@@ -818,7 +818,9 @@ begin
   TexteCompte := TNewStaticText.Create(PageBiblio);
   TexteCompte.Parent := PageBiblio.Surface;
   TexteCompte.AutoSize := False;
-  TexteCompte.Alignment := taRightJustify;
+#if Ver >= EncodeVer(6, 5, 0)
+  TexteCompte.Alignment := taRightJustify;   { 1.11.3 : Inno Setup 6.5 et plus ; avant, a gauche }
+#endif
   TexteCompte.Left := BRetirer.Left + BRetirer.Width + ScaleX(6);
   TexteCompte.Width := PageBiblio.SurfaceWidth - TexteCompte.Left;
   TexteCompte.Top := BAjouter.Top + ScaleY(4);
@@ -1134,7 +1136,13 @@ var F: TSetupForm;
     Ok, Annuler: TNewButton;
 begin
   Result := False;
+#if Ver >= EncodeVer(6, 5, 0)
   F := CreateCustomForm(ScaleX(460), ScaleY(170), False, False);
+#else
+  F := CreateCustomForm;   { 1.11.3 : Inno Setup 6.4 - la taille ensuite }
+  F.ClientWidth := ScaleX(460);
+  F.ClientHeight := ScaleY(170);
+#endif
   try
     F.Caption := 'Supprimer tes données';
     Texte := TNewStaticText.Create(F);

@@ -55,12 +55,14 @@ Son infobulle donne le type, la source et l'erreur s'il y en a une. **Le clic su
 1. Lancer `XPGAnalyser-Setup-1.11.3.exe`. Il met à jour la 1.11.2 installée : même identité d'installation, sauvegarde de l'ancienne version, données reprises sans être déplacées.
 2. Windows SmartScreen peut avertir, parce que l'installateur n'est pas signé. Choisir « Informations complémentaires », puis « Exécuter quand même ».
 
-Empreinte SHA-256 de l'installateur : voir `dist/SHA256SUMS.txt` (rappelée dans le message de livraison).
+Empreinte SHA-256 de `XPGAnalyser-Setup-1.11.3.exe` (14,7 Mo) :
+`167472F8B5DB751212B3D9F842049A0E3B6D764B959B671B2492251DCD6D2CE9`
 
 ## Comment cette version a été fabriquée
 
 - **L'exe** : compilé sous Linux avec MinGW-w64 (GCC 13, `outils/mingw/cross_mingw.sh`), comme les installateurs du lot 8 et de la 1.11.2. Le runtime C++ est lié dans l'exe ; seul `SDL3.dll` est à côté.
-- **L'installateur** : `installateur/XPGAnalyser.iss`, compilé par Inno Setup 6.4.1 sous Wine (`outils/mingw/package_mingw.py`). Il est fait du même dossier de livraison que `package.bat` : l'exe, SDL3.dll, resources, libs, maintenance, licences, et `manifeste.json` avec la taille et le SHA-256 de chaque fichier.
+- **L'installateur** : `installateur/XPGAnalyser.iss`, compilé par Inno Setup 6.4.1 sous Wine (`outils/mingw/package_mingw.py`). Il est fait du même dossier de livraison que `package.bat` : l'exe, SDL3.dll, resources, libs, maintenance, licences, et `manifeste.json` avec la taille et le SHA-256 de chaque fichier (150 fichiers).
+  - Le script `.iss` accepte maintenant Inno Setup 6.4 en plus de 6.5 et suivantes. Deux appels réservés à la 6.5 sont gardés par `#if Ver >= 6.5` : l'alignement à droite d'un compteur, et la taille donnée à `CreateCustomForm`. Avec l'Inno Setup 6.7.2 de `package.bat`, rien ne change.
 - **Sous Windows**, `outils\package.bat` reste la voie normale. Il compile avec MSVC et produit le même installateur.
 
 ## Vérifications
@@ -68,7 +70,12 @@ Empreinte SHA-256 de l'installateur : voir `dist/SHA256SUMS.txt` (rappelée dans
 - Tests Linux (GCC 13) : la suite CTest complète passe.
   - Pour l'éditeur IHM : 5 916 contrôles, dont les nouveaux de `symParametres1113` : Voiture, `=UINTS`, UINTS sans fx, `1,5`, `vrai`, gCoef dans un tableau, l'ancien `Name := Voiture`, les noms de l'automate, les huit carrés.
   - Les attentes des tests 1.11.2 qui vérifiaient l'ancien comportement (`Voiture` gardé comme nom) sont mises à jour : c'est le comportement demandé qui a changé.
-- L'exe Windows n'a pas été lancé sur un vrai Windows ici. Merci de vérifier à l'ouverture d'un projet, et de me renvoyer `collect_diagnostics.bat` en cas de souci.
+- L'exe Windows a été lancé sous Wine :
+  - `XpgAnalyzer.exe --version` répond `XPGAnalyser 1.11.3` ;
+  - `XpgAnalyzer.exe --cli MAST.XPG` analyse le projet d'essai (891 variables, 29 POU, 75 sections, 28 DDT, 8 DFB).
+- L'installateur a été lancé sous Wine en silencieux, pour tous les comptes : « Installation process succeeded », et l'exe installé répond `1.11.3`.
+  - Seuls les raccourcis du menu Démarrer dont le nom a un accent (Réparer, Vérifier l'installation…) n'ont pas pu être créés. C'est une limite de Wine dans ce conteneur, sans rapport avec Windows : le même script a installé la 1.11.2.
+- Ni l'exe ni l'installateur n'ont été lancés sur un vrai Windows. Merci de vérifier à l'ouverture d'un projet, et de me renvoyer `collect_diagnostics.bat` en cas de souci.
 
 ## La seconde livraison (même 1.11.3)
 
