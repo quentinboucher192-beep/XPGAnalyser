@@ -33,7 +33,8 @@
 #include "../src/app/hmi/HmiApiVarsPane.hpp"     // 1.11.1 (API-V)
 #include "../src/app/hmi/HmiAssist.hpp"
 #include "../src/app/hmi/HmiValueKind.hpp"           // 1.11.3 : le carre de legende
-#include "../src/app/hmi/HmiValuePicker.hpp"         // 1.11.3 : le selecteur de valeur
+#include "../src/app/hmi/HmiValuePicker.hpp"
+#include "../src/hmi/HmiViewPaths.hpp"              // 1.11.6         // 1.11.3 : le selecteur de valeur
 #include "../src/menu/MenuManager.hpp"
 #include "../src/ui/widgets/ExprField.hpp"          // 1.10 (chantier K)
 #include "../src/app/hmi/HmiDesignPanes.hpp"
@@ -22039,6 +22040,178 @@ void simulationVariables1115(const std::string& xpg) {
 }
 
 // =============================================================================
+//  1.11.6 (« dans les pages Esclaves simules, IHM, API ajouter une option 'Sur la vue
+//  actuelle' » ; « dans ces 3 onglets, ajouter clic droit avec tout deplier, deplier,
+//  replier, tout replier, deforcer, forcer ») : la case, le menu, ce qu'ils font.
+// =============================================================================
+void surLaVueClicDroit1116() {
+    std::printf("== 1.11.6 : sur la vue actuelle, le clic droit (Variables IHM, Esclaves simul\xC3\xA9s) ==\n");
+    auto doc = std::make_shared<Document>();
+    auto& p = doc->project;
+    {
+        HmiType vanne;
+        vanne.id = p.allocate();
+        vanne.name = "T_Vanne";
+        vanne.members = {{"Ouverte", "BOOL", "", ""}, {"Position", "INT", "", ""}};
+        HmiType four;
+        four.id = p.allocate();
+        four.name = "T_Four";
+        four.members = {{"Temperature", "REAL", "", ""}, {"Vannes", "ARRAY[1..2] OF T_Vanne", "", ""}};
+        p.programs.types.push_back(vanne);
+        p.programs.types.push_back(four);
+        for (const auto& [name, type] : {std::pair{"Compteur", "INT"}, {"Four1", "T_Four"}, {"Four2", "T_Four"}}) {
+            Variable var;
+            var.id = p.allocate();
+            var.name = name;
+            var.type = type;
+            p.programs.variables.push_back(var);
+        }
+        // Le symbole S_Aff lit son parametre X ; l'instance lui donne Four1.Vannes[2].Position.
+        View sym = makeView(p, "S_Aff");
+        sym.role = "symbole";
+        sym.width = 80;
+        sym.height = 30;
+        sym.params.push_back({"X", "", "", "", ParamMode::Reference});
+        const Id t = edit::add(p, sym, Kind::Text, 0, 0);
+        sym.object(t)->setExpr("text", "X + Compteur");
+        p.views.push_back(sym);
+        View v = makeView(p, "Accueil");
+        const Id inst = placeSymbol(p, v, "S_Aff", 100, 100);
+        v.object(inst)->name = "Aff_1";
+        v.object(inst)->set("params", "X := Four1.Vannes[2].Position");
+        const Id lbl = edit::add(p, v, Kind::Text, 10, 10);
+        v.object(lbl)->set("text", "T = {Four1.Temperature:0.0}");
+        p.config.startView = v.id;
+        p.views.push_back(v);
+    }
+    app::HmiSimulationHost host;
+    app::HmiSimulationPane pane("vue1116", doc, host);
+    pane.setBounds({0, 0, 1600, 900});
+    Recorder rec;
+    const auto theme = ui::Theme::dark();
+    auto paintAt = [&](double t) {
+        rec.clear();
+        pane.layout();
+        pane.render(ui::PaintContext{rec, theme, {0, 0, 1600, 900}, t, nullptr});
+    };
+    paintAt(0.0);
+    pane.tabs().setCurrentIndex(app::HmiSimulationPane::TabVariables);
+    paintAt(0.1);
+    auto& ihm = pane.ihmVariables();
+    const auto leaves = [](const app::HmiSimVarTree& t) {
+        std::vector<std::string> out;
+        for (const auto& r : t.rows()) if (r.leaf) out.push_back(r.path);
+        return out;
+    };
+    check(ihm.viewBox() != nullptr && !ihm.onlyView(), "la case \xC2\xAB Sur la vue actuelle \xC2\xBB est l\xC3\xA0, d\xC3\xA9" "coch\xC3\xA9" "e");
+    check(ihm.leafCount() == 11, "11 variables IHM (Compteur, Four1 et Four2 : 5 cases chacun) (" + std::to_string(ihm.leafCount()) + ")");
+    // Cocher : seulement ce que lit la vue (le symbole developpe : X -> Four1.Vannes[2].Position).
+    ihm.viewBox()->setState(ui::Checkbox::State::Checked);
+    paintAt(0.2);
+    const auto onView = leaves(ihm);
+    const auto shown = [&](const char* x) { return std::find(onView.begin(), onView.end(), x) != onView.end(); };
+    check(ihm.onlyView() && onView.size() == 3 && shown("Compteur") && shown("Four1.Temperature") && shown("Four1.Vannes[2].Position"),
+          "sur la vue : Compteur, Four1.Temperature et Four1.Vannes[2].Position (le param\xC3\xA8tre du symbole) - "
+              + std::to_string(onView.size()) + " valeurs");
+    check(!shown("Four2.Temperature") && !shown("Four1.Vannes[1].Position"), "ni Four2, ni Four1.Vannes[1]");
+    ihm.setOnlyView(false);
+    paintAt(0.3);
+    check(!ihm.onlyView() && ihm.viewBox() && !ihm.viewBox()->isChecked(), "d\xC3\xA9" "coch\xC3\xA9" "e : la case suit");
+    // Le clic droit : Tout deplier, puis Tout replier ; le menu et ses entrees.
+    check(ihm.contextAction("Four1", app::HmiSimVarTree::MExpandAll) && leaves(ihm).size() == 11, "Tout d\xC3\xA9plier : les 11 valeurs montr\xC3\xA9" "es");
+    check(ihm.contextAction("Four1", app::HmiSimVarTree::MCollapseAll) && leaves(ihm).size() == 1 && ihm.rows().size() == 3,
+          "Tout replier : Compteur, Four1, Four2 (" + std::to_string(ihm.rows().size()) + " lignes)");
+    check(ihm.contextAction("Four1", app::HmiSimVarTree::MExpand) && ihm.isOpen("Four1"), "D\xC3\xA9plier Four1");
+    check(ihm.contextAction("Four1.Temperature", app::HmiSimVarTree::MCollapse) && !ihm.isOpen("Four1"),
+          "Replier sur une variable : son n\xC5\x93ud se replie");
+    check(ihm.openContextMenu("Four1", {200.f, 200.f}) && ihm.contextMenu() && ihm.contextMenu()->isOpen(), "le clic droit ouvre le menu");
+    if (auto* m = ihm.contextMenu()) {
+        std::vector<std::string> labels;
+        for (const auto& it : m->items()) if (!it.separator && !it.heading) labels.push_back(it.label);
+        check(labels.size() == 6 && labels[0] == "Tout d\xC3\xA9plier" && labels[1] == "D\xC3\xA9plier" && labels[2] == "Replier"
+                  && labels[3] == "Tout replier" && labels[4].rfind("Forcer", 0) == 0 && labels[5].rfind("D\xC3\xA9" "forcer", 0) == 0,
+              "les six entr\xC3\xA9" "es, dans l'ordre demand\xC3\xA9");
+        m->close();
+    }
+    // Le vrai clic droit, a la souris, sur la ligne de Compteur.
+    {
+        gfx::Rect row{};
+        check(ihm.reveal("Compteur") && ihm.rowRect("Compteur", row), "la ligne de Compteur");
+        ihm.dispatch(ui::MouseDown{{row.x + 40.f, row.y + row.h * 0.5f}, ui::MouseButton::Right, 1, {}});
+        check(ihm.contextMenu() && ihm.contextMenu()->isOpen(), "un clic droit sur la ligne ouvre le menu");
+        if (auto* m = ihm.contextMenu()) m->close();
+    }
+    // Forcer un noeud : ses 5 valeurs, a leur valeur du moment ; Deforcer : libres.
+    check(ihm.contextAction("Four1", app::HmiSimVarTree::MForce) && pane.runtime().variableForced("Four1.Temperature")
+              && pane.runtime().variableForced("Four1.Vannes[2].Ouverte") && !pane.runtime().variableForced("Four2.Temperature"),
+          "Forcer sur Four1 : ses 5 valeurs forc\xC3\xA9" "es, pas Four2");
+    check(ihm.contextAction("Four1", app::HmiSimVarTree::MUnforce) && !pane.runtime().variableForced("Four1.Temperature")
+              && pane.runtime().forcedVariables().empty(),
+          "D\xC3\xA9" "forcer sur Four1 : toutes libres");
+
+    // ---- Les esclaves simules (IHM > Equipements > Valeurs simulees) : le clic droit, et la vue ----
+    {
+        using L = app::HmiTwinValues::Line;
+        core::CommandStack stack;
+        auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+        app::CommHost comm;
+        app::EquipmentHost equip;
+        app::HmiCommPane cp("vue1116.comm", doc, apply);
+        app::HmiCommPane::Hosts hosts;
+        hosts.comm = [&] { return &comm; };
+        hosts.equipments = [&] { return &equip; };
+        cp.setHosts(hosts);
+        cp.setBounds({0, 0, 1700, 950});
+        cp.layout();
+        check(cp.addEquipment("Centrale", hmi::EquipmentType::ModbusTcp, "192.168.1.30", 502) == "Centrale" && cp.createTwin("Centrale"),
+              "une centrale et son esclave simul\xC3\xA9");
+        for (auto& var : doc->project.programs.variables)
+            if (var.name == "Four1" || var.name == "Four2") {
+                var.equipment = "Centrale";
+                var.address = var.name == "Four1" ? "43001" : "43101";
+            }
+        cp.tabs().setCurrentIndex(app::HmiCommPane::TValues);
+        cp.refresh();
+        auto& w = cp.values();
+        const auto nodeLine = [&](const char* title) {
+            for (std::size_t i = 0; i < w.lines().size(); ++i)
+                if (w.lines()[i].kind == L::Kind::Node && w.lines()[i].title == title) return i;
+            return std::string::npos;
+        };
+        const std::size_t four1 = nodeLine("Four1");
+        check(four1 != std::string::npos && w.rowsUnder(four1).size() == 5, "sous Four1 : ses 5 valeurs");
+        check(four1 != std::string::npos && w.contextAction(four1, app::HmiTwinValues::MForce), "Forcer sur le n\xC5\x93ud Four1");
+        const auto* e = doc->project.equipmentByName("Centrale");
+        check(e && e->forcings.size() == 5, "ses 5 valeurs forc\xC3\xA9" "es (" + std::to_string(e ? e->forcings.size() : 0) + ")");
+        (void)stack.undo();
+        e = doc->project.equipmentByName("Centrale");
+        check(e && e->forcings.empty(), "un seul Ctrl+Z les lib\xC3\xA8re toutes (une seule commande)");
+        // Tout replier / Tout deplier.
+        cp.refresh();
+        const std::size_t all = w.shownLines();
+        w.setAllOpen(false);
+        check(w.shownLines() < all, "Tout replier : moins de lignes (" + std::to_string(all) + " -> " + std::to_string(w.shownLines()) + ")");
+        w.setAllOpen(true);
+        check(w.shownLines() == all, "Tout d\xC3\xA9plier : toutes reviennent");
+        // Sur la vue actuelle : le controleur garde les valeurs dont la variable est lue.
+        auto& ctl = cp.valuesController();
+        auto f = std::make_shared<hmi::viewpaths::Filter>();
+        f->set({"Four1.Temperature"});
+        ctl.setViewFilter([f](std::string_view x) { return f->covers(x); });
+        ctl.setOnlyView(true);
+        std::size_t rows = 0;
+        bool onlyTemp = true;
+        for (const auto& l : w.lines())
+            if (l.kind == L::Kind::Row) {
+                ++rows;
+                onlyTemp = onlyTemp && l.title == "Four1.Temperature";
+            }
+        check(rows == 1 && onlyTemp, "sur la vue (Four1.Temperature lue) : une seule ligne (" + std::to_string(rows) + ")");
+        ctl.setOnlyView(false);
+    }
+}
+
+// =============================================================================
 //  1.11.5 (« esclaves simules : treeview profondeur infinie sur les structures et
 //  variables, une recherche, garder le forcage, editer les bornes plus facilement -
 //  aussi dans IHM > Equipements > Valeurs simulees ») : les lignes d'un esclave se
@@ -25129,6 +25302,7 @@ int main(int argc, char** argv) {
     symParametresReperes1114();             // 1.11.4 : les reperes et le fx dans un parametre (variable ou texte)
     barresDefilement1114();                 // 1.11.4 : les barres de defilement qu'on tire
     esclavesArbre1115();                    // 1.11.5 : les esclaves simules en arbre, la recherche, les bornes au clavier
+    surLaVueClicDroit1116();                // 1.11.6 : sur la vue actuelle, le clic droit
     if (argc > 1) simulationVariables1115(argv[1]);   // 1.11.5 : les onglets Variables IHM et Variables API
     scriptsExportImport1113();              // 1.11.3 : exporter / importer les scripts d'une vue et les operateurs (.xpgst)
     valuePicker1113();                      // 1.11.3 : le carre de legende cliquable, le selecteur de valeur
