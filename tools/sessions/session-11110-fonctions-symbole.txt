@@ -1,0 +1,106 @@
+# =============================================================================
+#  Session 11110 : LES FONCTIONS ET LES POPUPS D'UN SYMBOLE - le sous-onglet
+#  Fonctions (violet), le sous-onglet Popups, l'arbre deballe, l'inspecteur d'une
+#  instance (redefinir une fonction virtuelle, sa fenetre), un operateur qui emploie
+#  un operateur et une fonction, en marche (la popup de l'instance, la redefinition).
+#  Le projet : une copie d'Armoire_Gaz (preparer-projet-1115, -1118, puis -11110) :
+#  S_Vanne (Ouvrir, Fermer virtuelles ; Etat), sa popup Pop_Vanne, Vue_Vannes
+#  (Vanne_3 qui redefinit Ouvrir, Vanne_4), Sequence_Matin, T_VEC.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- 1. Le symbole S_Vanne, sous-onglet Fonctions ----------------------------------
+arbre "IHM/Symboles/S_Vanne" double
+attendre 10
+sous-onglet "Fonctions"
+attendre 4
+capture 11110_01_fonctions_du_symbole.png
+
+# ---- 2. Le sous-onglet Popups --------------------------------------------------------
+sous-onglet "Popups"
+attendre 4
+capture 11110_02_popups_du_symbole.png
+
+# ---- 3. L'arbre deballe : sous le symbole, sous l'instance ---------------------------
+arbre "IHM/Symboles/S_Vanne" deplier
+attendre 2
+arbre "IHM/Symboles/S_Vanne/Fonctions" deplier
+attendre 2
+arbre "IHM/Symboles/S_Vanne/Popups" deplier
+attendre 2
+arbre "IHM/Vues/Vue_Vannes" deplier
+attendre 2
+arbre "IHM/Vues/Vue_Vannes/Objets" deplier
+attendre 2
+arbre "IHM/Vues/Vue_Vannes/Objets/Vanne_3" deplier
+attendre 2
+arbre "IHM/Vues/Vue_Vannes/Objets/Vanne_3/Fonctions" deplier
+attendre 3
+capture 11110_03_arbre_deballe.png
+
+# ---- 4. L'inspecteur de Vanne_3 : Fonctions du symbole, la redefinition ---------------
+arbre "IHM/Vues/Vue_Vannes" double
+attendre 10
+objet "Vanne_3"
+attendre 4
+# L'inspecteur plus large (sa poignee).
+glisser 1312 400 900 400
+attendre 3
+propriete-clic "ƒ Etat() : INT"
+attendre 3
+capture 11110_04_inspecteur_instance.png
+propriete-ouvrir "ƒ Ouvrir(Motif : STRING)"
+attendre 4
+capture 11110_05_redefinition_fenetre.png
+fenetre-action annuler
+attendre 2
+
+# ---- 5. Un script general appelle les fonctions des instances ; un operateur emploie
+#         un operateur et une fonction ---------------------------------------------------
+arbre "IHM/Programmation générale/Scripts généraux"
+attendre 8
+ligne "Sequence_Matin"
+attendre 3
+capture 11110_06_script_general.png
+arbre "IHM/Programmation générale/Types IHM/T_VEC" deplier
+attendre 2
+arbre "IHM/Programmation générale/Types IHM/T_VEC/Opérateurs" deplier
+attendre 2
+arbre "IHM/Programmation générale/Types IHM/T_VEC/Opérateurs/T_VEC * REAL" double
+attendre 8
+capture 11110_07_operateur_emploie_operateur.png
+
+# ---- 6. En marche : la popup de l'instance, la redefinition -------------------------
+arbre "Simulation/IHM"
+attendre 12
+sim-utilisateur "admin" "admin2026"
+attendre 3
+sim-vue "Vue_Vannes"
+attendre 8
+sim-clic "Vanne_3.Btn_Detail"
+attendre 6
+sim-clic "Btn_Ouvrir"
+attendre 4
+capture 11110_08_popup_vanne_3_purge.png
+touche Escape
+attendre 3
+sim-clic "Btn_Purge"
+attendre 3
+sim-clic "Vanne_4.Btn_Detail"
+attendre 6
+sim-clic "Btn_Ouvrir"
+attendre 6
+capture 11110_09_popup_vanne_4_ouverte.png
+touche Escape
+attendre 3
+sim-clic "Vanne_3.Btn_Detail"
+attendre 6
+sim-clic "Btn_Ouvrir"
+attendre 6
+capture 11110_10_vanne_3_apres_purge.png
+quitter
