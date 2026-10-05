@@ -16225,9 +16225,10 @@ void centreAide111() {
         // Tranche 25 : 112 (les reperes $...$, decision 69).
         // 1.11.1 (tranche 30) : 123 (+ 11).
         // Tranche 46 (SYM, decision 240) : 148 (+ 2, Dupliquer dans un symbole et la section Parametres du symbole).
-        // 1.11.3 : 152 (+ 4, les parametres d'une instance et le carre de legende).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 152,
-              "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 152 en tout ("
+        // 1.11.3 : 156 (+ 8, les parametres d'une instance, le carre de legende, le selecteur, la creation,
+        // les scripts et les operateurs exportes).
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 156,
+              "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 156 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
             for (const auto& n : hn::all())

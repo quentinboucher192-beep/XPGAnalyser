@@ -1,0 +1,1083 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>XPGAnalyser 1.11.3 maquette</title>
+<style>
+:root{
+  --bg:#e9ecf0; --chrome:#f3f4f6; --panel:#fbfbfc; --panel-2:#ffffff; --line:#d3d8df; --line-2:#e5e8ed;
+  --fg:#1c1f24; --fg-2:#4b535e; --fg-3:#6b7380; --accent:#1f63d1; --link:#1a5bc4; --accent-2:#e2ebfa; --on-accent:#ffffff;
+  --sel:#d5e3f9; --hover:#eef1f5; --input:#ffffff; --input-line:#c3c9d2; --focus:#1f63d1;
+  --k-api:#1d62cc; --k-ihm:#0a7a70; --k-sys:#9e5800; --k-v:#6d41c3; --k-err:#c42727; --k-fx:#4f5661; --k-c:#7c8490; --k-c-fg:#3c434d; --k-on:#ffffff;
+  --err-bg:#fdeded; --warn-bg:#fff6e5; --ok:#15773c; --shadow:0 12px 34px rgba(18,24,36,.2); --scrim:rgba(14,18,26,.4);
+  --mono:"Cascadia Mono","JetBrains Mono",Consolas,"DejaVu Sans Mono",ui-monospace,monospace;
+  --ui:"Segoe UI",system-ui,-apple-system,"Noto Sans","DejaVu Sans",sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#16181b; --chrome:#1f2125; --panel:#25272b; --panel-2:#2b2e33; --line:#3a3e45; --line-2:#30333a;
+    --fg:#e4e6ea; --fg-2:#b6bbc4; --fg-3:#8f959f; --accent:#2b6fdb; --link:#7ab0ff; --accent-2:#1c2f4d; --on-accent:#ffffff;
+    --sel:#1e3a62; --hover:#30343a; --input:#1c1e22; --input-line:#4a4f58; --focus:#5a9cff;
+    --k-api:#5ca3ff; --k-ihm:#35c6b7; --k-sys:#f2a83e; --k-v:#ba95ff; --k-err:#ff6767; --k-fx:#a0a6b0; --k-c:#9aa1ac; --k-c-fg:#d6dae0; --k-on:#101216;
+    --err-bg:#3b2325; --warn-bg:#3a2f1c; --ok:#55c983; --shadow:0 14px 40px rgba(0,0,0,.6); --scrim:rgba(0,0,0,.58);
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#16181b; --chrome:#1f2125; --panel:#25272b; --panel-2:#2b2e33; --line:#3a3e45; --line-2:#30333a;
+  --fg:#e4e6ea; --fg-2:#b6bbc4; --fg-3:#8f959f; --accent:#2b6fdb; --link:#7ab0ff; --accent-2:#1c2f4d; --on-accent:#ffffff;
+  --sel:#1e3a62; --hover:#30343a; --input:#1c1e22; --input-line:#4a4f58; --focus:#5a9cff;
+  --k-api:#5ca3ff; --k-ihm:#35c6b7; --k-sys:#f2a83e; --k-v:#ba95ff; --k-err:#ff6767; --k-fx:#a0a6b0; --k-c:#9aa1ac; --k-c-fg:#d6dae0; --k-on:#101216;
+  --err-bg:#3b2325; --warn-bg:#3a2f1c; --ok:#55c983; --shadow:0 14px 40px rgba(0,0,0,.6); --scrim:rgba(0,0,0,.58);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{background:var(--bg);color:var(--fg)}
+body{font:13px/1.45 var(--ui);padding-inline:16px;padding-block:20px 40px}
+button,input,select{font:inherit;color:inherit}
+code,.mono{font-family:var(--mono);font-size:12px}
+.wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+header.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
+header.top h1{margin:0;font-size:22px;font-weight:650;letter-spacing:-.01em;text-wrap:balance}
+header.top p{margin:4px 0 0;color:var(--fg-2);max-width:68ch}
+.eyebrow{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--fg-3);font-weight:600}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden;background:var(--panel)}
+.seg button{border:0;background:none;padding:5px 11px;cursor:pointer;color:var(--fg-2)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--on-accent)}
+.layout{display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start}
+.app{flex:1 1 470px;min-width:0;max-width:560px;background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden;box-shadow:0 1px 0 rgba(0,0,0,.03)}
+aside.side{flex:999 1 340px;min-width:0;display:flex;flex-direction:column;gap:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px 16px}
+.card h2{margin:0 0 8px;font-size:14px;font-weight:650}
+.card ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:8px}
+.card li{color:var(--fg-2)}
+.card li button{margin-top:4px}
+.btn{border:1px solid var(--input-line);background:var(--panel-2);border-radius:6px;padding:5px 11px;cursor:pointer;min-height:30px}
+.btn:hover{background:var(--hover)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.small{padding:2px 8px;min-height:24px;font-size:12px}
+.btn.link{border:0;background:none;color:var(--link);padding:0 2px;min-height:0;text-decoration:underline;text-underline-offset:2px}
+:focus-visible{outline:2px solid var(--focus);outline-offset:1px}
+
+/* --- la fenêtre de l'appli (l'inspecteur) --- */
+.tabs{display:flex;gap:2px;background:var(--chrome);border-bottom:1px solid var(--line);padding:0 6px}
+.tabs span{padding:8px 12px;color:var(--fg-3);border-bottom:2px solid transparent}
+.tabs span.on{color:var(--fg);border-bottom-color:var(--accent);font-weight:600}
+.show{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:7px 10px;border-bottom:1px solid var(--line-2);color:var(--fg-3);font-size:12px}
+.pill{border:1px solid var(--line);border-radius:999px;padding:1px 9px;color:var(--fg-2);background:var(--panel-2)}
+.ctx{padding:6px 10px;border-bottom:1px solid var(--line-2);font-size:12px;color:var(--fg-3)}
+.ctx b{color:var(--fg);font-weight:600}
+.sec{border-bottom:1px solid var(--line-2)}
+.sec>button.sh{display:flex;align-items:center;gap:6px;width:100%;border:0;background:var(--chrome);padding:5px 8px;cursor:pointer;font-weight:600;text-align:left}
+.sec>button.sh .chev{display:inline-block;transition:transform .12s;color:var(--fg-3)}
+.sec.closed>button.sh .chev{transform:rotate(-90deg)}
+.sec.closed .rows{display:none}
+.row{display:grid;grid-template-columns:minmax(0,42%) minmax(0,1fr);border-top:1px solid var(--line-2);min-height:30px}
+.row:first-child{border-top:0}
+.row .lab{display:flex;align-items:center;gap:6px;padding:4px 8px 4px 22px;color:var(--fg-2);border-right:1px solid var(--line-2);min-width:0}
+.row .lab .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .lab .ty{margin-left:auto;font-size:11px;color:var(--fg-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:55%}
+.row.param .lab .ty{margin-left:0}
+.row .val{display:flex;align-items:center;gap:6px;padding:3px 6px;min-width:0}
+.row .val .ro{color:var(--fg-2);padding-left:4px}
+.fxb{flex:none;width:24px;height:24px;border-radius:50%;border:1px solid var(--input-line);background:transparent;color:var(--fg-3);font:italic 600 10.5px/1 Georgia,"Times New Roman",serif;cursor:pointer;display:grid;place-items:center;padding:0}
+.fxb[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.inp{flex:1 1 auto;min-width:0;height:24px;border:1px solid transparent;border-radius:4px;background:transparent;padding:0 6px}
+.inp:hover{border-color:var(--line)}
+.inp:focus{border-color:var(--focus);background:var(--input);outline:none}
+.inp.f{font-family:var(--mono);font-size:12px}
+.row.hl{background:var(--accent-2)}
+.row.dim{opacity:.45}
+.row.flash{animation:flash 1.2s ease-out}
+@keyframes flash{from{background:var(--sel)}to{background:transparent}}
+.diag{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:4px 8px 6px 22px;background:var(--err-bg);color:var(--fg);font-size:12px}
+.diag .msg{flex:1 1 220px;min-width:0}
+.diag .msg b{color:var(--k-err)}
+.legend{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;padding:8px 10px;border-top:1px solid var(--line);background:var(--chrome);font-size:11.5px;color:var(--fg-2)}
+.legend .lt{color:var(--fg-3);margin-right:2px}
+.legend button{display:inline-flex;align-items:center;gap:5px;border:1px solid transparent;background:none;border-radius:5px;padding:2px 5px;cursor:pointer;color:var(--fg-2)}
+.legend button:hover,.legend button[aria-pressed="true"]{border-color:var(--line);background:var(--panel-2)}
+.status{padding:6px 10px;font-size:12px;color:var(--fg-3);border-top:1px solid var(--line-2)}
+
+/* --- le carré --- */
+.sqb{flex:none;border:0;background:none;padding:2px;margin:0;cursor:pointer;border-radius:5px;display:grid;place-items:center}
+.sqb:hover{background:var(--hover)}
+.sq{position:relative;display:inline-grid;place-items:center;width:20px;height:20px;border-radius:4px;font:700 10.5px/1 var(--ui);letter-spacing:-.02em;color:var(--k-on);flex:none}
+.sq.k-A{background:var(--k-api)} .sq.k-I{background:var(--k-ihm)} .sq.k-S{background:var(--k-sys)} .sq.k-V{background:var(--k-v)} .sq.k-E{background:var(--k-err)}
+.sq.k-fx,.sq.k-D{background:var(--k-fx);color:var(--k-on)}
+.sq.k-fx{font:italic 700 10px/1 Georgia,"Times New Roman",serif}
+.sq.k-C{background:transparent;border:1.5px solid var(--k-c);color:var(--k-c-fg)}
+.sq.has-dots{align-items:start;padding-top:3px}
+.sq .dots{position:absolute;left:0;right:0;bottom:2px;display:flex;justify-content:center;gap:2px}
+.sq .dots i{width:4px;height:4px;border-radius:50%;box-shadow:0 0 0 1px var(--panel)}
+.d-A{background:var(--k-api)} .d-I{background:var(--k-ihm)} .d-S{background:var(--k-sys)} .d-V{background:var(--k-v)}
+.sq.sm{width:16px;height:16px;font-size:9px;border-radius:3px}
+.sq.sm.k-fx{font-size:8.5px}
+.sq.empty{background:transparent;border:1.5px dashed var(--line);color:transparent}
+
+/* --- infobulle, menu, autocomplétion, toast --- */
+.tip{position:fixed;z-index:60;max-width:320px;background:var(--panel-2);border:1px solid var(--line);border-radius:7px;box-shadow:var(--shadow);padding:8px 10px;font-size:12px;pointer-events:none}
+.tip .tt{display:flex;align-items:center;gap:7px;font-weight:650;margin-bottom:3px}
+.tip .hint{color:var(--fg-3);margin-top:5px}
+.menu{position:fixed;z-index:50;width:min(360px,calc(100vw - 24px));background:var(--panel-2);border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);padding:6px;display:flex;flex-direction:column}
+.menu .mh{padding:4px 8px 6px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--fg-3);font-weight:600}
+.menu button.mi{display:grid;grid-template-columns:24px minmax(0,1fr) auto;align-items:center;gap:8px;border:0;background:none;text-align:left;padding:6px 8px;border-radius:6px;cursor:pointer;min-height:38px}
+.menu button.mi:hover,.menu button.mi:focus-visible{background:var(--hover)}
+.menu button.mi.cur{background:var(--accent-2)}
+.menu .mi .t{font-weight:600}
+.menu .mi .d{display:block;font-size:11.5px;color:var(--fg-3);font-weight:400}
+.menu .mi .ck{color:var(--accent);font-size:12px}
+.menu hr{border:0;border-top:1px solid var(--line-2);margin:5px 4px}
+.ac{position:fixed;z-index:70;min-width:260px;max-width:min(420px,calc(100vw - 24px));background:var(--panel-2);border:1px solid var(--line);border-radius:7px;box-shadow:var(--shadow);padding:4px;display:flex;flex-direction:column}
+.ac button{display:grid;grid-template-columns:18px minmax(0,1fr) auto;gap:8px;align-items:center;border:0;background:none;padding:4px 7px;border-radius:5px;text-align:left;cursor:pointer}
+.ac button.on{background:var(--sel)}
+.ac button.inc{opacity:.55}
+.ac .nm{font-family:var(--mono);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ac .ty{font-size:11px;color:var(--fg-3);white-space:nowrap}
+.ac .foot{display:flex;flex-wrap:wrap;gap:8px;padding:4px 6px 2px;border-top:1px solid var(--line-2);margin-top:3px;font-size:11px;color:var(--fg-3)}
+.ac .foot span{display:inline-flex;align-items:center;gap:4px}
+.toast{position:fixed;z-index:90;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:8px 14px;border-radius:7px;box-shadow:var(--shadow);font-size:12.5px;max-width:calc(100vw - 32px)}
+
+/* --- le sélecteur (modal) --- */
+.scrim{position:fixed;inset:0;z-index:40;background:var(--scrim);display:grid;place-items:center;padding:16px}
+.modal{width:min(1020px,100%);height:min(700px,calc(100vh - 32px));background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);display:flex;flex-direction:column;overflow:hidden}
+.mhd{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--chrome)}
+.mhd h2{margin:0;font-size:14.5px;font-weight:650;min-width:0}
+.mhd .exp{font-size:12px;color:var(--fg-2)}
+.mhd .x{margin-left:auto;border:0;background:none;width:32px;height:32px;border-radius:6px;cursor:pointer;color:var(--fg-2);font-size:18px}
+.mhd .x:hover{background:var(--hover)}
+.mtools{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line-2)}
+.search{flex:1 1 240px;min-width:0;display:flex;align-items:center;gap:6px;border:1px solid var(--input-line);border-radius:6px;background:var(--input);padding:0 8px;height:32px}
+.search input{border:0;background:none;outline:none;flex:1;min-width:0}
+.search svg{flex:none;color:var(--fg-3)}
+.chk{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--input-line);border-radius:6px;padding:0 9px;height:32px;cursor:pointer;background:var(--panel-2)}
+.chk input{margin:0}
+.srcs{display:flex;flex-wrap:wrap;gap:4px;width:100%}
+.srcs button{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--panel-2);border-radius:999px;padding:3px 10px 3px 4px;cursor:pointer;color:var(--fg-2);min-height:28px}
+.srcs button.all{padding-left:10px}
+.srcs button[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-2);color:var(--fg)}
+.mbody{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr)}
+.treebox{min-height:0;display:flex;flex-direction:column;border-right:1px solid var(--line-2)}
+.tcount{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:6px 14px;font-size:11.5px;color:var(--fg-3);border-bottom:1px solid var(--line-2)}
+.tree{flex:1;min-height:0;overflow:auto;padding:4px 0}
+.tn{display:flex;align-items:center;gap:6px;padding:3px 10px 3px calc(8px + var(--lvl,0) * 16px);cursor:pointer;min-height:26px;white-space:nowrap}
+.tn:hover{background:var(--hover)}
+.tn.sel{background:var(--sel)}
+.tn.mut .nm{color:var(--fg-3)}
+.tn.grp{font-weight:650;margin-top:4px}
+.tn .cv{width:16px;height:16px;border:0;background:none;padding:0;color:var(--fg-3);display:grid;place-items:center;cursor:pointer;flex:none}
+.tn .cv svg{transition:transform .12s}
+.tn[aria-expanded="false"] .cv svg{transform:rotate(-90deg)}
+.tn .cv.none{visibility:hidden}
+.tn .nm{font-family:var(--mono);font-size:12px;overflow:hidden;text-overflow:ellipsis}
+.tn.grp .nm,.tn.fold .nm{font-family:var(--ui);font-size:12.5px}
+.tn .ty{margin-left:auto;padding-left:12px;font-size:11px;color:var(--fg-3)}
+.tn .ad{font-size:11px;color:var(--fg-3);font-family:var(--mono);min-width:56px;text-align:right}
+.tn .ok{color:var(--ok);font-size:11px}
+.tn .new{font-size:10px;color:var(--on-accent);background:var(--accent);border-radius:3px;padding:0 4px}
+.empty-t{padding:18px 14px;color:var(--fg-3)}
+.detail{min-height:0;overflow:auto;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.detail .dn{font-family:var(--mono);font-size:14px;font-weight:600;word-break:break-all}
+.detail dl{margin:0;display:grid;grid-template-columns:max-content minmax(0,1fr);gap:4px 12px;font-size:12.5px}
+.detail dt{color:var(--fg-3)}
+.detail dd{margin:0;min-width:0;word-break:break-word}
+.detail .acts{display:flex;flex-wrap:wrap;gap:6px}
+.detail .compat{font-size:12px;padding:6px 8px;border-radius:6px;background:var(--hover)}
+.detail .compat.bad{background:var(--warn-bg)}
+.consts{display:flex;flex-wrap:wrap;gap:6px}
+.consts button{font-family:var(--mono);font-size:12px}
+.result{border-top:1px solid var(--line);background:var(--chrome);padding:10px 14px;display:flex;flex-direction:column;gap:8px}
+.rline{display:flex;align-items:center;gap:8px}
+.rline label{font-weight:600;min-width:62px}
+.rbox{flex:1;min-width:0;display:flex;align-items:center;gap:6px;border:1px solid var(--input-line);background:var(--input);border-radius:6px;padding:3px 6px}
+.rbox:focus-within{border-color:var(--focus)}
+.rbox input{flex:1;min-width:0;border:0;background:none;outline:none;height:26px;font-family:var(--mono);font-size:12.5px}
+.rinfo{font-size:12px;color:var(--fg-2);min-height:18px;padding-left:70px}
+.rinfo code{background:var(--hover);padding:0 4px;border-radius:3px}
+.diags{display:flex;flex-direction:column;gap:5px;padding-left:70px}
+.dg{display:flex;flex-wrap:wrap;align-items:center;gap:6px;background:var(--err-bg);border-radius:6px;padding:5px 8px;font-size:12px}
+.dg .msg{flex:1 1 240px;min-width:0}
+.dg .msg b{color:var(--k-err)}
+.mfoot{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 14px;border-top:1px solid var(--line-2)}
+.mfoot .hint{color:var(--fg-3);font-size:11.5px;flex:1 1 260px;min-width:0}
+.confirm{display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:var(--warn-bg);border-radius:6px;padding:6px 10px;font-size:12px}
+/* --- créer une variable --- */
+.cmodal{width:min(520px,100%);background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);display:flex;flex-direction:column;max-height:calc(100vh - 32px);overflow:auto}
+.cbody{padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+.cbody p{margin:0;color:var(--fg-2)}
+.sugg{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.form{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:8px 12px;align-items:center}
+.form label{color:var(--fg-2)}
+.form input[type=text],.form select{height:30px;border:1px solid var(--input-line);background:var(--input);border-radius:6px;padding:0 8px;min-width:0;width:100%}
+.zone{display:flex;flex-wrap:wrap;gap:6px}
+.zone button{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--panel-2);border-radius:7px;padding:6px 10px;cursor:pointer;text-align:left;min-height:40px}
+.zone button[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-2)}
+.zone small{display:block;color:var(--fg-3);font-size:11px}
+.note{font-size:12px;color:var(--fg-3)}
+.cfoot{display:flex;justify-content:flex-end;gap:8px;padding:10px 16px;border-top:1px solid var(--line-2)}
+@media (max-width:760px){
+  .mbody{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1.3fr) minmax(0,1fr)}
+  .treebox{border-right:0;border-bottom:1px solid var(--line-2)}
+  .rinfo,.diags{padding-left:0}
+  .rline label{min-width:0}
+  .modal{height:calc(100vh - 32px)}
+}
+@media (max-width:440px){ .row{grid-template-columns:minmax(0,38%) minmax(0,1fr)} .row .lab{padding-left:10px} }
+
+/* --- 1.11.3 : les scripts d'une vue qui voyagent (.xpgst) --- */
+.scripts{flex:1 1 100%;background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.stools{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:7px 10px;border-bottom:1px solid var(--line-2);background:var(--chrome)}
+.stools .sep{width:1px;height:20px;background:var(--line);margin:0 4px}
+.stools .ttl{font-weight:650;margin-right:8px}
+.sgrid{display:grid;grid-template-columns:minmax(0,340px) minmax(0,1fr);min-height:220px}
+@media (max-width:720px){.sgrid{grid-template-columns:1fr}}
+.stable{width:100%;border-collapse:collapse;font-size:12.5px}
+.stable th{text-align:left;font-weight:600;color:var(--fg-3);padding:6px 10px;border-bottom:1px solid var(--line-2);background:var(--panel-2)}
+.stable td{padding:6px 10px;border-bottom:1px solid var(--line-2);cursor:pointer}
+.stable tr.on td{background:var(--sel)}
+.stable td.n{text-align:right;font-variant-numeric:tabular-nums}
+.scode{border-left:1px solid var(--line);display:flex;flex-direction:column;min-width:0}
+.scode .ehd{padding:6px 10px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--fg-3);border-bottom:1px solid var(--line-2)}
+.scode pre{margin:0;padding:10px 12px;font-family:var(--mono);font-size:12px;white-space:pre-wrap;word-break:break-word;flex:1;overflow:auto;min-height:160px}
+.xmodal{width:min(720px,100%);max-height:calc(100vh - 32px);background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);display:flex;flex-direction:column;overflow:hidden}
+.xbody{padding:12px 16px;display:flex;flex-direction:column;gap:10px;overflow:auto}
+.xbody pre{margin:0;padding:10px 12px;border:1px solid var(--line);border-radius:6px;background:var(--input);font-family:var(--mono);font-size:12px;white-space:pre-wrap;max-height:320px;overflow:auto}
+.ilist{border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.ilist .lt{padding:6px 10px;font-size:11px;letter-spacing:.06em;color:var(--fg-3);background:var(--panel-2);border-bottom:1px solid var(--line-2)}
+.ilist label{display:flex;gap:10px;align-items:flex-start;padding:7px 10px;border-bottom:1px solid var(--line-2);cursor:pointer}
+.ilist label:last-child{border-bottom:0}
+.ilist small{display:block;color:var(--fg-3)}
+.st-new{color:var(--ok)} .st-diff{color:var(--k-sys)} .st-same{color:var(--fg-3)}
+.opts{display:flex;flex-direction:column;gap:6px}
+.opts label{display:flex;gap:8px;align-items:flex-start}
+.opts small{display:block;color:var(--fg-3)}
+.xfoot{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;align-items:center;padding:10px 16px;border-top:1px solid var(--line);background:var(--chrome)}
+.xfoot .note{margin-right:auto;font-size:12px;color:var(--fg-3)}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <div class="eyebrow">Maquette · XPGAnalyser 1.11.3 · ce qui est livré</div>
+      <h1>Le carré de légende, le sélecteur de valeur, les scripts qui voyagent</h1>
+      <p>À droite de chaque champ, un carré dit d’où vient la valeur. Un clic sur le carré ouvre la liste des carrés, puis le sélecteur : l’arbre de tout ce qui est disponible, filtré sur le type attendu, avec un champ résultat modifiable. Plus bas : exporter et importer les scripts d’une vue (et les opérateurs) dans un fichier <code>.xpgst</code>.</p>
+    </div>
+    <div class="seg" role="group" aria-label="Thème">
+      <button type="button" data-th="" aria-pressed="true">Système</button>
+      <button type="button" data-th="light" aria-pressed="false">Clair</button>
+      <button type="button" data-th="dark" aria-pressed="false">Sombre</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <section class="app" aria-label="Inspecteur de l’objet STEST_1">
+      <div class="tabs"><span class="on">Propriétés</span><span>Actions</span></div>
+      <div class="show" id="showbar"></div>
+      <div class="ctx"><b>STEST_1</b> · instance du symbole STEST · Vue_Accueil</div>
+      <div id="secs"></div>
+      <div class="legend" id="legend"></div>
+      <div class="status" id="status">Clic sur un carré : la liste des carrés et le sélecteur. Entrée valide un champ.</div>
+    </section>
+
+    <aside class="side">
+      <div class="card">
+        <h2>À essayer</h2>
+        <ol>
+          <li>Le carré rouge de <b>Seuil</b> : une variable mal tapée.<br><button class="btn small" type="button" data-try="menu">Ouvrir sa liste de carrés</button></li>
+          <li>Valider un nom qui n’existe pas : la création, avec le type et la zone (API ou IHM).<br><button class="btn small" type="button" data-try="create">Taper Debit_Max dans Seuil et valider</button></li>
+          <li><b>Value</b> attend un <code>ARRAY[0..9] OF UINT</code> : l’arbre ne montre que les tableaux de ce type.<br><button class="btn small" type="button" data-try="value">Ouvrir le sélecteur de Value</button></li>
+          <li><b>Name</b> : <code>Voiture</code> sans fx est une constante, convertie en <code>'Voiture'</code>.<br><button class="btn small" type="button" data-try="name">Ouvrir le sélecteur sur « Constante »</button></li>
+          <li><b>Info-bulle</b> : ajouter un repère <code>$…$</code> dans un texte.<br><button class="btn small" type="button" data-try="bulle">Ouvrir le sélecteur en mode repère</button></li>
+          <li><b>Opacité</b> à 150 : hors des bornes, avec sa correction.<br><button class="btn small" type="button" data-try="opac">Mettre 150</button></li>
+          <li><b>Scripts</b> (plus bas) : exporter ceux de Popup_vanne dans un <code>.xpgst</code>, puis importer celui de Vue_Accueil.<br><button class="btn small" type="button" data-try="export">Exporter…</button> <button class="btn small" type="button" data-try="import">Importer Vue_Accueil.xpgst</button></li>
+        </ol>
+      </div>
+      <div class="card">
+        <h2>Les règles</h2>
+        <ol>
+          <li>Sans <b>fx</b>, le champ est une constante, convertie dans son type. Avec <b>fx</b>, c’est une formule : le bouton reste allumé.</li>
+          <li>Une formule qui n’est qu’une variable montre le carré de la variable (<code>UINTS</code> → <b>I</b>), pas <b>fx</b>.</li>
+          <li>Dans le champ comme dans le sélecteur : l’aide à la saisie, les erreurs et leurs corrections, la création d’une variable inconnue.</li>
+          <li>Les couleurs sont celles de l’aide à la saisie. Le carré se calcule quand la valeur change, jamais à chaque image.</li>
+        </ol>
+      </div>
+    </aside>
+
+  <section class="scripts" aria-label="Scripts de la popup Popup_vanne">
+    <div class="stools">
+      <span class="ttl">Scripts · Popup_vanne</span>
+      <button class="btn small" type="button" id="sc-clear">Vider</button>
+      <button class="btn small" type="button" id="sc-export">Exporter…</button>
+      <button class="btn small" type="button" id="sc-import">Importer…</button>
+      <span class="sep" aria-hidden="true"></span>
+      <button class="btn small" type="button" id="sc-undo" disabled>Ctrl+Z</button>
+      <span class="note" id="sc-status" style="font-size:12px;color:var(--fg-3)">Les scripts d’une vue, d’une popup, d’un symbole, d’un écran modèle, d’un en-tête ou d’un pied de page.</span>
+    </div>
+    <div class="sgrid">
+      <table class="stable" aria-label="Scripts de la vue"><thead><tr><th>Événement</th><th>Langage</th><th class="n">Lignes</th><th>État</th></tr></thead><tbody id="sc-rows"></tbody></table>
+      <div class="scode"><div class="ehd" id="sc-ehd">Éditeur</div><pre id="sc-code"></pre></div>
+    </div>
+  </section>
+  </div>
+</div>
+
+<div class="tip" id="tip" hidden></div>
+<div class="menu" id="menu" role="menu" hidden></div>
+<div class="ac" id="ac" role="listbox" hidden></div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<div class="scrim" id="picker" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="pk-title">
+    <div class="mhd">
+      <h2 id="pk-title">Choisir la valeur</h2>
+      <span class="exp" id="pk-exp"></span>
+      <button class="x" type="button" id="pk-close" aria-label="Fermer">×</button>
+    </div>
+    <div class="mtools">
+      <label class="search"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="pk-q" type="text" placeholder="Rechercher une variable, un membre…" aria-label="Rechercher"></label>
+      <label class="chk"><input type="checkbox" id="pk-tf" checked> <span id="pk-tfl">Type attendu</span></label>
+      <div class="srcs" id="pk-src" role="group" aria-label="Sources"></div>
+    </div>
+    <div class="mbody">
+      <div class="treebox">
+        <div class="tcount" id="pk-count"></div>
+        <div class="tree" id="pk-tree" role="tree" aria-label="Ce qui est disponible" tabindex="0"></div>
+      </div>
+      <div class="detail" id="pk-detail"></div>
+    </div>
+    <div class="result">
+      <div class="rline">
+        <label for="pk-res">Résultat</label>
+        <div class="rbox">
+          <button class="fxb" type="button" id="pk-fx" aria-pressed="true" aria-label="Formule (fx)">fx</button>
+          <input id="pk-res" type="text" spellcheck="false" autocomplete="off">
+          <span id="pk-sq"></span>
+        </div>
+        <button class="btn small" type="button" id="pk-rep" title="Entoure la sélection de $…$">Insérer un repère $…$</button>
+      </div>
+      <div class="rinfo" id="pk-info"></div>
+      <div class="diags" id="pk-diags"></div>
+    </div>
+    <div class="mfoot">
+      <span class="hint">Clic sur une variable : elle va dans Résultat · double-clic : la prendre et valider · Ctrl+Entrée : valider</span>
+      <div id="pk-confirm"></div>
+      <button class="btn" type="button" id="pk-cancel">Annuler</button>
+      <button class="btn primary" type="button" id="pk-ok">Valider</button>
+    </div>
+  </div>
+</div>
+
+
+<div class="scrim" id="xp" hidden style="z-index:60">
+  <div class="xmodal" role="dialog" aria-modal="true" aria-labelledby="xp-title">
+    <div class="mhd"><h2 id="xp-title">Exporter les scripts de Popup_vanne</h2><button class="x" type="button" data-close="xp" aria-label="Fermer">×</button></div>
+    <div class="xbody">
+      <p class="note">Le fichier <b id="xp-name">Popup_vanne_scripts.xpgst</b> : du ST lisible, un bloc <code>(*# … *)</code> avant chaque script. Il se modifie dans n’importe quel éditeur.</p>
+      <pre id="xp-text"></pre>
+    </div>
+    <div class="xfoot"><span class="note">Dans l’application : l’explorateur de fichiers propose exports\ du projet.</span><button class="btn" type="button" data-close="xp">Fermer</button><button class="btn primary" type="button" id="xp-save">Enregistrer le fichier</button></div>
+  </div>
+</div>
+<div class="scrim" id="ip" hidden style="z-index:60">
+  <div class="xmodal" role="dialog" aria-modal="true" aria-labelledby="ip-title">
+    <div class="mhd"><h2 id="ip-title">Importer des scripts dans Popup_vanne</h2><button class="x" type="button" data-close="ip" aria-label="Fermer">×</button></div>
+    <div class="xbody">
+      <p id="ip-lead"></p>
+      <div class="ilist"><div class="lt">SCRIPTS DU FICHIER</div><div id="ip-items"></div></div>
+      <div class="opts" id="ip-opts"></div>
+      <p class="note">Un seul Ctrl+Z annule l’import. Les scripts identiques sont décochés : rien ne change pour eux.</p>
+      <p class="note">Ou un fichier à toi : <input type="file" id="ip-file" accept=".xpgst,.st,.txt"></p>
+    </div>
+    <div class="xfoot"><button class="btn" type="button" data-close="ip">Annuler</button><button class="btn primary" type="button" id="ip-ok">Importer</button></div>
+  </div>
+</div>
+<div class="scrim" id="creator" hidden style="z-index:80">
+  <div class="cmodal" role="dialog" aria-modal="true" aria-labelledby="cr-title">
+    <div class="mhd"><h2 id="cr-title">Créer la variable</h2><button class="x" type="button" id="cr-close" aria-label="Fermer">×</button></div>
+    <div class="cbody">
+      <p id="cr-lead"></p>
+      <div class="sugg" id="cr-sugg"></div>
+      <div class="form">
+        <label for="cr-name">Nom</label><input type="text" id="cr-name" spellcheck="false">
+        <span>Zone</span>
+        <div class="zone" role="group" aria-label="Zone">
+          <button type="button" data-z="I" aria-pressed="true"><span class="sq sm k-I">I</span><span>IHM<small>une variable de l’IHM</small></span></button>
+          <button type="button" data-z="A" aria-pressed="false"><span class="sq sm k-A">A</span><span>API<small>une variable de l’automate</small></span></button>
+        </div>
+        <label for="cr-type">Type</label><select id="cr-type"></select>
+        <label for="cr-extra" id="cr-extra-l">Valeur initiale (IHM)</label><input type="text" id="cr-extra" spellcheck="false">
+        <label for="cr-addr">Adresse (API, facultative)</label><input type="text" id="cr-addr" spellcheck="false" placeholder="%MW100 ; vide : non située">
+        <label for="cr-com">Commentaire</label><input type="text" id="cr-com">
+      </div>
+      <p class="note" id="cr-note"></p>
+    </div>
+    <div class="cfoot"><button class="btn" type="button" id="cr-cancel">Annuler</button><button class="btn primary" type="button" id="cr-ok">Créer et valider</button></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* ---------- le modèle : types, variables, champs ---------- */
+const TYPES = {
+  T_Armoire: {kind:'struct', members:[['Pression','REAL'],['Debit','REAL'],['Marche','BOOL'],['Defaut','BOOL'],['Nom','STRING']]},
+  T_MODE: {kind:'enum', values:['Arret','Auto','Manu']},
+};
+let VARS = [
+  {name:'Armoires', zone:'A', type:'ARRAY[1..3] OF T_Armoire', addr:'%MW1000', comment:'Les trois armoires gaz du site'},
+  {name:'Niveau_Cuve', zone:'A', type:'REAL', addr:'%MF100', comment:'Niveau de la cuve, en %'},
+  {name:'Pression_Max', zone:'A', type:'REAL', addr:'%MF102', comment:'Seuil haut de pression, en bar'},
+  {name:'Compteur', zone:'A', type:'UINT', addr:'%MW120', comment:'Cycles de la vanne'},
+  {name:'Mesures', zone:'A', type:'ARRAY[0..9] OF UINT', addr:'%MW200', comment:'Les dix dernières mesures'},
+  {name:'Mode', zone:'A', type:'T_MODE', addr:'%MW130', comment:'Mode de marche'},
+  {name:'Marche_Generale', zone:'A', type:'BOOL', addr:'%M10', comment:''},
+  {name:'UINTS', zone:'I', type:'ARRAY[0..9] OF UINT', init:'0', comment:'Tableau de travail de l’IHM'},
+  {name:'gCoef', zone:'I', type:'REAL', init:'1.0', comment:'Coefficient d’affichage'},
+  {name:'gAlarme', zone:'I', type:'BOOL', init:'FALSE', comment:'Une alarme est active'},
+  {name:'gNomSite', zone:'I', type:'STRING', init:"'Site Nord'", comment:''},
+  {name:'gConsigne', zone:'I', type:'UINT', init:'50', comment:'Consigne de débit'},
+  {name:'SYS.Heure', zone:'S', type:'STRING', comment:'L’heure du poste, hh:mm:ss'},
+  {name:'SYS.Date', zone:'S', type:'DATE', comment:'La date du poste'},
+  {name:'SYS.Utilisateur', zone:'S', type:'STRING', comment:'L’opérateur connecté'},
+  {name:'SYS.Seconde', zone:'S', type:'UINT', comment:'Les secondes de l’horloge, 0..59'},
+  {name:'SYS.Langue', zone:'S', type:'STRING', comment:'La langue de l’IHM'},
+  {name:'Vue_Accueil.Selection', zone:'V', type:'UINT', comment:'Variable publique de la vue'},
+  {name:'Vue_Accueil.Titre', zone:'V', type:'STRING', comment:'Variable publique de la vue'},
+  {name:'STEST_1.Ouvert', zone:'V', type:'BOOL', comment:'Variable publique de l’instance'},
+  {name:'STEST_1.Etat', zone:'V', type:'UINT', comment:'Variable publique de l’instance'},
+];
+let ROWS = [
+  {id:'symb', sec:'Instance de symbole', label:'Symbole', ro:'STEST', tyl:'choix'},
+  {id:'nbi', sec:'Instance de symbole', label:'Instances de ce symbole', ro:'1'},
+  {id:'visible', sec:'Apparence', label:'Visible', type:'BOOL', fx:true, value:'Armoires[1].Marche'},
+  {id:'opac', sec:'Apparence', label:'Opacité (%)', type:'UINT', min:0, max:100, tyl:'nombre 0..100', fx:false, value:'100'},
+  {id:'clign', sec:'Apparence', label:'Clignotement', type:'BOOL', fx:true, value:'gAlarme AND SYS.Seconde MOD 2 = 0'},
+  {id:'bulle', sec:'Apparence', label:'Info-bulle', type:'TEXTE', tyl:'texte', fx:false, value:'Pression : $Armoires[1].Pression$ bar'},
+  {id:'select', sec:'Apparence', label:'Sélectionné', type:'BOOL', fx:true, value:'STEST_1.Ouvert'},
+  {id:'name', sec:'Paramètres du symbole', param:true, label:'Name', type:'STRING', fx:false, value:'Voiture'},
+  {id:'value', sec:'Paramètres du symbole', param:true, label:'Value', type:'ARRAY[0..9] OF UINT', fx:true, value:'UINTS'},
+  {id:'titre', sec:'Paramètres du symbole', param:true, label:'Titre', type:'STRING', fx:true, value:'SYS.Utilisateur'},
+  {id:'seuil', sec:'Paramètres du symbole', param:true, label:'Seuil', type:'REAL', fx:true, value:'Pressoin_Max'},
+  {id:'mode', sec:'Paramètres du symbole', param:true, label:'Mode', type:'T_MODE', fx:false, value:'Auto'},
+];
+const KINDS = {
+  C:{l:'C', name:'Constante', desc:'Une valeur fixe, convertie dans le type du champ'},
+  fx:{l:'fx', name:'Formule', desc:'Un calcul, un appel ou plusieurs sources'},
+  D:{l:'$', name:'Formule + repères', desc:'Un texte avec des repères $…$'},
+  A:{l:'A', name:'Variable API', desc:'Une variable de l’automate'},
+  I:{l:'I', name:'Variable IHM', desc:'Une variable de l’IHM'},
+  S:{l:'S', name:'Variable système', desc:'SYS. : l’heure, la date, l’utilisateur…'},
+  V:{l:'V', name:'Variable du symbole ou de la vue', desc:'Paramètre, variable publique, THIS'},
+  E:{l:'!', name:'Erreur', desc:'Nom inconnu, conversion impossible, hors bornes'},
+};
+const KORDER = ['C','fx','D','A','I','S','V','E'];
+const ZONES = {A:'API', I:'IHM', S:'Système', V:'Symbole / vue'};
+const ZLONG = {A:'API (automate)', I:'IHM', S:'Système (SYS.)', V:'Symbole / vue'};
+const row = id => ROWS.find(r => r.id === id);
+const tyLabel = r => r.tyl || (r.type === 'TEXTE' ? 'texte' : r.type);
+
+/* ---------- les types et l'index des chemins ---------- */
+const arrInfo = t => { const m = /^ARRAY\[(-?\d+)\.\.(-?\d+)\]\s+OF\s+(.+)$/.exec(t || ''); return m ? {lo:+m[1], hi:+m[2], of:m[3]} : null; };
+const INTS = ['UINT','INT','DINT','UDINT'];
+let INDEX = new Map();
+const norm = p => p.replace(/\s+/g, '').replace(/\[[^\]]*\]/g, '[]');
+function addIdx(disp, key, zone, type, v){ if (!INDEX.has(key)) INDEX.set(key, {path:disp, zone, type, v}); const a = arrInfo(type); if (a) addIdx(disp + '[' + a.lo + ']', key + '[]', zone, a.of, v); const st = TYPES[type]; if (st && st.kind === 'struct') st.members.forEach(([m, t]) => addIdx(disp + '.' + m, key + '.' + m, zone, t, v)); }
+function rebuild(){ INDEX = new Map(); VARS.forEach(v => addIdx(v.name, v.name, v.zone, v.type, v)); }
+const resolve = p => INDEX.get(norm(p)) || null;
+function compat(actual, expected){
+  if (!actual || !expected) return false;
+  if (actual === expected) return true;
+  if (expected === 'REAL' && INTS.includes(actual)) return true;
+  if (expected === 'TEXTE' && actual === 'STRING') return true;
+  return false;
+}
+function convFix(expr, actual, expected){
+  if ((expected === 'STRING' || expected === 'TEXTE') && (INTS.includes(actual) || actual === 'REAL' || actual === 'BOOL')) return {label:`Convertir : ${actual}_TO_STRING(${expr})`, value:`${actual}_TO_STRING(${expr})`, fx:true};
+  if (expected === 'BOOL' && (INTS.includes(actual) || actual === 'REAL')) return {label:`Comparer : ${expr} <> 0`, value:`${expr} <> 0`, fx:true};
+  if (INTS.includes(expected) && actual === 'REAL') return {label:`Arrondir : REAL_TO_${expected}(${expr})`, value:`REAL_TO_${expected}(${expr})`, fx:true};
+  return null;
+}
+
+/* ---------- le classement d'une valeur ---------- */
+const KW = new Set(['AND','OR','XOR','NOT','MOD','TRUE','FALSE','IF','THEN','ELSE','ELSIF','END_IF']);
+const FN = new Set(['UINT_TO_STRING','REAL_TO_STRING','INT_TO_STRING','BOOL_TO_STRING','REAL_TO_UINT','REAL_TO_INT','ABS','MIN','MAX','LIMIT','SEL','CONCAT','LEN','TRUNC']);
+function idents(expr){
+  const s = expr.replace(/'(?:[^']|'')*'/g, m => ' '.repeat(m.length)).replace(/[A-Za-z_]\w*#\w+/g, m => ' '.repeat(m.length));
+  const re = /[A-Za-z_][A-Za-z0-9_]*(?:\s*\[[^\]]*\])?(?:\.[A-Za-z_][A-Za-z0-9_]*(?:\s*\[[^\]]*\])?)*/g;
+  const out = []; let m;
+  while ((m = re.exec(s))){
+    const p = m[0], head = p.split(/[.\[]/)[0].toUpperCase();
+    if (KW.has(p.toUpperCase())) continue;
+    if (FN.has(head) && s.slice(m.index + p.length).trimStart().startsWith('(')) continue;
+    out.push({path:p.replace(/\s+/g, ''), at:m.index, len:p.length});
+  }
+  return out;
+}
+function lev(a, b){ a = a.toLowerCase(); b = b.toLowerCase(); const d = []; for (let i = 0; i <= a.length; i++){ d[i] = [i]; } for (let j = 1; j <= b.length; j++) d[0][j] = j; for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) d[i][j] = Math.min(d[i-1][j] + 1, d[i][j-1] + 1, d[i-1][j-1] + (a[i-1] === b[j-1] ? 0 : 1)); return d[a.length][b.length]; }
+function closest(p, type){
+  const out = [];
+  for (const [k, info] of INDEX){ if (k.includes('[]')) continue; const dd = lev(p, k); if (dd <= Math.max(2, Math.floor(p.length / 4))) out.push({info, dd, ok:compat(info.type, type)}); }
+  out.sort((x, y) => x.dd - y.dd || (y.ok - x.ok));
+  return out.slice(0, 2);
+}
+function convert(t, r){
+  const type = r.type, a = arrInfo(type);
+  if (a) return {ok:false, msg:'Un tableau se donne par une variable : utilisez fx.', fixes:VARS.filter(v => v.type === type).map(v => ({label:`Utiliser ${v.name} (${ZONES[v.zone]}) en fx`, value:v.name, fx:true}))};
+  if (type === 'STRING'){ const q = /^'(?:[^']|'')*'$/.test(t); return {ok:true, lit:q ? t : "'" + t.replace(/'/g, "''") + "'", note:q ? '' : 'converti en texte'}; }
+  if (type === 'TEXTE') return {ok:true, lit:t, note:'texte fixe'};
+  if (type === 'BOOL'){ const map = {TRUE:'TRUE', VRAI:'TRUE', '1':'TRUE', FALSE:'FALSE', FAUX:'FALSE', '0':'FALSE'}; const u = map[t.toUpperCase()]; if (u) return {ok:true, lit:u}; return {ok:false, msg:`« ${t} » n’est pas un booléen.`, fixes:[{label:'TRUE', value:'TRUE', fx:false}, {label:'FALSE', value:'FALSE', fx:false}, {label:'En faire une formule (fx)', value:t, fx:true}]}; }
+  if (INTS.includes(type)){
+    const lo = r.min ?? (type === 'UINT' ? 0 : -32768), hi = r.max ?? (type === 'UINT' ? 65535 : 32767);
+    if (!/^-?\d+$/.test(t)) return {ok:false, msg:`« ${t} » n’est pas un nombre entier.`, fixes:[{label:'En faire une formule (fx)', value:t, fx:true}]};
+    const n = +t; if (n < lo || n > hi){ const b = n < lo ? lo : hi; return {ok:false, msg:`${n} est hors des bornes ${lo}..${hi}.`, fixes:[{label:`Ramener à ${b}`, value:String(b), fx:false}]}; }
+    return {ok:true, lit:String(n)};
+  }
+  if (type === 'REAL'){ const s = t.replace(',', '.'); if (!/^-?\d+(\.\d+)?([eE]-?\d+)?$/.test(s)) return {ok:false, msg:`« ${t} » n’est pas un nombre.`, fixes:[{label:'En faire une formule (fx)', value:t, fx:true}]}; return {ok:true, lit:/[.eE]/.test(s) ? s : s + '.0', note:s !== t ? 'virgule lue comme un point' : ''}; }
+  const en = TYPES[type];
+  if (en && en.kind === 'enum'){ const v = t.replace(new RegExp('^' + type + '#', 'i'), ''); const hit = en.values.find(x => x.toLowerCase() === v.toLowerCase()); if (hit) return {ok:true, lit:`${type}#${hit}`}; return {ok:false, msg:`« ${t} » n’est pas une valeur de ${type}.`, fixes:en.values.map(x => ({label:`${type}#${x}`, value:x, fx:false}))}; }
+  return {ok:true, lit:t};
+}
+function unknownDiag(p, r, single){
+  const fixes = closest(p, r.type).map(c => ({label:`Remplacer par ${c.info.path} (${ZONES[c.info.zone]} · ${c.info.type})`, replace:[p, c.info.path]}));
+  if (single && (r.type === 'STRING' || r.type === 'TEXTE') && /^[A-Za-z_]\w*$/.test(p)) fixes.push({label:`Prendre comme le texte '${p}' (constante)`, value:p, fx:false});
+  const creatable = /^[A-Za-z_]\w*$/.test(p) && !/^SYS$/i.test(p);
+  if (creatable) fixes.push({label:`Créer « ${p} »…`, create:p});
+  const where = p.includes('.') ? ' (le membre ou le chemin n’existe pas)' : '';
+  return {msg:`<b>${esc(p)}</b> n’existe pas${where}.`, fixes, unknown:creatable ? p : null};
+}
+function classify(text, fx, r){
+  const t = (text || '').trim();
+  if (!t) return null;
+  const res = {kind:null, dots:[], info:'', diags:[], unknown:[]};
+  const zonesOf = ids => [...new Set(ids.map(i => resolve(i.path)).filter(Boolean).map(i => i.zone))];
+  if (t.includes('$')){
+    const n = (t.match(/\$/g) || []).length;
+    if (n % 2) res.diags.push({msg:'<b>Un repère n’est pas fermé</b> : il manque un <code>$</code>.', fixes:[{label:'Fermer le repère', value:t + '$', fx}]});
+    const inner = [...t.matchAll(/\$([^$]*)\$/g)].map(m => m[1]);
+    const ids = inner.flatMap(idents);
+    ids.forEach(i => { if (!resolve(i.path)){ const d = unknownDiag(i.path, r, false); res.diags.push(d); if (d.unknown) res.unknown.push(d.unknown); } });
+    if (!['STRING','TEXTE'].includes(r.type)) res.diags.push({msg:`<b>Un texte avec repères donne un texte</b> ; ce champ attend ${esc(tyLabel(r))}.`, fixes:[]});
+    res.dots = zonesOf(ids);
+    res.kind = res.diags.length ? 'E' : 'D';
+    res.info = `Texte avec ${inner.length} repère${inner.length > 1 ? 's' : ''} : ` + (inner.map(x => `<code>$${esc(x)}$</code>`).join(' ') || '—');
+    return res;
+  }
+  if (!fx){
+    const c = convert(t, r);
+    if (c.ok){ res.kind = 'C'; res.lit = c.lit; res.info = `Constante : <code>${esc(c.lit)}</code> (${esc(tyLabel(r))})${c.note ? ' · ' + esc(c.note) : ''}`; }
+    else { res.kind = 'E'; res.diags.push({msg:`<b>${esc(c.msg)}</b>`, fixes:c.fixes}); res.info = 'Constante impossible à convertir.'; }
+    return res;
+  }
+  const ids = idents(t);
+  const flat = t.replace(/\s+/g, '');
+  const single = ids.length === 1 && flat === ids[0].path;
+  ids.forEach(i => { if (!resolve(i.path)){ const d = unknownDiag(i.path, r, single); res.diags.push(d); if (d.unknown) res.unknown.push(d.unknown); } });
+  if (res.diags.length){ res.kind = 'E'; res.dots = zonesOf(ids); res.info = 'Formule avec un nom inconnu.'; return res; }
+  if (!ids.length){ res.kind = 'fx'; res.info = 'Formule sans variable : un calcul fixe.'; return res; }
+  if (single){
+    const info = resolve(ids[0].path);
+    if (!compat(info.type, r.type)){
+      const fixes = []; const f = convFix(ids[0].path, info.type, r.type); if (f) fixes.push(f);
+      if (arrInfo(r.type)) VARS.filter(v => v.type === r.type).forEach(v => fixes.push({label:`Remplacer par ${v.name} (${ZONES[v.zone]})`, value:v.name, fx:true}));
+      res.kind = 'E'; res.diags.push({msg:`<b>${esc(ids[0].path)}</b> est ${esc(info.type)} ; ce champ attend ${esc(tyLabel(r))}.`, fixes});
+      res.info = `${ZLONG[info.zone]} : <code>${esc(ids[0].path)}</code>`;
+      return res;
+    }
+    res.kind = info.zone;
+    const where = info.v.addr ? ` · ${esc(info.v.addr)}` : (info.v.init ? ` · initiale ${esc(info.v.init)}` : '');
+    res.info = `${ZLONG[info.zone]} : <code>${esc(info.path === ids[0].path ? ids[0].path : ids[0].path)}</code> · ${esc(info.type)}${where}`;
+    return res;
+  }
+  res.kind = 'fx'; res.dots = zonesOf(ids);
+  res.info = 'Formule · sources : ' + res.dots.map(z => ZONES[z]).join(', ');
+  return res;
+}
+
+/* ---------- le dessin d'un carré ---------- */
+function sq(c, small){
+  if (!c) return `<span class="sq ${small ? 'sm ' : ''}empty" aria-hidden="true"></span>`;
+  const dots = (c.kind === 'fx' || c.kind === 'D') && c.dots.length ? `<span class="dots">${c.dots.map(z => `<i class="d-${z}"></i>`).join('')}</span>` : '';
+  return `<span class="sq ${small ? 'sm ' : ''}k-${c.kind}${dots ? ' has-dots' : ''}">${esc(KINDS[c.kind].l)}${dots}</span>`;
+}
+const sqKind = (k, small) => `<span class="sq ${small ? 'sm ' : ''}k-${k}">${esc(KINDS[k].l)}</span>`;
+
+/* ---------- l'inspecteur ---------- */
+const closedSecs = new Set();
+let highlight = null;
+function renderInspector(){
+  const secs = [...new Set(ROWS.map(r => r.sec))];
+  $('#secs').innerHTML = secs.map(s => `<div class="sec${closedSecs.has(s) ? ' closed' : ''}" data-sec="${esc(s)}"><button class="sh" type="button" aria-expanded="${!closedSecs.has(s)}"><span class="chev">▾</span>${esc(s)}</button><div class="rows">${ROWS.filter(r => r.sec === s).map(rowHtml).join('')}</div></div>`).join('');
+  renderShow(); renderLegend();
+}
+function rowHtml(r){
+  if (r.ro) return `<div class="row"><div class="lab"><span class="nm">${esc(r.label)}</span>${r.tyl ? `<span class="ty">${esc(r.tyl)}</span>` : ''}</div><div class="val"><span class="ro">${esc(r.ro)}</span></div></div>`;
+  const c = classify(r.value, r.fx, r); r._c = c;
+  const lab = r.param ? `<span class="nm">${esc(r.label)}</span><span class="ty">· ${esc(tyLabel(r))}</span>` : `<span class="nm">${esc(r.label)}</span><span class="ty">${esc(tyLabel(r))}</span>`;
+  const hl = highlight ? (c && c.kind === highlight ? ' hl' : ' dim') : '';
+  const diag = c && c.kind === 'E' && c.diags.length ? `<div class="diag">${c.diags.slice(0, 1).map(d => `<span class="msg">${d.msg}</span>${d.fixes.slice(0, 3).map((f, i) => `<button class="btn small" type="button" data-fix="${r.id}|0|${i}">${esc(f.label)}</button>`).join('')}`).join('')}${c.diags.length > 1 ? `<span class="note">+${c.diags.length - 1}</span>` : ''}</div>` : '';
+  return `<div class="row${r.param ? ' param' : ''}${hl}" data-row="${r.id}"><div class="lab">${lab}</div><div class="val"><button class="fxb" type="button" data-fxt="${r.id}" aria-pressed="${!!r.fx}" aria-label="Formule (fx) pour ${esc(r.label)}">fx</button><input class="inp${r.fx || (r.value || '').includes('$') ? ' f' : ''}" data-inp="${r.id}" value="${esc(r.value)}" spellcheck="false" autocomplete="off" aria-label="${esc(r.label)}"><button class="sqb" type="button" data-sq="${r.id}" aria-haspopup="menu" aria-label="${esc(c ? KINDS[c.kind].name : 'Aucune valeur')} : ouvrir la liste des carrés">${sq(c)}</button></div>${diag}</div>`;
+}
+function refreshRow(id, keepFocus){
+  const r = row(id); const el = document.querySelector(`[data-row="${id}"]`); if (!el) return;
+  const inp = el.querySelector('input'); const had = keepFocus && document.activeElement === inp; const pos = had ? inp.selectionStart : 0;
+  el.outerHTML = rowHtml(r);
+  if (had){ const ni = document.querySelector(`[data-inp="${id}"]`); ni.focus(); ni.setSelectionRange(pos, pos); }
+  renderShow();
+}
+function renderShow(){
+  const live = ROWS.filter(r => !r.ro);
+  const nfx = live.filter(r => r.fx && r.value).length, nrep = live.filter(r => (r.value || '').includes('$')).length, nn = live.filter(r => r.value).length;
+  $('#showbar').innerHTML = `Montrer : <span class="pill">fx ${nfx}</span><span class="pill">$ Repères ${nrep}</span><span class="pill">Non vides ${nn}</span>`;
+}
+function renderLegend(){
+  $('#legend').innerHTML = `<span class="lt">Le carré dit d’où vient la valeur :</span>` + KORDER.map(k => `<button type="button" data-leg="${k}" aria-pressed="${highlight === k}" title="${esc(KINDS[k].desc)}">${sqKind(k, true)}${esc(KINDS[k].name)}</button>`).join('');
+}
+function commitRow(r, value, fx, quiet){
+  r.value = value; r.fx = fx; refreshRow(r.id);
+  const el = document.querySelector(`[data-row="${r.id}"]`); if (el){ el.classList.add('flash'); }
+  if (!quiet) toast(`${r.label} ← ${value || '(vide)'}${fx ? ' (fx)' : ''} · Ctrl+Z annule`);
+}
+function applyFix(r, f, target){
+  if (f.create){ openCreate(f.create, r, target); return; }
+  let v = target ? pk.res : r.value, fx = target ? pk.fx : r.fx;
+  if (f.replace){ v = v.split(f.replace[0]).join(f.replace[1]); }
+  if (f.value !== undefined){ v = f.value; fx = f.fx; }
+  if (target){ setResult(v, fx); } else commitRow(r, v, fx);
+}
+
+/* ---------- infobulle ---------- */
+const tip = $('#tip');
+function showTip(btn){
+  const r = row(btn.dataset.sq); const c = r._c;
+  const k = c ? c.kind : null;
+  tip.innerHTML = c ? `<div class="tt">${sq(c, true)}${esc(KINDS[k].name)}</div><div>${c.info}</div>${c.diags.length ? `<div style="margin-top:4px">${c.diags[0].msg}</div>` : ''}<div class="hint">Clic : la liste des carrés et le sélecteur</div>` : `<div class="tt">Aucune valeur</div><div class="hint">Clic : ouvrir le sélecteur</div>`;
+  tip.hidden = false; const b = btn.getBoundingClientRect(); const w = tip.offsetWidth, h = tip.offsetHeight;
+  let x = Math.min(b.right - w, innerWidth - w - 8); x = Math.max(8, x); let y = b.bottom + 6; if (y + h > innerHeight - 8) y = b.top - h - 6;
+  tip.style.left = x + 'px'; tip.style.top = y + 'px';
+}
+const hideTip = () => { tip.hidden = true; };
+
+/* ---------- le menu des carrés ---------- */
+const menu = $('#menu'); let menuFor = null;
+function openMenu(btn){
+  hideTip(); closeAc(); const r = row(btn.dataset.sq); menuFor = {r, btn}; const cur = r._c ? r._c.kind : null;
+  menu.innerHTML = `<div class="mh">Le carré dit d’où vient la valeur</div>` + KORDER.map(k => `<button class="mi${k === cur ? ' cur' : ''}" type="button" role="menuitem" data-mk="${k}">${sqKind(k)}<span><span class="t">${esc(KINDS[k].name)}</span><span class="d">${esc(menuDesc(k, r))}</span></span><span class="ck">${k === cur ? '✓ ici' : ''}</span></button>`).join('') + `<hr><button class="mi" type="button" role="menuitem" data-mk="open"><span class="sq k-fx" style="font-style:normal">…</span><span><span class="t">Ouvrir le sélecteur</span><span class="d">Tout ce qui est disponible, filtré sur ${esc(tyLabel(r))}</span></span><span class="ck"></span></button>`;
+  menu.hidden = false; const b = btn.getBoundingClientRect(); const w = menu.offsetWidth, h = menu.offsetHeight;
+  let x = Math.min(b.right - w, innerWidth - w - 8); x = Math.max(8, x); let y = b.bottom + 4; if (y + h > innerHeight - 8) y = Math.max(8, b.top - h - 4);
+  menu.style.left = x + 'px'; menu.style.top = y + 'px'; menu.querySelector('.mi').focus();
+}
+function menuDesc(k, r){
+  if (k === 'C') return `Une valeur fixe, convertie en ${tyLabel(r)}`;
+  if (['A','I','S','V'].includes(k)){ const n = VARS.filter(v => v.zone === k).length; return `${KINDS[k].desc} · choisir parmi ${n}`; }
+  return KINDS[k].desc;
+}
+function closeMenu(){ menu.hidden = true; menuFor = null; }
+
+/* ---------- l'aide à la saisie ---------- */
+const ac = $('#ac'); let acCtx = null;
+function acCompute(text, caret, r, fx){
+  const before = text.slice(0, caret);
+  const insideRep = ((before.match(/\$/g) || []).length % 2) === 1;
+  if (!fx && !insideRep) return null;
+  const m = /([A-Za-z_][A-Za-z0-9_]*(?:\[[^\]]*\])?(?:\.[A-Za-z0-9_]*(?:\[[^\]]*\])?)*)$/.exec(before);
+  if (!m) return null;
+  const frag = m[1], dot = frag.lastIndexOf('.'), base = dot >= 0 ? frag.slice(0, dot) : '', pre = dot >= 0 ? frag.slice(dot + 1) : frag;
+  let items = [];
+  if (base){
+    const info = resolve(base);
+    if (info){ const st = TYPES[info.type]; if (st && st.kind === 'struct') items = st.members.map(([mm, t]) => ({ins:base + '.' + mm, label:mm, zone:info.zone, type:t})); }
+    else items = VARS.filter(v => v.name.startsWith(base + '.')).map(v => ({ins:v.name, label:v.name.slice(base.length + 1), zone:v.zone, type:v.type}));
+  } else {
+    const seen = new Set();
+    VARS.forEach(v => { const i = v.name.indexOf('.'); if (i > 0){ const p = v.name.slice(0, i); if (!seen.has(p)){ seen.add(p); items.push({ins:p + '.', label:p + '.', zone:v.zone, type:v.zone === 'S' ? 'variables système' : 'variables publiques', folder:true}); } } else items.push({ins:v.name, label:v.name, zone:v.zone, type:v.type}); });
+  }
+  const q = pre.toLowerCase();
+  items = items.filter(i => !q || i.label.toLowerCase().startsWith(q) || (q.length > 1 && i.label.toLowerCase().includes(q)));
+  const exp = insideRep ? 'TEXTE' : r.type;
+  items.forEach(i => { i.ok = i.folder || compat(i.type, exp) || !!arrInfo(i.type) || !!TYPES[i.type]; i.st = i.label.toLowerCase().startsWith(q); });
+  items.sort((a, b) => (b.ok - a.ok) || (b.st - a.st) || a.label.localeCompare(b.label));
+  if (!items.length) return null;
+  return {start:caret - frag.length + (dot >= 0 ? dot + 1 : 0) - (dot >= 0 ? (dot + 1) : 0), from:caret - frag.length, to:caret, items:items.slice(0, 8), q};
+}
+function openAc(input, r, fx, onPick){
+  const res = acCompute(input.value, input.selectionStart, r, fx);
+  if (!res){ closeAc(); return; }
+  acCtx = {input, r, fx, onPick, res, i:0};
+  drawAc();
+}
+function drawAc(){
+  const {res, i, input} = acCtx;
+  ac.innerHTML = res.items.map((it, k) => `<button type="button" role="option" class="${k === i ? 'on' : ''}${it.ok ? '' : ' inc'}" data-ac="${k}" aria-selected="${k === i}">${sqKind(it.zone, true)}<span class="nm">${esc(it.label)}</span><span class="ty">${esc(it.type)}</span></button>`).join('') + `<div class="foot"><span>${sqKind('A', true)}API</span><span>${sqKind('I', true)}IHM</span><span>${sqKind('S', true)}système</span><span>${sqKind('V', true)}symbole/vue</span><span>↑↓ Entrée</span></div>`;
+  ac.hidden = false; const b = input.getBoundingClientRect(); const h = ac.offsetHeight;
+  let y = b.bottom + 3; if (y + h > innerHeight - 8) y = b.top - h - 3;
+  ac.style.left = Math.max(8, Math.min(b.left, innerWidth - ac.offsetWidth - 8)) + 'px'; ac.style.top = y + 'px';
+}
+function closeAc(){ ac.hidden = true; acCtx = null; }
+function acAccept(k){
+  if (!acCtx) return; const {input, res, onPick} = acCtx; const it = res.items[k ?? acCtx.i];
+  const v = input.value.slice(0, res.from) + it.ins + input.value.slice(res.to);
+  const caret = res.from + it.ins.length;
+  input.value = v; input.setSelectionRange(caret, caret); onPick(v, caret);
+  if (it.folder || (TYPES[it.type] && TYPES[it.type].kind === 'struct')){ if (!it.folder){ input.value = v.slice(0, caret) + '.' + v.slice(caret); input.setSelectionRange(caret + 1, caret + 1); onPick(input.value, caret + 1); } openAc(input, acCtx.r, acCtx.fx, onPick); }
+  else closeAc();
+}
+function acKey(e){
+  if (!acCtx || ac.hidden) return false;
+  if (e.key === 'ArrowDown'){ acCtx.i = (acCtx.i + 1) % acCtx.res.items.length; drawAc(); return true; }
+  if (e.key === 'ArrowUp'){ acCtx.i = (acCtx.i - 1 + acCtx.res.items.length) % acCtx.res.items.length; drawAc(); return true; }
+  if (e.key === 'Enter' || e.key === 'Tab'){ acAccept(); return true; }
+  if (e.key === 'Escape'){ closeAc(); return true; }
+  return false;
+}
+
+/* ---------- le sélecteur ---------- */
+const pk = {r:null, src:'all', tf:true, q:'', sel:null, res:'', fx:true, open:new Set(), shut:new Set(), back:null, confirm:false};
+function buildTree(){
+  const node = (label, path, zone, type, v) => { const n = {key:path, label, path, zone, type, v, children:[]}; const a = arrInfo(type); if (a && a.hi - a.lo < 16) for (let i = a.lo; i <= a.hi; i++) n.children.push(node('[' + i + ']', path + '[' + i + ']', zone, a.of, v)); const st = TYPES[type]; if (st && st.kind === 'struct') st.members.forEach(([m, t]) => n.children.push(node(m, path + '.' + m, zone, t, v))); return n; };
+  return ['A','I','S','V'].map(z => {
+    const g = {key:'@' + z, label:ZLONG[z], zone:z, grp:true, children:[]}; const folders = new Map();
+    VARS.filter(v => v.zone === z).forEach(v => { const i = v.name.indexOf('.'); if (i > 0){ const p = v.name.slice(0, i); let f = folders.get(p); if (!f){ f = {key:'@' + z + '/' + p, label:p, fold:true, zone:z, children:[], note:z === 'S' ? 'système' : (p.startsWith('Vue') ? 'vue' : 'instance')}; folders.set(p, f); g.children.push(f); } f.children.push(node(v.name.slice(i + 1), v.name, z, v.type, v)); } else g.children.push(node(v.name, v.name, z, v.type, v)); });
+    return g;
+  });
+}
+function filtered(){
+  const q = pk.q.trim().toLowerCase(), exp = pk.r.type; let total = 0, shown = 0;
+  const test = n => {
+    if (n.grp || n.fold){ const ch = n.children.map(test).filter(Boolean); return ch.length ? {...n, children:ch} : null; }
+    total++;
+    const okT = !pk.tf || compat(n.type, exp), okQ = !q || n.path.toLowerCase().includes(q);
+    const ch = n.children.map(test).filter(Boolean);
+    if (okT && okQ) shown++;
+    return (okT && okQ) || ch.length ? {...n, children:ch, m:okT && okQ} : null;
+  };
+  const groups = buildTree().filter(g => pk.src === 'all' || pk.src === g.zone).map(test).filter(Boolean);
+  return {groups, total, shown};
+}
+function isOpen(n, depth){
+  if (pk.shut.has(n.key)) return false;
+  if (pk.open.has(n.key)) return true;
+  if (n.grp || n.fold) return true;
+  return !!(pk.q.trim() || pk.tf) && n.children.length > 0 && depth < 4;
+}
+function renderPicker(){
+  const r = pk.r;
+  $('#pk-title').textContent = `Choisir la valeur de « ${r.label} »`;
+  $('#pk-exp').innerHTML = `attendu : <code>${esc(tyLabel(r))}</code>`;
+  $('#pk-tfl').innerHTML = `Type attendu : <code>${esc(r.type === 'TEXTE' ? 'texte' : r.type)}</code>`;
+  $('#pk-tf').checked = pk.tf;
+  const srcs = [['all', 'Tout'], ['A'], ['I'], ['S'], ['V'], ['C']];
+  $('#pk-src').innerHTML = srcs.map(([k, t]) => k === 'all' ? `<button type="button" class="all" data-src="all" aria-pressed="${pk.src === 'all'}">Tout</button>` : `<button type="button" data-src="${k}" aria-pressed="${pk.src === k}">${sqKind(k, true)}${esc(k === 'C' ? 'Constante' : ZONES[k])}</button>`).join('');
+  renderTree(); renderDetail(); renderResult();
+}
+function renderTree(){
+  const tree = $('#pk-tree');
+  if (pk.src === 'C'){
+    $('#pk-count').innerHTML = `Une constante est une valeur fixe, convertie dans le type du champ.`;
+    tree.innerHTML = constPanel(); return;
+  }
+  const {groups, total, shown} = filtered();
+  $('#pk-count').innerHTML = pk.tf ? `${shown} élément${shown > 1 ? 's' : ''} sur ${total} conviennent à <code>${esc(pk.r.type === 'TEXTE' ? 'STRING' : pk.r.type)}</code> ·<button class="btn link" type="button" id="pk-all">Tout montrer</button>` : `${shown} élément${shown > 1 ? 's' : ''} · tout est montré · <button class="btn link" type="button" id="pk-flt">Filtrer sur le type attendu</button>`;
+  const out = [];
+  const walk = (n, lvl) => {
+    const has = n.children.length > 0, open = has && isOpen(n, lvl);
+    const z = n.zone; const sel = pk.sel === n.key ? ' sel' : '';
+    const cls = n.grp ? ' grp' : (n.fold ? ' fold' : '');
+    const mut = !n.grp && !n.fold && !n.m ? ' mut' : '';
+    const icon = n.grp ? sqKind(z, true) : (n.fold ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="color:var(--fg-3)"><path d="M3 7h6l2 2h10v10H3z"/></svg>` : sqKind(z, true));
+    const right = n.grp ? `<span class="ty">${countLeaves(n)}</span>` : n.fold ? `<span class="ty">${esc(n.note)}</span>` : `<span class="ty">${esc(n.type)}</span>${n.m && pk.tf ? '<span class="ok" title="du type attendu">✓</span>' : ''}${n.v && n.v.created && n.path === n.v.name ? '<span class="new">neuve</span>' : ''}<span class="ad">${n.path === (n.v && n.v.name) ? esc(n.v.addr || '') : ''}</span>`;
+    out.push(`<div class="tn${cls}${sel}${mut}" role="treeitem" aria-level="${lvl + 1}" ${has ? `aria-expanded="${open}"` : ''} data-key="${esc(n.key)}" style="--lvl:${lvl}"><button class="cv${has ? '' : ' none'}" type="button" tabindex="-1" data-tog="${esc(n.key)}" aria-label="${open ? 'Replier' : 'Déplier'}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>${icon}<span class="nm">${esc(n.label)}</span>${right}</div>`);
+    if (open) n.children.forEach(c => walk(c, lvl + 1));
+  };
+  groups.forEach(g => walk(g, 0));
+  tree.innerHTML = out.join('') || `<div class="empty-t">Rien de ce type ici. <button class="btn link" type="button" id="pk-all2">Tout montrer</button> ou créer une variable depuis le résultat.</div>`;
+}
+const countLeaves = n => n.children.reduce((s, c) => s + (c.grp || c.fold ? countLeaves(c) : 1), 0);
+function findNode(key){ let f = null; const walk = n => { if (n.key === key) f = n; n.children.forEach(walk); }; buildTree().forEach(walk); return f; }
+function constPanel(){
+  const r = pk.r, t = r.type, en = TYPES[t];
+  let opts = [];
+  if (en && en.kind === 'enum') opts = en.values.map(v => [v, `${t}#${v}`]);
+  else if (t === 'BOOL') opts = [['TRUE', 'TRUE'], ['FALSE', 'FALSE']];
+  else if (INTS.includes(t)) opts = [[String(r.min ?? 0), 'min'], [String(r.max ?? 65535), 'max']];
+  else if (t === 'REAL') opts = [['0.0', ''], ['1.0', '']];
+  const arr = arrInfo(t);
+  const body = arr ? `<p>Un tableau ne se donne pas en constante : il faut une variable du même type, en <b>fx</b>.</p><div class="consts">${VARS.filter(v => v.type === t).map(v => `<button class="btn small" type="button" data-cset="${esc(v.name)}" data-cfx="1">${esc(v.name)} (${ZONES[v.zone]})</button>`).join('')}</div>`
+    : `<p>Tapez la valeur dans <b>Résultat</b>, sans fx. ${t === 'STRING' || t === 'TEXTE' ? 'Pas besoin d’apostrophes : <code>Voiture</code> devient <code>\'Voiture\'</code>.' : 'Elle est vérifiée dans le type et ses bornes.'}</p>${opts.length ? `<div class="consts">${opts.map(([v, n]) => `<button class="btn small" type="button" data-cset="${esc(v)}">${esc(v)}${n && n !== 'min' && n !== 'max' ? '' : n ? ' <span class="note">' + n + '</span>' : ''}</button>`).join('')}</div>` : ''}`;
+  return `<div class="detail" style="overflow:visible">${body}</div>`;
+}
+function renderDetail(){
+  const d = $('#pk-detail');
+  if (pk.src === 'C'){ d.innerHTML = `<div class="dn">Constante</div><p class="note">Type attendu : <code>${esc(tyLabel(pk.r))}</code>. Un nom qui n’est pas une variable, tapé sans fx, devient une constante de ce type.</p>`; return; }
+  const n = pk.sel ? findNode(pk.sel) : null;
+  if (!n || n.grp || n.fold){ d.innerHTML = `<p class="note">Choisissez une variable dans l’arbre : son type, son adresse, son commentaire s’affichent ici.</p><p class="note">Le filtre <b>Type attendu</b> ne montre que ce qui convient à <code>${esc(tyLabel(pk.r))}</code>. Décochez-le, ou « Tout montrer », pour voir tout ce qui est disponible : API, SYS., les variables IHM…</p>`; return; }
+  const ok = compat(n.type, pk.r.type); const fix = ok ? null : convFix(n.path, n.type, pk.r.type);
+  const v = n.v;
+  d.innerHTML = `<div style="display:flex;align-items:center;gap:8px">${sqKind(n.zone)}<span class="dn">${esc(n.path)}</span></div>
+    <dl><dt>Zone</dt><dd>${esc(ZLONG[n.zone])}</dd><dt>Type</dt><dd><code>${esc(n.type)}</code></dd>${v.addr && n.path === v.name ? `<dt>Adresse</dt><dd><code>${esc(v.addr)}</code></dd>` : ''}${v.init && n.path === v.name ? `<dt>Initiale</dt><dd><code>${esc(v.init)}</code></dd>` : ''}${v.comment ? `<dt>Commentaire</dt><dd>${esc(v.comment)}</dd>` : ''}</dl>
+    <div class="compat${ok ? '' : ' bad'}">${ok ? `✓ Convient à <code>${esc(tyLabel(pk.r))}</code>.` : `${esc(n.type)} ne convient pas à <code>${esc(tyLabel(pk.r))}</code>.${fix ? ' On peut ' + esc(fix.label.toLowerCase()) + '.' : ''}`}</div>
+    <div class="acts"><button class="btn small primary" type="button" data-use="replace">Remplacer le résultat</button><button class="btn small" type="button" data-use="insert">Insérer à la suite</button><button class="btn small" type="button" data-use="rep">Insérer comme repère $…$</button>${fix ? `<button class="btn small" type="button" data-use="conv">${esc(fix.label)}</button>` : ''}</div>`;
+}
+function renderResult(){
+  const r = pk.r; const c = classify(pk.res, pk.fx, r); pk.c = c;
+  const inp = $('#pk-res'); if (inp.value !== pk.res) inp.value = pk.res;
+  inp.classList.toggle('f', true);
+  $('#pk-fx').setAttribute('aria-pressed', String(pk.fx));
+  $('#pk-sq').innerHTML = sq(c);
+  $('#pk-info').innerHTML = c ? `${esc(KINDS[c.kind].name)} · ${c.info}` : '<span class="note">Vide : la valeur par défaut du champ.</span>';
+  $('#pk-diags').innerHTML = c ? c.diags.map((dg, di) => `<div class="dg"><span class="msg">${dg.msg}</span>${dg.fixes.map((f, i) => `<button class="btn small" type="button" data-pfix="${di}|${i}">${esc(f.label)}</button>`).join('')}</div>`).join('') : '';
+  $('#pk-confirm').innerHTML = pk.confirm ? `<div class="confirm">La valeur a encore une erreur. <button class="btn small" type="button" id="pk-force">Valider quand même</button></div>` : '';
+}
+function setResult(v, fx, caret){
+  pk.res = v; if (fx !== undefined) pk.fx = fx; pk.confirm = false; renderResult();
+  const inp = $('#pk-res'); inp.focus(); const p = caret ?? v.length; inp.setSelectionRange(p, p);
+}
+function openPicker(r, preset){
+  closeMenu(); hideTip(); closeAc();
+  Object.assign(pk, {r, src:preset.src || 'all', tf:true, q:'', sel:null, res:r.value || '', fx:preset.src === 'C' ? false : (preset.rep ? false : (r.value ? !!r.fx : true)), open:new Set(), shut:new Set(), back:document.activeElement, confirm:false});
+  if (preset.rep && pk.res && !pk.res.includes('$') && r.fx){ pk.res = ''; }
+  if (['A','I','S','V'].includes(pk.src) && r._c && r._c.kind === pk.src){ const info = resolve(r.value); if (info) pk.sel = r.value.replace(/\s+/g, ''); }
+  $('#picker').hidden = false; renderPicker();
+  setTimeout(() => (pk.src === 'C' || preset.rep ? $('#pk-res') : $('#pk-q')).focus(), 0);
+  if (preset.rep){ $('#pk-info').innerHTML += ' <span class="note">· Mode repère : choisissez une variable puis « Insérer comme repère », ou tapez <code>$</code>.</span>'; }
+}
+function closePicker(){ $('#picker').hidden = true; closeAc(); if (pk.back && pk.back.focus) pk.back.focus(); }
+function useNode(mode, n){
+  n = n || findNode(pk.sel); if (!n || n.grp || n.fold) return;
+  const inp = $('#pk-res'); const a = inp.selectionStart ?? pk.res.length, b = inp.selectionEnd ?? pk.res.length;
+  if (mode === 'replace'){ setResult(n.path, true); return; }
+  if (mode === 'conv'){ const f = convFix(n.path, n.type, pk.r.type); if (f) setResult(f.value, true); return; }
+  if (mode === 'rep'){ const ins = '$' + n.path + '$'; const v = pk.res.slice(0, a) + ins + pk.res.slice(b); setResult(v, false, a + ins.length); return; }
+  const cur = pk.res; const sep = !cur || /[\s(]$/.test(cur) ? '' : ' '; const v = cur + sep + n.path; setResult(v, cur.includes('$') ? pk.fx : true, v.length);
+}
+function pickerValidate(force){
+  const c = classify(pk.res, pk.fx, pk.r);
+  if (c && c.unknown.length && !force){ openCreate(c.unknown[0], pk.r, true); return; }
+  if (c && c.kind === 'E' && !force){ pk.confirm = true; renderResult(); return; }
+  const r = pk.r; closePicker(); commitRow(r, pk.res, pk.fx);
+}
+
+/* ---------- créer une variable ---------- */
+const cr = {name:'', r:null, fromPicker:false, zone:'I'};
+const CTYPES = ['BOOL','UINT','INT','REAL','STRING','DATE','T_MODE','ARRAY[0..9] OF UINT'];
+function nextAddr(t){ const base = t === 'BOOL' ? ['%M', 11] : t === 'REAL' ? ['%MF', 104] : arrInfo(t) ? ['%MW', 400] : t === 'STRING' ? ['%MW', 300] : ['%MW', 140]; let n = base[1]; const used = new Set(VARS.map(v => v.addr)); while (used.has(base[0] + n)) n += t === 'REAL' ? 2 : 1; return base[0] + n; }
+function initFor(t){ return t === 'BOOL' ? 'FALSE' : t === 'REAL' ? '0.0' : t === 'STRING' ? "''" : t === 'T_MODE' ? 'T_MODE#Arret' : arrInfo(t) ? '0' : '0'; }
+function openCreate(name, r, fromPicker){
+  closeAc(); Object.assign(cr, {name, r, fromPicker, zone:'I'});
+  $('#cr-title').textContent = `Créer la variable « ${name} »`;
+  $('#cr-lead').innerHTML = `<b>${esc(name)}</b> n’existe ni dans l’automate, ni dans l’IHM. Le champ <b>${esc(r.label)}</b> attend <code>${esc(tyLabel(r))}</code>.`;
+  const sug = closest(name, r.type);
+  $('#cr-sugg').innerHTML = sug.length ? `<span class="note">Vouliez-vous dire :</span>` + sug.map((s, i) => `<button class="btn small" type="button" data-csug="${i}">${sqKind(s.info.zone, true)} ${esc(s.info.path)} · ${esc(s.info.type)}</button>`).join('') : '';
+  cr.sug = sug;
+  $('#cr-name').value = name;
+  const tt = r.type === 'TEXTE' ? 'STRING' : r.type;
+  $('#cr-type').innerHTML = [...new Set([tt, ...CTYPES])].map(t => `<option${t === tt ? ' selected' : ''}>${esc(t)}</option>`).join('');
+  $('#cr-com').value = '';
+  setZone('I');
+  $('#creator').hidden = false; setTimeout(() => $('#cr-ok').focus(), 0);
+}
+function setZone(z){
+  cr.zone = z; document.querySelectorAll('.zone button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.z === z)));
+  const t = $('#cr-type').value;
+  $('#cr-extra').disabled = z === 'A'; $('#cr-addr').disabled = z !== 'A';
+  if (z === 'A'){ $('#cr-extra').value = ''; $('#cr-addr').value = nextAddr(t); $('#cr-note').textContent = 'Elle s’ajoute aux variables globales du programme ; elle devra aussi exister dans Control Expert. L’adresse proposée est la première libre (facultative). Un seul Ctrl+Z retire la variable et la saisie.'; }
+  else { $('#cr-addr').value = ''; $('#cr-extra').value = initFor(t); $('#cr-note').textContent = 'Elle s’ajoute aux variables IHM du projet (Programmation générale › Variables IHM). Un seul Ctrl+Z retire la variable et la saisie.'; }
+}
+function closeCreate(){ $('#creator').hidden = true; }
+function doCreate(){
+  const name = $('#cr-name').value.trim(); if (!/^[A-Za-z_]\w*$/.test(name)){ $('#cr-name').focus(); toast('Un nom de variable : des lettres, des chiffres et _'); return; }
+  const type = $('#cr-type').value, extra = $('#cr-extra').value.trim(), addr = $('#cr-addr').value.trim(), com = $('#cr-com').value.trim();
+  const v = {name, zone:cr.zone, type, comment:com || 'Créée depuis le sélecteur', created:true}; if (cr.zone === 'A') v.addr = addr; else v.init = extra;
+  VARS.push(v); rebuild(); closeCreate();
+  const r = cr.r;
+  if (cr.fromPicker){ if (name !== cr.name) pk.res = pk.res.split(cr.name).join(name); pk.src = cr.zone; pk.sel = name; renderPicker(); toast(`Variable ${ZONES[cr.zone]} ${name} : ${type} créée`); pickerValidate(); }
+  else { const val = name !== cr.name ? r.value.split(cr.name).join(name) : r.value; commitRow(r, val, r.fx, true); renderInspector(); toast(`Variable ${ZONES[cr.zone]} ${name} : ${type} créée · ${r.label} ← ${val} · Ctrl+Z annule les deux`); }
+}
+
+/* ---------- toast ---------- */
+let toastT = 0;
+function toast(m){ const t = $('#toast'); t.textContent = m; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, 3200); }
+
+/* ---------- les événements ---------- */
+document.addEventListener('click', e => {
+  const t = e.target;
+  if (!menu.hidden && !menu.contains(t) && !t.closest('[data-sq]')) closeMenu();
+  if (!ac.hidden && !ac.contains(t) && !t.closest('input')) closeAc();
+  let el;
+  if ((el = t.closest('[data-th]'))){ document.querySelectorAll('[data-th]').forEach(b => b.setAttribute('aria-pressed', String(b === el))); if (el.dataset.th) document.documentElement.setAttribute('data-theme', el.dataset.th); else document.documentElement.removeAttribute('data-theme'); return; }
+  if ((el = t.closest('.sec>button.sh'))){ const s = el.parentElement.dataset.sec; closedSecs.has(s) ? closedSecs.delete(s) : closedSecs.add(s); renderInspector(); return; }
+  if ((el = t.closest('[data-sq]'))){ if (menuFor && menuFor.btn === el){ closeMenu(); return; } openMenu(el); return; }
+  if ((el = t.closest('[data-mk]'))){ const r = menuFor.r, k = el.dataset.mk; const preset = k === 'open' || k === 'fx' || k === 'E' ? {src:'all'} : k === 'D' ? {src:'all', rep:true} : {src:k}; openPicker(r, preset); return; }
+  if ((el = t.closest('[data-fxt]'))){ const r = row(el.dataset.fxt); r.fx = !r.fx; refreshRow(r.id); const ni = document.querySelector(`[data-inp="${r.id}"]`); ni.focus(); toast(r.fx ? `${r.label} : formule (fx)` : `${r.label} : constante, convertie en ${tyLabel(r)}`); return; }
+  if ((el = t.closest('[data-fix]'))){ const [id, di, fi] = el.dataset.fix.split('|'); const r = row(id); applyFix(r, r._c.diags[+di].fixes[+fi], false); return; }
+  if ((el = t.closest('[data-leg]'))){ highlight = highlight === el.dataset.leg ? null : el.dataset.leg; renderInspector(); return; }
+  if ((el = t.closest('[data-ac]'))){ acAccept(+el.dataset.ac); return; }
+  if ((el = t.closest('[data-try]'))){ tryIt(el.dataset.try); return; }
+  // le sélecteur
+  if (t.closest('#pk-close') || t.closest('#pk-cancel')){ closePicker(); return; }
+  if (t.closest('#pk-ok')){ pickerValidate(false); return; }
+  if (t.closest('#pk-force')){ pickerValidate(true); return; }
+  if (t.closest('#pk-all') || t.closest('#pk-all2')){ pk.tf = false; renderPicker(); return; }
+  if (t.closest('#pk-flt')){ pk.tf = true; renderPicker(); return; }
+  if ((el = t.closest('[data-src]'))){ pk.src = el.dataset.src; pk.sel = null; if (pk.src === 'C') pk.fx = false; renderPicker(); return; }
+  if ((el = t.closest('[data-tog]'))){ const k = el.dataset.tog; const n = el.closest('.tn'); const open = n.getAttribute('aria-expanded') === 'true'; if (open){ pk.shut.add(k); pk.open.delete(k); } else { pk.open.add(k); pk.shut.delete(k); } renderTree(); return; }
+  if ((el = t.closest('.tn'))){ const k = el.dataset.key; const n = findNode(k); if (n && (n.grp || n.fold)){ const open = el.getAttribute('aria-expanded') === 'true'; if (open){ pk.shut.add(k); pk.open.delete(k); } else { pk.open.add(k); pk.shut.delete(k); } renderTree(); return; } pk.sel = k; renderTree(); renderDetail(); const cur = classify(pk.res, pk.fx, pk.r); if (!pk.res || (cur && ['A','I','S','V','E'].includes(cur.kind) && idents(pk.res).length <= 1)) useNode('replace', n); return; }
+  if ((el = t.closest('[data-use]'))){ useNode(el.dataset.use); return; }
+  if ((el = t.closest('[data-cset]'))){ setResult(el.dataset.cset, !!el.dataset.cfx); return; }
+  if ((el = t.closest('[data-pfix]'))){ const [di, fi] = el.dataset.pfix.split('|'); applyFix(pk.r, pk.c.diags[+di].fixes[+fi], true); return; }
+  if (t.closest('#pk-fx')){ pk.fx = !pk.fx; renderResult(); $('#pk-res').focus(); return; }
+  if (t.closest('#pk-rep')){ const inp = $('#pk-res'); const a = inp.selectionStart ?? pk.res.length, b = inp.selectionEnd ?? a; const mid = pk.res.slice(a, b); const v = pk.res.slice(0, a) + '$' + mid + '$' + pk.res.slice(b); setResult(v, false, a + 1 + mid.length); openAc(inp, pk.r, false, (vv) => { pk.res = vv; renderResult(); }); return; }
+  // créer
+  if (t.closest('#cr-close') || t.closest('#cr-cancel')){ closeCreate(); return; }
+  if (t.closest('#cr-ok')){ doCreate(); return; }
+  if ((el = t.closest('.zone button'))){ setZone(el.dataset.z); return; }
+  if ((el = t.closest('[data-csug]'))){ const s = cr.sug[+el.dataset.csug]; closeCreate(); if (cr.fromPicker){ setResult(pk.res.split(cr.name).join(s.info.path)); } else { const r = cr.r; commitRow(r, r.value.split(cr.name).join(s.info.path), r.fx); } return; }
+});
+document.addEventListener('dblclick', e => { const el = e.target.closest('.tn'); if (!el) return; const n = findNode(el.dataset.key); if (n && !n.grp && !n.fold){ useNode('replace', n); pickerValidate(false); } });
+document.addEventListener('change', e => { if (e.target.id === 'pk-tf'){ pk.tf = e.target.checked; renderPicker(); } if (e.target.id === 'cr-type') setZone(cr.zone); });
+document.addEventListener('input', e => {
+  const t = e.target;
+  if (t.dataset.inp){ const r = row(t.dataset.inp); r.value = t.value; refreshRow(r.id, true); const ni = document.querySelector(`[data-inp="${r.id}"]`); openAc(ni, r, r.fx, (v) => { r.value = v; refreshRow(r.id, true); }); return; }
+  if (t.id === 'pk-q'){ pk.q = t.value; renderTree(); return; }
+  if (t.id === 'pk-res'){ pk.res = t.value; pk.confirm = false; renderResult(); openAc(t, pk.r, pk.fx, (v) => { pk.res = v; renderResult(); }); return; }
+});
+document.addEventListener('keydown', e => {
+  const t = e.target;
+  if (acKey(e)){ e.preventDefault(); return; }
+  if (e.key === 'Escape'){
+    if (!$('#creator').hidden){ closeCreate(); return; }
+    if (!$('#picker').hidden){ closePicker(); return; }
+    if (!menu.hidden){ const b = menuFor.btn; closeMenu(); b.focus(); return; }
+  }
+  if (!menu.hidden && (e.key === 'ArrowDown' || e.key === 'ArrowUp')){ const items = [...menu.querySelectorAll('.mi')]; const i = items.indexOf(document.activeElement); const n = e.key === 'ArrowDown' ? (i + 1) % items.length : (i - 1 + items.length) % items.length; items[n].focus(); e.preventDefault(); return; }
+  if (t.dataset && t.dataset.inp){
+    const r = row(t.dataset.inp);
+    if (e.key === ' ' && e.ctrlKey){ e.preventDefault(); openPicker(r, {src:'all'}); return; }
+    if (e.key === 'Enter'){ e.preventDefault(); const c = classify(r.value, r.fx, r); if (c && c.unknown.length){ openCreate(c.unknown[0], r, false); return; } commitRow(r, r.value, r.fx); t.blur(); return; }
+  }
+  if (t.id === 'pk-res' && e.key === 'Enter'){ e.preventDefault(); pickerValidate(false); return; }
+  if (!$('#picker').hidden && e.key === 'Enter' && e.ctrlKey){ e.preventDefault(); pickerValidate(false); return; }
+  if (t.id === 'pk-tree' || (t.closest && t.closest('#pk-tree'))){
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp'){ const items = [...document.querySelectorAll('#pk-tree .tn:not(.grp):not(.fold)')]; let i = items.findIndex(x => x.dataset.key === pk.sel); i = e.key === 'ArrowDown' ? Math.min(items.length - 1, i + 1) : Math.max(0, i - 1); if (items[i]){ pk.sel = items[i].dataset.key; renderTree(); renderDetail(); const s = document.querySelector('#pk-tree .tn.sel'); if (s) s.scrollIntoView({block:'nearest'}); } e.preventDefault(); }
+    if (e.key === 'Enter' && pk.sel){ useNode('replace'); e.preventDefault(); }
+  }
+  if (e.key === 'Enter' && t.id === 'cr-name'){ e.preventDefault(); doCreate(); }
+});
+document.addEventListener('mouseover', e => { const b = e.target.closest('[data-sq]'); if (b && menu.hidden) showTip(b); else if (!b) hideTip(); });
+document.addEventListener('focusin', e => { const b = e.target.closest && e.target.closest('[data-sq]'); if (b && menu.hidden) showTip(b); else hideTip(); });
+addEventListener('scroll', () => { hideTip(); closeAc(); }, true);
+addEventListener('resize', () => { hideTip(); closeMenu(); closeAc(); });
+
+function tryIt(k){
+  if (k === 'menu'){ const b = document.querySelector('[data-sq="seuil"]'); b.scrollIntoView({block:'center'}); openMenu(b); }
+  if (k === 'create'){ const r = row('seuil'); r.fx = true; r.value = 'Debit_Max'; refreshRow('seuil'); const i = document.querySelector('[data-inp="seuil"]'); i.scrollIntoView({block:'center'}); i.focus(); setTimeout(() => openCreate('Debit_Max', r, false), 350); }
+  if (k === 'value') openPicker(row('value'), {src:'all'});
+  if (k === 'name') openPicker(row('name'), {src:'C'});
+  if (k === 'bulle') openPicker(row('bulle'), {src:'A', rep:true});
+  if (k === 'opac'){ const r = row('opac'); r.fx = false; commitRow(r, '150', false, true); const i = document.querySelector('[data-inp="opac"]'); i.scrollIntoView({block:'center'}); }
+}
+
+rebuild(); renderInspector();
+/* ---------- 1.11.3 : les scripts d'une vue qui voyagent (.xpgst) ---------- */
+const EVENTS = ['OnOpen', 'OnCycle', 'OnClose'];
+const EVLABEL = {OnOpen:'OnOpen (ouverture)', OnCycle:'OnCycle (chaque cycle)', OnClose:'OnClose (fermeture)'};
+let SCRIPTS = {OnOpen:"(* A l'ouverture : le titre *)\ngNom := 'Vanne V1';", OnCycle:'gAlarme := UINTS[0] > 100;', OnClose:''};
+const SAMPLE = `(* XPGAnalyser 1.11.3 - scripts de Vue_Accueil (vue)
+   Un bloc (*# ... *) avant chaque script, puis son code jusqu'au bloc suivant. *)
+(*# xpgst format=1 genre=scripts-vue source=Vue_Accueil role=vue version=1.11.3 *)
+(*# script evenement=OnOpen langage=ST *)
+(* A l'ouverture : le titre *)
+gNom := 'Vanne V1';
+(*# script evenement=OnCycle langage=ST *)
+Compteur := Compteur + 1;
+gAlarme := Compteur > 100;
+(*# script evenement=OnClose langage=ST *)
+Compteur := 0;
+(*# fin *)
+`;
+let scSel = 'OnOpen', scUndo = null;
+const lines = b => b.trim() ? b.trim().split('\n').length : 0;
+function renderScripts(){
+  $('#sc-rows').innerHTML = EVENTS.map(e => `<tr data-ev="${e}" class="${e === scSel ? 'on' : ''}"><td>${esc(EVLABEL[e])}</td><td>${SCRIPTS[e].trim() ? 'ST' : '-'}</td><td class="n">${lines(SCRIPTS[e])}</td><td>${SCRIPTS[e].trim() ? 'OK' : '(vide)'}</td></tr>`).join('');
+  $('#sc-ehd').textContent = `Éditeur · ${scSel}${SCRIPTS[scSel].trim() ? '' : ' (vide : taper pour le créer)'}`;
+  $('#sc-code').textContent = SCRIPTS[scSel];
+  $('#sc-undo').disabled = !scUndo;
+}
+function writeXpgst(){
+  let out = `(* XPGAnalyser 1.11.3 - scripts de Popup_vanne (popup)\n   Un bloc (*# ... *) avant chaque script, puis son code jusqu'au bloc suivant. Le code se modifie ici ;\n   les blocs se gardent tels quels. Importer : Scripts (ou Opérateurs) > Importer… *)\n`;
+  out += '(*# xpgst format=1 genre=scripts-vue source=Popup_vanne role=popup version=1.11.3 *)\n';
+  EVENTS.forEach(e => { if (SCRIPTS[e].trim()) out += `(*# script evenement=${e} langage=ST *)\n${SCRIPTS[e].trim()}\n`; });
+  return out + '(*# fin *)\n';
+}
+function readXpgst(text){
+  const out = {source:'', role:'', plain:false, entries:[], error:''};
+  let cur = null, header = false;
+  for (const raw of text.replace(/\r/g, '').split('\n')){
+    const m = /^\s*\(\*#\s*(\w+)(.*?)\*\)\s*$/.exec(raw);
+    if (!m){ if (cur) cur.body += raw + '\n'; continue; }
+    const kv = {}; (m[2].match(/(\w+)=("(?:[^"\\]|\\.)*"|\S+)/g) || []).forEach(p => { const i = p.indexOf('='); kv[p.slice(0, i)] = p.slice(i + 1).replace(/^"|"$/g, ''); });
+    if (m[1] === 'xpgst'){ header = true; if (+(kv.format || 1) > 1){ out.error = `Ce fichier vient d’une version plus récente (${kv.version || '?'}).`; return out; } out.source = kv.source || ''; out.role = kv.role || ''; continue; }
+    if (m[1] === 'fin'){ cur = null; continue; }
+    if (m[1] === 'script'){ if (!EVENTS.includes(kv.evenement)){ out.error = `Événement inconnu : « ${kv.evenement || ''} » (OnOpen, OnCycle ou OnClose).`; return out; } cur = {event:kv.evenement, body:''}; out.entries.push(cur); continue; }
+    if (m[1] === 'operateur'){ out.error = 'Ce fichier contient des opérateurs : importe-le dans les Opérateurs d’un symbole ou d’un type IHM.'; return out; }
+    out.error = `Bloc inconnu : (*# ${m[1]} … *)`; return out;
+  }
+  out.entries.forEach(e => { e.body = e.body.replace(/\s+$/, ''); });
+  if (!header && !out.entries.length){ const b = text.trim(); if (!b){ out.error = 'Le fichier est vide.'; return out; } out.plain = true; out.entries.push({event:scSel, body:b}); }
+  if (!out.entries.length) out.error = 'Le fichier n’a aucun script.';
+  return out;
+}
+let ipFile = null;
+function openImport(text){
+  const f = readXpgst(text);
+  if (f.error){ toast(f.error); return; }
+  ipFile = f;
+  $('#ip-lead').innerHTML = f.plain ? `Le fichier est un seul script : il va dans <b>${esc(f.entries[0].event)}</b>.` : `Le fichier vient de <b>${esc(f.source || '?')}</b>${f.role ? ' (' + esc(f.role) + ')' : ''} : coche les scripts à prendre.`;
+  let different = false;
+  $('#ip-items').innerHTML = f.entries.map((e, i) => {
+    const ours = SCRIPTS[e.event].trim(), st = !ours ? 'new' : ours === e.body.trim() ? 'same' : 'diff';
+    different = different || st === 'diff';
+    const label = st === 'new' ? '<span class="st-new">nouveau</span>' : st === 'same' ? '<span class="st-same">identique (rien ne change)</span>' : `<span class="st-diff">différent de l’actuel (${lines(ours)} ligne${lines(ours) > 1 ? 's' : ''})</span>`;
+    return `<label><input type="checkbox" data-ip="${i}" ${st === 'same' ? '' : 'checked'}><span><b>${esc(e.event)}</b><small>${lines(e.body)} ligne${lines(e.body) > 1 ? 's' : ''} · ${label}</small></span></label>`;
+  }).join('');
+  $('#ip-opts').innerHTML = different ? `<label><input type="radio" name="ipm" value="r" checked><span>Remplacer le script de la vue<small>le code du fichier prend sa place</small></span></label><label><input type="radio" name="ipm" value="a"><span>Ajouter à la suite<small>le code du fichier va après celui de la vue, sous un commentaire</small></span></label>` : '';
+  syncImport();
+  $('#ip').hidden = false;
+}
+function syncImport(){ const n = document.querySelectorAll('[data-ip]:checked').length; $('#ip-ok').textContent = n ? `Importer ${n} script${n > 1 ? 's' : ''}` : 'Rien à importer'; $('#ip-ok').disabled = !n; }
+function doImport(){
+  const append = (document.querySelector('input[name=ipm]:checked') || {}).value === 'a';
+  const before = {...SCRIPTS}; let n = 0;
+  document.querySelectorAll('[data-ip]').forEach(c => {
+    if (!c.checked) return; const e = ipFile.entries[+c.dataset.ip]; const ours = SCRIPTS[e.event].trim();
+    if (ours === e.body.trim()) return;
+    SCRIPTS[e.event] = append && ours ? `${ours}\n\n(* ---- importé de ${ipFile.source || 'un fichier'} ---- *)\n${e.body}` : e.body; n++;
+  });
+  $('#ip').hidden = true;
+  if (n){ scUndo = before; renderScripts(); $('#sc-status').textContent = `${n} script${n > 1 ? 's importés' : ' importé'} (Ctrl+Z pour annuler).`; }
+  else $('#sc-status').textContent = 'Rien n’a changé : les scripts choisis sont identiques.';
+}
+document.addEventListener('click', e => {
+  const t = e.target; let el;
+  if ((el = t.closest('#sc-rows tr'))){ scSel = el.dataset.ev; renderScripts(); return; }
+  if (t.closest('#sc-export') || ((el = t.closest('[data-try]')) && el.dataset.try === 'export')){
+    if (!EVENTS.some(ev => SCRIPTS[ev].trim())){ toast('Rien à exporter : les scripts de Popup_vanne sont vides.'); return; }
+    $('#xp-text').textContent = writeXpgst(); $('#xp').hidden = false; return;
+  }
+  if (t.closest('#sc-import') || ((el = t.closest('[data-try]')) && el.dataset.try === 'import')){ openImport(SAMPLE); return; }
+  if (t.closest('#xp-save')){ const blob = new Blob(['﻿' + writeXpgst().replace(/\n/g, '\r\n')], {type:'text/plain'}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'Popup_vanne_scripts.xpgst'; document.body.appendChild(a); a.click(); a.remove(); return; }
+  if ((el = t.closest('[data-close]'))){ $('#' + el.dataset.close).hidden = true; return; }
+  if (t.closest('#ip-ok')){ doImport(); return; }
+  if (t.closest('#sc-clear')){ if (SCRIPTS[scSel].trim()){ scUndo = {...SCRIPTS}; SCRIPTS[scSel] = ''; renderScripts(); $('#sc-status').textContent = `${scSel} vidé (Ctrl+Z le rend).`; } return; }
+  if (t.closest('#sc-undo')){ if (scUndo){ SCRIPTS = scUndo; scUndo = null; renderScripts(); $('#sc-status').textContent = 'Annulé.'; } return; }
+});
+document.addEventListener('change', e => {
+  if (e.target.dataset && e.target.dataset.ip !== undefined) syncImport();
+  if (e.target.id === 'ip-file' && e.target.files[0]){ const r = new FileReader(); r.onload = () => { $('#ip').hidden = true; openImport(String(r.result).replace(/^﻿/, '')); }; r.readAsText(e.target.files[0]); e.target.value = ''; }
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape'){ ['#ip', '#xp'].forEach(id => { $(id).hidden = true; }); } });
+renderScripts();
+
+</script>
+
+</body></html>

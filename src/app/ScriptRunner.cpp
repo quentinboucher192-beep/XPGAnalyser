@@ -14,6 +14,7 @@
 #include "Capture.hpp"
 #include "hmi/HmiCommPanes.hpp"         // lot 15 : les equipements, le reseau du PC
 #include "hmi/HmiEditor.hpp"
+#include "hmi/HmiValuePicker.hpp"        // 1.11.3 : le selecteur de valeur (selecteur-...)
 #include "hmi/HmiDuplicateDialog.hpp"  // 1.10.2 (chantier D) : "Dupliquer..."
 #include "hmi/HmiMemoryMap.hpp"         // lot 17 : la carte memoire
 #include "hmi/HmiTwinValues.hpp"        // lot 18 : les valeurs simulees
@@ -3421,7 +3422,9 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     // bouton X "Retirer l'expression" au bout de la ligne X ; "propriete-menu X" :
     // le clic droit sur sa case (puis "choisir Retirer l'expression", "choisir
     // Modifier l'expression...", "choisir Copier").
-    if (cmd == "propriete-retirer" || cmd == "propriete-menu") {
+    // 1.11.3 : "propriete-carre X" - un clic sur le carre de legende de la case X (la
+    // liste des carres s'ouvre ; puis "choisir Variable IHM", "choisir Ouvrir le selecteur...").
+    if (cmd == "propriete-retirer" || cmd == "propriete-menu" || cmd == "propriete-carre") {
         auto* page = currentPage();
         if (!page) { fail("aucun onglet"); return Step::Next; }
         gfx::Rect r{};
@@ -3429,7 +3432,9 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         walk(*page, [&](ui::Widget& x) {
             auto* grid = dynamic_cast<ui::PropertyGrid*>(&x);
             if (ok || !grid || !shown(*grid)) return;
-            ok = cmd == "propriete-retirer" ? ui::exprfield::clearRect(*grid, arg(1), r) : grid->valueRect(arg(1), r);
+            ok = cmd == "propriete-retirer" ? ui::exprfield::clearRect(*grid, arg(1), r)
+               : cmd == "propriete-carre"   ? grid->legendRect(arg(1), r)
+                                            : grid->valueRect(arg(1), r);
             if (!ok && grid->revealValue(arg(1))) exists = true;   // hors de vue : defiler
         });
         if (!ok && exists && retries_ < 3) return Step::Retry;
@@ -3438,6 +3443,30 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             return Step::Next;
         }
         click(centre(r), cmd == "propriete-menu" ? MouseButton::Right : MouseButton::Left, 1, {});
+        return Step::Yield;
+    }
+
+    // 1.11.3 : LE SELECTEUR DE VALEUR ouvert (HmiValuePicker) :
+    //   selecteur-chercher "texte"        la recherche de l'arbre
+    //   selecteur-tout                     Tout montrer (le filtre du type attendu, decoche)
+    //   selecteur-source A|I|S|V|C|Tout    la source
+    //   selecteur-choisir CHEMIN           un noeud de l'arbre : il va dans Resultat
+    //   selecteur-resultat "texte" [fx|constante]
+    //   selecteur-valider [force]
+    if (cmd.rfind("selecteur-", 0) == 0) {
+        auto* picker = dynamic_cast<HmiValuePicker*>(app_.menus().top());
+        if (!picker) { fail("aucun s\xC3\xA9lecteur de valeur ouvert"); return Step::Next; }
+        using LS = ui::PropertyGrid::LegendStyle;
+        if (cmd == "selecteur-chercher") picker->setSearch(arg(1));
+        else if (cmd == "selecteur-tout") picker->setTypeFilter(false);
+        else if (cmd == "selecteur-source") {
+            const std::string s = arg(1);
+            picker->setSource(s == "A" ? LS::Api : s == "I" ? LS::Hmi : s == "S" ? LS::System : s == "V" ? LS::Local : s == "C" ? LS::Constant : LS::Empty);
+        } else if (cmd == "selecteur-choisir") {
+            if (!picker->pick(arg(1))) fail("pas dans l'arbre : " + arg(1));
+        } else if (cmd == "selecteur-resultat") picker->setResult(arg(1), arg(2) != "constante");
+        else if (cmd == "selecteur-valider") picker->validate(arg(1) == "force");
+        else { fail("commande inconnue : " + cmd); }
         return Step::Yield;
     }
 

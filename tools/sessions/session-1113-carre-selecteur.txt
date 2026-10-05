@@ -1,0 +1,65 @@
+# =============================================================================
+#  Session 1113 : LE CARRE DE LEGENDE, LA LISTE DES CARRES, LE SELECTEUR DE VALEUR,
+#  LA CREATION D'UNE VARIABLE INCONNUE, EXPORTER / IMPORTER LES SCRIPTS D'UNE VUE.
+#  Le projet : une copie d'Armoire_Gaz preparee par preparer-projet-1113.cpp (le
+#  symbole STEST, Vue_STEST et l'instance STEST_1 : Name := 'Voiture' ;
+#  Value := UINTS ; les variables UINTS, AUTRES, gCoef, gNom ; Popup_vanne et ses
+#  scripts).
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- 1. L'inspecteur de STEST_1 : un carre au bout de chaque case -----------------
+arbre "IHM/Vues/Vue_STEST"
+attendre 6
+objet STEST_1
+attendre 4
+capture 1113_01_inspecteur_carres.png
+
+# ---- 2. Un clic sur le carre de Value : la liste des carres et leur sens -----------
+propriete-carre "Value · ARRAY[0..9] OF UINT"
+attendre 2
+capture 1113_02_liste_des_carres.png
+
+# ---- 3. « Variable IHM » : le selecteur, filtre sur ARRAY[0..9] OF UINT ------------
+choisir "Variable IHM"
+attendre 3
+capture 1113_03_selecteur_filtre_IHM.png
+
+# ---- 4. Tout montrer (API, SYS., la vue...) -----------------------------------------
+selecteur-source Tout
+selecteur-tout
+attendre 2
+capture 1113_04_selecteur_tout_montrer.png
+
+# ---- 5. Un resultat qui ne convient pas : l'erreur et ses corrections -------------
+selecteur-resultat "gCoef" fx
+attendre 2
+capture 1113_05_selecteur_erreur_corrections.png
+selecteur-resultat "UINTS" fx
+selecteur-valider
+attendre 3
+
+# ---- 6. Un nom inconnu : Valider propose de le creer (type, zone) -----------------
+propriete-carre "Name · STRING"
+attendre 2
+choisir "Ouvrir le sélecteur…"
+attendre 3
+selecteur-resultat "Nom_Ligne" fx
+attendre 2
+capture 1113_06_selecteur_nom_inconnu.png
+selecteur-valider
+attendre 3
+capture 1113_07_creer_la_variable.png
+touche escape
+attendre 2
+
+# ---- 7. Les scripts d'une popup : Exporter... et Importer... ----------------------
+arbre "IHM/Vues/Popups/Popup_vanne/Scripts"
+attendre 5
+capture 1113_08_scripts_exporter_importer.png
+quitter
