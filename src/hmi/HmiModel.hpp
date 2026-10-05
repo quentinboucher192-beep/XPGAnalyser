@@ -825,6 +825,15 @@ struct Variable {
     std::string folder{};
     bool        packBools{true};
     std::vector<MemberAddress> places{};
+    // 1.11.8 (« chaque membre peut choisir s'il est interne ou attribue a l'equipement de la
+    // structure ») : LES MEMBRES INTERNES d'une variable liee - ils restent dans l'IHM (une
+    // variable IHM locale), l'equipement ne les lit ni ne les ecrit. Un chemin relatif a la
+    // variable, comme `places` : "[0].NOM" (une case), "[*].NOM" (le membre NOM de toutes les
+    // cases), "Vannes[2]" ou "Defaut" (le membre, et tout ce qui est dessous).
+    std::vector<std::string> internal{};
+    // 1.11.8 (« Recalculer la place memoire ») : vrai - un mot que n'occupent que des membres
+    // internes est rendu et les membres suivants se resserrent ; faux : leur place reste reservee.
+    bool        compact{false};
     [[nodiscard]] bool bound() const noexcept { return !equipment.empty(); }
     [[nodiscard]] bool scaled() const noexcept { return rawMax != rawMin; }
     bool operator==(const Variable&) const = default;

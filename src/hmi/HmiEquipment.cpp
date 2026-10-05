@@ -189,6 +189,7 @@ comm::Plan buildPlan(const Project& p, const Equipment& e) {
         }
         for (std::size_t i = 0; i < leaves.size(); ++i) {
             const Variable* v = &leaves[i];
+            if (!v->bound()) continue;                      // 1.11.8 : un membre interne reste dans l'IHM
             comm::Point pt;
             std::string why;
             if (v->address.empty()) {

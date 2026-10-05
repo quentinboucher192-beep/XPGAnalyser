@@ -757,6 +757,13 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
             for (const auto& pl : var.places) places += (places.empty() ? "" : ";") + pl.path + "=" + pl.address;
             index += field("places", places);
         }
+        // 1.11.8 : les membres internes d'une variable liee ; la place recalculee.
+        if (!var.internal.empty()) {
+            std::string internal;
+            for (const auto& m : var.internal) internal += (internal.empty() ? "" : ";") + m;
+            index += field("internes", internal);
+        }
+        if (var.compact) index += fieldBool("place_recalculee", true);
         // Lot 15 : liee a un equipement - seulement si elle l'est.
         if (var.bound()) {
             index += field("equipement", var.equipment) + field("adresse", var.address)
@@ -1237,6 +1244,18 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
                         var.places.push_back({item.substr(0, eq), item.substr(eq + 1)});
                     from = semi + 1;
                 }
+            }
+            {
+                // 1.11.8 : les membres internes, la place recalculee.
+                const std::string internal = toStr(r.get("internes"));
+                std::size_t from = 0;
+                while (from < internal.size()) {
+                    auto semi = internal.find(';', from);
+                    if (semi == std::string::npos) semi = internal.size();
+                    if (semi > from) var.internal.push_back(internal.substr(from, semi - from));
+                    from = semi + 1;
+                }
+                var.compact = toBool(r.get("place_recalculee"), false);
             }
             p.programs.variables.push_back(std::move(var));
         } else if (r.word == "type_ihm") {

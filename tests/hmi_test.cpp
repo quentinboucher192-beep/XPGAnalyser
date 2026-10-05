@@ -3784,6 +3784,113 @@ void reperesArgumentsPopup1117() {
     check(rt.variable("Lu") && rt.variable("Lu")->isTruthy(), "Lu := IN_V.OUV lit V[2].OUV");
 }
 
+// =============================================================================
+//  1.11.8 (« j'aimerais pouvoir dire que la ligne selectionnee deviendrait une variable
+//  interne dans Variables IHM ; chaque membre peut choisir s'il est interne ou attribue a
+//  l'equipement de la structure » ; « un bouton Recalculer la place memoire » ; « modifier
+//  les adresses %MW meme dans une structure ») : V : ARRAY[0..63] OF Vanne a %MW17, sur
+//  l'Esclave virtuel 1 (la capture du client).
+// =============================================================================
+void membresInternes1118() {
+    std::printf("1.11.8 : les membres internes d'une structure li\xC3\xA9" "e, la place recalcul\xC3\xA9" "e, le d\xC3\xA9part d'un membre\n");
+    namespace ty = hmi::types;
+    Project p;
+    HmiType vanne;
+    vanne.id = p.allocate();
+    vanne.name = "Vanne";
+    vanne.members = {{"POSITION", "INT"}, {"OUV", "BOOL"}, {"NOM", "STRING"}, {"CMD_OUV", "BOOL"}, {"CMD_FERM", "BOOL"}};
+    p.programs.types = {vanne};
+    Equipment e;
+    e.id = p.allocate();
+    e.name = "Esclave virtuel 1";
+    e.host = "127.0.0.1";
+    e.port = 502;
+    p.equipments.push_back(e);
+    Variable v = hmiVar(p, "V", "ARRAY[0..63] OF Vanne");
+    v.equipment = "Esclave virtuel 1";
+    v.address = "%MW17";
+    p.programs.variables.push_back(v);
+    const auto addressOf = [&](std::string_view name) {
+        for (const auto& l : ty::leafVariables(p, p.programs.variables[0]))
+            if (l.name == name) return l.bound() ? l.address : std::string("interne");
+        return std::string("?");
+    };
+    const auto var = [&]() -> Variable& { return p.programs.variables[0]; };
+    // La place d'origine (la capture : 19 mots par vanne, NOM en prend 16).
+    same(addressOf("V[0].NOM"), "%MW19", "V[0].NOM : %MW19 (16 mots)");
+    same(addressOf("V[0].CMD_OUV"), "%MW35.0", "V[0].CMD_OUV : %MW35.0");
+    same(addressOf("V[1].POSITION"), "%MW36", "V[1] part de %MW36");
+    same(ty::spanText(p, var()), "mots 17 \xC3\xA0 1232", "la place : mots 17 \xC3\xA0 1232");
+    check(hmi::equip::buildPlan(p, p.equipments[0]).points().size() == 64 * 5, "le plan : 320 cases");
+    // Le chemin d'un membre : une case, ou toutes ([*]), et tout ce qui est dessous.
+    check(ty::memberCovers("[0].NOM", "[0].NOM") && !ty::memberCovers("[0].NOM", "[1].NOM") && ty::memberCovers("[*].NOM", "[63].NOM")
+              && ty::memberCovers("[2]", "[2].CMD_OUV") && !ty::memberCovers("[2]", "[20].CMD_OUV") && !ty::memberCovers("[*].NOM", "[0].NOMBRE")
+              && ty::memberCovers("vannes[*].position", "Vannes[2].Position"),
+          "un chemin couvre lui-m\xC3\xAAme et ce qui est dessous ; [*] couvre tout indice ; sans casse");
+    // 1. V[0].NOM interne : elle reste dans l'IHM, sa place reste reservee (rien ne bouge).
+    var().internal = {"[0].NOM"};
+    same(addressOf("V[0].NOM"), "interne", "V[0].NOM interne : ni \xC3\xA9quipement, ni adresse");
+    same(addressOf("V[0].CMD_OUV"), "%MW35.0", "... V[0].CMD_OUV ne bouge pas (la place reste r\xC3\xA9serv\xC3\xA9" "e)");
+    same(addressOf("V[1].NOM"), "%MW38", "... V[1].NOM reste li\xC3\xA9" "e");
+    check(hmi::equip::buildPlan(p, p.equipments[0]).points().size() == 64 * 5 - 1 && hmi::equip::buildPlan(p, p.equipments[0]).refused().empty(),
+          "le plan : 319 cases, aucune refus\xC3\xA9" "e");
+    // 2. Recalculer la place : les 16 mots de V[0].NOM sont rendus, la suite se resserre.
+    var().compact = true;
+    same(addressOf("V[0].CMD_OUV"), "%MW19.0", "recalcul\xC3\xA9" "e : V[0].CMD_OUV passe \xC3\xA0 %MW19.0");
+    same(addressOf("V[1].POSITION"), "%MW20", "... V[1] part de %MW20");
+    same(ty::spanText(p, var()), "mots 17 \xC3\xA0 1216", "... la place : mots 17 \xC3\xA0 1216 (16 mots rendus)");
+    // 3. NOM interne dans toutes les vannes ([*].NOM) : 3 mots par vanne.
+    var().internal = {"[*].NOM"};
+    same(addressOf("V[63].NOM"), "interne", "[*].NOM : V[63].NOM interne aussi");
+    same(addressOf("V[1].POSITION"), "%MW20", "V[1] part de %MW20");
+    same(addressOf("V[63].CMD_FERM"), "%MW208.1", "V[63].CMD_FERM : %MW208.1 (V[63] part de 17 + 63 x 3 = 206)");
+    same(ty::spanText(p, var()), "mots 17 \xC3\xA0 208", "la place : mots 17 \xC3\xA0 208 (192 mots au lieu de 1216)");
+    check(hmi::equip::buildPlan(p, p.equipments[0]).points().size() == 64 * 4, "le plan : 256 cases");
+    // ... sans recalcul, les trous restent.
+    var().compact = false;
+    same(addressOf("V[1].POSITION"), "%MW36", "place r\xC3\xA9serv\xC3\xA9" "e : V[1] reste \xC3\xA0 %MW36");
+    var().compact = true;
+    // 4. Le depart d'un membre compose : V[2] a %MW500, ses cases le suivent.
+    var().places = {{"[2]", "%MW500"}};
+    same(addressOf("V[2].POSITION"), "%MW500", "V[2] part de %MW500");
+    same(addressOf("V[2].OUV"), "%MW501.0", "V[2].OUV : %MW501.0");
+    same(addressOf("V[2].CMD_FERM"), "%MW502.1", "V[2].CMD_FERM : %MW502.1 (NOM interne, place rendue)");
+    same(addressOf("V[3].POSITION"), "%MW26", "V[3] garde sa place calcul\xC3\xA9" "e");
+    // ... et une case corrigee a la main gagne sur le depart de son membre.
+    var().places.push_back({"[2].OUV", "%MW600.3"});
+    same(addressOf("V[2].OUV"), "%MW600.3", "V[2].OUV corrig\xC3\xA9" "e \xC3\xA0 la main : %MW600.3");
+    // 5. En marche : un membre interne vit dans l'IHM ; les autres dans l'equipement.
+    {
+        Runtime rt;
+        rt.bind(&p, nullptr);
+        rt.start(0.0);
+        check(rt.boundVariable("V[0].NOM") == nullptr && rt.boundVariable("V[0].POSITION") != nullptr,
+              "le moteur : V[0].NOM est locale, V[0].POSITION li\xC3\xA9" "e");
+        check(rt.environment().write("V[5].NOM", sim::Value::text("Vanne 5")) && rt.variable("V[5].NOM")
+                  && rt.variable("V[5].NOM")->asString() == "Vanne 5",
+              "\xC3\xA9" "crire V[5].NOM : gard\xC3\xA9 dans l'IHM (sans liaison, sans erreur)");
+        rt.stop(1.0);
+    }
+    // 6. Enregistrer, relire : les membres internes et la place recalculee restent.
+    {
+        const fs::path dir = fs::temp_directory_path() / "hmi_test_1118";
+        fs::remove_all(dir);
+        check(static_cast<bool>(save(p, dir.string())), "enregistrer");
+        const auto back = load(dir.string());
+        check(back && back->variable("V") && back->variable("V")->internal == std::vector<std::string>{"[*].NOM"} && back->variable("V")->compact
+                  && back->variable("V")->places.size() == 2,
+              "relu : [*].NOM interne, place recalcul\xC3\xA9" "e, deux adresses corrig\xC3\xA9" "es");
+        fs::remove_all(dir);
+    }
+    // 7. Generer : un membre interne ne designe plus rien -> un avertissement.
+    var().internal.push_back("[*].ABSENT");
+    const auto issues = generate(p, [](std::string_view) { return false; });
+    check(std::any_of(issues.begin(), issues.end(), [](const Issue& i) { return i.message.find("[*].ABSENT") != std::string::npos; }),
+          "un membre interne qui ne d\xC3\xA9signe rien : signal\xC3\xA9");
+    check(std::none_of(issues.begin(), issues.end(), [](const Issue& i) { return i.message.find("V[0].NOM") != std::string::npos; }),
+          "... un membre interne n'est pas \xC2\xAB sans place \xC2\xBB");
+}
+
 void verificationsLot8() {
     std::printf("lot 8 : g\xC3\xA9n\xC3\xA9rer et compiler (popups, param\xC3\xA8tres, saisie, utilisateurs)\n");
     Project p;
@@ -20470,6 +20577,7 @@ int main(int argc, char** argv) {
     surLaVueActuelle1116();            // 1.11.6 : les variables lues par la vue
     lignesDeCode1117();                // 1.11.7 : les lignes de code de l'application
     reperesArgumentsPopup1117();       // 1.11.7 : IN_V := $V[2]$, une reference
+    membresInternes1118();             // 1.11.8 : membres internes, place recalculee, depart d'un membre
     actions();
     scripts();
     transitions();

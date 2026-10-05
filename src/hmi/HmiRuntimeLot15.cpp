@@ -92,10 +92,12 @@ std::string Runtime::stateSnapshot() const {
     if (const auto* v = viewOf(current_)) out += "vue\t" + escaped(v->name) + "\n";
     if (project_) {
         for (const auto& var : project_->programs.variables) {
-            if (var.bound()) continue;             // relue dans l'equipement
-            // Lot 16 : une structure ou un tableau, case par case.
+            if (var.bound() && !types::isComposite(var.type)) continue;   // relue dans l'equipement
+            // Lot 16 : une structure ou un tableau, case par case ; 1.11.8 : d'une variable liee,
+            // seulement ses membres internes (les autres se relisent dans l'equipement).
             const auto leaves = types::isComposite(var.type) ? types::leafVariables(*project_, var) : std::vector<Variable>{var};
             for (const auto& leaf : leaves) {
+                if (leaf.bound()) continue;
                 const sim::Value* value = variable(leaf.name);
                 if (!value) continue;
                 out += "variable\t" + escaped(leaf.name) + "\t" + escaped(valueText(*value)) + "\n";
@@ -207,6 +209,7 @@ void Runtime::refreshBound() {
             continue;
         }
         for (auto& leaf : types::leafVariables(*project_, v)) {
+            if (!leaf.bound()) continue;                    // 1.11.8 : un membre interne vit dans l'IHM
             std::string key = upperOf(leaf.name);
             bound_.emplace(std::move(key), std::move(leaf));
         }

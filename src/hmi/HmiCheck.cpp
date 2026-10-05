@@ -2399,6 +2399,7 @@ void checkEquipments(const Project& p, std::vector<Issue>& out) {
             if (!error.empty()) continue;             // dit par les variables IHM
             std::size_t refused = 0;
             for (std::size_t i = 0; i < leaves.size(); ++i) {
+                if (!leaves[i].bound()) continue;           // 1.11.8 : un membre interne n'a pas de place
                 std::string why = i < whys.size() ? whys[i] : std::string{};
                 comm::Point pt;
                 if (why.empty()) (void)equip::placeEquipmentAddress(leaves[i].address, equip::registerType(leaves[i]), pt, &why);
@@ -2407,14 +2408,26 @@ void checkEquipments(const Project& p, std::vector<Issue>& out) {
             }
             if (refused > 5)
                 add(out, S::Error, vcat, kNoId, kNoId, v.name, v.name + " : " + std::to_string(refused - 5) + " autre(s) case(s) sans place sur " + e->name);
+            // Le chemin relatif d'une case (Four1.Vannes[2].Position -> Vannes[2].Position ; V[0].NOM -> [0].NOM).
+            const auto relOf = [&](const Variable& l) {
+                const std::string rest = l.name.substr(std::min(l.name.size(), v.name.size()));
+                return !rest.empty() && rest.front() == '.' ? rest.substr(1) : rest;
+            };
             for (const auto& pl : v.places) {
                 bool found = false;
-                for (const auto& l : leaves) {
-                    const std::string rel = l.name.size() > v.name.size() + 1 ? l.name.substr(v.name.size() + 1) : std::string{};
-                    if (upperOf(rel) == upperOf(pl.path) || upperOf(l.name.substr(v.name.size())) == upperOf(pl.path)) found = true;
-                }
+                for (const auto& l : leaves)                 // 1.11.8 : un membre compose aussi (son depart)
+                    if (types::memberCovers(pl.path, relOf(l))) found = true;
                 if (!found)
                     add(out, S::Warning, vcat, kNoId, kNoId, v.name, v.name + " : l'adresse corrig\xC3\xA9" "e de \xC2\xAB " + pl.path
+                                                                           + " \xC2\xBB ne d\xC3\xA9signe aucun membre");
+            }
+            // 1.11.8 : un membre interne qui ne designe rien (le type a change, un membre renomme).
+            for (const auto& m : v.internal) {
+                bool found = false;
+                for (const auto& l : leaves)
+                    if (types::memberCovers(m, relOf(l))) found = true;
+                if (!found)
+                    add(out, S::Warning, vcat, kNoId, kNoId, v.name, v.name + " : le membre interne \xC2\xAB " + m
                                                                            + " \xC2\xBB ne d\xC3\xA9signe aucun membre");
             }
             continue;

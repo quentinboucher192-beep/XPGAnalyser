@@ -111,10 +111,22 @@ struct Flat {
 // ecrite comme le depart - 43001, %MW3000, HR3000 -, ou l'adresse corrigee de
 // `places`). `why` (facultatif) : pourquoi une case n'a pas d'adresse, a son
 // rang ; `aggregates` : les structures et tableaux rencontres ; `error` : le
-// type ne se deplie pas.
+// type ne se deplie pas. 1.11.8 : un membre interne (Variable::internal) n'est
+// pas lie (ni equipement, ni adresse, `why` vide) ; `places` peut donner le depart
+// d'un membre compose ("Vannes[2]" -> "%MW3050" : ses cases le suivent) ;
+// Variable::compact rend les mots que n'occupent que des membres internes.
 [[nodiscard]] std::vector<Variable> leafVariables(const Project&, const Variable&, std::vector<Aggregate>* aggregates = nullptr,
                                                   std::vector<std::string>* why = nullptr, std::string* error = nullptr);
 [[nodiscard]] std::vector<Variable> flatVariables(const Project&);
+
+// 1.11.8 : un chemin de membre (relatif a la variable) en couvre-t-il un autre ? Lui-meme,
+// et tout ce qui est dessous ("Vannes[2]" couvre "Vannes[2].Position") ; un indice [*]
+// couvre tous les indices ("[*].NOM" couvre "[0].NOM", "[63].NOM"). Sans casse, sans blancs.
+[[nodiscard]] bool memberCovers(std::string_view pattern, std::string_view rel);
+// Le membre `rel` de `v` est-il interne (Variable::internal) ? Une variable non liee : non.
+[[nodiscard]] bool isInternalMember(const Variable& v, std::string_view rel);
+// L'entree de Variable::internal qui rend `rel` interne (vide : aucune).
+[[nodiscard]] std::string internalEntryOf(const Variable& v, std::string_view rel);
 
 // L'adresse d'une case a `word` mots (et `bit`) du depart, ecrite comme le depart.
 // Une zone de bits (%M, 00017) : `word` est le rang du BOOL.

@@ -10,6 +10,7 @@
 #include <cctype>
 #include <cstdio>
 #include <functional>
+#include <map>
 #include <set>
 
 namespace hmi::types {
@@ -490,6 +491,36 @@ std::string memberAddress(std::string_view start, long long word, int bit, std::
     return {};
 }
 
+bool memberCovers(std::string_view pattern, std::string_view rel) {
+    const std::string pt = pathKey(pattern), r = pathKey(rel);
+    if (pt.empty()) return false;
+    std::size_t i = 0, j = 0;
+    while (i < pt.size()) {
+        if (pt.compare(i, 3, "[*]") == 0) {
+            // [*] : un indice quelconque ([3], [1,2]).
+            if (j >= r.size() || r[j] != '[') return false;
+            const auto close = r.find(']', j);
+            if (close == std::string::npos) return false;
+            i += 3;
+            j = close + 1;
+            continue;
+        }
+        if (j >= r.size() || pt[i] != r[j]) return false;
+        ++i;
+        ++j;
+    }
+    return j == r.size() || r[j] == '.' || r[j] == '[';
+}
+
+std::string internalEntryOf(const Variable& v, std::string_view rel) {
+    if (!v.bound()) return {};
+    for (const auto& e : v.internal)
+        if (memberCovers(e, rel)) return e;
+    return {};
+}
+
+bool isInternalMember(const Variable& v, std::string_view rel) { return !internalEntryOf(v, rel).empty(); }
+
 std::vector<Variable> leafVariables(const Project& p, const Variable& v, std::vector<Aggregate>* aggregates,
                                     std::vector<std::string>* why, std::string* error) {
     std::vector<Variable> out;
@@ -505,9 +536,64 @@ std::vector<Variable> leafVariables(const Project& p, const Variable& v, std::ve
     }
     if (aggregates) aggregates->insert(aggregates->end(), f.aggregates.begin(), f.aggregates.end());
     const bool bits = v.bound() && !v.address.empty() && bitArea(v.address);
-    long long boolRank = 0;
-    out.reserve(f.leaves.size());
-    for (const auto& l : f.leaves) {
+    const std::size_t n = f.leaves.size();
+    // 1.11.8 : les membres internes (gardes dans l'IHM).
+    std::vector<char> internal(n, 0);
+    if (v.bound() && !v.internal.empty())
+        for (std::size_t i = 0; i < n; ++i) internal[i] = isInternalMember(v, f.leaves[i].rel) ? 1 : 0;
+    // 1.11.8 (« Recalculer la place memoire ») : les mots que n'occupent que des membres
+    // internes sont rendus ; chaque case recule d'autant de mots rendus avant elle. Les BOOL
+    // d'une zone de bits se comptent par rang : un BOOL interne n'en prend plus.
+    std::vector<long long> word(n), rank(n);
+    {
+        std::vector<long long> freed;
+        if (v.compact && v.bound()) {
+            std::map<long long, bool> onlyInternal;
+            for (std::size_t i = 0; i < n; ++i) {
+                const auto& l = f.leaves[i];
+                const long long count = std::max<long long>(1, wordsOf(l.type));
+                for (long long w = l.word; w < l.word + count; ++w) {
+                    const auto [it, inserted] = onlyInternal.emplace(w, internal[i] != 0);
+                    if (!inserted) it->second = it->second && internal[i] != 0;
+                }
+            }
+            for (const auto& [w, only] : onlyInternal)
+                if (only) freed.push_back(w);
+        }
+        long long r = 0;
+        for (std::size_t i = 0; i < n; ++i) {
+            const auto& l = f.leaves[i];
+            word[i] = l.word - static_cast<long long>(std::lower_bound(freed.begin(), freed.end(), l.word) - freed.begin());
+            rank[i] = r;
+            if (l.type == "BOOL" && !(v.compact && internal[i])) ++r;
+        }
+    }
+    // 1.11.8 : le depart d'un membre compose ("Vannes[2]" -> "%MW3050") - ses cases le suivent,
+    // a la meme place l'une par rapport a l'autre. Le plus precis gagne (Vannes[2].Sous avant Vannes[2]).
+    struct Start {
+        std::string pattern, address;
+        long long   base{0};
+    };
+    std::vector<Start> starts;
+    if (v.bound())
+        for (const auto& pl : v.places) {
+            if (trimmed(pl.address).empty()) continue;
+            bool leaf = false, any = false;
+            long long base = 0;
+            for (std::size_t i = 0; i < n; ++i) {
+                if (pathKey(pl.path) == pathKey(f.leaves[i].rel)) leaf = true;
+                if (!memberCovers(pl.path, f.leaves[i].rel)) continue;
+                if (v.compact && internal[i]) continue;
+                const long long at = bits ? rank[i] : word[i];
+                if (!any || at < base) base = at;
+                any = true;
+            }
+            if (!leaf && any) starts.push_back({pl.path, trimmed(pl.address), base});
+        }
+    std::sort(starts.begin(), starts.end(), [](const Start& a, const Start& b) { return pathKey(a.pattern).size() > pathKey(b.pattern).size(); });
+    out.reserve(n);
+    for (std::size_t i = 0; i < n; ++i) {
+        const auto& l = f.leaves[i];
         Variable x;
         x.id = v.id;
         x.name = l.path;
@@ -518,22 +604,31 @@ std::vector<Variable> leafVariables(const Project& p, const Variable& v, std::ve
         x.readOnly = v.readOnly;
         x.packBools = v.packBools;
         std::string reason;
-        if (v.bound()) {
+        if (v.bound() && !internal[i]) {
             x.equipment = v.equipment;
             const MemberAddress* fixed = nullptr;
             for (const auto& pl : v.places)
                 if (pathKey(pl.path) == pathKey(l.rel)) fixed = &pl;
+            const Start* from = nullptr;
+            for (const auto& s : starts)
+                if (memberCovers(s.pattern, l.rel)) {
+                    from = &s;
+                    break;
+                }
             if (fixed && !trimmed(fixed->address).empty()) {
                 x.address = trimmed(fixed->address);
+            } else if (from) {
+                // (le depart d'un membre est de la meme sorte que celui de la variable : mots, ou bits)
+                x.address = bits ? memberAddress(from->address, rank[i] - from->base, -1, l.type, &reason)
+                                 : memberAddress(from->address, word[i] - from->base, l.bit, l.type, &reason);
             } else if (v.address.empty()) {
                 reason = "sans adresse de d\xC3\xA9part";
             } else if (bits) {
-                x.address = l.type == "BOOL" ? memberAddress(v.address, boolRank, -1, l.type, &reason)
+                x.address = l.type == "BOOL" ? memberAddress(v.address, rank[i], -1, l.type, &reason)
                                              : memberAddress(v.address, 0, -1, l.type, &reason);
             } else {
-                x.address = memberAddress(v.address, l.word, l.bit, l.type, &reason);
+                x.address = memberAddress(v.address, word[i], l.bit, l.type, &reason);
             }
-            if (l.type == "BOOL") ++boolRank;
         }
         if (why) why->push_back(reason);
         out.push_back(std::move(x));
