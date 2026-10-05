@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.11.4", "05/10/2026", "livr\xC3\xA9" "e le 05/10"},
     {"1.11.3", "05/10/2026", "livr\xC3\xA9" "e le 05/10"},
     {"1.11.2", "04/10/2026", "livr\xC3\xA9" "e le 04/10"},
     {"1.11.1", "03/10/2026", "livr\xC3\xA9" "e le 03/10 au soir"},
@@ -82,6 +83,21 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.11.4 (05/10/2026, premiere des quatre livraisons du 05/10) : la geometrie calculee en marche
+        // (instances, groupes, objets d'un symbole), les reperes dans les parametres, Equipements sans
+        // Variables liees, les barres de defilement qu'on tire.
+        note("1.11.4", "Simulation", Kind::Fixed,
+         "Une formule sur X, Y, la largeur, la hauteur, la rotation, le miroir X ou le miroir Y d'une instance de symbole la d\xC3\xA9place en simulation (la capture : X = =$UINTS[0]$, l'instance restait en place - l'onglet Expressions calculait bien la valeur). Un groupe emm\xC3\xA8ne ce qu'il contient ; un objet d'un symbole qui a sa propre formule de position la prend dans le rep\xC3\xA8re du symbole ; un symbole dans un symbole suit.",
+         "proprietes", ""),
+        note("1.11.4", "\xC3\x89" "diteur IHM", Kind::Fixed,
+         "Les rep\xC3\xA8res dans les param\xC3\xA8tres d'une instance : $Nom$ tap\xC3\xA9 dans un STRING garde ses $ ('$Nom$', avant '$$Nom$$' : le rep\xC3\xA8re \xC3\xA9tait perdu) et se lit Nom en marche ; un param\xC3\xA8tre qui re\xC3\xA7oit une variable prend =$UINTS$ ou $UINTS$ (la variable, avec son rep\xC3\xA8re) ; Dupliquer\xE2\x80\xA6 remplace les deux.",
+         "dupliquer-reperes", ""),
+        note("1.11.4", "Communication", Kind::Changed,
+         "IHM \xE2\x80\xBA \xC3\x89quipements n'a plus d'onglet Variables li\xC3\xA9" "es : une variable li\xC3\xA9" "e se choisit et se r\xC3\xA8gle dans le Plan d'adressage (le m\xC3\xAA" "me formulaire : \xC3\xA9quipement, adresse, type, lecture seule, mise \xC3\xA0 l'\xC3\xA9" "chelle). Lier une variable et \xC2\xAB Voir dans \xC3\x89quipements \xC2\xBB y m\xC3\xA8nent.",
+         "variables-liees", ""),
+        note("1.11.4", "Application", Kind::Changed,
+         "Les barres de d\xC3\xA9" "filement se tirent \xC3\xA0 la souris, partout : le pouce se prend (le glisser continue hors du volet), un clic dans la goutti\xC3\xA8re avance d'une page. L'arbre du projet, les listes, les tableaux, l'inspecteur et l'explorateur d'objets en ont une ; celles de l'\xC3\xA9" "diteur de scripts, de l'historique, des dialogues, du s\xC3\xA9lecteur de valeur, de la carte m\xC3\xA9moire et des valeurs simul\xC3\xA9" "es se tirent aussi.",
+         "editeur", ""),
         // 1.11.3 (05/10/2026, correctif urgent des captures du client) : les parametres d'une instance de
         // symbole - le fx garde, la constante convertie dans le type (Voiture), le tableau (UINTS) ; le carre
         // de legende au bout de chaque case de l'inspecteur.
