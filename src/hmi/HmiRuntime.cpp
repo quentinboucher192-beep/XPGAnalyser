@@ -1165,6 +1165,15 @@ void Runtime::fire(const View& v, const Object* o, const Action& a, double now, 
     // 1.11 (REP) : les $ d'un repere sont transparents ($V[2]$.Cmd ecrit V[2].Cmd) ;
     // la valeur, la condition et l'expression surveillee passent par Expression::compile.
     const auto targetMode = operationWritesVariable(a.operation) ? markers::Mode::Expression : markers::Mode::Text;   // comme dup::fields
+    // 1.11.7 : une variable visee tapee "=Vanne.CMD_OUV" (sa case a la pastille fx) : Vanne.CMD_OUV.
+    if (operationWritesVariable(a.operation) && !a.target.empty() && (a.target.front() == '=' || a.target.front() == ' ')) {
+        Action plain = a;
+        plain.target = targetVariable(a.target);
+        if (plain.target != a.target) {
+            fire(v, o, plain, now, byUser);
+            return;
+        }
+    }
     if (a.target.find('$') != std::string::npos && !markers::find(a.target, targetMode).empty()) {
         Action plain = a;
         plain.target = markers::strip(a.target, targetMode);

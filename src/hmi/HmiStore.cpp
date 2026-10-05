@@ -400,6 +400,7 @@ bool parseAction(const Record& r, Action& a, std::string& why) {
     a.delayMs = static_cast<int>(toInt(r.get("delai"), 0));
     a.guard = toStr(r.get("garde"));
     a.target = toStr(r.get("cible"));
+    if (operationWritesVariable(a.operation)) a.target = targetVariable(a.target);   // 1.11.7 : "=Vanne.CMD_OUV" d'avant
     a.value = toStr(r.get("valeur"));
     a.placement = toStr(r.get("position"));
     a.askWhere = toBool(r.get("demander_ou"), true);        // Lot API 8 : absent (projet d'avant) = coche

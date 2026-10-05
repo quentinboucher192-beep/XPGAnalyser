@@ -404,6 +404,9 @@ inline constexpr Operation kOperations[] = {
 [[nodiscard]] bool triggerWaits(Trigger) noexcept;      // appui long, timer
 // Ce que l'operation vise : une variable, une vue, un script ; et si elle a une valeur.
 [[nodiscard]] bool operationWritesVariable(Operation) noexcept;
+// 1.11.7 : la variable visee, telle qu'elle s'ecrit : un "=" tape devant (la case Variable
+// a sa pastille fx, comme la Condition) est retire ("=Vanne.CMD_OUV" -> "Vanne.CMD_OUV").
+[[nodiscard]] std::string targetVariable(std::string_view target);
 [[nodiscard]] bool operationOpensView(Operation) noexcept;       // naviguer, popup, changer de popup
 [[nodiscard]] bool operationHasValue(Operation) noexcept;        // increment, affectation, script, journal
 // Lot 8 : ce qui passe des parametres a la vue ouverte (Naviguer, Ouvrir une

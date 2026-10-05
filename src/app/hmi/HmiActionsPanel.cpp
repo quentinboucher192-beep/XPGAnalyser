@@ -384,8 +384,15 @@ void HmiActionsPanel::rebuildGrid() {
                                  })));
     if (hmi::operationWritesVariable(a.operation)) {
         op.properties.push_back(prop("Variable", a.target, PG::ValueType::Text, {},
-                                     commitWith([](Action& n, std::string_view v) { n.target = std::string(v); return true; }),
-                                     "Une variable IHM ou de l'automate : Compteur_Clics, Armoires[0].active"));
+                                     commitWith([](Action& n, std::string_view v) { n.target = hmi::targetVariable(v); return true; }),
+                                     "Une variable IHM ou de l'automate : Compteur_Clics, Armoires[0].active. Dans un symbole ou une "
+                                     "popup, une r\xC3\xA9" "f\xC3\xA9rence et ses membres : Vanne.CMD_OUV."));
+        // 1.11.7 : la pastille fx et l'aide (les variables, les references du symbole), comme la Condition ;
+        // le type attendu au bout du nom (BOOL pour Mettre a 1, Mettre a 0, Basculer).
+        const auto expect = a.operation == Operation::Increment || a.operation == Operation::Decrement ? ui::exprfield::Expect::Number
+                          : a.operation == Operation::Assign                                            ? ui::exprfield::Expect::Value
+                                                                                                         : ui::exprfield::Expect::Bool;
+        ui::exprfield::markWhole(op.properties.back(), expect);
     } else if (hmi::operationOpensView(a.operation)) {
         // Lot 8 : une popup s'ouvre parmi les popups (et les vues : toute vue peut
         // s'ouvrir par-dessus) ; une navigation vise une vue ordinaire.

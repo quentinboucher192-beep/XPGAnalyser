@@ -1807,6 +1807,16 @@ bool operationWritesVariable(Operation o) noexcept {
     return o == Operation::Toggle || o == Operation::Set || o == Operation::Reset || o == Operation::Increment
         || o == Operation::Decrement || o == Operation::Assign;
 }
+std::string targetVariable(std::string_view target) {
+    const auto blank = [](char c) { return c == ' ' || c == '\t' || c == '\r' || c == '\n'; };
+    while (!target.empty() && blank(target.front())) target.remove_prefix(1);
+    while (!target.empty() && blank(target.back())) target.remove_suffix(1);
+    if (!target.empty() && target.front() == '=') {
+        target.remove_prefix(1);
+        while (!target.empty() && blank(target.front())) target.remove_prefix(1);
+    }
+    return std::string(target);
+}
 bool operationOpensView(Operation o) noexcept {
     return o == Operation::Navigate || o == Operation::Popup || o == Operation::ChangePopup;
 }

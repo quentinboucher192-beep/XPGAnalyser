@@ -15969,11 +15969,12 @@ void centreAide111() {
 
     // ---- les notes ----
     // 1.11.1 (T2, tranche 30) : la 1.11.1 en tete (9 versions).
-    // 1.11.3 : la 1.11.3 en tete (11 versions). 1.11.4 : la 1.11.4 en tete (12 versions). 1.11.5 : 13. 1.11.6 : 14.
-    check(hn::releases().size() == 14 && hn::releases().front().version == "1.11.6" && hn::releases()[1].version == "1.11.5"
-              && hn::releases()[2].version == "1.11.4" && hn::releases()[3].version == "1.11.3" && hn::releases()[4].version == "1.11.2"
-              && hn::releases()[5].version == "1.11.1" && hn::releases()[6].version == "1.11" && hn::releases()[7].version == "1.10.4",
-          "notes : 14 versions, la 1.11.6 en tete, puis la 1.11.5, la 1.11.4, la 1.11.3, la 1.11.2, la 1.11.1, la 1.11 et la 1.10.4");
+    // 1.11.3 : la 1.11.3 en tete (11 versions). 1.11.4 : la 1.11.4 en tete (12 versions). 1.11.5 : 13. 1.11.6 : 14. 1.11.7 : 15.
+    check(hn::releases().size() == 15 && hn::releases().front().version == "1.11.7" && hn::releases()[1].version == "1.11.6"
+              && hn::releases()[2].version == "1.11.5" && hn::releases()[3].version == "1.11.4" && hn::releases()[4].version == "1.11.3"
+              && hn::releases()[5].version == "1.11.2" && hn::releases()[6].version == "1.11.1" && hn::releases()[7].version == "1.11"
+              && hn::releases()[8].version == "1.10.4",
+          "notes : 15 versions, la 1.11.7 en tete, puis la 1.11.6, la 1.11.5, la 1.11.4, la 1.11.3, la 1.11.2, la 1.11.1, la 1.11 et la 1.10.4");
     // 1.11.2 (T2, tranches 41, 42 et 44 ; decisions 187, 201 et 216) : 23 lignes en 8 domaines, dont 2 cartes de la fenetre Nouveautes.
     // Tranche 46 (SYM, decision 240) : + Dupliquer dans un symbole (C) et la section Parametres du symbole (N) : 25 lignes.
     {
@@ -16244,7 +16245,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 169,
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 173,
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -16387,7 +16388,7 @@ void centreAide111() {
     // Integration 1.11 (I111) : la 1.10.4 ajoute objet-vanne-3-voies (La bibliotheque d'objets) : 206.
     // 1.11.1 (T2, decision 107) : Programmer gagne variables-api (API. : les variables de l'automate) : 207.
     check(ix.count(hc::Chapter::Hmi) == 208, "centre : L'IHM a les 208 sujets des chapitres 2 a 8 du guide (1.11.1 : variables-api ; 1.11.2 : paquets-symboles)");
-    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 14, "centre : 11 expressions, 14 notes (1.11.6)");
+    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 15, "centre : 11 expressions, 15 notes (1.11.7)");
     // Tranche 3 : les 11 types de T3 (hmi::exprguide::all(), depot-o), passes par in.expressions ; les
     // cles de la liste de secours sont les siennes (enumeration, pas enum).
     {
@@ -16449,10 +16450,10 @@ void centreAide111() {
         check(o, "page Raccourcis : Ctrl+Maj+O dessine en trois touches, repere 1.11");
 
         const auto n110 = hc::notesPage("1.10");
-        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 14
+        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 15
                   && !n110.summary.empty() && !n110.date.empty(),
               "page Notes : 1.10 -> 1.10.0, 22 lignes en 7 domaines, sa date et son resume");
-        check(hc::notesPage("").version == "1.11.6" && hc::notesPage("9.9").version == "1.11.6",
+        check(hc::notesPage("").version == "1.11.7" && hc::notesPage("9.9").version == "1.11.7",
               "page Notes : sans version (ou inconnue), la plus recente");
         const auto simu = hc::notesPage("1.10.0", "Simulation");
         check(simu.sections.size() == 1 && simu.rows == 4 && simu.domains.size() == 7,
@@ -16796,7 +16797,7 @@ void centreAide111() {
         // Les notes de version n'ont pas de tutoriel : ni la carte "Regarder le tutoriel" (hasTutorial, que
         // lit HelpCenterScreen::showTopic), ni la pastille dans l'arbre. Les autres pages speciales gardent
         // les leurs (T1 ecrit les tutoriels des raccourcis et de Signaler).
-        bool notesSans = ix.count(hc::Chapter::Notes) == 14;   // 1.11.3 a 1.11.6 : une version de plus
+        bool notesSans = ix.count(hc::Chapter::Notes) == 15;   // 1.11.3 a 1.11.7 : une version de plus
         for (const auto* t : ix.ofChapter(hc::Chapter::Notes)) notesSans = notesSans && !hc::hasTutorial(*t);
         const auto* raccourcis = ix.find("page-raccourcis");
         const auto* signaler = ix.find("page-signaler");
@@ -22393,6 +22394,94 @@ void forcageMouvement1116(const std::string& xpg) {
 }
 
 // =============================================================================
+//  1.11.7 (« voila un exemple pour le champ 'variable' dans lequel je veux voir le fx
+//  et les references ») : la case Variable d'une action a la pastille fx, comme la
+//  Condition, et l'aide propose les variables et les references du symbole.
+// =============================================================================
+void variableFx1117() {
+    std::printf("== 1.11.7 : la case Variable d'une action - la pastille fx et les r\xC3\xA9" "f\xC3\xA9rences, comme la Condition ==\n");
+    namespace xf = ui::exprfield;
+    namespace as = app::assist;
+    namespace hp = app::hmiparams;
+    auto doc = std::make_shared<Document>();
+    auto& p = doc->project;
+    {
+        HmiType tv;
+        tv.id = p.allocate();
+        tv.name = "T_Vanne";
+        tv.members = {{"CMD_OUV", "BOOL", "", ""}, {"CMD_FERM", "BOOL", "", ""}, {"OUV", "BOOL", "", ""}, {"Position", "REAL", "", ""}};
+        p.programs.types.push_back(tv);
+    }
+    View sym = makeView(p, "S_Vanne");
+    sym.role = "symbole";
+    sym.params = {{"Vanne", "", "", "T_Vanne", ParamMode::Reference}};
+    const Id btn = edit::add(p, sym, Kind::Button, 20, 20);
+    const Id symId = sym.id;
+    p.views.push_back(sym);
+    core::CommandStack stack;
+    app::HmiActionsPanel panel("acts1117", doc, symId, [&](core::CommandPtr c) { (void)stack.push(std::move(c)); });
+    panel.setBounds({0, 0, 600, 800});
+    panel.setOwner(btn);
+    Action a;
+    a.trigger = Trigger::Click;
+    a.operation = Operation::Set;
+    a.target = "Vanne.CMD_OUV";
+    a.guard = "NOT(Vanne.OUV)";
+    panel.selectIndex(panel.add(a));
+    panel.layout();
+    const auto act = [&]() -> const Action& { return p.view(symId)->object(btn)->actions[0]; };
+    {
+        const auto cats = panel.grid().categories();
+        const auto* var = v19::propOf(cats, "Op\xC3\xA9ration", "Variable");
+        const auto* cond = v19::propOf(cats, "D\xC3\xA9" "clencheur", "Condition (facultative)");
+        check(var && xf::accepts(*var) && var->expression == "Vanne.CMD_OUV" && xf::expectOf(*var) == xf::Expect::Bool,
+              "Mettre \xC3\xA0 1 : la case Variable a sa pastille fx (pleine) et son type, BOOL");
+        check(var && cond && var->placeholder == cond->placeholder && xf::editText(*var) == "=Vanne.CMD_OUV",
+              "comme la Condition : \xC2\xAB =Vanne.CMD_OUV \xC2\xBB \xC3\xA0 l'\xC3\xA9" "dition");
+    }
+    // Un "=" tape devant est retire : la variable s'ecrit Vanne.CMD_FERM.
+    check(commitIn(panel.grid(), "Variable", "=Vanne.CMD_FERM") && act().target == "Vanne.CMD_FERM", "\xC2\xAB =Vanne.CMD_FERM \xC2\xBB tap\xC3\xA9 : la variable Vanne.CMD_FERM");
+    check(hmi::describeAction(act()).rfind("Clic \xE2\x86\x92 Mettre \xC3\xA0 1 Vanne.CMD_FERM ", 0) == 0
+              && hmi::describeAction(act()).find('=') == std::string::npos,
+          "la liste la d\xC3\xA9" "crit sans \xC2\xAB = \xC2\xBB : " + hmi::describeAction(act()));
+    // L'aide : les references du symbole (Vanne) et leurs membres.
+    hp::setAssistView(symId);
+    {
+        auto rule = as::gridAssist(as::sourcesFor(doc));
+        const auto cats = panel.grid().categories();
+        const auto* var = v19::propOf(cats, "Op\xC3\xA9ration", "Variable");
+        std::vector<ui::InputText::Suggestion> got, mem;
+        std::size_t from = 0;
+        if (var)
+            if (auto g = rule("Op\xC3\xA9ration", *var)) { g("Va", from, got); g("Vanne.", from, mem); }
+        check(std::any_of(got.begin(), got.end(), [](const auto& s) { return s.text == "Vanne"; }), "l'aide propose la r\xC3\xA9" "f\xC3\xA9rence Vanne");
+        check(std::any_of(mem.begin(), mem.end(), [](const auto& s) { return s.text == "CMD_OUV"; }), "... et ses membres (Vanne.CMD_OUV)");
+    }
+    hp::setAssistView(kNoId);
+    // Incrementer : un nombre ; Affecter : une valeur.
+    check(commitIn(panel.grid(), "Op\xC3\xA9ration", "Incr\xC3\xA9menter"), "Incr\xC3\xA9menter");
+    {
+        const auto* var = v19::propOf(panel.grid().categories(), "Op\xC3\xA9ration", "Variable");
+        check(var && xf::accepts(*var) && xf::expectOf(*var) == xf::Expect::Number, "Incr\xC3\xA9menter : la case Variable attend un nombre");
+    }
+    // Un projet d'avant, enregistre avec "=Vanne.CMD_OUV" : relu sans le "=".
+    {
+        View w = makeView(p, "Ancienne");
+        const Id b2 = edit::add(p, w, Kind::Button, 10, 10);
+        Action old;
+        old.trigger = Trigger::Click;
+        old.operation = Operation::Set;
+        old.target = "=Vanne.CMD_OUV";
+        w.object(b2)->actions.push_back(old);
+        const auto back = hmi::parseView(hmi::serializeView(w));
+        check(back && back->object(b2) && !back->object(b2)->actions.empty() && back->object(b2)->actions[0].target == "Vanne.CMD_OUV",
+              "relu : \xC2\xAB =Vanne.CMD_OUV \xC2\xBB devient Vanne.CMD_OUV");
+        check(hmi::targetVariable(" = Four1.Marche ") == "Four1.Marche" && hmi::targetVariable("Compteur") == "Compteur",
+              "targetVariable : le \xC2\xAB = \xC2\xBB et les blancs retir\xC3\xA9s");
+    }
+}
+
+// =============================================================================
 //  1.11.7 (defaut de la 1.11.6 : « les forcages, si jamais les variables sont communes
 //  dans les 3 onglets [...] il faut que ce soit un forcage commun ; et il faut passer
 //  prioritaire par rapport aux scripts ») : une variable IHM liee a un esclave simule
@@ -25602,6 +25691,7 @@ int main(int argc, char** argv) {
     esclavesArbre1115();                    // 1.11.5 : les esclaves simules en arbre, la recherche, les bornes au clavier
     surLaVueClicDroit1116();                // 1.11.6 : sur la vue actuelle, le clic droit
     forcageCommun1117();                    // 1.11.7 : le forcage commun, prioritaire sur les scripts
+    variableFx1117();                       // 1.11.7 : la case Variable d'une action, la pastille fx
     if (argc > 1) simulationVariables1115(argv[1]);   // 1.11.5 : les onglets Variables IHM et Variables API
     if (argc > 1) forcageMouvement1116(argv[1]);   // 1.11.6 : le forcage par type et bornes
     scriptsExportImport1113();              // 1.11.3 : exporter / importer les scripts d'une vue et les operateurs (.xpgst)
