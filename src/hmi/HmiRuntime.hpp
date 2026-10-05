@@ -671,6 +671,16 @@ public:
     // Variables IHM, puis automate : ce que lisent les expressions des vues.
     [[nodiscard]] sim::Environment& environment();
     [[nodiscard]] const sim::Value* variable(std::string_view name) const;
+    // 1.11.5 : FORCER UNE VARIABLE IHM (l'onglet Variables IHM de la simulation), le meme
+    // contrat que l'automate simule : forcee, elle prend la valeur donnee et ignore les
+    // ecritures (scripts, actions, champs, equipement lie) jusqu'au deforcage. Une case
+    // (Four1.Vannes[1].Position) se force seule. Faux : pas une variable IHM, ou la valeur
+    // n'est pas du bon type (`why` le dit).
+    bool forceVariable(std::string_view name, const sim::Value& value, std::string* why = nullptr);
+    bool unforceVariable(std::string_view name);
+    void unforceAllVariables();
+    [[nodiscard]] bool variableForced(std::string_view name) const;
+    [[nodiscard]] std::vector<std::string> forcedVariables() const;
     // Un script general, par son nom (Programmation generale, et les tests).
     bool callScript(std::string_view name, double now, std::string* error = nullptr);
     // Combien de fois un script a tourne ; sa derniere erreur.
@@ -1174,6 +1184,7 @@ private:
     // les indices hors des bornes deja dits au journal.
     std::map<std::string, types::Aggregate, std::less<>> aggregates_;
     std::set<std::string>                                boundsReported_;
+    std::set<std::string, std::less<>>                   forcedIhm_;   // 1.11.5 : les variables IHM forcees (en majuscules)
     bool aggregateRead(const std::string& path, sim::Value& out);
     [[nodiscard]] bool outOfBoundsPath(const std::string& path, std::string* why) const;
     void reportBounds(const std::string& path, const std::string& why);

@@ -270,6 +270,8 @@ public:
             return false;
         }
         if (const auto it = vars.find(upper(r)); it != vars.end()) {
+            // 1.11.5 : forcee (l'onglet Variables IHM de la simulation), elle garde sa valeur.
+            if (rt_.forcedIhm_.count(it->first)) return true;
             // Lot 15 : une variable liee a un equipement s'ecrit dans l'equipement ;
             // refusee (lecture seule, sans liaison), elle ne change pas.
             if (!rt_.bound_.empty()) {
@@ -721,6 +723,25 @@ const sim::Value* Runtime::variable(std::string_view name) const {
     const auto it = env_->vars.find(upper(name));
     return it == env_->vars.end() ? nullptr : &it->second;
 }
+
+bool Runtime::forceVariable(std::string_view name, const sim::Value& value, std::string* why) {
+    const auto it = env_->vars.find(upper(name));
+    if (it == env_->vars.end()) {
+        if (why) *why = std::string(name) + " n'est pas une variable IHM (une structure se force case par case)";
+        return false;
+    }
+    it->second.assignFrom(value);   // dans son type (comme une ecriture)
+    forcedIhm_.insert(it->first);
+    return true;
+}
+
+bool Runtime::unforceVariable(std::string_view name) { return forcedIhm_.erase(upper(name)) > 0; }
+
+void Runtime::unforceAllVariables() { forcedIhm_.clear(); }
+
+bool Runtime::variableForced(std::string_view name) const { return forcedIhm_.count(upper(name)) > 0; }
+
+std::vector<std::string> Runtime::forcedVariables() const { return {forcedIhm_.begin(), forcedIhm_.end()}; }
 
 sim::Value* Runtime::ihmSlot(std::string_view name) {
     const auto it = env_->vars.find(upper(name));
@@ -1865,6 +1886,7 @@ double Runtime::animationProgress(double now) const {
 void Runtime::start(double now) {
     composed_.clear();
     slaveReads_.clear();                // 1.9 : les bascules d'avant ne comptent plus
+    forcedIhm_.clear();                 // 1.11.5 : les variables repartent de leur valeur initiale
     running_ = true;
     now_ = startNow_ = now;
     startWallMs_ = std::chrono::duration_cast<std::chrono::milliseconds>(

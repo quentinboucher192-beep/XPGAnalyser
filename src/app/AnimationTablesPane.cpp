@@ -830,7 +830,7 @@ void AnimationTablesPane::refreshProperties() {
                 h.properties.push_back({"Liaison", v->bound() ? v->equipment + " \xC2\xB7 " + v->address : std::string("locale : elle vit dans l'IHM"),
                                         PG::ValueType::ReadOnly,
                                         v->bound() ? "Pendant la simulation, l'IHM la lit sur l'automate : les deux valeurs doivent dire la m\xC3\xAAme chose."
-                                                   : "\xC3\x89" "crire change sa valeur dans l'IHM en marche ; elle ne se force pas.",
+                                                   : "\xC3\x89" "crire change sa valeur dans l'IHM en marche ; la forcer la tient.",
                                         {}, nullptr});
             }
         } else {
@@ -1038,12 +1038,21 @@ void AnimationTablesPane::writeSelected(bool force) {
             if (force ? rt->force(target, *v) : rt->set(target, *v)) ++done;
             else refused = r.name + " : inconnue de la simulation";
         } else {
-            if (force) { refused = "une variable de l'IHM ne se force pas : \xC3\x89" "crire change sa valeur"; continue; }
             if (!hr) { refused = "l'IHM ne tourne pas (IHM > Simulation la lance)"; continue; }
+            // 1.11.5 : une variable IHM se force aussi (le moteur de l'IHM la tient, il ignore les ecritures).
+            if (force && text.empty()) {
+                if (const auto* cur = hr->variable(r.name); cur && hr->forceVariable(r.name, *cur)) ++done;
+                else refused = r.name + " : pas une variable IHM qui tourne";
+                continue;
+            }
             if (text.empty()) { refused = "tape d'abord la nouvelle valeur (colonne Nouvelle valeur)"; continue; }
             const auto v = parseValue(text, hr->variable(r.name));
             if (!v) { refused = "\xC2\xAB " + text + " \xC2\xBB ne se lit pas comme une valeur de " + r.name; continue; }
-            if (hr->environment().write(r.name, *v)) ++done;
+            if (force) {
+                std::string why;
+                if (hr->forceVariable(r.name, *v, &why)) ++done;
+                else refused = why;
+            } else if (hr->environment().write(r.name, *v)) ++done;
             else refused = r.name + " : l'IHM refuse l'\xC3\xA9" "criture";
         }
     }

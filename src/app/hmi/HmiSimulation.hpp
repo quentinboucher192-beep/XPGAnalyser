@@ -45,6 +45,7 @@ namespace app {
 
 class EquipmentHost;
 class HmiTwinValues;
+class HmiSimVarTree;   // 1.11.5 : les variables IHM et API en arbre
 class TwinValuesController;
 
 struct HmiSimulationHost {
@@ -421,8 +422,12 @@ public:
     // Les onglets du bas : Expressions, Journal, Variables IHM, Alarmes, Recettes ;
     // lot 13 : Performances.
     // Lot 18 : Jumeaux (ce que font les esclaves simules : animer, la zone, forcer).
-    enum Tab : std::size_t { TabValues = 0, TabJournal = 1, TabVariables = 2, TabAlarms = 3, TabRecipes = 4, TabPerf = 5, TabTwins = 6 };
+    // 1.11.5 : Variables API apres Variables IHM (les deux en arbre, avec la recherche et le forcage).
+    enum Tab : std::size_t { TabValues = 0, TabJournal = 1, TabVariables = 2, TabApiVariables = 3, TabAlarms = 4, TabRecipes = 5, TabPerf = 6, TabTwins = 7 };
     [[nodiscard]] HmiTwinValues& twins() noexcept { return *twins_; }
+    // 1.11.5 : les onglets Variables IHM et Variables API (pour les scripts et les tests).
+    [[nodiscard]] HmiSimVarTree& ihmVariables() noexcept { return *ihmVars_; }
+    [[nodiscard]] HmiSimVarTree& apiVariables() noexcept { return *apiVars_; }
     [[nodiscard]] TwinValuesController& twinsController() noexcept { return *twinsCtl_; }
     // Lot 13 : le releve des performances (remis a zero, exporte en CSV).
     void resetPerf();
@@ -578,7 +583,11 @@ private:
     ui::TabControl*       tabs_{nullptr};
     ui::TableView*        table_{nullptr};
     ui::TableView*        journal_{nullptr};
-    ui::TableView*        variables_{nullptr};
+    HmiSimVarTree*        ihmVars_{nullptr};      // 1.11.5
+    HmiSimVarTree*        apiVars_{nullptr};      // 1.11.5
+    std::string           ihmVarsSig_;            // les variables IHM telles que l'arbre les a
+    const void*           apiRuntime_{nullptr};   // la simulation de l'automate telle que l'arbre l'a
+    std::size_t           apiSlots_{0};
     ui::TableView*        alarms_{nullptr};
     ui::TableView*        recipes_{nullptr};
     ui::TableView*        perf_{nullptr};                      // lot 13 : les performances
@@ -590,11 +599,10 @@ private:
     ui::StatusBar*        status_{nullptr};
     ui::Widget*           simReads_{nullptr};                  // 1.9 : a droite de la barre d'etat (simmark::Indicator)
     ui::ToggleButton*     marksButton_{nullptr};               // 1.9 : Reperes (la seance)
-    std::shared_ptr<ui::ITableModel> model_, journalModel_, varsModel_, alarmsModel_, recipesModel_, perfModel_;
+    std::shared_ptr<ui::ITableModel> model_, journalModel_, alarmsModel_, recipesModel_, perfModel_;
     std::string           alarmsShown_, recipesShown_;         // ce que montrent les deux tableaux (pour ne les refaire qu'au besoin)
     std::vector<std::pair<std::string, std::string>> recipeRows_;   // (recette, jeu) de chaque ligne
     std::size_t           journalShown_{static_cast<std::size_t>(-1)};
-    std::vector<std::vector<std::string>> varsShown_;   // le tableau ne change que si les valeurs changent
     // Lot 18 : l'onglet Jumeaux.
     HmiTwinValues*        twins_{nullptr};
     std::unique_ptr<TwinValuesController> twinsCtl_;

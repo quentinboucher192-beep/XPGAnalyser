@@ -18,6 +18,7 @@
 #include "../../hmi/HmiNavigation.hpp"
 
 #include "HmiAssetPanes.hpp"
+#include "HmiSimVarTree.hpp"   // 1.11.5 : les variables IHM et API en arbre
 #include "HmiIcons.hpp"
 #include "HmiSound.hpp"
 #include "HmiSystemPainter.hpp"
@@ -2115,11 +2116,77 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
                      std::make_unique<JournalPage>(base + ".journalPage", std::move(tools), std::move(table)));
     }
     {
-        auto table = std::make_unique<ui::TableView>(base + ".variables");
-        table->setColumns({{"Variable IHM", 170.f}, {"Type", 80.f}, {"Valeur", 220.f}});
-        table->setSelectionMode(ui::SelectionMode::Single);
-        variables_ = table.get();
-        tabs->addTab(ui::TabControl::Tab{"Variables IHM", ui::Icon::Library, false, false}, std::move(table));
+        // 1.11.5 : les variables IHM en arbre (une structure a toute profondeur), la recherche,
+        // le forcage (le moteur de l'IHM : forcee, elle ignore les ecritures).
+        auto tree = std::make_unique<HmiSimVarTree>(base + ".variables", "IHM");
+        ihmVars_ = tree.get();
+        HmiSimVarTree::Hooks h;
+        h.read = [this](const std::string& path) -> std::optional<sim::Value> {
+            if (const auto* v = runtime_.variable(path)) return *v;
+            return std::nullopt;
+        };
+        h.forced = [this](const std::string& path) { return runtime_.variableForced(path); };
+        h.force = [this](const std::string& path, const std::string& text, std::string* why) {
+            const auto* cur = runtime_.variable(path);
+            if (!cur) {
+                if (why) *why = path + " : l'IHM ne tourne pas (le bouton D\xC3\xA9marrer l'IHM)";
+                return false;
+            }
+            const auto v = text.empty() ? std::optional<sim::Value>(*cur) : parseTypedValue(text, cur);
+            if (!v) {
+                if (why) *why = "\xC2\xAB " + text + " \xC2\xBB ne se lit pas comme une valeur de " + path;
+                return false;
+            }
+            return runtime_.forceVariable(path, *v, why);
+        };
+        h.unforce = [this](const std::string& path) { return runtime_.unforceVariable(path); };
+        h.nodeType = [this](const std::string& path) { return hmi::types::typeOfPath(doc_->project, path); };
+        tree->setHooks(std::move(h));
+        tree->setEmptyText("Aucune variable IHM (Programmation g\xC3\xA9n\xC3\xA9rale \xE2\x80\xBA Variables IHM).");
+        links_ += tree->said->connect([this](const std::string& t, bool error) {
+            if (status_) status_->setTransientMessage(t, 6.0, error ? ui::StatusBar::Severity::Warning : ui::StatusBar::Severity::Success);
+        });
+        tabs->addTab(ui::TabControl::Tab{"Variables IHM", ui::Icon::Library, false, false}, std::move(tree));
+    }
+    {
+        // 1.11.5 : les variables de l'automate simule, en arbre, avec son forcage (sim::Runtime).
+        auto tree = std::make_unique<HmiSimVarTree>(base + ".apiVariables", "API");
+        apiVars_ = tree.get();
+        const auto plc = [this]() -> sim::Runtime* { return host_.runtime ? host_.runtime() : nullptr; };
+        HmiSimVarTree::Hooks h;
+        h.read = [plc](const std::string& path) -> std::optional<sim::Value> {
+            sim::Value v;
+            if (auto* rt = plc(); rt && rt->get(path, v)) return v;
+            return std::nullopt;
+        };
+        h.forced = [plc](const std::string& path) {
+            auto* rt = plc();
+            return rt && rt->isForced(path);
+        };
+        h.force = [plc](const std::string& path, const std::string& text, std::string* why) {
+            auto* rt = plc();
+            sim::Value cur;
+            if (!rt || !rt->get(path, cur)) {
+                if (why) *why = path + " : la simulation de l'automate n'est pas pr\xC3\xAAte (F9 la lance)";
+                return false;
+            }
+            const auto v = text.empty() ? std::optional<sim::Value>(cur) : parseTypedValue(text, &cur);
+            if (!v) {
+                if (why) *why = "\xC2\xAB " + text + " \xC2\xBB ne se lit pas comme une valeur de " + path;
+                return false;
+            }
+            return rt->force(path, *v);
+        };
+        h.unforce = [plc](const std::string& path) {
+            auto* rt = plc();
+            return rt && rt->unforce(path);
+        };
+        tree->setHooks(std::move(h));
+        tree->setEmptyText("La simulation de l'automate n'est pas pr\xC3\xAAte : F9 la lance (l'IHM peut lire un vrai automate, qui ne se force pas ici).");
+        links_ += tree->said->connect([this](const std::string& t, bool error) {
+            if (status_) status_->setTransientMessage(t, 6.0, error ? ui::StatusBar::Severity::Warning : ui::StatusBar::Severity::Success);
+        });
+        tabs->addTab(ui::TabControl::Tab{"Variables API", ui::Icon::LocatedVariable, false, false}, std::move(tree));
     }
     {
         auto table = std::make_unique<ui::TableView>(base + ".alarms");
@@ -3368,35 +3435,43 @@ void HmiSimulationPane::updateTables() {
             tabs_->setTabBadge(TabRecipes, recipeRows_.empty() ? std::string{} : std::to_string(recipeRows_.size()), ui::Tone::Accent);
         }
     }
-    std::vector<std::vector<std::string>> vars;
-    for (const auto& var : doc_->project.programs.variables) {
-        if (!hmi::types::isComposite(var.type)) {
-            const auto* v = runtime_.variable(var.name);
-            vars.push_back({var.name, var.type, v ? hmi::formatValue(*v) : std::string("-")});
-            continue;
-        }
-        // Lot 16 : une structure ou un tableau - sa ligne, puis ses cases (200 au plus).
-        const auto leaves = hmi::types::leafVariables(doc_->project, var);
-        vars.push_back({var.name, var.type, std::to_string(leaves.size()) + " case(s)"});
-        std::size_t shown = 0;
-        for (const auto& l : leaves) {
-            if (++shown > 200) {
-                vars.push_back({"  \xE2\x80\xA6", "", std::to_string(leaves.size() - 200) + " autre(s)"});
-                break;
+    // 1.11.5 : les arbres des variables - refaits quand les variables changent (les valeurs,
+    // elles, se lisent au dessin).
+    if (ihmVars_) {
+        std::string sig;
+        for (const auto& var : doc_->project.programs.variables) sig += var.name + ':' + var.type + ';';
+        for (const auto& t : doc_->project.programs.types) sig += t.name + '#' + std::to_string(t.members.size()) + ';';
+        if (sig != ihmVarsSig_) {
+            ihmVarsSig_ = sig;
+            std::vector<HmiSimVarTree::Leaf> leaves;
+            for (const auto& var : doc_->project.programs.variables) {
+                if (!hmi::types::isComposite(var.type)) {
+                    leaves.push_back({var.name, var.type});
+                    continue;
+                }
+                for (const auto& l : hmi::types::leafVariables(doc_->project, var)) leaves.push_back({l.name, l.type});
             }
-            const auto* v = runtime_.variable(l.name);
-            vars.push_back({"  " + l.name, l.type, v ? hmi::formatValue(*v) : std::string("-")});
+            ihmVars_->setLeaves(std::move(leaves));
+            tabs_->setTabBadge(TabVariables, std::to_string(ihmVars_->leafCount()), ui::Tone::Accent);
         }
     }
-    if (varsModel_ && vars == varsShown_) return;
-    varsShown_ = vars;
-    varsModel_ = std::make_shared<TextRows>(std::vector<std::string>{"Variable IHM", "Type", "Valeur"}, std::move(vars),
-                                            [](ui::RowIndex, std::size_t c) {
-                                                ui::CellStyle s;
-                                                s.bold = c == 2;
-                                                return s;
-                                            });
-    variables_->setModel(varsModel_);
+    if (apiVars_) {
+        auto* rt = host_.runtime ? host_.runtime() : nullptr;
+        const std::size_t slots = rt ? rt->slotCount() : 0;
+        if (rt != apiRuntime_ || slots != apiSlots_) {
+            apiRuntime_ = rt;
+            apiSlots_ = slots;
+            std::vector<HmiSimVarTree::Leaf> leaves;
+            if (rt) {
+                for (const auto& n : rt->names()) {
+                    sim::Value v;
+                    leaves.push_back({n, rt->get(n, v) ? std::string(sim::toString(v.type())) : std::string{}});
+                }
+            }
+            apiVars_->setLeaves(std::move(leaves));
+            tabs_->setTabBadge(TabApiVariables, slots ? std::to_string(apiVars_->leafCount()) : std::string{}, ui::Tone::Accent);
+        }
+    }
 }
 
 void HmiSimulationPane::setStationMode(bool on) {

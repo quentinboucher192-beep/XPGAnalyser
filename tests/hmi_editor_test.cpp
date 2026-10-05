@@ -58,6 +58,7 @@
 #include "../src/app/hmi/HmiDisplayPanes.hpp"
 #include "../src/app/hmi/HmiScriptPanes.hpp"
 #include "../src/app/hmi/HmiSimulation.hpp"
+#include "../src/app/hmi/HmiSimVarTree.hpp"   // 1.11.5
 #include "../src/app/ExportTarget.hpp"                 // lot API 8 : les exports qui demandent ou
 #include "../src/app/hmi/HmiPaneKit.hpp"
 #include "../src/app/hmi/HmiSupervisionPanes.hpp"
@@ -1760,10 +1761,13 @@ void simulation_ihm() {
     pane.canvas().dispatch(ui::MouseUp{c, ui::MouseButton::Left, {}});
 
     // L'onglet Variables IHM.
-    pane.tabs().setCurrentIndex(2);
+    pane.tabs().setCurrentIndex(app::HmiSimulationPane::TabVariables);
     paintAt(2.9);
-    auto* vars = dynamic_cast<ui::TableView*>(pane.tabs().page(2));
-    check(vars && cellOf(*vars, "Compteur", 2) == "11" && cellOf(*vars, "Arret_Demande", 2) == "TRUE",
+    // 1.11.5 : un arbre (HmiSimVarTree) a la place du tableau.
+    auto& vars = pane.ihmVariables();
+    bool listed = false;
+    for (const auto& row : vars.rows()) listed = listed || row.path == "Compteur";
+    check(listed && vars.valueText("Compteur") == "11" && vars.valueText("Arret_Demande") == "TRUE",
           "l'onglet Variables IHM montre les valeurs");
 
     // Redemarrer : valeurs initiales, scripts de demarrage, vue de demarrage.
@@ -21899,6 +21903,130 @@ void symParametres1112() {
 //  Et le carre de legende de chaque ligne (C, fx, I, !).
 // =============================================================================
 // =============================================================================
+//  1.11.5 : LES ONGLETS VARIABLES IHM ET VARIABLES API DE LA SIMULATION - en arbre a
+//  toute profondeur, la recherche, le forcage (l'IHM : son moteur ; l'API : l'automate
+//  simule). Forcee, une variable IHM ignore les ecritures.
+// =============================================================================
+void simulationVariables1115(const std::string& xpg) {
+    std::printf("== 1.11.5 : les onglets Variables IHM et Variables API de la simulation ==\n");
+    auto doc = std::make_shared<Document>();
+    auto& p = doc->project;
+    {
+        HmiType vanne;
+        vanne.id = p.allocate();
+        vanne.name = "T_Vanne";
+        vanne.members = {{"Ouverte", "BOOL", "", ""}, {"Position", "INT", "", ""}};
+        HmiType four;
+        four.id = p.allocate();
+        four.name = "T_Four";
+        four.members = {{"Temperature", "REAL", "", ""}, {"Vannes", "ARRAY[1..2] OF T_Vanne", "", ""}};
+        p.programs.types.push_back(vanne);
+        p.programs.types.push_back(four);
+        for (const auto& [name, type, initial] : {std::tuple{"Compteur", "INT", "5"}, {"Four1", "T_Four", ""}}) {
+            Variable var;
+            var.id = p.allocate();
+            var.name = name;
+            var.type = type;
+            var.initial = initial;
+            p.programs.variables.push_back(var);
+        }
+        View v = makeView(p, "Accueil");
+        p.config.startView = v.id;
+        p.views.push_back(v);
+    }
+    std::shared_ptr<const domain::Project> plcProject;
+    std::unique_ptr<sim::Runtime> plc;
+    if (!xpg.empty()) {
+        core::EventBus bus;
+        importer::ProjectImporter imp(bus);
+        auto result = imp.importFiles({xpg});
+        if (result) {
+            plcProject = result->project;
+            plc = std::make_unique<sim::Runtime>(plcProject);
+            check(static_cast<bool>(plc->prepare("MAST")), "le programme pr\xC3\xAAt");
+        }
+    }
+    app::HmiSimulationHost host;
+    host.runtime = [&]() -> sim::Runtime* { return plc.get(); };
+    app::HmiSimulationPane pane("simvars1115", doc, host);
+    pane.setBounds({0, 0, 1600, 900});
+    Recorder rec;
+    const auto theme = ui::Theme::dark();
+    auto paintAt = [&](double t) {
+        rec.clear();
+        pane.layout();
+        pane.render(ui::PaintContext{rec, theme, {0, 0, 1600, 900}, t, nullptr});
+    };
+    paintAt(0.0);
+    pane.tabs().setCurrentIndex(app::HmiSimulationPane::TabVariables);
+    paintAt(0.1);
+    check(pane.tabs().tab(app::HmiSimulationPane::TabApiVariables) && pane.tabs().tab(app::HmiSimulationPane::TabApiVariables)->title == "Variables API",
+          "un onglet Variables API, apr\xC3\xA8s Variables IHM");
+    auto& ihm = pane.ihmVariables();
+    const auto rowOf = [](const app::HmiSimVarTree& t, const std::string& path) -> const app::HmiSimVarTree::Row* {
+        for (const auto& r : t.rows())
+            if (r.path == path) return &r;
+        return nullptr;
+    };
+    check(ihm.leafCount() == 6, "6 variables IHM : Compteur et les 5 cases de Four1 (" + std::to_string(ihm.leafCount()) + ")");
+    const auto* four = rowOf(ihm, "Four1");
+    check(four && !four->leaf && four->count == 5 && four->type == "T_Four" && !four->open, "Four1 : un noeud ferm\xC3\xA9, 5 valeurs, T_Four");
+    ihm.setOpen("Four1", true);
+    ihm.setOpen("Four1.Vannes", true);
+    ihm.setOpen("Four1.Vannes[1]", true);
+    const auto* pos = rowOf(ihm, "Four1.Vannes[1].Position");
+    check(pos && pos->leaf && pos->depth == 3 && pos->label == "Position" && pos->type == "INT", "Four1 > Vannes > [1] > Position (profondeur 3, INT)");
+    ihm.setSearch("Position");
+    {
+        std::size_t leaves = 0;
+        for (const auto& r : ihm.rows()) leaves += r.leaf ? 1 : 0;
+        check(leaves == 2 && rowOf(ihm, "Four1.Vannes[2].Position"), "chercher Position : les deux, leurs noeuds ouverts");
+    }
+    ihm.setSearch("");
+    // Le forcage d'une variable IHM : la valeur tenue, les ecritures ignorees.
+    check(ihm.forcePath("Compteur", "42") && pane.runtime().variableForced("Compteur") && ihm.valueText("Compteur") == "42",
+          "forcer Compteur \xC3\xA0 42");
+    (void)pane.runtime().environment().write("Compteur", sim::Value::integer(sim::Type::Int, 7));
+    same_text(ihm.valueText("Compteur"), "42", "forc\xC3\xA9" "e, Compteur ignore l'\xC3\xA9" "criture (7)");
+    check(ihm.unforcePath("Compteur") && !pane.runtime().variableForced("Compteur"), "d\xC3\xA9" "cocher : libre");
+    (void)pane.runtime().environment().write("Compteur", sim::Value::integer(sim::Type::Int, 7));
+    same_text(ihm.valueText("Compteur"), "7", "libre, Compteur s'\xC3\xA9" "crit");
+    check(ihm.forcePath("Four1.Vannes[1].Position", "12") && ihm.valueText("Four1.Vannes[1].Position") == "12", "une case de structure se force");
+    check(!ihm.forcePath("Four1.Vannes[1].Position", "abc"), "un texte pour un INT : refus\xC3\xA9");
+    // Le champ de la valeur (un double-clic).
+    paintAt(0.2);
+    check(ihm.openValueEditor("Compteur") && ihm.valueEditor(), "le champ de la valeur s'ouvre");
+    if (auto* f = ihm.valueEditor()) {
+        f->setText("13");
+        (void)f->dispatch(ui::KeyDown{ui::Key::Return, {}, false});
+    }
+    check(!ihm.valueEditor() && pane.runtime().variableForced("Compteur") && ihm.valueText("Compteur") == "13", "Entr\xC3\xA9" "e : forc\xC3\xA9" "e \xC3\xA0 13");
+    // La case Forcer, a la souris.
+    {
+        gfx::Rect row{};
+        check(ihm.rowRect("Compteur", row), "la ligne de Compteur");
+        const gfx::Rect box = ihm.forceBox(row);
+        ihm.dispatch(ui::MouseDown{{box.x + 5.f, box.y + 5.f}, ui::MouseButton::Left, 1, {}});
+        check(!pane.runtime().variableForced("Compteur"), "un clic sur la case : d\xC3\xA9" "forc\xC3\xA9" "e");
+    }
+    // L'API : l'automate simule, en arbre.
+    if (plc) {
+        pane.tabs().setCurrentIndex(app::HmiSimulationPane::TabApiVariables);
+        paintAt(0.3);
+        auto& api = pane.apiVariables();
+        check(api.leafCount() > 100, "les variables de l'automate simul\xC3\xA9 (" + std::to_string(api.leafCount()) + ")");
+        const std::string path = "Armoires[1].ana.PT1.ech_haute";
+        api.setSearch("ech_haute");
+        check(rowOf(api, path) && rowOf(api, "Armoires[1].ana") && !rowOf(api, path)->type.empty(),
+              "chercher ech_haute : la case et ses noeuds (Armoires > [1] > ana > PT1)");
+        check(api.forcePath(path, "123,5") && plc->isForced(path), "forcer la case de l'automate \xC3\xA0 123,5");
+        sim::Value v;
+        check(plc->get(path, v) && std::fabs(v.asReal() - 123.5) < 1e-9, "sa valeur : 123.5");
+        check(api.unforcePath(path) && !plc->isForced(path), "d\xC3\xA9" "forcer");
+    }
+}
+
+// =============================================================================
 //  1.11.5 (« esclaves simules : treeview profondeur infinie sur les structures et
 //  variables, une recherche, garder le forcage, editer les bornes plus facilement -
 //  aussi dans IHM > Equipements > Valeurs simulees ») : les lignes d'un esclave se
@@ -24989,6 +25117,7 @@ int main(int argc, char** argv) {
     symParametresReperes1114();             // 1.11.4 : les reperes et le fx dans un parametre (variable ou texte)
     barresDefilement1114();                 // 1.11.4 : les barres de defilement qu'on tire
     esclavesArbre1115();                    // 1.11.5 : les esclaves simules en arbre, la recherche, les bornes au clavier
+    if (argc > 1) simulationVariables1115(argv[1]);   // 1.11.5 : les onglets Variables IHM et Variables API
     scriptsExportImport1113();              // 1.11.3 : exporter / importer les scripts d'une vue et les operateurs (.xpgst)
     valuePicker1113();                      // 1.11.3 : le carre de legende cliquable, le selecteur de valeur
     if (argc > 1) valuePickerApi1113(argv[1]);   // 1.11.3 : le selecteur et les membres des variables de l'automate
