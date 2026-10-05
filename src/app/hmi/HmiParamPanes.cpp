@@ -447,9 +447,11 @@ FieldResult applyParamField(hmi::Project& p, hmi::Id viewId, std::string_view fi
     if (what == "defaut") { prm.defaultValue = value; return r; }
     if (what == "description") { prm.description = value; return r; }
     if (what == "ordre") {
-        if (value == "Supprimer") { v->params.erase(v->params.begin() + static_cast<std::ptrdiff_t>(index)); return r; }
-        if (value == "Monter" && index > 0) { std::swap(v->params[index], v->params[index - 1]); return r; }
-        if (value == "Descendre" && index + 1 < v->params.size()) { std::swap(v->params[index], v->params[index + 1]); return r; }
+        // 1.11.10 : les instances d'un symbole et les appelants suivent (hmi::params).
+        const std::string viewName = v->name;
+        if (value == "Supprimer") { (void)hmi::params::removeParam(p, viewName, index); return r; }
+        if (value == "Monter" && index > 0) { (void)hmi::params::moveParam(p, viewName, index, index - 1); return r; }
+        if (value == "Descendre" && index + 1 < v->params.size()) { (void)hmi::params::moveParam(p, viewName, index, index + 1); return r; }
         r.ok = false;
         r.why = "rien \xC3\xA0 d\xC3\xA9placer";
         return r;

@@ -25758,6 +25758,218 @@ void jumeauValeurs1112() {
           "jumeau 1112 : un clic sur V1502 la choisit (" + chosen + ")");
 }
 
+// =============================================================================
+//  1.11.10 (defaut du 05/10 soir : « comment puis-je avoir des mauvaises donnees
+//  sur un esclave simule et des zones memoires a 65535 ? ») : un script qui ecrit
+//  a chaque image plus vite que la liaison n'envoie. La file des ecritures ne se
+//  videait plus, et les lectures ne repassaient plus : « pas relue depuis 2 min ».
+// =============================================================================
+void ecrituresContinues11110() {
+    std::printf("== 1.11.10 : un script qui \xC3\xA9" "crit sans cesse n'emp\xC3\xAA" "che plus les lectures (esclave simul\xC3\xA9) ==\n");
+    using clk = std::chrono::steady_clock;
+    hmi::Project p;
+    hmi::Equipment e;
+    e.id = p.allocate();
+    e.name = "Esclave virtuel 1";
+    e.type = hmi::EquipmentType::ModbusTcp;
+    e.host = "192.168.1.40";
+    e.port = 502;
+    e.simulated = true;
+    e.periodMs = 100;
+    e.twinDelayMs = 5;                     // comme la fiche : 5 ms par reponse, plus ou moins 2
+    p.equipments.push_back(e);
+    Variable pos;
+    pos.id = p.allocate();
+    pos.name = "Pos";
+    pos.type = "ARRAY[0..63] OF INT";
+    pos.equipment = e.name;
+    pos.address = "%MW100";
+    p.programs.variables.push_back(pos);
+    Variable lue;
+    lue.id = p.allocate();
+    lue.name = "Lue";
+    lue.type = "INT";
+    lue.equipment = e.name;
+    lue.address = "%MW300";
+    p.programs.variables.push_back(lue);
+    app::EquipmentHost equip;
+    hmi::comm::Link* link = nullptr;
+    for (int k = 0; k < 100 && !link; ++k) {
+        equip.tick(&p, 0.05);
+        if (auto* l = equip.link(e.name); l && l->connected()) link = l;
+        else std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+    check(link != nullptr, "la liaison vers l'esclave simul\xC3\xA9");
+    if (!link) return;
+    auto bank = equip.twinBank(e.name);
+    check(bank != nullptr, "... sa m\xC3\xA9moire");
+    if (!bank) return;
+    bank->setWord(hmi::MemTable::Holding, 300, 7);
+    sim::Value v;
+    for (int k = 0; k < 40; ++k) {
+        (void)link->read("Lue", v);
+        if (link->quality("Lue") == hmi::comm::Quality::Good && v.asInteger() == 7) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(25));
+    }
+    check(link->quality("Lue") == hmi::comm::Quality::Good && v.asInteger() == 7, "Lue (%MW300) lue : 7");
+    // Le script : 64 positions ecrites a chaque image (60 images par seconde), 4 s.
+    const auto t0 = clk::now();
+    int frame = 0, worst = 0;
+    std::string why, worstWhy;
+    bank->setWord(hmi::MemTable::Holding, 300, 8);
+    bool sawEight = false;
+    while (std::chrono::duration<double>(clk::now() - t0).count() < 4.0) {
+        ++frame;
+        for (int i = 0; i < 64; ++i) (void)link->write("Pos[" + std::to_string(i) + "]", sim::Value::integer(sim::Type::Int, frame * 10 + i % 7));
+        (void)link->read("Lue", v);
+        sawEight = sawEight || v.asInteger() == 8;
+        const auto q = link->quality("Lue", &why);
+        if (static_cast<int>(q) > worst) { worst = static_cast<int>(q); worstWhy = why; }
+        equip.tick(&p, 1.0 / 60);
+        std::this_thread::sleep_for(std::chrono::milliseconds(16));
+    }
+    check(worst == static_cast<int>(hmi::comm::Quality::Good),
+          "pendant 4 s d'\xC3\xA9" "critures (" + std::to_string(frame) + " images x 64) : Lue reste bonne" + (worstWhy.empty() ? std::string{} : " (" + worstWhy + ")"));
+    check(sawEight, "... et suit l'esclave (8 lu pendant les \xC3\xA9" "critures)");
+    // Le script s'arrete : la derniere valeur de chaque position arrive dans l'esclave, vite.
+    bool arrived = false;
+    for (int k = 0; k < 40 && !arrived; ++k) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(25));
+        arrived = true;
+        for (int i = 0; i < 64; ++i) arrived = arrived && bank->word(hmi::MemTable::Holding, 100 + i) == static_cast<std::uint16_t>(frame * 10 + i % 7);
+    }
+    check(arrived, "le script arr\xC3\xAAt\xC3\xA9 : la derni\xC3\xA8re position de chaque vanne est dans l'esclave en moins d'une seconde");
+    const auto d = link->diagnostics();
+    check(d.writes < static_cast<std::uint64_t>(frame) * 64 / 2,
+          "les \xC3\xA9" "critures d'une m\xC3\xAAme place en attente se regroupent (" + std::to_string(d.writes) + " envoy\xC3\xA9" "es pour " + std::to_string(frame * 64) + " demand\xC3\xA9" "es)");
+}
+
+// =============================================================================
+//  1.11.10 (defaut du 05/10 soir : « quand je modifie les parametres d'un popup ou
+//  d'un symbole, il faut mettre a jour les instances, sinon il voit encore les
+//  anciens parametres ») : renommer, supprimer, deplacer un parametre - les
+//  instances (et les appelants d'une popup) suivent, l'inspecteur ouvert aussi.
+// =============================================================================
+void parametresInstances11110() {
+    std::printf("== 1.11.10 : les instances et les appelants suivent les param\xC3\xA8tres du symbole ou de la popup ==\n");
+    auto doc = std::make_shared<Document>();
+    core::CommandStack stack;
+    auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+    Project& p = doc->project;
+    View sym = makeView(p, "S_Vanne");
+    sym.role = "symbole";
+    sym.params.push_back({"Name", "'Sans nom'", "", "STRING", ParamMode::Reference});
+    sym.params.push_back({"Value", "0", "", "INT", ParamMode::Reference});
+    const Id symId = sym.id;
+    {
+        const Id t = edit::add(p, sym, Kind::Text, 0, 0);
+        sym.object(t)->name = "Txt";
+        sym.object(t)->set("text", "{Name} = {Value}");
+    }
+    p.views.push_back(sym);
+    // Un symbole qui contient une instance de S_Vanne.
+    View groupe = makeView(p, "S_Groupe");
+    groupe.role = "symbole";
+    const Id gid = groupe.id;
+    p.views.push_back(groupe);
+    {
+        View& g = *p.view(gid);
+        const Id in = edit::add(p, g, Kind::SymbolInstance, 10, 10);
+        g.object(in)->set("symbol", "S_Vanne");
+        g.object(in)->set("params", "Value := 7");
+    }
+    View pop = makeView(p, "Pop_Four");
+    pop.role = "popup";
+    pop.params.push_back({"Four", "", "", "T_Four", ParamMode::Reference});
+    pop.params.push_back({"Zone", "1", "", "INT", ParamMode::Copy});
+    const Id popId = pop.id;
+    p.views.push_back(pop);
+    View v = makeView(p, "Vue_Vannes");
+    const Id vid = v.id;
+    p.views.push_back(v);
+    Id i1 = kNoId, i2 = kNoId, btn = kNoId;
+    {
+        View& view = *p.view(vid);
+        i1 = edit::add(p, view, Kind::SymbolInstance, 100, 100);
+        view.object(i1)->set("symbol", "S_Vanne");
+        view.object(i1)->set("params", "Voiture;50");               // positionnels (les anciens projets)
+        i2 = edit::add(p, view, Kind::SymbolInstance, 300, 100);
+        view.object(i2)->set("symbol", "S_Vanne");
+        view.object(i2)->set("params", "Name := 'A'; Value := 3");
+        btn = edit::add(p, view, Kind::Button, 100, 300);
+        Action a;
+        a.trigger = Trigger::Click;
+        a.operation = Operation::Popup;
+        a.target = "Pop_Four";
+        a.value = "Four := Four1; Zone := 2";
+        view.object(btn)->actions.push_back(a);
+    }
+    const auto paramsOf = [&](Id view, Id o) { return p.view(view)->object(o)->text("params"); };
+    const auto nestedParams = [&] { return p.view(gid)->objects.empty() ? std::string("?") : p.view(gid)->objects.front().text("params"); };
+    const auto argsOf = [&](Id o) {
+        std::string out;
+        for (const auto& [n, val] : hmi::symbolArguments(*p.view(symId), *p.view(vid)->object(o), &p)) out += (out.empty() ? "" : " | ") + n + "=" + val;
+        return out;
+    };
+    const auto rowNames = [](const ui::PropertyGrid& grid) {
+        std::string out;
+        for (const auto& c : grid.categories())
+            if (c.name == "Param\xC3\xA8tres du symbole")
+                for (const auto& q : c.properties) out += (out.empty() ? "" : ", ") + q.name;
+        return out;
+    };
+    // La vue ouverte, l'instance i2 choisie : son inspecteur montre les parametres du symbole.
+    app::HmiEditor ed("ed11110", doc, vid, apply);
+    ed.setBounds({0, 0, 1800, 1000});
+    ed.layout();
+    ed.canvas().setSelection({i2});
+    ed.layout();
+    same_text(rowNames(ed.properties()), "Name \xC2\xB7 STRING, Value \xC2\xB7 INT", "l'instance choisie : Name, Value");
+    // Le symbole, ouvert dans un autre onglet : Name renomme en Titre.
+    app::HmiEditor eds("ed11110s", doc, symId, apply);
+    eds.setBounds({0, 0, 1800, 1000});
+    eds.layout();
+    check((eds.layout(), deepCommit(eds.properties(), "Name", "Nom", "Titre")), "S_Vanne : Name renomm\xC3\xA9 en Titre");
+    same_text(paramsOf(vid, i2), "Titre := 'A'; Value := 3", "l'instance nomm\xC3\xA9" "e suit : Titre := 'A'");
+    same_text(argsOf(i1), "Titre='Voiture' | Value=50", "l'instance en positionnels garde son sens");
+    same_text(p.view(symId)->objects.front().text("text"), "{Titre} = {Value}", "le texte du symbole suit");
+    ed.layout();
+    same_text(rowNames(ed.properties()), "Titre \xC2\xB7 STRING, Value \xC2\xB7 INT", "l'inspecteur ouvert de l'instance montre Titre (sans la rechoisir)");
+    // Une saisie dans l'inspecteur ouvert : le nouveau nom, pas l'ancien.
+    const ui::PropertyGrid::Property* titre = nullptr;
+    for (const auto& c : ed.properties().categories())
+        for (const auto& q : c.properties)
+            if (q.name == "Titre \xC2\xB7 STRING") titre = &q;
+    check(titre && titre->commit && titre->commit("B"), "Titre : B, dans l'inspecteur ouvert");
+    same_text(paramsOf(vid, i2), "Titre := 'B'; Value := 3", "... l'instance re\xC3\xA7oit Titre := 'B' (avant : Name := 'B')");
+    // Deplacer Value en tete : les positionnels deviennent nommes (sinon 50 irait a Titre).
+    check((eds.layout(), deepCommit(eds.properties(), "Value", "Ordre", "Monter")), "S_Vanne : Value mont\xC3\xA9 en t\xC3\xAAte");
+    same_text(paramsOf(vid, i1), "Titre := Voiture; Value := 50", "l'instance en positionnels est r\xC3\xA9\xC3\xA9" "crite en nomm\xC3\xA9s");
+    same_text(argsOf(i1), "Value=50 | Titre='Voiture'", "... et garde son sens");
+    ed.layout();
+    same_text(rowNames(ed.properties()), "Value \xC2\xB7 INT, Titre \xC2\xB7 STRING", "l'inspecteur ouvert : le nouvel ordre");
+    // Supprimer Value : son argument part des instances, l'instance imbriquee comprise.
+    check((eds.layout(), deepCommit(eds.properties(), "Value", "Ordre", "Supprimer")), "S_Vanne : Value supprim\xC3\xA9");
+    same_text(paramsOf(vid, i1), "Titre := Voiture", "i1 : Value retir\xC3\xA9");
+    same_text(paramsOf(vid, i2), "Titre := 'B'", "i2 : Value retir\xC3\xA9");
+    same_text(nestedParams(), "", "l'instance dans S_Groupe : Value retir\xC3\xA9");
+    ed.layout();
+    same_text(rowNames(ed.properties()), "Titre \xC2\xB7 STRING", "l'inspecteur ouvert : Titre seul");
+    // Un seul Ctrl+Z par geste : le parametre et les instances reviennent ensemble.
+    (void)stack.undo();
+    same_text(paramsOf(vid, i2), "Titre := 'B'; Value := 3", "Ctrl+Z : Value revient dans l'instance");
+    ed.layout();
+    same_text(rowNames(ed.properties()), "Value \xC2\xB7 INT, Titre \xC2\xB7 STRING", "... et dans l'inspecteur ouvert");
+    // La popup : renommer et supprimer - les appelants suivent.
+    app::HmiEditor edp("ed11110p", doc, popId, apply);
+    edp.setBounds({0, 0, 1800, 1000});
+    edp.layout();
+    check((edp.layout(), deepCommit(edp.properties(), "Four", "Nom", "Four_X")), "Pop_Four : Four renomm\xC3\xA9 en Four_X");
+    same_text(p.view(vid)->object(btn)->actions.front().value, "Four_X := Four1; Zone := 2", "le bouton qui l'ouvre suit");
+    check((edp.layout(), deepCommit(edp.properties(), "Zone", "Ordre", "Supprimer")), "Pop_Four : Zone supprim\xC3\xA9");
+    same_text(p.view(vid)->object(btn)->actions.front().value, "Four_X := Four1", "... son argument part du bouton");
+}
+
 int main(int argc, char** argv) {
     // 1.11.1 (API-V) : HMI_TEST_APIV=1 - la vue des variables de l'automate et API dans l'aide a la saisie, seules.
     if (const char* only = std::getenv("HMI_TEST_APIV"); only && *only == '1') {
@@ -25771,6 +25983,13 @@ int main(int argc, char** argv) {
         if (argc > 1) configuration_et_variables(argv[1]);
         if (argc > 1) apiVue1112_dupliquer(argv[1]);   // 1.11.2 (D13)
         if (argc > 1) valuePickerApi1113(argv[1]);     // 1.11.3 : le selecteur et les membres de l'automate
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
+    // 1.11.10 : HMI_TEST_1110=1 - les defauts du 05/10 soir, seuls.
+    if (const char* only = std::getenv("HMI_TEST_1110"); only && *only == '1') {
+        ecrituresContinues11110();
+        parametresInstances11110();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -26025,6 +26244,8 @@ int main(int argc, char** argv) {
     blocageDelier1117();                    // 1.11.7 : Delier pendant la simulation ne bloque plus
     variablesInternes1118();                // 1.11.8 : membres internes, Recalculer la place memoire
     actionsFenetres1119();                  // 1.11.9 : l'operation en arbre, le script, Maths, le clavier
+    ecrituresContinues11110();              // 1.11.10 : un script qui ecrit sans cesse n'empeche plus les lectures
+    parametresInstances11110();             // 1.11.10 : les instances et les appelants suivent les parametres
     if (argc > 1) simulationVariables1115(argv[1]);   // 1.11.5 : les onglets Variables IHM et Variables API
     if (argc > 1) forcageMouvement1116(argv[1]);   // 1.11.6 : le forcage par type et bornes
     scriptsExportImport1113();              // 1.11.3 : exporter / importer les scripts d'une vue et les operateurs (.xpgst)

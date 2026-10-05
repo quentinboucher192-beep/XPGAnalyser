@@ -274,6 +274,7 @@ private:
         bool        excluded{false};  // refusee par l'automate : relue seule, toutes les 30 s
         double      retryAt{0};
         bool        followed{false};  // 1.9 : suivie en permanence (follow) : jamais oubliee
+        int         pendingWrites{0}; // 1.11.10 : ses ecritures pas encore parties (une lecture ne les defait pas)
     };
     struct PendingWrite {
         std::string key;
@@ -284,6 +285,7 @@ private:
     void loop();
     bool ensureConnected(double now);
     void doWrites();
+    void dropWrites();                 // sous mutex_
     void doReads(double now);
     void note(const modbus::Outcome& o, bool write);
     void lose(const std::string& why, double now);

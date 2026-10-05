@@ -5,10 +5,12 @@
 
 #include "HmiMarkers.hpp"   // 1.11.1 (REP) : un repere ecrit comme son morceau ($Vit$ := ...)
 #include "HmiRuntime.hpp"   // parseArguments, isVariablePath
+#include "HmiSymbols.hpp"   // 1.11.10 : les instances d'un symbole (withArgument)
 #include "HmiTypes.hpp"
 
 #include <algorithm>
 #include <cctype>
+#include <functional>
 
 namespace hmi::params {
 
@@ -452,7 +454,129 @@ std::size_t renameParam(Project& p, std::string_view viewName, std::string_view 
         args(other.actions, other.name + " / actions de la vue");
         for (auto& o : other.objects) args(o.actions, other.name + " / " + o.name);
     }
+    // 1.11.10 : un symbole - l'argument nomme de chaque instance suit (les positionnels
+    // gardent leur rang : rien a faire).
+    if (isSymbolView(*v)) {
+        for (auto& other : p.views)
+            for (auto& o : other.objects) {
+                if (o.kind != Kind::SymbolInstance || !same(trim(o.text("symbol")), target)) continue;
+                const std::string before = o.text("params");
+                const std::string next = renameArgument(before, from, to);
+                if (next == before) continue;
+                o.set("params", next);
+                note(other.name + " / " + o.name);
+            }
+    }
     return count;
+}
+
+// ---- 1.11.10 : supprimer, deplacer un parametre - les instances et les appelants suivent ----
+namespace {
+// Les morceaux de premier niveau d'un texte d'arguments : coupes aux ';' hors des
+// chaines, des crochets et des parentheses, sans les blancs autour.
+std::vector<std::string> argumentSegments(std::string_view text) {
+    std::vector<std::string> out;
+    std::string cur;
+    int depth = 0;
+    char quote = 0;
+    for (const char c : text) {
+        if (quote) {
+            cur += c;
+            if (c == quote) quote = 0;
+            continue;
+        }
+        if (c == '\'' || c == '"') { quote = c; cur += c; continue; }
+        if (c == '[' || c == '(') ++depth;
+        else if ((c == ']' || c == ')') && depth > 0) --depth;
+        else if (c == ';' && depth == 0) { out.push_back(trim(cur)); cur.clear(); continue; }
+        cur += c;
+    }
+    out.push_back(trim(cur));
+    return out;
+}
+// Le nom d'un morceau nomme ("Four := F1", "Four = F1") ; vide : positionnel ou autre.
+std::string segmentName(std::string_view seg) {
+    std::size_t i = 0;
+    if (seg.empty() || !identStart(seg[0])) return {};
+    while (i < seg.size() && identChar(seg[i])) ++i;
+    std::size_t k = i;
+    while (k < seg.size() && std::isspace(static_cast<unsigned char>(seg[k]))) ++k;
+    const bool assign = k < seg.size() && (seg[k] == '=' || (seg[k] == ':' && k + 1 < seg.size() && seg[k + 1] == '='));
+    return assign ? std::string(seg.substr(0, i)) : std::string{};
+}
+// Chaque instance du symbole `symbol`, dans toutes les vues (les symboles compris).
+template <class F>
+void forEachInstance(Project& p, std::string_view symbol, F&& f) {
+    for (auto& other : p.views)
+        for (auto& o : other.objects)
+            if (o.kind == Kind::SymbolInstance && same(trim(o.text("symbol")), symbol)) f(other, o);
+}
+// Les instances en positionnels passent en nommes (le sens d'aujourd'hui garde).
+void nameInstanceArguments(Project& p, const View& symbol, const std::function<void(std::string)>& note) {
+    forEachInstance(p, symbol.name, [&](View& owner, Object& o) {
+        const std::string before = o.text("params");
+        if (trim(before).empty()) return;
+        const std::string next = hmi::withArgument(symbol, before, symbol.params.size(), {});
+        if (next == before) return;
+        o.set("params", next);
+        note(owner.name + " / " + o.name);
+    });
+}
+} // namespace
+
+std::string withoutArgument(std::string_view text, std::string_view name) {
+    std::string out;
+    for (const auto& seg : argumentSegments(text)) {
+        if (seg.empty() || same(segmentName(seg), name)) continue;
+        out += (out.empty() ? "" : "; ") + seg;
+    }
+    return out;
+}
+
+bool removeParam(Project& p, std::string_view viewName, std::size_t index, std::vector<std::string>* where) {
+    View* v = p.viewByName(viewName);
+    if (!v || index >= v->params.size()) return false;
+    const auto note = [&](std::string w) { if (where) where->push_back(std::move(w)); };
+    const std::string name = v->params[index].name, target = v->name;
+    if (isSymbolView(*v)) {
+        nameInstanceArguments(p, *v, note);
+        forEachInstance(p, target, [&](View& owner, Object& o) {
+            const std::string before = o.text("params");
+            const std::string next = withoutArgument(before, name);
+            if (next == before) return;
+            o.set("params", next);
+            note(owner.name + " / " + o.name);
+        });
+    }
+    // Les actions qui ouvrent la vue (Ouvrir une popup, Changer de popup, Naviguer).
+    for (auto& other : p.views) {
+        const auto args = [&](std::vector<Action>& list, const std::string& label) {
+            bool changed = false;
+            for (auto& a : list) {
+                if (!operationTakesArguments(a.operation) || !same(trim(a.target), target)) continue;
+                const std::string next = withoutArgument(a.value, name);
+                if (next != a.value) { a.value = next; changed = true; }
+            }
+            if (changed) note(label);
+        };
+        args(other.actions, other.name + " / actions de la vue");
+        for (auto& o : other.objects) args(o.actions, other.name + " / " + o.name);
+    }
+    v = p.viewByName(viewName);
+    v->params.erase(v->params.begin() + static_cast<std::ptrdiff_t>(index));
+    return true;
+}
+
+bool moveParam(Project& p, std::string_view viewName, std::size_t index, std::size_t to, std::vector<std::string>* where) {
+    View* v = p.viewByName(viewName);
+    if (!v || index >= v->params.size() || to >= v->params.size() || to == index) return false;
+    const auto note = [&](std::string w) { if (where) where->push_back(std::move(w)); };
+    if (isSymbolView(*v)) nameInstanceArguments(p, *v, note);
+    v = p.viewByName(viewName);
+    ViewParam moved = std::move(v->params[index]);
+    v->params.erase(v->params.begin() + static_cast<std::ptrdiff_t>(index));
+    v->params.insert(v->params.begin() + static_cast<std::ptrdiff_t>(to), std::move(moved));
+    return true;
 }
 
 namespace {

@@ -827,21 +827,38 @@ void Link::cycle() {
     doReads(monoNow());
 }
 
+// 1.11.10 : les ecritures abandonnees (la liaison coupee) ne sont plus en attente.
+void Link::dropWrites() {
+    for (const auto& lost : writes_) {
+        event("\xC3\x89" "criture de " + lost.point.name + " perdue : la liaison est coup\xC3\xA9" "e");
+        if (const auto it = entries_.find(lost.key); it != entries_.end()) it->second.pendingWrites = 0;
+    }
+    writes_.clear();
+}
+
 void Link::doWrites() {
-    for (;;) {
+    // 1.11.10 (defaut du 05/10 soir : « des mauvaises donnees sur un esclave simule ») :
+    // seulement les ecritures deja en attente au debut du cycle. Avant, la boucle
+    // videait la file - et un script qui ecrit plus vite que la liaison n'envoie
+    // la remplissait sans fin : les lectures ne repassaient plus (« pas relue
+    // depuis 2 min 49 s »). Les suivantes partent au cycle d'apres, apres les lectures.
+    std::size_t budget = 0;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        budget = writes_.size();
+    }
+    for (; budget > 0; --budget) {
         PendingWrite w;
         {
             std::lock_guard<std::mutex> lock(mutex_);
             if (stop_.load()) return;                                // 1.11.7 : arretee, entre deux requetes
             if (writes_.empty() || !client_.connected()) {
-                if (!writes_.empty()) {
-                    for (const auto& lost : writes_) event("\xC3\x89" "criture de " + lost.point.name + " perdue : la liaison est coup\xC3\xA9" "e");
-                    writes_.clear();
-                }
+                if (!writes_.empty()) dropWrites();
                 return;
             }
             w = std::move(writes_.front());
             writes_.pop_front();
+            if (const auto it = entries_.find(w.key); it != entries_.end() && it->second.pendingWrites > 0) --it->second.pendingWrites;
         }
         const auto& p = w.point;
         modbus::Outcome o;
@@ -868,8 +885,7 @@ void Link::doWrites() {
         if (o.lost || o.timeout) {
             // Jamais rejouees apres une coupure : une commande d'il y a dix secondes
             // n'est plus celle de l'operateur.
-            for (const auto& lost : writes_) event("\xC3\x89" "criture de " + lost.point.name + " perdue : la liaison est coup\xC3\xA9" "e");
-            writes_.clear();
+            dropWrites();
             if (o.lost) lose(o.why, monoNow());
             else if (++timeoutsInRow_ >= 2) {
                 lose(o.why, monoNow());
@@ -905,7 +921,9 @@ void Link::doReads(double now) {
     const bool low = settings_.lowWordFirst;
     const auto store = [&](const std::string& key, sim::Value v) {
         if (const auto it = entries_.find(key); it != entries_.end()) {
-            it->second.value = std::move(v);
+            // 1.11.10 : une ecriture encore en attente garde sa valeur (l'appareil
+            // a encore l'ancienne) ; la place est lue quand meme : elle est bonne.
+            if (it->second.pendingWrites == 0) it->second.value = std::move(v);
             it->second.hasValue = true;
             it->second.readAt = monoNow();
             it->second.excluded = false;
@@ -1053,7 +1071,28 @@ bool Link::write(std::string_view name, const sim::Value& value) {
     } else {
         shown = sim::Value::boolean(value.isTruthy());
     }
-    writes_.push_back({keyOf(name), p, value});
+    // 1.11.10 : les ecritures d'une meme place en attente se regroupent. La meme
+    // valeur que la derniere en attente : rien de plus ; deux deja en attente : la
+    // seconde prend la nouvelle valeur. La file reste bornee (deux par place) ; un
+    // 1 puis un 0 (une impulsion) partent tous les deux, et la derniere valeur
+    // demandee part toujours.
+    const std::string key = keyOf(name);
+    PendingWrite* last = nullptr;
+    int queued = 0;
+    for (auto it = writes_.rbegin(); it != writes_.rend(); ++it) {
+        if (it->key != key) continue;
+        if (!last) last = &*it;
+        ++queued;
+    }
+    if (last && last->value.equals(value)) {
+        // deja demandee
+    } else if (last && queued >= 2) {
+        last->point = p;
+        last->value = value;
+    } else {
+        writes_.push_back({key, p, value});
+        ++e->pendingWrites;
+    }
     e->value = shown;
     e->hasValue = true;
     e->usedAt = now;

@@ -175,5 +175,16 @@ struct ParamUse {
 // (non nul) : lesquels ("Base / Btn_Ouvrir").
 std::size_t renameParam(Project&, std::string_view view, std::string_view from, std::string_view to,
                         std::vector<std::string>* where = nullptr);
+// 1.11.10 (defaut du 05/10 soir : « quand je modifie les parametres d'un popup ou d'un
+// symbole, il faut mettre a jour les instances ») : renommer suit aussi dans les
+// instances d'un symbole (l'argument nomme, dans toutes les vues). SUPPRIMER le
+// parametre `index` : son argument part des instances du symbole et des actions qui
+// ouvrent la vue. LE DEPLACER (Monter, Descendre) : les instances ecrites en
+// positionnels ("Voiture;50") passent en nommes avant, pour garder leur sens. Dans
+// une commande annulable, comme renameParam. Faux : rien a faire.
+bool removeParam(Project&, std::string_view view, std::size_t index, std::vector<std::string>* where = nullptr);
+bool moveParam(Project&, std::string_view view, std::size_t index, std::size_t to, std::vector<std::string>* where = nullptr);
+// "Four := F1; Zone := 2" sans l'argument `name` : "Four := F1" (le reste tel quel).
+[[nodiscard]] std::string withoutArgument(std::string_view arguments, std::string_view name);
 
 } // namespace hmi::params
