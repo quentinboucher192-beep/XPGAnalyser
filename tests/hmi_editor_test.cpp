@@ -21899,6 +21899,146 @@ void symParametres1112() {
 //  Et le carre de legende de chaque ligne (C, fx, I, !).
 // =============================================================================
 // =============================================================================
+//  1.11.5 (« esclaves simules : treeview profondeur infinie sur les structures et
+//  variables, une recherche, garder le forcage, editer les bornes plus facilement -
+//  aussi dans IHM > Equipements > Valeurs simulees ») : les lignes d'un esclave se
+//  rangent en arbre (Four1 > Vannes > [1] > Position), un noeud se replie, la
+//  recherche garde les noeuds de ce qu'elle trouve, et le crayon (ou un double-clic
+//  sur la zone) ouvre un champ « min ; max ».
+// =============================================================================
+void esclavesArbre1115() {
+    std::printf("== 1.11.5 : les esclaves simul\xC3\xA9s en arbre, la recherche, les bornes au clavier ==\n");
+    using L = app::HmiTwinValues::Line;
+    auto doc = std::make_shared<Document>();
+    core::CommandStack stack;
+    auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+    {
+        HmiType vanne;
+        vanne.id = doc->project.allocate();
+        vanne.name = "T_Vanne";
+        vanne.members = {{"Ouverte", "BOOL", "", ""}, {"Position", "INT", "", ""}};
+        HmiType four;
+        four.id = doc->project.allocate();
+        four.name = "T_Four";
+        four.members = {{"Temperature", "REAL", "", ""}, {"Vannes", "ARRAY[1..2] OF T_Vanne", "", ""}};
+        doc->project.programs.types.push_back(vanne);
+        doc->project.programs.types.push_back(four);
+    }
+    app::CommHost comm;
+    app::EquipmentHost equip;
+    app::HmiCommPane pane("esclaves1115", doc, apply);
+    app::HmiCommPane::Hosts hosts;
+    hosts.comm = [&] { return &comm; };
+    hosts.equipments = [&] { return &equip; };
+    pane.setHosts(hosts);
+    pane.setBounds({0, 0, 1700, 950});
+    pane.layout();
+    std::string why;
+    check(pane.addEquipment("Centrale", hmi::EquipmentType::ModbusTcp, "192.168.1.30", 502) == "Centrale" && pane.createTwin("Centrale"),
+          "une centrale et son esclave simul\xC3\xA9");
+    check(pane.bindVariable("Courant", "Centrale", "43050", "REAL"), "Courant (REAL) li\xC3\xA9");
+    {
+        Variable f;
+        f.id = doc->project.allocate();
+        f.name = "Four1";
+        f.type = "T_Four";
+        f.equipment = "Centrale";
+        f.address = "43001";
+        doc->project.programs.variables.push_back(f);
+    }
+    pane.tabs().setCurrentIndex(app::HmiCommPane::TValues);
+    pane.refresh();
+    auto& w = pane.values();
+    const auto findLine = [&](L::Kind k, const std::string& title) -> const L* {
+        for (const auto& l : w.lines())
+            if (l.kind == k && l.title == title) return &l;
+        return nullptr;
+    };
+    const L* nFour = findLine(L::Kind::Node, "Four1");
+    const L* nVannes = findLine(L::Kind::Node, "Four1.Vannes");
+    const L* nV1 = findLine(L::Kind::Node, "Four1.Vannes[1]");
+    const L* pos = findLine(L::Kind::Row, "Four1.Vannes[1].Position");
+    const L* courant = findLine(L::Kind::Row, "Courant");
+    check(nFour && nVannes && nV1 && pos && courant, "l'arbre : Four1 > Vannes > [1] > Position ; Courant \xC3\xA0 la racine");
+    if (nFour && nVannes && nV1 && pos && courant) {
+        check(nFour->depth == 0 && nVannes->depth == 1 && nV1->depth == 2 && pos->depth == 3 && courant->depth == 0,
+              "les profondeurs : 0, 1, 2, 3 (et 0 pour Courant)");
+        check(pos->label == "Position" && nV1->label == "[1]" && nVannes->label == "Vannes", "chaque ligne montre son morceau (Position, [1], Vannes)");
+        check(nFour->count == 5 && nVannes->count == 4 && nV1->count == 2, "les comptes : Four1 5 valeurs, Vannes 4, [1] 2 ("
+                                                                             + std::to_string(nFour->count) + ")");
+        check(nFour->type == "T_Four" && nV1->type == "T_Vanne", "le type d'un noeud (T_Four, T_Vanne)");
+        check(pos->node == "Centrale|Four1.Vannes[1]", "Position est sous le noeud Four1.Vannes[1]");
+    }
+    // Replier Vannes cache ses 4 valeurs et ses 2 noeuds.
+    const std::size_t all = w.shownLines();
+    w.setNodeOpen("Centrale|Four1.Vannes", false);
+    check(w.shownLines() == all - 6, "Vannes repli\xC3\xA9 : 6 lignes de moins (" + std::to_string(all) + " -> " + std::to_string(w.shownLines()) + ")");
+    gfx::Rect r{};
+    const std::string posKey = pos ? pos->key : std::string{};
+    pane.layout();
+    check(w.partRect("Centrale", posKey, app::HmiTwinValues::Part::Row, r) && w.nodeOpen("Centrale|Four1.Vannes"),
+          "montrer Position rouvre ses noeuds");
+    // Le clic sur un noeud le replie.
+    pane.layout();
+    {
+        const auto& ls = w.lines();
+        std::size_t at = 0;
+        for (std::size_t i = 0; i < ls.size(); ++i) if (ls[i].kind == L::Kind::Node && ls[i].title == "Four1") at = i;
+        (void)at;
+        gfx::Rect row{};
+        // Le noeud Four1 est juste au-dessus de Temperature : on clique sa ligne.
+        if (w.partRect("Centrale", findLine(L::Kind::Row, "Four1.Temperature") ? findLine(L::Kind::Row, "Four1.Temperature")->key : std::string{},
+                       app::HmiTwinValues::Part::Row, row)) {
+            w.dispatch(ui::MouseDown{{row.x + 60.f, row.y - 8.f}, ui::MouseButton::Left, 1, {}});
+            check(!w.nodeOpen("Centrale|Four1"), "un clic sur le noeud Four1 le replie");
+            w.setNodeOpen("Centrale|Four1", true);
+        } else {
+            check(false, "Four1.Temperature montr\xC3\xA9" "e");
+        }
+    }
+    // La recherche (aussi en mode serre) garde les noeuds de ce qu'elle trouve.
+    check(w.searchBox() != nullptr, "la recherche est l\xC3\xA0");
+    pane.valuesController().setSearch("Position");
+    {
+        std::size_t rows = 0, nodes = 0;
+        for (const auto& l : w.lines()) {
+            if (l.kind == L::Kind::Row) ++rows;
+            if (l.kind == L::Kind::Node) ++nodes;
+        }
+        check(rows == 2 && nodes == 4, "chercher Position : 2 valeurs et leurs 4 noeuds (" + std::to_string(rows) + ", " + std::to_string(nodes) + ")");
+    }
+    pane.valuesController().setSearch("");
+    app::HmiTwinValues serre("serre1115", true);
+    check(serre.searchBox() != nullptr, "l'onglet Esclaves simul\xC3\xA9s de la simulation a sa recherche");
+    // Les bornes au clavier.
+    double lo = 0, hi = 0;
+    check(app::HmiTwinValues::parseZone("20 ; 80", 1, lo, hi) && lo == 20 && hi == 80, "\xC2\xAB 20 ; 80 \xC2\xBB : une zone");
+    check(app::HmiTwinValues::parseZone("1,5 .. 7,25", 1, lo, hi) && lo == 1.5 && hi == 7.25, "\xC2\xAB 1,5 .. 7,25 \xC2\xBB : des virgules");
+    check(app::HmiTwinValues::parseZone("90 10", 1, lo, hi) && lo == 10 && hi == 90, "\xC2\xAB 90 10 \xC2\xBB : remis dans l'ordre");
+    check(!app::HmiTwinValues::parseZone("20", 1, lo, hi) && !app::HmiTwinValues::parseZone("a ; b", 1, lo, hi), "une borne seule ou du texte : refus\xC3\xA9");
+    check(app::HmiTwinValues::parseZone("-3,5", 2, lo, hi) && lo == -3.5 && hi == -3.5, "une constante : -3,5");
+    check(pane.animate("Centrale", "43050", true), "Courant anim\xC3\xA9 (un sinus)");
+    pane.layout();
+    check(w.openZoneEditor("Centrale", "43050") && w.zoneEditorOpen() && w.zoneEditor(), "le crayon : le champ des bornes s'ouvre");
+    if (auto* f = w.zoneEditor()) {
+        f->setText("12 ; 34");
+        (void)f->dispatch(ui::KeyDown{ui::Key::Return, {}, false});
+    }
+    const auto* e = doc->project.equipmentByName("Centrale");
+    check(!w.zoneEditorOpen() && e && !e->behaviors.empty() && e->behaviors[0].a == 12 && e->behaviors[0].b == 34,
+          "Entr\xC3\xA9" "e : la zone 12 \xE2\x86\x92 34 (comme une poign\xC3\xA9" "e tir\xC3\xA9" "e)");
+    (void)stack.undo();
+    check(e && e->behaviors[0].a != 12, "Ctrl+Z : la zone d'avant");
+    check(w.openZoneEditor("Centrale", "43050"), "rouvert");
+    if (auto* f = w.zoneEditor()) {
+        f->setText("99 ; 1000");
+        (void)f->dispatch(ui::KeyDown{ui::Key::Escape, {}, false});
+        (void)f->dispatch(ui::KeyDown{ui::Key::Return, {}, false});
+    }
+    check(e && e->behaviors[0].b != 1000, "\xC3\x89" "chap : rien n'est chang\xC3\xA9");
+}
+
+// =============================================================================
 //  1.11.4 (« verifier que toutes les scrollbars de l'appli soient deplacables avec
 //  la souris, ajouter scrollbar sur explorateur ») : les listes, les arbres (l'arbre
 //  du projet), les tableaux, l'inspecteur et les panneaux ont une barre qu'on tire ;
@@ -24848,6 +24988,7 @@ int main(int argc, char** argv) {
     symParametres1113();                    // 1.11.3 : fx garde, Voiture constante, UINTS (tableau), le carre de legende
     symParametresReperes1114();             // 1.11.4 : les reperes et le fx dans un parametre (variable ou texte)
     barresDefilement1114();                 // 1.11.4 : les barres de defilement qu'on tire
+    esclavesArbre1115();                    // 1.11.5 : les esclaves simules en arbre, la recherche, les bornes au clavier
     scriptsExportImport1113();              // 1.11.3 : exporter / importer les scripts d'une vue et les operateurs (.xpgst)
     valuePicker1113();                      // 1.11.3 : le carre de legende cliquable, le selecteur de valeur
     if (argc > 1) valuePickerApi1113(argv[1]);   // 1.11.3 : le selecteur et les membres des variables de l'automate

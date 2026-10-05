@@ -55,8 +55,14 @@ class EquipmentHost;
 class HmiTwinValues final : public ui::Widget {
 public:
     struct Line {
-        enum class Kind : std::uint8_t { Group, Row, Add };
+        // 1.11.5 : Node - un noeud d'une variable structuree (Four1, Four1.Zones, Four1.Zones[2]) ;
+        // les lignes s'y rangent a toute profondeur, et il se replie.
+        enum class Kind : std::uint8_t { Group, Row, Add, Node };
         Kind        kind{Kind::Row};
+        int         depth{0};           // 1.11.5 : la profondeur dans l'arbre (0 : sous l'esclave)
+        std::string node;               // 1.11.5 : Node - sa cle ("equipement|Four1.Zones") ; Row : celle de son parent
+        std::string label;              // 1.11.5 : ce qui se montre (le dernier morceau : Temp, [2]) ; vide : title
+        std::size_t count{0};           // 1.11.5 : Node - les valeurs qu'il contient
         std::string equipment;          // son equipement
         std::string key;                // Row : l'adresse (la cle de la ligne dans l'equipement)
         std::string title, sub;         // Row : la variable (ou "registre 40011"), dessous ; Group : le nom, l'etat
@@ -83,7 +89,7 @@ public:
         std::function<std::string(double)> rawOf;   // la valeur brute d'une valeur de la variable (l'infobulle)
         std::string tooltip;
     };
-    enum class Part : std::uint8_t { None, Check, Kind, Low, High, Band, Bar, ForceBox, ForceValue, Free, Zero, One, Row, Add, Group };
+    enum class Part : std::uint8_t { None, Check, Kind, Low, High, Band, Bar, ForceBox, ForceValue, Free, Zero, One, Row, Add, Group, Node, Edit };
 
     HmiTwinValues(std::string id = {}, bool compact = false);
     ~HmiTwinValues() override;
@@ -119,6 +125,19 @@ public:
     // Ou tombe une valeur (de la variable) sur la barre de la ligne.
     [[nodiscard]] bool valueX(const std::string& equipment, const std::string& key, double v, float& x);
     [[nodiscard]] const Line* line(const std::string& equipment, const std::string& key) const;
+    // 1.11.5 : LES BORNES AU CLAVIER. Le crayon au bout de la barre (ou un double-clic sur la
+    // zone) ouvre un champ : « 20 ; 80 » (une zone), « 50 » (une constante), « 1,5 » (a 1
+    // pendant, en s) ; Entree l'applique (bandChanged, comme une poignee tiree), Echap annule.
+    bool openZoneEditor(const std::string& equipment, const std::string& key);
+    [[nodiscard]] bool zoneEditorOpen() const noexcept;
+    [[nodiscard]] ui::InputText* zoneEditor() noexcept;
+    // Le texte du champ, lu : vrai si la zone (lo, hi) se lit pour ce mode de barre.
+    static bool parseZone(std::string_view text, int barMode, double& lo, double& hi);
+    // 1.11.5 : un noeud de l'arbre (sa cle : Line::node) - ouvert ou replie.
+    void setNodeOpen(const std::string& node, bool open);
+    [[nodiscard]] bool nodeOpen(const std::string& node) const { return folded_.count(node) == 0; }
+    // Les lignes montrees (pas repliees), pour les tests.
+    [[nodiscard]] std::size_t shownLines() const;
 
     // Les signaux (equipement, cle...). Une poignee tiree : au lacher.
     const core::SignalPtr<const std::string&, const std::string&, bool>           animateToggled = core::Signal<const std::string&, const std::string&, bool>::create();
@@ -164,6 +183,10 @@ private:
     [[nodiscard]] std::pair<std::size_t, Part> hit(gfx::Point p) const;
     [[nodiscard]] std::string lineKey(const Line& l) const { return l.equipment + "|" + l.key; }
     [[nodiscard]] bool folded(const std::string& equipment) const { return folded_.count(equipment) != 0; }
+    // 1.11.5 : les lignes cachees par un esclave ou un noeud replie (refait quand les lignes ou
+    // les replis changent ; lineHeight le lit).
+    void computeHidden();
+    void unfoldAncestors(std::size_t row);
     // La ligne choisie (deux variables sur la meme case : celle qu'on a cliquee).
     [[nodiscard]] std::size_t selIndex() const;
     void paintRow(const ui::PaintContext&, std::size_t i, const gfx::Rect& r, const Cols& c);
@@ -177,6 +200,7 @@ private:
     std::map<std::string, Live>              live_;
     std::map<std::string, std::deque<Sample>> hist_;
     std::set<std::string>                    folded_;
+    std::vector<char>                        hidden_;   // 1.11.5 : une par ligne
     std::string                              selEquip_, selKey_, selTitle_;
     std::string                              status_;
     double                                   now_{0};
@@ -191,6 +215,11 @@ private:
     ui::DropDown*                            showBox_{nullptr};
     ui::InputText*                           searchBox_{nullptr};
     ui::PopupMenu*                           menu_{nullptr};
+    // 1.11.5 : le champ des bornes (cache tant qu'il n'est pas ouvert), et sa ligne.
+    ui::InputText*                           zoneEdit_{nullptr};
+    std::string                              zoneEquip_, zoneKey_;
+    int                                      zoneMode_{0};
+    void closeZoneEditor(bool apply);
     std::string                              menuEquip_, menuKey_;
     // Tirer une poignee, la bande.
     struct Drag {

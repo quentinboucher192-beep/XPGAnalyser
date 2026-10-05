@@ -5,6 +5,7 @@
 #include "HmiPaneKit.hpp"
 #include "../../hmi/HmiEquipment.hpp"
 #include "../../hmi/HmiStore.hpp"
+#include "../../hmi/HmiTypes.hpp"   // 1.11.5 : le type d'un noeud de l'arbre
 #include "../../hmi/HmiZones.hpp"
 #include "../../ui/TextSearch.hpp"      // lot recherche
 #include "../../ui/widgets/Controls.hpp"
@@ -168,6 +169,57 @@ std::string tableKind(const hmi::twin::ValueRow& r) {
     return "BOOL";
 }
 
+// 1.11.5 : les morceaux d'un chemin pour l'arbre - Four1.Zones[2].Temp : Four1, Zones, [2], Temp.
+std::vector<std::string> pathPieces(const std::string& path) {
+    std::vector<std::string> out;
+    std::string cur;
+    for (std::size_t i = 0; i < path.size(); ++i) {
+        const char ch = path[i];
+        if (ch == '.') {
+            if (!cur.empty()) out.push_back(cur);
+            cur.clear();
+        } else if (ch == '[') {
+            if (!cur.empty()) out.push_back(cur);
+            cur = "[";
+        } else if (ch == ']') {
+            cur += ']';
+            out.push_back(cur);
+            cur.clear();
+        } else {
+            cur += ch;
+        }
+    }
+    if (!cur.empty()) out.push_back(cur);
+    if (out.empty()) out.push_back(path);
+    return out;
+}
+std::string piecesPrefix(const std::vector<std::string>& pieces, std::size_t last) {
+    std::string out;
+    for (std::size_t k = 0; k <= last && k < pieces.size(); ++k) {
+        if (k > 0 && pieces[k].front() != '[') out += '.';
+        out += pieces[k];
+    }
+    return out;
+}
+
+// 1.11.5 : le champ des bornes - il prend le focus a l'ouverture ; Echap l'annule.
+class ZoneField final : public ui::InputText {
+public:
+    using ui::InputText::InputText;
+    bool cancelled{false};
+    void start() {
+        cancelled = false;
+        grabFocus();
+        (void)ui::InputText::onEvent(ui::KeyDown{ui::Key::End, {}, false});
+        (void)ui::InputText::onEvent(ui::KeyDown{ui::Key::Home, ui::KeyMods{false, true, false, false}, false});
+    }
+protected:
+    ui::EventResult onEvent(const ui::InputEvent& ev) override {
+        if (const auto* k = std::get_if<ui::KeyDown>(&ev); k && k->key == ui::Key::Escape && focused()) cancelled = true;
+        return ui::InputText::onEvent(ev);
+    }
+};
+
 } // namespace
 
 // ===================================================================== le widget ===
@@ -183,6 +235,21 @@ HmiTwinValues::HmiTwinValues(std::string id, bool compact) : ui::Widget(std::mov
         searchBox_->setPlaceholder("Chercher (variable, 43003)");
     } else {
         curvesOpen_ = false;
+        // 1.11.5 : la recherche aussi dans l'onglet Esclaves simules de la simulation.
+        searchBox_ = &static_cast<ui::InputText&>(addChild(std::make_unique<ui::InputText>(base + ".search")));
+        searchBox_->setPlaceholder("Chercher (variable, adresse, membre)");
+    }
+    // 1.11.5 : le champ des bornes, cache tant qu'on ne l'ouvre pas.
+    {
+        auto field = std::make_unique<ZoneField>(base + ".zone");
+        field->setPlaceholder("min ; max");
+        field->setVisibility(ui::Visibility::Collapsed);
+        auto* raw = field.get();
+        zoneEdit_ = &static_cast<ui::InputText&>(addChild(std::move(field)));
+        links_ += raw->editingDone->connect([this, raw](const std::string&) {
+            if (!zoneEditorOpen()) return;   // deja ferme (Entree, puis la perte du focus)
+            closeZoneEditor(!raw->cancelled);
+        });
     }
     menu_ = &static_cast<ui::PopupMenu&>(addChild(std::make_unique<ui::PopupMenu>(base + ".kinds")));
     links_ += menu_->itemChosen->connect([this](int item) {
@@ -198,6 +265,7 @@ HmiTwinValues::~HmiTwinValues() = default;
 
 void HmiTwinValues::setLines(std::vector<Line> lines) {
     lines_ = std::move(lines);
+    computeHidden();
     if (drag_.on) {
         drag_.on = false;
         for (std::size_t i = 0; i < lines_.size(); ++i)
@@ -208,6 +276,141 @@ void HmiTwinValues::setLines(std::vector<Line> lines) {
     }
     hover_.reset();
     invalidate();
+}
+
+// 1.11.5 : un esclave replie cache tout ce qu'il a ; un noeud replie, ce qui est plus profond
+// que lui jusqu'a la ligne suivante de sa profondeur.
+void HmiTwinValues::computeHidden() {
+    hidden_.assign(lines_.size(), 0);
+    bool equipFolded = false;
+    int hideDepth = 1 << 30;
+    for (std::size_t i = 0; i < lines_.size(); ++i) {
+        const auto& l = lines_[i];
+        if (l.kind == Line::Kind::Group) {
+            equipFolded = folded(l.equipment);
+            hideDepth = 1 << 30;
+            continue;
+        }
+        if (equipFolded) { hidden_[i] = 1; continue; }
+        if (l.depth > hideDepth) { hidden_[i] = 1; continue; }
+        hideDepth = 1 << 30;
+        if (l.kind == Line::Kind::Node && folded_.count(l.node)) hideDepth = l.depth;
+    }
+}
+
+void HmiTwinValues::unfoldAncestors(std::size_t row) {
+    if (row >= lines_.size()) return;
+    int d = lines_[row].depth;
+    for (std::size_t j = row; j-- > 0 && d > 0;) {
+        const auto& l = lines_[j];
+        if (l.kind == Line::Kind::Group) break;
+        if (l.kind == Line::Kind::Node && l.depth < d) {
+            folded_.erase(l.node);
+            d = l.depth;
+        }
+    }
+    computeHidden();
+}
+
+bool HmiTwinValues::parseZone(std::string_view text, int barMode, double& lo, double& hi) {
+    std::vector<double> nums;
+    std::string cur;
+    const auto flush = [&] {
+        if (cur.empty() || cur == "-" || cur == "+") { cur.clear(); return true; }
+        std::replace(cur.begin(), cur.end(), ',', '.');
+        char* end = nullptr;
+        const double v = std::strtod(cur.c_str(), &end);
+        const bool ok = end && *end == '\0';
+        if (ok) nums.push_back(v);
+        cur.clear();
+        return ok;
+    };
+    for (std::size_t i = 0; i < text.size(); ++i) {
+        const char ch = text[i];
+        const bool digit = std::isdigit(static_cast<unsigned char>(ch)) != 0;
+        const bool nextDigit = i + 1 < text.size() && std::isdigit(static_cast<unsigned char>(text[i + 1])) != 0;
+        if (digit || (ch == '.' && nextDigit) || ((ch == 'e' || ch == 'E') && !cur.empty()) || ((ch == '-' || ch == '+') && cur.empty())
+            || (ch == ',' && !cur.empty() && i + 1 < text.size() && std::isdigit(static_cast<unsigned char>(text[i + 1])))) {
+            cur += ch;
+            continue;
+        }
+        if (!flush()) return false;   // ; espace -> .. : des separateurs
+    }
+    if (!flush()) return false;
+    if (barMode == 1) {
+        if (nums.size() != 2) return false;
+        lo = std::min(nums[0], nums[1]);
+        hi = std::max(nums[0], nums[1]);
+        return true;
+    }
+    if (nums.size() != 1) return false;
+    lo = barMode == 3 ? 0.0 : nums[0];
+    hi = nums[0];
+    return true;
+}
+
+bool HmiTwinValues::zoneEditorOpen() const noexcept { return zoneEdit_ && zoneEdit_->visible() && !zoneEquip_.empty(); }
+ui::InputText* HmiTwinValues::zoneEditor() noexcept { return zoneEditorOpen() ? zoneEdit_ : nullptr; }
+
+bool HmiTwinValues::openZoneEditor(const std::string& equipment, const std::string& key) {
+    for (std::size_t i = 0; i < lines_.size(); ++i) {
+        const auto& l = lines_[i];
+        if (l.kind != Line::Kind::Row || l.equipment != equipment || l.key != key) continue;
+        if (l.barMode == 0 || l.bandFixed || l.warn || !l.note.empty()) return false;
+        folded_.erase(equipment);
+        unfoldAncestors(i);
+        gfx::Rect r{};
+        if (!lineRect(i, r)) return false;
+        const auto c = cols();
+        const gfx::Rect bar{c.bar, r.y, c.barW, r.h};
+        zoneEquip_ = equipment;
+        zoneKey_ = key;
+        zoneMode_ = l.barMode;
+        std::string text;
+        if (l.barMode == 1) text = valueText(l.lo, false) + " ; " + valueText(l.hi, false);
+        else if (l.barMode == 2) text = valueText(l.lo, false);
+        else text = valueText(l.hi, false);
+        zoneEdit_->setPlaceholder(l.barMode == 1 ? "min ; max" : l.barMode == 2 ? "la valeur" : "\xC3\xA0 1 pendant (s)");
+        zoneEdit_->setText(text);
+        zoneEdit_->setBounds({bar.x + 26.f, r.y + (r.h - 24.f) * 0.5f, std::max(90.f, std::min(220.f, bar.w - 60.f)), 24.f});
+        zoneEdit_->setVisibility(ui::Visibility::Visible);
+        static_cast<ZoneField*>(zoneEdit_)->start();
+        invalidate();
+        return true;
+    }
+    return false;
+}
+
+void HmiTwinValues::closeZoneEditor(bool apply) {
+    if (!zoneEditorOpen()) return;
+    const std::string e = zoneEquip_, k = zoneKey_, text = zoneEdit_->text();
+    const int mode = zoneMode_;
+    zoneEquip_.clear();
+    zoneKey_.clear();
+    zoneEdit_->setVisibility(ui::Visibility::Collapsed);
+    invalidate();
+    if (!apply) return;
+    double lo = 0, hi = 0;
+    if (!parseZone(text, mode, lo, hi)) {
+        setStatus(mode == 1 ? "Les bornes se tapent \xC2\xAB min ; max \xC2\xBB (20 ; 80), rien n'est chang\xC3\xA9."
+                            : "Une valeur se tape seule (50 ou 1,5), rien n'est chang\xC3\xA9.");
+        return;
+    }
+    bandChanged->emit(e, k, lo, hi);
+}
+
+void HmiTwinValues::setNodeOpen(const std::string& node, bool open) {
+    if (open) folded_.erase(node);
+    else folded_.insert(node);
+    computeHidden();
+    invalidate();
+}
+
+std::size_t HmiTwinValues::shownLines() const {
+    std::size_t n = 0;
+    for (std::size_t i = 0; i < lines_.size(); ++i)
+        if (lines_[i].kind != Line::Kind::Group && (i >= hidden_.size() || !hidden_[i])) ++n;
+    return n;
 }
 
 void HmiTwinValues::setLive(const std::string& equipment, const std::string& key, std::string value, std::string sub, std::optional<double> v, bool forced) {
@@ -256,6 +459,7 @@ void HmiTwinValues::select(const std::string& equipment, const std::string& key)
     for (std::size_t i = 0; i < lines_.size(); ++i)
         if (lines_[i].kind == Line::Kind::Row && lines_[i].equipment == equipment && lines_[i].key == key) {
             folded_.erase(equipment);
+            unfoldAncestors(i);   // 1.11.5 : ses noeuds s'ouvrent
             gfx::Rect r{};
             if (lineRect(i, r)) {
                 const auto area = listArea();
@@ -289,7 +493,12 @@ void HmiTwinValues::onLayout() {
     const auto b = bounds();
     // Le menu du mouvement : des bornes non vides, sinon il n'est jamais dessine (la passe du dessus).
     if (menu_) menu_->setBounds(b);
-    if (compact_ || !twinBox_) return;
+    if (compact_) {
+        // 1.11.5 : la recherche, en haut de l'onglet.
+        if (searchBox_) searchBox_->setBounds({b.x + 8.f, b.y + 5.f, std::min(360.f, std::max(80.f, b.w - 16.f)), 26.f});
+        return;
+    }
+    if (!twinBox_) return;
     float x = b.x + 70.f;
     twinBox_->setBounds({x, b.y + 5.f, 260.f, 26.f});
     x += 260.f + 76.f;
@@ -365,7 +574,7 @@ gfx::Rect HmiTwinValues::curvesArea() const {
 
 gfx::Rect HmiTwinValues::listArea() const {
     const auto b = bounds();
-    const float top = b.y + (compact_ ? 0.f : kBarH) + kHeadH;
+    const float top = b.y + kBarH + kHeadH;   // 1.11.5 : la barre de recherche aussi en mode serre
     const float bottom = compact_ ? b.y + b.h - kStatusH : curvesArea().y;
     return {b.x, top, b.w, std::max(0.f, bottom - top)};
 }
@@ -373,6 +582,9 @@ gfx::Rect HmiTwinValues::listArea() const {
 float HmiTwinValues::lineHeight(const Line& l) const {
     if (l.kind == Line::Kind::Group) return kGroupH;
     if (folded(l.equipment)) return 0;
+    // 1.11.5 : sous un noeud replie.
+    if (const std::size_t i = static_cast<std::size_t>(&l - lines_.data()); i < hidden_.size() && hidden_[i]) return 0;
+    if (l.kind == Line::Kind::Node) return compact_ ? 24.f : 26.f;
     if (l.kind == Line::Kind::Add) return compact_ ? 0.f : kAddH;
     return compact_ ? 36.f : kRowH;
 }
@@ -421,6 +633,11 @@ gfx::Rect HmiTwinValues::partOf(std::size_t i, const gfx::Rect& r, Part part) co
             if (part == Part::High) return gfx::Rect{xb - 7, ty - 10, 14, 20};
             return l.barMode == 1 && xb - xa > 16 ? gfx::Rect{xa + 7, ty - 7, xb - xa - 14, 14} : gfx::Rect{};
         }
+        case Part::Edit: {
+            // 1.11.5 : le crayon, au bout de la barre - une zone, une constante, un clignotement.
+            if (l.barMode == 0 || l.bandFixed || l.warn || !l.note.empty()) return {};
+            return {c.bar + c.barW - 24.f, r.y + 3.f, 18.f, 16.f};
+        }
         case Part::Row: return r;
         default: return {};
     }
@@ -461,8 +678,9 @@ std::pair<std::size_t, HmiTwinValues::Part> HmiTwinValues::hit(gfx::Point p) con
         if (rowH <= 0 || !inside(r, p)) continue;
         const auto& l = lines_[i];
         if (l.kind == Line::Kind::Group) return {i, Part::Group};
+        if (l.kind == Line::Kind::Node) return {i, Part::Node};   // 1.11.5
         if (l.kind == Line::Kind::Add) return {i, Part::Add};
-        for (const Part part : {Part::Check, Part::Kind, Part::High, Part::Low, Part::Band, Part::ForceBox, Part::ForceValue, Part::Free, Part::Zero, Part::One})
+        for (const Part part : {Part::Check, Part::Kind, Part::Edit, Part::High, Part::Low, Part::Band, Part::ForceBox, Part::ForceValue, Part::Free, Part::Zero, Part::One})
             if (inside(partOf(i, r, part), p)) return {i, part};
         return {i, Part::Row};
     }
@@ -482,6 +700,7 @@ bool HmiTwinValues::partRect(const std::string& equipment, const std::string& ke
                                              : l.kind == Line::Kind::Row && l.equipment == equipment && (l.key == key || tw::sameCell(l.key, key));
         if (!match) continue;
         folded_.erase(equipment);
+        unfoldAncestors(i);   // 1.11.5 : ses noeuds s'ouvrent (recalcule les lignes cachees)
         gfx::Rect r{};
         if (!lineRect(i, r)) return false;
         const auto area = listArea();
@@ -649,10 +868,13 @@ void HmiTwinValues::paintRow(const ui::PaintContext& ctx, std::size_t i, const g
     checkBox(g, {c.check, mid - 7, 14, 14}, l.animated, th.color.accent, th.color.borderStrong, th.color.inputBg);
     // Le nom.
     {
-        const float w = c.nameW;
-        bold(g, {c.name, r.y + (compact_ ? 3.f : 4.f)}, fit(g, l.title, kBody, w), kBody, l.sub == "sans variable" ? th.color.textMuted : th.color.text);
+        // 1.11.5 : en retrait de sa profondeur, son dernier morceau (Temp, [2]) ; le chemin entier dans l'infobulle.
+        const float indent = std::min(static_cast<float>(l.depth) * 14.f, c.nameW * 0.5f);
+        const float w = c.nameW - indent;
+        const std::string name = l.label.empty() ? l.title : l.label;
+        bold(g, {c.name + indent, r.y + (compact_ ? 3.f : 4.f)}, fit(g, name, kBody, w), kBody, l.sub == "sans variable" ? th.color.textMuted : th.color.text);
         std::string sub = compact_ ? l.address + (l.sub.empty() ? std::string{} : " \xC2\xB7 " + l.sub) : l.sub;
-        g.drawText({c.name, r.y + (compact_ ? 19.f : 22.f)}, fit(g, sub, kTiny, w), kTiny, muted);
+        g.drawText({c.name + indent, r.y + (compact_ ? 19.f : 22.f)}, fit(g, sub, kTiny, w), kTiny, muted);
     }
     if (!compact_) {
         g.drawText({c.addr, mid - 8}, l.address, kSmall, th.color.text);
@@ -682,6 +904,12 @@ void HmiTwinValues::paintRow(const ui::PaintContext& ctx, std::size_t i, const g
         paintBar(ctx, l, live, bar, drag_.on && drag_.line == i);
     } else if (l.boolean) {
         g.drawText({bar.x + 6, mid - 8}, l.forced ? "forc\xC3\xA9 \xC3\xA0 " + l.forcedText : std::string("\xE2\x80\x94"), kSmall, l.forced ? forcedColor() : muted);
+    }
+    // 1.11.5 : le crayon des bornes, au bout de la barre (un clic : les taper).
+    if (const gfx::Rect pen = partOf(i, r, Part::Edit); pen.w > 0) {
+        const bool hot = hover_ && hover_->first == i && hover_->second == Part::Edit;
+        if (hot) g.fillRoundedRect(pen, alpha(th.color.accent, 50), 3);
+        g.drawText({pen.x + 3, pen.y}, "\xE2\x9C\x8E", kSmall, hot ? th.color.accent : th.color.textMuted);
     }
     // La periode.
     if (!compact_) g.drawText({c.period, mid - 8}, l.period, kSmall, l.animated ? th.color.text : muted);
@@ -875,10 +1103,18 @@ void HmiTwinValues::onPaint(const ui::PaintContext& ctx) {
             g.drawText({sx + 14, b.y + (kBarH - 16) * 0.5f}, st, kSmall, th.color.ok);
         }
     }
+    if (compact_) {
+        // 1.11.5 : la barre de la recherche (et ce que dit l'onglet, a droite).
+        g.fillRect({b.x, b.y, b.w, kBarH}, th.color.panelBg);
+        if (searchBox_ && !status_.empty()) {
+            const float sx = searchBox_->bounds().x + searchBox_->bounds().w + 12;
+            g.drawText({sx, b.y + (kBarH - 16) * 0.5f}, fit(g, status_, kSmall, b.x + b.w - sx - 8), kSmall, th.color.ok);
+        }
+    }
     const auto c = cols();
     // Les titres des colonnes.
     {
-        const float hy = b.y + (compact_ ? 0.f : kBarH);
+        const float hy = b.y + kBarH;
         g.fillRect({b.x, hy, b.w, kHeadH}, th.color.headerBg);
         const float ty = hy + (kHeadH - 15) * 0.5f;
         wave(g, c.check + 1, hy + kHeadH * 0.5f, 12, th.color.textMuted);
@@ -926,6 +1162,26 @@ void HmiTwinValues::onPaint(const ui::PaintContext& ctx) {
             bold(g, {r.x + 24, r.y + 5}, l.title, kSmall, th.color.text);
             const float tx = r.x + 30 + textW(g, l.title, kSmall);
             g.drawText({tx, r.y + 5}, fit(g, l.sub, kSmall, r.x + r.w - tx - 8), kSmall, l.running ? th.color.info : th.color.textMuted);
+            continue;
+        }
+        if (l.kind == Line::Kind::Node) {
+            // 1.11.5 : un noeud de structure ou de tableau - sa fleche, son nom, ce qu'il contient.
+            const bool hot = hover_ && hover_->first == i;
+            g.fillRect(r, alpha(th.color.headerBg, hot ? 150 : 90));
+            g.line({r.x, r.y + r.h - 0.5f}, {r.x + r.w, r.y + r.h - 0.5f}, alpha(th.color.border, 90), 1.f);
+            const float ax = c.name + static_cast<float>(l.depth) * 14.f - 16.f, ay = r.y + (r.h - 12) * 0.5f;
+            if (nodeOpen(l.node)) {
+                g.line({ax, ay + 3}, {ax + 5, ay + 9}, th.color.text, 1.4f);
+                g.line({ax + 5, ay + 9}, {ax + 10, ay + 3}, th.color.text, 1.4f);
+            } else {
+                g.line({ax + 2, ay + 1}, {ax + 8, ay + 6}, th.color.text, 1.4f);
+                g.line({ax + 8, ay + 6}, {ax + 2, ay + 11}, th.color.text, 1.4f);
+            }
+            const float tx = ax + 16.f;
+            const std::string name = l.label.empty() ? l.title : l.label;
+            bold(g, {tx, r.y + (r.h - 15) * 0.5f}, fit(g, name, kSmall, r.x + r.w - tx - 120), kSmall, th.color.text);
+            const std::string n = std::to_string(l.count) + (l.count > 1 ? " valeurs" : " valeur") + (l.type.empty() ? std::string{} : " \xC2\xB7 " + l.type);
+            g.drawText({tx + textW(g, name, kSmall) + 10, r.y + (r.h - 15) * 0.5f}, fit(g, n, kSmall, r.x + r.w - tx - textW(g, name, kSmall) - 18), kSmall, th.color.textMuted);
             continue;
         }
         if (l.kind == Line::Kind::Add) {
@@ -1094,7 +1350,12 @@ ui::EventResult HmiTwinValues::onEvent(const ui::InputEvent& ev) {
         if (part == Part::Group) {
             if (folded(l.equipment)) folded_.erase(l.equipment);
             else folded_.insert(l.equipment);
+            computeHidden();
             invalidate();
+            return ui::EventResult::Consumed;
+        }
+        if (part == Part::Node) {   // 1.11.5 : un noeud se replie ou se deplie
+            setNodeOpen(l.node, !nodeOpen(l.node));
             return ui::EventResult::Consumed;
         }
         if (part == Part::Add) {
@@ -1112,9 +1373,15 @@ ui::EventResult HmiTwinValues::onEvent(const ui::InputEvent& ev) {
                 if (newRow) rowChosen->emit(l.equipment, l.key);
                 openKindMenu(i, {partOf(i, [&] { gfx::Rect r{}; (void)lineRect(i, r); return r; }(), Part::Kind).x, d->pos.y + 14});
                 return ui::EventResult::Consumed;
+            case Part::Edit:   // 1.11.5 : les bornes au clavier
+                if (newRow) rowChosen->emit(l.equipment, l.key);
+                (void)openZoneEditor(l.equipment, l.key);
+                return ui::EventResult::Consumed;
             case Part::Low:
             case Part::High:
             case Part::Band:
+                // 1.11.5 : un double-clic sur la zone ouvre le champ des bornes.
+                if (d->clickCount >= 2 && openZoneEditor(l.equipment, l.key)) return ui::EventResult::Consumed;
                 drag_.on = true;
                 drag_.line = i;
                 drag_.part = part;
@@ -1270,6 +1537,7 @@ void TwinValuesController::buildLines() {
         else g.sub += " \xC2\xB7 pr\xC3\xAAt \xC2\xB7 l'IHM lit le vrai";
         // (Son port et ses requetes : la ligne de l'esclave dans Configuration > Equipements.)
         lines.push_back(g);
+        const std::size_t firstRow = lines.size();   // 1.11.5 : ses lignes, rangees en arbre plus bas
         for (const auto& r : tw::valueRows(p, e)) {
             const hmi::Behavior* b = r.behavior >= 0 ? &e.behaviors[static_cast<std::size_t>(r.behavior)] : nullptr;
             const hmi::Forcing* f = r.forcing >= 0 ? &e.forcings[static_cast<std::size_t>(r.forcing)] : nullptr;
@@ -1377,6 +1645,44 @@ void TwinValuesController::buildLines() {
             l.tooltip = l.title + " \xC2\xB7 " + r.address + " (" + std::string(zn::tableLabel(r.table)) + ")" + (r.writers.empty() ? std::string{} : " \xC2\xB7 \xC3\xA9" "crite par " + r.writers);
             lines.push_back(std::move(l));
             refs_.push_back({e.name, r, low});
+        }
+        {
+            // 1.11.5 : L'ARBRE, A TOUTE PROFONDEUR. Une variable structuree (Four1.Zones[2].Temp) se
+            // range sous ses noeuds (Four1, Zones, [2]) ; un registre sans variable reste a la racine.
+            std::vector<HmiTwinValues::Line> tree;
+            tree.reserve(lines.size() - firstRow);
+            std::vector<std::string> open;      // les prefixes ouverts, du plus haut au plus bas
+            std::vector<std::size_t> openAt;    // leur ligne dans `tree`
+            for (std::size_t i = firstRow; i < lines.size(); ++i) {
+                auto l = std::move(lines[i]);
+                const bool plain = l.sub == "sans variable";
+                const auto pieces = plain ? std::vector<std::string>{l.title} : pathPieces(l.title);
+                std::size_t k = 0;
+                while (k < open.size() && k + 1 < pieces.size() && open[k] == piecesPrefix(pieces, k)) ++k;
+                open.resize(k);
+                openAt.resize(k);
+                for (; k + 1 < pieces.size(); ++k) {
+                    HmiTwinValues::Line n;
+                    n.kind = HmiTwinValues::Line::Kind::Node;
+                    n.equipment = e.name;
+                    n.depth = static_cast<int>(k);
+                    n.title = piecesPrefix(pieces, k);
+                    n.label = pieces[k];
+                    n.node = e.name + "|" + n.title;
+                    n.type = hmi::types::typeOfPath(p, n.title);
+                    n.running = l.running;
+                    tree.push_back(std::move(n));
+                    open.push_back(tree.back().title);
+                    openAt.push_back(tree.size() - 1);
+                }
+                for (const std::size_t at : openAt) ++tree[at].count;
+                l.depth = static_cast<int>(pieces.size()) - 1;
+                if (pieces.size() > 1) l.label = pieces.back();
+                l.node = open.empty() ? std::string{} : e.name + "|" + open.back();
+                tree.push_back(std::move(l));
+            }
+            lines.resize(firstRow);
+            for (auto& l : tree) lines.push_back(std::move(l));
         }
         HmiTwinValues::Line add;
         add.kind = HmiTwinValues::Line::Kind::Add;
