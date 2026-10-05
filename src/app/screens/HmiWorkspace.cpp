@@ -41,6 +41,8 @@
 #include "../hmi/HmiAssetPanes.hpp"
 #include "../hmi/HmiAssist.hpp"
 #include "../hmi/HmiEditor.hpp"
+#include "../hmi/HmiValuePicker.hpp"              // 1.11.3 : le selecteur de valeur
+#include "../../project/EditCommands.hpp"             // 1.11.3 : creer une variable de l'automate
 #include "../hmi/HmiDuplicateDialog.hpp"            // 1.10.2 (chantier D) : "Dupliquer..."
 #include "../hmi/HmiFunctionPanes.hpp"
 #include "../hmi/HmiHelpPane.hpp"
@@ -1587,6 +1589,8 @@ void MainAnalysisScreen::openHmiView(std::uint64_t viewId, int part, std::uint64
         // Lot 10 : "Creer un symbole" passe par un dialogue ; double-clic sur une
         // instance ouvre son symbole.
         made->setSymbolAsker([this, viewId] { askHmiSymbol(viewId); });
+        // 1.11.3 : le carre de legende d'une case ouvre la liste des carres, puis le selecteur.
+        made->setValueAsker([this, viewId](const valuekind::Request& r) { askHmiValue(viewId, r); });
         made->setStyleAsker([this, viewId] { askHmiStyle(viewId); });     // lot 12
         made->setDuplicateAsker([this, viewId] { askHmiDuplicate(viewId); });   // 1.10.2 (chantier D)
         made->setTemplateAsker([this, viewId] { askHmiSaveTemplate(viewId); });   // lot 20
@@ -1688,6 +1692,162 @@ void MainAnalysisScreen::openHmiViewsFolder(int folder) {
 // Lot 10 : "Creer un symbole". Le dialogue propose un nom libre et les
 // parametres lus dans la selection (Armoire := Armoires[0]) ; l'editeur fait la
 // commande. L'editeur est RETROUVE a la reponse : l'onglet a pu etre ferme.
+// ---- 1.11.3 : le selecteur de valeur et la creation d'une variable ----
+void MainAnalysisScreen::askHmiValue(std::uint64_t viewId, const valuekind::Request& req) {
+    auto doc = app_.hmi();
+    if (!doc) return;
+    if (!req.create.empty()) {
+        askHmiCreateVariable(viewId, req, req.text, req.fx, req.create);
+        return;
+    }
+    HmiValuePicker::Spec spec;
+    spec.field = req.field;
+    spec.expected = req.expected;
+    spec.text = req.text;
+    spec.fx = req.fx;
+    spec.source = req.source;
+    spec.doc = doc;
+    spec.view = asId(viewId);
+    spec.plc = app_.project();
+    app_.menus().ShowDialog(std::make_unique<HmiValuePicker>(std::move(spec)), [this, viewId, req](const menu::DialogResult& r) {
+        if (!r.accepted()) return;
+        const auto a = HmiValuePicker::parse(r.payload);
+        if (!a.create.empty()) {
+            askHmiCreateVariable(viewId, req, a.text, a.fx, a.create);
+            return;
+        }
+        commitHmiValue(viewId, req, a.text, a.fx);
+    });
+}
+
+void MainAnalysisScreen::commitHmiValue(std::uint64_t viewId, const valuekind::Request& req, const std::string& text, bool fx) {
+    auto* ed = dynamic_cast<HmiEditor*>(hmiTab("vue:" + std::to_string(viewId)));
+    if (!ed || !ed->commitValue(req.category, req.property, text, fx)) {
+        status_->setTransientMessage("La case \xC2\xAB " + req.field + " \xC2\xBB n'est plus montr\xC3\xA9" "e : la valeur n'a pas \xC3\xA9t\xC3\xA9 \xC3\xA9" "crite.", 8.0);
+        return;
+    }
+    status_->setTransientMessage(req.field + " \xE2\x86\x90 " + (text.empty() ? std::string("(d\xC3\xA9" "faut)") : (fx ? "=" : "") + text)
+                                     + " \xC2\xB7 Ctrl+Z annule",
+                                 6.0);
+}
+
+void MainAnalysisScreen::askHmiCreateVariable(std::uint64_t viewId, const valuekind::Request& req, const std::string& text, bool fx,
+                                              const std::string& name) {
+    auto doc = app_.hmi();
+    if (!doc) return;
+    const auto plc = app_.document();
+    // Le type propose : celui que la case attend, s'il en est un vrai.
+    std::string wanted = req.expected;
+    {
+        std::string u;
+        for (const char c : wanted) u += static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+        if (u.empty() || u == "ANY" || u == "TEXTE" || u == "COULEUR") wanted = "STRING";
+        else if (u == "NOMBRE") wanted = "REAL";
+    }
+    const auto hmiTypes = [doc, wanted] {
+        std::vector<std::string> out{wanted};
+        for (const auto t : hmi::kVariableTypes) if (std::string(t) != wanted) out.emplace_back(t);
+        for (const auto& t : doc->project.programs.types) if (t.name != wanted) out.push_back(t.name);
+        return out;
+    };
+    const auto plcTypes = [plc, wanted] {
+        std::vector<std::string> out{wanted};
+        if (plc)
+            for (const auto& c : project::availableTypeChoices(*plc)) if (c.name != wanted) out.push_back(c.name);
+        return out;
+    };
+    const std::string zoneHmi = "IHM \xE2\x80\x94 une variable de l'IHM";
+    const std::string zoneApi = "API \xE2\x80\x94 une variable de l'automate";
+    std::vector<FormDialog::Field> fields;
+    fields.push_back({"Nom", name, "Debit_Max", false, {}});
+    fields.push_back({"Zone", zoneHmi, {}, false, plc ? std::vector<std::string>{zoneHmi, zoneApi} : std::vector<std::string>{zoneHmi}});
+    fields.push_back({"Type", wanted, {}, false, hmiTypes()});
+    fields.push_back({"Valeur initiale (IHM)", {}, "vide : 0, FALSE ou ''", false, {}});
+    fields.push_back({"Adresse (API, facultative)", {}, "%MW100 ; vide : non situ\xC3\xA9" "e", false, {}});
+    fields.push_back({"Commentaire", "Cr\xC3\xA9\xC3\xA9" "e depuis le s\xC3\xA9lecteur de " + req.field, {}, false, {}});
+    auto dialog = std::make_unique<FormDialog>(
+        "dialog.hmiCreateVariable", "Cr\xC3\xA9" "er la variable \xC2\xAB " + name + " \xC2\xBB",
+        name + " n'existe ni dans l'automate, ni dans l'IHM. Le champ " + req.field + " attend " + valuekind::expectedLabel(req.expected)
+            + ".\nIHM : elle s'ajoute aux variables IHM du projet (Programmation g\xC3\xA9n\xC3\xA9rale > Variables IHM). "
+              "API : elle s'ajoute aux variables globales du programme ; elle devra exister dans Control Expert. "
+              "Un seul Ctrl+Z retire la variable et la saisie.",
+        std::move(fields), "Cr\xC3\xA9" "er et valider");
+    dialog->setRules([zoneApi, hmiTypes, plcTypes](const std::vector<std::string>& v, std::vector<FormDialog::FieldState>& st) {
+        if (v.size() < 6 || st.size() < 6) return;
+        const bool api = v[1] == zoneApi;
+        const auto choices = api ? plcTypes() : hmiTypes();
+        st[2].choices = choices;
+        if (std::find(choices.begin(), choices.end(), v[2]) == choices.end()) st[2].value = choices.front();
+        st[3].enabled = !api;
+        st[3].hint = api ? "seulement pour une variable IHM" : std::string{};
+        st[4].enabled = api;
+        st[4].hint = api ? std::string{} : "seulement pour une variable de l'automate";
+    });
+    app_.menus().ShowDialog(std::move(dialog), [this, viewId, req, text, fx, name, zoneApi](const menu::DialogResult& r) {
+        if (!r.accepted()) return;
+        const auto v = FormDialog::split(r.payload);
+        if (v.size() < 6) return;
+        auto hdoc = app_.hmi();
+        if (!hdoc) return;
+        const std::string newName = v[0];
+        std::string why;
+        if (!hmi::isIdentifier(newName)) why = "\xC2\xAB " + newName + " \xC2\xBB n'est pas un nom de variable (des lettres, des chiffres et _).";
+        else if (hdoc->project.variable(newName)) why = "Une variable IHM s'appelle d\xC3\xA9j\xC3\xA0 " + newName + ".";
+        if (!why.empty()) {
+            status_->setTransientMessage(why, 8.0);
+            return;
+        }
+        // Le nom change ? Il change aussi dans la valeur.
+        std::string value = text;
+        if (newName != name && !value.empty()) {
+            std::string out;
+            std::size_t at = 0, hit = 0;
+            while ((hit = value.find(name, at)) != std::string::npos) {
+                out += value.substr(at, hit - at) + newName;
+                at = hit + name.size();
+            }
+            value = out + value.substr(at);
+        }
+        if (value.empty()) value = newName;
+        // UN SEUL CTRL+Z : la variable et la saisie.
+        core::CommandGroupScope group("Cr\xC3\xA9" "er " + newName + " et l'utiliser");
+        if (v[1] == zoneApi) {
+            project::AddVariableCommand::Spec spec;
+            spec.name = newName;
+            spec.type = v[2];
+            spec.address = v[4];
+            spec.comment = v[5];
+            app_.apply(std::make_unique<project::AddVariableCommand>(app_.document(), spec), true);
+            if (!app_.project() || std::none_of(app_.project()->variables.begin(), app_.project()->variables.end(), [&](const domain::Variable& x) {
+                    return app_.project()->strings.text(x.name) == newName;
+                })) {
+                status_->setTransientMessage("La variable de l'automate n'a pas \xC3\xA9t\xC3\xA9 cr\xC3\xA9\xC3\xA9" "e (nom pris, type ou adresse refus\xC3\xA9s).", 8.0);
+                return;
+            }
+        } else {
+            std::string initial = v[3];
+            const std::string type = hmi::types::normalized(v[2]);
+            if (initial.empty()) initial = type == "BOOL" ? "FALSE" : type == "STRING" ? "''" : hmi::types::isComposite(type) ? "" : "0";
+            if (!hmi::types::validType(hdoc->project, type, &why)) {
+                status_->setTransientMessage("Type refus\xC3\xA9 : " + why, 8.0);
+                return;
+            }
+            auto cmd = hmi::changeProject(hdoc, "Nouvelle variable " + newName, [&](hmi::Project& p) {
+                hmi::Variable var;
+                var.id = p.allocate();
+                var.name = newName;
+                var.type = type;
+                var.initial = initial;
+                var.description = v[5];
+                p.programs.variables.push_back(std::move(var));
+            });
+            if (cmd) app_.apply(std::move(cmd), false);
+        }
+        commitHmiValue(viewId, req, value, fx || value == newName);
+        group.close();
+    });
+}
+
 void MainAnalysisScreen::askHmiSymbol(std::uint64_t viewId) {
     auto doc = app_.hmi();
     auto* editor = dynamic_cast<HmiEditor*>(hmiTab("vue:" + std::to_string(viewId)));

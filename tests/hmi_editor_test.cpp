@@ -33,6 +33,8 @@
 #include "../src/app/hmi/HmiApiVarsPane.hpp"     // 1.11.1 (API-V)
 #include "../src/app/hmi/HmiAssist.hpp"
 #include "../src/app/hmi/HmiValueKind.hpp"           // 1.11.3 : le carre de legende
+#include "../src/app/hmi/HmiValuePicker.hpp"         // 1.11.3 : le selecteur de valeur
+#include "../src/menu/MenuManager.hpp"
 #include "../src/ui/widgets/ExprField.hpp"          // 1.10 (chantier K)
 #include "../src/app/hmi/HmiDesignPanes.hpp"
 #include "../src/app/hmi/HmiEditor.hpp"
@@ -22167,6 +22169,134 @@ void scriptsExportImport1113() {
 }
 
 // =============================================================================
+//  1.11.3 : LE CARRE DE LEGENDE CLIQUABLE ET LE SELECTEUR DE VALEUR. Un clic sur le
+//  carre : la liste des carres (et leur sens) ; un choix : la demande a l'hote ; le
+//  selecteur : l'arbre filtre sur le type attendu, la recherche, le resultat classe,
+//  ses corrections, Valider (ou la creation d'une variable inconnue).
+// =============================================================================
+void valuePicker1113() {
+    std::printf("== 1.11.3 : le carr\xC3\xA9 de l\xC3\xA9gende cliquable et le s\xC3\xA9lecteur de valeur ==\n");
+    using S = ui::PropertyGrid::LegendStyle;
+    auto doc = std::make_shared<Document>();
+    core::CommandStack stack;
+    auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+    View sym = makeView(doc->project, "STEST");
+    sym.role = "symbole";
+    sym.params.push_back({"Name", "'Sans nom'", "", "STRING", ParamMode::Reference});
+    sym.params.push_back({"Value", "", "", "ARRAY[0..9] OF UINT", ParamMode::Reference});
+    doc->project.views.push_back(sym);
+    const auto var = [&](const char* name, const char* type) {
+        Variable x;
+        x.id = doc->project.allocate();
+        x.name = name;
+        x.type = type;
+        x.initial = "0";
+        doc->project.programs.variables.push_back(x);
+    };
+    var("UINTS", "ARRAY[0..9] OF UINT");
+    var("AUTRES", "ARRAY[0..9] OF UINT");
+    var("gCoef", "REAL");
+    var("gNom", "STRING");
+    View v = makeView(doc->project, "Vue_Accueil");
+    const Id vid = v.id;
+    doc->project.views.push_back(v);
+    View& view = *doc->project.view(vid);
+    const Id inst = edit::add(doc->project, view, Kind::SymbolInstance, 100, 100);
+    view.object(inst)->set("symbol", "STEST");
+    view.object(inst)->set("params", "Name := 'Voiture'; Value := UINTS");
+
+    app::HmiEditor ed("ed1113", doc, vid, apply);
+    ed.setBounds({0, 0, 1800, 1000});
+    ed.layout();
+    ed.canvas().setSelection({inst});
+    ed.layout();
+    auto& grid = ed.properties();
+    const std::string valueRow = "Value \xC2\xB7 ARRAY[0..9] OF UINT", nameRow = "Name \xC2\xB7 STRING";
+    const std::string cat = "Param\xC3\xA8tres du symbole";
+    check(!grid.legendClickable(), "sans h\xC3\xB4te, le carr\xC3\xA9 se lit seulement");
+    std::vector<app::valuekind::Request> asked;
+    ed.setValueAsker([&](const app::valuekind::Request& r) { asked.push_back(r); });
+    check(grid.legendClickable(), "avec un h\xC3\xB4te, le carr\xC3\xA9 r\xC3\xA9pond au clic");
+    gfx::Rect sq;
+    check(grid.revealValue(valueRow) && (grid.layout(), grid.legendRect(valueRow, sq)), "le carr\xC3\xA9 de Value est montr\xC3\xA9");
+    grid.dispatch(ui::MouseDown{{sq.x + sq.w / 2, sq.y + sq.h / 2}, ui::MouseButton::Left, 1, {}});
+    auto* menu = ed.legendMenu();
+    check(menu && menu->isOpen(), "un clic sur le carr\xC3\xA9 : la liste des carr\xC3\xA9s");
+    int kindsShown = 0, openId = -1;
+    std::string here;
+    if (menu)
+        for (const auto& it : menu->items()) {
+            if (it.id >= 100 && it.id < 108) ++kindsShown;
+            if (it.id == 200) openId = it.id;
+            if (it.shortcut.find("\xE2\x9C\x93 ici") == 0) here = it.label;
+        }
+    check(kindsShown == 8 && openId == 200, "les huit carr\xC3\xA9s, leur sens, et Ouvrir le s\xC3\xA9lecteur");
+    same_text(here, "Variable IHM", "le carr\xC3\xA9 de la case est marqu\xC3\xA9 ici (UINTS : I)");
+    if (menu) menu->itemChosen->emit(104);   // I : Variable IHM
+    check(asked.size() == 1 && asked[0].source == S::Hmi && asked[0].expected == "ARRAY[0..9] OF UINT" && asked[0].text == "UINTS"
+              && asked[0].fx && asked[0].field == "Value" && asked[0].category == cat && asked[0].property == valueRow,
+          "le choix I : l'h\xC3\xB4te re\xC3\xA7oit la case, sa valeur, le type attendu, la source IHM");
+    // Le selecteur, dans un gestionnaire de menus d'essai.
+    menu::MenuManager mm{menu::MenuFactory{}};
+    app::HmiValuePicker::Spec spec;
+    spec.field = "Value";
+    spec.expected = "ARRAY[0..9] OF UINT";
+    spec.text = "UINTS";
+    spec.fx = true;
+    spec.doc = doc;
+    spec.view = vid;
+    std::vector<app::HmiValuePicker::Answer> answers;
+    mm.ShowDialog(std::make_unique<app::HmiValuePicker>(spec), [&](const menu::DialogResult& r) {
+        if (r.accepted()) answers.push_back(app::HmiValuePicker::parse(r.payload));
+    });
+    mm.applyPending();
+    auto* picker = dynamic_cast<app::HmiValuePicker*>(mm.top());
+    check(picker != nullptr, "le s\xC3\xA9lecteur s'ouvre");
+    if (picker) {
+        // UINTS et AUTRES (IHM), et Vue_Accueil.STEST_1.Value (le parametre public de l'instance).
+        check(picker->shownCount() == 3, "filtr\xC3\xA9 sur ARRAY[0..9] OF UINT : UINTS, AUTRES, STEST_1.Value (" + std::to_string(picker->shownCount()) + ")");
+        check(picker->classification().style == S::Hmi, "le r\xC3\xA9sultat UINTS : le carr\xC3\xA9 I");
+        picker->setTypeFilter(false);
+        check(picker->shownCount() > 10, "Tout montrer : l'IHM, SYS., la vue... (" + std::to_string(picker->shownCount()) + ")");
+        picker->setSearch("coef");
+        check(picker->shownCount() == 1, "la recherche : gCoef seul");
+        picker->setSearch("");
+        picker->setTypeFilter(true);
+        check(picker->pick("AUTRES") && picker->result() == "AUTRES" && picker->resultFx(), "un clic dans l'arbre : AUTRES dans R\xC3\xA9sultat, en fx");
+        picker->setResult("gCoef", true);
+        check(picker->classification().error() && !picker->classification().diags.empty(), "gCoef (REAL) : l'erreur de type");
+        picker->setResult("Voiture", false);
+        check(picker->classification().error(), "Voiture en constante dans un tableau : l'erreur");
+        picker->validate(false);
+        check(answers.empty() && mm.top() == picker, "Valider avec une erreur : la confirmation, le s\xC3\xA9lecteur reste");
+        picker->setResult("UINTS", true);
+        picker->validate(false);
+        mm.applyPending();
+        check(answers.size() == 1 && answers[0].text == "UINTS" && answers[0].fx && answers[0].create.empty(), "Valider : UINTS, en fx");
+    }
+    // Un nom inconnu : Valider demande la creation.
+    spec.text = "Debit_Max";
+    spec.expected = "REAL";
+    mm.ShowDialog(std::make_unique<app::HmiValuePicker>(spec), [&](const menu::DialogResult& r) {
+        if (r.accepted()) answers.push_back(app::HmiValuePicker::parse(r.payload));
+    });
+    mm.applyPending();
+    picker = dynamic_cast<app::HmiValuePicker*>(mm.top());
+    if (picker) {
+        const auto& res = picker->classification();
+        // Sans automate, un nom inconnu peut etre a lui : la classification ne le refuse pas ; on le force ici.
+        picker->setResult("Debit_Max", true);
+        picker->validate(true);
+        mm.applyPending();
+        check(answers.size() == 2 && answers[1].text == "Debit_Max", "Valider quand m\xC3\xAAme : Debit_Max (" + std::string(res.empty ? "vide" : "class\xC3\xA9") + ")");
+    }
+    // Ecrire la valeur choisie dans la case : une commande.
+    check(ed.commitValue(cat, nameRow, "gNom", true) && view.object(inst)->text("params").find("Name := gNom") != std::string::npos,
+          "commitValue : Name := gNom (" + view.object(inst)->text("params") + ")");
+    check(stack.canUndo(), "... une commande (Ctrl+Z)");
+}
+
+// =============================================================================
 //  1.11.2 (decision 162) : LE DOSSIER SYMBOLES de la liste des vues a ses deux
 //  boutons, Exporter les symboles... (le symbole choisi part a l'hote, qui
 //  ouvre le dialogue) et Importer des symboles... ; ceux des vues n'y servent
@@ -24172,6 +24302,7 @@ int main(int argc, char** argv) {
         symDupliquer1112();
         symParametres1112();
         symParametres1113();
+        valuePicker1113();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -24408,6 +24539,7 @@ int main(int argc, char** argv) {
     symParametres1112();                    // 1.11.2 (SYM, decision 240) : la section Parametres du symbole
     symParametres1113();                    // 1.11.3 : fx garde, Voiture constante, UINTS (tableau), le carre de legende
     scriptsExportImport1113();              // 1.11.3 : exporter / importer les scripts d'une vue et les operateurs (.xpgst)
+    valuePicker1113();                      // 1.11.3 : le carre de legende cliquable, le selecteur de valeur
     symbolesPanneau1112();                  // 1.11.2 (decision 162) : le dossier Symboles - Exporter les symboles, Importer des symboles
     paquetsPanneaux1112();                  // 1.11.2 (decision 174) : Types IHM, Fonctions, Scripts generaux - Exporter, Importer
     paquetsDepot1112();                     // 1.11.2 (decision 188) : un paquet glisse sur l'appli ouvre la fenetre d'import

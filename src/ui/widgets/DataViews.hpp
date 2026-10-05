@@ -808,6 +808,7 @@ public:
         std::string              text;      // "C", "fx", "$", "A", "I", "S", "V", "!"
         std::vector<LegendStyle> dots{};    // une formule : les zones qu'elle lit (des points sous la lettre)
         std::string              tip{};     // l'infobulle du carre
+        std::string              expected{};   // le type que la case attend (le selecteur filtre dessus)
     };
 
     struct Property {

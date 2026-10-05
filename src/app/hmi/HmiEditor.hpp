@@ -19,6 +19,8 @@
 // =============================================================================
 #pragma once
 
+#include "HmiValueKind.hpp"   // 1.11.3 : valuekind::Request (la case du carre de legende)
+
 #include "HmiActionsPanel.hpp"
 #include "HmiCanvas.hpp"
 #include "HmiContentPanel.hpp"
@@ -124,6 +126,18 @@ public:
     void setTemplateAsker(std::function<void()> ask) { askTemplate_ = std::move(ask); }
     // 1.10.2 (chantier D) : "Dupliquer..." (Ctrl+D, la barre d'outils) ; vide : la copie decalee.
     void setDuplicateAsker(std::function<void()> ask) { askDuplicate_ = std::move(ask); }
+    // 1.11.3 : LE CARRE DE LEGENDE d'une case de l'inspecteur. Un clic ouvre la liste
+    // des carres et leur sens (et « Creer X... » pour un nom inconnu) ; un choix
+    // demande a l'hote le selecteur de valeur (setValueAsker) : la case (retrouvee
+    // par sa categorie et son nom, la grille est souvent refaite), sa valeur, le
+    // type attendu, la source choisie. Sans hote, le carre ne fait que se lire.
+    using ValueRequest = valuekind::Request;
+    void setValueAsker(std::function<void(const ValueRequest&)> ask);
+    // La liste des carres d'une case (`at` : ou l'ouvrir). Faux : pas de telle case, ou pas d'hote.
+    bool openLegendMenu(const std::string& category, const std::string& property, gfx::Point at);
+    [[nodiscard]] ui::PopupMenu* legendMenu() const noexcept { return legendMenu_; }
+    // Ecrire une valeur choisie dans la case : une commande (Ctrl+Z). Faux : la case n'est plus la.
+    bool commitValue(const std::string& category, const std::string& property, const std::string& text, bool fx);
     bool makeStyle(const std::string& name, std::string* why = nullptr);
     // Ouvrir une autre vue (double-clic sur une instance : son symbole).
     const core::SignalPtr<hmi::Id> openView = core::Signal<hmi::Id>::create();
@@ -192,6 +206,10 @@ private:
     std::function<void()>     askStyle_;         // lot 12
     std::function<void()>     askTemplate_;      // lot 20
     std::function<void()>     askDuplicate_;     // 1.10.2 (chantier D)
+    std::function<void(const ValueRequest&)> askValue_;   // 1.11.3 : le selecteur de valeur
+    ui::PopupMenu*            legendMenu_{nullptr};       // 1.11.3 : la liste des carres
+    ValueRequest              legendRequest_;             // ... la case pour laquelle elle est ouverte
+    std::vector<std::string>  legendUnknown_;             // ... les noms a creer qu'elle propose
 };
 
 } // namespace app

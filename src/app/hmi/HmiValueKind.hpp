@@ -99,4 +99,16 @@ bool pathInfo(const Env&, std::string_view path, Style& zone, std::string& type,
 // Une phrase sans balise : le premier diagnostic (la note rouge sous la case).
 [[nodiscard]] std::string firstProblem(const Result&);
 
+// 1.11.3 : ce que l'inspecteur demande a l'hote quand on choisit dans la liste des carres
+// (HmiEditor::setValueAsker) : la case, ce qu'elle vaut, le type attendu, la source.
+struct Request {
+    std::string category, property;   // la case dans la grille (refaite souvent : retrouvee par ces noms)
+    std::string field;                 // son libelle montre : « Value »
+    std::string text;                  // sa valeur : l'expression (sans =) ou la valeur
+    bool        fx{false};
+    std::string expected;              // le type attendu
+    Style       source{Style::Empty};  // Empty : tout ; Api, Hmi, System, Local, Constant ; Markers : un repere
+    std::string create;                // non vide : creer d'abord ce nom
+};
+
 } // namespace app::valuekind

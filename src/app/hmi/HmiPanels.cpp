@@ -2828,6 +2828,7 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
                 const auto res = valuekind::classify(env, formula ? effective : a.value, formula, type);
                 if (formula && res.error()) a.exprError = valuekind::firstProblem(res);
                 a.legend = valuekind::legendOf(res);
+                a.legend->expected = type;
                 const std::string current = prop.value;
                 a.commit = [commit, shape, current, i, type, project](std::string_view s) {
                     if (!commit.prop) return false;
@@ -2960,8 +2961,10 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
             for (auto& p : c.properties) {
                 if (p.legend || !p.commit || p.type == PG::ValueType::ReadOnly || !ui::exprfield::accepts(p)) continue;
                 const bool fx = !p.expression.empty();
-                const auto res = valuekind::classify(env, fx ? p.expression : p.value, fx, valuekind::expectedOfProperty(p));
+                const std::string expected = valuekind::expectedOfProperty(p);
+                const auto res = valuekind::classify(env, fx ? p.expression : p.value, fx, expected);
                 p.legend = valuekind::legendOf(res);
+                p.legend->expected = expected;
             }
     }
     return out;

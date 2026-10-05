@@ -10,6 +10,7 @@
 #include "HmiObjectAlarmPanes.hpp"    // 1.9 : les alarmes de l'objet (inspecteur)
 #include "HmiOperatorPanes.hpp"       // 1.10 (S2) : les operateurs du symbole
 #include "HmiTreeData.hpp"            // 1.10.3 (Q1103) : les lignes d'un objet deplie (les deux explorateurs)
+#include "HmiValueKind.hpp"           // 1.11.3 : le carre de legende, la liste des carres
 
 #include <set>
 
@@ -398,6 +399,27 @@ HmiEditor::HmiEditor(std::string widgetId, hmi::DocumentPtr doc, Id view, Apply 
     });
     links_ += tools_->triggered->connect([this](int a) { run(a); });
     links_ += layerTools_->triggered->connect([this](int a) { run(a); });
+    // 1.11.3 : le carre de legende - la liste des carres, puis le selecteur (l'hote).
+    legendMenu_ = &static_cast<ui::PopupMenu&>(addChild(std::make_unique<ui::PopupMenu>(id() + ".carres")));
+    links_ += legendMenu_->itemChosen->connect([this](int a) {
+        if (!askValue_) return;
+        ValueRequest req = legendRequest_;
+        const auto& kinds = valuekind::kinds();
+        if (a >= 300 && static_cast<std::size_t>(a - 300) < legendUnknown_.size()) {
+            req.create = legendUnknown_[static_cast<std::size_t>(a - 300)];
+        } else if (a >= 100 && static_cast<std::size_t>(a - 100) < kinds.size()) {
+            const auto s = kinds[static_cast<std::size_t>(a - 100)].style;
+            using S = ui::PropertyGrid::LegendStyle;
+            req.source = (s == S::Formula || s == S::Error) ? S::Empty : s;
+        } else if (a != 200) {
+            return;
+        }
+        const auto ask = askValue_;   // l'hote peut refaire l'editeur
+        ask(req);
+    });
+    links_ += props_->legendClicked->connect([this](const std::string& cat, const std::string& name, gfx::Rect at) {
+        (void)openLegendMenu(cat, name, {at.x, at.bottom() + 4.f});
+    });
 
     links_ += canvas_->selectionChanged->connect([this] {
         if (syncing_) return;
@@ -572,6 +594,95 @@ HmiEditor::HmiEditor(std::string widgetId, hmi::DocumentPtr doc, Id view, Apply 
 }
 
 HmiEditor::~HmiEditor() = default;
+
+// ---- 1.11.3 : le carre de legende ----
+namespace {
+const ui::PropertyGrid::Property* findProperty(const std::vector<ui::PropertyGrid::Category>& cats, std::string_view category,
+                                               std::string_view name) {
+    for (const auto& c : cats) {
+        if (c.name == category)
+            for (const auto& p : c.properties)
+                if (p.name == name) return &p;
+        if (const auto* in = findProperty(c.children, category, name)) return in;
+    }
+    return nullptr;
+}
+} // namespace
+
+void HmiEditor::setValueAsker(std::function<void(const ValueRequest&)> ask) {
+    askValue_ = std::move(ask);
+    props_->setLegendClickable(static_cast<bool>(askValue_));
+}
+
+bool HmiEditor::openLegendMenu(const std::string& category, const std::string& property, gfx::Point at) {
+    using S = ui::PropertyGrid::LegendStyle;
+    const auto* p = findProperty(props_->categories(), category, property);
+    if (!p || !p->legend || !askValue_) return false;
+    const bool fx = !p->expression.empty();
+    ValueRequest req;
+    req.category = category;
+    req.property = property;
+    req.field = std::string(ui::exprfield::shownLabel(*p));
+    if (const auto at2 = req.field.find(" \xC2\xB7 "); at2 != std::string::npos) req.field = req.field.substr(0, at2);   // « Name · STRING »
+    if (const auto f = req.field.find("  \xC6\x92"); f != std::string::npos) req.field = req.field.substr(0, f);
+    req.text = fx ? p->expression : p->value;
+    req.fx = fx || p->value.empty();
+    req.expected = p->legend->expected;
+    legendRequest_ = req;
+    const valuekind::Env env{&doc_->project, doc_->project.view(viewId_), plc_.get()};
+    const auto res = valuekind::classify(env, req.text, fx, req.expected);
+    legendUnknown_ = res.unknown;
+    std::vector<ui::PopupMenu::Item> items;
+    items.push_back({"Le carr\xC3\xA9 dit d'o\xC3\xB9 vient la valeur", {}, {}, ui::Icon::None, true, false, -1, true});
+    const std::string now = res.empty ? std::string("Vide : la valeur par d\xC3\xA9" "faut du champ")
+                                      : std::string(valuekind::info(res.style).name) + (res.info.empty() ? std::string{} : " \xC2\xB7 " + res.info);
+    items.push_back({now.size() > 90 ? now.substr(0, 87) + "\xE2\x80\xA6" : now, {}, {}, ui::Icon::None, true, false, -1, true});
+    for (std::size_t i = 0; i < legendUnknown_.size() && i < 3; ++i) {
+        ui::PopupMenu::Item it{"Cr\xC3\xA9" "er \xC2\xAB " + legendUnknown_[i] + " \xC2\xBB\xE2\x80\xA6", "le type et la zone (API ou IHM)", {},
+                               ui::Icon::None, true, false, 300 + static_cast<int>(i)};
+        it.paintIcon = [](const ui::PaintContext& ctx, gfx::Rect r) { ui::paintLegend(ctx, r, valuekind::legendOf(S::Error)); };
+        items.push_back(std::move(it));
+    }
+    items.push_back({{}, {}, {}, ui::Icon::None, true, true, -1});
+    const auto& kinds = valuekind::kinds();
+    const std::string expectedText = valuekind::expectedLabel(req.expected);
+    for (std::size_t i = 0; i < kinds.size(); ++i) {
+        const auto& k = kinds[i];
+        std::string meaning(k.meaning);
+        if (k.style == S::Constant) meaning = "Une valeur fixe, convertie en " + expectedText;
+        if (!res.empty && k.style == res.style) meaning = "\xE2\x9C\x93 ici \xC2\xB7 " + meaning;
+        ui::PopupMenu::Item it{std::string(k.name), meaning, {}, ui::Icon::None, true, false, 100 + static_cast<int>(i)};
+        const S style = k.style;
+        it.paintIcon = [style](const ui::PaintContext& ctx, gfx::Rect r) { ui::paintLegend(ctx, r, valuekind::legendOf(style)); };
+        items.push_back(std::move(it));
+    }
+    items.push_back({{}, {}, {}, ui::Icon::None, true, true, -1});
+    ui::PopupMenu::Item open{"Ouvrir le s\xC3\xA9lecteur\xE2\x80\xA6", "tout ce qui convient \xC3\xA0 " + expectedText, {}, ui::Icon::None, true, false, 200};
+    open.paintIcon = [](const ui::PaintContext& ctx, gfx::Rect r) {
+        ui::PropertyGrid::Legend l = valuekind::legendOf(S::Formula);
+        l.text = "\xE2\x80\xA6";
+        ui::paintLegend(ctx, r, l);
+    };
+    items.push_back(std::move(open));
+    legendMenu_->setItems(std::move(items));
+    gfx::Size surface = ui::surfaceSize();
+    if (surface.w <= 0.f) surface = {bounds().right() + 400.f, bounds().bottom() + 400.f};
+    legendMenu_->openAt(at, surface);
+    return true;
+}
+
+bool HmiEditor::commitValue(const std::string& category, const std::string& property, const std::string& text, bool fx) {
+    const auto* p = findProperty(props_->categories(), category, property);
+    if (!p || !p->commit) return false;
+    const auto commit = p->commit;   // la grille est refaite pendant l'appel
+    std::string sent;
+    if (text.empty()) sent = fx && !p->expression.empty() ? std::string("=") : std::string(ui::exprfield::kToDefault);
+    else sent = fx && ui::exprfield::accepts(*p) ? "=" + text : text;
+    const bool ok = commit(sent);
+    if (ok) props_->propertyChanged->emit(property, sent);
+    invalidateLayout();
+    return ok;
+}
 
 void HmiEditor::setPlcProject(std::shared_ptr<const domain::Project> plc) {
     plc_ = std::move(plc);

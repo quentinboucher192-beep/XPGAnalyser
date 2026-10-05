@@ -27,6 +27,7 @@
 #include "../GoToPanel.hpp"     // lot 20 : Aller a... (Ctrl+K)
 #include "../../hmi/HmiVersions.hpp"   // lot 21 : les versions
 #include "../hmi/HmiTrails.hpp"         // lot 21 : les parcours du didacticiel
+#include "../hmi/HmiValueKind.hpp"      // 1.11.3 : la demande du carre de legende
 #include "../RackView.hpp"
 #include "../ViewModels.hpp"
 #include "../../core/CodeIcons.hpp"          // 1.8.0 : les icones au choix
@@ -624,6 +625,12 @@ private:
     void openHmiViewsFolder(int folder);      // lot 8 : le volet Vues sur un dossier (Modeles, Vues, Popups...)
     void askDeleteHmiView(std::uint64_t viewId);
     void askHmiSymbol(std::uint64_t viewId);  // lot 10 : "Creer un symbole" (le nom, les parametres)
+    // 1.11.3 : le carre de legende d'une case - le selecteur de valeur, la creation d'une
+    // variable inconnue (le type, la zone API ou IHM), puis la case recoit la valeur.
+    void askHmiValue(std::uint64_t viewId, const valuekind::Request& request);
+    void askHmiCreateVariable(std::uint64_t viewId, const valuekind::Request& request, const std::string& text, bool fx,
+                              const std::string& name);
+    void commitHmiValue(std::uint64_t viewId, const valuekind::Request& request, const std::string& text, bool fx);
     void askHmiStyle(std::uint64_t viewId);   // lot 12 : "Creer un style" (son nom)
     void askHmiDuplicate(std::uint64_t viewId);   // 1.10.2 (chantier D) : "Dupliquer..." (reperes, indices, pose)
     void askHmiDuplicateReplace(std::uint64_t viewId);   // lot 12 : "Dupliquer en remplacant"
