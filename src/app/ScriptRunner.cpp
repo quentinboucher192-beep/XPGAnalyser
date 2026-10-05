@@ -15,6 +15,7 @@
 #include "hmi/HmiCommPanes.hpp"         // lot 15 : les equipements, le reseau du PC
 #include "hmi/HmiEditor.hpp"
 #include "hmi/HmiValuePicker.hpp"        // 1.11.3 : le selecteur de valeur (selecteur-...)
+#include "hmi/HmiActionDialogs.hpp"      // 1.11.9 : les fenetres des actions (fenetre-action)
 #include "hmi/HmiDuplicateDialog.hpp"  // 1.10.2 (chantier D) : "Dupliquer..."
 #include "hmi/HmiMemoryMap.hpp"         // lot 17 : la carte memoire
 #include "hmi/HmiTwinValues.hpp"        // lot 18 : les valeurs simulees
@@ -3416,6 +3417,68 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             send(ui::KeyDown{Key::Return, {}, false});
             send(ui::KeyUp{Key::Return, {}});
         }
+        return Step::Yield;
+    }
+
+    // 1.11.9 : "propriete-ouvrir X" - le bouton « … » au bout de la ligne X (la fenetre de
+    // l'action : l'operation en arbre, le script, la formule de Maths).
+    if (cmd == "propriete-ouvrir") {
+        auto* page = currentPage();
+        if (!page) { fail("aucun onglet"); return Step::Next; }
+        gfx::Rect r{};
+        bool ok = false;
+        walk(*page, [&](ui::Widget& x) {
+            auto* grid = dynamic_cast<ui::PropertyGrid*>(&x);
+            if (!ok && grid && shown(*grid)) ok = grid->openRect(arg(1), r);
+        });
+        if (!ok) {
+            if (retries_ < 3) return Step::Retry;
+            fail("propriete-ouvrir : pas de bouton \xE2\x80\xA6 sur la ligne " + arg(1));
+            return Step::Next;
+        }
+        click(centre(r), MouseButton::Left, 1, {});
+        return Step::Yield;
+    }
+    // 1.11.9 : les fenetres des actions (celle du dessus) -
+    //   fenetre-action chercher "clavier" | choisir "Maths" | valider | annuler   (l'operation en arbre)
+    //   fenetre-action cible "Sortie" | ref "Mesure" "M" "12,5" | formule "(Mesure - Consigne) * 2" | tester   (Maths)
+    //   fenetre-action code "Compteur := 0;\nIHM_JOURNAL('ok');" | noms "Mot"   (le script ; \n : une ligne)
+    if (cmd == "fenetre-action") {
+        auto* top = app_.menus().top();
+        auto* od = dynamic_cast<HmiOperationDialog*>(top);
+        auto* md = dynamic_cast<HmiMathsDialog*>(top);
+        auto* sd = dynamic_cast<HmiActionScriptDialog*>(top);
+        if (!od && !md && !sd) { fail("fenetre-action : aucune fen\xC3\xAAtre d'action ouverte"); return Step::Next; }
+        const std::string what = arg(1);
+        bool ok = true;
+        if (what == "valider" || what == "annuler") {
+            if (od) od->finish(what == "valider");
+            else if (md) { if (what == "valider") md->validate(); else md->finish(false); }
+            else sd->finish(what == "valider");
+        } else if (od && what == "chercher") {
+            od->setSearch(arg(2));
+        } else if (od && what == "choisir") {
+            const auto o = hmi::operationFromLabel(arg(2));
+            ok = o && od->choose(*o);
+        } else if (md && what == "cible") {
+            md->setTarget(arg(2));
+        } else if (md && what == "ref") {
+            const auto i = md->addReference(arg(2), arg(3), arg(4));
+            ok = i < md->referenceCount();
+        } else if (md && what == "formule") {
+            md->setFormula(arg(2));
+        } else if (md && what == "tester") {
+            (void)md->test();
+        } else if (sd && what == "code") {
+            std::string code = arg(2);
+            for (std::size_t at = code.find("\\n"); at != std::string::npos; at = code.find("\\n", at)) code.replace(at, 2, "\n");
+            sd->setCode(code);
+        } else if (sd && what == "noms") {
+            sd->setSearch(arg(2));
+        } else {
+            ok = false;
+        }
+        if (!ok) fail("fenetre-action : " + what + " " + arg(2) + " ?");
         return Step::Yield;
     }
 

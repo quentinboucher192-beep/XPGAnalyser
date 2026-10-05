@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.11.9", "05/10/2026", "livr\xC3\xA9" "e le 05/10"},
     {"1.11.8", "05/10/2026", "livr\xC3\xA9" "e le 05/10"},
     {"1.11.7", "05/10/2026", "livr\xC3\xA9" "e le 05/10"},
     {"1.11.6", "05/10/2026", "livr\xC3\xA9" "e le 05/10"},
@@ -87,6 +88,20 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.11.9 (05/10/2026, les demandes du 05/10 sur les actions) : l'operation en arbre, la fenetre
+        // du script, Maths, le clavier virtuel.
+        note("1.11.9", "\xC3\x89" "diteur IHM", Kind::New,
+         "L'op\xC3\xA9ration d'une action se choisit dans un arbre : les familles (Variables, Navigation, Popups, Scripts, Alarmes...), une recherche (le nom, la famille, ce que l'op\xC3\xA9ration fait), la phrase de l'op\xC3\xA9ration choisie. Un clic sur la case Op\xC3\xA9ration l'ouvre ; Entr\xC3\xA9" "e ou un double-clic la prend.",
+         "proprietes", ""),
+        note("1.11.9", "Scripts", Kind::New,
+         "Ex\xC3\xA9" "cuter un script : le bouton \xE2\x80\xA6 de la ligne Code ST ouvre le script dans sa fen\xC3\xAAtre - l'\xC3\xA9" "diteur des scripts (couleurs, num\xC3\xA9ros, aide \xC3\xA0 la saisie), la ligne du nom sous le curseur, les fautes comme Compiler, et \xC3\xA0 droite les variables et les r\xC3\xA9" "f\xC3\xA9rences (les param\xC3\xA8tres de la vue) ; un double-clic ins\xC3\xA8re le nom.",
+         "scripts", ""),
+        note("1.11.9", "\xC3\x89" "diteur IHM", Kind::New,
+         "L'action Maths : une formule sur des r\xC3\xA9" "f\xC3\xA9rences nomm\xC3\xA9" "es (Mesure := Armoires[0].ana.PT1.mes ; Consigne := Consigne_Four), son r\xC3\xA9sultat dans une variable. Sa fen\xC3\xAAtre : ajouter n r\xC3\xA9" "f\xC3\xA9rences, les fonctions (ABS, SQRT, MIN, MAX, LIMIT...), les fautes, et le mode test (des valeurs \xC3\xA0 la place des r\xC3\xA9" "f\xC3\xA9rences : (12,5 - 10) * 2 = 5).",
+         "proprietes", ""),
+        note("1.11.9", "Simulation", Kind::New,
+         "L'action Clavier virtuel : un champ de saisie par-dessus la vue en marche, et son clavier (num\xC3\xA9rique ou complet) ; ce qu'on tape va dans la variable \xC3\xA0 la validation. Ses r\xC3\xA9glages : le titre (\xC3\xA0 trous), le clavier, les limites min et max, l'unit\xC3\xA9, les caract\xC3\xA8res cach\xC3\xA9s (un code). Une valeur hors limites est refus\xC3\xA9" "e, le champ le dit ; \xC3\x89" "chap annule.",
+         "simulation", ""),
         // 1.11.8 (05/10/2026, les demandes du 05/10 sur Variables IHM) : les membres internes d'une
         // structure liee, Recalculer la place memoire, le depart d'un membre compose.
         note("1.11.8", "\xC3\x89" "diteur IHM", Kind::New,

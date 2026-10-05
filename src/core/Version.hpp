@@ -1,5 +1,5 @@
 // =============================================================================
-//  core/Version.hpp - le nom et la version de l'application (1.11.8)
+//  core/Version.hpp - le nom et la version de l'application (1.11.9)
 // -----------------------------------------------------------------------------
 //  La seule source pour le code. La meme version est ecrite dans
 //  CMakeLists.txt (project VERSION), resources/windows/xpg_analyzer.rc et
@@ -12,5 +12,5 @@
 // =============================================================================
 #pragma once
 
-#define XPG_ANALYZER_VERSION "1.11.8"
+#define XPG_ANALYZER_VERSION "1.11.9"
 #define XPG_ANALYZER_NAME    "XPGAnalyser"
