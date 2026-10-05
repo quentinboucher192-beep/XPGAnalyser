@@ -22,6 +22,7 @@
 #include "HmiPainter.hpp"
 #include "../../hmi/HmiViewPaths.hpp"   // 1.11.6 : sur la vue actuelle
 #include "../../hmi/HmiVarMotion.hpp"   // 1.11.6 : le forcage par type et bornes
+#include "../../hmi/HmiTwin.hpp"        // 1.11.7 : le forcage commun (les cases des esclaves)
 #include "HmiPanels.hpp"
 #include "HmiLot13Painter.hpp"
 #include "../../hmi/HmiCommands.hpp"
@@ -555,6 +556,21 @@ private:
         hmi::motion::State  state;
     };
     std::map<std::string, MotionOn> ihmMotions_, apiMotions_;
+    // 1.11.7 : LE FORCAGE COMMUN. Une variable IHM liee a un esclave simule (Four1.Temperature
+    // lue sur la Balance B, en 43001) est la meme case que la ligne de l'esclave : la forcer,
+    // l'animer, la liberer - depuis Variables IHM ou Esclaves simules - c'est forcer, animer,
+    // liberer la case de l'esclave (Equipment::forcings, behaviors). Les deux onglets disent le
+    // meme etat ; le moteur ignore les ecritures des scripts sur elle (Hooks::boundForced).
+    struct TwinPlace {
+        std::string           equipment;
+        hmi::twin::ValueRow   row;
+    };
+    std::map<std::string, TwinPlace> twinPlaces_;           // cle : le chemin en majuscules
+    std::string                      twinPlacesSig_;
+    void updateTwinPlaces();
+    [[nodiscard]] const TwinPlace* twinPlace(std::string_view path) const;
+    [[nodiscard]] bool             twinForced(const TwinPlace&) const;
+    [[nodiscard]] const hmi::Behavior* twinBehavior(const TwinPlace&) const;
     // 1.10.1 (C1) : L'HORLOGE DU VOLET. Deux sources la font avancer : le dessin
     // (onPaint, ctx.time) et les appels (refreshAt : l'onglet cache, les tests).
     // Chacune a son decalage, nul tant qu'elle est sur la meme base que le volet :

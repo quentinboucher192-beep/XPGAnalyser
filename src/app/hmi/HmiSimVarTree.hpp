@@ -100,6 +100,8 @@ public:
     bool openMotionMenu(const std::string& path, gfx::Point at);
     bool openMotionEditor(const std::string& path);
     [[nodiscard]] std::string motionText(const std::string& path) const;
+    // Forcee (ou animee) - ce que montre la case Forcer ; 1.11.7 : aussi dans son esclave simule.
+    [[nodiscard]] bool isForced(const std::string& path) const { return hooks_.forced && hooks_.forced(path); }
     [[nodiscard]] ui::PopupMenu* motionMenu() noexcept { return motionMenu_; }
     // Le champ de la valeur (un double-clic) : ouvert sur cette variable.
     bool openValueEditor(const std::string& path);

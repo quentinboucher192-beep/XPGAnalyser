@@ -286,6 +286,10 @@ private:
     std::size_t                        sig_{0};
 };
 
+// 1.11.7 : le mouvement d'une variable IHM <-> le comportement de la case de son esclave (plus bas).
+hmi::Behavior       behaviorOf(const hmi::motion::Motion& m, const hmi::twin::ValueRow& r);
+hmi::motion::Motion motionOf(const hmi::Behavior& b, const hmi::twin::ValueRow& r);
+
 class TextRows final : public ui::ITableModel {
 public:
     using Style = std::function<ui::CellStyle(ui::RowIndex, std::size_t)>;
@@ -2329,7 +2333,13 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
             if (const auto* v = runtime_.variable(path)) return *v;
             return std::nullopt;
         };
-        h.forced = [this](const std::string& path) { return runtime_.variableForced(path); };
+        // 1.11.7 : le forcage commun - une variable liee a un esclave simule se force dans l'esclave.
+        h.forced = [this](const std::string& path) {
+            if (runtime_.variableForced(path)) return true;
+            updateTwinPlaces();
+            const auto* tp = twinPlace(path);
+            return tp && (twinForced(*tp) || twinBehavior(*tp) != nullptr);
+        };
         h.force = [this](const std::string& path, const std::string& text, std::string* why) {
             const auto* cur = runtime_.variable(path);
             if (!cur) {
@@ -2341,20 +2351,48 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
                 if (why) *why = "\xC2\xAB " + text + " \xC2\xBB ne se lit pas comme une valeur de " + path;
                 return false;
             }
+            updateTwinPlaces();
+            if (const auto* tp = twinPlace(path); tp && twinsCtl_) {
+                // La case de l'esclave, en brut (sa mise a l'echelle) : les deux onglets la voient forcee.
+                const double eng = v->type() == sim::Type::Bool ? (v->isTruthy() ? 1.0 : 0.0) : v->asReal();
+                std::string raw = hmi::twin::numberText(tp->row.raw(eng));
+                std::replace(raw.begin(), raw.end(), ',', '.');
+                const std::string equipment = tp->equipment, address = tp->row.address;
+                return twinsCtl_->setForced(equipment, address, raw, why);
+            }
             return runtime_.forceVariable(path, *v, why);
         };
-        // 1.11.6 : liberer arrete aussi son mouvement.
+        // 1.11.6 : liberer arrete aussi son mouvement ; 1.11.7 : dans l'esclave aussi.
         h.unforce = [this](const std::string& path) {
             ihmMotions_.erase(path);
-            return runtime_.unforceVariable(path);
+            bool done = runtime_.unforceVariable(path);
+            updateTwinPlaces();
+            if (const auto* tp = twinPlace(path); tp && twinsCtl_) {
+                const std::string equipment = tp->equipment, address = tp->row.address;
+                const bool forced = twinForced(*tp), animated = twinBehavior(*tp) != nullptr;
+                if (forced) done = twinsCtl_->setForced(equipment, address, {}) || done;
+                if (animated) done = twinsCtl_->setBehavior(equipment, address, std::nullopt) || done;
+            }
+            return done;
         };
         h.nodeType = [this](const std::string& path) { return hmi::types::typeOfPath(doc_->project, path); };
         // 1.11.6 : le forcage par type et bornes.
         h.motion = [this](const std::string& path) -> std::optional<hmi::motion::Motion> {
+            // 1.11.7 : liee a un esclave simule, son mouvement est celui de la case de l'esclave.
+            updateTwinPlaces();
+            if (const auto* tp = twinPlace(path))
+                if (const auto* b = twinBehavior(*tp)) return motionOf(*b, tp->row);
             const auto it = ihmMotions_.find(path);
             return it == ihmMotions_.end() ? std::nullopt : std::optional<hmi::motion::Motion>(it->second.motion);
         };
         h.setMotion = [this](const std::string& path, const std::optional<hmi::motion::Motion>& m, std::string* why) {
+            updateTwinPlaces();
+            if (const auto* tp = twinPlace(path); tp && twinsCtl_) {
+                const std::string equipment = tp->equipment, address = tp->row.address;
+                const auto row = tp->row;
+                ihmMotions_.erase(path);
+                return twinsCtl_->setBehavior(equipment, address, m ? std::optional<hmi::Behavior>(behaviorOf(*m, row)) : std::nullopt, why);
+            }
             if (!m) {
                 ihmMotions_.erase(path);
                 (void)runtime_.unforceVariable(path);
@@ -2573,6 +2611,13 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
     hooks.notifyStats = host_.notifyStats;
     hooks.reportWritten = host_.reportWritten;   // lot 14 : les rapports a envoyer
     hooks.equipmentLink = host_.equipmentLink;   // lot 15 : les equipements du reseau
+    // 1.11.7 : le forcage commun - une variable liee forcee (ou animee) dans son esclave : le
+    // forcage passe avant les scripts.
+    hooks.boundForced = [this](const std::string& key) {
+        updateTwinPlaces();
+        const auto* tp = twinPlace(key);
+        return tp && (twinForced(*tp) || twinBehavior(*tp) != nullptr);
+    };
     hooks.equipmentStatus = host_.equipmentStatus;
     hooks.simSlaves = host_.simSlaves;           // 1.9 : les esclaves simules (la page Simulation)
     hooks.simSlaveCommand = host_.simSlaveCommand;
@@ -3606,6 +3651,103 @@ sim::Value motionValue(double v, const sim::Value& like) {
 }
 } // namespace
 
+// ---------------------------------------------------------- 1.11.7 : le forcage commun ---
+namespace {
+std::string upperKey(std::string_view s) {
+    std::string out(s);
+    for (auto& c : out) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    return out;
+}
+// La pente brut / valeur de la variable (sa mise a l'echelle ; sans : 1).
+double rawPerEng(const hmi::twin::ValueRow& r) {
+    if (!r.scaled || r.engMax == r.engMin) return 1.0;
+    return (r.rawMax - r.rawMin) / (r.engMax - r.engMin);
+}
+std::string stepsConverted(const std::string& steps, const std::function<double(double)>& f) {
+    std::string out;
+    std::size_t start = 0;
+    while (start <= steps.size()) {
+        const auto semi = steps.find(';', start);
+        std::string piece = steps.substr(start, semi == std::string::npos ? std::string::npos : semi - start);
+        std::replace(piece.begin(), piece.end(), ',', '.');
+        char* end = nullptr;
+        const double d = std::strtod(piece.c_str(), &end);
+        if (end && end != piece.c_str()) out += (out.empty() ? "" : "; ") + hmi::twin::numberText(f(d));
+        if (semi == std::string::npos) break;
+        start = semi + 1;
+    }
+    return out;
+}
+// Un mouvement de l'onglet Variables IHM -> le comportement de l'esclave (en brut), et retour.
+hmi::Behavior behaviorOf(const hmi::motion::Motion& m, const hmi::twin::ValueRow& r) {
+    hmi::Behavior b;
+    b.kind = m.kind;
+    b.period = m.period;
+    b.delay = m.delay;
+    const auto raw = [&](double e) { return r.raw(e); };
+    switch (m.kind) {
+        case hmi::BehaviorKind::Constant: b.a = b.b = raw(m.a); break;
+        case hmi::BehaviorKind::Counter: b.a = raw(m.a); b.b = m.b * rawPerEng(r); break;
+        case hmi::BehaviorKind::Blink: b.a = 0; b.b = 1; break;
+        case hmi::BehaviorKind::Steps: b.source = stepsConverted(m.steps, raw); break;
+        default: b.a = raw(m.a); b.b = raw(m.b); break;
+    }
+    return b;
+}
+hmi::motion::Motion motionOf(const hmi::Behavior& b, const hmi::twin::ValueRow& r) {
+    hmi::motion::Motion m;
+    m.kind = b.kind;
+    m.period = b.period;
+    m.delay = b.delay;
+    const auto eng = [&](double x) { return r.eng(x); };
+    switch (b.kind) {
+        case hmi::BehaviorKind::Counter: m.a = eng(b.a); m.b = b.b / rawPerEng(r); break;
+        case hmi::BehaviorKind::Steps: m.steps = stepsConverted(b.source, eng); break;
+        default: m.a = eng(b.a); m.b = eng(b.b); break;
+    }
+    return m;
+}
+} // namespace
+
+void HmiSimulationPane::updateTwinPlaces() {
+    const auto& p = doc_->project;
+    std::string sig;
+    for (const auto& v : p.programs.variables)
+        if (!v.equipment.empty()) sig += v.name + '|' + v.type + '|' + v.equipment + '|' + v.address + ';';
+    for (const auto& e : p.equipments) sig += e.name + (e.hasTwin() ? "+" : "-") + ';';
+    for (const auto& t : p.programs.types) sig += t.name + '#' + std::to_string(t.members.size()) + ';';
+    if (sig == twinPlacesSig_) return;
+    twinPlacesSig_ = std::move(sig);
+    twinPlaces_.clear();
+    for (const auto& e : p.equipments) {
+        if (!e.hasTwin()) continue;
+        for (auto& r : hmi::twin::valueRows(p, e)) {
+            if (r.variable.empty()) continue;
+            std::string key = upperKey(r.variable);                             // avant le deplacement (la droite d'un = passe d'abord)
+            twinPlaces_[std::move(key)] = TwinPlace{e.name, std::move(r)};
+        }
+    }
+}
+
+const HmiSimulationPane::TwinPlace* HmiSimulationPane::twinPlace(std::string_view path) const {
+    const auto it = twinPlaces_.find(upperKey(path));
+    return it == twinPlaces_.end() ? nullptr : &it->second;
+}
+
+bool HmiSimulationPane::twinForced(const TwinPlace& tp) const {
+    const auto* e = doc_->project.equipmentByName(tp.equipment);
+    if (!e) return false;
+    return std::any_of(e->forcings.begin(), e->forcings.end(), [&](const hmi::Forcing& f) { return hmi::twin::sameCell(f.address, tp.row.address); });
+}
+
+const hmi::Behavior* HmiSimulationPane::twinBehavior(const TwinPlace& tp) const {
+    const auto* e = doc_->project.equipmentByName(tp.equipment);
+    if (!e) return nullptr;
+    for (const auto& b : e->behaviors)
+        if (b.enabled && hmi::twin::sameCell(b.address, tp.row.address)) return &b;
+    return nullptr;
+}
+
 void HmiSimulationPane::applyMotions() {
     if (ihmMotions_.empty() && apiMotions_.empty()) return;
     const double t = std::max(0.0, now_ - runtime_.startedAt());
@@ -3668,6 +3810,7 @@ void HmiSimulationPane::updateViewFilter() {
 
 void HmiSimulationPane::updateTables() {
     if (tabs_) hmiparams::updatePopupsTab(*tabs_, runtime_, doc_->project);   // 1.9 : l'onglet Popups
+    updateTwinPlaces();                                                         // 1.11.7 : le forcage commun
     updateViewFilter();                                                         // 1.11.6
     applyMotions();                                                             // 1.11.6 : le forcage par type et bornes
     // Lot 13 : les performances, deux fois par seconde (de marche).

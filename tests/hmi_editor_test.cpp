@@ -22393,6 +22393,123 @@ void forcageMouvement1116(const std::string& xpg) {
 }
 
 // =============================================================================
+//  1.11.7 (defaut de la 1.11.6 : « les forcages, si jamais les variables sont communes
+//  dans les 3 onglets [...] il faut que ce soit un forcage commun ; et il faut passer
+//  prioritaire par rapport aux scripts ») : une variable IHM liee a un esclave simule
+//  est la meme case que la ligne de l'esclave.
+// =============================================================================
+void forcageCommun1117() {
+    std::printf("== 1.11.7 : le for\xC3\xA7" "age commun (Variables IHM et Esclaves simul\xC3\xA9s), prioritaire sur les scripts ==\n");
+    auto doc = std::make_shared<Document>();
+    core::CommandStack stack;
+    auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+    {
+        HmiType four;
+        four.id = doc->project.allocate();
+        four.name = "T_Four";
+        four.members = {{"Temperature", "REAL", "", ""}, {"Marche", "BOOL", "", ""}};
+        doc->project.programs.types.push_back(four);
+        View v = makeView(doc->project, "Accueil");
+        doc->project.config.startView = v.id;
+        doc->project.views.push_back(v);
+    }
+    app::CommHost comm;
+    app::EquipmentHost equip;
+    app::HmiCommPane cp("commun1117.comm", doc, apply);
+    app::HmiCommPane::Hosts hosts;
+    hosts.comm = [&] { return &comm; };
+    hosts.equipments = [&] { return &equip; };
+    cp.setHosts(hosts);
+    cp.setBounds({0, 0, 1700, 950});
+    cp.layout();
+    check(cp.addEquipment("Centrale", hmi::EquipmentType::ModbusTcp, "192.168.1.30", 502) == "Centrale" && cp.createTwin("Centrale"),
+          "une centrale et son esclave simul\xC3\xA9");
+    {
+        Variable f;
+        f.id = doc->project.allocate();
+        f.name = "Four1";
+        f.type = "T_Four";
+        f.equipment = "Centrale";
+        f.address = "43001";
+        doc->project.programs.variables.push_back(f);
+        Variable local;
+        local.id = doc->project.allocate();
+        local.name = "Compteur";
+        local.type = "INT";
+        doc->project.programs.variables.push_back(local);
+    }
+    app::HmiSimulationHost host;
+    host.equipments = [&] { return &equip; };
+    host.apply = apply;
+    app::HmiSimulationPane pane("commun1117", doc, host);
+    pane.setBounds({0, 0, 1600, 900});
+    Recorder rec;
+    const auto theme = ui::Theme::dark();
+    auto paintAt = [&](double t) {
+        rec.clear();
+        pane.layout();
+        pane.render(ui::PaintContext{rec, theme, {0, 0, 1600, 900}, t, nullptr});
+    };
+    paintAt(0.0);
+    pane.tabs().setCurrentIndex(app::HmiSimulationPane::TabVariables);
+    paintAt(0.1);
+    auto& ihm = pane.ihmVariables();
+    const auto* e = doc->project.equipmentByName("Centrale");
+    const auto forcings = [&] { e = doc->project.equipmentByName("Centrale"); return e ? e->forcings.size() : 0; };
+    const auto behaviors = [&] {
+        e = doc->project.equipmentByName("Centrale");
+        std::size_t n = 0;
+        if (e) for (const auto& b : e->behaviors) n += b.enabled ? 1 : 0;
+        return n;
+    };
+    // 1. Forcer dans Variables IHM : la case de l'esclave est forcee (la ligne de l'esclave le dit).
+    check(ihm.forcePath("Four1.Temperature", "80") && forcings() == 1, "forcer Four1.Temperature (Variables IHM) : la case 43001 de l'esclave est forc\xC3\xA9" "e");
+    check(e && !e->forcings.empty() && hmi::twin::sameCell(e->forcings[0].address, "43001") && std::fabs(e->forcings[0].value - 80.0) < 1e-6,
+          "\xC3\xA0 80, dans l'esclave");
+    {
+        auto& ctl = pane.twinsController();
+        ctl.refresh();
+        bool rowForced = false;
+        for (const auto& l : pane.twins().lines())
+            if (l.kind == app::HmiTwinValues::Line::Kind::Row && l.title == "Four1.Temperature") rowForced = l.forced;
+        check(rowForced, "l'onglet Esclaves simul\xC3\xA9s montre la ligne Four1.Temperature forc\xC3\xA9" "e");
+    }
+    // 2. Liberer dans Variables IHM : la case de l'esclave est liberee.
+    check(ihm.unforcePath("Four1.Temperature") && forcings() == 0, "lib\xC3\xA9rer (Variables IHM) : l'esclave aussi");
+    // 3. Forcer dans l'esclave : Variables IHM la voit forcee ; la liberer de la, l'esclave aussi.
+    std::string marche;
+    pane.twinsController().refresh();
+    for (const auto& l : pane.twins().lines())
+        if (l.kind == app::HmiTwinValues::Line::Kind::Row && l.title == "Four1.Marche") marche = l.key;
+    check(!marche.empty() && pane.twinsController().setForced("Centrale", marche, "1") && forcings() == 1,
+          "forcer la case de Four1.Marche (" + marche + ") dans l'onglet de l'esclave");
+    check(ihm.isForced("Four1.Marche") && !ihm.isForced("Four1.Temperature"), "Variables IHM la montre forc\xC3\xA9" "e (et elle seule)");
+    check(ihm.unforcePath("Four1.Marche") && forcings() == 0, "lib\xC3\xA9r\xC3\xA9" "e depuis Variables IHM : la case de l'esclave aussi");
+    // 4. Le mouvement : un sinus pose dans Variables IHM est celui de l'esclave (en brut), et revient en clair.
+    check(ihm.setMotionKind("Four1.Temperature", "sinus") && behaviors() == 1, "un sinus sur Four1.Temperature : le mouvement de l'esclave");
+    check(ihm.motionText("Four1.Temperature").find("sinus") == 0, "Variables IHM le dit : " + ihm.motionText("Four1.Temperature"));
+    {
+        auto& ctl = pane.twinsController();
+        ctl.refresh();
+        std::string kind;
+        for (const auto& l : pane.twins().lines())
+            if (l.kind == app::HmiTwinValues::Line::Kind::Row && l.title == "Four1.Temperature") kind = l.kindLabel;
+        check(kind == "sinus", "l'onglet Esclaves simul\xC3\xA9s aussi (" + kind + ")");
+    }
+    check(ihm.unforcePath("Four1.Temperature") && behaviors() == 0, "lib\xC3\xA9rer : le mouvement de l'esclave s'arr\xC3\xAAte");
+    // 5. Prioritaire sur les scripts : une ecriture sur une variable forcee dans son esclave est ignoree, sans erreur.
+    check(pane.twinsController().setForced("Centrale", "43001", "50"), "Four1.Temperature forc\xC3\xA9" "e dans l'esclave");
+    paintAt(0.3);
+    check(pane.runtime().environment().write("Four1.Temperature", sim::Value::real(12.0)),
+          "un script qui l'\xC3\xA9" "crit : ignor\xC3\xA9, sans erreur (le for\xC3\xA7" "age passe avant)");
+    // Une variable locale forcee : pareil (1.11.5).
+    check(ihm.forcePath("Compteur", "7") && pane.runtime().environment().write("Compteur", sim::Value::integer(sim::Type::Int, 99))
+              && ihm.valueText("Compteur") == "7",
+          "Compteur forc\xC3\xA9" "e \xC3\xA0 7 : un script qui \xC3\xA9" "crit 99 ne la change pas");
+    (void)ihm.unforcePath("Compteur");
+}
+
+// =============================================================================
 //  1.11.5 (« esclaves simules : treeview profondeur infinie sur les structures et
 //  variables, une recherche, garder le forcage, editer les bornes plus facilement -
 //  aussi dans IHM > Equipements > Valeurs simulees ») : les lignes d'un esclave se
@@ -25484,6 +25601,7 @@ int main(int argc, char** argv) {
     barresDefilement1114();                 // 1.11.4 : les barres de defilement qu'on tire
     esclavesArbre1115();                    // 1.11.5 : les esclaves simules en arbre, la recherche, les bornes au clavier
     surLaVueClicDroit1116();                // 1.11.6 : sur la vue actuelle, le clic droit
+    forcageCommun1117();                    // 1.11.7 : le forcage commun, prioritaire sur les scripts
     if (argc > 1) simulationVariables1115(argv[1]);   // 1.11.5 : les onglets Variables IHM et Variables API
     if (argc > 1) forcageMouvement1116(argv[1]);   // 1.11.6 : le forcage par type et bornes
     scriptsExportImport1113();              // 1.11.3 : exporter / importer les scripts d'une vue et les operateurs (.xpgst)
