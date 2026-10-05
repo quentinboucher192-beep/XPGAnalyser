@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.11.6", "05/10/2026", "livr\xC3\xA9" "e le 05/10"},
     {"1.11.5", "05/10/2026", "livr\xC3\xA9" "e le 05/10"},
     {"1.11.4", "05/10/2026", "livr\xC3\xA9" "e le 05/10"},
     {"1.11.3", "05/10/2026", "livr\xC3\xA9" "e le 05/10"},
@@ -84,6 +85,20 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.11.6 (05/10/2026, les demandes du 05/10 apres la 1.11.5) : sur la vue actuelle, le clic droit,
+        // l'onglet Expressions en arbre, le forcage par type et bornes.
+        note("1.11.6", "Simulation", Kind::New,
+         "Esclaves simul\xC3\xA9s, Variables IHM, Variables API : la case \xC2\xAB Sur la vue actuelle \xC2\xBB ne garde que les variables que lit la vue montr\xC3\xA9" "e et ses popups ouvertes - ses objets, ses textes, ses actions, ses scripts, et ceux de ses symboles \xC3\xA0 toute profondeur (un param\xC3\xA8tre de symbole se lit dans sa variable : X := Four1.Vannes[2].Position). Un index calcul\xC3\xA9 (V[i].Pos) couvre toutes les cases.",
+         "simulation", ""),
+        note("1.11.6", "Simulation", Kind::New,
+         "Le clic droit dans Esclaves simul\xC3\xA9s, Variables IHM et Variables API : Tout d\xC3\xA9plier, D\xC3\xA9plier, Replier, Tout replier, Forcer, D\xC3\xA9" "forcer. Sur un n\xC5\x93ud, Forcer tient toutes ses valeurs \xC3\xA0 leur valeur du moment (pour un esclave : une seule commande, un Ctrl+Z).",
+         "simulation", ""),
+        note("1.11.6", "Simulation", Kind::New,
+         "Le for\xC3\xA7" "age par type et bornes dans Variables IHM et Variables API, comme les esclaves simul\xC3\xA9s : la colonne Mouvement - un clic choisit le type (constante, sinus, rampe, compteur, clignote, al\xC3\xA9" "atoire, \xC3\xA9tapes), un double-clic tape les bornes (20 ; 80 ; 10 : min, max, p\xC3\xA9riode). La variable est tenue \xC3\xA0 chaque cycle ; d\xC3\xA9" "cocher Forcer arr\xC3\xAAte le mouvement.",
+         "simulation", ""),
+        note("1.11.6", "Simulation", Kind::Changed,
+         "L'onglet Expressions de la simulation est un arbre : chaque objet, puis ses propri\xC3\xA9t\xC3\xA9s ; une instance de symbole range les objets de son symbole sous elle (Aff_1 \xE2\x80\xBA Texte \xE2\x80\xBA text). Un n\xC5\x93ud dit combien d'expressions il porte et ses erreurs ; une recherche en haut, Tout d\xC3\xA9plier et Tout replier au clic droit.",
+         "simulation", ""),
         // 1.11.5 (05/10/2026, deuxieme des quatre livraisons du 05/10) : les esclaves simules en arbre,
         // les onglets Variables IHM et Variables API en arbre, la recherche, le forcage, les bornes au clavier.
         note("1.11.5", "Simulation", Kind::New,

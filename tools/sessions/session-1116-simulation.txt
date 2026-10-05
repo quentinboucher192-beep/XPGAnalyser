@@ -1,0 +1,83 @@
+# =============================================================================
+#  Session 1116 : SUR LA VUE ACTUELLE, LE CLIC DROIT, L'ONGLET EXPRESSIONS EN
+#  ARBRE, LE FORCAGE PAR TYPE ET BORNES (Variables IHM et Variables API).
+#  Le projet : la copie d'Armoire_Gaz de la session 1115 (preparer-projet-1113,
+#  -1114, -1115). Vue_STEST : STEST_1 (Y = gCoef * 100), STEST_2, Groupe_geo ;
+#  Vue_Equipements : les variables lues sur la Centrale PM5560.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+arbre "Simulation/IHM"
+attendre 12
+sim-utilisateur "admin" "admin2026"
+attendre 3
+sim-vue "Vue_STEST"
+attendre 8
+
+# ---- 1. L'onglet Expressions en arbre : STEST_1 range les objets de son symbole ----
+sous-onglet "Expressions"
+attendre 3
+capture 1116_01_expressions_arbre.png
+
+# ---- 2. Variables IHM : le clic droit sur un noeud ---------------------------------
+sous-onglet "Variables IHM"
+attendre 3
+simvar ihm chercher "Four2"
+attendre 3
+simvar ihm menu "Four2"
+attendre 2
+capture 1116_02_clic_droit_variables_ihm.png
+touche Escape
+attendre 1
+simvar ihm chercher ""
+attendre 2
+
+# ---- 3. Sur la vue actuelle : ce que lit Vue_STEST (ses symboles compris) ----------
+simvar ihm vue on
+attendre 3
+capture 1116_03_sur_la_vue_actuelle_ihm.png
+
+# ---- 4. Le forcage par type et bornes : gCoef en sinus (STEST_1 monte et descend) --
+simvar ihm cellule-mouvement "gCoef"
+attendre 2
+capture 1116_04_mouvement_types.png
+touche Escape
+attendre 1
+simvar ihm mouvement "gCoef" "sinus"
+attendre 1
+simvar ihm bornes "gCoef"
+attendre 1
+texte "0,5 ; 3 ; 8"
+attendre 2
+capture 1116_05_mouvement_bornes.png
+touche entree
+attendre 5
+capture 1116_06_mouvement_en_marche.png
+
+# ---- 5. Esclaves simules : sur la vue actuelle (Vue_Equipements), le clic droit ----
+sim-vue "Vue_Equipements"
+attendre 8
+sous-onglet "Esclaves simulés"
+attendre 3
+valeurs-vue on
+attendre 3
+capture 1116_07_esclaves_sur_la_vue.png
+valeurs-menu "Centrale PM5560"
+attendre 2
+capture 1116_08_clic_droit_esclaves.png
+touche Escape
+attendre 1
+
+# ---- 6. Variables API : une rampe sur une mesure de l'automate simule -------------
+sous-onglet "Variables API"
+attendre 3
+simvar api chercher "Armoires[0].ana.PT1.mes"
+attendre 3
+simvar api mouvement "Armoires[0].ana.PT1.mes" "rampe"
+attendre 4
+capture 1116_09_api_rampe.png
+quitter

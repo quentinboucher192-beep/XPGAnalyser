@@ -148,6 +148,8 @@ public:
     void setAllOpen(bool open);
     // Les lignes de valeurs sous une ligne (un esclave, un noeud) ; une valeur : elle-meme.
     [[nodiscard]] std::vector<std::size_t> rowsUnder(std::size_t line) const;
+    // Ou est dessinee une ligne (un esclave, un noeud...) - pour les scripts ; faux : pas montree.
+    [[nodiscard]] bool lineRectOf(std::size_t line, gfx::Rect& out) const { return lineRect(line, out); }
     // 1.11.6 : « Sur la vue actuelle » (l'onglet de la simulation) : la case de la barre.
     [[nodiscard]] ui::Checkbox* viewBox() noexcept { return viewBox_; }
 

@@ -3651,7 +3651,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     }
     // 1.11.5 : l'arbre des valeurs simulees - valeurs-chercher "texte" (la recherche),
     // valeurs-noeud "equipement|Four1.Zones" ouvrir|fermer.
-    if (cmd == "valeurs-chercher" || cmd == "valeurs-noeud") {
+    if (cmd == "valeurs-chercher" || cmd == "valeurs-noeud" || cmd == "valeurs-vue" || cmd == "valeurs-menu") {
         auto* page = currentPage();
         HmiTwinValues* tv = nullptr;
         if (page)
@@ -3667,6 +3667,27 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             tv->setNodeOpen(arg(1), arg(2) != "fermer");
             return Step::Next;
         }
+        // 1.11.6 : valeurs-vue on|off (sur la vue actuelle) ; valeurs-menu "titre" (le clic droit sur la ligne :
+        // un esclave, un noeud Four1, une variable).
+        if (cmd == "valeurs-vue") {
+            if (auto* box = tv->viewBox()) box->setState(arg(1) == "off" || arg(1) == "non" ? ui::Checkbox::State::Unchecked : ui::Checkbox::State::Checked);
+            else fail("valeurs-vue : pas de case ici (l'onglet Esclaves simul\xC3\xA9s de la simulation)");
+            return Step::Yield;
+        }
+        if (cmd == "valeurs-menu") {
+            const auto& ls = tv->lines();
+            for (std::size_t i = 0; i < ls.size(); ++i) {
+                const bool group = ls[i].kind == HmiTwinValues::Line::Kind::Group;
+                if ((group ? ls[i].equipment : ls[i].title) != arg(1)) continue;
+                gfx::Rect r{};
+                if (!tv->lineRectOf(i, r)) break;
+                click({r.x + 80.f, r.y + r.h * 0.5f}, MouseButton::Right, 1, {});
+                return Step::Yield;
+            }
+            if (retries_ < 4) return Step::Retry;
+            fail("valeurs-menu : ligne " + arg(1) + " introuvable");
+            return Step::Next;
+        }
         auto* box = tv->searchBox();
         if (!box || !shown(*box)) { fail("valeurs-chercher : pas de recherche ici"); return Step::Next; }
         typeInto(centre(box->bounds()), arg(1));
@@ -3678,6 +3699,23 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     //   simvar ihm|api forcer "chemin" ["valeur"]   (sans valeur : la case, a la valeur du moment)
     //   simvar ihm|api liberer "chemin"
     //   simvar ihm|api editer "chemin"              (le champ de la valeur, comme un double-clic)
+    // 1.11.6 : l'onglet Expressions en arbre - expressions-chercher "texte" ; expressions-deplier on|off.
+    if (cmd == "expressions-chercher" || cmd == "expressions-deplier") {
+        auto* pane = dynamic_cast<HmiSimulationPane*>(currentPage());
+        if (!pane) { fail("l'onglet courant n'est pas la simulation IHM (" + cmd + ")"); return Step::Next; }
+        if (cmd == "expressions-deplier") {
+            pane->expandExpressions(arg(1) != "off" && arg(1) != "non");
+            return Step::Yield;
+        }
+        auto* box = pane->expressionsSearch();
+        if (!box || !shown(*box)) {
+            if (retries_ < 4) return Step::Retry;
+            fail("expressions-chercher : l'onglet Expressions n'est pas montr\xC3\xA9");
+            return Step::Next;
+        }
+        typeInto(centre(box->bounds()), arg(1));
+        return Step::Yield;
+    }
     if (cmd == "simvar") {
         auto* pane = dynamic_cast<HmiSimulationPane*>(currentPage());
         if (!pane) { fail("l'onglet courant n'est pas la simulation IHM (" + cmd + ")"); return Step::Next; }
@@ -3717,7 +3755,37 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             if (!tree.openValueEditor(arg(3))) fail("simvar : pas de champ pour " + arg(3));
             return Step::Next;
         }
-        fail("simvar : " + what + " ? (chercher, noeud, forcer, liberer, editer)");
+        // 1.11.6 : simvar ihm|api vue on|off ; menu "chemin" (le clic droit) ; mouvement "chemin" "sinus"|"aucun" ;
+        // bornes "chemin" (le champ des bornes) ; cellule-mouvement "chemin" (le menu des types).
+        if (what == "vue") {
+            tree.setOnlyView(arg(3) != "off" && arg(3) != "non");
+            return Step::Yield;
+        }
+        if (what == "menu" || what == "cellule-mouvement") {
+            gfx::Rect r{};
+            if (!tree.rowRect(arg(3), r)) {
+                (void)tree.reveal(arg(3));
+                if (retries_ < 4) return Step::Retry;
+                fail("simvar : la ligne " + arg(3) + " n'est pas montr\xC3\xA9" "e");
+                return Step::Next;
+            }
+            const gfx::Point at{r.x + (what == "menu" ? 60.f : r.w * 0.72f), r.y + r.h * 0.5f};
+            if (what == "menu") {
+                click(at, MouseButton::Right, 1, {});
+                return Step::Yield;
+            }
+            if (!tree.openMotionMenu(arg(3), at)) fail("simvar : pas de menu de mouvement pour " + arg(3));
+            return Step::Yield;
+        }
+        if (what == "mouvement") {
+            if (!tree.setMotionKind(arg(3), arg(4))) fail("simvar : le mouvement " + arg(4) + " ne se pose pas sur " + arg(3));
+            return Step::Yield;
+        }
+        if (what == "bornes") {
+            if (!tree.openMotionEditor(arg(3))) fail("simvar : pas de bornes pour " + arg(3));
+            return Step::Yield;
+        }
+        fail("simvar : " + what + " ? (chercher, noeud, forcer, liberer, editer, vue, menu, mouvement, bornes, cellule-mouvement)");
         return Step::Next;
     }
     // Lot 17 : une case de la carte memoire - carte-case 4x 52 [double|survol].
