@@ -22232,6 +22232,12 @@ void valuePicker1113() {
             if (it.shortcut.find("\xE2\x9C\x93 ici") == 0) here = it.label;
         }
     check(kindsShown == 8 && openId == 200, "les huit carr\xC3\xA9s, leur sens, et Ouvrir le s\xC3\xA9lecteur");
+    // Un menu sans bornes ne se dessine pas : ouvert, il ne se voyait pas (la capture 02).
+    check(menu && !menu->bounds().empty() && !menu->bounds().intersect(menu->popupRect()).empty(),
+          "la liste des carr\xC3\xA9s a sa place : elle se dessine");
+    std::string infoLine = menu && menu->items().size() > 1 ? menu->items()[1].label : std::string{};
+    check(infoLine.rfind("Variable IHM : UINTS", 0) == 0 && infoLine.find("Variable IHM", 1) == std::string::npos,
+          "la ligne de la case dit une fois Variable IHM (" + infoLine + ")");
     same_text(here, "Variable IHM", "le carr\xC3\xA9 de la case est marqu\xC3\xA9 ici (UINTS : I)");
     if (menu) menu->itemChosen->emit(104);   // I : Variable IHM
     check(asked.size() == 1 && asked[0].source == S::Hmi && asked[0].expected == "ARRAY[0..9] OF UINT" && asked[0].text == "UINTS"

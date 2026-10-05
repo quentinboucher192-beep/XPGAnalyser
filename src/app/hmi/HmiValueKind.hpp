@@ -98,6 +98,10 @@ bool pathInfo(const Env&, std::string_view path, Style& zone, std::string& type,
 [[nodiscard]] std::string expectedLabel(std::string_view expected);
 // Une phrase sans balise : le premier diagnostic (la note rouge sous la case).
 [[nodiscard]] std::string firstProblem(const Result&);
+// La ligne qui dit ce que vaut la case (le selecteur, la liste des carres) : `info`
+// seul quand il se nomme deja (« Variable IHM : UINTS... »), « Erreur · ... » pour
+// une erreur, le nom du carre quand il n'y a rien d'autre.
+[[nodiscard]] std::string summary(const Result&);
 
 // 1.11.3 : ce que l'inspecteur demande a l'hote quand on choisit dans la liste des carres
 // (HmiEditor::setValueAsker) : la case, ce qu'elle vaut, le type attendu, la source.

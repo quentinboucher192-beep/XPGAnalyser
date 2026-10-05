@@ -660,6 +660,14 @@ Result classify(const Env& env, std::string_view text, bool fx, std::string_view
     return r;
 }
 
+std::string summary(const Result& r) {
+    if (r.empty) return "Vide : la valeur par d\xC3\xA9" "faut du champ";
+    const std::string name(info(r.style).name);
+    if (r.info.empty()) return name;
+    if (r.style == Style::Error) return name + " \xC2\xB7 " + r.info;
+    return r.info;
+}
+
 ui::PropertyGrid::Legend legendOf(const Result& r) {
     ui::PropertyGrid::Legend l = legendOf(r.style);
     if (r.empty) {
@@ -669,7 +677,7 @@ ui::PropertyGrid::Legend legendOf(const Result& r) {
         return l;
     }
     if (r.style == Style::Formula || r.style == Style::Markers) l.dots = r.sources;
-    l.tip = std::string(info(r.style).name) + (r.info.empty() ? std::string{} : "\n" + r.info);
+    l.tip = summary(r);
     if (!r.diags.empty()) l.tip += "\n" + r.diags.front().message;
     return l;
 }

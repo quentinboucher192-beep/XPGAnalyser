@@ -634,8 +634,7 @@ bool HmiEditor::openLegendMenu(const std::string& category, const std::string& p
     legendUnknown_ = res.unknown;
     std::vector<ui::PopupMenu::Item> items;
     items.push_back({"Le carr\xC3\xA9 dit d'o\xC3\xB9 vient la valeur", {}, {}, ui::Icon::None, true, false, -1, true});
-    const std::string now = res.empty ? std::string("Vide : la valeur par d\xC3\xA9" "faut du champ")
-                                      : std::string(valuekind::info(res.style).name) + (res.info.empty() ? std::string{} : " \xC2\xB7 " + res.info);
+    const std::string now = valuekind::summary(res);
     items.push_back({now.size() > 90 ? now.substr(0, 87) + "\xE2\x80\xA6" : now, {}, {}, ui::Icon::None, true, false, -1, true});
     for (std::size_t i = 0; i < legendUnknown_.size() && i < 3; ++i) {
         ui::PopupMenu::Item it{"Cr\xC3\xA9" "er \xC2\xAB " + legendUnknown_[i] + " \xC2\xBB\xE2\x80\xA6", "le type et la zone (API ou IHM)", {},
@@ -1411,6 +1410,9 @@ void HmiEditor::onLayout() {
     tools_->setBounds({b.x, b.y, b.w, toolH});
     statusBar_->setBounds({b.x, b.y + b.h - statusH, b.w, statusH});
     split_->setBounds({b.x, b.y + toolH, b.w, std::max(0.f, b.h - toolH - statusH)});
+    // 1.11.3 : un menu sans bornes ne se dessine pas (il est ouvert, rien ne se voit).
+    context_->setBounds(b);
+    legendMenu_->setBounds(b);
     if (symbolTabs_) {
         // 1.9 : les sous-onglets du symbole ; Alarmes et Instances : le volet Alarmes a la place du dessin.
         const float tabH = 30.f;

@@ -454,8 +454,7 @@ protected:
         }
         ui::paintLegend(ctx, legendBox_, valuekind::legendOf(res_));
         float y = resultTop_ + 44.f;
-        const std::string info = res_.empty ? std::string("Vide : la valeur par d\xC3\xA9" "faut du champ.")
-                                            : std::string(valuekind::info(res_.style).name) + (res_.info.empty() ? "" : " \xC2\xB7 " + res_.info);
+        const std::string info = valuekind::summary(res_);
         r.drawText({panel_.x + 16.f, y}, fit(r, info, kSmall, panel_.w - 32.f), kSmall, res_.error() ? c.error : c.textMuted);
         y += 22.f;
         // Les erreurs, et leurs corrections (un clic).
