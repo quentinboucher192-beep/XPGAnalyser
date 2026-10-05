@@ -704,6 +704,7 @@ std::size_t renameFunctionEverywhere(Project& p, std::string_view from, std::str
             code(a.guard);
             if (a.operation == Operation::Log) templ(a.value);
             else code(a.value);
+            code(a.params);                                  // 1.11.6 : Maths, clavier virtuel
         }
     };
     for (auto& sc : p.programs.scripts) if (sc.lang == ScriptLang::ST) { code(sc.body); code(sc.watch); }
@@ -738,7 +739,8 @@ std::vector<std::string> functionCallers(const Project& p, std::string_view name
     };
     const auto actionCalls = [&](const std::vector<Action>& list) {
         for (const auto& a : list)
-            if (calls(a.watch) || calls(a.guard) || (a.operation == Operation::Log ? inText(a.value) : calls(a.value))) return true;
+            if (calls(a.watch) || calls(a.guard) || (a.operation == Operation::Log ? inText(a.value) : calls(a.value)) || calls(a.params))
+                return true;
         return false;
     };
     for (const auto& sc : p.programs.scripts)

@@ -147,6 +147,7 @@ std::size_t rewriteEverywhere(Project& p, const std::function<std::string(std::s
             code(a.watch);
             code(a.guard);
             if (a.operation != Operation::Log) code(a.value);
+            code(a.params);                                  // 1.11.6
         }
     };
     for (auto& sc : p.programs.scripts) if (sc.lang == ScriptLang::ST) { code(sc.body); code(sc.watch); }

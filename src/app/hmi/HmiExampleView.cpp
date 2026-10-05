@@ -47,6 +47,9 @@ HmiExampleView::HmiExampleView(std::string id) : ui::Widget(std::move(id)) {
     links_ += canvas_->signaturePartClicked->connect([this, live](const std::string& part) {
         if (live()) { runtime_->signaturePart(part, clock_); showNow(); }
     });
+    links_ += canvas_->promptPartClicked->connect([this, live](const std::string& part) {      // 1.11.7 : le clavier d'une action
+        if (live()) { runtime_->promptPart(part, clock_); showNow(); }
+    });
     links_ += canvas_->popupCloseRequested->connect([this, live](int slot, bool instant) {
         if (!live()) return;
         hmi::Transition t;

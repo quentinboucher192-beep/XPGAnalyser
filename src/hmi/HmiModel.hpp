@@ -372,6 +372,11 @@ enum class Operation : std::uint8_t {
     // d'un parametre de la popup en mode Les deux ; vide ou "*" : tous ceux en
     // mode Les deux. Ecrit la copie dans la variable de l'appelant.
     ApplyCopy,
+    // 1.11.6 : Maths - la cible recoit une formule (value) calculee sur des
+    // references nommees (params : "Mesure := Armoires[0].ana.PT1.mes; ...").
+    // Clavier virtuel - un champ de saisie et son clavier ; ce qu'on tape va dans
+    // la cible (params : titre, clavier, min, max, unite, masque). HmiActionKinds.hpp.
+    Maths, Keyboard,
 };
 inline constexpr Trigger kTriggers[] = {
     Trigger::Click, Trigger::DoubleClick, Trigger::RisingEdge, Trigger::FallingEdge, Trigger::LongPress,
@@ -390,6 +395,7 @@ inline constexpr Operation kOperations[] = {
     Operation::SetLanguage, Operation::SetTheme,
     Operation::GifPlay, Operation::GifPause, Operation::GifStop, Operation::GifReplay,   // lot 16
     Operation::ApplyCopy,                                                                // 1.9
+    Operation::Maths, Operation::Keyboard,                                               // 1.11.6
 };
 // Lot 16 : les operations qui visent un GIF anime de la vue.
 [[nodiscard]] constexpr bool operationTargetsGif(Operation o) noexcept {
@@ -465,6 +471,9 @@ struct Action {
     // d'un projet d'avant : coche). La question ne se pose que pendant un geste
     // de l'operateur (Runtime::exportData) ; decoche : exports/ sans question.
     bool        askWhere{true};
+    // 1.11.6 : les parametres de l'operation, "Nom := valeur; ..." - Maths : les
+    // references de la formule ; Clavier virtuel : ses reglages (HmiActionKinds.hpp).
+    std::string params;
     bool operator==(const Action&) const = default;
 };
 // "Clic -> Naviguer vers Vue_Donnees (Glissement, 400 ms)" : ce que montre la liste.

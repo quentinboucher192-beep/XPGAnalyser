@@ -1054,6 +1054,25 @@ public:
     [[nodiscard]] const User* signatureSigner() const;      // celui qui signe
     [[nodiscard]] const User* signatureVisa() const;        // double : le second
     [[nodiscard]] const std::string& lastSignature() const noexcept { return lastSignature_; }
+    //  1.11.7 : LE CLAVIER VIRTUEL D'UNE ACTION (Operation::Keyboard, HmiPrompt.hpp) - un
+    //  champ de saisie par-dessus la vue, modal : ce qui est tape y va (typeText,
+    //  typeKey), Entree (ou Valider) ecrit la valeur dans la cible si elle se lit
+    //  (un nombre, dans ses limites ; un BOOL ; un texte), Echap (ou Annuler) ferme.
+    struct KeyboardPrompt {
+        std::string           target;              // la variable (sans ses $)
+        std::string           title;               // le titre montre
+        std::string           keyboard;            // "numerique" ou "complet"
+        std::string           unit;                // "degC"
+        std::optional<double> min, max;
+        bool                  mask{false};         // un code : des points
+        sim::Type             type{sim::Type::Unknown};
+        std::string           source;              // l'objet de l'action (le journal)
+    };
+    [[nodiscard]] bool promptShown() const noexcept { return prompt_.has_value(); }
+    [[nodiscard]] const KeyboardPrompt* keyboardPrompt() const noexcept { return prompt_ ? &*prompt_ : nullptr; }
+    [[nodiscard]] const FormState& promptForm() const noexcept { return promptForm_; }
+    // "bouton:valider", "bouton:annuler", "fermer", "champ", "dehors".
+    void promptPart(std::string_view part, double now);
     //  L'AVERTISSEMENT : les Security::logoutWarnS dernieres secondes avant la
     //  deconnexion automatique, un bandeau compte ; un toucher (stayConnected)
     //  remet la minuterie a zero.
@@ -1434,6 +1453,12 @@ private:
     std::string                                     signedBy_, signedReason_;   // pendant le geste signe
     bool                                            signatureBypass_{false};
     std::optional<SignatureRequest>                 signature_;
+    std::optional<KeyboardPrompt>                   prompt_;          // 1.11.7 : le clavier virtuel d'une action
+    FormState                                       promptForm_;
+    void openPrompt(const View& v, const Object* o, const Action& a, const std::string& source);
+    void promptTypeText(std::string_view text);
+    void promptTypeKey(EditKey k, double now);
+    void promptSubmit(double now);
     FormState                                       signForm_;
     bool                                            signKeyboard_{false};
     std::string                                     lastSignature_;

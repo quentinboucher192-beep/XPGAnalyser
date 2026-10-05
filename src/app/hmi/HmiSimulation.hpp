@@ -220,6 +220,11 @@ public:
     const core::SignalPtr<> stayRequested = core::Signal<>::create();
     [[nodiscard]] gfx::Rect signaturePanelRect() const noexcept { return signatureRect_; }
     [[nodiscard]] bool      signaturePartRect(std::string_view part, gfx::Rect& out) const;
+    // 1.11.7 : le champ de saisie de l'action Clavier virtuel - une partie cliquee
+    // ("bouton:valider", "bouton:annuler", "fermer", "champ", "dehors") ; ou elle est.
+    const core::SignalPtr<std::string> promptPartClicked = core::Signal<std::string>::create();
+    [[nodiscard]] gfx::Rect promptPanelRect() const noexcept { return promptRect_; }
+    [[nodiscard]] bool      promptPartRect(std::string_view part, gfx::Rect& out) const;
     [[nodiscard]] gfx::Rect logoutWarningRect() const noexcept { return warning_.bar; }
     [[nodiscard]] gfx::Rect stayButtonRect() const noexcept { return warning_.button; }
 
@@ -338,6 +343,8 @@ private:
     hmi::LoginTab             loginTabShown_{hmi::LoginTab::Connexion};
     gfx::Rect                 signatureRect_{};           // lot 13 : le panneau de signature, au dernier dessin
     std::optional<hmi::SignatureLayout> signLayout_;
+    gfx::Rect                 promptRect_{};              // 1.11.7 : le champ du clavier virtuel, au dernier dessin
+    std::optional<hmi::PromptLayout> promptLayout_;
     LogoutWarningRects        warning_{};                 // lot 13 : le bandeau de l'avertissement
     // Lot 12 : la barre d'un panneau defilant qu'on tire ; le glisser sur le fond ;
     // le zoom et la place d'une vue qu'on peut zoomer.

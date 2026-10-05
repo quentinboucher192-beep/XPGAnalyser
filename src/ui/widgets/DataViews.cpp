@@ -2474,7 +2474,15 @@ bool hasClear(const PropertyGrid::Property& p) {
 }
 // 1.11.3 : la place du carre de legende au bout de la case (sa largeur et l'ecart).
 float legendSide(float rowH) { return std::min(std::max(10.f, rowH - 6.f), 18.f); }
-float legendSlot(const PropertyGrid::Property& p, float rowH) { return p.legend ? legendSide(rowH) + 8.f : 0.f; }
+// 1.11.7 : et la place du bouton « … » (Property::open), a gauche du carre.
+float legendSlot(const PropertyGrid::Property& p, float rowH) {
+    return (p.legend ? legendSide(rowH) + 8.f : 0.f) + (p.open ? legendSide(rowH) + 10.f : 0.f);
+}
+gfx::Rect openBox(const PropertyGrid::Property& p, const gfx::Rect& row) {
+    const float side = legendSide(row.h);
+    const float right = row.right() - (p.legend ? side + 8.f : 0.f);
+    return {right - side - 8.f, row.y + (row.h - side) * 0.5f, side + 4.f, side};
+}
 gfx::Rect fieldCell(const PropertyGrid::Property& p, gfx::Rect cell) {
     // 1.11.3 : le champ ouvert laisse voir le carre de legende.
     const float legend = legendSlot(p, cell.h + 2.f);
@@ -3038,11 +3046,11 @@ std::string PropertyGrid::liveTooltip(gfx::Point mouse) const {
     const Property* p = ri >= 0 ? rows_[static_cast<std::size_t>(ri)].prop : nullptr;
     // 1.10.3 : une case a repere ($Vanne$) le dit en tete de son infobulle.
     const std::string mtip = p ? exprfield::markerTip(*p) : std::string{};
-    if (p && mtip.size() && p->expression.empty() && !p->overridden && !p->revert && !exprfield::accepts(*p) && !p->legend) {
+    if (p && mtip.size() && p->expression.empty() && !p->overridden && !p->revert && !exprfield::accepts(*p) && !p->legend && !p->open) {
         const std::string base = Widget::liveTooltip(mouse);
         return base.empty() ? mtip : mtip + "\n" + base;
     }
-    if (!p || (p->expression.empty() && !p->overridden && !p->revert && !exprfield::accepts(*p) && !p->legend))
+    if (!p || (p->expression.empty() && !p->overridden && !p->revert && !exprfield::accepts(*p) && !p->legend && !p->open))
         return Widget::liveTooltip(mouse);
     // 1.10 (chantier K) : le X dit ce qu'il fait ; une case vide, ce qu'elle accepte.
     {
@@ -3050,6 +3058,8 @@ std::string PropertyGrid::liveTooltip(gfx::Point mouse) const {
         const float y = area.y + static_cast<float>(ri) * rowHeight_ - scrollY_;
         const gfx::Rect row{area.x, y, area.w, rowHeight_};
         // 1.11.3 : le carre de legende dit d'ou vient la valeur, et ce que fait un clic.
+        if (p->open && openBox(*p, row).contains(mouse))                  // 1.11.7
+            return p->openTip.empty() ? std::string("Ouvrir l'\xC3\xA9" "diteur") : p->openTip;
         if (p->legend && legendBox(row).contains(mouse)) {
             std::string tip = p->legend->tip;
             if (legendClickable_)
@@ -3084,6 +3094,18 @@ std::string PropertyGrid::liveTooltip(gfx::Point mouse) const {
     }
     if (tip.empty()) return Widget::liveTooltip(mouse);
     return tip;
+}
+
+bool PropertyGrid::openRect(std::string_view name, gfx::Rect& out) const {
+    const auto area = contentRect();
+    for (std::size_t i = 0; i < rows_.size(); ++i) {
+        if (!rows_[i].prop || rows_[i].prop->name != name) continue;
+        if (!rows_[i].prop->open) return false;
+        const float y = area.y + static_cast<float>(i) * rowHeight_ - scrollY_;
+        out = openBox(*rows_[i].prop, {area.x, y, area.w, rowHeight_});
+        return true;
+    }
+    return false;
 }
 
 bool PropertyGrid::revertRect(std::string_view name, gfx::Rect& out) const {
@@ -3481,6 +3503,14 @@ void PropertyGrid::onPaint(const PaintContext& ctx) {
         }
         // 1.11.3 : le carre de legende, au bout de la ligne.
         if (vr.prop && vr.prop->legend) paintLegend(ctx, legendBox(r), *vr.prop->legend);
+        // 1.11.7 : le bouton « … » (l'editeur de l'hote).
+        if (vr.prop && vr.prop->open) {
+            const gfx::Rect ob = openBox(*vr.prop, r);
+            ctx.r.fillRoundedRect(ob, c.inputBg, 3.f);
+            ctx.r.strokeRect(ob, c.borderStrong, 1.f);
+            const float cy = ob.y + ob.h * 0.5f + 0.5f;
+            for (int k = -1; k <= 1; ++k) ctx.r.fillRect({ob.x + ob.w * 0.5f + static_cast<float>(k) * 4.f - 1.f, cy - 1.f, 2.f, 2.f}, c.text);
+        }
         ctx.r.line({r.x, r.bottom()}, {r.right(), r.bottom()}, c.gridLine, 1.f);
     }
     ctx.r.line({split, area.y}, {split, area.bottom()}, c.border, 1.f);
@@ -3544,6 +3574,17 @@ EventResult PropertyGrid::onEvent(const InputEvent& ev) {
             const gfx::Rect rowRect{area.x, rowY, area.w, rowH};
             // 1.11.3 : le carre de legende - l'hote ouvre la liste des carres (la grille
             // peut etre refaite pendant l'appel : le nom et la categorie sont copies).
+            // 1.11.7 : le bouton « … » - la fonction est copiee (l'hote refait la grille).
+            if (d->button == MouseButton::Left && vr.prop->open) {
+                const gfx::Rect b = openBox(*vr.prop, rowRect);
+                if (gfx::Rect{b.x - 2.f, rowY, b.w + 4.f, rowH}.contains(d->pos)) {
+                    finishEdit(false, {});
+                    const auto open = vr.prop->open;
+                    open();
+                    invalidate();
+                    return EventResult::Consumed;
+                }
+            }
             if (d->button == MouseButton::Left && vr.prop->legend && legendClickable_) {
                 const gfx::Rect b = legendBox(rowRect);
                 if (gfx::Rect{b.x - 3.f, rowY, b.w + 6.f, rowH}.contains(d->pos)) {
@@ -3645,6 +3686,14 @@ EventResult PropertyGrid::onEvent(const InputEvent& ev) {
                     invalidate();
                     return EventResult::Consumed;
                 }
+            }
+            // 1.11.7 : une case qui s'ouvre d'un clic (le choix de l'operation en arbre).
+            if (d->button == MouseButton::Left && d->pos.x >= split && vr.prop->open && vr.prop->openOnClick) {
+                finishEdit(false, {});
+                const auto open = vr.prop->open;
+                open();
+                invalidate();
+                return EventResult::Consumed;
             }
             if (d->button == MouseButton::Left && d->pos.x >= split && vr.prop->commit
                 && vr.prop->type != ValueType::ReadOnly)

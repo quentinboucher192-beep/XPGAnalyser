@@ -489,6 +489,7 @@ void recordActions(Sink& s, const std::vector<std::string>& path, const std::vec
         s.change(path, base + " \xC2\xB7 condition", a[i].guard, b[i].guard, true);
         s.change(path, base + " \xC2\xB7 cible", a[i].target, b[i].target, true);
         s.change(path, base + " \xC2\xB7 valeur", a[i].value, b[i].value, true);
+        s.change(path, base + " \xC2\xB7 param\xC3\xA8tres", a[i].params, b[i].params, true);   // 1.11.6
     }
 }
 

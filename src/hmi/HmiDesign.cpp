@@ -309,6 +309,7 @@ void walk(P& p, const FindOptions& o, F&& fn) {
                 fn(a.value, v.id, obj.id, an + "(valeur)");
                 fn(a.guard, v.id, obj.id, an + "(condition)");
                 fn(a.watch, v.id, obj.id, an + "(surveill\xC3\xA9" "e)");
+                fn(a.params, v.id, obj.id, an + "(param\xC3\xA8tres)");   // 1.11.6
             }
         }
         for (std::size_t i = 0; i < v.actions.size(); ++i) {
@@ -318,6 +319,7 @@ void walk(P& p, const FindOptions& o, F&& fn) {
             fn(a.value, v.id, kNoId, an + "(valeur)");
             fn(a.guard, v.id, kNoId, an + "(condition)");
             fn(a.watch, v.id, kNoId, an + "(surveill\xC3\xA9" "e)");
+            fn(a.params, v.id, kNoId, an + "(param\xC3\xA8tres)");      // 1.11.6
         }
         for (auto& s : v.scripts) fn(s.body, v.id, kNoId, v.name + dot + "script " + (s.name.empty() ? s.event : s.name));
         for (auto& prm : v.params) fn(prm.defaultValue, v.id, kNoId, v.name + dot + "param\xC3\xA8tre " + prm.name);

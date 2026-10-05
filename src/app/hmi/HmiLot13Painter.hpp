@@ -13,6 +13,7 @@
 
 #include "../../hmi/HmiRuntime.hpp"
 #include "../../hmi/HmiSignature.hpp"
+#include "../../hmi/HmiPrompt.hpp"   // 1.11.7
 #include "../../platform/Renderer.hpp"
 
 namespace ui { struct Theme; }
@@ -22,6 +23,9 @@ namespace app {
 [[nodiscard]] hmi::SignatureLayout signatureLayoutFor(const hmi::Runtime&, float w, float areaH);
 // Le panneau ; rend la geometrie dessinee (dans le repere de `screen`).
 hmi::SignatureLayout paintSignaturePanel(gfx::IRenderer&, const ui::Theme&, const hmi::Runtime&, const gfx::Rect& screen, float areaH);
+
+// 1.11.7 : le champ de saisie de l'action Clavier virtuel (hmi/HmiPrompt.hpp) ; rend sa geometrie.
+hmi::PromptLayout paintPromptPanel(gfx::IRenderer&, const ui::Theme&, const hmi::Runtime&, const gfx::Rect& screen, float areaH);
 
 // Le bandeau et son bouton, a l'ecran (vides : pas d'avertissement).
 struct LogoutWarningRects {

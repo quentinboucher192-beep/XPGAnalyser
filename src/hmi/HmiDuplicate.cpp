@@ -331,6 +331,7 @@ void fields(O& o, F&& fn) {
            a.operation == Operation::Set || operationTakesArguments(a.operation) || a.operation == Operation::RunScript);
         fn(a.guard, an + "(condition)", true);
         fn(a.watch, an + "(surveill\xC3\xA9" "e)", true);
+        fn(a.params, an + "(param\xC3\xA8tres)", true);       // 1.11.6
     }
     for (auto& al : o.alarmOverrides) {
         const std::string an = "alarme " + al.alarm + " ";

@@ -1,4 +1,5 @@
 #include "HmiRuntime.hpp"
+#include "HmiActionKinds.hpp"   // 1.11.7 : Maths, le clavier virtuel
 #include "../core/CallTrail.hpp"   // 1.10.2 (CR) : les scripts de l'IHM, dans le journal interne
 #include "HmiObjectAlarms.hpp"
 #include "HmiAlarmGroups.hpp"   // 1.10.2 (AL) : les reglages des groupes d'alarmes
@@ -1141,6 +1142,7 @@ std::string_view permissionFor(Operation op) {
     switch (op) {
         case Operation::Toggle: case Operation::Set: case Operation::Reset: case Operation::Increment:
         case Operation::Decrement: case Operation::Assign:
+        case Operation::Maths: case Operation::Keyboard:        // 1.11.7
             return "Piloter";
         case Operation::Navigate: case Operation::Popup: case Operation::ChangePopup:
         case Operation::NavigateBack: case Operation::NavigateForward: case Operation::NavigateHome:   // lot 12
@@ -1428,6 +1430,24 @@ void Runtime::fire(const View& v, const Object* o, const Action& a, double now, 
             if (applyCopy(trimText(a.target), v.id, now, &why) < 0) log("Erreur", source, why);
             break;
         }
+        // 1.11.7 : Maths - la formule, ses references remplacees par leurs chemins, va dans la cible.
+        case Operation::Maths: {
+            const auto refs = actionkinds::params(a);
+            std::string expr = actionkinds::mathsExpression(a.value, refs);
+            auto it = expressions_.find(expr);
+            if (it == expressions_.end()) it = expressions_.emplace(expr, Expression::compile(expr)).first;
+            auto val = it->second.evaluate(*env_);
+            if (!val) {
+                log("Erreur", source, "maths " + a.target + " := " + a.value + " : " + val.error().message());
+                break;
+            }
+            if (write(a.target, *val, source)) log("Action", source, "maths : " + a.target + " := " + formatValue(*val));
+            break;
+        }
+        // 1.11.7 : le clavier virtuel - le champ de saisie s'ouvre (la cible s'ecrit a la validation).
+        case Operation::Keyboard:
+            openPrompt(v, o, a, source);
+            break;
         case Operation::GifReplay: {
             bool ok = false;
             const std::string n = trimText(a.value).empty() ? std::string("1") : evalText(a.value, &ok);
@@ -1901,6 +1921,7 @@ void Runtime::start(double now) {
     composed_.clear();
     slaveReads_.clear();                // 1.9 : les bascules d'avant ne comptent plus
     forcedIhm_.clear();                 // 1.11.5 : les variables repartent de leur valeur initiale
+    prompt_.reset();                    // 1.11.7 : aucun clavier d'action ouvert
     running_ = true;
     now_ = startNow_ = now;
     startWallMs_ = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -3365,6 +3386,152 @@ std::string inputMode(const Object& o) {
 
 } // namespace
 
+// ---------------------------------------------- 1.11.7 : le clavier virtuel d'une action ---
+void Runtime::openPrompt(const View& v, const Object* o, const Action& a, const std::string& source) {
+    (void)o;
+    const std::string target = markers::strip(a.target, markers::Mode::Expression);
+    sim::Value cur;
+    if (target.empty() || !env_->read(target, cur)) {
+        log("Erreur", source, "clavier virtuel : variable inconnue " + a.target);
+        return;
+    }
+    const auto spec = actionkinds::keyboardSpec(a);
+    KeyboardPrompt p;
+    p.target = target;
+    p.type = cur.type();
+    // Le titre : un texte a trous (Consigne de {Four}) ; vide : le nom de la variable.
+    {
+        AliasGuard aliasGuard(env_->aliases, scopePtr(v.id));
+        p.title = spec.title.empty() ? target : TextTemplate::compile(spec.title).render(*env_);
+        const auto bound = [&](const std::string& e) -> std::optional<double> {
+            if (trimText(e).empty()) return std::nullopt;
+            double x = 0;
+            if (parseNumber(trimText(e), x)) return x;
+            bool ok = false;
+            const std::string t = evalText(e, &ok);
+            if (ok && parseNumber(t, x)) return x;
+            return std::nullopt;
+        };
+        p.min = bound(spec.min);
+        p.max = bound(spec.max);
+    }
+    p.unit = spec.unit;
+    p.mask = spec.mask;
+    p.keyboard = std::string(actionkinds::keyboardFor(std::string(sim::toString(cur.type())), spec.keyboard));
+    p.source = source;
+    prompt_ = std::move(p);
+    promptForm_ = FormState{};
+    promptForm_.focus = "valeur";
+    // La valeur en cours, choisie : la premiere frappe la remplace (comme un champ de saisie).
+    promptForm_.text["valeur"] = spec.mask ? std::string{} : formatValue(cur);
+    promptForm_.caret["valeur"] = promptForm_.text["valeur"].size();
+    promptForm_.fresh = !spec.mask;
+    log("Action", source, "clavier virtuel : " + target);
+}
+
+void Runtime::promptTypeText(std::string_view text) {
+    if (!prompt_) return;
+    auto& buffer = promptForm_.text["valeur"];
+    auto& caret = promptForm_.caret["valeur"];
+    if (promptForm_.fresh) { buffer.clear(); caret = 0; promptForm_.fresh = false; }
+    caret = std::min(caret, buffer.size());
+    const bool numeric = prompt_->keyboard == "numerique";
+    std::string accepted;
+    for (const char c : text) {
+        if (c == '\n' || c == '\r' || c == '\t') continue;
+        if (numeric && !(std::isdigit(static_cast<unsigned char>(c)) || c == '.' || c == ',' || c == '-' || c == '+' || c == 'e' || c == 'E'))
+            continue;
+        accepted += c;
+    }
+    if (accepted.empty()) return;
+    if (codepoints(buffer) + codepoints(accepted) > 64) return;
+    buffer.insert(caret, accepted);
+    caret += accepted.size();
+    if (promptForm_.error) { promptForm_.message.clear(); promptForm_.error = false; }
+}
+
+void Runtime::promptTypeKey(EditKey k, double now) {
+    if (!prompt_) return;
+    auto& buffer = promptForm_.text["valeur"];
+    auto& caret = promptForm_.caret["valeur"];
+    caret = std::min(caret, buffer.size());
+    switch (k) {
+        case EditKey::Backspace:
+            if (promptForm_.fresh) { buffer.clear(); caret = 0; promptForm_.fresh = false; break; }
+            if (caret > 0) { const auto p = prevCp(buffer, caret); buffer.erase(p, caret - p); caret = p; }
+            break;
+        case EditKey::Delete:
+            if (promptForm_.fresh) { buffer.clear(); caret = 0; promptForm_.fresh = false; break; }
+            if (caret < buffer.size()) buffer.erase(caret, nextCp(buffer, caret) - caret);
+            break;
+        case EditKey::Left: promptForm_.fresh = false; caret = prevCp(buffer, caret); break;
+        case EditKey::Right: promptForm_.fresh = false; caret = nextCp(buffer, caret); break;
+        case EditKey::Home: promptForm_.fresh = false; caret = 0; break;
+        case EditKey::End: promptForm_.fresh = false; caret = buffer.size(); break;
+        case EditKey::Enter: promptSubmit(now); break;
+        case EditKey::Escape:
+            log("Action", prompt_->source, "clavier virtuel : annul\xC3\xA9");
+            prompt_.reset();
+            break;
+        default: break;
+    }
+}
+
+void Runtime::promptSubmit(double now) {
+    if (!prompt_) return;
+    const auto& p = *prompt_;
+    const std::string text = trimText(promptForm_.text["valeur"]);
+    const auto fail = [&](const std::string& m) {
+        promptForm_.message = m;
+        promptForm_.error = true;
+        promptForm_.messageAt = now;
+    };
+    sim::Value next;
+    switch (p.type) {
+        case sim::Type::Bool: {
+            const std::string u = upper(text);
+            if (u == "TRUE" || u == "VRAI" || u == "1" || u == "OUI" || u == "ON") next = sim::Value::boolean(true);
+            else if (u == "FALSE" || u == "FAUX" || u == "0" || u == "NON" || u == "OFF") next = sim::Value::boolean(false);
+            else { fail("TRUE ou FALSE (1 ou 0)"); return; }
+            break;
+        }
+        case sim::Type::String: next = sim::Value::text(text); break;
+        default: {
+            double x = 0;
+            if (!parseNumber(text, x)) { fail("un nombre est attendu"); return; }
+            if ((p.min && x < *p.min) || (p.max && x > *p.max)) {
+                fail("hors limites : de " + (p.min ? formatNumber(*p.min) : std::string("-")) + " \xC3\xA0 "
+                     + (p.max ? formatNumber(*p.max) : std::string("-")));
+                return;
+            }
+            if (p.type == sim::Type::Real || p.type == sim::Type::Unknown) next = sim::Value::real(x);
+            else if (p.type == sim::Type::Time) next = sim::Value::time(static_cast<std::int64_t>(std::llround(x)));
+            else {
+                if (std::fabs(x - std::round(x)) > 1e-9) { fail("un entier est attendu"); return; }
+                next = sim::Value::integer(p.type, static_cast<std::int64_t>(std::llround(x)));
+            }
+            break;
+        }
+    }
+    const std::string target = p.target, source = p.source;
+    const bool mask = p.mask;
+    GestureGuard gesture(*this, source);                // l'audit : un geste de l'operateur
+    if (!write(target, next, source)) { fail("\xC3\xA9" "criture refus\xC3\xA9" "e"); return; }
+    sim::Value after;
+    (void)env_->read(target, after);
+    log("Action", source, "clavier virtuel : " + target + " = " + (mask ? std::string("********") : formatValue(after)));
+    prompt_.reset();
+}
+
+void Runtime::promptPart(std::string_view part, double now) {
+    if (!prompt_) return;
+    lastActivity_ = now;
+    if (part == "bouton:valider") promptSubmit(now);
+    else if (part == "bouton:annuler" || part == "fermer") promptTypeKey(EditKey::Escape, now);
+    // "champ", "dehors" : rien (le panneau est modal ; le clavier reste).
+}
+
+
 const FormState* Runtime::formState(Id object) const {
     const auto it = forms_.find(object);
     return it == forms_.end() ? nullptr : &it->second;
@@ -3378,6 +3545,7 @@ const View* Runtime::shownViewOf(Id object) const {
 }
 
 std::string Runtime::keyboardMode() const {
+    if (prompt_) return settings_.keyboard == "jamais" ? std::string{} : prompt_->keyboard;   // 1.11.7 : le clavier d'une action
     if (signature_) return signatureKeyboardMode();             // lot 13 : le panneau de signature
     if (loginShown_) return loginKeyboardMode();                // lot 12 : le menu de connexion
     if (focused_ == kNoId) return {};
@@ -3563,6 +3731,7 @@ void Runtime::objectPart(Id object, std::string_view part, double now) {
 void Runtime::typeText(std::string_view text, double now) {
     now_ = std::max(now_, now);
     lastActivity_ = now;
+    if (prompt_) { promptTypeText(text); return; }             // 1.11.7 : le clavier d'une action est modal
     if (signature_) { signatureTypeText(text, now); return; }  // lot 13 : le panneau de signature est modal
     if (loginShown_) { loginTypeText(text, now); return; }     // lot 12 : le menu de connexion est modal
     if (focused_ == kNoId) { badgeTyped(text, now); return; }  // lot 13 : un lecteur de badge tape
@@ -3600,6 +3769,7 @@ void Runtime::typeText(std::string_view text, double now) {
 void Runtime::typeKey(EditKey k, double now) {
     now_ = std::max(now_, now);
     lastActivity_ = now;
+    if (prompt_) { promptTypeKey(k, now); return; }            // 1.11.7 : le clavier d'une action est modal
     if (signature_) { signatureTypeKey(k, now); return; }      // lot 13 : le panneau de signature est modal
     if (loginShown_) { (void)loginTypeKey(k, now); return; }   // lot 12 : le menu de connexion est modal
     if (focused_ == kNoId) {

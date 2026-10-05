@@ -1021,6 +1021,22 @@ void HmiLiveCanvas::onPaint(const ui::PaintContext& ctx) {
         signatureRect_ = {baseRect.x + static_cast<float>(pl.x), baseRect.y + static_cast<float>(pl.y), static_cast<float>(pl.w),
                           static_cast<float>(pl.h)};
     }
+    // 1.11.7 : le champ de saisie de l'action Clavier virtuel (au-dessus du clavier).
+    promptRect_ = {};
+    promptLayout_.reset();
+    if (runtime_ && runtime_->promptShown()) {
+        float areaH = baseRect.h;
+        const std::string mode = runtime_->keyboardMode();
+        if (!mode.empty()) {
+            const auto size = hmi::keyboardSize(mode);
+            const float kh = std::min(b.h - 16.f, static_cast<float>(size.h));
+            areaH = std::max(160.f, b.bottom() - kh - 10.f - baseRect.y - 4.f);
+        }
+        promptLayout_ = paintPromptPanel(ctx.r, ctx.theme, *runtime_, baseRect, areaH);
+        const auto& pl = promptLayout_->panel;
+        promptRect_ = {baseRect.x + static_cast<float>(pl.x), baseRect.y + static_cast<float>(pl.y), static_cast<float>(pl.w),
+                       static_cast<float>(pl.h)};
+    }
     warning_ = runtime_ ? paintLogoutWarning(ctx.r, ctx.theme, *runtime_, baseRect) : LogoutWarningRects{};
     // Lot 8 : le clavier virtuel du champ qui a le focus (s'il le demande).
     paintKeyboard(ctx);
@@ -1078,6 +1094,14 @@ bool HmiLiveCanvas::signaturePartRect(std::string_view part, gfx::Rect& out) con
     }
     hmi::Box b{};
     if (!hmi::signaturePartBox(*signLayout_, part, b)) return false;
+    out = {screen_.x + static_cast<float>(b.x), screen_.y + static_cast<float>(b.y), static_cast<float>(b.w), static_cast<float>(b.h)};
+    return true;
+}
+
+bool HmiLiveCanvas::promptPartRect(std::string_view part, gfx::Rect& out) const {
+    if (!promptLayout_) return false;
+    hmi::Box b{};
+    if (!hmi::promptPartBox(*promptLayout_, part, b)) return false;
     out = {screen_.x + static_cast<float>(b.x), screen_.y + static_cast<float>(b.y), static_cast<float>(b.w), static_cast<float>(b.h)};
     return true;
 }
@@ -1678,6 +1702,20 @@ ui::EventResult HmiLiveCanvas::onEvent(const ui::InputEvent& ev) {
         }
         // Lot 13 : le panneau de signature - son clavier virtuel d'abord, puis il
         // prend tous les clics (modal) ; le bandeau de l'avertissement : rester connecte.
+        // 1.11.7 : le champ du clavier virtuel d'une action - modal, comme la signature.
+        if (runtime_ && runtime_->promptShown()) {
+            if (keyboardRect_.contains(d->pos)) {
+                pressKeyboard(d->pos);
+                return ui::EventResult::Consumed;
+            }
+            std::string part = "dehors";
+            if (promptLayout_) {
+                part = hmi::promptHit(*promptLayout_, d->pos.x - screen_.x, d->pos.y - screen_.y);
+                if (part.empty()) part = "rien";
+            }
+            promptPartClicked->emit(part);
+            return ui::EventResult::Consumed;
+        }
         if (runtime_ && runtime_->signatureShown()) {
             if (keyboardRect_.contains(d->pos)) {
                 pressKeyboard(d->pos);
@@ -1958,7 +1996,8 @@ ui::EventResult HmiLiveCanvas::onEvent(const ui::InputEvent& ev) {
     // lecteur de badge : avec la connexion par badge (Armoire_Gaz), le canevas
     // qui a le focus (un clic dans la vue) rendait Echap « Ignored » dans le bloc
     // du badge, et la popup restait ouverte (vu dans l'appli, G5_04).
-    if (runtime_ && !popupRects_.empty() && runtime_->focusedObject() == kNoId && !runtime_->loginShown() && !runtime_->signatureShown())
+    if (runtime_ && !popupRects_.empty() && runtime_->focusedObject() == kNoId && !runtime_->loginShown() && !runtime_->signatureShown()
+        && !runtime_->promptShown())
         if (const auto* k = std::get_if<ui::KeyDown>(&ev); k && k->key == ui::Key::Escape && k->mods.none() && !k->repeat) {
             const auto& top = popupRects_.back();
             if (top.close.w > 0.f) {
@@ -1969,7 +2008,7 @@ ui::EventResult HmiLiveCanvas::onEvent(const ui::InputEvent& ev) {
     // Lot 13 : un lecteur de badge (hors de tout champ) - ses chiffres et son Entree
     // vont au moteur ; les autres touches suivent leur chemin.
     if (focused() && runtime_ && runtime_->focusedObject() == kNoId && !runtime_->loginShown() && !runtime_->signatureShown()
-        && runtime_->badgeListening()) {
+        && !runtime_->promptShown() && runtime_->badgeListening()) {
         if (const auto* t = std::get_if<ui::TextInput>(&ev)) {
             textTyped->emit(t->utf8);
             return ui::EventResult::Consumed;
@@ -1983,7 +2022,8 @@ ui::EventResult HmiLiveCanvas::onEvent(const ui::InputEvent& ev) {
     // Lot 8 : le clavier, quand un champ de la vue a le focus (lot 12 : ou que le
     // menu de connexion est ouvert - Echap le ferme, Entree connecte ; lot 13 : ou
     // le panneau de signature).
-    if (focused() && runtime_ && (runtime_->focusedObject() != kNoId || runtime_->loginShown() || runtime_->signatureShown())) {
+    if (focused() && runtime_
+        && (runtime_->focusedObject() != kNoId || runtime_->loginShown() || runtime_->signatureShown() || runtime_->promptShown())) {
         if (const auto* t = std::get_if<ui::TextInput>(&ev)) {
             textTyped->emit(t->utf8);
             return ui::EventResult::Consumed;
@@ -2724,6 +2764,10 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
         refreshNow();
     });
     // Lot 13 : le panneau de signature ; rester connecte (l'avertissement).
+    links_ += canvas_->promptPartClicked->connect([this](const std::string& part) {   // 1.11.7
+        runtime_.promptPart(part, now_);
+        refreshNow();
+    });
     links_ += canvas_->signaturePartClicked->connect([this](const std::string& part) {
         runtime_.signaturePart(part, now_);
         refreshNow();

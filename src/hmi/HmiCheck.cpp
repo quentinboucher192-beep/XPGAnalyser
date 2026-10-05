@@ -1,4 +1,5 @@
 #include "HmiCheck.hpp"
+#include "HmiActionKinds.hpp"   // 1.11.7 : Maths, le clavier virtuel
 #include <cmath>
 #include "HmiPopupParams.hpp"
 #include "HmiObjectAlarms.hpp"
@@ -1064,6 +1065,22 @@ void checkParams19(const Project& p, const exprcheck::PlcPaths& paths, std::vect
                     for (const auto& pb : params::checkArguments(p, &v, *target, a.value, plcTypes)) {
                         if (pb.kind == params::ArgumentProblem::Kind::UnknownParam) continue;   // deja dit (lot 8)
                         add(out, pb.error ? S::Error : S::Warning, "Action", v.id, obj, where, pb.message);
+                    }
+                }
+                // 1.11.7 : Maths - des references (des chemins de variables), une formule qui se lit.
+                if (a.operation == Operation::Maths) {
+                    for (const auto& is : actionkinds::checkMaths(actionkinds::params(a), a.value))
+                        add(out, is.warning ? S::Warning : S::Error, "Action", v.id, obj, where, "maths : " + is.why);
+                    if (trimmedCopy(a.target).empty()) add(out, S::Error, "Action", v.id, obj, where, "maths : aucune variable pour le r\xC3\xA9sultat");
+                }
+                // 1.11.7 : le clavier virtuel - une variable a saisir, des limites qui se lisent.
+                if (a.operation == Operation::Keyboard) {
+                    if (trimmedCopy(a.target).empty()) add(out, S::Error, "Action", v.id, obj, where, "clavier virtuel : aucune variable \xC3\xA0 saisir");
+                    const auto k = actionkinds::keyboardSpec(a);
+                    for (const auto* e : {&k.min, &k.max}) {
+                        double x = 0;
+                        if (!trimmedCopy(*e).empty() && !parseNumber(trimmedCopy(*e), x) && !Expression::compile(*e).valid())
+                            add(out, S::Error, "Action", v.id, obj, where, "clavier virtuel : la limite \xC2\xAB " + *e + " \xC2\xBB ne se lit pas");
                     }
                 }
                 if (a.operation == Operation::ApplyCopy) {

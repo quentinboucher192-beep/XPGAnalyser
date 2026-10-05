@@ -3,6 +3,7 @@
 #include "HmiCharts.hpp"      // chartItems
 #include "HmiExpr.hpp"        // Scope
 #include "HmiLive.hpp"        // autoValueSource
+#include "HmiRuntime.hpp"     // parseArguments (1.11.7)
 #include "HmiWidgets.hpp"     // parseCells, parseImageStates
 
 #include <algorithm>
@@ -158,6 +159,7 @@ std::vector<std::string> ofView(const View& v, const Scope* scope) {
             if (operationWritesVariable(a.operation) || a.operation == Operation::RequestResource) add(raw, inCode(a.target));
             if (a.operation == Operation::Log) add(raw, inTemplate(a.value));
             else if (operationHasValue(a.operation) || operationTakesArguments(a.operation)) add(raw, inCode(a.value));
+            for (const auto& [n, val] : parseArguments(a.params)) add(raw, inCode(val));   // 1.11.7 : Maths, le clavier
         }
     };
     for (const auto& o : v.objects) {

@@ -1740,6 +1740,9 @@ constexpr OperationName kOperationNames[] = {
     {Operation::GifReplay, "Rejouer le GIF N fois"},
     // 1.9
     {Operation::ApplyCopy, "Appliquer copie sur r\xC3\xA9" "f\xC3\xA9rence"},
+    // 1.11.6
+    {Operation::Maths, "Maths"},
+    {Operation::Keyboard, "Clavier virtuel"},
 };
 struct PlacementName { const char* key; const char* label; };
 constexpr PlacementName kPlacementNames[] = {
@@ -1805,7 +1808,8 @@ bool triggerWatches(Trigger t) noexcept {
 bool triggerWaits(Trigger t) noexcept { return t == Trigger::LongPress || t == Trigger::Timer; }
 bool operationWritesVariable(Operation o) noexcept {
     return o == Operation::Toggle || o == Operation::Set || o == Operation::Reset || o == Operation::Increment
-        || o == Operation::Decrement || o == Operation::Assign;
+        || o == Operation::Decrement || o == Operation::Assign
+        || o == Operation::Maths || o == Operation::Keyboard;           // 1.11.6
 }
 std::string targetVariable(std::string_view target) {
     const auto blank = [](char c) { return c == ' ' || c == '\t' || c == '\r' || c == '\n'; };
@@ -1822,6 +1826,7 @@ bool operationOpensView(Operation o) noexcept {
 }
 bool operationHasValue(Operation o) noexcept {
     return o == Operation::Increment || o == Operation::Decrement || o == Operation::Assign
+        || o == Operation::Maths                                        // 1.11.6 : la formule
         || o == Operation::RunScript || o == Operation::Log
         || o == Operation::ShelveAlarm || o == Operation::Export      // lot 11 : "30; raison", le fichier
         || o == Operation::GifReplay;                                  // lot 16 : N fois
@@ -1948,6 +1953,16 @@ std::string describeAction(const Action& a) {
             break;
         case Operation::SetTheme:
             s += " " + (a.target.empty() ? std::string("(bascule)") : a.target);
+            break;
+        // 1.11.6 : Maths (la formule et ses references), le clavier virtuel
+        case Operation::Maths: {
+            s += " " + a.target + " := " + a.value;
+            const auto n = a.params.empty() ? 0 : 1 + std::count(a.params.begin(), a.params.end(), ';');
+            if (n > 0) s += " (" + std::to_string(n) + " r\xC3\xA9" "f\xC3\xA9rence" + (n > 1 ? "s" : "") + ")";
+            break;
+        }
+        case Operation::Keyboard:
+            s += " \xE2\x86\x92 " + a.target;
             break;
         // 1.9 : un parametre en mode Les deux, ou tous
         case Operation::ApplyCopy: {

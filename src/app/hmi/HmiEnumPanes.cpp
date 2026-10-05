@@ -93,6 +93,7 @@ std::vector<EnumUse> enumValueUses(const hmi::Project& p, std::string_view type,
             scan(where, a.watch);
             scan(where, a.guard);
             if (a.operation != hmi::Operation::Log) scan(where, a.value);
+            scan(where, a.params);                           // 1.11.6
         }
     };
     for (const auto& sc : p.programs.scripts)

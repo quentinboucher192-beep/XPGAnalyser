@@ -1,5 +1,6 @@
 // hmi/HmiComm.cpp - plan d'adressage, liaison Modbus, serveur de demonstration (lot 14).
 #include "HmiComm.hpp"
+#include "HmiActionKinds.hpp"
 #include "HmiObjectAlarms.hpp"
 
 #include "HmiHistory.hpp"
@@ -1525,6 +1526,7 @@ std::vector<std::string> projectPlcPaths(const Project& p) {
             take(a.guard);
             take(a.target);
             take(a.value);
+            for (const auto& kv : actionkinds::params(a)) take(kv.second);      // 1.11.6
         }
     };
     for (const auto& v : p.views) {

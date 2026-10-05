@@ -961,6 +961,7 @@ void rewriteNames(Object& o, const std::function<std::string(std::string_view, b
         else if (a.operation == Operation::Log) tpl(a.value);
         else if (a.operation == Operation::RunScript) { if (!trimmedCopy(a.value).empty()) a.value = f(a.value, true); }
         else if (operationTakesArguments(a.operation)) args(a.value);
+        if (!a.params.empty()) args(a.params);               // 1.11.6 : les references de Maths, les reglages du clavier
     }
 }
 

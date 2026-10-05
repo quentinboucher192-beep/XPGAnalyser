@@ -6,6 +6,7 @@
 //  project::members (l'arbre de l'onglet Variables), les tailles de domain.
 // =============================================================================
 #include "HmiApiVars.hpp"
+#include "HmiActionKinds.hpp"
 
 #include "HmiComm.hpp"
 #include "HmiModel.hpp"
@@ -547,6 +548,7 @@ void collectUses(const Project& p, const std::function<bool(std::string_view)>& 
             take(a.target, u);
             if (a.operation == Operation::RunScript) takeCode(a.value, u);
             else take(a.value, u);
+            for (const auto& kv : actionkinds::params(a)) take(kv.second, u);   // 1.11.6
         }
     };
     for (const auto& v : p.views) {

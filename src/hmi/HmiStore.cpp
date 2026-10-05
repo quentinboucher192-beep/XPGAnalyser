@@ -292,6 +292,7 @@ std::string serializeAction(Id owner, const Action& a) {
     if (!a.target.empty()) s += field("cible", a.target);
     if (!a.value.empty()) s += field("valeur", a.value);
     if (!a.placement.empty()) s += field("position", a.placement);   // lot 8
+    if (!a.params.empty()) s += field("parametres", a.params);        // 1.11.6 : Maths, clavier virtuel
     // Lot API 8 : "Demander ou enregistrer", ecrit seulement decoche - absent (un
     // projet d'avant, ou coche) se relit coche : les fichiers d'avant ne changent pas.
     if (!a.askWhere) s += fieldBool("demander_ou", false);
@@ -403,6 +404,7 @@ bool parseAction(const Record& r, Action& a, std::string& why) {
     if (operationWritesVariable(a.operation)) a.target = targetVariable(a.target);   // 1.11.7 : "=Vanne.CMD_OUV" d'avant
     a.value = toStr(r.get("valeur"));
     a.placement = toStr(r.get("position"));
+    a.params = toStr(r.get("parametres"));                  // 1.11.6
     a.askWhere = toBool(r.get("demander_ou"), true);        // Lot API 8 : absent (projet d'avant) = coche
     auto& t = a.transition;
     t.kind = transitionFromLabel(toStr(r.get("transition"))).value_or(TransitionKind::Instant);

@@ -254,6 +254,67 @@ hmi::SignatureLayout paintSignaturePanel(gfx::IRenderer& r, const ui::Theme& th,
     return l;
 }
 
+hmi::PromptLayout paintPromptPanel(gfx::IRenderer& r, const ui::Theme& th, const hmi::Runtime& rt, const gfx::Rect& screen, float areaH) {
+    const auto l = hmi::promptLayout(screen.w, std::min(screen.h, areaH));
+    const auto* pr = rt.keyboardPrompt();
+    if (!pr) return l;
+    const auto& form = rt.promptForm();
+    const Painter p{r, th, screen.x, screen.y};
+    const gfx::FontId f = fontOf(l.fontSize), small = fontOf(l.fontSize * 0.82), big = fontOf(l.fontSize * 1.3), title = fontOf(l.fontSize * 1.05);
+    const gfx::Color accent = gfx::Color::rgb(0x3D7BD9);
+    r.pushClip(screen);
+    r.fillRect(screen, gfx::Color{0, 0, 0, 135});
+    const gfx::Rect panel = p.at(l.panel);
+    r.fillRect({panel.x + 6.f, panel.y + 8.f, panel.w, panel.h}, gfx::Color{0, 0, 0, 100});
+    r.fillRoundedRect(panel, gfx::Color::rgb(0x1B222C), 6.f);
+    // Le titre, la croix.
+    const gfx::Rect bar = p.at(l.title);
+    r.fillRect(bar, gfx::Color::rgb(0x22314A));
+    const float g = std::min(22.f, bar.h * 0.56f);
+    drawHmiGlyph(r, HmiGlyph::Keyboard, {bar.x + 12.f, bar.y + (bar.h - g) / 2.f, g, g}, accent);
+    p.text({bar.x + g + 22.f, bar.y, bar.w - g - 70.f, bar.h}, pr->title, title, kText);
+    {
+        const gfx::Rect close = p.at(l.close);
+        const float m = close.h * 0.34f;
+        r.line({close.x + m, close.y + m}, {close.right() - m, close.bottom() - m}, kLabel, 1.8f);
+        r.line({close.right() - m, close.y + m}, {close.x + m, close.bottom() - m}, kLabel, 1.8f);
+    }
+    // Le champ : la valeur (choisie tant qu'on n'a pas tape), son unite a droite.
+    {
+        const gfx::Rect box = p.at(l.field);
+        auto it = form.text.find("valeur");
+        const std::string typed = it == form.text.end() ? std::string{} : it->second;
+        auto ct = form.caret.find("valeur");
+        const std::size_t caret = ct == form.caret.end() ? typed.size() : ct->second;
+        if (form.fresh && !typed.empty()) r.fillRoundedRect(box, accent.withAlpha(40), 4.f);
+        p.field(box, typed, caret, true, pr->mask, pr->mask ? "le code" : "la valeur", big);
+        if (!pr->unit.empty()) p.text({box.right() - 90.f, box.y, 80.f, box.h}, pr->unit, f, kLabel, 2);
+    }
+    // Les limites.
+    {
+        std::string lim;
+        if (pr->min && pr->max) lim = "de " + hmi::formatNumber(*pr->min) + " \xC3\xA0 " + hmi::formatNumber(*pr->max);
+        else if (pr->min) lim = "au moins " + hmi::formatNumber(*pr->min);
+        else if (pr->max) lim = "au plus " + hmi::formatNumber(*pr->max);
+        const std::string kind = pr->type == sim::Type::Bool ? "TRUE ou FALSE" : pr->type == sim::Type::String ? "un texte" : "un nombre";
+        p.text(p.at(l.limits), kind + (lim.empty() ? std::string{} : " \xC2\xB7 " + lim) + (pr->unit.empty() ? std::string{} : " " + pr->unit)
+                                   + " \xC2\xB7 Entr\xC3\xA9" "e valide, \xC3\x89" "chap annule",
+               small, kMuted);
+    }
+    if (!form.message.empty()) p.text(p.at(l.message), form.message, f, form.error ? kRed : kGreen);
+    // Valider, Annuler.
+    {
+        const gfx::Rect ok = p.at(l.ok), cancel = p.at(l.cancel);
+        p.button(ok, accent, true);
+        p.text(ok.inset(8.f, 0.f), "Valider", f, gfx::Color::rgb(0xFFFFFF), 1);
+        p.button(cancel, gfx::Color::rgb(0x3A3F4A), true);
+        p.text(cancel.inset(8.f, 0.f), "Annuler", f, kText, 1);
+    }
+    r.strokeRect(panel, accent, 1.5f);
+    r.popClip();
+    return l;
+}
+
 LogoutWarningRects paintLogoutWarning(gfx::IRenderer& r, const ui::Theme& th, const hmi::Runtime& rt, const gfx::Rect& screen) {
     LogoutWarningRects out;
     const double now = rt.now();

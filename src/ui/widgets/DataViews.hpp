@@ -870,6 +870,12 @@ public:
         // ou vue, ! erreur). Un clic : legendClicked (l'hote ouvre la liste des
         // carres, puis le selecteur). Rien : pas de carre.
         std::optional<Legend>     legend{};
+        // 1.11.7 : UN BOUTON « … » au bout de la case (a gauche du carre de legende) :
+        // l'hote ouvre son editeur (le script d'une action, la formule de Maths). Avec
+        // openOnClick, un clic sur la case l'ouvre aussi (le choix de l'operation en arbre).
+        std::function<void()>     open{};
+        std::string               openTip{};
+        bool                      openOnClick{false};
     };
 
     struct Category {
@@ -916,6 +922,8 @@ public:
     // 1.9 : le bouton "revenir a la valeur d'origine" d'une propriete surchargee
     // (Property::revert), a l'ecran (tests, scripts) ; false s'il n'est pas montre.
     [[nodiscard]] bool revertRect(std::string_view name, gfx::Rect& out) const;
+    // 1.11.7 : le bouton « … » d'une propriete (Property::open), a l'ecran ; faux : pas montre.
+    [[nodiscard]] bool openRect(std::string_view name, gfx::Rect& out) const;
     // Ce que la grille montre (tests, scripts).
     [[nodiscard]] const std::vector<Category>& categories() const noexcept { return categories_; }
 

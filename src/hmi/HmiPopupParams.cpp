@@ -412,6 +412,7 @@ std::size_t renameParam(Project& p, std::string_view viewName, std::string_view 
             else a.value = renameArgumentValues(a.value, from, to);   // "Moteur := Moteur" : la valeur seulement
             a.guard = renameRoot(a.guard, from, to);
             a.watch = renameRoot(a.watch, from, to);
+            a.params = renameArgumentValues(a.params, from, to);     // 1.11.6 : les valeurs seulement
             changed = changed || !(before == a);
         }
         if (changed) note(label);
@@ -620,7 +621,7 @@ std::vector<ParamUse> paramUses(const View& v, std::string_view param) {
     const auto action = [&](const Object* o, const Action& a) {
         const std::string where = "action " + std::string(triggerLabel(a.trigger)) + " \xE2\x86\x92 " + std::string(operationLabel(a.operation));
         if (mentionsName(a.target, param) || mentionsName(a.value, param) || mentionsName(a.guard, param)
-            || mentionsName(a.watch, param))
+            || mentionsName(a.watch, param) || mentionsName(a.params, param))
             out.push_back({o ? o->name : std::string{}, where, describeAction(a)});
         else if (a.operation == Operation::ApplyCopy && same(trim(a.target), param))
             out.push_back({o ? o->name : std::string{}, where, describeAction(a)});
