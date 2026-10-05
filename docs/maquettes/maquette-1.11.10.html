@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Maquette XPGAnalyser 1.11.10</title>
+<style>
+:root{
+  --bg:#e9ecf0; --chrome:#f3f4f6; --panel:#fbfbfc; --panel-2:#ffffff; --line:#d3d8df; --line-2:#e5e8ed;
+  --fg:#1c1f24; --fg-2:#4b535e; --fg-3:#6b7380; --accent:#1f63d1; --accent-2:#e2ebfa; --on-accent:#fff;
+  --sel:#d5e3f9; --hover:#eef1f5; --input:#fff; --input-line:#c3c9d2;
+  --k-api:#1d62cc; --k-ihm:#0a7a70; --k-sys:#9e5800; --k-fn:#7a3fd1; --k-fn-bg:#efe7fc; --k-err:#c42727; --k-ok:#15773c;
+  --k-op:#b0347a; --k-param:#1d62cc; --k-pop:#0a7a70; --warn-bg:#fff6e5;
+  --mono:"Cascadia Mono","JetBrains Mono",Consolas,"DejaVu Sans Mono",ui-monospace,monospace;
+  --ui:"Segoe UI",system-ui,-apple-system,"Noto Sans","DejaVu Sans",sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#16181b; --chrome:#1f2125; --panel:#25272b; --panel-2:#2b2e33; --line:#3a3e45; --line-2:#30333a;
+    --fg:#e4e6ea; --fg-2:#b6bbc4; --fg-3:#8f959f; --accent:#2b6fdb; --accent-2:#1c2f4d;
+    --sel:#1e3a62; --hover:#30343a; --input:#1c1e22; --input-line:#4a4f58;
+    --k-api:#5ca3ff; --k-ihm:#35c6b7; --k-sys:#f2a83e; --k-fn:#b58cff; --k-fn-bg:#2e2442; --k-err:#ff6767; --k-ok:#55c983;
+    --k-op:#ff7cc4; --k-param:#5ca3ff; --k-pop:#35c6b7; --warn-bg:#3a2f1c;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#16181b; --chrome:#1f2125; --panel:#25272b; --panel-2:#2b2e33; --line:#3a3e45; --line-2:#30333a;
+  --fg:#e4e6ea; --fg-2:#b6bbc4; --fg-3:#8f959f; --accent:#2b6fdb; --accent-2:#1c2f4d;
+  --sel:#1e3a62; --hover:#30343a; --input:#1c1e22; --input-line:#4a4f58;
+  --k-api:#5ca3ff; --k-ihm:#35c6b7; --k-sys:#f2a83e; --k-fn:#b58cff; --k-fn-bg:#2e2442; --k-err:#ff6767; --k-ok:#55c983;
+  --k-op:#ff7cc4; --k-param:#5ca3ff; --k-pop:#35c6b7; --warn-bg:#3a2f1c;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 var(--ui)}
+header.top{position:sticky;top:0;z-index:5;background:var(--chrome);border-bottom:1px solid var(--line);padding:10px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+header.top h1{font-size:16px;margin:0;font-weight:600}
+header.top .sub{color:var(--fg-3);font-size:13px}
+header.top nav{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
+header.top nav a{color:var(--fg-2);text-decoration:none;font-size:12.5px;padding:3px 8px;border:1px solid var(--line);border-radius:4px;background:var(--panel)}
+header.top nav a:hover{background:var(--hover)}
+button.theme{font:inherit;font-size:12px;padding:3px 8px;border:1px solid var(--line);border-radius:4px;background:var(--panel);color:var(--fg-2);cursor:pointer}
+main{max-width:1180px;margin:0 auto;padding:16px}
+section.scene{background:var(--panel);border:1px solid var(--line);border-radius:6px;margin:0 0 22px;overflow:hidden}
+section.scene>h2{margin:0;padding:10px 14px;font-size:15px;border-bottom:1px solid var(--line);background:var(--chrome);display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+section.scene>h2 .n{color:var(--fg-3);font-weight:400;font-size:12px}
+.why{padding:10px 14px;color:var(--fg-2);border-bottom:1px solid var(--line-2);font-size:13.5px}
+.why b{color:var(--fg)}
+.notes{padding:10px 14px 12px;font-size:13px;color:var(--fg-2);border-top:1px solid var(--line-2)}
+.notes ul{margin:4px 0 0 18px;padding:0}
+.notes li{margin:2px 0}
+.win{display:flex;min-height:300px;overflow-x:auto}
+.col{border-right:1px solid var(--line);min-width:0;display:flex;flex-direction:column}
+.col:last-child{border-right:0}
+.ttl{font-size:11px;letter-spacing:.06em;color:var(--fg-3);padding:6px 10px;border-bottom:1px solid var(--line-2);background:var(--panel-2);text-transform:uppercase;white-space:nowrap}
+.tabs{display:flex;gap:2px;padding:6px 8px 0;background:var(--chrome);border-bottom:1px solid var(--line);overflow-x:auto}
+.tabs span{padding:5px 12px;border:1px solid transparent;border-bottom:0;border-radius:5px 5px 0 0;color:var(--fg-2);font-size:13px;white-space:nowrap}
+.tabs span.on{background:var(--panel);border-color:var(--line);color:var(--fg);font-weight:600;margin-bottom:-1px}
+.tabs span.new::after{content:"nouveau";font-size:10px;margin-left:6px;color:var(--k-fn);border:1px solid var(--k-fn);border-radius:3px;padding:0 3px}
+.tools{display:flex;gap:6px;padding:6px 8px;border-bottom:1px solid var(--line-2);flex-wrap:wrap}
+.tools span{font-size:12px;padding:2px 8px;border:1px solid var(--line);border-radius:3px;background:var(--panel-2);color:var(--fg-2);white-space:nowrap}
+table.grid{border-collapse:collapse;width:100%;font-size:12.5px}
+table.grid th{font-weight:600;text-align:left;color:var(--fg-3);padding:4px 8px;border-bottom:1px solid var(--line-2);white-space:nowrap}
+table.grid td{padding:4px 8px;border-bottom:1px solid var(--line-2);white-space:nowrap}
+table.grid tr.sel td{background:var(--sel)}
+.fn{color:var(--k-fn);font-weight:600}
+.ico{display:inline-flex;width:16px;height:16px;border-radius:3px;align-items:center;justify-content:center;font:700 11px/1 var(--mono);margin-right:5px;vertical-align:-3px}
+.ico.f{background:var(--k-fn);color:#fff}
+.ico.p{background:var(--k-param);color:#fff}
+.ico.o{background:var(--k-op);color:#fff}
+.ico.w{background:var(--k-pop);color:#fff}
+.ico.s{background:var(--fg-3);color:var(--panel)}
+.ico.v{background:var(--k-ihm);color:#fff}
+.badge{font-size:11px;border-radius:3px;padding:0 5px;border:1px solid var(--line);color:var(--fg-2);margin-left:6px}
+.badge.virt{border-color:var(--k-fn);color:var(--k-fn)}
+.badge.over{background:var(--k-fn);border-color:var(--k-fn);color:#fff}
+.badge.ok{border-color:var(--k-ok);color:var(--k-ok)}
+pre.code{margin:0;padding:8px 0;font:12.5px/1.55 var(--mono);background:var(--panel-2);overflow:auto;flex:1;counter-reset:l}
+pre.code span.l{display:block;padding:0 10px 0 0}
+pre.code span.l::before{counter-increment:l;content:counter(l);display:inline-block;width:32px;text-align:right;margin-right:10px;color:var(--fg-3)}
+.kw{color:#2f6fd6;font-weight:600}
+.ty{color:#0a7a70}
+.cm{color:var(--fg-3);font-style:italic}
+.st{color:#a34b00}
+.pa{color:var(--k-param);font-weight:600}
+.cf{color:var(--k-fn);font-weight:600}
+.cop{color:var(--k-op);font-weight:600}
+.iv{color:var(--k-ihm)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .kw{color:#7ab0ff}:root:not([data-theme="light"]) .ty{color:#35c6b7}:root:not([data-theme="light"]) .st{color:#f2a83e}}
+:root[data-theme="dark"] .kw{color:#7ab0ff}:root[data-theme="dark"] .ty{color:#35c6b7}:root[data-theme="dark"] .st{color:#f2a83e}
+.bar{font-size:12px;color:var(--fg-2);padding:4px 10px;border-top:1px solid var(--line-2);background:var(--chrome);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.props{font-size:12.5px}
+.props .row{display:grid;grid-template-columns:42% 58%;border-bottom:1px solid var(--line-2)}
+.props .row>div{padding:4px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.props .row>div:first-child{color:var(--fg-2)}
+.props .cat{padding:4px 8px;font-weight:600;background:var(--chrome);border-bottom:1px solid var(--line-2);font-size:12px}
+.input{border:1px solid var(--input-line);background:var(--input);border-radius:3px;padding:0 5px;display:inline-block;min-width:60px}
+.chk{display:inline-block;width:13px;height:13px;border:1px solid var(--input-line);border-radius:2px;vertical-align:-2px;margin-right:5px;background:var(--input);text-align:center;font:700 10px/12px var(--ui)}
+.chk.on{background:var(--k-fn);border-color:var(--k-fn);color:#fff}
+.btn{font-size:12px;padding:1px 8px;border:1px solid var(--line);border-radius:3px;background:var(--panel-2);color:var(--fg-2);margin-left:4px;white-space:nowrap}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+.tree{font-size:13px;padding:6px 0;white-space:nowrap}
+.tree div{padding:2px 8px}
+.tree div.sel{background:var(--sel)}
+.tree .tw{display:inline-block;width:14px;color:var(--fg-3)}
+.tree .dim{color:var(--fg-3);font-size:12px;margin-left:6px}
+.canvas{flex:1;background:repeating-linear-gradient(0deg,transparent 0 19px,var(--line-2) 19px 20px),repeating-linear-gradient(90deg,transparent 0 19px,var(--line-2) 19px 20px),var(--panel-2);position:relative;min-height:260px}
+.valve{position:absolute;width:120px;height:92px;border:1px dashed var(--fg-3);border-radius:4px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:12px;color:var(--fg-2);background:var(--panel)}
+.valve .sh{width:46px;height:30px;background:linear-gradient(135deg,var(--k-ihm) 0 50%,transparent 50%),linear-gradient(225deg,var(--k-ihm) 0 50%,transparent 50%);opacity:.85;margin-bottom:4px}
+.popup{position:absolute;background:var(--panel);border:1px solid var(--line);border-radius:6px;box-shadow:0 12px 34px rgba(18,24,36,.25);width:300px;font-size:13px}
+.popup .pt{background:var(--chrome);padding:6px 10px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;font-weight:600}
+.popup .pb{padding:10px}
+.popup .kv{display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--line-2)}
+.assist{position:absolute;background:var(--panel-2);border:1px solid var(--line);border-radius:4px;box-shadow:0 10px 26px rgba(18,24,36,.22);font-size:12.5px;width:430px;z-index:2}
+.assist div{padding:3px 8px;white-space:nowrap;display:flex;gap:6px;align-items:center}
+.assist div.sel{background:var(--sel)}
+.assist .t{margin-left:auto;color:var(--fg-3);font-size:11.5px}
+.sig{position:absolute;background:var(--k-fn-bg);border:1px solid var(--k-fn);border-radius:4px;padding:4px 8px;font:12px var(--mono);z-index:2}
+table.mx{border-collapse:collapse;font-size:13px;margin:10px 14px 14px}
+table.mx th,table.mx td{border:1px solid var(--line);padding:5px 9px;text-align:left;vertical-align:top}
+table.mx th{background:var(--chrome);font-weight:600}
+.yes{color:var(--k-ok);font-weight:700}
+.legend{display:flex;gap:14px;flex-wrap:wrap;padding:8px 14px;font-size:12.5px;color:var(--fg-2);border-bottom:1px solid var(--line-2)}
+.ask{background:var(--warn-bg);border-left:3px solid var(--k-sys);padding:8px 12px;margin:10px 14px;font-size:13px}
+@media (max-width:760px){
+  .win{flex-direction:column}
+  .col{border-right:0;border-bottom:1px solid var(--line);width:auto!important}
+  header.top nav{margin-left:0}
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>XPGAnalyser 1.11.10 — maquette</h1>
+  <span class="sub">Les fonctions et les popups propres à un symbole · les appels entre fonctions et opérateurs</span>
+  <nav>
+    <a href="#s1">1 Fonctions</a><a href="#s2">2 Arbre</a><a href="#s3">3 Instance</a><a href="#s4">4 Saisie</a>
+    <a href="#s5">5 Appels</a><a href="#s6">6 Popups</a><a href="#s7">7 En marche</a>
+    <button class="theme" onclick="var r=document.documentElement;r.dataset.theme=r.dataset.theme==='dark'?'light':'dark'">Clair / sombre</button>
+  </nav>
+</header>
+<main>
+
+<div class="legend">
+  <span><span class="ico f">ƒ</span>fonction du symbole (violet)</span>
+  <span><span class="ico p">P</span>paramètre du symbole</span>
+  <span><span class="ico w">▢</span>popup du symbole</span>
+  <span><span class="ico o">±</span>opérateur</span>
+  <span><span class="badge virt">virtuelle</span>une instance peut la redéfinir</span>
+  <span><span class="badge over">redéfinie</span>l'instance a son propre corps</span>
+</div>
+
+<!-- ============================================================ 1 -->
+<section class="scene" id="s1">
+  <h2>1. Le symbole S_Vanne, sous-onglet « Fonctions » <span class="n">éditeur du symbole</span></h2>
+  <div class="why">Un symbole porte des <b>fonctions</b>, comme il porte déjà des opérateurs. Chaque fonction a un nom, un type de retour (<b>aucun</b> pour une procédure, ou n'importe quel type), des paramètres <code>VAR_INPUT</code> / <code>VAR_IN_OUT</code> / <code>VAR_OUTPUT</code> de tous les types, des locales, et un corps ST. Elle lit et écrit <b>les paramètres du symbole</b> (ceux de l'instance qui l'appelle), toutes les variables IHM, l'automate, <code>SYS.</code>, et appelle les autres fonctions et opérateurs.</div>
+  <div class="tabs"><span>Dessin</span><span>Alarmes</span><span>Instances (64)</span><span>Opérateurs (2)</span><span class="on new">Fonctions (3)</span><span class="new">Popups (1)</span></div>
+  <div class="win">
+    <div class="col" style="width:38%">
+      <div class="tools"><span>+ Nouvelle fonction</span><span>Supprimer</span><span>▶ Essayer</span><span>Compiler (F7)</span><span>Exporter…</span><span>Importer…</span></div>
+      <div class="ttl">Fonctions de S_Vanne</div>
+      <table class="grid">
+        <tr><th>Nom</th><th>Retour</th><th>Paramètres</th><th>Virtuelle</th><th>État</th></tr>
+        <tr class="sel"><td><span class="ico f">ƒ</span><span class="fn">Ouvrir</span></td><td>-</td><td>Motif : STRING</td><td><span class="chk on">✓</span></td><td style="color:var(--k-ok)">OK</td></tr>
+        <tr><td><span class="ico f">ƒ</span><span class="fn">Fermer</span></td><td>-</td><td>-</td><td><span class="chk on">✓</span></td><td style="color:var(--k-ok)">OK</td></tr>
+        <tr><td><span class="ico f">ƒ</span><span class="fn">Etat</span></td><td>T_ETAT</td><td>-</td><td><span class="chk"></span></td><td style="color:var(--k-ok)">OK</td></tr>
+      </table>
+      <div class="ttl" style="margin-top:6px">Propriétés de la fonction</div>
+      <div class="props">
+        <div class="row"><div>Nom</div><div><span class="input">Ouvrir</span></div></div>
+        <div class="row"><div>Type de retour</div><div><span class="input">(aucun) ▾</span></div></div>
+        <div class="row"><div>Virtuelle</div><div><span class="chk on">✓</span>une instance peut la redéfinir</div></div>
+        <div class="row"><div>Description</div><div><span class="input">Ouvre la vanne et le note</span></div></div>
+        <div class="row"><div>Signature</div><div><code>Ouvrir(Motif : STRING)</code></div></div>
+        <div class="row"><div>Redéfinie par</div><div>2 instances (Vanne_3, Vanne_12)</div></div>
+        <div class="row"><div>Appelée par</div><div>Btn_Ouvrir (S_Vanne), Sequence_Matin, Pop_Detail</div></div>
+      </div>
+    </div>
+    <div class="col" style="width:62%">
+      <div class="ttl">Éditeur · Ouvrir(Motif : STRING)</div>
+<pre class="code"><span class="l"><span class="kw">VAR_INPUT</span></span><span class="l">    Motif : <span class="ty">STRING</span> := <span class="st">'opérateur'</span>;</span><span class="l"><span class="kw">END_VAR</span></span><span class="l"><span class="cm">(* Vanne : le paramètre du symbole - V[3] pour l'instance Vanne_3 *)</span></span><span class="l"><span class="kw">IF</span> <span class="cf">Etat</span>() = T_ETAT#Defaut <span class="kw">THEN</span></span><span class="l">    <span class="cf">Journaliser</span>(<span class="st">'refus : '</span> + <span class="pa">Nom</span>);   <span class="cm">(* une fonction IHM du projet *)</span></span><span class="l">    <span class="kw">RETURN</span>;</span><span class="l"><span class="kw">END_IF</span>;</span><span class="l"><span class="pa">Vanne</span>.CMD_FERM := FALSE;</span><span class="l"><span class="pa">Vanne</span>.CMD_OUV := TRUE;</span><span class="l"><span class="iv">Compteur_Ouvertures</span> := <span class="iv">Compteur_Ouvertures</span> + 1;</span><span class="l"><span class="cf">Journaliser</span>(<span class="pa">Nom</span> + <span class="st">' ouverte : '</span> + Motif);</span></pre>
+      <div class="bar">Ligne 9 · <b style="color:var(--k-param)">Vanne</b> : paramètre de S_Vanne (Vanne) — dans Vanne_3 : V[3]</div>
+      <div class="ttl">Diagnostics</div>
+      <div style="padding:6px 10px;font-size:12.5px;color:var(--k-ok)">Aucune faute.</div>
+    </div>
+  </div>
+  <div class="notes"><ul>
+    <li><b>Virtuelle</b> : la case dit qu'une instance peut remplacer le corps (scène 3). Une fonction non virtuelle est la même pour toutes les instances.</li>
+    <li><b>Les types</b> : le retour et les paramètres prennent tous les types connus : élémentaires, STRING, TIME, types IHM (structures, énumérations), DDT de l'automate, ARRAY, et un symbole (une instance passée en paramètre).</li>
+    <li><b>Renommer</b> une fonction renomme ses appels partout, et <b>un seul Ctrl+Z</b> reprend chaque geste.</li>
+    <li><b>Exporter / Importer</b> : un paquet <code>.xpgfonctions</code>, comme les fonctions IHM ; importé sur un symbole, il ajoute ses fonctions (les conflits de nom se règlent comme d'habitude). Exporter le symbole emporte aussi ses fonctions et ses popups.</li>
+  </ul></div>
+</section>
+
+<!-- ============================================================ 2 -->
+<section class="scene" id="s2">
+  <h2>2. L'arbre du projet, déballé <span class="n">le symbole et ses instances</span></h2>
+  <div class="why">En déballant un <b>symbole</b> ou une <b>instance</b>, on voit ses paramètres, ses <b>fonctions (icônes violettes)</b>, ses <b>popups</b> et ses opérateurs. Sous une instance, une fonction redéfinie le dit. Un double-clic ouvre la fonction, la popup ou l'opérateur à sa place.</div>
+  <div class="win">
+    <div class="col" style="width:50%">
+      <div class="ttl">Projet · IHM</div>
+      <div class="tree">
+        <div><span class="tw">▾</span><span class="ico s">S</span>Symboles <span class="dim">(4)</span></div>
+        <div style="padding-left:24px"><span class="tw">▾</span><span class="ico s">S</span>S_Vanne</div>
+        <div style="padding-left:40px"><span class="tw">▸</span><span class="ico p">P</span>Paramètres (2) <span class="dim">Vanne : Vanne, Nom : STRING</span></div>
+        <div style="padding-left:40px"><span class="tw">▾</span><span class="ico f">ƒ</span><span class="fn">Fonctions (3)</span></div>
+        <div style="padding-left:56px" class="sel"><span class="tw"></span><span class="ico f">ƒ</span><span class="fn">Ouvrir(Motif : STRING)</span><span class="badge virt">virtuelle</span></div>
+        <div style="padding-left:56px"><span class="tw"></span><span class="ico f">ƒ</span><span class="fn">Fermer()</span><span class="badge virt">virtuelle</span></div>
+        <div style="padding-left:56px"><span class="tw"></span><span class="ico f">ƒ</span><span class="fn">Etat() : T_ETAT</span></div>
+        <div style="padding-left:40px"><span class="tw">▾</span><span class="ico w">▢</span>Popups (1)</div>
+        <div style="padding-left:56px"><span class="tw"></span><span class="ico w">▢</span>Pop_Detail <span class="dim">popup de S_Vanne</span></div>
+        <div style="padding-left:40px"><span class="tw">▸</span><span class="ico o">±</span>Opérateurs (2)</div>
+        <div style="padding-left:40px"><span class="tw">▸</span>Instances (64)</div>
+      </div>
+    </div>
+    <div class="col" style="width:50%">
+      <div class="ttl">Projet · Vues</div>
+      <div class="tree">
+        <div><span class="tw">▾</span>Vue_Vannes <span class="dim">(64 objets)</span></div>
+        <div style="padding-left:24px"><span class="tw">▾</span><span class="ico s">S</span>Vanne_3 <span class="dim">S_Vanne · Vanne := V[3]</span></div>
+        <div style="padding-left:40px"><span class="tw">▾</span><span class="ico f">ƒ</span><span class="fn">Fonctions (3)</span></div>
+        <div style="padding-left:56px"><span class="tw"></span><span class="ico f">ƒ</span><span class="fn">Ouvrir(Motif : STRING)</span><span class="badge over">redéfinie</span></div>
+        <div style="padding-left:56px"><span class="tw"></span><span class="ico f">ƒ</span><span class="fn">Fermer()</span><span class="dim">du symbole</span></div>
+        <div style="padding-left:56px"><span class="tw"></span><span class="ico f">ƒ</span><span class="fn">Etat() : T_ETAT</span><span class="dim">du symbole</span></div>
+        <div style="padding-left:40px"><span class="tw">▾</span><span class="ico w">▢</span>Popups (1)</div>
+        <div style="padding-left:56px"><span class="tw"></span><span class="ico w">▢</span>Pop_Detail <span class="dim">s'ouvre avec Vanne := V[3]</span></div>
+        <div style="padding-left:40px"><span class="tw">▸</span><span class="ico o">±</span>Opérateurs (2)</div>
+        <div style="padding-left:24px"><span class="tw">▸</span><span class="ico s">S</span>Vanne_4 <span class="dim">S_Vanne · Vanne := V[4]</span></div>
+        <div style="padding-left:24px"><span class="tw">▸</span><span class="ico s">S</span>…</div>
+      </div>
+    </div>
+  </div>
+  <div class="notes"><ul>
+    <li>Les popups d'un symbole ne sont plus mélangées aux popups du projet : elles sont rangées <b>sous leur symbole</b> (dossier Popups du symbole). Elles se créent avec « + Nouvelle popup » dans le sous-onglet Popups, ou par un clic droit sur le symbole.</li>
+    <li>Le même déballage se retrouve partout où l'on voit un symbole ou une instance : la liste des objets de la vue, l'aide à la saisie, la fenêtre de choix d'une variable, la simulation (Sur la vue actuelle).</li>
+  </ul></div>
+</section>
+
+<!-- ============================================================ 3 -->
+<section class="scene" id="s3">
+  <h2>3. L'inspecteur d'une instance : redéfinir une fonction virtuelle <span class="n">Vanne_3, dans Vue_Vannes</span></h2>
+  <div class="why">L'inspecteur de l'instance gagne la section <b>Fonctions du symbole</b>. Une fonction <b>virtuelle</b> se redéfinit : <b>Redéfinir…</b> ouvre la fenêtre du script (celle de la 1.11.9) avec le corps du symbole pour départ. Une fois redéfinie, l'instance a son propre corps, et <b>Revenir au symbole</b> l'efface.</div>
+  <div class="win">
+    <div class="col" style="width:46%">
+      <div class="ttl">Inspecteur · Vanne_3 (S_Vanne)</div>
+      <div class="props">
+        <div class="cat">Paramètres du symbole</div>
+        <div class="row"><div>Vanne · Vanne</div><div><span class="badge">fx</span> V[3]</div></div>
+        <div class="row"><div>Nom · STRING</div><div>Vanne d'entrée gaz</div></div>
+        <div class="cat"><span class="ico f">ƒ</span>Fonctions du symbole (3)</div>
+        <div class="row"><div><span class="fn">Ouvrir</span><span class="badge over">redéfinie</span></div><div><span class="btn">Modifier…</span><span class="btn">Revenir au symbole</span></div></div>
+        <div class="row"><div><span class="fn">Fermer</span><span class="badge virt">virtuelle</span></div><div>du symbole <span class="btn">Redéfinir…</span></div></div>
+        <div class="row"><div><span class="fn">Etat</span> : T_ETAT</div><div>du symbole (non virtuelle)</div></div>
+        <div class="cat"><span class="ico w">▢</span>Popups du symbole (1)</div>
+        <div class="row"><div>Pop_Detail</div><div>Vanne := V[3] <span class="btn">Ouvrir le dessin</span></div></div>
+      </div>
+    </div>
+    <div class="col" style="width:54%">
+      <div class="ttl">Fenêtre · Vanne_3.Ouvrir — redéfinie dans l'instance</div>
+<pre class="code"><span class="l"><span class="kw">VAR_INPUT</span></span><span class="l">    Motif : <span class="ty">STRING</span> := <span class="st">'opérateur'</span>;</span><span class="l"><span class="kw">END_VAR</span></span><span class="l"><span class="cm">(* Vanne_3 : l'entrée gaz s'ouvre en deux temps *)</span></span><span class="l"><span class="kw">IF</span> <span class="kw">NOT</span> <span class="iv">Purge_OK</span> <span class="kw">THEN</span></span><span class="l">    <span class="cf">Journaliser</span>(<span class="st">'purge non faite'</span>);</span><span class="l">    <span class="kw">RETURN</span>;</span><span class="l"><span class="kw">END_IF</span>;</span><span class="l"><span class="cf">SUPER</span>.<span class="cf">Ouvrir</span>(Motif);   <span class="cm">(* le corps du symbole *)</span></span></pre>
+      <div class="bar">Signature imposée par le symbole : Ouvrir(Motif : STRING) · <span style="color:var(--k-ok)">Aucune faute</span> · Valider (Ctrl+Entrée) · Échap</div>
+    </div>
+  </div>
+  <div class="notes"><ul>
+    <li><b>La signature</b> (nom, paramètres, retour) reste celle du symbole : seule l'implémentation change. Changer la signature dans le symbole signale les redéfinitions à revoir (Compiler).</li>
+    <li><b><code>SUPER.Ouvrir(Motif)</code></b> appelle le corps du symbole depuis une redéfinition (proposé par l'aide à la saisie).</li>
+    <li>Une fonction rendue non virtuelle garde les redéfinitions existantes, mais Compiler les signale (elles ne servent plus).</li>
+  </ul></div>
+</section>
+
+<!-- ============================================================ 4 -->
+<section class="scene" id="s4">
+  <h2>4. L'aide à la saisie, dans un script général <span class="n">Programmation générale › Scripts › Sequence_Matin</span></h2>
+  <div class="why">Les fonctions des symboles sont <b>disponibles dans les scripts généraux</b> : <code>Vue.Instance.Fonction(...)</code>. Après le point, l'aide propose les paramètres, les <b>fonctions (violettes)</b> et les popups de l'instance ; la signature s'affiche pendant la frappe.</div>
+  <div class="win">
+    <div class="col" style="width:100%;position:relative;min-height:290px">
+      <div class="ttl">Sequence_Matin · Démarrage</div>
+<pre class="code" style="min-height:250px"><span class="l"><span class="cm">(* Ouvrir les vannes d'entrée, puis lire leur état *)</span></span><span class="l"><span class="kw">FOR</span> i := 0 <span class="kw">TO</span> 3 <span class="kw">DO</span></span><span class="l">    <span class="cf">OuvrirVanne</span>(i);   <span class="cm">(* une fonction IHM qui appelle Vue_Vannes.Vanne_x.Ouvrir *)</span></span><span class="l"><span class="kw">END_FOR</span>;</span><span class="l">Vue_Vannes.Vanne_3.<span style="background:var(--sel)">O|</span></span><span class="l"></span><span class="l"></span><span class="l"></span></pre>
+      <div class="assist" style="left:250px;top:120px">
+        <div class="sel"><span class="ico f">ƒ</span><span class="fn">Ouvrir</span>(Motif : STRING)<span class="t">fonction · redéfinie dans Vanne_3</span></div>
+        <div><span class="ico f">ƒ</span><span class="fn">Fermer</span>()<span class="t">fonction du symbole</span></div>
+        <div><span class="ico f">ƒ</span><span class="fn">Etat</span>() : T_ETAT<span class="t">fonction du symbole</span></div>
+        <div><span class="ico p">P</span>Vanne<span class="t">paramètre · Vanne := V[3]</span></div>
+        <div><span class="ico p">P</span>Nom<span class="t">paramètre · STRING</span></div>
+        <div><span class="ico w">▢</span>Pop_Detail<span class="t">popup du symbole</span></div>
+      </div>
+      <div class="sig" style="left:250px;top:92px"><span class="fn">Ouvrir</span>(<b>Motif : STRING</b> := 'opérateur') — Ouvre la vanne et le note</div>
+    </div>
+  </div>
+  <div class="notes"><ul>
+    <li><b>Où l'appeler, et comment l'écrire :</b>
+      <ul>
+        <li>dans le symbole (ses objets, ses actions, ses scripts, ses popups) : <code>Ouvrir('bouton')</code> ;</li>
+        <li>dans la vue qui pose l'instance : <code>Vanne_3.Ouvrir()</code> ;</li>
+        <li>partout ailleurs (scripts généraux, fonctions IHM, autres vues, actions « Exécuter un script ») : <code>Vue_Vannes.Vanne_3.Ouvrir()</code>.</li>
+      </ul></li>
+    <li>Une fonction avec retour se lit aussi dans une expression de vue : <code>{Vanne_3.Etat()}</code>, en lecture seule comme les fonctions IHM.</li>
+    <li>Compiler (F7) contrôle les appels : fonction inconnue, nombre et types d'arguments, retour employé d'une procédure.</li>
+  </ul></div>
+</section>
+
+<!-- ============================================================ 5 -->
+<section class="scene" id="s5">
+  <h2>5. Les appels entre fonctions et opérateurs <span class="n">votre demande de 19 h</span></h2>
+  <div class="why">Les fonctions et les opérateurs s'appellent entre eux, dans tous les sens. Une boucle (une fonction qui finit par se rappeler sans fin) est arrêtée et signalée, sans bloquer l'IHM.</div>
+  <table class="mx">
+    <tr><th>Dans le corps de…</th><th>une fonction IHM</th><th>une fonction de symbole</th><th>un opérateur (type IHM ou symbole)</th></tr>
+    <tr><th>… une fonction IHM</th><td class="yes">✓ <code>Moyenne(a, b)</code></td><td class="yes">✓ <code>Vue_Vannes.Vanne_3.Ouvrir()</code></td><td class="yes">✓ <code>v1 + v2</code>, <code>TO_STRING(v)</code></td></tr>
+    <tr><th>… une fonction de symbole</th><td class="yes">✓ <code>Journaliser(Nom)</code></td><td class="yes">✓ <code>Etat()</code> (la sienne), <code>Vanne_4.Fermer()</code></td><td class="yes">✓ <code>Debit_Total := Debit_Total + Mesure</code></td></tr>
+    <tr><th>… un opérateur</th><td class="yes">✓ <code>Norme(a)</code></td><td class="yes">✓ <code>a.Etat()</code> (a : une instance)</td><td class="yes">✓ <code>Resultat := a + (b * 2.0)</code></td></tr>
+  </table>
+  <div class="win">
+    <div class="col" style="width:100%">
+      <div class="ttl">Type IHM T_VECTEUR › Opérateurs › T_VECTEUR * REAL : T_VECTEUR</div>
+<pre class="code"><span class="l"><span class="cm">(* a * b : un vecteur fois un nombre, en s'appuyant sur + et sur une fonction *)</span></span><span class="l"><span class="kw">IF</span> b = 2.0 <span class="kw">THEN</span></span><span class="l">    Resultat := a <span class="cop">+</span> a;                      <span class="cm">(* l'opérateur T_VECTEUR + T_VECTEUR *)</span></span><span class="l"><span class="kw">ELSE</span></span><span class="l">    Resultat.x := a.x * b;</span><span class="l">    Resultat.y := a.y * b;</span><span class="l"><span class="kw">END_IF</span>;</span><span class="l"><span class="kw">IF</span> <span class="cf">Norme</span>(Resultat) &gt; 1000.0 <span class="kw">THEN</span>      <span class="cm">(* une fonction IHM *)</span></span><span class="l">    Resultat := <span class="cf">Limiter</span>(Resultat, 1000.0);</span><span class="l"><span class="kw">END_IF</span>;</span></pre>
+      <div class="bar">Opérateurs employés : T_VECTEUR + T_VECTEUR · Fonctions : Norme, Limiter · <span style="color:var(--k-ok)">Aucune faute</span></div>
+    </div>
+  </div>
+  <div class="notes"><ul>
+    <li><b>L'aide à la saisie</b> propose, dans un opérateur et dans une fonction, les fonctions IHM, les fonctions de symbole et les membres des opérandes, comme dans un script.</li>
+    <li><b>Compiler</b> suit les appels : un opérateur qui emploie un opérateur inexistant le dit (« pas d'opérateur T_VECTEUR - REAL »).</li>
+    <li><b>Une récursion sans fin</b> (Ouvrir appelle Fermer qui appelle Ouvrir…) s'arrête à 64 appels imbriqués : le journal le dit, le script continue.</li>
+  </ul></div>
+</section>
+
+<!-- ============================================================ 6 -->
+<section class="scene" id="s6">
+  <h2>6. Les popups du symbole, sous-onglet « Popups » <span class="n">même principe qu'une popup classique, mais chez lui</span></h2>
+  <div class="why">Une popup du symbole <b>connaît d'office les paramètres du symbole</b> : ouverte depuis une instance, <code>Vanne</code> y vaut <code>V[3]</code> sans rien passer. Elle peut aussi déclarer ses propres paramètres, et appelle les fonctions de l'instance : <code>Ouvrir('popup')</code>.</div>
+  <div class="tabs"><span>Dessin</span><span>Alarmes</span><span>Instances (64)</span><span>Opérateurs (2)</span><span>Fonctions (3)</span><span class="on">Popups (1)</span></div>
+  <div class="win">
+    <div class="col" style="width:34%">
+      <div class="tools"><span>+ Nouvelle popup</span><span>Ouvrir le dessin</span><span>Supprimer</span></div>
+      <div class="ttl">Popups de S_Vanne</div>
+      <table class="grid">
+        <tr><th>Nom</th><th>Taille</th><th>Ouverte par</th></tr>
+        <tr class="sel"><td><span class="ico w">▢</span>Pop_Detail</td><td>420 × 260</td><td>Btn_Detail (clic)</td></tr>
+      </table>
+      <div class="ttl" style="margin-top:6px">Ce qu'elle connaît</div>
+      <div class="props">
+        <div class="row"><div><span class="ico p">P</span>Vanne</div><div>paramètre du symbole</div></div>
+        <div class="row"><div><span class="ico p">P</span>Nom</div><div>paramètre du symbole</div></div>
+        <div class="row"><div><span class="ico f">ƒ</span>Ouvrir, Fermer, Etat</div><div>fonctions de l'instance</div></div>
+      </div>
+    </div>
+    <div class="col" style="width:66%">
+      <div class="ttl">Pop_Detail (dessin)</div>
+      <div class="canvas">
+        <div class="popup" style="left:30px;top:24px;width:330px">
+          <div class="pt"><span>{Nom}</span><span>×</span></div>
+          <div class="pb">
+            <div class="kv"><span>Position</span><b>{Vanne.POSITION} %</b></div>
+            <div class="kv"><span>Ouverte</span><b>{Vanne.OUV}</b></div>
+            <div class="kv"><span>État</span><b>{Etat()}</b></div>
+            <div style="margin-top:10px;display:flex;gap:6px"><span class="btn pri">Ouvrir</span><span class="btn">Fermer</span></div>
+            <div style="font-size:11.5px;color:var(--fg-3);margin-top:6px">Ouvrir : action « Exécuter un script » → <code>Ouvrir('popup');</code></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="notes"><ul>
+    <li><b>L'ouvrir</b> :
+      <ul>
+        <li>dans le symbole, l'action « Ouvrir une popup » propose ses popups en tête (« du symbole ») ;</li>
+        <li>dans la vue qui pose l'instance, la cible s'écrit <code>Vanne_3.Pop_Detail</code> ;</li>
+        <li>depuis un script : <code>IHM_POPUP('Vue_Vannes.Vanne_3.Pop_Detail')</code>.</li>
+      </ul></li>
+    <li>Ses <b>paramètres propres</b> (s'il y en a) se passent comme d'habitude ; ceux du symbole viennent de l'instance.</li>
+    <li>Exporter le symbole emporte ses popups, et Dupliquer le symbole les duplique avec lui.</li>
+  </ul></div>
+</section>
+
+<!-- ============================================================ 7 -->
+<section class="scene" id="s7">
+  <h2>7. En marche <span class="n">Simulation › IHM, Vue_Vannes</span></h2>
+  <div class="why">Un clic sur Vanne_3 ouvre <b>sa</b> popup : les valeurs de V[3]. « Ouvrir » appelle <b>la redéfinition de Vanne_3</b> (la purge d'abord) ; sur Vanne_4, le corps du symbole.</div>
+  <div class="win">
+    <div class="col" style="width:100%">
+      <div class="canvas" style="min-height:300px">
+        <div class="valve" style="left:30px;top:30px"><div class="sh"></div>Vanne_3<br><b>V[3] · 42 %</b></div>
+        <div class="valve" style="left:170px;top:30px"><div class="sh"></div>Vanne_4<br><b>V[4] · 0 %</b></div>
+        <div class="popup" style="left:340px;top:40px">
+          <div class="pt"><span>Vanne d'entrée gaz</span><span>×</span></div>
+          <div class="pb">
+            <div class="kv"><span>Position</span><b>42 %</b></div>
+            <div class="kv"><span>Ouverte</span><b>TRUE</b></div>
+            <div class="kv"><span>État</span><b>T_ETAT#Marche</b></div>
+            <div style="margin-top:10px;display:flex;gap:6px"><span class="btn pri">Ouvrir</span><span class="btn">Fermer</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="bar">Journal : 19:42:05 Vanne_3.Ouvrir (redéfinie) → « purge non faite » · 19:42:11 Vanne_4.Ouvrir (S_Vanne) → « Vanne de sortie ouverte : popup »</div>
+    </div>
+  </div>
+</section>
+
+<section class="scene">
+  <h2>Ce que je vous propose de trancher</h2>
+  <div class="ask">1. <b>L'écriture des appels hors du symbole</b> : <code>Vue_Vannes.Vanne_3.Ouvrir()</code> (proposée), comme les chemins des instances déjà utilisés par les opérateurs.</div>
+  <div class="ask">2. <b><code>SUPER.Ouvrir()</code></b> dans une redéfinition pour rappeler le corps du symbole : à garder, ou pas besoin ?</div>
+  <div class="ask">3. <b>Les popups du symbole</b> rangées sous le symbole (et plus dans IHM › Popups) : d'accord ?</div>
+  <div class="notes">Sans réponse de votre part, je pars sur ces propositions. La maquette sera suivie de captures d'avancement prises dans l'application.</div>
+</section>
+
+</main>
+</body>
+</html>
