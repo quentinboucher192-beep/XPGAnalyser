@@ -1,0 +1,95 @@
+# =============================================================================
+#  Session 1119 : LES ACTIONS - L'OPERATION EN ARBRE, MATHS (SA FENETRE, LE MODE
+#  TEST), LE SCRIPT DANS SA FENETRE, LE CLAVIER VIRTUEL (SES REGLAGES, EN MARCHE).
+#  Le projet : une copie d'Armoire_Gaz (preparer-projet-1115, puis -1119) : la vue
+#  Vue_Actions (Btn_Calcul, Btn_Code, Btn_Compter), la popup Pop_Reglage (Four).
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- 1. Maths dans l'inspecteur ----------------------------------------------------
+arbre "IHM/Vues/Vue_Actions" double
+attendre 10
+objet "Btn_Calcul"
+attendre 4
+sous-onglet "Actions"
+attendre 4
+ligne "Maths"
+attendre 3
+# L'inspecteur plus large et plus haut (ses poignees).
+glisser 1312 400 900 400
+attendre 3
+glisser 1400 541 1400 830
+attendre 4
+capture 1119_01_maths_inspecteur.png
+
+# ---- 2. L'operation en arbre : un clic sur la case Operation -----------------------
+propriete-clic "Opération"
+attendre 3
+capture 1119_02_operation_arbre.png
+fenetre-action chercher "popup"
+attendre 2
+capture 1119_03_operation_arbre_recherche.png
+fenetre-action annuler
+attendre 2
+
+# ---- 3. La fenetre de Maths : les references, le mode test -------------------------
+propriete-ouvrir "Formule"
+attendre 3
+fenetre-action valeur-test 0 "12,5"
+fenetre-action valeur-test 1 "10"
+fenetre-action tester
+attendre 2
+capture 1119_04_maths_fenetre_test.png
+fenetre-action valider
+attendre 2
+
+# ---- 4. Le clavier virtuel : ses reglages ------------------------------------------
+objet "Btn_Code"
+attendre 3
+ligne "Clavier virtuel"
+attendre 3
+capture 1119_05_clavier_reglages.png
+
+# ---- 5. Le script dans sa fenetre (la reference Four de la popup) ----------------
+arbre "IHM/Vues/Popups/Pop_Reglage" double
+attendre 10
+objet "Btn_Remise"
+attendre 3
+sous-onglet "Actions"
+attendre 3
+ligne "cuter un script"
+attendre 3
+propriete-ouvrir "Code ST"
+attendre 3
+fenetre-action code "Four.Consigne := 850;\nIHM_JOURNAL('consigne remise');"
+fenetre-action noms "Fo"
+attendre 3
+capture 1119_06_script_fenetre.png
+fenetre-action valider
+attendre 2
+
+# ---- 6. En marche : Maths, puis le clavier virtuel ---------------------------------
+arbre "Simulation/IHM"
+attendre 12
+sim-utilisateur "admin" "admin2026"
+attendre 3
+sim-vue "Vue_Actions"
+attendre 8
+sim-clic "Btn_Calcul"
+attendre 3
+sim-clic "Btn_Code"
+attendre 3
+texte "1234"
+attendre 2
+capture 1119_07_clavier_en_marche.png
+touche Return
+attendre 3
+sim-clic "Btn_Compter"
+attendre 3
+capture 1119_08_resultats_en_marche.png
+quitter

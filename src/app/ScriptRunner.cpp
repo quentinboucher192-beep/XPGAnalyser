@@ -3442,6 +3442,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     // 1.11.9 : les fenetres des actions (celle du dessus) -
     //   fenetre-action chercher "clavier" | choisir "Maths" | valider | annuler   (l'operation en arbre)
     //   fenetre-action cible "Sortie" | ref "Mesure" "M" "12,5" | formule "(Mesure - Consigne) * 2" | tester   (Maths)
+    //   fenetre-action valeur-test 0 "12,5"   la valeur de test de la reference n. 0 (Maths)
     //   fenetre-action code "Compteur := 0;\nIHM_JOURNAL('ok');" | noms "Mot"   (le script ; \n : une ligne)
     if (cmd == "fenetre-action") {
         auto* top = app_.menus().top();
@@ -3467,6 +3468,10 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             ok = i < md->referenceCount();
         } else if (md && what == "formule") {
             md->setFormula(arg(2));
+        } else if (md && what == "valeur-test") {
+            const auto i = static_cast<std::size_t>(std::max(0.f, num(2)));
+            ok = i < md->referenceCount();
+            if (ok) md->setTestValue(i, arg(3));
         } else if (md && what == "tester") {
             (void)md->test();
         } else if (sd && what == "code") {

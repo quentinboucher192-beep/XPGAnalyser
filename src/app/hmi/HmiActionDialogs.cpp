@@ -380,6 +380,7 @@ public:
         search_->setPlaceholder("Chercher une op\xC3\xA9ration (nom, famille, ce qu'elle fait)\xE2\x80\xA6");
         links_ += search_->textChanged->connect([this](const std::string&) { filter(); });
         tree_ = &static_cast<ui::TreeView&>(addChild(std::make_unique<ui::TreeView>("dialog.operation.arbre")));
+        tree_->setShowRootNode(false);                                 // les familles a la racine
         links_ += tree_->selectionChanged->connect([this](ui::NodeId n) {
             if (n >= kOpBase) {
                 chosen_ = static_cast<hmi::Operation>(n - kOpBase);
