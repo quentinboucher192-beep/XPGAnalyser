@@ -21897,6 +21897,140 @@ void symParametres1112() {
 //  Et le carre de legende de chaque ligne (C, fx, I, !).
 // =============================================================================
 // =============================================================================
+//  1.11.4 (« verifier que toutes les scrollbars de l'appli soient deplacables avec
+//  la souris, ajouter scrollbar sur explorateur ») : les listes, les arbres (l'arbre
+//  du projet), les tableaux, l'inspecteur et les panneaux ont une barre qu'on tire ;
+//  le glisser continue hors du widget (la souris tenue) ; un clic dans la gouttiere
+//  avance d'une page.
+// =============================================================================
+namespace barres1114 {
+struct Lignes final : ui::IListModel {
+    std::size_t rowCount() const override { return 200; }
+    std::string text(ui::RowIndex r) const override { return "Ligne " + std::to_string(r); }
+};
+struct Arbre final : ui::ITreeModel {
+    ui::NodeId root() const override { return 1; }
+    std::size_t childCount(ui::NodeId n) const override { return n == 1 ? 150 : 0; }
+    ui::NodeId childAt(ui::NodeId, std::size_t i) const override { return static_cast<ui::NodeId>(10 + i); }
+    bool hasChildren(ui::NodeId n) const override { return n == 1; }
+    std::string text(ui::NodeId n) const override { return "Noeud " + std::to_string(n); }
+};
+struct Table final : ui::ITableModel {
+    std::size_t rowCount() const override { return 120; }
+    std::size_t columnCount() const override { return 6; }
+    std::string headerText(std::size_t c) const override { return "Colonne " + std::to_string(c); }
+    std::string cellText(ui::RowIndex r, std::size_t c) const override { return std::to_string(r) + "," + std::to_string(c); }
+    bool less(ui::RowIndex a, ui::RowIndex b, std::size_t) const override { return a < b; }
+};
+struct Grand final : ui::Widget {
+    Grand() : ui::Widget("grand") {}
+    ui::SizeHint sizeHint() const override { ui::SizeHint h; h.preferred = {300.f, 2000.f}; return h; }
+};
+// Tire le pouce de la barre au bord droit de `area` jusqu'en bas (bien au-dela du widget).
+template <class W>
+bool tirer(ui::Widget& root, W& w, gfx::Rect area) {
+    const float x = area.right() - ui::kScrollBarThickness * 0.5f;
+    const float y = area.y + 6.f;   // le pouce est en haut
+    root.dispatch(ui::MouseDown{{x, y}, ui::MouseButton::Left, 1, {}});
+    if (!w.holdsMouse()) return false;
+    // Hors du widget : la souris tenue suit quand meme (WidgetMenu fait ce routage).
+    (void)ui::Widget::routeCapturedMouse(root, ui::MouseMove{{x + 400.f, area.bottom() + 600.f}, {}, {}});
+    (void)ui::Widget::routeCapturedMouse(root, ui::MouseUp{{x + 400.f, area.bottom() + 600.f}, ui::MouseButton::Left, {}});
+    return !w.holdsMouse();
+}
+} // namespace barres1114
+
+void barresDefilement1114() {
+    std::printf("== 1.11.4 : les barres de d\xC3\xA9" "filement qu'on tire ==\n");
+    using namespace barres1114;
+    ui::Widget root("racine");
+    root.setBounds({0, 0, 1200, 800});
+    // La liste.
+    auto& list = static_cast<ui::ListView&>(root.addChild(std::make_unique<ui::ListView>("liste")));
+    list.setBounds({0, 0, 300, 240});
+    list.setModel(std::make_shared<Lignes>());
+    root.layout();
+    const gfx::Rect la = list.contentRect();
+    check(tirer(root, list, la), "la liste : le pouce se prend, la souris est rendue au rel\xC3\xA2" "chement");
+    check(list.scrollOffset() > 200.f * 24.f - la.h - 1.f, "la liste : tir\xC3\xA9" "e jusqu'en bas, m\xC3\xAA" "me hors du widget ("
+                                                                 + std::to_string(list.scrollOffset()) + ")");
+    // Un clic dans la gouttiere, au-dessus du pouce : une page vers le haut.
+    const float before = list.scrollOffset();
+    root.dispatch(ui::MouseDown{{la.right() - 4.f, la.y + 4.f}, ui::MouseButton::Left, 1, {}});
+    root.dispatch(ui::MouseUp{{la.right() - 4.f, la.y + 4.f}, ui::MouseButton::Left, {}});
+    check(list.scrollOffset() < before - la.h * 0.5f, "la liste : un clic dans la gouttiere remonte d'une page");
+    // L'arbre (l'arbre du projet en est un) : il n'avait pas de barre.
+    auto& tree = static_cast<ui::TreeView&>(root.addChild(std::make_unique<ui::TreeView>("arbre")));
+    tree.setBounds({320, 0, 300, 240});
+    tree.setModel(std::make_shared<Arbre>());
+    tree.expand(1);
+    root.layout();
+    check(tirer(root, tree, tree.contentRect()) && tree.scrollOffset() > 1000.f, "l'arbre : sa barre se tire (" + std::to_string(tree.scrollOffset()) + ")");
+    // Le tableau : la barre verticale (sous les titres) et l'horizontale.
+    auto& table = static_cast<ui::TableView&>(root.addChild(std::make_unique<ui::TableView>("table")));
+    table.setBounds({640, 0, 400, 300});
+    table.setColumns({{"A", 200.f}, {"B", 200.f}, {"C", 200.f}, {"D", 200.f}, {"E", 200.f}, {"F", 200.f}});
+    table.setModel(std::make_shared<Table>());
+    root.layout();
+    {
+        const gfx::Rect ta = table.contentRect();
+        const float x = ta.right() - ui::kScrollBarThickness * 0.5f, y = ta.y + 28.f + 6.f;   // sous les titres
+        root.dispatch(ui::MouseDown{{x, y}, ui::MouseButton::Left, 1, {}});
+        (void)ui::Widget::routeCapturedMouse(root, ui::MouseMove{{x, ta.bottom() + 500.f}, {}, {}});
+        (void)ui::Widget::routeCapturedMouse(root, ui::MouseUp{{x, ta.bottom() + 500.f}, ui::MouseButton::Left, {}});
+        check(table.scrollOffset() > 100.f && !table.holdsMouse(), "le tableau : la barre verticale se tire (" + std::to_string(table.scrollOffset()) + ")");
+        const float hx = ta.x + 6.f, hy = ta.bottom() - ui::kScrollBarThickness * 0.5f;
+        root.dispatch(ui::MouseDown{{hx, hy}, ui::MouseButton::Left, 1, {}});
+        (void)ui::Widget::routeCapturedMouse(root, ui::MouseMove{{hx + 2000.f, hy}, {}, {}});
+        (void)ui::Widget::routeCapturedMouse(root, ui::MouseUp{{hx + 2000.f, hy}, ui::MouseButton::Left, {}});
+        check(table.scrollOffsetX() > 500.f, "le tableau : la barre horizontale se tire (" + std::to_string(table.scrollOffsetX()) + ")");
+    }
+    // L'inspecteur : la barre dans sa marge, les cases (et leur carre) lui laissent la place.
+    auto& grid = static_cast<ui::PropertyGrid&>(root.addChild(std::make_unique<ui::PropertyGrid>("grille")));
+    grid.setBounds({0, 300, 360, 240});
+    {
+        ui::PropertyGrid::Category cat;
+        cat.name = "Beaucoup";
+        for (int i = 0; i < 60; ++i) {
+            ui::PropertyGrid::Property p;
+            p.name = "P" + std::to_string(i);
+            p.value = std::to_string(i);
+            p.legend = ui::PropertyGrid::Legend{};
+            cat.properties.push_back(std::move(p));
+        }
+        grid.setCategories({cat});
+    }
+    root.layout();
+    root.layout();
+    const gfx::Rect gi = grid.contentRect();
+    check(gi.right() <= grid.bounds().right() - ui::kScrollBarThickness - 2.f, "l'inspecteur : les cases s'arr\xC3\xAA" "tent avant la barre");
+    gfx::Rect sq;
+    check(grid.legendRect("P0", sq) && sq.right() <= grid.bounds().right() - ui::kScrollBarThickness - 2.f, "l'inspecteur : le carr\xC3\xA9 de l\xC3\xA9gende n'est pas sous la barre");
+    {
+        const float x = grid.bounds().right() - 2.f - ui::kScrollBarThickness * 0.5f, y = grid.bounds().y + 2.f + 6.f;
+        root.dispatch(ui::MouseDown{{x, y}, ui::MouseButton::Left, 1, {}});
+        (void)ui::Widget::routeCapturedMouse(root, ui::MouseMove{{x, y + 900.f}, {}, {}});
+        (void)ui::Widget::routeCapturedMouse(root, ui::MouseUp{{x, y + 900.f}, ui::MouseButton::Left, {}});
+        check(grid.scrollOffset() > 500.f, "l'inspecteur : sa barre se tire (" + std::to_string(grid.scrollOffset()) + ")");
+    }
+    // Un panneau (les dialogues) : sa barre, un enfant au-dessus du contenu, prend le clic.
+    auto& panel = static_cast<ui::ScrollablePanel&>(root.addChild(std::make_unique<ui::ScrollablePanel>("panneau")));
+    panel.setBounds({400, 320, 320, 240});
+    panel.setContent(std::make_unique<Grand>());
+    root.layout();
+    {
+        const float x = panel.bounds().right() - 6.f, y = panel.bounds().y + 6.f;
+        root.dispatch(ui::MouseDown{{x, y}, ui::MouseButton::Left, 1, {}});
+        (void)ui::Widget::routeCapturedMouse(root, ui::MouseMove{{x, y + 400.f}, {}, {}});
+        (void)ui::Widget::routeCapturedMouse(root, ui::MouseUp{{x, y + 400.f}, ui::MouseButton::Left, {}});
+        root.layout();
+        check(panel.scrollOffset().y > 100.f, "un panneau : sa barre se tire (" + std::to_string(panel.scrollOffset().y) + ")");
+    }
+    // Rien ne retient la souris une fois relachee.
+    check(!ui::Widget::routeCapturedMouse(root, ui::MouseMove{{5.f, 5.f}, {}, {}}), "la souris n'est plus tenue");
+}
+
+// =============================================================================
 //  1.11.4 (« dans les parametres, verifier fx, reperes etc ; dans un parametre
 //  'variable', pouvoir utiliser ca aussi ») : un parametre qui recoit une variable
 //  (Value : ARRAY[0..9] OF UINT, par reference) prend un repere avec ou sans fx
@@ -24711,6 +24845,7 @@ int main(int argc, char** argv) {
     symParametres1112();                    // 1.11.2 (SYM, decision 240) : la section Parametres du symbole
     symParametres1113();                    // 1.11.3 : fx garde, Voiture constante, UINTS (tableau), le carre de legende
     symParametresReperes1114();             // 1.11.4 : les reperes et le fx dans un parametre (variable ou texte)
+    barresDefilement1114();                 // 1.11.4 : les barres de defilement qu'on tire
     scriptsExportImport1113();              // 1.11.3 : exporter / importer les scripts d'une vue et les operateurs (.xpgst)
     valuePicker1113();                      // 1.11.3 : le carre de legende cliquable, le selecteur de valeur
     if (argc > 1) valuePickerApi1113(argv[1]);   // 1.11.3 : le selecteur et les membres des variables de l'automate

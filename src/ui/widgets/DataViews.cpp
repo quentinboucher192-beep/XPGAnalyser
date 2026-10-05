@@ -355,7 +355,7 @@ int ListView::rowAt(float globalY) const {
 
 void ListView::onPaint(const PaintContext& ctx) {
     const auto& c = ctx.theme.color;
-    const auto  area = contentRect();
+    const auto  full = contentRect();
     const float rowH = rowHeight_ = ctx.theme.metric.rowHeight;
 
     ctx.r.fillRect(bounds(), c.panelBg);
@@ -363,6 +363,10 @@ void ListView::onPaint(const PaintContext& ctx) {
     if (!model_ || rowH <= 0.f) return;
 
     const auto total = model_->rowCount();
+    // 1.11.4 : la barre de defilement (qu'on tire), a droite ; les lignes lui laissent sa place.
+    const float content = static_cast<float>(total) * rowH;
+    auto area = full;
+    area.w -= vbar_.space(full, content, full.h);
     const auto first = static_cast<std::size_t>(std::max(0.f, scrollY_ / rowH));
     const auto last  = std::min(total, first + static_cast<std::size_t>(area.h / rowH) + 1);
 
@@ -400,10 +404,20 @@ void ListView::onPaint(const PaintContext& ctx) {
                       r.right() - textX - 6.f - badge, st.bold);
     }
     ctx.r.popClip();
+    vbar_.paint(ctx, full, content, full.h, scrollY_);
 }
 
 EventResult ListView::onEvent(const InputEvent& ev) {
     if (!model_) return EventResult::Ignored;
+    {
+        // 1.11.4 : la barre de defilement, tiree ou cliquee.
+        const auto full = contentRect();
+        float off = scrollY_;
+        if (vbar_.handle(*this, ev, full, static_cast<float>(model_->rowCount()) * rowHeight_, full.h, off)) {
+            scrollY_ = off;
+            return EventResult::Consumed;
+        }
+    }
 
     if (const auto* m = std::get_if<MouseMove>(&ev)) {
         const int h = bounds().contains(m->pos) ? rowAt(m->pos.y) : -1;
@@ -687,9 +701,14 @@ void TreeView::onLayout() {
 
 void TreeView::onPaint(const PaintContext& ctx) {
     const auto& c = ctx.theme.color;
-    const auto  area = contentRect();
+    const auto  full = contentRect();
     // Lot API 8 : l'arbre du projet - la densite (rowOverride_) passe avant le theme.
     const float rowH = rowHeight_ = rowOverride_ > 0.f ? rowOverride_ : ctx.theme.metric.rowHeight;
+    // 1.11.4 : la barre de defilement (qu'on tire), a droite - l'arbre du projet en avait
+    // besoin ; les lignes lui laissent sa place (les comptes au bout restent lisibles).
+    const float content = static_cast<float>(rows_.size()) * rowH;
+    auto area = full;
+    area.w -= vbar_.space(full, content, full.h);
     const float indent = indent_ = ctx.theme.metric.indentPerLevel;
 
     ctx.r.fillRect(bounds(), c.panelBg);
@@ -954,12 +973,22 @@ void TreeView::onPaint(const PaintContext& ctx) {
     }
     // ---- fin Lot API 8 ----
     ctx.r.popClip();
+    vbar_.paint(ctx, full, content, full.h, scrollY_);
 }
 
 EventResult TreeView::onEvent(const InputEvent& ev) {
     if (!model_) return EventResult::Ignored;
     const float rowH = rowHeight_;      // whatever the last paint used
     const float indent = indent_;
+    {
+        // 1.11.4 : la barre de defilement, tiree ou cliquee.
+        const auto full = contentRect();
+        float off = scrollY_;
+        if (vbar_.handle(*this, ev, full, static_cast<float>(rows_.size()) * rowH, full.h, off)) {
+            scrollY_ = off;
+            return EventResult::Consumed;
+        }
+    }
 
     if (const auto* w = std::get_if<MouseWheel>(&ev)) {
         if (!bounds().contains(w->pos)) return EventResult::Ignored;
@@ -1500,8 +1529,10 @@ int TableView::columnAtX(float globalX) const {
 }
 
 void TableView::setScrollOffset(float y) {
-    const float maxScroll = std::max(0.f, static_cast<float>(view_.size()) * rowHeight_
-                                          - (contentRect().h - headerHeight_));
+    gfx::Rect va, ha;
+    float cw = 0.f, ch = 0.f;
+    barAreas(va, ha, cw, ch);   // 1.11.4 : sans la place de la barre du bas
+    const float maxScroll = std::max(0.f, ch - va.h);
     scrollY_ = std::clamp(y, 0.f, maxScroll);
     revealPending_ = false;     // la place demandee l'emporte sur « montrer la selection »
     invalidate();
@@ -1511,9 +1542,12 @@ void TableView::onLayout() {
     if (context_) context_->setBounds(bounds());      // lot 20 : le menu peint par-dessus tout
     if (filterPopup_) filterPopup_->setBounds(bounds());   // lot recherche : la fenetre du filtre aussi
     if (revealPending_) revealSelection();
-    const float maxScroll = std::max(0.f, static_cast<float>(view_.size()) * rowHeight_
-                                          - (contentRect().h - headerHeight_));
+    gfx::Rect va, ha;
+    float cw = 0.f, ch = 0.f;
+    barAreas(va, ha, cw, ch);   // 1.11.4 : sans la place de la barre du bas
+    const float maxScroll = std::max(0.f, ch - va.h);
     scrollY_ = std::clamp(scrollY_, 0.f, maxScroll);
+    scrollX_ = std::clamp(scrollX_, 0.f, std::max(0.f, cw - ha.w));
     // Lot 16 : le champ d'une case suit sa case (la colonne elargie, la table deplacee).
     if (cellEditor_) {
         const auto it = std::find(view_.begin(), view_.end(), editRow_);
@@ -1567,6 +1601,19 @@ bool TableView::rowRect(std::size_t i, gfx::Rect& out) const {
     if (y < area.y + headerHeight_ || y + rowHeight_ > area.bottom()) return false;
     out = {area.x, y, area.w, rowHeight_};
     return true;
+}
+
+void TableView::barAreas(gfx::Rect& vArea, gfx::Rect& hArea, float& contentW, float& contentH) const {
+    const auto area = contentRect();
+    const gfx::Rect body{area.x, area.y + headerHeight_, area.w, std::max(0.f, area.h - headerHeight_)};
+    contentH = static_cast<float>(view_.size()) * rowHeight_;
+    contentW = 0.f;
+    for (const auto& col : columns_)
+        if (col.visible) contentW += col.width;
+    const float vspace = vbar_.space(body, contentH, body.h);
+    const float hspace = hbar_.space({body.x, body.y, body.w - vspace, body.h}, contentW, body.w - vspace);
+    vArea = {body.x, body.y, body.w, body.h - hspace};
+    hArea = {body.x, body.y, body.w - vspace, body.h};
 }
 
 void TableView::onPaint(const PaintContext& ctx) {
@@ -1815,21 +1862,54 @@ void TableView::onPaint(const PaintContext& ctx) {
         }
     }
     ctx.r.popClip();
+    // 1.11.4 : les barres de defilement (qu'on tire), sur le bord droit et le bas du corps.
+    {
+        gfx::Rect va, ha;
+        float cw = 0.f, ch = 0.f;
+        barAreas(va, ha, cw, ch);
+        if (vbar_.space(va, ch, va.h) > 0.f || hbar_.space(ha, cw, ha.w) > 0.f) {
+            // Sous les barres, le fond (les lignes passent dessous).
+            if (vbar_.space(va, ch, va.h) > 0.f) ctx.r.fillRect({va.right() - kScrollBarThickness - 1.f, va.y, kScrollBarThickness + 1.f, va.h}, c.panelBg);
+            if (hbar_.space(ha, cw, ha.w) > 0.f) ctx.r.fillRect({ha.x, ha.bottom() - kScrollBarThickness - 1.f, ha.w, kScrollBarThickness + 1.f}, c.panelBg);
+        }
+        vbar_.paint(ctx, va, ch, va.h, scrollY_);
+        hbar_.paint(ctx, ha, cw, ha.w, scrollX_);
+    }
 }
 
 EventResult TableView::onEvent(const InputEvent& ev) {
     if (!model_) return EventResult::Ignored;
     const float rowH = rowHeight_, headerH = headerHeight_;   // as last painted
     const auto  area = contentRect();
+    {
+        // 1.11.4 : les barres de defilement, tirees ou cliquees.
+        gfx::Rect va, ha;
+        float cw = 0.f, ch = 0.f;
+        barAreas(va, ha, cw, ch);
+        float y = scrollY_, x = scrollX_;
+        if (vbar_.handle(*this, ev, va, ch, va.h, y)) {
+            scrollY_ = y;
+            invalidateLayout();   // le champ d'une case suit sa case
+            return EventResult::Consumed;
+        }
+        if (hbar_.handle(*this, ev, ha, cw, ha.w, x)) {
+            scrollX_ = x;
+            invalidateLayout();
+            return EventResult::Consumed;
+        }
+    }
 
     if (const auto* w = std::get_if<MouseWheel>(&ev)) {
         if (!bounds().contains(w->pos)) return EventResult::Ignored;
         // Lot 16 : la case en cours d'edition est validee avant de defiler.
         if (cellEditor_ && !cellIsList_)
             if (auto* f = activeCellField()) finishCellEdit(true, f->text());
-        const float maxScroll = std::max(0.f, static_cast<float>(view_.size()) * rowH - (area.h - headerH));
+        gfx::Rect va, ha;
+        float cw = 0.f, ch = 0.f;
+        barAreas(va, ha, cw, ch);   // 1.11.4 : la place des barres
+        const float maxScroll = std::max(0.f, ch - va.h);
         scrollY_ = std::clamp(scrollY_ - w->dy * rowH * 3.f, 0.f, maxScroll);
-        if (w->mods.shift) scrollX_ = std::max(0.f, scrollX_ - w->dy * 60.f);
+        if (w->mods.shift) scrollX_ = std::clamp(scrollX_ - w->dy * 60.f, 0.f, std::max(0.f, cw - ha.w));
         invalidate();
         return EventResult::Consumed;
     }
@@ -3084,6 +3164,15 @@ void paintLegend(const PaintContext& ctx, gfx::Rect box, const PropertyGrid::Leg
 }
 
 void PropertyGrid::onLayout() {
+    // 1.11.4 : la barre de defilement (qu'on tire) prend sa place a droite, dans la marge :
+    // les cases, leur carre de legende, la croix et le champ ouvert se calculent tous depuis
+    // contentRect(), ils la laissent libre. (Pas de boucle : la marge ne change qu'une fois.)
+    {
+        const float inner = std::max(0.f, bounds().h - 4.f);
+        const bool need = static_cast<float>(rows_.size()) * rowHeight_ > inner + 0.5f;
+        const float right = 2.f + (need ? kScrollBarThickness + 2.f : 0.f);
+        if (std::fabs(padding().r - right) > 0.01f) setPadding({2.f, right, 2.f, 2.f});
+    }
     const float maxScroll =
         std::max(0.f, static_cast<float>(rows_.size()) * rowHeight_ - contentRect().h);
     scrollY_ = std::clamp(scrollY_, 0.f, maxScroll);
@@ -3395,10 +3484,25 @@ void PropertyGrid::onPaint(const PaintContext& ctx) {
         ctx.r.line({r.x, r.bottom()}, {r.right(), r.bottom()}, c.gridLine, 1.f);
     }
     ctx.r.line({split, area.y}, {split, area.bottom()}, c.border, 1.f);
+    // 1.11.4 : la barre de defilement, dans la marge de droite.
+    {
+        const gfx::Rect inner{bounds().x + 2.f, bounds().y + 2.f, std::max(0.f, bounds().w - 4.f), std::max(0.f, bounds().h - 4.f)};
+        vbar_.paint(ctx, inner, static_cast<float>(rows_.size()) * rowHeight_, contentRect().h, scrollY_);
+    }
 }
 
 EventResult PropertyGrid::onEvent(const InputEvent& ev) {
     const float rowH = rowHeight_;
+    {
+        // 1.11.4 : la barre de defilement, tiree ou cliquee.
+        const gfx::Rect inner{bounds().x + 2.f, bounds().y + 2.f, std::max(0.f, bounds().w - 4.f), std::max(0.f, bounds().h - 4.f)};
+        float off = scrollY_;
+        if (vbar_.handle(*this, ev, inner, static_cast<float>(rows_.size()) * rowH, contentRect().h, off)) {
+            scrollY_ = off;
+            invalidateLayout();   // le champ ouvert suit sa case
+            return EventResult::Consumed;
+        }
+    }
 
     if (const auto* w = std::get_if<MouseWheel>(&ev)) {
         if (!bounds().contains(w->pos)) return EventResult::Ignored;

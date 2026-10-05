@@ -209,6 +209,18 @@ namespace ui {
         // its clicks stolen by the table underneath.
         [[nodiscard]] Widget* findOverlayOwner();
 
+        // 1.11.4 : LA SOURIS TENUE. Un widget qui commence un glisser (le pouce d'une
+        // barre de defilement) la tient : jusqu'au relachement, les deplacements et le
+        // relachement lui arrivent, meme hors de lui et de ses parents (dispatch, lui,
+        // les laisse tomber hors de eventBounds()). routeCapturedMouse() est appele a
+        // l'entree d'un arbre (WidgetMenu, WidgetHost).
+        void captureMouse() noexcept;
+        void releaseMouse() noexcept;                      // seulement s'il la tient
+        [[nodiscard]] bool holdsMouse() const noexcept;
+        // Un deplacement ou un relachement, au widget qui tient la souris s'il est dans
+        // l'arbre de `root` (le relachement la rend). Vrai : l'evenement est pris.
+        static bool routeCapturedMouse(Widget& root, const InputEvent& ev);
+
         // Deepest visible widget under `p` that has a tooltip. Deepest wins: a
         // tooltip on a cell should beat one on the panel that contains it.
         [[nodiscard]] const Widget* tooltipAt(gfx::Point p) const;

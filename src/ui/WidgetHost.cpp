@@ -47,6 +47,8 @@ EventResult WidgetHost::dispatch(const InputEvent& ev) {
         mouse_ = m->pos;
         pointerInside_ = true;
     }
+    // 1.11.4 : un glisser en cours suit la souris hors du widget qui l'a commence.
+    if (Widget::routeCapturedMouse(*root_, ev)) return EventResult::Consumed;
     // Ce qui peint par-dessus tout (une liste ouverte) recoit l'evenement avant
     // l'arbre : sinon le tableau dessous prend le clic destine a la liste.
     if (Widget* overlay = root_->findOverlayOwner())

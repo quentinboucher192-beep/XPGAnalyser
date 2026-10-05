@@ -3,6 +3,7 @@
 // =============================================================================
 #pragma once
 
+#include "ScrollBar.hpp"   // 1.11.4 : les barres de ScrollablePanel
 #include "../../core/Command.hpp"
 #include "../Icons.hpp"
 #include "../Layout.hpp"
@@ -234,13 +235,16 @@ public:
 protected:
     void        onLayout() override;
     void        onPaint(const PaintContext&) override;
-    void        onPaintOverlay(const PaintContext&) override;   // scrollbars on top
     EventResult onEvent(const InputEvent&) override;
 private:
+    void       keepBarsOnTop();
     Widget*    content_{nullptr};
     gfx::Point offset_{}, target_{};
     bool       hScroll_{true}, vScroll_{true};
-    int        dragBar_{-1};
+    // 1.11.4 : les barres sont des enfants, apres le contenu : dessinees dessus, elles
+    // recoivent leurs clics avant lui (on les tire, ScrollBar.hpp).
+    ScrollBar* vBar_{nullptr};
+    ScrollBar* hBar_{nullptr};
 };
 
 // --------------------------------------------------------------- ToolBar ---

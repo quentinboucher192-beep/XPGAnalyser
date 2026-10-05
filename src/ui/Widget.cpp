@@ -89,7 +89,38 @@ namespace ui {
 
     // ---------------------------------------------------------------- Widget ---
     Widget::Widget(std::string id) : id_(std::move(id)) {}
-    Widget::~Widget() = default;
+    namespace {
+        Widget* gMouseHolder = nullptr;   // 1.11.4 : la souris tenue (un glisser en cours)
+    } // namespace
+
+    Widget::~Widget() {
+        if (gMouseHolder == this) gMouseHolder = nullptr;
+    }
+
+    void Widget::captureMouse() noexcept { gMouseHolder = this; }
+    void Widget::releaseMouse() noexcept {
+        if (gMouseHolder == this) gMouseHolder = nullptr;
+    }
+    bool Widget::holdsMouse() const noexcept { return gMouseHolder == this; }
+
+    bool Widget::routeCapturedMouse(Widget& root, const InputEvent& ev) {
+        Widget* holder = gMouseHolder;
+        if (!holder) return false;
+        const bool move = std::holds_alternative<MouseMove>(ev);
+        const bool up = std::holds_alternative<MouseUp>(ev);
+        if (!move && !up) return false;
+        const Widget* top = holder;
+        while (top->parent_) top = top->parent_;
+        if (top != &root) return false;
+        // Le tenant n'est plus montre (un onglet change pendant le glisser) : il la rend.
+        if (!holder->visible()) {
+            gMouseHolder = nullptr;
+            return false;
+        }
+        (void)holder->onEvent(ev);
+        if (up) holder->releaseMouse();
+        return true;
+    }
 
     // --------------------------------------------------------------- geometry ---
     void Widget::setBounds(const gfx::Rect& r) {

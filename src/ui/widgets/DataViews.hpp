@@ -22,6 +22,7 @@
 // =============================================================================
 #pragma once
 
+#include "ScrollBar.hpp"   // 1.11.4 : les barres de defilement qu'on tire
 #include "../Icons.hpp"
 #include "../TextSearch.hpp"      // lot recherche : la recherche surlignee, les filtres de colonne
 #include "../Widget.hpp"
@@ -167,6 +168,7 @@ public:
     explicit ListView(std::string id = {});
     void setModel(std::shared_ptr<IListModel> m);
     void setSelectionMode(SelectionMode m) { selectionMode_ = m; }
+    [[nodiscard]] float scrollOffset() const noexcept { return scrollY_; }   // 1.11.4
     [[nodiscard]] const std::vector<RowIndex>& selection() const noexcept { return selection_; }
 
     const core::SignalPtr<RowIndex> activated        = core::Signal<RowIndex>::create();
@@ -181,6 +183,7 @@ private:
     std::vector<RowIndex>       selection_;
     SelectionMode               selectionMode_{SelectionMode::Single};
     float                       scrollY_{0.f};
+    EdgeScrollBar               vbar_;                // 1.11.4 : la barre qu'on tire
     mutable float               rowHeight_{24.f};   // cached from the theme at paint time
     core::ConnectionScope       modelConnections_;
     int                         hoverRow_{-1};      // la ligne sous la souris
@@ -212,6 +215,7 @@ public:
 class TreeView : public Widget {
 public:
     explicit TreeView(std::string id = {});
+    [[nodiscard]] float scrollOffset() const noexcept { return scrollY_; }   // 1.11.4
 
     void setModel(std::shared_ptr<ITreeModel> m);
     void expand(NodeId, bool recursive = false);
@@ -352,6 +356,7 @@ private:
     std::function<bool(NodeId)>  filter_;
     SelectionMode                selectionMode_{SelectionMode::Single};
     float                        scrollY_{0.f};
+    EdgeScrollBar                vbar_;               // 1.11.4 : la barre qu'on tire
     // Geometry the event handlers need but cannot look up: cached each paint.
     mutable float                rowHeight_{24.f};
     mutable float                indent_{20.f};
@@ -513,6 +518,7 @@ public:
     // Lot API 7 : le defilement vertical, lu et remis (une table qui se refait
     // quand on deplie une ligne garde sa place au lieu de remonter en haut).
     [[nodiscard]] float scrollOffset() const noexcept { return scrollY_; }
+    [[nodiscard]] float scrollOffsetX() const noexcept { return scrollX_; }   // 1.11.4
     void setScrollOffset(float y);
     void autoSizeColumn(std::size_t col);              // samples visible rows only
 
@@ -711,6 +717,9 @@ private:
     void revealSelection();             // la premiere ligne choisie en vue (au placement si pas encore placee)
     [[nodiscard]] int columnAtX(float localX) const;
     [[nodiscard]] std::size_t firstVisibleColumn() const noexcept;
+    // 1.11.4 : ou se posent les deux barres (le corps sous les titres, chacune laissant
+    // le coin a l'autre), et ce qui defile : la largeur des colonnes, la hauteur des lignes.
+    void barAreas(gfx::Rect& vArea, gfx::Rect& hArea, float& contentW, float& contentH) const;
     std::string  tableTooltip_;         // lot 16 : l'infobulle de la table, sous celles des lignes
     bool         rowTooltipShown_{false};
     bool         revealPending_{false};
@@ -742,6 +751,7 @@ private:
     int                          resizingColumn_{-1};
     float                        resizeOrigin_{0.f};
     float                        scrollX_{0.f}, scrollY_{0.f};
+    EdgeScrollBar                vbar_, hbar_{true};  // 1.11.4 : les barres qu'on tire
     mutable float                rowHeight_{24.f}, headerHeight_{28.f};
     float                        titleHeight_{28.f};   // lot 20 : les titres seuls (headerHeight_ = titres + bandeau)
     core::ConnectionScope        modelConnections_;
@@ -876,6 +886,7 @@ public:
     };
 
     explicit PropertyGrid(std::string id = {});
+    [[nodiscard]] float scrollOffset() const noexcept { return scrollY_; }   // 1.11.4
 
     void setCategories(std::vector<Category> cats);
     void clearProperties();
@@ -957,6 +968,7 @@ private:
     float                  nameRatio_{0.45f};
     bool                   descriptionPane_{true};
     float                  scrollY_{0.f};
+    EdgeScrollBar          vbar_;                     // 1.11.4 : la barre qu'on tire
     mutable float          rowHeight_{24.f};
     WidgetPtr              activeEditor_;      // un champ ferme, detruit au dessin suivant :
                                                // il peut etre en train d'emettre quand on le ferme

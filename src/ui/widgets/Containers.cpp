@@ -996,11 +996,26 @@ EventResult TabControl::onEvent(const InputEvent& ev) {
 }
 
 // ======================================================= ScrollablePanel ====
-ScrollablePanel::ScrollablePanel(std::string id) : Widget(std::move(id)) {}
+ScrollablePanel::ScrollablePanel(std::string id) : Widget(std::move(id)) {
+    const std::string base = this->id().empty() ? std::string("scroll") : this->id();
+    vBar_ = &static_cast<ScrollBar&>(addChild(std::make_unique<ScrollBar>(base + ".vbar", false)));
+    hBar_ = &static_cast<ScrollBar&>(addChild(std::make_unique<ScrollBar>(base + ".hbar", true)));
+    vBar_->onScroll = [this](float y) { scrollTo({offset_.x, y}); };
+    hBar_->onScroll = [this](float x) { scrollTo({x, offset_.y}); };
+}
+
+void ScrollablePanel::keepBarsOnTop() {
+    // Le dernier ajoute recoit les clics le premier : les barres passent apres le contenu.
+    auto v = removeChild(*vBar_);
+    auto h = removeChild(*hBar_);
+    vBar_ = &static_cast<ScrollBar&>(addChild(std::move(v)));
+    hBar_ = &static_cast<ScrollBar&>(addChild(std::move(h)));
+}
 
 void ScrollablePanel::setContent(WidgetPtr w) {
     if (content_) removeChild(*content_);
     content_ = &addChild(std::move(w));
+    keepBarsOnTop();
     invalidateLayout();
 }
 
@@ -1037,43 +1052,28 @@ void ScrollablePanel::ensureVisible(const gfx::Rect& local) {
 }
 
 void ScrollablePanel::onLayout() {
-    if (!content_) return;
     const auto area = contentRect();
     const auto vp   = viewportSize();
+    if (!content_) {
+        vBar_->setVisibility(Visibility::Collapsed);
+        hBar_->setVisibility(Visibility::Collapsed);
+        return;
+    }
     const auto want = content_->sizeHint().preferred;
     content_->setBounds({area.x - offset_.x, area.y - offset_.y,
                          std::max(vp.w, want.w), std::max(vp.h, want.h)});
+    // 1.11.4 : les barres, la ou elles se dessinaient (12 px au bord), et qu'on tire.
+    const bool v = vScroll_ && want.h > vp.h, h = hScroll_ && want.w > vp.w;
+    vBar_->setVisibility(v ? Visibility::Visible : Visibility::Collapsed);
+    hBar_->setVisibility(h ? Visibility::Visible : Visibility::Collapsed);
+    vBar_->setBounds({area.right() - 12.f, area.y, 12.f, vp.h});
+    hBar_->setBounds({area.x, area.bottom() - 12.f, vp.w, 12.f});
+    vBar_->setRange(want.h, vp.h, offset_.y);
+    hBar_->setRange(want.w, vp.w, offset_.x);
 }
 
 void ScrollablePanel::onPaint(const PaintContext& ctx) {
     ctx.r.fillRect(bounds(), ctx.theme.color.panelBg);
-}
-
-void ScrollablePanel::onPaintOverlay(const PaintContext& ctx) {
-    if (!content_) return;
-    const auto& c = ctx.theme.color;
-    const auto area = contentRect();
-    const auto vp = viewportSize();
-    const auto want = content_->sizeHint().preferred;
-
-    if (vScroll_ && want.h > vp.h) {
-        const gfx::Rect track{area.right() - 12.f, area.y, 12.f, vp.h};
-        ctx.r.fillRect(track, c.panelBg);
-        const float frac = vp.h / want.h;
-        const float thumbH = std::max(24.f, track.h * frac);
-        const float t = offset_.y / std::max(1.f, want.h - vp.h);
-        ctx.r.fillRoundedRect({track.x + 3.f, track.y + t * (track.h - thumbH), 6.f, thumbH},
-                              dragBar_ == 1 ? c.scrollbarHover : c.scrollbar, 3.f);
-    }
-    if (hScroll_ && want.w > vp.w) {
-        const gfx::Rect track{area.x, area.bottom() - 12.f, vp.w, 12.f};
-        ctx.r.fillRect(track, c.panelBg);
-        const float frac = vp.w / want.w;
-        const float thumbW = std::max(24.f, track.w * frac);
-        const float t = offset_.x / std::max(1.f, want.w - vp.w);
-        ctx.r.fillRoundedRect({track.x + t * (track.w - thumbW), track.y + 3.f, thumbW, 6.f},
-                              dragBar_ == 0 ? c.scrollbarHover : c.scrollbar, 3.f);
-    }
 }
 
 EventResult ScrollablePanel::onEvent(const InputEvent& ev) {

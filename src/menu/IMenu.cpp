@@ -141,6 +141,9 @@ ui::EventResult WidgetMenu::HandleEvent(const ui::InputEvent& ev) {
     if (!root_) return ui::EventResult::Ignored;
 
     if (const auto* m = std::get_if<ui::MouseMove>(&ev)) mouse_ = m->pos;
+    // 1.11.4 : un glisser en cours (le pouce d'une barre de defilement) suit la souris
+    // meme hors du widget qui l'a commence.
+    if (ui::Widget::routeCapturedMouse(*root_, ev)) return ui::EventResult::Consumed;
 
     // A widget painting on top of everything - an open dropdown list - also
     // gets the event first. Without this the popup is drawn over the table
