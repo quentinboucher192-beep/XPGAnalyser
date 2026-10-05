@@ -188,6 +188,11 @@ public:
     [[nodiscard]] std::vector<std::string> takeEvents();
 
 private:
+    // 1.11.7 (le blocage du 05/10) : une liaison remplacee ou arretee ne s'attend plus sur la
+    // boucle principale - elle finit sa requete en cours sur son fil, puis tick() la libere.
+    void retire(std::shared_ptr<hmi::comm::Link> link);
+    std::vector<std::shared_ptr<hmi::comm::Link>> retiring_;
+
     struct Running {
         hmi::Equipment                            equipment;
         hmi::Equipment                            effective;    // 1.9 : avec les choix de la page Simulation

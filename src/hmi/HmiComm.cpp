@@ -652,15 +652,23 @@ Link::~Link() { stop(); }
 void Link::start() {
     if (thread_.joinable()) return;
     stop_.store(false);
-    thread_ = std::thread([this] { loop(); });
+    finished_.store(false);
+    thread_ = std::thread([this] {
+        loop();
+        finished_.store(true);
+    });
 }
 
-void Link::stop() {
+void Link::requestStop() {
     {
         std::lock_guard<std::mutex> lock(mutex_);
         stop_.store(true);
     }
     wake_.notify_all();
+}
+
+void Link::stop() {
+    requestStop();
     if (thread_.joinable()) thread_.join();
     client_.disconnect();
     std::lock_guard<std::mutex> lock(mutex_);
@@ -812,8 +820,9 @@ Link::Entry* Link::subscribe(std::string_view name, double now) {
 
 void Link::cycle() {
     const double now = monoNow();
-    if (!ensureConnected(now)) return;
+    if (!ensureConnected(now) || stop_.load()) return;
     doWrites();
+    if (stop_.load()) return;                                    // 1.11.7 : arretee, elle sort sans lire
     doReads(monoNow());
 }
 
@@ -822,6 +831,7 @@ void Link::doWrites() {
         PendingWrite w;
         {
             std::lock_guard<std::mutex> lock(mutex_);
+            if (stop_.load()) return;                                // 1.11.7 : arretee, entre deux requetes
             if (writes_.empty() || !client_.connected()) {
                 if (!writes_.empty()) {
                     for (const auto& lost : writes_) event("\xC3\x89" "criture de " + lost.point.name + " perdue : la liaison est coup\xC3\xA9" "e");
@@ -946,7 +956,7 @@ void Link::doReads(double now) {
     std::size_t requests = 0;
     bool alive = true;
     for (const auto& b : blocks) {
-        if (!alive || !client_.connected()) break;
+        if (!alive || !client_.connected() || stop_.load()) break;   // 1.11.7 : arretee, entre deux requetes
         ++requests;
         modbus::Outcome o;
         std::vector<bool> bitsRead;
@@ -977,6 +987,7 @@ void Link::doReads(double now) {
             // Un bloc refuse : chaque place seule, pour trouver celle qui gene.
             lock.unlock();
             for (const auto k : b.items) {
+                if (stop_.load()) break;
                 ++requests;
                 if (!(alive = readOne(items[k]))) break;
             }
@@ -987,7 +998,7 @@ void Link::doReads(double now) {
         alive = false;
     }
     for (const auto& r : retries) {
-        if (!alive || !client_.connected()) break;
+        if (!alive || !client_.connected() || stop_.load()) break;
         ++requests;
         alive = readOne(r);
     }

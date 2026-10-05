@@ -85,7 +85,15 @@ void EquipmentHost::shutdown() {
         if (r.server) r.server->stop();
     }
     running_.clear();
+    for (auto& l : retiring_) l->stop();
+    retiring_.clear();
     statuses_.clear();
+}
+
+void EquipmentHost::retire(std::shared_ptr<hmi::comm::Link> link) {
+    if (!link) return;
+    link->requestStop();
+    retiring_.push_back(std::move(link));
 }
 
 void EquipmentHost::event(std::string text) {
@@ -368,6 +376,12 @@ void EquipmentHost::runTwin(Running& r, const hmi::Equipment& e, const hmi::Proj
 void EquipmentHost::tick(const hmi::Project* p, double dt) {
     clock_ += dt;
     const double now = clock_;
+    // 1.11.7 : les liaisons arretees dont le fil est sorti (stop() ne bloque plus).
+    std::erase_if(retiring_, [](const std::shared_ptr<hmi::comm::Link>& l) {
+        if (!l->finished()) return false;
+        l->stop();
+        return true;
+    });
     std::map<hmi::Id, Running> keep;
     if (p) {
         for (const auto& e : p->equipments) {
@@ -396,7 +410,7 @@ void EquipmentHost::tick(const hmi::Project* p, double dt) {
                 if (!r.link || key != r.linkKey) {
                     if (r.link) {
                         for (auto& ev : r.link->takeEvents()) event(e.name + " : " + ev);
-                        r.link->stop();
+                        retire(std::move(r.link));                  // 1.11.7 : sans attendre son fil
                     }
                     const std::size_t n = plan.points().size();
                     r.link = std::make_shared<hmi::comm::Link>(plan, settings);
@@ -410,7 +424,7 @@ void EquipmentHost::tick(const hmi::Project* p, double dt) {
                 }
             } else if (r.link) {
                 for (auto& ev : r.link->takeEvents()) event(e.name + " : " + ev);
-                r.link->stop();
+                retire(std::move(r.link));                          // 1.11.7 : sans attendre son fil
                 r.link.reset();
                 r.linkKey.clear();
                 r.linkToSlave = false;
@@ -441,7 +455,7 @@ void EquipmentHost::tick(const hmi::Project* p, double dt) {
         }
     }
     for (auto& [id, r] : running_) {
-        if (r.link) r.link->stop();
+        if (r.link) retire(std::move(r.link));                     // 1.11.7 : sans attendre son fil
         if (r.exposed) r.exposed->stop();
         if (r.server) {
             r.server->stop();

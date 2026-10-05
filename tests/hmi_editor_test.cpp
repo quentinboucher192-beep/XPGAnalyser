@@ -16245,7 +16245,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 174,
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 175,
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -22499,6 +22499,70 @@ void variableFx1117() {
 }
 
 // =============================================================================
+//  1.11.7 (le rapport de blocage du 05/10, 1.11.6 : « Delier V » pendant la simulation -
+//  la boucle principale attendait 8 s dans hmi::comm::Link::stop(), le fil de la liaison
+//  finissant toutes ses ecritures, chacune au temps de reponse de l'esclave simule).
+// =============================================================================
+void blocageDelier1117() {
+    std::printf("== 1.11.7 : D\xC3\xA9lier une variable pendant la simulation ne bloque plus (le rapport du 05/10) ==\n");
+    using clk = std::chrono::steady_clock;
+    const auto secondsSince = [](clk::time_point t0) { return std::chrono::duration<double>(clk::now() - t0).count(); };
+    hmi::Project p;
+    hmi::Equipment e;
+    e.id = p.allocate();
+    e.name = "Centrale";
+    e.type = hmi::EquipmentType::ModbusTcp;
+    e.host = "192.168.1.30";
+    e.port = 502;
+    e.simulated = true;
+    e.twinDelayMs = 300;                   // l'esclave simule repond en 300 ms
+    p.equipments.push_back(e);
+    Variable v;
+    v.id = p.allocate();
+    v.name = "V";
+    v.type = "INT";
+    v.equipment = "Centrale";
+    v.address = "43001";
+    p.programs.variables.push_back(v);
+    app::EquipmentHost equip;
+    const auto connect = [&] {
+        for (int k = 0; k < 100; ++k) {
+            equip.tick(&p, 0.05);
+            if (auto* l = equip.link("Centrale"); l && l->connected()) return l;
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+        return static_cast<hmi::comm::Link*>(nullptr);
+    };
+    auto* link = connect();
+    check(link != nullptr, "la liaison vers l'esclave simul\xC3\xA9 (300 ms par r\xC3\xA9ponse)");
+    if (!link) return;
+    // Un script qui ecrit sans cesse : 15 ecritures en attente (4,5 s de travail pour la liaison).
+    for (int k = 0; k < 15; ++k) (void)link->write("V", sim::Value::integer(sim::Type::Int, k));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    // Delier V : le plan change, la liaison est remplacee - sans attendre son fil.
+    p.programs.variables[0].equipment.clear();
+    p.programs.variables[0].address.clear();
+    auto t0 = clk::now();
+    equip.tick(&p, 0.05);
+    const double tick = secondsSince(t0);
+    check(tick < 0.25, "D\xC3\xA9lier V : la boucle principale reprend tout de suite (" + std::to_string(static_cast<int>(tick * 1000)) + " ms, avant : plusieurs secondes)");
+    check(equip.link("Centrale") != link, "la liaison est refaite avec le nouveau plan (l'ancienne finit sur son fil)");
+    // Relier, et arreter : stop() n'attend plus qu'une requete, plus tout le cycle.
+    p.programs.variables[0].equipment = "Centrale";
+    p.programs.variables[0].address = "43001";
+    link = connect();
+    check(link != nullptr, "reli\xC3\xA9" "e : une nouvelle liaison");
+    if (!link) return;
+    for (int k = 0; k < 15; ++k) (void)link->write("V", sim::Value::integer(sim::Type::Int, 100 + k));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    t0 = clk::now();
+    link->stop();
+    const double stop = secondsSince(t0);
+    check(stop < 0.8, "Link::stop() : la requ\xC3\xAAte en cours seulement (" + std::to_string(static_cast<int>(stop * 1000)) + " ms, pas 15 x 300 ms)");
+    check(link->finished(), "... son fil est sorti");
+}
+
+// =============================================================================
 //  1.11.7 (defaut de la 1.11.6 : « les forcages, si jamais les variables sont communes
 //  dans les 3 onglets [...] il faut que ce soit un forcage commun ; et il faut passer
 //  prioritaire par rapport aux scripts ») : une variable IHM liee a un esclave simule
@@ -25709,6 +25773,7 @@ int main(int argc, char** argv) {
     surLaVueClicDroit1116();                // 1.11.6 : sur la vue actuelle, le clic droit
     forcageCommun1117();                    // 1.11.7 : le forcage commun, prioritaire sur les scripts
     variableFx1117();                       // 1.11.7 : la case Variable d'une action, la pastille fx
+    blocageDelier1117();                    // 1.11.7 : Delier pendant la simulation ne bloque plus
     if (argc > 1) simulationVariables1115(argv[1]);   // 1.11.5 : les onglets Variables IHM et Variables API
     if (argc > 1) forcageMouvement1116(argv[1]);   // 1.11.6 : le forcage par type et bornes
     scriptsExportImport1113();              // 1.11.3 : exporter / importer les scripts d'une vue et les operateurs (.xpgst)

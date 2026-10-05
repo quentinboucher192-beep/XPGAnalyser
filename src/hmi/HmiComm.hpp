@@ -210,6 +210,13 @@ public:
     void start();
     void stop();
     [[nodiscard]] bool started() const noexcept { return thread_.joinable(); }
+    // 1.11.7 (le blocage du 05/10 : « Delier V » en simulation - la boucle principale attendait
+    // dans stop() la fin d'un cycle entier, chaque ecriture payant le temps de reponse de
+    // l'esclave) : arreter SANS ATTENDRE. Le fil finit la requete en cours et sort (les
+    // ecritures pas encore parties sont abandonnees) ; finished() le dit, et stop() ne bloque
+    // plus. stop() lui-meme n'attend plus qu'une requete, plus un cycle.
+    void requestStop();
+    [[nodiscard]] bool finished() const noexcept { return finished_.load(); }
     // Un cycle sur le fil de l'appelant (les essais ; l'outil Tester) : la
     // connexion s'il le faut, les ecritures, les lectures.
     void cycle();
@@ -292,6 +299,7 @@ private:
     std::deque<PendingWrite> writes_;
     std::thread              thread_;
     std::atomic<bool>        stop_{false};
+    std::atomic<bool>        finished_{false};    // 1.11.7 : le fil est sorti de loop()
     // L'etat et les compteurs (sous mutex_).
     bool                     connected_{false};
     bool                     everConnected_{false};
