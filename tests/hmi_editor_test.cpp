@@ -22083,6 +22083,20 @@ void scriptsExportImport1113() {
               && back.entries[0].body == "Titre := 'Vanne';" && back.entries[1].body == "Compteur := Compteur + 1;",
           "write puis read : les deux scripts, la source et le r\xC3\xB4le (" + why + ")");
     check(text.find("(*# script evenement=OnOpen langage=ST *)") != std::string::npos, "un bloc lisible avant chaque script");
+    // La vue modele, l'en-tete et le pied de page modeles : les memes scripts, leur role garde.
+    for (const char* role : {"modele", "entete", "pied"}) {
+        View m = makeView(doc->project, std::string("Modele_") + role);
+        m.role = role;
+        m.scripts.push_back(script(m.name, "OnOpen", "Heure := SYS.Time;\n"));
+        sf::File mb;
+        check(sf::read(sf::write(sf::fromView(m)), mb, &why) && mb.role == role && mb.entries.size() == 1
+                  && mb.entries[0].event == "OnOpen" && mb.entries[0].body == "Heure := SYS.Time;",
+              std::string("les scripts d'un mod\xC3\xA8le (") + role + ") : aller et retour, le r\xC3\xB4le gard\xC3\xA9");
+        View target = makeView(doc->project, "Cible");
+        target.role = role;
+        check(sf::applyToView(doc->project, target, mb, {true}, sf::Mode::Replace) == 1 && target.scripts.size() == 1,
+              std::string("import\xC3\xA9s dans un ") + role);
+    }
     sf::File newer;
     check(!sf::read("(*# xpgst format=9 version=2.0 *)\n", newer, &why) && why.find("plus r\xC3\xA9" "cente") != std::string::npos,
           "un format plus r\xC3\xA9" "cent est refus\xC3\xA9, en le disant (" + why + ")");
@@ -22175,6 +22189,62 @@ void scriptsExportImport1113() {
 //  selecteur : l'arbre filtre sur le type attendu, la recherche, le resultat classe,
 //  ses corrections, Valider (ou la creation d'une variable inconnue).
 // =============================================================================
+// 1.11.3 : le selecteur sur un vrai programme (MAST.XPG) : les membres d'un DDT et ceux
+// d'une case de tableau ont leur chemin entier (BALANCE_A.Valeur, Armoires[0].ana) -
+// la capture 06 montrait des membres sans nom, qu'un clic aurait mis seuls dans Resultat.
+void valuePickerApi1113(const std::string& xpg) {
+    std::printf("== 1.11.3 : le s\xC3\xA9lecteur de valeur et les membres des variables de l'automate ==\n");
+    core::EventBus bus;
+    importer::ProjectImporter imp(bus);
+    auto imported = imp.importFiles({xpg});
+    check(static_cast<bool>(imported), "import du projet");
+    if (!imported) return;
+    std::shared_ptr<const domain::Project> plc = imported->project;
+    // Un DDT (un membre au moins) et une case d'un petit tableau de DDT.
+    std::string ddt, ddtMember, cell, cellMember;
+    std::vector<std::string> names;
+    for (const auto& var : plc->variables) {
+        if (var.scope != domain::VariableScope::Global) continue;
+        const std::string name(plc->strings.text(var.name));
+        names.push_back(name);
+        const auto& t = var.type;
+        if (ddt.empty() && t.klass == domain::TypeClass::Derived)
+            if (const auto ms = app::assist::designMembers(*plc, name); !ms.empty()) { ddt = name; ddtMember = ms.front().name; }
+        if (cell.empty() && t.klass == domain::TypeClass::Array && t.arrayHigh >= t.arrayLow && t.arrayHigh - t.arrayLow < 16) {
+            const std::string c = name + "[" + std::to_string(t.arrayLow) + "]";
+            if (const auto ms = app::assist::designMembers(*plc, c); !ms.empty()) { cell = c; cellMember = ms.front().name; }
+        }
+    }
+    check(!ddt.empty() && !cell.empty(), "MAST.XPG : un DDT (" + ddt + ") et un tableau de DDT (" + cell + ")");
+    check(ddtMember.find('.') == std::string::npos, "designMembers rend le membre seul (" + ddtMember + ")");
+    auto doc = std::make_shared<Document>();
+    View v = makeView(doc->project, "Vue_Api");
+    const Id vid = v.id;
+    doc->project.views.push_back(v);
+    menu::MenuManager mm{menu::MenuFactory{}};
+    app::HmiValuePicker::Spec spec;
+    spec.field = "Valeur";
+    spec.text = "";
+    spec.fx = true;
+    spec.doc = doc;
+    spec.view = vid;
+    spec.plc = plc;
+    mm.ShowDialog(std::make_unique<app::HmiValuePicker>(spec), [](const menu::DialogResult&) {});
+    mm.applyPending();
+    auto* picker = dynamic_cast<app::HmiValuePicker*>(mm.top());
+    check(picker != nullptr, "le s\xC3\xA9lecteur s'ouvre avec l'automate");
+    if (!picker) return;
+    picker->setTypeFilter(false);
+    const std::string full = ddt + "." + ddtMember;
+    check(picker->pick(full) && picker->result() == full, "un membre de DDT : son chemin entier dans R\xC3\xA9sultat (" + picker->result() + ")");
+    check(!picker->pick(ddtMember) || std::find(names.begin(), names.end(), ddtMember) != names.end(),
+          "le membre seul n'est pas un noeud de l'arbre");
+    const std::string cellFull = cell + "." + cellMember;
+    check(picker->pick(cellFull) && picker->result() == cellFull, "un membre d'une case : " + picker->result());
+    picker->setSearch(ddt + ".");
+    check(picker->shownCount() >= 1, "chercher " + ddt + ". trouve ses membres (" + std::to_string(picker->shownCount()) + ")");
+}
+
 void valuePicker1113() {
     std::printf("== 1.11.3 : le carr\xC3\xA9 de l\xC3\xA9gende cliquable et le s\xC3\xA9lecteur de valeur ==\n");
     using S = ui::PropertyGrid::LegendStyle;
@@ -24301,6 +24371,7 @@ int main(int argc, char** argv) {
         apiVue1111_recette();
         if (argc > 1) configuration_et_variables(argv[1]);
         if (argc > 1) apiVue1112_dupliquer(argv[1]);   // 1.11.2 (D13)
+        if (argc > 1) valuePickerApi1113(argv[1]);     // 1.11.3 : le selecteur et les membres de l'automate
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -24547,6 +24618,7 @@ int main(int argc, char** argv) {
     symParametres1113();                    // 1.11.3 : fx garde, Voiture constante, UINTS (tableau), le carre de legende
     scriptsExportImport1113();              // 1.11.3 : exporter / importer les scripts d'une vue et les operateurs (.xpgst)
     valuePicker1113();                      // 1.11.3 : le carre de legende cliquable, le selecteur de valeur
+    if (argc > 1) valuePickerApi1113(argv[1]);   // 1.11.3 : le selecteur et les membres des variables de l'automate
     symbolesPanneau1112();                  // 1.11.2 (decision 162) : le dossier Symboles - Exporter les symboles, Importer des symboles
     paquetsPanneaux1112();                  // 1.11.2 (decision 174) : Types IHM, Fonctions, Scripts generaux - Exporter, Importer
     paquetsDepot1112();                     // 1.11.2 (decision 188) : un paquet glisse sur l'appli ouvre la fenetre d'import

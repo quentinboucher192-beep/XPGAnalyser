@@ -116,10 +116,16 @@ std::vector<Node> buildCatalog(const hmi::Project* hp, const hmi::View* view, co
     // ---- l'automate : les globales, leurs cases et leurs membres ----
     if (plc) {
         const int g = group(Style::Api, zoneLong(Style::Api));
+        // Par nom, comme l'editeur de donnees (le fichier les range dans l'ordre de declaration).
+        std::vector<std::pair<std::string, const domain::Variable*>> globals;
         for (const auto& var : plc->variables) {
             if (var.scope != domain::VariableScope::Global) continue;
-            const std::string name(plc->strings.text(var.name));
-            if (name.empty()) continue;
+            std::string name(plc->strings.text(var.name));
+            if (!name.empty()) globals.emplace_back(std::move(name), &var);
+        }
+        std::stable_sort(globals.begin(), globals.end(), [](const auto& a, const auto& b) { return lower(a.first) < lower(b.first); });
+        for (const auto& [name, at] : globals) {
+            const auto& var = *at;
             std::string detail = var.address.raw;
             const std::string comment(plc->strings.text(var.comment));
             if (!comment.empty()) detail += (detail.empty() ? "" : " \xC2\xB7 ") + comment;
@@ -132,15 +138,15 @@ std::vector<Node> buildCatalog(const hmi::Project* hp, const hmi::View* view, co
                     for (std::int64_t i = t.arrayLow; i <= t.arrayHigh; ++i) {
                         const std::string path = name + "[" + std::to_string(i) + "]";
                         const int e = leaf(a, Style::Api, "[" + std::to_string(i) + "]", path, element, {});
-                        for (const auto& m : assist::designMembers(*plc, path))
-                            leaf(e, Style::Api, m.name.substr(std::min(m.name.size(), path.size() + 1)), m.name, m.type, m.comment);
+                        for (const auto& m : assist::designMembers(*plc, path))   // m.name : le membre seul
+                            leaf(e, Style::Api, m.name, path + "." + m.name, m.type, m.comment);
                     }
                 continue;
             }
             const int v = leaf(g, Style::Api, name, name, std::string(plc->strings.text(t.name)), detail);
             if (t.klass == domain::TypeClass::Derived || t.klass == domain::TypeClass::FunctionBlock)
                 for (const auto& m : assist::designMembers(*plc, name))
-                    leaf(v, Style::Api, m.name.substr(std::min(m.name.size(), name.size() + 1)), m.name, m.type, m.comment);
+                    leaf(v, Style::Api, m.name, name + "." + m.name, m.type, m.comment);
         }
     }
     // ---- l'IHM : ses variables, leurs cases et leurs membres ----
