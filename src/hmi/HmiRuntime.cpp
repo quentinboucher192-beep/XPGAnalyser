@@ -273,6 +273,10 @@ public:
         if (const auto it = vars.find(upper(r)); it != vars.end()) {
             // 1.11.5 : forcee (l'onglet Variables IHM de la simulation), elle garde sa valeur.
             if (rt_.forcedIhm_.count(it->first)) return true;
+            // 1.11.7 : liee a un esclave simule qui la force (ou l'anime) : le forcage passe
+            // avant le script - l'ecriture est ignoree, sans erreur.
+            if (!rt_.bound_.empty() && rt_.hooks_.boundForced && rt_.boundVariable(it->first) && rt_.hooks_.boundForced(it->first))
+                return true;
             // Lot 15 : une variable liee a un equipement s'ecrit dans l'equipement ;
             // refusee (lecture seule, sans liaison), elle ne change pas.
             if (!rt_.bound_.empty()) {

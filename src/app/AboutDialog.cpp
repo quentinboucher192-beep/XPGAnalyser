@@ -1,4 +1,5 @@
 #include "AboutDialog.hpp"
+#include "../core/CodeStats.hpp"   // 1.11.7 : les lignes de code
 
 #include "App.hpp"
 #include "Dossiers.hpp"
@@ -82,6 +83,15 @@ namespace app {
         std::string out;
         out += std::string(XPG_ANALYZER_NAME) + " " + XPG_ANALYZER_VERSION + "\n";
         out += "Construit le " + buildDate() + " (" + compilerName() + ", " + systemName() + ")\n\n";
+        // 1.11.7 : le code de l'application (outils/compter_lignes.py).
+        {
+            out += "Le code de l'application (compt\xC3\xA9 le " + std::string(xpg::codestats::kCountedOn) + ") : "
+                 + std::to_string(xpg::codestats::kTotalLines) + " lignes dans " + std::to_string(xpg::codestats::kTotalFiles) + " fichiers\n";
+            for (const auto& e : xpg::codestats::kByExtension)
+                out += "  " + std::string(e.extension) + " : " + std::to_string(e.lines) + " lignes (" + std::to_string(e.files)
+                     + (e.files > 1 ? " fichiers)\n" : " fichier)\n");
+            out += "\n";
+        }
         out += "Les dossiers de l'application :\n" + foldersText() + "\n";
         out += "Le projet ouvert :\n" + projectText(app) + "\n";
         out += "Composants libres embarqu\xC3\xA9s et leurs licences : SDL3 (zlib), miniz (MIT), nanosvg (zlib), "

@@ -32,7 +32,8 @@
 #include "../../core/Version.hpp"
 #include "../StartPage.hpp"
 #include "../hmi/HmiStationLaunch.hpp"     // lot 15 : le poste au demarrage du PC
-#include "../../hmi/HmiVersionState.hpp"   // la ligne de version : "V48 en cours"
+#include "../../hmi/HmiVersionState.hpp"
+#include "../../core/CodeStats.hpp"   // 1.11.7 : les lignes de code de l'application   // la ligne de version : "V48 en cours"
 #include "../../project/ProjectIcon.hpp"
 #include "../../project/ProjectStore.hpp"
 
@@ -62,6 +63,23 @@ namespace fs = std::filesystem;
 // on l'ouvre, qui ne dit pas quelle version tourne.
 // 1.8.0 : la pastille sous le nom dit la version (core/Version.hpp), plus le lot.
 const char* const kRelease = XPG_ANALYZER_VERSION;
+
+// 1.11.7 : 453306 -> "453 306".
+std::string groupedNumber(long long n) {
+    std::string d = std::to_string(n < 0 ? -n : n), out;
+    for (std::size_t i = 0; i < d.size(); ++i) {
+        if (i > 0 && (d.size() - i) % 3 == 0) out += ' ';
+        out += d[i];
+    }
+    return (n < 0 ? "-" : "") + out;
+}
+
+// 1.11.7 : « Code : 453 306 lignes · .h 0 · .hpp 58 943 · .c 0 · .cpp 394 363 ».
+std::string codeStatsText() {
+    std::string out = "Code : " + groupedNumber(xpg::codestats::kTotalLines) + " lignes";
+    for (const auto& e : xpg::codestats::kByExtension) out += " \xC2\xB7 " + std::string(e.extension) + " " + groupedNumber(e.lines);
+    return out;
+}
 
 std::string buildDate() {
     const std::string_view d = __DATE__;
@@ -363,6 +381,7 @@ core::Status StartupScreen::buildUi() {
     auto& detail = page_->detail();
 
     rail.setRelease(kRelease, buildDate());
+    rail.setCodeStats(codeStatsText());              // 1.11.7 : les lignes de code (.h, .hpp, .c, .cpp)
     std::string program = leafName(station::currentExecutable());
     if (program.empty()) program = "xpg_analyzer";
     page_->setStatusRight("Entr\xC3\xA9" "e : ouvrir \xC2\xB7 F2 : renommer \xC2\xB7 Suppr : supprimer \xC2\xB7 Ctrl+F : chercher", "PLC Project Analyzer \xC2\xB7 " + program);

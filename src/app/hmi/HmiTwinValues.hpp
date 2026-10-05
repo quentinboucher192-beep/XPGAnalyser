@@ -283,6 +283,10 @@ public:
     [[nodiscard]] bool onlyView() const noexcept { return onlyView_; }
     // 1.11.6 : forcer (a leur valeur du moment) ou deforcer ces valeurs d'un esclave - une commande.
     bool forceRows(const std::string& equipment, const std::vector<std::string>& addresses, bool on, std::string* why = nullptr);
+    // 1.11.7 : le mouvement d'une ligne pose (ou retire : vide) d'un coup - une commande ; ses
+    // bornes en valeur BRUTE (le registre). Le forcage commun de l'onglet Variables IHM.
+    bool setBehavior(const std::string& equipment, const std::string& address, const std::optional<hmi::Behavior>& b,
+                     std::string* why = nullptr);
 
     // Les actions (la ligne, la fiche, les scripts, les tests).
     bool setAnimated(const std::string& equipment, const std::string& address, bool on, std::string* why = nullptr);

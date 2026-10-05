@@ -1495,6 +1495,12 @@ void StartRail::setAutostart(std::string projectName) {
     invalidateLayout();
 }
 
+void StartRail::setCodeStats(std::string text) {
+    codeStats_ = std::move(text);
+    invalidateLayout();
+    invalidate();
+}
+
 void StartRail::setRelease(std::string tag, std::string date) {
     tag_ = std::move(tag);
     date_ = std::move(date);
@@ -1523,7 +1529,10 @@ float StartRail::placeBody(int level) {
     tagline_ = wrap("L'atelier de tes projets Control Expert : l'API, l'IHM, les macros et les versions.", kBody, textW, taglineLines);
     const float titleH = ui::lineHeight(kBrand) * static_cast<float>(title_.size());
     const float tagH = ui::lineHeight(kBody) * static_cast<float>(tagline_.size());
-    const float blockH = titleH + (tagline_.empty() ? 0.f : 6.f + tagH) + 8.f + 20.f;
+    // 1.11.7 : les lignes de code, sous la pastille (pas dans une fenetre tres basse).
+    codeLines_ = level <= 2 && !codeStats_.empty() ? wrap(codeStats_, kSmall, textW, 2) : std::vector<std::string>{};
+    const float codeH = codeLines_.empty() ? 0.f : 4.f + ui::lineHeight(kSmall) * static_cast<float>(codeLines_.size());
+    const float blockH = titleH + (tagline_.empty() ? 0.f : 6.f + tagH) + 8.f + 20.f + codeH;
     const float brandH = std::max(logoSide, blockH);
     logo_ = {x0, std::round(y + (brandH - logoSide) * 0.5f), logoSide, logoSide};
     titleY_ = std::round(y + (brandH - blockH) * 0.5f);
@@ -1638,6 +1647,14 @@ void StartRail::onPaint(const ui::PaintContext& ctx) {
         float x = textX_;
         if (!tag_.empty()) x += drawPill(ctx, x, chipY_ + 10.f, tag_, c.accent) + 8.f;
         ctx.r.drawText({x, chipY_ + 10.f - ctx.r.lineHeight(kSmall) * 0.5f}, date_, kSmall, c.textMuted);
+    }
+    // 1.11.7 : les lignes de code de l'application.
+    {
+        float cy = chipY_ + 24.f;
+        for (const auto& l : codeLines_) {
+            ctx.r.drawText({textX_, cy}, l, kSmall, c.textMuted);
+            cy += ctx.r.lineHeight(kSmall);
+        }
     }
 
     // ---- la zone ou glisser -------------------------------------------------------

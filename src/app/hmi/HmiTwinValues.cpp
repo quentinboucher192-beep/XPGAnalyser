@@ -2243,6 +2243,28 @@ bool TwinValuesController::forceRows(const std::string& name, const std::vector<
     return ok;
 }
 
+bool TwinValuesController::setBehavior(const std::string& name, const std::string& rawAddress, const std::optional<hmi::Behavior>& b,
+                                       std::string* why) {
+    const auto r = row(name, trimmedOf(rawAddress));
+    if (!r) return fail(name + " : pas de ligne \xC2\xAB " + rawAddress + " \xC2\xBB", why);
+    const std::string what = r->variable.empty() ? r->address : r->variable;
+    const std::string label = b ? what + " : " + std::string(hmi::behaviorKindLabel(b->kind)) : what + " : plus de mouvement";
+    return changeBehaviors(name, label, [&](std::vector<hmi::Behavior>& list, std::string&) {
+        const bool has = r->behavior >= 0 && static_cast<std::size_t>(r->behavior) < list.size();
+        if (!b) {
+            if (has) list.erase(list.begin() + r->behavior);
+            return true;
+        }
+        hmi::Behavior nb = *b;
+        nb.address = r->address;
+        nb.type = r->boolean ? std::string("BOOL") : r->type;
+        nb.enabled = true;
+        if (has) list[static_cast<std::size_t>(r->behavior)] = nb;
+        else list.push_back(nb);
+        return true;
+    }, why);
+}
+
 bool TwinValuesController::unforceAll(std::string* why) {
     std::size_t n = 0;
     for (const auto& e : doc_->project.equipments) n += e.forcings.size();

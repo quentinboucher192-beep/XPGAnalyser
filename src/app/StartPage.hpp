@@ -298,6 +298,9 @@ public:
     [[nodiscard]] const std::string& autostart() const noexcept { return autostartName_; }
     // La pastille sous le nom : "lot API 7", et la date du jour.
     void setRelease(std::string tag, std::string date);
+    // 1.11.7 : sous la pastille, le nombre de lignes de code de l'application (.h, .hpp,
+    // .c, .cpp - core/CodeStats.hpp) ; vide : rien.
+    void setCodeStats(std::string text);
 
 protected:
     void onLayout() override;
@@ -320,6 +323,8 @@ private:
     ThemeSwatches* swatches_{nullptr};
     StartButton*   autostart_{nullptr};
     std::string    autostartName_, tag_, date_;
+    std::string              codeStats_;              // 1.11.7
+    std::vector<std::string> codeLines_;
     // Ce que onLayout calcule et que onPaint dessine.
     gfx::Rect                logo_{}, drop_{}, themeLabel_{}, station_{};
     std::vector<std::string> title_, tagline_, dropText_;

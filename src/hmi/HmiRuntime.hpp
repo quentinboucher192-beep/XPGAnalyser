@@ -453,6 +453,11 @@ public:
         // de liaison - Ethernet TCP/IP, desactive, pas encore partie) ; l'etat de
         // tous les equipements.
         std::function<comm::Link*(const std::string& equipment)> equipmentLink;
+        // 1.11.7 : LE FORCAGE COMMUN - une variable liee dont la case est forcee (ou animee)
+        // dans son esclave simule (la cle : la variable en majuscules, Four1.Temperature ->
+        // FOUR1.TEMPERATURE). Vrai : une ecriture (un script, une action) est ignoree, sans
+        // erreur - le forcage passe avant ; la lecture rend la valeur forcee de l'esclave.
+        std::function<bool(const std::string& variable)>         boundForced;
         std::function<std::vector<EquipmentStatus>()>            equipmentStatus;
         // 1.9 : les esclaves simules (withValues : leurs lignes aussi - la page
         // Simulation ouverte) ; une commande de la page (faux et why : refusee).

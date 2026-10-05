@@ -35,6 +35,7 @@
 #include "../src/hmi/HmiStore.hpp"
 #include "../src/hmi/HmiSymbols.hpp"
 #include "../src/hmi/HmiViewPaths.hpp"   // 1.11.6
+#include "../src/core/CodeStats.hpp"      // 1.11.7
 #include "../src/hmi/HmiObjectAlarms.hpp"   // 1.9
 #include "../src/hmi/HmiAlarmGroups.hpp"    // 1.10.2 (AL)
 #include "../src/hmi/HmiAlarmGroupCommands.hpp"   // 1.10.2 (AL) : Ctrl+Z
@@ -811,6 +812,24 @@ void geometrieEnMarche1114() {
 //  actuelle' en reperant les profondeurs des symboles d'instances ») : les variables
 //  que lit une vue, ses symboles developpes a toute profondeur ; le filtre.
 // =============================================================================
+// 1.11.7 : le nombre de lignes de code de l'application (outils/compter_lignes.py ->
+// core/CodeStats.hpp), affiche sur l'ecran d'accueil et dans A propos.
+void lignesDeCode1117() {
+    std::printf("1.11.7 : les lignes de code de l'application\n");
+    namespace cs = xpg::codestats;
+    long long lines = 0;
+    int files = 0;
+    std::vector<std::string> exts;
+    for (const auto& e : cs::kByExtension) {
+        lines += e.lines;
+        files += e.files;
+        exts.emplace_back(e.extension);
+    }
+    check(exts == std::vector<std::string>{".h", ".hpp", ".c", ".cpp"}, "les quatre extensions : .h, .hpp, .c, .cpp");
+    check(lines == cs::kTotalLines && files == cs::kTotalFiles, "le total est la somme des extensions");
+    check(cs::kTotalLines > 100000 && cs::kByExtension[3].files > 100, "des centaines de .cpp, plus de 100 000 lignes (" + std::to_string(cs::kTotalLines) + ")");
+}
+
 void surLaVueActuelle1116() {
     std::printf("1.11.6 : les variables lues par la vue (sur la vue actuelle)\n");
     namespace vp = hmi::viewpaths;
@@ -20391,6 +20410,7 @@ int main(int argc, char** argv) {
     geometrieEnMarche1114();   // 1.11.4 : x, y, w, h, rot, miroirs calcules - instance, groupe, objet
     parametresReperesEnMarche1114();   // 1.11.4 : '$Nom$' et $UINTS$ en arguments, en marche
     surLaVueActuelle1116();            // 1.11.6 : les variables lues par la vue
+    lignesDeCode1117();                // 1.11.7 : les lignes de code de l'application
     actions();
     scripts();
     transitions();
