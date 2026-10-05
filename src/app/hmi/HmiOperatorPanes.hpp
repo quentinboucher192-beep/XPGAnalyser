@@ -29,6 +29,7 @@
 #include "../../hmi/HmiCommands.hpp"
 #include "../../hmi/HmiOperators.hpp"
 #include "../../hmi/HmiScript.hpp"
+#include "../../hmi/HmiScriptFile.hpp"   // 1.11.3 : exporter / importer les operateurs (.xpgst)
 #include "../../ui/widgets/Containers.hpp"
 #include "../../ui/widgets/Controls.hpp"
 #include "../../ui/widgets/DataViews.hpp"
@@ -161,6 +162,14 @@ public:
 
     [[nodiscard]] const std::vector<hmi::ScriptDiagnostic>& diagnostics() const noexcept { return diagnostics_; }
 
+    // ---- 1.11.3 : EXPORTER ET IMPORTER LES OPERATEURS (.xpgst, HmiScriptFile.hpp) ----
+    //  Ceux du porteur montre (un symbole ou un type IHM). L'import compare par
+    //  signature (op, gauche, droite) : un neuf est ajoute, un different remplace le
+    //  sien ; un seul Ctrl+Z. Un operateur que operatorProblem refuse est laisse.
+    bool exportOperators(const std::string& path, std::string* why = nullptr);
+    bool importOperators(const std::string& path, std::string* why = nullptr);
+    std::size_t applyOperatorsImport(const hmi::scriptfile::File&, const std::vector<bool>& chosen);
+
     // L'aide a la saisie (comme les scripts). `plc` : le programme de l'automate.
     void setAssist(std::function<std::shared_ptr<const domain::Project>()> plc,
                    std::function<bool(std::string_view, std::string&)> live = {});
@@ -216,6 +225,7 @@ private:
     std::string        message_;
     bool               syncing_{false};
     core::ConnectionScope links_;
+    std::shared_ptr<char> alive_ = std::make_shared<char>(0);   // 1.11.3 : les reponses de l'explorateur et des dialogues
 };
 
 } // namespace app

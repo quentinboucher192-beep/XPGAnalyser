@@ -4,6 +4,10 @@
 #include "HmiIcons.hpp"
 #include "HmiPaneKit.hpp"
 #include "HmiScriptPanes.hpp"   // 1.10.4 : guardedDiagnostics
+#include "HmiAskDialog.hpp"     // 1.11.3 : la fenetre d'import des operateurs
+#include "HmiImages.hpp"        // hmiProjectFolder
+#include "../../menu/MenuManager.hpp"
+#include "../../ui/widgets/PathBrowse.hpp"
 #include "../../domain/ProjectModel.hpp"
 #include "../../hmi/HmiEnums.hpp"     // 1.10 (decision 15)
 #include "../../hmi/HmiSymbols.hpp"
@@ -175,7 +179,8 @@ std::string firstFree(const hmi::Project& p, const hmi::OperatorOwner& owner, co
     return list.empty() ? std::string{} : list.front();
 }
 
-enum ToolAction : int { TAdd = 1, TDuplicate, TDelete, TCompile, TRewrite };
+enum ToolAction : int { TAdd = 1, TDuplicate, TDelete, TCompile, TRewrite,
+                        TExport, TImport };   // 1.11.3 : les operateurs voyagent (.xpgst)
 
 constexpr const char* kConversionLabel = "Conversion (TO_xxx)";
 constexpr const char* kNone = "(aucun)";
@@ -231,6 +236,13 @@ HmiOperatorsPane::HmiOperatorsPane(std::string id, hmi::DocumentPtr doc, Apply a
     tools->add(TDelete, HmiGlyph::Delete, "Supprimer l'op\xC3\xA9rateur (Ctrl+Z le rend)", "Supprimer");
     tools->separator();
     tools->add(TCompile, HmiGlyph::Code, "Compiler : les op\xC3\xA9rateurs, les scripts, les expressions et les actions", "Compiler");
+    tools->separator();
+    // 1.11.3 : exporter et importer les operateurs (un fichier .xpgst, lisible).
+    tools->add(TExport, HmiGlyph::Export, "Exporter les op\xC3\xA9rateurs de ce symbole ou de ce type dans un fichier .xpgst, lisible et modifiable",
+               "Exporter\xE2\x80\xA6");
+    tools->add(TImport, HmiGlyph::Import,
+               "Importer des op\xC3\xA9rateurs (.xpgst) : chacun coch\xC3\xA9, un neuf ajout\xC3\xA9, un diff\xC3\xA9rent remplac\xC3\xA9 (m\xC3\xAAme signature), un seul Ctrl+Z",
+               "Importer\xE2\x80\xA6");
     tools->add(TRewrite, HmiGlyph::Refresh, "R\xC3\xA9\xC3\xA9" "crire toString et fromString d'apr\xC3\xA8s les valeurs de l'\xC3\xA9num\xC3\xA9ration (Ctrl+Z reprend)",
                "R\xC3\xA9\xC3\xA9" "crire depuis les valeurs");
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
@@ -239,6 +251,8 @@ HmiOperatorsPane::HmiOperatorsPane(std::string id, hmi::DocumentPtr doc, Apply a
         return t && hmi::isEnumeration(*t);
     });
     tools_->setEnabledWhen(TAdd, [this] { return owner_.valid(); });
+    tools_->setEnabledWhen(TExport, [this] { return owner_.valid() && !order_.empty(); });
+    tools_->setEnabledWhen(TImport, [this] { return owner_.valid(); });
     tools_->setEnabledWhen(TDuplicate, [this] { return selectedOperator() != kNoId; });
     tools_->setEnabledWhen(TDelete, [this] { return selectedOperator() != kNoId; });
 
@@ -311,6 +325,32 @@ HmiOperatorsPane::HmiOperatorsPane(std::string id, hmi::DocumentPtr doc, Apply a
             case TDuplicate: if (sel) (void)openDuplicateDialog(sel); break;
             case TDelete: if (sel) (void)deleteOperator(sel); break;
             case TRewrite: (void)rewriteFromValues(); break;
+            case TExport: {   // 1.11.3
+                const std::weak_ptr<char> alive = alive_;
+                const std::string name = owner_.name + "_operateurs" + std::string(hmi::scriptfile::kExtension);
+                if (!ui::browsePath(ui::saveFile("Op\xC3\xA9rateurs XPGAnalyser|*.xpgst", ui::pathIn(hmiProjectFolder(), "exports"),
+                                                 "Exporter les op\xC3\xA9rateurs de " + owner_.name),
+                                    name, [this, alive](std::string path) {
+                                        if (alive.expired()) return;
+                                        std::string why;
+                                        if (exportOperators(path, &why)) say("Op\xC3\xA9rateurs export\xC3\xA9s : " + path);
+                                        else say(why, true);
+                                    }))
+                    say("Pas d'explorateur de fichiers ici.", true);
+                break;
+            }
+            case TImport: {
+                const std::weak_ptr<char> alive = alive_;
+                if (!ui::browsePath(ui::openFile("Op\xC3\xA9rateurs XPGAnalyser|*.xpgst", ui::pathIn(hmiProjectFolder(), "exports"),
+                                                 "Importer des op\xC3\xA9rateurs"),
+                                    {}, [this, alive](std::string path) {
+                                        if (alive.expired()) return;
+                                        std::string why;
+                                        if (!importOperators(path, &why)) say(why, true);
+                                    }))
+                    say("Pas d'explorateur de fichiers ici.", true);
+                break;
+            }
             case TCompile:
                 updateDiagnostics();
                 if (compile) compile();
@@ -655,6 +695,87 @@ void HmiOperatorsPane::setAssist(std::function<std::shared_ptr<const domain::Pro
     assist_.live = std::move(live);
     assist::attach(*editor_, assist_);
     updateDiagnostics();
+}
+
+// ---- 1.11.3 : exporter et importer les operateurs ----
+bool HmiOperatorsPane::exportOperators(const std::string& path, std::string* why) {
+    const auto* ops = owner_.valid() ? hmi::operatorsOf(doc_->project, owner_) : nullptr;
+    if (!ops || ops->empty()) { if (why) *why = "Rien \xC3\xA0 exporter : aucun op\xC3\xA9rateur."; return false; }
+    const auto file = hmi::scriptfile::fromOperators(*ops, owner_.name,
+                                                     owner_.kind == hmi::OperatorOwner::Kind::Type ? std::string("type") : std::string("symbole"));
+    return hmi::scriptfile::save(file, path, why);
+}
+
+bool HmiOperatorsPane::importOperators(const std::string& path, std::string* why) {
+    const auto* ops = owner_.valid() ? hmi::operatorsOf(doc_->project, owner_) : nullptr;
+    if (!ops) { if (why) *why = "Choisis d'abord un symbole ou un type IHM."; return false; }
+    hmi::scriptfile::File f;
+    if (!hmi::scriptfile::load(path, f, why)) return false;
+    if (f.genre != hmi::scriptfile::Genre::Operators) {
+        if (why) *why = "Ce fichier contient des scripts de vue (de " + f.source + ") : importe-le dans les Scripts d'une vue.";
+        return false;
+    }
+    const auto states = hmi::scriptfile::compareOperators(f, *ops);
+    app::HmiAskDialog::Spec spec;
+    spec.id = "dialog.importOperators";
+    spec.title = "Importer des op\xC3\xA9rateurs dans " + owner_.label();
+    spec.text = "Le fichier vient de " + (f.source.empty() ? std::string("?") : f.source) + " : coche les op\xC3\xA9rateurs \xC3\xA0 prendre. "
+                "Un op\xC3\xA9rateur de m\xC3\xAAme signature est remplac\xC3\xA9.";
+    spec.listTitle = "OP\xC3\x89RATEURS DU FICHIER";
+    for (std::size_t i = 0; i < f.entries.size(); ++i) {
+        const auto st = i < states.size() ? states[i] : hmi::scriptfile::State::New;
+        std::string detail = hmi::scriptfile::describe(f, i, st);
+        if (st == hmi::scriptfile::State::New)
+            if (const auto problem = hmi::operatorProblem(doc_->project, owner_, f.entries[i].op, hmi::kNoId, isPlcType); !problem.empty())
+                detail += " \xC2\xB7 refus\xC3\xA9 : " + problem;
+        spec.items.push_back({hmi::operatorSignature(f.entries[i].op), detail, st != hmi::scriptfile::State::Same});
+    }
+    spec.confirm = "Importer";
+    spec.confirmLabel = [](const std::vector<bool>& items, const std::vector<bool>&, int) {
+        const auto n = static_cast<std::size_t>(std::count(items.begin(), items.end(), true));
+        return n == 0 ? std::string("Rien \xC3\xA0 importer") : "Importer " + std::to_string(n) + " op\xC3\xA9rateur" + (n > 1 ? "s" : "");
+    };
+    spec.note = "Un seul Ctrl+Z annule l'import.";
+    auto* manager = menu::MenuManager::instance();
+    if (!manager) {
+        std::vector<bool> chosen;
+        for (const auto& it : spec.items) chosen.push_back(it.checked);
+        (void)applyOperatorsImport(f, chosen);
+        return true;
+    }
+    const std::weak_ptr<char> alive = alive_;
+    manager->ShowDialog(std::make_unique<app::HmiAskDialog>(std::move(spec)), [this, alive, f](const menu::DialogResult& r) {
+        if (alive.expired() || !r.accepted()) return;
+        (void)applyOperatorsImport(f, app::HmiAskDialog::parse(r.payload).items);
+    });
+    return true;
+}
+
+std::size_t HmiOperatorsPane::applyOperatorsImport(const hmi::scriptfile::File& f, const std::vector<bool>& chosen) {
+    if (!owner_.valid()) return 0;
+    // Un neuf que la verification refuse (en double, un type inconnu) est laisse, et dit.
+    std::vector<bool> keep = chosen.empty() ? std::vector<bool>(f.entries.size(), true) : chosen;
+    std::string refused;
+    if (const auto* ops = hmi::operatorsOf(doc_->project, owner_)) {
+        const auto states = hmi::scriptfile::compareOperators(f, *ops);
+        for (std::size_t i = 0; i < f.entries.size() && i < keep.size(); ++i)
+            if (keep[i] && i < states.size() && states[i] == hmi::scriptfile::State::New)
+                if (const auto problem = hmi::operatorProblem(doc_->project, owner_, f.entries[i].op, hmi::kNoId, isPlcType); !problem.empty()) {
+                    keep[i] = false;
+                    refused += (refused.empty() ? "" : " ; ") + hmi::operatorSignature(f.entries[i].op) + " (" + problem + ")";
+                }
+    }
+    std::size_t changed = 0;
+    auto cmd = hmi::changeProject(doc_, "Importer des op\xC3\xA9rateurs dans " + owner_.name, [&](hmi::Project& p) {
+        if (auto* list = hmi::operatorsOf(p, owner_)) changed = hmi::scriptfile::applyToOperators(p, *list, f, keep);
+    });
+    if (cmd && changed > 0) apply_(std::move(cmd));
+    refresh();
+    std::string msg = changed == 0 ? std::string("Rien n'a chang\xC3\xA9.")
+                                   : std::to_string(changed) + " op\xC3\xA9rateur" + (changed > 1 ? "s import\xC3\xA9s" : " import\xC3\xA9") + " (Ctrl+Z pour annuler).";
+    if (!refused.empty()) msg += " Laiss\xC3\xA9s : " + refused + ".";
+    say(msg, !refused.empty());
+    return changed;
 }
 
 void HmiOperatorsPane::say(std::string text, bool warning) {

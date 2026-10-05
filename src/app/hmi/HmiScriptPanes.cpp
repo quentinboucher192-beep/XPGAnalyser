@@ -3,6 +3,9 @@
 
 #include "HmiAssetPanes.hpp"
 #include "HmiIcons.hpp"
+#include "HmiAskDialog.hpp"                 // 1.11.3 : la fenetre d'import des scripts d'une vue
+#include "../../menu/MenuManager.hpp"
+#include "../../ui/widgets/PathBrowse.hpp"
 #include "../../core/CallTrail.hpp"      // 1.10.4 : un diagnostic qui echoue va au journal interne
 #include "../../domain/ProjectModel.hpp"
 #include "../../hmi/HmiEnums.hpp"         // 1.10 (integration I2) : knownType connait les enumerations
@@ -300,6 +303,15 @@ HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply
                    "Importer\xE2\x80\xA6");
     } else {
         tools->add(TClear, HmiGlyph::Delete, "Vider le script de cet \xC3\xA9v\xC3\xA9nement (Ctrl+Z le rend)", "Vider");
+        // 1.11.3 : les scripts d'une vue (popup, symbole, modele, en-tete, pied) voyagent (.xpgst).
+        tools->add(TExport, HmiGlyph::Export,
+                   "Exporter les scripts de cette vue (OnOpen, OnCycle, OnClose) dans un fichier .xpgst, lisible et modifiable dans "
+                   "n'importe quel \xC3\xA9" "diteur",
+                   "Exporter\xE2\x80\xA6");
+        tools->add(TImport, HmiGlyph::Import,
+                   "Importer des scripts (.xpgst ; un .st va dans l'\xC3\xA9v\xC3\xA9nement choisi) : chacun coch\xC3\xA9, remplacer ou "
+                   "ajouter \xC3\xA0 la suite, un seul Ctrl+Z",
+                   "Importer\xE2\x80\xA6");
     }
     tools->separator();
     // 1.10 (maquette, scene 4) : les resultats ici, sous le code.
@@ -433,8 +445,43 @@ HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply
             }
             case TRename: if (sel && hosts_.rename) hosts_.rename(sel); break;
             case TFolder: if (folders_) (void)folders_->newFolder(); break;
-            case TExport: if (hosts_.exportItems) hosts_.exportItems(sel); break;   // 1.11.2 (decision 174)
-            case TImport: if (hosts_.importAny) hosts_.importAny(); break;
+            case TExport:
+                if (general()) {
+                    if (hosts_.exportItems) hosts_.exportItems(sel);   // 1.11.2 (decision 174)
+                } else if (const auto* v = doc_->project.view(view_)) {
+                    // 1.11.3 : l'explorateur, puis le fichier.
+                    if (hmi::scriptfile::fromView(*v).entries.empty()) {
+                        say("Rien \xC3\xA0 exporter : les scripts de " + v->name + " sont vides.", true);
+                        break;
+                    }
+                    const std::string name = v->name + "_scripts" + std::string(hmi::scriptfile::kExtension);
+                    const std::weak_ptr<char> alive = alive_;
+                    if (!ui::browsePath(ui::saveFile("Scripts XPGAnalyser|*.xpgst", ui::pathIn(hmiProjectFolder(), "exports"),
+                                                     "Exporter les scripts de " + v->name),
+                                        name, [this, alive](std::string path) {
+                                            if (alive.expired()) return;
+                                            std::string why;
+                                            if (exportViewScripts(path, &why)) say("Scripts export\xC3\xA9s : " + path);
+                                            else say(why, true);
+                                        }))
+                        say("Pas d'explorateur de fichiers ici.", true);
+                }
+                break;
+            case TImport:
+                if (general()) {
+                    if (hosts_.importAny) hosts_.importAny();
+                } else {
+                    const std::weak_ptr<char> alive = alive_;
+                    if (!ui::browsePath(ui::openFile("Scripts XPGAnalyser|*.xpgst;*.st;*.txt", ui::pathIn(hmiProjectFolder(), "exports"),
+                                                     "Importer des scripts"),
+                                        {}, [this, alive](std::string path) {
+                                            if (alive.expired()) return;
+                                            std::string why;
+                                            if (!importViewScripts(path, &why)) say(why, true);
+                                        }))
+                        say("Pas d'explorateur de fichiers ici.", true);
+                }
+                break;
             case TDelete:
                 if (!sel && folders_) {
                     if (const auto f = folders_->selectedFolder(); !f.empty()) (void)folders_->deleteFolder(f);
@@ -1070,6 +1117,79 @@ void HmiScriptsPane::goTo(Id script, int line, int column, int length) {
     editor_->selectRange(static_cast<std::size_t>(line - 1), static_cast<std::uint32_t>(column - 1),
                          static_cast<std::uint32_t>(std::max(0, length)));
     updateSymbolLine();
+}
+
+// ---- 1.11.3 : exporter et importer les scripts d'une vue ----
+bool HmiScriptsPane::exportViewScripts(const std::string& path, std::string* why) {
+    const auto* v = doc_->project.view(view_);
+    if (!v) { if (why) *why = "La vue n'existe plus."; return false; }
+    const auto file = hmi::scriptfile::fromView(*v);
+    if (file.entries.empty()) { if (why) *why = "Rien \xC3\xA0 exporter : les scripts de " + v->name + " sont vides."; return false; }
+    return hmi::scriptfile::save(file, path, why);
+}
+
+bool HmiScriptsPane::importViewScripts(const std::string& path, std::string* why) {
+    const auto* v = doc_->project.view(view_);
+    if (!v) { if (why) *why = "La vue n'existe plus."; return false; }
+    hmi::scriptfile::File f;
+    if (!hmi::scriptfile::load(path, f, why)) return false;
+    if (f.genre != hmi::scriptfile::Genre::ViewScripts) {
+        if (why) *why = "Ce fichier contient des op\xC3\xA9rateurs (de " + f.source + ") : importe-le dans les Op\xC3\xA9rateurs d'un symbole ou d'un type IHM.";
+        return false;
+    }
+    // Un .st sans bloc : un seul script, pour l'evenement choisi.
+    if (f.plain && !f.entries.empty()) f.entries.front().event = selectedEvent().empty() ? std::string("OnOpen") : selectedEvent();
+    const auto states = hmi::scriptfile::compareView(f, *v);
+    app::HmiAskDialog::Spec spec;
+    spec.id = "dialog.importViewScripts";
+    spec.title = "Importer des scripts dans " + v->name;
+    spec.text = (f.plain ? "Le fichier est un seul script : il va dans " + f.entries.front().event + "."
+                         : "Le fichier vient de " + (f.source.empty() ? std::string("?") : f.source)
+                               + (f.role.empty() ? std::string{} : " (" + f.role + ")") + " : coche les scripts \xC3\xA0 prendre.");
+    spec.listTitle = "SCRIPTS DU FICHIER";
+    bool different = false;
+    for (std::size_t i = 0; i < f.entries.size(); ++i) {
+        const auto st = i < states.size() ? states[i] : hmi::scriptfile::State::New;
+        different = different || st == hmi::scriptfile::State::Different;
+        spec.items.push_back({f.entries[i].event, hmi::scriptfile::describe(f, i, st, v), st != hmi::scriptfile::State::Same});
+    }
+    if (different) {
+        spec.options.push_back({"Remplacer le script de la vue", "le code du fichier prend sa place", {}, false, {}, {}});
+        spec.options.push_back({"Ajouter \xC3\xA0 la suite", "le code du fichier va apr\xC3\xA8s celui de la vue, sous un commentaire", {}, false, {}, {}});
+    }
+    spec.confirm = "Importer";
+    spec.confirmLabel = [](const std::vector<bool>& items, const std::vector<bool>&, int) {
+        const auto n = static_cast<std::size_t>(std::count(items.begin(), items.end(), true));
+        return n == 0 ? std::string("Rien \xC3\xA0 importer") : "Importer " + std::to_string(n) + " script" + (n > 1 ? "s" : "");
+    };
+    spec.note = "Un seul Ctrl+Z annule l'import. Les scripts identiques sont d\xC3\xA9" "coch\xC3\xA9s : rien ne change pour eux.";
+    auto* manager = menu::MenuManager::instance();
+    if (!manager) {   // sans ecran (essais) : tout ce qui est coche, en remplacant
+        std::vector<bool> chosen;
+        for (const auto& it : spec.items) chosen.push_back(it.checked);
+        (void)applyImport(f, chosen, hmi::scriptfile::Mode::Replace);
+        return true;
+    }
+    const std::weak_ptr<char> alive = alive_;
+    manager->ShowDialog(std::make_unique<app::HmiAskDialog>(std::move(spec)), [this, alive, f](const menu::DialogResult& r) {
+        if (alive.expired() || !r.accepted()) return;
+        const auto a = app::HmiAskDialog::parse(r.payload);
+        (void)applyImport(f, a.items, a.option == 1 ? hmi::scriptfile::Mode::Append : hmi::scriptfile::Mode::Replace);
+    });
+    return true;
+}
+
+std::size_t HmiScriptsPane::applyImport(const hmi::scriptfile::File& f, const std::vector<bool>& chosen, hmi::scriptfile::Mode mode) {
+    std::size_t changed = 0;
+    const std::string plainEvent = selectedEvent().empty() ? std::string("OnOpen") : selectedEvent();
+    auto cmd = hmi::changeView(doc_, view_, "Importer des scripts", [&](hmi::Project& p, hmi::View& vv) {
+        changed = hmi::scriptfile::applyToView(p, vv, f, chosen, mode, plainEvent);
+    });
+    if (cmd && changed > 0) apply_(std::move(cmd));
+    refresh();
+    if (changed == 0) say("Rien n'a chang\xC3\xA9 : les scripts choisis sont identiques.");
+    else say(std::to_string(changed) + " script" + (changed > 1 ? "s import\xC3\xA9s" : " import\xC3\xA9") + " (Ctrl+Z pour annuler).");
+    return changed;
 }
 
 void HmiScriptsPane::say(std::string text, bool warning) {

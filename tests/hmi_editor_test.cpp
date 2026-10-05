@@ -22041,6 +22041,132 @@ void symParametres1113() {
 }
 
 // =============================================================================
+//  1.11.3 : EXPORTER ET IMPORTER LES SCRIPTS D'UNE VUE (popup, symbole, modele...)
+//  ET LES OPERATEURS - un fichier texte .xpgst (HmiScriptFile.hpp) ; l'import
+//  compare, remplace ou ajoute a la suite, en une commande (Ctrl+Z).
+// =============================================================================
+void scriptsExportImport1113() {
+    std::printf("== 1.11.3 : exporter et importer les scripts d'une vue et les op\xC3\xA9rateurs (.xpgst) ==\n");
+    namespace sf = hmi::scriptfile;
+    auto doc = std::make_shared<Document>();
+    core::CommandStack stack;
+    auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+    const auto script = [&](const std::string& view, const std::string& event, const std::string& body) {
+        Script sc;
+        sc.id = doc->project.allocate();
+        sc.name = view + "." + event;
+        sc.event = event;
+        sc.body = body;
+        return sc;
+    };
+    View a = makeView(doc->project, "Popup_vanne");
+    a.role = "popup";
+    a.scripts.push_back(script("Popup_vanne", "OnOpen", "Titre := 'Vanne';\n"));
+    a.scripts.push_back(script("Popup_vanne", "OnCycle", "Compteur := Compteur + 1;\n"));
+    const Id aid = a.id;
+    View b = makeView(doc->project, "Vue_Accueil");
+    b.scripts.push_back(script("Vue_Accueil", "OnCycle", "Ancien := 1;\n"));
+    const Id bid = b.id;
+    doc->project.views.push_back(a);
+    doc->project.views.push_back(b);
+
+    // Le format : aller et retour, un format plus recent refuse, un .st seul.
+    const auto f = sf::fromView(*doc->project.view(aid));
+    check(f.entries.size() == 2 && f.entries[0].event == "OnOpen" && f.entries[1].event == "OnCycle", "fromView : OnOpen puis OnCycle (le vide saute)");
+    const std::string text = sf::write(f);
+    sf::File back;
+    std::string why;
+    check(sf::read(text, back, &why) && back.entries.size() == 2 && back.source == "Popup_vanne" && back.role == "popup"
+              && back.entries[0].body == "Titre := 'Vanne';" && back.entries[1].body == "Compteur := Compteur + 1;",
+          "write puis read : les deux scripts, la source et le r\xC3\xB4le (" + why + ")");
+    check(text.find("(*# script evenement=OnOpen langage=ST *)") != std::string::npos, "un bloc lisible avant chaque script");
+    sf::File newer;
+    check(!sf::read("(*# xpgst format=9 version=2.0 *)\n", newer, &why) && why.find("plus r\xC3\xA9" "cente") != std::string::npos,
+          "un format plus r\xC3\xA9" "cent est refus\xC3\xA9, en le disant (" + why + ")");
+    sf::File plain;
+    check(sf::read("x := 1;\ny := 2;\n", plain, &why) && plain.plain && plain.entries.size() == 1 && plain.entries[0].body == "x := 1;\ny := 2;",
+          "un .st sans bloc : un seul script");
+    sf::File bad;
+    check(!sf::read("(*# script evenement=OnBoom *)\nx := 1;\n", bad, &why) && why.find("OnBoom") != std::string::npos,
+          "un \xC3\xA9v\xC3\xA9nement inconnu : refus\xC3\xA9 (" + why + ")");
+
+    // Les volets : Exporter... et Importer... dans la barre d'une vue (pas dans la Programmation generale).
+    app::HmiScriptsPane src("sx1113", doc, apply, aid);
+    src.setBounds({0, 0, 1400, 800});
+    src.layout();
+    check(src.tools().actionByTip("Exporter les scripts de cette vue") >= 0 && src.tools().actionByTip("Importer des scripts (.xpgst") >= 0,
+          "les scripts d'une vue : Exporter\xE2\x80\xA6 et Importer\xE2\x80\xA6");
+    const std::string path = (std::filesystem::temp_directory_path() / "xpg_1113_scripts.xpgst").string();
+    check(src.exportViewScripts(path, &why), "Exporter : le fichier \xC3\xA9" "crit (" + why + ")");
+    app::HmiScriptsPane dst("dx1113", doc, apply, bid);
+    dst.setBounds({0, 0, 1400, 800});
+    dst.layout();
+    const auto states = sf::compareView(back, *doc->project.view(bid));
+    check(states.size() == 2 && states[0] == sf::State::New && states[1] == sf::State::Different, "compare : OnOpen nouveau, OnCycle diff\xC3\xA9rent");
+    check(dst.importViewScripts(path, &why), "Importer (sans \xC3\xA9" "cran : tout ce qui est coch\xC3\xA9, en rempla\xC3\xA7" "ant) (" + why + ")");
+    const auto bodyOf = [&](Id view, const char* event) {
+        for (const auto& sc : doc->project.view(view)->scripts)
+            if (sc.event == event) return sc.body;
+        return std::string("(aucun)");
+    };
+    check(bodyOf(bid, "OnOpen").find("Titre := 'Vanne';") == 0 && bodyOf(bid, "OnCycle").find("Compteur := Compteur + 1;") == 0,
+          "Vue_Accueil : OnOpen cr\xC3\xA9\xC3\xA9, OnCycle remplac\xC3\xA9");
+    check(stack.undoLabel() == "Importer des scripts", "une seule commande : " + stack.undoLabel());
+    (void)stack.undo();
+    check(bodyOf(bid, "OnCycle") == "Ancien := 1;\n" && bodyOf(bid, "OnOpen") == "(aucun)", "Ctrl+Z : Vue_Accueil comme avant");
+    const auto n = dst.applyImport(back, {false, true}, sf::Mode::Append);
+    const std::string cyc = bodyOf(bid, "OnCycle");
+    check(n == 1 && cyc.find("Ancien := 1;") == 0 && cyc.find("import\xC3\xA9 de Popup_vanne") != std::string::npos
+              && cyc.find("Compteur := Compteur + 1;") != std::string::npos,
+          "Ajouter \xC3\xA0 la suite : le code de la vue, un commentaire, celui du fichier");
+    check(dst.applyImport(back, {false, true}, sf::Mode::Replace) == 1 && bodyOf(bid, "OnCycle").find("Ancien") == std::string::npos,
+          "Remplacer : le code du fichier seul");
+    check(dst.applyImport(back, {false, true}, sf::Mode::Replace) == 0, "le m\xC3\xAAme import : rien ne change (identique)");
+    std::filesystem::remove(path);
+
+    // Les operateurs d'un type IHM.
+    HmiType t;
+    t.id = doc->project.allocate();
+    t.name = "T_VECTEUR";
+    t.members = {{"X", "REAL", "", ""}, {"Y", "REAL", "", ""}};
+    HmiOperator add;
+    add.id = doc->project.allocate();
+    add.op = "+";
+    add.left = "T_VECTEUR";
+    add.right = "T_VECTEUR";
+    add.result = "T_VECTEUR";
+    add.body = "ADD.X := A.X + B.X;\nADD.Y := A.Y + B.Y;";
+    add.description = "La somme";
+    t.operators.push_back(add);
+    doc->project.programs.types.push_back(t);
+    const auto of = sf::fromOperators(t.operators, "T_VECTEUR", "type");
+    sf::File ob;
+    check(sf::read(sf::write(of), ob, &why) && ob.genre == sf::Genre::Operators && ob.entries.size() == 1 && ob.entries[0].op.op == "+"
+              && ob.entries[0].op.right == "T_VECTEUR" && ob.entries[0].op.description == "La somme" && ob.entries[0].body == add.body,
+          "op\xC3\xA9rateurs : aller et retour (signature, description, script)");
+    std::vector<HmiOperator> empty;
+    check(sf::compareOperators(ob, empty).front() == sf::State::New && sf::applyToOperators(doc->project, empty, ob, {}) == 1
+              && empty.size() == 1 && empty[0].id != kNoId,
+          "un op\xC3\xA9rateur neuf : ajout\xC3\xA9, avec un identifiant");
+    check(sf::compareOperators(ob, empty).front() == sf::State::Same, "le m\xC3\xAAme : identique");
+    empty[0].body = "ADD := A;";
+    check(sf::compareOperators(ob, empty).front() == sf::State::Different && sf::applyToOperators(doc->project, empty, ob, {}) == 1
+              && empty[0].body == add.body,
+          "un diff\xC3\xA9rent (m\xC3\xAAme signature) : remplac\xC3\xA9");
+    app::HmiOperatorsPane ops("op1113", doc, apply, hmi::ownerOfType(*doc->project.hmiTypeByName("T_VECTEUR")));
+    ops.setBounds({0, 0, 1400, 800});
+    ops.layout();
+    check(ops.tools().actionByTip("Exporter les op\xC3\xA9rateurs") >= 0 && ops.tools().actionByTip("Importer des op\xC3\xA9rateurs") >= 0,
+          "les op\xC3\xA9rateurs : Exporter\xE2\x80\xA6 et Importer\xE2\x80\xA6");
+    const std::string opath = (std::filesystem::temp_directory_path() / "xpg_1113_ops.xpgst").string();
+    check(ops.exportOperators(opath, &why), "Exporter les op\xC3\xA9rateurs (" + why + ")");
+    sf::File wrong;
+    check(!dst.importViewScripts(opath, &why) && why.find("op\xC3\xA9rateurs") != std::string::npos,
+          "des op\xC3\xA9rateurs dans les scripts d'une vue : refus\xC3\xA9, en disant o\xC3\xB9 les importer");
+    std::filesystem::remove(opath);
+}
+
+// =============================================================================
 //  1.11.2 (decision 162) : LE DOSSIER SYMBOLES de la liste des vues a ses deux
 //  boutons, Exporter les symboles... (le symbole choisi part a l'hote, qui
 //  ouvre le dialogue) et Importer des symboles... ; ceux des vues n'y servent
@@ -24281,6 +24407,7 @@ int main(int argc, char** argv) {
     symDupliquer1112();                     // 1.11.2 (SYM, decision 240) : Dupliquer... dans un symbole - $Value[0]$ existe
     symParametres1112();                    // 1.11.2 (SYM, decision 240) : la section Parametres du symbole
     symParametres1113();                    // 1.11.3 : fx garde, Voiture constante, UINTS (tableau), le carre de legende
+    scriptsExportImport1113();              // 1.11.3 : exporter / importer les scripts d'une vue et les operateurs (.xpgst)
     symbolesPanneau1112();                  // 1.11.2 (decision 162) : le dossier Symboles - Exporter les symboles, Importer des symboles
     paquetsPanneaux1112();                  // 1.11.2 (decision 174) : Types IHM, Fonctions, Scripts generaux - Exporter, Importer
     paquetsDepot1112();                     // 1.11.2 (decision 188) : un paquet glisse sur l'appli ouvre la fenetre d'import

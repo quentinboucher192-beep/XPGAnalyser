@@ -29,6 +29,7 @@
 #include "../../hmi/HmiCommands.hpp"
 #include "../../hmi/HmiCheck.hpp"         // 1.10 : hmi::Issue (les resultats de Compiler)
 #include "../../hmi/HmiScript.hpp"
+#include "../../hmi/HmiScriptFile.hpp"   // 1.11.3 : exporter / importer les scripts d'une vue (.xpgst)
 #include "../../ui/widgets/Containers.hpp"
 #include "../../ui/widgets/Controls.hpp"
 #include "../../ui/widgets/DataViews.hpp"
@@ -122,6 +123,20 @@ public:
     void selectVariable(hmi::Id);
 
     [[nodiscard]] const std::vector<hmi::ScriptDiagnostic>& diagnostics() const noexcept { return diagnostics_; }
+
+    // ---- 1.11.3 : EXPORTER ET IMPORTER LES SCRIPTS D'UNE VUE (.xpgst) ----
+    //  Une vue, une popup, un symbole, un ecran modele, un en-tete ou un pied
+    //  de page : ses OnOpen, OnCycle, OnClose dans un fichier texte lisible
+    //  (HmiScriptFile.hpp). Exporter... et Importer... dans la barre d'outils ;
+    //  l'import compare, demande (les scripts a prendre ; remplacer, ou ajouter a
+    //  la suite) et fait UNE commande (Ctrl+Z). Un .st sans bloc va dans
+    //  l'evenement choisi.
+    // Ecrire le fichier (sans rien demander). Faux et `why` : rien a exporter, ecriture impossible.
+    bool exportViewScripts(const std::string& path, std::string* why = nullptr);
+    // Lire le fichier et ouvrir la fenetre d'import. Faux et `why` : illisible, ou des operateurs.
+    bool importViewScripts(const std::string& path, std::string* why = nullptr);
+    // Appliquer un fichier lu (les entrees cochees ; vide : toutes), une commande. Rend le nombre de scripts changes.
+    std::size_t applyImport(const hmi::scriptfile::File&, const std::vector<bool>& chosen, hmi::scriptfile::Mode mode);
 
     // L'AIDE A LA SAISIE, comme dans les sections de l'automate : la liste en
     // tapant (et les membres apres un point), la signature d'un appel, une
@@ -220,6 +235,7 @@ private:
     std::string       message_;
     bool              syncing_{false};
     core::ConnectionScope links_;
+    std::shared_ptr<char> alive_ = std::make_shared<char>(0);   // 1.11.3 : les reponses de l'explorateur et des dialogues
 };
 
 } // namespace app
