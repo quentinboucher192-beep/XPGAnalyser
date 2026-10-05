@@ -11599,6 +11599,18 @@ void variablesLieesLot15() {
     check(bank->word(100) == 6912, "... la centrale a re\xC3\xA7u 6912 (2,5 bar remis au brut)");
     check(!rt.environment().write("Compteur", sim::Value::integer(sim::Type::Int, 5)), "une variable en lecture seule ne s'\xC3\xA9" "crit pas");
     check(rt.environment().read("Local", v) && v.asInteger() == 7, "une variable IHM ordinaire reste dans l'IHM");
+    // 1.11.5 : forcee (l'onglet Variables IHM de la simulation), une variable liee garde sa
+    // valeur - la lecture de la centrale ne l'ecrase plus, une ecriture ne part pas vers elle.
+    check(rt.forceVariable("Pression", sim::Value::real(9.0)), "1.11.5 : forcer Pression \xC3\xA0 9");
+    link.cycle();
+    check(rt.environment().read("Pression", v) && std::fabs(v.asReal() - 9.0) < 1e-6,
+          "1.11.5 : forc\xC3\xA9" "e, Pression reste \xC3\xA0 9 (la centrale dit 2,5)");
+    (void)rt.environment().write("Pression", sim::Value::real(1.0));
+    link.cycle();
+    check(bank->word(100) == 6912 && rt.environment().read("Pression", v) && std::fabs(v.asReal() - 9.0) < 1e-6,
+          "1.11.5 : forc\xC3\xA9" "e, une \xC3\xA9" "criture ne part pas vers la centrale");
+    check(rt.unforceVariable("Pression") && rt.environment().read("Pression", v) && std::fabs(v.asReal() - 2.5) < 1e-6,
+          "1.11.5 : lib\xC3\xA9r\xC3\xA9" "e, Pression relit la centrale (2,5)");
     // La centrale se tait : la derniere valeur reste, ancienne.
     server.setMute(true);
     link.cycle();

@@ -233,7 +233,8 @@ public:
         // 1.9 : un parametre Copie / Les deux - la copie de la popup, jamais l'original.
         if (!r.empty() && r[0] == '$') return rt_.copyRead(r, out);
         if (const auto it = vars.find(upper(r)); it != vars.end()) {
-            if (!rt_.bound_.empty()) rt_.readBound(it->first, it->second);   // lot 15 : liee a un equipement
+            // Lot 15 : liee a un equipement, elle se relit sur lui - sauf forcee (1.11.5) : elle garde sa valeur.
+            if (!rt_.bound_.empty() && !rt_.forcedIhm_.count(it->first)) rt_.readBound(it->first, it->second);
             out = it->second;
             return true;
         }
