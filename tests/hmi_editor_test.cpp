@@ -22499,6 +22499,115 @@ void variableFx1117() {
 }
 
 // =============================================================================
+//  1.11.8 (« j'aimerais pouvoir dire que la ligne selectionnee deviendrait une variable
+//  interne dans Variables IHM ; chaque membre peut choisir s'il est interne ou attribue a
+//  l'equipement de la structure ») : V : ARRAY[0..63] OF Vanne a %MW17 (la capture).
+// =============================================================================
+void variablesInternes1118() {
+    std::printf("== 1.11.8 : Variables IHM - un membre interne ou attribu\xC3\xA9 \xC3\xA0 l'\xC3\xA9quipement, Recalculer la place m\xC3\xA9moire ==\n");
+    auto doc = std::make_shared<Document>();
+    core::CommandStack stack;
+    auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+    auto& p = doc->project;
+    {
+        HmiType vanne;
+        vanne.id = p.allocate();
+        vanne.name = "Vanne";
+        vanne.members = {{"POSITION", "INT", "", ""}, {"OUV", "BOOL", "", ""}, {"NOM", "STRING", "", ""}, {"CMD_OUV", "BOOL", "", ""}, {"CMD_FERM", "BOOL", "", ""}};
+        p.programs.types.push_back(vanne);
+        hmi::Equipment e;
+        e.id = p.allocate();
+        e.name = "Esclave virtuel 1";
+        e.host = "127.0.0.1";
+        p.equipments.push_back(e);
+        Variable v;
+        v.id = p.allocate();
+        v.name = "V";
+        v.type = "ARRAY[0..63] OF Vanne";
+        v.equipment = "Esclave virtuel 1";
+        v.address = "%MW17";
+        p.programs.variables.push_back(v);
+    }
+    const Id vid = p.programs.variables[0].id;
+    app::HmiVariablesPane vars("vars1118", doc, apply);
+    vars.setBounds({0, 0, 1600, 900});
+    vars.layout();
+    vars.setExpanded("V", true);
+    vars.setExpanded("V[0]", true);
+    const auto cellOf = [&](const std::string& key, std::size_t col) {
+        const int r = vars.rowOf(key);
+        return r >= 0 && static_cast<std::size_t>(r) < vars.rows().size() && vars.rows()[r].cells.size() > col ? vars.rows()[r].cells[col] : std::string("?");
+    };
+    check(cellOf("V[0].NOM", 3) == "\xE2\x86\xB3 V" && cellOf("V[0].NOM", 4) == "%MW19", "V[0].NOM : attribu\xC3\xA9" "e \xC3\xA0 V, %MW19 (la capture)");
+    // Le clic droit sur la ligne choisie : Rendre interne.
+    auto* menu = vars.table().contextMenu();
+    const auto entry = [&](const std::string& label) -> const ui::PopupMenu::Item* {
+        for (const auto& it : menu->items())
+            if (it.label == label) return &it;
+        return nullptr;
+    };
+    vars.selectPath("V[0].NOM");
+    vars.openContextMenu({400, 300});
+    const auto* internalItem = entry("Rendre interne (gard\xC3\xA9 dans l'IHM)");
+    const auto* allItem = entry("Rendre interne dans toutes les cases");
+    check(internalItem && internalItem->enabled && internalItem->shortcut == "V[0].NOM" && allItem && allItem->shortcut == "V[*].NOM",
+          "le clic droit sur V[0].NOM : Rendre interne (V[0].NOM), Rendre interne dans toutes les cases (V[*].NOM)");
+    check(entry("Recalculer la place m\xC3\xA9moire") && !entry("Recalculer la place m\xC3\xA9moire")->enabled,
+          "Recalculer la place m\xC3\xA9moire : gris\xC3\xA9 (aucun membre interne)");
+    if (internalItem) menu->itemChosen->emit(internalItem->id);
+    const auto* v = doc->project.variableById(vid);
+    check(v && v->internal == std::vector<std::string>{"[0].NOM"}, "V[0].NOM interne (une seule commande)");
+    vars.refresh();
+    check(cellOf("V[0].NOM", 3) == "interne (IHM)" && cellOf("V[0].NOM", 4).empty() && cellOf("V[0].NOM", 6) == "dans l'IHM",
+          "la ligne le dit : interne (IHM), sans adresse, dans l'IHM");
+    check(cellOf("V[0].CMD_OUV", 4) == "%MW35.0", "la place reste r\xC3\xA9serv\xC3\xA9" "e : V[0].CMD_OUV ne bouge pas");
+    check(cellOf("V[0]", 3).find("1 interne") != std::string::npos, "V[0] le dit : \xE2\x86\xB3 V \xC2\xB7 1 interne");
+    // Dans toutes les cases (V[*].NOM), puis Recalculer la place memoire (le bouton).
+    vars.selectPath("V[0].NOM");
+    vars.openContextMenu({400, 300});
+    if (const auto* it = entry("Rendre interne dans toutes les cases")) menu->itemChosen->emit(it->id);
+    v = doc->project.variableById(vid);
+    check(v && v->internal == std::vector<std::string>{"[*].NOM"}, "[*].NOM remplace [0].NOM");
+    std::string why;
+    check(vars.recalculatePlace(vid, true, &why) && doc->project.variableById(vid)->compact, "Recalculer la place m\xC3\xA9moire");
+    check(vars.lastMessage().find("mots 17 \xC3\xA0 208") != std::string::npos && vars.lastMessage().find("mots 17 \xC3\xA0 1232") != std::string::npos,
+          "le message : " + vars.lastMessage());
+    vars.refresh();
+    check(cellOf("V[0].CMD_OUV", 4) == "%MW19.0" && cellOf("V", 6) == "mots 17 \xC3\xA0 208", "recalcul\xC3\xA9" "e : V[0].CMD_OUV %MW19.0, V : mots 17 \xC3\xA0 208");
+    // Ctrl+Z : la place d'origine ; Ctrl+Z encore : V[0].NOM seulement.
+    (void)stack.undo();
+    check(!doc->project.variableById(vid)->compact, "Ctrl+Z : la place d'origine");
+    (void)stack.undo();
+    check(doc->project.variableById(vid)->internal == std::vector<std::string>{"[0].NOM"}, "Ctrl+Z : V[0].NOM seule interne");
+    (void)stack.redo();
+    (void)stack.redo();
+    // Attribuer une seule case d'un motif : [*].NOM se defait en ses autres cases.
+    vars.refresh();
+    vars.setExpanded("V[3]", true);
+    check(vars.setMembersInternal(vid, {"[3].NOM"}, false, false, &why), "attribuer V[3].NOM seule");
+    v = doc->project.variableById(vid);
+    check(v && v->internal.size() == 63 && !hmi::types::isInternalMember(*v, "[3].NOM") && hmi::types::isInternalMember(*v, "[4].NOM"),
+          "[*].NOM se d\xC3\xA9" "fait en 63 cases ; V[3].NOM attribu\xC3\xA9" "e, V[4].NOM interne");
+    check(vars.setMembersInternal(vid, {"[0].NOM"}, false, true, &why) && doc->project.variableById(vid)->internal.empty(),
+          "Attribuer dans toutes les cases : plus aucun membre interne");
+    // La ligne Liaison de l'inspecteur.
+    vars.refresh();
+    vars.selectPath("V[0].OUV");
+    vars.layout();
+    check(choicesOf(vars.properties(), "Liaison").size() == 3 && commitIn(vars.properties(), "Liaison", "interne (cette case)")
+              && doc->project.variableById(vid)->internal == std::vector<std::string>{"[0].OUV"},
+          "l'inspecteur : Liaison \xE2\x86\x92 interne (cette case)");
+    // Le depart d'un membre compose : V[2] a %MW500 (la case Adresse de sa ligne).
+    check(vars.setMemberAddress(vid, "[2]", "%MW500", &why), "V[2] part de %MW500" + (why.empty() ? std::string{} : " (" + why + ")"));
+    vars.refresh();
+    vars.setExpanded("V[2]", true);
+    check(cellOf("V[2].POSITION", 4) == "%MW500" && cellOf("V[2].OUV", 4) == "%MW501.0" && cellOf("V[2]", 4).find("%MW500") == 0,
+          "V[2].POSITION %MW500, V[2].OUV %MW501.0 ; V[2] porte le crayon");
+    check(!vars.setMemberAddress(vid, "[2]", "%M100", &why), "un bit pour le d\xC3\xA9part d'une structure de mots : refus\xC3\xA9 (" + why + ")");
+    check(!vars.setMemberAddress(vid, "[0].OUV", "%MW900.1", &why), "un membre interne n'a pas d'adresse : refus\xC3\xA9 (" + why + ")");
+}
+
+// =============================================================================
 //  1.11.7 (le rapport de blocage du 05/10, 1.11.6 : « Delier V » pendant la simulation -
 //  la boucle principale attendait 8 s dans hmi::comm::Link::stop(), le fil de la liaison
 //  finissant toutes ses ecritures, chacune au temps de reponse de l'esclave simule).
@@ -25790,6 +25899,7 @@ int main(int argc, char** argv) {
     forcageCommun1117();                    // 1.11.7 : le forcage commun, prioritaire sur les scripts
     variableFx1117();                       // 1.11.7 : la case Variable d'une action, la pastille fx
     blocageDelier1117();                    // 1.11.7 : Delier pendant la simulation ne bloque plus
+    variablesInternes1118();                // 1.11.8 : membres internes, Recalculer la place memoire
     if (argc > 1) simulationVariables1115(argv[1]);   // 1.11.5 : les onglets Variables IHM et Variables API
     if (argc > 1) forcageMouvement1116(argv[1]);   // 1.11.6 : le forcage par type et bornes
     scriptsExportImport1113();              // 1.11.3 : exporter / importer les scripts d'une vue et les operateurs (.xpgst)

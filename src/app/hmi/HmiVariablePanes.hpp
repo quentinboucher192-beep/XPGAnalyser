@@ -73,6 +73,16 @@ public:
     bool setPackBools(hmi::Id, bool pack);
     // L'adresse corrigee d'un membre ("Heures", "Vannes[2].Position") ; vide : la place calculee.
     bool setMemberAddress(hmi::Id, const std::string& relPath, const std::string& address, std::string* why = nullptr);
+    // 1.11.8 : des membres INTERNES (gardes dans l'IHM : l'equipement ne les lit ni ne les ecrit) ou
+    // ATTRIBUES a l'equipement de la structure ; `allElements` : le meme membre dans toutes les cases
+    // du tableau ([0].NOM -> [*].NOM). Une seule commande (un Ctrl+Z).
+    bool setMembersInternal(hmi::Id, const std::vector<std::string>& relPaths, bool internal, bool allElements = false,
+                            std::string* why = nullptr);
+    // 1.11.8 : « Recalculer la place memoire » - les mots des membres internes sont rendus, la suite se
+    // resserre ; `on` faux : la place d'origine (les membres internes gardent la leur).
+    bool recalculatePlace(hmi::Id, bool on = true, std::string* why = nullptr);
+    // 1.11.8 : les membres choisis (chemins relatifs), d'une meme variable.
+    [[nodiscard]] std::vector<std::string> selectedMemberPaths() const;
     hmi::Id duplicateVariable(hmi::Id);
     bool deleteVariable(hmi::Id);
     bool addFolder(const std::string& path, std::string* why = nullptr);

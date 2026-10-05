@@ -1176,6 +1176,7 @@ void HmiCommPane::refreshPlan() {
             std::string worstText;
             bool anyRead = false;
             for (const auto& lf : leaves) {
+                if (!lf.bound()) continue;                     // 1.11.8 : un membre interne n'est pas lu
                 int tone = 0;
                 const std::string q = leafQuality(lf.name, tone);
                 if (tone != 0) anyRead = true;
@@ -1201,6 +1202,19 @@ void HmiCommPane::refreshPlan() {
             std::size_t n = 0;
             for (const auto& lf : leaves) {
                 if (++n > 400) break;
+                if (!lf.bound()) {
+                    // 1.11.8 : un membre interne - garde dans l'IHM, hors du plan.
+                    PlanModel::Line m;
+                    m.kind = 3;
+                    m.indent = 44.f;
+                    m.cells = {lf.name, "", lf.type, "membre interne de " + v->name, "IHM", "dans l'IHM", "", "\xE2\x80\x94"};
+                    m.tip = lf.name + " \xE2\x80\x94 un membre interne de " + v->name + " : il reste dans l'IHM, \xC2\xAB " + e.name
+                          + " \xC2\xBB ne le lit ni ne l'\xC3\xA9" "crit (Variables IHM : clic droit, Attribuer).";
+                    lines.push_back(std::move(m));
+                    planRows_.push_back({PlanRow::Kind::Member, e.name, lf.name, v->name, {}});
+                    planNames_.push_back(lf.name);
+                    continue;
+                }
                 const auto pt = ep.resolve(lf.name);
                 int tone = 0;
                 std::string q = leafQuality(lf.name, tone);

@@ -28,7 +28,8 @@ namespace eq = hmi::equip;
 namespace {
 
 enum VarAction : int { VAdd = 1, VFolder, VType, VRename, VDuplicate, VDelete, VLink, VUnlink, VShow,
-                       VTrend };              // 1.10 (chantier O) : la visualisation graphique
+                       VTrend,                // 1.10 (chantier O) : la visualisation graphique
+                       VRecalc };             // 1.11.8 : Recalculer la place memoire
 enum TypeAction : int { TAdd = 1, TMember, TUp, TDown, TRemoveMember, TDuplicate, TDelete,
                         TFolder,               // lot 21 : un dossier de types
                         TCopy, TPaste,         // 1.10 (chantier O) : les membres <-> Excel
@@ -36,7 +37,27 @@ enum TypeAction : int { TAdd = 1, TMember, TUp, TDown, TRemoveMember, TDuplicate
 // 1.10 (chantier O) : les entrees des volets dans le menu du clic droit d'une
 // table. La table garde ses id (1 a 5, 99, 100 et plus) ; celles du volet :
 // kMenuBase - action (des id negatifs, -1 etant un trait).
-enum VarMenu : int { MTrend = 1, MCopyName, MRename, MDuplicate, MDelete };
+enum VarMenu : int { MTrend = 1, MCopyName, MRename, MDuplicate, MDelete,
+                     MInternal, MInternalAll, MAttach, MAttachAll, MRecalc, MRestore };   // 1.11.8
+
+// 1.11.8 : le meme membre dans toutes les cases : chaque indice devient [*] ("[0].NOM" -> "[*].NOM").
+std::string allElementsOf(std::string_view rel) {
+    std::string out;
+    for (std::size_t i = 0; i < rel.size(); ++i) {
+        if (rel[i] != '[') {
+            out += rel[i];
+            continue;
+        }
+        const auto close = rel.find(']', i);
+        if (close == std::string_view::npos) {
+            out += rel.substr(i);
+            break;
+        }
+        out += "[*]";
+        i = close;
+    }
+    return out;
+}
 constexpr int kMenuBase = -1000;
 enum Col : std::size_t { CName, CType, CInitial, CEquipment, CAddress, CAccess, CPlace, CQuality, CCount };
 
@@ -434,6 +455,9 @@ HmiVariablesPane::HmiVariablesPane(std::string id, hmi::DocumentPtr doc, Apply a
                "Lier \xC3\xA0 un \xC3\xA9quipement\xE2\x80\xA6");
     tools->add(VUnlink, HmiGlyph::Delete, "D\xC3\xA9lier : la variable reste dans l'IHM", "D\xC3\xA9lier");
     tools->add(VShow, HmiGlyph::Search, "Voir dans \xC3\x89quipements (Plan d'adressage)", "Voir dans \xC3\x89quipements");
+    // 1.11.8 : apres avoir rendu des membres internes (clic droit sur un membre), leur place est rendue.
+    tools->add(VRecalc, HmiGlyph::Refresh, "Recalculer la place m\xC3\xA9moire de la structure : les mots des membres internes sont rendus, "
+               "les membres suivants se resserrent (Ctrl+Z la remet)", "Recalculer la place m\xC3\xA9moire");
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
     const auto variableChosen = [this] { return selectedVariable() != kNoId && selectedPath().empty(); };
     tools_->setEnabledWhen(VRename, [this] { return selectedVariable() != kNoId || !selectedFolder().empty(); });
@@ -451,6 +475,10 @@ HmiVariablesPane::HmiVariablesPane(std::string id, hmi::DocumentPtr doc, Apply a
     tools_->setEnabledWhen(VShow, [this] {
         const auto* v = doc_->project.variableById(selectedVariable());
         return v && v->bound() && hosts_.showEquipment;
+    });
+    tools_->setEnabledWhen(VRecalc, [this] {
+        const auto* v = doc_->project.variableById(selectedVariable());
+        return v && v->bound() && ty::isComposite(v->type);
     });
 
     auto bar = std::make_unique<FilterBar>(base + ".filters");
@@ -589,6 +617,11 @@ HmiVariablesPane::HmiVariablesPane(std::string id, hmi::DocumentPtr doc, Apply a
                 if (const auto* v = doc_->project.variableById(sel); v && hosts_.showEquipment) hosts_.showEquipment(v->name);
                 break;
             case VTrend: (void)openTrend(); break;            // 1.10 (chantier O)
+            case VRecalc: {                                    // 1.11.8
+                std::string why;
+                if (!recalculatePlace(sel, true, &why)) say("Refus\xC3\xA9 : " + why, true);
+                break;
+            }
             default: break;
         }
     });
@@ -856,10 +889,21 @@ void HmiVariablesPane::emitMembers(const hmi::Variable& v, const Leaves& leaves,
         std::string initial, address, place;
         const hmi::Variable* leaf = nullptr;
         if (const auto it = leaves.find(upper(k.path)); it != leaves.end()) leaf = &it->second;
+        // 1.11.8 : interne (gardee dans l'IHM) - une case, ou toutes les cases d'un membre compose.
+        std::size_t inside = 0, internals = 0;
+        if (v.bound()) {
+            const std::string prefix = upper(k.path);
+            for (auto it = leaves.lower_bound(prefix); it != leaves.end() && it->first.compare(0, prefix.size(), prefix) == 0; ++it) {
+                if (it->first.size() != prefix.size() && it->first[prefix.size()] != '.' && it->first[prefix.size()] != '[') continue;
+                ++inside;
+                internals += it->second.bound() ? 0 : 1;
+            }
+        }
+        const bool internal = v.bound() && inside > 0 && internals == inside;
         if (leaf) {
             initial = leaf->initial;
             address = leaf->address;
-            if (v.bound()) place = placeOf(leaf->address, leaf->type);
+            if (v.bound()) place = internal ? std::string("dans l'IHM") : placeOf(leaf->address, leaf->type);
             // Une adresse corrigee a la main : le crayon.
             for (const auto& pl : v.places)
                 if (sameText(pl.path, k.rel) && !pl.address.empty()) address += " \xE2\x9C\x8E";
@@ -869,7 +913,7 @@ void HmiVariablesPane::emitMembers(const hmi::Variable& v, const Leaves& leaves,
             const std::string prefix = upper(k.path);
             for (auto it = leaves.lower_bound(prefix); it != leaves.end() && it->first.compare(0, prefix.size(), prefix) == 0; ++it)
                 if (it->first.size() > prefix.size() && (it->first[prefix.size()] == '.' || it->first[prefix.size()] == '[')) part.push_back(it->second);
-            place = ty::spanTextOf(part, v.address);
+            place = internal ? std::string("dans l'IHM") : ty::spanTextOf(part, v.address);
             // Le depart : la case de plus petite adresse.
             long long best = -1;
             for (const auto& lf : part) {
@@ -881,6 +925,9 @@ void HmiVariablesPane::emitMembers(const hmi::Variable& v, const Leaves& leaves,
                     address = lf.address;
                 }
             }
+            // 1.11.8 : le depart donne a la main (Vannes[2] -> %MW500) : le crayon.
+            for (const auto& pl : v.places)
+                if (sameText(pl.path, k.rel) && !pl.address.empty() && !address.empty()) address += " \xE2\x9C\x8E";
         }
         if (composite && !v.bound()) {
             ty::Spec ks;
@@ -888,9 +935,15 @@ void HmiVariablesPane::emitMembers(const hmi::Variable& v, const Leaves& leaves,
         }
         std::string quality;
         qualityOf(v, k.path, !composite, quality, r.tone);
-        r.editableAddress = v.bound() && !composite;
-        r.cells = {k.path, k.type, initial, v.bound() ? "\xE2\x86\xB3 " + v.name : std::string{}, v.bound() ? address : std::string{},
-                   v.bound() ? "(" + v.name + ")" : std::string{}, place.empty() && v.bound() ? std::string("sans place") : place, quality};
+        // 1.11.8 : l'adresse d'un membre compose (son depart) se change aussi ; pas celle d'un membre interne.
+        r.editableAddress = v.bound() && !internal;
+        std::string equipmentCell = v.bound() ? "\xE2\x86\xB3 " + v.name : std::string{};
+        if (internal) equipmentCell = "interne (IHM)";
+        else if (internals > 0) equipmentCell += " \xC2\xB7 " + std::to_string(internals) + " interne" + (internals > 1 ? "s" : "");
+        if (internal) quality.clear();
+        r.cells = {k.path, k.type, initial, equipmentCell, v.bound() && !internal ? address : std::string{},
+                   !v.bound() ? std::string{} : internal ? std::string("IHM") : "(" + v.name + ")",
+                   place.empty() && v.bound() ? std::string("sans place") : place, quality};
         rows_.push_back(std::move(r));
         if (isOpen) emitMembers(v, leaves, k.path, k.rel, k.type, depth + 1);
     }
@@ -1552,8 +1605,18 @@ bool HmiVariablesPane::setMemberAddress(Id id, const std::string& rel, const std
     const std::string address = trimmed(raw);
     const std::string path = v->name + (rel.empty() || rel.front() == '[' ? "" : ".") + rel;
     const std::string type = ty::typeOfPath(doc_->project, path);
-    if (type.empty() || ty::isComposite(type)) return fail(why, path + " : pas une case simple");
-    if (!address.empty()) {
+    if (type.empty()) return fail(why, path + " : pas un membre de " + v->name);
+    if (ty::isInternalMember(*v, rel)) return fail(why, path + " est interne (gard\xC3\xA9" "e dans l'IHM) : l'attribuer \xC3\xA0 " + v->equipment + " d'abord");
+    if (!address.empty() && ty::isComposite(type)) {
+        // 1.11.8 : le depart d'un membre compose (Vannes[2] -> %MW500) : ses cases le suivent. De la
+        // meme sorte que celui de la variable (des mots, ou des bits si elle est dans une zone de bits).
+        if (ty::bitArea(v->address)) {
+            if (!ty::bitArea(address)) return fail(why, v->name + " est dans une zone de bits (" + v->address + ") : le d\xC3\xA9part de " + path + " aussi");
+        } else if (ty::bitArea(address) || ty::memberAddress(address, 0, -1, "INT", why).empty()) {
+            if (why && why->empty()) *why = "le d\xC3\xA9part de " + path + " est un mot (%MW, 4x, 40001), pas un bit";
+            return false;
+        }
+    } else if (!address.empty()) {
         hmi::Variable probe;
         probe.type = type;
         hmi::comm::Point pt;
@@ -1564,6 +1627,99 @@ bool HmiVariablesPane::setMemberAddress(Id id, const std::string& rel, const std
         pl.erase(std::remove_if(pl.begin(), pl.end(), [&](const hmi::MemberAddress& m) { return sameText(m.path, rel); }), pl.end());
         if (!address.empty()) pl.push_back({rel, address});
     });
+}
+
+bool HmiVariablesPane::setMembersInternal(Id id, const std::vector<std::string>& relPaths, bool internal, bool allElements, std::string* why) {
+    const auto* v = doc_->project.variableById(id);
+    if (!v) return fail(why, "variable introuvable");
+    if (!v->bound()) return fail(why, v->name + " n'est li\xC3\xA9" "e \xC3\xA0 aucun \xC3\xA9quipement : ses membres sont d\xC3\xA9j\xC3\xA0 dans l'IHM");
+    if (!ty::isComposite(v->type)) return fail(why, v->name + " n'a pas de membres");
+    std::vector<std::string> wanted;
+    for (const auto& r : relPaths) {
+        const std::string rel = trimmed(r);
+        if (rel.empty()) continue;
+        if (ty::typeOfPath(doc_->project, v->name + (rel.front() == '[' ? "" : ".") + rel).empty())
+            return fail(why, rel + " : pas un membre de " + v->name);
+        const std::string pattern = allElements ? allElementsOf(rel) : rel;
+        if (std::find(wanted.begin(), wanted.end(), pattern) == wanted.end()) wanted.push_back(pattern);
+    }
+    if (wanted.empty()) return fail(why, "aucun membre choisi");
+    // Les cases de la variable (sans membres internes) : pour defaire un motif qui en couvre plus.
+    hmi::Variable all = *v;
+    all.internal.clear();
+    std::vector<std::string> rels;
+    for (const auto& l : ty::leafVariables(doc_->project, all)) {
+        const std::string rest = l.name.substr(std::min(l.name.size(), v->name.size()));
+        rels.push_back(!rest.empty() && rest.front() == '.' ? rest.substr(1) : rest);
+    }
+    std::vector<std::string> next = v->internal;
+    for (const auto& pattern : wanted) {
+        if (internal) {
+            // Deja couvert : rien a faire ; sinon il remplace ceux qu'il couvre.
+            if (std::any_of(next.begin(), next.end(), [&](const std::string& e) { return ty::memberCovers(e, pattern); })) continue;
+            std::erase_if(next, [&](const std::string& e) { return ty::memberCovers(pattern, e); });
+            next.push_back(pattern);
+            continue;
+        }
+        // Attribuer : retirer ce qu'il couvre ; un motif plus large ([*].NOM pour [0].NOM) se defait
+        // en ses cases, moins celles-ci.
+        std::vector<std::string> keep, expanded;
+        for (const auto& e : next) {
+            if (ty::memberCovers(pattern, e)) continue;                       // lui, ou dessous
+            if (!ty::memberCovers(e, pattern) && !std::any_of(rels.begin(), rels.end(), [&](const std::string& r) {
+                    return ty::memberCovers(e, r) && ty::memberCovers(pattern, r);
+                })) {
+                keep.push_back(e);
+                continue;
+            }
+            for (const auto& r : rels)
+                if (ty::memberCovers(e, r) && !ty::memberCovers(pattern, r)) expanded.push_back(r);
+        }
+        for (auto& x : expanded) keep.push_back(std::move(x));
+        next = std::move(keep);
+    }
+    if (next == v->internal) return true;
+    std::string what;
+    for (const auto& w : wanted) what += (what.empty() ? "" : ", ") + w;
+    const std::string label = (internal ? "Interne : " : "Attribu\xC3\xA9 \xC3\xA0 " + v->equipment + " : ") + v->name + " " + what;
+    const bool ok = change(id, label, [&](hmi::Variable& x) { x.internal = next; });
+    if (ok)
+        say(internal ? v->name + " " + what + " : interne, gard\xC3\xA9 dans l'IHM (l'\xC3\xA9quipement ne le lit ni ne l'\xC3\xA9" "crit). "
+                           "Sa place reste r\xC3\xA9serv\xC3\xA9" "e : \xC2\xAB Recalculer la place m\xC3\xA9moire \xC2\xBB la rend."
+                     : v->name + " " + what + " : attribu\xC3\xA9 \xC3\xA0 " + v->equipment + ".",
+            false);
+    return ok;
+}
+
+bool HmiVariablesPane::recalculatePlace(Id id, bool on, std::string* why) {
+    const auto* v = doc_->project.variableById(id);
+    if (!v) return fail(why, "variable introuvable");
+    if (!v->bound() || !ty::isComposite(v->type)) return fail(why, v->name + " : une structure ou un tableau li\xC3\xA9 \xC3\xA0 un \xC3\xA9quipement");
+    const std::string before = ty::spanText(doc_->project, *v);
+    hmi::Variable probe = *v;
+    probe.compact = on;
+    const std::string after = ty::spanText(doc_->project, probe);
+    if (v->compact == on) {
+        say(v->name + (on ? " : place d\xC3\xA9j\xC3\xA0 recalcul\xC3\xA9" "e (" : " : place d'origine (") + before + ")", false);
+        return true;
+    }
+    const bool ok = change(id, (on ? "Recalculer la place m\xC3\xA9moire de " : "Place d'origine de ") + v->name,
+                           [&](hmi::Variable& x) { x.compact = on; });
+    if (ok) {
+        if (v->internal.empty() && on)
+            say(v->name + " : aucun membre interne, rien \xC3\xA0 rendre (" + after + "). Clic droit sur un membre : \xC2\xAB Rendre interne \xC2\xBB.", false);
+        else
+            say(v->name + (on ? " : place recalcul\xC3\xA9" "e - " : " : place d'origine - ") + after + " (avant : " + before + ")", false);
+    }
+    return ok;
+}
+
+std::vector<std::string> HmiVariablesPane::selectedMemberPaths() const {
+    std::vector<std::string> out;
+    const Id var = selectedVariable();
+    for (const auto r : table_->selectedModelRows())
+        if (r < rows_.size() && rows_[r].kind == Row::Kind::Member && rows_[r].var == var) out.push_back(rows_[r].rel);
+    return out;
 }
 
 Id HmiVariablesPane::duplicateVariable(Id id) {
@@ -1766,6 +1922,27 @@ void HmiVariablesPane::rebuildProperties() {
         c.properties.push_back(prop("Chemin", row.key));
         c.properties.push_back(prop("Type", row.type));
         c.properties.push_back(prop("Variable", v->name + " (" + v->type + ")"));
+        if (v->bound()) {
+            // 1.11.8 : interne (garde dans l'IHM) ou attribue a l'equipement de la structure.
+            const std::string rel = row.rel;
+            const std::string entry = ty::internalEntryOf(*v, rel);
+            const bool indexed = rel.find('[') != std::string::npos;
+            const std::string attached = "attribu\xC3\xA9 \xC3\xA0 " + v->equipment;
+            const std::string one = indexed ? "interne (cette case)" : "interne (gard\xC3\xA9 dans l'IHM)";
+            const std::string all = "interne dans toutes les cases (" + allElementsOf(rel) + ")";
+            std::vector<std::string> choices{attached, one};
+            if (indexed) choices.push_back(all);
+            const std::string current = entry.empty() ? attached : indexed && entry.find("[*]") != std::string::npos ? all : one;
+            c.properties.push_back(prop("Liaison", current, PG::ValueType::Enum, [this, id, rel, attached, one, all](std::string_view text) {
+                std::string why;
+                const bool ok = text == attached ? setMembersInternal(id, {rel}, false, false, &why)
+                              : text == all      ? setMembersInternal(id, {rel}, true, true, &why)
+                                                 : setMembersInternal(id, {rel}, true, false, &why);
+                if (!ok) say("Refus\xC3\xA9 : " + why, true);
+                return ok;
+            }, choices, "Interne : le membre reste dans l'IHM (une variable IHM), l'\xC3\xA9quipement ne le lit ni ne l'\xC3\xA9" "crit ; sa place reste "
+                   "r\xC3\xA9serv\xC3\xA9" "e jusqu'\xC3\xA0 \xC2\xAB Recalculer la place m\xC3\xA9moire \xC2\xBB. Aussi au clic droit, sur plusieurs lignes."));
+        }
         if (v->bound() && row.editableAddress) {
             const std::string rel = row.rel;
             std::string address = row.cells.size() > CAddress ? row.cells[CAddress] : std::string{};
@@ -1775,7 +1952,9 @@ void HmiVariablesPane::rebuildProperties() {
                 const bool ok = setMemberAddress(id, rel, std::string(text), &why);
                 if (!ok) say("Refus\xC3\xA9 : " + why, true);
                 return ok;
-            }, {}, "Vide : la place calcul\xC3\xA9" "e (le d\xC3\xA9part + la place du membre). Une adresse corrig\xC3\xA9" "e porte un crayon dans le tableau."));
+            }, {}, ty::isComposite(row.type)
+                       ? "Le d\xC3\xA9part de ce membre : ses cases le suivent (1.11.8). Vide : la place calcul\xC3\xA9" "e. Un d\xC3\xA9part donn\xC3\xA9 porte un crayon."
+                       : "Vide : la place calcul\xC3\xA9" "e (le d\xC3\xA9part + la place du membre). Une adresse corrig\xC3\xA9" "e porte un crayon dans le tableau."));
             c.properties.push_back(prop("Place Modbus", row.cells.size() > CPlace ? row.cells[CPlace] : std::string{}));
             c.properties.push_back(prop("En marche", row.cells.size() > CQuality ? row.cells[CQuality] : std::string{}));
         }
@@ -1860,6 +2039,23 @@ void HmiVariablesPane::rebuildProperties() {
                                             [this, id](std::string_view text) { return setPackBools(id, text == "TRUE"); }, {},
                                             "Coch\xC3\xA9 : les BOOL qui se suivent partagent un mot (bits 0 \xC3\xA0 15). D\xC3\xA9" "coch\xC3\xA9 : un mot chacun."));
             c.properties.push_back(prop("Place", composite ? ty::spanText(p, *v) : placeOf(v->address, v->type)));
+            if (composite) {
+                // 1.11.8 : les membres internes et leur place.
+                std::string list;
+                for (const auto& m : v->internal) list += (list.empty() ? "" : "; ") + m;
+                c.properties.push_back(prop("Membres internes", list.empty() ? std::string("aucun") : list, PG::ValueType::ReadOnly, {}, {},
+                                            "Gard\xC3\xA9s dans l'IHM : clic droit sur un membre, \xC2\xAB Rendre interne \xC2\xBB (ou sa ligne Liaison)."));
+                const std::string kept = "r\xC3\xA9serv\xC3\xA9" "e (place d'origine)", freed = "rendue (place recalcul\xC3\xA9" "e)";
+                c.properties.push_back(prop("Place des membres internes", v->compact ? freed : kept, PG::ValueType::Enum,
+                                            [this, id, freed](std::string_view text) {
+                                                std::string w;
+                                                const bool ok = recalculatePlace(id, text == freed, &w);
+                                                if (!ok) say("Refus\xC3\xA9 : " + w, true);
+                                                return ok;
+                                            },
+                                            {kept, freed}, "Rendue : les mots que n'occupent que des membres internes sont rendus et les membres suivants se "
+                                                "resserrent (le bouton \xC2\xAB Recalculer la place m\xC3\xA9moire \xC2\xBB). R\xC3\xA9serv\xC3\xA9" "e : chaque membre garde sa place d'origine."));
+            }
         }
         cats.push_back(std::move(c));
     }
@@ -1876,6 +2072,10 @@ void HmiVariablesPane::rebuildProperties() {
             for (const auto& pl : v->places)
                 if (sameText(pl.path, rel)) fixed = true;
             const std::string why = i < whys.size() ? whys[i] : std::string{};
+            if (!l.bound()) {                                   // 1.11.8 : un membre interne
+                c.properties.push_back(prop(rel, "interne (IHM)", PG::ValueType::ReadOnly, {}, {}, l.type + " \xC2\xB7 gard\xC3\xA9 dans l'IHM"));
+                continue;
+            }
             c.properties.push_back(prop(rel + (fixed ? " \xE2\x9C\x8E" : ""), l.address.empty() ? "(" + why + ")" : l.address, PG::ValueType::Text,
                                         [this, id, rel](std::string_view text) {
                                             std::string w;
@@ -2018,6 +2218,38 @@ void HmiVariablesPane::openContextMenu(gfx::Point at) {
     items.push_back({"Dupliquer", "", oneVar ? std::string{} : std::string("une variable \xC3\xA0 la fois"), ui::Icon::None, oneVar, false,
                      kMenuBase - MDuplicate});
     items.push_back({"Supprimer", "Suppr", one ? std::string{} : std::string("une ligne \xC3\xA0 la fois"), ui::Icon::Close, one, false, kMenuBase - MDelete});
+    // 1.11.8 : un membre d'une structure liee - interne (garde dans l'IHM) ou attribue a son equipement.
+    if (const auto* v = doc_->project.variableById(selectedVariable()); v && v->bound() && ty::isComposite(v->type)) {
+        items.push_back({"", "", "", ui::Icon::None, true, true, -1});
+        const auto members = selectedMemberPaths();
+        const std::string none = "clic droit sur un membre (une ligne sous " + v->name + ")";
+        std::size_t internals = 0;
+        bool indexed = false;
+        for (const auto& m : members) {
+            internals += ty::isInternalMember(*v, m) ? 1 : 0;
+            indexed = indexed || m.find('[') != std::string::npos;
+        }
+        const std::string what = members.size() == 1 ? v->name + (members.front().front() == '[' ? "" : ".") + members.front()
+                                                     : std::to_string(members.size()) + " membres";
+        const std::string every = members.size() == 1 ? v->name + (members.front().front() == '[' ? "" : ".") + allElementsOf(members.front()) : "toutes les cases";
+        const bool canInternal = !members.empty() && internals < members.size();
+        const bool canAttach = internals > 0;
+        items.push_back({"Rendre interne (gard\xC3\xA9 dans l'IHM)", members.empty() ? std::string{} : what,
+                         members.empty() ? none : !canInternal ? std::string("d\xC3\xA9j\xC3\xA0 interne") : std::string{}, ui::Icon::None, canInternal, false,
+                         kMenuBase - MInternal});
+        if (indexed)
+            items.push_back({"Rendre interne dans toutes les cases", every, members.empty() ? none : std::string{}, ui::Icon::None, !members.empty(), false,
+                             kMenuBase - MInternalAll});
+        items.push_back({"Attribuer \xC3\xA0 " + v->equipment, members.empty() ? std::string{} : what,
+                         members.empty() ? none : !canAttach ? std::string("d\xC3\xA9j\xC3\xA0 attribu\xC3\xA9 \xC3\xA0 l'\xC3\xA9quipement") : std::string{},
+                         ui::Icon::None, canAttach, false, kMenuBase - MAttach});
+        if (indexed && !v->internal.empty())
+            items.push_back({"Attribuer dans toutes les cases", every, members.empty() ? none : std::string{}, ui::Icon::None, !members.empty(), false,
+                             kMenuBase - MAttachAll});
+        items.push_back({v->compact ? "Place d'origine (membres internes compris)" : "Recalculer la place m\xC3\xA9moire",
+                         ty::spanText(doc_->project, *v), v->internal.empty() && !v->compact ? std::string("aucun membre interne : rien \xC3\xA0 rendre") : std::string{},
+                         ui::Icon::None, !v->internal.empty() || v->compact, false, kMenuBase - (v->compact ? MRestore : MRecalc)});
+    }
     items.push_back({"", "", "", ui::Icon::None, true, true, -1});
     for (const auto& it : menu_->items()) items.push_back(it);
     menu_->setItems(std::move(items));
@@ -2037,6 +2269,19 @@ void HmiVariablesPane::runMenu(int action) {
         case MRename:    tools_->triggered->emit(VRename); break;
         case MDuplicate: tools_->triggered->emit(VDuplicate); break;
         case MDelete:    tools_->triggered->emit(VDelete); break;
+        // 1.11.8 : les membres internes, la place memoire.
+        case MInternal: case MInternalAll: case MAttach: case MAttachAll: {
+            std::string why;
+            if (!setMembersInternal(selectedVariable(), selectedMemberPaths(), action == MInternal || action == MInternalAll,
+                                    action == MInternalAll || action == MAttachAll, &why))
+                say("Refus\xC3\xA9 : " + why, true);
+            break;
+        }
+        case MRecalc: case MRestore: {
+            std::string why;
+            if (!recalculatePlace(selectedVariable(), action == MRecalc, &why)) say("Refus\xC3\xA9 : " + why, true);
+            break;
+        }
         default: break;
     }
 }
