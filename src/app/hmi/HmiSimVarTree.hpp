@@ -25,6 +25,7 @@
 #include "../../ui/widgets/ScrollBar.hpp"
 #include "../../core/Signal.hpp"
 #include "../../sim/Value.hpp"
+#include "../../hmi/HmiVarMotion.hpp"   // 1.11.6 : le forcage par type et bornes
 
 #include <functional>
 #include <map>
@@ -49,6 +50,11 @@ public:
         std::function<bool(const std::string& path)>                      unforce;
         // Le type d'un noeud (T_Four) ; vide : rien a dire.
         std::function<std::string(const std::string& path)>               nodeType;
+        // 1.11.6 : LE FORCAGE PAR TYPE ET BORNES - le mouvement d'une variable (aucun :
+        // vide) ; le poser (vide : l'arreter, la variable redevient libre). Nul : pas de
+        // colonne Mouvement.
+        std::function<std::optional<hmi::motion::Motion>(const std::string& path)> motion;
+        std::function<bool(const std::string& path, const std::optional<hmi::motion::Motion>&, std::string* why)> setMotion;
     };
     struct Row {
         int         node{-1};
@@ -88,6 +94,13 @@ public:
     // Forcer (vide : a la valeur du moment), deforcer - comme la case et le champ.
     bool forcePath(const std::string& path, const std::string& text = {});
     bool unforcePath(const std::string& path);
+    // 1.11.6 : le mouvement d'une variable - un genre ("sinus", "aucun" : l'arreter) pose
+    // autour de sa valeur du moment ; le champ des bornes ("20 ; 80 ; 10") ; son texte.
+    bool setMotionKind(const std::string& path, std::string_view kind);
+    bool openMotionMenu(const std::string& path, gfx::Point at);
+    bool openMotionEditor(const std::string& path);
+    [[nodiscard]] std::string motionText(const std::string& path) const;
+    [[nodiscard]] ui::PopupMenu* motionMenu() noexcept { return motionMenu_; }
     // Le champ de la valeur (un double-clic) : ouvert sur cette variable.
     bool openValueEditor(const std::string& path);
     [[nodiscard]] ui::InputText* valueEditor() noexcept;
@@ -151,6 +164,12 @@ private:
     bool                         onlyView_{false};
     ui::Checkbox*                viewBox_{nullptr};
     ui::PopupMenu*               ctxMenu_{nullptr};       // 1.11.6 : le clic droit
+    ui::PopupMenu*               motionMenu_{nullptr};    // 1.11.6 : le choix du mouvement
+    std::string                  motionPath_;
+    std::vector<hmi::BehaviorKind> motionKinds_;
+    bool                         editMotion_{false};      // le champ ouvert : les bornes (pas la valeur)
+    [[nodiscard]] gfx::Rect editRect(const gfx::Rect& row) const;
+    bool applyMotion(const std::string& path, const std::optional<hmi::motion::Motion>& m);
     std::string                  ctxPath_;
     [[nodiscard]] bool shownLeaf(const Node& n) const;   // la recherche et la vue la gardent-elles ?
     core::ConnectionScope        links_;

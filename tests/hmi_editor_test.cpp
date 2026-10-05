@@ -34,7 +34,8 @@
 #include "../src/app/hmi/HmiAssist.hpp"
 #include "../src/app/hmi/HmiValueKind.hpp"           // 1.11.3 : le carre de legende
 #include "../src/app/hmi/HmiValuePicker.hpp"
-#include "../src/hmi/HmiViewPaths.hpp"              // 1.11.6         // 1.11.3 : le selecteur de valeur
+#include "../src/hmi/HmiViewPaths.hpp"
+#include "../src/hmi/HmiVarMotion.hpp"              // 1.11.6         // 1.11.3 : le selecteur de valeur
 #include "../src/menu/MenuManager.hpp"
 #include "../src/ui/widgets/ExprField.hpp"          // 1.10 (chantier K)
 #include "../src/app/hmi/HmiDesignPanes.hpp"
@@ -22248,6 +22249,149 @@ void surLaVueClicDroit1116() {
 }
 
 // =============================================================================
+//  1.11.6 (« ajouter forcage par borne et type dans variables IHM et API dans IHM ->
+//  Simulation ») : un mouvement (sinus, clignote, constante...) et ses bornes tiennent
+//  la variable, comme un esclave simule.
+// =============================================================================
+void forcageMouvement1116(const std::string& xpg) {
+    std::printf("== 1.11.6 : le for\xC3\xA7" "age par type et bornes (Variables IHM et API) ==\n");
+    namespace mo = hmi::motion;
+    // Le mouvement seul : les formules, le champ des bornes.
+    {
+        mo::Motion m = mo::defaultFor(hmi::BehaviorKind::Sine, false, 50);
+        check(m.a == 40 && m.b == 60 && m.period == 10, "un sinus neuf autour de 50 : de 40 \xC3\xA0 60, 10 s");
+        std::string why;
+        check(mo::parse("20 ; 80 ; 4", m, &why) && m.a == 20 && m.b == 80 && m.period == 4, "\xC2\xAB 20 ; 80 ; 4 \xC2\xBB : les bornes et la p\xC3\xA9riode");
+        check(mo::parse("90 .. 10", m) && m.a == 10 && m.b == 90 && m.period == 4, "\xC2\xAB 90 .. 10 \xC2\xBB : remis dans l'ordre, la p\xC3\xA9riode gard\xC3\xA9" "e");
+        check(!mo::parse("20", m, &why) && !why.empty(), "une borne seule : refus\xC3\xA9" "e (" + why + ")");
+        mo::State st;
+        m = {hmi::BehaviorKind::Sine, 20, 80, 4, 0, {}};
+        check(std::fabs(mo::valueAt(m, 1, st) - 80) < 1e-9 && std::fabs(mo::valueAt(m, 3, st) - 20) < 1e-9, "sinus 20 -> 80 sur 4 s : 80 \xC3\xA0 1 s, 20 \xC3\xA0 3 s");
+        mo::Motion b = mo::defaultFor(hmi::BehaviorKind::Blink, true, 0);
+        check(mo::parse("1,5 ; 4", b) && b.delay == 1.5 && b.period == 4 && mo::valueAt(b, 1, st) == 1 && mo::valueAt(b, 2, st) == 0,
+              "clignote \xC2\xAB 1,5 ; 4 \xC2\xBB : \xC3\xA0 1 pendant 1,5 s toutes les 4 s");
+        mo::Motion r{hmi::BehaviorKind::Random, 10, 20, 1, 0, {}};
+        bool inside = true;
+        for (int k = 0; k < 50; ++k) {
+            const double v = mo::valueAt(r, k * 0.5, st);
+            inside = inside && v >= 10 && v <= 20;
+        }
+        check(inside, "al\xC3\xA9" "atoire 10 -> 20 : toujours dans ses bornes");
+        check(mo::text({hmi::BehaviorKind::Sine, 20, 80, 10, 0, {}}).find("sinus 20") == 0, "en clair : " + mo::text({hmi::BehaviorKind::Sine, 20, 80, 10, 0, {}}));
+        check(mo::kindsFor(true).size() == 3, "un BOOL : constante, clignote, \xC3\xA9tapes");
+    }
+    // Dans la simulation : Variables IHM.
+    auto doc = std::make_shared<Document>();
+    auto& p = doc->project;
+    for (const auto& [name, type] : {std::pair{"Niveau", "REAL"}, {"Compteur", "INT"}, {"Marche", "BOOL"}}) {
+        Variable var;
+        var.id = p.allocate();
+        var.name = name;
+        var.type = type;
+        p.programs.variables.push_back(var);
+    }
+    {
+        View v = makeView(p, "Accueil");
+        p.config.startView = v.id;
+        p.views.push_back(v);
+    }
+    std::shared_ptr<const domain::Project> plcProject;
+    std::unique_ptr<sim::Runtime> plc;
+    if (!xpg.empty()) {
+        core::EventBus bus;
+        importer::ProjectImporter imp(bus);
+        if (auto result = imp.importFiles({xpg})) {
+            plcProject = result->project;
+            plc = std::make_unique<sim::Runtime>(plcProject);
+            (void)plc->prepare("MAST");
+        }
+    }
+    app::HmiSimulationHost host;
+    host.runtime = [&]() -> sim::Runtime* { return plc.get(); };
+    app::HmiSimulationPane pane("mouvement1116", doc, host);
+    pane.setBounds({0, 0, 1600, 900});
+    Recorder rec;
+    const auto theme = ui::Theme::dark();
+    auto paintAt = [&](double t) {
+        rec.clear();
+        pane.layout();
+        pane.render(ui::PaintContext{rec, theme, {0, 0, 1600, 900}, t, nullptr});
+    };
+    paintAt(0.0);
+    pane.tabs().setCurrentIndex(app::HmiSimulationPane::TabVariables);
+    paintAt(0.1);
+    auto& ihm = pane.ihmVariables();
+    const auto real = [&](const char* name) {
+        const auto* v = pane.runtime().variable(name);
+        return v ? v->asReal() : -999.0;
+    };
+    check(ihm.setMotionKind("Niveau", "sinus") && ihm.motionText("Niveau").find("sinus") == 0 && pane.runtime().variableForced("Niveau"),
+          "Niveau : un sinus (" + ihm.motionText("Niveau") + "), la variable forc\xC3\xA9" "e");
+    check(ihm.openMotionEditor("Niveau") && ihm.valueEditor(), "le double-clic : le champ des bornes");
+    if (auto* f = ihm.valueEditor()) {
+        f->setText("20 ; 80 ; 4");
+        (void)f->dispatch(ui::KeyDown{ui::Key::Return, {}, false});
+    }
+    check(ihm.motionText("Niveau").find("sinus 20 \xE2\x86\x92 80") == 0, "Entr\xC3\xA9" "e : sinus 20 -> 80 \xC2\xB7 4 s (" + ihm.motionText("Niveau") + ")");
+    double lo = 1e9, hi = -1e9;
+    for (int k = 1; k <= 16; ++k) {
+        paintAt(0.1 + k * 0.25);
+        lo = std::min(lo, real("Niveau"));
+        hi = std::max(hi, real("Niveau"));
+    }
+    check(lo >= 20 - 1e-6 && hi <= 80 + 1e-6 && hi - lo > 40, "en marche, Niveau va de " + std::to_string(lo) + " \xC3\xA0 " + std::to_string(hi) + " (20 -> 80)");
+    // Une ecriture ne la change pas (forcee) ; un BOOL refuse le sinus, accepte clignote.
+    (void)pane.runtime().environment().write("Niveau", sim::Value::real(500));
+    check(real("Niveau") <= 80 + 1e-6, "forc\xC3\xA9" "e par son mouvement : une \xC3\xA9" "criture (500) ne passe pas");
+    check(!ihm.setMotionKind("Marche", "sinus") && ihm.setMotionKind("Marche", "clignote"), "Marche (BOOL) : pas de sinus, clignote oui");
+    bool sawOn = false, sawOff = false;
+    for (int k = 1; k <= 12; ++k) {
+        paintAt(4.2 + k * 0.4);
+        const auto* v = pane.runtime().variable("Marche");
+        if (v && v->isTruthy()) sawOn = true;
+        if (v && !v->isTruthy()) sawOff = true;
+    }
+    check(sawOn && sawOff, "Marche clignote (TRUE puis FALSE)");
+    // Decocher Forcer (ou Aucun) : le mouvement s'arrete, la variable redevient libre.
+    check(ihm.unforcePath("Niveau") && ihm.motionText("Niveau").empty() && !pane.runtime().variableForced("Niveau"),
+          "lib\xC3\xA9rer Niveau : plus de mouvement");
+    check(ihm.setMotionKind("Marche", "aucun") && ihm.motionText("Marche").empty() && !pane.runtime().variableForced("Marche"),
+          "Aucun : Marche libre");
+    // Le menu de la cellule Mouvement : Aucun, les genres (un BOOL : trois), Les bornes...
+    check(ihm.openMotionMenu("Compteur", {300.f, 300.f}) && ihm.motionMenu() && ihm.motionMenu()->isOpen(), "un clic sur la cellule : le menu des mouvements");
+    if (auto* m = ihm.motionMenu()) {
+        std::size_t kinds = 0;
+        for (const auto& it : m->items()) kinds += (!it.separator && !it.heading && it.id >= 1 && it.id < 100) ? 1 : 0;
+        check(kinds == 7, "Compteur (INT) : 7 mouvements propos\xC3\xA9s (" + std::to_string(kinds) + ")");
+        m->close();
+    }
+    // Variables API : le meme forcage, sur l'automate simule.
+    if (plc) {
+        pane.tabs().setCurrentIndex(app::HmiSimulationPane::TabApiVariables);
+        paintAt(10.0);
+        auto& api = pane.apiVariables();
+        const std::string path = "Armoires[1].ana.PT1.mes";
+        check(api.setMotionKind(path, "rampe") && plc->isForced(path), "l'automate : " + path + " en rampe, forc\xC3\xA9" "e");
+        check(api.openMotionEditor(path) && api.valueEditor(), "ses bornes au clavier");
+        if (auto* f = api.valueEditor()) {
+            f->setText("0 ; 10 ; 2");
+            (void)f->dispatch(ui::KeyDown{ui::Key::Return, {}, false});
+        }
+        double alo = 1e9, ahi = -1e9;
+        for (int k = 1; k <= 10; ++k) {
+            paintAt(10.0 + k * 0.3);
+            sim::Value v;
+            if (plc->get(path, v)) {
+                alo = std::min(alo, v.asReal());
+                ahi = std::max(ahi, v.asReal());
+            }
+        }
+        check(alo >= -1e-6 && ahi <= 10 + 1e-6 && ahi - alo > 3, "la rampe 0 -> 10 tourne (" + std::to_string(alo) + " -> " + std::to_string(ahi) + ")");
+        check(api.unforcePath(path) && !plc->isForced(path) && api.motionText(path).empty(), "lib\xC3\xA9r\xC3\xA9" "e : le mouvement s'arr\xC3\xAAte");
+    }
+}
+
+// =============================================================================
 //  1.11.5 (« esclaves simules : treeview profondeur infinie sur les structures et
 //  variables, une recherche, garder le forcage, editer les bornes plus facilement -
 //  aussi dans IHM > Equipements > Valeurs simulees ») : les lignes d'un esclave se
@@ -25340,6 +25484,7 @@ int main(int argc, char** argv) {
     esclavesArbre1115();                    // 1.11.5 : les esclaves simules en arbre, la recherche, les bornes au clavier
     surLaVueClicDroit1116();                // 1.11.6 : sur la vue actuelle, le clic droit
     if (argc > 1) simulationVariables1115(argv[1]);   // 1.11.5 : les onglets Variables IHM et Variables API
+    if (argc > 1) forcageMouvement1116(argv[1]);   // 1.11.6 : le forcage par type et bornes
     scriptsExportImport1113();              // 1.11.3 : exporter / importer les scripts d'une vue et les operateurs (.xpgst)
     valuePicker1113();                      // 1.11.3 : le carre de legende cliquable, le selecteur de valeur
     if (argc > 1) valuePickerApi1113(argv[1]);   // 1.11.3 : le selecteur et les membres des variables de l'automate

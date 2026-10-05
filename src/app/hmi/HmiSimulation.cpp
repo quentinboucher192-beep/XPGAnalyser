@@ -2343,8 +2343,32 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
             }
             return runtime_.forceVariable(path, *v, why);
         };
-        h.unforce = [this](const std::string& path) { return runtime_.unforceVariable(path); };
+        // 1.11.6 : liberer arrete aussi son mouvement.
+        h.unforce = [this](const std::string& path) {
+            ihmMotions_.erase(path);
+            return runtime_.unforceVariable(path);
+        };
         h.nodeType = [this](const std::string& path) { return hmi::types::typeOfPath(doc_->project, path); };
+        // 1.11.6 : le forcage par type et bornes.
+        h.motion = [this](const std::string& path) -> std::optional<hmi::motion::Motion> {
+            const auto it = ihmMotions_.find(path);
+            return it == ihmMotions_.end() ? std::nullopt : std::optional<hmi::motion::Motion>(it->second.motion);
+        };
+        h.setMotion = [this](const std::string& path, const std::optional<hmi::motion::Motion>& m, std::string* why) {
+            if (!m) {
+                ihmMotions_.erase(path);
+                (void)runtime_.unforceVariable(path);
+                return true;
+            }
+            if (!runtime_.variable(path)) {
+                if (why) *why = path + " : l'IHM ne tourne pas (le bouton D\xC3\xA9marrer l'IHM)";
+                return false;
+            }
+            auto& on = ihmMotions_[path];
+            on.motion = *m;
+            applyMotions();
+            return true;
+        };
         tree->setHooks(std::move(h));
         tree->setEmptyText("Aucune variable IHM (Programmation g\xC3\xA9n\xC3\xA9rale \xE2\x80\xBA Variables IHM).");
         links_ += tree->said->connect([this](const std::string& t, bool error) {
@@ -2381,9 +2405,32 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
             }
             return rt->force(path, *v);
         };
-        h.unforce = [plc](const std::string& path) {
+        h.unforce = [this, plc](const std::string& path) {
+            apiMotions_.erase(path);                                // 1.11.6 : son mouvement s'arrete
             auto* rt = plc();
             return rt && rt->unforce(path);
+        };
+        // 1.11.6 : le forcage par type et bornes.
+        h.motion = [this](const std::string& path) -> std::optional<hmi::motion::Motion> {
+            const auto it = apiMotions_.find(path);
+            return it == apiMotions_.end() ? std::nullopt : std::optional<hmi::motion::Motion>(it->second.motion);
+        };
+        h.setMotion = [this, plc](const std::string& path, const std::optional<hmi::motion::Motion>& m, std::string* why) {
+            auto* rt = plc();
+            if (!m) {
+                apiMotions_.erase(path);
+                if (rt) (void)rt->unforce(path);
+                return true;
+            }
+            sim::Value cur;
+            if (!rt || !rt->get(path, cur)) {
+                if (why) *why = path + " : la simulation de l'automate n'est pas pr\xC3\xAAte (F9 la lance)";
+                return false;
+            }
+            auto& on = apiMotions_[path];
+            on.motion = *m;
+            applyMotions();
+            return true;
         };
         tree->setHooks(std::move(h));
         tree->setEmptyText("La simulation de l'automate n'est pas pr\xC3\xAAte : F9 la lance (l'IHM peut lire un vrai automate, qui ne se force pas ici).");
@@ -3544,6 +3591,41 @@ std::size_t HmiSimulationPane::clearJournal() {
     return n;
 }
 
+namespace {
+// 1.11.6 : la valeur d'un mouvement, dans le type de la variable.
+sim::Value motionValue(double v, const sim::Value& like) {
+    switch (like.type()) {
+        case sim::Type::Bool: return sim::Value::boolean(v >= 0.5);
+        case sim::Type::Real: return sim::Value::real(v);
+        case sim::Type::String: return sim::Value::text(hmi::formatNumber(v));
+        case sim::Type::Unknown: return sim::Value::real(v);
+        default:
+            if (like.type() == sim::Type::Time) return sim::Value::time(static_cast<std::int64_t>(std::llround(v)));
+            return sim::Value::integer(like.type(), static_cast<std::int64_t>(std::llround(v)));
+    }
+}
+} // namespace
+
+void HmiSimulationPane::applyMotions() {
+    if (ihmMotions_.empty() && apiMotions_.empty()) return;
+    const double t = std::max(0.0, now_ - runtime_.startedAt());
+    for (auto it = ihmMotions_.begin(); it != ihmMotions_.end();) {
+        const auto* cur = runtime_.variable(it->first);
+        if (!cur) { it = ihmMotions_.erase(it); continue; }      // l'IHM s'est arretee : le mouvement aussi
+        const double v = hmi::motion::valueAt(it->second.motion, t, it->second.state);
+        (void)runtime_.forceVariable(it->first, motionValue(v, *cur));
+        ++it;
+    }
+    auto* rt = host_.runtime ? host_.runtime() : nullptr;
+    for (auto it = apiMotions_.begin(); it != apiMotions_.end();) {
+        sim::Value cur;
+        if (!rt || !rt->get(it->first, cur)) { it = apiMotions_.erase(it); continue; }
+        const double v = hmi::motion::valueAt(it->second.motion, t, it->second.state);
+        (void)rt->force(it->first, motionValue(v, cur));
+        ++it;
+    }
+}
+
 void HmiSimulationPane::expandExpressions(bool open) {
     if (auto* tree = static_cast<ExprTree*>(model_.get())) tree->setAllOpen(open);
     if (table_) table_->setModel(model_);
@@ -3587,6 +3669,7 @@ void HmiSimulationPane::updateViewFilter() {
 void HmiSimulationPane::updateTables() {
     if (tabs_) hmiparams::updatePopupsTab(*tabs_, runtime_, doc_->project);   // 1.9 : l'onglet Popups
     updateViewFilter();                                                         // 1.11.6
+    applyMotions();                                                             // 1.11.6 : le forcage par type et bornes
     // Lot 13 : les performances, deux fois par seconde (de marche).
     if (perf_ && (perfShownAt_ < 0 || now_ - perfShownAt_ >= 0.5 || now_ < perfShownAt_)) {
         perfShownAt_ = now_;

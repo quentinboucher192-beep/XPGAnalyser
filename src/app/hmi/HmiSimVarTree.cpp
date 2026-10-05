@@ -21,6 +21,8 @@ constexpr float kBarH = 36.f;    // la recherche
 constexpr float kHeadH = 24.f;   // les titres des colonnes
 constexpr float kRowH = 24.f;
 constexpr float kIndent = 14.f;
+// Les colonnes, en part de la largeur des lignes (1.11.6 : la colonne Mouvement).
+constexpr float kColType = 0.40f, kColValue = 0.52f, kColMotion = 0.69f, kColForce = 0.885f;
 
 std::string trimmed(std::string s) {
     std::size_t a = 0, b = s.size();
@@ -133,6 +135,16 @@ HmiSimVarTree::HmiSimVarTree(std::string id, std::string what) : ui::Widget(std:
     // 1.11.6 : le menu du clic droit.
     ctxMenu_ = &static_cast<ui::PopupMenu&>(addChild(std::make_unique<ui::PopupMenu>(base + ".context")));
     links_ += ctxMenu_->itemChosen->connect([this](int item) { (void)contextAction(ctxPath_, item); });
+    // 1.11.6 : le choix du mouvement (la cellule Mouvement).
+    motionMenu_ = &static_cast<ui::PopupMenu&>(addChild(std::make_unique<ui::PopupMenu>(base + ".motion")));
+    links_ += motionMenu_->itemChosen->connect([this](int item) {
+        const std::string path = motionPath_;
+        if (item == 0) (void)applyMotion(path, std::nullopt);
+        else if (item == 100) (void)openMotionEditor(path);
+        else if (item >= 1 && static_cast<std::size_t>(item) <= motionKinds_.size()) {
+            if (setMotionKind(path, hmi::behaviorKindKey(motionKinds_[static_cast<std::size_t>(item - 1)]))) (void)openMotionEditor(path);
+        }
+    });
     auto field = std::make_unique<ValueField>(base + ".value");
     field->setVisibility(ui::Visibility::Collapsed);
     auto* raw = field.get();
@@ -431,7 +443,7 @@ bool HmiSimVarTree::rowRect(const std::string& path, gfx::Rect& out) const {
 }
 
 gfx::Rect HmiSimVarTree::forceBox(const gfx::Rect& row) const {
-    const float x = row.x + row.w * 0.84f;
+    const float x = row.x + row.w * kColForce;
     return {x, row.y + (kRowH - 14.f) * 0.5f, 14.f, 14.f};
 }
 
@@ -441,9 +453,10 @@ void HmiSimVarTree::onLayout() {
     if (search_) search_->setBounds({b.x + 8.f, b.y + 5.f, std::min(340.f, std::max(80.f, b.w - 16.f - 190.f - 170.f)), 26.f});
     if (viewBox_ && search_) viewBox_->setBounds({search_->bounds().right() + 10.f, b.y + 7.f, 160.f, 22.f});
     if (ctxMenu_) ctxMenu_->setBounds(b);   // sinon il n'est jamais dessine (la passe du dessus)
+    if (motionMenu_) motionMenu_->setBounds(b);
     if (!editPath_.empty()) {
         gfx::Rect r{};
-        if (rowRect(editPath_, r)) edit_->setBounds({r.x + r.w * 0.62f, r.y + 1.f, std::max(80.f, r.w * 0.2f), kRowH - 2.f});
+        if (rowRect(editPath_, r)) edit_->setBounds(editRect(r));
         else closeValueEditor(false);
     }
 }
@@ -501,12 +514,13 @@ bool HmiSimVarTree::openValueEditor(const std::string& path) {
             if (!rowRect(path, rr)) (void)reveal(path);
             if (!rowRect(path, rr)) return false;
             editPath_ = path;
+            editMotion_ = false;
             std::string now;
             if (hooks_.read)
                 if (const auto v = hooks_.read(path)) now = hmi::formatValue(*v);
             edit_->setText(now);
             edit_->setPlaceholder("la valeur forc\xC3\xA9" "e");
-            edit_->setBounds({rr.x + rr.w * 0.62f, rr.y + 1.f, std::max(80.f, rr.w * 0.2f), kRowH - 2.f});
+            edit_->setBounds(editRect(rr));
             edit_->setVisibility(ui::Visibility::Visible);
             static_cast<ValueField*>(edit_)->start();
             invalidate();
@@ -520,10 +534,143 @@ ui::InputText* HmiSimVarTree::valueEditor() noexcept { return editPath_.empty() 
 void HmiSimVarTree::closeValueEditor(bool apply) {
     if (editPath_.empty()) return;
     const std::string path = editPath_, text = trimmed(edit_->text());
+    const bool motion = editMotion_;
     editPath_.clear();
+    editMotion_ = false;
     edit_->setVisibility(ui::Visibility::Collapsed);
     invalidate();
-    if (apply && !text.empty()) (void)forcePath(path, text);
+    if (!apply || text.empty()) return;
+    if (!motion) {
+        (void)forcePath(path, text);
+        return;
+    }
+    // 1.11.6 : les bornes du mouvement.
+    auto mo = hooks_.motion ? hooks_.motion(path) : std::nullopt;
+    if (!mo) return;
+    std::string why;
+    if (!hmi::motion::parse(text, *mo, &why)) {
+        say(path + " : " + why + " - rien n'est chang\xC3\xA9.", true);
+        return;
+    }
+    (void)applyMotion(path, mo);
+}
+
+gfx::Rect HmiSimVarTree::editRect(const gfx::Rect& row) const {
+    if (editMotion_) return {row.x + row.w * kColMotion, row.y + 1.f, std::max(110.f, row.w * (kColForce - kColMotion) - 4.f), kRowH - 2.f};
+    return {row.x + row.w * kColValue, row.y + 1.f, std::max(80.f, row.w * (kColMotion - kColValue) - 4.f), kRowH - 2.f};
+}
+
+// ------------------------------------------------- 1.11.6 : le mouvement d'une variable ---
+bool HmiSimVarTree::applyMotion(const std::string& path, const std::optional<hmi::motion::Motion>& m) {
+    if (!hooks_.setMotion) return false;
+    std::string why;
+    if (!hooks_.setMotion(path, m, &why)) {
+        say(why.empty() ? path + " : mouvement refus\xC3\xA9" : why, true);
+        return false;
+    }
+    say(m ? path + " : " + hmi::motion::text(*m) + " (forc\xC3\xA9" "e \xC3\xA0 chaque cycle ; d\xC3\xA9" "cocher Forcer l'arr\xC3\xAAte)."
+          : path + " : le mouvement s'arr\xC3\xAAte, la variable est libre.",
+        false);
+    invalidate();
+    return true;
+}
+
+bool HmiSimVarTree::setMotionKind(const std::string& path, std::string_view kind) {
+    const Node* node = nullptr;
+    for (const auto& n : nodes_)
+        if (n.path == path && n.leaf) node = &n;
+    if (!node || !hooks_.setMotion) return false;
+    if (kind.empty() || kind == "aucun") return applyMotion(path, std::nullopt);
+    const auto k = hmi::behaviorKindFrom(kind);
+    if (!k) return false;
+    const bool boolean = node->type == "BOOL";
+    const auto allowed = hmi::motion::kindsFor(boolean);
+    if (std::find(allowed.begin(), allowed.end(), *k) == allowed.end()) {
+        say(path + " : \xC2\xAB " + std::string(hmi::behaviorKindLabel(*k)) + " \xC2\xBB ne va pas \xC3\xA0 un BOOL.", true);
+        return false;
+    }
+    // Le meme genre : garder ses bornes ; un autre : autour de la valeur du moment.
+    auto mo = hooks_.motion ? hooks_.motion(path) : std::nullopt;
+    if (!mo || mo->kind != *k) {
+        double current = 0;
+        if (hooks_.read)
+            if (const auto v = hooks_.read(path)) current = v->type() == sim::Type::Bool ? (v->isTruthy() ? 1 : 0) : v->asReal();
+        mo = hmi::motion::defaultFor(*k, boolean, current);
+    }
+    return applyMotion(path, mo);
+}
+
+bool HmiSimVarTree::openMotionMenu(const std::string& path, gfx::Point at) {
+    const Node* node = nullptr;
+    for (const auto& n : nodes_)
+        if (n.path == path && n.leaf) node = &n;
+    if (!node || !motionMenu_) return false;
+    const auto mo = hooks_.motion ? hooks_.motion(path) : std::nullopt;
+    std::vector<ui::PopupMenu::Item> items;
+    ui::PopupMenu::Item head;
+    head.heading = true;
+    head.label = path;
+    head.shortcut = mo ? hmi::motion::text(*mo) : std::string("libre");
+    items.push_back(head);
+    ui::PopupMenu::Item none;
+    none.label = "Aucun (la variable redevient libre)";
+    none.id = 0;
+    none.enabled = mo.has_value();
+    none.disabledReason = "elle n'a pas de mouvement";
+    items.push_back(none);
+    motionKinds_ = hmi::motion::kindsFor(node->type == "BOOL");
+    for (std::size_t k = 0; k < motionKinds_.size(); ++k) {
+        ui::PopupMenu::Item it;
+        it.label = std::string(hmi::behaviorKindLabel(motionKinds_[k]));
+        if (mo && mo->kind == motionKinds_[k]) it.shortcut = "actuel";
+        it.id = static_cast<int>(k) + 1;
+        items.push_back(it);
+    }
+    ui::PopupMenu::Item sep;
+    sep.separator = true;
+    items.push_back(sep);
+    ui::PopupMenu::Item limits;
+    limits.label = "Les bornes\xE2\x80\xA6";
+    limits.shortcut = "double-clic";
+    limits.id = 100;
+    limits.enabled = mo.has_value();
+    limits.disabledReason = "choisir d'abord un mouvement";
+    items.push_back(limits);
+    motionPath_ = path;
+    motionMenu_->setItems(std::move(items));
+    auto* root = rootWidget();
+    const auto sb = root ? root->bounds() : bounds();
+    motionMenu_->openAt(at, {sb.w, sb.h});
+    return true;
+}
+
+bool HmiSimVarTree::openMotionEditor(const std::string& path) {
+    const auto mo = hooks_.motion ? hooks_.motion(path) : std::nullopt;
+    if (!mo) {
+        say(path + " : choisir d'abord un mouvement (un clic sur la cellule).", true);
+        return false;
+    }
+    gfx::Rect rr{};
+    if (!rowRect(path, rr)) (void)reveal(path);
+    if (!rowRect(path, rr)) return false;
+    editPath_ = path;
+    editMotion_ = true;
+    edit_->setText(hmi::motion::editText(*mo));
+    edit_->setPlaceholder(mo->kind == hmi::BehaviorKind::Constant ? "la valeur"
+                          : mo->kind == hmi::BehaviorKind::Blink  ? "\xC3\xA0 1 pendant ; p\xC3\xA9riode (s)"
+                          : mo->kind == hmi::BehaviorKind::Steps  ? "1; 5; 3"
+                          : mo->kind == hmi::BehaviorKind::Counter ? "d\xC3\xA9part ; pas ; p\xC3\xA9riode"
+                                                                   : "min ; max ; p\xC3\xA9riode (s)");
+    edit_->setBounds(editRect(rr));
+    edit_->setVisibility(ui::Visibility::Visible);
+    static_cast<ValueField*>(edit_)->start();
+    invalidate();
+    return true;
+}
+
+std::string HmiSimVarTree::motionText(const std::string& path) const {
+    const auto mo = hooks_.motion ? hooks_.motion(path) : std::nullopt;
+    return mo ? hmi::motion::text(*mo) : std::string{};
 }
 
 void HmiSimVarTree::onPaint(const ui::PaintContext& ctx) {
@@ -555,7 +702,7 @@ void HmiSimVarTree::onPaint(const ui::PaintContext& ctx) {
     const float content = static_cast<float>(rows_.size()) * kRowH;
     const float space = bar_.space(a, content, a.h);
     const float w = a.w - space;
-    const float xType = a.x + w * 0.46f, xValue = a.x + w * 0.62f, xForce = a.x + w * 0.84f;
+    const float xType = a.x + w * kColType, xValue = a.x + w * kColValue, xMotion = a.x + w * kColMotion, xForce = a.x + w * kColForce;
     // Les titres.
     {
         const float hy = b.y + kBarH;
@@ -564,8 +711,11 @@ void HmiSimVarTree::onPaint(const ui::PaintContext& ctx) {
         // Chaque titre tient dans sa colonne (le volet peut etre etroit).
         g.drawText({a.x + 10.f, ty}, fit(g, "Variable " + what_, kSmall, xType - a.x - 16.f), kSmall, th.color.textMuted);
         g.drawText({xType, ty}, fit(g, "Type", kSmall, xValue - xType - 6.f), kSmall, th.color.textMuted);
-        g.drawText({xValue, ty}, fit(g, "Valeur (double-clic : forcer \xC3\xA0)", kSmall, xForce - xValue - 8.f), kSmall,
+        g.drawText({xValue, ty}, fit(g, "Valeur (double-clic : forcer \xC3\xA0)", kSmall, xMotion - xValue - 8.f), kSmall,
                    th.color.textMuted);
+        if (hooks_.setMotion)
+            g.drawText({xMotion, ty}, fit(g, "Mouvement (clic : type, double-clic : bornes)", kSmall, xForce - xMotion - 8.f), kSmall,
+                       th.color.textMuted);
         g.drawText({xForce, ty}, fit(g, "Forcer", kSmall, a.x + w - xForce - 4.f), kSmall, th.color.textMuted);
     }
     scroll_ = std::clamp(scroll_, 0.f, std::max(0.f, content - a.h));
@@ -610,7 +760,19 @@ void HmiSimVarTree::onPaint(const ui::PaintContext& ctx) {
             if (hooks_.read)
                 if (const auto val = hooks_.read(row.path)) v = hmi::formatValue(*val);
             if (forced) v += "  (forc\xC3\xA9" "e)";
-            g.drawText({xValue, ty}, fit(g, v, kSmall, xForce - xValue - 8.f), kSmall, forced ? th.color.warning : th.color.text);
+            g.drawText({xValue, ty}, fit(g, v, kSmall, (hooks_.setMotion ? xMotion : xForce) - xValue - 8.f), kSmall,
+                       forced ? th.color.warning : th.color.text);
+        }
+        // 1.11.6 : le mouvement (type, bornes) - "sinus 20 -> 80 · 10 s" ; sinon un tiret et la fleche du choix.
+        if (hooks_.setMotion && !(editMotion_ && editPath_ == row.path)) {
+            const auto mo = hooks_.motion ? hooks_.motion(row.path) : std::nullopt;
+            const std::string t = mo ? hmi::motion::text(*mo) : std::string("\xE2\x80\x94");
+            g.drawText({xMotion, ty}, fit(g, t, kSmall, xForce - xMotion - 22.f), kSmall, mo ? th.color.accent : th.color.textMuted);
+            if (static_cast<int>(i) == hover_) {
+                const float cx = xForce - 14.f, cy = r.y + kRowH * 0.5f;
+                g.line({cx - 4, cy - 2}, {cx, cy + 2}, th.color.textMuted, 1.3f);
+                g.line({cx, cy + 2}, {cx + 4, cy - 2}, th.color.textMuted, 1.3f);
+            }
         }
         const gfx::Rect box = forceBox(r);
         g.fillRect(box, th.color.inputBg);
@@ -670,7 +832,13 @@ ui::EventResult HmiSimVarTree::onEvent(const ui::InputEvent& ev) {
             else (void)forcePath(row.path);
             return ui::EventResult::Consumed;
         }
-        if (d->clickCount >= 2 && d->pos.x >= r.x + w * 0.62f) {
+        // 1.11.6 : la cellule du mouvement - un clic : le type ; un double-clic : les bornes.
+        if (hooks_.setMotion && d->pos.x >= r.x + w * kColMotion && d->pos.x < r.x + w * kColForce - 2.f) {
+            if (d->clickCount >= 2) (void)openMotionEditor(row.path);
+            else (void)openMotionMenu(row.path, d->pos);
+            return ui::EventResult::Consumed;
+        }
+        if (d->clickCount >= 2 && d->pos.x >= r.x + w * kColValue) {
             (void)openValueEditor(row.path);
             return ui::EventResult::Consumed;
         }

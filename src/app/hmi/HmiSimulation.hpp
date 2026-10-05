@@ -21,6 +21,7 @@
 
 #include "HmiPainter.hpp"
 #include "../../hmi/HmiViewPaths.hpp"   // 1.11.6 : sur la vue actuelle
+#include "../../hmi/HmiVarMotion.hpp"   // 1.11.6 : le forcage par type et bornes
 #include "HmiPanels.hpp"
 #include "HmiLot13Painter.hpp"
 #include "../../hmi/HmiCommands.hpp"
@@ -433,6 +434,8 @@ public:
     [[nodiscard]] ui::TableView& expressions() noexcept { return *table_; }
     [[nodiscard]] ui::InputText* expressionsSearch() noexcept { return exprSearch_; }
     void expandExpressions(bool open);
+    // 1.11.6 : les mouvements appliques maintenant (la mise a jour le fait ; les tests aussi).
+    void applyMotions();
     [[nodiscard]] TwinValuesController& twinsController() noexcept { return *twinsCtl_; }
     // Lot 13 : le releve des performances (remis a zero, exporte en CSV).
     void resetPerf();
@@ -545,6 +548,13 @@ private:
     // 1.11.6 : sur la vue actuelle - les variables que lit la vue montree (et ses popups
     // ouvertes), refaites quand elles changent, pour Esclaves simules, Variables IHM et API.
     void updateViewFilter();
+    // 1.11.6 : LE FORCAGE PAR TYPE ET BORNES - chaque mouvement tient sa variable (IHM :
+    // forceVariable ; API : sim::Runtime::force) a sa valeur du moment, a chaque mise a jour.
+    struct MotionOn {
+        hmi::motion::Motion motion;
+        hmi::motion::State  state;
+    };
+    std::map<std::string, MotionOn> ihmMotions_, apiMotions_;
     // 1.10.1 (C1) : L'HORLOGE DU VOLET. Deux sources la font avancer : le dessin
     // (onPaint, ctx.time) et les appels (refreshAt : l'onglet cache, les tests).
     // Chacune a son decalage, nul tant qu'elle est sur la meme base que le volet :
