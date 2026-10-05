@@ -1,0 +1,37 @@
+# =============================================================================
+#  Session 1114 : LA GEOMETRIE CALCULEE EN MARCHE, LES BARRES DE DEFILEMENT,
+#  EQUIPEMENTS SANS VARIABLES LIEES.
+#  Le projet : une copie d'Armoire_Gaz preparee par preparer-projet-1113.cpp puis
+#  preparer-projet-1114.cpp (STEST_1 : X = $UINTS[0]$, Y = gCoef * 100 ; STEST_2
+#  tourne de gAngle et retourne par gMiroir ; Groupe_geo : X = 1300 + gDecal,
+#  rotation gAngle).
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- 1. L'editeur : les objets a leur place de conception (la barre de l'arbre) ----
+arbre "IHM/Vues/Vue_STEST"
+attendre 6
+objet STEST_1
+attendre 3
+capture 1114_01_edition_formules.png
+
+# ---- 2. En simulation : STEST_1 en X = 0, Y = 100 ; STEST_2 tourne et se retourne ;
+#         le groupe avance et tourne avec ce qu'il contient --------------------------
+arbre "Simulation/IHM"
+attendre 12
+sim-utilisateur "admin" "admin2026"
+attendre 3
+sim-vue "Vue_STEST"
+attendre 8
+capture 1114_02_simulation_geometrie.png
+
+# ---- 3. IHM > Equipements : plus d'onglet Variables liees --------------------------
+arbre "IHM/Configuration/Équipements"
+attendre 6
+capture 1114_03_equipements_sans_variables_liees.png
+quitter
