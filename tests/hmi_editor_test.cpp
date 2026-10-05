@@ -16245,7 +16245,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 173,
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 174,
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -22478,6 +22478,23 @@ void variableFx1117() {
               "relu : \xC2\xAB =Vanne.CMD_OUV \xC2\xBB devient Vanne.CMD_OUV");
         check(hmi::targetVariable(" = Four1.Marche ") == "Four1.Marche" && hmi::targetVariable("Compteur") == "Compteur",
               "targetVariable : le \xC2\xAB = \xC2\xBB et les blancs retir\xC3\xA9s");
+    }
+    // 1.11.7 (« je veux pouvoir laisser des references dans les parametres des popups ») : IN_V := $V[0]$
+    // n'est plus « a revoir » dans Parametres de Popup (le $ d'un repere est transparent).
+    {
+        p.programs.variables.push_back([&] {
+            Variable var;
+            var.id = p.allocate();
+            var.name = "V";
+            var.type = "ARRAY[0..3] OF T_Vanne";
+            return var;
+        }());
+        View pop = makeView(p, "Popup");
+        pop.role = "popup";
+        pop.params = {{"IN_V", "", "", "T_Vanne", ParamMode::Reference}};
+        View caller = makeView(p, "Appelante");
+        same_text(hp::argumentsSummary(p, &caller, pop, "IN_V := $V[0]$", nullptr), "1", "Param\xC3\xA8tres de Popup : IN_V := $V[0]$, rien \xC3\xA0 revoir");
+        same_text(hp::argumentsSummary(p, &caller, pop, "IN_V := V[0]", nullptr), "1", "... comme IN_V := V[0]");
     }
 }
 

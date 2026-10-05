@@ -203,7 +203,7 @@ std::vector<std::pair<std::string, std::string>> typeMembers(const Project& p, s
 
 // ----------------------------------------------------- type d'une expression -
 std::string expressionType(const Project& p, const View* caller, std::string_view expression, const PlcTypes& plc) {
-    const std::string t = trim(expression);
+    const std::string t = trim(markers::strip(expression));   // 1.11.7 : $V[0]$ se lit V[0] (un repere est transparent)
     if (t.empty()) return {};
     const std::string u = up(t);
     if (u == "TRUE" || u == "FALSE") return "BOOL";
@@ -523,7 +523,7 @@ std::vector<ArgumentProblem> checkArguments(const Project& p, const View* caller
                                    + " n'est pas donn\xC3\xA9 et n'a pas de valeur par d\xC3\xA9" "faut : donne-le"});
             continue;
         }
-        const std::string arg = trim(it->second);
+        const std::string arg = trim(markers::strip(it->second));   // 1.11.7 : IN_V := $V[0]$ passe V[0] (une reference)
         const std::string given_t = expressionType(p, caller, arg, plc);
         const bool variable = isVariablePath(arg);
         if (!typeAcceptsFor(prm.mode, prm.type, given_t, variable)) {

@@ -3260,7 +3260,7 @@ Scope designScope(const View& v) {
     Scope scope;
     NullEnv none;
     for (const auto& prm : v.params) {
-        const std::string t = trimmed(prm.defaultValue);
+        const std::string t = trimmed(markers::strip(prm.defaultValue));   // 1.11.7 : les $ d'un repere sont transparents
         if (t.empty()) continue;
         if (isVariablePath(t)) { scope.setAlias(prm.name, t); continue; }
         if (auto value = Expression::compile(t).evaluate(none)) scope.setValue(prm.name, *value);
@@ -3273,7 +3273,9 @@ std::shared_ptr<const Scope> Runtime::buildScope(const View& v, std::string_view
     if (v.params.empty() && given.empty()) return nullptr;
     auto scope = std::make_shared<Scope>();
     const auto bind = [&](const std::string& name, const std::string& text) {
-        const std::string t = trimmed(text);
+        // 1.11.7 : un repere dans un argument (IN_V := $V[0]$, pose par Dupliquer...) : ses $ sont
+        // transparents - V[0] est une variable, la popup la recoit en reference (avant : evaluee, rien ne passait).
+        const std::string t = trimmed(markers::strip(text));
         if (t.empty()) return;
         if (isVariablePath(t)) {
             // Les index calcules maintenant (Pompes[i + 1] -> Pompes[3]) ; les

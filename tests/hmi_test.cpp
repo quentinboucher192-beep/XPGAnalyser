@@ -805,13 +805,6 @@ void geometrieEnMarche1114() {
     near(boxOf(shown, "O.In.M").x, 1100 + 50 + 50, "O.In.M (x = LX = 50 dans S) suit aussi");
 }
 
-// 1.11.4 : un parametre a repere, en marche - Name := '$Nom$' (une constante texte) se lit
-// 'Nom' ; Value := $UINTS$ (une variable) se lit UINTS, dans un texte comme dans une position.
-// =============================================================================
-//  1.11.6 (« dans les pages Esclaves simules, IHM, API, ajouter une option 'Sur la vue
-//  actuelle' en reperant les profondeurs des symboles d'instances ») : les variables
-//  que lit une vue, ses symboles developpes a toute profondeur ; le filtre.
-// =============================================================================
 // 1.11.7 : le nombre de lignes de code de l'application (outils/compter_lignes.py ->
 // core/CodeStats.hpp), affiche sur l'ecran d'accueil et dans A propos.
 void lignesDeCode1117() {
@@ -830,6 +823,11 @@ void lignesDeCode1117() {
     check(cs::kTotalLines > 100000 && cs::kByExtension[3].files > 100, "des centaines de .cpp, plus de 100 000 lignes (" + std::to_string(cs::kTotalLines) + ")");
 }
 
+// =============================================================================
+//  1.11.6 (« dans les pages Esclaves simules, IHM, API, ajouter une option 'Sur la vue
+//  actuelle' en reperant les profondeurs des symboles d'instances ») : les variables
+//  que lit une vue, ses symboles developpes a toute profondeur ; le filtre.
+// =============================================================================
 void surLaVueActuelle1116() {
     std::printf("1.11.6 : les variables lues par la vue (sur la vue actuelle)\n");
     namespace vp = hmi::viewpaths;
@@ -914,6 +912,8 @@ void surLaVueActuelle1116() {
     }
 }
 
+// 1.11.4 : un parametre a repere, en marche - Name := '$Nom$' (une constante texte) se lit
+// 'Nom' ; Value := $UINTS$ (une variable) se lit UINTS, dans un texte comme dans une position.
 void parametresReperesEnMarche1114() {
     std::printf("1.11.4 : les reperes dans les parametres d'une instance, en marche\n");
     Project p;
@@ -3724,6 +3724,64 @@ void utilisateursLot8() {
     vals.remaining = -1;
     same(fillUserInfo("{nom} ({groupe}, niveau {niveau}) depuis {depuis}, reste {reste} {autre}", vals),
          "admin (Administrateur, niveau 4) depuis 2 min 05 s, reste - {autre}", "le gabarit : sans nom, le login ; {reste} sans minuterie : -");
+}
+
+// =============================================================================
+//  1.11.7 (« quand je fais tourner l'IHM il n'envoie pas le parametre car il y a les $$ ;
+//  si je les enleve ca fonctionne ; je veux pouvoir laisser des references dans les
+//  parametres des popups ») : un repere dans un argument (IN_V := $V[2]$, pose par
+//  Dupliquer...) est transparent - la popup recoit V[2] en reference.
+// =============================================================================
+void reperesArgumentsPopup1117() {
+    std::printf("1.11.7 : un rep\xC3\xA8re dans les param\xC3\xA8tres d'une popup (IN_V := $V[2]$)\n");
+    Project p;
+    HmiType tv;
+    tv.id = p.allocate();
+    tv.name = "T_Vanne";
+    tv.members = {{"CMD_OUV", "BOOL"}, {"OUV", "BOOL"}};
+    p.programs.types = {tv};
+    p.programs.variables.push_back(hmiVar(p, "V", "ARRAY[0..3] OF T_Vanne"));
+    p.programs.variables.push_back(hmiVar(p, "Lu", "BOOL", "FALSE"));
+    View base = makeView(p, "Base");
+    View pop = makeView(p, "Popup");
+    pop.role = "popup";
+    pop.params = {{"IN_V", "", "", "T_Vanne", ParamMode::Reference}};
+    auto& ouvrir = addButton(p, base, "Valve_1", 10, 10);
+    ouvrir.actions.push_back(act(Trigger::Click, Operation::Popup, "Popup", "IN_V := $V[2]$"));
+    const Id btnOuvrir = ouvrir.id;
+    auto& cmd = addButton(p, pop, "Btn_Ouvrir", 10, 10);
+    cmd.actions.push_back(act(Trigger::Click, Operation::Set, "IN_V.CMD_OUV"));
+    const Id btnCmd = cmd.id;
+    auto& lire = addButton(p, pop, "Btn_Lire", 10, 60);
+    lire.actions.push_back(act(Trigger::Click, Operation::Assign, "Lu", "IN_V.OUV"));
+    const Id btnLire = lire.id;
+    p.views = {base, pop};
+    p.config.startView = base.id;
+    const Id popId = pop.id;
+    // La verification : ni type refuse, ni variable inexistante.
+    check(hmi::params::checkArguments(p, p.view(base.id), *p.view(popId), "IN_V := $V[2]$", {}).empty(),
+          "IN_V := $V[2]$ : une r\xC3\xA9" "f\xC3\xA9rence T_Vanne, rien \xC3\xA0 revoir");
+    const auto issues = generate(p, [](std::string_view) { return false; });
+    check(std::none_of(issues.begin(), issues.end(), [](const Issue& i) { return i.message.find("IN_V") != std::string::npos; }),
+          "G\xC3\xA9n\xC3\xA9rer ne dit rien de IN_V");
+    // En marche : la popup recoit V[2] en reference (elle l'ecrit et le lit).
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    rt.press(btnOuvrir, 0.1);
+    rt.release(btnOuvrir, 0.15, true);
+    check(rt.popups().size() == 1 && rt.popups().front() == popId, "le clic ouvre la popup");
+    const auto* scope = rt.viewScope(popId);
+    check(scope && scope->resolve("IN_V.CMD_OUV") == "V[2].CMD_OUV", "IN_V est V[2] (" + (scope ? scope->resolve("IN_V.CMD_OUV") : std::string("pas de param\xC3\xA8tres")) + ")");
+    rt.press(btnCmd, 0.2);
+    rt.release(btnCmd, 0.25, true);
+    sim::Value v2, v0;
+    check(rt.environment().read("V[2].CMD_OUV", v2) && v2.isTruthy() && rt.environment().read("V[0].CMD_OUV", v0) && !v0.isTruthy(),
+          "Mettre \xC3\xA0 1 IN_V.CMD_OUV \xC3\xA9" "crit V[2].CMD_OUV (et pas V[0])");
+    rt.environment().write("V[2].OUV", sim::Value::boolean(true));
+    rt.press(btnLire, 0.3);
+    rt.release(btnLire, 0.35, true);
+    check(rt.variable("Lu") && rt.variable("Lu")->isTruthy(), "Lu := IN_V.OUV lit V[2].OUV");
 }
 
 void verificationsLot8() {
@@ -20411,6 +20469,7 @@ int main(int argc, char** argv) {
     parametresReperesEnMarche1114();   // 1.11.4 : '$Nom$' et $UINTS$ en arguments, en marche
     surLaVueActuelle1116();            // 1.11.6 : les variables lues par la vue
     lignesDeCode1117();                // 1.11.7 : les lignes de code de l'application
+    reperesArgumentsPopup1117();       // 1.11.7 : IN_V := $V[2]$, une reference
     actions();
     scripts();
     transitions();

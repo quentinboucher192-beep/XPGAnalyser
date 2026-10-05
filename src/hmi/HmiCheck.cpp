@@ -949,7 +949,7 @@ void checkLot8(const Project& p, const NameExists& plc, std::vector<Issue>& out)
                             add(out, S::Warning, "Action", v.id, obj, where,
                                 "param\xC3\xA8tre inconnu de " + target->name + " : " + name);
                         // Ce que l'appelant relie doit exister (chez lui : ses propres parametres comptent).
-                        for (const auto& r : scanRoots(value))
+                        for (const auto& r : scanRoots(markers::strip(value)))   // 1.11.7 : $V[0]$ -> V
                             if (!known(p, plc, r, &v))
                                 add(out, S::Error, "Variable", v.id, obj, where, name + " := " + value + " : variable inexistante : " + r);
                     }
@@ -3567,7 +3567,7 @@ std::vector<Issue> compile(const Project& p) {
                 // Lot 8 : les parametres passes a la vue ouverte (un chemin, ou un calcul).
                 if (operationTakesArguments(a.operation))
                     for (const auto& [name, value] : parseArguments(a.value))
-                        if (!isVariablePath(value)) expr(value, ("param\xC3\xA8tre " + name + " :").c_str());
+                        if (!isVariablePath(markers::strip(value))) expr(value, ("param\xC3\xA8tre " + name + " :").c_str());
             }
         };
         actionsOf(nullptr, v.actions);

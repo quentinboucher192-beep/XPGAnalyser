@@ -86,12 +86,16 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
-        // 1.11.7 (05/10/2026, le defaut de la 1.11.6 sur les forcages ; la case Variable des actions ; le nombre de lignes de code).
+        // 1.11.7 (05/10/2026, le defaut de la 1.11.6 sur les forcages ; les reperes dans les parametres des popups ;
+        // la case Variable des actions ; le nombre de lignes de code).
         note("1.11.7", "Simulation", Kind::Fixed,
          "Le for\xC3\xA7" "age est commun aux onglets : une variable IHM li\xC3\xA9" "e \xC3\xA0 un esclave simul\xC3\xA9 (Four1 \xC3\xA0 l'adresse 43001 de la Centrale) est la m\xC3\xAAme case que sa ligne dans Esclaves simul\xC3\xA9s. La forcer, lui donner un mouvement ou la lib\xC3\xA9rer dans un onglet le fait dans l'autre ; les deux la montrent forc\xC3\xA9" "e.",
          "simulation", ""),
         note("1.11.7", "Simulation", Kind::Fixed,
          "Le for\xC3\xA7" "age passe avant les scripts : une variable forc\xC3\xA9" "e (dans Variables IHM ou dans son esclave simul\xC3\xA9) garde sa valeur quand un script l'\xC3\xA9" "crit ; l'\xC3\xA9" "criture est ignor\xC3\xA9" "e, sans erreur. Dans l'automate simul\xC3\xA9, c'\xC3\xA9tait d\xC3\xA9j\xC3\xA0 le cas.",
+         "simulation", ""),
+        note("1.11.7", "Simulation", Kind::Fixed,
+         "Un rep\xC3\xA8re dans les param\xC3\xA8tres d'une popup (IN_V := $V[0]$, pos\xC3\xA9 par Dupliquer...) passe en marche : ses $ sont transparents, la popup re\xC3\xA7oit V[0] en r\xC3\xA9" "f\xC3\xA9rence (elle le lit et l'\xC3\xA9" "crit). Avant, rien ne passait tant qu'on n'enlevait pas les $ ; Param\xC3\xA8tres de Popup ne le dit plus \xC2\xAB \xC3\xA0 revoir \xC2\xBB.",
          "simulation", ""),
         note("1.11.7", "\xC3\x89" "diteur IHM", Kind::Changed,
          "La case Variable d'une action (Mettre \xC3\xA0 1, Mettre \xC3\xA0 0, Basculer, Incr\xC3\xA9menter, D\xC3\xA9" "cr\xC3\xA9menter, Affecter) a la pastille fx et son type, comme la Condition ; l'aide propose les variables et, dans un symbole ou une popup, ses r\xC3\xA9" "f\xC3\xA9rences et leurs membres (Vanne.CMD_OUV). Un \xC2\xAB = \xC2\xBB tap\xC3\xA9 devant est retir\xC3\xA9 : =Vanne.CMD_OUV \xC3\xA9" "crit bien Vanne.CMD_OUV (une action d\xC3\xA9j\xC3\xA0 enregistr\xC3\xA9" "e ainsi aussi).",
