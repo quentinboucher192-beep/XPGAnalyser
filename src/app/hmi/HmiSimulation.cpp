@@ -2330,6 +2330,22 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
         ihmVars_ = tree.get();
         HmiSimVarTree::Hooks h;
         h.read = [this](const std::string& path) -> std::optional<sim::Value> {
+            // 1.11.7 : forcee dans son esclave simule - la valeur forcee tout de suite (la liaison ne
+            // la relit qu'a son prochain cycle).
+            updateTwinPlaces();
+            if (const auto* tp = twinPlace(path))
+                if (const auto* e = doc_->project.equipmentByName(tp->equipment))
+                    for (const auto& f : e->forcings) {
+                        if (!hmi::twin::sameCell(f.address, tp->row.address)) continue;
+                        const double eng = tp->row.eng(f.value);
+                        const sim::Value forced = tp->row.boolean ? sim::Value::boolean(eng != 0.0) : sim::Value::real(eng);
+                        if (const auto* cur = runtime_.variable(path)) {
+                            sim::Value v = *cur;
+                            v.assignFrom(forced);
+                            return v;
+                        }
+                        return forced;
+                    }
             // 1.11.7 : liee a un equipement (un esclave simule), elle se relit sur lui, comme une vue
             // la lit - sans vue qui la montre, sa valeur restait celle du demarrage (forcee a 80 dans
             // l'esclave, l'onglet montrait 0).

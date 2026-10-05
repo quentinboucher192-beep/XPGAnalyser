@@ -22639,6 +22639,7 @@ void forcageCommun1117() {
     check(ihm.forcePath("Four1.Temperature", "80") && forcings() == 1, "forcer Four1.Temperature (Variables IHM) : la case 43001 de l'esclave est forc\xC3\xA9" "e");
     check(e && !e->forcings.empty() && hmi::twin::sameCell(e->forcings[0].address, "43001") && std::fabs(e->forcings[0].value - 80.0) < 1e-6,
           "\xC3\xA0 80, dans l'esclave");
+    check(ihm.valueText("Four1.Temperature").rfind("80", 0) == 0, "Variables IHM montre 80 tout de suite (" + ihm.valueText("Four1.Temperature") + ")");
     {
         auto& ctl = pane.twinsController();
         ctl.refresh();

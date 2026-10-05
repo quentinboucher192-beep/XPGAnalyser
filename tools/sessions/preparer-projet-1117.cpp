@@ -5,7 +5,8 @@
 //  Sur la copie d'Armoire_Gaz des sessions 1115 et 1116 (preparer-projet-1113,
 //  -1114, -1115 passes) :
 //    - Four3 (T_Four), liee a la Centrale PM5560 (l'esclave simule) a %MW3200 :
-//      une variable IHM commune a Variables IHM et a Esclaves simules ;
+//      une variable IHM commune a Variables IHM et a Esclaves simules (la zone
+//      3200-3220 ajoutee a la memoire de la centrale, si elle a des zones) ;
 //    - la popup Pop_Vanne et son parametre IN_V (T_Vanne, Reference) : sa position,
 //      son etat, Ouvrir (Mettre a 1 IN_V.Ouverte) et Fermer ;
 //    - la vue Vue_Vannes : trois boutons qui l'ouvrent avec un repere
@@ -40,6 +41,15 @@ int main(int argc, char** argv) {
     if (!p.equipmentByName("Centrale PM5560")) {
         std::fprintf(stderr, "pas de Centrale PM5560 : passer d'abord preparer-projet-1115\n");
         return 1;
+    }
+    // Ses registres sont dans la memoire de la centrale simulee : la zone 3200-3220 (sinon
+    // l'esclave refuse, exception 2 : adresse illegale - comme le vrai appareil).
+    for (auto& c : p.equipments) {
+        if (c.name != "Centrale PM5560" || !c.zones.declared) continue;
+        auto& holding = c.zones.of(MemTable::Holding);
+        bool covered = false;
+        for (const auto& r : holding) covered = covered || (r.first <= 3200 && r.last >= 3220);
+        if (!covered) holding.push_back({3200, 3220});
     }
     if (!p.variable("Four3")) {
         Variable v;

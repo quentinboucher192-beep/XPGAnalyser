@@ -9,9 +9,7 @@ attendre 3
 theme Dark
 attendre 5
 # ---- 1. Le nombre de lignes de code : l'ecran d'accueil, A propos -----------------
-# (le poste de test n'a pas encore de cle administrateur : la fenetre qui la demande d'abord)
-bouton "Définir la clé"
-attendre 3
+# (un poste sans cle administrateur la demande d'abord : bouton "Definir la cle" avant la capture)
 capture 1117_01_accueil_lignes_de_code.png
 action help.about
 attendre 4
@@ -58,6 +56,9 @@ touche Ctrl+A
 texte "IN_V."
 attendre 3
 capture 1117_05_variable_aide_references.png
+# Echap ferme la liste, Echap encore annule la saisie (sinon "IN_V." serait gardee en quittant la case).
+touche Escape
+attendre 1
 touche Escape
 attendre 2
 
