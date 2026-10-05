@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.11.5", "05/10/2026", "livr\xC3\xA9" "e le 05/10"},
     {"1.11.4", "05/10/2026", "livr\xC3\xA9" "e le 05/10"},
     {"1.11.3", "05/10/2026", "livr\xC3\xA9" "e le 05/10"},
     {"1.11.2", "04/10/2026", "livr\xC3\xA9" "e le 04/10"},
@@ -83,6 +84,20 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.11.5 (05/10/2026, deuxieme des quatre livraisons du 05/10) : les esclaves simules en arbre,
+        // les onglets Variables IHM et Variables API en arbre, la recherche, le forcage, les bornes au clavier.
+        note("1.11.5", "Simulation", Kind::New,
+         "Simulation IHM \xE2\x80\xBA Esclaves simul\xC3\xA9s : les variables se rangent en arbre, \xC3\xA0 toute profondeur (Four1 \xE2\x80\xBA Vannes \xE2\x80\xBA [1] \xE2\x80\xBA Position). Un n\xC5\x93ud se replie d'un clic et dit combien de valeurs il contient. Une recherche en haut garde les valeurs trouv\xC3\xA9" "es et leurs n\xC5\x93uds, ouverts.",
+         "simulation", ""),
+        note("1.11.5", "Simulation", Kind::New,
+         "Deux onglets en arbre dans la simulation IHM : Variables IHM et Variables API (celles de l'automate simul\xC3\xA9), chacun avec sa recherche. On y force comme dans les esclaves simul\xC3\xA9s : la case Forcer tient la valeur du moment, un double-clic sur la valeur la force \xC3\xA0 ce qu'on tape ; une valeur forc\xC3\xA9" "e se voit en orange.",
+         "simulation", ""),
+        note("1.11.5", "Simulation", Kind::New,
+         "Une variable IHM se force : l'IHM en marche ne l'\xC3\xA9" "crit plus (scripts, actions, lectures) tant qu'elle est forc\xC3\xA9" "e. Aussi depuis les tables d'animation.",
+         "variables-ihm", ""),
+        note("1.11.5", "Communication", Kind::Changed,
+         "Les bornes d'une valeur simul\xC3\xA9" "e se tapent au clavier : le crayon au bout de la barre (ou un double-clic sur la zone) ouvre un champ \xC2\xAB 20 ; 80 \xC2\xBB, Entr\xC3\xA9" "e l'applique, \xC3\x89" "chap annule. Dans la simulation (Esclaves simul\xC3\xA9s) et dans IHM \xE2\x80\xBA \xC3\x89quipements \xE2\x80\xBA Valeurs simul\xC3\xA9" "es, qui se range aussi en arbre.",
+         "simulation", ""),
         // 1.11.4 (05/10/2026, premiere des quatre livraisons du 05/10) : la geometrie calculee en marche
         // (instances, groupes, objets d'un symbole), les reperes dans les parametres, Equipements sans
         // Variables liees, les barres de defilement qu'on tire.

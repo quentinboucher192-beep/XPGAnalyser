@@ -26,6 +26,7 @@
 #include "hmi/HmiTemplateGallery.hpp"      // lot 20 : la galerie des modeles
 #include "hmi/HmiQualityPanes.hpp"
 #include "hmi/HmiSimulation.hpp"
+#include "hmi/HmiSimVarTree.hpp"         // 1.11.5 : les variables en arbre
 #include "hmi/HmiPublicVarsPane.hpp"     // 1.9 : les structures des esclaves simules (vars-dossier, vars-choisir)
 #include "screens/StationScreen.hpp"      // lot 14 : le poste d'exploitation
 #include "screens/HelpChrome.hpp"         // lot macros 1 : les onglets de l'aide
@@ -3631,6 +3632,8 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         else if (what == "1") part = P::One;
         else if (what == "ajouter") part = P::Add;
         else if (what == "barre") part = P::Bar;
+        else if (what == "bornes") part = P::Edit;          // 1.11.5 : le crayon des bornes
+        else if (what == "noeud") part = P::Node;
         gfx::Rect r{};
         if (!tv->partRect(arg(1), arg(2), part, r)) {
             if (retries_ < 4) return Step::Retry;
@@ -3645,6 +3648,76 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         click(p, MouseButton::Left, 1, {});
         if (has("double")) click(p, MouseButton::Left, 2, {});
         return Step::Yield;
+    }
+    // 1.11.5 : l'arbre des valeurs simulees - valeurs-chercher "texte" (la recherche),
+    // valeurs-noeud "equipement|Four1.Zones" ouvrir|fermer.
+    if (cmd == "valeurs-chercher" || cmd == "valeurs-noeud") {
+        auto* page = currentPage();
+        HmiTwinValues* tv = nullptr;
+        if (page)
+            walk(*page, [&](ui::Widget& x) {
+                if (auto* twv = dynamic_cast<HmiTwinValues*>(&x); !tv && twv && shown(*twv)) tv = twv;
+            });
+        if (!tv) {
+            if (retries_ < 4) return Step::Retry;
+            fail("pas de valeurs simul\xC3\xA9" "es ici");
+            return Step::Next;
+        }
+        if (cmd == "valeurs-noeud") {
+            tv->setNodeOpen(arg(1), arg(2) != "fermer");
+            return Step::Next;
+        }
+        auto* box = tv->searchBox();
+        if (!box || !shown(*box)) { fail("valeurs-chercher : pas de recherche ici"); return Step::Next; }
+        typeInto(centre(box->bounds()), arg(1));
+        return Step::Yield;
+    }
+    // 1.11.5 : les onglets Variables IHM et Variables API de la simulation (des arbres) -
+    //   simvar ihm|api chercher "texte"
+    //   simvar ihm|api noeud "Four1.Vannes" ouvrir|fermer
+    //   simvar ihm|api forcer "chemin" ["valeur"]   (sans valeur : la case, a la valeur du moment)
+    //   simvar ihm|api liberer "chemin"
+    //   simvar ihm|api editer "chemin"              (le champ de la valeur, comme un double-clic)
+    if (cmd == "simvar") {
+        auto* pane = dynamic_cast<HmiSimulationPane*>(currentPage());
+        if (!pane) { fail("l'onglet courant n'est pas la simulation IHM (" + cmd + ")"); return Step::Next; }
+        HmiSimVarTree& tree = arg(1) == "api" ? pane->apiVariables() : pane->ihmVariables();
+        const std::string what = arg(2);
+        if (what == "chercher") {
+            auto* box = tree.searchBox();
+            if (!box || !shown(*box)) {
+                if (retries_ < 4) return Step::Retry;
+                fail("simvar : la recherche n'est pas montr\xC3\xA9" "e (l'onglet est-il ouvert ?)");
+                return Step::Next;
+            }
+            typeInto(centre(box->bounds()), arg(3));
+            return Step::Yield;
+        }
+        if (what == "noeud") { tree.setOpen(arg(3), arg(4) != "fermer"); return Step::Next; }
+        if (what == "liberer") {
+            if (!tree.unforcePath(arg(3))) fail("simvar : " + arg(3) + " ne se lib\xC3\xA8re pas");
+            return Step::Next;
+        }
+        if (what == "forcer") {
+            if (w.size() > 4) {
+                if (!tree.forcePath(arg(3), arg(4))) fail("simvar : " + arg(3) + " ne se force pas a " + arg(4));
+                return Step::Next;
+            }
+            gfx::Rect r{};
+            if (!tree.rowRect(arg(3), r)) {
+                if (retries_ < 4) return Step::Retry;
+                fail("simvar : la ligne " + arg(3) + " n'est pas montr\xC3\xA9" "e");
+                return Step::Next;
+            }
+            click(centre(tree.forceBox(r)), MouseButton::Left, 1, {});
+            return Step::Yield;
+        }
+        if (what == "editer") {
+            if (!tree.openValueEditor(arg(3))) fail("simvar : pas de champ pour " + arg(3));
+            return Step::Next;
+        }
+        fail("simvar : " + what + " ? (chercher, noeud, forcer, liberer, editer)");
+        return Step::Next;
     }
     // Lot 17 : une case de la carte memoire - carte-case 4x 52 [double|survol].
     if (cmd == "carte-case") {

@@ -1,0 +1,71 @@
+# =============================================================================
+#  Session 1115 : LES ESCLAVES SIMULES EN ARBRE, LES BORNES AU CLAVIER,
+#  LES ONGLETS VARIABLES IHM ET VARIABLES API (ARBRES, RECHERCHE, FORCAGE).
+#  Le projet : une copie d'Armoire_Gaz preparee par preparer-projet-1113.cpp,
+#  preparer-projet-1114.cpp puis preparer-projet-1115.cpp (Four1 : T_Four lie a
+#  la Centrale PM5560 en %MW3030 ; Four2 : T_Four local).
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- 1. IHM > Equipements > Valeurs simulees : l'arbre (Four1 > Vannes > [1]) ----
+arbre "IHM/Configuration/Équipements"
+attendre 5
+sous-onglet "Valeurs simulées"
+attendre 4
+valeurs-chercher "Four1"
+attendre 3
+capture 1115_01_valeurs_simulees_arbre.png
+
+# ---- 2. Les bornes au clavier : le crayon au bout de la barre ------------------
+valeurs-chercher ""
+attendre 2
+valeur "Centrale PM5560" "%MW3002" bornes
+attendre 2
+texte "100 ; 450"
+attendre 2
+capture 1115_02_bornes_au_clavier.png
+touche entree
+attendre 3
+capture 1115_03_bornes_appliquees.png
+
+# ---- 3. En simulation : Esclaves simules en arbre, avec la recherche ------------
+arbre "Simulation/IHM"
+attendre 12
+sim-utilisateur "admin" "admin2026"
+attendre 3
+sous-onglet "Esclaves simulés"
+attendre 4
+valeurs-chercher "Four1"
+attendre 4
+capture 1115_04_simulation_esclaves_arbre.png
+
+# ---- 4. Variables IHM : l'arbre, la recherche, le forcage -----------------------
+sous-onglet "Variables IHM"
+attendre 3
+simvar ihm chercher "Four"
+attendre 3
+simvar ihm forcer "Four2.Temperature" "80"
+attendre 2
+simvar ihm forcer "Four2.Vannes[1].Ouverte"
+attendre 3
+capture 1115_05_variables_ihm_arbre_forcage.png
+simvar ihm editer "Four2.Pression"
+attendre 1
+texte "1013,5"
+attendre 2
+capture 1115_06_variables_ihm_champ_valeur.png
+touche entree
+attendre 2
+
+# ---- 5. Variables API : les variables de l'automate simule, en arbre ------------
+sous-onglet "Variables API"
+attendre 3
+simvar api chercher "PT1"
+attendre 4
+capture 1115_07_variables_api_arbre.png
+quitter
