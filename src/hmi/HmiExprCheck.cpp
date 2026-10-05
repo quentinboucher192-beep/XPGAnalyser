@@ -13,6 +13,7 @@
 #include "HmiOperators.hpp"
 #include "HmiPublicVars.hpp"
 #include "HmiScript.hpp"
+#include "HmiSymbols.hpp"   // 1.11.10 : les fonctions des symboles
 #include "HmiTypes.hpp"
 #include "../project/MemberTree.hpp"
 
@@ -453,6 +454,23 @@ private:
                     return v;
                 }
                 if (isOp("(")) return call(t.text);
+                // 1.11.10 : Vanne_3.Etat(), Vue_Vannes.Vanne_3.Etat() - la fonction d'une instance.
+                if (isOp(".")) {
+                    std::vector<std::string> segs{t.text};
+                    std::size_t k = at_;
+                    while (k + 1 < toks_.size() && toks_[k].k == Tok::K::Op && toks_[k].text == "." && toks_[k + 1].k == Tok::K::Ident) {
+                        segs.push_back(toks_[k + 1].text);
+                        k += 2;
+                    }
+                    if (segs.size() >= 2 && k < toks_.size() && toks_[k].k == Tok::K::Op && toks_[k].text == "(")
+                        if (const HmiFunction* fn = instanceFunction(segs)) {
+                            at_ = k;
+                            std::string dotted;
+                            for (const auto& sg : segs) dotted += (dotted.empty() ? "" : ".") + sg;
+                            pendingFn_ = fn;
+                            return call(dotted);
+                        }
+                }
                 return path(t.text);
             }
             case Tok::K::End:
@@ -635,7 +653,44 @@ private:
         return v;
     }
 
+    // ---- 1.11.10 : les fonctions des symboles ----
+    // Le symbole dont l'expression est controlee : le symbole lui-meme, ou celui qui porte la popup.
+    const View* symbolHere() const {
+        if (!ctx_.view || !ctx_.project) return nullptr;
+        if (isSymbolView(*ctx_.view)) return ctx_.view;
+        return popupOwner(*ctx_.project, *ctx_.view);
+    }
+    // ["Vanne_3", "Etat"] (une instance de la vue ou du symbole) ou ["Vue", "Vanne_3", "Etat"] : la fonction.
+    const HmiFunction* instanceFunction(const std::vector<std::string>& segs) const {
+        const Project* p = ctx_.project;
+        if (!p || segs.size() < 2) return nullptr;
+        const View* here = symbolHere() ? symbolHere() : ctx_.view;
+        if (here) {
+            const View* sym = nullptr;
+            for (const auto& o : here->objects)
+                if (o.kind == Kind::SymbolInstance && up(o.name) == up(segs[0])) sym = symbolOf(*p, o);
+            for (std::size_t k = 1; sym && k < segs.size(); ++k) {
+                if (k + 1 == segs.size()) return symbolFunction(*sym, segs[k]);
+                const View* inner = nullptr;
+                for (const auto& o : sym->objects)
+                    if (o.kind == Kind::SymbolInstance && up(o.name) == up(segs[k])) inner = symbolOf(*p, o);
+                sym = inner;
+            }
+        }
+        std::string dotted;
+        for (const auto& sg : segs) dotted += (dotted.empty() ? "" : ".") + sg;
+        if (BoundFunction b; boundSymbolFunction(*p, dotted, b))
+            if (const View* sv = p->viewByName(b.symbol)) return symbolFunction(*sv, b.function.name);
+        return nullptr;
+    }
+    const HmiFunction* pendingFn_{nullptr};
+
     Val call(const std::string& name) {
+        // 1.11.10 : une fonction de symbole (par son nom dans le symbole, ou Instance.Fonction).
+        const HmiFunction* symFn = pendingFn_;
+        pendingFn_ = nullptr;
+        if (!symFn)
+            if (const View* sv = symbolHere()) symFn = symbolFunction(*sv, name);
         next();    // (
         std::vector<Val> args;
         if (!isOp(")"))
@@ -649,6 +704,23 @@ private:
         const int n = static_cast<int>(args.size());
         Val r;
         r.show = name + "(...)";
+        if (symFn) {
+            r.type = typeOfName(symFn->returnType);
+            if (trimmed(symFn->returnType).empty())
+                problem(name + " ne rend pas de valeur : une expression ne peut appeler qu'une fonction qui rend quelque chose");
+            else {
+                // Le nombre d'arguments : ses VAR_INPUT (une entree avec une valeur initiale est facultative).
+                const auto parts = splitDeclarations(symFn->body, true);
+                const auto inputs = parts.inputs();
+                int required = 0;
+                for (const auto* in : inputs) required += in->initial.empty() ? 1 : 0;
+                if (n < required || n > static_cast<int>(inputs.size()))
+                    problem(name + " prend " + (required == static_cast<int>(inputs.size()) ? plural(required, "argument")
+                                                                                            : std::to_string(required) + " \xC3\xA0 " + plural(static_cast<int>(inputs.size()), "argument"))
+                            + ", pas " + std::to_string(n));
+            }
+            return r;
+        }
         if (isStandardFunction(u)) {
             const auto to = u.find("_TO_");
             if (to != std::string::npos && to > 0) {
@@ -724,9 +796,11 @@ private:
         for (const auto& a : kArity) names.emplace_back(a.name);
         for (const char* conv : {"INT_TO_REAL", "REAL_TO_INT", "INT_TO_STRING", "REAL_TO_STRING", "BOOL_TO_INT"}) names.emplace_back(conv);
         if (ctx_.project) for (const auto& f : ctx_.project->programs.functions) names.push_back(f.name);
+        if (const View* sv = symbolHere()) for (const auto& f : sv->functions) names.push_back(f.name);   // 1.11.10
         const std::string near = closestAmong(name, names);
         problem("fonction inconnue : " + name + (near.empty() ? std::string() : " (veux-tu dire " + near + " ?)")
-                + " ; une expression n'appelle que les fonctions standard (ABS, MIN, LIMIT, INT_TO_REAL...) et les fonctions IHM du projet");
+                + " ; une expression n'appelle que les fonctions standard (ABS, MIN, LIMIT, INT_TO_REAL...), les fonctions IHM du projet"
+                  " et celles des symboles (dans le symbole : Nom(), dans la vue : Instance.Nom())");
         return r;
     }
 };

@@ -128,6 +128,8 @@ inline constexpr std::string_view kAllBoth = "Tous les param\xC3\xA8tres en mode
 // vue a chaque reconstruction de sa fiche) ; nulle : aucune ou plus dans le projet.
 void setAssistView(hmi::Id view);
 [[nodiscard]] const hmi::View* assistView(const hmi::Project&);
+// 1.11.10 : la meme vue, meme sans parametre (ses instances, les fonctions de son symbole).
+[[nodiscard]] const hmi::View* editedView(const hmi::Project&);
 // Les parametres de la vue (et les membres de leur type) pour ce qui precede le
 // curseur : (le nom, "<type> \xC2\xB7 <PASTILLE> \xC2\xB7 param\xC3\xA8tre").
 [[nodiscard]] std::vector<std::pair<std::string, std::string>> assistItems(const hmi::Project&, const hmi::View&,

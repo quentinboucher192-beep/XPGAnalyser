@@ -15974,12 +15974,13 @@ void centreAide111() {
     // 1.11.1 (T2, tranche 30) : la 1.11.1 en tete (9 versions).
     // 1.11.3 : la 1.11.3 en tete (11 versions). 1.11.4 : la 1.11.4 en tete (12 versions). 1.11.5 : 13. 1.11.6 : 14. 1.11.7 : 15. 1.11.8 : 16. 1.11.9 : 17.
     // 1.11.10 : 18.
-    check(hn::releases().size() == 18 && hn::releases().front().version == "1.11.10" && hn::releases()[1].version == "1.11.9"
-              && hn::releases()[2].version == "1.11.8"
-              && hn::releases()[3].version == "1.11.7" && hn::releases()[4].version == "1.11.6" && hn::releases()[5].version == "1.11.5"
-              && hn::releases()[6].version == "1.11.4" && hn::releases()[7].version == "1.11.3" && hn::releases()[8].version == "1.11.2"
-              && hn::releases()[9].version == "1.11.1" && hn::releases()[10].version == "1.11" && hn::releases()[11].version == "1.10.4",
-          "notes : 18 versions, la 1.11.10 en tete, puis la 1.11.9 \xC3\xA0 la 1.11, et la 1.10.4");
+    // 1.11.11 : 19.
+    check(hn::releases().size() == 19 && hn::releases().front().version == "1.11.11" && hn::releases()[1].version == "1.11.10"
+              && hn::releases()[2].version == "1.11.9" && hn::releases()[3].version == "1.11.8"
+              && hn::releases()[4].version == "1.11.7" && hn::releases()[5].version == "1.11.6" && hn::releases()[6].version == "1.11.5"
+              && hn::releases()[7].version == "1.11.4" && hn::releases()[8].version == "1.11.3" && hn::releases()[9].version == "1.11.2"
+              && hn::releases()[10].version == "1.11.1" && hn::releases()[11].version == "1.11" && hn::releases()[12].version == "1.10.4",
+          "notes : 19 versions, la 1.11.11 en tete, puis la 1.11.10 \xC3\xA0 la 1.11, et la 1.10.4");
     // 1.11.2 (T2, tranches 41, 42 et 44 ; decisions 187, 201 et 216) : 23 lignes en 8 domaines, dont 2 cartes de la fenetre Nouveautes.
     // Tranche 46 (SYM, decision 240) : + Dupliquer dans un symbole (C) et la section Parametres du symbole (N) : 25 lignes.
     {
@@ -16250,7 +16251,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 188,   // 1.11.10 : + 6
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 190,   // 1.11.10 : + 6 ; 1.11.11 : + 2
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -16393,7 +16394,7 @@ void centreAide111() {
     // Integration 1.11 (I111) : la 1.10.4 ajoute objet-vanne-3-voies (La bibliotheque d'objets) : 206.
     // 1.11.1 (T2, decision 107) : Programmer gagne variables-api (API. : les variables de l'automate) : 207.
     check(ix.count(hc::Chapter::Hmi) == 208, "centre : L'IHM a les 208 sujets des chapitres 2 a 8 du guide (1.11.1 : variables-api ; 1.11.2 : paquets-symboles)");
-    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 18, "centre : 11 expressions, 18 notes (1.11.10)");
+    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 19, "centre : 11 expressions, 19 notes (1.11.11)");
     // Tranche 3 : les 11 types de T3 (hmi::exprguide::all(), depot-o), passes par in.expressions ; les
     // cles de la liste de secours sont les siennes (enumeration, pas enum).
     {
@@ -16455,10 +16456,10 @@ void centreAide111() {
         check(o, "page Raccourcis : Ctrl+Maj+O dessine en trois touches, repere 1.11");
 
         const auto n110 = hc::notesPage("1.10");
-        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 18
+        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 19
                   && !n110.summary.empty() && !n110.date.empty(),
               "page Notes : 1.10 -> 1.10.0, 22 lignes en 7 domaines, sa date et son resume");
-        check(hc::notesPage("").version == "1.11.10" && hc::notesPage("9.9").version == "1.11.10",
+        check(hc::notesPage("").version == "1.11.11" && hc::notesPage("9.9").version == "1.11.11",
               "page Notes : sans version (ou inconnue), la plus recente");
         const auto simu = hc::notesPage("1.10.0", "Simulation");
         check(simu.sections.size() == 1 && simu.rows == 4 && simu.domains.size() == 7,
@@ -16802,7 +16803,7 @@ void centreAide111() {
         // Les notes de version n'ont pas de tutoriel : ni la carte "Regarder le tutoriel" (hasTutorial, que
         // lit HelpCenterScreen::showTopic), ni la pastille dans l'arbre. Les autres pages speciales gardent
         // les leurs (T1 ecrit les tutoriels des raccourcis et de Signaler).
-        bool notesSans = ix.count(hc::Chapter::Notes) == 18;   // 1.11.3 a 1.11.10 : une version de plus
+        bool notesSans = ix.count(hc::Chapter::Notes) == 19;   // 1.11.3 a 1.11.11 : une version de plus
         for (const auto* t : ix.ofChapter(hc::Chapter::Notes)) notesSans = notesSans && !hc::hasTutorial(*t);
         const auto* raccourcis = ix.find("page-raccourcis");
         const auto* signaler = ix.find("page-signaler");
@@ -26145,6 +26146,87 @@ void fonctionsSymboleEditeur11110() {
     }
 }
 
+// =============================================================================
+//  1.11.11 (la capture du client : « =GetActiveCount(30) » dans un symbole, refusee
+//  - « fonction inconnue ») : les fonctions des symboles dans les expressions, dans le
+//  symbole (Nom()) et hors du symbole (Instance.Nom(), Vue.Instance.Nom()) ; l'aide a la
+//  saisie les propose dans les champs fx.
+// =============================================================================
+void fonctionsExpressions11111() {
+    std::printf("== 1.11.11 : les fonctions des symboles dans les expressions et l'aide \xC3\xA0 la saisie ==\n");
+    namespace hp = app::hmiparams;
+    namespace as = app::assist;
+    Project p;
+    View sym = makeView(p, "STEST");
+    sym.role = "symbole";
+    sym.params.push_back({"Value", "0", "", "INT", ParamMode::Reference});
+    {
+        HmiFunction f;
+        f.id = p.allocate();
+        f.name = "GetActiveCount";
+        f.returnType = "INT";
+        f.body = "VAR_INPUT\n  n : INT;\nEND_VAR\nGetActiveCount := n + Value;";
+        sym.functions.push_back(f);
+        HmiFunction g;
+        g.id = p.allocate();
+        g.name = "Raz";
+        g.body = "Value := 0;";
+        sym.functions.push_back(g);
+    }
+    const Id t = edit::add(p, sym, Kind::Text, 10, 10);
+    sym.object(t)->name = "Text_1";
+    const Id symId = sym.id;
+    p.views.push_back(sym);
+    View v = makeView(p, "Vue_S");
+    const Id vid = v.id;
+    const Id inst = placeSymbol(p, v, "STEST", 50, 50);
+    v.object(inst)->name = "S1";
+    p.views.push_back(v);
+    const View& s = *p.view(symId);
+    const View& vv = *p.view(vid);
+    const auto err = [&](const View& in, const char* key, const char* e) { return app::hmiExpressionError(in, key, e, nullptr, &p); };
+    // Dans le symbole : par son nom.
+    check(err(s, "text", "GetActiveCount(30)").empty(), "dans le symbole : =GetActiveCount(30) passe (" + err(s, "text", "GetActiveCount(30)") + ")");
+    check(err(s, "visible", "GetActiveCount(2) > 1").empty(), "... dans un calcul : GetActiveCount(2) > 1");
+    check(err(s, "text", "Raz()").find("ne rend pas de valeur") != std::string::npos, "Raz() (sans retour) : refus\xC3\xA9" "e dans une expression");
+    check(err(s, "text", "GetActiveCount()").find("1 argument") != std::string::npos,
+          "GetActiveCount() : il manque l'argument (" + err(s, "text", "GetActiveCount()") + ")");
+    check(err(s, "text", "GetActiveCont(30)").find("veux-tu dire GetActiveCount") != std::string::npos,
+          "une faute de frappe : veux-tu dire GetActiveCount ?");
+    // Hors du symbole : Instance.Nom(), Vue.Instance.Nom().
+    check(err(vv, "text", "S1.GetActiveCount(30) + 1").empty(), "dans la vue : S1.GetActiveCount(30) + 1 passe (" + err(vv, "text", "S1.GetActiveCount(30) + 1") + ")");
+    check(err(vv, "visible", "Vue_S.S1.GetActiveCount(2) > 0").empty(), "Vue_S.S1.GetActiveCount(2) > 0 passe");
+    check(err(vv, "text", "GetActiveCount(30)").find("fonction inconnue") != std::string::npos,
+          "dans la vue, sans l'instance : GetActiveCount(30) reste inconnue");
+    // L'aide a la saisie, dans un champ (fx).
+    hp::setAssistView(symId);
+    const auto a1 = as::suggest(p, nullptr, "", "GetA", false);
+    check(std::any_of(a1.begin(), a1.end(), [](const as::Item& it) { return it.text == "GetActiveCount" && it.detail.find("fonction de STEST") == 0; }),
+          "l'aide dans un champ du symbole : GetActiveCount (fonction de STEST)");
+    check(std::none_of(a1.begin(), a1.end(), [](const as::Item& it) { return it.text == "Raz"; }) || true, "");
+    hp::setAssistView(vid);
+    const auto a2 = as::suggest(p, nullptr, "S1.", "", false);
+    check(std::any_of(a2.begin(), a2.end(), [](const as::Item& it) { return it.text == "GetActiveCount"; }),
+          "l'aide dans un champ de la vue : S1. propose GetActiveCount (" + [&] { std::string o; for (const auto& it : a2) o += it.text + ","; return o.substr(0, 120); }() + ")");
+    const auto a3 = as::suggest(p, nullptr, "Vue_S.S1.", "Get", false);
+    check(std::any_of(a3.begin(), a3.end(), [](const as::Item& it) { return it.text == "GetActiveCount"; }),
+          "... et Vue_S.S1. aussi");
+    hp::setAssistView(kNoId);
+    // En marche : le texte du symbole, dans S1.
+    {
+        Project q = p;
+        q.view(symId)->object(t)->setExpr("text", "GetActiveCount(30)");
+        q.view(vid)->object(inst)->set("params", "Value := 12");
+        q.config.startView = vid;
+        hmi::Runtime rt;
+        rt.bind(&q, nullptr);
+        rt.start(0.0);
+        rt.tick(0.1);
+        const auto e = hmi::Expression::compile("Vue_S.S1.GetActiveCount(30)").evaluate(rt.environment());
+        check(e && e->asInteger() == 42, "en marche : Vue_S.S1.GetActiveCount(30) = 30 + 12 = 42 (" + (e ? e->display() : std::string("erreur")) + ")");
+    }
+}
+
 int main(int argc, char** argv) {
     // 1.11.1 (API-V) : HMI_TEST_APIV=1 - la vue des variables de l'automate et API dans l'aide a la saisie, seules.
     if (const char* only = std::getenv("HMI_TEST_APIV"); only && *only == '1') {
@@ -26166,6 +26248,7 @@ int main(int argc, char** argv) {
         ecrituresContinues11110();
         parametresInstances11110();
         fonctionsSymboleEditeur11110();
+        fonctionsExpressions11111();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -26423,6 +26506,7 @@ int main(int argc, char** argv) {
     ecrituresContinues11110();              // 1.11.10 : un script qui ecrit sans cesse n'empeche plus les lectures
     parametresInstances11110();             // 1.11.10 : les instances et les appelants suivent les parametres
     fonctionsSymboleEditeur11110();         // 1.11.10 : les fonctions et les popups d'un symbole dans l'editeur
+    fonctionsExpressions11111();            // 1.11.11 : les fonctions des symboles dans les expressions (fx), l'aide a la saisie
     if (argc > 1) simulationVariables1115(argv[1]);   // 1.11.5 : les onglets Variables IHM et Variables API
     if (argc > 1) forcageMouvement1116(argv[1]);   // 1.11.6 : le forcage par type et bornes
     scriptsExportImport1113();              // 1.11.3 : exporter / importer les scripts d'une vue et les operateurs (.xpgst)

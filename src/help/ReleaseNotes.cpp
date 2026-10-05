@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.11.11", "05/10/2026", "livr\xC3\xA9" "e le 05/10 au soir"},
     {"1.11.10", "05/10/2026", "livr\xC3\xA9" "e le 05/10 au soir"},
     {"1.11.9", "05/10/2026", "livr\xC3\xA9" "e le 05/10"},
     {"1.11.8", "05/10/2026", "livr\xC3\xA9" "e le 05/10"},
@@ -89,6 +90,14 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.11.11 (05/10/2026 au soir, la capture du client : =GetActiveCount(30) dans un symbole,
+        // refusee) : les fonctions des symboles dans les expressions, et l'aide a la saisie.
+        note("1.11.11", "\xC3\x89" "diteur IHM", Kind::Fixed,
+         "Les fonctions des symboles dans les expressions (les cases fx, les textes \xC3\xA0 trous) : dans le symbole par leur nom (=GetActiveCount(30)), hors du symbole par l'instance (Vanne_3.Etat() dans sa vue, Vue_Vannes.Vanne_3.Etat() partout). Avant : \xC2\xAB fonction inconnue \xC2\xBB. Le contr\xC3\xB4le dit une fonction sans retour, le nombre d'arguments, et propose le nom le plus proche.",
+         "symboles", ""),
+        note("1.11.11", "\xC3\x89" "diteur IHM", Kind::Fixed,
+         "L'aide \xC3\xA0 la saisie propose les fonctions des symboles dans les cases fx comme dans les scripts : dans le symbole (ses fonctions, avec leur retour), apr\xC3\xA8s Instance. ou Vue.Instance. ailleurs - y compris dans une vue ou un symbole sans param\xC3\xA8tre (avant : rien).",
+         "symboles", ""),
         // 1.11.10 (05/10/2026 au soir) : les fonctions et les popups d'un symbole ; les fonctions et
         // les operateurs entre eux ; deux defauts (l'esclave simule, les parametres des instances).
         note("1.11.10", "\xC3\x89" "diteur IHM", Kind::New,

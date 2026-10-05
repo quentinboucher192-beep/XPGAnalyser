@@ -1777,28 +1777,13 @@ static std::vector<Item> suggestItems(const hmi::Project& hp, const domain::Proj
                     break;
                 }
             }
-            // 1.9 : Moteur. - les membres du type declare d'un parametre de la popup.
-            if (const auto* pv = hmiparams::assistView(hp)) {
-                const auto items = hmiparams::assistItems(hp, *pv, where.path + "." + std::string(prefix), plc);
-                if (!items.empty() || pv->param(where.path)) {
-                    for (const auto& [name, detail] : items) {
-                        Item it;
-                        it.text = name;
-                        it.detail = detail;
-                        it.kind = Kind::Member;
-                        it.rank = matchRank(name, needle);
-                        push(std::move(it));
-                    }
-                    if (!items.empty()) break;
-                }
-            }
             // 1.11.10 : Vanne_3. (dans sa vue), Vue_Vannes.Vanne_3. (partout), SUPER. (dans le
             // symbole) - les fonctions de l'instance, en tete ; ses variables publiques suivent.
             {
                 const hmi::View* sym = nullptr;
                 const hmi::Object* inst = nullptr;
                 hmi::InstanceAt at;
-                const auto* av = hmiparams::assistView(hp);
+                const auto* av = hmiparams::editedView(hp);   // meme sans parametre
                 if (av && hmi::isSymbolView(*av) && upper(where.path) == hmi::kSuperName) sym = av;
                 else if (av && hmi::instanceAt(hp, av->name + "." + where.path, at)) { sym = at.symbol; inst = &at.instance; }
                 else if (hmi::instanceAt(hp, where.path, at)) { sym = at.symbol; inst = &at.instance; }
@@ -1814,6 +1799,21 @@ static std::vector<Item> suggestItems(const hmi::Project& hp, const domain::Proj
                     it.detail = "fonction de " + sym->name + "  \xC2\xB7  " + (f.returnType.empty() ? std::string("sans retour") : f.returnType)
                               + (over ? "  \xC2\xB7  red\xC3\xA9" "finie ici" : f.isVirtual ? "  \xC2\xB7  virtuelle" : "");
                     push(std::move(it));
+                }
+            }
+            // 1.9 : Moteur. - les membres du type declare d'un parametre de la popup.
+            if (const auto* pv = hmiparams::assistView(hp)) {
+                const auto items = hmiparams::assistItems(hp, *pv, where.path + "." + std::string(prefix), plc);
+                if (!items.empty() || pv->param(where.path)) {
+                    for (const auto& [name, detail] : items) {
+                        Item it;
+                        it.text = name;
+                        it.detail = detail;
+                        it.kind = Kind::Member;
+                        it.rank = matchRank(name, needle);
+                        push(std::move(it));
+                    }
+                    if (!items.empty()) break;
                 }
             }
             // Lot 9 : SYS., Vue., Vue.Objet. - les variables publiques.
@@ -1963,7 +1963,7 @@ static std::vector<Item> suggestItems(const hmi::Project& hp, const domain::Proj
                 push(userFunctionItem(f, r * 2));
             }
             // 1.11.10 : dans un symbole (ou une de ses popups), ses fonctions par leur nom.
-            if (const auto* av = hmiparams::assistView(hp)) {
+            if (const auto* av = hmiparams::editedView(hp)) {   // meme sans parametre
                 const hmi::View* sym = hmi::isSymbolView(*av) ? av : hmi::popupOwner(hp, *av);
                 for (const auto& f : sym ? sym->functions : std::vector<hmi::HmiFunction>{}) {
                     if (!full && f.returnType.empty()) continue;

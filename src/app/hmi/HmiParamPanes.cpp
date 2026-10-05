@@ -657,6 +657,10 @@ hmi::Id& assistViewId() {
 }
 } // namespace
 void setAssistView(hmi::Id view) { assistViewId() = view; }
+const hmi::View* editedView(const hmi::Project& p) {
+    return assistViewId() != hmi::kNoId ? p.view(assistViewId()) : nullptr;
+}
+
 const hmi::View* assistView(const hmi::Project& p) {
     const auto* v = assistViewId() != hmi::kNoId ? p.view(assistViewId()) : nullptr;
     return v && !v->params.empty() ? v : nullptr;

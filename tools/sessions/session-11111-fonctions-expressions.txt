@@ -1,0 +1,61 @@
+# =============================================================================
+#  Session 11111 : LES FONCTIONS DES SYMBOLES DANS LES EXPRESSIONS (la capture du
+#  client : =GetActiveCount(30) dans un symbole etait refusee) - dans le symbole, dans
+#  la vue (Vanne_4.GetActiveCount(30)), l'aide a la saisie dans la case fx, en marche.
+#  Le projet : une copie d'Armoire_Gaz (preparer-projet-1115, -1118, -11110, -11111).
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- 1. Dans le symbole : =GetActiveCount(30), sans faute ----------------------------
+arbre "IHM/Symboles/S_Vanne" double
+attendre 10
+objet "Txt_Score"
+attendre 4
+glisser 1312 400 900 400
+attendre 3
+propriete-clic "Texte  ƒ"
+attendre 3
+capture 11111_01_symbole_getactivecount.png
+# L'aide a la saisie dans la case : ses fonctions.
+touche End
+texte " + Get"
+attendre 3
+capture 11111_02_aide_dans_le_symbole.png
+touche Escape
+attendre 1
+touche Escape
+attendre 2
+
+# ---- 2. Dans la vue : Vanne_4.GetActiveCount(30), puis l'aide apres "Vanne_4." -------
+arbre "IHM/Vues/Vue_Vannes" double
+attendre 10
+objet "Txt_Compte"
+attendre 4
+propriete-clic "Texte  ƒ"
+attendre 3
+capture 11111_03_vue_instance_fonction.png
+touche End
+texte " + Vanne_3."
+attendre 3
+capture 11111_04_aide_apres_instance.png
+touche Escape
+attendre 1
+touche Escape
+attendre 2
+
+# ---- 3. En marche ----------------------------------------------------------------------
+arbre "Simulation/IHM"
+attendre 12
+sim-utilisateur "admin" "admin2026"
+attendre 3
+sim-vue "Vue_Vannes"
+attendre 8
+sim-clic "Btn_Sortie"
+attendre 6
+capture 11111_05_en_marche.png
+quitter
