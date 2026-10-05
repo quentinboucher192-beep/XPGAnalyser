@@ -47,7 +47,7 @@ Un symbole dans un symbole suit de la même façon. Par exemple :
 - **Un index calculé** (`V[i].Pos`) couvre toutes les cases : `V[0].Pos`, `V[3].Pos`…
 - **Dans Esclaves simulés**, une ligne reste si sa variable est lue. Un registre sans variable est caché.
 
-Le compte en haut le dit : « 3 sur 228 variables ». Quand la vue ne lit rien de l'onglet, la liste le dit aussi : « La vue Vue_STEST ne lit aucune variable API. »
+Le compte en haut le dit : sur Vue_STEST, « 5 sur 228 variables » (UINTS[0], gCoef, gAngle, gMiroir, gDecal). Quand la vue ne lit rien de l'onglet, la liste le dit aussi : « La vue Vue_STEST ne lit aucune variable API. »
 
 Captures :
 - `1116_03_sur_la_vue_actuelle_ihm.png` : Vue_STEST ;
@@ -69,6 +69,7 @@ Sur une ligne, dans Esclaves simulés, Variables IHM et Variables API :
 - Le menu nomme ce sur quoi on a cliqué et combien de valeurs il contient. Une entrée qui ne peut rien faire est grisée, et dit pourquoi.
 - **Pour un esclave**, Forcer ou Déforcer un nœud ne fait qu'une seule commande : un seul Ctrl+Z revient en arrière.
 - **Dans l'automate**, qui a des dizaines de milliers de cases, Forcer refuse un nœud de plus de 2 000 valeurs : forcer un nœud plus petit.
+- **Dans Variables API**, une case de l'automate partagée par plusieurs blocs se montre forcée partout où elle apparaît. Par exemple, `Armoires[0].ana.PT1.mes` apparaît aussi sous Gestion_armoires et sous Logigrammes. C'est la même case mémoire.
 
 Captures : `1116_02_clic_droit_variables_ihm.png`, `1116_08_clic_droit_esclaves.png`.
 
@@ -112,7 +113,7 @@ Captures :
 ## 4. L'onglet Expressions en arbre
 
 - **Chaque objet** est un nœud, avec ses propriétés dessous : la propriété, l'expression, la valeur.
-- **Une instance de symbole** range les objets de son symbole sous elle, à toute profondeur. Par exemple STEST_1 › Rect › fill.
+- **Une instance de symbole** range les objets de son symbole sous elle, à toute profondeur. Par exemple STEST_1 › Text_1 › text, l'expression du symbole avec la variable de l'instance.
 - **Un nœud** dit combien d'expressions il porte, et combien sont en erreur, en rouge.
 - **La recherche** en haut cherche dans l'objet, la propriété, l'expression et la valeur. Elle garde ce qu'elle trouve et ouvre ses nœuds.
 - **Le clic droit** propose Tout déplier et Tout replier. Un double-clic sur un nœud le replie ; sur une propriété, il force sa variable, comme avant.
@@ -124,8 +125,8 @@ Capture : `1116_01_expressions_arbre.png`.
 1. Lancer `XPGAnalyser-Setup-1.11.6.exe`. Il met à jour la 1.11.5 installée : même identité d'installation, sauvegarde de l'ancienne version, données reprises sans être déplacées.
 2. Windows SmartScreen peut avertir, parce que l'installateur n'est pas signé. Choisir « Informations complémentaires », puis « Exécuter quand même ».
 
-Empreinte SHA-256 de `XPGAnalyser-Setup-1.11.6.exe` (TAILLE) :
-`EMPREINTE`
+Empreinte SHA-256 de `XPGAnalyser-Setup-1.11.6.exe` (15,3 Mo, 15 277 854 octets) :
+`F15957BBC60F7409835A2A8811BD131732586FE698C1ED46704975F1B3C0EA9D`
 
 ## Vérifications
 
