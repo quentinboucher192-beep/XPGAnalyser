@@ -31,7 +31,7 @@ namespace hmi {
 
 namespace {
 
-constexpr int         kMaxDepth = 8;
+constexpr int         kMaxDepth = 32;    // 1.11.10 : 8 avant - les fonctions et operateurs s'appellent entre eux
 constexpr std::size_t kJournalMax = 500;
 
 std::string upper(std::string_view s) {
@@ -365,6 +365,8 @@ public:
         // Lot 7 : une fonction IHM du projet passe avant celles de l'automate.
         if (rt_.project_)
             if (const auto* f = rt_.project_->functionByName(name)) return rt_.callFunction(*f, args, result);
+        // 1.11.10 : la fonction d'une instance de symbole (Vue_Vannes.Vanne_3.Ouvrir).
+        if (const auto* f = symbolCall(name)) return rt_.callFunction(*f, args, result);
         if (rt_.plc_) return rt_.plc_->call(name, instance, args, result);
         // Lot 8 : sans automate (l'IHM seule, les exemples de l'aide), les
         // fonctions standard restent la : SEL, SIN, LIMIT, les conversions...
@@ -380,7 +382,15 @@ public:
     // et les fonctions IHM_ qui ne font que lire (l'utilisateur, la vue...).
     [[nodiscard]] bool hostsFunction(std::string_view name) const override {
         if (readOnlyIhm(upper(name))) return true;
-        return rt_.project_ && rt_.project_->functionByName(name) != nullptr;
+        if (rt_.project_ && rt_.project_->functionByName(name) != nullptr) return true;
+        return const_cast<Env*>(this)->symbolCall(name) != nullptr;   // 1.11.10 : {Vanne_3.Etat()}
+    }
+    // 1.11.10 : "Vue.Instance.Fonction" (ou un parametre de popup qui y mene) : la fonction
+    // de l'instance, prete a tourner ; nul : ce n'est pas une fonction d'instance.
+    const HmiFunction* symbolCall(std::string_view name) {
+        if (!rt_.project_ || name.find('.') == std::string_view::npos) return nullptr;
+        const std::string r = resolved(name);
+        return rt_.symbolCall(r.empty() ? std::string(name) : r);
     }
     bool callFromExpression(std::string_view name, const std::vector<std::pair<std::string, sim::Value>>& args,
                             sim::Value& result) override {
@@ -392,6 +402,7 @@ public:
             return ok;
         }
         const auto* f = rt_.project_ ? rt_.project_->functionByName(name) : nullptr;
+        if (!f) f = symbolCall(name);                     // 1.11.10 : {Vanne_3.Etat()}
         if (!f) return false;
         ++rt_.readOnly_;
         // Une fonction ne voit pas les parametres de la vue : on les lui passe.
@@ -453,6 +464,7 @@ public:
     // script avec ses arguments riches ; une fonction simple, comme avant (env.call).
     std::shared_ptr<const sim::Function> dialectFunction(std::string_view name) override {
         const auto* f = rt_.project_ ? rt_.project_->functionByName(name) : nullptr;
+        if (!f) f = symbolCall(name);                     // 1.11.10 : une fonction d'instance aux types riches
         if (!f) return nullptr;
         const std::string text = functionText(*f);
         if (const auto it = richFunctions_.find(text); it != richFunctions_.end()) return it->second;
@@ -503,13 +515,19 @@ private:
             t.kind = TransitionKind::Fade;
             t.durationMs = 250;
             const auto* v = rt_.project_ ? rt_.project_->viewByName(text(0)) : nullptr;
+            std::string args = text(1);
+            // 1.11.10 : IHM_POPUP('Vue.Vanne_3.Pop_Detail') - la popup du symbole, avec l'instance.
+            if (std::string popup, given; !v && rt_.project_ && popupOfInstance(*rt_.project_, nullptr, resolved(text(0)), popup, given)) {
+                v = rt_.project_->viewByName(popup);
+                args = given + (args.find_first_not_of(" \t") == std::string::npos ? std::string{} : "; " + args);
+            }
             if (!v) {
                 rt_.log("Erreur", rt_.source_, u + " : vue '" + text(0) + "' introuvable");
                 result = sim::Value::boolean(false);
                 return true;
             }
-            result = sim::Value::boolean(u == "IHM_POPUP" ? rt_.openPopup(v->id, t, now, text(1), text(2), kNoId)
-                                                          : rt_.changePopup(v->id, t, now, text(1)));
+            result = sim::Value::boolean(u == "IHM_POPUP" ? rt_.openPopup(v->id, t, now, args, text(2), kNoId)
+                                                          : rt_.changePopup(v->id, t, now, args));
             return true;
         }
         if (u == "IHM_FERMER_POPUP") {
@@ -763,7 +781,8 @@ const View* Runtime::viewOf(Id id) const {
     // leurs arguments), apres les surcharges : une instance cachee cache les siens.
     const bool inherited = inherits(*project_, *v);
     const bool symbols = usesSymbols(*project_, *v);
-    if (!inherited && !symbols && !overridden(*v)) return v;
+    const bool owned = popupOwner(*project_, *v) != nullptr;    // 1.11.10 : une popup d'un symbole
+    if (!inherited && !symbols && !owned && !overridden(*v)) return v;
     // Une entree de std::map ne bouge pas quand on en ajoute d'autres : le
     // pointeur rendu vaut jusqu'au prochain effacement (entree du moteur).
     auto it = composed_.find(id);
@@ -771,6 +790,7 @@ const View* Runtime::viewOf(Id id) const {
         View c = inherited ? compose(*project_, *v) : *v;
         applyOverrides(c, *v);
         if (symbols) c = expandInstances(*project_, c);
+        if (owned) c = qualifiedOwnedPopup(*project_, c);        // 1.11.10 : Ouvrir() vise l'instance qui l'ouvre
         it = composed_.emplace(id, std::move(c)).first;
     }
     return &it->second;
@@ -990,6 +1010,17 @@ bool Runtime::runStatements(const std::string& code, const std::string& source, 
     }
     if (scriptId) errors_.erase(scriptId);
     return true;
+}
+
+// 1.11.10 : la fonction d'une instance de symbole, prete a tourner (HmiSymbols.hpp).
+const HmiFunction* Runtime::symbolCall(std::string_view call) {
+    if (!project_) return nullptr;
+    const std::string key = upper(call);
+    if (const auto it = boundCalls_.find(key); it != boundCalls_.end()) return it->second.get();
+    std::shared_ptr<const HmiFunction> fn;
+    if (BoundFunction b; boundSymbolFunction(*project_, call, b)) fn = std::make_shared<const HmiFunction>(std::move(b.function));
+    boundCalls_[key] = fn;
+    return fn.get();
 }
 
 bool Runtime::callFunction(const HmiFunction& f, const std::vector<std::pair<std::string, sim::Value>>& args,
@@ -1918,7 +1949,7 @@ double Runtime::animationProgress(double now) const {
 }
 
 void Runtime::start(double now) {
-    composed_.clear();
+    composed_.clear(); boundCalls_.clear();
     slaveReads_.clear();                // 1.9 : les bascules d'avant ne comptent plus
     forcedIhm_.clear();                 // 1.11.5 : les variables repartent de leur valeur initiale
     prompt_.reset();                    // 1.11.7 : aucun clavier d'action ouvert
@@ -2176,7 +2207,7 @@ bool Runtime::aggregateAssign(const std::string& target, const std::string& sour
 }
 
 void Runtime::prime(double now) {
-    composed_.clear();
+    composed_.clear(); boundCalls_.clear();
     now_ = startNow_ = now;
     startWallMs_ = std::chrono::duration_cast<std::chrono::milliseconds>(
                        std::chrono::system_clock::now().time_since_epoch()).count();
@@ -2240,7 +2271,7 @@ void Runtime::stop(double now) {
 }
 
 void Runtime::press(Id object, double now) {
-    composed_.clear();
+    composed_.clear(); boundCalls_.clear();
     now_ = std::max(now_, now);
     lastActivity_ = now;
     pressed_ = object;
@@ -2256,7 +2287,7 @@ void Runtime::press(Id object, double now) {
 }
 
 void Runtime::release(Id object, double now, bool inside) {
-    composed_.clear();
+    composed_.clear(); boundCalls_.clear();
     now_ = std::max(now_, now);
     const bool wasPressed = running_ && pressed_ == object && object != kNoId;
     const bool click = wasPressed && inside && !longFired_;
@@ -2322,7 +2353,7 @@ void Runtime::release(Id object, double now, bool inside) {
 }
 
 void Runtime::doubleClick(Id object, double now) {
-    composed_.clear();
+    composed_.clear(); boundCalls_.clear();
     now_ = std::max(now_, now);
     const auto* v = shownViewOf(object);
     const auto* o = v ? v->object(object) : nullptr;
@@ -2435,7 +2466,7 @@ void Runtime::cycle(double now) {
 
 void Runtime::tick(double now) {
     if (!running_ || !project_) return;
-    composed_.clear();                  // le projet a pu changer depuis le dernier appel
+    composed_.clear(); boundCalls_.clear();                  // le projet a pu changer depuis le dernier appel
     refreshBound();                     // lot 15 : les variables liees a un equipement
     now_ = std::max(now_, now);
     followWatched(now, false);          // 1.9 : les variables des alarmes, suivies en permanence
@@ -2801,7 +2832,7 @@ void Runtime::selectRecipeRecord(Id object, Id record) {
 }
 
 void Runtime::recipeManagerClick(Id object, std::string_view part, double now) {
-    composed_.clear();
+    composed_.clear(); boundCalls_.clear();
     now_ = std::max(now_, now);
     lastActivity_ = now;
     if (!running_ || !project_) return;
@@ -3338,6 +3369,13 @@ std::shared_ptr<const Scope> Runtime::buildScope(const View& v, std::string_view
         const auto it = std::find_if(given.begin(), given.end(), [&](const auto& g) { return upper(g.first) == upper(prm.name); });
         bind(prm.name, it != given.end() ? it->second : prm.defaultValue);
     }
+    // 1.11.10 : une popup d'un symbole - les parametres du symbole que l'ouverture ne donne pas
+    // (ouverte hors d'une instance) prennent la valeur par defaut du symbole.
+    if (const View* owner = project_ ? popupOwner(*project_, v) : nullptr)
+        for (const auto& prm : owner->params) {
+            const bool there = v.param(prm.name) || std::any_of(given.begin(), given.end(), [&](const auto& g) { return upper(g.first) == upper(prm.name); });
+            if (!there) bind(prm.name, prm.defaultValue);
+        }
     // Un argument que la vue ne declare pas : accepte (Generer le signale).
     for (const auto& [name, text] : given)
         if (!v.param(name)) bind(name, text);
@@ -3590,7 +3628,7 @@ void Runtime::formMessage(Id object, std::string message, bool error, double now
 }
 
 void Runtime::objectPart(Id object, std::string_view part, double now) {
-    composed_.clear();
+    composed_.clear(); boundCalls_.clear();
     now_ = std::max(now_, now);
     lastActivity_ = now;
     if (!running_ || !project_) return;

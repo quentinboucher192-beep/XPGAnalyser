@@ -9,6 +9,7 @@
 #include "../../domain/ProjectModel.hpp"
 #include "../../hmi/HmiExpr.hpp"
 #include "../../hmi/HmiRuntime.hpp"
+#include "../../hmi/HmiSymbols.hpp"   // 1.11.10 : les fonctions des symboles
 #include "../../sim/Runtime.hpp"
 #include "../../ui/Theme.hpp"
 
@@ -150,6 +151,7 @@ HmiFunctionsPane::HmiFunctionsPane(std::string id, hmi::DocumentPtr doc, Apply a
     tools_->setVisibleWhen(TImport, [this] { return static_cast<bool>(hosts_.importAny); });
     tools_->setEnabledWhen(TDelete, [this] { return selectedFunction() != kNoId; });
     tools_->setEnabledWhen(TTry, [this] { return selectedFunction() != kNoId; });
+    tools_->setVisibleWhen(TTry, [this] { return symbol_ == kNoId; });   // 1.11.10 : une fonction de symbole s'essaie en marche
 
     auto split = std::make_unique<ui::Splitter>(ui::Orientation::Horizontal, base + ".split");
     auto left = std::make_unique<ui::Splitter>(ui::Orientation::Vertical, base + ".left");
@@ -219,7 +221,11 @@ HmiFunctionsPane::HmiFunctionsPane(std::string id, hmi::DocumentPtr doc, Apply a
             case TImport: if (hosts_.importAny) hosts_.importAny(); break;
             case TNew:
                 if (hosts_.newFunction) hosts_.newFunction();
-                else (void)addFunction(hmi::uniqueFunctionName(doc_->project, "Fonction"), "REAL", {});
+                else if (const auto* sv = symbolView()) {               // 1.11.10 : un nom libre dans le symbole
+                    std::string n = "Fonction";
+                    for (int k = 2; hmi::symbolFunction(*sv, n); ++k) n = "Fonction" + std::to_string(k);
+                    (void)addFunction(n, {}, {});
+                } else (void)addFunction(hmi::uniqueFunctionName(doc_->project, "Fonction"), "REAL", {});
                 break;
             case TDelete:
                 if (!sel) break;
@@ -274,7 +280,53 @@ Id HmiFunctionsPane::selectedFunction() const {
     return order_[static_cast<std::size_t>(selectedRow_)];
 }
 
-const hmi::HmiFunction* HmiFunctionsPane::current() const { return doc_->project.function(selectedFunction()); }
+const hmi::HmiFunction* HmiFunctionsPane::current() const { return fnOf(doc_->project, selectedFunction()); }
+
+// ---- 1.11.10 : les fonctions d'un symbole -------------------------------------------
+std::vector<hmi::HmiFunction>* HmiFunctionsPane::listOf(hmi::Project& p) const {
+    if (symbol_ == kNoId) return &p.programs.functions;
+    auto* v = p.view(symbol_);
+    return v ? &v->functions : nullptr;
+}
+const std::vector<hmi::HmiFunction>* HmiFunctionsPane::listOf(const hmi::Project& p) const {
+    if (symbol_ == kNoId) return &p.programs.functions;
+    const auto* v = p.view(symbol_);
+    return v ? &v->functions : nullptr;
+}
+hmi::HmiFunction* HmiFunctionsPane::fnOf(hmi::Project& p, Id id) const {
+    if (auto* l = listOf(p))
+        for (auto& f : *l)
+            if (f.id == id && id) return &f;
+    return nullptr;
+}
+const hmi::HmiFunction* HmiFunctionsPane::fnOf(const hmi::Project& p, Id id) const {
+    if (const auto* l = listOf(p))
+        for (const auto& f : *l)
+            if (f.id == id && id) return &f;
+    return nullptr;
+}
+const hmi::View* HmiFunctionsPane::symbolView() const { return symbol_ != kNoId ? doc_->project.view(symbol_) : nullptr; }
+
+void HmiFunctionsPane::setSymbol(Id symbol) {
+    symbol_ = symbol;
+    if (auto* panel = dynamic_cast<HmiTitledPanel*>(findById(id() + ".functionsPanel")))
+        panel->setTitle(symbolView() ? "FONCTIONS DE " + symbolView()->name : std::string("FONCTIONS IHM"));
+    selectedRow_ = -1;
+    refresh();
+}
+
+bool HmiFunctionsPane::setVirtual(Id id, bool on) {
+    const auto* f = fnOf(doc_->project, id);
+    if (!f || symbol_ == kNoId) return false;
+    if (f->isVirtual == on) return true;
+    auto cmd = hmi::changeProject(doc_, std::string(on ? "Rendre virtuelle " : "Rendre non virtuelle ") + f->name, [&](hmi::Project& p) {
+        if (auto* g = fnOf(p, id)) g->isVirtual = on;
+    });
+    if (cmd) apply_(std::move(cmd));
+    say(std::string(on ? "Virtuelle : une instance peut red\xC3\xA9" "finir " : "Non virtuelle : toutes les instances gardent ") + f->name
+        + (on ? std::string(" (inspecteur de l'instance, Fonctions du symbole).") : std::string(" du symbole.")));
+    return true;
+}
 
 void HmiFunctionsPane::selectFunction(Id id) {
     for (std::size_t i = 0; i < order_.size(); ++i)
@@ -312,7 +364,9 @@ void HmiFunctionsPane::refresh() {
     std::vector<std::string> states;
     order_.clear();
     std::size_t withReturn = 0;
-    for (const auto& f : doc_->project.programs.functions) {
+    static const std::vector<hmi::HmiFunction> kNone;
+    const auto* list = listOf(doc_->project);
+    for (const auto& f : list ? *list : kNone) {
         order_.push_back(f.id);
         withReturn += !f.returnType.empty();
         states.push_back(stateOf(hmi::checkFunction(f, knownTypeOf(doc_->project))));   // 1.10 : types IHM
@@ -321,9 +375,10 @@ void HmiFunctionsPane::refresh() {
     }
     functionModel_ = std::make_shared<Rows>(
         std::vector<std::string>{"Nom", "Retour", "Param\xC3\xA8tres", "Lignes", "\xC3\x89tat", "Description"}, std::move(rows),
-        [states](ui::RowIndex r, std::size_t c) {
+        [states, purple = symbol_ != kNoId](ui::RowIndex r, std::size_t c) {
             ui::CellStyle s;
             if (c == 0) s.icon = ui::Icon::FunctionBlock;
+            if (c == 0 && purple) s.iconTone = ui::Tone::InOut;    // 1.11.10 : les fonctions d'un symbole, en violet
             if (c == 4 && r < states.size())
                 s.fgTone = states[r] == "OK" ? ui::Tone::Ok
                          : states[r].find("erreur") != std::string::npos ? ui::Tone::Error : ui::Tone::Warning;
@@ -340,7 +395,11 @@ void HmiFunctionsPane::refresh() {
         selectedRow_ = 0;
     }
     showSelected();
-    const auto n = doc_->project.programs.functions.size();
+    const auto n = list ? list->size() : 0u;
+    if (const auto* sv = symbolView())                                    // 1.11.10
+        status_->setMessage(std::to_string(n) + " fonction(s) de " + sv->name + "  \xC2\xB7  appel : Nom() dans le symbole, "
+                            "Instance.Nom() dans sa vue, Vue.Instance.Nom() partout (scripts g\xC3\xA9n\xC3\xA9raux, fonctions)");
+    else
     status_->setMessage(std::to_string(n) + " fonction(s) IHM  \xC2\xB7  " + std::to_string(withReturn) + " avec retour, "
                         + std::to_string(n - withReturn) + " sans  \xC2\xB7  appel : Nom(a, b) dans un script, "
                           "une action ou une expression de vue");
@@ -395,9 +454,26 @@ void HmiFunctionsPane::rebuildProperties() {
     c.properties.push_back(hmikit::prop("Param\xC3\xA8tres (VAR_INPUT)", std::to_string(parts.inputs().size()), PG::ValueType::ReadOnly));
     c.properties.push_back(hmikit::prop("Locales (VAR / VAR_TEMP)", std::to_string(kept) + " / " + std::to_string(temps),
                                         PG::ValueType::ReadOnly));
+    if (const auto* sv = symbolView()) {
+        // 1.11.10 : virtuelle, et qui la redefinit.
+        c.properties.push_back(hmikit::prop("Virtuelle", f->isVirtual ? "TRUE" : "FALSE", PG::ValueType::Boolean,
+            [this, id](std::string_view v) { return setVirtual(id, v == "TRUE" || v == "true" || v == "1"); },
+            "Coch\xC3\xA9" "e : une instance peut red\xC3\xA9" "finir le corps (inspecteur de l'instance, Fonctions du symbole) ; "
+            "la signature reste celle du symbole. SUPER." + f->name + "(...) y rappelle le corps du symbole."));
+        std::vector<std::string> over;
+        for (const auto& [owner, inst] : hmi::instancesOf(doc_->project, sv->name))
+            if (hmi::functionOverride(*inst, f->name)) over.push_back(owner->name + "." + inst->name);
+        c.properties.push_back(hmikit::prop("Red\xC3\xA9" "finie par",
+            over.empty() ? std::string("(aucune instance)") : std::to_string(over.size()) + " : " + hmikit::fewOf(over, 3),
+            PG::ValueType::ReadOnly));
+        c.properties.push_back(hmikit::prop("Appel",
+            f->name + "() dans " + sv->name + " ; Instance." + f->name + "() dans sa vue ; Vue.Instance." + f->name + "() partout",
+            PG::ValueType::ReadOnly));
+    } else {
     const auto callers = hmi::functionCallers(doc_->project, f->name);
     c.properties.push_back(hmikit::prop("Appel\xC3\xA9" "e par", callers.empty() ? std::string("(personne)") : hmikit::fewOf(callers, 3),
                                         PG::ValueType::ReadOnly));
+    }
     c.properties.push_back(hmikit::prop("Lignes", std::to_string(lineCount(f->body)), PG::ValueType::ReadOnly));
     props_->setCategories({std::move(c)});
 }
@@ -447,7 +523,8 @@ void HmiFunctionsPane::updateDiagnostics() {
                 // ecriture interdite, un type. Sans programme de l'automate branche, un
                 // nom inconnu de l'IHM peut etre a lui : rien n'est dit.
                 const auto plc = assist_.plc ? assist_.plc() : nullptr;
-                for (auto& d : placedScriptDiagnostics(doc_->project, f->body, nullptr, f, plc.get())) all.push_back(std::move(d));
+                // 1.11.10 : une fonction de symbole lit les parametres et appelle les fonctions du symbole.
+                for (auto& d : placedScriptDiagnostics(doc_->project, f->body, symbolView(), f, plc.get())) all.push_back(std::move(d));
                 return all;
             },
             line, f->name);
@@ -555,6 +632,13 @@ bool HmiFunctionsPane::nameAllowed(const std::string& name, Id self, std::string
                                       "VAR_INPUT", "END_VAR", "FUNCTION", "END_FUNCTION"};
     for (const char* k : kReserved) if (u == k) return refuse("'" + name + "' est un mot du langage ST");
     if (hmi::localTypeSupported(u) || hmi::isStandardFunction(u)) return refuse("'" + name + "' est un type ou une fonction standard");
+    if (const auto* sv = symbolView()) {                          // 1.11.10 : unique dans le symbole
+        if (const auto* other = hmi::symbolFunction(*sv, name); other && other->id != self)
+            return refuse(sv->name + " a d\xC3\xA9j\xC3\xA0 une fonction " + name);
+        if (sv->param(name)) return refuse("un param\xC3\xA8tre de " + sv->name + " porte d\xC3\xA9j\xC3\xA0 ce nom");
+        if (u == hmi::kSuperName) return refuse("SUPER est r\xC3\xA9serv\xC3\xA9 (SUPER.Nom() rappelle le corps du symbole)");
+        return true;
+    }
     if (const auto* other = doc_->project.functionByName(name); other && other->id != self)
         return refuse("une fonction porte d\xC3\xA9j\xC3\xA0 ce nom");
     if (doc_->project.variable(name)) return refuse("une variable IHM porte d\xC3\xA9j\xC3\xA0 ce nom");
@@ -583,7 +667,8 @@ Id HmiFunctionsPane::addFunction(std::string name, std::string returnType, std::
         f.description = description;
         f.body = hmi::functionTemplate(name, returnType, description);
         made = f.id;
-        p.programs.functions.push_back(std::move(f));
+        if (auto* l = listOf(p)) l->push_back(std::move(f));
+        else made = kNoId;
     });
     if (cmd) apply_(std::move(cmd));
     if (made) {
@@ -595,7 +680,7 @@ Id HmiFunctionsPane::addFunction(std::string name, std::string returnType, std::
 }
 
 bool HmiFunctionsPane::renameFunction(Id id, const std::string& name, std::string* why) {
-    const auto* f = doc_->project.function(id);
+    const auto* f = fnOf(doc_->project, id);
     if (!f) return false;
     if (f->name == name) return true;
     std::string reason;
@@ -607,8 +692,11 @@ bool HmiFunctionsPane::renameFunction(Id id, const std::string& name, std::strin
     const std::string old = f->name;
     std::size_t changed = 0;
     auto cmd = hmi::changeProject(doc_, "Renommer la fonction " + old + " en " + name, [&](hmi::Project& p) {
-        changed = hmi::renameFunctionEverywhere(p, old, name);
-        if (auto* g = p.function(id)) g->name = name;
+        // 1.11.10 : une fonction de symbole - ses appels (dans le symbole, Instance.Nom, Vue.Instance.Nom)
+        // et les redefinitions des instances suivent.
+        if (const auto* sv = symbolView()) changed = hmi::renameSymbolFunction(p, sv->name, old, name);
+        else changed = hmi::renameFunctionEverywhere(p, old, name);
+        if (auto* g = fnOf(p, id)) g->name = name;
     });
     if (cmd) apply_(std::move(cmd));
     say(old + " devient " + name + (changed ? " : " + std::to_string(changed) + " texte(s) suivent (appels, corps)" : std::string{})
@@ -617,7 +705,7 @@ bool HmiFunctionsPane::renameFunction(Id id, const std::string& name, std::strin
 }
 
 bool HmiFunctionsPane::setReturnType(Id id, const std::string& type, std::string* why) {
-    const auto* f = doc_->project.function(id);
+    const auto* f = fnOf(doc_->project, id);
     if (!f) return false;
     const std::string t = type == kNoReturn ? std::string{} : type;
     if (!t.empty() && !returnTypeAllowed(doc_->project, t)) {
@@ -626,38 +714,39 @@ bool HmiFunctionsPane::setReturnType(Id id, const std::string& type, std::string
     }
     if (t == f->returnType) return true;
     auto cmd = hmi::changeProject(doc_, "Retour de " + f->name, [&](hmi::Project& p) {
-        if (auto* g = p.function(id)) g->returnType = t;
+        if (auto* g = fnOf(p, id)) g->returnType = t;
     });
     if (cmd) apply_(std::move(cmd));
     return true;
 }
 
 bool HmiFunctionsPane::setDescription(Id id, const std::string& description) {
-    const auto* f = doc_->project.function(id);
+    const auto* f = fnOf(doc_->project, id);
     if (!f || f->description == description) return f != nullptr;
     auto cmd = hmi::changeProject(doc_, "Description de " + f->name, [&](hmi::Project& p) {
-        if (auto* g = p.function(id)) g->description = description;
+        if (auto* g = fnOf(p, id)) g->description = description;
     });
     if (cmd) apply_(std::move(cmd));
     return true;
 }
 
 bool HmiFunctionsPane::setBody(Id id, const std::string& body) {
-    const auto* f = doc_->project.function(id);
+    const auto* f = fnOf(doc_->project, id);
     if (!f || f->body == body) return false;
     auto cmd = hmi::changeProject(doc_, "Saisie dans " + f->name, [&](hmi::Project& p) {
-        if (auto* g = p.function(id)) g->body = body;
+        if (auto* g = fnOf(p, id)) g->body = body;
     }, "function:" + std::to_string(id));
     if (cmd) apply_(std::move(cmd));
     return true;
 }
 
 bool HmiFunctionsPane::deleteFunction(Id id) {
-    const auto* f = doc_->project.function(id);
+    const auto* f = fnOf(doc_->project, id);
     if (!f) return false;
     const std::string name = f->name;
     auto cmd = hmi::changeProject(doc_, "Supprimer la fonction " + name, [&](hmi::Project& p) {
-        auto& list = p.programs.functions;
+        if (!listOf(p)) return;
+        auto& list = *listOf(p);
         list.erase(std::remove_if(list.begin(), list.end(), [&](const hmi::HmiFunction& g) { return g.id == id; }), list.end());
     });
     if (cmd) apply_(std::move(cmd));
@@ -667,7 +756,7 @@ bool HmiFunctionsPane::deleteFunction(Id id) {
 }
 
 bool HmiFunctionsPane::tryFunction(Id id, const std::vector<std::string>& arguments) {
-    const auto* f = doc_->project.function(id);
+    const auto* f = fnOf(doc_->project, id);
     if (!f) return false;
     trial_ = {};
     trial_.function = id;

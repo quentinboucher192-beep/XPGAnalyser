@@ -9,6 +9,8 @@
 #include "HmiParamPanes.hpp"             // 1.9 : les parametres des popups
 #include "HmiObjectAlarmPanes.hpp"    // 1.9 : les alarmes de l'objet (inspecteur)
 #include "HmiOperatorPanes.hpp"       // 1.10 (S2) : les operateurs du symbole
+#include "HmiFunctionPanes.hpp"       // 1.11.10 : les fonctions du symbole
+#include "HmiSymbolPopupsPane.hpp"    // 1.11.10 : les popups du symbole
 #include "HmiTreeData.hpp"            // 1.10.3 (Q1103) : les lignes d'un objet deplie (les deux explorateurs)
 #include "HmiValueKind.hpp"           // 1.11.3 : le carre de legende, la liste des carres
 
@@ -589,6 +591,15 @@ HmiEditor::HmiEditor(std::string widgetId, hmi::DocumentPtr doc, Id view, Apply 
             this->id() + ".symops", doc_, apply_, hmi::ownerOfView(*sv))));
         symbolOperators_->setAssist([this] { return plc_; });
         symbolOperators_->setVisibility(ui::Visibility::Collapsed);
+        // 1.11.10 : les sous-onglets Fonctions et Popups.
+        symbolFunctions_ = &static_cast<HmiFunctionsPane&>(addChild(std::make_unique<HmiFunctionsPane>(this->id() + ".symfns", doc_, apply_)));
+        symbolFunctions_->setSymbol(viewId_);
+        symbolFunctions_->setAssist([this] { return plc_; });
+        symbolFunctions_->setVisibility(ui::Visibility::Collapsed);
+        symbolPopups_ = &static_cast<HmiSymbolPopupsPane&>(
+            addChild(std::make_unique<HmiSymbolPopupsPane>(this->id() + ".sympops", doc_, viewId_, apply_)));
+        symbolPopups_->openView = [this](Id v) { openView->emit(v); };
+        symbolPopups_->setVisibility(ui::Visibility::Collapsed);
         links_ += symbolTabs_->changed->connect([this](int) { invalidateLayout(); invalidate(); });
     }
 }
@@ -1420,12 +1431,19 @@ void HmiEditor::onLayout() {
         symbolTabs_->setBounds({b.x, b.y + toolH, b.w, tabH});
         const bool drawing = symbolTabs_->current() == HmiSymbolTabs::Drawing;
         const bool operators = symbolTabs_->current() == HmiSymbolTabs::Operators;   // 1.10 (S2)
-        split_->setVisibility(drawing ? ui::Visibility::Visible : ui::Visibility::Collapsed);
-        symbolAlarms_->setVisibility(drawing || operators ? ui::Visibility::Collapsed : ui::Visibility::Visible);
-        symbolOperators_->setVisibility(operators ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+        const bool functions = symbolTabs_->current() == HmiSymbolTabs::Functions;   // 1.11.10
+        const bool popups = symbolTabs_->current() == HmiSymbolTabs::Popups;         // 1.11.10
+        const auto shown = [](bool on) { return on ? ui::Visibility::Visible : ui::Visibility::Collapsed; };
+        split_->setVisibility(shown(drawing));
+        symbolAlarms_->setVisibility(shown(!drawing && !operators && !functions && !popups));
+        symbolOperators_->setVisibility(shown(operators));
+        symbolFunctions_->setVisibility(shown(functions));
+        symbolPopups_->setVisibility(shown(popups));
         split_->setBounds(rest);
         symbolAlarms_->setBounds(rest);
         symbolOperators_->setBounds(rest);
+        symbolFunctions_->setBounds(rest);
+        symbolPopups_->setBounds(rest);
     }
     rebuildProperties();
     // Les actions suivent la selection : un seul objet, les siennes ; rien, celles

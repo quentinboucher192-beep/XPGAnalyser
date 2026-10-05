@@ -507,6 +507,15 @@ struct AlarmOverride {
     bool operator==(const AlarmOverride&) const = default;
 };
 
+// 1.11.10 : UNE FONCTION D'UN SYMBOLE REDEFINIE PAR UNE INSTANCE. Le symbole la
+// declare virtuelle (HmiFunction::isVirtual) ; l'instance garde son propre corps,
+// avec la meme signature (ses VAR_INPUT, son retour) : seule l'implementation change.
+struct FunctionOverride {
+    std::string function;         // le nom de la fonction du symbole
+    std::string body;             // le corps de l'instance (ST, avec ses declarations)
+    bool operator==(const FunctionOverride&) const = default;
+};
+
 struct Object {
     Id          id{kNoId};
     Kind        kind{Kind::Rectangle};
@@ -518,6 +527,7 @@ struct Object {
     std::vector<Prop> props;
     std::vector<Action> actions;
     std::vector<AlarmOverride> alarmOverrides;   // 1.9 : ses alarmes surchargees (voir plus haut)
+    std::vector<FunctionOverride> functionOverrides;   // 1.11.10 : une instance : ses fonctions redefinies
 
     [[nodiscard]] const Prop* find(std::string_view key) const noexcept;
     [[nodiscard]] Prop*       find(std::string_view key) noexcept;
@@ -622,6 +632,24 @@ inline constexpr std::string_view kViewEvents[] = {"OnOpen", "OnCycle", "OnClose
 inline constexpr std::string_view kGeneralEvents[] = {"Demarrage", "Cyclique", "Changement", "Appel"};
 [[nodiscard]] std::string_view eventLabel(std::string_view event) noexcept;   // "Demarrage", "Sur changement"... (accentues)
 
+// ---- lot 7 : les fonctions IHM ---------------------------------------------------
+//  UNE FONCTION IHM : un nom, un type de retour (vide : sans retour, une
+//  procedure), un corps ST qui declare ses parametres (VAR_INPUT) et ses
+//  variables (VAR, VAR_TEMP), comme une FUNCTION de l'automate. Elle s'appelle
+//  depuis un script, une expression de vue, une action : Moyenne(a, b) ou
+//  Moyenne(a := 1.5, b := 2.0) ; elle donne sa valeur en l'affectant a son nom.
+struct HmiFunction {
+    Id          id{kNoId};
+    std::string name;
+    std::string returnType;       // BOOL, INT, REAL, STRING... ; "" : sans retour
+    std::string body;
+    std::string description;
+    // 1.11.10 : une fonction d'un symbole (View::functions) - virtuelle : une instance
+    // peut la redefinir (Object::functionOverrides). Sans effet sur une fonction IHM.
+    bool        isVirtual{false};
+    bool operator==(const HmiFunction&) const = default;
+};
+
 struct AlarmDef;   // 1.9 : plus bas (les alarmes) ; un symbole en declare
 
 // ---- 1.10 : les operateurs d'un symbole ou d'un type IHM (decision 14) -------------
@@ -694,6 +722,13 @@ struct View {
     std::vector<AlarmDef>  alarms;
     // ---- 1.10 : les operateurs d'un symbole (voir HmiOperator). Vide pour les autres vues.
     std::vector<HmiOperator> operators{};
+    // ---- 1.11.10 : les fonctions d'un symbole (HmiSymbolFunctions.hpp) ; vide pour les autres vues.
+    //  Elles lisent et ecrivent les parametres du symbole (ceux de l'instance qui les
+    //  appelle) ; une virtuelle se redefinit dans une instance.
+    std::vector<HmiFunction> functions{};
+    // ---- 1.11.10 : une popup d'un symbole : le symbole qui la porte (kNoId : une popup du
+    //  projet). Elle connait les parametres et les fonctions de l'instance qui l'ouvre.
+    Id                       ownerSymbol{kNoId};
     [[nodiscard]] const ViewParam* param(std::string_view name) const noexcept;   // sans casse
 
     [[nodiscard]] Object*       object(Id) noexcept;
@@ -887,21 +922,6 @@ struct HmiType {
     HmiTypeKind kind{HmiTypeKind::Structure};   // 1.10 : une enumeration a des values, pas de members
     std::vector<HmiEnumValue> values{};         // 1.10 : ses valeurs, dans l'ordre de declaration
     bool operator==(const HmiType&) const = default;
-};
-
-// ---- lot 7 : les fonctions IHM ---------------------------------------------------
-//  UNE FONCTION IHM : un nom, un type de retour (vide : sans retour, une
-//  procedure), un corps ST qui declare ses parametres (VAR_INPUT) et ses
-//  variables (VAR, VAR_TEMP), comme une FUNCTION de l'automate. Elle s'appelle
-//  depuis un script, une expression de vue, une action : Moyenne(a, b) ou
-//  Moyenne(a := 1.5, b := 2.0) ; elle donne sa valeur en l'affectant a son nom.
-struct HmiFunction {
-    Id          id{kNoId};
-    std::string name;
-    std::string returnType;       // BOOL, INT, REAL, STRING... ; "" : sans retour
-    std::string body;
-    std::string description;
-    bool operator==(const HmiFunction&) const = default;
 };
 
 struct Programs {

@@ -323,7 +323,8 @@ private:
 // Instances montre le volet Alarmes sur son apercu (les instances et leurs alarmes).
 class HmiSymbolTabs final : public ui::Widget {
 public:
-    enum Tab : int { Drawing = 0, Alarms = 1, Instances = 2, Operators = 3 };
+    // 1.11.10 : + Fonctions et Popups (les fonctions et les popups propres au symbole).
+    enum Tab : int { Drawing = 0, Alarms = 1, Instances = 2, Operators = 3, Functions = 4, Popups = 5 };
     HmiSymbolTabs(std::string id, hmi::DocumentPtr doc, hmi::Id symbol);
     [[nodiscard]] int  current() const noexcept { return current_; }
     void               setCurrent(int tab);

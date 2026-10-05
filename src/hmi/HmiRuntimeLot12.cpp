@@ -173,7 +173,7 @@ bool Runtime::navigateByUser(const View& v, const Object* o, Operation op, const
 bool Runtime::swipe(int direction, double now, std::string* why) {
     now_ = std::max(now_, now);
     lastActivity_ = now;
-    composed_.clear();
+    composed_.clear(); boundCalls_.clear();
     if (!running_ || !project_ || direction == 0) return false;
     if (!project_->config.swipeNavigation) {
         if (why) *why = "le changement de vue en glissant n'est pas activ\xC3\xA9 (Configuration)";
@@ -226,7 +226,7 @@ bool Runtime::swipe(int direction, double now, std::string* why) {
 // ================================================================== clics ====
 void Runtime::setOverride(const View& v, const Object& o, const std::string& key, const std::string& value) {
     overrides_[{v.id, o.id}][key] = value;
-    composed_.clear();
+    composed_.clear(); boundCalls_.clear();
 }
 
 void Runtime::lot12Part(const View& v, const Object& o, std::string_view part, double now) {

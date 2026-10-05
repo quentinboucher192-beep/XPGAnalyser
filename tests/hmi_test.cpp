@@ -3039,7 +3039,7 @@ void fonctionsLot7() {
     p.programs.functions.push_back(hmiFunction(p, "Casse", "INT", "VAR\n  x : INT\nEND_VAR\nCasse := 1;"));
     p.programs.scripts.push_back(generalScript(p, "Calcul",
         "Resultat := Moyenne(Resultat, 8.0);\nTracer('calcul fait');\nTracer(Message := 'deuxi\xC3\xA8me');\nFact5 := Fact(5);"));
-    p.programs.scripts.push_back(generalScript(p, "Profond", "Fact5 := Fact(12);\nTraces := -1;"));
+    p.programs.scripts.push_back(generalScript(p, "Profond", "Fact5 := Fact(40);\nTraces := -1;"));
     p.programs.scripts.push_back(generalScript(p, "AppelCasse", "Resultat := Casse();\nTraces := -2;"));
     p.views = {a, b};
     p.config.startView = a.id;
@@ -3083,7 +3083,7 @@ void fonctionsLot7() {
           "Tracer (sans retour) : appel\xC3\xA9" "e deux fois, par position puis par nom");
     check(rt.variable("Fact5")->asInteger() == 120, "Fact(5) = 120 : une fonction s'appelle elle-m\xC3\xAAme (5 niveaux)");
     ok = !rt.callScript("Profond", 0.2, &why) && why.find("appel circulaire") != std::string::npos;
-    check(ok, "Fact(12) : plus de 8 niveaux, coup\xC3\xA9 (" + why + ")");
+    check(ok, "Fact(40) : plus de 32 niveaux (1.11.10 ; 8 avant), coup\xC3\xA9 (" + why + ")");
     check(rt.variable("Traces")->asInteger() == 2, "... et le script s'arr\xC3\xAAte l\xC3\xA0 (la ligne suivante ne passe pas)");
     ok = !rt.callScript("AppelCasse", 0.3, &why) && why.find("fonction Casse") != std::string::npos;
     check(ok, "une fonction mal d\xC3\xA9" "clar\xC3\xA9" "e fait \xC3\xA9" "chouer son appelant (" + why + ")");
@@ -3994,6 +3994,225 @@ void actionsMathsClavier1119() {
     rt.typeText("7", 0.5);
     rt.typeKey(EditKey::Escape, 0.51);
     check(!rt.promptShown() && rt.variable("Code")->asInteger() == 42, "\xC3\x89" "chap : ferm\xC3\xA9, Code ne change pas");
+}
+
+// =============================================================================
+//  1.11.10 : LES FONCTIONS D'UN SYMBOLE (la demande du 05/10 : « des fonctions aux
+//  symboles utilisateurs [...] en virtual, modifiables par les instances, toutes les
+//  variables dispos comme les scripts generaux [...] disponibles dans les scripts
+//  generaux » ; et, a 19 h : « les fonctions utilisables entre elles et dans les
+//  operateurs, les operateurs entre eux aussi »).
+// =============================================================================
+void fonctionsSymbole11110() {
+    std::printf("1.11.10 : les fonctions d'un symbole (virtuelles, red\xC3\xA9" "finies, appel\xC3\xA9" "es partout) ; fonctions et op\xC3\xA9rateurs entre eux\n");
+    Project p;
+    {
+        HmiType vec;
+        vec.id = p.allocate();
+        vec.name = "T_VEC";
+        vec.members = {{"X", "REAL", "", ""}, {"Y", "REAL", "", ""}};
+        p.programs.types.push_back(vec);
+    }
+    p.programs.variables.push_back(hmiVar(p, "Pos0", "INT", "0"));
+    p.programs.variables.push_back(hmiVar(p, "Pos1", "INT", "0"));
+    p.programs.variables.push_back(hmiVar(p, "Ouvertures", "INT", "0"));
+    p.programs.variables.push_back(hmiVar(p, "Trace", "STRING", ""));
+    p.programs.variables.push_back(hmiVar(p, "Purge", "BOOL", "FALSE"));
+    p.programs.variables.push_back(hmiVar(p, "V0", "T_VEC", ""));
+    p.programs.variables.push_back(hmiVar(p, "R", "T_VEC", ""));
+    p.programs.variables.push_back(hmiVar(p, "Lu", "INT", "0"));
+    // Une fonction IHM, appelee par une fonction de symbole et par un operateur.
+    HmiFunction compter;
+    compter.id = p.allocate();
+    compter.name = "Compter";
+    compter.body = "Ouvertures := Ouvertures + 1;";
+    p.programs.functions.push_back(compter);
+    HmiFunction bonus;
+    bonus.id = p.allocate();
+    bonus.name = "Bonus";
+    bonus.returnType = "REAL";
+    bonus.body = "VAR_INPUT\n  x : REAL;\nEND_VAR\nBonus := x + 0.5;";
+    p.programs.functions.push_back(bonus);
+    // Deux operateurs de T_VEC : * emploie + et la fonction Bonus.
+    HmiOperator plus = makeOperator(p, "+", "T_VEC", "T_VEC", "T_VEC");
+    plus.body = "Resultat.X := a.X + b.X;\nResultat.Y := a.Y + b.Y;";
+    HmiOperator fois = makeOperator(p, "*", "T_VEC", "REAL", "T_VEC");
+    fois.body = "IF b = 2.0 THEN\n  Resultat := a + a;\nELSE\n  Resultat.X := a.X * b;\n  Resultat.Y := a.Y * b;\nEND_IF;\nResultat.X := Bonus(Resultat.X);";
+    p.programs.types[0].operators = {plus, fois};
+    // Le symbole : un parametre Pos, trois fonctions.
+    View sym = makeView(p, "S_Vanne");
+    sym.role = "symbole";
+    sym.params.push_back({"Pos", "0", "", "INT", ParamMode::Reference});
+    const auto fn = [&](const char* name, const char* ret, const char* body, bool virt) {
+        HmiFunction f;
+        f.id = p.allocate();
+        f.name = name;
+        f.returnType = ret;
+        f.body = body;
+        f.isVirtual = virt;
+        sym.functions.push_back(f);
+    };
+    fn("Ouvrir", "", "VAR_INPUT\n  Pas : INT := 10;\nEND_VAR\nPos := Pos + Pas;\nCompter();\nTrace := CONCAT(Trace, 'o');", true);
+    fn("Etat", "INT", "Etat := Pos * 2;", false);
+    fn("Double", "", "Ouvrir(Pas := Etat());", false);                 // ses fonctions entre elles
+    fn("Vecteur", "T_VEC", "Vecteur := V0 * 2.0;", false);             // un operateur dans une fonction
+    fn("Boucle", "", "Boucle();", false);                               // sans fin
+    {
+        auto& b = addButton(p, sym, "Btn", 0, 0);
+        b.actions.push_back(act(Trigger::Click, Operation::RunScript, {}, "Ouvrir();"));
+    }
+    const Id symBtn = sym.objects.back().id;
+    {
+        auto& d = addButton(p, sym, "BtnDetail", 0, 40);
+        d.actions.push_back(act(Trigger::Click, Operation::Popup, "Pop_Vanne"));    // sa popup, sans argument
+    }
+    const Id symDetail = sym.objects.back().id;
+    const Id symId = sym.id;
+    p.views.push_back(sym);
+    // 1.11.10 : la popup du symbole - elle lit Pos (le parametre du symbole) et appelle Ouvrir.
+    View pop = makeView(p, "Pop_Vanne");
+    pop.role = "popup";
+    pop.ownerSymbol = symId;
+    Id popLire = kNoId, popOuvrir = kNoId;
+    {
+        auto& b1 = addButton(p, pop, "BtnLire", 0, 0);
+        b1.actions.push_back(act(Trigger::Click, Operation::RunScript, {}, "Lu := Pos;"));
+        popLire = b1.id;
+        auto& b2 = addButton(p, pop, "BtnOuvrir", 0, 40);
+        b2.actions.push_back(act(Trigger::Click, Operation::RunScript, {}, "Ouvrir(1);"));
+        popOuvrir = b2.id;
+    }
+    p.views.push_back(pop);
+    View v = makeView(p, "Vue_V");
+    const Id vid = v.id;
+    Id i1 = kNoId, i2 = kNoId, vBtn = kNoId, vPop = kNoId;
+    {
+        i1 = placeSymbol(p, v, "S_Vanne", 10, 10);
+        v.object(i1)->name = "V1";
+        v.object(i1)->set("params", "Pos := Pos0");
+        i2 = placeSymbol(p, v, "S_Vanne", 200, 10);
+        v.object(i2)->name = "V2";
+        v.object(i2)->set("params", "Pos := Pos1");
+        // V2 redefinit Ouvrir : la purge d'abord, puis le corps du symbole (SUPER), pas double.
+        v.object(i2)->functionOverrides.push_back(
+            {"Ouvrir", "VAR_INPUT\n  Pas : INT := 10;\nEND_VAR\nIF NOT Purge THEN\n  Trace := CONCAT(Trace, 'refus');\n  RETURN;\nEND_IF;\nSUPER.Ouvrir(Pas := Pas * 2);"});
+        auto& b = addButton(p, v, "BtnV", 400, 10);
+        b.actions.push_back(act(Trigger::Click, Operation::RunScript, {}, "V1.Ouvrir(5);"));   // depuis la vue : Instance.Fonction
+        vBtn = b.id;
+        auto& b2 = addButton(p, v, "BtnV2", 400, 60);
+        b2.actions.push_back(act(Trigger::Click, Operation::Popup, "V2.Pop_Vanne"));          // la popup de V2, depuis la vue
+        vPop = b2.id;
+    }
+    p.views.push_back(v);
+    p.config.startView = vid;
+    p.programs.scripts.push_back(generalScript(p, "Seq",
+        "Vue_V.V1.Ouvrir();\nVue_V.V2.Ouvrir();\nPurge := TRUE;\nVue_V.V2.Ouvrir();\nVue_V.V1.Double();\nR := Vue_V.V1.Vecteur();"));
+    p.programs.scripts.back().event = "Appel";
+    p.programs.scripts.push_back(generalScript(p, "Inf", "Vue_V.V1.Boucle();"));
+    p.programs.scripts.back().event = "Appel";
+    p.programs.scripts.push_back(generalScript(p, "OuvrePop", "IHM_POPUP('Vue_V.V1.Pop_Vanne');"));
+    p.programs.scripts.back().event = "Appel";
+    // L'ecriture des appels, a l'expansion.
+    {
+        same(qualifySymbolCalls("Ouvrir(); x := Etat() + Pos; SUPER.Ouvrir(1); Autre(); 'Ouvrir()'", p, *p.viewByName("S_Vanne"), "Vue_V.V1"),
+             "Vue_V.V1.Ouvrir(); x := Vue_V.V1.Etat() + Pos; Vue_V.V1.SUPER.Ouvrir(1); Autre(); 'Ouvrir()'",
+             "dans le symbole : Ouvrir( et SUPER.Ouvrir( visent l'instance ; une autre fonction et une cha\xC3\xAEne restent");
+        same(qualifyViewCalls("V1.Ouvrir(5); V2.Pos := 1; V9.Ouvrir(); Vue_V.V1.Etat()", p, *p.view(vid)),
+             "Vue_V.V1.Ouvrir(5); V2.Pos := 1; V9.Ouvrir(); Vue_V.V1.Etat()",
+             "dans la vue : V1.Ouvrir( devient Vue_V.V1.Ouvrir( ; le reste tel quel");
+        BoundFunction b;
+        check(boundSymbolFunction(p, "Vue_V.V2.Ouvrir", b) && b.overridden && b.function.body.find("Vue_V.V2.SUPER.Ouvrir(") != std::string::npos,
+              "Vue_V.V2.Ouvrir : la red\xC3\xA9" "finition de V2, son SUPER complet");
+        check(boundSymbolFunction(p, "Vue_V.V2.SUPER.Ouvrir", b) && !b.overridden && b.function.body.find("Pos1 := Pos1 + Pas") != std::string::npos,
+              "Vue_V.V2.SUPER.Ouvrir : le corps du symbole, Pos remplac\xC3\xA9 par Pos1 (" + b.function.body + ")");
+        check(!boundSymbolFunction(p, "Vue_V.V1.Inconnue", b) && !boundSymbolFunction(p, "Vue_V.V9.Ouvrir", b), "une fonction ou une instance inconnue : rien");
+    }
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    const auto num = [&](const char* name) { return rt.variable(name) ? rt.variable(name)->asInteger() : -999; };
+    const auto txt = [&](const char* name) { return rt.variable(name) ? rt.variable(name)->asString() : std::string("?"); };
+    std::string why;
+    check(rt.callScript("Seq", 0.1, &why), "le script g\xC3\xA9n\xC3\xA9ral appelle les fonctions des instances (" + why + ")");
+    check(num("Pos0") == 30 && num("Pos1") == 20 && num("Ouvertures") == 3 && txt("Trace") == "orefusoo",
+          "V1.Ouvrir (+10), V2 refuse sans purge, puis SUPER (+20), V1.Double = Ouvrir(Etat()) (+20) : Pos0 = 30, Pos1 = 20, 3 ouvertures, "
+          "trace orefusoo (" + std::to_string(num("Pos0")) + ", " + std::to_string(num("Pos1")) + ", " + std::to_string(num("Ouvertures")) + ", "
+              + txt("Trace") + ")");
+    sim::Value rx;
+    (void)rt.environment().read("R.X", rx);
+    sim::Value rY;
+    (void)rt.environment().read("R.Y", rY);
+    check(std::fabs(rx.asReal() - 0.5) < 1e-9 && std::fabs(rY.asReal()) < 1e-9,
+          "Vecteur = V0 * 2.0 : l'op\xC3\xA9rateur * emploie + et la fonction Bonus (X = " + rx.display() + ", Y = " + rY.display() + ")");
+    // Le bouton du symbole, dans V1 : Ouvrir() vise V1.
+    rt.press(expandedId(i1, symBtn), 0.2);
+    rt.release(expandedId(i1, symBtn), 0.25, true);
+    check(num("Pos0") == 40, "le bouton du symbole dans V1 : Ouvrir() ouvre V1 (Pos0 = " + std::to_string(num("Pos0")) + ")");
+    rt.press(expandedId(i2, symBtn), 0.3);
+    rt.release(expandedId(i2, symBtn), 0.35, true);
+    check(num("Pos1") == 40, "... dans V2 : la red\xC3\xA9" "finition de V2 (+20 : Pos1 = " + std::to_string(num("Pos1")) + ")");
+    rt.press(vBtn, 0.4);
+    rt.release(vBtn, 0.45, true);
+    check(num("Pos0") == 45 && !journalHas(rt, "Erreur", ""), "le bouton de la vue : V1.Ouvrir(5) (Pos0 = " + std::to_string(num("Pos0")) + ")");
+    // 1.11.10 : la popup du symbole, ouverte depuis le bouton du symbole dans V1 : Pos est Pos0.
+    {
+        const auto click = [&](Id id, double t) { rt.press(id, t); rt.release(id, t + 0.02, true); };
+        click(expandedId(i1, symDetail), 1.0);
+        check(rt.topView() == p.viewByName("Pop_Vanne")->id, "le bouton du symbole (V1) ouvre Pop_Vanne, la popup du symbole");
+        click(popLire, 1.1);
+        check(num("Lu") == 45, "dans la popup : Lu := Pos lit Pos0 (" + std::to_string(num("Lu")) + ")");
+        click(popOuvrir, 1.2);
+        check(num("Pos0") == 46 && !journalHas(rt, "Erreur", ""), "Ouvrir(1) dans la popup : la fonction de V1 (Pos0 = " + std::to_string(num("Pos0")) + ")");
+        (void)rt.closePopup({}, 1.3);
+        click(vPop, 1.4);
+        click(popLire, 1.5);
+        check(rt.topView() == p.viewByName("Pop_Vanne")->id && num("Lu") == 40, "V2.Pop_Vanne depuis la vue : la popup de V2 (Lu = " + std::to_string(num("Lu")) + ")");
+        click(popOuvrir, 1.6);
+        check(num("Pos1") == 42, "... Ouvrir(1) : la red\xC3\xA9" "finition de V2 (SUPER, pas double : Pos1 = " + std::to_string(num("Pos1")) + ")");
+        (void)rt.closePopup({}, 1.7);
+        std::string err;
+        check(rt.callScript("OuvrePop", 1.8, &err) && rt.topView() == p.viewByName("Pop_Vanne")->id, "IHM_POPUP('Vue_V.V1.Pop_Vanne') (" + err + ")");
+        click(popLire, 1.9);
+        check(num("Lu") == 46, "... la popup de V1 (Lu = " + std::to_string(num("Lu")) + ")");
+        (void)rt.closePopup({}, 2.0);
+    }
+    // Une expression de vue : {Vue_V.V1.Etat()}.
+    {
+        auto& env = rt.environment();
+        auto* host = dynamic_cast<FunctionHost*>(&env);
+        sim::Value out;
+        check(host && host->hostsFunction("Vue_V.V1.Etat") && host->callFromExpression("Vue_V.V1.Etat", {}, out) && out.asInteger() == 92,
+              "une expression lit Vue_V.V1.Etat() : 92 (" + out.display() + ")");
+        const auto e = Expression::compile("Vue_V.V2.Etat() + 1");
+        const auto x = e.evaluate(env);
+        check(x && x->asInteger() == 85, "Vue_V.V2.Etat() + 1 = 85 (" + (x ? x->display() : std::string("erreur")) + ")");
+    }
+    // Sans fin : arretee et dite, l'IHM continue.
+    {
+        std::string err;
+        const bool ran = rt.callScript("Inf", 0.5, &err);
+        check(!ran && (journalHas(rt, "Erreur", "appel circulaire") || err.find("circulaire") != std::string::npos),
+              "Boucle() sans fin : arr\xC3\xAAt\xC3\xA9" "e (appel circulaire) (" + err + ")");
+        check(rt.callScript("Seq", 0.6, &err), "... et l'IHM continue : Seq tourne encore (" + err + ")");
+    }
+    // Enregistrer, relire : les fonctions, virtuelles, et la redefinition.
+    {
+        const auto files = serializeProject(p);
+        const FileReader reader = [&](const std::string& path, std::string& content) {
+            for (const auto& f : files)
+                if (f.path == path) { content.assign(f.data->begin(), f.data->end()); return true; }
+            return false;
+        };
+        auto back = parseProject(reader);
+        check(back.has_value(), "le projet se relit");
+        if (back) {
+            const View* s2 = back->viewByName("S_Vanne");
+            const View* v2 = back->viewByName("Vue_V");
+            check(s2 && s2->functions == p.viewByName("S_Vanne")->functions, "relu : les 5 fonctions du symbole (Ouvrir virtuelle)");
+            const Object* o2 = v2 ? v2->objectByName("V2") : nullptr;
+            check(o2 && o2->functionOverrides == p.view(vid)->objectByName("V2")->functionOverrides, "relu : la red\xC3\xA9" "finition de V2");
+        }
+    }
 }
 
 void verificationsLot8() {
@@ -20671,6 +20890,12 @@ void blocages1112() {
 }
 
 int main(int argc, char** argv) {
+    // 1.11.10 : HMI_TEST_1110=1 - les fonctions et les popups des symboles, seules.
+    if (const char* only = std::getenv("HMI_TEST_1110"); only && *only == '1') {
+        fonctionsSymbole11110();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
     modele();
     disque();
     annulation();
@@ -20684,6 +20909,7 @@ int main(int argc, char** argv) {
     reperesArgumentsPopup1117();       // 1.11.7 : IN_V := $V[2]$, une reference
     membresInternes1118();             // 1.11.8 : membres internes, place recalculee, depart d'un membre
     actionsMathsClavier1119();         // 1.11.9 : operations rangees, Maths, clavier virtuel
+    fonctionsSymbole11110();           // 1.11.10 : les fonctions d'un symbole ; fonctions et operateurs entre eux
     actions();
     scripts();
     transitions();

@@ -321,6 +321,8 @@ std::string serializeView(const View& v) {
     // Lot 12 (format 11) : la vue parente (fil d'Ariane), le zoom en marche.
     if (v.upView != kNoId) s += fieldInt("vue_parente", v.upView);
     if (v.zoomable) s += fieldBool("zoom", v.zoomable);
+    // 1.11.10 : une popup d'un symbole - le symbole qui la porte (une version plus ancienne l'ignore).
+    if (v.ownerSymbol != kNoId) s += fieldInt("symbole", v.ownerSymbol);
     // Lot 8 (format 7) : les reglages de popup, quand ils different du defaut.
     const PopupSettings defaults;
     if (v.popup != defaults) {
@@ -343,6 +345,11 @@ std::string serializeView(const View& v) {
            + field("groupe", a.group) + fieldBool("acquittement", a.ackRequired) + fieldInt("delai", a.delayMs)
            + field("description", a.description) + field("consigne", a.instruction) + "\n";
     for (const auto& o : v.operators) s += serializeOperator("operateur_symbole", o);   // 1.10
+    // 1.11.10 : les fonctions d'un symbole, leur corps sur la ligne (une version plus ancienne les ignore).
+    for (const auto& fn : v.functions)
+        s += "fonction_symbole" + fieldInt("id", fn.id) + field("nom", fn.name) + field("retour", fn.returnType)
+           + (fn.isVirtual ? fieldBool("virtuelle", true) : std::string{})
+           + (fn.description.empty() ? std::string{} : field("description", fn.description)) + field("corps", fn.body) + "\n";
     s += "grille" + fieldBool("visible", v.grid.visible) + fieldInt("pas", v.grid.step)
        + fieldBool("magnetisme_grille", v.grid.snapGrid)
        + fieldBool("magnetisme_objets", v.grid.snapObjects)
@@ -361,6 +368,8 @@ std::string serializeView(const View& v) {
             if (!p.expr.empty()) s += field("expr", p.expr);
             s += "\n";
         }
+        // 1.11.10 : ses fonctions redefinies (une instance).
+        for (const auto& fo : o.functionOverrides) s += "redefinition" + field("fonction", fo.function) + field("corps", fo.body) + "\n";
         // 1.9 : ses alarmes surchargees - seulement les champs surcharges.
         for (const auto& ov : o.alarmOverrides) {
             s += "surcharge_alarme" + field("alarme", ov.alarm);
@@ -470,6 +479,7 @@ core::Result<View> parseView(std::string_view text, LoadReport* report) {
             v.footer = static_cast<Id>(toInt(r.get("pied_vue"), 0));
             v.upView = static_cast<Id>(toInt(r.get("vue_parente"), 0));      // lot 12
             v.zoomable = toBool(r.get("zoom"), false);
+            v.ownerSymbol = static_cast<Id>(toInt(r.get("symbole"), 0));   // 1.11.10 : une popup d'un symbole
             // Lot 8
             auto& pp = v.popup;
             pp.titleBar = toBool(r.get("popup_titre"), pp.titleBar);
@@ -509,6 +519,23 @@ core::Result<View> parseView(std::string_view text, LoadReport* report) {
             HmiOperator o;
             if (!parseOperator(r, o)) { warn("ligne " + std::to_string(lineNo) + " : op\xC3\xA9rateur sans genre ou sans op\xC3\xA9rande"); continue; }
             v.operators.push_back(std::move(o));
+        } else if (r.word == "fonction_symbole") {                    // 1.11.10
+            HmiFunction fn;
+            fn.id = static_cast<Id>(toInt(r.get("id"), 0));
+            fn.name = toStr(r.get("nom"));
+            fn.returnType = toStr(r.get("retour"));
+            fn.isVirtual = toBool(r.get("virtuelle"), false);
+            fn.description = toStr(r.get("description"));
+            fn.body = toStr(r.get("corps"));
+            if (fn.name.empty()) { warn("ligne " + std::to_string(lineNo) + " : fonction de symbole sans nom"); continue; }
+            v.functions.push_back(std::move(fn));
+        } else if (r.word == "redefinition") {                        // 1.11.10
+            if (!current) { warn("ligne " + std::to_string(lineNo) + " : red\xC3\xA9" "finition hors d'un objet"); continue; }
+            FunctionOverride fo;
+            fo.function = toStr(r.get("fonction"));
+            fo.body = toStr(r.get("corps"));
+            if (fo.function.empty()) { warn("ligne " + std::to_string(lineNo) + " : red\xC3\xA9" "finition sans fonction"); continue; }
+            current->functionOverrides.push_back(std::move(fo));
         } else if (r.word == "surcharge_alarme") {                    // 1.9
             if (!current) { warn("ligne " + std::to_string(lineNo) + " : surcharge d'alarme hors d'un objet"); continue; }
             AlarmOverride ov;
@@ -1841,6 +1868,7 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
         for (const auto& s : v->scripts) highest = std::max(highest, s.id);
         for (const auto& a : v->alarms) highest = std::max(highest, a.id);     // 1.9 : les alarmes d'un symbole
         for (const auto& o : v->operators) highest = std::max(highest, o.id);  // 1.10 : ses operateurs
+        for (const auto& fn : v->functions) highest = std::max(highest, fn.id);  // 1.11.10 : ses fonctions
         p.views.push_back(std::move(*v));
     }
     for (const auto& r : p.assets.resources) highest = std::max(highest, r.id);

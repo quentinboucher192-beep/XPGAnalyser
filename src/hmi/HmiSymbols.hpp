@@ -163,11 +163,91 @@ struct Expansion {
 };
 // Les objets du symbole a la place de l'instance. `depth` : le niveau
 // d'imbrication (au-dela de kMaxSymbolDepth : rien). Symbole introuvable : vide.
-[[nodiscard]] Expansion expandInstance(const Project&, const Object& instance, int depth = 0);
+// 1.11.10 : `qualified`, le chemin de l'instance ("Vue_Vannes.Vanne_3") - ses appels de
+// fonctions s'y rapportent ; vide : son nom.
+[[nodiscard]] Expansion expandInstance(const Project&, const Object& instance, int depth = 0, std::string_view qualified = {});
 // La vue avec, apres chaque instance, ses objets developpes (l'instance reste :
 // elle porte ses actions ; son dessin est celui de ses objets). Les scripts et
 // les actions de vue des symboles s'ajoutent a ceux de la vue.
 [[nodiscard]] View expandInstances(const Project&, const View&);
+
+// ---- 1.11.10 : les fonctions d'un symbole -------------------------------------------
+//  UN SYMBOLE PORTE DES FONCTIONS (View::functions, des HmiFunction) : un nom, un
+//  retour (aucun : une procedure), des VAR_INPUT / VAR_IN_OUT de tous les types, un
+//  corps ST qui lit et ecrit les PARAMETRES DU SYMBOLE - ceux de l'instance qui
+//  l'appelle -, toutes les variables, et appelle les autres fonctions et operateurs.
+//  Une fonction VIRTUELLE se redefinit dans une instance (Object::functionOverrides) ;
+//  la redefinition rappelle le corps du symbole par SUPER.Ouvrir(...).
+//
+//  L'APPEL. Dans le symbole : Ouvrir('bouton') ; dans la vue qui pose l'instance :
+//  Vanne_3.Ouvrir() ; partout ailleurs : Vue_Vannes.Vanne_3.Ouvrir(). L'expansion
+//  (et le moteur) ecrivent chaque appel sous sa forme complete, "Vue.Instance.Fonction",
+//  que le moteur resout (boundSymbolFunction) : le corps en vigueur pour cette instance,
+//  ses parametres remplaces par les arguments de l'instance.
+inline constexpr std::string_view kSuperName = "SUPER";
+// La fonction `name` du symbole (sans casse) ; nul : aucune.
+[[nodiscard]] const HmiFunction* symbolFunction(const View& symbol, std::string_view name);
+// La redefinition de `function` dans l'instance ; nul : aucune.
+[[nodiscard]] const FunctionOverride* functionOverride(const Object& instance, std::string_view function);
+// Le corps qui tourne pour l'instance : sa redefinition (une fonction virtuelle), sinon celui du symbole.
+[[nodiscard]] const std::string& effectiveFunctionBody(const HmiFunction&, const Object& instance, bool* overridden = nullptr);
+// Les appels du code d'un symbole developpe pour l'instance de chemin `qualified`
+// ("Vue_Vannes.Vanne_3") : Ouvrir( devient Vue_Vannes.Vanne_3.Ouvrir( (une fonction du
+// symbole) ; Vanne_4.Fermer( devient Vue_Vannes.Vanne_3.Vanne_4.Fermer( (une instance posee
+// dans le symbole) ; SUPER.Ouvrir( devient Vue_Vannes.Vanne_3.SUPER.Ouvrir(. Le reste tel quel.
+[[nodiscard]] std::string qualifySymbolCalls(std::string_view code, const Project&, const View& symbol, std::string_view qualified);
+// Les appels du code d'une vue : Vanne_3.Ouvrir( devient Vue_Vannes.Vanne_3.Ouvrir( (une
+// instance de la vue dont le symbole a cette fonction ; Groupe_1.Vanne_2.Ouvrir( aussi).
+[[nodiscard]] std::string qualifyViewCalls(std::string_view code, const Project&, const View& view);
+// L'instance d'un chemin ("Vue_Vannes.Vanne_3", "Vue.Groupe_1.Vanne_2"), telle que
+// l'expansion la pose (ses arguments relies a ceux des instances qui la contiennent).
+struct InstanceAt {
+    const View* view{nullptr};      // la vue qui pose la premiere instance
+    const View* symbol{nullptr};    // le symbole de la derniere
+    Object      instance;           // la derniere, ses arguments relies
+    std::string path;               // le chemin, tel que donne
+};
+[[nodiscard]] bool instanceAt(const Project&, std::string_view path, InstanceAt& out);
+// Un appel "Vue_Vannes.Vanne_3.Ouvrir" (ou "Vue_Vannes.Vanne_3.SUPER.Ouvrir") : la fonction
+// prete a appeler - son nom court (le resultat s'y affecte), le corps en vigueur, les
+// parametres du symbole remplaces par les arguments de l'instance (sauf la ou une
+// declaration de la fonction les cache), ses propres appels sous leur forme complete.
+struct BoundFunction {
+    HmiFunction function;
+    std::string instance;           // "Vue_Vannes.Vanne_3"
+    std::string symbol;             // "S_Vanne"
+    bool        overridden{false};  // le corps de l'instance
+};
+[[nodiscard]] bool boundSymbolFunction(const Project&, std::string_view call, BoundFunction& out);
+// Renommer la fonction `from` du symbole `symbol` en `to` : ses appels dans le symbole
+// (Ouvrir(, SUPER.Ouvrir(), ceux des vues (Vanne_3.Ouvrir() et des scripts et fonctions
+// (Vue.Vanne_3.Ouvrir(), et les redefinitions des instances. Rend le nombre de textes changes
+// (la declaration elle-meme n'est pas renommee : a l'appelant).
+std::size_t renameSymbolFunction(Project&, std::string_view symbol, std::string_view from, std::string_view to);
+
+// ---- 1.11.10 : les popups d'un symbole ----------------------------------------------
+//  UNE POPUP DU SYMBOLE (View::ownerSymbol) connait d'office les parametres du symbole :
+//  ouverte depuis une instance (une action Ouvrir une popup de ses objets, ou
+//  Instance.Pop_Detail depuis la vue, ou IHM_POPUP('Vue.Instance.Pop_Detail')), elle les
+//  recoit de l'instance, et l'instance elle-meme sous le nom kInstanceAlias : ses appels
+//  Ouvrir() visent l'instance qui l'a ouverte.
+inline constexpr std::string_view kInstanceAlias = "INSTANCE_DU_SYMBOLE";
+// La popup `name` portee par le symbole (sans casse) ; nul : aucune.
+[[nodiscard]] const View* ownedPopup(const Project&, const View& symbol, std::string_view name);
+// Le symbole qui porte la popup ; nul : une popup du projet.
+[[nodiscard]] const View* popupOwner(const Project&, const View& popup);
+// Les arguments d'une ouverture depuis l'instance `qualified` : chaque parametre du
+// symbole que `given` ne donne pas ("Pos := Pos" - relie ensuite par l'expansion -, ou
+// "Pos := Pos0" avec `values`), l'instance (INSTANCE_DU_SYMBOLE := Vue.V1), puis `given`.
+[[nodiscard]] std::string withSymbolArguments(std::string_view given, const View& symbol, std::string_view qualified,
+                                              const SymbolArguments* values = nullptr);
+// Une cible "Vanne_3.Pop_Detail" (depuis la vue `here`) ou "Vue.Vanne_3.Pop_Detail" :
+// la popup et les arguments de l'instance (a mettre avant ceux de l'action). Faux : non.
+[[nodiscard]] bool popupOfInstance(const Project&, const View* here, std::string_view target, std::string& popup,
+                                   std::string& arguments);
+// Le code d'une popup du symbole, ses appels qualifies : Ouvrir( devient
+// INSTANCE_DU_SYMBOLE.Ouvrir( (l'instance qui l'ouvre). Sans symbole : la vue telle quelle.
+[[nodiscard]] View qualifiedOwnedPopup(const Project&, const View& popup);
 
 // ---- l'edition -----------------------------------------------------------------------
 // Poser une instance du symbole `symbol` en (x, y) dans `view` (a sa taille,

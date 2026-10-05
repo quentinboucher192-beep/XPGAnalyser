@@ -2776,6 +2776,11 @@ private:
         if (e.lhs && e.lhs->kind == Expr::Kind::Reference) callee = e.lhs->name;
         const std::string u = upperOf(callee);
         // Les fonctions internes du script, puis les fonctions IHM du projet (dialecte).
+        // 1.11.10 : Vue_Vannes.Vanne_3.Vecteur() - la fonction d'une instance de symbole,
+        // aux types riches (une structure rendue, VAR_IN_OUT) : l'environnement la donne.
+        if (callee.empty() && e.lhs && e.lhs->kind == Expr::Kind::Member)
+            if (auto q = qualify(*e.lhs))
+                if (auto f = env_.dialectFunction(*q)) return callDeclared(*f, e, true);
         if (!callee.empty()) {
             if (const Function* f = findFunction(callee)) return callDeclared(*f, e, false);
             if (auto builtin = dialectBuiltin(u, e)) return std::move(*builtin);

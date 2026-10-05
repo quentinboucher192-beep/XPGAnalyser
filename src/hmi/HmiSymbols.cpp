@@ -10,6 +10,7 @@
 #include "HmiOperators.hpp"
 #include "HmiExpr.hpp"
 #include "HmiRuntime.hpp"
+#include "HmiScript.hpp"        // 1.11.10 : splitDeclarations (les noms qu'une fonction de symbole cache)
 #include "HmiTemplates.hpp"
 #include "HmiWidgets.hpp"
 
@@ -1029,18 +1030,33 @@ Id expandedId(Id instance, Id child) noexcept {
     return static_cast<Id>(0x80000000u | static_cast<std::uint32_t>((h ^ (h >> 31)) & 0x7FFFFFFFu));
 }
 
-Expansion expandInstance(const Project& p, const Object& inst, int depth) {
+namespace {
+// 1.11.10 : les actions qui ouvrent une popup du symbole lui passent ses parametres et l'instance.
+void addOwnedPopupArguments(const Project& p, const View& sym, const std::string& qualified, std::vector<Action>& actions) {
+    for (auto& a : actions)
+        if ((a.operation == Operation::Popup || a.operation == Operation::ChangePopup) && ownedPopup(p, sym, trimmedCopy(a.target)))
+            a.value = withSymbolArguments(a.value, sym, qualified);
+}
+} // namespace
+
+Expansion expandInstance(const Project& p, const Object& inst, int depth, std::string_view qualified) {
     Expansion out;
     if (depth >= kMaxSymbolDepth) return out;
     const View* sym = symbolOf(p, inst);
     if (!sym) return out;
     const SymbolArguments args = symbolArguments(*sym, inst, &p);
+    // 1.11.10 : les appels des fonctions du symbole (et de ses instances) visent CETTE instance.
+    const std::string q = qualified.empty() ? inst.name : std::string(qualified);
+    const bool calls = !sym->functions.empty() || hasInstances(*sym);
     const Box ib = inst.box();
     const double sx = sym->width > 0 ? ib.w / sym->width : 1.0;
     const double sy = sym->height > 0 ? ib.h / sym->height : 1.0;
     std::set<std::string> siblings;
     for (const auto& so : sym->objects) siblings.insert(so.name);
-    const auto relink = [&](std::string_view t, bool code) { return substituteParams(t, args, code); };
+    const auto relink = [&](std::string_view t, bool code) {
+        if (!calls) return substituteParams(t, args, code);
+        return substituteParams(qualifySymbolCalls(t, p, *sym, q), args, code);
+    };
     for (const Object* so : sym->paintOrder()) {
         Object c = *so;
         c.id = expandedId(inst.id, so->id);
@@ -1048,7 +1064,8 @@ Expansion expandInstance(const Project& p, const Object& inst, int depth) {
         c.layer = inst.layer;
         c.parent = so->parent != kNoId && sym->object(so->parent) ? expandedId(inst.id, so->parent) : inst.id;
         c.locked = false;
-        if (!args.empty()) rewriteNames(c, relink);
+        addOwnedPopupArguments(p, *sym, q, c.actions);          // 1.11.10 : ses popups recoivent l'instance
+        if (!args.empty() || calls) rewriteNames(c, relink);
         if (auto* tp = c.find("text")) tp->value = resolveLiteralHoles(tp->value);
         // Lier un tableau vise un objet par son nom : celui de l'instance.
         for (auto& a : c.actions)
@@ -1062,7 +1079,7 @@ Expansion expandInstance(const Project& p, const Object& inst, int depth) {
                 c.set(std::string(kSymbolSizeKey), formatNumber(inner->width) + ";" + formatNumber(inner->height));
         out.objects.push_back(c);
         if (c.kind == Kind::SymbolInstance) {
-            auto inner = expandInstance(p, c, depth + 1);
+            auto inner = expandInstance(p, c, depth + 1, q + "." + so->name);
             for (auto& o : inner.objects) out.objects.push_back(std::move(o));
             for (auto& s : inner.scripts) out.scripts.push_back(std::move(s));
             for (auto& a : inner.actions) out.actions.push_back(std::move(a));
@@ -1072,13 +1089,14 @@ Expansion expandInstance(const Project& p, const Object& inst, int depth) {
         Script s = sc;
         s.id = expandedId(inst.id, sc.id);
         s.name = inst.name + "." + sc.name;
-        if (s.lang == ScriptLang::ST && !args.empty()) s.body = substituteParams(s.body, args, true);
+        if (s.lang == ScriptLang::ST && (!args.empty() || calls)) s.body = relink(s.body, true);
         out.scripts.push_back(std::move(s));
     }
     if (!sym->actions.empty()) {
         Object holder;
         holder.actions = sym->actions;
-        if (!args.empty()) rewriteNames(holder, relink);
+        addOwnedPopupArguments(p, *sym, q, holder.actions);
+        if (!args.empty() || calls) rewriteNames(holder, relink);
         for (auto& a : holder.actions) out.actions.push_back(std::move(a));
     }
     return out;
@@ -1097,13 +1115,36 @@ View expandInstances(const Project& p, const View& v) {
         used.insert(id);
         return id;
     };
+    // 1.11.10 : dans le code de la vue, Vanne_3.Ouvrir( vise l'instance de CETTE vue ; une
+    // popup Vanne_3.Pop_Detail est celle du symbole, ouverte avec les arguments de Vanne_3.
+    const auto viewCalls = [&](std::string_view t, bool) { return qualifyViewCalls(t, p, v); };
+    const auto instancePopups = [&](std::vector<Action>& list) {
+        for (auto& a : list) {
+            if (a.operation != Operation::Popup && a.operation != Operation::ChangePopup) continue;
+            std::string popup, given;
+            if (!popupOfInstance(p, &v, trimmedCopy(a.target), popup, given)) continue;
+            a.target = popup;
+            a.value = given + (trimmedCopy(a.value).empty() ? std::string{} : "; " + a.value);
+        }
+    };
+    instancePopups(out.actions);
+    for (auto& sc : out.scripts)
+        if (sc.lang == ScriptLang::ST) sc.body = qualifyViewCalls(sc.body, p, v);
+    if (!out.actions.empty()) {
+        Object holder;
+        holder.actions = std::move(out.actions);
+        rewriteNames(holder, viewCalls);
+        out.actions = std::move(holder.actions);
+    }
     for (const auto& o : v.objects) {
         out.objects.push_back(o);
+        instancePopups(out.objects.back().actions);
+        rewriteNames(out.objects.back(), viewCalls);
         if (o.kind != Kind::SymbolInstance) continue;
         // 1.11.4 : la taille du symbole, pour reposer ses objets en marche (relayoutLive).
         if (const View* sym = symbolOf(p, o))
             out.objects.back().set(std::string(kSymbolSizeKey), formatNumber(sym->width) + ";" + formatNumber(sym->height));
-        Expansion e = expandInstance(p, o);
+        Expansion e = expandInstance(p, o, 0, v.name + "." + o.name);
         // Deux identifiants derives egaux (improbable) : le second avance.
         std::map<Id, Id> moved;
         for (auto& c : e.objects) {
@@ -1249,6 +1290,338 @@ std::size_t renameSymbol(Project& p, std::string_view from, std::string_view to)
             if (changed) g->value = std::move(next);
         }
     return n;
+}
+
+// ============================================== 1.11.10 : les fonctions d'un symbole ====
+const HmiFunction* symbolFunction(const View& symbol, std::string_view name) {
+    for (const auto& f : symbol.functions)
+        if (sameName(f.name, name)) return &f;
+    return nullptr;
+}
+
+const FunctionOverride* functionOverride(const Object& instance, std::string_view function) {
+    for (const auto& o : instance.functionOverrides)
+        if (sameName(o.function, function)) return &o;
+    return nullptr;
+}
+
+const std::string& effectiveFunctionBody(const HmiFunction& f, const Object& instance, bool* overridden) {
+    const FunctionOverride* o = f.isVirtual ? functionOverride(instance, f.name) : nullptr;
+    if (overridden) *overridden = o != nullptr;
+    return o ? o->body : f.body;
+}
+
+namespace {
+// L'objet instance `name` pose dans `v` (nul : aucun).
+const Object* instanceNamed(const View& v, std::string_view name) {
+    for (const auto& o : v.objects)
+        if (o.kind == Kind::SymbolInstance && sameName(o.name, name)) return &o;
+    return nullptr;
+}
+// La chaine qui suit une tete de chemin : ".Vanne_2.Ouvrir", puis "(" (des blancs permis
+// avant la parenthese). Rend les segments apres la tete ; faux : pas un appel.
+bool callChain(std::string_view s, std::size_t end, std::vector<std::string>& segments) {
+    segments.clear();
+    std::size_t i = end;
+    while (i < s.size() && s[i] == '.') {
+        std::size_t j = i + 1;
+        if (j >= s.size() || !identStart(s[j])) return false;
+        std::size_t k = j;
+        while (k < s.size() && identChar(s[k])) ++k;
+        segments.emplace_back(s.substr(j, k - j));
+        i = k;
+    }
+    while (i < s.size() && (s[i] == ' ' || s[i] == '\t')) ++i;
+    return i < s.size() && s[i] == '(';
+}
+// Depuis le symbole `sym`, les segments `segs` (des instances posees, puis la fonction)
+// menent-ils a une fonction (ou a SUPER.fonction) ?
+bool reachesFunction(const Project& p, const View* sym, const std::vector<std::string>& segs, std::size_t from) {
+    for (std::size_t k = from; sym && k < segs.size(); ++k) {
+        if (k + 1 == segs.size()) return symbolFunction(*sym, segs[k]) != nullptr;
+        const Object* inner = instanceNamed(*sym, segs[k]);
+        sym = inner ? symbolOf(p, *inner) : nullptr;
+    }
+    return false;
+}
+} // namespace
+
+std::string qualifySymbolCalls(std::string_view code, const Project& p, const View& symbol, std::string_view qualified) {
+    if (code.find('(') == std::string_view::npos) return std::string(code);
+    std::vector<std::string> segs;
+    return rewriteRoots(code, true, [&](std::string_view s, std::size_t b, std::size_t e) -> Replacement {
+        if (!callChain(s, e, segs)) return std::nullopt;
+        const std::string_view root = s.substr(b, e - b);
+        bool ours = false;
+        if (segs.empty()) ours = symbolFunction(symbol, root) != nullptr;                 // Ouvrir(
+        else if (sameName(root, kSuperName)) ours = segs.size() == 1 && symbolFunction(symbol, segs[0]);   // SUPER.Ouvrir(
+        else if (const Object* inner = instanceNamed(symbol, root)) ours = reachesFunction(p, symbolOf(p, *inner), segs, 0);
+        if (!ours) return std::nullopt;
+        return std::make_pair(e, std::string(qualified) + "." + std::string(root));
+    });
+}
+
+std::string qualifyViewCalls(std::string_view code, const Project& p, const View& view) {
+    if (code.find('(') == std::string_view::npos || !hasInstances(view)) return std::string(code);
+    std::vector<std::string> segs;
+    return rewriteRoots(code, true, [&](std::string_view s, std::size_t b, std::size_t e) -> Replacement {
+        const std::string_view root = s.substr(b, e - b);
+        const Object* inst = instanceNamed(view, root);
+        if (!inst || !callChain(s, e, segs) || segs.empty()) return std::nullopt;
+        if (!reachesFunction(p, symbolOf(p, *inst), segs, 0)) return std::nullopt;
+        return std::make_pair(e, view.name + "." + std::string(root));
+    });
+}
+
+namespace {
+std::vector<std::string> dottedSegments(std::string_view path) {
+    std::vector<std::string> out;
+    std::size_t i = 0;
+    while (i <= path.size()) {
+        const std::size_t dot = path.find('.', i);
+        const std::size_t end = dot == std::string_view::npos ? path.size() : dot;
+        out.push_back(trimmedCopy(path.substr(i, end - i)));
+        if (dot == std::string_view::npos) break;
+        i = dot + 1;
+    }
+    return out;
+}
+} // namespace
+
+bool instanceAt(const Project& p, std::string_view path, InstanceAt& out) {
+    const auto segs = dottedSegments(path);
+    if (segs.size() < 2) return false;
+    const View* v = p.viewByName(segs[0]);
+    if (!v) return false;
+    const Object* first = instanceNamed(*v, segs[1]);
+    if (!first) return false;
+    Object cur = *first;
+    const View* sym = symbolOf(p, cur);
+    for (std::size_t k = 2; sym && k < segs.size(); ++k) {
+        const Object* inner = instanceNamed(*sym, segs[k]);
+        if (!inner) return false;
+        // Comme l'expansion : ses arguments citent les parametres de l'instance qui la contient.
+        const SymbolArguments outer = symbolArguments(*sym, cur, &p);
+        Object next = *inner;
+        if (!outer.empty())
+            rewriteNames(next, [&](std::string_view t, bool code) { return substituteParams(t, outer, code); });
+        cur = std::move(next);
+        sym = symbolOf(p, cur);
+    }
+    if (!sym) return false;
+    out.view = v;
+    out.symbol = sym;
+    out.instance = std::move(cur);
+    out.path = std::string(path);
+    return true;
+}
+
+bool boundSymbolFunction(const Project& p, std::string_view call, BoundFunction& out) {
+    auto segs = dottedSegments(call);
+    if (segs.size() < 3) return false;
+    const std::string name = segs.back();
+    segs.pop_back();
+    const bool base = sameName(segs.back(), kSuperName);
+    if (base) segs.pop_back();
+    std::string path;
+    for (const auto& sgm : segs) path += (path.empty() ? "" : ".") + sgm;
+    InstanceAt at;
+    if (!instanceAt(p, path, at)) return false;
+    const HmiFunction* f = symbolFunction(*at.symbol, name);
+    if (!f) return false;
+    bool overridden = false;
+    const std::string& body = base ? f->body : effectiveFunctionBody(*f, at.instance, &overridden);
+    // Les parametres du symbole, sauf ceux que la fonction cache (ses declarations, son nom).
+    SymbolArguments args = symbolArguments(*at.symbol, at.instance, &p);
+    const auto parts = splitDeclarations(body, true);
+    args.erase(std::remove_if(args.begin(), args.end(),
+                              [&](const auto& a) { return parts.local(a.first) != nullptr || sameName(a.first, f->name); }),
+               args.end());
+    out.function = *f;
+    out.function.body = substituteParams(qualifySymbolCalls(body, p, *at.symbol, path), args, true);
+    // Un identifiant a lui (les compteurs d'appels du moteur) : stable pour ce chemin.
+    std::uint64_t h = 1469598103934665603ull;
+    for (const char c : upperCopy(call)) { h ^= static_cast<unsigned char>(c); h *= 1099511628211ull; }
+    out.function.id = static_cast<Id>(0x80000000u | static_cast<std::uint32_t>((h ^ (h >> 31)) & 0x7FFFFFFFu));
+    out.instance = path;
+    out.symbol = at.symbol->name;
+    out.overridden = overridden;
+    return true;
+}
+
+namespace {
+// La fin de la chaine ".a.b" qui suit une tete de chemin (l'index apres le dernier nom).
+std::size_t chainEnd(std::string_view s, std::size_t end) {
+    std::size_t i = end;
+    while (i < s.size() && s[i] == '.' && i + 1 < s.size() && identStart(s[i + 1])) {
+        std::size_t k = i + 1;
+        while (k < s.size() && identChar(s[k])) ++k;
+        i = k;
+    }
+    return i;
+}
+} // namespace
+
+std::size_t renameSymbolFunction(Project& p, std::string_view symbol, std::string_view from, std::string_view to) {
+    View* sym = p.viewByName(symbol);
+    if (!sym || !isSymbolView(*sym) || from.empty() || to.empty()) return 0;
+    std::size_t changed = 0;
+    const std::string toName(to);
+    // Dans le symbole : chaque tete `from` (ses appels, le resultat dans son propre corps).
+    const SymbolArguments direct{{std::string(from), toName}};
+    const auto inSymbol = [&](std::string_view t, bool code) { return substituteParams(t, direct, code); };
+    const auto apply = [&](std::string& text, const std::string& next) {
+        if (next == text) return;
+        text = next;
+        ++changed;
+    };
+    for (auto& o : sym->objects) {
+        const Object before = o;
+        rewriteNames(o, inSymbol);
+        if (!(before == o)) ++changed;
+    }
+    for (auto& sc : sym->scripts)
+        if (sc.lang == ScriptLang::ST) apply(sc.body, inSymbol(sc.body, true));
+    {
+        Object holder;
+        holder.actions = sym->actions;
+        rewriteNames(holder, inSymbol);
+        if (!(holder.actions == sym->actions)) { sym->actions = std::move(holder.actions); ++changed; }
+    }
+    for (auto& fn : sym->functions) apply(fn.body, inSymbol(fn.body, true));
+    // SUPER.from( dans les corps (les redefinitions le citent).
+    const auto superCalls = [&](std::string_view t) {
+        return rewriteRoots(t, true, [&](std::string_view s2, std::size_t b, std::size_t e) -> Replacement {
+            if (!sameName(s2.substr(b, e - b), kSuperName)) return std::nullopt;
+            const std::size_t end = chainEnd(s2, e);
+            if (end == e || !sameName(s2.substr(e + 1, end - e - 1), from)) return std::nullopt;
+            return std::make_pair(end, std::string(s2.substr(b, e - b)) + "." + toName);
+        });
+    };
+    for (auto& fn : sym->functions) apply(fn.body, superCalls(fn.body));
+    // Les redefinitions des instances : leur nom, et les memes appels dans leur corps.
+    for (auto& v : p.views)
+        for (auto& o : v.objects) {
+            if (o.kind != Kind::SymbolInstance || !sameName(trimmedCopy(o.text("symbol")), symbol)) continue;
+            for (auto& fo : o.functionOverrides) {
+                if (sameName(fo.function, from)) { fo.function = toName; ++changed; }
+                apply(fo.body, superCalls(inSymbol(fo.body, true)));
+            }
+        }
+    // Les appels qualifies : Vanne_3.from( (dans une vue ou un symbole qui pose l'instance)
+    // et Vue.Vanne_3.from( (partout).
+    const auto qualified = [&](std::string_view t, const View* here) {
+        if (t.find('(') == std::string_view::npos) return std::string(t);
+        return rewriteRoots(t, true, [&](std::string_view s2, std::size_t b, std::size_t e) -> Replacement {
+            const std::size_t end = chainEnd(s2, e);
+            if (end == e) return std::nullopt;
+            std::size_t k = end;
+            while (k < s2.size() && (s2[k] == ' ' || s2[k] == '\t')) ++k;
+            if (k >= s2.size() || s2[k] != '(') return std::nullopt;
+            const std::size_t lastDot = s2.rfind('.', end - 1);
+            if (lastDot == std::string_view::npos || lastDot < e || !sameName(s2.substr(lastDot + 1, end - lastDot - 1), from))
+                return std::nullopt;
+            const std::string path(s2.substr(b, lastDot - b));
+            const View* target = nullptr;
+            if (InstanceAt at; instanceAt(p, path, at)) target = at.symbol;
+            if (!target && here) {                                          // relatif a la vue (ou au symbole)
+                const auto segs = dottedSegments(path);
+                const View* cur = here;
+                for (const auto& sg : segs) {
+                    const Object* inst = cur ? instanceNamed(*cur, sg) : nullptr;
+                    cur = inst ? symbolOf(p, *inst) : nullptr;
+                }
+                target = cur;
+            }
+            if (!target || !sameName(target->name, symbol)) return std::nullopt;
+            return std::make_pair(end, path + "." + toName);
+        });
+    };
+    for (auto& v : p.views) {
+        const View* here = &v;
+        for (auto& o : v.objects) {
+            const Object before = o;
+            rewriteNames(o, [&](std::string_view t, bool) { return qualified(t, here); });
+            if (!(before == o)) ++changed;
+        }
+        for (auto& sc : v.scripts)
+            if (sc.lang == ScriptLang::ST) apply(sc.body, qualified(sc.body, here));
+        Object holder;
+        holder.actions = v.actions;
+        rewriteNames(holder, [&](std::string_view t, bool) { return qualified(t, here); });
+        if (!(holder.actions == v.actions)) { v.actions = std::move(holder.actions); ++changed; }
+        for (auto& fn : v.functions) apply(fn.body, qualified(fn.body, here));
+    }
+    for (auto& sc : p.programs.scripts)
+        if (sc.lang == ScriptLang::ST) apply(sc.body, qualified(sc.body, nullptr));
+    for (auto& fn : p.programs.functions) apply(fn.body, qualified(fn.body, nullptr));
+    for (auto& ty : p.programs.types)
+        for (auto& op : ty.operators) apply(op.body, qualified(op.body, nullptr));
+    return changed;
+}
+
+// ================================================= 1.11.10 : les popups d'un symbole ====
+const View* ownedPopup(const Project& p, const View& symbol, std::string_view name) {
+    const View* v = p.viewByName(trimmedCopy(name));
+    return v && v->ownerSymbol == symbol.id && symbol.id != kNoId ? v : nullptr;
+}
+
+const View* popupOwner(const Project& p, const View& popup) {
+    if (popup.ownerSymbol == kNoId) return nullptr;
+    const View* s = p.view(popup.ownerSymbol);
+    return s && isSymbolView(*s) ? s : nullptr;
+}
+
+std::string withSymbolArguments(std::string_view given, const View& symbol, std::string_view qualified, const SymbolArguments* values) {
+    const auto named = parseArguments(given);
+    const auto has = [&](std::string_view n) {
+        return std::any_of(named.begin(), named.end(), [&](const auto& g) { return sameName(g.first, n); });
+    };
+    std::string out;
+    const auto add = [&](const std::string& n, const std::string& t) { out += (out.empty() ? "" : "; ") + n + " := " + t; };
+    for (const auto& prm : symbol.params) {
+        if (has(prm.name)) continue;
+        if (!values) { add(prm.name, prm.name); continue; }
+        for (const auto& [n, t] : *values)
+            if (sameName(n, prm.name)) add(prm.name, t);
+    }
+    if (!has(kInstanceAlias)) add(std::string(kInstanceAlias), std::string(qualified));
+    const std::string rest = trimmedCopy(given);
+    if (!rest.empty()) out += (out.empty() ? "" : "; ") + rest;
+    return out;
+}
+
+bool popupOfInstance(const Project& p, const View* here, std::string_view target, std::string& popup, std::string& arguments) {
+    const std::size_t dot = target.rfind('.');
+    if (dot == std::string_view::npos || dot == 0) return false;
+    const std::string path = trimmedCopy(target.substr(0, dot));
+    const std::string name = trimmedCopy(target.substr(dot + 1));
+    InstanceAt at;
+    bool found = false;
+    if (here && !path.empty()) found = instanceAt(p, here->name + "." + path, at);
+    if (!found) found = instanceAt(p, path, at);
+    if (!found) return false;
+    const View* pop = ownedPopup(p, *at.symbol, name);
+    if (!pop) return false;
+    const SymbolArguments args = symbolArguments(*at.symbol, at.instance, &p);
+    popup = pop->name;
+    arguments = withSymbolArguments({}, *at.symbol, at.path, &args);
+    return true;
+}
+
+View qualifiedOwnedPopup(const Project& p, const View& popup) {
+    const View* sym = popupOwner(p, popup);
+    if (!sym || (sym->functions.empty() && !hasInstances(*sym))) return popup;
+    View out = popup;
+    const auto calls = [&](std::string_view t, bool) { return qualifySymbolCalls(t, p, *sym, kInstanceAlias); };
+    for (auto& o : out.objects) rewriteNames(o, calls);
+    for (auto& sc : out.scripts)
+        if (sc.lang == ScriptLang::ST) sc.body = qualifySymbolCalls(sc.body, p, *sym, kInstanceAlias);
+    Object holder;
+    holder.actions = std::move(out.actions);
+    rewriteNames(holder, calls);
+    out.actions = std::move(holder.actions);
+    return out;
 }
 
 } // namespace hmi

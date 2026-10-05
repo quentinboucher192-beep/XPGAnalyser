@@ -6,6 +6,7 @@
 //  qui est appele. Les types et les divisions passent par exprcheck.
 // =============================================================================
 #include "HmiScriptCheck.hpp"
+#include "HmiSymbols.hpp"   // 1.11.10 : les fonctions des symboles
 #include "HmiApiVars.hpp"   // 1.11.1 (API-M) : API.<globale>, API.<Unite>.<variable>
 
 #include "HmiExpr.hpp"
@@ -560,7 +561,13 @@ private:
     [[nodiscard]] const LocalVar* local(std::string_view name) const { return parts_.local(name); }
     [[nodiscard]] bool counter(std::string_view name) const { return counters_.count(up(name)) > 0; }
     [[nodiscard]] bool selfName(std::string_view name) const { return sc_.function && up(sc_.function->name) == up(name); }
-    [[nodiscard]] const ViewParam* param(std::string_view name) const { return sc_.view ? sc_.view->param(name) : nullptr; }
+    [[nodiscard]] const ViewParam* param(std::string_view name) const {
+        if (!sc_.view) return nullptr;
+        if (const auto* prm = sc_.view->param(name)) return prm;
+        // 1.11.10 : une popup d'un symbole connait les parametres du symbole.
+        if (const View* owner = sc_.project ? popupOwner(*sc_.project, *sc_.view) : nullptr) return owner->param(name);
+        return nullptr;
+    }
 
     [[nodiscard]] std::vector<std::string> namePool() const {
         std::vector<std::string> pool;
@@ -825,10 +832,67 @@ private:
 
     // ------------------------------------------------------- les appels -----
     // [i] : le nom, [i+1] : '('. Rend l'index apres la ')'.
+    // 1.11.10 : le symbole dont le code est controle (le symbole lui-meme, ou celui qui
+    // porte la popup) - ses fonctions s'appellent par leur nom : Ouvrir().
+    const View* symbolHere() const {
+        if (!sc_.view || !sc_.project) return nullptr;
+        if (isSymbolView(*sc_.view)) return sc_.view;
+        if (sc_.view->ownerSymbol != kNoId)
+            if (const View* o = sc_.project->view(sc_.view->ownerSymbol); o && isSymbolView(*o)) return o;
+        return nullptr;
+    }
+    // 1.11.10 : [i, j) est-il un appel de fonction d'instance (Vanne_3.Ouvrir, SUPER.Ouvrir,
+    // Vue_Vannes.Vanne_3.Ouvrir) ? Rend la fonction ; nul : non.
+    const HmiFunction* instanceFunction(std::size_t i, std::size_t j) const {
+        if (!sc_.project || j <= i + 1) return nullptr;
+        std::vector<std::string> segs;
+        for (std::size_t k = i; k < j; ++k) {
+            if (toks_[k].k == Tok::K::Ident) segs.push_back(toks_[k].text);
+            else if (!isOp(k, ".")) return nullptr;
+        }
+        if (segs.size() < 2) return nullptr;
+        const Project& p = *sc_.project;
+        // SUPER.Ouvrir, Ouvrir d'une instance posee : depuis le symbole (ou la vue) controle.
+        const View* here = symbolHere() ? symbolHere() : sc_.view;
+        if (here) {
+            if (segs.size() == 2 && up(segs[0]) == kSuperName && symbolHere()) return symbolFunction(*symbolHere(), segs[1]);
+            const View* sym = nullptr;
+            for (const auto& o : here->objects)
+                if (o.kind == hmi::Kind::SymbolInstance && up(o.name) == up(segs[0])) sym = symbolOf(p, o);
+            for (std::size_t k = 1; sym && k < segs.size(); ++k) {
+                if (k + 1 == segs.size()) return symbolFunction(*sym, segs[k]);
+                const View* next = nullptr;
+                for (const auto& o : sym->objects)
+                    if (o.kind == hmi::Kind::SymbolInstance && up(o.name) == up(segs[k])) next = symbolOf(p, o);
+                sym = next;
+            }
+        }
+        std::string dotted;
+        for (const auto& sg : segs) dotted += (dotted.empty() ? "" : ".") + sg;
+        if (BoundFunction b; boundSymbolFunction(p, dotted, b))
+            if (const View* sv = p.viewByName(b.symbol)) return symbolFunction(*sv, b.function.name);
+        return nullptr;
+    }
+    const HmiFunction* pendingSymbolFn_{nullptr};
+    // Un appel de fonction d'instance : ses arguments controles comme ceux d'une fonction IHM.
+    std::size_t instanceCall(std::size_t i, std::size_t j, const HmiFunction& f, bool statement) {
+        (void)i;
+        pendingSymbolFn_ = &f;
+        const std::size_t after = call(j - 1, statement);
+        pendingSymbolFn_ = nullptr;
+        return after;
+    }
+
     std::size_t call(std::size_t i, bool statement) {
         if (atEnd(i)) return last();             // 1.10.4 : borne
         const Tok& name = toks_[i];
         const std::string U = up(name.text);
+        // 1.11.10 : une fonction du symbole, par son nom (dans le symbole, ses popups).
+        const HmiFunction* ownFn = nullptr;
+        if (!pendingSymbolFn_)
+            if (const View* sv = symbolHere()) ownFn = symbolFunction(*sv, name.text);
+        if (ownFn) pendingSymbolFn_ = ownFn;
+        struct Reset { const HmiFunction*& p; bool on; ~Reset() { if (on) p = nullptr; } } reset{pendingSymbolFn_, ownFn != nullptr};
         std::size_t k = i + 2;
         int n = 0, depth = 1;
         bool named = false, any = false;
@@ -870,7 +934,7 @@ private:
         } else if (isHmiFunction(U)) {
             found = true;
             for (const auto& a : kHmi) if (U == a.name) arity(a.min, a.max);
-        } else if (const auto* f = sc_.project ? sc_.project->functionByName(name.text) : nullptr) {
+        } else if (const auto* f = pendingSymbolFn_ ? pendingSymbolFn_ : sc_.project ? sc_.project->functionByName(name.text) : nullptr) {
             found = true;
             // Une entree qui a une valeur initiale (Poids : REAL := 0.5) est facultative.
 #ifdef XPG_HMI_LANG110
@@ -930,6 +994,11 @@ private:
                 continue;
             }
             const std::size_t e = std::min(pathEnd(k), b);
+            if (isOp(e, "("))                                   // 1.11.10 : x := Vanne_3.Etat() + 1
+                if (const HmiFunction* f = instanceFunction(k, e)) {
+                    k = std::max(instanceCall(k, e, *f, false), k + 1);
+                    continue;
+                }
             (void)path(k, e, false);
             ++k;            // les indices sont relus (leurs noms)
         }
@@ -1151,6 +1220,14 @@ private:
             i = e;
             return;
         }
+        if (isOp(j, "("))                                       // 1.11.10 : Vanne_3.Ouvrir(...);
+            if (const HmiFunction* f = instanceFunction(i, j)) {
+                const std::size_t after = instanceCall(i, j, *f, true);
+                const std::size_t e = statementEnd(after);
+                walkNames(after, e);
+                i = e;
+                return;
+            }
         const std::size_t e = statementEnd(i);
         walkNames(i, e);
         i = e;

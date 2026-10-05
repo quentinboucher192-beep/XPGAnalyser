@@ -1489,7 +1489,7 @@ HmiSymbolTabs::HmiSymbolTabs(std::string id, hmi::DocumentPtr doc, hmi::Id symbo
     : ui::Widget(std::move(id)), doc_(std::move(doc)), symbol_(symbol) {}
 
 void HmiSymbolTabs::setCurrent(int tab) {
-    if (tab < Drawing || tab > Operators || tab == current_) return;
+    if (tab < Drawing || tab > Popups || tab == current_) return;
     current_ = tab;
     invalidate();
     changed->emit(tab);
@@ -1500,11 +1500,17 @@ std::string HmiSymbolTabs::label(int tab) const {
     if (tab == Drawing) return "Dessin";
     if (tab == Alarms) return "Alarmes (" + std::to_string(sym ? sym->alarms.size() : 0) + ")";
     if (tab == Operators) return "Op\xC3\xA9rateurs (" + std::to_string(sym ? sym->operators.size() : 0) + ")";   // 1.10 (S2)
+    if (tab == Functions) return "Fonctions (" + std::to_string(sym ? sym->functions.size() : 0) + ")";            // 1.11.10
+    if (tab == Popups) {
+        std::size_t n = 0;
+        for (const auto& v : doc_->project.views) n += sym && v.ownerSymbol == sym->id ? 1 : 0;
+        return "Popups (" + std::to_string(n) + ")";
+    }
     return "Instances (" + std::to_string(sym ? hmi::instancesOf(doc_->project, sym->name).size() : 0) + ")";
 }
 
 bool HmiSymbolTabs::tabRect(int tab, gfx::Rect& out) const {
-    if (tab < Drawing || tab > Operators) return false;
+    if (tab < Drawing || tab > Popups) return false;
     const auto b = bounds();
     out = {b.x + 8 + 130.f * static_cast<float>(tab), b.y + 2, 124, b.h - 4};
     return true;
@@ -1513,7 +1519,7 @@ bool HmiSymbolTabs::tabRect(int tab, gfx::Rect& out) const {
 void HmiSymbolTabs::onPaint(const ui::PaintContext& ctx) {
     const auto& c = ctx.theme.color;
     ctx.r.fillRect(bounds(), c.panelBg);
-    for (int t = Drawing; t <= Operators; ++t) {
+    for (int t = Drawing; t <= Popups; ++t) {
         gfx::Rect r;
         (void)tabRect(t, r);
         const bool cur = t == current_;
@@ -1521,15 +1527,18 @@ void HmiSymbolTabs::onPaint(const ui::PaintContext& ctx) {
             ctx.r.fillRoundedRect(r, c.accent.withAlpha(40), 4);
             ctx.r.fillRect({r.x, r.y + r.h - 2, r.w, 2}, c.accent);
         }
-        drawHmiGlyph(ctx.r, t == Drawing ? HmiGlyph::Symbol : t == Alarms ? HmiGlyph::Bell : t == Operators ? HmiGlyph::Compare : HmiGlyph::Duplicate,
-                     {r.x + 6, r.y + (r.h - 14) / 2, 14, 14}, cur ? c.accent : c.textMuted);
+        // 1.11.10 : Fonctions en violet (comme leurs icones dans l'arbre).
+        const gfx::Color glyph = t == Functions ? ctx.theme.brand.scopeInOut : cur ? c.accent : c.textMuted;
+        drawHmiGlyph(ctx.r, t == Drawing ? HmiGlyph::Symbol : t == Alarms ? HmiGlyph::Bell : t == Operators ? HmiGlyph::Compare
+                          : t == Functions ? HmiGlyph::Code : t == Popups ? HmiGlyph::Popup : HmiGlyph::Duplicate,
+                     {r.x + 6, r.y + (r.h - 14) / 2, 14, 14}, glyph);
         ctx.r.drawText({r.x + 26, r.y + (r.h - 16) / 2}, label(t), ctx.theme.font.smallUi, cur ? c.accent : c.text);
     }
 }
 
 ui::EventResult HmiSymbolTabs::onEvent(const ui::InputEvent& ev) {
     if (const auto* m = std::get_if<ui::MouseDown>(&ev))
-        for (int t = Drawing; t <= Operators; ++t) {
+        for (int t = Drawing; t <= Popups; ++t) {
             gfx::Rect r;
             if (tabRect(t, r) && r.contains(m->pos)) {
                 setCurrent(t);

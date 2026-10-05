@@ -48,6 +48,14 @@ public:
     using Apply = std::function<void(core::CommandPtr)>;
     HmiFunctionsPane(std::string id, hmi::DocumentPtr doc, Apply apply);
 
+    // 1.11.10 : LES FONCTIONS D'UN SYMBOLE (le sous-onglet Fonctions de son editeur) : la
+    // meme liste, le meme editeur, sur View::functions du symbole `symbol` ; en plus, la
+    // case Virtuelle (une instance peut la redefinir) et les instances qui la redefinissent.
+    // Le corps lit les parametres du symbole (les diagnostics les connaissent).
+    void setSymbol(hmi::Id symbol);
+    [[nodiscard]] hmi::Id symbol() const noexcept { return symbol_; }
+    bool setVirtual(hmi::Id, bool on);
+
     void refresh();
     [[nodiscard]] hmi::Id selectedFunction() const;
     void selectFunction(hmi::Id);
@@ -121,11 +129,18 @@ private:
     void updateDiagnostics();
     void say(std::string text, bool warning = false);
     [[nodiscard]] const hmi::HmiFunction* current() const;
+    // 1.11.10 : la liste editee (les fonctions IHM, ou celles du symbole) et l'une d'elles.
+    [[nodiscard]] std::vector<hmi::HmiFunction>*       listOf(hmi::Project&) const;
+    [[nodiscard]] const std::vector<hmi::HmiFunction>* listOf(const hmi::Project&) const;
+    [[nodiscard]] hmi::HmiFunction*       fnOf(hmi::Project&, hmi::Id) const;
+    [[nodiscard]] const hmi::HmiFunction* fnOf(const hmi::Project&, hmi::Id) const;
+    [[nodiscard]] const hmi::View*        symbolView() const;
     [[nodiscard]] bool nameAllowed(const std::string& name, hmi::Id self, std::string* why) const;
 
     hmi::DocumentPtr   doc_;
     Apply              apply_;
     Hosts              hosts_;
+    hmi::Id            symbol_{hmi::kNoId};   // 1.11.10 : le symbole dont on edite les fonctions
     HmiToolStrip*      tools_{nullptr};
     ui::Splitter*      split_{nullptr};
     ui::TableView*     functions_{nullptr};

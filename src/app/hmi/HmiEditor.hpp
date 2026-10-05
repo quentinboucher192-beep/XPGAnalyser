@@ -40,6 +40,8 @@ namespace app {
 class HmiSymbolTabs;          // 1.9 : HmiObjectAlarmPanes.hpp
 class HmiSymbolAlarmsPane;
 class HmiOperatorsPane;       // 1.10 (S2) : HmiOperatorPanes.hpp
+class HmiFunctionsPane;       // 1.11.10 : HmiFunctionPanes.hpp (les fonctions du symbole)
+class HmiSymbolPopupsPane;    // 1.11.10 : HmiSymbolPopupsPane.hpp
 namespace hmitree { struct Line; }   // 1.10.3 (Q1103) : HmiTreeData.hpp
 class HmiPropsFilterBar;      // 1.10.3 : les filtres de l'onglet Proprietes (HmiEditor.cpp)
 class HmiEditor final : public ui::Widget {
@@ -75,6 +77,8 @@ public:
     [[nodiscard]] HmiSymbolTabs*       symbolTabs() noexcept { return symbolTabs_; }
     [[nodiscard]] HmiSymbolAlarmsPane* symbolAlarms() noexcept { return symbolAlarms_; }
     [[nodiscard]] HmiOperatorsPane*    symbolOperators() noexcept { return symbolOperators_; }   // 1.10 (S2)
+    [[nodiscard]] HmiFunctionsPane*    symbolFunctions() noexcept { return symbolFunctions_; }   // 1.11.10
+    [[nodiscard]] HmiSymbolPopupsPane* symbolPopups() noexcept { return symbolPopups_; }         // 1.11.10
     [[nodiscard]] HmiActionsPanel&  actions() noexcept { return *actions_; }
     // Lot 6 : l'onglet Contenu (lignes d'un tableau, plumes, etats, recette).
     [[nodiscard]] HmiContentPanel&  content() noexcept { return *content_; }
@@ -198,6 +202,8 @@ private:
     HmiSymbolTabs*       symbolTabs_{nullptr};     // 1.9 : un symbole - Dessin | Alarmes | Instances
     HmiSymbolAlarmsPane* symbolAlarms_{nullptr};
     HmiOperatorsPane*    symbolOperators_{nullptr};   // 1.10 (S2) : le sous-onglet Operateurs
+    HmiFunctionsPane*    symbolFunctions_{nullptr};   // 1.11.10 : le sous-onglet Fonctions
+    HmiSymbolPopupsPane* symbolPopups_{nullptr};      // 1.11.10 : le sous-onglet Popups
     core::ConnectionScope links_;
     bool              syncing_{false};
     History           history_;

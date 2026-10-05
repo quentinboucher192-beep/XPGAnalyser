@@ -1347,6 +1347,10 @@ private:
     // entree du moteur (tick, clics) - jamais pendant un cycle : un script qui
     // navigue garde la vue qu'il est en train d'executer.
     mutable std::map<Id, View>       composed_;
+    // 1.11.10 : les fonctions de symbole appelees ("Vue.Instance.Fonction", en majuscules),
+    // pretes a tourner (nul : pas une fonction d'instance) ; refaites avec composed_.
+    std::map<std::string, std::shared_ptr<const HmiFunction>> boundCalls_;
+    [[nodiscard]] const HmiFunction* symbolCall(std::string_view call);
     std::map<Id, Id>                 recipeSelection_;  // gestionnaire -> jeu choisi
     std::map<Id, std::string>        tableSources_;     // tableau -> fichier externe (Lier un tableau)
     bool                             systemShown_{false};
