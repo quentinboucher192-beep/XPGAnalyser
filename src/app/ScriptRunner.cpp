@@ -4908,6 +4908,43 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     //   vars-dossier "Esclaves simul\xC3\xA9s" [replier]   deplie (ou replie) un dossier ; une structure
     //                                                 d'esclave : "Esclaves simul\xC3\xA9s/SYS.Slave.Variateur_ATV320"
     //   vars-choisir "SYS.Slave.Variateur_ATV320.Read"  choisit la ligne (ses dossiers se deplient)
+    // 1.11.8 : le volet Variables IHM (l'onglet courant) -
+    //   varihm deplier "V[0]" | replier "V[0]"    deplie (replie) une variable ou un membre compose
+    //   varihm choisir "V[0].NOM"                 choisit la ligne (ses parents se deplient)
+    //   varihm menu "V[0].NOM"                    le vrai clic droit sur sa ligne (le menu du volet)
+    if (cmd == "varihm") {
+        HmiVariablesPane* pane = nullptr;
+        if (auto* page = currentPage())
+            walk(*page, [&](ui::Widget& x) {
+                if (!pane) pane = dynamic_cast<HmiVariablesPane*>(&x);
+            });
+        if (!pane) { fail("l'onglet courant n'est pas IHM \xC2\xB7 Variables IHM (" + cmd + ")"); return Step::Next; }
+        const std::string what = arg(1), path = arg(2);
+        if (what == "deplier" || what == "replier") {
+            pane->setExpanded(path, what == "deplier");
+            return Step::Yield;
+        }
+        if (what == "choisir" || what == "menu") {
+            pane->selectPath(path);
+            const int r = pane->rowOf(path);
+            if (r < 0) { fail("varihm : ligne introuvable : " + path); return Step::Next; }
+            if (what == "choisir") return Step::Yield;
+            auto& t = pane->table();
+            gfx::Rect rr{};
+            bool ok = false;
+            for (std::size_t i = 0; i < t.visibleRowCount() && !ok; ++i)
+                if (t.viewRow(i) == static_cast<ui::RowIndex>(r)) ok = t.rowRect(i, rr);
+            if (!ok) {
+                if (retries_ < 3) return Step::Retry;
+                fail("varihm menu : ligne hors de la vue : " + path);
+                return Step::Next;
+            }
+            click({rr.x + 120.f, rr.y + rr.h * 0.5f}, MouseButton::Right, 1, {});
+            return Step::Yield;
+        }
+        fail("varihm : " + what + " ? (deplier, replier, choisir, menu)");
+        return Step::Next;
+    }
     if (cmd == "vars-dossier" || cmd == "vars-choisir") {
         auto* pane = dynamic_cast<HmiPublicVarsPane*>(currentPage());
         if (!pane) { fail("l'onglet courant n'est pas IHM \xC2\xB7 Variables syst\xC3\xA8me et d'instances (" + cmd + ")"); return Step::Next; }

@@ -1,0 +1,63 @@
+# =============================================================================
+#  Session 1118 : VARIABLES IHM - UN MEMBRE INTERNE OU ATTRIBUE A L'EQUIPEMENT,
+#  RECALCULER LA PLACE MEMOIRE, LE DEPART D'UN MEMBRE COMPOSE.
+#  Le projet : une copie d'Armoire_Gaz (preparer-projet-1115, puis -1118) avec
+#  V : ARRAY[0..63] OF Vanne liee a l'Esclave virtuel 1 a %MW17 (la capture du client).
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+arbre "IHM/Programmation générale/Variables IHM"
+attendre 8
+
+# ---- 1. V[0].NOM, attribuee a l'equipement (comme la capture) ---------------------
+varihm deplier "V"
+varihm deplier "V[0]"
+varihm choisir "V[0].NOM"
+attendre 3
+capture 1118_01_v0_nom_attribuee.png
+
+# ---- 2. Le clic droit sur la ligne : Rendre interne ---------------------------------
+varihm menu "V[0].NOM"
+attendre 2
+capture 1118_02_clic_droit_rendre_interne.png
+choisir "Rendre interne (gardé dans l'IHM)"
+attendre 3
+capture 1118_03_v0_nom_interne.png
+
+# ---- 3. Dans toutes les cases (V[*].NOM), puis Recalculer la place memoire -------------
+varihm menu "V[0].NOM"
+attendre 2
+choisir "Rendre interne dans toutes les cases"
+attendre 3
+varihm deplier "V[1]"
+attendre 2
+capture 1118_04_nom_interne_partout.png
+outil "Recalculer la place mémoire"
+attendre 3
+varihm choisir "V"
+attendre 3
+capture 1118_05_place_recalculee.png
+
+# ---- 4. Le depart d'un membre compose : V[2] a %MW500 -------------------------------
+varihm choisir "V[2]"
+attendre 2
+propriete "Adresse" "%MW500"
+attendre 3
+varihm deplier "V[2]"
+varihm choisir "V[2].OUV"
+attendre 3
+capture 1118_06_depart_v2.png
+
+# ---- 5. L'inspecteur : la ligne Liaison d'un membre ---------------------------------
+varihm choisir "V[0].OUV"
+attendre 2
+propriete-clic "Liaison"
+attendre 2
+capture 1118_07_inspecteur_liaison.png
+touche Escape
+attendre 1
+quitter
