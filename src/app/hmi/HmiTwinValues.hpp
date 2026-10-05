@@ -37,6 +37,7 @@
 #include <functional>
 #include <map>
 #include <optional>
+#include <string_view>
 #include <set>
 #include <string>
 #include <utility>
@@ -138,6 +139,17 @@ public:
     [[nodiscard]] bool nodeOpen(const std::string& node) const { return folded_.count(node) == 0; }
     // Les lignes montrees (pas repliees), pour les tests.
     [[nodiscard]] std::size_t shownLines() const;
+    // 1.11.6 : LE CLIC DROIT sur une ligne - Tout deplier, Deplier, Replier, Tout replier,
+    // Forcer, Deforcer (la ligne, ou toutes les valeurs sous un esclave ou un noeud).
+    enum MenuItem : int { MExpandAll = 1, MExpand, MCollapse, MCollapseAll, MForce, MUnforce };
+    bool openContextMenu(std::size_t line, gfx::Point at);
+    [[nodiscard]] ui::PopupMenu* contextMenu() noexcept { return ctxMenu_; }
+    bool contextAction(std::size_t line, int item);        // ce que fait l'entree (les tests, les scripts)
+    void setAllOpen(bool open);
+    // Les lignes de valeurs sous une ligne (un esclave, un noeud) ; une valeur : elle-meme.
+    [[nodiscard]] std::vector<std::size_t> rowsUnder(std::size_t line) const;
+    // 1.11.6 : « Sur la vue actuelle » (l'onglet de la simulation) : la case de la barre.
+    [[nodiscard]] ui::Checkbox* viewBox() noexcept { return viewBox_; }
 
     // Les signaux (equipement, cle...). Une poignee tiree : au lacher.
     const core::SignalPtr<const std::string&, const std::string&, bool>           animateToggled = core::Signal<const std::string&, const std::string&, bool>::create();
@@ -148,6 +160,9 @@ public:
     const core::SignalPtr<const std::string&, const std::string&>                 rowChosen = core::Signal<const std::string&, const std::string&>::create();
     const core::SignalPtr<const std::string&, const std::string&>                 rowActivated = core::Signal<const std::string&, const std::string&>::create();
     const core::SignalPtr<const std::string&>                                      addRequested = core::Signal<const std::string&>::create();
+    // 1.11.6 : forcer (vrai) ou deforcer plusieurs valeurs d'un esclave d'un coup (le clic droit).
+    const core::SignalPtr<const std::string&, const std::vector<std::string>&, bool> forceMany =
+        core::Signal<const std::string&, const std::vector<std::string>&, bool>::create();
 
     [[nodiscard]] gfx::Rect eventBounds() const override;
 
@@ -211,6 +226,9 @@ private:
     bool                                     bandOn_{true};
     float                                    scroll_{0};
     ui::PaintedScrollBar                     sbar_;   // 1.11.4 : la barre se tire
+    ui::PopupMenu*                           ctxMenu_{nullptr};   // 1.11.6 : le clic droit
+    std::size_t                              ctxLine_{std::string::npos};
+    ui::Checkbox*                            viewBox_{nullptr};   // 1.11.6 : sur la vue actuelle
     ui::DropDown*                            twinBox_{nullptr};
     ui::DropDown*                            showBox_{nullptr};
     ui::InputText*                           searchBox_{nullptr};
@@ -256,6 +274,13 @@ public:
     void setTwinFilter(const std::string& equipment);
     void setShow(int mode);
     void setSearch(const std::string& text);
+    // 1.11.6 : sur la vue actuelle - seulement les valeurs dont la variable est lue par la vue
+    // montree (`covers`) ; nul : rien a filtrer.
+    void setViewFilter(std::function<bool(std::string_view)> covers);
+    void setOnlyView(bool on);
+    [[nodiscard]] bool onlyView() const noexcept { return onlyView_; }
+    // 1.11.6 : forcer (a leur valeur du moment) ou deforcer ces valeurs d'un esclave - une commande.
+    bool forceRows(const std::string& equipment, const std::vector<std::string>& addresses, bool on, std::string* why = nullptr);
 
     // Les actions (la ligne, la fiche, les scripts, les tests).
     bool setAnimated(const std::string& equipment, const std::string& address, bool on, std::string* why = nullptr);
@@ -311,6 +336,8 @@ private:
     std::string                         filter_;
     int                                 show_{0};
     std::string                         search_;
+    std::function<bool(std::string_view)> covers_;                 // 1.11.6 : sur la vue actuelle
+    bool                                onlyView_{false};
     std::string                         selEquip_, selKey_;
     std::map<std::string, std::pair<double, double>> bars_;   // "equipement|adresse" -> la barre reglee
     std::map<std::string, std::pair<double, double>> autoBars_;

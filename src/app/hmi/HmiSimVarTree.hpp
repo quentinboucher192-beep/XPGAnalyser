@@ -30,6 +30,7 @@
 #include <map>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace app {
@@ -68,6 +69,14 @@ public:
 
     // La recherche.
     void setSearch(const std::string& text);
+    // 1.11.6 : « SUR LA VUE ACTUELLE » - la case a cote de la recherche ne garde que
+    // les variables que lit la vue montree et ses popups ouvertes (leurs symboles
+    // developpes, a toute profondeur). `covers` le dit pour un chemin ; `viewName`
+    // la nomme (le compte, la liste vide). Nul : la case est grisee.
+    void setViewFilter(std::function<bool(std::string_view)> covers, std::string viewName);
+    void setOnlyView(bool on);
+    [[nodiscard]] bool onlyView() const noexcept { return onlyView_; }
+    [[nodiscard]] ui::Checkbox* viewBox() noexcept { return viewBox_; }
     [[nodiscard]] ui::InputText* searchBox() noexcept { return search_; }
     // Un noeud ouvert ou replie (son chemin : Four1.Vannes).
     void setOpen(const std::string& path, bool open);
@@ -84,6 +93,17 @@ public:
     [[nodiscard]] ui::InputText* valueEditor() noexcept;
     // Ce qu'a dit le dernier geste (« Four1.Temperature forcee a 80 »), pour la barre d'etat.
     const core::SignalPtr<const std::string&, bool> said = core::Signal<const std::string&, bool>::create();
+    // 1.11.6 : LE CLIC DROIT sur une ligne - Tout deplier, Deplier, Replier, Tout replier,
+    // Forcer, Deforcer (la variable, ou toutes celles montrees sous un noeud).
+    enum MenuItem : int { MExpandAll = 1, MExpand, MCollapse, MCollapseAll, MForce, MUnforce };
+    bool openContextMenu(const std::string& path, gfx::Point at);
+    [[nodiscard]] ui::PopupMenu* contextMenu() noexcept { return ctxMenu_; }
+    bool contextAction(const std::string& path, int item);
+    void setAllOpen(bool open);
+    // Les variables montrees (la recherche, la vue) sous ce chemin ; une variable : elle-meme.
+    [[nodiscard]] std::vector<std::string> leavesUnder(const std::string& path) const;
+    // Au-dela, Forcer refuse : un noeud plus petit (l'automate a des dizaines de milliers de cases).
+    static constexpr std::size_t kMaxForceAtOnce = 2000;
     // Pour les scripts et les tests : ou est la ligne de ce chemin (faux : pas montree).
     [[nodiscard]] bool rowRect(const std::string& path, gfx::Rect& out) const;
     // Amener la ligne de ce chemin a l'ecran : ses noeuds s'ouvrent, la liste defile
@@ -126,6 +146,13 @@ private:
     ui::InputText*               search_{nullptr};
     ui::InputText*               edit_{nullptr};
     std::string                  editPath_;
+    std::function<bool(std::string_view)> covers_;        // 1.11.6 : sur la vue actuelle
+    std::string                  viewName_;
+    bool                         onlyView_{false};
+    ui::Checkbox*                viewBox_{nullptr};
+    ui::PopupMenu*               ctxMenu_{nullptr};       // 1.11.6 : le clic droit
+    std::string                  ctxPath_;
+    [[nodiscard]] bool shownLeaf(const Node& n) const;   // la recherche et la vue la gardent-elles ?
     core::ConnectionScope        links_;
 };
 

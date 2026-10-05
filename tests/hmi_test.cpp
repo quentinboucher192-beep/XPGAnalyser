@@ -34,6 +34,7 @@
 #include "../src/hmi/HmiScriptCheck.hpp"   // 1.10 : les erreurs des scripts, a leur place
 #include "../src/hmi/HmiStore.hpp"
 #include "../src/hmi/HmiSymbols.hpp"
+#include "../src/hmi/HmiViewPaths.hpp"   // 1.11.6
 #include "../src/hmi/HmiObjectAlarms.hpp"   // 1.9
 #include "../src/hmi/HmiAlarmGroups.hpp"    // 1.10.2 (AL)
 #include "../src/hmi/HmiAlarmGroupCommands.hpp"   // 1.10.2 (AL) : Ctrl+Z
@@ -805,6 +806,95 @@ void geometrieEnMarche1114() {
 
 // 1.11.4 : un parametre a repere, en marche - Name := '$Nom$' (une constante texte) se lit
 // 'Nom' ; Value := $UINTS$ (une variable) se lit UINTS, dans un texte comme dans une position.
+// =============================================================================
+//  1.11.6 (« dans les pages Esclaves simules, IHM, API, ajouter une option 'Sur la vue
+//  actuelle' en reperant les profondeurs des symboles d'instances ») : les variables
+//  que lit une vue, ses symboles developpes a toute profondeur ; le filtre.
+// =============================================================================
+void surLaVueActuelle1116() {
+    std::printf("1.11.6 : les variables lues par la vue (sur la vue actuelle)\n");
+    namespace vp = hmi::viewpaths;
+    // Le code : un index calcule devient un joker, un appel n'est pas une variable, les chaines sont sautees.
+    {
+        const auto c = vp::inCode("IF V[i].Pos > 10 AND ABS(Four1.Temperature) < Seuil THEN Msg := 'Four2.Temperature'; END_IF");
+        const auto has = [&](const char* x) { return std::find(c.begin(), c.end(), x) != c.end(); };
+        check(has("V[*].Pos") && has("i") && has("Four1.Temperature") && has("Seuil") && has("Msg"), "le code : V[*].Pos, i, Four1.Temperature, Seuil, Msg");
+        check(!has("ABS") && !has("IF") && !has("Four2.Temperature"), "le code : ni l'appel ABS, ni IF, ni le texte entre apostrophes");
+        const auto t = vp::inTemplate("Pression : {API.Armoires[0].ana.PT1.mes:0.0} bar, {Marche:marche|arr\xC3\xAAt}");
+        check(t.size() == 2 && t[0] == "API.Armoires[0].ana.PT1.mes" && t[1] == "Marche", "le texte \xC3\xA0 trous : ses deux trous, sans leur format");
+        check(vp::inCode("%MW100 + 1").size() == 1 && vp::inCode("%MW100 + 1")[0] == "%MW100", "une adresse %MW100");
+    }
+    // Le filtre : un prefixe couvre ses membres ; un joker couvre tout index ; API. ne compte pas.
+    {
+        vp::Filter f;
+        f.set({"Four1", "V[*].Pos", "API.Armoires[0].ana.PT1.mes", "Vannes[2].Ouverte"});
+        check(f.size() == 4, "4 chemins");
+        check(f.covers("Four1.Vannes[1].Position") && f.covers("four1.temperature"), "Four1 couvre ses membres (sans casse)");
+        check(f.covers("V[3].Pos") && f.covers("V[0].Pos") && !f.covers("V[3].Ouv"), "V[*].Pos couvre V[3].Pos, pas V[3].Ouv");
+        check(f.covers("Armoires[0].ana.PT1.mes") && !f.covers("Armoires[1].ana.PT1.mes"), "API.Armoires[0]... couvre Armoires[0]..., pas Armoires[1]");
+        check(f.covers("Vannes[2].Ouverte") && !f.covers("Vannes[2].Fermee") && !f.covers("Four2.Temperature"), "Vannes[2].Ouverte seule ; pas Four2");
+    }
+    // La vue : ses symboles developpes, a toute profondeur (Valve -> V := Vannes[2] ; Outer -> W := Vannes[5] -> V := W).
+    Project p;
+    View valve = makeView(p, "S_Vanne");
+    valve.role = "symbole";
+    valve.width = 60;
+    valve.height = 60;
+    valve.params.push_back({"V", "", "", "", ParamMode::Reference});
+    const Id body = edit::add(p, valve, Kind::Rectangle, 0, 0);
+    valve.object(body)->name = "Corps";
+    valve.object(body)->setExpr("visible", "V.Pos > 10");
+    const Id label = edit::add(p, valve, Kind::Text, 0, 40);
+    valve.object(label)->name = "Nom";
+    valve.object(label)->set("text", "{V.Nom}");
+    p.views.push_back(valve);
+    View outer = makeView(p, "S_Ligne");
+    outer.role = "symbole";
+    outer.width = 200;
+    outer.height = 100;
+    outer.params.push_back({"W", "", "", "", ParamMode::Reference});
+    const Id in = placeSymbol(p, outer, "S_Vanne", 10, 10);
+    outer.object(in)->name = "Dedans";
+    outer.object(in)->set("params", "V := W");
+    p.views.push_back(outer);
+    View v = makeView(p, "Vue_Vannes");
+    const Id a = placeSymbol(p, v, "S_Vanne", 100, 100);
+    v.object(a)->name = "Valve_1";
+    v.object(a)->set("params", "V := Vannes[2]");
+    const Id b = placeSymbol(p, v, "S_Ligne", 400, 100);
+    v.object(b)->name = "Ligne_1";
+    v.object(b)->set("params", "W := Vannes[5]");
+    const Id btn = edit::add(p, v, Kind::Rectangle, 10, 10);
+    v.object(btn)->name = "Bouton";
+    Action act;
+    act.trigger = Trigger::Click;
+    act.operation = Operation::Assign;
+    act.target = "Consigne_Four";
+    act.value = "Four1.Temperature + 5";
+    v.object(btn)->actions.push_back(act);
+    p.views.push_back(v);
+    const View composed = expandInstances(p, v);
+    vp::Filter f;
+    f.set(vp::ofView(composed));
+    check(f.covers("Vannes[2].Pos") && f.covers("Vannes[2].Nom"), "Valve_1 (V := Vannes[2]) : Vannes[2].Pos et .Nom lus");
+    check(f.covers("Vannes[5].Pos") && f.covers("Vannes[5].Nom"), "un symbole dans un symbole (W := Vannes[5], V := W) : Vannes[5].Pos lu");
+    check(!f.covers("Vannes[3].Pos") && !f.covers("V.Pos") && !f.covers("W.Pos"), "ni Vannes[3], ni les noms des param\xC3\xA8tres (V, W)");
+    check(f.covers("Consigne_Four") && f.covers("Four1.Temperature"), "les actions : la cible et la valeur");
+    check(!f.covers("Four2.Temperature"), "une variable qu'aucun objet ne lit : non");
+    // Les parametres de la vue (une popup ouverte pour Vannes[7]) : par sa portee.
+    {
+        View pop = makeView(p, "Pop_Vanne");
+        pop.params.push_back({"M", "", "", "", ParamMode::Reference});
+        const Id t = edit::add(p, pop, Kind::Text, 0, 0);
+        pop.object(t)->setExpr("text", "M.Pos");
+        Scope sc;
+        sc.setAlias("M", "Vannes[7]");
+        vp::Filter g;
+        g.set(vp::ofView(pop, &sc));
+        check(g.covers("Vannes[7].Pos") && !g.covers("M.Pos"), "une popup ouverte pour Vannes[7] : M.Pos se lit Vannes[7].Pos");
+    }
+}
+
 void parametresReperesEnMarche1114() {
     std::printf("1.11.4 : les reperes dans les parametres d'une instance, en marche\n");
     Project p;
@@ -20300,6 +20390,7 @@ int main(int argc, char** argv) {
     enMarche();
     geometrieEnMarche1114();   // 1.11.4 : x, y, w, h, rot, miroirs calcules - instance, groupe, objet
     parametresReperesEnMarche1114();   // 1.11.4 : '$Nom$' et $UINTS$ en arguments, en marche
+    surLaVueActuelle1116();            // 1.11.6 : les variables lues par la vue
     actions();
     scripts();
     transitions();

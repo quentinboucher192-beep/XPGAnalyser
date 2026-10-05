@@ -251,6 +251,12 @@ HmiTwinValues::HmiTwinValues(std::string id, bool compact) : ui::Widget(std::mov
             closeZoneEditor(!raw->cancelled);
         });
     }
+    // 1.11.6 : sur la vue actuelle (l'onglet de la simulation).
+    if (compact_) {
+        viewBox_ = &static_cast<ui::Checkbox&>(addChild(std::make_unique<ui::Checkbox>("Sur la vue actuelle", base + ".view")));
+        viewBox_->setTooltip("Seulement les valeurs dont la variable est lue par la vue montr\xC3\xA9" "e (et ses popups ouvertes) : "
+                             "ses objets, ses textes, ses actions, ses scripts, et ceux de ses symboles, \xC3\xA0 toute profondeur.");
+    }
     menu_ = &static_cast<ui::PopupMenu&>(addChild(std::make_unique<ui::PopupMenu>(base + ".kinds")));
     links_ += menu_->itemChosen->connect([this](int item) {
         const std::string e = menuEquip_, k = menuKey_;
@@ -259,9 +265,123 @@ HmiTwinValues::HmiTwinValues(std::string id, bool compact) : ui::Widget(std::mov
             kind = std::string(hmi::behaviorKindKey(hmi::kBehaviorKinds[static_cast<std::size_t>(item - 1)]));
         kindChosen->emit(e, k, kind);
     });
+    // 1.11.6 : le menu du clic droit.
+    ctxMenu_ = &static_cast<ui::PopupMenu&>(addChild(std::make_unique<ui::PopupMenu>(base + ".context")));
+    links_ += ctxMenu_->itemChosen->connect([this](int item) { (void)contextAction(ctxLine_, item); });
 }
 
 HmiTwinValues::~HmiTwinValues() = default;
+
+// ---------------------------------------------------------- 1.11.6 : le clic droit ---
+std::vector<std::size_t> HmiTwinValues::rowsUnder(std::size_t line) const {
+    std::vector<std::size_t> out;
+    if (line >= lines_.size()) return out;
+    const auto& l = lines_[line];
+    if (l.kind == Line::Kind::Row) {
+        out.push_back(line);
+        return out;
+    }
+    for (std::size_t j = line + 1; j < lines_.size(); ++j) {
+        const auto& x = lines_[j];
+        if (x.kind == Line::Kind::Group) break;
+        if (l.kind == Line::Kind::Node && (x.equipment != l.equipment || x.depth <= l.depth)) break;
+        if (x.kind == Line::Kind::Row) out.push_back(j);
+    }
+    return out;
+}
+
+void HmiTwinValues::setAllOpen(bool open) {
+    folded_.clear();
+    if (!open)
+        for (const auto& l : lines_) {
+            if (l.kind == Line::Kind::Group) folded_.insert(l.equipment);
+            else if (l.kind == Line::Kind::Node) folded_.insert(l.node);
+        }
+    computeHidden();
+    invalidate();
+}
+
+bool HmiTwinValues::contextAction(std::size_t line, int item) {
+    if (line >= lines_.size()) return false;
+    const Line l = lines_[line];
+    // La cle de repli de la ligne : un esclave (son nom), un noeud (sa cle), une valeur (son noeud).
+    const std::string key = l.kind == Line::Kind::Group ? l.equipment
+                          : l.kind == Line::Kind::Node  ? l.node
+                          : l.node.empty()              ? l.equipment
+                                                        : l.node;
+    switch (item) {
+        case MExpandAll: setAllOpen(true); return true;
+        case MCollapseAll: setAllOpen(false); return true;
+        case MExpand:
+            if (l.kind == Line::Kind::Row) return false;
+            folded_.erase(key);
+            unfoldAncestors(line);
+            computeHidden();
+            invalidate();
+            return true;
+        case MCollapse:
+            folded_.insert(key);
+            computeHidden();
+            invalidate();
+            return true;
+        case MForce: case MUnforce: {
+            std::vector<std::string> keys;
+            for (const auto j : rowsUnder(line))
+                if (lines_[j].forced != (item == MForce) && lines_[j].note.empty()) keys.push_back(lines_[j].key);
+            if (keys.empty()) return false;
+            forceMany->emit(l.equipment, keys, item == MForce);
+            return true;
+        }
+        default: return false;
+    }
+}
+
+bool HmiTwinValues::openContextMenu(std::size_t line, gfx::Point at) {
+    if (!ctxMenu_ || line >= lines_.size()) return false;
+    const auto& l = lines_[line];
+    if (l.kind == Line::Kind::Add) return false;
+    const auto rows = rowsUnder(line);
+    std::size_t forced = 0, free = 0;
+    for (const auto j : rows) {
+        if (!lines_[j].note.empty()) continue;            // une recopie, un compteur : rien a forcer ici
+        (lines_[j].forced ? forced : free) += 1;
+    }
+    const bool row = l.kind == Line::Kind::Row;
+    const bool open = l.kind == Line::Kind::Group ? !folded(l.equipment) : l.kind == Line::Kind::Node ? nodeOpen(l.node) : true;
+    std::vector<ui::PopupMenu::Item> items;
+    ui::PopupMenu::Item head;
+    head.heading = true;
+    head.label = l.kind == Line::Kind::Group ? l.equipment : l.title;
+    head.shortcut = row ? std::string{} : std::to_string(rows.size()) + (rows.size() > 1 ? " valeurs" : " valeur");
+    items.push_back(head);
+    const auto item = [&](int id, std::string label, bool enabled, std::string why = {}) {
+        ui::PopupMenu::Item it;
+        it.id = id;
+        it.label = std::move(label);
+        it.enabled = enabled;
+        it.disabledReason = std::move(why);
+        items.push_back(std::move(it));
+    };
+    const auto sep = [&] {
+        ui::PopupMenu::Item it;
+        it.separator = true;
+        items.push_back(it);
+    };
+    item(MExpandAll, "Tout d\xC3\xA9plier", true);
+    item(MExpand, "D\xC3\xA9plier", !row && !open, row ? "une valeur ne se d\xC3\xA9plie pas" : "d\xC3\xA9j\xC3\xA0 d\xC3\xA9pli\xC3\xA9");
+    item(MCollapse, row ? "Replier (son n\xC5\x93ud)" : "Replier", row || open, "d\xC3\xA9j\xC3\xA0 repli\xC3\xA9");
+    item(MCollapseAll, "Tout replier", true);
+    sep();
+    item(MForce, row ? "Forcer (\xC3\xA0 sa valeur)" : "Forcer les " + std::to_string(free) + " libres (\xC3\xA0 leur valeur)", free > 0,
+         "rien de libre \xC3\xA0 forcer");
+    item(MUnforce, row ? "D\xC3\xA9" "forcer" : "D\xC3\xA9" "forcer les " + std::to_string(forced), forced > 0, "rien de forc\xC3\xA9");
+    ctxLine_ = line;
+    ctxMenu_->setItems(std::move(items));
+    auto* root = rootWidget();
+    const auto sb = root ? root->bounds() : bounds();
+    ctxMenu_->openAt(at, {sb.w, sb.h});
+    return true;
+}
 
 void HmiTwinValues::setLines(std::vector<Line> lines) {
     lines_ = std::move(lines);
@@ -493,9 +613,11 @@ void HmiTwinValues::onLayout() {
     const auto b = bounds();
     // Le menu du mouvement : des bornes non vides, sinon il n'est jamais dessine (la passe du dessus).
     if (menu_) menu_->setBounds(b);
+    if (ctxMenu_) ctxMenu_->setBounds(b);     // 1.11.6 : sinon il n'est jamais dessine (la passe du dessus)
     if (compact_) {
-        // 1.11.5 : la recherche, en haut de l'onglet.
-        if (searchBox_) searchBox_->setBounds({b.x + 8.f, b.y + 5.f, std::min(360.f, std::max(80.f, b.w - 16.f - 200.f)), 26.f});
+        // 1.11.5 : la recherche, en haut de l'onglet ; 1.11.6 : la case « Sur la vue actuelle » a cote.
+        if (searchBox_) searchBox_->setBounds({b.x + 8.f, b.y + 5.f, std::min(320.f, std::max(80.f, b.w - 16.f - 200.f - 170.f)), 26.f});
+        if (viewBox_ && searchBox_) viewBox_->setBounds({searchBox_->bounds().right() + 10.f, b.y + 7.f, 160.f, 22.f});
         return;
     }
     if (!twinBox_) return;
@@ -1112,7 +1234,7 @@ void HmiTwinValues::onPaint(const ui::PaintContext& ctx) {
         // 1.11.5 : la barre de la recherche (et ce que dit l'onglet, a droite).
         g.fillRect({b.x, b.y, b.w, kBarH}, th.color.panelBg);
         if (searchBox_ && !status_.empty()) {
-            const float sx = searchBox_->bounds().x + searchBox_->bounds().w + 12;
+            const float sx = viewBox_ ? viewBox_->bounds().right() + 8.f : searchBox_->bounds().x + searchBox_->bounds().w + 12;
             g.drawText({sx, b.y + (kBarH - 16) * 0.5f}, fit(g, status_, kSmall, b.x + b.w - sx - 8), kSmall, th.color.ok);
         }
     }
@@ -1319,6 +1441,13 @@ ui::EventResult HmiTwinValues::onEvent(const ui::InputEvent& ev) {
         return ui::EventResult::Consumed;
     }
     if (const auto* d = std::get_if<ui::MouseDown>(&ev)) {
+        // 1.11.6 : le clic droit sur une ligne - deplier, replier, forcer, deforcer.
+        if (d->button == ui::MouseButton::Right) {
+            const auto [i, part] = hit(d->pos);
+            (void)part;
+            if (i == std::string::npos || i >= lines_.size()) return ui::EventResult::Ignored;
+            return openContextMenu(i, d->pos) ? ui::EventResult::Consumed : ui::EventResult::Ignored;
+        }
         if (d->button != ui::MouseButton::Left) return ui::EventResult::Ignored;
         // Les courbes : replier, la fenetre, figer, la bande.
         if (!compact_) {
@@ -1452,6 +1581,9 @@ void TwinValuesController::attach(HmiTwinValues& w) {
         if (changed) changed();
     });
     links_ += w.addRequested->connect([this](const std::string& e) { (void)addRegister(e); });
+    links_ += w.forceMany->connect([this](const std::string& e, const std::vector<std::string>& keys, bool on) { (void)forceRows(e, keys, on); });
+    if (auto* v = w.viewBox())
+        links_ += v->stateChanged->connect([this](ui::Checkbox::State st) { setOnlyView(st == ui::Checkbox::State::Checked); });
     if (auto* t = w.twinFilter())
         links_ += t->selectionChanged->connect([this, t](int) {
             const auto* item = t->selectedItem();
@@ -1498,6 +1630,18 @@ void TwinValuesController::setShow(int mode) {
 }
 void TwinValuesController::setSearch(const std::string& text) {
     search_ = lowered(trimmedOf(text));
+    refresh();
+}
+void TwinValuesController::setViewFilter(std::function<bool(std::string_view)> covers) {
+    covers_ = std::move(covers);
+    if (onlyView_) refresh();
+}
+void TwinValuesController::setOnlyView(bool on) {
+    if (widget_)
+        if (auto* v = widget_->viewBox(); v && v->isChecked() != on)
+            v->setState(on ? ui::Checkbox::State::Checked : ui::Checkbox::State::Unchecked);
+    if (onlyView_ == on) return;
+    onlyView_ = on;
     refresh();
 }
 
@@ -1554,6 +1698,8 @@ void TwinValuesController::buildLines() {
             if (show_ == 1 && !animated && !f) continue;
             // Lot recherche : la recherche de toutes les listes (mots ET, "phrase", -exclu).
             if (!search_.empty() && !ui::SearchQuery(search_).matches({r.variable, r.address, r.type})) continue;
+            // 1.11.6 : sur la vue actuelle - une valeur dont la variable est lue par la vue (un registre sans variable : non).
+            if (onlyView_ && covers_ && (r.variable.empty() || !covers_(r.variable))) continue;
             HmiTwinValues::Line l;
             l.kind = HmiTwinValues::Line::Kind::Row;
             l.equipment = e.name;
@@ -2056,6 +2202,44 @@ bool TwinValuesController::setForced(const std::string& name, const std::string&
         say(text, false);
     }
     if (ok) select(name, r->address);
+    return ok;
+}
+
+bool TwinValuesController::forceRows(const std::string& name, const std::vector<std::string>& addresses, bool on, std::string* why) {
+    const auto* e = equipment(name);
+    if (!e) return fail(name + " : pas d'esclave de ce nom", why);
+    std::vector<hmi::twin::ValueRow> rows;
+    for (const auto& a : addresses)
+        if (const auto r = row(name, trimmedOf(a))) rows.push_back(*r);
+    if (rows.empty()) return fail(name + " : aucune valeur \xC3\xA0 " + (on ? "forcer" : "d\xC3\xA9" "forcer"), why);
+    const auto bank = host() ? host()->twinBank(name) : nullptr;
+    const bool low = e->wordOrder != "fort";
+    const std::string n = std::to_string(rows.size()) + (rows.size() > 1 ? " valeurs" : " valeur");
+    const bool ok = changeForcings(name, (on ? "Forcer " : "D\xC3\xA9" "forcer ") + n + " de " + name,
+                                   [&](std::vector<hmi::Forcing>& list, std::string& reason) {
+        for (const auto& r : rows) {
+            list.erase(std::remove_if(list.begin(), list.end(), [&](const hmi::Forcing& f) { return tw::sameCell(f.address, r.address); }),
+                       list.end());
+            if (!on) continue;
+            // Tenue a sa valeur de maintenant (comme la case Forcer).
+            double raw = 0;
+            if (bank)
+                if (const auto v = tw::rowValue(*bank, r, low)) raw = *v;
+            hmi::Forcing f;
+            f.address = r.address;
+            f.type = r.boolean ? std::string("BOOL") : r.type;
+            f.value = raw;
+            f.since = hmi::nowStamp();
+            std::vector<tw::TwinBank::ForcedCell> cells;
+            if (!tw::forcedCells(f, low, cells, &reason)) return false;
+            list.push_back(f);
+        }
+        return true;
+    }, why);
+    if (ok && say)
+        say(e->twinLabel() + " \xC2\xB7 " + n + (on ? " forc\xC3\xA9" "es \xC3\xA0 leur valeur du moment (Ctrl+Z les lib\xC3\xA8re)."
+                                                : " d\xC3\xA9" "forc\xC3\xA9" "es (Ctrl+Z les reforce)."),
+            false);
     return ok;
 }
 

@@ -5,6 +5,7 @@
 #include "HmiEquipmentHost.hpp"          // 1.9 : les choix de la page Simulation, oublies au demarrage
 #include "HmiSimMarks.hpp"               // 1.9 : les reperes des lectures simulees
 #include "../../hmi/HmiTwin.hpp"
+#include "../../hmi/HmiSymbols.hpp"   // 1.11.6 : expandInstances (sur la vue actuelle, arretee)
 #include "../../hmi/HmiMarkers.hpp"   // 1.11 (REP-1) : recette et groupe sans les $ de leurs reperes
 #include "../../hmi/HmiTypes.hpp"
 #include "../../hmi/HmiControls.hpp"
@@ -3325,8 +3326,44 @@ std::size_t HmiSimulationPane::clearJournal() {
     return n;
 }
 
+void HmiSimulationPane::updateViewFilter() {
+    const auto& project = doc_->project;
+    const Id current = started_ ? runtime_.currentView() : shownView_;
+    std::vector<Id> ids;
+    if (current != kNoId) ids.push_back(current);
+    if (started_)
+        for (const Id p : runtime_.popups()) ids.push_back(p);
+    std::string sig;
+    std::vector<const hmi::View*> views;
+    for (const Id id : ids) {
+        const hmi::View* v = started_ ? runtime_.composedView(id) : nullptr;
+        if (!v) v = project.view(id);
+        if (!v) continue;
+        views.push_back(v);
+        sig += std::to_string(id) + ':' + std::to_string(v->objects.size()) + ';';
+    }
+    if (sig == viewFilterSig_ && viewFilter_) return;
+    viewFilterSig_ = sig;
+    std::vector<std::string> paths;
+    std::string name;
+    for (const auto* v : views) {
+        // Arretee, la vue du projet : ses symboles se developpent ici (en marche, la vue composee l'est deja).
+        const hmi::View expanded = started_ ? *v : hmi::expandInstances(project, *v);
+        for (auto& p : hmi::viewpaths::ofView(expanded, started_ ? runtime_.viewScope(v->id) : nullptr)) paths.push_back(std::move(p));
+        name += (name.empty() ? "" : " + ") + v->name;
+    }
+    auto filter = std::make_shared<hmi::viewpaths::Filter>();
+    filter->set(paths);
+    viewFilter_ = filter;
+    const auto covers = [filter](std::string_view path) { return filter->covers(path); };
+    if (ihmVars_) ihmVars_->setViewFilter(covers, name);
+    if (apiVars_) apiVars_->setViewFilter(covers, name);
+    if (twinsCtl_) twinsCtl_->setViewFilter(covers);
+}
+
 void HmiSimulationPane::updateTables() {
     if (tabs_) hmiparams::updatePopupsTab(*tabs_, runtime_, doc_->project);   // 1.9 : l'onglet Popups
+    updateViewFilter();                                                         // 1.11.6
     // Lot 13 : les performances, deux fois par seconde (de marche).
     if (perf_ && (perfShownAt_ < 0 || now_ - perfShownAt_ >= 0.5 || now_ < perfShownAt_)) {
         perfShownAt_ = now_;

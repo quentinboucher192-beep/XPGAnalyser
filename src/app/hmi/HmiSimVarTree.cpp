@@ -125,6 +125,14 @@ HmiSimVarTree::HmiSimVarTree(std::string id, std::string what) : ui::Widget(std:
     search_ = &static_cast<ui::InputText&>(addChild(std::make_unique<ui::InputText>(base + ".search")));
     search_->setPlaceholder("Chercher une variable " + what_ + " (nom, membre, type)");
     links_ += search_->textChanged->connect([this](const std::string& t) { setSearch(t); });
+    // 1.11.6 : sur la vue actuelle.
+    viewBox_ = &static_cast<ui::Checkbox&>(addChild(std::make_unique<ui::Checkbox>("Sur la vue actuelle", base + ".view")));
+    viewBox_->setTooltip("Seulement les variables " + what_ + " que lit la vue montr\xC3\xA9" "e (et ses popups ouvertes) : "
+                         "ses objets, ses textes, ses actions, ses scripts, et ceux de ses symboles, \xC3\xA0 toute profondeur.");
+    links_ += viewBox_->stateChanged->connect([this](ui::Checkbox::State st) { setOnlyView(st == ui::Checkbox::State::Checked); });
+    // 1.11.6 : le menu du clic droit.
+    ctxMenu_ = &static_cast<ui::PopupMenu&>(addChild(std::make_unique<ui::PopupMenu>(base + ".context")));
+    links_ += ctxMenu_->itemChosen->connect([this](int item) { (void)contextAction(ctxPath_, item); });
     auto field = std::make_unique<ValueField>(base + ".value");
     field->setVisibility(ui::Visibility::Collapsed);
     auto* raw = field.get();
@@ -180,6 +188,164 @@ void HmiSimVarTree::setSearch(const std::string& text) {
     rebuildRows();
 }
 
+void HmiSimVarTree::setViewFilter(std::function<bool(std::string_view)> covers, std::string viewName) {
+    covers_ = std::move(covers);
+    viewName_ = std::move(viewName);
+    if (onlyView_) {
+        scroll_ = 0.f;
+        rebuildRows();
+    }
+    invalidate();
+}
+
+bool HmiSimVarTree::shownLeaf(const Node& n) const {
+    if (!n.leaf) return false;
+    if (!query_.empty() && !ui::SearchQuery(query_).matches({n.path, n.type})) return false;
+    if (onlyView_ && covers_ && !covers_(n.path)) return false;
+    return true;
+}
+
+std::vector<std::string> HmiSimVarTree::leavesUnder(const std::string& path) const {
+    std::vector<std::string> out;
+    int at = -1;
+    for (std::size_t k = 0; k < nodes_.size() && at < 0; ++k)
+        if (nodes_[k].path == path) at = static_cast<int>(k);
+    if (at < 0) return out;
+    const std::function<void(int)> walk = [&](int i) {
+        const auto& n = nodes_[static_cast<std::size_t>(i)];
+        if (n.leaf) {
+            if (shownLeaf(n)) out.push_back(n.path);
+            return;
+        }
+        for (const int c : n.children) walk(c);
+    };
+    walk(at);
+    return out;
+}
+
+void HmiSimVarTree::setAllOpen(bool open) {
+    for (const auto& n : nodes_)
+        if (!n.leaf) open_[n.path] = open;
+    rebuildRows();
+}
+
+bool HmiSimVarTree::contextAction(const std::string& path, int item) {
+    const Node* node = nullptr;
+    for (const auto& n : nodes_)
+        if (n.path == path) node = &n;
+    if (!node) return false;
+    switch (item) {
+        case MExpandAll: setAllOpen(true); return true;
+        case MCollapseAll: setAllOpen(false); return true;
+        case MExpand:
+            if (node->leaf) return false;
+            setOpen(path, true);
+            return true;
+        case MCollapse: {
+            // Une variable : son noeud se replie.
+            const Node* target = node;
+            if (node->leaf) {
+                if (node->parent < 0) return false;
+                target = &nodes_[static_cast<std::size_t>(node->parent)];
+            }
+            const std::string p = target->path;
+            setOpen(p, false);
+            return true;
+        }
+        case MForce: case MUnforce: {
+            const bool on = item == MForce;
+            const auto leaves = leavesUnder(path);
+            if (on && leaves.size() > kMaxForceAtOnce) {
+                say(path + " : " + std::to_string(leaves.size()) + " valeurs, c'est trop d'un coup (" + std::to_string(kMaxForceAtOnce)
+                        + " au plus) - forcez un n\xC5\x93ud plus petit.",
+                    true);
+                return false;
+            }
+            std::size_t done = 0;
+            std::string why;
+            for (const auto& lf : leaves) {
+                const bool forced = hooks_.forced && hooks_.forced(lf);
+                if (forced == on) continue;
+                std::string w;
+                const bool ok = on ? hooks_.force && hooks_.force(lf, {}, &w) : hooks_.unforce && hooks_.unforce(lf);
+                if (ok) ++done;
+                else if (why.empty()) why = w.empty() ? lf + " refus\xC3\xA9" "e" : w;
+            }
+            invalidate();
+            if (node->leaf) {
+                if (done) say(path + (on ? " forc\xC3\xA9" "e \xC3\xA0 sa valeur du moment." : " : libre (plus forc\xC3\xA9" "e)."), false);
+                else if (!why.empty()) say(why, true);
+                return done > 0;
+            }
+            std::string text = path + " : " + std::to_string(done) + (done > 1 ? " variables " : " variable ")
+                             + (on ? (done > 1 ? "forc\xC3\xA9" "es \xC3\xA0 leur valeur du moment" : "forc\xC3\xA9" "e \xC3\xA0 sa valeur du moment")
+                                   : (done > 1 ? "lib\xC3\xA9r\xC3\xA9" "es" : "lib\xC3\xA9r\xC3\xA9" "e"));
+            if (!why.empty()) text += " (" + why + ")";
+            say(text + ".", done == 0);
+            return done > 0;
+        }
+        default: return false;
+    }
+}
+
+bool HmiSimVarTree::openContextMenu(const std::string& path, gfx::Point at) {
+    if (!ctxMenu_) return false;
+    const Node* node = nullptr;
+    for (const auto& n : nodes_)
+        if (n.path == path) node = &n;
+    if (!node) return false;
+    const auto leaves = node->leaf ? std::vector<std::string>{path} : leavesUnder(path);
+    std::size_t forced = 0;
+    if (hooks_.forced)
+        for (const auto& lf : leaves) forced += hooks_.forced(lf) ? 1 : 0;
+    const std::size_t free = leaves.size() - forced;
+    const bool open = !node->leaf && std::any_of(rows_.begin(), rows_.end(), [&](const Row& r) { return r.path == path && r.open; });
+    std::vector<ui::PopupMenu::Item> items;
+    ui::PopupMenu::Item head;
+    head.heading = true;
+    head.label = path;
+    head.shortcut = node->leaf ? node->type : std::to_string(leaves.size()) + (leaves.size() > 1 ? " valeurs" : " valeur");
+    items.push_back(head);
+    const auto item = [&](int id, std::string label, bool enabled, std::string why = {}) {
+        ui::PopupMenu::Item it;
+        it.id = id;
+        it.label = std::move(label);
+        it.enabled = enabled;
+        it.disabledReason = std::move(why);
+        items.push_back(std::move(it));
+    };
+    item(MExpandAll, "Tout d\xC3\xA9plier", true);
+    item(MExpand, "D\xC3\xA9plier", !node->leaf && !open, node->leaf ? "une variable ne se d\xC3\xA9plie pas" : "d\xC3\xA9j\xC3\xA0 d\xC3\xA9pli\xC3\xA9");
+    item(MCollapse, node->leaf ? "Replier (son n\xC5\x93ud)" : "Replier", node->leaf ? node->parent >= 0 : open,
+         node->leaf ? "elle n'a pas de n\xC5\x93ud" : "d\xC3\xA9j\xC3\xA0 repli\xC3\xA9");
+    item(MCollapseAll, "Tout replier", true);
+    {
+        ui::PopupMenu::Item sep;
+        sep.separator = true;
+        items.push_back(sep);
+    }
+    const bool tooMany = !node->leaf && free > kMaxForceAtOnce;
+    item(MForce, node->leaf ? "Forcer (\xC3\xA0 sa valeur)" : "Forcer les " + std::to_string(free) + " libres (\xC3\xA0 leur valeur)",
+         free > 0 && !tooMany && static_cast<bool>(hooks_.force),
+         tooMany ? "trop de valeurs d'un coup : un n\xC5\x93ud plus petit" : "rien de libre \xC3\xA0 forcer");
+    item(MUnforce, node->leaf ? "D\xC3\xA9" "forcer" : "D\xC3\xA9" "forcer les " + std::to_string(forced), forced > 0 && static_cast<bool>(hooks_.unforce),
+         "rien de forc\xC3\xA9");
+    ctxPath_ = path;
+    ctxMenu_->setItems(std::move(items));
+    auto* root = rootWidget();
+    const auto sb = root ? root->bounds() : bounds();
+    ctxMenu_->openAt(at, {sb.w, sb.h});
+    return true;
+}
+
+void HmiSimVarTree::setOnlyView(bool on) {
+    if (viewBox_ && viewBox_->isChecked() != on) viewBox_->setState(on ? ui::Checkbox::State::Checked : ui::Checkbox::State::Unchecked);
+    if (onlyView_ == on) return;
+    onlyView_ = on;
+    scroll_ = 0.f;
+    rebuildRows();
+}
+
 void HmiSimVarTree::setOpen(const std::string& path, bool open) {
     open_[path] = open;
     rebuildRows();
@@ -195,18 +361,27 @@ void HmiSimVarTree::rebuildRows() {
     const ui::SearchQuery q(query_);
     std::vector<char> keep;
     const bool searching = !q.empty();
-    if (searching) {
+    const bool viewOnly = onlyView_ && static_cast<bool>(covers_);      // 1.11.6
+    const bool filtering = searching || viewOnly;
+    if (filtering) {
         keep.assign(nodes_.size(), 0);
         // Les noeuds sont crees avant leurs enfants : a rebours, un enfant garde son parent.
         for (std::size_t i = nodes_.size(); i-- > 0;) {
             const auto& n = nodes_[i];
-            if (n.leaf && q.matches({n.path, n.type})) keep[i] = 1;
+            if (n.leaf && (!searching || q.matches({n.path, n.type})) && (!viewOnly || covers_(n.path))) keep[i] = 1;
             if (keep[i] && n.parent >= 0) keep[static_cast<std::size_t>(n.parent)] = 1;
         }
     }
+    // Sur la vue actuelle, les noeuds gardes s'ouvrent d'office (sauf replies a la main).
+    const auto openNode = [&](const std::string& path) {
+        if (searching) return true;
+        if (!viewOnly) return isOpen(path);
+        const auto it = open_.find(path);
+        return it == open_.end() || it->second;
+    };
     const std::function<void(int)> walk = [&](int at) {
         const auto& n = nodes_[static_cast<std::size_t>(at)];
-        if (searching && !keep[static_cast<std::size_t>(at)]) return;
+        if (filtering && !keep[static_cast<std::size_t>(at)]) return;
         Row r;
         r.node = at;
         r.label = n.label;
@@ -215,7 +390,7 @@ void HmiSimVarTree::rebuildRows() {
         r.depth = n.depth;
         r.leaf = n.leaf;
         r.count = n.count;
-        r.open = !n.leaf && (searching || isOpen(n.path));
+        r.open = !n.leaf && openNode(n.path);
         rows_.push_back(r);
         if (r.open)
             for (const int c : n.children) walk(c);
@@ -262,8 +437,10 @@ gfx::Rect HmiSimVarTree::forceBox(const gfx::Rect& row) const {
 
 void HmiSimVarTree::onLayout() {
     const auto b = bounds();
-    // La place du compte a droite de la recherche (« 86 sur 228 variables · 2 forcees »).
-    if (search_) search_->setBounds({b.x + 8.f, b.y + 5.f, std::min(380.f, std::max(80.f, b.w - 16.f - 190.f)), 26.f});
+    // La place de la case « Sur la vue actuelle » et du compte a droite de la recherche.
+    if (search_) search_->setBounds({b.x + 8.f, b.y + 5.f, std::min(340.f, std::max(80.f, b.w - 16.f - 190.f - 170.f)), 26.f});
+    if (viewBox_ && search_) viewBox_->setBounds({search_->bounds().right() + 10.f, b.y + 7.f, 160.f, 22.f});
+    if (ctxMenu_) ctxMenu_->setBounds(b);   // sinon il n'est jamais dessine (la passe du dessus)
     if (!editPath_.empty()) {
         gfx::Rect r{};
         if (rowRect(editPath_, r)) edit_->setBounds({r.x + r.w * 0.62f, r.y + 1.f, std::max(80.f, r.w * 0.2f), kRowH - 2.f});
@@ -364,13 +541,13 @@ void HmiSimVarTree::onPaint(const ui::PaintContext& ctx) {
             for (const auto& n : nodes_)
                 if (n.leaf && hooks_.forced(n.path)) ++forced;
         std::string t = std::to_string(leaves_) + (leaves_ > 1 ? " variables" : " variable");
-        if (!query_.empty()) {
+        if (!query_.empty() || (onlyView_ && covers_)) {
             std::size_t shown = 0;
             for (const auto& r : rows_) shown += r.leaf ? 1 : 0;
             t = std::to_string(shown) + " sur " + t;
         }
         if (forced) t += " \xC2\xB7 " + std::to_string(forced) + (forced > 1 ? " forc\xC3\xA9" "es" : " forc\xC3\xA9" "e");
-        const float sx = search_ ? search_->bounds().right() + 12.f : b.x + 8.f;
+        const float sx = viewBox_ ? viewBox_->bounds().right() + 8.f : search_ ? search_->bounds().right() + 12.f : b.x + 8.f;
         g.drawText({sx, b.y + (kBarH - g.lineHeight(kSmall)) * 0.5f}, fit(g, t, kSmall, b.right() - sx - 8.f), kSmall,
                    forced ? th.color.warning : th.color.textMuted);
     }
@@ -394,7 +571,10 @@ void HmiSimVarTree::onPaint(const ui::PaintContext& ctx) {
     scroll_ = std::clamp(scroll_, 0.f, std::max(0.f, content - a.h));
     g.pushClip(a);
     if (rows_.empty()) {
-        const std::string t = !query_.empty() ? std::string("Rien ne correspond \xC3\xA0 la recherche.") : emptyText_;
+        const std::string t = !query_.empty() ? std::string("Rien ne correspond \xC3\xA0 la recherche.")
+                            : onlyView_ && covers_ && leaves_ > 0
+                                ? "La vue " + (viewName_.empty() ? std::string("montr\xC3\xA9" "e") : viewName_) + " ne lit aucune variable " + what_ + "."
+                                : emptyText_;
         g.drawText({a.x + 14.f, a.y + 12.f}, fit(g, t, kUi, a.w - 28.f), kUi, th.color.textMuted);
     }
     const auto first = static_cast<std::size_t>(std::max(0.f, scroll_ / kRowH));
@@ -467,6 +647,12 @@ ui::EventResult HmiSimVarTree::onEvent(const ui::InputEvent& ev) {
         scroll_ = std::clamp(scroll_ - w->dy * kRowH * 3.f, 0.f, std::max(0.f, static_cast<float>(rows_.size()) * kRowH - a.h));
         invalidateLayout();
         return ui::EventResult::Consumed;
+    }
+    // 1.11.6 : le clic droit sur une ligne.
+    if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && d->button == ui::MouseButton::Right) {
+        const int i = rowAt(d->pos);
+        if (i < 0) return ui::EventResult::Ignored;
+        return openContextMenu(rows_[static_cast<std::size_t>(i)].path, d->pos) ? ui::EventResult::Consumed : ui::EventResult::Ignored;
     }
     if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && d->button == ui::MouseButton::Left) {
         const int i = rowAt(d->pos);

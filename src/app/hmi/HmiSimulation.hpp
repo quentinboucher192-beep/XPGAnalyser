@@ -20,6 +20,7 @@
 #pragma once
 
 #include "HmiPainter.hpp"
+#include "../../hmi/HmiViewPaths.hpp"   // 1.11.6 : sur la vue actuelle
 #include "HmiPanels.hpp"
 #include "HmiLot13Painter.hpp"
 #include "../../hmi/HmiCommands.hpp"
@@ -537,6 +538,9 @@ private:
     ui::Widget*           fsBar_{nullptr};        // la barre flottante (devant tout)
     void ensureStarted(double now);
     void updateTables();
+    // 1.11.6 : sur la vue actuelle - les variables que lit la vue montree (et ses popups
+    // ouvertes), refaites quand elles changent, pour Esclaves simules, Variables IHM et API.
+    void updateViewFilter();
     // 1.10.1 (C1) : L'HORLOGE DU VOLET. Deux sources la font avancer : le dessin
     // (onPaint, ctx.time) et les appels (refreshAt : l'onglet cache, les tests).
     // Chacune a son decalage, nul tant qu'elle est sur la meme base que le volet :
@@ -588,6 +592,8 @@ private:
     std::string           ihmVarsSig_;            // les variables IHM telles que l'arbre les a
     const void*           apiRuntime_{nullptr};   // la simulation de l'automate telle que l'arbre l'a
     std::size_t           apiSlots_{0};
+    std::string           viewFilterSig_;                                   // 1.11.6 : la vue et ses popups
+    std::shared_ptr<const hmi::viewpaths::Filter> viewFilter_;
     ui::TableView*        alarms_{nullptr};
     ui::TableView*        recipes_{nullptr};
     ui::TableView*        perf_{nullptr};                      // lot 13 : les performances
