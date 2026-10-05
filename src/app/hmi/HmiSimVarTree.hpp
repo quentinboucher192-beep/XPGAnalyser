@@ -86,7 +86,8 @@ public:
     const core::SignalPtr<const std::string&, bool> said = core::Signal<const std::string&, bool>::create();
     // Pour les scripts et les tests : ou est la ligne de ce chemin (faux : pas montree).
     [[nodiscard]] bool rowRect(const std::string& path, gfx::Rect& out) const;
-    // Faire defiler jusqu'a la ligne de ce chemin (faux : pas montree, repliee ou filtree).
+    // Amener la ligne de ce chemin a l'ecran : ses noeuds s'ouvrent, la liste defile
+    // (faux : inconnue, ou cachee par la recherche).
     bool reveal(const std::string& path);
     [[nodiscard]] gfx::Rect forceBox(const gfx::Rect& row) const;
 

@@ -244,9 +244,12 @@ std::string HmiSimVarTree::valueText(const std::string& path) const {
 
 bool HmiSimVarTree::rowRect(const std::string& path, gfx::Rect& out) const {
     const auto a = listArea();
+    // La largeur des lignes dessinees : sans la place de la barre de defilement (comme
+    // onPaint et onEvent - avant, la case Forcer d'une longue liste etait visee a cote).
+    const float w = a.w - bar_.space(a, static_cast<float>(rows_.size()) * kRowH, a.h);
     for (std::size_t i = 0; i < rows_.size(); ++i)
         if (rows_[i].path == path) {
-            out = {a.x, a.y + static_cast<float>(i) * kRowH - scroll_, a.w, kRowH};
+            out = {a.x, a.y + static_cast<float>(i) * kRowH - scroll_, w, kRowH};
             return out.y >= a.y - 0.5f && out.bottom() <= a.bottom() + 0.5f;
         }
     return false;
@@ -291,6 +294,18 @@ bool HmiSimVarTree::unforcePath(const std::string& path) {
 }
 
 bool HmiSimVarTree::reveal(const std::string& path) {
+    // Ses noeuds replies s'ouvrent d'abord (Armoires > [1] > ana > PT1).
+    for (std::size_t k = 0; k < nodes_.size(); ++k) {
+        if (nodes_[k].path != path) continue;
+        bool changed = false;
+        for (int p = nodes_[k].parent; p >= 0; p = nodes_[static_cast<std::size_t>(p)].parent)
+            if (!isOpen(nodes_[static_cast<std::size_t>(p)].path)) {
+                open_[nodes_[static_cast<std::size_t>(p)].path] = true;
+                changed = true;
+            }
+        if (changed) rebuildRows();
+        break;
+    }
     const auto a = listArea();
     for (std::size_t i = 0; i < rows_.size(); ++i)
         if (rows_[i].path == path) {

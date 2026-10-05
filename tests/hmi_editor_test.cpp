@@ -22024,6 +22024,17 @@ void simulationVariables1115(const std::string& xpg) {
         sim::Value v;
         check(plc->get(path, v) && std::fabs(v.asReal() - 123.5) < 1e-9, "sa valeur : 123.5");
         check(api.unforcePath(path) && !plc->isForced(path), "d\xC3\xA9" "forcer");
+        // Une longue liste (la barre de defilement) : la case Forcer d'une ligne amenee a
+        // l'ecran se clique la ou elle est dessinee (avant : visee 8 px a cote, rien ne se passait).
+        api.setSearch("");
+        paintAt(0.4);
+        const std::string far = "Armoires[1].ana.PT1.mes";
+        gfx::Rect row{};
+        check(api.reveal(far) && api.rowRect(far, row), "la ligne de " + far + " amen\xC3\xA9" "e \xC3\xA0 l'\xC3\xA9" "cran");
+        const gfx::Rect box = api.forceBox(row);
+        api.dispatch(ui::MouseDown{{box.x + box.w * 0.5f, box.y + box.h * 0.5f}, ui::MouseButton::Left, 1, {}});
+        check(plc->isForced(far), "la barre de d\xC3\xA9" "filement montr\xC3\xA9" "e : un clic au milieu de la case force " + far);
+        (void)api.unforcePath(far);
     }
 }
 
