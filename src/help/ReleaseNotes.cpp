@@ -109,6 +109,9 @@ const std::vector<Note>& table() {
         note("1.11.3", "Scripts", Kind::New,
          "Exporter\xE2\x80\xA6 et Importer\xE2\x80\xA6 les op\xC3\xA9rateurs d'un symbole ou d'un type IHM, dans le m\xC3\xAAme format .xpgst : un op\xC3\xA9rateur de m\xC3\xAAme signature est remplac\xC3\xA9, un nouveau ajout\xC3\xA9, un op\xC3\xA9rateur refus\xC3\xA9 (en double, type inconnu) laiss\xC3\xA9 et dit.",
          "types-ihm", ""),
+        note("1.11.3", "\xC3\x89" "diteur IHM", Kind::Fixed,
+         "Le clic droit sur la vue (Dupliquer\xE2\x80\xA6, Dupliquer tel quel, Copier, Supprimer) montre son menu : depuis la 1.10.2, il s'ouvrait sans se dessiner.",
+         "dupliquer-reperes", ""),
         // 1.11.2 (T2, tranches 41, 42 et 44 ; livree le 04/10/2026 a 6 h ; decisions 187, 201, 212 et 216) : l'export et
         // l'import (REP), les icones de l'aide a la saisie (API-V), l'instance unique (UNI), les blocages (b), (c),
         // (d) (BLK), les tutoriels et le projet modele livre avec l'exe (T1), les glyphes, les noms des langues et F1

@@ -176,8 +176,8 @@ C'est une maquette : le logiciel livré fait foi.
 1. Lancer `XPGAnalyser-Setup-1.11.3.exe`. Il met à jour une 1.11.2 ou une première 1.11.3 installée : même identité d'installation, sauvegarde de l'ancienne version, données reprises sans être déplacées.
 2. Windows SmartScreen peut avertir, parce que l'installateur n'est pas signé. Choisir « Informations complémentaires », puis « Exécuter quand même ».
 
-Empreinte SHA-256 de `XPGAnalyser-Setup-1.11.3.exe` (@TAILLE@) :
-`@SHA256@`
+Empreinte SHA-256 de `XPGAnalyser-Setup-1.11.3.exe` (15,2 Mo, 15 182 763 octets) :
+`A2A13E5A6690FB85DEB026C057D05DC1805F8FD0989909CA0026C9EFD52BB7EB`
 
 > L'installateur du correctif urgent (empreinte `167472F8…D2CE9`) est remplacé par celui-ci.
 
@@ -191,12 +191,13 @@ Empreinte SHA-256 de `XPGAnalyser-Setup-1.11.3.exe` (@TAILLE@) :
 
 ## Vérifications
 
-**Tests Linux** (GCC 13) : la suite CTest complète passe (55 sur 55). Pour l'éditeur IHM, @CONTROLES@ contrôles passent, sans échec. Les nouveaux contrôles :
+**Tests Linux** (GCC 13) : la suite CTest complète passe (55 sur 55). Pour l'éditeur IHM, 5 985 contrôles passent, sans échec. Les nouveaux contrôles :
 
 | Groupe | Ce qu'il vérifie |
 |---|---|
 | `symParametres1113` | Voiture, `=UINTS`, UINTS sans fx, `1,5`, `vrai`, gCoef dans un tableau, l'ancien `Name := Voiture`, les noms de l'automate, les huit carrés |
-| `valuePicker1113` | le clic sur le carré, la liste des carrés et sa place à l'écran, le filtre sur le type, Tout montrer, les sources, la recherche, les erreurs et leurs corrections, Valider, un nom inconnu qui demande la création |
+| `valuePicker1113` | le clic sur le carré, la liste des carrés (sa place à l'écran, sa ligne d'information), le filtre sur le type, Tout montrer, les sources, la recherche, les erreurs et leurs corrections, Valider, un nom inconnu qui demande la création |
+| `valuePickerApi1113` | le sélecteur sur MAST.XPG : un membre de DDT et un membre d'une case de tableau arrivent dans Résultat avec leur chemin entier |
 | `scriptsExportImport1113` | l'aller-retour d'un fichier `.xpgst` (scripts d'une popup, de la vue modèle, de l'en-tête et du pied de page modèles, opérateurs d'un type), la comparaison neuf / identique / différent, Remplacer, Ajouter à la suite, un seul Ctrl+Z, un `.st` sans bloc, un format plus récent refusé |
 
 Les attentes des tests 1.11.2 qui vérifiaient l'ancien comportement (`Voiture` gardé comme nom) sont mises à jour : c'est le comportement demandé qui a changé.
@@ -212,7 +213,17 @@ Les attentes des tests 1.11.2 qui vérifiaient l'ancien comportement (`Voiture` 
   - le nom inconnu, puis la fenêtre de création ;
   - les boutons Exporter… et Importer… des scripts de Popup_vanne.
 
-**L'installateur, lancé sous Wine** en silencieux pour tous les comptes : « Installation process succeeded », et l'exe installé répond `1.11.3`.
+**Défauts trouvés en rejouant la session, et corrigés dans cette livraison :**
+- La liste des carrés s'ouvrait sans se dessiner : le menu n'avait pas de place à l'écran.
+- La ligne d'information répétait le nom du carré (« Variable IHM · Variable IHM : UINTS… »).
+- Dans l'arbre du sélecteur, les membres des DDT de l'automate n'avaient pas de nom, et un clic aurait mis le membre seul (`gaz` au lieu de `ConfigArmoireUtilisee.gaz`) dans Résultat.
+- Les 800 variables de l'automate s'affichaient dans l'ordre du fichier ; elles sont maintenant rangées par nom.
+- En cherchant la cause du premier défaut : le clic droit sur la vue (Dupliquer…, Copier, Supprimer) avait le même problème depuis la 1.10.2 ; son menu se dessine maintenant (ligne ajoutée aux notes de version).
+
+**L'installateur, lancé sous Wine** en silencieux pour tous les comptes, **par-dessus la 1.11.3 du correctif urgent** :
+- le journal dit « Installation process succeeded » ;
+- l'exe installé est identique à celui qui a été testé, et répond `1.11.3` ;
+- l'exe installé analyse MAST.XPG (891 variables, 29 POU, 75 sections, 28 DDT, 8 DFB).
 - Seuls les raccourcis du menu Démarrer dont le nom a un accent (Réparer, Vérifier l'installation…) n'ont pas pu être créés. C'est une limite de Wine dans ce conteneur, sans rapport avec Windows : le même script a installé la 1.11.2.
 
 **Pas encore fait :** ni l'exe ni l'installateur n'ont été lancés sur un vrai Windows. Merci de vérifier à l'ouverture d'un projet, et de me renvoyer `collect_diagnostics.bat` en cas de souci.
