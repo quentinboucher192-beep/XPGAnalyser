@@ -429,6 +429,10 @@ public:
     // 1.11.5 : les onglets Variables IHM et Variables API (pour les scripts et les tests).
     [[nodiscard]] HmiSimVarTree& ihmVariables() noexcept { return *ihmVars_; }
     [[nodiscard]] HmiSimVarTree& apiVariables() noexcept { return *apiVars_; }
+    // 1.11.6 : l'onglet Expressions en arbre (objet, instance, propriete) et sa recherche.
+    [[nodiscard]] ui::TableView& expressions() noexcept { return *table_; }
+    [[nodiscard]] ui::InputText* expressionsSearch() noexcept { return exprSearch_; }
+    void expandExpressions(bool open);
     [[nodiscard]] TwinValuesController& twinsController() noexcept { return *twinsCtl_; }
     // Lot 13 : le releve des performances (remis a zero, exporte en CSV).
     void resetPerf();
@@ -592,6 +596,7 @@ private:
     std::string           ihmVarsSig_;            // les variables IHM telles que l'arbre les a
     const void*           apiRuntime_{nullptr};   // la simulation de l'automate telle que l'arbre l'a
     std::size_t           apiSlots_{0};
+    ui::InputText*        exprSearch_{nullptr};                               // 1.11.6 : la recherche des expressions
     std::string           viewFilterSig_;                                   // 1.11.6 : la vue et ses popups
     std::shared_ptr<const hmi::viewpaths::Filter> viewFilter_;
     ui::TableView*        alarms_{nullptr};

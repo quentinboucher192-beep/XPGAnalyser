@@ -22149,6 +22149,42 @@ void surLaVueClicDroit1116() {
               && pane.runtime().forcedVariables().empty(),
           "D\xC3\xA9" "forcer sur Four1 : toutes libres");
 
+    // ---- L'onglet Expressions en arbre : l'instance Aff_1 range l'objet de son symbole sous elle ----
+    {
+        pane.tabs().setCurrentIndex(app::HmiSimulationPane::TabValues);
+        paintAt(0.5);
+        const auto& m = pane.expressions().model();
+        check(m && m->columnCount() == 3 && m->headerText(0) == "Objet / propri\xC3\xA9t\xC3\xA9", "trois colonnes : Objet / propri\xC3\xA9t\xC3\xA9, Expression, Valeur");
+        const auto find = [&](std::size_t col, const std::string& text) {
+            for (std::size_t r = 0; m && r < m->rowCount(); ++r)
+                if (m->cellText(r, col) == text) return r;
+            return std::string::npos;
+        };
+        const std::size_t aff = find(0, "Aff_1");
+        bool symbolExpr = false;
+        std::size_t exprRow = std::string::npos;
+        for (std::size_t r = 0; m && r < m->rowCount(); ++r)
+            if (m->cellText(r, 1) == "Four1.Vannes[2].Position + Compteur") { symbolExpr = true; exprRow = r; }
+        check(aff != std::string::npos && m->cellStyle(aff, 0).expander == 1, "Aff_1 : un n\xC5\x93ud ouvert");
+        check(symbolExpr && exprRow > aff && m->cellStyle(exprRow, 0).indent >= 32.f,
+              "sous Aff_1 > son objet : l'expression du symbole, d\xC3\xA9velopp\xC3\xA9" "e (X -> Four1.Vannes[2].Position)");
+        check(aff != std::string::npos && m->cellText(aff, 2).find("1 expression") == 0, "le n\xC5\x93ud dit combien il en porte (" + m->cellText(aff, 2) + ")");
+        const std::size_t all = m->rowCount();
+        pane.expandExpressions(false);
+        const std::size_t folded = pane.expressions().model()->rowCount();
+        check(folded == 2, "Tout replier : les deux objets de la vue (" + std::to_string(folded) + ")");
+        pane.expandExpressions(true);
+        check(pane.expressions().model()->rowCount() == all, "Tout d\xC3\xA9plier : tout revient");
+        if (auto* s = pane.expressionsSearch()) {
+            s->setText("Compteur");
+            const auto& m2 = pane.expressions().model();
+            bool onlyAff = m2->rowCount() > 0;
+            for (std::size_t r = 0; r < m2->rowCount(); ++r) onlyAff = onlyAff && m2->cellText(r, 0) != "T = {Four1.Temperature:0.0}";
+            check(onlyAff && m2->rowCount() == 3, "chercher Compteur : Aff_1, son objet et l'expression (" + std::to_string(m2->rowCount()) + " lignes)");
+            s->setText("");
+        }
+    }
+
     // ---- Les esclaves simules (IHM > Equipements > Valeurs simulees) : le clic droit, et la vue ----
     {
         using L = app::HmiTwinValues::Line;

@@ -83,49 +83,207 @@ std::string simReadTip(const hmi::Runtime& rt, const hmi::Project& project, cons
 }
 
 // Les valeurs, une ligne par propriete pilotee.
-class LiveModel final : public ui::ITableModel {
+// 1.11.6 : L'ONGLET EXPRESSIONS EN ARBRE (« dans expressions etre en mode treeview aussi »).
+// Un objet, puis ses proprietes ; une instance de symbole developpee range ses objets
+// sous elle (Aff_1 > Texte > text), a toute profondeur. Un noeud dit combien
+// d'expressions il porte (et ses erreurs) ; la recherche (mots ET, "phrase", -exclu)
+// garde ce qu'elle trouve et ouvre ses noeuds. Les valeurs se relisent a chaque image ;
+// l'arbre ne se refait que si la vue change (les noms et les cles des expressions).
+class ExprTree final : public ui::ITableModel {
 public:
-    explicit LiveModel(const std::vector<hmi::LiveValue>* rows) : rows_(rows) {}
-    [[nodiscard]] std::size_t rowCount() const override { return rows_->size(); }
-    [[nodiscard]] std::size_t columnCount() const override { return 4; }
+    struct Row {
+        bool        node{false};
+        std::string label, path;
+        int         depth{0};
+        std::size_t value{std::string::npos};   // l'expression (values_) d'une ligne de propriete
+        std::size_t count{0}, errors{0};
+        bool        open{true};
+    };
+    explicit ExprTree(const std::vector<hmi::LiveValue>* values) : values_(values) {}
+
+    // L'arbre a-t-il change de forme depuis le dernier rebuild (la vue, ses objets) ?
+    [[nodiscard]] bool stale() const { return signature() != sig_; }
+    void rebuild(const std::string& query) {
+        query_ = query;
+        sig_ = signature();
+        build();
+    }
+    void toggle(std::size_t row) {
+        if (row >= rows_.size() || !rows_[row].node) return;
+        const auto& path = rows_[row].path;
+        if (rows_[row].open) closed_.insert(path);
+        else closed_.erase(path);
+        build();
+    }
+    void setAllOpen(bool open) {
+        closed_.clear();
+        if (!open)
+            for (const auto& n : nodes_) closed_.insert(n.path);
+        build();
+    }
+    [[nodiscard]] const std::vector<Row>& rows() const noexcept { return rows_; }
+    [[nodiscard]] std::size_t valueAt(std::size_t row) const { return row < rows_.size() ? rows_[row].value : std::string::npos; }
+
+    [[nodiscard]] std::size_t rowCount() const override { return rows_.size(); }
+    [[nodiscard]] std::size_t columnCount() const override { return 3; }
     [[nodiscard]] std::string headerText(std::size_t c) const override {
-        static const char* h[] = {"Objet", "Propri\xC3\xA9t\xC3\xA9", "Expression", "Valeur"};
-        return c < 4 ? h[c] : "";
+        static const char* h[] = {"Objet / propri\xC3\xA9t\xC3\xA9", "Expression", "Valeur"};
+        return c < 3 ? h[c] : "";
     }
     [[nodiscard]] std::string cellText(ui::RowIndex r, std::size_t c) const override {
-        if (r >= rows_->size()) return {};
-        const auto& v = (*rows_)[r];
-        switch (c) {
-            case 0: return v.objectName;
-            case 1: return v.key;
-            case 2: return v.expression;
-            default: {
-                // Un texte multiligne tient sur une ligne du tableau.
-                std::string out = v.value;
-                for (std::size_t at = out.find('\n'); at != std::string::npos; at = out.find('\n', at + 3))
-                    out.replace(at, 1, " / ");
-                // Lot 14 : une valeur de l'automate reel qui n'est pas bonne.
-                if (v.quality) out += v.quality >= 2 ? "  (mauvaise : " + v.qualityWhy + ")" : "  (ancienne : " + v.qualityWhy + ")";
-                return out;
+        if (r >= rows_.size()) return {};
+        const auto& row = rows_[r];
+        if (row.node) {
+            if (c == 0) return row.label;
+            if (c == 2) {
+                std::string t = std::to_string(row.count) + (row.count > 1 ? " expressions" : " expression");
+                if (row.errors) t += " \xC2\xB7 " + std::to_string(row.errors) + (row.errors > 1 ? " erreurs" : " erreur");
+                return t;
             }
+            return {};
         }
+        if (row.value >= values_->size()) return {};
+        const auto& v = (*values_)[row.value];
+        if (c == 0) return v.key;
+        if (c == 1) return v.expression;
+        // Un texte multiligne tient sur une ligne du tableau.
+        std::string out = v.value;
+        for (std::size_t at = out.find('\n'); at != std::string::npos; at = out.find('\n', at + 3)) out.replace(at, 1, " / ");
+        // Lot 14 : une valeur de l'automate reel qui n'est pas bonne.
+        if (v.quality) out += v.quality >= 2 ? "  (mauvaise : " + v.qualityWhy + ")" : "  (ancienne : " + v.qualityWhy + ")";
+        return out;
     }
     [[nodiscard]] ui::CellStyle cellStyle(ui::RowIndex r, std::size_t c) const override {
         ui::CellStyle s;
-        if (r < rows_->size() && c == 3) {
+        if (r >= rows_.size()) return s;
+        const auto& row = rows_[r];
+        if (c == 0) {
+            s.indent = static_cast<float>(row.depth) * 16.f;
+            if (row.node) {
+                s.expander = row.open ? 1 : 0;
+                s.bold = true;
+                s.icon = row.depth == 0 ? ui::Icon::Module : ui::Icon::Variable;
+            } else {
+                s.icon = ui::Icon::Code;
+            }
+            return s;
+        }
+        if (row.node) {
+            if (c == 2) s.fgTone = row.errors ? ui::Tone::Error : ui::Tone::None;
+            return s;
+        }
+        if (c == 2 && row.value < values_->size()) {
+            const auto& v = (*values_)[row.value];
             s.bold = true;
             // 1.11 (REP) : une expression a repere se calcule comme les autres (1.10.3 : ambre).
-            if ((*rows_)[r].error) { s.fg = gfx::Color::rgb(0xE5534B); s.icon = ui::Icon::Error; }
-            else if ((*rows_)[r].quality >= 2) { s.fg = gfx::Color::rgb(0xE5534B); s.icon = ui::Icon::Warning; }
-            else if ((*rows_)[r].quality == 1) { s.fg = gfx::Color::rgb(0xF2994A); s.icon = ui::Icon::Warning; }
+            if (v.error) { s.fg = gfx::Color::rgb(0xE5534B); s.icon = ui::Icon::Error; }
+            else if (v.quality >= 2) { s.fg = gfx::Color::rgb(0xE5534B); s.icon = ui::Icon::Warning; }
+            else if (v.quality == 1) { s.fg = gfx::Color::rgb(0xF2994A); s.icon = ui::Icon::Warning; }
         }
         return s;
     }
-    [[nodiscard]] bool less(ui::RowIndex a, ui::RowIndex b, std::size_t c) const override {
-        return cellText(a, c) < cellText(b, c);
-    }
+    // L'ordre de l'arbre (pas de tri par colonne : il casserait les noeuds).
+    [[nodiscard]] bool less(ui::RowIndex a, ui::RowIndex b, std::size_t) const override { return a < b; }
+
 private:
-    const std::vector<hmi::LiveValue>* rows_;
+    struct Node {
+        std::string              label, path;
+        int                      parent{-1}, depth{0};
+        std::vector<int>         kids;
+        std::vector<std::size_t> values;
+    };
+    [[nodiscard]] std::size_t signature() const {
+        std::size_t h = values_->size();
+        for (const auto& v : *values_) h = h * 1099511628211ull ^ std::hash<std::string>{}(v.objectName) ^ (std::hash<std::string>{}(v.key) << 1);
+        return h;
+    }
+    void build() {
+        nodes_.clear();
+        std::map<std::string, int> index;
+        std::vector<int> roots;
+        for (std::size_t i = 0; i < values_->size(); ++i) {
+            const std::string& name = (*values_)[i].objectName;
+            std::string prefix;
+            int parent = -1;
+            std::size_t start = 0;
+            int depth = 0;
+            while (true) {
+                const auto dot = name.find('.', start);
+                const std::string piece = name.substr(start, dot == std::string::npos ? std::string::npos : dot - start);
+                prefix += (prefix.empty() ? "" : ".") + piece;
+                auto it = index.find(prefix);
+                if (it == index.end()) {
+                    Node n;
+                    n.label = piece.empty() ? std::string("(sans nom)") : piece;
+                    n.path = prefix;
+                    n.parent = parent;
+                    n.depth = depth;
+                    nodes_.push_back(std::move(n));
+                    const int at = static_cast<int>(nodes_.size()) - 1;
+                    if (parent >= 0) nodes_[static_cast<std::size_t>(parent)].kids.push_back(at);
+                    else roots.push_back(at);
+                    it = index.emplace(prefix, at).first;
+                }
+                parent = it->second;
+                ++depth;
+                if (dot == std::string::npos) break;
+                start = dot + 1;
+            }
+            nodes_[static_cast<std::size_t>(parent)].values.push_back(i);
+        }
+        const ui::SearchQuery q(query_);
+        const bool searching = !q.empty();
+        const auto kept = [&](std::size_t i) {
+            if (!searching) return true;
+            const auto& v = (*values_)[i];
+            return q.matches({v.objectName, v.key, v.expression, v.value});
+        };
+        // Les comptes (recursifs) : ce qui est garde dessous, et ses erreurs.
+        std::vector<std::size_t> count(nodes_.size(), 0), errors(nodes_.size(), 0);
+        for (std::size_t k = nodes_.size(); k-- > 0;) {
+            for (const auto i : nodes_[k].values)
+                if (kept(i)) {
+                    ++count[k];
+                    errors[k] += (*values_)[i].error ? 1 : 0;
+                }
+            for (const int c : nodes_[k].kids) {
+                count[k] += count[static_cast<std::size_t>(c)];
+                errors[k] += errors[static_cast<std::size_t>(c)];
+            }
+        }
+        rows_.clear();
+        const std::function<void(int)> walk = [&](int at) {
+            const auto& n = nodes_[static_cast<std::size_t>(at)];
+            if (count[static_cast<std::size_t>(at)] == 0) return;
+            Row r;
+            r.node = true;
+            r.label = n.label;
+            r.path = n.path;
+            r.depth = n.depth;
+            r.count = count[static_cast<std::size_t>(at)];
+            r.errors = errors[static_cast<std::size_t>(at)];
+            r.open = searching || closed_.count(n.path) == 0;
+            rows_.push_back(r);
+            if (!r.open) return;
+            for (const auto i : n.values) {
+                if (!kept(i)) continue;
+                Row v;
+                v.depth = n.depth + 1;
+                v.value = i;
+                v.path = n.path;
+                rows_.push_back(v);
+            }
+            for (const int c : n.kids) walk(c);
+        };
+        for (const int root : roots) walk(root);
+    }
+
+    const std::vector<hmi::LiveValue>* values_;
+    std::vector<Node>                  nodes_;
+    std::vector<Row>                   rows_;
+    std::set<std::string>              closed_;
+    std::string                        query_;
+    std::size_t                        sig_{0};
 };
 
 class TextRows final : public ui::ITableModel {
@@ -312,6 +470,8 @@ private:
 // du tableau ouvre son menu (Copier...) ; le volet y met Vider le journal en tete.
 constexpr int kJournalClear = 1;              // le bouton de la barre
 constexpr int kJournalClearItem = -2001;      // l'entree du menu (-1 : un trait)
+constexpr int kExprExpandAll = -2101;         // 1.11.6 : le clic droit de l'onglet Expressions
+constexpr int kExprCollapseAll = -2102;
 
 // 1.10.3 (demande du client) : les 5 boutons de droite et la liste deroulante de
 // droite sont retires de la barre ; leurs commandes passent dans le MENU DU CLIC
@@ -365,6 +525,27 @@ protected:
     }
 private:
     HmiToolStrip*  tools_{nullptr};
+    ui::TableView* table_{nullptr};
+};
+
+// 1.11.6 : la page Expressions - la recherche, puis l'arbre.
+class ExprPage final : public ui::Widget {
+public:
+    ExprPage(std::string id, std::unique_ptr<ui::TableView> table) : ui::Widget(std::move(id)) {
+        search_ = &static_cast<ui::InputText&>(addChild(std::make_unique<ui::InputText>(this->id() + ".search")));
+        search_->setPlaceholder("Chercher (objet, propri\xC3\xA9t\xC3\xA9, expression, valeur)");
+        table_ = &static_cast<ui::TableView&>(addChild(std::move(table)));
+    }
+    [[nodiscard]] ui::InputText& search() noexcept { return *search_; }
+protected:
+    void onLayout() override {
+        const auto b = bounds();
+        search_->setBounds({b.x + 8.f, b.y + 5.f, std::min(380.f, std::max(80.f, b.w - 16.f)), 26.f});
+        table_->setBounds({b.x, b.y + 36.f, b.w, std::max(0.f, b.h - 36.f)});
+    }
+    void onPaint(const ui::PaintContext& ctx) override { ctx.r.fillRect({bounds().x, bounds().y, bounds().w, 36.f}, ctx.theme.color.panelBg); }
+private:
+    ui::InputText* search_{nullptr};
     ui::TableView* table_{nullptr};
 };
 
@@ -2077,11 +2258,33 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
     canvas_->setAssets(&doc_->project.assets);
     auto tabs = std::make_unique<ui::TabControl>(base + ".tabs");
     {
-        auto table = std::make_unique<ui::TableView>(base + ".values");
-        table->setColumns({{"Objet", 150.f}, {"Propri\xC3\xA9t\xC3\xA9", 92.f}, {"Expression", 210.f}, {"Valeur", 235.f}});
+        // 1.11.6 : l'arbre des expressions (objet, instance, propriete) et sa recherche.
+        auto table = std::make_unique<JournalTable>(base + ".values");
+        table->setColumns({{"Objet / propri\xC3\xA9t\xC3\xA9", 220.f}, {"Expression", 230.f}, {"Valeur", 235.f}});
         table->setSelectionMode(ui::SelectionMode::Single);
         table_ = table.get();
-        tabs->addTab(ui::TabControl::Tab{"Expressions", ui::Icon::Code, false, false}, std::move(table));
+        auto* raw = table.get();
+        table->onContextMenu = [this, raw](gfx::Point) {
+            auto* menu = raw->contextMenu();
+            if (!menu) return;
+            std::vector<ui::PopupMenu::Item> items;
+            items.push_back({"Tout d\xC3\xA9plier", {}, {}, ui::Icon::None, true, false, kExprExpandAll});
+            items.push_back({"Tout replier", {}, {}, ui::Icon::None, true, false, kExprCollapseAll});
+            items.push_back({{}, {}, {}, ui::Icon::None, true, true, -1});
+            for (const auto& it : menu->items()) items.push_back(it);
+            menu->setItems(std::move(items));
+        };
+        if (auto* menu = table->contextMenu())
+            links_ += menu->itemChosen->connect([this](int a) {
+                if (a == kExprExpandAll || a == kExprCollapseAll) expandExpressions(a == kExprExpandAll);
+            });
+        auto page = std::make_unique<ExprPage>(base + ".valuesPage", std::move(table));
+        exprSearch_ = &page->search();
+        links_ += exprSearch_->textChanged->connect([this](const std::string& t) {
+            if (auto* tree = static_cast<ExprTree*>(model_.get())) tree->rebuild(t);
+            table_->setModel(model_);
+        });
+        tabs->addTab(ui::TabControl::Tab{"Expressions", ui::Icon::Code, false, false}, std::move(page));
     }
     {
         auto table = std::make_unique<JournalTable>(base + ".journal");
@@ -2238,8 +2441,12 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
     // 1.9 : a droite, "Variateur ATV320 et Balance B lus en simule" (violet, la fiole).
     simReads_ = &status_->addIndicator(std::make_unique<simmark::Indicator>(base + ".simReads"), ui::StatusBar::Slot::Right);
 
-    model_ = std::make_shared<LiveModel>(&values_);
+    model_ = std::make_shared<ExprTree>(&values_);           // 1.11.6 : en arbre
     table_->setModel(model_);
+    links_ += table_->expanderClicked->connect([this](ui::RowIndex r) {
+        static_cast<ExprTree*>(model_.get())->toggle(r);
+        table_->setModel(model_);
+    });
 
     canvas_->setLive(&runtime_, &doc_->history);
     canvas_->setProject(&doc_->project);
@@ -2417,8 +2624,15 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
     });
     links_ += canvas_->doubleClicked->connect([this](Id object) { runtime_.doubleClick(object, now_); });
     links_ += table_->activated->connect([this](ui::RowIndex r) {
-        if (r >= values_.size() || !host_.force) return;
-        const auto& e = values_[r].expression;
+        auto* tree = static_cast<ExprTree*>(model_.get());
+        const std::size_t i = tree->valueAt(r);
+        if (i == std::string::npos) {   // 1.11.6 : un noeud se replie ou se deplie
+            tree->toggle(r);
+            table_->setModel(model_);
+            return;
+        }
+        if (i >= values_.size() || !host_.force) return;
+        const auto& e = values_[i].expression;
         host_.force(plainPath(e) ? e : std::string{});
     });
     // Double-clic sur une alarme : l'acquitter ; sur un jeu : l'appliquer.
@@ -3255,7 +3469,11 @@ void HmiSimulationPane::refreshPane() {
         if (text != reads->text()) twinsDirty_ = true;
         reads->setText(std::move(text));
     }
-    if (values_.size() != before) table_->setModel(model_);
+    // 1.11.6 : l'arbre se refait quand la vue change (ses objets, ses expressions) ; les valeurs se relisent.
+    if (auto* tree = static_cast<ExprTree*>(model_.get()); values_.size() != before || tree->stale()) {
+        tree->rebuild(exprSearch_ ? exprSearch_->text() : std::string{});
+        table_->setModel(model_);
+    }
     table_->invalidate();
     updateTables();
     refreshBar();   // 1.10
@@ -3324,6 +3542,11 @@ std::size_t HmiSimulationPane::clearJournal() {
         status_->setTransientMessage("Journal vid\xC3\xA9 (" + std::to_string(n) + (n > 1 ? " lignes)" : " ligne)"), 6.0,
                                      ui::StatusBar::Severity::Success);
     return n;
+}
+
+void HmiSimulationPane::expandExpressions(bool open) {
+    if (auto* tree = static_cast<ExprTree*>(model_.get())) tree->setAllOpen(open);
+    if (table_) table_->setModel(model_);
 }
 
 void HmiSimulationPane::updateViewFilter() {
