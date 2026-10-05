@@ -2260,7 +2260,7 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
     {
         // 1.11.6 : l'arbre des expressions (objet, instance, propriete) et sa recherche.
         auto table = std::make_unique<JournalTable>(base + ".values");
-        table->setColumns({{"Objet / propri\xC3\xA9t\xC3\xA9", 220.f}, {"Expression", 230.f}, {"Valeur", 235.f}});
+        table->setColumns({{"Objet / propri\xC3\xA9t\xC3\xA9", 165.f}, {"Expression", 170.f}, {"Valeur", 140.f}});
         table->setSelectionMode(ui::SelectionMode::Single);
         table_ = table.get();
         auto* raw = table.get();

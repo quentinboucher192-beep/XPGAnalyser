@@ -17,6 +17,9 @@ sim-utilisateur "admin" "admin2026"
 attendre 3
 sim-vue "Vue_STEST"
 attendre 8
+# Le volet de droite plus large (sa poignee, entre la vue et les onglets) : les colonnes se lisent.
+glisser 1113 500 790 500
+attendre 3
 
 # ---- 1. L'onglet Expressions en arbre : STEST_1 range les objets de son symbole ----
 sous-onglet "Expressions"
