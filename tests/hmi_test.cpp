@@ -4186,6 +4186,11 @@ void fonctionsSymbole11110() {
         const auto e = Expression::compile("Vue_V.V2.Etat() + 1");
         const auto x = e.evaluate(env);
         check(x && x->asInteger() == 85, "Vue_V.V2.Etat() + 1 = 85 (" + (x ? x->display() : std::string("erreur")) + ")");
+        // Dans une popup du symbole : {Etat()} devient INSTANCE_DU_SYMBOLE.Etat(), un parametre de la popup.
+        Scope inPopup;
+        inPopup.setAlias(std::string(kInstanceAlias), "Vue_V.V1");
+        const auto y = Expression::compile(std::string(kInstanceAlias) + ".Etat()").evaluate(env, &inPopup);
+        check(y && y->asInteger() == 92, "dans la popup : INSTANCE_DU_SYMBOLE.Etat() = 92, celle de V1 (" + (y ? y->display() : std::string("erreur")) + ")");
     }
     // Sans fin : arretee et dite, l'IHM continue.
     {
@@ -4194,6 +4199,29 @@ void fonctionsSymbole11110() {
         check(!ran && (journalHas(rt, "Erreur", "appel circulaire") || err.find("circulaire") != std::string::npos),
               "Boucle() sans fin : arr\xC3\xAAt\xC3\xA9" "e (appel circulaire) (" + err + ")");
         check(rt.callScript("Seq", 0.6, &err), "... et l'IHM continue : Seq tourne encore (" + err + ")");
+    }
+    // Exporter le symbole : ses fonctions et ses popups (meme celle qu'aucune action n'ouvre)
+    // partent avec lui ; importes dans un projet neuf, la popup suit son symbole.
+    {
+        namespace pk = hmi::pkg;
+        Project src = p;
+        View info = makeView(src, "Pop_Info");
+        info.role = "popup";
+        info.ownerSymbol = symId;
+        src.views.push_back(info);
+        const auto pkg = pk::collectSymbols(src, {symId});
+        const View* ps = pkg.content.viewByName("S_Vanne");
+        check(ps && ps->functions.size() == 5 && pkg.content.viewByName("Pop_Vanne") && pkg.content.viewByName("Pop_Info"),
+              "exporter S_Vanne : ses 5 fonctions et ses deux popups (Pop_Info : aucune action ne l'ouvre)");
+        Project dst;
+        const auto pl = pk::plan(dst, pkg);
+        (void)pk::importInto(dst, pkg, pl);
+        const View* s2 = dst.viewByName("S_Vanne");
+        const View* i2 = dst.viewByName("Pop_Info");
+        const View* v2 = dst.viewByName("Pop_Vanne");
+        check(s2 && i2 && v2 && i2->ownerSymbol == s2->id && v2->ownerSymbol == s2->id && s2->functions.size() == 5
+                  && s2->functions[0].isVirtual,
+              "import\xC3\xA9 : les popups restent celles de S_Vanne (le nouvel identifiant), ses fonctions aussi");
     }
     // Enregistrer, relire : les fonctions, virtuelles, et la redefinition.
     {

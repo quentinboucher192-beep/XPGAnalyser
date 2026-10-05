@@ -50,6 +50,9 @@ int main(int argc, char** argv) {
         v.description = text;
         p.programs.variables.push_back(v);
     };
+    // L'Esclave virtuel 1 (preparer-projet-1118) : seulement simule, comme chez le client.
+    for (auto& e : p.equipments)
+        if (e.name == "Esclave virtuel 1") e.simulated = true;
     var("Ouvertures", "INT", "0", "Le nombre d'ouvertures de vannes");
     var("Purge_OK", "BOOL", "FALSE", "La purge de la ligne gaz est faite");
     var("V0", "T_VEC", "", "Un vecteur");
@@ -191,7 +194,7 @@ int main(int argc, char** argv) {
         const Id i3 = placeSymbol(p, v, "S_Vanne", 40, 40);
         if (auto* o = v.object(i3)) {
             o->name = "Vanne_3";
-            o->set("params", "Vanne := V[3]; Nom := 'Vanne d''entr\xC3\xA9" "e gaz'");
+            o->set("params", "Vanne := V[3]; Nom := 'Vanne entr\xC3\xA9" "e gaz'");
             o->functionOverrides.push_back({"Ouvrir",
                 "VAR_INPUT\n    Motif : STRING := 'op\xC3\xA9rateur';\nEND_VAR\n"
                 "(* Vanne_3 : l'entr\xC3\xA9" "e gaz s'ouvre en deux temps - la purge d'abord *)\n"

@@ -113,6 +113,7 @@ View withNewIds(Project& dst, const View& v) {
         if (ids.count(o.parent)) o.parent = ids[o.parent];
     }
     for (auto& sc : copy.scripts) sc.id = dst.allocate();
+    for (auto& fn : copy.functions) fn.id = dst.allocate();   // 1.11.10 : les fonctions d'un symbole
     if (ids.count(copy.activeLayer)) copy.activeLayer = ids[copy.activeLayer];
     else if (!copy.layers.empty()) copy.activeLayer = copy.layers.front().id;
     return copy;
@@ -253,6 +254,10 @@ Package collect(const Project& p, const std::vector<Id>& chosen) {
         std::vector<Id> popups;
         popupTargets(p, *v, popups);
         for (Id pid : popups) todo.push_back(pid);
+        // 1.11.10 : un symbole emporte ses popups, meme celles qu'aucune action n'ouvre.
+        if (isSymbolView(*v))
+            for (const auto& w : p.views)
+                if (w.ownerSymbol == v->id) todo.push_back(w.id);
     }
     Project& c = out.content;
     c = Project{};
@@ -938,6 +943,7 @@ ImportResult importInto(Project& dst, const Package& pkg, const Plan& pl) {
             v->header = relink(v->header);
             v->footer = relink(v->footer);
             v->upView = relink(v->upView);
+            v->ownerSymbol = relink(v->ownerSymbol);   // 1.11.10 : la popup suit son symbole
         }
     }
     // 4. Les ressources.

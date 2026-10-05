@@ -10,10 +10,10 @@ Livrée le 05/10/2026 au soir. Elle reprend vos demandes :
 | « les fonctions des symboles sont disponibles dans les scripts généraux, et visibles partout où on déballe les instances ou les symboles » | `Vue_Vannes.Vanne_3.Ouvrir()` ; l'arbre, l'aide à la saisie |
 | « qu'un symbole ait ses propres popups dans sa structure à lui, afficher ça quand on déballe un symbole et les instances » | sous-onglet **Popups** ; l'arbre |
 | « que les fonctions soient utilisables entre elles et dans les opérateurs, que les opérateurs puissent s'utiliser entre eux » | le moteur des scripts |
-| « quand je modifie les paramètres d'un popup ou d'un symbole, il faut mettre à jour les instances » | corrigé (§ 7) |
-| « comment puis-je avoir des mauvaises données sur un esclave simulé avec des zones mémoire à 65535 ? » | corrigé (§ 8) |
+| « quand je modifie les paramètres d'un popup ou d'un symbole, il faut mettre à jour les instances » | corrigé (§ 8) |
+| « comment puis-je avoir des mauvaises données sur un esclave simulé avec des zones mémoire à 65535 ? » | corrigé (§ 9) |
 
-Fichiers livrés : `XPGAnalyser-Setup-1.11.10.exe` (l'installateur), ce document, CAPTURES captures, et la maquette `maquette-1.11.10.html` envoyée plus tôt.
+Fichiers livrés : `XPGAnalyser-Setup-1.11.10.exe` (l'installateur), ce document, 11 captures, et la maquette `maquette-1.11.10.html` envoyée plus tôt.
 
 Les exemples suivent la maquette : le symbole `S_Vanne` (paramètres `Vanne : Vanne` et `Nom : STRING`), posé deux fois dans `Vue_Vannes` :
 - `Vanne_3`, liée à `V[3]` ;
@@ -39,6 +39,8 @@ L'éditeur du symbole a un nouveau sous-onglet, **Fonctions**. On y retrouve le 
 
 Dans `Ouvrir`, `Vanne.CMD_OUV := TRUE;` écrit `V[3].CMD_OUV` pour Vanne_3 et `V[4].CMD_OUV` pour Vanne_4.
 
+**Exporter le symbole** (IHM › Symboles, Exporter les symboles) emporte ses fonctions et toutes ses popups, même celles qu'aucune action n'ouvre. Importées, les popups restent rattachées à leur symbole.
+
 **Les propriétés** disent aussi quelles instances redéfinissent la fonction (« Redéfinie par ») et comment l'appeler.
 
 **Renommer une fonction** renomme ses appels partout : dans le symbole, dans les vues, dans les scripts et les fonctions, ainsi que les redéfinitions des instances. Un seul Ctrl+Z reprend tout.
@@ -62,7 +64,7 @@ Les fonctions d'un symbole posé **dans un autre symbole** s'appellent aussi : `
 
 **Compiler (F7)** contrôle ces appels : la fonction, le nombre d'arguments, le retour d'une procédure.
 
-Capture : `11110_06_script_general.png`, le script général `Sequence_Matin`.
+Capture : `11110_07_script_general.png`, le script général `Sequence_Matin`, « aucune erreur dans ce script ».
 
 ## 3. Une fonction virtuelle, redéfinie dans une instance
 
@@ -92,15 +94,15 @@ SUPER.Ouvrir(Motif);   (* le corps du symbole *)
 ```
 
 Captures :
-- `11110_04_inspecteur_instance.png` : la section, Ouvrir redéfinie ici ;
-- `11110_05_redefinition_fenetre.png` : la fenêtre de la redéfinition, avec `SUPER.Ouvrir`.
+- `11110_05_inspecteur_instance.png` : la section, Ouvrir redéfinie ici ;
+- `11110_06_redefinition_fenetre.png` : la fenêtre de la redéfinition, avec `SUPER.Ouvrir`, « Aucune faute ».
 
 ## 4. Les popups d'un symbole
 
 Le sous-onglet **Popups** de l'éditeur du symbole liste ses popups : **Nouvelle popup**, **Ouvrir le dessin** (un onglet, comme une vue) et **Supprimer**. À droite, « Ce qu'elle connaît » : les paramètres du symbole et les fonctions de l'instance.
 
 **Une popup du symbole :**
-- **connaît d'office les paramètres du symbole.** Ouverte depuis Vanne_3, `Vanne` y vaut `V[3]` et `Nom` « Vanne d'entrée gaz », sans rien passer ;
+- **connaît d'office les paramètres du symbole.** Ouverte depuis Vanne_3, `Vanne` y vaut `V[3]` et `Nom` « Vanne entrée gaz », sans rien passer ;
 - **appelle les fonctions de l'instance qui l'a ouverte.** `Ouvrir('popup')` dans Pop_Vanne ouvre Vanne_3 avec sa redéfinition, ou Vanne_4 avec le corps du symbole ;
 - peut déclarer ses propres paramètres, passés comme d'habitude.
 
@@ -124,7 +126,9 @@ Capture : `11110_02_popups_du_symbole.png`.
 - sur une fonction du symbole : ouvre son éditeur sur elle ;
 - sous une instance : choisit l'instance, et son inspecteur montre ses fonctions.
 
-Capture : `11110_03_arbre_deballe.png`.
+Captures :
+- `11110_03_arbre_symbole_deballe.png` : sous S_Vanne ;
+- `11110_04_arbre_instance_deballee.png` : sous Vanne_3, Ouvrir « redéfinie ».
 
 ## 6. Les fonctions et les opérateurs, entre eux
 
@@ -136,11 +140,23 @@ Capture : `11110_03_arbre_deballe.png`.
 
 **Les appels imbriqués** vont maintenant jusqu'à **32 niveaux** (8 avant). Au-delà, l'appel s'arrête (« appel circulaire »), le journal le dit, et l'IHM continue.
 
-Capture : `11110_07_operateur_emploie_operateur.png`, l'opérateur `T_VEC * REAL` :
+Capture : `11110_08_operateur_emploie_operateur.png`, l'opérateur `T_VEC * REAL` :
 - `Resultat := a + a` emploie l'opérateur `T_VEC + T_VEC` ;
 - `Bonus(Resultat.X)` appelle une fonction IHM.
 
-## 7. Correction : les paramètres d'un symbole ou d'une popup, et leurs instances
+## 7. En marche
+
+Dans `Vue_Vannes`, Vanne_3 et Vanne_4 lisent V[3] et V[4] sur l'Esclave virtuel 1 (seulement simulé). Le bouton « Détail » de chaque instance ouvre **sa** popup :
+
+| Geste | Ce qui se passe | Capture |
+|---|---|---|
+| Détail de Vanne_3, puis Ouvrir | la redéfinition de Vanne_3 refuse : la purge n'est pas faite (« Vanne_3 : purge non faite » au journal), la vanne reste à 0 % | `11110_09_popup_vanne_3_purge.png` |
+| Détail de Vanne_4, puis Ouvrir | le corps du symbole : V[4] passe à 100 %, état 2 ; Ouvertures : 1 | `11110_10_popup_vanne_4_ouverte.png` |
+| « Purge faite », puis Vanne_3 › Ouvrir | la redéfinition rappelle `SUPER.Ouvrir` : V[3] passe à 100 % ; Ouvertures : 2 | `11110_11_vanne_3_apres_purge.png` |
+
+Dans la popup, `État : {Etat()}` lit la fonction de l'instance qui l'a ouverte.
+
+## 8. Correction : les paramètres d'un symbole ou d'une popup, et leurs instances
 
 **Ce qui se passait :** renommer un paramètre de symbole laissait l'ancien nom dans les instances. `Name := 'A'` restait, le nouveau paramètre prenait sa valeur par défaut, et l'inspecteur montrait l'ancien argument. Supprimer ou déplacer un paramètre n'était pas suivi non plus.
 
@@ -154,7 +170,7 @@ Capture : `11110_07_operateur_emploie_operateur.png`, l'opérateur `T_VEC * REAL
 
 L'inspecteur d'une instance ouverte dans un autre onglet suit aussitôt. Un seul Ctrl+Z reprend le paramètre et ses instances.
 
-## 8. Correction : des valeurs « mauvaises » sur un esclave simulé
+## 9. Correction : des valeurs « mauvaises » sur un esclave simulé
 
 Ce n'étaient pas les zones mémoire. **Un script qui écrit à chaque image** remplissait la file d'écritures de la liaison plus vite qu'elle ne l'envoyait (une requête par écriture, au temps de réponse de l'esclave). La liaison ne repassait jamais aux lectures : les valeurs vieillissaient, « ancienne » puis « mauvaise » au bout de 30 s (« pas relue depuis 2 min 49 s »).
 
@@ -170,8 +186,8 @@ Ce n'étaient pas les zones mémoire. **Un script qui écrit à chaque image** r
 
 **Compatibilité des projets :** ceux enregistrés par la 1.11.10 gardent les fonctions des symboles, les redéfinitions des instances et les popups des symboles. Une version plus ancienne qui les relit les ignore : un avertissement par ligne inconnue, et la popup redevient une popup du projet.
 
-Empreinte SHA-256 de `XPGAnalyser-Setup-1.11.10.exe` (TAILLE) :
-`EMPREINTE`
+Empreinte SHA-256 de `XPGAnalyser-Setup-1.11.10.exe` (14,7 Mo, 15 430 380 octets) :
+`52E0064117554BC51C056E041DBD826EB1251967E6FB8B59C15487B27A354C0C`
 
 ## Vérifications
 
@@ -179,7 +195,7 @@ Empreinte SHA-256 de `XPGAnalyser-Setup-1.11.10.exe` (TAILLE) :
 
 | Test | Ce qu'il vérifie |
 |---|---|
-| `fonctionsSymbole11110` (hmi_test) | les appels qualifiés à l'expansion ; un script général appelle `Vue_V.V1.Ouvrir()` ; la redéfinition de V2 et `SUPER` ; une fonction qui appelle les siennes (`Ouvrir(Pas := Etat())`) ; un opérateur qui emploie `+` et une fonction ; le bouton du symbole dans chaque instance ; `V1.Ouvrir(5)` depuis la vue ; la popup du symbole ouverte depuis le symbole, depuis la vue (`V2.Pop_Vanne`) et par `IHM_POPUP` (Pos lu, Ouvrir de l'instance) ; une expression `Vue_V.V1.Etat()` ; la boucle sans fin arrêtée ; enregistré puis relu |
+| `fonctionsSymbole11110` (hmi_test) | les appels qualifiés à l'expansion ; exporter le symbole (ses fonctions, ses deux popups), l'importer (les popups rattachées) ; un script général appelle `Vue_V.V1.Ouvrir()` ; la redéfinition de V2 et `SUPER` ; une fonction qui appelle les siennes (`Ouvrir(Pas := Etat())`) ; un opérateur qui emploie `+` et une fonction ; le bouton du symbole dans chaque instance ; `V1.Ouvrir(5)` depuis la vue ; la popup du symbole ouverte depuis le symbole, depuis la vue (`V2.Pop_Vanne`) et par `IHM_POPUP` (Pos lu, Ouvrir de l'instance) ; une expression `Vue_V.V1.Etat()`, et `Etat()` dans la popup ; la boucle sans fin arrêtée ; enregistré puis relu |
 | `fonctionsSymboleEditeur11110` (hmi_editor_test) | les sous-onglets Fonctions et Popups ; une fonction ajoutée, virtuelle, un nom refusé ; renommer (le script général suit) et Ctrl+Z ; une popup du symbole ; l'inspecteur de l'instance (redéfinie ici, la fenêtre, SUPER sans faute, Ctrl+Z, du symbole) ; l'arbre déballé |
 | `parametresInstances11110` (hmi_editor_test) | renommer, déplacer, supprimer un paramètre de symbole ou de popup : les instances (positionnelles, nommées, imbriquées) et les appelants suivent ; l'inspecteur ouvert ; Ctrl+Z |
 | `ecrituresContinues11110` (hmi_editor_test) | un esclave simulé, 64 écritures par image pendant 4 s : la variable seulement lue reste bonne et suit l'esclave ; les dernières positions arrivent ; les écritures se regroupent |
@@ -189,7 +205,10 @@ Empreinte SHA-256 de `XPGAnalyser-Setup-1.11.10.exe` (TAILLE) :
 - `--cli MAST.XPG` analyse le projet d'essai (891 variables) ;
 - la session `session-11110-fonctions-symbole.txt` a été rejouée sur une copie d'Armoire_Gaz : ce sont les captures.
 
-**L'installateur**, compilé par Inno Setup 6.4.1 sous Wine, puis installé en silencieux : INSTALL.
+**L'installateur**, compilé par Inno Setup 6.4.1 sous Wine, puis installé en silencieux :
+- il s'est installé en silencieux, pour tous les comptes, par-dessus la 1.11.9 : « Installation process succeeded » ;
+- l'exe installé est identique à celui qui a été testé, et répond `1.11.10`.
+- Seuls les raccourcis du menu Démarrer dont le nom a un accent n'ont pas pu être créés. C'est la limite de Wine déjà vue aux livraisons précédentes, sans rapport avec Windows.
 
 **Pas encore fait :** ni l'exe ni l'installateur n'ont été lancés sur un vrai Windows. Merci de vérifier sur votre projet :
 - la redéfinition d'une fonction dans une instance ;

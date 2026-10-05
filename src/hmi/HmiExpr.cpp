@@ -81,6 +81,12 @@ public:
         // Lot 7 : une fonction IHM du projet (en lecture seule).
         if (auto* host = dynamic_cast<FunctionHost*>(&plc_); host && host->hostsFunction(name))
             return host->callFromExpression(name, arguments, result);
+        // 1.11.10 : la fonction d'une instance par un parametre de la vue (dans une popup du
+        // symbole, INSTANCE_DU_SYMBOLE.Etat() : l'instance qui l'a ouverte).
+        if (auto* host = dynamic_cast<FunctionHost*>(&plc_); host && scope_ && name.find('.') != std::string_view::npos) {
+            const std::string resolved = scope_->resolve(name);
+            if (resolved != name && host->hostsFunction(resolved)) return host->callFromExpression(resolved, arguments, result);
+        }
         if (!isPureFunction(name)) {
             if (message_.empty())
                 message_ = "'" + std::string(name) + "' : une expression de vue n'appelle que des fonctions "

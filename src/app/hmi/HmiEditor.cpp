@@ -838,7 +838,7 @@ void HmiEditor::editOverride(Id instance, const std::string& function) {
     spec.function = *f;
     const auto* fo = hmi::functionOverride(*inst, f->name);
     spec.code = fo ? fo->body : f->body;
-    spec.where = v->name + "." + inst->name + "." + f->name + " \xC2\xB7 " + (fo ? "red\xC3\xA9" "finie dans l'instance" : "le corps du symbole pour d\xC3\xA9part");
+    spec.where = fo ? std::string("sa red\xC3\xA9" "finition") : std::string("le corps du symbole pour d\xC3\xA9part");
     spec.title = "Red\xC3\xA9" "finir " + f->name + " dans " + inst->name;
     const std::string name = f->name;
     std::weak_ptr<bool> alive = alive_;

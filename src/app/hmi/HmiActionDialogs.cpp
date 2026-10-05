@@ -192,7 +192,7 @@ protected:
         const auto& c = ctx.theme.color;
         r.fillRect(panel_, c.panelBg);
         r.strokeRect(panel_, c.borderStrong, 1.f);
-        r.drawText({panel_.x + 16.f, panel_.y + 13.f}, fit(r, "Script de l'action \xC2\xB7 " + spec_.where, kTitle, panel_.w * 0.7f), kTitle, c.text);
+        r.drawText({panel_.x + 16.f, panel_.y + 13.f}, fit(r, (spec_.title.empty() ? std::string("Script de l'action") : spec_.title) + " \xC2\xB7 " + spec_.where, kTitle, panel_.w * 0.7f), kTitle, c.text);
         close_ = {panel_.right() - 36.f, panel_.y + 10.f, 24.f, 24.f};
         r.drawText({close_.x + 7.f, close_.y + 2.f}, "\xC3\x97", kTitle, c.textMuted);
         r.fillRect({panel_.x, panel_.y + 42.f, panel_.w, 1.f}, c.border);
