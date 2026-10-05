@@ -87,16 +87,16 @@ const std::vector<Note>& table() {
         // de legende au bout de chaque case de l'inspecteur.
         note("1.11.3", "\xC3\x89" "diteur IHM", Kind::Fixed,
          "Param\xC3\xA8tres du symbole : une formule garde son fx apr\xC3\xA8s la saisie. =UINTS reste une formule (la pastille fx pleine, le carr\xC3\xA9 I d'une variable IHM) ; la 1.11.2 le r\xC3\xA9\xC3\xA9" "crivait UINTS, sans fx.",
-         "parametres-symbole", ""),
+         "symboles", ""),
         note("1.11.3", "\xC3\x89" "diteur IHM", Kind::Changed,
          "Param\xC3\xA8tres du symbole : sans fx, ce qu'on tape est une constante convertie dans le type du param\xC3\xA8tre, comme le texte d'un objet. Voiture devient 'Voiture' pour un STRING, 1,5 devient 1.5 pour un REAL, vrai devient TRUE pour un BOOL, Auto devient T_MODE#Auto pour une \xC3\xA9num\xC3\xA9ration. Un nom de variable (UINTS, une variable de l'automate) reste la variable ; un param\xC3\xA8tre ANY garde l'argument tel quel. Les anciens arguments sans apostrophes (Voiture;50) se lisent de la m\xC3\xAAme fa\xC3\xA7on.",
-         "parametres-symbole", ""),
+         "symboles", ""),
         note("1.11.3", "\xC3\x89" "diteur IHM", Kind::Fixed,
          "Un tableau en param\xC3\xA8tre : UINTS (ARRAY[0..9] OF UINT) va \xC3\xA0 Value : ARRAY[0..9] OF UINT sans erreur ; une variable d'un autre type (gCoef, un REAL) est signal\xC3\xA9" "e en rouge, avec les variables du bon type propos\xC3\xA9" "es.",
-         "parametres-symbole", ""),
+         "symboles", ""),
         note("1.11.3", "Champs et expressions", Kind::New,
          "Le carr\xC3\xA9 de l\xC3\xA9gende : au bout de chaque case de l'inspecteur, un carr\xC3\xA9 dit d'o\xC3\xB9 vient la valeur - C constante, fx formule, $ rep\xC3\xA8res, A automate, I IHM, S syst\xC3\xA8me, V symbole ou vue, ! erreur. Son infobulle dit le type, la source et l'erreur s'il y en a une.",
-         "", ""),
+         "aide-saisie", ""),
         // 1.11.2 (T2, tranches 41, 42 et 44 ; livree le 04/10/2026 a 6 h ; decisions 187, 201, 212 et 216) : l'export et
         // l'import (REP), les icones de l'aide a la saisie (API-V), l'instance unique (UNI), les blocages (b), (c),
         // (d) (BLK), les tutoriels et le projet modele livre avec l'exe (T1), les glyphes, les noms des langues et F1

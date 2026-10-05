@@ -16223,8 +16223,9 @@ void centreAide111() {
         // Tranche 25 : 112 (les reperes $...$, decision 69).
         // 1.11.1 (tranche 30) : 123 (+ 11).
         // Tranche 46 (SYM, decision 240) : 148 (+ 2, Dupliquer dans un symbole et la section Parametres du symbole).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 148,
-              "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 148 en tout ("
+        // 1.11.3 : 152 (+ 4, les parametres d'une instance et le carre de legende).
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 152,
+              "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 152 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
             for (const auto& n : hn::all())
@@ -16366,7 +16367,7 @@ void centreAide111() {
     // Integration 1.11 (I111) : la 1.10.4 ajoute objet-vanne-3-voies (La bibliotheque d'objets) : 206.
     // 1.11.1 (T2, decision 107) : Programmer gagne variables-api (API. : les variables de l'automate) : 207.
     check(ix.count(hc::Chapter::Hmi) == 208, "centre : L'IHM a les 208 sujets des chapitres 2 a 8 du guide (1.11.1 : variables-api ; 1.11.2 : paquets-symboles)");
-    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 10, "centre : 11 expressions, 10 notes (1.11.2)");
+    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 11, "centre : 11 expressions, 11 notes (1.11.3)");
     // Tranche 3 : les 11 types de T3 (hmi::exprguide::all(), depot-o), passes par in.expressions ; les
     // cles de la liste de secours sont les siennes (enumeration, pas enum).
     {
@@ -16775,13 +16776,13 @@ void centreAide111() {
         // Les notes de version n'ont pas de tutoriel : ni la carte "Regarder le tutoriel" (hasTutorial, que
         // lit HelpCenterScreen::showTopic), ni la pastille dans l'arbre. Les autres pages speciales gardent
         // les leurs (T1 ecrit les tutoriels des raccourcis et de Signaler).
-        bool notesSans = ix.count(hc::Chapter::Notes) == 10;
+        bool notesSans = ix.count(hc::Chapter::Notes) == 11;   // 1.11.3 : une version de plus
         for (const auto* t : ix.ofChapter(hc::Chapter::Notes)) notesSans = notesSans && !hc::hasTutorial(*t);
         const auto* raccourcis = ix.find("page-raccourcis");
         const auto* signaler = ix.find("page-signaler");
         check(notesSans && raccourcis && hc::hasTutorial(*raccourcis) && signaler && hc::hasTutorial(*signaler)
                   && hc::hasTutorial(*ix.find("objet-vanne")),
-              "decision 12 : les 10 notes de version sans tutoriel ; les raccourcis, Signaler et les autres en ont un");
+              "decision 12 : les 11 notes de version sans tutoriel ; les raccourcis, Signaler et les autres en ont un");
         hc::TreeState st;
         st.current = "notes-1.11";
         bool pastilles = false, uneNote = false;
