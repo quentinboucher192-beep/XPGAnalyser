@@ -3299,7 +3299,8 @@ const std::vector<Topic>& topics() {
          "IHM.",
          {
              {K::Heading, "Lier", {}},
-             {K::Paragraph, "**Lier une variable** (onglets \xC3\x89quipements ou Variables li\xC3\xA9" "es) : "
+             {K::Paragraph, "**Lier une variable** (onglets \xC3\x89quipements ou Plan d'adressage ; 1.11.4 : l'onglet Variables li\xC3\xA9" "es est "
+                         "retir\xC3\xA9, une variable li\xC3\xA9" "e se choisit et se r\xC3\xA8gle dans le Plan d'adressage) : "
                          "un **nom** (une variable IHM qui existe est li\xC3\xA9" "e ; un nom nouveau la "
                          "cr\xC3\xA9" "e), un **type**, l'**\xC3\xA9quipement**, l'**adresse** - vide : la "
                          "prochaine libre apr\xC3\xA8s les autres variables de cet \xC3\xA9quipement. "

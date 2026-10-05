@@ -1006,7 +1006,7 @@ bool HmiCommPane::proposeFreeAddress(const std::string& variable, std::string* w
         return false;
     };
     const auto* v = doc_->project.variable(variable);
-    if (!v || !v->bound()) return fail("choisissez une variable IHM li\xC3\xA9" "e (sur la carte, ou Variables li\xC3\xA9" "es)");
+    if (!v || !v->bound()) return fail("choisissez une variable IHM li\xC3\xA9" "e (sur la carte, ou dans le Plan d'adressage)");
     const auto* e = doc_->project.equipmentByName(v->equipment);
     if (!e) return fail("\xC3\xA9quipement inconnu : " + v->equipment);
     const auto m = zn::buildMap(doc_->project, *e);

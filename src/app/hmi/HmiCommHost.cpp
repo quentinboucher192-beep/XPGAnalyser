@@ -215,7 +215,7 @@ std::vector<CommHost::TestLine> CommHost::testLink(const hmi::comm::Plan& plan, 
             if (auto e = plan.resolve(p.name + "[" + std::to_string(p.low) + "]")) pts.push_back(*e);
         }
     if (pts.empty()) {
-        out.push_back({equipment ? std::string("Aucune variable \xC3\xA0 lire : liez des variables IHM \xC3\xA0 cet \xC3\xA9quipement (onglet Variables li\xC3\xA9" "es).")
+        out.push_back({equipment ? std::string("Aucune variable \xC3\xA0 lire : liez des variables IHM \xC3\xA0 cet \xC3\xA9quipement (Lier une variable : onglet \xC3\x89quipements ou Plan d'adressage).")
                                  : std::string("Aucune variable \xC3\xA0 lire : localisez des variables du programme (AT %MW...) ou remplissez la table des adresses."),
                        2});
     } else {

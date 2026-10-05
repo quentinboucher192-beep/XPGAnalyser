@@ -111,7 +111,6 @@ HmiCommPane::Side HmiCommPane::side() const {
         case TScanner: return Side::Scan;
         case TEquipments:
         case TState: return equipment_.empty() || equipment_ == kPlcKey ? Side::Plc : Side::Equipment;
-        case TBound: return Side::Bound;
         case TPlan: {
             // Lot 16 : la ligne choisie du plan - une variable IHM, un equipement, ou l'automate.
             const auto* r = selectedPlanRow();
@@ -1053,103 +1052,28 @@ void HmiCommPane::rebuildZoneProperties(std::vector<PG::Category>& cats, const h
 }
 
 // ========================================================= variables liees ===
-void HmiCommPane::refreshBound() {
-    const auto& p = doc_->project;
-    auto* h = host();
-    boundOrder_.clear();
-    std::vector<std::vector<std::string>> rows;
-    std::vector<int> tones;
-    for (const auto& v : p.programs.variables) {
-        if (!v.bound()) continue;
-        boundOrder_.push_back(v.name);
-        hmi::comm::Point pt;
-        std::string reason, place;
-        int tone = 0;
-        const bool composite = hmi::types::isComposite(v.type);          // lot 16 : une structure, un tableau
-        if (composite) {
-            place = hmi::types::spanText(p, v);
-            pt.writable = !hmi::types::bitArea(v.address) || v.address.empty() || (v.address.front() != '1' && v.address.find("DI") == std::string::npos
-                                                                                  && v.address.rfind("%I", 0) != 0);
-            if (place.empty()) {
-                place = "sans place (adresse de d\xC3\xA9part illisible)";
-                tone = 3;
-            }
-        } else if (eq::placeEquipmentAddress(v.address, eq::registerType(v), pt, &reason)) place = pt.placeText() + " \xC2\xB7 " + eq::modiconText(pt);
-        else {
-            place = reason.empty() ? std::string("adresse illisible") : reason;
-            tone = 3;
-        }
-        const auto* e = p.equipmentByName(v.equipment);
-        if (!e) {
-            place = "\xC3\xA9quipement inconnu";
-            tone = 3;
-        }
-        std::string value = "\xE2\x80\x94", quality = "\xE2\x80\x94";
-        if (auto* lk = h && e && composite ? h->link(e->name) : nullptr) {
-            // Lot 16 : la pire des cases lues ; la valeur : le nombre de cases.
-            const auto leaves = hmi::types::leafVariables(p, v);
-            value = std::to_string(leaves.size()) + " cases";
-            int worst = 0;
-            bool read = false;
-            for (const auto& lf : leaves) {
-                std::string why;
-                const auto q = lk->quality(lf.name, &why);
-                const int t2 = q == hmi::comm::Quality::Good ? 1 : q == hmi::comm::Quality::Stale ? 2 : q == hmi::comm::Quality::Bad ? 3 : 0;
-                if (t2) read = true;
-                if (t2 > worst) {
-                    worst = t2;
-                    quality = t2 == 1 ? std::string("bonne") : std::string(hmi::comm::qualityName(q)) + " : " + lf.name + (why.empty() ? std::string{} : " : " + why);
-                }
-            }
-            if (!read) quality = "pas encore lue";
-            if (tone != 3) tone = worst;
-        } else if (auto* single = h && e ? h->link(e->name) : nullptr) {
-            std::string why;
-            const auto q = single->quality(v.name, &why);
-            quality = std::string(hmi::comm::qualityName(q)) + (why.empty() ? std::string{} : " : " + why);
-            if (q == hmi::comm::Quality::Pending) quality = "pas encore lue";
-            sim::Value raw;
-            if (single->read(v.name, raw) && (q == hmi::comm::Quality::Good || q == hmi::comm::Quality::Stale)) value = hmi::formatValue(eq::fromRegister(v, raw));
-            if (tone != 3) tone = q == hmi::comm::Quality::Good ? 1 : q == hmi::comm::Quality::Stale ? 2 : q == hmi::comm::Quality::Bad ? 3 : 0;
-        } else if (e && !e->enabled) {
-            quality = "\xC3\xA9quipement d\xC3\xA9sactiv\xC3\xA9";
-        }
-        const std::string scale = v.scaled() ? numberText(v.rawMin) + ".." + numberText(v.rawMax) + " \xE2\x86\x92 " + numberText(v.engMin) + ".." + numberText(v.engMax)
-                                             : std::string("\xE2\x80\x94");
-        const bool writable = !v.readOnly && e && e->writes && pt.writable;
-        rows.push_back({v.name, v.equipment, v.address, place, v.type, scale, writable ? "lecture, \xC3\xA9" "criture" : "lecture seule", value, quality});
-        tones.push_back(tone);
-    }
-    boundModel_ = std::make_shared<Rows>(std::vector<std::string>{"Variable", "\xC3\x89quipement", "Adresse", "Place Modbus", "Type", "Mise \xC3\xA0 l'\xC3\xA9" "chelle",
-                                                                  "Acc\xC3\xA8s", "Valeur", "Qualit\xC3\xA9"},
-                                         std::move(rows), [tones](ui::RowIndex r, std::size_t c) {
-                                             ui::CellStyle st;
-                                             if (r >= tones.size()) return st;
-                                             if (c == 0) {
-                                                 st.bold = true;
-                                                 st.icon = ui::Icon::LocatedVariable;
-                                                 st.iconTone = toneOf(tones[r]);
-                                             }
-                                             if (c == 8 || (c == 3 && tones[r] == 3)) st.fgTone = toneOf(tones[r]);
-                                             return st;
-                                         });
-    const bool was = refreshing_;
-    refreshing_ = true;
-    boundTable_->setModel(boundModel_);
-    for (std::size_t i = 0; i < boundOrder_.size(); ++i)
-        if (!bound_.empty() && same(boundOrder_[i], bound_)) boundTable_->selectModelRows({static_cast<ui::RowIndex>(i)}, false);
-    if (bound_.empty() && !boundOrder_.empty()) {
-        bound_ = boundOrder_.front();
-        boundTable_->selectModelRows({0}, false);
-    }
-    refreshing_ = was;
-    tabs_->setTabBadge(TBound, std::to_string(boundOrder_.size()));
-}
-
 void HmiCommPane::selectBound(const std::string& variable) {
     bound_ = variable;
-    if (const auto* v = doc_->project.variable(variable)) bound_ = v->name;
-    refreshBound();
+    const auto* v = doc_->project.variable(variable);
+    if (v) bound_ = v->name;
+    // 1.11.4 : plus d'onglet Variables liees - le Plan d'adressage, sur la ligne de la
+    // variable (son equipement montre et deplie) ; le formulaire a droite la regle.
+    tabs_->setCurrentIndex(TPlan);
+    if (v && !v->equipment.empty()) {
+        if (!planFilter_.empty() && !same(planFilter_, v->equipment)) planFilter_.clear();
+        setPlanGroupOpen(v->equipment, true);
+    }
+    refreshPlan();
+    const bool was = refreshing_;
+    refreshing_ = true;
+    for (std::size_t i = 0; i < planRows_.size(); ++i)
+        if (planRows_[i].kind == PlanRow::Kind::Ihm && same(planRows_[i].name, bound_)) {
+            plan_->selectModelRows({static_cast<ui::RowIndex>(i)}, false);
+            equipment_ = planRows_[i].group;
+            break;
+        }
+    refreshing_ = was;
+    syncPlanTools();
     rebuildProperties();
 }
 
@@ -1203,10 +1127,7 @@ bool HmiCommPane::bindVariable(const std::string& rawVariable, const std::string
             x.programs.variables.push_back(std::move(v));
         }))
         return false;
-    bound_ = name;
-    tabs_->setCurrentIndex(TBound);
-    refreshBound();
-    rebuildProperties();
+    selectBound(name);   // 1.11.4 : dans le Plan d'adressage
     say(name + " li\xC3\xA9" "e \xC3\xA0 " + eqName + " : " + address + " (" + eq::modiconText(pt) + ")");
     return true;
 }
@@ -2342,7 +2263,6 @@ void HmiCommPane::onPaint(const ui::PaintContext& ctx) {
         const int tab = static_cast<int>(tabs_->currentIndex());
         if (tab == TPlan && ((hosts_.comm && hosts_.comm() && hosts_.comm()->link()) || !doc_->project.equipments.empty())) refreshPlan();
         if (tab == TEquipments) refreshEquipments();
-        if (tab == TBound) refreshBound();
         if (tab == TNetwork) {
             refreshDiagram();
             if (auto* h = host(); h && ctx.time - lastNet_ >= 5.0) {

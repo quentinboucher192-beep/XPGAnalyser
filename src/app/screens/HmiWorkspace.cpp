@@ -1038,8 +1038,7 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
             vh.showEquipment = [this](const std::string& name) {
                 openHmiPane("communication");
                 if (auto* comm = dynamic_cast<HmiCommPane*>(hmiTab("communication"))) {
-                    comm->tabs().setCurrentIndex(HmiCommPane::TBound);
-                    comm->selectBound(name);
+                    comm->selectBound(name);   // 1.11.4 : le Plan d'adressage, sur sa ligne
                 }
             };
             vh.arrayType = [this](const std::string& current, std::function<void(const std::string&)> done) { askHmiArrayType(current, std::move(done)); };
@@ -2880,7 +2879,6 @@ bool MainAnalysisScreen::openHmiHelpNow() {
                     case HmiCommPane::TScanner:    place = "scanner-ip"; break;
                     case HmiCommPane::TEquipments: place = "equipements"; break;
                     case HmiCommPane::TState:      place = "equipements"; break;
-                    case HmiCommPane::TBound:      place = "variables-liees"; break;
                     default:                       break;      // l'automate du projet (lot 14)
                 }
             }

@@ -433,7 +433,7 @@ HmiVariablesPane::HmiVariablesPane(std::string id, hmi::DocumentPtr doc, Apply a
     tools->add(VLink, HmiGlyph::Link, "Lier \xC3\xA0 un \xC3\xA9quipement : le premier \xC3\xA9quipement Modbus, \xC3\xA0 la prochaine adresse libre (\xC3\xA0 changer dans la ligne)",
                "Lier \xC3\xA0 un \xC3\xA9quipement\xE2\x80\xA6");
     tools->add(VUnlink, HmiGlyph::Delete, "D\xC3\xA9lier : la variable reste dans l'IHM", "D\xC3\xA9lier");
-    tools->add(VShow, HmiGlyph::Search, "Voir dans \xC3\x89quipements (Variables li\xC3\xA9" "es)", "Voir dans \xC3\x89quipements");
+    tools->add(VShow, HmiGlyph::Search, "Voir dans \xC3\x89quipements (Plan d'adressage)", "Voir dans \xC3\x89quipements");
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
     const auto variableChosen = [this] { return selectedVariable() != kNoId && selectedPath().empty(); };
     tools_->setEnabledWhen(VRename, [this] { return selectedVariable() != kNoId || !selectedFolder().empty(); });
@@ -969,7 +969,7 @@ void HmiVariablesPane::refresh() {
     if (message_.empty())
         status_->setMessage(std::to_string(p.programs.variables.size()) + " variable(s) IHM dans " + std::to_string(folderChoices_.size())
                                 + " dossier(s) \xC2\xB7 " + std::to_string(composite) + " structure(s) ou tableau(x) \xC2\xB7 " + std::to_string(bound)
-                                + " li\xC3\xA9" "e(s) \xC3\xA0 un \xC3\xA9quipement (une modification ici se voit aussi dans \xC3\x89quipements \xE2\x80\xBA Variables li\xC3\xA9" "es)");
+                                + " li\xC3\xA9" "e(s) \xC3\xA0 un \xC3\xA9quipement (une modification ici se voit aussi dans \xC3\x89quipements \xE2\x80\xBA Plan d'adressage)");
     invalidate();
 }
 
@@ -1401,7 +1401,7 @@ bool HmiVariablesPane::setEquipment(Id id, const std::string& raw, std::string* 
         x.address = address;
     });
     selectVariable(id);
-    say(v->name + " est li\xC3\xA9" "e \xC3\xA0 " + equipmentName + " (" + address + ") : la m\xC3\xAAme ligne est dans \xC3\x89quipements \xE2\x80\xBA Variables li\xC3\xA9" "es");
+    say(v->name + " est li\xC3\xA9" "e \xC3\xA0 " + equipmentName + " (" + address + ") : la m\xC3\xAAme ligne est dans \xC3\x89quipements \xE2\x80\xBA Plan d'adressage");
     return true;
 }
 

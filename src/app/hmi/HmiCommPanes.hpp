@@ -18,8 +18,9 @@
 //                         repond, sa MAC, son fabricant, ses ports, Modbus ;
 //    Equipements          la liste (l'automate du projet en tete), la fiche de
 //                         celui qu'on choisit, Tester, Ping ;
-//    Variables liees      les variables IHM liees a un equipement : adresse
-//                         (Schneider ou Modicon), mise a l'echelle, lecture seule ;
+//    (1.11.4 : l'onglet Variables liees est retire ; une variable IHM liee se choisit
+//                         et se regle dans le Plan d'adressage - adresse, mise a
+//                         l'echelle, lecture seule - ou dans les Variables IHM)
 //    Table des adresses   (l'automate du projet) les variables placees a la main ;
 //    Plan d'adressage     tout ce que l'IHM peut lire : l'automate puis chaque
 //                         equipement ; les refusees et pourquoi ; la qualite ;
@@ -124,7 +125,8 @@ public:
 
     // Les onglets (lot 15).
     // Lot 17 : la Carte memoire, apres le plan d'adressage ; lot 18 : les Valeurs simulees, apres elle.
-    enum Tab : int { TNetwork = 0, TScanner, TEquipments, TBound, TTable, TPlan, TMap, TValues, TTest, TState };
+    // 1.11.4 : sans Variables liees (une variable liee se choisit dans le Plan d'adressage).
+    enum Tab : int { TNetwork = 0, TScanner, TEquipments, TTable, TPlan, TMap, TValues, TTest, TState };
 
     // ---- l'automate du projet (lot 14) ----------------------------------------
     // Un reglage : "mode" (simulateur, modbus), "hote", "port", "esclave",
@@ -221,6 +223,7 @@ public:
     // "echelle_min", "echelle_max", "type_brut", "description".
     bool setBoundField(const std::string& variable, const std::string& key, const std::string& value, std::string* why = nullptr);
     [[nodiscard]] std::string selectedBound() const { return bound_; }
+    // 1.11.4 : la montre dans le Plan d'adressage (son onglet, sa ligne, son formulaire).
     void selectBound(const std::string& variable);
 
     // ---- lot 16 : le plan d'adressage, range par liaison ---------------------------
@@ -393,7 +396,6 @@ public:
     [[nodiscard]] ui::TableView&     report() noexcept { return *report_; }
     [[nodiscard]] ui::TableView&     state() noexcept { return *state_; }
     [[nodiscard]] ui::TableView&     equipmentsTable() noexcept { return *equipTable_; }
-    [[nodiscard]] ui::TableView&     boundTable() noexcept { return *boundTable_; }
     [[nodiscard]] ui::TableView&     scanTable() noexcept;
     [[nodiscard]] HmiNetDiagram&     diagram() noexcept { return *diagram_; }
     [[nodiscard]] ui::TabControl&    tabs() noexcept { return *tabs_; }
@@ -424,7 +426,6 @@ private:
     void refreshPlan();
     void refreshState();
     void refreshEquipments();
-    void refreshBound();
     void refreshDiagram();
     void refreshScan();
     void rebuildProperties();
@@ -467,7 +468,6 @@ private:
     ui::TableView*         report_{nullptr};
     ui::TableView*         state_{nullptr};
     ui::TableView*         equipTable_{nullptr};
-    ui::TableView*         boundTable_{nullptr};
     HmiScanPage*           scanPage_{nullptr};
     HmiNetDiagram*         diagram_{nullptr};
     ui::PropertyGrid*      grid_{nullptr};
@@ -475,7 +475,7 @@ private:
     ui::Button*            applyButton_{nullptr};
     ui::Button*            cancelButton_{nullptr};
     ui::StatusBar*         status_{nullptr};
-    std::shared_ptr<ui::ITableModel> tableModel_, planModel_, reportModel_, stateModel_, equipModel_, boundModel_, scanModel_;
+    std::shared_ptr<ui::ITableModel> tableModel_, planModel_, reportModel_, stateModel_, equipModel_, scanModel_;
     std::vector<std::string> order_;            // les variables de la table, dans l'ordre des lignes
     std::vector<std::string> planNames_;        // les variables du plan, dans l'ordre des lignes
     std::vector<PlanRow>     planRows_;         // lot 16 : les lignes du plan (groupes compris)
@@ -486,7 +486,6 @@ private:
     void syncPlanTools();
     std::vector<EquipRow>    equipRows_;        // les lignes des equipements, dans l'ordre (kPlcKey en tete ; 1.9 : les esclaves)
     bool                     slaveRow_{false};  // 1.9 : la ligne choisie est celle de l'esclave simule de equipment_
-    std::vector<std::string> boundOrder_;       // les variables liees
     std::vector<std::string> scanOrder_;        // les adresses trouvees
     std::vector<std::string> reportLines_;
     std::vector<int>         reportTones_;

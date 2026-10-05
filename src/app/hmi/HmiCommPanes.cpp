@@ -349,7 +349,7 @@ HmiCommPane::HmiCommPane(std::string id, hmi::DocumentPtr doc, Apply apply)
     tools_->setVisibleWhen(CDetect, [this, on] { return on({TEquipments})() || (on({TMap})() && !mapTwin_); });
     tools_->setVisibleWhen(CTwinsStart, [on, simNet] { return on({TEquipments})() || simNet(); });
     tools_->setVisibleWhen(CTwinsStop, [on, simNet] { return on({TEquipments})() || simNet(); });
-    tools_->setVisibleWhen(COpenMap, on({TEquipments, TNetwork, TBound, TValues}));
+    tools_->setVisibleWhen(COpenMap, on({TEquipments, TNetwork, TValues}));
     tools_->setVisibleWhen(CValAnimateAll, on({TValues}));
     tools_->setVisibleWhen(CValStopAll, on({TValues}));
     tools_->setVisibleWhen(CValUnforce, on({TValues}));
@@ -384,7 +384,6 @@ HmiCommPane::HmiCommPane(std::string id, hmi::DocumentPtr doc, Apply apply)
         return e && e->modbus() && !detecting();
     });
     tools_->setEnabledWhen(COpenMap, [this] {
-        if (static_cast<int>(tabs_->currentIndex()) == TBound) return !bound_.empty();
         if (static_cast<int>(tabs_->currentIndex()) == TValues) return valuesCtl_ && !valuesCtl_->selectedEquipment().empty();
         if (equipment_ == kPlcKey) return true;
         const auto* e = equipmentOf(equipment_);
@@ -412,18 +411,18 @@ HmiCommPane::HmiCommPane(std::string id, hmi::DocumentPtr doc, Apply apply)
         return r && (r->kind == PlanRow::Kind::Ihm || r->kind == PlanRow::Kind::Member);
     };
     tools_->setVisibleWhen(CTestEquip, [on, planEquip] { return on({TEquipments, TTest})() || planEquip(); });
-    tools_->setVisibleWhen(CBind, on({TBound, TEquipments}));
-    tools_->setVisibleWhen(CUnbind, [on, planIhm] { return on({TBound})() || planIhm(); });
-    tools_->setVisibleWhen(COpenVar, [on, planIhm] { return on({TBound, TMap})() || planIhm(); });
+    tools_->setVisibleWhen(CBind, on({TEquipments, TPlan}));   // 1.11.4 : plus d'onglet Variables liees
+    tools_->setVisibleWhen(CUnbind, planIhm);
+    tools_->setVisibleWhen(COpenVar, [on, planIhm] { return on({TMap})() || planIhm(); });
     tools_->setVisibleWhen(CPing, [real, planEquip] { return real({TNetwork})() || planEquip(); });
-    tools_->setVisibleWhen(CTool, on({TNetwork, TScanner, TEquipments, TBound, TMap, TValues}));
+    tools_->setVisibleWhen(CTool, on({TNetwork, TScanner, TEquipments, TMap, TValues}));
     tools_->setVisibleWhen(CScanExport, on({TScanner}));
     tools_->setVisibleWhen(CRestore, real({TNetwork}));
     tools_->setVisibleWhen(CTest, [on, planEquip] { return on({TTable, TPlan, TTest})() && !planEquip(); });
     tools_->setVisibleWhen(CAdd, on({TTable}));
     tools_->setVisibleWhen(CRemove, on({TTable}));
     tools_->setVisibleWhen(CPropose, on({TTable}));
-    tools_->setVisibleWhen(CExport, on({TTable, TPlan, TBound}));
+    tools_->setVisibleWhen(CExport, on({TTable, TPlan}));
     tools_->setVisibleWhen(CReconnect, on({TTable, TPlan, TState}));
     tools_->setVisibleWhen(CMute, on({TTable, TState}));
     tools_->setVisibleWhen(CUnmute, on({TTable, TState}));
@@ -496,10 +495,6 @@ HmiCommPane::HmiCommPane(std::string id, hmi::DocumentPtr doc, Apply apply)
             simmark::drawDot(r, {box.x + box.w * 0.5f, box.y + box.h * 0.5f}, std::min(4.f, box.h * 0.3f));
         }
     });
-    auto bound = std::make_unique<ui::TableView>(base + ".bound");
-    bound->setColumns({{"Variable", 180.f}, {"\xC3\x89quipement", 170.f}, {"Adresse", 100.f}, {"Place Modbus", 190.f}, {"Type", 70.f},
-                       {"Mise \xC3\xA0 l'\xC3\xA9" "chelle", 170.f}, {"Acc\xC3\xA8s", 110.f}, {"Valeur", 110.f}, {"Qualit\xC3\xA9", 240.f}});
-    bound->setSelectionMode(ui::SelectionMode::Single);
     auto table = std::make_unique<ui::TableView>(base + ".table");
     table->setColumns({{"Variable", 250.f}, {"Adresse", 84.f}, {"Type", 70.f}, {"Acc\xC3\xA8s", 132.f}, {"Place Modbus", 170.f},
                        {"Fonctions", 84.f}, {"\xC3\x89tat", 150.f}, {"Description", 320.f}});
@@ -522,7 +517,6 @@ HmiCommPane::HmiCommPane(std::string id, hmi::DocumentPtr doc, Apply apply)
         std::make_unique<ui::Checkbox>("Rep\xC3\xA9rer les lectures simul\xC3\xA9" "es", base + ".simMarks")));
     simMarksBox_->setTooltip("En marche, une valeur lue sur un esclave simul\xC3\xA9 se rep\xC3\xA8re : un cadre violet en tirets et une pastille sur "
                              "l'objet, le bandeau LECTURES SIMUL\xC3\x89" "ES en haut de l'IHM, la barre d'\xC3\xA9tat, les courbes.");
-    boundTable_ = bound.get();
     // Lot 17 : la carte memoire.
     auto mapPage = std::make_unique<MapPage>(base + ".mapPage");
     mapTargetBox_ = &static_cast<ui::DropDown&>(mapPage->addChild(std::make_unique<ui::DropDown>(base + ".mapTarget")));
@@ -556,7 +550,6 @@ HmiCommPane::HmiCommPane(std::string id, hmi::DocumentPtr doc, Apply apply)
     tabs->addTab({"R\xC3\xA9seau du PC", ui::Icon::Network}, std::move(diagram));
     tabs->addTab({"Scanner IP", ui::Icon::Search}, std::move(scan));
     tabs->addTab({"\xC3\x89quipements", ui::Icon::Module}, std::move(equipPage));
-    tabs->addTab({"Variables li\xC3\xA9" "es", ui::Icon::Variable}, std::move(bound));
     tabs->addTab({"Table des adresses", ui::Icon::LocatedVariable}, std::move(table));
     tabs->addTab({"Plan d'adressage", ui::Icon::Document}, std::move(planPage));
     tabs->addTab({"Carte m\xC3\xA9moire", ui::Icon::LocatedVariable}, std::move(mapPage));
@@ -632,8 +625,6 @@ HmiCommPane::HmiCommPane(std::string id, hmi::DocumentPtr doc, Apply apply)
             case CTwinsStop: runTwins(false); break;
             case COpenMap: {
                 std::string target = equipment_;
-                if (static_cast<int>(tabs_->currentIndex()) == TBound && !bound_.empty())
-                    if (const auto* v = doc_->project.variable(bound_)) target = v->equipment;
                 // Lot 18 : la carte du jumeau de la ligne choisie, sur sa case.
                 std::string cell;
                 if (static_cast<int>(tabs_->currentIndex()) == TValues) {
@@ -707,8 +698,6 @@ HmiCommPane::HmiCommPane(std::string id, hmi::DocumentPtr doc, Apply apply)
                 int port = 502, unit = 1;
                 if (static_cast<int>(tabs_->currentIndex()) == TScanner) {
                     h = selectedScanned();
-                } else if (static_cast<int>(tabs_->currentIndex()) == TBound && !bound_.empty()) {
-                    if (const auto* v = doc_->project.variable(bound_)) target = v->equipment;
                 }
                 if (h.empty() && target == kPlcKey) {
                     h = doc_->project.comm.host;
@@ -751,11 +740,6 @@ HmiCommPane::HmiCommPane(std::string id, hmi::DocumentPtr doc, Apply apply)
         slaveRow_ = equipRows_[rows.front()].slave;
         if (const auto* e = slaveRow_ ? equipmentOf(equipment_) : nullptr)
             say(e->twinLabel() + " : li\xC3\xA9 au vrai appareil ; sa configuration le suit.");
-        rebuildProperties();
-    });
-    links_ += boundTable_->selectionChanged->connect([this](const std::vector<ui::RowIndex>& rows) {
-        if (refreshing_ || rows.empty() || rows.front() >= boundOrder_.size()) return;
-        bound_ = boundOrder_[rows.front()];
         rebuildProperties();
     });
     links_ += scanPage_->table().selectionChanged->connect([this](const std::vector<ui::RowIndex>&) {
@@ -960,7 +944,6 @@ void HmiCommPane::refresh() {
     refreshState();
     // Lot 15 : les equipements, les variables liees, le schema, le scanner.
     refreshEquipments();
-    refreshBound();
     refreshDiagram();
     refreshScan();
     // Lot 17 : la carte memoire suit le projet.

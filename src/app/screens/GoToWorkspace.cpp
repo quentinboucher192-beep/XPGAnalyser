@@ -128,7 +128,6 @@ const PaneEntry kPanes[] = {
     {"communication", "\xC3\x89quipements \xE2\x80\xBA R\xC3\xA9seau du PC", HmiCommPane::TNetwork},
     {"communication", "\xC3\x89quipements \xE2\x80\xBA Scanner IP", HmiCommPane::TScanner},
     {"communication", "\xC3\x89quipements \xE2\x80\xBA \xC3\x89quipements", HmiCommPane::TEquipments},
-    {"communication", "\xC3\x89quipements \xE2\x80\xBA Variables li\xC3\xA9" "es", HmiCommPane::TBound},
     {"communication", "\xC3\x89quipements \xE2\x80\xBA Table des adresses", HmiCommPane::TTable},
     {"communication", "\xC3\x89quipements \xE2\x80\xBA Plan d'adressage", HmiCommPane::TPlan},
     {"communication", "\xC3\x89quipements \xE2\x80\xBA Carte m\xC3\xA9moire", HmiCommPane::TMap},

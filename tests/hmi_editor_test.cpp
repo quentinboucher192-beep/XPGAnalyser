@@ -8380,12 +8380,19 @@ void lot15_equipements() {
     check(pane.setBoundField("Courant", "brut_max", "1000") && pane.setBoundField("Courant", "echelle_max", "100")
               && doc->project.variable("Courant")->scaled(),
           "la mise \xC3\xA0 l'\xC3\xA9" "chelle : 0..1000 -> 0..100");
-    pane.tabs().setCurrentIndex(app::HmiCommPane::TBound);
+    // 1.11.4 : plus d'onglet Variables liees - selectBound montre le Plan d'adressage, sur la ligne.
     pane.selectBound("Courant");
     pane.layout();
     check(gridValue(pane.properties().categories(), "En Modicon") == "registre 43003"
               && gridValue(pane.properties().categories(), "En Schneider") == "%MW3002",
           "la fiche : les deux notations (registre 43003, %MW3002)");
+    check(static_cast<int>(pane.tabs().currentIndex()) == app::HmiCommPane::TPlan && pane.selectedPlanRow()
+              && pane.selectedPlanRow()->name == "Courant",
+          "1.11.4 : Courant choisie dans le Plan d'adressage (l'onglet Variables li\xC3\xA9" "es est retir\xC3\xA9)");
+    bool noBoundTab = true;
+    for (std::size_t i = 0; i < pane.tabs().tabCount(); ++i)
+        if (pane.tabs().tab(i) && pane.tabs().tab(i)->title.find("Variables li") == 0) noBoundTab = false;
+    check(noBoundTab, "1.11.4 : \xC3\x89quipements n'a plus d'onglet Variables li\xC3\xA9" "es");
     check(pane.unbindVariable("Courant") && !doc->project.variable("Courant")->bound(), "D\xC3\xA9lier : une variable IHM locale");
     (void)stack.undo();
     check(doc->project.variable("Courant")->bound(), "Ctrl+Z : de nouveau li\xC3\xA9" "e");
