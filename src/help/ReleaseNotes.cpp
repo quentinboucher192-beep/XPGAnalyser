@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.11.8", "05/10/2026", "livr\xC3\xA9" "e le 05/10"},
     {"1.11.7", "05/10/2026", "livr\xC3\xA9" "e le 05/10"},
     {"1.11.6", "05/10/2026", "livr\xC3\xA9" "e le 05/10"},
     {"1.11.5", "05/10/2026", "livr\xC3\xA9" "e le 05/10"},
@@ -86,6 +87,17 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.11.8 (05/10/2026, les demandes du 05/10 sur Variables IHM) : les membres internes d'une
+        // structure liee, Recalculer la place memoire, le depart d'un membre compose.
+        note("1.11.8", "\xC3\x89" "diteur IHM", Kind::New,
+         "Variables IHM : un membre d'une structure ou d'un tableau li\xC3\xA9 peut \xC3\xAAtre INTERNE - il reste dans l'IHM (une variable IHM), l'\xC3\xA9quipement ne le lit ni ne l'\xC3\xA9" "crit - ou attribu\xC3\xA9 \xC3\xA0 l'\xC3\xA9quipement de la structure. Clic droit sur la ligne : Rendre interne (cette case : V[0].NOM), Rendre interne dans toutes les cases (V[*].NOM), Attribuer ; ou la ligne Liaison de l'inspecteur.",
+         "variables-ihm", ""),
+        note("1.11.8", "\xC3\x89" "diteur IHM", Kind::New,
+         "Le bouton \xC2\xAB Recalculer la place m\xC3\xA9moire \xC2\xBB d'une structure : les mots que n'occupent que des membres internes sont rendus et les membres suivants se resserrent (V : ARRAY[0..63] OF Vanne, NOM interne partout : mots 17 \xC3\xA0 208 au lieu de 17 \xC3\xA0 1232). Sans lui, un membre interne garde sa place (rien ne bouge) ; Ctrl+Z la remet.",
+         "variables-ihm", ""),
+        note("1.11.8", "\xC3\x89" "diteur IHM", Kind::New,
+         "L'adresse d'un membre compos\xC3\xA9 se change aussi (V[2] -> %MW500) : c'est son d\xC3\xA9part, ses cases le suivent. Une case corrig\xC3\xA9" "e \xC3\xA0 la main garde son adresse ; un crayon le dit.",
+         "variables-ihm", ""),
         // 1.11.7 (05/10/2026, le defaut de la 1.11.6 sur les forcages ; les reperes dans les parametres des popups ;
         // la case Variable des actions ; le nombre de lignes de code).
         note("1.11.7", "Simulation", Kind::Fixed,
