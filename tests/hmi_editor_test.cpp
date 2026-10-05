@@ -34,6 +34,8 @@
 #include "../src/app/hmi/HmiAssist.hpp"
 #include "../src/app/hmi/HmiValueKind.hpp"           // 1.11.3 : le carre de legende
 #include "../src/app/hmi/HmiValuePicker.hpp"
+#include "../src/app/hmi/HmiActionDialogs.hpp"     // 1.11.9 : l'operation en arbre, le script, Maths
+#include "../src/hmi/HmiActionKinds.hpp"
 #include "../src/hmi/HmiViewPaths.hpp"
 #include "../src/hmi/HmiVarMotion.hpp"              // 1.11.6         // 1.11.3 : le selecteur de valeur
 #include "../src/menu/MenuManager.hpp"
@@ -22608,6 +22610,128 @@ void variablesInternes1118() {
 }
 
 // =============================================================================
+//  1.11.9 (« trier les actions disponibles avec un treeview » ; « executer un script :
+//  un petit modal pour editer le script, l'aide a la saisie, les references » ; « maths :
+//  une mini fenetre, n references, un mode test » ; « un clavier virtuel, et on met des
+//  parametres ») : le volet Actions et ses fenetres.
+// =============================================================================
+void actionsFenetres1119() {
+    std::printf("== 1.11.9 : le volet Actions - l'op\xC3\xA9ration en arbre, le script, Maths, le clavier virtuel ==\n");
+    namespace ak = hmi::actionkinds;
+    auto doc = std::make_shared<Document>();
+    core::CommandStack stack;
+    auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+    auto& p = doc->project;
+    for (const auto& [name, type] : {std::pair{"M", "REAL"}, {"C", "REAL"}, {"Sortie", "REAL"}, {"Compteur", "INT"}}) {
+        Variable var;
+        var.id = p.allocate();
+        var.name = name;
+        var.type = type;
+        p.programs.variables.push_back(var);
+    }
+    View v = makeView(p, "Vue_Act");
+    v.role = "popup";
+    v.params = {{"Moteur", "", "le moteur", "INT", ParamMode::Reference}};
+    const Id btn = edit::add(p, v, Kind::Button, 20, 20);
+    const Id vid = v.id;
+    p.views.push_back(v);
+    app::HmiActionsPanel panel("acts1119", doc, vid, apply);
+    panel.setBounds({0, 0, 600, 900});
+    panel.setOwner(btn);
+    Action a;
+    a.trigger = Trigger::Click;
+    a.operation = Operation::Set;
+    a.target = "Compteur";
+    panel.selectIndex(panel.add(a));
+    panel.layout();
+    const auto act = [&]() -> const Action& { return p.view(vid)->object(btn)->actions[0]; };
+    const auto opProp = [&]() { return v19::propOf(panel.grid().categories(), "Op\xC3\xA9ration", "Op\xC3\xA9ration"); };
+    check(opProp() && !opProp()->open && !panel.openEditor("Op\xC3\xA9ration"), "sans h\xC3\xB4te : la liste des op\xC3\xA9rations, comme avant");
+    menu::MenuManager mm{menu::MenuFactory{}};
+    panel.setDialogHost([&](menu::MenuPtr d, std::function<void(const menu::DialogResult&)> done) { mm.ShowDialog(std::move(d), std::move(done)); }, {});
+    panel.layout();
+    check(opProp() && opProp()->open && opProp()->openOnClick, "avec l'h\xC3\xB4te : un clic sur la case ouvre l'arbre");
+    // ---- l'operation en arbre
+    check(panel.openEditor("Op\xC3\xA9ration"), "ouvrir l'arbre des op\xC3\xA9rations");
+    mm.applyPending();
+    auto* od = dynamic_cast<app::HmiOperationDialog*>(mm.top());
+    check(od && od->chosen() == Operation::Set && od->groupsShown().size() == ak::groups().size(),
+          "l'arbre : toutes les familles, Mettre \xC3\xA0 1 choisie");
+    if (!od) return;
+    od->setSearch("clavier");
+    const auto shown = od->operationsShown();
+    check(std::find(shown.begin(), shown.end(), "Clavier virtuel") != shown.end() && shown.size() < std::size(kOperations),
+          "la recherche \xC2\xAB clavier \xC2\xBB : Clavier virtuel (" + std::to_string(shown.size()) + " op\xC3\xA9ration(s))");
+    check(od->choose(Operation::Keyboard) && od->helpLine().find("Clavier virtuel") == 0, "sa phrase en bas : " + od->helpLine());
+    od->finish(true);
+    mm.applyPending();
+    check(act().operation == Operation::Keyboard, "choisie : l'action devient Clavier virtuel");
+    // ---- le clavier virtuel : ses reglages
+    panel.layout();
+    check(commitIn(panel.grid(), "Clavier", "num\xC3\xA9rique") && commitIn(panel.grid(), "Max", "100") && commitIn(panel.grid(), "Titre", "Compteur ({Compteur})"),
+          "ses r\xC3\xA9glages : num\xC3\xA9rique, max 100, un titre \xC3\xA0 trous");
+    {
+        const auto k = ak::keyboardSpec(act());
+        check(k.keyboard == "numerique" && k.max == "100" && k.title == "Compteur ({Compteur})", "... enregistr\xC3\xA9s dans l'action (" + act().params + ")");
+    }
+    // ---- Maths : la fenetre de la formule, ses references, le mode test
+    check(panel.openEditor("Op\xC3\xA9ration"), "l'arbre encore");
+    mm.applyPending();
+    od = dynamic_cast<app::HmiOperationDialog*>(mm.top());
+    if (!od) return;
+    check(od->choose(Operation::Maths), "Maths");
+    od->finish(true);
+    mm.applyPending();
+    panel.layout();
+    check(act().operation == Operation::Maths && v19::propOf(panel.grid().categories(), "Op\xC3\xA9ration", "Formule") && act().params.empty(),
+          "Maths : la ligne Formule ; les r\xC3\xA9glages du clavier ne suivent pas");
+    check(panel.openEditor("Formule"), "ouvrir la fen\xC3\xAAtre de la formule");
+    mm.applyPending();
+    auto* md = dynamic_cast<app::HmiMathsDialog*>(mm.top());
+    check(md != nullptr, "la fen\xC3\xAAtre de Maths");
+    if (!md) return;
+    md->setTarget("Sortie");
+    (void)md->addReference("Mesure", "M", "12.5");
+    (void)md->addReference("Consigne", "C", "10");
+    md->setFormula("(Mesure - Consigne) * 2");
+    const auto t = md->test();
+    check(t.ok && t.result == "5", "le mode test : " + t.result + " (" + t.expression + ")");
+    check(md->issues().empty(), "aucune faute");
+    md->validate();
+    mm.applyPending();
+    check(act().target == "Sortie" && act().value == "(Mesure - Consigne) * 2" && act().params == "Mesure := M; Consigne := C",
+          "Valider : la cible, la formule, les r\xC3\xA9" "f\xC3\xA9rences dans l'action (" + act().params + ")");
+    // ---- le script : sa fenetre, ses references
+    {
+        Action s = act();
+        s.operation = Operation::RunScript;
+        s.value = "Compteur := 0;";
+        check(panel.set(0, s), "Ex\xC3\xA9" "cuter un script");
+    }
+    panel.layout();
+    const auto* code = v19::propOf(panel.grid().categories(), "Op\xC3\xA9ration", "Code ST");
+    check(code && code->open, "la ligne Code ST a son bouton \xE2\x80\xA6");
+    check(panel.openEditor("Code ST"), "ouvrir la fen\xC3\xAAtre du script");
+    mm.applyPending();
+    auto* sd = dynamic_cast<app::HmiActionScriptDialog*>(mm.top());
+    check(sd && sd->code() == "Compteur := 0;", "la fen\xC3\xAAtre du script, avec son code");
+    if (!sd) return;
+    sd->setSearch("Mot");
+    const auto names = sd->names();
+    check(std::find(names.begin(), names.end(), "Moteur") != names.end(), "\xC3\xA0 droite, la r\xC3\xA9" "f\xC3\xA9rence Moteur (le param\xC3\xA8tre de la popup)");
+    sd->setCode("Compteur := Compteur + Moteur;\nSortie := 1.5;");
+    check(sd->errorCount() == 0, "le code se v\xC3\xA9rifie : aucune faute");
+    sd->setCode("Compteur := ;");
+    check(sd->errorCount() > 0, "une faute de syntaxe : dite, comme Compiler");
+    sd->setCode("Compteur := Compteur + Moteur;");
+    sd->finish(true);
+    mm.applyPending();
+    check(act().value == "Compteur := Compteur + Moteur;", "Valider : le script dans l'action");
+    (void)stack.undo();
+    check(act().value == "Compteur := 0;", "Ctrl+Z : le script d'avant");
+}
+
+// =============================================================================
 //  1.11.7 (le rapport de blocage du 05/10, 1.11.6 : « Delier V » pendant la simulation -
 //  la boucle principale attendait 8 s dans hmi::comm::Link::stop(), le fil de la liaison
 //  finissant toutes ses ecritures, chacune au temps de reponse de l'esclave simule).
@@ -25900,6 +26024,7 @@ int main(int argc, char** argv) {
     variableFx1117();                       // 1.11.7 : la case Variable d'une action, la pastille fx
     blocageDelier1117();                    // 1.11.7 : Delier pendant la simulation ne bloque plus
     variablesInternes1118();                // 1.11.8 : membres internes, Recalculer la place memoire
+    actionsFenetres1119();                  // 1.11.9 : l'operation en arbre, le script, Maths, le clavier
     if (argc > 1) simulationVariables1115(argv[1]);   // 1.11.5 : les onglets Variables IHM et Variables API
     if (argc > 1) forcageMouvement1116(argv[1]);   // 1.11.6 : le forcage par type et bornes
     scriptsExportImport1113();              // 1.11.3 : exporter / importer les scripts d'une vue et les operateurs (.xpgst)

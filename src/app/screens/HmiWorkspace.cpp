@@ -1590,6 +1590,12 @@ void MainAnalysisScreen::openHmiView(std::uint64_t viewId, int part, std::uint64
         made->setSymbolAsker([this, viewId] { askHmiSymbol(viewId); });
         // 1.11.3 : le carre de legende d'une case ouvre la liste des carres, puis le selecteur.
         made->setValueAsker([this, viewId](const valuekind::Request& r) { askHmiValue(viewId, r); });
+        // 1.11.9 : les petites fenetres des actions (l'operation en arbre, le script, la formule de Maths).
+        made->actions().setDialogHost(
+            [this](menu::MenuPtr dialog, std::function<void(const menu::DialogResult&)> onClose) {
+                app_.menus().ShowDialog(std::move(dialog), std::move(onClose));
+            },
+            [this] { return app_.project(); });
         made->setStyleAsker([this, viewId] { askHmiStyle(viewId); });     // lot 12
         made->setDuplicateAsker([this, viewId] { askHmiDuplicate(viewId); });   // 1.10.2 (chantier D)
         made->setTemplateAsker([this, viewId] { askHmiSaveTemplate(viewId); });   // lot 20

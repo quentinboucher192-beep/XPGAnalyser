@@ -9,6 +9,9 @@
 #include "../../hmi/HmiModel.hpp"
 #include "../../hmi/HmiPublicVars.hpp"
 #include "../../hmi/HmiRuntime.hpp"     // parseArguments
+#include "../../hmi/HmiEnums.hpp"       // findEnumeration : un type de locale permis
+#include "../../hmi/HmiScript.hpp"      // checkScript : la syntaxe
+#include "../../hmi/HmiTypes.hpp"       // pathProblems : les chemins IHM
 #include "../../menu/MenuManager.hpp"
 #include "../../ui/TextSearch.hpp"
 #include "../../ui/Theme.hpp"
@@ -235,8 +238,26 @@ private:
         diags_.clear();
         if (!spec_.doc) return;
         const std::string code = editor_->text();
-        diags_ = guardedDiagnostics([&] { return placedScriptDiagnostics(spec_.doc->project, code, view_, nullptr, spec_.plc.get()); }, 1,
-                                    "le script d'une action");
+        // 1.11.9 : comme l'editeur des scripts (allDiagnostics) - la syntaxe, les chemins IHM, puis
+        // les fautes a leur place (avant : seulement les dernieres, "Compteur := ;" passait).
+        diags_ = guardedDiagnostics(
+            [&] {
+                const auto& p = spec_.doc->project;
+                const hmi::TypeKnown knownType = [&p](std::string_view t) {
+                    return !hmi::types::membersOf(p, t).empty() || hmi::findEnumeration(p, t) != nullptr;
+                };
+                auto d = hmi::checkScript(hmi::ScriptLang::ST, code, "action", knownType);
+                const auto placed = placedScriptDiagnostics(p, code, view_, nullptr, spec_.plc.get());
+                for (const auto& pp : hmi::types::pathProblems(p, code)) {
+                    const bool said = std::any_of(placed.begin(), placed.end(), [&](const hmi::ScriptDiagnostic& x) {
+                        return x.line == pp.line && x.message == pp.message;
+                    });
+                    if (!said) d.push_back({hmi::ScriptDiagnostic::Severity::Error, pp.line, pp.message});
+                }
+                d.insert(d.end(), placed.begin(), placed.end());
+                return d;
+            },
+            1, "le script d'une action");
         editor_->setSquiggles(squigglesOf(diags_));
         invalidate();
     }
@@ -307,6 +328,246 @@ void HmiActionScriptDialog::finish(bool ok) {
     if (done_) return;
     done_ = true;
     manager().CloseDialog(menu::DialogResult{ok ? menu::DialogResult::Button::Ok : menu::DialogResult::Button::Cancel, code()});
+}
+
+// ============================================================ l'operation en arbre ===
+namespace {
+// Les noeuds : 0 la racine, 1..N les familles, 1000 + l'operation.
+constexpr ui::NodeId kOpBase = 1000;
+ui::NodeId nodeOf(hmi::Operation o) { return kOpBase + static_cast<ui::NodeId>(o); }
+
+class OperationTree final : public ui::ITreeModel {
+public:
+    struct Group {
+        std::string                 name;
+        std::vector<hmi::Operation> ops;
+    };
+    std::vector<Group> groups;
+    hmi::Operation     current{hmi::Operation::Set};
+    [[nodiscard]] ui::NodeId  root() const override { return 0; }
+    [[nodiscard]] std::size_t childCount(ui::NodeId n) const override {
+        if (n == 0) return groups.size();
+        if (n <= groups.size()) return groups[n - 1].ops.size();
+        return 0;
+    }
+    [[nodiscard]] ui::NodeId childAt(ui::NodeId parent, std::size_t i) const override {
+        if (parent == 0) return i + 1;
+        if (parent <= groups.size() && i < groups[parent - 1].ops.size()) return nodeOf(groups[parent - 1].ops[i]);
+        return 0;
+    }
+    [[nodiscard]] bool hasChildren(ui::NodeId n) const override { return n == 0 || (n <= groups.size() && !groups[n - 1].ops.empty()); }
+    [[nodiscard]] std::string text(ui::NodeId n) const override {
+        if (n > 0 && n <= groups.size()) return groups[n - 1].name + "  (" + std::to_string(groups[n - 1].ops.size()) + ")";
+        if (n >= kOpBase) return std::string(hmi::operationLabel(static_cast<hmi::Operation>(n - kOpBase)));
+        return {};
+    }
+    [[nodiscard]] ui::CellStyle style(ui::NodeId n) const override {
+        ui::CellStyle st;
+        if (n > 0 && n <= groups.size()) st.bold = true;
+        if (n == nodeOf(current)) {
+            st.bold = true;
+            st.fgTone = ui::Tone::Accent;
+        }
+        return st;
+    }
+};
+} // namespace
+
+class HmiOperationDialog::Body final : public ui::Widget {
+public:
+    Body(HmiOperationDialog& owner, const Spec& spec) : ui::Widget("dialog.operation"), owner_(owner), spec_(spec), chosen_(spec.current) {
+        search_ = &static_cast<ui::InputText&>(addChild(std::make_unique<ui::InputText>("dialog.operation.chercher")));
+        search_->setPlaceholder("Chercher une op\xC3\xA9ration (nom, famille, ce qu'elle fait)\xE2\x80\xA6");
+        links_ += search_->textChanged->connect([this](const std::string&) { filter(); });
+        tree_ = &static_cast<ui::TreeView&>(addChild(std::make_unique<ui::TreeView>("dialog.operation.arbre")));
+        links_ += tree_->selectionChanged->connect([this](ui::NodeId n) {
+            if (n >= kOpBase) {
+                chosen_ = static_cast<hmi::Operation>(n - kOpBase);
+                invalidate();
+            }
+        });
+        links_ += tree_->activated->connect([this](ui::NodeId n) {
+            if (n >= kOpBase) {
+                chosen_ = static_cast<hmi::Operation>(n - kOpBase);
+                owner_.finish(true);
+            } else if (n > 0) {
+                tree_->toggle(n);
+            }
+        });
+        cancel_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Annuler", "dialog.operation.annuler")));
+        ok_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Choisir (Entr\xC3\xA9" "e)", "dialog.operation.choisir")));
+        ok_->setStyle(ui::Button::Style::Primary);
+        links_ += cancel_->clicked->connect([this] { owner_.finish(false); });
+        links_ += ok_->clicked->connect([this] { owner_.finish(true); });
+        filter();
+    }
+    void setSearch(const std::string& t) { search_->setText(t); filter(); }
+    [[nodiscard]] std::vector<std::string> groupsShown() const {
+        std::vector<std::string> out;
+        if (model_)
+            for (const auto& g : model_->groups) out.push_back(g.name);
+        return out;
+    }
+    [[nodiscard]] std::vector<std::string> operationsShown() const {
+        std::vector<std::string> out;
+        if (model_)
+            for (const auto& g : model_->groups)
+                for (const auto o : g.ops) out.emplace_back(hmi::operationLabel(o));
+        return out;
+    }
+    bool choose(hmi::Operation o) {
+        if (!model_) return false;
+        for (const auto& g : model_->groups)
+            if (std::find(g.ops.begin(), g.ops.end(), o) != g.ops.end()) {
+                chosen_ = o;
+                tree_->setCurrentNode(nodeOf(o));
+                invalidate();
+                return true;
+            }
+        return false;
+    }
+    [[nodiscard]] hmi::Operation chosen() const { return chosen_; }
+    [[nodiscard]] std::string helpLine() const {
+        return std::string(hmi::operationLabel(chosen_)) + " (" + std::string(hmi::actionkinds::groupOf(chosen_)) + ") \xE2\x80\x94 "
+             + std::string(hmi::actionkinds::help(chosen_));
+    }
+    void focusSearch() { owner_.focus().focus(search_); }
+    // Entree : la ligne choisie ; les fleches : la suivante, la precedente (dans l'ordre montre).
+    bool step(int delta) {
+        const auto all = operations();
+        if (all.empty()) return false;
+        auto it = std::find(all.begin(), all.end(), chosen_);
+        std::ptrdiff_t i = it == all.end() ? 0 : (it - all.begin()) + delta;
+        i = std::clamp<std::ptrdiff_t>(i, 0, static_cast<std::ptrdiff_t>(all.size()) - 1);
+        return choose(all[static_cast<std::size_t>(i)]);
+    }
+
+protected:
+    void onLayout() override {
+        const auto r = bounds();
+        const float w = std::min(640.f, r.w - 40.f), h = std::min(640.f, r.h - 40.f);
+        panel_ = {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h};
+        search_->setBounds({panel_.x + 16.f, panel_.y + 54.f, w - 32.f, 30.f});
+        const float bottom = panel_.bottom() - 52.f;
+        helpBox_ = {panel_.x + 16.f, bottom - 58.f, w - 32.f, 54.f};
+        tree_->setBounds({panel_.x + 16.f, panel_.y + 92.f, w - 32.f, helpBox_.y - 8.f - (panel_.y + 92.f)});
+        ok_->setBounds({panel_.right() - 16.f - 160.f, bottom + 10.f, 160.f, 32.f});
+        cancel_->setBounds({ok_->bounds().x - 10.f - 100.f, bottom + 10.f, 100.f, 32.f});
+    }
+    void onPaint(const ui::PaintContext& ctx) override {
+        auto& r = ctx.r;
+        const auto& c = ctx.theme.color;
+        r.fillRect(panel_, c.panelBg);
+        r.strokeRect(panel_, c.borderStrong, 1.f);
+        r.drawText({panel_.x + 16.f, panel_.y + 13.f}, fit(r, "Op\xC3\xA9ration \xC2\xB7 " + spec_.where, kTitle, panel_.w - 70.f), kTitle, c.text);
+        close_ = {panel_.right() - 36.f, panel_.y + 10.f, 24.f, 24.f};
+        r.drawText({close_.x + 7.f, close_.y + 2.f}, "\xC3\x97", kTitle, c.textMuted);
+        r.fillRect({panel_.x, panel_.y + 42.f, panel_.w, 1.f}, c.border);
+        r.fillRect(helpBox_, c.inputBg);
+        r.strokeRect(helpBox_, c.border, 1.f);
+        if (model_ && model_->groups.empty()) {
+            r.drawText({helpBox_.x + 10.f, helpBox_.y + 8.f}, "Aucune op\xC3\xA9ration ne contient \xC2\xAB " + search_->text() + " \xC2\xBB.", kSmall, c.warning);
+            return;
+        }
+        r.drawText({helpBox_.x + 10.f, helpBox_.y + 6.f}, fit(r, std::string(hmi::operationLabel(chosen_)) + "  \xC2\xB7  " + std::string(hmi::actionkinds::groupOf(chosen_)), kBody, helpBox_.w - 20.f),
+                   kBody, c.text);
+        r.drawText({helpBox_.x + 10.f, helpBox_.y + 29.f}, fit(r, std::string(hmi::actionkinds::help(chosen_)), kSmall, helpBox_.w - 20.f), kSmall, c.textMuted);
+    }
+    ui::EventResult onEvent(const ui::InputEvent& ev) override {
+        if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && close_.contains(d->pos)) {
+            owner_.finish(false);
+            return ui::EventResult::Consumed;
+        }
+        return ui::EventResult::Ignored;
+    }
+
+private:
+    [[nodiscard]] std::vector<hmi::Operation> operations() const {
+        std::vector<hmi::Operation> out;
+        if (model_)
+            for (const auto& g : model_->groups) out.insert(out.end(), g.ops.begin(), g.ops.end());
+        return out;
+    }
+    void filter() {
+        auto m = std::make_shared<OperationTree>();
+        m->current = spec_.current;
+        const ui::SearchQuery q(search_->text());
+        for (const auto& g : hmi::actionkinds::groups()) {
+            OperationTree::Group kept{std::string(g.name), {}};
+            for (const auto o : g.operations)
+                if (search_->text().empty() || q.matches({std::string(hmi::operationLabel(o)), std::string(g.name), std::string(hmi::actionkinds::help(o))}))
+                    kept.ops.push_back(o);
+            if (!kept.ops.empty()) m->groups.push_back(std::move(kept));
+        }
+        model_ = m;
+        tree_->setModel(model_);
+        // Recherche vide : la famille de l'operation actuelle ouverte ; sinon tout ce qui est trouve.
+        for (std::size_t i = 0; i < model_->groups.size(); ++i) {
+            const auto& g = model_->groups[i];
+            const bool mine = std::find(g.ops.begin(), g.ops.end(), chosen_) != g.ops.end();
+            if (!search_->text().empty() || mine) tree_->expand(i + 1);
+        }
+        if (!choose(chosen_)) {
+            const auto all = operations();
+            if (!all.empty()) (void)choose(all.front());
+        }
+        invalidate();
+    }
+
+    HmiOperationDialog&                owner_;
+    Spec                               spec_;
+    hmi::Operation                     chosen_;
+    std::shared_ptr<OperationTree>     model_;
+    ui::InputText*                     search_{nullptr};
+    ui::TreeView*                      tree_{nullptr};
+    ui::Button*                        ok_{nullptr};
+    ui::Button*                        cancel_{nullptr};
+    gfx::Rect                          panel_{}, close_{}, helpBox_{};
+    core::ConnectionScope              links_;
+};
+
+HmiOperationDialog::HmiOperationDialog(Spec spec) : menu::WidgetMenu("dialog.operation"), spec_(std::move(spec)) {}
+HmiOperationDialog::~HmiOperationDialog() = default;
+menu::MenuTraits HmiOperationDialog::traits() const { return dialogTraits(); }
+std::string HmiOperationDialog::title() const { return "Op\xC3\xA9ration de l'action"; }
+core::Status HmiOperationDialog::buildUi() {
+    auto body = std::make_unique<Body>(*this, spec_);
+    body_ = body.get();
+    setRoot(std::move(body));
+    return core::ok();
+}
+void HmiOperationDialog::onEnter() {
+    if (body_) body_->focusSearch();
+}
+ui::EventResult HmiOperationDialog::HandleEvent(const ui::InputEvent& ev) {
+    if (const auto* k = std::get_if<ui::KeyDown>(&ev); k && body_) {
+        if (k->key == ui::Key::Return) {
+            finish(true);
+            return ui::EventResult::Consumed;
+        }
+        if (k->key == ui::Key::Escape && k->mods.none()) {
+            finish(false);
+            return ui::EventResult::Consumed;
+        }
+        if (k->key == ui::Key::Down || k->key == ui::Key::Up) {
+            (void)body_->step(k->key == ui::Key::Down ? 1 : -1);
+            return ui::EventResult::Consumed;
+        }
+    }
+    return menu::WidgetMenu::HandleEvent(ev);
+}
+std::optional<hmi::Operation> HmiOperationDialog::parse(const std::string& payload) { return hmi::operationFromLabel(payload); }
+void HmiOperationDialog::setSearch(const std::string& t) { if (body_) body_->setSearch(t); }
+std::vector<std::string> HmiOperationDialog::groupsShown() const { return body_ ? body_->groupsShown() : std::vector<std::string>{}; }
+std::vector<std::string> HmiOperationDialog::operationsShown() const { return body_ ? body_->operationsShown() : std::vector<std::string>{}; }
+bool HmiOperationDialog::choose(hmi::Operation o) { return body_ && body_->choose(o); }
+hmi::Operation HmiOperationDialog::chosen() const { return body_ ? body_->chosen() : spec_.current; }
+std::string HmiOperationDialog::helpLine() const { return body_ ? body_->helpLine() : std::string{}; }
+void HmiOperationDialog::finish(bool ok) {
+    if (done_) return;
+    done_ = true;
+    manager().CloseDialog(menu::DialogResult{ok ? menu::DialogResult::Button::Ok : menu::DialogResult::Button::Cancel,
+                                             std::string(hmi::operationLabel(chosen()))});
 }
 
 // ===================================================================== Maths ===
@@ -390,12 +651,17 @@ public:
     void setFormula(const std::string& f) { formula_->setText(f); }
     void setTest(std::size_t i, const std::string& v) { if (i < rows_.size()) rows_[i].test->setText(v); }
     [[nodiscard]] std::size_t refCount() const { return rows_.size(); }
+    // Les lignes gardees : pas vides ; une ligne laissee vide (la premiere, « A ») que la formule
+    // ne cite pas est ignoree.
+    [[nodiscard]] bool kept(const RefRow& r) const {
+        if (r.name->text().empty() && r.path->text().empty()) return false;
+        return !r.path->text().empty()
+            || hmi::actionkinds::mathsExpression(formula_->text(), {{r.name->text(), "\x01"}}).find('\x01') != std::string::npos;
+    }
     [[nodiscard]] hmi::actionkinds::Params refs() const {
         hmi::actionkinds::Params out;
-        for (const auto& r : rows_) {
-            if (r.name->text().empty() && r.path->text().empty()) continue;
-            out.emplace_back(r.name->text(), r.path->text());
-        }
+        for (const auto& r : rows_)
+            if (kept(r)) out.emplace_back(r.name->text(), r.path->text());
         return out;
     }
     [[nodiscard]] Answer answer() const { return {target_->text(), formula_->text(), refs()}; }
@@ -406,7 +672,7 @@ public:
     hmi::actionkinds::MathsTest runTest() {
         std::vector<std::string> values;
         for (const auto& r : rows_)
-            if (!(r.name->text().empty() && r.path->text().empty())) values.push_back(r.test->text());
+            if (kept(r)) values.push_back(r.test->text());     // une valeur par reference gardee, dans l'ordre
         last_ = hmi::actionkinds::testMaths(refs(), values, formula_->text());
         tested_ = true;
         invalidate();

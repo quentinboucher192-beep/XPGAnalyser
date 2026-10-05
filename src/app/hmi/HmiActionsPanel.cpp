@@ -1,5 +1,7 @@
 #include "HmiActionsPanel.hpp"
+#include "HmiActionDialogs.hpp"   // 1.11.9 : l'operation en arbre, le script, la formule de Maths
 #include "HmiParamPanes.hpp"   // 1.9 : les arguments types d'Ouvrir une popup
+#include "../../hmi/HmiActionKinds.hpp"
 #include "../../hmi/HmiExport.hpp"
 #include "HmiAssist.hpp"
 #include "../../ui/widgets/ExprField.hpp"   // 1.10 (chantier K) : les champs a expression, partout pareils
@@ -174,6 +176,94 @@ const std::vector<Action>* HmiActionsPanel::actions() const {
     if (owner_ == kNoId) return &v->actions;
     const auto* o = v->object(owner_);
     return o ? &o->actions : nullptr;
+}
+
+namespace {
+// L'operation d'une action, et ce qu'elle entraine (une transition, un delai par defaut).
+bool applyOperation(Action& n, Operation o) {
+    // Les parametres sont ceux d'une operation (les references de Maths, les reglages du clavier) :
+    // une autre operation repart sans eux.
+    if (n.operation != o) n.params.clear();
+    n.operation = o;
+    if (hmi::operationOpensView(n.operation) && n.transition.kind == TransitionKind::Instant) {
+        const bool popup = n.operation == Operation::Popup || n.operation == Operation::ChangePopup;
+        n.transition.kind = popup ? TransitionKind::Fade : TransitionKind::Slide;
+        n.transition.durationMs = popup ? 300 : 400;
+    }
+    return true;
+}
+} // namespace
+
+void HmiActionsPanel::setDialogHost(DialogHost host, std::function<std::shared_ptr<const domain::Project>()> plc) {
+    host_ = std::move(host);
+    plc_ = std::move(plc);
+    rebuildGrid();
+}
+
+bool HmiActionsPanel::openEditor(const std::string& name) {
+    const auto* list = actions();
+    const int index = selectedIndex();
+    if (!host_ || !list || index < 0 || index >= static_cast<int>(list->size())) return false;
+    const Action a = (*list)[static_cast<std::size_t>(index)];
+    const std::string where = ownerName() + " \xC2\xB7 n\xC2\xB0 " + std::to_string(index + 1);
+    // La reponse arrive plus tard : le volet (et la meme action) doit etre encore la.
+    const std::weak_ptr<bool> alive = alive_;
+    const Id view = view_, owner = owner_;
+    const auto current = [this, alive, view, owner, index]() -> const Action* {
+        if (alive.expired() || view_ != view || owner_ != owner) return nullptr;
+        const auto* l = actions();
+        return l && index < static_cast<int>(l->size()) ? &(*l)[static_cast<std::size_t>(index)] : nullptr;
+    };
+    if (name == "Op\xC3\xA9ration") {
+        HmiOperationDialog::Spec spec;
+        spec.current = a.operation;
+        spec.where = where;
+        host_(std::make_unique<HmiOperationDialog>(std::move(spec)), [this, current, index](const menu::DialogResult& r) {
+            const auto* cur = current();
+            const auto o = r.accepted() ? HmiOperationDialog::parse(r.payload) : std::nullopt;
+            if (!cur || !o) return;
+            Action next = *cur;
+            if (applyOperation(next, *o)) (void)set(index, next);
+        });
+        return true;
+    }
+    if (name == "Code ST" && a.operation == Operation::RunScript) {
+        HmiActionScriptDialog::Spec spec;
+        spec.where = where;
+        spec.code = a.value;
+        spec.doc = doc_;
+        spec.view = view_;
+        if (plc_) spec.plc = plc_();
+        host_(std::make_unique<HmiActionScriptDialog>(std::move(spec)), [this, current, index](const menu::DialogResult& r) {
+            const auto* cur = current();
+            if (!cur || !r.accepted()) return;
+            Action next = *cur;
+            next.value = r.payload;
+            (void)set(index, next);
+        });
+        return true;
+    }
+    if ((name == "Formule" || name == "R\xC3\xA9" "f\xC3\xA9rences") && a.operation == Operation::Maths) {
+        HmiMathsDialog::Spec spec;
+        spec.where = where;
+        spec.target = a.target;
+        spec.formula = a.value;
+        spec.refs = hmi::actionkinds::params(a);
+        spec.doc = doc_;
+        spec.view = view_;
+        host_(std::make_unique<HmiMathsDialog>(std::move(spec)), [this, current, index](const menu::DialogResult& r) {
+            const auto* cur = current();
+            if (!cur || !r.accepted()) return;
+            const auto answer = HmiMathsDialog::parse(r.payload);
+            Action next = *cur;
+            next.target = hmi::targetVariable(answer.target);
+            next.value = answer.formula;
+            next.params = hmi::actionkinds::formatParams(answer.refs);
+            (void)set(index, next);
+        });
+        return true;
+    }
+    return false;
 }
 
 std::string HmiActionsPanel::ownerName() const {
@@ -373,15 +463,15 @@ void HmiActionsPanel::rebuildGrid() {
     op.properties.push_back(prop("Op\xC3\xA9ration", std::string(hmi::operationLabel(a.operation)), PG::ValueType::Enum, opNames,
                                  commitWith([](Action& n, std::string_view v) {
                                      const auto o = hmi::operationFromLabel(v);
-                                     if (!o) return false;
-                                     n.operation = *o;
-                                     if (hmi::operationOpensView(n.operation) && n.transition.kind == TransitionKind::Instant) {
-                                         const bool popup = n.operation == Operation::Popup || n.operation == Operation::ChangePopup;
-                                         n.transition.kind = popup ? TransitionKind::Fade : TransitionKind::Slide;
-                                         n.transition.durationMs = popup ? 300 : 400;
-                                     }
-                                     return true;
-                                 })));
+                                     return o && applyOperation(n, *o);
+                                 }),
+                                 std::string(hmi::actionkinds::groupOf(a.operation)) + " \xE2\x80\x94 " + std::string(hmi::actionkinds::help(a.operation))));
+    if (host_) {
+        // 1.11.9 : un clic ouvre l'arbre des operations (rangees par familles, avec une recherche).
+        op.properties.back().open = [this] { (void)openEditor("Op\xC3\xA9ration"); };
+        op.properties.back().openTip = "Choisir dans l'arbre des op\xC3\xA9rations (familles, recherche)";
+        op.properties.back().openOnClick = true;
+    }
     if (hmi::operationWritesVariable(a.operation)) {
         op.properties.push_back(prop("Variable", a.target, PG::ValueType::Text, {},
                                      commitWith([](Action& n, std::string_view v) { n.target = hmi::targetVariable(v); return true; }),
@@ -389,9 +479,10 @@ void HmiActionsPanel::rebuildGrid() {
                                      "popup, une r\xC3\xA9" "f\xC3\xA9rence et ses membres : Vanne.CMD_OUV."));
         // 1.11.7 : la pastille fx et l'aide (les variables, les references du symbole), comme la Condition ;
         // le type attendu au bout du nom (BOOL pour Mettre a 1, Mettre a 0, Basculer).
-        const auto expect = a.operation == Operation::Increment || a.operation == Operation::Decrement ? ui::exprfield::Expect::Number
-                          : a.operation == Operation::Assign                                            ? ui::exprfield::Expect::Value
-                                                                                                         : ui::exprfield::Expect::Bool;
+        const auto expect = a.operation == Operation::Increment || a.operation == Operation::Decrement || a.operation == Operation::Maths
+                                ? ui::exprfield::Expect::Number
+                          : a.operation == Operation::Assign || a.operation == Operation::Keyboard ? ui::exprfield::Expect::Value
+                                                                                                    : ui::exprfield::Expect::Bool;
         ui::exprfield::markWhole(op.properties.back(), expect);
     } else if (hmi::operationOpensView(a.operation)) {
         // Lot 8 : une popup s'ouvre parmi les popups (et les vues : toute vue peut
@@ -685,10 +776,79 @@ void HmiActionsPanel::rebuildGrid() {
                                      commitWith([](Action& n, std::string_view v) { n.value = std::string(v); return true; }),
                                      "Ex. : Consigne + 1.5 ; 'Azote' ; T#5s ; Armoires[i].seuil_poids_saisi"));
     if (a.operation == Operation::Assign) ui::exprfield::markWhole(op.properties.back(), ui::exprfield::Expect::Value);   // 1.10 (chantier K)
-    if (a.operation == Operation::RunScript)
+    if (a.operation == Operation::RunScript) {
         op.properties.push_back(prop("Code ST", escapeLines(a.value), PG::ValueType::Text, {},
                                      commitWith([](Action& n, std::string_view v) { n.value = unescapeLines(v); return true; }),
                                      "Du ST ex\xC3\xA9" "cut\xC3\xA9 tel quel ; \\n s\xC3\xA9pare les lignes. Ex. : Compteur := 0;\\nIHM_JOURNAL('remis \xC3\xA0 z\xC3\xA9ro');"));
+        if (host_) {
+            // 1.11.9 : le script dans sa petite fenetre (l'editeur des scripts, l'aide, les references).
+            op.properties.back().open = [this] { (void)openEditor("Code ST"); };
+            op.properties.back().openTip = "Modifier le script dans sa fen\xC3\xAAtre (aide \xC3\xA0 la saisie, variables et r\xC3\xA9" "f\xC3\xA9rences)";
+        }
+    }
+    // 1.11.9 : Maths - la formule et ses references (la cible est la case Variable ci-dessus).
+    if (a.operation == Operation::Maths) {
+        namespace ak = hmi::actionkinds;
+        const auto refs = ak::params(a);
+        std::string issues;
+        for (const auto& i : ak::checkMaths(refs, a.value)) issues += (issues.empty() ? "" : " ; ") + i.why;
+        op.properties.push_back(prop("Formule", a.value, PG::ValueType::Text, {},
+                                     commitWith([](Action& n, std::string_view v) { n.value = std::string(v); return true; }),
+                                     "Avec les noms des r\xC3\xA9" "f\xC3\xA9rences : (Mesure - Consigne) * 2. Les fonctions : ABS, SQRT, MIN, MAX, LIMIT..."
+                                         + (issues.empty() ? std::string{} : " \xE2\x80\x94 \xC3\x80 revoir : " + issues)));
+        if (host_) {
+            op.properties.back().open = [this] { (void)openEditor("Formule"); };
+            op.properties.back().openTip = "La formule, ses r\xC3\xA9" "f\xC3\xA9rences et le mode test, dans leur fen\xC3\xAAtre";
+        }
+        op.properties.push_back(prop("R\xC3\xA9" "f\xC3\xA9rences", ak::formatParams(refs), PG::ValueType::Text, {},
+                                     commitWith([](Action& n, std::string_view v) { n.params = std::string(v); return true; }),
+                                     "Des variables nomm\xC3\xA9" "es : Mesure := Armoires[0].ana.PT1.mes; Consigne := Consigne_Four"));
+        if (host_) {
+            op.properties.back().open = [this] { (void)openEditor("R\xC3\xA9" "f\xC3\xA9rences"); };
+            op.properties.back().openTip = "Ajouter, retirer, tester les r\xC3\xA9" "f\xC3\xA9rences dans la fen\xC3\xAAtre de la formule";
+        }
+    }
+    // 1.11.9 : le clavier virtuel - ses reglages (la cible est la case Variable ci-dessus).
+    if (a.operation == Operation::Keyboard) {
+        namespace ak = hmi::actionkinds;
+        const auto spec = ak::keyboardSpec(a);
+        const auto edit = [&](auto&& change) {
+            return commitWith([change](Action& n, std::string_view v) {
+                auto k = ak::keyboardSpec(n);
+                if (!change(k, v)) return false;
+                ak::setKeyboardSpec(n, k);
+                return true;
+            });
+        };
+        op.properties.push_back(prop("Titre", spec.title, PG::ValueType::Text, {},
+                                     edit([](ak::KeyboardSpec& k, std::string_view v) { k.title = std::string(v); return true; }),
+                                     "Le texte du champ, \xC3\xA0 trous : Consigne de {Four1.Nom}. Vide : le nom de la variable."));
+        static const char* kKeys[] = {"auto", "numerique", "complet"};
+        static const char* kLabels[] = {"auto (selon le type de la variable)", "num\xC3\xA9rique", "complet (lettres)"};
+        std::string shown = kLabels[0];
+        for (int i = 0; i < 3; ++i)
+            if (spec.keyboard == kKeys[i]) shown = kLabels[i];
+        op.properties.push_back(prop("Clavier", shown, PG::ValueType::Enum, {kLabels[0], kLabels[1], kLabels[2]},
+                                     edit([](ak::KeyboardSpec& k, std::string_view v) {
+                                         for (int i = 0; i < 3; ++i)
+                                             if (v == kLabels[i]) k.keyboard = kKeys[i];
+                                         return true;
+                                     })));
+        op.properties.push_back(prop("Min", spec.min, PG::ValueType::Text, {},
+                                     edit([](ak::KeyboardSpec& k, std::string_view v) { k.min = std::string(v); return true; }),
+                                     "Vide : pas de limite. Un nombre ou une expression (Consigne_Min)."));
+        ui::exprfield::markWhole(op.properties.back(), ui::exprfield::Expect::Number, false);
+        op.properties.push_back(prop("Max", spec.max, PG::ValueType::Text, {},
+                                     edit([](ak::KeyboardSpec& k, std::string_view v) { k.max = std::string(v); return true; }),
+                                     "Vide : pas de limite. Une valeur hors des bornes est refus\xC3\xA9" "e, le champ le dit."));
+        ui::exprfield::markWhole(op.properties.back(), ui::exprfield::Expect::Number, false);
+        op.properties.push_back(prop("Unit\xC3\xA9", spec.unit, PG::ValueType::Text, {},
+                                     edit([](ak::KeyboardSpec& k, std::string_view v) { k.unit = std::string(v); return true; }),
+                                     "Montr\xC3\xA9" "e au bout du champ : degC, bar, %"));
+        op.properties.push_back(prop("Caract\xC3\xA8res cach\xC3\xA9s", spec.mask ? "TRUE" : "FALSE", PG::ValueType::Boolean, {},
+                                     edit([](ak::KeyboardSpec& k, std::string_view v) { k.mask = v == "TRUE"; return true; }),
+                                     "Coch\xC3\xA9 : des points \xC3\xA0 la place des caract\xC3\xA8res (un code)."));
+    }
     if (a.operation == Operation::Log)
         op.properties.push_back(prop("Message", escapeLines(a.value), PG::ValueType::Text, {},
                                      commitWith([](Action& n, std::string_view v) { n.value = unescapeLines(v); return true; }),

@@ -7,6 +7,7 @@
 //  Avec le chemin d'un export, les expressions sont aussi evaluees contre le
 //  VRAI simulateur, sur les variables du projet (Armoires[i].ana.PT1.mes...).
 // =============================================================================
+#include "../src/hmi/HmiActionKinds.hpp"     // 1.11.9 : les operations rangees, Maths, le clavier virtuel
 #include "../src/hmi/HmiArchive.hpp"
 #include "../src/hmi/HmiAssets.hpp"
 #include "../src/hmi/HmiCheck.hpp"
@@ -3889,6 +3890,110 @@ void membresInternes1118() {
           "un membre interne qui ne d\xC3\xA9signe rien : signal\xC3\xA9");
     check(std::none_of(issues.begin(), issues.end(), [](const Issue& i) { return i.message.find("V[0].NOM") != std::string::npos; }),
           "... un membre interne n'est pas \xC2\xAB sans place \xC2\xBB");
+}
+
+// =============================================================================
+//  1.11.9 (« trier les actions disponibles avec un treeview » ; « maths : aide aux
+//  formules, n parametres qui seront des references, un mode test » ; « ouvrir un
+//  clavier virtuel, champ de saisie, et on met des parametres ») : le moteur.
+// =============================================================================
+void actionsMathsClavier1119() {
+    std::printf("1.11.9 : les op\xC3\xA9rations rang\xC3\xA9" "es, Maths, le clavier virtuel\n");
+    namespace ak = hmi::actionkinds;
+    // Les familles : chaque operation y est une fois, avec sa phrase.
+    {
+        std::map<int, int> seen;
+        for (const auto& g : ak::groups())
+            for (const auto o : g.operations) ++seen[static_cast<int>(o)];
+        bool once = true, help = true;
+        for (const auto o : kOperations) {
+            once = once && seen[static_cast<int>(o)] == 1;
+            help = help && !ak::help(o).empty() && !ak::groupOf(o).empty();
+        }
+        check(once && seen.size() == std::size(kOperations), "les familles : chaque op\xC3\xA9ration une fois (" + std::to_string(seen.size()) + ")");
+        check(help, "... chacune a sa famille et sa phrase");
+        check(ak::groupOf(Operation::Maths) == ak::groupOf(Operation::Assign) && ak::groupOf(Operation::Popup) != ak::groupOf(Operation::Set),
+              "Maths avec Affecter ; Ouvrir une popup ailleurs que Mettre \xC3\xA0 1");
+    }
+    // Les references de Maths.
+    Action m;
+    m.params = "Mesure := M; Consigne := C";
+    const auto refs = ak::params(m);
+    check(refs.size() == 2 && refs[0].first == "Mesure" && refs[1].second == "C" && ak::formatParams(refs) == m.params, "les r\xC3\xA9" "f\xC3\xA9rences, lues et r\xC3\xA9" "\xC3\xA9" "crites");
+    same(ak::mathsExpression("(Mesure - Consigne) * 2 + MesureX", refs), "(M - C) * 2 + MesureX", "la formule avec les chemins (MesureX reste)");
+    check(ak::checkMaths(refs, "(Mesure - Consigne) * 2").empty(), "une formule juste : rien \xC3\xA0 dire");
+    {
+        const auto bad = ak::checkMaths({{"X", "1 + 2"}, {"X", "Y"}}, "X * 2");
+        check(bad.size() >= 2 && bad[0].badParam == 0 && bad[0].why.find("chemin") != std::string::npos, "une r\xC3\xA9" "f\xC3\xA9rence calcul\xC3\xA9" "e : refus\xC3\xA9" "e (" + (bad.empty() ? std::string{} : bad[0].why) + ")");
+        check(std::any_of(bad.begin(), bad.end(), [](const ak::MathsIssue& i) { return i.why.find("deux fois") != std::string::npos; }), "un nom deux fois : dit");
+    }
+    {
+        const auto t = ak::testMaths(refs, {"12.5", "10"}, "(Mesure - Consigne) * 2");
+        check(t.ok && t.result == "5" && t.expression.find("12.5") != std::string::npos, "le mode test : (12.5 - 10) * 2 = " + t.result);
+        check(!ak::testMaths(refs, {"1", "2"}, "Mesure +").ok, "le mode test : une formule illisible le dit");
+    }
+    // Le clavier virtuel : ses reglages.
+    {
+        Action k;
+        ak::KeyboardSpec spec;
+        spec.title = "'Code du badge'";
+        spec.keyboard = "numerique";
+        spec.min = "0";
+        spec.max = "100";
+        spec.unit = "%";
+        spec.mask = true;
+        ak::setKeyboardSpec(k, spec);
+        const auto back = ak::keyboardSpec(k);
+        check(back.title == spec.title && back.keyboard == "numerique" && back.min == "0" && back.max == "100" && back.unit == "%" && back.mask,
+              "les r\xC3\xA9glages du clavier, enregistr\xC3\xA9s puis relus (" + k.params + ")");
+        check(ak::keyboardFor("REAL", "auto") == "numerique" && ak::keyboardFor("STRING", "auto") == "complet", "auto : num\xC3\xA9rique pour un REAL, complet pour un texte");
+    }
+    // En marche.
+    Project p;
+    View base = makeView(p, "Base");
+    p.programs.variables.push_back(hmiVar(p, "M", "REAL", "12.5"));
+    p.programs.variables.push_back(hmiVar(p, "C", "REAL", "10"));
+    p.programs.variables.push_back(hmiVar(p, "Sortie", "REAL", "0"));
+    p.programs.variables.push_back(hmiVar(p, "Code", "INT", "0"));
+    auto& calc = addButton(p, base, "Btn_Calc", 10, 10);
+    {
+        Action a = act(Trigger::Click, Operation::Maths, "Sortie", "(Mesure - Consigne) * 2");
+        a.params = "Mesure := M; Consigne := C";
+        calc.actions.push_back(a);
+    }
+    const Id btnCalc = calc.id;
+    auto& saisie = addButton(p, base, "Btn_Saisie", 10, 80);
+    {
+        Action a = act(Trigger::Click, Operation::Keyboard, "Code");
+        a.params = "titre := 'Code'; min := 0; max := 100";
+        saisie.actions.push_back(a);
+    }
+    const Id btnSaisie = saisie.id;
+    p.views = {base};
+    p.config.startView = base.id;
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    rt.press(btnCalc, 0.1);
+    rt.release(btnCalc, 0.15, true);
+    near(rt.variable("Sortie") ? rt.variable("Sortie")->asReal() : -1, 5.0, "Maths : Sortie := (M - C) * 2 = 5");
+    rt.press(btnSaisie, 0.2);
+    rt.release(btnSaisie, 0.25, true);
+    check(rt.promptShown() && rt.keyboardPrompt() && rt.keyboardPrompt()->target == "Code" && rt.keyboardPrompt()->max && *rt.keyboardPrompt()->max == 100,
+          "le clavier virtuel s'ouvre : Code, de 0 \xC3\xA0 100");
+    rt.typeText("150", 0.3);
+    rt.typeKey(EditKey::Enter, 0.31);
+    check(rt.promptShown() && rt.promptForm().error && rt.promptForm().message.find("hors limites") != std::string::npos,
+          "150 : refus\xC3\xA9, hors limites (le champ reste) - " + rt.promptForm().message);
+    for (int k = 0; k < 3; ++k) rt.typeKey(EditKey::Backspace, 0.32);
+    rt.typeText("42", 0.33);
+    rt.typeKey(EditKey::Enter, 0.34);
+    check(!rt.promptShown() && rt.variable("Code") && rt.variable("Code")->asInteger() == 42, "42 : \xC3\xA9" "crit dans Code, le champ se ferme");
+    rt.press(btnSaisie, 0.4);
+    rt.release(btnSaisie, 0.45, true);
+    rt.typeText("7", 0.5);
+    rt.typeKey(EditKey::Escape, 0.51);
+    check(!rt.promptShown() && rt.variable("Code")->asInteger() == 42, "\xC3\x89" "chap : ferm\xC3\xA9, Code ne change pas");
 }
 
 void verificationsLot8() {
@@ -20578,6 +20683,7 @@ int main(int argc, char** argv) {
     lignesDeCode1117();                // 1.11.7 : les lignes de code de l'application
     reperesArgumentsPopup1117();       // 1.11.7 : IN_V := $V[2]$, une reference
     membresInternes1118();             // 1.11.8 : membres internes, place recalculee, depart d'un membre
+    actionsMathsClavier1119();         // 1.11.9 : operations rangees, Maths, clavier virtuel
     actions();
     scripts();
     transitions();

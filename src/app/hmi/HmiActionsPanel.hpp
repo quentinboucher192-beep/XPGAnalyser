@@ -23,12 +23,15 @@
 #include "HmiPanels.hpp"
 #include "../../core/Command.hpp"
 #include "../../hmi/HmiCommands.hpp"
+#include "../../menu/IMenu.hpp"
 #include "../../ui/widgets/DataViews.hpp"
 
 #include <functional>
 #include <memory>
 #include <string>
 #include <vector>
+
+namespace domain { class Project; }
 
 namespace app {
 
@@ -50,6 +53,15 @@ public:
     bool set(int index, const hmi::Action&);
     bool remove(int index);
     bool move(int index, int delta);
+
+    // 1.11.9 : LES PETITES FENETRES DES ACTIONS - le choix de l'operation en arbre, le script
+    // (Executer un script), la formule de Maths. L'hote les ouvre (le gestionnaire des menus) et
+    // rend la reponse ; sans hote, pas de bouton « … » (la liste et la case, comme avant).
+    using DialogHost = std::function<void(menu::MenuPtr, std::function<void(const menu::DialogResult&)>)>;
+    void setDialogHost(DialogHost host, std::function<std::shared_ptr<const domain::Project>()> plc = {});
+    // Ouvre la fenetre d'une ligne de l'action choisie : "Op\xC3\xA9ration", "Code ST",
+    // "Formule" (Maths) ; faux : pas de fenetre (pas d'hote, rien de choisi, pas cette ligne).
+    bool openEditor(const std::string& name);
 
     [[nodiscard]] HmiToolStrip&     tools() noexcept { return *tools_; }
     [[nodiscard]] ui::TableView&    table() noexcept { return *table_; }
@@ -74,6 +86,9 @@ private:
     std::shared_ptr<ui::ITableModel> model_;
     int              selected_{-1};
     std::size_t      lastCount_{0};
+    DialogHost       host_;                                                  // 1.11.9
+    std::function<std::shared_ptr<const domain::Project>()> plc_;
+    std::shared_ptr<bool> alive_ = std::make_shared<bool>(true);           // une reponse apres la fermeture : ignoree
     core::ConnectionScope links_;
 };
 

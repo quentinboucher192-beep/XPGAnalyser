@@ -40,6 +40,12 @@
 //    | [Tester]  = 5   ((12.5 - 10) * 2)                                       |
 //    |                                                  [Annuler] [Valider]    |
 //    +-------------------------------------------------------------------------+
+//
+//  1.11.9 : L'OPERATION EN ARBRE (« trier les actions disponibles avec un treeview
+//  utile et efficace ») - les familles (Variables, Navigation, Popups...), leurs
+//  operations dessous ; la recherche garde ce qu'elle trouve (le nom, la famille,
+//  ce que l'operation fait) ; en bas, la phrase de l'operation choisie ; un
+//  double-clic (ou Entree) la prend.
 // =============================================================================
 #pragma once
 
@@ -48,6 +54,7 @@
 #include "../../menu/IMenu.hpp"
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -77,6 +84,40 @@ public:
     [[nodiscard]] std::vector<std::string> names() const;      // la liste de droite, montree
     void setSearch(const std::string& text);
     bool insertName(const std::string& name);                  // comme un double-clic
+    void finish(bool ok);
+
+protected:
+    core::Status buildUi() override;
+    void         onEnter() override;
+
+private:
+    class Body;
+    Spec  spec_;
+    Body* body_{nullptr};
+    bool  done_{false};
+};
+
+class HmiOperationDialog final : public menu::WidgetMenu {
+public:
+    struct Spec {
+        hmi::Operation current{hmi::Operation::Set};
+        std::string    where;        // « Bouton_1 · n° 1 »
+    };
+    explicit HmiOperationDialog(Spec spec);
+    ~HmiOperationDialog() override;
+    [[nodiscard]] menu::MenuTraits traits() const override;
+    [[nodiscard]] std::string title() const override;
+    ui::EventResult HandleEvent(const ui::InputEvent& ev) override;
+    // La reponse : le libelle de l'operation (operationFromLabel le relit).
+    [[nodiscard]] static std::optional<hmi::Operation> parse(const std::string& payload);
+
+    // Pour les tests et les scripts.
+    void setSearch(const std::string& text);
+    [[nodiscard]] std::vector<std::string> groupsShown() const;            // les familles montrees
+    [[nodiscard]] std::vector<std::string> operationsShown() const;        // les operations montrees, dans l'ordre
+    bool choose(hmi::Operation);                                          // la ligne choisie
+    [[nodiscard]] hmi::Operation chosen() const;
+    [[nodiscard]] std::string helpLine() const;                           // la phrase du bas
     void finish(bool ok);
 
 protected:

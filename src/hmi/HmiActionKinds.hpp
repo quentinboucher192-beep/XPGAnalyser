@@ -18,7 +18,7 @@
 //      "(Mesure - Consigne) * 2". Chaque reference est un chemin de variable (pas
 //      un calcul) : en marche, la formule se lit avec les chemins a la place des
 //      noms, et son resultat va dans la cible.
-//    - Clavier virtuel : les reglages de la saisie. "titre := 'Consigne du four';
+//    - Clavier virtuel : les reglages de la saisie (le titre : un texte a trous). "titre := 'Consigne du four';
 //      clavier := numerique; min := 0; max := 1200; unite := 'degC'; masque := FALSE".
 // =============================================================================
 #pragma once
@@ -75,7 +75,7 @@ struct MathsTest {
 
 // ---- le clavier virtuel ---------------------------------------------------------
 struct KeyboardSpec {
-    std::string title;          // une expression (un texte entre apostrophes, ou une variable) ; vide : le nom de la cible
+    std::string title;          // un texte a trous ("Consigne de {Four}") ; vide : le nom de la cible
     std::string keyboard;       // "auto" (selon le type de la cible), "numerique", "complet"
     std::string min, max;       // des expressions ; vides : pas de limite
     std::string unit;           // un texte : "degC"
