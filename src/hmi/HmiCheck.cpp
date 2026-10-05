@@ -3089,7 +3089,7 @@ struct ExprWalker {
                         }
                     for (std::size_t k = 0; k < instances.size(); ++k) {
                         const auto& [iv, inst] = instances[k];
-                        const auto args = symbolArguments(sv, *inst);
+                        const auto args = symbolArguments(sv, *inst, &p);
                         if (args.empty()) continue;
                         for (const auto& [t, pb] : problemsOf(sv, site, &args)) {
                             // Un nom inconnu, un indice de l'argument : l'argument le dit ; faux

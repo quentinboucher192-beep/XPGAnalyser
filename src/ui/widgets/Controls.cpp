@@ -3163,7 +3163,10 @@ namespace ui {
                 const gfx::Color fg = !item.enabled ? c.textDisabled
                     : (hot ? c.selectionText : c.text);
 
-                if (item.icon != Icon::None) {
+                if (item.paintIcon) {
+                    const float side = std::min(h - 4.f, 18.f);
+                    item.paintIcon(ctx, { row.x + kMenuPadding - 1.f, row.y + (h - side) * 0.5f, side, side });
+                } else if (item.icon != Icon::None) {
                     const float side = std::min(h - 6.f, 16.f);
                     drawIcon(ctx.r, item.icon,
                         { row.x + kMenuPadding, row.y + (h - side) * 0.5f, side, side }, fg);

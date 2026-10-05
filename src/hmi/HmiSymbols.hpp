@@ -39,6 +39,8 @@
 
 #include <functional>
 #include <map>
+#include <memory>
+#include <set>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -73,7 +75,44 @@ using SymbolArguments = std::vector<std::pair<std::string, std::string>>;
 // argument sans := (Voiture;50) est celui du parametre de meme rang, dans
 // l'ordre du symbole ; un argument nomme garde la priorite ; un positionnel
 // en trop est ignore.
-[[nodiscard]] SymbolArguments symbolArguments(const View& symbol, const Object& instance);
+// 1.11.3 : un argument qui n'est pas une variable (`project` : ses variables IHM, et
+// les noms de l'automate donnes par setPlcNames) est une CONSTANTE, convertie dans
+// le type du parametre : Voiture -> 'Voiture' (STRING), 1,5 -> 1.5 (REAL), Auto ->
+// T_MODE#Auto (enumeration IHM). Un parametre ANY garde l'argument tel quel.
+[[nodiscard]] SymbolArguments symbolArguments(const View& symbol, const Object& instance, const Project* project = nullptr);
+
+// ---- 1.11.3 : LA VALEUR D'UN PARAMETRE (et de toute case typee) - constante ou formule ----
+//  Sans fx, ce qu'on tape est une constante, CONVERTIE DANS LE TYPE attendu (comme le
+//  texte d'un objet) ; un nom de variable connu reste la variable ; avec fx, une
+//  formule, gardee telle quelle. La forme gardee dans "params" est du ST : une
+//  constante y est un litteral ('Voiture', TRUE, 1.5, T#5s, T_MODE#Auto).
+//
+// Le litteral ST de `text` pour le type `type` (STRING : 'Voiture' ; BOOL : vrai ->
+// TRUE ; INT : 12 dans ses bornes ; REAL : 1,5 -> 1.5 ; TIME : 5s -> T#5s ; DATE :
+// 2026-10-05 -> D#2026-10-05 ; une enumeration IHM : Auto -> T_MODE#Auto ; ANY : un
+// nombre, TRUE/FALSE, sinon un texte). Vide (et `why`) : ne se convertit pas (un
+// tableau, une structure, un mot qui n'est pas du type).
+[[nodiscard]] std::string argumentLiteral(const Project*, std::string_view type, std::string_view text, std::string* why = nullptr);
+// L'argument tel que le moteur le colle pour un parametre de type `type` (la regle de
+// symbolArguments) : Voiture -> 'Voiture' pour un STRING, une variable connue telle quelle.
+[[nodiscard]] std::string effectiveArgument(const Project*, std::string_view type, std::string_view text);
+// `text` est-il deja une constante : une chaine seule, un nombre, TRUE/FALSE, un
+// litteral type (T#5s, 16#FF, T_MODE#Auto) ?
+[[nodiscard]] bool isLiteralArgument(std::string_view text);
+// Ce que l'inspecteur montre d'une constante : 'Voiture' -> Voiture, 'L$'eau' -> L'eau ;
+// le reste tel quel.
+[[nodiscard]] std::string shownLiteral(std::string_view text);
+// Le type est-il un texte (STRING, STRING[20], WSTRING) ? un tableau ou une structure
+// (ce qui se donne par une variable, jamais en constante) ?
+[[nodiscard]] bool isTextType(std::string_view type) noexcept;
+[[nodiscard]] bool isAggregateType(const Project*, std::string_view type);
+// Les racines de chemin que l'application sait etre des variables de l'automate (en
+// majuscules) ; l'application les donne quand le programme change (nul : aucune).
+// Partage entre les fils (le moteur de simulation lit, l'interface ecrit).
+void setPlcNames(std::shared_ptr<const std::set<std::string, std::less<>>> upperRoots);
+// `root` (la tete d'un chemin : Armoires de Armoires[1].Nom) est-il une variable : de
+// l'IHM (`project`), SYS, une vue (ses variables publiques), THIS, ou de l'automate ?
+[[nodiscard]] bool isKnownName(const Project*, std::string_view root);
 
 // 1.11.2 (SYM, decision 240) : la section « Parametres du symbole » de l'inspecteur.
 // Ce que `params` (le texte de l'instance) donne a chaque parametre du symbole, dans

@@ -21806,9 +21806,11 @@ void symParametres1112() {
         check(n && n->description.find("Le nom affich\xC3\xA9") == 0 && val && val->description.find("Attend : ARRAY[0..9] OF UINT") == 0,
               "l'infobulle : la description du param\xC3\xA8tre, sinon ce qu'attend son type");
         // Une saisie : une seule commande, params en forme nommee.
-        check(n && n->commit && n->commit("Camion") && calls.size() == 1 && std::get<0>(calls[0]) == "params"
-                  && std::get<1>(calls[0]) == "Name := Camion; Value := 50" && !std::get<2>(calls[0]),
-              "Name : Camion - une commande, params = Name := Camion; Value := 50 (" + (calls.empty() ? std::string("rien") : std::get<1>(calls[0])) + ")");
+        // 1.11.3 : sans fx, Camion est une constante du type du parametre (STRING) : 'Camion'.
+        const bool camion = n && n->commit && n->commit("Camion");
+        check(camion && calls.size() == 1 && std::get<0>(calls[0]) == "params"
+                  && std::get<1>(calls[0]) == "Name := 'Camion'; Value := 50" && !std::get<2>(calls[0]),
+              "Name : Camion - une commande, params = Name := 'Camion'; Value := 50 (" + (calls.empty() ? std::string("rien") : std::get<1>(calls[0])) + ")");
         // Le fx : =Armoires[1] devient l'argument.
         check(val && val->commit && val->commit("=Armoires[1]") && calls.size() == 2 && std::get<1>(calls[1]) == "Name := Voiture; Value := Armoires[1]",
               "fx : =Armoires[1] (" + (calls.size() < 2 ? std::string("rien") : std::get<1>(calls[1])) + ")");
@@ -21845,11 +21847,12 @@ void symParametres1112() {
             for (const auto& [n, val] : hmi::symbolArguments(sym, o)) out += (out.empty() ? "" : " | ") + n + "=" + val;
             return out;
         };
-        same_text(args("Voiture;50"), "Name=Voiture | Value=50", "moteur : Voiture;50 - Name = Voiture, Value = 50 (plus le d\xC3\xA9" "faut)");
-        same_text(args("Voiture"), "Name=Voiture", "moteur : un seul positionnel - Name ; Value sans d\xC3\xA9" "faut reste tel quel");
-        same_text(args("Voiture;50;99"), "Name=Voiture | Value=50", "moteur : un positionnel en trop est ignor\xC3\xA9");
+        // 1.11.3 : Name est un STRING et Voiture n'est pas une variable : la constante 'Voiture'.
+        same_text(args("Voiture;50"), "Name='Voiture' | Value=50", "moteur : Voiture;50 - Name = 'Voiture', Value = 50 (plus le d\xC3\xA9" "faut)");
+        same_text(args("Voiture"), "Name='Voiture'", "moteur : un seul positionnel - Name ; Value sans d\xC3\xA9" "faut reste tel quel");
+        same_text(args("Voiture;50;99"), "Name='Voiture' | Value=50", "moteur : un positionnel en trop est ignor\xC3\xA9");
         same_text(args("Camion; Name := 'B'"), "Name='B'", "moteur : le nomm\xC3\xA9 garde la priorit\xC3\xA9 sur le positionnel de m\xC3\xAAme rang");
-        same_text(args("Value := 7; Voiture"), "Name=Voiture | Value=7", "moteur : nomm\xC3\xA9 et positionnel m\xC3\xAAl\xC3\xA9s");
+        same_text(args("Value := 7; Voiture"), "Name='Voiture' | Value=7", "moteur : nomm\xC3\xA9 et positionnel m\xC3\xAAl\xC3\xA9s");
         same_text(args("; 50"), "Name='Sans nom' | Value=50", "moteur : un rang vide garde le d\xC3\xA9" "faut");
         same_text(args("'a:=b'; T[1;2]"), "Name='a:=b' | Value=T[1;2]", "moteur : := dans une cha\xC3\xAEne, ; dans des crochets");
         same_text(args("Name := 'A'; Value := M"), "Name='A' | Value=M", "moteur : la forme nomm\xC3\xA9" "e, comme avant");

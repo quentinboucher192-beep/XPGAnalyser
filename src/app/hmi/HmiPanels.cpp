@@ -23,6 +23,7 @@
 #include "../../project/RenamePlan.hpp"   // ---- Lot API 8 : les expressions impossibles (PlcTypes) ----
 #include "../../hmi/HmiApiVars.hpp"     // 1.11.1 (API-M) : les variables de l'automate sous API.
 #include "HmiApiVarsPane.hpp"            // 1.11.1 (API-V, R1111-6) : l'arbre dans la bibliotheque
+#include "HmiValueKind.hpp"              // 1.11.3 : le carre de legende de chaque case
 #include "../../ui/Shapes.hpp"
 #include "../../ui/Theme.hpp"
 #include "../../ui/widgets/Controls.hpp"
@@ -2794,12 +2795,26 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
             shape.role = paramsOf->role;
             shape.params = paramsOf->params;
             const auto given = hmi::givenArguments(shape, prop.value);
+            const valuekind::Env env{project, &view, plc};
             for (std::size_t i = 0; i < shape.params.size(); ++i) {
                 const auto& prm = shape.params[i];
                 PG::Property a;
                 a.name = prm.name + " \xC2\xB7 " + (prm.type.empty() ? std::string("ANY") : prm.type);
                 a.type = PG::ValueType::Text;
-                a.value = i < given.size() ? given[i] : std::string{};
+                // 1.11.3 (le fx qu'on ne voyait plus ; Voiture refuse) : l'argument tel que le moteur
+                // le prend. Une constante ('Voiture', 50, TRUE) se montre sans fx ni apostrophes ; un
+                // mot qui n'est pas une variable est une constante du type (Voiture -> 'Voiture') ; le
+                // reste (une variable : UINTS, un calcul) est une formule et garde son fx.
+                const std::string arg = i < given.size() ? given[i] : std::string{};
+                const std::string type = prm.type.empty() ? std::string("ANY") : prm.type;
+                const std::string effective = arg.empty() ? arg : hmi::effectiveArgument(project, type, arg);
+                const bool formula = !effective.empty() && !hmi::isLiteralArgument(effective);
+                if (formula) {
+                    a.expression = effective;
+                    a.value = effective;
+                } else {
+                    a.value = hmi::shownLiteral(effective);
+                }
                 const std::string def = prm.defaultValue.empty() ? std::string("aucune") : prm.defaultValue;
                 // Vide : la valeur par defaut du symbole, montree en gris (le texte d'attente de la case).
                 if (a.value.empty()) a.placeholder = "(d\xC3\xA9" "faut : " + def + ")";
@@ -2807,14 +2822,35 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
                                        ? (prm.type.empty() ? std::string("Le param\xC3\xA8tre accepte tout (ANY) : une variable, un chemin, une valeur.")
                                                            : "Attend : " + prm.type + " - une variable, un chemin (Armoires[1]), une expression ou une valeur.")
                                        : prm.description;
-                tip += "\nVide : la valeur par d\xC3\xA9" "faut du symbole (" + def + "). Le bouton fx : une variable ou une expression.";
+                tip += "\nVide : la valeur par d\xC3\xA9" "faut du symbole (" + def + "). Sans fx : une constante, convertie en " + type
+                     + " (Voiture devient 'Voiture') ; un nom de variable reste la variable. Le bouton fx : une variable ou une expression.";
                 a.description = std::move(tip);
+                const auto res = valuekind::classify(env, formula ? effective : a.value, formula, type);
+                if (formula && res.error()) a.exprError = valuekind::firstProblem(res);
+                a.legend = valuekind::legendOf(res);
                 const std::string current = prop.value;
-                a.commit = [commit, shape, current, i](std::string_view s) {
+                a.commit = [commit, shape, current, i, type, project](std::string_view s) {
                     if (!commit.prop) return false;
                     std::string v(s);
-                    if (v == ui::exprfield::kToDefault) v.clear();
-                    else if (!v.empty() && v.front() == '=') v.erase(v.begin());
+                    if (v == ui::exprfield::kToDefault) {
+                        v.clear();
+                    } else {
+                        const std::size_t a0 = v.find_first_not_of(" \t"), a1 = v.find_last_not_of(" \t");
+                        v = a0 == std::string::npos ? std::string{} : v.substr(a0, a1 - a0 + 1);
+                        if (!v.empty() && v.front() == '=') {
+                            // fx : la formule telle quelle (=UINTS : la variable).
+                            v.erase(v.begin());
+                            const std::size_t b0 = v.find_first_not_of(" \t");
+                            v = b0 == std::string::npos ? std::string{} : v.substr(b0);
+                        } else if (!v.empty()) {
+                            // Sans fx : la constante, convertie dans le type du parametre. Une saisie
+                            // inchangee garde ce qui etait ecrit ; un nom de variable reste la variable.
+                            const auto before = hmi::givenArguments(shape, current);
+                            const std::string was = i < before.size() ? before[i] : std::string{};
+                            if (!was.empty() && hmi::isLiteralArgument(was) && hmi::shownLiteral(was) == v) v = was;
+                            else v = hmi::effectiveArgument(project, type, v);
+                        }
+                    }
                     // Une saisie = une commande (un seul Ctrl+Z) : le texte entier de l'instance, en forme nommee.
                     return commit.prop("params", hmi::withArgument(shape, current, i, v), false);
                 };
@@ -2915,8 +2951,23 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
         for (auto& r : list) c.properties.push_back(std::move(r.p));
         out.push_back(std::move(c));
     }
+    // 1.11.3 : LE CARRE DE LEGENDE de chaque case modifiable qui accepte une formule - d'ou
+    // vient la valeur (C, fx, $, A, I, S, V, !). Calcule ici, quand l'inspecteur est refait
+    // (une valeur a change), jamais a chaque image. Les parametres d'un symbole ont deja le leur.
+    {
+        const valuekind::Env env{project, &view, plc};
+        for (auto& c : out)
+            for (auto& p : c.properties) {
+                if (p.legend || !p.commit || p.type == PG::ValueType::ReadOnly || !ui::exprfield::accepts(p)) continue;
+                const bool fx = !p.expression.empty();
+                const auto res = valuekind::classify(env, fx ? p.expression : p.value, fx, valuekind::expectedOfProperty(p));
+                p.legend = valuekind::legendOf(res);
+            }
+    }
     return out;
 }
+
+void hmiPublishPlcNames(const domain::Project* plc) { hmi::setPlcNames(hmiPlcUpperNames(plc)); }
 
 // 1.10.4 (K3) : les objets dont la variable fait quelque chose que leur Valeur ne
 // fait pas : une commande l'ecrit, un champ de saisie aussi, un histogramme la

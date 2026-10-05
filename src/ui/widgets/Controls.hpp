@@ -685,6 +685,9 @@ namespace ui {
             // rend l'id de l'entree choisie dans le sous-menu. Un seul niveau (les
             // enfants d'un enfant sont ignores).
             std::vector<Item> children{};
+            // 1.11.3 : une icone dessinee par l'appelant (le carre de legende d'une
+            // case) a la place de `icon`, dans la meme gouttiere.
+            std::function<void(const PaintContext&, gfx::Rect)> paintIcon{};
         };
 
         explicit PopupMenu(std::string id = {});

@@ -4,6 +4,7 @@
 #include "HmiSymbols.hpp"
 
 #include "HmiEdit.hpp"
+#include "HmiEnums.hpp"            // 1.11.3 : Auto -> T_MODE#Auto (un parametre de type enumeration)
 #include "HmiOperators.hpp"
 #include "HmiExpr.hpp"
 #include "HmiRuntime.hpp"
@@ -15,6 +16,7 @@
 #include <climits>
 #include <cmath>
 #include <cstdint>
+#include <mutex>
 #include <optional>
 #include <set>
 
@@ -433,12 +435,39 @@ std::vector<std::string> positionalArguments(std::string_view params) {
     }
     return out;
 }
+// 1.11.3 : la racine d'un chemin (Armoires de Armoires[1].Nom) ; vide : le texte ne
+// commence pas par un nom.
+std::string rootOf(std::string_view t) {
+    std::size_t i = 0;
+    while (i < t.size() && (t[i] == ' ' || t[i] == '\t')) ++i;
+    const std::size_t b = i;
+    if (i >= t.size() || !identStart(t[i])) return {};
+    while (i < t.size() && identChar(t[i])) ++i;
+    return std::string(t.substr(b, i - b));
+}
+// 1.11.3 : l'argument tel que le moteur le colle. Une constante, une formule valide qui ne
+// lit que des variables connues : tel quel. Sinon, le parametre etant type, la conversion
+// (Voiture -> 'Voiture', 1,5 -> 1.5, Auto -> T_MODE#Auto) quand elle reussit.
+std::string constantArgument(const Project* project, std::string_view type, std::string text) {
+    // ANY (ou sans type) : rien vers quoi convertir - l'argument tel quel, comme avant.
+    if (text.empty() || trimmedCopy(type).empty() || sameName(trimmedCopy(type), "ANY") || isLiteralArgument(text)) return text;
+    if (isVariablePath(text)) {
+        if (isKnownName(project, rootOf(text))) return text;
+    } else if (const Expression e = Expression::compile(text); e.valid()) {
+        // Un appel (Pompe(1), TO_STRING(x)) : laisse ; un calcul sur des noms connus aussi.
+        if (text.find('(') != std::string::npos) return text;
+        const auto& roots = e.roots();
+        if (std::all_of(roots.begin(), roots.end(), [project](const std::string& r) { return isKnownName(project, r); })) return text;
+    }
+    std::string lit = argumentLiteral(project, type, text);
+    return lit.empty() ? text : lit;
+}
 } // namespace
 
 // Les nommes comme avant (parseArguments) ; 1.11.2 (decision 248) : un parametre que rien
 // ne nomme prend le positionnel de son rang (Voiture;50 : Name = Voiture, Value = 50) ;
 // un positionnel en trop est ignore.
-SymbolArguments symbolArguments(const View& symbol, const Object& instance) {
+SymbolArguments symbolArguments(const View& symbol, const Object& instance, const Project* project) {
     const std::string params = instance.text("params");
     const auto given = parseArguments(params);
     const auto positional = positionalArguments(params);
@@ -450,7 +479,7 @@ SymbolArguments symbolArguments(const View& symbol, const Object& instance) {
         for (const auto& [name, value] : given)
             if (sameName(name, prm.name)) { text = value; named = true; break; }
         if (!named && i < positional.size() && !positional[i].empty()) text = positional[i];
-        text = trimmedCopy(text);
+        text = constantArgument(project, prm.type, trimmedCopy(text));
         if (!text.empty()) out.emplace_back(prm.name, std::move(text));
     }
     return out;
@@ -493,6 +522,221 @@ std::string withArgument(const View& symbol, std::string_view params, std::size_
         if (std::none_of(symbol.params.begin(), symbol.params.end(), [&](const ViewParam& p) { return sameName(p.name, a.name); })) add(a.name, a.value);
     }
     return out;
+}
+
+// ---- 1.11.3 : la valeur d'un parametre, constante convertie ou formule ------------------
+namespace {
+std::mutex                                 gPlcNamesLock;
+std::shared_ptr<const std::set<std::string, std::less<>>> gPlcNames;
+
+std::string squeezedUpper(std::string_view s) {
+    std::string out;
+    for (const char c : s)
+        if (!std::isspace(uc(c))) out += static_cast<char>(std::toupper(uc(c)));
+    return out;
+}
+// Un entier de ce type : ses bornes ; faux : pas un type entier.
+bool integerBounds(const std::string& u, long long& lo, unsigned long long& hi) {
+    struct B { const char* name; long long lo; unsigned long long hi; };
+    static const B kTypes[] = {
+        {"SINT", -128, 127}, {"INT", -32768, 32767}, {"DINT", INT32_MIN, INT32_MAX}, {"LINT", LLONG_MIN, LLONG_MAX},
+        {"USINT", 0, 255}, {"UINT", 0, 65535}, {"UDINT", 0, UINT32_MAX}, {"ULINT", 0, ULLONG_MAX},
+        {"BYTE", 0, 255}, {"WORD", 0, 65535}, {"DWORD", 0, UINT32_MAX}, {"LWORD", 0, ULLONG_MAX},
+    };
+    for (const auto& t : kTypes)
+        if (u == t.name) { lo = t.lo; hi = t.hi; return true; }
+    return false;
+}
+// "5s", "1m30s", "250ms", "2h" : une duree sans T#.
+bool durationText(std::string_view t) {
+    if (t.empty()) return false;
+    std::size_t i = 0;
+    bool any = false;
+    while (i < t.size()) {
+        const std::size_t d = i;
+        while (i < t.size() && (std::isdigit(uc(t[i])) || t[i] == '.' || t[i] == '_')) ++i;
+        if (i == d) return false;
+        const std::size_t u = i;
+        while (i < t.size() && std::isalpha(uc(t[i]))) ++i;
+        const std::string unit = upperCopy(t.substr(u, i - u));
+        if (unit != "MS" && unit != "S" && unit != "M" && unit != "MIN" && unit != "H" && unit != "D") return false;
+        any = true;
+    }
+    return any;
+}
+std::string quoted(std::string_view text) {
+    std::string out = "'";
+    for (const char c : text) {
+        if (c == '\'' || c == '$') out += '$';
+        if (c == '\n') { out += "$N"; continue; }
+        out += c;
+    }
+    return out + "'";
+}
+} // namespace
+
+bool isTextType(std::string_view type) noexcept {
+    std::string u;
+    for (const char c : type)
+        if (!std::isspace(uc(c))) u += static_cast<char>(std::toupper(uc(c)));
+    return u == "STRING" || u == "WSTRING" || u.rfind("STRING[", 0) == 0 || u.rfind("WSTRING[", 0) == 0 || u == "TEXTE";
+}
+
+bool isAggregateType(const Project* project, std::string_view type) {
+    const std::string u = squeezedUpper(type);
+    if (u.rfind("ARRAY", 0) == 0) return true;
+    if (!project) return false;
+    const HmiType* t = project->hmiTypeByName(trimmedCopy(type));
+    return t && t->kind == HmiTypeKind::Structure;
+}
+
+std::string effectiveArgument(const Project* project, std::string_view type, std::string_view text) {
+    return constantArgument(project, type, trimmedCopy(text));
+}
+
+bool isLiteralArgument(std::string_view text) {
+    const std::string t = trimmedCopy(text);
+    if (t.empty() || isVariablePath(t)) return false;
+    return standsAlone(t);
+}
+
+std::string shownLiteral(std::string_view text) {
+    const std::string t = trimmedCopy(text);
+    std::string inner;
+    if (stringLiteral(t, inner)) return inner;
+    return t;
+}
+
+void setPlcNames(std::shared_ptr<const std::set<std::string, std::less<>>> upperRoots) {
+    const std::lock_guard<std::mutex> lock(gPlcNamesLock);
+    gPlcNames = std::move(upperRoots);
+}
+
+bool isKnownName(const Project* project, std::string_view root) {
+    const std::string r = trimmedCopy(root);
+    if (r.empty()) return false;
+    const std::string u = upperCopy(r);
+    if (u == "SYS" || u == "THIS" || u == "TRUE" || u == "FALSE") return true;
+    if (project) {
+        if (project->variable(r)) return true;
+        if (project->viewByName(r)) return true;
+        if (project->functionByName(r)) return true;
+        if (project->hmiTypeByName(r)) return true;    // TO_T_MODE, T_MODE#... : un nom de type
+        // Le parametre d'une vue ou d'un symbole (une instance dans un symbole lui passe le sien :
+        // Name := Nom), un objet (ses variables publiques : STEST_1.Ouvert).
+        const auto same = [&r](std::string_view n) {
+            if (n.size() != r.size()) return false;
+            for (std::size_t i = 0; i < n.size(); ++i)
+                if (std::toupper(uc(n[i])) != std::toupper(uc(r[i]))) return false;
+            return true;
+        };
+        for (const auto& v : project->views) {
+            for (const auto& prm : v.params)
+                if (same(prm.name)) return true;
+            for (const auto& o : v.objects)
+                if (same(o.name)) return true;
+        }
+    }
+    if (isStandardFunction(r)) return true;
+    std::shared_ptr<const std::set<std::string, std::less<>>> names;
+    {
+        const std::lock_guard<std::mutex> lock(gPlcNamesLock);
+        names = gPlcNames;
+    }
+    return names && names->count(u) > 0;
+}
+
+std::string argumentLiteral(const Project* project, std::string_view type, std::string_view text, std::string* why) {
+    const auto fail = [why](std::string m) { if (why) *why = std::move(m); return std::string{}; };
+    const std::string t = trimmedCopy(text);
+    if (t.empty()) return fail("vide");
+    const std::string u = squeezedUpper(type);
+    const std::string ut = upperCopy(t);
+    double num = 0;
+    // ANY : un nombre, un booleen, un litteral deja ecrit ; sinon un texte.
+    if (u.empty() || u == "ANY") {
+        if (isLiteralArgument(t)) return t;
+        if (parseNumber(t, num)) {
+            std::string n = t;
+            std::replace(n.begin(), n.end(), ',', '.');
+            return n;
+        }
+        if (ut == "VRAI" || ut == "OUI") return "TRUE";
+        if (ut == "FAUX" || ut == "NON") return "FALSE";
+        return quoted(t);
+    }
+    if (isTextType(type)) {
+        std::string inner;
+        if (stringLiteral(t, inner)) return t;
+        if (t.size() >= 2 && t.front() == '"' && t.back() == '"') return quoted(std::string_view(t).substr(1, t.size() - 2));
+        return quoted(t);
+    }
+    if (u.rfind("ARRAY", 0) == 0)
+        return fail("Un tableau (" + std::string(trimmedCopy(type)) + ") se donne par une variable du m\xC3\xAAme type : utilisez fx.");
+    if (u == "BOOL") {
+        if (ut == "TRUE" || ut == "VRAI" || ut == "OUI" || ut == "ON" || ut == "1" || ut == "YES") return "TRUE";
+        if (ut == "FALSE" || ut == "FAUX" || ut == "NON" || ut == "OFF" || ut == "0" || ut == "NO") return "FALSE";
+        return fail("\xC2\xAB " + t + " \xC2\xBB n'est pas un bool\xC3\xA9" "en : TRUE ou FALSE.");
+    }
+    long long lo = 0;
+    unsigned long long hi = 0;
+    if (integerBounds(u, lo, hi)) {
+        std::string body = t;
+        if (const auto hash = body.find('#'); hash != std::string::npos && identStart(body[0])) body = body.substr(hash + 1);   // INT#12
+        if (body.size() > 2 && std::isdigit(uc(body[0])) && body.find('#') != std::string::npos) return body;              // 16#FF
+        std::string digits;
+        for (const char c : body)
+            if (c != '_' && c != ' ') digits += c;
+        double v = 0;
+        if (!parseNumber(digits, v) || std::floor(v) != v)
+            return fail("\xC2\xAB " + t + " \xC2\xBB n'est pas un nombre entier (" + u + ").");
+        if (v < static_cast<double>(lo) || v > static_cast<double>(hi))
+            return fail(digits + " est hors des bornes de " + u + " (" + std::to_string(lo) + ".." + std::to_string(hi) + ").");
+        const long long n = static_cast<long long>(v);
+        return std::to_string(n);
+    }
+    if (u == "REAL" || u == "LREAL") {
+        std::string body = t;
+        if (const auto hash = body.find('#'); hash != std::string::npos && identStart(body[0])) body = body.substr(hash + 1);
+        std::string n;
+        for (const char c : body)
+            if (c != '_' && c != ' ') n += c == ',' ? '.' : c;
+        if (!parseNumber(n, num)) return fail("\xC2\xAB " + t + " \xC2\xBB n'est pas un nombre (" + u + ").");
+        if (n.find_first_of(".eE") == std::string::npos) n += ".0";
+        if (n.front() == '.') n.insert(n.begin(), '0');
+        return n;
+    }
+    if (u == "TIME") {
+        if (ut.rfind("T#", 0) == 0 || ut.rfind("TIME#", 0) == 0) return t;
+        std::string compact;
+        for (const char c : t)
+            if (c != ' ') compact += c;
+        if (durationText(compact)) return "T#" + compact;
+        if (parseNumber(compact, num) && num >= 0) return "T#" + compact + "ms";
+        return fail("\xC2\xAB " + t + " \xC2\xBB n'est pas une dur\xC3\xA9" "e : T#5s, 1m30s, 250ms.");
+    }
+    if (u == "DATE" || u == "TOD" || u == "TIME_OF_DAY" || u == "DT" || u == "DATE_AND_TIME") {
+        if (t.find('#') != std::string::npos) return t;
+        const char* prefix = u == "DATE" ? "D#" : (u == "TOD" || u == "TIME_OF_DAY") ? "TOD#" : "DT#";
+        return prefix + t;
+    }
+    if (project)
+        if (const HmiType* en = findEnumeration(*project, trimmedCopy(type))) {
+            std::string v = t;
+            if (const auto hash = v.find('#'); hash != std::string::npos && sameName(v.substr(0, hash), en->name)) v = v.substr(hash + 1);
+            if (const HmiEnumValue* ev = enumValueByName(*en, v)) return enumLiteral(*en, *ev);
+            std::int64_t number = 0;
+            if (enumNumberOf(*en, v, number))
+                if (const HmiEnumValue* ev = enumValueByNumber(*en, number)) return enumLiteral(*en, *ev);
+            std::string list;
+            for (const auto& ev : en->values) list += (list.empty() ? "" : ", ") + ev.name;
+            return fail("\xC2\xAB " + t + " \xC2\xBB n'est pas une valeur de " + en->name + " (" + list + ").");
+        }
+    if (isAggregateType(project, type))
+        return fail("Une structure (" + trimmedCopy(type) + ") se donne par une variable du m\xC3\xAAme type : utilisez fx.");
+    // Un DDT de l'automate, un type inconnu : une constante deja ecrite passe, le reste non.
+    if (isLiteralArgument(t)) return t;
+    return fail("Une valeur de " + trimmedCopy(type) + " se donne par une variable : utilisez fx.");
 }
 
 // ========================================================= remplacements ====
@@ -723,7 +967,7 @@ Expansion expandInstance(const Project& p, const Object& inst, int depth) {
     if (depth >= kMaxSymbolDepth) return out;
     const View* sym = symbolOf(p, inst);
     if (!sym) return out;
-    const SymbolArguments args = symbolArguments(*sym, inst);
+    const SymbolArguments args = symbolArguments(*sym, inst, &p);
     const Box ib = inst.box();
     const double sx = sym->width > 0 ? ib.w / sym->width : 1.0;
     const double sy = sym->height > 0 ? ib.h / sym->height : 1.0;

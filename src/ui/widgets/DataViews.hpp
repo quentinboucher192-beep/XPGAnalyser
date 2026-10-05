@@ -801,6 +801,15 @@ public:
         Text, Integer, Real, Boolean, Enum, Address, Color, ReadOnly
     };
 
+    // 1.11.3 : le carre de legende d'une case (voir Property::legend).
+    enum class LegendStyle : std::uint8_t { Constant, Formula, Markers, Api, Hmi, System, Local, Error, Empty };
+    struct Legend {
+        LegendStyle              style{LegendStyle::Constant};
+        std::string              text;      // "C", "fx", "$", "A", "I", "S", "V", "!"
+        std::vector<LegendStyle> dots{};    // une formule : les zones qu'elle lit (des points sous la lettre)
+        std::string              tip{};     // l'infobulle du carre
+    };
+
     struct Property {
         std::string  name;
         std::string  value;
@@ -845,6 +854,11 @@ public:
         // 1.9 (chantier U) : le texte d'attente d'une case vide, en gris (la valeur
         // par defaut d'un argument pas donne) ; il ne se tape pas.
         std::string               placeholder{};
+        // 1.11.3 : LE CARRE DE LEGENDE au bout de la case - d'ou vient la valeur
+        // (C constante, fx formule, $ reperes, A API, I IHM, S systeme, V symbole
+        // ou vue, ! erreur). Un clic : legendClicked (l'hote ouvre la liste des
+        // carres, puis le selecteur). Rien : pas de carre.
+        std::optional<Legend>     legend{};
     };
 
     struct Category {
@@ -898,6 +912,11 @@ public:
     // Une valeur tapee que `commit` a refusee (nom, texte) : l'hote dit pourquoi.
     const core::SignalPtr<const std::string&, const std::string&> propertyRejected =
         core::Signal<const std::string&, const std::string&>::create();
+    // 1.11.3 : un clic sur le carre de legende d'une case (categorie, nom, le carre a l'ecran).
+    const core::SignalPtr<const std::string&, const std::string&, gfx::Rect> legendClicked =
+        core::Signal<const std::string&, const std::string&, gfx::Rect>::create();
+    // ... et ou il est (tests, scripts) ; false s'il n'est pas montre.
+    [[nodiscard]] bool legendRect(std::string_view name, gfx::Rect& out) const;
     [[nodiscard]] bool editing() const noexcept { return editor_ != nullptr; }
     // ---- Lot API 8 : les expressions impossibles ----
     // L'infobulle d'une propriete pilotee : l'expression, sa valeur en
@@ -945,5 +964,10 @@ private:
     bool                   editIsPalette_{false};
     std::function<std::string(const Property&)> exprValueFor_;   // ---- Lot API 8 : les expressions impossibles ----
 };
+
+// 1.11.3 : la couleur d'un carre de legende (le meme partout : la grille, la liste
+// des carres, le selecteur de valeur) et son dessin dans `box`.
+[[nodiscard]] gfx::Color legendColor(PropertyGrid::LegendStyle, bool dark) noexcept;
+void paintLegend(const PaintContext&, gfx::Rect box, const PropertyGrid::Legend&);
 
 } // namespace ui

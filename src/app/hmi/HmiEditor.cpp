@@ -192,6 +192,7 @@ HmiEditor::HmiEditor(std::string widgetId, hmi::DocumentPtr doc, Id view, Apply 
     : ui::Widget(std::move(widgetId)), doc_(std::move(doc)), viewId_(view), apply_(std::move(apply)), plc_(std::move(plc)) {
     using ui::Orientation;
     const std::string base = this->id();
+    if (plc_) hmiPublishPlcNames(plc_.get());   // 1.11.3 : un argument qui n'est pas une variable est une constante
     // Une modification qui passe : l'avertissement d'une saisie refusee avant
     // elle n'a plus lieu d'etre (les avertissements suivent toujours un echec).
     apply_ = [inner = std::move(apply_), this](core::CommandPtr c) {
@@ -574,6 +575,7 @@ HmiEditor::~HmiEditor() = default;
 
 void HmiEditor::setPlcProject(std::shared_ptr<const domain::Project> plc) {
     plc_ = std::move(plc);
+    hmiPublishPlcNames(plc_.get());   // 1.11.3 : un argument qui n'est pas une variable est une constante
     invalidateLayout();
 }
 

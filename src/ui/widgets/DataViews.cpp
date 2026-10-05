@@ -2333,9 +2333,11 @@ bool clearRect(const PropertyGrid& grid, std::string_view name, gfx::Rect& out) 
     } walk{name, found};
     walk(grid.categories());
     if (!found || !accepts(*found) || found->expression.empty() || !found->commit) return false;
-    // Le meme carre que le bouton de retour, au bout de la ligne (la case s'arrete a 1 px du bord).
+    // Le meme carre que le bouton de retour, au bout de la ligne (la case s'arrete a 1 px du bord) ;
+    // 1.11.3 : a gauche du carre de legende.
     const float side = std::min(std::max(8.f, cell.h + 2.f - 8.f), 14.f);
-    out = {cell.right() + 1.f - side - 6.f, cell.y - 1.f + (cell.h + 2.f - side) * 0.5f, side, side};
+    const float legend = found->legend ? std::min(std::max(10.f, cell.h + 2.f - 6.f), 18.f) + 8.f : 0.f;
+    out = {cell.right() + 1.f - legend - side - 6.f, cell.y - 1.f + (cell.h + 2.f - side) * 0.5f, side, side};
     return true;
 }
 // ---- 1.10.3 : les reperes ($Vanne$) d'une case ----
@@ -2390,7 +2392,13 @@ float gFxSlot = 28.f;
 bool hasClear(const PropertyGrid::Property& p) {
     return exprfield::accepts(p) && !p.expression.empty() && p.commit && p.type != PropertyGrid::ValueType::ReadOnly;
 }
+// 1.11.3 : la place du carre de legende au bout de la case (sa largeur et l'ecart).
+float legendSide(float rowH) { return std::min(std::max(10.f, rowH - 6.f), 18.f); }
+float legendSlot(const PropertyGrid::Property& p, float rowH) { return p.legend ? legendSide(rowH) + 8.f : 0.f; }
 gfx::Rect fieldCell(const PropertyGrid::Property& p, gfx::Rect cell) {
+    // 1.11.3 : le champ ouvert laisse voir le carre de legende.
+    const float legend = legendSlot(p, cell.h + 2.f);
+    if (legend > 0.f && cell.w - legend >= 60.f) cell.w -= legend;
     if (!exprfield::accepts(p) || p.type == PropertyGrid::ValueType::ReadOnly) return cell;
     const float right = hasClear(p) ? std::min(std::max(8.f, cell.h + 2.f - 8.f), 14.f) + 10.f : 0.f;
     if (cell.w - gFxSlot - right < 60.f) return cell;
@@ -2879,6 +2887,16 @@ gfx::Rect revertBox(const gfx::Rect& row) {
     const float side = std::min(std::max(8.f, row.h - 8.f), 14.f);
     return {row.right() - side - 6.f, row.y + (row.h - side) * 0.5f, side, side};
 }
+// 1.11.3 : le carre de legende, tout au bout de la ligne ; le reste (le X, le
+// retour, la valeur) se range a sa gauche (endOf).
+gfx::Rect legendBox(const gfx::Rect& row) {
+    const float side = legendSide(row.h);
+    return {row.right() - side - 6.f, row.y + (row.h - side) * 0.5f, side, side};
+}
+gfx::Rect endOf(const PropertyGrid::Property& p, const gfx::Rect& row) {
+    if (!p.legend) return row;
+    return {row.x, row.y, std::max(0.f, row.w - legendSlot(p, row.h)), row.h};
+}
 // 1.9 : le nom montre d'une propriete a pastille de couleur - sans la fin
 // "  .  <texte de la pastille>" que la pastille dit deja (le nom reste entier
 // pour l'hote, les tests et les scripts).
@@ -2921,7 +2939,9 @@ void removeExpression(PropertyGrid& grid, const PropertyGrid::Property& p) {
 bool PropertyGrid::hasTooltip() const {
     if (Widget::hasTooltip()) return true;
     for (const auto& vr : rows_)
-        if (vr.prop && (!vr.prop->expression.empty() || vr.prop->overridden || vr.prop->revert || exprfield::accepts(*vr.prop))) return true;
+        if (vr.prop && (!vr.prop->expression.empty() || vr.prop->overridden || vr.prop->revert || exprfield::accepts(*vr.prop)
+                        || vr.prop->legend))
+            return true;
     return false;
 }
 
@@ -2936,19 +2956,24 @@ std::string PropertyGrid::liveTooltip(gfx::Point mouse) const {
     const Property* p = ri >= 0 ? rows_[static_cast<std::size_t>(ri)].prop : nullptr;
     // 1.10.3 : une case a repere ($Vanne$) le dit en tete de son infobulle.
     const std::string mtip = p ? exprfield::markerTip(*p) : std::string{};
-    if (p && mtip.size() && p->expression.empty() && !p->overridden && !p->revert && !exprfield::accepts(*p)) {
+    if (p && mtip.size() && p->expression.empty() && !p->overridden && !p->revert && !exprfield::accepts(*p) && !p->legend) {
         const std::string base = Widget::liveTooltip(mouse);
         return base.empty() ? mtip : mtip + "\n" + base;
     }
-    if (!p || (p->expression.empty() && !p->overridden && !p->revert && !exprfield::accepts(*p))) return Widget::liveTooltip(mouse);
+    if (!p || (p->expression.empty() && !p->overridden && !p->revert && !exprfield::accepts(*p) && !p->legend))
+        return Widget::liveTooltip(mouse);
     // 1.10 (chantier K) : le X dit ce qu'il fait ; une case vide, ce qu'elle accepte.
     {
         const auto area = contentRect();
         const float y = area.y + static_cast<float>(ri) * rowHeight_ - scrollY_;
         const gfx::Rect row{area.x, y, area.w, rowHeight_};
-        if (showsClear(*p) && revertBox(row).contains(mouse)) return std::string(exprfield::kRemoveTip);
+        // 1.11.3 : le carre de legende dit d'ou vient la valeur, et ce que fait un clic.
+        if (p->legend && legendBox(row).contains(mouse))
+            return (p->legend->tip.empty() ? std::string{} : p->legend->tip + "\n")
+                   + "Clic : la liste des carr\xC3\xA9s, puis le s\xC3\xA9lecteur de valeur (Ctrl+Espace dans la case : les propositions).";
+        if (showsClear(*p) && revertBox(endOf(*p, row)).contains(mouse)) return std::string(exprfield::kRemoveTip);
         // 1.9 : le bouton de retour dit ce qu'il fait.
-        if (p->revert && revertBox(beforeClear(*p, row)).contains(mouse))
+        if (p->revert && revertBox(beforeClear(*p, endOf(*p, row))).contains(mouse))
             return p->revertTip.empty() ? std::string("Revenir \xC3\xA0 la valeur du symbole") : p->revertTip;
     }
     if (p->expression.empty() && !p->overridden && exprfield::accepts(*p)) {
@@ -2982,10 +3007,75 @@ bool PropertyGrid::revertRect(std::string_view name, gfx::Rect& out) const {
         if (!rows_[i].prop || rows_[i].prop->name != name) continue;
         if (!rows_[i].prop->revert) return false;
         const float y = area.y + static_cast<float>(i) * rowHeight_ - scrollY_;
-        out = revertBox(beforeClear(*rows_[i].prop, {area.x, y, area.w, rowHeight_}));
+        out = revertBox(beforeClear(*rows_[i].prop, endOf(*rows_[i].prop, {area.x, y, area.w, rowHeight_})));
         return y >= area.y && y + rowHeight_ <= area.bottom() + 1.f;
     }
     return false;
+}
+
+bool PropertyGrid::legendRect(std::string_view name, gfx::Rect& out) const {
+    const auto area = contentRect();
+    for (std::size_t i = 0; i < rows_.size(); ++i) {
+        if (!rows_[i].prop || (rows_[i].depth & kNoteRow) != 0 || rows_[i].prop->name != name) continue;
+        if (!rows_[i].prop->legend) return false;
+        const float y = area.y + static_cast<float>(i) * rowHeight_ - scrollY_;
+        out = legendBox({area.x, y, area.w, rowHeight_});
+        return y >= area.y && y + rowHeight_ <= area.bottom() + 1.f;
+    }
+    return false;
+}
+
+gfx::Color legendColor(PropertyGrid::LegendStyle st, bool dark) noexcept {
+    using S = PropertyGrid::LegendStyle;
+    switch (st) {
+        case S::Api:      return dark ? gfx::Color{92, 163, 255, 255} : gfx::Color{29, 98, 204, 255};
+        case S::Hmi:      return dark ? gfx::Color{53, 198, 183, 255} : gfx::Color{10, 122, 112, 255};
+        case S::System:   return dark ? gfx::Color{242, 168, 62, 255} : gfx::Color{158, 88, 0, 255};
+        case S::Local:    return dark ? gfx::Color{186, 149, 255, 255} : gfx::Color{109, 65, 195, 255};
+        case S::Error:    return dark ? gfx::Color{255, 103, 103, 255} : gfx::Color{196, 39, 39, 255};
+        case S::Formula:
+        case S::Markers:  return dark ? gfx::Color{160, 166, 176, 255} : gfx::Color{79, 86, 97, 255};
+        case S::Constant:
+        case S::Empty:    break;
+    }
+    return dark ? gfx::Color{154, 161, 172, 255} : gfx::Color{124, 132, 144, 255};
+}
+
+void paintLegend(const PaintContext& ctx, gfx::Rect box, const PropertyGrid::Legend& l) {
+    using S = PropertyGrid::LegendStyle;
+    const bool dark = ctx.theme.isDark();
+    const gfx::Color col = legendColor(l.style, dark);
+    const gfx::Color ink = dark ? gfx::Color{16, 18, 22, 255} : gfx::Color{255, 255, 255, 255};
+    const float radius = std::max(2.f, box.h * 0.2f);
+    gfx::Color textCol = ink;
+    if (l.style == S::Constant || l.style == S::Empty) {
+        // Une constante : un cadre, pas de fond ; vide : un cadre estompe.
+        ctx.r.fillRoundedRect(box, l.style == S::Empty ? ctx.theme.color.border : col, radius);
+        ctx.r.fillRoundedRect({box.x + 1.5f, box.y + 1.5f, box.w - 3.f, box.h - 3.f}, ctx.theme.color.panelBg, std::max(1.f, radius - 1.f));
+        textCol = dark ? gfx::Color{214, 218, 224, 255} : gfx::Color{60, 67, 77, 255};
+    } else {
+        ctx.r.fillRoundedRect(box, col, radius);
+    }
+    if (l.text.empty()) return;
+    const auto font = box.h >= 17.f && l.text.size() <= 1 ? ctx.theme.font.uiBold : ctx.theme.font.smallUi;
+    const float lh = ctx.r.lineHeight(font);
+    const float tw = ctx.r.measure(l.text, font).width;
+    const bool dots = !l.dots.empty() && (l.style == S::Formula || l.style == S::Markers);
+    const float ty = dots ? box.y + 1.f : box.y + (box.h - lh) * 0.5f;
+    const gfx::Point at{box.x + (box.w - tw) * 0.5f, ty};
+    ctx.r.drawText(at, l.text, font, textCol);
+    ctx.r.drawText({at.x + 0.6f, at.y}, l.text, font, textCol);   // le gras simule (Fonts : pas de face grasse)
+    if (dots) {
+        const float d = 3.f, gap = 2.f;
+        const float total = static_cast<float>(l.dots.size()) * d + static_cast<float>(l.dots.size() - 1) * gap;
+        float x = box.x + (box.w - total) * 0.5f;
+        for (const auto z : l.dots) {
+            const gfx::Rect dot{x, box.bottom() - d - 2.f, d, d};
+            ctx.r.fillRoundedRect({dot.x - 0.5f, dot.y - 0.5f, d + 1.f, d + 1.f}, ink, (d + 1.f) * 0.5f);
+            ctx.r.fillRoundedRect(dot, legendColor(z, dark), d * 0.5f);
+            x += d + gap;
+        }
+    }
 }
 
 void PropertyGrid::onLayout() {
@@ -3143,8 +3233,8 @@ void PropertyGrid::onPaint(const PaintContext& ctx) {
             // 1.9 : surchargee (le lisere et l'etiquette sur la valeur), et la
             // pastille de couleur devant l'expression.
             // 1.10 (chantier K) : le X "Retirer l'expression" au bout de la ligne.
-            if (showsClear(*vr.prop)) drawIcon(ctx.r, Icon::Close, revertBox(r), c.textMuted);
-            const float exprRight = paintOverride(*vr.prop, beforeClear(*vr.prop, r));
+            if (showsClear(*vr.prop)) drawIcon(ctx.r, Icon::Close, revertBox(endOf(*vr.prop, r)), c.textMuted);
+            const float exprRight = paintOverride(*vr.prop, beforeClear(*vr.prop, endOf(*vr.prop, r)));
             if (inValue) drawPill();
             float exprX = inValue ? pill.right() + 6.f : split + 6.f;
             if (vr.prop->pill)
@@ -3202,7 +3292,7 @@ void PropertyGrid::onPaint(const PaintContext& ctx) {
             const auto font = vr.prop->type == ValueType::Address ? ctx.theme.font.mono
                                                                   : ctx.theme.font.ui;
             // 1.9 : surchargee - le fond, le lisere, l'etiquette ; le bouton de retour.
-            float valueRight = paintOverride(*vr.prop, r);
+            float valueRight = paintOverride(*vr.prop, endOf(*vr.prop, r));
             float valueX = split + 6.f;
             if (fxHollow) {
                 const auto pf = ctx.theme.font.uiBold;
@@ -3295,6 +3385,8 @@ void PropertyGrid::onPaint(const PaintContext& ctx) {
                             waiting ? c.textDisabled : valueCol, valueRight - valueX);
             }
         }
+        // 1.11.3 : le carre de legende, au bout de la ligne.
+        if (vr.prop && vr.prop->legend) paintLegend(ctx, legendBox(r), *vr.prop->legend);
         ctx.r.line({r.x, r.bottom()}, {r.right(), r.bottom()}, c.gridLine, 1.f);
     }
     ctx.r.line({split, area.y}, {split, area.bottom()}, c.border, 1.f);
@@ -3341,8 +3433,21 @@ EventResult PropertyGrid::onEvent(const InputEvent& ev) {
             // Retirer l'expression, Modifier l'expression..., Copier.
             const float rowY = area.y + static_cast<float>(ri) * rowH - scrollY_;
             const gfx::Rect rowRect{area.x, rowY, area.w, rowH};
+            // 1.11.3 : le carre de legende - l'hote ouvre la liste des carres (la grille
+            // peut etre refaite pendant l'appel : le nom et la categorie sont copies).
+            if (d->button == MouseButton::Left && vr.prop->legend) {
+                const gfx::Rect b = legendBox(rowRect);
+                if (gfx::Rect{b.x - 3.f, rowY, b.w + 6.f, rowH}.contains(d->pos)) {
+                    finishEdit(false, {});
+                    const std::string cat = vr.cat ? vr.cat->name : std::string{};
+                    const std::string name = vr.prop->name;
+                    legendClicked->emit(cat, name, b);
+                    invalidate();
+                    return EventResult::Consumed;
+                }
+            }
             if (d->button == MouseButton::Left && showsClear(*vr.prop)) {
-                const gfx::Rect b = revertBox(rowRect);
+                const gfx::Rect b = revertBox(endOf(*vr.prop, rowRect));
                 if (gfx::Rect{b.x - 3.f, rowY, b.w + 6.f, rowH}.contains(d->pos)) {
                     finishEdit(false, {});
                     removeExpression(*this, *vr.prop);
@@ -3423,7 +3528,7 @@ EventResult PropertyGrid::onEvent(const InputEvent& ev) {
             // souvent la grille : la fonction est copiee avant l'appel.
             if (d->button == MouseButton::Left && vr.prop->revert) {
                 const float y = area.y + static_cast<float>(ri) * rowH - scrollY_;
-                const gfx::Rect b = revertBox(beforeClear(*vr.prop, {area.x, y, area.w, rowH}));
+                const gfx::Rect b = revertBox(beforeClear(*vr.prop, endOf(*vr.prop, {area.x, y, area.w, rowH})));
                 if (gfx::Rect{b.x - 3.f, y, b.w + 6.f, rowH}.contains(d->pos)) {
                     finishEdit(false, {});
                     const auto revert = vr.prop->revert;

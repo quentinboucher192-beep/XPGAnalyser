@@ -300,6 +300,7 @@ void MainAnalysisScreen::refreshBuildState(bool full) {
     if (full || plc.get() != buildStateOf_) {
         buildState_->rebuild(plc.get(), doc ? &doc->project : nullptr);
         buildStateOf_ = plc.get();
+        hmiPublishPlcNames(plc.get());   // 1.11.3 : les globales de l'automate pour le moteur IHM
     } else {
         // Les scripts supprimes (ou ceux d'une IHM fermee) quittent le cache.
         static const hmi::Project none{};

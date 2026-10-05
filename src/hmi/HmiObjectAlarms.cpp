@@ -323,7 +323,7 @@ struct Generator {
         const View* sym = symbolOf(p, inst);
         if (!sym) return;
         const std::string group = objectGroupOf(v, inst);
-        const SymbolArguments args = symbolArguments(*sym, inst);
+        const SymbolArguments args = symbolArguments(*sym, inst, &p);
         for (const auto& a : sym->alarms)
             emit(v, inst, group, {}, sym->name, sym->name, ObjectAlarmSource::Symbol, Kind::SymbolInstance, developed(a, args), true, &args);
         // Les objets du symbole, developpes comme le moteur les pose : noms
@@ -356,7 +356,7 @@ struct Generator {
                 if (!s2) continue;
                 nested[c.name] = &c;
                 chain[c.name] = symbols + ";" + s2->name;
-                const SymbolArguments& args2 = argsOf[c.name] = symbolArguments(*s2, c);
+                const SymbolArguments& args2 = argsOf[c.name] = symbolArguments(*s2, c, &p);
                 for (const auto& a : s2->alarms) {
                     bool active = true;
                     const AlarmDef base = layered(developed(a, args2), c, outer, &active, &args2);

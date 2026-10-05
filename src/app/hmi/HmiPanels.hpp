@@ -351,6 +351,9 @@ hmiPropertyCategories(const hmi::View&, const std::vector<hmi::Id>& selection, c
 // Les globales de l'automate, en majuscules (ce que hmiExpressionError consulte vite).
 [[nodiscard]] std::shared_ptr<const std::set<std::string, std::less<>>> hmiPlcUpperNames(const domain::Project* plc);
 
+// 1.11.3 : les globales de l'automate donnees au moteur IHM (hmi::setPlcNames) - un
+// argument de symbole qui n'en est pas une (ni une variable IHM) est une constante.
+void hmiPublishPlcNames(const domain::Project* plc);
 // L'adresse automate d'une variable du projet ("%MW100"), ou "".
 [[nodiscard]] std::string plcAddressOf(const domain::Project* plc, const std::string& variable);
 // Lot 9 : le libelle d'une propriete dans l'inspecteur ("Couleur de fond") et
