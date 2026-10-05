@@ -22594,6 +22594,8 @@ void forcageCommun1117() {
     cp.layout();
     check(cp.addEquipment("Centrale", hmi::EquipmentType::ModbusTcp, "192.168.1.30", 502) == "Centrale" && cp.createTwin("Centrale"),
           "une centrale et son esclave simul\xC3\xA9");
+    for (auto& eq : doc->project.equipments)
+        if (eq.name == "Centrale") eq.simulated = true;   // lue sur son esclave simule (le vrai n'est pas la)
     {
         Variable f;
         f.id = doc->project.allocate();
@@ -22610,6 +22612,7 @@ void forcageCommun1117() {
     }
     app::HmiSimulationHost host;
     host.equipments = [&] { return &equip; };
+    host.equipmentLink = [&](const std::string& n) { return equip.link(n); };
     host.apply = apply;
     app::HmiSimulationPane pane("commun1117", doc, host);
     pane.setBounds({0, 0, 1600, 900});
@@ -22669,6 +22672,18 @@ void forcageCommun1117() {
     check(ihm.unforcePath("Four1.Temperature") && behaviors() == 0, "lib\xC3\xA9rer : le mouvement de l'esclave s'arr\xC3\xAAte");
     // 5. Prioritaire sur les scripts : une ecriture sur une variable forcee dans son esclave est ignoree, sans erreur.
     check(pane.twinsController().setForced("Centrale", "43001", "50"), "Four1.Temperature forc\xC3\xA9" "e dans l'esclave");
+    // 1.11.7 (la capture de la livraison : forcee a 80 dans l'esclave, Variables IHM montrait 0) :
+    // Variables IHM relit une variable liee sur son equipement, meme si aucune vue ne la montre.
+    {
+        bool seen = false;
+        for (int k = 0; k < 60 && !seen; ++k) {
+            equip.tick(&doc->project, 0.05);
+            paintAt(1.0 + k * 0.05);
+            seen = ihm.valueText("Four1.Temperature").rfind("50", 0) == 0;
+            if (!seen) std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+        check(seen, "Variables IHM montre la valeur forc\xC3\xA9" "e dans l'esclave : " + ihm.valueText("Four1.Temperature"));
+    }
     paintAt(0.3);
     check(pane.runtime().environment().write("Four1.Temperature", sim::Value::real(12.0)),
           "un script qui l'\xC3\xA9" "crit : ignor\xC3\xA9, sans erreur (le for\xC3\xA7" "age passe avant)");

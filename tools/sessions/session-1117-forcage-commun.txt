@@ -9,6 +9,9 @@ attendre 3
 theme Dark
 attendre 5
 # ---- 1. Le nombre de lignes de code : l'ecran d'accueil, A propos -----------------
+# (le poste de test n'a pas encore de cle administrateur : la fenetre qui la demande d'abord)
+bouton "Définir la clé"
+attendre 3
 capture 1117_01_accueil_lignes_de_code.png
 action help.about
 attendre 4
@@ -31,6 +34,9 @@ ligne "Ouvrir une popup"
 attendre 4
 # L'inspecteur plus large (sa poignee, entre la vue et lui) : les parametres de la popup se lisent.
 glisser 1312 400 900 400
+attendre 3
+# ... et plus haut (sa poignee, au-dessus de la bibliotheque).
+glisser 1400 541 1400 830
 attendre 4
 capture 1117_03_parametre_repere_editeur.png
 
@@ -43,6 +49,8 @@ sous-onglet "Actions"
 attendre 4
 ligne "Mettre"
 attendre 4
+glisser 1312 400 900 400
+attendre 3
 capture 1117_04_variable_fx.png
 propriete-clic "Variable"
 attendre 2
@@ -61,9 +69,9 @@ attendre 3
 sim-vue "Vue_Vannes"
 attendre 8
 sim-clic "Valve_2"
-attendre 6
+attendre 10
 sim-clic "Btn_Ouvrir"
-attendre 4
+attendre 8
 capture 1117_06_popup_repere_en_marche.png
 touche Escape
 attendre 3

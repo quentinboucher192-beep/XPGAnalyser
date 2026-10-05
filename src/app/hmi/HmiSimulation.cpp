@@ -2330,6 +2330,13 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
         ihmVars_ = tree.get();
         HmiSimVarTree::Hooks h;
         h.read = [this](const std::string& path) -> std::optional<sim::Value> {
+            // 1.11.7 : liee a un equipement (un esclave simule), elle se relit sur lui, comme une vue
+            // la lit - sans vue qui la montre, sa valeur restait celle du demarrage (forcee a 80 dans
+            // l'esclave, l'onglet montrait 0).
+            if (runtime_.boundVariable(path)) {
+                sim::Value v;
+                if (runtime_.environment().read(path, v)) return v;
+            }
             if (const auto* v = runtime_.variable(path)) return *v;
             return std::nullopt;
         };
