@@ -1,0 +1,93 @@
+# =============================================================================
+#  Session 1117 : LE FORCAGE COMMUN (Variables IHM et Esclaves simules), LA CASE
+#  VARIABLE D'UNE ACTION (fx, references), UN REPERE DANS LES PARAMETRES D'UNE
+#  POPUP, LE NOMBRE DE LIGNES DE CODE.
+#  Le projet : la copie d'Armoire_Gaz de la session 1116, plus preparer-projet-1117
+#  (Four3 liee a la Centrale PM5560 a %MW3200 ; Pop_Vanne et IN_V ; Vue_Vannes).
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+# ---- 1. Le nombre de lignes de code : l'ecran d'accueil, A propos -----------------
+capture 1117_01_accueil_lignes_de_code.png
+action help.about
+attendre 4
+capture 1117_02_a_propos_lignes_de_code.png
+touche Escape
+attendre 2
+
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- 2. Un repere dans les parametres d'une popup : IN_V := $Four2.Vannes[1]$ -------
+arbre "IHM/Vues/Vue_Vannes" double
+attendre 10
+objet "Valve_1"
+attendre 4
+sous-onglet "Actions"
+attendre 4
+ligne "Ouvrir une popup"
+attendre 4
+# L'inspecteur plus large (sa poignee, entre la vue et lui) : les parametres de la popup se lisent.
+glisser 1312 400 900 400
+attendre 4
+capture 1117_03_parametre_repere_editeur.png
+
+# ---- 3. La case Variable d'une action : la pastille fx, son type, les references ----
+arbre "IHM/Vues/Popups/Pop_Vanne" double
+attendre 10
+objet "Btn_Ouvrir"
+attendre 4
+sous-onglet "Actions"
+attendre 4
+ligne "Mettre"
+attendre 4
+capture 1117_04_variable_fx.png
+propriete-clic "Variable"
+attendre 2
+touche Ctrl+A
+texte "IN_V."
+attendre 3
+capture 1117_05_variable_aide_references.png
+touche Escape
+attendre 2
+
+# ---- 4. En marche : la popup recoit Four2.Vannes[2] (le repere est transparent) -----
+arbre "Simulation/IHM"
+attendre 12
+sim-utilisateur "admin" "admin2026"
+attendre 3
+sim-vue "Vue_Vannes"
+attendre 8
+sim-clic "Valve_2"
+attendre 6
+sim-clic "Btn_Ouvrir"
+attendre 4
+capture 1117_06_popup_repere_en_marche.png
+touche Escape
+attendre 3
+# Le volet de droite plus large (sa poignee, entre la vue et les onglets) : les colonnes se lisent.
+glisser 1113 500 790 500
+attendre 3
+
+# ---- 5. Le forcage commun : force dans Variables IHM, vu dans Esclaves simules -----
+sous-onglet "Variables IHM"
+attendre 3
+simvar ihm chercher "Four3"
+attendre 3
+simvar ihm forcer "Four3.Temperature" "80"
+attendre 3
+capture 1117_07_force_dans_variables_ihm.png
+sous-onglet "Esclaves simulés"
+attendre 3
+valeurs-chercher "Four3"
+attendre 4
+capture 1117_08_meme_case_dans_l_esclave.png
+# ... et force dans l'esclave (Four3.Marche), vu dans Variables IHM.
+valeur "Centrale PM5560" "%MW3204.0" 1
+attendre 3
+sous-onglet "Variables IHM"
+attendre 4
+capture 1117_09_force_dans_l_esclave_vu_ihm.png
+quitter

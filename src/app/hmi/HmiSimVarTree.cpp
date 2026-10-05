@@ -468,8 +468,9 @@ bool HmiSimVarTree::forcePath(const std::string& path, const std::string& text) 
         say(why.empty() ? path + " : for\xC3\xA7" "age refus\xC3\xA9" : why, true);
         return false;
     }
-    std::string now;
-    if (hooks_.read)
+    // 1.11.7 : la valeur tapee (forcee dans un esclave simule, la variable ne la relit qu'au cycle suivant).
+    std::string now = text;
+    if (now.empty() && hooks_.read)
         if (const auto v = hooks_.read(path)) now = hmi::formatValue(*v);
     say(path + " forc\xC3\xA9" "e" + (now.empty() ? std::string{} : " \xC3\xA0 " + now) + " (d\xC3\xA9" "cocher Forcer la rend libre).", false);
     invalidate();
