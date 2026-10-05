@@ -3,6 +3,7 @@
 
 #include "../../help/HelpCodes.hpp"
 #include "../../ui/widgets/Controls.hpp"
+#include "../../ui/widgets/ScrollBar.hpp"   // 1.11.4 : la barre de defilement qu'on tire
 
 #include <algorithm>
 #include <cctype>
@@ -510,16 +511,19 @@ protected:
         }
         ctx.r.popClip();
 
-        // La barre de defilement.
-        if (maxScroll > 0.f) {
-            const float frac = body_.h / (body_.h + maxScroll);
-            const float len = std::max(28.f, body_.h * frac);
-            const float y = body_.y + (body_.h - len) * (scrollY_ / maxScroll);
-            ctx.r.fillRoundedRect({b.right() - 7.f, y, 5.f, len}, c.scrollbar, 2.5f);
-        }
+        // La barre de defilement (1.11.4 : elle se tire).
+        if (maxScroll > 0.f) sbar_.paint(ctx, {body_.x, body_.y, b.right() - body_.x, body_.h}, body_.h + maxScroll, body_.h, scrollY_);
     }
 
     ui::EventResult onEvent(const ui::InputEvent& ev) override {
+        {
+            float off = scrollY_;   // 1.11.4 : la barre de defilement se tire
+            if (sbar_.handle(*this, ev, off)) {
+                scrollY_ = std::max(0.f, off);
+                invalidate();
+                return ui::EventResult::Consumed;
+            }
+        }
         if (const auto* m = std::get_if<ui::MouseMove>(&ev)) {
             const int h = bounds().contains(m->pos) ? lineAt(m->pos.y) : -1;
             if (h != hover_) { hover_ = h; invalidate(); }
@@ -609,6 +613,7 @@ private:
     std::string                      selected_;
     int                              hover_{-1};
     float                            scrollY_{0.f};
+    ui::PaintedScrollBar             sbar_;   // 1.11.4
     float                            rowH_{28.f};
     float                            colValueRight_{0.f};
     gfx::Rect                        body_{};

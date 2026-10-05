@@ -437,12 +437,8 @@ protected:
                                        : "Rien ne correspond \xC3\xA0 la recherche.",
                            kSmall, c.textMuted);
             r.popClip();
-            if (maxScroll() > 0.f) {
-                const float total = static_cast<float>(rows_.size()) * kRow;
-                const float th = std::max(24.f, tree_.h * tree_.h / total);
-                const float ty = tree_.y + (tree_.h - th) * (scroll_ / maxScroll());
-                r.fillRoundedRect({tree_.right() - 8.f, ty, 5.f, th}, c.scrollbar, 2.5f);
-            }
+            // 1.11.4 : la barre se tire.
+            sbar_.paint(ctx, tree_, static_cast<float>(rows_.size()) * kRow, tree_.h, scroll_);
         }
         // ---- le detail ----
         paintDetail(ctx);
@@ -512,6 +508,14 @@ protected:
     }
 
     ui::EventResult onEvent(const ui::InputEvent& ev) override {
+        {
+            float off = scroll_;   // 1.11.4 : la barre de defilement se tire
+            if (sbar_.handle(*this, ev, off)) {
+                scroll_ = std::clamp(off, 0.f, maxScroll());
+                invalidate();
+                return ui::EventResult::Consumed;
+            }
+        }
         if (const auto* m = std::get_if<ui::MouseMove>(&ev)) {
             int h = -1;
             for (std::size_t k = 0; k < rowRects_.size(); ++k)
@@ -825,6 +829,7 @@ private:
     ui::Button*          ok_{nullptr};
     gfx::Rect            panel_{}, tree_{}, detail_{}, close_{}, typeBox_{}, allLink_{}, fxBox_{}, legendBox_{}, repBox_{}, force_{};
     float                resultTop_{0.f}, bottom_{0.f}, scroll_{0.f};
+    ui::PaintedScrollBar sbar_;   // 1.11.4
     std::vector<std::pair<gfx::Rect, Style>>                                        chips_;
     std::vector<std::pair<gfx::Rect, int>>                                          rowRects_;
     std::vector<std::pair<gfx::Rect, std::pair<std::size_t, std::size_t>>>          fixRects_;

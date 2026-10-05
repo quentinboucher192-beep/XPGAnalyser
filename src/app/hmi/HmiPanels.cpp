@@ -624,8 +624,14 @@ int HmiObjectList::rowAt(float y) const {
     return i < static_cast<int>(rows_.size()) ? i : -1;
 }
 
+gfx::Rect HmiObjectList::listArea() const noexcept {
+    gfx::Rect b = bounds();
+    b.w -= vbar_.space(bounds(), static_cast<float>(rows_.size()) * rowH_, bounds().h);
+    return b;
+}
+
 void HmiObjectList::onPaint(const ui::PaintContext& ctx) {
-    const auto b = bounds();
+    const auto b = listArea();   // 1.11.4 : la barre a droite
     if (!hovered()) hover_ = -1;          // la souris est partie
     const auto& c = ctx.theme.color;
     rowH_ = ctx.theme.metric.rowHeight;
@@ -780,10 +786,11 @@ void HmiObjectList::onPaint(const ui::PaintContext& ctx) {
         (void)locked;
     }
     ctx.r.popClip();
+    vbar_.paint(ctx, bounds(), static_cast<float>(rows_.size()) * rowH_, bounds().h, scrollY_);   // 1.11.4
 }
 
 bool HmiObjectList::rowRect(hmi::Id id, gfx::Rect& out, int part) const {
-    const auto b = bounds();
+    const auto b = listArea();
     for (std::size_t i = 0; i < rows_.size(); ++i) {
         if (rows_[i].id != id || !rows_[i].object()) continue;
         const float y = b.y + static_cast<float>(i) * rowH_ - scrollY_;
@@ -798,6 +805,14 @@ bool HmiObjectList::rowRect(hmi::Id id, gfx::Rect& out, int part) const {
 }
 
 ui::EventResult HmiObjectList::onEvent(const ui::InputEvent& ev) {
+    {
+        // 1.11.4 : la barre de defilement, tiree ou cliquee.
+        float off = scrollY_;
+        if (vbar_.handle(*this, ev, bounds(), static_cast<float>(rows_.size()) * rowH_, bounds().h, off)) {
+            scrollY_ = off;
+            return ui::EventResult::Consumed;
+        }
+    }
     if (const auto* k = std::get_if<ui::KeyDown>(&ev)) {
         if (!focused() || editor_) return ui::EventResult::Ignored;
         // 1.11 (T1, tranche 6) : les touches de l'ecran passent (F7 Compiler, F8 l'IHM, F9, F5...) ;
@@ -832,7 +847,7 @@ ui::EventResult HmiObjectList::onEvent(const ui::InputEvent& ev) {
             return ui::EventResult::Consumed;
         }
         const auto& row = rows_[static_cast<std::size_t>(i)];
-        const auto b = bounds();
+        const auto b = listArea();
         const float right = b.x + b.w - 8;
         // 1.10 (chantier O) : le noeud Alarmes se deplie ; une alarme choisit
         // l'objet et ouvre la section Alarmes de l'objet sur elle.

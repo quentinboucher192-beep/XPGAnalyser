@@ -18,6 +18,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include "../ui/widgets/ScrollBar.hpp"   // 1.11.4 : la barre de defilement qu'on tire
 
 namespace app {
 
@@ -341,12 +342,8 @@ protected:
             paintCard(ctx, rc, cards_[it.card], cur == cards_[it.card].entry.key, static_cast<int>(it.card) == hover_);
         }
         r.popClip();
-        if (contentH_ > list_.h) {     // ou l'on est dans la liste
-            const float track = list_.h - 8.f;
-            const float thumb = std::max(24.f, track * list_.h / contentH_);
-            const float at = (track - thumb) * (scroll_ / std::max(1.f, contentH_ - list_.h));
-            r.fillRoundedRect({panel_.x + panel_.w - 8.f, list_.y + 4.f + at, 4.f, thumb}, c.scrollbar, 2.f);
-        }
+        // Ou l'on est dans la liste (1.11.4 : la barre se tire).
+        sbar_.paint(ctx, {panel_.x, list_.y, panel_.w, list_.h}, contentH_, list_.h, scroll_);
         r.fillRect({panel_.x, list_.y + list_.h + 2.f, panel_.w, 1.f}, c.border);
         // Ce que dit la galerie : le message, sinon les contrastes du theme choisi.
         std::string line = d_.message_;
@@ -378,6 +375,15 @@ protected:
     }
 
     ui::EventResult onEvent(const ui::InputEvent& ev) override {
+        {
+            float off = scroll_;   // 1.11.4 : la barre de defilement se tire
+            if (sbar_.handle(*this, ev, {panel_.x, list_.y, panel_.w, list_.h}, contentH_, list_.h, off)) {
+                scroll_ = off;
+                clampScroll();
+                invalidate();
+                return ui::EventResult::Consumed;
+            }
+        }
         if (const auto* w = std::get_if<ui::MouseWheel>(&ev)) {
             if (!contains(list_, w->pos)) return ui::EventResult::Ignored;
             scroll_ -= w->dy * 60.f;
@@ -553,6 +559,7 @@ private:
     std::string pendingReveal_;
     gfx::Rect panel_{}, list_{};
     float     scroll_{0.f}, contentH_{0.f}, messageY_{0.f};
+    ui::EdgeScrollBar sbar_;   // 1.11.4
     int       hover_{-1}, pressed_{-1};
     int       hoverPart_{0}, pressedPart_{0};    // 1 : Creer a partir de celui-ci ; 2 : Exporter
 };

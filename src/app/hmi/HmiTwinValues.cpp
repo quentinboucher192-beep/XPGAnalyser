@@ -957,11 +957,9 @@ void HmiTwinValues::onPaint(const ui::PaintContext& ctx) {
         }
     }
     g.popClip();
-    if (contentHeight() > area.h && area.h > 0) {
-        const float thumb = std::max(24.f, area.h * area.h / contentHeight());
-        const float ty = area.y + (area.h - thumb) * (maxScroll > 0 ? scroll_ / maxScroll : 0.f);
-        g.fillRoundedRect({area.x + area.w - 7, ty, 5, thumb}, alpha(th.color.textMuted, 110), 3);
-    }
+    // 1.11.4 : la barre se tire.
+    if (area.h > 0) sbar_.paint(ctx, area, contentHeight(), area.h, scroll_);
+    (void)maxScroll;
     if (!compact_) paintCurves(ctx, curvesArea());
     else {
         const gfx::Rect st{b.x, b.y + b.h - kStatusH, b.w, kStatusH};
@@ -972,6 +970,14 @@ void HmiTwinValues::onPaint(const ui::PaintContext& ctx) {
 
 // ------------------------------------------------------------------ souris ---
 ui::EventResult HmiTwinValues::onEvent(const ui::InputEvent& ev) {
+    {
+        float off = scroll_;   // 1.11.4 : la barre de defilement se tire
+        if (sbar_.handle(*this, ev, off)) {
+            scroll_ = std::max(0.f, off);
+            invalidate();
+            return ui::EventResult::Consumed;
+        }
+    }
     if (const auto* m = std::get_if<ui::MouseMove>(&ev)) {
         if (drag_.on && drag_.line < lines_.size()) {
             const auto& l = lines_[drag_.line];

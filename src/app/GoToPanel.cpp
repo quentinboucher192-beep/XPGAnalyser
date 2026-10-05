@@ -357,15 +357,20 @@ void GoToPanel::onPaint(const ui::PaintContext& ctx) {
     }
     ctx.r.popClip();
     // La barre de defilement, quand la liste depasse.
-    if (content > listH_ && listH_ > 0.f) {
-        const float th = std::max(24.f, listH_ * listH_ / content);
-        const float tyb = listTop + (listH_ - th) * (scroll_ / std::max(1.f, content - listH_));
-        ctx.r.fillRoundedRect({box_.right() - 7.f, tyb, 4.f, th}, c.scrollbar, 2.f);
-    }
+    // 1.11.4 : elle se tire.
+    if (listH_ > 0.f) sbar_.paint(ctx, {box_.x, listTop, box_.w - 1.f, listH_}, content, listH_, scroll_);
 }
 
 ui::EventResult GoToPanel::onEvent(const ui::InputEvent& ev) {
     if (!open_) return ui::EventResult::Ignored;
+    {
+        float off = scroll_;   // 1.11.4 : la barre de defilement se tire
+        if (sbar_.handle(*this, ev, off)) {
+            scroll_ = std::max(0.f, off);
+            invalidate();
+            return ui::EventResult::Consumed;
+        }
+    }
     if (const auto* t = std::get_if<ui::TextInput>(&ev); t && focused()) {
         text_ += t->utf8;
         textEdited();

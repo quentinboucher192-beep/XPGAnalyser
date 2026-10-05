@@ -1906,15 +1906,16 @@ namespace ui {
             const float t = maxFirst > 0.f ? static_cast<float>(firstVisible_) / maxFirst : 0.f;
             ctx.r.fillRect({ r.right() - 12.f, inner.y, 12.f, inner.h }, c.panelBg);
             ctx.r.fillRoundedRect({ r.right() - 10.f, inner.y + t * (inner.h - thumbH), 7.f, thumbH },
-                c.scrollbar, 3.f);
+                vDrag_.active() ? c.scrollbarHover : c.scrollbar, 3.f);
         }
         const float contentW = widest + gutter;
+        paintContentW_ = contentW;   // 1.11.4 : la barre du bas se tire
         if (contentW > inner.w) {
             const float thumbW = std::max(24.f, inner.w * (inner.w / contentW));
             const float t = std::min(1.f, scrollX_ / std::max(1.f, contentW - inner.w));
             ctx.r.fillRect({ inner.x, r.bottom() - 12.f, inner.w, 12.f }, c.panelBg);
             ctx.r.fillRoundedRect({ inner.x + t * (inner.w - thumbW), r.bottom() - 10.f, thumbW, 7.f },
-                c.scrollbar, 3.f);
+                hDrag_.active() ? c.scrollbarHover : c.scrollbar, 3.f);
         }
 
         // 1.10.1 : le mot (lecture seule, modifie) ne passe plus sur le code. En
@@ -2097,6 +2098,34 @@ namespace ui {
     }
 
     EventResult MultiLineText::handleEvent(const InputEvent& ev) {
+        // 1.11.4 : les barres de defilement (dessinees plus bas dans onPaint) se tirent ; un
+        // clic dans la gouttiere avance d'une page. Avant : un appui sur la barre placait le curseur.
+        if (paintLineHeight_ > 0.f && !visible_.empty()) {
+            const auto r = bounds();
+            const auto inner = contentRect();
+            const float lh = paintLineHeight_;
+            ScrollAxis v;
+            v.track = { r.right() - 12.f, inner.y, 12.f, inner.h };
+            v.content = static_cast<float>(visible_.size()) * lh;
+            v.viewport = inner.h;
+            float off = static_cast<float>(firstVisible_) * lh;
+            if (vDrag_.handle(*this, v, ev, off)) {
+                firstVisible_ = std::min(visible_.size() - 1, static_cast<std::size_t>(std::lround(off / lh)));
+                invalidate();
+                return EventResult::Consumed;
+            }
+            ScrollAxis h;
+            h.horizontal = true;
+            h.track = { inner.x, r.bottom() - 12.f, inner.w, 12.f };
+            h.content = paintContentW_;
+            h.viewport = inner.w;
+            float x = scrollX_;
+            if (hDrag_.handle(*this, h, ev, x)) {
+                scrollX_ = x;
+                invalidate();
+                return EventResult::Consumed;
+            }
+        }
         const auto inner = contentRect();
 
         if (const auto* d = std::get_if<MouseDown>(&ev)) {
@@ -2772,7 +2801,7 @@ namespace ui {
         const float thumbH = std::max(18.f, fraction);
         const float travel = bar.h - thumbH;
         const float thumbY = bar.y + travel * (scroll_ / maxScroll());
-        ctx.r.fillRoundedRect({ bar.x + 1.f, thumbY, bar.w - 2.f, thumbH }, c.border, 3.f);
+        ctx.r.fillRoundedRect({ bar.x + 1.f, thumbY, bar.w - 2.f, thumbH }, barDrag_.active() ? c.scrollbarHover : c.border, 3.f);
     }
 
     EventResult DropDown::onEvent(const InputEvent& ev) {
@@ -2786,6 +2815,20 @@ namespace ui {
                 scroll_ = std::clamp(scroll_ - w->dy * step, 0.f, maxScroll());
                 invalidate();
                 return EventResult::Consumed;
+            }
+            // 1.11.4 : le pouce se prend et se tire ; un clic dans la gouttiere avance d'une page.
+            if (maxScroll() > 0.f) {
+                ScrollAxis a;
+                a.track = scrollbarRect();
+                a.content = rowHeight_ * static_cast<float>(items_.size());
+                a.viewport = rowHeight_ * static_cast<float>(visibleRows());
+                a.minThumb = 18.f;
+                float off = scroll_;
+                if (barDrag_.handle(*this, a, ev, off)) {
+                    scroll_ = std::clamp(off, 0.f, maxScroll());
+                    invalidate();
+                    return EventResult::Consumed;
+                }
             }
             if (const auto* m = std::get_if<MouseMove>(&ev)) {
                 const int i = rowAt(m->pos);

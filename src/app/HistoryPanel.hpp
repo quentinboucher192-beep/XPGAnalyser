@@ -20,6 +20,7 @@
 #include "../core/Command.hpp"
 #include "../core/Signal.hpp"
 #include "../ui/Widget.hpp"
+#include "../ui/widgets/ScrollBar.hpp"   // 1.11.4 : la barre de defilement qu'on tire
 
 #include <cstdint>
 #include <string>
@@ -106,6 +107,7 @@ private:
     std::vector<gfx::Rect>    rowRects_;
     float                     scroll_{0.f};
     float                     contentH_{0.f};
+    ui::EdgeScrollBar         sbar_;                 // 1.11.4 : elle se tire
     int                       hover_{-1}, selected_{-1};
     int                       hoverPart_{-1};
 };

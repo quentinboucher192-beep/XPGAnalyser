@@ -803,12 +803,9 @@ void HmiMemoryMap::onPaint(const ui::PaintContext& ctx) {
     }
     r.popClip();
     // ---- l'ascenseur
-    if (contentHeight() > area.h && area.h > 0) {
-        const float track = area.h;
-        const float thumb = std::max(24.f, track * area.h / contentHeight());
-        const float ty = area.y + (track - thumb) * (maxScroll > 0 ? scroll_ / maxScroll : 0.f);
-        r.fillRoundedRect({area.x + area.w - kScrollW, ty, kScrollW - 2, thumb}, alpha(th.color.textMuted, 110), 3);
-    }
+    // 1.11.4 : il se tire.
+    if (area.h > 0) sbar_.paint(ctx, area, contentHeight(), area.h, scroll_);
+    (void)maxScroll;
     // ---- la legende
     {
         const float top = b.y + b.h - legendHeight();
@@ -850,6 +847,14 @@ void HmiMemoryMap::onPaint(const ui::PaintContext& ctx) {
 
 // ------------------------------------------------------------------ souris ---
 ui::EventResult HmiMemoryMap::onEvent(const ui::InputEvent& ev) {
+    {
+        float off = scroll_;   // 1.11.4 : l'ascenseur se tire
+        if (sbar_.handle(*this, ev, off)) {
+            scroll_ = std::max(0.f, off);
+            invalidate();
+            return ui::EventResult::Consumed;
+        }
+    }
     if (const auto* m = std::get_if<ui::MouseMove>(&ev)) {
         const auto c = cellAt(m->pos);
         if (pressCell_ && !dragVar_.empty() && !dragging_ && std::hypot(m->pos.x - pressAt_.x, m->pos.y - pressAt_.y) > 8.f) dragging_ = true;

@@ -318,16 +318,20 @@ void RackView::onPaint(const PaintContext& ctx) {
     }
 
     // Scroll hint, drawn only when there is something below the fold.
-    if (content_.h > area.h) {
-        const float frac = area.h / content_.h;
-        const float thumbH = std::max(24.f, area.h * frac);
-        const float t = scroll_.y / std::max(1.f, content_.h - area.h);
-        ctx.r.fillRoundedRect({bounds().right() - 10.f, area.y + t * (area.h - thumbH), 6.f, thumbH},
-                              c.scrollbar, 3.f);
-    }
+    // 1.11.4 : la barre se tire.
+    sbar_.paint(ctx, {area.x, area.y, bounds().right() - area.x, area.h}, content_.h, area.h, scroll_.y);
 }
 
 EventResult RackView::onEvent(const InputEvent& ev) {
+    {
+        float off = scroll_.y;   // 1.11.4 : la barre de defilement se tire
+        if (sbar_.handle(*this, ev, off)) {
+            scroll_.y = std::clamp(off, 0.f, std::max(0.f, content_.h - contentRect().h));
+            dirtyGeometry_ = true;
+            invalidate();
+            return EventResult::Consumed;
+        }
+    }
     if (const auto* w = std::get_if<MouseWheel>(&ev)) {
         if (!bounds().contains(w->pos)) return EventResult::Ignored;
         if (w->mods.ctrl) {

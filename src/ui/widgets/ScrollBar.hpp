@@ -89,6 +89,20 @@ private:
     bool          hot_{false};
 };
 
+// Une barre dont la place ne se sait qu'au dessin (un volet qui calcule sa liste en se
+// dessinant) : paint() la note, handle() la relit.
+class PaintedScrollBar {
+public:
+    void paint(const PaintContext&, gfx::Rect area, float content, float viewport, float offset);
+    bool handle(Widget& owner, const InputEvent&, float& offset);
+    [[nodiscard]] bool active() const noexcept { return bar_.active(); }
+
+private:
+    EdgeScrollBar bar_;
+    gfx::Rect     area_{};
+    float         content_{0.f}, viewport_{0.f};
+};
+
 // ---- le widget (un enfant) -----------------------------------------------------
 class ScrollBar : public Widget {
 public:

@@ -5,6 +5,7 @@
 #include "../ui/Icons.hpp"
 #include "../ui/TextSearch.hpp"          // lot recherche : la recherche de toutes les listes
 #include "../ui/widgets/Controls.hpp"
+#include "../ui/widgets/ScrollBar.hpp"   // 1.11.4 : la barre de defilement qu'on tire
 
 #include <algorithm>
 #include <cctype>
@@ -234,13 +235,8 @@ protected:
         if (shown_.empty())
             r.drawText({list_.x + 20.f, list_.y + 16.f}, "Aucune variable ne correspond.", kBody, c.textMuted);
         r.popClip();
-        // La barre de defilement.
-        if (maxScroll() > 0.f) {
-            const float total = static_cast<float>(shown_.size()) * kRow;
-            const float th = std::max(24.f, list_.h * list_.h / total);
-            const float ty = list_.y + (list_.h - th) * (scroll_ / maxScroll());
-            r.fillRoundedRect({list_.right() - 8.f, ty, 5.f, th}, c.scrollbar, 2.5f);
-        }
+        // La barre de defilement (1.11.4 : elle se tire).
+        sbar_.paint(ctx, list_, static_cast<float>(shown_.size()) * kRow, list_.h, scroll_);
         r.fillRect({panel_.x, list_.bottom(), panel_.w, 1.f}, c.border);
         if (!spec_.note.empty())
             r.drawText({panel_.x + 16.f, panel_.bottom() - 38.f}, fit(r, spec_.note, kSmall, cancel_->bounds().x - panel_.x - 30.f), kSmall,
@@ -248,6 +244,14 @@ protected:
     }
 
     ui::EventResult onEvent(const ui::InputEvent& ev) override {
+        {
+            float off = scroll_;   // 1.11.4 : la barre de defilement se tire
+            if (sbar_.handle(*this, ev, list_, static_cast<float>(shown_.size()) * kRow, list_.h, off)) {
+                scroll_ = std::clamp(off, 0.f, maxScroll());
+                invalidate();
+                return ui::EventResult::Consumed;
+            }
+        }
         if (const auto* m = std::get_if<ui::MouseMove>(&ev)) {
             const int h = rowAt(m->pos);
             const bool hc = close_.contains(m->pos);
@@ -316,6 +320,7 @@ private:
     gfx::Rect                  panel_{}, list_{}, close_{};
     std::vector<gfx::Rect>     chips_;
     float                      scroll_{0.f};
+    ui::EdgeScrollBar          sbar_;   // 1.11.4
     int                        hover_{-1};
     bool                       hoverClose_{false};
     core::ConnectionScope      links_;

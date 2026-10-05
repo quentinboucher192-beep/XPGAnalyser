@@ -27,6 +27,7 @@
 #include "../../core/Signal.hpp"
 #include "../../hmi/HmiZones.hpp"
 #include "../../ui/Widget.hpp"
+#include "../../ui/widgets/ScrollBar.hpp"   // 1.11.4
 
 #include <cstdint>
 #include <functional>
@@ -156,6 +157,7 @@ private:
     std::unordered_map<std::uint64_t, int>                        worst_;   // le pire chevauchement de la case
     std::vector<Row>                           rows_;
     float                                      scroll_{0};
+    ui::PaintedScrollBar                       sbar_;   // 1.11.4 : l'ascenseur se tire
     // La vague : le nombre de changements vu, et quand il a bouge (par case).
     mutable std::unordered_map<std::uint64_t, std::pair<std::uint32_t, double>> seen_;
     mutable double                             now_{0};

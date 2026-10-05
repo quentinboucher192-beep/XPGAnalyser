@@ -1422,16 +1422,8 @@ void HelpArticleView::onPaint(const PaintContext& ctx) {
     // La barre de defilement. Sans elle, rien ne dit qu'un article continue
     // sous le bord : on croit avoir tout lu, et la moitie des parametres est
     // en dessous. 1.11 (T2) : pas pour la seule marge du bas (maxScroll).
-    if (maxScroll() > 0.f) {
-        const float w    = 6.f;
-        const float x    = r.right() - w - 2.f;
-        const float frac = r.h / layout_.height;
-        const float len  = std::max(28.f, r.h * frac);
-        const float span = std::max(1.f, maxScroll());
-        const float posY = r.y + (r.h - len) * std::clamp(scrollY_ / span, 0.f, 1.f);
-        ctx.r.fillRoundedRect({x, r.y, w, r.h}, th.color.rowAltBg, w / 2.f);
-        ctx.r.fillRoundedRect({x, posY, w, len}, th.color.scrollbar, w / 2.f);
-    }
+    // 1.11.4 : elle se tire.
+    if (maxScroll() > 0.f) sbar_.paint(ctx, {r.x, r.y, r.w - 2.f, r.h}, r.h + maxScroll(), r.h, scrollY_);
 
     // L'infobulle d'une puce : ce que designe un nom, sans avoir a l'ouvrir.
     if (hoveredSpot_ >= 0 && hoveredSpot_ < static_cast<int>(layout_.hotspots.size())) {
@@ -1535,6 +1527,14 @@ void HelpArticleView::activate(const std::string& target) {
 }
 
 EventResult HelpArticleView::onEvent(const InputEvent& ev) {
+    {
+        float off = scrollY_;   // 1.11.4 : la barre de defilement se tire
+        if (maxScroll() > 0.f && sbar_.handle(*this, ev, off)) {
+            scrollY_ = std::clamp(off, 0.f, maxScroll());
+            invalidate();
+            return EventResult::Consumed;
+        }
+    }
     if (const auto* mv = std::get_if<MouseMove>(&ev)) {
         mouse_ = mv->pos;
         const int h = bounds().contains(mv->pos) ? hotspotAt(mv->pos) : -1;

@@ -1049,17 +1049,21 @@ void MacroFormView::onPaint(const ui::PaintContext& ctx) {
             ctx.r.drawText({b.x + ctrlX, hy}, hint, kHint, tone);
         }
     }
-    // La barre de defilement.
-    if (contentH_ > b.h) {
-        const float ratio = b.h / contentH_;
-        const float barH = std::max(30.f, b.h * ratio);
-        const float maxScroll = std::max(1.f, contentH_ - b.h + 20.f);
-        const float barY = b.y + (b.h - barH) * std::clamp(scroll_ / maxScroll, 0.f, 1.f);
-        ctx.r.fillRoundedRect({b.x + b.w - 7.f, barY, 4.f, barH}, c.scrollbar, 2.f);
-    }
+    // La barre de defilement (1.11.4 : elle se tire ; la marge du bas comprise).
+    if (contentH_ > b.h) sbar_.paint(ctx, bounds(), contentH_ + 20.f, bounds().h, scroll_);
 }
 
 ui::EventResult MacroFormView::onEvent(const ui::InputEvent& ev) {
+    if (contentH_ > bounds().h) {
+        float off = scroll_;   // 1.11.4 : la barre de defilement se tire
+        if (sbar_.handle(*this, ev, bounds(), contentH_ + 20.f, bounds().h, off)) {
+            scroll_ = off;
+            clampScroll();
+            invalidateLayout();
+            invalidate();
+            return ui::EventResult::Consumed;
+        }
+    }
     if (const auto* w = std::get_if<ui::MouseWheel>(&ev); w && bounds().contains(w->pos)) {
         scroll_ -= w->dy * 48.f;
         clampScroll();

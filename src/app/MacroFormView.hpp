@@ -33,6 +33,7 @@
 #include "../project/MacroSpec.hpp"
 #include "../ui/Widget.hpp"
 #include "../ui/widgets/Controls.hpp"
+#include "../ui/widgets/ScrollBar.hpp"   // 1.11.4 : la barre de defilement qu'on tire
 
 #include <functional>
 #include <memory>
@@ -204,6 +205,7 @@ private:
     bool                               advancedOpen_{false};
     float                              scroll_{0.f};
     mutable float                      contentH_{0.f};
+    ui::EdgeScrollBar                  sbar_;   // 1.11.4 : elle se tire
     gfx::Rect                          advancedHeader_{};
     std::string                        message_;
     ui::Tone                           messageTone_{ui::Tone::None};

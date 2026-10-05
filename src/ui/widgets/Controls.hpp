@@ -8,6 +8,7 @@
 #include "../Syntax.hpp"
 #include "../Widget.hpp"
 #include "KindBadge.hpp"   // 1.11.2 (API-V, decision 161) : la pastille d'une proposition
+#include "ScrollBar.hpp"   // 1.11.4 : les barres de defilement qu'on tire
 
 #include <functional>
 #include <optional>
@@ -473,6 +474,9 @@ namespace ui {
         std::vector<std::pair<std::size_t, gfx::Color>> marked_;
         std::size_t                firstVisible_{ 0 };   // index into visible_
         float                      scrollX_{ 0.f };
+        // 1.11.4 : les barres se tirent (la largeur du code, notee au dessin).
+        ScrollBarDrag              vDrag_, hDrag_;
+        mutable float              paintContentW_{ 0.f };
         float                      zoom_{ 1.f };
         int                        maxDepth_{ 0 };
         Caret                      caret_{}, anchor_{};
@@ -638,6 +642,7 @@ namespace ui {
         int               highlighted_{ -1 };      // where the keyboard or pointer is
         int               maxVisibleRows_{ 12 };
         float             scroll_{ 0.f };          // pixels, 0 .. maxScroll()
+        ScrollBarDrag     barDrag_;                // 1.11.4 : le pouce de la liste ouverte se tire
         float             rowHeight_{ 24.f };      // cached from the theme at paint time
         bool              editable_{ false }, popupOpen_{ false };
         mutable bool      flipped_{ false };       // the list sits above, not below

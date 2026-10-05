@@ -122,6 +122,18 @@ bool EdgeScrollBar::handle(Widget& owner, const InputEvent& ev, gfx::Rect area, 
     return true;
 }
 
+void PaintedScrollBar::paint(const PaintContext& ctx, gfx::Rect area, float content, float viewport, float offset) {
+    area_ = area;
+    content_ = content;
+    viewport_ = viewport;
+    bar_.paint(ctx, area, content, viewport, offset);
+}
+
+bool PaintedScrollBar::handle(Widget& owner, const InputEvent& ev, float& offset) {
+    if (area_.w <= 0.f || area_.h <= 0.f) return false;
+    return bar_.handle(owner, ev, area_, content_, viewport_, offset);
+}
+
 // ---- le widget --------------------------------------------------------------------
 ScrollBar::ScrollBar(std::string id, bool horizontal) : Widget(std::move(id)), horizontal_(horizontal) {}
 

@@ -323,12 +323,8 @@ void Board::onPaint(const PaintContext& ctx) {
         }
     }
     // La barre de defilement, quand les cartes depassent : elle dit qu'il y en a d'autres.
-    if (contentH_ > body_.h + 1.f) {
-        const float track = body_.h - 8.f;
-        const float th = std::max(24.f, track * body_.h / contentH_);
-        const float ty = body_.y + 4.f + (track - th) * scroll_ / std::max(1.f, contentH_ - body_.h);
-        r.fillRoundedRect({body_.right() - 7.f, ty, 4.f, th}, c.borderStrong, 2.f);
-    }
+    // 1.11.4 : elle se tire.
+    if (contentH_ > body_.h + 1.f) sbar_.paint(ctx, body_, contentH_, body_.h, scroll_);
     r.popClip();
     // Le pied : la case des reperes, ou revoir la fenetre, les boutons.
     r.line({b.x, b.bottom() - kFooterH}, {b.right(), b.bottom() - kFooterH}, c.border, 1.f);
@@ -364,6 +360,13 @@ void Board::onPaint(const PaintContext& ctx) {
 }
 
 EventResult Board::onEvent(const InputEvent& ev) {
+    {
+        float off = scroll_;   // 1.11.4 : la barre de defilement se tire
+        if (contentH_ > body_.h + 1.f && sbar_.handle(*this, ev, off)) {
+            scrollBy(off - scroll_);
+            return EventResult::Consumed;
+        }
+    }
     const auto partAt = [&](gfx::Point p) {
         if (later_.contains(p)) return -2;
         if (allSeen_.contains(p)) return -3;

@@ -30,6 +30,7 @@
 #include "SimJournal.hpp"
 #include "SimStatus.hpp"
 #include "../ui/Widget.hpp"
+#include "../ui/widgets/ScrollBar.hpp"   // 1.11.4 : la barre de defilement qu'on tire
 
 #include <cstddef>
 #include <cstdint>
@@ -181,6 +182,7 @@ private:
     int                             hover_{-1};
     int                             pressed_{-1};
     float                           scrollY_{0.f};
+    ui::PaintedScrollBar            sbar_;   // 1.11.4 : la barre se tire
     float                           contentH_{0.f};
 };
 

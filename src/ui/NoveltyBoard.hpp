@@ -19,6 +19,7 @@
 
 #include "Widget.hpp"
 #include "../core/Signal.hpp"
+#include "widgets/ScrollBar.hpp"   // 1.11.4 : la barre de defilement qu'on tire
 
 #include <string>
 #include <vector>
@@ -93,6 +94,7 @@ private:
     gfx::Rect           later_{}, allSeen_{}, showAll_{}, hide_{}, close_{}, body_{};
     gfx::Rect           previous_{};    // 1.10 : la ligne des versions precedentes (y du contenu)
     float               scroll_{0.f}, contentH_{0.f};
+    PaintedScrollBar    sbar_;   // 1.11.4
     int                 hover_{-1};       // 0.. une carte (Me montrer) ; -2 Plus tard ; -3 Tout vu ; -4 la case ; -5 tout ; -6 la croix
 };
 

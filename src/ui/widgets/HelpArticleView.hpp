@@ -30,6 +30,7 @@
 #include "../Icons.hpp"
 #include "../Theme.hpp"
 #include "../Widget.hpp"
+#include "ScrollBar.hpp"   // 1.11.4 : la barre de defilement qu'on tire
 
 #include <functional>
 #include <string>
@@ -265,6 +266,7 @@ private:
     HelpArticle article_;
     HelpLayout  layout_;
     float       scrollY_{0.f};
+    PaintedScrollBar sbar_;   // 1.11.4
     float       scrollTarget_{0.f};     // le defilement doux court vers lui
     float       builtWidth_{-1.f};
     bool        dirtyLayout_{true};

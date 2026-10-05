@@ -408,13 +408,8 @@ void HistoryPanel::onPaint(const ui::PaintContext& ctx) {
     if (rows_.empty() || (rows_.size() <= 3 && stack_ && stack_->done().empty() && stack_->undone().empty()))
         ctx.r.drawText({list_.x + 14.f, list_.y + 90.f}, "Rien \xC3\xA0 annuler pour l'instant.", f.ui, c.textMuted);
     ctx.r.popClip();
-    // La barre de defilement.
-    if (contentH_ > list_.h) {
-        const float frac = list_.h / contentH_;
-        const float th = std::max(24.f, list_.h * frac);
-        const float tyy = list_.y + (list_.h - th) * (scroll_ / std::max(1.f, contentH_ - list_.h));
-        ctx.r.fillRoundedRect({list_.right() - 7.f, tyy, 5.f, th}, c.scrollbar, 2.5f);
-    }
+    // La barre de defilement (1.11.4 : elle se tire).
+    sbar_.paint(ctx, list_, contentH_, list_.h, scroll_);
 
     // ---- le pied : revenir a l'etat enregistre, a l'ouverture
     const float fy = d.bottom() - kFooterH + 10.f;
@@ -440,6 +435,15 @@ void HistoryPanel::onPaint(const ui::PaintContext& ctx) {
 
 ui::EventResult HistoryPanel::onEvent(const ui::InputEvent& ev) {
     if (!open_) return ui::EventResult::Ignored;
+    {
+        float off = scroll_;   // 1.11.4 : la barre de defilement se tire
+        if (sbar_.handle(*this, ev, list_, contentH_, list_.h, off)) {
+            scroll_ = off;
+            clampScroll();
+            invalidate();
+            return ui::EventResult::Consumed;
+        }
+    }
     if (const auto* mw = std::get_if<ui::MouseWheel>(&ev)) {
         if (!drawer_.contains(mw->pos)) return ui::EventResult::Ignored;
         scroll_ -= mw->dy * 48.f;

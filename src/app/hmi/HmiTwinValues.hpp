@@ -186,6 +186,7 @@ private:
     bool                                     frozen_{false};
     bool                                     bandOn_{true};
     float                                    scroll_{0};
+    ui::PaintedScrollBar                     sbar_;   // 1.11.4 : la barre se tire
     ui::DropDown*                            twinBox_{nullptr};
     ui::DropDown*                            showBox_{nullptr};
     ui::InputText*                           searchBox_{nullptr};

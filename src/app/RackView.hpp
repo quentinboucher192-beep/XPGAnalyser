@@ -20,6 +20,7 @@
 
 #include "../domain/ProjectModel.hpp"
 #include "../ui/Widget.hpp"
+#include "../ui/widgets/ScrollBar.hpp"   // 1.11.4 : la barre de defilement qu'on tire
 
 #include <memory>
 #include <optional>
@@ -73,6 +74,7 @@ private:
     std::vector<SlotBox> slots_;
     gfx::Size            content_{};
     gfx::Point           scroll_{};
+    ui::PaintedScrollBar sbar_;   // 1.11.4 : la barre se tire
     float                zoom_{1.f};
     int                  selectedRack_{-1};
     int                  selectedSlot_{-32768};

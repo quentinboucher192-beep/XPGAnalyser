@@ -229,11 +229,8 @@ void SimOverviewPane::onPaint(const ui::PaintContext& ctx) {
     paintAttention(ctx, at(pl.attention));
     paintTimeline(ctx, at(pl.timeline));
     // L'ascenseur : un trait fin a droite quand tout ne tient pas.
-    if (maxScroll() > 0.f) {
-        const float h = std::max(28.f, b.h * b.h / contentH_);
-        const float y = b.y + (b.h - h) * (scrollY_ / maxScroll());
-        ctx.r.fillRoundedRect({b.right() - 8.f, y, 5.f, h}, c.scrollbar, 2.5f);
-    }
+    // 1.11.4 : il se tire.
+    if (maxScroll() > 0.f) sbar_.paint(ctx, b, b.h + maxScroll(), b.h, scrollY_);
     ctx.r.popClip();
 }
 
@@ -579,6 +576,13 @@ void SimOverviewPane::paintTimeline(const ui::PaintContext& ctx, const gfx::Rect
 
 // ----------------------------------------------------------------- la souris ----
 ui::EventResult SimOverviewPane::onEvent(const ui::InputEvent& ev) {
+    {
+        float off = scrollY_;   // 1.11.4 : l'ascenseur se tire
+        if (maxScroll() > 0.f && sbar_.handle(*this, ev, off)) {
+            scrollTo(off);
+            return ui::EventResult::Consumed;
+        }
+    }
     if (const auto* w = std::get_if<ui::MouseWheel>(&ev)) {
         if (!bounds().contains(w->pos) || maxScroll() <= 0.f) return ui::EventResult::Ignored;
         scrollTo(scrollY_ - w->dy * 48.f);

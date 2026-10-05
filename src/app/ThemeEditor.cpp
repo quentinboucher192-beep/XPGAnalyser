@@ -11,6 +11,7 @@
 #include "../ui/widgets/ColorPalette.hpp"   // 1.10 (chantier Q) : la palette et sa pipette
 #include "../ui/widgets/Controls.hpp"
 #include "../ui/widgets/PathBrowse.hpp"
+#include "../ui/widgets/ScrollBar.hpp"   // 1.11.4 : la barre de defilement qu'on tire
 
 #include <algorithm>
 #include <cmath>
@@ -204,12 +205,8 @@ protected:
             }
         }
         r.popClip();
-        if (contentH_ > list_.h) {
-            const float track = list_.h - 8.f;
-            const float thumb = std::max(24.f, track * list_.h / contentH_);
-            const float at = (track - thumb) * (scroll_ / std::max(1.f, contentH_ - list_.h));
-            r.fillRoundedRect({list_.x + list_.w + 4.f, list_.y + 4.f + at, 4.f, thumb}, c.scrollbar, 2.f);
-        }
+        // 1.11.4 : la barre se tire (a droite de la liste, ou elle etait).
+        sbar_.paint(ctx, {list_.x, list_.y, list_.w + 12.f, list_.h}, contentH_, list_.h, scroll_);
 
         // --- la couleur choisie ---
         const auto* key = ui::themeColorKey(d_.selected_);
@@ -365,6 +362,15 @@ protected:
     }
 
     ui::EventResult onEvent(const ui::InputEvent& ev) override {
+        {
+            float off = scroll_;   // 1.11.4 : la barre de defilement se tire
+            if (sbar_.handle(*this, ev, off)) {
+                scroll_ = off;
+                clampScroll();
+                invalidate();
+                return ui::EventResult::Consumed;
+            }
+        }
         if (const auto* w = std::get_if<ui::MouseWheel>(&ev)) {
             if (!inside(list_, w->pos)) return ui::EventResult::Ignored;
             scroll_ -= w->dy * 52.f;
@@ -461,6 +467,7 @@ private:
     gfx::Rect          track_[3]{};
     float              metaY_{0.f}, familyX_{0.f}, authorX_{0.f}, boxY_{0.f}, boxH_{0.f}, previewY_{0.f};
     float              scroll_{0.f}, contentH_{0.f};
+    ui::PaintedScrollBar sbar_;   // 1.11.4
     int                hover_{-1}, drag_{-1};
     ui::Hsl            dragHsl_{};
 };

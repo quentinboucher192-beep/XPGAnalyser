@@ -121,6 +121,8 @@ public:
     // Pour les scripts et les tests : ou est la ligne d'un objet (part 0 : son
     // nom, 1 : l'oeil, 2 : le cadenas). false si elle n'est pas montree.
     [[nodiscard]] bool rowRect(hmi::Id, gfx::Rect& out, int part = 0) const;
+    // 1.11.4 : la place des lignes (sans la barre de defilement, qu'on tire, a droite).
+    [[nodiscard]] gfx::Rect listArea() const noexcept;
     [[nodiscard]] ui::SizeHint sizeHint() const override;
     // Renommer sur place : un champ de saisie pose sur la ligne. Entree
     // valide (signal `renamed`), Echap annule.
@@ -190,6 +192,7 @@ private:
     std::string               filterText_;
     std::optional<hmi::Kind>  filterKind_;
     float                     scrollY_{0};
+    ui::EdgeScrollBar         vbar_;                 // 1.11.4 : la barre de l'explorateur d'objets
     int                       hover_{-1};
     int                       anchor_{-1};
     float                     rowH_{24};

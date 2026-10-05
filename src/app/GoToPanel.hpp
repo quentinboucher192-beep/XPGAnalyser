@@ -33,6 +33,7 @@
 #include "../core/Signal.hpp"
 #include "../ui/Icons.hpp"
 #include "../ui/Widget.hpp"
+#include "../ui/widgets/ScrollBar.hpp"   // 1.11.4 : la barre de defilement qu'on tire
 
 #include <cstddef>
 #include <functional>
@@ -127,6 +128,7 @@ private:
     bool                   pending_{false};
     double                 pendingSince_{-1.0};
     float                  scroll_{0.f};
+    ui::PaintedScrollBar   sbar_;   // 1.11.4 : la barre se tire
     float                  listH_{0.f};              // la hauteur de la liste au dernier dessin
     gfx::Rect              anchor_{}, box_{};
     std::vector<std::pair<int, gfx::Rect>> rowRects_;
