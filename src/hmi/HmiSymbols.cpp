@@ -2,6 +2,8 @@
 //  hmi/HmiSymbols.cpp - voir HmiSymbols.hpp
 // =============================================================================
 #include "HmiSymbols.hpp"
+#include "HmiLiveGeometry.hpp"   // 1.11.4 : la geometrie en marche (les notes de l'expansion)
+#include "HmiMarkers.hpp"        // 1.11.4 : un repere dans une constante texte ('$Nom$')
 
 #include "HmiEdit.hpp"
 #include "HmiEnums.hpp"            // 1.11.3 : Auto -> T_MODE#Auto (un parametre de type enumeration)
@@ -197,10 +199,31 @@ std::string rewriteTemplate(std::string_view text, const std::function<std::stri
 }
 
 // Une chaine ST ('B', 'L''armoire', 'A$'B') -> son texte ; faux : pas une chaine seule.
+// 1.11.4 : les reperes d'un texte ($Nom$, la regle des textes) : leurs `$` ne s'echappent
+// pas dans une constante ('$Nom$' et non '$$Nom$$') - Dupliquer les trouve, le moteur les
+// retire. `at` : la position de chaque `$` d'un repere dans `text`.
+std::set<std::size_t> markerDollars(std::string_view text) {
+    std::set<std::size_t> at;
+    if (text.find('$') == std::string_view::npos) return at;
+    for (const auto& sp : markers::find(text, markers::Mode::Text)) {
+        at.insert(sp.at);
+        at.insert(sp.end() - 1);
+    }
+    return at;
+}
+
 bool stringLiteral(const std::string& t, std::string& text) {
     if (t.size() < 2 || t.front() != '\'' || t.back() != '\'') return false;
     text.clear();
+    // 1.11.4 : un repere ('$Nom$') se lit tel quel, ses `$` ne sont pas des echappements.
+    const auto kept = markerDollars(std::string_view(t).substr(1, t.size() - 2));
     for (std::size_t i = 1; i + 1 < t.size(); ++i) {
+        if (t[i] == '$' && kept.count(i - 1)) {
+            const std::size_t close = t.find('$', i + 1);
+            text += t.substr(i, close - i + 1);
+            i = close;
+            continue;
+        }
         if (t[i] == '$' && i + 2 < t.size()) {
             const char n = t[++i];
             text += n == 'N' || n == 'n' ? '\n' : n == 'T' || n == 't' ? '\t' : n;
@@ -467,6 +490,10 @@ std::string constantArgument(const Project* project, std::string_view type, std:
 // Les nommes comme avant (parseArguments) ; 1.11.2 (decision 248) : un parametre que rien
 // ne nomme prend le positionnel de son rang (Voiture;50 : Name = Voiture, Value = 50) ;
 // un positionnel en trop est ignore.
+namespace {
+std::string withoutMarkers(std::string text);   // 1.11.4 (plus bas)
+} // namespace
+
 SymbolArguments symbolArguments(const View& symbol, const Object& instance, const Project* project) {
     const std::string params = instance.text("params");
     const auto given = parseArguments(params);
@@ -479,7 +506,7 @@ SymbolArguments symbolArguments(const View& symbol, const Object& instance, cons
         for (const auto& [name, value] : given)
             if (sameName(name, prm.name)) { text = value; named = true; break; }
         if (!named && i < positional.size() && !positional[i].empty()) text = positional[i];
-        text = constantArgument(project, prm.type, trimmedCopy(text));
+        text = withoutMarkers(constantArgument(project, prm.type, trimmedCopy(text)));
         if (!text.empty()) out.emplace_back(prm.name, std::move(text));
     }
     return out;
@@ -566,7 +593,28 @@ bool durationText(std::string_view t) {
 }
 std::string quoted(std::string_view text) {
     std::string out = "'";
-    for (const char c : text) {
+    const auto kept = markerDollars(text);   // 1.11.4 : les `$` d'un repere restent seuls
+    for (std::size_t i = 0; i < text.size(); ++i) {
+        const char c = text[i];
+        if (c == '\'' || (c == '$' && !kept.count(i))) out += '$';
+        if (c == '\n') { out += "$N"; continue; }
+        out += c;
+    }
+    return out + "'";
+}
+
+// 1.11.4 : ce que le moteur colle a la place du parametre - une constante texte a repere
+// ('$Nom$') sans ses `$` ('Nom') : un repere est transparent pour le calcul, comme partout.
+std::string withoutMarkers(std::string text) {
+    std::string inner;
+    if (text.find('$') == std::string::npos || !stringLiteral(text, inner)) return text;
+    const auto kept = markerDollars(inner);
+    if (kept.empty()) return text;
+    std::string plain;
+    for (std::size_t i = 0; i < inner.size(); ++i)
+        if (!kept.count(i)) plain += inner[i];
+    std::string out = "'";
+    for (const char c : plain) {
         if (c == '\'' || c == '$') out += '$';
         if (c == '\n') { out += "$N"; continue; }
         out += c;
@@ -1004,8 +1052,13 @@ Expansion expandInstance(const Project& p, const Object& inst, int depth) {
         // Lier un tableau vise un objet par son nom : celui de l'instance.
         for (auto& a : c.actions)
             if (a.operation == Operation::BindTable && siblings.count(a.target)) a.target = inst.name + "." + a.target;
+        // 1.11.4 : sa geometrie dans le symbole, pour la reposer en marche (relayoutLive).
+        c.set(std::string(kLocalGeometryKey), encodeLocalGeometry(c));
         place(c, inst, sx, sy);
         inherit(c, inst);
+        if (c.kind == Kind::SymbolInstance)
+            if (const View* inner = symbolOf(p, c))
+                c.set(std::string(kSymbolSizeKey), formatNumber(inner->width) + ";" + formatNumber(inner->height));
         out.objects.push_back(c);
         if (c.kind == Kind::SymbolInstance) {
             auto inner = expandInstance(p, c, depth + 1);
@@ -1046,6 +1099,9 @@ View expandInstances(const Project& p, const View& v) {
     for (const auto& o : v.objects) {
         out.objects.push_back(o);
         if (o.kind != Kind::SymbolInstance) continue;
+        // 1.11.4 : la taille du symbole, pour reposer ses objets en marche (relayoutLive).
+        if (const View* sym = symbolOf(p, o))
+            out.objects.back().set(std::string(kSymbolSizeKey), formatNumber(sym->width) + ";" + formatNumber(sym->height));
         Expansion e = expandInstance(p, o);
         // Deux identifiants derives egaux (improbable) : le second avance.
         std::map<Id, Id> moved;
@@ -1065,6 +1121,12 @@ View expandInstances(const Project& p, const View& v) {
         for (auto& a : e.actions) out.actions.push_back(std::move(a));
     }
     return out;
+}
+
+// 1.11.4 : la meme pose, en marche (HmiLiveGeometry : l'instance a une formule de geometrie).
+void placeInInstance(Object& o, const Object& instance, double symbolWidth, double symbolHeight) {
+    const Box ib = instance.box();
+    place(o, instance, symbolWidth > 0 ? ib.w / symbolWidth : 1.0, symbolHeight > 0 ? ib.h / symbolHeight : 1.0);
 }
 
 // =============================================================== edition ====

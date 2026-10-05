@@ -21889,6 +21889,92 @@ void symParametres1112() {
 //  - UINTS, un ARRAY[0..9] OF UINT, va a Value : ARRAY[0..9] OF UINT.
 //  Et le carre de legende de chaque ligne (C, fx, I, !).
 // =============================================================================
+// =============================================================================
+//  1.11.4 (« dans les parametres, verifier fx, reperes etc ; dans un parametre
+//  'variable', pouvoir utiliser ca aussi ») : un parametre qui recoit une variable
+//  (Value : ARRAY[0..9] OF UINT, par reference) prend un repere avec ou sans fx
+//  ($UINTS$ reste la variable) ; un texte (Name : STRING) aussi ('$Nom$') ; le carre,
+//  la pastille $, Dupliquer les voient.
+// =============================================================================
+void symParametresReperes1114() {
+    std::printf("== 1.11.4 : les rep\xC3\xA8res et le fx dans les param\xC3\xA8tres d'une instance ==\n");
+    Project p;
+    View sym = makeView(p, "STEST");
+    sym.role = "symbole";
+    sym.params.push_back({"Name", "'Sans nom'", "", "STRING", ParamMode::Reference});
+    sym.params.push_back({"Value", "", "", "ARRAY[0..9] OF UINT", ParamMode::Reference});
+    p.views.push_back(sym);
+    for (const char* n : {"UINTS", "AUTRES"}) {
+        Variable a;
+        a.id = p.allocate();
+        a.name = n;
+        a.type = "ARRAY[0..9] OF UINT";
+        p.programs.variables.push_back(a);
+    }
+    View v = makeView(p, "Vue_Accueil");
+    const Id vid = v.id;
+    p.views.push_back(v);
+    View& view = *p.view(vid);
+    const Id inst = edit::add(p, view, Kind::SymbolInstance, 100, 100);
+    view.object(inst)->set("symbol", "STEST");
+    std::string last;
+    app::HmiPropertyCommits commits;
+    commits.prop = [&](const std::string& k, const std::string& value, bool) {
+        if (k == "params") { view.object(inst)->set("params", value); last = value; }
+        return true;
+    };
+    const auto rowOf = [&](const std::string& name) -> ui::PropertyGrid::Property {
+        const auto cats = app::hmiPropertyCategories(view, {inst}, nullptr, commits, nullptr, &p);
+        for (const auto& c : cats)
+            for (const auto& q : c.properties)
+                if (q.name == name) return q;
+        return {};
+    };
+    using S = ui::PropertyGrid::LegendStyle;
+    const std::string nameRow = "Name \xC2\xB7 STRING", valueRow = "Value \xC2\xB7 ARRAY[0..9] OF UINT";
+    // Le parametre « variable » : =$UINTS$ (fx) et $UINTS$ (sans fx) lient UINTS, avec un repere.
+    for (const char* typed : {"=$UINTS$", "$UINTS$"}) {
+        auto val = rowOf(valueRow);
+        const bool ok = val.commit && val.commit(typed);
+        check(ok && last == "Value := $UINTS$", std::string(typed) + " : Value := $UINTS$ (" + last + ")");
+        val = rowOf(valueRow);
+        check(val.expression == "$UINTS$" && val.exprError.empty(), std::string(typed) + " : une formule, sans erreur (" + val.exprError + ")");
+        check(val.legend && val.legend->style == S::Markers, std::string(typed) + " : le carr\xC3\xA9 $");
+        check(ui::exprfield::hasMarker(val), std::string(typed) + " : la case compte dans les Rep\xC3\xA8res");
+    }
+    // Un repere sur une partie : $UINTS$ dans un calcul n'a pas de sens pour un tableau, mais un
+    // element l'a, avec un repere sur l'indice.
+    // Un texte : $Nom$ sans fx est la constante '$Nom$' (le repere varie a Dupliquer).
+    {
+        auto n = rowOf(nameRow);
+        const bool ok = n.commit && n.commit("$Nom$");
+        check(ok && last == "Name := '$Nom$'; Value := $UINTS$", "$Nom$ sans fx : la constante '$Nom$' (" + last + ")");
+        n = rowOf(nameRow);
+        check(n.value == "$Nom$" && n.expression.empty() && ui::exprfield::hasMarker(n), "Name se relit $Nom$, avec son rep\xC3\xA8re");
+        check(n.legend && n.legend->style == S::Markers, "Name : le carr\xC3\xA9 $ (un texte avec rep\xC3\xA8re)");
+    }
+    // Dupliquer voit les deux reperes de l'instance : UINTS (une variable) et Nom (un texte).
+    {
+        const auto ms = hmi::dup::ownMarkers(*view.object(inst));
+        bool uints = false, nom = false;
+        for (const auto& m : ms) {
+            if (m.name == "UINTS") uints = m.variable;
+            if (m.name == "Nom") nom = true;
+        }
+        check(ms.size() == 2 && uints && nom, "Dupliquer : les rep\xC3\xA8res UINTS (variable) et Nom de l'instance");
+        const std::string copy = hmi::dup::replaceMarkers(view.object(inst)->text("params"), {{"UINTS", "AUTRES"}, {"NOM", "Camion"}}, nullptr, nullptr, false);
+        same_text(copy, "Name := '$Camion$'; Value := $AUTRES$", "la copie : Name := '$Camion$' ; Value := $AUTRES$ (le rep\xC3\xA8re reste)");
+    }
+    // Le moteur : l'argument $UINTS$ se lit UINTS (les $ sont transparents).
+    {
+        const auto args = hmi::symbolArguments(*p.viewByName("STEST"), *view.object(inst), &p);
+        bool found = false;
+        for (const auto& a : args)
+            if (a.first == "Value") found = hmi::Expression::compile(a.second + "[1]").valid();
+        check(found, "l'argument $UINTS$ se calcule : $UINTS$[1]");
+    }
+}
+
 void symParametres1113() {
     std::printf("== 1.11.3 : les param\xC3\xA8tres d'une instance - fx gard\xC3\xA9, Voiture constante, tableau ==\n");
     Project p;
@@ -24380,6 +24466,7 @@ int main(int argc, char** argv) {
         symDupliquer1112();
         symParametres1112();
         symParametres1113();
+        symParametresReperes1114();
         valuePicker1113();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
@@ -24616,6 +24703,7 @@ int main(int argc, char** argv) {
     symDupliquer1112();                     // 1.11.2 (SYM, decision 240) : Dupliquer... dans un symbole - $Value[0]$ existe
     symParametres1112();                    // 1.11.2 (SYM, decision 240) : la section Parametres du symbole
     symParametres1113();                    // 1.11.3 : fx garde, Voiture constante, UINTS (tableau), le carre de legende
+    symParametresReperes1114();             // 1.11.4 : les reperes et le fx dans un parametre (variable ou texte)
     scriptsExportImport1113();              // 1.11.3 : exporter / importer les scripts d'une vue et les operateurs (.xpgst)
     valuePicker1113();                      // 1.11.3 : le carre de legende cliquable, le selecteur de valeur
     if (argc > 1) valuePickerApi1113(argv[1]);   // 1.11.3 : le selecteur et les membres des variables de l'automate

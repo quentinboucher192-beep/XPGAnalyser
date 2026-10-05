@@ -645,6 +645,209 @@ void enMarche() {
     near(shown.object(cuve)->number("value"), 100, "reevalue au cycle suivant : la barre est pleine");
 }
 
+// 1.11.4 (la capture du client : X d'une instance = =$UINTS[0]$, l'instance ne bouge pas en
+// simulation) : LA GEOMETRIE CALCULEE EN MARCHE. Une formule sur x, y, w, h, rot, flipH ou flipV
+// d'un objet, d'un groupe, d'une instance (et d'un objet de son symbole) : ce qu'on voit suit.
+void geometrieEnMarche1114() {
+    std::printf("1.11.4 : la position, la taille, la rotation et les miroirs calcules en marche\n");
+    Project p;
+    // Le symbole S (100 x 50) : un rectangle R en (10, 10), 20 x 10 ; un rectangle M dont x a sa formule.
+    View sym = makeView(p, "S");
+    sym.role = "symbole";
+    sym.width = 100;
+    sym.height = 50;
+    const Id r = edit::add(p, sym, Kind::Rectangle, 10, 10);
+    sym.object(r)->name = "R";
+    sym.object(r)->setBox({10, 10, 20, 10});
+    const Id m = edit::add(p, sym, Kind::Rectangle, 0, 30);
+    sym.object(m)->name = "M";
+    sym.object(m)->setBox({0, 30, 10, 10});
+    sym.object(m)->setExpr("x", "LX");   // dans le repere du symbole
+    p.views.push_back(sym);
+    // Le symbole S2 (200 x 100) : une instance de S en (50, 20), a sa taille.
+    View sym2 = makeView(p, "S2");
+    sym2.role = "symbole";
+    sym2.width = 200;
+    sym2.height = 100;
+    const Id inner = placeSymbol(p, sym2, "S", 50, 20);
+    sym2.object(inner)->name = "In";
+    sym2.object(inner)->setBox({50, 20, 100, 50});
+    p.views.push_back(sym2);
+
+    View v = makeView(p, "V");
+    const Id inst = placeSymbol(p, v, "S", 200, 300);
+    v.object(inst)->name = "I";
+    v.object(inst)->setBox({200, 300, 100, 50});
+    for (const char* k : {"x", "y", "w", "h", "rot", "flipH", "flipV"}) v.object(inst)->setExpr(k, std::string("I_") + k);
+    const Id plain = edit::add(p, v, Kind::Rectangle, 10, 10);
+    v.object(plain)->name = "P";
+    v.object(plain)->setBox({10, 10, 40, 20});
+    for (const char* k : {"x", "y", "w", "h", "rot", "flipH", "flipV"}) v.object(plain)->setExpr(k, std::string("P_") + k);
+    const Id a = edit::add(p, v, Kind::Rectangle, 600, 100);
+    v.object(a)->name = "A";
+    v.object(a)->setBox({600, 100, 20, 20});
+    const Id b = edit::add(p, v, Kind::Rectangle, 680, 100);
+    v.object(b)->name = "B";
+    v.object(b)->setBox({680, 100, 20, 20});
+    const Id g = edit::group(p, v, {a, b});
+    v.object(g)->name = "G";
+    for (const char* k : {"x", "y", "rot", "flipH"}) v.object(g)->setExpr(k, std::string("G_") + k);
+    const Id outer = placeSymbol(p, v, "S2", 1000, 500);
+    v.object(outer)->name = "O";
+    v.object(outer)->setBox({1000, 500, 200, 100});
+    v.object(outer)->setExpr("x", "O_x");
+
+    FakePlc plc;
+    const auto real = [&](const char* n, double x) { plc.values[n] = sim::Value::real(x); };
+    const auto boolean = [&](const char* n, bool x) { plc.values[n] = sim::Value::boolean(x); };
+    // D'abord : les valeurs statiques (rien ne bouge).
+    real("I_x", 200); real("I_y", 300); real("I_w", 100); real("I_h", 50); real("I_rot", 0); boolean("I_flipH", false); boolean("I_flipV", false);
+    real("P_x", 10); real("P_y", 10); real("P_w", 40); real("P_h", 20); real("P_rot", 0); boolean("P_flipH", false); boolean("P_flipV", false);
+    const Box gb = v.object(g)->box();
+    real("G_x", gb.x); real("G_y", gb.y); real("G_rot", 0); boolean("G_flipH", false);
+    real("LX", 0);
+    real("O_x", 1000);
+
+    const View composed = expandInstances(p, v);
+    LiveView live;
+    live.bind(composed);
+    std::vector<LiveValue> values;
+    const auto run = [&] { return live.evaluate(plc, &values); };
+    const auto boxOf = [](const View& w, const char* name) { const Object* o = w.objectByName(name); return o ? o->box() : Box{}; };
+
+    View shown = run();
+    std::size_t errors = 0;
+    for (const auto& lv : values) errors += lv.error;
+    check(errors == 0, "les formules de geometrie se calculent sans erreur");
+    near(boxOf(shown, "I.R").x, 210, "valeurs statiques : I.R reste en 210");
+    near(boxOf(shown, "I.M").x, 200, "M (x = LX = 0 dans le symbole) : 200 dans la vue, pas 0");
+
+    // 1. L'instance se deplace : ses objets suivent.
+    real("I_x", 0); real("I_y", 100);
+    shown = run();
+    near(boxOf(shown, "I.R").x, 10, "X de l'instance = 0 : I.R en 10 (la capture : l'instance bouge)");
+    near(boxOf(shown, "I.R").y, 110, "Y de l'instance = 100 : I.R en 110");
+    near(boxOf(shown, "I.M").x, 0, "I.M suit l'instance");
+    // 2. Sa taille double : ses objets sont mis a l'echelle.
+    real("I_w", 200); real("I_h", 100);
+    shown = run();
+    near(boxOf(shown, "I.R").x, 20, "largeur 200 : I.R en 20");
+    near(boxOf(shown, "I.R").w, 40, "largeur 200 : I.R large de 40");
+    near(boxOf(shown, "I.R").h, 20, "hauteur 100 : I.R haut de 20");
+    real("I_w", 100); real("I_h", 50);
+    // 3. Le miroir X : R (10..30) passe en 70..90.
+    boolean("I_flipH", true);
+    shown = run();
+    near(boxOf(shown, "I.R").x, 70, "miroir X de l'instance : I.R en 70");
+    check(shown.objectByName("I.R") && shown.objectByName("I.R")->flipH(), "miroir X : I.R retourne");
+    boolean("I_flipH", false);
+    // 4. Le miroir Y : R (10..20) passe en 30..40.
+    boolean("I_flipV", true);
+    shown = run();
+    near(boxOf(shown, "I.R").y, 100 + 30, "miroir Y de l'instance : I.R en 130");
+    check(shown.objectByName("I.R") && shown.objectByName("I.R")->flipV(), "miroir Y : I.R retourne");
+    boolean("I_flipV", false);
+    // 5. La rotation : un quart de tour autour du centre de l'instance (50, 125).
+    real("I_rot", 90);
+    shown = run();
+    {
+        const Object* o = shown.objectByName("I.R");
+        check(o != nullptr, "I.R en marche");
+        if (o) {
+            near(o->rotation(), 90, "rotation de l'instance : I.R tourne de 90");
+            // Le centre de R (20, 115) tourne autour de (50, 125) : (60, 95).
+            const Box rb = o->box();
+            near(rb.x + rb.w / 2, 60, "rotation : le centre de I.R en x = 60", 1e-6);
+            near(rb.y + rb.h / 2, 95, "rotation : le centre de I.R en y = 95", 1e-6);
+        }
+    }
+    real("I_rot", 0);
+    shown = run();
+    near(shown.objectByName("I.R") ? shown.objectByName("I.R")->rotation() : -1, 0, "plus de rotation : I.R revient a 0");
+    // 6. Un objet du symbole a sa formule : dans le repere du symbole, pose dans l'instance.
+    real("LX", 50);
+    shown = run();
+    near(boxOf(shown, "I.M").x, 50, "M.x = 50 dans le symbole : 50 de plus que l'instance (en 0)");
+
+    // 7. Un objet simple : chaque propriete.
+    real("P_x", 300); real("P_y", 40); real("P_w", 80); real("P_h", 30); real("P_rot", 45); boolean("P_flipH", true); boolean("P_flipV", true);
+    shown = run();
+    {
+        const Object* o = shown.object(plain);
+        check(o && std::fabs(o->box().x - 300) < 1e-9 && std::fabs(o->box().y - 40) < 1e-9 && std::fabs(o->box().w - 80) < 1e-9
+                  && std::fabs(o->box().h - 30) < 1e-9 && std::fabs(o->rotation() - 45) < 1e-9 && o->flipH() && o->flipV(),
+              "un objet : x, y, largeur, hauteur, rotation, miroir X et miroir Y calcules");
+    }
+
+    // 8. Un groupe : ce qu'il contient suit sa position, sa rotation, son miroir.
+    real("G_x", gb.x + 50); real("G_y", gb.y + 20);
+    shown = run();
+    near(boxOf(shown, "A").x, 650, "le groupe avance de 50 : A en 650");
+    near(boxOf(shown, "B").y, 120, "le groupe descend de 20 : B en 120");
+    real("G_x", gb.x); real("G_y", gb.y);
+    boolean("G_flipH", true);
+    shown = run();
+    near(boxOf(shown, "A").x, 680, "miroir X du groupe : A prend la place de B");
+    near(boxOf(shown, "B").x, 600, "miroir X du groupe : B prend la place de A");
+    boolean("G_flipH", false);
+    real("G_rot", 180);
+    shown = run();
+    near(boxOf(shown, "A").x, 680, "le groupe tourne de 180 : A passe a droite");
+    near(shown.objectByName("A") ? shown.objectByName("A")->rotation() : -1, 180, "le groupe tourne : A aussi");
+    real("G_rot", 0);
+
+    // 9. Un symbole dans un symbole : l'instance exterieure bouge, l'objet le plus profond suit.
+    real("O_x", 1100);
+    shown = run();
+    near(boxOf(shown, "O.In.R").x, 1100 + 50 + 10, "O avance de 100 : O.In.R en 1160");
+    near(boxOf(shown, "O.In.M").x, 1100 + 50 + 50, "O.In.M (x = LX = 50 dans S) suit aussi");
+}
+
+// 1.11.4 : un parametre a repere, en marche - Name := '$Nom$' (une constante texte) se lit
+// 'Nom' ; Value := $UINTS$ (une variable) se lit UINTS, dans un texte comme dans une position.
+void parametresReperesEnMarche1114() {
+    std::printf("1.11.4 : les reperes dans les parametres d'une instance, en marche\n");
+    Project p;
+    View sym = makeView(p, "S");
+    sym.role = "symbole";
+    sym.width = 100;
+    sym.height = 50;
+    sym.params.push_back({"Name", "'Sans nom'", "", "STRING", ParamMode::Reference});
+    sym.params.push_back({"Value", "", "", "ARRAY[0..9] OF UINT", ParamMode::Reference});
+    const Id t = edit::add(p, sym, Kind::Text, 0, 0);
+    sym.object(t)->name = "T";
+    sym.object(t)->set("text", "{Name} : {Value[0]}");
+    sym.object(t)->setBox({0, 0, 60, 20});
+    sym.object(t)->setExpr("x", "Value[1]");
+    p.views.push_back(sym);
+    View v = makeView(p, "V");
+    const Id inst = placeSymbol(p, v, "S", 100, 100);
+    v.object(inst)->name = "I";
+    v.object(inst)->setBox({100, 100, 100, 50});
+    v.object(inst)->set("params", "Name := '$Nom$'; Value := $UINTS$");
+    const auto args = symbolArguments(*p.viewByName("S"), *v.object(inst), &p);
+    std::string name, value;
+    for (const auto& a : args) {
+        if (a.first == "Name") name = a.second;
+        if (a.first == "Value") value = a.second;
+    }
+    same(name, "'Nom'", "Name := '$Nom$' : le moteur lit 'Nom' (le repere est transparent)");
+    same(value, "$UINTS$", "Value := $UINTS$ : l'expression garde son repere (le calcul le retire)");
+    FakePlc plc;
+    plc.values["UINTS[0]"] = sim::Value::integer(sim::Type::UInt, 7);
+    plc.values["UINTS[1]"] = sim::Value::integer(sim::Type::UInt, 40);
+    LiveView live;
+    live.bind(expandInstances(p, v));
+    std::vector<LiveValue> values;
+    const View shown = live.evaluate(plc, &values);
+    std::size_t errors = 0;
+    for (const auto& lv : values) errors += lv.error;
+    check(errors == 0, "les formules de l'instance se calculent");
+    const Object* o = shown.objectByName("I.T");
+    same(o ? o->text("text") : std::string{}, "Nom : 7", "le texte : Nom : 7 (Name et UINTS[0])");
+    near(o ? o->box().x : -1, 140, "x = Value[1] = 40 dans le symbole : 140 dans la vue");
+}
+
 // ------------------------------------------ contre le vrai simulateur ------
 void simulateur(const std::string& xpg) {
     std::printf("simulateur (%s)\n", xpg.c_str());
@@ -20083,6 +20286,8 @@ int main(int argc, char** argv) {
     editeur();
     expressions();
     enMarche();
+    geometrieEnMarche1114();   // 1.11.4 : x, y, w, h, rot, miroirs calcules - instance, groupe, objet
+    parametresReperesEnMarche1114();   // 1.11.4 : '$Nom$' et $UINTS$ en arguments, en marche
     actions();
     scripts();
     transitions();

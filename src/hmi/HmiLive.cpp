@@ -3,9 +3,11 @@
 #include "HmiDisplay.hpp"
 #include "HmiWidgets.hpp"
 #include "HmiDuplicate.hpp"   // 1.11 (REP) : l'ancien $Vanne$ inconnu, la phrase de Dupliquer
+#include "HmiLiveGeometry.hpp"  // 1.11.4 : une instance, un groupe dont la geometrie vient d'une formule
 
 #include <algorithm>
 #include <map>
+#include <set>
 
 namespace hmi {
 namespace {
@@ -193,6 +195,8 @@ View LiveView::evaluate(sim::Environment& plc, std::vector<LiveValue>* values, c
     std::map<Id, int> chosen;
     // Lot 11 : les listes, par (objet, cle) : une valeur par element.
     std::map<std::pair<Id, std::string>, std::vector<std::string>> lists;
+    // 1.11.4 : les (objet, cle) dont la formule a donne une position, une taille, une rotation.
+    std::set<std::pair<Id, std::string>> geometry;
     for (const auto& b : bound_) {
         Object* o = out.object(b.object);
         if (!o) continue;
@@ -273,6 +277,7 @@ View LiveView::evaluate(sim::Environment& plc, std::vector<LiveValue>* values, c
                 } else {
                     o->set(b.key, lv.value);
                 }
+                if (isLiveGeometryKey(b.key)) geometry.insert({b.object, b.key});   // 1.11.4
             } else {
                 lv.error = true;
                 lv.value = liveError(lv.expression, v.error().message());
@@ -282,6 +287,9 @@ View LiveView::evaluate(sim::Environment& plc, std::vector<LiveValue>* values, c
         }
         if (values) values->push_back(std::move(lv));
     }
+    // 1.11.4 : une position, une taille, une rotation calculee - ce qu'une instance ou un
+    // groupe contient suit (avant : seule l'instance bougeait, et elle ne se dessine pas).
+    relayoutLive(out, source_, geometry);
     for (auto& [id, rows] : tables)
         if (Object* o = out.object(id)) o->set("cells", formatCells(rows));
     for (const auto& [where, list] : lists)
