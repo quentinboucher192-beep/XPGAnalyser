@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(xpg_analyzer VERSION 1.11.2 LANGUAGES C CXX)
+project(xpg_analyzer VERSION 1.11.3 LANGUAGES C CXX)
 
 # ---------------------------------------------------------------------------
 # C++23 is requested, C++20 is the floor. The one feature that needs C++23 is
@@ -180,6 +180,7 @@ target_link_libraries(xpg_analyzer PRIVATE xpg_ui xpg_import xpg_help xpg_hmi)
 if(WIN32)
     enable_language(RC)
     set(XPG_ICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/logo/xpg_analyzer.ico")
+    set(XPG_MANIFEST "${CMAKE_CURRENT_SOURCE_DIR}/resources/windows/xpg_analyzer.manifest")   # 1.11.3 : MinGW
     configure_file(resources/windows/xpg_analyzer.rc.in ${CMAKE_CURRENT_BINARY_DIR}/xpg_analyzer.rc @ONLY)
     target_sources(xpg_analyzer PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/xpg_analyzer.rc)
 endif()

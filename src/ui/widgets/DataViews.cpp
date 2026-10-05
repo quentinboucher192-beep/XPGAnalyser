@@ -2887,6 +2887,8 @@ gfx::Rect revertBox(const gfx::Rect& row) {
     const float side = std::min(std::max(8.f, row.h - 8.f), 14.f);
     return {row.right() - side - 6.f, row.y + (row.h - side) * 0.5f, side, side};
 }
+// 1.11.3 : l'infobulle d'un carre sans texte.
+constexpr std::string_view valuekindHint = "Le carr\xC3\xA9 dit d'o\xC3\xB9 vient la valeur.";
 // 1.11.3 : le carre de legende, tout au bout de la ligne ; le reste (le X, le
 // retour, la valeur) se range a sa gauche (endOf).
 gfx::Rect legendBox(const gfx::Rect& row) {
@@ -2968,9 +2970,12 @@ std::string PropertyGrid::liveTooltip(gfx::Point mouse) const {
         const float y = area.y + static_cast<float>(ri) * rowHeight_ - scrollY_;
         const gfx::Rect row{area.x, y, area.w, rowHeight_};
         // 1.11.3 : le carre de legende dit d'ou vient la valeur, et ce que fait un clic.
-        if (p->legend && legendBox(row).contains(mouse))
-            return (p->legend->tip.empty() ? std::string{} : p->legend->tip + "\n")
-                   + "Clic : la liste des carr\xC3\xA9s, puis le s\xC3\xA9lecteur de valeur (Ctrl+Espace dans la case : les propositions).";
+        if (p->legend && legendBox(row).contains(mouse)) {
+            std::string tip = p->legend->tip;
+            if (legendClickable_)
+                tip += (tip.empty() ? "" : "\n") + std::string("Clic : la liste des carr\xC3\xA9s, puis le s\xC3\xA9lecteur de valeur.");
+            return tip.empty() ? std::string(valuekindHint) : tip;
+        }
         if (showsClear(*p) && revertBox(endOf(*p, row)).contains(mouse)) return std::string(exprfield::kRemoveTip);
         // 1.9 : le bouton de retour dit ce qu'il fait.
         if (p->revert && revertBox(beforeClear(*p, endOf(*p, row))).contains(mouse))
@@ -3435,7 +3440,7 @@ EventResult PropertyGrid::onEvent(const InputEvent& ev) {
             const gfx::Rect rowRect{area.x, rowY, area.w, rowH};
             // 1.11.3 : le carre de legende - l'hote ouvre la liste des carres (la grille
             // peut etre refaite pendant l'appel : le nom et la categorie sont copies).
-            if (d->button == MouseButton::Left && vr.prop->legend) {
+            if (d->button == MouseButton::Left && vr.prop->legend && legendClickable_) {
                 const gfx::Rect b = legendBox(rowRect);
                 if (gfx::Rect{b.x - 3.f, rowY, b.w + 6.f, rowH}.contains(d->pos)) {
                     finishEdit(false, {});

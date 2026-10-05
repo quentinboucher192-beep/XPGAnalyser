@@ -597,6 +597,24 @@ std::string effectiveArgument(const Project* project, std::string_view type, std
 bool isLiteralArgument(std::string_view text) {
     const std::string t = trimmedCopy(text);
     if (t.empty() || isVariablePath(t)) return false;
+    // Un nombre ST : un point, jamais une virgule (1,5 se convertit : ce n'est pas encore un litteral).
+    if (std::isdigit(uc(t.front())) || ((t.front() == '-' || t.front() == '+') && t.size() > 1)) {
+        if (t.find('#') != std::string::npos) return standsAlone(t);   // 16#FF
+        std::size_t i = (t.front() == '-' || t.front() == '+') ? 1 : 0;
+        bool digits = false, dot = false, exp = false;
+        for (; i < t.size(); ++i) {
+            const char c = t[i];
+            if (std::isdigit(uc(c)) || c == '_') { digits = digits || c != '_'; continue; }
+            if (c == '.' && !dot && !exp) { dot = true; continue; }
+            if ((c == 'e' || c == 'E') && digits && !exp) {
+                exp = true;
+                if (i + 1 < t.size() && (t[i + 1] == '-' || t[i + 1] == '+')) ++i;
+                continue;
+            }
+            return false;
+        }
+        return digits;
+    }
     return standsAlone(t);
 }
 

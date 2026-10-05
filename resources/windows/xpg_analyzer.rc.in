@@ -11,6 +11,12 @@
 
 1 ICON "@XPG_ICON@"
 
+// 1.11.3 : MinGW (windres) - le manifeste (page de code UTF-8, chemins longs,
+// versions de Windows) que MSVC ajoute de lui-meme par le projet Visual Studio.
+#ifdef __MINGW32__
+1 24 "@XPG_MANIFEST@"
+#endif
+
 VS_VERSION_INFO VERSIONINFO
  FILEVERSION     @PROJECT_VERSION_MAJOR@,@PROJECT_VERSION_MINOR@,@PROJECT_VERSION_PATCH@,0
  PRODUCTVERSION  @PROJECT_VERSION_MAJOR@,@PROJECT_VERSION_MINOR@,@PROJECT_VERSION_PATCH@,0

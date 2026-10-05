@@ -917,6 +917,10 @@ public:
         core::Signal<const std::string&, const std::string&, gfx::Rect>::create();
     // ... et ou il est (tests, scripts) ; false s'il n'est pas montre.
     [[nodiscard]] bool legendRect(std::string_view name, gfx::Rect& out) const;
+    // Le carre repond-il au clic (l'hote sait ouvrir la liste des carres) ? Faux : il
+    // se lit seulement (son infobulle).
+    void setLegendClickable(bool on) { legendClickable_ = on; }
+    [[nodiscard]] bool legendClickable() const noexcept { return legendClickable_; }
     [[nodiscard]] bool editing() const noexcept { return editor_ != nullptr; }
     // ---- Lot API 8 : les expressions impossibles ----
     // L'infobulle d'une propriete pilotee : l'expression, sa valeur en
@@ -963,6 +967,7 @@ private:
     std::function<std::vector<std::string>()> paletteColors_;
     bool                   editIsPalette_{false};
     std::function<std::string(const Property&)> exprValueFor_;   // ---- Lot API 8 : les expressions impossibles ----
+    bool                   legendClickable_{false};               // 1.11.3 : le carre de legende repond au clic
 };
 
 // 1.11.3 : la couleur d'un carre de legende (le meme partout : la grille, la liste

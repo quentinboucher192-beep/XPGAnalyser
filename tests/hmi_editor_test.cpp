@@ -32,6 +32,7 @@
 #include "../src/app/hmi/HmiAssetPanes.hpp"
 #include "../src/app/hmi/HmiApiVarsPane.hpp"     // 1.11.1 (API-V)
 #include "../src/app/hmi/HmiAssist.hpp"
+#include "../src/app/hmi/HmiValueKind.hpp"           // 1.11.3 : le carre de legende
 #include "../src/ui/widgets/ExprField.hpp"          // 1.10 (chantier K)
 #include "../src/app/hmi/HmiDesignPanes.hpp"
 #include "../src/app/hmi/HmiEditor.hpp"
@@ -15953,9 +15954,10 @@ void centreAide111() {
 
     // ---- les notes ----
     // 1.11.1 (T2, tranche 30) : la 1.11.1 en tete (9 versions).
-    check(hn::releases().size() == 10 && hn::releases().front().version == "1.11.2" && hn::releases()[1].version == "1.11.1"
-              && hn::releases()[2].version == "1.11" && hn::releases()[3].version == "1.10.4",
-          "notes : 10 versions, la 1.11.2 en tete, puis la 1.11.1, la 1.11 et la 1.10.4");
+    // 1.11.3 : la 1.11.3 en tete (11 versions).
+    check(hn::releases().size() == 11 && hn::releases().front().version == "1.11.3" && hn::releases()[1].version == "1.11.2"
+              && hn::releases()[2].version == "1.11.1" && hn::releases()[3].version == "1.11" && hn::releases()[4].version == "1.10.4",
+          "notes : 11 versions, la 1.11.3 en tete, puis la 1.11.2, la 1.11.1, la 1.11 et la 1.10.4");
     // 1.11.2 (T2, tranches 41, 42 et 44 ; decisions 187, 201 et 216) : 23 lignes en 8 domaines, dont 2 cartes de la fenetre Nouveautes.
     // Tranche 46 (SYM, decision 240) : + Dupliquer dans un symbole (C) et la section Parametres du symbole (N) : 25 lignes.
     {
@@ -16426,10 +16428,10 @@ void centreAide111() {
         check(o, "page Raccourcis : Ctrl+Maj+O dessine en trois touches, repere 1.11");
 
         const auto n110 = hc::notesPage("1.10");
-        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 10
+        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 11
                   && !n110.summary.empty() && !n110.date.empty(),
               "page Notes : 1.10 -> 1.10.0, 22 lignes en 7 domaines, sa date et son resume");
-        check(hc::notesPage("").version == "1.11.2" && hc::notesPage("9.9").version == "1.11.2",
+        check(hc::notesPage("").version == "1.11.3" && hc::notesPage("9.9").version == "1.11.3",
               "page Notes : sans version (ou inconnue), la plus recente");
         const auto simu = hc::notesPage("1.10.0", "Simulation");
         check(simu.sections.size() == 1 && simu.rows == 4 && simu.domains.size() == 7,
@@ -21876,6 +21878,168 @@ void symParametres1112() {
 }
 
 // =============================================================================
+//  1.11.3 (correctif urgent, captures du client) : LES PARAMETRES D'UNE INSTANCE.
+//  - le fx ne se voyait plus apres la saisie (=UINTS montre UINTS sans fx) ;
+//  - Voiture (sans fx) n'etait pas accepte : une constante, convertie dans le type
+//    du parametre (STRING : 'Voiture'), comme le texte d'un objet ;
+//  - UINTS, un ARRAY[0..9] OF UINT, va a Value : ARRAY[0..9] OF UINT.
+//  Et le carre de legende de chaque ligne (C, fx, I, !).
+// =============================================================================
+void symParametres1113() {
+    std::printf("== 1.11.3 : les param\xC3\xA8tres d'une instance - fx gard\xC3\xA9, Voiture constante, tableau ==\n");
+    Project p;
+    View sym = makeView(p, "STEST");
+    sym.role = "symbole";
+    sym.params.push_back({"Name", "'Sans nom'", "", "STRING", ParamMode::Reference});
+    sym.params.push_back({"Value", "", "", "ARRAY[0..9] OF UINT", ParamMode::Reference});
+    sym.params.push_back({"Coef", "1.0", "", "REAL", ParamMode::Reference});
+    sym.params.push_back({"Actif", "FALSE", "", "BOOL", ParamMode::Reference});
+    p.views.push_back(sym);
+    {
+        Variable a;
+        a.id = p.allocate();
+        a.name = "UINTS";
+        a.type = "ARRAY[0..9] OF UINT";
+        a.initial = "0";
+        p.programs.variables.push_back(a);
+        Variable g;
+        g.id = p.allocate();
+        g.name = "gCoef";
+        g.type = "REAL";
+        g.initial = "1.0";
+        p.programs.variables.push_back(g);
+    }
+    View v = makeView(p, "Vue_Accueil");
+    const Id vid = v.id;
+    p.views.push_back(v);
+    View& view = *p.view(vid);
+    const Id inst = edit::add(p, view, Kind::SymbolInstance, 100, 100);
+    view.object(inst)->set("symbol", "STEST");
+    std::vector<std::tuple<std::string, std::string, bool>> calls;
+    app::HmiPropertyCommits commits;
+    commits.prop = [&](const std::string& k, const std::string& value, bool expr) {
+        calls.emplace_back(k, value, expr);
+        if (k == "params") view.object(inst)->set("params", value);   // comme l'editeur : la saisie est prise
+        return true;
+    };
+    const auto rowOf = [&](const std::string& name) -> ui::PropertyGrid::Property {
+        const auto cats = app::hmiPropertyCategories(view, {inst}, nullptr, commits, nullptr, &p);
+        for (const auto& c : cats)
+            for (const auto& q : c.properties)
+                if (q.name == name) return q;
+        return {};
+    };
+    const std::string nameRow = "Name \xC2\xB7 STRING", valueRow = "Value \xC2\xB7 ARRAY[0..9] OF UINT";
+    const std::string coefRow = "Coef \xC2\xB7 REAL", actifRow = "Actif \xC2\xB7 BOOL";
+    // La capture : Name = Voiture (sans fx), Value = =UINTS.
+    {
+        auto n = rowOf(nameRow);
+        const bool voiture = n.commit && n.commit("Voiture");
+        check(voiture && !calls.empty() && std::get<1>(calls.back()) == "Name := 'Voiture'",
+              "Voiture sans fx : la constante 'Voiture' (" + (calls.empty() ? std::string("rien") : std::get<1>(calls.back())) + ")");
+        auto val = rowOf(valueRow);
+        const bool uints = val.commit && val.commit("=UINTS");
+        check(uints && std::get<1>(calls.back()) == "Name := 'Voiture'; Value := UINTS",
+              "=UINTS : la variable (" + std::get<1>(calls.back()) + ")");
+        n = rowOf(nameRow);
+        val = rowOf(valueRow);
+        check(n.value == "Voiture" && n.expression.empty() && n.legend && n.legend->text == "C",
+              "Name se relit Voiture, sans fx ni apostrophes ; son carre : C (" + n.value + ")");
+        check(val.expression == "UINTS" && val.exprError.empty() && val.legend && val.legend->text == "I",
+              "Value garde son fx (=UINTS), sans erreur : UINTS est un ARRAY[0..9] OF UINT ; son carre : I (" + val.exprError + ")");
+        check(ui::exprfield::editText(val) == "=UINTS", "rouvrir la case : =UINTS (la pastille fx pleine)");
+    }
+    // Sans fx, un nom de variable reste la variable.
+    {
+        auto val = rowOf(valueRow);
+        const bool plain = val.commit && val.commit("UINTS");
+        check(plain && std::get<1>(calls.back()) == "Name := 'Voiture'; Value := UINTS",
+              "UINTS sans fx : la variable (" + std::get<1>(calls.back()) + ")");
+    }
+    // Une saisie inchangee garde ce qui etait ecrit (une constante qui ressemble a un nom).
+    {
+        view.object(inst)->set("params", "Name := 'UINTS'; Value := UINTS");
+        auto n = rowOf(nameRow);
+        check(n.value == "UINTS" && n.expression.empty(), "la constante 'UINTS' se montre UINTS, sans fx");
+        const bool same = n.commit && n.commit("UINTS");
+        check(same && std::get<1>(calls.back()) == "Name := 'UINTS'; Value := UINTS",
+              "la meme saisie : la constante reste 'UINTS' (" + std::get<1>(calls.back()) + ")");
+    }
+    // Les autres types : REAL (la virgule), BOOL (vrai), un tableau en constante (erreur, carre rouge).
+    {
+        auto c = rowOf(coefRow);
+        const bool coef = c.commit && c.commit("1,5");
+        check(coef && std::get<1>(calls.back()).find("Coef := 1.5") != std::string::npos,
+              "Coef : 1,5 -> 1.5 (" + std::get<1>(calls.back()) + ")");
+        auto a = rowOf(actifRow);
+        const bool actif = a.commit && a.commit("vrai");
+        check(actif && std::get<1>(calls.back()).find("Actif := TRUE") != std::string::npos,
+              "Actif : vrai -> TRUE (" + std::get<1>(calls.back()) + ")");
+        auto val = rowOf(valueRow);
+        check(val.commit && val.commit("=gCoef"), "=gCoef dans Value");
+        val = rowOf(valueRow);
+        check(!val.exprError.empty() && val.legend && val.legend->text == "!",
+              "gCoef (REAL) dans un ARRAY[0..9] OF UINT : l'erreur et le carre rouge (" + val.exprError + ")");
+        check(val.commit && val.commit("=UINTS"), "retour a =UINTS");
+    }
+    // Le moteur : ce que l'instance donne a son symbole.
+    {
+        view.object(inst)->set("params", "Voiture;UINTS");
+        std::string out;
+        for (const auto& [n, a] : hmi::symbolArguments(*p.viewByName("STEST"), *view.object(inst), &p))
+            out += (out.empty() ? "" : " | ") + n + "=" + a;
+        same_text(out, "Name='Voiture' | Value=UINTS | Coef=1.0 | Actif=FALSE",
+                  "moteur : Voiture;UINTS - Name la constante, Value la variable IHM, les d\xC3\xA9" "fauts");
+        // Une ancienne saisie sans apostrophes (1.11.2) se relit comme une constante, sans fx.
+        view.object(inst)->set("params", "Name := Voiture; Value := UINTS");
+        const auto n = rowOf(nameRow);
+        check(n.value == "Voiture" && n.expression.empty(), "Name := Voiture (1.11.2) : la constante Voiture, sans fx");
+    }
+    // Les noms de l'automate (setPlcNames) : un argument qui en est un reste la variable.
+    {
+        auto names = std::make_shared<std::set<std::string, std::less<>>>();
+        names->insert("NOMLIGNE");
+        hmi::setPlcNames(names);
+        view.object(inst)->set("params", "Name := NomLigne");
+        std::string out;
+        for (const auto& [n, a] : hmi::symbolArguments(*p.viewByName("STEST"), *view.object(inst), &p))
+            if (n == "Name") out = a;
+        same_text(out, "NomLigne", "une variable de l'automate (NomLigne) reste la variable");
+        hmi::setPlcNames(nullptr);
+        out.clear();
+        for (const auto& [n, a] : hmi::symbolArguments(*p.viewByName("STEST"), *view.object(inst), &p))
+            if (n == "Name") out = a;
+        same_text(out, "'NomLigne'", "sans automate connu : NomLigne est un texte");
+    }
+    // La conversion elle-meme.
+    {
+        std::string why;
+        same_text(hmi::argumentLiteral(&p, "STRING", "L'eau"), "'L$'eau'", "STRING : l'apostrophe echappee");
+        same_text(hmi::argumentLiteral(&p, "UINT", "70000", &why), "", "UINT : 70000 hors des bornes");
+        check(why.find("0..65535") != std::string::npos, "... et la raison dit les bornes (" + why + ")");
+        same_text(hmi::argumentLiteral(&p, "TIME", "5s"), "T#5s", "TIME : 5s -> T#5s");
+        same_text(hmi::argumentLiteral(&p, "ARRAY[0..9] OF UINT", "3", &why), "", "un tableau ne se donne pas en constante");
+        same_text(hmi::shownLiteral("'L$'eau'"), "L'eau", "la constante montree sans apostrophes");
+    }
+    // Le carre, seul : les huit sortes et leur sens.
+    {
+        check(app::valuekind::kinds().size() == 8 && app::valuekind::info(ui::PropertyGrid::LegendStyle::Api).letter == "A",
+              "huit carr\xC3\xA9s : C, fx, $, A, I, S, V, !");
+        const app::valuekind::Env env{&p, &view, nullptr};
+        const auto r = app::valuekind::classify(env, "gCoef * 2", true, "REAL");
+        check(r.style == ui::PropertyGrid::LegendStyle::Formula && r.sources.size() == 1
+                  && r.sources.front() == ui::PropertyGrid::LegendStyle::Hmi,
+              "gCoef * 2 : une formule (fx) qui lit l'IHM");
+        const auto s = app::valuekind::classify(env, "SYS.UserName", true, "STRING");
+        check(s.style == ui::PropertyGrid::LegendStyle::System, "SYS.UserName : S");
+        const auto o = app::valuekind::classify(env, "150", false, "UINT");
+        check(o.style == ui::PropertyGrid::LegendStyle::Constant, "150 dans un UINT : C");
+        const auto b = app::valuekind::classify(env, "peut-etre", false, "BOOL");
+        check(b.error() && b.diags.size() == 1 && b.diags.front().fixes.size() >= 2, "peut-etre dans un BOOL : l'erreur, TRUE et FALSE propos\xC3\xA9s");
+    }
+}
+
+// =============================================================================
 //  1.11.2 (decision 162) : LE DOSSIER SYMBOLES de la liste des vues a ses deux
 //  boutons, Exporter les symboles... (le symbole choisi part a l'hote, qui
 //  ouvre le dialogue) et Importer des symboles... ; ceux des vues n'y servent
@@ -23880,6 +24044,7 @@ int main(int argc, char** argv) {
     if (const char* only = std::getenv("HMI_TEST_SYM"); only && *only == '1') {
         symDupliquer1112();
         symParametres1112();
+        symParametres1113();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -24114,6 +24279,7 @@ int main(int argc, char** argv) {
     dupliquerColonnesLongues1111();         // 1.11.1 (R1111-7) : Dupliquer... - un repere long a sa largeur, son en-tete ne deborde pas
     symDupliquer1112();                     // 1.11.2 (SYM, decision 240) : Dupliquer... dans un symbole - $Value[0]$ existe
     symParametres1112();                    // 1.11.2 (SYM, decision 240) : la section Parametres du symbole
+    symParametres1113();                    // 1.11.3 : fx garde, Voiture constante, UINTS (tableau), le carre de legende
     symbolesPanneau1112();                  // 1.11.2 (decision 162) : le dossier Symboles - Exporter les symboles, Importer des symboles
     paquetsPanneaux1112();                  // 1.11.2 (decision 174) : Types IHM, Fonctions, Scripts generaux - Exporter, Importer
     paquetsDepot1112();                     // 1.11.2 (decision 188) : un paquet glisse sur l'appli ouvre la fenetre d'import
