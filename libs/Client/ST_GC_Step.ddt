@@ -1,0 +1,34 @@
+# Derived data type, shared.
+name = ST_GC_Step
+version = 0.10
+#! summary = Une etape du moteur GRAFCET : son numero, son nom, initiale ou finale, active ou non, et depuis quand.
+#! usage = REPRIS DU PROJET MAST : le type est celui du projet (champs inchanges).
+#! usage = Ce qui suit decrit ce qu'en fait DFB_GRAFCETENGINE 1.49.
+#! see = DFB_GRAFCETENGINE
+#! see = BUILDING
+#! param Id = Le numero de l'etape : son indice dans le tableau Steps.
+#! param Name = Son nom, 4 caracteres : X0, X12.
+#! param IsInitial = Active au demarrage, et apres InitReq ou ResetAllReq.
+#! param isFinal = Une etape FINALE : quand une transition qui en sort est franchie -
+#! param isFinal = ou quand elle est active sans transition de sortie - le moteur
+#! param isFinal = s'arrete (Finished).
+#! param Active = L'etape est active. Ecrit par le moteur.
+#! param PrevActive = Active au cycle precedent. Ecrit par le moteur.
+#! param Rising = Elle vient de s'activer : vrai UN cycle.
+#! param Falling = Elle vient de se desactiver : vrai UN cycle.
+#! param ActiveTime = Depuis combien de temps elle est active (bute a 24 jours).
+#! param InactiveTime = Depuis combien de temps elle ne l'est plus (bute a 24 jours).
+#! internal = PrevActive
+#! changes 0.10 = Range dans la bibliotheque, depuis le projet MAST.
+
+# name ; type ; scope ; initial ; comment
+Id ; INT ; Member ;  ; 
+Name ; string[4] ; Member ;  ; 
+IsInitial ; BOOL ; Member ;  ; 
+isFinal ; BOOL ; Member ;  ; 
+Active ; BOOL ; Member ;  ; 
+PrevActive ; BOOL ; Member ;  ; 
+Rising ; BOOL ; Member ;  ; 
+Falling ; BOOL ; Member ;  ; 
+ActiveTime ; TIME ; Member ;  ; 
+InactiveTime ; TIME ; Member ;  ; 

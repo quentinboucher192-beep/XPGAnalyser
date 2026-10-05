@@ -1,0 +1,11 @@
+#! summary = Declare une instance de bloc fonction ET ecrit sa ligne d'appel.
+#! usage = UNE INSTANCE QUI N'EST JAMAIS APPELEE NE FAIT RIEN. C'est le piege que cette macro existe pour eviter : declarer la variable sans ecrire l'appel laisse un travail qui a l'air termine et qui ne tourne pas.
+#! usage = L'appel ecrit est nu - nomInstance(); - sans ses parametres. Il faut les completer a la main, ou passer par ImportES qui ecrit l'appel complet pour les blocs d'E/S.
+#! usage = Une macro se relance. C'est la regle de toutes celles-ci : relancee sur un projet ou elle a deja tourne, elle ne doit rien casser et rien dupliquer. C'est pour ca qu'elles testent avant de creer, et qu'elles disent "existe deja" au lieu de s'arreter.
+#! usage = Les questions arrivent par TOURS. Ask() enregistre une question, AskNow() les pose. Une macro coupe ses tours la ou une reponse decide des questions suivantes : demander les quatre noms de section quand on vient de repondre "une seule famille" remplirait l'ecran de champs qu'on laisserait vides.
+#! example = CreerInstanceDFB : bloc = DFB_EQ_MOTOR, nom = EqMoteurs, section = Equipements
+#! see = CreerInstanceDDT, EnsureLibraryItem, ImportES
+#! param bloc = Le nom du bloc fonction : DFB_IO_ANA08, DFB_EQ_MOTOR, DFB_ALM_MANAGER. Importe de la bibliotheque s'il manque.
+#! param nom = Le nom de l'instance. Une instance de bloc porte son etat interne d'un cycle a l'autre : deux endroits qui appellent la meme instance se marchent dessus. Une instance par usage.
+#! param section = Ou ecrire l'appel. Laisser vide ne cree que la variable - a n'utiliser que si vous ecrivez l'appel vous-meme juste apres.
+#! param section = Si la section n'existe pas, la variable est quand meme creee et un avertissement le dit : aucun appel n'a ete ecrit.

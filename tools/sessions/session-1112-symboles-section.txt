@@ -1,0 +1,30 @@
+# =============================================================================
+#  Session 1112 (SYM, decision 240 ; la capture du client d88bc67f « Arguments :
+#  fx Voiture;50 ») : LA SECTION « PARAMETRES DU SYMBOLE » de l'inspecteur d'une
+#  instance. Pour un binaire qui contient 34ee461 (chaine 5 ou 1.11.3). Le projet :
+#  celui de session-1112-symboles-parametres.txt (preparer-projet-1112.sh : STEST,
+#  Vue_STEST et l'instance STEST_1, arguments positionnels « Voiture;50 »).
+#  1) l'instance choisie : Name . STRING = Voiture, Value . ARRAY[0..9] OF UINT = 50
+#     (les positionnels relus), chaque ligne avec son fx ;
+#  2) Name := 'Camion' saisi : une commande, params en forme nommee ;
+#  3) Name vide : « (defaut : ...) » en gris.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+arbre "IHM/Vues/Vue_STEST"
+attendre 6
+objet STEST_1
+attendre 3
+capture 1112_SYM_05_instance_section_relue.png
+propriete "Name · STRING" "'Camion'"
+attendre 3
+capture 1112_SYM_06_instance_section_saisie.png
+propriete "Name · STRING" ""
+attendre 3
+capture 1112_SYM_07_instance_section_defaut_gris.png
+quitter

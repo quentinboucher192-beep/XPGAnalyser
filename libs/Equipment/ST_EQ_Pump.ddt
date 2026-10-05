@@ -1,0 +1,146 @@
+# Derived data type, shared.
+name = ST_EQ_Pump
+version = 1.01
+#! summary = Une pompe : un moteur, plus la marche a sec, le debit et la pression.
+#! usage = Le contrat commun a toutes les familles d'equipement :
+#! usage = Enable a FALSE fige l'equipement - aucune sortie, aucun defaut. Un
+#! usage = equipement consigne ne doit pas remplir le journal d'alarmes pendant
+#! usage = qu'on travaille dessus.
+#! usage = ManMode fait primer les commandes Man* sur l'automatisme.
+#! usage = AckFault acquitte SUR FRONT MONTANT, et seulement si la condition a
+#! usage = disparu.
+#! usage = LE DEFAUT EST MEMORISE par FaultLatch. Un thermique qui se rearme tout
+#! usage = seul en refroidissant effacerait la trace de son declenchement, et
+#! usage = personne ne saurait pourquoi la machine s'est arretee cette nuit-la.
+#! see = DFB_EQ_PUMP
+#! see = ST_EQ_Motor
+#! see = ST_EQ_Tank
+#! see = ST_SEQ_Member
+#! param Enable = FALSE fige l'equipement : aucune sortie, aucun defaut, et les compteurs
+#! param Enable = cessent d'avancer. C'est l'etat d'une machine consignee.
+#! param Fault = La copie PUBLIEE de FaultLatch, posee en fin de cycle. Les sorties, elles,
+#! param Fault = se coupent sur FaultLatch - c'est-a-dire dans le MEME cycle que le defaut.
+#! param Fault = Les couper sur Fault laisserait l'equipement pilote un cycle de plus :
+#! param Fault = vingt millisecondes pendant lesquelles on le commande alors qu'on vient de
+#! param Fault = decouvrir qu'on ne sait plus ou il en est.
+#! param FaultCode = Le dernier code pose, 0 quand il n'y a rien. Voir la table de cette famille,
+#! param FaultCode = en tete de fichier. Il n'est efface que par AckFault.
+#! param Ready = Active et sans defaut. C'est ce qu'on cable sur Available d'une rotation :
+#! param Ready = un equipement en defaut est alors saute, et il reprend son rang en revenant.
+#! param Starts = Nombre de demarrages depuis le dernier Reset. Un compteur qui grimpe vite
+#! param Starts = est la signature d'un court-cycle - voir MinOffMs quand la famille en a un.
+#! param Thermal = TRUE quand le relais est SAIN. C'est un contact NF, et l'initialiser a FALSE
+#! param Thermal = met l'equipement en defaut au demarrage - ce qui est le comportement sur.
+#! param MinOffMs = Duree minimale a l'arret avant de pouvoir redemarrer. 0 desactive. Un moteur
+#! param MinOffMs = redemarre trois fois par minute est un moteur qu'on remplace deux fois par
+#! param MinOffMs = an.
+#! param HasFbk = FALSE : pas de retour de marche. Running suit alors la commande, et les
+#! param HasFbk = defauts 2 et 3 ne peuvent plus se produire - on ne detecte plus ni un
+#! param HasFbk = contacteur qui ne colle pas, ni un contacteur colle.
+#! param FbkMs = Delai tolere entre la commande et le retour. Il sert dans les DEUX sens :
+#! param FbkMs = c'est aussi le temps qu'on laisse au retour pour retomber avant de crier au
+#! param FbkMs = contacteur colle.
+#! param Running = Commande ET retour. A distinguer de Run, qui n'est que la commande : c'est
+#! param Running = Running qui fait avancer RunMs et Starts.
+#! param SuctionOk = Niveau d'aspiration suffisant. A cabler sur le DryRun inverse de la cuve
+#! param SuctionOk = d'aspiration : ST_EQ_Tank le publie deja.
+#! param MinFlow = Debit minimal attendu en marche. 0 desactive le controle - et c'est le
+#! param MinFlow = reglage par defaut, donc une pompe sans debitmetre ne crie pas.
+#! param MaxPressure = Au-dela, defaut 6. 0 desactive.
+#! fault 1 = Le relais thermique a declenche. C'est un contact NF : Thermal a FALSE veut
+#! fault 1 = dire DECLENCHE. Le lire a l'envers est l'erreur qui fait tourner une machine
+#! fault 1 = avec sa protection ouverte, et rien ne la signale.
+#! fault 2 = Pas de retour de marche au bout de FbkMs : le contacteur n'a pas colle.
+#! fault 3 = Retour de marche alors que rien n'est commande : le contacteur est colle. Le
+#! fault 3 = moteur tourne et personne ne l'a demande - c'est plus grave que l'inverse.
+#! fault 4 = Marche a sec : niveau d'aspiration insuffisant. Elle COUPE IMMEDIATEMENT,
+#! fault 4 = sans delai - une garniture se detruit en quelques minutes, et attendre une
+#! fault 4 = temporisation reviendrait a la payer.
+#! fault 5 = Pas de debit au bout de FlowDelayMs : la pompe est desamorcee, ou une vanne
+#! fault 5 = de refoulement est restee fermee. Le delai existe parce qu'une pompe met du
+#! fault 5 = temps a s'amorcer.
+#! fault 6 = Pression de refoulement au-dela de MaxPressure. Souvent une vanne fermee en
+#! fault 6 = aval.
+#! internal = PrevAck, FbkElapsed, OffElapsed, PrevRunning, FlowElapsed, RunFracMs,
+#! internal = PrevState
+#! param Fbk = Retour de marche : le contact auxiliaire du contacteur (KM). Sans
+#! param Fbk = retour, HasFbk a FALSE.
+#! param Flow = Le debit mesure, en unites physiques. Surveille seulement si MinFlow
+#! param Flow = est different de 0.
+#! param FlowDelayMs = Le temps laisse a la pompe pour s'amorcer avant de surveiller
+#! param FlowDelayMs = le debit (defaut 5).
+#! param Pressure = La pression de refoulement. Surveillee seulement si MaxPressure
+#! param Pressure = est different de 0 (defaut 6, sans delai).
+#! changes 1.01 = AJOUTS EN FIN DE TYPE : RunS (temps de marche en secondes, sans
+#! changes 1.01 = debordement), State (etat publie : 0 desactive, 1 defaut, 2 repos, 3
+#! changes 1.01 = en service), et deux champs internes. RunMs et StateMs plafonnent a
+#! changes 1.01 = 2 000 000 000 ms au lieu de devenir negatifs.
+#! example = (* declarer :
+#! example =    Pompes : ARRAY[0..15] OF ST_EQ_Pump;
+#! example =    DI : ARRAY[0..15] OF ST_IO_Dig;
+#! example =    DQ : ARRAY[0..15] OF ST_IO_Dig;
+#! example =    AI : ARRAY[0..7] OF ST_IO_Ana; *)
+#! example = (* la configuration, une fois *)
+#! example = Pompes[0].Name     := 'P101 gavage';
+#! example = Pompes[0].FbkMs    := 3000;       (* retour de marche attendu sous 3 s *)
+#! example = Pompes[0].MinOffMs := 60000;      (* une minute d'arret entre deux demarrages *)
+#! example = Pompes[0].MinFlow  := 2.0;        (* sous 2 m3/h en marche : defaut de debit *)
+#! example = (* les retours, a chaque cycle, AVANT l'appel de DFB_EQ_PUMP *)
+#! example = Pompes[0].Fbk       := DI[3].Val;    (* contact auxiliaire KM *)
+#! example = Pompes[0].Thermal   := DI[4].Val;    (* relais thermique, NF *)
+#! example = Pompes[0].SuctionOk := DI[5].Val;    (* niveau d'aspiration *)
+#! example = Pompes[0].Flow      := AI[0].Val;
+#! example = (* la commande, APRES *)
+#! example = DQ[0].Val := Pompes[0].Run;
+#! given = DI[3].Val := TRUE
+#! given = AI[0].Val := 4.5
+#! expect = 1 : Pompes[0].Fbk = TRUE
+#! expect = 1 : Pompes[0].Flow = 4.5
+#! expect = 1 : Pompes[0].FbkMs = 3000
+
+# Une pompe: un moteur, plus la marche a sec, le debit et la pression.
+#
+# Codes de defaut (FaultCode):
+# 1  le relais thermique a declenche
+# 2  pas de retour de marche au bout de FbkMs: le contacteur n'a pas colle
+# 3  retour de marche alors que rien n'est commande: contacteur colle
+# 4  marche a sec: niveau d'aspiration insuffisant
+# 5  pas de debit au bout de FlowDelayMs: desamorcee, ou vanne fermee
+# 6  pression de refoulement au-dela de MaxPressure
+
+# name ; type ; scope ; initial ; comment
+Name ; STRING[16] ; Member ;  ; ce que l'operateur lit
+Enable ; BOOL ; Member ; TRUE ; FALSE fige l'equipement: aucune sortie, aucun defaut
+ManMode ; BOOL ; Member ;  ; TRUE: les commandes manuelles priment sur l'automatisme
+AckFault ; BOOL ; Member ;  ; front montant: acquitte le defaut s'il a disparu
+PrevAck ; BOOL ; Member ;  ; runtime, ne pas ecrire
+RunReq ; BOOL ; Member ;  ; demande de marche en automatique
+ManRunReq ; BOOL ; Member ;  ; demande de marche en manuel
+Fbk ; BOOL ; Member ;  ; retour de marche (contacteur, KM)
+Thermal ; BOOL ; Member ;  ; TRUE quand le relais thermique est SAIN (contact NF)
+Run ; BOOL ; Member ;  ; la sortie de commande
+Running ; BOOL ; Member ;  ; commande ET retour
+FbkMs ; DINT ; Member ; 2000 ; delai tolere entre la commande et le retour
+FbkElapsed ; DINT ; Member ; 0 ; runtime
+MinOffMs ; DINT ; Member ; 0 ; duree minimale a l'arret avant un redemarrage. 0 desactive
+OffElapsed ; DINT ; Member ; 0 ; runtime
+HasFbk ; BOOL ; Member ; TRUE ; FALSE: pas de retour, Running suit la commande
+PrevRunning ; BOOL ; Member ;  ; runtime
+Flow ; REAL ; Member ; 0.0 ; debit mesure, en unites physiques
+MinFlow ; REAL ; Member ; 0.0 ; debit minimal attendu en marche. 0 desactive le controle
+FlowDelayMs ; DINT ; Member ; 5000 ; temps laisse a la pompe pour s'amorcer
+FlowElapsed ; DINT ; Member ; 0 ; runtime
+SuctionOk ; BOOL ; Member ; TRUE ; niveau aspiration suffisant (protection marche a sec)
+Pressure ; REAL ; Member ; 0.0 ; pression refoulement
+MaxPressure ; REAL ; Member ; 0.0 ; au-dela, defaut. 0 desactive
+Fault ; BOOL ; Member ;  ; un defaut est present
+FaultCode ; INT ; Member ; 0 ; 0 aucun. Voir la table de la famille
+FaultLatch ; BOOL ; Member ;  ; le defaut reste jusqu'a AckFault, meme s'il disparait
+Ready ; BOOL ; Member ;  ; utilisable: active, sans defaut
+RunMs ; DINT ; Member ; 0 ; temps de fonctionnement cumule, en ms, plafonne a 2 000 000 000 (555 h) : lire RunS
+Starts ; UDINT ; Member ; 0 ; nombre de demarrages depuis le dernier Reset
+StateMs ; DINT ; Member ; 0 ; temps dans l'etat courant (State), en ms, plafonne a 2 000 000 000
+RunS ; UDINT ; Member ; 0 ; temps de fonctionnement cumule, en secondes : ne deborde pas avant 136 ans
+RunFracMs ; DINT ; Member ; 0 ; runtime, ne pas ecrire : les millisecondes pas encore comptees dans RunS
+State ; INT ; Member ; 0 ; etat publie : 0 desactive, 1 en defaut, 2 au repos, 3 en service
+PrevState ; INT ; Member ; -1 ; runtime, ne pas ecrire

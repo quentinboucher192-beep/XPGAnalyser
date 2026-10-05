@@ -1,0 +1,133 @@
+# =============================================================================
+#  Session 52 - LOT API 2 : la nouvelle barre du haut (le projet et son etat,
+#  Annuler / Retablir / Historique, + Nouveau, Aller a..., la simulation en
+#  direct, Vers Control Expert, Release, Affichage, Aide) et ses quatre menus ;
+#  l'arbre de l'API en francais ; le tableau de bord (le projet s'ouvre dessus,
+#  un clic sur API y revient) ; les onglets de l'API dans leur cadre
+#  (Configuration - une page gardee -, Taches, Sous-routines) ; les pastilles
+#  des macros, leur legende et le filtre.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 12
+arbre "IHM" replier
+attendre 3
+
+# ---- A. La barre et l'arbre : le projet s'ouvre sur le tableau de bord ----------------------
+capture PNG_580_barre_arbre_tableau_de_bord.png
+
+# ---- B. Les quatre menus ----------------------------------------------------------------------
+barre "projet"
+attendre 4
+capture PNG_581_menu_projet.png
+touche escape
+attendre 2
+barre "nouveau"
+attendre 4
+capture PNG_582_menu_nouveau.png
+touche escape
+attendre 2
+barre "affichage"
+attendre 4
+capture PNG_583_menu_affichage.png
+touche escape
+attendre 2
+barre "aide"
+attendre 4
+capture PNG_584_menu_aide.png
+touche escape
+attendre 2
+
+# ---- C. + Nouveau > Variable, puis Annuler : le point « modifie », l'infobulle ---------------
+barre-menu "nouveau" "Variable"
+attendre 6
+champ 1 "Essai_barre"
+attendre 3
+capture PNG_585_nouvelle_variable.png
+bouton "Create"
+attendre 10
+barre "annuler" survol
+attendre 45
+capture PNG_586_barre_annuler_modifie.png
+
+# ---- D. Le tableau de bord : les cartes ouvrent leurs onglets ---------------------------------
+arbre "API"
+attendre 5
+tableau-de-bord "configuration"
+attendre 6
+capture PNG_587_configuration.png
+arbre "API/Configuration/Processeur"
+attendre 4
+capture PNG_588_configuration_processeur.png
+fermer-onglet "API · Configuration"
+attendre 3
+arbre "API/Configuration"
+attendre 5
+capture PNG_589_configuration_rouverte.png
+arbre "API/Tâches"
+attendre 5
+capture PNG_590_taches.png
+arbre "API/Sous-routines"
+attendre 5
+capture PNG_591_sous_routines.png
+arbre "API"
+attendre 5
+tableau-de-bord "bibliotheque"
+attendre 10
+attendre-macro
+attendre 5
+capture PNG_592_tableau_de_bord_bibliotheque.png
+macro-etape fermer
+attendre 5
+
+# ---- E. Les macros : pastilles, legende, filtre -----------------------------------------------
+barre-menu "affichage" "Onglet Macros"
+attendre 8
+macros-arbre "Importer depuis le classeur/ImporterClasseur"
+attendre 5
+capture PNG_593_macros_pastilles_legende.png
+macros-pastille 4
+attendre 4
+capture PNG_594_macros_filtre_sections.png
+macros-pastille tout
+attendre 2
+macros-legende replier
+attendre 3
+capture PNG_595_macros_legende_repliee.png
+macros-legende deplier
+attendre 2
+
+# ---- F. La simulation dans la barre, l'historique, Aller a... -------------------------------
+barre "simuler"
+attendre 10
+capture PNG_596_barre_simulation.png
+barre "etat" survol
+attendre 45
+capture PNG_597_barre_simulation_infobulle.png
+barre "arreter"
+attendre 4
+barre "historique"
+attendre 5
+capture PNG_598_historique.png
+barre "annuler"
+attendre 6
+barre "historique"
+attendre 3
+barre "aller"
+attendre 4
+texte "Vanne"
+attendre 5
+capture PNG_599_aller_a.png
+touche escape
+attendre 3
+
+# ---- G. L'aide : les nouveautes ---------------------------------------------------------------
+barre-menu "aide" "Aide"
+attendre 12
+capture PNG_600_aide_nouveautes.png
+bouton "Fermer"
+attendre 5
+quitter

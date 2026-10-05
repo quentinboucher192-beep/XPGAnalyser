@@ -1,0 +1,21 @@
+# =============================================================================
+#  Aide F1 de la 1.10 : le menu Aide rangé (chantier R2, les six rapides des
+#  propositions du 01/10). Même syntaxe que guide-ihm.txt ; P le reporte dans
+#  guide-ihm.txt (sujets généraux, près du sujet des nouveautés).
+# =============================================================================
+
+== menu-aide | Le menu Aide : chercher, les guides, apprendre, les nouveautés
+: Le menu Aide (le « ? » en haut à droite) est rangé en quatre blocs : Chercher et lire, Les guides, Apprendre, Nouveautés et support. Une pastille orange sur le « ? » dit combien de nouveautés tu n'as pas encore vues.
+@lieux api, ihm
+@mots menu Aide, Aide, F1, Raccourcis clavier, guides, didacticiel, Nouveautés, Repères des nouveautés, À propos d'XPGAnalyser, support, Copier les informations pour le support, pastille, Aller à / Faire
+@voir nouveautes
+### Les quatre blocs
+| Bloc | Ce qu'il contient |
+| Chercher et lire | **Aide** (F1, le raccourci est écrit à droite) et **Raccourcis clavier**. |
+| Les guides | L'API et son programme, l'IHM, les macros, les blocs DFB / DDT. |
+| Apprendre | Le **Didacticiel de l'API** : tous ses parcours, y compris ceux marqués « nouveau ». |
+| Nouveautés et support | **Nouveautés…** (à droite : combien il en reste à voir), la case **Repères des nouveautés** (cochée : les éléments nouveaux sont encadrés en orange), **À propos d'XPGAnalyser…**. |
+### À propos d'XPGAnalyser
+La version, la date de construction, les dossiers de l'application (données, projets, bibliothèque, captures, réglages, programme), le projet ouvert (son nom, ses sections, ses vues) et les composants libres avec leurs licences. **Copier les informations pour le support** met tout cela dans le presse-papiers, prêt à coller dans un message : la version, le système, les dossiers et le résumé du projet, jamais ses données.
+### Aller à / Faire…
+Ctrl+K : les commandes de l'application s'y cherchent en français (Ouvrir un projet…, Enregistrer le projet, Fermer le projet, Revenir au menu principal…), avec leur raccourci à droite.

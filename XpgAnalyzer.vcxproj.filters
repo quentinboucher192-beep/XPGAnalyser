@@ -1,0 +1,2303 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="core">
+      <UniqueIdentifier>{A0000000-0000-0000-0000-000000000000}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="domain">
+      <UniqueIdentifier>{A0000001-0000-0000-0000-000000000000}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="import">
+      <UniqueIdentifier>{A0000002-0000-0000-0000-000000000000}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="platform">
+      <UniqueIdentifier>{A0000003-0000-0000-0000-000000000000}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ui">
+      <UniqueIdentifier>{A0000004-0000-0000-0000-000000000000}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ui\widgets">
+      <UniqueIdentifier>{A0000005-0000-0000-0000-000000000000}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="menu">
+      <UniqueIdentifier>{A0000006-0000-0000-0000-000000000000}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="app">
+      <UniqueIdentifier>{A0000007-0000-0000-0000-000000000000}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="app\screens">
+      <UniqueIdentifier>{A0000008-0000-0000-0000-000000000000}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="export">
+      <UniqueIdentifier>{df0cbc38-f3b7-4dd9-876d-e1efac58ee30}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="project">
+      <UniqueIdentifier>{9cb213c1-9978-4b24-9cd5-a71dc36e84fa}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="sim">
+      <UniqueIdentifier>{22fca677-e7a2-4ae4-9647-9140a56ce1cb}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="xls">
+      <UniqueIdentifier>{95eb262f-4661-4390-8ab6-f99280ad4eef}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="help">
+      <UniqueIdentifier>{ab11ca74-500d-4614-8835-4f8019ececdf}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="app\hmi">
+      <UniqueIdentifier>{475c5e25-c513-4579-a5bd-098959a8e36a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="hmi">
+      <UniqueIdentifier>{af48dadb-652d-4281-baa9-9ed0c4fbe6ac}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="resources">
+      <UniqueIdentifier>{c3a1e6f2-5b7d-4f18-9e21-6d4b8a0f2c31}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="app\tutorial">
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="src\main.cpp" />
+    <ClCompile Include="src\domain\ProjectModel.cpp">
+      <Filter>domain</Filter>
+    </ClCompile>
+    <ClCompile Include="src\domain\Reindex.cpp">
+      <Filter>domain</Filter>
+    </ClCompile>
+    <ClCompile Include="src\export\XpgWriter.cpp">
+      <Filter>export</Filter>
+    </ClCompile>
+    <ClCompile Include="src\import\ProjectAnalyzer.cpp">
+      <Filter>import</Filter>
+    </ClCompile>
+    <ClCompile Include="src\import\ProjectImporter.cpp">
+      <Filter>import</Filter>
+    </ClCompile>
+    <ClCompile Include="src\import\XhwParser.cpp">
+      <Filter>import</Filter>
+    </ClCompile>
+    <ClCompile Include="src\import\XmlReader.cpp">
+      <Filter>import</Filter>
+    </ClCompile>
+    <ClCompile Include="src\import\XpgParser.cpp">
+      <Filter>import</Filter>
+    </ClCompile>
+    <ClCompile Include="src\domain\ExecutionOrder.cpp">
+      <Filter>domain</Filter>
+    </ClCompile>
+    <ClCompile Include="src\help\HelpCodes.cpp">
+      <Filter>help</Filter>
+    </ClCompile>
+    <ClCompile Include="src\help\HelpExport.cpp">
+      <Filter>help</Filter>
+    </ClCompile>
+    <ClCompile Include="src\help\HelpIndex.cpp">
+      <Filter>help</Filter>
+    </ClCompile>
+    <ClCompile Include="src\help\HelpSession.cpp">
+      <Filter>help</Filter>
+    </ClCompile>
+    <ClCompile Include="src\help\TryBench.cpp">
+      <Filter>help</Filter>
+    </ClCompile>
+    <ClCompile Include="src\help\HelpTryIt.cpp">
+      <Filter>help</Filter>
+    </ClCompile>
+    <ClCompile Include="src\project\BlockLibrary.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
+    <ClCompile Include="src\project\CrossReference.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
+    <ClCompile Include="src\project\DefaultMacros.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
+    <ClCompile Include="src\project\DeleteCommands.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
+    <ClCompile Include="src\project\EditCommands.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
+    <ClCompile Include="src\project\Grafcet.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
+    <ClCompile Include="src\project\GrafcetEdit.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
+    <ClCompile Include="src\project\GrafcetLayout.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
+    <ClCompile Include="src\project\GrafcetLayoutFile.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
+    <ClCompile Include="src\project\GrafcetRewrite.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
+    <ClCompile Include="src\project\ImportSchema.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
+    <ClCompile Include="src\project\LibraryCatalog.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
+    <ClCompile Include="src\project\LibraryHelp.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
+    <ClCompile Include="src\project\Macro.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
+    <ClCompile Include="src\project\Security.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
+    <ClCompile Include="src\project\SharedLibrary.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
+    <ClCompile Include="src\project\Table.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
+    <ClCompile Include="src\xls\MacroXls.cpp">
+      <Filter>xls</Filter>
+    </ClCompile>
+    <ClCompile Include="third_party\miniz.c" />
+    <ClCompile Include="src\xls\miniz_impl.cpp">
+      <Filter>xls</Filter>
+    </ClCompile>
+    <ClCompile Include="src\xls\XlsmSource.cpp">
+      <Filter>xls</Filter>
+    </ClCompile>
+    <ClCompile Include="src\project\ProjectStore.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
+    <ClCompile Include="src\xls\Workbook.cpp">
+      <Filter>xls</Filter>
+    </ClCompile>
+    <ClCompile Include="src\sim\Interpreter.cpp">
+      <Filter>sim</Filter>
+    </ClCompile>
+    <ClCompile Include="src\sim\Runtime.cpp">
+      <Filter>sim</Filter>
+    </ClCompile>
+    <ClCompile Include="src\sim\Value.cpp">
+      <Filter>sim</Filter>
+    </ClCompile>
+    <ClCompile Include="src\menu\MenuManager.cpp">
+      <Filter>menu</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\widgets\ColorPalette.cpp">
+      <Filter>ui\widgets</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\widgets\FilterChain.cpp">
+      <Filter>ui\widgets</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\widgets\HelpArticleView.cpp">
+      <Filter>ui\widgets</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\widgets\HelpView.cpp">
+      <Filter>ui\widgets</Filter>
+    </ClCompile>
+    <ClCompile Include="src\platform\FontAtlas.cpp">
+      <Filter>platform</Filter>
+    </ClCompile>
+    <ClCompile Include="src\platform\SdlEventPump.cpp">
+      <Filter>platform</Filter>
+    </ClCompile>
+    <ClCompile Include="src\platform\SdlRenderer.cpp">
+      <Filter>platform</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\widgets\Containers.cpp">
+      <Filter>ui\widgets</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\widgets\Controls.cpp">
+      <Filter>ui\widgets</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\Error.cpp">
+      <Filter>core</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\widgets\DataViews.cpp">
+      <Filter>ui\widgets</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\HelpDocument.cpp">
+      <Filter>ui</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\Icons.cpp">
+      <Filter>ui</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\Layout.cpp">
+      <Filter>ui</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\Shapes.cpp">
+      <Filter>ui</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\Syntax.cpp">
+      <Filter>ui</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\Theme.cpp">
+      <Filter>ui</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\Widget.cpp">
+      <Filter>ui</Filter>
+    </ClCompile>
+    <ClCompile Include="src\menu\IMenu.cpp">
+      <Filter>menu</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiAlarmViews.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiArchive.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiAssets.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiCharts.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiCheck.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiComm.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiCommands.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiControls.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiCrypto.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiDesign.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiDisplay.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiDossier.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiEdit.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiEquipment.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiExamples.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiExport.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiExpr.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiExternal.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiFolders.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiForms.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiGuide.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiGuideText.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiHistory.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiIpScan.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiLanguages.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiLive.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiLoginMenu.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiMedia.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiModbus.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiModbusTool.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiModel.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiNavigation.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiNet.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiNetInfo.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiNotify.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiPackage.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiPolicy.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiProduction.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiQr.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiQuality.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiRecipes.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiReports.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiRuntime.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiRuntimeControls.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiRuntimeLogin.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiRuntimeLot11.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiRuntimeLot12.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiRuntimeLot13.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiRuntimeLot14.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiRuntimeLot15.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiRuntimeLot16.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiRuntimePublic.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiRuntimeSystem.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiScenarios.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiScript.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiSignature.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiSpy.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiStore.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiSymbols.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiSystemMenu.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiTemplates.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiTwin.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiTypes.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiVersions.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiWeb.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiWidgets.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiZones.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiActionsPanel.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiAskDialog.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiAssetPanes.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiAssist.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiCanvas.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiChartsPainter.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiCommHost.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiCommPanes.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiContentPanel.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiControlsPainter.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiDesignPanes.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiDisplayPanes.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiEditor.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiEquipmentHost.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiEquipmentPanes.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiExampleView.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiExchangePanes.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiFolderTable.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiFunctionPanes.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiHelpPane.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiIcons.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiImages.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiImportDialog.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiLoginPainter.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiLot11Painter.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiLot13Painter.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiLot14Painter.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiMemoryMap.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiModbusToolPane.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiNavPainter.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiNetDiagram.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiNotifyHost.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiNotifyPanes.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiObjectTutorial.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiPainter.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiPanels.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiPanes.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiPublicVarsPane.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiQualityPanes.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiReportPanes.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiScriptPanes.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiSecurityPane.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiSimulation.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiSound.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiStationLaunch.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiStationPanes.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiSupervisionPanes.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiSynopticPainter.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiSystemPainter.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiTemplateGallery.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiTrails.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiTutorial.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiTwinPanes.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiTwinValues.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiVariablePanes.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiWebHost.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiWebPanes.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\screens\Dialogs.cpp">
+      <Filter>app\screens</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\screens\FoldersWorkspace.cpp">
+      <Filter>app\screens</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\screens\GoToWorkspace.cpp">
+      <Filter>app\screens</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\screens\HelpBench.cpp">
+      <Filter>app\screens</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\screens\HelpChrome.cpp">
+      <Filter>app\screens</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\screens\HistoryWorkspace.cpp">
+      <Filter>app\screens</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\screens\HmiRuntimeDialogs.cpp">
+      <Filter>app\screens</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\screens\HmiSupervision.cpp">
+      <Filter>app\screens</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\screens\HmiWorkspace.cpp">
+      <Filter>app\screens</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\screens\LibraryHelpScreen.cpp">
+      <Filter>app\screens</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\screens\MainAnalysisScreen.cpp">
+      <Filter>app\screens</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\screens\Screens.cpp">
+      <Filter>app\screens</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\screens\StationScreen.cpp">
+      <Filter>app\screens</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\screens\TemplatesWorkspace.cpp">
+      <Filter>app\screens</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\screens\TutorialWorkspace.cpp">
+      <Filter>app\screens</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\screens\VersionsWorkspace.cpp">
+      <Filter>app\screens</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\App.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\Brand.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\Capture.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\GoToPanel.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\GrafcetPanels.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\GrafcetView.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\HistoryPanel.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\LibraryHelpModels.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\RackView.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\Recovery.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\ScriptRunner.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\Settings.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\SimulationHost.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\TablePaste.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\VersionComparePane.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\VersionsPane.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\ViewModels.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\ClipboardFiles.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\MacroFormView.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\MacrosPane.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\screens\MacrosWorkspace.cpp">
+      <Filter>app\screens</Filter>
+    </ClCompile>
+    <ClCompile Include="src\project\MacroFolders.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
+    <ClCompile Include="src\project\MacroMemory.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
+    <ClCompile Include="src\project\MacroSession.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
+    <ClCompile Include="src\project\MacroSpec.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\ApiPanes.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\TopBar.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\screens\ApiWorkspace.cpp">
+      <Filter>app\screens</Filter>
+    </ClCompile>
+    <ClCompile Include="src\project\ApiChecks.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\AnimationTablesPane.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\ConfigurationPane.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\TaskPanes.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\VariablePicker.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\project\ApiCommands.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
+    <ClCompile Include="src\project\IoCheck.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\ApiListKit.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\TypePanes.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\VariablesPane.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\project\RenameCommands.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
+    <ClCompile Include="src\project\TypeUsage.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\MacroEditorView.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\PixelIconEditor.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\ThemeGallery.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\VersionClose.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\screens\IconWorkspace.cpp">
+      <Filter>app\screens</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiVersionState.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\project\MacroSpecWriter.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
+    <ClCompile Include="src\project\ProjectIcon.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\ApiTrails.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\DetachedWindows.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\GoToSearch.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\ImportMastDialog.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\RenameDialog.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\SimulationPane.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\StartPage.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\StatisticsPane.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\screens\ExplorerMenus.cpp">
+      <Filter>app\screens</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\screens\ImportWorkspace.cpp">
+      <Filter>app\screens</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\screens\RenameWorkspace.cpp">
+      <Filter>app\screens</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\screens\StartScreen.cpp">
+      <Filter>app\screens</Filter>
+    </ClCompile>
+    <ClCompile Include="src\project\MastImport.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
+    <ClCompile Include="src\project\MemberTree.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
+    <ClCompile Include="src\project\ProjectStats.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
+    <ClCompile Include="src\project\RenamePlan.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\TextSearch.cpp">
+      <Filter>ui</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\WidgetHost.cpp">
+      <Filter>ui</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\widgets\PathBrowse.cpp">
+      <Filter>ui\widgets</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\widgets\TabArea.cpp">
+      <Filter>ui\widgets</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\widgets\TableFilters.cpp">
+      <Filter>ui\widgets</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\ApiTrailsLot8.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\BackgroundTasks.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\DropFilesDialog.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\DropFilesPlan.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\FileExplorerHost.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\FilePreview.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\SearchFocus.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\SimCenterOverview.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\SimCenterPanes.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\SimConditionDialog.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\SimDebugPane.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\SimDebugText.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\SimJournal.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\SimStatus.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\SimulationHostDebug.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\StatusStrip.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\ThemeEditor.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\TopBarLot8.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\TutorialsLot8.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\screens\DropFilesWorkspace.cpp">
+      <Filter>app\screens</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\screens\SimDebugWorkspace.cpp">
+      <Filter>app\screens</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\screens\SimulationWorkspace.cpp">
+      <Filter>app\screens</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\screens\StationExportDialog.cpp">
+      <Filter>app\screens</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\screens\StatusStripWorkspace.cpp">
+      <Filter>app\screens</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\screens\TopBarWorkspace.cpp">
+      <Filter>app\screens</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\screens\TreeWorkspace.cpp">
+      <Filter>app\screens</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiExprCheck.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiRenameRefs.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\sim\RuntimeDebug.cpp">
+      <Filter>sim</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\FileExplorerModel.cpp">
+      <Filter>ui</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\FileKinds.cpp">
+      <Filter>ui</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\ThemeFile.cpp">
+      <Filter>ui</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\widgets\FileExplorer.cpp">
+      <Filter>ui\widgets</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\widgets\FilterMemory.cpp">
+      <Filter>ui\widgets</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\widgets\SearchField.cpp">
+      <Filter>ui\widgets</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\CodeIconPicker.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\Dossiers.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\Epinglage.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\ImportJob.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\ImportJobDialog.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\ProgramExportDialog.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\SectionComparePane.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\screens\FoldersDialog.cpp">
+      <Filter>app\screens</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\screens\LisibleWorkspace.cpp">
+      <Filter>app\screens</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\CodeIcons.cpp">
+      <Filter>core</Filter>
+    </ClCompile>
+    <ClCompile Include="src\export\DocKit.cpp">
+      <Filter>export</Filter>
+    </ClCompile>
+    <ClCompile Include="src\export\ProgramBook.cpp">
+      <Filter>export</Filter>
+    </ClCompile>
+    <ClCompile Include="src\export\ProgramBookPdf.cpp">
+      <Filter>export</Filter>
+    </ClCompile>
+    <ClCompile Include="src\export\ProgramBookXlsx.cpp">
+      <Filter>export</Filter>
+    </ClCompile>
+    <ClCompile Include="src\project\CodeIconKeys.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
+    <ClCompile Include="src\project\SectionCompare.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\AboutDialog.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\ConditionsNotice.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\CrashDialogs.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\GrafcetCodePanel.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\NoveltyCenter.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiApiVarsPane.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiCyclicPage.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiCyclicPageSets.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiCyclicWidgets.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiDuplicateDialog.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiEnumPanes.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiExprPage.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiExprPageView.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiObjectAlarmPanes.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiObjectAlarmTree.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiOperatorPanes.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiParamPanes.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiQuickTrend.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiSimMarks.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiSlavePanes.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\screens\HelpCenterScreen.cpp">
+      <Filter>app\screens</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\screens\HmiExprScreen.cpp">
+      <Filter>app\screens</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\tutorial\TutorialApp.cpp">
+      <Filter>app\tutorial</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\tutorial\TutorialOverlay.cpp">
+      <Filter>app\tutorial</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\tutorial\TutorialStageApp.cpp">
+      <Filter>app\tutorial</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\tutorial\UiDriver.cpp">
+      <Filter>app\tutorial</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\CallTrail.cpp">
+      <Filter>core</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\CrashGuard.cpp">
+      <Filter>core</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\SingleInstance.cpp">
+      <Filter>core</Filter>
+    </ClCompile>
+    <ClCompile Include="src\help\CenterIndex.cpp">
+      <Filter>help</Filter>
+    </ClCompile>
+    <ClCompile Include="src\help\CenterPages.cpp">
+      <Filter>help</Filter>
+    </ClCompile>
+    <ClCompile Include="src\help\CenterSources.cpp">
+      <Filter>help</Filter>
+    </ClCompile>
+    <ClCompile Include="src\help\CenterTutorials.cpp">
+      <Filter>help</Filter>
+    </ClCompile>
+    <ClCompile Include="src\help\CenterView.cpp">
+      <Filter>help</Filter>
+    </ClCompile>
+    <ClCompile Include="src\help\F1Table.cpp">
+      <Filter>help</Filter>
+    </ClCompile>
+    <ClCompile Include="src\help\Novelties.cpp">
+      <Filter>help</Filter>
+    </ClCompile>
+    <ClCompile Include="src\help\ProblemReport.cpp">
+      <Filter>help</Filter>
+    </ClCompile>
+    <ClCompile Include="src\help\ReleaseNotes.cpp">
+      <Filter>help</Filter>
+    </ClCompile>
+    <ClCompile Include="src\help\SandboxTrash.cpp">
+      <Filter>help</Filter>
+    </ClCompile>
+    <ClCompile Include="src\help\Shortcuts.cpp">
+      <Filter>help</Filter>
+    </ClCompile>
+    <ClCompile Include="src\help\Tutorial.cpp">
+      <Filter>help</Filter>
+    </ClCompile>
+    <ClCompile Include="src\help\TutorialLaunch.cpp">
+      <Filter>help</Filter>
+    </ClCompile>
+    <ClCompile Include="src\help\TutorialPlayer.cpp">
+      <Filter>help</Filter>
+    </ClCompile>
+    <ClCompile Include="src\help\TutorialTexts.cpp">
+      <Filter>help</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiAlarmGroupCommands.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiAlarmGroups.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiApiVars.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiBuildState.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiDuplicate.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiEnums.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiExprBench.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiExprGuide.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiMarkers.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiModbusCyclic.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiObjectAlarms.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiOperators.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiPopupParams.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiRuntimeObjectAlarms.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiRuntimeParams.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiRuntimeSimPage.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiRuntimeSlaves.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiScriptCheck.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiScriptCheck110.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiTutorialDeduce.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\project\ActivationConditions.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
+    <ClCompile Include="src\project\GrafcetCheck.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
+    <ClCompile Include="src\project\GrafcetDiagram.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
+    <ClCompile Include="src\project\GrafcetRewrite2.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
+    <ClCompile Include="src\sim\Rich.cpp">
+      <Filter>sim</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\NoveltyBoard.cpp">
+      <Filter>ui</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\NoveltyMarks.cpp">
+      <Filter>ui</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="docs\ARCHITECTURE.md" />
+    <None Include="README.md" />
+    <None Include="CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="resources\windows\xpg_analyzer.rc">
+      <Filter>resources</Filter>
+    </ResourceCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\domain\ProjectModel.hpp">
+      <Filter>domain</Filter>
+    </ClInclude>
+    <ClInclude Include="src\domain\Reindex.hpp">
+      <Filter>domain</Filter>
+    </ClInclude>
+    <ClInclude Include="src\export\XpgWriter.hpp">
+      <Filter>export</Filter>
+    </ClInclude>
+    <ClInclude Include="src\import\ProjectAnalyzer.hpp">
+      <Filter>import</Filter>
+    </ClInclude>
+    <ClInclude Include="src\import\ProjectImporter.hpp">
+      <Filter>import</Filter>
+    </ClInclude>
+    <ClInclude Include="src\import\ProjectParser.hpp">
+      <Filter>import</Filter>
+    </ClInclude>
+    <ClInclude Include="src\import\XmlReader.hpp">
+      <Filter>import</Filter>
+    </ClInclude>
+    <ClInclude Include="src\domain\ExecutionOrder.hpp">
+      <Filter>domain</Filter>
+    </ClInclude>
+    <ClInclude Include="src\help\HelpCodes.hpp">
+      <Filter>help</Filter>
+    </ClInclude>
+    <ClInclude Include="src\help\HelpExport.hpp">
+      <Filter>help</Filter>
+    </ClInclude>
+    <ClInclude Include="src\help\HelpIndex.hpp">
+      <Filter>help</Filter>
+    </ClInclude>
+    <ClInclude Include="src\help\HelpSession.hpp">
+      <Filter>help</Filter>
+    </ClInclude>
+    <ClInclude Include="src\help\TryBench.hpp">
+      <Filter>help</Filter>
+    </ClInclude>
+    <ClInclude Include="src\help\HelpTryIt.hpp">
+      <Filter>help</Filter>
+    </ClInclude>
+    <ClInclude Include="src\project\BlockLibrary.hpp">
+      <Filter>project</Filter>
+    </ClInclude>
+    <ClInclude Include="src\project\CrossReference.hpp">
+      <Filter>project</Filter>
+    </ClInclude>
+    <ClInclude Include="src\project\DeleteCommands.hpp">
+      <Filter>project</Filter>
+    </ClInclude>
+    <ClInclude Include="src\project\EditCommands.hpp">
+      <Filter>project</Filter>
+    </ClInclude>
+    <ClInclude Include="src\project\Grafcet.hpp">
+      <Filter>project</Filter>
+    </ClInclude>
+    <ClInclude Include="src\project\GrafcetEdit.hpp">
+      <Filter>project</Filter>
+    </ClInclude>
+    <ClInclude Include="src\project\GrafcetLayout.hpp">
+      <Filter>project</Filter>
+    </ClInclude>
+    <ClInclude Include="src\project\GrafcetLayoutFile.hpp">
+      <Filter>project</Filter>
+    </ClInclude>
+    <ClInclude Include="src\project\GrafcetRewrite.hpp">
+      <Filter>project</Filter>
+    </ClInclude>
+    <ClInclude Include="src\project\ImportSchema.hpp">
+      <Filter>project</Filter>
+    </ClInclude>
+    <ClInclude Include="src\project\LibraryCatalog.hpp">
+      <Filter>project</Filter>
+    </ClInclude>
+    <ClInclude Include="src\project\LibraryHelp.hpp">
+      <Filter>project</Filter>
+    </ClInclude>
+    <ClInclude Include="src\project\Macro.hpp">
+      <Filter>project</Filter>
+    </ClInclude>
+    <ClInclude Include="src\project\ProjectStore.hpp">
+      <Filter>project</Filter>
+    </ClInclude>
+    <ClInclude Include="src\project\Security.hpp">
+      <Filter>project</Filter>
+    </ClInclude>
+    <ClInclude Include="src\project\SharedLibrary.hpp">
+      <Filter>project</Filter>
+    </ClInclude>
+    <ClInclude Include="src\project\Table.hpp">
+      <Filter>project</Filter>
+    </ClInclude>
+    <ClInclude Include="src\xls\MacroXls.hpp">
+      <Filter>xls</Filter>
+    </ClInclude>
+    <ClInclude Include="src\xls\Workbook.hpp">
+      <Filter>xls</Filter>
+    </ClInclude>
+    <ClInclude Include="src\xls\XlsmSource.hpp">
+      <Filter>xls</Filter>
+    </ClInclude>
+    <ClInclude Include="src\sim\Interpreter.hpp">
+      <Filter>sim</Filter>
+    </ClInclude>
+    <ClInclude Include="src\sim\Runtime.hpp">
+      <Filter>sim</Filter>
+    </ClInclude>
+    <ClInclude Include="src\sim\Value.hpp">
+      <Filter>sim</Filter>
+    </ClInclude>
+    <ClInclude Include="src\menu\IMenu.hpp">
+      <Filter>menu</Filter>
+    </ClInclude>
+    <ClInclude Include="src\menu\MenuManager.hpp">
+      <Filter>menu</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\widgets\ColorPalette.hpp">
+      <Filter>ui\widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\widgets\HelpArticleView.hpp">
+      <Filter>ui\widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\widgets\HelpView.hpp">
+      <Filter>ui\widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="src\platform\FontAtlas.hpp">
+      <Filter>platform</Filter>
+    </ClInclude>
+    <ClInclude Include="src\platform\Geometry.hpp">
+      <Filter>platform</Filter>
+    </ClInclude>
+    <ClInclude Include="src\platform\InputEvent.hpp">
+      <Filter>platform</Filter>
+    </ClInclude>
+    <ClInclude Include="src\platform\Renderer.hpp">
+      <Filter>platform</Filter>
+    </ClInclude>
+    <ClInclude Include="src\platform\RoundedCorner.hpp">
+      <Filter>platform</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\widgets\Containers.hpp">
+      <Filter>ui\widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\widgets\Controls.hpp">
+      <Filter>ui\widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\Command.hpp">
+      <Filter>core</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\EventBus.hpp">
+      <Filter>core</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\FieldCodec.hpp">
+      <Filter>core</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\Result.hpp">
+      <Filter>core</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\ServiceRegistry.hpp">
+      <Filter>core</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\Signal.hpp">
+      <Filter>core</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\widgets\DataViews.hpp">
+      <Filter>ui\widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\HelpDocument.hpp">
+      <Filter>ui</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\Icons.hpp">
+      <Filter>ui</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\Layout.hpp">
+      <Filter>ui</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\Shapes.hpp">
+      <Filter>ui</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\Syntax.hpp">
+      <Filter>ui</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\Theme.hpp">
+      <Filter>ui</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\Widget.hpp">
+      <Filter>ui</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiAlarmViews.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiArchive.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiAssets.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiCharts.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiCheck.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiComm.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiCommands.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiControls.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiCrypto.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiDesign.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiDisplay.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiDossier.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiEdit.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiEquipment.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiExamples.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiExport.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiExpr.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiExternal.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiFolders.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiForms.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiGuide.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiHistory.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiIpScan.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiLanguages.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiLive.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiLoginMenu.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiMedia.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiModbus.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiModbusTool.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiModel.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiNavigation.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiNet.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiNetInfo.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiNotify.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiPackage.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiPerf.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiPolicy.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiProduction.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiPublicVars.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiQr.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiQuality.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiRecipes.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiReports.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiRuntime.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiScenarios.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiScript.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiSignature.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiSpy.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiStore.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiSymbols.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiSystemMenu.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiTemplates.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiTwin.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiTypes.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiVersions.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiWeb.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiWidgets.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiZones.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiActionsPanel.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiAskDialog.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiAssetPanes.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiAssist.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiCanvas.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiCommHost.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiCommPanes.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiContentPanel.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiDesignPanes.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiDisplayPanes.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiEditor.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiEquipmentHost.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiExampleView.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiFolderTable.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiFunctionPanes.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiHelpPane.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiIcons.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiImages.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiImportDialog.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiLoginPainter.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiLot13Painter.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiMemoryMap.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiModbusToolPane.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiNetDiagram.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiNotifyHost.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiNotifyPanes.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiObjectTutorial.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiPainter.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiPaintKit.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiPaneKit.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiPanels.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiPanes.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiPublicVarsPane.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiQualityPanes.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiReportPanes.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiScriptPanes.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiSimulation.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiSound.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiStationLaunch.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiStationPanes.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiSupervisionPanes.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiSystemPainter.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiTemplateGallery.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiTrails.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiTreeData.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiTutorial.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiTwinValues.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiVariablePanes.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiWebHost.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiWebPanes.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\screens\HelpBench.hpp">
+      <Filter>app\screens</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\screens\HelpChrome.hpp">
+      <Filter>app\screens</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\screens\LibraryHelpScreen.hpp">
+      <Filter>app\screens</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\screens\Screens.hpp">
+      <Filter>app\screens</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\screens\StationScreen.hpp">
+      <Filter>app\screens</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\App.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\Brand.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\Capture.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ExecutionOrderWiring.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\GoToPanel.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\GrafcetPanels.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\GrafcetView.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\HistoryPanel.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\LibraryHelpModels.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\RackView.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\Recovery.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ScriptRunner.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\Settings.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\SimulationHost.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\TablePaste.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\VersionComparePane.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\VersionsPane.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ViewModels.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ClipboardFiles.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\MacroFormView.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\MacrosPane.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\project\MacroFolders.hpp">
+      <Filter>project</Filter>
+    </ClInclude>
+    <ClInclude Include="src\project\MacroMemory.hpp">
+      <Filter>project</Filter>
+    </ClInclude>
+    <ClInclude Include="src\project\MacroSession.hpp">
+      <Filter>project</Filter>
+    </ClInclude>
+    <ClInclude Include="src\project\MacroSpec.hpp">
+      <Filter>project</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ApiPanes.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\TopBar.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\project\ApiChecks.hpp">
+      <Filter>project</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\AnimationTablesPane.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ConfigurationPane.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\TaskPanes.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\VariablePicker.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\project\ApiCommands.hpp">
+      <Filter>project</Filter>
+    </ClInclude>
+    <ClInclude Include="src\project\IoCheck.hpp">
+      <Filter>project</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ApiListKit.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\TypePanes.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\VariablesPane.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\project\RenameCommands.hpp">
+      <Filter>project</Filter>
+    </ClInclude>
+    <ClInclude Include="src\project\TypeUsage.hpp">
+      <Filter>project</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\MacroEditorView.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\PixelIconEditor.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ThemeGallery.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\VersionClose.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiVersionState.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\project\MacroSpecWriter.hpp">
+      <Filter>project</Filter>
+    </ClInclude>
+    <ClInclude Include="src\project\ProjectIcon.hpp">
+      <Filter>project</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ApiTrails.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\DetachedWindows.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ExportTarget.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\GoToSearch.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ImportMastDialog.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\RenameDialog.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\SimulationPane.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\StartPage.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\StatisticsPane.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\project\MastImport.hpp">
+      <Filter>project</Filter>
+    </ClInclude>
+    <ClInclude Include="src\project\MemberTree.hpp">
+      <Filter>project</Filter>
+    </ClInclude>
+    <ClInclude Include="src\project\ProjectStats.hpp">
+      <Filter>project</Filter>
+    </ClInclude>
+    <ClInclude Include="src\project\RenamePlan.hpp">
+      <Filter>project</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\TextSearch.hpp">
+      <Filter>ui</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\WidgetHost.hpp">
+      <Filter>ui</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\widgets\PathBrowse.hpp">
+      <Filter>ui\widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\widgets\TabArea.hpp">
+      <Filter>ui\widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\widgets\TableFilters.hpp">
+      <Filter>ui\widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\BackgroundTasks.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\DropFilesDialog.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\DropFilesPlan.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\FileExplorerHost.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\FilePreview.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\SearchFocus.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\SimCenter.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\SimCenterKit.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\SimConditionDialog.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\SimDebugPane.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\SimDebugText.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\SimJournal.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\SimStatus.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\StatusStrip.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ThemeEditor.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\TutorialsLot8.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\screens\StationExportDialog.hpp">
+      <Filter>app\screens</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiExprCheck.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiRenameRefs.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\FileExplorerModel.hpp">
+      <Filter>ui</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\FileKinds.hpp">
+      <Filter>ui</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\ThemeFile.hpp">
+      <Filter>ui</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\widgets\FileExplorer.hpp">
+      <Filter>ui\widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\widgets\FilterMemory.hpp">
+      <Filter>ui\widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\widgets\SearchField.hpp">
+      <Filter>ui\widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\CodeIconPicker.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\Dossiers.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\Epinglage.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ImportJob.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ImportJobDialog.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ProgramExportDialog.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\SectionComparePane.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\CodeIcons.hpp">
+      <Filter>core</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\Version.hpp">
+      <Filter>core</Filter>
+    </ClInclude>
+    <ClInclude Include="src\export\DocKit.hpp">
+      <Filter>export</Filter>
+    </ClInclude>
+    <ClInclude Include="src\export\ProgramBook.hpp">
+      <Filter>export</Filter>
+    </ClInclude>
+    <ClInclude Include="src\project\CodeIconKeys.hpp">
+      <Filter>project</Filter>
+    </ClInclude>
+    <ClInclude Include="src\project\SectionCompare.hpp">
+      <Filter>project</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\AboutDialog.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ConditionsNotice.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\CrashDialogs.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\GrafcetCodePanel.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\NoveltyCenter.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiApiVarsPane.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiCyclicPage.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiDuplicateDialog.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiEnumPanes.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiExprPage.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiExprPageView.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiObjectAlarmPanes.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiObjectAlarmTree.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiOperatorPanes.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiParamPanes.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiQuickTrend.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiSimMarks.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\screens\HelpCenterScreen.hpp">
+      <Filter>app\screens</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\screens\HmiExprScreen.hpp">
+      <Filter>app\screens</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\tutorial\TutorialApp.hpp">
+      <Filter>app\tutorial</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\tutorial\TutorialExprTrial.hpp">
+      <Filter>app\tutorial</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\tutorial\TutorialOverlay.hpp">
+      <Filter>app\tutorial</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\tutorial\TutorialStageApp.hpp">
+      <Filter>app\tutorial</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\tutorial\UiDriver.hpp">
+      <Filter>app\tutorial</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\CallTrail.hpp">
+      <Filter>core</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\CrashGuard.hpp">
+      <Filter>core</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\SingleInstance.hpp">
+      <Filter>core</Filter>
+    </ClInclude>
+    <ClInclude Include="src\help\CenterIndex.hpp">
+      <Filter>help</Filter>
+    </ClInclude>
+    <ClInclude Include="src\help\CenterPages.hpp">
+      <Filter>help</Filter>
+    </ClInclude>
+    <ClInclude Include="src\help\CenterSources.hpp">
+      <Filter>help</Filter>
+    </ClInclude>
+    <ClInclude Include="src\help\CenterTutorials.hpp">
+      <Filter>help</Filter>
+    </ClInclude>
+    <ClInclude Include="src\help\CenterView.hpp">
+      <Filter>help</Filter>
+    </ClInclude>
+    <ClInclude Include="src\help\F1Table.hpp">
+      <Filter>help</Filter>
+    </ClInclude>
+    <ClInclude Include="src\help\Novelties.hpp">
+      <Filter>help</Filter>
+    </ClInclude>
+    <ClInclude Include="src\help\ProblemReport.hpp">
+      <Filter>help</Filter>
+    </ClInclude>
+    <ClInclude Include="src\help\ReleaseNotes.hpp">
+      <Filter>help</Filter>
+    </ClInclude>
+    <ClInclude Include="src\help\SandboxTrash.hpp">
+      <Filter>help</Filter>
+    </ClInclude>
+    <ClInclude Include="src\help\Shortcuts.hpp">
+      <Filter>help</Filter>
+    </ClInclude>
+    <ClInclude Include="src\help\Tutorial.hpp">
+      <Filter>help</Filter>
+    </ClInclude>
+    <ClInclude Include="src\help\TutorialKeys.hpp">
+      <Filter>help</Filter>
+    </ClInclude>
+    <ClInclude Include="src\help\TutorialLaunch.hpp">
+      <Filter>help</Filter>
+    </ClInclude>
+    <ClInclude Include="src\help\TutorialPlayer.hpp">
+      <Filter>help</Filter>
+    </ClInclude>
+    <ClInclude Include="src\help\TutorialScreen.hpp">
+      <Filter>help</Filter>
+    </ClInclude>
+    <ClInclude Include="src\help\TutorialSpot.hpp">
+      <Filter>help</Filter>
+    </ClInclude>
+    <ClInclude Include="src\help\TutorialVerify.hpp">
+      <Filter>help</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiAlarmGroupCommands.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiAlarmGroups.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiApiVars.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiBuildState.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiDuplicate.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiEnums.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiExprBench.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiExprGuide.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiMarkers.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiModbusCyclic.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiObjectAlarms.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiOperators.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiPopupParams.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiScriptCheck.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiScriptCheck110.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiTutorialDeduce.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\platform\AtlasSymbols.hpp">
+      <Filter>platform</Filter>
+    </ClInclude>
+    <ClInclude Include="src\project\ActivationConditions.hpp">
+      <Filter>project</Filter>
+    </ClInclude>
+    <ClInclude Include="src\project\GrafcetCheck.hpp">
+      <Filter>project</Filter>
+    </ClInclude>
+    <ClInclude Include="src\project\GrafcetDiagram.hpp">
+      <Filter>project</Filter>
+    </ClInclude>
+    <ClInclude Include="src\project\GrafcetRewrite2.hpp">
+      <Filter>project</Filter>
+    </ClInclude>
+    <ClInclude Include="src\sim\Rich.hpp">
+      <Filter>sim</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\NoveltyBoard.hpp">
+      <Filter>ui</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\NoveltyMarks.hpp">
+      <Filter>ui</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\widgets\ExprField.hpp">
+      <Filter>ui\widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\widgets\ExprMarkers.hpp">
+      <Filter>ui\widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\widgets\KindBadge.hpp">
+      <Filter>ui\widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\widgets\PropertyGridHooks.hpp">
+      <Filter>ui\widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\widgets\TrailSymbols.hpp">
+      <Filter>ui\widgets</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>

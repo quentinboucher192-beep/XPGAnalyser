@@ -1,0 +1,96 @@
+# =============================================================================
+#  1.10.1 - L'aide F1 des operateurs : a, b et Resultat (chantier U2, C3), et les
+#  invites des champs a expression (C2).
+#  Meme syntaxe que guide-ihm.txt (= chapitre, == cle | titre, : resume, @mots,
+#  @lieux, @voir, ### intertitre, - puce, | tableau |, ``` code ```) ; chaque
+#  exemple en trois blocs etiquetes ```ST, ```C et ```C++ a la suite.
+#  A reporter dans guide-ihm.txt par l'integrateur :
+#   1. dans le sujet « operateurs » : remplacer l'intertitre « Le script d'un
+#      operateur » par les trois intertitres ci-dessous (« a, b et Resultat »,
+#      « La legende au-dessus du script », « L'aide a la saisie et Compiler »),
+#      et l'intertitre « Ajouter un operateur » par celui d'ici ; ajouter les
+#      mots de @mots a ceux du sujet ;
+#   2. dans le sujet « champs-expressions » : les deux paragraphes de la fin
+#      (« Ce que la case montre »), a la place des phrases sur « ou = expression » ;
+#   3. la ligne du tableau des nouveautes 1.10 (« Les champs a expression,
+#      partout pareils ») : « valeur ou = expression » -> « fx en creux et le type
+#      au bout du nom ».
+# =============================================================================
+
+== operateurs | Les opérateurs des symboles et des types IHM
+@mots a, b, Resultat, a et b, opérande de gauche, opérande de droite, l'objet, l'autre opérande, légende, Dans le script, TO_REAL :=, Ajouter un opérateur, Créer et ouvrir le script, existe déjà, l'ouvrir, veux-tu dire, membre inexistant, a.x, Ctrl+Espace
+### a, b et Resultat
+Dans le script d'un opérateur, trois noms sont déjà déclarés, avec leur type : **tu n'écris ni THIS ni OTHER**, tu écris `a`, `b` et `Resultat`.
+| Nom | Ce qu'il est | Son type |
+| `a` | l'opérande de gauche : **l'objet** (pour une conversion : l'objet converti) | le type de gauche (T_VECTEUR, ou le symbole) |
+| `b` | l'opérande de droite : **l'autre opérande** | le type de droite (REAL, T_VECTEUR…) ; pas de `b` dans une conversion |
+| `Resultat` | ce que l'opérateur rend | le type rendu (T_VECTEUR, BOOL pour une comparaison) |
+| `TO_REAL` | pour une conversion : le résultat, sous le nom de la conversion | le type cible |
+- Une **structure** se remplit membre par membre : `Resultat.x := a.x + b.x;`.
+- Une **conversion** donne son résultat par son nom ou par `Resultat` : `TO_REAL := a.x;` ou `Resultat := a.x;`.
+- Un opérateur **composé** (`+=`, `-=`, `*=`, `/=`) n'a pas de résultat : **`a` est modifié en place** (`a.x := a.x + b;`). Compiler avertit si son script écrit `Resultat`.
+- Un **symbole** : `a` est l'instance ; ses paramètres se lisent comme des membres (`a.Debit`), puis ses propriétés (`a.Visible`, `a.X`), comme `Pompe_3.` ailleurs.
+- L'ordre compte : dans `REAL * T_VECTEUR`, `a` est le REAL et `b` l'objet.
+```ST
+(* T_VECTEUR + T_VECTEUR : T_VECTEUR *)
+Resultat.x := a.x + b.x;
+Resultat.y := a.y + b.y;
+
+(* TO_REAL(T_VECTEUR) : REAL - la norme *)
+TO_REAL := SQRT(a.x * a.x + a.y * a.y);
+
+(* T_VECTEUR += REAL : a est modifie *)
+a.x := a.x + b;
+a.y := a.y + b;
+```
+```C
+T_VECTEUR t_vecteur_ajouter(T_VECTEUR a, T_VECTEUR b)
+{
+    T_VECTEUR resultat;
+    resultat.x = a.x + b.x;
+    resultat.y = a.y + b.y;
+    return resultat;
+}
+REAL t_vecteur_to_real(const T_VECTEUR *a) { return sqrtf(a->x * a->x + a->y * a->y); }
+void t_vecteur_ajouter_a(T_VECTEUR *a, REAL b) { a->x += b; a->y += b; }
+```
+```C++
+T_VECTEUR operator+(const T_VECTEUR& a, const T_VECTEUR& b)
+{
+    T_VECTEUR resultat;
+    resultat.x = a.x + b.x;
+    resultat.y = a.y + b.y;
+    return resultat;
+}
+explicit T_VECTEUR::operator REAL() const { return std::sqrt(x * x + y * y); }
+T_VECTEUR& operator+=(T_VECTEUR& a, REAL b) { a.x += b; a.y += b; return a; }
+```
+### La légende au-dessus du script
+Au-dessus du script de chaque opérateur, un encadré le dit noir sur blanc, puis donne un exemple d'une ligne :
+| Genre | La légende |
+| `T_VECTEUR * REAL : T_VECTEUR` | a : l'objet de type T_VECTEUR (à gauche de *) · b : l'autre opérande, REAL · Resultat : T_VECTEUR |
+| `TO_REAL(T_VECTEUR) : REAL` | a : l'objet converti, T_VECTEUR · le résultat (REAL) : TO_REAL := … ou Resultat := … |
+| `T_VECTEUR += REAL` | a : l'objet de type T_VECTEUR, modifié en place (à gauche de +=) · b : l'autre opérande, REAL · pas de résultat : a est modifié |
+| `T_VECTEUR = T_VECTEUR : BOOL` | a : l'objet de type T_VECTEUR (à gauche de =) · b : l'autre opérande, T_VECTEUR · Resultat : BOOL |
+L'exemple suit les membres du type : `Exemple : Resultat.x := a.x * b;`, `Exemple : TO_REAL := a.x;`.
+### L'aide à la saisie et Compiler
+L'aide à la saisie connaît `a`, `b` et `Resultat`, avec leurs types :
+- `a.` propose les membres du type de gauche (un type IHM : ses membres ; un symbole : ses paramètres, puis ses propriétés) ;
+- `b.` propose ceux de l'autre opérande quand c'est un type IHM, une structure ou un DDT ; un REAL n'a pas de membres ;
+- `Resultat.` (et `TO_T_RESUME.` dans une conversion) propose les membres du type rendu ;
+- **Ctrl+Espace** sur une ligne vide : `a`, `b` et `Resultat` en tête de la liste, chacun avec son type et ce qu'il est ;
+- le survol de `a` (et la barre sous le script) dit son type : « a : T_VECTEUR   l'objet de type T_VECTEUR (à gauche de +) ».
+**Compiler** (F7) les connaît aussi : un membre qui n'existe pas est souligné et dit à sa ligne, avec le nom le plus proche — « le membre Nm n'existe pas dans T_VECTEUR (a) : veux-tu dire Nom ? » ; `b.x` quand b est un REAL : « b est un REAL : il n'a pas de membre x ».
+### Ajouter un opérateur
+**Ajouter un opérateur** (l'outil de la section Opérateurs) ouvre une fenêtre :
+- **Genre** : des pastilles — Conversion TO_…, `+ - * / += -= *= /= = <> < > <= >=` ;
+- **Opérande de droite** (à gauche : le type lui-même) ou, pour une conversion, **Type cible** : des pastilles (le type lui-même, REAL, LREAL, INT, DINT et les autres types IHM ; pour une cible : STRING, REAL, LREAL, INT, DINT, BOOL et les types IHM). Un DDT de l'automate se choisit ensuite dans la **Cible** des propriétés de l'opérateur ;
+- **Signature** : `T_VECTEUR / REAL : T_VECTEUR` et « nouveau » ; si elle existe déjà, « existe déjà · l'ouvrir » et **Créer est grisé** (« l'ouvrir » choisit l'opérateur existant) ; une signature impossible dit pourquoi ;
+- **Dans le script** : la même légende de `a`, `b`, `Resultat`, et l'exemple d'une ligne ;
+- **Script prérempli** : ce que l'opérateur aura en script (et son équivalent C++).
+**Créer et ouvrir le script** (Entrée) ajoute l'opérateur en une seule commande (**Ctrl+Z** le retire) et ouvre son script dans l'éditeur, le curseur dedans. Échap ferme sans rien ajouter. **Dupliquer** ouvre la même fenêtre, avec le même genre et l'opérande (ou la cible) libre suivant.
+
+== champs-expressions | Les champs à expression
+### Ce que la case montre (1.10.1)
+Une case qui accepte une expression porte la **pastille fx** devant sa valeur et le **type attendu** en petit au bout de son nom : c'est ce qui le dit. Son nom n'a donc plus de « (expression) » (l'animation de l'inspecteur : **Visibilité**, **Couleur dynamique**, **Clignotement**… ; **Autorisation**, **Valeur** d'une action), et une case vide n'a plus d'invite « ou = expression » ; une case à cocher non plus.
+Vide, une case garde seulement ce qui aide vraiment : sa valeur par défaut (« 12 · valeur par défaut ») ou, pour un texte à trous, « {variable} ». Le type ne reste dans l'invite que là où il n'est pas écrit au bout du nom ; l'infobulle d'une case vide le redit : « Vide : nombre. Accepte une expression : tape = puis l'expression. »

@@ -1,0 +1,95 @@
+# =============================================================================
+#  Aide F1 de la 1.9 - chantier B : la page Simulation de Paramètres système,
+#  l'accès administrateur (Ctrl+Alt+S sur le poste), les variables système des
+#  esclaves simulés, IHM_ESCLAVE_SIMULE.
+#
+#  Même syntaxe que guide-ihm.txt (voir son en-tête). Ces deux sujets sont à
+#  ranger dans le chapitre de Paramètres système et des variables système ;
+#  le chef de projet les reporte dans guide-ihm.txt.
+# =============================================================================
+
+== page-simulation | La page Simulation (Paramètres système)
+: Le 3e onglet de Paramètres système montre tous les esclaves simulés de l'application et les commande : ce que lit l'IHM pour chaque équipement (le vrai appareil, l'esclave simulé ou automatique), la marche, la panne, une exception, et les valeurs de l'esclave choisi (animer, le mouvement, la zone, la période, forcer). Réservée à la permission Administrer ; ses réglages durent jusqu'au redémarrage de l'IHM et ne vont pas dans le projet.
+@mots Page Simulation, page Simulation, Simulation, Ctrl+Alt+S, Revenir au vrai maintenant, Tout animer, Tout arrêter, Déforcer tout, Animer les, Déforcer les, Le vrai, L'esclave, Auto, En marche, Répond, Exception, Réservé à un administrateur, Se connecter…, IHM_PARAMETRES_SYSTEME
+@voir parametres-systeme, variables-esclaves, esclaves-virtuels, valeurs-simulees, equipements, securite, poste-exploitation
+@capture PNG_910_page_simulation_admin.png | La page Simulation vue par un administrateur : à gauche les esclaves simulés, à droite le Variateur ATV320 choisi, une ligne animée et une valeur forcée.
+@capture PNG_911_page_simulation_refusee.png | La même page pour un opérateur : la carte « Réservé à un administrateur », rien des esclaves ; le journal dit « Accès refusé ».
+@capture PNG_912_poste_ctrl_alt_s.png | Sur le poste d'exploitation, Ctrl+Alt+S ouvre la page, même sans bouton Paramètres système dans le projet.
+### L'ouvrir
+La page est le troisième onglet du menu natif **Paramètres système**, après Réglages et Diagnostic. Rien à dessiner :
+- dans **Simuler l'IHM**, le bouton **Page Simulation** de la barre (à côté de **Paramètres système**) ;
+- sur le **poste d'exploitation**, **Ctrl+Alt+S**, même si le projet n'a ni bouton ni action Paramètres système ;
+- l'action **Paramètres système** avec l'onglet **Simulation**, l'objet Paramètres système dont l'onglet ouvert est **Simulation**, ou `IHM_PARAMETRES_SYSTEME('Simulation')` dans un script.
+La croix, ou un clic hors du panneau, la ferme. Le panneau grandit pour cet onglet (jusqu'à 1200 × 800) et s'adapte aux petits écrans ; les cases et les boutons − et + font 26 pixels : ils se touchent au doigt.
+### Qui peut l'ouvrir
+La page est **réservée à la permission Administrer** (Configuration › Utilisateurs). Sans elle, l'onglet porte un cadenas et le corps ne montre que la carte **Réservé à un administrateur** avec **Se connecter…** : le menu de connexion s'ouvre, et une fois connecté avec un compte administrateur la page revient. Rien des esclaves n'est montré ni envoyé ; chaque essai est écrit au journal et dans l'historique des événements (« Accès refusé »). Sécurité éteinte : tout le monde y a accès.
+Sur le poste, la fiche **Configuration › Poste d'exploitation** porte la case **Page Simulation (Ctrl+Alt+S, permission Administrer)**, cochée par défaut ; décochée, la page n'existe pas sur le poste (deux onglets seulement) et Ctrl+Alt+S ne l'ouvre pas.
+### À gauche : les esclaves simulés
+Le titre dit combien il y en a et combien sont en marche (« ESCLAVES SIMULÉS (3) · 3 EN MARCHE »). Une carte par esclave, dans l'ordre des équipements :
+- le **cadenas violet** d'un esclave lié à un vrai appareil, la fiole, le nom de l'équipement ;
+- son état : « esclave lié · en marche · 61 requêtes », ou « seulement simulée » pour un équipement qui n'a pas encore de vrai appareil ;
+- pour un esclave lié, le segment **Le vrai | L'esclave | Auto** : ce que l'IHM lit pour cet équipement. **Auto** lit le vrai et bascule sur l'esclave quand le vrai ne répond plus (« Basculer après » de la fiche). Le segment est grisé, avec la raison, quand la page ne peut pas choisir (sur le poste, une fiche qui dit « toujours le vrai appareil ») ;
+- une ligne violette quand l'IHM lit l'esclave : « L'IHM lit l'esclave : le vrai ne répond pas depuis 14:02:21. ».
+Un clic sur une carte choisit l'esclave (il est entouré). En bas, **TOUS** : **Tout animer**, **Tout arrêter**, **Déforcer tout** pour tous les esclaves à la fois. Beaucoup d'esclaves : la liste défile (flèches, molette).
+### À droite : l'esclave choisi
+En tête, son nom, son adresse locale (127.0.0.1:port), les bascules **En marche** et **Répond** (décochée : une panne simulée, il ne répond plus), et **Exception** ‹ aucune › (01, 02, 03, 04, 06 ou 0B, renvoyée à chaque requête).
+Puis une ligne par valeur de l'esclave :
+| Colonne | Ce qu'elle fait |
+| ANIMER | la case : la valeur bouge toute seule |
+| VARIABLE | le nom de la variable liée, son adresse, ce qu'en fait l'IHM (lue, écrite) |
+| MOUVEMENT | ‹ sinus › : aucun, sinus, rampe, aléatoire, compteur, constante ; pour un bit : clignote, constante |
+| ZONE | [−] 10 [+] à [−] 50 [+] : entre quelles valeurs elle bouge, en valeur de la variable (mise à l'échelle comprise) ; le pas suit l'échelle |
+| PÉRIODE | ‹ 20 s › : de 0,5 s à 10 min |
+| FORCER | la case F orange : la valeur est tenue ; forcée, [−] valeur [+] la change ; les écritures de l'IHM sont refusées |
+| VALEUR | la valeur en direct, en gras |
+En bas : **Animer les N**, **Arrêter**, **Déforcer les N** pour cet esclave, et à droite **Revenir au vrai maintenant** (un esclave lié) : l'IHM lit de nouveau le vrai appareil, la bascule repart de zéro.
+### Ce que la page change
+Les choix de la page **durent jusqu'au redémarrage de l'IHM** : ils ne vont pas dans le projet, Ctrl+Z ne les concerne pas, et **Redémarrer l'IHM** les oublie tous (la source de chaque fiche revient, plus rien n'est forcé). La ligne d'état le rappelle : « Réservé à la permission Administrer. Ces réglages durent jusqu'au redémarrage de l'IHM : ils ne vont pas dans le projet. » ; après un geste, elle dit ce qui s'est passé (« Variateur ATV320 : l'IHM lit l'esclave simulé »), un refus en rouge.
+Chaque geste est écrit au journal (source « Page Simulation », l'équipement, le geste, l'utilisateur) ; chaque bascule entre le vrai et l'esclave ajoute un événement « Communication » et une marque sur les courbes des variables liées.
+> L'onglet **Diagnostic** a un groupe **Esclaves simulés** : combien, en marche, lesquels l'IHM lit, les bascules en cours, les valeurs animées et forcées ; chaque ligne est aussi une variable SYS (voir « Les variables système des esclaves simulés »).
+
+== variables-esclaves | Les variables système des esclaves simulés
+: Le domaine SYS « Esclaves simulés » : sept variables pour toute l'IHM (combien d'esclaves, en marche, lus par l'IHM, les bascules, les valeurs animées et forcées) et une structure SYS.Slave.<nom> de seize membres par esclave simulé. Toutes en lecture seule ; IHM_ESCLAVE_SIMULE('Équipement') dit si l'IHM lit un équipement sur son esclave.
+@mots SYS.SimSlaveCount, SYS.SimSlavesRunning, SYS.SimReads, SYS.SimReadNames, SYS.SimFallbacks, SYS.SimAnimated, SYS.SimForced, SYS.Slave, SimSlaveCount, SimSlavesRunning, SimReads, SimReadNames, SimFallbacks, SimAnimated, SimForced, IHM_ESCLAVE_SIMULE, Esclaves simulés
+@voir variables-systeme, page-simulation, esclaves-virtuels, equipements, fonctions-ihm
+@capture PNG_913_variables_esclaves.png | Le volet Variables système : le domaine Esclaves simulés, ses sept variables, et la structure SYS.Slave.Variateur_ATV320 dépliée avec la valeur de ses membres en marche.
+@capture PNG_914_diagnostic_esclaves.png | L'onglet Diagnostic de Paramètres système : le groupe Esclaves simulés, chaque ligne reliée à sa variable SYS.
+### Les sept variables du domaine
+| Variable | Type | Ce qu'elle dit |
+| SYS.SimSlaveCount | INT | les esclaves simulés (liés et seulement simulés) |
+| SYS.SimSlavesRunning | INT | ceux qui sont en marche |
+| SYS.SimReads | BOOL | l'IHM lit au moins un équipement sur un esclave simulé |
+| SYS.SimReadNames | STRING | lesquels, séparés par des virgules |
+| SYS.SimFallbacks | INT | les bascules automatiques en cours (le vrai ne répond pas) |
+| SYS.SimAnimated | INT | les valeurs animées |
+| SYS.SimForced | INT | les cases forcées |
+### Une structure par esclave : SYS.Slave.<nom>
+Chaque équipement Modbus qui a un esclave simulé (lié à un vrai appareil, ou seulement simulé) a sa structure. Son **nom** est celui de l'équipement, les espaces et les accents remplacés par _ : « Variateur ATV320 » donne `SYS.Slave.Variateur_ATV320`, « Balance B » donne `SYS.Slave.Balance_B`. Seize membres, en lecture :
+| Membre | Type | Ce qu'il dit |
+| Name | STRING | son nom affiché (« Variateur ATV320 · esclave simulé ») |
+| Kind | STRING | « lié » (clone d'un vrai appareil) ou « seulement simulé » |
+| Equipment | STRING | l'équipement dont il est l'esclave |
+| Running | BOOL | il est en marche |
+| Responds | BOOL | faux : panne simulée |
+| Exception | INT | l'exception forcée (0 : aucune) |
+| Read | BOOL | l'IHM le lit à la place du vrai appareil (ou il n'y a que lui) |
+| Fallback | BOOL | lu parce que le vrai ne répond pas (bascule automatique) |
+| Mode | STRING | « vrai », « esclave » ou « auto » |
+| RealOnline | BOOL | le vrai appareil répond |
+| Port | DINT | son port sur 127.0.0.1 (0 : arrêté) |
+| Requests | UDINT | les requêtes servies |
+| RefusedWrites | UDINT | les écritures refusées (cases forcées) |
+| Clients | INT | les clients connectés (l'IHM, l'outil Modbus…) |
+| Animated | INT | ses valeurs animées |
+| Forced | INT | ses cases forcées |
+Le volet **Programmation générale › Variables système** les montre : le domaine **Esclaves simulés**, ses sept variables, puis une ligne dépliable par esclave avec ses seize membres et, en marche, leur valeur. L'aide à la saisie propose les noms après `SYS.Slave.` et les membres après `SYS.Slave.<nom>.` ; l'infobulle d'un membre dit son type et son texte.
+**Générer** refuse un esclave inconnu (`SYS.Slave.Inconnu.Read` : le message cite les esclaves du projet) et un membre inconnu (`SYS.Slave.Variateur_ATV320.Truc` : le message cite les seize membres), comme une écriture : ces variables sont en lecture seule.
+### La fonction IHM_ESCLAVE_SIMULE
+`IHM_ESCLAVE_SIMULE('Variateur ATV320')` rend **TRUE** quand l'IHM lit en ce moment cet équipement sur son esclave simulé (choisi sur la page Simulation, demandé par sa fiche, ou par la bascule automatique), ou quand l'équipement n'est que simulé ; **FALSE** sinon, et pour un équipement inconnu. Elle s'écrit dans une expression, une condition d'alarme ou un script, comme `IHM_EQUIPEMENT_OK` ; l'aide à la saisie propose les équipements qui ont un esclave simulé.
+```
+(* un bandeau qui prévient quand une mesure vient d'un esclave simulé *)
+IF IHM_ESCLAVE_SIMULE('Variateur ATV320') THEN
+    Bandeau := 'Vitesse lue sur l''esclave simulé';
+END_IF;
+```
+> Une alarme `SYS.SimFallbacks > 0` prévient qu'au moins un vrai appareil ne répond plus et que l'IHM lit son esclave.

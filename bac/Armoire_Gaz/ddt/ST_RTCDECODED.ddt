@@ -1,0 +1,16 @@
+# Derived data type.
+name = ST_RTCDECODED
+version = 0.01
+# checksum is recomputed by Control Expert on import; not stored.
+
+# name ; type ; address ; scope ; init ; comment ; attributes ; element comments
+ValidUtc ; BOOL ;  ; Member ;  ;  ;  ; 
+Status ; INT ;  ; Member ;  ;  ;  ; 
+Annee ; INT ;  ; Member ;  ;  ;  ; 
+Mois ; INT ;  ; Member ;  ;  ;  ; 
+Jour ; INT ;  ; Member ;  ;  ;  ; 
+Heures ; INT ;  ; Member ;  ;  ;  ; 
+Minutes ; INT ;  ; Member ;  ;  ;  ; 
+Secondes ; INT ;  ; Member ;  ;  ;  ; 
+Millisecondes ; INT ;  ; Member ;  ;  ;  ; 
+CycleMs ; UDINT ;  ; Member ;  ;  ;  ; 

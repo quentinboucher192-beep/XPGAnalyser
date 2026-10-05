@@ -1,0 +1,62 @@
+# =============================================================================
+#  Session 97 - 1.11 (chantier T3, C4, tranche 10) : les icones compilable /
+#  generable sur les UNITES DE PROGRAMME, les sections, les DFB et les scripts,
+#  en theme CLAIR (la question du client, 02/10 a 22 h 16 : « je ne vois pas
+#  les icones ... sur les sections, unites de programmes et scripts »).
+#  Dans une COPIE de Armoire_Gaz que le lanceur prepare (scratchpad/T3/t10/lancer-s96-98.sh) :
+#   - MAST : Matrice en LD (⊘), Reset avec un IF sans END_IF (✕1)
+#   - Logigrammes_B : sa section Matrice en LD                -> l'unite « 1 ✕/⊘ » en gris
+#   - Gestion_armoires : Declenchement avec un IF sans END_IF -> l'unite « 1 ✕/⊘ » en rouge
+#   - Logigrammes_A : rien                                    -> l'unite ✓
+#   - le script Remise_A_Zero en erreur ; Calcul_Debit (C++) : ⊘ et ⇩ barre
+#   T3_97_01 : Unites de programme et Taches : chaque noeud resume ses sections
+#   T3_97_02 : Logigrammes_B deplie : chaque section a son icone
+#   T3_97_03 : Gestion_armoires deplie
+#   T3_97_04 : les Blocs DFB
+#   T3_97_05 : les scripts de l'IHM (le dossier resume, chaque script)
+# =============================================================================
+attendre 3
+theme Light
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+arbre "API/Unités de programme" deplier
+attendre 3
+arbre "API/Tâches" deplier
+attendre 3
+arbre-lignes
+capture T3_97_01_unites_taches.png
+
+arbre "API/Unités de programme/Logigrammes_B" deplier
+attendre 4
+arbre-lignes
+capture T3_97_02_logigrammes_b.png
+
+arbre-replier
+attendre 3
+arbre "API/Unités de programme" deplier
+attendre 3
+arbre "API/Unités de programme/Gestion_armoires" deplier
+attendre 4
+capture T3_97_03_gestion_armoires.png
+
+arbre-replier
+attendre 3
+arbre "API/Blocs DFB" deplier
+attendre 4
+arbre-lignes
+capture T3_97_04_dfb.png
+
+survol 1000 700
+attendre 5
+arbre-portee ihm
+attendre 3
+arbre "IHM/Programmation générale/Scripts" deplier
+attendre 4
+arbre-lignes
+capture T3_97_05_scripts.png
+arbre-portee tout
+attendre 3
+quitter

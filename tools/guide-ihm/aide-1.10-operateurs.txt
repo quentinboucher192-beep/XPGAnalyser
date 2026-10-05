@@ -1,0 +1,212 @@
+# =============================================================================
+#  1.10 - L'aide F1 des operateurs des symboles et des types IHM (chantier S2).
+#  Meme syntaxe que guide-ihm.txt (= chapitre, == cle | titre, : resume, @mots,
+#  @lieux, @voir, ### intertitre, - puce, | tableau |, ``` code ```) ; chaque
+#  exemple en trois blocs etiquetes ```ST, ```C et ```C++ a la suite (le
+#  selecteur ST / C / C++ du chantier P).
+#  A inserer dans guide-ihm.txt par le chef de projet : le sujet apres
+#  « types-ihm » ; puis les retouches des sujets existants listees en fin de fichier.
+# =============================================================================
+
+== operateurs | Les opérateurs des symboles et des types IHM
+: Un symbole et un type IHM ont leurs opérateurs : des conversions TO_xxx (TO_STRING, TO_REAL, TO_T_RESUME…) et des opérateurs + - * / += -= *= /= = <> < > <= >=, avec un opérande de son propre type ou d'un type externe. Chacun est défini par un script, modifiable comme les autres ; ailleurs on écrit TO_STRING(v3), v1 + v2 * 2.0, v += 1.5.
+@mots opérateur, opérateurs, Opérateurs, conversion, TO_STRING, TO_REAL, TO_xxx, Resultat, a et b, ADD, SUB, MUL, DIV, EQ, operator+, explicit operator, +=, -=, *=, /=, comparaison, composé, Ajouter un opérateur, Créer et ouvrir le script, en double, opérandes impossibles, retour du mauvais type
+@lieux symboles, types-ihm, scripts
+@voir symboles, types-ihm, scripts, fonctions, compiler, erreurs-scripts, aide-saisie
+### Ce qu'est un opérateur
+Un opérateur appartient à un **symbole** (onglet du symbole › **Opérateurs**) ou à un **type IHM** (onglet Types IHM › section **Opérateurs** sous les membres). Il a :
+- un **genre** : une **conversion** `TO_xxx`, un opérateur **arithmétique** (`+ - * /`, il rend une valeur), **composé** (`+= -= *= /=`, il modifie l'opérande de gauche et ne rend rien) ou une **comparaison** (`= <> < > <= >=`, il rend un BOOL) ;
+- ses **opérandes** : le type de gauche et le type de droite. L'un des deux est son propre type ; l'autre peut être un type externe (REAL, INT, un autre type IHM). **L'ordre compte** : `T_VECTEUR * REAL` et `REAL * T_VECTEUR` sont deux opérateurs ;
+- son **type de retour** (la cible d'une conversion : un type de base, un type IHM ou un DDT de l'automate) ;
+- **son script** : du ST, avec les mêmes règles que les autres scripts (variables locales, aide à la saisie, diagnostics pendant la frappe, Compiler).
+| Genre | Signature | Retour |
+| conversion | `TO_STRING(T_VECTEUR) : STRING` | STRING |
+| conversion | `TO_REAL(T_VECTEUR) : REAL` | REAL |
+| arithmétique | `T_VECTEUR + T_VECTEUR : T_VECTEUR` | T_VECTEUR |
+| arithmétique | `T_VECTEUR * REAL : T_VECTEUR` | T_VECTEUR |
+| composé | `T_VECTEUR += T_VECTEUR` | (a modifié) |
+| comparaison | `T_VECTEUR = T_VECTEUR : BOOL` | BOOL |
+### Le script d'un opérateur
+- `a` est l'opérande de gauche (l'objet converti, pour une conversion), `b` celui de droite.
+- Le résultat se donne par **`Resultat := … ;`** (`Resultat.x := … ;` membre par membre pour une structure), par le nom de la conversion (`TO_REAL := … ;`) ou par `RETURN … ;`.
+- Un opérateur composé (`+=`) **modifie `a`** : `a.x := a.x + b.x;`.
+- Un symbole : `a` est l'instance ; ses **paramètres** se lisent comme des membres (`a.Nom`, `a.Debit`).
+- À l'ajout, le script est **prérempli** : la signature en commentaire, puis un corps d'exemple tiré des membres du type (ou des paramètres du symbole). Change la signature dans les propriétés : l'en-tête du script suit.
+### Les conversions TO_xxx
+Une conversion part de son type (`TO_STRING` d'un T_VECTEUR) ou y arrive (`TO_T_VECTEUR` d'un REAL, définie sur T_VECTEUR). Ailleurs, elle s'emploie comme une fonction : `TO_STRING(v3)`, `TO_REAL(v3)`, `TO_STRING(Pompe_3)`.
+```ST
+(* TO_REAL(T_VECTEUR) : REAL - la norme *)
+TO_REAL := SQRT(a.x * a.x + a.y * a.y + a.z * a.z);
+
+(* TO_STRING(Sym_Pompe) : STRING - a : l'instance *)
+TO_STRING := CONCAT(a.Nom, ' : ', TO_STRING(a.Debit), ' m3/h');
+```
+```C
+REAL t_vecteur_to_real(const T_VECTEUR *a)
+{
+    return sqrtf(a->x * a->x + a->y * a->y + a->z * a->z);
+}
+STRING sym_pompe_to_string(const Sym_Pompe *a);   /* "P3 : 44.6 m3/h" */
+```
+```C++
+explicit T_VECTEUR::operator REAL() const
+{
+    return std::sqrt(x * x + y * y + z * z);
+}
+explicit Sym_Pompe::operator STRING() const;      // Nom + " : " + Debit + " m3/h"
+```
+Vers un **type IHM**, le script remplit la structure rendue membre par membre :
+```ST
+(* TO_T_RESUME(Sym_Pompe) : T_RESUME *)
+Resultat.Nom := a.Nom;
+Resultat.Valeur := a.Debit;
+```
+```C
+T_RESUME sym_pompe_to_t_resume(const Sym_Pompe *a)
+{
+    T_RESUME r = { a->Nom, a->Debit };
+    return r;
+}
+```
+```C++
+T_RESUME to_t_resume(const Sym_Pompe& a)
+{
+    return T_RESUME{a.Nom, a.Debit};
+}
+```
+### Les opérateurs + - * /
+Avec son propre type ou un type externe, à gauche ou à droite :
+```ST
+(* T_VECTEUR + T_VECTEUR : T_VECTEUR *)
+Resultat.x := a.x + b.x;
+Resultat.y := a.y + b.y;
+Resultat.z := a.z + b.z;
+
+(* T_VECTEUR * REAL : T_VECTEUR *)
+Resultat.x := a.x * b;
+Resultat.y := a.y * b;
+Resultat.z := a.z * b;
+```
+```C
+T_VECTEUR t_vecteur_ajouter(T_VECTEUR a, T_VECTEUR b)
+{
+    T_VECTEUR r = { a.x + b.x, a.y + b.y, a.z + b.z };
+    return r;
+}
+T_VECTEUR t_vecteur_multiplier(T_VECTEUR a, REAL b)
+{
+    T_VECTEUR r = { a.x * b, a.y * b, a.z * b };
+    return r;
+}
+```
+```C++
+T_VECTEUR operator+(const T_VECTEUR& a, const T_VECTEUR& b)
+{
+    return {a.x + b.x, a.y + b.y, a.z + b.z};
+}
+T_VECTEUR operator*(const T_VECTEUR& a, REAL b)
+{
+    return {a.x * b, a.y * b, a.z * b};
+}
+```
+> `REAL * T_VECTEUR` (le nombre à gauche) est un autre opérateur : ajoute-le aussi si tu veux écrire `2.0 * v`.
+### Les opérateurs composés += -= *= /=
+Ils modifient l'opérande de gauche, qui est toujours son propre type ; ils ne rendent rien.
+```ST
+(* T_VECTEUR += T_VECTEUR *)
+a.x := a.x + b.x;
+a.y := a.y + b.y;
+a.z := a.z + b.z;
+```
+```C
+void t_vecteur_ajouter_a(T_VECTEUR *a, T_VECTEUR b)
+{
+    a->x += b.x;  a->y += b.y;  a->z += b.z;
+}
+```
+```C++
+T_VECTEUR& operator+=(T_VECTEUR& a, const T_VECTEUR& b)
+{
+    a.x += b.x;  a.y += b.y;  a.z += b.z;
+    return a;
+}
+```
+### Les comparaisons = <> < > <= >=
+Elles rendent un BOOL.
+```ST
+(* Sym_Pompe = Sym_Pompe : BOOL - le même équipement *)
+Resultat := a.Nom = b.Nom;
+```
+```C
+int sym_pompe_egal(Sym_Pompe a, Sym_Pompe b)
+{
+    return strcmp(a.Nom, b.Nom) == 0;
+}
+```
+```C++
+bool operator==(const Sym_Pompe& a, const Sym_Pompe& b)
+{
+    return a.Nom == b.Nom;
+}
+```
+### L'emploi, ailleurs
+Dans les scripts et les expressions de l'IHM, les opérateurs s'écrivent comme pour les nombres ; chaque emploi appelle le script de l'opérateur :
+```ST
+VAR v1, v2, v3 : T_VECTEUR; END_VAR
+v1.x := 1.0;  v1.y := 2.0;  v1.z := 2.0;
+v2.x := 0.5;  v2.y := 0.0;  v2.z := 1.0;
+v3 := v1 + v2 * 2.0;          (* T_VECTEUR * REAL, puis T_VECTEUR + T_VECTEUR *)
+v3 += v1;                     (* T_VECTEUR += T_VECTEUR *)
+Texte := TO_STRING(v3);
+Norme := TO_REAL(v3);
+Pompe_3_Txt := TO_STRING(Pompe_3);
+```
+```C
+T_VECTEUR v1 = {1.0f, 2.0f, 2.0f}, v2 = {0.5f, 0.0f, 1.0f}, v3;
+v3 = t_vecteur_ajouter(v1, t_vecteur_multiplier(v2, 2.0f));
+t_vecteur_ajouter_a(&v3, v1);
+texte = t_vecteur_to_string(&v3);
+norme = t_vecteur_to_real(&v3);
+```
+```C++
+T_VECTEUR v1{1.0f, 2.0f, 2.0f}, v2{0.5f, 0.0f, 1.0f};
+T_VECTEUR v3 = v1 + v2 * 2.0f;
+v3 += v1;
+STRING texte = static_cast<STRING>(v3);
+REAL norme = static_cast<REAL>(v3);
+```
+- L'**aide à la saisie** propose les conversions `TO_…` (celles des types et des symboles, puis celles de base) et, après une variable d'un type IHM, ses opérateurs.
+- Un opérateur qui n'existe pas est dit par Compiler et souligné dans l'éditeur : « pas d'opérateur T_VECTEUR / REAL : ajoute-le dans les Opérateurs de T_VECTEUR ».
+### Dans l'arbre du projet et l'explorateur d'objets
+Un objet (une instance de symbole), un symbole et un type IHM ont un nœud **Opérateurs (n)** (après le nœud Alarmes d'un objet) ; déplié, il montre chaque opérateur par sa signature (`TO_STRING(Sym_Pompe) : STRING`, `T_VECTEUR + T_VECTEUR : T_VECTEUR`). Un clic ouvre son script.
+### Ajouter, dupliquer, renommer, supprimer
+- **Ajouter un opérateur** : le genre (Conversion TO_… ou un opérateur), le type cible ou l'opérande de droite ; la signature dit « nouveau » ou « existe déjà » ; **Créer et ouvrir le script** : le script prérempli s'ouvre dans l'éditeur.
+- **Dupliquer** : une copie avec la signature libre suivante (une autre cible, un autre opérateur, un autre type à droite).
+- **Changer la signature** (les propriétés de l'opérateur : genre, gauche, droite, cible) : refusé si elle ne va pas ; l'en-tête du script suit.
+- **Supprimer** ; tout se reprend par **Ctrl+Z**.
+- **Renommer le type ou le symbole** : ses opérateurs suivent (les opérandes, les cibles, `TO_ANCIEN` devient `TO_NOUVEAU` dans les scripts) ; **dupliquer** le type ou le symbole copie ses opérateurs pour la copie.
+### Ce que Compiler vérifie
+| La faute | Exemple | Ce que Compiler dit |
+| un opérateur en double | deux `T_VECTEUR + T_VECTEUR` | opérateur en double : T_VECTEUR + T_VECTEUR : T_VECTEUR |
+| des opérandes impossibles | `REAL + REAL` dans T_VECTEUR | opérandes impossibles : ni la gauche ni la droite n'est T_VECTEUR |
+| la gauche d'un composé | `REAL += T_VECTEUR` | la gauche d'un += est modifiée, elle doit être T_VECTEUR |
+| le retour d'une comparaison | `T_VECTEUR < T_VECTEUR : REAL` | retour du mauvais type : une comparaison rend BOOL |
+| une cible inconnue | `TO_T_INCONNU` | conversion vers un type inconnu : T_INCONNU |
+| une conversion vers lui-même | `TO_T_VECTEUR(T_VECTEUR)` | conversion vers le même type |
+| un script fautif | `Resultat.x := a.x + ;` | la faute du script, à sa ligne |
+| un résultat jamais donné | une conversion sans `TO_REAL :=` | l'opérateur ne donne jamais son résultat (avertissement) |
+> En C++, un opérateur d'un type est une fonction `operator+` ; en C, une fonction nommée (`t_vecteur_ajouter`). En ST de l'IHM, c'est un script : `a + b` l'appelle.
+
+# ---- retouches des sujets existants ----
+# « symboles » : ### Les opérateurs (1.10)
+#   Un symbole a ses opérateurs (onglet du symbole › Opérateurs (n), après Dessin,
+#   Alarmes et Instances) : TO_STRING(Pompe_3) ailleurs. Voir « Les opérateurs des
+#   symboles et des types IHM ».
+# « types-ihm » : ### Les opérateurs (1.10)
+#   Un type IHM a ses opérateurs (la section Opérateurs sous ses membres) : v1 + v2,
+#   v += 1.5, TO_REAL(v). Voir « Les opérateurs des symboles et des types IHM ».
+# « scripts » : ### Les opérateurs des types (1.10)
+#   Dans un script, TO_xxx(x) et a + b sur un type IHM ou une instance de symbole
+#   appellent le script de l'opérateur. Voir « operateurs ».
+# « compiler » : ajouter à la liste de ce qui est contrôlé : les opérateurs (en double,
+#   opérandes impossibles, retour du mauvais type, cible inconnue, leur script).

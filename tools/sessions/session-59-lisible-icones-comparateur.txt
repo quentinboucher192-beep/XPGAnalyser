@@ -1,0 +1,56 @@
+# =============================================================================
+#  Session 59 - 1.8.0 : les icones au choix, le comparateur de sections, le
+#  programme lisible (Excel, PDF, texte), l'import suivi d'un .XPG.
+#  Dans le projet des sessions precedentes (Armoire_Gaz), dans la VRAIE
+#  application. Captures PNG_900 a PNG_907. Les fichiers exportes : ${EXPORTS}.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- A. Les icones : une commande pour plusieurs elements (Ctrl+Z les retire) -------
+icone "section:MAST/Init" init
+icone "section:Logigrammes_A/SFC_ManuA;section:Logigrammes_B/SFC_ManuB" grafcet
+icone "section:Logigrammes_A/Matrice;section:Logigrammes_B/Matrice" matrice
+icone "unit:Logigrammes_A;unit:Logigrammes_B" grafcet
+arbre "API/Unités de programme/Logigrammes_A"
+attendre 8
+capture PNG_900_icones_dans_l_arbre.png
+icone-menu "section:Logigrammes_A/SFC_ManuA"
+attendre 5
+capture PNG_901_le_menu_des_icones.png
+touche Escape
+attendre 3
+
+# ---- B. Le comparateur : SFC_ManuA / SFC_ManuB (A <-> B deduit des noms) -----------
+comparer SFC_ManuA SFC_ManuB
+attendre 10
+capture PNG_902_comparateur_manuA_manuB.png
+comparer SFC_ManuA SFC_ManuB SFC_PurgeA
+attendre 10
+capture PNG_903_comparateur_trois_sections.png
+
+# ---- C. Le programme lisible ---------------------------------------------------------
+lisible-exporter "${EXPORTS}" xlsx,pdf,txt tout
+lisible-exporter "${EXPORTS}" txt sections:SFC_ManuA,SFC_ManuB
+lisible-exporter "${EXPORTS}" pdf unite:Logigrammes_A
+lisible-boite tout
+attendre 6
+capture PNG_904_la_boite_exporter.png
+touche Escape
+attendre 3
+
+# ---- D. L'import suivi : la fenetre, puis le recapitulatif -------------------------------
+import-suivi "${XPG}"
+attendre 1
+capture PNG_905_import_en_cours.png
+attendre-import
+attendre 20
+capture PNG_906_import_recapitulatif.png
+touche Escape
+attendre 5
+capture PNG_907_apres.png
+quitter

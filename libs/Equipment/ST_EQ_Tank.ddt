@@ -1,0 +1,136 @@
+# Derived data type, shared.
+name = ST_EQ_Tank
+version = 1.01
+#! summary = Une cuve : niveau, volume, quatre seuils, vitesse de variation.
+#! usage = Le contrat commun a toutes les familles d'equipement :
+#! usage = Enable a FALSE fige l'equipement - aucune sortie, aucun defaut. Un
+#! usage = equipement consigne ne doit pas remplir le journal d'alarmes pendant
+#! usage = qu'on travaille dessus.
+#! usage = ManMode fait primer les commandes Man* sur l'automatisme.
+#! usage = AckFault acquitte SUR FRONT MONTANT, et seulement si la condition a
+#! usage = disparu.
+#! usage = LE DEFAUT EST MEMORISE par FaultLatch. Un thermique qui se rearme tout
+#! usage = seul en refroidissant effacerait la trace de son declenchement, et
+#! usage = personne ne saurait pourquoi la machine s'est arretee cette nuit-la.
+#! see = DFB_EQ_TANK
+#! see = ST_EQ_Pump
+#! param Enable = FALSE fige l'equipement : aucune sortie, aucun defaut, et les compteurs
+#! param Enable = cessent d'avancer. C'est l'etat d'une machine consignee.
+#! param Fault = La copie PUBLIEE de FaultLatch, posee en fin de cycle. Les sorties, elles,
+#! param Fault = se coupent sur FaultLatch - c'est-a-dire dans le MEME cycle que le defaut.
+#! param Fault = Les couper sur Fault laisserait l'equipement pilote un cycle de plus :
+#! param Fault = vingt millisecondes pendant lesquelles on le commande alors qu'on vient de
+#! param Fault = decouvrir qu'on ne sait plus ou il en est.
+#! param FaultCode = Le dernier code pose, 0 quand il n'y a rien. Voir la table de cette famille,
+#! param FaultCode = en tete de fichier. Il n'est efface que par AckFault.
+#! param Ready = Active et sans defaut. C'est ce qu'on cable sur Available d'une rotation :
+#! param Ready = un equipement en defaut est alors saute, et il reprend son rang en revenant.
+#! param Starts = Nombre de demarrages depuis le dernier Reset. Un compteur qui grimpe vite
+#! param Starts = est la signature d'un court-cycle - voir MinOffMs quand la famille en a un.
+#! param Hyst = Bande de retombee, appliquee A LA SORTIE SEULEMENT. Un seuil haut regle a 80
+#! param Hyst = se declenche a 80 et retombe a 80 - Hyst : le nombre qu'on a saisi garde son
+#! param Hyst = sens a la montee, qui est le sens qui compte.
+#! param VeryLow = Les quatre seuils sont en unites physiques, pas en pourcent. VeryLow pilote
+#! param VeryLow = DryRun, VeryHigh pilote Overflow.
+#! param DryRun = Sous VeryLow. A cabler sur le SuctionOk INVERSE des pompes en aspiration :
+#! param DryRun = c'est ce qui empeche une pompe de se detruire sur une cuve vide.
+#! param Overflow = Au-dessus de VeryHigh. A cabler dans la condition de remplissage.
+#! param Rate = Variation par seconde, SIGNEE. Negatif quand la cuve descend. Elle vaut 0 au
+#! param Rate = tout premier cycle, tant qu'il n'y a pas de mesure precedente a comparer.
+#! param Capacity = Volume total, pour calculer Volume depuis Percent. 0 : pas de calcul, et
+#! param Capacity = Volume reste a sa derniere valeur.
+#! param Percent = Remplissage en pourcent, calcule depuis LevelMin et LevelMax. Il peut sortir
+#! param Percent = de 0..100 : c'est justement ce qui revele une sonde debranchee.
+#! fault 1 = LevelMax egal a LevelMin : l'echelle est inutilisable. C'est une division par
+#! fault 1 = zero qui arreterait la tache ; elle est detectee, la cuve est sautee, et le
+#! fault 1 = reste de la station continue. Une erreur de reglage ne doit pas emporter tout
+#! fault 1 = le programme.
+#! fault 2 = Niveau hors plage de plus de 10% : la sonde est probablement debranchee. La
+#! fault 2 = tolerance existe pour ne pas crier sur un bruit de mesure ; au-dela de dix
+#! fault 2 = pour cent, ce n'est plus du bruit.
+#! internal = PrevAck, PrevLevel, HasPrev, RunFracMs, PrevState
+#! param Level = Le niveau mesure, en unites physiques : a cabler sur Val de la voie
+#! param Level = analogique du capteur.
+#! param LevelMin = Le niveau d'une cuve VIDE. Avec LevelMax, donne Percent et Volume
+#! param LevelMin = ; LevelMax = LevelMin est une plage nulle, qui pose le defaut 1.
+#! param LevelMax = Le niveau d'une cuve PLEINE.
+#! param Volume = Le volume courant, calcule depuis Percent et Capacity. Reste a 0 si
+#! param Volume = Capacity vaut 0.
+#! param Low = Seuil BAS. 20 par defaut.
+#! param High = Seuil HAUT. 80 par defaut.
+#! param VeryHigh = Seuil TRES HAUT. Au-dessus, IsVeryHigh et Overflow : interdire le
+#! param VeryHigh = remplissage. 95 par defaut.
+#! param IsVeryLow = Sous VeryLow (avec l'hysteresis a la retombee).
+#! param IsLow = Sous Low.
+#! param IsHigh = Au-dessus de High.
+#! param IsVeryHigh = Au-dessus de VeryHigh.
+#! changes 1.01 = AJOUTS EN FIN DE TYPE : RunS (temps de marche en secondes, sans
+#! changes 1.01 = debordement), State (etat publie : 0 desactive, 1 defaut, 2 repos, 3
+#! changes 1.01 = en service), et deux champs internes. RunMs et StateMs plafonnent a
+#! changes 1.01 = 2 000 000 000 ms au lieu de devenir negatifs. Les seuils ont des
+#! changes 1.01 = valeurs par defaut qui veulent dire quelque chose (5, 20, 80, 95,
+#! changes 1.01 = hysteresis 1) : a 0 tous les quatre, une cuve pleine se croyait en
+#! changes 1.01 = debordement.
+#! example = (* declarer :
+#! example =    Cuves : ARRAY[0..15] OF ST_EQ_Tank;
+#! example =    AI : ARRAY[0..7] OF ST_IO_Ana; *)
+#! example = (* la configuration, une fois : la hauteur de mesure et ce qu'elle contient *)
+#! example = Cuves[0].Name     := 'T601 stockage';
+#! example = Cuves[0].LevelMin := 0.0;
+#! example = Cuves[0].LevelMax := 4.5;        (* metres *)
+#! example = Cuves[0].Capacity := 30.0;       (* m3 *)
+#! example = (* les seuils sont en METRES, comme Level - pas en pourcent *)
+#! example = Cuves[0].VeryLow  := 0.3;
+#! example = Cuves[0].Low      := 0.9;
+#! example = Cuves[0].High     := 3.8;
+#! example = Cuves[0].VeryHigh := 4.3;
+#! example = Cuves[0].Hyst     := 0.05;
+#! example = (* la mesure, AVANT l'appel de DFB_EQ_TANK *)
+#! example = Cuves[0].Level := AI[0].Val;
+#! given = AI[0].Val := 2.25
+#! expect = 1 : Cuves[0].Level = 2.25
+#! expect = 1 : Cuves[0].LevelMax = 4.5
+
+# Une cuve: niveau, volume, quatre seuils, vitesse de variation.
+#
+# Codes de defaut (FaultCode):
+# 1  LevelMax egal a LevelMin: echelle inutilisable
+# 2  niveau hors plage de plus de 10%: la sonde est probablement debranchee
+
+# name ; type ; scope ; initial ; comment
+Name ; STRING[16] ; Member ;  ; ce que l'operateur lit
+Enable ; BOOL ; Member ; TRUE ; FALSE fige l'equipement: aucune sortie, aucun defaut
+ManMode ; BOOL ; Member ;  ; TRUE: les commandes manuelles priment sur l'automatisme
+AckFault ; BOOL ; Member ;  ; front montant: acquitte le defaut s'il a disparu
+PrevAck ; BOOL ; Member ;  ; runtime, ne pas ecrire
+Level ; REAL ; Member ; 0.0 ; niveau mesure, en unites physiques
+LevelMin ; REAL ; Member ; 0.0 ; niveau correspondant a une cuve vide
+LevelMax ; REAL ; Member ; 100.0 ; et a une cuve pleine
+Capacity ; REAL ; Member ; 0.0 ; volume total, pour calculer Volume. 0: pas de calcul
+Volume ; REAL ; Member ; 0.0 ; volume courant
+Percent ; REAL ; Member ; 0.0 ; remplissage en pourcent
+VeryLow ; REAL ; Member ; 5.0 ; seuils, en unites physiques
+Low ; REAL ; Member ; 20.0 ; 
+High ; REAL ; Member ; 80.0 ; 
+VeryHigh ; REAL ; Member ; 95.0 ; 
+Hyst ; REAL ; Member ; 1.0 ; bande de retombee, appliquee a la sortie seulement
+IsVeryLow ; BOOL ; Member ;  ; 
+IsLow ; BOOL ; Member ;  ; 
+IsHigh ; BOOL ; Member ;  ; 
+IsVeryHigh ; BOOL ; Member ;  ; 
+DryRun ; BOOL ; Member ;  ; sous VeryLow: interdire les pompes en aspiration
+Overflow ; BOOL ; Member ;  ; au-dessus de VeryHigh: interdire le remplissage
+Rate ; REAL ; Member ; 0.0 ; variation par seconde, signee
+PrevLevel ; REAL ; Member ; 0.0 ; runtime
+HasPrev ; BOOL ; Member ;  ; runtime: faux tant qu'aucun cycle n'a eu lieu
+Fault ; BOOL ; Member ;  ; un defaut est present
+FaultCode ; INT ; Member ; 0 ; 0 aucun. Voir la table de la famille
+FaultLatch ; BOOL ; Member ;  ; le defaut reste jusqu'a AckFault, meme s'il disparait
+Ready ; BOOL ; Member ;  ; utilisable: active, sans defaut
+RunMs ; DINT ; Member ; 0 ; temps de fonctionnement cumule, en ms, plafonne a 2 000 000 000 (555 h) : lire RunS
+Starts ; UDINT ; Member ; 0 ; nombre de demarrages depuis le dernier Reset
+StateMs ; DINT ; Member ; 0 ; temps dans l'etat courant (State), en ms, plafonne a 2 000 000 000
+RunS ; UDINT ; Member ; 0 ; temps de fonctionnement cumule, en secondes : ne deborde pas avant 136 ans
+RunFracMs ; DINT ; Member ; 0 ; runtime, ne pas ecrire : les millisecondes pas encore comptees dans RunS
+State ; INT ; Member ; 0 ; etat publie : 0 desactive, 1 en defaut, 2 au repos, 3 en service
+PrevState ; INT ; Member ; -1 ; runtime, ne pas ecrire

@@ -1,0 +1,123 @@
+# =============================================================================
+#  Session 76 - 1.10 : l'editeur de grafcet refait (chantier R, decision 11).
+#  Captures PNG_1060 et suivantes, dans une COPIE de Armoire_Gaz (le programme
+#  des armoires : 17 instances de DFB_GRAFCETENGINE). Le grafcet s'ouvre par
+#  un double-clic sur son instance dans l'arbre (Logigrammes_A, Variables
+#  privees), comme le ferait l'utilisateur. La marche (PNG_1063, 1064, 1067)
+#  demande la correction de FIND (1.10, tranche 5) : sans elle l'API s'arretait
+#  au cycle 1 (BUILDING ne finissait pas sa boucle), deja en 1.9.0.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# --- DetoxalA, hors simulation : le dessin, le navigateur, les controles ---
+arbre-filtre "Gc_DetoxalA"
+attendre 3
+arbre "API/Unités de programme/Logigrammes_A/Variables privées/Gc_DetoxalA" double
+attendre 6
+arbre-filtre ""
+attendre 2
+survol 1180 900
+attendre 2
+capture PNG_1060_grafcet_detoxala.png
+
+# --- PompageA : un grand grafcet (OU, renvois) ---
+arbre-filtre "Gc_PompageA"
+attendre 3
+arbre "API/Unités de programme/Logigrammes_A/Variables privées/Gc_PompageA" double
+attendre 6
+arbre-filtre ""
+attendre 2
+survol 1180 900
+attendre 2
+capture PNG_1061_grafcet_pompagea.png
+
+# --- ChangementA ---
+arbre-filtre "Gc_ChangementA"
+attendre 3
+arbre "API/Unités de programme/Logigrammes_A/Variables privées/Gc_ChangementA" double
+attendre 6
+arbre-filtre ""
+attendre 2
+survol 1180 900
+attendre 2
+capture PNG_1062_grafcet_changementa.png
+
+# --- en simulation de l'API ---
+centre-aller "sim.run"
+attendre-cycles 60
+arbre-filtre "Gc_ChangementA"
+attendre 3
+arbre "API/Unités de programme/Logigrammes_A/Variables privées/Gc_ChangementA" double
+attendre 6
+arbre-filtre ""
+attendre 2
+survol 1180 900
+attendre 2
+capture PNG_1063_grafcet_changementa_simulation.png
+arbre-filtre "Gc_DetoxalA"
+attendre 3
+arbre "API/Unités de programme/Logigrammes_A/Variables privées/Gc_DetoxalA" double
+attendre 6
+arbre-filtre ""
+attendre 2
+survol 1180 900
+attendre 2
+capture PNG_1064_grafcet_detoxala_simulation.png
+arbre-filtre "Gc_PompageA"
+attendre 3
+arbre "API/Unités de programme/Logigrammes_A/Variables privées/Gc_PompageA" double
+attendre 6
+arbre-filtre ""
+attendre 2
+clic 1200 1000
+attendre 2
+survol 1180 980
+attendre 3
+capture PNG_1067_grafcet_pompagea_simulation.png
+# --- Exporter PNG (bouton en bas a gauche du dessin) : tout le grafcet, dans le dossier des captures ---
+clic 905 1000
+attendre 3
+survol 1180 980
+attendre 1
+capture PNG_1068_grafcet_export_png.png
+arbre-filtre "Gc_DetoxalA"
+attendre 3
+arbre "API/Unités de programme/Logigrammes_A/Variables privées/Gc_DetoxalA" double
+attendre 6
+arbre-filtre ""
+attendre 2
+
+# --- les commandes du moteur : Initialiser demande confirmation (la bande dit ce que le moteur va faire) ---
+clic 1166 128
+attendre 3
+survol 1180 980
+attendre 2
+capture PNG_1066_grafcet_confirmer_initialiser.png
+touche escape
+attendre 1
+
+# --- PompageA : chercher (Ctrl+F) une variable, la mini-carte ---
+arbre-filtre "Gc_PompageA"
+attendre 3
+arbre "API/Unités de programme/Logigrammes_A/Variables privées/Gc_PompageA" double
+attendre 6
+arbre-filtre ""
+attendre 2
+clic 1300 1000
+attendre 2
+touche ctrl+f
+attendre 1
+texte "pirani"
+attendre 3
+touche f3
+attendre 3
+survol 1180 1000
+attendre 2
+capture PNG_1065_grafcet_chercher_minicarte.png
+touche escape
+quitter

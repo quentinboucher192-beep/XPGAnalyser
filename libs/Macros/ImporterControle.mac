@@ -1,0 +1,560 @@
+(* ImporterControle
+
+   Ce qui DECIDE, depuis quatre onglets du classeur :
+
+     Paliers             combien de pompes doivent tourner, selon un niveau
+                         (DFB_CTL_LEVEL)
+     Rotations           lesquelles, en repartissant l'usure (DFB_SEQ_ROTATE)
+     Modes               quel mode de marche, et les sous-routines de chacun
+                         (DFB_MODE_MANAGER, et un CASE)
+     Interverrouillages  ce qui ne doit jamais s'ouvrir ensemble, ou pas sans
+                         l'autre (DFB_ITL_MATRIX)
+
+   Chaque onglet est facultatif : la macro fait ce que le classeur porte.
+
+   OU CA S'ECRIT, ET POURQUOI LA
+
+     Controle_Init   les reglages des paliers, des rotations et des modes,
+                     et les relations d'interverrouillage : au premier cycle
+     Modes           le gestionnaire, puis les sous-routines du mode actif
+     Controle        paliers, puis rotations, puis interverrouillages - EN
+                     DERNIER, juste avant les equipements : une demande
+                     interdite est annulee quelle que soit sa source (IHM,
+                     sous-routine, rotation).
+
+   #! summary = Génère le contrôle depuis le classeur : paliers de niveau, rotations d'équipements, modes de marche et interverrouillages.
+   #! version = 1.10
+   #! changes 1.10 = Le formulaire : chaque question a son champ (le classeur par …, Ctrl+V ou en le glissant ; les tâches et les sections du projet ; des interrupteurs ; des choix à libellés), ses groupes, son aide et un libellé avec accents. Le code ne change pas. Le mode de repli se choisit parmi ceux de l'onglet Modes.
+   #! usage = QUATRE ONGLETS, TOUS FACULTATIFS : Paliers, Rotations, Modes, Interverrouillages. Leur forme est celle de onglets-a-ajouter.xlsx ; les colonnes de groupe (Mesure, Mode, Bascule...) se lisent sur la PREMIERE ligne de chaque groupe.
+   #! usage = PALIERS -> PAL_<groupe> (DFB_CTL_LEVEL) et PAL_<groupe>_Def. Mesure est une expression ST (Cuves[0].Level), MesureOk aussi (vide : TRUE), Sens 0 vidange / 1 remplissage, Repli le nombre de pompes a faire tourner quand la mesure est perdue. En vidange la marche doit etre AU-DESSUS de l'arret ; l'inverse est signale.
+   #! usage = ROTATIONS -> ROT_<groupe> (DFB_SEQ_ROTATE) et ROT_<groupe>_Mem. Avant l'appel, chaque membre recoit Ready, RunS et RunMs de son equipement ; apres, l'equipement recoit RunReq. Demande est une expression : PAL_Relevage.Demand relie un palier a sa rotation. Un equipement sans RunReq (une vanne) ne peut pas etre dans une rotation.
+   #! usage = MODES -> GestionModes (DFB_MODE_MANAGER), Modes, Mode_Courant et Mode_Prec (qui NAISSENT A -1), Mode_Ms. Condition est une expression ST, recalculee a chaque cycle. Les sous-routines absentes sont CREEES VIDES et c'est dit ; une SECTION citee comme sous-routine est signalee, parce qu'elle tourne deja a chaque cycle.
+   #! usage = INTERVERROUILLAGES -> ITL_<groupe> (DFB_ITL_MATRIX). Relation "Interdite avec" : jamais ouverte pendant que l'autre l'est. "Exige" : ne s'ouvre que si l'autre est ouverte. Une demande refusee est ANNULEE (OpenReq, PosReq ou RunReq, et leur version manuelle) ; ITL_<groupe>_Raison et _Par disent pourquoi.
+   #! usage = Tout est range par RangerSections : Controle_Init en tete, Modes apres Reports_TC, Controle juste avant Equipements.
+   #! see = ImporterProgramme, ImporterClasseur, VerifierClasseur, GenererModes, RangerSections
+   #! param classeur = Le classeur de l'affaire (.xlsx ou .xlsm) : glisse-le sur le champ, choisis-le avec …, ou colle-le (Ctrl+V) après l'avoir copié dans l'Explorateur. Vide : le dernier classeur ouvert, le cas normal quand on enchaîne les imports.
+   #! param tache = Les sections générées vont dans cette tâche.
+   #! param tache = La tache d'accueil des sections et des sous-routines creees, MAST en general.
+   #! param prefSection = Vide en général : il sert quand deux automates partagent un projet.
+   #! param prefSection = Le prefixe des sections generees, le meme qu'a l'import. Vide en general.
+   #! param modeRepli = Le mode pris quand aucune condition n'est vraie ; choisi parmi ceux de l'onglet Modes.
+   #! param modeRepli = Le mode pris quand aucune condition n'est vraie. -1 : aucun.
+   #! param forcePrio = À partir de cette priorité, un mode passe malgré le temps minimum du mode en cours.
+   #! param forcePrio = La priorite a partir de laquelle un mode passe malgre le temps minimum du mode en cours : un arret d'urgence n'attend pas.
+   #! categorie = Importer depuis le classeur/Étapes de l'import
+   #! champ classeur = fichier .xlsx .xlsm facultatif
+   #! libelle classeur = Le classeur de l'affaire
+   #! champ tache = tache
+   #! libelle tache = Tâche d'accueil des sections
+   #! champ prefSection = nom facultatif
+   #! libelle prefSection = Préfixe des noms de section
+   #! champ modeRepli = choix-classeur Modes, Mode, Nom : -1 aucun
+   #! libelle modeRepli = Mode de repli
+   #! champ forcePrio = nombre 0..32767
+   #! libelle forcePrio = Priorité qui passe outre le temps minimum
+   #! exemple prefSection = {}Paliers, {}Rotations, {}Modes
+   #! groupe Programme = tache, prefSection
+   #! groupe Modes de marche = modeRepli, forcePrio
+   #! avance = prefSection, forcePrio
+   #! produit = les paliers de niveau, les rotations d'équipements, les modes de marche et les interverrouillages
+   #! appliquer = Appliquer : les sections du contrôle sont réécrites en entier
+*)
+
+chemin := Ask('classeur', 'Chemin du classeur (vide = celui deja charge)', '');
+AskNow();
+tache       := Ask('tache', 'Tache d accueil des sections', 'MAST');
+prefSection := Ask('prefSection', 'Prefixe des noms de section (vide en general)', '');
+modeRepli   := AskNumber('modeRepli', 'Mode de repli quand aucune condition n est vraie (-1 : aucun)', -1, 15, '0');
+forcePrio   := AskNumber('forcePrio', 'Priorite qui passe outre le temps minimum', 0, 32767, '100');
+AskNow();
+
+wb := OpenWorkbook(chemin);
+IF wb < 0 THEN Fail('classeur introuvable'); END_IF;
+tEq := OpenSheet('Equipements');
+IF tEq < 0 THEN Fail('onglet "Equipements" introuvable'); END_IF;
+(* Quatre onglets FACULTATIFS : HasSheet d'abord, pour qu'un onglet absent ne
+   devienne pas un avertissement. *)
+tPal := -1; tRot := -1; tMod := -1; tItl := -1;
+IF HasSheet('Paliers') THEN tPal := OpenSheet('Paliers'); END_IF;
+IF HasSheet('Rotations') THEN tRot := OpenSheet('Rotations'); END_IF;
+IF HasSheet('Modes') THEN tMod := OpenSheet('Modes'); END_IF;
+IF HasSheet('Interverrouillages') THEN tItl := OpenSheet('Interverrouillages'); END_IF;
+IF tPal < 0 AND tRot < 0 AND tMod < 0 AND tItl < 0 THEN
+    Fail('aucun onglet de controle dans ce classeur : Paliers, Rotations, Modes ou '
+         + 'Interverrouillages (voir onglets-a-ajouter.xlsx)');
+END_IF;
+
+periode := Setting('Periode (ms)');
+IF periode = '' THEN periode := '20'; END_IF;
+cycle := periode;
+IF VariableExists('Horloge') THEN cycle := 'Horloge.DtMs'; END_IF;
+
+nl := CHR(10);
+sInit := prefSection + 'Controle_Init';
+sCtl  := prefSection + 'Controle';
+sMod  := prefSection + 'Modes';
+neq := RowCount(tEq);
+
+(* Variables de travail. *)
+i := 0; k := 0; j := 0; m := 0; p := 0; q := 0; n := 0; deja := 0; count := 0;
+g := ''; nom := ''; acces := ''; fam := ''; repere := ''; s := ''; t := '';
+initTxt := '';
+sig := 0;
+soucis := 0;
+avant := ''; apres := '';
+creees := 0;
+
+IF tPal >= 0 OR tRot >= 0 OR tItl >= 0 THEN
+    IF NOT SectionExists(sCtl) THEN AddSection(sCtl, tache, 'ST', ''); END_IF;
+    ClearSection(sCtl);
+    AppendToSection(sCtl, '(* Genere par ImporterControle : paliers, rotations, puis interverrouillages');
+    AppendToSection(sCtl, '   EN DERNIER - juste avant les equipements, ils ont le dernier mot. *)');
+END_IF;
+
+(* ===================================================================== *)
+(*  PALIERS                                                               *)
+(* ===================================================================== *)
+nPal := 0;
+IF tPal >= 0 THEN
+    IF NOT TypeExists('ST_CTL_Stage') AND LibHasItem('ST_CTL_Stage') THEN LibImport('ST_CTL_Stage'); END_IF;
+    IF NOT PouExists('DFB_CTL_LEVEL') AND LibHasItem('DFB_CTL_LEVEL') THEN LibImport('DFB_CTL_LEVEL'); END_IF;
+    n := RowCount(tPal);
+    FOR i := 0 TO n - 1 DO
+        g := Cell(tPal, i, 'Groupe');
+        deja := 0;
+        FOR k := 0 TO i - 1 DO
+            IF Cell(tPal, k, 'Groupe') = g THEN deja := 1; END_IF;
+        END_FOR;
+        IF g <> '' AND deja = 0 THEN
+            mesure   := Cell(tPal, i, 'Mesure');
+            mesureOk := Cell(tPal, i, 'MesureOk');
+            sens     := Cell(tPal, i, 'Sens');
+            repli    := Cell(tPal, i, 'Repli');
+            IF mesureOk = '' THEN mesureOk := 'TRUE'; END_IF;
+            IF sens = '' THEN sens := '0'; END_IF;
+            IF repli = '' THEN repli := '0'; END_IF;
+            s := 'PAL_' + g + '_Def';
+            t := 'PAL_' + g;
+            count := 0;
+            FOR k := i TO n - 1 DO
+                IF Cell(tPal, k, 'Groupe') = g THEN
+                    p := STRING_TO_INT(Cell(tPal, k, 'Palier'));
+                    marche := STRING_TO_REAL(Cell(tPal, k, 'Marche'));
+                    arret  := STRING_TO_REAL(Cell(tPal, k, 'Arret'));
+                    IF p < 0 OR p > 7 THEN
+                        Warn('Paliers ' + g + ' : palier ' + Cell(tPal, k, 'Palier') + ' hors de 0..7, saute');
+                        soucis := soucis + 1;
+                    ELSE
+                        IF sens = '0' AND marche <= arret THEN
+                            Warn('Paliers ' + g + ' palier ' + DINT_TO_STRING(p) + ' : en vidange, la marche ('
+                                 + REAL_TO_STRING(marche) + ') doit etre AU-DESSUS de l arret ('
+                                 + REAL_TO_STRING(arret) + ')');
+                            soucis := soucis + 1;
+                        END_IF;
+                        IF sens = '1' AND marche >= arret THEN
+                            Warn('Paliers ' + g + ' palier ' + DINT_TO_STRING(p) + ' : en remplissage, la marche ('
+                                 + REAL_TO_STRING(marche) + ') doit etre AU-DESSOUS de l arret ('
+                                 + REAL_TO_STRING(arret) + ')');
+                            soucis := soucis + 1;
+                        END_IF;
+                        s := 'PAL_' + g + '_Def[' + DINT_TO_STRING(p) + ']';
+                        initTxt := initTxt + nl + '    ' + s + '.Name := '
+                            + QUOTE(MID(ASCII(Cell(tPal, k, 'Nom')), 0, 16)) + ';'
+                            + nl + '    ' + s + '.Enable := TRUE;'
+                            + nl + '    ' + s + '.StartLevel := ' + REAL_TO_STRING(marche) + ';'
+                            + nl + '    ' + s + '.StopLevel := ' + REAL_TO_STRING(arret) + ';'
+                            + nl + '    ' + s + '.OnDelayMs := '
+                            + DINT_TO_STRING(STRING_TO_INT(Cell(tPal, k, 'TempoMarche (ms)'))) + ';'
+                            + nl + '    ' + s + '.OffDelayMs := '
+                            + DINT_TO_STRING(STRING_TO_INT(Cell(tPal, k, 'TempoArret (ms)'))) + ';';
+                        sig := (sig * 31 + p * 7 + REAL_TO_INT(marche * 100.0) MOD 997
+                                + REAL_TO_INT(arret * 100.0) MOD 991) MOD 30011;
+                        IF p + 1 > count THEN count := p + 1; END_IF;
+                    END_IF;
+                END_IF;
+            END_FOR;
+            s := 'PAL_' + g + '_Def';
+            IF NOT VariableExists(s) THEN AddVariable(s, 'ARRAY[0..7] OF ST_CTL_Stage', 'Global', ''); END_IF;
+            IF NOT VariableExists(t) THEN AddVariable(t, 'DFB_CTL_LEVEL', 'Global', ''); END_IF;
+            AppendToSection(sCtl, '');
+            AppendToSection(sCtl, '(* paliers ' + g + ' : combien doivent tourner *)');
+            IF mesure = '' THEN
+                Warn('Paliers ' + g + ' : la colonne Mesure est vide, aucun appel ecrit');
+                soucis := soucis + 1;
+            ELSE
+                AppendToSection(sCtl, t + '(Count := ' + DINT_TO_STRING(count) + ', CycleMs := ' + cycle
+                    + ', Level := ' + mesure + ', Dir := ' + sens + ',');
+                AppendToSection(sCtl, '    LevelOk := ' + mesureOk + ', FallbackDemand := ' + repli
+                    + ', Stages := ' + s + ');');
+            END_IF;
+            nPal := nPal + 1;
+        END_IF;
+    END_FOR;
+END_IF;
+
+(* ===================================================================== *)
+(*  ROTATIONS                                                             *)
+(*  CE QUI ENTRE SE CABLE AVANT L'APPEL, CE QUI SORT APRES : Ready, RunS  *)
+(*  et RunMs cables apres arriveraient un cycle trop tard, et la moins    *)
+(*  usee serait choisie sur des zeros.                                    *)
+(* ===================================================================== *)
+nRot := 0;
+IF tRot >= 0 THEN
+    IF NOT TypeExists('ST_SEQ_Member') AND LibHasItem('ST_SEQ_Member') THEN LibImport('ST_SEQ_Member'); END_IF;
+    IF NOT PouExists('DFB_SEQ_ROTATE') AND LibHasItem('DFB_SEQ_ROTATE') THEN LibImport('DFB_SEQ_ROTATE'); END_IF;
+    n := RowCount(tRot);
+    FOR i := 0 TO n - 1 DO
+        g := Cell(tRot, i, 'Groupe');
+        deja := 0;
+        FOR k := 0 TO i - 1 DO
+            IF Cell(tRot, k, 'Groupe') = g THEN deja := 1; END_IF;
+        END_FOR;
+        IF g <> '' AND deja = 0 THEN
+            mode := Cell(tRot, i, 'Mode');
+            IF mode = '' THEN mode := '1'; END_IF;
+            bascule := STRING_TO_REAL(Cell(tRot, i, 'Bascule (min)'));
+            demande := Cell(tRot, i, 'Demande');
+            IF demande = '' THEN
+                Warn('Rotations ' + g + ' : la colonne Demande est vide, aucun equipement ne sera demande');
+                demande := '0';
+                soucis := soucis + 1;
+            END_IF;
+            s := 'ROT_' + g + '_Mem';
+            t := 'ROT_' + g;
+            avant := '';
+            apres := '';
+            m := 0;
+            FOR k := i TO n - 1 DO
+                IF Cell(tRot, k, 'Groupe') = g THEN
+                    nom := Cell(tRot, k, 'Equipement');
+                    acces := '';
+                    fam := '';
+                    repere := '';
+                    FOR q := 0 TO neq - 1 DO
+                        IF Cell(tEq, q, 'Nom') = nom AND Cell(tEq, q, 'Actif') = 'O' THEN
+                            acces := Cell(tEq, q, 'Acces ST');
+                            fam := Cell(tEq, q, 'Famille');
+                            repere := Cell(tEq, q, 'Repere');
+                        END_IF;
+                    END_FOR;
+                    IF acces = '' THEN
+                        Warn('Rotations ' + g + ' : ' + nom + ' est introuvable ou inactif');
+                        soucis := soucis + 1;
+                    ELSIF NOT HasMember(fam, 'RunReq') OR NOT HasMember(fam, 'Ready')
+                          OR NOT HasMember(fam, 'RunS') THEN
+                        Warn('Rotations ' + g + ' : ' + nom + ' (' + fam + ') n a pas RunReq, Ready et RunS, '
+                             + 'il ne peut pas tourner dans une rotation');
+                        soucis := soucis + 1;
+                    ELSIF m > 15 THEN
+                        Warn('Rotations ' + g + ' : plus de 16 membres, ' + nom + ' saute');
+                        soucis := soucis + 1;
+                    ELSE
+                        initTxt := initTxt + nl + '    ' + s + '[' + DINT_TO_STRING(m) + '].Name := '
+                            + QUOTE(MID(ASCII(repere), 0, 16)) + ';'
+                            + nl + '    ' + s + '[' + DINT_TO_STRING(m) + '].Rank := '
+                            + DINT_TO_STRING(STRING_TO_INT(Cell(tRot, k, 'Rang'))) + ';';
+                        avant := avant + nl + s + '[' + DINT_TO_STRING(m) + '].Available := ' + acces + '.Ready;'
+                            + nl + s + '[' + DINT_TO_STRING(m) + '].RunS := ' + acces + '.RunS;'
+                            + nl + s + '[' + DINT_TO_STRING(m) + '].RunMs := ' + acces + '.RunMs;';
+                        apres := apres + nl + acces + '.RunReq := ' + s + '[' + DINT_TO_STRING(m) + '].RunReq;';
+                        sig := (sig * 31 + m * 13 + STRING_TO_INT(Cell(tRot, k, 'Rang'))) MOD 30011;
+                        m := m + 1;
+                    END_IF;
+                END_IF;
+            END_FOR;
+            IF NOT VariableExists(s) THEN AddVariable(s, 'ARRAY[0..15] OF ST_SEQ_Member', 'Global', ''); END_IF;
+            IF NOT VariableExists(t) THEN AddVariable(t, 'DFB_SEQ_ROTATE', 'Global', ''); END_IF;
+            AppendToSection(sCtl, '');
+            AppendToSection(sCtl, '(* rotation ' + g + ' : lesquels tournent. Ce qui entre, AVANT l appel *)' + avant);
+            AppendToSection(sCtl, t + '(Count := ' + DINT_TO_STRING(m) + ', Demand := ' + demande
+                + ', Mode := ' + mode + ', RotateMs := ' + DINT_TO_STRING(REAL_TO_INT(bascule * 60000.0))
+                + ', CycleMs := ' + cycle + ', Mem := ' + s + ');');
+            AppendToSection(sCtl, '(* ce qui en sort, APRES *)' + apres);
+            nRot := nRot + 1;
+        END_IF;
+    END_FOR;
+END_IF;
+
+(* ===================================================================== *)
+(*  MODES                                                                 *)
+(* ===================================================================== *)
+nModes := 0;
+IF tMod >= 0 THEN
+    IF NOT TypeExists('ST_MODE_Def') AND LibHasItem('ST_MODE_Def') THEN LibImport('ST_MODE_Def'); END_IF;
+    IF NOT PouExists('DFB_MODE_MANAGER') AND LibHasItem('DFB_MODE_MANAGER') THEN
+        LibImport('DFB_MODE_MANAGER');
+    END_IF;
+    IF NOT VariableExists('Modes') THEN AddVariable('Modes', 'ARRAY[0..15] OF ST_MODE_Def', 'Global', ''); END_IF;
+    IF NOT VariableExists('GestionModes') THEN AddVariable('GestionModes', 'DFB_MODE_MANAGER', 'Global', ''); END_IF;
+    (* LE MODE COURANT NAIT A -1 : "aucun mode encore". A 0, le gestionnaire
+       croirait le mode 0 deja actif, et son temps minimum retiendrait le
+       premier vrai choix. *)
+    IF NOT VariableExists('Mode_Courant') THEN
+        AddVariable('Mode_Courant', 'INT', 'Global', '', '-1', 'le mode actif, -1 avant le premier choix');
+    END_IF;
+    IF NOT VariableExists('Mode_Prec') THEN
+        AddVariable('Mode_Prec', 'INT', 'Global', '', '-1', 'le mode precedent');
+    END_IF;
+    IF NOT VariableExists('Mode_Ms') THEN
+        AddVariable('Mode_Ms', 'DINT', 'Global', '', '0', 'depuis combien de temps dans ce mode');
+    END_IF;
+    IF NOT SectionExists(sMod) THEN AddSection(sMod, tache, 'ST', ''); END_IF;
+    ClearSection(sMod);
+    AppendToSection(sMod, '(* Genere par ImporterControle depuis l onglet Modes : les conditions, le');
+    AppendToSection(sMod, '   gestionnaire, puis les sous-routines du mode actif. *)');
+
+    n := RowCount(tMod);
+    count := 0;
+    FOR i := 0 TO n - 1 DO
+        m := STRING_TO_INT(Cell(tMod, i, 'Mode'));
+        deja := 0;
+        FOR k := 0 TO i - 1 DO
+            IF STRING_TO_INT(Cell(tMod, k, 'Mode')) = m THEN deja := 1; END_IF;
+        END_FOR;
+        IF m < 0 OR m > 15 THEN
+            Warn('Modes : mode ' + Cell(tMod, i, 'Mode') + ' hors de 0..15, saute');
+            soucis := soucis + 1;
+        ELSIF deja = 1 THEN
+            Warn('Modes : le mode ' + DINT_TO_STRING(m) + ' est decrit deux fois ; la seconde ligne est sautee');
+            soucis := soucis + 1;
+        ELSE
+            s := 'Modes[' + DINT_TO_STRING(m) + ']';
+            initTxt := initTxt + nl + '    ' + s + '.Name := '
+                + QUOTE(MID(ASCII(Cell(tMod, i, 'Nom')), 0, 16)) + ';'
+                + nl + '    ' + s + '.Enabled := TRUE;'
+                + nl + '    ' + s + '.Priority := ' + DINT_TO_STRING(STRING_TO_INT(Cell(tMod, i, 'Priorite'))) + ';'
+                + nl + '    ' + s + '.MinMs := ' + DINT_TO_STRING(STRING_TO_INT(Cell(tMod, i, 'MinMs'))) + ';';
+            sig := (sig * 31 + m * 17 + STRING_TO_INT(Cell(tMod, i, 'Priorite'))
+                    + STRING_TO_INT(Cell(tMod, i, 'MinMs')) MOD 997) MOD 30011;
+            IF Cell(tMod, i, 'Condition') = '' THEN
+                Warn('Modes : le mode ' + DINT_TO_STRING(m) + ' n a pas de condition, il ne sera jamais demande');
+                soucis := soucis + 1;
+            ELSE
+                AppendToSection(sMod, s + '.Req := ' + Cell(tMod, i, 'Condition') + ';   (* '
+                    + ASCII(Cell(tMod, i, 'Nom')) + ' *)');
+            END_IF;
+            IF m + 1 > count THEN count := m + 1; END_IF;
+            nModes := nModes + 1;
+        END_IF;
+    END_FOR;
+
+    AppendToSection(sMod, '');
+    AppendToSection(sMod, 'GestionModes(Count := ' + DINT_TO_STRING(count) + ', CycleMs := ' + cycle
+        + ', FallbackMode := ' + DINT_TO_STRING(REAL_TO_INT(modeRepli))
+        + ', ForcePriority := ' + DINT_TO_STRING(REAL_TO_INT(forcePrio)) + ',');
+    AppendToSection(sMod, '    Def := Modes, Current := Mode_Courant, PrevMode := Mode_Prec, CurrentMs := Mode_Ms);');
+    AppendToSection(sMod, '');
+    AppendToSection(sMod, 'CASE Mode_Courant OF');
+    creees := 0;
+    FOR i := 0 TO n - 1 DO
+        m := STRING_TO_INT(Cell(tMod, i, 'Mode'));
+        deja := 0;
+        FOR k := 0 TO i - 1 DO
+            IF STRING_TO_INT(Cell(tMod, k, 'Mode')) = m THEN deja := 1; END_IF;
+        END_FOR;
+        IF m >= 0 AND m <= 15 AND deja = 0 THEN
+            AppendToSection(sMod, '    ' + DINT_TO_STRING(m) + ':  (* ' + ASCII(Cell(tMod, i, 'Nom')) + ' *)');
+            t := Cell(tMod, i, 'Sous-routines');
+            j := 0;
+            q := 0;
+            WHILE j < LEN(t) DO
+                k := FIND(t, ',', j);
+                IF k < 0 THEN
+                    nom := MID(t, j);
+                    j := LEN(t);
+                ELSE
+                    nom := MID(t, j, k - j);
+                    j := k + 1;
+                END_IF;
+                WHILE LEN(nom) > 0 AND MID(nom, 0, 1) = ' ' DO nom := MID(nom, 1); END_WHILE;
+                WHILE LEN(nom) > 0 AND MID(nom, LEN(nom) - 1, 1) = ' ' DO nom := MID(nom, 0, LEN(nom) - 1); END_WHILE;
+                IF nom <> '' THEN
+                    IF NOT SectionExists(nom) THEN
+                        AddSubroutine(nom, tache);
+                        Warn('Modes : la sous-routine ' + nom + ' n existait pas, elle est creee VIDE');
+                        creees := creees + 1;
+                    ELSIF NOT IsSubroutine(nom) THEN
+                        Warn('Modes : ' + nom + ' est une SECTION, elle tourne deja a chaque cycle ; '
+                             + 'l appeler ici la ferait tourner deux fois');
+                        soucis := soucis + 1;
+                    END_IF;
+                    (* L'appel d'une sous-routine en ST : son nom suivi de (). *)
+                    AppendToSection(sMod, '        ' + nom + '();');
+                    q := q + 1;
+                END_IF;
+            END_WHILE;
+            IF q = 0 THEN
+                AppendToSection(sMod, '        ;   (* rien de plus dans ce mode *)');
+            END_IF;
+        END_IF;
+    END_FOR;
+    AppendToSection(sMod, 'END_CASE;');
+END_IF;
+
+(* ===================================================================== *)
+(*  INTERVERROUILLAGES - en dernier dans Controle                         *)
+(* ===================================================================== *)
+nItl := 0;
+IF tItl >= 0 THEN
+    IF NOT PouExists('DFB_ITL_MATRIX') AND LibHasItem('DFB_ITL_MATRIX') THEN LibImport('DFB_ITL_MATRIX'); END_IF;
+    n := RowCount(tItl);
+    FOR i := 0 TO n - 1 DO
+        g := Cell(tItl, i, 'Groupe');
+        deja := 0;
+        FOR k := 0 TO i - 1 DO
+            IF Cell(tItl, k, 'Groupe') = g THEN deja := 1; END_IF;
+        END_FOR;
+        IF g <> '' AND deja = 0 THEN
+            (* Les membres, dans l'ordre d'apparition : ',V10,V11,FV20,' *)
+            membres := ',';
+            FOR k := i TO n - 1 DO
+                IF Cell(tItl, k, 'Groupe') = g THEN
+                    nom := Cell(tItl, k, 'Vanne');
+                    IF nom <> '' AND FIND(membres, ',' + nom + ',', 0) < 0 THEN membres := membres + nom + ','; END_IF;
+                    nom := Cell(tItl, k, 'Autre');
+                    IF nom <> '' AND FIND(membres, ',' + nom + ',', 0) < 0 THEN membres := membres + nom + ','; END_IF;
+                END_IF;
+            END_FOR;
+
+            t := 'ITL_' + g;
+            (* Les tableaux du bloc, declares une fois. *)
+            IF NOT VariableExists(t + '_Ouv') THEN AddVariable(t + '_Ouv', 'ARRAY[0..15] OF BOOL', 'Global', ''); END_IF;
+            IF NOT VariableExists(t + '_Interdit') THEN AddVariable(t + '_Interdit', 'ARRAY[0..255] OF BOOL', 'Global', ''); END_IF;
+            IF NOT VariableExists(t + '_Exige') THEN AddVariable(t + '_Exige', 'ARRAY[0..255] OF BOOL', 'Global', ''); END_IF;
+            IF NOT VariableExists(t + '_Ok') THEN AddVariable(t + '_Ok', 'ARRAY[0..15] OF BOOL', 'Global', ''); END_IF;
+            IF NOT VariableExists(t + '_Par') THEN AddVariable(t + '_Par', 'ARRAY[0..15] OF INT', 'Global', ''); END_IF;
+            IF NOT VariableExists(t + '_Raison') THEN AddVariable(t + '_Raison', 'ARRAY[0..15] OF INT', 'Global', ''); END_IF;
+            IF NOT VariableExists(t + '_Viol') THEN AddVariable(t + '_Viol', 'ARRAY[0..15] OF BOOL', 'Global', ''); END_IF;
+            IF NOT VariableExists(t) THEN AddVariable(t, 'DFB_ITL_MATRIX', 'Global', ''); END_IF;
+
+            (* Les relations. *)
+            FOR k := i TO n - 1 DO
+                IF Cell(tItl, k, 'Groupe') = g THEN
+                    (* le rang de Vanne et d'Autre dans la liste des membres *)
+                    p := -1;
+                    q := -1;
+                    j := 1;
+                    m := 0;
+                    WHILE j < LEN(membres) DO
+                        nom := MID(membres, j, FIND(membres, ',', j) - j);
+                        IF nom = Cell(tItl, k, 'Vanne') THEN p := m; END_IF;
+                        IF nom = Cell(tItl, k, 'Autre') THEN q := m; END_IF;
+                        j := FIND(membres, ',', j) + 1;
+                        m := m + 1;
+                    END_WHILE;
+                    s := UPPER(Cell(tItl, k, 'Relation'));
+                    IF p < 0 OR q < 0 OR p > 15 OR q > 15 THEN
+                        Warn('Interverrouillages ' + g + ' ligne ' + DINT_TO_STRING(k) + ' : vanne absente, ou plus de 16');
+                        soucis := soucis + 1;
+                    ELSIF STARTSWITH(s, 'INTERDIT') THEN
+                        initTxt := initTxt + nl + '    ' + t + '_Interdit[' + DINT_TO_STRING(p * 16 + q) + '] := TRUE;   (* '
+                            + ASCII(Cell(tItl, k, 'Vanne')) + ' interdite avec ' + ASCII(Cell(tItl, k, 'Autre')) + ' *)';
+                        sig := (sig * 31 + p * 16 + q + 1) MOD 30011;
+                    ELSIF STARTSWITH(s, 'EXIGE') THEN
+                        initTxt := initTxt + nl + '    ' + t + '_Exige[' + DINT_TO_STRING(p * 16 + q) + '] := TRUE;   (* '
+                            + ASCII(Cell(tItl, k, 'Vanne')) + ' exige ' + ASCII(Cell(tItl, k, 'Autre')) + ' *)';
+                        sig := (sig * 31 + p * 16 + q + 257) MOD 30011;
+                    ELSE
+                        Warn('Interverrouillages ' + g + ' : relation "' + Cell(tItl, k, 'Relation')
+                             + '" inconnue (Interdite avec, ou Exige)');
+                        soucis := soucis + 1;
+                    END_IF;
+                END_IF;
+            END_FOR;
+
+            (* Le cycle : l'etat de chaque membre, l'appel, puis les portes. *)
+            avant := '';
+            apres := '';
+            j := 1;
+            m := 0;
+            WHILE j < LEN(membres) DO
+                nom := MID(membres, j, FIND(membres, ',', j) - j);
+                j := FIND(membres, ',', j) + 1;
+                acces := '';
+                fam := '';
+                FOR q := 0 TO neq - 1 DO
+                    IF Cell(tEq, q, 'Nom') = nom AND Cell(tEq, q, 'Actif') = 'O' THEN
+                        acces := Cell(tEq, q, 'Acces ST');
+                        fam := Cell(tEq, q, 'Famille');
+                    END_IF;
+                END_FOR;
+                s := t + '_Ouv[' + DINT_TO_STRING(m) + ']';
+                IF acces = '' THEN
+                    Warn('Interverrouillages ' + g + ' : ' + nom + ' est introuvable ou inactif');
+                    soucis := soucis + 1;
+                    avant := avant + nl + s + ' := FALSE;   (* ' + ASCII(nom) + ' : introuvable *)';
+                ELSE
+                    IF HasMember(fam, 'Opened') THEN
+                        avant := avant + nl + s + ' := ' + acces + '.Opened;';
+                    ELSIF HasMember(fam, 'Running') THEN
+                        avant := avant + nl + s + ' := ' + acces + '.Running;';
+                    ELSE
+                        avant := avant + nl + s + ' := FALSE;   (* ' + fam + ' : ni Opened ni Running *)';
+                        Warn('Interverrouillages ' + g + ' : ' + nom + ' (' + fam + ') n a ni Opened ni Running');
+                        soucis := soucis + 1;
+                    END_IF;
+                    (* La porte : une demande refusee est annulee, en automatique
+                       comme en manuel. *)
+                    apres := apres + nl + 'IF NOT ' + t + '_Ok[' + DINT_TO_STRING(m) + '] THEN   (* ' + ASCII(nom) + ' *)';
+                    IF HasMember(fam, 'OpenReq') THEN
+                        apres := apres + nl + '    ' + acces + '.OpenReq := FALSE;';
+                        IF HasMember(fam, 'ManOpenReq') THEN apres := apres + nl + '    ' + acces + '.ManOpenReq := FALSE;'; END_IF;
+                    ELSIF HasMember(fam, 'PosReq') AND MemberType(fam, 'PosReq') = 'REAL' THEN
+                        apres := apres + nl + '    ' + acces + '.PosReq := 0.0;';
+                        IF HasMember(fam, 'ManPosReq') THEN apres := apres + nl + '    ' + acces + '.ManPosReq := 0.0;'; END_IF;
+                    ELSIF HasMember(fam, 'RunReq') THEN
+                        apres := apres + nl + '    ' + acces + '.RunReq := FALSE;';
+                        IF HasMember(fam, 'ManRunReq') THEN apres := apres + nl + '    ' + acces + '.ManRunReq := FALSE;'; END_IF;
+                    ELSE
+                        apres := apres + nl + '    ;   (* ' + fam + ' : aucune demande a annuler *)';
+                    END_IF;
+                    apres := apres + nl + 'END_IF;';
+                END_IF;
+                m := m + 1;
+            END_WHILE;
+            IF m > 16 THEN
+                Warn('Interverrouillages ' + g + ' : ' + DINT_TO_STRING(m) + ' membres, le bloc n en tient que 16');
+                soucis := soucis + 1;
+                m := 16;
+            END_IF;
+
+            AppendToSection(sCtl, '');
+            AppendToSection(sCtl, '(* interverrouillage ' + g + ' : EN DERNIER, il a le dernier mot *)' + avant);
+            AppendToSection(sCtl, t + '(Count := ' + DINT_TO_STRING(m) + ', Open := ' + t + '_Ouv, Forbid := '
+                + t + '_Interdit, Require := ' + t + '_Exige,');
+            AppendToSection(sCtl, '    Allowed := ' + t + '_Ok, BlockedBy := ' + t + '_Par, Reason := '
+                + t + '_Raison, Violation := ' + t + '_Viol);' + apres);
+            nItl := nItl + 1;
+        END_IF;
+    END_FOR;
+END_IF;
+
+(* ===================================================================== *)
+(*  Controle_Init, gardee par sa signature                                *)
+(* ===================================================================== *)
+IF initTxt <> '' THEN
+    IF sig <= 0 THEN sig := sig + 30011; END_IF;
+    IF sig = 0 THEN sig := 1; END_IF;
+    IF NOT VariableExists('Controle_Sig') THEN
+        AddVariable('Controle_Sig', 'INT', 'Global', '', '0', 'signature des reglages de controle deja poses');
+    END_IF;
+    IF NOT SectionExists(sInit) THEN AddSection(sInit, tache, 'ST', ''); END_IF;
+    ClearSection(sInit);
+    AppendToSection(sInit, '(* Genere par ImporterControle. GARDEE : pose les reglages des paliers, des');
+    AppendToSection(sInit, '   rotations et des modes, et les relations d interverrouillage, au premier');
+    AppendToSection(sInit, '   cycle et apres un import qui les a changes. *)');
+    AppendToSection(sInit, 'IF Controle_Sig <> ' + DINT_TO_STRING(sig) + ' THEN' + initTxt);
+    AppendToSection(sInit, '    Controle_Sig := ' + DINT_TO_STRING(sig) + ';');
+    AppendToSection(sInit, 'END_IF;');
+END_IF;
+
+RunMacro('RangerSections');
+
+Log(DINT_TO_STRING(nPal) + ' groupe(s) de paliers, ' + DINT_TO_STRING(nRot) + ' rotation(s), '
+    + DINT_TO_STRING(nModes) + ' mode(s), ' + DINT_TO_STRING(nItl) + ' interverrouillage(s)');
+IF tMod >= 0 AND creees > 0 THEN
+    Log(DINT_TO_STRING(creees) + ' sous-routine(s) creee(s) vide(s) : a remplir');
+END_IF;
+IF soucis > 0 THEN
+    Warn(DINT_TO_STRING(soucis) + ' point(s) a revoir dans les onglets de controle : voir ci-dessus');
+END_IF;

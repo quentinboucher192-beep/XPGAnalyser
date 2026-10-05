@@ -1,0 +1,75 @@
+(* CreerInstanceDFB
+
+   Une instance de bloc qui n'est jamais appelee ne fait rien. Cette macro cree
+   donc la variable ET ecrit la ligne d'appel - les deux, parce que l'une sans
+   l'autre est une moitie de travail qui a l'air terminee.
+
+   #! summary = Déclare une instance de bloc fonction ET écrit sa ligne d'appel.
+   #! version = 1.10
+   #! changes 1.10 = Le formulaire : chaque question a son champ (le classeur par …, Ctrl+V ou en le glissant ; les tâches et les sections du projet ; des interrupteurs ; des choix à libellés), ses groupes, son aide et un libellé avec accents. Le code ne change pas. Les paramètres se donnent un par ligne, avec les entrées du bloc proposées.
+   #! changes 1.01 = Nouvelle question parametres : l'appel s'ecrit avec eux. Un appel nu ne compile pas des que le bloc a un InOut (Chan, Eq...), et c'est le cas de tous les blocs de la bibliotheque. Le renvoi vers ImportES, qui n'existe plus, pointe vers ImporterProgramme.
+   #! usage = UNE INSTANCE QUI N'EST JAMAIS APPELEE NE FAIT RIEN. C'est le piege que cette macro existe pour eviter : declarer la variable sans ecrire l'appel laisse un travail qui a l'air termine et qui ne tourne pas.
+   #! usage = L'APPEL PREND LES PARAMETRES DONNES : nomInstance(Count := 8, CycleMs := Horloge.DtMs, Chan := CarteAI_R0S4);. Sans eux, l'appel est nu et ne compile pas si le bloc a un InOut - tous ceux de la bibliotheque en ont un. Pour les cartes et les equipements, ImporterProgramme ecrit l'appel complet.
+   #! usage = Une macro se relance. C'est la regle de toutes celles-ci : relancee sur un projet ou elle a deja tourne, elle ne doit rien casser et rien dupliquer. C'est pour ca qu'elles testent avant de creer, et qu'elles disent "existe deja" au lieu de s'arreter.
+   #! usage = Les questions arrivent par TOURS. Ask() enregistre une question, AskNow() les pose. Une macro coupe ses tours la ou une reponse decide des questions suivantes : demander les quatre noms de section quand on vient de repondre "une seule famille" remplirait l'ecran de champs qu'on laisserait vides.
+   #! example = CreerInstanceDFB : bloc = DFB_EQ_MOTOR, nom = EqMoteurs, section = Equipements
+   #! see = CreerInstanceDDT, EnsureLibraryItem, ImporterProgramme, CreerEquipement
+   #! param bloc = Du projet, ou de la bibliothèque : il est alors importé.
+   #! param bloc = Le nom du bloc fonction : DFB_IO_ANA08, DFB_EQ_MOTOR, DFB_ALM_MANAGER. Importe de la bibliotheque s'il manque.
+   #! param nom = Une instance par usage : deux appels de la même instance se marchent dessus.
+   #! param nom = Le nom de l'instance. Une instance de bloc porte son etat interne d'un cycle a l'autre : deux endroits qui appellent la meme instance se marchent dessus. Une instance par usage.
+   #! param section = Vide : la variable seule, sans appel.
+   #! param section = Ou ecrire l'appel. Laisser vide ne cree que la variable - a n'utiliser que si vous ecrivez l'appel vous-meme juste apres.
+   #! param section = Si la section n'existe pas, la variable est quand meme creee et un avertissement le dit : aucun appel n'a ete ecrit.
+   #! param parametres = Un par ligne : Nom := valeur ; les entrées du bloc sont proposées.
+   #! param parametres = Les parametres de l'appel, tels qu'ils s'ecrivent entre les parentheses : Count := 8, CycleMs := Horloge.DtMs, Chan := CarteAI_R0S4. Vide : un appel nu, a completer.
+   #! categorie = Créer
+   #! champ bloc = dfb
+   #! libelle bloc = Bloc fonction
+   #! champ nom = nom
+   #! libelle nom = Nom de l'instance
+   #! champ section = section facultatif
+   #! libelle section = Section qui reçoit l'appel
+   #! champ parametres = liste membres-de bloc facultatif
+   #! libelle parametres = Paramètres de l'appel
+   #! produit = l'instance du bloc, et sa ligne d'appel dans la section
+   #! appliquer = Créer l'instance {nom}
+*)
+
+bloc := Ask('bloc', 'Quel bloc ?', 'DFB_IO_ANA08');
+nom  := Ask('nom', 'Nom de l instance', '');
+section := Ask('section', 'Dans quelle section ecrire l appel ? (vide = aucune)', '');
+parametres := Ask('parametres', 'Parametres de l appel (Nom := valeur, separes par des virgules)', '');
+AskNow();
+
+IF nom = '' THEN
+    Fail('aucun nom donne');
+END_IF;
+
+IF NOT PouExists(bloc) THEN
+    IF LibHasItem(bloc) THEN
+        Log('import du bloc ' + bloc);
+        LibImport(bloc);
+    ELSE
+        Fail('le bloc ' + bloc + ' n existe pas et la bibliotheque ne le propose pas');
+    END_IF;
+END_IF;
+
+IF VariableExists(nom) THEN
+    Log(nom + ' existe deja');
+ELSE
+    AddVariable(nom, bloc, 'Global', '');
+    Log(nom + ' : ' + bloc);
+END_IF;
+
+IF section <> '' THEN
+    IF SectionExists(section) THEN
+        AppendToSection(section, nom + '(' + parametres + ');');
+        Log('appel ecrit dans ' + section);
+        IF parametres = '' THEN
+            Warn('appel nu : ' + nom + '(); ne compile pas si ' + bloc + ' a un InOut. Completez ses parametres.');
+        END_IF;
+    ELSE
+        Warn('la section ' + section + ' n existe pas : aucun appel ecrit');
+    END_IF;
+END_IF;

@@ -1,0 +1,101 @@
+# =============================================================================
+#  Session 1112c - 1.11.2 (UNI, decision 218) : "OUVRIR..." (CTRL+O) ET "FERMER LE
+#  PROJET" NE FONT PLUS PERDRE LES MODIFICATIONS.
+#  Avant : la puce projet > Ouvrir... montrait la fenetre Ouvrir un projet sans rien
+#  demander : le projet choisi remplacait celui qui etait modifie, ses modifications
+#  etaient perdues ; Ctrl+O ne faisait rien sur l'ecran du projet ; la puce projet >
+#  Fermer le projet le retirait de la memoire sans un mot (perdues aussi).
+#  Maintenant : la question de l'accueil (dialog.startLeave : "Les enregistrer
+#  d'abord" / "Les abandonner" ; Annuler : rien ne s'ouvre, rien ne se ferme), avant
+#  la fenetre Ouvrir un projet et avant de fermer ; Ctrl+O fait comme Ouvrir...
+#  Jouee sur Linux par scratchpad/UNI/lancer-218.sh (ou par une chaine d'essais) :
+#    PROJETS=<dossier> avec DEUX projets : Armoire_Gaz et Projet_B (une copie
+#    d'Armoire_Gaz) ; la cle administrateur deja definie (pas de dialogue au
+#    demarrage) ; --size (pas d'instance unique).
+#  Reussie : code 0, aucune ligne "[script] ligne" ; quatre questions
+#  "dialogue : principale - dialog.startLeave" et une fenetre
+#  "dialogue : principale - dialog.open" ; les cinq "etat" disent Armoire_Gaz,
+#  Armoire_Gaz, Projet_B, Projet_B, puis aucun projet (l'accueil) ; gUni218a
+#  enregistre dans Armoire_Gaz seulement, gUni218b dans Projet_B seulement.
+#  Avant le correctif : 0 question ; echec au premier "dialogue-fenetre principale"
+#  apres "touche ctrl+o" (rien ne s'ouvre) ; gUni218a et gUni218b perdus.
+# =============================================================================
+attendre 3
+dialogue-fenetre aucun
+ouvrir "${PROJETS}/Projet_B"
+attendre-projet
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+dialogue-fenetre aucun
+# Une modification : une variable de plus (le projet est modifie, rien n'est enregistre).
+action create.variable
+attendre 3
+dialogue-fenetre principale
+champ 1 "gUni218a"
+attendre 2
+bouton "Créer"
+attendre 5
+dialogue-fenetre aucun
+etat
+# 1. La puce projet > Ouvrir... : la question de l'accueil d'abord. Annuler : rien ne
+#    s'ouvre, rien ne se perd.
+bandeau-projet-menu
+attendre 3
+choisir "Ouvrir…"
+dialogue-fenetre principale
+attendre 3
+capture 1112c_01_ouvrir_question.png
+bouton "Annuler"
+attendre 3
+dialogue-fenetre aucun
+etat
+# 2. Ctrl+O : la meme question. "Les enregistrer d'abord" (le choix par defaut),
+#    Continuer : Armoire_Gaz est enregistre, puis la fenetre Ouvrir un projet ;
+#    Projet_B y est tape, Ouvrir.
+touche ctrl+o
+dialogue-fenetre principale
+attendre 3
+bouton "Continuer"
+attendre 5
+dialogue-fenetre principale
+champ 1 "${PROJETS}/Projet_B"
+attendre 2
+capture 1112c_02_ouvrir_apres_enregistrer.png
+bouton "Ouvrir"
+attendre 10
+dialogue-fenetre aucun
+etat
+# 3. Projet_B modifie, puis la puce projet > Fermer le projet : la question (sa derniere
+#    phrase : "Fermer le projet le retire de la memoire"). Annuler : il reste ouvert.
+action create.variable
+attendre 3
+dialogue-fenetre principale
+champ 1 "gUni218b"
+attendre 2
+bouton "Créer"
+attendre 5
+dialogue-fenetre aucun
+bandeau-projet-menu
+attendre 3
+choisir "Fermer le projet"
+dialogue-fenetre principale
+attendre 3
+capture 1112c_03_fermer_question.png
+bouton "Annuler"
+attendre 3
+dialogue-fenetre aucun
+etat
+# 4. Encore, Continuer : Projet_B est enregistre, puis ferme (l'accueil).
+bandeau-projet-menu
+attendre 3
+choisir "Fermer le projet"
+dialogue-fenetre principale
+bouton "Continuer"
+attendre 8
+dialogue-fenetre aucun
+etat
+attendre 3
+capture 1112c_04_accueil.png
+quitter

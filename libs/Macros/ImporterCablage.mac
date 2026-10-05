@@ -1,0 +1,149 @@
+(* ImporterCablage
+
+   Depuis l'onglet "Cablage". Relie une voie d'entree/sortie a un parametre
+   d'equipement : Pompes[0].Fbk := CarteDI_R0S4[3].Val;
+
+   C'EST LA MOITIE DU TRAVAIL QUI MANQUAIT. Les macros CSV cablaient les voies
+   vers leurs structures et declaraient les equipements, mais rien ne reliait
+   les deux : la liaison se faisait a la main, ligne par ligne.
+
+   L'onglet donne les deux cotes et le sens ; il n'y a rien a deduire. Le seul
+   travail est de retrouver l'acces ST de l'equipement, qui est dans l'onglet
+   Equipements et pas ici.
+
+   DEUX SECTIONS, PARCE QUE LE SENS DECIDE DE L'INSTANT. Une entree se lit
+   AVANT que l'equipement ne tourne, une sortie s'ecrit APRES qu'il ait
+   decide. Tout mettre au meme endroit ajoute un cycle de retard a l'un des
+   deux sens.
+
+   #! summary = Relie chaque voie d'E/S au paramètre d'équipement qu'elle alimente.
+   #! version = 1.10
+   #! changes 1.10 = Le formulaire : chaque question a son champ (le classeur par …, Ctrl+V ou en le glissant ; les tâches et les sections du projet ; des interrupteurs ; des choix à libellés), ses groupes, son aide et un libellé avec accents. Le code ne change pas.
+   #! changes 1.01 = Les sections sont RANGEES dans l'ordre de la tache par RangerSections, au lieu d'un rappel dans le compte rendu.
+   #! usage = Depuis l'onglet Cablage : Pompes[0].Fbk := CarteDI_R0S4[3].Val;
+   #! usage = C'EST LA MOITIE DU TRAVAIL QUI MANQUAIT. Les macros CSV cablaient les voies vers leurs structures et declaraient les equipements, mais rien ne reliait les deux : la liaison se faisait a la main, ligne par ligne.
+   #! usage = L'onglet donne les deux cotes et le sens ; il n'y a rien a deduire. Le seul travail est de retrouver l'acces ST de l'equipement, qui vit dans l'onglet Equipements et pas ici.
+   #! usage = DEUX SECTIONS, PARCE QUE LE SENS DECIDE DE L'INSTANT. Une entree se lit AVANT que l'equipement ne tourne, une sortie s'ecrit APRES qu'il ait decide. Tout mettre au meme endroit ajoute un cycle de retard a l'un des deux sens.
+   #! usage = LA SECTION EST REECRITE ENTIEREMENT a chaque execution. Ce qui y a ete ajoute a la main est perdu. C'est voulu : une section a moitie ancienne et a moitie nouvelle est pire que les deux, et on ne peut pas deviner ce qui a ete ajoute expres.
+   #! usage = ELLE NE FAIT QU'UNE ETAPE, et elle suppose que les precedentes ont tourne. Pour generer tout le programme en une fois - types, blocs, variables, instances, E/S, equipements, cablage, reports et alarmes - c'est ImporterProgramme.
+   #! see = ImporterProgramme, ImporterVoies, ImporterEquipements
+   #! param classeur = Le classeur de l'affaire (.xlsx ou .xlsm) : glisse-le sur le champ, choisis-le avec …, ou colle-le (Ctrl+V) après l'avoir copié dans l'Explorateur. Vide : le dernier classeur ouvert, le cas normal quand on enchaîne les imports.
+   #! param classeur = C'est un .xlsm, pas un export CSV : la macro lit les onglets directement, et les quatre familles d'E/S sont donc traitees en une seule execution.
+   #! param sEnt = Réécrite en entier à chaque import.
+   #! param sEnt = Les voies vers les equipements. A placer APRES Mapping_Entrees et AVANT la section des equipements.
+   #! param sSort = Réécrite en entier à chaque import.
+   #! param sSort = Les equipements vers les voies. A placer APRES la section des equipements et AVANT Mapping_Sorties.
+   #! param tache = La tâche qui exécute les sections créées.
+   #! param tache = La tache d'accueil des sections creees, MAST en general.
+   #! param tache = Les sections creees sont RANGEES par RangerSections a la fin : Control Expert execute les sections dans l'ordre de la tache, et les entrees doivent passer avant les equipements.
+   #! categorie = Importer depuis le classeur/Étapes de l'import
+   #! champ classeur = fichier .xlsx .xlsm facultatif
+   #! libelle classeur = Le classeur de l'affaire
+   #! champ sEnt = section nouvelle
+   #! libelle sEnt = Section des entrées vers les équipements
+   #! champ sSort = section nouvelle
+   #! libelle sSort = Section des équipements vers les sorties
+   #! champ tache = tache
+   #! libelle tache = Tâche appelante
+   #! groupe Sections = sEnt, sSort, tache
+   #! produit = deux sections : les entrées vers les paramètres des équipements, les équipements vers les sorties
+   #! appliquer = Réécrire {sEnt} et {sSort} entièrement
+*)
+
+chemin := Ask('classeur', 'Chemin du classeur (vide = celui deja charge)', '');
+AskNow();
+
+sEnt  := Ask('sEnt', 'Section des entrees vers les equipements', 'Cablage_Entrees');
+sSort := Ask('sSort', 'Section des equipements vers les sorties', 'Cablage_Sorties');
+tache := Ask('tache', 'Tache appelante', 'MAST');
+AskNow();
+
+wb := OpenWorkbook(chemin);
+IF wb < 0 THEN Fail('classeur introuvable'); END_IF;
+t := OpenSheet('Cablage');
+IF t < 0 THEN Fail('onglet "Cablage" introuvable'); END_IF;
+te := OpenSheet('Equipements');
+IF te < 0 THEN Fail('onglet "Equipements" introuvable'); END_IF;
+
+IF NOT Confirm('Cablage des equipements',
+               'Reecrire ' + sEnt + ' et ' + sSort + ' entierement ?') THEN
+    Fail('annule');
+END_IF;
+
+IF NOT SectionExists(sEnt)  THEN AddSection(sEnt, tache, 'ST', ''); END_IF;
+IF NOT SectionExists(sSort) THEN AddSection(sSort, tache, 'ST', ''); END_IF;
+ClearSection(sEnt);
+ClearSection(sSort);
+AppendToSection(sEnt,  '(* Section generee par ImporterCablage. *)');
+AppendToSection(sSort, '(* Section generee par ImporterCablage. *)');
+
+n := RowCount(t);
+ne := RowCount(te);
+i := 0;
+k := 0;
+poses := 0;
+eq := '';
+acces := '';
+cible := '';
+source := '';
+sens := '';
+sect := '';
+gauche := '';
+
+FOR i := 0 TO n - 1 DO
+    eq     := Cell(t, i, 'Equipement');
+    cible  := Cell(t, i, 'Cible');
+    source := Cell(t, i, 'Source');
+    sens   := Cell(t, i, 'Sens');
+
+    IF eq = '' OR cible = '' OR source = '' THEN
+        SkipRow('ligne ' + DINT_TO_STRING(i) + ' : equipement, cible ou source manquant');
+    ELSE
+        (* L'acces ST de l equipement vit dans l onglet Equipements. *)
+        acces := '';
+        FOR k := 0 TO ne - 1 DO
+            IF Cell(te, k, 'Nom') = eq THEN
+                acces := Cell(te, k, 'Acces ST');
+            END_IF;
+        END_FOR;
+
+        IF acces = '' THEN
+            Warn(eq + ' : introuvable dans l onglet Equipements, ligne sautee');
+        ELSE
+            IF sens = 'DO' OR sens = 'AO' THEN
+                sect := sSort;
+            ELSE
+                sect := sEnt;
+            END_IF;
+
+            AppendToSection(sect, '');
+            AppendToSection(sect, '(* ' + eq + ' ' + Cell(t, i, 'Parametre')
+                + '   ' + Cell(t, i, 'Adresse') + '   '
+                + Cell(t, i, 'Designation') + ' *)');
+
+            (* La colonne Cible porte en general un suffixe, .Fbk, mais rien
+               n'empeche un classeur d'y reecrire le chemin complet. Concatener
+               sans regarder donnerait Pompes[0]Pompes[0].Fbk. *)
+            IF STARTSWITH(cible, acces) THEN
+                gauche := cible;
+            ELSE
+                gauche := acces + cible;
+            END_IF;
+
+            IF sens = 'DO' OR sens = 'AO' THEN
+                (* L equipement decide, la voie recoit. *)
+                AppendToSection(sect, source + ' := ' + gauche + ';');
+            ELSE
+                AppendToSection(sect, gauche + ' := ' + source + ';');
+            END_IF;
+            poses := poses + 1;
+        END_IF;
+    END_IF;
+END_FOR;
+
+IF poses = 0 THEN
+    Warn('aucun cablage. L onglet Cablage est-il rempli ? Il se remplit en '
+         + 'double-cliquant une voie depuis l onglet ES.');
+END_IF;
+Log(DINT_TO_STRING(poses) + ' liaison(s) ecrite(s)');
+RunMacro('RangerSections');

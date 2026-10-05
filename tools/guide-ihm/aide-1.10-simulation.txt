@@ -1,0 +1,80 @@
+# =============================================================================
+#  Aide F1 de la 1.10 - chantier L : la simulation de l'API et de l'IHM
+#  indépendantes, la barre de l'onglet « Simulation · IHM », le zoom de la vue
+#  en cours.
+#
+#  Même syntaxe que guide-ihm.txt (voir son en-tête). Le sujet est à ranger à
+#  côté de « La simulation » (== simulation) ; son tableau « La barre » est à
+#  remplacer par celui d'ici (les boutons Marche, Pause, Arrêt, Un cycle ont
+#  quitté la barre de l'onglet). Le chef de projet les reporte dans guide-ihm.txt.
+# =============================================================================
+
+== simulation-api-ihm | L'API et l'IHM : deux simulations indépendantes
+: La simulation a deux moitiés qui démarrent et s'arrêtent chacune de son côté : l'API (le programme de l'automate simulé) et l'IHM (ses vues, ses scripts, ses alarmes). Tu démarres l'API seule, l'IHM seule ou les deux ; rien ne démarre ni n'arrête l'autre sans le dire.
+@mots Démarrer l'IHM, Arrêter l'IHM, Redémarrer l'IHM, Démarrer l'API, Arrêter l'API, Les deux, Démarrer les deux, Tout arrêter, IHM en marche, IHM arrêtée, API en marche, API arrêtée, IHM seule, API seule, F8, Maj+F8
+@lieux simulation
+@voir simulation, simulation-zoom, page-simulation, valeurs-simulees, esclaves-virtuels, poste-exploitation
+@capture PNG_1020_barre_haut_api_ihm.png | La barre du haut : le bloc de l'API (Simuler, Arrêter, Un cycle, « API arrêtée »), à côté l'IHM (« IHM en marche », Démarrer, Arrêter) et le menu « Les deux ».
+@capture PNG_1021_ihm_seule.png | Simulation · IHM, l'IHM seule : la pastille IHM verte, la pastille API « arrêtée » ; un clic dans la vue écrit dans l'automate simulé et la valeur reste.
+@capture PNG_1022_les_deux.png | Les deux en marche : l'API compte ses cycles, l'IHM suit.
+@capture PNG_1023_ihm_arretee.png | L'IHM arrêtée : la dernière image sous un voile, et ce qui la redémarre.
+@capture PNG_1028_menu_les_deux.png | Le menu « Les deux » de la barre du haut : Démarrer les deux, Tout arrêter ; à gauche, l'IHM démarrée par F8.
+### Les deux états, toujours visibles
+- Dans la **barre du haut**, le bloc de la simulation dit l'état de l'**API** (« API en marche », « API arrêtée », « API en pause », « API en défaut », et son cycle) avec ses boutons Simuler / Pause, Arrêter, Un cycle ; à côté, l'**IHM** : sa pastille « IHM en marche » (verte) ou « IHM arrêtée » (orange), ses boutons **Démarrer l'IHM** (F8) et **Arrêter l'IHM** (Maj+F8) ; puis le menu **Les deux ▾** : Démarrer les deux, Tout arrêter. Un clic sur la pastille IHM la démarre ou l'arrête aussi, sans toucher à l'API.
+- Dans l'onglet **Simulation · IHM**, la barre commence par les mêmes deux pastilles : **IHM** avec Démarrer l'IHM, Arrêter l'IHM, Redémarrer l'IHM ; **API** avec son bouton Démarrer l'API (ou Arrêter l'API quand elle tourne).
+- La ligne d'état du bas de l'onglet les répète : « IHM en marche · API arrêtée ».
+### Les commandes
+| Commande | Ce qu'elle fait |
+| Démarrer l'IHM (F8) | l'IHM tourne : scripts de démarrage, vue de démarrage, actions, alarmes. L'API ne démarre pas. |
+| Arrêter l'IHM (Maj+F8) | l'IHM s'arrête ; la dernière image reste sous un voile. L'API continue (ou reste arrêtée). |
+| Redémarrer l'IHM | variables IHM à leur valeur initiale, scripts de démarrage, vue de démarrage ; l'API ne bouge pas. |
+| Démarrer l'API | le programme de l'automate simulé cycle (F5 dans la barre du haut) ; l'IHM ne change pas d'état. |
+| Arrêter l'API | le programme s'arrête et ses variables reviennent à leur valeur initiale (Maj+F5) ; l'IHM continue et le montre. |
+| Démarrer les deux | l'API et l'IHM en marche (le menu Les deux de la barre du haut, le bouton Les deux de l'onglet). |
+| Tout arrêter | l'IHM et l'API arrêtées (le même menu, le même onglet). |
+La pause et le pas à pas sont ceux de l'**API** : dans la barre du haut (Pause, Un cycle, F10) et dans Simulation › Automate et Débogage. L'IHM qui tourne pendant une pause de l'API lit les valeurs figées du dernier cycle.
+Chaque commande de l'API dit ce que devient l'IHM, dans la ligne d'état : « API arrêtée (variables à leur valeur initiale) — l'IHM continue », « Un cycle de l'API — l'IHM tourne : elle voit ce cycle et continue », « API démarrée — l'IHM reste arrêtée ».
+### L'IHM seule
+Démarrée sans l'API, l'IHM tourne sur la **mémoire de l'automate simulé** : elle est préparée (le programme chargé, ses variables à leur valeur initiale) mais **aucun cycle ne tourne**. Les variables de l'automate gardent leur valeur ; l'IHM les lit et peut les écrire (un bouton, une saisie, une recette, Forcer...), et ce qu'elle écrit **reste** : aucun programme ne vient le réécrire. La ligne d'état le dit au démarrage : « IHM démarrée seule — la mémoire de l'automate simulé est préparée, sans cycle (l'API reste arrêtée) ».
+Les **esclaves simulés** des équipements tournent comme d'habitude (leurs valeurs animées, forcées, la page Simulation) : l'IHM seule suffit pour essayer les vues des équipements.
+> Pour essayer une vue sans le programme, l'IHM seule ; pour voir le programme réagir à l'IHM, les deux. Arrêter l'API remet ses variables à leur valeur initiale : ce que l'IHM y avait écrit est perdu.
+### Ouvrir l'onglet
+Ouvrir **Simulation › IHM** démarre l'IHM (seule : l'API ne démarre pas). Une fois que tu l'as arrêtée, elle le reste jusqu'à **Démarrer l'IHM** : changer d'onglet et revenir ne la relance pas. Choisir une vue dans la liste de la barre démarre l'IHM sur cette vue (la ligne d'état le dit) ; les autres boutons de l'IHM (Paramètres système, Utilisateur, Tout acquitter...) disent « L'IHM est arrêtée : Démarrer l'IHM d'abord ».
+### Le poste d'exploitation
+Le poste d'exploitation lit le vrai automate (Configuration › Communication). Sans liaison, il tourne comme l'IHM seule : la mémoire de l'automate simulé, sans cycle tant que l'API n'est pas démarrée.
+
+== simulation-zoom | La barre de Simulation · IHM et le zoom de la vue
+: La barre de l'onglet Simulation · IHM pilote l'IHM (pas l'automate) : ses deux pastilles d'état, la vue en cours (la liste des vues, Précédente, Vue de démarrage), le zoom de la vue en cours, l'utilisateur connecté et les repères des lectures simulées.
+@mots Précédente, Vue de démarrage, Ajuster, 100 %, Zoom avant, Zoom arrière, Ctrl+molette, Utilisateur, Repères, Plein écran, F11, Échap
+@lieux simulation
+@voir simulation-api-ihm, simulation, lectures-simulees, securite
+@capture PNG_1024_zoom_200.png | La vue à 200 % : elle dépasse la place, on la déplace en tirant le fond ; la barre dit « 200 % ».
+@capture PNG_1025_zoom_50.png | La même vue à 50 %, et un clic sur un bouton : il touche le bon objet à tout zoom.
+@capture PNG_1026_plein_ecran.png | Le simulateur IHM en plein écran : la vue seule, ajustée, et la petite barre flottante en haut (la vue, « IHM en marche », le zoom, « Quitter le plein écran · Échap »).
+@capture PNG_1029_plein_ecran_fenetre_detachee.png | L'onglet Simulation · IHM détaché dans sa fenêtre : F11 y met la vue seule, et c'est cette fenêtre qui passe en plein écran.
+### La barre, de gauche à droite
+| Partie | Ce qu'elle fait |
+| IHM : en marche | l'état de l'IHM ; Démarrer l'IHM, Arrêter l'IHM, Redémarrer l'IHM |
+| API : arrêtée | l'état de l'API, son cycle ; Démarrer l'API ou Arrêter l'API ; Les deux ; Tout arrêter |
+| la liste des vues | la vue en cours ; en choisir une autre y va (modèles, popups et symboles n'y sont pas) |
+| Précédente | revient à la vue d'avant |
+| Utilisateur, Déconnecter | le compte connecté (sécurité active) ; un clic : changer d'utilisateur |
+| Repères | les repères des lectures simulées, pour la séance |
+| −, la valeur, +, Ajuster, 100 % | le zoom de la vue en cours (voir plus bas) |
+| Plein écran | la vue de l'IHM sur tout l'écran (F11) ; Échap ou F11 pour sortir (voir plus bas) |
+| Vue de démarrage | va à la vue de démarrage du projet |
+Suivent Paramètres système, Page Simulation, Forcer..., Tout relâcher, Tout acquitter et les mesures des performances, comme avant ; ce qui ne tient pas dans la largeur passe dans le menu **»** au bout de la barre.
+### Le zoom de la vue en cours
+- **−** et **+** : 20 % de moins, 25 % de plus ; la valeur au milieu (« 100 % ») ; **Ajuster** : la vue entière dans la place (le défaut ; l'infobulle de la valeur le dit) ; **100 %** : la vue à sa taille réelle.
+- **Ctrl+molette** sur la vue : zoom autour du curseur (le point sous la souris y reste).
+- Une vue plus grande que la place **se déplace** : tire le fond de la vue, ou la molette (Maj+molette : en largeur), ou le bouton du milieu de la souris tiré n'importe où.
+- Quand la vue dépasse, une **petite carte** en bas à gauche montre la vue entière et la partie visible (encadrée) ; en bas à droite, le rappel « Ctrl+molette : zoom · glisser : déplacer ».
+- Les clics, les glissés (curseurs, potentiomètres), les popups et le clavier virtuel restent justes à tout zoom : la vue reçoit les gestes dans ses propres coordonnées.
+> Ce zoom est celui de l'atelier, pour regarder la vue : il ne change ni le projet ni la vue de l'IHM. Le zoom d'une vue « zoomable » (molette dans la vue, SYS.ViewZoom) est celui de l'opérateur, et se règle à part.
+### Le plein écran
+Le bouton **Plein écran** de la barre (ou **F11** quand l'onglet Simulation · IHM est à l'écran) met la fenêtre de l'appli en plein écran et la **vue de l'IHM seule** dessus, ajustée : ni l'arbre, ni les onglets, ni les barres. Tout reste cliquable : les boutons de la vue, les saisies, les popups, Ctrl+molette.
+- Une **petite barre flottante** en haut garde le nom de la vue, l'état de l'IHM, le zoom (−, la valeur, +, Ajuster) et **Quitter le plein écran · Échap**. Elle s'efface après 3 secondes sans souris et revient quand la souris approche du haut de l'écran.
+- **Échap** ou **F11** en sort : la fenêtre redevient comme avant (déjà en plein écran par F11, elle le reste), le zoom d'avant revient.
+- Hors de l'onglet Simulation · IHM, F11 garde son sens habituel (le plein écran de la fenêtre ; dans Simulation › Débogage : Cycle suivant).
+- L'onglet Simulation · IHM **détaché dans une fenêtre à lui** : F11 (ou Plein écran) y met la vue seule et c'est **cette fenêtre** qui passe en plein écran ; la fenêtre principale garde son F11 à elle.
+> Le poste d'exploitation a son propre plein écran (Configuration › Poste d'exploitation) : celui-ci est celui de l'atelier, pour essayer les vues comme sur le poste.

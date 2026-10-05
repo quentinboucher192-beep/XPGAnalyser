@@ -1,0 +1,71 @@
+# =============================================================================
+#  1.10 - L'aide F1 du chantier O (decisions 5, 6 et 7) : la visualisation
+#  graphique des variables IHM, les membres d'un type avec Excel, les alarmes
+#  d'un objet dans l'explorateur et l'arbre du projet.
+#  Meme syntaxe que guide-ihm.txt (= chapitre, == cle | titre, : resume, @mots,
+#  @lieux, @voir, @capture, ### intertitre, - puce, | tableau |).
+#  A inserer dans guide-ihm.txt par le chef de projet : « graphique-variables »
+#  apres « variables-ihm » ; « types-excel » apres « types-ihm » ;
+#  « alarmes-dans-arbre » apres « alarmes-objets ». Captures : session 74
+#  (tools/sessions/session-74-editeur.txt), PNG_1040 a PNG_1048.
+# =============================================================================
+
+== graphique-variables | Variables IHM : la visualisation graphique
+: Dans l'onglet Variables IHM, un clic droit sur une variable (ou une sélection) › Ouvrir une visualisation graphique : une fenêtre temporaire trace ces variables en direct pendant la simulation.
+@mots visualisation graphique, Ouvrir une visualisation graphique, graphique, courbe, courbes, tendance, Graphique :, Échelle auto, Échelle fixe, Pause, Reprendre, curseur, légende, exporter l'image, PNG, CSV
+@lieux variables-ihm, variables
+@voir variables-ihm, types-ihm, simulation, courbes
+@capture PNG_1040_variables_clic_droit_graphique.png | Le clic droit sur trois variables choisies : Ouvrir une visualisation graphique (3 courbes) en tête du menu.
+@capture PNG_1041_fenetre_graphique.png | La fenêtre graphique : la durée, Pause, l'échelle, +, les exports ; une courbe par variable, la légende et ses valeurs.
+@capture PNG_1048_graphique_arrete_demarrer.png | Rien ne tourne encore : la fenêtre le dit et propose Démarrer la simulation de l'IHM.
+### L'ouvrir
+1. Dans l'onglet **Variables IHM**, choisis une ou plusieurs variables : un clic, **Ctrl+clic** pour en ajouter, **Maj+clic** pour une plage.
+2. **Clic droit** sur la sélection › **Ouvrir une visualisation graphique** (le menu dit combien de courbes) ; ou l'outil **Visualisation graphique** de la barre de l'onglet.
+3. Une fenêtre s'ouvre, à elle : déplace-la, agrandis-la, ouvres-en plusieurs. Son titre : « Graphique : A, B, C ».
+Une variable numérique ou BOOL fait une courbe (un BOOL en escalier) ; une **structure** ou un tableau : ses membres numériques et BOOL (24 courbes au plus) ; un texte ou une couleur ne se trace pas (le menu le dit).
+Le même menu propose aussi **Copier le nom**, **Renommer…** (F2), **Dupliquer**, **Supprimer**, puis ceux de la table (Copier, Coller depuis Excel, Tout choisir, les filtres).
+### En direct, pendant la simulation
+La fenêtre lit les variables à chaque image pendant que la simulation de l'IHM tourne (elle lit aussi les variables de l'automate). Si rien ne tourne, elle le dit : « Démarre la simulation pour voir les valeurs », et propose un bouton **Démarrer la simulation de l'IHM** au milieu du tracé ; rien ne démarre tout seul.
+| Dans la barre | Ce qu'il fait |
+| 10 s, 1 min, 5 min, 30 min | La durée montrée (les valeurs plus vieilles que 30 minutes s'oublient). |
+| Pause / Reprendre | Fige l'affichage ; les lectures continuent derrière. |
+| Échelle auto / fixe | Auto : l'échelle suit les valeurs montrées ; fixe : elle garde celle du moment. |
+| + | Ajoute les variables choisies dans l'onglet Variables IHM. |
+| PNG…, CSV… | Exporte l'image de la fenêtre, ou les valeurs (Temps (s) ; une colonne par variable), par le dialogue des exports. |
+- **Le curseur** : passe la souris sur le tracé, la légende montre la valeur de chaque courbe à cet instant.
+- **La légende** : un clic sur une courbe la cache (ou la remontre) ; son **✕** la retire de la fenêtre.
+> La fenêtre est temporaire : elle n'est pas enregistrée dans le projet et se ferme avec lui.
+
+== types-excel | Les membres d'un type avec Excel
+: Dans les membres d'un type IHM, Ctrl+C copie les membres choisis en tableau pour Excel ; Ctrl+V colle un tableau d'Excel avec un aperçu de ce qui est ajouté, remplacé ou refusé, puis Appliquer (Ctrl+Z le défait).
+@mots Copier vers Excel, Coller depuis Excel, Copier (pour Excel), Excel, tableau, membres, Ctrl+C, Ctrl+V, aperçu, ajouté, remplacé, refusé, Appliquer
+@lieux types-ihm, types
+@voir types-ihm, variables-ihm, copier-coller-excel
+@capture PNG_1042_types_copier_excel.png | Deux membres choisis, Ctrl+C : le tableau pour Excel, avec sa ligne de titres.
+@capture PNG_1043_types_coller_apercu.png | Ctrl+V d'un tableau d'Excel : l'aperçu sous la table - ajoutés, remplacés, refusés et pourquoi.
+### Copier vers Excel
+Choisis des membres (Ctrl+clic, Maj+clic), puis **Ctrl+C**, l'outil **Copier** ou le clic droit › **Copier (pour Excel)**. Le presse-papiers reçoit un tableau : une ligne de titres (**Nom, Type, Valeur initiale, Description, Décalage, Taille**), puis une ligne par membre, les colonnes séparées par des tabulations. Une case qui contient une tabulation, un retour à la ligne ou un guillemet est écrite entre guillemets, comme Excel le fait. Colle-le dans Excel : chaque colonne tombe dans la sienne.
+### Coller depuis Excel
+Copie des lignes dans Excel, choisis le type, puis **Ctrl+V** (ou l'outil **Coller**, ou le clic droit › **Coller depuis Excel…**). Le tableau peut avoir sa ligne de titres (reconnue, dans n'importe quel ordre) ou non : sans titres, les colonnes sont **Nom, Type, Valeur initiale, Description**, dans cet ordre.
+Rien n'est collé tout de suite : un **aperçu** s'ouvre sous la table.
+| Ligne | Ce qui arrive |
+| ajouté | Un nom nouveau : le membre est ajouté à la fin. |
+| remplacé | Un nom qui existe : le membre est remplacé à sa place (une case vide garde sa valeur). |
+| refusé | Nom invalide, nom en double dans le tableau, type inconnu : la raison est écrite, la ligne n'est pas collée. |
+**Appliquer** colle tout en une seule commande : **Ctrl+Z** la défait d'un coup. **Annuler** referme l'aperçu sans rien changer.
+
+== alarmes-dans-arbre | Déplier un objet : ses alarmes
+: Dans l'explorateur d'objets et dans l'arbre du projet, un objet qui porte des alarmes a un nœud « Alarmes · <groupe interne> (n) » qui se déplie sur chacune ; un clic sur une alarme ouvre la section Alarmes de l'objet sur elle.
+@mots Alarmes ·, nœud Alarmes, groupe interne, déplier, déballer, explorateur d'objets, cloche, décochée, surchargée, priorité
+@lieux objets, explorateur, arbre
+@voir alarmes-objets, alarmes-symboles, alarmes-bibliotheque, inspecteur
+@capture PNG_1044_explorateur_objet_alarmes.png | L'explorateur d'objets : Pompe_3 déplié, son nœud Alarmes déplié sur ses alarmes.
+@capture PNG_1045_inspecteur_sur_alarme.png | Un clic sur une alarme : la section Alarmes de l'objet s'ouvre sur elle.
+@capture PNG_1046_arbre_projet_objet_alarmes.png | L'arbre du projet : Vues › la vue › Objets › l'objet › Alarmes.
+### Ce qui se voit sans déplier
+Dans l'**explorateur d'objets** de l'éditeur de vues, un objet qui porte des alarmes (un objet du synoptique avec ses alarmes, une instance de symbole) montre une **cloche** et leur nombre au bout de sa ligne ; dans l'**arbre du projet**, le nombre est dans une pastille (« 3 alarmes »).
+### Déplier
+L'objet se déplie (son triangle) sur un nœud **Alarmes · Vue_Pompes.Pompe_3 (3)** : le nom de son **groupe d'alarmes interne** et le nombre. Ce nœud se déplie à son tour sur chaque alarme : sa **pastille de priorité** (pleine : active ; creuse : décochée sur cet objet), son nom, sa priorité, et « décochée » ou « surchargée » quand l'objet change l'alarme du symbole.
+Une **instance de symbole** montre ses propres alarmes, puis les groupes des objets du symbole qui en portent (« Vue_Pompes.Pompe_3.Moteur (2) »), chacun dépliable.
+### Un clic sur une alarme
+L'objet est choisi dans sa vue et l'inspecteur ouvre la section **Alarmes de l'objet** sur cette alarme (les autres repliées) : sa condition, son message, sa priorité, ses surcharges. Depuis l'arbre du projet, la vue s'ouvre d'abord.

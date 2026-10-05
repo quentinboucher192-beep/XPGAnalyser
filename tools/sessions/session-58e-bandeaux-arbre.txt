@@ -1,0 +1,153 @@
+# =============================================================================
+#  Session 58e - LOT API 8 : les bandeaux et l'arbre du projet.
+#  Le bandeau haut en trois zones (la puce projet et Enregistrer, la version et
+#  ses modifications, la palette Aller a / Faire..., la simulation, la cloche,
+#  les taches de fond) ; Annuler et la liste des dernieres actions ; la barre
+#  d'etat (le journal des messages, la selection, les compteurs, le zoom, le
+#  theme, l'enregistrement) ; l'arbre (le filtre, les outils sous les titres,
+#  les pastilles, Epingles et Recents, le rail et ses portees, la sante en
+#  pied, la densite).
+#  Dans le projet des sessions precedentes, rejouee dans la VRAIE application.
+#  Captures PNG_800 a PNG_813.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- R. Les deux bandeaux ; la selection dans la barre d'etat -------------------------------
+arbre "API/Variables"
+attendre 8
+ligne "AUTOMATE_EN_RUN" exact
+attendre 5
+barre-bas
+survol 960 1070
+attendre 3
+capture PNG_800_bandeaux_variable_choisie.png
+
+# ---- S. Compiler l'IHM : la pastille rouge de l'arbre, les compteurs, la cloche -------------
+arbre "IHM/Compiler"
+attendre 10
+outil "Compiler"
+attendre 20
+bandeau-avis "Export terminé : alarmes.csv" "Projets/Armoire_Gaz/exports" "Ouvrir le dossier" "open.folder:${PROJETS}/Armoire_Gaz/exports"
+attendre 3
+arbre-sante
+barre-bas
+survol 960 1070
+attendre 3
+capture PNG_801_compiler_pastilles_compteurs.png
+bandeau-cloche
+attendre 3
+capture PNG_802_cloche_notifications.png
+bandeau-cloche fermer
+attendre 2
+
+# ---- T. Deux modifications ; la liste d'Annuler ; revenir avant les deux --------------------
+arbre "API/Variables"
+attendre 8
+ligne "index_armoire_non_utilisee" exact
+attendre 5
+outil "Renommer la variable"
+attendre 5
+champ 1 "Index_Armoire_Libre"
+attendre 3
+renommer-confirmer
+attendre 10
+ligne "Index_Armoire_Libre" exact
+attendre 5
+outil "Renommer la variable"
+attendre 5
+champ 1 "Index_Armoire_Reserve"
+attendre 3
+renommer-confirmer
+attendre 10
+bandeau-annuler-liste
+attendre 3
+capture PNG_803_annuler_liste.png
+bandeau-annuler-liste 2
+attendre 8
+ligne "index_armoire_non_utilisee" exact
+attendre 4
+
+# ---- U. La palette : les commandes (">") -----------------------------------------------------
+palette ">compiler"
+attendre 3
+capture PNG_804_palette_commandes.png
+touche escape
+attendre 2
+
+# ---- V. Une tache de fond : la jauge et son detail ------------------------------------------
+bandeau-tache "Génération IHM" 62
+attendre 3
+bandeau-taches
+attendre 3
+capture PNG_805_tache_de_fond.png
+touche escape
+attendre 2
+bandeau-tache fin
+attendre 2
+
+# ---- W. La barre d'etat : le journal des messages, le zoom d'une section, les themes recents -
+messages-journal
+attendre 3
+capture PNG_806_journal_des_messages.png
+messages-journal fermer
+attendre 2
+arbre "API/Program units/Logigrammes_A/Matrice"
+attendre 8
+barre-zoom 125
+attendre 3
+barre-zoom
+attendre 3
+capture PNG_807_zoom_section.png
+touche escape
+attendre 2
+barre-zoom 100
+attendre 2
+barre-theme
+attendre 3
+capture PNG_808_themes_recents.png
+touche escape
+attendre 2
+
+# ---- X. L'arbre : le filtre, les epingles, le rail, la densite, la sante --------------------
+arbre-filtre "purge"
+attendre 4
+arbre-lignes
+survol 960 1070
+attendre 3
+capture PNG_809_arbre_filtre.png
+arbre-filtre ""
+attendre 3
+arbre-epingler "IHM/Vues/Vue_Armoire_A"
+attendre 3
+arbre-replier
+attendre 3
+survol 960 1070
+attendre 3
+capture PNG_810_arbre_epingles_recents.png
+arbre-portee ihm
+attendre 3
+capture PNG_811_arbre_portee_ihm.png
+arbre-portee tout
+attendre 3
+arbre-densite serre
+attendre 3
+arbre "API/Types dérivés"
+attendre 5
+arbre-carte
+arbre-sante
+capture PNG_812_arbre_serre_sante.png
+arbre-densite normal
+attendre 3
+arbre-epingler "IHM/Vues/Vue_Armoire_A" non
+attendre 3
+arbre-portee versions
+attendre 3
+capture PNG_813_arbre_portee_versions.png
+arbre-portee tout
+attendre 3
+quitter

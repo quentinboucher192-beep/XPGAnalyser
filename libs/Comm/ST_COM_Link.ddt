@@ -1,0 +1,51 @@
+# Derived data type, shared.
+name = ST_COM_Link
+version = 1.00
+#! summary = Une liaison surveillee par battement de coeur : le compteur du partenaire doit changer avant TimeoutMs.
+#! usage = LE PARTENAIRE FAIT BATTRE UN COMPTEUR - la supervision incremente un mot
+#! usage = chaque seconde, un automate voisin recopie le sien. Tant qu'il change, la
+#! usage = liaison vit. Un compteur qui ne bouge plus veut dire que quelqu'un s'est
+#! usage = arrete, quelque part entre son programme et le notre - et c'est tout ce
+#! usage = qu'on peut savoir d'ici.
+#! usage = AU DEMARRAGE, NI Ok NI Lost : on attend un premier battement pendant
+#! usage = TimeoutMs avant de declarer la liaison perdue. Sans ce delai, chaque
+#! usage = demarrage de l'automate leverait une alarme de liaison.
+#! see = DFB_COM_WATCHDOG
+#! param Name = Le nom de la liaison, pour l'IHM et le journal.
+#! param Enable = FALSE : la liaison n'est pas surveillee, ni Ok ni Lost.
+#! param Beat = Le compteur du partenaire, ecrit par lui : un %MW que la supervision
+#! param Beat = incremente, un mot recu par Modbus. Seul compte qu'il CHANGE.
+#! param TimeoutMs = Sans changement de Beat pendant ce temps : la liaison est perdue.
+#! param TimeoutMs = Au moins trois periodes de battement du partenaire.
+#! param Ok = SORTIE. Le partenaire a battu depuis moins de TimeoutMs.
+#! param Lost = SORTIE. Pas de battement depuis TimeoutMs. C'est l'alarme.
+#! param ElapsedMs = SORTIE. Depuis combien de temps Beat n'a pas change, en ms,
+#! param ElapsedMs = plafonne.
+#! param LostCount = Combien de fois la liaison a ete perdue. Une liaison qui tombe
+#! param LostCount = souvent a un TimeoutMs trop court, ou un reseau malade.
+#! param PrevBeat = Runtime.
+#! param Seen = Runtime : un premier battement a ete vu.
+#! param Init = Runtime : la premiere lecture a ete faite. Elle n'est pas un battement
+#! param Init = - un compteur lu une fois ne dit pas qu'il bouge.
+#! internal = PrevBeat, Seen, Init
+#! example = (* declarer : Liens : ARRAY[0..15] OF ST_COM_Link; *)
+#! example = Liens[0].Name := 'Supervision';
+#! example = Liens[0].TimeoutMs := 5000;
+#! example = Liens[0].Beat := %MW100;       (* la supervision l'incremente chaque seconde *)
+#! expect = 1 : Liens[0].TimeoutMs = 5000
+#! changes 1.00 = NOUVEAU.
+
+# Une liaison surveillee par battement de coeur.
+
+# name ; type ; scope ; initial ; comment
+Name ; STRING[16] ; Member ;  ; le nom de la liaison
+Enable ; BOOL ; Member ; TRUE ; FALSE : pas surveillee
+Beat ; INT ; Member ; 0 ; le compteur du partenaire : seul compte qu'il change
+TimeoutMs ; DINT ; Member ; 5000 ; sans changement pendant ce temps : perdue
+Ok ; BOOL ; Member ;  ; SORTIE : le partenaire a battu depuis moins de TimeoutMs
+Lost ; BOOL ; Member ;  ; SORTIE : pas de battement depuis TimeoutMs
+ElapsedMs ; DINT ; Member ; 0 ; SORTIE : depuis combien de temps Beat n'a pas change
+LostCount ; UDINT ; Member ; 0 ; combien de fois elle a ete perdue
+PrevBeat ; INT ; Member ; 0 ; runtime, ne pas ecrire
+Seen ; BOOL ; Member ;  ; runtime, ne pas ecrire
+Init ; BOOL ; Member ;  ; runtime, ne pas ecrire

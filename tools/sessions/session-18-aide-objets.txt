@@ -1,0 +1,203 @@
+# =============================================================================
+#  Session 18 - LOT 8 : l'aide de chaque objet de la bibliotheque - sa page (a
+#  quoi il sert, chacun de ses parametres, ce qu'il fait en marche) et son
+#  exemple anime, par F1 sur un objet choisi, par F1 au survol d'une tuile de la
+#  bibliotheque, et depuis le bouton Aide de la barre d'outils generale.
+#  Puis l'exemple de chacun des 24 objets, fige a son instant le plus parlant
+#  (les images EX_*.png du guide Word).
+#
+#    xpg_analyzer --script session-18-aide-objets.txt --captures captures --size 1920x1080
+# =============================================================================
+attendre 3
+theme Dark
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+arbre "Derived data types" replier
+arbre "DFB types" replier
+arbre "Program units" replier
+arbre "Ordre d'execution" replier
+arbre "Variables" replier
+arbre "Macros" replier
+arbre "Animation tables" replier
+arbre "Tasks" replier
+arbre "Configuration" replier
+
+# ---- 1. F1 sur un objet choisi dans l'editeur : sa page, son exemple anime ------------------
+arbre "IHM/Vues/Vues/Vue_Armoires"
+attendre 10
+objet "Btn_Armoire_A"
+attendre 5
+touche f1
+attendre 60
+survol 1200 1040
+attendre 5
+capture PNG_216_aide_f1_objet_bouton_exemple.png
+
+# ---- 2. F1 au survol d'une tuile de la bibliotheque : le champ de saisie -----------------------
+onglet "Vue_Armoires"
+attendre 5
+palette "Champ de saisie" survol
+attendre 5
+touche f1
+attendre 10
+exemple-figer 3.95
+attendre 5
+survol 1200 1040
+attendre 5
+capture PNG_217_aide_f1_tuile_champ_de_saisie.png
+
+# ---- 3. les parametres, et la bulle d'aide de l'inspecteur qui dit la meme chose ---------------
+aide-sujet "objet-gestion-des-utilisateurs"
+attendre 10
+exemple-figer 2.9
+attendre 5
+molette 1300 900 -6
+attendre 5
+survol 1200 1040
+attendre 5
+capture PNG_218_aide_parametres_gestion_utilisateurs.png
+exemple-figer -1
+attendre 3
+
+# ---- 4. depuis la barre d'outils generale : Aide, puis l'onglet IHM ---------------------------
+# (lot macros 1 : l'aide a quatre onglets - Aide, Macros, Blocs DFB / DDT, IHM)
+action help.open
+attendre 10
+bouton "IHM"
+attendre 10
+aide-sujet "objet-connexion"
+attendre 10
+exemple-figer 3.0
+attendre 5
+capture PNG_219_aide_generale_ihm_connexion.png
+exemple-figer -1
+attendre 3
+
+# ---- 5. l'exemple de chaque objet, fige, pour le guide Word ------------------------------------
+aide-sujet "objet-texte"
+attendre 3
+exemple-figer 3.0
+attendre 3
+capture-exemple EX_Text.png
+aide-sujet "objet-image"
+attendre 3
+exemple-figer 1.0
+attendre 3
+capture-exemple EX_Image.png
+aide-sujet "objet-bouton"
+attendre 3
+exemple-figer 1.3
+attendre 3
+capture-exemple EX_Button.png
+aide-sujet "objet-rectangle"
+attendre 3
+exemple-figer 2.2
+attendre 3
+capture-exemple EX_Rectangle.png
+aide-sujet "objet-ellipse"
+attendre 3
+exemple-figer 3.8
+attendre 3
+capture-exemple EX_Ellipse.png
+aide-sujet "objet-ligne"
+attendre 3
+exemple-figer 1.6
+attendre 3
+capture-exemple EX_Line.png
+aide-sujet "objet-polygone"
+attendre 3
+exemple-figer 2.5
+attendre 3
+capture-exemple EX_Polygon.png
+aide-sujet "objet-voyant"
+attendre 3
+exemple-figer 1.2
+attendre 3
+capture-exemple EX_Indicator.png
+aide-sujet "objet-barre-de-progression"
+attendre 3
+exemple-figer 2.0
+attendre 3
+capture-exemple EX_ProgressBar.png
+aide-sujet "objet-jauge"
+attendre 3
+exemple-figer 3.0
+attendre 3
+capture-exemple EX_Gauge.png
+aide-sujet "objet-tableau"
+attendre 3
+exemple-figer 2.0
+attendre 3
+capture-exemple EX_Table.png
+aide-sujet "objet-historique"
+attendre 3
+exemple-figer 2.5
+attendre 3
+capture-exemple EX_History.png
+aide-sujet "objet-courbe"
+attendre 3
+exemple-figer 12.0
+attendre 3
+capture-exemple EX_Trend.png
+aide-sujet "objet-liste"
+attendre 3
+exemple-figer 1.0
+attendre 3
+capture-exemple EX_List.png
+aide-sujet "objet-video"
+attendre 3
+exemple-figer 3.0
+attendre 3
+capture-exemple EX_Video.png
+aide-sujet "objet-conteneur"
+attendre 3
+exemple-figer 4.0
+attendre 3
+capture-exemple EX_Container.png
+aide-sujet "objet-gestion-de-recettes"
+attendre 3
+exemple-figer 2.4
+attendre 3
+capture-exemple EX_RecipeManager.png
+aide-sujet "objet-image-animee"
+attendre 3
+exemple-figer 2.3
+attendre 3
+capture-exemple EX_AnimatedImage.png
+aide-sujet "objet-champ-de-saisie"
+attendre 3
+exemple-figer 3.95
+attendre 3
+capture-exemple EX_InputField.png
+aide-sujet "objet-connexion"
+attendre 3
+exemple-figer 3.0
+attendre 3
+capture-exemple EX_LoginPanel.png
+aide-sujet "objet-deconnexion"
+attendre 3
+exemple-figer 2.2
+attendre 3
+capture-exemple EX_LogoutButton.png
+aide-sujet "objet-utilisateur-connecte"
+attendre 3
+exemple-figer 4.0
+attendre 3
+capture-exemple EX_UserInfo.png
+aide-sujet "objet-changer-mot-de-passe"
+attendre 3
+exemple-figer 5.1
+attendre 3
+capture-exemple EX_PasswordChange.png
+aide-sujet "objet-gestion-des-utilisateurs"
+attendre 3
+exemple-figer 2.9
+attendre 3
+capture-exemple EX_UserManager.png
+exemple-figer -1
+attendre 3
+# Lot macros 1 : un seul Fermer - les onglets de l'aide se remplacent, ils ne s'empilent plus.
+bouton "Fermer"
+attendre 5
+quitter

@@ -1,0 +1,377 @@
+(* GenererSimulation
+
+   De quoi faire tourner le programme SANS la machine : une section
+   Simulation, placee avant les blocs d'entree, qui renvoie a chaque voie
+   d'entree ce que la machine lui repondrait.
+
+     un retour de marche      suit la commande de marche
+     un fin de course         suit la commande de sa position
+     un verin                 ses capteurs suivent ses pilotes
+     un capteur de rotation   bat tant que le convoyeur tourne
+     un thermique, un AU,     sains : les contacts NF sont fermes
+     une aspiration
+     une position, une        suit la position ou la vitesse commandee
+     vitesse
+     une pression, un debit   entre ses seuils quand la pompe tourne, 0 sinon
+     un niveau                entre ses seuils
+     une voie sans            si elle porte une alarme : a l'etat sain
+     equipement
+     un variateur Modbus      son mot d'etat suit la commande CiA402, sa
+                              vitesse suit la consigne
+
+   TOUT EST SOUS SimActive. A FALSE, la section rend la main aux cartes
+   (SimEn := FALSE) et ne touche a rien d'autre : elle peut rester dans la
+   tache. Sur site, SimActive DOIT rester a FALSE.
+
+   #! summary = Génère la section Simulation : chaque voie d'entrée reçoit ce que la machine lui répondrait, et les variateurs Modbus sont émulés - tout sous SimActive.
+   #! version = 1.10
+   #! changes 1.10 = Le formulaire : chaque question a son champ (le classeur par …, Ctrl+V ou en le glissant ; les tâches et les sections du projet ; des interrupteurs ; des choix à libellés), ses groupes, son aide et un libellé avec accents. Le code ne change pas.
+   #! usage = LA SIMULATION PASSE PAR LES VOIES : SimEn et SimVal de ST_IO_Dig / ST_IO_Ana, que les blocs de carte prennent a la place de la carte. Rien d'autre du programme n'est touche : c'est le vrai programme qui tourne, avec de faux retours.
+   #! usage = SimVal EST LA VALEUR PHYSIQUE, avant Inv. La macro calcule la valeur LOGIQUE attendue par l'equipement (un thermique sain vaut TRUE : contact NF ferme) puis l'inverse si la voie a Inv a O dans l'onglet ES.
+   #! usage = LES MESURES ANALOGIQUES sont en points de carte, calculees depuis RawMin, RawMax, EngMin et EngMax de l'onglet ES : une valeur au milieu de ses seuils d'alarme (S0 a S3), ou de sa plage s'il n'y en a pas. Une pression ou un debit ne sont la que quand la pompe tourne. Pour un scenario, forcez SimVal a la main, voie par voie.
+   #! usage = LES VOIES SANS EQUIPEMENT : une entree TOR qui porte une alarme (AlarmEn a O) est simulee a son etat sain, une mesure qui porte un seuil au milieu de ses seuils. Un arret d'urgence cable en direct ne met donc pas le programme en securite des qu'on simule. Les autres voies libres gardent la carte.
+   #! usage = LES VARIATEURS MODBUS (famille avec Eta et Cmd) : le mot d'etat de la requete de lecture suit la derniere commande CiA402 (6 -> pret, 7 -> sous tension, 15 -> en marche), Rfr suit Lfr, Lft reste a 0. DFB_COM_MODBUS, sous SimActive, n'envoie rien et reussit chaque requete.
+   #! usage = SimActive est cree s'il manque, a FALSE. Il se met a TRUE depuis une table d'animation ou l'IHM, jamais par le programme.
+   #! see = ImporterProgramme, ImporterModbus, RangerSections
+   #! param classeur = Le classeur de l'affaire (.xlsx ou .xlsm) : glisse-le sur le champ, choisis-le avec …, ou colle-le (Ctrl+V) après l'avoir copié dans l'Explorateur. Vide : le dernier classeur ouvert, le cas normal quand on enchaîne les imports.
+   #! param tache = Les sections générées vont dans cette tâche.
+   #! param tache = La tache d'accueil de la section, MAST en general.
+   #! param prefSection = Vide en général : il sert quand deux automates partagent un projet.
+   #! param prefSection = Le prefixe des sections generees, le meme qu'a l'import. Vide en general.
+   #! categorie = Générer
+   #! champ classeur = fichier .xlsx .xlsm facultatif
+   #! libelle classeur = Le classeur de l'affaire
+   #! champ tache = tache
+   #! libelle tache = Tâche d'accueil des sections
+   #! champ prefSection = nom facultatif
+   #! libelle prefSection = Préfixe des noms de section
+   #! exemple prefSection = {}Simulation
+   #! groupe Programme = tache, prefSection
+   #! avance = prefSection
+   #! produit = la section Simulation, qui ne fait rien tant que SimActive est à FALSE
+   #! appliquer = Appliquer : la section Simulation est réécrite en entier
+*)
+
+chemin := Ask('classeur', 'Chemin du classeur (vide = celui deja charge)', '');
+AskNow();
+tache       := Ask('tache', 'Tache d accueil des sections', 'MAST');
+prefSection := Ask('prefSection', 'Prefixe des noms de section (vide en general)', '');
+AskNow();
+
+wb := OpenWorkbook(chemin);
+IF wb < 0 THEN Fail('classeur introuvable'); END_IF;
+tES := OpenSheet('ES');
+IF tES < 0 THEN Fail('onglet "ES" introuvable'); END_IF;
+tEq := OpenSheet('Equipements');
+IF tEq < 0 THEN Fail('onglet "Equipements" introuvable'); END_IF;
+tCab := -1;
+IF HasSheet('Cablage') THEN tCab := OpenSheet('Cablage'); END_IF;
+tMb := -1;
+IF HasSheet('Modbus') THEN tMb := OpenSheet('Modbus'); END_IF;
+
+IF NOT VariableExists('SimActive') THEN
+    AddVariable('SimActive', 'BOOL', 'Global', '', 'FALSE',
+                'simulation : aucun echange reel. JAMAIS A TRUE SUR SITE');
+END_IF;
+
+nl := CHR(10);
+sect := prefSection + 'Simulation';
+ne := RowCount(tES);
+neq := RowCount(tEq);
+ncab := 0;
+IF tCab >= 0 THEN ncab := RowCount(tCab); END_IF;
+colSource := 'Source';
+IF tCab >= 0 THEN
+    IF NOT HasColumn(tCab, 'Source') AND HasColumn(tCab, 'Acces voie') THEN colSource := 'Acces voie'; END_IF;
+END_IF;
+aSeuils := HasColumn(tES, 'S0_En');
+aAlarme := HasColumn(tES, 'AlarmEn');
+
+i := 0; k := 0; q := 0; j := 0; n := 0; pos := 0; debut := 0;
+eq := ''; acces := ''; fam := ''; cible := ''; champ := ''; indice := ''; source := ''; voie := '';
+famES := ''; tableau := ''; note := ''; inv := ''; logique := ''; s := ''; typ := ''; anyCmd := ''; rev := '';
+rawMin := ''; rawMax := ''; engMin := ''; engMax := ''; etat := ''; ks := '';
+rMin := 0.0; rMax := 0.0; eMin := 0.0; eMax := 0.0; lo := 0.0; hi := 0.0; seuil := 0.0;
+vSain := 0.0; pente := 0.0;
+nSeuils := 0;
+corps := '';
+repos := '';
+voies := ',';
+nSim := 0;
+nLibre := 0;
+nMain := 0;
+nMb := 0;
+
+(* ---- les voies d'entree, une par ligne de l'onglet ES --------------------- *)
+FOR q := 0 TO ne - 1 DO
+    famES := UPPER(Cell(tES, q, 'Famille'));
+    voie := Cell(tES, q, 'Acces ST');
+    tableau := Cell(tES, q, 'Tableau');
+    (* une carte inactive n'a pas ete declaree : rien a simuler *)
+    IF (famES = 'DI' OR famES = 'AI') AND voie <> '' AND tableau <> ''
+       AND FIND(voies, ',' + voie + ',', 0) < 0 THEN
+    IF VariableExists(tableau) THEN
+        voies := voies + voie + ',';
+        inv := Cell(tES, q, 'Inv');
+
+        (* ce que l'equipement lit sur cette voie, par l'onglet Cablage *)
+        eq := ''; cible := ''; acces := ''; fam := '';
+        FOR i := 0 TO ncab - 1 DO
+            IF eq = '' THEN
+                source := Cell(tCab, i, colSource);
+                IF LEN(source) > 4 AND MID(source, LEN(source) - 4) = '.Val' THEN
+                    source := MID(source, 0, LEN(source) - 4);
+                END_IF;
+                IF source = voie AND Cell(tCab, i, 'Equipement') <> '' AND Cell(tCab, i, 'Cible') <> '' THEN
+                    eq := Cell(tCab, i, 'Equipement');
+                    cible := Cell(tCab, i, 'Cible');
+                END_IF;
+            END_IF;
+        END_FOR;
+        IF eq <> '' THEN
+            FOR i := 0 TO neq - 1 DO
+                IF Cell(tEq, i, 'Nom') = eq AND Cell(tEq, i, 'Actif') = 'O' THEN
+                    acces := Cell(tEq, i, 'Acces ST');
+                    fam := Cell(tEq, i, 'Famille');
+                END_IF;
+            END_FOR;
+        END_IF;
+
+        (* Le champ vise, sans point ni indice : .Fdc[1] -> Fdc, 1 *)
+        champ := cible;
+        IF MID(champ, 0, 1) = '.' THEN champ := MID(champ, 1); END_IF;
+        indice := '';
+        pos := FIND(champ, '[', 0);
+        IF pos > 0 THEN
+            indice := MID(champ, pos + 1, FIND(champ, ']', pos) - pos - 1);
+            champ := MID(champ, 0, pos);
+        END_IF;
+
+        IF famES = 'DI' THEN
+            (* la valeur LOGIQUE attendue, apres Inv *)
+            logique := '';
+            IF acces <> '' THEN
+                IF champ = 'Fbk' AND HasMember(fam, 'Run') THEN
+                    logique := acces + '.Run';
+                ELSIF champ = 'Fdc' AND indice <> '' AND HasMember(fam, 'Cmd') THEN
+                    (* le fin de course suit la commande de sa position ; sans
+                       commande, il garde la position atteinte *)
+                    typ := MemberType(fam, 'Cmd');
+                    n := STRING_TO_INT(MID(typ, FIND(typ, '..', 0) + 2, FIND(typ, ']', 0) - FIND(typ, '..', 0) - 2));
+                    anyCmd := '';
+                    FOR k := 0 TO n DO
+                        IF anyCmd <> '' THEN anyCmd := anyCmd + ' OR '; END_IF;
+                        anyCmd := anyCmd + acces + '.Cmd[' + DINT_TO_STRING(k) + ']';
+                    END_FOR;
+                    logique := acces + '.Cmd[' + indice + '] OR (NOT (' + anyCmd + ') AND ' + acces
+                        + '.Pos = ' + indice + ')';
+                ELSIF champ = 'FdcExtended' AND HasMember(fam, 'CmdExtend') THEN
+                    (* un verin monostable rentre des que son pilote tombe ; un
+                       bistable garde sa position *)
+                    logique := acces + '.CmdExtend OR (NOT ' + acces + '.CmdRetract AND NOT ' + acces
+                        + '.Monostable AND ' + acces + '.Extended)';
+                ELSIF champ = 'FdcRetracted' AND HasMember(fam, 'CmdRetract') THEN
+                    logique := acces + '.CmdRetract OR (NOT ' + acces + '.CmdExtend AND (' + acces
+                        + '.Monostable OR NOT ' + acces + '.Extended))';
+                ELSIF champ = 'Pulse' AND HasMember(fam, 'Run') THEN
+                    (* bat a chaque cycle tant que le convoyeur tourne *)
+                    rev := '';
+                    IF HasMember(fam, 'RunRev') THEN rev := ' OR ' + acces + '.RunRev'; END_IF;
+                    logique := '(' + acces + '.Run' + rev + ') AND NOT ' + acces + '.Pulse';
+                ELSIF champ = 'Thermal' OR champ = 'EmergStop' OR champ = 'SuctionOk' OR champ = 'DriveReady' THEN
+                    (* contacts NF : TRUE veut dire sain *)
+                    logique := 'TRUE';
+                ELSIF champ = 'DriveFault' THEN
+                    logique := 'FALSE';
+                END_IF;
+            END_IF;
+            IF logique = '' AND aAlarme THEN
+                (* une alarme sur la voie : a l'etat sain, l'inverse de AlarmState *)
+                IF Cell(tES, q, 'AlarmEn') = 'O' THEN
+                    etat := UPPER(Cell(tES, q, 'AlarmState'));
+                    IF etat = '1' OR etat = 'O' OR etat = 'TRUE' THEN
+                        logique := 'FALSE';
+                    ELSE
+                        logique := 'TRUE';
+                    END_IF;
+                    IF acces = '' THEN nLibre := nLibre + 1; END_IF;
+                END_IF;
+            END_IF;
+
+            IF logique = '' THEN
+                IF acces <> '' THEN
+                    corps := corps + nl + '    (* ' + voie + ' -> ' + acces + cible
+                        + ' : pas de regle, SimVal a poser a la main *)'
+                        + nl + '    ' + voie + '.SimEn := TRUE;';
+                    repos := repos + nl + '    ' + voie + '.SimEn := FALSE;';
+                    nMain := nMain + 1;
+                END_IF;
+            ELSE
+                (* SimVal est PHYSIQUE : avant Inv. *)
+                IF inv = 'O' THEN
+                    IF logique = 'TRUE' THEN logique := 'FALSE';
+                    ELSIF logique = 'FALSE' THEN logique := 'TRUE';
+                    ELSE logique := 'NOT (' + logique + ')';
+                    END_IF;
+                END_IF;
+                note := acces + cible;
+                IF acces = '' THEN note := ASCII(Cell(tES, q, 'Designation')) + ' : sain'; END_IF;
+                corps := corps + nl + '    ' + voie + '.SimEn := TRUE;'
+                    + nl + '    ' + voie + '.SimVal := ' + logique + ';   (* ' + note + ' *)';
+                repos := repos + nl + '    ' + voie + '.SimEn := FALSE;';
+                nSim := nSim + 1;
+            END_IF;
+
+        ELSE
+            (* AI : en POINTS de carte. Les nombres sont calcules ICI et ecrits
+               en REAL : 0 + 0.6 * 10000 melange un INT et un REAL, et Control
+               Expert le refuse. *)
+            rawMin := Cell(tES, q, 'RawMin'); rawMax := Cell(tES, q, 'RawMax');
+            engMin := Cell(tES, q, 'EngMin'); engMax := Cell(tES, q, 'EngMax');
+            IF rawMin = '' THEN rawMin := '0'; END_IF;
+            IF rawMax = '' THEN rawMax := '10000'; END_IF;
+            IF engMin = '' THEN engMin := '0'; END_IF;
+            IF engMax = '' THEN engMax := '100'; END_IF;
+            rMin := STRING_TO_REAL(rawMin);
+            rMax := STRING_TO_REAL(rawMax);
+            eMin := STRING_TO_REAL(engMin);
+            eMax := STRING_TO_REAL(engMax);
+            pente := 0.0;
+            IF eMax <> eMin THEN pente := (rMax - rMin) / (eMax - eMin); END_IF;
+
+            (* la valeur saine : au milieu de ses seuils, ou de sa plage *)
+            lo := eMin; hi := eMax; nSeuils := 0;
+            IF aSeuils THEN
+                FOR k := 0 TO 3 DO
+                    ks := 'S' + DINT_TO_STRING(k) + '_';
+                    IF Cell(tES, q, ks + 'En') = 'O' THEN
+                        seuil := STRING_TO_REAL(Cell(tES, q, ks + 'Val'));
+                        IF Cell(tES, q, ks + 'Dir') = 'B' THEN
+                            IF seuil > lo THEN lo := seuil; END_IF;
+                        ELSE
+                            IF seuil < hi THEN hi := seuil; END_IF;
+                        END_IF;
+                        nSeuils := nSeuils + 1;
+                    END_IF;
+                END_FOR;
+            END_IF;
+            IF hi > lo THEN vSain := (lo + hi) / 2.0; ELSE vSain := (eMin + eMax) / 2.0; END_IF;
+
+            s := '';
+            IF acces <> '' THEN
+                IF champ = 'PosFbk' AND HasMember(fam, 'Pos') AND pente <> 0.0 THEN
+                    s := REAL_TO_STRING(rMin) + ' + (' + acces + '.Pos - ' + REAL_TO_STRING(eMin) + ') * '
+                        + REAL_TO_STRING(pente);
+                ELSIF champ = 'SpeedFbk' AND HasMember(fam, 'Speed') AND pente <> 0.0 THEN
+                    s := REAL_TO_STRING(rMin) + ' + (' + acces + '.Speed - ' + REAL_TO_STRING(eMin) + ') * '
+                        + REAL_TO_STRING(pente);
+                ELSIF (champ = 'Pressure' OR champ = 'Flow' OR champ = 'Current') AND HasMember(fam, 'Running') THEN
+                    corps := corps + nl + '    IF ' + acces + '.Running THEN   (* ' + acces + cible
+                        + ' : entre ses seuils en marche *)'
+                        + nl + '        ' + voie + '.SimVal := ' + REAL_TO_STRING(rMin + (vSain - eMin) * pente) + ';'
+                        + nl + '    ELSE' + nl + '        ' + voie + '.SimVal := ' + REAL_TO_STRING(rMin) + ';'
+                        + nl + '    END_IF;';
+                    s := '*';
+                ELSIF champ = 'Level' THEN
+                    s := REAL_TO_STRING(rMin + (vSain - eMin) * pente);
+                END_IF;
+            END_IF;
+            note := acces + cible;
+            IF s = '' AND nSeuils > 0 THEN
+                (* une mesure libre, ou sans regle, qui porte un seuil *)
+                s := REAL_TO_STRING(rMin + (vSain - eMin) * pente);
+                note := ASCII(Cell(tES, q, 'Designation')) + ' : entre ses seuils';
+                IF acces = '' THEN nLibre := nLibre + 1; END_IF;
+            END_IF;
+
+            IF s = '' THEN
+                IF acces <> '' THEN
+                    corps := corps + nl + '    (* ' + voie + ' -> ' + acces + cible
+                        + ' : pas de regle, SimVal a poser a la main *)'
+                        + nl + '    ' + voie + '.SimEn := TRUE;';
+                    repos := repos + nl + '    ' + voie + '.SimEn := FALSE;';
+                    nMain := nMain + 1;
+                END_IF;
+            ELSE
+                IF s <> '*' THEN
+                    corps := corps + nl + '    ' + voie + '.SimVal := ' + s + ';   (* ' + note + ' *)';
+                END_IF;
+                corps := corps + nl + '    ' + voie + '.SimEn := TRUE;';
+                repos := repos + nl + '    ' + voie + '.SimEn := FALSE;';
+                nSim := nSim + 1;
+            END_IF;
+        END_IF;
+    END_IF;
+    END_IF;
+END_FOR;
+
+(* ---- les variateurs Modbus ----------------------------------------------- *)
+IF tMb >= 0 THEN
+    n := RowCount(tMb);
+    FOR i := 0 TO n - 1 DO
+        eq := Cell(tMb, i, 'Equipement');
+        acces := '';
+        fam := '';
+        FOR q := 0 TO neq - 1 DO
+            IF Cell(tEq, q, 'Nom') = eq AND Cell(tEq, q, 'Actif') = 'O' THEN
+                acces := Cell(tEq, q, 'Acces ST');
+                fam := Cell(tEq, q, 'Famille');
+            END_IF;
+        END_FOR;
+        IF acces <> '' AND UPPER(Cell(tMb, i, 'Sens')) = 'L' AND HasMember(fam, 'Eta') AND HasMember(fam, 'Cmd') THEN
+            (* le rang de cette requete dans sa liaison *)
+            k := 0;
+            FOR q := 0 TO i - 1 DO
+                IF Cell(tMb, q, 'Liaison') = Cell(tMb, i, 'Liaison') THEN k := k + 1; END_IF;
+            END_FOR;
+            s := 'MB_' + Cell(tMb, i, 'Liaison') + '_Req[' + DINT_TO_STRING(k) + '].Data';
+            champ := '';
+            j := 0;
+            debut := 0;
+            source := Cell(tMb, i, 'Champs');
+            WHILE debut <= LEN(source) DO
+                pos := FIND(source, ',', debut);
+                IF pos < 0 THEN champ := MID(source, debut); debut := LEN(source) + 1;
+                ELSE champ := MID(source, debut, pos - debut); debut := pos + 1;
+                END_IF;
+                IF champ = 'Eta' THEN
+                    corps := corps + nl + '    (* ' + ASCII(eq) + ' : le mot d etat suit la commande CiA402 *)'
+                        + nl + '    IF ' + acces + '.Cmd = 16#0006 THEN ' + s + '[' + DINT_TO_STRING(j) + '] := 16#0231;'
+                        + nl + '    ELSIF ' + acces + '.Cmd = 16#0007 THEN ' + s + '[' + DINT_TO_STRING(j) + '] := 16#0233;'
+                        + nl + '    ELSIF ' + acces + '.Cmd = 16#000F OR ' + acces + '.Cmd = 16#080F THEN '
+                        + s + '[' + DINT_TO_STRING(j) + '] := 16#0237;'
+                        + nl + '    ELSE ' + s + '[' + DINT_TO_STRING(j) + '] := 16#0250;'
+                        + nl + '    END_IF;';
+                    nMb := nMb + 1;
+                ELSIF champ = 'Rfr' AND HasMember(fam, 'Lfr') THEN
+                    corps := corps + nl + '    IF ' + acces + '.Running THEN ' + s + '[' + DINT_TO_STRING(j) + '] := '
+                        + acces + '.Lfr; ELSE ' + s + '[' + DINT_TO_STRING(j) + '] := 0; END_IF;';
+                ELSIF champ = 'Lcr' THEN
+                    corps := corps + nl + '    IF ' + acces + '.Running THEN ' + s + '[' + DINT_TO_STRING(j) + '] := 50; ELSE '
+                        + s + '[' + DINT_TO_STRING(j) + '] := 0; END_IF;';
+                ELSIF champ = 'Lft' THEN
+                    corps := corps + nl + '    ' + s + '[' + DINT_TO_STRING(j) + '] := 0;';
+                END_IF;
+                j := j + 1;
+            END_WHILE;
+        END_IF;
+    END_FOR;
+END_IF;
+
+IF nSim + nMain + nMb = 0 THEN Fail('rien a simuler : aucune voie d entree a une carte active'); END_IF;
+
+IF NOT SectionExists(sect) THEN AddSection(sect, tache, 'ST', ''); END_IF;
+ClearSection(sect);
+AppendToSection(sect, '(* Genere par GenererSimulation. AVANT les blocs d entree. SimActive A FALSE');
+AppendToSection(sect, '   SUR SITE : la section rend alors la main aux cartes et ne fait rien d autre. *)');
+AppendToSection(sect, 'IF SimActive THEN' + corps);
+AppendToSection(sect, 'ELSE' + repos);
+AppendToSection(sect, 'END_IF;');
+
+RunMacro('RangerSections');
+Log(DINT_TO_STRING(nSim) + ' voie(s) simulee(s), dont ' + DINT_TO_STRING(nLibre) + ' sans equipement (alarme a l etat sain), '
+    + DINT_TO_STRING(nMb) + ' variateur(s) Modbus emule(s)');
+IF nMain > 0 THEN
+    Warn(DINT_TO_STRING(nMain) + ' voie(s) sans regle de simulation : leur SimVal est a poser a la main');
+END_IF;
+Log('SimActive a TRUE pour simuler - depuis une table d animation, JAMAIS sur site.');

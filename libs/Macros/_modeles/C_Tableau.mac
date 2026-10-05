@@ -1,0 +1,51 @@
+(* C_Tableau
+
+   Lit un tableau CSV (un onglet du classeur exporte en CSV) et ecrit une
+   section ST, une ligne par ligne du tableau. La section est reecrite
+   entierement a chaque fois : une section generee ne se corrige pas a la main.
+
+   #! summary = Lire un tableau CSV et réécrire une section ST, une ligne par ligne du tableau.
+   #! version = 1.00
+   #! categorie = Mes macros
+   #! param section = Elle est créée si elle manque, et réécrite entièrement sinon.
+   #! param tache = La tâche qui exécute la section.
+   #! champ section = section nouvelle
+   #! libelle section = Section générée
+   #! champ tache = tache
+   #! libelle tache = Tâche d'accueil
+   #! tableau lignes = Le tableau (CSV exporté d'un onglet : colonnes Cible et Source)
+   #! produit = la section {section}, réécrite : une affectation par ligne du tableau
+   #! appliquer = Réécrire la section {section}
+*)
+
+section := Ask('section', 'Section generee', 'Genere_Tableau');
+tache   := Ask('tache', 'Tache d accueil', 'MAST');
+AskNow();
+
+t := OpenTable('lignes');
+IF t < 0 THEN
+    Fail('aucun tableau : exportez l onglet en CSV, puis choisissez-le dans le formulaire.');
+END_IF;
+IF NOT HasColumn(t, 'Cible') OR NOT HasColumn(t, 'Source') THEN
+    Fail('le tableau doit avoir les colonnes Cible et Source');
+END_IF;
+
+IF NOT Confirm('Tableau', 'Reecrire ' + section + ' entierement ?') THEN Fail('annule'); END_IF;
+
+IF NOT SectionExists(section) THEN AddSection(section, tache, 'ST', ''); END_IF;
+ClearSection(section);
+AppendToSection(section, '(* Section generee par une macro. Ne pas corriger a la main : relancer la macro. *)');
+
+n := RowCount(t);
+cible := '';
+source := '';
+FOR i := 0 TO n - 1 DO
+    cible  := Cell(t, i, 'Cible');
+    source := Cell(t, i, 'Source');
+    IF cible = '' OR source = '' THEN
+        SkipRow('ligne ' + DINT_TO_STRING(i + 2) + ' : cible ou source vide');
+    ELSE
+        AppendToSection(section, cible + ' := ' + source + ';');
+    END_IF;
+END_FOR;
+Log(DINT_TO_STRING(n) + ' ligne(s) lue(s)');

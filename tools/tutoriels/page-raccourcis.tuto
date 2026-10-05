@@ -1,0 +1,50 @@
+# La page des raccourcis du centre d'aide (sujet page-raccourcis). Écrit à la main (T1, tranche 19) :
+# une page spéciale n'a pas de tutoriel déduit (décision du chef du 03/10, 12).
+# Ce que le centre en dit : « Toutes les touches, groupées par contexte ; la fiche A4 à imprimer. »
+# Les notes de la 1.11 : « groupée par contexte, elle se cherche et s'imprime en A4. Ctrl+H reste à
+# l'Historique ; l'import de la configuration matérielle (.XHW), qui le portait aussi, passe à Ctrl+Maj+O. »
+# Les touches citées viennent de la table (src/help/Shortcuts.cpp). La bande de la page (HelpCenterScreen,
+# id help) : le champ help.keys.search, les boutons Aperçu A4 (puis Les tables) et Imprimer… ; on ne clique
+# pas Imprimer… (il ouvre le navigateur). @avant aide : le centre s'ouvre sur la page, par-dessus le bac.
+= page-raccourcis | La page des raccourcis
+@sujet page-raccourcis
+@bac Armoire_Gaz
+
+@avant
+aide page-raccourcis
+
+== 1 | Toutes les touches, par contexte
+: Chaque touche de l'appli, rangée par contexte : Général, Éditeur IHM, Scripts, Simulation, Grafcet et Aide. Les pastilles du haut n'en gardent qu'un.
+encadrer "champ:help.keys.search"
+dire "Au-dessus des tables : la recherche de la page, l'aperçu de la fiche A4 et Imprimer…"
+attendre 1.5s
+
+== 2 | Cherche une touche
+: Dans **Chercher un raccourci**, tape une touche ou un mot. Avec F8, la page montre d'abord F8 et Maj+F8, puis les lignes qui citent F8.
+texte "champ:help.keys.search" "F8"
+attendre 1s
+dire "F8 démarre l'IHM simulée, sans l'API. Maj+F8 l'arrête, et l'API continue."
+attendre 1s
+
+== 3 | Ctrl+H et Ctrl+Maj+O
+: Ctrl+H reste à l'Historique. L'import de la configuration matérielle (.XHW), qui le portait aussi, passe à **Ctrl+Maj+O** en 1.11.
+texte "champ:help.keys.search" "Ctrl+Maj+O"
+attendre 1s
+dire "Ctrl+Maj+O importe la configuration matérielle (.XHW) dans le projet ouvert."
+attendre 1s
+
+== 4 | La fiche A4
+: **Aperçu A4** montre la fiche : toutes les touches, par contexte. **Imprimer…** l'écrit en page HTML au format A4 et l'ouvre dans ton navigateur, qui l'imprime ou l'enregistre en PDF.
+clic "bouton:Aperçu A4"
+encadrer "bouton:Imprimer…"
+attendre 1.5s
+clic "bouton:Les tables"
+
+== 5 | Sers-toi de la touche trouvée
+: Échap ferme l'aide : te voilà dans le projet. Puis F8 : l'IHM démarre.
+touche Escape
+touche F8
+attendre 1.5s
+dire "L'IHM tourne. Maj+F8 l'arrête."
+@atoi Ferme l'aide avec Échap, puis appuie sur F8 : l'IHM démarre.
+@verifier simulation.ihm = marche

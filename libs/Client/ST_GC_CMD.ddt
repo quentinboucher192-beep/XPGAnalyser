@@ -1,0 +1,39 @@
+# Derived data type, shared.
+name = ST_GC_CMD
+version = 0.02
+#! summary = Les commandes d'un moteur GRAFCET, regroupees pour l'IHM.
+#! usage = REPRIS DU PROJET MAST (champs inchanges). Les commandes impulsionnelles
+#! usage = (StepReq, InitReq, ResetInitialReq, ResetAllReq, ForceBackReq,
+#! usage = ForceNextReq) et le forcage direct (ForceStepFromId/ToId remis a -1) se
+#! usage = remettent a zero APRES l'appel du moteur. Remis a -1 AVANT l'appel, comme
+#! usage = dans le projet MAST, le forcage direct n'arrive jamais au moteur.
+#! see = ST_GC_CTRL
+#! see = DFB_GRAFCETENGINE
+#! param Enable = Le moteur tourne.
+#! param ModeReq = Le mode : 2 pas a pas (StepReq).
+#! param FreezeReq = Fige le moteur.
+#! param PauseReq = Met le moteur en pause.
+#! param StepReq = En mode 2, un pas.
+#! param InitReq = Retour a l'etat initial.
+#! param ResetInitialReq = Retour a la situation initiale, sans relancer les etapes
+#! param ResetInitialReq = initiales deja actives.
+#! param ResetAllReq = Remise a zero complete.
+#! param ForceBackReq = La premiere etape active revient a l'etape precedente.
+#! param ForceNextReq = La premiere etape active passe a l'etape suivante.
+#! param ForceStepFromId = Forcage : l'etape a desactiver. -1 : pas de forcage.
+#! param ForceStepToId = Forcage : l'etape a activer. -1 : pas de forcage.
+#! changes 0.02 = Range dans la bibliotheque, depuis le projet MAST.
+
+# name ; type ; scope ; initial ; comment
+Enable ; BOOL ; Member ;  ; 
+ModeReq ; INT ; Member ;  ; 
+FreezeReq ; BOOL ; Member ;  ; 
+PauseReq ; BOOL ; Member ;  ; 
+StepReq ; BOOL ; Member ;  ; 
+InitReq ; BOOL ; Member ;  ; 
+ResetInitialReq ; BOOL ; Member ;  ; 
+ResetAllReq ; BOOL ; Member ;  ; 
+ForceBackReq ; BOOL ; Member ;  ; 
+ForceNextReq ; BOOL ; Member ;  ; 
+ForceStepFromId ; INT ; Member ;  ; 
+ForceStepToId ; INT ; Member ;  ; 

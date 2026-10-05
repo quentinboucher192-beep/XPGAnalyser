@@ -1,0 +1,57 @@
+# =============================================================================
+#  1.10 - L'aide F1 de l'outil des couleurs (chantier Q).
+#  Meme syntaxe que guide-ihm.txt (= chapitre, == cle | titre, : resume, @mots,
+#  @lieux, @voir, ### intertitre, - puce, | tableau |, ``` code ```).
+#  A inserer dans guide-ihm.txt par le chef de projet : le sujet apres
+#  « proprietes » (ou pres de « styles-nommes ») ; puis la retouche du sujet
+#  « proprietes » listee en fin de fichier. Les captures PNG_1010 a PNG_1019 :
+#  session tools/sessions/session-71-couleurs.txt (jouee sur la copie de travail
+#  le 01/10 ; a rejouer sur l'appli fusionnee).
+# =============================================================================
+
+== couleurs | Choisir une couleur : la palette et la pipette
+: Un clic sur une case Couleur ouvre la palette : en haut la propriété et le bouton Pipette ; à gauche le nuancier, les couleurs du projet, les récentes et l'aperçu avant / après ; à droite le choix personnalisé, ouvert d'emblée - le carré saturation/valeur, la barre de teinte, la barre de transparence, le code #RRGGBB(AA), T S V, R G B et l'opacité ; en bas Annuler et Appliquer. La pipette prend une couleur n'importe où dans la fenêtre.
+@mots couleur, Couleur, palette, nuancier, personnalisée, pipette, Pipette, loupe, transparence, alpha, opacité, Opacité, #RRGGBB, #RRGGBBAA, RVB, TSV, teinte, saturation, valeur, avant, après, Transparent, Récentes, Dans le projet, Appliquer
+@lieux proprietes, styles, palette-couleurs
+@voir proprietes, styles-nommes, aide-saisie
+@capture PNG_1010_palette_choix_personnalise.png | La palette d'une case Couleur : le nuancier à gauche, le choix personnalisé à droite, ouvert d'emblée.
+@capture PNG_1012_palette_transparence.png | La barre de transparence : le code passe en #RRGGBBAA.
+@capture PNG_1016_pipette_loupe.png | La pipette : la loupe montre les pixels sous la croix et leur code.
+### La palette
+Un clic sur la valeur d'une propriété Couleur (Remplissage, Contour, Couleur du texte, les couleurs d'un style, d'une plume de courbe, d'une zone...) ouvre la palette sous la case. Dans l'éditeur de thème et dans l'éditeur de l'icône du projet, le bouton **…** à droite du code de la couleur choisie ouvre la même palette (une couleur d'icône reste opaque). En haut, le nom de la propriété et le bouton **Pipette**. Puis deux colonnes :
+- **à gauche**, le **nuancier** (dix gris, puis dix teintes en trois nuances : foncé, franc, clair), **Dans le projet** (les couleurs déjà employées, dix au plus), **Récentes** (les dix dernières choisies) et **Transparent** (une valeur vide) : un clic sur une pastille l'applique et ferme. Dessous, **avant / après** : la couleur d'origine et la couleur préparée, côte à côte ;
+- **à droite**, le **choix personnalisé**, toujours ouvert : il prépare une couleur, qu'**Appliquer** (ou Entrée) applique et qu'**Annuler** (ou Échap) oublie.
+En bas, une ligne dit ce que veut dire la case où tu tapes (le code, R G B, T S V, l'opacité), ou ce que fait ce que la souris survole (la pipette, avant, après, le carré, les barres, une pastille et son code).
+### Le choix personnalisé
+- Le **carré** : la saturation de gauche à droite, la valeur (la clarté) de bas en haut. Un clic ou un glissé place le repère.
+- La **barre de teinte**, sous le carré : de gauche à droite, rouge, jaune, vert, cyan, bleu, magenta, rouge.
+- La **barre de transparence**, dessous : transparente à gauche, opaque à droite, sur un damier. Une couleur qui n'est plus opaque s'écrit **#RRGGBBAA**.
+- Le **Code** : `#RRGGBB`, `#RRGGBBAA`, vide (transparent), ou une **expression** `=…` qui passe telle quelle.
+- **T S V** (la teinte en degrés, de 0 à 359, la saturation et la valeur en %), **R G B** (de 0 à 255) et l'**Opacité %** (100 : opaque, 0 : transparente) : un clic dans la case, puis la frappe ; **Tab** passe à la case suivante (Maj+Tab : la précédente), **Haut** et **Bas**, ou la molette sur la case, changent le nombre d'un (avec Maj : de dix). Tout se suit : le carré, les barres, le code et les cases bougent ensemble.
+- **avant / après** : un clic sur **avant** remet la couleur d'origine.
+| Touche | Ce qu'elle fait |
+| Entrée | applique la couleur préparée (un code complet, vide, ou une expression) |
+| Échap | ferme sans rien changer (pendant la pipette : arrête la pipette) |
+| Tab, Maj+Tab | la case suivante, la précédente |
+| Haut, Bas (ou la molette sur une case nombre) | un de plus, un de moins (Maj : dix) |
+| I | la pipette |
+### La pipette
+Le bouton **Pipette** (ou la touche **I**) : la palette reste ouverte, une **croix** remplace le curseur et une **loupe** la suit, avec les pixels sous la croix (agrandis, celui du milieu encadré) et son code ; un bandeau en bas de la fenêtre rappelle quoi faire. Un **clic** prend la couleur de ce pixel - dans la vue de l'IHM, une image, la palette elle-même ou n'importe où dans l'interface - et le bas de la palette le dit (« prise, Appliquer pour la garder »). **Échap** ou le clic droit arrêtent la pipette sans rien prendre.
+> La pipette lit ce que l'application vient de dessiner : elle voit la vue en simulation bouger, mais pas ce qui est hors de la fenêtre de l'application.
+! Une couleur prise à la pipette est opaque ; règle sa transparence ensuite avec la barre de transparence ou l'Opacité.
+### Une propriété pilotée par une expression
+Si la case porte une expression (`=Etat_Couleur`), la palette la montre en entier, avec son `=` : la case **Expression** prend la place du code et de T S V (qui ne veulent rien dire pour une expression) ; Entrée ou Appliquer la rendent telle quelle. Taper un nouveau code, choisir une pastille ou cliquer dans le carré remplace l'expression par une couleur fixe (le code et T S V reviennent). Dans une expression, la lettre i reste une lettre (elle ne lance pas la pipette).
+
+# -----------------------------------------------------------------------------
+#  Retouche d'un sujet existant :
+#  - « proprietes » : apres le paragraphe des cases Couleur (ou a la fin de la
+#    section des types de cases), ajouter :
+#    « Une case **Couleur** s'édite dans la palette : nuancier, couleurs du
+#    projet, récentes, et le choix personnalisé (carré, teinte, transparence,
+#    code, T S V, R G B, opacité, pipette) - voir « Choisir une couleur : la
+#    palette et la pipette ». »
+#  - le sujet des nouveautes de P (« reperes-nouveautes » dans depot-p a 21 h 30 ;
+#    pas de renvoi @voir vers lui tant que sa cle n'est pas fixee) : une ligne « La palette des couleurs
+#    montre le choix personnalisé complet (transparence, code, T S V, R G B,
+#    opacité, avant / après) et une pipette (I) qui prend une couleur à l'écran. »
+# -----------------------------------------------------------------------------

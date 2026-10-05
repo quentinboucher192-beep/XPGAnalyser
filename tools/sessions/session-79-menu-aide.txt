@@ -1,0 +1,62 @@
+# =============================================================================
+#  Session 79 - 1.10 : le menu Aide rangé (chantier R2, les six rapides des
+#  propositions du 01/10 « propose des améliorations à faire dans les menus
+#  d'aide »). Captures PNG_1093 et suivantes, dans une COPIE de Armoire_Gaz.
+#   1093 : le menu Aide en quatre blocs titrés (Chercher et lire, Les guides,
+#          Apprendre, Nouveautés et support), F1 à droite, « n à voir » sur
+#          Nouveautés…, la case Repères des nouveautés (affichés)
+#   1094 : la pastille orange sur Aide et son infobulle
+#   1095 : Repères des nouveautés décochée : « masqués »
+#   1096 : À propos d'XPGAnalyser (version, construction, dossiers, projet,
+#          composants libres)
+#   1097 : « Copier les informations pour le support » : copié (barre d'état)
+#   1098 : Aller à / Faire… (catégorie Actions) : les commandes en français
+#   1099 : Nouveautés… : la fenêtre des nouveautés (son pied : Aide › Nouveautés…)
+#   1100 : Apprendre › Didacticiel de l'API : ses parcours, dont ceux du lot 8
+#          (les cartes « nouveau »), qui n'ont plus d'entrée à part
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 8
+barre "aide"
+attendre 2
+capture PNG_1093_menu_aide.png
+touche echap
+attendre 1
+barre "aide" survol
+attendre 3
+capture PNG_1094_aide_pastille_infobulle.png
+barre-menu "aide" "Repères des nouveautés"
+attendre 2
+barre "aide"
+attendre 2
+capture PNG_1095_menu_aide_reperes_masques.png
+touche echap
+attendre 1
+barre-menu "aide" "Repères des nouveautés"
+attendre 2
+barre-menu "aide" "À propos"
+attendre 3
+capture PNG_1096_a_propos.png
+bouton "Copier les informations pour le support"
+attendre 2
+capture PNG_1097_a_propos_copie.png
+aller-a "projet"
+attendre 3
+aller-a-categorie "actions"
+attendre 2
+capture PNG_1098_aller_a_commandes_francais.png
+touche echap
+attendre 1
+barre-menu "aide" "Nouveautés"
+attendre 3
+capture PNG_1099_nouveautes.png
+touche echap
+attendre 2
+barre-menu "aide" "Didacticiel de l'API"
+attendre 4
+capture PNG_1100_didacticiel_api.png
+quitter

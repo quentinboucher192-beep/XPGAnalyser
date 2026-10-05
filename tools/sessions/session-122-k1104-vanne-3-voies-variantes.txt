@@ -1,0 +1,30 @@
+# =============================================================================
+#  Session 122 (K2, K1104 - 1.10.4) : les quatre variantes de la maquette (scene 4)
+#  sur Vue_Melange : V3_1 melangeuse en T (1-3), V3_2 repartitrice en T (1-2),
+#  V3_3 melangeuse en L (2-3, en mouvement), V3_4 repartitrice en L (fermee, en
+#  defaut). Dans l'editeur, puis en simulation (l'ambre qui clignote, le rouge et
+#  son cadre tirete, les fleches du sens). Copie preparee par prepare2.py.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+arbre "IHM/Vues/Vue_Melange"
+attendre 8
+vue-zoom 100 -20 -20
+attendre 3
+capture 122_01_quatre_variantes_editeur.png
+
+# ---- En simulation : les couleurs du passage, du mouvement, du defaut
+arbre "Simulation/IHM"
+attendre 12
+sim-utilisateur "admin" "admin2026"
+attendre 3
+sim-vue "Vue_Melange"
+attendre 8
+capture 122_02_quatre_variantes_simulation.png
+attendre 5
+capture 122_03_quatre_variantes_simulation_bis.png
+quitter

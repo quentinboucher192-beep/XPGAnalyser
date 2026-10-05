@@ -1,0 +1,85 @@
+# =============================================================================
+#  Session 64 - 1.9.0 : les alarmes des objets (chantier G). Captures PNG_950 a
+#  PNG_957, dans une COPIE de Armoire_Gaz (le symbole Carte_Armoire et ses
+#  instances de Vue_Cartes ; le synoptique de Vue_Synoptique : B1_Argon, V_101).
+#  Ecrite avant la fusion, pas encore jouee : a passer apres la construction de
+#  l'appli fusionnee (F + G + B). "sous-onglet" connait aussi les sous-onglets
+#  d'un symbole (HmiSymbolTabs) ; "outil" trouve un bouton de barre par son
+#  infobulle ; "Creer des alarmes..." ouvre le panneau (Fermer le referme).
+#  Attention : "propriete X" sans valeur VIDE le champ X (typeInto) ; pour
+#  montrer un champ sans le changer : "propriete-clic X" (lecture seule).
+#  A ajouter en la jouant : une capture de la pastille fx rouge (une condition
+#  surchargee impossible) et une vraie surcharge a l'etape A2.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- A5. Un objet de la bibliotheque pose : ses alarmes par defaut ------------------
+arbre "IHM/Vues/Vue_Synoptique"
+attendre 6
+objet B1_Argon
+attendre 3
+propriete-clic "Résumé"
+attendre 3
+capture PNG_950_bouteille_alarmes_par_defaut.png
+
+# ---- A2. La vanne : decocher sa course trop longue (une surcharge), Ctrl+Z ----------
+objet V_101
+attendre 3
+propriete-clic "Résumé"
+attendre 3
+capture PNG_951_vanne_alarmes_de_l_objet.png
+# 1.9 finale (chantier I) : une vraie surcharge - deplier Course_Trop_Longue (clic sur son titre,
+# volet de droite en 1920 x 1080), decocher Active :
+# le lisere et l'etiquette SURCHARGE dans la ligne, le bouton de retour au bout (chantier U).
+clic 1650 352
+attendre 3
+propriete-clic "Active"
+attendre 4
+capture PNG_958_vanne_surcharge_dans_la_ligne.png
+annuler
+attendre 2
+
+# ---- A1. Le symbole Carte_Armoire : l'onglet Alarmes, Creer des alarmes, l'apercu ----
+arbre "IHM/Symboles/Carte_Armoire"
+attendre 6
+sous-onglet Alarmes
+attendre 3
+capture PNG_952_symbole_onglet_alarmes.png
+outil "Créer des alarmes depuis un paramètre typé"
+attendre 3
+capture PNG_953_symbole_creer_des_alarmes.png
+propriete-clic "Fermer"
+attendre 2
+propriete-clic "Sur l'instance"
+attendre 3
+capture PNG_954_symbole_apercu_du_groupe.png
+
+# ---- A2. Une instance : la section Alarmes de l'objet, une priorite surchargee ------
+arbre "IHM/Vues/Vue_Cartes"
+attendre 6
+objet Carte_Armoire_1
+attendre 3
+propriete-clic "Résumé"
+attendre 3
+capture PNG_955_instance_alarmes_surcharge.png
+
+# ---- A3. Configuration > Alarmes : Symboles, puis Objets du synoptique --------------
+arbre "IHM/Configuration/Alarmes"
+attendre 6
+capture PNG_956_configuration_alarmes_generees.png
+# 1.9 finale (chantier I) : une alarme generee choisie - sa fiche a droite (A3, chantier U),
+# si le volet des generees fait plus de 640 px.
+ligne "Course_Trop_Longue"
+attendre 4
+capture PNG_959_fiche_alarme_generee.png
+
+# ---- A4. Le filtre d'un objet d'alarmes : motif, groupe d'objet, symbole: -----------
+arbre "IHM/Vues/Vue_Alarmes"
+attendre 6
+capture PNG_957_filtre_de_groupes.png
+quitter

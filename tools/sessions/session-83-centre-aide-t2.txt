@@ -1,0 +1,113 @@
+# =============================================================================
+#  Session 83 - 1.11 : le centre d'aide unique (chantier T2). Sans projet.
+#   T2_01 : F1 (action help.open) - le centre sur Démarrer : l'arbre des neuf
+#           chapitres, la barre (‹ › recherche ★ compteur), la carte du tutoriel
+#   T2_02 : la Vanne (aide-sujet objet-vanne) : le fil d'Ariane, la carte
+#           « ▶ Regarder le tutoriel · durée · étapes », Essayer, la page du guide
+#   T2_03 : la recherche « vanne », résultats groupés (IHM, Blocs, Notes…)
+#   T2_04 : la page des raccourcis (page-raccourcis), groupée par contexte
+#   T2_05 : les notes de la 1.10.1 (notes-1.10.1), par domaine, N / M / C
+#   T2_06 : Signaler un problème (page-signaler) : le formulaire (trois champs,
+#           quatre cases, Préparer le zip, Ouvrir le dossier, Copier le chemin,
+#           Copier le texte) et l'aperçu en texte simple
+#   T2_06b: les deux premiers champs remplis, « Joindre une capture » (tranche 8 :
+#           capture.png dans le zip), « Préparer le zip » : le chemin du zip
+#   T2_07 : Alt+← dans le centre : retour aux notes de la 1.10.1 (son historique)
+#   T2_08 : un bloc de la bibliothèque (bloc-DFB_CTL_PID) ; la session tourne dans
+#           un dossier où libs/ mène à la bibliothèque (lancer-s83.sh)
+#   T2_09 : Ctrl+F puis « pid » : les résultats groupés, Blocs compris
+#   T2_10 : une page de l'aide générale (api-importer), dans HelpView : l'en-tête
+#           (fil d'Ariane, carte) à la hauteur de son contenu, sans titre en double
+#   T2_11 : (tranche 8) la page des raccourcis, la recherche « F8 » de la page
+#   T2_12 : la pastille « Simulation » (aide-cible contexte:3), puis l'aperçu A4
+#   T2_13 : les notes de la 1.10.1, les pastilles des versions, le filtre « Simulation »
+#   T2_14 : Récents (les favoris, puis les sujets ouverts)
+#   T2_15 : (tranche 9) les Propriétés (proprietes), « C++ » dans la barre : ST | C | C++
+#           vaut pour tous les exemples ; puis « ST », pour rendre le réglage comme avant
+#   T2_16 : (tranche 10) l'arbre garde son défilement : la molette le descend (16a),
+#           un clic ouvre un sujet visible, l'arbre ne remonte pas (16b)
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+action help.open
+attendre 8
+capture T2_01_centre_demarrer.png
+aide-sujet objet-vanne
+attendre 4
+capture T2_02_centre_vanne.png
+champ "help.search" "vanne"
+attendre 5
+capture T2_03_recherche_vanne.png
+aide-sujet page-raccourcis
+attendre 4
+capture T2_04_raccourcis.png
+aide-sujet notes-1.10.1
+attendre 4
+capture T2_05_notes_1101.png
+aide-sujet page-signaler
+attendre 4
+capture T2_06_signaler.png
+champ "help.report.quoi" "La vanne V-101 reste rouge après l'acquittement."
+attendre 2
+champ "help.report.attendu" "Qu'elle repasse au vert."
+attendre 2
+bouton "Joindre une capture"
+attendre 3
+bouton "Préparer le zip"
+attendre 3
+capture T2_06b_signaler_zip.png
+touche Alt+Left
+attendre 3
+capture T2_07_alt_gauche.png
+aide-sujet bloc-DFB_CTL_PID
+attendre 4
+capture T2_08_bloc_pid.png
+touche Ctrl+F
+texte "pid"
+attendre 4
+capture T2_09_recherche_pid.png
+aide-sujet api-importer
+attendre 4
+capture T2_10_api_importer.png
+aide-sujet page-raccourcis
+attendre 3
+champ "help.keys.search" "F8"
+attendre 4
+capture T2_11_raccourcis_f8.png
+champ "help.keys.search" ""
+attendre 2
+aide-cible contexte:3
+attendre 3
+bouton "Aperçu A4"
+attendre 4
+capture T2_12_raccourcis_a4.png
+aide-sujet notes-1.10.1
+attendre 3
+aide-cible domaine:Simulation
+attendre 4
+capture T2_13_notes_filtre.png
+bouton "Récents"
+attendre 4
+capture T2_14_recents.png
+aide-sujet proprietes
+attendre 3
+bouton "C++"
+attendre 4
+capture T2_15_notation_cpp.png
+bouton "ST"
+attendre 2
+# T2_16 (tranche 10) : l'arbre garde son défilement. Le sommaire, la Vanne
+# (L'IHM déplié), la molette descend l'arbre (16a) ; un clic sur un sujet
+# visible l'ouvre, et l'arbre ne remonte pas (16b : les mêmes lignes).
+bouton "Sommaire"
+attendre 3
+aide-sujet objet-vanne
+attendre 4
+molette 140 500 -8
+attendre 3
+capture T2_16a_arbre_defile.png
+clic 140 500
+attendre 4
+capture T2_16b_arbre_garde.png
+quitter

@@ -1,0 +1,271 @@
+# =============================================================================
+#  Session 55 - LOT API 5 : Types derives, Blocs DFB, Unites de programme,
+#  Variables, Sous-routines.
+#  Types derives : du projet / de la bibliotheque, « utilise par », les champs
+#  deplies, renommer un type (les variables suivent) puis Ctrl+Z, + Champ.
+#  Blocs DFB : le bloc dessine, ses instances (globales et dans les unites),
+#  creer une instance, double-clic : la variable. Unites : leurs sections, les
+#  parametres relies aux variables, renommer (les tables suivent), Voir dans
+#  l'ordre. Variables : en dossiers, lues par l'IHM, ajouter a une table
+#  d'animation, renommer (le code suit), exporter CSV. Sous-routines : vide,
+#  + Sous-routine, remplie, Ctrl+Z. Plan memoire : %M, %MW, %KW, leur taille,
+#  les bornes de lecture, le pourcentage d'utilisation. Les dialogues en francais.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 12
+arbre "IHM" replier
+attendre 3
+
+# ---- A. Types derives : ceux du projet, ceux de la bibliotheque ------------------------------
+arbre "API/Types dérivés"
+attendre 8
+survol 1200 1060
+attendre 3
+capture PNG_636_types_derives.png
+puce "Plus récents"
+attendre 5
+capture PNG_637_types_plus_recents.png
+puce "Tous"
+attendre 4
+ligne "armoire" exact
+attendre 3
+deplier "armoire"
+attendre 5
+capture PNG_638_type_armoire_champs.png
+
+# Renommer un type : les variables, les champs, les parametres de ce type suivent.
+ligne "config_gaz" exact
+attendre 4
+outil "Renommer le type"
+attendre 5
+capture PNG_639_renommer_type_dialogue.png
+champ 1 "Config_Gaz_V2"
+attendre 3
+# Lot API 7 : renommer ouvre le dialogue qui montre tout ce qui suit (API et IHM) : Confirmer.
+renommer-confirmer
+attendre 10
+survol 1200 1060
+attendre 3
+capture PNG_640_type_renomme.png
+touche ctrl+z
+attendre 10
+capture PNG_641_type_renomme_annule.png
+
+# + Champ : dans le type choisi, un Ctrl+Z le retire.
+ligne "entree_ana" exact
+attendre 4
+outil "Ajouter un champ"
+attendre 5
+champ 1 "Decalage : REAL"
+attendre 3
+bouton "OK"
+attendre 10
+survol 1200 1060
+attendre 3
+capture PNG_642_champ_ajoute.png
+touche ctrl+z
+attendre 8
+
+# Supprimer un type encore utilise : refuse, et dit pourquoi.
+ligne "config_chgt" exact
+attendre 4
+outil "Supprimer le type"
+attendre 6
+capture PNG_643_supprimer_type_refuse.png
+bouton "Fermer"
+attendre 4
+
+# Le dialogue de creation, en francais.
+outil "Créer un type"
+attendre 6
+capture PNG_644_nouveau_type_dialogue.png
+bouton "Annuler"
+attendre 4
+
+# ---- B. Blocs DFB : le bloc dessine, ses instances -------------------------------------------
+arbre "API/Blocs DFB"
+attendre 8
+survol 1200 1060
+attendre 3
+capture PNG_645_blocs_dfb.png
+ligne "CAPTEUR" exact
+attendre 5
+capture PNG_646_bloc_capteur.png
+outil "Créer une instance"
+attendre 5
+champ 1 "CAPTEUR_PT5"
+attendre 3
+bouton "OK"
+attendre 10
+ligne "CAPTEUR" exact
+attendre 5
+survol 1200 1060
+attendre 3
+capture PNG_647_instance_creee.png
+touche ctrl+z
+attendre 8
+ligne "DFB_GRAFCETENGINE" exact
+attendre 5
+capture PNG_648_bloc_grafcetengine.png
+ligne "Gc_PurgeA" double
+attendre 8
+capture PNG_649_instance_ouverte.png
+fermer-onglet "Variable Gc_PurgeA"
+attendre 4
+
+# ---- C. Unites de programme : les sections, les parametres ----------------------------------
+arbre "API/Unités de programme"
+attendre 8
+ligne "Gestion_armoires" exact
+attendre 5
+survol 1200 1060
+attendre 3
+capture PNG_650_unite_gestion_armoires.png
+outil "Renommer l'unit"
+attendre 5
+champ 1 "Armoires_Gestion"
+attendre 3
+# Lot API 7 : renommer ouvre le dialogue qui montre tout ce qui suit (API et IHM) : Confirmer.
+renommer-confirmer
+attendre 10
+arbre "API/Tables d'animation" deplier
+attendre 3
+survol 1200 1060
+attendre 3
+capture PNG_651_unite_renommee_tables_suivent.png
+touche ctrl+z
+attendre 8
+arbre "API/Tables d'animation" replier
+attendre 3
+ligne "Logigrammes_B" exact
+attendre 4
+outil "L'unit"
+attendre 8
+capture PNG_652_unite_dans_ordre.png
+
+# ---- D. Variables : dossiers, filtres, ce qui les relie au reste ----------------------------
+arbre "API/Variables"
+attendre 10
+survol 1200 1060
+attendre 3
+capture PNG_653_variables_dossiers.png
+puce "Lues par"
+attendre 5
+ligne "AUTOMATE_EN_RUN" exact
+attendre 5
+capture PNG_654_variables_lues_ihm.png
+puce "Toutes"
+attendre 4
+ligne "PT1_A" exact
+attendre 4
+outil "Ajouter les variables"
+attendre 5
+capture PNG_655_ajouter_table_menu.png
+choisir "PURGE"
+attendre 10
+survol 1200 1060
+attendre 3
+capture PNG_656_variable_dans_table.png
+onglet "API · Variables"
+attendre 5
+ligne "index_armoire_non_utilisee" exact
+attendre 5
+outil "Renommer la variable"
+attendre 5
+champ 1 "Index_Armoire_Libre"
+attendre 3
+# Lot API 7 : renommer ouvre le dialogue qui montre tout ce qui suit (API et IHM) : Confirmer.
+renommer-confirmer
+attendre 10
+survol 1200 1060
+attendre 3
+capture PNG_657_variable_renommee.png
+touche ctrl+z
+attendre 8
+champ "analysis.api.variables.volet.filtres.chercher" "TON_D"
+attendre 6
+capture PNG_658_variables_recherche.png
+outil "Exporter les variables"
+attendre 5
+capture PNG_659_variables_export_csv.png
+# Lot API 7 : l'export demande ou (le chemin, le bouton ...) : Exporter l'ecrit dans exports/, comme avant.
+bouton "Exporter"
+attendre 4
+
+# ---- E. Sous-routines : vide, puis une, puis Ctrl+Z -----------------------------------------
+arbre "API/Sous-routines"
+attendre 8
+survol 1200 1060
+attendre 3
+capture PNG_660_sous_routines_vide.png
+outil "Créer une sous-routine (ST)"
+attendre 5
+champ 1 "SR_Purge"
+attendre 3
+bouton "OK"
+attendre 10
+survol 1200 1060
+attendre 3
+capture PNG_661_sous_routine_creee.png
+touche ctrl+z
+attendre 8
+capture PNG_662_sous_routines_ctrl_z.png
+
+# ---- G. Configuration > Plan memoire : %M, %MW, %KW, les bornes, l'utilisation ------------
+# Le .XHW d'abord : la taille de chaque zone vient de lui (512 %M, 1024 %MW, 256 %KW).
+arbre "API/Configuration"
+attendre 8
+outil "Importer le .XHW"
+attendre 6
+champ 1 "${XHW}"
+attendre 3
+bouton "Importer"
+attendre 20
+arbre "API/Configuration/Plan mémoire"
+attendre 8
+survol 1200 1060
+attendre 3
+capture PNG_665_plan_memoire_trois_zones.png
+outil "Zone %M"
+attendre 5
+capture PNG_666_plan_memoire_zone_m.png
+outil "Zone %KW"
+attendre 5
+capture PNG_667_plan_memoire_zone_kw.png
+outil "Zone %MW"
+attendre 4
+outil "Borner la lecture"
+attendre 5
+capture PNG_668_plan_memoire_bornes_dialogue.png
+champ 1 "5500-9099"
+attendre 3
+bouton "OK"
+attendre 10
+survol 1200 1060
+attendre 3
+capture PNG_669_plan_memoire_bornes.png
+outil "Trouver la plus grande place libre"
+attendre 5
+capture PNG_670_plan_memoire_place_libre.png
+touche ctrl+z
+attendre 8
+capture PNG_671_plan_memoire_toute_la_zone.png
+
+# ---- F. + Variable : le dialogue en francais --------------------------------------------------
+arbre "API/Variables"
+attendre 6
+outil "Créer une variable"
+attendre 6
+capture PNG_672_nouvelle_variable_dialogue.png
+bouton "Annuler"
+attendre 4
+barre "historique"
+attendre 6
+capture PNG_673_historique_lot5.png
+barre "historique"
+attendre 3
+quitter

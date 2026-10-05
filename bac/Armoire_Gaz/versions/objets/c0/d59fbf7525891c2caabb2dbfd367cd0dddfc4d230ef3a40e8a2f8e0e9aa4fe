@@ -1,0 +1,54 @@
+# Watch tables.
+# table ; name ; owning POU
+# entry ; symbol
+table ; ARM ; Gestion_armoires
+entry ; armoires
+entry ; index_armoire_non_utilisee
+entry ; %M12
+entry ; config_utilisee
+entry ; TON_BASCULEMENT.ET
+entry ; %M12
+entry ; generalites
+entry ; Gc_SurpressionA
+entry ; Gc_Surveillance
+entry ; %M300
+entry ; Ctrl_SurpA
+table ; SURPRESSION ; Gestion_armoires
+entry ; Acts_SurpA[0].started
+entry ; Acts_SurpA[0].finished
+entry ; Acts_SurpA[1].started
+entry ; Acts_SurpA[2].started
+entry ; Acts_SurpA[3].started
+entry ; Acts_SurpA[4].started
+entry ; Acts_SurpA[5].started
+entry ; Acts_SurpA[6].started
+entry ; Acts_SurpA[7].started
+entry ; Acts_SurpA[8].started
+entry ; Acts_SurpA[9].started
+entry ; Acts_SurpA[10].started
+entry ; Acts_SurpA[11].started
+entry ; Acts_SurpA[12].started
+entry ; Gc_SurpressionA.debug.stepfocus
+entry ; armoires[1].sorties.V5.F0
+entry ; armoires[1].sorties.V5.F1
+entry ; armoires[1].sorties.V7.F0
+entry ; armoires[1].sorties.V7.F1
+entry ; armoires[1].sorties.VS.F0
+entry ; armoires[1].sorties.VS.F1
+entry ; armoires[0].compteur_cycle_surpression
+entry ; armoires[1].compteur_cycle_surpression
+entry ; Gc_SurpressionA
+entry ; armoires[1]
+table ; CHANGEMENT ; Gestion_armoires
+entry ; %M300
+entry ; armoires[0].sorties
+table ; DETOXAL ; Gestion_armoires
+entry ; %M300
+table ; PURGE ; Gestion_armoires
+entry ; armoires[0].sorties.V3
+entry ; armoires[0].sorties.V4
+entry ; armoires[0].sorties.V7
+entry ; armoires[0].sorties.V2
+entry ; armoires[0].compteur_cycle_purge
+entry ; armoires[0].ana.PT1.mes
+entry ; %M300

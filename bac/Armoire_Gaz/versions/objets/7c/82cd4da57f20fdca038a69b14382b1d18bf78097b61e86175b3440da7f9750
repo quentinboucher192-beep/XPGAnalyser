@@ -1,0 +1,4 @@
+Jeu;Seuil poids A (kg);Seuil poids B (kg);Message
+Azote;12;12;'Azote N2'
+Argon;8.5;12.0;'Argon Ar'
+Helium;5;5;'Hélium He'

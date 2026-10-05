@@ -1,0 +1,52 @@
+# =============================================================================
+#  1.10 - L'aide F1 de Compiler et des erreurs des scripts (chantier N).
+#  Meme syntaxe que guide-ihm.txt (= chapitre, == cle | titre, : resume, @mots,
+#  @lieux, @voir, ### intertitre, - puce, | tableau |, ``` code ```).
+#  A inserer dans guide-ihm.txt par le chef de projet : le sujet apres
+#  « scripts » (ou « compiler ») ; puis la retouche du sujet « compiler »
+#  listee en fin de fichier.
+# =============================================================================
+
+== erreurs-scripts | Les erreurs des scripts, à leur place
+: Compiler et Générer lisent chaque script ST du projet comme il tournera : un nom qui n'existe pas, un membre inconnu, une fonction inconnue ou le mauvais nombre d'arguments, une écriture interdite, un type qui ne convient pas. Chaque faute a sa ligne et sa colonne ; l'éditeur de scripts les montre pendant que tu tapes, sans attendre Compiler.
+@mots n'existe pas, veux-tu dire, F7, Résultats de Compiler, FUNCTION, FOR EACH, fonction interne, fonction inconnue, prend, arguments, lecture seule, tu lui affectes, est attendu, n'est pas un tableau, n'a pas de membre, Diagnostics, colonne, souligné, soulignement, trait ondulé, constante
+@lieux scripts, compiler, fonctions
+@voir scripts, fonctions, variables-locales, compiler, generer, variables-systeme, parametres-popups, types-ihm
+@capture PNG_1030_script_fautes_soulignees.png | Trois fautes tapées : soulignées dans le code, le numéro de leur ligne en rouge, et le tableau des diagnostics les dit à leur ligne et leur colonne, pendant la frappe.
+@capture PNG_1032_compiler_fautes_des_scripts.png | Compiler : chaque faute des scripts, avec son script, sa ligne et sa colonne.
+@capture PNG_1036_resultats_de_compiler_editeur.png | Compiler (F7) dans l'éditeur : les résultats de tous les scripts sous le code (Script, Ligne, Col., Message) ; un clic y mène.
+### Ce qui est contrôlé
+| La faute | Exemple | Ce que Compiler dit |
+| un nom inconnu | `Temp_Moteur := 5;` | Temp_Moteur n'existe pas : veux-tu dire Temp_Moteur1 ? |
+| un membre inconnu | `Moteur.Vitesse := 3;` | le type de Moteur n'a pas de membre Vitesse |
+| un indice sur ce qui n'est pas un tableau | `Consigne[2] := 1;` | Consigne n'est pas un tableau |
+| une fonction inconnue | `x := Moyene(a, b);` | fonction inconnue : Moyene : veux-tu dire Moyenne ? |
+| le mauvais nombre d'arguments | `IHM_JOURNAL();` | IHM_JOURNAL prend 1 argument, pas 0 |
+| une procédure dans un calcul | `Texte := Tracer('x');` | Tracer ne rend pas de valeur |
+| une écriture interdite | `SYS.UserName := 'moi';` | SYS.UserName est une variable système en lecture seule |
+| une constante écrite | `Limite := 3;` (déclarée dans `VAR CONSTANT`) | Limite est une constante (VAR CONSTANT) : un script ne peut pas l'écrire |
+| un type qui ne convient pas | `Compteur := 'abc';` | Compteur est un INT : tu lui affectes un texte ('abc') |
+| une condition qui n'est pas un booléen | `IF 'abc' THEN` | IF : un booléen est attendu |
+### Ce qu'un nom peut être
+Un nom est connu s'il est une **variable IHM**, une **variable de l'automate** (ses globales, quand le programme est chargé), une **variable système** (`SYS.…`), une **variable d'instance** (`Vue.Objet.Propriété`), un **paramètre** de la vue (une popup, un symbole), une **variable locale** du script (`VAR … END_VAR`, `VAR_TEMP`), un **compteur de boucle** (`FOR i := …`), et dans une fonction IHM, ses **entrées** (`VAR_INPUT`) et son propre nom (sa valeur). Sans programme d'automate chargé, un nom inconnu de l'IHM peut être à lui : il n'est pas signalé.
+### Les erreurs et les avertissements
+- **Erreur** (rouge) : le script ne fera pas ce qui est écrit (un nom, un membre, une fonction, une écriture, un type impossibles).
+- **Avertissement** (orange) : il tournera, mais sans doute pas comme tu le penses (un texte comparé à un nombre : la condition est toujours fausse).
+### Dans l'éditeur de scripts
+- Chaque faute est **soulignée d'un trait ondulé** dès que tu tapes, sous ses caractères (rouge : erreur, orange : avertissement) ; le **numéro de sa ligne** est sur fond rouge (ou orange). La souris sur le trait : l'infobulle dit le message.
+- Le tableau **Diagnostics** sous le code les liste : sa **ligne**, sa **colonne**, sa gravité, son message ; son titre les compte (« 2 erreurs dans ce script »). Un clic sur une ligne du tableau sélectionne la faute dans le code.
+- **Compiler (F7)** dans l'éditeur, sans le quitter : le tableau devient **Résultats de Compiler** et liste les fautes de **tous** les scripts du projet (colonne **Script** : `Calcul`, `Vue_Pompes · OnOpen`, `Fonction Moyenne`…), avec leur ligne et leur colonne ; son titre les compte. Celles du script montré suivent la frappe : corrigée, une faute disparaît tout de suite. Un **clic** sur la faute d'un autre script l'ouvre, le curseur à la faute, le nom sélectionné (le script d'une autre vue, une fonction IHM, une action : leur éditeur s'ouvre). Le rapport entier (expressions, liaisons, actions) reste dans **IHM › Compiler**.
+- Le **curseur sur la faute** : son message s'écrit dans la barre sous le code.
+- La colonne **État** de la liste des scripts compte les erreurs de chaque script.
+### Dans Compiler et Générer
+- Tous les scripts du projet sont lus : les scripts généraux, ceux des vues (les popups et les symboles, avec leurs paramètres), les actions « Exécuter un script » et les fonctions IHM.
+- La colonne **Propriété / script** dit `Calcul, ligne 2, col. 13`. Un **double-clic** ouvre le script, va à la ligne et **sélectionne la faute** (le nom inconnu, l'appel…) : tu n'as plus qu'à la corriger.
+### Le langage des scripts 1.10
+Compiler connaît ce que les scripts de l'IHM gagnent en 1.10 (le sujet des scripts de la 1.10 les décrit) : une **fonction interne** déclarée dans le script (`FUNCTION Moyenne(t : ARRAY[0..9] OF REAL) : REAL … END_FUNCTION`) s'appelle avant ou après sa déclaration, ses paramètres et ses variables sont connus **dans la fonction** ; les variables d'un `FOR EACH cle, valeur IN m DO … END_FOR` sont connues **dans la boucle** ; une variable déclarée `MAP[…] OF …`, `ARRAY[…] OF …`, `REF_TO …` ou `POINTER TO …`, `p^`, `NULL` et les fonctions `MAP_…`, `REF`, `ADR`, `SIZEOF`, `LOWER_BOUND`, `UPPER_BOUND` ne sont pas des noms inconnus. Un nom mal écrit reste dit : `Moyene(t)` → « fonction inconnue : Moyene : veux-tu dire Moyenne ? » ; `valeur` après le `END_FOR` → « valeur n'existe pas ». Les arguments, les types des références, des pointeurs et des MAP sont contrôlés avec ces constructions.
+> Un nom mal écrit est souvent un nom renommé ailleurs : « veux-tu dire » propose le nom connu le plus proche.
+
+# ---- retouche du sujet « compiler » (a ajouter en fin de sujet) ----
+# ### Les scripts (1.10)
+# Compiler ne lit plus seulement la syntaxe des scripts : il dit aussi les noms
+# inconnus, les membres, les fonctions, les ecritures interdites et les types
+# (voir « Les erreurs des scripts, a leur place »).

@@ -1,0 +1,27 @@
+# DFB type interface.
+name = RTCDECODED
+version = 0.11
+attribute = TypeCodeCheckSumString = C0B0
+attribute = TypeSignatureCheckSumString = FCAB
+attribute = UseNewTplSignAlgo = TRUE
+
+# name ; type ; address ; scope ; init ; comment ; attributes ; element comments
+Enable ; BOOL ;  ; Input ;  ;  ; PositionPin=1 ; 
+Out ; ST_RTCDECODED ;  ; Output ;  ;  ; PositionPin=1 ; 
+Display ; Display_NTPC ;  ; Public ;  ;  ;  ; 
+Calcntpc ; Calc_NTPC ;  ; Public ;  ;  ;  ; 
+secOfDay ; UDINT ;  ; Public ;  ;  ;  ; 
+daysSince1980 ; UDINT ;  ; Public ;  ;  ;  ; 
+remDays ; UDINT ;  ; Public ;  ;  ;  ; 
+y ; INT ;  ; Public ;  ;  ;  ; 
+m ; INT ;  ; Public ;  ;  ;  ; 
+dim ; INT ;  ; Public ;  ;  ;  ; 
+isLeap ; BOOL ;  ; Public ;  ;  ;  ; 
+lowOk ; BOOL ;  ; Public ;  ;  ;  ; 
+highOk ; BOOL ;  ; Public ;  ;  ;  ; 
+finished ; BOOL ;  ; Local ;  ;  ;  ; 
+msOfDay ; UDINT ;  ; Local ;  ;  ;  ; 
+msOfDayPrev ; UDINT ;  ; Local ;  ;  ;  ; 
+
+# section ; name ; language ; order ; activation ; logic ; file
+section ; Main ; ST ; 21 ;  ;  ; Main.st

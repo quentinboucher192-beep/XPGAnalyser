@@ -1,0 +1,113 @@
+# Program unit interface.
+name = Logigrammes_B
+version = 
+task = MAST
+order = 16
+
+# name ; type ; address ; scope ; init ; comment ; attributes ; element comments
+armoires ; ARRAY[0..1] OF armoire ;  ; InOut ;  ;  ; EffectiveParameter=Armoires ; 
+config_utilisee ; config_gaz ;  ; InOut ;  ;  ; EffectiveParameter=ConfigGazUtilisee ; 
+generalites ; config_armoire ;  ; InOut ;  ;  ; EffectiveParameter=ConfigArmoireUtilisee ; 
+chgt_valider ; ARRAY[0..1] OF EBOOL ;  ; InOut ;  ;  ; EffectiveParameter=chgt_validerB ; [0]=oui,[1]=non
+NtpcNow ; Display_NTPC ;  ; InOut ;  ;  ; EffectiveParameter=NTPCInfos ; 
+TsSys ; TIME ;  ; InOut ;  ;  ; EffectiveParameter=TsSys ; 
+manu_ouv ; EBOOL ;  ; InOut ;  ;  ; EffectiveParameter=manu_ouv[1] ; 
+manu_ferm ; EBOOL ;  ; InOut ;  ;  ; EffectiveParameter=manu_ferm[1] ; 
+manu_armoire_choisie ; EBOOL ;  ; InOut ;  ;  ; EffectiveParameter=manu_armoire_choisie[1] ; 
+manu_vanne_choisie ; INT ;  ; InOut ;  ;  ; EffectiveParameter=manu_vanne_choisie[1] ; 
+DEBUG_NOM_ETAPE ; WORD ;  ; InOut ;  ;  ; EffectiveParameter=DEBUG_NOM_ETAPE[1] ; 
+DEBUG_ACT1 ; WORD ;  ; InOut ;  ;  ; EffectiveParameter=DEBUG_ACT1[1] ; 
+DEBUG_ACT2 ; WORD ;  ; InOut ;  ;  ; EffectiveParameter=DEBUG_ACT2[1] ; 
+DEBUG_ACT3 ; WORD ;  ; InOut ;  ;  ; EffectiveParameter=DEBUG_ACT3[1] ; 
+DEBUG_QUESTION ; WORD ;  ; InOut ;  ;  ; EffectiveParameter=DEBUG_QUESTION[1] ; 
+DEBUG_QUESTION_NUMERIQUE ; WORD ;  ; InOut ;  ;  ; EffectiveParameter=DEBUG_QUESTION_NUMERIQUE[1] ; 
+DEBUG_NB ; WORD ;  ; InOut ;  ;  ; EffectiveParameter=DEBUG_NB[1] ; 
+DEBUG_NB_TOTAL ; WORD ;  ; InOut ;  ;  ; EffectiveParameter=DEBUG_NB_TOTAL[1] ; 
+DEBUG_DETOXAL_0 ; WORD ;  ; InOut ;  ;  ; EffectiveParameter=DEBUG_DETOXAL_0[1] ; 
+DEBUG_PURGE_0 ; WORD ;  ; InOut ;  ;  ; EffectiveParameter=DEBUG_PURGE_0[1] ; 
+DEBUG_POMPAGE_0 ; WORD ;  ; InOut ;  ;  ; EffectiveParameter=DEBUG_POMPAGE_0[1] ; 
+DEBUG_HELIUM_0 ; WORD ;  ; InOut ;  ;  ; EffectiveParameter=DEBUG_HELIUM_0[1] ; 
+DEBUG_CHGT ; WORD ;  ; InOut ;  ;  ; EffectiveParameter=DEBUG_CHGT[1] ; 
+DEBUG_DETOXAL_1 ; WORD ;  ; InOut ;  ;  ; EffectiveParameter=DEBUG_DETOXAL_1[1] ; 
+DEBUG_PURGE_1 ; WORD ;  ; InOut ;  ;  ; EffectiveParameter=DEBUG_PURGE_1[1] ; 
+DEBUG_POMPAGE_1 ; WORD ;  ; InOut ;  ;  ; EffectiveParameter=DEBUG_POMPAGE_1[1] ; 
+DEBUG_HELIUM_1 ; WORD ;  ; InOut ;  ;  ; EffectiveParameter=DEBUG_HELIUM_1[1] ; 
+modification_majeure ; BOOL ;  ; InOut ;  ;  ; EffectiveParameter=modification_majeure ; 
+DEBUG_TEMPSETAPE ; DINT ;  ; InOut ;  ;  ; EffectiveParameter=DEBUG_TEMPSETAPE[1] ; 
+DEBUG_TEMPSACTION1 ; DINT ;  ; InOut ;  ;  ; EffectiveParameter=DEBUG_TEMPSACTION1[1] ; 
+DEBUG_TEMPSACTION2 ; DINT ;  ; InOut ;  ;  ; EffectiveParameter=DEBUG_TEMPSACTION2[1] ; 
+DEBUG_TEMPSACTION3 ; DINT ;  ; InOut ;  ;  ; EffectiveParameter=DEBUG_TEMPSACTION3[1] ; 
+DEBUG_TYPE ; WORD ;  ; InOut ;  ;  ; EffectiveParameter=DEBUG_TYPE[1] ; 
+DEBUG_INTERLOCK_OUI ; WORD ;  ; InOut ;  ;  ; EffectiveParameter=DEBUG_INTERLOCK_OUI[1] ; 
+DEBUG_INTERLOCK_NON ; WORD ;  ; InOut ;  ;  ; EffectiveParameter=DEBUG_INTERLOCK_NON[1] ; 
+configuree ; EBOOL ;  ; Local ;  ;  ;  ; 
+index_purge_B ; INT ;  ; Local ;  ;  ;  ; 
+Ctrl_ChangementB ; ST_GC_CTRL ;  ; Local ;  ;  ;  ; 
+Gc_ChangementB ; DFB_GRAFCETENGINE ;  ; Local ;  ;  ;  ; 
+Steps_ChangementB ; ARRAY[0..27] OF ST_GC_Step ;  ; Local ;  ;  ;  ; 
+Trans_ChangementB ; ARRAY[0..27] OF ST_GC_Transition ;  ; Local ;  ;  ;  ; 
+Acts_ChangementB ; ARRAY[0..27] OF ST_GC_Action ;  ; Local ;  ;  ;  ; 
+InitDone_ChangementB ; EBOOL ;  ; Local ;  ;  ;  ; 
+Gc_DetoxalB ; DFB_GRAFCETENGINE ;  ; Local ;  ;  ;  ; 
+Gc_PurgeB ; DFB_GRAFCETENGINE ;  ; Local ;  ;  ;  ; 
+Gc_PompageB ; DFB_GRAFCETENGINE ;  ; Local ;  ;  ;  ; 
+Steps_DetoxalB ; ARRAY[0..27] OF ST_GC_Step ;  ; Local ;  ;  ;  ; 
+Trans_DetoxalB ; ARRAY[0..27] OF ST_GC_Transition ;  ; Local ;  ;  ;  ; 
+Acts_DetoxalB ; ARRAY[0..27] OF ST_GC_Action ;  ; Local ;  ;  ;  ; 
+Ctrl_DetoxalB ; ST_GC_CTRL ;  ; Local ;  ;  ;  ; 
+InitDone_DetoxalB ; EBOOL ;  ; Local ;  ;  ;  ; 
+Steps_PurgeB ; ARRAY[0..27] OF ST_GC_Step ;  ; Local ;  ;  ;  ; 
+Acts_PurgeB ; ARRAY[0..27] OF ST_GC_Action ;  ; Local ;  ;  ;  ; 
+Trans_PurgeB ; ARRAY[0..27] OF ST_GC_Transition ;  ; Local ;  ;  ;  ; 
+InitDone_PurgeB ; EBOOL ;  ; Local ;  ;  ;  ; 
+Ctrl_PurgeB ; ST_GC_CTRL ;  ; Local ;  ;  ;  ; 
+Builder ; BUILDING ;  ; Local ;  ;  ;  ; 
+Steps_PompageB ; ARRAY[0..27] OF ST_GC_Step ;  ; Local ;  ;  ;  ; 
+Trans_PompageB ; ARRAY[0..27] OF ST_GC_Transition ;  ; Local ;  ;  ;  ; 
+Acts_PompageB ; ARRAY[0..27] OF ST_GC_Action ;  ; Local ;  ;  ;  ; 
+Ctrl_PompageB ; ST_GC_CTRL ;  ; Local ;  ;  ;  ; 
+InitDone_PompageB ; EBOOL ;  ; Local ;  ;  ;  ; 
+index_pompage_B ; INT ;  ; Local ;  ;  ;  ; 
+Gc_HeliumAVB ; DFB_GRAFCETENGINE ;  ; Local ;  ;  ;  ; 
+Steps_HeliumAVB ; ARRAY[0..27] OF ST_GC_Step ;  ; Local ;  ;  ;  ; 
+Trans_HeliumAVB ; ARRAY[0..27] OF ST_GC_Transition ;  ; Local ;  ;  ;  ; 
+Acts_HeliumAVB ; ARRAY[0..27] OF ST_GC_Action ;  ; Local ;  ;  ;  ; 
+Ctrl_HeliumAVB ; ST_GC_CTRL ;  ; Local ;  ;  ;  ; 
+InitDone_HeliumAVB ; EBOOL ;  ; Local ;  ;  ;  ; 
+Gc_HeliumAPB ; DFB_GRAFCETENGINE ;  ; Local ;  ;  ;  ; 
+Ctrl_HeliumAPB ; ST_GC_CTRL ;  ; Local ;  ;  ;  ; 
+Steps_HeliumAPB ; ARRAY[0..27] OF ST_GC_Step ;  ; Local ;  ;  ;  ; 
+Trans_HeliumAPB ; ARRAY[0..27] OF ST_GC_Transition ;  ; Local ;  ;  ;  ; 
+Acts_HeliumAPB ; ARRAY[0..27] OF ST_GC_Action ;  ; Local ;  ;  ;  ; 
+InitDone_HeliumAPB ; EBOOL ;  ; Local ;  ;  ;  ; 
+Gc_ManuB ; DFB_GRAFCETENGINE ;  ; Local ;  ;  ;  ; 
+Steps_ManuB ; ARRAY[0..27] OF ST_GC_Step ;  ; Local ;  ;  ;  ; 
+Trans_ManuB ; ARRAY[0..27] OF ST_GC_Transition ;  ; Local ;  ;  ;  ; 
+Acts_ManuB ; ARRAY[0..27] OF ST_GC_Action ;  ; Local ;  ;  ;  ; 
+Ctrl_ManuB ; ST_GC_CTRL ;  ; Local ;  ;  ;  ; 
+InitDone_ManuB ; EBOOL ;  ; Local ;  ;  ;  ; 
+Autorise ; BOOL ;  ; Local ;  ;  ;  ; 
+i ; DINT ;  ; Local ;  ;  ;  ; 
+j ; DINT ;  ; Local ;  ;  ;  ; 
+WordConverter ; WORD_TO_AREBOOL_INV ;  ; Local ;  ;  ;  ; 
+Tempon ; ARRAY[0..15] OF BOOL ;  ; Local ;  ;  ;  ; 
+Close ; TOUTFERMER ;  ; Local ;  ;  ;  ; 
+
+# section ; name ; language ; order ; activation ; logic ; file
+section ; Init ; ST ; 1 ;  ;  ; Init.st
+section ; Matrice ; ST ; 2 ; configuree ; standard ; Matrice.st
+section ; SFC_ManuB ; ST ; 3 ; configuree ; standard ; SFC_ManuB.st
+section ; SFC_ManuB_Actions ; ST ; 4 ; configuree ; standard ; SFC_ManuB_Actions.st
+section ; SFC_ChangementB ; ST ; 5 ; configuree ; standard ; SFC_ChangementB.st
+section ; SFC_DetoxalB ; ST ; 6 ; configuree ; standard ; SFC_DetoxalB.st
+section ; SFC_PompageB ; ST ; 7 ; configuree ; standard ; SFC_PompageB.st
+section ; SFC_PurgeB ; ST ; 8 ; configuree ; standard ; SFC_PurgeB.st
+section ; SFC_HeliumAVB ; ST ; 9 ; configuree ; standard ; SFC_HeliumAVB.st
+section ; SFC_Helium_APB ; ST ; 10 ; configuree ; standard ; SFC_Helium_APB.st
+section ; SFC_ChangementB_Actions ; ST ; 11 ; configuree ; standard ; SFC_ChangementB_Actions.st
+section ; SFC_DetoxalB_Actions ; ST ; 12 ; configuree ; standard ; SFC_DetoxalB_Actions.st
+section ; SFC_PompageB_Actions ; ST ; 13 ; configuree ; standard ; SFC_PompageB_Actions.st
+section ; SFC_PurgeB_Actions ; ST ; 14 ; configuree ; standard ; SFC_PurgeB_Actions.st
+section ; SFC_HeliumAVB_Actions ; ST ; 15 ; configuree ; standard ; SFC_HeliumAVB_Actions.st
+section ; SFC_HeliumAPB_Actions ; ST ; 16 ; configuree ; standard ; SFC_HeliumAPB_Actions.st
+section ; SFC_DEBUG ; ST ; 17 ; configuree ; standard ; SFC_DEBUG.st

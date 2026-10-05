@@ -1,0 +1,54 @@
+# =============================================================================
+#  Session 94 - 1.11 : le centre d'aide relu comme le client (chantier T2,
+#  tranche 11). Sans projet.
+#   T2_30 : les notes de la 1.11 (notes-1.11), le premier jet : Aide, Tutoriels,
+#           Expressions, Projet, puis les reliquats (Éditeur IHM, Alarmes)
+#   T2_31 : les notes de la 1.10.3 (notes-1.10.3), livrée le 02/10 au soir
+#   T2_32 : la recherche « Ctrl+Y » : la ligne des notes 1.11 (Dupliquer…)
+#   T2_33 : L'automate (api-importer) : la durée de chaque tutoriel en pastille,
+#           à droite de l'arbre ; un titre long est coupé avant elle
+#   T2_34 : Signaler : les trois questions dans l'ordre de l'aperçu (ce qui
+#           s'est passé, comment le refaire, ce que tu attendais) ; « Préparer le
+#           zip » : « Dernier zip » ne donne que son nom, qui tient dans la colonne
+#   T2_35 : une macro (macro-CreerEquipement) : « Macros › CreerEquipement »,
+#           sans le sous-niveau « Macros » en double dans l'arbre
+#   T2_36 : les notes de la 1.10.0 (ses cartes) : « Titre. Texte », et non plus
+#           « Titre : Texte » avec une majuscule après le deux-points
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+action help.open
+attendre 8
+aide-sujet notes-1.11
+attendre 4
+capture T2_30_notes_111.png
+aide-sujet notes-1.10.3
+attendre 4
+capture T2_31_notes_1103.png
+champ "help.search" "Ctrl+Y"
+attendre 5
+capture T2_32_recherche_ctrl_y.png
+champ "help.search" ""
+attendre 2
+aide-sujet api-importer
+attendre 4
+capture T2_33_arbre_pastilles.png
+aide-sujet page-signaler
+attendre 4
+champ "help.report.quoi" "La vanne V-101 reste rouge après l'acquittement."
+attendre 2
+champ "help.report.refaire" "Vue_Synoptique, F8, acquitter l'alarme de V-101."
+attendre 2
+champ "help.report.attendu" "Qu'elle repasse au vert."
+attendre 2
+bouton "Préparer le zip"
+attendre 3
+capture T2_34_signaler_ordre.png
+aide-sujet macro-CreerEquipement
+attendre 4
+capture T2_35_macro_sans_doublon.png
+aide-sujet notes-1.10.0
+attendre 4
+capture T2_36_notes_1100_cartes.png
+quitter

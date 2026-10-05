@@ -1,0 +1,68 @@
+# =============================================================================
+#  Session 89 - 1.11 (integration I111, tranche 3) : les 5 liens entre T1, T2 et T3.
+#   - le centre d'aide (T2) : "Tutoriels prets : N / M", N > 0 (le fournisseur de T1) ;
+#   - deux tutoriels DEDUITS (T3, help::deduceTutorial), lances depuis le centre
+#     (aide-cible tuto:<cle>) : un sujet du guide (ihm) et un objet (la cuve),
+#     puis Quitter, qui ramene au centre sur le sujet (TutorialStart::returnTopic) ;
+#   - la page des expressions (T3) ouverte depuis le centre (expr:couleur), puis Echap ;
+#   - l'etape 7 du tutoriel de l'expression (T1) : au debut de l'etape (l'IHM lancee
+#     a l'etape 6), puis jouee (retour a l'onglet de la vue, clic droit sur la case,
+#     "La page des expressions...") et verifiee a sa fin (tutoriel-verifier).
+#  A lancer avec PROJETS=<dossier d'Armoire_Gaz> et XPG_TUTORIELS=tools/tutoriels,
+#  en offscreen, 1600 x 900 (comme les sessions 84 a 87).
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+action help.open
+attendre 10
+capture I111_89_01_centre_compteur.png
+aide-sujet ihm
+attendre 6
+capture I111_89_02_sujet_ihm.png
+aide-cible tuto:ihm
+attendre 5
+tutoriel-attendre
+attendre 10
+capture I111_89_03_deduit_guide_ihm.png
+tutoriel-quitter
+attendre 10
+capture I111_89_04_retour_centre_ihm.png
+aide-sujet objet-cuve
+attendre 6
+aide-cible tuto:objet-cuve
+attendre 5
+tutoriel-attendre
+attendre 10
+capture I111_89_05_deduit_objet_cuve.png
+tutoriel-quitter
+attendre 10
+capture I111_89_06_retour_centre_cuve.png
+aide-sujet expr-couleur
+attendre 6
+capture I111_89_07_centre_expr_couleur.png
+aide-cible expr:couleur
+attendre 20
+capture I111_89_08_page_expressions.png
+touche Escape
+attendre 8
+capture I111_89_09_retour_de_la_page.png
+touche Escape
+attendre 5
+tutoriel expression-couleur - 7 pause
+tutoriel-attendre
+attendre 10
+capture I111_89_10_expression_etape7_debut.png
+tutoriel-lecture
+attendre 240
+capture I111_89_11_expression_etape7_en_cours.png
+# La fin de l'etape 7, comme le verificateur de T1 : rejouee jusqu'au bout, puis verifiee
+# (une cible introuvable - le menu, le bouton du type - y serait un echec).
+tutoriel-aller 7 9999999
+tutoriel-attendre
+tutoriel-verifier
+attendre 10
+capture I111_89_12_expression_etape7_fin.png
+tutoriel-quitter
+attendre 5
+quitter

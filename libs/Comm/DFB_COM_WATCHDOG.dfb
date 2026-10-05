@@ -1,0 +1,116 @@
+# Derived function block, shared.
+name = DFB_COM_WATCHDOG
+version = 1.00
+#! summary = Surveille seize liaisons par battement de coeur, et fait battre le notre.
+#! usage = DANS LES DEUX SENS. Le bloc surveille le compteur de chaque partenaire, et
+#! usage = publie MyBeat - le notre, qui avance toutes les BeatMs. A recopier vers un
+#! usage = mot que la supervision lit : c'est ainsi qu'ELLE sait que l'automate tourne
+#! usage = encore, et pas seulement qu'il repond.
+#! example = (* declarer : Liens : ARRAY[0..15] OF ST_COM_Link; BattementScada : INT; MonBattement : INT; *)
+#! example = Liens[0].Beat := BattementScada;
+#! example = WD_Liaisons(Count := 1, CycleMs := 20, BeatMs := 1000, Links := Liens);
+#! example = MonBattement := WD_Liaisons.MyBeat;     (* vers un %MW lu par la supervision *)
+#! see = ST_COM_Link
+#! see = DFB_COM_MODBUS
+#! param Count = Combien de liaisons sont surveillees : Links[0] a Links[Count - 1],
+#! param Count = 16 au plus.
+#! param CycleMs = La periode de la tache, en ms : DtMs de DFB_SYS_CLOCK.
+#! param BeatMs = La periode de NOTRE battement, en ms. 1000 : MyBeat avance chaque
+#! param BeatMs = seconde.
+#! param Links = Les liaisons, une ligne ST_COM_Link chacune.
+#! param MyBeat = Notre battement : avance de 1 toutes les BeatMs, repasse a 0 apres
+#! param MyBeat = 32767.
+#! param AllOk = Toutes les liaisons surveillees sont Ok.
+#! param LostCount = Combien de liaisons sont perdues en ce moment.
+#! changes 1.00 = NOUVEAU.
+#! given = BattementScada := 7
+#! expect = 1 : Liens[0].Ok = FALSE
+#! expect = 1 : Liens[0].Lost = FALSE
+#! expect = 50 : MonBattement = 1
+#! expect = 260 : Liens[0].Lost = TRUE
+#! expect = 260 : WD_Liaisons.AllOk = FALSE
+
+# Surveillance de liaisons par battement de coeur.
+
+# name ; type ; scope ; initial ; comment
+Count ; INT ; Input ; 16 ; combien de liaisons sont surveillees
+CycleMs ; DINT ; Input ; 20 ; la periode de la tache en ms : DtMs de DFB_SYS_CLOCK
+BeatMs ; DINT ; Input ; 1000 ; la periode de notre battement, en ms
+Links ; ARRAY[0..15] OF ST_COM_Link ; InOut ;  ; les liaisons
+MyBeat ; INT ; Output ; 0 ; notre battement : a recopier vers le partenaire
+AllOk ; BOOL ; Output ;  ; toutes les liaisons surveillees sont Ok
+LostCount ; INT ; Output ; 0 ; combien sont perdues en ce moment
+i ; INT ; Local ; 0 ; 
+n ; INT ; Local ; 0 ; 
+LAST ; INT ; Local ; 15 ; dernier indice
+BeatElapsed ; DINT ; Local ; 0 ; 
+lost ; BOOL ; Local ;  ; 
+MAXMS ; DINT ; Local ; 2000000000 ; plafond des compteurs de temps
+
+<<<section Process ST>>>
+(* =====================================================================
+    DFB_COM_WATCHDOG - des liaisons surveillees par battement de coeur.
+
+    Un compteur qui change veut dire que le partenaire tourne. Un compteur
+    fige depuis TimeoutMs veut dire qu'il s'est arrete, ou que la liaison est
+    coupee - d'ici, on ne peut pas savoir lequel, et le bloc ne pretend pas
+    le savoir.
+
+    AU DEMARRAGE, on attend un premier battement pendant TimeoutMs avant de
+    declarer la liaison perdue.
+   ===================================================================== *)
+
+n := Count;
+IF n > LAST + 1 THEN n := LAST + 1; END_IF;
+IF n < 0 THEN n := 0; END_IF;
+
+(* ---- notre battement ------------------------------------------------ *)
+BeatElapsed := BeatElapsed + CycleMs;
+IF BeatMs > 0 AND BeatElapsed >= BeatMs THEN
+    BeatElapsed := 0;
+    IF MyBeat >= 32767 THEN
+        MyBeat := 0;
+    ELSE
+        MyBeat := MyBeat + 1;
+    END_IF;
+END_IF;
+IF BeatElapsed > MAXMS THEN BeatElapsed := 0; END_IF;
+
+(* ---- les partenaires ------------------------------------------------ *)
+AllOk := TRUE;
+LostCount := 0;
+FOR i := 0 TO n - 1 DO
+    IF NOT Links[i].Enable THEN
+        Links[i].Ok := FALSE;
+        Links[i].Lost := FALSE;
+        Links[i].ElapsedMs := 0;
+        Links[i].PrevBeat := Links[i].Beat;
+    ELSE
+        (* La premiere lecture n'est pas un battement : un compteur lu une
+           fois ne dit pas qu'il bouge. *)
+        IF NOT Links[i].Init THEN
+            Links[i].PrevBeat := Links[i].Beat;
+            Links[i].Init := TRUE;
+        END_IF;
+        IF Links[i].Beat <> Links[i].PrevBeat THEN
+            Links[i].ElapsedMs := 0;
+            Links[i].Seen := TRUE;
+        ELSIF Links[i].ElapsedMs < MAXMS - CycleMs THEN
+            Links[i].ElapsedMs := Links[i].ElapsedMs + CycleMs;
+        ELSE
+            Links[i].ElapsedMs := MAXMS;
+        END_IF;
+        Links[i].PrevBeat := Links[i].Beat;
+
+        lost := Links[i].ElapsedMs >= Links[i].TimeoutMs;
+        IF lost AND NOT Links[i].Lost THEN
+            Links[i].LostCount := Links[i].LostCount + 1;
+        END_IF;
+        Links[i].Lost := lost;
+        Links[i].Ok := Links[i].Seen AND NOT lost;
+
+        IF lost THEN LostCount := LostCount + 1; END_IF;
+        IF NOT Links[i].Ok THEN AllOk := FALSE; END_IF;
+    END_IF;
+END_FOR;
+<<<end>>>

@@ -1,0 +1,16 @@
+#! summary = Ce que le gestionnaire d'alarmes rapporte a chaque cycle.
+#! usage = Tout est recalcule a chaque cycle par DFB_ALM_MANAGER. N'ecrivez
+#! usage = rien ici : ce que vous y mettriez serait ecrase au cycle suivant.
+#! param WorstSev = La pire gravite PRESENTE, et 0 quand il n'y a rien. C'est la
+#! param WorstSev = valeur a poser sur un bandeau d'IHM ou un feu de colonne.
+#! param Unacked = Presentes ET non acquittees. C'est ce qui doit faire clignoter,
+#! param Unacked = la ou Active fait seulement allumer.
+#! param HistCount = Combien d'evenements sont lisibles. Une fois l'anneau
+#! param HistCount = reboucle, tout l'anneau l'est.
+#! param LastError = Pourquoi la derniere commande a ete refusee. Vide au debut
+#! param LastError = de chaque cycle : a lire juste apres avoir pose une
+#! param LastError = commande. Les trois refus possibles sont 'UUID 0 refuse',
+#! param LastError = 'UUID inconnu' et 'registre plein'.
+#! param Full = Le registre est plein : un Register de plus sera refuse.
+#! see = DFB_ALM_MANAGER
+#! see = ST_ALM_Cmd

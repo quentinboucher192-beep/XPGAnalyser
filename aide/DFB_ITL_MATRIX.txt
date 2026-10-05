@@ -1,0 +1,36 @@
+#! summary = Interverrouillage de 16 vannes par matrice : interdits et prerequis.
+#! usage = DEUX RELATIONS, et les confondre est l'erreur classique :
+#! usage =   Forbid[i*16+j]   i ne doit PAS etre ouverte pendant que j l'est.
+#! usage =                    Melange de produits, court-circuit hydraulique.
+#! usage =   Require[i*16+j]  i ne peut s'ouvrir QUE SI j est ouverte. Une vanne
+#! usage =                    d'aspiration avant une pompe, un event avant un
+#! usage =                    remplissage.
+#! usage = Un interverrouillage qui n'a que le premier laisse ouvrir une vanne
+#! usage = dans le vide ; un qui n'a que le second laisse melanger deux produits.
+#! usage = LA MATRICE EST A PLAT : ARRAY[0..255] indice par i*16+j, et non un
+#! usage = tableau a deux dimensions. Le format d'echange les ecrit, mais tout
+#! usage = ce qui les relit ne les comprend pas encore.
+#! usage = IL NE COMMANDE RIEN. Il dit Allowed[i], et pourquoi non. La vanne
+#! usage = reste maitresse de ce qu'elle fait de cette reponse - un bloc qui
+#! usage = forcerait la fermeture ferait deux choses au meme endroit.
+#! example = (* 0 interdite pendant que 1 est ouverte *)
+#! example = MatForbid[0 * 16 + 1] := TRUE;
+#! example = (* 2 ne s'ouvre que si l'aspiration 5 est ouverte *)
+#! example = MatRequire[2 * 16 + 5] := TRUE;
+#! example =
+#! example = ITL_Melange(Count := 8, Open := VannesOuvertes,
+#! example =             Forbid := MatForbid, Require := MatRequire,
+#! example =             Allowed := VannesOk, BlockedBy := VannesPar,
+#! example =             Reason := VannesRaison, Violation := VannesViol);
+#! example = Vannes[0].OpenReq := Demande[0] AND VannesOk[0];
+#! param Open = L'etat REEL de chaque vanne, a cabler sur sa position - pas sur
+#! param Open = sa commande. Une vanne commandee ouverte mais bloquee fermee ne
+#! param Open = protege personne.
+#! param Reason = 0 rien, 1 conflit, 2 prerequis absent.
+#! param BlockedBy = Qui l'en empeche, -1 si personne. De quoi ecrire un message
+#! param BlockedBy = qui nomme la vanne fautive plutot que de dire 'interdit'.
+#! param Violation = Elle est ouverte ALORS QU'ELLE NE DEVRAIT PAS L'ETRE. C'est
+#! param Violation = different d'un refus d'ouvrir : la situation interdite
+#! param Violation = EXISTE deja, et personne ne s'en apercevrait si on ne la
+#! param Violation = nommait pas.
+#! see = DFB_MODE_MANAGER

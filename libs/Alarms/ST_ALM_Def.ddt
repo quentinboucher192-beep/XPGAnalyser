@@ -1,0 +1,78 @@
+# Derived data type, shared.
+name = ST_ALM_Def
+version = 1.01
+#! summary = Une alarme du registre : son identifiant, ce que l'operateur lit, et son etat.
+#! usage = Le registre est balaye par DFB_ALM_MANAGER. Un emplacement dont Uuid
+#! usage = vaut 0 est libre : c'est pour cela qu'un Register avec l'UUID 0 est
+#! usage = refuse.
+#! usage = Ne rien ecrire ici a la main. Passez par Cmd.Register, qui trouve
+#! usage = l'emplacement et refuse les doublons.
+#! see = DFB_ALM_MANAGER
+#! see = AlmUuid
+#! see = ST_ALM_Cmd
+#! param Uuid = Un identifiant COMPOSE, pas tire au hasard et range dans une
+#! param Uuid = table qu'il faudrait tenir a jour : ses 32 bits se relisent avec
+#! param Uuid = AlmDecode. Un identifiant trouve dans un journal dans cinq ans
+#! param Uuid = dit encore de quelle voie il vient, meme si plus personne n'a
+#! param Uuid = la table.
+#! param Sev = 1 information, 2 avertissement, 3 defaut, 4 arret machine.
+#! param Sev = C'est cette valeur que Stat.WorstSev remonte, et elle sert au tri
+#! param Sev = de l'historique.
+#! param SinceMs = Remis a zero a chaque APPARITION, pas a l'acquittement : une alarme
+#! param SinceMs = acquittee mais toujours presente continue de compter. En ms, il
+#! param SinceMs = PLAFONNE a 2 000 000 000 (23 jours) : pour une alarme qui dure,
+#! param SinceMs = lire SinceS.
+#! param Count = Combien de fois elle est apparue depuis le dernier Reset. Une
+#! param Count = alarme qui bat se repere a ce compteur et nulle part ailleurs :
+#! param Count = l'historique, lui, finit par reboucler.
+#! param Acked = Acquittee. Remis a FALSE a chaque nouvelle apparition, sinon une
+#! param Acked = alarme qui revient arriverait deja acquittee. Un emplacement qui
+#! param Acked = vient d'etre enregistre est acquitte : rien n'est encore apparu.
+#! param Label = Ce que l'operateur lit, 32 caracteres. Pose par Cmd.Register ; un
+#! param Label = second Register du meme UUID le met a jour.
+#! param Link = Un renvoi : le folio du schema, la page d'IHM, l'adresse de la voie.
+#! param Link = 32 caracteres. Le gestionnaire ne s'en sert pas : c'est pour celui qui
+#! param Link = depanne.
+#! param Used = Cet emplacement du registre est occupe. Libre, il peut recevoir un
+#! param Used = Register - sous Count seulement.
+#! param Raised = L'alarme est presente MAINTENANT. Toujours faux pour une alarme
+#! param Raised = masquee.
+#! param Masked = Masquee : elle ne leve plus, ne compte plus dans Stat, ne fait plus
+#! param Masked = sonner le klaxon. Pose par Cmd.Mask, retire par Cmd.Unmask, les deux
+#! param Masked = inscrits dans l'historique. Encore presente au demasquage, elle
+#! param Masked = reapparait - a acquitter.
+#! param RaisedS = La date de la derniere apparition, en secondes : depuis le
+#! param RaisedS = 01/01/2000 si le gestionnaire recoit NowS, depuis son demarrage
+#! param RaisedS = sinon.
+#! param SinceS = Depuis combien de temps elle est presente, en SECONDES : ne deborde
+#! param SinceS = pas. Remis a zero a chaque apparition, comme SinceMs.
+#! example = (* declarer : Clignote : BOOL; DureeMin : INT; *)
+#! example = (* une ligne de la liste d'alarmes de l'IHM *)
+#! example = IF AlmDefs[0].Used AND AlmDefs[0].Raised AND NOT AlmDefs[0].Acked THEN
+#! example =     Clignote := TRUE;
+#! example = END_IF;
+#! example = DureeMin := UDINT_TO_INT(AlmDefs[0].SinceS / 60);
+#! given = AlmDefs[0].Used := TRUE
+#! given = AlmDefs[0].Raised := TRUE
+#! given = AlmDefs[0].SinceS := 600
+#! expect = 1 : Clignote = TRUE
+#! expect = 1 : DureeMin = 10
+#! changes 1.01 = AJOUTS EN FIN DE TYPE : Masked (masquage), RaisedS (date de la
+#! changes 1.01 = derniere apparition), SinceS (duree en secondes, sans debordement).
+#! changes 1.01 = SinceMs plafonne a 2 000 000 000 ms.
+
+# Une alarme enregistree: son UUID, ce qu'un operateur lit, et son etat.
+
+# name ; type ; scope ; initial ; comment
+Uuid ; UDINT ; Member ; 0 ; identifiant compose: voir AlmUuid. 0 = emplacement libre
+Label ; STRING[32] ; Member ;  ; ce que l'operateur lit
+Link ; STRING[32] ; Member ;  ; renvoi vers le plan, la page IHM, le folio
+Sev ; INT ; Member ; 1 ; 1 information, 2 avertissement, 3 defaut, 4 arret machine
+Used ; BOOL ; Member ;  ; cet emplacement du registre est occupe
+Raised ; BOOL ; Member ;  ; l'alarme est presente maintenant
+Acked ; BOOL ; Member ;  ; elle a ete acquittee
+SinceMs ; DINT ; Member ; 0 ; depuis combien de temps elle est presente, en ms, plafonne a 2 000 000 000 : lire SinceS
+Count ; UDINT ; Member ; 0 ; combien de fois elle est apparue depuis le dernier Reset
+Masked ; BOOL ; Member ;  ; masquee : ne leve plus, ne compte plus, ne sonne plus
+RaisedS ; UDINT ; Member ; 0 ; date de la derniere apparition, en s (voir NowS du gestionnaire)
+SinceS ; UDINT ; Member ; 0 ; depuis combien de temps elle est presente, en s : ne deborde pas

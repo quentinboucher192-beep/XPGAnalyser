@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="300" viewBox="0 0 1240 300">
+  <rect width="1240" height="300" fill="#141B24"/>
+  <g stroke="#223044" stroke-width="1">
+    <path d="M0 50H1240M0 100H1240M0 150H1240M0 200H1240M0 250H1240"/>
+    <path d="M100 0V300M200 0V300M300 0V300M400 0V300M500 0V300M600 0V300M700 0V300M800 0V300M900 0V300M1000 0V300M1100 0V300M1200 0V300"/>
+  </g>
+  <g fill="none" stroke="#4A5E78" stroke-width="6">
+    <path d="M20 20H1220V280H20Z"/>
+    <path d="M420 20V120M420 180V280M840 20V280"/>
+  </g>
+  <g fill="#1E2A38" stroke="#6C84A3" stroke-width="2">
+    <rect x="60" y="50" width="130" height="90" rx="6"/>
+    <rect x="230" y="50" width="130" height="90" rx="6"/>
+    <rect x="60" y="170" width="130" height="80" rx="6"/>
+    <rect x="230" y="170" width="130" height="80" rx="6"/>
+    <rect x="480" y="60" width="300" height="70" rx="6"/>
+    <rect x="480" y="170" width="140" height="80" rx="6"/>
+    <rect x="640" y="170" width="140" height="80" rx="6"/>
+  </g>
+  <g fill="#2F4A66">
+    <circle cx="95" cy="95" r="16"/><circle cx="155" cy="95" r="16"/><circle cx="265" cy="95" r="16"/><circle cx="325" cy="95" r="16"/>
+    <circle cx="95" cy="210" r="16"/><circle cx="155" cy="210" r="16"/><circle cx="265" cy="210" r="16"/><circle cx="325" cy="210" r="16"/>
+  </g>
+  <g fill="none" stroke="#8FA3BF" stroke-width="4" stroke-linecap="round">
+    <path d="M360 95H480M360 210H440V150H480M780 95H900V220H1180"/>
+    <path d="M620 210H640"/>
+  </g>
+  <g fill="#8FA3BF">
+    <rect x="900" y="60" width="280" height="110" rx="8" fill="#1E2A38" stroke="#6C84A3" stroke-width="2"/>
+    <circle cx="960" cy="115" r="30" fill="#2F4A66"/><circle cx="1040" cy="115" r="30" fill="#2F4A66"/><circle cx="1120" cy="115" r="30" fill="#2F4A66"/>
+  </g>
+  <g fill="#6C84A3" font-family="sans-serif" font-size="13">
+    <text x="30" y="40">LOCAL GAZ - RDC</text>
+    <text x="860" y="40">STOCKAGE</text>
+    <text x="440" y="40">DISTRIBUTION</text>
+  </g>
+</svg>

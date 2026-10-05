@@ -1,0 +1,75 @@
+# =============================================================================
+#  Session 85 - 1.11 (chantier T3, C4) : les icones compilable / generable a
+#  droite des sections de l'automate et des scripts de l'IHM, dans l'arbre.
+#  Dans une COPIE de Armoire_Gaz (${PROJETS}/Armoire_Gaz) que le lanceur prepare :
+#   - sections/index.txt : la section Matrice en LD     -> ⊘ (non compilable)
+#   - sections/Reset.st : un IF sans END_IF a la fin     -> ✕1 (en erreur)
+#   - ihm/scripts/0090-Remise_A_Zero.st : « Compteur_Clics := ; » -> ✕1 et ⇩ barre
+#  Le script C++ Calcul_Debit du projet donne ⊘ et ⇩ barre ; les autres : ✓ ⇩.
+#   T3_01 : la tache MAST depliee : ✓ partout, ✕1 sur Reset, ⊘ sur Matrice
+#   T3_02 : les scripts de l'IHM : ✓ ⇩, ✕1 ⇩ barre, ⊘ ⇩ barre
+#   T3_03 : l'infobulle d'une icone (la raison, en une phrase)
+#   T3_04 : le menu du clic droit : « Ce qui ne compile pas (n) », « Ce qui
+#           n'est pas genere (n) »
+#   T3_05 : le filtre « ce qui ne compile pas » (deplie ce qu'il montre)
+#   T3_06 : le filtre « ce qui n'est pas genere »
+#   T3_07 : la legende, l'infobulle du « ? » du rail de l'arbre (4e bouton du bas)
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- Les sections de la tache MAST ---------------------------------------------
+arbre "API/MAST" deplier
+attendre 4
+arbre-lignes
+capture T3_01_sections_icones.png
+
+# ---- L'infobulle d'une icone (1600 x 900 : Reset a y = 544, Matrice a y = 688) ---
+# « attendre » compte des images (1/30 s) : l'infobulle attend 0,9 s, d'ou 40.
+survol 479 544
+attendre 40
+capture T3_03_infobulle_erreur.png
+survol 483 688
+attendre 40
+capture T3_03b_infobulle_non_compilable.png
+
+# ---- La legende : le « ? », 4e bouton du bas du rail de l'arbre --------------------
+survol 18 841
+attendre 40
+capture T3_07_legende.png
+
+# ---- Les scripts de l'IHM (la portee IHM : l'API ne les pousse plus hors de vue) ---
+survol 1000 700
+attendre 5
+arbre-portee ihm
+attendre 3
+arbre "IHM/Programmation générale/Scripts" deplier
+attendre 4
+arbre-lignes
+capture T3_02_scripts_icones.png
+arbre-portee tout
+attendre 3
+
+# ---- Le menu du clic droit : les deux filtres et leur nombre ----------------------
+arbre-menu "API/MAST"
+attendre 3
+capture T3_04_menu_filtres.png
+touche escape
+attendre 2
+
+# ---- Les deux filtres --------------------------------------------------------------
+arbre-filtre "@ne-compile-pas"
+attendre 4
+arbre-lignes
+capture T3_05_filtre_ne_compile_pas.png
+arbre-filtre "@non-genere"
+attendre 4
+arbre-lignes
+capture T3_06_filtre_non_genere.png
+arbre-filtre ""
+attendre 3
+quitter

@@ -1,0 +1,142 @@
+# =============================================================================
+#  Session 114 - 1.10.4 (K1, K1104) : LES CAPTURES FINALES, sur l'appli 1.10.4
+#  finale (une copie d'Armoire_Gaz preparee comme celles des sessions 115 a 125 :
+#  le type T_V, le tableau V : ARRAY[0..63] OF T_V, V_101 qui suit V[0] et porte
+#  $Vanne$ dans Valeur ; plus la vue Vue_Melange de la maquette, scene 4, par
+#  scratchpad/K2/prepare2.py). La vanne 3 voies en simulation (un clic, la
+#  position suivante) est dans la session 114b, sur une copie neuve.
+#  1. l'inspecteur range : une Vanne (les sections communes, puis Vanne), un
+#     groupe et son onglet Contenu ;
+#  2. Dupliquer... : le cas du client, prerempli V[0] a V[3] ; Remplir > Tableau... ;
+#     la serie V[{n}] de 0 ; une case hors des bornes (V[64]) ;
+#  3. Compiler : l'avertissement du repere ; Remplacer... (0 copie) ; Compiler
+#     sans repere ; puis annuler (le repere revient) : Generer bloque ;
+#  4. la vanne 3 voies : la vue de la maquette (les variantes), la bibliotheque,
+#     l'inspecteur (les sections communes, puis Vanne 3 voies) ;
+#  5. un FOR tape en fin de script : l'appli tient (le plantage de la 1.10.3).
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- 1. L'inspecteur range : V_101, une Vanne
+arbre "IHM/Vues/Vue_Synoptique"
+attendre 6
+objet V_101
+attendre 3
+vue-clic 240 170
+attendre 3
+molette 1780 400 60
+attendre 3
+capture 114_01_inspecteur_vanne_communes.png
+molette 1780 400 -60
+attendre 3
+capture 114_02_inspecteur_vanne_section_vanne.png
+molette 1780 400 60
+attendre 2
+
+# Un groupe : les memes sections communes, et l'onglet Contenu (ses objets)
+arbre "IHM/Vues/Vue_Armoire_A"
+attendre 6
+objet Groupe_Bouteille
+attendre 3
+capture 114_03_groupe_proprietes.png
+sous-onglet "Contenu"
+attendre 3
+capture 114_04_groupe_contenu.png
+sous-onglet "Propri"
+attendre 2
+
+# ---- 2. Dupliquer... : le cas du client, sans rien faire ; Remplir > Tableau... ;
+#         la serie V[{n}] ; une case hors des bornes ; Echap (rien n'est change)
+arbre "IHM/Vues/Vue_Synoptique"
+attendre 6
+objet V_101
+attendre 3
+vue-clic 240 170
+attendre 1
+touche ctrl+d
+attendre 4
+dupliquer-verifier
+capture 114_05_dupliquer_prerempli_v0_v3.png
+dupliquer-tableau "$Vanne$" "V (0..63)"
+attendre 2
+dupliquer-verifier
+dupliquer-ligne 3
+attendre 2
+capture 114_06_dupliquer_remplir_tableau.png
+dupliquer-serie "$Vanne$" "V[{n}]" "0"
+attendre 2
+dupliquer-verifier
+capture 114_07_dupliquer_serie_v_n_de_0.png
+dupliquer-case 3 "$Vanne$" "V[64]"
+attendre 2
+dupliquer-verifier bloque
+capture 114_08_dupliquer_hors_des_bornes.png
+touche echap
+attendre 3
+
+# ---- 3. Compiler : l'avertissement du repere, Remplacer... (0 copie) ; Compiler
+#         sans repere ; annuler (le repere revient) ; Generer bloque
+arbre "IHM/Compiler" double
+attendre 6
+outil "Compiler"
+attendre 12
+ihm-rapport-avertissement "garde le repère $Vanne$"
+ligne "garde le repère $Vanne$"
+attendre 4
+capture 114_09_compiler_avertissement_repere.png
+outil "Remplacer…"
+attendre 10
+dupliquer-verifier
+capture 114_10_remplacer_zero_copie.png
+dupliquer-valider
+attendre 4
+arbre "IHM/Compiler" double
+attendre 6
+outil "Compiler"
+attendre 12
+capture 114_11_compiler_sans_repere.png
+annuler
+attendre 3
+arbre "IHM/Générer" double
+attendre 6
+outil "Générer"
+attendre 15
+ihm-rapport-verifier "garde le repère $Vanne$"
+capture 114_12_generer_bloque.png
+
+# ---- 4. La vanne 3 voies : la vue de la maquette (les variantes), la bibliotheque, l'inspecteur
+arbre "IHM/Vues/Vue_Melange"
+attendre 8
+vue-zoom 100 -20 -20
+attendre 3
+capture 114_13_vanne_3_voies_vue.png
+palette "Vanne 3 voies" survol
+attendre 4
+capture 114_14_vanne_3_voies_bibliotheque.png
+objet V3_3
+attendre 4
+molette 1780 400 60
+attendre 3
+capture 114_15_vanne_3_voies_inspecteur.png
+molette 1780 400 -60
+attendre 3
+capture 114_16_vanne_3_voies_section.png
+molette 1780 400 60
+attendre 2
+
+# ---- 5. Un FOR tape en fin de script (l'entree du plantage de la 1.10.3) : l'appli tient
+arbre "IHM/Programmation générale" double
+attendre 8
+ligne "Init" exact
+attendre 4
+clic 1300 260
+touche ctrl+end
+texte "FOR"
+attendre 8
+capture 114_17_for_en_fin_de_script.png
+quitter

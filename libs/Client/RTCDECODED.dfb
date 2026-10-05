@@ -1,0 +1,183 @@
+# Derived function block, shared.
+name = RTCDECODED
+version = 0.12
+attribute = TypeCodeCheckSumString = 0
+attribute = TypeSignatureCheckSumString = 0
+attribute = UseNewTplSignAlgo = TRUE
+#! summary = La date et l'heure a la milliseconde, depuis RRTC_DT_MS, et le temps ecoule depuis l'appel precedent.
+#! usage = REPRIS DU PROJET MAST, CORRIGE EN 0.12 : CycleMs ne saute plus quand
+#! usage = l'horloge est remise a l'heure (voir changes). Dans MAST, TsSys - le temps
+#! usage = des moteurs GRAFCET - est le cumul de CycleMs.
+#! usage = RRTC_DT_MS EST UNE FONCTION DE L'AUTOMATE, et Display_NTPC, Calc_NTPC des
+#! usage = types systeme : le simulateur de l'outil ne les connait pas, ce bloc n'y
+#! usage = tourne donc pas. Il n'a pas d'exemple jouable pour cette raison.
+#! usage = AVEC DFB_SYS_CLOCK : la milliseconde du jour que ce bloc calcule fait un
+#! usage = Tick exact - Tick := msOfDay, TickUnitMs := 1, TickWrap := 86400000 - et
+#! usage = DtMs devient juste a la milliseconde.
+#! see = ST_RTCDECODED
+#! see = DFB_SYS_CLOCK
+#! param Enable = FALSE : le bloc ne fait rien.
+#! param Out = La date, l'heure et CycleMs.
+#! param Display = Ce que RRTC_DT_MS rend, pour l'affichage.
+#! param Calcntpc = Ce que RRTC_DT_MS rend, pour le calcul : secondes depuis 1980, et
+#! param Calcntpc = millisecondes.
+#! internal = secOfDay, daysSince1980, remDays, y, m, dim, isLeap, lowOk, highOk
+#! changes 0.12 = CORRECTION : CycleMs est calcule sur l'heure du jour. Au premier appel
+#! changes 0.12 = (msOfDayPrev a 0), il valait l'heure du jour entiere ; a chaque remise
+#! changes 0.12 = a l'heure (changement d'heure ete/hiver, synchronisation NTP, reglage
+#! changes 0.12 = a la main), il sautait d'une heure ou de pres de 24 h. Cumule dans
+#! changes 0.12 = TsSys, ce saut validait d'un coup toutes les temporisations des
+#! changes 0.12 = grafcets. Maintenant : 0 au premier appel, et un ecart de plus de 10 s
+#! changes 0.12 = compte pour 0 (ce n'est pas un cycle, c'est l'horloge qui a bouge).
+#! changes 0.11 = Range dans la bibliotheque, depuis le projet MAST. Code inchange.
+
+# name ; type ; scope ; initial ; comment
+Enable ; BOOL ; Input ;  ; 
+Out ; ST_RTCDECODED ; Output ;  ; 
+Display ; Display_NTPC ; Public ;  ; 
+Calcntpc ; Calc_NTPC ; Public ;  ; 
+secOfDay ; UDINT ; Public ;  ; 
+daysSince1980 ; UDINT ; Public ;  ; 
+remDays ; UDINT ; Public ;  ; 
+y ; INT ; Public ;  ; 
+m ; INT ; Public ;  ; 
+dim ; INT ; Public ;  ; 
+isLeap ; BOOL ; Public ;  ; 
+lowOk ; BOOL ; Public ;  ; 
+highOk ; BOOL ; Public ;  ; 
+finished ; BOOL ; Local ;  ; 
+msOfDay ; UDINT ; Local ;  ; 
+msOfDayPrev ; UDINT ; Local ;  ; 
+prevValid ; BOOL ; Local ;  ; msOfDayPrev a ete pose par un appel precedent
+
+<<<section Main ST>>>
+IF NOT Enable THEN
+RETURN;
+END_IF;
+
+RRTC_DT_MS(Display, Calcntpc, Out.Status);
+
+lowOk := ((Out.Status AND 16#00FF) = 1);
+highOk := (((Out.Status AND 16#FF00) / 256) = 1);
+Out.ValidUtc := lowOk AND highOk;
+
+(* ========================= *)
+(* TEMPS DE BASE SAFE        *)
+(* ========================= *)
+
+Out.Millisecondes := Calcntpc.Fraction_Second;
+
+IF Out.Millisecondes < 0 THEN
+Out.Millisecondes := 0;
+ELSIF Out.Millisecondes > 999 THEN
+Out.Millisecondes := 999;
+END_IF;
+
+secOfDay := Calcntpc.Seconds MOD 86400;
+
+msOfDay :=
+(secOfDay * 1000) +
+INT_TO_UDINT(Out.Millisecondes);
+
+(* ========================= *)
+(* HEURE / MIN / SEC         *)
+(* ========================= *)
+
+Out.Heures := UDINT_TO_INT(secOfDay / 3600);
+Out.Minutes := UDINT_TO_INT((secOfDay MOD 3600) / 60);
+Out.Secondes := UDINT_TO_INT(secOfDay MOD 60);
+
+(* ========================= *)
+(* DATE                      *)
+(* ========================= *)
+
+daysSince1980 := Calcntpc.Seconds / 86400;
+remDays := daysSince1980;
+y := 1980;
+
+finished := FALSE;
+WHILE NOT finished DO
+isLeap := FALSE;
+
+
+IF (y MOD 4 = 0) THEN
+    IF (y MOD 100 <> 0) OR (y MOD 400 = 0) THEN
+        isLeap := TRUE;
+    END_IF;
+END_IF;
+
+IF remDays >= INT_TO_UDINT(365 + BOOL_TO_INT(isLeap)) THEN
+    remDays := remDays - INT_TO_UDINT(365 + BOOL_TO_INT(isLeap));
+    y := y + 1;
+ELSE
+    finished := TRUE;
+END_IF;
+
+
+END_WHILE;
+
+m := 1;
+finished := FALSE;
+
+WHILE NOT finished DO
+
+
+dim := 31;
+
+IF (m = 4) OR (m = 6) OR (m = 9) OR (m = 11) THEN
+    dim := 30;
+
+ELSIF m = 2 THEN
+
+    isLeap := FALSE;
+
+    IF (y MOD 4 = 0) THEN
+        IF (y MOD 100 <> 0) OR (y MOD 400 = 0) THEN
+            isLeap := TRUE;
+        END_IF;
+    END_IF;
+
+    IF isLeap THEN
+        dim := 29;
+    ELSE
+        dim := 28;
+    END_IF;
+
+END_IF;
+
+IF remDays >= INT_TO_UDINT(dim) THEN
+    remDays := remDays - INT_TO_UDINT(dim);
+    m := m + 1;
+ELSE
+    finished := TRUE;
+END_IF;
+
+
+END_WHILE;
+
+Out.Annee := y;
+Out.Mois := m;
+Out.Jour := UDINT_TO_INT(remDays) + 1;
+
+(* ========================= *)
+(* CYCLE TIME                *)
+(* ========================= *)
+
+IF NOT prevValid THEN
+    Out.CycleMs := 0;            (* premier appel : pas de duree *)
+    prevValid := TRUE;
+ELSIF msOfDay >= msOfDayPrev THEN
+    Out.CycleMs := msOfDay - msOfDayPrev;
+ELSE
+    Out.CycleMs := (86400000 - msOfDayPrev) + msOfDay;   (* minuit *)
+END_IF;
+
+(* plus de 10 s d'un appel a l'autre : l'horloge a ete remise a l'heure
+   (ete/hiver, NTP, reglage), ce n'est pas un cycle *)
+IF Out.CycleMs > 10000 THEN
+    Out.CycleMs := 0;
+END_IF;
+
+msOfDayPrev := msOfDay;
+
+<<<end>>>

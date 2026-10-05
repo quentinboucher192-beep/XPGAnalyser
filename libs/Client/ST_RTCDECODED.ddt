@@ -1,0 +1,32 @@
+# Derived data type, shared.
+name = ST_RTCDECODED
+version = 0.01
+#! summary = La date et l'heure decodees par RTCDECODED, a la milliseconde.
+#! usage = REPRIS DU PROJET MAST (champs inchanges).
+#! see = RTCDECODED
+#! see = DFB_SYS_CLOCK
+#! param ValidUtc = Les deux octets de Status valent 1 : l'heure est sure.
+#! param Status = Le compte rendu de RRTC_DT_MS.
+#! param Annee = L'annee.
+#! param Mois = Le mois.
+#! param Jour = Le jour.
+#! param Heures = L'heure.
+#! param Minutes = La minute.
+#! param Secondes = La seconde.
+#! param Millisecondes = La milliseconde.
+#! param CycleMs = Le temps ecoule depuis l'appel precedent, en ms, calcule sur la
+#! param CycleMs = milliseconde du jour. 0 au premier appel et quand l'horloge est
+#! param CycleMs = remise a l'heure (RTCDECODED 0.12).
+#! changes 0.01 = Range dans la bibliotheque, depuis le projet MAST.
+
+# name ; type ; scope ; initial ; comment
+ValidUtc ; BOOL ; Member ;  ; 
+Status ; INT ; Member ;  ; 
+Annee ; INT ; Member ;  ; 
+Mois ; INT ; Member ;  ; 
+Jour ; INT ; Member ;  ; 
+Heures ; INT ; Member ;  ; 
+Minutes ; INT ; Member ;  ; 
+Secondes ; INT ; Member ;  ; 
+Millisecondes ; INT ; Member ;  ; 
+CycleMs ; UDINT ; Member ;  ; 

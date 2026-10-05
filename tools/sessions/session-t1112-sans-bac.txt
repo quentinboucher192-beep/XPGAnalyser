@@ -1,0 +1,35 @@
+# =============================================================================
+#  Session t1112-sans-bac - 1.11.2 (T1, decisions 155 et 164) : le chemin du
+#  client quand le projet modele du bac a sable (Armoire_Gaz) manque : ni dans
+#  PROJETS, ni dans bac/ a cote de l'appli (le seul endroit ou l'appli le
+#  cherche, jamais le dossier courant). Avant (la 1.11.1) : le lecteur partait
+#  quand meme, muet, sous la page de l'aide, a 0:00 (la capture du client).
+#  Maintenant : un dialogue « Tutoriel pas lance » dit ou le modele devait etre
+#  et le remede (bouton Fermer), rien n'est lance, et le centre reste sur le
+#  sujet (aide-sujet le demande au-dessus).
+#  A lancer dans un HOME neuf, PROJETS=<un dossier vide>, sans XPG_TUTORIELS ni
+#  XPG_BAC_SOURCES, --size 1920x1080, l'appli sans bac/ a cote d'elle, et un
+#  dossier de travail qui A projets/Armoire_Gaz et bac/Armoire_Gaz (le dossier
+#  courant ne doit pas servir).
+# =============================================================================
+attendre 30
+bouton "Définir la clé"
+attendre 10
+action project.new
+attendre 10
+bouton Create
+attendre-projet
+attendre 30
+touche f1
+attendre 15
+aide-sujet objet-ligne
+attendre 10
+aide-cible tuto:objet-ligne
+attendre 20
+capture t1112-sans-bac-01-dialogue.png
+bouton Fermer
+attendre 15
+aide-sujet objet-ligne
+attendre 10
+capture t1112-sans-bac-02-centre.png
+quitter

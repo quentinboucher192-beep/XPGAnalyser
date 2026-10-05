@@ -1,0 +1,50 @@
+# =============================================================================
+#  Session 95 - 1.11 : la fenetre Nouveautes de la 1.11 (chantier T2, tranche
+#  14), au premier lancement apres la 1.10.4. A lancer comme la session 93 :
+#  PROJETS=<dossier d'Armoire_Gaz> et XPG_TUTORIELS=tools/tutoriels, libs/ dans
+#  le dossier courant (scratchpad lancer-s95.sh).
+#   T2_50 : la fenetre, 7 cartes (le centre, les raccourcis, Signaler, les
+#           tutoriels, les expressions, les icones, Lier... a cocher)
+#   T2_51 : Me montrer des raccourcis : le centre, sur la page des raccourcis
+#   T2_54 : Suivante, Suivante : la carte des tutoriels, en cours de visite,
+#           ouvre la page de la Vanne (sans lancer le tutoriel), bulle 4/7
+#   T2_52 : Me montrer des icones : l'arbre du projet, Scripts, encadre
+#   T2_53 : Me montrer des tutoriels : le tutoriel de la Vanne, dans son bac
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+nouveautes-relancer 1.11.0 1.10.4
+nouveautes-fenetre
+attendre 4
+nouveautes-etat "a montrer 7"
+capture T2_50_nouveautes_111.png
+nouveautes-carte 1.11.raccourcis
+attendre 15
+nouveautes-etat
+capture T2_51_me_montrer_raccourcis.png
+nouveautes-bulle Suivante
+attendre 10
+nouveautes-bulle Suivante
+attendre 12
+nouveautes-etat "bulle 1.11.tutoriels 4/7"
+capture T2_54_visite_tutoriels_page.png
+nouveautes-bulle Terminer
+attendre 3
+nouveautes-fenetre
+attendre 3
+nouveautes-carte 1.11.icones-compilable
+attendre 15
+nouveautes-etat
+capture T2_52_me_montrer_icones.png
+nouveautes-bulle Terminer
+attendre 3
+nouveautes-fenetre
+attendre 3
+nouveautes-carte 1.11.tutoriels
+attendre 25
+nouveautes-etat
+capture T2_53_me_montrer_tutoriel.png

@@ -1,0 +1,54 @@
+# =============================================================================
+#  1.10 - L'aide F1 des champs a expression (chantier K, decisions 1 et 10a).
+#  Meme syntaxe que guide-ihm.txt (= chapitre, == cle | titre, : resume, @mots,
+#  @lieux, @voir, ### intertitre, - puce, | tableau |, ``` code ```).
+#  A inserer dans guide-ihm.txt par le chef de projet : le sujet apres
+#  « aide-saisie » ; puis la retouche du sujet « inspecteur » en fin de fichier.
+# =============================================================================
+
+== champs-expressions | Les champs à expression
+: Toute case qui accepte une expression se reconnaît de la même façon, partout : l'inspecteur, le volet Actions, les arguments d'Ouvrir une popup, les valeurs par défaut des paramètres, les alarmes des objets et des symboles. Vide, elle le dit ; pilotée, elle montre son « = » ; et une expression se retire toujours de la même façon.
+@mots expression, expressions, champ à expression, = expression, pastille fx, fx, Retirer l'expression, Modifier l'expression, valeur fixe, invite, vider, effacer, ✕, aide à la saisie, complétion, type attendu
+@lieux inspecteur, proprietes, actions, parametres, alarmes
+@voir aide-saisie, inspecteur, actions, parametres-popups, alarmes-objets
+### Elle dit qu'elle accepte une expression
+Toute case qui accepte une expression porte une **pastille fx en creux** (un contour) devant sa valeur, et le **type attendu** écrit en petit au bout de son nom (BOOL, nombre, couleur, vue, texte, choix). Une case à cocher ajoute « ou = expression » à côté de la case.
+### Vide : elle dit ce qu'elle attend
+Vide, elle montre en plus une **invite grise** adaptée à ce qu'elle attend : « nombre ou = expression », « couleur ou = expression », « TRUE, FALSE ou = expression », « vue ou = expression », « choix ou = expression », « texte, {variable} ou = expression », « durée ou = expression », « valeur ou = expression ». L'invite ne se tape pas : elle disparaît dès que tu écris.
+### Avec une expression : le « = » reste
+Une propriété pilotée par une expression a sa **pastille fx pleine** à la même place (rouge si l'expression ne peut pas marcher), la ligne teintée, et montre son expression **avec le « = » devant**, au repos comme quand tu la modifies : `=SEL(Marche, '#FF0000', '#00FF00')`. Même une case à cocher, une liste ou une couleur pilotées s'ouvrent sur leur expression (pas sur la valeur fixe qu'elle cache).
+### Retirer une expression
+Cinq façons, partout les mêmes :
+- le bouton **✕** au bout de la ligne (« Retirer l'expression : revenir à la valeur fixe (Ctrl+Suppr) ») ;
+- le **clic droit** sur la ligne : **Modifier l'expression…** (**Écrire une expression…** sur une case qui n'en a pas), **Retirer l'expression**, **Copier**, et **Revenir à la valeur par défaut** (l'expression part et la valeur devient celle d'un objet neuf de ce genre ; pour une surcharge, la valeur du symbole ; pour une case « tout expression », elle se vide) ;
+- **Ctrl+Suppr** dans la case ouverte ;
+- **effacer tout le texte** de la case, puis Entrée ;
+- **effacer le texte après le « = »** (laisser « = » seul), puis Entrée.
+La propriété revient à sa **valeur fixe** : celle qu'elle avait avant l'expression (elle est gardée quand tu poses une expression), sinon la valeur par défaut de l'objet. Une alarme surchargée revient à la valeur du symbole. **Ctrl+Z** remet l'expression.
+- Taper une **valeur fixe** (sans « = ») dans une case pilotée remplace l'expression par cette valeur.
+- Vider un **nombre** (X, Largeur, Opacité…) le ramène à sa valeur par défaut, au lieu d'être refusé.
+- **Écrire une expression…** (clic droit) ouvre la case sur « = » : c'est aussi la façon de piloter une case à cocher, une liste ou une couleur.
+- Pendant que tu écris, la pastille fx et le ✕ restent visibles à côté de la case.
+### L'aide à la saisie selon le type de la case
+La liste qui s'ouvre sous la case (Ctrl+Espace) propose d'abord **ce qui convient** au type attendu :
+| La case attend | La liste propose d'abord |
+|---|---|
+| TRUE, FALSE | les variables et membres BOOL (puis les structures, dont un membre peut convenir) |
+| un nombre | les variables numériques (INT, REAL, WORD…) |
+| une durée | les variables TIME |
+| une couleur | les couleurs du projet et les couleurs nommées, chacune avec sa pastille (rouge, vert, bleu… : le code `#RRGGBB` est inséré) ; après « = », les variables chaîne puis `'#RRGGBB'` |
+| une vue | les vues du projet ; après « = », `'Nom_de_vue'` |
+| une liste | ses valeurs |
+| un texte à trous | `{variable}` et `{variable:format}` dans les accolades, ou « = » pour une expression |
+Ce qui ne convient pas est proposé **plus bas**, sous un trait, **grisé**, avec « ne convient pas : » et son type. En simulation, chaque variable proposée dit aussi sa **valeur actuelle** (« = 42 »).
+### Dans un script : les fonctions internes, MAP, FOR EACH, les pointeurs
+Dans l'éditeur de scripts de l'IHM, l'aide à la saisie connaît aussi les nouveautés du langage des scripts (voir « Scripts : fonctions internes et types riches ») :
+- les **fonctions internes du script** (`FUNCTION Moyenne(t : ARRAY[0..9] OF REAL) : REAL … END_FUNCTION`), déclarées plus haut ou plus bas, avec leur signature ; le choix insère `Moyenne()` et place le curseur entre les parenthèses ;
+- les fonctions des dictionnaires `MAP_HAS`, `MAP_REMOVE`, `MAP_SIZE`, `MAP_BEGIN`, `MAP_NEXT`, et `ADR`, `SIZEOF`, `NULL` ;
+- les modèles `FOR EACH cle, valeur IN … DO … END_FOR` et `FUNCTION … END_FUNCTION` ;
+- après `x :` dans une déclaration : les types `MAP[STRING] OF …`, `ARRAY[0..…] OF …`, `REF_TO …`, `REFERENCE TO …`, `POINTER TO …` ;
+- après `t.` (un tableau) : `Length`.
+Ces mots ne sont proposés que dans les scripts de l'IHM, pas dans les champs ni dans le programme de l'automate.
+
+# ---- Retouche du sujet « inspecteur » (une puce a ajouter) ----
+# - Une propriété pilotée montre « =expression » ; pour la retirer : ✕ au bout de la ligne, clic droit, ou efface le texte (voir « Les champs à expression »).

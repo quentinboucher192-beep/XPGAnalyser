@@ -1,0 +1,157 @@
+# =============================================================================
+#  Session 58a - LOT API 8 : le dossier Simulation.
+#  La Vue d'ensemble (en marche, en pause, sur un point d'arret) ; le Debogage
+#  (un point d'arret pose dans la marge, le clic droit et sa condition, la
+#  section suivante, les espions, qui a ecrit) ; modifier le programme en pause
+#  puis Continuer : le cycle est garde ; les Forcages et "Le programme dirait" ;
+#  le Journal filtre.
+#  Dans le projet des sessions precedentes, rejouee dans la VRAIE application.
+#  Captures PNG_760 a PNG_772.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+# BUILDING 0.22 boucle sans fin au 1er cycle : la mise a jour de la bibliotheque (0.24) d'abord.
+tableau-de-bord bibliotheque
+attendre 10
+attendre-macro
+attendre 3
+macro-etape apercu
+attendre 8
+attendre-macro
+macro-etape appliquer
+attendre 15
+macro-etape fermer
+attendre 5
+
+# ---- A. Simulation > Vue d'ensemble (F9) : en marche, en pause, sur un point d'arret ---------
+touche f9
+attendre 5
+barre "simuler"
+attendre-cycles 20
+attendre 10
+etat-simulation marche
+etat-bandeau
+survol 960 1070
+attendre 3
+capture PNG_760_vue_ensemble_en_marche.png
+barre "simuler"
+attendre 8
+etat-simulation pause
+etat-bandeau
+capture PNG_761_vue_ensemble_en_pause.png
+# Un point d'arret sur une ligne lue a chaque cycle : Continuer, le programme s'y arrete.
+point-arret "Acquisitions_ANA" 12
+barre "simuler"
+attendre 15
+etat-simulation pause
+etat-bandeau
+survol 960 1070
+attendre 3
+capture PNG_762_vue_ensemble_point_arret.png
+
+# ---- B. Simulation > Debogage ----------------------------------------------------------------
+debogage-ouvrir
+attendre 8
+debogage-etat "Acquisitions_ANA"
+capture PNG_763_debogage_arret.png
+# Un point d'arret pose d'un clic dans la marge de la section...
+point-arret-marge "Acquisitions_ANA" 24
+attendre 5
+# ... et un autre par le clic droit, avec sa condition.
+point-arret-condition-marge "Acquisitions_ANA" 36 "Armoires[0].ana.Balance.mes >= 0"
+attendre 5
+capture PNG_764_marge_condition.png
+touche entree
+attendre 4
+capture PNG_765_marge_deux_points.png
+# Continuer : le programme s'arrete au point de la ligne 24 ; F10 : la section suivante.
+# (Un seul arret par cycle, au premier point atteint : celui de la ligne 12 est mis de cote.)
+debogage-ouvrir
+attendre 4
+debogage-point-actif 1 non
+attendre 2
+debogage-continuer
+attendre 10
+debogage-etat "ligne 24"
+debogage-points-desactiver
+attendre 3
+debogage-section
+attendre 10
+etat-simulation pause
+# Les espions ; qui a ecrit la mesure.
+espion-ajouter "Armoires[0].ana.PT1"
+attendre 3
+espion-deplier "Armoires[0].ana.PT1"
+attendre 3
+espion-ajouter "Armoires[0].ana.PT3.mes"
+attendre 3
+debogage-variable "Armoires[0].ana.PT1.mes"
+attendre 5
+qui-a-ecrit "Armoires[0].ana.PT1.mes"
+survol 960 1070
+attendre 3
+capture PNG_766_debogage_section_espions_qui_a_ecrit.png
+
+# ---- C. Modifier le programme en pause, puis Continuer : le cycle est garde ------------------
+debogage-modifier
+attendre 8
+capture PNG_767_modifier_ouvre_la_ligne.png
+etat-simulation pause
+# Une ligne de plus dans la section, en pause : la modification est prise EN LIGNE.
+bouton "Edit"
+attendre 2
+touche fin
+touche entree
+texte "(* ajoute en pause : le cycle continue *)"
+touche echap
+attendre 8
+etat-simulation pause
+survol 960 1070
+attendre 3
+capture PNG_768_modifie_en_pause.png
+debogage-ouvrir
+attendre 4
+debogage-continuer
+attendre-cycles 20
+attendre 5
+etat-simulation marche
+etat-bandeau
+centre ensemble
+attendre 5
+survol 960 1070
+attendre 3
+capture PNG_769_continuer_cycle_garde.png
+
+# ---- D. Simulation > Forcages : "Le programme dirait" ----------------------------------------
+simulation-forcer "armoires[0].ana.PT1.mes" "5"
+attendre 3
+simulation-forcer "armoires[0].ana.PT3.mes" "7.5"
+attendre 3
+centre forcages
+attendre 8
+programme-dirait "Armoires[0].ana.PT1.mes"
+programme-dirait "Armoires[0].ana.PT3.mes"
+survol 960 1070
+attendre 3
+capture PNG_770_forcages_le_programme_dirait.png
+
+# ---- E. Simulation > Journal filtre -----------------------------------------------------------
+centre journal
+attendre 5
+journal-filtre debogage
+attendre 3
+journal-lignes 8
+survol 960 1070
+attendre 3
+capture PNG_771_journal_filtre_debogage.png
+journal-filtre tout surveiller
+attendre 3
+journal-lignes 8
+capture PNG_772_journal_filtre_surveiller.png
+journal-filtre tout tout
+attendre 2
+quitter

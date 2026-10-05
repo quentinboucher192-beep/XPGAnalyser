@@ -1,0 +1,51 @@
+(* B_Classeur
+
+   Lit un onglet du classeur de l'affaire, une ligne par element, et cree dans
+   le projet ce qui manque. Relancee, elle ne recree rien : elle teste avant de
+   creer et dit "existe deja".
+
+   #! summary = Lire un onglet du classeur : une ligne par élément, créer ce qui manque.
+   #! version = 1.00
+   #! categorie = Mes macros
+   #! param classeur = Le classeur de l'affaire (.xlsx ou .xlsm). Vide : celui déjà chargé.
+   #! param onglet = Une ligne par élément, les titres de colonnes en première ligne (colonne Nom).
+   #! param prefixe = Le début du nom de chaque variable créée.
+   #! champ classeur = fichier .xlsx .xlsm facultatif
+   #! libelle classeur = Le classeur de l'affaire
+   #! champ onglet = onglet
+   #! libelle onglet = L'onglet à lire
+   #! champ prefixe = nom
+   #! libelle prefixe = Préfixe des variables
+   #! exemple prefixe = {}Pompe1, {}Vanne2
+   #! produit = une variable BOOL par ligne de l'onglet (colonne Nom), si elle n'existe pas encore
+   #! appliquer = Créer les variables de l'onglet {onglet}
+*)
+
+chemin  := Ask('classeur', 'Chemin du classeur (vide = celui deja charge)', '');
+onglet  := Ask('onglet', 'Onglet a lire', 'Equipements');
+prefixe := Ask('prefixe', 'Prefixe des variables', 'EQ_');
+AskNow();
+
+wb := OpenWorkbook(chemin);
+IF wb < 0 THEN
+    Fail('classeur introuvable : choisis-le dans le formulaire (bouton ..., Ctrl+V ou glisser le fichier).');
+END_IF;
+t := OpenSheet(onglet);
+IF t < 0 THEN Fail('onglet ' + onglet + ' introuvable'); END_IF;
+IF NOT HasColumn(t, 'Nom') THEN Fail('l onglet ' + onglet + ' n a pas de colonne Nom'); END_IF;
+
+n := RowCount(t);
+nom := '';
+crees := 0;
+FOR i := 0 TO n - 1 DO
+    nom := Cell(t, i, 'Nom');
+    IF nom = '' THEN
+        SkipRow('ligne ' + DINT_TO_STRING(i + 2) + ' : pas de nom');
+    ELSIF VariableExists(prefixe + nom) THEN
+        Log(prefixe + nom + ' existe deja');
+    ELSE
+        AddVariable(prefixe + nom, 'BOOL', 'Global', '', '', 'cree depuis l onglet ' + onglet);
+        crees := crees + 1;
+    END_IF;
+END_FOR;
+Log(DINT_TO_STRING(crees) + ' variable(s) creee(s) sur ' + DINT_TO_STRING(n) + ' ligne(s)');

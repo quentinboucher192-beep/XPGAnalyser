@@ -1,0 +1,36 @@
+#! summary = Un convoyeur : deux sens, thermique, arret d'urgence, detection de bourrage.
+#! usage = UNE INSTANCE TRAITE SEIZE EQUIPEMENTS, et cette taille est dans la signature
+#! usage = du bloc : en changer touche toutes les instances de tous les projets qui
+#! usage = l'ont importe. Seize suffit pour une station ; au-dela, on declare une
+#! usage = deuxieme instance.
+#! usage = Appeler une fois par cycle, apres les voies d'entree et avant les reports
+#! usage = vers l'IHM : le bloc lit ce que les voies ont ecrit, et ecrit ce que les
+#! usage = reports vont lire.
+#! usage = 
+#! usage = LES DEUX SENS SONT EXCLUSIFS PAR CONSTRUCTION. Run et RunRev se departagent
+#! usage = sur Reverse, donc les deux contacteurs ne peuvent pas etre commandes
+#! usage = ensemble. C'est pour cela que le code de defaut 4 de la table n'est jamais
+#! usage = pose.
+#! example = (* declarer : Convoyeurs : ARRAY[0..15] OF ST_EQ_Conveyor; *)
+#! example = Convoyeurs[0].Thermal   := CarteDI_R0S7[0].Val;
+#! example = Convoyeurs[0].EmergStop := CarteDI_R0S7[1].Val;
+#! example = Convoyeurs[0].Pulse     := CarteDI_R0S7[2].Val;
+#! example = Convoyeurs[0].RunReq    := Sequence.AvancerBande;
+#! example = 
+#! example = CNV_Ligne(Count := 4, CycleMs := 20, Eq := Convoyeurs);
+#! example = 
+#! example = CarteDO_R0S8[0].Val := Convoyeurs[0].Run;
+#! example = CarteDO_R0S8[1].Val := Convoyeurs[0].RunRev;
+#! param Count = Combien d'equipements du tableau sont traites. Borne a 16. En mettre moins
+#! param Count = ne fait pas gagner de memoire, seulement du temps de cycle.
+#! param CycleMs = La periode de la tache, en ms. Un DDT ne peut pas contenir de temporisateur,
+#! param CycleMs = donc tout le temps s'accumule depuis la : une valeur fausse ici fausse
+#! param CycleMs = toutes les temporisations de tous les equipements du tableau. DINT et non
+#! param CycleMs = INT - un INT de millisecondes deborde au bout de trente-trois secondes.
+#! param Eq = Le tableau des equipements, en InOut. Sa taille est figee a 16 : un InOut ne
+#! param Eq = peut pas etre dimensionne a l'appel.
+#! param FaultCount = Combien sont en defaut, recalcule a chaque cycle. De quoi allumer un voyant
+#! param FaultCount = de synthese sans reparcourir le tableau.
+#! param ReadyCount = Combien sont utilisables. FaultCount + ReadyCount n'est pas forcement egal a
+#! param ReadyCount = Count : un equipement desactive n'est ni l'un ni l'autre.
+#! see = ST_EQ_Conveyor

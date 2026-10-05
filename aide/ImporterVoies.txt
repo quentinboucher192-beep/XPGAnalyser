@@ -1,0 +1,14 @@
+#! summary = Ecrit les deux sections de mapping : le cablage de chaque voie, tous ses reglages, et l'appel du bloc de sa carte.
+#! usage = Depuis les onglets Cartes API et ES.
+#! usage = L'ORDRE A L'INTERIEUR D'UNE SECTION EST TOUT LE SUJET. Pour une entree : %I vers .Raw, PUIS l'appel du bloc - le bloc doit voir la valeur de ce cycle. Pour une sortie : l'appel du bloc, PUIS .Raw vers %Q - la carte doit recevoir ce que le bloc vient de calculer. Inverser l'un ou l'autre ajoute un cycle de retard qui ne se voit sur rien, sauf sur un comptage de pieces.
+#! usage = C'est pour ca que cette macro ecrit le cablage ET les appels : deux macros qui ajoutent chacune leur bout ne peuvent pas obtenir les deux ordres.
+#! usage = ELLE ECRIT TOUS LES REGLAGES, pas seulement .Raw : Inv, DebounceMs, AlarmEn, AlarmState, AlarmDelayMs et Sev pour le TOR ; RawMin/Max, EngMin/Max, Clamp, DeadBand, FiltN, RateMax et les quatre seuils complets pour l'analogique. Un tableau de ST_IO_Ana sans echelle ni seuils ne fait rien du tout.
+#! usage = L'adresse vient de la colonne Adresse de la voie, pas d'un calcul a partir du rack et du module : une carte dont les voies ne se suivent pas reste juste.
+#! usage = LA SECTION EST REECRITE ENTIEREMENT a chaque execution. Ce qui y a ete ajoute a la main est perdu. C'est voulu : une section a moitie ancienne et a moitie nouvelle est pire que les deux, et on ne peut pas deviner ce qui a ete ajoute expres.
+#! see = ImporterCartes, ImporterAlarmes, ImporterClasseur
+#! param classeur = Le chemin du classeur. Laisser vide prend celui qui est deja charge par le bouton Classeur..., ce qui est le cas normal quand on enchaine plusieurs imports.
+#! param classeur = C'est un .xlsm, pas un export CSV : la macro lit les onglets directement, et les quatre familles d'E/S sont donc traitees en une seule execution.
+#! param sEntrees = La section des cartes d'entree. Elle doit tourner EN PREMIER dans la tache : tout le programme travaille sur ce qu'elle vient de lire.
+#! param sSorties = La section des cartes de sortie. Elle doit tourner EN DERNIER : elle publie ce que le programme vient de decider.
+#! param tache = La tache d'accueil des sections creees, MAST en general.
+#! param tache = Creer la section ne la place pas dans le bon ordre : Control Expert execute les sections dans l'ordre du navigateur de projet, et cet ordre se pose a la main. Chaque macro rappelle a la fin ou sa section doit aller.

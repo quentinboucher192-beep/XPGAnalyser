@@ -1,0 +1,7 @@
+Paramètre;Valeur;Unité;Armoire
+Pression haute;9.5;bar;A
+Pression basse;1.2;bar;A
+Seuil poids bouteille;65;kg;A
+Temporisation purge;30;s;A
+Pression haute;9.2;bar;B
+Pression basse;1.0;bar;B

@@ -1,0 +1,759 @@
+(* VerifierClasseur
+
+   Ne modifie RIEN. Elle lit le classeur et la bibliotheque, et elle repond a
+   la seule question qui compte avant un import : qu'est-ce qui va casser ?
+
+   Chaque champ cite est verifie contre sa famille - un .RunCmd qui n'existe
+   pas se voit ici, pas a la compilation, cinquante lignes plus loin. Chaque
+   adresse de report est verifiee contre les zones de l'onglet Config et
+   contre les autres reports. Chaque onglet de controle est relu.
+
+   #! summary = Lit le classeur et la bibliothèque, et dit ce qui va casser avant d'importer : champs inexistants, adresses en double ou hors zone, cartes trop petites, onglets de contrôle et de grafcets incohérents.
+   #! version = 2.10
+   #! changes 2.10 = Le formulaire : chaque question a son champ (le classeur par …, Ctrl+V ou en le glissant ; les tâches et les sections du projet ; des interrupteurs ; des choix à libellés), ses groupes, son aide et un libellé avec accents. Le code ne change pas.
+   #! changes 2.01 = Les onglets des grafcets : numeros d etape, de transition et d action (0 a 27, sans doublon), etapes citees en De, Vers et par les actions, 3 au plus, etape initiale, qualificatif, INIT vers un grafcet absent, transition sans receptivite.
+   #! changes 2.00 = CHAQUE CHAMP CITE EST VERIFIE contre sa famille (HasMember) : cablage, reports, reglages, rotations, Modbus. Les adresses de report sont verifiees contre les zones MW et MX de l'onglet Config. Nouveaux controles : voie au-dela de la taille de sa carte, deux cartes sur le meme emplacement (hors carte mixte), equipement cite mais absent ou inactif, meme tableau et meme indice pour deux equipements, indice au-dela des 16 equipements d un bloc, et les onglets Reglages, Rotations, Paliers, Modes, Interverrouillages et Modbus.
+   #! usage = NE MODIFIE RIEN. Elle regarde et elle rapporte, ce qui est exactement ce qu'on veut avant un import : un import qui s'arrete au milieu laisse un projet a moitie ecrit, et defaire a moitie est plus long que de verifier avant.
+   #! usage = CE QU'ELLE CONTROLE : l'onglet Config (dossier libs, periode, zones) ; les cartes (bloc, taille, emplacement, voies) ; les equipements (famille, bloc, tableau et indice) ; le cablage et les reports (equipement, champ, adresse, zone, doublons) ; et les onglets de controle et des grafcets quand ils sont la.
+   #! usage = UNE CARTE MIXTE (DDM 16022, DDM 3202K, AMM 0600) occupe legitimement un emplacement sur deux lignes, une par sens. Ses sorties numerotees depuis 0 sont signalees pour information : l'import les decale.
+   #! usage = Lancee par ImporterClasseur, ses avertissements s'affichent dans l'apercu de l'import : c'est le moment de s'arreter.
+   #! see = ImporterClasseur, ImporterProgramme, ImporterGrafcet
+   #! param classeur = Le classeur de l'affaire (.xlsx ou .xlsm) : glisse-le sur le champ, choisis-le avec …, ou colle-le (Ctrl+V) après l'avoir copié dans l'Explorateur. Vide : le dernier classeur ouvert, le cas normal quand on enchaîne les imports.
+   #! categorie = Vérifier et ranger
+   #! champ classeur = fichier .xlsx .xlsm facultatif
+   #! libelle classeur = Le classeur de l'affaire
+   #! produit = rien : elle lit et elle dit ce qui va casser (l'aperçu est le résultat)
+*)
+
+chemin := Ask('classeur', 'Chemin du classeur (vide = celui deja charge)', '');
+AskNow();
+
+wb := OpenWorkbook(chemin);
+IF wb < 0 THEN
+    Fail('classeur introuvable : choisis-le dans le formulaire (bouton ..., Ctrl+V ou glisser le fichier).');
+END_IF;
+
+soucis := 0;
+i := 0; k := 0; q := 0; j := 0; n := 0; m := 0; p := 0; pos := 0; debut := 0;
+taille := 0; voies := 0; nb := 0; num := 0; idx := 0; decal := 0; compte := 0;
+bloc := ''; nom := ''; fam := ''; acces := ''; ref := ''; ref2 := ''; s := ''; champ := '';
+adr := ''; bit := ''; zone := ''; tab := ''; eq := ''; typ := ''; val := ''; membres := '';
+trouve := 0; actif := ''; depasse := 0; deja := 0; sens := ''; t := 0;
+
+(* ---- Config ------------------------------------------------------------- *)
+IF Setting('Dossier libs') = '' THEN
+    Warn('Config : "Dossier libs" est vide. C est le seul champ indispensable.');
+    soucis := soucis + 1;
+END_IF;
+periode := Setting('Periode (ms)');
+IF periode = '' THEN
+    Warn('Config : "Periode (ms)" est vide. Les blocs en tirent leurs temps quand l horloge n est pas appelee.');
+    soucis := soucis + 1;
+ELSE
+    Log('periode de tache : ' + periode + ' ms');
+END_IF;
+zmwDeb := STRING_TO_INT(Setting('Zone MW debut'));
+zmwFin := STRING_TO_INT(Setting('Zone MW fin'));
+zmxDeb := STRING_TO_INT(Setting('Zone MX debut'));
+zmxFin := STRING_TO_INT(Setting('Zone MX fin'));
+IF Setting('Zone MW fin') = '' THEN zmwFin := -1; END_IF;
+IF Setting('Zone MX fin') = '' THEN zmxFin := -1; END_IF;
+
+(* ---- Cartes API --------------------------------------------------------- *)
+tC := OpenSheet('Cartes API');
+IF tC < 0 THEN Fail('onglet "Cartes API" introuvable dans ce classeur'); END_IF;
+tES := -1;
+IF HasSheet('ES') THEN tES := OpenSheet('ES'); ELSE Warn('onglet "ES" introuvable'); soucis := soucis + 1; END_IF;
+nc := RowCount(tC);
+ne := 0;
+IF tES >= 0 THEN ne := RowCount(tES); END_IF;
+Log('cartes declarees : ' + DINT_TO_STRING(nc) + ', voies : ' + DINT_TO_STRING(ne));
+
+FOR i := 0 TO nc - 1 DO
+    IF Cell(tC, i, 'Active') = 'O' THEN
+        nom := Cell(tC, i, 'Nom');
+        bloc := Cell(tC, i, 'Bloc');
+        taille := 0;
+        voies := STRING_TO_INT(Cell(tC, i, 'Voies'));
+        ref := UPPER(Cell(tC, i, 'Reference'));
+        IF Cell(tC, i, 'Rack') = '' OR Cell(tC, i, 'Module') = '' THEN
+            Warn(nom + ' : rack ou module vide');
+            soucis := soucis + 1;
+        END_IF;
+        IF bloc = '' THEN
+            Warn(nom + ' : aucun bloc calcule. Recalculez le classeur.');
+            soucis := soucis + 1;
+        ELSIF NOT PouExists(bloc) AND NOT LibHasItem(bloc) THEN
+            Warn(nom + ' : le bloc ' + bloc + ' n est ni dans le projet ni dans la bibliotheque');
+            soucis := soucis + 1;
+        ELSE
+            taille := STRING_TO_INT(MID(bloc, LEN(bloc) - 2));
+            IF taille > 0 AND voies > taille THEN
+                Warn(nom + ' : ' + DINT_TO_STRING(voies) + ' voies ne tiennent pas dans ' + bloc);
+                soucis := soucis + 1;
+            END_IF;
+            IF LibHasItem(bloc) AND LibVersion(bloc) = '1.00' THEN
+                Warn(nom + ' : ' + bloc + ' est en 1.00 dans la bibliotheque - la derniere voie n y est '
+                     + 'pas traitee. Mettez libs a jour.');
+                soucis := soucis + 1;
+            END_IF;
+        END_IF;
+
+        (* DEUX CARTES SUR LE MEME EMPLACEMENT : permis pour les deux sens
+           d'une carte mixte, et pour rien d'autre. *)
+        FOR k := i + 1 TO nc - 1 DO
+            IF Cell(tC, k, 'Active') = 'O' AND Cell(tC, k, 'Rack') = Cell(tC, i, 'Rack')
+               AND Cell(tC, k, 'Module') = Cell(tC, i, 'Module') THEN
+                ref2 := UPPER(Cell(tC, k, 'Reference'));
+                IF ref2 <> ref OR (FIND(ref, 'DDM', 0) < 0 AND FIND(ref, 'AMM', 0) < 0)
+                   OR Cell(tC, k, 'Famille') = Cell(tC, i, 'Famille') THEN
+                    Warn(nom + ' et ' + Cell(tC, k, 'Nom') + ' : meme emplacement (rack '
+                         + Cell(tC, i, 'Rack') + ', module ' + Cell(tC, i, 'Module')
+                         + ') - seule une carte mixte se declare en deux lignes');
+                    soucis := soucis + 1;
+                END_IF;
+            END_IF;
+        END_FOR;
+
+        (* Les voies de la carte dans ES, et les sorties d'une carte mixte. *)
+        compte := 0;
+        decal := 0;
+        IF (Cell(tC, i, 'Famille') = 'DO' OR Cell(tC, i, 'Famille') = 'AO') THEN
+            IF FIND(ref, 'DDM', 0) >= 0 THEN decal := 16; END_IF;
+            IF FIND(ref, 'AMM', 0) >= 0 THEN decal := 4; END_IF;
+        END_IF;
+        trouve := 0;
+        depasse := 0;
+        FOR q := 0 TO ne - 1 DO
+            IF Cell(tES, q, 'Carte') = nom THEN
+                compte := compte + 1;
+                idx := STRING_TO_INT(Cell(tES, q, 'Index'));
+                IF taille > 0 AND idx >= taille THEN depasse := depasse + 1; END_IF;
+                IF decal > 0 THEN
+                    adr := Cell(tES, q, 'Adresse');
+                    p := FIND(adr, '.', FIND(adr, '.', 0) + 1);
+                    IF p > 0 AND STRING_TO_INT(MID(adr, p + 1)) < decal THEN trouve := trouve + 1; END_IF;
+                END_IF;
+            END_IF;
+        END_FOR;
+        IF compte = 0 THEN
+            Warn(nom + ' : aucune voie dans l onglet ES');
+            soucis := soucis + 1;
+        END_IF;
+        IF depasse > 0 THEN
+            Warn(nom + ' : ' + DINT_TO_STRING(depasse) + ' voie(s) de l onglet ES au-dela du bloc ' + bloc);
+            soucis := soucis + 1;
+        END_IF;
+        IF trouve > 0 THEN
+            Log(nom + ' (' + ref + ') : carte mixte, ' + DINT_TO_STRING(trouve) + ' sortie(s) numerotee(s) '
+                + 'depuis 0 dans ES - l import les decale a la voie ' + DINT_TO_STRING(decal) + '.');
+        END_IF;
+    END_IF;
+END_FOR;
+
+(* ---- ES : une adresse, une voie ------------------------------------------ *)
+FOR i := 0 TO ne - 1 DO
+    adr := Cell(tES, i, 'Adresse');
+    IF adr <> '' THEN
+        FOR k := i + 1 TO ne - 1 DO
+            IF Cell(tES, k, 'Adresse') = adr THEN
+                Warn('ES : l adresse ' + adr + ' est declaree deux fois (' + Cell(tES, i, 'Carte') + ' et '
+                     + Cell(tES, k, 'Carte') + ')');
+                soucis := soucis + 1;
+            END_IF;
+        END_FOR;
+    END_IF;
+END_FOR;
+
+(* ---- Equipements ------------------------------------------------------- *)
+tEq := OpenSheet('Equipements');
+IF tEq < 0 THEN Fail('onglet "Equipements" introuvable'); END_IF;
+neq := RowCount(tEq);
+Log('equipements declares : ' + DINT_TO_STRING(neq));
+FOR i := 0 TO neq - 1 DO
+    IF Cell(tEq, i, 'Actif') = 'O' THEN
+        nom := Cell(tEq, i, 'Nom');
+        fam := Cell(tEq, i, 'Famille');
+        IF fam = '' THEN
+            Warn(nom + ' : aucune famille');
+            soucis := soucis + 1;
+        ELSIF NOT TypeExists(fam) AND NOT LibHasItem(fam) THEN
+            Warn(nom + ' : la famille ' + fam + ' n est ni dans le projet ni dans la bibliotheque');
+            soucis := soucis + 1;
+        ELSIF STARTSWITH(fam, 'ST_EQ_') THEN
+            bloc := 'DFB_EQ_' + UPPER(MID(fam, 6));
+            IF NOT PouExists(bloc) AND NOT LibHasItem(bloc) THEN
+                Warn(nom + ' : aucun bloc ' + bloc + ' pour la famille ' + fam);
+                soucis := soucis + 1;
+            ELSE
+                (* le tableau a la taille de l InOut Eq du bloc : 16 en general *)
+                typ := MemberType(bloc, 'Eq');
+                IF typ <> '' THEN
+                    idx := STRING_TO_INT(MID(typ, FIND(typ, '..', 0) + 2,
+                           FIND(typ, ']', 0) - FIND(typ, '..', 0) - 2));
+                    IF STRING_TO_INT(Cell(tEq, i, 'Index')) > idx THEN
+                        Warn(nom + ' : indice ' + Cell(tEq, i, 'Index') + ' au-dela des '
+                             + DINT_TO_STRING(idx + 1) + ' equipements de ' + bloc
+                             + ' - partagez le tableau ' + Cell(tEq, i, 'Variable') + ' en deux');
+                        soucis := soucis + 1;
+                    END_IF;
+                END_IF;
+            END_IF;
+        END_IF;
+        IF Cell(tEq, i, 'Acces ST') = '' THEN
+            Warn(nom + ' : colonne Acces ST vide. Recalculez le classeur.');
+            soucis := soucis + 1;
+        END_IF;
+        FOR k := i + 1 TO neq - 1 DO
+            IF Cell(tEq, k, 'Actif') = 'O' AND Cell(tEq, k, 'Variable') = Cell(tEq, i, 'Variable') THEN
+                IF Cell(tEq, k, 'Index') = Cell(tEq, i, 'Index') THEN
+                    Warn(nom + ' et ' + Cell(tEq, k, 'Nom') + ' : meme tableau et meme indice ('
+                         + Cell(tEq, i, 'Acces ST') + ')');
+                    soucis := soucis + 1;
+                END_IF;
+                IF Cell(tEq, k, 'Famille') <> fam THEN
+                    Warn(Cell(tEq, i, 'Variable') + ' : deux familles dans le meme tableau (' + fam + ' et '
+                         + Cell(tEq, k, 'Famille') + ')');
+                    soucis := soucis + 1;
+                END_IF;
+            END_IF;
+        END_FOR;
+    END_IF;
+END_FOR;
+
+(* ---- Cablage : equipement, champ, voie ------------------------------------ *)
+IF HasSheet('Cablage') THEN
+    t := OpenSheet('Cablage');
+    n := RowCount(t);
+    colSource := 'Source';
+    IF NOT HasColumn(t, 'Source') AND HasColumn(t, 'Acces voie') THEN colSource := 'Acces voie'; END_IF;
+    Log('voies cablees : ' + DINT_TO_STRING(n));
+    FOR i := 0 TO n - 1 DO
+        eq := Cell(t, i, 'Equipement');
+        acces := ''; fam := ''; actif := '';
+        FOR q := 0 TO neq - 1 DO
+            IF Cell(tEq, q, 'Nom') = eq THEN
+                acces := Cell(tEq, q, 'Acces ST'); fam := Cell(tEq, q, 'Famille'); actif := Cell(tEq, q, 'Actif');
+            END_IF;
+        END_FOR;
+        champ := Cell(t, i, 'Cible');
+        IF MID(champ, 0, 1) = '.' THEN champ := MID(champ, 1); END_IF;
+        IF FIND(champ, '[', 0) > 0 THEN champ := MID(champ, 0, FIND(champ, '[', 0)); END_IF;
+        IF FIND(champ, '.', 0) > 0 THEN champ := MID(champ, 0, FIND(champ, '.', 0)); END_IF;
+        IF acces = '' THEN
+            Warn('Cablage : ' + eq + ' n est pas dans l onglet Equipements');
+            soucis := soucis + 1;
+        ELSIF actif = 'O' AND NOT HasMember(fam, champ) THEN
+            Warn('Cablage : ' + eq + ' ' + Cell(t, i, 'Cible') + ' - ' + champ + ' n est pas un champ de ' + fam);
+            soucis := soucis + 1;
+        END_IF;
+        (* La voie : CarteDI_R0S2[20] -> la carte dont c'est le tableau. *)
+        s := Cell(t, i, colSource);
+        pos := FIND(s, '[', 0);
+        IF pos > 0 THEN
+            tab := MID(s, 0, pos);
+            idx := STRING_TO_INT(MID(s, pos + 1, FIND(s, ']', pos) - pos - 1));
+            trouve := 0;
+            FOR q := 0 TO nc - 1 DO
+                IF Cell(tC, q, 'Tableau') = tab THEN
+                    trouve := 1;
+                    voies := STRING_TO_INT(Cell(tC, q, 'Voies'));
+                    IF idx >= voies THEN
+                        Warn('Cablage : ' + s + ' - la carte ' + Cell(tC, q, 'Nom') + ' n a que '
+                             + DINT_TO_STRING(voies) + ' voies');
+                        soucis := soucis + 1;
+                    END_IF;
+                    IF Cell(tC, q, 'Active') <> 'O' THEN
+                        Warn('Cablage : ' + s + ' - la carte ' + Cell(tC, q, 'Nom') + ' est inactive');
+                        soucis := soucis + 1;
+                    END_IF;
+                END_IF;
+            END_FOR;
+            IF trouve = 0 THEN
+                Warn('Cablage : ' + s + ' - aucune carte n a pour tableau ' + tab);
+                soucis := soucis + 1;
+            END_IF;
+        END_IF;
+    END_FOR;
+END_IF;
+
+(* ---- Liens : equipement, champ, adresse, zone, doublon ------------------- *)
+IF HasSheet('Liens') THEN
+    t := OpenSheet('Liens');
+    n := RowCount(t);
+    Log('reports declares : ' + DINT_TO_STRING(n));
+    FOR i := 0 TO n - 1 DO
+        eq := Cell(t, i, 'Equipement');
+        acces := ''; fam := ''; actif := '';
+        FOR q := 0 TO neq - 1 DO
+            IF Cell(tEq, q, 'Nom') = eq THEN
+                acces := Cell(tEq, q, 'Acces ST'); fam := Cell(tEq, q, 'Famille'); actif := Cell(tEq, q, 'Actif');
+            END_IF;
+        END_FOR;
+        IF acces = '' THEN
+            Warn('Liens : ' + eq + ' n est pas dans l onglet Equipements (' + Cell(t, i, 'Designation') + ')');
+            soucis := soucis + 1;
+        ELSIF actif = 'O' AND NOT HasMember(fam, Cell(t, i, 'Parametre')) THEN
+            Warn('Liens : ' + eq + ' - ' + Cell(t, i, 'Parametre') + ' n est pas un champ de ' + fam);
+            soucis := soucis + 1;
+        END_IF;
+
+        adr := Cell(t, i, 'Adr API');
+        bit := Cell(t, i, 'Bit');
+        zone := UPPER(Cell(t, i, 'Zone'));
+        num := STRING_TO_INT(Cell(t, i, 'Numero'));
+        IF zone = 'MW' AND zmwFin >= 0 AND (num < zmwDeb OR num > zmwFin) THEN
+            Warn('Liens : ' + adr + ' (' + Cell(t, i, 'Designation') + ') est hors de la zone MW '
+                 + DINT_TO_STRING(zmwDeb) + '..' + DINT_TO_STRING(zmwFin) + ' de l onglet Config');
+            soucis := soucis + 1;
+        END_IF;
+        IF zone = 'MX' AND zmxFin >= 0 AND (num < zmxDeb OR num > zmxFin) THEN
+            Warn('Liens : ' + adr + ' (' + Cell(t, i, 'Designation') + ') est hors de la zone MX '
+                 + DINT_TO_STRING(zmxDeb) + '..' + DINT_TO_STRING(zmxFin) + ' de l onglet Config');
+            soucis := soucis + 1;
+        END_IF;
+        IF bit <> '' AND (STRING_TO_INT(bit) < 0 OR STRING_TO_INT(bit) > 15) THEN
+            Warn('Liens : ' + adr + ' bit ' + bit + ' - un mot n a que les bits 0 a 15');
+            soucis := soucis + 1;
+        END_IF;
+        (* Deux reports sur la meme adresse : chaque ligne contre les suivantes. *)
+        IF adr <> '' THEN
+            FOR k := i + 1 TO n - 1 DO
+                IF Cell(t, k, 'Adr API') = adr AND Cell(t, k, 'Bit') = bit THEN
+                    Warn('Liens : ' + adr + ' bit ' + bit + ' pris deux fois, par ' + Cell(t, i, 'Designation')
+                         + ' et ' + Cell(t, k, 'Designation'));
+                    soucis := soucis + 1;
+                END_IF;
+                (* un mot entier et un de ses bits *)
+                IF Cell(t, k, 'Adr API') = adr AND ((bit = '' AND Cell(t, k, 'Bit') <> '')
+                   OR (bit <> '' AND Cell(t, k, 'Bit') = '')) THEN
+                    Warn('Liens : ' + adr + ' sert a la fois de mot entier et de bits ('
+                         + Cell(t, i, 'Designation') + ', ' + Cell(t, k, 'Designation') + ')');
+                    soucis := soucis + 1;
+                END_IF;
+            END_FOR;
+        END_IF;
+    END_FOR;
+END_IF;
+
+(* ---- Reglages ------------------------------------------------------------ *)
+IF HasSheet('Reglages') THEN
+    t := OpenSheet('Reglages');
+    n := RowCount(t);
+    Log('reglages : ' + DINT_TO_STRING(n));
+    FOR i := 0 TO n - 1 DO
+        eq := Cell(t, i, 'Equipement');
+        acces := ''; fam := '';
+        FOR q := 0 TO neq - 1 DO
+            IF Cell(tEq, q, 'Nom') = eq AND Cell(tEq, q, 'Actif') = 'O' THEN
+                acces := Cell(tEq, q, 'Acces ST'); fam := Cell(tEq, q, 'Famille');
+            END_IF;
+        END_FOR;
+        typ := '';
+        IF acces <> '' THEN typ := MemberType(fam, Cell(t, i, 'Parametre')); END_IF;
+        val := Cell(t, i, 'Valeur');
+        IF acces = '' THEN
+            Warn('Reglages : ' + eq + ' est introuvable ou inactif');
+            soucis := soucis + 1;
+        ELSIF typ = '' THEN
+            Warn('Reglages : ' + Cell(t, i, 'Parametre') + ' n est pas un champ de ' + fam + ' (' + eq + ')');
+            soucis := soucis + 1;
+        ELSIF typ = 'BOOL' THEN
+            IF FIND(',O,N,1,0,TRUE,FALSE,VRAI,FAUX,', ',' + UPPER(val) + ',', 0) < 0 THEN
+                Warn('Reglages : ' + eq + '.' + Cell(t, i, 'Parametre') + ' attend O ou N, pas "' + val + '"');
+                soucis := soucis + 1;
+            END_IF;
+        ELSIF typ = 'REAL' OR typ = 'INT' OR typ = 'DINT' OR typ = 'UINT' OR typ = 'UDINT' THEN
+            trouve := 1;
+            IF LEN(val) = 0 THEN trouve := 0; END_IF;
+            FOR q := 0 TO LEN(val) - 1 DO
+                IF FIND('0123456789.-+', MID(val, q, 1), 0) < 0 THEN trouve := 0; END_IF;
+            END_FOR;
+            IF trouve = 0 THEN
+                Warn('Reglages : ' + eq + '.' + Cell(t, i, 'Parametre') + ' attend un nombre, pas "' + val + '"');
+                soucis := soucis + 1;
+            END_IF;
+        END_IF;
+    END_FOR;
+END_IF;
+
+(* ---- Rotations -------------------------------------------------------------- *)
+IF HasSheet('Rotations') THEN
+    t := OpenSheet('Rotations');
+    n := RowCount(t);
+    FOR i := 0 TO n - 1 DO
+        eq := Cell(t, i, 'Equipement');
+        acces := ''; fam := '';
+        FOR q := 0 TO neq - 1 DO
+            IF Cell(tEq, q, 'Nom') = eq AND Cell(tEq, q, 'Actif') = 'O' THEN
+                acces := Cell(tEq, q, 'Acces ST'); fam := Cell(tEq, q, 'Famille');
+            END_IF;
+        END_FOR;
+        IF acces = '' THEN
+            Warn('Rotations ' + Cell(t, i, 'Groupe') + ' : ' + eq + ' est introuvable ou inactif');
+            soucis := soucis + 1;
+        ELSIF NOT HasMember(fam, 'RunReq') OR NOT HasMember(fam, 'Ready') OR NOT HasMember(fam, 'RunS') THEN
+            Warn('Rotations ' + Cell(t, i, 'Groupe') + ' : ' + eq + ' (' + fam + ') n a pas RunReq, Ready et RunS');
+            soucis := soucis + 1;
+        END_IF;
+        deja := 0;
+        FOR k := 0 TO i - 1 DO
+            IF Cell(t, k, 'Groupe') = Cell(t, i, 'Groupe') THEN deja := 1; END_IF;
+        END_FOR;
+        IF deja = 0 AND Cell(t, i, 'Demande') = '' THEN
+            Warn('Rotations ' + Cell(t, i, 'Groupe') + ' : la colonne Demande est vide sur la premiere ligne');
+            soucis := soucis + 1;
+        END_IF;
+    END_FOR;
+END_IF;
+
+(* ---- Paliers -------------------------------------------------------------- *)
+IF HasSheet('Paliers') THEN
+    t := OpenSheet('Paliers');
+    n := RowCount(t);
+    sens := '0';
+    FOR i := 0 TO n - 1 DO
+        deja := 0;
+        FOR k := 0 TO i - 1 DO
+            IF Cell(t, k, 'Groupe') = Cell(t, i, 'Groupe') THEN deja := 1; END_IF;
+        END_FOR;
+        IF deja = 0 THEN
+            sens := Cell(t, i, 'Sens');
+            IF sens = '' THEN sens := '0'; END_IF;
+            IF Cell(t, i, 'Mesure') = '' THEN
+                Warn('Paliers ' + Cell(t, i, 'Groupe') + ' : la colonne Mesure est vide sur la premiere ligne');
+                soucis := soucis + 1;
+            END_IF;
+        END_IF;
+        p := STRING_TO_INT(Cell(t, i, 'Palier'));
+        IF p < 0 OR p > 7 THEN
+            Warn('Paliers ' + Cell(t, i, 'Groupe') + ' : palier ' + Cell(t, i, 'Palier') + ' hors de 0..7');
+            soucis := soucis + 1;
+        END_IF;
+        IF sens = '0' AND STRING_TO_REAL(Cell(t, i, 'Marche')) <= STRING_TO_REAL(Cell(t, i, 'Arret')) THEN
+            Warn('Paliers ' + Cell(t, i, 'Groupe') + ' palier ' + Cell(t, i, 'Palier')
+                 + ' : en vidange, la marche doit etre au-dessus de l arret');
+            soucis := soucis + 1;
+        END_IF;
+        IF sens = '1' AND STRING_TO_REAL(Cell(t, i, 'Marche')) >= STRING_TO_REAL(Cell(t, i, 'Arret')) THEN
+            Warn('Paliers ' + Cell(t, i, 'Groupe') + ' palier ' + Cell(t, i, 'Palier')
+                 + ' : en remplissage, la marche doit etre au-dessous de l arret');
+            soucis := soucis + 1;
+        END_IF;
+    END_FOR;
+END_IF;
+
+(* ---- Modes ------------------------------------------------------------------ *)
+IF HasSheet('Modes') THEN
+    t := OpenSheet('Modes');
+    n := RowCount(t);
+    FOR i := 0 TO n - 1 DO
+        m := STRING_TO_INT(Cell(t, i, 'Mode'));
+        IF m < 0 OR m > 15 THEN
+            Warn('Modes : mode ' + Cell(t, i, 'Mode') + ' hors de 0..15');
+            soucis := soucis + 1;
+        END_IF;
+        FOR k := i + 1 TO n - 1 DO
+            IF STRING_TO_INT(Cell(t, k, 'Mode')) = m THEN
+                Warn('Modes : le mode ' + DINT_TO_STRING(m) + ' est decrit deux fois');
+                soucis := soucis + 1;
+            END_IF;
+        END_FOR;
+        IF Cell(t, i, 'Condition') = '' THEN
+            Warn('Modes : le mode ' + DINT_TO_STRING(m) + ' n a pas de condition');
+            soucis := soucis + 1;
+        END_IF;
+    END_FOR;
+END_IF;
+
+(* ---- Interverrouillages ------------------------------------------------------ *)
+IF HasSheet('Interverrouillages') THEN
+    t := OpenSheet('Interverrouillages');
+    n := RowCount(t);
+    FOR i := 0 TO n - 1 DO
+        FOR j := 0 TO 1 DO
+            IF j = 0 THEN eq := Cell(t, i, 'Vanne'); ELSE eq := Cell(t, i, 'Autre'); END_IF;
+            trouve := 0;
+            FOR q := 0 TO neq - 1 DO
+                IF Cell(tEq, q, 'Nom') = eq AND Cell(tEq, q, 'Actif') = 'O' THEN trouve := 1; END_IF;
+            END_FOR;
+            IF trouve = 0 THEN
+                Warn('Interverrouillages ' + Cell(t, i, 'Groupe') + ' : ' + eq + ' est introuvable ou inactif');
+                soucis := soucis + 1;
+            END_IF;
+        END_FOR;
+        s := UPPER(Cell(t, i, 'Relation'));
+        IF NOT STARTSWITH(s, 'INTERDIT') AND NOT STARTSWITH(s, 'EXIGE') THEN
+            Warn('Interverrouillages : relation "' + Cell(t, i, 'Relation') + '" inconnue (Interdite avec, ou Exige)');
+            soucis := soucis + 1;
+        END_IF;
+    END_FOR;
+END_IF;
+
+(* ---- Modbus --------------------------------------------------------------- *)
+IF HasSheet('Modbus') THEN
+    t := OpenSheet('Modbus');
+    n := RowCount(t);
+    FOR i := 0 TO n - 1 DO
+        s := 'Modbus ' + Cell(t, i, 'Liaison') + ' ' + Cell(t, i, 'Requete');
+        nb := STRING_TO_INT(Cell(t, i, 'Nombre'));
+        IF nb < 1 OR nb > 64 THEN
+            Warn(s + ' : ' + Cell(t, i, 'Nombre') + ' registres, il en faut de 1 a 64');
+            soucis := soucis + 1;
+        END_IF;
+        IF UPPER(Cell(t, i, 'Sens')) <> 'L' AND UPPER(Cell(t, i, 'Sens')) <> 'E' THEN
+            Warn(s + ' : Sens "' + Cell(t, i, 'Sens') + '", il faut L ou E');
+            soucis := soucis + 1;
+        END_IF;
+        IF FIND(Cell(t, i, 'Adresse'), '{', 0) < 0 THEN
+            Warn(s + ' : l adresse "' + Cell(t, i, 'Adresse') + '" n a pas la forme ADDM r.m.v{IP}unite');
+            soucis := soucis + 1;
+        END_IF;
+        compte := 0;
+        FOR k := 0 TO i - 1 DO
+            IF Cell(t, k, 'Liaison') = Cell(t, i, 'Liaison') THEN compte := compte + 1; END_IF;
+        END_FOR;
+        IF compte = 8 THEN
+            Warn(s + ' : neuvieme requete de la liaison, DFB_COM_MODBUS n en tient que 8');
+            soucis := soucis + 1;
+        END_IF;
+        eq := Cell(t, i, 'Equipement');
+        acces := ''; fam := '';
+        FOR q := 0 TO neq - 1 DO
+            IF Cell(tEq, q, 'Nom') = eq AND Cell(tEq, q, 'Actif') = 'O' THEN
+                acces := Cell(tEq, q, 'Acces ST'); fam := Cell(tEq, q, 'Famille');
+            END_IF;
+        END_FOR;
+        IF eq <> '' AND acces = '' THEN
+            Warn(s + ' : ' + eq + ' est introuvable ou inactif');
+            soucis := soucis + 1;
+        ELSIF acces <> '' THEN
+            val := Cell(t, i, 'Champs');
+            j := 0;
+            debut := 0;
+            WHILE debut <= LEN(val) DO
+                pos := FIND(val, ',', debut);
+                IF pos < 0 THEN champ := MID(val, debut); debut := LEN(val) + 1;
+                ELSE champ := MID(val, debut, pos - debut); debut := pos + 1;
+                END_IF;
+                IF champ <> '' THEN
+                    IF j >= nb THEN
+                        Warn(s + ' : ' + champ + ' tombe au registre ' + DINT_TO_STRING(j) + ', la requete n en a que '
+                             + DINT_TO_STRING(nb));
+                        soucis := soucis + 1;
+                    ELSIF NOT HasMember(fam, champ) THEN
+                        Warn(s + ' : ' + champ + ' n est pas un champ de ' + fam);
+                        soucis := soucis + 1;
+                    END_IF;
+                END_IF;
+                j := j + 1;
+            END_WHILE;
+        END_IF;
+    END_FOR;
+END_IF;
+
+(* ---- Grafcets (ImporterGrafcet) --------------------------------------------- *)
+(* Ce qui ferait sauter une ligne a l'import : numeros, etapes citees,
+   qualificatifs, INIT vers un grafcet absent. La structure (etape sans sortie,
+   etape jamais atteinte) et les raccourcis FIN, ACTIF, DUREE, FINI sont
+   verifies par ImporterGrafcet, dans son apercu. *)
+lettres := 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+ident := lettres + '0123456789_';
+qualifs := ',CONTINU,N,RISING,P1,DELAYON,D,PULSEON,LIMITEDON,L,FALLING,P0,PULSEOFF,LIMITEDOFF,'
+         + 'CONDDELAYEND,CONDDELAYPULSE,CONDLIMITEDON,CONDLIMITEDONTP,';
+gNoms := ',';       (* les grafcets : ',Brassage,Rincage,' *)
+gEtapes := '|';     (* les etapes declarees : '|Brassage:0|Brassage:1|' *)
+gInit := ',';       (* les grafcets qui ont une etape initiale *)
+vus := '|';
+g := ''; x := ''; ok := FALSE;
+IF HasSheet('Grafcet Etapes') THEN
+    t := OpenSheet('Grafcet Etapes');
+    n := RowCount(t);
+    FOR i := 0 TO n - 1 DO
+        g := Cell(t, i, 'Grafcet');
+        IF FIND(gNoms, ',' + g + ',', 0) < 0 THEN
+            gNoms := gNoms + g + ',';
+            ok := LEN(g) <= 20 AND FIND(lettres, MID(g, 0, 1), 0) >= 0;
+            FOR q := 0 TO LEN(g) - 1 DO
+                IF FIND(ident, MID(g, q, 1), 0) < 0 THEN ok := FALSE; END_IF;
+            END_FOR;
+            IF NOT ok THEN
+                Warn('Grafcet "' + g + '" : ce nom devient un nom de variable - lettres, chiffres, souligne, '
+                     + 'une lettre en tete, 20 caracteres au plus');
+                soucis := soucis + 1;
+            END_IF;
+        END_IF;
+        val := Cell(t, i, 'Etape');
+        ok := LEN(val) >= 1 AND LEN(val) <= 2;
+        FOR q := 0 TO LEN(val) - 1 DO
+            IF FIND('0123456789', MID(val, q, 1), 0) < 0 THEN ok := FALSE; END_IF;
+        END_FOR;
+        IF ok THEN val := DINT_TO_STRING(STRING_TO_INT(val)); END_IF;
+        IF NOT ok OR STRING_TO_INT(val) > 27 THEN
+            Warn('Grafcet ' + g + ' : etape "' + val + '" - un numero de 0 a 27');
+            soucis := soucis + 1;
+        ELSIF FIND(gEtapes, '|' + g + ':' + val + '|', 0) >= 0 THEN
+            Warn('Grafcet ' + g + ' : l etape ' + val + ' est declaree deux fois');
+            soucis := soucis + 1;
+        ELSE
+            gEtapes := gEtapes + g + ':' + val + '|';
+        END_IF;
+        s := UPPER(Cell(t, i, 'Initiale'));
+        IF (s = 'O' OR s = 'OUI' OR s = '1' OR s = 'X') AND FIND(gInit, ',' + g + ',', 0) < 0 THEN
+            gInit := gInit + g + ',';
+        END_IF;
+    END_FOR;
+    p := 1;
+    WHILE p < LEN(gNoms) DO
+        k := FIND(gNoms, ',', p);
+        g := MID(gNoms, p, k - p);
+        p := k + 1;
+        IF FIND(gInit, ',' + g + ',', 0) < 0 THEN
+            Warn('Grafcet ' + g + ' : aucune etape initiale (Initiale a O) - il ne demarrera jamais');
+            soucis := soucis + 1;
+        END_IF;
+    END_WHILE;
+ELSIF HasSheet('Grafcet Transitions') OR HasSheet('Grafcet Actions') THEN
+    Warn('Grafcets : des transitions ou des actions, mais pas d onglet Grafcet Etapes - ImporterGrafcet sera sautee');
+    soucis := soucis + 1;
+END_IF;
+
+IF HasSheet('Grafcet Etapes') AND HasSheet('Grafcet Transitions') THEN
+    t := OpenSheet('Grafcet Transitions');
+    n := RowCount(t);
+    vus := '|';
+    FOR i := 0 TO n - 1 DO
+        g := Cell(t, i, 'Grafcet');
+        val := Cell(t, i, 'Transition');
+        ok := LEN(val) >= 1 AND LEN(val) <= 2;
+        FOR q := 0 TO LEN(val) - 1 DO
+            IF FIND('0123456789', MID(val, q, 1), 0) < 0 THEN ok := FALSE; END_IF;
+        END_FOR;
+        IF ok THEN val := DINT_TO_STRING(STRING_TO_INT(val)); END_IF;
+        IF FIND(gNoms, ',' + g + ',', 0) < 0 THEN
+            Warn('Grafcet Transitions : le grafcet ' + g + ' n a aucune etape dans Grafcet Etapes');
+            soucis := soucis + 1;
+        ELSIF NOT ok OR STRING_TO_INT(val) > 27 THEN
+            Warn('Grafcet ' + g + ' : transition "' + val + '" - un numero de 0 a 27');
+            soucis := soucis + 1;
+        ELSE
+            IF FIND(vus, '|' + g + ':' + val + '|', 0) >= 0 THEN
+                Warn('Grafcet ' + g + ' : la transition ' + val + ' est declaree deux fois');
+                soucis := soucis + 1;
+            END_IF;
+            vus := vus + g + ':' + val + '|';
+            FOR j := 0 TO 1 DO
+                IF j = 0 THEN s := Cell(t, i, 'De'); sens := 'De'; ELSE s := Cell(t, i, 'Vers'); sens := 'Vers'; END_IF;
+                s := s + ',';
+                nb := 0;
+                debut := 0;
+                WHILE debut < LEN(s) DO
+                    pos := FIND(s, ',', debut);
+                    x := MID(s, debut, pos - debut);
+                    debut := pos + 1;
+                    WHILE LEN(x) > 0 AND MID(x, 0, 1) = ' ' DO x := MID(x, 1); END_WHILE;
+                    WHILE LEN(x) > 0 AND MID(x, LEN(x) - 1, 1) = ' ' DO x := MID(x, 0, LEN(x) - 1); END_WHILE;
+                    IF x <> '' THEN
+                        nb := nb + 1;
+                        IF FIND(gEtapes, '|' + g + ':' + x + '|', 0) < 0 THEN
+                            Warn('Grafcet ' + g + ' : T' + val + ' : l etape ' + x + ' (' + sens + ') n est pas declaree');
+                            soucis := soucis + 1;
+                        END_IF;
+                    END_IF;
+                END_WHILE;
+                IF nb = 0 THEN
+                    Warn('Grafcet ' + g + ' : T' + val + ' : aucune etape ' + sens);
+                    soucis := soucis + 1;
+                ELSIF nb > 3 THEN
+                    Warn('Grafcet ' + g + ' : T' + val + ' : ' + DINT_TO_STRING(nb) + ' etapes ' + sens
+                         + ', le moteur en tient 3');
+                    soucis := soucis + 1;
+                END_IF;
+            END_FOR;
+            IF Cell(t, i, 'Receptivite') = '' THEN
+                Warn('Grafcet ' + g + ' : T' + val + ' sans receptivite - elle ne sera jamais franchie');
+                soucis := soucis + 1;
+            END_IF;
+        END_IF;
+    END_FOR;
+END_IF;
+
+IF HasSheet('Grafcet Etapes') AND HasSheet('Grafcet Actions') THEN
+    t := OpenSheet('Grafcet Actions');
+    n := RowCount(t);
+    vus := '|';
+    FOR i := 0 TO n - 1 DO
+        g := Cell(t, i, 'Grafcet');
+        val := Cell(t, i, 'Action');
+        ok := LEN(val) >= 1 AND LEN(val) <= 2;
+        FOR q := 0 TO LEN(val) - 1 DO
+            IF FIND('0123456789', MID(val, q, 1), 0) < 0 THEN ok := FALSE; END_IF;
+        END_FOR;
+        IF ok THEN val := DINT_TO_STRING(STRING_TO_INT(val)); END_IF;
+        IF FIND(gNoms, ',' + g + ',', 0) < 0 THEN
+            Warn('Grafcet Actions : le grafcet ' + g + ' n a aucune etape dans Grafcet Etapes');
+            soucis := soucis + 1;
+        ELSIF NOT ok OR STRING_TO_INT(val) > 27 THEN
+            Warn('Grafcet ' + g + ' : action "' + val + '" - un numero de 0 a 27');
+            soucis := soucis + 1;
+        ELSE
+            IF FIND(vus, '|' + g + ':' + val + '|', 0) >= 0 THEN
+                Warn('Grafcet ' + g + ' : l action ' + val + ' est declaree deux fois');
+                soucis := soucis + 1;
+            END_IF;
+            vus := vus + g + ':' + val + '|';
+            x := Cell(t, i, 'Etape');
+            IF FIND(gEtapes, '|' + g + ':' + x + '|', 0) < 0 THEN
+                Warn('Grafcet ' + g + ' : A' + val + ' : l etape "' + x + '" n est pas declaree');
+                soucis := soucis + 1;
+            END_IF;
+            s := UPPER(Cell(t, i, 'Qualificatif'));
+            WHILE LEN(s) > 0 AND MID(s, 0, 1) = ' ' DO s := MID(s, 1); END_WHILE;
+            IF s <> '' THEN
+                IF FIND('0123456789', MID(s, 0, 1), 0) >= 0 THEN
+                    k := 0;
+                    WHILE k < LEN(s) AND FIND('0123456789', MID(s, k, 1), 0) >= 0 DO k := k + 1; END_WHILE;
+                    ok := STRING_TO_INT(MID(s, 0, k)) <= 11;
+                ELSE
+                    ok := FIND(qualifs, ',' + s + ',', 0) >= 0;
+                END_IF;
+                IF NOT ok THEN
+                    Warn('Grafcet ' + g + ' : A' + val + ' : qualificatif "' + Cell(t, i, 'Qualificatif')
+                         + '" inconnu (0 a 11, ou CONTINU, RISING, DELAYON, LIMITEDON, FALLING...)');
+                    soucis := soucis + 1;
+                END_IF;
+            END_IF;
+            s := Cell(t, i, 'Cible');
+            IF STARTSWITH(UPPER(s), 'INIT(') THEN
+                k := FIND(s, ')', 5);
+                x := '';
+                IF k > 5 THEN x := MID(s, 5, k - 5); END_IF;
+                WHILE LEN(x) > 0 AND MID(x, 0, 1) = ' ' DO x := MID(x, 1); END_WHILE;
+                WHILE LEN(x) > 0 AND MID(x, LEN(x) - 1, 1) = ' ' DO x := MID(x, 0, LEN(x) - 1); END_WHILE;
+                IF FIND(gNoms, ',' + x + ',', 0) < 0 THEN
+                    Warn('Grafcet ' + g + ' : A' + val + ' : INIT(' + x + ') - le classeur n a pas de grafcet '
+                         + x + ', l action serait sans effet');
+                    soucis := soucis + 1;
+                END_IF;
+            END_IF;
+        END_IF;
+    END_FOR;
+END_IF;
+
+IF HasSheet('Grafcets') AND HasSheet('Grafcet Etapes') THEN
+    t := OpenSheet('Grafcets');
+    n := RowCount(t);
+    FOR i := 0 TO n - 1 DO
+        g := Cell(t, i, 'Grafcet');
+        IF FIND(gNoms, ',' + g + ',', 0) < 0 THEN
+            Warn('Grafcets : ' + g + ' n a aucune etape dans Grafcet Etapes - sa ligne est sans effet');
+            soucis := soucis + 1;
+        END_IF;
+    END_FOR;
+END_IF;
+
+IF soucis = 0 THEN
+    Log('aucun probleme trouve. ImporterProgramme peut tourner.');
+ELSE
+    Warn(DINT_TO_STRING(soucis) + ' point(s) a regler avant d importer : voir ci-dessus.');
+END_IF;

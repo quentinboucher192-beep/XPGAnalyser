@@ -1,0 +1,131 @@
+# =============================================================================
+#  Session 78 - 1.10 : le volet Code du grafcet et le direct (chantier R2,
+#  decision 11 bis). Captures PNG_1080 et suivantes, dans une COPIE de
+#  Armoire_Gaz. DetoxalA s'ouvre par son instance dans l'arbre (comme la
+#  session 76) ; T2 est choisie dans le dessin (son trait), A1 et A0 aussi.
+#   1080 : T2 choisie -> sa receptivite dans le volet Code (sous le dessin)
+#   1081 : l'aide a la saisie : noms du programme + raccourcis du grafcet
+#   1082 : modifie (le titre le dit, Appliquer / Retablir actifs)
+#   1083 : Ctrl+Entree -> applique, raccourci developpe, texte du programme
+#   1084 : l'onglet SFC_DetoxalA (ouvert par Aller a) : la ligne 62 reecrite
+#          par le grafcet (ACTIF(X1) developpe en Steps_DetoxalA[1].Active)
+#   1085 : le libelle de T2 modifie en ST (Edit, PT9 insere)
+#   1086 : retour au grafcet : T2 redessinee avec le nouveau libelle
+#   1087 : Ctrl+Z : l'appli va a l'onglet ST, le libelle y est revenu
+#   1088 : retour au grafcet : le libelle y est revenu aussi
+#   1089 : A1 choisie (son corps), Suppr -> l'apercu "Ce qui va changer"
+#   1090 : A0, Suppr -> refus : employee dans les receptivites de T2, T3
+#   1091 : double-clic sur A0 -> la fiche (genre, duree, nom, etape)
+#   1092 : en simulation (-O0 : le cycle de MAST depasse sa limite, l'API
+#          s'arrete au cycle 1 : "en ligne" ne se voit qu'en Release)
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+arbre-filtre "Gc_DetoxalA"
+attendre 3
+arbre "API/Unités de programme/Logigrammes_A/Variables privées/Gc_DetoxalA" double
+attendre 6
+arbre-filtre ""
+attendre 2
+clic 911 326
+attendre 2
+survol 1700 1000
+attendre 1
+capture PNG_1080_grafcet_volet_code_T2.png
+clic 1300 800
+attendre 1
+touche ctrl+fin
+texte " AND ACT"
+attendre 1
+touche ctrl+espace
+attendre 2
+capture PNG_1081_grafcet_volet_code_aide_saisie.png
+touche echap
+texte "IF(X1)"
+attendre 1
+capture PNG_1082_grafcet_volet_code_modifie.png
+touche ctrl+entree
+attendre 3
+survol 1700 1000
+attendre 1
+capture PNG_1083_grafcet_volet_code_applique.png
+aller-a "SFC_DetoxalA"
+attendre 3
+touche entree
+attendre 5
+clic 1300 600
+attendre 1
+touche ctrl+fin
+attendre 2
+clic 700 230
+attendre 1
+touche fin
+attendre 2
+survol 1700 1000
+attendre 1
+capture PNG_1084_section_st_relue.png
+touche ctrl+debut
+attendre 2
+clic 630 91
+attendre 1
+clic 992 502 double
+attendre 1
+texte "PT9"
+attendre 2
+capture PNG_1085_section_st_modifiee.png
+onglet "DetoxalA"
+attendre 3
+survol 1700 1000
+attendre 1
+capture PNG_1086_grafcet_redessine.png
+touche ctrl+z
+attendre 3
+capture PNG_1087_section_st_ctrl_z.png
+onglet "DetoxalA"
+attendre 3
+survol 1700 1000
+attendre 1
+capture PNG_1088_grafcet_ctrl_z.png
+clic 1000 388
+attendre 2
+survol 1700 1000
+attendre 1
+touche suppr
+attendre 2
+capture PNG_1089_grafcet_supprimer_action_apercu.png
+touche echap
+attendre 2
+clic 1060 276
+attendre 2
+touche suppr
+attendre 2
+capture PNG_1090_grafcet_supprimer_action_refus.png
+touche echap
+attendre 2
+clic 1060 276 double
+attendre 3
+capture PNG_1091_grafcet_modifier_action.png
+touche echap
+attendre 2
+centre-aller "sim.run"
+attendre 8
+etat-simulation
+onglet "DetoxalA"
+attendre 3
+clic 911 326
+attendre 2
+clic 1300 800
+attendre 1
+touche ctrl+fin
+texte " AND TRUE"
+touche ctrl+entree
+attendre 6
+survol 1700 1000
+attendre 1
+etat-simulation
+capture PNG_1092_grafcet_simulation.png
+quitter

@@ -1,0 +1,92 @@
+# =============================================================================
+#  Session t1112-essayer - 1.11.2 (T1, R1112-3 et R1112-4 de R111, decision 180)
+#  R1112-4 : « Essayer » sur un tutoriel sans « A toi » a l'etape 1 rejouait la
+#  demonstration sans un mot. Il ouvre l'« A toi » le plus proche et le dit
+#  (menu-aide : l'etape 2) ; sans aucun « A toi » (vues), il montre les gestes
+#  et le dit.
+#  R1112-3 : avec le bac, a 8 s, les bulles de menu-aide et de didacticiel
+#  decrivaient le centre d'aide et sa page, absents de l'ecran. L'« A toi » F1
+#  est maintenant l'etape 2 ; l'etape 3 ouvre la page du sujet dans le centre.
+#  Le chemin du client : un HOME neuf, « New machine » ouvert, F1, le sujet, son
+#  bouton. A lancer sans XPG_TUTORIELS, --size 1920x1080, avec le modele a cote
+#  de l'appli (bac/Armoire_Gaz) ou PROJETS=<dossier d'Armoire_Gaz>.
+# =============================================================================
+attendre 30
+bouton "Définir la clé"
+attendre 10
+action project.new
+attendre 10
+bouton Create
+attendre-projet
+attendre 30
+touche f1
+attendre 15
+# R1112-4 : vues n'a aucun « A toi » : la demonstration, et le lecteur le dit.
+aide-sujet vues
+attendre 10
+aide-cible essayer:vues
+attendre 150
+tutoriel-etat lecture
+tutoriel-etape 1
+tutoriel-mot "n'a pas d"
+tutoriel-lit centre.ouvert non
+capture t1112-essayer-01-vues-pas-d-atoi.png
+tutoriel-quitter
+attendre 30
+# R1112-4 et R1112-3 : menu-aide : « Essayer » ouvre l'« A toi » F1, l'etape 2, et le dit.
+aide-sujet menu-aide
+attendre 10
+aide-cible essayer:menu-aide
+attendre 150
+tutoriel-etat atoi
+tutoriel-etape 2
+tutoriel-mot "tape 2"
+tutoriel-lit centre.ouvert non
+capture t1112-essayer-02-menu-aide-atoi.png
+tutoriel-quitter
+attendre 30
+# R1112-3 : « Regarder » menu-aide : vers 8 s, puis l'etape 3 : le centre ouvert sur la page du sujet.
+aide-sujet menu-aide
+attendre 10
+aide-cible tuto:menu-aide
+attendre 5
+tutoriel-etat lecture
+tutoriel-mot -
+attendre 240
+capture t1112-essayer-03-menu-aide-8s.png
+tutoriel-aller 3 1500
+tutoriel-attendre
+attendre 30
+tutoriel-etape 3
+tutoriel-lit centre.ouvert oui
+capture t1112-essayer-04-menu-aide-etape3.png
+tutoriel-quitter
+attendre 30
+# R1112-3 : « Regarder » didacticiel : vers 8 s, puis l'etape 3 sur la page du sujet.
+aide-sujet didacticiel
+attendre 10
+aide-cible tuto:didacticiel
+attendre 5
+tutoriel-etat lecture
+attendre 240
+capture t1112-essayer-05-didacticiel-8s.png
+tutoriel-aller 3 1500
+tutoriel-attendre
+attendre 30
+tutoriel-etape 3
+tutoriel-lit centre.ouvert oui
+capture t1112-essayer-06-didacticiel-etape3.png
+tutoriel-quitter
+attendre 30
+# Un objet garde son « A toi » a l'etape 1, sans mot (rien ne change pour lui).
+aide-sujet objet-ligne
+attendre 10
+aide-cible essayer:objet-ligne
+attendre 150
+tutoriel-etat atoi
+tutoriel-etape 1
+tutoriel-mot -
+tutoriel-quitter
+attendre 30
+capture t1112-essayer-07-retour-centre.png
+quitter

@@ -1,0 +1,151 @@
+# Derived data type, shared.
+name = ST_EQ_Drive
+version = 1.01
+#! summary = Un variateur : consigne, rampe, ecart, mots d'etat, sortie en points.
+#! usage = Le contrat commun a toutes les familles d'equipement :
+#! usage = Enable a FALSE fige l'equipement - aucune sortie, aucun defaut. Un
+#! usage = equipement consigne ne doit pas remplir le journal d'alarmes pendant
+#! usage = qu'on travaille dessus.
+#! usage = ManMode fait primer les commandes Man* sur l'automatisme.
+#! usage = AckFault acquitte SUR FRONT MONTANT, et seulement si la condition a
+#! usage = disparu.
+#! usage = LE DEFAUT EST MEMORISE par FaultLatch. Un thermique qui se rearme tout
+#! usage = seul en refroidissant effacerait la trace de son declenchement, et
+#! usage = personne ne saurait pourquoi la machine s'est arretee cette nuit-la.
+#! see = DFB_EQ_DRIVE
+#! see = ST_EQ_Motor
+#! param Enable = FALSE fige l'equipement : aucune sortie, aucun defaut, et les compteurs
+#! param Enable = cessent d'avancer. C'est l'etat d'une machine consignee.
+#! param Fault = La copie PUBLIEE de FaultLatch, posee en fin de cycle. Les sorties, elles,
+#! param Fault = se coupent sur FaultLatch - c'est-a-dire dans le MEME cycle que le defaut.
+#! param Fault = Les couper sur Fault laisserait l'equipement pilote un cycle de plus :
+#! param Fault = vingt millisecondes pendant lesquelles on le commande alors qu'on vient de
+#! param Fault = decouvrir qu'on ne sait plus ou il en est.
+#! param FaultCode = Le dernier code pose, 0 quand il n'y a rien. Voir la table de cette famille,
+#! param FaultCode = en tete de fichier. Il n'est efface que par AckFault.
+#! param Ready = Active et sans defaut. C'est ce qu'on cable sur Available d'une rotation :
+#! param Ready = un equipement en defaut est alors saute, et il reprend son rang en revenant.
+#! param Starts = Nombre de demarrages depuis le dernier Reset. Un compteur qui grimpe vite
+#! param Starts = est la signature d'un court-cycle - voir MinOffMs quand la famille en a un.
+#! param SpeedReq = La consigne en unites physiques, PAS en points. La conversion vers RawOut est
+#! param SpeedReq = faite ici, une fois, plutot que recopiee dans chaque section.
+#! param Speed = La consigne apres rampe et bornage : c'est ce qu'on envoie reellement. La
+#! param Speed = comparer a SpeedReq montre ou en est la rampe.
+#! param RampMs = Duree pour parcourir TOUTE la plage SpeedMin..SpeedMax. 0 : pas de rampe ici -
+#! param RampMs = c'est alors celle du variateur qui joue, s'il en a une.
+#! param RawOut = La consigne en points, prete pour un %QW. Une plage SpeedMin = SpeedMax est
+#! param RawOut = une division par zero qui arreterait la tache : elle est detectee, et RawOut
+#! param RawOut = prend RawMin.
+#! param MaxDeviation = Au-dela de cet ecart et au bout de DevDelayMs, defaut 3. 0 desactive - et
+#! param MaxDeviation = c'est le defaut, donc un variateur sans retour de vitesse ne crie pas.
+#! param Deviation = Ecart entre la consigne envoyee et la mesure remontee. Il n'est surveille que
+#! param Deviation = pendant la marche : a l'arret, un ecart est normal.
+#! fault 1 = Le variateur signale un defaut par son mot d'etat (DriveFault).
+#! fault 2 = Le variateur n'est pas pret alors qu'on demande la marche. Verifier
+#! fault 2 = l'alimentation de puissance et le mot d'etat avant de chercher ailleurs.
+#! fault 3 = Ecart consigne / mesure trop grand pendant plus de DevDelayMs. Une courroie
+#! fault 3 = qui patine, un accouplement casse, ou une consigne que la machine ne peut pas
+#! fault 3 = tenir.
+#! internal = PrevAck, DevElapsed, PrevRunning, RunFracMs, PrevState
+#! param Reverse = Sens arriere. La commande sort alors sur RunRev au lieu de Run.
+#! param Reverse = Avant la 1.02, ce champ n'etait pas lu.
+#! param RunRev = La sortie MARCHE ARRIERE du variateur (entree RV). Jamais en meme
+#! param RunRev = temps que Run.
+#! param Run = La sortie MARCHE AVANT du variateur (entree FW). Coupee sur un defaut,
+#! param Run = et tant que DriveReady est faux.
+#! param Running = En marche : une commande (Run ou RunRev), et le variateur pret et
+#! param Running = sans defaut. C'est ce qui fait avancer RunMs, RunS et Starts, et ce
+#! param Running = qui arme la surveillance d'ecart.
+#! param ManSpeedReq = Consigne en manuel, en unites physiques, suivie tant que
+#! param ManSpeedReq = ManMode est vrai.
+#! param SpeedMin = Bas de la plage physique : la consigne est bornee ici AVANT la
+#! param SpeedMin = rampe, et c'est la vitesse envoyee a l'arret.
+#! param SpeedMax = Haut de la plage physique. SpeedMax = SpeedMin est une plage nulle
+#! param SpeedMax = : la sortie reste alors a RawMin au lieu de diviser par zero.
+#! param SpeedFbk = La vitesse mesuree, remontee par le variateur (sortie analogique
+#! param SpeedFbk = ou mot reseau), dans les memes unites que la consigne.
+#! param DevDelayMs = Combien de temps l'ecart peut depasser MaxDeviation avant le
+#! param DevDelayMs = defaut 3. Laisse le temps a une rampe de rattraper la consigne.
+#! param DriveReady = Le variateur est pret (bit de son mot d'etat, ou contact). Sans
+#! param DriveReady = lui, aucune commande ne sort, et une demande de marche pose le
+#! param DriveReady = defaut 2.
+#! param DriveFault = Le variateur est en defaut (bit de son mot d'etat). Pose le
+#! param DriveFault = defaut 1.
+#! param RawMin = La plage de la sortie analogique, en points : ce que vaut RawOut a
+#! param RawMin = SpeedMin.
+#! param RawMax = Ce que vaut RawOut a SpeedMax. 10000 pour une carte BMX AMO en 0-10
+#! param RawMax = V.
+#! changes 1.01 = AJOUTS EN FIN DE TYPE : RunS (temps de marche en secondes, sans
+#! changes 1.01 = debordement), State (etat publie : 0 desactive, 1 defaut, 2 repos, 3
+#! changes 1.01 = en service), et deux champs internes. RunMs et StateMs plafonnent a
+#! changes 1.01 = 2 000 000 000 ms au lieu de devenir negatifs. Variateur : RunRev, la
+#! changes 1.01 = sortie marche arriere.
+#! example = (* declarer :
+#! example =    Vf : ARRAY[0..15] OF ST_EQ_Drive;
+#! example =    DI : ARRAY[0..15] OF ST_IO_Dig;
+#! example =    DQ : ARRAY[0..15] OF ST_IO_Dig;
+#! example =    AO : ARRAY[0..3] OF ST_IO_Ana; *)
+#! example = (* la configuration, une fois *)
+#! example = Vf[0].Name     := 'VF301 extraction';
+#! example = Vf[0].SpeedMin := 10.0;
+#! example = Vf[0].SpeedMax := 50.0;          (* Hz *)
+#! example = Vf[0].RampMs   := 5000;          (* 0 a SpeedMax en 5 s *)
+#! example = (* les retours du variateur, AVANT l'appel de DFB_EQ_DRIVE *)
+#! example = Vf[0].DriveReady := DI[0].Val;
+#! example = Vf[0].DriveFault := DI[1].Val;
+#! example = (* apres : la consigne vers une sortie analogique, les sens vers des sorties TOR *)
+#! example = AO[0].Val := Vf[0].Speed;
+#! example = DQ[0].Val := Vf[0].Run;
+#! example = DQ[1].Val := Vf[0].RunRev;
+#! given = DI[0].Val := TRUE
+#! expect = 1 : Vf[0].DriveReady = TRUE
+#! expect = 1 : Vf[0].SpeedMax = 50.0
+#! expect = 1 : DQ[0].Val = FALSE
+
+# Un variateur: consigne, rampe, ecart, mots d'etat, sortie en points.
+#
+# Codes de defaut (FaultCode):
+# 1  le variateur signale un defaut (mot d'etat)
+# 2  le variateur n'est pas pret alors qu'on demande la marche
+# 3  ecart consigne / mesure trop grand pendant plus de DevDelayMs
+
+# name ; type ; scope ; initial ; comment
+Name ; STRING[16] ; Member ;  ; ce que l'operateur lit
+Enable ; BOOL ; Member ; TRUE ; FALSE fige l'equipement: aucune sortie, aucun defaut
+ManMode ; BOOL ; Member ;  ; TRUE: les commandes manuelles priment sur l'automatisme
+AckFault ; BOOL ; Member ;  ; front montant: acquitte le defaut s'il a disparu
+PrevAck ; BOOL ; Member ;  ; runtime, ne pas ecrire
+RunReq ; BOOL ; Member ;  ; demande de marche
+ManRunReq ; BOOL ; Member ;  ; demande manuelle
+Reverse ; BOOL ; Member ;  ; sens arriere
+SpeedReq ; REAL ; Member ; 0.0 ; consigne, en unites physiques
+ManSpeedReq ; REAL ; Member ; 0.0 ; consigne manuelle
+SpeedMin ; REAL ; Member ; 0.0 ; plage physique
+SpeedMax ; REAL ; Member ; 50.0 ; 
+RampMs ; DINT ; Member ; 0 ; duree pour parcourir toute la plage. 0: pas de rampe ici
+Speed ; REAL ; Member ; 0.0 ; consigne apres rampe et bornage: ce qu'on envoie
+SpeedFbk ; REAL ; Member ; 0.0 ; vitesse mesuree, remontee par le variateur
+Deviation ; REAL ; Member ; 0.0 ; ecart consigne / mesure
+MaxDeviation ; REAL ; Member ; 0.0 ; au-dela et au bout de DevDelayMs, defaut. 0 desactive
+DevDelayMs ; DINT ; Member ; 3000 ; 
+DevElapsed ; DINT ; Member ; 0 ; runtime
+Run ; BOOL ; Member ;  ; sortie marche avant
+Running ; BOOL ; Member ;  ; en marche : commande, variateur pret et sans defaut
+DriveReady ; BOOL ; Member ;  ; mot d'etat: pret
+DriveFault ; BOOL ; Member ;  ; mot d'etat: defaut
+RawOut ; INT ; Member ; 0 ; consigne en points, prete pour %QW
+RawMin ; INT ; Member ; 0 ; plage de la sortie analogique
+RawMax ; INT ; Member ; 10000 ; 
+PrevRunning ; BOOL ; Member ;  ; runtime
+Fault ; BOOL ; Member ;  ; un defaut est present
+FaultCode ; INT ; Member ; 0 ; 0 aucun. Voir la table de la famille
+FaultLatch ; BOOL ; Member ;  ; le defaut reste jusqu'a AckFault, meme s'il disparait
+Ready ; BOOL ; Member ;  ; utilisable: active, sans defaut
+RunMs ; DINT ; Member ; 0 ; temps de fonctionnement cumule, en ms, plafonne a 2 000 000 000 (555 h) : lire RunS
+Starts ; UDINT ; Member ; 0 ; nombre de demarrages depuis le dernier Reset
+StateMs ; DINT ; Member ; 0 ; temps dans l'etat courant (State), en ms, plafonne a 2 000 000 000
+RunRev ; BOOL ; Member ;  ; sortie marche arriere, quand Reverse est vrai
+RunS ; UDINT ; Member ; 0 ; temps de fonctionnement cumule, en secondes : ne deborde pas avant 136 ans
+RunFracMs ; DINT ; Member ; 0 ; runtime, ne pas ecrire : les millisecondes pas encore comptees dans RunS
+State ; INT ; Member ; 0 ; etat publie : 0 desactive, 1 en defaut, 2 au repos, 3 en service
+PrevState ; INT ; Member ; -1 ; runtime, ne pas ecrire

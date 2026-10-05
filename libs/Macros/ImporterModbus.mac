@@ -1,0 +1,277 @@
+(* ImporterModbus
+
+   Les echanges Modbus TCP avec les equipements distants, depuis l'onglet
+   Modbus du classeur : une ligne par requete, et la liste des champs
+   d'equipement que ses registres alimentent.
+
+     Liaison  Requete   Adresse               Sens  Premier  Nombre  Champs
+     ATV1     Etat      0.0.3{192.168.1.21}1   L     3201     4       Eta,Rfr,,Lcr
+     ATV1     Commande  0.0.3{192.168.1.21}1   E     8501     2       Cmd,Lfr
+
+   Data[0] va dans Eta, Data[1] dans Rfr, Data[2] nulle part, Data[3] dans
+   Lcr. Une requete d'ECRITURE fait l'inverse, apres les equipements.
+
+   #! summary = Génère les requêtes Modbus TCP (DFB_COM_MODBUS) depuis l'onglet Modbus, et relie leurs registres aux champs des équipements.
+   #! version = 1.10
+   #! changes 1.10 = Le formulaire : chaque question a son champ (le classeur par …, Ctrl+V ou en le glissant ; les tâches et les sections du projet ; des interrupteurs ; des choix à libellés), ses groupes, son aide et un libellé avec accents. Le code ne change pas.
+   #! usage = UNE INSTANCE DE DFB_COM_MODBUS PAR LIAISON, huit requetes au plus chacune : MB_<liaison> et MB_<liaison>_Req. Les requetes partent une a la fois, la plus en retard d'abord.
+   #! usage = TROIS SECTIONS. Modbus_Init pose l'adresse, le sens, les registres et les periodes au premier cycle. Modbus_Entrees appelle le bloc et recopie ce qui a ete LU dans les equipements - avant eux. Modbus_Sorties recopie ce qu'il faut ECRIRE depuis les equipements - apres eux. RangerSections les place.
+   #! usage = CommOk : si la famille a un champ CommOk (ST_EQ_Atv), il est cable sur la fraicheur (Ok) de ses requetes de lecture. Sans lui, un etat fige par une liaison coupee serait lu comme un variateur qui tourne encore.
+   #! usage = LES TYPES sont convertis : un registre est un INT ; un champ REAL recoit INT_TO_REAL, un DINT INT_TO_DINT, un BOOL le test <> 0 - et l'inverse a l'ecriture.
+   #! usage = SimActive : la variable globale de simulation, creee si elle manque. A TRUE, aucun echange ne part et chaque requete reussit en un cycle ; c'est ce qui fait tourner le programme dans le simulateur. JAMAIS A TRUE SUR SITE.
+   #! usage = A VALIDER SUR SITE : l'adresse ADDM, le premier registre (compte-t-il a partir de 0 ou de 1 ?) et les mots de l'equipement se verifient sur le vrai materiel, une requete a la fois.
+   #! see = ImporterProgramme, GenererSimulation, VerifierClasseur, RangerSections
+   #! param classeur = Le classeur de l'affaire (.xlsx ou .xlsm) : glisse-le sur le champ, choisis-le avec …, ou colle-le (Ctrl+V) après l'avoir copié dans l'Explorateur. Vide : le dernier classeur ouvert, le cas normal quand on enchaîne les imports.
+   #! param tache = Les sections générées vont dans cette tâche.
+   #! param tache = La tache d'accueil des sections, MAST en general.
+   #! param prefSection = Vide en général : il sert quand deux automates partagent un projet.
+   #! param prefSection = Le prefixe des sections generees, le meme qu'a l'import. Vide en general.
+   #! categorie = Importer depuis le classeur/Étapes de l'import
+   #! champ classeur = fichier .xlsx .xlsm facultatif
+   #! libelle classeur = Le classeur de l'affaire
+   #! champ tache = tache
+   #! libelle tache = Tâche d'accueil des sections
+   #! champ prefSection = nom facultatif
+   #! libelle prefSection = Préfixe des noms de section
+   #! exemple prefSection = {}Modbus_Init, {}Modbus_Entrees
+   #! groupe Programme = tache, prefSection
+   #! avance = prefSection
+   #! produit = les requêtes Modbus TCP (DFB_COM_MODBUS) et le lien de leurs registres aux équipements
+   #! appliquer = Appliquer : les sections Modbus sont réécrites en entier
+*)
+
+chemin := Ask('classeur', 'Chemin du classeur (vide = celui deja charge)', '');
+AskNow();
+tache       := Ask('tache', 'Tache d accueil des sections', 'MAST');
+prefSection := Ask('prefSection', 'Prefixe des noms de section (vide en general)', '');
+AskNow();
+
+wb := OpenWorkbook(chemin);
+IF wb < 0 THEN Fail('classeur introuvable'); END_IF;
+tMb := OpenSheet('Modbus');
+IF tMb < 0 THEN Fail('onglet "Modbus" introuvable : il se copie depuis onglets-a-ajouter.xlsx'); END_IF;
+tEq := OpenSheet('Equipements');
+IF tEq < 0 THEN Fail('onglet "Equipements" introuvable'); END_IF;
+
+periode := Setting('Periode (ms)');
+IF periode = '' THEN periode := '20'; END_IF;
+cycle := periode;
+IF VariableExists('Horloge') THEN cycle := 'Horloge.DtMs'; END_IF;
+
+nl := CHR(10);
+sInit := prefSection + 'Modbus_Init';
+sIn   := prefSection + 'Modbus_Entrees';
+sOut  := prefSection + 'Modbus_Sorties';
+n := RowCount(tMb);
+neq := RowCount(tEq);
+
+i := 0; k := 0; j := 0; q := 0; r := 0; nb := 0; deja := 0; pos := 0; debut := 0;
+L := ''; req := ''; tab := ''; inst := ''; eq := ''; acces := ''; fam := ''; champs := '';
+champ := ''; typ := ''; data := ''; ecrit := 0; sens := '';
+initTxt := '';
+sig := 0;
+soucis := 0;
+nReq := 0;
+nLiens := 0;
+okLu := '';
+
+IF NOT TypeExists('ST_COM_Modbus') AND LibHasItem('ST_COM_Modbus') THEN LibImport('ST_COM_Modbus'); END_IF;
+IF NOT PouExists('DFB_COM_MODBUS') AND LibHasItem('DFB_COM_MODBUS') THEN LibImport('DFB_COM_MODBUS'); END_IF;
+IF NOT VariableExists('SimActive') THEN
+    AddVariable('SimActive', 'BOOL', 'Global', '', 'FALSE',
+                'simulation : aucun echange reel. JAMAIS A TRUE SUR SITE');
+END_IF;
+
+IF NOT SectionExists(sIn) THEN AddSection(sIn, tache, 'ST', ''); END_IF;
+IF NOT SectionExists(sOut) THEN AddSection(sOut, tache, 'ST', ''); END_IF;
+ClearSection(sIn);
+ClearSection(sOut);
+AppendToSection(sIn, '(* Genere par ImporterModbus : les requetes, puis ce qui a ete LU, vers les');
+AppendToSection(sIn, '   equipements - AVANT eux. *)');
+AppendToSection(sOut, '(* Genere par ImporterModbus : ce qu il faut ECRIRE, depuis les equipements -');
+AppendToSection(sOut, '   APRES eux. La requete part au cycle suivant. *)');
+
+FOR i := 0 TO n - 1 DO
+    L := Cell(tMb, i, 'Liaison');
+    deja := 0;
+    FOR k := 0 TO i - 1 DO
+        IF Cell(tMb, k, 'Liaison') = L THEN deja := 1; END_IF;
+    END_FOR;
+    IF L <> '' AND deja = 0 THEN
+        tab := 'MB_' + L + '_Req';
+        inst := 'MB_' + L;
+        IF NOT VariableExists(tab) THEN AddVariable(tab, 'ARRAY[0..7] OF ST_COM_Modbus', 'Global', ''); END_IF;
+        IF NOT VariableExists(inst) THEN AddVariable(inst, 'DFB_COM_MODBUS', 'Global', ''); END_IF;
+
+        (* Premier passage : les requetes, et l'appel. *)
+        r := 0;
+        FOR k := i TO n - 1 DO
+            IF Cell(tMb, k, 'Liaison') = L THEN
+                IF r > 7 THEN
+                    Warn('Modbus ' + L + ' : plus de 8 requetes, ' + Cell(tMb, k, 'Requete')
+                         + ' sautee. Faites une seconde liaison.');
+                    soucis := soucis + 1;
+                ELSE
+                    nb := STRING_TO_INT(Cell(tMb, k, 'Nombre'));
+                    sens := UPPER(Cell(tMb, k, 'Sens'));
+                    IF nb < 1 OR nb > 64 THEN
+                        Warn('Modbus ' + L + ' ' + Cell(tMb, k, 'Requete') + ' : ' + Cell(tMb, k, 'Nombre')
+                             + ' registres, il en faut de 1 a 64');
+                        soucis := soucis + 1;
+                        IF nb < 1 THEN nb := 1; ELSE nb := 64; END_IF;
+                    END_IF;
+                    IF sens <> 'L' AND sens <> 'E' THEN
+                        Warn('Modbus ' + L + ' ' + Cell(tMb, k, 'Requete') + ' : Sens "' + Cell(tMb, k, 'Sens')
+                             + '", il faut L (lire) ou E (ecrire). Lecture retenue.');
+                        soucis := soucis + 1;
+                        sens := 'L';
+                    END_IF;
+                    data := tab + '[' + DINT_TO_STRING(r) + ']';
+                    initTxt := initTxt + nl + '    ' + data + '.Name := '
+                        + QUOTE(MID(ASCII(Cell(tMb, k, 'Requete')), 0, 16)) + ';'
+                        + nl + '    ' + data + '.Enable := TRUE;'
+                        + nl + '    ' + data + '.Addr := ' + QUOTE(Cell(tMb, k, 'Adresse')) + ';'
+                        + nl + '    ' + data + '.Write := ' + BOOL_TO_STRING(sens = 'E') + ';'
+                        + nl + '    ' + data + '.First := ' + DINT_TO_STRING(STRING_TO_INT(Cell(tMb, k, 'Premier'))) + ';'
+                        + nl + '    ' + data + '.Nb := ' + DINT_TO_STRING(nb) + ';';
+                    IF Cell(tMb, k, 'PeriodeMs') <> '' THEN
+                        initTxt := initTxt + nl + '    ' + data + '.PeriodMs := '
+                            + DINT_TO_STRING(STRING_TO_INT(Cell(tMb, k, 'PeriodeMs'))) + ';';
+                    END_IF;
+                    IF Cell(tMb, k, 'TimeoutMs') <> '' THEN
+                        initTxt := initTxt + nl + '    ' + data + '.TimeoutMs := '
+                            + DINT_TO_STRING(STRING_TO_INT(Cell(tMb, k, 'TimeoutMs'))) + ';';
+                    END_IF;
+                    sig := (sig * 31 + STRING_TO_INT(Cell(tMb, k, 'Premier')) MOD 997 + nb * 7
+                            + LEN(Cell(tMb, k, 'Adresse'))) MOD 30011;
+                    r := r + 1;
+                    nReq := nReq + 1;
+                END_IF;
+            END_IF;
+        END_FOR;
+        AppendToSection(sIn, '');
+        AppendToSection(sIn, inst + '(Count := ' + DINT_TO_STRING(r) + ', CycleMs := ' + cycle
+            + ', SimActive := SimActive, Req := ' + tab + ');');
+
+        (* Second passage : les champs, requete par requete. *)
+        r := 0;
+        FOR k := i TO n - 1 DO
+            IF Cell(tMb, k, 'Liaison') = L AND r <= 7 THEN
+                eq := Cell(tMb, k, 'Equipement');
+                champs := Cell(tMb, k, 'Champs');
+                ecrit := 0;
+                IF UPPER(Cell(tMb, k, 'Sens')) = 'E' THEN ecrit := 1; END_IF;
+                nb := STRING_TO_INT(Cell(tMb, k, 'Nombre'));
+                data := tab + '[' + DINT_TO_STRING(r) + ']';
+                acces := '';
+                fam := '';
+                FOR q := 0 TO neq - 1 DO
+                    IF Cell(tEq, q, 'Nom') = eq AND Cell(tEq, q, 'Actif') = 'O' THEN
+                        acces := Cell(tEq, q, 'Acces ST');
+                        fam := Cell(tEq, q, 'Famille');
+                    END_IF;
+                END_FOR;
+                IF eq <> '' AND acces = '' THEN
+                    Warn('Modbus ' + L + ' ' + Cell(tMb, k, 'Requete') + ' : ' + eq + ' est introuvable ou inactif');
+                    soucis := soucis + 1;
+                ELSIF acces <> '' THEN
+                    IF ecrit = 1 THEN
+                        AppendToSection(sOut, '');
+                        AppendToSection(sOut, '(* ' + ASCII(Cell(tMb, k, 'Requete')) + ' -> ' + ASCII(eq) + ' *)');
+                    ELSE
+                        AppendToSection(sIn, '(* ' + ASCII(eq) + ' <- ' + ASCII(Cell(tMb, k, 'Requete')) + ' *)');
+                    END_IF;
+                    j := 0;
+                    debut := 0;
+                    WHILE debut <= LEN(champs) DO
+                        pos := FIND(champs, ',', debut);
+                        IF pos < 0 THEN
+                            champ := MID(champs, debut);
+                            debut := LEN(champs) + 1;
+                        ELSE
+                            champ := MID(champs, debut, pos - debut);
+                            debut := pos + 1;
+                        END_IF;
+                        WHILE LEN(champ) > 0 AND MID(champ, 0, 1) = ' ' DO champ := MID(champ, 1); END_WHILE;
+                        IF champ <> '' THEN
+                            typ := MemberType(fam, champ);
+                            IF j >= nb THEN
+                                Warn('Modbus ' + L + ' ' + Cell(tMb, k, 'Requete') + ' : ' + champ
+                                     + ' tombe au registre ' + DINT_TO_STRING(j) + ', la requete n en lit que '
+                                     + DINT_TO_STRING(nb));
+                                soucis := soucis + 1;
+                            ELSIF typ = '' THEN
+                                Warn('Modbus ' + L + ' : ' + champ + ' n est pas un champ de ' + fam);
+                                soucis := soucis + 1;
+                            ELSIF ecrit = 0 THEN
+                                IF typ = 'REAL' THEN
+                                    AppendToSection(sIn, acces + '.' + champ + ' := INT_TO_REAL(' + data + '.Data['
+                                        + DINT_TO_STRING(j) + ']);');
+                                ELSIF typ = 'DINT' THEN
+                                    AppendToSection(sIn, acces + '.' + champ + ' := INT_TO_DINT(' + data + '.Data['
+                                        + DINT_TO_STRING(j) + ']);');
+                                ELSIF typ = 'BOOL' THEN
+                                    AppendToSection(sIn, acces + '.' + champ + ' := ' + data + '.Data['
+                                        + DINT_TO_STRING(j) + '] <> 0;');
+                                ELSE
+                                    AppendToSection(sIn, acces + '.' + champ + ' := ' + data + '.Data['
+                                        + DINT_TO_STRING(j) + '];');
+                                END_IF;
+                                nLiens := nLiens + 1;
+                            ELSE
+                                IF typ = 'REAL' THEN
+                                    AppendToSection(sOut, data + '.Data[' + DINT_TO_STRING(j) + '] := REAL_TO_INT('
+                                        + acces + '.' + champ + ');');
+                                ELSIF typ = 'DINT' THEN
+                                    AppendToSection(sOut, data + '.Data[' + DINT_TO_STRING(j) + '] := DINT_TO_INT('
+                                        + acces + '.' + champ + ');');
+                                ELSIF typ = 'BOOL' THEN
+                                    AppendToSection(sOut, data + '.Data[' + DINT_TO_STRING(j) + '] := BOOL_TO_INT('
+                                        + acces + '.' + champ + ');');
+                                ELSE
+                                    AppendToSection(sOut, data + '.Data[' + DINT_TO_STRING(j) + '] := '
+                                        + acces + '.' + champ + ';');
+                                END_IF;
+                                nLiens := nLiens + 1;
+                            END_IF;
+                        END_IF;
+                        j := j + 1;
+                    END_WHILE;
+                    (* La fraicheur de la lecture, sur CommOk si la famille l'a. *)
+                    IF ecrit = 0 AND HasMember(fam, 'CommOk') THEN
+                        IF FIND(okLu, ',' + acces + ',', 0) < 0 THEN
+                            AppendToSection(sIn, acces + '.CommOk := ' + data + '.Ok;');
+                            okLu := okLu + ',' + acces + ',';
+                        ELSE
+                            AppendToSection(sIn, acces + '.CommOk := ' + acces + '.CommOk AND ' + data + '.Ok;');
+                        END_IF;
+                    END_IF;
+                END_IF;
+                r := r + 1;
+            END_IF;
+        END_FOR;
+    END_IF;
+END_FOR;
+
+IF nReq = 0 THEN Fail('aucune requete dans l onglet Modbus'); END_IF;
+
+IF sig <= 0 THEN sig := sig + 30011; END_IF;
+IF sig = 0 THEN sig := 1; END_IF;
+IF NOT VariableExists('Modbus_Sig') THEN
+    AddVariable('Modbus_Sig', 'INT', 'Global', '', '0', 'signature des requetes Modbus deja posees');
+END_IF;
+IF NOT SectionExists(sInit) THEN AddSection(sInit, tache, 'ST', ''); END_IF;
+ClearSection(sInit);
+AppendToSection(sInit, '(* Genere par ImporterModbus. GARDEE : pose les requetes au premier cycle, et');
+AppendToSection(sInit, '   apres un import qui les a changees. *)');
+AppendToSection(sInit, 'IF Modbus_Sig <> ' + DINT_TO_STRING(sig) + ' THEN' + initTxt);
+AppendToSection(sInit, '    Modbus_Sig := ' + DINT_TO_STRING(sig) + ';');
+AppendToSection(sInit, 'END_IF;');
+
+RunMacro('RangerSections');
+
+Log(DINT_TO_STRING(nReq) + ' requete(s) Modbus, ' + DINT_TO_STRING(nLiens) + ' champ(s) relie(s)');
+Log('A VALIDER SUR SITE : adresses ADDM, premier registre et mots de chaque equipement.');
+IF soucis > 0 THEN
+    Warn(DINT_TO_STRING(soucis) + ' point(s) a revoir dans l onglet Modbus : voir ci-dessus');
+END_IF;

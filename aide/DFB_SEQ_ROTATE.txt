@@ -1,0 +1,33 @@
+#! summary = Fait tourner N equipements parmi 16 : ordre fixe, carrousel, ou la moins usee.
+#! usage = Dix pompes, deux en marche, on bascule toutes les X minutes : c'est
+#! usage = le cas pour lequel ce bloc existe. IL NE COMMANDE RIEN - il dit
+#! usage = lesquels doivent tourner, et le bloc d'equipement fait le reste.
+#! usage = TROIS MANIERES DE CHOISIR, et le choix compte :
+#! usage =   0  ordre fixe   les premiers disponibles, toujours dans le meme
+#! usage =                   ordre. Previsible, et use toujours les memes.
+#! usage =   1  carrousel    on decale d'un cran a chaque rotation. Simple, et
+#! usage =                   l'usure se repartit meme si personne ne mesure rien.
+#! usage =   2  moins usee   celle qui a le moins d'heures part en premier.
+#! usage =                   C'est ce qu'on veut vraiment, et ca demande que
+#! usage =                   RunMs soit tenu a jour.
+#! usage = LA ROTATION AVANCE MEME QUAND RIEN NE TOURNE. Sinon une installation
+#! usage = a l'arret repartirait toujours sur la meme machine.
+#! example = ROT_Gavage(Count := 3, Demand := 2, Mode := 2,
+#! example =            RotateMs := 3600000,    (* une heure *)
+#! example =            CycleMs := 20, Mem := Pompes_Rot);
+#! example =
+#! example = (* cabler, dans les deux sens *)
+#! example = Pompes_Rot[0].Available := Pompes[0].Ready;
+#! example = Pompes_Rot[0].RunMs     := Pompes[0].RunMs;
+#! example = Pompes[0].ManRunReq     := Pompes_Rot[0].RunReq;
+#! param Demand = Combien doivent tourner en meme temps. En demander plus que ce
+#! param Demand = qui est disponible n'est pas une erreur : on en fait tourner
+#! param Demand = autant qu'on peut, et Short le dit.
+#! param RotateMs = Periode de bascule du carrousel, en ms. 0 desactive la
+#! param RotateMs = rotation automatique : la selection ne change alors qu'au gre
+#! param RotateMs = des disponibilites.
+#! param Short = On n'a pas pu en demarrer autant que demande. A surveiller : un
+#! param Short = Short qui dure veut dire qu'il ne reste plus assez de machines
+#! param Short = saines pour tenir le debit.
+#! param Mode = 0 ordre fixe, 1 carrousel, 2 la moins usee d'abord.
+#! see = ST_SEQ_Member

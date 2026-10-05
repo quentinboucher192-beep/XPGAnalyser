@@ -1,0 +1,69 @@
+# =============================================================================
+#  Session t1112-chemin-client - 1.11.2 (T1, decision 155) : les tutoriels lances
+#  comme le client (« les tutoriels et essayer objets dans l'aide ne font rien,
+#  parfois la barre de progression ne bouge meme pas, et je vois meme pas le
+#  tuto » ; « j'avais ouvert avec F1 »). Un projet neuf « New machine » ouvert,
+#  F1 (le centre d'aide par-dessus l'ecran), un sujet, son bouton ; puis :
+#  le centre est ferme (centre.ouvert = non), l'horloge du lecteur avance, et
+#  Quitter ramene au centre (aide-cible le demande au-dessus). Ligne (Regarder,
+#  puis Essayer), BOOL (Regarder), et un sujet de Demarrer (ihm, Regarder).
+#  A lancer dans un HOME neuf (le dialogue de la cle administrateur), sans
+#  XPG_TUTORIELS, --size 1920x1080, et le modele : soit PROJETS=<dossier
+#  d'Armoire_Gaz> (les essais), soit, comme livre (decision 164), l'appli
+#  copiee a cote de bac/Armoire_Gaz, sans PROJETS ni XPG_BAC_SOURCES.
+#  (session-t1112-sans-bac : le meme chemin quand le modele manque ;
+#  session-t1112-copie-ratee : quand sa copie echoue.)
+# =============================================================================
+attendre 30
+bouton "Définir la clé"
+attendre 10
+action project.new
+attendre 10
+bouton Create
+attendre-projet
+attendre 30
+touche f1
+attendre 15
+aide-sujet objet-ligne
+attendre 10
+capture t1112-client-01-centre-ligne.png
+aide-cible tuto:objet-ligne
+attendre 5
+tutoriel-etat lecture
+attendre 120
+tutoriel-lit centre.ouvert non
+tutoriel-avance 1000
+capture t1112-client-02-ligne-regarder.png
+tutoriel-quitter
+attendre 30
+capture t1112-client-03-ligne-quitter.png
+aide-cible essayer:objet-ligne
+attendre 150
+tutoriel-etat atoi
+tutoriel-lit centre.ouvert non
+capture t1112-client-04-ligne-essayer.png
+tutoriel-quitter
+attendre 30
+aide-sujet expr-bool
+attendre 10
+aide-cible tuto:expr-bool
+attendre 5
+tutoriel-etat lecture
+attendre 120
+tutoriel-lit centre.ouvert non
+tutoriel-avance 1000
+capture t1112-client-05-bool-regarder.png
+tutoriel-quitter
+attendre 30
+aide-sujet ihm
+attendre 10
+aide-cible tuto:ihm
+attendre 5
+tutoriel-etat lecture
+attendre 120
+tutoriel-avance 1000
+capture t1112-client-06-demarrer-ihm.png
+tutoriel-quitter
+attendre 30
+capture t1112-client-07-retour-centre.png
+quitter

@@ -1,0 +1,45 @@
+# Variables d'instances : le groupe d'alarmes et les alarmes d'un objet (1.11.1, décisions 108 et 115).
+# Bac : Armoire_Gaz. Une pompe dont le défaut suit Pompe_Defaut : son alarme Defaut, son groupe
+# d'alarmes Vue_Tuto.Pompe_1. Il remplace le tutoriel déduit du sujet variables-instances.
+# Format : v111/agents/CONCEPTION-T1.md, section 1.
+= variables-instances | Variables d'instances : les alarmes d'un objet
+@sujet variables-instances
+@bac Armoire_Gaz | Vue_Tuto
+
+@avant
+variable Pompe_Defaut BOOL
+vue Vue_Tuto
+poser Pompe 400,262 Pompe_1
+regler Pompe_1 fault "=Pompe_Defaut"
+
+== 1 | Ouvre Variables d'instances
+: IHM › Programmation générale › **Variables d'instances** : chaque vue, puis chaque objet, et tout ce qu'il publie.
+clic "arbre:IHM/Programmation" double
+clic "arbre:IHM/Programmation/Variables d'instances" double
+clic "arbre:IHM/Programmation/Variables d'instances/Vue_Tuto" double
+clic "arbre:IHM/Programmation/Variables d'instances/Vue_Tuto/Pompe_1" double
+encadrer "arbre:IHM/Programmation/Variables d'instances/Vue_Tuto/Pompe_1"
+dire "Sous Pompe_1 : ses variables (Visible, Value…), puis son groupe d'alarmes et ses alarmes."
+
+== 2 | Son groupe d'alarmes
+: **Groupe d'alarmes Vue_Tuto.Pompe_1** : ce que le moteur sait de ses alarmes (AlarmActive, AlarmCount…) et **AlarmLinkedGroup**, le groupe de l'IHM auquel il est lié.
+clic "arbre:IHM/Programmation/Variables d'instances/Vue_Tuto/Pompe_1/Groupe d'alarmes" double
+encadrer "arbre:IHM/Programmation/Variables d'instances/Vue_Tuto/Pompe_1/Groupe d'alarmes/AlarmLinkedGroup"
+dire "Toutes en lecture (R) : Vue_Tuto.Pompe_1.AlarmActive, .AlarmCount, .AlarmLinkedGroup…"
+
+== 3 | Ses alarmes
+: **Alarmes › Defaut** : chaque alarme de l'objet a ses variables. **Acked** et **Shelved** s'écrivent (R/W) : acquitter, mettre de côté ; le reste se lit.
+clic "arbre:IHM/Programmation/Variables d'instances/Vue_Tuto/Pompe_1/Alarmes" double
+clic "arbre:IHM/Programmation/Variables d'instances/Vue_Tuto/Pompe_1/Alarmes/Defaut" double
+clic "arbre:IHM/Programmation/Variables d'instances/Vue_Tuto/Pompe_1/Alarmes/Defaut/Acked"
+encadrer "arbre:IHM/Programmation/Variables d'instances/Vue_Tuto/Pompe_1/Alarmes/Defaut/Acked"
+dire "Vue_Tuto.Pompe_1.Alarmes.Defaut.Acked := TRUE acquitte l'alarme, dans un script ou une action."
+# Tranche 34 : la demonstration finit sur Shelved, ce que verifie l'« A toi » (le verificateur joue les gestes de
+# l'etape, puis la verification : finir sur Acked laissait volet.variable a ...Defaut.Acked).
+clic "arbre:IHM/Programmation/Variables d'instances/Vue_Tuto/Pompe_1/Alarmes/Defaut/Shelved"
+encadrer "arbre:IHM/Programmation/Variables d'instances/Vue_Tuto/Pompe_1/Alarmes/Defaut/Shelved"
+dire "Vue_Tuto.Pompe_1.Alarmes.Defaut.Shelved := TRUE la met de côté : elle quitte la liste des alarmes."
+# Au debut de l'« A toi », l'arbre est tel qu'apres l'etape 2 : Alarmes est encore replie.
+@atoi Dans l'arbre, déplie Alarmes › Defaut, puis choisis la variable Shelved : le volet la montre.
+@cible "arbre:IHM/Programmation/Variables d'instances/Vue_Tuto/Pompe_1/Alarmes"
+@verifier volet.variable = "Vue_Tuto.Pompe_1.Alarmes.Defaut.Shelved"

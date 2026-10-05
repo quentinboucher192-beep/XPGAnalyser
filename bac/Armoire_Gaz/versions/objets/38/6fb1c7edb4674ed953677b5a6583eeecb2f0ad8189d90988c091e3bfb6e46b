@@ -1,0 +1,24 @@
+# Derived data type.
+name = Q
+version = 0.09
+# checksum is recomputed by Control Expert on import; not stored.
+
+# name ; type ; address ; scope ; init ; comment ; attributes ; element comments
+V2 ; sortie_tor ;  ; Member ;  ;  ;  ; 
+V3 ; sortie_tor ;  ; Member ;  ;  ;  ; 
+V4 ; sortie_tor ;  ; Member ;  ;  ;  ; 
+V5 ; sortie_tor ;  ; Member ;  ;  ;  ; 
+V6 ; sortie_tor ;  ; Member ;  ;  ;  ; 
+V16 ; sortie_tor ;  ; Member ;  ;  ;  ; 
+V7 ; sortie_tor ;  ; Member ;  ;  ;  ; 
+V9 ; sortie_tor ;  ; Member ;  ;  ;  ; 
+VS ; sortie_tor ;  ; Member ;  ;  ;  ; 
+PPE ; sortie_tor ;  ; Member ;  ;  ;  ; 
+VHE ; sortie_tor ;  ; Member ;  ;  ;  ; 
+VBTE ; sortie_tor ;  ; Member ;  ;  ;  ; 
+Sorties_in ; ARRAY[0..15] OF BOOL ;  ; Member ;  ;  ;  ; 
+Sorties_out ; ARRAY[0..15] OF BOOL ;  ; Member ;  ;  ;  ; 
+Sorties_prev ; ARRAY[0..15] OF BOOL ;  ; Member ;  ;  ;  ; 
+Sorties_cpt_rising ; ARRAY[0..15] OF UDINT ;  ; Member ;  ;  ;  ; 
+Sorties_cpt_falling ; ARRAY[0..15] OF UDINT ;  ; Member ;  ;  ;  ; 
+Sorties_reset ; ARRAY[0..15] OF BOOL ;  ; Member ;  ;  ;  ; 

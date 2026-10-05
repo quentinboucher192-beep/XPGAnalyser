@@ -1,0 +1,46 @@
+# =============================================================================
+#  Session 1112 (SYM, decision 240 ; les captures du client du 03/10, 21 h 58) :
+#  DUPLIQUER DANS UN SYMBOLE - $Value[0]$ EXISTE.
+#  Le projet : Armoire_Gaz, plus le symbole STEST (Name : STRING, Value : ARRAY[0..9]
+#  OF UINT ; Text_2 lit $Value[0]$) et la vue Vue_STEST (l'instance STEST_1). Le
+#  lanceur (scratchpad/SYM/guet-session-1112.sh) les ecrit dans la copie du projet.
+#  En 1.11.1, Dupliquer... de Text_2 disait « 4 cases en rouge - ligne 1,
+#  $Value[0]$ : Value[0] n'existe pas » et Dupliquer etait gris (capture 023c44a9).
+#  Ici : la colonne $Value[0]$ preremplie Value[0]..Value[3], aucune case rouge,
+#  « Dupliquer (3 copies) » permis ; puis la vue apres : Text_3, Text_4, Text_5.
+#  Chaque capture est prise AVANT sa verification (une faute n'empeche pas la suite).
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- 1. Le symbole STEST, comme chez le client (Name . STRING, Value . ARRAY[0..9] OF UINT)
+arbre "IHM/Symboles/STEST"
+attendre 6
+vue-clic 330 250
+attendre 3
+capture 1112_SYM_01_symbole_STEST.png
+
+# ---- 2. Dupliquer... sur Text_2 ($Value[0]$), 3 copies : rien de rouge ----------------
+objet Text_2
+attendre 3
+vue-clic 120 72
+attendre 1
+touche ctrl+d
+attendre 4
+dupliquer-copies 3
+attendre 2
+capture 1112_SYM_02_dupliquer_Value0_existe.png
+dupliquer-verifier
+dupliquer-ligne 4
+attendre 2
+capture 1112_SYM_03_dupliquer_ligne4_Value3.png
+dupliquer-valider
+attendre 4
+
+# ---- 3. La vue apres « Dupliquer (3 copies) » : Text_3, Text_4, Text_5 ----------------
+capture 1112_SYM_04_vue_apres_dupliquer.png
+quitter

@@ -1,0 +1,51 @@
+# =============================================================================
+#  Aide F1 de la 1.9 : la lecture cyclique a plusieurs requetes (chantier A).
+#  Meme syntaxe que guide-ihm.txt (voir son en-tete) ; le chef de projet
+#  reporte ce sujet dans guide-ihm.txt, apres « outil-modbus ».
+# =============================================================================
+
+== outil-cyclique | La lecture cyclique à plusieurs requêtes
+: L'onglet Lecture cyclique de l'outil Modbus lit une liste de requêtes, chacune vers sa cible (un équipement, l'automate, une adresse, ou l'esclave simulé d'un équipement), chacune à sa période. Une connexion par équipement : deux équipements se lisent en même temps, et une requête qui échoue n'arrête pas les autres. La liste se garde dans le projet sous un nom : un jeu de lecture.
+@lieux outil
+@mots Lecture cyclique, lecture cyclique, requêtes, Requête, + Requête, Nouvelle requête, Inser, Dupliquer, Retirer, Figer, FIGÉ, En pistes, Une seule échelle, Tracer, Valeurs, Journal, Seulement la requête choisie, Période commune, période commune, Enchaînement, Pause entre deux requêtes, Après N échecs de suite, en pause, Reprendre, Carte mémoire, Jeu, jeu de lecture, Enregistrer le jeu, Enregistrer sous, Nouveau jeu vide, Exporter le jeu, Importer un jeu, Exporter CSV, Enregistrer, exports/modbus, Lire des variables, Regrouper les voisines, trou toléré, Depuis des variables, Depuis les zones mémoire, Coller depuis Excel, Reprendre la requête de Lecture / écriture, esclave simulé, simulée
+@voir outil-modbus, equipements, variables-liees, carte-memoire, esclave-simule
+### Une liste de requêtes
+En haut, le tableau des requêtes : une ligne par requête, avec sa case (décochée : la requête est coupée, elle reste dans la liste), son numéro R1, R2…, son nom, sa cible, son adresse (à partir de 0, et en Modicon), son nombre de mots ou de bits (Nb), son format, sa période et son état ; quand le tableau est assez large, aussi sa fonction (1 à 4 : l'adresse Modicon la dit déjà) et le nombre de lectures. Un clic sur une ligne la choisit : la grille de droite la règle et dit tout.
+| Colonne | Ce qu'elle dit |
+| Cible | L'équipement par son nom (la requête suit ses réglages : adresse IP, port, esclave, délai), « API » pour l'automate du projet, une adresse tapée, ou « <Nom> · esclave simulé ». |
+| Format | Décimal, signé, hexadécimal, binaire, ASCII, 32 bits, flottant ; « variables » quand la requête vient de variables (chacune son type : INT, DINT, REAL, BOOL…). |
+| Période | La période commune, ou la sienne, marquée d'un point (« • 1 s »). |
+| État | « bonne · 12 ms », « simulée · 3 ms » (un esclave simulé), « échec : pas de réponse (2) », « en pause : exception 02 », « coupée ». |
+### Ajouter des requêtes
+Le menu **+ Requête ▾** (ou la ligne « + Ajouter une requête… » au bas du tableau) :
+- **Nouvelle requête** (Inser) : une plage à lire, réglée ensuite à droite ; elle reprend la cible de la requête choisie.
+- **Reprendre la requête de Lecture / écriture** : la cible et la plage de l'onglet Lecture / écriture.
+- **Depuis des variables…** : le dialogue Lire des variables (ci-dessous).
+- **Depuis les zones mémoire d'un équipement…** : une requête par zone déclarée ou détectée dans sa carte mémoire (125 mots, 2000 bits au plus chacune).
+- **Coller depuis Excel** (Ctrl+V) : les colonnes Nom, Équipement, Adresse, Nombre, Format, Période sont reconnues par leur titre ; une ligne illisible est refusée avec la raison.
+- **Ouvrir un jeu de lecture…** : une liste enregistrée dans le projet.
+**Dupliquer** copie la requête choisie, **Retirer** (Suppr) l'enlève ; Ctrl+Z, l'outil ayant le clavier, défait le dernier geste sur la liste.
+### Lire des variables
+Le dialogue montre deux onglets : **Automate** (les variables localisées %MW, %M, %MF, %MD du projet) et **Variables IHM liées** (par équipement). Coche des variables ou des groupes entiers, cherche par le nom. À droite, l'aperçu des requêtes : **Regrouper les voisines** met dans une même requête les variables proches (le trou toléré se règle ; 125 mots, 2000 bits au plus par requête) ; les mots du trou sont lus au passage, sans être montrés. Ce qui est déjà lu par une requête est signalé ; les variables sans adresse ou en %I / %Q sont grisées avec la raison. **Ajouter N requêtes** les met dans la liste.
+### Les valeurs et le journal
+En bas, le segment **Valeurs | Journal**. Valeurs : une ligne par valeur lue (un DINT est une valeur, pas deux registres) : la case Tracer, la pastille de sa couleur, Rn, l'adresse Modicon, l'adresse Schneider (%MW, %M : la colonne ne se montre que quand une requête lit l'automate), le nom de la variable qui porte cette adresse, la valeur dans son format (une variable IHM mise à l'échelle : la valeur mise à l'échelle), le minimum, le maximum, la moyenne (deux décimales pour un nombre à virgule), le nombre de changements et depuis quand (« Il y a » : 0,4 s, 12 s, 3 min). Ce qui vient de changer s'allume un instant. **Seulement la requête choisie** filtre le tableau. Journal : chaque lecture, son heure, sa requête, son résultat, son temps, les valeurs lues.
+### Les courbes
+Coche **Tracer** sur une valeur pour la voir sur le graphique. **En pistes** : une piste par valeur, chacune son échelle (les valeurs de même unité ensemble) ; **Une seule échelle** : toutes ensemble. Les couleurs tournent au-delà de huit courbes. **Figer** arrête l'affichage - les courbes et le tableau des valeurs - pendant que la lecture continue (l'étiquette FIGÉ) ; Figer à nouveau reprend. La fenêtre (60 s par défaut) se règle dans la grille.
+### La grille de droite
+| Catégorie | Ce qu'on y règle |
+| Requête Rn | Nom, Active. |
+| Cible | Équipement (ou l'automate, l'esclave simulé, une adresse tapée), Adresse IP, Port, Esclave, Délai - réglables seulement pour une adresse tapée : sinon la requête suit son équipement. |
+| Lecture | Fonction, Adresse (tape aussi 40101, 30001 ou %MW100 : la fonction suit), En Modicon, En Schneider, Nombre, Format, Ordre des mots, Période, Tracer. |
+| Cette requête | État, Lectures, Temps de réponse (dernier, moyenne, maximum), Dernière erreur. |
+| Lecture cyclique (toutes les requêtes) | Période commune, Enchaînement (une connexion par équipement, ou toutes l'une après l'autre), Pause entre deux requêtes, Après N échecs de suite, Fenêtre du graphique, Enregistrer sur le disque. |
+### Une requête en pause
+Après N échecs de suite (10 par défaut, 0 : jamais), la requête se met en pause ; les autres continuent. Sous la grille, la boîte rouge dit l'erreur en clair - « exception 02 : l'appareil n'a pas ces registres », « délai dépassé : pas de réponse en 1000 ms »… - avec **Reprendre** et **Carte mémoire** (Configuration › Équipements › Carte mémoire, sur cet équipement, pour vérifier ses zones). La barre d'état le rappelle : « Lecture cyclique : 5 requêtes, 3 équipements · R5 en pause (exception 02) ».
+### Lire un esclave simulé
+Une requête peut viser l'esclave simulé d'un équipement (« <Nom> · esclave simulé ») : elle lit le serveur Modbus de l'application (127.0.0.1 et son port). Sa ligne, sa cible, son état (« simulée ») et ses valeurs sont en violet ; « ~ » devant une valeur animée, une pastille « F » orange sur une case forcée. La grille montre « Adresse : 127.0.0.1:<port> (simulé) » et une note violette ; la barre d'état dit à droite « R4 lit un esclave simulé ».
+! Une valeur violette ne vient pas du vrai appareil.
+### Les jeux de lecture
+Le menu **Jeu : <nom> ▾** liste les jeux du projet. **Enregistrer le jeu** (Ctrl+S dans l'outil) garde la liste et ses réglages DANS LE PROJET IHM : elle suit ses versions et part avec l'affaire ; c'est une modification du projet, Ctrl+Z la défait. **Enregistrer sous…**, **Nouveau jeu vide**, **Exporter le jeu (CSV)** et **Importer un jeu** (un jeu exporté, copié) complètent. Le dernier jeu ouvert revient à l'ouverture de l'outil ; une étoile après son nom dit qu'il a changé depuis son enregistrement.
+### Exporter, enregistrer
+**Exporter CSV…** ouvre la boîte d'export : toutes les requêtes dans un fichier (une ligne par tour de la période commune, une colonne par valeur ; une requête plus lente garde sa dernière valeur) ou un fichier par requête ; les valeurs dans leur format ou brutes ; un aperçu. Le CSV est fait pour Excel en français : point-virgule, virgule décimale.
+**● Enregistrer** écrit en continu, tant que la lecture tourne, dans `exports/modbus/<date>_<jeu>.csv` du projet (un fichier par jour) ; l'écriture se fait à part, l'écran ne se fige jamais.
+> Une lecture de mise en service qui revient souvent : enregistre-la comme jeu, elle reviendra à la prochaine ouverture de l'outil.

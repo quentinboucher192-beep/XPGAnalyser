@@ -1,0 +1,126 @@
+(* ImporterCartes
+
+   Depuis l'onglet "Cartes API". Pour chaque carte active : importe le DDT et
+   le bloc, declare le tableau de voies, declare l'instance, ecrit son appel.
+
+   ELLE NE DEVINE PLUS LA TAILLE. L'ancienne ImportES parcourait deux fois
+   l'onglet ES pour deduire combien de voies avait chaque carte, puis arrondir
+   a 4, 8, 16, 32 ou 64. Le classeur a deja fait ce calcul et l'a ecrit dans
+   la colonne Bloc. Lire vaut mieux que recalculer : deux calculs finissent
+   toujours par ne plus donner la meme chose.
+
+   ELLE N'ECRIT AUCUN CODE, et c'est ce qui la rend relancable sans rien
+   salir. Declarer est idempotent : une variable qui existe deja se passe de
+   commentaire. Ecrire du code ne l'est pas - il faudrait effacer d'abord, et
+   effacer une section que quelqu'un a completee a la main est exactement ce
+   qu'une macro ne doit pas faire.
+
+   Le code de mapping - le cablage et les appels - est ecrit par
+   ImporterVoies, qui a besoin des deux dans le MEME ordre : pour une entree
+   le cablage AVANT l'appel, pour une sortie APRES. Deux macros qui ajoutent
+   chacune leur bout a la meme section ne peuvent pas obtenir les deux.
+
+   #! summary = Déclare les tableaux de voies et les instances de bloc de chaque carte du classeur.
+   #! version = 1.10
+   #! changes 1.10 = Le formulaire : chaque question a son champ (le classeur par …, Ctrl+V ou en le glissant ; les tâches et les sections du projet ; des interrupteurs ; des choix à libellés), ses groupes, son aide et un libellé avec accents. Le code ne change pas.
+   #! usage = Depuis l'onglet Cartes API. Pour chaque carte active : importe le DDT et le bloc depuis la bibliotheque, declare le tableau de voies a la taille du bloc, declare l'instance.
+   #! usage = ELLE NE DEVINE PLUS LA TAILLE. L'ancienne ImportES parcourait deux fois l'onglet ES pour deduire le nombre de voies de chaque carte, puis arrondir a 4, 8, 16, 32 ou 64. Le classeur a deja fait ce calcul et l'a ecrit dans la colonne Bloc. Lire vaut mieux que recalculer : deux calculs finissent toujours par ne plus donner la meme chose.
+   #! usage = ELLE N'ECRIT AUCUN CODE, et c'est ce qui la rend relancable sans rien salir. Declarer est idempotent ; ecrire du code ne l'est pas. Le mapping est ecrit par ImporterVoies, qui a besoin du cablage et de l'appel dans le meme ordre - et deux macros qui ajoutent chacune leur bout a une section ne peuvent pas obtenir cet ordre.
+   #! usage = La taille du tableau vient du BLOC, pas du nombre de voies cablees : le bloc attend exactement sa taille en InOut.
+   #! usage = ELLE NE FAIT QU'UNE ETAPE, et elle suppose que les precedentes ont tourne. Pour generer tout le programme en une fois - types, blocs, variables, instances, E/S, equipements, cablage, reports et alarmes - c'est ImporterProgramme.
+   #! see = ImporterProgramme, ImporterVoies, VerifierClasseur
+   #! param classeur = Le classeur de l'affaire (.xlsx ou .xlsm) : glisse-le sur le champ, choisis-le avec …, ou colle-le (Ctrl+V) après l'avoir copié dans l'Explorateur. Vide : le dernier classeur ouvert, le cas normal quand on enchaîne les imports.
+   #! param classeur = C'est un .xlsm, pas un export CSV : la macro lit les onglets directement, et les quatre familles d'E/S sont donc traitees en une seule execution.
+   #! categorie = Importer depuis le classeur/Étapes de l'import
+   #! champ classeur = fichier .xlsx .xlsm facultatif
+   #! libelle classeur = Le classeur de l'affaire
+   #! produit = un tableau de voies et une instance de bloc par carte de l'onglet Cartes API
+   #! appliquer = Déclarer les tableaux et les instances des cartes de ce classeur
+*)
+
+chemin := Ask('classeur', 'Chemin du classeur (vide = celui deja charge)', '');
+AskNow();
+
+AskNow();
+
+wb := OpenWorkbook(chemin);
+IF wb < 0 THEN Fail('classeur introuvable'); END_IF;
+
+t := OpenSheet('Cartes API');
+IF t < 0 THEN Fail('onglet "Cartes API" introuvable'); END_IF;
+
+IF NOT Confirm('Import des cartes',
+               'Declarer les tableaux et les instances des cartes de ce classeur ?') THEN
+    Fail('annule');
+END_IF;
+
+n := RowCount(t);
+i := 0;
+posees := 0;
+typeVoie := '';
+bloc := '';
+tableau := '';
+instance := '';
+voies := 0;
+taille := 0;
+
+FOR i := 0 TO n - 1 DO
+    IF Cell(t, i, 'Active') <> 'O' THEN
+        SkipRow(Cell(t, i, 'Nom') + ' : carte inactive');
+    ELSE
+        bloc     := Cell(t, i, 'Bloc');
+        tableau  := Cell(t, i, 'Tableau');
+        instance := Cell(t, i, 'Instance');
+        voies    := STRING_TO_INT(Cell(t, i, 'Voies'));
+        fam      := Cell(t, i, 'Famille');
+
+        IF bloc = '' OR tableau = '' OR instance = '' THEN
+            Warn(Cell(t, i, 'Nom') + ' : bloc, tableau ou instance manquant. '
+                 + 'Recalculez le classeur.');
+        ELSE
+            (* La famille dit le type de voie ET le sens. DI et AI vont en
+               tete de tache, DO et AO en queue. *)
+            IF fam = 'AI' OR fam = 'AO' THEN
+                typeVoie := 'ST_IO_Ana';
+            ELSE
+                typeVoie := 'ST_IO_Dig';
+            END_IF;
+            (* Les types avant les blocs qui les utilisent : un
+               ARRAY OF ST_IO_Ana ne se declare pas avant ST_IO_Ana. *)
+            IF typeVoie = 'ST_IO_Ana' AND NOT TypeExists('ST_IO_Thr')
+               AND LibHasItem('ST_IO_Thr') THEN
+                LibImport('ST_IO_Thr');
+            END_IF;
+            IF NOT TypeExists(typeVoie) AND LibHasItem(typeVoie) THEN
+                LibImport(typeVoie);
+            END_IF;
+            IF NOT PouExists(bloc) AND LibHasItem(bloc) THEN
+                LibImport(bloc);
+            END_IF;
+
+            (* La taille du tableau vient du BLOC, pas du nombre de voies
+               cablees : le bloc attend exactement sa taille en InOut. *)
+            taille := STRING_TO_INT(MID(bloc, LEN(bloc) - 2));
+            IF taille <= 0 THEN
+                Warn(Cell(t, i, 'Nom') + ' : taille illisible dans ' + bloc);
+            ELSE
+                IF NOT VariableExists(tableau) THEN
+                    AddVariable(tableau,
+                        'ARRAY[0..' + DINT_TO_STRING(taille - 1) + '] OF ' + typeVoie,
+                        'Global', '');
+                END_IF;
+                IF NOT VariableExists(instance) THEN
+                    AddVariable(instance, bloc, 'Global', '');
+                END_IF;
+
+                posees := posees + 1;
+            END_IF;
+        END_IF;
+    END_IF;
+END_FOR;
+
+IF posees = 0 THEN
+    Warn('aucune carte declaree. Verifiez la colonne Active de l onglet Cartes API.');
+END_IF;
+Log(DINT_TO_STRING(posees) + ' carte(s) declaree(s). Lancez ImporterVoies pour '
+    + 'ecrire le cablage et les appels.');

@@ -1,0 +1,68 @@
+# Derived function block, shared.
+name = AlmDecode
+version = 1.00
+#! summary = Relit l'identifiant d'une alarme et rend sa provenance. L'inverse exact d'AlmUuid.
+#! usage = C'est la raison pour laquelle l'UUID n'a besoin d'AUCUNE table : la
+#! usage = provenance est dans le nombre. Un journal exporte en CSV reste
+#! usage = exploitable des annees apres, sans le projet qui l'a produit.
+#! example = (* d'ou vient cet evenement ? Evt a ete pris dans AlmHist, ou relu
+#! example =    d'un journal CSV exporte il y a trois ans: c'est pareil, la
+#! example =    provenance est dans le nombre. *)
+#! example = IF Evt.Kind = 0 THEN
+#! example =     DEC(Uuid := Evt.Uuid);
+#! example = END_IF;
+#! example = (* DEC.Rack, DEC.Module, DEC.Voie, DEC.Sous disent la voie *)
+#! usage = L'historique se parcourt a l'envers depuis AlmStat.HistHead, qui
+#! usage = designe le PROCHAIN emplacement a ecrire: le dernier evenement est
+#! usage = donc en HistHead - 1, et tout au bout de l'anneau (255, ou 511 pour
+#! usage = DFB_ALM_MANAGER256) quand HistHead vaut 0.
+#! see = AlmUuid
+#! see = ST_ALM_Event
+#! param Uuid = L'identifiant a relire : Defs[i].Uuid, History[k].Uuid, ou un nombre
+#! param Uuid = lu dans un journal exporte. Rien d'autre n'est necessaire - la
+#! param Uuid = provenance est dans le nombre.
+#! param Genre = 1 voie TOR, 2 seuil analogique, 3 etape GRAFCET, 4 alarme
+#! param Genre = applicative.
+#! param Rack = Le rack, 0..15.
+#! param Module = L'emplacement du module dans le rack, 0..63.
+#! param Voie = La voie, 0..63.
+#! param Sous = Le sous-numero, 0..15 : le numero du seuil pour une alarme analogique.
+#! param Code = Le code libre, 0..255 : ce qui distingue deux alarmes d'une meme voie.
+#! given = Evt.Uuid := 539504640
+#! expect = 1 : DEC.Genre = 2
+#! expect = 1 : DEC.Module = 10
+#! expect = 1 : DEC.Voie = 3
+
+# Relit l'identifiant. L'inverse exact d'AlmUuid.
+
+# name ; type ; scope ; initial ; comment
+Uuid ; UDINT ; Input ; 0 ; l'identifiant a relire
+Genre ; INT ; Output ; 0 ; 1 voie TOR
+Rack ; INT ; Output ; 0 ; 0..15
+Module ; INT ; Output ; 0 ; 0..63
+Voie ; INT ; Output ; 0 ; 0..63
+Sous ; INT ; Output ; 0 ; 0..15, le numero du seuil
+Code ; INT ; Output ; 0 ; 0..255
+u ; UDINT ; Local ; 0 ; 
+
+<<<section Process ST>>>
+(* =====================================================================
+    AlmDecode - relire l'identifiant.
+
+    L'inverse exact d'AlmUuid, et la raison pour laquelle l'UUID n'a besoin
+    d'aucune table: la provenance est DANS le nombre.
+   ===================================================================== *)
+
+u := Uuid;
+
+Genre  := UDINT_TO_INT(u / 268435456);
+u      := u - INT_TO_UDINT(Genre) * 268435456;
+Rack   := UDINT_TO_INT(u / 16777216);
+u      := u - INT_TO_UDINT(Rack) * 16777216;
+Module := UDINT_TO_INT(u / 262144);
+u      := u - INT_TO_UDINT(Module) * 262144;
+Voie   := UDINT_TO_INT(u / 4096);
+u      := u - INT_TO_UDINT(Voie) * 4096;
+Sous   := UDINT_TO_INT(u / 256);
+Code   := UDINT_TO_INT(u - INT_TO_UDINT(Sous) * 256);
+<<<end>>>

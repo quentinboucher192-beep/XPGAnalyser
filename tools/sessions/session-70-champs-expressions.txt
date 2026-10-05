@@ -1,0 +1,100 @@
+# =============================================================================
+#  Session 70 - 1.10 : les champs a expression, partout pareils (chantier K,
+#  decisions 1 et 10a). Captures PNG_1000 a PNG_1009, dans une COPIE de
+#  Armoire_Gaz (Vue_Synoptique : la vanne V_101). Ecrite avant la fusion, pas
+#  encore jouee : a passer sur l'appli fusionnee. Commandes nouvelles (K) :
+#  "propriete-retirer X" (le bouton X au bout de la ligne X) et
+#  "propriete-menu X" (le clic droit sur la case X) ; "choisir <libelle>"
+#  choisit une entree du menu ouvert (sans expression, la premiere s'appelle
+#  "Ecrire une expression...", avec : "Modifier l'expression...") ; "texte" tape dans le champ qui a le
+#  clavier. Une propriete pilotee s'appelle "<nom>  f" (f crochet).
+#  A verifier en la jouant : les noms exacts des proprietes de V_101.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- 1. Vide : la pastille fx en creux et l'invite grise selon le type ----------
+arbre "IHM/Vues/Vue_Synoptique"
+attendre 6
+objet V_101
+attendre 3
+propriete-clic "Info-bulle"
+touche Escape
+attendre 2
+capture PNG_1000_champs_vides_invite.png
+
+# ---- 2. Poser une expression : clic droit > Ecrire une expression... ------------
+propriete-menu "Remplissage"
+attendre 2
+capture PNG_1001_menu_clic_droit.png
+choisir "Écrire une expression…"
+attendre 2
+texte "SEL(V_101_Ouverte, '#9E9E9E', '#2E7D32')"
+attendre 2
+capture PNG_1002_expression_le_egal_garde.png
+touche Return
+attendre 3
+capture PNG_1003_pilotee_pastille_pleine_et_x.png
+
+# ---- 3. L'aide a la saisie selon le type : une case TRUE/FALSE -------------------
+propriete-menu "Visible"
+attendre 2
+choisir "Écrire une expression…"
+attendre 2
+texte "V_"
+touche Ctrl+Space
+attendre 2
+capture PNG_1004_completion_bool_d_abord.png
+touche Escape
+touche Escape
+attendre 2
+
+# ---- 4. Une couleur : les couleurs nommees et #RRGGBB ----------------------------
+propriete-menu "Contour"
+attendre 2
+choisir "Écrire une expression…"
+attendre 2
+touche Ctrl+A
+texte "rou"
+touche Ctrl+Space
+attendre 2
+capture PNG_1005_completion_couleurs.png
+touche Escape
+touche Escape
+attendre 2
+
+# ---- 5. Retirer l'expression : le X, puis Ctrl+Z ---------------------------------
+propriete-retirer "Remplissage  ƒ"
+attendre 3
+capture PNG_1006_retiree_valeur_fixe_revenue.png
+touche Ctrl+Z
+attendre 3
+capture PNG_1007_ctrl_z_rend_l_expression.png
+
+# ---- 6. Vider la case pilotee : l'expression part aussi --------------------------
+propriete "Remplissage  ƒ" ""
+attendre 3
+capture PNG_1008_case_videe_expression_retiree.png
+
+# ---- 7. Ctrl+Suppr dans la case ouverte retire l'expression ----------------------
+touche Ctrl+Z
+attendre 3
+propriete-clic "Remplissage  ƒ"
+attendre 2
+touche Ctrl+Delete
+attendre 3
+capture PNG_1009_ctrl_suppr_retire.png
+
+# ---- 8. Clic droit > Revenir a la valeur par defaut (la 4e entree de la maquette) --
+touche Ctrl+Z
+attendre 3
+# (le menu et ses quatre entrees se voient deja sur PNG_1001 ; PNG_1010+ sont au chantier Q)
+propriete-menu "Remplissage  ƒ"
+attendre 2
+choisir "Revenir à la valeur par défaut"
+attendre 3
+capture PNG_1009b_valeur_par_defaut_revenue.png

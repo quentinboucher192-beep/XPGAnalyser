@@ -1,0 +1,169 @@
+# Derived function block, shared.
+name = DFB_CTL_LEVEL
+version = 1.00
+#! summary = Regulation de niveau par paliers : combien d'equipements doivent tourner, pour vider ou pour remplir.
+#! usage = IL NE COMMANDE RIEN. Il dit Demand - combien de pompes doivent tourner - et
+#! usage = c'est DFB_SEQ_ROTATE qui choisit LESQUELLES. Les deux ensemble font un
+#! usage = poste de relevage : Demand du niveau cable sur Demand de la rotation.
+#! usage = DEUX SENS. Dir = 0, VIDANGE : un poste de relevage, une fosse - on pompe
+#! usage = quand ca monte. Dir = 1, REMPLISSAGE : un chateau d'eau, une bache
+#! usage = d'alimentation - on pompe quand ca descend.
+#! usage = UNE MESURE PERDUE NE DECIDE RIEN. LevelOk a FALSE (voie en defaut, capteur
+#! usage = hors plage) fige les paliers, et Demand prend FallbackDemand : le nombre de
+#! usage = pompes a faire tourner a l'aveugle. 0 en vidange peut faire deborder ;
+#! usage = c'est a vous de choisir, pas au bloc.
+#! example = (* declarer : Paliers : ARRAY[0..7] OF ST_CTL_Stage;
+#! example =    Rot : ARRAY[0..15] OF ST_SEQ_Member; ROT_Relevage : DFB_SEQ_ROTATE; *)
+#! example = NIV_Relevage(Count := 2, CycleMs := 20, Level := Niveau, Dir := 0,
+#! example =              LevelOk := NiveauOk, FallbackDemand := 1, Stages := Paliers);
+#! example = 
+#! example = (* combien : le niveau ; lesquelles : la rotation *)
+#! example = ROT_Relevage(Count := 3, Demand := NIV_Relevage.Demand, Mode := 2,
+#! example =              RotateMs := 3600000, CycleMs := 20, Mem := Rot);
+#! see = ST_CTL_Stage
+#! see = DFB_SEQ_ROTATE
+#! param Count = Combien de paliers sont declares : Stages[0] a Stages[Count - 1], 8
+#! param Count = au plus.
+#! param CycleMs = La periode de la tache, en ms : DtMs de DFB_SYS_CLOCK. Fait avancer
+#! param CycleMs = les retards.
+#! param Level = La mesure de niveau, dans les unites des paliers : Val de la voie
+#! param Level = analogique.
+#! param Dir = 0 vidange (on pompe quand ca monte), 1 remplissage (on pompe quand ca
+#! param Dir = descend).
+#! param LevelOk = La mesure est fiable. FALSE fige les paliers et donne
+#! param LevelOk = FallbackDemand : a cabler sur NOT de la voie en defaut, ou sur la
+#! param LevelOk = plage du capteur.
+#! param FallbackDemand = Combien de pompes font tourner quand la mesure est perdue.
+#! param Stages = Les paliers, une ligne ST_CTL_Stage chacun.
+#! param Demand = COMBIEN d'equipements doivent tourner : le nombre de paliers actifs,
+#! param Demand = ou FallbackDemand sans mesure. A cabler sur Demand de
+#! param Demand = DFB_SEQ_ROTATE.
+#! param AnyActive = Au moins un palier est actif.
+#! param FaultCount = Combien de paliers ont des niveaux dans le mauvais sens.
+#! changes 1.00 = NOUVEAU.
+#! given = Niveau := 1.30
+#! given = NiveauOk := TRUE
+#! given = Paliers[0].StartLevel := 1.2
+#! given = Paliers[0].StopLevel := 0.5
+#! given = Paliers[1].StartLevel := 1.6
+#! given = Paliers[1].StopLevel := 0.7
+#! expect = 1 : NIV_Relevage.Demand = 1
+#! expect = 1 : Paliers[0].Active = TRUE
+#! expect = 1 : Rot[0].RunReq = TRUE
+#! expect = 1 : Rot[1].RunReq = FALSE
+
+# Regulation de niveau par paliers.
+
+# name ; type ; scope ; initial ; comment
+Count ; INT ; Input ; 8 ; combien de paliers sont declares
+CycleMs ; DINT ; Input ; 20 ; la periode de la tache en ms : DtMs de DFB_SYS_CLOCK
+Level ; REAL ; Input ; 0.0 ; la mesure de niveau
+Dir ; INT ; Input ; 0 ; 0 vidange (pomper quand ca monte), 1 remplissage (quand ca descend)
+LevelOk ; BOOL ; Input ; TRUE ; la mesure est fiable
+FallbackDemand ; INT ; Input ; 0 ; combien de pompes sans mesure
+Stages ; ARRAY[0..7] OF ST_CTL_Stage ; InOut ;  ; les paliers
+Demand ; INT ; Output ; 0 ; combien d'equipements doivent tourner
+AnyActive ; BOOL ; Output ;  ; au moins un palier est actif
+FaultCount ; INT ; Output ; 0 ; combien de paliers sont mal regles
+i ; INT ; Local ; 0 ; 
+n ; INT ; Local ; 0 ; 
+LAST ; INT ; Local ; 7 ; dernier indice
+startCond ; BOOL ; Local ;  ; 
+stopCond ; BOOL ; Local ;  ; 
+MAXMS ; DINT ; Local ; 2000000000 ; plafond des compteurs de temps
+
+<<<section Process ST>>>
+(* =====================================================================
+    DFB_CTL_LEVEL - combien d'equipements doivent tourner, selon le niveau.
+
+    IL NE COMMANDE RIEN : il dit Demand, et DFB_SEQ_ROTATE choisit lesquels.
+
+    CHAQUE PALIER A SON HYSTERESIS. En vidange, il s'enclenche quand le
+    niveau MONTE a StartLevel, et retombe quand il REDESCEND a StopLevel.
+    Des niveaux dans le mauvais sens feraient battre le palier a chaque
+    vague : c'est un defaut de reglage, et le palier est tenu hors service.
+
+    UNE MESURE PERDUE NE DECIDE RIEN : les paliers sont figes, et Demand
+    prend FallbackDemand.
+   ===================================================================== *)
+
+n := Count;
+IF n > LAST + 1 THEN n := LAST + 1; END_IF;
+IF n < 0 THEN n := 0; END_IF;
+
+Demand := 0;
+AnyActive := FALSE;
+FaultCount := 0;
+
+FOR i := 0 TO n - 1 DO
+    IF NOT Stages[i].Enable THEN
+        Stages[i].Active := FALSE;
+        Stages[i].ElapsedMs := 0;
+        Stages[i].Fault := FALSE;
+    ELSE
+        IF Dir = 0 THEN
+            Stages[i].Fault := Stages[i].StartLevel <= Stages[i].StopLevel;
+        ELSE
+            Stages[i].Fault := Stages[i].StartLevel >= Stages[i].StopLevel;
+        END_IF;
+
+        IF Stages[i].Fault THEN
+            Stages[i].Active := FALSE;
+            Stages[i].ElapsedMs := 0;
+            FaultCount := FaultCount + 1;
+        ELSIF LevelOk THEN
+            IF Dir = 0 THEN
+                startCond := Level >= Stages[i].StartLevel;
+                stopCond  := Level <= Stages[i].StopLevel;
+            ELSE
+                startCond := Level <= Stages[i].StartLevel;
+                stopCond  := Level >= Stages[i].StopLevel;
+            END_IF;
+
+            IF NOT Stages[i].Active THEN
+                IF startCond THEN
+                    IF Stages[i].ElapsedMs < MAXMS - CycleMs THEN
+                        Stages[i].ElapsedMs := Stages[i].ElapsedMs + CycleMs;
+                    ELSE
+                        Stages[i].ElapsedMs := MAXMS;
+                    END_IF;
+                    IF Stages[i].ElapsedMs >= Stages[i].OnDelayMs THEN
+                        Stages[i].Active := TRUE;
+                        Stages[i].Starts := Stages[i].Starts + 1;
+                        Stages[i].ElapsedMs := 0;
+                    END_IF;
+                ELSE
+                    Stages[i].ElapsedMs := 0;
+                END_IF;
+            ELSE
+                IF stopCond THEN
+                    IF Stages[i].ElapsedMs < MAXMS - CycleMs THEN
+                        Stages[i].ElapsedMs := Stages[i].ElapsedMs + CycleMs;
+                    ELSE
+                        Stages[i].ElapsedMs := MAXMS;
+                    END_IF;
+                    IF Stages[i].ElapsedMs >= Stages[i].OffDelayMs THEN
+                        Stages[i].Active := FALSE;
+                        Stages[i].ElapsedMs := 0;
+                    END_IF;
+                ELSE
+                    Stages[i].ElapsedMs := 0;
+                END_IF;
+            END_IF;
+        ELSE
+            (* Mesure perdue : le palier ne bouge pas, et son retard repart. *)
+            Stages[i].ElapsedMs := 0;
+        END_IF;
+
+        IF Stages[i].Active THEN
+            Demand := Demand + 1;
+        END_IF;
+    END_IF;
+END_FOR;
+
+IF NOT LevelOk THEN
+    Demand := FallbackDemand;
+    IF Demand < 0 THEN Demand := 0; END_IF;
+END_IF;
+AnyActive := Demand > 0;
+<<<end>>>

@@ -1,0 +1,54 @@
+# =============================================================================
+#  Session 110 (R111, 1.11) : les reliquats des groupes d'alarmes.
+#  IHM > Alarmes > Groupes d'alarmes : la ligne « Lier… » d'un groupe deroule
+#  « Ouvrir la fenetre a cocher… », qui ouvre la fenetre a cocher (les groupes
+#  d'objets, les vues, les symboles ; ceux deja lies coches) ; Appliquer, Ctrl+Z.
+#  Une nouvelle alarme prend la priorite par defaut de son groupe.
+#  Sur une copie d'Armoire_Gaz telle quelle (scratchpad/Q1103/qa/run.sh ... brut).
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- 1. IHM > Alarmes : la partie Groupes d'alarmes
+arbre "IHM/Configuration/Alarmes"
+attendre 6
+capture 110_01_alarmes_groupes.png
+
+# ---- 2. « Lier… » d'un groupe : une seule entree, puis la fenetre a cocher
+# (le groupe Armoire A, replie, se deplie d'un clic sur son titre)
+clic 1515 286
+attendre 3
+propriete-clic "Lier…"
+attendre 3
+capture 110_02_lier_deroule.png
+choisir "Ouvrir la fenêtre à cocher…"
+attendre 4
+capture 110_03_lier_fenetre_a_cocher.png
+
+# ---- 3. Cocher V_101 : le bouton dit ce qui va changer ; Appliquer (une commande), Ctrl+Z
+clic 682 457
+attendre 2
+capture 110_04_lier_coche_bouton.png
+clic 1183 743
+attendre 4
+capture 110_05_lier_applique_colonne.png
+touche ctrl+z
+attendre 4
+capture 110_06_lier_ctrl_z.png
+
+# ---- 4. La priorite par defaut d'Armoire A (1 - Critique) ; une NOUVELLE alarme mise
+# dans Armoire A la prend (la barre d'etat le dit)
+propriete-clic "Priorité par défaut"
+attendre 2
+choisir "1 - Critique"
+attendre 3
+clic 652 94
+attendre 3
+propriete "Groupe" "Armoire A"
+attendre 4
+capture 110_07_nouvelle_alarme_priorite_du_groupe.png
+quitter

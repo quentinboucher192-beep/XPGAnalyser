@@ -1,0 +1,51 @@
+(* VerifierBibliotheque
+
+   Ne modifie rien. Elle regarde et elle rapporte, ce qui est exactement ce
+   qu'on veut avant une mise a jour : savoir ce qui bougerait.
+
+   #! summary = Compare les types et les blocs du projet à la bibliothèque et rapporte ce qui a pris du retard.
+   #! version = 1.10
+   #! changes 1.10 = Le formulaire et son dossier Bibliothèque ; le code ne change pas.
+   #! changes 1.01 = Elle controle TOUT ce que le projet a importe de la bibliotheque (LibOutdated) : la 1.00 ne regardait que ST_IO_Thr, ST_IO_Ana et ST_IO_Dig, ecrits en dur, et une famille ajoutee a libs/ n'etait verifiee par personne.
+   #! usage = NE MODIFIE RIEN. Elle regarde et elle rapporte, ce qui est exactement ce qu'on veut avant une mise a jour : savoir ce qui bougerait avant de decider si on veut que ca bouge.
+   #! usage = TOUT CE QUI VIENT DE LA BIBLIOTHEQUE est compare : chaque type (DDT) et chaque bloc (DFB) du projet dont la bibliotheque propose une version plus recente. Un element que la bibliotheque ne connait pas n'est pas cite.
+   #! usage = Pour mettre a jour : MettreAJourBibliotheque, qui prend la meme liste - les types d'abord, les blocs ensuite.
+   #! usage = Une macro se relance. C'est la regle de toutes celles-ci : relancee sur un projet ou elle a deja tourne, elle ne doit rien casser et rien dupliquer.
+   #! see = MettreAJourBibliotheque, EnsureLibraryItem
+   #! categorie = Bibliothèque
+   #! produit = rien : elle compare le projet à la bibliothèque et dit ce qui a pris du retard
+*)
+
+liste := LibOutdated();
+retard := 0;
+debut := 0;
+pos := 0;
+nom := '';
+genre := '';
+
+WHILE debut < LEN(liste) DO
+    pos := FIND(liste, ',', debut);
+    IF pos < 0 THEN
+        nom := MID(liste, debut);
+        debut := LEN(liste);
+    ELSE
+        nom := MID(liste, debut, pos - debut);
+        debut := pos + 1;
+    END_IF;
+    IF nom <> '' THEN
+        genre := 'element';
+        IF TypeExists(nom) THEN
+            genre := 'type';
+        ELSIF PouExists(nom) THEN
+            genre := 'bloc';
+        END_IF;
+        Warn(nom + ' (' + genre + ') : la bibliotheque propose la ' + LibVersion(nom));
+        retard := retard + 1;
+    END_IF;
+END_WHILE;
+
+IF retard = 0 THEN
+    Log('tout est a jour');
+ELSE
+    Log(DINT_TO_STRING(retard) + ' element(s) en retard sur la bibliotheque : MettreAJourBibliotheque les met a jour');
+END_IF;

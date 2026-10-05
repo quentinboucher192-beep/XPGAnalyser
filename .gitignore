@@ -1,0 +1,16 @@
+# Sorties de compilation
+build/
+build-*/
+out/
+*.o
+*.d
+*.obj
+*.pdb
+*.ilk
+.vs/
+x64/
+dist/staging/
+outils/journaux/
+outils/etat/
+# Fichiers de verrou Office
+~$*

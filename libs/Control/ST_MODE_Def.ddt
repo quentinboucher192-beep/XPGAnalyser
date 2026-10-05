@@ -1,0 +1,51 @@
+# Derived data type, shared.
+name = ST_MODE_Def
+version = 1.01
+#! summary = Un mode de marche : sa condition d'entree, sa priorite, son temps minimum.
+#! usage = Une ligne par mode, dans le tableau passe a DFB_MODE_MANAGER. Le
+#! usage = gestionnaire choisit ; c'est vous qui calculez Req.
+#! see = DFB_MODE_MANAGER
+#! param Req = ENTREE. L'equation de transition, calculee par votre programme a
+#! param Req = chaque cycle. Le gestionnaire ne la calcule pas et ne la garde
+#! param Req = pas : c'est une demande, pas un ordre.
+#! param Priority = Le plus grand gagne. C'EST LA PRIORITE QUI TRANCHE, PAS
+#! param Priority = L'ORDRE DU TABLEAU. Deux modes demandes en meme temps arrive
+#! param Priority = tout le temps - un arret d'urgence pendant un cycle - et
+#! param Priority = laisser gagner celui qui est declare le premier ferait
+#! param Priority = dependre la securite de l'ordre de saisie.
+#! param MinMs = Temps minimum dans ce mode avant d'en sortir, en ms. 0 : aucun.
+#! param MinMs = Sans lui, deux conditions qui oscillent font battre
+#! param MinMs = l'installation entre deux modes a chaque cycle, et rien de ce
+#! param MinMs = qui est lance n'a le temps d'aboutir.
+#! param Enabled = FALSE retire le mode du choix sans effacer sa ligne ni ses
+#! param Enabled = compteurs. C'est ce qu'on veut pour un mode d'essai.
+#! param Active = SORTIE. C'est le mode courant.
+#! param Name = Le nom du mode, pour l'IHM et le journal. Le gestionnaire ne s'en sert
+#! param Name = pas : c'est l'indice dans le tableau qui designe un mode.
+#! param TotalMs = Temps cumule passe dans ce mode, en ms. Il PLAFONNE a 2 000 000 000
+#! param TotalMs = (555 heures) au lieu de devenir negatif : pour un cumul, lire
+#! param TotalMs = TotalS.
+#! param TotalS = Temps cumule passe dans ce mode, en SECONDES : ne deborde pas avant
+#! param TotalS = 136 ans. Les heures de production sont TotalS / 3600 du mode
+#! param TotalS = automatique.
+#! param Entries = Combien de fois on est entre dans ce mode depuis le demarrage, y
+#! param Entries = compris la premiere entree. Un compteur qui grimpe vite sur un mode
+#! param Entries = de repli dit qu'une condition bat.
+#! internal = TotalFracMs
+#! changes 1.01 = AJOUTS EN FIN DE TYPE : TotalS (temps passe dans le mode, en
+#! changes 1.01 = secondes, sans debordement) et TotalFracMs (interne). TotalMs
+#! changes 1.01 = plafonne a 2 000 000 000 ms au lieu de devenir negatif.
+
+# Un mode: sa condition d'entree, sa priorite, son temps minimum.
+
+# name ; type ; scope ; initial ; comment
+Name ; STRING[16] ; Member ;  ; le nom du mode
+Enabled ; BOOL ; Member ; TRUE ; FALSE: ce mode ne peut pas etre choisi
+Req ; BOOL ; Member ;  ; ENTREE: l'equation de transition, calculee par votre programme
+Priority ; INT ; Member ; 0 ; le plus grand gagne. C'est la priorite qui tranche, pas l'ordre
+MinMs ; DINT ; Member ; 0 ; temps minimum dans ce mode avant d'en sortir. 0: aucun
+Active ; BOOL ; Member ;  ; SORTIE: c'est le mode courant
+TotalMs ; DINT ; Member ; 0 ; temps cumule passe dans ce mode, en ms, plafonne a 2 000 000 000 : lire TotalS
+Entries ; UDINT ; Member ; 0 ; combien de fois on y est entre
+TotalS ; UDINT ; Member ; 0 ; temps cumule passe dans ce mode, en secondes : ne deborde pas avant 136 ans
+TotalFracMs ; DINT ; Member ; 0 ; runtime, ne pas ecrire : les millisecondes pas encore comptees dans TotalS

@@ -1,0 +1,75 @@
+# =============================================================================
+#  Session 81 - 1.10.2 (chantier D) : "Dupliquer..." avec des reperes. Captures
+#  D1102_01 a D1102_11, dans une COPIE de Armoire_Gaz (Vue_Synoptique : V_101).
+#  V_101 recoit $Vanne$ (Ouverture, Defaut) et $Repere$ (Libelle) ; les vannes
+#  sont des membres de Armoires[0].sorties (V2..V9, VS : sortie_tor = cmd, F0,
+#  F1), qui existent : les cases sont blanches, sauf V8 (rouge, "veux-tu dire").
+#  Le lecteur de sessions ne touche pas a "$Vanne$" (seul ${...} est une variable).
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- V_101 recoit des reperes ; l'inspecteur les montre ------------------------
+arbre "IHM/Vues/Vue_Synoptique"
+attendre 6
+objet V_101
+attendre 3
+propriete "Ouverture (%)  ƒ" "=SEL($Vanne$.cmd, 0, 100)"
+attendre 2
+propriete "Défaut (expression)" "=($Vanne$.F0)"
+attendre 2
+propriete "Libellé" "$Repere$"
+attendre 2
+capture D1102_01_inspecteur_reperes.png
+
+# ---- Ctrl+D : la fenetre, les copies et leurs reperes ---------------------------
+# un clic sur V_101 dans la vue : le focus quitte le champ de l'inspecteur
+vue-clic 240 170
+attendre 1
+touche ctrl+d
+attendre 3
+capture D1102_02_fenetre_cases_vides.png
+# En liste : une colonne collee d'Excel (7 lignes = les 7 copies) ; l'original a part
+dupliquer-coller "$Vanne$" "Armoires[0].sorties.V3|Armoires[0].sorties.V4|Armoires[0].sorties.V5|Armoires[0].sorties.V6|Armoires[0].sorties.V7|Armoires[0].sorties.V9|Armoires[0].sorties.VS"
+dupliquer-case 1 "$Vanne$" "Armoires[0].sorties.V2"
+attendre 2
+capture D1102_03_fenetre_en_liste.png
+# En serie : V-1{n}, n de 01
+dupliquer-serie "$Repere$" "V-1{n}" "01"
+attendre 2
+capture D1102_04_fenetre_en_serie.png
+dupliquer-case 4 "$Vanne$" "Armoires[0].sorties.V8"
+attendre 2
+capture D1102_05_case_rouge_veux_tu_dire.png
+dupliquer-case 4 "$Vanne$" "Armoires[0].sorties.V5"
+dupliquer-ligne 3
+attendre 2
+dupliquer-verifier
+capture D1102_06_copies_avant_apres.png
+
+# ---- La disposition : sur X (deborde), Ajuster, puis en grille ------------------
+dupliquer-onglet 2
+dupliquer-pose x 4 200
+attendre 2
+capture D1102_07_disposition_deborde.png
+dupliquer-ajuster
+attendre 2
+dupliquer-pose grille 4 16
+attendre 2
+capture D1102_08_disposition_grille.png
+
+# ---- Dupliquer : une commande ; Ctrl+Z la retire ; Compiler ----------------------
+dupliquer-valider
+attendre 3
+capture D1102_09_vue_apres.png
+touche ctrl+z
+attendre 3
+capture D1102_10_vue_ctrl_z.png
+touche ctrl+y
+attendre 3
+capture D1102_11_vue_ctrl_y.png
+quitter

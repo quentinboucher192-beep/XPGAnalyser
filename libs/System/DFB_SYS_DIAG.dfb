@@ -1,0 +1,151 @@
+# Derived function block, shared.
+name = DFB_SYS_DIAG
+version = 1.00
+#! summary = Le diagnostic de l'automate : bits systeme, temps de cycle, et jusqu'a 32 modules surveilles.
+#! usage = LES BITS SYSTEME ENTRENT PAR LES BROCHES : %S10, %S16, %S19, %S51, %S68,
+#! usage = %S0, %S1, %SW30. Le bloc ne lit aucune adresse lui-meme - ce qui le rend
+#! usage = lisible, et simulable.
+#! usage = ATTENTION AUX POLARITES : %S10 et %S16 sont a 1 quand TOUT VA BIEN, et
+#! usage = tombent a 0 sur une erreur. Les broches s'appellent IoOk et TaskIoOk pour
+#! usage = ne pas l'oublier.
+#! example = (* declarer : Sante : ST_SYS_Diag; Modules : ARRAY[0..31] OF ST_SYS_Module; *)
+#! example = DIAG(Count := 2, CycleMs := 20, CycleTimeMs := %SW30, IoOk := %S10, TaskIoOk := %S16,
+#! example =      Overrun := %S19, RtcLost := %S51, BatteryLow := %S68, ColdStart := %S0, WarmStart := %S1,
+#! example =      Diag := Sante, Mods := Modules);
+#! see = ST_SYS_Diag
+#! see = ST_SYS_Module
+#! see = DFB_SYS_CLOCK
+#! param Count = Combien de modules sont surveilles : Mods[0] a Mods[Count - 1], 32 au
+#! param Count = plus.
+#! param CycleMs = La periode de la tache, en ms : DtMs de DFB_SYS_CLOCK. Fait avancer
+#! param CycleMs = ErrMs.
+#! param CycleTimeMs = %SW30 : le temps du dernier cycle MAST, en ms.
+#! param IoOk = %S10 : 1 quand les entrees/sorties vont bien.
+#! param TaskIoOk = %S16 : 1 quand les entrees/sorties de la tache vont bien.
+#! param Overrun = %S19 : la periode de la tache a ete depassee.
+#! param RtcLost = %S51 : l'horloge a perdu l'heure.
+#! param BatteryLow = %S68 : la pile de la CPU est faible.
+#! param ColdStart = %S0 : premier cycle apres un demarrage a froid.
+#! param WarmStart = %S1 : premier cycle apres une reprise a chaud.
+#! param ResetStats = Front montant : remet a zero CycleMaxMs, Overruns et les
+#! param ResetStats = ErrCount.
+#! param Diag = La synthese, pour l'IHM.
+#! param Mods = Les modules surveilles.
+#! param Healthy = Tout va bien : la meme chose que Diag.Healthy.
+#! param ModErrCount = Combien de modules sont en erreur.
+#! changes 1.00 = NOUVEAU.
+#! given = %S10 := TRUE
+#! given = %S16 := TRUE
+#! given = %SW30 := 12
+#! expect = 1 : DIAG.Healthy = TRUE
+#! expect = 1 : Sante.CycleMaxMs = 12
+#! expect = 1 : Sante.FirstModuleInError = -1
+
+# Le diagnostic de l'automate.
+
+# name ; type ; scope ; initial ; comment
+Count ; INT ; Input ; 32 ; combien de modules sont surveilles
+CycleMs ; DINT ; Input ; 20 ; la periode de la tache en ms : DtMs de DFB_SYS_CLOCK
+CycleTimeMs ; INT ; Input ; 0 ; %SW30 : le dernier cycle, en ms
+IoOk ; BOOL ; Input ; TRUE ; %S10 : 1 quand tout va bien
+TaskIoOk ; BOOL ; Input ; TRUE ; %S16 : 1 quand tout va bien
+Overrun ; BOOL ; Input ;  ; %S19 : debordement de periode
+RtcLost ; BOOL ; Input ;  ; %S51 : horloge perdue
+BatteryLow ; BOOL ; Input ;  ; %S68 : pile faible
+ColdStart ; BOOL ; Input ;  ; %S0 : demarrage a froid
+WarmStart ; BOOL ; Input ;  ; %S1 : reprise a chaud
+ResetStats ; BOOL ; Input ;  ; front : remet les statistiques a zero
+Diag ; ST_SYS_Diag ; InOut ;  ; la synthese
+Mods ; ARRAY[0..31] OF ST_SYS_Module ; InOut ;  ; les modules
+Healthy ; BOOL ; Output ;  ; tout va bien
+ModErrCount ; INT ; Output ; 0 ; modules en erreur
+i ; INT ; Local ; 0 ; 
+n ; INT ; Local ; 0 ; 
+LAST ; INT ; Local ; 31 ; dernier indice
+cnt ; INT ; Local ; 0 ; 
+first ; INT ; Local ; -1 ; 
+avgInit ; BOOL ; Local ;  ; 
+PrevOverrun ; BOOL ; Local ;  ; 
+PrevReset ; BOOL ; Local ;  ; 
+MAXMS ; DINT ; Local ; 2000000000 ; plafond des compteurs de temps
+
+<<<section Process ST>>>
+(* =====================================================================
+    DFB_SYS_DIAG - la sante de l'automate.
+
+    Les bits systeme entrent par les broches : le bloc ne lit aucune adresse
+    lui-meme. %S10 et %S16 sont a 1 quand tout va bien - d'ou IoOk et
+    TaskIoOk, pour que la polarite se lise dans le nom.
+   ===================================================================== *)
+
+n := Count;
+IF n > LAST + 1 THEN n := LAST + 1; END_IF;
+IF n < 0 THEN n := 0; END_IF;
+
+(* ---- les demarrages ---------------------------------------------------- *)
+IF ColdStart THEN
+    Diag.LastStart := 1;
+END_IF;
+IF WarmStart THEN
+    Diag.LastStart := 2;
+    Diag.WarmStarts := Diag.WarmStarts + 1;
+END_IF;
+
+(* ---- les statistiques -------------------------------------------------- *)
+IF ResetStats AND NOT PrevReset THEN
+    Diag.CycleMaxMs := 0;
+    Diag.Overruns := 0;
+    FOR i := 0 TO LAST DO
+        Mods[i].ErrCount := 0;
+    END_FOR;
+END_IF;
+PrevReset := ResetStats;
+
+Diag.IoOk := IoOk;
+Diag.TaskIoOk := TaskIoOk;
+Diag.BatteryLow := BatteryLow;
+Diag.RtcLost := RtcLost;
+
+IF Overrun AND NOT PrevOverrun THEN
+    Diag.Overruns := Diag.Overruns + 1;
+END_IF;
+PrevOverrun := Overrun;
+
+Diag.CycleMs := CycleTimeMs;
+IF CycleTimeMs > Diag.CycleMaxMs THEN
+    Diag.CycleMaxMs := CycleTimeMs;
+END_IF;
+IF NOT avgInit THEN
+    Diag.CycleAvgMs := INT_TO_REAL(CycleTimeMs);
+    avgInit := TRUE;
+ELSE
+    Diag.CycleAvgMs := Diag.CycleAvgMs + (INT_TO_REAL(CycleTimeMs) - Diag.CycleAvgMs) * 0.01;
+END_IF;
+
+(* ---- les modules ------------------------------------------------------- *)
+cnt := 0;
+first := -1;
+FOR i := 0 TO n - 1 DO
+    IF Mods[i].Used AND Mods[i].Err THEN
+        IF NOT Mods[i].PrevErr THEN
+            Mods[i].ErrCount := Mods[i].ErrCount + 1;
+            Mods[i].ErrMs := 0;
+        ELSIF Mods[i].ErrMs < MAXMS - CycleMs THEN
+            Mods[i].ErrMs := Mods[i].ErrMs + CycleMs;
+        ELSE
+            Mods[i].ErrMs := MAXMS;
+        END_IF;
+        cnt := cnt + 1;
+        IF first < 0 THEN first := i; END_IF;
+    ELSE
+        Mods[i].ErrMs := 0;
+    END_IF;
+    Mods[i].PrevErr := Mods[i].Used AND Mods[i].Err;
+END_FOR;
+
+Diag.ModulesInError := cnt;
+Diag.FirstModuleInError := first;
+Diag.Healthy := IoOk AND TaskIoOk AND NOT BatteryLow AND NOT RtcLost AND cnt = 0;
+Healthy := Diag.Healthy;
+ModErrCount := cnt;
+<<<end>>>

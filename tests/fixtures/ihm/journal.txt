@@ -1,0 +1,4 @@
+2026-09-21 06:00:12 Démarrage de l'armoire A
+2026-09-21 06:00:15 Purge azote : OK
+2026-09-21 08:41:03 Bouteille A1 vide, basculement sur A2
+2026-09-21 12:15:47 Acquittement opérateur

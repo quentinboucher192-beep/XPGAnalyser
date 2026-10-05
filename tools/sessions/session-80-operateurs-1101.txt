@@ -1,0 +1,81 @@
+# =============================================================================
+#  Session 80 - 1.10.1 (chantier U2) : les operateurs - la fenetre "Ajouter un
+#  operateur" (maquette 1.10, scene 13), la legende de a, b et Resultat
+#  au-dessus du script, l'aide a la saisie qui les connait (a. : les membres,
+#  Ctrl+Espace : en tete), Compiler (un membre faux, veux-tu dire). Dans une
+#  COPIE de Armoire_Gaz (le type IHM T_Vanne : Ouverte, Fermee, Position).
+#  Commande nouvelle : operateur-fenetre genre|operande <valeur>, creer,
+#  annuler, ouvrir (un clic sur la pastille, le bouton, le lien).
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- Types IHM : T_Vanne, sa section Operateurs (vide) ------------------------------
+arbre "IHM/Programmation générale/Types IHM"
+attendre 5
+ligne "T_Vanne" exact
+attendre 3
+
+# ---- 1. La fenetre, prereglee comme la maquette : / et REAL -------------------------
+outil "Ajouter un opérateur"
+attendre 3
+capture U2_1_fenetre_ajouter.png
+
+# ---- 2. Le genre + et l'operande T_Vanne : la signature, la legende, le script --------
+operateur-fenetre genre "+"
+attendre 2
+operateur-fenetre operande "T_Vanne"
+attendre 2
+capture U2_2_fenetre_plus.png
+
+# ---- 3. Creer et ouvrir le script : la legende au-dessus du script --------------------
+operateur-fenetre creer
+attendre 3
+capture U2_3_legende_script.png
+
+# ---- 4. L'aide a la saisie : a. propose les membres de T_Vanne ------------------------
+touche Ctrl+End
+texte "Resultat.Position := a."
+attendre 3
+capture U2_4_completion_a_point.png
+touche Escape
+attendre 1
+
+# ---- 5. Ctrl+Espace sur une ligne vide : a, b, Resultat en tete, avec leurs types -----
+texte "Position;"
+touche Return
+touche Ctrl+Space
+attendre 3
+capture U2_5_ctrl_espace.png
+touche Escape
+attendre 1
+
+# ---- 6. Compiler : un membre faux de a (veux-tu dire) ---------------------------------
+texte "Resultat.Ouverte"
+touche Escape
+texte " := a.Ouvert"
+touche Escape
+texte ";"
+attendre 3
+capture U2_6_membre_faux.png
+
+# ---- 7. Le doublon : existe deja, l'ouvrir ; une conversion ----------------------------
+outil "Ajouter un opérateur"
+attendre 2
+operateur-fenetre genre "+"
+attendre 1
+operateur-fenetre operande "T_Vanne"
+attendre 2
+capture U2_7_doublon.png
+operateur-fenetre genre "TO"
+attendre 1
+operateur-fenetre operande "STRING"
+attendre 2
+capture U2_8_conversion.png
+operateur-fenetre annuler
+attendre 2
+quitter

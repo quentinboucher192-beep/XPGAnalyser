@@ -1,0 +1,233 @@
+# Derived function block, shared.
+name = DFB_EQ_VALVE3
+version = 1.02
+#! summary = Une vanne 3 voies : 3 commandes, 3 retours de position.
+#! usage = UNE INSTANCE TRAITE SEIZE EQUIPEMENTS, et cette taille est dans la signature
+#! usage = du bloc : en changer touche toutes les instances de tous les projets qui
+#! usage = l'ont importe. Seize suffit pour une station ; au-dela, on declare une
+#! usage = deuxieme instance.
+#! usage = Appeler une fois par cycle, apres les voies d'entree et avant les reports
+#! usage = vers l'IHM : le bloc lit ce que les voies ont ecrit, et ecrit ce que les
+#! usage = reports vont lire.
+#! usage = 
+#! usage = LA POSITION EST DEDUITE DES RETOURS, pas de la commande. Un seul retour actif
+#! usage = donne la position ; deux donnent le defaut 1 et la position -1 ; aucun laisse
+#! usage = -1 aussi. Rien n'est suppose, sauf quand HasFdc est faux et que c'est ecrit.
+#! example = (* declarer : Vannes : ARRAY[0..15] OF ST_EQ_Valve3; *)
+#! example = Vannes[0].PosReq := ChoixOperateur;
+#! example = Vannes[0].Fdc[0] := CarteDI_R0S4[8].Val;
+#! example = Vannes[0].Fdc[1] := CarteDI_R0S4[9].Val;
+#! example = 
+#! example = VAL_Melange(Count := 4, CycleMs := 20, Eq := Vannes);
+#! example = 
+#! example = CarteDO_R0S5[0].Val := Vannes[0].Cmd[0];
+#! example = CarteDO_R0S5[1].Val := Vannes[0].Cmd[1];
+#! see = ST_EQ_Valve3
+#! see = DFB_ITL_MATRIX
+#! param Count = Combien d'equipements du tableau sont traites. Borne a 16. En mettre moins
+#! param Count = ne fait pas gagner de memoire, seulement du temps de cycle.
+#! param CycleMs = La periode de la tache, en ms. Un DDT ne peut pas contenir de temporisateur,
+#! param CycleMs = donc tout le temps s'accumule depuis la : une valeur fausse ici fausse
+#! param CycleMs = toutes les temporisations de tous les equipements du tableau. DINT et non
+#! param CycleMs = INT - un INT de millisecondes deborde au bout de trente-trois secondes.
+#! param CycleMs = Le mieux : DtMs de DFB_SYS_CLOCK, qui suit le temps reel de la tache.
+#! param Eq = Le tableau des equipements, en InOut. Sa taille est figee a 16 : un InOut ne
+#! param Eq = peut pas etre dimensionne a l'appel.
+#! param FaultCount = Combien sont en defaut, recalcule a chaque cycle. De quoi allumer un voyant
+#! param FaultCount = de synthese sans reparcourir le tableau.
+#! param ReadyCount = Combien sont utilisables. FaultCount + ReadyCount n'est pas forcement egal a
+#! param ReadyCount = Count : un equipement desactive n'est ni l'un ni l'autre.
+#! changes 1.02 = LES COMPTEURS DE TEMPS NE DEBORDENT PLUS. Un DINT de millisecondes
+#! changes 1.02 = devient negatif au bout de 24,8 jours ; ils plafonnent maintenant a
+#! changes 1.02 = 2 000 000 000 ms (23 jours). StateMs repart a zero a chaque
+#! changes 1.02 = changement d'etat (il comptait depuis la mise en route du bloc), et
+#! changes 1.02 = l'etat est publie dans State. Demande le DDT en 1.01, qui porte les
+#! changes 1.02 = nouveaux champs.
+#! changes 1.01 = Count etait borne par le dernier INDICE (15) au lieu du nombre
+#! changes 1.01 = d'equipements (16) : le dernier equipement du tableau n'etait jamais
+#! changes 1.01 = traite.
+#! changes 1.02 = CORRECTION : sans fin de course, la position supposee atteinte etait
+#! changes 1.02 = perdue au cycle suivant - la vanne oscillait entre atteinte et en
+#! changes 1.02 = mouvement, et Starts s'envolait. Elle est maintenant gardee tant que
+#! changes 1.02 = la demande ne change pas.
+#! changes 1.02 = Un acquittement redonne tout son delai a une nouvelle tentative : le
+#! changes 1.02 = chrono du defaut repart de zero.
+
+# Une vanne 3 voies: 3 commandes, 3 retours de position.
+# Une instance traite 16 equipements. Passer a une autre taille change
+# la signature du bloc, donc toutes ses instances.
+
+# name ; type ; scope ; initial ; comment
+Count ; INT ; Input ; 16 ; combien d'equipements sont traites
+CycleMs ; DINT ; Input ; 20 ; la periode de la tache en ms. Un DDT ne peut pas contenir de temporisateur
+Eq ; ARRAY[0..15] OF ST_EQ_Valve3 ; InOut ;  ; les equipements
+FaultCount ; INT ; Output ; 0 ; combien sont en defaut
+ReadyCount ; INT ; Output ; 0 ; combien sont utilisables
+i ; INT ; Local ; 0 ; 
+n ; INT ; Local ; 0 ; 
+LAST ; INT ; Local ; 15 ; dernier indice
+req ; INT ; Local ; 0 ; 
+pos ; INT ; Local ; -1 ; 
+count ; INT ; Local ; 0 ; 
+k ; INT ; Local ; 0 ; 
+st ; INT ; Local ; 0 ; l'etat de l'equipement, avant publication
+MAXMS ; DINT ; Local ; 2000000000 ; plafond des compteurs de temps : 23 jours, sous la limite d'un DINT
+
+<<<section Process ST>>>
+n := Count;
+IF n > LAST + 1 THEN n := LAST + 1; END_IF;
+IF n < 0 THEN n := 0; END_IF;
+
+FaultCount := 0;
+ReadyCount := 0;
+
+FOR i := 0 TO n - 1 DO
+
+(* Ce qui est vrai de toute famille, ecrit une fois: l'acquittement sur front,
+   la memorisation du defaut, le temps dans l'etat. *)
+IF Eq[i].AckFault AND NOT Eq[i].PrevAck THEN
+    Eq[i].FaultLatch := FALSE;
+    Eq[i].FaultCode := 0;
+    (* et redonne tout son delai a une nouvelle tentative : sans ca, le
+       chrono du defaut continuait, et le defaut revenait des
+       l'acquittement. *)
+    Eq[i].TravelElapsed := 0;
+END_IF;
+Eq[i].PrevAck := Eq[i].AckFault;
+
+IF NOT Eq[i].Enable THEN
+    (* Desactive: aucune sortie, aucun defaut. Un equipement consigne ne doit
+       pas remplir le journal d'alarmes pendant qu'on travaille dessus. *)
+    Eq[i].Fault := FALSE;
+    Eq[i].FaultCode := 0;
+    Eq[i].FaultLatch := FALSE;
+END_IF;
+
+(* Une position demandee hors plage est refusee AVANT de commander quoi que ce
+   soit. Une vanne 3 voies a qui on demande la position 5 ne doit pas voir ses
+   trois sorties a zero et se croire au repos. *)
+req := Eq[i].PosReq;
+IF Eq[i].ManMode THEN
+    req := Eq[i].ManPosReq;
+END_IF;
+
+IF req < 0 OR req > Eq[i].Ways - 1 THEN
+    Eq[i].FaultCode := 3;
+    Eq[i].FaultLatch := TRUE;
+    req := -1;
+END_IF;
+
+(* La position atteinte. DEUX RETOURS A LA FOIS EST IMPOSSIBLE physiquement:
+   c'est un capteur casse, et c'est le defaut que tout le monde oublie. *)
+count := 0;
+pos := -1;
+FOR k := 0 TO Eq[i].Ways - 1 DO
+    IF Eq[i].Fdc[k] THEN
+        count := count + 1;
+        pos := k;
+    END_IF;
+END_FOR;
+
+IF count > 1 THEN
+    Eq[i].FaultCode := 1;
+    Eq[i].FaultLatch := TRUE;
+    pos := -1;
+END_IF;
+
+IF NOT Eq[i].HasFdc THEN
+    (* Sans retour, la position est SUPPOSEE atteinte au bout du temps de
+       manoeuvre. C'est une supposition, elle est ecrite ici, et elle explique
+       pourquoi une vanne sans fin de course ne detecte jamais un blocage. *)
+    IF req >= 0 AND (Eq[i].TravelElapsed >= Eq[i].TravelMs OR Eq[i].PrevPos = req) THEN
+        (* Une fois atteinte, la position SUPPOSEE le reste tant que la demande
+           ne change pas. Sans le second terme, le chrono remis a zero la
+           rendait inconnue au cycle suivant : la vanne oscillait entre
+           atteinte et en mouvement, et Starts s'envolait. *)
+        pos := req;
+    END_IF;
+END_IF;
+
+Eq[i].Pos := pos;
+Eq[i].Moving := (req >= 0) AND (pos <> req);
+
+(* Le temps de manoeuvre. *)
+IF Eq[i].Moving THEN
+    IF Eq[i].TravelElapsed < MAXMS - CycleMs THEN
+        Eq[i].TravelElapsed := Eq[i].TravelElapsed + CycleMs;
+    ELSE
+        Eq[i].TravelElapsed := MAXMS;
+    END_IF;
+    IF Eq[i].HasFdc AND Eq[i].TravelElapsed > Eq[i].TravelMs THEN
+        Eq[i].FaultCode := 2;
+        Eq[i].FaultLatch := TRUE;
+    END_IF;
+ELSE
+    Eq[i].TravelElapsed := 0;
+END_IF;
+
+(* Un retour qui disparait sans qu'on ait rien demande: la vanne a bouge toute
+   seule, ou le capteur lache. *)
+IF Eq[i].HasFdc AND NOT Eq[i].Moving AND req >= 0 AND pos < 0 THEN
+    Eq[i].FaultCode := 4;
+    Eq[i].FaultLatch := TRUE;
+END_IF;
+
+(* Les sorties. Un defaut les coupe TOUTES: laisser une vanne commandee alors
+   qu'on ne sait pas ou elle est, c'est le contraire d'un repli sur.  *)
+FOR k := 0 TO Eq[i].Ways - 1 DO
+    Eq[i].Cmd[k] := Eq[i].Enable AND NOT Eq[i].FaultLatch AND (req = k);
+END_FOR;
+
+IF Eq[i].Pos <> Eq[i].PrevPos AND Eq[i].Pos >= 0 THEN
+    Eq[i].Starts := Eq[i].Starts + 1;
+END_IF;
+Eq[i].PrevPos := Eq[i].Pos;
+
+
+(* Fault est la copie PUBLIEE de FaultLatch, posee en fin de cycle.
+   Les sorties, elles, se coupent sur FaultLatch - c'est-a-dire dans le meme
+   cycle que le defaut. Les couper sur Fault laissait l'equipement commande un
+   cycle de plus : vingt millisecondes pendant lesquelles une vanne reste
+   pilotee alors qu'on vient de decouvrir qu'on ne sait pas ou elle est. *)
+
+(* Le defaut est MEMORISE. Un thermique qui se rearme tout seul en refroidissant
+   effacerait la trace de son declenchement, et personne ne saurait pourquoi la
+   machine s'est arretee cette nuit-la. *)
+(* Un equipement desactive ne publie pas de defaut, meme si la condition est
+   toujours la. Le prologue efface la memorisation, mais le corps la repose au
+   meme cycle : c'est ici qu'il faut le dire, une fois, plutot que d'entourer
+   chaque famille d'un IF Enable. *)
+Eq[i].Fault := Eq[i].FaultLatch AND Eq[i].Enable;
+Eq[i].Ready := Eq[i].Enable AND NOT Eq[i].Fault;
+
+(* L'ETAT PUBLIE, et le temps passe dedans. StateMs n'etait jamais remis a
+   zero - il comptait depuis la mise en route du bloc - et debordait au bout de
+   24,8 jours. Il repart maintenant a chaque changement d'etat, et plafonne. *)
+IF NOT Eq[i].Enable THEN
+    st := 0;
+ELSIF Eq[i].Fault THEN
+    st := 1;
+ELSIF Eq[i].Moving THEN
+    st := 3;
+ELSE
+    st := 2;
+END_IF;
+IF st <> Eq[i].PrevState THEN
+    Eq[i].StateMs := 0;
+    Eq[i].PrevState := st;
+ELSIF Eq[i].StateMs < MAXMS - CycleMs THEN
+    Eq[i].StateMs := Eq[i].StateMs + CycleMs;
+ELSE
+    Eq[i].StateMs := MAXMS;
+END_IF;
+Eq[i].State := st;
+
+IF Eq[i].Fault THEN
+    FaultCount := FaultCount + 1;
+END_IF;
+IF Eq[i].Ready THEN
+    ReadyCount := ReadyCount + 1;
+END_IF;
+
+END_FOR;
+<<<end>>>

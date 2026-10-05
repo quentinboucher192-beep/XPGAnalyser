@@ -1,0 +1,791 @@
+(* ImporterGrafcet
+
+   LES GRAFCETS DU CLASSEUR, generes pour DFB_GRAFCETENGINE. Trois onglets
+   les decrivent, un quatrieme (facultatif) dit quand chacun tourne :
+
+     Grafcet Etapes        Grafcet, Etape, Nom, Initiale, Finale, Commentaire
+     Grafcet Transitions   Grafcet, Transition, De, Vers, Receptivite,
+                           Tempo (s), Texte, Commentaire
+     Grafcet Actions       Grafcet, Action, Etape, Nom, Qualificatif,
+                           Retard (s), Condition, Cible, Commentaire
+     Grafcets              Grafcet, Marche, Commentaire
+
+   CE QUI EST GENERE, pour un grafcet Brassage
+
+     Etapes_Brassage, Trans_Brassage, Acts_Brassage     les tableaux
+     GC_Brassage (DFB_GRAFCETENGINE), Ctrl_Brassage (ST_GC_CTRL, pour l'IHM)
+     Grafcet_Brassage   une SOUS-ROUTINE : la construction (une fois), les
+                        receptivites, l'appel du moteur, les sorties des
+                        actions, la remise a zero des commandes de l'IHM
+     Grafcets           la section qui fait avancer le temps et appelle
+                        chaque sous-routine (PreparerGrafcets)
+
+   LES RACCOURCIS dans une receptivite ou une condition d'action :
+
+     FIN(A2)       l'action 2 a fini ce qu'elle avait a faire
+                   (Acts_x[2].Started AND Acts_x[2].Finished)
+     ACTIF(X3)     l'etape 3 est active
+     DUREE(X3)     depuis combien de temps (un TIME : DUREE(X3) >= T#5s)
+     FINI(Autre)   le grafcet Autre est fini - et n'est pas en train d'etre
+                   relance : GC_Autre.Finished AND NOT Ctrl_Autre.Cmd.InitReq
+
+   #! summary = Génère les grafcets décrits dans le classeur (onglets Grafcet Etapes, Transitions, Actions) : tableaux, moteur DFB_GRAFCETENGINE, une sous-routine par grafcet, construits une fois.
+   #! version = 1.10
+   #! changes 1.10 = Le formulaire : chaque question a son champ (le classeur par …, Ctrl+V ou en le glissant ; les tâches et les sections du projet ; des interrupteurs ; des choix à libellés), ses groupes, son aide et un libellé avec accents. Le code ne change pas.
+   #! usage = GRAFCET ETAPES : une ligne par etape. Grafcet = le nom du grafcet (lettres, chiffres, souligne ; 20 caracteres au plus : il devient un nom de variable). Etape = son numero, 0 a 27. Nom = 4 caracteres (X3 par defaut). Initiale, Finale : O ou N. Au moins une etape initiale par grafcet.
+   #! usage = GRAFCET TRANSITIONS : De et Vers = des numeros d'etape, separes par des virgules pour une convergence (De = 2,3) ou une divergence en ET (Vers = 4,5) ; 3 au plus. Receptivite = une expression ST, recopiee telle quelle, avec les raccourcis FIN, ACTIF, DUREE, FINI. Tempo (s) = combien de temps elle doit tenir. Texte = 8 caracteres pour la mise au point (sinon le debut de la receptivite).
+   #! usage = GRAFCET ACTIONS : Qualificatif = 0 a 11, ou son nom (CONTINU, RISING, DELAYON, PULSEON, LIMITEDON, FALLING, PULSEOFF, LIMITEDOFF, CONDDELAYEND, CONDDELAYPULSE, CONDLIMITEDON, CONDLIMITEDONTP ; N, P1, D, L, P0 aussi). Retard (s) selon le qualificatif. Condition = une expression ST (vide : toujours vraie).
+   #! usage = LA CIBLE d'une action, trois formes. UNE VARIABLE BOOL (Moteurs[0].RunReq, Voyant_Marche) : le grafcet la POSSEDE, elle vaut le OU des actions qui la citent, a chaque cycle ; un nom simple absent du projet est declare en BOOL. UNE INSTRUCTION (Vannes[1].PosReq := 1;) : executee quand l'action sort, sans rien ecrire le reste du temps. INIT(Autre) : relance le grafcet Autre (son InitReq).
+   #! usage = UNE CIBLE DEJA ECRITE AILLEURS (Reports_TC, Controle, un autre grafcet) est signalee : sous forme de variable, le grafcet l'ecraserait a chaque cycle. Ecrivez alors une instruction.
+   #! usage = GRAFCETS (facultatif) : Marche = une expression ST (vide : TRUE) qui autorise le grafcet - son Enable. A FALSE, le grafcet est remis a zero.
+   #! usage = LA CONSTRUCTION se fait une fois : au demarrage a froid, et apres un import qui l'a changee (signature GC_x_Sig). Le texte de chaque element n'est donc pas relu a chaque cycle.
+   #! usage = L'IHM passe par Ctrl_x (ST_GC_CTRL) : Cmd.InitReq, FreezeReq, ForceNextReq, ForceStepFromId/ToId... les commandes impulsionnelles sont remises a zero APRES l'appel du moteur ; Stat recopie l'etat.
+   #! usage = CE QUI EST VERIFIE : numeros d'etape, de transition et d'action (0 a 27, sans doublon), etapes citees qui existent, 3 sources et destinations au plus, etape initiale, etapes sans sortie qui ne sont pas finales, etapes inatteignables, raccourcis vers ce qui n'existe pas, FIN d'une action continue (elle ne finit qu'une fois l'etape quittee), cibles ecrites ailleurs. L'APERCU EST LA VERIFICATION : rien n'est ecrit avant d'appliquer.
+   #! see = PreparerGrafcets, GenererGrafcet, ImporterClasseur, RangerSections, DFB_GRAFCETENGINE, BUILDING
+   #! param classeur = Le classeur de l'affaire (.xlsx ou .xlsm) : glisse-le sur le champ, choisis-le avec …, ou colle-le (Ctrl+V) après l'avoir copié dans l'Explorateur. Vide : le dernier classeur ouvert, le cas normal quand on enchaîne les imports.
+   #! param tache = Les sections générées vont dans cette tâche.
+   #! param tache = La tache d'accueil de la section Grafcets et des sous-routines, MAST en general.
+   #! param prefSection = Vide en général : il sert quand deux automates partagent un projet.
+   #! param prefSection = Le prefixe des sections generees, le meme qu'a l'import. Vide en general.
+   #! param horloge = Les blocs se cadencent sur Horloge.DtMs, le vrai temps du cycle.
+   #! param horloge = O cree l'Horloge (DFB_SYS_CLOCK) si le projet n'en a pas, et le temps des grafcets la suit. N prend la periode de l'onglet Config.
+   #! categorie = Importer depuis le classeur/Étapes de l'import
+   #! champ classeur = fichier .xlsx .xlsm facultatif
+   #! libelle classeur = Le classeur de l'affaire
+   #! champ tache = tache
+   #! libelle tache = Tâche d'accueil des sections
+   #! champ prefSection = nom facultatif
+   #! libelle prefSection = Préfixe des noms de section
+   #! champ horloge = oui-non
+   #! libelle horloge = Appeler DFB_SYS_CLOCK et cadencer les blocs sur lui
+   #! exemple prefSection = {}Grafcets, {}Grafcet_Vidange
+   #! groupe Programme = tache, prefSection, horloge
+   #! avance = prefSection
+   #! produit = les tableaux et le moteur DFB_GRAFCETENGINE de chaque grafcet, et une sous-routine Grafcet_<nom>
+   #! appliquer = Appliquer : les grafcets du classeur sont reconstruits
+*)
+
+chemin := Ask('classeur', 'Chemin du classeur (vide = celui deja charge)', '');
+AskNow();
+tache       := Ask('tache', 'Tache d accueil des sections', 'MAST');
+prefSection := Ask('prefSection', 'Prefixe des noms de section (vide en general)', '');
+horloge     := AskChoice('horloge', 'Appeler DFB_SYS_CLOCK et cadencer les blocs sur lui', 'O,N', 'O');
+AskNow();
+
+wb := OpenWorkbook(chemin);
+IF wb < 0 THEN Fail('classeur introuvable'); END_IF;
+IF NOT HasSheet('Grafcet Etapes') THEN
+    Fail('onglet "Grafcet Etapes" introuvable : les onglets Grafcet se copient depuis onglets-a-ajouter.xlsx');
+END_IF;
+tEt := OpenSheet('Grafcet Etapes');
+tTr := -1;
+IF HasSheet('Grafcet Transitions') THEN tTr := OpenSheet('Grafcet Transitions'); END_IF;
+tAc := -1;
+IF HasSheet('Grafcet Actions') THEN tAc := OpenSheet('Grafcet Actions'); END_IF;
+tGr := -1;
+IF HasSheet('Grafcets') THEN tGr := OpenSheet('Grafcets'); END_IF;
+IF tTr < 0 THEN Warn('onglet "Grafcet Transitions" absent : aucun grafcet ne franchira rien'); END_IF;
+
+nEt := RowCount(tEt);
+nTr := 0;
+IF tTr >= 0 THEN nTr := RowCount(tTr); END_IF;
+nAc := 0;
+IF tAc >= 0 THEN nAc := RowCount(tAc); END_IF;
+nGr := 0;
+IF tGr >= 0 THEN nGr := RowCount(tGr); END_IF;
+
+nl := CHR(10);
+lettres  := 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+ident    := lettres + '0123456789_';
+chiffres := '0123456789';
+secG := prefSection + 'Grafcets';
+
+(* Les variables de travail, typees par leur premiere valeur. *)
+i := 0; k := 0; q := 0; n := 0; ms := 0; nb := 0; p := 0; v := 0; tn := 0; a := 0; kind := 0;
+ok := FALSE; oui := FALSE;
+g := ''; x := ''; c := ''; txt := ''; nom := ''; com := ''; brut := ''; numTxt := '';
+reel := 0.0;
+
+(* ===================================================================== *)
+(*  1. Les grafcets du classeur, dans l'ordre ou ils apparaissent        *)
+(* ===================================================================== *)
+liste := ',';
+rejetes := ',';
+nbG := 0;
+FOR i := 0 TO nEt - 1 DO
+    g := Cell(tEt, i, 'Grafcet');
+    WHILE LEN(g) > 0 AND MID(g, 0, 1) = ' ' DO g := MID(g, 1); END_WHILE;
+    WHILE LEN(g) > 0 AND MID(g, LEN(g) - 1, 1) = ' ' DO g := MID(g, 0, LEN(g) - 1); END_WHILE;
+    IF FIND(liste, ',' + g + ',', 0) < 0 AND FIND(rejetes, ',' + g + ',', 0) < 0 THEN
+        (* le nom devient un nom de variable : Etapes_<nom>, GC_<nom> *)
+        ok := LEN(g) > 0 AND LEN(g) <= 20;
+        IF ok THEN
+            IF FIND(lettres, MID(g, 0, 1), 0) < 0 THEN ok := FALSE; END_IF;
+        END_IF;
+        FOR q := 0 TO LEN(g) - 1 DO
+            IF FIND(ident, MID(g, q, 1), 0) < 0 THEN ok := FALSE; END_IF;
+        END_FOR;
+        IF ok THEN
+            liste := liste + g + ',';
+            nbG := nbG + 1;
+        ELSE
+            rejetes := rejetes + g + ',';
+            Warn('Grafcet Etapes : "' + g + '" n est pas un nom de grafcet valable (lettres, chiffres, '
+                 + 'souligne, une lettre en tete, 20 caracteres au plus) : ses lignes sont ecartees');
+        END_IF;
+    END_IF;
+END_FOR;
+IF nbG = 0 THEN Fail('aucun grafcet valable dans l onglet Grafcet Etapes'); END_IF;
+
+(* ===================================================================== *)
+(*  2. La bibliotheque, GC_Builder, GC_Temps, la section Grafcets        *)
+(* ===================================================================== *)
+RunMacro('PreparerGrafcets');
+
+ciblesToutes := '|';    (* cible@grafcet : une cible BOOL citee par deux grafcets *)
+totalEt := 0; totalTr := 0; totalAc := 0; faits := 0;
+
+(* ===================================================================== *)
+(*  3. Chaque grafcet                                                    *)
+(* ===================================================================== *)
+pos := 1;
+virg := 0;
+WHILE pos < LEN(liste) DO
+    virg := FIND(liste, ',', pos);
+    g := MID(liste, pos, virg - pos);
+    pos := virg + 1;
+
+    construction := '';
+    receptivites := '';
+    conditions := '';
+    sorties := '';
+    sig := 7;
+
+    (* ----------------------------- LES ETAPES ------------------------- *)
+    etapes := ',';          (* les numeros declares : ',0,1,2,' *)
+    finales := ',';
+    initiales := ',';
+    nbEt := 0; maxE := -1;
+    FOR i := 0 TO nEt - 1 DO
+        x := Cell(tEt, i, 'Grafcet');
+        WHILE LEN(x) > 0 AND MID(x, 0, 1) = ' ' DO x := MID(x, 1); END_WHILE;
+        WHILE LEN(x) > 0 AND MID(x, LEN(x) - 1, 1) = ' ' DO x := MID(x, 0, LEN(x) - 1); END_WHILE;
+        IF x = g THEN
+            (* le numero : un entier de 0 a 27 ('3' ou '3.0') *)
+            brut := Cell(tEt, i, 'Etape');
+            WHILE LEN(brut) > 0 AND MID(brut, 0, 1) = ' ' DO brut := MID(brut, 1); END_WHILE;
+            WHILE LEN(brut) > 0 AND MID(brut, LEN(brut) - 1, 1) = ' ' DO brut := MID(brut, 0, LEN(brut) - 1); END_WHILE;
+            IF LEN(brut) > 2 AND MID(brut, LEN(brut) - 2, 2) = '.0' THEN brut := MID(brut, 0, LEN(brut) - 2); END_IF;
+            ok := LEN(brut) > 0 AND LEN(brut) <= 2;
+            FOR q := 0 TO LEN(brut) - 1 DO
+                IF FIND(chiffres, MID(brut, q, 1), 0) < 0 THEN ok := FALSE; END_IF;
+            END_FOR;
+            n := -1;
+            IF ok THEN n := STRING_TO_INT(brut); END_IF;
+            IF NOT ok OR n > 27 THEN
+                SkipRow(g + ' : etape "' + brut + '" - un numero de 0 a 27');
+            ELSIF FIND(etapes, ',' + DINT_TO_STRING(n) + ',', 0) >= 0 THEN
+                SkipRow(g + ' : l etape ' + DINT_TO_STRING(n) + ' est declaree deux fois');
+            ELSE
+                etapes := etapes + DINT_TO_STRING(n) + ',';
+                (* le nom : ASCII, sans '|' (le separateur de BUILDING) ni apostrophe *)
+                brut := ASCII(Cell(tEt, i, 'Nom'));
+                nom := '';
+                FOR q := 0 TO LEN(brut) - 1 DO
+                    c := MID(brut, q, 1);
+                    IF c <> '|' AND c <> CHR(39) AND NOT (c = ' ' AND nom = '') THEN nom := nom + c; END_IF;
+                END_FOR;
+                WHILE LEN(nom) > 0 AND MID(nom, LEN(nom) - 1, 1) = ' ' DO nom := MID(nom, 0, LEN(nom) - 1); END_WHILE;
+                IF nom = '' THEN nom := 'X' + DINT_TO_STRING(n); END_IF;
+                IF LEN(nom) > 4 THEN
+                    Warn(g + ' : le nom d etape "' + nom + '" est coupe a 4 caracteres : "' + MID(nom, 0, 4) + '"');
+                    nom := MID(nom, 0, 4);
+                END_IF;
+                txt := 'id=' + DINT_TO_STRING(n) + '|n=' + nom;
+                c := UPPER(Cell(tEt, i, 'Initiale'));
+                IF c = 'O' OR c = 'OUI' OR c = '1' OR c = 'X' THEN
+                    txt := txt + '|i=1';
+                    initiales := initiales + DINT_TO_STRING(n) + ',';
+                END_IF;
+                c := UPPER(Cell(tEt, i, 'Finale'));
+                IF c = 'O' OR c = 'OUI' OR c = '1' OR c = 'X' THEN
+                    txt := txt + '|f=1';
+                    finales := finales + DINT_TO_STRING(n) + ',';
+                END_IF;
+                com := '';
+                brut := ASCII(Cell(tEt, i, 'Commentaire'));
+                FOR q := 0 TO LEN(brut) - 1 DO
+                    IF MID(brut, q, 1) <> '*' THEN com := com + MID(brut, q, 1); END_IF;
+                END_FOR;
+                IF com <> '' THEN com := '   (* ' + com + ' *)'; END_IF;
+                construction := construction + nl + '    GC_Builder(T := 1, Text := ' + QUOTE(txt)
+                    + ', _Step := Etapes_' + g + '[' + DINT_TO_STRING(n) + ']);' + com;
+                IF n > maxE THEN maxE := n; END_IF;
+                nbEt := nbEt + 1;
+                sig := (sig * 31 + LEN(txt) * 3 + n) MOD 30011;
+            END_IF;
+        END_IF;
+    END_FOR;
+
+    IF nbEt = 0 THEN
+        Warn(g + ' : aucune etape valable, grafcet ecarte');
+    ELSE
+    IF initiales = ',' THEN
+        Warn(g + ' : aucune etape initiale (colonne Initiale a O) - le grafcet ne demarrera jamais');
+    END_IF;
+
+    (* ----------------------------- LES TRANSITIONS -------------------- *)
+    transitions := ',';
+    sortants := ',';        (* les etapes qui ont une transition de sortie *)
+    atteintes := ',';       (* celles qu'une transition active *)
+    nbTr := 0; maxT := -1;
+    FOR i := 0 TO nTr - 1 DO
+        x := Cell(tTr, i, 'Grafcet');
+        WHILE LEN(x) > 0 AND MID(x, 0, 1) = ' ' DO x := MID(x, 1); END_WHILE;
+        WHILE LEN(x) > 0 AND MID(x, LEN(x) - 1, 1) = ' ' DO x := MID(x, 0, LEN(x) - 1); END_WHILE;
+        IF x = g THEN
+            numTxt := Cell(tTr, i, 'Transition');
+            WHILE LEN(numTxt) > 0 AND MID(numTxt, 0, 1) = ' ' DO numTxt := MID(numTxt, 1); END_WHILE;
+            WHILE LEN(numTxt) > 0 AND MID(numTxt, LEN(numTxt) - 1, 1) = ' ' DO numTxt := MID(numTxt, 0, LEN(numTxt) - 1); END_WHILE;
+            IF LEN(numTxt) > 2 AND MID(numTxt, LEN(numTxt) - 2, 2) = '.0' THEN numTxt := MID(numTxt, 0, LEN(numTxt) - 2); END_IF;
+            ok := LEN(numTxt) > 0 AND LEN(numTxt) <= 2;
+            FOR q := 0 TO LEN(numTxt) - 1 DO
+                IF FIND(chiffres, MID(numTxt, q, 1), 0) < 0 THEN ok := FALSE; END_IF;
+            END_FOR;
+            tn := -1;
+            IF ok THEN tn := STRING_TO_INT(numTxt); END_IF;
+
+            (* De et Vers : 1 a 3 etapes declarees, separees par des virgules *)
+            listeDe := '';
+            listeVers := '';
+            erreur := '';
+            FOR v := 0 TO 1 DO
+                IF v = 0 THEN brut := Cell(tTr, i, 'De'); ELSE brut := Cell(tTr, i, 'Vers'); END_IF;
+                brut := brut + ',';
+                propre := '';
+                nb := 0;
+                p := 0;
+                WHILE p < LEN(brut) DO
+                    k := FIND(brut, ',', p);
+                    c := MID(brut, p, k - p);
+                    p := k + 1;
+                    WHILE LEN(c) > 0 AND MID(c, 0, 1) = ' ' DO c := MID(c, 1); END_WHILE;
+                    WHILE LEN(c) > 0 AND MID(c, LEN(c) - 1, 1) = ' ' DO c := MID(c, 0, LEN(c) - 1); END_WHILE;
+                    IF LEN(c) > 2 AND MID(c, LEN(c) - 2, 2) = '.0' THEN c := MID(c, 0, LEN(c) - 2); END_IF;
+                    IF LEN(c) = 2 AND MID(c, 0, 1) = '0' THEN c := MID(c, 1); END_IF;   (* 02 : 2 *)
+                    IF LEN(c) > 0 THEN
+                        IF FIND(etapes, ',' + c + ',', 0) < 0 THEN
+                            erreur := 'l etape "' + c + '" n est pas declaree';
+                        ELSIF FIND(',' + propre + ',', ',' + c + ',', 0) < 0 THEN
+                            IF propre = '' THEN propre := c; ELSE propre := propre + ',' + c; END_IF;
+                            nb := nb + 1;
+                        END_IF;
+                    END_IF;
+                END_WHILE;
+                IF nb = 0 AND erreur = '' THEN
+                    IF v = 0 THEN erreur := 'aucune etape De'; ELSE erreur := 'aucune etape Vers'; END_IF;
+                END_IF;
+                IF nb > 3 THEN erreur := '3 etapes au plus en De et en Vers (le moteur a 3 places)'; END_IF;
+                IF v = 0 THEN listeDe := propre; ELSE listeVers := propre; END_IF;
+            END_FOR;
+
+            IF NOT ok OR tn > 27 THEN
+                SkipRow(g + ' : transition "' + numTxt + '" - un numero de 0 a 27');
+            ELSIF FIND(transitions, ',' + DINT_TO_STRING(tn) + ',', 0) >= 0 THEN
+                SkipRow(g + ' : la transition ' + DINT_TO_STRING(tn) + ' est declaree deux fois');
+            ELSIF erreur <> '' THEN
+                SkipRow(g + ' : transition ' + DINT_TO_STRING(tn) + ' - ' + erreur);
+            ELSE
+                transitions := transitions + DINT_TO_STRING(tn) + ',';
+                sortants := sortants + listeDe + ',';
+                atteintes := atteintes + listeVers + ',';
+
+                (* la temporisation, en secondes *)
+                brut := Cell(tTr, i, 'Tempo (s)');
+                ms := 0;
+                IF brut <> '' THEN
+                    ok := TRUE;
+                    FOR q := 0 TO LEN(brut) - 1 DO
+                        IF FIND('0123456789.', MID(brut, q, 1), 0) < 0 THEN ok := FALSE; END_IF;
+                    END_FOR;
+                    IF ok THEN
+                        ms := REAL_TO_DINT(STRING_TO_REAL(brut) * 1000.0 + 0.5);
+                    ELSE
+                        Warn(g + ' : T' + DINT_TO_STRING(tn) + ' : Tempo "' + brut + '" n est pas un nombre de secondes : 0');
+                    END_IF;
+                END_IF;
+
+                (* la receptivite *)
+                rec := Cell(tTr, i, 'Receptivite');
+                WHILE LEN(rec) > 0 AND MID(rec, 0, 1) = ' ' DO rec := MID(rec, 1); END_WHILE;
+                WHILE LEN(rec) > 0 AND MID(rec, LEN(rec) - 1, 1) = ' ' DO rec := MID(rec, 0, LEN(rec) - 1); END_WHILE;
+                IF LEN(rec) > 0 AND MID(rec, LEN(rec) - 1, 1) = ';' THEN rec := MID(rec, 0, LEN(rec) - 1); END_IF;
+                IF rec = '' THEN
+                    Warn(g + ' : T' + DINT_TO_STRING(tn) + ' sans receptivite : FALSE, elle ne sera jamais franchie');
+                    rec := 'FALSE';
+                END_IF;
+
+                (* le texte de mise au point : 8 caracteres *)
+                brut := ASCII(Cell(tTr, i, 'Texte'));
+                IF brut = '' THEN brut := ASCII(rec); END_IF;
+                txt := '';
+                FOR q := 0 TO LEN(brut) - 1 DO
+                    c := MID(brut, q, 1);
+                    IF c <> '|' AND c <> CHR(39) AND c <> ' ' AND LEN(txt) < 8 THEN txt := txt + c; END_IF;
+                END_FOR;
+
+                com := '';
+                brut := ASCII(Cell(tTr, i, 'Commentaire'));
+                FOR q := 0 TO LEN(brut) - 1 DO
+                    IF MID(brut, q, 1) <> '*' THEN com := com + MID(brut, q, 1); END_IF;
+                END_FOR;
+                IF com <> '' THEN com := ' : ' + com; END_IF;
+
+                txt := 'id=' + DINT_TO_STRING(tn) + '|s=' + listeDe + '|d=' + listeVers + '|c=' + txt;
+                construction := construction + nl + '    GC_Builder(T := 2, Text := ' + QUOTE(txt)
+                    + ', d := T#' + DINT_TO_STRING(ms) + 'ms, _Trans := Trans_' + g + '[' + DINT_TO_STRING(tn) + ']);';
+                receptivites := receptivites + nl + 'Trans_' + g + '[' + DINT_TO_STRING(tn) + '].Condition := '
+                    + rec + ';   (* X' + listeDe + ' -> X' + listeVers + com + ' *)';
+                IF tn > maxT THEN maxT := tn; END_IF;
+                nbTr := nbTr + 1;
+                sig := (sig * 31 + LEN(txt) * 5 + tn + ms MOD 9973) MOD 30011;
+            END_IF;
+        END_IF;
+    END_FOR;
+
+    (* ----------------------------- LES ACTIONS ------------------------ *)
+    actions := ',';
+    genres := '|';          (* numero=qualificatif : '|0=4|3=1|' *)
+    lignesA := ',';         (* les lignes valides de l'onglet *)
+    cibles := '|';          (* les cibles BOOL, une fois chacune *)
+    nbAc := 0; maxA := -1;
+    FOR i := 0 TO nAc - 1 DO
+        x := Cell(tAc, i, 'Grafcet');
+        WHILE LEN(x) > 0 AND MID(x, 0, 1) = ' ' DO x := MID(x, 1); END_WHILE;
+        WHILE LEN(x) > 0 AND MID(x, LEN(x) - 1, 1) = ' ' DO x := MID(x, 0, LEN(x) - 1); END_WHILE;
+        IF x = g THEN
+            (* le numero de l'action, puis celui de son etape *)
+            numTxt := Cell(tAc, i, 'Action');
+            WHILE LEN(numTxt) > 0 AND MID(numTxt, 0, 1) = ' ' DO numTxt := MID(numTxt, 1); END_WHILE;
+            WHILE LEN(numTxt) > 0 AND MID(numTxt, LEN(numTxt) - 1, 1) = ' ' DO numTxt := MID(numTxt, 0, LEN(numTxt) - 1); END_WHILE;
+            IF LEN(numTxt) > 2 AND MID(numTxt, LEN(numTxt) - 2, 2) = '.0' THEN numTxt := MID(numTxt, 0, LEN(numTxt) - 2); END_IF;
+            ok := LEN(numTxt) > 0 AND LEN(numTxt) <= 2;
+            FOR q := 0 TO LEN(numTxt) - 1 DO
+                IF FIND(chiffres, MID(numTxt, q, 1), 0) < 0 THEN ok := FALSE; END_IF;
+            END_FOR;
+            a := -1;
+            IF ok THEN a := STRING_TO_INT(numTxt); END_IF;
+            c := Cell(tAc, i, 'Etape');
+            WHILE LEN(c) > 0 AND MID(c, 0, 1) = ' ' DO c := MID(c, 1); END_WHILE;
+            WHILE LEN(c) > 0 AND MID(c, LEN(c) - 1, 1) = ' ' DO c := MID(c, 0, LEN(c) - 1); END_WHILE;
+            IF LEN(c) > 2 AND MID(c, LEN(c) - 2, 2) = '.0' THEN c := MID(c, 0, LEN(c) - 2); END_IF;
+            IF LEN(c) = 2 AND MID(c, 0, 1) = '0' THEN c := MID(c, 1); END_IF;
+
+            (* le qualificatif : un numero, ou son nom *)
+            brut := UPPER(Cell(tAc, i, 'Qualificatif'));
+            WHILE LEN(brut) > 0 AND MID(brut, 0, 1) = ' ' DO brut := MID(brut, 1); END_WHILE;
+            kind := -1;
+            IF brut = '' THEN
+                kind := 0;
+            ELSIF FIND(chiffres, MID(brut, 0, 1), 0) >= 0 THEN
+                k := 0;
+                WHILE k < LEN(brut) AND FIND(chiffres, MID(brut, k, 1), 0) >= 0 DO k := k + 1; END_WHILE;
+                kind := STRING_TO_INT(MID(brut, 0, k));
+                IF kind > 11 THEN kind := -1; END_IF;
+            ELSIF brut = 'CONTINU' OR brut = 'N' THEN kind := 0;
+            ELSIF brut = 'RISING' OR brut = 'P1' THEN kind := 1;
+            ELSIF brut = 'DELAYON' OR brut = 'D' THEN kind := 2;
+            ELSIF brut = 'PULSEON' THEN kind := 3;
+            ELSIF brut = 'LIMITEDON' OR brut = 'L' THEN kind := 4;
+            ELSIF brut = 'FALLING' OR brut = 'P0' THEN kind := 5;
+            ELSIF brut = 'PULSEOFF' THEN kind := 6;
+            ELSIF brut = 'LIMITEDOFF' THEN kind := 7;
+            ELSIF brut = 'CONDDELAYEND' THEN kind := 8;
+            ELSIF brut = 'CONDDELAYPULSE' THEN kind := 9;
+            ELSIF brut = 'CONDLIMITEDON' THEN kind := 10;
+            ELSIF brut = 'CONDLIMITEDONTP' THEN kind := 11;
+            END_IF;
+
+            IF NOT ok OR a > 27 THEN
+                SkipRow(g + ' : action "' + numTxt + '" - un numero de 0 a 27');
+            ELSIF FIND(actions, ',' + DINT_TO_STRING(a) + ',', 0) >= 0 THEN
+                SkipRow(g + ' : l action ' + DINT_TO_STRING(a) + ' est declaree deux fois');
+            ELSIF FIND(etapes, ',' + c + ',', 0) < 0 THEN
+                SkipRow(g + ' : A' + DINT_TO_STRING(a) + ' : l etape "' + c + '" n est pas declaree');
+            ELSIF kind < 0 THEN
+                SkipRow(g + ' : A' + DINT_TO_STRING(a) + ' : qualificatif "' + Cell(tAc, i, 'Qualificatif')
+                        + '" inconnu (0 a 11, ou CONTINU, RISING, DELAYON...)');
+            ELSE
+                actions := actions + DINT_TO_STRING(a) + ',';
+                genres := genres + DINT_TO_STRING(a) + '=' + DINT_TO_STRING(kind) + '|';
+                lignesA := lignesA + DINT_TO_STRING(i) + ',';
+
+                brut := ASCII(Cell(tAc, i, 'Nom'));
+                nom := '';
+                FOR q := 0 TO LEN(brut) - 1 DO
+                    c := MID(brut, q, 1);
+                    IF c <> '|' AND c <> CHR(39) AND NOT (c = ' ' AND nom = '') THEN nom := nom + c; END_IF;
+                END_FOR;
+                WHILE LEN(nom) > 0 AND MID(nom, LEN(nom) - 1, 1) = ' ' DO nom := MID(nom, 0, LEN(nom) - 1); END_WHILE;
+                IF nom = '' THEN nom := 'A' + DINT_TO_STRING(a); END_IF;
+                IF LEN(nom) > 8 THEN
+                    Warn(g + ' : le nom d action "' + nom + '" est coupe a 8 caracteres : "' + MID(nom, 0, 8) + '"');
+                    nom := MID(nom, 0, 8);
+                END_IF;
+
+                brut := Cell(tAc, i, 'Retard (s)');
+                ms := 0;
+                IF brut <> '' THEN
+                    ok := TRUE;
+                    FOR q := 0 TO LEN(brut) - 1 DO
+                        IF FIND('0123456789.', MID(brut, q, 1), 0) < 0 THEN ok := FALSE; END_IF;
+                    END_FOR;
+                    IF ok THEN
+                        ms := REAL_TO_DINT(STRING_TO_REAL(brut) * 1000.0 + 0.5);
+                    ELSE
+                        Warn(g + ' : A' + DINT_TO_STRING(a) + ' : Retard "' + brut + '" n est pas un nombre de secondes : 0');
+                    END_IF;
+                END_IF;
+
+                c := Cell(tAc, i, 'Etape');
+                WHILE LEN(c) > 0 AND MID(c, 0, 1) = ' ' DO c := MID(c, 1); END_WHILE;
+                WHILE LEN(c) > 0 AND MID(c, LEN(c) - 1, 1) = ' ' DO c := MID(c, 0, LEN(c) - 1); END_WHILE;
+                IF LEN(c) > 2 AND MID(c, LEN(c) - 2, 2) = '.0' THEN c := MID(c, 0, LEN(c) - 2); END_IF;
+                IF LEN(c) = 2 AND MID(c, 0, 1) = '0' THEN c := MID(c, 1); END_IF;
+                txt := 'id=' + DINT_TO_STRING(a) + '|n=' + nom + '|k=' + DINT_TO_STRING(kind) + '|s=' + c;
+                construction := construction + nl + '    GC_Builder(T := 3, Text := ' + QUOTE(txt)
+                    + ', d := T#' + DINT_TO_STRING(ms) + 'ms, _Act := Acts_' + g + '[' + DINT_TO_STRING(a) + ']);';
+                sig := (sig * 31 + LEN(txt) * 7 + a + ms MOD 9973) MOD 30011;
+
+                (* la condition d'action *)
+                brut := Cell(tAc, i, 'Condition');
+                WHILE LEN(brut) > 0 AND MID(brut, 0, 1) = ' ' DO brut := MID(brut, 1); END_WHILE;
+                WHILE LEN(brut) > 0 AND MID(brut, LEN(brut) - 1, 1) = ' ' DO brut := MID(brut, 0, LEN(brut) - 1); END_WHILE;
+                IF LEN(brut) > 0 AND MID(brut, LEN(brut) - 1, 1) = ';' THEN brut := MID(brut, 0, LEN(brut) - 1); END_IF;
+                IF brut <> '' THEN
+                    conditions := conditions + nl + 'Acts_' + g + '[' + DINT_TO_STRING(a) + '].EnableCond := '
+                        + brut + ';   (* ' + nom + ' *)';
+                END_IF;
+
+                (* la cible : une instruction, INIT(Autre), ou une variable BOOL *)
+                brut := Cell(tAc, i, 'Cible');
+                WHILE LEN(brut) > 0 AND MID(brut, 0, 1) = ' ' DO brut := MID(brut, 1); END_WHILE;
+                WHILE LEN(brut) > 0 AND MID(brut, LEN(brut) - 1, 1) = ' ' DO brut := MID(brut, 0, LEN(brut) - 1); END_WHILE;
+                IF brut = '' THEN
+                    k := 0;
+                ELSIF STARTSWITH(UPPER(brut), 'INIT(') THEN
+                    k := FIND(brut, ')', 5);
+                    x := '';
+                    IF k > 5 THEN x := MID(brut, 5, k - 5); END_IF;
+                    WHILE LEN(x) > 0 AND MID(x, 0, 1) = ' ' DO x := MID(x, 1); END_WHILE;
+                    WHILE LEN(x) > 0 AND MID(x, LEN(x) - 1, 1) = ' ' DO x := MID(x, 0, LEN(x) - 1); END_WHILE;
+                    IF FIND(liste, ',' + x + ',', 0) < 0 THEN
+                        Warn(g + ' : A' + DINT_TO_STRING(a) + ' : INIT(' + x + ') - le classeur n a pas de grafcet '
+                             + x + ' : action sans effet');
+                    ELSE
+                        sorties := sorties + nl + 'IF Acts_' + g + '[' + DINT_TO_STRING(a) + '].Out THEN Ctrl_'
+                            + x + '.Cmd.InitReq := TRUE; END_IF;   (* ' + nom + ' : relance ' + x + ' *)';
+                    END_IF;
+                ELSIF FIND(brut, ':=', 0) >= 0 THEN
+                    IF MID(brut, LEN(brut) - 1, 1) <> ';' THEN brut := brut + ';'; END_IF;
+                    (* ce qu'elle ecrit existe-t-il ? (Vannes dans Vannes[1].PosReq := 1;) *)
+                    k := 0;
+                    WHILE k < LEN(brut) AND FIND(ident, MID(brut, k, 1), 0) >= 0 DO k := k + 1; END_WHILE;
+                    x := UPPER(MID(brut, 0, k));
+                    IF k > 0 AND x <> 'IF' AND x <> 'CASE' AND x <> 'FOR' AND x <> 'WHILE' AND x <> 'REPEAT' THEN
+                        IF NOT VariableExists(MID(brut, 0, k)) THEN
+                            Warn(g + ' : A' + DINT_TO_STRING(a) + ' : ' + MID(brut, 0, k) + ' n existe pas dans le '
+                                 + 'projet (la sous-routine ne compilera pas tant qu elle manque)');
+                        END_IF;
+                    END_IF;
+                    sorties := sorties + nl + 'IF Acts_' + g + '[' + DINT_TO_STRING(a) + '].Out THEN '
+                        + brut + ' END_IF;   (* ' + nom + ' *)';
+                ELSIF FIND(cibles, '|' + brut + '|', 0) < 0 THEN
+                    cibles := cibles + brut + '|';
+                END_IF;
+
+                IF a > maxA THEN maxA := a; END_IF;
+                nbAc := nbAc + 1;
+            END_IF;
+        END_IF;
+    END_FOR;
+
+    (* LES CIBLES BOOL : le OU des actions qui les citent. Le grafcet les
+       possede : il les ecrit a chaque cycle. *)
+    p := 1;
+    WHILE p < LEN(cibles) DO
+        k := FIND(cibles, '|', p);
+        x := MID(cibles, p, k - p);
+        p := k + 1;
+        expr := '';
+        noms := '';
+        FOR i := 0 TO nAc - 1 DO
+            IF FIND(lignesA, ',' + DINT_TO_STRING(i) + ',', 0) >= 0 THEN
+                brut := Cell(tAc, i, 'Cible');
+                WHILE LEN(brut) > 0 AND MID(brut, 0, 1) = ' ' DO brut := MID(brut, 1); END_WHILE;
+                WHILE LEN(brut) > 0 AND MID(brut, LEN(brut) - 1, 1) = ' ' DO brut := MID(brut, 0, LEN(brut) - 1); END_WHILE;
+                IF brut = x THEN
+                    c := Cell(tAc, i, 'Action');
+                    WHILE LEN(c) > 0 AND MID(c, 0, 1) = ' ' DO c := MID(c, 1); END_WHILE;
+                    IF LEN(c) > 2 AND MID(c, LEN(c) - 2, 2) = '.0' THEN c := MID(c, 0, LEN(c) - 2); END_IF;
+                    IF expr = '' THEN expr := 'Acts_' + g + '[' + c + '].Out';
+                    ELSE expr := expr + ' OR Acts_' + g + '[' + c + '].Out'; END_IF;
+                    IF noms = '' THEN noms := 'A' + c; ELSE noms := noms + ', A' + c; END_IF;
+                END_IF;
+            END_IF;
+        END_FOR;
+        sorties := sorties + nl + x + ' := ' + expr + ';   (* ' + noms + ' *)';
+
+        (* la racine existe-t-elle ? Un nom simple absent est declare en BOOL *)
+        k := 0;
+        WHILE k < LEN(x) AND FIND(ident, MID(x, k, 1), 0) >= 0 DO k := k + 1; END_WHILE;
+        IF MID(x, 0, 1) = '%' THEN
+            k := 0;     (* une adresse directe : rien a declarer *)
+        ELSIF k = LEN(x) THEN
+            IF NOT VariableExists(x) THEN
+                AddVariable(x, 'BOOL', 'Global', '', '', 'commandee par le grafcet ' + g);
+                Log(g + ' : ' + x + ' n existait pas : declaree en BOOL');
+            END_IF;
+        ELSIF NOT VariableExists(MID(x, 0, k)) THEN
+            Warn(g + ' : la cible ' + x + ' : ' + MID(x, 0, k) + ' n existe pas dans le projet '
+                 + '(la sous-routine ne compilera pas tant qu elle manque)');
+        END_IF;
+
+        (* ecrite ailleurs ? Le grafcet l'ecraserait a chaque cycle *)
+        IF FIND(ciblesToutes, '|' + x + '@', 0) >= 0 THEN
+            Warn(g + ' : la cible ' + x + ' est deja possedee par un autre grafcet : le dernier appele '
+                 + 'l ecrase. Dans l un des deux, ecrivez une instruction (' + x + ' := TRUE;)');
+        END_IF;
+        ciblesToutes := ciblesToutes + x + '@' + g + '|';
+        FOR v := 0 TO 5 DO
+            IF v = 0 THEN c := 'Reports_TC';
+            ELSIF v = 1 THEN c := 'Controle';
+            ELSIF v = 2 THEN c := 'Modes';
+            ELSIF v = 3 THEN c := 'Cablage_Entrees';
+            ELSIF v = 4 THEN c := 'Modbus_Entrees';
+            ELSE c := 'Simulation'; END_IF;
+            IF FIND(SectionText(prefSection + c), x + ' :=', 0) >= 0 THEN
+                Warn(g + ' : la cible ' + x + ' est aussi ecrite par la section ' + prefSection + c
+                     + ' : le grafcet l ecrasera a chaque cycle. Ecrivez plutot une instruction ('
+                     + x + ' := TRUE;), executee seulement quand l action sort.');
+            END_IF;
+        END_FOR;
+    END_WHILE;
+
+    (* ----------------------------- LA STRUCTURE ----------------------- *)
+    (* une etape sans sortie qui n'est pas finale, une etape que rien n'active *)
+    p := 1;
+    WHILE p < LEN(etapes) DO
+        k := FIND(etapes, ',', p);
+        x := MID(etapes, p, k - p);
+        p := k + 1;
+        IF FIND(sortants, ',' + x + ',', 0) < 0 AND FIND(finales, ',' + x + ',', 0) < 0 THEN
+            Warn(g + ' : l etape ' + x + ' n a pas de transition de sortie et n est pas finale : '
+                 + 'le grafcet s y arretera');
+        END_IF;
+        IF FIND(atteintes, ',' + x + ',', 0) < 0 AND FIND(initiales, ',' + x + ',', 0) < 0 THEN
+            Warn(g + ' : l etape ' + x + ' n est ni initiale ni la destination d une transition : '
+                 + 'elle ne sera jamais active');
+        END_IF;
+    END_WHILE;
+
+    (* ----------------------------- LES RACCOURCIS --------------------- *)
+    (* FIN(An), ACTIF(Xn), DUREE(Xn), FINI(Autre), dans les receptivites et
+       les conditions d'action : un seul passage sur tout le texte. *)
+    corps := receptivites + nl + '@@' + conditions;
+    res := '';
+    p := 0;
+    WHILE p < LEN(corps) DO
+        q := FIND(corps, '(', p);
+        IF q < 0 THEN
+            res := res + MID(corps, p);
+            p := LEN(corps);
+        ELSE
+            (* le mot juste avant la parenthese *)
+            k := q;
+            WHILE k > 0 AND FIND(ident, MID(corps, k - 1, 1), 0) >= 0 DO k := k - 1; END_WHILE;
+            mot := UPPER(MID(corps, k, q - k));
+            c := '';
+            IF k > 0 THEN c := MID(corps, k - 1, 1); END_IF;
+            v := FIND(corps, ')', q);
+            IF (mot = 'FIN' OR mot = 'ACTIF' OR mot = 'DUREE' OR mot = 'FINI') AND c <> '.' AND v > q THEN
+                x := MID(corps, q + 1, v - q - 1);
+                WHILE LEN(x) > 0 AND MID(x, 0, 1) = ' ' DO x := MID(x, 1); END_WHILE;
+                WHILE LEN(x) > 0 AND MID(x, LEN(x) - 1, 1) = ' ' DO x := MID(x, 0, LEN(x) - 1); END_WHILE;
+                IF mot = 'FINI' THEN
+                    IF FIND(liste, ',' + x + ',', 0) < 0 THEN
+                        Warn(g + ' : FINI(' + x + ') - le classeur n a pas de grafcet ' + x);
+                    END_IF;
+                    res := res + MID(corps, p, k - p) + '(GC_' + x + '.Finished AND NOT Ctrl_' + x + '.Cmd.InitReq)';
+                ELSE
+                    IF LEN(x) > 0 AND FIND('AXax', MID(x, 0, 1), 0) >= 0 THEN x := MID(x, 1); END_IF;
+                    IF mot = 'FIN' THEN
+                        IF FIND(actions, ',' + x + ',', 0) < 0 THEN
+                            Warn(g + ' : FIN(A' + x + ') - l action ' + x + ' n est pas declaree');
+                        ELSIF FIND(genres, '|' + x + '=0|', 0) >= 0 OR FIND(genres, '|' + x + '=8|', 0) >= 0 THEN
+                            Warn(g + ' : FIN(A' + x + ') - A' + x + ' est une action continue (K0, K8) : elle '
+                                 + 'n est finie qu une fois son etape quittee. Dans la receptivite de SON '
+                                 + 'etape, le grafcet y restera bloque.');
+                        END_IF;
+                        res := res + MID(corps, p, k - p) + '(Acts_' + g + '[' + x + '].Started AND Acts_' + g
+                               + '[' + x + '].Finished)';
+                    ELSE
+                        IF FIND(etapes, ',' + x + ',', 0) < 0 THEN
+                            Warn(g + ' : ' + mot + '(X' + x + ') - l etape ' + x + ' n est pas declaree');
+                        END_IF;
+                        IF mot = 'ACTIF' THEN
+                            res := res + MID(corps, p, k - p) + 'Etapes_' + g + '[' + x + '].Active';
+                        ELSE
+                            res := res + MID(corps, p, k - p) + 'Etapes_' + g + '[' + x + '].ActiveTime';
+                        END_IF;
+                    END_IF;
+                END_IF;
+                p := v + 1;
+            ELSE
+                res := res + MID(corps, p, q + 1 - p);
+                p := q + 1;
+            END_IF;
+        END_IF;
+    END_WHILE;
+    k := FIND(res, nl + '@@', 0);
+    receptivites := MID(res, 0, k);
+    conditions := MID(res, k + 3);
+
+    (* ----------------------------- LA MARCHE -------------------------- *)
+    marche := '';
+    FOR i := 0 TO nGr - 1 DO
+        x := Cell(tGr, i, 'Grafcet');
+        WHILE LEN(x) > 0 AND MID(x, 0, 1) = ' ' DO x := MID(x, 1); END_WHILE;
+        WHILE LEN(x) > 0 AND MID(x, LEN(x) - 1, 1) = ' ' DO x := MID(x, 0, LEN(x) - 1); END_WHILE;
+        IF x = g THEN
+            marche := Cell(tGr, i, 'Marche');
+            WHILE LEN(marche) > 0 AND MID(marche, 0, 1) = ' ' DO marche := MID(marche, 1); END_WHILE;
+            WHILE LEN(marche) > 0 AND MID(marche, LEN(marche) - 1, 1) = ' ' DO marche := MID(marche, 0, LEN(marche) - 1); END_WHILE;
+            IF LEN(marche) > 0 AND MID(marche, LEN(marche) - 1, 1) = ';' THEN marche := MID(marche, 0, LEN(marche) - 1); END_IF;
+        END_IF;
+    END_FOR;
+    IF marche = '' THEN marche := 'TRUE'; END_IF;
+
+    IF sig <= 0 THEN sig := sig + 30011; END_IF;
+    IF sig = 0 THEN sig := 1; END_IF;
+
+    (* ----------------------------- LES VARIABLES ---------------------- *)
+    declarations := 'Etapes_' + g + ':ARRAY[0..27] OF ST_GC_Step;'
+                  + 'Trans_' + g + ':ARRAY[0..27] OF ST_GC_Transition;'
+                  + 'Acts_' + g + ':ARRAY[0..27] OF ST_GC_Action;'
+                  + 'GC_' + g + ':DFB_GRAFCETENGINE;'
+                  + 'Ctrl_' + g + ':ST_GC_CTRL;'
+                  + 'GC_' + g + '_Sig:INT;';
+    p := 0;
+    conflit := FALSE;
+    WHILE p < LEN(declarations) DO
+        k := FIND(declarations, ';', p);
+        x := MID(declarations, p, k - p);
+        p := k + 1;
+        q := FIND(x, ':', 0);
+        c := MID(x, q + 1);
+        x := MID(x, 0, q);
+        IF VariableExists(x) THEN
+            IF UPPER(VariableType(x)) <> UPPER(c) THEN
+                Warn(g + ' : ' + x + ' existe deja avec le type ' + VariableType(x) + ' au lieu de ' + c
+                     + ' : grafcet ecarte (renommez l un ou l autre)');
+                conflit := TRUE;
+            END_IF;
+        ELSE
+            AddVariable(x, c, 'Global', '', '', 'grafcet ' + g);
+        END_IF;
+    END_WHILE;
+
+    sr := prefSection + 'Grafcet_' + g;
+    IF SectionExists(sr) AND NOT IsSubroutine(sr) THEN
+        Warn(sr + ' existe deja et c est une SECTION, pas une sous-routine : grafcet ' + g + ' ecarte');
+        conflit := TRUE;
+    END_IF;
+
+    IF NOT conflit THEN
+        (* ----------------------------- LA SOUS-ROUTINE ---------------- *)
+        IF NOT SectionExists(sr) THEN AddSubroutine(sr, tache); END_IF;
+        ClearSection(sr);
+        AppendToSection(sr, '(* Genere par ImporterGrafcet : le grafcet ' + g + ' - ' + DINT_TO_STRING(nbEt)
+            + ' etape(s), ' + DINT_TO_STRING(nbTr) + ' transition(s), ' + DINT_TO_STRING(nbAc) + ' action(s).');
+        AppendToSection(sr, '   Un nouvel import reecrit cette sous-routine : etapes, receptivites et');
+        AppendToSection(sr, '   actions se changent dans le classeur. Appelee par la section Grafcets. *)');
+        AppendToSection(sr, 'GC_' + g + '.Runtime.GC_MAX_STEPS := ' + DINT_TO_STRING(maxE + 1) + ';');
+        AppendToSection(sr, 'GC_' + g + '.Runtime.GC_MAX_TRANSITIONS := ' + DINT_TO_STRING(maxT + 1) + ';');
+        AppendToSection(sr, 'GC_' + g + '.Runtime.GC_MAX_ACTIONS := ' + DINT_TO_STRING(maxA + 1) + ';');
+        AppendToSection(sr, 'GC_' + g + '.Runtime.GC_MAX_HIST := 8;');
+        AppendToSection(sr, '');
+        AppendToSection(sr, '(* LA CONSTRUCTION : une fois au demarrage, et apres un import qui l a');
+        AppendToSection(sr, '   changee. Pas a chaque cycle : BUILDING analyse du texte. *)');
+        AppendToSection(sr, 'IF GC_' + g + '_Sig <> ' + DINT_TO_STRING(sig) + ' THEN' + construction);
+        AppendToSection(sr, '    Ctrl_' + g + '.Cmd.ForceStepFromId := -1;   (* pas de forcage *)');
+        AppendToSection(sr, '    Ctrl_' + g + '.Cmd.ForceStepToId := -1;');
+        AppendToSection(sr, '    GC_' + g + '_Sig := ' + DINT_TO_STRING(sig) + ';');
+        AppendToSection(sr, 'END_IF;');
+        AppendToSection(sr, '');
+        AppendToSection(sr, '(* LES RECEPTIVITES, calculees AVANT l appel du moteur *)' + receptivites);
+        IF conditions <> '' THEN
+            AppendToSection(sr, '');
+            AppendToSection(sr, '(* LES CONDITIONS D ACTION (les autres restent vraies) *)' + conditions);
+        END_IF;
+        AppendToSection(sr, '');
+        AppendToSection(sr, '(* LE MOTEUR *)');
+        AppendToSection(sr, 'Ctrl_' + g + '.Cmd.Enable := ' + marche + ';');
+        AppendToSection(sr, 'GC_' + g + '(Enable := Ctrl_' + g + '.Cmd.Enable, ModeReq := Ctrl_' + g + '.Cmd.ModeReq,');
+        AppendToSection(sr, '    FreezeReq := Ctrl_' + g + '.Cmd.FreezeReq, PauseReq := Ctrl_' + g + '.Cmd.PauseReq,');
+        AppendToSection(sr, '    StepReq := Ctrl_' + g + '.Cmd.StepReq, InitReq := Ctrl_' + g + '.Cmd.InitReq,');
+        AppendToSection(sr, '    ResetInitialReq := Ctrl_' + g + '.Cmd.ResetInitialReq, ResetAllReq := Ctrl_' + g
+            + '.Cmd.ResetAllReq,');
+        AppendToSection(sr, '    TsNow := GC_Temps,');
+        AppendToSection(sr, '    ForceBackReq := Ctrl_' + g + '.Cmd.ForceBackReq, ForceNextReq := Ctrl_' + g
+            + '.Cmd.ForceNextReq,');
+        AppendToSection(sr, '    ForceStepFromId := Ctrl_' + g + '.Cmd.ForceStepFromId, ForceStepToId := Ctrl_' + g
+            + '.Cmd.ForceStepToId,');
+        AppendToSection(sr, '    Steps := Etapes_' + g + ', Transitions := Trans_' + g + ', Actions := Acts_' + g + ');');
+        AppendToSection(sr, '');
+        AppendToSection(sr, '(* L ETAT, pour l IHM *)');
+        AppendToSection(sr, 'Ctrl_' + g + '.Stat.Cycle := GC_' + g + '.Runtime.Cycle;');
+        AppendToSection(sr, 'Ctrl_' + g + '.Stat.Phase := GC_' + g + '.Runtime.Phase;');
+        AppendToSection(sr, 'Ctrl_' + g + '.Stat.Mode := GC_' + g + '.Runtime.Mode;');
+        AppendToSection(sr, 'Ctrl_' + g + '.Stat.ActiveStepCount := GC_' + g + '.Debug.ActiveStepCount;');
+        AppendToSection(sr, 'Ctrl_' + g + '.Stat.LastTransitionFiredId := GC_' + g + '.Debug.LastTransitionFiredId;');
+        AppendToSection(sr, 'Ctrl_' + g + '.Stat.ConfigFault := GC_' + g + '.Debug.ConfigFault;');
+        AppendToSection(sr, 'Ctrl_' + g + '.Stat.WatchdogDetected := GC_' + g + '.Debug.WatchdogDetected;');
+        AppendToSection(sr, 'Ctrl_' + g + '.Stat.NoActiveStepFault := GC_' + g + '.Debug.NoActiveStepFault;');
+        IF sorties <> '' THEN
+            AppendToSection(sr, '');
+            AppendToSection(sr, '(* LES SORTIES DES ACTIONS *)' + sorties);
+        END_IF;
+        AppendToSection(sr, '');
+        AppendToSection(sr, '(* LES COMMANDES IMPULSIONNELLES DE L IHM : remises a zero APRES l appel *)');
+        AppendToSection(sr, 'Ctrl_' + g + '.Cmd.StepReq := FALSE;');
+        AppendToSection(sr, 'Ctrl_' + g + '.Cmd.InitReq := FALSE;');
+        AppendToSection(sr, 'Ctrl_' + g + '.Cmd.ResetInitialReq := FALSE;');
+        AppendToSection(sr, 'Ctrl_' + g + '.Cmd.ResetAllReq := FALSE;');
+        AppendToSection(sr, 'Ctrl_' + g + '.Cmd.ForceBackReq := FALSE;');
+        AppendToSection(sr, 'Ctrl_' + g + '.Cmd.ForceNextReq := FALSE;');
+        AppendToSection(sr, 'Ctrl_' + g + '.Cmd.ForceStepFromId := -1;');
+        AppendToSection(sr, 'Ctrl_' + g + '.Cmd.ForceStepToId := -1;');
+
+        (* ----------------------------- L'APPEL ------------------------ *)
+        IF FIND(SectionText(secG), sr + '();', 0) < 0 THEN
+            AppendToSection(secG, sr + '();');
+        END_IF;
+
+        Log(g + ' : ' + DINT_TO_STRING(nbEt) + ' etape(s), ' + DINT_TO_STRING(nbTr) + ' transition(s), '
+            + DINT_TO_STRING(nbAc) + ' action(s) -> ' + sr);
+        totalEt := totalEt + nbEt;
+        totalTr := totalTr + nbTr;
+        totalAc := totalAc + nbAc;
+        faits := faits + 1;
+    END_IF;
+    END_IF;
+END_WHILE;
+
+IF faits = 0 THEN Fail('aucun grafcet n a pu etre genere : voir les avertissements'); END_IF;
+
+RunMacro('RangerSections');
+
+Log(DINT_TO_STRING(faits) + ' grafcet(s) : ' + DINT_TO_STRING(totalEt) + ' etape(s), '
+    + DINT_TO_STRING(totalTr) + ' transition(s), ' + DINT_TO_STRING(totalAc) + ' action(s). '
+    + 'Construits une fois ; appeles par la section ' + secG + '.');

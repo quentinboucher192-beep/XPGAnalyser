@@ -1,0 +1,101 @@
+# =============================================================================
+#  Session 62 - 1.9 (chantier C) : l'esclave simule lie a l'ecran.
+#  Dans une copie du projet des sessions (Armoire_Gaz) : Centrale PM5560 et
+#  Variateur ATV320 ont un esclave simule lie, Balance B et Analyseur de test
+#  sont seulement simules. Le variateur vise un vrai appareil de laboratoire
+#  (un serveur Modbus sur 127.0.0.1, labo-appareil) qui repond, puis se tait
+#  (labo-couper) : l'IHM lit son esclave simule. La centrale (192.168.1.30,
+#  injoignable ici) est en automatique : elle bascule sur son esclave apres 5 s.
+#  Dans la copie, la courbe Courbe_Equipements montre aussi Consigne_Variateur
+#  (variables="Consigne_Variateur; Courant_L1" dans 0601-Vue_Equipements.vue) pour
+#  voir les marques des deux bascules du variateur. Captures PNG_930 a PNG_937.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- A. Configuration > Equipements : la liste et ses lignes d'esclaves ----------
+arbre "IHM/Configuration/Équipements"
+attendre 5
+# L'arbre plus etroit (sa poignee, a droite) : la place pour la liste et la fiche.
+glisser 602 600 330 600
+attendre 3
+sous-onglet "Équipements"
+attendre 3
+labo-appareil "Variateur ATV320"
+labo-valeur "Variateur ATV320" 8502 1450
+labo-valeur "Variateur ATV320" 8504 1432
+attendre-reel 2
+
+# ---- B. La fiche de l'esclave (la carte violette) : d'abord, avant toute bascule
+#      (l'avis d'une bascule, en bas a droite, cacherait la note du bas). Le variateur
+#      lit son esclave par choix (le projet du lot 17) : Lu par l'IHM, oui.
+equipement-esclave "Variateur ATV320"
+survol 1000 900
+attendre 4
+capture PNG_932_fiche_de_l_esclave_simule.png
+
+# ---- A. La liste : le variateur et la centrale en automatique ; la centrale
+#      (192.168.1.30) ne repond pas : apres 5 s, l'IHM lit son esclave simule.
+#      Sous un script, cette horloge avance d'1/30 s par image : on attend l'etat.
+equipement-lecture "Variateur ATV320" auto
+equipement-champ "Variateur ATV320" bascule_apres 5
+equipement-champ "Variateur ATV320" lecture_poste auto
+equipement-lecture "Centrale PM5560" auto
+equipement-champ "Centrale PM5560" bascule_apres 5
+attendre-reel 3
+attendre-bascule "Centrale PM5560" esclave
+equipement "Variateur ATV320"
+survol 1000 900
+attendre 4
+capture PNG_930_equipements_lignes_des_esclaves.png
+
+# ---- La fiche du vrai en bascule (la centrale) : L'IHM lit, Maintenant ---------------
+equipement "Centrale PM5560"
+propriete-clic "Maintenant"
+survol 1000 900
+attendre 3
+capture PNG_931_fiche_du_vrai_l_ihm_lit.png
+
+# ---- C. Simuler l'IHM : le vrai se tait, l'IHM lit son esclave ---------------------
+arbre "IHM/Simulation"
+attendre 10
+sim-vue "Vue_Equipements"
+attendre-reel 4
+labo-couper "Variateur ATV320"
+# Le variateur se tait : apres 5 s (Basculer apres), l'IHM lit son esclave simule.
+attendre-bascule "Variateur ATV320" esclave
+attendre 8
+survol 800 990
+attendre 3
+capture PNG_933_lectures_simulees_cadres_bandeau.png
+sim-survol "Aff_Variateur"
+attendre 3
+capture PNG_934_infobulle_lue_sur_l_esclave.png
+sous-onglet "Esclaves simulés"
+survol 800 990
+attendre 4
+capture PNG_935_onglet_esclaves_simules.png
+
+# ---- D. Il revient : la marque sur la courbe -----------------------------------------
+labo-relancer "Variateur ATV320"
+# Deux essais reussis du vrai (toutes les 5 s) : l'IHM le lit de nouveau.
+attendre-bascule "Variateur ATV320" vrai
+attendre 20
+capture PNG_936_courbe_marques_de_bascule.png
+
+# ---- E. Le poste d'exploitation : le bandeau -----------------------------------------
+labo-couper "Variateur ATV320"
+poste
+attendre-poste
+attendre 10
+sim-vue "Vue_Equipements"
+attendre-bascule "Variateur ATV320" esclave
+attendre 10
+capture PNG_937_poste_bandeau_lectures_simulees.png
+poste-sortir
+attendre 3
+quitter

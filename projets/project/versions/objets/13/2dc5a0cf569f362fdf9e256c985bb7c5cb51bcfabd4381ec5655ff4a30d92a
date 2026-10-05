@@ -1,0 +1,18 @@
+# Derived data type.
+name = ST_GC_CMD
+version = 0.02
+# checksum is recomputed by Control Expert on import; not stored.
+
+# name ; type ; address ; scope ; init ; comment ; attributes ; element comments
+Enable ; BOOL ;  ; Member ;  ;  ;  ; 
+ModeReq ; INT ;  ; Member ;  ;  ;  ; 
+FreezeReq ; BOOL ;  ; Member ;  ;  ;  ; 
+PauseReq ; BOOL ;  ; Member ;  ;  ;  ; 
+StepReq ; BOOL ;  ; Member ;  ;  ;  ; 
+InitReq ; BOOL ;  ; Member ;  ;  ;  ; 
+ResetInitialReq ; BOOL ;  ; Member ;  ;  ;  ; 
+ResetAllReq ; BOOL ;  ; Member ;  ;  ;  ; 
+ForceBackReq ; BOOL ;  ; Member ;  ;  ;  ; 
+ForceNextReq ; BOOL ;  ; Member ;  ;  ;  ; 
+ForceStepFromId ; INT ;  ; Member ;  ;  ;  ; 
+ForceStepToId ; INT ;  ; Member ;  ;  ;  ; 

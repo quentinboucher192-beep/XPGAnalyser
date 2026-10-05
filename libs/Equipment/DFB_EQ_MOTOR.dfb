@@ -1,0 +1,240 @@
+# Derived function block, shared.
+name = DFB_EQ_MOTOR
+version = 1.02
+#! summary = Un moteur a vitesse fixe : commande, retour, thermique, anti court-cycle.
+#! usage = UNE INSTANCE TRAITE SEIZE EQUIPEMENTS, et cette taille est dans la signature
+#! usage = du bloc : en changer touche toutes les instances de tous les projets qui
+#! usage = l'ont importe. Seize suffit pour une station ; au-dela, on declare une
+#! usage = deuxieme instance.
+#! usage = Appeler une fois par cycle, apres les voies d'entree et avant les reports
+#! usage = vers l'IHM : le bloc lit ce que les voies ont ecrit, et ecrit ce que les
+#! usage = reports vont lire.
+#! example = (* declarer : Moteurs : ARRAY[0..15] OF ST_EQ_Motor; *)
+#! example = Moteurs[0].Thermal := CarteDI_R0S4[5].Val;
+#! example = Moteurs[0].Fbk     := CarteDI_R0S4[6].Val;
+#! example = Moteurs[0].RunReq  := DemarrerVentilateur;   (* votre sequence *)
+#! example = 
+#! example = MOT_Station(Count := 6, CycleMs := 20, Eq := Moteurs);
+#! example = 
+#! example = CarteDO_R0S5[3].Val := Moteurs[0].Run;
+#! see = ST_EQ_Motor
+#! see = DFB_EQ_PUMP
+#! param Count = Combien d'equipements du tableau sont traites. Borne a 16. En mettre moins
+#! param Count = ne fait pas gagner de memoire, seulement du temps de cycle.
+#! param CycleMs = La periode de la tache, en ms. Un DDT ne peut pas contenir de temporisateur,
+#! param CycleMs = donc tout le temps s'accumule depuis la : une valeur fausse ici fausse
+#! param CycleMs = toutes les temporisations de tous les equipements du tableau. DINT et non
+#! param CycleMs = INT - un INT de millisecondes deborde au bout de trente-trois secondes.
+#! param CycleMs = Le mieux : DtMs de DFB_SYS_CLOCK, qui suit le temps reel de la tache.
+#! param Eq = Le tableau des equipements, en InOut. Sa taille est figee a 16 : un InOut ne
+#! param Eq = peut pas etre dimensionne a l'appel.
+#! param FaultCount = Combien sont en defaut, recalcule a chaque cycle. De quoi allumer un voyant
+#! param FaultCount = de synthese sans reparcourir le tableau.
+#! param ReadyCount = Combien sont utilisables. FaultCount + ReadyCount n'est pas forcement egal a
+#! param ReadyCount = Count : un equipement desactive n'est ni l'un ni l'autre.
+#! changes 1.02 = LES COMPTEURS DE TEMPS NE DEBORDENT PLUS. Un DINT de millisecondes
+#! changes 1.02 = devient negatif au bout de 24,8 jours ; ils plafonnent maintenant a
+#! changes 1.02 = 2 000 000 000 ms (23 jours). StateMs repart a zero a chaque
+#! changes 1.02 = changement d'etat (il comptait depuis la mise en route du bloc), et
+#! changes 1.02 = l'etat est publie dans State. Demande le DDT en 1.01, qui porte les
+#! changes 1.02 = nouveaux champs.
+#! changes 1.02 = RunS compte le temps de marche en SECONDES, sans debordement avant
+#! changes 1.02 = 136 ans ; RunMs plafonne a 555 heures. C'est RunS qu'il faut cabler
+#! changes 1.02 = sur une rotation.
+#! changes 1.02 = CORRECTION : une machine a l'arret depuis plus de 24,8 jours ne
+#! changes 1.02 = pouvait plus redemarrer quand MinOffMs etait regle - le temps a
+#! changes 1.02 = l'arret devenait negatif et l'anti court-cycle se croyait toujours
+#! changes 1.02 = dans son delai. C'est le cas typique d'une pompe de secours.
+#! changes 1.01 = Count etait borne par le dernier INDICE (15) au lieu du nombre
+#! changes 1.01 = d'equipements (16) : le dernier equipement du tableau n'etait jamais
+#! changes 1.01 = traite.
+#! changes 1.02 = CORRECTION : un defaut detecte apres le calcul de la commande
+#! changes 1.02 = (retour, marche a sec, debit, pression, ecart) coupe la sortie dans
+#! changes 1.02 = le meme cycle, comme l'aide le promettait ; elle restait commandee
+#! changes 1.02 = un cycle de plus.
+#! changes 1.02 = Un acquittement redonne tout son delai a une nouvelle tentative : le
+#! changes 1.02 = chrono du defaut repart de zero.
+
+# Un moteur a vitesse fixe: commande, retour, thermique, anti court-cycle.
+# Une instance traite 16 equipements. Passer a une autre taille change
+# la signature du bloc, donc toutes ses instances.
+
+# name ; type ; scope ; initial ; comment
+Count ; INT ; Input ; 16 ; combien d'equipements sont traites
+CycleMs ; DINT ; Input ; 20 ; la periode de la tache en ms. Un DDT ne peut pas contenir de temporisateur
+Eq ; ARRAY[0..15] OF ST_EQ_Motor ; InOut ;  ; les equipements
+FaultCount ; INT ; Output ; 0 ; combien sont en defaut
+ReadyCount ; INT ; Output ; 0 ; combien sont utilisables
+i ; INT ; Local ; 0 ; 
+n ; INT ; Local ; 0 ; 
+LAST ; INT ; Local ; 15 ; dernier indice
+req ; BOOL ; Local ;  ; 
+allowed ; BOOL ; Local ;  ; 
+st ; INT ; Local ; 0 ; l'etat de l'equipement, avant publication
+MAXMS ; DINT ; Local ; 2000000000 ; plafond des compteurs de temps : 23 jours, sous la limite d'un DINT
+
+<<<section Process ST>>>
+n := Count;
+IF n > LAST + 1 THEN n := LAST + 1; END_IF;
+IF n < 0 THEN n := 0; END_IF;
+
+FaultCount := 0;
+ReadyCount := 0;
+
+FOR i := 0 TO n - 1 DO
+
+(* Ce qui est vrai de toute famille, ecrit une fois: l'acquittement sur front,
+   la memorisation du defaut, le temps dans l'etat. *)
+IF Eq[i].AckFault AND NOT Eq[i].PrevAck THEN
+    Eq[i].FaultLatch := FALSE;
+    Eq[i].FaultCode := 0;
+    (* et redonne tout son delai a une nouvelle tentative : sans ca, le
+       chrono du defaut continuait, et le defaut revenait des
+       l'acquittement. *)
+    Eq[i].FbkElapsed := 0;
+END_IF;
+Eq[i].PrevAck := Eq[i].AckFault;
+
+IF NOT Eq[i].Enable THEN
+    (* Desactive: aucune sortie, aucun defaut. Un equipement consigne ne doit
+       pas remplir le journal d'alarmes pendant qu'on travaille dessus. *)
+    Eq[i].Fault := FALSE;
+    Eq[i].FaultCode := 0;
+    Eq[i].FaultLatch := FALSE;
+END_IF;
+
+req := Eq[i].RunReq;
+IF Eq[i].ManMode THEN
+    req := Eq[i].ManRunReq;
+END_IF;
+
+(* Le thermique est un contact NF: FALSE veut dire declenche. Le lire a l'envers
+   est l'erreur qui fait tourner une machine avec sa protection ouverte. *)
+IF NOT Eq[i].Thermal THEN
+    Eq[i].FaultCode := 1;
+    Eq[i].FaultLatch := TRUE;
+END_IF;
+
+(* Anti court-cycle. Un moteur redemarre trois fois par minute est un moteur
+   qu'on remplace deux fois par an. *)
+IF NOT Eq[i].Run THEN
+    IF Eq[i].OffElapsed < MAXMS - CycleMs THEN
+        Eq[i].OffElapsed := Eq[i].OffElapsed + CycleMs;
+    ELSE
+        Eq[i].OffElapsed := MAXMS;
+    END_IF;
+ELSE
+    Eq[i].OffElapsed := 0;
+END_IF;
+
+allowed := Eq[i].Enable AND NOT Eq[i].FaultLatch;
+IF Eq[i].MinOffMs > 0 AND NOT Eq[i].Run AND Eq[i].OffElapsed < Eq[i].MinOffMs THEN
+    allowed := FALSE;
+END_IF;
+
+Eq[i].Run := allowed AND req;
+
+IF Eq[i].HasFbk THEN
+    IF Eq[i].Run AND NOT Eq[i].Fbk THEN
+        IF Eq[i].FbkElapsed < MAXMS - CycleMs THEN
+            Eq[i].FbkElapsed := Eq[i].FbkElapsed + CycleMs;
+        ELSE
+            Eq[i].FbkElapsed := MAXMS;
+        END_IF;
+        IF Eq[i].FbkElapsed > Eq[i].FbkMs THEN
+            Eq[i].FaultCode := 2;
+            Eq[i].FaultLatch := TRUE;
+        END_IF;
+    ELSE
+        Eq[i].FbkElapsed := 0;
+    END_IF;
+
+    (* Un retour sans commande: le contacteur est colle. Le moteur tourne et
+       personne ne l'a demande - c'est plus grave que l'inverse. *)
+    IF NOT Eq[i].Run AND Eq[i].Fbk AND Eq[i].OffElapsed > Eq[i].FbkMs THEN
+        Eq[i].FaultCode := 3;
+        Eq[i].FaultLatch := TRUE;
+    END_IF;
+
+    Eq[i].Running := Eq[i].Run AND Eq[i].Fbk;
+ELSE
+    Eq[i].Running := Eq[i].Run;
+END_IF;
+
+IF Eq[i].Running AND NOT Eq[i].PrevRunning THEN
+    Eq[i].Starts := Eq[i].Starts + 1;
+END_IF;
+IF Eq[i].Running THEN
+    (* RunMs plafonne a 2 000 000 000 ms, soit 555 heures : au-dela il ne
+       bouge plus, au lieu de devenir negatif. RunS compte les SECONDES et ne
+       deborde pas avant 136 ans : c'est lui qu'il faut relayer a une rotation
+       ou a l'IHM. *)
+    IF Eq[i].RunMs < MAXMS - CycleMs THEN
+        Eq[i].RunMs := Eq[i].RunMs + CycleMs;
+    ELSE
+        Eq[i].RunMs := MAXMS;
+    END_IF;
+    Eq[i].RunFracMs := Eq[i].RunFracMs + CycleMs;
+    IF Eq[i].RunFracMs >= 1000 THEN
+        Eq[i].RunS := Eq[i].RunS + DINT_TO_UDINT(Eq[i].RunFracMs / 1000);
+        Eq[i].RunFracMs := Eq[i].RunFracMs MOD 1000;
+    END_IF;
+END_IF;
+Eq[i].PrevRunning := Eq[i].Running;
+
+
+(* Fault est la copie PUBLIEE de FaultLatch, posee en fin de cycle.
+   Les sorties, elles, se coupent sur FaultLatch - c'est-a-dire dans le meme
+   cycle que le defaut. Les couper sur Fault laissait l'equipement commande un
+   cycle de plus : vingt millisecondes pendant lesquelles une vanne reste
+   pilotee alors qu'on vient de decouvrir qu'on ne sait pas ou elle est. *)
+
+(* Le defaut est MEMORISE. Un thermique qui se rearme tout seul en refroidissant
+   effacerait la trace de son declenchement, et personne ne saurait pourquoi la
+   machine s'est arretee cette nuit-la. *)
+(* Un equipement desactive ne publie pas de defaut, meme si la condition est
+   toujours la. Le prologue efface la memorisation, mais le corps la repose au
+   meme cycle : c'est ici qu'il faut le dire, une fois, plutot que d'entourer
+   chaque famille d'un IF Enable. *)
+(* UN DEFAUT COUPE LA SORTIE DANS LE CYCLE MEME ou il apparait. Ceux qui se
+   detectent APRES le calcul de la commande - retour absent, marche a sec,
+   debit, pression, ecart - la laissaient un cycle de plus. *)
+IF Eq[i].FaultLatch THEN
+    Eq[i].Run := FALSE;
+    Eq[i].Running := FALSE;
+END_IF;
+
+Eq[i].Fault := Eq[i].FaultLatch AND Eq[i].Enable;
+Eq[i].Ready := Eq[i].Enable AND NOT Eq[i].Fault;
+
+(* L'ETAT PUBLIE, et le temps passe dedans. StateMs n'etait jamais remis a
+   zero - il comptait depuis la mise en route du bloc - et debordait au bout de
+   24,8 jours. Il repart maintenant a chaque changement d'etat, et plafonne. *)
+IF NOT Eq[i].Enable THEN
+    st := 0;
+ELSIF Eq[i].Fault THEN
+    st := 1;
+ELSIF Eq[i].Running THEN
+    st := 3;
+ELSE
+    st := 2;
+END_IF;
+IF st <> Eq[i].PrevState THEN
+    Eq[i].StateMs := 0;
+    Eq[i].PrevState := st;
+ELSIF Eq[i].StateMs < MAXMS - CycleMs THEN
+    Eq[i].StateMs := Eq[i].StateMs + CycleMs;
+ELSE
+    Eq[i].StateMs := MAXMS;
+END_IF;
+Eq[i].State := st;
+
+IF Eq[i].Fault THEN
+    FaultCount := FaultCount + 1;
+END_IF;
+IF Eq[i].Ready THEN
+    ReadyCount := ReadyCount + 1;
+END_IF;
+
+END_FOR;
+<<<end>>>

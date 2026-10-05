@@ -1,0 +1,295 @@
+# =============================================================================
+#  Session 56 - LOT API 6 : le mode Modifier des macros ; l'etat du projet et les
+#  versions (la version en cours dans la barre du haut, Terminer, Livrer,
+#  Deverrouiller) ; les neuf themes ; l'icone du projet et son editeur en pixel
+#  art. Et les ajouts du 28/09 : le volet de droite retire ; coller depuis Excel
+#  dans les Variables, les Unites (qui montrent leurs variables) et les Tables
+#  d'animation (dont les structures se deplient) ; la frise des versions qui
+#  defile (40 versions).
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 12
+arbre "IHM" replier
+attendre 3
+
+# ---- A. L'ecran sans le volet de droite ; la version dans la barre (FINISH : V3) ------------
+survol 1200 1060
+attendre 3
+capture PNG_674_ecran_sans_volet_version_finish.png
+barre version
+attendre 4
+capture PNG_675_menu_version_finish.png
+touche escape
+attendre 3
+
+# ---- B. Modifier un projet FINISH : la V4 commence (DEV) ; Ctrl+Z jusqu'au bout le rend FINISH
+arbre "API/Variables"
+attendre 8
+ligne "PT1_A" exact
+attendre 4
+outil "Renommer la variable"
+attendre 5
+champ 1 "PT1_A_Essai"
+attendre 3
+# Lot API 7 : renommer ouvre le dialogue qui montre tout ce qui suit (API et IHM) : Confirmer.
+renommer-confirmer
+attendre 8
+capture PNG_676_finish_modifie_v4_en_cours.png
+barre version
+attendre 4
+capture PNG_677_menu_version_v4_en_cours.png
+touche escape
+attendre 3
+ligne "PT1_A_Essai" exact
+attendre 3
+touche ctrl+z
+attendre 8
+capture PNG_678_ctrl_z_rend_finish.png
+
+# ---- C. Variables : coller depuis Excel (deux mises a jour, une creation, un refus) ----------
+ligne "PT1_A" exact
+attendre 3
+presse-papiers "Nom\tType\tCommentaire\nPT1_A\t\tPression amont armoire A (Excel)\nPT1_B\t\tPression amont armoire B (Excel)\nDebit_Purge\tREAL\tDebit de purge mesure\nPression aval\tREAL\tnom refuse : un espace"
+touche ctrl+v
+attendre 10
+survol 1200 1060
+attendre 3
+capture PNG_679_variables_colle_excel.png
+touche ctrl+z
+attendre 8
+
+# ---- D. Unites de programme : les variables sous l'unite, coller depuis Excel ------------------
+arbre "API/Unités de programme"
+attendre 8
+ligne "Logigrammes_A" exact
+attendre 4
+survol 1200 1060
+attendre 3
+capture PNG_680_unite_ses_variables.png
+ligne "armoires" exact
+attendre 4
+capture PNG_681_unite_variable_fiche.png
+presse-papiers "Nom\tType\tPortée\tValeur initiale\tCommentaire\nCompteur_Essais\tINT\tlocale\t0\tEssais faits depuis le demarrage\nSeuil_Essai\tREAL\tentrée\t\tSeuil recu du projet\nconfigurée\tBOOL\tlocale\t\tnom refuse"
+touche ctrl+v
+attendre 10
+survol 1200 1060
+attendre 3
+capture PNG_682_unite_colle_excel.png
+touche ctrl+z
+attendre 8
+
+# ---- E. Tables d'animation : une structure depliee, ses membres ; coller des variables ---------
+arbre "API/Tables d'animation"
+attendre 8
+ligne "ARM" exact
+attendre 5
+deplier "armoires"
+attendre 5
+deplier "armoires[0]"
+attendre 5
+survol 1200 1060
+attendre 3
+capture PNG_683_table_structure_depliee.png
+deplier "Gc_SurpressionA"
+attendre 5
+capture PNG_684_table_instance_dfb_depliee.png
+ligne "armoires"
+attendre 3
+presse-papiers "Variable\tNouvelle valeur\nconfig_utilisee\t\ngeneralites\t\nPT3_A\t4.5\nVariable_inconnue\t1"
+touche ctrl+v
+attendre 10
+survol 1200 1060
+attendre 3
+capture PNG_685_table_colle_excel.png
+touche ctrl+z
+attendre 8
+
+# ---- F. Terminer la V4 : une version validee, le projet FINISH ---------------------------------
+arbre "API/Variables"
+attendre 8
+ligne "PT1_A" exact
+attendre 4
+outil "Renommer la variable"
+attendre 5
+champ 1 "PT1_A_V4"
+attendre 3
+# Lot API 7 : renommer ouvre le dialogue qui montre tout ce qui suit (API et IHM) : Confirmer.
+renommer-confirmer
+attendre 8
+barre-menu version "Terminer la V"
+attendre 5
+capture PNG_686_terminer_v4_dialogue.png
+champ 1 "Essais de purge"
+attendre 2
+bouton "Terminer la V*"
+attendre 12
+capture PNG_687_v4_validee_finish.png
+
+# ---- G. Livrer et verrouiller : la V4 promue livree (rien n'a change), LOCK ; deverrouiller ----
+barre-menu version "Livrer la V"
+attendre 5
+capture PNG_688_livrer_v4_dialogue.png
+champ 3 "atelier"
+champ 4 "atelier"
+attendre 2
+bouton "Livrer et verrouiller"
+attendre 12
+capture PNG_689_v4_livree_lock.png
+barre version
+attendre 4
+capture PNG_690_menu_version_lock.png
+touche escape
+attendre 3
+action project.unlock
+attendre 5
+champ 1 "atelier"
+attendre 2
+bouton "Déverrouiller"
+attendre 8
+bouton "Fermer"
+attendre 5
+capture PNG_691_deverrouille_v5_en_cours.png
+
+# ---- H. Les versions : la frise defile (40 versions de plus) --------------------------------------
+versions-fabriquer 40
+attendre 6
+barre-menu version "Les versions du projet"
+attendre 10
+survol 1200 1060
+attendre 3
+frise-verifier 6
+capture PNG_692_versions_frise_defile.png
+frise-molette 6
+attendre 4
+frise-verifier
+capture PNG_693_versions_frise_molette.png
+frise-choisir 1
+attendre 5
+frise-verifier
+capture PNG_694_versions_v1_revelee.png
+
+# ---- I. Les themes : la galerie, Nuit, Papier, Contraste eleve clair --------------------------
+action view.theme
+attendre 6
+capture PNG_695_galerie_themes.png
+theme-galerie Nuit
+attendre 5
+capture PNG_696_galerie_nuit.png
+bouton "Garder « Nuit »"
+attendre 6
+arbre "API/Unités de programme"
+attendre 6
+survol 1200 1060
+attendre 3
+capture PNG_697_theme_nuit.png
+theme Papier
+attendre 6
+capture PNG_698_theme_papier.png
+theme "Contraste élevé clair"
+attendre 6
+capture PNG_699_theme_contraste_eleve_clair.png
+theme Solarized
+attendre 6
+capture PNG_700_theme_solarise.png
+theme Dark
+attendre 6
+
+# ---- J. L'icone du projet : la galerie, puis le mini paint -------------------------------------
+barre logo
+attendre 6
+icone-onglet galerie
+attendre 3
+capture PNG_701_icone_galerie.png
+icone-dessin bouteille
+attendre 3
+icone-onglet dessiner
+attendre 3
+icone-couleur 9
+icone-outil crayon
+icone-trait 12 2 19 2
+icone-outil symetrie
+icone-trait 4 26 9 30
+attendre 3
+capture PNG_702_icone_mini_paint.png
+bouton "Appliquer"
+attendre 8
+survol 1200 1060
+attendre 3
+capture PNG_703_icone_dans_la_barre.png
+touche ctrl+z
+attendre 6
+capture PNG_704_icone_ctrl_z.png
+touche ctrl+y
+attendre 6
+
+# ---- K. Le mode Modifier d'une macro : le code, les cartes, l'apercu, l'essai, Enregistrer -------
+barre-menu "affichage" "Onglet Macros"
+attendre 10
+macros-arbre "Importer depuis le classeur/Étapes de l'import/ImporterAlarmes" double
+attendre 10
+attendre-macro
+macro-champ "classeur" "${ECHANTILLONS}/affaire.xlsm"
+attendre 5
+attendre-macro
+attendre 5
+macro-etape fermer
+attendre 5
+bouton "Modifier le code"
+attendre 10
+survol 1200 1060
+attendre 3
+capture PNG_705_editeur_macro_cartes.png
+editeur-carte tache
+attendre 4
+capture PNG_706_editeur_carte_choisie.png
+editeur-deplacer tache "Sections" 0
+attendre 6
+editeur-contient "#! groupe Sections = tache"
+capture PNG_707_editeur_carte_deplacee.png
+editeur-onglet apercu
+attendre 5
+capture PNG_708_editeur_apercu_formulaire.png
+editeur-onglet questions
+attendre 3
+editeur-essayer
+attendre 12
+capture PNG_709_editeur_essai_f5.png
+editeur-verifier
+attendre 5
+capture PNG_710_editeur_verifier.png
+editeur-annuler
+attendre 5
+editeur-sans "#! groupe Sections = tache"
+editeur-ajouter prefixe nom "Préfixe des équipements" "EQ_"
+attendre 6
+editeur-contient "#! champ prefixe = nom"
+capture PNG_711_editeur_question_ajoutee.png
+editeur-annuler
+attendre 5
+outil "Enregistrer"
+attendre 5
+capture PNG_712_editeur_enregistrer_version.png
+bouton "Annuler"
+attendre 4
+# Utiliser / Modifier, dans le meme onglet : Utiliser revient a la fiche.
+macros-mode utiliser
+attendre 6
+capture PNG_713_macros_utiliser_modifier.png
+
+barre "historique"
+attendre 6
+capture PNG_714_historique_lot6.png
+barre "historique"
+attendre 3
+
+# ---- L. L'accueil : l'icone du projet dans la liste des projets recents -------------------------
+action project.save
+attendre 10
+action file.close
+attendre 8
+capture PNG_715_accueil_icone_projet.png
+quitter

@@ -1,0 +1,100 @@
+# Derived data type, shared.
+name = ST_EQ_Led
+version = 1.01
+#! summary = Un voyant : fixe, clignotant, impulsion, ou pilote par une gravite.
+#! usage = Le contrat commun a toutes les familles d'equipement :
+#! usage = Enable a FALSE fige l'equipement - aucune sortie, aucun defaut. Un
+#! usage = equipement consigne ne doit pas remplir le journal d'alarmes pendant
+#! usage = qu'on travaille dessus.
+#! usage = ManMode fait primer les commandes Man* sur l'automatisme.
+#! usage = AckFault acquitte SUR FRONT MONTANT, et seulement si la condition a
+#! usage = disparu.
+#! usage = LE DEFAUT EST MEMORISE par FaultLatch. Un thermique qui se rearme tout
+#! usage = seul en refroidissant effacerait la trace de son declenchement, et
+#! usage = personne ne saurait pourquoi la machine s'est arretee cette nuit-la.
+#! usage = 
+#! usage = CETTE FAMILLE N'A AUCUN CODE DE DEFAUT, et ce n'est pas un oubli : il n'y a
+#! usage = aucun moyen de savoir depuis l'automate qu'une LED est grillee. Le dire ici
+#! usage = evite qu'on cherche.
+#! see = DFB_EQ_LED
+#! see = ST_ALM_Stat
+#! param Enable = FALSE fige l'equipement : aucune sortie, aucun defaut, et les compteurs
+#! param Enable = cessent d'avancer. C'est l'etat d'une machine consignee.
+#! param Fault = La copie PUBLIEE de FaultLatch, posee en fin de cycle. Les sorties, elles,
+#! param Fault = se coupent sur FaultLatch - c'est-a-dire dans le MEME cycle que le defaut.
+#! param Fault = Les couper sur Fault laisserait l'equipement pilote un cycle de plus :
+#! param Fault = vingt millisecondes pendant lesquelles on le commande alors qu'on vient de
+#! param Fault = decouvrir qu'on ne sait plus ou il en est.
+#! param FaultCode = Le dernier code pose, 0 quand il n'y a rien. Voir la table de cette famille,
+#! param FaultCode = en tete de fichier. Il n'est efface que par AckFault.
+#! param Ready = Active et sans defaut. C'est ce qu'on cable sur Available d'une rotation :
+#! param Ready = un equipement en defaut est alors saute, et il reprend son rang en revenant.
+#! param Starts = Nombre de demarrages depuis le dernier Reset. Un compteur qui grimpe vite
+#! param Starts = est la signature d'un court-cycle - voir MinOffMs quand la famille en a un.
+#! param Mode = 0 eteint, 1 fixe, 2 clignotant lent, 3 rapide, 4 impulsion, 5 pilote par
+#! param Mode = Severity.
+#! param Mode = Le mode 5 traduit une gravite en allure : 1 donne fixe, 2 lent, 3 et plus
+#! param Mode = rapide, 0 eteint. La correspondance est ecrite UNE FOIS dans le bloc plutot
+#! param Mode = que recopiee dans chaque section qui allume un voyant.
+#! param Severity = 0 rien, 1 info, 2 avertissement, 3 defaut, 4 arret. Les memes valeurs que
+#! param Severity = ST_ALM_Def.Sev : on y cable directement Stat.WorstSev du gestionnaire
+#! param Severity = d'alarmes.
+#! param Trigger = Declenche l'impulsion, SUR FRONT MONTANT. Une impulsion relancee a chaque
+#! param Trigger = cycle par un niveau resterait allumee en permanence.
+#! param Out = La sortie. Elle est forcee a FALSE quand Enable est faux, comme toutes les
+#! param Out = sorties de toutes les familles.
+#! internal = PrevAck, PrevTrigger, BlinkMs, PulseLeft, RunFracMs, PrevState
+#! param SlowMs = Demi-periode du clignotement lent (mode 2), en ms.
+#! param FastMs = Demi-periode du clignotement rapide (mode 3), en ms.
+#! param PulseMs = Duree d'une impulsion (mode 4), lancee par un front montant de
+#! param PulseMs = Trigger.
+#! changes 1.01 = AJOUTS EN FIN DE TYPE : RunS (temps de marche en secondes, sans
+#! changes 1.01 = debordement), State (etat publie : 0 desactive, 1 defaut, 2 repos, 3
+#! changes 1.01 = en service), et deux champs internes. RunMs et StateMs plafonnent a
+#! changes 1.01 = 2 000 000 000 ms au lieu de devenir negatifs.
+#! example = (* declarer :
+#! example =    Voyants : ARRAY[0..15] OF ST_EQ_Led;
+#! example =    DQ : ARRAY[0..15] OF ST_IO_Dig;
+#! example =    AlmStat : ST_ALM_Stat; *)
+#! example = (* un voyant de defaut qui suit la pire alarme : fixe, puis clignotant vite *)
+#! example = Voyants[0].Name     := 'H801 defaut';
+#! example = Voyants[0].Mode     := 5;
+#! example = Voyants[0].Severity := AlmStat.WorstSev;
+#! example = (* la sortie, APRES l'appel de DFB_EQ_LED *)
+#! example = DQ[0].Val := Voyants[0].Out;
+#! given = AlmStat.WorstSev := 3
+#! expect = 1 : Voyants[0].Severity = 3
+#! expect = 1 : Voyants[0].Mode = 5
+
+# Un voyant: fixe, clignotant, impulsion, ou pilote par une gravite.
+#
+# Codes de defaut (FaultCode):
+# (aucun: un voyant ne tombe pas en panne d'une facon que l'automate voie)
+
+# name ; type ; scope ; initial ; comment
+Name ; STRING[16] ; Member ;  ; ce que l'operateur lit
+Enable ; BOOL ; Member ; TRUE ; FALSE fige l'equipement: aucune sortie, aucun defaut
+ManMode ; BOOL ; Member ;  ; TRUE: les commandes manuelles priment sur l'automatisme
+AckFault ; BOOL ; Member ;  ; front montant: acquitte le defaut s'il a disparu
+PrevAck ; BOOL ; Member ;  ; runtime, ne pas ecrire
+Mode ; INT ; Member ; 0 ; 0 eteint, 1 fixe, 2 clignotant lent, 3 rapide, 4 impulsion, 5 pilote par Severity
+Severity ; INT ; Member ; 0 ; 0 rien, 1 info, 2 avertissement, 3 defaut, 4 arret
+SlowMs ; DINT ; Member ; 1000 ; demi-periode du clignotement lent
+FastMs ; DINT ; Member ; 250 ; demi-periode du rapide
+PulseMs ; DINT ; Member ; 200 ; duree de l'impulsion
+Trigger ; BOOL ; Member ;  ; declenche l'impulsion, sur front montant
+PrevTrigger ; BOOL ; Member ;  ; runtime
+Out ; BOOL ; Member ;  ; la sortie
+BlinkMs ; DINT ; Member ; 0 ; runtime
+PulseLeft ; DINT ; Member ; 0 ; runtime
+Fault ; BOOL ; Member ;  ; un defaut est present
+FaultCode ; INT ; Member ; 0 ; 0 aucun. Voir la table de la famille
+FaultLatch ; BOOL ; Member ;  ; le defaut reste jusqu'a AckFault, meme s'il disparait
+Ready ; BOOL ; Member ;  ; utilisable: active, sans defaut
+RunMs ; DINT ; Member ; 0 ; temps de fonctionnement cumule, en ms, plafonne a 2 000 000 000 (555 h) : lire RunS
+Starts ; UDINT ; Member ; 0 ; nombre de demarrages depuis le dernier Reset
+StateMs ; DINT ; Member ; 0 ; temps dans l'etat courant (State), en ms, plafonne a 2 000 000 000
+RunS ; UDINT ; Member ; 0 ; temps de fonctionnement cumule, en secondes : ne deborde pas avant 136 ans
+RunFracMs ; DINT ; Member ; 0 ; runtime, ne pas ecrire : les millisecondes pas encore comptees dans RunS
+State ; INT ; Member ; 0 ; etat publie : 0 desactive, 1 en defaut, 2 au repos, 3 en service
+PrevState ; INT ; Member ; -1 ; runtime, ne pas ecrire

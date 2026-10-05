@@ -1,0 +1,39 @@
+# =============================================================================
+#  Session 116 - 1.10.4 (K1, K1104) : « DUPLIQUER… » AVEC LES INDICES, le cas du
+#  client (client-dupliquer.png). V_101 suit V[0] ailleurs (Libelle = V[0].Nom,
+#  Ouverture = V[0].Pos, En mouvement = V[0].Pos > 10) et porte $Vanne$ dans
+#  Valeur : sans rien faire, la colonne $Vanne$ est preremplie V[0], V[1]...
+#  Puis Vider, et Remplir > Tableau... (V (0..63)).
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+arbre "IHM/Vues/Vue_Synoptique"
+attendre 6
+objet V_101
+attendre 3
+vue-clic 240 170
+attendre 1
+touche ctrl+d
+attendre 4
+# Le cas du client : la colonne preremplie, la note bleue, Dupliquer permis.
+dupliquer-verifier
+capture 116_01_prerempli_sans_rien_faire.png
+dupliquer-vider "$Vanne$"
+attendre 2
+dupliquer-verifier bloque
+capture 116_02_vider.png
+dupliquer-tableau "$Vanne$" "V (0..63)"
+attendre 2
+dupliquer-verifier
+dupliquer-ligne 3
+attendre 2
+capture 116_03_remplir_tableau.png
+dupliquer-valider
+attendre 4
+capture 116_04_vue_apres.png
+quitter

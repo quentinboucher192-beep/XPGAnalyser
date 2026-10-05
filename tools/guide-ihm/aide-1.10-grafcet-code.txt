@@ -1,0 +1,34 @@
+# =============================================================================
+#  Aide F1 de la 1.10 : le volet Code du grafcet et le direct grafcet <-> sections
+#  (chantier R2, décision 11 bis). Même syntaxe que guide-ihm.txt (voir son
+#  en-tête) ; sujet de l'API, à reporter dans guide-ihm.txt juste après le sujet
+#  « grafcet » de R (aide-1.10-grafcet.txt).
+# =============================================================================
+
+== grafcet-code | Le code du grafcet : réceptivités et actions, en direct avec les sections
+: Sous le dessin du grafcet, le volet Code montre le code de l'élément choisi — la réceptivité d'une transition, le corps d'une action — dans le même éditeur que les sections ST du programme. Chaque modification réécrit aussitôt les sections du programme ; les onglets ST ouverts et le dessin suivent, dans les deux sens.
+@lieux api
+@mots volet Code, Code, réceptivité, corps d'action, Appliquer, Rétablir, Ctrl+Entrée, aide à la saisie, Ctrl+Espace, raccourcis, X3, A2, FIN, ACTIF, DUREE, FINI, en direct, onglet ST, modification en ligne, Ce qui va changer dans le programme, Supprimer une transition, Supprimer une action, Modifier une action, genre, durée, SFC_DEBUG, renumérotation
+@voir grafcet, sections-st, simulation-api-ihm
+### Le volet Code
+Choisis une transition ou une action dans le dessin (ou dans les listes Transitions, Actions) : son code s'affiche sous le dessin, avec la section et la ligne où il est écrit (« Réceptivité de T2 · SFC_DetoxalA, ligne 62 »). Une étape n'a pas de code.
+C'est l'éditeur des sections ST : coloration, numéros de ligne, **Ctrl+Espace** (ou deux lettres tapées) propose les noms du programme, la signature d'un appel s'affiche à la parenthèse, et en simulation le survol d'un nom montre sa valeur.
+L'aide à la saisie connaît en plus les raccourcis du grafcet :
+| Raccourci | Ce qu'il veut dire | Ce qui est écrit dans le programme |
+| ACTIF(X3) | l'étape X3 est active | Steps_<grafcet>[3].Active |
+| DUREE(X1) >= T#5s | X1 est active depuis 5 s au moins | Steps_<grafcet>[1].ActiveTime >= T#5s |
+| FIN(A2) | l'action A2 a fini | Acts_<grafcet>[2].Started AND Acts_<grafcet>[2].Finished |
+| FINI(Autre) | le grafcet Autre est fini | la fin de son moteur (Gc_Autre) |
+Taper « X3 » ou « A2 » les trouve aussi. Les raccourcis tapés sont développés dans le programme en appliquant.
+### Appliquer, rétablir, défaire
+Le titre du volet dit « modifié » dès que le texte change. **Ctrl+Entrée**, le bouton **Appliquer**, ou quitter le volet (cliquer ailleurs, choisir un autre élément) écrit le changement : une seule ligne bouge pour une réceptivité, le bloc IF … END_IF pour un corps d'action. La ligne du bas dit combien de lignes ont été réécrites, et dans quelle section. **Rétablir** remet le texte du programme sans rien écrire. **Ctrl+Z** défait, comme une frappe dans une section.
+### En direct, dans les deux sens
+Une modification faite dans le grafcet (le volet Code, un dialogue, l'outil Supprimer) réécrit aussitôt les sections du programme, et **les onglets ST ouverts sur ces sections montrent le nouveau texte au même instant**. Un onglet ouvert en modification le dit dans la barre d'état : rien de ce qui y a été tapé n'est perdu (chaque frappe y est déjà enregistrée).
+À l'inverse, **une section modifiée en ST redessine le grafcet aussitôt** (un libellé, une réceptivité, une action), et son volet Code suit s'il n'est pas lui-même en cours de modification. Ctrl+Z défait l'un ou l'autre, et les deux suivent.
+En simulation de l'API, le programme modifié passe par la **modification en ligne** (entre deux cycles, les valeurs gardées) : le volet dit « Appliqué en ligne », ou pourquoi le nouveau code n'a pas pu être pris.
+### Supprimer, modifier : ce qui va changer dans le programme
+**Supprimer une transition** (outil Supprimer ou Suppr) retire ses deux appels Builder et sa réceptivité ; les transitions suivantes descendent d'un numéro (T5 devient T4). La confirmation dit aussi ce que la suppression laisse au grafcet : « X3 n'aura plus de transition de sortie », « X5 ne sera plus atteinte ».
+**Supprimer une action** retire ses appels Builder, sa condition et son bloc IF … END_IF ; les actions suivantes descendent d'un numéro, y compris dans les réceptivités (FIN(A5) devient FIN(A4)) et dans les autres sections de l'unité (SFC_DEBUG). Si une réceptivité ou une autre section emploie l'action (FIN(A2), Acts_…[2].Started…), la suppression est **refusée** et le message dit où : change d'abord ces lignes.
+**Modifier une action** (double-clic sur l'action) : son genre (continue, à l'activation, retardée, limitée…, avec son code K du moteur), sa durée, son nom (8 caractères au plus : le moteur jette un nom plus long), son étape. Seuls les champs changés sont réécrits.
+Avant d'appliquer, quand plusieurs lignes bougent, la fenêtre **Ce qui va changer dans le programme** les liste : la section, le numéro de ligne, le texte d'avant et celui d'après. Ctrl+Z défait tout d'un coup.
+Insérer ou supprimer une étape, une transition, une action renumérote aussi les autres sections de l'unité qui nomment ses tableaux (SFC_DEBUG lit Steps_…, Acts_…) : elles continuent de désigner le même élément.

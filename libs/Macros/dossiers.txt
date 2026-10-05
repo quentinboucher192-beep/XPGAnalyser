@@ -1,0 +1,12 @@
+# Les dossiers des macros : l'onglet Macros et l'arbre API > Macros.
+# Un dossier n'a aucun effet sur les noms ni sur RunMacro : c'est un rangement.
+#   dossier ; <chemin>              un dossier (meme vide), dans l'ordre d'affichage
+#   macro ; <nom> ; <chemin>        ou est rangee une macro (vide : a la racine)
+# Une macro absente d'ici va dans le dossier de sa ligne "#! categorie".
+dossier ; Importer depuis le classeur
+dossier ; Importer depuis le classeur/Étapes de l'import
+dossier ; Importer depuis un CSV
+dossier ; Créer
+dossier ; Générer
+dossier ; Vérifier et ranger
+dossier ; Bibliothèque

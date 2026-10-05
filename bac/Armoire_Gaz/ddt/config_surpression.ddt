@@ -1,0 +1,16 @@
+# Derived data type.
+name = config_surpression
+version = 0.02
+# checksum is recomputed by Control Expert on import; not stored.
+
+# name ; type ; address ; scope ; init ; comment ; attributes ; element comments
+SP3H ; INT ;  ; Member ;  ;  ;  ; 
+SP3 ; INT ;  ; Member ;  ;  ;  ; 
+SP3B ; INT ;  ; Member ;  ;  ;  ; 
+NBS ; INT ;  ; Member ;  ;  ;  ; 
+DLSURV ; INT ;  ; Member ;  ;  ;  ; 
+DLSURP1 ; INT ;  ; Member ;  ;  ;  ; 
+DLSURP2 ; INT ;  ; Member ;  ;  ;  ; 
+DLSURP3 ; INT ;  ; Member ;  ;  ;  ; 
+DLSURP4 ; INT ;  ; Member ;  ;  ;  ; 
+DLSURP5 ; INT ;  ; Member ;  ;  ;  ; 

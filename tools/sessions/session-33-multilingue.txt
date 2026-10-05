@@ -1,0 +1,222 @@
+# =============================================================================
+#  Session 33 - LOT 13 C : le multilingue et le confort. Configuration >
+#  Langues (l'anglais et l'allemand, deux traductions a la main, le classeur
+#  pour le traducteur, puis le classeur rempli relu) ; le selecteur de langue
+#  et le selecteur de theme poses dans la vue des commandes ; en marche :
+#  l'anglais, l'allemand ; Configuration > Unites et formats (Proposer : une
+#  ligne pour toutes les armoires) ; le menu Parametres systeme et ses quatre
+#  reglages d'affichage (daltonien, symboles), le synoptique en defaut, le
+#  theme jour, le texte a 150 % ; Generer ; les exemples animes des deux
+#  selecteurs. Dans le projet des sessions 1 a 32 :
+#
+#    xpg_analyzer --script session-33-multilingue.txt --captures captures --size 1920x1080
+#
+#  Le classeur rempli est dans les echantillons : traductions_armoire_gaz.xlsx.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+arbre "API" replier
+attendre 3
+
+# ---- 1. Configuration > Langues : l'anglais, l'allemand -------------------------------------------
+arbre "IHM/Configuration" deplier
+arbre "IHM/Configuration/Langues"
+attendre 8
+outil "Ajouter une langue"
+attendre 5
+bouton "Ajouter"
+attendre 5
+outil "Ajouter une langue"
+attendre 5
+liste 1
+attendre 2
+choisir "Deutsch (de)"
+attendre 2
+bouton "Ajouter"
+attendre 5
+# Deux traductions a la main, dans la fiche du texte.
+ligne "Pompe de transfert : commandes"
+attendre 3
+propriete "English (en)" "Transfer pump: controls"
+attendre 2
+propriete "Deutsch (de)" "Förderpumpe: Bedienung"
+attendre 3
+# Le classeur pour le traducteur (exports/), puis le classeur rempli.
+outil "Exporter (Excel)"
+attendre 3
+# Lot API 7 : l'export demande ou (exports/ par defaut, le bouton ...) : Exporter, comme avant.
+bouton "Exporter"
+attendre 10
+outil "Importer (Excel)"
+attendre 5
+champ 1 "${ECHANTILLONS}/traductions_armoire_gaz.xlsx"
+bouton "Importer"
+attendre 10
+ligne "Petite vitesse"
+attendre 5
+survol 1200 1040
+attendre 3
+capture PNG_355_langues_volet.png
+outil "À traduire"
+attendre 5
+capture PNG_356_langues_a_traduire.png
+outil "À traduire"
+attendre 3
+
+# ---- 2. Les selecteurs de langue et de theme dans la vue des commandes ---------------------------
+arbre "IHM/Vues/Vues/Vue_Commandes"
+attendre 10
+palette "Sélecteur de langue"
+vue-clic 960 16
+attendre 5
+propriete "Nom" "Langues"
+propriete "X" "950"
+propriete "Y" "16"
+propriete "Largeur" "170"
+propriete "Hauteur" "40"
+propriete-clic "Libellé"
+choisir "code"
+attendre 3
+palette "Sélecteur de thème"
+vue-clic 1140 16
+attendre 5
+propriete "Nom" "Theme"
+propriete "X" "1128"
+propriete "Y" "16"
+propriete "Largeur" "140"
+propriete "Hauteur" "40"
+attendre 3
+objet "Langues"
+attendre 5
+survol 1200 1040
+attendre 3
+capture PNG_357_selecteurs_editeur.png
+
+# ---- 3. En marche : l'anglais, l'allemand (et le francais pour ce qui manque) -------------------
+arbre "IHM/Simulation"
+attendre 10
+sim-vue "Vue_Commandes"
+attendre 10
+sim-partie "Langues" "langue:1"
+attendre 10
+capture-sim PNG_358_sim_anglais.png
+sim-partie "Langues" "langue:2"
+attendre 10
+capture-sim PNG_359_sim_allemand.png
+sim-partie "Langues" "langue:0"
+attendre 5
+
+# ---- 4. Configuration > Unites et formats ---------------------------------------------------------
+arbre "IHM/Configuration/Unités et formats"
+attendre 8
+outil "Proposer"
+attendre 5
+ligne "Debit_Ligne"
+attendre 3
+propriete "Unité" "m³/h"
+attendre 3
+ligne "Pression_Ligne"
+attendre 3
+propriete-clic "Format"
+choisir "0.00"
+attendre 5
+survol 1200 1040
+attendre 3
+capture PNG_360_unites_formats.png
+arbre "IHM/Simulation"
+attendre 10
+sim-vue "Vue_Afficheurs"
+attendre 15
+capture-sim PNG_361_unites_en_marche.png
+
+# ---- 5. L'affichage : le menu Parametres systeme, daltonien et symboles, le jour, 150 % ---------
+sim-vue "Vue_Production"
+attendre 10
+sim-clic "Btn_Parametres"
+attendre 10
+sim-menu "suivant:couleurs"
+attendre 3
+sim-menu "bascule:symboles"
+attendre 5
+capture-sim PNG_362_menu_affichage.png
+sim-menu "fermer"
+attendre 5
+sim-vue "Vue_Synoptique"
+attendre 10
+sim-clic "Inter_Ligne"
+attendre 5
+sim-clic "Case_Colmatage"
+attendre 20
+capture-sim PNG_363_daltonien_symboles.png
+sim-clic "Case_Colmatage"
+attendre 5
+sim-vue "Vue_Production"
+attendre 10
+sim-clic "Btn_Parametres"
+attendre 10
+sim-menu "suivant:couleurs"
+attendre 3
+sim-menu "bascule:symboles"
+attendre 3
+sim-menu "fermer"
+attendre 5
+sim-vue "Vue_Commandes"
+attendre 10
+sim-partie "Theme" "theme:jour"
+attendre 10
+capture-sim PNG_364_theme_jour.png
+sim-partie "Theme" "theme:nuit"
+attendre 5
+sim-vue "Vue_Production"
+attendre 10
+sim-clic "Btn_Parametres"
+attendre 10
+sim-menu "suivant:texte"
+attendre 3
+sim-menu "suivant:texte"
+attendre 3
+sim-menu "fermer"
+attendre 5
+sim-vue "Vue_Commandes"
+attendre 15
+capture-sim PNG_365_texte_150.png
+sim-vue "Vue_Production"
+attendre 10
+sim-clic "Btn_Parametres"
+attendre 10
+sim-menu "precedent:texte"
+attendre 3
+sim-menu "precedent:texte"
+attendre 3
+sim-menu "fermer"
+attendre 5
+
+# ---- 6. Generer : ce qui reste a traduire, les unites --------------------------------------------
+arbre "IHM/Générer"
+attendre 10
+outil "Générer"
+attendre 20
+capture PNG_366_generer_langues.png
+
+# ---- 7. L'aide : les exemples animes des deux selecteurs ------------------------------------------
+touche f1
+attendre 20
+aide-sujet "langues"
+attendre 5
+aide-sujet "objet-selecteur-de-langue"
+attendre 3
+exemple-figer 5.0
+attendre 3
+capture-exemple EX_LanguageSelector.png
+aide-sujet "objet-selecteur-de-theme"
+attendre 3
+exemple-figer 3.0
+attendre 3
+capture-exemple EX_ThemeSelector.png
+exemple-figer -1
+attendre 3
+quitter

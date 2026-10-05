@@ -1,0 +1,128 @@
+# Derived data type, shared.
+name = ST_EQ_Conveyor
+version = 1.01
+#! summary = Un convoyeur : deux sens, thermique, arret d'urgence, detection de bourrage.
+#! usage = Le contrat commun a toutes les familles d'equipement :
+#! usage = Enable a FALSE fige l'equipement - aucune sortie, aucun defaut. Un
+#! usage = equipement consigne ne doit pas remplir le journal d'alarmes pendant
+#! usage = qu'on travaille dessus.
+#! usage = ManMode fait primer les commandes Man* sur l'automatisme.
+#! usage = AckFault acquitte SUR FRONT MONTANT, et seulement si la condition a
+#! usage = disparu.
+#! usage = LE DEFAUT EST MEMORISE par FaultLatch. Un thermique qui se rearme tout
+#! usage = seul en refroidissant effacerait la trace de son declenchement, et
+#! usage = personne ne saurait pourquoi la machine s'est arretee cette nuit-la.
+#! see = DFB_EQ_CONVEYOR
+#! see = ST_EQ_Motor
+#! param Enable = FALSE fige l'equipement : aucune sortie, aucun defaut, et les compteurs
+#! param Enable = cessent d'avancer. C'est l'etat d'une machine consignee.
+#! param Fault = La copie PUBLIEE de FaultLatch, posee en fin de cycle. Les sorties, elles,
+#! param Fault = se coupent sur FaultLatch - c'est-a-dire dans le MEME cycle que le defaut.
+#! param Fault = Les couper sur Fault laisserait l'equipement pilote un cycle de plus :
+#! param Fault = vingt millisecondes pendant lesquelles on le commande alors qu'on vient de
+#! param Fault = decouvrir qu'on ne sait plus ou il en est.
+#! param FaultCode = Le dernier code pose, 0 quand il n'y a rien. Voir la table de cette famille,
+#! param FaultCode = en tete de fichier. Il n'est efface que par AckFault.
+#! param Ready = Active et sans defaut. C'est ce qu'on cable sur Available d'une rotation :
+#! param Ready = un equipement en defaut est alors saute, et il reprend son rang en revenant.
+#! param Starts = Nombre de demarrages depuis le dernier Reset. Un compteur qui grimpe vite
+#! param Starts = est la signature d'un court-cycle - voir MinOffMs quand la famille en a un.
+#! param HasPulse = FALSE : pas de capteur de rotation, donc pas de detection de bourrage. C'est
+#! param HasPulse = dit plutot que suppose : un convoyeur sans capteur ne signalera jamais le
+#! param HasPulse = defaut 2.
+#! param JamMs = Sans impulsion pendant ce temps EN MARCHE : bourrage. A regler au-dessus de
+#! param JamMs = l'intervalle entre deux impulsions a la vitesse la plus lente.
+#! param EmergStop = Chaine d'arret d'urgence saine. Contact NF, comme le thermique. Il ne se
+#! param EmergStop = contente pas de poser un defaut : il entre aussi directement dans la
+#! param EmergStop = condition des sorties.
+#! param Reverse = Sens arriere. Il choisit LAQUELLE des deux sorties part : les commander
+#! param Reverse = toutes les deux ferait un court-circuit, donc le bloc ne le permet pas.
+#! param PulseCount = Impulsions comptees depuis le dernier Reset. Il avance meme a l'arret, ce qui
+#! param PulseCount = permet de voir une bande poussee a la main.
+#! fault 1 = Le relais thermique a declenche. Contact NF : Thermal a FALSE veut dire
+#! fault 1 = DECLENCHE.
+#! fault 2 = Bourrage : aucune impulsion pendant JamMs alors que le convoyeur tourne. Le
+#! fault 2 = moteur tourne et la bande ne bouge pas. Sans capteur (HasPulse a FALSE) il
+#! fault 2 = n'y a rien a detecter, et ce defaut ne se produit jamais.
+#! fault 3 = Arret d'urgence. Contact NF lui aussi, et il coupe les sorties immediatement,
+#! fault 3 = avant tout le reste.
+#! fault 4 = RESERVE, ET JAMAIS POSE en l'etat. La table annonce "les deux sens demandes
+#! fault 4 = en meme temps", mais le bloc rend les deux sorties mutuellement exclusives
+#! fault 4 = par construction - Run et RunRev se departagent sur Reverse - donc la
+#! fault 4 = situation ne peut pas se produire et le code n'est jamais ecrit. Le laisser
+#! fault 4 = dans la table sans le dire ferait chercher une condition qui n'existe pas.
+#! internal = PrevAck, PrevPulse, JamElapsed, PrevRunning, RunFracMs, PrevState
+#! param Run = La sortie MARCHE AVANT. Coupee dans le cycle meme ou un defaut apparait
+#! param Run = (sur FaultLatch), et jamais en meme temps que RunRev : commander les
+#! param Run = deux contacteurs ferait un court-circuit.
+#! param RunRev = La sortie MARCHE ARRIERE, quand Reverse est vrai. Meme regle que Run
+#! param RunRev = : jamais les deux a la fois.
+#! param Running = Run OU RunRev, tels que commandes CE cycle. Un convoyeur n'a pas de
+#! param Running = retour de marche : c'est la commande qui fait foi, et le bourrage
+#! param Running = (defaut 2) qui dit qu'elle n'est pas suivie.
+#! param Pulse = Le detecteur de rotation (roue codeuse, came). Chaque front montant
+#! param Pulse = remet a zero le chrono de bourrage. Sans ce capteur, HasPulse a FALSE
+#! param Pulse = : il n'y a alors rien a detecter, et c'est dit plutot que suppose.
+#! changes 1.01 = AJOUTS EN FIN DE TYPE : RunS (temps de marche en secondes, sans
+#! changes 1.01 = debordement), State (etat publie : 0 desactive, 1 defaut, 2 repos, 3
+#! changes 1.01 = en service), et deux champs internes. RunMs et StateMs plafonnent a
+#! changes 1.01 = 2 000 000 000 ms au lieu de devenir negatifs.
+#! example = (* declarer :
+#! example =    Conv : ARRAY[0..15] OF ST_EQ_Conveyor;
+#! example =    DI : ARRAY[0..15] OF ST_IO_Dig;
+#! example =    DQ : ARRAY[0..15] OF ST_IO_Dig; *)
+#! example = (* la configuration, une fois *)
+#! example = Conv[0].Name     := 'C401 evacuation';
+#! example = Conv[0].HasPulse := TRUE;        (* un detecteur de rotation est cable *)
+#! example = Conv[0].JamMs    := 3000;
+#! example = (* les retours, AVANT l'appel de DFB_EQ_CONVEYOR *)
+#! example = Conv[0].Pulse     := DI[0].Val;
+#! example = Conv[0].Thermal   := DI[1].Val;
+#! example = Conv[0].EmergStop := DI[2].Val;  (* chaine d'arret d'urgence, NF *)
+#! example = (* les deux sens, APRES : jamais les deux a la fois *)
+#! example = DQ[0].Val := Conv[0].Run;
+#! example = DQ[1].Val := Conv[0].RunRev;
+#! given = DI[2].Val := TRUE
+#! expect = 1 : Conv[0].EmergStop = TRUE
+#! expect = 1 : Conv[0].HasPulse = TRUE
+
+# Un convoyeur: deux sens, thermique, arret d'urgence, detection de bourrage.
+#
+# Codes de defaut (FaultCode):
+# 1  le relais thermique a declenche
+# 2  bourrage: aucune impulsion pendant JamMs alors que le convoyeur tourne
+# 3  arret d'urgence
+# 4  les deux sens demandes en meme temps
+
+# name ; type ; scope ; initial ; comment
+Name ; STRING[16] ; Member ;  ; ce que l'operateur lit
+Enable ; BOOL ; Member ; TRUE ; FALSE fige l'equipement: aucune sortie, aucun defaut
+ManMode ; BOOL ; Member ;  ; TRUE: les commandes manuelles priment sur l'automatisme
+AckFault ; BOOL ; Member ;  ; front montant: acquitte le defaut s'il a disparu
+PrevAck ; BOOL ; Member ;  ; runtime, ne pas ecrire
+RunReq ; BOOL ; Member ;  ; demande de marche
+ManRunReq ; BOOL ; Member ;  ; demande manuelle
+Reverse ; BOOL ; Member ;  ; sens arriere
+Run ; BOOL ; Member ;  ; sortie marche avant
+RunRev ; BOOL ; Member ;  ; sortie marche arriere
+Running ; BOOL ; Member ;  ; 
+Thermal ; BOOL ; Member ; TRUE ; relais thermique sain (contact NF)
+Pulse ; BOOL ; Member ;  ; impulsion du capteur de rotation
+PrevPulse ; BOOL ; Member ;  ; runtime
+PulseCount ; UDINT ; Member ; 0 ; impulsions depuis le dernier Reset
+JamMs ; DINT ; Member ; 3000 ; sans impulsion pendant ce temps en marche: bourrage
+JamElapsed ; DINT ; Member ; 0 ; runtime
+HasPulse ; BOOL ; Member ;  ; FALSE: pas de capteur, pas de detection de bourrage
+EmergStop ; BOOL ; Member ; TRUE ; chaine d'arret d'urgence saine (contact NF)
+PrevRunning ; BOOL ; Member ;  ; runtime
+Fault ; BOOL ; Member ;  ; un defaut est present
+FaultCode ; INT ; Member ; 0 ; 0 aucun. Voir la table de la famille
+FaultLatch ; BOOL ; Member ;  ; le defaut reste jusqu'a AckFault, meme s'il disparait
+Ready ; BOOL ; Member ;  ; utilisable: active, sans defaut
+RunMs ; DINT ; Member ; 0 ; temps de fonctionnement cumule, en ms, plafonne a 2 000 000 000 (555 h) : lire RunS
+Starts ; UDINT ; Member ; 0 ; nombre de demarrages depuis le dernier Reset
+StateMs ; DINT ; Member ; 0 ; temps dans l'etat courant (State), en ms, plafonne a 2 000 000 000
+RunS ; UDINT ; Member ; 0 ; temps de fonctionnement cumule, en secondes : ne deborde pas avant 136 ans
+RunFracMs ; DINT ; Member ; 0 ; runtime, ne pas ecrire : les millisecondes pas encore comptees dans RunS
+State ; INT ; Member ; 0 ; etat publie : 0 desactive, 1 en defaut, 2 au repos, 3 en service
+PrevState ; INT ; Member ; -1 ; runtime, ne pas ecrire

@@ -1,0 +1,29 @@
+# DFB type interface.
+name = CAPTEUR
+version = 0.02
+attribute = TypeCodeCheckSumString = 8A90
+attribute = TypeSignatureCheckSumString = 740C
+attribute = UseNewTplSignAlgo = TRUE
+
+# name ; type ; address ; scope ; init ; comment ; attributes ; element comments
+IW_Raw ; REAL ;  ; Input ;  ;  ; PositionPin=1 ; 
+Raw_Min ; REAL ;  ; Input ;  ;  ; PositionPin=3 ; 
+Raw_Max ; REAL ;  ; Input ;  ;  ; PositionPin=4 ; 
+Eng_Min ; REAL ;  ; Input ;  ;  ; PositionPin=5 ; 
+Eng_Max ; REAL ;  ; Input ;  ;  ; PositionPin=6 ; 
+SimEnable ; BOOL ;  ; Input ;  ;  ; PositionPin=2 ; 
+SimValue ; REAL ;  ; Input ;  ;  ; PositionPin=7 ; 
+DeadBand ; REAL ;  ; Input ;  ;  ; PositionPin=8 ; 
+ScaledValue ; REAL ;  ; Public ;  ;  ;  ; 
+AverageValue ; REAL ;  ; Public ;  ;  ;  ; 
+StableValue ; REAL ;  ; Public ;  ;  ;  ; 
+RawInput ; REAL ;  ; Public ;  ;  ;  ; 
+Index ; INT ;  ; Local ;  ;  ;  ; 
+i ; INT ;  ; Local ;  ;  ;  ; 
+Buffer ; ARRAY[0..9] OF REAL ;  ; Local ;  ;  ;  ; 
+Sum ; REAL ;  ; Local ;  ;  ;  ; 
+WorkingValue ; REAL ;  ; Local ;  ;  ;  ; 
+FirstScan ; BOOL ;  ; Local ;  ;  ;  ; 
+
+# section ; name ; language ; order ; activation ; logic ; file
+section ; main ; ST ; 21 ;  ;  ; main.st

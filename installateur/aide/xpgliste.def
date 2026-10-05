@@ -1,0 +1,14 @@
+; xpgliste.def - les noms exportes SANS decoration (Inno Setup les cherche par leur nom) :
+; cl /LD /O2 xpgliste.c xpgliste.def ... (Build Tools x86) ; MinGW : -Wl,--kill-at suffit.
+LIBRARY xpgliste
+EXPORTS
+    ListeCreer
+    ListeCategorieConnue
+    ListeAjouterLivree
+    ListeAjouterChemin
+    ListeRetirerSelection
+    ListeSelectionLivrees
+    ListeNombreLivrees
+    ListeNombreAjoutees
+    ListeAjoutee
+    ListeDetruire

@@ -1,0 +1,270 @@
+# Derived function block, shared.
+name = DFB_IO_ANA08
+version = 1.02
+#! summary = Traite une carte de 8 voies analogiques en un appel.
+#! usage = UNE INSTANCE PAR CARTE, PAS PAR VOIE. Un seul appel par scrutation traite les 8 voies : echelle, bande morte, filtre, limite de pente, mini/maxi et quatre seuils.
+#! usage = ENTREE OU SORTIE EST UNE PROPRIETE DE LA VOIE (ST_IO_Ana.IsOut), pas du bloc. Une carte mixte reste une seule instance.
+#! usage = LES CINQ TAILLES - 04, 08, 16, 32, 64 - ne different QUE par la borne du tableau. Le corps est identique. Prenez la premiere taille qui contient les voies de la carte : un DFB_IO_ANA64 pour une carte de 16 voies reserve 48 voies de memoire automate pour rien.
+#! usage = L'ORDRE DANS LA TACHE COMPTE. Le cablage des entrees doit tourner AVANT le programme qui les lit, celui des sorties APRES. Une section d'entrees placee en fin de tache fait travailler tout le programme sur la mesure du cycle precedent.
+#! example = IO_AI_R0S2(Count := 8, CycleMs := 20, Chan := CarteAI_R0S2);
+#! see = ST_IO_Ana, DFB_IO_ANA04, DFB_IO_ANA16, DFB_IO_ANA32, DFB_IO_ANA64
+#! param Count = Combien de voies de cette carte sont reellement utilisees. Les voies au-dela ne sont pas traitees, ce qui evite de payer le calcul de 64 voies sur une carte qui en a 8 de cablees.
+#! param Count = CORRIGE EN 1.01, ET IL FAUT LE SAVOIR SI VOUS AVEZ ENCORE LA 1.00. La version 1.00 bornait Count par "IF n > LAST THEN n := LAST". LAST est le dernier INDICE (7) et Count un NOMBRE de voies (8) : borner l'un par l'autre faisait boucler de 0 a 6, et **la voie 7 n'etait jamais traitee**. Sur une carte pleine, la derniere voie ne lisait rien si c'etait une entree, et n'ecrivait rien si c'etait une sortie - sans que rien ne le signale.
+#! param Count = La 1.01 borne a LAST + 1. Count = 8 traite donc bien les 8 voies, de 0 a 7.
+#! param Count = Si un projet porte encore la 1.00, VerifierBibliotheque le dit, et le symptome a chercher est toujours le meme : la derniere voie de la carte.
+#! param CycleMs = La periode de la tache, en millisecondes.
+#! param CycleMs = POURQUOI UN NOMBRE ET PAS UN TEMPORISATEUR : un DDT ne peut pas contenir de TON. Un type derive est une donnee, un temporisateur est un bloc fonction. Le temps est donc accumule a partir de ce nombre.
+#! param CycleMs = Une valeur fausse ici fausse SILENCIEUSEMENT tous les temps de la carte : anti-rebond, temps d'etat, retards de seuil. Si la tache n'est pas periodique, passez un temps de cycle mesure.
+#! param CycleMs = Le mieux : DtMs de DFB_SYS_CLOCK, qui suit le temps reel de la tache.
+#! param Reset = Efface les STATISTIQUES, jamais les valeurs : les compteurs de fronts pour une carte TOR, les mini/maxi pour une carte analogique.
+#! param Reset = Il agit sur niveau, pas sur front : le laisser a TRUE remet a zero a chaque scrutation, ce qui donne des compteurs qui restent a zero sans raison apparente.
+#! param Chan = Les voies de la carte, un ARRAY[0..7] OF ST_IO_Ana.
+#! param Chan = C'est un InOut : le bloc lit dedans et ecrit dedans. Tout ce qu'il retient d'une scrutation a l'autre - compteurs, temps, anti-rebond - est DANS la voie, donc rien ne se perd entre les appels et il n'y a pas d'etat cache dans l'instance.
+#! param AlarmCount = Combien de voies de cette carte sont en alarme cette scrutation.
+#! param AlarmSevMax = La pire gravite presente sur la carte, 0 quand il n'y en a aucune.
+#! param AlarmSevMax = C'est le resume qu'on cable sur un voyant ou qu'on remonte a l'IHM quand on ne veut pas parcourir les voies une par une.
+#! changes 1.02 = CORRECTION : au premier passage, la valeur partait de 0. Avec un
+#! changes 1.02 = filtre (FiltN) ou une limite de pente (RateMax), elle montait depuis
+#! changes 1.02 = zero : une pression de 5 bar limitee a 0,1 bar/s mettait 50 secondes
+#! changes 1.02 = a apparaitre apres un demarrage de l'automate, et Rate annoncait une
+#! changes 1.02 = variation qui n'avait jamais eu lieu. Elle part maintenant de la
+#! changes 1.02 = mesure.
+#! changes 1.02 = L'exemple appelait une carte TOR (IO_DI, CarteDI) : c'est une carte
+#! changes 1.02 = analogique. Les commentaires du fichier sont en francais.
+#! given = CarteAI_R0S2[0].Raw := 5000.0
+#! given = CarteAI_R0S2[0].RateMax := 1.0
+#! expect = 1 : CarteAI_R0S2[0].Val = 50.0
+#! expect = 1 : CarteAI_R0S2[0].Rate = 0.0
+#! expect = 1 : IO_AI_R0S2.AlarmCount = 0
+
+# Une instance traite une carte entiere de 8 voies.
+# Les cinq tailles ne different que par la borne du tableau ; le corps est identique.
+
+# name ; type ; scope ; initial ; comment
+Count ; INT ; Input ; 8 ; combien de voies de cette carte sont utilisees
+CycleMs ; DINT ; Input ; 20 ; la periode de la tache en ms. Un DDT ne peut pas contenir de temporisateur : le temps s'accumule
+Reset ; BOOL ; Input ;  ; efface les mini/maxi, pas les valeurs
+Chan ; ARRAY[0..7] OF ST_IO_Ana ; InOut ;  ; les voies de la carte
+AlarmCount ; INT ; Output ; 0 ; combien de voies sont en alarme
+AlarmSevMax ; INT ; Output ; 0 ; la pire gravite de la carte, 0 quand il n'y en a aucune
+i ; INT ; Local ; 0 ; indice de voie
+n ; INT ; Local ; 0 ; Count, borne au tableau
+LAST ; INT ; Local ; 7 ; le dernier indice de cette taille de bloc
+k ; INT ; Local ; 0 ; indice de seuil
+THRLAST ; INT ; Local ; 3 ; le dernier indice de seuil
+span ; REAL ; Local ; 0.0 ; RawMax - RawMin
+engSpan ; REAL ; Local ; 0.0 ; EngMax - EngMin, pour une sortie
+r ; REAL ; Local ; 0.0 ; la valeur brute retenue
+e ; REAL ; Local ; 0.0 ; la valeur physique retenue
+moved ; BOOL ; Local ;  ; la valeur a bouge de plus que la bande morte
+over ; BOOL ; Local ;  ; la condition du seuil tient cette scrutation
+raised ; BOOL ; Local ;  ; la condition a tenu assez longtemps
+step ; REAL ; Local ; 0.0 ; la plus grande variation que la limite de pente permet cette scrutation
+prevVal ; ARRAY[0..7] OF REAL ; Local ;  ; la Val de la scrutation precedente, pour la pente
+primed ; ARRAY[0..7] OF BOOL ; Local ;  ; la voie a deja ete traitee une fois
+
+<<<section Process ST>>>
+(* ======================================================================= *)
+(*  Une instance par CARTE, pas par voie.                                  *)
+(*                                                                         *)
+(*  Echelle, bande morte, filtre, mini/maxi, vitesse de variation et       *)
+(*  quatre seuils avec leur sens, leur hysteresis, leur retard et leur     *)
+(*  gravite - pour chaque voie de la carte, en un appel.                   *)
+(*                                                                         *)
+(*  ENTREE OU SORTIE EST UNE PROPRIETE DE LA VOIE, pas du bloc : une carte *)
+(*  mixte reste une seule instance. Pour une entree, le bloc remplit Val a *)
+(*  partir de Raw ; pour une sortie, il remplit Raw a partir de Val, avec  *)
+(*  la meme echelle lue a l'envers.                                        *)
+(*                                                                         *)
+(*  LE PREMIER PASSAGE part de la mesure, pas de 0. Sans ca, le filtre et  *)
+(*  la limite de pente faisaient monter la valeur depuis zero apres chaque *)
+(*  demarrage de l'automate.                                               *)
+(* ======================================================================= *)
+
+n := Count;
+IF n > LAST + 1 THEN n := LAST + 1; END_IF;
+IF n < 0 THEN n := 0; END_IF;
+
+AlarmCount := 0;
+AlarmSevMax := 0;
+
+FOR i := 0 TO n - 1 DO
+
+    (* ---- l'echelle doit etre utilisable -------------------------------- *)
+    (* Une plage nulle est une division par zero, qui arrete la tache.       *)
+    (* C'est une erreur de configuration : elle est signalee en defaut sur   *)
+    (* la voie, et la voie est sautee - une plage mal saisie ne doit pas     *)
+    (* faire tomber toute la carte.                                          *)
+    span := Chan[i].RawMax - Chan[i].RawMin;
+    Chan[i].Fault := ABS(span) < 1.0E-9;
+
+    IF NOT Chan[i].Fault THEN
+
+        IF Chan[i].IsOut THEN
+
+            (* ---- sortie : unites physiques en entree, points en sortie -- *)
+            e := Chan[i].Val;
+            IF Chan[i].ForceEn THEN
+                e := Chan[i].ForceVal;
+            END_IF;
+            IF Chan[i].Clamp THEN
+                IF e < Chan[i].EngMin THEN e := Chan[i].EngMin; END_IF;
+                IF e > Chan[i].EngMax THEN e := Chan[i].EngMax; END_IF;
+            END_IF;
+            engSpan := Chan[i].EngMax - Chan[i].EngMin;
+            IF ABS(engSpan) < 1.0E-9 THEN
+                Chan[i].Fault := TRUE;
+            ELSE
+                Chan[i].Eng := e;
+                Chan[i].Raw := Chan[i].RawMin
+                             + (e - Chan[i].EngMin) * span / engSpan;
+            END_IF;
+
+        ELSE
+
+            (* ---- entree : points en entree, unites physiques en sortie -- *)
+            IF Chan[i].ForceEn THEN
+                r := Chan[i].ForceVal;
+            ELSIF Chan[i].SimEn THEN
+                r := Chan[i].SimVal;
+            ELSE
+                r := Chan[i].Raw;
+            END_IF;
+
+            Chan[i].UnderRange := r < Chan[i].RawMin;
+            Chan[i].OverRange  := r > Chan[i].RawMax;
+
+            Chan[i].Eng := Chan[i].EngMin
+                         + (r - Chan[i].RawMin)
+                           * (Chan[i].EngMax - Chan[i].EngMin) / span;
+
+            IF Chan[i].Clamp THEN
+                IF Chan[i].Eng < Chan[i].EngMin THEN Chan[i].Eng := Chan[i].EngMin; END_IF;
+                IF Chan[i].Eng > Chan[i].EngMax THEN Chan[i].Eng := Chan[i].EngMax; END_IF;
+            END_IF;
+
+            (* ---- le premier passage -------------------------------------- *)
+            (* La valeur part de la mesure, pas de 0. Sans ca, le filtre et   *)
+            (* la limite de pente la faisaient monter depuis zero : une       *)
+            (* pression de 5 bar limitee a 0,1 bar/s mettait 50 secondes a    *)
+            (* apparaitre apres un demarrage, et Rate annoncait une variation *)
+            (* qui n'avait jamais eu lieu.                                    *)
+            IF NOT primed[i] THEN
+                Chan[i].Val := Chan[i].Eng;
+                prevVal[i] := Chan[i].Eng;
+                primed[i] := TRUE;
+            END_IF;
+
+            (* ---- bande morte, puis filtre -------------------------------- *)
+            (* La bande morte d'abord : filtrer un bruit qu'elle aurait jete  *)
+            (* coute une division et ne rapporte rien.                        *)
+            moved := ABS(Chan[i].Eng - Chan[i].Val) >= Chan[i].DeadBand;
+            IF moved OR NOT Chan[i].HoldValid THEN
+                IF Chan[i].FiltN > 1 THEN
+                    Chan[i].Val := Chan[i].Val
+                                 + (Chan[i].Eng - Chan[i].Val)
+                                   / INT_TO_REAL(Chan[i].FiltN);
+                ELSE
+                    Chan[i].Val := Chan[i].Eng;
+                END_IF;
+            END_IF;
+
+            (* ---- la limite de pente, puis la pente ----------------------- *)
+            (* Dans cet ordre. Publier la pente puis limiter annonce une      *)
+            (* vitesse que la voie n'a jamais eue - et Rate est justement le  *)
+            (* nombre qu'on lit pour savoir si la limite sert a quelque chose.*)
+            IF Chan[i].RateMax > 0.0 AND CycleMs > 0 THEN
+                step := Chan[i].RateMax * DINT_TO_REAL(CycleMs) / 1000.0;
+                IF Chan[i].Val > prevVal[i] + step THEN
+                    Chan[i].Val := prevVal[i] + step;
+                ELSIF Chan[i].Val < prevVal[i] - step THEN
+                    Chan[i].Val := prevVal[i] - step;
+                END_IF;
+            END_IF;
+
+            IF CycleMs > 0 THEN
+                Chan[i].Rate := (Chan[i].Val - prevVal[i])
+                              * 1000.0 / DINT_TO_REAL(CycleMs);
+            ELSE
+                Chan[i].Rate := 0.0;
+            END_IF;
+            prevVal[i] := Chan[i].Val;
+
+            (* ---- mini et maxi -------------------------------------------- *)
+            (* HoldValid existe parce qu'un MinHold initialise a 0.0 ment sur *)
+            (* une voie qui n'est jamais descendue sous 4 bar.                *)
+            IF NOT Chan[i].HoldValid THEN
+                Chan[i].MinHold := Chan[i].Val;
+                Chan[i].MaxHold := Chan[i].Val;
+                Chan[i].HoldValid := TRUE;
+            ELSE
+                IF Chan[i].Val < Chan[i].MinHold THEN Chan[i].MinHold := Chan[i].Val; END_IF;
+                IF Chan[i].Val > Chan[i].MaxHold THEN Chan[i].MaxHold := Chan[i].Val; END_IF;
+            END_IF;
+
+        END_IF;
+    END_IF;
+
+    (* ---- les seuils ------------------------------------------------------ *)
+    Chan[i].AlarmAny := FALSE;
+    Chan[i].AlarmSev := 0;
+
+    FOR k := 0 TO THRLAST DO
+        IF NOT Chan[i].Thr[k].En OR Chan[i].Fault THEN
+            Chan[i].Thr[k].Raised := FALSE;
+            Chan[i].Thr[k].Rise := FALSE;
+            Chan[i].Thr[k].Fall := FALSE;
+            Chan[i].Thr[k].ElapsedMs := 0;
+        ELSE
+            (* L'hysteresis elargit la bande a la SORTIE seulement. L'appliquer *)
+            (* dans les deux sens ferait dire au seuil un nombre different selon *)
+            (* le cote d'ou l'on arrive.                                         *)
+            IF Chan[i].Thr[k].Dir = 0 THEN
+                IF Chan[i].Thr[k].Raised THEN
+                    over := Chan[i].Val > (Chan[i].Thr[k].Val - Chan[i].Thr[k].Hyst);
+                ELSE
+                    over := Chan[i].Val >= Chan[i].Thr[k].Val;
+                END_IF;
+            ELSE
+                IF Chan[i].Thr[k].Raised THEN
+                    over := Chan[i].Val < (Chan[i].Thr[k].Val + Chan[i].Thr[k].Hyst);
+                ELSE
+                    over := Chan[i].Val <= Chan[i].Thr[k].Val;
+                END_IF;
+            END_IF;
+
+            IF over THEN
+                IF Chan[i].Thr[k].ElapsedMs < Chan[i].Thr[k].DelayMs THEN
+                    Chan[i].Thr[k].ElapsedMs := Chan[i].Thr[k].ElapsedMs + CycleMs;
+                END_IF;
+            ELSE
+                Chan[i].Thr[k].ElapsedMs := 0;
+            END_IF;
+
+            raised := over AND (Chan[i].Thr[k].ElapsedMs >= Chan[i].Thr[k].DelayMs);
+            Chan[i].Thr[k].Rise := raised AND NOT Chan[i].Thr[k].Raised;
+            Chan[i].Thr[k].Fall := Chan[i].Thr[k].Raised AND NOT raised;
+            Chan[i].Thr[k].Raised := raised;
+
+            IF raised THEN
+                Chan[i].AlarmAny := TRUE;
+                IF Chan[i].Thr[k].Sev > Chan[i].AlarmSev THEN
+                    Chan[i].AlarmSev := Chan[i].Thr[k].Sev;
+                END_IF;
+            END_IF;
+        END_IF;
+    END_FOR;
+
+    IF Chan[i].AlarmAny THEN
+        AlarmCount := AlarmCount + 1;
+        IF Chan[i].AlarmSev > AlarmSevMax THEN
+            AlarmSevMax := Chan[i].AlarmSev;
+        END_IF;
+    END_IF;
+
+    IF Reset THEN
+        Chan[i].HoldValid := FALSE;
+    END_IF;
+
+END_FOR;
+<<<end>>>

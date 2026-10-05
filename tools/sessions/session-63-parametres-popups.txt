@@ -1,0 +1,112 @@
+# =============================================================================
+#  Session 63 - 1.9 : les parametres des popups (liste typee, Reference / Copie /
+#  Les deux, Appliquer copie sur reference). Chantier F.
+#  Dans une COPIE du projet des sessions (Armoire_Gaz : ${PROJETS}/Armoire_Gaz),
+#  dans la VRAIE application, avec le programme MAST.XPG (les DDT de l'API).
+#  Popup_Armoire (parametres Armoire := Armoires[0], Nom := 'A'), ouverte par
+#  Vue_Armoires (deux boutons) et par le symbole Carte_Armoire.
+#  Captures : les noms du guide (tools/guide-ihm/guide-ihm.txt, chantier H) PNG_940
+#  a PNG_945 (sauf PNG_944_scripts_parametres : pas encore de pas ici), et en plus
+#  PNG_946 a PNG_950. ECRITE, PAS ENCORE JOUEE (l'appli se construit apres la
+#  fusion F + G).
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- A. La fiche de Popup_Armoire : la sous-section Parametres (maquette P1) -------
+arbre "IHM/Popups/Popup_Armoire" double
+attendre 10
+# Armoire (la premiere ligne) : le DDT armoire, en mode Les deux.
+propriete-clic "Type"
+attendre 3
+capture PNG_946_choix_du_type.png
+choisir "armoire"
+attendre 5
+propriete-clic "Mode"
+attendre 3
+choisir "Les deux"
+attendre 5
+# Un troisieme parametre, Lecture_Seule (ajoute en Reference, type ANY : la liste le montre).
+propriete "Ajouter" "Lecture_Seule"
+attendre 5
+capture PNG_940_parametres_popup.png
+
+# ---- B. Les infos : qui ouvre, ou chaque parametre est employe (P2) ---------------
+propriete-clic "Montrer"
+attendre 3
+choisir "Infos"
+attendre 6
+capture PNG_941_infos_popup.png
+propriete-clic "Montrer"
+attendre 3
+choisir "Paramètres"
+attendre 4
+
+# ---- C. Appliquer copie sur reference sur le bouton Btn_Marche de la popup (P4) ---
+objet "Btn_Marche"
+attendre 4
+sous-onglet "Actions"
+attendre 4
+outil "Ajouter une action"
+attendre 4
+propriete-clic "Opération"
+attendre 3
+choisir "Appliquer copie sur référence"
+attendre 4
+propriete-clic "Paramètre"
+attendre 3
+capture PNG_948_appliquer_copie_le_parametre.png
+choisir "Armoire"
+attendre 4
+capture PNG_943_appliquer_copie.png
+
+# ---- D. L'action Ouvrir une popup de Vue_Armoires : un champ par parametre (P3) ----
+arbre "IHM/Vues/Vue_Armoires" double
+attendre 10
+vue-clic 160 162
+attendre 4
+sous-onglet "Actions"
+attendre 4
+ligne "Ouvrir une popup"
+attendre 4
+# Un argument d'un type qui ne convient pas : une mesure pour le DDT armoire (pastille fx
+# ROUGE, expression soulignee, la raison), puis Ctrl+Z (la marche de E garde Armoire := Armoires[0]).
+propriete "Armoire  ·  armoire  ·  LES DEUX" "Armoires[0].ana.PT1.mes"
+attendre 5
+capture PNG_942_ouvrir_une_popup_arguments.png
+touche Ctrl+Z
+attendre 4
+# Decision 7 : chaque argument donne porte la pastille fx (normale : Armoires[0] convient).
+capture PNG_950_arguments_pastille_fx.png
+
+# ---- E. En marche : la copie modifiee, pas encore appliquee (P6) -------------------
+# 1.9 finale (chantier I) : la simulation de l'IHM s'ouvre par l'arbre (pas d'outil Simuler) ;
+# l'administrateur, puis Vue_Armoires (la vue des boutons).
+arbre "Simulation/IHM"
+attendre 12
+sim-utilisateur "admin" "admin2026"
+attendre 3
+sim-vue "Vue_Armoires"
+attendre 8
+sim-clic "Btn_Armoire_A"
+attendre 15
+sim-clic "Saisie_Seuil"
+attendre 4
+texte "45"
+touche Return
+attendre 10
+capture PNG_945_popup_copie_modifiee.png
+# L'onglet Popups de la simulation : la copie modifiee et la reference pas encore ecrite.
+sous-onglet "Popups"
+attendre 4
+capture PNG_949_onglet_popups.png
+sim-clic "Btn_Marche"
+attendre 10
+capture PNG_947_copie_appliquee.png
+touche Ctrl+Z
+attendre 3
+quitter

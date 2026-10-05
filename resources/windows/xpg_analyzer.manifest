@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!--
+  resources/windows/xpg_analyzer.manifest - 1.8.0 : ce que Visual Studio (MSVC)
+  ajoute au manifeste de XpgAnalyzer.exe (Proprietes > Outil Manifeste >
+  Fichiers manifeste supplementaires). L'editeur de liens ecrit deja le reste
+  (requestedExecutionLevel asInvoker).
+
+  - activeCodePage UTF-8 : les API "A" et std::filesystem::path(std::string)
+    lisent l'UTF-8 que l'application utilise partout ; un chemin accentue
+    (C:\Users\Opérateur, un projet "Chaudière") marche comme les autres.
+    (Windows 10 1903 ou plus ; avant, ignore.) L'exe MinGW du lot 8 l'avait deja.
+  - longPathAware : les chemins de plus de 260 caracteres, si Windows les autorise.
+  - supportedOS : Windows 7 a 11 (sans eux, Windows 10 "ment" sur sa version).
+  Pas de reglage DPI ici : SDL3 s'en occupe (l'affichage ne change pas).
+-->
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
+    <application>
+      <supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}"/>
+      <supportedOS Id="{1f676c76-80e1-4239-95bb-83d0f6d0da78}"/>
+      <supportedOS Id="{4a2f28e3-53b9-4441-ba9c-d69d4a4a6e38}"/>
+      <supportedOS Id="{35138b9a-5d96-4fbd-8e2d-a2440225f93a}"/>
+    </application>
+  </compatibility>
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <activeCodePage xmlns="http://schemas.microsoft.com/SMI/2019/WindowsSettings">UTF-8</activeCodePage>
+      <longPathAware xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">true</longPathAware>
+    </windowsSettings>
+  </application>
+</assembly>

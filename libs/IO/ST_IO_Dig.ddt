@@ -1,0 +1,79 @@
+# Derived data type, shared.
+name = ST_IO_Dig
+version = 1.01
+#! summary = Une voie tout ou rien, entree ou sortie : inversion, anti-rebond, fronts, compteurs, alarme de maintien.
+#! usage = PAS D'ECHELLE, PAS DE SEUILS, ET C'EST VOLONTAIRE. Une carte de 64 voies porte 64 copies de cette structure ; lui ajouter des champs qu'une voie TOR n'utilisera jamais coute de la memoire automate sur chaque voie de chaque carte.
+#! usage = LA VALEUR VIENT DE TROIS ENDROITS, DANS CET ORDRE : le forcage, puis la simulation, puis la carte. L'ordre est fixe et ecrit une fois, pour qu'une voie laissee forcee ne puisse pas etre discretement reprise par une simulation qu'on avait oubliee.
+#! usage = ENTREE OU SORTIE EST UNE PROPRIETE DE LA VOIE, pas de la carte. Une carte mixte reste une seule instance de bloc. Pour une entree, le bloc remplit Val a partir de Raw ; pour une sortie, il remplit Raw a partir de Val - et c'est VOUS qui ecrivez Val.
+#! see = DFB_IO_DIG16, ST_IO_Ana
+#! param Raw = Ce que dit la carte, avant tout traitement. Pour une entree, c'est vous qui la cablez depuis %I ; pour une sortie, c'est le bloc qui l'ecrit et vous la recopiez vers %Q.
+#! param Val = LA valeur : inversee si Inv, et anti-rebondie. C'est elle qu'on lit dans le programme.
+#! param Val = Pour une sortie, c'est l'inverse : c'est vous qui ecrivez Val, et le bloc en deduit Raw.
+#! param IsOut = TRUE fait de la voie une sortie. Le sens du calcul s'inverse : Val est l'entree, Raw devient le resultat.
+#! param Inv = TRUE pour un contact a ouverture. L'inversion est appliquee AVANT l'anti-rebond et avant tout le reste : Val est donc toujours "vrai = condition presente", quel que soit le cablage.
+#! param DebounceMs = Combien de temps un changement doit tenir avant d'etre cru. 0 laisse tout passer, ce qui est le cas habituel et ne coute qu'une comparaison.
+#! param DebounceMs = A regler sur un contact mecanique qui rebondit, pas sur une entree electronique. Un anti-rebond de 50 ms sur une detection de piece rapide fait manquer la piece.
+#! param SimEn = Utiliser SimVal au lieu de la carte. Passe apres ForceEn.
+#! param SimVal = La valeur simulee.
+#! param ForceEn = Utiliser ForceVal au lieu de tout le reste. Gagne sur SimEn.
+#! param ForceEn = Un forcage est fait pour les essais et se voit dans la structure : c'est la premiere chose a regarder quand une voie ne suit pas la realite.
+#! param ForceVal = La valeur forcee.
+#! param Prev = La valeur de la scrutation precedente. Ecrit par le bloc : ne pas y ecrire.
+#! param Rise = Vrai une seule scrutation, sur un front 0 vers 1.
+#! param Fall = Vrai une seule scrutation, sur un front 1 vers 0.
+#! param RiseCnt = Les fronts montants depuis le dernier Reset. UDINT : il reboucle a 4294967295, soit environ 136 ans a un front par seconde.
+#! param FallCnt = Les fronts descendants depuis le dernier Reset.
+#! param OnMs = Depuis combien de temps la voie est a 1. Remise a zero des qu'elle
+#! param OnMs = retombe. DINT et pas INT : un INT de millisecondes deborde au bout de
+#! param OnMs = 33 secondes. Elle PLAFONNE a 2 000 000 000 (23 jours) - devenue
+#! param OnMs = negative, elle faisait disparaitre l'alarme de maintien.
+#! param OffMs = Depuis combien de temps la voie est a 0. Remise a zero des qu'elle
+#! param OffMs = monte, plafonnee a 2 000 000 000 comme OnMs.
+#! param SettleMs = L'accumulateur de l'anti-rebond. Runtime : ne pas y ecrire.
+#! param AlarmEn = Lever une alarme quand la voie reste trop longtemps dans AlarmState.
+#! param AlarmState = L'etat qui est anormal : TRUE ou FALSE.
+#! param AlarmState = C'est ce champ qui distingue "le capteur devrait etre present" de "le capteur ne devrait pas l'etre". Se tromper ici donne une alarme qui sonne exactement quand tout va bien.
+#! param AlarmDelayMs = Combien de temps cet etat est tolere. Une alarme TOR veut toujours dire "ca dure depuis trop longtemps" ; c'est ce nombre qui dit combien.
+#! param Sev = 1 information, 4 la machine doit s'arreter. Remontee, jamais agie par le bloc.
+#! param Alarm = L'alarme est sortie.
+#! param Fault = Le bloc n'a pas su lire la configuration de la voie.
+#! param Fault = Sur une voie TOR il n'y a rien qui puisse etre mal configure au point de lever ce drapeau : il existe pour que ST_IO_Dig et ST_IO_Ana se traitent de la meme facon dans le programme qui les lit.
+#! internal = Prev, SettleMs
+#! example = (* declarer : Porte : ARRAY[0..3] OF ST_IO_Dig; *)
+#! example = (* le cablage, avant l'appel du bloc de la carte *)
+#! example = Porte[0].Inv := TRUE;             (* contact a ouverture *)
+#! example = Porte[0].AlarmEn := TRUE;
+#! example = Porte[0].AlarmState := TRUE;      (* ouverte, c'est anormal *)
+#! example = Porte[0].AlarmDelayMs := 60000;   (* au-dela d'une minute *)
+#! given = Porte[0].Val := TRUE
+#! expect = 1 : Porte[0].Inv = TRUE
+#! expect = 1 : Porte[0].AlarmDelayMs = 60000
+#! changes 1.01 = Commentaires des champs en francais. Aucun champ ajoute ni retire.
+#! changes 1.01 = OnMs, OffMs et SettleMs plafonnent desormais (DFB_IO_DIG* 1.02).
+
+# Une voie TOR, entree ou sortie. Ni echelle ni seuils : une carte de 64 voies ne doit pas porter des champs qu'elle n'utilisera jamais.
+
+# name ; type ; scope ; initial ; comment
+Raw ; BOOL ; Member ;  ; tel que lu sur la carte, avant tout
+Val ; BOOL ; Member ;  ; LA valeur finale : inversee et anti-rebondie
+IsOut ; BOOL ; Member ;  ; TRUE pour une sortie : Val est ecrite par vous, Raw par le bloc
+Inv ; BOOL ; Member ;  ; TRUE pour un contact a ouverture
+DebounceMs ; DINT ; Member ; 0 ; combien de temps un changement doit tenir avant d'etre cru
+SimEn ; BOOL ; Member ;  ; utiliser SimVal au lieu de la carte
+SimVal ; BOOL ; Member ;  ; la valeur simulee
+ForceEn ; BOOL ; Member ;  ; utiliser ForceVal au lieu de tout le reste - gagne sur SimEn
+ForceVal ; BOOL ; Member ;  ; la valeur forcee
+Prev ; BOOL ; Member ;  ; la Val de la scrutation precedente - runtime, ne pas ecrire
+Rise ; BOOL ; Member ;  ; une scrutation, sur un front 0 vers 1
+Fall ; BOOL ; Member ;  ; une scrutation, sur un front 1 vers 0
+RiseCnt ; UDINT ; Member ; 0 ; fronts montants depuis le dernier Reset ; reboucle a 4294967295
+FallCnt ; UDINT ; Member ; 0 ; fronts descendants depuis le dernier Reset
+OnMs ; DINT ; Member ; 0 ; temps passe a 1, en ms, plafonne a 2 000 000 000
+OffMs ; DINT ; Member ; 0 ; temps passe a 0, en ms, plafonne a 2 000 000 000
+SettleMs ; DINT ; Member ; 0 ; accumulateur de l'anti-rebond - runtime, ne pas ecrire
+AlarmEn ; BOOL ; Member ;  ; lever une alarme quand la voie reste trop longtemps dans AlarmState
+AlarmState ; BOOL ; Member ;  ; l'etat anormal : TRUE ou FALSE
+AlarmDelayMs ; DINT ; Member ; 0 ; combien de temps cet etat est tolere
+Sev ; INT ; Member ; 1 ; 1 = information, 4 = la machine doit s'arreter
+Alarm ; BOOL ; Member ;  ; l'alarme est levee
+Fault ; BOOL ; Member ;  ; le bloc n'a pas pu comprendre la configuration

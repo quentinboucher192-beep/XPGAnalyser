@@ -1,0 +1,60 @@
+(* CreerVariable
+
+   Creer une variable qui existe deja est refuse, ce qui arrete la macro. Une
+   macro relancee doit pouvoir l'etre.
+
+   #! summary = Crée une variable globale, ou privée à une unité de programme.
+   #! version = 1.10
+   #! changes 1.10 = Le formulaire : chaque question a son champ (le classeur par …, Ctrl+V ou en le glissant ; les tâches et les sections du projet ; des interrupteurs ; des choix à libellés), ses groupes, son aide et un libellé avec accents. Le code ne change pas.
+   #! changes 1.01 = Une variable privee se cherche dans SON unite (VariableExists avec un proprietaire) : une globale du meme nom la faisait passer pour deja la, et elle n'etait jamais creee.
+   #! usage = Creer une variable qui existe deja est refuse par le projet, ce qui arreterait la macro. Celle-ci teste d'abord et se contente de le dire.
+   #! usage = Elle NE VERIFIE PAS que le type existe. Une variable d'un type inconnu sera creee et ne compilera pas : passez par CreerInstanceDDT pour un DDT, qui l'importe au besoin.
+   #! usage = Une macro se relance. C'est la regle de toutes celles-ci : relancee sur un projet ou elle a deja tourne, elle ne doit rien casser et rien dupliquer. C'est pour ca qu'elles testent avant de creer, et qu'elles disent "existe deja" au lieu de s'arreter.
+   #! usage = Les questions arrivent par TOURS. Ask() enregistre une question, AskNow() les pose. Une macro coupe ses tours la ou une reponse decide des questions suivantes : demander les quatre noms de section quand on vient de repondre "une seule famille" remplirait l'ecran de champs qu'on laisserait vides.
+   #! see = CreerInstanceDDT, CreerInstanceDFB, CreerSR
+   #! param nom = Un identifiant : lettres, chiffres, _.
+   #! param nom = Le nom de la variable. Vide, la macro s'arrete plutot que de creer quelque chose sans nom.
+   #! param type = BOOL, INT, REAL, STRING[16], un DDT du projet, ou ARRAY[0..15] OF …
+   #! param type = Un type elementaire (BOOL, INT, DINT, REAL, STRING[16]), un DDT deja present, ou un tableau : ARRAY[0..15] OF ST_IO_Ana.
+   #! param type = Le type n'est pas verifie ici. C'est le compilateur qui le dira.
+   #! param ou = Une variable privée ne se voit que depuis son unité.
+   #! param ou = Globale, ou privee a une unite de programme.
+   #! param ou = Une variable privee ne se voit que depuis son unite. C'est ce qu'on veut pour un compteur de travail ; ce n'est pas ce qu'on veut pour une donnee que l'IHM doit lire.
+   #! param unite = Seulement pour une variable privée.
+   #! param unite = L'unite de programme, quand la portee est privee. La question n'est posee que dans ce cas - c'est la raison du AskNow() qui precede.
+   #! categorie = Créer
+   #! champ nom = nom
+   #! libelle nom = Nom de la variable
+   #! champ type = type
+   #! libelle type = Type
+   #! champ ou = choix
+   #! libelle ou = Portée
+   #! champ unite = unite existant
+   #! libelle unite = Unité de programme
+   #! option ou Globale = Globale
+   #! option ou Dans une unite = Privée à une unité
+   #! produit = une variable, globale ou privée à une unité
+   #! appliquer = Créer la variable {nom}
+*)
+
+nom   := Ask('nom', 'Nom de la variable', '');
+type  := Ask('type', 'Type', 'BOOL');
+ou    := AskChoice('ou', 'Portee', 'Globale,Dans une unite', 'Globale');
+AskNow();
+
+IF ou = 'Dans une unite' THEN
+    unite := Ask('unite', 'Quelle unite de programme ?', 'Logigrammes_A');
+    portee := 'Private';
+ELSE
+    unite := '';
+    portee := 'Global';
+END_IF;
+
+IF nom = '' THEN
+    Fail('aucun nom donne');
+ELSIF VariableExists(nom, unite) THEN
+    Log(nom + ' existe deja');
+ELSE
+    AddVariable(nom, type, portee, unite);
+    Log(nom + ' : ' + type);
+END_IF;

@@ -1,0 +1,1293 @@
+# Derived function block, shared.
+name = DFB_GRAFCETENGINE
+version = 1.49
+attribute = TypeCodeCheckSumString = 0
+attribute = TypeSignatureCheckSumString = 0
+attribute = UseNewTplSignAlgo = TRUE
+#! summary = Un moteur GRAFCET en ST : jusqu'a 28 etapes, 28 transitions et 28 actions decrites par des tableaux, evaluees en trois phases.
+#! usage = REPRIS DU PROJET MAST, CORRIGE EN 1.49 : la liste des corrections est plus
+#! usage = bas (changes 1.49), le detail dans LISEZ-MOI-GRAFCET.md. L'interface est
+#! usage = celle de la 1.48 : entrees, sorties et tableaux inchanges, rien a
+#! usage = modifier aux appels.
+#! usage = LES TAILLES AVANT L'APPEL. Runtime.GC_MAX_STEPS, GC_MAX_TRANSITIONS et
+#! usage = GC_MAX_ACTIONS (28 au plus : la taille des tableaux), GC_MAX_HIST (8 au
+#! usage = plus). Elles valent 0 par defaut : sans elles, le moteur ne parcourt rien.
+#! usage = Au-dela, le moteur les ramene a 28 et 8.
+#! usage = TROIS PHASES PAR CYCLE : on scrute les transitions (sources actives,
+#! usage = receptivite tenue ConditionTime), on fige celles qui sont franchissables,
+#! usage = puis on les franchit toutes ensemble : TOUTES les sources desactivees,
+#! usage = PUIS toutes les destinations activees. Une etape desactivee par une
+#! usage = transition et activee par une autre au meme cycle reste donc active
+#! usage = (regle 5 du GRAFCET), quel que soit l'ordre dans le tableau.
+#! usage = UN FRANCHISSEMENT PREND DEUX CYCLES. Apres tout changement de situation
+#! usage = (franchissement, demarrage, InitReq, forcage), le moteur fait une pause
+#! usage = d'un cycle (pauseToReevaluateCondition) : les receptivites et les
+#! usage = conditions d'action sont calculees par ton programme AVANT l'appel, donc
+#! usage = sur l'ancienne situation ; au cycle de pause, les actions de la nouvelle
+#! usage = situation tournent et les transitions ne sont pas scrutees. Chaque etape
+#! usage = activee agit donc au moins un cycle. Au demarrage : cycle 1 les etapes
+#! usage = initiales, cycle 2 leurs actions, cycle 3 la premiere scrutation.
+#! usage = LES COMMANDES NE SE PERDENT PAS : InitReq, ResetAllReq, ResetInitialReq et
+#! usage = les forcages sont pris a chaque appel, pendant la pause comme pendant le
+#! usage = gel ou le pas a pas. Ton IHM peut les remettre a zero apres l'appel.
+#! usage = LE TEMPS VIENT DE TsNow, un TIME qui avance (MAST : TsSys). Les temps
+#! usage = d'etape, les receptivites temporisees et les retards d'action en sont
+#! usage = tires ; ils partent de l'evenement (activation, receptivite vue vraie,
+#! usage = condition vue vraie) et butent a 24 jours au lieu de repasser par 0.
+#! usage = Premier cycle : duree nulle. Un ecart de plus de 10 s entre deux appels
+#! usage = (TsNow qui recule, appel suspendu) compte pour 0. Fige, en pas a pas ou
+#! usage = fini : le temps s'arrete. TsNow qui n'avance pas pendant 100 appels :
+#! usage = Debug.WatchdogDetected.
+#! usage = LES ACTIONS : une impulsion (K1, K3, K5, K6, K9) dure un cycle, meme quand
+#! usage = le moteur est fige ou fini. Une action limitee (K4, K10, K11) sort au
+#! usage = moins un cycle, meme avec un retard nul : une transition qui attend
+#! usage = 'Started AND Finished' ne reste pas bloquee. K6 et K7 ne concernent
+#! usage = qu'une etape qui a vraiment ete active.
+#! usage = LES RECEPTIVITES ET LES CONDITIONS D'ACTION se calculent dans ton
+#! usage = programme, AVANT l'appel : Transitions[i].Condition, Actions[i].EnableCond.
+#! usage = BUILDING construit les tableaux depuis un texte ; le construire une fois
+#! usage = (premier cycle, ou sur demande) plutot qu'a chaque cycle allege l'automate.
+#! usage = UN DFB A TROIS SECTIONS : Init, Main, Debug. Un RETURN dans Init - moteur
+#! usage = desactive, configuration incoherente, gel, pas a pas, fini - rend la main
+#! usage = a l'appelant : Main et Debug ne s'executent pas ce cycle-la.
+#! usage = DEPENDANCE : NtpcNow est de type Display_NTPC, un type systeme de Control
+#! usage = Expert (celui de RRTC_DT_MS). Il ne sert qu'a dater l'historique de mise au
+#! usage = point.
+#! example = (* declarer : Etapes : ARRAY[0..27] OF ST_GC_Step; Trans : ARRAY[0..27] OF ST_GC_Transition;
+#! example =    Acts : ARRAY[0..27] OF ST_GC_Action; Builder : BUILDING; Construit : BOOL;
+#! example =    Temps : TIME; Depart : BOOL; Fini : BOOL; Init : BOOL; *)
+#! example = GC.Runtime.GC_MAX_STEPS := 28;
+#! example = GC.Runtime.GC_MAX_TRANSITIONS := 28;
+#! example = GC.Runtime.GC_MAX_ACTIONS := 28;
+#! example = GC.Runtime.GC_MAX_HIST := 8;
+#! example =
+#! example = IF NOT Construit THEN   (* une fois : BUILDING analyse du texte *)
+#! example =     Builder(T := 1, Text := 'id=0|n=X0|i=1', _Step := Etapes[0]);
+#! example =     Builder(T := 1, Text := 'id=1|n=X1', _Step := Etapes[1]);
+#! example =     Builder(T := 2, Text := 'id=0|s=0|d=1|c=DEPART', d := T#0s, _Trans := Trans[0]);
+#! example =     Builder(T := 2, Text := 'id=1|s=1|d=0|c=FINI', d := T#0s, _Trans := Trans[1]);
+#! example =     Builder(T := 3, Text := 'id=0|n=MARCHE|k=0|s=1', d := T#0s, _Act := Acts[0]);
+#! example =     Construit := TRUE;
+#! example = END_IF;
+#! example =
+#! example = Trans[0].Condition := Depart;
+#! example = Trans[1].Condition := Fini;
+#! example = Acts[0].EnableCond := TRUE;
+#! example =
+#! example = Temps := Temps + T#20ms;   (* sur l'automate : le temps reel, MAST : TsSys *)
+#! example = GC(Enable := TRUE, ModeReq := 1, InitReq := Init, TsNow := Temps,
+#! example =    ForceStepFromId := -1, ForceStepToId := -1,
+#! example =    Steps := Etapes, Transitions := Trans, Actions := Acts);
+#! example = Init := FALSE;   (* les impulsions : remises a zero APRES l'appel *)
+#! see = BUILDING
+#! see = ST_GC_Step
+#! see = ST_GC_Transition
+#! see = ST_GC_Action
+#! see = ST_GC_Runtime
+#! see = ST_GC_Debug
+#! see = DFB_SEQ_ROTATE
+#! param Enable = FALSE : le moteur est remis a zero et ne fait rien. Au retour a
+#! param Enable = TRUE, il repart des etapes initiales et revoit sa configuration.
+#! param ModeReq = Le mode. 2 : pas a pas - le moteur n'avance que sur StepReq (la
+#! param ModeReq = pause d'un franchissement se fait quand meme, sans StepReq).
+#! param FreezeReq = Fige le moteur : situation, sorties et temps ne bougent plus.
+#! param PauseReq = Comme FreezeReq.
+#! param StepReq = En mode 2, fait avancer d'un cycle.
+#! param InitReq = Retour a l'etat initial : etapes initiales actives, toutes les
+#! param InitReq = actions remises a zero, Finished efface, configuration revue.
+#! param ResetInitialReq = Retour a la situation initiale ; les etapes initiales deja
+#! param ResetInitialReq = actives continuent (leurs actions ne sont pas relancees).
+#! param ResetAllReq = Remise a zero complete, comme InitReq.
+#! param TsNow = L'instant de ce cycle : un TIME qui avance. Le moteur en tire la
+#! param TsNow = duree du cycle.
+#! param NtpcNow = La date (Display_NTPC), pour l'historique de mise au point.
+#! param ForceBackReq = La premiere etape active revient aux sources de la premiere
+#! param ForceBackReq = transition qui y mene.
+#! param ForceNextReq = La premiere etape active passe aux destinations de la premiere
+#! param ForceNextReq = transition qui en part.
+#! param ForceStepFromId = Forcage direct : l'etape a desactiver. -1 : pas de forcage.
+#! param ForceStepToId = Forcage direct : l'etape a activer. -1 : pas de forcage. LES
+#! param ForceStepToId = DEUX A -1 EN MARCHE NORMALE, et remis a -1 APRES l'appel (pas
+#! param ForceStepToId = avant : le moteur ne verrait jamais la demande). From = To :
+#! param ForceStepToId = l'etape est relancee.
+#! param Steps = Les etapes, ARRAY[0..27] OF ST_GC_Step.
+#! param Transitions = Les transitions, ARRAY[0..27] OF ST_GC_Transition.
+#! param Actions = Les actions, ARRAY[0..27] OF ST_GC_Action.
+#! param Debug = La mise au point : compteurs, defauts, historique, conflits,
+#! param Debug = WatchdogDetected (TsNow n'avance pas).
+#! param Finished = Une transition sortant d'une etape finale a ete franchie, ou une
+#! param Finished = etape finale sans transition de sortie est active : le moteur
+#! param Finished = s'arrete jusqu'a InitReq ou un forcage.
+#! param InternalInitDone = Les etapes initiales ont ete activees au premier cycle.
+#! param Runtime = L'etat interne, et LES TAILLES a poser avant l'appel.
+#! param ModeReqOut = La copie de ModeReq, pour l'IHM.
+#! internal = NeedToResetPause, pauseToReevaluateCondition, howManyResets, i, j, k, srcId, dstId, allSrcActive, anySrcActive, sIdx, aIdx, tIdx, sid, isFromStep, doneBack, doneNext, isDest, focusStep, ConfigChecked, HistFill, activeStepQty, firstStepId, firstStepName, h, finalSrcOnValidatedTr, isInitState, PrevInitState, InitPulse, InitPulseCount, SectionsAuthorized
+#! changes 1.49 = CORRECTIONS (le detail et les essais : LISEZ-MOI-GRAFCET.md,
+#! changes 1.49 = tests/moteurgrafcet_test.cpp). Interface inchangee.
+#! changes 1.49 = G01 franchissements simultanes : sources puis destinations (regle 5).
+#! changes 1.49 = G02 commandes prises pendant la pause, le gel et le pas a pas.
+#! changes 1.49 = G03 InitReq, reset et forcages arment la pause (plus de receptivite
+#! changes 1.49 = perimee) ; G04 les actions d'une etape initiale quittee aussitot
+#! changes 1.49 = tournent au demarrage.
+#! changes 1.49 = G05 impulsions et Rising/Falling d'un seul cycle, meme fige ou fini.
+#! changes 1.49 = G06 historique sans doublon ; G20 focus sur la premiere etape, K0
+#! changes 1.49 = liste, lignes sans ')' et sans debordement.
+#! changes 1.49 = G07 K4, G08 K11, G09 K10 : au moins un cycle (retard nul) ; K10 ne
+#! changes 1.49 = ressort plus apres sa limite. G10 K9 retard nul : une impulsion.
+#! changes 1.49 = G11 K11 : pas de sortie collee sur un second front.
+#! changes 1.49 = G12 K6/K7 : rien pour une etape jamais active.
+#! changes 1.49 = G13 retour a la situation initiale : ni coupure ni relance des actions
+#! changes 1.49 = en cours, plus de cycle perdu.
+#! changes 1.49 = G14 ForceNext/Back ne relancent que la nouvelle etape ; G15 un forcage
+#! changes 1.49 = relance un moteur fini.
+#! changes 1.49 = G16 configuration revue a InitReq et a la reactivation ; G17 tailles et
+#! changes 1.49 = comptes bornes (plus rien hors tableau).
+#! changes 1.49 = G18 temps butes a 24 jours ; G19 compteurs sans debordement ; G25 temps
+#! changes 1.49 = comptes depuis l'evenement.
+#! changes 1.49 = G21 ConflictDetected ; G22 etape finale sans sortie : Finished ; G24
+#! changes 1.49 = ResetInitialReq ne relance pas les etapes initiales deja actives.
+#! changes 1.49 = G26 TsNow qui recule ne valide plus toutes les temporisations ; G27
+#! changes 1.49 = WatchdogDetected : TsNow n'avance pas. L'exemple de l'aide passait
+#! changes 1.49 = une constante a TsNow : il fait maintenant avancer le temps.
+#! changes 1.48 = Range dans la bibliotheque, depuis le projet MAST. Code inchange.
+#! given = Depart := TRUE
+#! expect = 1 : Etapes[0].Active = TRUE
+#! expect = 3 : Etapes[1].Active = TRUE
+#! expect = 3 : Etapes[0].Active = FALSE
+#! expect = 4 : Acts[0].Out = TRUE
+
+# name ; type ; scope ; initial ; comment
+Enable ; BOOL ; Input ;  ;
+ModeReq ; INT ; Input ;  ;
+FreezeReq ; BOOL ; Input ;  ;
+PauseReq ; BOOL ; Input ;  ;
+StepReq ; BOOL ; Input ;  ;
+InitReq ; BOOL ; Input ;  ;
+ResetInitialReq ; BOOL ; Input ;  ;
+ResetAllReq ; BOOL ; Input ;  ;
+TsNow ; TIME ; Input ;  ;
+NtpcNow ; Display_NTPC ; Input ;  ;
+ForceBackReq ; BOOL ; Input ;  ;
+ForceNextReq ; BOOL ; Input ;  ;
+ForceStepFromId ; INT ; Input ;  ;
+ForceStepToId ; INT ; Input ;  ;
+Steps ; ARRAY[0..27] OF ST_GC_Step ; InOut ;  ;
+Transitions ; ARRAY[0..27] OF ST_GC_Transition ; InOut ;  ;
+Actions ; ARRAY[0..27] OF ST_GC_Action ; InOut ;  ;
+Debug ; ST_GC_Debug ; Output ;  ;
+Finished ; BOOL ; Output ;  ;
+InternalInitDone ; BOOL ; Public ;  ;
+Runtime ; ST_GC_Runtime ; Public ;  ;
+ModeReqOut ; INT ; Public ;  ;
+NeedToResetPause ; BOOL ; Public ;  ;
+pauseToReevaluateCondition ; BOOL ; Public ;  ;
+howManyResets ; INT ; Public ;  ;
+i ; INT ; Public ;  ;
+j ; INT ; Public ;  ;
+k ; INT ; Public ;  ;
+srcId ; INT ; Public ;  ;
+dstId ; INT ; Public ;  ;
+allSrcActive ; BOOL ; Public ;  ;
+anySrcActive ; BOOL ; Public ;  ;
+sIdx ; INT ; Public ;  ;
+aIdx ; INT ; Public ;  ;
+tIdx ; INT ; Public ;  ;
+sid ; INT ; Public ;  ;
+isFromStep ; BOOL ; Public ;  ;
+doneBack ; BOOL ; Public ;  ;
+doneNext ; BOOL ; Public ;  ;
+isDest ; BOOL ; Public ;  ;
+focusStep ; INT ; Public ;  ;
+ConfigChecked ; BOOL ; Public ;  ;
+HistFill ; INT ; Public ;  ;
+activeStepQty ; INT ; Public ;  ;
+firstStepId ; INT ; Public ;  ;
+firstStepName ; string[4] ; Public ;  ;
+h ; INT ; Public ;  ;
+finalSrcOnValidatedTr ; BOOL ; Public ;  ;
+isInitState ; BOOL ; Public ;  ;
+PrevInitState ; BOOL ; Public ;  ;
+InitPulse ; BOOL ; Public ;  ;
+InitPulseCount ; INT ; Public ;  ;
+SectionsAuthorized ; BOOL ; Public ;  ;
+stepIdStr ; STRING ; Local ;  ;
+actionIdStr ; STRING ; Local ;  ;
+changedNow ; BOOL ; Local ;  ; la situation a change pendant cet appel
+held ; BOOL ; Local ;  ; fige, pas a pas ou fini : le temps ne compte pas
+resetAll ; BOOL ; Local ;  ; toutes les actions a remettre a zero
+forced ; BOOL ; Local ;  ; un forcage a ete fait pendant cet appel
+anyFired ; BOOL ; Local ;  ; au moins une transition franchie
+hasExit ; BOOL ; Local ;  ; une etape finale a une transition de sortie
+doReset ; BOOL ; Local ;  ;
+firstEn ; BOOL ; Local ;  ; premier cycle de la condition d'une action
+nSrc ; INT ; Local ;  ; SourceCount borne a 0..3
+nDst ; INT ; Local ;  ; DestCount borne a 0..3
+dtScan ; TIME ; Local ;  ; temps pas encore compte aux receptivites
+dtActs ; TIME ; Local ;  ; temps pas encore compte aux actions
+lineTmp ; string[32] ; Local ;  ;
+wasActive ; ARRAY[0..27] OF BOOL ; Local ;  ; la situation avant le changement
+resetStep ; ARRAY[0..27] OF BOOL ; Local ;  ; etapes dont les actions repartent de zero
+claimed ; ARRAY[0..27] OF BOOL ; Local ;  ; etapes deja prises par une transition franchissable
+frozenTimeCount ; INT ; Local ;  ; appels de suite sans que TsNow avance
+
+<<<section Init ST>>>
+SectionsAuthorized := TRUE;
+ModeReqOut := ModeReq;
+
+(* =========================================================
+   0. LES TAILLES : jamais au-dela des tableaux
+   ========================================================= *)
+IF Runtime.GC_MAX_STEPS > 28 THEN Runtime.GC_MAX_STEPS := 28; END_IF;
+IF Runtime.GC_MAX_STEPS < 0 THEN Runtime.GC_MAX_STEPS := 0; END_IF;
+IF Runtime.GC_MAX_TRANSITIONS > 28 THEN Runtime.GC_MAX_TRANSITIONS := 28; END_IF;
+IF Runtime.GC_MAX_TRANSITIONS < 0 THEN Runtime.GC_MAX_TRANSITIONS := 0; END_IF;
+IF Runtime.GC_MAX_ACTIONS > 28 THEN Runtime.GC_MAX_ACTIONS := 28; END_IF;
+IF Runtime.GC_MAX_ACTIONS < 0 THEN Runtime.GC_MAX_ACTIONS := 0; END_IF;
+IF Runtime.GC_MAX_HIST > 8 THEN Runtime.GC_MAX_HIST := 8; END_IF;
+IF Runtime.GC_MAX_HIST < 0 THEN Runtime.GC_MAX_HIST := 0; END_IF;
+
+(* =========================================================
+   1. MOTEUR DESACTIVE : tout a zero
+   ========================================================= *)
+IF NOT Enable THEN
+
+    FOR i := 0 TO Runtime.GC_MAX_STEPS - 1 DO
+        Steps[i].Active := FALSE;
+        Steps[i].PrevActive := FALSE;
+        Steps[i].Rising := FALSE;
+        Steps[i].Falling := FALSE;
+        Steps[i].ActiveTime := T#0ms;
+        Steps[i].InactiveTime := T#0ms;
+    END_FOR;
+
+    FOR i := 0 TO Runtime.GC_MAX_TRANSITIONS - 1 DO
+        Transitions[i].Validated := FALSE;
+        Transitions[i].SnapshotValid := FALSE;
+        Transitions[i].TonStarted := FALSE;
+        Transitions[i].TonElapsed := T#0ms;
+        Transitions[i].TimedConditionValid := FALSE;
+    END_FOR;
+
+    FOR aIdx := 0 TO Runtime.GC_MAX_ACTIONS - 1 DO
+        Actions[aIdx].Started := FALSE;
+        Actions[aIdx].Finished := FALSE;
+        Actions[aIdx].Out := FALSE;
+        Actions[aIdx].PrevOut := FALSE;
+        Actions[aIdx].OnPulseDone := FALSE;
+        Actions[aIdx].OffPulseDone := TRUE;     (* K6/K7 desarmees *)
+        Actions[aIdx].EnableDone := FALSE;
+        Actions[aIdx].EnablePulseDone := FALSE;
+        Actions[aIdx].TonStarted := FALSE;
+        Actions[aIdx].TonElapsed := T#0ms;
+        Actions[aIdx].PrevEnableCond := FALSE;
+    END_FOR;
+
+    Finished := FALSE;
+    InitPulse := FALSE;
+    PrevInitState := FALSE;
+    finalSrcOnValidatedTr := FALSE;
+    InternalInitDone := FALSE;   (* tres important *)
+    pauseToReevaluateCondition := FALSE;
+    NeedToResetPause := FALSE;
+    ConfigChecked := FALSE;      (* revue au retour *)
+    dtScan := T#0ms;
+    dtActs := T#0ms;
+    Debug.ActiveStepCount := 0;
+    Debug.ConflictDetected := FALSE;
+
+    SectionsAuthorized := FALSE;
+    RETURN;
+END_IF;
+
+(* =========================================================
+   2. CE QUI NE DURE QU'UN CYCLE
+   Les fronts d'etape et les impulsions d'action ne valent que pour le
+   cycle ou ils sont calcules. Un cycle ou le moteur ne recalcule pas les
+   actions (franchissement, pause, gel, pas a pas, fini) les laisse a FALSE,
+   au lieu de les garder vrais : une impulsion collee pendant un gel
+   comptait a chaque cycle.
+   ========================================================= *)
+changedNow := FALSE;
+resetAll := FALSE;
+forced := FALSE;
+
+FOR i := 0 TO Runtime.GC_MAX_STEPS - 1 DO
+    Steps[i].Rising := FALSE;
+    Steps[i].Falling := FALSE;
+    resetStep[i] := FALSE;
+END_FOR;
+
+FOR aIdx := 0 TO Runtime.GC_MAX_ACTIONS - 1 DO
+    Actions[aIdx].PrevOut := Actions[aIdx].Out;
+    IF (Actions[aIdx].Kind = 1) OR (Actions[aIdx].Kind = 3) OR (Actions[aIdx].Kind = 5)
+       OR (Actions[aIdx].Kind = 6) OR (Actions[aIdx].Kind = 9) THEN
+        Actions[aIdx].Out := FALSE;
+    END_IF;
+END_FOR;
+
+(* =========================================================
+   3. LE TEMPS : la duree depuis l'appel precedent
+   ========================================================= *)
+IF NOT InternalInitDone THEN
+    Runtime.TsNow := TsNow;      (* premier cycle : duree nulle *)
+END_IF;
+Runtime.Mode := ModeReq;
+Runtime.TsPrev := Runtime.TsNow;
+Runtime.TsNow := TsNow;
+Runtime.NtpcNow := NtpcNow;
+Runtime.DateTime := Runtime.TsNow - Runtime.TsPrev;
+IF Runtime.DateTime > T#10s THEN
+    (* plus de 10 s entre deux appels : TsNow a recule (TsSys remis a zero) ou
+       l'appel a ete suspendu. Le temps du moteur s'arrete, comme fige : une
+       receptivite temporisee ne se valide pas d'un coup. *)
+    Runtime.DateTime := T#0ms;
+END_IF;
+(* le temps doit avancer : TsNow fige (une constante passee a TsNow) laisse
+   toutes les temporisations a zero. Signale apres 100 appels. *)
+IF Runtime.DateTime = T#0ms THEN
+    IF frozenTimeCount < 100 THEN
+        frozenTimeCount := frozenTimeCount + 1;
+    ELSE
+        Debug.WatchdogDetected := TRUE;
+    END_IF;
+ELSE
+    frozenTimeCount := 0;
+    Debug.WatchdogDetected := FALSE;
+END_IF;
+IF Runtime.Cycle < 2147483647 THEN
+    Runtime.Cycle := Runtime.Cycle + 1;
+ELSE
+    Runtime.Cycle := 0;
+END_IF;
+
+(* =========================================================
+   4. PREMIER CYCLE : toutes les etapes initiales
+   ========================================================= *)
+IF NOT InternalInitDone THEN
+    FOR i := 0 TO Runtime.GC_MAX_STEPS - 1 DO
+        Steps[i].Active := Steps[i].IsInitial;
+        Steps[i].PrevActive := FALSE;
+        Steps[i].ActiveTime := T#0ms;
+        Steps[i].InactiveTime := T#0ms;
+    END_FOR;
+    resetAll := TRUE;
+    changedNow := TRUE;
+    InternalInitDone := TRUE;
+    Finished := FALSE;
+END_IF;
+
+(* =========================================================
+   5. LA CONFIGURATION : revue au premier cycle, a InitReq,
+   ResetAllReq, ResetInitialReq et a la reactivation
+   ========================================================= *)
+IF InitReq OR ResetAllReq OR ResetInitialReq THEN
+    ConfigChecked := FALSE;
+END_IF;
+
+IF NOT ConfigChecked THEN
+    Debug.ConfigFault := FALSE;
+
+    FOR i := 0 TO Runtime.GC_MAX_STEPS - 1 DO
+        IF Steps[i].Id < 0 THEN
+            Debug.ConfigFault := TRUE;
+        END_IF;
+    END_FOR;
+
+    FOR i := 0 TO Runtime.GC_MAX_TRANSITIONS - 1 DO
+        IF Transitions[i].Enabled THEN
+            IF (Transitions[i].SourceCount < 1) OR (Transitions[i].DestCount < 1)
+               OR (Transitions[i].SourceCount > 3) OR (Transitions[i].DestCount > 3) THEN
+                Debug.ConfigFault := TRUE;
+            END_IF;
+            nSrc := Transitions[i].SourceCount;
+            IF nSrc > 3 THEN nSrc := 3; END_IF;
+            FOR j := 0 TO nSrc - 1 DO
+                srcId := Transitions[i].Sources[j];
+                IF (srcId < 0) OR (srcId >= Runtime.GC_MAX_STEPS) THEN
+                    Debug.ConfigFault := TRUE;
+                END_IF;
+            END_FOR;
+            nDst := Transitions[i].DestCount;
+            IF nDst > 3 THEN nDst := 3; END_IF;
+            FOR j := 0 TO nDst - 1 DO
+                dstId := Transitions[i].Destinations[j];
+                IF (dstId < 0) OR (dstId >= Runtime.GC_MAX_STEPS) THEN
+                    Debug.ConfigFault := TRUE;
+                END_IF;
+            END_FOR;
+        END_IF;
+    END_FOR;
+
+    FOR i := 0 TO Runtime.GC_MAX_ACTIONS - 1 DO
+        sid := Actions[i].BoundStepId;
+        IF (sid < -1) OR (sid >= Runtime.GC_MAX_STEPS) THEN
+            Debug.ConfigFault := TRUE;
+        END_IF;
+        IF (Actions[i].Kind < 0) OR (Actions[i].Kind > 11) THEN
+            Debug.ConfigFault := TRUE;
+        END_IF;
+    END_FOR;
+
+    ConfigChecked := TRUE;
+END_IF;
+
+IF Debug.ConfigFault THEN
+    SectionsAuthorized := FALSE;
+    RETURN;
+END_IF;
+
+(* =========================================================
+   6. LE TEMPS DES ETAPES, sur la situation de l'intervalle ecoule
+   (avant les changements de cet appel). Pas quand le moteur est fige,
+   en pas a pas ou fini - sauf la pause d'un cycle deja armee, qui passe
+   toujours.
+   ========================================================= *)
+held := (FreezeReq OR PauseReq OR ((Runtime.Mode = 2) AND NOT StepReq) OR Finished)
+        AND NOT pauseToReevaluateCondition;
+
+IF NOT held THEN
+    FOR i := 0 TO Runtime.GC_MAX_STEPS - 1 DO
+        IF Steps[i].Active THEN
+            IF Steps[i].ActiveTime < T#24d - Runtime.DateTime THEN
+                Steps[i].ActiveTime := Steps[i].ActiveTime + Runtime.DateTime;
+            ELSE
+                Steps[i].ActiveTime := T#24d;    (* bute : ne repasse pas par 0 *)
+            END_IF;
+            Steps[i].InactiveTime := T#0ms;
+        ELSE
+            IF Steps[i].InactiveTime < T#24d - Runtime.DateTime THEN
+                Steps[i].InactiveTime := Steps[i].InactiveTime + Runtime.DateTime;
+            ELSE
+                Steps[i].InactiveTime := T#24d;
+            END_IF;
+            Steps[i].ActiveTime := T#0ms;
+        END_IF;
+    END_FOR;
+    IF dtScan < T#24d - Runtime.DateTime THEN dtScan := dtScan + Runtime.DateTime; END_IF;
+    IF dtActs < T#24d - Runtime.DateTime THEN dtActs := dtActs + Runtime.DateTime; END_IF;
+END_IF;
+
+(* =========================================================
+   7. LES COMMANDES : prises a chaque appel, meme pendant la pause
+   ========================================================= *)
+IF InitReq OR ResetAllReq THEN
+    FOR i := 0 TO Runtime.GC_MAX_STEPS - 1 DO
+        Steps[i].Active := Steps[i].IsInitial;
+        Steps[i].PrevActive := FALSE;
+        Steps[i].ActiveTime := T#0ms;
+    END_FOR;
+    resetAll := TRUE;
+    changedNow := TRUE;
+    Finished := FALSE;
+    Debug.ConflictDetected := FALSE;
+END_IF;
+
+IF ResetInitialReq THEN
+    (* retour a la situation initiale ; une etape initiale deja active
+       continue, ses actions ne repartent pas *)
+    FOR i := 0 TO Runtime.GC_MAX_STEPS - 1 DO
+        resetStep[i] := NOT (Steps[i].IsInitial AND Steps[i].Active);
+        Steps[i].Active := Steps[i].IsInitial;
+    END_FOR;
+    changedNow := TRUE;
+    Finished := FALSE;
+END_IF;
+
+(* =========================================================
+   8. LES FORCAGES : direct, puis retour, puis avance. Un forcage relance
+   un moteur fini. Seules les etapes nouvellement activees repartent de
+   zero.
+   ========================================================= *)
+IF (ForceStepFromId >= 0) AND (ForceStepToId >= 0) AND
+   (ForceStepFromId < Runtime.GC_MAX_STEPS) AND (ForceStepToId < Runtime.GC_MAX_STEPS) THEN
+
+    FOR i := 0 TO Runtime.GC_MAX_STEPS - 1 DO
+        wasActive[i] := Steps[i].Active;
+    END_FOR;
+    Steps[ForceStepFromId].Active := FALSE;
+    Steps[ForceStepToId].Active := TRUE;
+    IF (ForceStepFromId = ForceStepToId) OR NOT wasActive[ForceStepToId] THEN
+        (* From = To : l'etape est relancee *)
+        resetStep[ForceStepToId] := TRUE;
+        Steps[ForceStepToId].PrevActive := FALSE;
+        Steps[ForceStepToId].ActiveTime := T#0ms;
+    END_IF;
+    forced := TRUE;
+
+ELSIF ForceBackReq THEN
+    (* la premiere etape active revient aux sources de la premiere
+       transition qui y mene *)
+    doneBack := FALSE;
+    FOR sIdx := 0 TO Runtime.GC_MAX_STEPS - 1 DO
+        IF Steps[sIdx].Active AND (NOT doneBack) THEN
+            FOR tIdx := 0 TO Runtime.GC_MAX_TRANSITIONS - 1 DO
+                IF Transitions[tIdx].Enabled AND (NOT doneBack) THEN
+                    isDest := FALSE;
+                    nDst := Transitions[tIdx].DestCount;
+                    IF nDst > 3 THEN nDst := 3; END_IF;
+                    FOR k := 0 TO nDst - 1 DO
+                        IF Transitions[tIdx].Destinations[k] = sIdx THEN
+                            isDest := TRUE;
+                        END_IF;
+                    END_FOR;
+
+                    IF isDest THEN
+                        FOR i := 0 TO Runtime.GC_MAX_STEPS - 1 DO
+                            wasActive[i] := Steps[i].Active;
+                        END_FOR;
+                        Steps[sIdx].Active := FALSE;
+                        nSrc := Transitions[tIdx].SourceCount;
+                        IF nSrc > 3 THEN nSrc := 3; END_IF;
+                        FOR j := 0 TO nSrc - 1 DO
+                            srcId := Transitions[tIdx].Sources[j];
+                            IF (srcId >= 0) AND (srcId < Runtime.GC_MAX_STEPS) THEN
+                                Steps[srcId].Active := TRUE;
+                                IF NOT wasActive[srcId] THEN
+                                    resetStep[srcId] := TRUE;
+                                END_IF;
+                            END_IF;
+                        END_FOR;
+                        doneBack := TRUE;
+                    END_IF;
+                END_IF;
+            END_FOR;
+        END_IF;
+    END_FOR;
+    forced := doneBack;
+
+ELSIF ForceNextReq THEN
+    (* la premiere etape active passe aux destinations de la premiere
+       transition qui en part *)
+    doneNext := FALSE;
+    FOR sIdx := 0 TO Runtime.GC_MAX_STEPS - 1 DO
+        IF Steps[sIdx].Active AND (NOT doneNext) THEN
+            FOR tIdx := 0 TO Runtime.GC_MAX_TRANSITIONS - 1 DO
+                IF Transitions[tIdx].Enabled AND (NOT doneNext) THEN
+                    isFromStep := FALSE;
+                    nSrc := Transitions[tIdx].SourceCount;
+                    IF nSrc > 3 THEN nSrc := 3; END_IF;
+                    FOR j := 0 TO nSrc - 1 DO
+                        IF Transitions[tIdx].Sources[j] = sIdx THEN
+                            isFromStep := TRUE;
+                        END_IF;
+                    END_FOR;
+
+                    IF isFromStep THEN
+                        FOR i := 0 TO Runtime.GC_MAX_STEPS - 1 DO
+                            wasActive[i] := Steps[i].Active;
+                        END_FOR;
+                        Steps[sIdx].Active := FALSE;
+                        nDst := Transitions[tIdx].DestCount;
+                        IF nDst > 3 THEN nDst := 3; END_IF;
+                        IF (Transitions[tIdx].SplitKind <> 1) AND (nDst > 1) THEN
+                            nDst := 1;
+                        END_IF;
+                        FOR k := 0 TO nDst - 1 DO
+                            dstId := Transitions[tIdx].Destinations[k];
+                            IF (dstId >= 0) AND (dstId < Runtime.GC_MAX_STEPS) THEN
+                                Steps[dstId].Active := TRUE;
+                                IF NOT wasActive[dstId] THEN
+                                    resetStep[dstId] := TRUE;
+                                END_IF;
+                            END_IF;
+                        END_FOR;
+                        doneNext := TRUE;
+                    END_IF;
+                END_IF;
+            END_FOR;
+        END_IF;
+    END_FOR;
+    forced := doneNext;
+END_IF;
+
+IF forced THEN
+    changedNow := TRUE;
+    Finished := FALSE;
+END_IF;
+
+(* =========================================================
+   9. LES ACTIONS DES ETAPES QUI REPARTENT, et la pause d'un cycle
+   ========================================================= *)
+IF changedNow THEN
+    (* une etape qui repart est une NOUVELLE activation : front montant et
+       temps a zero, meme si elle a ete quittee puis reprise entre deux
+       cycles ou les fronts n'ont pas ete calcules (forcages successifs) *)
+    FOR i := 0 TO Runtime.GC_MAX_STEPS - 1 DO
+        IF resetStep[i] AND Steps[i].Active THEN
+            Steps[i].PrevActive := FALSE;
+            Steps[i].ActiveTime := T#0ms;
+        END_IF;
+    END_FOR;
+    FOR aIdx := 0 TO Runtime.GC_MAX_ACTIONS - 1 DO
+        sid := Actions[aIdx].BoundStepId;
+        doReset := resetAll;
+        IF (sid >= 0) AND (sid < Runtime.GC_MAX_STEPS) THEN
+            IF resetStep[sid] THEN doReset := TRUE; END_IF;
+        END_IF;
+        IF doReset THEN
+            Actions[aIdx].Started := FALSE;
+            Actions[aIdx].Finished := FALSE;
+            Actions[aIdx].Out := FALSE;
+            Actions[aIdx].OnPulseDone := FALSE;
+            Actions[aIdx].OffPulseDone := TRUE;     (* K6/K7 desarmees *)
+            Actions[aIdx].EnableDone := FALSE;
+            Actions[aIdx].EnablePulseDone := FALSE;
+            Actions[aIdx].TonStarted := FALSE;
+            Actions[aIdx].TonElapsed := T#0ms;
+            Actions[aIdx].PrevEnableCond := FALSE;
+        END_IF;
+    END_FOR;
+    pauseToReevaluateCondition := TRUE;
+END_IF;
+
+(* =========================================================
+   10. FIGE, EN PAUSE, EN PAS A PAS, FINI : on rend la main. La pause
+   d'un cycle deja armee passe outre : la nouvelle situation agit au
+   moins un cycle.
+   ========================================================= *)
+IF (FreezeReq OR PauseReq OR ((Runtime.Mode = 2) AND NOT StepReq))
+   AND NOT pauseToReevaluateCondition THEN
+    SectionsAuthorized := FALSE;
+    RETURN;
+END_IF;
+
+IF Finished AND NOT pauseToReevaluateCondition THEN
+    SectionsAuthorized := FALSE;
+    RETURN;
+END_IF;
+<<<end>>>
+
+<<<section Main ST>>>
+(* La pause d'un cycle : armee par l'appel precedent (et pas par un
+   changement de cet appel-ci), elle se leve a la fin de celui-ci. *)
+NeedToResetPause := pauseToReevaluateCondition AND NOT changedNow;
+
+IF NOT(pauseToReevaluateCondition) THEN
+
+    (* 1 SCAN_TRANS *)
+    Runtime.Phase := 1;
+    finalSrcOnValidatedTr := FALSE;
+
+    FOR i := 0 TO Runtime.GC_MAX_STEPS - 1 DO
+        claimed[i] := FALSE;
+    END_FOR;
+
+    FOR i := 0 TO Runtime.GC_MAX_TRANSITIONS - 1 DO
+
+        Transitions[i].Validated := FALSE;
+        nSrc := Transitions[i].SourceCount;
+        IF nSrc > 3 THEN nSrc := 3; END_IF;
+
+        (* sans source ou sans destination, une transition ne se franchit
+           jamais (elle sortirait des etapes de nulle part, ou en perdrait) *)
+        IF Transitions[i].Enabled AND (nSrc >= 1) AND (Transitions[i].DestCount >= 1) THEN
+
+            allSrcActive := TRUE;
+            anySrcActive := FALSE;
+
+            FOR j := 0 TO nSrc - 1 DO
+                srcId := Transitions[i].Sources[j];
+                IF (srcId >= 0) AND (srcId < Runtime.GC_MAX_STEPS) THEN
+                    anySrcActive := anySrcActive OR Steps[srcId].Active;
+                    allSrcActive := allSrcActive AND Steps[srcId].Active;
+                END_IF;
+            END_FOR;
+
+            (* =========================
+               FILTRE TEMPOREL CONDITION : le temps part de la premiere
+               fois ou la receptivite est vue vraie (comme un TON)
+               ========================= *)
+            IF Transitions[i].Condition THEN
+                IF NOT Transitions[i].TonStarted THEN
+                    Transitions[i].TonStarted := TRUE;
+                    Transitions[i].TonElapsed := T#0ms;
+                ELSIF Transitions[i].TonElapsed < T#24d - dtScan THEN
+                    Transitions[i].TonElapsed := Transitions[i].TonElapsed + dtScan;
+                ELSE
+                    Transitions[i].TonElapsed := T#24d;
+                END_IF;
+
+                IF Transitions[i].TonElapsed >= Transitions[i].ConditionTime THEN
+                    Transitions[i].TimedConditionValid := TRUE;
+                END_IF;
+            END_IF;
+            (* ResetOnFall : sans effet, le filtre repart de zero des que la
+               receptivite tombe (plus bas), comme en 1.48 *)
+
+            (* =========================
+               VALIDATION TRANSITION
+               ========================= *)
+            IF Transitions[i].JoinKind = 1 THEN
+                Transitions[i].Validated :=
+                    allSrcActive AND Transitions[i].TimedConditionValid AND Transitions[i].Condition;
+                IF NOT(allSrcActive) THEN
+                    Transitions[i].TonStarted := FALSE;
+                    Transitions[i].TonElapsed := T#0ms;
+                    Transitions[i].TimedConditionValid := FALSE;
+                END_IF;
+            ELSE
+                Transitions[i].Validated :=
+                    anySrcActive AND Transitions[i].TimedConditionValid AND Transitions[i].Condition;
+                IF NOT(anySrcActive) THEN
+                    Transitions[i].TonStarted := FALSE;
+                    Transitions[i].TonElapsed := T#0ms;
+                    Transitions[i].TimedConditionValid := FALSE;
+                END_IF;
+            END_IF;
+
+        END_IF;
+
+        (* =========================
+           FINISH DETECTION, CONFLITS
+           ========================= *)
+        IF Transitions[i].Validated THEN
+            FOR j := 0 TO nSrc - 1 DO
+                srcId := Transitions[i].Sources[j];
+                IF (srcId >= 0) AND (srcId < Runtime.GC_MAX_STEPS) THEN
+                    IF Steps[srcId].Active AND Steps[srcId].IsFinal THEN
+                        finalSrcOnValidatedTr := TRUE;
+                        Finished := TRUE;
+                    END_IF;
+                    (* deux transitions franchissables qui prennent la meme
+                       etape : receptivites non exclusives *)
+                    IF claimed[srcId] THEN
+                        Debug.ConflictDetected := TRUE;
+                    END_IF;
+                    claimed[srcId] := TRUE;
+                END_IF;
+            END_FOR;
+        END_IF;
+
+        IF NOT Transitions[i].Enabled OR NOT Transitions[i].Condition THEN
+            Transitions[i].TonStarted := FALSE;
+            Transitions[i].TonElapsed := T#0ms;
+            Transitions[i].TimedConditionValid := FALSE;
+        END_IF;
+
+    END_FOR;
+    dtScan := T#0ms;
+
+    (* une etape finale active sans aucune transition de sortie : fini *)
+    FOR sIdx := 0 TO Runtime.GC_MAX_STEPS - 1 DO
+        IF Steps[sIdx].Active AND Steps[sIdx].IsFinal THEN
+            hasExit := FALSE;
+            FOR tIdx := 0 TO Runtime.GC_MAX_TRANSITIONS - 1 DO
+                IF Transitions[tIdx].Enabled THEN
+                    nSrc := Transitions[tIdx].SourceCount;
+                    IF nSrc > 3 THEN nSrc := 3; END_IF;
+                    FOR j := 0 TO nSrc - 1 DO
+                        IF Transitions[tIdx].Sources[j] = sIdx THEN
+                            hasExit := TRUE;
+                        END_IF;
+                    END_FOR;
+                END_IF;
+            END_FOR;
+            IF NOT hasExit THEN
+                Finished := TRUE;
+            END_IF;
+        END_IF;
+    END_FOR;
+
+    (* 2 SNAPSHOT *)
+    Runtime.Phase := 2;
+    FOR i := 0 TO Runtime.GC_MAX_TRANSITIONS - 1 DO
+        Transitions[i].SnapshotValid := Transitions[i].Validated;
+        IF Transitions[i].Validated THEN
+            Transitions[i].TonStarted := FALSE;
+            Transitions[i].TonElapsed := T#0ms;
+            Transitions[i].TimedConditionValid := FALSE;
+        END_IF;
+    END_FOR;
+
+    (* 3 COMMIT : TOUTES les sources desactivees, PUIS toutes les
+       destinations activees. Une etape desactivee et activee au meme
+       cycle reste active, sans repartir (regle 5). *)
+    Runtime.Phase := 3;
+    anyFired := FALSE;
+    FOR i := 0 TO Runtime.GC_MAX_STEPS - 1 DO
+        wasActive[i] := Steps[i].Active;
+        resetStep[i] := FALSE;
+    END_FOR;
+
+    FOR i := 0 TO Runtime.GC_MAX_TRANSITIONS - 1 DO
+        IF Transitions[i].SnapshotValid THEN
+            anyFired := TRUE;
+            nSrc := Transitions[i].SourceCount;
+            IF nSrc > 3 THEN nSrc := 3; END_IF;
+            FOR j := 0 TO nSrc - 1 DO
+                srcId := Transitions[i].Sources[j];
+                IF (srcId >= 0) AND (srcId < Runtime.GC_MAX_STEPS) THEN
+                    Steps[srcId].Active := FALSE;
+                END_IF;
+            END_FOR;
+            Debug.LastTransitionFiredId := Transitions[i].Id;
+            IF Debug.TotalTransitionsFired < 2147483647 THEN
+                Debug.TotalTransitionsFired := Debug.TotalTransitionsFired + 1;
+            ELSE
+                Debug.TotalTransitionsFired := 0;
+            END_IF;
+        END_IF;
+    END_FOR;
+
+    FOR i := 0 TO Runtime.GC_MAX_TRANSITIONS - 1 DO
+        IF Transitions[i].SnapshotValid THEN
+            nDst := Transitions[i].DestCount;
+            IF nDst > 3 THEN nDst := 3; END_IF;
+            IF (Transitions[i].SplitKind <> 1) AND (nDst > 1) THEN
+                nDst := 1;       (* SplitKind 0 : la premiere destination seule *)
+            END_IF;
+            FOR k := 0 TO nDst - 1 DO
+                dstId := Transitions[i].Destinations[k];
+                IF (dstId >= 0) AND (dstId < Runtime.GC_MAX_STEPS) THEN
+                    Steps[dstId].Active := TRUE;
+                    IF NOT wasActive[dstId] THEN
+                        resetStep[dstId] := TRUE;
+                    END_IF;
+                END_IF;
+            END_FOR;
+        END_IF;
+    END_FOR;
+
+    IF anyFired THEN
+        FOR i := 0 TO Runtime.GC_MAX_STEPS - 1 DO
+            IF resetStep[i] THEN
+                Steps[i].PrevActive := FALSE;   (* nouvelle activation : front montant *)
+                Steps[i].ActiveTime := T#0ms;
+            END_IF;
+        END_FOR;
+        howManyResets := 0;
+        FOR aIdx := 0 TO Runtime.GC_MAX_ACTIONS - 1 DO
+            sid := Actions[aIdx].BoundStepId;
+            IF (sid >= 0) AND (sid < Runtime.GC_MAX_STEPS) THEN
+                IF resetStep[sid] THEN
+                    howManyResets := howManyResets + 1;
+                    Actions[aIdx].Finished         := FALSE;
+                    Actions[aIdx].Started          := FALSE;
+                    Actions[aIdx].Out              := FALSE;
+                    Actions[aIdx].OnPulseDone      := FALSE;
+                    Actions[aIdx].OffPulseDone     := TRUE;
+                    Actions[aIdx].EnableDone       := FALSE;
+                    Actions[aIdx].EnablePulseDone  := FALSE;
+                    Actions[aIdx].TonStarted       := FALSE;
+                    Actions[aIdx].TonElapsed       := T#0ms;
+                    Actions[aIdx].PrevEnableCond   := FALSE;
+                END_IF;
+            END_IF;
+        END_FOR;
+        changedNow := TRUE;
+        pauseToReevaluateCondition := TRUE;
+    END_IF;
+
+END_IF;
+
+(* =========================================================
+   0 RETOUR A LA SITUATION INITIALE : le statut (Started, Finished) des
+   actions au repos des etapes inactives est efface, pour que le nouveau
+   tour parte propre. Les actions des etapes actives et celles qui ont
+   encore quelque chose a faire (K6/K7 armees, K11 en cours) n'y sont
+   pas touchees. Plus de RETURN : le cycle n'est pas perdu.
+   ========================================================= *)
+isInitState := TRUE;
+FOR i := 0 TO Runtime.GC_MAX_STEPS - 1 DO
+    IF Steps[i].Active <> Steps[i].IsInitial THEN
+        isInitState := FALSE;
+    END_IF;
+END_FOR;
+InitPulse := isInitState AND NOT PrevInitState;
+PrevInitState := isInitState;
+
+IF InitPulse THEN
+    FOR aIdx := 0 TO Runtime.GC_MAX_ACTIONS - 1 DO
+        sid := Actions[aIdx].BoundStepId;
+        IF (sid >= 0) AND (sid < Runtime.GC_MAX_STEPS) THEN
+            IF NOT Steps[sid].Active AND NOT Actions[aIdx].Out AND NOT Actions[aIdx].TonStarted
+               AND (Actions[aIdx].OffPulseDone OR ((Actions[aIdx].Kind <> 6) AND (Actions[aIdx].Kind <> 7))) THEN
+                Actions[aIdx].Started := FALSE;
+                Actions[aIdx].Finished := FALSE;
+            END_IF;
+        END_IF;
+    END_FOR;
+    IF InitPulseCount < 32767 THEN
+        InitPulseCount := InitPulseCount + 1;
+    ELSE
+        InitPulseCount := 0;
+    END_IF;
+END_IF;
+
+IF NeedToResetPause THEN
+    NeedToResetPause := FALSE;
+    pauseToReevaluateCondition := FALSE;
+END_IF;
+
+IF NOT(pauseToReevaluateCondition) THEN
+
+    (* 4 UPDATE_STEPS : les fronts. Les temps sont comptes en tete
+       d'appel (Init, 6). *)
+    Runtime.Phase := 4;
+    FOR i := 0 TO Runtime.GC_MAX_STEPS - 1 DO
+        Steps[i].Rising  := Steps[i].Active AND (NOT Steps[i].PrevActive);
+        Steps[i].Falling := (NOT Steps[i].Active) AND Steps[i].PrevActive;
+        Steps[i].PrevActive := Steps[i].Active;
+    END_FOR;
+
+    (* 5 SCAN_ACTIONS *)
+    Runtime.Phase := 5;
+    FOR i := 0 TO Runtime.GC_MAX_ACTIONS - 1 DO
+        Actions[i].Out := FALSE;
+
+        sid := Actions[i].BoundStepId;
+
+        IF (sid >= 0) AND (sid < Runtime.GC_MAX_STEPS) THEN
+
+            (* le temps de la condition (K8, K9, K10) : depuis qu'elle est
+               vue vraie sur l'etape active. 0 au premier cycle. Une fois
+               l'action finie, il ne bouge plus. *)
+            firstEn := FALSE;
+            IF Actions[i].Kind <> 11 THEN
+                IF Actions[i].EnableCond AND Steps[sid].Active THEN
+                    IF NOT Actions[i].Finished THEN
+                        IF NOT Actions[i].EnableDone THEN
+                            Actions[i].EnableDone := TRUE;
+                            Actions[i].TonElapsed := T#0ms;
+                            firstEn := TRUE;
+                        ELSIF Actions[i].TonElapsed < T#24d - dtActs THEN
+                            Actions[i].TonElapsed := Actions[i].TonElapsed + dtActs;
+                        ELSE
+                            Actions[i].TonElapsed := T#24d;
+                        END_IF;
+                    END_IF;
+                ELSE
+                    Actions[i].EnableDone := FALSE;
+                    Actions[i].TonElapsed := T#0ms;
+                    Actions[i].EnablePulseDone := FALSE;
+                END_IF;
+            END_IF;
+
+            (* K11 : une impulsion de Delay sur front de la condition, une
+               par activation ; elle va au bout meme si l'etape est quittee *)
+            IF Actions[i].Kind = 11 THEN
+                IF Actions[i].TonStarted THEN
+                    IF Actions[i].TonElapsed < T#24d - dtActs THEN
+                        Actions[i].TonElapsed := Actions[i].TonElapsed + dtActs;
+                    END_IF;
+                    IF Actions[i].TonElapsed >= Actions[i].Delay THEN
+                        Actions[i].TonStarted := FALSE;
+                    END_IF;
+                ELSIF Steps[sid].Active AND Actions[i].EnableCond AND (NOT Actions[i].PrevEnableCond)
+                      AND (NOT Actions[i].Finished) THEN
+                    Actions[i].TonStarted := TRUE;
+                    Actions[i].TonElapsed := T#0ms;
+                END_IF;
+            END_IF;
+
+            IF Actions[i].EnableCond THEN
+
+                IF Steps[sid].Active THEN
+                    Actions[i].OffPulseDone := FALSE;   (* arme K6/K7 *)
+                END_IF;
+
+                IF Steps[sid].Falling THEN
+                    Actions[i].OnPulseDone := FALSE;
+                END_IF;
+
+                IF Actions[i].Kind = 0 THEN
+                    Actions[i].Out := Steps[sid].Active;
+
+                ELSIF Actions[i].Kind = 1 THEN
+                    Actions[i].Out := Steps[sid].Rising;
+
+                ELSIF Actions[i].Kind = 2 THEN
+                    Actions[i].Out := Steps[sid].Active AND (Steps[sid].ActiveTime >= Actions[i].Delay);
+
+                ELSIF Actions[i].Kind = 3 THEN
+                    IF Steps[sid].Active AND (NOT Actions[i].OnPulseDone) AND (Steps[sid].ActiveTime >= Actions[i].Delay) THEN
+                        Actions[i].Out := TRUE;
+                        Actions[i].OnPulseDone := TRUE;
+                    END_IF;
+
+                ELSIF Actions[i].Kind = 4 THEN
+                    (* au moins le cycle d'activation, meme avec un retard nul *)
+                    Actions[i].Out := Steps[sid].Active AND
+                        (Steps[sid].Rising OR (Steps[sid].ActiveTime <= Actions[i].Delay));
+
+                ELSIF Actions[i].Kind = 5 THEN
+                    Actions[i].Out := Steps[sid].Falling;
+
+                ELSIF Actions[i].Kind = 6 THEN
+                    IF (NOT Steps[sid].Active) AND (NOT Actions[i].OffPulseDone) AND (Steps[sid].InactiveTime >= Actions[i].Delay) THEN
+                        Actions[i].Out := TRUE;
+                        Actions[i].OffPulseDone := TRUE;
+                    END_IF;
+
+                ELSIF Actions[i].Kind = 7 THEN
+                    (* seulement apres une vraie activite de l'etape (armee),
+                       au moins le cycle de desactivation *)
+                    IF (NOT Steps[sid].Active) AND (NOT Actions[i].OffPulseDone) THEN
+                        IF Steps[sid].Falling OR (Steps[sid].InactiveTime <= Actions[i].Delay) THEN
+                            Actions[i].Out := TRUE;
+                        ELSE
+                            Actions[i].OffPulseDone := TRUE;
+                        END_IF;
+                    END_IF;
+
+                ELSIF Actions[i].Kind = 8 THEN
+                    Actions[i].Out :=
+                        Steps[sid].Active AND
+                        (Actions[i].TonElapsed >= Actions[i].Delay);
+
+                ELSIF Actions[i].Kind = 9 THEN
+                    IF Steps[sid].Active AND (NOT Actions[i].Finished) THEN
+                        IF (NOT Actions[i].EnablePulseDone) AND (Actions[i].TonElapsed >= Actions[i].Delay) THEN
+                            Actions[i].Out := TRUE;
+                            Actions[i].EnablePulseDone := TRUE;
+                        END_IF;
+                    END_IF;
+
+                ELSIF Actions[i].Kind = 10 THEN
+                    Actions[i].Out :=
+                        Steps[sid].Active AND (NOT Actions[i].Finished) AND
+                        (firstEn OR (Actions[i].TonElapsed < Actions[i].Delay));
+                END_IF;
+            END_IF;
+
+            IF Actions[i].Kind = 11 THEN
+                Actions[i].Out := Actions[i].TonStarted;
+            END_IF;
+
+            IF (NOT(Actions[i].Started) AND Actions[i].Out) THEN Actions[i].Started := TRUE; END_IF;
+
+            IF Actions[i].Started AND NOT(Actions[i].Finished) THEN
+                CASE Actions[i].Kind OF
+                    0: Actions[i].Finished := NOT Steps[sid].Active;
+                    1: Actions[i].Finished := Steps[sid].Rising;
+                    2: Actions[i].Finished := Steps[sid].Active AND (Steps[sid].ActiveTime >= Actions[i].Delay);
+                    3: Actions[i].Finished := Actions[i].OnPulseDone;
+                    4: Actions[i].Finished := Steps[sid].Active AND (Steps[sid].ActiveTime > Actions[i].Delay);
+                    5: Actions[i].Finished := Steps[sid].Falling;
+                    6: Actions[i].Finished := Actions[i].OffPulseDone;
+                    7: Actions[i].Finished := (NOT Steps[sid].Active) AND (Steps[sid].InactiveTime > Actions[i].Delay);
+                    8: Actions[i].Finished := (NOT Steps[sid].Active);
+                    9: Actions[i].Finished := Actions[i].EnablePulseDone;
+                    10: Actions[i].Finished := (NOT Actions[i].EnableCond) OR (Actions[i].TonElapsed >= Actions[i].Delay) OR (NOT Steps[sid].Active);
+                    11: Actions[i].Finished := NOT Actions[i].TonStarted;
+                END_CASE;
+            END_IF;
+
+            Actions[i].PrevEnableCond := Actions[i].EnableCond;
+        END_IF;
+    END_FOR;
+    dtActs := T#0ms;
+
+END_IF;
+<<<end>>>
+
+<<<section Debug ST>>>
+(* 5b HISTO ETAPES ACTIVES (glissant sur MAX_HIST) : une ligne par etape
+   qui vient de s'activer *)
+activeStepQty := 0;
+firstStepId := -1;
+firstStepName := '';
+
+FOR i := 0 TO Runtime.GC_MAX_STEPS - 1 DO
+    IF Steps[i].Rising THEN
+        activeStepQty := activeStepQty + 1;
+        IF firstStepId = -1 THEN
+            firstStepId := Steps[i].Id;
+            firstStepName := Steps[i].Name;
+        END_IF;
+
+        FOR h := Runtime.GC_MAX_HIST - 1 TO 1 BY -1 DO
+            Debug.HistSteps[h].Line := Debug.HistSteps[h - 1].Line;
+            Debug.HistSteps[h].NtpcNow := Debug.HistSteps[h - 1].NtpcNow;
+        END_FOR;
+        Debug.HistSteps[0].Line := Steps[i].Name;
+        Debug.HistSteps[0].NtpcNow := Runtime.NtpcNow;
+
+        IF HistFill < Runtime.GC_MAX_HIST THEN
+            HistFill := HistFill + 1;
+        END_IF;
+    END_IF;
+END_FOR;
+
+FOR i := 0 TO Runtime.GC_MAX_ACTIONS - 1 DO
+
+    sid := Actions[i].BoundStepId;
+
+    IF Actions[i].Out AND NOT Actions[i].PrevOut AND (sid >= 0) AND (sid < Runtime.GC_MAX_STEPS) THEN
+
+        FOR h := Runtime.GC_MAX_HIST - 1 TO 1 BY -1 DO
+            Debug.HistActions[h].Line := Debug.HistActions[h-1].Line;
+            Debug.HistActions[h].NtpcNow := Debug.HistActions[h-1].NtpcNow;
+        END_FOR;
+
+        Debug.HistActions[0].Line := '1';
+
+        stepIdStr := INT_TO_STRING(Steps[sid].Id);
+        actionIdStr := INT_TO_STRING(Actions[i].Id);
+
+        IF LEFT_INT(stepIdStr, 1) = '+' THEN
+            stepIdStr := RIGHT_INT(stepIdStr, LEN_INT(stepIdStr) - 1);
+        END_IF;
+
+        WHILE (LEN_INT(stepIdStr) > 1) AND (LEFT_INT(stepIdStr, 1) = '0') DO
+            stepIdStr := RIGHT_INT(stepIdStr, LEN_INT(stepIdStr) - 1);
+        END_WHILE;
+
+        IF LEFT_INT(actionIdStr, 1) = '+' THEN
+            actionIdStr := RIGHT_INT(actionIdStr, LEN_INT(actionIdStr) - 1);
+        END_IF;
+
+        WHILE (LEN_INT(actionIdStr) > 1) AND (LEFT_INT(actionIdStr, 1) = '0') DO
+            actionIdStr := RIGHT_INT(actionIdStr, LEN_INT(actionIdStr) - 1);
+        END_WHILE;
+
+        Debug.HistActions[0].Line :=
+            CONCAT_STR(
+                CONCAT_STR(
+                    CONCAT_STR('[',
+                        CONCAT_STR(Steps[sid].Name, ':')
+                    ),
+                    CONCAT_STR(stepIdStr, ']')
+                ),
+                CONCAT_STR(
+                    Debug.HistActions[0].Line,
+                    CONCAT_STR('->',
+                        CONCAT_STR(
+                            CONCAT_STR(Actions[i].Name, ':'),
+                            actionIdStr
+                        )
+                    )
+                )
+            );
+
+        Debug.HistActions[0].NtpcNow := Runtime.NtpcNow;
+
+    END_IF;
+
+END_FOR;
+
+(* =========================================================
+   DEBUG FOCUS : 1 seule etape active affichee, la PREMIERE
+   ========================================================= *)
+Debug.ActiveStepCount := 0;
+FOR i := 0 TO Runtime.GC_MAX_STEPS - 1 DO
+    IF Steps[i].Active THEN
+        Debug.ActiveStepCount := Debug.ActiveStepCount + 1;
+    END_IF;
+END_FOR;
+Debug.NoActiveStepFault := (Debug.ActiveStepCount = 0);
+
+(* Reset focus *)
+Debug.StepFocus.StepId := -1;
+Debug.StepFocus.StepName := '';
+
+Debug.StepFocus.Kind0Line := 'K0 : ';
+Debug.StepFocus.Kind1Line := 'K1 : ';
+Debug.StepFocus.Kind2Line := 'K2 : ';
+Debug.StepFocus.Kind3Line := 'K3 : ';
+Debug.StepFocus.Kind4Line := 'K4 : ';
+Debug.StepFocus.Kind5Line := 'K5 : ';
+Debug.StepFocus.Kind6Line := 'K6 : ';
+Debug.StepFocus.Kind7Line := 'K7 : ';
+Debug.StepFocus.Kind8Line := 'K8 : ';
+Debug.StepFocus.Kind9Line := 'K9 : ';
+Debug.StepFocus.Kind10Line := 'K10 : ';
+Debug.StepFocus.Kind11Line := 'K11 : ';
+Debug.StepFocus.TransitionsLine := 'TRS : ';
+
+focusStep := -1;
+
+(* premiere etape active *)
+FOR sIdx := 0 TO Runtime.GC_MAX_STEPS - 1 DO
+    IF Steps[sIdx].Active AND (focusStep = -1) THEN
+        focusStep := sIdx;
+    END_IF;
+END_FOR;
+
+IF focusStep <> -1 THEN
+    Debug.StepFocus.StepId := Steps[focusStep].Id;
+    Debug.StepFocus.StepName := Steps[focusStep].Name;
+
+    (* Actions nommees de cette etape, groupees par Kind ; une ligne pleine
+       (32 caracteres) garde ce qu'elle a *)
+    FOR aIdx := 0 TO Runtime.GC_MAX_ACTIONS - 1 DO
+        IF (Actions[aIdx].BoundStepId = focusStep) AND (LEN_INT(Actions[aIdx].Name) > 0)
+           AND (Actions[aIdx].Kind >= 0) AND (Actions[aIdx].Kind <= 11) THEN
+
+            CASE Actions[aIdx].Kind OF
+                0: lineTmp := Debug.StepFocus.Kind0Line;
+                1: lineTmp := Debug.StepFocus.Kind1Line;
+                2: lineTmp := Debug.StepFocus.Kind2Line;
+                3: lineTmp := Debug.StepFocus.Kind3Line;
+                4: lineTmp := Debug.StepFocus.Kind4Line;
+                5: lineTmp := Debug.StepFocus.Kind5Line;
+                6: lineTmp := Debug.StepFocus.Kind6Line;
+                7: lineTmp := Debug.StepFocus.Kind7Line;
+                8: lineTmp := Debug.StepFocus.Kind8Line;
+                9: lineTmp := Debug.StepFocus.Kind9Line;
+                10: lineTmp := Debug.StepFocus.Kind10Line;
+                11: lineTmp := Debug.StepFocus.Kind11Line;
+            END_CASE;
+
+            IF LEN_INT(lineTmp) + LEN_INT(Actions[aIdx].Name) + 2 <= 32 THEN
+                lineTmp := CONCAT_STR(CONCAT_STR(lineTmp, Actions[aIdx].Name), ', ');
+            END_IF;
+
+            CASE Actions[aIdx].Kind OF
+                0: Debug.StepFocus.Kind0Line := lineTmp;
+                1: Debug.StepFocus.Kind1Line := lineTmp;
+                2: Debug.StepFocus.Kind2Line := lineTmp;
+                3: Debug.StepFocus.Kind3Line := lineTmp;
+                4: Debug.StepFocus.Kind4Line := lineTmp;
+                5: Debug.StepFocus.Kind5Line := lineTmp;
+                6: Debug.StepFocus.Kind6Line := lineTmp;
+                7: Debug.StepFocus.Kind7Line := lineTmp;
+                8: Debug.StepFocus.Kind8Line := lineTmp;
+                9: Debug.StepFocus.Kind9Line := lineTmp;
+                10: Debug.StepFocus.Kind10Line := lineTmp;
+                11: Debug.StepFocus.Kind11Line := lineTmp;
+            END_CASE;
+
+        END_IF;
+    END_FOR;
+
+    (* Transitions sortantes + destination + CondText, tant que la ligne
+       (100 caracteres) a la place *)
+    FOR tIdx := 0 TO Runtime.GC_MAX_TRANSITIONS - 1 DO
+        isFromStep := FALSE;
+
+        IF Transitions[tIdx].Enabled THEN
+            nSrc := Transitions[tIdx].SourceCount;
+            IF nSrc > 3 THEN nSrc := 3; END_IF;
+            FOR j := 0 TO nSrc - 1 DO
+                IF Transitions[tIdx].Sources[j] = focusStep THEN
+                    isFromStep := TRUE;
+                END_IF;
+            END_FOR;
+
+            IF isFromStep AND (Transitions[tIdx].DestCount >= 1) THEN
+                srcId := Transitions[tIdx].Sources[0];
+                dstId := Transitions[tIdx].Destinations[0];
+                IF (srcId >= 0) AND (srcId < Runtime.GC_MAX_STEPS) AND (dstId >= 0) AND (dstId < Runtime.GC_MAX_STEPS) THEN
+                    IF LEN_INT(Debug.StepFocus.TransitionsLine) + LEN_INT(Steps[srcId].Name) + LEN_INT(Steps[dstId].Name)
+                       + LEN_INT(Transitions[tIdx].CondText) + 10 <= 100 THEN
+                        Debug.StepFocus.TransitionsLine := CONCAT_STR(Debug.StepFocus.TransitionsLine, 'TR{');
+                        Debug.StepFocus.TransitionsLine := CONCAT_STR(Debug.StepFocus.TransitionsLine, Steps[srcId].Name);
+                        Debug.StepFocus.TransitionsLine := CONCAT_STR(Debug.StepFocus.TransitionsLine, '->');
+                        Debug.StepFocus.TransitionsLine := CONCAT_STR(Debug.StepFocus.TransitionsLine, Steps[dstId].Name);
+                        Debug.StepFocus.TransitionsLine := CONCAT_STR(Debug.StepFocus.TransitionsLine, '} [');
+                        Debug.StepFocus.TransitionsLine := CONCAT_STR(Debug.StepFocus.TransitionsLine, Transitions[tIdx].CondText);
+                        Debug.StepFocus.TransitionsLine := CONCAT_STR(Debug.StepFocus.TransitionsLine, '] ');
+                    END_IF;
+                END_IF;
+            END_IF;
+        END_IF;
+    END_FOR;
+END_IF;
+
+Runtime.Phase := 0;
+Debug.CurrentCycle := Runtime.Cycle;
+Debug.Mode := Runtime.Mode;
+Debug.Phase := Runtime.Phase;
+
+<<<end>>>

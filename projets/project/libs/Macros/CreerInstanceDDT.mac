@@ -1,0 +1,39 @@
+(* CreerInstanceDDT
+
+   Une instance de DDT est une variable dont le type est un DDT. Le type doit
+   donc exister AVANT : c'est pour ca que cette macro l'importe au besoin plutot
+   que de laisser la creation echouer avec un message sur un type inconnu. *)
+
+type := Ask('type', 'Quel type derive ?', 'ST_IO_Ana');
+nom  := Ask('nom', 'Nom de l instance', '');
+combien := AskChoice('combien', 'Une seule ou un tableau ?', 'Une seule,Un tableau',
+                     'Une seule');
+AskNow();
+
+IF combien = 'Un tableau' THEN
+    taille := AskNumber('taille', 'Combien d elements ?', 1, 256, '8');
+END_IF;
+
+IF nom = '' THEN
+    Fail('aucun nom donne');
+END_IF;
+
+IF NOT TypeExists(type) THEN
+    IF LibHasItem(type) THEN
+        Log('import du type ' + type);
+        LibImport(type);
+    ELSE
+        Fail('le type ' + type + ' n existe pas et la bibliotheque ne le propose pas');
+    END_IF;
+END_IF;
+
+IF VariableExists(nom) THEN
+    Log(nom + ' existe deja');
+ELSIF combien = 'Un tableau' THEN
+    AddVariable(nom, 'ARRAY[0..' + DINT_TO_STRING(REAL_TO_INT(taille) - 1) + '] OF ' + type,
+                'Global', '');
+    Log(nom + ' : tableau de ' + DINT_TO_STRING(REAL_TO_INT(taille)) + ' ' + type);
+ELSE
+    AddVariable(nom, type, 'Global', '');
+    Log(nom + ' : ' + type);
+END_IF;

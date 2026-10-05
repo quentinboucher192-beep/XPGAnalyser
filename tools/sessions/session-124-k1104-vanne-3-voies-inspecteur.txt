@@ -1,0 +1,33 @@
+# =============================================================================
+#  Session 124 (K2, K1104 - 1.10.4) : l'inspecteur de la vanne 3 voies, avec les
+#  mots de la maquette (scene 4) : Variante, Boisseau, Commande de la position,
+#  Position, Couleur du passage, Couleur fermee, Couleur de mouvement, Couleur de
+#  defaut. Les listes de choix. Copie preparee par prepare2.py.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+arbre "IHM/Vues/Vue_Melange"
+attendre 8
+objet V3_3
+attendre 4
+capture 124_01_inspecteur_vanne_3_voies.png
+propriete-clic "Variante"
+attendre 3
+capture 124_02_inspecteur_variante.png
+touche echap
+attendre 2
+propriete-clic "Boisseau"
+attendre 3
+capture 124_03_inspecteur_boisseau.png
+touche echap
+attendre 2
+propriete-clic "Commande de la position"
+attendre 3
+capture 124_04_inspecteur_commande_position.png
+touche echap
+attendre 2
+quitter

@@ -1,0 +1,13 @@
+# DFB type interface.
+name = WORD_TO_AREBOOL_INV
+version = 0.01
+attribute = TypeCodeCheckSumString = 0604
+attribute = TypeSignatureCheckSumString = CA8A
+attribute = UseNewTplSignAlgo = TRUE
+
+# name ; type ; address ; scope ; init ; comment ; attributes ; element comments
+In ; WORD ;  ; Input ;  ;  ; PositionPin=1 ; 
+Out ; ARRAY[0..15] OF BOOL ;  ; Output ;  ;  ; PositionPin=1 ; 
+
+# section ; name ; language ; order ; activation ; logic ; file
+section ; main ; ST ; 17 ;  ;  ; main.st

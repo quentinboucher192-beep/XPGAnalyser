@@ -1,0 +1,27 @@
+# =============================================================================
+#  Session 84 - 1.11 (chantier T1, tranche 3) : le tutoriel de la vanne a
+#  l'ecran, dans l'appli. help::startTutorial ouvre le bac a sable (une copie
+#  NEUVE d'Armoire_Gaz, prise dans ${PROJETS}), @avant y cree Vue_Tuto, la
+#  tuyauterie et la cuve, puis le calque se pose : le curseur, l'encadre, la
+#  bulle et la barre de commande.
+#  Trois captures : le debut (etape 1, en pause), le milieu (etape 4, 2,5 s :
+#  la saisie de l'ouverture), "A toi" (la consigne en tirets, l'appli repond).
+#  A lancer avec PROJETS=<dossier d'Armoire_Gaz> et XPG_TUTORIELS=tools/tutoriels.
+# =============================================================================
+attendre 30
+tutoriel objet-vanne réglante 1 pause
+tutoriel-attendre
+attendre 20
+capture s84-debut.png
+tutoriel-aller 4 2500
+tutoriel-attendre
+attendre 20
+capture s84-milieu.png
+tutoriel-atoi
+tutoriel-attendre
+attendre 20
+capture s84-atoi.png
+tutoriel-quitter
+attendre 10
+capture s84-quitte.png
+quitter

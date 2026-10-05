@@ -1,0 +1,21 @@
+# =============================================================================
+#  Session 88 - 1.11 (chantier T3, tranche 8) : les lignes de l'arbre que visent
+#  les tutoriels deduits. La cible arbre: de T1 cherche chaque morceau, par le
+#  debut de son libelle, dans les lignes VISIBLES de l'explorateur (UiDriver).
+#   T3_30 : Armoire_Gaz ouvert, l'arbre tel qu'il s'ouvre (arbre-lignes l'ecrit) :
+#           IHM > Vues [n] se voit ; Alarmes [n] est sous Configuration, replie
+#   T3_31 : Configuration deplie (ce que fait le double clic des deduits) : Alarmes se voit
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+arbre-lignes
+capture T3_30_arbre_depart.png
+arbre "IHM/Configuration" deplier
+attendre 10
+arbre-lignes
+capture T3_31_configuration_depliee.png
+quitter

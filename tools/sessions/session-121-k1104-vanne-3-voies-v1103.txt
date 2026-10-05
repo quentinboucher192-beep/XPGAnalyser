@@ -1,0 +1,28 @@
+# =============================================================================
+#  Session 121 (K2, K1104 - 1.10.4) : une 1.10.3 ouvre un projet qui a des vannes
+#  3 voies (la meme copie d'Armoire_Gaz que la session 120). Elle le dit (la
+#  barre d'etat : "type d'objet inconnu 'ThreeWayValve', lu comme un rectangle"),
+#  montre des rectangles, ne plante pas ; on deplace un objet et on enregistre :
+#  le fichier dit "Rectangle", avec toutes les proprietes de la vanne. JOUEE AVEC
+#  L'APPLI 1.10.3 (scratchpad/K2/xpg_analyzer-1.10.3). La session 122 rouvre ce
+#  projet avec la 1.10.4.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+arbre "IHM/Vues/Vue_Vannes_3_Voies"
+attendre 4
+capture 121_01_v1103_le_dit_rectangles.png
+objet V3V_13
+attendre 4
+capture 121_02_v1103_inspecteur_rectangle.png
+vue-glisser 295 115 305 115
+attendre 4
+bandeau-enregistrer
+attendre 10
+capture 121_03_v1103_enregistre.png
+attendre 5
+quitter

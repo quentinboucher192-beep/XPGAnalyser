@@ -1,0 +1,44 @@
+# Derived data type, shared.
+name = ST_GC_DebugStepFocus
+version = 0.14
+#! summary = Le detail d'une etape du moteur GRAFCET : ses actions par qualificatif, ses transitions.
+#! usage = REPRIS DU PROJET MAST. Rempli par DFB_GRAFCETENGINE pour la PREMIERE etape
+#! usage = active : ses actions nommees, rangees par qualificatif, et ses transitions
+#! usage = de sortie. Une ligne pleine garde ce qu'elle a (pas de debordement).
+#! see = ST_GC_Debug
+#! param StepId = L'etape detaillee.
+#! param StepName = Son nom.
+#! param Kind1Line = Ses actions de qualificatif 1.
+#! param Kind2Line = Ses actions de qualificatif 2.
+#! param Kind3Line = Ses actions de qualificatif 3.
+#! param Kind4Line = Ses actions de qualificatif 4.
+#! param Kind5Line = Ses actions de qualificatif 5.
+#! param Kind6Line = Ses actions de qualificatif 6.
+#! param Kind7Line = Ses actions de qualificatif 7.
+#! param Kind8Line = Ses actions de qualificatif 8.
+#! param Kind9Line = Ses actions de qualificatif 9.
+#! param Kind10Line = Ses actions de qualificatif 10.
+#! param Kind11Line = Ses actions de qualificatif 11.
+#! param TransitionsLine = Ses transitions de sortie : TR{X1->X2} [COND].
+#! param Kind0Line = Ses actions continues (qualificatif 0). En fin de type pour ne pas
+#! param Kind0Line = deplacer les champs existants.
+#! changes 0.14 = Kind0Line ajoute EN FIN : les actions continues, les plus courantes,
+#! changes 0.14 = n'apparaissaient nulle part.
+#! changes 0.13 = Range dans la bibliotheque, depuis le projet MAST.
+
+# name ; type ; scope ; initial ; comment
+StepId ; INT ; Member ;  ; 
+StepName ; string[4] ; Member ;  ; 
+Kind1Line ; string[32] ; Member ;  ; 
+Kind2Line ; string[32] ; Member ;  ; 
+Kind3Line ; string[32] ; Member ;  ; 
+Kind4Line ; string[32] ; Member ;  ; 
+Kind5Line ; string[32] ; Member ;  ; 
+Kind6Line ; string[32] ; Member ;  ; 
+Kind7Line ; string[32] ; Member ;  ; 
+Kind8Line ; string[32] ; Member ;  ; 
+Kind9Line ; string[32] ; Member ;  ; 
+Kind10Line ; string[32] ; Member ;  ; 
+Kind11Line ; string[32] ; Member ;  ; 
+TransitionsLine ; string[100] ; Member ;  ; 
+Kind0Line ; string[32] ; Member ;  ; 

@@ -1,0 +1,79 @@
+# =============================================================================
+#  Session 73 - 1.10 : Compiler trouve les erreurs des scripts (chantier N).
+#  Dans une COPIE du projet des sessions (Armoire_Gaz : ${PROJETS}/Armoire_Gaz),
+#  dans la VRAIE application, avec le programme de l'automate du projet.
+#  On ecrit trois fautes dans un script general (un nom mal ecrit, un appel
+#  a une fonction inconnue, une ecriture dans SYS), on les voit soulignees
+#  pendant la frappe, puis Compiler les liste avec leur ligne et leur colonne ;
+#  un double-clic mene a la faute.
+#  Puis Compiler (F7) dans l'editeur : les resultats de tous les scripts sous
+#  le code (maquette, scene 4).
+#  Captures : PNG_1030 a PNG_1036. ECRITE, PAS ENCORE JOUEE.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- A. Un script general, trois fautes tapees --------------------------------
+arbre "IHM/Programmation générale" double
+attendre 8
+bouton "ST"
+attendre 5
+choisir "Créer"
+attendre 5
+# Le clic dans l'editeur (a droite, en haut du code, ecran 1920x1080) lui donne le focus.
+clic 1300 260
+texte "Compteur_Essai := 1;\n"
+texte "Temp_Moteur := Armoirres[0].ana.PT9;\n"
+texte "IHM_JOURNAL();\n"
+texte "SYS.UserName := 'moi';\n"
+attendre 5
+# Les fautes soulignees pendant la frappe (trait ondule rouge, numero de ligne
+# sur fond rouge), le tableau des diagnostics (Ligne, Col.) et son titre
+# ("3 erreurs dans ce script (soulignees pendant que tu tapes)").
+capture PNG_1030_script_fautes_soulignees.png
+
+# ---- B. Le curseur sur une faute : son message sous le code -----------------------
+# Le curseur sur la ligne 2 (Temp_Moteur, souligne) : un clic sur son debut.
+clic 1010 282
+attendre 3
+capture PNG_1031_curseur_sur_la_faute.png
+# La souris sur le trait ondule de Temp_Moteur (ligne 2) : l'infobulle dit le message.
+survol 1040 288
+attendre 3
+capture PNG_1035_infobulle_de_la_faute.png
+
+# ---- B2. Compiler (F7) dans l'editeur : les fautes de tous les scripts sous le code ----
+# (maquette, scene 4) Le tableau du bas devient « Resultats de Compiler » : Script,
+# Ligne, Col., Gravite, Message ; son titre les compte.
+clic 1300 300
+touche f7
+attendre 8
+capture PNG_1036_resultats_de_compiler_editeur.png
+
+# ---- C. Compiler : chaque faute, son script, sa ligne, sa colonne -----------------
+arbre "IHM/Compiler" double
+attendre 5
+bouton "Compiler"
+attendre 10
+ihm-rapport-verifier "n'existe pas" 1
+ihm-rapport-verifier "IHM_JOURNAL prend 1 argument, pas 0" 1
+ihm-rapport-verifier "SYS.UserName est une variable syst" 1
+capture PNG_1032_compiler_fautes_des_scripts.png
+
+# ---- D. Le double-clic mene a la faute (le script, la ligne, la faute selectionnee) --
+ligne "IHM_JOURNAL prend 1 argument, pas 0" double
+attendre 5
+capture PNG_1033_double_clic_mene_a_la_faute.png
+
+# ---- E. Corrige : la liste se vide ---------------------------------------------------
+annuler
+attendre 3
+arbre "IHM/Compiler" double
+attendre 5
+bouton "Compiler"
+attendre 10
+capture PNG_1034_compiler_apres_correction.png

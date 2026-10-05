@@ -1,0 +1,9 @@
+#! summary = Relit l'identifiant d'une alarme et rend sa provenance. L'inverse exact d'AlmUuid.
+#! usage = C'est la raison pour laquelle l'UUID n'a besoin d'AUCUNE table : la
+#! usage = provenance est dans le nombre. Un journal exporte en CSV reste
+#! usage = exploitable des annees apres, sans le projet qui l'a produit.
+#! example = (* d'ou vient le dernier evenement de l'historique ? *)
+#! example = AlmDecode(Uuid := AlmHist[AlmStat.HistHead - 1].Uuid);
+#! example = (* AlmDecode.Rack, .Module, .Voie, .Sous disent la voie *)
+#! see = AlmUuid
+#! see = ST_ALM_Event

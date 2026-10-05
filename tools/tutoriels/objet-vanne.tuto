@@ -1,0 +1,127 @@
+# La vanne et ses variantes (maquette 1.11, scène 2). Bac : Armoire_Gaz, vue Vue_Tuto
+# (la ligne d'azote, la cuve T1). V : ARRAY[0..3] OF T_VANNE (Pos, Defaut, Bouge, Cmd).
+# Format : v111/agents/CONCEPTION-T1.md, section 1. Une cible dont le nom a des
+# espaces s'écrit entre guillemets : "propriete:Couleur allumé". Les cibles propriete: portent
+# le libellé exact de l'inspecteur (HmiPanels.cpp) ; les conditions lisent la clé (objet[Vanne].opening).
+= objet-vanne | Vanne, avec ses variantes
+@sujet objet-vanne
+@bac Armoire_Gaz | Vue_Tuto
+@variantes manuelle, motorisée, pneumatique, réglante
+@variante réglante
+
+# Le bac à sable (tranche 2) : une copie neuve d'Armoire_Gaz n'a ni Vue_Tuto ni
+# Tuyauterie_1 ; @avant les crée à chaque remise à neuf, sans animation, avant l'étape 1.
+@avant
+type T_VANNE "Pos : REAL; Defaut : BOOL; Bouge : BOOL; Cmd : BOOL"
+variable V "ARRAY[0..3] OF T_VANNE"
+vue Vue_Tuto
+poser Tuyauterie 120,262 Tuyauterie_1
+regler Tuyauterie_1 Largeur 520
+poser Cuve 660,180 T1
+
+== 1 | Choisis la variante
+: Dans la bibliothèque, la tuile **Vanne**. La vanne a quatre **variantes** : leurs noms sont en haut, dans le bandeau, à droite d'« Aller à », et celle que montre le tutoriel y est en orange.
+clic biblio:Vanne
+encadrer variantes
+dire "Manuelle : un volant. Motorisée : un moteur M. Pneumatique : une membrane. Réglante : ouverture de 0 à 100 %."
+attendre 1.5s
+clic variante:{variante}
+encadrer variante:{variante}
+[!réglante] dire "La vanne {variante} est ouverte ou fermée."
+[réglante] dire "La vanne réglante est ouverte à 35 %, pas seulement ouverte ou fermée."
+@atoi Clique Vanne dans la bibliothèque, puis choisis la variante.
+@cible variantes
+@verifier biblio.variante <> ""
+@bravo Bien : la vanne {valeur}.
+@onok variante=biblio.variante
+
+== 2 | Pose l'instance
+: Glisse la vanne sur la tuyauterie : elle s'y pose et prend son sens.
+encadrer vue:Tuyauterie_1
+glisser variante:{variante} vue:400,262
+dire "Posée sur la tuyauterie. L'inspecteur, à droite, montre ses propriétés : Commande de la vanne vaut déjà « {variante} »."
+@atoi Glisse la vanne sur la tuyauterie.
+@cible vue:Tuyauterie_1
+@verifier objets[Vanne] >= 1
+@presque objet[Vanne].sur-tuyauterie = non | Elle est posée, mais pas sur la tuyauterie.
+
+== 3 | Nomme-la
+: Le **Nom** sert aux scripts et aux alarmes ; le **Libellé** est écrit sous la vanne.
+clic propriete:Nom
+texte propriete:Nom "V_201"
+touche Return
+encadrer propriete:Nom
+attendre 500ms
+clic propriete:Libellé
+texte propriete:Libellé "V-201"
+touche Return
+dire "Le libellé V-201 est sous la vanne ; les alarmes parleront de « V-201 »."
+@atoi Nomme la vanne V_201, avec le libellé V-201.
+@cible propriete:Nom
+@verifier objet[Vanne].nom = V_201
+@presque objet[Vanne].nom = V201 | Le tutoriel attend V_201, tu as écrit {valeur}.
+
+== 4 | Lie l'ouverture
+[réglante] : L'**Ouverture (%)** suit une variable : `=V[0].Pos`. Après `V[0].`, l'aide à la saisie propose les membres de T_VANNE.
+[!réglante] : La **Valeur** dit si la vanne est ouverte : `=V[0].Pos > 0`.
+[réglante] clic "propriete:Ouverture (%)"
+[réglante] texte "propriete:Ouverture (%)" "="
+[!réglante] clic propriete:Valeur
+[!réglante] texte propriete:Valeur "="
+[réglante] dire "Le = ouvre une expression et reste affiché. L'aide à la saisie propose d'abord ce qui convient : les nombres."
+[!réglante] dire "Le = ouvre une expression et reste affiché. L'aide à la saisie propose d'abord ce qui convient : les BOOL."
+attendre 1.1s
+texte "V[0]."
+encadrer saisie:Pos
+dire "Les membres de T_VANNE, avec leur type : Pos REAL, Defaut BOOL, Bouge BOOL, Cmd BOOL."
+attendre 1.2s
+[réglante] texte "Pos"
+[!réglante] texte "Pos > 0"
+touche Return
+[réglante] dire "La pastille fx est pleine, la ligne teintée, l'expression gardée avec son =. En simulation, la jauge suivra V[0].Pos."
+[!réglante] dire "La pastille fx est pleine, la ligne teintée, l'expression gardée avec son =."
+@atoi Lie la vanne à V[0].Pos.
+[réglante] @verifier objet[Vanne].opening = "=V[0].Pos"
+[!réglante] @verifier objet[Vanne].value = "=V[0].Pos > 0"
+[réglante] @presque objet[Vanne].opening = "V[0].Pos" | Sans « = », c'est une valeur fixe.
+
+== 5 | Ses couleurs et ses états
+: La **Couleur allumé**, et le **Défaut** relié à `=V[0].Defaut` : l'aperçu montre les trois états.
+clic "propriete:Couleur allumé"
+texte "propriete:Couleur allumé" "'#2ECC71'"
+touche Return
+clic "propriete:Défaut (expression)"
+texte "propriete:Défaut (expression)" "=V[0].Defaut"
+touche Return
+encadrer apercu-etats
+dire "Ouverte, fermée, en défaut : le Défaut arme l'alarme Defaut de la vanne."
+attendre 1s
+dire "Le Défaut est relié : en marche, la vanne passera en rouge et clignotera quand V[0].Defaut sera vrai."
+@atoi Relie le Défaut à V[0].Defaut.
+@verifier objet[Vanne].fault = "=V[0].Defaut"
+
+== 6 | Ses alarmes par défaut
+: Les alarmes par défaut s'arment quand leur propriété est reliée.
+encadrer alarmes-objet
+[motorisée, réglante] attendre 1.3s
+[manuelle, pneumatique] attendre 900ms
+[motorisée, réglante] clic "propriete:En mouvement (expression)"
+[motorisée, réglante] texte "propriete:En mouvement (expression)" "=V[0].Bouge"
+[motorisée, réglante] touche Return
+[motorisée, réglante] dire "Course_Trop_Longue s'arme : « V-201 : ne finit pas sa course » si elle bouge plus de 30 s (priorité 3)."
+[motorisée, réglante] clic alarme:Course_Trop_Longue
+[motorisée, réglante] attendre 600ms
+[manuelle, pneumatique] clic alarme:Defaut
+[manuelle, pneumatique] dire "Sa condition, son message (« V-201 : défaut »), sa priorité (2, Haute). Décochable sur cet objet seulement."
+attendre 1s
+
+== 7 | Essaie en simulation
+: **F8** démarre l'IHM : la vanne suit `V[0].Pos` en direct. Quand `V[0].Defaut` passe à TRUE, elle clignote en rouge.
+touche F8
+simuler 1s
+encadrer vue:V_201
+simuler 6.6s
+[réglante] dire "La jauge et le pourcentage suivent V[0].Pos (accéléré ×10). Quand V[0].Defaut passe à TRUE, elle clignote en rouge et l'alarme s'affiche."
+[!réglante] dire "Ouverte dès que V[0].Pos quitte 0 (accéléré ×10). Quand V[0].Defaut passe à TRUE, elle clignote en rouge et l'alarme s'affiche."
+@atoi Démarre l'IHM avec F8.
+@verifier simulation.ihm = marche

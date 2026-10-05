@@ -1,0 +1,72 @@
+# Derived data type, shared.
+name = ST_COM_Modbus
+version = 1.00
+#! summary = Une requete Modbus TCP periodique : lire ou ecrire des registres d'un equipement distant.
+#! usage = L'ADRESSE EST CELLE D'ADDM : '0.0.3{192.168.1.10}1' pour le port Ethernet
+#! usage = d'une CPU M340 - rack 0, emplacement 0, voie 3 - vers l'adresse IP, unite
+#! usage = 1. Pour un module NOE, 'r.m.0{IP}unite'. C'est Control Expert qui la lit,
+#! usage = pas le bloc : une adresse fausse se voit dans Report.
+#! usage = LES REGISTRES SONT DES %MW DISTANTS : First est le numero du premier, comme
+#! usage = dans la documentation de l'equipement (verifier s'il compte a partir de 0
+#! usage = ou de 1 - la plupart des variateurs Schneider comptent a partir de 0).
+#! usage = Ok EST UNE FRAICHEUR, PAS UN SUCCES PASSE : il tombe si le dernier echange
+#! usage = reussi date de plus de StaleMs. Une valeur lue il y a dix minutes n'est
+#! usage = plus une mesure.
+#! see = DFB_COM_MODBUS
+#! see = DFB_EQ_ATV
+#! param Name = Le nom de la requete, pour l'IHM.
+#! param Enable = FALSE : la requete n'est plus envoyee.
+#! param Write = FALSE lit les registres (READ_VAR), TRUE les ecrit (WRITE_VAR).
+#! param Addr = L'adresse ADDM : '0.0.3{192.168.1.10}1'.
+#! param First = Le numero du premier registre distant.
+#! param Nb = Combien de registres, de 1 a 64.
+#! param PeriodMs = Tous les combien la requete part, en ms.
+#! param TimeoutMs = Au-dela sans reponse, l'echange est en erreur. Arrondi a 100 ms,
+#! param TimeoutMs = 100 au moins : Control Expert le compte en dixiemes de seconde.
+#! param StaleMs = Au-dela sans echange reussi, Ok tombe.
+#! param Data = Les registres : ce qui a ete lu, ou ce qu'il faut ecrire. Data[0] est
+#! param Data = le registre First.
+#! param Busy = SORTIE. L'echange est en cours.
+#! param Ok = SORTIE. Le dernier echange reussi date de moins de StaleMs.
+#! param Error = SORTIE. Le dernier echange a echoue : Report dit pourquoi.
+#! param Report = SORTIE. Le compte rendu du dernier echange : GEST[1] de Control
+#! param Report = Expert, 0 si tout va bien. -1 : pas de reponse du systeme de
+#! param Report = communication ; -2 : Nb hors de 1..64.
+#! param OkCount = Combien d'echanges ont reussi.
+#! param ErrCount = Combien ont echoue.
+#! param AgeMs = SORTIE. Depuis combien de temps le dernier echange reussi, en ms,
+#! param AgeMs = plafonne.
+#! param ElapsedMs = Depuis le dernier envoi. Runtime.
+#! param Gest = La table de gestion de l'echange, pour READ_VAR et WRITE_VAR. Runtime.
+#! internal = ElapsedMs, Gest
+#! example = (* declarer : Requetes : ARRAY[0..7] OF ST_COM_Modbus; *)
+#! example = (* l'etat d'un ATV320 : ETA (3201) a LFT, toutes les 200 ms *)
+#! example = Requetes[0].Addr := '0.0.3{192.168.1.21}1';
+#! example = Requetes[0].First := 3201;
+#! example = Requetes[0].Nb := 6;
+#! example = Requetes[0].PeriodMs := 200;
+#! expect = 1 : Requetes[0].Nb = 6
+#! changes 1.00 = NOUVEAU.
+
+# Une requete Modbus TCP periodique.
+
+# name ; type ; scope ; initial ; comment
+Name ; STRING[16] ; Member ;  ; le nom de la requete
+Enable ; BOOL ; Member ; TRUE ; FALSE : plus envoyee
+Write ; BOOL ; Member ;  ; FALSE lire, TRUE ecrire
+Addr ; STRING[32] ; Member ;  ; l'adresse ADDM : '0.0.3{192.168.1.10}1'
+First ; DINT ; Member ; 0 ; le premier registre distant
+Nb ; INT ; Member ; 1 ; combien de registres, 1 a 64
+PeriodMs ; DINT ; Member ; 1000 ; tous les combien, en ms
+TimeoutMs ; DINT ; Member ; 1000 ; au-dela sans reponse : erreur
+StaleMs ; DINT ; Member ; 5000 ; au-dela sans succes : Ok tombe
+Data ; ARRAY[0..63] OF INT ; Member ;  ; les registres lus, ou a ecrire
+Busy ; BOOL ; Member ;  ; SORTIE : echange en cours
+Ok ; BOOL ; Member ;  ; SORTIE : le dernier succes date de moins de StaleMs
+Error ; BOOL ; Member ;  ; SORTIE : le dernier echange a echoue
+Report ; INT ; Member ; 0 ; SORTIE : le compte rendu, 0 si tout va bien
+OkCount ; UDINT ; Member ; 0 ; echanges reussis
+ErrCount ; UDINT ; Member ; 0 ; echanges echoues
+AgeMs ; DINT ; Member ; 2000000000 ; SORTIE : depuis le dernier succes, en ms
+ElapsedMs ; DINT ; Member ; 2000000000 ; runtime, ne pas ecrire
+Gest ; ARRAY[0..3] OF INT ; Member ;  ; runtime, ne pas ecrire

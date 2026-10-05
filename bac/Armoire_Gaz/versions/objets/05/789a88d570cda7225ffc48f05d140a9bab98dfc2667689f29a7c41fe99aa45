@@ -1,0 +1,16 @@
+# Derived data type.
+name = config_gaz
+version = 0.15
+# checksum is recomputed by Control Expert on import; not stored.
+
+# name ; type ; address ; scope ; init ; comment ; attributes ; element comments
+Utilise ; BOOL ;  ; Member ;  ;  ;  ; 
+detoxal ; config_detoxal ;  ; Member ;  ;  ;  ; 
+basc ; config_basculement ;  ; Member ;  ;  ;  ; 
+chgt ; config_chgt ;  ; Member ;  ;  ;  ; 
+purge ; ARRAY[0..2] OF config_purge ;  ; Member ;  ; avant apres helium ;  ; [0]=avant,[1]=apres,[2]=helium
+pompage ; ARRAY[0..2] OF config_pompage ;  ; Member ;  ; avant apres helium ;  ; [0]=avant,[1]=apres,[2]=helium
+surpression ; config_surpression ;  ; Member ;  ;  ;  ; 
+helium ; config_helium ;  ; Member ;  ;  ;  ; 
+Nom_gaz ; string[8] ;  ; Member ;  ;  ;  ; 
+Unite ; string[8] ;  ; Member ;  ;  ;  ; 

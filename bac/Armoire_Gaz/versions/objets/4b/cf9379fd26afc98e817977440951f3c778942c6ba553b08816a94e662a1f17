@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<equipements site="Nord">
+  <equipement repere="V-101" type="Vanne" armoire="A">Vanne d'entrée</equipement>
+  <equipement repere="V-102" type="Vanne" armoire="A">Vanne de sortie</equipement>
+  <equipement repere="P-101" type="Pompe" armoire="A">Pompe à vide</equipement>
+  <equipement repere="PT-1" type="Capteur" armoire="A">Pression bouteille</equipement>
+</equipements>

@@ -1,0 +1,114 @@
+# Derived function block, shared.
+name = DFB_CNT_TOTAL
+version = 1.00
+#! summary = Seize totalisateurs en un appel : debits integres ou impulsions, total exact, jour et veille.
+#! usage = LE TOTAL NE PERD RIEN. La partie entiere est un UDINT, la partie decimale
+#! usage = un REAL qui reste sous 1 : chaque increment, meme de 0,0005, s'ajoute a un
+#! usage = nombre assez petit pour le garder. Un total tenu dans un seul REAL
+#! usage = s'arreterait de compter vers 16 millions d'unites.
+#! usage = MINUIT VIENT DE L'HORLOGE : NewDay de DFB_SYS_CLOCK. Sans horloge, Today
+#! usage = compte depuis le demarrage et Yesterday reste a 0.
+#! example = (* declarer : Compteurs : ARRAY[0..15] OF ST_CNT_Total; Horloge : DFB_SYS_CLOCK;
+#! example =    Debit : REAL; *)
+#! example = Compteurs[0].Flow := Debit;         (* m3/h *)
+#! example = TOT_Station(Count := 1, CycleMs := 20, NewDay := Horloge.NewDay, Tot := Compteurs);
+#! see = ST_CNT_Total
+#! see = DFB_SYS_CLOCK
+#! param Count = Combien de compteurs sont tenus : Tot[0] a Tot[Count - 1], 16 au
+#! param Count = plus.
+#! param CycleMs = La periode de la tache, en ms : DtMs de DFB_SYS_CLOCK. C'est le dt
+#! param CycleMs = de l'integration - une constante fausse fausse chaque metre cube.
+#! param NewDay = Minuit : NewDay de DFB_SYS_CLOCK. Fige Yesterday et remet Today a
+#! param NewDay = zero.
+#! param Tot = Les compteurs, une ligne ST_CNT_Total chacun.
+#! param FaultCount = Combien de compteurs ont une base de temps inutilisable.
+#! changes 1.00 = NOUVEAU.
+#! given = Debit := 36.0
+#! expect = 50 : Compteurs[0].Frac = 0.01
+#! expect = 50 : Compteurs[0].Today = 0.01
+
+# Seize totalisateurs en un appel.
+
+# name ; type ; scope ; initial ; comment
+Count ; INT ; Input ; 16 ; combien de compteurs sont tenus
+CycleMs ; DINT ; Input ; 20 ; la periode de la tache en ms : DtMs de DFB_SYS_CLOCK
+NewDay ; BOOL ; Input ;  ; minuit : NewDay de DFB_SYS_CLOCK
+Tot ; ARRAY[0..15] OF ST_CNT_Total ; InOut ;  ; les compteurs
+FaultCount ; INT ; Output ; 0 ; combien ont une base de temps inutilisable
+i ; INT ; Local ; 0 ; 
+n ; INT ; Local ; 0 ; 
+LAST ; INT ; Local ; 15 ; dernier indice
+inc ; REAL ; Local ; 0.0 ; ce qui s'ajoute ce cycle
+whole ; DINT ; Local ; 0 ; 
+
+<<<section Process ST>>>
+(* =====================================================================
+    DFB_CNT_TOTAL - seize totalisateurs.
+
+    LE TOTAL EST EN DEUX MORCEAUX. Whole (UDINT) garde les unites entieres,
+    Frac (REAL) le reste, toujours sous 1. Un increment de 0,0005 s'ajoute a
+    un nombre plus petit que 2 : il n'est jamais perdu. Dans un seul REAL, il
+    le serait des 16 777 216 unites - sept chiffres, pas un de plus.
+
+    LA PARTIE ENTIERE SORT DE Frac SANS SUPPOSER LE SENS DE L'ARRONDI.
+    REAL_TO_DINT arrondit ou tronque selon les plateformes ; on prend ce
+    qu'il rend, et on recule d'une unite s'il a arrondi au-dessus.
+
+    TODAY EST UNE DIFFERENCE : le total moins celui de minuit.
+   ===================================================================== *)
+
+n := Count;
+IF n > LAST + 1 THEN n := LAST + 1; END_IF;
+IF n < 0 THEN n := 0; END_IF;
+
+FaultCount := 0;
+
+FOR i := 0 TO n - 1 DO
+    IF Tot[i].Reset AND NOT Tot[i].PrevReset THEN
+        Tot[i].Whole := 0;
+        Tot[i].Frac := 0.0;
+        Tot[i].DayWhole := 0;
+        Tot[i].DayFrac := 0.0;
+        Tot[i].Yesterday := 0.0;
+        Tot[i].Pulses := 0;
+    END_IF;
+    Tot[i].PrevReset := Tot[i].Reset;
+
+    Tot[i].Fault := Tot[i].TimeBaseS <= 0.0;
+    IF Tot[i].Fault THEN
+        FaultCount := FaultCount + 1;
+    END_IF;
+
+    inc := 0.0;
+    IF Tot[i].Enable THEN
+        IF NOT Tot[i].Fault AND Tot[i].Flow > 0.0 AND Tot[i].Flow > Tot[i].LowCut THEN
+            inc := Tot[i].Flow * DINT_TO_REAL(CycleMs) / (1000.0 * Tot[i].TimeBaseS);
+        END_IF;
+        IF Tot[i].PulseWeight > 0.0 AND Tot[i].Pulse AND NOT Tot[i].PrevPulse THEN
+            inc := inc + Tot[i].PulseWeight;
+            Tot[i].Pulses := Tot[i].Pulses + 1;
+        END_IF;
+    END_IF;
+    Tot[i].PrevPulse := Tot[i].Pulse;
+
+    Tot[i].Frac := Tot[i].Frac + inc;
+    IF Tot[i].Frac >= 1.0 THEN
+        whole := REAL_TO_DINT(Tot[i].Frac);
+        IF DINT_TO_REAL(whole) > Tot[i].Frac THEN
+            whole := whole - 1;
+        END_IF;
+        Tot[i].Whole := Tot[i].Whole + DINT_TO_UDINT(whole);
+        Tot[i].Frac := Tot[i].Frac - DINT_TO_REAL(whole);
+    END_IF;
+
+    IF NewDay THEN
+        Tot[i].Yesterday := UDINT_TO_REAL(Tot[i].Whole - Tot[i].DayWhole)
+                          + (Tot[i].Frac - Tot[i].DayFrac);
+        Tot[i].DayWhole := Tot[i].Whole;
+        Tot[i].DayFrac := Tot[i].Frac;
+    END_IF;
+    Tot[i].Today := UDINT_TO_REAL(Tot[i].Whole - Tot[i].DayWhole)
+                  + (Tot[i].Frac - Tot[i].DayFrac);
+    Tot[i].Total := UDINT_TO_REAL(Tot[i].Whole) + Tot[i].Frac;
+END_FOR;
+<<<end>>>

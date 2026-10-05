@@ -1,0 +1,123 @@
+# XpgAnalyzer hardware catalog - Modicon M340 local I/O station
+# =============================================================================
+# REFERENCE ; family ; description ; input points ; output points ; rack slots
+#
+# Transcribed from the Control Expert "Nouvel equipement" catalogue, which is
+# the authority. The application still prefers what the .XHW export states about
+# a given project; this table supplies what the export cannot:
+#
+#   1. the input/output split of a module declaring one channel group per
+#      direction, where there is no stride to measure;
+#   2. rack slot counts, implied by the backplane reference;
+#   3. descriptions;
+#   4. the list of parts available when CREATING a configuration, which by
+#      definition is not in any project file.
+#
+# Lines starting with '#' are comments. An entry replaces the built-in one with
+# the same reference, so this file can be corrected without a rebuild.
+#
+# Point counts follow Control Expert's own wording: "Dig 32E" is 32 inputs,
+# "Dig 16S" is 16 outputs, "Dig 8E ... 8S" is 8 of each.
+# =============================================================================
+
+# --- Processors --------------------------------------------------------------
+BMXP341000  ; Modicon M340 ; Processor, Modbus serial                            ; 0  ; 0  ; 0
+BMXP342000  ; Modicon M340 ; Processor, Modbus serial                            ; 0  ; 0  ; 0
+BMXP342010  ; Modicon M340 ; Processor, CANopen                                  ; 0  ; 0  ; 0
+BMXP342020  ; Modicon M340 ; Processor, Ethernet TCP/IP + Modbus serial          ; 0  ; 0  ; 0
+BMXP342030  ; Modicon M340 ; Processor, Ethernet TCP/IP + CANopen                ; 0  ; 0  ; 0
+
+# --- Power supplies ----------------------------------------------------------
+BMXCPS2000  ; Modicon M340 ; Power supply, 100-240 VAC, 20 W                     ; 0  ; 0  ; 0
+BMXCPS3500  ; Modicon M340 ; Power supply, 100-240 VAC, 36 W                     ; 0  ; 0  ; 0
+BMXCPS3020  ; Modicon M340 ; Power supply, 24-48 VDC, 32 W                       ; 0  ; 0  ; 0
+BMXCPS3540T ; Modicon M340 ; Power supply, 125 VDC, 36 W                         ; 0  ; 0  ; 0
+
+# --- Backplanes --------------------------------------------------------------
+BMXXBP0400  ; Modicon M340 ; Backplane, 4 slots                                  ; 0  ; 0  ; 4
+BMXXBP0600  ; Modicon M340 ; Backplane, 6 slots                                  ; 0  ; 0  ; 6
+BMXXBP0800  ; Modicon M340 ; Backplane, 8 slots                                  ; 0  ; 0  ; 8
+BMXXBP1200  ; Modicon M340 ; Backplane, 12 slots                                 ; 0  ; 0  ; 12
+BMEXBP0800  ; Modicon M580 ; Ethernet backplane, 8 slots                         ; 0  ; 0  ; 8
+BMEXBP1200  ; Modicon M580 ; Ethernet backplane, 12 slots                        ; 0  ; 0  ; 12
+
+# --- Analogique --------------------------------------------------------------
+BMXAMI0410  ; Modicon M340 ; 4 entrees ana. HN isolees rapides                   ; 4  ; 0  ; 0
+BMXAMI0800  ; Modicon M340 ; 8 entrees ana. rapides non isolees tension/courant  ; 8  ; 0  ; 0
+BMXAMI0810  ; Modicon M340 ; 8 entrees ana. HN isolees rapides                   ; 8  ; 0  ; 0
+BMXAMM0600  ; Modicon M340 ; 4 E ana. tension/courant, 2 S ana. tension/courant  ; 4  ; 2  ; 0
+BMXAMO0210  ; Modicon M340 ; 2 sorties ana. U/I isolees                          ; 0  ; 2  ; 0
+BMXAMO0410  ; Modicon M340 ; 4 sorties ana. U/I isolees                          ; 0  ; 4  ; 0
+BMXAMO0802  ; Modicon M340 ; 8 sorties ana. courant non isole                    ; 0  ; 8  ; 0
+BMXART0414  ; Modicon M340 ; 4 entrees temperature isolees                       ; 4  ; 0  ; 0
+BMXART0814  ; Modicon M340 ; 8 entrees temperature isolees                       ; 8  ; 0  ; 0
+
+# --- Communication -----------------------------------------------------------
+BMXEIA0100  ; Modicon M340 ; Module AS-interface V3                              ; 0  ; 0  ; 0
+BMXNOC0401  ; Modicon M340 ; 4 ports Ethernet RJ45 10/100                        ; 0  ; 0  ; 0
+BMXNOC04012 ; Modicon M340 ; 4 ports Ethernet RJ45 10/100                        ; 0  ; 0  ; 0
+BMXNOE0100  ; Modicon M340 ; 1 port Ethernet RJ45 10/100                         ; 0  ; 0  ; 0
+BMXNOE01002 ; Modicon M340 ; 1 port Ethernet RJ45 10/100                         ; 0  ; 0  ; 0
+BMXNOE0110  ; Modicon M340 ; 1 port Ethernet RJ45 10/100                         ; 0  ; 0  ; 0
+BMXNOE01102 ; Modicon M340 ; 1 port Ethernet RJ45 10/100                         ; 0  ; 0  ; 0
+BMXNOM0200  ; Modicon M340 ; Module de bus 2 ports RS485/232                     ; 0  ; 0  ; 0
+BMXNOM02002 ; Modicon M340 ; Module de bus 2 ports RS485/232 (SV >= V1.2)        ; 0  ; 0  ; 0
+BMXNOR0200  ; Modicon M340 ; 1 port Ethernet 10/100 RJ45 - RTU                   ; 0  ; 0  ; 0
+BMXNRP0200  ; Modicon M340 ; Convertisseur de fibre MM/LC 2 voies 100 Mb         ; 0  ; 0  ; 0
+BMXNRP0201  ; Modicon M340 ; Convertisseur de fibre SM/LC 2 voies 100 Mb         ; 0  ; 0  ; 0
+
+# --- Comptage ----------------------------------------------------------------
+BMXEAE0300  ; Modicon M340 ; Module SSI 3 voies                                  ; 3  ; 0  ; 0
+BMXEHC0200  ; Modicon M340 ; Compteur rapide 2 voies                             ; 2  ; 0  ; 0
+BMXEHC0800  ; Modicon M340 ; Compteur rapide 8 voies                             ; 8  ; 0  ; 0
+BMXETM0200  ; Modicon M340 ; Entree frequence pour turbomachinerie 2 voies       ; 2  ; 0  ; 0
+
+# --- Mouvement ---------------------------------------------------------------
+BMXMSP0200  ; Modicon M340 ; Sortie a train d'impulsions, 2 voies independantes  ; 0  ; 2  ; 0
+
+# --- Produits tiers ----------------------------------------------------------
+PMXCDA0400  ; Partner      ; Module de diagnostic Partner                        ; 0  ; 0  ; 0
+PMXETW0100  ; Partner      ; Module de communication Ethway                      ; 0  ; 0  ; 0
+PMXNOW0300  ; Partner      ; Module Partner sans fil                             ; 0  ; 0  ; 0
+
+# --- TOR : entrees -----------------------------------------------------------
+BMXDAI0805  ; Modicon M340 ; Dig 8E 220 Vac                                      ; 8  ; 0  ; 0
+BMXDAI0814  ; Modicon M340 ; 8 x 1 e. num. 100 a 120 Vca isolees                 ; 8  ; 0  ; 0
+BMXDAI1602  ; Modicon M340 ; 16 E num. negatives 24 VCA/24 VCC                   ; 16 ; 0  ; 0
+BMXDAI1603  ; Modicon M340 ; Dig 16E 48 Vac                                      ; 16 ; 0  ; 0
+BMXDAI1604  ; Modicon M340 ; Dig 16E 100 a 120 Vac                               ; 16 ; 0  ; 0
+BMXDAI1614  ; Modicon M340 ; 16 x 1 entree numerique supervisee 100 a 120 VCA    ; 16 ; 0  ; 0
+BMXDAI1615  ; Modicon M340 ; 16 x 1 entree numerique supervisee 220 a 240 VCA    ; 16 ; 0  ; 0
+BMXDDI1602  ; Modicon M340 ; Dig 16E 24 Vdc Sink                                 ; 16 ; 0  ; 0
+BMXDDI1603  ; Modicon M340 ; Dig 16E 48 Vdc Sink                                 ; 16 ; 0  ; 0
+BMXDDI1604  ; Modicon M340 ; Dig 16E 125 Vdc Sink                                ; 16 ; 0  ; 0
+BMXDDI3202K ; Modicon M340 ; Dig 32E 24 Vdc Sink                                 ; 32 ; 0  ; 0
+BMXDDI3203  ; Modicon M340 ; Dig 32E 48 Vdc Sink TB                              ; 32 ; 0  ; 0
+BMXDDI3232  ; Modicon M340 ; Dig 32E 12/24 Vdc Sink/Source TB                    ; 32 ; 0  ; 0
+BMXDDI6402K ; Modicon M340 ; Dig 64E 24 Vdc Sink                                 ; 64 ; 0  ; 0
+BMXERT1604  ; Modicon M340 ; TSTAMP 16 E num. 24/125 VCC (SV <= 1.30)            ; 16 ; 0  ; 0
+
+# --- TOR : sorties -----------------------------------------------------------
+BMXDAO1605  ; Modicon M340 ; 16 S num. triac                                     ; 0  ; 16 ; 0
+BMXDAO1615  ; Modicon M340 ; 16 S num. triac                                     ; 0  ; 16 ; 0
+BMXDDO1602  ; Modicon M340 ; Dig 16S trans. source 0,5 A                         ; 0  ; 16 ; 0
+BMXDDO1612  ; Modicon M340 ; 16 S num. negatives statiques                       ; 0  ; 16 ; 0
+BMXDDO3202  ; Modicon M340 ; Dig 32S 12/24 Vdc trans. source 0,5 A               ; 0  ; 32 ; 0
+BMXDDO3202K ; Modicon M340 ; Dig 32Q trans. source 0,1 A                         ; 0  ; 32 ; 0
+BMXDDO6402K ; Modicon M340 ; Dig 64Q trans. source 0,1 A                         ; 0  ; 64 ; 0
+BMXDRA0804  ; Modicon M340 ; Dig 8S 125 Vdc                                      ; 0  ; 8  ; 0
+BMXDRA0805  ; Modicon M340 ; Dig 8S relais isolees                               ; 0  ; 8  ; 0
+BMXDRA0815  ; Modicon M340 ; 8 sorties relais isolees 5-125 VCC / 24-240 VCA 2 A ; 0  ; 8  ; 0
+BMXDRA1605  ; Modicon M340 ; Dig 16S relais                                      ; 0  ; 16 ; 0
+BMXDRC0805  ; Modicon M340 ; 8 sorties relais isolees 5-125 VCC / 24-240 VCA 2 A ; 0  ; 8  ; 0
+
+# --- TOR : mixtes ------------------------------------------------------------
+# CORRECTION. The seeded table said 16 inputs / 8 outputs for BMX DDM 16022,
+# inferred from the "1602" in the reference. Control Expert says "Dig 8E 24 Vdc
+# 8S Source Tr": eight of each. The .XHW export could not settle it - one
+# channel group per direction gives no stride to measure - so the wrong value
+# went unchallenged until the catalogue screenshot arrived. Exactly the failure
+# mode the "from catalog" flag exists to make visible.
+BMXDDM16022 ; Modicon M340 ; Dig 8E 24 Vdc, 8S source transistor                 ; 8  ; 8  ; 0
+BMXDDM16025 ; Modicon M340 ; Dig 8E 24 Vdc, 8S relais                            ; 8  ; 8  ; 0
+BMXDDM3202K ; Modicon M340 ; Dig 16E 24 Vdc, 16S source transistor               ; 16 ; 16 ; 0

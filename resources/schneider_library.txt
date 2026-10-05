@@ -1,0 +1,169 @@
+# EcoStruxure Control Expert - block library, for the editor's assistance
+# =============================================================================
+# library ; family ; kind ; name ; parameters ; returns ; status ; description
+#
+# parameters: pins separated by '|', each prefixed by its direction
+#     >  input        <  output        =  in/out
+#   e.g.  >IN:BOOL|>PT:TIME|<Q:BOOL|<ET:TIME
+#
+# kind:   EF   elementary function, one result, no internal state
+#         EFB  elementary function block, has state, needs an instance
+#         PROC procedure: several outputs, no state
+#
+# status: how much this entry is worth trusting.
+#     standard   defined by IEC 61131-3; Control Expert implements it
+#     observed   seen in a real Control Expert project of yours, so it exists
+#                and the spelling is right
+#     unverified plausible and useful, but not confirmed against Schneider's
+#                documentation. Correct these rather than trusting them.
+#
+# This file is read at start-up and replaces the built-in table entry by entry,
+# so it can be corrected or extended without rebuilding. To make it authoritative
+# see the note at the end.
+# =============================================================================
+
+# --- Standard library : timers and counters (IEC 61131-3) ------------------
+Standard ; Timers ; EFB ; TON ; >IN:BOOL|>PT:TIME|<Q:BOOL|<ET:TIME ;  ; standard ; On-delay timer
+Standard ; Timers ; EFB ; TOF ; >IN:BOOL|>PT:TIME|<Q:BOOL|<ET:TIME ;  ; standard ; Off-delay timer
+Standard ; Timers ; EFB ; TP ; >IN:BOOL|>PT:TIME|<Q:BOOL|<ET:TIME ;  ; standard ; Pulse timer
+Standard ; Counters ; EFB ; CTU ; >CU:BOOL|>R:BOOL|>PV:INT|<Q:BOOL|<CV:INT ;  ; standard ; Up counter
+Standard ; Counters ; EFB ; CTD ; >CD:BOOL|>LD:BOOL|>PV:INT|<Q:BOOL|<CV:INT ;  ; standard ; Down counter
+Standard ; Counters ; EFB ; CTUD ; >CU:BOOL|>CD:BOOL|>R:BOOL|>LD:BOOL|>PV:INT|<QU:BOOL|<QD:BOOL|<CV:INT ;  ; standard ; Up/down counter
+Standard ; Bistable ; EFB ; SR ; >SET1:BOOL|>RESET:BOOL|<Q1:BOOL ;  ; standard ; Set-dominant bistable
+Standard ; Bistable ; EFB ; RS ; >SET:BOOL|>RESET1:BOOL|<Q1:BOOL ;  ; standard ; Reset-dominant bistable
+Standard ; Edge ; EFB ; R_TRIG ; >CLK:BOOL|<Q:BOOL ;  ; standard ; Rising edge detection
+Standard ; Edge ; EFB ; F_TRIG ; >CLK:BOOL|<Q:BOOL ;  ; standard ; Falling edge detection
+
+# --- Base library : arithmetic (IEC 61131-3) -------------------------------
+Base ; Arithmetic ; EF ; ADD ; >IN1:ANY_NUM|>IN2:ANY_NUM ; ANY_NUM ; standard ; Addition
+Base ; Arithmetic ; EF ; SUB ; >IN1:ANY_NUM|>IN2:ANY_NUM ; ANY_NUM ; standard ; Subtraction
+Base ; Arithmetic ; EF ; MUL ; >IN1:ANY_NUM|>IN2:ANY_NUM ; ANY_NUM ; standard ; Multiplication
+Base ; Arithmetic ; EF ; DIV ; >IN1:ANY_NUM|>IN2:ANY_NUM ; ANY_NUM ; standard ; Division
+Base ; Arithmetic ; EF ; MOD ; >IN1:ANY_NUM|>IN2:ANY_NUM ; ANY_NUM ; standard ; Modulo
+Base ; Arithmetic ; EF ; ABS ; >IN:REAL ; REAL ; standard ; Absolute value
+Base ; Arithmetic ; EF ; SQRT ; >IN:REAL ; REAL ; standard ; Square root
+Base ; Arithmetic ; EF ; LN ; >IN:REAL ; REAL ; standard ; Natural logarithm
+Base ; Arithmetic ; EF ; LOG ; >IN:REAL ; REAL ; standard ; Base-10 logarithm
+Base ; Arithmetic ; EF ; EXP ; >IN:REAL ; REAL ; standard ; Exponential
+Base ; Arithmetic ; EF ; SIN ; >IN:REAL ; REAL ; standard ; Sine
+Base ; Arithmetic ; EF ; COS ; >IN:REAL ; REAL ; standard ; Cosine
+Base ; Arithmetic ; EF ; TAN ; >IN:REAL ; REAL ; standard ; Tangent
+Base ; Arithmetic ; EF ; ASIN ; >IN:REAL ; REAL ; standard ; Arc sine
+Base ; Arithmetic ; EF ; ACOS ; >IN:REAL ; REAL ; standard ; Arc cosine
+Base ; Arithmetic ; EF ; ATAN ; >IN:REAL ; REAL ; standard ; Arc tangent
+Base ; Arithmetic ; EF ; EXPT ; >IN1:REAL|>IN2:ANY_NUM ; REAL ; standard ; IN1 raised to the power IN2
+
+# --- Base library : selection and comparison -------------------------------
+Base ; Selection ; EF ; SEL ; >G:BOOL|>IN0:ANY|>IN1:ANY ; ANY ; standard ; IN0 when G is FALSE, IN1 when TRUE
+Base ; Selection ; EF ; MUX ; >K:INT|>IN0:ANY|>IN1:ANY ; ANY ; standard ; Selects the input named by K
+Base ; Selection ; EF ; MAX ; >IN1:ANY|>IN2:ANY ; ANY ; standard ; Larger of the two
+Base ; Selection ; EF ; MIN ; >IN1:ANY|>IN2:ANY ; ANY ; standard ; Smaller of the two
+Base ; Selection ; EF ; LIMIT ; >MN:ANY|>IN:ANY|>MX:ANY ; ANY ; standard ; IN clamped between MN and MX
+Base ; Comparison ; EF ; GT ; >IN1:ANY|>IN2:ANY ; BOOL ; standard ; Greater than
+Base ; Comparison ; EF ; GE ; >IN1:ANY|>IN2:ANY ; BOOL ; standard ; Greater or equal
+Base ; Comparison ; EF ; EQ ; >IN1:ANY|>IN2:ANY ; BOOL ; standard ; Equal
+Base ; Comparison ; EF ; NE ; >IN1:ANY|>IN2:ANY ; BOOL ; standard ; Not equal
+Base ; Comparison ; EF ; LE ; >IN1:ANY|>IN2:ANY ; BOOL ; standard ; Less or equal
+Base ; Comparison ; EF ; LT ; >IN1:ANY|>IN2:ANY ; BOOL ; standard ; Less than
+
+# --- Base library : bit strings --------------------------------------------
+Base ; Bit ; EF ; SHL ; >IN:ANY_BIT|>N:INT ; ANY_BIT ; observed ; Shift left by N bits
+Base ; Bit ; EF ; SHR ; >IN:ANY_BIT|>N:INT ; ANY_BIT ; standard ; Shift right by N bits
+Base ; Bit ; EF ; ROL ; >IN:ANY_BIT|>N:INT ; ANY_BIT ; standard ; Rotate left by N bits
+Base ; Bit ; EF ; ROR ; >IN:ANY_BIT|>N:INT ; ANY_BIT ; standard ; Rotate right by N bits
+Base ; Bit ; EF ; AND ; >IN1:ANY_BIT|>IN2:ANY_BIT ; ANY_BIT ; standard ; Bitwise AND
+Base ; Bit ; EF ; OR ; >IN1:ANY_BIT|>IN2:ANY_BIT ; ANY_BIT ; standard ; Bitwise OR
+Base ; Bit ; EF ; XOR ; >IN1:ANY_BIT|>IN2:ANY_BIT ; ANY_BIT ; standard ; Bitwise exclusive OR
+Base ; Bit ; EF ; NOT ; >IN:ANY_BIT ; ANY_BIT ; standard ; Bitwise complement
+
+# --- Base library : character strings ---------------------------------------
+# Control Expert suffixes these with the type of the length parameter, which is
+# why they read LEN_INT rather than LEN. Every one below appears in your own
+# program, so the spelling is confirmed by your code rather than by memory.
+Base ; String ; EF ; LEN_INT ; >IN:STRING ; INT ; observed ; Length of the string
+Base ; String ; EF ; LEFT_INT ; >IN:STRING|>L:INT ; STRING ; observed ; Leftmost L characters
+Base ; String ; EF ; RIGHT_INT ; >IN:STRING|>L:INT ; STRING ; observed ; Rightmost L characters
+Base ; String ; EF ; MID_INT ; >IN:STRING|>L:INT|>P:INT ; STRING ; unverified ; L characters from position P
+Base ; String ; EF ; CONCAT_STR ; >IN1:STRING|>IN2:STRING ; STRING ; observed ; Concatenation
+Base ; String ; EF ; FIND_INT ; >IN1:STRING|>IN2:STRING ; INT ; observed ; Position of IN2 in IN1, 0 when absent
+Base ; String ; EF ; INSERT_INT ; >IN1:STRING|>IN2:STRING|>P:INT ; STRING ; unverified ; Inserts IN2 into IN1 at P
+Base ; String ; EF ; DELETE_INT ; >IN:STRING|>L:INT|>P:INT ; STRING ; unverified ; Removes L characters from P
+Base ; String ; EF ; REPLACE_INT ; >IN1:STRING|>IN2:STRING|>L:INT|>P:INT ; STRING ; unverified ; Replaces L characters at P
+Base ; String ; EF ; EQUAL_STR ; >IN1:STRING|>IN2:STRING ; BOOL ; unverified ; String equality
+
+# --- Base library : type conversion -----------------------------------------
+# Control Expert names these <SOURCE>_TO_<TARGET>. The ones marked observed are
+# used by your own program; the rest follow the same mechanical naming and are
+# offered because they are useful, not because they have been confirmed.
+Base ; Conversion ; EF ; BOOL_TO_INT ; >IN:BOOL ; INT ; unverified ; Converts BOOL to INT
+Base ; Conversion ; EF ; BOOL_TO_DINT ; >IN:BOOL ; DINT ; unverified ; Converts BOOL to DINT
+Base ; Conversion ; EF ; BOOL_TO_WORD ; >IN:BOOL ; WORD ; unverified ; Converts BOOL to WORD
+Base ; Conversion ; EF ; INT_TO_REAL ; >IN:INT ; REAL ; observed ; Converts INT to REAL
+Base ; Conversion ; EF ; INT_TO_DINT ; >IN:INT ; DINT ; unverified ; Converts INT to DINT
+Base ; Conversion ; EF ; INT_TO_UDINT ; >IN:INT ; UDINT ; observed ; Converts INT to UDINT
+Base ; Conversion ; EF ; INT_TO_UINT ; >IN:INT ; UINT ; unverified ; Converts INT to UINT
+Base ; Conversion ; EF ; INT_TO_WORD ; >IN:INT ; WORD ; unverified ; Converts INT to WORD
+Base ; Conversion ; EF ; INT_TO_STRING ; >IN:INT ; STRING ; observed ; Converts INT to STRING
+Base ; Conversion ; EF ; INT_TO_TIME ; >IN:INT ; TIME ; unverified ; Converts INT to TIME
+Base ; Conversion ; EF ; DINT_TO_REAL ; >IN:DINT ; REAL ; unverified ; Converts DINT to REAL
+Base ; Conversion ; EF ; DINT_TO_INT ; >IN:DINT ; INT ; unverified ; Converts DINT to INT
+Base ; Conversion ; EF ; DINT_TO_UDINT ; >IN:DINT ; UDINT ; unverified ; Converts DINT to UDINT
+Base ; Conversion ; EF ; DINT_TO_STRING ; >IN:DINT ; STRING ; unverified ; Converts DINT to STRING
+Base ; Conversion ; EF ; DINT_TO_TIME ; >IN:DINT ; TIME ; unverified ; Converts DINT to TIME
+Base ; Conversion ; EF ; UINT_TO_INT ; >IN:UINT ; INT ; unverified ; Converts UINT to INT
+Base ; Conversion ; EF ; UINT_TO_DINT ; >IN:UINT ; DINT ; unverified ; Converts UINT to DINT
+Base ; Conversion ; EF ; UINT_TO_UDINT ; >IN:UINT ; UDINT ; unverified ; Converts UINT to UDINT
+Base ; Conversion ; EF ; UDINT_TO_INT ; >IN:UDINT ; INT ; observed ; Converts UDINT to INT
+Base ; Conversion ; EF ; UDINT_TO_DINT ; >IN:UDINT ; DINT ; observed ; Converts UDINT to DINT
+Base ; Conversion ; EF ; UDINT_TO_UINT ; >IN:UDINT ; UINT ; unverified ; Converts UDINT to UINT
+Base ; Conversion ; EF ; UDINT_TO_REAL ; >IN:UDINT ; REAL ; unverified ; Converts UDINT to REAL
+Base ; Conversion ; EF ; UDINT_TO_TIME ; >IN:UDINT ; TIME ; observed ; Converts UDINT to TIME
+Base ; Conversion ; EF ; REAL_TO_INT ; >IN:REAL ; INT ; observed ; Converts REAL to INT
+Base ; Conversion ; EF ; REAL_TO_DINT ; >IN:REAL ; DINT ; unverified ; Converts REAL to DINT
+Base ; Conversion ; EF ; REAL_TO_UDINT ; >IN:REAL ; UDINT ; unverified ; Converts REAL to UDINT
+Base ; Conversion ; EF ; REAL_TO_STRING ; >IN:REAL ; STRING ; unverified ; Converts REAL to STRING
+Base ; Conversion ; EF ; REAL_TO_TIME ; >IN:REAL ; TIME ; observed ; Converts REAL to TIME
+Base ; Conversion ; EF ; WORD_TO_INT ; >IN:WORD ; INT ; unverified ; Converts WORD to INT
+Base ; Conversion ; EF ; WORD_TO_UINT ; >IN:WORD ; UINT ; unverified ; Converts WORD to UINT
+Base ; Conversion ; EF ; WORD_TO_DWORD ; >IN:WORD ; DWORD ; unverified ; Converts WORD to DWORD
+Base ; Conversion ; EF ; WORD_TO_BOOL ; >IN:WORD ; BOOL ; unverified ; Converts WORD to BOOL
+Base ; Conversion ; EF ; DWORD_TO_DINT ; >IN:DWORD ; DINT ; unverified ; Converts DWORD to DINT
+Base ; Conversion ; EF ; DWORD_TO_UDINT ; >IN:DWORD ; UDINT ; unverified ; Converts DWORD to UDINT
+Base ; Conversion ; EF ; DWORD_TO_WORD ; >IN:DWORD ; WORD ; unverified ; Converts DWORD to WORD
+Base ; Conversion ; EF ; TIME_TO_UDINT ; >IN:TIME ; UDINT ; observed ; Converts TIME to UDINT
+Base ; Conversion ; EF ; TIME_TO_UINT ; >IN:TIME ; UINT ; observed ; Converts TIME to UINT
+Base ; Conversion ; EF ; TIME_TO_DINT ; >IN:TIME ; DINT ; unverified ; Converts TIME to DINT
+Base ; Conversion ; EF ; TIME_TO_REAL ; >IN:TIME ; REAL ; unverified ; Converts TIME to REAL
+Base ; Conversion ; EF ; TIME_TO_STRING ; >IN:TIME ; STRING ; unverified ; Converts TIME to STRING
+Base ; Conversion ; EF ; STRING_TO_INT ; >IN:STRING ; INT ; observed ; Converts STRING to INT
+Base ; Conversion ; EF ; STRING_TO_DINT ; >IN:STRING ; DINT ; unverified ; Converts STRING to DINT
+Base ; Conversion ; EF ; STRING_TO_REAL ; >IN:STRING ; REAL ; unverified ; Converts STRING to REAL
+Base ; Conversion ; EF ; STRING_TO_TIME ; >IN:STRING ; TIME ; unverified ; Converts STRING to TIME
+Base ; Conversion ; EF ; BYTE_TO_INT ; >IN:BYTE ; INT ; unverified ; Converts BYTE to INT
+Base ; Conversion ; EF ; BYTE_TO_WORD ; >IN:BYTE ; WORD ; unverified ; Converts BYTE to WORD
+
+# =============================================================================
+#  TO MAKE THIS AUTHORITATIVE
+#
+#  Everything above is either IEC 61131-3, which is a published standard, or
+#  taken from your own project's code. The entries marked 'unverified' are
+#  neither: they follow Control Expert's naming and are almost certainly right,
+#  but "almost certainly" is how a 16-in/8-out module ended up in the hardware
+#  catalogue when it is 8 and 8.
+#
+#  Any one of these makes the whole table exact, in decreasing order of effort
+#  for you:
+#
+#  1. The Libset folder from your Control Expert installation. It holds one
+#     descriptor per family listing every EF and EFB with its pins. A directory
+#     listing plus one descriptor file is enough for me to write a converter and
+#     generate this file completely. Look under
+#       C:\ProgramData\Schneider Electric\Control Expert\...\Libset\
+#     or the install directory's Libset subfolder.
+#
+#  2. Screenshots of the FFB input assistant, one per library family, the way
+#     you sent the module catalogue. Slower, but it worked well last time.
+#
+#  3. A .XPG exported from a scratch project that instantiates the blocks you
+#     care about: the export carries their pins.
+# =============================================================================

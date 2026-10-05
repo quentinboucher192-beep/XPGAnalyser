@@ -1,0 +1,25 @@
+# =============================================================================
+#  Session 1112 - 1.11.2 (UNI, decision 195) : une seule instance, DEUX LANCEMENTS
+#  (le banc wine d'I111, sur une fabrication d'essai qui contient unique-1112).
+#  Cette session est jouee par la PREMIERE instance ; --instance-unique lui fait
+#  prendre le verrou malgre --script (les sessions n'ont pas d'instance unique) :
+#    1. wine XpgAnalyzer.exe --instance-unique --script session-1112-instance-unique.txt
+#       (sans projet : l'accueil, sans dialogue ouvert - une cle administrateur deja
+#       definie, comme pour les autres sessions)
+#    2. 5 a 10 s plus tard, avec le MEME WINEPREFIX :
+#       wine XpgAnalyzer.exe <dossier d'un projet, ex. Armoire_Gaz>
+#       La deuxieme trouve le mutex Local\XPGAnalyser.instance.<utilisateur>, passe sa
+#       ligne de commande par le tube nomme, et s'arrete : CODE 0, en quelques
+#       secondes, sans fenetre (code 4 et une boite de message : la premiere n'a pas
+#       repondu).
+#    3. La premiere revient au premier plan, ouvre le projet (pas de projet modifie :
+#       pas de question) ; attendre-projet passe, puis elle quitte : CODE 0.
+#       La demande n'est jamais arrivee : "toujours pas pret apres 3000 images"
+#       (environ 50 s), CODE 3.
+#  Sur la sortie d'erreur de la premiere : "[instance] une autre instance a ete
+#  lancee (1 argument(s))".
+# =============================================================================
+attendre 30
+attendre-projet
+attendre 60
+quitter

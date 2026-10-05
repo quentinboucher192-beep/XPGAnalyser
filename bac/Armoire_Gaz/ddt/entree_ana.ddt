@@ -1,0 +1,10 @@
+# Derived data type.
+name = entree_ana
+version = 0.02
+# checksum is recomputed by Control Expert on import; not stored.
+
+# name ; type ; address ; scope ; init ; comment ; attributes ; element comments
+mes ; REAL ;  ; Member ;  ;  ;  ; 
+ech_haute ; REAL ;  ; Member ;  ;  ;  ; 
+ech_basse ; REAL ;  ; Member ;  ;  ;  ; 
+raw ; REAL ;  ; Member ;  ;  ;  ; 

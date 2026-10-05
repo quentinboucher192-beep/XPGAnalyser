@@ -1,0 +1,133 @@
+# Derived function block, shared.
+name = DFB_CTL_SCHEDULE
+version = 1.00
+#! summary = Un programmateur horaire : seize plages, huit sorties, jours feries, et un repli quand l'heure n'est pas sure.
+#! usage = L'HEURE VIENT DE DFB_SYS_CLOCK : Valid, DayOfWeek et MinuteOfDay. Le bloc
+#! usage = ne lit aucun mot systeme - il ne sait donc rien de l'heure d'ete, qui est
+#! usage = l'affaire de l'horloge de l'automate.
+#! usage = SANS HEURE SURE, LE REPLI. Valid a FALSE : les plages sont suspendues, et
+#! usage = chaque sortie qu'une plage commande prend FallbackOn. FALSE eteint tout ;
+#! usage = TRUE laisse tourner - le bon choix depend de ce qu'on commande.
+#! example = (* declarer : Plages : ARRAY[0..15] OF ST_CTL_Slot; Sorties : ARRAY[0..7] OF BOOL;
+#! example =    Horloge : DFB_SYS_CLOCK; *)
+#! example = HOR_Batiment(Count := 2, Valid := Horloge.Valid, DayOfWeek := Horloge.DayOfWeek,
+#! example =              MinuteOfDay := Horloge.MinuteOfDay, Holiday := Ferie,
+#! example =              FallbackOn := FALSE, Slots := Plages, Out := Sorties);
+#! example = Ventilation := Sorties[0];
+#! see = ST_CTL_Slot
+#! see = DFB_SYS_CLOCK
+#! param Count = Combien de plages sont lues : Slots[0] a Slots[Count - 1], 16 au
+#! param Count = plus.
+#! param Valid = L'heure est sure : Valid de DFB_SYS_CLOCK.
+#! param DayOfWeek = Le jour de la semaine, 1 lundi a 7 dimanche : DayOfWeek de
+#! param DayOfWeek = DFB_SYS_CLOCK.
+#! param MinuteOfDay = Les minutes depuis minuit : MinuteOfDay de DFB_SYS_CLOCK.
+#! param Holiday = Aujourd'hui est un jour ferie : seules les plages OnHoliday valent.
+#! param FallbackOn = Ce que valent les sorties commandees quand l'heure n'est pas
+#! param FallbackOn = sure.
+#! param Slots = Les plages, une ligne ST_CTL_Slot chacune.
+#! param Out = Les huit sorties, recalculees a chaque cycle : Out[k] est vraie si au
+#! param Out = moins une plage de la sortie k est en cours.
+#! param AnyOn = Au moins une sortie est vraie.
+#! param NoClock = L'heure n'est pas sure : les sorties sont en repli.
+#! changes 1.00 = NOUVEAU.
+#! given = Horloge.Valid := TRUE
+#! given = Horloge.DayOfWeek := 2
+#! given = Horloge.MinuteOfDay := 600
+#! expect = 1 : Ventilation = TRUE
+#! expect = 1 : Plages[0].Active = TRUE
+
+# Un programmateur horaire.
+
+# name ; type ; scope ; initial ; comment
+Count ; INT ; Input ; 16 ; combien de plages sont lues
+Valid ; BOOL ; Input ;  ; l'heure est sure (DFB_SYS_CLOCK.Valid)
+DayOfWeek ; INT ; Input ; 0 ; 1 lundi a 7 dimanche
+MinuteOfDay ; INT ; Input ; 0 ; minutes depuis minuit
+Holiday ; BOOL ; Input ;  ; aujourd'hui est un jour ferie
+FallbackOn ; BOOL ; Input ;  ; la valeur des sorties quand l'heure n'est pas sure
+Slots ; ARRAY[0..15] OF ST_CTL_Slot ; InOut ;  ; les plages
+Out ; ARRAY[0..7] OF BOOL ; InOut ;  ; SORTIE : les huit sorties
+AnyOn ; BOOL ; Output ;  ; au moins une sortie est vraie
+NoClock ; BOOL ; Output ;  ; l'heure n'est pas sure : repli
+i ; INT ; Local ; 0 ; 
+k ; INT ; Local ; 0 ; 
+n ; INT ; Local ; 0 ; 
+LAST ; INT ; Local ; 15 ; dernier indice
+prevDow ; INT ; Local ; 0 ; la veille
+bitToday ; INT ; Local ; 0 ; 
+bitYesterday ; INT ; Local ; 0 ; 
+today ; BOOL ; Local ;  ; 
+yesterday ; BOOL ; Local ;  ; 
+act ; BOOL ; Local ;  ; 
+
+<<<section Process ST>>>
+(* =====================================================================
+    DFB_CTL_SCHEDULE - seize plages horaires, huit sorties.
+
+    L'heure vient de DFB_SYS_CLOCK. Une plage dont la fin est avant le debut
+    passe minuit, et la partie d'apres minuit appartient au JOUR DU DEBUT :
+    la plage du vendredi 22 h - 6 h tourne jusqu'au samedi 6 h, et celle du
+    samedi ne commence pas le samedi a 0 h.
+   ===================================================================== *)
+
+n := Count;
+IF n > LAST + 1 THEN n := LAST + 1; END_IF;
+IF n < 0 THEN n := 0; END_IF;
+
+FOR k := 0 TO 7 DO
+    Out[k] := FALSE;
+END_FOR;
+AnyOn := FALSE;
+NoClock := NOT Valid OR DayOfWeek < 1 OR DayOfWeek > 7;
+
+(* Le bit du jour et celui de la veille : 1 lundi ... 64 dimanche. *)
+bitToday := 1;
+bitYesterday := 1;
+IF NOT NoClock THEN
+    prevDow := DayOfWeek - 1;
+    IF prevDow < 1 THEN prevDow := 7; END_IF;
+    FOR k := 2 TO DayOfWeek DO
+        bitToday := bitToday * 2;
+    END_FOR;
+    FOR k := 2 TO prevDow DO
+        bitYesterday := bitYesterday * 2;
+    END_FOR;
+END_IF;
+
+FOR i := 0 TO n - 1 DO
+    Slots[i].Fault := Slots[i].StartMin < 0 OR Slots[i].StartMin > 1440
+                   OR Slots[i].StopMin < 0 OR Slots[i].StopMin > 1440
+                   OR Slots[i].Channel < 0 OR Slots[i].Channel > 7
+                   OR Slots[i].Days < 0 OR Slots[i].Days > 127;
+    act := FALSE;
+    IF Slots[i].Enable AND NOT Slots[i].Fault THEN
+        IF NoClock THEN
+            (* le repli, seulement sur les sorties qu'une plage commande *)
+            IF FallbackOn THEN
+                Out[Slots[i].Channel] := TRUE;
+            END_IF;
+        ELSIF NOT Holiday OR Slots[i].OnHoliday THEN
+            today := ((Slots[i].Days / bitToday) MOD 2) = 1;
+            yesterday := ((Slots[i].Days / bitYesterday) MOD 2) = 1;
+            IF Slots[i].StartMin < Slots[i].StopMin THEN
+                act := today AND MinuteOfDay >= Slots[i].StartMin
+                       AND MinuteOfDay < Slots[i].StopMin;
+            ELSIF Slots[i].StartMin > Slots[i].StopMin THEN
+                act := (today AND MinuteOfDay >= Slots[i].StartMin)
+                       OR (yesterday AND MinuteOfDay < Slots[i].StopMin);
+            ELSE
+                act := today;
+            END_IF;
+        END_IF;
+    END_IF;
+    Slots[i].Active := act;
+    IF act THEN
+        Out[Slots[i].Channel] := TRUE;
+    END_IF;
+END_FOR;
+
+FOR k := 0 TO 7 DO
+    IF Out[k] THEN AnyOn := TRUE; END_IF;
+END_FOR;
+<<<end>>>

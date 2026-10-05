@@ -1,0 +1,37 @@
+# =============================================================================
+#  Session 1111 - 1.11.1 (T1, R111-18) : la barre du lecteur d'un tutoriel,
+#  cliquee comme une souris. clic-souris passe par App::deliverClientEvent, la
+#  voie d'App::pumpEvents (la bulle des nouveautes, puis le calque du tutoriel,
+#  puis les ecrans) : le chemin des clics du client. "clic X Y" (UiDriver::send)
+#  va droit aux ecrans : la barre ne le voyait pas (R111-18, session 155 de R111,
+#  ou Pause et "A toi" ne faisaient rien, alors qu'une vraie souris marchait).
+#  1. Pause : le lecteur passe en pause, et son horloge ne bouge plus (60 images).
+#  2. Lecture : il repart.
+#  3. "A toi" : la remise a neuf, puis la consigne (l'etat "atoi").
+#  4. Quitter.
+#  A lancer avec PROJETS=<dossier d'Armoire_Gaz>, XPG_TUTORIELS=tools/tutoriels
+#  et --size 1600x900. Trois captures : la pause, "A toi", apres Quitter.
+# =============================================================================
+attendre 30
+tutoriel objet-vanne réglante 4
+tutoriel-attendre
+attendre 20
+tutoriel-etat lecture
+clic-souris lecteur:lecture
+attendre 2
+tutoriel-etat pause
+attendre 60
+tutoriel-etat pause 1
+capture s1111-pause.png
+clic-souris lecteur:lecture
+attendre 2
+tutoriel-etat lecture
+clic-souris lecteur:atoi
+tutoriel-attendre
+attendre 20
+tutoriel-etat atoi
+capture s1111-atoi.png
+clic-souris lecteur:quitter
+attendre 10
+capture s1111-quitte.png
+quitter

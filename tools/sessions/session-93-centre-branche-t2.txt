@@ -1,0 +1,44 @@
+# =============================================================================
+#  Session 93 - 1.11 : le centre d'aide BRANCHE (chantier T2, apres la fusion
+#  d'integration-111 : le lanceur et le compteur de T1, la page des expressions
+#  de T3). A lancer comme la session 89 : PROJETS=<dossier d'Armoire_Gaz> (le bac
+#  a sable du tutoriel) et XPG_TUTORIELS=tools/tutoriels, libs/ dans le dossier
+#  courant (lancer-s93b.sh).
+#   T2_20 : le centre (action help.open) : le compteur de la barre,
+#           « Tutoriels prêts : n / N » (help::countTutorials), plus « 0 / 375 »
+#   T2_21 : la Vanne (aide-sujet objet-vanne) : la carte avec la duree et le
+#           nombre d'etapes du vrai tutoriel (T1), sans « (durée estimée) »
+#   T2_22 : « ▶ Regarder le tutoriel » (aide-cible tuto:objet-vanne) : le
+#           tutoriel joue, hors du centre
+#   T2_23 : tutoriel-quitter : le retour au centre, sur la Vanne
+#   T2_24 : un type d'expression dans le centre (aide-sujet expr-bool) :
+#           l'article de T3 (app::exprpage::article), « Essaie ici… »
+#   T2_25 : « Essaie ici : la page des expressions › » (aide-cible expr:bool) :
+#           la page complete de T3 (HmiExprScreen), sur le type booleen
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+action help.open
+attendre 8
+capture T2_20_centre_compteur.png
+aide-sujet objet-vanne
+attendre 5
+capture T2_21_carte_vanne.png
+aide-cible tuto:objet-vanne
+attendre 5
+tutoriel-attendre
+attendre 10
+capture T2_22_tutoriel_lance.png
+tutoriel-quitter
+attendre 10
+capture T2_23_retour_centre.png
+aide-sujet expr-bool
+attendre 5
+capture T2_24_expressions_centre.png
+aide-cible expr:bool
+attendre 15
+capture T2_25_page_expressions.png
+touche Escape
+attendre 5
+quitter

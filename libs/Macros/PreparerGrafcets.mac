@@ -1,0 +1,184 @@
+(* PreparerGrafcets
+
+   CE DONT TOUS LES GRAFCETS ONT BESOIN, une fois pour le projet :
+
+     la bibliotheque   DFB_GRAFCETENGINE, BUILDING et leurs DDT, importes
+                       s'ils manquent ; une copie plus ancienne est signalee
+     GC_Builder        l'instance de BUILDING que tous les grafcets partagent
+     GC_Temps          le temps des grafcets (TIME), avance une fois par cycle
+     Grafcets          la section qui fait avancer GC_Temps puis appelle la
+                       sous-routine de chaque grafcet
+
+   Lancee par ImporterGrafcet et GenererGrafcet. Lancee seule, elle remet la
+   section Grafcets d'aplomb sans toucher aux grafcets.
+
+   #! summary = Prépare le projet pour les grafcets : bibliothèque GRAFCET, instance de BUILDING, temps des grafcets et section Grafcets qui appelle chacun.
+   #! version = 1.10
+   #! changes 1.10 = Le formulaire : chaque question a son champ (le classeur par …, Ctrl+V ou en le glissant ; les tâches et les sections du projet ; des interrupteurs ; des choix à libellés), ses groupes, son aide et un libellé avec accents. Le code ne change pas.
+   #! usage = LE TEMPS DES GRAFCETS (GC_Temps) avance d'Horloge.DtMs a chaque cycle si le projet a une Horloge (DFB_SYS_CLOCK, creee par ImporterProgramme, ou ici si la question horloge vaut O). Sinon, de la periode de l'onglet Config, constante. C'est le TsNow de tous les moteurs.
+   #! usage = LA SECTION Grafcets est reecrite : son en-tete et la ligne du temps. Les appels de sous-routine qu'elle portait (Grafcet_xxx();) sont gardes, dans le meme ordre ; ImporterGrafcet et GenererGrafcet y ajoutent les leurs.
+   #! usage = UNE COPIE ANCIENNE DU MOTEUR dans le projet (1.48 du projet MAST, par exemple) est signalee, pas remplacee : MettreAJourBibliotheque le fait. Le code genere marche avec les deux - l'interface n'a pas change - mais la 1.48 a les bugs listes dans libs/Client/LISEZ-MOI-GRAFCET.md.
+   #! see = ImporterGrafcet, GenererGrafcet, MettreAJourBibliotheque, RangerSections
+   #! param tache = Les sections générées vont dans cette tâche.
+   #! param tache = La tache d'accueil de la section Grafcets et des sous-routines, MAST en general.
+   #! param prefSection = Vide en général : il sert quand deux automates partagent un projet.
+   #! param prefSection = Le prefixe des sections generees, le meme qu'a l'import. Vide en general.
+   #! param horloge = Les blocs se cadencent sur Horloge.DtMs, le vrai temps du cycle.
+   #! param horloge = O cree l'Horloge (DFB_SYS_CLOCK) si le projet n'en a pas, et le temps des grafcets la suit. N prend la periode de l'onglet Config (20 ms sans classeur).
+   #! categorie = Générer
+   #! champ tache = tache
+   #! libelle tache = Tâche d'accueil des sections
+   #! champ prefSection = nom facultatif
+   #! libelle prefSection = Préfixe des noms de section
+   #! champ horloge = oui-non
+   #! libelle horloge = Appeler DFB_SYS_CLOCK et cadencer les blocs sur lui
+   #! exemple prefSection = {}Grafcets
+   #! groupe Programme = tache, prefSection, horloge
+   #! avance = prefSection
+   #! produit = la bibliothèque GRAFCET, l'instance de BUILDING, le temps des grafcets et la section Grafcets
+   #! appliquer = Préparer le projet pour les grafcets
+*)
+
+tache       := Ask('tache', 'Tache d accueil des sections', 'MAST');
+prefSection := Ask('prefSection', 'Prefixe des noms de section (vide en general)', '');
+horloge     := AskChoice('horloge', 'Appeler DFB_SYS_CLOCK et cadencer les blocs sur lui', 'O,N', 'O');
+AskNow();
+
+nl := CHR(10);
+secG := prefSection + 'Grafcets';
+sHorl := prefSection + 'Horloge';
+
+(* ---- la bibliotheque, les types avant les blocs ----------------------- *)
+elements := 'ST_DebugLine4,ST_DebugLine64,ST_GC_DebugStepFocus,ST_GC_Debug,ST_GC_Runtime,'
+          + 'ST_GC_Step,ST_GC_Transition,ST_GC_Action,ST_GC_CMD,ST_GC_STAT,ST_GC_CTRL,'
+          + 'BUILDING,DFB_GRAFCETENGINE';
+depart := 0;
+virgule := 0;
+nom := '';
+present := FALSE;
+anciens := '';
+WHILE depart < LEN(elements) DO
+    virgule := FIND(elements, ',', depart);
+    IF virgule < 0 THEN
+        nom := MID(elements, depart);
+        depart := LEN(elements);
+    ELSE
+        nom := MID(elements, depart, virgule - depart);
+        depart := virgule + 1;
+    END_IF;
+    IF STARTSWITH(nom, 'ST_') THEN
+        present := TypeExists(nom);
+    ELSE
+        present := PouExists(nom);
+    END_IF;
+    IF NOT present THEN
+        IF LibHasItem(nom) THEN
+            LibImport(nom);
+        ELSE
+            Fail(nom + ' n est ni dans le projet ni dans la bibliotheque : mettez libs a jour');
+        END_IF;
+    ELSIF LibIsOutdated(nom) THEN
+        IF anciens = '' THEN anciens := nom; ELSE anciens := anciens + ', ' + nom; END_IF;
+    END_IF;
+END_WHILE;
+IF anciens <> '' THEN
+    Warn('le projet a une copie ANCIENNE de : ' + anciens + '. Le code genere marche avec, '
+         + 'mais les corrections de la bibliotheque (DFB_GRAFCETENGINE 1.49, BUILDING 0.24) '
+         + 'n y sont pas : lancez MettreAJourBibliotheque.');
+END_IF;
+
+(* ---- les variables partagees ------------------------------------------ *)
+IF VariableExists('GC_Builder') THEN
+    IF UPPER(VariableType('GC_Builder')) <> 'BUILDING' THEN
+        Fail('GC_Builder existe deja avec le type ' + VariableType('GC_Builder') + ' au lieu de BUILDING');
+    END_IF;
+ELSE
+    AddVariable('GC_Builder', 'BUILDING', 'Global', '', '', 'construit les grafcets depuis leur texte');
+END_IF;
+IF VariableExists('GC_Temps') THEN
+    IF UPPER(VariableType('GC_Temps')) <> 'TIME' THEN
+        Fail('GC_Temps existe deja avec le type ' + VariableType('GC_Temps') + ' au lieu de TIME');
+    END_IF;
+ELSE
+    AddVariable('GC_Temps', 'TIME', 'Global', '', '', 'le temps des grafcets : le TsNow de chaque moteur');
+END_IF;
+
+(* ---- le temps : l'Horloge, ou la periode ------------------------------ *)
+temps := '';
+IF VariableExists('Horloge') THEN
+    temps := 'DINT_TO_TIME(Horloge.DtMs)';
+ELSIF horloge = 'O' THEN
+    IF NOT PouExists('DFB_SYS_CLOCK') AND LibHasItem('DFB_SYS_CLOCK') THEN
+        LibImport('DFB_SYS_CLOCK');
+    END_IF;
+    IF NOT PouExists('DFB_SYS_CLOCK') AND NOT LibHasItem('DFB_SYS_CLOCK') THEN
+        Fail('DFB_SYS_CLOCK n est ni dans le projet ni dans la bibliotheque : '
+             + 'repondez N a la question de l horloge, ou mettez libs a jour');
+    END_IF;
+    AddVariable('Horloge', 'DFB_SYS_CLOCK', 'Global', '', '',
+                'le temps reel du cycle : DtMs pour tous les blocs');
+    IF NOT SectionExists(sHorl) THEN AddSection(sHorl, tache, 'ST', ''); END_IF;
+    ClearSection(sHorl);
+    AppendToSection(sHorl, '(* Genere par PreparerGrafcets. EN TETE DE TACHE : le temps reel du cycle,');
+    AppendToSection(sHorl, '   que suivent les grafcets (GC_Temps) et les autres blocs. *)');
+    AppendToSection(sHorl, 'Horloge(PeriodMs := %SW0, LastCycleMs := %SW30, Tick := %SD18, '
+        + 'TickUnitMs := 100,');
+    AppendToSection(sHorl, '        RtcSec := %SW50, RtcHourMin := %SW51, RtcMonthDay := %SW52, '
+        + 'RtcYear := %SW53,');
+    AppendToSection(sHorl, '        RtcDow := %SW49, RtcLost := %S51);');
+    Log('Horloge creee (DFB_SYS_CLOCK), section ' + sHorl);
+    temps := 'DINT_TO_TIME(Horloge.DtMs)';
+ELSE
+    periode := Setting('Periode (ms)');
+    IF periode = '' THEN periode := '20'; END_IF;
+    temps := 'T#' + periode + 'ms';
+    Log('temps des grafcets : la periode constante, ' + periode + ' ms');
+END_IF;
+
+(* ---- la section Grafcets : l'en-tete, le temps, les appels gardes ----- *)
+ancien := '';
+IF SectionExists(secG) THEN
+    IF IsSubroutine(secG) THEN
+        Fail(secG + ' existe deja et c est une SOUS-ROUTINE : la section Grafcets doit tourner a chaque cycle');
+    END_IF;
+    ancien := SectionText(secG);
+ELSE
+    AddSection(secG, tache, 'ST', '');
+END_IF;
+ClearSection(secG);
+AppendToSection(secG, '(* Genere par PreparerGrafcets (ImporterGrafcet, GenererGrafcet). Le temps');
+AppendToSection(secG, '   des grafcets avance une fois par cycle, puis chaque grafcet tourne dans sa');
+AppendToSection(secG, '   sous-routine Grafcet_xxx : ses receptivites, son moteur, ses sorties.');
+AppendToSection(secG, '   Place apres les modes et avant le controle et les equipements :');
+AppendToSection(secG, '   les interverrouillages ont le dernier mot sur ce que les grafcets commandent. *)');
+AppendToSection(secG, 'GC_Temps := GC_Temps + ' + temps + ';');
+
+(* Les appels qu'elle portait : une ligne "Grafcet_xxx();" chacun. *)
+gardes := 0;
+debut := 0;
+fin := 0;
+ligne := '';
+long := 0;
+WHILE debut < LEN(ancien) DO
+    fin := FIND(ancien, nl, debut);
+    IF fin < 0 THEN fin := LEN(ancien); END_IF;
+    ligne := MID(ancien, debut, fin - debut);
+    debut := fin + 1;
+    WHILE LEN(ligne) > 0 AND (MID(ligne, 0, 1) = ' ' OR MID(ligne, 0, 1) = CHR(9)) DO
+        ligne := MID(ligne, 1);
+    END_WHILE;
+    long := LEN(ligne);
+    WHILE long > 0 AND (MID(ligne, long - 1, 1) = ' ' OR MID(ligne, long - 1, 1) = CHR(13)) DO
+        ligne := MID(ligne, 0, long - 1);
+        long := LEN(ligne);
+    END_WHILE;
+    IF STARTSWITH(ligne, prefSection + 'Grafcet_') AND long > 3 THEN
+        IF MID(ligne, long - 3, 3) = '();' THEN
+            AppendToSection(secG, ligne);
+            gardes := gardes + 1;
+        END_IF;
+    END_IF;
+END_WHILE;
+
+Log('section ' + secG + ' : le temps des grafcets (' + temps + ') et '
+    + DINT_TO_STRING(gardes) + ' appel(s) de grafcet garde(s)');

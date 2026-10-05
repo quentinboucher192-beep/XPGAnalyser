@@ -1,0 +1,42 @@
+# XpgAnalyzer - vue IHM (format 19)
+vue id=131 nom="Pied_Conduite" description="Bas de page commun" largeur=1280 hauteur=40 fond="#20242B" calque_actif=132 role=pied
+grille visible=1 pas=10 magnetisme_grille=1 magnetisme_objets=1 magnetisme_guides=1
+calque id=132 nom="Calque 1" visible=1 verrou=0
+objet id=133 type=Rectangle nom="Bande_Pied" calque=132 parent=0 verrou=0 cache=0
+prop cle=x valeur="0"
+prop cle=y valeur="0"
+prop cle=w valeur="1280"
+prop cle=h valeur="40"
+prop cle=rot valeur="0"
+prop cle=flipH valeur="FALSE"
+prop cle=flipV valeur="FALSE"
+prop cle=visible valeur="TRUE"
+prop cle=opacity valeur="100"
+prop cle=fill valeur="#10151C"
+prop cle=stroke valeur="#2A3444"
+prop cle=strokeWidth valeur="1"
+prop cle=radius valeur="0"
+prop cle=variable valeur=""
+prop cle=refresh valeur="500"
+prop cle=access valeur="0"
+objet id=134 type=Text nom="Texte_Pied" calque=132 parent=0 verrou=0 cache=0
+prop cle=x valeur="20"
+prop cle=y valeur="10"
+prop cle=w valeur="900"
+prop cle=h valeur="26"
+prop cle=rot valeur="0"
+prop cle=flipH valeur="FALSE"
+prop cle=flipV valeur="FALSE"
+prop cle=visible valeur="TRUE"
+prop cle=opacity valeur="100"
+prop cle=text valeur="Armoire_Gaz 1.0  -  IHM en marche depuis {Secondes_IHM:t}"
+prop cle=font valeur="Sans"
+prop cle=fontSize valeur="15"
+prop cle=textColor valeur="#8A96A8"
+prop cle=align valeur="gauche"
+prop cle=wrap valeur="FALSE"
+prop cle=fill valeur=""
+prop cle=variable valeur=""
+prop cle=refresh valeur="500"
+prop cle=access valeur="0"
+fin

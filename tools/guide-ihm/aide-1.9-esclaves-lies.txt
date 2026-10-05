@@ -1,0 +1,92 @@
+# =============================================================================
+#  Aide F1 de la 1.9 (chantier C) : l'esclave simulé lié et les repères des
+#  lectures simulées. Même syntaxe que guide-ihm.txt ; à fondre dans le guide
+#  (chapitre des équipements) par le chef de projet.
+#
+#  Sujets de guide-ihm.txt qui parlent encore du « jumeau » et qu'il faudra
+#  réécrire (l'écran dit maintenant « esclave simulé ») :
+#    - esclaves-virtuels (13 mentions) : le sujet entier devient « Les esclaves
+#      simulés » ; renvoyer vers esclaves-lies pour le clone d'un vrai appareil ;
+#      « Créer le jumeau » -> la case « Cloner en esclave simulé » ; la ligne au
+#      cadenas sous le vrai ; « En simulation : au jumeau » -> « L'IHM lit ».
+#    - equipements (11) : les colonnes de la liste (Équipement, Type, Adresse,
+#      État, L'IHM lit, Var., Zones mémoire, Description), le filtre Montrer, le
+#      résumé, la fiche (Son esclave simulé, L'IHM lit) ; « Démarrer les
+#      jumeaux » -> « Démarrer les esclaves ».
+#    - valeurs-simulees (9) : « le jumeau choisi » -> « l'esclave simulé
+#      choisi » ; l'onglet de la simulation s'appelle « Esclaves simulés ».
+#    - outil-modbus (8) : viser l'esclave simulé (bouton Outil Modbus de sa
+#      fiche : 127.0.0.1 et son port).
+#    - carte-memoire (8) : « la mémoire du jumeau » -> « de l'esclave simulé ».
+#    - simulation (3) : l'onglet Jumeaux -> Esclaves simulés ; les repères des
+#      lectures simulées (renvoyer vers lectures-simulees).
+#    - reseau-pc (2) : « les jumeaux gardent l'adresse de leur appareil ».
+#    - zones-memoire (1), verifier (1), didacticiel (1) : le mot seulement.
+# =============================================================================
+
+== esclaves-lies | Les esclaves simulés liés
+: Un vrai appareil Modbus TCP peut avoir un clone simulé : un esclave Modbus dans l'application, avec sa configuration, lié à lui (le cadenas). L'IHM le lit à la place du vrai quand tu le choisis, ou toute seule quand le vrai ne répond plus.
+@mots esclave simulé, Esclave simulé, esclaves simulés, Cloner en esclave simulé, L'IHM lit, Basculer après, Revenir au vrai, Détacher, Détacher…, Repris du vrai appareil, Sur le poste d'exploitation, seulement simulé, Seulement simulé, lié, cadenas
+@lieux equipements
+@voir lectures-simulees, equipements, esclaves-virtuels, valeurs-simulees, carte-memoire, outil-modbus
+### Le créer
+1. Configuration › Équipements, onglet **Équipements** : choisis le vrai appareil (un équipement Modbus TCP).
+2. Dans sa fiche, partie **Son esclave simulé**, coche **Cloner en esclave simulé** (ou le bouton « Cloner en esclave simulé » de la barre).
+3. Sa ligne apparaît sous le vrai, en retrait : « ↳ [cadenas] [fiole] Variateur ATV320 · esclave simulé ». Le type dit « Esclave simulé », l'adresse « 127.0.0.1:<port> (comme 192.168.1.31) » : il répond dans ce PC, à la place du vrai.
+Un clone tout neuf est en **automatique** : l'IHM lit le vrai, et son esclave seulement si le vrai ne répond plus. Ctrl+Z le retire.
+### Le cadenas : ce qui suit le vrai
+L'esclave reprend du vrai appareil : son numéro d'esclave (Unit Id), ses zones mémoire, ses variables liées, l'ordre des mots. Ces lignes sont en lecture seule, chacune avec un petit cadenas : pour les changer, change le vrai, l'esclave suit.
+Ce qui est à lui : son nom affiché, sa marche, son port local, sa mémoire au démarrage, son temps de réponse (et le plus ou moins), ses pannes (Répond, Exception forcée, Répond au ping), Visible sur le vrai réseau, et ses valeurs animées ou forcées.
+### La fiche de l'esclave
+Un clic sur sa ligne ouvre sa fiche. En tête, une carte violette « Esclave simulé lié à Variateur ATV320 » et ses boutons :
+| Bouton | Ce qu'il fait |
+| Valeurs simulées | Ses valeurs qui bougent toutes seules, la zone de mouvement, les forçages. |
+| Carte mémoire | Ses cases en direct, ses comportements. |
+| Outil Modbus | L'outil Modbus, en lecture cyclique, qui vise l'esclave (127.0.0.1 et son port) : il faut qu'il soit en marche. |
+| Détacher… | Il devient un esclave seulement simulé, indépendant (voir plus bas). |
+Puis **Repris du vrai appareil** (au cadenas), **L'esclave simulé** (ses réglages) et **En ce moment** : lu par l'IHM ou non (et depuis quand), ses requêtes et ses écritures refusées, ses clients, et sa structure système `SYS.Slave.<nom>`.
+### L'IHM lit : trois choix
+Dans la fiche du vrai, partie **L'IHM lit**, la ligne **Dans l'application** :
+| Choix | Ce que lit l'IHM |
+| le vrai appareil | Toujours le vrai : s'il se tait, ses valeurs gardent la dernière lue (et leur qualité le dit). |
+| l'esclave simulé | Toujours l'esclave : toutes ses valeurs sont simulées (le vrai n'est pas là, ou on ne veut pas y toucher). |
+| le vrai ; l'esclave s'il ne répond pas | Automatique : le vrai tant qu'il répond ; l'esclave après « Basculer après » secondes de silence ; le vrai de nouveau dès qu'il répond (si « Revenir au vrai » le permet). |
+La colonne **L'IHM lit** de la liste le dit pour chaque équipement : « le vrai appareil », une étiquette AUTO devant en automatique, « l'esclave simulé » en violet ; sur la ligne de l'esclave, « prêt, pas lu » ou « ● lu par l'IHM depuis 14:02:31 ». La ligne **Maintenant** de la fiche dit qui l'IHM lit en ce moment, et depuis quand.
+### La bascule automatique, pas à pas
+1. Le vrai appareil ne répond plus : sa liaison se coupe, son état devient « injoignable depuis 14:02:21 » (en rouge).
+2. Après **Basculer après (s)** secondes (10 par défaut, de 1 à 3600), l'IHM lit son esclave simulé : un avis le dit (« Il ne répond plus depuis 10 s : l'IHM lit maintenant son esclave simulé. Les valeurs à l'écran sont simulées. »), le journal des événements aussi (Communication), et les courbes de ses variables portent une marque violette.
+3. Pendant la bascule, le vrai est essayé toutes les 5 s (une lecture Modbus).
+4. Deux essais réussis de suite : si **Revenir au vrai** dit « dès qu'il répond », l'IHM lit de nouveau le vrai (un avis, une marque) ; s'il dit « non : l'esclave jusqu'au redémarrage », elle reste sur l'esclave jusqu'au prochain démarrage de l'IHM.
+> Pendant la bascule, l'esclave répond avec ses propres valeurs (animées, forcées, ou sa mémoire) : ce ne sont pas les vraies. Les repères des lectures simulées le montrent à l'écran.
+### Sur le poste d'exploitation
+La ligne **Sur le poste d'exploitation** règle le poste à part : **toujours le vrai appareil** (au départ : un poste en production ne lit jamais une valeur simulée sans qu'on l'ait voulu), **automatique** (comme dans l'application), ou **au choix d'un administrateur**, sur la page Simulation de Paramètres système (Ctrl+Alt+S, permission Administrer).
+### Montrer, le résumé
+Le filtre **Montrer** : tous les équipements, les vrais appareils, les esclaves simulés (les lignes des esclaves liés et les équipements seulement simulés), ceux lus en simulé. Au-dessus du tableau, le résumé : « 7 vrais appareils (5 joignables) · 2 esclaves simulés liés · 2 seulement simulés · l'IHM lit 2 équipements en simulé ». À droite de la barre d'état du volet : « 2 équipements lus en simulé ».
+### Détacher, retirer, supprimer
+- **Détacher…** (la carte de sa fiche) : l'esclave devient un équipement seulement simulé, indépendant, avec le nom de l'esclave ; il garde sa configuration, ses mouvements, ses forçages et sa mémoire. Le vrai appareil perd son clone et garde ses variables liées. Ctrl+Z revient.
+- **Suppr** sur la ligne de l'esclave, ou décocher **Cloner en esclave simulé** : l'esclave est retiré (Ctrl+Z le rend, avec ses valeurs animées et forcées).
+- Supprimer le vrai appareil propose de garder son esclave : il devient alors seulement simulé.
+### Seulement simulé
+Un équipement **seulement simulé** n'a pas encore de vrai appareil (pas encore livré) : son esclave est sa seule source, partout, aussi sur le poste. Sa ligne porte une fiole, son type dit « Seulement simulé », la colonne L'IHM lit « son esclave (pas encore livré) ». Quand le vrai arrive, décoche **Seulement simulé** dans sa fiche et donne-lui sa vraie adresse.
+
+== lectures-simulees | Les lectures simulées et leurs repères
+: En marche, une valeur lue sur un esclave simulé (et non sur le vrai appareil) se voit : un cadre violet en tirets et une pastille sur l'objet, le bandeau LECTURES SIMULÉES en haut de l'IHM, la barre d'état, les marques des courbes, un avis à chaque bascule.
+@mots LECTURES SIMULÉES, lectures simulées, Lue sur l'esclave simulé, Repérer les lectures simulées, Repères, lu en simulé, lus en simulé, violet
+@lieux simulation
+@voir esclaves-lies, simulation, courbes, qualite
+### Le violet est réservé au simulé
+Partout dans l'application, le violet dit « simulé » : la ligne d'un esclave dans Configuration › Équipements, sa fiche, l'onglet Esclaves simulés de la simulation, et en marche les lectures simulées.
+### Sur l'objet : le cadre et la pastille
+Chaque objet dont une valeur vient d'un esclave simulé porte un **cadre violet en tirets** autour de lui et une **pastille ronde violette avec une fiole**, à cheval sur son coin haut droit : elle ne cache ni le libellé ni la valeur. Si l'objet a aussi un repère de qualité (orange : ancienne ; rouge : mauvaise), les deux restent lisibles : la pastille violette se pousse à gauche de l'autre.
+Au survol (ou un appui long au doigt), une infobulle dit quelle variable (sa description, sinon le libellé de l'objet), quel équipement, et depuis quand : « Lue sur l'esclave simulé — Consigne variateur (Consigne_Variateur) : Variateur ATV320 ne répond pas depuis 14:02:21 ; l'IHM lit son esclave simulé depuis 14:02:31. »
+### Le bandeau
+Tant qu'au moins un équipement est lu sur son esclave, un bandeau violet rayé s'affiche en haut de l'écran de l'IHM (dans Simuler l'IHM, juste au-dessus de la vue quand il y a la place ; sinon par-dessus) : la fiole, l'étiquette **LECTURES SIMULÉES**, puis chaque équipement et pourquoi (« Variateur ATV320 (le vrai ne répond pas depuis 14:02:21) · Balance B (seulement simulé) »). Sur le poste d'exploitation : tout en haut de l'écran, sur toute la largeur.
+### La barre d'état, l'onglet Esclaves simulés
+- La barre d'état de la simulation, à droite : « Variateur ATV320 et Balance B lus en simulé ».
+- L'onglet **Esclaves simulés** de la simulation (l'ancien onglet Jumeaux) range les esclaves par groupe : esclave lié prêt (l'IHM lit le vrai), esclave lié lu par l'IHM (avec l'heure de la bascule), seulement simulé ; la ligne du bas compte les esclaves en marche, les valeurs animées et forcées, les équipements lus en simulé.
+### Les courbes, les avis
+Chaque bascule pose une marque sur les courbes des variables liées : un trait pointillé violet avec l'heure (« 14:02:31 · lu sur l'esclave simulé », « 14:05:10 · lu sur le vrai appareil »). Deux marques proches : la plus récente garde son texte, l'autre passe de l'autre côté de son trait ou sur une seconde ligne. Chaque bascule fait aussi un avis et un message dans le volet Équipements (« 14:02:31 · Variateur ATV320 — Il ne répond plus depuis 10 s : l'IHM lit maintenant son esclave simulé. Les valeurs à l'écran sont simulées. ») et une ligne au journal des événements (Communication).
+### Repérer ou non
+- La case **Repérer les lectures simulées** (Configuration › Équipements, à droite de la barre du filtre) règle les repères pour le projet : le poste d'exploitation et Simuler l'IHM. Décochée : ni cadre, ni pastille, ni bandeau (un poste de formation, tout simulé). Ctrl+Z la remet.
+- Dans **Simuler l'IHM**, le bouton **Repères** de la barre les masque pour la séance seulement (le projet ne change pas) ; la barre d'état dit toujours qui est lu en simulé.
+! Les repères ne disent pas que la valeur est fausse : elle vient d'un esclave simulé, pas du vrai appareil. Une commande écrite pendant la bascule va à l'esclave, pas au vrai.

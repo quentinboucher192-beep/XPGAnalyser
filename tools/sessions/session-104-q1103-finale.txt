@@ -1,0 +1,110 @@
+# =============================================================================
+#  Session 104 (Q-A, Q1103 - 1.10.3, captures finales sur l'appli integree) :
+#  les deux explorateurs deplient par familles, la famille Reperes et son clic ;
+#  la case a repere en ambre et son infobulle ; les filtres de l'inspecteur ;
+#  la galerie Vue et Popup (seuls les modeles du role) ; la simulation (repere
+#  non remplace, en ambre) ; la barre du simulateur et son clic droit.
+#  Sur une COPIE d'Armoire_Gaz preparee avant (scratchpad/Q1103/qa/run.sh) : dans
+#  ihm/vues/0272-Vue_Synoptique.vue, l'objet id=276 (V_101) recoit expr="$Vanne$.Ouv"
+#  (value), expr="$Vanne$.Nom" (label), expr="$Vanne$.Pos" (opening), et deux actions
+#  (Clic : Ouvrir une popup Popup_CAPTEUR ; Clic : Mettre a 1 Marche_Ligne).
+#  La 8e partie (Vue_Armoire_A) verifie le texte des erreurs ; elle n'est pas livree.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- 1. L'explorateur d'objets de Vue_Synoptique : V_101 deplie par familles
+arbre "IHM/Vues/Vue_Synoptique"
+attendre 8
+objet V_101
+attendre 3
+objet-famille V_101
+attendre 3
+objet-famille V_101 "Actions"
+attendre 2
+objet-famille V_101 "Liens fx"
+attendre 2
+objet-famille V_101 "Repères"
+attendre 3
+capture 104_01_explorateur_familles_reperes.png
+
+# ---- 2. Un clic sur le repere : V_101 choisie, la case Valeur (ambre) dans l'inspecteur
+objet-famille V_101 "Repères" 1
+attendre 4
+capture 104_02_explorateur_clic_repere_case_ambre.png
+
+# ---- 3. L'arbre de l'application : les memes familles, le meme clic
+arbre "IHM/Vues/Vue_Synoptique/Objets/V_101" deplier
+attendre 4
+arbre "IHM/Vues/Vue_Synoptique/Objets/V_101/Repères" deplier
+attendre 4
+arbre "IHM/Vues/Vue_Synoptique/Objets/V_101/Liens fx" deplier
+attendre 4
+arbre "IHM/Vues/Vue_Synoptique/Objets/V_101/Actions" deplier
+attendre 4
+arbre "IHM/Vues/Vue_Synoptique/Objets/V_101/Repères/$Vanne$" double
+attendre 5
+capture 104_03_arbre_familles_clic_repere.png
+
+# ---- 4. Les filtres de l'inspecteur ; l'infobulle d'une case a repere
+clic 1735 161
+attendre 3
+capture 104_04_filtre_reperes.png
+survol 1830 264
+attendre 90
+capture 104_05_infobulle_case_repere.png
+survol 900 1000
+attendre 3
+clic 1663 161
+attendre 3
+capture 104_06_filtres_fx_et_reperes.png
+clic 1663 161
+attendre 2
+clic 1735 161
+attendre 2
+clic 1835 161
+attendre 3
+capture 104_07_filtre_non_vides.png
+clic 1835 161
+attendre 3
+
+# ---- 5. La galerie : seuls les modeles du role (Vue, puis Popup)
+palette ">nouvelle vue" entree
+attendre 10
+capture 104_08_galerie_vue.png
+liste "gallery.role"
+attendre 3
+choisir "Popup"
+attendre 10
+capture 104_09_galerie_popup.png
+touche Escape
+attendre 4
+
+# ---- 6. La simulation de Vue_Synoptique : l'onglet Expressions, la barre
+arbre "Simulation/IHM"
+attendre 12
+sim-vue "Vue_Synoptique"
+attendre 8
+capture 104_10_simulation_barre_expressions.png
+survol 1700 234
+attendre 40
+capture 104_11_simulation_infobulle_repere.png
+survol 1000 1000
+attendre 3
+
+# ---- 7. Le clic droit sur la barre du simulateur
+clic 1850 94 droit
+attendre 4
+capture 104_12_barre_clic_droit.png
+touche Escape
+attendre 3
+
+# ---- 8. (verification, pas livree) Vue_Armoire_A : "argument invalide" en francais
+sim-vue "Vue_Armoire_A"
+attendre 8
+capture 104_99_verif_vue_armoire_a.png
+quitter

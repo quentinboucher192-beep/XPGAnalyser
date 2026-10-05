@@ -1,0 +1,68 @@
+# DFB type interface.
+name = DFB_GRAFCETENGINE
+version = 1.48
+attribute = TypeCodeCheckSumString = 7D5B
+attribute = TypeSignatureCheckSumString = 0D61
+attribute = UseNewTplSignAlgo = TRUE
+
+# name ; type ; address ; scope ; init ; comment ; attributes ; element comments
+Enable ; BOOL ;  ; Input ;  ;  ; PositionPin=1 ; 
+ModeReq ; INT ;  ; Input ;  ;  ; PositionPin=2 ; 
+FreezeReq ; BOOL ;  ; Input ;  ;  ; PositionPin=3 ; 
+PauseReq ; BOOL ;  ; Input ;  ;  ; PositionPin=4 ; 
+StepReq ; BOOL ;  ; Input ;  ;  ; PositionPin=5 ; 
+InitReq ; BOOL ;  ; Input ;  ;  ; PositionPin=6 ; 
+ResetInitialReq ; BOOL ;  ; Input ;  ;  ; PositionPin=7 ; 
+ResetAllReq ; BOOL ;  ; Input ;  ;  ; PositionPin=8 ; 
+TsNow ; TIME ;  ; Input ;  ;  ; PositionPin=9 ; 
+NtpcNow ; Display_NTPC ;  ; Input ;  ;  ; PositionPin=10 ; 
+ForceBackReq ; BOOL ;  ; Input ;  ;  ; PositionPin=14 ; 
+ForceNextReq ; BOOL ;  ; Input ;  ;  ; PositionPin=15 ; 
+ForceStepFromId ; INT ;  ; Input ;  ;  ; PositionPin=16 ; 
+ForceStepToId ; INT ;  ; Input ;  ;  ; PositionPin=17 ; 
+Steps ; ARRAY[0..27] OF ST_GC_Step ;  ; InOut ;  ;  ; PositionPin=11 ; 
+Transitions ; ARRAY[0..27] OF ST_GC_Transition ;  ; InOut ;  ;  ; PositionPin=12 ; 
+Actions ; ARRAY[0..27] OF ST_GC_Action ;  ; InOut ;  ;  ; PositionPin=13 ; 
+Debug ; ST_GC_Debug ;  ; Output ;  ;  ; PositionPin=1 ; 
+Finished ; BOOL ;  ; Output ;  ;  ; PositionPin=2 ; 
+InternalInitDone ; BOOL ;  ; Public ;  ;  ;  ; 
+Runtime ; ST_GC_Runtime ;  ; Public ;  ;  ;  ; 
+ModeReqOut ; INT ;  ; Public ;  ;  ;  ; 
+NeedToResetPause ; BOOL ;  ; Public ;  ;  ;  ; 
+pauseToReevaluateCondition ; BOOL ;  ; Public ;  ;  ;  ; 
+howManyResets ; INT ;  ; Public ;  ;  ;  ; 
+i ; INT ;  ; Public ;  ;  ;  ; 
+j ; INT ;  ; Public ;  ;  ;  ; 
+k ; INT ;  ; Public ;  ;  ;  ; 
+srcId ; INT ;  ; Public ;  ;  ;  ; 
+dstId ; INT ;  ; Public ;  ;  ;  ; 
+allSrcActive ; BOOL ;  ; Public ;  ;  ;  ; 
+anySrcActive ; BOOL ;  ; Public ;  ;  ;  ; 
+sIdx ; INT ;  ; Public ;  ;  ;  ; 
+aIdx ; INT ;  ; Public ;  ;  ;  ; 
+tIdx ; INT ;  ; Public ;  ;  ;  ; 
+sid ; INT ;  ; Public ;  ;  ;  ; 
+isFromStep ; BOOL ;  ; Public ;  ;  ;  ; 
+doneBack ; BOOL ;  ; Public ;  ;  ;  ; 
+doneNext ; BOOL ;  ; Public ;  ;  ;  ; 
+isDest ; BOOL ;  ; Public ;  ;  ;  ; 
+focusStep ; INT ;  ; Public ;  ;  ;  ; 
+ConfigChecked ; BOOL ;  ; Public ;  ;  ;  ; 
+HistFill ; INT ;  ; Public ;  ;  ;  ; 
+activeStepQty ; INT ;  ; Public ;  ;  ;  ; 
+firstStepId ; INT ;  ; Public ;  ;  ;  ; 
+firstStepName ; string[4] ;  ; Public ;  ;  ;  ; 
+h ; INT ;  ; Public ;  ;  ;  ; 
+finalSrcOnValidatedTr ; BOOL ;  ; Public ;  ;  ;  ; 
+isInitState ; BOOL ;  ; Public ;  ;  ;  ; 
+PrevInitState ; BOOL ;  ; Public ;  ;  ;  ; 
+InitPulse ; BOOL ;  ; Public ;  ;  ;  ; 
+InitPulseCount ; INT ;  ; Public ;  ;  ;  ; 
+SectionsAuthorized ; BOOL ;  ; Public ;  ;  ;  ; 
+stepIdStr ; STRING ;  ; Local ;  ;  ;  ; 
+actionIdStr ; STRING ;  ; Local ;  ;  ;  ; 
+
+# section ; name ; language ; order ; activation ; logic ; file
+section ; Init ; ST ; 17 ;  ;  ; Init.st
+section ; Main ; ST ; 17 ; SectionsAuthorized ; standard ; Main.st
+section ; Debug ; ST ; 17 ;  ;  ; Debug.st

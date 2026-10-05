@@ -1,0 +1,171 @@
+# =============================================================================
+#  Session 58b - LOT API 8 : renommer une variable IHM par la case Nom (le
+#  dialogue, l'onglet IHM, les expressions qui suivent) et un champ de DDT ;
+#  Compiler et les expressions impossibles, le symbole fx (son infobulle) ;
+#  glisser un classeur et un PDF (les deux cases) ; la galerie des themes
+#  (familles) et l'editeur ; la recherche et les filtres retenus ; "Generer
+#  maintenant" demande ou ; un dialogue dans une fenetre detachee.
+#  Dans le projet des sessions precedentes, rejouee dans la VRAIE application.
+#  Le PDF glisse : un export de l'etat de depart (exports/trs_2026-09-29.pdf).
+#  Captures PNG_773 a PNG_787.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- F. Renommer une variable IHM par la case Nom : ce qui la cite suit -------------------
+arbre "IHM/Programmation générale/Variables IHM"
+attendre 8
+ihm-variable-renommer "Pompe_Marche" "Pompe_En_Marche"
+attendre 5
+survol 960 1070
+attendre 2
+capture PNG_773_renommer_variable_ihm.png
+renommer-onglet "IHM"
+attendre 3
+capture PNG_774_renommer_variable_ihm_onglet_ihm.png
+renommer-confirmer
+attendre 5
+# Les expressions qui la citaient ont suivi (le compteur TRS de la vue Ligne).
+arbre "IHM/Vues/Vues/Vue_Ligne"
+attendre 8
+objet "Compteurs_Ligne"
+attendre 4
+survol 960 1070
+attendre 2
+capture PNG_775_expressions_suivent.png
+# Retour au nom d'avant, par le meme chemin.
+arbre "IHM/Programmation générale/Variables IHM"
+attendre 6
+ihm-variable-renommer "Pompe_En_Marche" "Pompe_Marche"
+attendre 4
+renommer-confirmer
+attendre 5
+# Un champ de DDT : la case Nom de API > Types derives.
+arbre "API/Derived data types"
+attendre 6
+# La souris quitte l'arbre AVANT le dialogue (sinon son infobulle reste sous le dialogue).
+survol 960 1070
+attendre 3
+types-champ-renommer "config_gaz.Nom_gaz" "Nom_du_gaz"
+attendre 5
+capture PNG_776_renommer_champ_ddt.png
+renommer-annuler
+attendre 3
+
+# ---- G. Compiler : les expressions impossibles ; le symbole fx et son infobulle ------------
+# Le projet des sessions en a : Popup_Armoire cite Equipement.Marche (ses parametres :
+# Armoire et Nom), Vue_Armoire_A/B citent Debit_Entree (qui n'existe pas)...
+arbre "IHM/Compiler"
+attendre 10
+outil "Compiler"
+attendre 20
+ihm-rapport-verifier "n'existe pas" 6
+survol 1200 1040
+attendre 3
+capture PNG_777_compiler_expressions_impossibles.png
+ligne "Voyant_Marche" double
+attendre 15
+ihm-expression-choisir erreur
+attendre 4
+# La souris sur la valeur pilotee (la ligne "fx Valeur" de la grille, 1920 x 1080) : l'infobulle.
+survol 1790 564
+attendre 3
+capture PNG_778_fx_infobulle.png
+
+# ---- H. Glisser un classeur, puis un PDF : les deux cases du document ----------------------
+deposer "${ECHANTILLONS}/affaire.xlsm" 960 540
+attendre 4
+depot-lignes
+survol 1700 1070
+attendre 2
+capture PNG_779_glisser_classeur.png
+depot-annuler
+attendre 3
+deposer "${PROJETS}/Armoire_Gaz/exports/trs_2026-09-29.pdf" 960 540
+attendre 4
+depot-cocher "trs_2026-09-29.pdf : Ressources" oui
+attendre 2
+depot-lignes
+survol 1700 1070
+attendre 2
+capture PNG_780_glisser_pdf_deux_cases.png
+depot-annuler
+attendre 3
+
+# ---- I. La galerie des themes : les familles ; l'editeur -----------------------------------
+theme-galerie
+attendre 4
+theme-famille "Clairs"
+attendre 3
+capture PNG_781_themes_famille_clairs.png
+theme-editer "Nord"
+attendre 4
+theme-couleur "texte.secondaire" "#3A4250"
+attendre 2
+theme-corriger
+attendre 2
+capture PNG_782_theme_editeur.png
+theme-annuler
+attendre 3
+touche escape
+attendre 3
+
+# ---- J. La recherche et les filtres retenus ------------------------------------------------
+arbre "API/Variables"
+attendre 6
+filtre-colonne "Type" "=" "BOOL"
+attendre 3
+touche ctrl+f
+attendre 2
+chercher "ETAT"
+attendre 3
+filtres-retenus "BOOL"
+survol 1200 1040
+attendre 2
+capture PNG_783_recherche_filtre.png
+arbre "API/Derived data types"
+attendre 5
+arbre "API/Variables"
+attendre 5
+filtres-retenus "BOOL"
+survol 1200 1040
+attendre 2
+capture PNG_784_filtres_retenus.png
+filtre-effacer
+attendre 2
+chercher ""
+attendre 2
+
+# ---- K. "Generer maintenant" demande ou ----------------------------------------------------
+arbre "IHM/Configuration/Rapports"
+attendre 8
+ligne "Journalier"
+attendre 3
+outil "Générer maintenant"
+attendre 4
+capture PNG_785_generer_maintenant_ou.png
+bouton "Annuler"
+attendre 3
+
+# ---- L. Un dialogue dans une fenetre detachee ----------------------------------------------
+arbre "API/Variables"
+attendre 5
+onglet-detacher "API · Variables"
+attendre 10
+fenetres-detachees 1
+fenetre-outil "API · Variables" "Exporter CSV"
+attendre 4
+dialogue-fenetre "API · Variables"
+capture-fenetre "API · Variables" PNG_786_dialogue_fenetre_detachee.png
+attendre 2
+capture PNG_787_principale_attend_la_fenetre.png
+fenetre-touche "API · Variables" escape
+attendre 3
+dialogue-fenetre aucun
+fenetre-rattacher *
+attendre 5
+quitter

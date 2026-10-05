@@ -1,0 +1,135 @@
+# =============================================================================
+#  Session 32 - LOT 13 B : la qualite. Generer (chaque ligne a la couleur de sa
+#  gravite ; un double clic mene a l'objet), Compiler (un trou dont le calcul
+#  est incomplet, en rouge, puis retire) ; un essai de reception
+#  (IHM > Essais : la purge signee, jouee dans la simulation, ses verdicts, son
+#  rapport PDF) ; les performances (l'onglet de la simulation) ; le dossier de
+#  l'IHM en Word et en PDF. Dans le projet des sessions 1 a 31 :
+#
+#    xpg_analyzer --script session-32-qualite.txt --captures captures --size 1920x1080
+#
+#  Le rapport de l'essai et le dossier sont ecrits dans exports/ ; leurs images
+#  du guide (PNG_351, PNG_353) sont tirees des PDF par pdf32.sh (pdftoppm).
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+arbre "API" replier
+attendre 3
+
+# ---- 1. Generer : la couleur de la gravite, un double clic mene a l'objet ------------------------
+arbre "IHM/Générer"
+attendre 10
+outil "Générer"
+attendre 20
+survol 1200 1040
+attendre 3
+capture PNG_345_generer_gravite.png
+ligne "Btn_Vers_B" double
+attendre 20
+capture PNG_346_generer_vers_objet.png
+
+# ---- 2. Compiler : un trou au calcul incomplet (un brouillon, retire ensuite) ----------------------
+arbre "IHM/Vues" deplier
+arbre "IHM/Vues/Vues/Vue_Commandes"
+attendre 10
+palette "Texte"
+vue-clic 700 760
+attendre 5
+propriete "Nom" "Texte_Brouillon"
+propriete "Texte" "Vitesse : {Vitesse_Pompe * } %"
+attendre 3
+arbre "IHM/Compiler"
+attendre 10
+outil "Compiler"
+attendre 20
+survol 1200 1040
+attendre 3
+capture PNG_347_compiler.png
+ligne "Texte_Brouillon" double
+attendre 15
+outil "Supprimer (Suppr)"
+attendre 5
+
+# ---- 3. un essai de reception : la purge signee -----------------------------------------------------
+arbre "IHM/Essais"
+attendre 10
+outil "Nouvel essai"
+attendre 5
+propriete "Nom" "Purge_Signee"
+propriete "Description" "La purge demande une signature ; signée, la vanne s'ouvre, puis se referme"
+attendre 3
+ligne "Ouvrir la vue"
+attendre 3
+propriete "Cible" "Vue_Commandes"
+attendre 3
+essai-pas "Cliquer" "Btn_Purge"
+essai-pas "Signer" "" "1234" "Purge avant intervention"
+essai-pas "Vérifier" "" "Vanne_Purge" "TRUE"
+essai-pas "Cliquer" "Btn_Purge"
+essai-pas "Signer" "" "1234" "Essai"
+essai-pas "Vérifier" "" "Vanne_Purge" "FALSE"
+essai-pas "Vérifier" "" "SYS.CurrentView" "'Vue_Commandes'"
+essai-pas "Commentaire" "La purge se referme, signée elle aussi"
+attendre 5
+ligne "Signer"
+attendre 5
+survol 1200 1040
+attendre 3
+capture PNG_348_essais_volet.png
+outil "Lancer"
+attendre 25
+capture-sim PNG_349_essai_en_cours.png
+essai-attendre
+attendre 10
+arbre "IHM/Essais"
+attendre 10
+survol 1200 1040
+attendre 3
+capture PNG_350_essais_verdicts.png
+outil "Rapport PDF"
+attendre 3
+# Lot API 7 : l'export demande ou (exports/ par defaut, le bouton ...) : Exporter, comme avant.
+bouton "Exporter"
+attendre 15
+
+# ---- 4. les performances : l'onglet de la simulation ---------------------------------------------
+arbre "IHM/Simulation"
+attendre 10
+sim-vue "Vue_Graphiques"
+attendre 40
+sim-vue "Vue_Synoptique"
+attendre 40
+glisser 1220 600 1010 600
+attendre 10
+sous-onglet "Performances"
+attendre 10
+survol 1200 1040
+attendre 3
+capture PNG_352_performances.png
+glisser 1010 600 1220 600
+attendre 5
+
+# ---- 5. le dossier de l'IHM : Word et PDF -------------------------------------------------------
+arbre "IHM/Exporter"
+attendre 10
+outil "Dossier Word"
+attendre 3
+# Lot API 7 : l'export demande ou (exports/ par defaut, le bouton ...) : Exporter, comme avant.
+bouton "Exporter"
+attendre 40
+outil "Dossier PDF"
+attendre 3
+bouton "Exporter"
+attendre 40
+survol 1200 1040
+attendre 3
+capture PNG_354_dossier_exporter.png
+action project.save
+attendre 5
+bouton "Close"
+attendre 3
+quitter

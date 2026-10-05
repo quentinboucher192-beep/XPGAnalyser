@@ -1,0 +1,88 @@
+# =============================================================================
+#  Session 61 - 1.9 : la lecture cyclique a plusieurs requetes (IHM > Outil
+#  Modbus, MB-1 a MB-10). Dans une copie d'Armoire_Gaz : ses vrais appareils ne
+#  sont pas sur le reseau du banc, mais ses esclaves simules repondent sur
+#  127.0.0.1 (la centrale et le variateur ont un esclave simule lie ; la
+#  balance B et l'analyseur de test sont seulement simules). Captures PNG_920
+#  a PNG_927.
+#    R1  Centrale : mesures      depuis six variables liees (regroupees), lue sur
+#                                l'esclave simule (43021 y est forcee : F)
+#    R2  Variateur : vitesses    48503-48505 sur l'esclave simule (48505 : ~ sinus)
+#    R3  Balance B : poids       un flottant, sa periode a lui (1 s)
+#    R4  Analyseur de test       dix mots, toutes les 2 s
+#    R5  Centrale : 43200        hors des zones de l'esclave : exception 02, en
+#                                pause apres 3 echecs
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+arbre "IHM/Outil Modbus"
+attendre 8
+outil-cyclique-vue valeurs
+
+# ---- A. La liste : 5 requetes, des esclaves simules, une en pause ----------------------
+outil-requetes-variables Tension_L1 Courant_L1 Puissance Debit_Gaz Temperature_Local Frequence
+outil-requete-regler R1 nom "Centrale : mesures"
+outil-requete-regler R1 cible "Centrale PM5560 · esclave simulé"
+outil-requete "Variateur : vitesses" "Variateur ATV320 · esclave simulé" 3 48503 3 decimal
+outil-requete "Balance B : poids" "Balance B" 3 40201 2 flottant 1000
+outil-requete "Analyseur de test" "Analyseur de test" 3 40001 10 decimal 2000
+outil-requete "Centrale : registres 43200" "Centrale PM5560 · esclave simulé" 3 43200 20 decimal
+outil-cyclique-option echecs 3
+outil-cyclique-option periode_commune 500
+outil-requete-regler R1 tracer "1,oui"
+outil-requete-regler R2 tracer "2,oui"
+outil-requete-regler R3 tracer toutes
+outil-cyclique-demarrer
+outil-cyclique-attendre 120
+# 250 images (l'horloge fixe d'une session : 1/30 s) : le message passager
+# "5 requetes en marche" (8 s) s'efface, l'etat de la lecture revient a gauche.
+attendre 250
+outil-requete-choisir R5
+attendre 5
+capture PNG_920_lecture_cyclique_en_marche.png
+outil-requete-choisir R2
+attendre 5
+capture PNG_921_requete_esclave_simule.png
+
+# ---- B. Les menus : + Requete, les jeux ---------------------------------------------
+outil-cyclique-menu requete
+attendre 5
+capture PNG_922_menu_ajouter_requete.png
+outil-cyclique-fermer
+attendre 3
+outil-jeu-enregistrer "Mise en service armoire A"
+attendre 3
+outil-cyclique-menu jeu
+attendre 5
+capture PNG_923_menu_des_jeux.png
+outil-cyclique-fermer
+attendre 3
+
+# ---- C. Lire des variables ------------------------------------------------------------
+outil-cyclique-variables Consigne_Variateur Vitesse Vitesse_Affichee Vanne_V2_Ouverte
+attendre 8
+capture PNG_924_dialogue_lire_des_variables.png
+outil-cyclique-fermer
+attendre 3
+
+# ---- D. Exporter, les pistes figees, le journal ------------------------------------------
+outil-cyclique-export un
+attendre 5
+capture PNG_925_boite_export_csv.png
+outil-cyclique-fermer
+attendre 3
+outil-cyclique-vue pistes
+outil-cyclique-figer oui
+attendre 5
+capture PNG_926_pistes_figees.png
+outil-cyclique-figer non
+outil-cyclique-vue journal
+attendre 5
+capture PNG_927_journal_des_lectures.png
+outil-cyclique-arreter
+attendre 3
+quitter

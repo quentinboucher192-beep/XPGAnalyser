@@ -1,0 +1,28 @@
+(* EnsureSection
+
+   Creer une section qui existe deja est refuse, ce qui arrete la macro. Une
+   macro relancee doit pouvoir l'etre - c'est tout l'objet de ce fichier.
+
+   GLOBALE OU DANS UNE UNITE : les deux. La premiere version imposait une unite
+   de programme, ce qui n'a aucune raison d'etre. Une section de tache se cree
+   avec un proprietaire vide, et c'est un choix, pas un defaut. *)
+
+nom := Ask('section', 'Nom de la section', 'Mapping_ES');
+ou  := AskChoice('ou', 'Ou la creer ?', 'Section de tache (globale),Dans une unite',
+                 'Section de tache (globale)');
+
+IF ou = 'Dans une unite' THEN
+    unite := Ask('unite', 'Dans quelle unite de programme ?', 'Logigrammes_A');
+    IF NOT PouExists(unite) THEN
+        Fail('l unite ' + unite + ' n existe pas');
+    END_IF;
+ELSE
+    unite := '';
+END_IF;
+
+IF SectionExists(nom) THEN
+    Log('la section ' + nom + ' existe deja');
+ELSE
+    Log('creation de ' + nom);
+    AddSection(nom, 'MAST', 'ST', unite);
+END_IF;

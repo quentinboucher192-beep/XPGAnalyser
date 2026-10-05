@@ -1,0 +1,483 @@
+# Derived function block, shared.
+name = DFB_ALM_MANAGER256
+version = 1.00
+#! summary = Un gestionnaire d'alarmes pour 256 alarmes et 512 evenements d'historique : masquage, klaxon, premier defaut, date. Une instance par groupe.
+#! usage = COMMENT UNE ALARME ARRIVE ICI : par le tableau State, indice par
+#! usage = indice, comme les cartes d'E/S le font pour leurs voies. Une ligne
+#! usage = par alarme, ecrite une fois. C'est explicite, ca se cherche avec un
+#! usage = Ctrl+F, et la macro ImporterAlarmes l'ecrit toute seule depuis le
+#! usage = classeur.
+#! usage = L'ORDRE DANS LE CYCLE. Le gestionnaire lit State ; il faut donc que
+#! usage = State soit deja ecrit quand il tourne. Appelez-le APRES vos blocs
+#! usage = d'equipement et de voies, et avant les reports vers l'IHM.
+#! usage = L'HISTORIQUE EST UN ANNEAU. Quand il est plein, le plus ancien est
+#! usage = perdu - un automate n'alloue pas. Stat.Wrapped le dit, et Seq ne
+#! usage = recule jamais : c'est ce qui distingue un historique reboucle d'un
+#! usage = historique a trous.
+#! usage = LA DATE. Cablez NowS sur EpochS de DFB_SYS_CLOCK : chaque evenement
+#! usage = porte alors sa vraie date (StampS, secondes depuis le 01/01/2000).
+#! usage = Sans horloge, NowS a 0, StampS compte depuis le demarrage - ce qui
+#! usage = suffit pour ordonner, pas pour dater.
+#! usage = LE KLAXON sonne tant qu'une alarme de gravite HornSev ou plus est
+#! usage = presente et non acquittee. Cmd.Silence le fait taire sans rien
+#! usage = acquitter ; la prochaine apparition le relance.
+#! usage = LE MASQUAGE retire une alarme du jeu - capteur en panne, voie en
+#! usage = travaux - sans effacer sa ligne : elle ne leve plus, ne compte plus,
+#! usage = ne sonne plus, et le masquage comme le demasquage s'inscrivent dans
+#! usage = l'historique. Stat.Masked dit combien le sont : un masquage oublie
+#! usage = est une alarme qu'on ne verra jamais.
+#! usage = LE PRIX DU CYCLE. Balayer 256 alarmes coute quatre fois ce que
+#! usage = coute 64 : sur un M340, mesurez le temps de cycle (%SW30 le
+#! usage = dernier, %SW31 le plus long) avant et apres. Si le budget ne le
+#! usage = permet pas, plusieurs DFB_ALM_MANAGER de 64 par groupe font le
+#! usage = meme travail, en plusieurs registres.
+#! usage = Pour 64 alarmes et 256 evenements, voir DFB_ALM_MANAGER : memes types,
+#! usage = meme comportement, d'autres tailles.
+#! example = (* declarer, une fois : l'UUID est compose par AlmUuid - ici son resultat,
+#! example =    genre 1 (TOR), rack 0, module 4, voie 2 *)
+#! example = AlmCmd.RegUuid := 16#10102000;
+#! example = AlmCmd.RegLabel := 'Fuite gaz armoire A';
+#! example = AlmCmd.RegSev := 4;
+#! example = AlmCmd.Register := TRUE;   (* front montant *)
+#! example = 
+#! example = (* alimenter, a chaque cycle *)
+#! example = AlmState[0] := FuiteGaz;
+#! example = 
+#! example = (* DateS : EpochS de DFB_SYS_CLOCK, qui vaut 0 tant que l'heure n'est pas sure *)
+#! example = ALM_Site(Count := 256, CycleMs := 20, NowS := DateS, HornSev := 3,
+#! example = Cmd := AlmCmd, State := AlmState, Defs := AlmDefs,
+#! example = History := AlmHist, Stat := AlmStat);
+#! example = Klaxon := AlmStat.Horn;
+#! see = ST_ALM_Def
+#! see = ST_ALM_Cmd
+#! see = ST_ALM_Stat
+#! see = ST_ALM_Event
+#! see = AlmUuid
+#! see = DFB_SYS_CLOCK
+#! see = DFB_ALM_MANAGER
+#! param CycleMs = La periode de la tache, en ms. Un DDT ne peut pas contenir de
+#! param CycleMs = temporisateur, donc tout le temps s'accumule depuis la. DINT
+#! param CycleMs = et non INT : un INT de millisecondes deborde au bout de
+#! param CycleMs = trente-trois secondes.
+#! param CycleMs = Le mieux : DtMs de DFB_SYS_CLOCK, qui suit le temps reel de la tache.
+#! param Count = Combien d'emplacements du registre sont balayes ET attribues,
+#! param Count = 256 au plus. Un Register ne range rien au-dela : une alarme
+#! param Count = rangee hors du balayage ne leverait jamais. En mettre moins ne fait
+#! param Count = pas gagner de memoire, seulement du temps de cycle.
+#! param State = L'etat BRUT de chaque alarme, ecrit par l'appelant. Le
+#! param State = gestionnaire ne lit rien d'autre : il ne va chercher aucune
+#! param State = voie tout seul.
+#! param Defs = Le registre. Il survit a un Reset : seuls l'historique et les
+#! param Defs = compteurs sont effaces.
+#! param NowS = La date, en secondes depuis le 01/01/2000 : EpochS de DFB_SYS_CLOCK, a
+#! param NowS = cabler directement - il vaut 0 tant que l'horloge n'est pas valide, et
+#! param NowS = 0 veut dire ici 'pas d'horloge' : les evenements sont alors dates en
+#! param NowS = secondes depuis le demarrage.
+#! param HornSev = La gravite a partir de laquelle une alarme fait sonner le klaxon.
+#! param HornSev = 3 par defaut : les defauts et les arrets machine, pas les
+#! param HornSev = avertissements. 0 : jamais de klaxon.
+#! param Cmd = Les commandes, toutes prises sur front montant : Register, Ack,
+#! param Cmd = AckAll, Silence, Mask, Unmask, Reset.
+#! param History = L'historique, en anneau de 512 evenements. Pour le relire dans
+#! param History = l'ordre, partir de Stat.HistHead et reculer.
+#! param Stat = Ce que le gestionnaire rapporte : les compteurs, le klaxon, le
+#! param Stat = premier defaut, la pire gravite presente.
+#! changes 1.00 = NOUVEAU : la variante a 256 alarmes et 512 evenements de
+#! changes 1.00 = DFB_ALM_MANAGER 1.02. Meme corps, memes types : seules les tailles
+#! changes 1.00 = changent.
+#! given = FuiteGaz := TRUE
+#! expect = 1 : AlmStat.Active = 1
+#! expect = 1 : AlmStat.Horn = TRUE
+
+# Un gestionnaire d'alarmes pour 256 alarmes et 512 evenements d'historique.
+
+# name ; type ; scope ; initial ; comment
+Count ; INT ; Input ; 256 ; combien d'emplacements du registre sont balayes et attribues
+CycleMs ; DINT ; Input ; 20 ; la periode de la tache en ms. Un DDT ne peut pas contenir de temporisateur
+NowS ; UDINT ; Input ; 0 ; la date, en s depuis le 01/01/2000 (DFB_SYS_CLOCK.EpochS). 0 : pas d'horloge
+HornSev ; INT ; Input ; 3 ; gravite a partir de laquelle le klaxon sonne. 0 : jamais
+Cmd ; ST_ALM_Cmd ; InOut ;  ; les commandes
+State ; ARRAY[0..255] OF BOOL ; InOut ;  ; l'etat brut de chaque alarme, ecrit par l'appelant
+Defs ; ARRAY[0..255] OF ST_ALM_Def ; InOut ;  ; le registre
+History ; ARRAY[0..511] OF ST_ALM_Event ; InOut ;  ; l'historique, en anneau
+Stat ; ST_ALM_Stat ; InOut ;  ; ce que le gestionnaire rapporte
+i ; INT ; Local ; 0 ;
+n ; INT ; Local ; 0 ;
+LAST ; INT ; Local ; 255 ; dernier indice du registre
+HISTLAST ; INT ; Local ; 511 ; dernier indice de l'anneau
+head ; INT ; Local ; 0 ;
+slot ; INT ; Local ; -1 ;
+found ; INT ; Local ; -1 ;
+hit ; BOOL ; Local ;  ;
+now ; BOOL ; Local ;  ;
+NowMs ; DINT ; Local ; 0 ; temps depuis le demarrage, en ms, plafonne a 2 000 000 000
+PrevAck ; BOOL ; Local ;  ;
+PrevAckAll ; BOOL ; Local ;  ;
+PrevReset ; BOOL ; Local ;  ;
+PrevRegister ; BOOL ; Local ;  ;
+PrevSilence ; BOOL ; Local ;  ;
+PrevMask ; BOOL ; Local ;  ;
+PrevUnmask ; BOOL ; Local ;  ;
+HornQuiet ; BOOL ; Local ;  ; le klaxon a ete tu depuis la derniere apparition
+horn ; INT ; Local ; 0 ; combien d'alarmes font sonner le klaxon ce cycle
+calm ; BOOL ; Local ;  ; rien n'etait present au cycle precedent
+FracMs ; DINT ; Local ; 0 ; les millisecondes pas encore comptees en secondes
+UpS ; UDINT ; Local ; 0 ; secondes depuis le demarrage
+secs ; UDINT ; Local ; 0 ; secondes ecoulees ce cycle
+dateS ; UDINT ; Local ; 0 ; la date des evenements de ce cycle
+MAXMS ; DINT ; Local ; 2000000000 ; plafond des compteurs de temps : 23 jours, sous la limite d'un DINT
+
+<<<section Process ST>>>
+(* =====================================================================
+    DFB_ALM_MANAGER256 - un gestionnaire d'alarmes, une instance par groupe.
+    256 alarmes, 512 evenements d'historique.
+
+    L'UUID PORTE LA PROVENANCE. Il n'est pas tire au hasard et range dans une
+    table qu'il faudrait tenir a jour: il est COMPOSE, et ses 32 bits se
+    relisent. Un identifiant trouve dans un journal dans cinq ans dit encore
+    de quelle voie il vient, meme si plus personne n'a la table.
+
+        bits 31..28  genre   1 voie TOR, 2 seuil analogique,
+                             3 etape GRAFCET, 4 alarme applicative
+        bits 27..24  rack    0..15
+        bits 23..18  module  0..63
+        bits 17..12  voie    0..63
+        bits 11..8   sous    0..15  (le numero du seuil)
+        bits  7..0   code    0..255 libre
+
+    COMMENT UNE ALARME ARRIVE ICI. Par le tableau State, indice par indice,
+    comme les cartes d'E/S le font pour leurs voies:
+
+        State[0] := CarteAI_R0S10[3].Thr[0].Raised;
+
+    Une ligne par alarme, ecrite une fois. C'est explicite, ca se cherche avec
+    un Ctrl+F, et la macro ImporterAlarmes l'ecrit toute seule depuis le
+    classeur.
+
+    L'HISTORIQUE EST UN ANNEAU. Un automate n'alloue pas: quand il est plein,
+    le plus ancien est perdu. Wrapped le dit, et Seq ne recule jamais - c'est
+    ce qui distingue un historique reboucle d'un historique a trous.
+
+    LE KLAXON sonne tant qu'une alarme de gravite HornSev ou plus est presente
+    et non acquittee. Silence le fait taire SANS RIEN ACQUITTER ; la prochaine
+    apparition le relance.
+
+    LE PREMIER DEFAUT (Stat.FirstUuid) est l'alarme qui a rompu le calme : la
+    premiere apparue alors que rien n'etait present. Dans une cascade - un
+    defaut d'alimentation qui fait tomber six retours de marche - c'est elle
+    qu'il faut lire, pas la plus grave ni la plus recente.
+
+    LE MASQUAGE retire une alarme du jeu sans effacer sa ligne. Il s'inscrit
+    dans l'historique, comme le demasquage : un masquage oublie est une
+    alarme qu'on ne verra jamais, et il faut pouvoir retrouver qui l'a pose.
+   ===================================================================== *)
+
+n := Count;
+IF n > LAST + 1 THEN n := LAST + 1; END_IF;
+IF n < 0 THEN n := 0; END_IF;
+
+(* Un HistHead hors de l'anneau - Stat ecrit a la main, ou partage entre deux
+   gestionnaires de tailles differentes - ferait ecrire hors du tableau. *)
+IF Stat.HistHead < 0 OR Stat.HistHead > HISTLAST THEN
+    Stat.HistHead := 0;
+END_IF;
+
+(* ---- le temps ---------------------------------------------------------
+   Accumule depuis CycleMs, comme partout ici: un DDT ne peut pas contenir de
+   temporisateur. NowMs PLAFONNE a 2 000 000 000 (23 jours) : devenu negatif,
+   il datait les evenements dans le passe. Les secondes ne debordent pas :
+   UpS compte depuis le demarrage, et NowS - quand une horloge le fournit -
+   donne la vraie date. *)
+IF NowMs < MAXMS - CycleMs THEN
+    NowMs := NowMs + CycleMs;
+ELSE
+    NowMs := MAXMS;
+END_IF;
+secs := 0;
+FracMs := FracMs + CycleMs;
+IF FracMs >= 1000 THEN
+    secs := DINT_TO_UDINT(FracMs / 1000);
+    FracMs := FracMs MOD 1000;
+    UpS := UpS + secs;
+END_IF;
+IF NowS > 0 THEN
+    dateS := NowS;
+ELSE
+    dateS := UpS;
+END_IF;
+
+(* ---- commandes, sur front montant -------------------------------------
+   Sur front, parce qu'un bouton d'IHM reste a TRUE tant que l'operateur a le
+   doigt dessus: sur niveau, un acquittement se rejouerait a chaque cycle et
+   acquitterait aussi tout ce qui apparait pendant ce temps. *)
+Stat.LastError := '';
+
+IF Cmd.Register AND NOT PrevRegister THEN
+    (* L'UUID est cherche dans tout le registre, la place libre SOUS Count
+       seulement : une alarme rangee au-dela ne serait jamais balayee, donc
+       jamais levee. *)
+    found := -1;
+    slot := -1;
+    FOR i := 0 TO LAST DO
+        IF Defs[i].Used AND Defs[i].Uuid = Cmd.RegUuid THEN
+            found := i;
+        ELSIF NOT Defs[i].Used AND slot < 0 AND i < n THEN
+            slot := i;
+        END_IF;
+    END_FOR;
+
+    IF Cmd.RegUuid = 0 THEN
+        Stat.LastError := 'UUID 0 refuse';
+    ELSIF found >= 0 THEN
+        (* Deja enregistre: on met a jour le libelle, on ne cree pas un
+           doublon. Deux entrees pour un meme UUID donneraient deux lignes
+           dans la liste pour une seule alarme. *)
+        Defs[found].Label := Cmd.RegLabel;
+        Defs[found].Link  := Cmd.RegLink;
+        Defs[found].Sev   := Cmd.RegSev;
+    ELSIF slot < 0 THEN
+        Stat.LastError := 'registre plein';
+    ELSE
+        Defs[slot].Uuid    := Cmd.RegUuid;
+        Defs[slot].Label   := Cmd.RegLabel;
+        Defs[slot].Link    := Cmd.RegLink;
+        Defs[slot].Sev     := Cmd.RegSev;
+        Defs[slot].Used    := TRUE;
+        Defs[slot].Raised  := FALSE;
+        (* Rien a acquitter tant qu'elle n'est pas apparue. *)
+        Defs[slot].Acked   := TRUE;
+        Defs[slot].Masked  := FALSE;
+        Defs[slot].SinceMs := 0;
+        Defs[slot].SinceS  := 0;
+        Defs[slot].RaisedS := 0;
+        Defs[slot].Count   := 0;
+    END_IF;
+END_IF;
+PrevRegister := Cmd.Register;
+
+IF Cmd.Ack AND NOT PrevAck THEN
+    hit := FALSE;
+    FOR i := 0 TO LAST DO
+        IF Defs[i].Used AND Defs[i].Uuid = Cmd.AckUuid THEN
+            hit := TRUE;
+            IF NOT Defs[i].Acked THEN
+                Defs[i].Acked := TRUE;
+                head := Stat.HistHead;
+                History[head].Seq     := Stat.NextSeq;
+                History[head].Uuid    := Defs[i].Uuid;
+                History[head].Sev     := Defs[i].Sev;
+                History[head].Kind    := 2;
+                History[head].StampMs := NowMs;
+                History[head].StampS  := dateS;
+                Stat.NextSeq := Stat.NextSeq + 1;
+                Stat.HistHead := head + 1;
+                IF Stat.HistHead > HISTLAST THEN
+                    Stat.HistHead := 0;
+                    Stat.Wrapped := TRUE;
+                END_IF;
+            END_IF;
+        END_IF;
+    END_FOR;
+    IF NOT hit THEN
+        Stat.LastError := 'UUID inconnu';
+    END_IF;
+END_IF;
+PrevAck := Cmd.Ack;
+
+IF Cmd.AckAll AND NOT PrevAckAll THEN
+    FOR i := 0 TO LAST DO
+        IF Defs[i].Used AND Defs[i].Raised AND NOT Defs[i].Acked THEN
+            Defs[i].Acked := TRUE;
+            head := Stat.HistHead;
+            History[head].Seq     := Stat.NextSeq;
+            History[head].Uuid    := Defs[i].Uuid;
+            History[head].Sev     := Defs[i].Sev;
+            History[head].Kind    := 2;
+            History[head].StampMs := NowMs;
+            History[head].StampS  := dateS;
+            Stat.NextSeq := Stat.NextSeq + 1;
+            Stat.HistHead := head + 1;
+            IF Stat.HistHead > HISTLAST THEN
+                Stat.HistHead := 0;
+                Stat.Wrapped := TRUE;
+            END_IF;
+        END_IF;
+    END_FOR;
+END_IF;
+PrevAckAll := Cmd.AckAll;
+
+(* Le klaxon se tait SANS RIEN ACQUITTER. La prochaine apparition le relance. *)
+IF Cmd.Silence AND NOT PrevSilence THEN
+    HornQuiet := TRUE;
+END_IF;
+PrevSilence := Cmd.Silence;
+
+(* Masquer, demasquer. Les deux s'inscrivent dans l'historique : un masquage
+   oublie est une alarme qu'on ne verra jamais, et il faut pouvoir retrouver
+   quand il a ete pose. Masquee, une alarme presente disparait SANS evenement
+   de disparition - le masquage le dit - et redevient presente, avec une
+   nouvelle apparition a acquitter, si elle l'est encore au demasquage. *)
+IF (Cmd.Mask AND NOT PrevMask) OR (Cmd.Unmask AND NOT PrevUnmask) THEN
+    hit := FALSE;
+    FOR i := 0 TO LAST DO
+        IF Defs[i].Used AND Defs[i].Uuid = Cmd.MaskUuid THEN
+            hit := TRUE;
+            IF Cmd.Mask AND NOT PrevMask THEN
+                IF NOT Defs[i].Masked THEN
+                    Defs[i].Masked := TRUE;
+                    Defs[i].Raised := FALSE;
+                    Defs[i].Acked  := TRUE;
+                    head := Stat.HistHead;
+                    History[head].Seq     := Stat.NextSeq;
+                    History[head].Uuid    := Defs[i].Uuid;
+                    History[head].Sev     := Defs[i].Sev;
+                    History[head].Kind    := 3;
+                    History[head].StampMs := NowMs;
+                    History[head].StampS  := dateS;
+                    Stat.NextSeq := Stat.NextSeq + 1;
+                    Stat.HistHead := head + 1;
+                    IF Stat.HistHead > HISTLAST THEN
+                        Stat.HistHead := 0;
+                        Stat.Wrapped := TRUE;
+                    END_IF;
+                END_IF;
+            ELSIF Defs[i].Masked THEN
+                Defs[i].Masked := FALSE;
+                head := Stat.HistHead;
+                History[head].Seq     := Stat.NextSeq;
+                History[head].Uuid    := Defs[i].Uuid;
+                History[head].Sev     := Defs[i].Sev;
+                History[head].Kind    := 4;
+                History[head].StampMs := NowMs;
+                History[head].StampS  := dateS;
+                Stat.NextSeq := Stat.NextSeq + 1;
+                Stat.HistHead := head + 1;
+                IF Stat.HistHead > HISTLAST THEN
+                    Stat.HistHead := 0;
+                    Stat.Wrapped := TRUE;
+                END_IF;
+            END_IF;
+        END_IF;
+    END_FOR;
+    IF NOT hit THEN
+        Stat.LastError := 'UUID inconnu';
+    END_IF;
+END_IF;
+PrevMask := Cmd.Mask;
+PrevUnmask := Cmd.Unmask;
+
+IF Cmd.Reset AND NOT PrevReset THEN
+    (* L'historique et les compteurs, PAS le registre ni l'etat courant. Une
+       alarme toujours presente doit le rester apres un Reset: la faire
+       disparaitre parce qu'on a efface le journal serait un mensonge sur la
+       machine. *)
+    Stat.HistHead := 0;
+    Stat.Wrapped  := FALSE;
+    Stat.NextSeq  := 1;
+    FOR i := 0 TO LAST DO
+        Defs[i].Count := 0;
+    END_FOR;
+END_IF;
+PrevReset := Cmd.Reset;
+
+(* ---- l'etat de chaque alarme ------------------------------------------
+   calm : rien n'etait present au cycle precedent. La premiere alarme qui
+   apparait alors est le PREMIER DEFAUT. *)
+calm := Stat.Active = 0;
+horn := 0;
+Stat.Active     := 0;
+Stat.Unacked    := 0;
+Stat.WorstSev   := 0;
+Stat.Registered := 0;
+Stat.Masked     := 0;
+
+FOR i := 0 TO n - 1 DO
+    IF Defs[i].Used THEN
+        Stat.Registered := Stat.Registered + 1;
+        IF Defs[i].Masked THEN
+            Stat.Masked := Stat.Masked + 1;
+        ELSE
+            now := State[i];
+
+            IF now AND NOT Defs[i].Raised THEN
+                (* apparition *)
+                Defs[i].Raised  := TRUE;
+                Defs[i].Acked   := FALSE;
+                Defs[i].SinceMs := 0;
+                Defs[i].SinceS  := 0;
+                Defs[i].RaisedS := dateS;
+                Defs[i].Count   := Defs[i].Count + 1;
+                head := Stat.HistHead;
+                History[head].Seq     := Stat.NextSeq;
+                History[head].Uuid    := Defs[i].Uuid;
+                History[head].Sev     := Defs[i].Sev;
+                History[head].Kind    := 0;
+                History[head].StampMs := NowMs;
+                History[head].StampS  := dateS;
+                Stat.NextSeq := Stat.NextSeq + 1;
+                Stat.HistHead := head + 1;
+                IF Stat.HistHead > HISTLAST THEN
+                    Stat.HistHead := 0;
+                    Stat.Wrapped := TRUE;
+                END_IF;
+                IF calm THEN
+                    Stat.FirstUuid := Defs[i].Uuid;
+                    calm := FALSE;
+                END_IF;
+                IF HornSev > 0 AND Defs[i].Sev >= HornSev THEN
+                    HornQuiet := FALSE;
+                END_IF;
+
+            ELSIF NOT now AND Defs[i].Raised THEN
+                (* disparition *)
+                Defs[i].Raised := FALSE;
+                head := Stat.HistHead;
+                History[head].Seq     := Stat.NextSeq;
+                History[head].Uuid    := Defs[i].Uuid;
+                History[head].Sev     := Defs[i].Sev;
+                History[head].Kind    := 1;
+                History[head].StampMs := NowMs;
+                History[head].StampS  := dateS;
+                Stat.NextSeq := Stat.NextSeq + 1;
+                Stat.HistHead := head + 1;
+                IF Stat.HistHead > HISTLAST THEN
+                    Stat.HistHead := 0;
+                    Stat.Wrapped := TRUE;
+                END_IF;
+
+            ELSIF Defs[i].Raised THEN
+                IF Defs[i].SinceMs < MAXMS - CycleMs THEN
+                    Defs[i].SinceMs := Defs[i].SinceMs + CycleMs;
+                ELSE
+                    Defs[i].SinceMs := MAXMS;
+                END_IF;
+                Defs[i].SinceS := Defs[i].SinceS + secs;
+            END_IF;
+
+            IF Defs[i].Raised THEN
+                Stat.Active := Stat.Active + 1;
+                IF NOT Defs[i].Acked THEN
+                    Stat.Unacked := Stat.Unacked + 1;
+                    IF HornSev > 0 AND Defs[i].Sev >= HornSev THEN
+                        horn := horn + 1;
+                    END_IF;
+                END_IF;
+                IF Defs[i].Sev > Stat.WorstSev THEN
+                    Stat.WorstSev := Defs[i].Sev;
+                END_IF;
+            END_IF;
+        END_IF;
+    END_IF;
+END_FOR;
+
+Stat.Horn := horn > 0 AND NOT HornQuiet;
+
+(* Combien d'evenements sont lisibles. Une fois reboucle, tout l'anneau l'est. *)
+IF Stat.Wrapped THEN
+    Stat.HistCount := HISTLAST + 1;
+ELSE
+    Stat.HistCount := Stat.HistHead;
+END_IF;
+(* Plein SOUS Count : c'est la que Register cherche une place. *)
+Stat.Full := Stat.Registered >= n;
+<<<end>>>

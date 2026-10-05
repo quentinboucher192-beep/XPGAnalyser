@@ -1,0 +1,57 @@
+# Derived data type, shared.
+name = ST_GC_Transition
+version = 0.08
+#! summary = Une transition du moteur GRAFCET : ses etapes sources et destinations, sa condition, sa temporisation.
+#! usage = REPRIS DU PROJET MAST : le type est celui du projet (champs inchanges).
+#! usage = Ce qui suit decrit ce qu'en fait DFB_GRAFCETENGINE 1.49.
+#! see = DFB_GRAFCETENGINE
+#! see = BUILDING
+#! param Id = Le numero de la transition.
+#! param CondText = La condition en clair, 8 caracteres, pour la mise au point.
+#! param Enabled = La transition existe. Une ligne non utilisee reste a FALSE.
+#! param Condition = LA RECEPTIVITE, calculee par ton programme a chaque cycle, avant
+#! param Condition = l'appel du moteur.
+#! param Priority = Reserve.
+#! param JoinKind = 1 : toutes les sources doivent etre actives (convergence en ET).
+#! param JoinKind = Autre : une seule suffit.
+#! param SplitKind = 1 : toutes les destinations s'activent (divergence en ET). Autre
+#! param SplitKind = : seulement la premiere. BUILDING met 1 des deux destinations.
+#! param SourceCount = Combien de sources dans Sources, 1 a 3 : sinon ConfigFault.
+#! param DestCount = Combien de destinations dans Destinations, 1 a 3 : sinon ConfigFault.
+#! param Sources = Les numeros des etapes sources.
+#! param Destinations = Les numeros des etapes destinations.
+#! param Validated = Franchissable au dernier cycle scrute. Ecrit par le moteur.
+#! param SnapshotValid = Le cliche de Validated, pris avant de franchir quoi que ce
+#! param SnapshotValid = soit.
+#! param ConditionTime = La condition doit tenir ce temps avant que la transition soit
+#! param ConditionTime = franchissable, compte depuis la premiere fois ou elle est vue vraie
+#! param ConditionTime = (comme un TON). T#0s : tout de suite.
+#! param TonStarted = Runtime.
+#! param TonElapsed = Runtime.
+#! param TimedConditionValid = La condition a tenu ConditionTime.
+#! param PrevCondition = Runtime.
+#! param ResetOnFall = Sans effet : une condition qui retombe remet TOUJOURS sa
+#! param ResetOnFall = temporisation a zero (comportement du projet MAST, garde).
+#! internal = TonStarted, TonElapsed, PrevCondition, SnapshotValid
+#! changes 0.08 = Range dans la bibliotheque, depuis le projet MAST.
+
+# name ; type ; scope ; initial ; comment
+Id ; INT ; Member ;  ; 
+CondText ; string[8] ; Member ;  ; 
+Enabled ; BOOL ; Member ;  ; 
+Condition ; BOOL ; Member ;  ; 
+Priority ; INT ; Member ;  ; 
+JoinKind ; INT ; Member ;  ; 
+SplitKind ; INT ; Member ;  ; 
+SourceCount ; INT ; Member ;  ; 
+DestCount ; INT ; Member ;  ; 
+Sources ; ARRAY[0..2] OF INT ; Member ;  ; 
+Destinations ; ARRAY[0..2] OF INT ; Member ;  ; 
+Validated ; BOOL ; Member ;  ; 
+SnapshotValid ; BOOL ; Member ;  ; 
+ConditionTime ; TIME ; Member ;  ; 
+TonStarted ; BOOL ; Member ;  ; 
+TonElapsed ; TIME ; Member ;  ; 
+TimedConditionValid ; BOOL ; Member ;  ; 
+PrevCondition ; BOOL ; Member ;  ; 
+ResetOnFall ; BOOL ; Member ;  ; 

@@ -1,0 +1,3 @@
+# Watch tables.
+# table ; name ; owning POU
+# entry ; symbol

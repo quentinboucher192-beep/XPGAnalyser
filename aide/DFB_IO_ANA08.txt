@@ -1,0 +1,21 @@
+#! summary = Traite une carte de 8 voies analogiques en un appel.
+#! usage = UNE INSTANCE PAR CARTE, PAS PAR VOIE. Un seul appel par scrutation traite les 8 voies : echelle, bande morte, filtre, limite de pente, mini/maxi et quatre seuils.
+#! usage = ENTREE OU SORTIE EST UNE PROPRIETE DE LA VOIE (ST_IO_Ana.IsOut), pas du bloc. Une carte mixte reste une seule instance.
+#! usage = LES CINQ TAILLES - 04, 08, 16, 32, 64 - ne different QUE par la borne du tableau. Le corps est identique. Prenez la premiere taille qui contient les voies de la carte : un DFB_IO_ANA64 pour une carte de 16 voies reserve 48 voies de memoire automate pour rien.
+#! usage = L'ORDRE DANS LA TACHE COMPTE. Le cablage des entrees doit tourner AVANT le programme qui les lit, celui des sorties APRES. Une section d'entrees placee en fin de tache fait travailler tout le programme sur la mesure du cycle precedent.
+#! example = IO_DI_R0S4(Count := 8, CycleMs := 20, Chan := CarteDI_R0S4);
+#! see = ST_IO_Ana, DFB_IO_ANA04, DFB_IO_ANA16, DFB_IO_ANA32
+#! param Count = Combien de voies de cette carte sont reellement utilisees. Les voies au-dela ne sont pas traitees, ce qui evite de payer le calcul de 64 voies sur une carte qui en a 8 de cablees.
+#! param Count = CORRIGE EN 1.01, ET IL FAUT LE SAVOIR SI VOUS AVEZ ENCORE LA 1.00. La version 1.00 bornait Count par "IF n > LAST THEN n := LAST". LAST est le dernier INDICE (7) et Count un NOMBRE de voies (8) : borner l'un par l'autre faisait boucler de 0 a 6, et **la voie 7 n'etait jamais traitee**. Sur une carte pleine, la derniere voie ne lisait rien si c'etait une entree, et n'ecrivait rien si c'etait une sortie - sans que rien ne le signale.
+#! param Count = La 1.01 borne a LAST + 1. Count = 8 traite donc bien les 8 voies, de 0 a 7.
+#! param Count = Si un projet porte encore la 1.00, VerifierBibliotheque le dit, et le symptome a chercher est toujours le meme : la derniere voie de la carte.
+#! param CycleMs = La periode de la tache, en millisecondes.
+#! param CycleMs = POURQUOI UN NOMBRE ET PAS UN TEMPORISATEUR : un DDT ne peut pas contenir de TON. Un type derive est une donnee, un temporisateur est un bloc fonction. Le temps est donc accumule a partir de ce nombre.
+#! param CycleMs = Une valeur fausse ici fausse SILENCIEUSEMENT tous les temps de la carte : anti-rebond, temps d'etat, retards de seuil. Si la tache n'est pas periodique, passez un temps de cycle mesure.
+#! param Reset = Efface les STATISTIQUES, jamais les valeurs : les compteurs de fronts pour une carte TOR, les mini/maxi pour une carte analogique.
+#! param Reset = Il agit sur niveau, pas sur front : le laisser a TRUE remet a zero a chaque scrutation, ce qui donne des compteurs qui restent a zero sans raison apparente.
+#! param Chan = Les voies de la carte, un ARRAY[0..7] OF ST_IO_Ana.
+#! param Chan = C'est un InOut : le bloc lit dedans et ecrit dedans. Tout ce qu'il retient d'une scrutation a l'autre - compteurs, temps, anti-rebond - est DANS la voie, donc rien ne se perd entre les appels et il n'y a pas d'etat cache dans l'instance.
+#! param AlarmCount = Combien de voies de cette carte sont en alarme cette scrutation.
+#! param AlarmSevMax = La pire gravite presente sur la carte, 0 quand il n'y en a aucune.
+#! param AlarmSevMax = C'est le resume qu'on cable sur un voyant ou qu'on remonte a l'IHM quand on ne veut pas parcourir les voies une par une.

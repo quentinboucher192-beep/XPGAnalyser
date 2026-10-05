@@ -1,0 +1,16 @@
+# Derived data type.
+name = ST_GC_Step
+version = 0.10
+# checksum is recomputed by Control Expert on import; not stored.
+
+# name ; type ; address ; scope ; init ; comment ; attributes ; element comments
+Id ; INT ;  ; Member ;  ;  ;  ; 
+Name ; string[4] ;  ; Member ;  ;  ;  ; 
+IsInitial ; BOOL ;  ; Member ;  ;  ;  ; 
+isFinal ; BOOL ;  ; Member ;  ;  ;  ; 
+Active ; BOOL ;  ; Member ;  ;  ;  ; 
+PrevActive ; BOOL ;  ; Member ;  ;  ;  ; 
+Rising ; BOOL ;  ; Member ;  ;  ;  ; 
+Falling ; BOOL ;  ; Member ;  ;  ;  ; 
+ActiveTime ; TIME ;  ; Member ;  ;  ;  ; 
+InactiveTime ; TIME ;  ; Member ;  ;  ;  ; 

@@ -1,0 +1,96 @@
+# Derived data type, shared.
+name = ST_IO_Ana
+version = 1.01
+#! summary = Une voie analogique, entree ou sortie : echelle, bande morte, filtre, limite de pente, mini/maxi et quatre seuils.
+#! usage = LA CHAINE, DANS L'ORDRE, POUR UNE ENTREE : Raw (points de carte) donne Eng par l'echelle, puis Eng donne Val par la bande morte et le filtre, puis Val est limitee en pente. C'est Val que le programme lit, et c'est Val que les seuils comparent.
+#! usage = LA BANDE MORTE PASSE AVANT LE FILTRE. Filtrer un bruit que la bande morte aurait de toute facon jete coute une division par scrutation et n'apporte rien.
+#! usage = LA PENTE EST LIMITEE AVANT D'ETRE PUBLIEE. Annoncer Rate puis ecreter ensuite publierait une vitesse que la voie n'a jamais eue - et Rate est justement le nombre qu'on lit pour decider si la limite sert a quelque chose.
+#! usage = POUR UNE SORTIE, TOUT SE LIT A L'ENVERS : vous ecrivez Val en unites physiques, le bloc en deduit Raw en points. La bande morte, le filtre, la pente, les mini/maxi et les seuils ne s'appliquent PAS a une sortie.
+#! see = ST_IO_Thr, DFB_IO_ANA16, ST_IO_Dig
+#! param Raw = Les points bruts de la carte. Pour une entree, vous la cablez depuis %IW ; pour une sortie, c'est le bloc qui l'ecrit et vous la recopiez vers %QW.
+#! param Raw = Elle est en REAL et pas en INT : une sortie calculee en points tombe rarement sur un entier, et arrondir deux fois perd de la resolution.
+#! param Eng = La valeur apres echelle, avant bande morte et filtre. Utile pour regler : comparer Eng et Val montre ce que le filtre est en train de faire.
+#! param Val = LA valeur, celle qu'on lit dans le programme et celle que les seuils comparent.
+#! param Val = Pour une sortie, c'est CELLE QUE VOUS ECRIVEZ.
+#! param IsOut = TRUE inverse le sens de l'echelle : Val entre en unites physiques, Raw sort en points.
+#! param RawMin = La plage de la carte, en points : 0 et 10000 pour un 0-10 V, 0 et 10000 pour un 4-20 mA sur une BMX AMI, selon le reglage de la voie.
+#! param RawMin = RawMin egal a RawMax est une division par zero, qui arreterait la tache. C'est pour ca que le bloc la refuse et leve Fault au lieu de calculer.
+#! param RawMax = L'autre extremite de la plage carte.
+#! param EngMin = Ce que cette plage veut dire : 0 et 16 bar, -50 et 150 degres.
+#! param EngMin = L'echelle est LINEAIRE et il n'y a pas d'autre choix. Une sonde non lineaire se lineariser ailleurs, avant d'arriver ici.
+#! param EngMax = L'autre extremite, en unites physiques.
+#! param Clamp = TRUE maintient Val entre EngMin et EngMax au lieu d'extrapoler.
+#! param Clamp = A laisser vrai pour une mesure physique - une cuve n'est pas remplie a 110%. A mettre a faux quand le depassement est l'information : une sonde debranchee lit alors hors plage, et ca se voit.
+#! param DeadBand = Les variations plus petites que ca ne changent pas Val, en unites physiques. 0 la desactive.
+#! param DeadBand = Elle sert a ne pas remonter du bruit a l'IHM. Trop grande, elle fige la mesure et la rend fausse d'un demi-pas en permanence.
+#! param FiltN = La longueur du filtre du premier ordre, en scrutations. 1 le desactive.
+#! param FiltN = La constante de temps vaut a peu pres FiltN fois la periode de tache : 10 sur une tache a 20 ms font 200 ms. Une valeur forte lisse bien et retarde d'autant la detection d'un depassement de seuil.
+#! param RateMax = La variation la plus grande toleree par seconde, en unites physiques. 0.0 la desactive.
+#! param RateMax = Elle ecrete la valeur, elle ne signale rien. Une mesure qui saute reste donc invisible sauf a regarder Rate : c'est le prix d'un filtre qui protege l'aval sans l'alarmer.
+#! param SimEn = Utiliser SimVal au lieu de la carte. Passe apres ForceEn.
+#! param SimVal = La valeur simulee, en POINTS de carte, pas en unites physiques.
+#! param ForceEn = Utiliser ForceVal au lieu de tout le reste. Gagne sur SimEn.
+#! param ForceEn = Attention : pour une ENTREE, ForceVal remplace Raw et passe donc par l'echelle. Pour une SORTIE, il remplace Val et est donc en unites physiques. Le meme champ n'a pas la meme unite des deux cotes.
+#! param ForceVal = La valeur forcee. Voir ForceEn pour son unite.
+#! param OverRange = Raw etait au-dessus de RawMax. Calcule avant le bornage, donc visible meme avec Clamp.
+#! param UnderRange = Raw etait en dessous de RawMin.
+#! param Fault = L'echelle est inutilisable : RawMax egale RawMin, ou EngMax egale EngMin sur une sortie.
+#! param Fault = La voie est alors SAUTEE et ses seuils remis a zero - une plage mal saisie ne doit pas emporter toute la carte. Le drapeau est RECALCULE a chaque scrutation : il n'est pas memorise, et il disparait des que la plage est corrigee.
+#! param MinHold = La plus basse Val depuis le dernier Reset.
+#! param MaxHold = La plus haute Val depuis le dernier Reset.
+#! param Rate = La variation par seconde, calculee d'une scrutation a l'autre, signee.
+#! param Rate = Elle est bruyante par nature : c'est une difference divisee par la periode. Pour l'afficher, filtrez-la ou regardez-la sur une tendance, pas au chiffre pres.
+#! param HoldValid = Faux tant que la premiere scrutation n'a pas rempli MinHold et MaxHold.
+#! param HoldValid = Ce champ existe parce qu'un MinHold initialise a 0.0 est un mensonge sur une voie qui n'est jamais descendue sous 4 bar.
+#! param AlarmAny = Au moins un des quatre seuils est leve.
+#! param AlarmSev = La pire gravite actuellement levee sur cette voie, 0 quand il n'y en a pas.
+#! param Thr = Les quatre seuils. Sans ordre impose : la convention "0 = tres bas, 3 = tres haut" est la votre, le bloc ne la connait pas.
+#! param Thr = Quatre et pas plus : c'est ce qui tient dans une voie sans faire grossir une carte de 64.
+#! example = (* declarer : Pression : ARRAY[0..3] OF ST_IO_Ana; *)
+#! example = (* 4-20 mA sur une carte M340 : 0..10000 points pour 0..16 bar *)
+#! example = Pression[0].RawMin := 0.0;
+#! example = Pression[0].RawMax := 10000.0;
+#! example = Pression[0].EngMin := 0.0;
+#! example = Pression[0].EngMax := 16.0;
+#! example = (* seuil haut : 12 bar pendant 2 s, hysteresis 0,5 bar *)
+#! example = Pression[0].Thr[0].En := TRUE;
+#! example = Pression[0].Thr[0].Dir := 0;
+#! example = Pression[0].Thr[0].Val := 12.0;
+#! example = Pression[0].Thr[0].Hyst := 0.5;
+#! example = Pression[0].Thr[0].DelayMs := 2000;
+#! example = Pression[0].Thr[0].Sev := 3;
+#! expect = 1 : Pression[0].EngMax = 16.0
+#! expect = 1 : Pression[0].Thr[0].Val = 12.0
+#! changes 1.01 = Commentaires des champs en francais. Aucun champ ajoute ni retire.
+#! changes 1.01 = Au premier passage, Val part de la mesure et non plus de 0
+#! changes 1.01 = (DFB_IO_ANA* 1.02).
+
+# Une voie analogique, entree ou sortie, avec 4 seuils.
+
+# name ; type ; scope ; initial ; comment
+Raw ; REAL ; Member ; 0.0 ; tel que lu sur la carte. Pour une sortie, c'est le bloc qui l'ecrit
+Eng ; REAL ; Member ; 0.0 ; apres l'echelle, avant bande morte et filtre
+Val ; REAL ; Member ; 0.0 ; LA valeur finale. Pour une sortie, c'est VOUS qui l'ecrivez
+IsOut ; BOOL ; Member ;  ; TRUE inverse l'echelle : Val en unites physiques, Raw en sortie
+RawMin ; REAL ; Member ; 0.0 ; la plage de la carte, par exemple 0 et 10000
+RawMax ; REAL ; Member ; 10000.0 ; haut de la plage de la carte
+EngMin ; REAL ; Member ; 0.0 ; ce que cette plage veut dire, par exemple 0 et 16 bar
+EngMax ; REAL ; Member ; 100.0 ; haut de la plage physique
+Clamp ; BOOL ; Member ; TRUE ; garder Val dans EngMin..EngMax plutot qu'extrapoler
+DeadBand ; REAL ; Member ; 0.0 ; ignorer les variations plus petites, en unites physiques
+FiltN ; INT ; Member ; 1 ; longueur du filtre du premier ordre, en scrutations. 1 le desactive
+RateMax ; REAL ; Member ; 0.0 ; plus grande variation permise par seconde. 0.0 la desactive
+SimEn ; BOOL ; Member ;  ; utiliser SimVal au lieu de la carte
+SimVal ; REAL ; Member ; 0.0 ; la valeur simulee
+ForceEn ; BOOL ; Member ;  ; utiliser ForceVal au lieu de tout le reste - gagne sur SimEn
+ForceVal ; REAL ; Member ; 0.0 ; la valeur forcee
+OverRange ; BOOL ; Member ;  ; Raw etait au-dessus de RawMax
+UnderRange ; BOOL ; Member ;  ; Raw etait au-dessous de RawMin
+Fault ; BOOL ; Member ;  ; l'echelle est inutilisable : RawMax egale RawMin
+MinHold ; REAL ; Member ; 0.0 ; plus petite Val depuis le dernier Reset
+MaxHold ; REAL ; Member ; 0.0 ; plus grande Val depuis le dernier Reset
+Rate ; REAL ; Member ; 0.0 ; variation par seconde, depuis la scrutation precedente
+HoldValid ; BOOL ; Member ;  ; FALSE tant que la premiere scrutation n'a pas rempli MinHold et MaxHold
+AlarmAny ; BOOL ; Member ;  ; au moins un seuil est leve
+AlarmSev ; INT ; Member ; 0 ; la pire gravite levee, 0 quand il n'y en a aucune
+Thr ; ARRAY[0..3] OF ST_IO_Thr ; Member ;  ; les seuils, dans n'importe quel ordre

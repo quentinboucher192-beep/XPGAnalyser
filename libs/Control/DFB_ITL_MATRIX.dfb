@@ -1,0 +1,165 @@
+# Derived function block, shared.
+name = DFB_ITL_MATRIX
+version = 1.01
+#! summary = Interverrouillage de 16 vannes par matrice : interdits et prerequis.
+#! usage = DEUX RELATIONS, et les confondre est l'erreur classique :
+#! usage = Forbid[i*16+j]   i ne doit PAS etre ouverte pendant que j l'est.
+#! usage = Melange de produits, court-circuit hydraulique.
+#! usage = Require[i*16+j]  i ne peut s'ouvrir QUE SI j est ouverte. Une vanne
+#! usage = d'aspiration avant une pompe, un event avant un
+#! usage = remplissage.
+#! usage = Un interverrouillage qui n'a que le premier laisse ouvrir une vanne
+#! usage = dans le vide ; un qui n'a que le second laisse melanger deux produits.
+#! usage = LA MATRICE EST A PLAT : ARRAY[0..255] indice par i*16+j, et non un
+#! usage = tableau a deux dimensions. Le format d'echange les ecrit, mais tout
+#! usage = ce qui les relit ne les comprend pas encore.
+#! usage = IL NE COMMANDE RIEN. Il dit Allowed[i], et pourquoi non. La vanne
+#! usage = reste maitresse de ce qu'elle fait de cette reponse - un bloc qui
+#! usage = forcerait la fermeture ferait deux choses au meme endroit.
+#! example = (* 0 interdite pendant que 1 est ouverte *)
+#! example = MatForbid[0 * 16 + 1] := TRUE;
+#! example = (* 2 ne s'ouvre que si l'aspiration 5 est ouverte *)
+#! example = MatRequire[2 * 16 + 5] := TRUE;
+#! example = 
+#! example = ITL_Melange(Count := 8, Open := VannesOuvertes,
+#! example = Forbid := MatForbid, Require := MatRequire,
+#! example = Allowed := VannesOk, BlockedBy := VannesPar,
+#! example = Reason := VannesRaison, Violation := VannesViol);
+#! example = Vannes[0].OpenReq := Demande[0] AND VannesOk[0];
+#! see = DFB_MODE_MANAGER
+#! param Open = L'etat REEL de chaque vanne, a cabler sur sa position - pas sur
+#! param Open = sa commande. Une vanne commandee ouverte mais bloquee fermee ne
+#! param Open = protege personne.
+#! param Reason = 0 rien, 1 conflit, 2 prerequis absent.
+#! param BlockedBy = Qui l'en empeche, -1 si personne. De quoi ecrire un message
+#! param BlockedBy = qui nomme la vanne fautive plutot que de dire 'interdit'.
+#! param Violation = Elle est ouverte ALORS QU'ELLE NE DEVRAIT PAS L'ETRE. C'est
+#! param Violation = different d'un refus d'ouvrir : la situation interdite
+#! param Violation = EXISTE deja, et personne ne s'en apercevrait si on ne la
+#! param Violation = nommait pas.
+#! param Count = Combien de vannes sont traitees : 0 a Count - 1, 16 au plus. Le pas
+#! param Count = de la matrice reste 16, quel que soit Count : Forbid[i*16+j], jamais
+#! param Count = i*Count+j.
+#! param Forbid = La matrice des INTERDITS, a plat : Forbid[i*16+j] vrai veut dire 'i
+#! param Forbid = ne doit pas etre ouverte pendant que j l'est'. Elle n'est pas
+#! param Forbid = symetrique d'office : si j ne doit pas non plus s'ouvrir pendant i,
+#! param Forbid = il faut poser aussi Forbid[j*16+i].
+#! param Require = La matrice des PREREQUIS, a plat : Require[i*16+j] vrai veut dire
+#! param Require = 'i ne peut etre ouverte que si j l'est'. Un event avant un
+#! param Require = remplissage, une aspiration avant une pompe.
+#! param Allowed = SORTIE. i a le droit d'etre ouverte. A mettre en ET dans sa demande
+#! param Allowed = d'ouverture : le bloc ne ferme rien lui-meme.
+#! param Blocked = Combien de vannes sont bloquees ce cycle, par un interdit ou un
+#! param Blocked = prerequis.
+#! param AnyViolation = Au moins une vanne est ouverte ALORS QU'ELLE NE DEVRAIT PAS
+#! param AnyViolation = L'ETRE. C'est une alarme, pas un refus : la situation
+#! param AnyViolation = interdite existe deja.
+#! given = VannesOuvertes[1] := TRUE
+#! expect = 1 : VannesOk[0] = FALSE
+#! expect = 1 : VannesPar[0] = 1
+#! expect = 1 : VannesRaison[0] = 1
+#! expect = 1 : VannesOk[2] = FALSE
+#! expect = 1 : VannesPar[2] = 5
+#! expect = 1 : VannesRaison[2] = 2
+#! expect = 1 : VannesOk[1] = TRUE
+
+# Interverrouillage de 16 vannes par matrice: interdits et prerequis.
+
+# name ; type ; scope ; initial ; comment
+Count ; INT ; Input ; 16 ; combien de vannes sont traitees
+Open ; ARRAY[0..15] OF BOOL ; InOut ;  ; l'etat reel de chaque vanne. A cabler sur sa position
+Forbid ; ARRAY[0..255] OF BOOL ; InOut ;  ; Forbid[i*16+j]: i interdite pendant que j est ouverte
+Require ; ARRAY[0..255] OF BOOL ; InOut ;  ; Require[i*16+j]: i ne peut s'ouvrir que si j est ouverte
+Allowed ; ARRAY[0..15] OF BOOL ; InOut ;  ; SORTIE: i a le droit d'etre ouverte
+BlockedBy ; ARRAY[0..15] OF INT ; InOut ;  ; SORTIE: qui l'en empeche, -1 si personne
+Reason ; ARRAY[0..15] OF INT ; InOut ;  ; SORTIE: 0 rien, 1 conflit, 2 prerequis absent
+Violation ; ARRAY[0..15] OF BOOL ; InOut ;  ; SORTIE: elle est ouverte alors qu'elle ne devrait pas l'etre
+Blocked ; INT ; Output ; 0 ; combien sont bloquees
+AnyViolation ; BOOL ; Output ;  ; au moins une situation interdite EXISTE deja
+i ; INT ; Local ; 0 ; 
+j ; INT ; Local ; 0 ; 
+k ; INT ; Local ; 0 ; 
+n ; INT ; Local ; 0 ; 
+LAST ; INT ; Local ; 15 ; 
+SIZE ; INT ; Local ; 16 ; le pas de la matrice a plat
+
+<<<section Process ST>>>
+(* =====================================================================
+    DFB_ITL_MATRIX - interverrouillage par matrice.
+
+    DEUX RELATIONS, et confondre les deux est l'erreur classique.
+
+      Forbid[i][j]   i ne doit PAS etre ouverte pendant que j l'est.
+                     Melange de produits, court-circuit hydraulique.
+      Require[i][j]  i ne peut s'ouvrir QUE SI j est ouverte.
+                     Une vanne d'aspiration avant une pompe, un event avant
+                     un remplissage.
+
+    Un interverrouillage qui n'a que le premier laisse ouvrir une vanne dans
+    le vide; un qui n'a que le second laisse melanger deux produits.
+
+    LA MATRICE EST A PLAT. ARRAY[0..255] avec l'indice i*Size+j, et non un
+    tableau a deux dimensions: le format d'echange les ecrit, mais tout ce
+    qui les relit ici ne les comprend pas encore. Un tableau a plat se lit
+    partout, et Index(i,j) est ecrit une fois.
+
+    IL NE COMMANDE RIEN. Il dit Allowed[i], et pourquoi non. La vanne reste
+    maitresse de ce qu'elle fait de cette reponse - un bloc qui forcerait la
+    fermeture ferait deux choses au meme endroit.
+   ===================================================================== *)
+
+n := Count;
+IF n > LAST + 1 THEN n := LAST + 1; END_IF;
+IF n < 0 THEN n := 0; END_IF;
+
+Blocked := 0;
+
+FOR i := 0 TO n - 1 DO
+    Allowed[i]   := TRUE;
+    BlockedBy[i] := -1;
+    Reason[i]    := 0;
+
+    FOR j := 0 TO n - 1 DO
+        IF i <> j THEN
+            k := i * SIZE + j;
+
+            (* Interdit: j est ouverte, donc i ne peut pas l'etre. *)
+            IF Forbid[k] AND Open[j] THEN
+                Allowed[i]   := FALSE;
+                BlockedBy[i] := j;
+                Reason[i]    := 1;
+                EXIT;
+            END_IF;
+
+            (* Prerequis: j doit etre ouverte, et elle ne l'est pas. *)
+            IF Require[k] AND NOT Open[j] THEN
+                Allowed[i]   := FALSE;
+                BlockedBy[i] := j;
+                Reason[i]    := 2;
+                EXIT;
+            END_IF;
+        END_IF;
+    END_FOR;
+
+    (* UNE VANNE DEJA OUVERTE ALORS QU'ELLE NE DEVRAIT PAS L'ETRE.
+       C'est different d'un refus d'ouvrir: la situation interdite EXISTE
+       deja, et personne ne s'en apercevrait si on ne la nommait pas. *)
+    IF Open[i] AND NOT Allowed[i] THEN
+        Violation[i] := TRUE;
+        AnyViolation := TRUE;
+    ELSE
+        Violation[i] := FALSE;
+    END_IF;
+
+    IF NOT Allowed[i] THEN
+        Blocked := Blocked + 1;
+    END_IF;
+END_FOR;
+
+(* Remis a chaque cycle apres la boucle, pas avant: sinon le premier element
+   examine effacerait la violation trouvee par le dernier au cycle precedent. *)
+AnyViolation := FALSE;
+FOR i := 0 TO n - 1 DO
+    IF Violation[i] THEN AnyViolation := TRUE; END_IF;
+END_FOR;
+<<<end>>>

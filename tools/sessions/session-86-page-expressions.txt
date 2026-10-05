@@ -1,0 +1,36 @@
+# =============================================================================
+#  Session 86 - 1.11 (chantier T3, D5) : la page des expressions, seule
+#  (action help.expressions : Aide > Les guides > Les expressions). Sans projet :
+#  le champ d'essai juge sur les variables d'exemple (V[0].Pos = 42, Pression,
+#  Mode = T_MODE#Auto, Pompe_Marche).
+#   T3_10 : l'ecran : Retour et le titre ; les 11 types a gauche (BOOL montre) ;
+#           l'article ; « Essaie ici » avec le premier exemple juge
+#   T3_11 : le type Entier (un clic dans la liste)
+#   T3_12 : « =V[0].Pos MOD 10 » : refuse (MOD sur un REAL), souligne, la raison,
+#           « Remplacer par REAL_TO_INT(V[0].Pos) MOD 10 »
+#   T3_13 : Remplacer par : le champ corrige vaut 2 (INT)
+#   T3_14 : le type Couleur : la pastille de l'exemple
+#   T3_15 : Echap : retour a l'accueil
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+action help.expressions
+attendre 20
+capture T3_10_expressions_bool.png
+bouton "12   Entier"
+attendre 10
+capture T3_11_expressions_entier.png
+champ "help.expressions.page.essai" "=V[0].Pos MOD 10"
+attendre 10
+capture T3_12_essai_mod_refuse.png
+bouton "Remplacer par*"
+attendre 10
+capture T3_13_essai_remplace.png
+bouton "#   Couleur"
+attendre 10
+capture T3_14_expressions_couleur.png
+touche Escape
+attendre 10
+capture T3_15_retour.png
+quitter

@@ -1,0 +1,90 @@
+# Program unit interface.
+name = Gestion_armoires
+version = 
+task = MAST
+order = 17
+
+# name ; type ; address ; scope ; init ; comment ; attributes ; element comments
+Acquit ; EBOOL ;  ; Input ;  ;  ; EffectiveParameter=Acquit ; 
+Acquit_A ; EBOOL ;  ; Input ;  ;  ; EffectiveParameter=Acquit_A ; 
+Acquit_B ; EBOOL ;  ; Input ;  ;  ; EffectiveParameter=Acquit_B ; 
+armoires ; ARRAY[0..1] OF armoire ;  ; InOut ;  ;  ; EffectiveParameter=Armoires ; 
+config_utilisee ; config_gaz ;  ; InOut ;  ;  ; EffectiveParameter=ConfigGazUtilisee ; 
+generalites ; config_armoire ;  ; InOut ;  ;  ; EffectiveParameter=ConfigArmoireUtilisee ; 
+NtpcNow ; Display_NTPC ;  ; InOut ;  ;  ; EffectiveParameter=NTPCInfos ; 
+index_armoire_utilisee ; INT ;  ; InOut ;  ;  ; EffectiveParameter=index_armoire_utilisee ; 
+index_armoire_non_utilisee ; INT ;  ; InOut ;  ;  ; EffectiveParameter=index_armoire_non_utilisee ; 
+TsSys ; TIME ;  ; InOut ;  ;  ; EffectiveParameter=TsSys ; 
+DEBUG_ACT1_SURP_A ; WORD ;  ; InOut ;  ;  ; EffectiveParameter=DEBUG_ACT1_SURP[0] ; 
+DEBUG_ACT2_SURP_A ; WORD ;  ; InOut ;  ;  ; EffectiveParameter=DEBUG_ACT2_SURP[0] ; 
+DEBUG_ACT3_SURP_A ; WORD ;  ; InOut ;  ;  ; EffectiveParameter=DEBUG_ACT3_SURP[0] ; 
+DEBUG_NOM_ETAPE_SURP_A ; WORD ;  ; InOut ;  ;  ; EffectiveParameter=DEBUG_NOM_ETAPE_SURP[0] ; 
+DEBUG_ACT1_SURP_B ; WORD ;  ; InOut ;  ;  ; EffectiveParameter=DEBUG_ACT1_SURP[1] ; 
+DEBUG_ACT2_SURP_B ; WORD ;  ; InOut ;  ;  ; EffectiveParameter=DEBUG_ACT2_SURP[1] ; 
+DEBUG_ACT3_SURP_B ; WORD ;  ; InOut ;  ;  ; EffectiveParameter=DEBUG_ACT3_SURP[1] ; 
+DEBUG_NOM_ETAPE_SURP_B ; WORD ;  ; InOut ;  ;  ; EffectiveParameter=DEBUG_NOM_ETAPE_SURP[1] ; 
+DEBUG_TEMPSACT1_SURP_A ; DINT ;  ; InOut ;  ;  ; EffectiveParameter=DEBUG_TEMPSACTION1_SURP[0] ; 
+DEBUG_TEMPSACT2_SURP_A ; DINT ;  ; InOut ;  ;  ; EffectiveParameter=DEBUG_TEMPSACTION2_SURP[0] ; 
+DEBUG_TEMPSACT3_SURP_A ; DINT ;  ; InOut ;  ;  ; EffectiveParameter=DEBUG_TEMPSACTION3_SURP[0] ; 
+DEBUG_TEMPSETAPE_SURP_A ; DINT ;  ; InOut ;  ;  ; EffectiveParameter=DEBUG_TEMPSETAPE_SURP[0] ; 
+DEBUG_TEMPSACT1_SURP_B ; DINT ;  ; InOut ;  ;  ; EffectiveParameter=DEBUG_TEMPSACTION1_SURP[1] ; 
+DEBUG_TEMPSACT2_SURP_B ; DINT ;  ; InOut ;  ;  ; EffectiveParameter=DEBUG_TEMPSACTION2_SURP[1] ; 
+DEBUG_TEMPSACT3_SURP_B ; DINT ;  ; InOut ;  ;  ; EffectiveParameter=DEBUG_TEMPSACTION3_SURP[1] ; 
+DEBUG_TEMPSETAPE_SURP_B ; DINT ;  ; InOut ;  ;  ; EffectiveParameter=DEBUG_TEMPSETAPE_SURP[1] ; 
+DEBUG_TYPE_SURP_A ; WORD ;  ; InOut ;  ;  ; EffectiveParameter=DEBUG_TYPE_SURP[1] ; 
+DEBUG_TYPE_SURP_B ; WORD ;  ; InOut ;  ;  ; EffectiveParameter=DEBUG_TYPE_SURP[1] ; 
+CycleMs ; UDINT ;  ; InOut ;  ;  ; EffectiveParameter=CycleMs ; 
+reset_timer ; ARRAY[0..1] OF EBOOL ;  ; InOut ;  ;  ; EffectiveParameter=reset_timer ; 
+index ; INT ;  ; Public ;  ;  ;  ; 
+flag_bouteille_vide ; ARRAY[0..1] OF EBOOL ;  ; Public ;  ;  ;  ; 
+timeout_atteintA ; EBOOL ;  ; Public ;  ;  ;  ; 
+Sorties_TOR16_STATES ; ARRAY[0..1] OF DWORD ;  ; Public ;  ;  ;  ; 
+flag_bouteille_presque_vide ; ARRAY[0..1] OF EBOOL ;  ; Local ;  ;  ;  ; 
+TON_PRESQUE_VIDE_0 ; TON ;  ; Local ;  ;  ;  ; 
+TON_PRESQUE_VIDE_1 ; TON ;  ; Local ;  ;  ;  ; 
+TON_VIDE_0 ; TON ;  ; Local ;  ;  ;  ; 
+TON_VIDE_1 ; TON ;  ; Local ;  ;  ;  ; 
+ancien_index_utilise ; INT ;  ; Local ;  ;  ;  ; 
+configuree ; EBOOL ;  ; Local ;  ;  ;  ; 
+TON_BASCULEMENT ; TON ;  ; Local ;  ;  ;  ; 
+Steps_SurpA ; ARRAY[0..27] OF ST_GC_Step ;  ; Local ;  ;  ;  ; 
+Trans_SurpA ; ARRAY[0..27] OF ST_GC_Transition ;  ; Local ;  ;  ;  ; 
+Acts_SurpA ; ARRAY[0..27] OF ST_GC_Action ;  ; Local ;  ;  ;  ; 
+Gc_SurpressionA ; DFB_GRAFCETENGINE ;  ; Local ;  ;  ;  ; 
+InitDone_SurpA ; EBOOL ;  ; Local ;  ;  ;  ; 
+Steps_Surv ; ARRAY[0..27] OF ST_GC_Step ;  ; Local ;  ;  ;  ; 
+Gc_Surveillance ; DFB_GRAFCETENGINE ;  ; Local ;  ;  ;  ; 
+InitDone_Surv ; EBOOL ;  ; Local ;  ;  ;  ; 
+Trans_Surv ; ARRAY[0..27] OF ST_GC_Transition ;  ; Local ;  ;  ;  ; 
+Acts_Surv ; ARRAY[0..27] OF ST_GC_Action ;  ; Local ;  ;  ;  ; 
+Ctrl_SurpA ; ST_GC_CTRL ;  ; Local ;  ;  ;  ; 
+Ctrl_Surv ; ST_GC_CTRL ;  ; Local ;  ;  ;  ; 
+Builder ; BUILDING ;  ; Local ;  ;  ;  ; 
+Gc_SurpressionB ; DFB_GRAFCETENGINE ;  ; Local ;  ;  ;  ; 
+Steps_SurpB ; ARRAY[0..27] OF ST_GC_Step ;  ; Local ;  ;  ;  ; 
+Trans_SurpB ; ARRAY[0..27] OF ST_GC_Transition ;  ; Local ;  ;  ;  ; 
+Acts_SurpB ; ARRAY[0..27] OF ST_GC_Action ;  ; Local ;  ;  ;  ; 
+Ctrl_SurpB ; ST_GC_CTRL ;  ; Local ;  ;  ;  ; 
+timeout_atteintB ; EBOOL ;  ; Local ;  ;  ;  ; 
+InitDone_SurpB ; EBOOL ;  ; Local ;  ;  ;  ; 
+PasDeBasculementEnCours ; BOOL ;  ; Local ;  ;  ;  ; 
+PasDeChangementEnCours ; EBOOL ;  ; Local ;  ;  ;  ; 
+index_out ; DINT ;  ; Local ;  ;  ;  ; 
+cpt_reset ; DINT ;  ; Local ;  ;  ;  ; 
+Close ; TOUTFERMER ;  ; Local ;  ;  ;  ; 
+acquittements ; ARRAY[0..1] OF EBOOL ;  ; Local ;  ;  ;  ; 
+
+# section ; name ; language ; order ; activation ; logic ; file
+section ; Init ; ST ; 1 ;  ;  ; Init.st
+section ; Distribution ; ST ; 2 ; configuree ; standard ; Distribution.st
+section ; SFC_Surveillance ; ST ; 3 ; configuree ; standard ; SFC_Surveillance.st
+section ; SFC_SurpressionA ; ST ; 4 ; configuree ; standard ; SFC_SurpressionA.st
+section ; SFC_SurpressionB ; ST ; 5 ; configuree ; standard ; SFC_SurpressionB.st
+section ; SFC_Surveillance_Actions ; ST ; 6 ; configuree ; standard ; SFC_Surveillance_Actions.st
+section ; SFC_SurpressionA_Actions ; ST ; 7 ; configuree ; standard ; SFC_SurpressionA_Actions.st
+section ; SFC_SurpressionB_Actions ; ST ; 8 ; configuree ; standard ; SFC_SurpressionB_Actions.st
+section ; Declenchement ; ST ; 9 ; configuree ; standard ; Declenchement.st
+section ; Bouteilles_vides ; ST ; 10 ; configuree ; standard ; Bouteilles_vides.st
+section ; Armoires_pretes ; ST ; 11 ; configuree ; standard ; Armoires_pretes.st
+section ; Armoires_actives ; ST ; 12 ; configuree ; standard ; Armoires_actives.st
+section ; SFC_DEBUG ; ST ; 13 ;  ;  ; SFC_DEBUG.st

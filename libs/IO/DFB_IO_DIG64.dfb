@@ -1,0 +1,224 @@
+# Derived function block, shared.
+name = DFB_IO_DIG64
+version = 1.02
+#! summary = Traite une carte de 64 voies tout ou rien en un appel.
+#! usage = UNE INSTANCE PAR CARTE, PAS PAR VOIE. Un seul appel par scrutation traite les 64 voies : inversion, anti-rebond, fronts, compteurs et alarme de maintien.
+#! usage = ENTREE OU SORTIE EST UNE PROPRIETE DE LA VOIE (ST_IO_Dig.IsOut), pas du bloc. Une carte mixte reste une seule instance.
+#! usage = LES CINQ TAILLES - 04, 08, 16, 32, 64 - ne different QUE par la borne du tableau. Le corps est identique. Prenez la premiere taille qui contient les voies de la carte : un DFB_IO_DIG64 pour une carte de 16 voies reserve 48 voies de memoire automate pour rien.
+#! usage = L'ORDRE DANS LA TACHE COMPTE. Le cablage des entrees doit tourner AVANT le programme qui les lit, celui des sorties APRES. Une section d'entrees placee en fin de tache fait travailler tout le programme sur la mesure du cycle precedent.
+#! example = IO_DI_R0S4(Count := 64, CycleMs := 20, Chan := CarteDI_R0S4);
+#! see = ST_IO_Dig, DFB_IO_DIG04, DFB_IO_DIG08, DFB_IO_DIG16, DFB_IO_DIG32
+#! param Count = Combien de voies de cette carte sont reellement utilisees. Les voies au-dela ne sont pas traitees, ce qui evite de payer le calcul de 64 voies sur une carte qui en a 8 de cablees.
+#! param Count = CORRIGE EN 1.01, ET IL FAUT LE SAVOIR SI VOUS AVEZ ENCORE LA 1.00. La version 1.00 bornait Count par "IF n > LAST THEN n := LAST". LAST est le dernier INDICE (63) et Count un NOMBRE de voies (64) : borner l'un par l'autre faisait boucler de 0 a 62, et **la voie 63 n'etait jamais traitee**. Sur une carte pleine, la derniere voie ne lisait rien si c'etait une entree, et n'ecrivait rien si c'etait une sortie - sans que rien ne le signale.
+#! param Count = La 1.01 borne a LAST + 1. Count = 64 traite donc bien les 64 voies, de 0 a 63.
+#! param Count = Si un projet porte encore la 1.00, VerifierBibliotheque le dit, et le symptome a chercher est toujours le meme : la derniere voie de la carte.
+#! param CycleMs = La periode de la tache, en millisecondes.
+#! param CycleMs = POURQUOI UN NOMBRE ET PAS UN TEMPORISATEUR : un DDT ne peut pas contenir de TON. Un type derive est une donnee, un temporisateur est un bloc fonction. Le temps est donc accumule a partir de ce nombre.
+#! param CycleMs = Une valeur fausse ici fausse SILENCIEUSEMENT tous les temps de la carte : anti-rebond, temps d'etat, retards de seuil. Si la tache n'est pas periodique, passez un temps de cycle mesure.
+#! param CycleMs = Le mieux : DtMs de DFB_SYS_CLOCK, qui suit le temps reel de la tache.
+#! param Reset = Efface les STATISTIQUES, jamais les valeurs : les compteurs de fronts pour une carte TOR, les mini/maxi pour une carte analogique.
+#! param Reset = Il agit sur niveau, pas sur front : le laisser a TRUE remet a zero a chaque scrutation, ce qui donne des compteurs qui restent a zero sans raison apparente.
+#! param Chan = Les voies de la carte, un ARRAY[0..63] OF ST_IO_Dig.
+#! param Chan = C'est un InOut : le bloc lit dedans et ecrit dedans. Tout ce qu'il retient d'une scrutation a l'autre - compteurs, temps, anti-rebond - est DANS la voie, donc rien ne se perd entre les appels et il n'y a pas d'etat cache dans l'instance.
+#! param AlarmCount = Combien de voies de cette carte sont en alarme cette scrutation.
+#! param AlarmSevMax = La pire gravite presente sur la carte, 0 quand il n'y en a aucune.
+#! param AlarmSevMax = C'est le resume qu'on cable sur un voyant ou qu'on remonte a l'IHM quand on ne veut pas parcourir les voies une par une.
+#! param AnyRise = Au moins une voie de la carte a eu un front montant cette scrutation. Pratique pour ne parcourir le tableau que quand il s'y est passe quelque chose.
+#! param AnyFall = Au moins une voie a eu un front descendant cette scrutation.
+#! changes 1.02 = CORRECTION MAJEURE : UNE SORTIE NE PASSAIT JAMAIS A 1. Pour une voie
+#! changes 1.02 = IsOut, le bloc relisait quand meme Raw - qu'il avait lui-meme ecrit
+#! changes 1.02 = au cycle precedent - et l'anti-rebond recopiait cet etat d'avant
+#! changes 1.02 = dans Val, ecrasant la commande : Raw ne changeait donc jamais. Une
+#! changes 1.02 = sortie ne lit plus rien sur la carte ; Val est ecrite par vous,
+#! changes 1.02 = ForceEn la remplace.
+#! changes 1.02 = CORRECTION : OnMs, OffMs et SettleMs devenaient negatifs au bout de
+#! changes 1.02 = 24,8 jours dans le meme etat. L'alarme de maintien - trop longtemps
+#! changes 1.02 = dans le mauvais etat - DISPARAISSAIT alors, au moment ou la
+#! changes 1.02 = situation durait depuis le plus longtemps. Ils plafonnent a 2 000
+#! changes 1.02 = 000 000 ms.
+#! changes 1.02 = Les commentaires du fichier sont en francais. Le calcul ne change
+#! changes 1.02 = pas autrement.
+#! given = CarteDI_R0S4[0].Raw := TRUE
+#! expect = 1 : CarteDI_R0S4[0].Val = TRUE
+#! expect = 1 : CarteDI_R0S4[0].Rise = TRUE
+#! expect = 1 : IO_DI_R0S4.AnyRise = TRUE
+#! expect = 2 : CarteDI_R0S4[0].Rise = FALSE
+#! expect = 3 : CarteDI_R0S4[0].OnMs = 60
+#! expect = 3 : CarteDI_R0S4[0].RiseCnt = 1
+
+# Une instance traite une carte entiere de 64 voies.
+# Les cinq tailles ne different que par la borne du tableau ; le corps est identique.
+
+# name ; type ; scope ; initial ; comment
+Count ; INT ; Input ; 64 ; combien de voies de cette carte sont utilisees
+CycleMs ; DINT ; Input ; 20 ; la periode de la tache en ms. Un DDT ne peut pas contenir de temporisateur : le temps s'accumule
+Reset ; BOOL ; Input ;  ; efface les compteurs de fronts, pas les valeurs
+Chan ; ARRAY[0..63] OF ST_IO_Dig ; InOut ;  ; les voies de la carte
+AlarmCount ; INT ; Output ; 0 ; combien de voies sont en alarme
+AlarmSevMax ; INT ; Output ; 0 ; la pire gravite de la carte, 0 quand il n'y en a aucune
+AnyRise ; BOOL ; Output ;  ; au moins une voie a eu un front montant cette scrutation
+AnyFall ; BOOL ; Output ;  ; au moins une voie a eu un front descendant cette scrutation
+i ; INT ; Local ; 0 ; indice de voie
+n ; INT ; Local ; 0 ; Count, borne au tableau
+LAST ; INT ; Local ; 63 ; le dernier indice de cette taille de bloc
+v ; BOOL ; Local ;  ; la valeur avant l'anti-rebond
+held ; DINT ; Local ; 0 ; le temps passe dans l'etat d'alarme
+MAXMS ; DINT ; Local ; 2000000000 ; plafond des compteurs de temps : 23 jours, sous la limite d'un DINT
+
+<<<section Process ST>>>
+(* ======================================================================= *)
+(*  Une instance par CARTE, pas par voie.                                  *)
+(*                                                                         *)
+(*  Appelee une fois par scrutation, avec la periode de la tache en        *)
+(*  millisecondes. Tout ce que le bloc retient - fronts comptes, temps     *)
+(*  dans l'etat, anti-rebond - est DANS la voie : rien ne se perd entre    *)
+(*  deux appels, et rien ne demande une instance a soi.                    *)
+(*                                                                         *)
+(*  POURQUOI DES MILLISECONDES ET PAS UN TEMPORISATEUR. Un DDT ne peut pas *)
+(*  contenir de TON : un type derive est une donnee, un temporisateur est  *)
+(*  un bloc fonction. Le temps s'accumule donc depuis CycleMs, comme       *)
+(*  DFB_GRAFCETENGINE le fait avec TsNow. Passez la periode de la tache,   *)
+(*  ou un temps de cycle mesure si la tache n'est pas periodique.          *)
+(*                                                                         *)
+(*  LES TEMPS PLAFONNENT a 2 000 000 000 ms (23 jours). Un DINT de         *)
+(*  millisecondes deborde au bout de 24,8 jours et devient negatif :       *)
+(*  l'alarme de maintien - trop longtemps dans le mauvais etat -           *)
+(*  disparaissait alors, au moment ou la situation durait depuis le plus   *)
+(*  longtemps.                                                             *)
+(* ======================================================================= *)
+
+n := Count;
+IF n > LAST + 1 THEN n := LAST + 1; END_IF;
+IF n < 0 THEN n := 0; END_IF;
+
+AlarmCount := 0;
+AlarmSevMax := 0;
+AnyRise := FALSE;
+AnyFall := FALSE;
+
+FOR i := 0 TO n - 1 DO
+
+    IF Chan[i].IsOut THEN
+
+        (* ---- une sortie : Val est ECRITE PAR VOUS ---------------------- *)
+        (* Rien a lire sur la carte, rien a anti-rebondir. Relire Raw - que  *)
+        (* le bloc a lui-meme ecrit au cycle precedent - ecrasait la         *)
+        (* commande par l'etat d'avant : une sortie ne passait JAMAIS a 1.   *)
+        (* Le forcage gagne toujours, et s'ecrit dans Val : Val dit ce qui   *)
+        (* part vraiment vers la carte.                                      *)
+        IF Chan[i].ForceEn THEN
+            Chan[i].Val := Chan[i].ForceVal;
+        END_IF;
+        Chan[i].SettleMs := 0;
+
+    ELSE
+
+        (* ---- d'ou vient la valeur -------------------------------------- *)
+        (* Le forcage passe avant la simulation, qui passe avant la carte.   *)
+        (* Un ordre, ecrit une fois : une voie laissee forcee ne peut pas    *)
+        (* etre reprise en douce par une simulation oubliee.                 *)
+        IF Chan[i].ForceEn THEN
+            v := Chan[i].ForceVal;
+        ELSIF Chan[i].SimEn THEN
+            v := Chan[i].SimVal;
+        ELSE
+            v := Chan[i].Raw;
+        END_IF;
+
+        IF Chan[i].Inv THEN
+            v := NOT v;
+        END_IF;
+
+        (* ---- anti-rebond ------------------------------------------------- *)
+        (* Un changement doit tenir DebounceMs avant d'etre cru. A 0, tout   *)
+        (* passe directement : c'est le cas habituel, et il ne coute qu'une  *)
+        (* comparaison.                                                      *)
+        IF v <> Chan[i].Val THEN
+            IF Chan[i].SettleMs < MAXMS - CycleMs THEN
+                Chan[i].SettleMs := Chan[i].SettleMs + CycleMs;
+            ELSE
+                Chan[i].SettleMs := MAXMS;
+            END_IF;
+            IF Chan[i].SettleMs >= Chan[i].DebounceMs THEN
+                Chan[i].Val := v;
+                Chan[i].SettleMs := 0;
+            END_IF;
+        ELSE
+            Chan[i].SettleMs := 0;
+        END_IF;
+
+    END_IF;
+
+    (* ---- les fronts ------------------------------------------------------ *)
+    Chan[i].Rise := Chan[i].Val AND NOT Chan[i].Prev;
+    Chan[i].Fall := Chan[i].Prev AND NOT Chan[i].Val;
+    Chan[i].Prev := Chan[i].Val;
+
+    IF Chan[i].Rise THEN
+        Chan[i].RiseCnt := Chan[i].RiseCnt + 1;
+        AnyRise := TRUE;
+    END_IF;
+    IF Chan[i].Fall THEN
+        Chan[i].FallCnt := Chan[i].FallCnt + 1;
+        AnyFall := TRUE;
+    END_IF;
+
+    (* ---- le temps dans l'etat courant ------------------------------------ *)
+    (* DINT et pas INT : un INT de millisecondes deborde au bout de 33       *)
+    (* secondes. Et PLAFONNE : un DINT deborde au bout de 24,8 jours, et     *)
+    (* l'alarme de maintien, qui compare ce temps a AlarmDelayMs,            *)
+    (* disparaissait avec lui.                                               *)
+    IF Chan[i].Val THEN
+        IF Chan[i].OnMs < MAXMS - CycleMs THEN
+            Chan[i].OnMs := Chan[i].OnMs + CycleMs;
+        ELSE
+            Chan[i].OnMs := MAXMS;
+        END_IF;
+        Chan[i].OffMs := 0;
+    ELSE
+        IF Chan[i].OffMs < MAXMS - CycleMs THEN
+            Chan[i].OffMs := Chan[i].OffMs + CycleMs;
+        ELSE
+            Chan[i].OffMs := MAXMS;
+        END_IF;
+        Chan[i].OnMs := 0;
+    END_IF;
+
+    (* ---- l'alarme -------------------------------------------------------- *)
+    (* Trop longtemps dans le mauvais etat : c'est toujours ce que veut dire *)
+    (* une alarme TOR.                                                       *)
+    IF Chan[i].AlarmEn AND (Chan[i].Val = Chan[i].AlarmState) THEN
+        IF Chan[i].Val THEN
+            held := Chan[i].OnMs;
+        ELSE
+            held := Chan[i].OffMs;
+        END_IF;
+        Chan[i].Alarm := held >= Chan[i].AlarmDelayMs;
+    ELSE
+        Chan[i].Alarm := FALSE;
+    END_IF;
+
+    IF Chan[i].Alarm THEN
+        AlarmCount := AlarmCount + 1;
+        IF Chan[i].Sev > AlarmSevMax THEN
+            AlarmSevMax := Chan[i].Sev;
+        END_IF;
+    END_IF;
+
+    (* ---- une sortie ecrit vers la carte ---------------------------------- *)
+    IF Chan[i].IsOut THEN
+        IF Chan[i].Inv THEN
+            Chan[i].Raw := NOT Chan[i].Val;
+        ELSE
+            Chan[i].Raw := Chan[i].Val;
+        END_IF;
+    END_IF;
+
+    (* ---- Reset efface les statistiques, jamais les valeurs --------------- *)
+    IF Reset THEN
+        Chan[i].RiseCnt := 0;
+        Chan[i].FallCnt := 0;
+    END_IF;
+
+END_FOR;
+<<<end>>>

@@ -1,0 +1,160 @@
+(* AppelerSR
+
+   Ecrit dans une section l'appel d'une sous-routine, precede du remplissage
+   de ses variables d'entree et suivi de la relecture de ses sorties.
+
+   UN APPEL SEUL NE SUFFIT PRESQUE JAMAIS. Une SR n'a pas de parametres : si
+   l'appelant n'ecrit pas ses entrees juste avant, la SR tourne avec ce qu'un
+   autre appelant y a laisse au cycle precedent. C'est le piege de la SR, et
+   c'est pour ca que cette macro ecrit les trois parties ensemble.
+
+   #! summary = Écrit l'appel d'une sous-routine, précédé du remplissage de ses entrées et suivi de la relecture de ses sorties.
+   #! version = 1.10
+   #! changes 1.10 = Le formulaire : chaque question a son champ (le classeur par …, Ctrl+V ou en le glissant ; les tâches et les sections du projet ; des interrupteurs ; des choix à libellés), ses groupes, son aide et un libellé avec accents. Le code ne change pas. Les entrées et les sorties se donnent une par ligne.
+   #! changes 1.01 = L'appel s'ecrit Nom(); - "Nom;" seul ne compilait pas. Nouvelle question relire : la relecture des sorties apres l'appel, que l'en-tete annoncait sans que la macro l'ecrive.
+   #! usage = UN APPEL SEUL NE SUFFIT PRESQUE JAMAIS. Une SR n'a pas de parametres : si l'appelant n'ecrit pas ses entrees juste avant, la SR tourne avec ce qu'un AUTRE appelant y a laisse au cycle precedent. C'est le piege de la SR, et c'est pour ca que cette macro ecrit les trois parties ensemble : les entrees, l'appel, les sorties.
+   #! usage = L'APPEL S'ECRIT Nom(); avec les parentheses. Control Expert refuse "Nom;" seul.
+   #! usage = Elle refuse d'ecrire l'appel d'une SECTION : une section tourne deja a chaque cycle, l'appeler la ferait tourner deux fois.
+   #! usage = Une macro se relance. C'est la regle de toutes celles-ci : relancee sur un projet ou elle a deja tourne, elle ne doit rien casser et rien dupliquer. C'est pour ca qu'elles testent avant de creer, et qu'elles disent "existe deja" au lieu de s'arreter.
+   #! usage = Les questions arrivent par TOURS. Ask() enregistre une question, AskNow() les pose. Une macro coupe ses tours la ou une reponse decide des questions suivantes : demander les quatre noms de section quand on vient de repondre "une seule famille" remplirait l'ecran de champs qu'on laisserait vides.
+   #! example = AppelerSR : sr = Regul_Niveau, section = Production, valeurs = consigne=Cuve1.Consigne, mesure=Cuve1.Level, relire = commande=Vanne1.PosReq
+   #! example = Regul_Niveau_In_consigne := Cuve1.Consigne;
+   #! example = Regul_Niveau_In_mesure := Cuve1.Level;
+   #! example = Regul_Niveau();
+   #! example = Vanne1.PosReq := Regul_Niveau_Out_commande;
+   #! see = CreerSR, GenererModes
+   #! param sr = Elle doit exister, et être une sous-routine.
+   #! param sr = La sous-routine a appeler. Elle doit exister et etre une sous-routine ; la macro s'arrete sinon, en disant lequel des deux manque.
+   #! param section = Elle doit exister : EnsureSection la crée.
+   #! param section = La section qui recoit l'appel. Elle doit exister : creez-la avec EnsureSection si besoin.
+   #! param valeurs = Une par ligne : nom=expression (consigne=Cuve1.Consigne).
+   #! param valeurs = Les entrees a poser, sous la forme nom=expression, separees par des virgules : consigne=Cuve1.Consigne, mesure=Cuve1.Level.
+   #! param valeurs = Le nom est celui donne a CreerSR, SANS le prefixe : la macro ecrit <sr>_In_<nom>. Si la variable n'existe pas, la ligne est ecrite quand meme et un avertissement le dit - elle ne compilera pas tant que la variable n'est pas creee.
+   #! param valeurs = Laisser vide ecrit l'appel seul, ce qui n'est juste que si la SR n'attend rien.
+   #! param relire = Une par ligne : nom=destination (commande=Vanne1.PosReq).
+   #! param relire = Ce qu'on relit APRES l'appel, sous la forme nom=destination : commande=Vanne1.PosReq ecrit Vanne1.PosReq := <sr>_Out_commande. Vide : rien n'est relu.
+   #! categorie = Créer
+   #! champ sr = sous-routine existant
+   #! libelle sr = Sous-routine à appeler
+   #! champ section = section existant
+   #! libelle section = Section qui reçoit l'appel
+   #! champ valeurs = liste facultatif
+   #! libelle valeurs = Entrées à poser
+   #! champ relire = liste facultatif
+   #! libelle relire = Sorties à relire
+   #! produit = l'appel de la sous-routine, précédé de ses entrées et suivi de la relecture de ses sorties
+   #! appliquer = Écrire l'appel de {sr} dans {section}
+*)
+
+sr      := Ask('sr', 'Quelle sous-routine ?', '');
+section := Ask('section', 'Dans quelle section ecrire l appel ?', '');
+AskNow();
+
+valeurs := Ask('valeurs', 'Entrees a poser (nom=expression, separees par des virgules)', '');
+sorties := Ask('relire', 'Sorties a relire (nom=destination, separees par des virgules)', '');
+AskNow();
+
+IF sr = '' OR section = '' THEN
+    Fail('il faut une sous-routine et une section');
+END_IF;
+IF NOT SectionExists(sr) THEN
+    Fail('la sous-routine ' + sr + ' n existe pas');
+END_IF;
+IF NOT IsSubroutine(sr) THEN
+    Fail(sr + ' est une section, pas une sous-routine : elle tourne deja a chaque '
+         + 'cycle et ne s appelle pas.');
+END_IF;
+IF NOT SectionExists(section) THEN
+    Fail('la section ' + section + ' n existe pas');
+END_IF;
+
+AppendToSection(section, '');
+AppendToSection(section, '(* --- ' + sr + ' --- *)');
+
+depart := 0;
+poses := 0;
+WHILE depart < LEN(valeurs) DO
+    virgule := FIND(valeurs, ',', depart);
+    IF virgule < 0 THEN
+        morceau := MID(valeurs, depart);
+        depart := LEN(valeurs);
+    ELSE
+        morceau := MID(valeurs, depart, virgule - depart);
+        depart := virgule + 1;
+    END_IF;
+
+    egal := FIND(morceau, '=', 0);
+    IF egal < 0 THEN
+        IF LEN(morceau) > 0 THEN
+            Warn('"' + morceau + '" : attendu nom=expression');
+        END_IF;
+    ELSE
+        champ := MID(morceau, 0, egal);
+        expr := MID(morceau, egal + 1);
+        WHILE LEN(champ) > 0 AND MID(champ, 0, 1) = ' ' DO
+            champ := MID(champ, 1);
+        END_WHILE;
+        WHILE LEN(champ) > 0 AND MID(champ, LEN(champ) - 1) = ' ' DO
+            champ := MID(champ, 0, LEN(champ) - 1);
+        END_WHILE;
+        WHILE LEN(expr) > 0 AND MID(expr, 0, 1) = ' ' DO
+            expr := MID(expr, 1);
+        END_WHILE;
+
+        cible := sr + '_In_' + champ;
+        IF NOT VariableExists(cible) THEN
+            Warn(cible + ' n existe pas : la ligne est ecrite quand meme, mais '
+                 + 'elle ne compilera pas tant que la variable n est pas creee.');
+        END_IF;
+        AppendToSection(section, cible + ' := ' + expr + ';');
+        poses := poses + 1;
+    END_IF;
+END_WHILE;
+
+(* l'appel : Nom(); - "Nom;" seul ne compile pas *)
+AppendToSection(section, sr + '();');
+
+(* les sorties, relues APRES *)
+depart := 0;
+relues := 0;
+WHILE depart < LEN(sorties) DO
+    virgule := FIND(sorties, ',', depart);
+    IF virgule < 0 THEN
+        morceau := MID(sorties, depart);
+        depart := LEN(sorties);
+    ELSE
+        morceau := MID(sorties, depart, virgule - depart);
+        depart := virgule + 1;
+    END_IF;
+    egal := FIND(morceau, '=', 0);
+    IF egal < 0 THEN
+        IF LEN(morceau) > 0 THEN
+            Warn('"' + morceau + '" : attendu nom=destination');
+        END_IF;
+    ELSE
+        champ := MID(morceau, 0, egal);
+        expr := MID(morceau, egal + 1);
+        WHILE LEN(champ) > 0 AND MID(champ, 0, 1) = ' ' DO
+            champ := MID(champ, 1);
+        END_WHILE;
+        WHILE LEN(champ) > 0 AND MID(champ, LEN(champ) - 1) = ' ' DO
+            champ := MID(champ, 0, LEN(champ) - 1);
+        END_WHILE;
+        WHILE LEN(expr) > 0 AND MID(expr, 0, 1) = ' ' DO
+            expr := MID(expr, 1);
+        END_WHILE;
+        source := sr + '_Out_' + champ;
+        IF NOT VariableExists(source) THEN
+            Warn(source + ' n existe pas : la ligne est ecrite quand meme, mais '
+                 + 'elle ne compilera pas tant que la variable n est pas creee.');
+        END_IF;
+        AppendToSection(section, expr + ' := ' + source + ';');
+        relues := relues + 1;
+    END_IF;
+END_WHILE;
+
+IF poses = 0 THEN
+    Log('appel ecrit sans entree : verifiez que ' + sr + ' n en attend aucune.');
+END_IF;
+Log(sr + '() ecrit dans ' + section + ' : ' + DINT_TO_STRING(poses) + ' entree(s), '
+    + DINT_TO_STRING(relues) + ' sortie(s) relue(s)');

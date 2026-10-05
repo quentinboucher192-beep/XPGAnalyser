@@ -1,0 +1,7 @@
+# Derived data type.
+name = config_chgt
+version = 0.02
+# checksum is recomputed by Control Expert on import; not stored.
+
+# name ; type ; address ; scope ; init ; comment ; attributes ; element comments
+SPV ; INT ;  ; Member ;  ;  ;  ; 

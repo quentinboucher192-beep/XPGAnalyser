@@ -1,0 +1,70 @@
+# Derived data type, shared.
+name = ST_ALM_Cmd
+version = 1.01
+#! summary = Les commandes du gestionnaire d'alarmes. Toutes sont prises SUR FRONT MONTANT.
+#! usage = Sur front, et pas sur niveau : un bouton d'IHM reste a TRUE tant que
+#! usage = l'operateur a le doigt dessus. Sur niveau, un acquittement se
+#! usage = rejouerait a chaque cycle et acquitterait aussi tout ce qui apparait
+#! usage = pendant ce temps.
+#! usage = Une commande refusee ne fait pas de bruit : elle ecrit la raison dans
+#! usage = Stat.LastError, qui est vide au debut de chaque cycle. Lisez-le juste
+#! usage = apres avoir pose la commande, pas trois cycles plus tard.
+#! example = (* acquitter une alarme designee depuis l'IHM *)
+#! example = AlmCmd.AckUuid := DINT_TO_UDINT(%MD1200);
+#! example = AlmCmd.Ack     := %MX40;
+#! see = DFB_ALM_MANAGER
+#! see = ST_ALM_Stat
+#! see = AlmUuid
+#! param Register = Enregistre RegUuid avec son libelle, sa gravite et son
+#! param Register = renvoi. Un UUID deja enregistre met a jour son libelle au
+#! param Register = lieu de creer un doublon : deux entrees pour un meme UUID
+#! param Register = donneraient deux lignes dans la liste pour une seule alarme.
+#! param RegUuid = A composer avec AlmUuid, jamais a la main. L'UUID 0 est
+#! param RegUuid = refuse : c'est le marqueur d'emplacement libre du registre.
+#! param Reset = Vide l'historique et les compteurs, PAS le registre ni l'etat
+#! param Reset = courant. Une alarme toujours presente doit le rester apres un
+#! param Reset = Reset : la faire disparaitre parce qu'on a efface le journal
+#! param Reset = serait un mensonge sur la machine.
+#! param AckAll = Acquitte tout ce qui est present et non acquitte. Ce qui
+#! param AckAll = apparait apres le front n'est pas concerne.
+#! param Ack = Acquitte l'alarme AckUuid, sur front montant. Deja acquittee : rien ne
+#! param Ack = se passe. Inconnue : Stat.LastError dit 'UUID inconnu'.
+#! param AckUuid = L'alarme a acquitter par Ack : son UUID, tel que l'IHM l'a lu dans
+#! param AckUuid = le registre.
+#! param RegLabel = Le libelle que l'operateur lira, 32 caracteres.
+#! param RegLink = Le renvoi : folio du schema, page d'IHM, adresse de la voie. 32
+#! param RegLink = caracteres.
+#! param RegSev = La gravite : 1 information, 2 avertissement, 3 defaut, 4 arret
+#! param RegSev = machine. C'est elle qui decide du klaxon (HornSev du gestionnaire).
+#! param Silence = Fait taire le klaxon, sur front montant, SANS RIEN ACQUITTER. La
+#! param Silence = prochaine apparition d'une alarme assez grave le relance.
+#! param Mask = Masque l'alarme MaskUuid, sur front montant : elle ne leve plus, ne
+#! param Mask = compte plus, ne sonne plus. Inscrit dans l'historique (Kind 3). A
+#! param Mask = reserver aux capteurs en panne et aux voies en travaux - et a lever
+#! param Mask = ensuite.
+#! param Unmask = Demasque l'alarme MaskUuid, sur front montant (Kind 4 dans
+#! param Unmask = l'historique). Encore presente, elle reapparait aussitot, a
+#! param Unmask = acquitter.
+#! param MaskUuid = L'alarme a masquer ou demasquer.
+#! given = %MD1200 := 269492224
+#! given = %MX40 := TRUE
+#! expect = 1 : AlmCmd.Ack = TRUE
+#! changes 1.01 = AJOUTS EN FIN DE TYPE : Silence (klaxon), Mask, Unmask et MaskUuid
+#! changes 1.01 = (masquage).
+
+# Les commandes, prises sur front montant.
+
+# name ; type ; scope ; initial ; comment
+Ack ; BOOL ; Member ;  ; acquitter AckUuid. Front montant
+AckUuid ; UDINT ; Member ; 0 ; laquelle
+AckAll ; BOOL ; Member ;  ; acquitter tout ce qui est present. Front montant
+Reset ; BOOL ; Member ;  ; vider l'historique et les compteurs. Front montant
+Register ; BOOL ; Member ;  ; enregistrer RegUuid avec son libelle. Front montant
+RegUuid ; UDINT ; Member ; 0 ; l'UUID a enregistrer, compose par AlmUuid. 0 est refuse
+RegLabel ; STRING[32] ; Member ;  ; son libelle
+RegLink ; STRING[32] ; Member ;  ; son renvoi : folio, page d'IHM, adresse
+RegSev ; INT ; Member ; 1 ; sa gravite : 1 information, 2 avertissement, 3 defaut, 4 arret machine
+Silence ; BOOL ; Member ;  ; faire taire le klaxon, sans rien acquitter. Front montant
+Mask ; BOOL ; Member ;  ; masquer MaskUuid. Front montant
+Unmask ; BOOL ; Member ;  ; demasquer MaskUuid. Front montant
+MaskUuid ; UDINT ; Member ; 0 ; laquelle masquer ou demasquer

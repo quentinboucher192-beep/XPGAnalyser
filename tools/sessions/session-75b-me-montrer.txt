@@ -1,0 +1,190 @@
+# =============================================================================
+#  Session 75b - 1.10 (chantier P) : « Me montrer » sur chaque nouveaute de la 1.10,
+#  une a une, dans une COPIE de Armoire_Gaz. nouveautes-etat dit pour chacune si
+#  l'element est encadre (« element encadre ») ou si la bulle se pose au centre.
+#  Captures PNG_1059d a PNG_1059g (quelques-unes).
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+nouveautes-relancer 1.10.0 1.9.0
+
+# ---- 1.10.expressions
+nouveautes-fenetre
+attendre 3
+nouveautes-carte 1.10.expressions
+attendre 15
+nouveautes-etat
+nouveautes-bulle Terminer
+attendre 3
+
+# ---- 1.10.saisie-typee
+nouveautes-fenetre
+attendre 3
+nouveautes-carte 1.10.saisie-typee
+attendre 15
+nouveautes-etat
+nouveautes-bulle Terminer
+attendre 3
+
+# ---- 1.10.simulation-api-ihm
+nouveautes-fenetre
+attendre 3
+nouveautes-carte 1.10.simulation-api-ihm
+attendre 15
+nouveautes-etat
+nouveautes-bulle Terminer
+attendre 3
+
+# ---- 1.10.f8
+nouveautes-fenetre
+attendre 3
+nouveautes-carte 1.10.f8
+attendre 15
+nouveautes-etat
+nouveautes-bulle Terminer
+attendre 3
+
+# ---- 1.10.barre-simulation-ihm
+nouveautes-fenetre
+attendre 3
+nouveautes-carte 1.10.barre-simulation-ihm
+attendre 15
+nouveautes-etat
+nouveautes-bulle Terminer
+attendre 3
+
+# ---- 1.10.plein-ecran
+nouveautes-fenetre
+attendre 3
+nouveautes-carte 1.10.plein-ecran
+attendre 15
+nouveautes-etat
+capture PNG_1059e_me_montrer_plein_ecran.png
+nouveautes-bulle Terminer
+attendre 3
+
+# ---- 1.10.compiler-scripts
+nouveautes-fenetre
+attendre 3
+nouveautes-carte 1.10.compiler-scripts
+attendre 15
+nouveautes-etat
+nouveautes-bulle Terminer
+attendre 3
+
+# ---- 1.10.visualisation-graphique
+nouveautes-fenetre
+attendre 3
+nouveautes-carte 1.10.visualisation-graphique
+attendre 15
+nouveautes-etat
+nouveautes-bulle Terminer
+attendre 3
+
+# ---- 1.10.types-excel
+nouveautes-fenetre
+attendre 3
+nouveautes-carte 1.10.types-excel
+attendre 15
+nouveautes-etat
+nouveautes-bulle Terminer
+attendre 3
+
+# ---- 1.10.objet-alarmes
+nouveautes-fenetre
+attendre 3
+nouveautes-carte 1.10.objet-alarmes
+attendre 15
+nouveautes-etat
+nouveautes-bulle Terminer
+attendre 3
+
+# ---- 1.10.couleurs
+nouveautes-fenetre
+attendre 3
+nouveautes-carte 1.10.couleurs
+attendre 15
+nouveautes-etat
+nouveautes-bulle Terminer
+attendre 3
+
+# ---- 1.10.grafcet
+nouveautes-fenetre
+attendre 3
+nouveautes-carte 1.10.grafcet
+attendre 15
+nouveautes-etat
+capture PNG_1059d_me_montrer_grafcet.png
+nouveautes-bulle Terminer
+attendre 3
+
+# ---- 1.10.grafcet-code
+nouveautes-fenetre
+attendre 3
+nouveautes-carte 1.10.grafcet-code
+attendre 15
+nouveautes-etat
+nouveautes-bulle Terminer
+attendre 3
+
+# ---- 1.10.fonctions-scripts
+nouveautes-fenetre
+attendre 3
+nouveautes-carte 1.10.fonctions-scripts
+attendre 15
+nouveautes-etat
+nouveautes-bulle Terminer
+attendre 3
+
+# ---- 1.10.operateurs
+nouveautes-fenetre
+attendre 3
+nouveautes-carte 1.10.operateurs
+attendre 15
+nouveautes-etat
+capture PNG_1059f_me_montrer_operateurs.png
+nouveautes-bulle Terminer
+attendre 3
+
+# ---- 1.10.enum
+nouveautes-fenetre
+attendre 3
+nouveautes-carte 1.10.enum
+attendre 15
+nouveautes-etat
+nouveautes-bulle Terminer
+attendre 3
+
+# ---- 1.10.aide-notations
+nouveautes-fenetre
+attendre 3
+nouveautes-carte 1.10.aide-notations
+attendre 15
+nouveautes-etat
+nouveautes-bulle Terminer
+attendre 3
+
+# ---- 1.10.menu-aide
+nouveautes-fenetre
+attendre 3
+nouveautes-carte 1.10.menu-aide
+attendre 15
+nouveautes-etat
+capture PNG_1059g_me_montrer_menu_aide.png
+nouveautes-bulle Terminer
+attendre 3
+
+# ---- 1.10.nouveautes
+nouveautes-fenetre
+attendre 3
+nouveautes-carte 1.10.nouveautes
+attendre 15
+nouveautes-etat
+nouveautes-bulle Terminer
+attendre 3
+
+quitter

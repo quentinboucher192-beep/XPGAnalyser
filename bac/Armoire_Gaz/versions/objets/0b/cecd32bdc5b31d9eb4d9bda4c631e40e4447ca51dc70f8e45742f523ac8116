@@ -1,0 +1,20 @@
+# Derived data type.
+name = config_pompage
+version = 0.03
+# checksum is recomputed by Control Expert on import; not stored.
+
+# name ; type ; address ; scope ; init ; comment ; attributes ; element comments
+NBPPE ; INT ;  ; Member ;  ;  ;  ; 
+SPPE5 ; INT ;  ; Member ;  ;  ;  ; 
+SPPE6 ; INT ;  ; Member ;  ;  ;  ; 
+DLP1 ; INT ;  ; Member ;  ;  ;  ; 
+DLP2 ; INT ;  ; Member ;  ;  ;  ; 
+DLP3 ; INT ;  ; Member ;  ;  ;  ; 
+DLP4 ; INT ;  ; Member ;  ;  ;  ; 
+DLP5 ; INT ;  ; Member ;  ;  ;  ; 
+DLP6 ; INT ;  ; Member ;  ;  ;  ; 
+DLP7 ; INT ;  ; Member ;  ;  ;  ; 
+DLP8 ; INT ;  ; Member ;  ;  ;  ; 
+DLP9 ; INT ;  ; Member ;  ;  ;  ; 
+DLP10 ; INT ;  ; Member ;  ;  ;  ; 
+DLP11 ; INT ;  ; Member ;  ;  ;  ; 

@@ -1,0 +1,92 @@
+# =============================================================================
+#  Session 125 - 1.10.4 (chantier K1104, K3) : l'inspecteur range, dans une
+#  COPIE de Armoire_Gaz (le client, le 02/10 a 23 h 51 : "range un peu mieux les
+#  proprietes ... ne met pas 2 fois valeur ... si un objet ne peut pas avoir de
+#  contenu inutile de mettre l'onglet ... enlever la partie communication").
+#   - V_101, une Vanne, reglee comme celle du client (Valeur =$Vanne$.Ouv,
+#     Libelle =V[0].Nom, Ouverture =V[0].Pos, En mouvement =V[0].Pos > 10) :
+#     d'abord Objet, Position et taille, Apparence, Securite, Alarmes de l'objet,
+#     puis la section Vanne ; une seule Valeur ; ni Communication ni Animation ;
+#     pas d'onglet Contenu ; les filtres fx et Non vides, avec leurs nombres ;
+#   - un Groupe (Groupe_Bouteille) : l'onglet Contenu, ses objets ;
+#   - une Courbe (Courbe_Pressions) : sa section, son onglet Contenu (les plumes) ;
+#   - un Bouton (Btn_Accueil) : Proprietes et Actions seulement.
+#  L'"avant" (la meme vanne en 1.10.3) : scratchpad K1104/k3/session-125-avant.txt.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- 1. La vanne du client -----------------------------------------------------
+arbre "IHM/Vues/Vue_Synoptique"
+attendre 6
+objet V_101
+attendre 3
+propriete "Valeur" "=$Vanne$.Ouv"
+attendre 2
+propriete "Libellé" "=V[0].Nom"
+attendre 2
+propriete "Ouverture (%)  ƒ" "=V[0].Pos"
+attendre 2
+propriete "En mouvement (expression)  ƒ" "=V[0].Pos > 10"
+attendre 2
+vue-clic 240 170
+attendre 3
+# la grille a suivi la derniere case reglee : en haut, les sections communes
+molette 1780 400 60
+attendre 3
+capture K3_125_01_vanne_apres_haut.png
+molette 1780 400 -60
+attendre 3
+capture K3_125_02_vanne_apres_section_vanne.png
+molette 1780 400 60
+attendre 2
+
+# ---- 2. Les filtres de la 1.10.3, sur l'inspecteur range ------------------------
+clic 1663 161
+attendre 3
+capture K3_125_03_vanne_filtre_fx.png
+clic 1663 161
+attendre 2
+clic 1835 161
+attendre 3
+capture K3_125_04_vanne_filtre_non_vides.png
+clic 1835 161
+attendre 3
+
+# ---- 3. Un groupe : l'onglet Contenu, ses objets --------------------------------
+arbre "IHM/Vues/Vue_Armoire_A"
+attendre 6
+objet Groupe_Bouteille
+attendre 3
+capture K3_125_05_groupe_proprietes.png
+sous-onglet "Contenu"
+attendre 3
+capture K3_125_06_groupe_contenu.png
+sous-onglet "Propri"
+attendre 2
+
+# ---- 4. Un bouton : Proprietes et Actions seulement ------------------------------
+objet Btn_Accueil
+attendre 3
+capture K3_125_07_bouton.png
+
+# ---- 5. Une courbe : sa section, son onglet Contenu ------------------------------
+arbre "IHM/Vues/Vue_Production"
+attendre 6
+objet Courbe_Pressions
+attendre 3
+molette 1780 400 60
+attendre 2
+capture K3_125_08_courbe_proprietes.png
+molette 1780 400 -60
+attendre 3
+capture K3_125_09_courbe_section_courbe.png
+sous-onglet "Contenu"
+attendre 3
+capture K3_125_10_courbe_contenu.png
+attendre 2
+quitter

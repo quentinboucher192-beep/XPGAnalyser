@@ -1,0 +1,9 @@
+#! summary = Enchaine les six imports dans l'ordre, avec un seul jeu de reponses.
+#! usage = L'ORDRE N'EST PAS NEGOCIABLE, et chaque etape a sa raison. Cartes avant Voies : on n'indexe pas un tableau qui n'existe pas. Equipements et Voies avant Cablage : les deux cotes de la liaison doivent exister. Reports en dernier : ils citent des champs d'equipement.
+#! usage = Chacune reste lancable seule. Cette macro ne fait que les appeler dans le bon ordre ; si l'une s'arrete, corrigez et relancez-la seule, puis reprenez la suivante.
+#! usage = ORDRE DES SECTIONS DANS LA TACHE, une fois tout importe : Mapping_Entrees, Reports_TC, Cablage_Entrees, Equipements, Alarmes_Cycle, Cablage_Sorties, Reports_TM_TA, Mapping_Sorties.
+#! usage = Control Expert ne reordonne pas les sections tout seul : cet ordre se pose a la main dans le navigateur de projet, une fois. C'est la seule etape que l'import ne peut pas faire a votre place.
+#! usage = ELLE A BESOIN DE RunMacro, qui n'existe peut-etre pas encore dans votre hote. Si elle s'arrete dessus, lancez les six a la main dans l'ordre ci-dessus - le resultat est exactement le meme.
+#! see = VerifierClasseur, ImporterCartes, ImporterVoies
+#! param classeur = Le chemin du classeur. Laisser vide prend celui qui est deja charge par le bouton Classeur..., ce qui est le cas normal quand on enchaine plusieurs imports.
+#! param classeur = C'est un .xlsm, pas un export CSV : la macro lit les onglets directement, et les quatre familles d'E/S sont donc traitees en une seule execution.

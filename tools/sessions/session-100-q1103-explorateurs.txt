@@ -1,0 +1,61 @@
+# =============================================================================
+#  Session 100 (Q1103, Q-A) - 1.10.3 : l'explorateur d'objets de la vue deplie
+#  un objet PAR FAMILLES, comme l'arbre de l'application ; la famille Reperes
+#  dans les deux ; un clic sur une ligne ouvre sa case ; en simulation, une
+#  expression a repere dit "repere non remplace : $Vanne$" (ambre).
+#  Dans une COPIE d'Armoire_Gaz : V_101 (Vue_Synoptique) recoit $Vanne$ dans
+#  l'inspecteur (Valeur, Libelle, Ouverture). Captures 100_01 a 100_08.
+#  Le lecteur de sessions ne touche pas a "$Vanne$" (seul ${...} est une variable).
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- V_101 avant : ses familles (Liens fx, Alarmes), pas de repere ----
+arbre "IHM/Vues/Vue_Synoptique"
+attendre 8
+objet V_101
+attendre 3
+objet-famille V_101
+attendre 3
+capture 100_01_avant_familles.png
+
+# ---- Les reperes du client, tapes dans l'inspecteur : les deux explorateurs suivent ----
+propriete "Valeur" "=$Vanne$.Ouv"
+attendre 3
+propriete "Libellé" "=$Vanne$.Nom"
+attendre 3
+propriete "Ouverture (%)  ƒ" "=$Vanne$.Pos"
+attendre 3
+objet-famille V_101 "Liens fx"
+attendre 2
+objet-famille V_101 "Repères"
+attendre 3
+capture 100_02_reperes_explorateur.png
+
+# ---- Un clic sur le repere : sa premiere case dans l'inspecteur ----
+objet-famille V_101 "Repères" 1
+attendre 4
+capture 100_03_clic_repere.png
+
+# ---- L'arbre de l'application : les memes familles, les memes lignes, le meme clic ----
+arbre "IHM/Vues/Vue_Synoptique/Objets/V_101" deplier
+attendre 4
+arbre "IHM/Vues/Vue_Synoptique/Objets/V_101/Repères" deplier
+attendre 4
+arbre "IHM/Vues/Vue_Synoptique/Objets/V_101/Liens fx" deplier
+attendre 4
+arbre "IHM/Vues/Vue_Synoptique/Objets/V_101/Repères/$Vanne$"
+attendre 5
+capture 100_04_arbre_clic_repere.png
+
+# ---- La simulation : "repere non remplace : $Vanne$", en ambre ----
+arbre "Simulation/IHM"
+attendre 12
+sim-vue "Vue_Synoptique"
+attendre 8
+capture 100_05_simulation_repere.png
+quitter

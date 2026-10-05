@@ -1,0 +1,392 @@
+# =============================================================================
+#  Session 3 - LOT 2 : les ressources (images, sons, videos, polices) et les
+#  fichiers externes (Excel, CSV, TXT, JSON, XML, SQLite, base externe), dans
+#  le projet cree par la session 1. Rejouee dans la VRAIE application :
+#
+#    set APPDATA=%TEMP%\xpg-ihm-demo      (la meme que pour les sessions 1 et 2)
+#    set PROJETS=dossier\ou\la\session-1\a\cree\le\projet
+#    set ECHANTILLONS=depot\tests\fixtures\ihm
+#    set DONNEES=%PROJETS%\Armoire_Gaz\donnees   (une copie des CSV, XLSX, DB,
+#                                                  JSON, XML et TXT des echantillons)
+#    xpg_analyzer --script session-3-ressources-fichiers.txt --captures captures --size 1920x1080
+# =============================================================================
+attendre 3
+theme Dark
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+arbre "Derived data types" replier
+arbre "DFB types" replier
+arbre "Program units" replier
+arbre "Ordre d'execution" replier
+arbre "Variables" replier
+arbre "Macros" replier
+arbre "Animation tables" replier
+arbre "Tasks" replier
+arbre "Configuration" replier
+
+# ---- Ressources : importer par le dialogue --------------------------------------
+arbre "IHM/Ressources"
+attendre 5
+outil "Importer une ressource"
+attendre 3
+champ 1 "${ECHANTILLONS}/logo_site.png"
+survol 960 1000
+attendre 5
+capture PNG_031_dialogue_importer_ressource.png
+bouton "Importer"
+attendre 5
+
+# ---- ... et en glissant les fichiers sur le volet (un texte devient un Document) ----
+deposer "${ECHANTILLONS}/vanne_ouverte.png" 1100 500
+deposer "${ECHANTILLONS}/vanne_fermee.png" 1100 500
+deposer "${ECHANTILLONS}/photo_armoire.jpg" 1100 500
+deposer "${ECHANTILLONS}/schema.bmp" 1100 500
+deposer "${ECHANTILLONS}/pompe.svg" 1100 500
+deposer "${ECHANTILLONS}/alarme.ico" 1100 500
+deposer "${ECHANTILLONS}/bip_alarme.wav" 1100 500
+deposer "${ECHANTILLONS}/annonce.mp3" 1100 500
+deposer "${ECHANTILLONS}/presentation.mp4" 1100 500
+deposer "${ECHANTILLONS}/procedure.webm" 1100 500
+deposer "${ECHANTILLONS}/industrie_bold.ttf" 1100 500
+deposer "${ECHANTILLONS}/journal.txt" 1100 500
+attendre 5
+ligne "logo_site.png"
+attendre 5
+survol 1200 1000
+attendre 5
+capture PNG_032_ressources_tableau_apercu_image.png
+ligne "bip_alarme.wav"
+attendre 5
+outil "Écouter"
+survol 1200 1000
+attendre 20
+capture PNG_033_ressources_ecouter_son.png
+ligne "industrie_bold.ttf"
+attendre 5
+survol 1200 1000
+attendre 5
+capture PNG_034_ressources_apercu_police.png
+ligne "pompe.svg"
+attendre 5
+survol 1200 1000
+attendre 5
+capture PNG_035_ressources_apercu_svg.png
+ligne "presentation.mp4"
+attendre 5
+survol 1200 1000
+attendre 5
+capture PNG_036_ressources_apercu_video.png
+
+# ---- Fichiers externes : lier par le dialogue ----------------------------------------
+arbre "IHM/Fichiers externes"
+attendre 5
+outil "Lier un fichier"
+attendre 3
+champ 1 "${DONNEES}/consignes.csv"
+survol 960 1000
+attendre 5
+capture PNG_037_dialogue_lier_fichier.png
+bouton "Lier"
+attendre 5
+
+# ---- ... en glissant les autres fichiers, puis une base externe -----------------------
+deposer "${DONNEES}/parametres.xlsx" 1100 300
+deposer "${DONNEES}/historique.db" 1100 300
+deposer "${DONNEES}/recettes_gaz.json" 1100 300
+deposer "${DONNEES}/equipements.xml" 1100 300
+deposer "${DONNEES}/journal.txt" 1100 300
+attendre 3
+outil "Lier une base externe"
+attendre 3
+champ 1 "Production"
+champ 2 "Driver={ODBC Driver 17 for SQL Server};Server=srv-scada;Database=Production;Uid=ihm;Pwd=Secret-2026;"
+champ 3 "Mesures"
+bouton "Lier"
+attendre 5
+ligne "consignes"
+attendre 5
+survol 1200 1000
+attendre 5
+capture PNG_038_fichiers_csv_apercu.png
+
+# ---- un classeur Excel : ses onglets, en choisir un --------------------------------
+ligne "parametres"
+attendre 5
+outil "Choisir l'onglet"
+attendre 3
+liste 1
+attendre 3
+survol 1110 560
+attendre 5
+capture PNG_039_dialogue_choisir_onglet.png
+choisir "Contacts"
+attendre 3
+bouton "Choisir"
+attendre 5
+survol 1200 1000
+attendre 5
+capture PNG_040_fichiers_excel_onglet_contacts.png
+outil "Choisir l'onglet"
+attendre 3
+liste 1
+attendre 3
+choisir "Seuils"
+bouton "Choisir"
+attendre 5
+
+# ---- SQLite, JSON, XML, base externe ------------------------------------------------
+ligne "historique"
+attendre 5
+survol 1200 1000
+attendre 5
+capture PNG_041_fichiers_sqlite_apercu.png
+ligne "recettes_gaz"
+attendre 5
+survol 1200 1000
+attendre 5
+capture PNG_042_fichiers_json_apercu.png
+ligne "equipements"
+attendre 5
+survol 1200 1000
+attendre 5
+capture PNG_043_fichiers_xml_apercu.png
+ligne "Production"
+attendre 5
+survol 1200 1000
+attendre 5
+capture PNG_044_fichiers_base_externe.png
+
+# ---- dans l'editeur : l'image du logo, choisie parmi les ressources ------------------
+arbre "IHM/Vues" deplier
+attendre 3
+arbre "IHM/Vues/Vue_Armoire_A"
+attendre 10
+objet "Logo_Site"
+attendre 3
+propriete-clic "Image (ressource)"
+attendre 5
+survol 1700 700
+attendre 5
+capture PNG_045_propriete_image_liste_ressources.png
+choisir "logo_site.png"
+attendre 3
+
+# ---- le titre dans la police importee ------------------------------------------------
+objet "Titre"
+propriete-clic "Police"
+attendre 3
+choisir "industrie_bold.ttf"
+attendre 3
+
+# ---- l'etat graphique : une image choisie par une expression ---------------------------
+calque "Equipements"
+palette "Image"
+vue-clic 320 450
+propriete "Nom" "Etat_Vanne_Entree"
+propriete "Largeur" "80"
+propriete "Hauteur" "80"
+propriete-clic "Image (ressource)"
+attendre 3
+choisir "vanne_fermee.png"
+attendre 3
+propriete "Image (expression)" "SEL(Armoires[0].active, 'vanne_fermee.png', 'vanne_ouverte.png')"
+palette "Texte"
+vue-clic 290 540
+propriete "Nom" "Libelle_Etat_Vanne"
+propriete "Largeur" "140"
+propriete "Texte" "Vanne d'entrée"
+propriete "Taille du texte" "16"
+objet "Etat_Vanne_Entree"
+attendre 3
+molette 895 620 2 ctrl
+attendre 5
+survol 1200 1000
+attendre 5
+capture PNG_046_editeur_logo_police_etat_graphique.png
+outil "Toute la vue"
+
+# ---- une vue de donnees : tableaux lies aux fichiers, video, images ---------------------
+arbre "IHM/Vues"
+attendre 5
+outil "Nouvelle vue"
+attendre 5
+champ 1 "Vue_Donnees"
+champ 2 "1280"
+champ 3 "800"
+champ 4 "Consignes, historique, documents de l'armoire"
+touche Return
+attendre 10
+palette "Texte"
+vue-clic 40 20
+propriete "Nom" "Titre_Donnees"
+propriete "Largeur" "1200"
+propriete "Hauteur" "50"
+propriete "Texte" "Données de l'armoire A"
+propriete "Taille du texte" "30"
+propriete-clic "Police"
+attendre 3
+choisir "industrie_bold.ttf"
+palette "Tableau"
+vue-clic 40 90
+propriete "Nom" "Table_Consignes"
+propriete "Largeur" "620"
+propriete "Hauteur" "210"
+propriete-clic "Fichier externe"
+attendre 3
+choisir "consignes"
+palette "Tableau"
+vue-clic 40 330
+propriete "Nom" "Table_Historique"
+propriete "Largeur" "620"
+propriete "Hauteur" "210"
+propriete-clic "Fichier externe"
+attendre 3
+choisir "historique"
+palette "Tableau"
+vue-clic 40 570
+propriete "Nom" "Table_Seuils"
+propriete "Largeur" "620"
+propriete "Hauteur" "130"
+propriete-clic "Fichier externe"
+attendre 3
+choisir "parametres"
+palette "Vidéo"
+vue-clic 700 90
+propriete "Nom" "Video_Procedure"
+propriete "Largeur" "540"
+propriete "Hauteur" "300"
+propriete-clic "Vidéo (ressource)"
+attendre 3
+choisir "presentation.mp4"
+propriete-clic "Image d'attente"
+attendre 3
+choisir "photo_armoire.jpg"
+palette "Image"
+vue-clic 700 430
+propriete "Nom" "Image_Pompe"
+propriete "Largeur" "140"
+propriete "Hauteur" "140"
+propriete-clic "Image (ressource)"
+attendre 3
+choisir "pompe.svg"
+palette "Image"
+vue-clic 870 430
+propriete "Nom" "Image_Alarme"
+propriete "Largeur" "96"
+propriete "Hauteur" "96"
+propriete-clic "Image (ressource)"
+attendre 3
+choisir "alarme.ico"
+palette "Image"
+vue-clic 990 430
+propriete "Nom" "Image_Schema"
+propriete "Largeur" "250"
+propriete "Hauteur" "160"
+propriete-clic "Image (ressource)"
+attendre 3
+choisir "schema.bmp"
+palette "Image"
+vue-clic 700 610
+propriete "Nom" "Image_Manquante"
+propriete "Largeur" "140"
+propriete "Hauteur" "90"
+propriete "Image (expression)" "'plan_evacuation.png'"
+objet "Table_Consignes"
+molette 672 320 5 ctrl
+attendre 5
+survol 1200 1000
+attendre 5
+capture PNG_047_vue_donnees_tableaux_video_images.png
+
+# ---- Generer : ressources inutilisees, image introuvable -----------------------------------
+arbre "IHM/Générer"
+attendre 10
+survol 1200 1000
+attendre 5
+capture PNG_048_generer_ressources_fichiers.png
+
+# ---- Ressources : les utilisations, les inutilisees -------------------------------------
+arbre "IHM/Ressources"
+attendre 5
+ligne "vanne_ouverte.png"
+attendre 5
+survol 1200 1000
+attendre 5
+capture PNG_049_ressources_utilisations.png
+outil "Montrer seulement"
+attendre 5
+survol 1200 1000
+attendre 5
+capture PNG_050_ressources_inutilisees.png
+outil "Montrer seulement"
+attendre 3
+
+# ---- renommer une ressource citee : l'expression suit -----------------------------------
+ligne "vanne_ouverte.png"
+outil "Renommer"
+attendre 3
+champ 1 "vanne_v1_ouverte.png"
+survol 960 1000
+attendre 5
+capture PNG_051_dialogue_renommer_ressource.png
+touche Return
+attendre 5
+onglet "Vue_Armoire_A"
+attendre 5
+objet "Etat_Vanne_Entree"
+attendre 3
+propriete-clic "Image (expression)"
+touche Escape
+attendre 3
+survol 1200 1000
+attendre 5
+capture PNG_052_expression_suit_le_renommage.png
+
+# ---- supprimer une ressource encore citee : on le dit avant -------------------------------
+arbre "IHM/Ressources"
+attendre 5
+ligne "logo_site.png"
+outil "Supprimer la ressource"
+attendre 5
+survol 960 1000
+attendre 5
+capture PNG_053_confirmer_suppression_ressource.png
+bouton "Annuler"
+attendre 3
+
+# ---- la simulation : l'etat graphique suit l'automate -----------------------------------
+arbre "IHM/Simulation"
+attendre 10
+bouton "Marche"
+attendre 10
+bouton "Forcer..."
+attendre 3
+champ 1 "Armoires[0].active"
+champ 2 "FALSE"
+touche Return
+attendre 20
+survol 1200 1000
+attendre 5
+capture PNG_054_simulation_vanne_fermee.png
+bouton "Forcer..."
+attendre 3
+champ 1 "Armoires[0].active"
+champ 2 "TRUE"
+touche Return
+attendre 20
+survol 1200 1000
+attendre 5
+capture PNG_055_simulation_vanne_ouverte.png
+bouton "Vue suivante"
+attendre 20
+survol 1200 1000
+attendre 5
+capture PNG_056_simulation_vue_donnees.png
+
+# ---- enregistrer ------------------------------------------------------------------------
+action project.save
+attendre 5
+bouton "Close"
+attendre 3
+quitter

@@ -1,0 +1,216 @@
+# Derived function block, shared.
+name = DFB_MODE_MANAGER
+version = 1.02
+#! summary = Choisit le mode actif parmi 16 : priorite, temps minimum, repli.
+#! usage = CE QU'IL FAIT ET CE QU'IL NE FAIT PAS. Il decide QUEL mode tourne ;
+#! usage = il n'appelle rien. Ce qui s'execute dans chaque mode est une suite de
+#! usage = sous-routines, dans un ordre - et une suite de noms dans un ordre ne
+#! usage = se range pas dans un DDT. C'est du CODE, et c'est la macro
+#! usage = GenererModes qui l'ecrit, sous forme d'un CASE.
+#! usage = Separer les deux n'est pas une commodite : la condition d'entree d'un
+#! usage = mode se calcule dans votre programme et arrive par Def[i].Req, alors
+#! usage = que l'ordre des appels est fige a la generation.
+#! usage = UN MODE PRIORITAIRE PASSE MALGRE LE TEMPS MINIMUM, des que sa
+#! usage = priorite atteint ForcePriority. Un arret d'urgence qui attend la fin
+#! usage = d'un temps de sejour n'est pas un arret d'urgence.
+#! example = (* les conditions, calculees par vous *)
+#! example = Modes[0].Req := NOT Defaut AND NOT Manu;        (* automatique *)
+#! example = Modes[1].Req := Manu;                            (* manuel *)
+#! example = Modes[2].Req := Defaut;                          (* repli *)
+#! example = 
+#! example = (* la securite au-dessus de ForcePriority, et rien d'autre *)
+#! example = Modes[0].Priority := 10;
+#! example = Modes[1].Priority := 20;
+#! example = Modes[2].Priority := 100;
+#! example = 
+#! example = MODE_Station(Count := 3, CycleMs := 20, FallbackMode := 0,
+#! example = ForcePriority := 100, Def := Modes,
+#! example = Current := ModeCourant, PrevMode := ModePrecedent,
+#! example = CurrentMs := ModeDepuisMs);
+#! see = ST_MODE_Def
+#! param FallbackMode = Le mode choisi quand personne ne demande rien. -1 :
+#! param FallbackMode = aucun, et Current reste sur le dernier choisi.
+#! param ForcePriority = A partir de cette priorite, un mode passe malgre le
+#! param ForcePriority = temps minimum du mode courant. Mettez les securites
+#! param ForcePriority = au-dessus, et rien d'autre.
+#! param Held = Un changement est demande mais retenu par le temps minimum. A
+#! param Held = surveiller : un Held qui ne retombe jamais dit qu'une condition
+#! param Held = oscille plus vite que le MinMs ne le permet.
+#! param Changed = On vient de changer de mode, CE cycle-ci. Un seul cycle : de
+#! param Changed = quoi declencher une initialisation, pas de quoi tester un
+#! param Changed = etat.
+#! param Count = Combien de modes sont declares : Def[0] a Def[Count - 1], 16 au plus.
+#! param CycleMs = La periode de la tache, en ms, telle qu'elle est reglee dans la
+#! param CycleMs = configuration. Elle fait avancer CurrentMs et les temps minimum :
+#! param CycleMs = une valeur fausse les fausse d'autant.
+#! param CycleMs = Le mieux : DtMs de DFB_SYS_CLOCK, qui suit le temps reel de la tache.
+#! param Def = Les modes, une ligne ST_MODE_Def chacun. Req et Priority y ENTRENT,
+#! param Def = Active, TotalS et Entries en SORTENT.
+#! param Current = Le mode courant, l'indice dans Def. LA VARIABLE CABLEE DOIT ETRE
+#! param Current = INITIALISEE A -1 : c'est ce qui fait choisir le premier mode sans
+#! param Current = attendre de temps minimum. Initialisee a 0, elle fait croire que le
+#! param Current = mode 0 tourne deja.
+#! param PrevMode = Le mode d'avant le dernier changement, -1 au depart. De quoi dire
+#! param PrevMode = 'retour en automatique apres un defaut'.
+#! param CurrentMs = Depuis combien de temps on est dans le mode courant, en ms. Remis
+#! param CurrentMs = a 0 a chaque changement, il PLAFONNE a 2 000 000 000 : devenu
+#! param CurrentMs = negatif, il bloquait tout changement de mode au bout de 24,8
+#! param CurrentMs = jours.
+#! param Transitions = Combien de changements de mode depuis le demarrage. La premiere
+#! param Transitions = entree n'en est pas un.
+#! changes 1.02 = CORRECTION : CurrentMs devenait negatif au bout de 24,8 jours dans
+#! changes 1.02 = le meme mode, et `CurrentMs < MinMs` restait alors vrai - PLUS AUCUN
+#! changes 1.02 = CHANGEMENT DE MODE, sauf par ForcePriority. Il plafonne a 2 000 000
+#! changes 1.02 = 000 ms.
+#! changes 1.02 = CORRECTION : tant qu'aucun mode n'etait choisi (rien de demande,
+#! changes 1.02 = FallbackMode a -1), Changed battait a chaque cycle. Il ne signale
+#! changes 1.02 = plus qu'un vrai changement.
+#! changes 1.02 = Def[i].TotalS compte le temps passe dans chaque mode en secondes ;
+#! changes 1.02 = TotalMs plafonne.
+#! given = ModeCourant := -1
+#! given = Manu := TRUE
+#! given = Defaut := TRUE
+#! expect = 1 : ModeCourant = 2
+#! expect = 1 : MODE_Station.Changed = TRUE
+#! expect = 2 : MODE_Station.Changed = FALSE
+#! expect = 3 : ModeDepuisMs = 40
+#! expect = 3 : Modes[2].Active = TRUE
+#! expect = 3 : Modes[1].Active = FALSE
+
+# Choisit le mode actif parmi 16: priorite, temps minimum, repli.
+
+# name ; type ; scope ; initial ; comment
+Count ; INT ; Input ; 16 ; combien de modes sont declares
+CycleMs ; DINT ; Input ; 20 ; la periode de la tache
+FallbackMode ; INT ; Input ; 0 ; le mode choisi quand personne ne demande rien. -1: aucun
+ForcePriority ; INT ; Input ; 100 ; a partir de cette priorite, un mode passe malgre le temps minimum
+Def ; ARRAY[0..15] OF ST_MODE_Def ; InOut ;  ; les modes
+Current ; INT ; InOut ; -1 ; le mode courant. -1 tant qu'aucun n'a ete choisi
+PrevMode ; INT ; InOut ; -1 ; celui d'avant
+CurrentMs ; DINT ; InOut ; 0 ; depuis combien de temps on y est
+Changed ; BOOL ; Output ;  ; on vient de changer de mode, ce cycle-ci
+Held ; BOOL ; Output ;  ; un changement est demande mais retenu par le temps minimum
+Transitions ; UDINT ; Output ; 0 ; combien de changements depuis le demarrage
+i ; INT ; Local ; 0 ; 
+n ; INT ; Local ; 0 ; 
+LAST ; INT ; Local ; 15 ; 
+best ; INT ; Local ; -1 ; 
+bestPrio ; INT ; Local ; 0 ; 
+holding ; BOOL ; Local ;  ; 
+MAXMS ; DINT ; Local ; 2000000000 ; plafond des compteurs de temps : 23 jours, sous la limite d'un DINT
+
+<<<section Process ST>>>
+(* =====================================================================
+    DFB_MODE_MANAGER - quel mode est actif.
+
+    CE QU'IL FAIT ET CE QU'IL NE FAIT PAS. Il decide QUEL mode tourne; il
+    n'appelle rien. Ce qui s'execute dans chaque mode est une suite de
+    sous-routines, dans un ordre - et une suite de noms dans un ordre ne se
+    range pas dans un DDT. C'est du CODE, et c'est la macro GenererModes qui
+    l'ecrit, sous forme d'un CASE.
+
+    Separer les deux n'est pas une commodite: la condition d'entree d'un mode
+    se calcule dans votre programme et arrive ici par Def[i].Req, alors que
+    l'ordre des appels est fige a la generation. Melanger les deux donnerait
+    un bloc qui ne sait faire ni l'un ni l'autre.
+
+    LA PRIORITE TRANCHE, PAS L'ORDRE DU TABLEAU. Deux modes demandes en meme
+    temps arrive tout le temps - un arret d'urgence pendant un cycle - et
+    laisser gagner celui qui est declare le premier fait dependre la securite
+    de l'ordre de saisie.
+
+    UN TEMPS MINIMUM PAR MODE. Sans lui, deux conditions qui oscillent font
+    battre l'installation entre deux modes a chaque cycle, et rien de ce qui
+    est lance n'a le temps d'aboutir.
+   ===================================================================== *)
+
+n := Count;
+IF n > LAST + 1 THEN n := LAST + 1; END_IF;
+IF n < 0 THEN n := 0; END_IF;
+
+(* PLAFONNE. Devenu negatif au bout de 24,8 jours dans le meme mode, il
+   rendait `CurrentMs < MinMs` vrai pour toujours : plus aucun changement
+   de mode n'etait possible, sauf par ForcePriority. *)
+IF CurrentMs < MAXMS - CycleMs THEN
+    CurrentMs := CurrentMs + CycleMs;
+ELSE
+    CurrentMs := MAXMS;
+END_IF;
+Changed := FALSE;
+
+(* Le candidat: le plus prioritaire parmi ceux qui sont demandes et permis. *)
+best := -1;
+bestPrio := -32768;
+FOR i := 0 TO n - 1 DO
+    Def[i].Active := FALSE;
+    IF Def[i].Enabled AND Def[i].Req THEN
+        IF best < 0 OR Def[i].Priority > bestPrio THEN
+            best := i;
+            bestPrio := Def[i].Priority;
+        END_IF;
+    END_IF;
+END_FOR;
+
+IF best < 0 THEN
+    (* Personne ne demande rien: le mode de repli, s'il en existe un. *)
+    best := FallbackMode;
+    IF best >= n THEN best := -1; END_IF;
+END_IF;
+
+IF Current < 0 THEN
+    (* Premier cycle: on entre sans condition de duree. Tant qu'aucun mode
+       n'est choisi (rien de demande, pas de repli), il n'y a pas de
+       changement a signaler : Changed battait a chaque cycle. *)
+    IF best >= 0 THEN
+        Current := best;
+        CurrentMs := 0;
+        Changed := TRUE;
+    END_IF;
+ELSIF best >= 0 AND best <> Current THEN
+    holding := FALSE;
+    IF Current < n THEN
+        IF Def[Current].MinMs > 0 AND CurrentMs < Def[Current].MinMs THEN
+            holding := TRUE;
+        END_IF;
+    END_IF;
+
+    (* Un mode dont la priorite depasse ForcePriority passe MALGRE le temps
+       minimum. Un arret d'urgence qui attend la fin d'un temps de sejour
+       n'est pas un arret d'urgence. *)
+    IF best < n THEN
+        IF Def[best].Priority >= ForcePriority THEN
+            holding := FALSE;
+        END_IF;
+    END_IF;
+
+    IF holding THEN
+        Held := TRUE;
+    ELSE
+        Held := FALSE;
+        PrevMode := Current;
+        Current := best;
+        CurrentMs := 0;
+        Changed := TRUE;
+        Transitions := Transitions + 1;
+    END_IF;
+ELSE
+    Held := FALSE;
+END_IF;
+
+IF Current >= 0 AND Current < n THEN
+    Def[Current].Active := TRUE;
+    IF Def[Current].TotalMs < MAXMS - CycleMs THEN
+        Def[Current].TotalMs := Def[Current].TotalMs + CycleMs;
+    ELSE
+        Def[Current].TotalMs := MAXMS;
+    END_IF;
+    Def[Current].TotalFracMs := Def[Current].TotalFracMs + CycleMs;
+    IF Def[Current].TotalFracMs >= 1000 THEN
+        Def[Current].TotalS := Def[Current].TotalS + DINT_TO_UDINT(Def[Current].TotalFracMs / 1000);
+        Def[Current].TotalFracMs := Def[Current].TotalFracMs MOD 1000;
+    END_IF;
+    IF Changed THEN
+        Def[Current].Entries := Def[Current].Entries + 1;
+    END_IF;
+END_IF;
+<<<end>>>

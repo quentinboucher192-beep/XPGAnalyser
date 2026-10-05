@@ -1,0 +1,15 @@
+# DFB type interface.
+name = LECTURE_CONFIG_MEMOIRE
+version = 0.12
+attribute = TypeCodeCheckSumString = ACC4
+attribute = TypeSignatureCheckSumString = 8BF2
+attribute = UseNewTplSignAlgo = TRUE
+
+# name ; type ; address ; scope ; init ; comment ; attributes ; element comments
+config ; ARRAY[0..149] OF INT ;  ; Input ;  ;  ; PositionPin=1 ; 
+STOCKAGE_PUBLIC ; config_gaz ;  ; Public ;  ;  ;  ; 
+stockage_nom ; ARRAY[0..7] OF INT ;  ; Local ;  ;  ;  ; 
+stockage_unite ; ARRAY[0..7] OF INT ;  ; Local ;  ;  ;  ; 
+
+# section ; name ; language ; order ; activation ; logic ; file
+section ; main ; ST ; 21 ;  ;  ; main.st

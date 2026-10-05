@@ -1,0 +1,117 @@
+# =============================================================================
+#  1.10 - L'aide F1 du chantier U (decision 15) : le type enumeration IHM -
+#  le creer, ses valeurs, toString / fromString, une variable de ce type.
+#  Meme syntaxe que guide-ihm.txt (= chapitre, == cle | titre, : resume, @mots,
+#  @lieux, @voir, @capture, ### intertitre, - puce, | tableau |) ; un exemple
+#  en trois notations : trois blocs ```ST, ```C, ```C++ qui se suivent.
+#  A inserer dans guide-ihm.txt par le chef de projet : « enum-types » apres
+#  « types-excel » (ou « types-ihm »), juste avant « enum-scripts » (S1 :
+#  aide-1.10-enum-langage.txt, le langage : litteraux, CASE, FOR EACH...).
+#  Captures : session 77 (tools/sessions/session-77-enum.txt), PNG_1070 et suivantes.
+# =============================================================================
+
+== enum-types | Les énumérations IHM : créer, valeurs, toString / fromString
+: Une énumération est un type IHM fait de valeurs nommées et ordonnées (T_MODE : Arret = 0, Auto = 1, Manu = 2, Defaut = 9). « Nouveau type ▾ › Énumération… » la crée ; ses valeurs s'éditent dans une grille ; toString et fromString, créés avec elle, se codent comme tout opérateur ; une variable de ce type montre « Auto (1) ».
+@mots énumération, enumeration, enum, ENUM IHM, Nouveau type, Nouvelle énumération, valeurs, Valeur, Texte affiché, toString, fromString, TO_STRING, TO_T_MODE, Réécrire toString / fromString, Renommer partout, La valeur seulement, Supprimer quand même, Coller depuis Excel, Auto (1), DINT
+@lieux types-ihm, types, variables-ihm, variables
+@voir types-ihm, enum-scripts, operateurs, types-excel, variables-ihm
+@capture PNG_1070_enum_nouveau_type.png | « Nouveau type ▾ » : Structure… ou Énumération….
+@capture PNG_1071_enum_creation.png | La fenêtre « Nouvelle énumération » : le nom, les premières valeurs, l'aperçu de la déclaration, les deux conversions.
+@capture PNG_1072_enum_valeurs.png | T_MODE : la grille des valeurs, la déclaration en ST, les opérateurs toString et fromString dessous.
+@capture PNG_1073_enum_controles.png | Une valeur en double : la ligne en rouge, sa raison dessous.
+@capture PNG_1074_enum_coller.png | Coller depuis Excel : l'aperçu - ajoutées, remplacées, refusées et pourquoi.
+@capture PNG_1075_enum_renommer.png | Renommer une valeur employée : « 3 scripts emploient T_MODE#Manu : renommer partout ? ».
+### Créer une énumération
+1. Ouvre l'onglet **Types IHM**, puis **Nouveau type ▾** › **Énumération…** (Structure… crée une structure, comme avant).
+2. Donne son **nom** (T_MODE) : il est contrôlé pendant que tu tapes - vide, invalide (un chiffre en tête, des caractères interdits), **mot réservé** (CASE, INT…), **déjà pris** (un autre type IHM) ; tant qu'il ne va pas, « Créer l'énumération » reste grisé.
+3. Tape les **premières valeurs**, une par ligne : `Nom [= valeur] ['texte affiché']`. Sans nombre, une valeur prend **la suivante de la plus grande** (0, 1, 2…) ; le texte affiché est facultatif (vide : le nom).
+4. L'**aperçu** montre la déclaration en **ST | C | C++** et annonce les deux conversions créées avec le type : `TO_STRING(T_MODE) : STRING` (toString) et `TO_T_MODE(STRING) : T_MODE` (fromString).
+5. **Créer l'énumération** : le type apparaît dans la liste et dans l'arbre du projet (Types IHM › T_MODE › Valeurs (4), Opérateurs (2)). C'est **une seule commande** : **Ctrl+Z** l'annule.
+```ST
+TYPE T_MODE : (
+    Arret := 0,     (* À l'arrêt *)
+    Auto := 1,      (* Automatique *)
+    Manu := 2,      (* Manuel *)
+    Defaut := 9     (* En défaut *)
+) DINT;
+END_TYPE
+```
+```C
+typedef enum {
+    T_MODE_Arret = 0,     /* À l'arrêt */
+    T_MODE_Auto = 1,      /* Automatique */
+    T_MODE_Manu = 2,      /* Manuel */
+    T_MODE_Defaut = 9     /* En défaut */
+} T_MODE;
+const char *t_mode_to_string(T_MODE a);
+T_MODE t_mode_from_string(const char *a);
+```
+```C++
+enum class T_MODE : int32_t {
+    Arret = 0,     // À l'arrêt
+    Auto = 1,      // Automatique
+    Manu = 2,      // Manuel
+    Defaut = 9     // En défaut
+};
+std::string to_string(T_MODE a);
+T_MODE from_string(const std::string& a);
+```
+### Les valeurs
+Une énumération choisie dans Types IHM montre **ses valeurs à la place des membres** : une grille **# | Nom | Valeur | Texte affiché | Description**, et à droite la **déclaration** (ST, C ou C++).
+- **Modifier une case** : double-clic ou **F2** ; **Entrée** valide, **Tab** passe à la case suivante, **Échap** annule.
+- **Les contrôles se font en direct** : nom vide, nom ST invalide, mot réservé, **nom en double**, **valeur en double**, valeur hors des DINT. La ligne en défaut passe **en rouge** et sa raison s'écrit **dessous** ; la note sous la grille compte les lignes en défaut (Compiler les signale aussi).
+- **Ajouter une valeur** : après la ligne choisie, avec **la suivante de la plus grande** (10 après Defaut = 9) ; tape son nom.
+- **Dupliquer**, **Supprimer** (Suppr), **Monter**, **Descendre** : l'ordre des lignes est celui de `FOR EACH v IN T_MODE`.
+- Chaque changement est une commande : **Ctrl+Z** / **Ctrl+Y**.
+### Coller depuis Excel
+Copie des lignes dans Excel (colonnes **Nom, Valeur, Texte affiché, Description** ; la ligne de titres est reconnue), puis **Coller depuis Excel** (ou Ctrl+V dans la grille). Une fenêtre montre le tableau collé (tu peux le corriger, l'aperçu suit) et l'**aperçu** :
+| Ligne | Ce qui arrive |
+| ajoutée | Un nom nouveau : la valeur est ajoutée à la fin. |
+| remplacée | Un nom qui existe : la valeur est remplacée à sa place (une case vide garde l'ancienne). |
+| refusée | Nom ST invalide, valeur en double, valeur qui n'est pas un entier : la raison est écrite. |
+**Appliquer** colle tout en **une seule commande** (Ctrl+Z la défait).
+### Renommer ou supprimer une valeur employée
+Si des scripts emploient `T_MODE#Manu` (scripts, fonctions IHM, opérateurs - toString et fromString compris -, actions, expressions, conditions d'alarme), renommer Manu ouvre une fenêtre : « **3 scripts emploient T_MODE#Manu : renommer partout ?** », avec chaque emploi (script, ligne, texte).
+- **Renommer partout** : la valeur et tous les textes, en **une seule commande** (Ctrl+Z défait le tout). Les chaînes et les commentaires ne changent pas.
+- **La valeur seulement** : les scripts gardent `T_MODE#Manu` ; Compiler les signale.
+- Supprimer une valeur employée prévient de la même façon (« dont une branche de CASE ») : **Supprimer quand même** laisse ses emplois en erreur.
+### toString et fromString
+Ce sont deux **opérateurs de conversion** créés avec le type, préremplis, que tu peux coder comme tout opérateur (section **Opérateurs** sous les valeurs, même éditeur que les scripts) : toString rend le **texte affiché** de la valeur ; fromString accepte **le nom ou le texte affiché** (tel quel, en MAJUSCULES ou en minuscules) et, sinon, rend la première valeur. Après un changement de valeurs, **Réécrire toString / fromString** les régénère (une commande, Ctrl+Z). Fournis aussi : `TO_INT(m)`, `TO_DINT(m)` et `TO_T_MODE(2)` (contrôlé).
+```ST
+(* toString : TO_STRING(T_MODE) : STRING *)
+CASE a OF
+    T_MODE#Arret: TO_STRING := 'À l''arrêt';
+    T_MODE#Auto: TO_STRING := 'Automatique';
+    T_MODE#Manu: TO_STRING := 'Manuel';
+    T_MODE#Defaut: TO_STRING := 'En défaut';
+ELSE
+    TO_STRING := '?';
+END_CASE;
+```
+```C
+const char *t_mode_to_string(T_MODE a) {
+    switch (a) {
+    case T_MODE_Arret:  return "À l'arrêt";
+    case T_MODE_Auto:   return "Automatique";
+    case T_MODE_Manu:   return "Manuel";
+    case T_MODE_Defaut: return "En défaut";
+    default:            return "?";
+    }
+}
+```
+```C++
+std::string to_string(T_MODE a) {
+    switch (a) {
+    case T_MODE::Arret:  return "À l'arrêt";
+    case T_MODE::Auto:   return "Automatique";
+    case T_MODE::Manu:   return "Manuel";
+    case T_MODE::Defaut: return "En défaut";
+    }
+    return "?";
+}
+```
+### Une variable de type énumération
+Dans l'onglet **Variables IHM**, choisis le type dans la liste des types (les énumérations y sont). La variable vaut un **DINT** (le nombre de sa valeur) ; elle se montre **« Auto (1) »** : le nom de la valeur et son nombre.
+- **La valeur initiale** se choisit **dans la liste des valeurs** (« Manu (2) ») : dans sa case, ou dans la fiche du type (Types IHM, à droite : Variables IHM de type T_MODE). Vide : la première valeur. Tu peux aussi taper `Auto`, `T_MODE#Auto`, le texte affiché ou le nombre.
+- Dans les scripts : `Mode_P3 := T_MODE#Manu;`, `CASE Mode_P3 OF …`, `FOR EACH v IN T_MODE` - voir **enum-scripts**.
+> Une énumération n'a pas de membres : elle ne se déplie pas. Sa place Modbus est celle d'un DINT (2 mots).

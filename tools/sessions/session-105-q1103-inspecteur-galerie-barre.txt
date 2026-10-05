@@ -1,0 +1,96 @@
+# =============================================================================
+#  Session 105 - 1.10.3 (chantier Q1103, Q-B) : ce que le client a demande le
+#  02/10 a 21 h 08, dans une COPIE de Armoire_Gaz (Vue_Synoptique : V_101).
+#   - l'inspecteur : une case a repere ($Vanne$) se voit - pastille ambre "$",
+#     le repere surligne, l'infobulle ;
+#   - les trois filtres de l'onglet Proprietes (fx, Reperes, Non vides), ON/OFF,
+#     cumules (au moins un), avec leurs nombres ;
+#   - la galerie "Nouvelle ... - choisir un modele" : seuls les modeles du role
+#     (plus d'AUTRES MODELES) ;
+#   - la barre du haut du simulateur de l'IHM sans les 5 boutons de droite ni la
+#     liste deroulante ; leurs commandes au clic droit sur la barre.
+#  Le lecteur de sessions ne touche pas a "$Vanne$" (seul ${...} est une variable).
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- 1. V_101 recoit des reperes, comme la vanne du client ($Vanne$.Ouv) ------
+arbre "IHM/Vues/Vue_Synoptique"
+attendre 6
+objet V_101
+attendre 3
+propriete "Ouverture (%)  ƒ" "=SEL($Vanne$.cmd, 0, 100)"
+attendre 2
+propriete "Défaut (expression)" "=($Vanne$.F0)"
+attendre 2
+propriete "Libellé" "$Repere$"
+attendre 2
+# un clic sur V_101 dans la vue : le focus quitte le champ de l'inspecteur
+vue-clic 240 170
+attendre 3
+capture QB105_01_inspecteur_reperes_ambre.png
+
+# ---- 2. L'infobulle d'une case a repere ---------------------------------------
+survol 1830 482
+attendre 90
+capture QB105_02_infobulle_repere.png
+survol 900 1000
+attendre 3
+
+# ---- 3. Les filtres de l'inspecteur : fx, Reperes, Non vides ------------------
+clic 1663 161
+attendre 3
+capture QB105_03_filtre_fx.png
+clic 1733 161
+attendre 3
+capture QB105_04_filtres_fx_et_reperes.png
+clic 1663 161
+attendre 3
+capture QB105_05_filtre_reperes_seul.png
+clic 1733 161
+attendre 2
+clic 1835 161
+attendre 3
+capture QB105_06_filtre_non_vides.png
+clic 1835 161
+attendre 3
+
+# ---- 4. La galerie : seuls les modeles du role choisi --------------------------
+palette ">nouvelle vue" entree
+attendre 10
+capture QB105_10_galerie_vue.png
+liste "gallery.role"
+attendre 3
+choisir "Popup"
+attendre 10
+capture QB105_11_galerie_popup.png
+liste "gallery.template"
+attendre 3
+capture QB105_12_liste_modeles_popup.png
+touche Escape
+attendre 3
+liste "gallery.role"
+attendre 3
+choisir "Symbole"
+attendre 10
+capture QB105_13_galerie_symbole.png
+touche Escape
+attendre 4
+
+# ---- 5. Le simulateur de l'IHM : la barre du haut allegee ----------------------
+arbre "Simulation/IHM"
+attendre 12
+survol 1650 1000
+sim-vue "Vue_Armoire_A"
+attendre 8
+capture QB105_20_simulateur_barre.png
+clic 1850 94 droit
+attendre 4
+capture QB105_21_barre_clic_droit.png
+touche Escape
+attendre 3
+quitter

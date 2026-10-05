@@ -1,0 +1,55 @@
+# Derived data type, shared.
+name = ST_CTL_Stage
+version = 1.00
+#! summary = Un palier d'une regulation de niveau : le niveau ou il s'enclenche, celui ou il retombe, et leurs retards.
+#! usage = Une ligne par palier, dans le tableau passe a DFB_CTL_LEVEL. Le palier 0
+#! usage = est le premier a s'enclencher : son niveau de marche est le plus proche du
+#! usage = normal.
+#! usage = LES DEUX NIVEAUX FONT L'HYSTERESIS. En vidange, StartLevel doit etre
+#! usage = AU-DESSUS de StopLevel : la pompe demarre quand ca monte a StartLevel et
+#! usage = s'arrete quand ca redescend a StopLevel. L'inverse est le defaut Fault : un
+#! usage = palier qui demarrerait et s'arreterait au meme niveau battrait a chaque
+#! usage = vague.
+#! see = DFB_CTL_LEVEL
+#! param Name = Le nom du palier, pour l'IHM. Le bloc ne s'en sert pas.
+#! param Enable = FALSE retire le palier sans effacer sa ligne : il ne s'enclenche
+#! param Enable = plus.
+#! param StartLevel = Le niveau qui ENCLENCHE le palier, en unites de la mesure :
+#! param StartLevel = au-dessus en vidange, au-dessous en remplissage.
+#! param StopLevel = Le niveau qui le fait RETOMBER. L'ecart avec StartLevel est
+#! param StopLevel = l'hysteresis : c'est lui qui fixe la duree d'un cycle de pompe.
+#! param OnDelayMs = Combien de temps la condition d'enclenchement doit tenir. Une
+#! param OnDelayMs = vague qui passe ne demarre pas de pompe.
+#! param OffDelayMs = Combien de temps la condition d'arret doit tenir.
+#! param Active = SORTIE. Le palier est enclenche. Demand est le nombre de paliers
+#! param Active = actifs.
+#! param ElapsedMs = Depuis combien de temps la condition en cours tient. Runtime.
+#! param Starts = Combien de fois le palier s'est enclenche : un palier qui
+#! param Starts = s'enclenche trop souvent a une hysteresis trop serree.
+#! param Fault = Les niveaux sont dans le mauvais sens pour Dir : le palier est tenu
+#! param Fault = hors service.
+#! internal = ElapsedMs
+#! example = (* declarer : Paliers : ARRAY[0..7] OF ST_CTL_Stage; *)
+#! example = (* un poste de relevage : 1 pompe a 1,20 m, 2 pompes a 1,60 m *)
+#! example = Paliers[0].StartLevel := 1.20;
+#! example = Paliers[0].StopLevel  := 0.50;
+#! example = Paliers[1].StartLevel := 1.60;
+#! example = Paliers[1].StopLevel  := 0.70;
+#! example = Paliers[1].OnDelayMs  := 10000;
+#! expect = 1 : Paliers[1].OnDelayMs = 10000
+#! expect = 1 : Paliers[0].Enable = TRUE
+#! changes 1.00 = NOUVEAU.
+
+# Un palier d'une regulation de niveau.
+
+# name ; type ; scope ; initial ; comment
+Name ; STRING[16] ; Member ;  ; le nom du palier
+Enable ; BOOL ; Member ; TRUE ; FALSE : le palier ne s'enclenche plus
+StartLevel ; REAL ; Member ; 0.0 ; le niveau qui enclenche le palier
+StopLevel ; REAL ; Member ; 0.0 ; le niveau qui le fait retomber
+OnDelayMs ; DINT ; Member ; 0 ; combien de temps la condition d'enclenchement doit tenir
+OffDelayMs ; DINT ; Member ; 0 ; combien de temps la condition d'arret doit tenir
+Active ; BOOL ; Member ;  ; SORTIE : le palier est enclenche
+ElapsedMs ; DINT ; Member ; 0 ; runtime, ne pas ecrire
+Starts ; UDINT ; Member ; 0 ; combien de fois il s'est enclenche
+Fault ; BOOL ; Member ;  ; les niveaux sont dans le mauvais sens pour Dir

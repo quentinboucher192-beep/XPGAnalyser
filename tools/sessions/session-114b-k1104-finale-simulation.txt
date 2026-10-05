@@ -1,0 +1,34 @@
+# =============================================================================
+#  Session 114b - 1.10.4 (K1, K1104) : LES CAPTURES FINALES, la vanne 3 voies en
+#  simulation, sur l'appli 1.10.4 finale. Une copie neuve d'Armoire_Gaz avec la
+#  vue Vue_Melange de la maquette (scene 4), par scratchpad/K2/prepare2.py :
+#  V3_1 melangeuse T (1-3), V3_2 repartitrice T (1-2), V3_3 melangeuse L (2-3, en
+#  mouvement), V3_4 repartitrice L (fermee, en defaut) ; V3_Clic, dont la Position
+#  est V3_Pos MOD 4 et dont l'action Clic incremente V3_Pos.
+#  Un clic, la position suivante : 1-2, 1-3, 2-3, fermee (comme la session 123).
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+arbre "IHM/Vues/Vue_Melange"
+attendre 6
+arbre "Simulation/IHM"
+attendre 12
+sim-utilisateur "admin" "admin2026"
+attendre 3
+sim-vue "Vue_Melange"
+attendre 8
+capture 114_18_vanne_3_voies_simulation_1-2.png
+sim-clic "V3_Clic"
+attendre 6
+capture 114_19_vanne_3_voies_clic_1-3.png
+sim-clic "V3_Clic"
+attendre 6
+capture 114_20_vanne_3_voies_clic_2-3.png
+sim-clic "V3_Clic"
+attendre 6
+capture 114_21_vanne_3_voies_clic_fermee.png
+quitter

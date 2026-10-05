@@ -1,0 +1,14 @@
+# Derived data type, shared.
+name = ST_GC_CTRL
+version = 0.02
+#! summary = Commandes et etat d'un moteur GRAFCET, en une structure.
+#! usage = REPRIS DU PROJET MAST (champs inchanges).
+#! see = ST_GC_CMD
+#! see = ST_GC_STAT
+#! param Cmd = Les commandes.
+#! param Stat = L'etat.
+#! changes 0.02 = Range dans la bibliotheque, depuis le projet MAST.
+
+# name ; type ; scope ; initial ; comment
+Cmd ; ST_GC_CMD ; Member ;  ; 
+Stat ; ST_GC_STAT ; Member ;  ; 

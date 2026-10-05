@@ -1,0 +1,54 @@
+# Derived data type, shared.
+name = ST_ALM_Event
+version = 1.01
+#! summary = Un evenement de l'historique des alarmes : laquelle, quel genre, quand.
+#! usage = L'historique est un ANNEAU de 256 evenements. Un automate n'alloue
+#! usage = pas : quand il est plein, le plus ancien est perdu. Stat.Wrapped dit
+#! usage = que c'est arrive, et Stat.HistCount combien sont lisibles.
+#! usage = Pour relire dans l'ordre, partez de Stat.HistHead et reculez : c'est
+#! usage = la ou la prochaine ecriture ira, donc juste apres le plus ancien.
+#! see = DFB_ALM_MANAGER
+#! see = ST_ALM_Stat
+#! param Seq = Le numero d'ordre ne recule JAMAIS, meme quand l'anneau reboucle.
+#! param Seq = C'est ce qui distingue un historique reboucle d'un historique a
+#! param Seq = trous : deux evenements voisins dont Seq passe de 12 a 68 disent
+#! param Seq = que cinquante-cinq ont ete perdus entre les deux.
+#! param Kind = 0 apparition, 1 disparition, 2 acquittement, 3 masquage, 4 demasquage.
+#! param Kind = Une alarme masquee alors qu'elle est presente n'a pas d'evenement de
+#! param Kind = disparition : le masquage le dit.
+#! param StampMs = Des millisecondes depuis le demarrage du gestionnaire, pas une
+#! param StampMs = heure du jour. Elles PLAFONNENT a 2 000 000 000 (23 jours) :
+#! param StampMs = au-dela, tous les evenements portent la meme valeur. C'est StampS
+#! param StampMs = qu'il faut lire.
+#! param StampS = LA DATE de l'evenement, en secondes depuis le 01/01/2000 quand le
+#! param StampS = gestionnaire recoit NowS (EpochS de DFB_SYS_CLOCK) - c'est ce qu'un
+#! param StampS = export CSV convertit en date et heure. Sans horloge, des secondes
+#! param StampS = depuis le demarrage : de quoi ordonner, pas de quoi dater.
+#! param Uuid = Quelle alarme : son identifiant compose, qui se relit avec AlmDecode
+#! param Uuid = meme sans le projet.
+#! param Sev = Sa gravite AU MOMENT de l'evenement. Un Register ulterieur peut changer
+#! param Sev = la gravite du registre ; l'historique garde celle qu'elle avait.
+#! example = (* declarer : AlmHist : ARRAY[0..255] OF ST_ALM_Event; Dernier : ST_ALM_Event; *)
+#! example = (* le dernier evenement ecrit : juste avant HistHead *)
+#! example = IF AlmStat.HistHead > 0 THEN
+#! example =     Dernier := AlmHist[AlmStat.HistHead - 1];
+#! example = ELSIF AlmStat.Wrapped THEN
+#! example =     Dernier := AlmHist[255];
+#! example = END_IF;
+#! given = AlmStat.HistHead := 1
+#! given = AlmHist[0].Seq := 7
+#! given = AlmHist[0].Kind := 2
+#! expect = 1 : Dernier.Seq = 7
+#! expect = 1 : Dernier.Kind = 2
+#! changes 1.01 = AJOUT EN FIN DE TYPE : StampS, la date en secondes. Kind 3 et 4 :
+#! changes 1.01 = masquage et demasquage. StampMs plafonne a 2 000 000 000 ms.
+
+# Un evenement de l'historique. Seq ne recule jamais.
+
+# name ; type ; scope ; initial ; comment
+Seq ; UDINT ; Member ; 0 ; numero d'ordre. Il ne recule jamais: c'est ce qui distingue un historique reboucle d'un historique a trous
+Uuid ; UDINT ; Member ; 0 ; quelle alarme
+Sev ; INT ; Member ; 0 ; sa gravite au moment de l'evenement
+Kind ; INT ; Member ; 0 ; 0 apparition, 1 disparition, 2 acquittement, 3 masquage, 4 demasquage
+StampMs ; DINT ; Member ; 0 ; quand, en ms depuis le demarrage du gestionnaire, plafonne a 2 000 000 000 : lire StampS
+StampS ; UDINT ; Member ; 0 ; quand, en s depuis le 01/01/2000 (NowS du gestionnaire), ou depuis le demarrage

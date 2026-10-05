@@ -1,0 +1,129 @@
+# =============================================================================
+#  Session 36 - LOT 14 C, D, E : les notifications des alarmes (la boite
+#  d'essai, deux destinataires, l'anti-rafale), un rapport periodique
+#  (Generer maintenant, en PDF, envoye au chef), l'acces par navigateur (le
+#  serveur web ; une tablette s'y connecte pendant la marche - la capture du
+#  navigateur est faite a cote, par run36.sh). Dans le projet des sessions 1 a 35 :
+#
+#    xpg_analyzer --script session-36-notifications-rapports-web.txt --captures captures --size 1920x1080
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+arbre "API" replier
+attendre 3
+
+# ---- 1. Configuration > Notifications : la boite d'essai, deux destinataires ---------------------------
+arbre "IHM/Configuration" deplier
+arbre "IHM/Configuration/Notifications"
+attendre 8
+outil "Essayer avec la"
+attendre 10
+outil "Ajouter un destinataire"
+attendre 3
+propriete "Nom" "Astreinte"
+attendre 2
+propriete "Courriel" "astreinte.electricite@usine.fr"
+attendre 2
+propriete "Téléphone" "+33 6 12 34 56 78"
+attendre 2
+outil "Ajouter un destinataire"
+attendre 3
+propriete "Nom" "Chef"
+attendre 2
+propriete "Courriel" "claire.dubois@usine.fr"
+attendre 2
+propriete-clic "Priorités"
+choisir "Critique seulement"
+attendre 2
+propriete "Groupes" "Armoire A; Armoire B"
+attendre 2
+propriete "À la disparition aussi" "TRUE"
+attendre 3
+sous-onglet "Destinataires"
+attendre 3
+ligne "Astreinte"
+attendre 3
+survol 1200 1040
+attendre 3
+capture PNG_383_notifications.png
+
+# ---- 2. En marche : les alarmes previennent ; l'anti-rafale -------------------------------------------
+arbre "IHM/Simulation"
+attendre 10
+attendre-liaison connectee
+attendre-reel 3
+attendre 10
+# La pression remonte : les alarmes disparaissent (le chef le sait) ; elle retombe :
+# la meme alarme dans l'heure ne repart pas.
+sim-forcer "Armoires[0].ana.PT1.mes" "25"
+attendre-reel 3
+attendre 5
+sim-forcer "Armoires[0].ana.PT1.mes" "0.4"
+attendre-reel 3
+attendre 5
+arbre "IHM/Configuration/Notifications"
+attendre 5
+attendre-reel 2
+sous-onglet "Envois"
+attendre 5
+survol 1200 1040
+attendre 3
+capture PNG_384_notifications_envois.png
+sous-onglet "Boîte d'essai"
+attendre 5
+survol 1200 1040
+attendre 3
+capture PNG_385_notifications_boite.png
+
+# ---- 3. Configuration > Rapports : un rapport journalier, genere maintenant ----------------------------
+arbre "IHM/Configuration/Rapports"
+attendre 8
+outil "Ajouter un rapport"
+attendre 3
+propriete "Nom" "Journalier"
+attendre 2
+propriete "Titre" "Rapport journalier - poste de gaz"
+attendre 2
+propriete "Destinataires" "Chef"
+attendre 2
+propriete "Événements" "TRUE"
+attendre 2
+outil "Générer maintenant"
+bouton "Exporter"
+attendre-reel 3
+attendre 5
+ligne "Journalier"
+attendre 3
+survol 1200 1040
+attendre 3
+capture PNG_386_rapports.png
+
+# ---- 4. Configuration > Acces web : une tablette se connecte -------------------------------------------
+arbre "IHM/Configuration/Accès web"
+attendre 8
+propriete "Port" "8089"
+attendre 2
+propriete "Commande" "TRUE"
+attendre 2
+propriete "Actif" "TRUE"
+attendre 8
+arbre "IHM/Simulation"
+attendre 10
+# La souris loin de la vue (une infobulle serait sur l'image).
+survol 1910 1075
+attendre 5
+# Le navigateur (run36.sh) se connecte, regarde : 25 s de l'horloge du poste.
+attendre-reel 25
+arbre "IHM/Configuration/Accès web"
+attendre 5
+attendre-reel 1
+survol 1200 1040
+attendre 3
+capture PNG_388_acces_web.png
+action project.save
+attendre 5
+quitter

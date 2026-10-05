@@ -1,0 +1,69 @@
+# =============================================================================
+#  Session 58d - LOT API 8 : Aide > Nouveautes du lot 8 ; les parcours du lot
+#  marques NOUVEAU dans le didacticiel de l'API ; la visite "Simuler et suivre
+#  la simulation" (Montre-moi) ; F1 sur Simulation > Vue d'ensemble.
+#  Dans le projet des sessions precedentes, rejouee dans la VRAIE application.
+#  Captures PNG_794 a PNG_798 (PNG_788 a PNG_793 : l'explorateur, session 58c).
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+# La visite lance la simulation : BUILDING 0.22 boucle au 1er cycle, la bibliotheque (0.24) d'abord.
+tableau-de-bord bibliotheque
+attendre 10
+attendre-macro
+attendre 3
+macro-etape apercu
+attendre 8
+attendre-macro
+macro-etape appliquer
+attendre 15
+macro-etape fermer
+attendre 5
+
+# ---- M. Aide > Nouveautes du lot 8 ----------------------------------------------------------
+barre-menu "Aide" "Nouveautés du lot 8"
+attendre 4
+aide-nouveautes
+attendre 2
+survol 960 1070
+attendre 2
+capture PNG_794_aide_nouveautes_lot8.png
+
+# ---- N. Les parcours du lot 8 dans le didacticiel de l'API ----------------------------------
+barre-menu "Aide" "Didacticiel de l'API"
+attendre 4
+survol 960 1070
+attendre 2
+capture PNG_795_didacticiel_parcours_nouveaux.png
+
+# ---- O. La visite "Simuler et suivre la simulation" -----------------------------------------
+parcours "api-simuler" debut
+attendre 4
+parcours-etape 1
+capture PNG_796_visite_simuler_dossier.png
+parcours-clic "Suivant"
+attendre 3
+parcours-etape 2
+parcours-clic "Suivant"
+attendre 3
+parcours-etape 3
+parcours-clic "Montre-moi"
+attendre 6
+capture PNG_797_visite_montre_moi.png
+parcours-clic "Passer"
+attendre 3
+
+# ---- P. F1 sur la Vue d'ensemble : sa page de l'aide ----------------------------------------
+touche f9
+attendre 4
+touche f1
+attendre 4
+aide-section "Simulation › Vue d'ensemble"
+capture PNG_798_f1_vue_ensemble.png
+touche escape
+attendre 3
+quitter

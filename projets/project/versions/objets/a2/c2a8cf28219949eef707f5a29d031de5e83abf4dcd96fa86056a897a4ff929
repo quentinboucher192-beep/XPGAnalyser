@@ -1,0 +1,18 @@
+# PLC configuration.
+cpu = BMXP342020
+firmware = 
+family = Modicon M340
+resource = Micro Basic
+bus = 
+internalBits = 0
+internalWords = 0
+constantWords = 0
+autoRun = false
+initialiseWords = false
+
+# rack ; number ; reference ; topological address
+# module ; rack ; slot ; reference ; family ; firmware ; kind ; in ; out ; topo ; guid
+# channel ; rack ; slot ; number ; direction ; role ; task ; code ; version ; iob ; KW ; KPW
+rack ; 0 ; BMXXBP0400 ; \\0.0\\0
+module ; 0 ; -1 ; BMXCPS2000 ; Supply ; 01.00 ; 2 ; 0 ; 0 ; \\0.0\\0.(P) (P) ; 
+module ; 0 ; 0 ; BMXP342020 ; Micro Basic ; 03.50 ; 1 ; 0 ; 0 ; \\0.0\\0.0 ; 

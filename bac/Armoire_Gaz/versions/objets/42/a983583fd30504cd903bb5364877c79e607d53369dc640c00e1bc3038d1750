@@ -1,0 +1,15 @@
+# PLC configuration.
+cpu = BMX P34 2020
+firmware = 03.30
+family = Modicon M340
+resource = Micro Basic
+bus = 
+internalBits = 0
+internalWords = 0
+constantWords = 0
+autoRun = false
+initialiseWords = false
+
+# rack ; number ; reference ; topological address
+# module ; rack ; slot ; reference ; family ; firmware ; kind ; in ; out ; topo ; guid
+# channel ; rack ; slot ; number ; direction ; role ; task ; code ; version ; iob ; KW ; KPW

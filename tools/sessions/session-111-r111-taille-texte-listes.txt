@@ -1,0 +1,27 @@
+# =============================================================================
+#  Session 111 (R111, 1.11) : la taille du texte d'une liste d'alarmes (objet
+#  History) - la propriete « Taille du texte » de l'inspecteur, 12 puis 18 ;
+#  l'en-tete et la hauteur des lignes suivent. Elle est dans Apparence, comme
+#  pour les autres objets (decision du chef, tranche 4), apres Remplissage et
+#  Contour ; Source et Groupe d'alarmes restent dans la section Historique.
+#  Sur une copie d'Armoire_Gaz telle quelle (scratchpad/Q1103/qa/run.sh ... brut).
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+arbre "IHM/Vues/Vue_Alarmes"
+attendre 6
+objet Liste_Alarmes
+attendre 3
+propriete-clic "Taille du texte"
+attendre 2
+capture 111_01_liste_taille_12.png
+touche Escape
+attendre 2
+propriete "Taille du texte" "18"
+attendre 3
+capture 111_02_liste_taille_18.png
+quitter

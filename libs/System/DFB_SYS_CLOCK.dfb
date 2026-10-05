@@ -1,0 +1,354 @@
+# Derived function block, shared.
+name = DFB_SYS_CLOCK
+version = 1.00
+#! summary = L'heure de l'automate decodee, la date en secondes (EpochS), des impulsions par seconde, minute, heure et jour - et DtMs, le temps REELLEMENT ecoule depuis le cycle precedent.
+#! usage = UNE INSTANCE PAR AUTOMATE, appelee EN TETE de la tache MAST : tout ce qui
+#! usage = suit lit l'heure et DtMs de ce cycle-ci.
+#! usage = DtMs REMPLACE CycleMs. Tous les blocs de la bibliotheque accumulent le
+#! usage = temps depuis leur entree CycleMs ; y cabler une constante, c'est supposer
+#! usage = que la tache tient sa periode. Un cycle qui deborde, une tache cyclique,
+#! usage = une periode changee dans la configuration : les chronos derivent sans que
+#! usage = rien ne le dise. Cable CycleMs := Horloge.DtMs partout.
+#! usage = D'OU VIENT DtMs. La periode nominale (PeriodMs, %SW0 pour MAST), corrigee
+#! usage = par un compteur libre (Tick) : %SD18 avance toutes les 100 ms, donc
+#! usage = TickUnitMs := 100. Tant que la tache tient sa periode, DtMs vaut la periode
+#! usage = ; quand elle derive de plus d'une unite de Tick, DtMs rattrape. La somme
+#! usage = des DtMs ne s'ecarte jamais du temps reel de plus d'une unite de Tick. Un
+#! usage = compteur en millisecondes (la milliseconde du jour de RRTC_DT_MS, par
+#! usage = exemple : TickUnitMs := 1, TickWrap := 86400000) rend DtMs exact a la
+#! usage = milliseconde.
+#! usage = UN ARRET N'EST PAS UN CYCLE. Plus de dix periodes d'un coup, c'est une
+#! usage = reprise apres un STOP ou une coupure : ce temps-la n'est pas rendu - sinon
+#! usage = chaque compteur d'heures de marche compterait l'arret comme de la marche.
+#! usage = Jumps le compte.
+#! usage = L'HEURE vient des mots systeme de l'horloge temps reel, en BCD : %SW50
+#! usage = (16#SS00), %SW51 (16#HHMM), %SW52 (16#MMJJ), %SW53 (16#SSAA), %SW49 (jour
+#! usage = de la semaine, 1 lundi). Chaque champ est verifie : un chiffre BCD
+#! usage = au-dessus de 9, un 31 avril ou %S51 (horloge perdue) rendent Valid faux, et
+#! usage = EpochS vaut alors 0 - ce qui est exactement 'pas d'horloge' pour le
+#! usage = gestionnaire d'alarmes. EpochS est en heure LOCALE, celle de l'horloge de
+#! usage = l'automate.
+#! example = Horloge(PeriodMs := %SW0, LastCycleMs := %SW30, Tick := %SD18, TickUnitMs := 100,
+#! example = RtcSec := %SW50, RtcHourMin := %SW51, RtcMonthDay := %SW52, RtcYear := %SW53,
+#! example = RtcDow := %SW49, RtcLost := %S51);
+#! example = 
+#! example = (* puis, dans TOUS les appels de blocs de la bibliotheque :
+#! example =      PMP(Count := 16, CycleMs := Horloge.DtMs, Eq := Pompes);
+#! example =      ALM_Station(..., CycleMs := Horloge.DtMs, NowS := Horloge.EpochS, ...); *)
+#! see = DFB_ALM_MANAGER
+#! see = DFB_CTL_SCHEDULE
+#! see = DFB_CNT_TOTAL
+#! param PeriodMs = La periode nominale de la tache, en ms : %SW0 pour MAST. 0 veut
+#! param PeriodMs = dire une tache CYCLIQUE, qui n'a pas de periode : c'est alors
+#! param PeriodMs = LastCycleMs qui sert.
+#! param LastCycleMs = Le temps du dernier cycle, en ms : %SW30. Ne sert que si
+#! param LastCycleMs = PeriodMs vaut 0.
+#! param Tick = Un compteur libre, qui avance tout seul : %SD18 (toutes les 100 ms).
+#! param Tick = S'il ne bouge jamais - rien de cable, ou le simulateur - DtMs vaut la
+#! param Tick = periode nominale, sans correction.
+#! param TickUnitMs = Ce que vaut une unite de Tick, en ms : 100 pour %SD18, 1 pour un
+#! param TickUnitMs = compteur en millisecondes. C'est aussi l'erreur maximale de la
+#! param TickUnitMs = somme des DtMs.
+#! param TickWrap = La valeur a laquelle Tick repart a zero, si ce n'est pas la limite
+#! param TickWrap = d'un DINT : 86400000 pour la milliseconde du jour. 0 : Tick est un
+#! param TickWrap = compteur DINT ordinaire.
+#! param RtcSec = %SW50 : les secondes en BCD dans l'octet haut (16#SS00).
+#! param RtcHourMin = %SW51 : l'heure et la minute en BCD (16#HHMM).
+#! param RtcMonthDay = %SW52 : le mois et le jour en BCD (16#MMJJ).
+#! param RtcYear = %SW53 : le siecle et l'annee en BCD (16#2026 pour 2026).
+#! param RtcDow = %SW49 : le jour de la semaine, 1 lundi a 7 dimanche.
+#! param RtcLost = %S51 : l'horloge temps reel a perdu l'heure et doit etre remise a
+#! param RtcLost = l'heure.
+#! param DtMs = LE TEMPS REELLEMENT ECOULE depuis le cycle precedent, en ms : a cabler
+#! param DtMs = sur CycleMs de tous les blocs. Vaut la periode nominale tant que la
+#! param DtMs = tache la tient.
+#! param Year = L'annee, 2000 a 2099. Garde sa derniere valeur valide quand Valid
+#! param Year = tombe.
+#! param Month = Le mois, 1 a 12.
+#! param Day = Le jour du mois, 1 a 31.
+#! param Hour = L'heure, 0 a 23.
+#! param Minute = La minute, 0 a 59.
+#! param Second = La seconde, 0 a 59.
+#! param DayOfWeek = Le jour de la semaine, 1 lundi a 7 dimanche ; 0 si %SW49 est hors
+#! param DayOfWeek = plage.
+#! param MinuteOfDay = Les minutes depuis minuit, 0 a 1439 : ce que DFB_CTL_SCHEDULE
+#! param MinuteOfDay = compare.
+#! param EpochS = La date en SECONDES DEPUIS LE 01/01/2000 00:00:00, heure locale. 0
+#! param EpochS = TANT QUE L'HEURE N'EST PAS VALIDE : a cabler directement sur NowS du
+#! param EpochS = gestionnaire d'alarmes, qui comprend 0 comme 'pas d'horloge'.
+#! param Valid = L'heure est plausible : %S51 faux, chiffres BCD valides, date qui
+#! param Valid = existe, annee 2000 a 2099.
+#! param NewSecond = Vrai un cycle a chaque seconde ECOULEE, comptee sur DtMs : bat
+#! param NewSecond = meme sans horloge.
+#! param NewMinute = Vrai un cycle quand la minute de l'horloge change. Seulement si
+#! param NewMinute = Valid.
+#! param NewHour = Vrai un cycle quand l'heure change. Seulement si Valid.
+#! param NewDay = Vrai un cycle quand le jour change - a minuit. Seulement si Valid.
+#! param NewDay = C'est ce qu'on cable sur NewDay de DFB_CNT_TOTAL.
+#! param UpS = Secondes depuis le demarrage de l'automate, comptees sur DtMs.
+#! param Jumps = Combien de reprises (plus de dix periodes d'un coup) ont ete
+#! param Jumps = ecartees.
+#! param LagMs = Le temps reel pas encore rendu dans DtMs, en ms : reste entre
+#! param LagMs = -TickUnitMs et +TickUnitMs. Un diagnostic, pas une mesure.
+#! changes 1.00 = NOUVEAU.
+#! given = %SW0 := 20
+#! given = %SW53 := 16#2026
+#! given = %SW52 := 16#0921
+#! given = %SW51 := 16#1430
+#! given = %SW50 := 16#1500
+#! given = %SW49 := 1
+#! expect = 1 : Horloge.Valid = TRUE
+#! expect = 1 : Horloge.Year = 2026
+#! expect = 1 : Horloge.Hour = 14
+#! expect = 1 : Horloge.EpochS = 843316215
+#! expect = 1 : Horloge.DtMs = 20
+
+# L'heure de l'automate, et le temps qui passe vraiment.
+
+# name ; type ; scope ; initial ; comment
+PeriodMs ; DINT ; Input ; 20 ; la periode nominale de la tache (%SW0). 0 : tache cyclique
+LastCycleMs ; DINT ; Input ; 0 ; le temps du dernier cycle (%SW30), si PeriodMs vaut 0
+Tick ; DINT ; Input ; 0 ; un compteur libre (%SD18, toutes les 100 ms)
+TickUnitMs ; DINT ; Input ; 100 ; ce que vaut une unite de Tick, en ms
+TickWrap ; DINT ; Input ; 0 ; la valeur ou Tick repart a zero. 0 : compteur DINT ordinaire
+RtcSec ; INT ; Input ; 0 ; %SW50 : 16#SS00, secondes en BCD
+RtcHourMin ; INT ; Input ; 0 ; %SW51 : 16#HHMM en BCD
+RtcMonthDay ; INT ; Input ; 0 ; %SW52 : 16#MMJJ en BCD
+RtcYear ; INT ; Input ; 0 ; %SW53 : 16#SSAA en BCD
+RtcDow ; INT ; Input ; 0 ; %SW49 : 1 lundi a 7 dimanche
+RtcLost ; BOOL ; Input ;  ; %S51 : l'horloge a perdu l'heure
+DtMs ; DINT ; Output ; 0 ; le temps reellement ecoule depuis le cycle precedent, en ms
+Year ; INT ; Output ; 0 ; 2000..2099
+Month ; INT ; Output ; 0 ; 1..12
+Day ; INT ; Output ; 0 ; 1..31
+Hour ; INT ; Output ; 0 ; 0..23
+Minute ; INT ; Output ; 0 ; 0..59
+Second ; INT ; Output ; 0 ; 0..59
+DayOfWeek ; INT ; Output ; 0 ; 1 lundi a 7 dimanche, 0 si inconnu
+MinuteOfDay ; INT ; Output ; 0 ; minutes depuis minuit, 0..1439
+EpochS ; UDINT ; Output ; 0 ; secondes depuis le 01/01/2000, heure locale. 0 si l'heure n'est pas valide
+Valid ; BOOL ; Output ;  ; l'heure est plausible
+NewSecond ; BOOL ; Output ;  ; un cycle a chaque seconde ecoulee (sur DtMs)
+NewMinute ; BOOL ; Output ;  ; un cycle quand la minute change (horloge valide)
+NewHour ; BOOL ; Output ;  ; un cycle quand l'heure change (horloge valide)
+NewDay ; BOOL ; Output ;  ; un cycle a minuit (horloge valide)
+UpS ; UDINT ; Output ; 0 ; secondes depuis le demarrage
+Jumps ; UDINT ; Output ; 0 ; reprises ecartees : plus de dix periodes d'un coup
+LagMs ; DINT ; Output ; 0 ; temps reel pas encore rendu dans DtMs
+started ; BOOL ; Local ;  ;
+tickSeen ; BOOL ; Local ;  ; Tick a deja bouge
+prevTick ; DINT ; Local ; 0 ;
+nominal ; DINT ; Local ; 0 ;
+real ; DINT ; Local ; 0 ;
+lag ; DINT ; Local ; 0 ;
+FracMs ; DINT ; Local ; 0 ;
+secs ; UDINT ; Local ; 0 ;
+hi ; INT ; Local ; 0 ;
+lo ; INT ; Local ; 0 ;
+bad ; BOOL ; Local ;  ; un chiffre BCD invalide
+y ; INT ; Local ; 0 ;
+mo ; INT ; Local ; 0 ;
+d ; INT ; Local ; 0 ;
+h ; INT ; Local ; 0 ;
+mi ; INT ; Local ; 0 ;
+s ; INT ; Local ; 0 ;
+dim ; INT ; Local ; 0 ; jours dans le mois
+cum ; INT ; Local ; 0 ; jours de l'annee avant le mois
+days ; DINT ; Local ; 0 ; jours depuis le 01/01/2000
+ok ; BOOL ; Local ;  ;
+haveRtc ; BOOL ; Local ;  ; une heure valide a deja ete lue
+prevMin ; INT ; Local ; -1 ;
+prevHour ; INT ; Local ; -1 ;
+prevDay ; INT ; Local ; -1 ;
+
+<<<section Process ST>>>
+(* =====================================================================
+    DFB_SYS_CLOCK - l'heure de l'automate, et le temps qui passe vraiment.
+
+    DtMs REMPLACE LA CONSTANTE CycleMs. Tous les blocs de la bibliotheque
+    accumulent leurs temps depuis CycleMs ; y cabler 20, c'est supposer que
+    la tache tient sa periode. Un cycle qui deborde, une tache cyclique, une
+    periode changee dans la configuration : les chronos derivent sans que
+    rien ne le dise.
+
+    DtMs vaut la periode nominale tant que la tache la tient, et RATTRAPE
+    quand le compteur libre Tick montre qu'elle a derive de plus d'une unite.
+    La somme des DtMs ne s'ecarte jamais du temps reel de plus d'une unite de
+    Tick - 100 ms avec %SD18, 1 ms avec un compteur en millisecondes.
+
+    UN ARRET N'EST PAS UN CYCLE. Plus de dix periodes d'un coup, c'est une
+    reprise apres un STOP : ce temps-la n'est pas rendu, sinon chaque
+    compteur d'heures de marche compterait l'arret comme de la marche.
+   ===================================================================== *)
+
+(* ---- le temps ecoule ------------------------------------------------ *)
+nominal := PeriodMs;
+IF nominal <= 0 THEN nominal := LastCycleMs; END_IF;
+IF nominal < 0 THEN nominal := 0; END_IF;
+
+IF NOT started THEN
+    started := TRUE;
+    prevTick := Tick;
+    lag := 0;
+    DtMs := nominal;
+ELSE
+    IF TickUnitMs > 0 AND Tick <> prevTick THEN
+        tickSeen := TRUE;
+    END_IF;
+    IF tickSeen THEN
+        real := Tick - prevTick;
+        IF real < 0 AND TickWrap > 0 THEN
+            real := real + TickWrap;
+        END_IF;
+        real := real * TickUnitMs;
+        IF real < 0 OR real > 10 * nominal + TickUnitMs THEN
+            (* Une reprise, pas un cycle : le temps n'est pas rendu. *)
+            Jumps := Jumps + 1;
+            lag := 0;
+        ELSE
+            lag := lag + real;
+        END_IF;
+        DtMs := nominal;
+        IF lag - DtMs > TickUnitMs THEN
+            DtMs := lag - TickUnitMs;
+        ELSIF lag - DtMs < -TickUnitMs THEN
+            DtMs := lag + TickUnitMs;
+            IF DtMs < 0 THEN DtMs := 0; END_IF;
+        END_IF;
+        lag := lag - DtMs;
+    ELSE
+        DtMs := nominal;
+    END_IF;
+    prevTick := Tick;
+END_IF;
+LagMs := lag;
+
+(* Les secondes depuis le demarrage, et l'impulsion de la seconde. *)
+NewSecond := FALSE;
+FracMs := FracMs + DtMs;
+IF FracMs >= 1000 THEN
+    secs := DINT_TO_UDINT(FracMs / 1000);
+    FracMs := FracMs MOD 1000;
+    UpS := UpS + secs;
+    NewSecond := TRUE;
+END_IF;
+
+(* ---- l'heure, depuis les mots BCD ------------------------------------ *)
+bad := FALSE;
+IF RtcSec < 0 THEN
+    bad := TRUE;
+ELSE
+    hi := RtcSec / 256;
+    lo := RtcSec MOD 256;
+    IF (hi / 16) > 9 OR (hi MOD 16) > 9 OR (lo / 16) > 9 OR (lo MOD 16) > 9 THEN
+        bad := TRUE;
+    END_IF;
+    s := (hi / 16) * 10 + hi MOD 16;
+    lo := (lo / 16) * 10 + lo MOD 16;
+END_IF;
+IF RtcHourMin < 0 THEN
+    bad := TRUE;
+ELSE
+    hi := RtcHourMin / 256;
+    lo := RtcHourMin MOD 256;
+    IF (hi / 16) > 9 OR (hi MOD 16) > 9 OR (lo / 16) > 9 OR (lo MOD 16) > 9 THEN
+        bad := TRUE;
+    END_IF;
+    h := (hi / 16) * 10 + hi MOD 16;
+    mi := (lo / 16) * 10 + lo MOD 16;
+END_IF;
+IF RtcMonthDay < 0 THEN
+    bad := TRUE;
+ELSE
+    hi := RtcMonthDay / 256;
+    lo := RtcMonthDay MOD 256;
+    IF (hi / 16) > 9 OR (hi MOD 16) > 9 OR (lo / 16) > 9 OR (lo MOD 16) > 9 THEN
+        bad := TRUE;
+    END_IF;
+    mo := (hi / 16) * 10 + hi MOD 16;
+    d := (lo / 16) * 10 + lo MOD 16;
+END_IF;
+IF RtcYear < 0 THEN
+    bad := TRUE;
+ELSE
+    hi := RtcYear / 256;
+    lo := RtcYear MOD 256;
+    IF (hi / 16) > 9 OR (hi MOD 16) > 9 OR (lo / 16) > 9 OR (lo MOD 16) > 9 THEN
+        bad := TRUE;
+    END_IF;
+    hi := (hi / 16) * 10 + hi MOD 16;
+    y := (lo / 16) * 10 + lo MOD 16;
+END_IF;
+(* hi porte le siecle : 20 pour 2026. *)
+y := hi * 100 + y;
+
+(* Les jours du mois, et ceux de l'annee avant lui. *)
+CASE mo OF
+    1:  cum := 0;   dim := 31;
+    2:  cum := 31;  dim := 28;
+    3:  cum := 59;  dim := 31;
+    4:  cum := 90;  dim := 30;
+    5:  cum := 120; dim := 31;
+    6:  cum := 151; dim := 30;
+    7:  cum := 181; dim := 31;
+    8:  cum := 212; dim := 31;
+    9:  cum := 243; dim := 30;
+    10: cum := 273; dim := 31;
+    11: cum := 304; dim := 30;
+    12: cum := 334; dim := 31;
+ELSE
+    cum := 0; dim := 0;
+END_CASE;
+(* 2000 a 2099 : une annee sur quatre est bissextile, sans exception. *)
+IF (y MOD 4) = 0 THEN
+    IF mo = 2 THEN dim := 29; END_IF;
+    IF mo > 2 THEN cum := cum + 1; END_IF;
+END_IF;
+
+ok := NOT RtcLost AND NOT bad
+      AND y >= 2000 AND y <= 2099
+      AND mo >= 1 AND mo <= 12
+      AND d >= 1 AND d <= dim
+      AND h <= 23 AND mi <= 59 AND s <= 59;
+
+Valid := ok;
+NewMinute := FALSE;
+NewHour := FALSE;
+NewDay := FALSE;
+
+IF ok THEN
+    Year := y;
+    Month := mo;
+    Day := d;
+    Hour := h;
+    Minute := mi;
+    Second := s;
+    MinuteOfDay := h * 60 + mi;
+    IF RtcDow >= 1 AND RtcDow <= 7 THEN
+        DayOfWeek := RtcDow;
+    ELSE
+        DayOfWeek := 0;
+    END_IF;
+
+    (* Les jours depuis le 01/01/2000 : 365 par an, plus un par annee
+       bissextile ecoulee - 2000 en est une. *)
+    days := INT_TO_DINT(y - 2000) * 365 + INT_TO_DINT((y - 2000 + 3) / 4)
+          + INT_TO_DINT(cum + d - 1);
+    EpochS := DINT_TO_UDINT(days) * 86400
+            + DINT_TO_UDINT(INT_TO_DINT(h) * 3600 + INT_TO_DINT(mi) * 60 + INT_TO_DINT(s));
+
+    (* Les impulsions, a partir de la deuxieme lecture valide : la premiere
+       n'est pas un changement. *)
+    IF haveRtc THEN
+        NewMinute := mi <> prevMin;
+        NewHour := h <> prevHour;
+        NewDay := d <> prevDay;
+    END_IF;
+    prevMin := mi;
+    prevHour := h;
+    prevDay := d;
+    haveRtc := TRUE;
+ELSE
+    EpochS := 0;
+END_IF;
+<<<end>>>

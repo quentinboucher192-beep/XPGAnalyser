@@ -1,0 +1,80 @@
+# =============================================================================
+#  Session 74 - 1.10 : l'editeur (chantier O). Captures PNG_1040 a PNG_1048,
+#  dans une COPIE de Armoire_Gaz. Ecrite avant la fusion, pas encore jouee :
+#  a passer avec l'appli fusionnee (K + L + N + O + P + Q).
+#   - Variables IHM -> clic droit -> Ouvrir une visualisation graphique (la
+#     fenetre detachee "Graphique : ...", en direct pendant la simulation) ;
+#   - Types IHM : Ctrl+C des membres de T_Four, Ctrl+V d'un tableau d'Excel
+#     (l'apercu : ajoutes, remplaces, refuses) ;
+#   - deplier un objet montre ses alarmes : l'explorateur d'objets
+#     (commande objet-alarmes, 1.10), l'inspecteur ouvert sur l'alarme, l'arbre.
+#  A verifier en la jouant : la commande qui demarre l'IHM seule (chantier L :
+#  "Demarrer l'IHM") ; le chemin de l'objet dans l'arbre (Vues/Vues/...).
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- 5. Variables IHM : trois variables, le clic droit, la fenetre graphique ---------
+arbre "IHM/Programmation générale/Variables IHM"
+attendre 5
+ligne "Debit_Ligne" exact
+attendre 2
+ligne "Pression_Ligne" exact ctrl
+attendre 2
+ligne "Pompe_Marche" exact ctrl
+attendre 2
+ligne "Pression_Ligne" exact droit
+attendre 3
+capture PNG_1040_variables_clic_droit_graphique.png
+choisir "Ouvrir une visualisation graphique"
+attendre 4
+# Rien ne tourne encore : la fenetre le dit et propose de demarrer (1.10, 21 h 30).
+capture-fenetre "Graphique" PNG_1048_graphique_arrete_demarrer.png
+# La simulation de l'IHM (chantier L : Demarrer l'IHM) : les courbes avancent.
+arbre "Simulation/IHM"
+attendre 5
+outil "Démarrer l'IHM"
+attendre 20
+capture-fenetre "Graphique" PNG_1041_fenetre_graphique.png
+fermer-fenetre "Graphique"
+attendre 3
+
+# ---- 6. Types IHM : Ctrl+C des membres de T_Four, Ctrl+V d'un tableau d'Excel -------
+arbre "IHM/Programmation générale/Types IHM"
+attendre 5
+ligne "T_Four" exact
+attendre 3
+ligne "Temperature" exact
+attendre 2
+ligne "Consigne" exact maj
+attendre 2
+touche ctrl+c
+attendre 3
+capture PNG_1042_types_copier_excel.png
+presse-papiers "Nom\tType\tValeur initiale\tDescription\nConsigne\tREAL\t900\tConsigne du four (°C)\nPression\tREAL\t1.2\tPression de l'enceinte\n2_Zones\tBOOL\t\t\nVitesse\tFLOTTANT\t0\tVitesse du ventilateur\n"
+touche ctrl+v
+attendre 4
+capture PNG_1043_types_coller_apercu.png
+bouton "Annuler"
+attendre 2
+
+# ---- 7. Deplier un objet montre ses alarmes ------------------------------------------
+arbre "IHM/Vues/Vue_Synoptique"
+attendre 6
+objet-alarmes V_101
+attendre 3
+capture PNG_1044_explorateur_objet_alarmes.png
+objet-alarmes V_101 1
+attendre 4
+capture PNG_1045_inspecteur_sur_alarme.png
+arbre "IHM/Vues/Vues/Vue_Synoptique/Objets/V_101" deplier
+attendre 3
+capture PNG_1046_arbre_projet_objet_alarmes.png
+arbre "IHM/Vues/Vues/Vue_Synoptique/Objets/V_101/Alarmes" deplier
+attendre 3
+capture PNG_1047_arbre_projet_alarmes_depliees.png
+attendre 2

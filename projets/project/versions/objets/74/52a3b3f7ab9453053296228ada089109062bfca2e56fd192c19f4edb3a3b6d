@@ -1,0 +1,25 @@
+# DFB type interface.
+name = BUILDING
+version = 0.24
+attribute = TypeCodeCheckSumString = 0
+attribute = TypeSignatureCheckSumString = 0
+attribute = UseNewTplSignAlgo = TRUE
+
+# name ; type ; address ; scope ; init ; comment ; attributes ; element comments
+Text ; string[100] ;  ; Input ;  ; arguments ;  ; 
+T ; INT ;  ; Input ;  ; 1=step,2=trans,3=act ;  ; 
+d ; TIME ;  ; Input ;  ; delay ;  ; 
+_Trans ; ST_GC_Transition ;  ; InOut ;  ; ref ;  ; 
+_Step ; ST_GC_Step ;  ; InOut ;  ; ref ;  ; 
+_Act ; ST_GC_Action ;  ; InOut ;  ; ref ;  ; 
+Work ; string[100] ;  ; Local ;  ;  ;  ; 
+Token ; string[100] ;  ; Local ;  ;  ;  ; 
+Pos ; INT ;  ; Local ;  ;  ;  ; 
+Value ; string[100] ;  ; Local ;  ;  ;  ; 
+WorkList ; string[100] ;  ; Local ;  ;  ;  ; 
+Item ; string[100] ;  ; Local ;  ;  ;  ; 
+Key ; string[100] ;  ; Local ;  ; la cle d'un jeton : id, n, i, f, s, d, c, k ;  ; 
+Spaced ; BOOL ;  ; Local ;  ; le jeton contient des espaces ;  ; 
+
+# section ; name ; language ; order ; activation ; logic ; file
+section ; Main ; ST ; 0 ;  ;  ; Main.st

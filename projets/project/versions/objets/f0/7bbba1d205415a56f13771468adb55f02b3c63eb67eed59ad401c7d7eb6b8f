@@ -1,0 +1,25 @@
+# Derived data type.
+name = ST_GC_Transition
+version = 0.08
+# checksum is recomputed by Control Expert on import; not stored.
+
+# name ; type ; address ; scope ; init ; comment ; attributes ; element comments
+Id ; INT ;  ; Member ;  ;  ;  ; 
+CondText ; string[8] ;  ; Member ;  ;  ;  ; 
+Enabled ; BOOL ;  ; Member ;  ;  ;  ; 
+Condition ; BOOL ;  ; Member ;  ;  ;  ; 
+Priority ; INT ;  ; Member ;  ;  ;  ; 
+JoinKind ; INT ;  ; Member ;  ;  ;  ; 
+SplitKind ; INT ;  ; Member ;  ;  ;  ; 
+SourceCount ; INT ;  ; Member ;  ;  ;  ; 
+DestCount ; INT ;  ; Member ;  ;  ;  ; 
+Sources ; ARRAY[0..2] OF INT ;  ; Member ;  ;  ;  ; 
+Destinations ; ARRAY[0..2] OF INT ;  ; Member ;  ;  ;  ; 
+Validated ; BOOL ;  ; Member ;  ;  ;  ; 
+SnapshotValid ; BOOL ;  ; Member ;  ;  ;  ; 
+ConditionTime ; TIME ;  ; Member ;  ;  ;  ; 
+TonStarted ; BOOL ;  ; Member ;  ;  ;  ; 
+TonElapsed ; TIME ;  ; Member ;  ;  ;  ; 
+TimedConditionValid ; BOOL ;  ; Member ;  ;  ;  ; 
+PrevCondition ; BOOL ;  ; Member ;  ;  ;  ; 
+ResetOnFall ; BOOL ;  ; Member ;  ;  ;  ; 

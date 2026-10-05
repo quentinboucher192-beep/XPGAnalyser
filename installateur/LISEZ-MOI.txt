@@ -1,0 +1,54 @@
+﻿XPGAnalyser {VERSION} - Windows 10 et 11, 64 bits
+=================================================
+
+L'analyse, l'IHM et la simulation de tes projets Control Expert (.XPG).
+
+
+CE QUI EST INSTALLÉ
+-------------------
+Ce dossier : le programme (XpgAnalyzer.exe) et tout ce dont il a besoin
+(SDL3.dll, le runtime Visual C++ s'il y en a un), resources\ et libs\ (les
+versions livrées, qui amorcent tes données), maintenance\ (les scripts de
+réparation), licences\, manifeste.json (chaque fichier, sa taille, son
+SHA-256) et installation.ini (écrit par l'installateur : ne pas modifier).
+Rien à ranger ici : ce dossier est remplacé à chaque mise à jour.
+
+TES DONNÉES
+-----------
+Tes projets, ta bibliothèque (DFB, DDT, macros), ton catalogue et tes
+captures sont dans ton dossier des données : Documents\XPGAnalyser par
+défaut, ou celui choisi pendant l'installation. Pour les voir, les ouvrir ou
+les changer : l'accueil de XPGAnalyser, lien « Dossiers », ou le menu Projet
+> Dossiers de l'application... Ils sont enregistrés dans
+%APPDATA%\XpgAnalyzer\XPGAnalyser.ini ; tes réglages, dans
+%APPDATA%\XpgAnalyzer\settings.txt.
+
+METTRE À JOUR
+-------------
+Lance le nouvel installateur (XPGAnalyser-Setup-<version>.exe). Il trouve la
+version installée, la sauvegarde, ferme l'application proprement, remplace le
+programme, met à jour les fichiers livrés sans écraser ceux que tu as
+modifiés, puis vérifie chaque fichier.
+
+EN CAS DE PROBLÈME (menu Démarrer > XPGAnalyser > Maintenance)
+--------------------------------------------------------------
+  Vérifier l'installation                rien n'est modifié
+  Réparer                                diagnostic, puis réparation de ce qui est cassé
+  Reprendre une installation interrompue
+  Restaurer une sauvegarde               la version d'avant, tes réglages d'avant
+  Réinitialiser mes réglages             mis de côté, pas effacés
+  Collecter les journaux                 un zip sur le Bureau, pour le dépannage
+Les journaux : %LOCALAPPDATA%\XpgAnalyzer\Journaux (installation pour toi
+seul) ou %ProgramData%\XPGAnalyser\Journaux (pour tous les comptes).
+
+DÉSINSTALLER
+------------
+Menu Démarrer > XPGAnalyser > Désinstaller XPGAnalyser (tape « désinstaller »
+dans la recherche Windows), ou Paramètres > Applications > Applications
+installées > XPGAnalyser > Désinstaller. Tes données et tes réglages sont gardés, sauf si tu choisis de
+les supprimer (ils vont alors dans la Corbeille, après la confirmation
+SUPPRIMER).
+
+L'installateur n'est pas signé : au premier lancement, Windows SmartScreen
+peut afficher « Windows a protégé votre ordinateur ». Clique sur
+« Informations complémentaires », puis sur « Exécuter quand même ».

@@ -1,0 +1,98 @@
+# Derived data type, shared.
+name = ST_EQ_CtrlValve
+version = 1.00
+#! summary = Une vanne de regulation : position commandee en pourcent, recopie, ecart surveille, position de repli.
+#! usage = Le contrat commun a toutes les familles d'equipement : Enable a FALSE fige
+#! usage = l'equipement ; ManMode fait primer les commandes Man* ; AckFault acquitte
+#! usage = SUR FRONT ; le defaut est MEMORISE par FaultLatch ; State, StateMs, RunS et
+#! usage = Starts se lisent comme partout. Voir COMMUN.hlp du dossier.
+#! usage = LA POSITION DE REPLI EST UNE DECISION DE PROCEDE. En defaut, desactivee ou
+#! usage = sans commande, la vanne va a FailPos - fermee pour une arrivee de produit,
+#! usage = ouverte pour une decharge. Ce n'est pas au bloc de le deviner : FailPos
+#! usage = vaut 0 par defaut, et c'est a regler vanne par vanne.
+#! see = DFB_EQ_CTRLVALVE
+#! see = DFB_CTL_PID
+#! param PosReq = La position demandee en automatique, en % d'ouverture : Out d'un
+#! param PosReq = PID, le plus souvent.
+#! param ManPosReq = La position demandee en manuel, en %.
+#! param Pos = SORTIE. La position commandee, en %, apres limite de vitesse et repli.
+#! param PosFbk = La recopie de position, en % : Val d'une voie analogique. Ignoree si
+#! param PosFbk = HasFbk est faux.
+#! param HasFbk = FALSE : pas de recopie. Sans elle, aucun ecart ne peut se detecter.
+#! param RateMax = La vitesse maximale de la commande, en % par seconde. 0 : pas de
+#! param RateMax = limite. Utile contre les coups de belier.
+#! param FailPos = La position de repli, en % : en defaut et desactivee. A choisir
+#! param FailPos = selon le procede.
+#! param ClosedLimit = Sous ce pourcentage, la vanne est fermee ; au-dessus de 100 -
+#! param ClosedLimit = ClosedLimit, ouverte. 1 par defaut.
+#! param MaxDeviation = L'ecart commande - recopie tolere, en %.
+#! param DevDelayMs = Combien de temps l'ecart peut durer avant le defaut 1 : le temps
+#! param DevDelayMs = de course de la vanne, et un peu plus.
+#! param Deviation = SORTIE. Pos - PosFbk, en %.
+#! param Closed = SORTIE. Fermee (sous ClosedLimit, sur la recopie si elle existe).
+#! param Opened = SORTIE. Ouverte en grand.
+#! param Moving = SORTIE. La recopie n'a pas rejoint la commande.
+#! param RawOut = SORTIE. La commande en points, prete pour un %QW : RawMin a RawMax.
+#! param RawMin = Les points de la sortie analogique a 0 %.
+#! param RawMax = Les points a 100 %. 10000 pour une carte M340 en 0-10 V ou 4-20 mA.
+#! param DevElapsed = Depuis combien de temps l'ecart dure. Runtime.
+#! internal = PrevAck, DevElapsed, PrevRunning, RunFracMs, PrevState
+#! fault 1 = Ecart de position : la recopie ne suit pas la commande depuis DevDelayMs. Vanne bloquee, air coupe, positionneur en defaut.
+#! fault 2 = Recopie hors plage (sous -5 % ou au-dessus de 105 %) : capteur ou cablage.
+#! example = (* declarer : Vr : ARRAY[0..15] OF ST_EQ_CtrlValve; Boucles : ARRAY[0..7] OF ST_CTL_Pid;
+#! example =    AI : ARRAY[0..7] OF ST_IO_Ana; AO : ARRAY[0..3] OF ST_IO_Ana; *)
+#! example = Vr[0].Name := 'FCV101 debit';
+#! example = Vr[0].FailPos := 0.0;          (* fermee en repli *)
+#! example = Vr[0].RateMax := 10.0;         (* 10 % par seconde au plus *)
+#! example = (* avant l'appel de DFB_EQ_CTRLVALVE *)
+#! example = Vr[0].PosReq := Boucles[0].Out;
+#! example = Vr[0].PosFbk := AI[2].Val;
+#! example = (* apres *)
+#! example = AO[1].Val := Vr[0].Pos;
+#! given = AI[2].Val := 42.0
+#! expect = 1 : Vr[0].PosFbk = 42.0
+#! expect = 1 : Vr[0].RateMax = 10.0
+#! changes 1.00 = NOUVEAU.
+
+# Une vanne de regulation : position commandee en %, recopie, repli.
+#
+# Codes de defaut (FaultCode):
+# 1  ecart de position : la recopie ne suit pas la commande
+# 2  recopie hors plage : capteur ou cablage
+
+# name ; type ; scope ; initial ; comment
+Name ; STRING[16] ; Member ;  ; ce que l'operateur lit
+Enable ; BOOL ; Member ; TRUE ; FALSE fige l'equipement: aucune sortie, aucun defaut
+ManMode ; BOOL ; Member ;  ; TRUE: les commandes manuelles priment sur l'automatisme
+AckFault ; BOOL ; Member ;  ; front montant: acquitte le defaut s'il a disparu
+PrevAck ; BOOL ; Member ;  ; runtime, ne pas ecrire
+PosReq ; REAL ; Member ; 0.0 ; position demandee en automatique, en %
+ManPosReq ; REAL ; Member ; 0.0 ; position demandee en manuel, en %
+Pos ; REAL ; Member ; 0.0 ; SORTIE : la position commandee, en %
+PosFbk ; REAL ; Member ; 0.0 ; la recopie de position, en %
+HasFbk ; BOOL ; Member ; TRUE ; FALSE : pas de recopie
+RateMax ; REAL ; Member ; 0.0 ; vitesse maximale de la commande, en %/s. 0 : pas de limite
+FailPos ; REAL ; Member ; 0.0 ; la position de repli, en %
+ClosedLimit ; REAL ; Member ; 1.0 ; sous ce %, fermee
+MaxDeviation ; REAL ; Member ; 5.0 ; ecart commande - recopie tolere, en %
+DevDelayMs ; DINT ; Member ; 10000 ; duree toleree de l'ecart
+DevElapsed ; DINT ; Member ; 0 ; runtime, ne pas ecrire
+Deviation ; REAL ; Member ; 0.0 ; SORTIE : Pos - PosFbk
+Closed ; BOOL ; Member ;  ; SORTIE : fermee
+Opened ; BOOL ; Member ;  ; SORTIE : ouverte en grand
+Moving ; BOOL ; Member ;  ; SORTIE : la recopie n'a pas rejoint la commande
+RawOut ; INT ; Member ; 0 ; SORTIE : la commande en points, pour un %QW
+RawMin ; INT ; Member ; 0 ; points a 0 %
+RawMax ; INT ; Member ; 10000 ; points a 100 %
+PrevRunning ; BOOL ; Member ;  ; runtime, ne pas ecrire
+Fault ; BOOL ; Member ;  ; un defaut est present
+FaultCode ; INT ; Member ; 0 ; 0 aucun. Voir la table de la famille
+FaultLatch ; BOOL ; Member ;  ; le defaut reste jusqu'a AckFault, meme s'il disparait
+Ready ; BOOL ; Member ;  ; utilisable: active, sans defaut
+RunMs ; DINT ; Member ; 0 ; temps en service cumule, en ms, plafonne a 2 000 000 000 (555 h) : lire RunS
+Starts ; UDINT ; Member ; 0 ; nombre de mises en service depuis le dernier Reset
+StateMs ; DINT ; Member ; 0 ; temps dans l'etat courant (State), en ms, plafonne a 2 000 000 000
+RunS ; UDINT ; Member ; 0 ; temps en service cumule, en secondes : ne deborde pas avant 136 ans
+RunFracMs ; DINT ; Member ; 0 ; runtime, ne pas ecrire : les millisecondes pas encore comptees dans RunS
+State ; INT ; Member ; 0 ; etat publie : 0 desactive, 1 en defaut, 2 au repos, 3 en service
+PrevState ; INT ; Member ; -1 ; runtime, ne pas ecrire

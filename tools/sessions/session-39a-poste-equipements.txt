@@ -1,0 +1,235 @@
+# =============================================================================
+#  Session 39 A - LOT 15 C : les equipements en marche, le poste d'exploitation.
+#  Deux alarmes sur les equipements (une mesure de la centrale ; le variateur
+#  injoignable, par IHM_EQUIPEMENT_OK) ; une vue des mesures lues dans les
+#  equipements, avec SYS.Equip* ; en simulation ; le projet passe en FINISH ;
+#  l'accueil : Demarrage auto... (le poste au demarrage du PC), puis le bouton
+#  Poste d'exploitation ; F1 refuse a l'operateur, permis a l'administrateur.
+#  La session s'arrete brutalement (kill -9) poste en marche : la reprise est
+#  la session 39 B. Dans le reseau de laboratoire, apres la session 38.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+arbre "API" replier
+attendre 3
+
+# ---- 1. Deux alarmes sur les equipements -----------------------------------------------------------------
+arbre "IHM/Configuration" deplier
+arbre "IHM/Configuration/Alarmes"
+attendre 5
+outil "Nouvelle alarme"
+attendre 3
+propriete "Nom" "Courant_L1_Haut"
+propriete "Condition" "Courant_L1 > 13.5"
+propriete "Message" "Courant L1 élevé : {Courant_L1:0.0} A (centrale PM5560)"
+propriete-clic "Priorité"
+choisir "2 - Haute"
+attendre 2
+propriete "Groupe" "Équipements"
+outil "Nouvelle alarme"
+attendre 3
+propriete "Nom" "Variateur_Injoignable"
+propriete "Condition" "NOT IHM_EQUIPEMENT_OK('Variateur ATV320')"
+propriete "Message" "Variateur ATV320 injoignable (hors ligne : {SYS.EquipOfflineNames})"
+propriete-clic "Priorité"
+choisir "1 - Critique"
+attendre 2
+propriete "Groupe" "Équipements"
+attendre 3
+
+# ---- 2. Une vue des mesures lues dans les equipements ------------------------------------------------------
+arbre "IHM/Vues"
+attendre 5
+outil "Nouvelle vue"
+attendre 5
+champ 1 "Vue_Equipements"
+champ 2 "1280"
+champ 3 "800"
+champ 4 "Les mesures lues dans les équipements du réseau (Modbus TCP/IP)"
+touche Return
+attendre 10
+palette "Texte"
+vue-clic 20 20
+propriete "Nom" "Titre_Equipements"
+propriete "X" "20"
+propriete "Y" "14"
+propriete "Largeur" "1240"
+propriete "Hauteur" "70"
+propriete "Taille du texte" "20"
+propriete "Texte" "Équipements du réseau : {SYS.EquipOnline} joignables sur {SYS.EquipCount} ({SYS.EquipSimulated} simulé)\nHors ligne : {SYS.EquipOfflineNames}"
+palette "Afficheur numérique"
+vue-clic 40 120
+propriete "Nom" "Aff_Tension"
+propriete "X" "40"
+propriete "Y" "110"
+propriete "Largeur" "280"
+propriete "Hauteur" "84"
+propriete "Libellé" "Tension L1 (centrale)"
+propriete "Format" "0.0"
+propriete "Unité" "V"
+propriete "Taille du texte" "30"
+propriete "Variable API" "Tension_L1"
+palette "Afficheur numérique"
+vue-clic 360 120
+propriete "Nom" "Aff_Courant"
+propriete "X" "350"
+propriete "Y" "110"
+propriete "Largeur" "280"
+propriete "Hauteur" "84"
+propriete "Libellé" "Courant L1"
+propriete "Format" "0.0"
+propriete "Unité" "A"
+propriete "Seuil haut" "13.5"
+propriete "Taille du texte" "30"
+propriete "Variable API" "Courant_L1"
+palette "Afficheur numérique"
+vue-clic 680 120
+propriete "Nom" "Aff_Puissance"
+propriete "X" "660"
+propriete "Y" "110"
+propriete "Largeur" "280"
+propriete "Hauteur" "84"
+propriete "Libellé" "Puissance"
+propriete "Format" "0.0"
+propriete "Unité" "kW"
+propriete "Taille du texte" "30"
+propriete "Variable API" "Puissance"
+palette "Afficheur numérique"
+vue-clic 990 120
+propriete "Nom" "Aff_Frequence"
+propriete "X" "970"
+propriete "Y" "110"
+propriete "Largeur" "280"
+propriete "Hauteur" "84"
+propriete "Libellé" "Fréquence"
+propriete "Format" "0.00"
+propriete "Unité" "Hz"
+propriete "Taille du texte" "30"
+propriete "Variable API" "Frequence"
+palette "Afficheur numérique"
+vue-clic 60 240
+propriete "Nom" "Aff_O2"
+propriete "X" "40"
+propriete "Y" "230"
+propriete "Largeur" "280"
+propriete "Hauteur" "84"
+propriete "Libellé" "O2 four 2 (analyseur)"
+propriete "Format" "0.0"
+propriete "Unité" "%"
+propriete "Taille du texte" "30"
+propriete "Variable API" "O2_Four2"
+palette "Afficheur numérique"
+vue-clic 380 240
+propriete "Nom" "Aff_CO"
+propriete "X" "350"
+propriete "Y" "230"
+propriete "Largeur" "280"
+propriete "Hauteur" "84"
+propriete "Libellé" "CO four 2"
+propriete "Format" "0"
+propriete "Unité" "ppm"
+propriete "Taille du texte" "30"
+propriete "Variable API" "CO_Four2"
+palette "Afficheur numérique"
+vue-clic 700 240
+propriete "Nom" "Aff_Poids"
+propriete "X" "660"
+propriete "Y" "230"
+propriete "Largeur" "280"
+propriete "Hauteur" "84"
+propriete "Libellé" "Poids balance B (simulée)"
+propriete "Format" "0.00"
+propriete "Unité" "kg"
+propriete "Taille du texte" "30"
+propriete "Variable API" "Poids_B"
+palette "Afficheur numérique"
+vue-clic 1010 240
+propriete "Nom" "Aff_Variateur"
+propriete "X" "970"
+propriete "Y" "230"
+propriete "Largeur" "280"
+propriete "Hauteur" "84"
+propriete "Libellé" "Consigne variateur"
+propriete "Format" "0"
+propriete "Unité" "tr/min"
+propriete "Taille du texte" "30"
+propriete "Variable API" "Consigne_Variateur"
+palette "Courbe"
+vue-clic 60 380
+propriete "Nom" "Courbe_Equipements"
+propriete "X" "40"
+propriete "Y" "350"
+propriete "Largeur" "1210"
+propriete "Hauteur" "300"
+propriete "Plumes : variables tracées (a;b)" "Courant_L1; O2_Four2"
+propriete-clic "Échelle"
+choisir "auto"
+attendre 2
+palette "Compteur d'alarmes"
+vue-clic 60 690
+propriete "Nom" "Alarmes_Equipements"
+propriete "X" "40"
+propriete "Y" "680"
+propriete "Largeur" "420"
+propriete "Hauteur" "90"
+attendre 5
+action project.save
+attendre 5
+bouton "Close"
+attendre 3
+
+# ---- 3. En simulation : les valeurs des equipements, leur qualite -----------------------------------------
+arbre "IHM/Simulation"
+attendre 10
+sim-vue "Vue_Equipements"
+attendre-reel 12
+attendre 10
+survol 1200 1040
+attendre 3
+capture-sim PNG_411_sim_vue_equipements.png
+
+# ---- 4. Le projet passe en FINISH ; l'accueil : Demarrage auto... ---------------------------------------
+action project.state
+attendre 5
+liste 1
+choisir "FINISH"
+attendre 2
+bouton "Apply"
+attendre 5
+action app.home
+attendre 10
+bouton "Démarrage auto…"
+attendre 5
+liste 1
+choisir "Armoire_Gaz (${PROJETS}/Armoire_Gaz)"
+attendre 3
+capture PNG_412_accueil_demarrage_auto.png
+bouton "Appliquer"
+attendre 8
+capture PNG_413_accueil_poste.png
+
+# ---- 5. Le bouton Poste d'exploitation ; F1 ------------------------------------------------------------------
+bouton "Poste d'exploitation"
+attendre-poste
+attendre 10
+sim-vue "Vue_Equipements"
+attendre-reel 6
+attendre 10
+touche f1
+attendre 5
+sim-utilisateur "admin" "admin2026"
+attendre 5
+touche f1
+attendre 10
+capture PNG_414_poste_f1_aide.png
+bouton "Fermer"
+attendre 5
+attendre-reel 12
+attendre 10
+capture PNG_415_poste_avant_coupure.png
+# Le poste tourne : la coupure (kill -9) arrive d'ailleurs.
+attendre-reel 600

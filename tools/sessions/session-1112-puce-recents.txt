@@ -1,0 +1,75 @@
+# =============================================================================
+#  Session 1112b - 1.11.2 (UNI, decision 204) : UN PROJET RECENT, PAR LE MENU DE
+#  LA PUCE PROJET, NE FAIT PLUS PERDRE LES MODIFICATIONS.
+#  Avant : Projets recents > un projet ouvrait le projet choisi par-dessus celui qui
+#  etait modifie, sans question : ses modifications etaient perdues (et choisir le
+#  projet deja ouvert le relisait du disque : perdues aussi).
+#  Maintenant : la question de l'accueil (dialog.startLeave : "Les enregistrer
+#  d'abord" / "Les abandonner" ; Annuler : rien ne s'ouvre) ; le projet deja ouvert
+#  n'est pas relu (la barre d'etat : "... est deja ouvert ici.").
+#  Jouee sur Linux par scratchpad/UNI/lancer-puce.sh (ou par une chaine d'essais) :
+#    PROJETS=<dossier> avec DEUX projets : Armoire_Gaz et Projet_B (une copie
+#    d'Armoire_Gaz) ; la cle administrateur deja definie (pas de dialogue au
+#    demarrage) ; --size (pas d'instance unique).
+#  Reussie : code 0, aucune ligne "[script] ligne" ; les trois "etat" disent
+#  .../Armoire_Gaz, .../Armoire_Gaz, .../Projet_B ; Armoire_Gaz enregistre
+#  contient gUni1112 ("Les enregistrer d'abord").
+#  Avant le correctif : echec au premier "dialogue-fenetre principale" apres
+#  "Projet_B" (la question n'est pas venue : Projet_B s'est ouvert, la variable
+#  gUni1112 est perdue).
+# =============================================================================
+attendre 3
+dialogue-fenetre aucun
+ouvrir "${PROJETS}/Projet_B"
+attendre-projet
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+dialogue-fenetre aucun
+# Une modification : une variable de plus (le projet est modifie, rien n'est enregistre).
+action create.variable
+attendre 3
+dialogue-fenetre principale
+champ 1 "gUni1112"
+attendre 2
+bouton "Créer"
+attendre 5
+dialogue-fenetre aucun
+etat
+# 1. Le projet deja ouvert, choisi dans les recents : pas de question, rien n'est relu
+#    (la modification reste : la question du 3 le prouve).
+bandeau-projet-menu
+attendre 3
+choisir "Projets récents"
+attendre 3
+choisir "Armoire_Gaz"
+attendre 5
+dialogue-fenetre aucun
+# 2. Un autre projet : la question de l'accueil. Annuler : rien ne s'ouvre.
+bandeau-projet-menu
+attendre 3
+choisir "Projets récents"
+attendre 3
+choisir "Projet_B"
+dialogue-fenetre principale
+attendre 3
+capture 1112b_01_puce_recent_question.png
+bouton "Annuler"
+attendre 3
+dialogue-fenetre aucun
+etat
+# 3. Encore : "Les enregistrer d'abord" (le choix par defaut), Continuer :
+#    Armoire_Gaz est enregistre, puis Projet_B s'ouvre.
+bandeau-projet-menu
+attendre 3
+choisir "Projets récents"
+attendre 3
+choisir "Projet_B"
+dialogue-fenetre principale
+bouton "Continuer"
+attendre 10
+dialogue-fenetre aucun
+etat
+attendre 5
+quitter

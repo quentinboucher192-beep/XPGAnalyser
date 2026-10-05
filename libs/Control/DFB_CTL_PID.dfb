@@ -1,0 +1,162 @@
+# Derived function block, shared.
+name = DFB_CTL_PID
+version = 1.00
+#! summary = Huit boucles PID en un appel : sans a-coup manuel/auto, anti-emballement, derivee sur la mesure.
+#! usage = POURQUOI PAS LE PID DE CONTROL EXPERT. Le PIDFF de la bibliotheque CONT_CTL
+#! usage = fait plus - et le simulateur de l'outil ne le connait pas. Celui-ci tourne
+#! usage = partout, se lit en une page, et suffit a une pression, un niveau, une
+#! usage = temperature.
+#! usage = L'ANTI-EMBALLEMENT EST PAR INTEGRATION CONDITIONNELLE : quand la sortie est
+#! usage = en butee, l'integrale ne pousse plus dans ce sens. Sans ca, une sortie
+#! usage = bloquee a 100 pendant un demarrage accumule une integrale qui mettra des
+#! usage = minutes a se vider, et la mesure depasse d'autant la consigne.
+#! usage = LA DERIVEE PORTE SUR LA MESURE, pas sur l'ecart : un saut de consigne ne
+#! usage = donne pas de coup de sortie. Filtree sur Td x TdFilter : sans filtre, le
+#! usage = bruit de la mesure passerait amplifie dans la sortie.
+#! example = (* declarer : Boucles : ARRAY[0..7] OF ST_CTL_Pid; Pression : REAL; Consigne : REAL; *)
+#! example = Boucles[0].Sp := 4.0;                      (* bar *)
+#! example = Boucles[0].Pv := Pression;
+#! example = PID_Surpression(Count := 1, CycleMs := 20, Loops := Boucles);
+#! example = Consigne := Boucles[0].Out;                (* vers le variateur *)
+#! see = ST_CTL_Pid
+#! see = DFB_EQ_CTRLVALVE
+#! param Count = Combien de boucles sont calculees : Loops[0] a Loops[Count - 1], 8 au
+#! param Count = plus.
+#! param CycleMs = La periode de la tache, en ms : DtMs de DFB_SYS_CLOCK. C'est le dt
+#! param CycleMs = de l'integrale et de la derivee - une valeur fausse fausse les
+#! param CycleMs = deux.
+#! param Loops = Les boucles, une ligne ST_CTL_Pid chacune.
+#! param SatCount = Combien de boucles sont en butee.
+#! param FaultCount = Combien de boucles ont des bornes de sortie inutilisables.
+#! changes 1.00 = NOUVEAU.
+#! given = Pression := 3.0
+#! expect = 1 : Boucles[0].Err = 1.0
+#! expect = 1 : Boucles[0].Out = 0.002
+#! expect = 2 : Consigne = 0.004
+
+# Huit boucles PID en un appel.
+
+# name ; type ; scope ; initial ; comment
+Count ; INT ; Input ; 8 ; combien de boucles sont calculees
+CycleMs ; DINT ; Input ; 20 ; la periode de la tache en ms : DtMs de DFB_SYS_CLOCK
+Loops ; ARRAY[0..7] OF ST_CTL_Pid ; InOut ;  ; les boucles
+SatCount ; INT ; Output ; 0 ; combien sont en butee
+FaultCount ; INT ; Output ; 0 ; combien ont des bornes inutilisables
+i ; INT ; Local ; 0 ; 
+n ; INT ; Local ; 0 ; 
+LAST ; INT ; Local ; 7 ; dernier indice
+dt ; REAL ; Local ; 0.0 ; la periode en secondes
+e ; REAL ; Local ; 0.0 ; l'ecart
+p ; REAL ; Local ; 0.0 ; le terme proportionnel
+iNew ; REAL ; Local ; 0.0 ; l'integrale candidate
+dRaw ; REAL ; Local ; 0.0 ; la derivee avant filtre
+tf ; REAL ; Local ; 0.0 ; la constante du filtre de derivee
+u ; REAL ; Local ; 0.0 ; la sortie avant bornage
+
+<<<section Process ST>>>
+(* =====================================================================
+    DFB_CTL_PID - huit boucles PID en un appel.
+
+    Forme mixte : Out = Kp.e + (Kp/Ti).integrale(e) - Kp.Td.dPv/dt.
+    Les temps sont en SECONDES.
+
+    SANS A-COUP. En manuel, l'integrale suit la sortie (Integ := Out - Kp.e) :
+    le premier cycle automatique repart exactement de la sortie manuelle. En
+    automatique, ManOut suit Out : repasser en manuel ne bouge rien.
+
+    ANTI-EMBALLEMENT PAR INTEGRATION CONDITIONNELLE : en butee, l'integrale ne
+    pousse plus dans le sens de la butee.
+
+    LA DERIVEE PORTE SUR LA MESURE, et elle est filtree.
+   ===================================================================== *)
+
+n := Count;
+IF n > LAST + 1 THEN n := LAST + 1; END_IF;
+IF n < 0 THEN n := 0; END_IF;
+
+SatCount := 0;
+FaultCount := 0;
+dt := DINT_TO_REAL(CycleMs) / 1000.0;
+
+FOR i := 0 TO n - 1 DO
+    Loops[i].Fault := Loops[i].OutMax <= Loops[i].OutMin;
+
+    (* l'ecart, dans le sens de l'action, bande morte retranchee *)
+    e := Loops[i].Sp - Loops[i].Pv;
+    IF Loops[i].Reverse THEN e := -e; END_IF;
+    IF e > Loops[i].DeadBand THEN
+        e := e - Loops[i].DeadBand;
+    ELSIF e < -Loops[i].DeadBand THEN
+        e := e + Loops[i].DeadBand;
+    ELSE
+        e := 0.0;
+    END_IF;
+    Loops[i].Err := e;
+    p := Loops[i].Kp * e;
+
+    IF NOT Loops[i].Init THEN
+        (* premier passage : on part de la sortie telle qu'elle est *)
+        Loops[i].PrevPv := Loops[i].Pv;
+        Loops[i].Integ := Loops[i].Out - p;
+        Loops[i].Dterm := 0.0;
+        Loops[i].Init := TRUE;
+    END_IF;
+
+    IF Loops[i].Fault THEN
+        Loops[i].Out := Loops[i].OutMin;
+        Loops[i].Sat := FALSE;
+        Loops[i].WasAuto := FALSE;
+        FaultCount := FaultCount + 1;
+    ELSIF NOT Loops[i].Auto THEN
+        (* manuel : la sortie est imposee, l'integrale la suit *)
+        u := Loops[i].ManOut;
+        IF u > Loops[i].OutMax THEN u := Loops[i].OutMax; END_IF;
+        IF u < Loops[i].OutMin THEN u := Loops[i].OutMin; END_IF;
+        Loops[i].Out := u;
+        Loops[i].Integ := u - p;
+        Loops[i].Dterm := 0.0;
+        Loops[i].Sat := FALSE;
+        Loops[i].WasAuto := FALSE;
+    ELSE
+        IF NOT Loops[i].WasAuto THEN
+            (* Le passage en automatique repart de la sortie TELLE QU'ELLE EST,
+               meme si la consigne a change au meme cycle : sans ca, l'ecart
+               nouveau passait d'un coup dans le terme proportionnel. *)
+            Loops[i].Integ := Loops[i].Out - p - Loops[i].Dterm;
+            Loops[i].WasAuto := TRUE;
+        END_IF;
+        iNew := Loops[i].Integ;
+        IF Loops[i].Ti > 0.0 THEN
+            iNew := iNew + Loops[i].Kp * e * dt / Loops[i].Ti;
+        END_IF;
+
+        IF Loops[i].Td > 0.0 AND dt > 0.0 THEN
+            dRaw := -Loops[i].Kp * Loops[i].Td * (Loops[i].Pv - Loops[i].PrevPv) / dt;
+            IF Loops[i].Reverse THEN dRaw := -dRaw; END_IF;
+            tf := Loops[i].Td * Loops[i].TdFilter;
+            Loops[i].Dterm := Loops[i].Dterm + (dRaw - Loops[i].Dterm) * dt / (tf + dt);
+        ELSE
+            Loops[i].Dterm := 0.0;
+        END_IF;
+
+        u := p + iNew + Loops[i].Dterm;
+        Loops[i].Sat := FALSE;
+        IF u > Loops[i].OutMax THEN
+            (* en butee haute : l'integrale ne pousse plus vers le haut *)
+            IF e > 0.0 THEN iNew := Loops[i].Integ; END_IF;
+            u := Loops[i].OutMax;
+            Loops[i].Sat := TRUE;
+        ELSIF u < Loops[i].OutMin THEN
+            IF e < 0.0 THEN iNew := Loops[i].Integ; END_IF;
+            u := Loops[i].OutMin;
+            Loops[i].Sat := TRUE;
+        END_IF;
+        Loops[i].Integ := iNew;
+        Loops[i].Out := u;
+        Loops[i].ManOut := u;
+    END_IF;
+
+    Loops[i].PrevPv := Loops[i].Pv;
+    IF Loops[i].Sat THEN SatCount := SatCount + 1; END_IF;
+END_FOR;
+<<<end>>>

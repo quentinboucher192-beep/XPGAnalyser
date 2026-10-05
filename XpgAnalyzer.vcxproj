@@ -1,0 +1,901 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!--
+    ==========================================================================
+     XpgAnalyzer.vcxproj — Visual Studio 2022, x64
+
+     SDL3 est fourni dans third_party\SDL3 : rien a installer ni a regler.
+     (SDL3 3.4.12, le paquet officiel pour Visual Studio, x64 : include\SDL3,
+     lib\x64\SDL3.lib, lib\x64\SDL3.dll ; la construction copie SDL3.dll a cote
+     de l'executable. Aucun chemin absolu dans ce projet.)
+
+     1.8.0 : compilable sans Visual Studio - outils\build.bat (MSBuild des Build
+     Tools), outils\package.bat (compilation, tests, installateur). Release :
+     sous-systeme Windows (pas de console) ; manifeste UTF-8.
+
+     The build is deliberately strict: /permissive- and /W4 catch the
+     non-standard constructs MSVC would otherwise accept and other compilers
+     would not. /utf-8 is required — several source files contain accented
+     characters and typographic symbols in comments and UI strings.
+    ==========================================================================
+  -->
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>17.0</VCProjectVersion>
+    <ProjectGuid>{7B1C4A2E-9D3F-4E51-8C6A-1F2D3E4B5A60}</ProjectGuid>
+    <RootNamespace>XpgAnalyzer</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)'=='Debug'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Release'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings" />
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup>
+    <!-- Lot API 8 : SDL3 est fourni dans l'archive (third_party\SDL3). Sans condition :
+         une variable d'environnement SDL3_DIR (souvent posee pour CMake, vers un autre
+         dossier) ne le detourne pas. Une autre SDL3 : msbuild /p:SDL3_DIR=dossier. -->
+    <SDL3_DIR>$(ProjectDir)third_party\SDL3</SDL3_DIR>
+    <OutDir>$(ProjectDir)build\$(Configuration)\</OutDir>
+    <IntDir>$(ProjectDir)build\obj\$(Configuration)\</IntDir>
+    <TargetName>XpgAnalyzer</TargetName>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <ConformanceMode>true</ConformanceMode>
+      <WarningLevel>Level4</WarningLevel>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <AdditionalOptions>/utf-8 /Zc:__cplusplus /Zc:preprocessor %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalIncludeDirectories>$(ProjectDir)src;$(ProjectDir)third_party;$(SDL3_DIR)\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <!--
+        NOMINMAX and WIN32_LEAN_AND_MEAN stop <windows.h> from defining min/max
+        and dragging in rpcndr.h (which defines `small`). platform/Geometry.hpp
+        also guards against all three, so the headers work either way.
+      -->
+      <!--
+        XPG_EDITION (lot 21) : le lot des sources. Il change la ligne de
+        commande de chaque .cpp : Visual Studio les recompile donc tous une
+        fois, et aucun .obj compile avec un ancien en-tete (HmiModel.hpp)
+        ne reste. Au prochain lot, 22 : la meme chose.
+      -->
+      <PreprocessorDefinitions>NOMINMAX;WIN32_LEAN_AND_MEAN;_CRT_SECURE_NO_WARNINGS;XPG_WITH_SDL=1;XPG_HAVE_MINIZ=1;XPG_EDITION=24;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <AdditionalLibraryDirectories>$(SDL3_DIR)\lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>SDL3.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+    <!-- 1.8.0 : page de code UTF-8, chemins longs, versions de Windows (voir le fichier). -->
+    <Manifest>
+      <AdditionalManifestFiles>$(ProjectDir)resources\windows\xpg_analyzer.manifest;%(AdditionalManifestFiles)</AdditionalManifestFiles>
+    </Manifest>
+    <!-- Lot API 8 : SDL3.dll a cote de l'executable (xcopy /D : seulement s'il est plus
+         recent ; code 1 = rien a copier, ce n'est pas une erreur). -->
+    <PostBuildEvent>
+      <Message>bac\ et SDL3.dll vers $(OutDir)</Message>
+      <Command>if exist "$(ProjectDir)bac\Armoire_Gaz\project.xpgproj" (xcopy /E /I /Y /D /Q "$(ProjectDir)bac" "$(OutDir)bac" &gt;NUL &amp; if errorlevel 2 exit /b 1)
+xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if errorlevel 2 (exit /b 1) else (exit /b 0)</Command>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">
+    <ClCompile>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <!-- 1.8.0 : l'application installee n'ouvre plus de console. main() reste le point
+           d'entree ; les options cli et version ecrivent dans l'invite qui les lance (main.cpp). -->
+      <SubSystem>Windows</SubSystem>
+      <EntryPointSymbol>mainCRTStartup</EntryPointSymbol>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="src\app\App.cpp" />
+    <ClCompile Include="src\app\Brand.cpp" />
+    <ClCompile Include="src\app\Capture.cpp" />
+    <ClCompile Include="src\app\GoToPanel.cpp" />
+    <ClCompile Include="src\app\GrafcetPanels.cpp" />
+    <ClCompile Include="src\app\GrafcetView.cpp" />
+    <ClCompile Include="src\app\HistoryPanel.cpp" />
+    <ClCompile Include="src\app\hmi\HmiActionsPanel.cpp" />
+    <ClCompile Include="src\app\hmi\HmiAskDialog.cpp" />
+    <ClCompile Include="src\app\hmi\HmiAssetPanes.cpp" />
+    <ClCompile Include="src\app\hmi\HmiAssist.cpp" />
+    <ClCompile Include="src\app\hmi\HmiCanvas.cpp" />
+    <ClCompile Include="src\app\hmi\HmiChartsPainter.cpp" />
+    <ClCompile Include="src\app\hmi\HmiCommHost.cpp" />
+    <ClCompile Include="src\app\hmi\HmiCommPanes.cpp" />
+    <ClCompile Include="src\app\hmi\HmiContentPanel.cpp" />
+    <ClCompile Include="src\app\hmi\HmiControlsPainter.cpp" />
+    <ClCompile Include="src\app\hmi\HmiDesignPanes.cpp" />
+    <ClCompile Include="src\app\hmi\HmiDisplayPanes.cpp" />
+    <ClCompile Include="src\app\hmi\HmiEditor.cpp" />
+    <ClCompile Include="src\app\hmi\HmiEquipmentHost.cpp" />
+    <ClCompile Include="src\app\hmi\HmiEquipmentPanes.cpp" />
+    <ClCompile Include="src\app\hmi\HmiExampleView.cpp" />
+    <ClCompile Include="src\app\hmi\HmiExchangePanes.cpp" />
+    <ClCompile Include="src\app\hmi\HmiFolderTable.cpp" />
+    <ClCompile Include="src\app\hmi\HmiFunctionPanes.cpp" />
+    <ClCompile Include="src\app\hmi\HmiHelpPane.cpp" />
+    <ClCompile Include="src\app\hmi\HmiIcons.cpp" />
+    <ClCompile Include="src\app\hmi\HmiImages.cpp" />
+    <ClCompile Include="src\app\hmi\HmiImportDialog.cpp" />
+    <ClCompile Include="src\app\hmi\HmiLoginPainter.cpp" />
+    <ClCompile Include="src\app\hmi\HmiLot11Painter.cpp" />
+    <ClCompile Include="src\app\hmi\HmiLot13Painter.cpp" />
+    <ClCompile Include="src\app\hmi\HmiLot14Painter.cpp" />
+    <ClCompile Include="src\app\hmi\HmiMemoryMap.cpp" />
+    <ClCompile Include="src\app\hmi\HmiModbusToolPane.cpp" />
+    <ClCompile Include="src\app\hmi\HmiNavPainter.cpp" />
+    <ClCompile Include="src\app\hmi\HmiNetDiagram.cpp" />
+    <ClCompile Include="src\app\hmi\HmiNotifyHost.cpp" />
+    <ClCompile Include="src\app\hmi\HmiNotifyPanes.cpp" />
+    <ClCompile Include="src\app\hmi\HmiObjectTutorial.cpp" />
+    <ClCompile Include="src\app\hmi\HmiPainter.cpp" />
+    <ClCompile Include="src\app\hmi\HmiPanels.cpp" />
+    <ClCompile Include="src\app\hmi\HmiPanes.cpp" />
+    <ClCompile Include="src\app\hmi\HmiPublicVarsPane.cpp" />
+    <ClCompile Include="src\app\hmi\HmiQualityPanes.cpp" />
+    <ClCompile Include="src\app\hmi\HmiReportPanes.cpp" />
+    <ClCompile Include="src\app\hmi\HmiScriptPanes.cpp" />
+    <ClCompile Include="src\app\hmi\HmiSecurityPane.cpp" />
+    <ClCompile Include="src\app\hmi\HmiSimulation.cpp" />
+    <ClCompile Include="src\app\hmi\HmiSound.cpp" />
+    <ClCompile Include="src\app\hmi\HmiStationLaunch.cpp" />
+    <ClCompile Include="src\app\hmi\HmiStationPanes.cpp" />
+    <ClCompile Include="src\app\hmi\HmiSupervisionPanes.cpp" />
+    <ClCompile Include="src\app\hmi\HmiSynopticPainter.cpp" />
+    <ClCompile Include="src\app\hmi\HmiSystemPainter.cpp" />
+    <ClCompile Include="src\app\hmi\HmiTemplateGallery.cpp" />
+    <ClCompile Include="src\app\hmi\HmiTrails.cpp" />
+    <ClCompile Include="src\app\hmi\HmiTutorial.cpp" />
+    <ClCompile Include="src\app\hmi\HmiTwinPanes.cpp" />
+    <ClCompile Include="src\app\hmi\HmiTwinValues.cpp" />
+    <ClCompile Include="src\app\hmi\HmiVariablePanes.cpp" />
+    <ClCompile Include="src\app\hmi\HmiWebHost.cpp" />
+    <ClCompile Include="src\app\hmi\HmiWebPanes.cpp" />
+    <ClCompile Include="src\app\LibraryHelpModels.cpp" />
+    <ClCompile Include="src\app\RackView.cpp" />
+    <ClCompile Include="src\app\Recovery.cpp" />
+    <ClCompile Include="src\app\screens\Dialogs.cpp" />
+    <ClCompile Include="src\app\screens\FoldersWorkspace.cpp" />
+    <ClCompile Include="src\app\screens\GoToWorkspace.cpp" />
+    <ClCompile Include="src\app\screens\HelpBench.cpp" />
+    <ClCompile Include="src\app\screens\HelpChrome.cpp" />
+    <ClCompile Include="src\app\screens\HistoryWorkspace.cpp" />
+    <ClCompile Include="src\app\screens\HmiRuntimeDialogs.cpp" />
+    <ClCompile Include="src\app\screens\HmiSupervision.cpp" />
+    <ClCompile Include="src\app\screens\HmiWorkspace.cpp" />
+    <ClCompile Include="src\app\screens\LibraryHelpScreen.cpp" />
+    <ClCompile Include="src\app\screens\MainAnalysisScreen.cpp" />
+    <ClCompile Include="src\app\screens\Screens.cpp" />
+    <ClCompile Include="src\app\screens\StationScreen.cpp" />
+    <ClCompile Include="src\app\screens\TemplatesWorkspace.cpp" />
+    <ClCompile Include="src\app\screens\TutorialWorkspace.cpp" />
+    <ClCompile Include="src\app\screens\VersionsWorkspace.cpp" />
+    <ClCompile Include="src\app\ScriptRunner.cpp" />
+    <ClCompile Include="src\app\Settings.cpp" />
+    <ClCompile Include="src\app\SimulationHost.cpp" />
+    <ClCompile Include="src\app\TablePaste.cpp" />
+    <ClCompile Include="src\app\VersionComparePane.cpp" />
+    <ClCompile Include="src\app\VersionsPane.cpp" />
+    <ClCompile Include="src\app\ViewModels.cpp" />
+    <ClCompile Include="src\core\Error.cpp" />
+    <ClCompile Include="src\domain\ExecutionOrder.cpp" />
+    <ClCompile Include="src\domain\ProjectModel.cpp" />
+    <ClCompile Include="src\domain\Reindex.cpp" />
+    <ClCompile Include="src\export\XpgWriter.cpp" />
+    <ClCompile Include="src\help\HelpCodes.cpp" />
+    <ClCompile Include="src\help\HelpExport.cpp" />
+    <ClCompile Include="src\help\HelpIndex.cpp" />
+    <ClCompile Include="src\help\HelpSession.cpp" />
+    <ClCompile Include="src\help\HelpTryIt.cpp" />
+    <ClCompile Include="src\help\TryBench.cpp" />
+    <ClCompile Include="src\hmi\HmiAlarmViews.cpp" />
+    <ClCompile Include="src\hmi\HmiArchive.cpp" />
+    <ClCompile Include="src\hmi\HmiAssets.cpp" />
+    <ClCompile Include="src\hmi\HmiCharts.cpp" />
+    <ClCompile Include="src\hmi\HmiCheck.cpp" />
+    <ClCompile Include="src\hmi\HmiComm.cpp" />
+    <ClCompile Include="src\hmi\HmiCommands.cpp" />
+    <ClCompile Include="src\hmi\HmiControls.cpp" />
+    <ClCompile Include="src\hmi\HmiCrypto.cpp" />
+    <ClCompile Include="src\hmi\HmiDesign.cpp" />
+    <ClCompile Include="src\hmi\HmiDisplay.cpp" />
+    <ClCompile Include="src\hmi\HmiDossier.cpp" />
+    <ClCompile Include="src\hmi\HmiEdit.cpp" />
+    <ClCompile Include="src\hmi\HmiEquipment.cpp" />
+    <ClCompile Include="src\hmi\HmiExamples.cpp" />
+    <ClCompile Include="src\hmi\HmiExport.cpp" />
+    <ClCompile Include="src\hmi\HmiExpr.cpp" />
+    <ClCompile Include="src\hmi\HmiExternal.cpp" />
+    <ClCompile Include="src\hmi\HmiFolders.cpp" />
+    <ClCompile Include="src\hmi\HmiForms.cpp" />
+    <ClCompile Include="src\hmi\HmiGuide.cpp" />
+    <ClCompile Include="src\hmi\HmiGuideText.cpp" />
+    <ClCompile Include="src\hmi\HmiHistory.cpp" />
+    <ClCompile Include="src\hmi\HmiIpScan.cpp" />
+    <ClCompile Include="src\hmi\HmiLanguages.cpp" />
+    <ClCompile Include="src\hmi\HmiLive.cpp" />
+    <ClCompile Include="src\hmi\HmiLoginMenu.cpp" />
+    <ClCompile Include="src\hmi\HmiMedia.cpp" />
+    <ClCompile Include="src\hmi\HmiModbus.cpp" />
+    <ClCompile Include="src\hmi\HmiModbusTool.cpp" />
+    <ClCompile Include="src\hmi\HmiModel.cpp" />
+    <ClCompile Include="src\hmi\HmiNavigation.cpp" />
+    <ClCompile Include="src\hmi\HmiNet.cpp" />
+    <ClCompile Include="src\hmi\HmiNetInfo.cpp" />
+    <ClCompile Include="src\hmi\HmiNotify.cpp" />
+    <ClCompile Include="src\hmi\HmiPackage.cpp" />
+    <ClCompile Include="src\hmi\HmiPolicy.cpp" />
+    <ClCompile Include="src\hmi\HmiProduction.cpp" />
+    <ClCompile Include="src\hmi\HmiQr.cpp" />
+    <ClCompile Include="src\hmi\HmiQuality.cpp" />
+    <ClCompile Include="src\hmi\HmiRecipes.cpp" />
+    <ClCompile Include="src\hmi\HmiReports.cpp" />
+    <ClCompile Include="src\hmi\HmiRuntime.cpp" />
+    <ClCompile Include="src\hmi\HmiRuntimeControls.cpp" />
+    <ClCompile Include="src\hmi\HmiRuntimeLogin.cpp" />
+    <ClCompile Include="src\hmi\HmiRuntimeLot11.cpp" />
+    <ClCompile Include="src\hmi\HmiRuntimeLot12.cpp" />
+    <ClCompile Include="src\hmi\HmiRuntimeLot13.cpp" />
+    <ClCompile Include="src\hmi\HmiRuntimeLot14.cpp" />
+    <ClCompile Include="src\hmi\HmiRuntimeLot15.cpp" />
+    <ClCompile Include="src\hmi\HmiRuntimeLot16.cpp" />
+    <ClCompile Include="src\hmi\HmiRuntimePublic.cpp" />
+    <ClCompile Include="src\hmi\HmiRuntimeSystem.cpp" />
+    <ClCompile Include="src\hmi\HmiScenarios.cpp" />
+    <ClCompile Include="src\hmi\HmiScript.cpp" />
+    <ClCompile Include="src\hmi\HmiSignature.cpp" />
+    <ClCompile Include="src\hmi\HmiSpy.cpp" />
+    <ClCompile Include="src\hmi\HmiStore.cpp" />
+    <ClCompile Include="src\hmi\HmiSymbols.cpp" />
+    <ClCompile Include="src\hmi\HmiSystemMenu.cpp" />
+    <ClCompile Include="src\hmi\HmiTemplates.cpp" />
+    <ClCompile Include="src\hmi\HmiTwin.cpp" />
+    <ClCompile Include="src\hmi\HmiTypes.cpp" />
+    <ClCompile Include="src\hmi\HmiVersions.cpp" />
+    <ClCompile Include="src\hmi\HmiWeb.cpp" />
+    <ClCompile Include="src\hmi\HmiWidgets.cpp" />
+    <ClCompile Include="src\hmi\HmiZones.cpp" />
+    <ClCompile Include="src\import\ProjectAnalyzer.cpp" />
+    <ClCompile Include="src\import\ProjectImporter.cpp" />
+    <ClCompile Include="src\import\XhwParser.cpp" />
+    <ClCompile Include="src\import\XmlReader.cpp" />
+    <ClCompile Include="src\import\XpgParser.cpp" />
+    <ClCompile Include="src\main.cpp" />
+    <ClCompile Include="src\menu\IMenu.cpp" />
+    <ClCompile Include="src\menu\MenuManager.cpp" />
+    <ClCompile Include="src\platform\FontAtlas.cpp" />
+    <ClCompile Include="src\platform\SdlEventPump.cpp" />
+    <ClCompile Include="src\platform\SdlRenderer.cpp" />
+    <ClCompile Include="src\project\BlockLibrary.cpp" />
+    <ClCompile Include="src\project\CrossReference.cpp" />
+    <ClCompile Include="src\project\DefaultMacros.cpp" />
+    <ClCompile Include="src\project\DeleteCommands.cpp" />
+    <ClCompile Include="src\project\EditCommands.cpp" />
+    <ClCompile Include="src\project\Grafcet.cpp" />
+    <ClCompile Include="src\project\GrafcetEdit.cpp" />
+    <ClCompile Include="src\project\GrafcetLayout.cpp" />
+    <ClCompile Include="src\project\GrafcetLayoutFile.cpp" />
+    <ClCompile Include="src\project\GrafcetRewrite.cpp" />
+    <ClCompile Include="src\project\ImportSchema.cpp" />
+    <ClCompile Include="src\project\LibraryCatalog.cpp" />
+    <ClCompile Include="src\project\LibraryHelp.cpp" />
+    <ClCompile Include="src\project\Macro.cpp" />
+    <ClCompile Include="src\project\ProjectStore.cpp" />
+    <ClCompile Include="src\project\Security.cpp" />
+    <ClCompile Include="src\project\SharedLibrary.cpp" />
+    <ClCompile Include="src\project\Table.cpp" />
+    <ClCompile Include="src\sim\Interpreter.cpp" />
+    <ClCompile Include="src\sim\Runtime.cpp" />
+    <ClCompile Include="src\sim\Value.cpp" />
+    <ClCompile Include="src\ui\HelpDocument.cpp" />
+    <ClCompile Include="src\ui\Icons.cpp" />
+    <ClCompile Include="src\ui\Layout.cpp" />
+    <ClCompile Include="src\ui\Shapes.cpp" />
+    <ClCompile Include="src\ui\Syntax.cpp" />
+    <ClCompile Include="src\ui\Theme.cpp" />
+    <ClCompile Include="src\ui\Widget.cpp" />
+    <ClCompile Include="src\ui\widgets\ColorPalette.cpp" />
+    <ClCompile Include="src\ui\widgets\Containers.cpp" />
+    <ClCompile Include="src\ui\widgets\Controls.cpp" />
+    <ClCompile Include="src\ui\widgets\DataViews.cpp" />
+    <ClCompile Include="src\ui\widgets\FilterChain.cpp" />
+    <ClCompile Include="src\ui\widgets\HelpArticleView.cpp" />
+    <ClCompile Include="src\ui\widgets\HelpView.cpp" />
+    <ClCompile Include="src\xls\MacroXls.cpp" />
+    <ClCompile Include="src\xls\miniz_impl.cpp" />
+    <ClCompile Include="third_party\miniz.c">
+      <WarningLevel>TurnOffAllWarnings</WarningLevel>
+    </ClCompile>
+    <ClCompile Include="src\xls\Workbook.cpp" />
+    <ClCompile Include="src\xls\XlsmSource.cpp" />
+    <ClCompile Include="src\app\ClipboardFiles.cpp" />
+    <ClCompile Include="src\app\MacroFormView.cpp" />
+    <ClCompile Include="src\app\MacrosPane.cpp" />
+    <ClCompile Include="src\app\screens\MacrosWorkspace.cpp" />
+    <ClCompile Include="src\project\MacroFolders.cpp" />
+    <ClCompile Include="src\project\MacroMemory.cpp" />
+    <ClCompile Include="src\project\MacroSession.cpp" />
+    <ClCompile Include="src\project\MacroSpec.cpp" />
+    <ClCompile Include="src\app\ApiPanes.cpp" />
+    <ClCompile Include="src\app\TopBar.cpp" />
+    <ClCompile Include="src\app\screens\ApiWorkspace.cpp" />
+    <ClCompile Include="src\project\ApiChecks.cpp" />
+    <ClCompile Include="src\app\AnimationTablesPane.cpp" />
+    <ClCompile Include="src\app\ConfigurationPane.cpp" />
+    <ClCompile Include="src\app\TaskPanes.cpp" />
+    <ClCompile Include="src\app\VariablePicker.cpp" />
+    <ClCompile Include="src\project\ApiCommands.cpp" />
+    <ClCompile Include="src\project\IoCheck.cpp" />
+    <ClCompile Include="src\app\ApiListKit.cpp" />
+    <ClCompile Include="src\app\TypePanes.cpp" />
+    <ClCompile Include="src\app\VariablesPane.cpp" />
+    <ClCompile Include="src\project\RenameCommands.cpp" />
+    <ClCompile Include="src\project\TypeUsage.cpp" />
+    <ClCompile Include="src\app\MacroEditorView.cpp" />
+    <ClCompile Include="src\app\PixelIconEditor.cpp" />
+    <ClCompile Include="src\app\ThemeGallery.cpp" />
+    <ClCompile Include="src\app\VersionClose.cpp" />
+    <ClCompile Include="src\app\screens\IconWorkspace.cpp" />
+    <ClCompile Include="src\hmi\HmiVersionState.cpp" />
+    <ClCompile Include="src\project\MacroSpecWriter.cpp" />
+    <ClCompile Include="src\project\ProjectIcon.cpp" />
+    <ClCompile Include="src\app\ApiTrails.cpp" />
+    <ClCompile Include="src\app\DetachedWindows.cpp" />
+    <ClCompile Include="src\app\GoToSearch.cpp" />
+    <ClCompile Include="src\app\ImportMastDialog.cpp" />
+    <ClCompile Include="src\app\RenameDialog.cpp" />
+    <ClCompile Include="src\app\SimulationPane.cpp" />
+    <ClCompile Include="src\app\StartPage.cpp" />
+    <ClCompile Include="src\app\StatisticsPane.cpp" />
+    <ClCompile Include="src\app\screens\ExplorerMenus.cpp" />
+    <ClCompile Include="src\app\screens\ImportWorkspace.cpp" />
+    <ClCompile Include="src\app\screens\RenameWorkspace.cpp" />
+    <ClCompile Include="src\app\screens\StartScreen.cpp" />
+    <ClCompile Include="src\project\MastImport.cpp" />
+    <ClCompile Include="src\project\MemberTree.cpp" />
+    <ClCompile Include="src\project\ProjectStats.cpp" />
+    <ClCompile Include="src\project\RenamePlan.cpp" />
+    <ClCompile Include="src\ui\TextSearch.cpp" />
+    <ClCompile Include="src\ui\WidgetHost.cpp" />
+    <ClCompile Include="src\ui\widgets\PathBrowse.cpp" />
+    <ClCompile Include="src\ui\widgets\TabArea.cpp" />
+    <ClCompile Include="src\ui\widgets\TableFilters.cpp" />
+    <ClCompile Include="src\app\ApiTrailsLot8.cpp" />
+    <ClCompile Include="src\app\BackgroundTasks.cpp" />
+    <ClCompile Include="src\app\DropFilesDialog.cpp" />
+    <ClCompile Include="src\app\DropFilesPlan.cpp" />
+    <ClCompile Include="src\app\FileExplorerHost.cpp" />
+    <ClCompile Include="src\app\FilePreview.cpp" />
+    <ClCompile Include="src\app\SearchFocus.cpp" />
+    <ClCompile Include="src\app\SimCenterOverview.cpp" />
+    <ClCompile Include="src\app\SimCenterPanes.cpp" />
+    <ClCompile Include="src\app\SimConditionDialog.cpp" />
+    <ClCompile Include="src\app\SimDebugPane.cpp" />
+    <ClCompile Include="src\app\SimDebugText.cpp" />
+    <ClCompile Include="src\app\SimJournal.cpp" />
+    <ClCompile Include="src\app\SimStatus.cpp" />
+    <ClCompile Include="src\app\SimulationHostDebug.cpp" />
+    <ClCompile Include="src\app\StatusStrip.cpp" />
+    <ClCompile Include="src\app\ThemeEditor.cpp" />
+    <ClCompile Include="src\app\TopBarLot8.cpp" />
+    <ClCompile Include="src\app\TutorialsLot8.cpp" />
+    <ClCompile Include="src\app\screens\DropFilesWorkspace.cpp" />
+    <ClCompile Include="src\app\screens\SimDebugWorkspace.cpp" />
+    <ClCompile Include="src\app\screens\SimulationWorkspace.cpp" />
+    <ClCompile Include="src\app\screens\StationExportDialog.cpp" />
+    <ClCompile Include="src\app\screens\StatusStripWorkspace.cpp" />
+    <ClCompile Include="src\app\screens\TopBarWorkspace.cpp" />
+    <ClCompile Include="src\app\screens\TreeWorkspace.cpp" />
+    <ClCompile Include="src\hmi\HmiExprCheck.cpp" />
+    <ClCompile Include="src\hmi\HmiRenameRefs.cpp" />
+    <ClCompile Include="src\sim\RuntimeDebug.cpp" />
+    <ClCompile Include="src\ui\FileExplorerModel.cpp" />
+    <ClCompile Include="src\ui\FileKinds.cpp" />
+    <ClCompile Include="src\ui\ThemeFile.cpp" />
+    <ClCompile Include="src\ui\widgets\FileExplorer.cpp" />
+    <ClCompile Include="src\ui\widgets\FilterMemory.cpp" />
+    <ClCompile Include="src\ui\widgets\SearchField.cpp" />
+    <ClCompile Include="src\app\CodeIconPicker.cpp" />
+    <ClCompile Include="src\app\Dossiers.cpp" />
+    <ClCompile Include="src\app\Epinglage.cpp" />
+    <ClCompile Include="src\app\ImportJob.cpp" />
+    <ClCompile Include="src\app\ImportJobDialog.cpp" />
+    <ClCompile Include="src\app\ProgramExportDialog.cpp" />
+    <ClCompile Include="src\app\SectionComparePane.cpp" />
+    <ClCompile Include="src\app\screens\FoldersDialog.cpp" />
+    <ClCompile Include="src\app\screens\LisibleWorkspace.cpp" />
+    <ClCompile Include="src\core\CodeIcons.cpp" />
+    <ClCompile Include="src\export\DocKit.cpp" />
+    <ClCompile Include="src\export\ProgramBook.cpp" />
+    <ClCompile Include="src\export\ProgramBookPdf.cpp" />
+    <ClCompile Include="src\export\ProgramBookXlsx.cpp" />
+    <ClCompile Include="src\project\CodeIconKeys.cpp" />
+    <ClCompile Include="src\project\SectionCompare.cpp" />
+    <ClCompile Include="src\app\AboutDialog.cpp" />
+    <ClCompile Include="src\app\ConditionsNotice.cpp" />
+    <ClCompile Include="src\app\CrashDialogs.cpp" />
+    <ClCompile Include="src\app\GrafcetCodePanel.cpp" />
+    <ClCompile Include="src\app\NoveltyCenter.cpp" />
+    <ClCompile Include="src\app\hmi\HmiApiVarsPane.cpp" />
+    <ClCompile Include="src\app\hmi\HmiCyclicPage.cpp" />
+    <ClCompile Include="src\app\hmi\HmiCyclicPageSets.cpp" />
+    <ClCompile Include="src\app\hmi\HmiCyclicWidgets.cpp" />
+    <ClCompile Include="src\app\hmi\HmiDuplicateDialog.cpp" />
+    <ClCompile Include="src\app\hmi\HmiEnumPanes.cpp" />
+    <ClCompile Include="src\app\hmi\HmiExprPage.cpp" />
+    <ClCompile Include="src\app\hmi\HmiExprPageView.cpp" />
+    <ClCompile Include="src\app\hmi\HmiObjectAlarmPanes.cpp" />
+    <ClCompile Include="src\app\hmi\HmiObjectAlarmTree.cpp" />
+    <ClCompile Include="src\app\hmi\HmiOperatorPanes.cpp" />
+    <ClCompile Include="src\app\hmi\HmiParamPanes.cpp" />
+    <ClCompile Include="src\app\hmi\HmiQuickTrend.cpp" />
+    <ClCompile Include="src\app\hmi\HmiSimMarks.cpp" />
+    <ClCompile Include="src\app\hmi\HmiSlavePanes.cpp" />
+    <ClCompile Include="src\app\screens\HelpCenterScreen.cpp" />
+    <ClCompile Include="src\app\screens\HmiExprScreen.cpp" />
+    <ClCompile Include="src\app\tutorial\TutorialApp.cpp" />
+    <ClCompile Include="src\app\tutorial\TutorialOverlay.cpp" />
+    <ClCompile Include="src\app\tutorial\TutorialStageApp.cpp" />
+    <ClCompile Include="src\app\tutorial\UiDriver.cpp" />
+    <ClCompile Include="src\core\CallTrail.cpp" />
+    <ClCompile Include="src\core\CrashGuard.cpp" />
+    <ClCompile Include="src\core\SingleInstance.cpp" />
+    <ClCompile Include="src\help\CenterIndex.cpp" />
+    <ClCompile Include="src\help\CenterPages.cpp" />
+    <ClCompile Include="src\help\CenterSources.cpp" />
+    <ClCompile Include="src\help\CenterTutorials.cpp" />
+    <ClCompile Include="src\help\CenterView.cpp" />
+    <ClCompile Include="src\help\F1Table.cpp" />
+    <ClCompile Include="src\help\Novelties.cpp" />
+    <ClCompile Include="src\help\ProblemReport.cpp" />
+    <ClCompile Include="src\help\ReleaseNotes.cpp" />
+    <ClCompile Include="src\help\SandboxTrash.cpp" />
+    <ClCompile Include="src\help\Shortcuts.cpp" />
+    <ClCompile Include="src\help\Tutorial.cpp" />
+    <ClCompile Include="src\help\TutorialLaunch.cpp" />
+    <ClCompile Include="src\help\TutorialPlayer.cpp" />
+    <ClCompile Include="src\help\TutorialTexts.cpp" />
+    <ClCompile Include="src\hmi\HmiAlarmGroupCommands.cpp" />
+    <ClCompile Include="src\hmi\HmiAlarmGroups.cpp" />
+    <ClCompile Include="src\hmi\HmiApiVars.cpp" />
+    <ClCompile Include="src\hmi\HmiBuildState.cpp" />
+    <ClCompile Include="src\hmi\HmiDuplicate.cpp" />
+    <ClCompile Include="src\hmi\HmiEnums.cpp" />
+    <ClCompile Include="src\hmi\HmiExprBench.cpp" />
+    <ClCompile Include="src\hmi\HmiExprGuide.cpp" />
+    <ClCompile Include="src\hmi\HmiMarkers.cpp" />
+    <ClCompile Include="src\hmi\HmiModbusCyclic.cpp" />
+    <ClCompile Include="src\hmi\HmiObjectAlarms.cpp" />
+    <ClCompile Include="src\hmi\HmiOperators.cpp" />
+    <ClCompile Include="src\hmi\HmiPopupParams.cpp" />
+    <ClCompile Include="src\hmi\HmiRuntimeObjectAlarms.cpp" />
+    <ClCompile Include="src\hmi\HmiRuntimeParams.cpp" />
+    <ClCompile Include="src\hmi\HmiRuntimeSimPage.cpp" />
+    <ClCompile Include="src\hmi\HmiRuntimeSlaves.cpp" />
+    <ClCompile Include="src\hmi\HmiScriptCheck.cpp" />
+    <ClCompile Include="src\hmi\HmiScriptCheck110.cpp" />
+    <ClCompile Include="src\hmi\HmiTutorialDeduce.cpp" />
+    <ClCompile Include="src\project\ActivationConditions.cpp" />
+    <ClCompile Include="src\project\GrafcetCheck.cpp" />
+    <ClCompile Include="src\project\GrafcetDiagram.cpp" />
+    <ClCompile Include="src\project\GrafcetRewrite2.cpp" />
+    <ClCompile Include="src\sim\Rich.cpp" />
+    <ClCompile Include="src\ui\NoveltyBoard.cpp" />
+    <ClCompile Include="src\ui\NoveltyMarks.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="docs\ARCHITECTURE.md" />
+    <None Include="README.md" />
+    <None Include="CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="resources\windows\xpg_analyzer.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\app\App.hpp" />
+    <ClInclude Include="src\app\Brand.hpp" />
+    <ClInclude Include="src\app\Capture.hpp" />
+    <ClInclude Include="src\app\ExecutionOrderWiring.hpp" />
+    <ClInclude Include="src\app\GoToPanel.hpp" />
+    <ClInclude Include="src\app\GrafcetPanels.hpp" />
+    <ClInclude Include="src\app\GrafcetView.hpp" />
+    <ClInclude Include="src\app\HistoryPanel.hpp" />
+    <ClInclude Include="src\app\hmi\HmiActionsPanel.hpp" />
+    <ClInclude Include="src\app\hmi\HmiAskDialog.hpp" />
+    <ClInclude Include="src\app\hmi\HmiAssetPanes.hpp" />
+    <ClInclude Include="src\app\hmi\HmiAssist.hpp" />
+    <ClInclude Include="src\app\hmi\HmiCanvas.hpp" />
+    <ClInclude Include="src\app\hmi\HmiCommHost.hpp" />
+    <ClInclude Include="src\app\hmi\HmiCommPanes.hpp" />
+    <ClInclude Include="src\app\hmi\HmiContentPanel.hpp" />
+    <ClInclude Include="src\app\hmi\HmiDesignPanes.hpp" />
+    <ClInclude Include="src\app\hmi\HmiDisplayPanes.hpp" />
+    <ClInclude Include="src\app\hmi\HmiEditor.hpp" />
+    <ClInclude Include="src\app\hmi\HmiEquipmentHost.hpp" />
+    <ClInclude Include="src\app\hmi\HmiExampleView.hpp" />
+    <ClInclude Include="src\app\hmi\HmiFolderTable.hpp" />
+    <ClInclude Include="src\app\hmi\HmiFunctionPanes.hpp" />
+    <ClInclude Include="src\app\hmi\HmiHelpPane.hpp" />
+    <ClInclude Include="src\app\hmi\HmiIcons.hpp" />
+    <ClInclude Include="src\app\hmi\HmiImages.hpp" />
+    <ClInclude Include="src\app\hmi\HmiImportDialog.hpp" />
+    <ClInclude Include="src\app\hmi\HmiLoginPainter.hpp" />
+    <ClInclude Include="src\app\hmi\HmiLot13Painter.hpp" />
+    <ClInclude Include="src\app\hmi\HmiMemoryMap.hpp" />
+    <ClInclude Include="src\app\hmi\HmiModbusToolPane.hpp" />
+    <ClInclude Include="src\app\hmi\HmiNetDiagram.hpp" />
+    <ClInclude Include="src\app\hmi\HmiNotifyHost.hpp" />
+    <ClInclude Include="src\app\hmi\HmiNotifyPanes.hpp" />
+    <ClInclude Include="src\app\hmi\HmiObjectTutorial.hpp" />
+    <ClInclude Include="src\app\hmi\HmiPainter.hpp" />
+    <ClInclude Include="src\app\hmi\HmiPaintKit.hpp" />
+    <ClInclude Include="src\app\hmi\HmiPaneKit.hpp" />
+    <ClInclude Include="src\app\hmi\HmiPanels.hpp" />
+    <ClInclude Include="src\app\hmi\HmiPanes.hpp" />
+    <ClInclude Include="src\app\hmi\HmiPublicVarsPane.hpp" />
+    <ClInclude Include="src\app\hmi\HmiQualityPanes.hpp" />
+    <ClInclude Include="src\app\hmi\HmiReportPanes.hpp" />
+    <ClInclude Include="src\app\hmi\HmiScriptPanes.hpp" />
+    <ClInclude Include="src\app\hmi\HmiSimulation.hpp" />
+    <ClInclude Include="src\app\hmi\HmiSound.hpp" />
+    <ClInclude Include="src\app\hmi\HmiStationLaunch.hpp" />
+    <ClInclude Include="src\app\hmi\HmiStationPanes.hpp" />
+    <ClInclude Include="src\app\hmi\HmiSupervisionPanes.hpp" />
+    <ClInclude Include="src\app\hmi\HmiSystemPainter.hpp" />
+    <ClInclude Include="src\app\hmi\HmiTemplateGallery.hpp" />
+    <ClInclude Include="src\app\hmi\HmiTrails.hpp" />
+    <ClInclude Include="src\app\hmi\HmiTreeData.hpp" />
+    <ClInclude Include="src\app\hmi\HmiTutorial.hpp" />
+    <ClInclude Include="src\app\hmi\HmiTwinValues.hpp" />
+    <ClInclude Include="src\app\hmi\HmiVariablePanes.hpp" />
+    <ClInclude Include="src\app\hmi\HmiWebHost.hpp" />
+    <ClInclude Include="src\app\hmi\HmiWebPanes.hpp" />
+    <ClInclude Include="src\app\LibraryHelpModels.hpp" />
+    <ClInclude Include="src\app\RackView.hpp" />
+    <ClInclude Include="src\app\Recovery.hpp" />
+    <ClInclude Include="src\app\screens\HelpBench.hpp" />
+    <ClInclude Include="src\app\screens\HelpChrome.hpp" />
+    <ClInclude Include="src\app\screens\LibraryHelpScreen.hpp" />
+    <ClInclude Include="src\app\screens\Screens.hpp" />
+    <ClInclude Include="src\app\screens\StationScreen.hpp" />
+    <ClInclude Include="src\app\ScriptRunner.hpp" />
+    <ClInclude Include="src\app\Settings.hpp" />
+    <ClInclude Include="src\app\SimulationHost.hpp" />
+    <ClInclude Include="src\app\TablePaste.hpp" />
+    <ClInclude Include="src\app\VersionComparePane.hpp" />
+    <ClInclude Include="src\app\VersionsPane.hpp" />
+    <ClInclude Include="src\app\ViewModels.hpp" />
+    <ClInclude Include="src\core\Command.hpp" />
+    <ClInclude Include="src\core\EventBus.hpp" />
+    <ClInclude Include="src\core\FieldCodec.hpp" />
+    <ClInclude Include="src\core\Result.hpp" />
+    <ClInclude Include="src\core\ServiceRegistry.hpp" />
+    <ClInclude Include="src\core\Signal.hpp" />
+    <ClInclude Include="src\domain\ExecutionOrder.hpp" />
+    <ClInclude Include="src\domain\ProjectModel.hpp" />
+    <ClInclude Include="src\domain\Reindex.hpp" />
+    <ClInclude Include="src\export\XpgWriter.hpp" />
+    <ClInclude Include="src\help\HelpCodes.hpp" />
+    <ClInclude Include="src\help\HelpExport.hpp" />
+    <ClInclude Include="src\help\HelpIndex.hpp" />
+    <ClInclude Include="src\help\HelpSession.hpp" />
+    <ClInclude Include="src\help\HelpTryIt.hpp" />
+    <ClInclude Include="src\help\TryBench.hpp" />
+    <ClInclude Include="src\hmi\HmiAlarmViews.hpp" />
+    <ClInclude Include="src\hmi\HmiArchive.hpp" />
+    <ClInclude Include="src\hmi\HmiAssets.hpp" />
+    <ClInclude Include="src\hmi\HmiCharts.hpp" />
+    <ClInclude Include="src\hmi\HmiCheck.hpp" />
+    <ClInclude Include="src\hmi\HmiComm.hpp" />
+    <ClInclude Include="src\hmi\HmiCommands.hpp" />
+    <ClInclude Include="src\hmi\HmiControls.hpp" />
+    <ClInclude Include="src\hmi\HmiCrypto.hpp" />
+    <ClInclude Include="src\hmi\HmiDesign.hpp" />
+    <ClInclude Include="src\hmi\HmiDisplay.hpp" />
+    <ClInclude Include="src\hmi\HmiDossier.hpp" />
+    <ClInclude Include="src\hmi\HmiEdit.hpp" />
+    <ClInclude Include="src\hmi\HmiEquipment.hpp" />
+    <ClInclude Include="src\hmi\HmiExamples.hpp" />
+    <ClInclude Include="src\hmi\HmiExport.hpp" />
+    <ClInclude Include="src\hmi\HmiExpr.hpp" />
+    <ClInclude Include="src\hmi\HmiExternal.hpp" />
+    <ClInclude Include="src\hmi\HmiFolders.hpp" />
+    <ClInclude Include="src\hmi\HmiForms.hpp" />
+    <ClInclude Include="src\hmi\HmiGuide.hpp" />
+    <ClInclude Include="src\hmi\HmiHistory.hpp" />
+    <ClInclude Include="src\hmi\HmiIpScan.hpp" />
+    <ClInclude Include="src\hmi\HmiLanguages.hpp" />
+    <ClInclude Include="src\hmi\HmiLive.hpp" />
+    <ClInclude Include="src\hmi\HmiLoginMenu.hpp" />
+    <ClInclude Include="src\hmi\HmiMedia.hpp" />
+    <ClInclude Include="src\hmi\HmiModbus.hpp" />
+    <ClInclude Include="src\hmi\HmiModbusTool.hpp" />
+    <ClInclude Include="src\hmi\HmiModel.hpp" />
+    <ClInclude Include="src\hmi\HmiNavigation.hpp" />
+    <ClInclude Include="src\hmi\HmiNet.hpp" />
+    <ClInclude Include="src\hmi\HmiNetInfo.hpp" />
+    <ClInclude Include="src\hmi\HmiNotify.hpp" />
+    <ClInclude Include="src\hmi\HmiPackage.hpp" />
+    <ClInclude Include="src\hmi\HmiPerf.hpp" />
+    <ClInclude Include="src\hmi\HmiPolicy.hpp" />
+    <ClInclude Include="src\hmi\HmiProduction.hpp" />
+    <ClInclude Include="src\hmi\HmiPublicVars.hpp" />
+    <ClInclude Include="src\hmi\HmiQr.hpp" />
+    <ClInclude Include="src\hmi\HmiQuality.hpp" />
+    <ClInclude Include="src\hmi\HmiRecipes.hpp" />
+    <ClInclude Include="src\hmi\HmiReports.hpp" />
+    <ClInclude Include="src\hmi\HmiRuntime.hpp" />
+    <ClInclude Include="src\hmi\HmiScenarios.hpp" />
+    <ClInclude Include="src\hmi\HmiScript.hpp" />
+    <ClInclude Include="src\hmi\HmiSignature.hpp" />
+    <ClInclude Include="src\hmi\HmiSpy.hpp" />
+    <ClInclude Include="src\hmi\HmiStore.hpp" />
+    <ClInclude Include="src\hmi\HmiSymbols.hpp" />
+    <ClInclude Include="src\hmi\HmiSystemMenu.hpp" />
+    <ClInclude Include="src\hmi\HmiTemplates.hpp" />
+    <ClInclude Include="src\hmi\HmiTwin.hpp" />
+    <ClInclude Include="src\hmi\HmiTypes.hpp" />
+    <ClInclude Include="src\hmi\HmiVersions.hpp" />
+    <ClInclude Include="src\hmi\HmiWeb.hpp" />
+    <ClInclude Include="src\hmi\HmiWidgets.hpp" />
+    <ClInclude Include="src\hmi\HmiZones.hpp" />
+    <ClInclude Include="src\import\ProjectAnalyzer.hpp" />
+    <ClInclude Include="src\import\ProjectImporter.hpp" />
+    <ClInclude Include="src\import\ProjectParser.hpp" />
+    <ClInclude Include="src\import\XmlReader.hpp" />
+    <ClInclude Include="src\menu\IMenu.hpp" />
+    <ClInclude Include="src\menu\MenuManager.hpp" />
+    <ClInclude Include="src\platform\FontAtlas.hpp" />
+    <ClInclude Include="src\platform\Geometry.hpp" />
+    <ClInclude Include="src\platform\InputEvent.hpp" />
+    <ClInclude Include="src\platform\Renderer.hpp" />
+    <ClInclude Include="src\platform\RoundedCorner.hpp" />
+    <ClInclude Include="src\project\BlockLibrary.hpp" />
+    <ClInclude Include="src\project\CrossReference.hpp" />
+    <ClInclude Include="src\project\DeleteCommands.hpp" />
+    <ClInclude Include="src\project\EditCommands.hpp" />
+    <ClInclude Include="src\project\Grafcet.hpp" />
+    <ClInclude Include="src\project\GrafcetEdit.hpp" />
+    <ClInclude Include="src\project\GrafcetLayout.hpp" />
+    <ClInclude Include="src\project\GrafcetLayoutFile.hpp" />
+    <ClInclude Include="src\project\GrafcetRewrite.hpp" />
+    <ClInclude Include="src\project\ImportSchema.hpp" />
+    <ClInclude Include="src\project\LibraryCatalog.hpp" />
+    <ClInclude Include="src\project\LibraryHelp.hpp" />
+    <ClInclude Include="src\project\Macro.hpp" />
+    <ClInclude Include="src\project\ProjectStore.hpp" />
+    <ClInclude Include="src\project\Security.hpp" />
+    <ClInclude Include="src\project\SharedLibrary.hpp" />
+    <ClInclude Include="src\project\Table.hpp" />
+    <ClInclude Include="src\sim\Interpreter.hpp" />
+    <ClInclude Include="src\sim\Runtime.hpp" />
+    <ClInclude Include="src\sim\Value.hpp" />
+    <ClInclude Include="src\ui\HelpDocument.hpp" />
+    <ClInclude Include="src\ui\Icons.hpp" />
+    <ClInclude Include="src\ui\Layout.hpp" />
+    <ClInclude Include="src\ui\Shapes.hpp" />
+    <ClInclude Include="src\ui\Syntax.hpp" />
+    <ClInclude Include="src\ui\Theme.hpp" />
+    <ClInclude Include="src\ui\Widget.hpp" />
+    <ClInclude Include="src\ui\widgets\ColorPalette.hpp" />
+    <ClInclude Include="src\ui\widgets\Containers.hpp" />
+    <ClInclude Include="src\ui\widgets\Controls.hpp" />
+    <ClInclude Include="src\ui\widgets\DataViews.hpp" />
+    <ClInclude Include="src\ui\widgets\HelpArticleView.hpp" />
+    <ClInclude Include="src\ui\widgets\HelpView.hpp" />
+    <ClInclude Include="src\xls\MacroXls.hpp" />
+    <ClInclude Include="src\xls\Workbook.hpp" />
+    <ClInclude Include="src\xls\XlsmSource.hpp" />
+    <ClInclude Include="src\app\ClipboardFiles.hpp" />
+    <ClInclude Include="src\app\MacroFormView.hpp" />
+    <ClInclude Include="src\app\MacrosPane.hpp" />
+    <ClInclude Include="src\project\MacroFolders.hpp" />
+    <ClInclude Include="src\project\MacroMemory.hpp" />
+    <ClInclude Include="src\project\MacroSession.hpp" />
+    <ClInclude Include="src\project\MacroSpec.hpp" />
+    <ClInclude Include="src\app\ApiPanes.hpp" />
+    <ClInclude Include="src\app\TopBar.hpp" />
+    <ClInclude Include="src\project\ApiChecks.hpp" />
+    <ClInclude Include="src\app\AnimationTablesPane.hpp" />
+    <ClInclude Include="src\app\ConfigurationPane.hpp" />
+    <ClInclude Include="src\app\TaskPanes.hpp" />
+    <ClInclude Include="src\app\VariablePicker.hpp" />
+    <ClInclude Include="src\project\ApiCommands.hpp" />
+    <ClInclude Include="src\project\IoCheck.hpp" />
+    <ClInclude Include="src\app\ApiListKit.hpp" />
+    <ClInclude Include="src\app\TypePanes.hpp" />
+    <ClInclude Include="src\app\VariablesPane.hpp" />
+    <ClInclude Include="src\project\RenameCommands.hpp" />
+    <ClInclude Include="src\project\TypeUsage.hpp" />
+    <ClInclude Include="src\app\MacroEditorView.hpp" />
+    <ClInclude Include="src\app\PixelIconEditor.hpp" />
+    <ClInclude Include="src\app\ThemeGallery.hpp" />
+    <ClInclude Include="src\app\VersionClose.hpp" />
+    <ClInclude Include="src\hmi\HmiVersionState.hpp" />
+    <ClInclude Include="src\project\MacroSpecWriter.hpp" />
+    <ClInclude Include="src\project\ProjectIcon.hpp" />
+    <ClInclude Include="src\app\ApiTrails.hpp" />
+    <ClInclude Include="src\app\DetachedWindows.hpp" />
+    <ClInclude Include="src\app\ExportTarget.hpp" />
+    <ClInclude Include="src\app\GoToSearch.hpp" />
+    <ClInclude Include="src\app\ImportMastDialog.hpp" />
+    <ClInclude Include="src\app\RenameDialog.hpp" />
+    <ClInclude Include="src\app\SimulationPane.hpp" />
+    <ClInclude Include="src\app\StartPage.hpp" />
+    <ClInclude Include="src\app\StatisticsPane.hpp" />
+    <ClInclude Include="src\project\MastImport.hpp" />
+    <ClInclude Include="src\project\MemberTree.hpp" />
+    <ClInclude Include="src\project\ProjectStats.hpp" />
+    <ClInclude Include="src\project\RenamePlan.hpp" />
+    <ClInclude Include="src\ui\TextSearch.hpp" />
+    <ClInclude Include="src\ui\WidgetHost.hpp" />
+    <ClInclude Include="src\ui\widgets\PathBrowse.hpp" />
+    <ClInclude Include="src\ui\widgets\TabArea.hpp" />
+    <ClInclude Include="src\ui\widgets\TableFilters.hpp" />
+    <ClInclude Include="src\app\BackgroundTasks.hpp" />
+    <ClInclude Include="src\app\DropFilesDialog.hpp" />
+    <ClInclude Include="src\app\DropFilesPlan.hpp" />
+    <ClInclude Include="src\app\FileExplorerHost.hpp" />
+    <ClInclude Include="src\app\FilePreview.hpp" />
+    <ClInclude Include="src\app\SearchFocus.hpp" />
+    <ClInclude Include="src\app\SimCenter.hpp" />
+    <ClInclude Include="src\app\SimCenterKit.hpp" />
+    <ClInclude Include="src\app\SimConditionDialog.hpp" />
+    <ClInclude Include="src\app\SimDebugPane.hpp" />
+    <ClInclude Include="src\app\SimDebugText.hpp" />
+    <ClInclude Include="src\app\SimJournal.hpp" />
+    <ClInclude Include="src\app\SimStatus.hpp" />
+    <ClInclude Include="src\app\StatusStrip.hpp" />
+    <ClInclude Include="src\app\ThemeEditor.hpp" />
+    <ClInclude Include="src\app\TutorialsLot8.hpp" />
+    <ClInclude Include="src\app\screens\StationExportDialog.hpp" />
+    <ClInclude Include="src\hmi\HmiExprCheck.hpp" />
+    <ClInclude Include="src\hmi\HmiRenameRefs.hpp" />
+    <ClInclude Include="src\ui\FileExplorerModel.hpp" />
+    <ClInclude Include="src\ui\FileKinds.hpp" />
+    <ClInclude Include="src\ui\ThemeFile.hpp" />
+    <ClInclude Include="src\ui\widgets\FileExplorer.hpp" />
+    <ClInclude Include="src\ui\widgets\FilterMemory.hpp" />
+    <ClInclude Include="src\ui\widgets\SearchField.hpp" />
+    <ClInclude Include="src\app\CodeIconPicker.hpp" />
+    <ClInclude Include="src\app\Dossiers.hpp" />
+    <ClInclude Include="src\app\Epinglage.hpp" />
+    <ClInclude Include="src\app\ImportJob.hpp" />
+    <ClInclude Include="src\app\ImportJobDialog.hpp" />
+    <ClInclude Include="src\app\ProgramExportDialog.hpp" />
+    <ClInclude Include="src\app\SectionComparePane.hpp" />
+    <ClInclude Include="src\core\CodeIcons.hpp" />
+    <ClInclude Include="src\core\Version.hpp" />
+    <ClInclude Include="src\export\DocKit.hpp" />
+    <ClInclude Include="src\export\ProgramBook.hpp" />
+    <ClInclude Include="src\project\CodeIconKeys.hpp" />
+    <ClInclude Include="src\project\SectionCompare.hpp" />
+    <ClInclude Include="src\app\AboutDialog.hpp" />
+    <ClInclude Include="src\app\ConditionsNotice.hpp" />
+    <ClInclude Include="src\app\CrashDialogs.hpp" />
+    <ClInclude Include="src\app\GrafcetCodePanel.hpp" />
+    <ClInclude Include="src\app\NoveltyCenter.hpp" />
+    <ClInclude Include="src\app\hmi\HmiApiVarsPane.hpp" />
+    <ClInclude Include="src\app\hmi\HmiCyclicPage.hpp" />
+    <ClInclude Include="src\app\hmi\HmiDuplicateDialog.hpp" />
+    <ClInclude Include="src\app\hmi\HmiEnumPanes.hpp" />
+    <ClInclude Include="src\app\hmi\HmiExprPage.hpp" />
+    <ClInclude Include="src\app\hmi\HmiExprPageView.hpp" />
+    <ClInclude Include="src\app\hmi\HmiObjectAlarmPanes.hpp" />
+    <ClInclude Include="src\app\hmi\HmiObjectAlarmTree.hpp" />
+    <ClInclude Include="src\app\hmi\HmiOperatorPanes.hpp" />
+    <ClInclude Include="src\app\hmi\HmiParamPanes.hpp" />
+    <ClInclude Include="src\app\hmi\HmiQuickTrend.hpp" />
+    <ClInclude Include="src\app\hmi\HmiSimMarks.hpp" />
+    <ClInclude Include="src\app\screens\HelpCenterScreen.hpp" />
+    <ClInclude Include="src\app\screens\HmiExprScreen.hpp" />
+    <ClInclude Include="src\app\tutorial\TutorialApp.hpp" />
+    <ClInclude Include="src\app\tutorial\TutorialExprTrial.hpp" />
+    <ClInclude Include="src\app\tutorial\TutorialOverlay.hpp" />
+    <ClInclude Include="src\app\tutorial\TutorialStageApp.hpp" />
+    <ClInclude Include="src\app\tutorial\UiDriver.hpp" />
+    <ClInclude Include="src\core\CallTrail.hpp" />
+    <ClInclude Include="src\core\CrashGuard.hpp" />
+    <ClInclude Include="src\core\SingleInstance.hpp" />
+    <ClInclude Include="src\help\CenterIndex.hpp" />
+    <ClInclude Include="src\help\CenterPages.hpp" />
+    <ClInclude Include="src\help\CenterSources.hpp" />
+    <ClInclude Include="src\help\CenterTutorials.hpp" />
+    <ClInclude Include="src\help\CenterView.hpp" />
+    <ClInclude Include="src\help\F1Table.hpp" />
+    <ClInclude Include="src\help\Novelties.hpp" />
+    <ClInclude Include="src\help\ProblemReport.hpp" />
+    <ClInclude Include="src\help\ReleaseNotes.hpp" />
+    <ClInclude Include="src\help\SandboxTrash.hpp" />
+    <ClInclude Include="src\help\Shortcuts.hpp" />
+    <ClInclude Include="src\help\Tutorial.hpp" />
+    <ClInclude Include="src\help\TutorialKeys.hpp" />
+    <ClInclude Include="src\help\TutorialLaunch.hpp" />
+    <ClInclude Include="src\help\TutorialPlayer.hpp" />
+    <ClInclude Include="src\help\TutorialScreen.hpp" />
+    <ClInclude Include="src\help\TutorialSpot.hpp" />
+    <ClInclude Include="src\help\TutorialVerify.hpp" />
+    <ClInclude Include="src\hmi\HmiAlarmGroupCommands.hpp" />
+    <ClInclude Include="src\hmi\HmiAlarmGroups.hpp" />
+    <ClInclude Include="src\hmi\HmiApiVars.hpp" />
+    <ClInclude Include="src\hmi\HmiBuildState.hpp" />
+    <ClInclude Include="src\hmi\HmiDuplicate.hpp" />
+    <ClInclude Include="src\hmi\HmiEnums.hpp" />
+    <ClInclude Include="src\hmi\HmiExprBench.hpp" />
+    <ClInclude Include="src\hmi\HmiExprGuide.hpp" />
+    <ClInclude Include="src\hmi\HmiMarkers.hpp" />
+    <ClInclude Include="src\hmi\HmiModbusCyclic.hpp" />
+    <ClInclude Include="src\hmi\HmiObjectAlarms.hpp" />
+    <ClInclude Include="src\hmi\HmiOperators.hpp" />
+    <ClInclude Include="src\hmi\HmiPopupParams.hpp" />
+    <ClInclude Include="src\hmi\HmiScriptCheck.hpp" />
+    <ClInclude Include="src\hmi\HmiScriptCheck110.hpp" />
+    <ClInclude Include="src\hmi\HmiTutorialDeduce.hpp" />
+    <ClInclude Include="src\platform\AtlasSymbols.hpp" />
+    <ClInclude Include="src\project\ActivationConditions.hpp" />
+    <ClInclude Include="src\project\GrafcetCheck.hpp" />
+    <ClInclude Include="src\project\GrafcetDiagram.hpp" />
+    <ClInclude Include="src\project\GrafcetRewrite2.hpp" />
+    <ClInclude Include="src\sim\Rich.hpp" />
+    <ClInclude Include="src\ui\NoveltyBoard.hpp" />
+    <ClInclude Include="src\ui\NoveltyMarks.hpp" />
+    <ClInclude Include="src\ui\widgets\ExprField.hpp" />
+    <ClInclude Include="src\ui\widgets\ExprMarkers.hpp" />
+    <ClInclude Include="src\ui\widgets\KindBadge.hpp" />
+    <ClInclude Include="src\ui\widgets\PropertyGridHooks.hpp" />
+    <ClInclude Include="src\ui\widgets\TrailSymbols.hpp" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets" />
+  <!--
+    Lot API 8 : SDL3 est fourni dans third_party\SDL3, en x64 seulement. Une autre
+    plateforme, ou une archive extraite sans ce dossier : un message clair tout de
+    suite, plutot que des centaines d'erreurs "SDL3/SDL.h introuvable".
+  -->
+  <Target Name="XpgVerifieSDL3" BeforeTargets="PrepareForBuild">
+    <Error Condition="'$(Platform)' != 'x64'" Text="SDL3 fourni en x64 seulement : choisis la plateforme x64 (Plateformes de solution, dans la barre d'outils)." />
+    <Error Condition="!Exists('$(SDL3_DIR)\include\SDL3\SDL.h') Or !Exists('$(SDL3_DIR)\lib\x64\SDL3.lib') Or !Exists('$(SDL3_DIR)\lib\x64\SDL3.dll')" Text="SDL3 introuvable dans $(SDL3_DIR) : il faut le dossier third_party\SDL3 de l'archive (include\SDL3, lib\x64\SDL3.lib, lib\x64\SDL3.dll)." />
+  </Target>
+</Project>

@@ -1,0 +1,50 @@
+(* D_Section
+
+   Cree une section dans une tache ou dans une unite, si elle n'existe pas, et
+   y ecrit quelques lignes. Le squelette d'une macro qui cree une chose et
+   seulement si elle manque.
+
+   #! summary = Créer une section (dans une tâche ou une unité) si elle manque, avec son en-tête.
+   #! version = 1.00
+   #! categorie = Mes macros
+   #! param section = Si elle existe déjà, la macro le dit et ne fait rien.
+   #! param ou = Dans la tâche, elle tourne à chaque cycle ; dans une unité, quand l'unité est appelée.
+   #! param unite = Elle doit exister : la macro ne crée pas d'unité au passage.
+   #! param commentaire = La première ligne de la section, en commentaire.
+   #! champ section = section nouvelle
+   #! libelle section = Nom de la section
+   #! champ ou = choix
+   #! libelle ou = Où la créer
+   #! option ou Tache = Dans la tâche
+   #! option ou Unite = Dans une unité
+   #! champ unite = unite existant
+   #! libelle unite = Unité de programme
+   #! champ tache = tache
+   #! libelle tache = Tâche
+   #! champ commentaire = texte facultatif
+   #! libelle commentaire = En-tête de la section
+   #! avance = commentaire
+   #! produit = une section, si elle n'existe pas encore
+   #! appliquer = Créer la section {section}
+*)
+
+section := Ask('section', 'Nom de la section', 'Ma_Section');
+ou      := AskChoice('ou', 'Ou la creer ?', 'Tache,Unite', 'Tache');
+AskNow();
+
+unite := '';
+IF ou = 'Unite' THEN
+    unite := Ask('unite', 'Unite de programme', 'Logigrammes_A');
+    IF NOT PouExists(unite) THEN Fail('l unite ' + unite + ' n existe pas'); END_IF;
+END_IF;
+tache       := Ask('tache', 'Tache', 'MAST');
+commentaire := Ask('commentaire', 'En-tete de la section', 'Section creee par une macro');
+AskNow();
+
+IF SectionExists(section) THEN
+    Log('la section ' + section + ' existe deja : rien a faire');
+ELSE
+    AddSection(section, tache, 'ST', unite);
+    IF commentaire <> '' THEN AppendToSection(section, '(* ' + commentaire + ' *)'); END_IF;
+    Log('section ' + section + ' creee');
+END_IF;

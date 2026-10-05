@@ -1,0 +1,23 @@
+# DFB type interface.
+name = BUILDING
+version = 0.22
+attribute = TypeCodeCheckSumString = 35BC
+attribute = TypeSignatureCheckSumString = DF77
+attribute = UseNewTplSignAlgo = TRUE
+
+# name ; type ; address ; scope ; init ; comment ; attributes ; element comments
+Text ; string[100] ;  ; Input ;  ; arguments ; PositionPin=1 ; 
+T ; INT ;  ; Input ;  ; 1=step,2=trans,3=act ; PositionPin=3 ; 
+d ; TIME ;  ; Input ;  ; delay ; PositionPin=6 ; 
+_Trans ; ST_GC_Transition ;  ; InOut ;  ; ref ; PositionPin=2 ; 
+_Step ; ST_GC_Step ;  ; InOut ;  ; ref ; PositionPin=4 ; 
+_Act ; ST_GC_Action ;  ; InOut ;  ; ref ; PositionPin=5 ; 
+Work ; string[100] ;  ; Local ;  ;  ;  ; 
+Token ; string[100] ;  ; Local ;  ;  ;  ; 
+Pos ; INT ;  ; Local ;  ;  ;  ; 
+Value ; string[100] ;  ; Local ;  ;  ;  ; 
+WorkList ; string[100] ;  ; Local ;  ;  ;  ; 
+Item ; string[100] ;  ; Local ;  ;  ;  ; 
+
+# section ; name ; language ; order ; activation ; logic ; file
+section ; Main ; ST ; 17 ;  ;  ; Main.st

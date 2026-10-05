@@ -1,0 +1,19 @@
+# Derived data type.
+name = config_purge
+version = 0.04
+# checksum is recomputed by Control Expert on import; not stored.
+
+# name ; type ; address ; scope ; init ; comment ; attributes ; element comments
+NBPUR ; INT ;  ; Member ;  ;  ;  ; 
+SPUR4 ; INT ;  ; Member ;  ;  ;  ; 
+SPUR5 ; INT ;  ; Member ;  ;  ;  ; 
+SPUR6 ; INT ;  ; Member ;  ;  ;  ; 
+DL4 ; INT ;  ; Member ;  ;  ;  ; 
+DL5 ; INT ;  ; Member ;  ;  ;  ; 
+DL6 ; INT ;  ; Member ;  ;  ;  ; 
+DL7 ; INT ;  ; Member ;  ;  ;  ; 
+DL8 ; INT ;  ; Member ;  ;  ;  ; 
+DL9 ; INT ;  ; Member ;  ;  ;  ; 
+DL10 ; INT ;  ; Member ;  ;  ;  ; 
+DL11 ; INT ;  ; Member ;  ;  ;  ; 
+DL12 ; INT ;  ; Member ;  ;  ;  ; 

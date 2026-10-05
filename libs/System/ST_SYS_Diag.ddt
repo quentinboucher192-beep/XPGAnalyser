@@ -1,0 +1,51 @@
+# Derived data type, shared.
+name = ST_SYS_Diag
+version = 1.00
+#! summary = L'etat de sante de l'automate en une structure : ce que l'IHM affiche sur sa page systeme.
+#! usage = Rempli a chaque cycle par DFB_SYS_DIAG. Une seule structure, pour qu'une
+#! usage = page d'IHM - ou une requete Modbus - la lise d'un bloc.
+#! see = DFB_SYS_DIAG
+#! param Healthy = Tout va bien : entrees/sorties saines, pile bonne, horloge a
+#! param Healthy = l'heure, aucun module en erreur. Les debordements de cycle n'en
+#! param Healthy = font pas partie : ils se comptent dans Overruns.
+#! param IoOk = %S10 : aucune erreur d'entree/sortie sur les modules configures.
+#! param TaskIoOk = %S16 : aucune erreur d'entree/sortie dans la tache.
+#! param BatteryLow = %S68 : la pile de la CPU est faible ou absente. Une coupure
+#! param BatteryLow = ferait perdre les donnees non sauvegardees.
+#! param RtcLost = %S51 : l'horloge a perdu l'heure.
+#! param Overruns = Combien de debordements de periode (%S19) ont ete vus. %S19 reste
+#! param Overruns = a 1 tant que le programme ne le remet pas a 0 : pour compter le
+#! param Overruns = suivant, il faut le remettre a 0 apres l'avoir lu.
+#! param CycleMs = Le temps du dernier cycle, en ms : %SW30.
+#! param CycleMaxMs = Le plus long cycle vu depuis la derniere remise a zero.
+#! param CycleAvgMs = La moyenne glissante du temps de cycle, sur une centaine de
+#! param CycleAvgMs = cycles.
+#! param LastStart = Le dernier demarrage : 1 a froid (%S0), 2 a chaud (%S1), 0
+#! param LastStart = inconnu.
+#! param WarmStarts = Combien de reprises a chaud. Un demarrage a froid remet tout a
+#! param WarmStarts = zero, lui compris : il ne peut pas compter les siens.
+#! param ModulesInError = Combien de modules sont en erreur en ce moment.
+#! param FirstModuleInError = L'indice du premier module en erreur, -1 s'il n'y en a
+#! param FirstModuleInError = pas.
+#! example = (* declarer : Sante : ST_SYS_Diag; Voyant : BOOL; *)
+#! example = Voyant := NOT Sante.Healthy;
+#! given = Sante.Healthy := TRUE
+#! expect = 1 : Voyant = FALSE
+#! changes 1.00 = NOUVEAU.
+
+# L'etat de sante de l'automate.
+
+# name ; type ; scope ; initial ; comment
+Healthy ; BOOL ; Member ;  ; tout va bien
+IoOk ; BOOL ; Member ;  ; %S10 : pas d'erreur d'entree/sortie
+TaskIoOk ; BOOL ; Member ;  ; %S16 : pas d'erreur d'entree/sortie dans la tache
+BatteryLow ; BOOL ; Member ;  ; %S68 : pile faible ou absente
+RtcLost ; BOOL ; Member ;  ; %S51 : l'horloge a perdu l'heure
+Overruns ; UDINT ; Member ; 0 ; debordements de periode (%S19) vus
+CycleMs ; INT ; Member ; 0 ; le dernier cycle, en ms (%SW30)
+CycleMaxMs ; INT ; Member ; 0 ; le plus long depuis la remise a zero
+CycleAvgMs ; REAL ; Member ; 0.0 ; la moyenne glissante
+LastStart ; INT ; Member ; 0 ; 1 a froid, 2 a chaud, 0 inconnu
+WarmStarts ; UDINT ; Member ; 0 ; reprises a chaud
+ModulesInError ; INT ; Member ; 0 ; modules en erreur
+FirstModuleInError ; INT ; Member ; -1 ; le premier module en erreur, -1 aucun

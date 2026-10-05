@@ -1,0 +1,27 @@
+(* E_Etapes
+
+   Enchaine d'autres macros de la bibliotheque, dans l'ordre. Chaque etape se
+   decoche dans le formulaire ; les macros enchainees partagent les reponses
+   et le classeur, et un seul Ctrl+Z reprend tout.
+
+   #! summary = Enchaîner d'autres macros, dans l'ordre : chaque étape se coche ou se décoche.
+   #! version = 1.00
+   #! categorie = Mes macros
+   #! param etape1 = La première macro lancée.
+   #! param etape2 = Lancée après la première.
+   #! champ etape1 = oui-non
+   #! libelle etape1 = Étape 1 : créer la section
+   #! champ etape2 = oui-non
+   #! libelle etape2 = Étape 2 : vérifier la bibliothèque
+   #! groupe Étapes = etape1, etape2
+   #! produit = ce que produisent les macros enchaînées
+   #! appliquer = Appliquer les étapes cochées
+*)
+
+etape1 := Ask('etape1', 'Etape 1 : creer la section (O/N)', 'O');
+etape2 := Ask('etape2', 'Etape 2 : verifier la bibliotheque (O/N)', 'O');
+AskNow();
+
+IF etape1 = 'O' THEN RunMacro('EnsureSection'); END_IF;
+IF etape2 = 'O' THEN RunMacro('VerifierBibliotheque'); END_IF;
+Log('etapes terminees');

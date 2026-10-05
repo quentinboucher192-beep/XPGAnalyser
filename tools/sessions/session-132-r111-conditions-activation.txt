@@ -1,0 +1,43 @@
+# =============================================================================
+#  Session 132 (R111, 1.11, decisions 6 et 15) : les conditions d'activation
+#  manquantes d'un projet importe avant la 1.8.0. Armoire_Gaz (importe le
+#  27/09) : ses sections de tache n'ont pas leurs conditions (Reset_all, Reset,
+#  Modifications tournent a chaque cycle en simulation).
+#    - a l'ouverture, l'avis de la cloche le dit, avec le remede (Fichier >
+#      Importer un .XPG (nouveau MAST)...) et le bouton « Ne plus le dire pour
+#      ce projet » ;
+#    - API > Ordre d'execution, « Verifier l'ordre » dit le meme message ;
+#    - « Ne plus le dire pour ce projet » : l'avis part (le dossier va dans les
+#      reglages de l'utilisateur, pas dans le projet) ; Verifier n'en dit plus rien.
+#  Sur une copie d'Armoire_Gaz telle quelle, HORS DE TOUT DEPOT, en 1600 x 900.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+# le bandeau haut tient l'avis a jour chaque seconde
+attendre 45
+arbre "API/Ordre d'execution"
+attendre 10
+outil "Vérifier l'ordre"
+attendre 6
+capture 132_01_verifier_ordre.png
+bandeau-cloche
+attendre 10
+capture 132_02_cloche_conditions.png
+# le bouton de l'avis (son entree dans la cloche)
+choisir "Conditions d'activation manquantes"
+attendre 45
+capture 132_03_ne_plus_le_dire.png
+bandeau-cloche
+attendre 10
+capture 132_04_cloche_apres.png
+# Echap ferme la cloche comme on le ferait (« bandeau-cloche fermer » ne la
+# rouvrirait pas)
+touche echap
+attendre 4
+outil "Vérifier l'ordre"
+attendre 6
+capture 132_05_verifier_apres.png
+quitter

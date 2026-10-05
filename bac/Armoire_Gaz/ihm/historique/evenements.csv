@@ -1,0 +1,135 @@
+horodatage;type;source;message;utilisateur
+2026-09-27 03:36:14.962;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:36:15.362;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 03:36:15.925;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:36:15.925;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 03:36:16.458;Apparition;PT1_A_Vide;[Critique] Bouteille A vide (0.0 bar) : basculer;operateur
+2026-09-27 03:36:16.858;Disparition;PT1_A_Vide;Bouteille A vide (0.0 bar) : basculer;operateur
+2026-09-27 03:36:19.058;Accès refusé;Vue_Supervision/Btn_Recette_Argon;"Btn_Recette_Argon : niveau d'accès 3 (Superviseur) requis ; operateur a le niveau 1";operateur
+2026-09-27 03:36:20.125;Connexion;chef;Claire Dubois connecté (Superviseur, niveau 3);chef
+2026-09-27 03:36:20.492;Recette;Reglages_Armoires;Argon appliqué : 3 valeur(s) écrite(s);chef
+2026-09-27 03:36:21.258;Réapparition;PT1_A_Vide;Bouteille A vide (0.0 bar) : basculer;chef
+2026-09-27 03:36:22.958;Acquittement;PT1_A_Vide;Bouteille A vide (0.0 bar) : basculer;chef
+2026-09-27 03:36:22.958;Acquittement;PT1_A_Basse;Bouteille A presque vide : 0.0 bar;chef
+2026-09-27 03:36:23.725;Disparition;PT1_A_Basse;Bouteille A presque vide : 0.0 bar;chef
+2026-09-27 03:36:23.725;Disparition;PT1_A_Vide;Bouteille A vide (0.0 bar) : basculer;chef
+2026-09-27 03:36:25.925;Recette;Reglages_Armoires;"Melange refusé : Seuil poids B : 75 hors bornes [0 ; 60] ; rien n'est écrit";chef
+2026-09-27 03:36:26.125;Recette;Reglages_Armoires;Azote appliqué : 3 valeur(s) écrite(s);chef
+2026-09-27 03:36:26.725;Apparition;Maintenance_En_Cours;[Basse] Intervention en cours : Maintenance en cours;chef
+2026-09-27 03:36:27.425;Connexion;technicien;Marc Leroy connecté (Maintenance, niveau 2);technicien
+2026-09-27 03:36:28.725;Disparition;Maintenance_En_Cours;Intervention en cours : Maintenance en cours;technicien
+2026-09-27 03:36:29.025;Déconnexion;technicien;déconnecté : bouton Déconnecter;
+2026-09-27 03:36:39.374;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:37:15.257;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:37:15.657;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 03:37:16.257;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:37:16.257;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 03:37:16.790;Apparition;PT1_A_Vide;[Critique] Bouteille A vide (0.0 bar) : basculer;operateur
+2026-09-27 03:37:18.257;Apparition;Maintenance_En_Cours;[Basse] Intervention en cours : Maintenance en cours;operateur
+2026-09-27 03:37:31.917;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:37:32.317;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 03:37:32.935;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:37:32.935;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 03:37:33.468;Apparition;PT1_A_Vide;[Critique] Bouteille A vide (0.0 bar) : basculer;operateur
+2026-09-27 03:37:34.602;Disparition;PT1_A_Vide;Bouteille A vide (0.0 bar) : basculer;operateur
+2026-09-27 03:37:37.735;Apparition;Maintenance_En_Cours;[Basse] Intervention en cours : Maintenance en cours;operateur
+2026-09-27 03:37:38.702;Accès refusé;Vue_Production/Gestion_Recettes;Appliquer : permission « Recettes » requise (utilisateur operateur);operateur
+2026-09-27 03:37:39.502;Connexion;admin;admin connecté (Administrateur, niveau 4);admin
+2026-09-27 03:37:39.868;Recette;Reglages_Armoires;Argon appliqué : 3 valeur(s) écrite(s);admin
+2026-09-27 03:37:55.120;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:37:55.520;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 03:37:56.069;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:37:56.069;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 03:37:56.602;Apparition;PT1_A_Vide;[Critique] Bouteille A vide (0.0 bar) : basculer;operateur
+2026-09-27 03:37:59.169;Accès refusé;Vue_Production/Btn_Photo;Demander une ressource : permission « Administrer » requise (utilisateur operateur);operateur
+2026-09-27 03:37:59.936;Connexion;admin;admin connecté (Administrateur, niveau 4);admin
+2026-09-27 03:38:19.971;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:38:20.371;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 03:38:20.917;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:38:20.917;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 03:38:21.450;Apparition;PT1_A_Vide;[Critique] Bouteille A vide (0.0 bar) : basculer;operateur
+2026-09-27 03:38:22.584;Disparition;PT1_A_Vide;Bouteille A vide (0.0 bar) : basculer;operateur
+2026-09-27 03:38:25.850;Connexion;admin;admin connecté (Administrateur, niveau 4);admin
+2026-09-27 03:39:08.485;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:39:08.885;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 03:39:09.460;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:39:09.460;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 03:39:09.993;Apparition;PT1_A_Vide;[Critique] Bouteille A vide (0.0 bar) : basculer;operateur
+2026-09-27 03:39:11.127;Disparition;PT1_A_Vide;Bouteille A vide (0.0 bar) : basculer;operateur
+2026-09-27 03:39:27.838;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:39:28.238;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 03:39:28.840;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:39:28.840;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 03:39:29.373;Apparition;PT1_A_Vide;[Critique] Bouteille A vide (0.0 bar) : basculer;operateur
+2026-09-27 03:39:30.240;Accès refusé;Vue_Utilisateurs/Gestion_Utilisateurs;Ajouter : permission « Administrer » requise (utilisateur operateur);operateur
+2026-09-27 03:39:30.807;Déconnexion;operateur;déconnecté : bouton Vue_Utilisateurs/Btn_Deconnexion;
+2026-09-27 03:39:31.407;Connexion;admin;admin connecté (Administrateur, niveau 4);admin
+2026-09-27 03:39:33.973;Déconnexion;admin;déconnecté : bouton Vue_Utilisateurs/Btn_Deconnexion;
+2026-09-27 03:39:34.973;Connexion;stagiaire;stagiaire connecté (Opérateur, niveau 1);stagiaire
+2026-09-27 03:39:35.973;Mot de passe changé;stagiaire;par stagiaire (Vue_Utilisateurs/Panneau_Mot_De_Passe);stagiaire
+2026-09-27 03:42:49.713;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:42:50.113;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 03:42:50.698;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:42:50.698;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 03:42:51.231;Apparition;PT1_A_Vide;[Critique] Bouteille A vide (0.0 bar) : basculer;operateur
+2026-09-27 03:43:07.598;Apparition;Bouteille_B_Vide;[Critique] Bouteille B vide;operateur
+2026-09-27 03:43:36.387;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:43:36.787;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 03:43:37.466;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:43:37.466;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 03:43:37.999;Apparition;PT1_A_Vide;[Critique] Bouteille A vide (0.0 bar) : basculer;operateur
+2026-09-27 03:48:41.922;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:48:42.322;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 03:48:42.973;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:48:42.973;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 03:48:43.506;Apparition;PT1_A_Vide;[Critique] Bouteille A vide (0.0 bar) : basculer;operateur
+2026-09-27 03:48:45.273;Signature;Vue_Commandes/Btn_Purge;operateur : Vanne_Purge : FAUX → VRAI (motif : Purge avant intervention);operateur
+2026-09-27 03:48:46.406;Signature;Vue_Commandes/Potar_Pression;operateur + visa admin : Consigne_Pression : 12 → 28 (motif : Réglage process);operateur
+2026-09-27 03:48:47.840;Déconnexion;operateur;déconnecté : menu de connexion;
+2026-09-27 03:48:48.073;Connexion refusée;operateur;mot de passe incorrect (encore 2 essais avant le verrouillage);
+2026-09-27 03:48:48.240;Connexion refusée;operateur;mot de passe incorrect (encore 1 essai avant le verrouillage);
+2026-09-27 03:48:48.406;Compte verrouillé;operateur;3 échecs de suite : verrouillé jusqu'à 04:03;
+2026-09-27 03:48:48.406;Connexion refusée;operateur;mot de passe incorrect — compte verrouillé jusqu'à 04:03;
+2026-09-27 03:48:48.873;Connexion;admin;admin connecté (Administrateur, niveau 4);admin
+2026-09-27 03:48:49.640;Compte déverrouillé;operateur;par admin;admin
+2026-09-27 03:48:50.806;Déconnexion;admin;déconnecté : menu de connexion;
+2026-09-27 03:48:51.273;Mot de passe à renouveler;nuit;mot de passe donné par un administrateur : choisis le tien;
+2026-09-27 03:48:51.740;Mot de passe renouvelé;nuit;par nuit (menu de connexion);
+2026-09-27 03:48:51.740;Connexion;nuit;Luc Moreau connecté (Opérateur, niveau 1);nuit
+2026-09-27 03:48:52.673;Déconnexion;nuit;déconnecté : menu de connexion;
+2026-09-27 03:48:53.240;Connexion;admin;admin connecté (Administrateur, niveau 4);admin
+2026-09-27 03:48:53.806;Accès modifié;Sécurité;déconnexion automatique : 1 min (menu de connexion);admin
+2026-09-27 03:48:55.740;Accès modifié;Sécurité;déconnexion automatique : jamais (menu de connexion);admin
+2026-09-27 03:48:56.073;Déconnexion;admin;déconnecté : badge (operateur);
+2026-09-27 03:48:56.073;Connexion;operateur;Paul Martin connecté (Opérateur, niveau 1);operateur
+2026-09-27 03:49:12.333;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:49:13.533;Signature;Vue_Commandes/Btn_Purge;operateur : Vanne_Purge : FAUX → VRAI (motif : Purge avant intervention);operateur
+2026-09-27 03:49:15.333;Signature;Vue_Commandes/Btn_Purge;operateur : Vanne_Purge : VRAI → FAUX (motif : Essai);operateur
+2026-09-27 03:50:10.063;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:50:10.663;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 7.2 bar;operateur
+2026-09-27 03:50:11.196;Apparition;PT1_A_Vide;[Critique] Bouteille A vide (7.2 bar) : basculer;operateur
+2026-09-27 03:50:42.975;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:50:47.642;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 7.2 bar;operateur
+2026-09-27 03:50:48.175;Apparition;PT1_A_Vide;[Critique] Bouteille A vide (7.2 bar) : basculer;operateur
+2026-09-27 03:50:53.644;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:50:55.244;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 03:50:55.777;Apparition;PT1_A_Vide;[Critique] Bouteille A vide (0.0 bar) : basculer;operateur
+2026-09-27 03:50:57.977;Disparition;PT1_A_Basse;Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 03:50:57.977;Disparition;PT1_A_Vide;Bouteille A vide (0.0 bar) : basculer;operateur
+2026-09-27 03:50:59.977;Réapparition;PT1_A_Basse;Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 03:50:59.977;Réapparition;PT1_A_Vide;Bouteille A vide (0.0 bar) : basculer;operateur
+2026-09-27 03:51:01.911;Rapport;Journalier;du 2026-09-26 06:00 au 2026-09-27 03:51 : exports/rapport_Journalier_2026-09-27_0351.pdf;operateur
+2026-09-27 03:54:36.417;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:54:36.417;Reprise;Poste d'exploitation;État d'avant l'arrêt rechargé : 43 variable(s), 4 alarme(s) en cours, la vue Vue_Equipements (état de 2026-09-27 03:54:39);operateur
+2026-09-27 03:54:37.317;Disparition;Variateur_Injoignable;Variateur ATV320 injoignable (hors ligne : Variateur ATV320, Caméra quai);operateur
+2026-09-27 03:54:37.917;Réapparition;Variateur_Injoignable;Variateur ATV320 injoignable (hors ligne : Variateur ATV320, Caméra quai);operateur
+2026-09-27 03:54:39.984;Réapparition;Courant_L1_Haut;Courant L1 élevé : 14.5 A (centrale PM5560);operateur
+2026-09-27 03:54:42.384;Disparition;Courant_L1_Haut;Courant L1 élevé : 14.5 A (centrale PM5560);operateur
+2026-09-27 04:00:46.643;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 04:00:47.376;Apparition;Courant_L1_Haut;[Haute] Courant L1 élevé : 52.8 A (centrale PM5560);operateur
+2026-09-27 04:00:47.776;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 04:00:48.310;Apparition;PT1_A_Vide;[Critique] Bouteille A vide (0.0 bar) : basculer;operateur
+2026-09-27 04:01:07.176;Disparition;Courant_L1_Haut;Courant L1 élevé : 52.8 A (centrale PM5560);operateur
+2026-09-27 04:02:40.279;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 04:02:57.912;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 04:02:58.446;Apparition;PT1_A_Vide;[Critique] Bouteille A vide (0.0 bar) : basculer;operateur

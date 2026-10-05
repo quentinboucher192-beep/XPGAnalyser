@@ -1,0 +1,76 @@
+# =============================================================================
+#  Session 60 - 1.9 (chantier B) : la page Simulation de Parametres systeme,
+#  Ctrl+Alt+S sur le poste d'exploitation, les variables systeme des esclaves
+#  simules. Dans le projet des sessions precedentes (Armoire_Gaz : Centrale
+#  PM5560 et Variateur ATV320 ont un esclave lie, Balance B et Analyseur de
+#  test sont seulement simules ; securite active, le compte de depart est
+#  "operateur", "admin" a la permission Administrer). Captures PNG_910 a PNG_915.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- A. Simuler l'IHM : l'administrateur, la page Simulation, le Variateur choisi ----
+arbre "Simulation/IHM"
+attendre 12
+sim-utilisateur "admin" "admin2026"
+attendre 3
+page-simulation "Variateur ATV320"
+attendre 5
+# L'IHM lit l'esclave du variateur (le segment L'esclave de sa carte, la 2e).
+page-simulation-partie "source:1:esclave"
+attendre 3
+# Une ligne animee (Vitesse_Affichee : le projet l'anime deja, sinus 10 a 50 en
+# 20 s - "animer:%MW8504" l'arreterait), une valeur forcee (la consigne) puis +.
+page-simulation-partie "forcer:%MW8502"
+attendre 2
+page-simulation-partie "forcee:%MW8502:plus"
+attendre 2
+page-simulation-partie "forcee:%MW8502:plus"
+attendre 8
+capture PNG_910_page_simulation_admin.png
+
+# ---- C. Les variables systeme : le domaine, la structure du variateur depliee ------------
+arbre "IHM/Programmation générale/Variables système"
+attendre 8
+vars-dossier "Esclaves simulés"
+attendre 2
+vars-dossier "Esclaves simulés/SYS.Slave.Variateur_ATV320"
+attendre 2
+vars-choisir "SYS.Slave.Variateur_ATV320.Read"
+attendre 6
+capture PNG_913_variables_esclaves.png
+
+# ---- D. La fiche du poste : les deux cases de la 1.9 -----------------------------------
+arbre "IHM/Configuration/Poste d'exploitation"
+attendre 8
+# La souris loin de l'arbre : pas d'infobulle sur la fiche.
+survol 1100 900
+attendre 4
+capture PNG_915_fiche_poste.png
+
+# ---- E. Le poste d'exploitation : Ctrl+Alt+S, refuse a l'operateur, puis l'admin ---------
+poste
+attendre-poste
+attendre 15
+touche ctrl+alt+s
+attendre 6
+capture PNG_911_page_simulation_refusee.png
+page-simulation-partie "fermer"
+attendre 2
+sim-utilisateur "admin" "admin2026"
+attendre 3
+touche ctrl+alt+s
+attendre 4
+page-simulation "Variateur ATV320"
+attendre 6
+capture PNG_912_poste_ctrl_alt_s.png
+
+# ---- F. Le diagnostic sur le poste (a l'echelle 1) : son groupe Esclaves simules -------
+page-simulation-partie "onglet:diagnostic"
+attendre 5
+capture PNG_914_diagnostic_esclaves.png
+quitter

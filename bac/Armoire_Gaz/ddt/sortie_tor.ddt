@@ -1,0 +1,11 @@
+# Derived data type.
+name = sortie_tor
+version = 0.04
+# checksum is recomputed by Control Expert on import; not stored.
+
+# name ; type ; address ; scope ; init ; comment ; attributes ; element comments
+cmd ; BOOL ;  ; Member ;  ;  ;  ; 
+F0 ; BOOL ;  ; Member ;  ;  ;  ; 
+F1 ; BOOL ;  ; Member ;  ;  ;  ; 
+Mat ; ARRAY[0..15] OF BOOL ;  ; Member ;  ;  ;  ; 
+Autorisee ; BOOL ;  ; Member ;  ;  ;  ; 

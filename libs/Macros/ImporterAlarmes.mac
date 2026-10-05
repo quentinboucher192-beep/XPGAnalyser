@@ -1,0 +1,310 @@
+(* ImporterAlarmes
+
+   Depuis l'onglet "ES". Enregistre les alarmes de VOIE dans
+   DFB_ALM_MANAGER : l'UUID, le libelle, le lien vers l'adresse, la gravite,
+   et la ligne qui remonte l'etat a chaque cycle.
+
+   POURQUOI ELLE EXISTE A COTE DE ImporterReports. Les deux parlent d'alarmes
+   et ne parlent pas des memes. ImporterReports recopie vers l'IHM les
+   defauts d'EQUIPEMENT lus dans l'onglet Liens - P0.Fault, P0.FaultCode.
+   Celle-ci enregistre les alarmes de VOIE : une entree TOR dont AlarmEn est
+   coche, un seuil analogique actif. Elles ne viennent pas du meme onglet et
+   ne passent pas par le meme chemin.
+
+   L'UUID PORTE LA PROVENANCE. Il n'est pas tire au hasard : ses 32 bits sont
+   le rack, le module, la voie et le numero de seuil, packes. Un identifiant
+   trouve dans un journal dans cinq ans dit encore de quelle voie il vient,
+   sans aucune table a tenir a jour.
+
+     bits 31..28 genre (1 TOR, 2 seuil analogique), 27..24 rack,
+     23..18 module, 17..12 voie, 11..8 seuil, 7..0 libre.
+
+   La macro ecrit un LITTERAL plutot que d'appeler AlmUuid, pour que le
+   fichier genere se lise sans rien executer. Le commentaire pose a cote de
+   chaque UUID en donne les parties, ce qui rend un ecart visible plutot que
+   silencieux.
+
+   LES QUATRE FAMILLES EN UNE EXECUTION, contrairement a l'ancienne
+   LierAlarmes qui travaillait sur un export CSV d'un seul onglet.
+
+   LE REGISTRE COMPTE 64 EMPLACEMENTS. Au-dela, les alarmes suivantes ne sont
+   pas enregistrees et un avertissement le dit.
+
+   #! summary = Enregistre les alarmes de voie dans DFB_ALM_MANAGER : UUID, libellé, gravité, et la remontée d'état à chaque cycle.
+   #! version = 1.10
+   #! changes 1.10 = Le formulaire : chaque question a son champ (le classeur par …, Ctrl+V ou en le glissant ; les tâches et les sections du projet ; des interrupteurs ; des choix à libellés), ses groupes, son aide et un libellé avec accents. Le code ne change pas.
+   #! changes 1.01 = Les libelles passent par QUOTE et ASCII : "Arret d'urgence" ecrivait une chaine coupee par son apostrophe, et la section ne compilait pas. L'initialisation SE GARDE ELLE-MEME (AlmInitSig) : elle ne s'executait qu'une fois si on pensait a la conditionner a la main. Le gestionnaire prend CycleMs := Horloge.DtMs et NowS := Horloge.EpochS quand l'horloge existe ; les sections sont rangees par RangerSections.
+   #! usage = Depuis l'onglet ES. POUR L'AFFAIRE ENTIERE, c'est ImporterProgramme : il fait ce travail, y ajoute les alarmes d'equipement et dimensionne le registre au-dela de 64.
+   #! usage = POURQUOI ELLE EXISTE A COTE DE ImporterReports. Les deux parlent d'alarmes et ne parlent pas des memes. ImporterReports recopie vers l'IHM les defauts d'EQUIPEMENT lus dans l'onglet Liens. Celle-ci enregistre les alarmes de VOIE : une entree TOR dont AlarmEn est coche, un seuil analogique actif. Elles ne viennent pas du meme onglet et ne passent pas par le meme chemin.
+   #! usage = L'UUID PORTE LA PROVENANCE. Il n'est pas tire au hasard : ses 32 bits sont le rack, le module, la voie et le numero de seuil, packes. Un identifiant trouve dans un journal dans cinq ans dit encore de quelle voie il vient, sans aucune table a tenir a jour. bits 31..28 genre (1 TOR, 2 seuil analogique), 27..24 rack, 23..18 module, 17..12 voie, 11..8 seuil.
+   #! usage = La macro ecrit un LITTERAL plutot que d'appeler AlmUuid, pour que le fichier genere se lise sans rien executer. Le commentaire pose a cote de chaque UUID en donne les parties, ce qui rend un ecart visible plutot que silencieux.
+   #! usage = LES QUATRE FAMILLES EN UNE EXECUTION, contrairement a l'ancienne LierAlarmes qui travaillait sur un export CSV d'un seul onglet.
+   #! usage = LE REGISTRE COMPTE 64 EMPLACEMENTS. Au-dela, les alarmes suivantes ne sont pas enregistrees et un avertissement le dit.
+   #! usage = L'INITIALISATION SE GARDE ELLE-MEME : Alarmes_Init s'ecrit IF AlmInitSig <> <signature> THEN ... END_IF. Elle enregistre au premier cycle, et de nouveau apres un import qui a change la liste - jamais a chaque cycle.
+   #! usage = LA SECTION EST REECRITE ENTIEREMENT a chaque execution. Ce qui y a ete ajoute a la main est perdu. C'est voulu : une section a moitie ancienne et a moitie nouvelle est pire que les deux, et on ne peut pas deviner ce qui a ete ajoute expres.
+   #! usage = ELLE NE FAIT QU'UNE ETAPE, et elle suppose que les precedentes ont tourne. Pour generer tout le programme en une fois - types, blocs, variables, instances, E/S, equipements, cablage, reports et alarmes - c'est ImporterProgramme.
+   #! see = ImporterProgramme, ImporterReports, ImporterVoies
+   #! param classeur = Le classeur de l'affaire (.xlsx ou .xlsm) : glisse-le sur le champ, choisis-le avec …, ou colle-le (Ctrl+V) après l'avoir copié dans l'Explorateur. Vide : le dernier classeur ouvert, le cas normal quand on enchaîne les imports.
+   #! param classeur = C'est un .xlsm, pas un export CSV : la macro lit les onglets directement, et les quatre familles d'E/S sont donc traitees en une seule execution.
+   #! param registre = ARRAY[0..63] OF ST_ALM_Def : la définition des alarmes.
+   #! param registre = Le tableau ARRAY[0..63] OF ST_ALM_Def : la definition des alarmes.
+   #! param etats = ARRAY[0..63] OF BOOL, rempli à chaque cycle.
+   #! param etats = Le tableau ARRAY[0..63] OF BOOL rempli a chaque cycle par la section cyclique. C'est lui qui dit quelles alarmes sont presentes maintenant.
+   #! param histo = ARRAY[0..255] OF ST_ALM_Event : apparitions et disparitions.
+   #! param histo = L'historique, ARRAY[0..255] OF ST_ALM_Event. Il garde les apparitions et les disparitions ; c'est ce qu'on relit apres coup.
+   #! param cmd = ST_ALM_Cmd : acquittements et reset, sur front montant.
+   #! param cmd = La structure ST_ALM_Cmd : acquittements et reset, tous pris SUR FRONT MONTANT.
+   #! param stat = ST_ALM_Stat : combien de présentes, de non acquittées.
+   #! param stat = La structure ST_ALM_Stat : combien de presentes, de non acquittees, et la derniere erreur.
+   #! param instance = L'instance de DFB_ALM_MANAGER.
+   #! param instance = Le nom de l'instance de DFB_ALM_MANAGER.
+   #! param sInit = Un bloc par alarme ; elle doit tourner une fois.
+   #! param sInit = La section qui recoit les definitions : un bloc par alarme.
+   #! param sInit = ELLE DOIT TOURNER UNE FOIS, PAS A CHAQUE CYCLE. Telle qu'elle est creee, c'est une section de tache : deplacez-la ou conditionnez-la.
+   #! param sCycle = L'appel du gestionnaire, puis l'état de chaque alarme.
+   #! param sCycle = La section cyclique : l'appel du gestionnaire, puis une ligne par alarme qui remonte son etat.
+   #! param tache = La tâche qui exécute les sections créées.
+   #! param tache = La tache d'accueil des sections creees, MAST en general.
+   #! param tache = Creer la section ne la place pas dans le bon ordre : Control Expert execute les sections dans l'ordre du navigateur de projet, et cet ordre se pose a la main. Chaque macro rappelle a la fin ou sa section doit aller.
+   #! categorie = Importer depuis le classeur/Étapes de l'import
+   #! champ classeur = fichier .xlsx .xlsm facultatif
+   #! libelle classeur = Le classeur de l'affaire
+   #! champ registre = nom
+   #! libelle registre = Registre des alarmes
+   #! champ etats = nom
+   #! libelle etats = Tableau des états
+   #! champ histo = nom
+   #! libelle histo = Historique
+   #! champ cmd = nom
+   #! libelle cmd = Commandes
+   #! champ stat = nom
+   #! libelle stat = État du gestionnaire
+   #! champ instance = nom
+   #! libelle instance = Instance du gestionnaire
+   #! champ sInit = section nouvelle
+   #! libelle sInit = Section d'initialisation du registre
+   #! champ sCycle = section nouvelle
+   #! libelle sCycle = Section cyclique
+   #! champ tache = tache
+   #! libelle tache = Tâche appelante
+   #! groupe Sections = sInit, sCycle, tache
+   #! groupe Les variables du gestionnaire = registre, etats, histo, cmd, stat, instance
+   #! avance = registre, etats, histo, cmd, stat, instance
+   #! produit = le registre DFB_ALM_MANAGER rempli, et la remontée d'état à chaque cycle
+   #! appliquer = Réécrire {sInit} et {sCycle} entièrement
+*)
+
+chemin := Ask('classeur', 'Chemin du classeur (vide = celui deja charge)', '');
+AskNow();
+
+registre := Ask('registre', 'Nom du registre d alarmes', 'AlmDefs');
+etats    := Ask('etats', 'Nom du tableau d etats', 'AlmState');
+histo    := Ask('histo', 'Nom de l historique', 'AlmHist');
+cmd      := Ask('cmd', 'Nom des commandes', 'AlmCmd');
+stat     := Ask('stat', 'Nom de l etat', 'AlmStat');
+instance := Ask('instance', 'Nom de l instance du gestionnaire', 'GestionAlarmes');
+sInit    := Ask('sInit', 'Section d initialisation du registre', 'Alarmes_Init');
+sCycle   := Ask('sCycle', 'Section cyclique', 'Alarmes_Cycle');
+tache    := Ask('tache', 'Tache appelante', 'MAST');
+AskNow();
+
+wb := OpenWorkbook(chemin);
+IF wb < 0 THEN Fail('classeur introuvable'); END_IF;
+t := OpenSheet('ES');
+IF t < 0 THEN Fail('onglet "ES" introuvable'); END_IF;
+
+periode := Setting('Periode (ms)');
+IF periode = '' THEN periode := '20'; END_IF;
+maintenant := '0';
+IF VariableExists('Horloge') THEN
+    periode := 'Horloge.DtMs';
+    maintenant := 'Horloge.EpochS';
+END_IF;
+
+IF NOT Confirm('Alarmes de voie',
+               'Reecrire ' + sInit + ' et ' + sCycle + ' entierement ?') THEN
+    Fail('annule');
+END_IF;
+
+FOR k := 0 TO 3 DO
+    IF k = 0 THEN nom := 'ST_ALM_Def';
+    ELSIF k = 1 THEN nom := 'ST_ALM_Event';
+    ELSIF k = 2 THEN nom := 'ST_ALM_Cmd';
+    ELSE nom := 'ST_ALM_Stat';
+    END_IF;
+    IF NOT TypeExists(nom) AND LibHasItem(nom) THEN LibImport(nom); END_IF;
+END_FOR;
+IF NOT PouExists('DFB_ALM_MANAGER') AND LibHasItem('DFB_ALM_MANAGER') THEN
+    LibImport('DFB_ALM_MANAGER');
+END_IF;
+
+IF NOT VariableExists(registre) THEN
+    AddVariable(registre, 'ARRAY[0..63] OF ST_ALM_Def', 'Global', '');
+END_IF;
+IF NOT VariableExists(etats) THEN
+    AddVariable(etats, 'ARRAY[0..63] OF BOOL', 'Global', '');
+END_IF;
+IF NOT VariableExists(histo) THEN
+    AddVariable(histo, 'ARRAY[0..255] OF ST_ALM_Event', 'Global', '');
+END_IF;
+IF NOT VariableExists(cmd) THEN AddVariable(cmd, 'ST_ALM_Cmd', 'Global', ''); END_IF;
+IF NOT VariableExists(stat) THEN AddVariable(stat, 'ST_ALM_Stat', 'Global', ''); END_IF;
+IF NOT VariableExists(instance) THEN
+    AddVariable(instance, 'DFB_ALM_MANAGER', 'Global', '');
+END_IF;
+IF NOT VariableExists('AlmInitSig') THEN
+    AddVariable('AlmInitSig', 'INT', 'Global', '', '0', 'signature de la liste d alarmes deja enregistree');
+END_IF;
+
+IF NOT SectionExists(sInit) THEN AddSection(sInit, tache, 'ST', ''); END_IF;
+IF NOT SectionExists(sCycle) THEN AddSection(sCycle, tache, 'ST', ''); END_IF;
+ClearSection(sInit);
+ClearSection(sCycle);
+AppendToSection(sCycle, '(* Section generee par ImporterAlarmes. *)');
+AppendToSection(sCycle, instance + '(Count := 64, CycleMs := ' + periode + ', NowS := ' + maintenant
+    + ', Cmd := ' + cmd + ', State := ' + etats + ', Defs := ' + registre
+    + ', History := ' + histo + ', Stat := ' + stat + ');');
+
+(* L init s accumule ici et s ecrit a la fin, sous sa garde : la signature
+   n est connue qu une fois la liste parcourue. *)
+nl := CHR(10);
+initTxt := '';
+sig := 0;
+
+n := RowCount(t);
+i := 0;
+k := 0;
+d := 0;
+p1 := 0;
+p2 := 0;
+slot := 0;
+poses := 0;
+rack := 0;
+module := 0;
+voie := 0;
+genre := 0;
+uuid := 0;
+sev := 1;
+cible := '';
+adresse := '';
+tableau := '';
+indice := '';
+libelle := '';
+fam := '';
+ana := 0;
+
+FOR i := 0 TO n - 1 DO
+    adresse := Cell(t, i, 'Adresse');
+    tableau := Cell(t, i, 'Tableau');
+    indice  := Cell(t, i, 'Index');
+    libelle := Cell(t, i, 'Designation');
+    fam     := Cell(t, i, 'Famille');
+
+    ana := 0;
+    IF fam = 'AI' OR fam = 'AO' THEN ana := 1; END_IF;
+
+    IF adresse = '' OR tableau = '' THEN
+        SkipRow('ligne ' + DINT_TO_STRING(i) + ' : adresse ou tableau manquant');
+    ELSE
+        p1 := FIND(adresse, '.', 0);
+        p2 := FIND(adresse, '.', p1 + 1);
+        IF p1 < 0 OR p2 < 0 THEN
+            SkipRow('ligne ' + DINT_TO_STRING(i) + ' : adresse illisible (' + adresse + ')');
+        ELSE
+            (* Le rack suit les lettres : %IW0 donne 0, %I0 donne 0. *)
+            d := 1;
+            WHILE d < p1 AND FIND('0123456789', MID(adresse, d, 1), 0) < 0 DO
+                d := d + 1;
+            END_WHILE;
+            rack   := STRING_TO_INT(MID(adresse, d, p1 - d));
+            module := STRING_TO_INT(MID(adresse, p1 + 1, p2 - p1 - 1));
+            voie   := STRING_TO_INT(MID(adresse, p2 + 1));
+
+            IF ana = 1 THEN
+                genre := 2;
+                FOR k := 0 TO 3 DO
+                    IF Cell(t, i, 'S' + DINT_TO_STRING(k) + '_En') = 'O' THEN
+                        IF slot > 63 THEN
+                            Warn('registre plein : ' + adresse + ' seuil '
+                                 + DINT_TO_STRING(k) + ' non enregistre');
+                        ELSE
+                            uuid := genre * 268435456 + rack * 16777216
+                                  + module * 262144 + voie * 4096 + k * 256;
+                            sev := STRING_TO_INT(Cell(t, i, 'S' + DINT_TO_STRING(k) + '_Sev'));
+                            cible := registre + '[' + DINT_TO_STRING(slot) + ']';
+
+                            initTxt := initTxt + nl
+                                + nl + '    (* ' + adresse + ' seuil '
+                                + DINT_TO_STRING(k) + '   genre=' + DINT_TO_STRING(genre)
+                                + ' rack=' + DINT_TO_STRING(rack)
+                                + ' module=' + DINT_TO_STRING(module)
+                                + ' voie=' + DINT_TO_STRING(voie) + ' *)'
+                                + nl + '    ' + cible + '.Uuid := ' + DINT_TO_STRING(uuid) + ';'
+                                + nl + '    ' + cible + '.Label := '
+                                + QUOTE(MID(ASCII(libelle), 0, 24) + ' S' + DINT_TO_STRING(k)) + ';'
+                                + nl + '    ' + cible + '.Link := ' + QUOTE(adresse) + ';'
+                                + nl + '    ' + cible + '.Sev := ' + DINT_TO_STRING(sev) + ';'
+                                + nl + '    ' + cible + '.Used := TRUE;';
+                            sig := (sig * 31 + (uuid MOD 30011) + sev + LEN(libelle)) MOD 30011;
+
+                            AppendToSection(sCycle, etats + '[' + DINT_TO_STRING(slot)
+                                + '] := ' + tableau + '[' + indice + '].Thr['
+                                + DINT_TO_STRING(k) + '].Raised;');
+                            slot := slot + 1;
+                            poses := poses + 1;
+                        END_IF;
+                    END_IF;
+                END_FOR;
+            ELSIF Cell(t, i, 'AlarmEn') = 'O' THEN
+                genre := 1;
+                IF slot > 63 THEN
+                    Warn('registre plein : ' + adresse + ' non enregistre');
+                ELSE
+                    uuid := genre * 268435456 + rack * 16777216
+                          + module * 262144 + voie * 4096;
+                    sev := STRING_TO_INT(Cell(t, i, 'Sev'));
+                    cible := registre + '[' + DINT_TO_STRING(slot) + ']';
+
+                    initTxt := initTxt + nl
+                        + nl + '    (* ' + adresse
+                        + '   genre=' + DINT_TO_STRING(genre)
+                        + ' rack=' + DINT_TO_STRING(rack)
+                        + ' module=' + DINT_TO_STRING(module)
+                        + ' voie=' + DINT_TO_STRING(voie) + ' *)'
+                        + nl + '    ' + cible + '.Uuid := ' + DINT_TO_STRING(uuid) + ';'
+                        + nl + '    ' + cible + '.Label := ' + QUOTE(MID(ASCII(libelle), 0, 30)) + ';'
+                        + nl + '    ' + cible + '.Link := ' + QUOTE(adresse) + ';'
+                        + nl + '    ' + cible + '.Sev := ' + DINT_TO_STRING(sev) + ';'
+                        + nl + '    ' + cible + '.Used := TRUE;';
+                    sig := (sig * 31 + (uuid MOD 30011) + sev + LEN(libelle)) MOD 30011;
+
+                    AppendToSection(sCycle, etats + '[' + DINT_TO_STRING(slot) + '] := '
+                        + tableau + '[' + indice + '].Alarm;');
+                    slot := slot + 1;
+                    poses := poses + 1;
+                END_IF;
+            END_IF;
+        END_IF;
+    END_IF;
+END_FOR;
+
+(* l init, sous sa garde : au premier cycle, et apres un import qui a change
+   la liste - jamais a chaque cycle *)
+IF sig = 0 THEN sig := 1; END_IF;
+AppendToSection(sInit, '(* Section generee par ImporterAlarmes. GARDEE : elle enregistre au premier');
+AppendToSection(sInit, '   cycle, et de nouveau apres un import qui a change la liste. *)');
+AppendToSection(sInit, 'IF AlmInitSig <> ' + DINT_TO_STRING(sig) + ' THEN' + initTxt);
+AppendToSection(sInit, '    AlmInitSig := ' + DINT_TO_STRING(sig) + ';');
+AppendToSection(sInit, 'END_IF;');
+
+RunMacro('RangerSections');
+
+IF poses = 0 THEN
+    (* Dire POURQUOI. "0 alarme" tout seul ressemble a une panne de la macro,
+       alors que c'est ce que le classeur contient. *)
+    Warn('aucune alarme enregistree : aucune voie de ce classeur n a AlarmEn = O '
+         + 'ni de seuil actif. Une voie ne devient une alarme que si vous le '
+         + 'demandez dans l onglet ES.');
+END_IF;
+Log(DINT_TO_STRING(poses) + ' alarme(s) de voie enregistree(s), '
+    + DINT_TO_STRING(64 - slot) + ' emplacement(s) libre(s)');

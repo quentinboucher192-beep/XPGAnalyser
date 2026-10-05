@@ -1,0 +1,79 @@
+# Derived data type, shared.
+name = ST_CTL_Pid
+version = 1.00
+#! summary = Une boucle de regulation PID : consigne, mesure, sortie, et ses reglages.
+#! usage = Une ligne par boucle, dans le tableau passe a DFB_CTL_PID. Les temps sont
+#! usage = en SECONDES, comme sur un regulateur de tableau : Ti = 20 veut dire que
+#! usage = l'integrale refait l'action proportionnelle en 20 secondes.
+#! usage = LE PASSAGE MANUEL / AUTO EST SANS A-COUP, dans les deux sens : en manuel,
+#! usage = l'integrale suit la sortie ; en automatique, ManOut suit la sortie.
+#! usage = Basculer ne fait pas bouger la vanne.
+#! see = DFB_CTL_PID
+#! param Name = Le nom de la boucle, pour l'IHM. Le bloc ne s'en sert pas.
+#! param Auto = TRUE : le PID calcule la sortie. FALSE : la sortie vaut ManOut.
+#! param Sp = La consigne, dans les unites de la mesure.
+#! param Pv = La mesure : Val de la voie analogique.
+#! param Out = SORTIE. La commande, entre OutMin et OutMax : a cabler sur Val de la
+#! param Out = voie de sortie, ou sur PosReq d'une vanne de regulation.
+#! param ManOut = La sortie en manuel. En automatique elle SUIT Out : repasser en
+#! param ManOut = manuel ne fait rien bouger.
+#! param Err = SORTIE. L'ecart consigne - mesure, apres bande morte et sens d'action.
+#! param Kp = Le gain proportionnel. 1.0 : un ecart de 1 donne 1 de sortie.
+#! param Ti = Le temps d'integrale, en secondes. 0 : pas d'integrale - il restera un
+#! param Ti = ecart.
+#! param Td = Le temps de derivee, en secondes. 0 : pas de derivee, et c'est le cas le
+#! param Td = plus courant. La derivee porte sur la MESURE : un saut de consigne ne
+#! param Td = donne pas de coup.
+#! param TdFilter = Le filtre de la derivee, en fraction de Td : 0.1 filtre sur Td /
+#! param TdFilter = 10.
+#! param OutMin = Le bas de la sortie. Aussi la borne de l'anti-emballement de
+#! param OutMin = l'integrale.
+#! param OutMax = Le haut de la sortie. Doit etre au-dessus d'OutMin : sinon Fault.
+#! param Reverse = Action INVERSE : la sortie monte quand la mesure depasse la
+#! param Reverse = consigne - un refroidissement, une vanne de decharge.
+#! param DeadBand = Un ecart plus petit est tenu pour nul. Retranche, pas coupe : la
+#! param DeadBand = sortie ne saute pas au bord de la bande.
+#! param Sat = SORTIE. La sortie est en butee : l'integrale est gelee dans ce sens.
+#! param Fault = SORTIE. OutMax n'est pas au-dessus d'OutMin : la sortie reste a
+#! param Fault = OutMin.
+#! param Integ = Le terme integral. Runtime.
+#! param PrevPv = La mesure du cycle precedent, pour la derivee. Runtime.
+#! param Dterm = Le terme derive filtre. Runtime.
+#! param Init = La boucle a deja tourne. Runtime.
+#! param WasAuto = La boucle etait en automatique au cycle precedent. Runtime.
+#! internal = Integ, PrevPv, Dterm, Init, WasAuto
+#! example = (* declarer : Boucles : ARRAY[0..7] OF ST_CTL_Pid; *)
+#! example = (* la pression de refoulement, sur la vitesse d'un variateur *)
+#! example = Boucles[0].Kp := 2.0;
+#! example = Boucles[0].Ti := 15.0;          (* secondes *)
+#! example = Boucles[0].OutMin := 20.0;      (* Hz *)
+#! example = Boucles[0].OutMax := 50.0;
+#! expect = 1 : Boucles[0].Ti = 15.0
+#! expect = 1 : Boucles[0].Auto = TRUE
+#! changes 1.00 = NOUVEAU.
+
+# Une boucle de regulation PID.
+
+# name ; type ; scope ; initial ; comment
+Name ; STRING[16] ; Member ;  ; le nom de la boucle
+Auto ; BOOL ; Member ; TRUE ; TRUE : le PID calcule. FALSE : Out vaut ManOut
+Sp ; REAL ; Member ; 0.0 ; la consigne
+Pv ; REAL ; Member ; 0.0 ; la mesure
+Out ; REAL ; Member ; 0.0 ; SORTIE : la commande
+ManOut ; REAL ; Member ; 0.0 ; la sortie en manuel ; suit Out en automatique
+Err ; REAL ; Member ; 0.0 ; SORTIE : l'ecart, apres bande morte et sens
+Kp ; REAL ; Member ; 1.0 ; gain proportionnel
+Ti ; REAL ; Member ; 10.0 ; temps d'integrale en s. 0 : pas d'integrale
+Td ; REAL ; Member ; 0.0 ; temps de derivee en s. 0 : pas de derivee
+TdFilter ; REAL ; Member ; 0.1 ; filtre de la derivee, en fraction de Td
+OutMin ; REAL ; Member ; 0.0 ; bas de la sortie
+OutMax ; REAL ; Member ; 100.0 ; haut de la sortie
+Reverse ; BOOL ; Member ;  ; action inverse : la sortie monte quand la mesure depasse
+DeadBand ; REAL ; Member ; 0.0 ; ecart tenu pour nul
+Sat ; BOOL ; Member ;  ; SORTIE : la sortie est en butee
+Fault ; BOOL ; Member ;  ; SORTIE : OutMax n'est pas au-dessus d'OutMin
+Integ ; REAL ; Member ; 0.0 ; runtime, ne pas ecrire
+PrevPv ; REAL ; Member ; 0.0 ; runtime, ne pas ecrire
+Dterm ; REAL ; Member ; 0.0 ; runtime, ne pas ecrire
+Init ; BOOL ; Member ;  ; runtime, ne pas ecrire
+WasAuto ; BOOL ; Member ;  ; runtime, ne pas ecrire

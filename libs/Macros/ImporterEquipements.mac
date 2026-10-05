@@ -1,0 +1,195 @@
+(* ImporterEquipements
+
+   Depuis l'onglet "Equipements". Groupe les lignes par tableau, declare
+   ARRAY[0..15] OF ST_EQ_xxx, declare l'instance du bloc de la famille, et
+   ecrit son appel.
+
+   LE GROUPEMENT SE FAIT SANS TABLEAU NI DICTIONNAIRE. Le langage n'en a pas.
+   Pour chaque ligne, on regarde si son tableau a deja ete rencontre PLUS HAUT
+   dans l'onglet ; si oui on passe, sinon on parcourt tout l'onglet pour
+   trouver le plus grand indice de ce tableau. C'est en n carre, ce qui sur
+   trois cents equipements reste instantane.
+
+   LE BLOC SE DEDUIT DE LA FAMILLE PAR CONVENTION : ST_EQ_Xxx -> DFB_EQ_XXX.
+   Une famille ajoutee a la bibliotheque (ST_EQ_Atv et DFB_EQ_ATV) est appelee
+   sans toucher a cette macro.
+
+   #! summary = Déclare les tableaux d'équipement, les instances de bloc de leur famille, et écrit leurs appels.
+   #! version = 1.10
+   #! changes 1.10 = Le formulaire : chaque question a son champ (le classeur par …, Ctrl+V ou en le glissant ; les tâches et les sections du projet ; des interrupteurs ; des choix à libellés), ses groupes, son aide et un libellé avec accents. Le code ne change pas.
+   #! changes 1.01 = Le bloc se deduit de la famille par convention (ST_EQ_Xxx -> DFB_EQ_XXX, avec UPPER) au lieu d'une liste qui ignorait ST_EQ_CtrlValve et ST_EQ_Atv. LE TABLEAU PREND LA TAILLE DU BLOC (ARRAY[0..15], celle de son InOut Eq) : la 1.00 le taillait au plus grand indice et Control Expert refusait l'appel. Les blocs prennent CycleMs := Horloge.DtMs quand l'horloge existe ; la section est rangee par RangerSections.
+   #! usage = Depuis l'onglet Equipements. Groupe les lignes par tableau, declare ARRAY[0..15] OF ST_EQ_xxx, declare l'instance du bloc, ecrit l'appel.
+   #! usage = LE TABLEAU A LA TAILLE DU BLOC, pas celle de l'onglet. Le bloc prend le tableau en InOut, fige a 16 equipements, et Control Expert refuse un tableau d'une autre taille. Count dit combien sont traites. Plus de 16 equipements dans un tableau : la macro s'arrete, il faut deux tableaux (colonne Variable).
+   #! usage = LE GROUPEMENT SE FAIT SANS TABLEAU NI DICTIONNAIRE, parce que le langage n'en a pas. Pour chaque ligne on regarde si son tableau a deja ete rencontre plus haut ; sinon on parcourt tout l'onglet pour trouver son plus grand indice. C'est en n carre, ce qui sur trois cents equipements reste instantane.
+   #! usage = LE BLOC SE DEDUIT DE LA FAMILLE PAR CONVENTION : ST_EQ_Valve2 donne DFB_EQ_VALVE2. Une famille dont le bloc n'est ni dans le projet ni dans la bibliotheque est signalee ; le tableau est quand meme declare : la donnee existe, seul l'appel manque.
+   #! usage = LA SECTION EST REECRITE ENTIEREMENT a chaque execution. Ce qui y a ete ajoute a la main est perdu. C'est voulu : une section a moitie ancienne et a moitie nouvelle est pire que les deux, et on ne peut pas deviner ce qui a ete ajoute expres.
+   #! usage = ELLE NE FAIT QU'UNE ETAPE, et elle suppose que les precedentes ont tourne. Pour generer tout le programme en une fois - types, blocs, variables, instances, E/S, equipements, cablage, reports et alarmes - c'est ImporterProgramme.
+   #! see = ImporterProgramme, ImporterCablage, ImporterReports, CreerEquipement
+   #! param classeur = Le classeur de l'affaire (.xlsx ou .xlsm) : glisse-le sur le champ, choisis-le avec …, ou colle-le (Ctrl+V) après l'avoir copié dans l'Explorateur. Vide : le dernier classeur ouvert, le cas normal quand on enchaîne les imports.
+   #! param classeur = C'est un .xlsm, pas un export CSV : la macro lit les onglets directement, et les quatre familles d'E/S sont donc traitees en une seule execution.
+   #! param section = Réécrite en entier à chaque import.
+   #! param section = La section qui recoit les appels des blocs d'equipement. Elle tourne au milieu de la tache : apres les entrees et les commandes, avant les mesures et les sorties.
+   #! param prefixe = Devant le nom du tableau : EQ_ donne EQ_Pompes.
+   #! param prefixe = Ce qui precede le nom du tableau pour nommer l'instance du bloc : EQ_ donne EQ_Pompes pour le tableau Pompes.
+   #! param prefixe = Le classeur ne nomme pas les instances - sa colonne Instance est vide sur l'onglet Equipements - donc la convention est posee ici.
+   #! param tache = La tâche qui exécute les sections créées.
+   #! param tache = La tache d'accueil des sections creees, MAST en general. La section est rangee par RangerSections.
+   #! categorie = Importer depuis le classeur/Étapes de l'import
+   #! champ classeur = fichier .xlsx .xlsm facultatif
+   #! libelle classeur = Le classeur de l'affaire
+   #! champ section = section nouvelle
+   #! libelle section = Section des appels d'équipement
+   #! champ prefixe = nom
+   #! libelle prefixe = Préfixe des instances de bloc
+   #! champ tache = tache
+   #! libelle tache = Tâche appelante
+   #! exemple prefixe = {}Pompes, {}Vannes, {}Moteurs
+   #! groupe Programme = section, prefixe, tache
+   #! produit = les tableaux d'équipement, les instances de bloc de leur famille, et leurs appels
+   #! appliquer = Réécrire la section {section} entièrement
+*)
+
+chemin := Ask('classeur', 'Chemin du classeur (vide = celui deja charge)', '');
+AskNow();
+
+section := Ask('section', 'Section des appels d equipement', 'Equipements');
+prefixe := Ask('prefixe', 'Prefixe des instances de bloc', 'EQ_');
+tache   := Ask('tache', 'Tache appelante', 'MAST');
+AskNow();
+
+wb := OpenWorkbook(chemin);
+IF wb < 0 THEN Fail('classeur introuvable'); END_IF;
+t := OpenSheet('Equipements');
+IF t < 0 THEN Fail('onglet "Equipements" introuvable'); END_IF;
+
+periode := Setting('Periode (ms)');
+IF periode = '' THEN periode := '20'; END_IF;
+IF VariableExists('Horloge') THEN periode := 'Horloge.DtMs'; END_IF;
+
+IF NOT Confirm('Import des equipements',
+               'Reecrire la section ' + section + ' entierement ?') THEN
+    Fail('annule');
+END_IF;
+
+IF NOT SectionExists(section) THEN AddSection(section, tache, 'ST', ''); END_IF;
+ClearSection(section);
+AppendToSection(section, '(* Section generee par ImporterEquipements. *)');
+
+n := RowCount(t);
+i := 0;
+k := 0;
+deja := 0;
+combien := 0;
+idx := 0;
+poses := 0;
+tab := '';
+fam := '';
+bloc := '';
+inst := '';
+typEq := '';
+capEq := 0;
+attendu := '';
+
+FOR i := 0 TO n - 1 DO
+    IF Cell(t, i, 'Actif') <> 'O' THEN
+        SkipRow(Cell(t, i, 'Nom') + ' : inactif');
+    ELSE
+        tab := Cell(t, i, 'Variable');
+        fam := Cell(t, i, 'Famille');
+
+        IF tab = '' OR fam = '' THEN
+            Warn(Cell(t, i, 'Nom') + ' : variable ou famille manquante');
+        ELSE
+            (* Ce tableau a-t-il deja ete traite plus haut ? *)
+            deja := 0;
+            FOR k := 0 TO i - 1 DO
+                IF Cell(t, k, 'Variable') = tab AND Cell(t, k, 'Actif') = 'O' THEN
+                    deja := 1;
+                END_IF;
+            END_FOR;
+
+            IF deja = 0 THEN
+                (* La taille : le plus grand indice de ce tableau, plus un. *)
+                combien := 0;
+                FOR k := 0 TO n - 1 DO
+                    IF Cell(t, k, 'Variable') = tab AND Cell(t, k, 'Actif') = 'O' THEN
+                        IF Cell(t, k, 'Famille') <> fam THEN
+                            Warn(tab + ' : deux familles dans le meme tableau ('
+                                 + fam + ' et ' + Cell(t, k, 'Famille') + ')');
+                        END_IF;
+                        idx := STRING_TO_INT(Cell(t, k, 'Index')) + 1;
+                        IF idx > combien THEN combien := idx; END_IF;
+                    END_IF;
+                END_FOR;
+
+                (* le bloc par convention : ST_EQ_Xxx -> DFB_EQ_XXX *)
+                bloc := '';
+                IF STARTSWITH(fam, 'ST_EQ_') THEN bloc := 'DFB_EQ_' + UPPER(MID(fam, 6)); END_IF;
+                IF bloc <> '' AND NOT PouExists(bloc) AND NOT LibHasItem(bloc) THEN
+                    Warn(tab + ' : ' + bloc + ' n est ni dans le projet ni dans la bibliotheque, '
+                         + 'aucun bloc appele. Le tableau est quand meme declare.');
+                    bloc := '';
+                ELSIF bloc = '' THEN
+                    Warn(tab + ' : ' + fam + ' ne suit pas la convention ST_EQ_Xxx, aucun bloc appele.');
+                END_IF;
+
+                IF NOT TypeExists(fam) AND LibHasItem(fam) THEN LibImport(fam); END_IF;
+                IF bloc <> '' AND NOT PouExists(bloc) AND LibHasItem(bloc) THEN
+                    LibImport(bloc);
+                END_IF;
+
+                (* LA TAILLE EST CELLE DU BLOC : son InOut Eq est fige, et Control
+                   Expert refuse un tableau d'une autre taille. *)
+                attendu := 'ARRAY[0..' + DINT_TO_STRING(combien - 1) + '] OF ' + fam;
+                IF bloc <> '' THEN
+                    typEq := MemberType(bloc, 'Eq');
+                    IF typEq <> '' THEN
+                        capEq := STRING_TO_INT(MID(typEq, FIND(typEq, '..', 0) + 2,
+                                 FIND(typEq, ']', 0) - FIND(typEq, '..', 0) - 2)) + 1;
+                        IF combien > capEq THEN
+                            Fail(tab + ' : indice ' + DINT_TO_STRING(combien - 1) + ', mais ' + bloc
+                                 + ' ne traite que ' + DINT_TO_STRING(capEq) + ' equipements. '
+                                 + 'Partagez-les en deux tableaux (colonne Variable).');
+                        END_IF;
+                        attendu := typEq;
+                    END_IF;
+                END_IF;
+                IF NOT VariableExists(tab) THEN
+                    AddVariable(tab, attendu, 'Global', '');
+                ELSIF VariableType(tab) <> attendu THEN
+                    Warn(tab + ' existe en ' + VariableType(tab) + ' ; il faut ' + attendu
+                         + '. A corriger a la main.');
+                END_IF;
+
+                AppendToSection(section, '');
+                AppendToSection(section,
+                    '(* ============================================================ *)');
+                AppendToSection(section, '(*  ' + tab + '   ' + fam + '   '
+                    + DINT_TO_STRING(combien) + ' equipement(s)  *)');
+                AppendToSection(section,
+                    '(* ============================================================ *)');
+
+                IF bloc <> '' THEN
+                    inst := prefixe + tab;
+                    IF NOT VariableExists(inst) THEN
+                        AddVariable(inst, bloc, 'Global', '');
+                    END_IF;
+                    (* Count est le NOMBRE d equipements. Depuis la 1.01 des
+                       blocs il est borne par la taille du tableau et non par
+                       son dernier indice : le dernier equipement tourne. *)
+                    AppendToSection(section, inst + '(Count := '
+                        + DINT_TO_STRING(combien) + ', CycleMs := ' + periode
+                        + ', Eq := ' + tab + ');');
+                END_IF;
+
+                poses := poses + 1;
+            END_IF;
+        END_IF;
+    END_IF;
+END_FOR;
+
+IF poses = 0 THEN
+    Warn('aucun equipement. Verifiez la colonne Actif de l onglet Equipements.');
+END_IF;
+RunMacro('RangerSections');
+Log(DINT_TO_STRING(poses) + ' tableau(x) d equipement declare(s)');

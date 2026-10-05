@@ -1,0 +1,12 @@
+# DFB type interface.
+name = TOUTFERMER
+version = 0.02
+attribute = TypeCodeCheckSumString = 5320
+attribute = TypeSignatureCheckSumString = 5518
+attribute = UseNewTplSignAlgo = TRUE
+
+# name ; type ; address ; scope ; init ; comment ; attributes ; element comments
+arm ; armoire ;  ; InOut ;  ;  ; PositionPin=1 ; 
+
+# section ; name ; language ; order ; activation ; logic ; file
+section ; main ; ST ; 17 ;  ;  ; main.st

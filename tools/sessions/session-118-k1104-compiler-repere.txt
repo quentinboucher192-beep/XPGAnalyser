@@ -1,0 +1,41 @@
+# =============================================================================
+#  Session 118 - 1.10.4 (K1, K1104) : LE MESSAGE DU REPERE (client-compiler.png).
+#  Compiler : un avertissement au texte clair (« ce n'est pas une faute de
+#  syntaxe ») ; Remplacer... ouvre Dupliquer avec 0 copie ; Generer bloque.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+arbre "IHM/Compiler" double
+attendre 6
+outil "Compiler"
+attendre 12
+ihm-rapport-avertissement "garde le repère $Vanne$"
+ligne "garde le repère $Vanne$"
+attendre 4
+capture 118_01_compiler_avertissement.png
+outil "Remplacer…"
+attendre 10
+dupliquer-verifier
+capture 118_02_remplacer_zero_copie.png
+dupliquer-valider
+attendre 4
+capture 118_03_vue_apres_remplacer.png
+arbre "IHM/Compiler" double
+attendre 6
+outil "Compiler"
+attendre 12
+capture 118_04_compiler_sans_repere.png
+annuler
+attendre 3
+arbre "IHM/Générer" double
+attendre 6
+outil "Générer"
+attendre 15
+ihm-rapport-verifier "garde le repère $Vanne$"
+capture 118_05_generer_bloque.png
+quitter

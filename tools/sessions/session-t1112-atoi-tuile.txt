@@ -1,0 +1,35 @@
+# =============================================================================
+#  Session t1112 - 1.11.2 (T1) : l'« A toi » d'un tutoriel d'objet montre la
+#  tuile a glisser (promis par le LISEZ-MOI de la 1.11.0). La remise en place
+#  rouvre une copie neuve du bac, la bibliotheque en haut : a l'entree de
+#  l'« A toi », la tuile est ramenee a l'ecran (UiDriver::locate) et encadree
+#  (TutorialATry::show, TutorialStageApp::setInteractive).
+#  1. Ventilateur (deduit), etape 1 en « A toi » : la tuile Ventilateur encadree.
+#  2. Video (deduit), etape 1 en « A toi » : la tuile Video encadree.
+#  3. La Vanne ecrite, reglante, etape 2 en « A toi » : la variante a glisser.
+#  A lancer avec PROJETS=<dossier d'Armoire_Gaz>, XPG_TUTORIELS=tools/tutoriels
+#  et --size 1600x900. Trois captures.
+# =============================================================================
+attendre 30
+tutoriel objet-ventilateur - 1 atoi
+tutoriel-attendre
+attendre 20
+tutoriel-etat atoi
+capture s1112-ventilateur-atoi.png
+tutoriel-quitter
+attendre 10
+tutoriel objet-video - 1 atoi
+tutoriel-attendre
+attendre 20
+tutoriel-etat atoi
+capture s1112-video-atoi.png
+tutoriel-quitter
+attendre 10
+tutoriel objet-vanne réglante 2 atoi
+tutoriel-attendre
+attendre 20
+tutoriel-etat atoi
+capture s1112-vanne-atoi.png
+tutoriel-quitter
+attendre 10
+quitter

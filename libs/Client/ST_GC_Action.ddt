@@ -1,0 +1,72 @@
+# Derived data type, shared.
+name = ST_GC_Action
+version = 0.15
+#! summary = Une action du moteur GRAFCET : l'etape qui la porte, son qualificatif, son retard, sa sortie.
+#! usage = REPRIS DU PROJET MAST : le type est celui du projet (champs inchanges).
+#! usage = Ce qui suit decrit ce qu'en fait DFB_GRAFCETENGINE 1.49.
+#! usage = LES QUALIFICATIFS (Kind). Sauf K11, rien ne sort sans EnableCond.
+#! usage = K0 CONTINU : vraie tant que l'etape est active.
+#! usage = K1 RISING : un cycle, a l'activation de l'etape.
+#! usage = K2 DELAYON : vraie une fois l'etape active depuis Delay.
+#! usage = K3 PULSEON : un cycle, quand l'etape est active depuis Delay.
+#! usage = K4 LIMITEDON : vraie les Delay premieres ms d'activite, au moins un cycle.
+#! usage = K5 FALLING : un cycle, a la desactivation.
+#! usage = K6 PULSEOFF : un cycle, Delay apres la desactivation d'une etape qui a
+#! usage = ete active (avec EnableCond).
+#! usage = K7 LIMITEDOFF : vraie pendant Delay apres la desactivation, au moins un
+#! usage = cycle ; meme condition que K6.
+#! usage = K8 CONDDELAYEND : vraie quand EnableCond tient depuis Delay, etape active.
+#! usage = K9 CONDDELAYPULSE : un cycle quand EnableCond tient depuis Delay ; une
+#! usage = fois par activation.
+#! usage = K10 CONDLIMITEDON : vraie les Delay premieres ms d'EnableCond, au moins un
+#! usage = cycle ; une fois par activation.
+#! usage = K11 CONDLIMITEDONTP : une impulsion de Delay (au moins un cycle) sur front
+#! usage = montant d'EnableCond, une par activation ; elle va au bout meme si
+#! usage = l'etape est quittee.
+#! usage = LES IMPULSIONS (K1, K3, K5, K6, K9) durent un cycle, meme si le moteur est
+#! usage = fige ou fini ensuite. Les autres sorties d'une etape quittee tombent au
+#! usage = cycle ou montent celles de l'etape suivante.
+#! usage = Started ET Finished : l'action a fait ce qu'elle avait a faire. C'est ce
+#! usage = que le projet MAST teste pour enchainer ('Acts[k].Started AND
+#! usage = Acts[k].Finished'). Remis a zero quand l'etape est (re)activee.
+#! see = DFB_GRAFCETENGINE
+#! see = BUILDING
+#! param Id = Le numero de l'action.
+#! param Name = Son nom, 8 caracteres.
+#! param Kind = Le qualificatif, 0 a 11 : voir plus haut. Hors de 0..11, le moteur
+#! param Kind = passe en ConfigFault.
+#! param BoundStepId = L'etape qui porte l'action. -1 : aucune.
+#! param EnableCond = La condition d'action, calculee par ton programme.
+#! param Delay = Le retard ou la duree, selon Kind.
+#! param Out = LA SORTIE de l'action : c'est elle qu'on cable vers le procede.
+#! param PrevOut = Runtime.
+#! param OffPulseDone = Runtime.
+#! param OnPulseDone = Runtime.
+#! param Started = L'action est sortie au moins une fois depuis sa remise a zero.
+#! param Finished = Elle a fini ce qu'elle avait a faire, selon Kind.
+#! param EnableDone = Runtime.
+#! param EnablePulseDone = Runtime.
+#! param PrevEnableCond = Runtime.
+#! param TONStarted = Runtime.
+#! param TONElapsed = Runtime.
+#! internal = PrevOut, OffPulseDone, OnPulseDone, Started, Finished, EnableDone, EnablePulseDone, PrevEnableCond, TONStarted, TONElapsed
+#! changes 0.15 = Range dans la bibliotheque, depuis le projet MAST.
+
+# name ; type ; scope ; initial ; comment
+Id ; INT ; Member ;  ; 
+Name ; string[8] ; Member ;  ; 
+Kind ; INT ; Member ;  ; 0 CONTINU | 1 RISING | 2 DELAYON | 3 PULSEON | 4 LIMITEDON | 5 FALLING | 6 PULSEOFF | 7 LIMITEDOFF | 8 CONDDELAYEND | 9 CONDDELAYPULSE | 10 CONDLIMITEDON | 11 CONDLIMITEDONTP
+BoundStepId ; INT ; Member ;  ; 
+EnableCond ; BOOL ; Member ;  ; 
+Delay ; TIME ; Member ;  ; 
+Out ; BOOL ; Member ;  ; 
+PrevOut ; BOOL ; Member ;  ; 
+OffPulseDone ; BOOL ; Member ;  ; 
+OnPulseDone ; BOOL ; Member ;  ; 
+Started ; BOOL ; Member ;  ; 
+Finished ; BOOL ; Member ;  ; 
+EnableDone ; BOOL ; Member ;  ; 
+EnablePulseDone ; BOOL ; Member ;  ; 
+PrevEnableCond ; BOOL ; Member ;  ; 
+TONStarted ; BOOL ; Member ;  ; 
+TONElapsed ; TIME ; Member ;  ; 

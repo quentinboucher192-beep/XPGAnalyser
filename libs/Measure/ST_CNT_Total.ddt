@@ -1,0 +1,70 @@
+# Derived data type, shared.
+name = ST_CNT_Total
+version = 1.00
+#! summary = Un totalisateur : un debit integre, ou des impulsions de compteur, sans perte de precision.
+#! usage = LE TOTAL EST EN DEUX MORCEAUX : Whole (UDINT) pour les unites entieres,
+#! usage = Frac (REAL, entre 0 et 1) pour le reste. Un REAL seul n'a que sept chiffres
+#! usage = : au-dela de 16 777 216 m3, ajouter 0,0005 m3 par cycle ne fait plus rien,
+#! usage = et le compteur s'arrete sans le dire. Total (REAL) n'est la que pour
+#! usage = l'affichage.
+#! usage = TODAY EST UNE DIFFERENCE, pas un second compteur : le total d'aujourd'hui
+#! usage = est le total moins celui de minuit. Il ne peut donc pas diverger du total.
+#! see = DFB_CNT_TOTAL
+#! param Name = Le nom du compteur, pour l'IHM.
+#! param Enable = FALSE arrete de compter ; le total est garde.
+#! param Flow = Le debit, dans l'unite du total par TimeBaseS : des m3/h pour un total
+#! param Flow = en m3.
+#! param TimeBaseS = Combien de secondes dans l'unite de temps du debit : 3600 pour
+#! param TimeBaseS = des m3/h, 60 pour des l/min, 1 pour des kg/s.
+#! param LowCut = Sous ce debit, rien n'est compte : le zero d'un debitmetre n'est
+#! param LowCut = jamais tout a fait zero. Un debit negatif n'est jamais compte.
+#! param Pulse = L'impulsion d'un compteur volumetrique. Chaque front montant ajoute
+#! param Pulse = PulseWeight.
+#! param PulseWeight = Ce que vaut une impulsion, dans l'unite du total. 0 : pas de
+#! param PulseWeight = comptage d'impulsions. Flow OU Pulse, en general - les deux
+#! param PulseWeight = s'additionnent.
+#! param Reset = Front montant : tout remettre a zero, total, jour et veille.
+#! param Whole = SORTIE. La partie entiere du total : exacte jusqu'a 4 294 967 295
+#! param Whole = unites.
+#! param Frac = SORTIE. La partie decimale, entre 0 et 1.
+#! param Total = SORTIE. Whole + Frac en REAL, pour l'affichage : sept chiffres
+#! param Total = significatifs.
+#! param Today = SORTIE. Depuis minuit (NewDay du bloc).
+#! param Yesterday = SORTIE. Le total de la veille, fige a minuit.
+#! param Pulses = Combien d'impulsions ont ete comptees.
+#! param DayWhole = Le total a minuit, partie entiere. Runtime.
+#! param DayFrac = Le total a minuit, partie decimale. Runtime.
+#! param PrevPulse = Runtime.
+#! param PrevReset = Runtime.
+#! param Fault = SORTIE. TimeBaseS n'est pas positif : le debit n'est pas compte.
+#! internal = DayWhole, DayFrac, PrevPulse, PrevReset
+#! example = (* declarer : Compteurs : ARRAY[0..15] OF ST_CNT_Total; *)
+#! example = (* le volume refoule, depuis un debitmetre en m3/h *)
+#! example = Compteurs[0].Name := 'Refoulement';
+#! example = Compteurs[0].TimeBaseS := 3600.0;
+#! example = Compteurs[0].LowCut := 0.5;
+#! expect = 1 : Compteurs[0].TimeBaseS = 3600.0
+#! changes 1.00 = NOUVEAU.
+
+# Un totalisateur.
+
+# name ; type ; scope ; initial ; comment
+Name ; STRING[16] ; Member ;  ; le nom du compteur
+Enable ; BOOL ; Member ; TRUE ; FALSE : ne compte plus, garde le total
+Flow ; REAL ; Member ; 0.0 ; le debit, dans l'unite du total par TimeBaseS
+TimeBaseS ; REAL ; Member ; 3600.0 ; secondes dans l'unite de temps du debit (3600 pour m3/h)
+LowCut ; REAL ; Member ; 0.0 ; sous ce debit, rien n'est compte
+Pulse ; BOOL ; Member ;  ; l'impulsion d'un compteur volumetrique
+PulseWeight ; REAL ; Member ; 0.0 ; ce que vaut une impulsion. 0 : pas d'impulsions
+Reset ; BOOL ; Member ;  ; front montant : tout remettre a zero
+Whole ; UDINT ; Member ; 0 ; SORTIE : la partie entiere du total
+Frac ; REAL ; Member ; 0.0 ; SORTIE : la partie decimale, 0..1
+Total ; REAL ; Member ; 0.0 ; SORTIE : Whole + Frac, pour l'affichage
+Today ; REAL ; Member ; 0.0 ; SORTIE : depuis minuit
+Yesterday ; REAL ; Member ; 0.0 ; SORTIE : la veille
+Pulses ; UDINT ; Member ; 0 ; impulsions comptees
+DayWhole ; UDINT ; Member ; 0 ; runtime, ne pas ecrire
+DayFrac ; REAL ; Member ; 0.0 ; runtime, ne pas ecrire
+PrevPulse ; BOOL ; Member ;  ; runtime, ne pas ecrire
+PrevReset ; BOOL ; Member ;  ; runtime, ne pas ecrire
+Fault ; BOOL ; Member ;  ; SORTIE : TimeBaseS n'est pas positif

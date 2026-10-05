@@ -1,0 +1,27 @@
+(* EnsureLibraryItem
+
+   Le type ou le bloc est-il la ? Sinon on l'importe. Deja la mais plus ancien
+   que la bibliotheque ? On le DIT et on ne touche a rien : remplacer un type
+   qu'un programme utilise deja n'est pas une decision qu'une macro prend.
+
+   Elle DEMANDE son entree plutot que de l'attendre d'ailleurs, pour qu'on
+   puisse la lancer seule depuis le navigateur. Une sous-macro qui ne peut
+   s'executer qu'appelee est une sous-macro qu'on ne peut pas essayer. *)
+
+nom := Ask('nom', 'Quel element de la bibliotheque ?', 'ST_IO_Ana');
+
+IF nom = '' THEN
+    Fail('aucun nom donne');
+ELSIF TypeExists(nom) OR PouExists(nom) THEN
+    IF LibIsOutdated(nom) THEN
+        Warn(nom + ' : le projet en a une copie plus ancienne que la bibliotheque ('
+             + LibVersion(nom) + '). Rien n a ete remplace.');
+    ELSE
+        Log(nom + ' est deja dans le projet et a jour.');
+    END_IF;
+ELSIF NOT LibHasItem(nom) THEN
+    Fail('la bibliotheque partagee ne propose pas ' + nom);
+ELSE
+    Log('import de ' + nom + ' v' + LibVersion(nom));
+    LibImport(nom);
+END_IF;

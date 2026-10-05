@@ -1,0 +1,37 @@
+#! summary = Une cuve : niveau, volume, quatre seuils, vitesse de variation.
+#! usage = UNE INSTANCE TRAITE SEIZE EQUIPEMENTS, et cette taille est dans la signature
+#! usage = du bloc : en changer touche toutes les instances de tous les projets qui
+#! usage = l'ont importe. Seize suffit pour une station ; au-dela, on declare une
+#! usage = deuxieme instance.
+#! usage = Appeler une fois par cycle, apres les voies d'entree et avant les reports
+#! usage = vers l'IHM : le bloc lit ce que les voies ont ecrit, et ecrit ce que les
+#! usage = reports vont lire.
+#! usage = 
+#! usage = L'HYSTERESIS JOUE A LA RETOMBEE SEULEMENT, pour que le seuil veuille dire le
+#! usage = meme nombre des deux cotes. Un seuil qui se declencherait a 80 + Hyst et
+#! usage = retomberait a 80 - Hyst ne voudrait plus dire 80 du tout.
+#! example = (* declarer : Cuves : ARRAY[0..15] OF ST_EQ_Tank; *)
+#! example = Cuves[0].Level    := CarteAI_R0S10[0].Val;
+#! example = Cuves[0].LevelMin := 0.0;
+#! example = Cuves[0].LevelMax := 100.0;
+#! example = Cuves[0].VeryLow  := 5.0;
+#! example = Cuves[0].VeryHigh := 95.0;
+#! example = Cuves[0].Hyst     := 2.0;
+#! example = 
+#! example = CUV_Station(Count := 2, CycleMs := 20, Eq := Cuves);
+#! example = 
+#! example = Pompes[0].SuctionOk := NOT Cuves[0].DryRun;
+#! param Count = Combien d'equipements du tableau sont traites. Borne a 16. En mettre moins
+#! param Count = ne fait pas gagner de memoire, seulement du temps de cycle.
+#! param CycleMs = La periode de la tache, en ms. Un DDT ne peut pas contenir de temporisateur,
+#! param CycleMs = donc tout le temps s'accumule depuis la : une valeur fausse ici fausse
+#! param CycleMs = toutes les temporisations de tous les equipements du tableau. DINT et non
+#! param CycleMs = INT - un INT de millisecondes deborde au bout de trente-trois secondes.
+#! param Eq = Le tableau des equipements, en InOut. Sa taille est figee a 16 : un InOut ne
+#! param Eq = peut pas etre dimensionne a l'appel.
+#! param FaultCount = Combien sont en defaut, recalcule a chaque cycle. De quoi allumer un voyant
+#! param FaultCount = de synthese sans reparcourir le tableau.
+#! param ReadyCount = Combien sont utilisables. FaultCount + ReadyCount n'est pas forcement egal a
+#! param ReadyCount = Count : un equipement desactive n'est ni l'un ni l'autre.
+#! see = ST_EQ_Tank
+#! see = DFB_EQ_PUMP

@@ -1,0 +1,33 @@
+# =============================================================================
+#  Session 119 - 1.10.4 (K1, K1104) : l'aide F1 des trois points. F1 dans la
+#  vue ouvre l'aide de l'IHM ; aide-sujet choisit le sujet ; la molette descend
+#  jusqu'aux sections 1.10.4 (marquees en orange : nouveau).
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+arbre "IHM/Vues/Vue_Synoptique"
+attendre 8
+vue-clic 900 600
+attendre 2
+touche f1
+attendre 10
+aide-sujet dupliquer-reperes
+attendre 8
+capture 119_01_aide_dupliquer_haut.png
+molette 1300 600 -12
+attendre 6
+capture 119_02_aide_indices.png
+molette 1300 600 -12
+attendre 6
+capture 119_03_aide_compiler.png
+aide-sujet erreurs-scripts
+attendre 8
+molette 1300 600 -10
+attendre 6
+capture 119_04_aide_diagnostic.png
+quitter

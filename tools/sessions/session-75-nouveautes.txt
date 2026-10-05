@@ -1,0 +1,101 @@
+# =============================================================================
+#  Session 75 - 1.10 : les nouveautes se voient (chantier P). Captures PNG_1050 a
+#  PNG_1059, dans une COPIE de Armoire_Gaz. En mode script, rien ne s'ouvre de
+#  soi-meme et les reperes sont masques : "nouveautes-relancer 1.10.0 1.8.0"
+#  rejoue le premier lancement de la 1.10 pour qui vient de la 1.8 (l'etat
+#  repart de zero, les reperes sont montres), "nouveautes-fenetre" ouvre la
+#  fenetre comme le menu Aide > Nouveautes de cette version.
+#  Les commandes : ScriptRunner.cpp, "1.10 (chantier P) : les nouveautes se voient".
+#  Avant la fusion : les elements des autres chantiers (pastilles API / IHM,
+#  zoom, Compiler...) n'existent pas dans cette copie - leur bulle se pose au
+#  centre ; l'inspecteur, les Variables IHM, les Types IHM et l'aide existent.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- 1. Le premier lancement de la 1.10, pour qui vient de la 1.8 -------------------
+nouveautes-relancer 1.10.0 1.8.0
+nouveautes-fenetre
+attendre 4
+nouveautes-etat "a montrer 31"
+capture PNG_1050_nouveautes_fenetre_premier_lancement.png
+nouveautes-deplier 1.9
+attendre 3
+capture PNG_1051_nouveautes_versions_manquees_1_9.png
+nouveautes-deplier 1.9
+attendre 2
+
+# ---- 2. Me montrer : l'endroit ouvert, l'element encadre, la bulle -----------------
+nouveautes-carte 1.10.expressions
+attendre 15
+nouveautes-etat "element encadre"
+capture PNG_1052_nouveautes_me_montrer_inspecteur.png
+nouveautes-bulle Suivante
+attendre 10
+nouveautes-etat "bulle 1.10.saisie-typee 2/31"
+nouveautes-bulle Terminer
+attendre 3
+
+# ---- 3. Les reperes orange dans l'appli ; un clic sur l'element retire le sien -------
+capture PNG_1053_nouveautes_reperes_orange.png
+nouveautes-repere 1.10.expressions
+attendre 3
+nouveautes-etat "utilisees 3"
+capture PNG_1054_nouveautes_repere_retire.png
+
+# ---- 4. La fenetre rouverte : les cartes vues, Me montrer les Types IHM --------------
+nouveautes-fenetre
+attendre 3
+capture PNG_1055_nouveautes_fenetre_cartes_vues.png
+nouveautes-carte 1.10.types-excel
+attendre 15
+capture PNG_1056_nouveautes_types_excel.png
+nouveautes-bulle Terminer
+attendre 3
+
+# ---- 5. L'aide F1 : les sujets de la 1.9 en orange, le filtre, Tout marquer comme lu --
+nouveautes-aide parametres-popups
+attendre 8
+capture PNG_1057_aide_sujet_1_9_en_orange.png
+nouveautes-aide-outil "Nouveautés seulement"
+attendre 4
+capture PNG_1058_aide_nouveautes_seulement.png
+nouveautes-aide-outil "Tout marquer comme lu"
+attendre 4
+nouveautes-etat
+capture PNG_1059_aide_tout_marque_comme_lu.png
+
+# ---- 6. L'aide F1 : un exemple en trois notations, ST | C | C++ (le choix est garde) --
+nouveautes-aide fonctions
+attendre 8
+nouveautes-aide-notation C++
+attendre 4
+capture PNG_1059b_aide_exemple_en_cpp.png
+nouveautes-aide tableaux-ihm
+attendre 8
+nouveautes-aide-notation C
+attendre 4
+capture PNG_1059c_aide_exemple_en_c.png
+nouveautes-aide-notation ST
+attendre 2
+
+# ---- 7. L'onglet Aide general : ses sections des nouveautes en orange (1.10, puis 1.9) ------
+nouveautes-relancer 1.10.0 1.8.0
+aide-page nouveautes-1-10
+attendre 8
+capture PNG_1059h_aide_generale_nouveautes_en_orange.png
+
+# ---- 8. La fenetre : Versions precedentes > l'API, lot 8 (ses parcours) ----------------------
+nouveautes-fenetre
+attendre 4
+nouveautes-deplier 1.9
+attendre 3
+capture PNG_1059i_nouveautes_la_1_9_depliee.png
+nouveautes-bouton "Versions precedentes"
+attendre 8
+capture PNG_1059j_versions_precedentes_lot_8.png
+quitter

@@ -1,0 +1,8 @@
+# Derived data type.
+name = config_detoxal
+version = 0.02
+# checksum is recomputed by Control Expert on import; not stored.
+
+# name ; type ; address ; scope ; init ; comment ; attributes ; element comments
+SPDETOX ; INT ;  ; Member ;  ;  ;  ; 
+DLDETOX ; INT ;  ; Member ;  ;  ;  ; 

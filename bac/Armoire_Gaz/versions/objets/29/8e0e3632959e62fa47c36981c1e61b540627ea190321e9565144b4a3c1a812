@@ -1,0 +1,14 @@
+# XpgAnalyzer project. Safe to read; edit with care.
+formatVersion = 1
+name = Projet
+version = 0.0.1
+state = FINISH
+created = 2026-09-27 03:33:45
+modified = 2026-09-27 04:02:21
+author = 
+cpu = BMX P34 2020
+firmware = 03.30
+comment = 
+company = Schneider Automation
+product = Control Expert V15.3 - 230214C
+dtd = 41

@@ -1,0 +1,118 @@
+# L'expression (maquette 1.11, scène 4) : la couleur de la cuve suit V[0].Pos.
+# Une couleur dans une expression est une chaîne ('#E53935') ; SEL(G, si FAUX, si VRAI) suit la
+# norme CEI (sim/Runtime.cpp) : la maquette en fait l'erreur que le tutoriel montre et corrige.
+# Bac : Armoire_Gaz (V : ARRAY[0..3] OF T_VANNE). Format : v111/agents/CONCEPTION-T1.md, section 1.
+= expression-couleur | Une expression : la couleur de la cuve
+@sujet champs-expressions
+@sujet expression-couleur
+@bac Armoire_Gaz | Vue_Tuto
+
+# La tuyauterie, la vanne V_201, la cuve Cuve_T1 et le texte au-dessus de la vanne.
+@avant
+type T_VANNE "Pos : REAL; Defaut : BOOL; Bouge : BOOL; Cmd : BOOL"
+variable V "ARRAY[0..3] OF T_VANNE"
+vue Vue_Tuto
+poser Tuyauterie 120,262 Tuyauterie_1
+regler Tuyauterie_1 Largeur 520
+poser Vanne 400,262 V_201
+poser Cuve 660,180 Cuve_T1
+poser Texte 370,200 Txt_Ouverture
+
+== 1 | Choisis la cuve et sa couleur
+: Un clic sur la cuve : l'inspecteur. **Couleur du contenu** a la pastille **fx** en creux : elle accepte une expression ; son type, « couleur », est écrit au bout.
+clic vue:Cuve_T1
+encadrer "propriete:Couleur du contenu"
+dire "Vide, elle montre en gris ce qu'elle attend : « couleur ». Plus de « ou = expression » : la pastille le dit (1.10.1)."
+attendre 800ms
+@atoi Clique la cuve dans la vue (ou Cuve_T1 dans la liste des objets).
+@cible vue:Cuve_T1
+@verifier selection = Cuve_T1
+
+== 2 | Clic droit : une expression
+: Un clic sur une case couleur ouvre la palette. Pour une expression : **clic droit** sur la case, puis **Écrire une expression…**. La case s'ouvre sur **=**, qui reste affiché devant l'expression. Dès la première lettre, l'aide à la saisie s'ouvre.
+# Tranche 8 (decision du chef, 02/10 18 h 51) : la pastille fx n'est pas un bouton (un clic sur
+# elle ouvre la palette, comme le reste de la case). Le clic droit "Ecrire une expression..."
+# ouvre un champ "=". Sur "=" seul, l'aide a la saisie ne propose rien, meme par Ctrl+Espace
+# (HmiAssist.cpp, fieldAssist : une liste des la premiere lettre, apres un point ou dans une
+# accolade) : on tape S. Le clic sur la case donne le clavier au champ (apres le menu, la
+# grille reprend le focus). L'ecart avec la maquette (scene 4 : "les couleurs d'abord") est accepte.
+clic "propriete:Couleur du contenu" droit
+clic "menu:Écrire une expression…"
+texte "propriete:Couleur du contenu" "=S"
+encadrer aide-saisie
+dire "Ce qui commence par S : les fonctions (SEL…) et les variables. ↓ choisit, Entrée insère, Échap ferme la liste."
+attendre 1.5s
+@atoi Clic droit sur la case Couleur du contenu, Écrire une expression…, puis tape S : l'aide à la saisie s'ouvre.
+@cible "propriete:Couleur du contenu"
+@verifier saisie.ouverte = oui
+
+== 3 | SEL, V[0].Pos… et une erreur
+: **SEL(condition, si FAUX, si VRAI)**. Après `V[0].`, les membres. Puis j'écris les couleurs **sans apostrophes**, comme dans la case d'une couleur fixe.
+# Tranche 8 : la case est deja ouverte sur "=" (etape 2) : un clic droit sur le champ ouvert
+# n'ouvre pas le menu de la grille (verificateur). On ecrit dans le champ.
+texte "propriete:Couleur du contenu" "=SEL(V[0]."
+encadrer saisie:Pos
+attendre 1s
+touche Return
+texte " > 80, #E53935, #43A047)"
+touche Return
+encadrer "propriete:Couleur du contenu"
+dire "La ligne passe en rouge, la pastille aussi, et la raison est dessous : « caractère inattendu : '#' ». Dans une expression, une couleur s'écrit entre apostrophes."
+# Tranche 8 : plus d'"A toi" ici. Les gestes de l'etape font l'erreur exprès : le verificateur
+# ("Montre-moi" puis la verification) ne pouvait pas la trouver juste. L'"A toi" est a l'etape 4.
+
+== 4 | Corrige la faute
+: Un clic sur la case rouge la rouvre sur son expression. Les deux couleurs entre **apostrophes**, puis Entrée : la pastille redevient bleue ; la couleur se calcule.
+# Tranche 8 : la maquette corrigeait d'un clic, par le lien "Remplacer par". L'appli ne montre ce
+# lien que pour un nom inconnu ("X n'existe pas : veux-tu dire Y ?", DataViews.cpp, noteFix) ;
+# pour "caractere inattendu : '#'", il n'y en a pas : on corrige dans la case.
+texte "propriete:Couleur du contenu" "=SEL(V[0].Pos > 80, '#E53935', '#43A047')"
+touche Return
+encadrer "propriete:Couleur du contenu"
+dire "=SEL(V[0].Pos > 80, '#E53935', '#43A047'). Avec V[0].Pos = 42 (la valeur d'essai), la condition est fausse : SEL rend le premier choix, le rouge."
+attendre 600ms
+encadrer vue:Cuve_T1
+attendre 1.2s
+dire "SEL suit la norme CEI : SEL(condition, si FAUX, si VRAI). Pour du rouge au-dessus de 80 %, échange les deux couleurs."
+@atoi La ligne est rouge : corrige l'expression. Écris =SEL(V[0].Pos > 80, '#E53935', '#43A047') puis Entrée.
+@cible "propriete:Couleur du contenu"
+@verifier objet(Cuve_T1).fillColor = "=SEL(V[0].Pos > 80, '#E53935', '#43A047')"
+@presque objet(Cuve_T1).fillColor ~ #E53935, | Dans une expression, une couleur s'écrit entre apostrophes : '#E53935'.
+
+== 5 | Un texte à trous
+: Le texte au-dessus de la vanne : `Ouverture : {V[0].Pos} %`. Entre accolades, une variable : elle s'écrit avec sa valeur.
+clic vue:Txt_Ouverture
+clic propriete:Texte
+texte propriete:Texte "Ouverture : {V[0]."
+touche Return
+texte "} %"
+touche Return
+encadrer vue:Txt_Ouverture
+dire "Dans la vue : « Ouverture : 42 % ». Pas de = : un texte à trous n'est pas une expression ; {V[0].Pos:0.0} donnerait 42,0."
+@atoi Choisis le texte (au-dessus de la vanne) et écris Ouverture : {V[0].Pos} % dans sa case Texte.
+@cible vue:Txt_Ouverture
+@verifier objet(Txt_Ouverture).text = "Ouverture : {V[0].Pos} %"
+
+== 6 | Essaie : V[0].Pos passe 80
+: L'IHM en marche : au-delà de 80, la condition est vraie et la cuve passe au second choix, le vert. Le texte suit.
+touche F8
+encadrer vue:Cuve_T1
+simuler 7s
+dire "42 → 94 → 42 : la cuve change de couleur quand V[0].Pos franchit 80, le texte suit en direct."
+@atoi Démarre l'IHM avec F8 : la cuve change de couleur quand V[0].Pos passe 80.
+@cible vue:Cuve_T1
+@verifier simulation.ihm = marche
+
+== 7 | Plus loin : la page des expressions
+: Chaque type a sa page : la syntaxe, les opérateurs, les fonctions, des exemples et un champ d'essai. Reviens à l'onglet **Vue_Tuto** (l'IHM continue de tourner), **clic droit** sur la case, puis **La page des expressions…** : elle s'ouvre sur le type « couleur ».
+# Integration I111 (lien 5) : l'entree du menu de la case (ui::propertygrid::kExpressionPageItem) ouvre
+# HmiExprScreen (T3) sur le type de la case ; le bouton du type est l'ancre stable de la page.
+# Session 89 : l'IHM lancee a l'etape 6 montre l'onglet Simulation · IHM (le volet Expressions),
+# sans l'inspecteur : on revient d'abord a l'onglet de la vue, et on y reprend la cuve.
+clic "onglet:Vue_Tuto"
+clic vue:Cuve_T1
+clic "propriete:Couleur du contenu" droit
+survol "menu:La page des expressions…"
+clic "menu:La page des expressions…"
+encadrer "bouton:#   Couleur"
+attendre 1.8s

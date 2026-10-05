@@ -1,0 +1,69 @@
+# Derived data type, shared.
+name = ST_ALM_Stat
+version = 1.01
+#! summary = Ce que le gestionnaire d'alarmes rapporte a chaque cycle.
+#! usage = Tout est recalcule a chaque cycle par DFB_ALM_MANAGER. N'ecrivez
+#! usage = rien ici : ce que vous y mettriez serait ecrase au cycle suivant.
+#! see = DFB_ALM_MANAGER
+#! see = ST_ALM_Cmd
+#! param WorstSev = La pire gravite PRESENTE, et 0 quand il n'y a rien. C'est la
+#! param WorstSev = valeur a poser sur un bandeau d'IHM ou un feu de colonne.
+#! param Unacked = Presentes ET non acquittees. C'est ce qui doit faire clignoter,
+#! param Unacked = la ou Active fait seulement allumer.
+#! param HistCount = Combien d'evenements sont lisibles. Une fois l'anneau
+#! param HistCount = reboucle, tout l'anneau l'est.
+#! param LastError = Pourquoi la derniere commande a ete refusee. Vide au debut
+#! param LastError = de chaque cycle : a lire juste apres avoir pose une
+#! param LastError = commande. Les trois refus possibles sont 'UUID 0 refuse',
+#! param LastError = 'UUID inconnu' et 'registre plein'.
+#! param Full = Le registre est plein : un Register de plus sera refuse.
+#! param Active = Combien d'alarmes sont presentes. Les masquees n'en font pas partie.
+#! param Registered = Combien d'emplacements du registre sont occupes, sous Count.
+#! param HistHead = Ou la prochaine ecriture ira. Le dernier evenement est juste avant
+#! param HistHead = : en HistHead - 1, ou tout au bout de l'anneau quand HistHead vaut
+#! param HistHead = 0 et que Wrapped est vrai.
+#! param Wrapped = L'historique a fait le tour : les plus vieux evenements ont ete
+#! param Wrapped = ecrases. Seq, lui, ne recule jamais.
+#! param NextSeq = Le numero d'ordre du prochain evenement. Part de 1, repart de 1
+#! param NextSeq = apres un Reset.
+#! param Horn = LE KLAXON, a cabler sur la sortie. Vrai tant qu'une alarme de gravite
+#! param Horn = HornSev ou plus est presente et non acquittee - sauf si Cmd.Silence a
+#! param Horn = ete presse depuis sa derniere apparition.
+#! param FirstUuid = LE PREMIER DEFAUT : l'alarme qui a rompu le calme, la premiere
+#! param FirstUuid = apparue alors que rien n'etait present. Dans une cascade, c'est
+#! param FirstUuid = elle qu'il faut lire - pas la plus grave ni la plus recente.
+#! param FirstUuid = Garde jusqu'a la prochaine rupture du calme ; 0 tant qu'il n'y en
+#! param FirstUuid = a pas eu.
+#! param Masked = Combien d'alarmes sont masquees. A afficher en permanence : un
+#! param Masked = masquage oublie est une alarme qu'on ne verra jamais.
+#! example = (* declarer : Rouge : BOOL; Orange : BOOL; Flash : BOOL; Klaxon : BOOL; *)
+#! example = (* le bandeau d'IHM et la colonne lumineuse *)
+#! example = Rouge  := AlmStat.WorstSev >= 3;
+#! example = Orange := AlmStat.WorstSev = 2;
+#! example = Flash  := AlmStat.Unacked > 0;
+#! example = Klaxon := AlmStat.Horn;
+#! given = AlmStat.WorstSev := 4
+#! given = AlmStat.Unacked := 1
+#! expect = 1 : Rouge = TRUE
+#! expect = 1 : Orange = FALSE
+#! expect = 1 : Flash = TRUE
+#! changes 1.01 = AJOUTS EN FIN DE TYPE : Horn (klaxon), FirstUuid (premier defaut),
+#! changes 1.01 = Masked (combien sont masquees). NextSeq part de 1, comme apres un
+#! changes 1.01 = Reset - il partait de 0.
+
+# Ce que le gestionnaire rapporte.
+
+# name ; type ; scope ; initial ; comment
+Active ; INT ; Member ; 0 ; combien sont presentes
+Unacked ; INT ; Member ; 0 ; combien sont presentes et non acquittees
+WorstSev ; INT ; Member ; 0 ; la pire gravite presente, 0 quand il n'y a rien
+Registered ; INT ; Member ; 0 ; combien d'emplacements du registre sont occupes
+HistCount ; INT ; Member ; 0 ; combien d'evenements sont lisibles
+HistHead ; INT ; Member ; 0 ; ou la prochaine ecriture ira
+Wrapped ; BOOL ; Member ;  ; l'historique a reboucle: les plus vieux sont perdus
+NextSeq ; UDINT ; Member ; 1 ; le prochain numero d'ordre
+Full ; BOOL ; Member ;  ; le registre est plein: un Register de plus est refuse
+LastError ; STRING[32] ; Member ;  ; pourquoi la derniere commande a ete refusee
+Horn ; BOOL ; Member ;  ; le klaxon : une alarme assez grave est presente et non acquittee, et Silence n'a pas ete presse depuis
+FirstUuid ; UDINT ; Member ; 0 ; le premier defaut : l'alarme apparue quand rien n'etait present
+Masked ; INT ; Member ; 0 ; combien d'alarmes sont masquees

@@ -1,0 +1,26 @@
+# =============================================================================
+#  Session 131 (R111, 1.11, recette T1-1) : le bandeau serre. En 1600 x 900, un
+#  projet DEV modifie passe le bandeau en mode serre (130 px pour la puce projet) :
+#  le nom coupe finit par « … » (« Armoir… », plus « Armoire_ »), le mot « modifié »
+#  ne passe plus sous Enregistrer (le point orange seul), et l'infobulle de la
+#  puce donne le nom entier (« Armoire_Gaz », puis ce que la puce fait).
+#  Sur une copie d'Armoire_Gaz telle quelle, en 1600 x 900 (--size 1600x900).
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+# une modification (comme t17c-modifie de T1) : le point orange, « modifié »
+arbre "IHM/Programmation générale/Variables IHM"
+attendre 4
+outil "Nouvelle variable IHM"
+attendre 2
+touche echap
+attendre 4
+capture 131_01_bandeau_serre.png
+barre projet survol
+attendre 90
+capture 131_02_infobulle_nom.png
+quitter

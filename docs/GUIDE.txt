@@ -1,0 +1,348 @@
+================================================================================
+  CLASSEUR AUTOMATION - guide d'installation et de prise en main
+================================================================================
+
+UN SEUL FICHIER. Les E/S et les reports vivaient dans deux classeurs qui devaient
+s'ouvrir l'un l'autre pour tenir un lien a jour : trois cas a gerer, un chemin a
+renseigner, et un etat incoherent possible des que l'un des deux n'etait pas
+accessible. Tout ce mecanisme a disparu. Un lien est une ligne dans une feuille
+du meme classeur.
+
+RIEN N'EST OBLIGATOIRE DANS L'ORDRE. On peut declarer des voies sans equipement,
+un equipement sans report, un report sans voie. Les liens se font quand ils ont
+un sens - et seulement la.
+
+
+--------------------------------------------------------------------------------
+  1. INSTALLATION  (cinq minutes, une seule fois)
+--------------------------------------------------------------------------------
+
+  1. Ouvrez automation.xlsx, Enregistrer sous -> "Classeur prenant en charge les
+     macros (*.xlsm)"
+  2. Alt+F11, Fichier -> Importer un fichier -> Automation.bas
+  3. Double-cliquez "ThisWorkbook" dans l'arborescence de gauche et collez le
+     code de la section 2 ci-dessous
+  4. Alt+Q, puis enregistrez
+  5. Alt+F8 -> InstallerBoutons -> Executer
+
+C'est la seule fois ou vous aurez besoin d'Alt+F8 : les sept boutons se posent
+sur l'onglet Config et tout part de la.
+
+Le .xlsm ne peut pas etre livre tout fait : il contient un vbaProject.bin,
+format binaire proprietaire que seul Excel sait ecrire.
+
+
+--------------------------------------------------------------------------------
+  2. LE CODE A COLLER DANS ThisWorkbook
+--------------------------------------------------------------------------------
+
+    ' Double-clic sur une voie : l'assistant de reglage, avec les seuls champs
+    ' de sa famille. Double-clic sur un equipement : son assistant a lui.
+    Private Sub Workbook_SheetBeforeDoubleClick(ByVal Sh As Object, _
+                ByVal Target As Range, Cancel As Boolean)
+        If Target.Row < 9 Then Exit Sub
+
+        If Sh.Name = "ES" Then
+            If Trim$(CStr(Sh.Cells(Target.Row, 1).Value)) = "" Then Exit Sub
+            Cancel = True
+            Automation.OuvrirAssistantES Target.Row
+
+        ElseIf Sh.Name = "Equipements" Then
+            If Trim$(CStr(Sh.Cells(Target.Row, 1).Value)) = "" Then Exit Sub
+            Cancel = True
+            Automation.OuvrirAssistantEquipement Target.Row
+        End If
+    End Sub
+
+    ' Dans l'assistant d'equipement : changer la famille refait la liste des
+    ' parametres, toucher une adresse recontrole immediatement si elle est libre.
+    Private Sub Workbook_SheetChange(ByVal Sh As Object, ByVal Target As Range)
+        If Sh.Name <> "_ASSISTANT" Then Exit Sub
+        Application.EnableEvents = False
+        If Target.Address(False, False) = "C8" Then
+            Automation.RemplirParametres
+        ElseIf Target.Address(False, False) = "C10" Then
+            ' Changer la forme change les champs visibles.
+            Automation.RafraichirChampsEquipement
+        ElseIf Target.Column >= 9 And Target.Column <= 11 Then
+            Automation.VerifierAdresses
+        ElseIf Target.Address(False, False) = "C7" Then
+            Automation.VerifierAdresses
+        End If
+        Application.EnableEvents = True
+    End Sub
+
+
+--------------------------------------------------------------------------------
+  3. LES ONGLETS
+--------------------------------------------------------------------------------
+
+  Config          le point de depart : le dossier libs, et les sept boutons
+  Cartes API      declarez vos cartes ; leurs voies se creent dans ES
+  Vue Rack        une case par emplacement, coloree par famille
+  ES              les quatre familles d'E/S ensemble
+  Catalogue       ecrit par INIT depuis vos .ddt et .dfb
+  Equipements     la liste, avec le compte de voies et de reports de chacun
+  Cablage         quelle voie alimente quel attribut d'equipement
+  Liens           quel attribut remonte a quelle adresse IHM
+  Reports TOR / bits / ANA      derives de Liens, ne rien y saisir
+  Memoire MW / MX               une case par adresse
+  ST genere       le code a recopier, dans l'ordre ou il doit tourner
+
+
+--------------------------------------------------------------------------------
+  4. UN EXEMPLE COMPLET : de la carte a l'IHM
+--------------------------------------------------------------------------------
+
+  ETAPE 1  -  Config : le dossier libs, puis bouton "1. INIT"
+
+     Il lit vos .ddt et .dfb - ce sont des fichiers texte - et remplit le
+     Catalogue : une ligne par parametre, avec TROIS propositions dans les
+     colonnes vertes, que vous pouvez corriger et qu'INIT n'ecrasera jamais :
+
+        Reportable    ce parametre merite-t-il de remonter a l'IHM ?
+        Type report   TM information, TA alarme, TC commande
+        Cablage E/S   DI, DO, AI, AO, ou vide
+
+     Sur ST_EQ_Pump par exemple :
+
+        Fbk         BOOL   O   TM   DI      <- vient d'une entree TOR
+        Thermal     BOOL   O   TA   DI
+        Run         BOOL   O   TM   DO      <- part sur une sortie TOR
+        Fault       BOOL   O   TA   (vide)  <- calcule par le bloc
+        ManRunReq   BOOL   O   TC   (vide)  <- vient de l'IHM
+
+  ETAPE 2  -  Cartes API : une ligne par carte, puis bouton "2. Creer les voies"
+
+        Nom        DI_R0S4
+        Rack       0
+        Module     4
+        Famille    DI
+        Reference  BMX DDI 1602
+        Voies      16
+        Tableau    CarteDI_R0S4
+
+     Les colonnes grises se calculent seules : le prefixe (%I), la premiere et
+     la derniere adresse, le bloc DFB de la bonne taille, et surtout l'ETAT -
+     qui compare les voies declarees ici et celles qui existent vraiment.
+
+     Le bouton cree les seize voies dans l'onglet ES. Il n'efface JAMAIS : une
+     voie deja reglee reste telle quelle, et reduire une carte de 16 a 8 laisse
+     les huit autres en place - l'Etat le signale, c'est a vous de decider.
+
+     Bouton "3. Rafraichir la vue du rack" : chaque emplacement montre son nom,
+     sa famille, sa reference, son nombre de voies et son etat, dans la couleur
+     de sa famille. Un emplacement vide entre deux cartes se voit en une
+     seconde ici ; dans une liste triee par nom, pas du tout.
+
+  ETAPE 3  -  ES : double-clic sur une voie
+
+     L'assistant ne montre QUE les champs de sa famille : six pour une TOR,
+     trente-cinq pour une ANA. Les chercher en deroulant cinquante colonnes est
+     exactement ce qui fait qu'on ne les regle pas.
+
+     Dans l'onglet lui-meme, les blocs "Reglages TOR", "Echelle ANA" et les
+     quatre "Seuil" sont replies : ouvrez avec le + du haut celui dont vous avez
+     besoin. La colonne Famille est coloree, donc les quatre parties se voient
+     sans avoir a filtrer - et le filtre les separe quand on veut n'en traiter
+     qu'une.
+
+  ETAPE 4  -  Bouton "4. Ajouter un equipement"
+
+        Nom        Pompe gavage A
+        Famille    ST_EQ_Pump        <- la liste vient du Catalogue
+        Tableau    Pompes
+        Index      0
+
+     La liste des parametres apparait. Pour chacun, DEUX choix independants et
+     tous les deux facultatifs :
+
+        Voie E/S    la liste ne montre que les voies du BON SENS. Chaque ligne
+                    se lit "Retour marche P1   [CarteDI_R0S4[3]  %I0.4.3]" :
+                    le libelle d'abord, parce que c'est lui qui dit de quoi il
+                    s'agit.
+
+        Attribut    Val par defaut. Les autres sont des cas particuliers : Rise
+                    pour un comptage, Alarm pour un defaut de voie. La colonne
+                    d'a cote AFFICHE CE QUE FAIT L'ATTRIBUT, prise dans le
+                    commentaire du .ddt - aucune recopie, si le bloc change la
+                    description suit.
+
+        Zone / Numero / Bit    l'adresse du report, si ce parametre remonte.
+
+     Une adresse deja prise passe en ROUGE immediatement, avec la raison :
+     "PRIS par Pompe gavage B", "le mot entier est pris par...". Valider refuse
+     tant qu'il en reste une.
+
+  ETAPE 5  -  Valider
+
+     En une fois : l'equipement, ses reports, son cablage, les trois onglets de
+     reports regeneres et les deux cartographies remises a jour.
+
+  ETAPE 6  -  Bouton "7. Generer le ST"
+
+     Cinq blocs, DANS CET ORDRE :
+
+        (* 1. Cablage : voies d'ENTREE -> equipements *)
+        Pompes[0].Fbk := CarteDI_R0S4[3].Val;   (* Retour marche P1  %I0.4.3 *)
+
+        (* 2. Vos blocs d'equipement : a ecrire ici *)
+
+        (* 3. Reports en LECTURE : API -> IHM *)
+        %MW1000.1 := Pompes[0].Fault;
+
+        (* 4. Cablage : equipements -> voies de SORTIE *)
+        CarteDO_R0S5[2].Val := Pompes[0].Run;
+
+        (* 5. Reports en ECRITURE : IHM -> API *)
+        Pompes[0].ManRunReq := %MW1001.0;
+
+     L'ordre n'est pas une question de gout : une voie alimente l'equipement,
+     l'equipement calcule, le resultat part a l'IHM et aux sorties. L'inverser
+     ferait remonter ce que l'equipement avait calcule au cycle PRECEDENT - un
+     cycle de retard que personne ne cherche parce que personne ne le soupconne.
+
+
+--------------------------------------------------------------------------------
+  4bis. LES QUATRE AJOUTS
+--------------------------------------------------------------------------------
+
+  TABLEAU OU VARIABLE SEULE
+  Une DDT est un ELEMENT DE TABLEAU, ou une VARIABLE SEULE. Jamais les deux :
+  Pompes[0] et Pompes sont deux choses differentes. Le champ Forme de
+  l'assistant tranche, et l'index n'est demande que dans le premier cas.
+
+  En forme Tableau, l'index est VERIFIE : deux equipements sur Pompes[0]
+  ecriraient dans la meme structure, et le second effacerait ce que le premier
+  vient de calculer, a chaque cycle, sans qu'aucun des deux ne s'en apercoive.
+  Le refus dit aussi quel est le premier index libre - dire "pris" sans dire
+  lequel prendre oblige a aller compter a la main.
+
+  En forme Variable seule, c'est le NOM qui doit etre libre.
+
+
+  LES CHAMPS QUI ONT UN SENS, ET EUX SEULS
+  Le genre de la famille - DFB ou DDT - s'affiche a droite d'elle, et il decide
+  des champs du dessous :
+
+     DFB                        Nom, Famille, Repere, Instance
+     DDT + Tableau              Nom, Famille, Repere, Forme, Variable, Index
+     DDT + Variable seule       Nom, Famille, Repere, Forme, Variable
+
+  Les montrer tous les six invitait a remplir un index sur un bloc qui n'en a
+  pas, et une instance sur une structure qui n'en a pas non plus.
+
+
+  ATTRIBUER LES ADRESSES LIBRES
+  Un bouton dans l'assistant d'equipement. Il DEMANDE a partir de quelle adresse
+  commencer - la plage de Config dit ou l'on a le droit d'aller, elle ne dit pas
+  ou l'on veut commencer. Ranger les pompes a partir de 1100 et les vannes a
+  partir de 1200 est une decision d'organisation, et repartir systematiquement
+  du premier trou libre l'empeche.
+
+  LES BITS D'UN MEME EQUIPEMENT VONT DANS LE MEME MOT. Ce n'est pas une
+  coquetterie : l'IHM lit un mot d'un coup, et une pompe dont les huit etats
+  sont eparpilles sur huit mots coute huit lectures la ou une suffirait.
+
+  Il ne touche QUE les lignes vides : une adresse posee a la main est un choix,
+  pas un oubli. Et si la plage est pleine, il le dit avec le nombre de
+  parametres restes sans adresse.
+
+
+  LE TABLEAU DE BORD  (onglet Config)
+  Seize nombres et un histogramme d'occupation %MW par tranche de cent mots -
+  qui repond a la seule question qu'on se pose devant une plage memoire : ou
+  reste-t-il de la place.
+
+  Tout en FORMULES, aucune macro : un tableau de bord qu'il faut penser a
+  rafraichir est un tableau de bord qui ment la moitie du temps.
+
+  L'histogramme ET les deux cartographies partent de la PLAGE DE CONFIG. Elles
+  partaient de zero : quelqu'un qui travaille de 1000 a 1999 regardait mille
+  cases qui ne le concernaient pas, et les siennes n'etaient nulle part.
+  Changez la plage, tout suit.
+
+
+  LE DESSIN DE LA VOIE  (dans l'assistant de reglage)
+  Sur une ANA : la droite de mise a l'echelle, avec chaque seuil ACTIF pose
+  dessus en pointilles. Voir ou un seuil coupe la rampe dit en un instant ce que
+  quatre nombres ne disent pas.
+
+  Sur une TOR : l'anti-rebond et le retard d'alarme, en deux barres. "20 ms" et
+  "2000 ms" se ressemblent dans un tableau ; pas sur deux barres.
+
+  Une echelle nulle ne trace rien et le dit : RawMin = RawMax fera marquer Fault
+  au bloc, et sauter la voie.
+
+
+  LES INDICES ET LE JOURNAL  (onglet Indices)
+  Les deux, parce qu'ils ne disent pas la meme chose. L'indice dit ce qu'on a
+  voulu faire et pourquoi ; le journal dit ce qui a ete fait et quand. Sur une
+  affaire qui vit deux ans, c'est le second qui repond a "depuis quand cette
+  adresse est-elle la", et le premier a "pourquoi".
+
+  Le journal s'ecrit tout seul : ajout et suppression d'equipement, creation de
+  voies, attribution d'adresses. Avec la date, le detail, et le nom de session
+  Windows.
+
+
+  LES ONGLETS VISIBLES  (onglet Config)
+  Onze cases a cocher. Dix-sept onglets, c'est trop pour une barre, et la
+  plupart ne servent qu'a un moment : la cartographie quand on attribue des
+  adresses, les reports quand on les imprime, le catalogue presque jamais une
+  fois INIT passe.
+
+  Config et ES ne sont pas proposees : masquer la feuille ou sont les cases
+  n'aiderait personne. Et c'est xlSheetHidden, pas VeryHidden : on doit pouvoir
+  remontrer un onglet a la main si les cases se perdent un jour.
+
+
+--------------------------------------------------------------------------------
+  5. CE QUI EST REFUSE, ET POURQUOI
+--------------------------------------------------------------------------------
+
+  Deux equipements sur la meme SORTIE          refuse
+      L'automate garderait celui qui passe en dernier, et lequel c'est depend
+      de l'ordre des sections.
+
+  Deux equipements sur la meme ENTREE          accepte
+      C'est courant et legitime : un arret d'urgence lu par toute une station.
+
+  Une adresse de report deja occupee           la validation s'arrete
+      Les cases rouges disent qui l'occupe.
+
+  Deux equipements du meme nom                 refuse
+      Les feuilles Liens et Cablage les designent par leur nom ; deux
+      homonymes rendraient tous les liens ambigus.
+
+  Deux equipements sur le meme index           refuse
+      Pompes[0] pour deux equipements : le second effacerait ce que le premier
+      calcule, a chaque cycle.
+
+  Une variable seule deja prise                refuse
+      Elle n'a qu'un proprietaire. Pour en avoir plusieurs, passez en Tableau.
+
+
+--------------------------------------------------------------------------------
+  6. ENLEVER
+--------------------------------------------------------------------------------
+
+  Un cablage seul      feuille Cablage, selectionnez la ligne, macro
+                       Automation.EnleverLien
+
+  Un equipement        bouton 5. Il demande lequel, dit combien de reports et
+                       de voies partiront avec, et libere tout.
+
+  Une voie             l'onglet ES ; si elle etait cablee, enlevez d'abord le
+                       cablage, sinon la feuille Cablage designerait une ligne
+                       qui n'existe plus.
+
+
+--------------------------------------------------------------------------------
+  7. CE QUI N'EST PAS LA
+--------------------------------------------------------------------------------
+
+Le parseur .xlsm cote C++ - celui qui permettrait a l'analyseur de lire ce
+classeur directement, pour ImportES, ImportReports et ImportEquipment - demande
+un decompresseur ZIP. Le projet n'a aujourd'hui aucune dependance hors SDL ;
+c'est une decision a prendre avant d'ecrire une ligne.

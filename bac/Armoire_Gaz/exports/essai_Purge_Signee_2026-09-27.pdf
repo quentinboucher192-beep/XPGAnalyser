@@ -1,0 +1,99 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [ 5 0 R ] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 842 595] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 6 0 R >>
+endobj
+6 0 obj
+<< /Length 3742 >>
+stream
+BT /F2 15 Tf 0.1 g 36 544 Td (Essai Purge_Signee : r\351ussi) Tj ET
+BT /F1 9 Tf 0.4 g 36 528 Td (Armoire_Gaz - 2026-09-27 03:49:12 - 9 pas : 8 r\351ussi\(s\) - 4,80 s) Tj ET
+0.85 0.88 0.93 rg 36 497 563.89 18 re f
+BT /F2 9 Tf 0.1 g 50.5 502.5 Td (N\260) Tj ET
+BT /F2 9 Tf 0.1 g 70 502.5 Td (Pas) Tj ET
+BT /F2 9 Tf 0.1 g 266.75 502.5 Td (Verdict) Tj ET
+BT /F2 9 Tf 0.1 g 307.26 502.5 Td (D\351tail) Tj ET
+BT /F2 9 Tf 0.1 g 564.39 502.5 Td (Instant) Tj ET
+BT /F1 9 Tf 0.15 g 57 486.5 Td (1) Tj ET
+BT /F1 9 Tf 0.15 g 70 486.5 Td (Ouvrir la vue Vue_Commandes) Tj ET
+BT /F1 9 Tf 0.15 g 266.75 486.5 Td (r\351ussi) Tj ET
+BT /F1 9 Tf 0.15 g 307.26 486.5 Td (Vue_Commandes \340 l'\351cran) Tj ET
+BT /F1 9 Tf 0.15 g 564.39 486.5 Td (0,00 s) Tj ET
+0.96 0.97 0.98 rg 36 467 563.89 15 re f
+BT /F1 9 Tf 0.15 g 57 471.5 Td (2) Tj ET
+BT /F1 9 Tf 0.15 g 70 471.5 Td (Cliquer Btn_Purge) Tj ET
+BT /F1 9 Tf 0.15 g 266.75 471.5 Td (r\351ussi) Tj ET
+BT /F1 9 Tf 0.15 g 307.26 471.5 Td (signature demand\351e \(pas suivant : Signer\)) Tj ET
+BT /F1 9 Tf 0.15 g 564.39 471.5 Td (0,60 s) Tj ET
+BT /F1 9 Tf 0.15 g 57 456.5 Td (3) Tj ET
+BT /F1 9 Tf 0.15 g 70 456.5 Td (Signer \(motif \253 Purge avant intervention \273\)) Tj ET
+BT /F1 9 Tf 0.15 g 266.75 456.5 Td (r\351ussi) Tj ET
+BT /F1 9 Tf 0.15 g 307.26 456.5 Td (sign\351 : operateur \(Purge avant intervention\) 2026-09-27 03:49) Tj ET
+BT /F1 9 Tf 0.15 g 564.39 456.5 Td (1,20 s) Tj ET
+0.96 0.97 0.98 rg 36 437 563.89 15 re f
+BT /F1 9 Tf 0.15 g 57 441.5 Td (4) Tj ET
+BT /F1 9 Tf 0.15 g 70 441.5 Td (V\351rifier Vanne_Purge = TRUE) Tj ET
+BT /F1 9 Tf 0.15 g 266.75 441.5 Td (r\351ussi) Tj ET
+BT /F1 9 Tf 0.15 g 307.26 441.5 Td (Vanne_Purge = TRUE) Tj ET
+BT /F1 9 Tf 0.15 g 564.39 441.5 Td (1,80 s) Tj ET
+BT /F1 9 Tf 0.15 g 57 426.5 Td (5) Tj ET
+BT /F1 9 Tf 0.15 g 70 426.5 Td (Cliquer Btn_Purge) Tj ET
+BT /F1 9 Tf 0.15 g 266.75 426.5 Td (r\351ussi) Tj ET
+BT /F1 9 Tf 0.15 g 307.26 426.5 Td (signature demand\351e \(pas suivant : Signer\)) Tj ET
+BT /F1 9 Tf 0.15 g 564.39 426.5 Td (2,40 s) Tj ET
+0.96 0.97 0.98 rg 36 407 563.89 15 re f
+BT /F1 9 Tf 0.15 g 57 411.5 Td (6) Tj ET
+BT /F1 9 Tf 0.15 g 70 411.5 Td (Signer \(motif \253 Essai \273\)) Tj ET
+BT /F1 9 Tf 0.15 g 266.75 411.5 Td (r\351ussi) Tj ET
+BT /F1 9 Tf 0.15 g 307.26 411.5 Td (sign\351 : operateur \(Essai\) 2026-09-27 03:49) Tj ET
+BT /F1 9 Tf 0.15 g 564.39 411.5 Td (3,00 s) Tj ET
+BT /F1 9 Tf 0.15 g 57 396.5 Td (7) Tj ET
+BT /F1 9 Tf 0.15 g 70 396.5 Td (V\351rifier Vanne_Purge = FALSE) Tj ET
+BT /F1 9 Tf 0.15 g 266.75 396.5 Td (r\351ussi) Tj ET
+BT /F1 9 Tf 0.15 g 307.26 396.5 Td (Vanne_Purge = FALSE) Tj ET
+BT /F1 9 Tf 0.15 g 564.39 396.5 Td (3,60 s) Tj ET
+0.96 0.97 0.98 rg 36 377 563.89 15 re f
+BT /F1 9 Tf 0.15 g 57 381.5 Td (8) Tj ET
+BT /F1 9 Tf 0.15 g 70 381.5 Td (V\351rifier SYS.CurrentView = 'Vue_Commandes') Tj ET
+BT /F1 9 Tf 0.15 g 266.75 381.5 Td (r\351ussi) Tj ET
+BT /F1 9 Tf 0.15 g 307.26 381.5 Td (SYS.CurrentView = Vue_Commandes) Tj ET
+BT /F1 9 Tf 0.15 g 564.39 381.5 Td (4,20 s) Tj ET
+BT /F1 9 Tf 0.15 g 57 366.5 Td (9) Tj ET
+BT /F1 9 Tf 0.15 g 70 366.5 Td (La purge se referme, sign\351e elle aussi) Tj ET
+BT /F1 9 Tf 0.15 g 266.75 366.5 Td (\227) Tj ET
+BT /F1 9 Tf 0.15 g 307.26 366.5 Td (La purge se referme, sign\351e elle aussi) Tj ET
+BT /F1 9 Tf 0.15 g 564.39 366.5 Td (4,80 s) Tj ET
+0.6 G 0.6 w 36 497 m 599.89 497 l S
+36 362 m 599.89 362 l S
+BT /F1 10 Tf 0.2 g 36 342 Td (Objet de l'essai : La purge demande une signature ; sign\351e, la vanne s'ouvre, puis se referme) Tj ET
+BT /F1 10 Tf 0.2 g 36 320 Td (Jou\351 par : ______________________________    Le : ________________    Visa : ______________________________) Tj ET
+BT /F1 8 Tf 0.45 g 769.53 32 Td (Page 1 / 1) Tj ET
+BT /F1 8 Tf 0.45 g 36 32 Td (XpgAnalyzer - IHM) Tj ET
+endstream
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000123 00000 n 
+0000000220 00000 n 
+0000000322 00000 n 
+0000000458 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+4251
+%%EOF

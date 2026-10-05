@@ -1,0 +1,30 @@
+# =============================================================================
+#  Session 98 - 1.11 (chantier T3, C4, tranche 10) : les icones compilable /
+#  generable quand l'ARBRE EST ETROIT (le separateur tire vers la gauche) : elles
+#  restent a droite, entieres ; c'est le nom qui se coupe, pas l'icone.
+#  La meme copie preparee de Armoire_Gaz que la session 96.
+#   T3_98_01 : l'arbre a sa largeur, Unites et Taches deplies
+#   T3_98_02 : l'arbre retreci (environ 300 px)
+#   T3_98_03 : l'arbre tres etroit (environ 220 px) : les sections de MAST
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+arbre "API/Unités de programme" deplier
+attendre 3
+arbre "API/Tâches" deplier
+attendre 3
+capture T3_98_01_large.png
+glisser 502 450 330 450
+attendre 6
+arbre-lignes
+capture T3_98_02_etroit.png
+arbre "API/MAST" deplier
+attendre 3
+glisser 330 450 250 450
+attendre 6
+capture T3_98_03_tres_etroit.png
+quitter

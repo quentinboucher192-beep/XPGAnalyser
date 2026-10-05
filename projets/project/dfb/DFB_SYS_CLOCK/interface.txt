@@ -1,0 +1,62 @@
+# DFB type interface.
+name = DFB_SYS_CLOCK
+version = 1.00
+
+# name ; type ; address ; scope ; init ; comment ; attributes ; element comments
+PeriodMs ; DINT ;  ; Input ; 20 ; la periode nominale de la tache (%SW0). 0 : tache cyclique ;  ; 
+LastCycleMs ; DINT ;  ; Input ; 0 ; le temps du dernier cycle (%SW30), si PeriodMs vaut 0 ;  ; 
+Tick ; DINT ;  ; Input ; 0 ; un compteur libre (%SD18, toutes les 100 ms) ;  ; 
+TickUnitMs ; DINT ;  ; Input ; 100 ; ce que vaut une unite de Tick, en ms ;  ; 
+TickWrap ; DINT ;  ; Input ; 0 ; la valeur ou Tick repart a zero. 0 : compteur DINT ordinaire ;  ; 
+RtcSec ; INT ;  ; Input ; 0 ; %SW50 : 16#SS00, secondes en BCD ;  ; 
+RtcHourMin ; INT ;  ; Input ; 0 ; %SW51 : 16#HHMM en BCD ;  ; 
+RtcMonthDay ; INT ;  ; Input ; 0 ; %SW52 : 16#MMJJ en BCD ;  ; 
+RtcYear ; INT ;  ; Input ; 0 ; %SW53 : 16#SSAA en BCD ;  ; 
+RtcDow ; INT ;  ; Input ; 0 ; %SW49 : 1 lundi a 7 dimanche ;  ; 
+RtcLost ; BOOL ;  ; Input ;  ; %S51 : l'horloge a perdu l'heure ;  ; 
+DtMs ; DINT ;  ; Output ; 0 ; le temps reellement ecoule depuis le cycle precedent, en ms ;  ; 
+Year ; INT ;  ; Output ; 0 ; 2000..2099 ;  ; 
+Month ; INT ;  ; Output ; 0 ; 1..12 ;  ; 
+Day ; INT ;  ; Output ; 0 ; 1..31 ;  ; 
+Hour ; INT ;  ; Output ; 0 ; 0..23 ;  ; 
+Minute ; INT ;  ; Output ; 0 ; 0..59 ;  ; 
+Second ; INT ;  ; Output ; 0 ; 0..59 ;  ; 
+DayOfWeek ; INT ;  ; Output ; 0 ; 1 lundi a 7 dimanche, 0 si inconnu ;  ; 
+MinuteOfDay ; INT ;  ; Output ; 0 ; minutes depuis minuit, 0..1439 ;  ; 
+EpochS ; UDINT ;  ; Output ; 0 ; secondes depuis le 01/01/2000, heure locale. 0 si l'heure n'est pas valide ;  ; 
+Valid ; BOOL ;  ; Output ;  ; l'heure est plausible ;  ; 
+NewSecond ; BOOL ;  ; Output ;  ; un cycle a chaque seconde ecoulee (sur DtMs) ;  ; 
+NewMinute ; BOOL ;  ; Output ;  ; un cycle quand la minute change (horloge valide) ;  ; 
+NewHour ; BOOL ;  ; Output ;  ; un cycle quand l'heure change (horloge valide) ;  ; 
+NewDay ; BOOL ;  ; Output ;  ; un cycle a minuit (horloge valide) ;  ; 
+UpS ; UDINT ;  ; Output ; 0 ; secondes depuis le demarrage ;  ; 
+Jumps ; UDINT ;  ; Output ; 0 ; reprises ecartees : plus de dix periodes d'un coup ;  ; 
+LagMs ; DINT ;  ; Output ; 0 ; temps reel pas encore rendu dans DtMs ;  ; 
+started ; BOOL ;  ; Local ;  ;  ;  ; 
+tickSeen ; BOOL ;  ; Local ;  ; Tick a deja bouge ;  ; 
+prevTick ; DINT ;  ; Local ; 0 ;  ;  ; 
+nominal ; DINT ;  ; Local ; 0 ;  ;  ; 
+real ; DINT ;  ; Local ; 0 ;  ;  ; 
+lag ; DINT ;  ; Local ; 0 ;  ;  ; 
+FracMs ; DINT ;  ; Local ; 0 ;  ;  ; 
+secs ; UDINT ;  ; Local ; 0 ;  ;  ; 
+hi ; INT ;  ; Local ; 0 ;  ;  ; 
+lo ; INT ;  ; Local ; 0 ;  ;  ; 
+bad ; BOOL ;  ; Local ;  ; un chiffre BCD invalide ;  ; 
+y ; INT ;  ; Local ; 0 ;  ;  ; 
+mo ; INT ;  ; Local ; 0 ;  ;  ; 
+d ; INT ;  ; Local ; 0 ;  ;  ; 
+h ; INT ;  ; Local ; 0 ;  ;  ; 
+mi ; INT ;  ; Local ; 0 ;  ;  ; 
+s ; INT ;  ; Local ; 0 ;  ;  ; 
+dim ; INT ;  ; Local ; 0 ; jours dans le mois ;  ; 
+cum ; INT ;  ; Local ; 0 ; jours de l'annee avant le mois ;  ; 
+days ; DINT ;  ; Local ; 0 ; jours depuis le 01/01/2000 ;  ; 
+ok ; BOOL ;  ; Local ;  ;  ;  ; 
+haveRtc ; BOOL ;  ; Local ;  ; une heure valide a deja ete lue ;  ; 
+prevMin ; INT ;  ; Local ; -1 ;  ;  ; 
+prevHour ; INT ;  ; Local ; -1 ;  ;  ; 
+prevDay ; INT ;  ; Local ; -1 ;  ;  ; 
+
+# section ; name ; language ; order ; activation ; logic ; file
+section ; Process ; ST ; 0 ;  ;  ; Process.st

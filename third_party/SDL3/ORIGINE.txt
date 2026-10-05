@@ -1,0 +1,19 @@
+SDL3 3.4.12 - le paquet officiel pour Visual Studio, x64 (lot API 8)
+=====================================================================
+
+Origine : https://github.com/libsdl-org/SDL/releases/download/release-3.4.12/SDL3-devel-3.4.12-VC.zip
+  SHA-256 du zip : 8793a153c7eba93b1eb8022fd2356383ec446b2584e43724a72ef68d682813ab
+  (identique a celui que GitHub publie pour ce fichier ; commit SDL f87239e71e42da91ca317a12eefb82cfbf3393eb)
+
+Garde du paquet : include/SDL3/*.h, lib/x64/SDL3.lib, lib/x64/SDL3.dll, LICENSE.txt (licence zlib).
+Rien d'autre : ni x86, ni arm64, ni .pdb, ni cmake/.
+  SHA-256 lib/x64/SDL3.dll : 2a2704678bf6c9c6a944270ab35079df76f5afe92b780394ed72d9c8218b98d8
+  SHA-256 lib/x64/SDL3.lib : 9972ad772d1df4582b68a2a86401b87425389d117a3c4d72906b82c328de7a05
+
+Le projet Visual Studio (XpgAnalyzer.vcxproj) le prend ici, sans rien regler :
+SDL3_DIR = $(ProjectDir)third_party\SDL3 ; apres chaque construction, SDL3.dll est copie
+a cote de XpgAnalyzer.exe (build\Debug ou build\Release).
+
+L'application n'utilise que SDL3 (fenetre, rendu, evenements, presse-papiers, son) :
+ni SDL3_ttf, ni SDL3_image, ni SDL3_mixer. Les polices, images et sons passent par
+third_party/ (stb_truetype, stb_image, nanosvg, minimp3).

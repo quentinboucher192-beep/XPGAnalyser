@@ -1,0 +1,83 @@
+# =============================================================================
+#  Session 71 - 1.10 : l'outil des couleurs (chantier Q). Captures PNG_1010 a
+#  PNG_1019, dans une COPIE de Armoire_Gaz (la cuve Cuve_T1 de Vue_Synoptique :
+#  sa propriete "Couleur du contenu", #3C8DDB).
+#  A rejouer apres la construction de l'appli fusionnee. Commandes de la palette (ScriptRunner, chantier Q) :
+#    couleur "#2F6FD6" | couleur transparent   une pastille (applique et ferme)
+#    couleur-carre S V          un clic dans le carre (saturation, valeur en %)
+#    couleur-teinte D           la barre de teinte (degres)
+#    couleur-alpha P            la barre de transparence (opacite en %)
+#    couleur-champ C "texte"    le champ C (code T S V R G B A ; A : l'opacite en %), puis la frappe
+#    couleur-avant | couleur-ok | couleur-annuler | couleur-pipette
+#    couleur-viser X Y | couleur-prendre X Y   pendant la pipette (fenetre)
+#    couleur-echap
+#  Jouee le 01/10 a 21 h 07 (build-o0) : la pipette vise le contenu du silo
+#  Silo_S1 (932 600 en 1920 x 1080 : #D9B26F), pris pour la cuve.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- C1. La palette d'une case Couleur : le choix personnalise ouvert d'emblee ----
+arbre "IHM/Vues/Vue_Synoptique"
+attendre 6
+objet Cuve_T1
+attendre 3
+propriete-clic "Couleur du contenu"
+attendre 3
+capture PNG_1010_palette_choix_personnalise.png
+
+# ---- C2. Le carre et la barre de teinte : une couleur preparee (avant / apres) ----
+couleur-teinte 200
+attendre 1
+couleur-carre 70 85
+attendre 2
+capture PNG_1011_palette_carre_et_teinte.png
+
+# ---- C3. La transparence : le code passe en #RRGGBBAA ----
+couleur-alpha 50
+attendre 2
+capture PNG_1012_palette_transparence.png
+
+# ---- C4. Les champs R G B, T S V (l'aide du champ actif en bas de la palette) ----
+couleur-champ R "230"
+couleur-champ G "120"
+couleur-champ B "40"
+attendre 2
+capture PNG_1013_palette_champs_rvb.png
+couleur-champ T "140"
+attendre 2
+capture PNG_1014_palette_champs_tsv.png
+
+# ---- C5. Avant : la couleur d'origine remise ----
+couleur-avant
+attendre 2
+capture PNG_1015_palette_avant_remise.png
+
+# ---- C6. La pipette : la croix, la loupe, puis la couleur prise ----
+couleur-pipette
+attendre 2
+couleur-viser 932 600
+attendre 2
+capture PNG_1016_pipette_loupe.png
+couleur-prendre 932 600
+attendre 2
+capture PNG_1017_pipette_couleur_prise.png
+couleur-ok
+attendre 3
+capture PNG_1018_couleur_appliquee.png
+annuler
+attendre 2
+
+# ---- C7. Une propriete pilotee : l'expression passe telle quelle ----
+propriete-clic "Couleur du contenu"
+attendre 2
+couleur-champ code "=Etat_Couleur"
+attendre 2
+capture PNG_1019_palette_expression.png
+couleur-echap
+attendre 2
+quitter

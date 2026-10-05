@@ -1,0 +1,38 @@
+# =============================================================================
+#  Session 99 - 1.11 (integration I111) : l'appli integree, T1 + T2 + T3.
+#  (Ex-session 87 : le 87 reste a T3, session-87-bascule-variables.)
+#  Quatre captures, une par chantier et une pour leur rencontre :
+#   - le centre d'aide unique (T2), sur Demarrer, avec le compteur des tutoriels ;
+#   - un tutoriel lance (T1) : la vanne reglante, etape 1, en pause ;
+#   - la page des expressions (T3), seule (Aide > Les expressions) ;
+#   - les icones de l'arbre (T3, C4) : les sections de la MAST.
+#  A lancer avec PROJETS=<dossier d'Armoire_Gaz> et XPG_TUTORIELS=tools/tutoriels,
+#  en offscreen, 1600 x 900 (comme les sessions 84 a 86).
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+action help.open
+attendre 8
+capture I111_01_centre_aide.png
+touche Escape
+attendre 5
+tutoriel objet-vanne réglante 1 pause
+tutoriel-attendre
+attendre 20
+capture I111_02_tutoriel_vanne.png
+tutoriel-quitter
+attendre 10
+action help.expressions
+attendre 20
+capture I111_03_page_expressions.png
+touche Escape
+attendre 10
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+arbre "API/MAST" deplier
+attendre 4
+arbre-lignes
+capture I111_04_icones_arbre.png
+quitter

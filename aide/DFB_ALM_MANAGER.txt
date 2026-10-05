@@ -1,0 +1,43 @@
+#! summary = Un gestionnaire d'alarmes pour 64 alarmes et 256 evenements d'historique. Une instance par groupe.
+#! usage = COMMENT UNE ALARME ARRIVE ICI : par le tableau State, indice par
+#! usage = indice, comme les cartes d'E/S le font pour leurs voies. Une ligne
+#! usage = par alarme, ecrite une fois. C'est explicite, ca se cherche avec un
+#! usage = Ctrl+F, et la macro LierAlarmes l'ecrit toute seule depuis le
+#! usage = classeur.
+#! usage = L'ORDRE DANS LE CYCLE. Le gestionnaire lit State ; il faut donc que
+#! usage = State soit deja ecrit quand il tourne. Appelez-le APRES vos blocs
+#! usage = d'equipement et de voies, et avant les reports vers l'IHM.
+#! usage = L'HISTORIQUE EST UN ANNEAU. Quand il est plein, le plus ancien est
+#! usage = perdu - un automate n'alloue pas. Stat.Wrapped le dit, et Seq ne
+#! usage = recule jamais : c'est ce qui distingue un historique reboucle d'un
+#! usage = historique a trous.
+#! example = (* declarer, une fois *)
+#! example = AlmCmd.RegUuid := AlmUuid(Genre := 1, Rack := 0, Module := 4, Voie := 2);
+#! example = AlmCmd.RegLabel := 'Fuite gaz armoire A';
+#! example = AlmCmd.RegSev := 4;
+#! example = AlmCmd.Register := TRUE;   (* front montant *)
+#! example =
+#! example = (* alimenter, a chaque cycle *)
+#! example = AlmState[0] := CarteDI_R0S4[2].Val;
+#! example = AlmState[1] := CarteAI_R0S10[3].Thr[0].Raised;
+#! example =
+#! example = ALM_Station(Count := 64, CycleMs := 20, Cmd := AlmCmd,
+#! example =             State := AlmState, Defs := AlmDefs,
+#! example =             History := AlmHist, Stat := AlmStat);
+#! param CycleMs = La periode de la tache, en ms. Un DDT ne peut pas contenir de
+#! param CycleMs = temporisateur, donc tout le temps s'accumule depuis la. DINT
+#! param CycleMs = et non INT : un INT de millisecondes deborde au bout de
+#! param CycleMs = trente-trois secondes.
+#! param Count = Combien d'emplacements du registre sont balayes. Borne a 64.
+#! param Count = En mettre moins ne fait pas gagner de memoire, seulement du
+#! param Count = temps de cycle.
+#! param State = L'etat BRUT de chaque alarme, ecrit par l'appelant. Le
+#! param State = gestionnaire ne lit rien d'autre : il ne va chercher aucune
+#! param State = voie tout seul.
+#! param Defs = Le registre. Il survit a un Reset : seuls l'historique et les
+#! param Defs = compteurs sont effaces.
+#! see = ST_ALM_Def
+#! see = ST_ALM_Cmd
+#! see = ST_ALM_Stat
+#! see = ST_ALM_Event
+#! see = AlmUuid

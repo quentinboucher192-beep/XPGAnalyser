@@ -1,0 +1,45 @@
+# =============================================================================
+#  Session 130 (R111, 1.11) : « Dupliquer… », puis Ctrl+Z et Ctrl+Y - apres
+#  Ctrl+Y, la selection revient aux copies, comme apres Dupliquer (l'inspecteur :
+#  « Objet (3 sélectionnés) » ; la barre d'etat : « Rétabli : Dupliquer (3 copies) »).
+#  Sur une copie d'Armoire_Gaz telle quelle (scratchpad/Q1103/qa/run.sh ... brut).
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+arbre "IHM/Vues/Vue_Synoptique"
+attendre 6
+objet V_101
+attendre 3
+propriete "Ouverture (%)  ƒ" "=SEL($Vanne$.cmd, 0, 100)"
+attendre 2
+propriete "Défaut (expression)" "=($Vanne$.F0)"
+attendre 2
+propriete "Libellé" "$Repere$"
+attendre 2
+vue-clic 240 170
+attendre 1
+touche ctrl+d
+attendre 3
+dupliquer-copies 3
+dupliquer-serie "$Repere$" "V-1{n}" "01"
+dupliquer-case 1 "$Vanne$" "Armoires[0].sorties.V2"
+dupliquer-case 2 "$Vanne$" "Armoires[0].sorties.V3"
+dupliquer-case 3 "$Vanne$" "Armoires[0].sorties.V4"
+dupliquer-case 4 "$Vanne$" "Armoires[0].sorties.V5"
+dupliquer-pose x 4 16
+attendre 2
+dupliquer-verifier
+dupliquer-valider
+attendre 3
+capture 130_01_apres_dupliquer_copies_choisies.png
+touche ctrl+z
+attendre 3
+capture 130_02_ctrl_z.png
+touche ctrl+y
+attendre 3
+capture 130_03_ctrl_y_copies_choisies.png
+quitter

@@ -1,0 +1,97 @@
+# =============================================================================
+#  Session 72 - 1.10 (chantier L) : la simulation de l'API et de l'IHM
+#  independantes ; la barre de Simulation . IHM ; le zoom de la vue en cours.
+#  Dans le projet des sessions precedentes (Armoire_Gaz). Captures PNG_1020 a
+#  PNG_1026 (sujets d'aide simulation-api-ihm et simulation-zoom ; PNG_1026 :
+#  le plein ecran, decision 12).
+#  A jouer sur une copie dont l'IHM lit le simulateur : la copie d'Armoire_Gaz lit
+#  un automate reel (ihm/ihm.txt : communication mode="modbus", 192.168.1.10) ;
+#  y mettre mode="simulateur" avant (sinon l'API se dit "reliee (automate reel)").
+#  PNG_1027 : tout arrete ; PNG_1028 a 1031 (tranche 5) : le menu Les deux de la
+#  barre du haut, le plein ecran d'un onglet detache, F8 (aussi dans la fenetre detachee) ; la session se termine (quitter).
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- A. L'IHM seule : l'onglet ouvert, l'IHM tourne, l'API reste arretee ----
+arbre "Simulation/IHM"
+attendre 12
+# la souris hors de l'arbre (pas d'infobulle sur la vue)
+survol 1650 1000
+sim-vue "Vue_Armoire_A"
+attendre 8
+capture PNG_1021_ihm_seule.png
+capture PNG_1020_barre_haut_api_ihm.png
+
+# ---- B. Les deux : l'API compte ses cycles, l'IHM suit ----
+simulation-barre both.start
+attendre 30
+capture PNG_1022_les_deux.png
+
+# ---- C. Arreter l'IHM : l'API continue ; la vue se fige sous un voile ----
+simulation-barre hmi.stop
+attendre 6
+capture PNG_1023_ihm_arretee.png
+
+# ---- D. Le zoom de la vue en cours ----
+simulation-barre hmi.start
+attendre 6
+simulation-zoom 200
+attendre 3
+simulation-deplacer 4000 4000
+attendre 4
+capture PNG_1024_zoom_200.png
+simulation-zoom 50
+attendre 4
+capture PNG_1025_zoom_50.png
+simulation-zoom ajuster
+attendre 2
+
+# ---- E. Le plein ecran (decision 12) : F11, la vue seule, la barre flottante ----
+touche f11
+attendre 8
+capture PNG_1026_plein_ecran.png
+touche echap
+attendre 4
+
+# ---- F. Tout arreter ----
+simulation-barre all.stop
+attendre 4
+capture PNG_1027_tout_arrete.png
+
+# ---- G. Tranche 5 : F8 (l'IHM au clavier), le menu Les deux de la barre du haut ----
+touche f8
+attendre 6
+capture PNG_1030_f8_ihm_demarree.png
+barre les-deux
+attendre 2
+capture PNG_1028_menu_les_deux.png
+barre-menu les-deux "Démarrer les deux"
+attendre 8
+touche maj+f8
+attendre 4
+
+# ---- H. L'onglet detache dans sa fenetre : F11 y met la vue seule, cette fenetre en plein ecran ----
+touche f8
+attendre 4
+onglet-detacher "Simulation"
+attendre 4
+fenetre-touche "Simulation" f11
+attendre 6
+capture-fenetre "Simulation" PNG_1029_plein_ecran_fenetre_detachee.png
+fenetre-touche "Simulation" echap
+attendre 3
+fenetre-touche "Simulation" maj+f8
+attendre 4
+capture-fenetre "Simulation" PNG_1031_fenetre_detachee_maj_f8.png
+fenetre-touche "Simulation" f8
+attendre 3
+fenetre-rattacher "Simulation"
+attendre 3
+simulation-barre all.stop
+attendre 3
+quitter

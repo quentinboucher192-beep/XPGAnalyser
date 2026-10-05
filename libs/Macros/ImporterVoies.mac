@@ -1,0 +1,283 @@
+(* ImporterVoies
+
+   Depuis les onglets "Cartes API" et "ES". Ecrit les DEUX sections de
+   mapping, entierement : le cablage de chaque voie vers son adresse, tous ses
+   reglages, et l'appel du bloc de sa carte.
+
+   L'ORDRE A L'INTERIEUR D'UNE SECTION EST TOUT LE SUJET.
+
+     entree :  %I  ->  .Raw,  PUIS l'appel du bloc
+     sortie :  l'appel du bloc,  PUIS  .Raw  ->  %Q
+
+   Cablage puis appel pour une entree : le bloc doit voir la valeur de CE
+   cycle. Appel puis cablage pour une sortie : la carte doit recevoir ce que
+   le bloc vient de calculer. Inverser l'un ou l'autre ajoute un cycle de
+   retard qui ne se voit sur rien, sauf sur un comptage de pieces.
+
+   C'est pour ca que cette macro ecrit les deux : deux macros qui ajoutent
+   chacune leur bout ne peuvent pas obtenir les deux ordres.
+
+   LES QUATRE FAMILLES EN UNE EXECUTION. L'onglet ES les porte toutes, avec
+   une colonne Famille. Le decoupage "un CSV par famille" de l'ancienne
+   ImportES n'a plus lieu d'etre.
+
+   ELLE REECRIT LES DEUX SECTIONS. Ce qui y avait ete ajoute a la main est
+   perdu : le mapping est genere, il ne se complete pas a la main.
+
+   #! summary = Écrit les deux sections de mapping : le câblage de chaque voie, tous ses réglages, et l'appel du bloc de sa carte.
+   #! version = 1.10
+   #! changes 1.10 = Le formulaire : chaque question a son champ (le classeur par …, Ctrl+V ou en le glissant ; les tâches et les sections du projet ; des interrupteurs ; des choix à libellés), ses groupes, son aide et un libellé avec accents. Le code ne change pas.
+   #! changes 1.01 = Les sections sont RANGEES dans l'ordre de la tache par RangerSections, au lieu d'un rappel dans le compte rendu. Les blocs prennent CycleMs := Horloge.DtMs quand l'horloge existe.
+   #! usage = Depuis les onglets Cartes API et ES.
+   #! usage = L'ORDRE A L'INTERIEUR D'UNE SECTION EST TOUT LE SUJET. Pour une entree : %I vers .Raw, PUIS l'appel du bloc - le bloc doit voir la valeur de ce cycle. Pour une sortie : l'appel du bloc, PUIS .Raw vers %Q - la carte doit recevoir ce que le bloc vient de calculer. Inverser l'un ou l'autre ajoute un cycle de retard qui ne se voit sur rien, sauf sur un comptage de pieces.
+   #! usage = C'est pour ca que cette macro ecrit le cablage ET les appels : deux macros qui ajoutent chacune leur bout ne peuvent pas obtenir les deux ordres.
+   #! usage = ELLE ECRIT TOUS LES REGLAGES, pas seulement .Raw : Inv, DebounceMs, AlarmEn, AlarmState, AlarmDelayMs et Sev pour le TOR ; RawMin/Max, EngMin/Max, Clamp, DeadBand, FiltN, RateMax et les quatre seuils complets pour l'analogique. Un tableau de ST_IO_Ana sans echelle ni seuils ne fait rien du tout.
+   #! usage = L'adresse vient de la colonne Adresse de la voie, pas d'un calcul a partir du rack et du module : une carte dont les voies ne se suivent pas reste juste.
+   #! usage = LA SECTION EST REECRITE ENTIEREMENT a chaque execution. Ce qui y a ete ajoute a la main est perdu. C'est voulu : une section a moitie ancienne et a moitie nouvelle est pire que les deux, et on ne peut pas deviner ce qui a ete ajoute expres.
+   #! usage = ELLE NE FAIT QU'UNE ETAPE, et elle suppose que les precedentes ont tourne. Pour generer tout le programme en une fois - types, blocs, variables, instances, E/S, equipements, cablage, reports et alarmes - c'est ImporterProgramme.
+   #! see = ImporterProgramme, ImporterCartes, ImporterAlarmes
+   #! param classeur = Le classeur de l'affaire (.xlsx ou .xlsm) : glisse-le sur le champ, choisis-le avec …, ou colle-le (Ctrl+V) après l'avoir copié dans l'Explorateur. Vide : le dernier classeur ouvert, le cas normal quand on enchaîne les imports.
+   #! param classeur = C'est un .xlsm, pas un export CSV : la macro lit les onglets directement, et les quatre familles d'E/S sont donc traitees en une seule execution.
+   #! param sEntrees = Réécrite en entier à chaque import.
+   #! param sEntrees = La section des cartes d'entree. Elle doit tourner EN PREMIER dans la tache : tout le programme travaille sur ce qu'elle vient de lire.
+   #! param sSorties = Réécrite en entier à chaque import.
+   #! param sSorties = La section des cartes de sortie. Elle doit tourner EN DERNIER : elle publie ce que le programme vient de decider.
+   #! param tache = La tâche qui exécute les sections créées.
+   #! param tache = La tache d'accueil des sections creees, MAST en general.
+   #! param tache = Les sections creees sont RANGEES par RangerSections a la fin : Control Expert execute les sections dans l'ordre de la tache, et les entrees doivent passer avant les equipements.
+   #! categorie = Importer depuis le classeur/Étapes de l'import
+   #! champ classeur = fichier .xlsx .xlsm facultatif
+   #! libelle classeur = Le classeur de l'affaire
+   #! champ sEntrees = section nouvelle
+   #! libelle sEntrees = Section des entrées
+   #! champ sSorties = section nouvelle
+   #! libelle sSorties = Section des sorties
+   #! champ tache = tache
+   #! libelle tache = Tâche appelante
+   #! groupe Sections = sEntrees, sSorties, tache
+   #! produit = deux sections de mapping : le câblage et les réglages de chaque voie, l'appel du bloc de sa carte
+   #! appliquer = Réécrire {sEntrees} et {sSorties} entièrement
+*)
+
+chemin := Ask('classeur', 'Chemin du classeur (vide = celui deja charge)', '');
+AskNow();
+
+sEntrees := Ask('sEntrees', 'Section des entrees', 'Mapping_Entrees');
+sSorties := Ask('sSorties', 'Section des sorties', 'Mapping_Sorties');
+tache    := Ask('tache', 'Tache appelante', 'MAST');
+AskNow();
+
+wb := OpenWorkbook(chemin);
+IF wb < 0 THEN Fail('classeur introuvable'); END_IF;
+
+tc := OpenSheet('Cartes API');
+IF tc < 0 THEN Fail('onglet "Cartes API" introuvable'); END_IF;
+te := OpenSheet('ES');
+IF te < 0 THEN Fail('onglet "ES" introuvable'); END_IF;
+
+periode := Setting('Periode (ms)');
+IF periode = '' THEN periode := '20'; END_IF;
+IF VariableExists('Horloge') THEN periode := 'Horloge.DtMs'; END_IF;
+
+IF NOT Confirm('Cablage des voies',
+               'Reecrire ' + sEntrees + ' et ' + sSorties + ' entierement ?') THEN
+    Fail('annule');
+END_IF;
+
+IF NOT SectionExists(sEntrees) THEN AddSection(sEntrees, tache, 'ST', ''); END_IF;
+IF NOT SectionExists(sSorties) THEN AddSection(sSorties, tache, 'ST', ''); END_IF;
+ClearSection(sEntrees);
+ClearSection(sSorties);
+AppendToSection(sEntrees, '(* Section generee par ImporterVoies. Ne pas completer a la main. *)');
+AppendToSection(sSorties, '(* Section generee par ImporterVoies. Ne pas completer a la main. *)');
+
+nc := RowCount(tc);
+ne := RowCount(te);
+c := 0;
+i := 0;
+k := 0;
+voiesFaites := 0;
+cartesFaites := 0;
+s := '';
+ana := 0;
+sortie := 0;
+carte := '';
+tableau := '';
+instance := '';
+bloc := '';
+fam := '';
+cible := '';
+adresse := '';
+seuil := '';
+
+FOR c := 0 TO nc - 1 DO
+    IF Cell(tc, c, 'Active') <> 'O' THEN
+        SkipRow(Cell(tc, c, 'Nom') + ' : carte inactive');
+    ELSE
+        carte    := Cell(tc, c, 'Nom');
+        tableau  := Cell(tc, c, 'Tableau');
+        instance := Cell(tc, c, 'Instance');
+        bloc     := Cell(tc, c, 'Bloc');
+        fam      := Cell(tc, c, 'Famille');
+
+        ana := 0;
+        IF fam = 'AI' OR fam = 'AO' THEN ana := 1; END_IF;
+        sortie := 0;
+        IF fam = 'DO' OR fam = 'AO' THEN sortie := 1; END_IF;
+
+        IF sortie = 1 THEN cible := sSorties; ELSE cible := sEntrees; END_IF;
+
+        IF tableau = '' OR instance = '' THEN
+            Warn(carte + ' : tableau ou instance manquant, carte sautee');
+        ELSE
+            AppendToSection(cible, '');
+            AppendToSection(cible,
+                '(* ============================================================ *)');
+            AppendToSection(cible, '(*  ' + carte + '   ' + fam + '   '
+                + Cell(tc, c, 'Reference') + '   ' + bloc + '  *)');
+            AppendToSection(cible,
+                '(* ============================================================ *)');
+
+            (* UNE CARTE DE SORTIE SE FAIT EN TROIS TEMPS, PAS EN DEUX : les
+               reglages, puis l'appel, puis la recopie vers %Q. L'appel etait
+               ecrit ici, en tete - donc AVANT que .IsOut soit pose. Au premier
+               cycle le bloc prenait la carte pour une entree et calculait Val
+               a partir de Raw au lieu de l'inverse. Ca ne dure qu'un cycle, et
+               c'est exactement le genre de chose qu'on ne retrouve jamais. *)
+
+            FOR i := 0 TO ne - 1 DO
+                IF Cell(te, i, 'Carte') = carte THEN
+                    adresse := Cell(te, i, 'Adresse');
+                    s := tableau + '[' + Cell(te, i, 'Index') + ']';
+
+                    IF adresse = '' THEN
+                        SkipRow(s + ' : aucune adresse');
+                    ELSE
+                        AppendToSection(cible, '');
+                        AppendToSection(cible, '(* -- ' + s + '   ' + adresse + '   '
+                            + Cell(te, i, 'Designation') + ' *)');
+
+                        (* ---- le cablage, dans le bon sens ---------------- *)
+                        IF sortie = 1 THEN
+                            (* La recopie vers %Q attend le deuxieme passage,
+                               apres l'appel du bloc. *)
+                            AppendToSection(cible, s + '.IsOut := TRUE;');
+                        ELSE
+                            IF ana = 1 THEN
+                                AppendToSection(cible, s + '.Raw := INT_TO_REAL('
+                                    + adresse + ');');
+                            ELSE
+                                AppendToSection(cible, s + '.Raw := ' + adresse + ';');
+                            END_IF;
+                            AppendToSection(cible, s + '.IsOut := FALSE;');
+                        END_IF;
+
+                        (* ---- tous les reglages, pas seulement .Raw ------- *)
+                        IF ana = 1 THEN
+                            AppendToSection(cible, s + '.RawMin := ' + REAL_TO_STRING(
+                                STRING_TO_REAL(Cell(te, i, 'RawMin'))) + ';');
+                            AppendToSection(cible, s + '.RawMax := ' + REAL_TO_STRING(
+                                STRING_TO_REAL(Cell(te, i, 'RawMax'))) + ';');
+                            AppendToSection(cible, s + '.EngMin := ' + REAL_TO_STRING(
+                                STRING_TO_REAL(Cell(te, i, 'EngMin'))) + ';');
+                            AppendToSection(cible, s + '.EngMax := ' + REAL_TO_STRING(
+                                STRING_TO_REAL(Cell(te, i, 'EngMax'))) + ';');
+                            IF Cell(te, i, 'Clamp') = 'N' THEN
+                                AppendToSection(cible, s + '.Clamp := FALSE;');
+                            ELSE
+                                AppendToSection(cible, s + '.Clamp := TRUE;');
+                            END_IF;
+                            AppendToSection(cible, s + '.DeadBand := ' + REAL_TO_STRING(
+                                STRING_TO_REAL(Cell(te, i, 'DeadBand'))) + ';');
+                            AppendToSection(cible, s + '.FiltN := ' + DINT_TO_STRING(
+                                STRING_TO_INT(Cell(te, i, 'FiltN'))) + ';');
+                            AppendToSection(cible, s + '.RateMax := ' + REAL_TO_STRING(
+                                STRING_TO_REAL(Cell(te, i, 'RateMax'))) + ';');
+
+                            FOR k := 0 TO 3 DO
+                                seuil := s + '.Thr[' + DINT_TO_STRING(k) + ']';
+                                IF Cell(te, i, 'S' + DINT_TO_STRING(k) + '_En') = 'O' THEN
+                                    AppendToSection(cible, seuil + '.En := TRUE;');
+                                    IF Cell(te, i, 'S' + DINT_TO_STRING(k) + '_Dir') = 'B' THEN
+                                        AppendToSection(cible, seuil + '.Dir := 1;');
+                                    ELSE
+                                        AppendToSection(cible, seuil + '.Dir := 0;');
+                                    END_IF;
+                                    AppendToSection(cible, seuil + '.Val := ' + REAL_TO_STRING(
+                                        STRING_TO_REAL(Cell(te, i, 'S' + DINT_TO_STRING(k) + '_Val'))) + ';');
+                                    AppendToSection(cible, seuil + '.Hyst := ' + REAL_TO_STRING(
+                                        STRING_TO_REAL(Cell(te, i, 'S' + DINT_TO_STRING(k) + '_Hyst'))) + ';');
+                                    AppendToSection(cible, seuil + '.DelayMs := ' + DINT_TO_STRING(
+                                        STRING_TO_INT(Cell(te, i, 'S' + DINT_TO_STRING(k) + '_DelayMs'))) + ';');
+                                    AppendToSection(cible, seuil + '.Sev := ' + DINT_TO_STRING(
+                                        STRING_TO_INT(Cell(te, i, 'S' + DINT_TO_STRING(k) + '_Sev'))) + ';');
+                                ELSE
+                                    AppendToSection(cible, seuil + '.En := FALSE;');
+                                END_IF;
+                            END_FOR;
+                        ELSE
+                            IF Cell(te, i, 'Inv') = 'O' THEN
+                                AppendToSection(cible, s + '.Inv := TRUE;');
+                            ELSE
+                                AppendToSection(cible, s + '.Inv := FALSE;');
+                            END_IF;
+                            AppendToSection(cible, s + '.DebounceMs := ' + DINT_TO_STRING(
+                                STRING_TO_INT(Cell(te, i, 'DebounceMs'))) + ';');
+                            IF Cell(te, i, 'AlarmEn') = 'O' THEN
+                                AppendToSection(cible, s + '.AlarmEn := TRUE;');
+                                IF Cell(te, i, 'AlarmState') = '0' THEN
+                                    AppendToSection(cible, s + '.AlarmState := FALSE;');
+                                ELSE
+                                    AppendToSection(cible, s + '.AlarmState := TRUE;');
+                                END_IF;
+                                AppendToSection(cible, s + '.AlarmDelayMs := ' + DINT_TO_STRING(
+                                    STRING_TO_INT(Cell(te, i, 'AlarmDelayMs'))) + ';');
+                                AppendToSection(cible, s + '.Sev := ' + DINT_TO_STRING(
+                                    STRING_TO_INT(Cell(te, i, 'Sev'))) + ';');
+                            ELSE
+                                AppendToSection(cible, s + '.AlarmEn := FALSE;');
+                            END_IF;
+                        END_IF;
+
+                        voiesFaites := voiesFaites + 1;
+                    END_IF;
+                END_IF;
+            END_FOR;
+
+            (* ---- l'appel, apres les reglages dans les deux sens -------- *)
+            AppendToSection(cible, '');
+            AppendToSection(cible, instance + '(Count := ' + Cell(tc, c, 'Voies')
+                + ', CycleMs := ' + periode + ', Chan := ' + tableau + ');');
+
+            (* ---- troisieme temps, sorties seulement : vers la carte ---- *)
+            IF sortie = 1 THEN
+                AppendToSection(cible, '');
+                AppendToSection(cible, '(* -- vers la carte, apres l appel *)');
+                FOR i := 0 TO ne - 1 DO
+                    IF Cell(te, i, 'Carte') = carte THEN
+                        adresse := Cell(te, i, 'Adresse');
+                        s := tableau + '[' + Cell(te, i, 'Index') + ']';
+                        IF adresse <> '' THEN
+                            IF ana = 1 THEN
+                                AppendToSection(cible, adresse + ' := REAL_TO_INT('
+                                    + s + '.Raw);');
+                            ELSE
+                                AppendToSection(cible, adresse + ' := ' + s + '.Raw;');
+                            END_IF;
+                        END_IF;
+                    END_IF;
+                END_FOR;
+            END_IF;
+
+            cartesFaites := cartesFaites + 1;
+        END_IF;
+    END_IF;
+END_FOR;
+
+IF voiesFaites = 0 THEN
+    Warn('aucune voie cablee. L onglet ES est-il rempli, et ses colonnes Carte '
+         + 'correspondent-elles aux noms de l onglet Cartes API ?');
+END_IF;
+Log(DINT_TO_STRING(voiesFaites) + ' voie(s) sur ' + DINT_TO_STRING(cartesFaites)
+    + ' carte(s)');
+RunMacro('RangerSections');

@@ -1,0 +1,42 @@
+# Derived data type, shared.
+name = ST_GC_Runtime
+version = 0.04
+#! summary = L'etat interne du moteur GRAFCET : le mode, la phase, le temps, et SES TAILLES.
+#! usage = REPRIS DU PROJET MAST : le type est celui du projet (champs inchanges).
+#! usage = Ce qui suit decrit ce qu'en fait DFB_GRAFCETENGINE 1.49.
+#! usage = LES TAILLES SE POSENT AVANT L'APPEL, a chaque cycle ou une fois :
+#! usage = GC_MAX_STEPS, GC_MAX_TRANSITIONS, GC_MAX_ACTIONS (28 au plus, la taille des
+#! usage = tableaux), GC_MAX_HIST (8). Elles valent 0 par defaut, et le moteur ne
+#! usage = parcourt alors rien ; au-dela, il les ramene a 28 et 8.
+#! usage = GC_MAX_SRC_PER_TRANS et GC_MAX_DST_PER_TRANS sont informatifs : la limite
+#! usage = est celle des tableaux Sources et Destinations, 3.
+#! see = DFB_GRAFCETENGINE
+#! param Mode = Le mode en cours.
+#! param Phase = 1 scrutation, 2 cliche, 3 franchissement, 4 fronts, 5 actions, 0 fini.
+#! param Cycle = Le numero de cycle.
+#! param TsNow = L'instant de ce cycle (TsNow du bloc).
+#! param TsPrev = L'instant du cycle precedent.
+#! param DateTime = La duree du cycle : TsNow - TsPrev, 0 au premier cycle, 10 s au plus.
+#! param NtpcNow = La date, pour l'historique de mise au point.
+#! param GC_MAX_STEPS = Combien d'etapes parcourir, 28 au plus.
+#! param GC_MAX_TRANSITIONS = Combien de transitions, 28 au plus.
+#! param GC_MAX_ACTIONS = Combien d'actions, 28 au plus.
+#! param GC_MAX_SRC_PER_TRANS = Sources par transition, 3.
+#! param GC_MAX_DST_PER_TRANS = Destinations par transition, 3.
+#! param GC_MAX_HIST = Lignes d'historique de mise au point, 8.
+#! changes 0.04 = Range dans la bibliotheque, depuis le projet MAST.
+
+# name ; type ; scope ; initial ; comment
+Mode ; INT ; Member ;  ; 
+Phase ; INT ; Member ;  ; 
+Cycle ; DINT ; Member ;  ; 
+TsNow ; TIME ; Member ;  ; 
+TsPrev ; TIME ; Member ;  ; 
+DateTime ; TIME ; Member ;  ; 
+NtpcNow ; Display_NTPC ; Member ;  ; 
+GC_MAX_STEPS ; INT ; Member ;  ; 
+GC_MAX_TRANSITIONS ; INT ; Member ;  ; 
+GC_MAX_ACTIONS ; INT ; Member ;  ; 
+GC_MAX_SRC_PER_TRANS ; INT ; Member ;  ; 
+GC_MAX_DST_PER_TRANS ; INT ; Member ;  ; 
+GC_MAX_HIST ; INT ; Member ;  ; 

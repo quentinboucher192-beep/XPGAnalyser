@@ -1,0 +1,128 @@
+# =============================================================================
+#  Session 53 - LOT API 3 : les tables d'animation, avec l'IHM. La liste des
+#  tables et leurs lignes (API en bleu, IHM en violet) ; + Table, renommer sur
+#  place, la table vide qui dit ou glisser ; + Variable IHM et + Variable API
+#  (le choix, les filtres, les cases) ; une variable glissee depuis l'arbre ;
+#  la simulation en marche (l'automate et l'IHM) : les valeurs, la courbe ;
+#  ecrire, forcer ; l'historique (chaque geste est une commande).
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 12
+arbre "IHM" replier
+attendre 3
+
+# ---- A. Les tables du projet : l'arbre, la liste, les lignes et leur source ----------------
+arbre "API/Tables d'animation/PURGE"
+attendre 8
+capture PNG_600_tables_purge.png
+ligne "armoires[0].ana.PT1.mes"
+attendre 5
+capture PNG_601_ligne_proprietes.png
+
+# ---- B. Une table neuve : + Table, renommee sur place ; vide, elle dit ou glisser ------------
+outil "Créer une table"
+attendre 8
+capture PNG_602_nouvelle_table_renommer.png
+cellule "Nouvelle_table" "Tables" "Essai_IHM"
+attendre 8
+capture PNG_603_table_vide.png
+
+# ---- C. + Variable IHM : les variables de l'IHM, filtrees, cochees ---------------------------
+outil "Ajouter des variables de l'IHM"
+attendre 8
+filtre-choix "BOOL"
+attendre 3
+cocher "Vanne_Purge"
+cocher "Purge_Auto"
+cocher "Vanne_V3_Ouverte"
+attendre 4
+capture PNG_604_choix_variables_ihm.png
+bouton "Ajouter 3 variables"
+attendre 8
+
+# ---- D. + Variable API : celles de l'automate ------------------------------------------------
+outil "Ajouter des variables de l'automate"
+attendre 8
+champ 1 "index"
+attendre 3
+cocher "index_config_utilisee"
+cocher "index_armoire_non_utilisee"
+attendre 4
+capture PNG_605_choix_variables_api.png
+bouton "Ajouter 2 variables"
+attendre 8
+
+# ---- E. Glisser une variable depuis l'arbre sur la table -----------------------------------
+arbre "IHM/Programmation/Variables IHM" deplier
+attendre 5
+glisser-vers-table "Variables IHM/Secondes_IHM" tenir
+attendre 4
+capture PNG_606_glisser_depuis_arbre.png
+lacher
+attendre 8
+arbre "IHM/Programmation/Variables IHM" deplier
+attendre 5
+glisser-vers-table "Variables IHM/Temps_Ligne"
+attendre 8
+arbre "IHM" replier
+attendre 4
+capture PNG_607_table_remplie.png
+# Le clic droit sur une variable de l'arbre : « Ajouter a la table ... »
+arbre "API/Variables/Elementaires" deplier
+attendre 4
+arbre "API/Variables/Elementaires/UDINT_1174" droit
+attendre 5
+capture PNG_612_clic_droit_ajouter.png
+# Lot API 7 : le clic droit de l'arbre range les tables dans un sous-menu.
+choisir "Ajouter à une table d'animation"
+attendre 2
+choisir "Essai_IHM"
+attendre 8
+arbre "API/Variables" replier
+attendre 3
+
+# ---- F. La simulation : l'IHM et l'automate en marche, les valeurs, la courbe ---------------
+arbre "IHM/Simulation"
+attendre 30
+onglet "API · Tables"
+attendre 5
+barre "simuler"
+attendre 40
+ligne "Secondes_IHM"
+attendre 90
+capture PNG_608_simulation_valeurs_courbe.png
+
+# ---- G. Ecrire, forcer ------------------------------------------------------------------------
+cellule "index_config_utilisee" "Nouvelle valeur" "1"
+attendre 3
+ligne "index_config_utilisee"
+attendre 3
+outil "Forcer"
+attendre 10
+cellule "Purge_Auto" "Nouvelle valeur" "FALSE"
+attendre 3
+ligne "Purge_Auto"
+attendre 3
+outil "Écrire la nouvelle valeur"
+attendre 12
+ligne "index_config_utilisee"
+attendre 20
+capture PNG_609_ecrire_forcer.png
+
+# ---- H. Chaque geste est une commande : l'historique, Ctrl+Z -------------------------------
+barre "historique"
+attendre 6
+capture PNG_610_historique.png
+barre "historique"
+attendre 3
+touche ctrl+z
+attendre 8
+capture PNG_611_ctrl_z.png
+
+barre "arreter"
+attendre 5
+quitter

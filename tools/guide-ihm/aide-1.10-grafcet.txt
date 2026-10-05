@@ -1,0 +1,50 @@
+# =============================================================================
+#  Aide F1 de la 1.10 : l'éditeur de grafcet refait (chantier R, décision 11).
+#  Même syntaxe que guide-ihm.txt (voir son en-tête) ; ce sujet est celui de
+#  l'API (les grafcets du programme de l'automate) : le chef de projet le
+#  reporte dans guide-ihm.txt parmi les sujets de l'API, après le sujet des
+#  sections ST (ou à défaut à la fin des sujets de l'API).
+# =============================================================================
+
+== grafcet | L'éditeur de grafcet : les instances de DFB_GRAFCETENGINE
+: Les grafcets du programme ne sont pas des sections SFC : chacun est construit en ST (la section SFC_<nom> appelle Builder pour ses étapes, ses transitions et ses actions) et tourne dans une instance du bloc DFB_GRAFCETENGINE. L'éditeur de grafcet relit ce ST, dessine le grafcet selon la norme (IEC 60848), le modifie en réécrivant le programme, et montre sa marche quand l'API est simulée.
+@lieux api
+@mots grafcet, Grafcet, DFB_GRAFCETENGINE, Gc_, Builder, étape, étape initiale, transition, réceptivité, action, divergence en OU, convergence en OU, divergence en ET, convergence en ET, renvoi, Grafcets du programme, Sélection, Étape, Transition, Action, Relier, Supprimer, Ajuster, Propriétés, Étapes, Transitions, Actions, Contrôles, continue, mémorisée, retardée, limitée, impulsion à l'activation, impulsion à la désactivation, FIN, ACTIF, DUREE, FINI, INIT, Steps_, Trans_, Acts_, .xpglayout
+@voir sections-st, simulation-api-ihm
+### Ouvrir un grafcet
+Double-clic sur une instance du bloc (par exemple `Gc_DetoxalA` dans l'arbre, dans les variables, ou sur son nom dans le code) : l'onglet « DetoxalA » s'ouvre. À gauche, **Grafcets du programme** : toutes les instances de DFB_GRAFCETENGINE du programme (17 dans le projet des armoires), avec leurs comptes (étapes · transitions · actions) et, hors simulation, leurs contrôles en défaut ; un clic ouvre le grafcet d'une autre instance (dans son onglet). En bas de la liste, les totaux.
+### Le dessin
+| Élément | Comment il est dessiné |
+| Étape | Un carré numéroté (X3) ; l'étape initiale en double carré ; « finale » dans le carré d'une étape finale ; son nom dessous s'il diffère de X<numéro>. |
+| Transition | Un trait épais sur la liaison ; son numéro (T2) à gauche, sa réceptivité à droite, lisible : les raccourcis FIN(A2), ACTIF(X3), DUREE(X3) >= T#5s, FINI(Autre) au lieu de Acts_…, Steps_…, Gc_… ; le libellé court du programme (c=) en petit au-dessus. |
+| Divergence, convergence en OU | Un trait simple : une étape a plusieurs transitions de sortie (ou d'entrée). |
+| Divergence, convergence en ET | Deux traits parallèles : une transition a plusieurs étapes d'aval (ou d'amont). |
+| Action | Un rectangle accroché à droite de son étape : la case du qualificatif (N continue, P1 à l'activation, P0 à la désactivation, D retardée, L limitée, C… conditionnelle), son nom, son genre en français (« limitée à 10 s », « retardée de 5 s »). |
+| Remontée | Une liaison qui revient vers une étape plus haut passe par le côté (à gauche ou à droite de tout le dessin), avec une flèche vers le haut, et rejoint l'étape par-dessus. |
+| Renvoi | Seulement quand une liaison croiserait autre chose : une flèche et le numéro de l'étape visée sous la transition ; au-dessus de l'étape d'arrivée, les étapes d'où l'on vient. |
+Une étape est placée sous toutes celles qui y mènent (au plus long chemin) : le grafcet se lit de haut en bas, une liaison peut descendre de plusieurs rangées. Rien ne se chevauche : la mise en page est calculée et vérifiée. Tu peux **glisser une étape** (outil Sélection) : elle s'aimante à 10 px, ses actions la suivent, ses liaisons suivent en équerre (une flèche quand elles remontent) ; la position se garde à côté du projet (fichier .xpglayout), le programme ne change pas.
+**Zoom** : Ctrl+molette (autour de la souris), −, +, **Ajuster** (tout le grafcet dans la fenêtre). La molette fait défiler (Maj : en largeur) ; glisse le fond pour te déplacer. Quand le grafcet dépasse nettement la vue, une **mini-carte** en bas à droite montre où tu es ; un clic t'y amène.
+**Exporter PNG** (le bouton en bas à gauche du dessin) : tout le grafcet, sans les barres par-dessus, dans le dossier des captures (Grafcet_<nom>_<date>.png) ; la barre du bas dit où il est parti.
+**Chercher** : Ctrl+F dans le dessin, puis tape : une étape (X3, son nom), une transition (T2, ou un mot de sa réceptivité : une variable), une action (son nom). La première trouvée est choisie et montrée ; Entrée ou F3 : la suivante ; Échap ferme.
+### Les outils
+| Outil | Ce qu'il fait |
+| Sélection | Choisir une étape, une transition, une action ; glisser une étape ; double-clic : la modifier. |
+| Étape | Un clic sur une étape insère une étape avant elle, un clic dans le vide l'ajoute à la fin. |
+| Transition | Une transition arrive avec sa réceptivité : sans elle, elle ne franchirait jamais. |
+| Action | Un clic sur l'étape qui la porte ; elle va dans SFC_<grafcet>_Actions. |
+| Relier | Une transition puis une étape (ou l'inverse) : deux étapes ne se relient jamais directement. Échap annule. |
+| Supprimer | Un clic sur ce qui doit partir ; on te le demande d'abord. Suppr fait de même sur la sélection. |
+Chaque modification réécrit le programme (les lignes Builder, les conditions, les corps d'actions) et s'annule par Ctrl+Z. F2 modifie la sélection.
+### Les panneaux de droite
+**Propriétés** : ce qui est choisi. Une étape : ses entrées et sorties (avec la divergence ou la convergence en OU), ses actions, en simulation depuis combien de temps elle est active. Une transition : de → vers, sa réceptivité lisible et le ST du programme, son retard, la convergence ou la divergence en ET. Une action : son étape, son genre (avec son code moteur K…, en petit), ce qui la fait sortir, sa durée, sa condition, son corps. Rien de choisi : le grafcet, son bloc, ses tableaux Steps_/Trans_/Acts_, sa structure.
+Dessous, les onglets **Étapes**, **Transitions**, **Actions** (un clic choisit l'élément dans le dessin et l'y montre ; double-clic : le modifier), **Contrôles** et **Historique**.
+Une réceptivité qui attend un autre grafcet (FINI(Autre)) ou une action qui en lance un (INIT(Autre)) : les Propriétés le disent (« Attend le grafcet », « Lance le grafcet ») ; un double-clic sur la ligne ouvre l'autre grafcet.
+### Les contrôles
+Ceux de la macro ImporterGrafcet, sur le grafcet tel que le programme le construit : pas d'étape initiale, étape sans sortie qui n'est pas finale, étape jamais atteinte, numéros en double, plus de 3 sources ou destinations, FIN d'une action continue (elle ne finit jamais : le grafcet bloquerait), raccourci vers ce qui n'existe pas, variable inexistante dans une réceptivité, transition sans réceptivité, liaison vers une étape absente. Chacun se voit **sur le dessin** (un cadre rouge en tirets et la raison sous l'élément), dans l'onglet **Contrôles** (un clic y mène ; le titre de l'onglet compte les défauts) et dans la barre du bas.
+### En simulation de l'API
+Quand l'API tourne, le dessin montre ce que le programme FAIT : les étapes actives remplies en vert, avec depuis combien de temps (« 2,6 s ») ; une transition validée (toutes ses étapes d'amont actives) en jaune, validée et vraie en vert vif ; une action en cours marquée « en cours ». La souris sur une transition dit si elle est validée, si sa réceptivité est vraie, et **la valeur de chaque variable de la réceptivité**. Le navigateur montre l'état de chaque grafcet : ses étapes actives, « fini », ou « défaut » (deux transitions franchies depuis la même étape dans un cycle, aucune étape active, déclaration incohérente).
+### Les commandes du moteur
+En simulation, une barre en haut à droite du dessin (le dessin commence dessous) : **Initialiser** (l'étape initiale seule), **Tout réinitialiser** (étapes, actions, tempos), **← Précédente** et **Suivante →** (forcer l'étape d'avant ou d'après sans attendre la réceptivité), **Forcer X3** (l'étape choisie dans le dessin devient la situation). Un clic ne fait rien tout de suite : une bande dit ce que le moteur va faire et quelle commande il reçoit (Ctrl_<nom>.Cmd.InitReq, ResetAllReq, ForceBackReq, ForceNextReq, ForceStepFromId / ForceStepToId) ; **Confirmer** l'envoie, **Annuler** ou Échap non.
+### L'historique
+L'onglet **Historique** inscrit les franchissements vus pendant la simulation (le plus récent en haut) : l'heure, la transition, de → vers, la réceptivité ; une commande du moteur y est notée en jaune (« forcé : Initialiser »). Le titre de l'onglet compte les lignes.
+! Les valeurs sont relues à chaque image dans Steps_<nom>[i].Active / .ActiveTime, Trans_<nom>[i].Condition et Acts_<nom>[i].Out : l'indice est la place de l'élément dans le grafcet, là où Builder l'a écrit.

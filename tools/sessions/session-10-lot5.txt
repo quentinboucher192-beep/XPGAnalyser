@@ -1,0 +1,232 @@
+# =============================================================================
+#  Session 10 - LOT 5 : l'editeur ST (curseur, aide a la saisie), les champs
+#  variables, la palette de couleurs, les arbres deballables.
+#  Dans le projet des sessions 1 a 9, rejouee dans la VRAIE application :
+#
+#    set APPDATA=%TEMP%\xpg-ihm-demo      (la meme que pour les sessions 1 a 9)
+#    set PROJETS=dossier\ou\la\session-1\a\cree\le\projet
+#    xpg_analyzer --script session-10-lot5.txt --captures captures --size 1920x1080
+# =============================================================================
+attendre 3
+theme Dark
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+arbre "Derived data types" replier
+arbre "DFB types" replier
+arbre "Program units" replier
+arbre "Ordre d'execution" replier
+arbre "Variables" replier
+arbre "Macros" replier
+arbre "Animation tables" replier
+arbre "Tasks" replier
+arbre "Configuration" replier
+
+# ---- 1. le curseur de l'editeur ST ----------------------------------------------------
+#  La police est proportionnelle : un espace est etroit, un "M" large. Le
+#  curseur se posait a colonne x largeur("M") et partait a droite apres chaque
+#  espace. Il est maintenant a la largeur MESUREE du debut de la ligne.
+arbre "IHM/Programmation générale"
+attendre 5
+ligne "Suivi_Maintenance"
+attendre 5
+molette 1400 400 1 ctrl
+molette 1400 400 1 ctrl
+attendre 3
+clic 1100 190
+touche fin
+texte "   (* arrêt à distance, déjà signalé *)"
+attendre 2
+capture PNG_130_st_curseur_fin_de_ligne.png
+touche debut
+touche droite
+touche droite
+touche droite
+touche droite
+attendre 2
+capture PNG_131_st_curseur_apres_quatre_espaces.png
+molette 1400 400 -1 ctrl
+molette 1400 400 -1 ctrl
+attendre 2
+
+# ---- 2. l'aide a la saisie des scripts, comme les sections de l'automate -------------
+#  Un script pour la montrer : la liste en tapant, les fonctions IHM_ et leur
+#  signature, les vues entre les guillemets, les membres apres un point, la
+#  barre du nom sous le code et l'infobulle au survol.
+outil "Nouveau script ST"
+attendre 3
+champ 1 "Demo_Saisie"
+liste 1
+choisir "Appelé"
+champ 4 "L'aide a la saisie, pour la demonstration"
+bouton "Créer"
+attendre 3
+clic 1400 400
+touche ctrl+fin
+texte "Mo"
+attendre 3
+capture PNG_132_st_completion_variable_ihm.png
+touche entree
+texte " := TRUE;"
+touche entree
+texte "IHM_NAV"
+attendre 2
+touche entree
+attendre 3
+capture PNG_133_st_fonction_ihm_signature_et_vues.png
+touche bas
+touche entree
+touche fin
+texte ";"
+touche entree
+texte "IF Armoires[0].ana."
+attendre 2
+texte "PT"
+attendre 3
+capture PNG_134_st_membres_apres_un_point.png
+touche entree
+texte ".mes > 5.0 THEN "
+touche entree
+texte "    IHM_JOURNAL('Pression {Arm"
+attendre 3
+capture PNG_135_st_variable_dans_un_texte_a_trous.png
+touche echap
+texte "oires[0].ana.PT1.mes:0.0} bar');"
+touche entree
+touche retour
+touche retour
+touche retour
+touche retour
+texte "END_IF;"
+touche haut
+touche haut
+touche debut
+touche droite
+touche droite
+touche droite
+touche droite
+touche droite
+touche droite
+touche droite
+touche droite
+touche droite
+touche droite
+touche droite
+touche droite
+touche droite
+touche droite
+touche droite
+touche droite
+touche droite
+attendre 3
+capture PNG_136_st_barre_du_nom_sous_le_curseur.png
+survol 1100 162
+attendre 45
+capture PNG_137_st_infobulle_au_survol.png
+
+# ---- 3. l'aide a la saisie des champs : une variable, une expression, un texte ----
+#  La meme liste sous la case, dans toutes les grilles de proprietes de l'IHM.
+#  Echap ferme la liste ; un second Echap abandonne la saisie (rien ne change ici).
+arbre "IHM/Configuration" deplier
+attendre 3
+arbre "IHM/Configuration/Alarmes"
+attendre 5
+ligne "PT9_Hors_Service"
+attendre 3
+propriete-clic "Condition"
+attendre 2
+texte "Armoires[1].bou"
+attendre 3
+capture PNG_138_champ_condition_membres.png
+touche echap
+touche echap
+attendre 2
+arbre "IHM/Vues" deplier
+attendre 3
+arbre "IHM/Vues/Vue_Armoire_A"
+attendre 10
+objet "Pression_PT1"
+attendre 3
+propriete-clic "Visibilité (expression)"
+attendre 2
+texte "NOT Mode_M"
+attendre 3
+capture PNG_139_champ_animation_variable_ihm.png
+touche echap
+touche echap
+attendre 2
+
+# ---- 4. la palette de couleurs ----------------------------------------------------
+#  Une case Couleur ouvre une palette : le nuancier, les couleurs deja employees
+#  dans le projet, les recentes, un carre de teinte et le code #RRGGBB.
+objet "Bouteille"
+attendre 3
+propriete-clic "Remplissage"
+attendre 3
+capture PNG_140_palette_couleurs.png
+couleur "#27AE60"
+attendre 3
+survol 1200 1000
+attendre 3
+capture PNG_141_palette_couleur_appliquee.png
+# La couleur d'avant, tapee dans la palette (le code est tout selectionne a
+# l'ouverture : la frappe le remplace, Entree l'applique).
+propriete "Remplissage" "#3B4D63"
+attendre 3
+
+# ---- 5. l'arbre deballe [+/-] ------------------------------------------------------
+#  Sous un objet : ses surcharges (expressions, texte dynamique, variable API,
+#  actions, securite, verrou) et, pour un groupe, ses membres. Un clic sur une
+#  surcharge ouvre la vue, l'objet choisi, et sa case ou son action.
+arbre "IHM/Configuration" replier
+arbre "IHM/Vues/Vue_Armoire_A" deplier
+attendre 2
+arbre "IHM/Vues/Vue_Armoire_A/Objets" deplier
+attendre 2
+arbre "IHM/Vues/Vue_Armoire_A/Objets/Groupe_Bouteille" deplier
+attendre 2
+arbre "IHM/Vues/Vue_Armoire_A/Objets/Pression_PT1" deplier
+attendre 2
+arbre "IHM/Vues/Vue_Armoire_A/Objets/Btn_Accueil" deplier
+attendre 2
+arbre "IHM/Vues/Vue_Armoire_A/Objets/Pression_PT1/Valeur"
+attendre 5
+survol 1200 1000
+attendre 3
+capture PNG_142_arbre_objets_et_surcharges.png
+arbre "IHM/Vues/Vue_Armoire_A" replier
+arbre "IHM/Vues" replier
+arbre "IHM/Configuration" deplier
+attendre 2
+arbre "IHM/Configuration/Alarmes" deplier
+attendre 2
+arbre "IHM/Configuration/Alarmes/Armoire A" deplier
+attendre 2
+arbre "IHM/Configuration/Alarmes/Armoire B" deplier
+attendre 2
+arbre "IHM/Configuration/Utilisateurs" deplier
+attendre 2
+arbre "IHM/Configuration/Utilisateurs/Superviseur" deplier
+attendre 2
+arbre "IHM/Configuration/Utilisateurs/Rôles" deplier
+attendre 2
+arbre "IHM/Configuration/Alarmes/Armoire A"
+attendre 5
+survol 1200 1000
+attendre 3
+capture PNG_143_arbre_alarmes_et_utilisateurs.png
+arbre "IHM/Configuration" replier
+arbre "IHM/Programmation générale" deplier
+attendre 2
+arbre "IHM/Programmation générale/Scripts" deplier
+attendre 2
+arbre "IHM/Programmation générale/Variables IHM" deplier
+attendre 2
+arbre "IHM/Programmation générale/Variables employées" deplier
+attendre 3
+arbre "IHM/Programmation générale/Variables employées/Mode_Maintenance"
+attendre 5
+survol 1200 1000
+attendre 3
+capture PNG_144_arbre_programmation_generale.png
+quitter

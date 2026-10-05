@@ -1,0 +1,11 @@
+# Derived data type.
+name = config_helium
+version = 0.02
+# checksum is recomputed by Control Expert on import; not stored.
+
+# name ; type ; address ; scope ; init ; comment ; attributes ; element comments
+DLHE1 ; INT ;  ; Member ;  ;  ;  ; 
+DLHE2 ; INT ;  ; Member ;  ;  ;  ; 
+DLHE3 ; INT ;  ; Member ;  ;  ;  ; 
+DLHE4 ; INT ;  ; Member ;  ;  ;  ; 
+DLHE5 ; INT ;  ; Member ;  ;  ;  ; 

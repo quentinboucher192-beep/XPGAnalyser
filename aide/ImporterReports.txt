@@ -1,0 +1,15 @@
+#! summary = Ecrit les echanges avec l'IHM : les commandes en tete de tache, les mesures et les alarmes d'equipement en queue.
+#! usage = Depuis l'onglet Liens. Trois types, et leur place dans la tache est le sujet :
+#! usage = TC, commande : l'IHM ecrit, l'automate lit. EN PREMIER. Une TC lue en fin de tache fait travailler tout le programme sur la commande du cycle precedent - un bouton d'IHM qui repond avec un cycle de retard.
+#! usage = TM, mesure, et TA, alarme : l'automate ecrit, l'IHM lit. EN DERNIER. Une TM ecrite en tete publie la valeur d'avant que le programme n'ait tourne.
+#! usage = Aucun des deux ne se voit sur une temperature. Les deux se voient sur un comptage de pieces.
+#! usage = LA CONVERSION DE TYPE VIENT DU CATALOGUE. Un %MW est un INT ; Pressure est un REAL et FbkMs un DINT. Ecrire l'affectation sans conversion donne un projet qui ne compile pas, et deviner le type d'apres le nom donne un projet qui compile et qui ment. Le type est dans l'onglet Catalogue, on l'y lit - et quand il est introuvable, la ligne est ecrite avec un commentaire qui le dit plutot qu'avec une conversion inventee.
+#! usage = ELLE NE TRAITE QUE LES ALARMES D'EQUIPEMENT. Les alarmes de voie - AlarmEn, seuils analogiques - sont un autre sujet, un autre onglet et un autre chemin : c'est ImporterAlarmes.
+#! usage = LA SECTION EST REECRITE ENTIEREMENT a chaque execution. Ce qui y a ete ajoute a la main est perdu. C'est voulu : une section a moitie ancienne et a moitie nouvelle est pire que les deux, et on ne peut pas deviner ce qui a ete ajoute expres.
+#! see = ImporterAlarmes, ImporterEquipements, ImporterClasseur
+#! param classeur = Le chemin du classeur. Laisser vide prend celui qui est deja charge par le bouton Classeur..., ce qui est le cas normal quand on enchaine plusieurs imports.
+#! param classeur = C'est un .xlsm, pas un export CSV : la macro lit les onglets directement, et les quatre familles d'E/S sont donc traitees en une seule execution.
+#! param sTC = Les commandes venant de l'IHM. A placer EN PREMIER dans la tache, juste apres la lecture des entrees.
+#! param sTM = Les mesures et les alarmes d'equipement vers l'IHM. A placer EN DERNIER, juste avant l'ecriture des sorties.
+#! param tache = La tache d'accueil des sections creees, MAST en general.
+#! param tache = Creer la section ne la place pas dans le bon ordre : Control Expert execute les sections dans l'ordre du navigateur de projet, et cet ordre se pose a la main. Chaque macro rappelle a la fin ou sa section doit aller.

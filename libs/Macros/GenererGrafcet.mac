@@ -1,0 +1,251 @@
+(* GenererGrafcet
+
+   UN GRAFCET SANS CLASSEUR : le squelette complet d'une sequence, a
+   completer a la main. Les etapes se donnent par leurs noms, dans l'ordre ;
+   chacune passe a la suivante, la derniere revient a la premiere si on le
+   demande.
+
+     GenererGrafcet  nom = Remplissage   etapes = ATT,REMP,BRAS,VID
+
+   donne la sous-routine Grafcet_Remplissage : les tailles, la construction
+   (4 etapes, 4 transitions X0->X1->X2->X3->X0), les receptivites a ecrire
+   (FALSE pour l'instant), l'appel du moteur, l'etat pour l'IHM et la remise
+   a zero des commandes - et l'appel dans la section Grafcets.
+
+   #! summary = Crée le squelette d'un grafcet à compléter à la main : étapes en séquence, réceptivités à écrire, moteur appelé, sans classeur.
+   #! version = 1.10
+   #! changes 1.10 = Le formulaire : chaque question a son champ (le classeur par …, Ctrl+V ou en le glissant ; les tâches et les sections du projet ; des interrupteurs ; des choix à libellés), ses groupes, son aide et un libellé avec accents. Le code ne change pas. Les étapes se donnent une par ligne.
+   #! usage = POUR QUOI : un grafcet ecrit a la main, sans les onglets Grafcet du classeur (ImporterGrafcet). Tout ce qui ne depend pas de VOTRE procede est ecrit : il reste les receptivites et les actions.
+   #! usage = CE QUI RESTE A FAIRE, dans la sous-routine : remplacer chaque FALSE par la vraie receptivite ; ajouter les actions (une ligne GC_Builder(T := 3...) par action, l'exemple est en commentaire) et leurs sorties.
+   #! usage = APRES UNE MODIFICATION DES TEXTES DE CONSTRUCTION, changer le numero de signature (GC_x_Sig <> 1, puis 2...) : la construction ne se refait que si elle change.
+   #! usage = ELLE NE REECRIT RIEN : une sous-routine du meme nom arrete la macro. Un grafcet genere puis modifie a la main ne se perd pas en la relancant.
+   #! see = ImporterGrafcet, PreparerGrafcets, DFB_GRAFCETENGINE, BUILDING
+   #! param nom = Il nomme les variables et la sous-routine ; 20 caractères au plus.
+   #! param nom = Le nom du grafcet : lettres, chiffres, souligne, une lettre en tete, 20 caracteres au plus. Il nomme les variables (Etapes_nom, GC_nom...) et la sous-routine (Grafcet_nom).
+   #! param etapes = Une par ligne, 4 caractères au plus ; la première est initiale.
+   #! param etapes = Les noms des etapes, dans l'ordre, separes par des virgules. 4 caracteres chacun au plus, 2 a 28 etapes. La premiere est initiale.
+   #! param boucle = Sinon la dernière est finale : le grafcet s'y arrête.
+   #! param boucle = O : la derniere etape revient a la premiere. N : la derniere est une etape finale (le grafcet s'y arrete, Finished).
+   #! param tache = Les sections générées vont dans cette tâche.
+   #! param tache = La tache d'accueil de la section Grafcets et de la sous-routine, MAST en general.
+   #! param prefSection = Vide en général : il sert quand deux automates partagent un projet.
+   #! param prefSection = Le prefixe des sections generees. Vide en general.
+   #! param horloge = Les blocs se cadencent sur Horloge.DtMs, le vrai temps du cycle.
+   #! param horloge = O cree l'Horloge (DFB_SYS_CLOCK) si le projet n'en a pas, et le temps des grafcets la suit. N prend 20 ms.
+   #! categorie = Générer
+   #! champ nom = nom
+   #! libelle nom = Nom du grafcet
+   #! champ etapes = liste
+   #! libelle etapes = Les étapes, dans l'ordre
+   #! champ boucle = oui-non
+   #! libelle boucle = La dernière étape revient à la première
+   #! champ tache = tache
+   #! libelle tache = Tâche d'accueil des sections
+   #! champ prefSection = nom facultatif
+   #! libelle prefSection = Préfixe des noms de section
+   #! champ horloge = oui-non
+   #! libelle horloge = Appeler DFB_SYS_CLOCK et cadencer les blocs sur lui
+   #! exemple nom = Etapes_{}, GC_{}, Grafcet_{}
+   #! groupe Le grafcet = nom, etapes, boucle
+   #! groupe Programme = tache, prefSection, horloge
+   #! avance = prefSection
+   #! produit = un grafcet à compléter : ses tableaux, son moteur, sa sous-routine Grafcet_<nom>
+   #! appliquer = Créer le grafcet {nom}
+*)
+
+g      := Ask('nom', 'Nom du grafcet (il nomme les variables)', 'Sequence');
+etapes := Ask('etapes', 'Noms des etapes, dans l ordre, separes par des virgules', 'X0,X1,X2,X3');
+boucle := AskChoice('boucle', 'La derniere etape revient-elle a la premiere', 'O,N', 'O');
+tache       := Ask('tache', 'Tache d accueil des sections', 'MAST');
+prefSection := Ask('prefSection', 'Prefixe des noms de section (vide en general)', '');
+horloge     := AskChoice('horloge', 'Appeler DFB_SYS_CLOCK et cadencer les blocs sur lui', 'O,N', 'O');
+AskNow();
+
+nl := CHR(10);
+lettres := 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+ident := lettres + '0123456789_';
+
+(* ---- le nom ------------------------------------------------------------ *)
+ok := LEN(g) > 0 AND LEN(g) <= 20;
+q := 0;
+IF ok THEN
+    IF FIND(lettres, MID(g, 0, 1), 0) < 0 THEN ok := FALSE; END_IF;
+END_IF;
+FOR q := 0 TO LEN(g) - 1 DO
+    IF FIND(ident, MID(g, q, 1), 0) < 0 THEN ok := FALSE; END_IF;
+END_FOR;
+IF NOT ok THEN
+    Fail('"' + g + '" n est pas un nom de grafcet : lettres, chiffres, souligne, une lettre en tete, 20 caracteres au plus');
+END_IF;
+sr := prefSection + 'Grafcet_' + g;
+IF SectionExists(sr) THEN
+    Fail(sr + ' existe deja : GenererGrafcet ne reecrit pas un grafcet (il a peut-etre ete complete a la main). '
+         + 'Supprimez-le, ou donnez un autre nom.');
+END_IF;
+
+(* ---- les etapes -------------------------------------------------------- *)
+liste := etapes + ',';
+p := 0;
+k := 0;
+nb := 0;
+x := '';
+noms := '';
+construction := '';
+WHILE p < LEN(liste) DO
+    k := FIND(liste, ',', p);
+    x := MID(liste, p, k - p);
+    p := k + 1;
+    WHILE LEN(x) > 0 AND MID(x, 0, 1) = ' ' DO x := MID(x, 1); END_WHILE;
+    WHILE LEN(x) > 0 AND MID(x, LEN(x) - 1, 1) = ' ' DO x := MID(x, 0, LEN(x) - 1); END_WHILE;
+    IF x <> '' THEN
+        IF nb >= 28 THEN Fail('28 etapes au plus : la taille des tableaux du moteur'); END_IF;
+        IF FIND(x, '|', 0) >= 0 OR FIND(x, CHR(39), 0) >= 0 THEN
+            Fail('le nom d etape "' + x + '" contient | ou une apostrophe');
+        END_IF;
+        IF LEN(x) > 4 THEN
+            Warn('le nom d etape "' + x + '" est coupe a 4 caracteres : "' + MID(x, 0, 4) + '"');
+            x := MID(x, 0, 4);
+        END_IF;
+        txt := 'id=' + DINT_TO_STRING(nb) + '|n=' + x;
+        IF nb = 0 THEN txt := txt + '|i=1'; END_IF;
+        construction := construction + nl + '    GC_Builder(T := 1, Text := ' + QUOTE(txt)
+            + ', _Step := Etapes_' + g + '[' + DINT_TO_STRING(nb) + ']);';
+        IF noms = '' THEN noms := x; ELSE noms := noms + ',' + x; END_IF;
+        nb := nb + 1;
+    END_IF;
+END_WHILE;
+IF nb < 2 THEN Fail('deux etapes au moins'); END_IF;
+
+(* La derniere etape, finale si le grafcet ne boucle pas : il s'arretera
+   apres elle. On le signale en la reconstruisant avec f=1. *)
+IF boucle = 'N' THEN
+    k := FIND(construction, 'id=' + DINT_TO_STRING(nb - 1) + '|n=', 0);
+    q := FIND(construction, CHR(39) + ',', k);
+    construction := MID(construction, 0, q) + '|f=1' + MID(construction, q);
+END_IF;
+
+(* ---- les transitions : chacune vers la suivante ------------------------ *)
+receptivites := '';
+nt := nb - 1;
+IF boucle = 'O' THEN nt := nb; END_IF;
+t2 := 0;
+dst := 0;
+FOR t2 := 0 TO nt - 1 DO
+    dst := t2 + 1;
+    IF dst >= nb THEN dst := 0; END_IF;
+    txt := 'id=' + DINT_TO_STRING(t2) + '|s=' + DINT_TO_STRING(t2) + '|d=' + DINT_TO_STRING(dst) + '|c=T'
+        + DINT_TO_STRING(t2);
+    construction := construction + nl + '    GC_Builder(T := 2, Text := ' + QUOTE(txt)
+        + ', d := T#0ms, _Trans := Trans_' + g + '[' + DINT_TO_STRING(t2) + ']);';
+    receptivites := receptivites + nl + 'Trans_' + g + '[' + DINT_TO_STRING(t2) + '].Condition := FALSE;   (* X'
+        + DINT_TO_STRING(t2) + ' -> X' + DINT_TO_STRING(dst) + ' : A ECRIRE *)';
+END_FOR;
+IF boucle = 'N' THEN
+    (* l'etape finale sort vers la premiere : c'est ce franchissement qui met Finished *)
+    txt := 'id=' + DINT_TO_STRING(nt) + '|s=' + DINT_TO_STRING(nb - 1) + '|d=0|c=FIN';
+    construction := construction + nl + '    GC_Builder(T := 2, Text := ' + QUOTE(txt)
+        + ', d := T#0ms, _Trans := Trans_' + g + '[' + DINT_TO_STRING(nt) + ']);';
+    receptivites := receptivites + nl + 'Trans_' + g + '[' + DINT_TO_STRING(nt)
+        + '].Condition := TRUE;   (* etape finale -> X0 : le grafcet est fini (Finished) jusqu a InitReq *)';
+    nt := nt + 1;
+END_IF;
+
+(* ---- la bibliotheque, GC_Temps, la section Grafcets --------------------- *)
+RunMacro('PreparerGrafcets');
+
+declarations := 'Etapes_' + g + ':ARRAY[0..27] OF ST_GC_Step;'
+              + 'Trans_' + g + ':ARRAY[0..27] OF ST_GC_Transition;'
+              + 'Acts_' + g + ':ARRAY[0..27] OF ST_GC_Action;'
+              + 'GC_' + g + ':DFB_GRAFCETENGINE;'
+              + 'Ctrl_' + g + ':ST_GC_CTRL;'
+              + 'GC_' + g + '_Sig:INT;';
+p := 0;
+c := '';
+WHILE p < LEN(declarations) DO
+    k := FIND(declarations, ';', p);
+    x := MID(declarations, p, k - p);
+    p := k + 1;
+    q := FIND(x, ':', 0);
+    c := MID(x, q + 1);
+    x := MID(x, 0, q);
+    IF VariableExists(x) THEN
+        IF UPPER(VariableType(x)) <> UPPER(c) THEN
+            Fail(x + ' existe deja avec le type ' + VariableType(x) + ' au lieu de ' + c);
+        END_IF;
+    ELSE
+        AddVariable(x, c, 'Global', '', '', 'grafcet ' + g);
+    END_IF;
+END_WHILE;
+
+AddSubroutine(sr, tache);
+AppendToSection(sr, '(* Genere par GenererGrafcet : le squelette du grafcet ' + g + ' (' + noms + ').');
+AppendToSection(sr, '   A COMPLETER : les receptivites (FALSE pour l instant), les actions et leurs');
+AppendToSection(sr, '   sorties. Appelee par la section Grafcets. *)');
+AppendToSection(sr, 'GC_' + g + '.Runtime.GC_MAX_STEPS := ' + DINT_TO_STRING(nb) + ';');
+AppendToSection(sr, 'GC_' + g + '.Runtime.GC_MAX_TRANSITIONS := ' + DINT_TO_STRING(nt) + ';');
+AppendToSection(sr, 'GC_' + g + '.Runtime.GC_MAX_ACTIONS := 28;   (* a ramener au nombre d actions *)');
+AppendToSection(sr, 'GC_' + g + '.Runtime.GC_MAX_HIST := 8;');
+AppendToSection(sr, '');
+AppendToSection(sr, '(* LA CONSTRUCTION, une fois. APRES AVOIR MODIFIE CES TEXTES, passer la');
+AppendToSection(sr, '   signature a 2, puis 3... : la construction ne se refait que si elle change. *)');
+AppendToSection(sr, 'IF GC_' + g + '_Sig <> 1 THEN' + construction);
+AppendToSection(sr, '    (* les actions : une ligne par action, par exemple');
+AppendToSection(sr, '    GC_Builder(T := 3, Text := ' + CHR(39) + 'id=0|n=MARCHE|k=0|s=1' + CHR(39)
+    + ', d := T#0ms, _Act := Acts_' + g + '[0]);');
+AppendToSection(sr, '       k = 0 continue, 1 a l activation, 2 retardee, 4 limitee (d), 5 a la');
+AppendToSection(sr, '       desactivation... voir ST_GC_Action *)');
+AppendToSection(sr, '    Ctrl_' + g + '.Cmd.ForceStepFromId := -1;   (* pas de forcage *)');
+AppendToSection(sr, '    Ctrl_' + g + '.Cmd.ForceStepToId := -1;');
+AppendToSection(sr, '    GC_' + g + '_Sig := 1;');
+AppendToSection(sr, 'END_IF;');
+AppendToSection(sr, '');
+AppendToSection(sr, '(* LES RECEPTIVITES, calculees AVANT l appel du moteur *)' + receptivites);
+AppendToSection(sr, '');
+AppendToSection(sr, '(* LES CONDITIONS D ACTION : Acts_' + g + '[k].EnableCond := ... ; *)');
+AppendToSection(sr, '');
+AppendToSection(sr, '(* LE MOTEUR *)');
+AppendToSection(sr, 'Ctrl_' + g + '.Cmd.Enable := TRUE;');
+AppendToSection(sr, 'GC_' + g + '(Enable := Ctrl_' + g + '.Cmd.Enable, ModeReq := Ctrl_' + g + '.Cmd.ModeReq,');
+AppendToSection(sr, '    FreezeReq := Ctrl_' + g + '.Cmd.FreezeReq, PauseReq := Ctrl_' + g + '.Cmd.PauseReq,');
+AppendToSection(sr, '    StepReq := Ctrl_' + g + '.Cmd.StepReq, InitReq := Ctrl_' + g + '.Cmd.InitReq,');
+AppendToSection(sr, '    ResetInitialReq := Ctrl_' + g + '.Cmd.ResetInitialReq, ResetAllReq := Ctrl_' + g
+    + '.Cmd.ResetAllReq,');
+AppendToSection(sr, '    TsNow := GC_Temps,');
+AppendToSection(sr, '    ForceBackReq := Ctrl_' + g + '.Cmd.ForceBackReq, ForceNextReq := Ctrl_' + g
+    + '.Cmd.ForceNextReq,');
+AppendToSection(sr, '    ForceStepFromId := Ctrl_' + g + '.Cmd.ForceStepFromId, ForceStepToId := Ctrl_' + g
+    + '.Cmd.ForceStepToId,');
+AppendToSection(sr, '    Steps := Etapes_' + g + ', Transitions := Trans_' + g + ', Actions := Acts_' + g + ');');
+AppendToSection(sr, '');
+AppendToSection(sr, '(* L ETAT, pour l IHM *)');
+AppendToSection(sr, 'Ctrl_' + g + '.Stat.Cycle := GC_' + g + '.Runtime.Cycle;');
+AppendToSection(sr, 'Ctrl_' + g + '.Stat.Phase := GC_' + g + '.Runtime.Phase;');
+AppendToSection(sr, 'Ctrl_' + g + '.Stat.Mode := GC_' + g + '.Runtime.Mode;');
+AppendToSection(sr, 'Ctrl_' + g + '.Stat.ActiveStepCount := GC_' + g + '.Debug.ActiveStepCount;');
+AppendToSection(sr, 'Ctrl_' + g + '.Stat.LastTransitionFiredId := GC_' + g + '.Debug.LastTransitionFiredId;');
+AppendToSection(sr, 'Ctrl_' + g + '.Stat.ConfigFault := GC_' + g + '.Debug.ConfigFault;');
+AppendToSection(sr, 'Ctrl_' + g + '.Stat.WatchdogDetected := GC_' + g + '.Debug.WatchdogDetected;');
+AppendToSection(sr, 'Ctrl_' + g + '.Stat.NoActiveStepFault := GC_' + g + '.Debug.NoActiveStepFault;');
+AppendToSection(sr, '');
+AppendToSection(sr, '(* LES SORTIES DES ACTIONS, par exemple : Moteur := Acts_' + g + '[0].Out; *)');
+AppendToSection(sr, '');
+AppendToSection(sr, '(* LES COMMANDES IMPULSIONNELLES DE L IHM : remises a zero APRES l appel *)');
+AppendToSection(sr, 'Ctrl_' + g + '.Cmd.StepReq := FALSE;');
+AppendToSection(sr, 'Ctrl_' + g + '.Cmd.InitReq := FALSE;');
+AppendToSection(sr, 'Ctrl_' + g + '.Cmd.ResetInitialReq := FALSE;');
+AppendToSection(sr, 'Ctrl_' + g + '.Cmd.ResetAllReq := FALSE;');
+AppendToSection(sr, 'Ctrl_' + g + '.Cmd.ForceBackReq := FALSE;');
+AppendToSection(sr, 'Ctrl_' + g + '.Cmd.ForceNextReq := FALSE;');
+AppendToSection(sr, 'Ctrl_' + g + '.Cmd.ForceStepFromId := -1;');
+AppendToSection(sr, 'Ctrl_' + g + '.Cmd.ForceStepToId := -1;');
+
+secG := prefSection + 'Grafcets';
+IF FIND(SectionText(secG), sr + '();', 0) < 0 THEN
+    AppendToSection(secG, sr + '();');
+END_IF;
+
+RunMacro('RangerSections');
+
+Log('grafcet ' + g + ' : ' + DINT_TO_STRING(nb) + ' etape(s) (' + noms + '), ' + DINT_TO_STRING(nt)
+    + ' transition(s) -> sous-routine ' + sr + ', appelee par ' + secG);
+Log('A COMPLETER dans ' + sr + ' : les receptivites (FALSE), les actions et leurs sorties.');

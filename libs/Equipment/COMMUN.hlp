@@ -1,0 +1,70 @@
+# Aide commune aux types d'equipement de ce dossier.
+#
+# Douze champs - Name, Enable, ManMode, AckFault, Fault... - sont les memes dans
+# les dix DDT d'equipement. Ils sont documentes ICI, une fois : tout parametre
+# d'un fichier de ce dossier qui n'a pas d'aide a lui prend celle-ci. L'aide
+# propre d'un fichier gagne toujours - une famille qui dit autre chose sur RunMs
+# le dit dans son fichier.
+#
+# Ce fichier n'est pas un element de bibliotheque : il n'est ni importe dans un
+# projet ni liste dans index.txt. Seule l'aide le lit.
+#! param Name = Le nom que l'operateur lit, 16 caracteres. Le bloc ne s'en sert pas : il est la
+#! param Name = pour l'IHM, les messages et le journal d'alarmes.
+#! param Enable = FALSE fige l'equipement : aucune sortie, aucun defaut publie, et les compteurs de
+#! param Enable = marche cessent d'avancer. C'est l'etat d'une machine consignee - elle ne doit
+#! param Enable = pas remplir le journal d'alarmes pendant qu'on travaille dessus.
+#! param ManMode = TRUE : les commandes manuelles (ManRunReq, ManPosReq...) priment sur
+#! param ManMode = l'automatisme. Le mode manuel ne desarme AUCUNE protection : un defaut coupe les
+#! param ManMode = sorties dans les deux modes.
+#! param AckFault = Acquittement, SUR FRONT MONTANT : efface FaultLatch et FaultCode. Si la
+#! param AckFault = condition est toujours la, le defaut revient au cycle suivant - on n'acquitte
+#! param AckFault = pas un thermique encore declenche. Tenu a TRUE, il n'acquitte qu'une fois.
+#! param Fault = La copie PUBLIEE de FaultLatch, posee en fin de cycle, et seulement si
+#! param Fault = l'equipement est active. C'est lui que lisent l'IHM et les alarmes.
+#! param FaultCode = Le dernier code de defaut pose, 0 quand il n'y a rien. La table de la famille
+#! param FaultCode = est en tete de son fichier. Efface seulement par AckFault.
+#! param FaultLatch = Le defaut MEMORISE : pose au cycle ou le defaut apparait, efface seulement par
+#! param FaultLatch = AckFault. Les sorties se coupent DESSUS, dans le meme cycle. Un defaut fugitif
+#! param FaultLatch = reste ainsi visible, et on sait pourquoi la machine s'est arretee cette
+#! param FaultLatch = nuit-la.
+#! param Ready = Utilisable : active et sans defaut. C'est ce qu'on cable sur Available d'une
+#! param Ready = rotation : un equipement en defaut est saute, et reprend son rang en revenant.
+#! param RunMs = Temps de fonctionnement cumule, en ms. Il PLAFONNE a 2 000 000 000 (555 heures)
+#! param RunMs = au lieu de devenir negatif : pour un compteur horaire, lire RunS.
+#! param RunS = Temps de fonctionnement cumule, en SECONDES : ne deborde pas avant 136 ans. C'est
+#! param RunS = lui qu'on cable sur RunS d'une rotation (la moins usee d'abord) et qu'on publie
+#! param RunS = vers l'IHM - les heures sont RunS / 3600.
+#! param Starts = Nombre de demarrages depuis le dernier Reset. Un compteur qui grimpe vite est la
+#! param Starts = signature d'un court-cycle.
+#! param StateMs = Depuis combien de temps l'equipement est dans son etat actuel (State), en ms.
+#! param StateMs = Repart a zero a chaque changement d'etat, plafonne a 2 000 000 000.
+#! param State = L'etat en un mot, pour l'IHM : 0 desactive (Enable faux), 1 en defaut, 2 au
+#! param State = repos, 3 en service - en marche, en mouvement, allume, ou un seuil franchi pour
+#! param State = une cuve.
+#! param RunReq = Demande de marche en automatique, suivie tant que ManMode est faux. C'est un
+#! param RunReq = NIVEAU : l'equipement tourne tant qu'elle est vraie et que rien ne l'interdit.
+#! param ManRunReq = Demande de marche en manuel, suivie tant que ManMode est vrai.
+#! param Run = La sortie de commande. Coupee dans le cycle meme ou un defaut apparait - sur
+#! param Run = FaultLatch, pas sur Fault, qui n'est publie qu'en fin de cycle.
+#! param Running = En marche effective : la commande ET le retour de marche quand la famille en a
+#! param Running = un. C'est Running qui fait avancer RunMs, RunS et Starts.
+#! param Fbk = Retour de marche : le contact auxiliaire du contacteur (KM).
+#! param Thermal = TRUE quand le relais thermique est SAIN : c'est un contact NF. L'initialiser a
+#! param Thermal = FALSE met l'equipement en defaut au demarrage, ce qui est le comportement sur.
+#! param Moving = Une position est demandee et pas encore atteinte. Fait avancer le chrono de
+#! param Moving = manoeuvre : au-dela du temps permis, defaut 2.
+#! param PosReq = Position demandee en automatique, de 0 a Ways - 1. Hors plage, c'est le defaut
+#! param PosReq = 3 et aucune sortie n'est commandee - plutot que de se croire au repos.
+#! param ManPosReq = Position demandee en manuel, suivie tant que ManMode est vrai.
+#! param Pos = La position atteinte, -1 tant qu'aucun retour n'est franc.
+#! param Ways = Le nombre de positions, fixe pour ce type (2, 3 ou 4). Ne pas le changer.
+#! param Cmd = Les sorties de commande, une par position : Cmd[k] vraie pour aller en position k.
+#! param Cmd = Toutes coupees sur un defaut - laisser une vanne commandee alors qu'on ne sait pas
+#! param Cmd = ou elle est serait le contraire d'un repli sur.
+#! param Fdc = Les fins de course, un par position. Deux a la fois est physiquement impossible :
+#! param Fdc = c'est le defaut 1, un capteur casse.
+#! param TravelMs = Le temps de manoeuvre permis. Au-dela, sans que la position soit atteinte,
+#! param TravelMs = c'est le defaut 2. Sans fin de course, c'est le temps au bout duquel la
+#! param TravelMs = position est SUPPOSEE atteinte.
+#! param HasFdc = FALSE : pas de fin de course. La position est alors supposee atteinte au bout de
+#! param HasFdc = TravelMs - c'est pourquoi un blocage ne se detecte jamais sans capteur.

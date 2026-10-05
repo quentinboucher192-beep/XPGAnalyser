@@ -1,0 +1,148 @@
+# Derived function block, shared.
+name = CAPTEUR
+version = 0.03
+attribute = TypeCodeCheckSumString = 0
+attribute = TypeSignatureCheckSumString = 0
+attribute = UseNewTplSignAlgo = TRUE
+#! summary = Une mesure analogique : mise a l'echelle, simulation, moyenne glissante sur 10 cycles, bande morte.
+#! usage = REPRIS DU PROJET MAST, TEL QUEL : c'est ton code, range ici pour etre
+#! usage = importe dans d'autres projets. Seuls les accents des commentaires ont ete
+#! usage = retires - les fichiers de libs/ sont en ASCII - et les sommes de controle
+#! usage = mises a 0 : Control Expert les recalcule a l'import.
+#! usage = TROIS VALEURS : ScaledValue (mise a l'echelle, brute), AverageValue
+#! usage = (moyenne des 10 derniers cycles), StableValue (la moyenne, qui ne bouge que
+#! usage = de plus de DeadBand).
+#! usage = Pour une carte entiere, DFB_IO_ANA* fait la meme chose sur toutes les voies
+#! usage = en un appel, avec les seuils.
+#! example = (* declarer : Pression : REAL; *)
+#! example = Mesure(IW_Raw := Brut, Raw_Min := 0.0, Raw_Max := 10000.0, Eng_Min := 0.0,
+#! example =        Eng_Max := 16.0, DeadBand := 0.05);
+#! example = Pression := Mesure.StableValue;
+#! see = DFB_IO_ANA04
+#! param IW_Raw = La mesure brute de la carte.
+#! param Raw_Min = Le bas de la plage de la carte.
+#! param Raw_Max = Le haut.
+#! param Eng_Min = Ce que vaut le bas, en unites physiques.
+#! param Eng_Max = Ce que vaut le haut.
+#! param SimEnable = Utiliser SimValue au lieu de la carte.
+#! param SimValue = La valeur simulee, en points de la carte.
+#! param DeadBand = StableValue ne suit AverageValue que si l'ecart depasse ce nombre.
+#! param ScaledValue = La mesure mise a l'echelle, ce cycle.
+#! param AverageValue = La moyenne des 10 derniers cycles.
+#! param StableValue = La moyenne, filtree par la bande morte.
+#! param RawInput = La valeur brute retenue : la carte ou la simulation.
+#! changes 0.03 = CORRECTION : FirstScan naissait FAUX, et l'initialisation de la
+#! changes 0.03 = moyenne (tampon rempli avec la premiere mesure) ne s'executait
+#! changes 0.03 = jamais : la moyenne partait de zero et mettait dix cycles a
+#! changes 0.03 = rejoindre la mesure. FirstScan nait maintenant VRAI.
+#! given = Brut := 5000.0
+#! expect = 1 : Mesure.AverageValue = 8.0
+#! expect = 1 : Pression = 8.0
+
+# name ; type ; scope ; initial ; comment
+IW_Raw ; REAL ; Input ;  ; 
+Raw_Min ; REAL ; Input ;  ; 
+Raw_Max ; REAL ; Input ;  ; 
+Eng_Min ; REAL ; Input ;  ; 
+Eng_Max ; REAL ; Input ;  ; 
+SimEnable ; BOOL ; Input ;  ; 
+SimValue ; REAL ; Input ;  ; 
+DeadBand ; REAL ; Input ;  ; 
+ScaledValue ; REAL ; Public ;  ; 
+AverageValue ; REAL ; Public ;  ; 
+StableValue ; REAL ; Public ;  ; 
+RawInput ; REAL ; Public ;  ; 
+Index ; INT ; Local ;  ; 
+i ; INT ; Local ;  ; 
+Buffer ; ARRAY[0..9] OF REAL ; Local ;  ; 
+Sum ; REAL ; Local ;  ; 
+WorkingValue ; REAL ; Local ;  ; 
+FirstScan ; BOOL ; Local ; TRUE ; premier appel : la moyenne part de la mesure
+
+<<<section main ST>>>
+(* ===================================================== *)
+(* ACQUISITION / SIMULATION *)
+(* ===================================================== *)
+
+IF SimEnable THEN
+
+    RawInput := SimValue;
+
+ELSE
+
+    RawInput := IW_Raw;
+
+END_IF;
+
+(* ===================================================== *)
+(* MISE A L'ECHELLE *)
+(* ===================================================== *)
+
+IF Raw_Max <> Raw_Min THEN
+
+    WorkingValue :=
+        ((RawInput - Raw_Min)
+        * (Eng_Max - Eng_Min)
+        / (Raw_Max - Raw_Min))
+        + Eng_Min;
+
+ELSE
+
+    WorkingValue := 0.0;
+
+END_IF;
+
+ScaledValue := WorkingValue;
+
+(* ===================================================== *)
+(* INITIALISATION *)
+(* ===================================================== *)
+
+IF FirstScan THEN
+
+    FOR i := 0 TO 9 DO
+
+        Buffer[i] := WorkingValue;
+
+    END_FOR;
+
+    Sum := WorkingValue * 10.0;
+
+    StableValue := WorkingValue;
+
+    FirstScan := FALSE;
+
+END_IF;
+
+(* ===================================================== *)
+(* MOYENNE GLISSANTE *)
+(* ===================================================== *)
+
+(* Retire ancienne valeur *)
+Sum := Sum - Buffer[Index];
+
+(* Ajoute nouvelle valeur *)
+Buffer[Index] := WorkingValue;
+
+Sum := Sum + Buffer[Index];
+
+(* Calcul moyenne *)
+AverageValue := Sum / 10.0;
+
+(* Incremente index *)
+Index := Index + 1;
+
+IF Index > 9 THEN
+    Index := 0;
+END_IF;
+
+(* ===================================================== *)
+(* DEADBAND *)
+(* ===================================================== *)
+
+IF ABS(AverageValue - StableValue) >= DeadBand THEN
+
+    StableValue := AverageValue;
+
+END_IF;
+<<<end>>>

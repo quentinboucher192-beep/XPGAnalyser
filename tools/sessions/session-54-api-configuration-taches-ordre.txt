@@ -1,0 +1,118 @@
+# =============================================================================
+#  Session 54 - LOT API 4 : Configuration, Taches, Ordre d'execution.
+#  Configuration : importer le .XHW dans le projet ouvert (une commande), les
+#  racks dessines avec les voies que le programme emploie, le module choisi ;
+#  Voies et adresses (les adresses du code face aux modules, les fautives, que
+#  faire) ; Reseau ; Plan memoire (un carre par mot, la plus grande place
+#  libre) ; remplacer un module, Ctrl+Z. Taches : le chien de garde, + FAST.
+#  Ordre d'execution : verifier l'ordre, placer apres, glisser, Ctrl+Z.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 12
+arbre "IHM" replier
+attendre 3
+
+# ---- A. Configuration : importer le .XHW dans le projet ouvert -----------------------------
+arbre "API/Configuration"
+attendre 8
+capture PNG_620_configuration_sans_xhw.png
+outil "Importer le .XHW"
+attendre 6
+champ 1 "${XHW}"
+attendre 3
+bouton "Import"
+attendre 20
+capture PNG_621_racks_modules.png
+
+# ---- B. Un module : ses voies, celles que le programme emploie -----------------------------
+module 0 5
+attendre 6
+capture PNG_622_module_choisi.png
+
+# ---- C. Voies et adresses : chaque adresse du code face a son module ----------------------
+outil "Vérifier les adresses"
+attendre 8
+ligne "%Q0.8.4"
+attendre 5
+capture PNG_623_voies_adresses.png
+outil "Seulement les adresses fautives"
+attendre 5
+ligne "%I0.5.0"
+attendre 5
+capture PNG_624_voies_fautives.png
+outil "Seulement les adresses fautives"
+attendre 3
+
+# ---- D. Reseau, plan memoire ----------------------------------------------------------------
+sous-onglet "Réseau"
+attendre 5
+ligne "BMXNOC0401"
+attendre 4
+capture PNG_625_reseau.png
+sous-onglet "Plan mémoire"
+attendre 6
+outil "Trouver la plus grande place libre"
+attendre 5
+capture PNG_626_plan_memoire.png
+
+# ---- E. Remplacer un module (une commande), Ctrl+Z ------------------------------------------
+sous-onglet "Racks et modules"
+attendre 5
+module 0 5
+attendre 4
+outil "Remplacer le module choisi"
+attendre 6
+champ 1 "BMXDDO1602"
+attendre 3
+capture PNG_627_remplacer_module.png
+bouton "OK"
+attendre 12
+capture PNG_628_module_remplace.png
+touche ctrl+z
+attendre 10
+
+# ---- F. Taches : le chien de garde, + FAST ---------------------------------------------------
+arbre "API/Tâches"
+attendre 8
+cellule "MAST" "Chien de garde" "300"
+attendre 10
+outil "Ajouter la tâche FAST"
+attendre 10
+ligne "FAST" exact
+attendre 5
+capture PNG_629_taches_fast.png
+touche ctrl+z
+attendre 6
+touche ctrl+z
+attendre 6
+
+# ---- G. Ordre d'execution : verifier, placer apres, glisser, Ctrl+Z --------------------------
+arbre "API/Ordre d"
+attendre 8
+capture PNG_630_ordre_execution.png
+outil "Vérifier l'ordre"
+attendre 8
+capture PNG_631_ordre_verifier.png
+outil "Placer"
+attendre 12
+capture PNG_632_ordre_place_apres.png
+touche ctrl+z
+attendre 10
+glisser-ligne "14" "18" avant tenir
+attendre 4
+capture PNG_633_ordre_glisser.png
+lacher
+attendre 10
+capture PNG_634_ordre_apres_glisser.png
+touche ctrl+z
+attendre 8
+barre "historique"
+attendre 6
+capture PNG_635_historique_lot4.png
+barre "historique"
+attendre 3
+quitter

@@ -1,0 +1,21 @@
+# Derived data type.
+name = ST_GC_DebugStepFocus
+version = 0.14
+# checksum is recomputed by Control Expert on import; not stored.
+
+# name ; type ; address ; scope ; init ; comment ; attributes ; element comments
+StepId ; INT ;  ; Member ;  ;  ;  ; 
+StepName ; string[4] ;  ; Member ;  ;  ;  ; 
+Kind1Line ; string[32] ;  ; Member ;  ;  ;  ; 
+Kind2Line ; string[32] ;  ; Member ;  ;  ;  ; 
+Kind3Line ; string[32] ;  ; Member ;  ;  ;  ; 
+Kind4Line ; string[32] ;  ; Member ;  ;  ;  ; 
+Kind5Line ; string[32] ;  ; Member ;  ;  ;  ; 
+Kind6Line ; string[32] ;  ; Member ;  ;  ;  ; 
+Kind7Line ; string[32] ;  ; Member ;  ;  ;  ; 
+Kind8Line ; string[32] ;  ; Member ;  ;  ;  ; 
+Kind9Line ; string[32] ;  ; Member ;  ;  ;  ; 
+Kind10Line ; string[32] ;  ; Member ;  ;  ;  ; 
+Kind11Line ; string[32] ;  ; Member ;  ;  ;  ; 
+TransitionsLine ; string[100] ;  ; Member ;  ;  ;  ; 
+Kind0Line ; string[32] ;  ; Member ;  ;  ;  ; 

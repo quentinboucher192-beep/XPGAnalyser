@@ -1,0 +1,194 @@
+(* ImporterClasseur
+
+   L'AFFAIRE ENTIERE, depuis le classeur, en une execution : la verification,
+   le programme, puis chaque macro de controle dont le classeur porte l'onglet,
+   et les grafcets.
+
+     1  VerifierClasseur     ce qui va casser - elle ne modifie rien
+     2  ImporterProgramme    cartes, voies, equipements, cablage, reports,
+                             alarmes, horloge
+     3  ImporterReglages     si l'onglet Reglages est la
+     4  ImporterControle     si Paliers, Rotations, Modes ou Interverrouillages
+     5  ImporterModbus       si l'onglet Modbus est la
+     6  ImporterGrafcet      si l'onglet Grafcet Etapes est la
+     7  GenererDiagnostic    si on le demande
+     8  GenererSimulation    si on le demande
+
+   Chaque etape est une macro de la bibliotheque, lancee par RunMacro : elle
+   reste lancable seule. Elles partagent les reponses - le classeur, la tache,
+   le prefixe ne se donnent qu'une fois - et UNE SEULE ANNULATION les reprend
+   toutes. Si l'une echoue, rien n'est applique.
+
+   #! summary = Importe l'affaire entière depuis le classeur : vérification, programme, réglages, contrôle, Modbus, grafcets, diagnostic et simulation - une seule annulation pour tout.
+   #! version = 2.10
+   #! changes 2.10 = Le formulaire : chaque question a son champ (le classeur par …, Ctrl+V ou en le glissant ; les tâches et les sections du projet ; des interrupteurs ; des choix à libellés), ses groupes, son aide et un libellé avec accents. Le code ne change pas. Le mode de repli se choisit parmi ceux de l'onglet Modes.
+   #! changes 2.01 = Les grafcets : ImporterGrafcet, si le classeur porte l'onglet Grafcet Etapes.
+   #! changes 2.00 = Toutes les questions des etapes sont posees par elle, en un seul ecran apres le classeur : la chaine en demandait huit de suite.
+   #! changes 2.00 = L'hote a RunMacro : elle tourne enfin. Elle n'enchaine plus les six macros par onglet mais ImporterProgramme puis les macros de controle, chacune seulement si le classeur porte son onglet ; VerifierClasseur passe en premier et ses avertissements s'affichent dans l'apercu, avant d'appliquer.
+   #! usage = C'EST L'IMPORT COMPLET. L'apercu montre tout ce qui serait fait, les avertissements de VerifierClasseur compris : c'est le moment de s'arreter si le classeur n'est pas pret.
+   #! usage = LES ONGLETS DECIDENT. Reglages, Paliers, Rotations, Modes, Interverrouillages, Modbus et Grafcet Etapes (avec Grafcet Transitions, Grafcet Actions, Grafcets) sont facultatifs : une etape dont l'onglet manque est sautee, et le compte rendu le dit.
+   #! usage = UNE SEULE ANNULATION. Les macros appelees partagent la commande de l'appelante : Ctrl+Z reprend l'affaire entiere, imports de bibliotheque (LibImport) compris. Seul le fichier CSV des alarmes, ecrit a cote du classeur, reste.
+   #! usage = LES SECTIONS SONT RANGEES a la fin de chaque etape par RangerSections, dans l'ordre de la tache.
+   #! see = ImporterProgramme, VerifierClasseur, ImporterReglages, ImporterControle, ImporterModbus, ImporterGrafcet, GenererDiagnostic, GenererSimulation, RangerSections
+   #! usage = TOUTES LES QUESTIONS EN UN SEUL ECRAN, apres le classeur : celles des etapes sont posees ici, et les macros appelees trouvent leur reponse deja donnee - elles partagent les reponses. Seules celles dont l'onglet est la sont posees (Modes : le mode de repli ; Reglages : les noms).
+   #! param classeur = Le classeur de l'affaire (.xlsx ou .xlsm) : glisse-le sur le champ, choisis-le avec …, ou colle-le (Ctrl+V) après l'avoir copié dans l'Explorateur. Vide : le dernier classeur ouvert, le cas normal quand on enchaîne les imports.
+   #! param verifier = VerifierClasseur passe d'abord ; ses avertissements s'ajoutent à l'aperçu.
+   #! param verifier = O lance VerifierClasseur d'abord ; ses avertissements s'ajoutent a l'apercu.
+   #! param diagnostic = La section Diagnostic : bits système, modules en erreur.
+   #! param diagnostic = O genere aussi la section Diagnostic (bits systeme, modules en erreur).
+   #! param simulation = Elle ne fait rien tant que SimActive est à FALSE.
+   #! param simulation = O genere aussi la section Simulation, qui ne fait rien tant que SimActive est a FALSE.
+   #! param tache = Les sections générées vont dans cette tâche.
+   #! param tache = La tache d'accueil des sections generees, MAST en general.
+   #! param prefixe = Devant le nom d'un tableau d'équipements, il nomme l'instance de son bloc.
+   #! param prefixe = Ce qui precede le nom d'un tableau d'equipements pour nommer l'instance de son bloc : EQ_ donne EQ_Pompes.
+   #! param prefSection = Vide en général : il sert quand deux automates partagent un projet.
+   #! param prefSection = Le prefixe des noms de section generes. Vide en general.
+   #! param horloge = Les blocs se cadencent sur Horloge.DtMs, le vrai temps du cycle.
+   #! param horloge = O appelle DFB_SYS_CLOCK en tete de tache et cadence tous les blocs sur lui (CycleMs := Horloge.DtMs).
+   #! param alarmes = Les alarmes de voie et d'équipement vont dans DFB_ALM_MANAGER.
+   #! param alarmes = O enregistre les alarmes de voie et d'equipement dans le gestionnaire d'alarmes.
+   #! param sevEq = Quand l'onglet Liens n'en donne pas.
+   #! param sevEq = La gravite d'une alarme d'equipement quand l'onglet Liens n'en donne pas : 1 information a 4 arret.
+   #! param liste = Écrite à côté du classeur. Ctrl+Z ne la reprend pas. Vide : aucune.
+   #! param liste = Le fichier CSV de la liste des alarmes, ecrit a cote du classeur. Vide : aucun.
+   #! param noms = Dans Reglages_Init, ce que l'opérateur lit.
+   #! param noms = O pose aussi le nom (Name) de chaque equipement dans Reglages_Init. Posee si l'onglet Reglages est la.
+   #! param modeRepli = Le mode pris quand aucune condition n'est vraie ; choisi parmi ceux de l'onglet Modes.
+   #! param modeRepli = Le mode pris quand aucune condition n'est vraie ; -1 : aucun. Posee si l'onglet Modes est la.
+   #! param forcePrio = À partir de cette priorité, un mode passe malgré le temps minimum du mode en cours.
+   #! param forcePrio = La priorite a partir de laquelle un mode passe malgre le temps minimum du mode en cours. Posee si l'onglet Modes est la.
+   #! param instanceDiag = Créée si elle n'existe pas ; gardée sinon.
+   #! param instanceDiag = Le nom de l'instance de DFB_SYS_DIAG, si le diagnostic est genere.
+   #! categorie = Importer depuis le classeur
+   #! champ classeur = fichier .xlsx .xlsm facultatif
+   #! libelle classeur = Le classeur de l'affaire
+   #! champ verifier = oui-non
+   #! libelle verifier = Vérifier le classeur avant d'importer
+   #! champ diagnostic = oui-non
+   #! libelle diagnostic = Générer aussi le diagnostic de l'automate
+   #! champ simulation = oui-non
+   #! libelle simulation = Générer aussi la section de simulation
+   #! champ tache = tache
+   #! libelle tache = Tâche d'accueil des sections
+   #! champ prefixe = nom
+   #! libelle prefixe = Préfixe des instances d'équipement
+   #! champ prefSection = nom facultatif
+   #! libelle prefSection = Préfixe des noms de section
+   #! champ horloge = oui-non
+   #! libelle horloge = Appeler DFB_SYS_CLOCK et cadencer les blocs sur lui
+   #! champ alarmes = oui-non
+   #! libelle alarmes = Enregistrer les alarmes dans le gestionnaire
+   #! champ sevEq = nombre 1..4 : 1 Information, 2 Avertissement, 3 Défaut, 4 Arrêt
+   #! libelle sevEq = Gravité d'une alarme d'équipement
+   #! champ liste = fichier-sortie .csv facultatif
+   #! libelle liste = Liste des alarmes (CSV pour l'IHM)
+   #! champ noms = oui-non
+   #! libelle noms = Poser aussi le nom (Name) de chaque équipement
+   #! champ modeRepli = choix-classeur Modes, Mode, Nom : -1 aucun
+   #! libelle modeRepli = Mode de repli
+   #! champ forcePrio = nombre 0..32767
+   #! libelle forcePrio = Priorité qui passe outre le temps minimum
+   #! champ instanceDiag = nom
+   #! libelle instanceDiag = Instance de DFB_SYS_DIAG
+   #! exemple prefixe = {}Pompes, {}Vannes, {}Moteurs
+   #! exemple prefSection = {}Horloge, {}Mapping_Entrees, {}Equipements
+   #! groupe Étapes = verifier, diagnostic, simulation
+   #! groupe Programme = tache, prefixe, prefSection, horloge
+   #! groupe Alarmes = alarmes, sevEq, liste
+   #! groupe Réglages et modes = noms, modeRepli, forcePrio
+   #! groupe Diagnostic = instanceDiag
+   #! avance = prefSection, forcePrio
+   #! lit = Config, Cartes API, ES, Equipements
+   #! lit-facultatif = Cablage, Liens, Catalogue, Reglages, Paliers, Rotations, Modes, Interverrouillages, Modbus
+   #! lit-facultatif = Grafcets, Grafcet Etapes, Grafcet Transitions, Grafcet Actions
+   #! produit = les sections générées (E/S, équipements, câblage, reports, alarmes, horloge), rangées dans l'ordre de la tâche
+   #! produit = une sous-routine par grafcet, et celles des modes de marche
+   #! produit = les tableaux d'équipement, leurs instances et le registre d'alarmes
+   #! produit = la liste des alarmes (CSV) à côté du classeur
+   #! appliquer = Appliquer : les sections générées sont réécrites en entier
+*)
+
+chemin := Ask('classeur', 'Chemin du classeur (vide = celui deja charge)', '');
+AskNow();
+
+wb := OpenWorkbook(chemin);
+IF wb < 0 THEN Fail('classeur introuvable : choisis-le dans le formulaire (bouton ..., Ctrl+V ou glisser le fichier).'); END_IF;
+
+(* LES QUESTIONS DE TOUTES LES ETAPES, EN UN SEUL ECRAN. Les macros appelees
+   partagent les reponses : elles trouvent les leurs deja donnees et ne
+   reposent rien. Memes cles, memes valeurs par defaut qu'elles. *)
+verifier    := AskChoice('verifier', 'Verifier le classeur avant d importer', 'O,N', 'O');
+diagnostic  := AskChoice('diagnostic', 'Generer aussi le diagnostic de l automate', 'O,N', 'O');
+simulation  := AskChoice('simulation', 'Generer aussi la section de simulation', 'O,N', 'O');
+tache       := Ask('tache', 'Tache d accueil des sections', 'MAST');
+prefixe     := Ask('prefixe', 'Prefixe des instances d equipement', 'EQ_');
+prefSection := Ask('prefSection', 'Prefixe des noms de section (vide en general)', '');
+horloge     := AskChoice('horloge', 'Appeler DFB_SYS_CLOCK et cadencer les blocs sur lui', 'O,N', 'O');
+alarmes     := AskChoice('alarmes', 'Enregistrer les alarmes dans le gestionnaire', 'O,N', 'O');
+sevEq       := AskNumber('sevEq', 'Severite par defaut d une alarme d equipement', 1, 4, '3');
+liste       := Ask('liste', 'Fichier CSV de la liste des alarmes (vide = aucun)', 'alarmes.csv');
+IF HasSheet('Reglages') THEN
+    noms := AskChoice('noms', 'Poser aussi le nom (Name) de chaque equipement', 'O,N', 'O');
+END_IF;
+IF HasSheet('Modes') THEN
+    modeRepli := AskNumber('modeRepli', 'Mode de repli quand aucune condition n est vraie (-1 : aucun)', -1, 15, '0');
+    forcePrio := AskNumber('forcePrio', 'Priorite qui passe outre le temps minimum', 0, 32767, '100');
+END_IF;
+IF diagnostic = 'O' THEN
+    instanceDiag := Ask('instanceDiag', 'Nom de l instance de DFB_SYS_DIAG', 'DIAG_Automate');
+END_IF;
+(* la confirmation d ImporterProgramme : la cle est la meme pour tout Confirm *)
+IF NOT Confirm('Import complet',
+               'Generer tout le programme depuis ce classeur ? Les sections '
+               + 'generees seront reecrites entierement.') THEN
+    Fail('annule');
+END_IF;
+AskNow();
+
+etapes := 0;
+IF verifier = 'O' THEN
+    RunMacro('VerifierClasseur');
+END_IF;
+
+RunMacro('ImporterProgramme');
+etapes := 1;
+
+IF HasSheet('Reglages') THEN
+    RunMacro('ImporterReglages');
+    etapes := etapes + 1;
+ELSE
+    Log('pas d onglet Reglages : ImporterReglages sautee');
+END_IF;
+
+IF HasSheet('Paliers') OR HasSheet('Rotations') OR HasSheet('Modes') OR HasSheet('Interverrouillages') THEN
+    RunMacro('ImporterControle');
+    etapes := etapes + 1;
+ELSE
+    Log('ni Paliers, ni Rotations, ni Modes, ni Interverrouillages : ImporterControle sautee');
+END_IF;
+
+IF HasSheet('Modbus') THEN
+    RunMacro('ImporterModbus');
+    etapes := etapes + 1;
+ELSE
+    Log('pas d onglet Modbus : ImporterModbus sautee');
+END_IF;
+
+IF HasSheet('Grafcet Etapes') THEN
+    RunMacro('ImporterGrafcet');
+    etapes := etapes + 1;
+ELSE
+    Log('pas d onglet Grafcet Etapes : ImporterGrafcet sautee');
+END_IF;
+
+IF diagnostic = 'O' THEN
+    RunMacro('GenererDiagnostic');
+    etapes := etapes + 1;
+END_IF;
+IF simulation = 'O' THEN
+    RunMacro('GenererSimulation');
+    etapes := etapes + 1;
+END_IF;
+
+Log('import complet : ' + DINT_TO_STRING(etapes) + ' etape(s). Une seule annulation reprend le tout.');

@@ -1,0 +1,1077 @@
+(* ImporterProgramme
+
+   TOUT le programme, depuis le classeur, en une execution : les types et les
+   blocs pris dans libs/, les tableaux et les instances declares, les sections
+   ecrites - ET RANGEES dans l'ordre de la tache.
+
+   L'ORDRE DES SECTIONS EST LA MOITIE DU SUJET
+
+     Horloge            DFB_SYS_CLOCK : le temps reel du cycle, pour tous
+     Alarmes_Init       le registre, rempli au premier cycle seulement
+     Mapping_Entrees    %I / %IW  ->  .Raw,  puis appel des blocs d'entree
+     Cablage_Entrees    les voies  ->  les parametres d'equipement
+     Reports_TC         l'IHM  ->  les equipements
+     Equipements        appel des DFB_EQ_*
+     Alarmes_Cycle      les etats d'alarme, puis le ou les gestionnaires
+     Reports_TM_TA      les equipements  ->  l'IHM
+     Cablage_Sorties    les equipements  ->  les voies
+     Mapping_Sorties    appel des blocs de sortie,  .Raw  ->  %Q / %QW
+
+   Une TC lue en fin de tache fait travailler tout le programme sur la commande
+   du cycle precedent ; une TM ecrite en tete publie la valeur d'avant que le
+   programme n'ait tourne. La macro RANGE ces sections elle-meme (RangerSections) :
+   elle ne deplace que celles qui sont dans le mauvais sens, et laisse les
+   votres ou elles sont.
+
+   #! summary = Génère tout le programme depuis le classeur en une fois : types et blocs importés de libs, tableaux et instances déclarés, E/S, équipements, câblage, reports et alarmes, sections rangées.
+   #! version = 2.10
+   #! changes 2.10 = Le formulaire : chaque question a son champ (le classeur par …, Ctrl+V ou en le glissant ; les tâches et les sections du projet ; des interrupteurs ; des choix à libellés), ses groupes, son aide et un libellé avec accents. Le code ne change pas.
+   #! changes 2.00 = LES SECTIONS SONT RANGEES dans l'ordre de la tache (RangerSections), au lieu d'un rappel dans le compte rendu. L'HORLOGE : DFB_SYS_CLOCK est appele en tete, tous les blocs prennent CycleMs := Horloge.DtMs et les alarmes leur date (NowS := Horloge.EpochS). LE REGISTRE D'ALARMES SE DIMENSIONNE : 64 emplacements tant que les alarmes y tiennent, sinon des registres de 256 (DFB_ALM_MANAGER256) - aucune alarme n'est plus perdue. Alarmes_Init se garde elle-meme et va DANS la tache. Les CARTES MIXTES (DDM 16022, DDM 3202K, AMM 0600) : les sorties sont decalees a leur vraie voie. La famille donne le bloc par convention (ST_EQ_Xxx -> DFB_EQ_XXX) : ST_EQ_CtrlValve et ST_EQ_Atv sont appeles sans rien changer ici. Le type d'un report vient de la famille (MemberType) et la colonne Resolution met a l'echelle. LES TABLEAUX D'EQUIPEMENTS PRENNENT LA TAILLE DU BLOC (ARRAY[0..15], celle de son InOut Eq) : la 1.01 les taillait au plus grand indice, et Control Expert refusait l'appel. Les libelles passent par QUOTE et ASCII : une apostrophe ou un accent ne cassent plus la section. La liste des alarmes est ecrite en CSV a cote du classeur.
+   #! changes 1.01 = Les bits de mot s'ecrivent %MW1000.3, la forme de Control Expert. La 1.00 ecrivait %MW1000:X3, la forme de PL7, que Control Expert refuse a la compilation.
+   #! usage = C'EST L'IMPORT A LANCER. Elle importe les DDT et les DFB dont elle a besoin, declare les tableaux et les instances, ecrit les sections et les range. Les macros de controle (ImporterReglages, ImporterControle, ImporterModbus, GenererDiagnostic, GenererSimulation) se lancent APRES elle ; ImporterClasseur enchaine le tout.
+   #! usage = LE REGISTRE D'ALARMES. Les alarmes de voie (seuils analogiques, voies TOR en alarme) et les alarmes d'equipement (lignes TA de l'onglet Liens) sont comptees AVANT d'ecrire. Jusqu'a 64 : un DFB_ALM_MANAGER. Au-dela : des DFB_ALM_MANAGER256 de 256 alarmes chacun (AlmDefs, AlmDefs_2...), qui partagent le meme AlmCmd. Un registre deja declare avec une autre taille ARRETE la macro : elle ne modifie pas une variable existante, et la laisser en l'etat ferait ecrire hors du tableau.
+   #! usage = Alarmes_Init EST GARDEE par une signature de la liste d'alarmes (AlmInitSig). Au premier cycle apres un demarrage a froid, et apres une modification de la liste, elle remplit le registre ; le reste du temps elle ne fait rien. Elle va donc DANS la tache, en tete.
+   #! usage = LES CARTES MIXTES se declarent en deux lignes dans Cartes API, une par sens, meme rack et meme module. Sur une DDM 16022 ou une DDM 3202K les sorties sont les voies 16 et suivantes ; sur une AMM 0600, les voies 4 et 5. Si l'onglet ES porte des adresses qui commencent a 0, la macro les decale et le dit.
+   #! usage = LA FAMILLE DONNE LE BLOC : ST_EQ_Pump -> DFB_EQ_PUMP, ST_EQ_CtrlValve -> DFB_EQ_CTRLVALVE. Une famille dont le bloc n'est ni dans le projet ni dans la bibliotheque est declaree sans appel, et c'est dit.
+   #! usage = TOUTES LES SECTIONS GENEREES SONT REECRITES ENTIEREMENT. Ce qui y a ete ajoute a la main est perdu. C'est voulu : une section a moitie ancienne et a moitie nouvelle est pire que les deux.
+   #! usage = CE QU'ELLE NE FAIT PAS : elle ne touche pas aux sections que vous avez ecrites, elle ne supprime rien, et elle ne modifie aucune variable qui existe deja. Une variable qui porte le nom attendu mais un autre type est signalee, pas remplacee.
+   #! see = ImporterClasseur, VerifierClasseur, RangerSections, ImporterReglages, ImporterControle, ImporterModbus, GenererDiagnostic, GenererSimulation
+   #! param classeur = Le classeur de l'affaire (.xlsx ou .xlsm) : glisse-le sur le champ, choisis-le avec …, ou colle-le (Ctrl+V) après l'avoir copié dans l'Explorateur. Vide : le dernier classeur ouvert, le cas normal quand on enchaîne les imports.
+   #! param tache = Les sections générées vont dans cette tâche.
+   #! param tache = La tache d'accueil des sections creees, MAST en general. Une section deja existante n'est pas deplacee d'une tache a l'autre.
+   #! param prefixe = Devant le nom d'un tableau d'équipements, il nomme l'instance de son bloc.
+   #! param prefixe = Le prefixe des instances de bloc d'equipement. EQ_ donne EQ_Pompes pour le tableau Pompes.
+   #! param prefSection = Vide en général : il sert quand deux automates partagent un projet.
+   #! param prefSection = Un prefixe ajoute devant le nom de chaque section generee. Vide en general. Il sert quand un meme projet porte deux automates et que les deux jeux de sections doivent coexister.
+   #! param horloge = Les blocs se cadencent sur Horloge.DtMs, le vrai temps du cycle.
+   #! param horloge = O appelle DFB_SYS_CLOCK en tete de tache, et tous les blocs prennent leur temps de cycle dans Horloge.DtMs. N garde la periode de l'onglet Config, constante.
+   #! param alarmes = Les alarmes de voie et d'équipement vont dans DFB_ALM_MANAGER.
+   #! param alarmes = N saute tout ce qui touche au gestionnaire d'alarmes : ni registre, ni appel, ni sections Alarmes_*. Les lignes TA sont alors seulement recopiees vers l'IHM.
+   #! param sevEq = Quand l'onglet Liens n'en donne pas.
+   #! param sevEq = La severite d'une alarme d'equipement quand l'onglet Liens n'a pas de colonne Sev, ou qu'elle est vide. 1 information, 2 avertissement, 3 defaut, 4 arret machine.
+   #! param liste = Écrite à côté du classeur. Ctrl+Z ne la reprend pas. Vide : aucune.
+   #! param liste = Le fichier CSV de la liste des alarmes, ecrit a cote du classeur : registre, emplacement, UUID, libelle, lien, gravite. Vide : pas de fichier. C'est la liste que l'IHM importe.
+   #! categorie = Importer depuis le classeur/Étapes de l'import
+   #! champ classeur = fichier .xlsx .xlsm facultatif
+   #! libelle classeur = Le classeur de l'affaire
+   #! champ tache = tache
+   #! libelle tache = Tâche d'accueil des sections
+   #! champ prefixe = nom
+   #! libelle prefixe = Préfixe des instances d'équipement
+   #! champ prefSection = nom facultatif
+   #! libelle prefSection = Préfixe des noms de section
+   #! champ horloge = oui-non
+   #! libelle horloge = Appeler DFB_SYS_CLOCK et cadencer les blocs sur lui
+   #! champ alarmes = oui-non
+   #! libelle alarmes = Enregistrer les alarmes dans le gestionnaire
+   #! champ sevEq = nombre 1..4 : 1 Information, 2 Avertissement, 3 Défaut, 4 Arrêt
+   #! libelle sevEq = Gravité d'une alarme d'équipement
+   #! champ liste = fichier-sortie .csv facultatif
+   #! libelle liste = Liste des alarmes (CSV pour l'IHM)
+   #! exemple prefixe = {}Pompes, {}Vannes, {}Moteurs
+   #! exemple prefSection = {}Horloge, {}Mapping_Entrees, {}Equipements
+   #! groupe Programme = tache, prefixe, prefSection, horloge
+   #! groupe Alarmes = alarmes, sevEq, liste
+   #! avance = prefSection
+   #! produit = les types et les blocs importés de libs/
+   #! produit = les tableaux de voies et d'équipements, leurs instances
+   #! produit = les sections des E/S, des équipements, du câblage, des reports et des alarmes, rangées
+   #! produit = la liste des alarmes (CSV) à côté du classeur
+   #! appliquer = Appliquer : les sections générées sont réécrites en entier
+*)
+
+chemin := Ask('classeur', 'Chemin du classeur (vide = celui deja charge)', '');
+AskNow();
+
+tache       := Ask('tache', 'Tache d accueil des sections', 'MAST');
+prefixe     := Ask('prefixe', 'Prefixe des instances d equipement', 'EQ_');
+prefSection := Ask('prefSection', 'Prefixe des noms de section (vide en general)', '');
+horloge     := AskChoice('horloge', 'Appeler DFB_SYS_CLOCK et cadencer les blocs sur lui', 'O,N', 'O');
+alarmes     := AskChoice('alarmes', 'Enregistrer les alarmes dans le gestionnaire', 'O,N', 'O');
+sevEq       := AskNumber('sevEq', 'Severite par defaut d une alarme d equipement', 1, 4, '3');
+liste       := Ask('liste', 'Fichier CSV de la liste des alarmes (vide = aucun)', 'alarmes.csv');
+AskNow();
+
+nl := CHR(10);
+sevDef := REAL_TO_INT(sevEq);
+avecAlarmes := 0;
+IF alarmes = 'O' THEN avecAlarmes := 1; END_IF;
+avecHorloge := 0;
+IF horloge = 'O' THEN avecHorloge := 1; END_IF;
+
+sHorl   := prefSection + 'Horloge';
+sAlmI   := prefSection + 'Alarmes_Init';
+sMapIn  := prefSection + 'Mapping_Entrees';
+sCabIn  := prefSection + 'Cablage_Entrees';
+sTC     := prefSection + 'Reports_TC';
+sEquip  := prefSection + 'Equipements';
+sAlmC   := prefSection + 'Alarmes_Cycle';
+sTM     := prefSection + 'Reports_TM_TA';
+sCabOut := prefSection + 'Cablage_Sorties';
+sMapOut := prefSection + 'Mapping_Sorties';
+
+(* ===================================================================== *)
+(*  Le classeur                                                          *)
+(* ===================================================================== *)
+
+wb := OpenWorkbook(chemin);
+IF wb < 0 THEN Fail('classeur introuvable'); END_IF;
+
+tCartes := OpenSheet('Cartes API');
+IF tCartes < 0 THEN Fail('onglet "Cartes API" introuvable'); END_IF;
+tES := OpenSheet('ES');
+IF tES < 0 THEN Fail('onglet "ES" introuvable'); END_IF;
+tEq := OpenSheet('Equipements');
+IF tEq < 0 THEN Fail('onglet "Equipements" introuvable'); END_IF;
+
+(* Ces deux-la peuvent manquer sans que l'import soit impossible : on le dit
+   et on continue, plutot que de refuser un classeur dont le cablage n'est
+   pas encore fait. *)
+tCab := -1;
+IF HasSheet('Cablage') THEN tCab := OpenSheet('Cablage'); END_IF;
+IF tCab < 0 THEN
+    Warn('onglet "Cablage" absent : aucune liaison voie / equipement ne sera ecrite.');
+END_IF;
+tLiens := -1;
+IF HasSheet('Liens') THEN tLiens := OpenSheet('Liens'); END_IF;
+IF tLiens < 0 THEN
+    Warn('onglet "Liens" absent : aucun report IHM ne sera ecrit.');
+END_IF;
+(* Le Catalogue n'est plus qu'un repli : le type d'un champ vient de sa famille. *)
+tCat := -1;
+IF HasSheet('Catalogue') THEN tCat := OpenSheet('Catalogue'); END_IF;
+
+periode := Setting('Periode (ms)');
+IF periode = '' THEN periode := '20'; END_IF;
+
+nc   := RowCount(tCartes);
+ne   := RowCount(tES);
+neq  := RowCount(tEq);
+nliens := 0;
+IF tLiens >= 0 THEN nliens := RowCount(tLiens); END_IF;
+ncat := 0;
+IF tCat >= 0 THEN ncat := RowCount(tCat); END_IF;
+
+IF NOT Confirm('Import complet',
+               'Generer tout le programme depuis ce classeur ? Les sections '
+               + 'generees seront reecrites entierement.') THEN
+    Fail('annule');
+END_IF;
+
+(* ===================================================================== *)
+(*  Le temps de cycle : l'horloge, ou la periode de l'onglet Config       *)
+(* ===================================================================== *)
+
+cycle := periode;
+dateS := '0';
+IF avecHorloge = 1 THEN
+    IF NOT PouExists('DFB_SYS_CLOCK') AND LibHasItem('DFB_SYS_CLOCK') THEN
+        LibImport('DFB_SYS_CLOCK');
+    END_IF;
+    IF NOT PouExists('DFB_SYS_CLOCK') AND NOT LibHasItem('DFB_SYS_CLOCK') THEN
+        Fail('DFB_SYS_CLOCK n est ni dans le projet ni dans la bibliotheque : '
+             + 'repondez N a la question de l horloge, ou mettez libs a jour');
+    END_IF;
+    IF NOT VariableExists('Horloge') THEN
+        AddVariable('Horloge', 'DFB_SYS_CLOCK', 'Global', '', '',
+                    'le temps reel du cycle : DtMs pour tous les blocs');
+    END_IF;
+    IF NOT SectionExists(sHorl) THEN AddSection(sHorl, tache, 'ST', ''); END_IF;
+    ClearSection(sHorl);
+    AppendToSection(sHorl, '(* Genere par ImporterProgramme. EN TETE DE TACHE : tous les blocs');
+    AppendToSection(sHorl, '   prennent leur temps de cycle dans Horloge.DtMs. *)');
+    AppendToSection(sHorl, 'Horloge(PeriodMs := %SW0, LastCycleMs := %SW30, Tick := %SD18, '
+        + 'TickUnitMs := 100,');
+    AppendToSection(sHorl, '        RtcSec := %SW50, RtcHourMin := %SW51, RtcMonthDay := %SW52, '
+        + 'RtcYear := %SW53,');
+    AppendToSection(sHorl, '        RtcDow := %SW49, RtcLost := %S51);');
+    cycle := 'Horloge.DtMs';
+    dateS := 'Horloge.EpochS';
+END_IF;
+
+(* ===================================================================== *)
+(*  Les sections                                                          *)
+(* ===================================================================== *)
+
+IF NOT SectionExists(sMapIn)  THEN AddSection(sMapIn, tache, 'ST', ''); END_IF;
+IF NOT SectionExists(sCabIn)  THEN AddSection(sCabIn, tache, 'ST', ''); END_IF;
+IF NOT SectionExists(sTC)     THEN AddSection(sTC, tache, 'ST', ''); END_IF;
+IF NOT SectionExists(sEquip)  THEN AddSection(sEquip, tache, 'ST', ''); END_IF;
+IF NOT SectionExists(sTM)     THEN AddSection(sTM, tache, 'ST', ''); END_IF;
+IF NOT SectionExists(sCabOut) THEN AddSection(sCabOut, tache, 'ST', ''); END_IF;
+IF NOT SectionExists(sMapOut) THEN AddSection(sMapOut, tache, 'ST', ''); END_IF;
+
+ClearSection(sMapIn);
+ClearSection(sCabIn);
+ClearSection(sTC);
+ClearSection(sEquip);
+ClearSection(sTM);
+ClearSection(sCabOut);
+ClearSection(sMapOut);
+
+AppendToSection(sMapIn,  '(* Genere par ImporterProgramme : les voies d entree. *)');
+AppendToSection(sCabIn,  '(* Genere par ImporterProgramme : les voies vers les equipements. *)');
+AppendToSection(sTC,     '(* Genere par ImporterProgramme : les commandes de l IHM. *)');
+AppendToSection(sEquip,  '(* Genere par ImporterProgramme : les equipements. *)');
+AppendToSection(sTM,     '(* Genere par ImporterProgramme : les etats vers l IHM. *)');
+AppendToSection(sCabOut, '(* Genere par ImporterProgramme : les equipements vers les voies. *)');
+AppendToSection(sMapOut, '(* Genere par ImporterProgramme : les voies de sortie. *)');
+
+(* Variables de travail, toutes posees avant usage. *)
+c := 0; i := 0; k := 0; q := 0; kk := 0;
+p1 := 0; p2 := 0; d := 0;
+rack := 0; module := 0; voie := 0; decal := 0;
+ana := 0; sortie := 0; taille := 0; attendu := ''; typEq := ''; capEq := 0;
+carte := ''; ref := ''; fam := ''; bloc := ''; tableau := ''; instance := '';
+cible := ''; adresse := ''; s := ''; seuil := '';
+corrige := 0;
+
+(* ===================================================================== *)
+(*  0. LE COMPTE DES ALARMES, AVANT D'ECRIRE QUOI QUE CE SOIT             *)
+(*                                                                        *)
+(*  Le registre se dimensionne sur ce total : 64 emplacements s'ils y     *)
+(*  tiennent, sinon des registres de 256. Compter apres coup, c'etait     *)
+(*  decouvrir au 65e qu'il fallait un second gestionnaire.                *)
+(* ===================================================================== *)
+
+total := 0;
+IF avecAlarmes = 1 THEN
+    FOR i := 0 TO ne - 1 DO
+        IF Cell(tES, i, 'Adresse') <> '' AND Cell(tES, i, 'Tableau') <> '' THEN
+            fam := Cell(tES, i, 'Famille');
+            IF fam = 'AI' OR fam = 'AO' THEN
+                FOR k := 0 TO 3 DO
+                    IF Cell(tES, i, 'S' + DINT_TO_STRING(k) + '_En') = 'O' THEN
+                        total := total + 1;
+                    END_IF;
+                END_FOR;
+            ELSIF Cell(tES, i, 'AlarmEn') = 'O' THEN
+                total := total + 1;
+            END_IF;
+        END_IF;
+    END_FOR;
+    FOR i := 0 TO nliens - 1 DO
+        IF Cell(tLiens, i, 'Type') = 'TA' AND Cell(tLiens, i, 'Equipement') <> '' THEN
+            total := total + 1;
+        END_IF;
+    END_FOR;
+END_IF;
+
+cap := 64;
+hist := 256;
+gestType := 'DFB_ALM_MANAGER';
+IF total > 64 THEN
+    cap := 256;
+    hist := 512;
+    gestType := 'DFB_ALM_MANAGER256';
+END_IF;
+nreg := (total + cap - 1) / cap;
+IF nreg < 1 THEN nreg := 1; END_IF;
+
+registre := 'AlmDefs';
+etats    := 'AlmState';
+histo    := 'AlmHist';
+almCmd   := 'AlmCmd';
+almStat  := 'AlmStat';
+gest     := 'GestionAlarmes';
+suf := '';
+r := 0;
+slot := 0;
+almPoses := 0;
+sig := 0;
+(* Les lignes du registre sont TENUES ici et ecrites a la fin : la garde de
+   la section porte la signature de la liste, qu'on ne connait qu'apres. *)
+initTxt := '';
+
+IF avecAlarmes = 1 THEN
+    IF NOT SectionExists(sAlmI) THEN AddSection(sAlmI, tache, 'ST', ''); END_IF;
+    IF NOT SectionExists(sAlmC) THEN AddSection(sAlmC, tache, 'ST', ''); END_IF;
+    ClearSection(sAlmI);
+    ClearSection(sAlmC);
+    AppendToSection(sAlmC, '(* Genere par ImporterProgramme : les etats d alarme, puis les gestionnaires. *)');
+
+    (* Les types avant le bloc qui les utilise. *)
+    FOR k := 0 TO 3 DO
+        IF k = 0 THEN s := 'ST_ALM_Def';
+        ELSIF k = 1 THEN s := 'ST_ALM_Event';
+        ELSIF k = 2 THEN s := 'ST_ALM_Cmd';
+        ELSE s := 'ST_ALM_Stat';
+        END_IF;
+        IF NOT TypeExists(s) AND LibHasItem(s) THEN LibImport(s); END_IF;
+    END_FOR;
+    IF NOT PouExists(gestType) AND LibHasItem(gestType) THEN LibImport(gestType); END_IF;
+
+    IF NOT VariableExists(almCmd) THEN
+        AddVariable(almCmd, 'ST_ALM_Cmd', 'Global', '', '', 'commandes des gestionnaires d alarmes');
+    END_IF;
+    IF NOT VariableExists('AlmInitSig') THEN
+        AddVariable('AlmInitSig', 'INT', 'Global', '', '0',
+                    'signature de la liste d alarmes deja enregistree');
+    END_IF;
+
+    (* Un registre par tranche de cap alarmes. UN REGISTRE DEJA DECLARE AVEC
+       UNE AUTRE TAILLE ARRETE TOUT : les lignes ecrites plus bas le
+       depasseraient, et la macro ne modifie pas une variable existante. *)
+    FOR r := 0 TO nreg - 1 DO
+        suf := '';
+        IF r > 0 THEN suf := '_' + DINT_TO_STRING(r + 1); END_IF;
+        attendu := 'ARRAY[0..' + DINT_TO_STRING(cap - 1) + '] OF ST_ALM_Def';
+        IF VariableExists(registre + suf) AND VariableType(registre + suf) <> attendu THEN
+            Fail(registre + suf + ' existe deja en ' + VariableType(registre + suf)
+                 + ' ; il faut ' + attendu + ' pour ' + DINT_TO_STRING(total)
+                 + ' alarmes. Supprimez-le (et ' + etats + suf + ', ' + histo + suf
+                 + ', ' + gest + suf + '), puis relancez.');
+        END_IF;
+        IF NOT VariableExists(registre + suf) THEN
+            AddVariable(registre + suf, attendu, 'Global', '');
+        END_IF;
+        IF NOT VariableExists(etats + suf) THEN
+            AddVariable(etats + suf, 'ARRAY[0..' + DINT_TO_STRING(cap - 1) + '] OF BOOL', 'Global', '');
+        END_IF;
+        IF NOT VariableExists(histo + suf) THEN
+            AddVariable(histo + suf, 'ARRAY[0..' + DINT_TO_STRING(hist - 1) + '] OF ST_ALM_Event',
+                        'Global', '');
+        END_IF;
+        IF NOT VariableExists(almStat + suf) THEN
+            AddVariable(almStat + suf, 'ST_ALM_Stat', 'Global', '');
+        END_IF;
+        IF NOT VariableExists(gest + suf) THEN
+            AddVariable(gest + suf, gestType, 'Global', '');
+        ELSIF VariableType(gest + suf) <> gestType THEN
+            Fail(gest + suf + ' est un ' + VariableType(gest + suf) + ', il faut un ' + gestType
+                 + ' pour ' + DINT_TO_STRING(total) + ' alarmes.');
+        END_IF;
+    END_FOR;
+
+    IF liste <> '' THEN
+        FileWrite(liste, 'Registre;Emplacement;Uuid;Libelle;Lien;Gravite;Origine');
+    END_IF;
+END_IF;
+
+(* ===================================================================== *)
+(*  1. LES CARTES ET LEURS VOIES                                          *)
+(* ===================================================================== *)
+
+cartesFaites := 0;
+voiesFaites := 0;
+
+FOR c := 0 TO nc - 1 DO
+    IF Cell(tCartes, c, 'Active') <> 'O' THEN
+        SkipRow(Cell(tCartes, c, 'Nom') + ' : carte inactive');
+    ELSE
+        carte    := Cell(tCartes, c, 'Nom');
+        bloc     := Cell(tCartes, c, 'Bloc');
+        tableau  := Cell(tCartes, c, 'Tableau');
+        instance := Cell(tCartes, c, 'Instance');
+        fam      := Cell(tCartes, c, 'Famille');
+        ref      := UPPER(Cell(tCartes, c, 'Reference'));
+
+        IF bloc = '' OR tableau = '' OR instance = '' THEN
+            Warn(carte + ' : bloc, tableau ou instance manquant. Recalculez le classeur.');
+        ELSE
+            ana := 0;
+            IF fam = 'AI' OR fam = 'AO' THEN ana := 1; END_IF;
+            sortie := 0;
+            IF fam = 'DO' OR fam = 'AO' THEN sortie := 1; END_IF;
+
+            (* LA VOIE DE LA PREMIERE SORTIE d'une carte mixte : 16 sur une
+               DDM, 4 sur une AMM 0600. Le classeur numerote ses voies a partir
+               de 0 dans les deux sens. *)
+            decal := 0;
+            IF sortie = 1 AND FIND(ref, 'DDM', 0) >= 0 THEN decal := 16; END_IF;
+            IF sortie = 1 AND FIND(ref, 'AMM', 0) >= 0 THEN decal := 4; END_IF;
+            corrige := 0;
+
+            IF ana = 1 THEN s := 'ST_IO_Ana'; ELSE s := 'ST_IO_Dig'; END_IF;
+            IF sortie = 1 THEN cible := sMapOut; ELSE cible := sMapIn; END_IF;
+
+            (* Les types avant les blocs qui les utilisent. *)
+            IF ana = 1 AND NOT TypeExists('ST_IO_Thr') AND LibHasItem('ST_IO_Thr') THEN
+                LibImport('ST_IO_Thr');
+            END_IF;
+            IF NOT TypeExists(s) AND LibHasItem(s) THEN LibImport(s); END_IF;
+            IF NOT PouExists(bloc) AND LibHasItem(bloc) THEN LibImport(bloc); END_IF;
+
+            (* La taille du tableau vient du BLOC, pas du nombre de voies
+               cablees : le bloc attend exactement sa taille en InOut. *)
+            taille := STRING_TO_INT(MID(bloc, LEN(bloc) - 2));
+            IF taille <= 0 THEN
+                Warn(carte + ' : taille illisible dans ' + bloc);
+            ELSE
+                attendu := 'ARRAY[0..' + DINT_TO_STRING(taille - 1) + '] OF ' + s;
+                IF NOT VariableExists(tableau) THEN
+                    AddVariable(tableau, attendu, 'Global', '', '', 'voies de la carte ' + carte);
+                ELSIF VariableType(tableau) <> attendu THEN
+                    Warn(tableau + ' existe en ' + VariableType(tableau) + ', le bloc ' + bloc
+                         + ' attend ' + attendu + '. A corriger a la main.');
+                END_IF;
+                IF NOT VariableExists(instance) THEN
+                    AddVariable(instance, bloc, 'Global', '');
+                END_IF;
+
+                AppendToSection(cible, '');
+                AppendToSection(cible, '(* ============================================================ *)');
+                AppendToSection(cible, '(*  ' + carte + '   ' + fam + '   ' + ref + '   ' + bloc + '  *)');
+                AppendToSection(cible, '(* ============================================================ *)');
+
+                (* UNE CARTE DE SORTIE SE FAIT EN TROIS TEMPS : les reglages,
+                   puis l'appel, puis la recopie vers %Q. L'appel en tete le
+                   ferait tourner avant que .IsOut soit ecrit. *)
+                FOR i := 0 TO ne - 1 DO
+                    IF Cell(tES, i, 'Carte') = carte THEN
+                        adresse := Cell(tES, i, 'Adresse');
+                        s := tableau + '[' + Cell(tES, i, 'Index') + ']';
+                        IF adresse = '' THEN
+                            SkipRow(s + ' : aucune adresse');
+                        ELSE
+                            (* La voie de la carte mixte, decalee si le classeur
+                               l'a numerotee depuis 0. *)
+                            IF decal > 0 THEN
+                                p1 := FIND(adresse, '.', 0);
+                                p2 := FIND(adresse, '.', p1 + 1);
+                                voie := STRING_TO_INT(MID(adresse, p2 + 1));
+                                IF p2 > 0 AND voie < decal THEN
+                                    adresse := MID(adresse, 0, p2 + 1) + DINT_TO_STRING(voie + decal);
+                                    corrige := corrige + 1;
+                                END_IF;
+                            END_IF;
+
+                            AppendToSection(cible, '');
+                            AppendToSection(cible, '(* -- ' + s + '   ' + adresse + '   '
+                                + ASCII(Cell(tES, i, 'Designation')) + ' *)');
+                            IF sortie = 1 THEN
+                                AppendToSection(cible, s + '.IsOut := TRUE;');
+                            ELSE
+                                IF ana = 1 THEN
+                                    AppendToSection(cible, s + '.Raw := INT_TO_REAL(' + adresse + ');');
+                                ELSE
+                                    AppendToSection(cible, s + '.Raw := ' + adresse + ';');
+                                END_IF;
+                                AppendToSection(cible, s + '.IsOut := FALSE;');
+                            END_IF;
+
+                            (* Tous les reglages, pas seulement .Raw. Un seuil laisse a
+                               sa valeur par defaut ne se declenche jamais. *)
+                            IF ana = 1 THEN
+                                AppendToSection(cible, s + '.RawMin := ' + REAL_TO_STRING(
+                                    STRING_TO_REAL(Cell(tES, i, 'RawMin'))) + ';');
+                                AppendToSection(cible, s + '.RawMax := ' + REAL_TO_STRING(
+                                    STRING_TO_REAL(Cell(tES, i, 'RawMax'))) + ';');
+                                AppendToSection(cible, s + '.EngMin := ' + REAL_TO_STRING(
+                                    STRING_TO_REAL(Cell(tES, i, 'EngMin'))) + ';');
+                                AppendToSection(cible, s + '.EngMax := ' + REAL_TO_STRING(
+                                    STRING_TO_REAL(Cell(tES, i, 'EngMax'))) + ';');
+                                IF Cell(tES, i, 'Clamp') = 'N' THEN
+                                    AppendToSection(cible, s + '.Clamp := FALSE;');
+                                ELSE
+                                    AppendToSection(cible, s + '.Clamp := TRUE;');
+                                END_IF;
+                                AppendToSection(cible, s + '.DeadBand := ' + REAL_TO_STRING(
+                                    STRING_TO_REAL(Cell(tES, i, 'DeadBand'))) + ';');
+                                q := STRING_TO_INT(Cell(tES, i, 'FiltN'));
+                                IF q < 1 THEN q := 1; END_IF;
+                                AppendToSection(cible, s + '.FiltN := ' + DINT_TO_STRING(q) + ';');
+                                AppendToSection(cible, s + '.RateMax := ' + REAL_TO_STRING(
+                                    STRING_TO_REAL(Cell(tES, i, 'RateMax'))) + ';');
+                                FOR k := 0 TO 3 DO
+                                    seuil := s + '.Thr[' + DINT_TO_STRING(k) + ']';
+                                    IF Cell(tES, i, 'S' + DINT_TO_STRING(k) + '_En') = 'O' THEN
+                                        AppendToSection(cible, seuil + '.En := TRUE;');
+                                        IF Cell(tES, i, 'S' + DINT_TO_STRING(k) + '_Dir') = 'B' THEN
+                                            AppendToSection(cible, seuil + '.Dir := 1;');
+                                        ELSE
+                                            AppendToSection(cible, seuil + '.Dir := 0;');
+                                        END_IF;
+                                        AppendToSection(cible, seuil + '.Val := ' + REAL_TO_STRING(
+                                            STRING_TO_REAL(Cell(tES, i, 'S' + DINT_TO_STRING(k) + '_Val'))) + ';');
+                                        AppendToSection(cible, seuil + '.Hyst := ' + REAL_TO_STRING(
+                                            STRING_TO_REAL(Cell(tES, i, 'S' + DINT_TO_STRING(k) + '_Hyst'))) + ';');
+                                        AppendToSection(cible, seuil + '.DelayMs := ' + DINT_TO_STRING(
+                                            STRING_TO_INT(Cell(tES, i, 'S' + DINT_TO_STRING(k) + '_DelayMs'))) + ';');
+                                        AppendToSection(cible, seuil + '.Sev := ' + DINT_TO_STRING(
+                                            STRING_TO_INT(Cell(tES, i, 'S' + DINT_TO_STRING(k) + '_Sev'))) + ';');
+                                    ELSE
+                                        AppendToSection(cible, seuil + '.En := FALSE;');
+                                    END_IF;
+                                END_FOR;
+                            ELSE
+                                IF Cell(tES, i, 'Inv') = 'O' THEN
+                                    AppendToSection(cible, s + '.Inv := TRUE;');
+                                ELSE
+                                    AppendToSection(cible, s + '.Inv := FALSE;');
+                                END_IF;
+                                AppendToSection(cible, s + '.DebounceMs := ' + DINT_TO_STRING(
+                                    STRING_TO_INT(Cell(tES, i, 'DebounceMs'))) + ';');
+                                IF Cell(tES, i, 'AlarmEn') = 'O' THEN
+                                    AppendToSection(cible, s + '.AlarmEn := TRUE;');
+                                    IF Cell(tES, i, 'AlarmState') = '0' THEN
+                                        AppendToSection(cible, s + '.AlarmState := FALSE;');
+                                    ELSE
+                                        AppendToSection(cible, s + '.AlarmState := TRUE;');
+                                    END_IF;
+                                    AppendToSection(cible, s + '.AlarmDelayMs := ' + DINT_TO_STRING(
+                                        STRING_TO_INT(Cell(tES, i, 'AlarmDelayMs'))) + ';');
+                                    AppendToSection(cible, s + '.Sev := ' + DINT_TO_STRING(
+                                        STRING_TO_INT(Cell(tES, i, 'Sev'))) + ';');
+                                ELSE
+                                    AppendToSection(cible, s + '.AlarmEn := FALSE;');
+                                END_IF;
+                            END_IF;
+                            voiesFaites := voiesFaites + 1;
+                        END_IF;
+                    END_IF;
+                END_FOR;
+
+                (* L'appel : apres les reglages dans les deux sens. *)
+                AppendToSection(cible, '');
+                AppendToSection(cible, instance + '(Count := ' + Cell(tCartes, c, 'Voies')
+                    + ', CycleMs := ' + cycle + ', Chan := ' + tableau + ');');
+
+                (* Troisieme temps, sorties seulement : le bloc a rempli Raw. *)
+                IF sortie = 1 THEN
+                    AppendToSection(cible, '');
+                    AppendToSection(cible, '(* -- vers la carte, apres l appel *)');
+                    FOR i := 0 TO ne - 1 DO
+                        IF Cell(tES, i, 'Carte') = carte THEN
+                            adresse := Cell(tES, i, 'Adresse');
+                            s := tableau + '[' + Cell(tES, i, 'Index') + ']';
+                            IF adresse <> '' THEN
+                                IF decal > 0 THEN
+                                    p1 := FIND(adresse, '.', 0);
+                                    p2 := FIND(adresse, '.', p1 + 1);
+                                    voie := STRING_TO_INT(MID(adresse, p2 + 1));
+                                    IF p2 > 0 AND voie < decal THEN
+                                        adresse := MID(adresse, 0, p2 + 1) + DINT_TO_STRING(voie + decal);
+                                    END_IF;
+                                END_IF;
+                                IF ana = 1 THEN
+                                    AppendToSection(cible, adresse + ' := REAL_TO_INT(' + s + '.Raw);');
+                                ELSE
+                                    AppendToSection(cible, adresse + ' := ' + s + '.Raw;');
+                                END_IF;
+                            END_IF;
+                        END_IF;
+                    END_FOR;
+                END_IF;
+
+                IF corrige > 0 THEN
+                    Warn(carte + ' (' + ref + ') : carte mixte, ses sorties commencent a la voie '
+                         + DINT_TO_STRING(decal) + '. ' + DINT_TO_STRING(corrige)
+                         + ' adresse(s) de l onglet ES decalee(s) d autant.');
+                END_IF;
+                cartesFaites := cartesFaites + 1;
+            END_IF;
+        END_IF;
+    END_IF;
+END_FOR;
+
+IF cartesFaites = 0 THEN
+    Warn('aucune carte declaree. Verifiez la colonne Active de l onglet Cartes API.');
+END_IF;
+
+(* ===================================================================== *)
+(*  2. LES EQUIPEMENTS                                                    *)
+(*                                                                        *)
+(*  LA FAMILLE DONNE LE BLOC : ST_EQ_Pump -> DFB_EQ_PUMP. Une famille     *)
+(*  ajoutee a libs/ est appelee sans toucher a cette macro.               *)
+(* ===================================================================== *)
+
+eqPoses := 0;
+deja := 0;
+combien := 0;
+idx := 0;
+tab := '';
+inst := '';
+
+FOR i := 0 TO neq - 1 DO
+    IF Cell(tEq, i, 'Actif') <> 'O' THEN
+        SkipRow(Cell(tEq, i, 'Nom') + ' : inactif');
+    ELSE
+        tab := Cell(tEq, i, 'Variable');
+        fam := Cell(tEq, i, 'Famille');
+        IF tab = '' OR fam = '' THEN
+            Warn(Cell(tEq, i, 'Nom') + ' : variable ou famille manquante');
+        ELSE
+            deja := 0;
+            FOR k := 0 TO i - 1 DO
+                IF Cell(tEq, k, 'Variable') = tab AND Cell(tEq, k, 'Actif') = 'O' THEN
+                    deja := 1;
+                END_IF;
+            END_FOR;
+
+            IF deja = 0 THEN
+                (* La taille : le plus grand indice de ce tableau, plus un. *)
+                combien := 0;
+                FOR k := 0 TO neq - 1 DO
+                    IF Cell(tEq, k, 'Variable') = tab AND Cell(tEq, k, 'Actif') = 'O' THEN
+                        IF Cell(tEq, k, 'Famille') <> fam THEN
+                            Warn(tab + ' : deux familles dans le meme tableau ('
+                                 + fam + ' et ' + Cell(tEq, k, 'Famille') + ')');
+                        END_IF;
+                        idx := STRING_TO_INT(Cell(tEq, k, 'Index')) + 1;
+                        IF idx > combien THEN combien := idx; END_IF;
+                    END_IF;
+                END_FOR;
+
+                bloc := '';
+                IF STARTSWITH(fam, 'ST_EQ_') THEN
+                    bloc := 'DFB_EQ_' + UPPER(MID(fam, 6));
+                END_IF;
+                IF bloc <> '' AND NOT PouExists(bloc) AND NOT LibHasItem(bloc) THEN
+                    Warn(tab + ' : ' + bloc + ' n est ni dans le projet ni dans la bibliotheque, '
+                         + 'aucun bloc appele. Le tableau est quand meme declare.');
+                    bloc := '';
+                ELSIF bloc = '' THEN
+                    Warn(tab + ' : ' + fam + ' ne suit pas la convention ST_EQ_Xxx, aucun bloc appele.');
+                END_IF;
+
+                IF NOT TypeExists(fam) AND LibHasItem(fam) THEN LibImport(fam); END_IF;
+                IF bloc <> '' AND NOT PouExists(bloc) AND LibHasItem(bloc) THEN LibImport(bloc); END_IF;
+
+                (* LA TAILLE EST CELLE DU BLOC : son InOut Eq est fige
+                   (ARRAY[0..15]), et Control Expert refuse un tableau d'une
+                   autre taille. Sans bloc : le plus grand indice, plus un. *)
+                attendu := 'ARRAY[0..' + DINT_TO_STRING(combien - 1) + '] OF ' + fam;
+                IF bloc <> '' THEN
+                    typEq := MemberType(bloc, 'Eq');
+                    IF typEq <> '' THEN
+                        capEq := STRING_TO_INT(MID(typEq, FIND(typEq, '..', 0) + 2,
+                                 FIND(typEq, ']', 0) - FIND(typEq, '..', 0) - 2)) + 1;
+                        IF combien > capEq THEN
+                            Fail(tab + ' : indice ' + DINT_TO_STRING(combien - 1) + ', mais ' + bloc
+                                 + ' ne traite que ' + DINT_TO_STRING(capEq) + ' equipements (0 a '
+                                 + DINT_TO_STRING(capEq - 1) + '). Partagez-les en deux tableaux : '
+                                 + 'colonne Variable de l onglet Equipements.');
+                        END_IF;
+                        attendu := typEq;
+                    END_IF;
+                END_IF;
+                IF NOT VariableExists(tab) THEN
+                    AddVariable(tab, attendu, 'Global', '');
+                ELSIF VariableType(tab) <> attendu THEN
+                    Warn(tab + ' existe en ' + VariableType(tab) + ' ; le classeur en demande '
+                         + attendu + '. A corriger a la main.');
+                END_IF;
+
+                AppendToSection(sEquip, '');
+                AppendToSection(sEquip, '(* ' + tab + '   ' + fam + '   '
+                    + DINT_TO_STRING(combien) + ' equipement(s) *)');
+                IF bloc <> '' THEN
+                    inst := prefixe + tab;
+                    IF NOT VariableExists(inst) THEN AddVariable(inst, bloc, 'Global', ''); END_IF;
+                    AppendToSection(sEquip, inst + '(Count := ' + DINT_TO_STRING(combien)
+                        + ', CycleMs := ' + cycle + ', Eq := ' + tab + ');');
+                END_IF;
+                eqPoses := eqPoses + 1;
+            END_IF;
+        END_IF;
+    END_IF;
+END_FOR;
+
+IF eqPoses = 0 THEN
+    Warn('aucun equipement. Verifiez la colonne Actif de l onglet Equipements.');
+END_IF;
+
+(* ===================================================================== *)
+(*  3. LE CABLAGE : une voie et un parametre d'equipement                 *)
+(* ===================================================================== *)
+
+cabPoses := 0;
+ncab := 0;
+IF tCab >= 0 THEN ncab := RowCount(tCab); END_IF;
+eq := '';
+acces := '';
+source := '';
+sens := '';
+sect := '';
+gauche := '';
+colSource := 'Source';
+IF tCab >= 0 AND NOT HasColumn(tCab, 'Source') AND HasColumn(tCab, 'Acces voie') THEN
+    colSource := 'Acces voie';
+END_IF;
+
+FOR i := 0 TO ncab - 1 DO
+    eq     := Cell(tCab, i, 'Equipement');
+    cible  := Cell(tCab, i, 'Cible');
+    source := Cell(tCab, i, colSource);
+    sens   := Cell(tCab, i, 'Sens');
+    IF eq = '' OR cible = '' OR source = '' THEN
+        SkipRow('Cablage ligne ' + DINT_TO_STRING(i) + ' : equipement, cible ou source manquant');
+    ELSE
+        acces := '';
+        FOR k := 0 TO neq - 1 DO
+            IF Cell(tEq, k, 'Nom') = eq AND Cell(tEq, k, 'Actif') = 'O' THEN
+                acces := Cell(tEq, k, 'Acces ST');
+            END_IF;
+        END_FOR;
+        IF acces = '' THEN
+            Warn(eq + ' : introuvable ou inactif dans l onglet Equipements, cablage saute');
+        ELSE
+            IF sens = 'DO' OR sens = 'AO' THEN sect := sCabOut; ELSE sect := sCabIn; END_IF;
+            AppendToSection(sect, '(* ' + ASCII(eq) + ' ' + Cell(tCab, i, 'Parametre') + '   '
+                + Cell(tCab, i, 'Adresse') + '   ' + ASCII(Cell(tCab, i, 'Designation')) + ' *)');
+            IF STARTSWITH(cible, acces) THEN gauche := cible; ELSE gauche := acces + cible; END_IF;
+            IF sens = 'DO' OR sens = 'AO' THEN
+                AppendToSection(sect, source + ' := ' + gauche + ';');
+            ELSE
+                AppendToSection(sect, gauche + ' := ' + source + ';');
+            END_IF;
+            cabPoses := cabPoses + 1;
+        END_IF;
+    END_IF;
+END_FOR;
+
+(* ===================================================================== *)
+(*  4. LES ALARMES DE VOIE                                                *)
+(*                                                                        *)
+(*  Elles passent en premier dans le registre pour que leurs emplacements *)
+(*  ne bougent pas quand on ajoute un equipement. L'UUID, lui, est        *)
+(*  compose et ne depend pas de l'emplacement : c'est lui que l'IHM cite. *)
+(* ===================================================================== *)
+
+genre := 0;
+uuid := 0;
+sev := 1;
+tableau2 := '';
+indice := '';
+libelle := '';
+lien := '';
+etat := '';
+
+IF avecAlarmes = 1 THEN
+    FOR i := 0 TO ne - 1 DO
+        adresse  := Cell(tES, i, 'Adresse');
+        tableau2 := Cell(tES, i, 'Tableau');
+        indice   := Cell(tES, i, 'Index');
+        libelle  := ASCII(Cell(tES, i, 'Designation'));
+        fam      := Cell(tES, i, 'Famille');
+        carte    := Cell(tES, i, 'Carte');
+        ana := 0;
+        IF fam = 'AI' OR fam = 'AO' THEN ana := 1; END_IF;
+
+        kk := 0;
+        IF ana = 1 THEN
+            FOR k := 0 TO 3 DO
+                IF Cell(tES, i, 'S' + DINT_TO_STRING(k) + '_En') = 'O' THEN kk := 4; END_IF;
+            END_FOR;
+        ELSIF Cell(tES, i, 'AlarmEn') = 'O' THEN
+            kk := 1;
+        END_IF;
+
+        IF kk > 0 AND (adresse = '' OR tableau2 = '') THEN
+            SkipRow('ES ligne ' + DINT_TO_STRING(i) + ' : alarme sans adresse ou sans tableau');
+        ELSIF kk > 0 THEN
+            (* La meme correction de voie que le mapping, pour que l'UUID
+               designe la vraie voie de la carte mixte. *)
+            decal := 0;
+            IF fam = 'DO' OR fam = 'AO' THEN
+                FOR k := 0 TO nc - 1 DO
+                    IF Cell(tCartes, k, 'Nom') = carte THEN
+                        ref := UPPER(Cell(tCartes, k, 'Reference'));
+                        IF FIND(ref, 'DDM', 0) >= 0 THEN decal := 16; END_IF;
+                        IF FIND(ref, 'AMM', 0) >= 0 THEN decal := 4; END_IF;
+                    END_IF;
+                END_FOR;
+            END_IF;
+            p1 := FIND(adresse, '.', 0);
+            p2 := FIND(adresse, '.', p1 + 1);
+            IF p1 < 0 OR p2 < 0 THEN
+                SkipRow('ES ligne ' + DINT_TO_STRING(i) + ' : adresse illisible (' + adresse + ')');
+            ELSE
+                d := 1;
+                WHILE d < p1 AND FIND('0123456789', MID(adresse, d, 1), 0) < 0 DO
+                    d := d + 1;
+                END_WHILE;
+                rack   := STRING_TO_INT(MID(adresse, d, p1 - d));
+                module := STRING_TO_INT(MID(adresse, p1 + 1, p2 - p1 - 1));
+                voie   := STRING_TO_INT(MID(adresse, p2 + 1));
+                IF decal > 0 AND voie < decal THEN
+                    voie := voie + decal;
+                    adresse := MID(adresse, 0, p2 + 1) + DINT_TO_STRING(voie);
+                END_IF;
+
+                FOR k := 0 TO kk - 1 DO
+                    IF ana = 0 OR Cell(tES, i, 'S' + DINT_TO_STRING(k) + '_En') = 'O' THEN
+                        IF ana = 1 THEN
+                            genre := 2;
+                            uuid := genre * 268435456 + rack * 16777216 + module * 262144
+                                  + voie * 4096 + k * 256;
+                            sev := STRING_TO_INT(Cell(tES, i, 'S' + DINT_TO_STRING(k) + '_Sev'));
+                            lien := adresse + ' S' + DINT_TO_STRING(k);
+                            etat := tableau2 + '[' + indice + '].Thr[' + DINT_TO_STRING(k) + '].Raised';
+                            s := MID(libelle, 0, 28) + ' S' + DINT_TO_STRING(k);
+                        ELSE
+                            genre := 1;
+                            uuid := genre * 268435456 + rack * 16777216 + module * 262144 + voie * 4096;
+                            sev := STRING_TO_INT(Cell(tES, i, 'Sev'));
+                            lien := adresse;
+                            etat := tableau2 + '[' + indice + '].Alarm';
+                            s := MID(libelle, 0, 32);
+                        END_IF;
+                        IF sev < 1 THEN sev := 1; END_IF;
+
+                        r := slot / cap;
+                        suf := '';
+                        IF r > 0 THEN suf := '_' + DINT_TO_STRING(r + 1); END_IF;
+                        seuil := registre + suf + '[' + DINT_TO_STRING(slot MOD cap) + ']';
+                        initTxt := initTxt + nl + '    (* ' + lien + ' *)'
+                            + nl + '    ' + seuil + '.Uuid := ' + DINT_TO_STRING(uuid) + ';'
+                            + nl + '    ' + seuil + '.Label := ' + QUOTE(s) + ';'
+                            + nl + '    ' + seuil + '.Link := ' + QUOTE(MID(lien, 0, 32)) + ';'
+                            + nl + '    ' + seuil + '.Sev := ' + DINT_TO_STRING(sev) + ';'
+                            + nl + '    ' + seuil + '.Used := TRUE;';
+                        AppendToSection(sAlmC, etats + suf + '[' + DINT_TO_STRING(slot MOD cap) + '] := '
+                            + etat + ';');
+                        IF liste <> '' THEN
+                            FileAppend(liste, DINT_TO_STRING(r + 1) + ';' + DINT_TO_STRING(slot MOD cap)
+                                + ';' + DINT_TO_STRING(uuid) + ';' + s + ';' + lien + ';'
+                                + DINT_TO_STRING(sev) + ';voie');
+                        END_IF;
+                        sig := (sig * 31 + (uuid MOD 9973) + sev) MOD 30011;
+                        slot := slot + 1;
+                        almPoses := almPoses + 1;
+                    END_IF;
+                END_FOR;
+            END_IF;
+        END_IF;
+    END_FOR;
+END_IF;
+
+(* ===================================================================== *)
+(*  5. LES REPORTS, ET LES ALARMES D'EQUIPEMENT                           *)
+(*                                                                        *)
+(*  Le type du parametre vient de la famille elle-meme (MemberType), le   *)
+(*  Catalogue ne sert plus que de repli. La colonne Resolution met a      *)
+(*  l'echelle : un niveau de 0 a 5 m publie en centiemes tient dans un    *)
+(*  mot, et ne s'arrondit plus a 0, 1, 2...                               *)
+(*                                                                        *)
+(*  L'UUID d'une alarme d'equipement ne depend pas de l'emplacement :     *)
+(*    genre 4, module = rang du tableau, voie = indice, code = rang du TA *)
+(* ===================================================================== *)
+
+nTC := 0;
+nTM := 0;
+nTA := 0;
+param := '';
+chemin2 := '';
+genreL := '';
+adr := '';
+bit := '';
+typ := '';
+droite := '';
+res := '';
+numTab := 0;
+rangTab := 0;
+idxEq := 0;
+codeP := 0;
+avecSev := 0;
+IF tLiens >= 0 AND HasColumn(tLiens, 'Sev') THEN avecSev := 1; END_IF;
+avecRes := 0;
+IF tLiens >= 0 AND HasColumn(tLiens, 'Resolution') THEN avecRes := 1; END_IF;
+
+FOR i := 0 TO nliens - 1 DO
+    eq      := Cell(tLiens, i, 'Equipement');
+    param   := Cell(tLiens, i, 'Parametre');
+    chemin2 := Cell(tLiens, i, 'Chemin');
+    genreL  := Cell(tLiens, i, 'Type');
+    adr     := Cell(tLiens, i, 'Adr API');
+    bit     := Cell(tLiens, i, 'Bit');
+    res     := '';
+    IF avecRes = 1 THEN res := Cell(tLiens, i, 'Resolution'); END_IF;
+
+    IF eq = '' OR adr = '' OR chemin2 = '' THEN
+        SkipRow('Liens ligne ' + DINT_TO_STRING(i) + ' : equipement, chemin ou adresse manquant');
+    ELSE
+        acces := '';
+        fam := '';
+        tab := '';
+        idxEq := 0;
+        FOR k := 0 TO neq - 1 DO
+            IF Cell(tEq, k, 'Nom') = eq AND Cell(tEq, k, 'Actif') = 'O' THEN
+                acces := Cell(tEq, k, 'Acces ST');
+                fam   := Cell(tEq, k, 'Famille');
+                tab   := Cell(tEq, k, 'Variable');
+                idxEq := STRING_TO_INT(Cell(tEq, k, 'Index'));
+            END_IF;
+        END_FOR;
+
+        IF acces = '' THEN
+            Warn(eq + ' : introuvable ou inactif dans l onglet Equipements, report saute');
+        ELSE
+            typ := MemberType(fam, param);
+            IF typ = '' THEN
+                FOR k := 0 TO ncat - 1 DO
+                    IF Cell(tCat, k, 'Famille') = fam AND Cell(tCat, k, 'Nom') = param THEN
+                        typ := Cell(tCat, k, 'Type');
+                    END_IF;
+                END_FOR;
+            END_IF;
+            (* Un bit de mot s'ecrit %MW1000.3 : la forme de Control Expert. *)
+            IF bit = '' THEN droite := adr; ELSE droite := adr + '.' + bit; END_IF;
+            IF STARTSWITH(chemin2, acces) THEN gauche := chemin2; ELSE gauche := acces + chemin2; END_IF;
+
+            IF genreL = 'TC' THEN
+                sect := sTC;
+                nTC := nTC + 1;
+            ELSE
+                sect := sTM;
+                IF genreL = 'TA' THEN nTA := nTA + 1; ELSE nTM := nTM + 1; END_IF;
+            END_IF;
+
+            AppendToSection(sect, '(* ' + genreL + '   ' + ASCII(Cell(tLiens, i, 'Designation'))
+                + '   ' + droite + ' *)');
+            IF typ = '' AND bit = '' THEN
+                AppendToSection(sect, '(* TYPE INCONNU : ' + fam + '.' + param
+                    + ' existe-t-il ? Verifiez la conversion. *)');
+                Warn(eq + ' : ' + param + ' n est pas un champ de ' + fam + ' (report ' + droite + ')');
+            END_IF;
+            IF STRING_TO_REAL(res) <= 0.0 THEN res := ''; END_IF;
+
+            IF genreL = 'TC' THEN
+                (* L IHM ecrit le mot, l automate le recopie dans l equipement. *)
+                IF bit <> '' OR typ = 'BOOL' THEN
+                    AppendToSection(sect, gauche + ' := ' + droite + ';');
+                ELSIF typ = 'REAL' AND res <> '' THEN
+                    AppendToSection(sect, gauche + ' := INT_TO_REAL(' + droite + ') * '
+                        + REAL_TO_STRING(STRING_TO_REAL(res)) + ';');
+                ELSIF typ = 'REAL' THEN
+                    AppendToSection(sect, gauche + ' := INT_TO_REAL(' + droite + ');');
+                ELSIF typ = 'DINT' AND res <> '' THEN
+                    AppendToSection(sect, gauche + ' := INT_TO_DINT(' + droite + ') * '
+                        + DINT_TO_STRING(REAL_TO_INT(STRING_TO_REAL(res))) + ';');
+                ELSIF typ = 'DINT' THEN
+                    AppendToSection(sect, gauche + ' := INT_TO_DINT(' + droite + ');');
+                ELSIF typ = 'UDINT' THEN
+                    AppendToSection(sect, gauche + ' := INT_TO_UDINT(' + droite + ');');
+                ELSE
+                    AppendToSection(sect, gauche + ' := ' + droite + ';');
+                END_IF;
+            ELSE
+                (* L automate calcule, l IHM lit. *)
+                IF bit <> '' OR typ = 'BOOL' THEN
+                    AppendToSection(sect, droite + ' := ' + gauche + ';');
+                ELSIF typ = 'REAL' AND res <> '' THEN
+                    AppendToSection(sect, droite + ' := REAL_TO_INT(' + gauche + ' / '
+                        + REAL_TO_STRING(STRING_TO_REAL(res)) + ');');
+                ELSIF typ = 'REAL' THEN
+                    AppendToSection(sect, droite + ' := REAL_TO_INT(' + gauche + ');');
+                ELSIF typ = 'DINT' AND res <> '' THEN
+                    AppendToSection(sect, droite + ' := DINT_TO_INT(' + gauche + ' / '
+                        + DINT_TO_STRING(REAL_TO_INT(STRING_TO_REAL(res))) + ');');
+                ELSIF typ = 'DINT' THEN
+                    AppendToSection(sect, droite + ' := DINT_TO_INT(' + gauche + ');');
+                ELSIF typ = 'UDINT' THEN
+                    AppendToSection(sect, droite + ' := UDINT_TO_INT(' + gauche + ');');
+                ELSE
+                    AppendToSection(sect, droite + ' := ' + gauche + ';');
+                END_IF;
+            END_IF;
+
+            (* ---- et, pour une TA, l'enregistrement dans le registre ---- *)
+            IF genreL = 'TA' AND avecAlarmes = 1 THEN
+                numTab := 0;
+                rangTab := 0;
+                FOR k := 0 TO neq - 1 DO
+                    IF Cell(tEq, k, 'Actif') = 'O' THEN
+                        IF Cell(tEq, k, 'Variable') = tab AND numTab = 0 THEN
+                            numTab := rangTab + 1;
+                        END_IF;
+                        IF Cell(tEq, k, 'Index') = '0' THEN rangTab := rangTab + 1; END_IF;
+                    END_IF;
+                END_FOR;
+                IF numTab > 0 THEN numTab := numTab - 1; END_IF;
+                codeP := 0;
+                FOR k := 0 TO i - 1 DO
+                    IF Cell(tLiens, k, 'Equipement') = eq AND Cell(tLiens, k, 'Type') = 'TA' THEN
+                        codeP := codeP + 1;
+                    END_IF;
+                END_FOR;
+                uuid := 4 * 268435456 + numTab * 262144 + idxEq * 4096 + codeP;
+                sev := sevDef;
+                IF avecSev = 1 AND Cell(tLiens, i, 'Sev') <> '' THEN
+                    sev := STRING_TO_INT(Cell(tLiens, i, 'Sev'));
+                END_IF;
+                s := MID(ASCII(Cell(tLiens, i, 'Designation')), 0, 32);
+
+                r := slot / cap;
+                suf := '';
+                IF r > 0 THEN suf := '_' + DINT_TO_STRING(r + 1); END_IF;
+                seuil := registre + suf + '[' + DINT_TO_STRING(slot MOD cap) + ']';
+                initTxt := initTxt + nl + '    (* ' + ASCII(eq) + '.' + param + ' *)'
+                    + nl + '    ' + seuil + '.Uuid := ' + DINT_TO_STRING(uuid) + ';'
+                    + nl + '    ' + seuil + '.Label := ' + QUOTE(s) + ';'
+                    + nl + '    ' + seuil + '.Link := ' + QUOTE(MID(droite, 0, 32)) + ';'
+                    + nl + '    ' + seuil + '.Sev := ' + DINT_TO_STRING(sev) + ';'
+                    + nl + '    ' + seuil + '.Used := TRUE;';
+                AppendToSection(sAlmC, etats + suf + '[' + DINT_TO_STRING(slot MOD cap) + '] := '
+                    + gauche + ';');
+                IF liste <> '' THEN
+                    FileAppend(liste, DINT_TO_STRING(r + 1) + ';' + DINT_TO_STRING(slot MOD cap)
+                        + ';' + DINT_TO_STRING(uuid) + ';' + s + ';' + droite + ';'
+                        + DINT_TO_STRING(sev) + ';' + ASCII(eq));
+                END_IF;
+                sig := (sig * 31 + (uuid MOD 9973) + sev) MOD 30011;
+                slot := slot + 1;
+                almPoses := almPoses + 1;
+            END_IF;
+        END_IF;
+    END_IF;
+END_FOR;
+
+(* ===================================================================== *)
+(*  6. LE REGISTRE, GARDE PAR SA SIGNATURE ; LES GESTIONNAIRES EN DERNIER *)
+(*                                                                        *)
+(*  La signature ne vaut jamais 0 : AlmInitSig nait a 0, et le premier    *)
+(*  cycle doit remplir le registre. Les gestionnaires sont appeles APRES  *)
+(*  toutes les ecritures de State : places avant, ils dateraient chaque   *)
+(*  alarme du cycle precedent.                                            *)
+(* ===================================================================== *)
+
+IF avecAlarmes = 1 THEN
+    IF sig = 0 THEN sig := 1; END_IF;
+    AppendToSection(sAlmI, '(* Genere par ImporterProgramme. GARDEE : le registre n est rempli qu au');
+    AppendToSection(sAlmI, '   premier cycle, et apres une modification de la liste d alarmes');
+    AppendToSection(sAlmI, '   (' + DINT_TO_STRING(almPoses) + ' alarmes, signature '
+        + DINT_TO_STRING(sig) + '). Elle va EN TETE de la tache. *)');
+    AppendToSection(sAlmI, 'IF AlmInitSig <> ' + DINT_TO_STRING(sig) + ' THEN' + initTxt);
+    AppendToSection(sAlmI, '    AlmInitSig := ' + DINT_TO_STRING(sig) + ';');
+    AppendToSection(sAlmI, 'END_IF;');
+
+    AppendToSection(sAlmC, '');
+    AppendToSection(sAlmC, '(* Les gestionnaires APRES les etats : places avant, ils dateraient *)');
+    AppendToSection(sAlmC, '(* chaque alarme du cycle precedent.                               *)');
+    FOR r := 0 TO nreg - 1 DO
+        suf := '';
+        IF r > 0 THEN suf := '_' + DINT_TO_STRING(r + 1); END_IF;
+        AppendToSection(sAlmC, gest + suf + '(Count := ' + DINT_TO_STRING(cap) + ', CycleMs := '
+            + cycle + ', NowS := ' + dateS + ', HornSev := 3,');
+        AppendToSection(sAlmC, '    Cmd := ' + almCmd + ', State := ' + etats + suf + ', Defs := '
+            + registre + suf + ', History := ' + histo + suf + ', Stat := ' + almStat + suf + ');');
+    END_FOR;
+END_IF;
+
+(* ===================================================================== *)
+(*  7. L'ORDRE DE LA TACHE                                                *)
+(* ===================================================================== *)
+
+RunMacro('RangerSections');
+
+(* ===================================================================== *)
+(*  Le compte rendu                                                       *)
+(* ===================================================================== *)
+
+Log(DINT_TO_STRING(cartesFaites) + ' carte(s), ' + DINT_TO_STRING(voiesFaites) + ' voie(s)');
+Log(DINT_TO_STRING(eqPoses) + ' tableau(x) d equipement, '
+    + DINT_TO_STRING(cabPoses) + ' liaison(s) de cablage');
+Log(DINT_TO_STRING(nTC) + ' commande(s), ' + DINT_TO_STRING(nTM) + ' mesure(s), '
+    + DINT_TO_STRING(nTA) + ' alarme(s) d equipement');
+IF avecAlarmes = 1 THEN
+    Log(DINT_TO_STRING(almPoses) + ' alarme(s) dans ' + DINT_TO_STRING(nreg) + ' registre(s) de '
+        + DINT_TO_STRING(cap) + ' (' + gestType + ')');
+    IF liste <> '' THEN Log('liste des alarmes : ' + liste + ', a cote du classeur'); END_IF;
+ELSE
+    Log('gestionnaire d alarmes non demande : les lignes TA sont seulement recopiees vers l IHM.');
+END_IF;
+IF avecHorloge = 1 THEN
+    Log('les blocs sont cadences par Horloge.DtMs ; les alarmes sont datees par Horloge.EpochS');
+END_IF;

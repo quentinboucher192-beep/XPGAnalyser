@@ -1,0 +1,51 @@
+# =============================================================================
+#  Session 106 (1.11, chantier T3, tranche 11) : les deux decisions du chef
+#  - la legende du « ? » trace ✓ ✕ ⊘ ⇩ comme l'arbre, au trait, sans police ;
+#  - dans le centre d'aide, l'article d'un type d'expression n'a pas de champ
+#    d'essai : il montre « Essayer dans la page des expressions ».
+#  Projet : une copie d'Armoire_Gaz preparee comme pour les sessions 96 a 98
+#  (Matrice en LD, Reset en erreur ; lanceur scratchpad/T3/t11/lancer-s106.sh).
+#   T3_106_01 : la legende (infobulle du « ? », 4e bouton du bas du rail) :
+#               les symboles traces, dans le ton de l'arbre ; ⇩ barre
+#   T3_106_02 : l'infobulle du resume de MAST (« 2 ✕/⊘ ») : les symboles traces
+#   T3_106_03 : le centre, sujet expr-bool : le lien sous le resume, pas de champ
+#   T3_106_04 : le lien suivi (expr:bool) : la page seule sur BOOL, « Essaie ici »
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- La legende : le « ? » du rail de l'arbre --------------------------------
+survol 18 841
+attendre 40
+capture T3_106_01_legende.png
+survol 1000 700
+attendre 5
+
+# ---- Le resume de MAST (2 ✕/⊘) : son infobulle --------------------------------
+arbre "API/Tâches" deplier
+attendre 3
+arbre-lignes
+# MAST est la ligne sous Tâches (y = 304 en 1600 x 900), son résumé à droite
+survol 470 304
+attendre 40
+capture T3_106_02_infobulle_mast.png
+survol 1000 700
+attendre 5
+
+# ---- Le centre d'aide : l'article BOOL, sans champ d'essai -------------------
+# (aide-sujet veut le centre à l'écran : on l'ouvre d'abord, comme la session 89)
+action help.open
+attendre 10
+aide-sujet expr-bool
+attendre 6
+capture T3_106_03_centre_expr_bool.png
+aide-cible expr:bool
+attendre 15
+capture T3_106_04_page_bool.png
+touche Escape
+attendre 5
+quitter

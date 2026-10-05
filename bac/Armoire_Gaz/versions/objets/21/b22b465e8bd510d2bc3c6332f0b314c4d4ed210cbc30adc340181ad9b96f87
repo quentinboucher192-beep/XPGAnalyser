@@ -1,0 +1,19 @@
+# Derived data type.
+name = ST_GC_Runtime
+version = 0.04
+# checksum is recomputed by Control Expert on import; not stored.
+
+# name ; type ; address ; scope ; init ; comment ; attributes ; element comments
+Mode ; INT ;  ; Member ;  ;  ;  ; 
+Phase ; INT ;  ; Member ;  ;  ;  ; 
+Cycle ; DINT ;  ; Member ;  ;  ;  ; 
+TsNow ; TIME ;  ; Member ;  ;  ;  ; 
+TsPrev ; TIME ;  ; Member ;  ;  ;  ; 
+DateTime ; TIME ;  ; Member ;  ;  ;  ; 
+NtpcNow ; Display_NTPC ;  ; Member ;  ;  ;  ; 
+GC_MAX_STEPS ; INT ;  ; Member ;  ;  ;  ; 
+GC_MAX_TRANSITIONS ; INT ;  ; Member ;  ;  ;  ; 
+GC_MAX_ACTIONS ; INT ;  ; Member ;  ;  ;  ; 
+GC_MAX_SRC_PER_TRANS ; INT ;  ; Member ;  ;  ;  ; 
+GC_MAX_DST_PER_TRANS ; INT ;  ; Member ;  ;  ;  ; 
+GC_MAX_HIST ; INT ;  ; Member ;  ;  ;  ; 

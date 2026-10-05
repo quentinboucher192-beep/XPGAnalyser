@@ -1,0 +1,41 @@
+# =============================================================================
+#  Session 113 (R111, 1.11) : « Dupliquer… » - une case rouge qui vise un
+#  membre de l'automate mal ecrit (Armoires[0].sortie.V3) propose
+#  « veux-tu dire Armoires[0].sorties.V3 ? », comme pour une variable
+#  (les membres : ceux que l'aide a la saisie propose apres le point).
+#  Sur une copie d'Armoire_Gaz telle quelle (scratchpad/Q1103/qa/run.sh ... brut).
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+arbre "IHM/Vues/Vue_Synoptique"
+attendre 6
+objet V_101
+attendre 3
+propriete "Ouverture (%)  ƒ" "=SEL($Vanne$.cmd, 0, 100)"
+attendre 2
+propriete "Défaut (expression)" "=($Vanne$.F0)"
+attendre 2
+propriete "Libellé" "$Repere$"
+attendre 2
+vue-clic 240 170
+attendre 1
+touche ctrl+d
+attendre 3
+dupliquer-copies 3
+dupliquer-serie "$Repere$" "V-1{n}" "01"
+dupliquer-case 1 "$Vanne$" "Armoires[0].sorties.V2"
+dupliquer-case 2 "$Vanne$" "Armoires[0].sorties.V3"
+dupliquer-case 3 "$Vanne$" "Armoires[0].sortie.V4"
+dupliquer-case 4 "$Vanne$" "Armoires[0].sorties.V5"
+attendre 3
+dupliquer-verifier bloque
+capture 113_01_membre_mal_ecrit_veux_tu_dire.png
+dupliquer-case 3 "$Vanne$" "Armoires[0].sorties.V4"
+attendre 3
+dupliquer-verifier
+capture 113_02_membre_corrige.png
+quitter

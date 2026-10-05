@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!-- XPG Analyzer : deux rails de schema a contacts (ladder), un X de deux
+       barreaux croises, et le point d'analyse ou ils se rencontrent. -->
+  <defs>
+    <linearGradient id="fond" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#23527F"/>
+      <stop offset="1" stop-color="#0C1826"/>
+    </linearGradient>
+    <linearGradient id="bleu" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7CC4FF"/>
+      <stop offset="1" stop-color="#2F6FD6"/>
+    </linearGradient>
+    <linearGradient id="vert" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5BE08F"/>
+      <stop offset="1" stop-color="#1E9E57"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="54" ry="54" fill="url(#fond)"/>
+  <rect x="10" y="10" width="236" height="236" rx="52" ry="52" fill="none" stroke="#FFFFFF" stroke-opacity="0.14" stroke-width="4"/>
+  <rect x="50" y="52" width="24" height="152" rx="12" ry="12" fill="#E9EFF7"/>
+  <rect x="182" y="52" width="24" height="152" rx="12" ry="12" fill="#E9EFF7"/>
+  <line x1="92" y1="82" x2="164" y2="174" stroke="url(#bleu)" stroke-width="26" stroke-linecap="round"/>
+  <line x1="164" y1="82" x2="92" y2="174" stroke="url(#vert)" stroke-width="26" stroke-linecap="round"/>
+  <circle cx="128" cy="128" r="19" fill="#F2C94C" stroke="#0C1826" stroke-width="7"/>
+</svg>

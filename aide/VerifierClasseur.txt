@@ -1,0 +1,7 @@
+#! summary = Lit le classeur et la bibliotheque, et dit ce qui va casser avant d'importer.
+#! usage = NE MODIFIE RIEN. Elle regarde et elle rapporte, ce qui est exactement ce qu'on veut avant un import : un import qui s'arrete au milieu laisse un projet a moitie ecrit, et defaire a moitie est plus long que de verifier avant.
+#! usage = Ce qu'elle controle : le dossier libs de l'onglet Config, l'existence de chaque bloc cite par les cartes, l'existence de chaque famille d'equipement, les adresses de report prises deux fois, et le nombre de voies face a la taille du bloc choisi.
+#! usage = ELLE SIGNALE AUSSI LES BLOCS EN 1.00. Avant la 1.01, le bornage de Count perdait la derniere voie de chaque carte. Un projet qui porte encore la 1.00 a une voie morte par carte pleine, et rien ne le dit a l'execution.
+#! see = ImporterClasseur, EnsureLibraryItem
+#! param classeur = Le chemin du classeur. Laisser vide prend celui qui est deja charge par le bouton Classeur..., ce qui est le cas normal quand on enchaine plusieurs imports.
+#! param classeur = C'est un .xlsm, pas un export CSV : la macro lit les onglets directement, et les quatre familles d'E/S sont donc traitees en une seule execution.

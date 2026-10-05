@@ -1,0 +1,123 @@
+# Le script (maquette 1.11, scène 3) : le script du client, sans un mot changé.
+#   IF V[0].Pos < 100 THEN V[0].Pos := V[0].Pos + 1; ELSE V[0].Pos := 0; END_IF;
+# Bac : Armoire_Gaz (V : ARRAY[0..3] OF T_VANNE). Format : v111/agents/CONCEPTION-T1.md, section 1.
+# Les durées suivent la maquette : 120 ms après chaque geste, 900 ms après dire, 1,8 s en fin d'étape.
+= script-rampe | Un script : la rampe de V[0].Pos
+@sujet scripts
+@sujet script-rampe
+@bac Armoire_Gaz | Vue_Tuto
+
+# La vanne V_201 sur sa tuyauterie, pour la voir s'ouvrir à l'étape 7.
+@avant
+type T_VANNE "Pos : REAL; Defaut : BOOL; Bouge : BOOL; Cmd : BOOL"
+variable V "ARRAY[0..3] OF T_VANNE"
+vue Vue_Tuto
+poser Tuyauterie 120,262 Tuyauterie_1
+regler Tuyauterie_1 Largeur 520
+poser Vanne 400,262 V_201
+# Tranche 8 : la vanne suit V[0].Pos (l'Ouverture, cle opening) : a l'etape 7, elle s'ouvre en direct.
+regler V_201 opening "=V[0].Pos"
+
+== 1 | Crée le script
+: Programmation générale › Scripts : **Nouveau script**. Le nom, le langage (ST : c'est lui qui s'exécute), le déclencheur.
+clic "arbre:IHM/Programmation générale" double
+clic "sous-onglet:Scripts généraux"
+clic "outil:Nouveau script ST"
+clic champ:1
+texte champ:1 "Rampe_Vanne"
+clic "bouton:Créer"
+encadrer ligne:Rampe_Vanne
+dire "Rampe_Vanne est dans la liste, ouvert dans l'éditeur. Il est « Appelé » pour l'instant : il ne tourne pas seul."
+@atoi Clique Nouveau script ST, puis nomme-le Rampe_Vanne.
+@cible "outil:Nouveau script ST"
+@verifier script(Rampe_Vanne).declencheur <> ""
+
+== 2 | Écris-le, avec l'aide à la saisie
+: Le script du client. Après `V[0].`, l'aide à la saisie propose les membres de T_VANNE : on choisit **Pos** au clavier.
+# Tranche 8 : un script neuf commence par "(* Rampe_Vanne *)". Le clic a 1:1 (colonne estimee)
+# tombait apres la "(" : le commentaire etait coupe en deux (verificateur). Ctrl+A : on remplace tout.
+clic editeur:1:1
+touche ctrl+a
+texte "(* Pos *)"
+touche Return
+texte "IF V[0]."
+encadrer saisie:Pos
+dire "V[0]. : V est un ARRAY[0..3] OF T_VANNE ; ses membres arrivent avec leur type. ↓ choisit, Entrée insère."
+attendre 1.4s
+touche Return
+texte " < 100 THEN"
+touche Return
+texte "V[0].Pos := V[0].Pos + 1;"
+touche Return
+texte "ELSE"
+touche Return
+dire "La coloration, les numéros de ligne : le même éditeur que les autres scripts."
+@atoi Écris les quatre premières lignes du script (jusqu'à ELSE). Tape V[0]. : l'aide à la saisie s'ouvre ; Ctrl+Espace la rouvre.
+@cible editeur:1:1
+@verifier script(Rampe_Vanne).texte ~ "V[0].Pos := V[0].Pos + 1;"
+
+== 3 | Une faute, exprès
+: J'écris **Position** au lieu de **Pos** : l'éditeur la souligne en rouge pendant la frappe, le numéro de ligne se teinte.
+texte "V[0].Position := 0;"
+touche Return
+texte "END_IF;"
+encadrer editeur:5:10
+dire "Ligne 5 : V[0].Position est soulignée. Le message est en infobulle ; Compiler le dira aussi."
+attendre 900ms
+
+== 4 | Compiler (F7) la trouve
+: **Compiler (F7)** contrôle tous les scripts : le script, la ligne, la colonne, et le nom le plus proche.
+survol outil:Compiler
+touche F7
+encadrer resultats-compiler
+dire "« Rampe_Vanne · 5:10 · le membre Position n'existe pas dans T_VANNE : veux-tu dire Pos ? »"
+attendre 900ms
+@atoi Lance Compiler : la touche F7, ou le bouton de la barre d'outils.
+@cible outil:Compiler
+# Tranche 21 (lot final) : script(Rampe_Vanne).erreurs compte les fautes soulignees pendant la
+# frappe, deja vraies avant F7. compiler.resultats n'a de valeur qu'apres Compiler.
+@verifier compiler.resultats >= 1
+@verifier script(Rampe_Vanne).erreurs >= 1
+@bravo Compiler a trouvé la faute, avec sa ligne et sa colonne, et propose Pos.
+
+== 5 | Corrige
+: Un clic sur le résultat place le curseur sur la faute ; on réécrit la ligne avec **Pos**. Compiler confirme : aucune erreur.
+# Tranche 8 : le double clic de l'editeur ne choisit pas le mot (verificateur : "PosPosition").
+# On choisit la ligne au clavier (Debut, puis Maj+Fin) et on la reecrit.
+clic resultats-compiler
+clic editeur:5:1
+touche home
+touche maj+end
+texte "V[0].Pos := 0;"
+touche F7
+encadrer resultats-compiler
+dire "Compilé : aucune erreur. Le soulignement a disparu."
+@atoi Corrige la faute : écris Pos à la place de Position, puis F7.
+@cible editeur:5:10
+@verifier script(Rampe_Vanne).erreurs = 0
+@presque script(Rampe_Vanne).texte ~ Position | Il reste Position, ligne 5.
+
+== 6 | Une minuterie de 500 ms
+: Le **Déclencheur** : Cyclique, toutes les 500 ms. Le script tourne seul dès que l'IHM démarre.
+encadrer propriete:Déclencheur
+clic propriete:Déclencheur
+clic menu:Cyclique
+clic "propriete:Période (ms)"
+texte "propriete:Période (ms)" "500"
+touche Return
+dire "« Cyclique · toutes les 500 ms ». Dans la liste aussi."
+@atoi Mets le Déclencheur sur Cyclique et la Période à 500 ms.
+@cible propriete:Déclencheur
+@verifier script(Rampe_Vanne).declencheur = Cyclique
+@verifier script(Rampe_Vanne).periode = 500
+
+== 7 | Simulation · IHM : la vanne s'ouvre en direct
+: Démarre l'IHM (**F8**) : toutes les 500 ms, `V[0].Pos` monte de 1 ; à 100, elle revient à 0. La vanne de la vue suit, en direct.
+touche F8
+encadrer vue:V_201
+simuler 9s
+dire "De 0 à 100 %, puis 0. C'est le défaut que tu as signalé : en 1.10.0, la vue restait à 12 % jusqu'au changement de page. Corrigé en 1.10.1 : chaque écriture d'un script prévient la vue."
+@atoi Démarre l'IHM : F8.
+@cible vue:V_201
+@verifier simulation.ihm = marche
+@bravo La vanne suit V[0].Pos en direct. Le tutoriel suivant colore la cuve avec une expression.

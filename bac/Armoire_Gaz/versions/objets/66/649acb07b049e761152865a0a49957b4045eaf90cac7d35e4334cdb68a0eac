@@ -1,0 +1,18 @@
+# Derived data type.
+name = defauts
+version = 0.07
+# checksum is recomputed by Control Expert on import; not stored.
+
+# name ; type ; address ; scope ; init ; comment ; attributes ; element comments
+surpression ; BOOL ;  ; Member ;  ;  ;  ; 
+fuite_gazbox ; BOOL ;  ; Member ;  ;  ;  ; 
+fuite_gazroom ; BOOL ;  ; Member ;  ;  ;  ; 
+manque_extraction ; BOOL ;  ; Member ;  ;  ;  ; 
+manque_tension ; BOOL ;  ; Member ;  ;  ;  ; 
+porte ; BOOL ;  ; Member ;  ;  ;  ; 
+au ; BOOL ;  ; Member ;  ;  ;  ; 
+env1 ; BOOL ;  ; Member ;  ;  ;  ; 
+env1B ; BOOL ;  ; Member ;  ;  ;  ; 
+env2 ; BOOL ;  ; Member ;  ;  ;  ; 
+env2B ; BOOL ;  ; Member ;  ;  ;  ; 
+span ; BOOL ;  ; Member ;  ;  ;  ; 

@@ -1,0 +1,262 @@
+# =============================================================================
+#  Session 57 - LOT API 7 : l'accueil refait ; la simulation et les statistiques
+#  dans l'API (F9, Ctrl+5) ; le menu des onglets, les groupes cote a cote, la
+#  mosaique, une fenetre detachee ; deballer a toute profondeur (types, blocs,
+#  unites, variables, tables d'animation) ; renommer en voyant tout ce qui change ;
+#  importer un .XPG (un nouveau MAST) ; glisser un export n'importe ou ; chercher
+#  (commentaires, filtres par colonne, Aller a... partout) ; le clic droit de
+#  l'arbre ; les infobulles vivantes ; le didacticiel de l'API.
+#  Dans le projet des sessions precedentes, rejouee dans la VRAIE application.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+
+# ---- A. L'accueil : refait, et les dialogues ne s'empilent plus ----------------------------
+survol 960 1070
+attendre 3
+capture PNG_720_accueil.png
+accueil-chercher "gaz"
+attendre 3
+capture PNG_721_accueil_recherche.png
+accueil-chercher ""
+attendre 2
+# Ouvrir, fermer, rouvrir le dialogue du nouveau projet : UN dialogue a la fin.
+bouton "Nouveau projet"
+attendre 3
+touche escape
+attendre 2
+bouton "Nouveau projet"
+attendre 3
+touche escape
+attendre 2
+bouton "Nouveau projet"
+attendre 3
+etat
+capture PNG_722_accueil_un_seul_dialogue.png
+touche escape
+attendre 2
+
+# ---- B. Le projet ; la mise a jour de la bibliotheque (BUILDING 0.24) ------------------------
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+arbre "IHM" replier
+attendre 2
+capture PNG_723_arbre_trois_unites.png
+tableau-de-bord bibliotheque
+attendre 10
+attendre-macro
+attendre 3
+macro-etape apercu
+attendre 8
+attendre-macro
+macro-etape appliquer
+attendre 15
+macro-etape fermer
+attendre 5
+
+# ---- C. API > Simulation (F9) --------------------------------------------------------------
+touche f9
+attendre 5
+barre "simuler"
+attendre 15
+simulation-deplier "armoires[0].sorties.V3"
+attendre 3
+simulation-deplier "armoires[0].ana.PT1"
+attendre 3
+simulation-forcer "armoires[0].ana.PT1.mes" "5"
+attendre 3
+simulation-suivre "armoires[0].ana.PT1.mes"
+attendre 8
+survol 960 1070
+attendre 2
+capture PNG_724_simulation_onglet.png
+simulation-vitesse 10
+attendre 5
+simulation-politique arreter
+attendre 3
+capture PNG_725_simulation_vitesse_politique.png
+simulation-politique continuer
+attendre 2
+
+# ---- D. API > Statistiques (Ctrl+5) --------------------------------------------------------
+touche ctrl+5
+attendre 6
+capture PNG_726_statistiques.png
+statistiques-vue section
+attendre 3
+capture PNG_727_statistiques_par_section.png
+statistiques-vue entree
+attendre 2
+
+# ---- E. Les onglets : le clic droit, les groupes, la mosaique, une fenetre ----------------
+touche ctrl+1
+attendre 5
+arbre "API/Program units"
+attendre 4
+onglet-menu "API · Variables"
+attendre 3
+capture PNG_728_menu_onglet.png
+touche escape
+attendre 2
+onglet-diviser "API · Simulation" droite
+attendre 4
+onglet-deplacer "API · Statistiques" "API · Simulation"
+attendre 3
+onglet-diviser "API · Statistiques" bas
+attendre 6
+survol 960 1070
+attendre 3
+capture PNG_729_groupes_cote_a_cote.png
+disposition mosaique
+attendre 8
+capture PNG_730_mosaique.png
+disposition groupes
+attendre 3
+onglet-detacher "API · Simulation"
+attendre 10
+fenetres-detachees 1
+capture PNG_731_fenetre_detachee_principale.png
+capture-fenetre "API · Simulation" PNG_732_fenetre_detachee.png
+fenetre-rattacher *
+attendre 5
+disposition onglets
+attendre 4
+
+# ---- F. Deballer a toute profondeur ----------------------------------------------------------
+arbre "API/Derived data types"
+attendre 5
+types-deplier "m:config_gaz.purge[2]"
+attendre 4
+capture PNG_733_types_profondeur.png
+arbre "API/DFB types"
+attendre 5
+dfb-deplier "b:DFB_GRAFCETENGINE"
+attendre 3
+ligne "DFB_GRAFCETENGINE" exact
+attendre 3
+capture PNG_734_dfb_deplie.png
+outil "Ouvrir le code"
+attendre 3
+capture PNG_735_dfb_choix_section.png
+touche escape
+attendre 2
+arbre "API/Program units"
+attendre 4
+unites-deplier "g:Logigrammes_A/es"
+attendre 2
+unites-deplier "m:Logigrammes_A.armoires[0]"
+attendre 3
+capture PNG_736_unites_dossiers_portee.png
+onglet "API · Variables"
+attendre 3
+variables-deplier "armoires[0].sorties.V3"
+attendre 4
+capture PNG_737_variables_profondeur.png
+
+# ---- G. Chercher : les commentaires, les filtres par colonne, Aller a... ---------------------
+filtre-colonne "Type" "=" "BOOL"
+attendre 4
+capture PNG_738_filtre_colonne.png
+filtre-colonne "Type" "ouvrir" ""
+attendre 3
+capture PNG_739_filtre_popup.png
+touche escape
+attendre 2
+filtre-effacer
+attendre 2
+touche ctrl+k
+attendre 2
+aller-a "purge"
+attendre 4
+capture PNG_740_aller_a_partout.png
+touche escape
+attendre 2
+
+# ---- H. Le clic droit de l'arbre -----------------------------------------------------------
+arbre "API/Program units" deplier
+attendre 2
+arbre-menu "API/Program units/Logigrammes_A"
+attendre 3
+capture PNG_741_clic_droit_unite.png
+touche escape
+attendre 2
+arbre-menu "API/Simulation"
+attendre 3
+capture PNG_742_clic_droit_simulation.png
+touche escape
+attendre 2
+
+# ---- I. Renommer : tout ce qui change, dans l'API et dans l'IHM ------------------------------
+renommer "variable" "AUTOMATE_EN_RUN" "AUTOMATE_EN_MARCHE"
+attendre 5
+capture PNG_743_renommer_tout.png
+renommer-onglet "IHM"
+attendre 3
+capture PNG_744_renommer_ihm.png
+renommer-confirmer
+attendre 5
+touche ctrl+z
+attendre 5
+
+# ---- J. Importer un .XPG (un nouveau MAST), glisser un export ---------------------------------
+importer-mast "${XPG}"
+attendre 8
+capture PNG_745_import_mast_recap.png
+import-onglet "Change"
+attendre 3
+capture PNG_746_import_mast_change.png
+import-annuler
+attendre 3
+deposer "${XPG};${XHW}" 960 540
+attendre 5
+capture PNG_747_glisser_xpg_xhw.png
+touche escape
+attendre 3
+
+# ---- K. Le didacticiel de l'API ----------------------------------------------------------
+barre-menu "Aide" "Didacticiel de l'API"
+attendre 5
+capture PNG_748_didacticiel_api.png
+parcours "api-decouvrir" debut
+attendre 4
+parcours-etape 1
+attendre 2
+capture PNG_749_didacticiel_visite.png
+parcours-clic "Passer"
+attendre 3
+
+# ---- L. Ctrl+W ferme l'onglet ouvert --------------------------------------------------------
+touche ctrl+w
+attendre 3
+etat
+capture PNG_750_ctrl_w.png
+
+# ---- M. IHM : les variables systeme en dossiers ; le bouton ... des exports -----------------
+arbre "IHM/Programmation générale/Variables système"
+attendre 5
+capture PNG_751_ihm_variables_systeme_dossiers.png
+touche ctrl+1
+attendre 4
+outil "Exporter CSV"
+attendre 3
+capture PNG_752_exporter_csv_parcourir.png
+touche escape
+attendre 2
+# Les exports en un clic de l'IHM demandent ou, eux aussi (exports/ par defaut, le bouton ...).
+arbre "IHM/Configuration/Langues"
+attendre 5
+outil "Exporter (Excel)"
+attendre 3
+capture PNG_755_ihm_export_ou.png
+touche escape
+attendre 2
+
+# ---- N. Une infobulle vivante : le cycle avance sous la souris ------------------------------
+barre "etat" survol
+attendre 45
+capture PNG_753_infobulle_vivante_1.png
+attendre 90
+capture PNG_754_infobulle_vivante_2.png
+quitter

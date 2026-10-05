@@ -1,0 +1,175 @@
+# Derived function block, shared.
+name = DFB_COM_MODBUS
+version = 1.00
+#! summary = Huit requetes Modbus TCP periodiques, une a la fois, avec compte rendu et fraicheur.
+#! usage = UNE REQUETE A LA FOIS. La plus en retard sur sa periode part des que la
+#! usage = precedente est finie. C'est plus lent que tout lancer d'un coup, et c'est
+#! usage = ce qui tient sur n'importe quelle CPU : le nombre d'echanges simultanes est
+#! usage = borne, et le depasser donne des erreurs qui ne disent pas leur nom.
+#! usage = L'ECHANGE EST ASYNCHRONE : READ_VAR part, et la reponse arrive quelques
+#! usage = cycles plus tard. Le bloc suit le bit d'activite de la table de gestion
+#! usage = (Gest[0], bit 0) et ne relance jamais un echange en cours. Un echange que
+#! usage = le systeme ne termine pas en deux fois TimeoutMs est abandonne, avec Report
+#! usage = a -1.
+#! usage = SimActive A TRUE, RIEN N'EST ENVOYE : chaque requete reussit en un cycle,
+#! usage = sans toucher a Data. C'est ce qui permet de faire tourner le programme dans
+#! usage = le simulateur de l'outil, qui ne connait ni READ_VAR ni ADDM. A cabler sur
+#! usage = la variable de simulation du projet, jamais a laisser a TRUE sur site.
+#! usage = A VALIDER SUR SITE. Le bloc suit la documentation de READ_VAR, WRITE_VAR et
+#! usage = ADDM ; il n'a pas pu etre essaye contre un vrai equipement. Premier essai :
+#! usage = une requete, une lecture, Report et Data dans une table d'animation.
+#! example = (* declarer : Requetes : ARRAY[0..7] OF ST_COM_Modbus; EtatAtv : INT; *)
+#! example = MB_Atv(Count := 2, CycleMs := 20, SimActive := Simulation, Req := Requetes);
+#! example = EtatAtv := Requetes[0].Data[0];      (* ETA *)
+#! see = ST_COM_Modbus
+#! see = DFB_COM_WATCHDOG
+#! see = DFB_EQ_ATV
+#! param Count = Combien de requetes sont tenues : Req[0] a Req[Count - 1], 8 au plus.
+#! param CycleMs = La periode de la tache, en ms : DtMs de DFB_SYS_CLOCK.
+#! param SimActive = TRUE : aucun echange reel, chaque requete reussit en un cycle.
+#! param SimActive = Pour le simulateur, jamais sur site.
+#! param Req = Les requetes, une ligne ST_COM_Modbus chacune.
+#! param Active = La requete en cours, -1 si aucune.
+#! param AllOk = Toutes les requetes actives sont fraiches (Ok).
+#! param FaultCount = Combien de requetes actives ne sont pas Ok.
+#! changes 1.00 = NOUVEAU.
+#! given = Simulation := TRUE
+#! given = Requetes[0].PeriodMs := 100
+#! given = Requetes[1].PeriodMs := 100
+#! expect = 1 : Requetes[0].Busy = TRUE
+#! expect = 2 : Requetes[0].Ok = TRUE
+#! expect = 2 : Requetes[1].Busy = TRUE
+#! expect = 3 : MB_Atv.AllOk = TRUE
+
+# Huit requetes Modbus TCP periodiques.
+
+# name ; type ; scope ; initial ; comment
+Count ; INT ; Input ; 8 ; combien de requetes sont tenues
+CycleMs ; DINT ; Input ; 20 ; la periode de la tache en ms : DtMs de DFB_SYS_CLOCK
+SimActive ; BOOL ; Input ;  ; TRUE : aucun echange reel (simulateur)
+Req ; ARRAY[0..7] OF ST_COM_Modbus ; InOut ;  ; les requetes
+Active ; INT ; Output ; -1 ; la requete en cours, -1 si aucune
+AllOk ; BOOL ; Output ;  ; toutes les requetes actives sont fraiches
+FaultCount ; INT ; Output ; 0 ; combien de requetes actives ne sont pas Ok
+i ; INT ; Local ; 0 ; 
+n ; INT ; Local ; 0 ; 
+LAST ; INT ; Local ; 7 ; dernier indice
+cur ; INT ; Local ; -1 ; la requete en cours
+best ; INT ; Local ; -1 ; 
+done ; BOOL ; Local ;  ; 
+report ; INT ; Local ; 0 ; 
+adr ; ARRAY[0..7] OF INT ; Local ;  ; l'adresse, telle qu'ADDM la rend
+MAXMS ; DINT ; Local ; 2000000000 ; plafond des compteurs de temps
+
+<<<section Process ST>>>
+(* =====================================================================
+    DFB_COM_MODBUS - huit requetes Modbus TCP, une a la fois.
+
+    L'ECHANGE EST ASYNCHRONE. READ_VAR ou WRITE_VAR part une fois ; le bit 0
+    de Gest[0] (le bit d'activite) reste a 1 tant que l'echange est en cours.
+    Le bloc ne relance JAMAIS un echange en cours, et lit Gest[1] - le compte
+    rendu - quand le bit retombe. Gest[2] porte le delai, en dixiemes de
+    seconde.
+
+    Le bit d'activite se lit par (Gest[0] MOD 2) : un MOD, parce que
+    l'extraction de bit d'un INT depend d'une option du projet, et que ce
+    bloc doit compiler partout.
+
+    SimActive : aucun echange reel. Le simulateur de l'outil ne connait ni
+    READ_VAR ni ADDM, et n'y passe donc jamais.
+   ===================================================================== *)
+
+n := Count;
+IF n > LAST + 1 THEN n := LAST + 1; END_IF;
+IF n < 0 THEN n := 0; END_IF;
+IF cur >= n THEN cur := -1; END_IF;
+
+(* ---- les ages --------------------------------------------------------- *)
+FOR i := 0 TO n - 1 DO
+    IF Req[i].AgeMs < MAXMS - CycleMs THEN
+        Req[i].AgeMs := Req[i].AgeMs + CycleMs;
+    ELSE
+        Req[i].AgeMs := MAXMS;
+    END_IF;
+    IF Req[i].ElapsedMs < MAXMS - CycleMs THEN
+        Req[i].ElapsedMs := Req[i].ElapsedMs + CycleMs;
+    ELSE
+        Req[i].ElapsedMs := MAXMS;
+    END_IF;
+    IF Req[i].Enable AND (Req[i].Nb < 1 OR Req[i].Nb > 64) THEN
+        Req[i].Error := TRUE;
+        Req[i].Report := -2;
+    END_IF;
+END_FOR;
+
+(* ---- l'echange en cours ------------------------------------------------ *)
+IF cur >= 0 THEN
+    IF SimActive THEN
+        done := TRUE;
+        report := 0;
+    ELSE
+        done := (Req[cur].Gest[0] MOD 2) = 0;
+        report := Req[cur].Gest[1];
+        IF NOT done AND Req[cur].ElapsedMs > 2 * Req[cur].TimeoutMs + 1000 THEN
+            (* le systeme ne termine pas l'echange : on l'abandonne *)
+            done := TRUE;
+            report := -1;
+        END_IF;
+    END_IF;
+    IF done THEN
+        Req[cur].Busy := FALSE;
+        Req[cur].Report := report;
+        IF report = 0 THEN
+            Req[cur].OkCount := Req[cur].OkCount + 1;
+            Req[cur].AgeMs := 0;
+            Req[cur].Error := FALSE;
+        ELSE
+            Req[cur].ErrCount := Req[cur].ErrCount + 1;
+            Req[cur].Error := TRUE;
+        END_IF;
+        cur := -1;
+    END_IF;
+END_IF;
+
+(* ---- lancer la plus en retard ------------------------------------------ *)
+IF cur < 0 THEN
+    best := -1;
+    FOR i := 0 TO n - 1 DO
+        IF Req[i].Enable AND Req[i].Nb >= 1 AND Req[i].Nb <= 64
+           AND Req[i].ElapsedMs >= Req[i].PeriodMs THEN
+            IF best < 0 THEN
+                best := i;
+            ELSIF Req[i].ElapsedMs - Req[i].PeriodMs > Req[best].ElapsedMs - Req[best].PeriodMs THEN
+                best := i;
+            END_IF;
+        END_IF;
+    END_FOR;
+    IF best >= 0 THEN
+        cur := best;
+        Req[cur].ElapsedMs := 0;
+        Req[cur].Busy := TRUE;
+        Req[cur].Gest[2] := DINT_TO_INT(Req[cur].TimeoutMs / 100);
+        IF Req[cur].Gest[2] < 1 THEN Req[cur].Gest[2] := 1; END_IF;
+        IF NOT SimActive THEN
+            adr := ADDM(Req[cur].Addr);
+            IF Req[cur].Write THEN
+                WRITE_VAR(adr, '%MW', Req[cur].First, Req[cur].Nb, Req[cur].Data, Req[cur].Gest);
+            ELSE
+                READ_VAR(adr, '%MW', Req[cur].First, Req[cur].Nb, Req[cur].Gest, Req[cur].Data);
+            END_IF;
+        END_IF;
+    END_IF;
+END_IF;
+Active := cur;
+
+(* ---- la fraicheur ------------------------------------------------------- *)
+AllOk := TRUE;
+FaultCount := 0;
+FOR i := 0 TO n - 1 DO
+    Req[i].Ok := Req[i].Enable AND Req[i].OkCount > 0 AND Req[i].AgeMs < Req[i].StaleMs;
+    IF Req[i].Enable AND NOT Req[i].Ok THEN
+        AllOk := FALSE;
+        FaultCount := FaultCount + 1;
+    END_IF;
+END_FOR;
+<<<end>>>

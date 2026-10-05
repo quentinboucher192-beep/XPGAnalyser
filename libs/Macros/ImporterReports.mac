@@ -1,0 +1,230 @@
+(* ImporterReports
+
+   Depuis l'onglet "Liens". Ecrit les DEUX sections qui relient les
+   equipements a l'IHM.
+
+   ELLE N'ENREGISTRE PAS LES ALARMES DANS LE GESTIONNAIRE, contrairement a ce
+   que cette aide affirmait. Une ligne TA est recopiee vers son bit de %MW, et
+   c'est tout : le defaut s'affiche sur l'IHM, mais il ne se date pas, ne
+   s'acquitte pas, n'entre pas dans l'historique et ne se compte pas. La
+   raison n'est pas un oubli : le registre est UNIQUE - 64 emplacements pour
+   tout le projet - et deux macros ne peuvent pas se partager un compteur
+   d'emplacements sans se marcher dessus. C'est ImporterProgramme qui pose les
+   deux sortes d'alarmes, parce qu'elle est seule a les voir toutes.
+
+   TROIS TYPES, ET LEUR PLACE DANS LA TACHE EST LE SUJET :
+
+     TC  commande  l IHM ecrit, l automate lit   ->  EN PREMIER
+     TM  mesure    l automate ecrit, l IHM lit   ->  EN DERNIER
+     TA  alarme    l automate ecrit, l IHM lit   ->  EN DERNIER
+
+   Une TC lue en fin de tache fait travailler tout le programme sur la
+   commande du cycle precedent : un bouton d IHM repond avec un cycle de
+   retard. Une TM ecrite en tete publie la valeur d avant que le programme
+   n ait tourne. Aucun des deux ne se voit sur une temperature ; les deux se
+   voient sur un comptage de pieces.
+
+   LA CONVERSION DE TYPE VIENT DU CATALOGUE. Un %MW est un INT ; Pressure est
+   un REAL et FbkMs un DINT. Ecrire l affectation sans conversion donne un
+   projet qui ne compile pas, et deviner le type d apres le nom donne un
+   projet qui compile et qui ment. Le type est dans l onglet Catalogue, on
+   l y lit.
+
+   #! summary = Écrit les échanges avec l'IHM : commandes en tête de tâche, mesures et recopie des alarmes en queue. Elle n'enregistre rien dans le gestionnaire d'alarmes.
+   #! version = 1.10
+   #! changes 1.10 = Le formulaire : chaque question a son champ (le classeur par …, Ctrl+V ou en le glissant ; les tâches et les sections du projet ; des interrupteurs ; des choix à libellés), ses groupes, son aide et un libellé avec accents. Le code ne change pas.
+   #! changes 1.02 = Les sections sont RANGEES dans l'ordre de la tache par RangerSections, au lieu d'un rappel dans le compte rendu.
+   #! changes 1.01 = Les bits de mot s'ecrivent %MW1000.3, la forme de Control Expert. La 1.00 ecrivait %MW1000:X3, la forme de PL7, que Control Expert refuse a la compilation.
+   #! usage = Depuis l'onglet Liens. Trois types, et leur place dans la tache est le sujet :
+   #! usage = TC, commande : l'IHM ecrit, l'automate lit. EN PREMIER. Une TC lue en fin de tache fait travailler tout le programme sur la commande du cycle precedent - un bouton d'IHM qui repond avec un cycle de retard.
+   #! usage = TM, mesure, et TA, alarme : l'automate ecrit, l'IHM lit. EN DERNIER. Une TM ecrite en tete publie la valeur d'avant que le programme n'ait tourne.
+   #! usage = Aucun des deux ne se voit sur une temperature. Les deux se voient sur un comptage de pieces.
+   #! usage = LA CONVERSION DE TYPE VIENT DU CATALOGUE. Un %MW est un INT ; Pressure est un REAL et FbkMs un DINT. Ecrire l'affectation sans conversion donne un projet qui ne compile pas, et deviner le type d'apres le nom donne un projet qui compile et qui ment. Le type est dans l'onglet Catalogue, on l'y lit - et quand il est introuvable, la ligne est ecrite avec un commentaire qui le dit plutot qu'avec une conversion inventee.
+   #! usage = ELLE N'ENREGISTRE AUCUNE ALARME DANS LE GESTIONNAIRE. Une ligne TA est recopiee vers son bit de %MW, et rien de plus : le defaut s'affiche sur l'IHM mais il ne se date pas, ne s'acquitte pas, n'entre pas dans l'historique et ne se compte pas. Le registre est unique - 64 emplacements pour tout le projet - et deux macros ne peuvent pas se partager un compteur d'emplacements. C'est ImporterProgramme qui pose les alarmes de voie ET celles d'equipement, parce qu'elle est seule a les voir toutes.
+   #! usage = ELLE SUPPOSE QUE LES EQUIPEMENTS EXISTENT DEJA. Lancee seule sur un projet vide, elle ecrit des lignes qui citent des variables qui n'existent pas : c'est ImporterEquipements qui les declare, ou ImporterProgramme qui fait tout.
+   #! usage = LA SECTION EST REECRITE ENTIEREMENT a chaque execution. Ce qui y a ete ajoute a la main est perdu. C'est voulu : une section a moitie ancienne et a moitie nouvelle est pire que les deux, et on ne peut pas deviner ce qui a ete ajoute expres.
+   #! see = ImporterProgramme, ImporterAlarmes, ImporterEquipements
+   #! param classeur = Le classeur de l'affaire (.xlsx ou .xlsm) : glisse-le sur le champ, choisis-le avec …, ou colle-le (Ctrl+V) après l'avoir copié dans l'Explorateur. Vide : le dernier classeur ouvert, le cas normal quand on enchaîne les imports.
+   #! param classeur = C'est un .xlsm, pas un export CSV : la macro lit les onglets directement, et les quatre familles d'E/S sont donc traitees en une seule execution.
+   #! param sTC = Lue AVANT les blocs : une commande de l'IHM vaut pour ce cycle.
+   #! param sTC = Les commandes venant de l'IHM. A placer EN PREMIER dans la tache, juste apres la lecture des entrees.
+   #! param sTM = Écrite APRÈS les blocs : l'IHM lit ce cycle, pas le précédent.
+   #! param sTM = Les mesures et les alarmes d'equipement vers l'IHM. A placer EN DERNIER, juste avant l'ecriture des sorties.
+   #! param tache = La tâche qui exécute les sections créées.
+   #! param tache = La tache d'accueil des sections creees, MAST en general.
+   #! param tache = Les sections creees sont RANGEES par RangerSections a la fin : Control Expert execute les sections dans l'ordre de la tache, et les entrees doivent passer avant les equipements.
+   #! categorie = Importer depuis le classeur/Étapes de l'import
+   #! champ classeur = fichier .xlsx .xlsm facultatif
+   #! libelle classeur = Le classeur de l'affaire
+   #! champ sTC = section nouvelle
+   #! libelle sTC = Section des commandes (TC), en premier
+   #! champ sTM = section nouvelle
+   #! libelle sTM = Section des mesures et alarmes (TM/TA), en dernier
+   #! champ tache = tache
+   #! libelle tache = Tâche appelante
+   #! groupe Sections = sTC, sTM, tache
+   #! produit = les échanges avec l'IHM : les commandes en tête de tâche, les mesures et les alarmes en queue
+   #! appliquer = Réécrire {sTC} et {sTM} entièrement
+*)
+
+chemin := Ask('classeur', 'Chemin du classeur (vide = celui deja charge)', '');
+AskNow();
+
+sTC   := Ask('sTC', 'Section des commandes (TC), en PREMIER', 'Reports_TC');
+sTM   := Ask('sTM', 'Section des mesures et alarmes (TM/TA), en DERNIER', 'Reports_TM_TA');
+tache := Ask('tache', 'Tache appelante', 'MAST');
+AskNow();
+
+wb := OpenWorkbook(chemin);
+IF wb < 0 THEN Fail('classeur introuvable'); END_IF;
+t := OpenSheet('Liens');
+IF t < 0 THEN Fail('onglet "Liens" introuvable'); END_IF;
+te := OpenSheet('Equipements');
+IF te < 0 THEN Fail('onglet "Equipements" introuvable'); END_IF;
+tcat := OpenSheet('Catalogue');
+IF tcat < 0 THEN
+    Warn('onglet "Catalogue" introuvable : les conversions de type seront '
+         + 'laissees en commentaire, a completer a la main.');
+END_IF;
+
+IF NOT Confirm('Import des reports',
+               'Reecrire ' + sTC + ' et ' + sTM + ' entierement ?') THEN
+    Fail('annule');
+END_IF;
+
+IF NOT SectionExists(sTC) THEN AddSection(sTC, tache, 'ST', ''); END_IF;
+IF NOT SectionExists(sTM) THEN AddSection(sTM, tache, 'ST', ''); END_IF;
+ClearSection(sTC);
+ClearSection(sTM);
+AppendToSection(sTC, '(* Section generee par ImporterReports. A placer en TETE de tache. *)');
+AppendToSection(sTM, '(* Section generee par ImporterReports. A placer en QUEUE de tache. *)');
+
+n := RowCount(t);
+ne := RowCount(te);
+ncat := 0;
+IF tcat >= 0 THEN ncat := RowCount(tcat); END_IF;
+
+i := 0;
+k := 0;
+nTC := 0;
+nTM := 0;
+nTA := 0;
+eq := '';
+acces := '';
+fam := '';
+chemin2 := '';
+param := '';
+typ := '';
+adr := '';
+bit := '';
+genre := '';
+gauche := '';
+droite := '';
+sect := '';
+
+FOR i := 0 TO n - 1 DO
+    eq      := Cell(t, i, 'Equipement');
+    param   := Cell(t, i, 'Parametre');
+    chemin2 := Cell(t, i, 'Chemin');
+    genre   := Cell(t, i, 'Type');
+    adr     := Cell(t, i, 'Adr API');
+    bit     := Cell(t, i, 'Bit');
+
+    IF eq = '' OR adr = '' OR chemin2 = '' THEN
+        SkipRow('ligne ' + DINT_TO_STRING(i) + ' : equipement, chemin ou adresse manquant');
+    ELSE
+        acces := '';
+        fam := '';
+        FOR k := 0 TO ne - 1 DO
+            IF Cell(te, k, 'Nom') = eq THEN
+                acces := Cell(te, k, 'Acces ST');
+                fam := Cell(te, k, 'Famille');
+            END_IF;
+        END_FOR;
+
+        IF acces = '' THEN
+            Warn(eq + ' : introuvable dans l onglet Equipements, report saute');
+        ELSE
+            (* Le type du parametre, depuis le Catalogue. *)
+            typ := '';
+            FOR k := 0 TO ncat - 1 DO
+                IF Cell(tcat, k, 'Famille') = fam AND Cell(tcat, k, 'Nom') = param THEN
+                    typ := Cell(tcat, k, 'Type');
+                END_IF;
+            END_FOR;
+
+            (* L adresse : un mot entier, ou un bit dans un mot. Un bit de mot
+               s'ecrit %MW1000.3 dans Control Expert : la forme %MW1000:X3 est
+               celle de PL7, et Control Expert la refuse a la compilation. *)
+            IF bit = '' THEN
+                droite := adr;
+            ELSE
+                droite := adr + '.' + bit;
+            END_IF;
+
+            (* LA COLONNE CHEMIN PORTE DEUX CONVENTIONS SELON LA GENERATION
+               DU CLASSEUR : soit le chemin complet, Pompes[0].Running, soit
+               le seul suffixe, .Running. Concatener sans regarder donne
+               Pompes[0]Pompes[0].Running - du ST qui ne compile pas, et qu'on
+               ne decouvre qu'a la compilation, cinquante lignes plus loin. *)
+            IF STARTSWITH(chemin2, acces) THEN
+                gauche := chemin2;
+            ELSE
+                gauche := acces + chemin2;
+            END_IF;
+
+            IF genre = 'TC' THEN
+                sect := sTC;
+                nTC := nTC + 1;
+            ELSE
+                sect := sTM;
+                IF genre = 'TA' THEN nTA := nTA + 1; ELSE nTM := nTM + 1; END_IF;
+            END_IF;
+
+            AppendToSection(sect, '');
+            AppendToSection(sect, '(* ' + genre + '   ' + Cell(t, i, 'Designation')
+                + '   ' + droite + ' *)');
+
+            IF typ = '' AND bit = '' THEN
+                AppendToSection(sect, '(* TYPE INCONNU : verifiez la conversion *)');
+            END_IF;
+
+            IF genre = 'TC' THEN
+                (* L IHM ecrit le mot, l automate le recopie dans l equipement. *)
+                IF bit <> '' THEN
+                    AppendToSection(sect, gauche + ' := ' + droite + ';');
+                ELSIF typ = 'REAL' THEN
+                    AppendToSection(sect, gauche + ' := INT_TO_REAL(' + droite + ');');
+                ELSIF typ = 'DINT' THEN
+                    AppendToSection(sect, gauche + ' := INT_TO_DINT(' + droite + ');');
+                ELSIF typ = 'UDINT' THEN
+                    AppendToSection(sect, gauche + ' := INT_TO_UDINT(' + droite + ');');
+                ELSE
+                    AppendToSection(sect, gauche + ' := ' + droite + ';');
+                END_IF;
+            ELSE
+                (* L automate calcule, l IHM lit. *)
+                IF bit <> '' THEN
+                    AppendToSection(sect, droite + ' := ' + gauche + ';');
+                ELSIF typ = 'REAL' THEN
+                    AppendToSection(sect, droite + ' := REAL_TO_INT(' + gauche + ');');
+                ELSIF typ = 'DINT' THEN
+                    AppendToSection(sect, droite + ' := DINT_TO_INT(' + gauche + ');');
+                ELSIF typ = 'UDINT' THEN
+                    AppendToSection(sect, droite + ' := UDINT_TO_INT(' + gauche + ');');
+                ELSE
+                    AppendToSection(sect, droite + ' := ' + gauche + ';');
+                END_IF;
+            END_IF;
+        END_IF;
+    END_IF;
+END_FOR;
+
+Log(DINT_TO_STRING(nTC) + ' commande(s), ' + DINT_TO_STRING(nTM) + ' mesure(s), '
+    + DINT_TO_STRING(nTA) + ' alarme(s)');
+RunMacro('RangerSections');
+IF nTA > 0 THEN
+    Log('Les ' + DINT_TO_STRING(nTA) + ' alarmes d EQUIPEMENT sont recopiees vers '
+        + 'l IHM. Les alarmes de VOIE - AlarmEn, seuils - sont un autre sujet : '
+        + 'c est ImporterAlarmes qui les enregistre dans DFB_ALM_MANAGER.');
+END_IF;

@@ -1,0 +1,260 @@
+# Derived function block, shared.
+name = DFB_SEQ_ROTATE
+version = 1.02
+#! summary = Fait tourner N equipements parmi 16 : ordre fixe, carrousel, ou la moins usee.
+#! usage = Dix pompes, deux en marche, on bascule toutes les X minutes : c'est
+#! usage = le cas pour lequel ce bloc existe. IL NE COMMANDE RIEN - il dit
+#! usage = lesquels doivent tourner, et le bloc d'equipement fait le reste.
+#! usage = TROIS MANIERES DE CHOISIR, et le choix compte :
+#! usage = 0  ordre fixe   les premiers disponibles, toujours dans le meme
+#! usage = ordre. Previsible, et use toujours les memes.
+#! usage = 1  carrousel    on decale d'un cran a chaque rotation. Simple, et
+#! usage = l'usure se repartit meme si personne ne mesure rien.
+#! usage = 2  moins usee   celle qui a le moins d'heures part en premier.
+#! usage = C'est ce qu'on veut vraiment, et ca demande que
+#! usage = RunS soit tenu a jour. LA MOINS USEE EST CHOISIE A LA
+#! usage = BASCULE, pas a chaque cycle : entre deux bascules, celles qui
+#! usage = tournent continuent.
+#! usage = LA ROTATION AVANCE MEME QUAND RIEN NE TOURNE. Sinon une installation
+#! usage = a l'arret repartirait toujours sur la meme machine.
+#! usage = CE QUI ENTRE SE CABLE AVANT L'APPEL, CE QUI SORT APRES. Available,
+#! usage = RunS et RunMs cables apres l'appel arrivent un cycle trop tard : au
+#! usage = demarrage, la moins usee serait choisie sur des zeros - et ce choix
+#! usage = tient jusqu'a la bascule suivante.
+#! example = (* ce qui ENTRE dans la rotation, AVANT l'appel *)
+#! example = Pompes_Rot[0].Available := Pompes[0].Ready;
+#! example = Pompes_Rot[0].RunS      := Pompes[0].RunS;
+#! example = Pompes_Rot[0].RunMs     := Pompes[0].RunMs;
+#! example = 
+#! example = ROT_Gavage(Count := 3, Demand := 2, Mode := 2,
+#! example = RotateMs := 3600000,    (* une heure *)
+#! example = CycleMs := 20, Mem := Pompes_Rot);
+#! example = 
+#! example = (* ce qui en SORT, apres *)
+#! example = Pompes[0].RunReq := Pompes_Rot[0].RunReq;
+#! see = ST_SEQ_Member
+#! param Demand = Combien doivent tourner en meme temps. En demander plus que ce
+#! param Demand = qui est disponible n'est pas une erreur : on en fait tourner
+#! param Demand = autant qu'on peut, et Short le dit.
+#! param RotateMs = Periode de bascule du carrousel, en ms. 0 desactive la
+#! param RotateMs = rotation automatique : la selection ne change alors qu'au gre
+#! param RotateMs = des disponibilites.
+#! param Short = On n'a pas pu en demarrer autant que demande. A surveiller : un
+#! param Short = Short qui dure veut dire qu'il ne reste plus assez de machines
+#! param Short = saines pour tenir le debit.
+#! param Mode = 0 ordre fixe, 1 carrousel, 2 la moins usee d'abord.
+#! param Count = Combien d'equipements sont dans la rotation : Mem[0] a Mem[Count -
+#! param Count = 1]. 16 au plus ; les lignes au-dela ne sont ni lues ni ecrites.
+#! param CycleMs = La periode de la tache, en ms, telle qu'elle est reglee dans la
+#! param CycleMs = configuration. Elle fait avancer la bascule et SelectedMs : une
+#! param CycleMs = valeur fausse fausse RotateMs d'autant.
+#! param CycleMs = Le mieux : DtMs de DFB_SYS_CLOCK, qui suit le temps reel de la tache.
+#! param Mem = Les equipements, une ligne ST_SEQ_Member par machine. Available, RunS
+#! param Mem = et RunMs y ENTRENT (depuis l'equipement), RunReq en SORT (vers sa
+#! param Mem = demande de marche).
+#! param Active = Combien tournent effectivement, c'est-a-dire combien ont RunReq ce
+#! param Active = cycle.
+#! param Available = Combien sont utilisables : disponibles et non verrouillees.
+#! param NextRotateMs = Dans combien de temps la prochaine bascule, en ms. 0 quand
+#! param NextRotateMs = RotateMs vaut 0. De quoi afficher 'prochaine permutation dans
+#! param NextRotateMs = 12 min'.
+#! param Rotations = Combien de bascules depuis le demarrage de l'automate. Elle
+#! param Rotations = compte meme quand rien ne tourne : la rotation avance a l'arret
+#! param Rotations = aussi.
+#! changes 1.02 = CORRECTION, MODE 2 : la moins usee etait recalculee A CHAQUE CYCLE.
+#! changes 1.02 = Des que celle qui tourne rattrapait l'autre, les deux se relayaient
+#! changes 1.02 = a chaque cycle - un arret et un demarrage toutes les 20 ms. Elle est
+#! changes 1.02 = maintenant choisie a la bascule ; entre deux bascules, celles qui
+#! changes 1.02 = tournent continuent.
+#! changes 1.02 = L'usure se lit sur RunS (secondes), puis sur RunMs a egalite : RunMs
+#! changes 1.02 = plafonne a 555 heures. A cabler : Mem[i].RunS := Eq[i].RunS.
+#! changes 1.02 = SelectedMs plafonne a 2 000 000 000 ms au lieu de devenir negatif au
+#! changes 1.02 = bout de 24,8 jours.
+#! given = Pompes[0].Ready := TRUE
+#! given = Pompes[0].RunS := 7200
+#! expect = 1 : Pompes_Rot[0].RunReq = FALSE
+#! expect = 1 : Pompes_Rot[1].RunReq = TRUE
+#! expect = 1 : Pompes_Rot[2].RunReq = TRUE
+#! expect = 1 : Pompes[0].RunReq = FALSE
+#! expect = 1 : ROT_Gavage.Active = 2
+
+# Fait tourner N equipements parmi 16: ordre fixe, carrousel, ou la moins usee.
+
+# name ; type ; scope ; initial ; comment
+Count ; INT ; Input ; 16 ; combien d'equipements sont dans la rotation
+Demand ; INT ; Input ; 0 ; combien doivent tourner en meme temps
+Mode ; INT ; Input ; 1 ; 0 ordre fixe, 1 carrousel, 2 la moins usee d'abord
+RotateMs ; DINT ; Input ; 0 ; periode de bascule du carrousel, en ms. 0: pas de rotation automatique
+CycleMs ; DINT ; Input ; 20 ; la periode de la tache. Un DDT ne peut pas contenir de temporisateur
+Mem ; ARRAY[0..15] OF ST_SEQ_Member ; InOut ;  ; les equipements
+Active ; INT ; Output ; 0 ; combien tournent effectivement
+Available ; INT ; Output ; 0 ; combien sont utilisables
+Short ; BOOL ; Output ;  ; on n'a pas pu en demarrer autant que demande
+NextRotateMs ; DINT ; Output ; 0 ; dans combien de temps la prochaine bascule
+Rotations ; UDINT ; Output ; 0 ; combien de bascules depuis le demarrage
+i ; INT ; Local ; 0 ; 
+n ; INT ; Local ; 0 ; 
+LAST ; INT ; Local ; 15 ; 
+pass ; INT ; Local ; 0 ; 
+start ; INT ; Local ; 0 ; 
+best ; INT ; Local ; -1 ; 
+rotated ; BOOL ; Local ;  ; une bascule a eu lieu CE cycle
+want ; INT ; Local ; 0 ; 
+started ; INT ; Local ; 0 ; 
+available ; INT ; Local ; 0 ; 
+Offset ; INT ; Local ; 0 ; le decalage du carrousel
+SinceRotateMs ; DINT ; Local ; 0 ; 
+NowMs ; DINT ; Local ; 0 ; 
+MAXMS ; DINT ; Local ; 2000000000 ; plafond des compteurs de temps : 23 jours, sous la limite d'un DINT
+
+<<<section Process ST>>>
+(* =====================================================================
+    DFB_SEQ_ROTATE - faire tourner N equipements parmi M.
+
+    Dix pompes, deux en marche, on bascule toutes les X minutes: c'est le
+    cas pour lequel ce bloc existe. Il ne commande rien lui-meme - il DIT
+    lesquels doivent tourner, et le bloc d'equipement fait le reste.
+
+    TROIS MANIERES DE CHOISIR, et le choix compte.
+
+      0  ordre fixe    les premiers disponibles, toujours dans le meme ordre.
+                       Previsible, et use toujours les memes.
+      1  carrousel     on decale d'un cran a chaque rotation. Simple, et
+                       l'usure se repartit meme si personne ne mesure rien.
+      2  moins usee    celle qui a le moins d'heures part en premier. C'est
+                       ce qu'on veut vraiment, et ca demande que RunS soit
+                       tenu a jour - le bloc d'equipement le fait.
+                       Choisie A LA BASCULE, pas a chaque cycle.
+
+    UNE INDISPONIBILITE NE DECALE PAS LE TOUR. Une pompe en defaut est
+    sautee, et quand elle revient elle reprend son rang. Redistribuer tout
+    le monde a chaque defaut ferait demarrer et arreter des machines qui
+    n'avaient rien demande.
+   ===================================================================== *)
+
+n := Count;
+IF n > LAST + 1 THEN n := LAST + 1; END_IF;
+IF n < 0 THEN n := 0; END_IF;
+
+IF NowMs < MAXMS - CycleMs THEN
+    NowMs := NowMs + CycleMs;
+ELSE
+    NowMs := MAXMS;
+END_IF;
+
+(* La rotation. Elle avance meme quand rien ne tourne: sinon une installation
+   a l'arret repartirait toujours sur la meme machine. *)
+rotated := FALSE;
+IF RotateMs > 0 THEN
+    IF SinceRotateMs < MAXMS - CycleMs THEN
+        SinceRotateMs := SinceRotateMs + CycleMs;
+    ELSE
+        SinceRotateMs := MAXMS;
+    END_IF;
+    IF SinceRotateMs >= RotateMs THEN
+        SinceRotateMs := 0;
+        Offset := Offset + 1;
+        IF Offset >= n THEN Offset := 0; END_IF;
+        Rotations := Rotations + 1;
+        rotated := TRUE;
+    END_IF;
+ELSE
+    SinceRotateMs := 0;
+END_IF;
+
+(* Combien doivent tourner. Demander plus que ce qui est disponible n'est pas
+   une erreur: on en fait tourner autant qu'on peut, et Short le dit. *)
+want := Demand;
+IF want < 0 THEN want := 0; END_IF;
+IF want > n THEN want := n; END_IF;
+
+available := 0;
+FOR i := 0 TO n - 1 DO
+    Mem[i].PrevReq := Mem[i].RunReq;
+    Mem[i].RunReq := FALSE;
+    IF Mem[i].Available AND NOT Mem[i].Locked THEN
+        available := available + 1;
+    END_IF;
+END_FOR;
+
+started := 0;
+
+IF Mode = 2 THEN
+    (* Moins usee d'abord - CHOISIE A LA BASCULE, PAS A CHAQUE CYCLE.
+       Recalculee a chaque cycle, la moins usee change des que celle qui tourne
+       rattrape l'autre : les deux se relaient alors A CHAQUE CYCLE, un arret et
+       un demarrage toutes les vingt millisecondes. Entre deux bascules, celles
+       qui tournaient continuent (les moins usees d'abord, si la demande a
+       baisse) ; on ne complete qu'avec les moins usees des autres.
+       L'usure se lit sur RunS, puis sur RunMs a egalite : RunMs plafonne a
+       555 heures, et au-dela toutes paraitraient egalement usees. *)
+    IF NOT rotated THEN
+        FOR pass := 0 TO n - 1 DO
+            IF started >= want THEN EXIT; END_IF;
+            best := -1;
+            FOR i := 0 TO n - 1 DO
+                IF Mem[i].PrevReq AND Mem[i].Available AND NOT Mem[i].Locked
+                   AND NOT Mem[i].RunReq THEN
+                    IF best < 0 THEN
+                        best := i;
+                    ELSIF Mem[i].RunS < Mem[best].RunS
+                       OR (Mem[i].RunS = Mem[best].RunS AND Mem[i].RunMs < Mem[best].RunMs) THEN
+                        best := i;
+                    END_IF;
+                END_IF;
+            END_FOR;
+            IF best < 0 THEN EXIT; END_IF;
+            Mem[best].RunReq := TRUE;
+            started := started + 1;
+        END_FOR;
+    END_IF;
+    FOR pass := 0 TO n - 1 DO
+        IF started >= want THEN EXIT; END_IF;
+        best := -1;
+        FOR i := 0 TO n - 1 DO
+            IF Mem[i].Available AND NOT Mem[i].Locked AND NOT Mem[i].RunReq THEN
+                IF best < 0 THEN
+                    best := i;
+                ELSIF Mem[i].RunS < Mem[best].RunS
+                   OR (Mem[i].RunS = Mem[best].RunS AND Mem[i].RunMs < Mem[best].RunMs) THEN
+                    best := i;
+                END_IF;
+            END_IF;
+        END_FOR;
+        IF best < 0 THEN EXIT; END_IF;
+        Mem[best].RunReq := TRUE;
+        started := started + 1;
+    END_FOR;
+ELSE
+    (* Ordre fixe, ou carrousel: le meme parcours, decale de Offset. *)
+    start := 0;
+    IF Mode = 1 THEN start := Offset; END_IF;
+    FOR pass := 0 TO n - 1 DO
+        IF started >= want THEN EXIT; END_IF;
+        i := start + pass;
+        IF i >= n THEN i := i - n; END_IF;
+        IF Mem[i].Available AND NOT Mem[i].Locked THEN
+            Mem[i].RunReq := TRUE;
+            started := started + 1;
+        END_IF;
+    END_FOR;
+END_IF;
+
+FOR i := 0 TO n - 1 DO
+    IF Mem[i].RunReq THEN
+        IF Mem[i].SelectedMs < MAXMS - CycleMs THEN
+            Mem[i].SelectedMs := Mem[i].SelectedMs + CycleMs;
+        ELSE
+            Mem[i].SelectedMs := MAXMS;
+        END_IF;
+    ELSE
+        Mem[i].SelectedMs := 0;
+    END_IF;
+END_FOR;
+
+Active := started;
+Available := available;
+Short := started < Demand;
+NextRotateMs := RotateMs - SinceRotateMs;
+IF NextRotateMs < 0 THEN NextRotateMs := 0; END_IF;
+<<<end>>>

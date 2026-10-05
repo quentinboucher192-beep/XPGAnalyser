@@ -1,0 +1,6 @@
+# XpgAnalyzer - les versions du projet (lot 21). Les fichiers de chacune : V0001.txt... ;
+# leur contenu, une fois par empreinte : objets/.
+reglages auto=jamais garder_auto=10
+version n=1 nom="Mise en service" etat=brouillon date="2026-09-27 04:02" auteur="POSTE-ATELIER-01" base=0 fichiers=198 octets=1564610 nouveaux=1547689 empreinte="15ed9bee928d" depuis="la première" commentaire="Armoires A et B, supervision, modeles du lot 20"
+version n=2 nom="Essais usine" etat=validee date="2026-09-27 04:02" auteur="POSTE-ATELIER-01" base=1 fichiers=198 octets=1564648 nouveaux=10158 empreinte="82b58f2f4253" depuis="✎ Matrice (Logigrammes_A) · ✎ Vue_Accueil" commentaire="Essais avec les 2 armoires, seuils ajustes"
+version n=3 nom="Avant restauration de V1" etat=avant_restauration date="2026-09-27 04:02" auteur="POSTE-ATELIER-01" base=2 fichiers=198 octets=1564647 nouveaux=315 empreinte="c9bbc100c0e0" depuis="✎ Vue_Accueil" commentaire="Le projet tel qu'il était avant de revenir à V1."

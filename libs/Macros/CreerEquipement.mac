@@ -1,0 +1,190 @@
+(* CreerEquipement
+
+   Un equipement de plus, SANS CLASSEUR : sa famille, son nom, son tableau et
+   son indice - la macro fait le reste.
+
+     le type et le bloc     importes de la bibliotheque s'ils manquent
+     le tableau             declare a la taille du bloc (ARRAY[0..15]) : le
+                            bloc le prend en InOut, et Control Expert refuse
+                            un tableau d'une autre taille
+     l'instance du bloc     declaree, et son appel ecrit dans la section des
+                            equipements - ou son Count releve si l'appel est
+                            deja la et que le nouvel indice le depasse
+     le nom                 pose devant l'appel, ce que l'operateur lit
+
+   #! summary = Ajoute un équipement sans classeur : type et bloc importés, tableau et instance déclarés, appel écrit ou son Count relevé, nom posé.
+   #! version = 1.10
+   #! changes 1.10 = Le formulaire : chaque question a son champ (le classeur par …, Ctrl+V ou en le glissant ; les tâches et les sections du projet ; des interrupteurs ; des choix à libellés), ses groupes, son aide et un libellé avec accents. Le code ne change pas.
+   #! usage = LA FAMILLE DONNE TOUT : Pump donne le type ST_EQ_Pump et le bloc DFB_EQ_PUMP. Les deux sont importes de la bibliotheque s'ils manquent ; absents de la bibliotheque, la macro s'arrete.
+   #! usage = LE TABLEAU A LA TAILLE DU BLOC (ARRAY[0..15] en general), pas celle du nombre d'equipements : le bloc prend le tableau en InOut, et Control Expert refuse un tableau d'une autre taille. Un tableau deja declare d'un autre type ARRETE la macro : elle ne modifie pas une variable existante.
+   #! usage = L'APPEL : s'il n'est pas dans la section, il est ecrit ; s'il y est, son Count est releve quand le nouvel indice le depasse (SectionText, ReplaceInSection). Count dit combien d'equipements le bloc traite : les indices 0 a Count-1.
+   #! usage = LE NOM est pose devant l'appel, a chaque cycle : Pompes[3].Name := 'P4'. Relancee avec un autre nom, la macro remplace la ligne.
+   #! usage = UN EQUIPEMENT CREE ICI N'EST PAS DANS LE CLASSEUR. Un ImporterProgramme relance reecrit la section Equipements depuis le classeur et l'oublie : ajoutez-le aussi a l'onglet Equipements si le projet vient d'un classeur.
+   #! usage = Le cablage (voies, reports, alarmes) reste a ecrire : c'est le travail des onglets Cablage et Liens, ou de la main.
+   #! see = ImporterProgramme, ImporterEquipements, CreerInstanceDFB, RangerSections
+   #! param famille = Elle donne le type ST_EQ_<famille> et le bloc DFB_EQ_<FAMILLE>.
+   #! param famille = La famille : Pump, Motor, Valve2, Valve3, Valve4, CtrlValve, Cylinder, Conveyor, Drive, Atv, Tank ou Led. Elle donne le type ST_EQ_<famille> et le bloc DFB_EQ_<FAMILLE>.
+   #! param nom = Ce que l'opérateur lit : 16 caractères, sans accent.
+   #! param nom = Ce que l'operateur lit : 16 caracteres au plus, sans accent (ils sont retires).
+   #! param tableau = Un tableau par famille ; la macro propose son nom d'usage.
+   #! param tableau = Le tableau d'accueil. La macro propose le nom d'usage de la famille (Pompes, Vannes, Moteurs...) ; un tableau par famille.
+   #! param indice = Deux équipements au même indice sont le même : vérifie.
+   #! param indice = La place dans le tableau, de 0 a 15. Deux equipements au meme indice sont le meme equipement : la macro ne peut pas le voir, verifiez.
+   #! param section = Celle d'ImporterProgramme en général : Equipements.
+   #! param section = La section des appels d'equipement, celle d'ImporterProgramme en general : Equipements.
+   #! param prefixe = Devant le nom du tableau : EQ_ donne EQ_Pompes.
+   #! param prefixe = Ce qui precede le nom du tableau pour nommer l'instance du bloc : EQ_ donne EQ_Pompes.
+   #! param tache = Les sections générées vont dans cette tâche.
+   #! param tache = La tache d'accueil de la section si elle est creee, MAST en general.
+   #! categorie = Créer
+   #! champ famille = choix
+   #! libelle famille = Famille de l'équipement
+   #! champ nom = texte
+   #! libelle nom = Nom affiché
+   #! champ tableau = nom
+   #! libelle tableau = Tableau d'accueil
+   #! champ indice = nombre 0..15
+   #! libelle indice = Place dans le tableau
+   #! champ section = section nouvelle
+   #! libelle section = Section des appels d'équipement
+   #! champ prefixe = nom
+   #! libelle prefixe = Préfixe des instances de bloc
+   #! champ tache = tache
+   #! libelle tache = Tâche d'accueil des sections
+   #! option famille Pump = Pompe
+   #! option famille Motor = Moteur
+   #! option famille Valve2 = Vanne à 2 fins de course
+   #! option famille Valve3 = Vanne à 3 positions
+   #! option famille Valve4 = Vanne à 4 positions
+   #! option famille CtrlValve = Vanne de régulation
+   #! option famille Cylinder = Vérin
+   #! option famille Conveyor = Convoyeur
+   #! option famille Drive = Variateur
+   #! option famille Atv = Variateur Altivar
+   #! option famille Tank = Cuve
+   #! option famille Led = Voyant
+   #! exemple prefixe = {}Pompes
+   #! groupe L'équipement = famille, nom, tableau, indice
+   #! groupe Programme = section, prefixe, tache
+   #! avance = prefixe
+   #! produit = le type et le bloc importés, le tableau et l'instance déclarés, l'appel écrit, le nom posé
+   #! appliquer = Créer l'équipement {nom}
+*)
+
+famille := AskChoice('famille', 'Famille de l equipement',
+    'Pump,Motor,Valve2,Valve3,Valve4,CtrlValve,Cylinder,Conveyor,Drive,Atv,Tank,Led', 'Pump');
+AskNow();
+
+(* le nom de tableau d'usage pour cette famille *)
+defTab := famille + 's';
+IF famille = 'Pump' THEN defTab := 'Pompes';
+ELSIF famille = 'Motor' THEN defTab := 'Moteurs';
+ELSIF famille = 'Valve2' THEN defTab := 'Vannes';
+ELSIF famille = 'Valve3' THEN defTab := 'Vannes3V';
+ELSIF famille = 'Valve4' THEN defTab := 'Vannes4V';
+ELSIF famille = 'CtrlValve' THEN defTab := 'VannesReg';
+ELSIF famille = 'Cylinder' THEN defTab := 'Verins';
+ELSIF famille = 'Conveyor' THEN defTab := 'Convoyeurs';
+ELSIF famille = 'Drive' THEN defTab := 'Variateurs';
+ELSIF famille = 'Atv' THEN defTab := 'Altivars';
+ELSIF famille = 'Tank' THEN defTab := 'Cuves';
+ELSIF famille = 'Led' THEN defTab := 'Voyants';
+END_IF;
+
+nom     := Ask('nom', 'Nom de l equipement (ce que l operateur lit, 16 caracteres)', '');
+tableau := Ask('tableau', 'Tableau d accueil', defTab);
+indice  := AskNumber('indice', 'Indice dans le tableau', 0, 15, '0');
+section := Ask('section', 'Section des appels d equipement', 'Equipements');
+prefixe := Ask('prefixe', 'Prefixe des instances de bloc', 'EQ_');
+tache   := Ask('tache', 'Tache d accueil des sections', 'MAST');
+AskNow();
+
+IF nom = '' THEN Fail('aucun nom donne'); END_IF;
+IF tableau = '' THEN Fail('aucun tableau donne'); END_IF;
+
+fam := 'ST_EQ_' + famille;
+bloc := 'DFB_EQ_' + UPPER(famille);
+IF NOT TypeExists(fam) THEN
+    IF NOT LibHasItem(fam) THEN Fail(fam + ' n est ni dans le projet ni dans la bibliotheque'); END_IF;
+    LibImport(fam);
+END_IF;
+IF NOT PouExists(bloc) THEN
+    IF NOT LibHasItem(bloc) THEN Fail(bloc + ' n est ni dans le projet ni dans la bibliotheque'); END_IF;
+    LibImport(bloc);
+END_IF;
+
+(* le tableau : exactement le type de l InOut Eq du bloc *)
+attendu := MemberType(bloc, 'Eq');
+IF attendu = '' THEN Fail(bloc + ' n a pas de parametre Eq : ce n est pas un bloc d equipement'); END_IF;
+cap := STRING_TO_INT(MID(attendu, FIND(attendu, '..', 0) + 2,
+       FIND(attendu, ']', 0) - FIND(attendu, '..', 0) - 2)) + 1;
+i := REAL_TO_INT(indice);
+IF i >= cap THEN
+    Fail('indice ' + DINT_TO_STRING(i) + ' : ' + bloc + ' ne traite que ' + DINT_TO_STRING(cap)
+         + ' equipements (0 a ' + DINT_TO_STRING(cap - 1) + ')');
+END_IF;
+IF NOT VariableExists(tableau) THEN
+    AddVariable(tableau, attendu, 'Global', '', '', 'equipements ' + famille);
+ELSIF VariableType(tableau) <> attendu THEN
+    Fail(tableau + ' existe en ' + VariableType(tableau) + ' ; ' + bloc + ' attend ' + attendu
+         + '. La macro ne modifie pas une variable existante.');
+END_IF;
+
+inst := prefixe + tableau;
+IF NOT VariableExists(inst) THEN
+    AddVariable(inst, bloc, 'Global', '', '', 'le bloc du tableau ' + tableau);
+ELSIF VariableType(inst) <> bloc THEN
+    Fail(inst + ' existe mais c est un ' + VariableType(inst) + ', pas un ' + bloc);
+END_IF;
+
+cycle := Setting('Periode (ms)');
+IF cycle = '' THEN cycle := '20'; END_IF;
+IF VariableExists('Horloge') THEN cycle := 'Horloge.DtMs'; END_IF;
+
+acces := tableau + '[' + DINT_TO_STRING(i) + ']';
+ligneNom := acces + '.Name := ' + QUOTE(MID(ASCII(nom), 0, 16)) + ';';
+appel := inst + '(Count := ';
+
+IF NOT SectionExists(section) THEN AddSection(section, tache, 'ST', ''); END_IF;
+texte := SectionText(section);
+debut := FIND(texte, appel, 0);
+IF debut < 0 THEN
+    (* pas encore d appel : le nom, puis l appel *)
+    AppendToSection(section, '');
+    AppendToSection(section, '(* ' + tableau + '   ' + fam + ' *)');
+    AppendToSection(section, ligneNom);
+    AppendToSection(section, appel + DINT_TO_STRING(i + 1) + ', CycleMs := ' + cycle + ', Eq := ' + tableau + ');');
+    Log('appel de ' + inst + ' ecrit dans ' + section + ', Count := ' + DINT_TO_STRING(i + 1));
+ELSE
+    (* l appel est la : son Count, releve si besoin *)
+    p := debut + LEN(appel);
+    virgule := FIND(texte, ',', p);
+    ancien := MID(texte, p, virgule - p);
+    n := STRING_TO_INT(ancien);
+    nouveau := appel + ancien + ',';
+    IF n < i + 1 THEN
+        nouveau := appel + DINT_TO_STRING(i + 1) + ',';
+        Log('Count de ' + inst + ' : ' + ancien + ' -> ' + DINT_TO_STRING(i + 1));
+    END_IF;
+
+    (* le nom : la ligne de cet indice est remplacee, sinon posee devant l appel *)
+    marque := acces + '.Name := ';
+    q := FIND(texte, marque, 0);
+    IF q >= 0 THEN
+        fin := FIND(texte, CHR(10), q);
+        IF fin < 0 THEN fin := LEN(texte); END_IF;
+        IF MID(texte, q, fin - q) <> ligneNom THEN
+            ReplaceInSection(section, MID(texte, q, fin - q), ligneNom);
+            Log(acces + ' renomme ' + nom);
+        END_IF;
+        IF nouveau <> appel + ancien + ',' THEN
+            ReplaceInSection(section, appel + ancien + ',', nouveau);
+        END_IF;
+    ELSE
+        ReplaceInSection(section, appel + ancien + ',', ligneNom + CHR(10) + nouveau);
+    END_IF;
+END_IF;
+
+RunMacro('RangerSections');
+Log(nom + ' : ' + acces + ' (' + fam + '), appele par ' + inst);
+Warn('le cablage de ' + nom + ' (voies, reports, alarmes) reste a ecrire');

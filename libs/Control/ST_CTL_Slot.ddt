@@ -1,0 +1,47 @@
+# Derived data type, shared.
+name = ST_CTL_Slot
+version = 1.00
+#! summary = Une plage horaire : quels jours, de quelle heure a quelle heure, sur quelle sortie.
+#! usage = Les heures sont en MINUTES DEPUIS MINUIT : 7 h 30 s'ecrit 450. Une plage
+#! usage = dont la fin est avant le debut PASSE MINUIT : 22 h a 6 h, c'est StartMin
+#! usage = 1320, StopMin 360, et la partie d'apres minuit appartient au jour du debut.
+#! usage = LES JOURS SONT UN MASQUE : 1 lundi, 2 mardi, 4 mercredi, 8 jeudi, 16
+#! usage = vendredi, 32 samedi, 64 dimanche. Du lundi au vendredi : 31. Tous les jours
+#! usage = : 127.
+#! see = DFB_CTL_SCHEDULE
+#! param Name = Le nom de la plage, pour l'IHM.
+#! param Enable = FALSE retire la plage sans effacer sa ligne.
+#! param Days = Les jours, en masque : 1 lundi ... 64 dimanche. 31 = du lundi au
+#! param Days = vendredi.
+#! param StartMin = Le debut, en minutes depuis minuit : 420 pour 7 h.
+#! param StopMin = La fin, en minutes depuis minuit, exclue. Avant le debut : la plage
+#! param StopMin = passe minuit. Egale au debut : toute la journee.
+#! param Channel = La sortie que la plage commande, 0 a 7 : Out[Channel] du bloc.
+#! param Channel = Plusieurs plages peuvent commander la meme sortie - elles
+#! param Channel = s'additionnent.
+#! param OnHoliday = TRUE : la plage vaut aussi les jours feries. Par defaut, un jour
+#! param OnHoliday = ferie (entree Holiday du bloc) l'eteint.
+#! param Active = SORTIE. La plage est en cours.
+#! param Fault = SORTIE. Une valeur hors plage : minutes hors 0..1440, Channel hors
+#! param Fault = 0..7, Days hors 0..127. La plage est ignoree.
+#! example = (* declarer : Plages : ARRAY[0..15] OF ST_CTL_Slot; *)
+#! example = (* la ventilation : du lundi au vendredi, 7 h - 18 h 30, sortie 0 *)
+#! example = Plages[0].Days := 31;
+#! example = Plages[0].StartMin := 420;
+#! example = Plages[0].StopMin := 1110;
+#! example = Plages[0].Channel := 0;
+#! expect = 1 : Plages[0].StopMin = 1110
+#! changes 1.00 = NOUVEAU.
+
+# Une plage horaire.
+
+# name ; type ; scope ; initial ; comment
+Name ; STRING[16] ; Member ;  ; le nom de la plage
+Enable ; BOOL ; Member ; TRUE ; FALSE : la plage est ignoree
+Days ; INT ; Member ; 31 ; les jours, en masque : 1 lundi ... 64 dimanche
+StartMin ; INT ; Member ; 420 ; le debut, en minutes depuis minuit
+StopMin ; INT ; Member ; 1080 ; la fin, en minutes depuis minuit, exclue
+Channel ; INT ; Member ; 0 ; la sortie commandee, 0 a 7
+OnHoliday ; BOOL ; Member ;  ; TRUE : vaut aussi les jours feries
+Active ; BOOL ; Member ;  ; SORTIE : la plage est en cours
+Fault ; BOOL ; Member ;  ; SORTIE : une valeur hors plage, la plage est ignoree

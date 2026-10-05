@@ -1,0 +1,1003 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<IOExchangeFile>
+	<fileHeader company="Schneider Automation" product="Control Expert V15.3 - 230214C" dateTime="date_and_time#2026-9-4-8:50:41" content="Fichier source configuration" DTDVersion="41"></fileHeader>
+	<contentHeader name="Projet" version="0.0.000"></contentHeader>
+	<IOConf>
+		<PLC autoRun="false" MWInitZero="true" ColdStartOnly="false" ccotfActive="false" numberInternalWord="1024" numberConstantWord="256" numberInternalBit="512" CPU_DoNotSupportQtmDROP="0">
+			<partItem family="Micro Basic" partNumber="BMXP342020" vendorName="Schneider Automation" version="03.50"></partItem>
+			<equipInfo topoAddress="\0.0\0.0" position="0" NodeGuid="{494FDD8B-D984-4FAF-9815-82E5B361C86B}"></equipInfo>
+			<configATS>
+				<busATS name="XBusMicro">
+					<equipInfo topoAddress="\0" position="0" NodeGuid="{8E110329-0699-4487-AEEB-272AB98465F3}"></equipInfo>
+					<rackATS>
+						<partItem family="Rack" partNumber="BMXXBP0800" vendorName="Schneider Automation" version="01.00"></partItem>
+						<equipInfo topoAddress="\0.0\0" position="0" NodeGuid="{87C67371-FA09-4B7D-BFD0-A72036456929}"></equipInfo>
+						<powerSupply>
+							<partItem family="Supply" partNumber="BMXCPS2000" vendorName="Schneider Automation" version="01.00"></partItem>
+							<equipInfo topoAddress="\0.0\0.(P) (P)" position="-1" NodeGuid="{8A8B57FC-87A8-44BE-B46B-24CD8DE541BC}"></equipInfo>
+						</powerSupply>
+						<moduleATS UCMod="true">
+							<partItem family="Micro Basic" partNumber="BMXP342020" vendorName="Schneider Automation" version="03.50"></partItem>
+							<equipInfo topoAddress="\0.0\0.0" position="0" NodeGuid="{494FDD8B-D984-4FAF-9815-82E5B361C86B}"></equipInfo>
+							<configModule>
+								<channelATS ASFCatKey="ModbusSerialPort" task="MAST" number="0">
+									<descFB code="0" version="255"></descFB>
+									<descIOB IOBFileName="IOB_3_0010000_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0x7"></hexaValue>
+										<hexaValue hexaValue="0xb04"></hexaValue>
+										<hexaValue hexaValue="0x2"></hexaValue>
+										<hexaValue hexaValue="0x1"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+								</channelATS>
+							</configModule>
+						</moduleATS>
+						<moduleATS>
+							<partItem family="Communication" partNumber="BMXNOC0401.2" vendorName="Schneider Automation" version="02.00"></partItem>
+							<equipInfo topoAddress="\0.0\0.1" position="1" NodeGuid="{879CF92C-43AD-4D63-9DA0-6B8B7108CAA7}"></equipInfo>
+							<configModule>
+								<channelATS ASFCatKey="EthernetCIP_Mirano_TR2" task="MAST" number="0">
+									<descFB code="47" version="16"></descFB>
+									<descIOB IOBFileName="IOB_3_0302040_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x20"></hexaValue>
+										<hexaValue hexaValue="0x20"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+									<paramKPW>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x10"></hexaValue>
+										<hexaValue hexaValue="0x10"></hexaValue>
+										<hexaValue hexaValue="0x9d34"></hexaValue>
+										<hexaValue hexaValue="0x2880"></hexaValue>
+										<hexaValue hexaValue="0x3307"></hexaValue>
+										<hexaValue hexaValue="0x483c"></hexaValue>
+										<hexaValue hexaValue="0x46b1"></hexaValue>
+										<hexaValue hexaValue="0xc98d"></hexaValue>
+										<hexaValue hexaValue="0x4235"></hexaValue>
+										<hexaValue hexaValue="0x7ffc"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x10"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKPW>
+								</channelATS>
+							</configModule>
+						</moduleATS>
+						<moduleATS>
+							<partItem family="Communication" partNumber="BMXNOC0401.2" vendorName="Schneider Automation" version="02.00"></partItem>
+							<equipInfo topoAddress="\0.0\0.2" position="2" NodeGuid="{79D90535-E287-478A-98B6-EAAD448CF458}"></equipInfo>
+							<configModule>
+								<channelATS ASFCatKey="EthernetCIP_Mirano_TR2" task="MAST" number="0">
+									<descFB code="47" version="16"></descFB>
+									<descIOB IOBFileName="IOB_3_0302040_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x20"></hexaValue>
+										<hexaValue hexaValue="0x20"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+									<paramKPW>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x10"></hexaValue>
+										<hexaValue hexaValue="0x10"></hexaValue>
+										<hexaValue hexaValue="0x9d34"></hexaValue>
+										<hexaValue hexaValue="0x2880"></hexaValue>
+										<hexaValue hexaValue="0x3307"></hexaValue>
+										<hexaValue hexaValue="0x483c"></hexaValue>
+										<hexaValue hexaValue="0x46b1"></hexaValue>
+										<hexaValue hexaValue="0xc98d"></hexaValue>
+										<hexaValue hexaValue="0x4235"></hexaValue>
+										<hexaValue hexaValue="0x7ffc"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x10"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKPW>
+								</channelATS>
+							</configModule>
+						</moduleATS>
+						<moduleATS>
+							<partItem family="Discrete" partNumber="BMXDDI3202K" vendorName="Schneider Automation" version="02.00"></partItem>
+							<equipInfo topoAddress="\0.0\0.3" position="3" NodeGuid="{00AC8A74-91B0-4A98-8687-F502E2B070B9}"></equipInfo>
+							<configModule>
+								<channelATS ASFCatKey="BasicInRackTORInSTD_MASTER" task="MAST" number="0">
+									<descFB code="1" version="17"></descFB>
+									<descIOB IOBFileName="IOB_0_0002000_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0x1"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+								</channelATS>
+								<channelATS ASFCatKey="BasicInRackTORInSTD_MASTER" task="MAST" number="8">
+									<descFB code="1" version="17"></descFB>
+									<descIOB IOBFileName="IOB_0_0002000_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0x1"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+								</channelATS>
+								<channelATS ASFCatKey="BasicInRackTORInSTD_MASTER" task="MAST" number="16">
+									<descFB code="1" version="17"></descFB>
+									<descIOB IOBFileName="IOB_0_0002000_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0x1"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+								</channelATS>
+								<channelATS ASFCatKey="BasicInRackTORInSTD_MASTER" task="MAST" number="24">
+									<descFB code="1" version="17"></descFB>
+									<descIOB IOBFileName="IOB_0_0002000_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0x1"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+								</channelATS>
+							</configModule>
+						</moduleATS>
+						<moduleATS>
+							<partItem family="Discrete" partNumber="BMXDDI6402K" vendorName="Schneider Automation" version="02.00"></partItem>
+							<equipInfo topoAddress="\0.0\0.4" position="4" NodeGuid="{EB30F1B6-F805-49AE-8F0F-DC6E1B35976C}"></equipInfo>
+							<configModule>
+								<channelATS ASFCatKey="BasicInRackTORInSTD_MASTER" task="MAST" number="0">
+									<descFB code="1" version="17"></descFB>
+									<descIOB IOBFileName="IOB_0_0002000_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0x1"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+								</channelATS>
+								<channelATS ASFCatKey="BasicInRackTORInSTD_MASTER" task="MAST" number="8">
+									<descFB code="1" version="17"></descFB>
+									<descIOB IOBFileName="IOB_0_0002000_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0x1"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+								</channelATS>
+								<channelATS ASFCatKey="BasicInRackTORInSTD_MASTER" task="MAST" number="16">
+									<descFB code="1" version="17"></descFB>
+									<descIOB IOBFileName="IOB_0_0002000_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0x1"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+								</channelATS>
+								<channelATS ASFCatKey="BasicInRackTORInSTD_MASTER" task="MAST" number="24">
+									<descFB code="1" version="17"></descFB>
+									<descIOB IOBFileName="IOB_0_0002000_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0x1"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+								</channelATS>
+								<channelATS ASFCatKey="BasicInRackTORInSTD_MASTER" task="MAST" number="32">
+									<descFB code="1" version="17"></descFB>
+									<descIOB IOBFileName="IOB_0_0002000_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0x1"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+								</channelATS>
+								<channelATS ASFCatKey="BasicInRackTORInSTD_MASTER" task="MAST" number="40">
+									<descFB code="1" version="17"></descFB>
+									<descIOB IOBFileName="IOB_0_0002000_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0x1"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+								</channelATS>
+								<channelATS ASFCatKey="BasicInRackTORInSTD_MASTER" task="MAST" number="48">
+									<descFB code="1" version="17"></descFB>
+									<descIOB IOBFileName="IOB_0_0002000_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0x1"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+								</channelATS>
+								<channelATS ASFCatKey="BasicInRackTORInSTD_MASTER" task="MAST" number="56">
+									<descFB code="1" version="17"></descFB>
+									<descIOB IOBFileName="IOB_0_0002000_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0x1"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+								</channelATS>
+							</configModule>
+						</moduleATS>
+						<moduleATS>
+							<partItem family="Discrete" partNumber="BMXDAO1605" vendorName="Schneider Automation" version="02.00"></partItem>
+							<equipInfo topoAddress="\0.0\0.5" position="5" NodeGuid="{7874B9D8-F49A-486C-9695-4AE06D4A8EE9}"></equipInfo>
+							<configModule>
+								<channelATS ASFCatKey="BasicInRackTOROutFallBackProtectOut0_MASTER" task="MAST" number="0">
+									<descFB code="1" version="17"></descFB>
+									<descIOB IOBFileName="IOB_0_0102000_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0x6"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+								</channelATS>
+								<channelATS ASFCatKey="BasicInRackTOROutFallBackProtectOut0_MASTER" task="MAST" number="8">
+									<descFB code="1" version="17"></descFB>
+									<descIOB IOBFileName="IOB_0_0102000_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0x6"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+								</channelATS>
+							</configModule>
+						</moduleATS>
+						<moduleATS>
+							<partItem family="Discrete" partNumber="BMXDDO6402K" vendorName="Schneider Automation" version="02.00"></partItem>
+							<equipInfo topoAddress="\0.0\0.6" position="6" NodeGuid="{D3B57AC0-EF82-4297-BB44-7208661B929C}"></equipInfo>
+							<configModule>
+								<channelATS ASFCatKey="BaInRackTOROutReactivateAndFallBackAndSupplyMonitoring_MASTER" task="MAST" number="0">
+									<descFB code="1" version="17"></descFB>
+									<descIOB IOBFileName="IOB_0_0102000_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0x16"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+								</channelATS>
+								<channelATS ASFCatKey="BaInRackTOROutReactivateAndFallBackAndSupplyMonitoring_MASTER" task="MAST" number="8">
+									<descFB code="1" version="17"></descFB>
+									<descIOB IOBFileName="IOB_0_0102000_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0x16"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+								</channelATS>
+								<channelATS ASFCatKey="BaInRackTOROutReactivateAndFallBackAndSupplyMonitoring_MASTER" task="MAST" number="16">
+									<descFB code="1" version="17"></descFB>
+									<descIOB IOBFileName="IOB_0_0102000_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0x16"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+								</channelATS>
+								<channelATS ASFCatKey="BaInRackTOROutReactivateAndFallBackAndSupplyMonitoring_MASTER" task="MAST" number="24">
+									<descFB code="1" version="17"></descFB>
+									<descIOB IOBFileName="IOB_0_0102000_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0x16"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+								</channelATS>
+								<channelATS ASFCatKey="BaInRackTOROutReactivateAndFallBackAndSupplyMonitoring_MASTER" task="MAST" number="32">
+									<descFB code="1" version="17"></descFB>
+									<descIOB IOBFileName="IOB_0_0102000_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0x16"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+								</channelATS>
+								<channelATS ASFCatKey="BaInRackTOROutReactivateAndFallBackAndSupplyMonitoring_MASTER" task="MAST" number="40">
+									<descFB code="1" version="17"></descFB>
+									<descIOB IOBFileName="IOB_0_0102000_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0x16"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+								</channelATS>
+								<channelATS ASFCatKey="BaInRackTOROutReactivateAndFallBackAndSupplyMonitoring_MASTER" task="MAST" number="48">
+									<descFB code="1" version="17"></descFB>
+									<descIOB IOBFileName="IOB_0_0102000_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0x16"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+								</channelATS>
+								<channelATS ASFCatKey="BaInRackTOROutReactivateAndFallBackAndSupplyMonitoring_MASTER" task="MAST" number="56">
+									<descFB code="1" version="17"></descFB>
+									<descIOB IOBFileName="IOB_0_0102000_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0x16"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+								</channelATS>
+							</configModule>
+						</moduleATS>
+						<moduleATS>
+							<partItem family="Discrete" partNumber="BMXDDO3202K" vendorName="Schneider Automation" version="02.00"></partItem>
+							<equipInfo topoAddress="\0.0\0.7" position="7" NodeGuid="{CEF0A46C-C089-4F3C-BDC3-E26B73F8423A}"></equipInfo>
+							<configModule>
+								<channelATS ASFCatKey="BaInRackTOROutReactivateAndFallBackAndSupplyMonitoring_MASTER" task="MAST" number="0">
+									<descFB code="1" version="17"></descFB>
+									<descIOB IOBFileName="IOB_0_0102000_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0x16"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+								</channelATS>
+								<channelATS ASFCatKey="BaInRackTOROutReactivateAndFallBackAndSupplyMonitoring_MASTER" task="MAST" number="8">
+									<descFB code="1" version="17"></descFB>
+									<descIOB IOBFileName="IOB_0_0102000_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0x16"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+								</channelATS>
+								<channelATS ASFCatKey="BaInRackTOROutReactivateAndFallBackAndSupplyMonitoring_MASTER" task="MAST" number="16">
+									<descFB code="1" version="17"></descFB>
+									<descIOB IOBFileName="IOB_0_0102000_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0x16"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+								</channelATS>
+								<channelATS ASFCatKey="BaInRackTOROutReactivateAndFallBackAndSupplyMonitoring_MASTER" task="MAST" number="24">
+									<descFB code="1" version="17"></descFB>
+									<descIOB IOBFileName="IOB_0_0102000_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0x16"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+								</channelATS>
+							</configModule>
+						</moduleATS>
+					</rackATS>
+					<rackATS>
+						<partItem family="Rack" partNumber="BMEXBP1200" vendorName="Schneider Automation" version="01.00"></partItem>
+						<equipInfo topoAddress="\0.0\1" position="1" NodeGuid="{83386F88-D74A-4D78-ABFC-E72434AC0043}"></equipInfo>
+						<moduleATS>
+							<partItem family="Analog" partNumber="BMXAMI0800" vendorName="Schneider Automation" version="01.00"></partItem>
+							<equipInfo topoAddress="\0.0\1.0" position="0" NodeGuid="{1BD2C57C-0BB5-475F-B536-1EF7E93FB006}"></equipInfo>
+							<configModule>
+								<channelATS ASFCatKey="BasicInRackANAInL2HighLevel0" task="MAST" number="0">
+									<descFB code="66" version="16"></descFB>
+									<descIOB IOBFileName="IOB_2_0002010_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0xc"></hexaValue>
+										<hexaValue hexaValue="0xd8f0"></hexaValue>
+										<hexaValue hexaValue="0x2710"></hexaValue>
+										<hexaValue hexaValue="0xd508"></hexaValue>
+										<hexaValue hexaValue="0x2af8"></hexaValue>
+										<hexaValue hexaValue="0x302"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+									<paramKPW>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x11"></hexaValue>
+									</paramKPW>
+								</channelATS>
+								<channelATS ASFCatKey="BasicInRackANAInL2HighLevel0" task="MAST" number="1">
+									<descFB code="66" version="16"></descFB>
+									<descIOB IOBFileName="IOB_2_0002010_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0xc"></hexaValue>
+										<hexaValue hexaValue="0xd8f0"></hexaValue>
+										<hexaValue hexaValue="0x2710"></hexaValue>
+										<hexaValue hexaValue="0xd508"></hexaValue>
+										<hexaValue hexaValue="0x2af8"></hexaValue>
+										<hexaValue hexaValue="0x302"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+									<paramKPW>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x11"></hexaValue>
+									</paramKPW>
+								</channelATS>
+								<channelATS ASFCatKey="BasicInRackANAInL2HighLevel0" task="MAST" number="2">
+									<descFB code="66" version="16"></descFB>
+									<descIOB IOBFileName="IOB_2_0002010_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0xc"></hexaValue>
+										<hexaValue hexaValue="0xd8f0"></hexaValue>
+										<hexaValue hexaValue="0x2710"></hexaValue>
+										<hexaValue hexaValue="0xd508"></hexaValue>
+										<hexaValue hexaValue="0x2af8"></hexaValue>
+										<hexaValue hexaValue="0x302"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+									<paramKPW>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x11"></hexaValue>
+									</paramKPW>
+								</channelATS>
+								<channelATS ASFCatKey="BasicInRackANAInL2HighLevel0" task="MAST" number="3">
+									<descFB code="66" version="16"></descFB>
+									<descIOB IOBFileName="IOB_2_0002010_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0xc"></hexaValue>
+										<hexaValue hexaValue="0xd8f0"></hexaValue>
+										<hexaValue hexaValue="0x2710"></hexaValue>
+										<hexaValue hexaValue="0xd508"></hexaValue>
+										<hexaValue hexaValue="0x2af8"></hexaValue>
+										<hexaValue hexaValue="0x302"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+									<paramKPW>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x11"></hexaValue>
+									</paramKPW>
+								</channelATS>
+								<channelATS ASFCatKey="BasicInRackANAInL2HighLevel0" task="MAST" number="4">
+									<descFB code="66" version="16"></descFB>
+									<descIOB IOBFileName="IOB_2_0002010_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0xc"></hexaValue>
+										<hexaValue hexaValue="0xd8f0"></hexaValue>
+										<hexaValue hexaValue="0x2710"></hexaValue>
+										<hexaValue hexaValue="0xd508"></hexaValue>
+										<hexaValue hexaValue="0x2af8"></hexaValue>
+										<hexaValue hexaValue="0x302"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+									<paramKPW>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x11"></hexaValue>
+									</paramKPW>
+								</channelATS>
+								<channelATS ASFCatKey="BasicInRackANAInL2HighLevel0" task="MAST" number="5">
+									<descFB code="66" version="16"></descFB>
+									<descIOB IOBFileName="IOB_2_0002010_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0xc"></hexaValue>
+										<hexaValue hexaValue="0xd8f0"></hexaValue>
+										<hexaValue hexaValue="0x2710"></hexaValue>
+										<hexaValue hexaValue="0xd508"></hexaValue>
+										<hexaValue hexaValue="0x2af8"></hexaValue>
+										<hexaValue hexaValue="0x302"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+									<paramKPW>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x11"></hexaValue>
+									</paramKPW>
+								</channelATS>
+								<channelATS ASFCatKey="BasicInRackANAInL2HighLevel0" task="MAST" number="6">
+									<descFB code="66" version="16"></descFB>
+									<descIOB IOBFileName="IOB_2_0002010_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0xc"></hexaValue>
+										<hexaValue hexaValue="0xd8f0"></hexaValue>
+										<hexaValue hexaValue="0x2710"></hexaValue>
+										<hexaValue hexaValue="0xd508"></hexaValue>
+										<hexaValue hexaValue="0x2af8"></hexaValue>
+										<hexaValue hexaValue="0x302"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+									<paramKPW>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x11"></hexaValue>
+									</paramKPW>
+								</channelATS>
+								<channelATS ASFCatKey="BasicInRackANAInL2HighLevel0" task="MAST" number="7">
+									<descFB code="66" version="16"></descFB>
+									<descIOB IOBFileName="IOB_2_0002010_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0xc"></hexaValue>
+										<hexaValue hexaValue="0xd8f0"></hexaValue>
+										<hexaValue hexaValue="0x2710"></hexaValue>
+										<hexaValue hexaValue="0xd508"></hexaValue>
+										<hexaValue hexaValue="0x2af8"></hexaValue>
+										<hexaValue hexaValue="0x302"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+									<paramKPW>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x11"></hexaValue>
+									</paramKPW>
+								</channelATS>
+							</configModule>
+						</moduleATS>
+						<moduleATS>
+							<partItem family="Analog" partNumber="BMXAMI0810" vendorName="Schneider Automation" version="01.00"></partItem>
+							<equipInfo topoAddress="\0.0\1.1" position="1" NodeGuid="{429ED190-DC82-423F-825B-7B3AE55C7226}"></equipInfo>
+							<configModule>
+								<channelATS ASFCatKey="BasicInRackANAInL2HighLevel0" task="MAST" number="0">
+									<descFB code="66" version="16"></descFB>
+									<descIOB IOBFileName="IOB_2_0002010_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0xc"></hexaValue>
+										<hexaValue hexaValue="0xd8f0"></hexaValue>
+										<hexaValue hexaValue="0x2710"></hexaValue>
+										<hexaValue hexaValue="0xd508"></hexaValue>
+										<hexaValue hexaValue="0x2af8"></hexaValue>
+										<hexaValue hexaValue="0x302"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+									<paramKPW>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x11"></hexaValue>
+									</paramKPW>
+								</channelATS>
+								<channelATS ASFCatKey="BasicInRackANAInL2HighLevel0" task="MAST" number="1">
+									<descFB code="66" version="16"></descFB>
+									<descIOB IOBFileName="IOB_2_0002010_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0xc"></hexaValue>
+										<hexaValue hexaValue="0xd8f0"></hexaValue>
+										<hexaValue hexaValue="0x2710"></hexaValue>
+										<hexaValue hexaValue="0xd508"></hexaValue>
+										<hexaValue hexaValue="0x2af8"></hexaValue>
+										<hexaValue hexaValue="0x302"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+									<paramKPW>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x11"></hexaValue>
+									</paramKPW>
+								</channelATS>
+								<channelATS ASFCatKey="BasicInRackANAInL2HighLevel0" task="MAST" number="2">
+									<descFB code="66" version="16"></descFB>
+									<descIOB IOBFileName="IOB_2_0002010_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0xc"></hexaValue>
+										<hexaValue hexaValue="0xd8f0"></hexaValue>
+										<hexaValue hexaValue="0x2710"></hexaValue>
+										<hexaValue hexaValue="0xd508"></hexaValue>
+										<hexaValue hexaValue="0x2af8"></hexaValue>
+										<hexaValue hexaValue="0x302"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+									<paramKPW>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x11"></hexaValue>
+									</paramKPW>
+								</channelATS>
+								<channelATS ASFCatKey="BasicInRackANAInL2HighLevel0" task="MAST" number="3">
+									<descFB code="66" version="16"></descFB>
+									<descIOB IOBFileName="IOB_2_0002010_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0xc"></hexaValue>
+										<hexaValue hexaValue="0xd8f0"></hexaValue>
+										<hexaValue hexaValue="0x2710"></hexaValue>
+										<hexaValue hexaValue="0xd508"></hexaValue>
+										<hexaValue hexaValue="0x2af8"></hexaValue>
+										<hexaValue hexaValue="0x302"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+									<paramKPW>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x11"></hexaValue>
+									</paramKPW>
+								</channelATS>
+								<channelATS ASFCatKey="BasicInRackANAInL2HighLevel0" task="MAST" number="4">
+									<descFB code="66" version="16"></descFB>
+									<descIOB IOBFileName="IOB_2_0002010_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0xc"></hexaValue>
+										<hexaValue hexaValue="0xd8f0"></hexaValue>
+										<hexaValue hexaValue="0x2710"></hexaValue>
+										<hexaValue hexaValue="0xd508"></hexaValue>
+										<hexaValue hexaValue="0x2af8"></hexaValue>
+										<hexaValue hexaValue="0x302"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+									<paramKPW>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x11"></hexaValue>
+									</paramKPW>
+								</channelATS>
+								<channelATS ASFCatKey="BasicInRackANAInL2HighLevel0" task="MAST" number="5">
+									<descFB code="66" version="16"></descFB>
+									<descIOB IOBFileName="IOB_2_0002010_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0xc"></hexaValue>
+										<hexaValue hexaValue="0xd8f0"></hexaValue>
+										<hexaValue hexaValue="0x2710"></hexaValue>
+										<hexaValue hexaValue="0xd508"></hexaValue>
+										<hexaValue hexaValue="0x2af8"></hexaValue>
+										<hexaValue hexaValue="0x302"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+									<paramKPW>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x11"></hexaValue>
+									</paramKPW>
+								</channelATS>
+								<channelATS ASFCatKey="BasicInRackANAInL2HighLevel0" task="MAST" number="6">
+									<descFB code="66" version="16"></descFB>
+									<descIOB IOBFileName="IOB_2_0002010_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0xc"></hexaValue>
+										<hexaValue hexaValue="0xd8f0"></hexaValue>
+										<hexaValue hexaValue="0x2710"></hexaValue>
+										<hexaValue hexaValue="0xd508"></hexaValue>
+										<hexaValue hexaValue="0x2af8"></hexaValue>
+										<hexaValue hexaValue="0x302"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+									<paramKPW>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x11"></hexaValue>
+									</paramKPW>
+								</channelATS>
+								<channelATS ASFCatKey="BasicInRackANAInL2HighLevel0" task="MAST" number="7">
+									<descFB code="66" version="16"></descFB>
+									<descIOB IOBFileName="IOB_2_0002010_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0xc"></hexaValue>
+										<hexaValue hexaValue="0xd8f0"></hexaValue>
+										<hexaValue hexaValue="0x2710"></hexaValue>
+										<hexaValue hexaValue="0xd508"></hexaValue>
+										<hexaValue hexaValue="0x2af8"></hexaValue>
+										<hexaValue hexaValue="0x302"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+									<paramKPW>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x11"></hexaValue>
+									</paramKPW>
+								</channelATS>
+							</configModule>
+						</moduleATS>
+						<moduleATS>
+							<partItem family="Analog" partNumber="BMXAMI0410" vendorName="Schneider Automation" version="01.00"></partItem>
+							<equipInfo topoAddress="\0.0\1.2" position="2" NodeGuid="{BDDAFC12-5309-4806-8728-150D7AFB6644}"></equipInfo>
+							<configModule>
+								<channelATS ASFCatKey="BasicInRackANAInL2HighLevel0" task="MAST" number="0">
+									<descFB code="66" version="16"></descFB>
+									<descIOB IOBFileName="IOB_2_0002010_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0xc"></hexaValue>
+										<hexaValue hexaValue="0xd8f0"></hexaValue>
+										<hexaValue hexaValue="0x2710"></hexaValue>
+										<hexaValue hexaValue="0xd508"></hexaValue>
+										<hexaValue hexaValue="0x2af8"></hexaValue>
+										<hexaValue hexaValue="0x302"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+									<paramKPW>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x11"></hexaValue>
+									</paramKPW>
+								</channelATS>
+								<channelATS ASFCatKey="BasicInRackANAInL2HighLevel0" task="MAST" number="1">
+									<descFB code="66" version="16"></descFB>
+									<descIOB IOBFileName="IOB_2_0002010_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0xc"></hexaValue>
+										<hexaValue hexaValue="0xd8f0"></hexaValue>
+										<hexaValue hexaValue="0x2710"></hexaValue>
+										<hexaValue hexaValue="0xd508"></hexaValue>
+										<hexaValue hexaValue="0x2af8"></hexaValue>
+										<hexaValue hexaValue="0x302"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+									<paramKPW>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x11"></hexaValue>
+									</paramKPW>
+								</channelATS>
+								<channelATS ASFCatKey="BasicInRackANAInL2HighLevel0" task="MAST" number="2">
+									<descFB code="66" version="16"></descFB>
+									<descIOB IOBFileName="IOB_2_0002010_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0xc"></hexaValue>
+										<hexaValue hexaValue="0xd8f0"></hexaValue>
+										<hexaValue hexaValue="0x2710"></hexaValue>
+										<hexaValue hexaValue="0xd508"></hexaValue>
+										<hexaValue hexaValue="0x2af8"></hexaValue>
+										<hexaValue hexaValue="0x302"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+									<paramKPW>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x11"></hexaValue>
+									</paramKPW>
+								</channelATS>
+								<channelATS ASFCatKey="BasicInRackANAInL2HighLevel0" task="MAST" number="3">
+									<descFB code="66" version="16"></descFB>
+									<descIOB IOBFileName="IOB_2_0002010_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0xc"></hexaValue>
+										<hexaValue hexaValue="0xd8f0"></hexaValue>
+										<hexaValue hexaValue="0x2710"></hexaValue>
+										<hexaValue hexaValue="0xd508"></hexaValue>
+										<hexaValue hexaValue="0x2af8"></hexaValue>
+										<hexaValue hexaValue="0x302"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+									<paramKPW>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x11"></hexaValue>
+									</paramKPW>
+								</channelATS>
+							</configModule>
+						</moduleATS>
+						<moduleATS>
+							<partItem family="Communication" partNumber="BMXNRP0201" vendorName="Schneider Automation" version="01.00"></partItem>
+							<equipInfo topoAddress="\0.0\1.3" position="3" NodeGuid="{37C5B769-024E-440B-9331-329DF5FB2268}"></equipInfo>
+						</moduleATS>
+						<moduleATS>
+							<partItem family="Discrete" partNumber="BMXDDM16022" vendorName="Schneider Automation" version="02.00"></partItem>
+							<equipInfo topoAddress="\0.0\1.4" position="4" NodeGuid="{4112D726-DEB6-4AD3-AE51-E9ED168C905E}"></equipInfo>
+							<configModule>
+								<channelATS ASFCatKey="BasicInRackTORInSTD_MASTER" task="MAST" number="0">
+									<descFB code="1" version="17"></descFB>
+									<descIOB IOBFileName="IOB_0_0002000_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0x1"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+								</channelATS>
+								<channelATS ASFCatKey="BaInRackTOROutReactivateAndFallBackAndSupplyMonitoring_MASTER" task="MAST" number="16">
+									<descFB code="1" version="17"></descFB>
+									<descIOB IOBFileName="IOB_0_0102000_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0x16"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+								</channelATS>
+							</configModule>
+						</moduleATS>
+					</rackATS>
+					<rackATS>
+						<partItem family="Rack" partNumber="BMEXBP1200" vendorName="Schneider Automation" version="01.00"></partItem>
+						<equipInfo topoAddress="\0.0\2" position="2" NodeGuid="{3F0A81B0-E6F6-4ACD-9509-F82228D4646A}"></equipInfo>
+						<moduleATS>
+							<partItem family="Communication" partNumber="BMXNOC0401.2" vendorName="Schneider Automation" version="02.00"></partItem>
+							<equipInfo topoAddress="\0.0\2.0" position="0" NodeGuid="{33D72A43-2D3A-4400-972B-F61BD97CB02B}"></equipInfo>
+							<configModule>
+								<channelATS ASFCatKey="EthernetCIP_Mirano_TR2" task="MAST" number="0">
+									<descFB code="47" version="16"></descFB>
+									<descIOB IOBFileName="IOB_3_0302040_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x20"></hexaValue>
+										<hexaValue hexaValue="0x20"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+									<paramKPW>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x10"></hexaValue>
+										<hexaValue hexaValue="0x10"></hexaValue>
+										<hexaValue hexaValue="0x9d34"></hexaValue>
+										<hexaValue hexaValue="0x2880"></hexaValue>
+										<hexaValue hexaValue="0x3307"></hexaValue>
+										<hexaValue hexaValue="0x483c"></hexaValue>
+										<hexaValue hexaValue="0x46b1"></hexaValue>
+										<hexaValue hexaValue="0xc98d"></hexaValue>
+										<hexaValue hexaValue="0x4235"></hexaValue>
+										<hexaValue hexaValue="0x7ffc"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x10"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKPW>
+								</channelATS>
+							</configModule>
+						</moduleATS>
+						<moduleATS>
+							<partItem family="Discrete" partNumber="BMXDRA1605" vendorName="Schneider Automation" version="02.00"></partItem>
+							<equipInfo topoAddress="\0.0\2.1" position="1" NodeGuid="{3CA6DCA8-4337-499E-B707-D8E260BB1E58}"></equipInfo>
+							<configModule>
+								<channelATS ASFCatKey="BasicInRackTOROutFallBackProtectOut0_MASTER" task="MAST" number="0">
+									<descFB code="1" version="17"></descFB>
+									<descIOB IOBFileName="IOB_0_0102000_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0x6"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+								</channelATS>
+								<channelATS ASFCatKey="BasicInRackTOROutFallBackProtectOut0_MASTER" task="MAST" number="8">
+									<descFB code="1" version="17"></descFB>
+									<descIOB IOBFileName="IOB_0_0102000_32S" version="1"></descIOB>
+									<paramKW>
+										<hexaValue hexaValue="0x6"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+										<hexaValue hexaValue="0x0"></hexaValue>
+									</paramKW>
+								</channelATS>
+							</configModule>
+						</moduleATS>
+					</rackATS>
+				</busATS>
+			</configATS>
+			<dataMemoryProtect protectM="false" protectMW="false" protectIO="false" protectS="false"></dataMemoryProtect>
+		</PLC>
+	</IOConf>
+</IOExchangeFile>

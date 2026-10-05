@@ -1,0 +1,167 @@
+# =============================================================================
+#  Session t1112-montrer - 1.11.2 (T1, R1112-6, R1112-5, R1112-3, R1112-7 et R1112-8 de R111)
+#  R1112-6 : l'etape 1 d'api-compiler clique IHM dans l'arbre et y laisse le
+#  pointeur ; 0,9 s plus tard, l'infobulle de la ligne (« IHM · Clic : ouvrir… »)
+#  s'ouvrait dessous et cachait Generer et Compiler. Pendant la demonstration
+#  (lecture, pause), les infobulles de l'appli se taisent ; a l'« A toi » et
+#  apres le tutoriel, elles reviennent.
+#  Le chemin du client : un HOME neuf, « New machine » ouvert, F1, le sujet, son
+#  bouton. A lancer sans XPG_TUTORIELS, --size 1920x1080, avec le modele a cote
+#  de l'appli (bac/Armoire_Gaz) ou PROJETS=<dossier d'Armoire_Gaz>.
+# =============================================================================
+attendre 30
+bouton "Définir la clé"
+attendre 10
+action project.new
+attendre 10
+bouton Create
+attendre-projet
+attendre 30
+touche f1
+attendre 15
+tutoriel-infobulles rendues
+# R1112-6 : « Regarder » api-compiler ; le pointeur reste sur IHM plus de 0,9 s.
+aide-sujet api-compiler
+attendre 10
+aide-cible tuto:api-compiler
+attendre 5
+tutoriel-etat lecture
+tutoriel-infobulles muettes
+attendre 150
+capture t1112-montrer-01-api-compiler-5s.png
+tutoriel-pause
+attendre 45
+tutoriel-etat pause
+tutoriel-infobulles muettes
+capture t1112-montrer-02-api-compiler-pause.png
+# R1112-5 : api-compiler montre Compiler (etape 2, clique puis encadre) puis Generer (etape 3, encadre).
+tutoriel-lecture
+tutoriel-aller 2
+tutoriel-attendre
+attendre 120
+tutoriel-etape 2
+tutoriel-cadre arbre:IHM/Compiler
+capture t1112-montrer-03-api-compiler-compiler.png
+tutoriel-aller 3
+tutoriel-attendre
+attendre 120
+tutoriel-etape 3
+tutoriel-cadre arbre:IHM/Générer
+capture t1112-montrer-04-api-compiler-generer.png
+tutoriel-quitter
+attendre 30
+# R1112-5 : api-renommer ouvre le dialogue Renommer (etape 2), Echap le ferme (etape 3).
+aide-sujet api-renommer
+attendre 10
+aide-cible tuto:api-renommer
+attendre 5
+tutoriel-aller 2
+tutoriel-attendre
+attendre 120
+tutoriel-etape 2
+capture t1112-montrer-05-api-renommer-dialogue.png
+tutoriel-aller 3
+tutoriel-attendre
+attendre 120
+tutoriel-etape 3
+capture t1112-montrer-06-api-renommer-annuler.png
+tutoriel-quitter
+attendre 30
+tutoriel-infobulles rendues
+# R1112-3 : editeur ouvre Vue_Commandes a l'etape 2 (« L'ecran de l'editeur » : l'explorateur d'objets, les calques).
+aide-sujet editeur
+attendre 10
+aide-cible tuto:editeur
+attendre 5
+tutoriel-aller 2
+tutoriel-attendre
+attendre 150
+tutoriel-etape 2
+capture t1112-montrer-07-editeur-etape2.png
+tutoriel-quitter
+attendre 30
+# R1112-7 : bloc-DFB_IO_ANA32 (pas dans Armoire_Gaz) ouvre sa page dans le centre a l'etape 2 (ses entrees et ses
+# sorties), le ferme a l'etape 3 (Echap : le bac revient, pour l'« A toi » F8 de l'etape 4).
+aide-sujet bloc-DFB_IO_ANA32
+attendre 10
+aide-cible tuto:bloc-DFB_IO_ANA32
+attendre 5
+tutoriel-aller 2
+tutoriel-attendre
+attendre 120
+tutoriel-etape 2
+tutoriel-lit centre.ouvert oui
+capture t1112-montrer-09-bloc-etape2.png
+tutoriel-aller 3
+tutoriel-attendre
+attendre 120
+tutoriel-etape 3
+tutoriel-lit centre.ouvert non
+capture t1112-montrer-10-bloc-etape3.png
+tutoriel-quitter
+attendre 30
+# R1112-7 : bloc-DFB_EQ_MOTOR (le 3e bloc vu par R111) ouvre aussi sa page a l'etape 2.
+aide-sujet bloc-DFB_EQ_MOTOR
+attendre 10
+aide-cible tuto:bloc-DFB_EQ_MOTOR
+attendre 5
+tutoriel-aller 2
+tutoriel-attendre
+attendre 120
+tutoriel-etape 2
+tutoriel-lit centre.ouvert oui
+capture t1112-montrer-11-eq-motor-etape2.png
+tutoriel-quitter
+attendre 30
+# R1112-3 : macro-ImportES ouvre a l'etape 2 l'onglet Macros (l'outil Macros de l'onglet API), choisit ImportES dans
+# la liste (macro:ImportES, sa fiche), puis ouvre son formulaire (double clic) : la bulle « 9 champs : … » le decrit.
+aide-sujet macro-ImportES
+attendre 10
+aide-cible tuto:macro-ImportES
+attendre 5
+tutoriel-aller 2
+tutoriel-attendre
+attendre 150
+tutoriel-etape 2
+capture t1112-montrer-12-macro-formulaire.png
+encadrer "onglet:Macros"
+tutoriel-quitter
+attendre 30
+# R1112-3 : symboles ouvre le symbole Carte_Armoire a l'etape 4 (« Le symbole » : ses parametres dans les proprietes
+# de sa vue), par la ligne de la liste IHM › Symboles puis l'outil Ouvrir.
+aide-sujet symboles
+attendre 10
+aide-cible tuto:symboles
+attendre 5
+tutoriel-aller 4
+tutoriel-attendre
+attendre 150
+tutoriel-etape 4
+capture t1112-montrer-13-symboles-etape4.png
+encadrer "onglet:Carte_Armoire"
+tutoriel-quitter
+attendre 30
+# R1112-8 : « Essayer » sur objet-vanne ; l'« A toi » de l'etape 1 (« Clique Vanne dans la bibliotheque ») amene la
+# tuile Vanne a l'ecran et l'encadre (TutorialATry::show, la premiere tuile des gestes : clic biblio:Vanne).
+aide-sujet objet-vanne
+attendre 10
+aide-cible essayer:objet-vanne
+attendre 150
+tutoriel-etat atoi
+tutoriel-etape 1
+tutoriel-attendre
+tutoriel-cadre biblio:Vanne
+capture t1112-montrer-08-vanne-atoi.png
+tutoriel-quitter
+attendre 30
+# L'« A toi » rend la souris a l'eleve, et ses infobulles.
+aide-sujet objet-ligne
+attendre 10
+aide-cible essayer:objet-ligne
+attendre 150
+tutoriel-etat atoi
+tutoriel-infobulles rendues
+tutoriel-quitter
+attendre 30
+tutoriel-infobulles rendues
+quitter

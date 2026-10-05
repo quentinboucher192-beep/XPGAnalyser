@@ -1,0 +1,126 @@
+(* RangerSections
+
+   Range les sections GENEREES dans l'ordre ou la tache doit les executer.
+   Les imports l'appellent a la fin ; elle se lance aussi seule, apres avoir
+   deplace une section a la main par erreur.
+
+   L'ORDRE, DE HAUT EN BAS
+
+     Horloge            le temps reel du cycle, pour tous les blocs
+     Alarmes_Init       registre d'alarmes      \
+     Reglages_Init      reglages du classeur     |  gardees : ne font quelque
+     Controle_Init      paliers, rotations...    |  chose qu'au premier cycle
+     Modbus_Init        requetes Modbus         /
+     Simulation         les retours simules, AVANT les blocs d'entree
+     Mapping_Entrees    %I / %IW  ->  voies
+     Modbus_Entrees     ce qui arrive des equipements distants
+     Cablage_Entrees    voies  ->  equipements
+     Reports_TC         l'IHM commande
+     Modes              le gestionnaire de modes et ses sous-routines
+     Grafcets           le temps des grafcets, puis chaque grafcet (sa
+                        sous-routine) : ses receptivites, son moteur, ses
+                        sorties
+     Controle           paliers, rotations, et les interverrouillages EN
+                        DERNIER : ils ont le dernier mot sur toutes les demandes
+     Equipements        les DFB_EQ_*
+     Alarmes_Cycle      etats d'alarme, puis gestionnaires
+     Reports_TM_TA      vers l'IHM
+     Modbus_Sorties     ce qui repart vers les equipements distants
+     Cablage_Sorties    equipements  ->  voies
+     Mapping_Sorties    voies  ->  %Q / %QW
+     Diagnostic         bits systeme et modules en erreur
+
+   ELLE NE DEPLACE QUE CE QUI EST DANS LE MAUVAIS SENS. Une section qui est
+   deja avant sa suivante reste ou elle est, meme si une de vos sections les
+   separe : vos sections ne bougent pas, et une section generee ne passe
+   jamais d'une tache a une autre.
+
+   #! summary = Range les sections générées par les imports dans l'ordre d'exécution de la tâche, sans déplacer les vôtres.
+   #! version = 1.10
+   #! changes 1.10 = Le formulaire : chaque question a son champ (le classeur par …, Ctrl+V ou en le glissant ; les tâches et les sections du projet ; des interrupteurs ; des choix à libellés), ses groupes, son aide et un libellé avec accents. Le code ne change pas.
+   #! changes 1.01 = La section Grafcets (ImporterGrafcet, GenererGrafcet) : apres Modes, avant Controle - les interverrouillages ont le dernier mot sur ce que les grafcets commandent.
+   #! usage = Appelee a la fin de chaque import. Lancee seule, elle remet l'ordre apres un deplacement malheureux dans le navigateur de projet.
+   #! usage = ELLE NE DEPLACE QUE CE QUI EST DANS LE MAUVAIS SENS. Elle part de la derniere section de la liste et remonte : une section qui est apres celle qui doit la suivre est placee juste avant elle ; une section deja avant reste ou elle est. Vos propres sections ne bougent jamais.
+   #! usage = L'ORDRE : Horloge, les sections d'initialisation (Alarmes_Init, Reglages_Init, Controle_Init, Modbus_Init), Simulation, Mapping_Entrees, Modbus_Entrees, Cablage_Entrees, Reports_TC, Modes, Grafcets, Controle, Equipements, Alarmes_Cycle, Reports_TM_TA, Modbus_Sorties, Cablage_Sorties, Mapping_Sorties, Diagnostic.
+   #! usage = Chaque deplacement est une etape de Ctrl+Z, comme un glisser-deposer dans l'arbre.
+   #! see = ImporterProgramme, ImporterClasseur
+   #! param prefSection = Vide en général : il sert quand deux automates partagent un projet.
+   #! param prefSection = Le prefixe des sections generees, le meme qu'a l'import. Vide en general. Appelee par un import, elle reprend sa reponse sans la redemander.
+   #! categorie = Vérifier et ranger
+   #! champ prefSection = nom facultatif
+   #! libelle prefSection = Préfixe des noms de section
+   #! exemple prefSection = {}Horloge, {}Mapping_Entrees, {}Equipements
+   #! produit = l'ordre d'exécution des sections générées, sans toucher aux autres
+   #! appliquer = Ranger les sections générées dans l'ordre de la tâche
+*)
+
+prefSection := Ask('prefSection', 'Prefixe des noms de section (vide en general)', '');
+
+(* LA LISTE EST ECRITE A L'ENVERS : on part de la fin de la tache et on
+   remonte, chaque section se placant avant celle qui la suit. *)
+envers := 'Diagnostic,Mapping_Sorties,Cablage_Sorties,Modbus_Sorties,Reports_TM_TA,'
+        + 'Alarmes_Cycle,Equipements,Controle,Grafcets,Modes,Reports_TC,Cablage_Entrees,'
+        + 'Modbus_Entrees,Mapping_Entrees,Simulation,Modbus_Init,Controle_Init,'
+        + 'Reglages_Init,Alarmes_Init,Horloge';
+
+suivante := '';
+deplacees := 0;
+presentes := 0;
+depart := 0;
+virgule := 0;
+nom := '';
+WHILE depart < LEN(envers) DO
+    virgule := FIND(envers, ',', depart);
+    IF virgule < 0 THEN
+        nom := MID(envers, depart);
+        depart := LEN(envers);
+    ELSE
+        nom := MID(envers, depart, virgule - depart);
+        depart := virgule + 1;
+    END_IF;
+    nom := prefSection + nom;
+    IF SectionExists(nom) AND SectionRank(nom) >= 0 THEN
+        presentes := presentes + 1;
+        IF suivante <> '' AND SectionRank(nom) > SectionRank(suivante) THEN
+            IF PlaceSection(nom, suivante) THEN
+                deplacees := deplacees + 1;
+            END_IF;
+        END_IF;
+        suivante := nom;
+    END_IF;
+END_WHILE;
+
+(* L'ordre obtenu, pour le compte rendu : du haut de la tache vers le bas. *)
+ordre := '';
+rang := 0;
+cherche := 0;
+trouve := '';
+FOR rang := 0 TO 400 DO
+    trouve := '';
+    depart := 0;
+    WHILE depart < LEN(envers) DO
+        virgule := FIND(envers, ',', depart);
+        IF virgule < 0 THEN
+            nom := MID(envers, depart);
+            depart := LEN(envers);
+        ELSE
+            nom := MID(envers, depart, virgule - depart);
+            depart := virgule + 1;
+        END_IF;
+        IF SectionRank(prefSection + nom) = rang THEN trouve := prefSection + nom; END_IF;
+    END_WHILE;
+    IF trouve <> '' THEN
+        IF ordre = '' THEN ordre := trouve; ELSE ordre := ordre + ', ' + trouve; END_IF;
+        cherche := cherche + 1;
+    END_IF;
+    IF cherche >= presentes THEN EXIT; END_IF;
+END_FOR;
+
+IF deplacees = 0 THEN
+    Log('sections deja dans l ordre (' + DINT_TO_STRING(presentes) + ' generees)');
+ELSE
+    Log(DINT_TO_STRING(deplacees) + ' section(s) deplacee(s) dans l ordre d execution');
+END_IF;
+IF ordre <> '' THEN
+    Log('ordre de la tache : ' + ordre);
+END_IF;

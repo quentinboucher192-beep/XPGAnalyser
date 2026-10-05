@@ -1,0 +1,269 @@
+# Derived function block, shared.
+name = DFB_EQ_ATV
+version = 1.01
+#! summary = Seize variateurs Altivar pilotes par mots CiA402 : la machine d'etats, le sens, la consigne, les defauts.
+#! usage = LA MACHINE D'ETATS EST CELLE DU PROFIL CiA402 (DRIVECOM) : le variateur
+#! usage = passe de 'mise sous tension interdite' a 'pret', 'sous tension', puis 'en
+#! usage = marche', un etat a la fois. Le bloc lit l'etat dans ETA et envoie a chaque
+#! usage = cycle la commande de l'etape suivante. Un variateur qui ne suit pas se voit
+#! usage = : il reste dans un etat, et au bout de StartMs c'est le defaut 3.
+#! usage = A L'ARRET, le bloc envoie 16#0007 : le variateur s'arrete sur sa rampe et
+#! usage = reste sous tension, pret a repartir. Le type d'arret (rampe, roue libre)
+#! usage = est un reglage du variateur, pas du bloc.
+#! usage = A VALIDER SUR SITE. Les mots et les etats suivent le profil CiA402 tel que
+#! usage = les Altivar l'appliquent ; le bloc n'a pas pu etre essaye contre un vrai
+#! usage = variateur. Premier essai : un variateur, a vide, ETA et CMD dans une table
+#! usage = d'animation.
+#! example = (* declarer : Atv : ARRAY[0..15] OF ST_EQ_Atv; *)
+#! example = Atv[0].RunReq := Marche;
+#! example = Atv[0].SpeedReq := 35.0;          (* Hz *)
+#! example = ATV_Station(Count := 1, CycleMs := 20, Eq := Atv);
+#! see = ST_EQ_Atv
+#! see = DFB_COM_MODBUS
+#! see = DFB_EQ_DRIVE
+#! param Count = Combien d'equipements du tableau sont traites. Borne a 16. En mettre
+#! param Count = moins ne fait pas gagner de memoire, seulement du temps de cycle.
+#! param CycleMs = La periode de la tache, en ms : DtMs de DFB_SYS_CLOCK, qui suit le
+#! param CycleMs = temps reel. Un DDT ne peut pas contenir de temporisateur, donc tout
+#! param CycleMs = le temps s'accumule depuis la.
+#! param Eq = Le tableau des equipements, en InOut. Sa taille est figee a 16 : un
+#! param Eq = InOut ne peut pas etre dimensionne a l'appel.
+#! param FaultCount = Combien sont en defaut, recalcule a chaque cycle.
+#! param ReadyCount = Combien sont utilisables. FaultCount + ReadyCount n'est pas
+#! param ReadyCount = forcement egal a Count : un equipement desactive n'est ni l'un
+#! param ReadyCount = ni l'autre.
+#! changes 1.00 = NOUVEAU.
+#! changes 1.01 = Le defaut 2 (liaison perdue) attend CommMs du type, 3 s par defaut :
+#! changes 1.01 = il tombait au premier cycle, avant que la premiere lecture Modbus
+#! changes 1.01 = ait abouti - donc a chaque mise en route de l'automate. Demande
+#! changes 1.01 = ST_EQ_Atv 1.01.
+#! given = Marche := TRUE
+#! given = Atv[0].CommOk := TRUE
+#! given = Atv[0].Eta := 16#0040
+#! expect = 1 : Atv[0].DriveState = 2
+#! expect = 1 : Atv[0].Cmd = 6
+#! expect = 1 : Atv[0].Lfr = 350
+#! expect = 1 : Atv[0].Run = TRUE
+
+# Seize variateurs Altivar pilotes par mots CiA402.
+
+# name ; type ; scope ; initial ; comment
+Count ; INT ; Input ; 16 ; combien d'equipements sont traites
+CycleMs ; DINT ; Input ; 20 ; la periode de la tache en ms : DtMs de DFB_SYS_CLOCK
+Eq ; ARRAY[0..15] OF ST_EQ_Atv ; InOut ;  ; les equipements
+FaultCount ; INT ; Output ; 0 ; combien sont en defaut
+ReadyCount ; INT ; Output ; 0 ; combien sont utilisables
+i ; INT ; Local ; 0 ; 
+n ; INT ; Local ; 0 ; 
+LAST ; INT ; Local ; 15 ; dernier indice
+st ; INT ; Local ; 0 ; l'etat de l'equipement, avant publication
+MAXMS ; DINT ; Local ; 2000000000 ; plafond des compteurs de temps : 23 jours, sous la limite d'un DINT
+req ; BOOL ; Local ;  ; 
+target ; REAL ; Local ; 0.0 ; 
+ds ; INT ; Local ; 0 ; l'etat du variateur
+eta ; WORD ; Local ; 0 ; 
+cmd ; WORD ; Local ; 0 ; 
+
+<<<section Process ST>>>
+n := Count;
+IF n > LAST + 1 THEN n := LAST + 1; END_IF;
+IF n < 0 THEN n := 0; END_IF;
+
+FaultCount := 0;
+ReadyCount := 0;
+
+FOR i := 0 TO n - 1 DO
+
+(* Ce qui est vrai de toute famille, ecrit une fois: l'acquittement sur front,
+   la memorisation du defaut, le temps dans l'etat. Un acquittement redonne
+   tout son delai a une nouvelle tentative. *)
+IF Eq[i].AckFault AND NOT Eq[i].PrevAck THEN
+    Eq[i].FaultLatch := FALSE;
+    Eq[i].FaultCode := 0;
+    Eq[i].StartElapsed := 0;
+    (* L'acquittement part aussi vers le variateur : le bit 7 du mot de
+       commande, sur front, pendant 300 ms. *)
+    Eq[i].ResetElapsed := 1;
+END_IF;
+Eq[i].PrevAck := Eq[i].AckFault;
+
+IF NOT Eq[i].Enable THEN
+    (* Desactive: aucune sortie, aucun defaut. Un equipement consigne ne doit
+       pas remplir le journal d'alarmes pendant qu'on travaille dessus. *)
+    Eq[i].Fault := FALSE;
+    Eq[i].FaultCode := 0;
+    Eq[i].FaultLatch := FALSE;
+END_IF;
+
+(* ---- l'etat du variateur, lu dans ETA ------------------------------------
+   Les masques du profil CiA402 : chaque etat a son motif, et les motifs
+   s'excluent. *)
+eta := INT_TO_WORD(Eq[i].Eta);
+IF (eta AND 16#004F) = 16#0008 THEN
+    ds := 8;                                   (* defaut *)
+ELSIF (eta AND 16#004F) = 16#000F THEN
+    ds := 7;                                   (* reaction sur defaut *)
+ELSIF (eta AND 16#006F) = 16#0027 THEN
+    ds := 5;                                   (* en marche *)
+ELSIF (eta AND 16#006F) = 16#0023 THEN
+    ds := 4;                                   (* sous tension *)
+ELSIF (eta AND 16#006F) = 16#0021 THEN
+    ds := 3;                                   (* pret *)
+ELSIF (eta AND 16#006F) = 16#0007 THEN
+    ds := 6;                                   (* arret rapide *)
+ELSIF (eta AND 16#004F) = 16#0040 THEN
+    ds := 2;                                   (* mise sous tension interdite *)
+ELSIF (eta AND 16#004F) = 16#0000 THEN
+    ds := 1;                                   (* pas pret *)
+ELSE
+    ds := 0;
+END_IF;
+Eq[i].DriveState := ds;
+Eq[i].Running := ds = 5;
+Eq[i].SpeedFbk := INT_TO_REAL(Eq[i].Rfr) / 10.0;
+Eq[i].Current := INT_TO_REAL(Eq[i].Lcr) / 10.0;
+
+req := Eq[i].RunReq;
+target := Eq[i].SpeedReq;
+IF Eq[i].ManMode THEN
+    req := Eq[i].ManRunReq;
+    target := Eq[i].ManSpeedReq;
+END_IF;
+IF target < Eq[i].SpeedMin THEN target := Eq[i].SpeedMin; END_IF;
+IF target > Eq[i].SpeedMax THEN target := Eq[i].SpeedMax; END_IF;
+
+(* ---- les defauts ---------------------------------------------------------- *)
+(* La liaison : CommOk peut manquer CommMs. Au demarrage, la premiere lecture
+   n'a pas encore abouti - sans ce delai, le defaut 2 tombait a chaque mise
+   en route de l'automate. *)
+IF Eq[i].CommOk OR NOT Eq[i].Enable THEN
+    Eq[i].CommElapsed := 0;
+ELSIF Eq[i].CommElapsed < MAXMS - CycleMs THEN
+    Eq[i].CommElapsed := Eq[i].CommElapsed + CycleMs;
+ELSE
+    Eq[i].CommElapsed := MAXMS;
+END_IF;
+IF Eq[i].Enable AND NOT Eq[i].CommOk AND Eq[i].CommElapsed > Eq[i].CommMs THEN
+    (* Un ETA fige par une liaison coupee n'est plus une mesure. *)
+    Eq[i].FaultCode := 2;
+    Eq[i].FaultLatch := TRUE;
+ELSIF Eq[i].Enable AND (ds = 8 OR ds = 7) AND Eq[i].ResetElapsed = 0 THEN
+    (* Pendant l'impulsion de reacquittement, le variateur a le temps de
+       quitter son defaut : sans ce delai, il fallait acquitter deux fois.
+       Encore en defaut apres l'impulsion, la cause est toujours la. *)
+    Eq[i].FaultCode := 1;
+    Eq[i].FaultLatch := TRUE;
+END_IF;
+IF Eq[i].Enable AND NOT Eq[i].FaultLatch AND req AND NOT Eq[i].Running THEN
+    IF Eq[i].StartElapsed < MAXMS - CycleMs THEN
+        Eq[i].StartElapsed := Eq[i].StartElapsed + CycleMs;
+    ELSE
+        Eq[i].StartElapsed := MAXMS;
+    END_IF;
+    IF Eq[i].StartElapsed > Eq[i].StartMs THEN
+        Eq[i].FaultCode := 3;
+        Eq[i].FaultLatch := TRUE;
+    END_IF;
+ELSE
+    Eq[i].StartElapsed := 0;
+END_IF;
+
+Eq[i].Run := Eq[i].Enable AND NOT Eq[i].FaultLatch AND req;
+
+(* ---- le mot de commande ----------------------------------------------------
+   16#0006 arret (vers 'pret'), 16#0007 mise sous tension, 16#000F marche,
+   16#0000 tension coupee, 16#0080 reacquittement (sur front). Le variateur
+   franchit les etats un par un : le bloc envoie a chaque cycle la commande
+   de l'etape suivante, jamais un saut. *)
+IF NOT Eq[i].Enable THEN
+    cmd := 16#0000;
+ELSIF Eq[i].ResetElapsed > 0 THEN
+    cmd := 16#0080;
+    Eq[i].ResetElapsed := Eq[i].ResetElapsed + CycleMs;
+    IF Eq[i].ResetElapsed > 300 THEN
+        Eq[i].ResetElapsed := 0;
+    END_IF;
+ELSIF Eq[i].FaultLatch THEN
+    cmd := 16#0000;
+ELSIF Eq[i].Run THEN
+    CASE ds OF
+        2: cmd := 16#0006;
+        3: cmd := 16#0007;
+        4, 5: cmd := 16#000F;
+        6: cmd := 16#0000;
+    ELSE
+        cmd := 16#0006;
+    END_CASE;
+    IF Eq[i].Reverse THEN
+        cmd := cmd OR 16#0800;
+    END_IF;
+ELSE
+    (* A l'arret : 16#0007 depuis 'en marche' - arret sur rampe, et le
+       variateur reste sous tension, pret a repartir. *)
+    IF ds = 5 OR ds = 4 THEN
+        cmd := 16#0007;
+    ELSE
+        cmd := 16#0006;
+    END_IF;
+END_IF;
+Eq[i].Cmd := WORD_TO_INT(cmd);
+
+IF Eq[i].Run THEN
+    Eq[i].Speed := target;
+ELSE
+    Eq[i].Speed := 0.0;
+END_IF;
+Eq[i].Lfr := REAL_TO_INT(Eq[i].Speed * 10.0);
+
+(* Le temps de service et les mises en service. RunMs plafonne a 555 heures ;
+   RunS compte les secondes et ne deborde pas avant 136 ans. *)
+IF Eq[i].Running AND NOT Eq[i].PrevRunning THEN
+    Eq[i].Starts := Eq[i].Starts + 1;
+END_IF;
+IF Eq[i].Running THEN
+    IF Eq[i].RunMs < MAXMS - CycleMs THEN
+        Eq[i].RunMs := Eq[i].RunMs + CycleMs;
+    ELSE
+        Eq[i].RunMs := MAXMS;
+    END_IF;
+    Eq[i].RunFracMs := Eq[i].RunFracMs + CycleMs;
+    IF Eq[i].RunFracMs >= 1000 THEN
+        Eq[i].RunS := Eq[i].RunS + DINT_TO_UDINT(Eq[i].RunFracMs / 1000);
+        Eq[i].RunFracMs := Eq[i].RunFracMs MOD 1000;
+    END_IF;
+END_IF;
+Eq[i].PrevRunning := Eq[i].Running;
+
+Eq[i].Fault := Eq[i].FaultLatch AND Eq[i].Enable;
+Eq[i].Ready := Eq[i].Enable AND NOT Eq[i].Fault;
+
+(* L'etat publie, et le temps passe dedans : 0 desactive, 1 en defaut,
+   2 au repos, 3 en service. *)
+IF NOT Eq[i].Enable THEN
+    st := 0;
+ELSIF Eq[i].Fault THEN
+    st := 1;
+ELSIF Eq[i].Running THEN
+    st := 3;
+ELSE
+    st := 2;
+END_IF;
+IF st <> Eq[i].PrevState THEN
+    Eq[i].StateMs := 0;
+    Eq[i].PrevState := st;
+ELSIF Eq[i].StateMs < MAXMS - CycleMs THEN
+    Eq[i].StateMs := Eq[i].StateMs + CycleMs;
+ELSE
+    Eq[i].StateMs := MAXMS;
+END_IF;
+Eq[i].State := st;
+
+IF Eq[i].Fault THEN
+    FaultCount := FaultCount + 1;
+END_IF;
+IF Eq[i].Ready THEN
+    ReadyCount := ReadyCount + 1;
+END_IF;
+
+END_FOR;
+<<<end>>>

@@ -1,0 +1,51 @@
+# La page Signaler un problème du centre d'aide (sujet page-signaler). Écrit à la main (T1, tranche 19) :
+# une page spéciale n'a pas de tutoriel déduit (décision du chef du 03/10, 12).
+# Ce que le centre en dit : « Ce qui s'est passé, comment le refaire, ce que tu attendais : un zip prêt
+# à envoyer. » Les notes de la 1.11 : « trois questions, une capture, les pièces jointes au choix, un zip
+# prêt à envoyer ; rien ne part par le réseau. »
+# Le formulaire (HelpCenterScreen, id help) : les champs help.report.quoi, .attendu et .refaire, quatre
+# cases cochées, puis Joindre une capture, Préparer le zip, Ouvrir le dossier, Copier le chemin et Copier
+# le texte. On ne clique aucun de ces boutons : ils écriraient dans le dossier signalements du client, ou
+# dans son presse-papiers. @avant aide : le centre s'ouvre sur la page, par-dessus le bac.
+= page-signaler | Signaler un problème
+@sujet page-signaler
+@bac Armoire_Gaz
+
+@avant
+aide page-signaler
+
+== 1 | Rien ne part par le réseau
+: Cette page prépare un zip, et c'est toi qui l'envoies : l'appli n'envoie rien. Trois questions, une capture, les pièces jointes au choix.
+encadrer "bouton:Signaler un problème  ·  rien n'est envoyé par le réseau"
+dire "Le zip part avec ton message, par le moyen que tu choisis."
+attendre 1.5s
+
+== 2 | Les trois questions
+: Ce qui s'est passé (obligatoire pour le zip), ce que tu attendais, et comment le refaire, étape par étape. L'aperçu, dessous, suit ce que tu écris : c'est le texte du zip.
+texte "champ:help.report.quoi" "La vanne V_201 reste fermée"
+texte "champ:help.report.attendu" "Qu'elle s'ouvre sur sa commande"
+texte "champ:help.report.refaire" "Ouvrir Vue_Tuto, F8, clic sur V_201"
+attendre 1s
+@atoi Dans la première case, écris ce qui s'est passé : La vanne V_201 reste fermée.
+@cible "champ:help.report.quoi"
+@verifier champ(help.report.quoi) ~ V_201
+
+== 3 | Les pièces jointes
+: Quatre cases, cochées : la version, le système, le résumé du projet (sans ses données) et le journal. Décoche ce que tu ne veux pas joindre.
+encadrer "champ:help.report.refaire"
+dire "Les cases sont sous les trois questions. L'aperçu dit tout de suite ce que le zip contiendra."
+attendre 1.5s
+
+== 4 | Une capture
+: **Joindre une capture** prend la fenêtre telle qu'elle est, au prochain dessin. Le zip la garde sous le nom capture.png.
+encadrer "bouton:Joindre une capture"
+dire "Montre d'abord l'endroit du problème, puis joins la capture."
+attendre 1.5s
+
+== 5 | Le zip
+: **Préparer le zip** l'écrit dans le dossier signalements de tes données. **Ouvrir le dossier** ou **Copier le chemin** : tu le joins à ton message.
+encadrer "bouton:Préparer le zip"
+attendre 1s
+encadrer "bouton:Copier le chemin"
+dire "Copier le texte met le signalement dans le presse-papiers, sans zip."
+attendre 1.5s

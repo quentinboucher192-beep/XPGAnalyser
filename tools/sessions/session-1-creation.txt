@@ -1,0 +1,445 @@
+# =============================================================================
+#  Session 1 - creer l'IHM d'un projet, construire une vue, la verifier,
+#  la simuler, l'enregistrer. Rejouee dans la VRAIE application :
+#
+#    set APPDATA=%TEMP%\xpg-ihm-demo      (configuration vierge, la meme
+#                                          pour la session 2)
+#    set XPG=chemin\vers\MAST.XPG
+#    set PROJETS=dossier\ou\creer\le\projet
+#    xpg_analyzer --script session-1-creation.txt --captures captures --size 1920x1080
+# =============================================================================
+
+# ---- premier lancement : la cle administrateur (demandee une fois) --------
+attendre 3
+champ 1 "A4-BB-6D-12-9F-03"
+bouton "Définir la clé"
+attendre 3
+theme Dark
+
+# ---- l'export du projet automate, puis son dossier de projet ----------------
+importer "${XPG}"
+attendre-projet
+attendre 10
+survol 960 900
+attendre 3
+capture PNG_001_dialogue_creer_projet.png
+champ 2 "${PROJETS}/Armoire_Gaz"
+bouton "Créer le projet"
+attendre 10
+
+# ---- l'espace de travail : plus de place pour l'editeur de vues -----------
+onglet "Layout"
+attendre 3
+# Lot API 8 : la rangee du bas et les documents ouverts sont caches par defaut (plus de "case" ici).
+attendre 3
+glisser 602 400 330 400
+attendre 5
+
+# ---- l'arbre du projet : le dossier IHM -----------------------------------
+arbre "Derived data types" replier
+arbre "DFB types" replier
+arbre "Program units" replier
+arbre "Ordre d'execution" replier
+arbre "Variables" replier
+arbre "Macros" replier
+arbre "Animation tables" replier
+arbre "IHM/Vues" deplier
+attendre 3
+arbre "IHM/Vues/Vue_Accueil" deplier
+attendre 10
+survol 1200 1000
+attendre 5
+capture PNG_002_arbre_projet_ihm.png
+
+# ---- Configuration ------------------------------------------------------------
+arbre "IHM/Configuration"
+attendre 5
+propriete "Nom" "Armoire_Gaz"
+propriete "Description" "Supervision des armoires de gaz A et B"
+propriete "Auteur" "Q. Boucher"
+attendre 5
+survol 1200 1000
+attendre 5
+capture PNG_003_configuration.png
+
+# ---- une nouvelle vue, par son dialogue ------------------------------------
+arbre "IHM/Vues"
+attendre 5
+outil "Nouvelle vue"
+attendre 5
+champ 1 "Vue_Armoire_A"
+champ 2 "1280"
+champ 3 "800"
+champ 4 "Synoptique de l'armoire de gaz A"
+survol 960 1000
+attendre 5
+capture PNG_004_dialogue_nouvelle_vue.png
+touche Return
+attendre 10
+
+# ---- les calques : "Calque 1" renomme, puis un calque par couche du synoptique
+calque "Calque 1" double
+touche Ctrl+A
+texte "Fond"
+touche Return
+outil "Nouveau calque"
+calque "Calque 1" double
+touche Ctrl+A
+texte "Equipements"
+touche Return
+outil "Nouveau calque"
+calque "Calque 1" double
+touche Ctrl+A
+texte "Instrumentation"
+touche Return
+outil "Nouveau calque"
+calque "Calque 1" double
+touche Ctrl+A
+texte "Alarmes"
+touche Return
+outil "Nouveau calque"
+calque "Calque 1" double
+touche Ctrl+A
+texte "Navigation"
+touche Return
+attendre 3
+
+# ---- le fond : un cadre, un titre --------------------------------------------
+calque "Fond"
+palette "Rectangle"
+vue-clic 40 90
+propriete "Nom" "Cadre_Armoire"
+propriete "Largeur" "700"
+propriete "Hauteur" "620"
+propriete "Rayon des coins" "12"
+propriete "Remplissage" "#26303D"
+propriete "Contour" "#46546B"
+palette "Texte"
+vue-clic 40 24
+propriete "Nom" "Titre"
+propriete "Largeur" "700"
+propriete "Hauteur" "44"
+propriete "Texte" "Armoire A - supervision gaz"
+propriete "Taille du texte" "26"
+attendre 5
+survol 1200 1000
+attendre 5
+capture PNG_005_calques_et_fond.png
+
+# ---- les equipements : bouteille, jauge de niveau, vannes, tuyaux, pompe -----
+calque "Equipements"
+palette "Rectangle"
+vue-clic 100 190
+propriete "Nom" "Bouteille"
+propriete "Largeur" "120"
+propriete "Hauteur" "400"
+propriete "Rayon des coins" "40"
+propriete "Remplissage" "#3B4D63"
+propriete "Contour" "#7F93AD"
+palette "Barre de progression"
+vue-clic 140 240
+propriete "Nom" "Niveau_Bouteille"
+propriete "Largeur" "40"
+propriete "Hauteur" "300"
+propriete-clic "Orientation"
+touche Down
+touche Return
+propriete "Valeur (expression)" "Armoires[0].seuil_poids_saisi"
+palette "Ligne"
+vue-clic 220 370
+propriete "Nom" "Tuyau_Entree"
+propriete "Largeur" "110"
+propriete "Épaisseur du contour" "6"
+palette "Polygone"
+vue-clic 330 340
+propriete "Nom" "Vanne_Entree"
+propriete "Largeur" "60"
+propriete "Hauteur" "60"
+outil "Tourner de +90"
+palette "Ligne"
+vue-clic 390 370
+propriete "Nom" "Tuyau_Pompe"
+propriete "Largeur" "90"
+propriete "Épaisseur du contour" "6"
+palette "Polygone"
+vue-clic 480 340
+propriete "Nom" "Vanne_Sortie"
+propriete "Largeur" "60"
+propriete "Hauteur" "60"
+outil "Tourner de +90"
+outil "Miroir horizontal"
+palette "Ellipse"
+vue-clic 570 315
+propriete "Nom" "Pompe_Vide"
+propriete "Largeur" "110"
+propriete "Hauteur" "110"
+propriete "Remplissage" "#2F6FD6"
+propriete "Couleur dynamique (expression)" "SEL(Armoires[0].active, '#4A5261', '#2ECC71')"
+objet "Vanne_Sortie"
+attendre 5
+survol 1200 1000
+attendre 5
+capture PNG_006_equipements_rotation_miroir.png
+
+# ---- un groupe : la bouteille et son niveau -----------------------------------
+objet "Bouteille"
+objet "Niveau_Bouteille" ctrl
+outil "Grouper"
+propriete "Nom" "Groupe_Bouteille"
+attendre 5
+survol 1200 1000
+attendre 5
+capture PNG_007_groupe_explorateur.png
+
+# ---- instrumentation : pression, compteur, voyants (expressions) ------------
+calque "Instrumentation"
+palette "Jauge" etoile
+palette "Jauge"
+vue-clic 820 100
+propriete "Nom" "Pression_PT1"
+propriete "Largeur" "220"
+propriete "Hauteur" "220"
+propriete "Unité" "bar"
+propriete "Maximum" "10"
+propriete "Valeur (expression)" "Armoires[0].ana.PT1.mes"
+palette "Texte"
+vue-clic 820 340
+propriete "Nom" "Texte_Cycles"
+propriete "Largeur" "420"
+propriete "Texte" "Cycles de pompage : {Armoires[0].compteur_cycle_pompage}"
+propriete "Visibilité (expression)" "Armoires[0].etat = 5 AND AUTOMATE_EN_RUN"
+palette "Voyant"
+vue-clic 820 400
+propriete "Nom" "Voyant_Active"
+propriete "Valeur (expression)" "Armoires[0].active"
+palette "Texte"
+vue-clic 870 400
+propriete "Nom" "Libelle_Active"
+propriete "Largeur" "360"
+propriete "Texte" "Armoire active"
+palette "Voyant"
+vue-clic 820 450
+propriete "Nom" "Voyant_Config"
+propriete "Valeur (expression)" "ConfigsGaz[(i + 15 + j * 2) MOD 20].Utilise"
+palette "Texte"
+vue-clic 870 450
+propriete "Nom" "Libelle_Config"
+propriete "Largeur" "380"
+propriete "Texte" "Config. gaz n° {(i + 15 + j * 2) MOD 20} utilisée"
+palette "Texte"
+vue-clic 820 560
+propriete "Nom" "Texte_Debit"
+propriete "Largeur" "380"
+propriete "Texte" "Débit entrée : {Debit_Entree:0.0} m3/h"
+
+# ---- alarmes -------------------------------------------------------------------
+calque "Alarmes"
+palette "Voyant"
+vue-clic 820 500
+propriete "Nom" "Alarme_Bouteille_Vide"
+propriete "Couleur allumé" "#E74C3C"
+propriete "Valeur (expression)" "Armoires[0].bouteille_vide"
+propriete "Clignotement (expression)" "Armoires[0].bouteille_vide"
+palette "Texte"
+vue-clic 870 500
+propriete "Nom" "Libelle_Alarme"
+propriete "Largeur" "300"
+propriete "Texte" "Bouteille vide"
+palette "Image"
+vue-clic 1090 610
+propriete "Nom" "Logo_Site"
+propriete "Largeur" "150"
+propriete "Hauteur" "100"
+# (l'image elle-meme : importee et choisie par la session 3, lot 2)
+
+# ---- navigation : trois boutons, alignes puis distribues ----------------------
+calque "Navigation"
+palette "Bouton"
+vue-clic 40 730
+propriete "Nom" "Btn_Accueil"
+propriete "Texte" "Accueil"
+palette "Bouton"
+vue-clic 330 745
+propriete "Nom" "Btn_Armoire_B"
+propriete "Texte" "Armoire B"
+palette "Bouton"
+vue-clic 600 736
+propriete "Nom" "Btn_Alarmes"
+propriete "Texte" "Alarmes"
+objet "Btn_Accueil"
+objet "Btn_Armoire_B" ctrl
+objet "Btn_Alarmes" ctrl
+attendre 3
+survol 1200 1000
+attendre 5
+capture PNG_008_selection_multiple_avant.png
+outil "Aligner en haut"
+outil "Distribuer horizontalement"
+attendre 3
+survol 1200 1000
+attendre 5
+capture PNG_009_alignes_distribues.png
+
+# ---- le panneau des proprietes : une jauge pilotee par une expression ------
+objet "Pression_PT1"
+attendre 3
+propriete-clic "Valeur (expression)"
+touche Escape
+attendre 3
+survol 1200 1000
+attendre 5
+capture PNG_010_proprietes_expression.png
+
+# ---- une saisie refusee : une expression ne peut pas ecrire dans l'automate -
+propriete "Visibilité (expression)" "Armoires[0].active := TRUE"
+attendre 3
+survol 1200 1000
+attendre 3
+capture PNG_011_erreur_expression_refusee.png
+
+# ---- calques : masquer les alarmes, verrouiller le fond ----------------------
+calque "Alarmes" oeil
+calque "Fond" verrou
+attendre 3
+survol 1200 1000
+attendre 5
+capture PNG_012_calques_masque_verrou.png
+calque "Alarmes" oeil
+attendre 3
+
+# ---- Generer : le rapport, puis aller a la source ----------------------------
+arbre "IHM/Générer"
+attendre 10
+survol 1200 1000
+attendre 5
+capture PNG_013_generer_rapport.png
+ligne "Debit_Entree" double
+attendre 10
+survol 1200 1000
+attendre 5
+capture PNG_014_generer_aller_a_la_source.png
+
+# ---- Compiler : une expression mal ecrite, trouvee, puis corrigee ---------------
+objet "Libelle_Alarme"
+propriete "Visibilité (expression)" "Armoires[0].etat = = 5"
+arbre "IHM/Compiler"
+attendre 10
+survol 1200 1000
+attendre 5
+capture PNG_015_compiler_rapport.png
+ligne "Libelle_Alarme" double
+attendre 5
+propriete "Visibilité (expression)" "Armoires[0].etat <> 0"
+attendre 3
+
+# ---- annuler / retablir : la meme pile que le reste du projet ---------------
+onglet "Vue_Armoire_A"
+attendre 3
+objet "Groupe_Bouteille"
+touche Delete
+attendre 3
+survol 1200 1000
+attendre 5
+capture PNG_016_suppression_groupe.png
+outil "Annuler"
+attendre 3
+survol 1200 1000
+attendre 5
+capture PNG_017_annuler_restaure.png
+
+# ---- Vues : la vue de demarrage, la suppression (confirmee) -----------------
+arbre "IHM/Vues"
+attendre 5
+ligne "Vue_Armoire_A"
+outil "En faire la vue de démarrage"
+attendre 3
+ligne "Vue_Accueil"
+outil "Supprimer la vue"
+attendre 5
+survol 960 1000
+attendre 5
+capture PNG_018_confirmer_suppression_vue.png
+bouton "Annuler"
+attendre 3
+
+# ---- un peu de place dans les onglets ------------------------------------------
+fermer-onglet "IHM · Configuration"
+fermer-onglet "IHM · Générer"
+fermer-onglet "IHM · Compiler"
+attendre 3
+
+# ---- Simulation : branchee sur le simulateur existant ------------------------
+arbre "IHM/Simulation"
+attendre 10
+bouton "Marche"
+attendre 10
+survol 1200 1000
+attendre 5
+capture PNG_019_simulation_sans_forcage.png
+bouton "Forcer..."
+attendre 3
+champ 1 "Armoires[0].ana.PT1.mes"
+champ 2 "7.5"
+survol 960 1000
+attendre 5
+capture PNG_020_dialogue_forcer.png
+touche Return
+attendre 3
+bouton "Forcer..."
+champ 1 "Armoires[0].active"
+champ 2 "TRUE"
+touche Return
+attendre 3
+bouton "Forcer..."
+champ 1 "Armoires[0].compteur_cycle_pompage"
+champ 2 "12"
+touche Return
+attendre 3
+bouton "Forcer..."
+champ 1 "Armoires[0].etat"
+champ 2 "5"
+touche Return
+attendre 3
+bouton "Forcer..."
+champ 1 "AUTOMATE_EN_RUN"
+champ 2 "TRUE"
+touche Return
+attendre 3
+bouton "Forcer..."
+champ 1 "i"
+champ 2 "1"
+touche Return
+attendre 3
+bouton "Forcer..."
+champ 1 "j"
+champ 2 "1"
+touche Return
+attendre 3
+bouton "Forcer..."
+champ 1 "ConfigsGaz[18].Utilise"
+champ 2 "TRUE"
+touche Return
+attendre 3
+bouton "Forcer..."
+champ 1 "Armoires[0].seuil_poids_saisi"
+champ 2 "65"
+touche Return
+attendre 3
+bouton "Forcer..."
+champ 1 "Armoires[0].bouteille_vide"
+champ 2 "TRUE"
+touche Return
+attendre 20
+survol 1200 1000
+attendre 5
+capture PNG_021_simulation_en_marche.png
+
+# ---- enregistrer -----------------------------------------------------------------
+action project.save
+attendre 5
+survol 960 1000
+attendre 5
+capture PNG_022_projet_enregistre.png
+bouton "Close"
+attendre 3
+quitter

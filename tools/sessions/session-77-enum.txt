@@ -1,0 +1,78 @@
+# =============================================================================
+#  Session 77 - 1.10 : le type enumeration IHM (chantier U, decision 15,
+#  maquette scene 14). Captures PNG_1070 a PNG_1078, dans une COPIE de
+#  Armoire_Gaz.
+#   - Types IHM : Nouveau type v > Enumeration... ; la fenetre << Nouvelle
+#     enumeration >> (nom, premieres valeurs, apercu ST | C | C++) ;
+#   - T_VANNE : la grille des valeurs, la declaration, toString / fromString ;
+#   - une valeur en double : la ligne en rouge, sa raison dessous ;
+#   - coller depuis Excel : l'apercu (ajoutees, remplacees, refusees) ;
+#   - renommer une valeur employee : Renommer partout / La valeur seulement ;
+#   - une variable IHM de type T_VANNE2 : << Bloquee (5) >>, la liste des valeurs.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- Nouveau type v : Structure / Enumeration ------------------------------------------
+arbre "IHM/Programmation générale/Types IHM"
+attendre 5
+outil "Nouveau type ▾"
+attendre 3
+capture PNG_1070_enum_nouveau_type.png
+choisir "Énumération…"
+attendre 3
+bouton "C++"
+attendre 2
+capture PNG_1071_enum_creation.png
+
+# ---- Creer : T_VANNE, ses valeurs, sa declaration, ses deux conversions --------------
+bouton "Créer l'énumération"
+attendre 4
+capture PNG_1072_enum_valeurs.png
+
+# ---- une valeur en double : la ligne en rouge, la raison dessous ---------------------
+cellule "Ouverte" "Valeur" "9"
+attendre 3
+capture PNG_1073_enum_controles.png
+touche ctrl+z
+attendre 3
+
+# ---- Coller depuis Excel : l'apercu -----------------------------------------------------
+presse-papiers "Nom\tValeur\tTexte affiché\tDescription\nFermee\t0\tFermée (fin de course)\tContact de fin de course\nBloquee\t5\tBloquée\tCouple trop fort\nSecours\t6\tSecours\tCommande de secours\n3Voies\t7\tTrois voies\tVanne trois voies\nVeille\t9\tEn veille\tValeur en double\n"
+outil "Coller depuis Excel"
+attendre 3
+capture PNG_1074_enum_coller.png
+bouton "Appliquer"
+attendre 3
+capture PNG_1076_enum_apres_collage.png
+
+# ---- renommer une valeur employee (toString, fromString) --------------------------------
+cellule "Ouverte" "Nom" "Ouverte_FC"
+attendre 3
+capture PNG_1075_enum_renommer.png
+bouton "Renommer partout"
+attendre 3
+capture PNG_1077_enum_renomme_partout.png
+attendre 2
+
+# ---- une variable IHM de type T_VANNE2 : << Fermee (0) >>, la valeur initiale par la liste ----
+arbre "IHM/Programmation générale/Variables IHM"
+attendre 4
+outil "Nouvelle variable IHM"
+attendre 2
+touche echap
+attendre 2
+cellule "Variable" "Type" "T_VANNE2"
+attendre 3
+cellule "Variable" "Initiale" "Bloquee (5)"
+attendre 3
+cellule "Variable" "Initiale"
+attendre 2
+capture PNG_1078_enum_variable.png
+touche echap
+attendre 2
+quitter

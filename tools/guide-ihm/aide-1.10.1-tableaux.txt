@@ -1,0 +1,15 @@
+# =============================================================================
+#  Aide F1 de la 1.10.1 - chantier B1 (C1) : en Simulation · IHM, la vue suit les
+#  scripts en direct, même après un passage sur un autre onglet.
+#
+#  Même syntaxe que guide-ihm.txt (voir son en-tête). Dans le sujet
+#  « L'API et l'IHM : deux simulations indépendantes » (== simulation-api-ihm),
+#  section « ### Ouvrir l'onglet » : ajouter le paragraphe ci-dessous après le
+#  premier paragraphe de la section. Ajouter aussi les mots de @mots ci-dessous
+#  à ceux du sujet. Le chef de projet les reporte dans guide-ihm.txt.
+# =============================================================================
+
+@mots onglet caché, autre onglet, vue figée, en direct
+
+L'IHM en marche **avance aussi quand tu regardes un autre onglet** : ses scripts (cycliques, sur changement), ses timers et ses alarmes continuent. Revenu à l'onglet Simulation · IHM, la vue reprend **en direct** là où l'IHM en est : une vanne qu'un script ouvre de 1 % à chaque cycle (`V[0].Pos := V[0].Pos + 1;`) continue d'avancer sous tes yeux, sans changer de vue.
+> En 1.10.0, après un passage sur un autre onglet, l'IHM revenue à l'écran ne faisait plus un cycle : la vue restait sur la valeur du retour, et n'avançait qu'en repartant sur un autre onglet. C'est corrigé en 1.10.1.

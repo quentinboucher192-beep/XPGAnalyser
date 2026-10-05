@@ -1,0 +1,204 @@
+# Derived function block, shared.
+name = DFB_EQ_CTRLVALVE
+version = 1.00
+#! summary = Seize vannes de regulation en un appel : limite de vitesse, recopie surveillee, repli.
+#! usage = UNE INSTANCE TRAITE SEIZE EQUIPEMENTS, comme les autres familles. Appeler
+#! usage = une fois par cycle, apres le PID qui donne PosReq et les voies qui donnent
+#! usage = PosFbk, et avant les voies de sortie qui recopient Pos.
+#! usage = EN SERVICE (State 3) VEUT DIRE OUVERTE : RunS compte le temps passe
+#! usage = ouverte, Starts le nombre d'ouvertures. C'est ce qui use un clapet et un
+#! usage = presse-etoupe.
+#! example = (* declarer : Vr : ARRAY[0..15] OF ST_EQ_CtrlValve; *)
+#! example = Vr[0].PosReq := 35.0;
+#! example = VR_Station(Count := 1, CycleMs := 20, Eq := Vr);
+#! see = ST_EQ_CtrlValve
+#! see = DFB_CTL_PID
+#! param Count = Combien d'equipements du tableau sont traites. Borne a 16. En mettre
+#! param Count = moins ne fait pas gagner de memoire, seulement du temps de cycle.
+#! param CycleMs = La periode de la tache, en ms : DtMs de DFB_SYS_CLOCK, qui suit le
+#! param CycleMs = temps reel. Un DDT ne peut pas contenir de temporisateur, donc tout
+#! param CycleMs = le temps s'accumule depuis la.
+#! param Eq = Le tableau des equipements, en InOut. Sa taille est figee a 16 : un
+#! param Eq = InOut ne peut pas etre dimensionne a l'appel.
+#! param FaultCount = Combien sont en defaut, recalcule a chaque cycle.
+#! param ReadyCount = Combien sont utilisables. FaultCount + ReadyCount n'est pas
+#! param ReadyCount = forcement egal a Count : un equipement desactive n'est ni l'un
+#! param ReadyCount = ni l'autre.
+#! changes 1.00 = NOUVEAU.
+#! given = Vr[0].PosFbk := 35.0
+#! expect = 1 : Vr[0].Pos = 35.0
+#! expect = 1 : Vr[0].RawOut = 3500
+#! expect = 1 : Vr[0].State = 3
+#! expect = 1 : VR_Station.ReadyCount = 1
+
+# Seize vannes de regulation.
+
+# name ; type ; scope ; initial ; comment
+Count ; INT ; Input ; 16 ; combien d'equipements sont traites
+CycleMs ; DINT ; Input ; 20 ; la periode de la tache en ms : DtMs de DFB_SYS_CLOCK
+Eq ; ARRAY[0..15] OF ST_EQ_CtrlValve ; InOut ;  ; les equipements
+FaultCount ; INT ; Output ; 0 ; combien sont en defaut
+ReadyCount ; INT ; Output ; 0 ; combien sont utilisables
+i ; INT ; Local ; 0 ; 
+n ; INT ; Local ; 0 ; 
+LAST ; INT ; Local ; 15 ; dernier indice
+st ; INT ; Local ; 0 ; l'etat de l'equipement, avant publication
+MAXMS ; DINT ; Local ; 2000000000 ; plafond des compteurs de temps : 23 jours, sous la limite d'un DINT
+target ; REAL ; Local ; 0.0 ; 
+step ; REAL ; Local ; 0.0 ; 
+pos ; REAL ; Local ; 0.0 ; la position connue : la recopie, ou la commande
+open ; BOOL ; Local ;  ; 
+
+<<<section Process ST>>>
+n := Count;
+IF n > LAST + 1 THEN n := LAST + 1; END_IF;
+IF n < 0 THEN n := 0; END_IF;
+
+FaultCount := 0;
+ReadyCount := 0;
+
+FOR i := 0 TO n - 1 DO
+
+(* Ce qui est vrai de toute famille, ecrit une fois: l'acquittement sur front,
+   la memorisation du defaut, le temps dans l'etat. Un acquittement redonne
+   tout son delai a une nouvelle tentative. *)
+IF Eq[i].AckFault AND NOT Eq[i].PrevAck THEN
+    Eq[i].FaultLatch := FALSE;
+    Eq[i].FaultCode := 0;
+    Eq[i].DevElapsed := 0;
+END_IF;
+Eq[i].PrevAck := Eq[i].AckFault;
+
+IF NOT Eq[i].Enable THEN
+    (* Desactive: aucune sortie, aucun defaut. Un equipement consigne ne doit
+       pas remplir le journal d'alarmes pendant qu'on travaille dessus. *)
+    Eq[i].Fault := FALSE;
+    Eq[i].FaultCode := 0;
+    Eq[i].FaultLatch := FALSE;
+END_IF;
+
+target := Eq[i].PosReq;
+IF Eq[i].ManMode THEN
+    target := Eq[i].ManPosReq;
+END_IF;
+IF target < 0.0 THEN target := 0.0; END_IF;
+IF target > 100.0 THEN target := 100.0; END_IF;
+
+(* La recopie hors plage : un capteur debranche lit -25 %, un fil coupe
+   au-dela de 100. Ce n'est pas une position. *)
+IF Eq[i].Enable AND Eq[i].HasFbk AND (Eq[i].PosFbk < -5.0 OR Eq[i].PosFbk > 105.0) THEN
+    Eq[i].FaultCode := 2;
+    Eq[i].FaultLatch := TRUE;
+END_IF;
+
+(* LE REPLI : desactivee ou en defaut, la vanne va a FailPos, tout de suite -
+   sans limite de vitesse. Une position de securite qu'on rejoint en dix
+   secondes n'en est pas une. *)
+IF NOT Eq[i].Enable OR Eq[i].FaultLatch THEN
+    Eq[i].Pos := Eq[i].FailPos;
+ELSIF Eq[i].RateMax > 0.0 AND CycleMs > 0 THEN
+    step := Eq[i].RateMax * DINT_TO_REAL(CycleMs) / 1000.0;
+    IF Eq[i].Pos < target - step THEN
+        Eq[i].Pos := Eq[i].Pos + step;
+    ELSIF Eq[i].Pos > target + step THEN
+        Eq[i].Pos := Eq[i].Pos - step;
+    ELSE
+        Eq[i].Pos := target;
+    END_IF;
+ELSE
+    Eq[i].Pos := target;
+END_IF;
+
+(* L'ecart. Surveille seulement quand la vanne est commandee : a l'arret,
+   desactivee, elle peut etre n'importe ou sans que ce soit un defaut. *)
+IF Eq[i].HasFbk THEN
+    Eq[i].Deviation := Eq[i].Pos - Eq[i].PosFbk;
+ELSE
+    Eq[i].Deviation := 0.0;
+END_IF;
+IF Eq[i].Enable AND Eq[i].HasFbk AND NOT Eq[i].FaultLatch
+   AND ABS(Eq[i].Deviation) > Eq[i].MaxDeviation THEN
+    IF Eq[i].DevElapsed < MAXMS - CycleMs THEN
+        Eq[i].DevElapsed := Eq[i].DevElapsed + CycleMs;
+    ELSE
+        Eq[i].DevElapsed := MAXMS;
+    END_IF;
+    IF Eq[i].DevElapsed > Eq[i].DevDelayMs THEN
+        Eq[i].FaultCode := 1;
+        Eq[i].FaultLatch := TRUE;
+    END_IF;
+ELSE
+    Eq[i].DevElapsed := 0;
+END_IF;
+
+(* Un defaut vu APRES le calcul de la commande la ramene au repli dans le
+   meme cycle. *)
+IF Eq[i].FaultLatch THEN
+    Eq[i].Pos := Eq[i].FailPos;
+END_IF;
+
+IF Eq[i].HasFbk THEN
+    pos := Eq[i].PosFbk;
+ELSE
+    pos := Eq[i].Pos;
+END_IF;
+Eq[i].Closed := pos < Eq[i].ClosedLimit;
+Eq[i].Opened := pos >= 100.0 - Eq[i].ClosedLimit;
+Eq[i].Moving := Eq[i].HasFbk AND ABS(Eq[i].Deviation) > Eq[i].ClosedLimit;
+open := Eq[i].Enable AND NOT Eq[i].Closed;
+
+Eq[i].RawOut := Eq[i].RawMin
+              + REAL_TO_INT(Eq[i].Pos * INT_TO_REAL(Eq[i].RawMax - Eq[i].RawMin) / 100.0);
+
+(* Le temps de service et les mises en service. RunMs plafonne a 555 heures ;
+   RunS compte les secondes et ne deborde pas avant 136 ans. *)
+IF open AND NOT Eq[i].PrevRunning THEN
+    Eq[i].Starts := Eq[i].Starts + 1;
+END_IF;
+IF open THEN
+    IF Eq[i].RunMs < MAXMS - CycleMs THEN
+        Eq[i].RunMs := Eq[i].RunMs + CycleMs;
+    ELSE
+        Eq[i].RunMs := MAXMS;
+    END_IF;
+    Eq[i].RunFracMs := Eq[i].RunFracMs + CycleMs;
+    IF Eq[i].RunFracMs >= 1000 THEN
+        Eq[i].RunS := Eq[i].RunS + DINT_TO_UDINT(Eq[i].RunFracMs / 1000);
+        Eq[i].RunFracMs := Eq[i].RunFracMs MOD 1000;
+    END_IF;
+END_IF;
+Eq[i].PrevRunning := open;
+
+Eq[i].Fault := Eq[i].FaultLatch AND Eq[i].Enable;
+Eq[i].Ready := Eq[i].Enable AND NOT Eq[i].Fault;
+
+(* L'etat publie, et le temps passe dedans : 0 desactive, 1 en defaut,
+   2 au repos, 3 en service. *)
+IF NOT Eq[i].Enable THEN
+    st := 0;
+ELSIF Eq[i].Fault THEN
+    st := 1;
+ELSIF open THEN
+    st := 3;
+ELSE
+    st := 2;
+END_IF;
+IF st <> Eq[i].PrevState THEN
+    Eq[i].StateMs := 0;
+    Eq[i].PrevState := st;
+ELSIF Eq[i].StateMs < MAXMS - CycleMs THEN
+    Eq[i].StateMs := Eq[i].StateMs + CycleMs;
+ELSE
+    Eq[i].StateMs := MAXMS;
+END_IF;
+Eq[i].State := st;
+
+IF Eq[i].Fault THEN
+    FaultCount := FaultCount + 1;
+END_IF;
+IF Eq[i].Ready THEN
+    ReadyCount := ReadyCount + 1;
+END_IF;
+
+END_FOR;
+<<<end>>>

@@ -1,0 +1,56 @@
+# =============================================================================
+#  Session 58c - LOT API 8 : l'explorateur de fichiers de l'application (le
+#  bouton ... d'un export) : les details, le filtre, les vignettes ; enregistrer
+#  sur un fichier qui existe (la question avant de remplacer).
+#  Dans le projet des sessions precedentes, rejouee dans la VRAIE application.
+#  Captures PNG_788 a PNG_791.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- Q. Exporter CSV, le bouton ... : l'explorateur de l'application ------------------------
+arbre "API/Variables"
+attendre 5
+outil "Exporter CSV"
+attendre 3
+explorateur-montrer
+parcourir
+attendre 4
+explorateur-vue details
+attendre 2
+explorateur-lignes
+explorateur-selectionner "variables.csv"
+attendre 3
+survol 1700 1070
+attendre 2
+capture PNG_788_explorateur_details.png
+# Le filtre : tous les fichiers ; les vignettes (le dossier des echantillons : des images).
+explorateur-aller "${ECHANTILLONS}"
+attendre 3
+explorateur-filtre "Tous"
+attendre 2
+capture PNG_789_explorateur_filtre_tous.png
+explorateur-vue vignettes
+attendre 4
+explorateur-selectionner "photo_armoire.jpg"
+attendre 6
+capture PNG_790_explorateur_vignettes.png
+# Enregistrer sur un fichier qui existe : la question.
+explorateur-vue details
+explorateur-aller "${PROJETS}/Armoire_Gaz/exports"
+attendre 3
+explorateur-selectionner "variables.csv"
+explorateur-nom "variables.csv"
+attendre 3
+survol 1700 1070
+attendre 2
+capture PNG_791_explorateur_remplacer.png
+explorateur-annuler
+attendre 2
+touche escape
+attendre 2
+quitter

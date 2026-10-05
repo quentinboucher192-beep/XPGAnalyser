@@ -1,0 +1,93 @@
+# Derived function block, shared.
+name = AlmUuid
+version = 1.00
+#! summary = Compose l'identifiant d'une alarme depuis sa provenance. La seule fonction qui connait la disposition des 32 bits.
+#! usage = La disposition des bits :
+#! usage = 31..28  genre   1 TOR, 2 seuil analogique, 3 etape, 4 applicatif
+#! usage = 27..24  rack    0..15
+#! usage = 23..18  module  0..63
+#! usage = 17..12  voie    0..63
+#! usage = 11..8   sous    0..15   le numero du seuil
+#! usage = 7..0   code    0..255  libre
+#! usage = DEUX ENDROITS LA CONNAISSENT, PAS VINGT : cette fonction et
+#! usage = AlmDecode. Un UUID compose a la main dans une section serait un UUID
+#! usage = que plus personne ne peut decoder le jour ou la disposition change.
+#! usage = Les depassements sont ramenes dans leur champ plutot que de deborder
+#! usage = sur le voisin en silence : un rack 17 qui deviendrait un module 1
+#! usage = designerait une autre carte, et rien ne le dirait.
+#! example = (* seuil 0 de la voie 3 de la carte AI rack 0 module 10 *)
+#! example = UUID_Seuil(Genre := 2, Rack := 0, Module := 10,
+#! example = Voie := 3, Sous := 0, Code := 0);
+#! example = AlmCmd.RegUuid := UUID_Seuil.AlmUuid;
+#! see = AlmDecode
+#! see = DFB_ALM_MANAGER
+#! param Genre = 1 voie TOR, 2 seuil analogique, 3 etape GRAFCET, 4 alarme
+#! param Genre = applicative. C'est ce qui permet de trier un journal par
+#! param Genre = origine sans rien connaitre de l'affaire.
+#! param Code = Libre, 0..255. De quoi distinguer deux alarmes qui viennent de
+#! param Code = la meme voie sans toucher aux autres champs.
+#! usage = UN DFB S'APPELLE PAR UNE INSTANCE. Control Expert ne connait pas de
+#! usage = fonction utilisateur : on declare UUID_Seuil : AlmUuid, on l'appelle, et on
+#! usage = lit UUID_Seuil.AlmUuid. Les macros, elles, ecrivent directement le nombre
+#! usage = compose, avec ses parties en commentaire.
+#! param Rack = Le rack, 0..15. Ramene dans le champ : 17 donne 15, pas un module de
+#! param Rack = plus.
+#! param Module = L'emplacement du module dans le rack, 0..63.
+#! param Voie = La voie du module, 0..63.
+#! param Sous = Le sous-numero, 0..15 : le numero du seuil pour une alarme analogique,
+#! param Sous = 0 sinon.
+#! param AlmUuid = L'identifiant compose, a poser dans Cmd.RegUuid. Il se relit avec
+#! param AlmUuid = AlmDecode.
+#! expect = 1 : AlmCmd.RegUuid = 539504640
+
+# Compose l'identifiant. La seule fonction qui connait la disposition des bits.
+
+# name ; type ; scope ; initial ; comment
+Genre ; INT ; Input ; 1 ; 1 TOR, 2 seuil analogique, 3 etape GRAFCET, 4 applicatif
+Rack ; INT ; Input ; 0 ; 0..15
+Module ; INT ; Input ; 0 ; 0..63
+Voie ; INT ; Input ; 0 ; 0..63
+Sous ; INT ; Input ; 0 ; 0..15, le numero du seuil
+Code ; INT ; Input ; 0 ; 0..255, libre
+AlmUuid ; UDINT ; Output ; 0 ; l'identifiant compose
+g ; INT ; Local ; 0 ; 
+r ; INT ; Local ; 0 ; 
+m ; INT ; Local ; 0 ; 
+v ; INT ; Local ; 0 ; 
+s ; INT ; Local ; 0 ; 
+c ; INT ; Local ; 0 ; 
+
+<<<section Process ST>>>
+(* =====================================================================
+    AlmUuid - composer l'identifiant.
+
+    C'est la seule fonction qui connait la disposition des 32 bits, et
+    AlmDecode est la seule qui la relit. Deux endroits, pas vingt: un UUID
+    compose a la main dans une section serait un UUID que personne ne peut
+    plus decoder le jour ou la disposition change.
+
+        bits 31..28  genre   1 TOR, 2 seuil analogique, 3 etape, 4 applicatif
+        bits 27..24  rack    0..15
+        bits 23..18  module  0..63
+        bits 17..12  voie    0..63
+        bits 11..8   sous    0..15
+        bits  7..0   code    0..255
+   ===================================================================== *)
+
+(* Les depassements sont ramenes dans leur champ plutot que de deborder sur le
+   voisin en silence. Un rack 17 qui devient un module 1 est un UUID qui
+   designe une autre carte. *)
+g := Genre;  IF g < 0 THEN g := 0; END_IF;  IF g > 15  THEN g := 15;  END_IF;
+r := Rack;   IF r < 0 THEN r := 0; END_IF;  IF r > 15  THEN r := 15;  END_IF;
+m := Module; IF m < 0 THEN m := 0; END_IF;  IF m > 63  THEN m := 63;  END_IF;
+v := Voie;   IF v < 0 THEN v := 0; END_IF;  IF v > 63  THEN v := 63;  END_IF;
+s := Sous;   IF s < 0 THEN s := 0; END_IF;  IF s > 15  THEN s := 15;  END_IF;
+c := Code;   IF c < 0 THEN c := 0; END_IF;  IF c > 255 THEN c := 255; END_IF;
+
+AlmUuid := INT_TO_UDINT(g) * 268435456
+         + INT_TO_UDINT(r) * 16777216
+         + INT_TO_UDINT(m) * 262144
+         + INT_TO_UDINT(v) * 4096
+         + INT_TO_UDINT(s) * 256
+         + INT_TO_UDINT(c);
+<<<end>>>

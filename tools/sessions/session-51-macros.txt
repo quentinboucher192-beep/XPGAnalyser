@@ -1,0 +1,139 @@
+# =============================================================================
+#  Session 51 - LOT MACROS 1 : l'onglet Macros (les dossiers, la fiche), le
+#  formulaire (le bouton ..., Ctrl+V d'un fichier copie, le fichier glisse sur
+#  le champ, l'apercu, Appliquer et Ctrl+Z), ranger (nouvelle macro depuis un
+#  modele, nouveau dossier, glisser, renommer, la corbeille et Restaurer), et
+#  les quatre onglets de l'aide (Aide, Macros, Blocs DFB / DDT, IHM).
+#  Le classeur : ${ECHANTILLONS}/affaire.xlsm (tests/fixtures/macros).
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+arbre "IHM" replier
+attendre 3
+
+# ---- A. L'onglet Macros : les dossiers, la fiche ---------------------------------------------
+bouton "Macros"
+attendre 10
+capture PNG_550_macros_onglet.png
+macros-arbre "Importer depuis le classeur/ImporterClasseur"
+attendre 6
+capture PNG_551_macros_fiche.png
+
+# ---- B. Le formulaire : le classeur par ..., Ctrl+V, glisse ; l'apercu ; Appliquer -----------
+macros-arbre "Importer depuis le classeur/ImporterClasseur" double
+attendre 10
+attendre-macro
+attendre 3
+capture PNG_552_formulaire_sans_classeur.png
+explorateur "${ECHANTILLONS}/affaire.xlsm"
+macro-parcourir "classeur"
+attendre 5
+attendre-macro
+attendre 8
+capture PNG_553_formulaire_bouton_parcourir.png
+macro-champ "classeur" ""
+attendre 5
+attendre-macro
+presse-papiers-fichiers "${ECHANTILLONS}/affaire.xlsm"
+macro-coller "classeur"
+attendre 5
+attendre-macro
+attendre 8
+capture PNG_554_formulaire_ctrl_v.png
+presse-papiers-fichiers
+macro-champ "sevEq" "4"
+attendre 5
+attendre-macro
+macro-voir "sevEq"
+attendre 5
+capture PNG_555_formulaire_reponses.png
+macro-etape apercu
+attendre 10
+attendre-macro
+attendre 5
+capture PNG_556_apercu.png
+macro-etape appliquer
+attendre 15
+capture PNG_557_applique.png
+touche ctrl+z
+attendre 10
+capture PNG_558_ctrl_z.png
+macro-etape fermer
+attendre 5
+
+# ---- C. Ranger : un modele, un dossier, glisser, renommer, la corbeille ---------------------
+macros-arbre "Créer"
+attendre 5
+outil "Nouvelle macro"
+attendre 8
+champ 1 "ImporterPompes"
+liste 1
+attendre 3
+choisir "Lire un onglet du classeur : une ligne par élément, créer ce qui manque."
+attendre 3
+capture PNG_559_nouvelle_macro_modele.png
+bouton "Créer"
+attendre 15
+capture PNG_560_nouvelle_macro_code.png
+# Lot API 6 : la nouvelle macro s'ouvre en mode Modifier, dans l'onglet Macros ; Utiliser revient a la liste.
+macros-mode utiliser
+attendre 8
+outil "Nouveau dossier"
+attendre 8
+champ 1 "Mes imports"
+attendre 2
+capture PNG_561_nouveau_dossier.png
+bouton "Créer"
+attendre 10
+macros-glisser "Créer/ImporterPompes" "Mes imports"
+attendre 8
+macros-arbre "Mes imports/ImporterPompes"
+attendre 5
+capture PNG_562_glisse_dans_un_dossier.png
+touche F2
+attendre 5
+champ 1 "ImporterPompesEtVannes"
+attendre 2
+capture PNG_563_renommer.png
+bouton "Renommer"
+attendre 10
+macros-arbre "Mes imports/ImporterPompesEtVannes"
+attendre 3
+touche suppr
+attendre 5
+bouton "Supprimer"
+attendre 10
+macros-arbre "Corbeille/ImporterPompesEtVannes"
+attendre 5
+capture PNG_564_corbeille.png
+outil "Restaurer"
+attendre 10
+capture PNG_565_restauree.png
+
+# ---- D. Les quatre onglets de l'aide --------------------------------------------------------
+macros-arbre "Importer depuis le classeur/ImporterClasseur"
+attendre 5
+touche F1
+attendre 12
+capture PNG_566_aide_macros.png
+aide-lien "cat:Importer depuis le classeur"
+attendre 8
+capture PNG_567_aide_dossier_de_macros.png
+bouton "Blocs DFB / DDT"
+attendre 12
+aide-page "DFB_EQ_PUMP"
+attendre 8
+capture PNG_568_aide_blocs.png
+bouton "Aide"
+attendre 10
+capture PNG_569_aide_generale.png
+bouton "IHM"
+attendre 10
+capture PNG_570_aide_ihm.png
+bouton "Fermer"
+attendre 8
+quitter

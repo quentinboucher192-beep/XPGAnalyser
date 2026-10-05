@@ -1,0 +1,75 @@
+(* AppelerSR
+
+   Ecrit dans une section l'appel d'une sous-routine, precede du remplissage
+   de ses variables d'entree et suivi de la relecture de ses sorties.
+
+   UN APPEL SEUL NE SUFFIT PRESQUE JAMAIS. Une SR n'a pas de parametres : si
+   l'appelant n'ecrit pas ses entrees juste avant, la SR tourne avec ce qu'un
+   autre appelant y a laisse au cycle precedent. C'est le piege de la SR, et
+   c'est pour ca que cette macro ecrit les trois parties ensemble. *)
+
+sr      := Ask('sr', 'Quelle sous-routine ?', '');
+section := Ask('section', 'Dans quelle section ecrire l appel ?', '');
+AskNow();
+
+valeurs := Ask('valeurs', 'Entrees a poser (nom=expression, separees par des virgules)', '');
+AskNow();
+
+IF sr = '' OR section = '' THEN
+    Fail('il faut une sous-routine et une section');
+END_IF;
+IF NOT SectionExists(sr) THEN
+    Fail('la sous-routine ' + sr + ' n existe pas');
+END_IF;
+IF NOT IsSubroutine(sr) THEN
+    Fail(sr + ' est une section, pas une sous-routine : elle tourne deja a chaque '
+         + 'cycle et ne s appelle pas.');
+END_IF;
+IF NOT SectionExists(section) THEN
+    Fail('la section ' + section + ' n existe pas');
+END_IF;
+
+AppendToSection(section, '');
+AppendToSection(section, '(* --- ' + sr + ' --- *)');
+
+depart := 0;
+poses := 0;
+WHILE depart < LEN(valeurs) DO
+    virgule := FIND(valeurs, ',', depart);
+    IF virgule < 0 THEN
+        morceau := MID(valeurs, depart);
+        depart := LEN(valeurs);
+    ELSE
+        morceau := MID(valeurs, depart, virgule - depart);
+        depart := virgule + 1;
+    END_IF;
+
+    egal := FIND(morceau, '=', 0);
+    IF egal < 0 THEN
+        IF LEN(morceau) > 0 THEN
+            Warn('"' + morceau + '" : attendu nom=expression');
+        END_IF;
+    ELSE
+        champ := MID(morceau, 0, egal);
+        expr := MID(morceau, egal + 1);
+        WHILE LEN(champ) > 0 AND MID(champ, 0, 1) = ' ' DO
+            champ := MID(champ, 1);
+        END_WHILE;
+        WHILE LEN(expr) > 0 AND MID(expr, 0, 1) = ' ' DO
+            expr := MID(expr, 1);
+        END_WHILE;
+
+        cible := sr + '_In_' + champ;
+        IF NOT VariableExists(cible) THEN
+            Warn(cible + ' n existe pas : la ligne est ecrite quand meme, mais '
+                 + 'elle ne compilera pas tant que la variable n est pas creee.');
+        END_IF;
+        AppendToSection(section, cible + ' := ' + expr + ';');
+        poses := poses + 1;
+    END_IF;
+END_WHILE;
+
+AppendToSection(section, sr + ';');
+IF poses = 0 THEN
+    Log('appel ecrit sans entree : verifiez que ' + sr + ' n en attend aucune.');
+END_IF;

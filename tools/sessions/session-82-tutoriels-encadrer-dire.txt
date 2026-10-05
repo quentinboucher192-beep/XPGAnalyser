@@ -1,0 +1,18 @@
+# =============================================================================
+#  Session 82 - 1.11 (chantier T1, tranche 2) : les gestes des tutoriels dans
+#  une session - encadrer <cible> (l'encadre orange) et dire "texte" (la bulle
+#  en bas), dessines sur l'image avant sa presentation, donc sur les captures.
+#  Les cibles sont celles des tutoriels (app::UiDriver::locate) : ecran:X,Y,
+#  bouton:Libelle, outil:Infobulle, propriete:Nom, biblio:Vanne, vue:X,Y.
+#  Sans projet : l'accueil. "encadrer" sans cible et dire "" les effacent.
+# =============================================================================
+attendre 30
+encadrer ecran:300,200
+dire "Sous la bibliothèque, les variantes de la vanne."
+attendre 2
+capture s82-encadrer-dire.png
+encadrer
+dire ""
+attendre 2
+capture s82-efface.png
+quitter

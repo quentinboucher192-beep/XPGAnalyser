@@ -1,0 +1,126 @@
+# =============================================================================
+#  1.9 - L'aide F1 des parametres des popups (chantier F).
+#  Meme syntaxe que guide-ihm.txt (= chapitre, == cle | titre, : resume, @mots,
+#  @lieux, @voir, ### intertitre, - puce, | tableau |, ``` code ```).
+#  A inserer dans guide-ihm.txt par le chef de projet : les deux sujets apres
+#  « popups » ; puis les retouches des sujets existants listees en fin de fichier.
+# =============================================================================
+
+== parametres-popups | Les paramètres d'une popup
+: Une popup déclare ses paramètres dans une liste : un nom, un type, un mode (Référence, Copie ou Les deux), une valeur par défaut et une description. Chaque action qui l'ouvre donne un argument par paramètre ; la popup les lit et les écrit par leur nom, dans ses expressions, ses textes, ses actions et ses scripts.
+@mots Paramètres, paramètres, Paramètre, paramètre, Référence, Copie, Les deux, REF, COPIE, LES DEUX, ParamMode, Type du paramètre, Valeur par défaut, Qui ouvre cette popup, Où il est employé, ANY, fx, pastille fx
+@lieux parametres, popup
+@voir popups, appliquer-copie, actions, symboles, scripts, aide-saisie, types-ihm
+### La liste des paramètres
+Dans la fiche de la popup (rien de choisi, onglet Propriétés), la sous-section **Paramètres** montre en haut **Montrer : Paramètres (4) | Infos (3 appels)**, puis une ligne par paramètre, titrée par son nom, son type et sa pastille (`Moteur · T_POMPE · LES DEUX`). Chaque ligne se déplie : **Nom**, **Type**, **Tableau** (les bornes d'un `ARRAY[a..b] OF`), **Mode**, **Valeur par défaut** (ce qu'il vaut quand l'appelant ne le donne pas, et dans l'éditeur), **Description**, **Ordre** (Monter, Descendre, Supprimer).
+- **Ajouter** : tape le nom du nouveau paramètre ; il arrive en fin de liste, en Référence, type ANY.
+- **Renommer** un paramètre le renomme partout (ses emplois dans la popup, Appliquer copie, et le nom de l'argument dans chaque action qui l'ouvre), en une seule commande.
+- Sous la liste, les trois modes sont expliqués en une ligne chacun.
+- Une **valeur par défaut** qui est une expression (un chemin `Armoires[0]`, un calcul `Consigne * 2`) porte la **pastille fx**, comme une propriété pilotée de l'inspecteur ; un littéral (`'Pompe'`, `12.5`, `TRUE`) n'en a pas. La pastille passe au rouge si l'expression ne peut pas marcher (nom inconnu, expression incomplète, type qui ne convient pas) ; l'infobulle dit l'expression et l'erreur.
+- Chaque changement est une commande : **Ctrl+Z** la défait.
+### Les types
+- **Les types de base** : BOOL, INT, UINT, WORD, DINT, UDINT, DWORD, REAL, LREAL, STRING, TIME, et **ANY** (tout est accepté ; c'est le type d'un paramètre d'un projet d'avant la 1.9).
+- **Les types IHM** du projet : tes structures (T_Moteur) et leurs tableaux (voir « Les types IHM »).
+- **Les DDT de l'API** : les types dérivés du programme de l'automate, quand il est chargé.
+- **Un tableau** : `ARRAY[1..4] OF T_Moteur`.
+Le type sert à trois choses : vérifier l'argument donné (Générer le signale s'il ne convient pas), proposer les membres dans l'aide à la saisie (`Moteur.` propose Marche, Vitesse...), et capturer tous les membres d'une copie.
+### La règle des types : elle dépend du mode
+- En **Référence** et en **Les deux**, la popup écrit la variable de l'appelant : la variable donnée doit avoir **exactement** le type du paramètre (ANY accepte tout ; STRING[20] compte pour STRING).
+- En **Copie**, l'original n'est jamais écrit : un type plus petit de la même famille convient aussi (la valeur est élargie à la capture) :
+| Le paramètre (Copie) | accepte aussi |
+| INT | SINT, BYTE |
+| DINT | INT, UINT, WORD, et les plus petits |
+| UINT, UDINT | un entier non signé pas plus large (UINT, WORD...) |
+| WORD, DWORD | un mot ou un entier non signé pas plus large |
+| REAL | un entier de 16 bits au plus (INT, UINT) |
+| LREAL | REAL et tout entier |
+| BOOL, STRING, TIME, un type IHM, un DDT | rien d'autre : seulement lui-même |
+| ARRAY[a..b] OF T | seulement un tableau de mêmes bornes, d'éléments T |
+- Une **valeur** donnée (un littéral `3`, un calcul) n'est jamais réécrite : la règle de la Copie vaut pour elle, dans les trois modes.
+- Un INT n'est jamais un BOOL : écris une comparaison (`Pompes[3].Mode = 2`).
+> Une variable de l'automate dont le type n'est pas connu (programme pas chargé) est acceptée : Générer ne signale que ce qui est sûr.
+### Les trois modes
+| Mode | À l'ouverture | Dans la popup | L'original |
+| Référence (REF) | rien : le nom désigne la variable de l'appelant | lit et écrit la variable en direct | change à chaque écriture |
+| Copie (COPIE) | une capture de la valeur : un scalaire, ou tous les membres d'une structure IHM, d'un DDT, d'un tableau | lit et modifie sa copie (champs, Affecter, scripts) | ne change jamais |
+| Les deux (LES DEUX) | la même capture | lit et modifie sa copie | change seulement par **Appliquer copie sur référence** |
+- Chaque popup ouverte a **sa** copie : deux popups ouvertes sur la même pompe ont chacune la leur.
+- **Fermer la popup oublie la copie** ; la rouvrir refait une capture.
+- Une écriture dans une copie **ne part jamais vers l'automate** ni vers les variables IHM.
+- Un paramètre qui reçoit une valeur (`Nom := 'P3'`) plutôt qu'une variable : en Copie, la popup peut la modifier ; en Référence, il se lit seulement.
+- Un **symbole** a lui aussi une liste typée, mais seulement en mode Référence (son instance est développée en texte) : Générer avertit d'un paramètre de symbole en Copie ou Les deux.
+### Ouvrir la popup avec ses arguments
+L'action **Ouvrir une popup** (et Changer de popup) montre, sous Opération, Vue et Position, le cadre **Paramètres de Popup_Pompe** avec son compteur (« 3 · 1 par défaut · 1 à revoir ») : une ligne par paramètre, avec son nom, son type, sa pastille de mode et le champ de son argument. Dans ce champ, l'aide à la saisie propose d'abord les variables et les membres du bon type pour ce mode (`Pompes[3].` sur un REAL : Seuil_Courant, Courant), puis les autres, marqués « ne convient pas : INT ».
+- Chaque argument donné est une **expression** : il porte la **pastille fx** des propriétés pilotées (la ligne teintée avec la barre à gauche, l'expression en chasse fixe, l'infobulle « Expression : … / Erreur : … »). Il est contrôlé comme dans l'inspecteur, dans la vue qui ouvre la popup (ses paramètres compris).
+- Un argument qui ne peut pas marcher (nom inconnu, expression incomplète, type qui ne convient pas selon le mode) passe au **rouge** : pastille, barre et expression soulignée ; son infobulle et le bas du volet disent pourquoi et quoi faire. Un simple avertissement (une valeur donnée à un paramètre qu'on ne pourra pas réécrire) est dit dans le bas du volet, sans rouge.
+- Un argument laissé vide prend la valeur par défaut (« Pas donné : la popup reçoit sa valeur par défaut 'Pompe' »).
+- Le texte enregistré reste `Moteur := Pompes[3]; Nom := 'P3'`, dans l'ordre des paramètres : les projets d'avant se relisent.
+### Les infos
+**Montrer : Infos** remplace la liste par :
+- **Qui ouvre cette popup** : chaque action Ouvrir une popup ou Changer de popup du projet qui la nomme - vue › objet › geste → opération, et ses arguments ; un argument à revoir est souligné, avec la raison.
+- **Où chaque paramètre est employé** : les objets et leurs propriétés, les textes à trous, les actions et les scripts de la popup (avec la ligne).
+- **Aller à l'objet**, au bout de chaque ligne, y mène : l'objet est choisi dans le dessin.
+### En marche, pour chaque mode
+| Mode | À l'ouverture | Dans la popup | Valider | Annuler, fermer |
+| REF | rien n'est capturé | chaque modification écrit la variable tout de suite | déjà écrit | déjà écrit : rien n'est défait |
+| COPIE | capture de la variable | on modifie la copie ; l'original ne bouge pas | rien n'est écrit | la copie est jetée |
+| LES DEUX | capture de la variable | on modifie la copie ; l'original ne bouge pas | **Appliquer copie sur référence** écrit la copie | rien n'est écrit |
+Un champ de saisie relié à un membre d'une copie modifié depuis l'ouverture porte un liseré jaune et la pastille **modifié, pas encore appliqué**, en simulation comme sur le poste d'exploitation ; elle disparaît quand la copie est appliquée.
+### Dans les scripts
+Un paramètre se lit et s'écrit par son nom et ses membres, comme une variable :
+```
+(* OnOpen de Popup_Pompe : Moteur en mode Les deux *)
+IF Moteur.Vitesse > 1500.0 THEN
+    Moteur.Vitesse := 1500.0;   (* la copie, pas encore la pompe *)
+END_IF;
+Titre := 'Pompe ' + Nom;
+```
+### Ce que Générer vérifie
+- un argument d'un type incompatible (la règle dépend du mode, voir plus haut), un paramètre manquant sans valeur par défaut, un argument pour un paramètre que la popup ne déclare pas ;
+- un argument qui n'est pas une variable pour un paramètre Référence ou Les deux que la popup écrit (avertissement : on ne pourra pas l'écrire) ;
+- un type inconnu, une valeur par défaut d'un autre type ;
+- Appliquer copie sur référence hors d'une popup, ou sur un paramètre qui n'est pas en mode Les deux.
+
+== appliquer-copie | Appliquer copie sur référence
+: L'action « Appliquer copie sur référence » (catégorie Popup) écrit la copie d'un paramètre en mode Les deux dans la variable de l'appelant - typiquement sur le bouton Valider de la popup. Seuls les membres modifiés depuis l'ouverture sont écrits.
+@mots Appliquer copie sur référence, appliquer copie, ApplyCopy, Valider
+@lieux actions
+@voir parametres-popups, popups, actions
+### Régler l'action
+1. Dans la popup, pose un bouton **Valider**.
+2. Ajoute-lui l'action **Appliquer copie sur référence** (catégorie Popup).
+3. Choisis le **Paramètre** : « Tous les paramètres en mode les deux » (enregistré `*`), ou l'un d'eux ; seuls les paramètres en mode Les deux sont proposés (l'aide de la case nomme les autres : « Pas en mode les deux : Nom (COPIE), Consigne (REF) »). La ligne **Écrit** dit ce que l'action écrira (« la copie de Moteur dans la variable de l'appelant »).
+4. Ajoute ensuite **Fermer la popup** si le bouton doit aussi la fermer.
+### Ce qu'elle écrit
+Seulement **les membres modifiés depuis la capture** : si l'automate a changé un autre membre pendant que la popup était ouverte (Marche passée à 1), il n'est pas écrasé par l'ancienne valeur de la copie. Appliquer deux fois de suite n'écrit rien la seconde fois. Le journal le dit : « Appliquer copie sur référence : Popup_Pompe.Moteur → Pompes[3] (2 membres) » ; sous audit, chaque écriture y figure avec son avant et son après.
+! Un paramètre en mode Copie ne s'applique jamais : choisis Les deux pour lui. Un paramètre qui a reçu une valeur (`'P3'`) et pas une variable n'a rien où écrire.
+> Annuler, c'est simplement fermer la popup sans appliquer : la copie est oubliée.
+
+# =============================================================================
+#  Les sujets existants de guide-ihm.txt qui parlent des parametres
+#  (cle : ce qu'il faut y changer)
+# =============================================================================
+#  popups (ligne ~510) : le paragraphe « Une popup déclare ses paramètres
+#     (propriété Paramètres de la vue) : Armoire := Armoires[0]; Nom := 'A' » et
+#     l'étape 1 du tutoriel : la liste (nom, type, mode, défaut, description)
+#     remplace le champ texte ; renvoyer à « parametres-popups » ; l'étape 3 :
+#     la liste des arguments de l'action (pastilles, aide à la saisie) ; ajouter
+#     une ligne « Appliquer copie sur référence » au tableau des actions de la
+#     catégorie Popup (vers la ligne 532) ; @voir : parametres-popups, appliquer-copie.
+#  actions (ligne ~453) : la ligne « Naviguer, Ouvrir une popup, Fermer la
+#     popup » du tableau (474) : les arguments se donnent dans la liste des
+#     paramètres ; une ligne de plus pour « Appliquer copie sur référence ».
+#  symboles (ligne ~562) et tutoriel-symbole (~599) : les paramètres d'un
+#     symbole ont aussi un type (aide à la saisie, alarmes) ; seul le mode
+#     Référence vaut pour un symbole.
+#  objet-instance-de-symbole (~3108) : la propriété Arguments - le type de
+#     chaque paramètre est vérifié par Générer.
+#  scripts (~3910) : dans une popup, les paramètres s'emploient par leur nom et
+#     leurs membres ; en Copie / Les deux, on écrit la copie (exemple ci-dessus).
+#  aide-saisie (~4181) : dans une popup, les paramètres sont proposés avec leur
+#     type et leur mode ; « Moteur. » propose les membres du type déclaré ;
+#     dans un argument d'Ouvrir une popup, les variables du bon type d'abord.
+#  generer / verifications (le sujet de Générer) : les nouveaux messages
+#     (type incompatible, manquant, type inconnu, défaut d'un autre type,
+#     Appliquer hors popup ou pas Les deux, symbole en Copie).
+#  journal-audit (si le sujet existe) : la ligne « Appliquer copie sur référence ».

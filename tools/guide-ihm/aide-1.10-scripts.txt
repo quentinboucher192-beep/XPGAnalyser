@@ -1,0 +1,287 @@
+# =============================================================================
+#  1.10 - L'aide F1 du langage des scripts de l'IHM (chantier S1).
+#  Meme syntaxe que guide-ihm.txt (= chapitre, == cle | titre, : resume, @mots,
+#  @lieux, @voir, ### intertitre, - puce, | tableau |, ``` code ```).
+#  LES TROIS NOTATIONS : chaque exemple est donne trois fois, a la suite, dans
+#  trois blocs etiquetes ```ST, ```C et ```C++ (le selecteur ST / C / C++ est
+#  l'affaire du chantier P/H) ; le ST est ce qui s'execute.
+#  A inserer dans guide-ihm.txt : les six sujets apres « fonctions » ; puis les
+#  retouches des sujets existants listees en fin de fichier.
+# =============================================================================
+
+== fonctions-internes | Les fonctions internes d'un script
+: Un script de l'IHM déclare ses propres fonctions, entre FUNCTION et END_FUNCTION, et les appelle comme les fonctions IHM du projet : avant ou après leur déclaration, avec des paramètres par valeur, par référence ou par pointeur, et une valeur rendue de n'importe quel type.
+@mots FUNCTION, END_FUNCTION, RETURN, fonction interne, VAR_INPUT, VAR_IN_OUT, VAR_OUTPUT
+@lieux scripts, fonctions
+@voir copies-references, tableaux-n, map-iterateurs, fonctions, variables-locales, scripts
+### Déclarer une fonction dans le script
+Une fonction interne s'écrit au premier niveau du script (pas dans un IF ni une boucle) : son nom, ses paramètres entre parenthèses, son type de retour après les deux-points, ses variables locales (VAR ... END_VAR), puis ses instructions. Elle rend sa valeur en l'affectant à son nom (`Moyenne := ...;`) ou par `RETURN expression;`. Elle n'est vue que de son script ; elle voit les variables du script, les variables IHM, celles de l'automate et SYS.
+```ST
+R1 := Moyenne(Mesures, 10);          (* appelee avant sa declaration : permis *)
+
+FUNCTION Moyenne(t : ARRAY[0..9] OF REAL; n : INT) : REAL
+VAR
+    i : INT;
+    s : REAL;
+END_VAR
+    FOR i := 0 TO n - 1 DO
+        s := s + t[i];
+    END_FOR
+    RETURN s / n;
+END_FUNCTION
+```
+```C
+float moyenne(const float t[10], int n) {
+    float s = 0.0f;
+    for (int i = 0; i < n; ++i) s += t[i];
+    return s / n;
+}
+r1 = moyenne(mesures, 10);
+```
+```C++
+float moyenne(const std::array<float, 10>& t, int n) {
+    float s = 0.0f;
+    for (int i = 0; i < n; ++i) s += t[i];
+    return s / n;
+}
+r1 = moyenne(mesures, 10);
+```
+- **Plusieurs fonctions** par script ; deux fonctions du même nom : une faute.
+- **La forme CEI** marche aussi : `FUNCTION Moyenne : REAL` puis des blocs `VAR_INPUT`, `VAR_IN_OUT`, `VAR_OUTPUT`.
+- **Les arguments** se donnent dans l'ordre (`Moyenne(t, 10)`) ou par leur nom (`Moyenne(n := 10, t := Mesures)`) ; un paramètre d'entrée oublié prend sa valeur initiale (`n : INT := 10`).
+- **La récursion** est permise, bornée à 64 appels imbriqués : au-delà, le script s'arrête et le journal dit « appels imbriqués trop profonds (récursion sans fin dans Fact ?) ».
+```ST
+FUNCTION Fact(n : DINT) : DINT
+    IF n <= 1 THEN RETURN 1; END_IF
+    Fact := n * Fact(n - 1);
+END_FUNCTION
+```
+```C
+long fact(long n) { return n <= 1 ? 1 : n * fact(n - 1); }
+```
+```C++
+long fact(long n) { return n <= 1 ? 1 : n * fact(n - 1); }
+```
+> Compiler (F7) vérifie les fonctions internes comme le reste du script : nom inconnu, mauvais nombre ou type d'arguments, retour du mauvais type.
+
+== copies-references | Copies, références et pointeurs
+: Un paramètre se passe par valeur (la fonction travaille sur une copie), par référence (VAR_IN_OUT ou REF_TO : elle écrit dans la variable de l'appelant) ou par pointeur (POINTER TO, ADR(x), p^) ; une fonction peut aussi rendre une référence ou un pointeur.
+@mots VAR_IN_OUT, REF_TO, REFERENCE TO, POINTER TO, REF, ADR, NULL, ^, référence, pointeur, copie, temporaire
+@lieux scripts, fonctions
+@voir fonctions-internes, retours-fonctions, tableaux-n, map-iterateurs
+### Par valeur, par référence
+| Écriture | Ce que reçoit la fonction | En C / C++ |
+| `x : REAL` | une copie : la changer ne change rien chez l'appelant | `float x` |
+| `VAR_IN_OUT x : REAL` | la variable elle-même (il faut donner une variable) | `float *x` / `float& x` |
+| `r : REF_TO REAL` | une référence : `r^` est la variable | `float *r` / `float& r` |
+| `p : POINTER TO REAL` | un pointeur : `ADR(x)` le donne, `p^` est la variable, `NULL` ne vise rien | `float *p` |
+```ST
+FUNCTION Echanger(VAR_IN_OUT a : REAL; VAR_IN_OUT b : REAL)
+VAR t : REAL; END_VAR
+    t := a; a := b; b := t;
+END_FUNCTION
+
+FUNCTION Borner(p : POINTER TO REAL; haut : REAL)
+    IF p <> NULL AND p^ > haut THEN p^ := haut; END_IF
+END_FUNCTION
+
+Echanger(Consigne1, Consigne2);
+Borner(ADR(Debit), 120.0);
+```
+```C
+void echanger(float *a, float *b) { float t = *a; *a = *b; *b = t; }
+void borner(float *p, float haut) { if (p != NULL && *p > haut) *p = haut; }
+
+echanger(&consigne1, &consigne2);
+borner(&debit, 120.0f);
+```
+```C++
+void echanger(float& a, float& b) { std::swap(a, b); }
+void borner(float* p, float haut) { if (p != nullptr && *p > haut) *p = haut; }
+
+echanger(consigne1, consigne2);
+borner(&debit, 120.0f);
+```
+### Les fautes dites clairement
+- **Référence vers un temporaire** : un VAR_IN_OUT, `REF(...)` ou `ADR(...)` d'une valeur calculée (`Inc(R1 + 1.0)`) est refusé : il faut une variable.
+- **Référence nulle**, **pointeur nul** : `p^` alors que `p` vaut NULL arrête le script et le dit.
+- **Variable disparue** : un pointeur vers la variable locale d'une fonction terminée ne vise plus rien ; `p^` le dit (« pointeur vers une variable disparue »), au lieu de lire n'importe quoi.
+- **Membres et cases** : `p^.Debit`, `p^[3]`, et pour une référence `r.Debit` (suivie toute seule).
+> Pas d'arithmétique de pointeurs : pour parcourir un tableau, prends ses cases (`t[i]`) ou FOR EACH.
+
+== retours-fonctions | Ce qu'une fonction rend
+: Une fonction interne ou une fonction IHM du projet rend une valeur simple, une structure, un tableau (à une ou N dimensions), une MAP — toujours une copie — ou une référence, ou un pointeur.
+@mots retour, type de retour, RETURN
+@lieux fonctions, scripts
+@voir fonctions-internes, copies-references, tableaux-n, map-iterateurs, fonctions
+| Retour | Exemple | En C++ |
+| une valeur | `FUNCTION Carre(x : REAL) : REAL` | `float carre(float x)` |
+| une structure IHM | `FUNCTION Milieu(a, b : T_Point) : T_Point` | `T_Point milieu(T_Point a, T_Point b)` |
+| un tableau | `FUNCTION Rampe(n : REAL) : ARRAY[0..4] OF REAL` | `std::array<float, 5> rampe(float n)` |
+| un tableau à 3 dimensions | `... : ARRAY[0..3, 0..9, 0..1] OF REAL` | `std::array<std::array<std::array<float, 2>, 10>, 4>` |
+| une MAP | `FUNCTION Stock() : MAP[STRING] OF REAL` | `std::map<std::string, float> stock()` |
+| une référence | `FUNCTION Case2(VAR_IN_OUT t : ARRAY[0..2] OF REAL) : REF_TO REAL` | `float& case2(std::array<float, 3>& t)` |
+| un pointeur | `FUNCTION Trouver(...) : POINTER TO T_Moteur` | `T_Moteur* trouver(...)` |
+```ST
+FUNCTION Rampe(pas : REAL) : ARRAY[0..4] OF REAL
+VAR i : INT; END_VAR
+    FOR i := 0 TO 4 DO Rampe[i] := i * pas; END_FOR
+END_FUNCTION
+
+FUNCTION Case2(VAR_IN_OUT t : ARRAY[0..2] OF REAL) : REF_TO REAL
+    Case2 := REF(t[2]);
+END_FUNCTION
+
+Courbe := Rampe(2.0);            (* copie dans le tableau IHM Courbe *)
+Case2(Table)^ := 7.5;            (* ecrit Table[2] *)
+```
+```C
+void rampe(float pas, float out[5]) { for (int i = 0; i < 5; ++i) out[i] = i * pas; }
+float *case2(float t[3]) { return &t[2]; }
+
+rampe(2.0f, courbe);
+*case2(table) = 7.5f;
+```
+```C++
+std::array<float, 5> rampe(float pas) {
+    std::array<float, 5> r{};
+    for (int i = 0; i < 5; ++i) r[i] = i * pas;
+    return r;
+}
+float& case2(std::array<float, 3>& t) { return t[2]; }
+
+courbe = rampe(2.0f);
+case2(table) = 7.5f;
+```
+- Les **fonctions IHM du projet** (Programmation générale › Fonctions) ont les mêmes droits : un type de retour riche, des paramètres `VAR_IN_OUT`, `REF_TO`, `POINTER TO`, des tableaux, des MAP.
+- Une référence rendue vers une **locale** de la fonction ne vit pas plus longtemps qu'elle : la suivre ensuite est dit (« variable disparue »).
+
+== tableaux-n | Tableaux à N dimensions et tableaux fixes
+: Une variable locale, un paramètre ou un retour peut être un tableau à autant de dimensions qu'il faut, aux bornes libres ; sa taille est fixe, comme un std::array : il se copie en entier, se compare, et dit sa taille.
+@mots ARRAY, OF, SIZEOF, LOWER_BOUND, UPPER_BOUND, Length, tableau, dimension, std::array
+@lieux scripts, fonctions, types-ihm
+@voir fonctions-internes, retours-fonctions, map-iterateurs, types-ihm
+```ST
+VAR
+    Cube : ARRAY[0..3, 0..9, 0..1] OF REAL;     (* 4 x 10 x 2 = 80 cases *)
+    a, b : ARRAY[1..3] OF INT;
+END_VAR
+Cube[2, 7, 1] := 4.5;
+b := a;                                      (* copie entiere *)
+IF a = b THEN IHM_JOURNAL('identiques'); END_IF
+n := SIZEOF(Cube);                           (* 80 *)
+haut := UPPER_BOUND(Cube, 2);                (* 9 : la 2e dimension *)
+```
+```C
+float cube[4][10][2];
+int a[3], b[3];
+cube[2][7][1] = 4.5f;
+memcpy(b, a, sizeof a);
+if (memcmp(a, b, sizeof a) == 0) journal("identiques");
+size_t n = sizeof cube / sizeof cube[0][0][0];   /* 80 */
+```
+```C++
+std::array<std::array<std::array<float, 2>, 10>, 4> cube{};
+std::array<int, 3> a{}, b{};
+cube[2][7][1] = 4.5f;
+b = a;
+if (a == b) journal("identiques");
+std::size_t n = 4 * 10 * 2;
+```
+| Ce qu'on lit | Ce que c'est |
+| `t.Length` (ou `SIZEOF(t)`) | le nombre de cases, toutes dimensions |
+| `LOWER_BOUND(t, d)`, `UPPER_BOUND(t, d)` | les bornes de la dimension d (1 = la première) |
+| `t.Low`, `t.High`, `t.Rows`, `t.Columns`, `t.Dimensions` | bornes de la 1re dimension, lignes, colonnes, nombre de dimensions |
+- Un indice hors des bornes arrête le script et le dit (« indice 4 hors des bornes 0..3 (dimension 1) »).
+- `a := b` exige deux tableaux de même forme (mêmes tailles par dimension) ; `=` et `<>` comparent case par case.
+- Les bornes sont des constantes (`ARRAY[0..N-1]` s'écrit avec la valeur de N).
+
+== map-iterateurs | MAP et itérateurs : FOR EACH
+: Une MAP range des valeurs sous des clés (texte ou entier), triées ; FOR EACH parcourt une MAP ou un tableau, et l'itérateur explicite (MAP_BEGIN, MAP_NEXT, MAP_END) avance pas à pas.
+@mots MAP, MAP_HAS, MAP_GET, MAP_REMOVE, MAP_SIZE, MAP_CLEAR, MAP_KEYS, MAP_BEGIN, MAP_NEXT, MAP_END, MAP_ITERATOR, FOR EACH, EACH, IN, Key, Value, std::map
+@lieux scripts, fonctions
+@voir fonctions-internes, tableaux-n, retours-fonctions
+```ST
+VAR
+    Stock : MAP[STRING] OF REAL;
+    Total : REAL;
+END_VAR
+Stock['vis'] := 120.0;                 (* cree la cle *)
+Stock['ecrou'] := 80.0;
+IF MAP_HAS(Stock, 'vis') THEN Stock['vis'] := Stock['vis'] - 1.0; END_IF
+FOR EACH nom, qte IN Stock DO          (* cles croissantes : ecrou, vis *)
+    Total := Total + qte;
+    qte := qte * 2.0;                  (* qte designe la valeur : elle change dans Stock *)
+END_FOR
+MAP_REMOVE(Stock, 'ecrou');
+```
+```C
+/* le C n'a pas de dictionnaire : un tableau de paires trie, ou une bibliotheque */
+struct paire { const char *cle; float qte; } stock[2] = {{"ecrou", 80.0f}, {"vis", 120.0f}};
+for (size_t i = 0; i < 2; ++i) { total += stock[i].qte; stock[i].qte *= 2.0f; }
+```
+```C++
+std::map<std::string, float> stock;
+stock["vis"] = 120.0f;
+stock["ecrou"] = 80.0f;
+if (stock.count("vis")) stock["vis"] -= 1.0f;
+for (auto& [nom, qte] : stock) { total += qte; qte *= 2.0f; }
+stock.erase("ecrou");
+```
+| Fonction | Ce qu'elle fait |
+| `m[cle] := v` | écrit, crée la clé si elle manque |
+| `m[cle]` | lit ; une clé absente arrête le script et le dit |
+| `MAP_GET(m, cle, defaut)` | lit, ou rend `defaut` si la clé manque |
+| `MAP_HAS(m, cle)` | vrai si la clé existe |
+| `MAP_REMOVE(m, cle)` | retire la clé (vrai si elle existait) |
+| `MAP_SIZE(m)`, `MAP_CLEAR(m)` | le nombre de clés ; tout vider |
+| `MAP_KEYS(m)` | les clés, dans un tableau, triées |
+- **Les types** : `MAP[STRING] OF T` ou `MAP[DINT] OF T`, T quelconque (nombre, texte, structure, tableau, autre MAP). Une clé du mauvais type est refusée et dite.
+- **FOR EACH k, v IN m** : `k` la clé (lecture seule), `v` la valeur (modifiable). **FOR EACH x IN t** : chaque case d'un tableau (local, ou tableau IHM), `x` modifiable ; avec deux noms, `FOR EACH i, x IN t`, `i` est l'indice. EXIT sort de la boucle.
+- **L'itérateur explicite** :
+```ST
+VAR it : MAP_ITERATOR; END_VAR
+it := MAP_BEGIN(Stock);
+WHILE NOT MAP_END(it) DO
+    IHM_JOURNAL(it.Key);
+    it.Value := 0.0;
+    MAP_NEXT(it);
+END_WHILE
+```
+```C
+for (size_t i = 0; i < n; ++i) { journal(stock[i].cle); stock[i].qte = 0.0f; }
+```
+```C++
+for (auto it = stock.begin(); it != stock.end(); ++it) { journal(it->first); it->second = 0.0f; }
+```
+> Une MAP se garde d'une exécution à l'autre si elle est déclarée dans un bloc VAR du script (comme toute VAR).
+
+== dialecte-ihm | Le ST de l'IHM et celui de l'automate
+: Les scripts, les fonctions IHM et les opérateurs de l'IHM lisent un ST enrichi (fonctions internes, références, pointeurs, tableaux à N dimensions, MAP, FOR EACH, +=) ; le programme de l'automate garde le ST de Control Expert, sans rien de tout cela.
+@mots dialecte, ST enrichi, +=, -=, *=, /=
+@lieux scripts, fonctions
+@voir fonctions-internes, copies-references, tableaux-n, map-iterateurs, retours-fonctions
+| Construction | Scripts et fonctions de l'IHM | Programme de l'automate |
+| `FUNCTION ... END_FUNCTION` dans le code | oui | non (les FUNCTION se déclarent dans Control Expert) |
+| `REF_TO`, `POINTER TO`, `REF()`, `ADR()`, `^`, `NULL` | oui | non |
+| `ARRAY[..]` à N dimensions en local | oui | (les déclarations de l'automate) |
+| `MAP[..] OF`, `FOR EACH`, `MAP_...` | oui | non |
+| `x += 1` | oui | non |
+> Un script ST copié vers le programme de l'automate doit s'en passer : Compiler le signale.
+
+# -----------------------------------------------------------------------------
+#  Retouches des sujets existants (chef de projet) :
+#  - « scripts » : une ligne « Fonctions internes, références, MAP : voir
+#    « Les fonctions internes d'un script » et « MAP et itérateurs » » ; @voir +
+#    fonctions-internes, map-iterateurs, dialecte-ihm.
+#  - « variables-locales » : les types d'une locale de script s'étendent (ARRAY à
+#    N dimensions, MAP, REF_TO, POINTER TO, MAP_ITERATOR, un type IHM) ; une
+#    fonction interne a ses propres VAR ; @voir + tableaux-n, map-iterateurs.
+#  - « fonctions » : une fonction IHM du projet accepte VAR_IN_OUT, REF_TO,
+#    POINTER TO, tableaux et MAP en paramètres, et un type de retour riche ;
+#    @voir + retours-fonctions, copies-references.
+#  - « compiler », « erreurs-scripts » (chantier N) : les contrôles des fonctions
+#    internes, références, MAP, FOR EACH.
+#  - « aide-saisie » (chantier K) : les fonctions internes du script et MAP_...
+#    proposées.
+# -----------------------------------------------------------------------------

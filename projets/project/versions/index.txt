@@ -1,0 +1,4 @@
+# XpgAnalyzer - les versions du projet (lot 21). Les fichiers de chacune : V0001.txt... ;
+# leur contenu, une fois par empreinte : objets/.
+reglages auto=jamais garder_auto=10
+version n=1 nom="V2" etat=brouillon date="2026-09-27 13:16" auteur="Quentin (SEATI-QBO)" base=0 fichiers=50 octets=1379323 nouveaux=1379323 empreinte="72f3e5dbd04c" depuis="la première" commentaire=""

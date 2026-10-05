@@ -1,0 +1,121 @@
+# =============================================================================
+#  1.10 - L'aide F1 du langage des enumerations IHM (chantier S1, decision 15).
+#  Meme syntaxe que guide-ihm.txt (= chapitre, == cle | titre, : resume, @mots,
+#  @lieux, @voir, ### intertitre, - puce, | tableau |, ``` code ```).
+#  LES TROIS NOTATIONS : chaque exemple est donne trois fois, a la suite, dans
+#  trois blocs ```ST, ```C et ```C++ (le ST est ce qui s'execute).
+#  A reporter par P dans guide-ihm.txt : le sujet apres « map-iterateurs »
+#  (aide-1.10-scripts.txt) ; le sujet du type lui-meme (creation, valeurs,
+#  toString / fromString) est celui d'O (aide-1.10-enum.txt).
+# =============================================================================
+
+== enum-scripts | Les énumérations dans les scripts et les fonctions
+: Une énumération IHM (T_MODE : Arret, Auto, Manu, Defaut) s'emploie dans les scripts et les fonctions : le littéral T_MODE#Auto, les comparaisons, CASE sur ses valeurs, FOR EACH v IN T_MODE, en variable, en paramètre, en retour, en case de tableau, en clé de MAP ; TO_DINT(m) donne son nombre, TO_T_MODE(2) l'inverse (contrôlé), TO_STRING(m) et TO_T_MODE('texte') passent par son toString et son fromString.
+@mots T_MODE#, ENUM, énumération, enumeration, TO_INT, TO_DINT, TO_STRING, TO_UPPER, TO_LOWER, CASE, FOR EACH, valeurs non traitées
+@lieux scripts, fonctions, types-ihm
+@voir fonctions-internes, copies-references, map-iterateurs, retours-fonctions, operateurs, types-ihm
+### Les valeurs et leur type
+Une valeur s'écrit avec son type : `T_MODE#Auto`. Quand le type attendu est déjà connu (on affecte une variable T_MODE, on la compare, on passe un paramètre T_MODE, on rend un T_MODE, une branche d'un CASE sur un T_MODE), le nom seul suffit : `m := Auto;`, si aucune variable ne porte ce nom. Une variable de ce type vaut un DINT, le nombre de sa valeur ; `=`, `<>`, `<`, `>` comparent deux valeurs du même type.
+```ST
+VAR
+    m : T_MODE := T_MODE#Arret;
+    Duree : MAP[T_MODE] OF REAL;
+END_VAR
+
+FUNCTION Suivant(m : T_MODE) : T_MODE
+    CASE m OF
+        Arret:      RETURN Auto;
+        Auto, Manu: RETURN Manu;
+    ELSE
+        RETURN Arret;
+    END_CASE
+END_FUNCTION
+
+m := Suivant(m);
+Duree[m] := Duree[m] + 1.0;
+FOR EACH v IN T_MODE DO                 (* Arret, Auto, Manu, Defaut : dans l'ordre declare *)
+    IHM_JOURNAL(TO_STRING(v));          (* le toString du type : le texte affiche *)
+END_FOR
+```
+```C
+typedef enum { T_MODE_Arret = 0, T_MODE_Auto = 1, T_MODE_Manu = 2, T_MODE_Defaut = 9 } T_MODE;
+const char *t_mode_to_string(T_MODE m);
+static const T_MODE T_MODE_valeurs[] = { T_MODE_Arret, T_MODE_Auto, T_MODE_Manu, T_MODE_Defaut };
+
+T_MODE suivant(T_MODE m) {
+    switch (m) {
+    case T_MODE_Arret: return T_MODE_Auto;
+    case T_MODE_Auto:
+    case T_MODE_Manu:  return T_MODE_Manu;
+    default:           return T_MODE_Arret;
+    }
+}
+
+m = suivant(m);
+for (size_t i = 0; i < 4; ++i) journal(t_mode_to_string(T_MODE_valeurs[i]));
+```
+```C++
+enum class T_MODE { Arret = 0, Auto = 1, Manu = 2, Defaut = 9 };
+std::string to_string(T_MODE m);
+T_MODE from_string(const std::string& s);
+
+T_MODE suivant(T_MODE m) {
+    switch (m) {
+    case T_MODE::Arret: return T_MODE::Auto;
+    case T_MODE::Auto:
+    case T_MODE::Manu:  return T_MODE::Manu;
+    default:            return T_MODE::Arret;
+    }
+}
+
+std::map<T_MODE, float> duree;
+m = suivant(m);
+duree[m] += 1.0f;
+for (T_MODE v : {T_MODE::Arret, T_MODE::Auto, T_MODE::Manu, T_MODE::Defaut}) journal(to_string(v));
+```
+### Les conversions
+| Écriture | Ce qu'elle rend | En C++ |
+| `TO_DINT(m)`, `TO_INT(m)` | le nombre de la valeur (Auto : 1) | `static_cast<int>(m)` |
+| `TO_T_MODE(2)` | la valeur de ce nombre ; un nombre qui n'est pas une valeur arrête le script : « 5 n'est pas une valeur de T_MODE (Arret = 0, Auto = 1, ...) » | `static_cast<T_MODE>(2)` (non contrôlé en C++) |
+| `TO_STRING(m)` | le **toString** du type : le texte affiché de la valeur | `to_string(m)` |
+| `TO_T_MODE('Automatique')` | le **fromString** du type : la valeur dont le nom ou le texte correspond | `from_string("Automatique")` |
+| `TO_UPPER(s)`, `TO_LOWER(s)` | le texte en MAJUSCULES, en minuscules (pour comparer sans casse) | `std::toupper` |
+- toString et fromString sont deux **opérateurs** du type, préremplis à sa création et modifiables comme tout script (voir « Les opérateurs »).
+- Les conversions de base s'écrivent aussi sans préfixe : `TO_REAL(5)`, `TO_STRING(3.5)`, `TO_DINT('12')`.
+### Pointeurs, références, tableaux
+```ST
+FUNCTION Libelle(p : POINTER TO T_MODE) : STRING
+    Libelle := TO_STRING(p^);
+END_FUNCTION
+
+FUNCTION Forcer(VAR_IN_OUT m : T_MODE)
+    m := T_MODE#Defaut;
+END_FUNCTION
+
+VAR Modes : ARRAY[0..3] OF T_MODE; END_VAR
+Texte := Libelle(ADR(Modes[0]));
+Forcer(Modes[1]);
+```
+```C
+const char *libelle(const T_MODE *p) { return t_mode_to_string(*p); }
+void forcer(T_MODE *m) { *m = T_MODE_Defaut; }
+
+T_MODE modes[4];
+texte = libelle(&modes[0]);
+forcer(&modes[1]);
+```
+```C++
+std::string libelle(const T_MODE* p) { return to_string(*p); }
+void forcer(T_MODE& m) { m = T_MODE::Defaut; }
+
+std::array<T_MODE, 4> modes{};
+texte = libelle(&modes[0]);
+forcer(modes[1]);
+```
+### Ce que Compiler dit
+- **Littéral inconnu** : `T_MODE#Automatique` n'existe pas : « veux-tu dire T_MODE#Auto ? ».
+- **CASE sans ELSE qui oublie des valeurs** : un avertissement, « CASE sans ELSE : valeurs non traitées : Defaut », et la correction **Ajouter les valeurs manquantes** (des branches vides, avant END_CASE).
+- **Un entier affecté** : `n := 2;` pour un T_MODE : « un entier ne s'affecte pas à n (T_MODE) : écris TO_T_MODE(2) (contrôlé) ou T_MODE#... ».
+- **Un entier passé** à un paramètre T_MODE : « Suivant attend un T_MODE : 1 est un INT · écris T_MODE#Arret ou TO_T_MODE(1) ».
+- **Deux énumérations différentes comparées** (un T_MODE et un T_ETAT) : une erreur.
+> Le ST de l'automate ne connaît pas ces littéraux : ils sont réservés aux scripts et aux fonctions de l'IHM.

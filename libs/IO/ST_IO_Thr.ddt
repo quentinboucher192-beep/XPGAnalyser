@@ -1,0 +1,50 @@
+# Derived data type, shared.
+name = ST_IO_Thr
+version = 1.01
+#! summary = Un seuil d'alarme. Quatre de ceux-la vivent dans chaque voie analogique.
+#! usage = Un seuil dit une chose : "la valeur est du mauvais cote de Val, et elle y est depuis assez longtemps". Les quatre reglages qui suivent servent tous a rendre cette phrase utilisable sur une mesure reelle, qui bruite et qui oscille autour du seuil.
+#! usage = L'HYSTERESIS JOUE A LA RETOMBEE SEULEMENT. Un seuil haut a 80 avec Hyst = 2 se leve a 80 et retombe a 78. L'appliquer des deux cotes ferait dire au seuil un nombre different selon le cote par lequel on l'approche, et 80 ne voudrait plus rien dire.
+#! usage = LE RETARD EST UN TEMPS DE MAINTIEN, PAS UNE TEMPORISATION D'ALARME. Le compteur repart a zero des que la condition tombe, meme une seule scrutation. C'est ce qui filtre une pointe de mesure, et c'est aussi pourquoi un signal qui oscille autour du seuil ne leve jamais l'alarme.
+#! usage = Les quatre seuils d'une voie sont INDEPENDANTS et sans ordre : rien n'empeche Thr[0] d'etre un seuil bas et Thr[3] un seuil tres haut. La convention est a vous ; le bloc ne la connait pas.
+#! see = ST_IO_Ana, DFB_IO_ANA16
+#! param En = FALSE laisse le seuil tranquille : il ne se leve pas, et ses sorties sont remises a zero a chaque scrutation.
+#! param En = C'est aussi ce qui se passe quand la voie est en defaut d'echelle. Un seuil evalue sur une mesure qu'on ne sait pas convertir ne dit rien de vrai.
+#! param Dir = 0 : le seuil se leve quand la valeur passe AU-DESSUS de Val. 1 : quand elle passe EN DESSOUS.
+#! param Dir = Il n'y a pas de troisieme possibilite. Une bande - "en dehors de 10..90" - s'ecrit avec deux seuils, un dans chaque sens.
+#! param Val = Le seuil, en UNITES PHYSIQUES, pas en points de carte. Il se compare a Val de la voie, c'est-a-dire apres echelle, bande morte et filtre.
+#! param Hyst = La bande de retombee, dans les memes unites. 0 la desactive : le seuil retombe exactement ou il s'est leve, ce qui fait battre une mesure bruitee.
+#! param Hyst = Une valeur de l'ordre du bruit de la mesure suffit. Trop grande, elle retarde la retombee d'une alarme qui a reellement disparu.
+#! param DelayMs = Combien de temps la condition doit tenir avant que ce soit une alarme. 0 leve des la premiere scrutation ou la condition est vraie.
+#! param DelayMs = Le temps s'accumule a partir de CycleMs : une periode de tache fausse fausse tous les retards de tous les seuils, sans qu'aucune erreur ne le signale.
+#! param Sev = 1 information, 2 avertissement, 3 defaut, 4 la machine doit s'arreter.
+#! param Sev = La gravite ne change RIEN au comportement du bloc : elle est remontee dans AlarmSev de la voie et dans AlarmSevMax de la carte, et c'est le programme qui en fait quelque chose. Le bloc ne coupe rien de lui-meme.
+#! param ElapsedMs = Depuis combien de temps la condition tient. Ecrit par le bloc a chaque scrutation : ne pas y ecrire.
+#! param ElapsedMs = Il plafonne a DelayMs plutot que de monter indefiniment, pour qu'un seuil leve depuis trois jours ne fasse pas deborder un DINT.
+#! param Raised = L'alarme est sortie. C'est l'etat, pas le front : il reste vrai tant que la condition tient.
+#! param Rise = Vrai UNE SEULE scrutation, celle ou le seuil s'est leve. C'est ce qu'on cable sur un enregistrement d'evenement ou un compteur : utiliser Raised a la place enregistrerait une ligne par cycle.
+#! param Fall = Vrai une seule scrutation, celle ou le seuil est retombe. Le pendant de Rise, pour horodater la fin d'une alarme.
+#! internal = ElapsedMs
+#! example = (* declarer : Bas : ST_IO_Thr; *)
+#! example = (* niveau bas : sous 20 %, 5 s, retour au-dessus de 22 % *)
+#! example = Bas.En := TRUE;
+#! example = Bas.Dir := 1;
+#! example = Bas.Val := 20.0;
+#! example = Bas.Hyst := 2.0;
+#! example = Bas.DelayMs := 5000;
+#! expect = 1 : Bas.Dir = 1
+#! expect = 1 : Bas.Raised = FALSE
+#! changes 1.01 = Commentaires des champs en francais. Aucun champ ajoute ni retire.
+
+# Un seuil d'alarme. Une voie analogique en porte plusieurs.
+
+# name ; type ; scope ; initial ; comment
+En ; BOOL ; Member ;  ; TRUE pour evaluer ce seuil
+Dir ; INT ; Member ; 0 ; 0 = leve quand la valeur passe AU-DESSUS de Val, 1 = au-dessous
+Val ; REAL ; Member ; 0.0 ; le seuil, en unites physiques
+Hyst ; REAL ; Member ; 0.0 ; bande de retour : appliquee a la SORTIE, jamais a l'entree
+DelayMs ; DINT ; Member ; 0 ; combien de temps la condition doit tenir avant d'etre une alarme
+Sev ; INT ; Member ; 1 ; 1 = information, 4 = la machine doit s'arreter
+ElapsedMs ; DINT ; Member ; 0 ; depuis combien de temps elle tient - runtime, ne pas ecrire
+Raised ; BOOL ; Member ;  ; l'alarme est levee
+Rise ; BOOL ; Member ;  ; une scrutation, celle ou elle se leve
+Fall ; BOOL ; Member ;  ; une scrutation, celle ou elle retombe

@@ -1,0 +1,18 @@
+(* A_Vide
+
+   Ce que fait la macro, en deux ou trois phrases : ce qu'elle lit, ce
+   qu'elle cree, ce qu'elle ne touche pas.
+
+   #! summary = Vide : une question, un Log. Le point de départ le plus simple.
+   #! version = 1.00
+   #! categorie = Mes macros
+   #! param tache = Les sections créées vont dans cette tâche.
+   #! champ tache = tache
+   #! libelle tache = Tâche d'accueil
+   #! appliquer = Appliquer
+*)
+
+tache := Ask('tache', 'Tache d accueil', 'MAST');
+AskNow();
+
+Log('tache : ' + tache);

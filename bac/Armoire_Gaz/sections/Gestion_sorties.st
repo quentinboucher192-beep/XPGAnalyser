@@ -1,0 +1,55 @@
+IF (Vraies_sorties) THEN
+	%Q0.5.1 := Armoires[0].sorties.V2.cmd := Armoires[0].sorties.V2.F1;
+	%Q0.5.2 := Armoires[0].sorties.V3.cmd := Armoires[0].sorties.V3.F1;
+	%Q0.5.3 := Armoires[0].sorties.V4.cmd := Armoires[0].sorties.V4.F1;
+	%Q0.5.4 := Armoires[0].sorties.V5.cmd := Armoires[0].sorties.V5.F1;
+	%Q0.5.13 := Armoires[0].sorties.VBTE.cmd := Armoires[0].sorties.VBTE.F1;
+	%Q0.5.5 := Armoires[0].sorties.V6.cmd := Armoires[0].sorties.V6.F1;
+	%Q0.5.14 := Armoires[0].sorties.V16.cmd := Armoires[0].sorties.V16.F1;
+	%Q0.5.6 := Armoires[0].sorties.V7.cmd := Armoires[0].sorties.V7.F1;
+	%Q0.5.7 := Armoires[0].sorties.VS.cmd := Armoires[0].sorties.VS.F1;
+	%Q0.5.8 := Armoires[0].sorties.V9.cmd := Armoires[0].sorties.V9.F1;
+	%Q0.5.12 := Armoires[0].sorties.PPE.cmd := Armoires[0].sorties.PPE.F1;
+	%Q0.5.15 := Armoires[0].sorties.VHE.cmd := Armoires[0].sorties.VHE.F1;
+	%Q0.5.0 := (%Q0.5.5 OR %Q0.5.14) AND %Q0.5.4;  	
+
+	%Q0.8.1 := Armoires[1].sorties.V2.cmd := Armoires[1].sorties.V2.F1;
+	%Q0.8.2 := Armoires[1].sorties.V3.cmd := Armoires[1].sorties.V3.F1;
+	%Q0.8.3 := Armoires[1].sorties.V4.cmd := Armoires[1].sorties.V4.F1;
+	%Q0.8.4 := Armoires[1].sorties.V5.cmd := Armoires[1].sorties.V5.F1;
+	%Q0.8.13 := Armoires[1].sorties.VBTE.cmd := Armoires[1].sorties.VBTE.F1;
+	%Q0.8.5 := Armoires[1].sorties.V6.cmd := Armoires[1].sorties.V6.F1;
+	%Q0.8.14 := Armoires[1].sorties.V16.cmd := Armoires[1].sorties.V16.F1;
+	%Q0.8.6 := Armoires[1].sorties.V7.cmd := Armoires[1].sorties.V7.F1;
+	%Q0.8.7 := Armoires[1].sorties.VS.cmd := Armoires[1].sorties.VS.F1;
+	%Q0.8.8 := Armoires[1].sorties.V9.cmd := Armoires[1].sorties.V9.F1;
+	%Q0.8.12 := Armoires[1].sorties.PPE.cmd := Armoires[1].sorties.PPE.F1;
+	%Q0.8.15 := Armoires[1].sorties.VHE.cmd := Armoires[1].sorties.VHE.F1;
+	%Q0.8.0 := (%Q0.8.5 OR %Q0.8.14) AND %Q0.8.4;  
+ELSE
+	Armoires[0].sorties.V2.cmd := Armoires[0].sorties.V2.F1;
+	Armoires[0].sorties.V3.cmd := Armoires[0].sorties.V3.F1;
+	Armoires[0].sorties.V4.cmd := Armoires[0].sorties.V4.F1;
+	Armoires[0].sorties.V5.cmd := Armoires[0].sorties.V5.F1;
+	Armoires[0].sorties.VBTE.cmd := Armoires[0].sorties.VBTE.F1;
+	Armoires[0].sorties.V6.cmd := Armoires[0].sorties.V6.F1;
+	Armoires[0].sorties.V16.cmd := Armoires[0].sorties.V16.F1;
+	Armoires[0].sorties.V7.cmd := Armoires[0].sorties.V7.F1;
+	Armoires[0].sorties.VS.cmd := Armoires[0].sorties.VS.F1;
+	Armoires[0].sorties.V9.cmd := Armoires[0].sorties.V9.F1;
+	Armoires[0].sorties.PPE.cmd := Armoires[0].sorties.PPE.F1;
+	Armoires[0].sorties.VHE.cmd := Armoires[0].sorties.VHE.F1;
+
+	Armoires[1].sorties.V2.cmd := Armoires[1].sorties.V2.F1;
+	Armoires[1].sorties.V3.cmd := Armoires[1].sorties.V3.F1;
+	Armoires[1].sorties.V4.cmd := Armoires[1].sorties.V4.F1;
+	Armoires[1].sorties.V5.cmd := Armoires[1].sorties.V5.F1;
+	Armoires[1].sorties.VBTE.cmd := Armoires[1].sorties.VBTE.F1;
+	Armoires[1].sorties.V6.cmd := Armoires[1].sorties.V6.F1;
+	Armoires[1].sorties.V16.cmd := Armoires[1].sorties.V16.F1;
+	Armoires[1].sorties.V7.cmd := Armoires[1].sorties.V7.F1;
+	Armoires[1].sorties.VS.cmd := Armoires[1].sorties.VS.F1;
+	Armoires[1].sorties.V9.cmd := Armoires[1].sorties.V9.F1;
+	Armoires[1].sorties.PPE.cmd := Armoires[1].sorties.PPE.F1;
+	Armoires[1].sorties.VHE.cmd := Armoires[1].sorties.VHE.F1;
+END_IF;

@@ -1,0 +1,19 @@
+# Derived data type.
+name = I
+version = 0.05
+# checksum is recomputed by Control Expert on import; not stored.
+
+# name ; type ; address ; scope ; init ; comment ; attributes ; element comments
+Manque_tension ; BOOL ;  ; Member ;  ; tension 0 absence 1 ;  ; 
+Auto_manu ; BOOL ;  ; Member ;  ; auto 1 manu 0 ;  ; 
+Extraction_inhibee ; BOOL ;  ; Member ;  ; 1 inhibee ;  ; 
+Porte ; BOOL ;  ; Member ;  ; 1 ouv 0 ferm ;  ; 
+Detoxal ; BOOL ;  ; Member ;  ; utilisation du detoxal ;  ; 
+Extraction ; BOOL ;  ; Member ;  ; 1 defaut ;  ; 
+Pirani ; BOOL ;  ; Member ;  ;  ;  ; 
+Span_N2 ; BOOL ;  ; Member ;  ;  ;  ; 
+D1 ; ARRAY[0..1] OF BOOL ;  ; Member ;  ; seuil preal al, def a 1 ;  ; 
+D2 ; ARRAY[0..1] OF BOOL ;  ; Member ;  ; seuil preal al, def a 1 ;  ; 
+AU ; BOOL ;  ; Member ;  ; arret d'urgence 1 ;  ; 
+Fuite_gazroom ; BOOL ;  ; Member ;  ; def a 1 ;  ; 
+Fuite_gazbox ; BOOL ;  ; Member ;  ; def a 1 ;  ; 

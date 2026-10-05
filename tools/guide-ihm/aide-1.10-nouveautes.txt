@@ -1,0 +1,48 @@
+# =============================================================================
+#  Aide F1 de la 1.10 - chantier P : les nouveautes se voient.
+#  Syntaxe de guide-ihm.txt ; l'integrateur reporte ce sujet dans guide-ihm.txt
+#  (chapitre "Démarrer", apres "nouveautes-1-9"), puis :
+#      python3 tools/guide-ihm/generer_guide.py --cpp src/hmi/HmiGuideText.cpp
+#  Les marques de version : "@depuis 1.10" sur un sujet nouveau, "@nouveau 1.10"
+#  devant un paragraphe (ou un ### intertitre : toute sa section) d'un sujet
+#  ancien qui a change. Les fragments d'aide des autres chantiers de la 1.10
+#  prennent "@depuis 1.10" en les reportant.
+#  Un exemple en trois notations : trois blocs ```ST, ```C, ```C++ qui se suivent
+#  (chacune une fois ; l'aide F1 les montre avec le selecteur ST | C | C++).
+# =============================================================================
+
+== reperes-nouveautes | Les nouveautés et leurs repères orange
+: À la première ouverture d'une nouvelle version, une fenêtre montre ses nouveautés ; dans l'application, les éléments nouveaux sont encadrés en orange avec une pastille NOUVEAU, et dans l'aide les sujets et paragraphes nouveaux le sont aussi.
+@depuis 1.10
+@mots nouveautés, NOUVEAU, Nouveautés…, Nouveautés de cette version, repères orange, Repères des nouveautés
+@lieux nouveautes
+@voir nouveautes-1-9, didacticiel, ihm
+### La fenêtre des nouveautés
+Au premier lancement d'une version plus récente que la dernière que tu as lancée, la fenêtre **Nouveautés de la 1.10** s'ouvre : une carte par nouveauté, avec son titre, une phrase et, quand il y en a une, une image. Si tu viens d'une version plus ancienne, chaque version manquée suit sur une ligne repliée (« Ce que tu as manqué : la 1.9 · tu viens de la 1.8 · 12 nouveautés ») : un clic la déplie sur ses cartes.
+- **Me montrer** ouvre l'endroit (l'onglet, le volet, la page de l'aide), voile le reste de l'écran et encadre l'élément en orange, avec une bulle qui dit ce qui est nouveau. **Suivante** passe à la nouveauté suivante ; **Terminer**, la croix ou Échap ferme la bulle ; à la dernière, **Revoir la liste** rouvre la fenêtre.
+- **Me montrer tout, une à une** enchaîne toutes les nouveautés de la fenêtre, dans l'ordre des cartes.
+- **Plus tard** ferme la fenêtre : rien n'est perdu, elle se rouvre par le menu **Aide › Nouveautés…**, et l'écran d'accueil la propose.
+- **Tout vu** ferme la fenêtre et note que tu as tout vu : elle ne s'ouvrira plus d'elle-même avant la prochaine version.
+### Les repères orange dans l'application
+Un bouton, un onglet, une section ou une entrée de menu nouveaux sont **encadrés en orange**, avec une petite pastille **NOUVEAU**, tant que tu ne t'en es pas servi : un clic dessus retire son repère. Le repère ne prend rien : le clic va à l'élément, comme d'habitude.
+- **Aide › Repères des nouveautés** (une case : cochée, ils sont affichés ; ou le bouton de la fenêtre des nouveautés) les retire tous d'un coup ; la recocher les remontre, une nouvelle version aussi.
+- Le repère suit l'élément : un volet replié ou un onglet caché n'en montre pas.
+### L'aide F1 en orange
+Dans l'aide, un sujet nouveau depuis la dernière version que tu as vue est **encadré en orange**, et marqué d'une pastille **NOUVEAU** dans la liste des sujets ; dans un sujet plus ancien, le paragraphe ou la section qui a changé est encadré à son tour, et le sujet porte **MODIFIÉ** dans la liste.
+- **Nouveautés seulement** ne garde, dans la liste, que les sujets nouveaux ou changés.
+- **Tout marquer comme lu** retire l'orange de toute l'aide.
+### Les exemples en ST, C ou C++
+Dans l'aide, un exemple de code peut se lire en trois notations : **ST** (celle des scripts de l'IHM), **C** et **C++**. Le sélecteur **ST | C | C++**, en haut de son cadre, montre la notation choisie ; un clic sur une autre change **tous les exemples** de l'aide, et ton choix est gardé d'une ouverture à l'autre. **Copier** copie l'exemple dans la notation montrée.
+@nouveau 1.10
+```ST
+Moyenne_Pression := A * Poids_A + B * (1.0 - Poids_A);
+```
+```C
+return A * Poids_A + B * (1.0f - Poids_A);
+```
+```C++
+return A * Poids_A + B * (1.0f - Poids_A);   // Poids_A = 0.5f par défaut
+```
+- Les scripts s'écrivent toujours en ST : le C et le C++ disent la même chose à qui les connaît mieux.
+- Dans le guide Word, les trois notations se suivent, chacune avec son nom.
+> Ce que tu as vu (la dernière version lancée, les nouveautés vues, les repères utilisés, l'aide lue) est gardé dans tes réglages (`XPGAnalyser.ini`, les clés `nouveautes.` ; la notation des exemples : `aide.notation`) : il te suit d'une version à l'autre, pas d'un projet à l'autre.

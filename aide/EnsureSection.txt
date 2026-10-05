@@ -1,0 +1,10 @@
+#! summary = Cree une section si elle n'existe pas encore, dans une tache ou dans une unite.
+#! usage = Creer une section qui existe deja est refuse, ce qui arrete la macro. Une macro relancee doit pouvoir l'etre : c'est tout l'objet de ce fichier.
+#! usage = GLOBALE OU DANS UNE UNITE : les deux. Une premiere version imposait une unite de programme, ce qui n'avait aucune raison d'etre. Une section de tache se cree avec un proprietaire vide, et c'est un choix, pas un defaut.
+#! usage = La section est creee en ST, dans MAST. Pour une autre tache ou un autre langage, il faut la creer a la main.
+#! usage = Une macro se relance. C'est la regle de toutes celles-ci : relancee sur un projet ou elle a deja tourne, elle ne doit rien casser et rien dupliquer. C'est pour ca qu'elles testent avant de creer, et qu'elles disent "existe deja" au lieu de s'arreter.
+#! usage = Les questions arrivent par TOURS. Ask() enregistre une question, AskNow() les pose. Une macro coupe ses tours la ou une reponse decide des questions suivantes : demander les quatre noms de section quand on vient de repondre "une seule famille" remplirait l'ecran de champs qu'on laisserait vides.
+#! see = CreerSR, ImportES
+#! param section = Le nom de la section. Si elle existe deja, la macro le dit et ne fait rien - y compris quand elle existe ailleurs que la ou vous la vouliez.
+#! param ou = Section de tache (elle tourne a chaque cycle de MAST), ou section d'une unite de programme.
+#! param unite = L'unite d'accueil. Elle doit exister : la macro s'arrete si elle n'existe pas, plutot que de creer une unite au passage. Creer une unite est une decision de structure, pas un effet de bord.

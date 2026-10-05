@@ -1,0 +1,36 @@
+# =============================================================================
+#  Session 87 - 1.11 (chantier T3, D5) : la page des expressions, la bascule
+#  « Variables : l'exemple / le projet ouvert », sur Armoire_Gaz ouvert.
+#   T3_20 : la page, le bouton « Variables : l'exemple » (actif : une IHM est ouverte)
+#   T3_21 : sur le projet ouvert, type Entier : =Compteur_Clics + 1 vaut 1 (la variable du projet)
+#           Tranche 8 : l'IHM du projet n'est pas demarree (Runtime::prime) : le compteur vaut sa valeur
+#           initiale, 0 (en tranche 7, la vue de demarrage avait deja compte un clic : 2) ; sous le resultat,
+#           la note « Projet ouvert, IHM non demarree : ... ».
+#   T3_22 : sur le projet ouvert, type BOOL : =Pression > 3 est refuse (Pression n'existe pas dans le projet)
+#   T3_23 : retour aux variables d'exemple : =Pression > 3 vaut TRUE (Pression = 3.8)
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+action help.expressions
+attendre 20
+capture T3_20_bascule_exemple.png
+bouton "Variables : l'exemple"
+attendre 10
+bouton "12   Entier"
+attendre 10
+champ "help.expressions.page.essai" "=Compteur_Clics + 1"
+attendre 10
+capture T3_21_projet_compteur.png
+bouton "B   BOOL"
+attendre 10
+champ "help.expressions.page.essai" "=Pression > 3"
+attendre 10
+capture T3_22_projet_pression_inconnue.png
+bouton "Variables : le projet ouvert"
+attendre 10
+capture T3_23_retour_exemple.png
+quitter

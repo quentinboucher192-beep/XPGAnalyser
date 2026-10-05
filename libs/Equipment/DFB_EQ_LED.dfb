@@ -1,0 +1,194 @@
+# Derived function block, shared.
+name = DFB_EQ_LED
+version = 1.02
+#! summary = Un voyant : fixe, clignotant, impulsion, ou pilote par une gravite.
+#! usage = UNE INSTANCE TRAITE SEIZE EQUIPEMENTS, et cette taille est dans la signature
+#! usage = du bloc : en changer touche toutes les instances de tous les projets qui
+#! usage = l'ont importe. Seize suffit pour une station ; au-dela, on declare une
+#! usage = deuxieme instance.
+#! usage = Appeler une fois par cycle, apres les voies d'entree et avant les reports
+#! usage = vers l'IHM : le bloc lit ce que les voies ont ecrit, et ecrit ce que les
+#! usage = reports vont lire.
+#! usage = 
+#! usage = LE CLIGNOTEMENT EST COMPTE DEPUIS CycleMs, comme tout le reste : une periode
+#! usage = de tache declaree a 20 alors qu'elle tourne a 50 donne un clignotement deux
+#! usage = fois et demie trop lent, sur tous les voyants a la fois.
+#! example = (* declarer : Voyants : ARRAY[0..15] OF ST_EQ_Led; *)
+#! example = Voyants[0].Mode     := 5;                  (* pilote par la gravite *)
+#! example = Voyants[0].Severity := AlmStat.WorstSev;
+#! example = 
+#! example = LED_Pupitre(Count := 8, CycleMs := 20, Eq := Voyants);
+#! example = 
+#! example = CarteDO_R0S5[8].Val := Voyants[0].Out;
+#! see = ST_EQ_Led
+#! see = ST_ALM_Stat
+#! param Count = Combien d'equipements du tableau sont traites. Borne a 16. En mettre moins
+#! param Count = ne fait pas gagner de memoire, seulement du temps de cycle.
+#! param CycleMs = La periode de la tache, en ms. Un DDT ne peut pas contenir de temporisateur,
+#! param CycleMs = donc tout le temps s'accumule depuis la : une valeur fausse ici fausse
+#! param CycleMs = toutes les temporisations de tous les equipements du tableau. DINT et non
+#! param CycleMs = INT - un INT de millisecondes deborde au bout de trente-trois secondes.
+#! param CycleMs = Le mieux : DtMs de DFB_SYS_CLOCK, qui suit le temps reel de la tache.
+#! param Eq = Le tableau des equipements, en InOut. Sa taille est figee a 16 : un InOut ne
+#! param Eq = peut pas etre dimensionne a l'appel.
+#! param FaultCount = Combien sont en defaut, recalcule a chaque cycle. De quoi allumer un voyant
+#! param FaultCount = de synthese sans reparcourir le tableau.
+#! param ReadyCount = Combien sont utilisables. FaultCount + ReadyCount n'est pas forcement egal a
+#! param ReadyCount = Count : un equipement desactive n'est ni l'un ni l'autre.
+#! changes 1.02 = LES COMPTEURS DE TEMPS NE DEBORDENT PLUS. Un DINT de millisecondes
+#! changes 1.02 = devient negatif au bout de 24,8 jours ; ils plafonnent maintenant a
+#! changes 1.02 = 2 000 000 000 ms (23 jours). StateMs repart a zero a chaque
+#! changes 1.02 = changement d'etat (il comptait depuis la mise en route du bloc), et
+#! changes 1.02 = l'etat est publie dans State. Demande le DDT en 1.01, qui porte les
+#! changes 1.02 = nouveaux champs.
+#! changes 1.01 = Count etait borne par le dernier INDICE (15) au lieu du nombre
+#! changes 1.01 = d'equipements (16) : le dernier equipement du tableau n'etait jamais
+#! changes 1.01 = traite.
+
+# Un voyant: fixe, clignotant, impulsion, ou pilote par une gravite.
+# Une instance traite 16 equipements. Passer a une autre taille change
+# la signature du bloc, donc toutes ses instances.
+
+# name ; type ; scope ; initial ; comment
+Count ; INT ; Input ; 16 ; combien d'equipements sont traites
+CycleMs ; DINT ; Input ; 20 ; la periode de la tache en ms. Un DDT ne peut pas contenir de temporisateur
+Eq ; ARRAY[0..15] OF ST_EQ_Led ; InOut ;  ; les equipements
+FaultCount ; INT ; Output ; 0 ; combien sont en defaut
+ReadyCount ; INT ; Output ; 0 ; combien sont utilisables
+i ; INT ; Local ; 0 ; 
+n ; INT ; Local ; 0 ; 
+LAST ; INT ; Local ; 15 ; dernier indice
+mode ; INT ; Local ; 0 ; 
+half ; DINT ; Local ; 0 ; 
+st ; INT ; Local ; 0 ; l'etat de l'equipement, avant publication
+MAXMS ; DINT ; Local ; 2000000000 ; plafond des compteurs de temps : 23 jours, sous la limite d'un DINT
+
+<<<section Process ST>>>
+n := Count;
+IF n > LAST + 1 THEN n := LAST + 1; END_IF;
+IF n < 0 THEN n := 0; END_IF;
+
+FaultCount := 0;
+ReadyCount := 0;
+
+FOR i := 0 TO n - 1 DO
+
+(* Ce qui est vrai de toute famille, ecrit une fois: l'acquittement sur front,
+   la memorisation du defaut, le temps dans l'etat. *)
+IF Eq[i].AckFault AND NOT Eq[i].PrevAck THEN
+    Eq[i].FaultLatch := FALSE;
+    Eq[i].FaultCode := 0;
+END_IF;
+Eq[i].PrevAck := Eq[i].AckFault;
+
+IF NOT Eq[i].Enable THEN
+    (* Desactive: aucune sortie, aucun defaut. Un equipement consigne ne doit
+       pas remplir le journal d'alarmes pendant qu'on travaille dessus. *)
+    Eq[i].Fault := FALSE;
+    Eq[i].FaultCode := 0;
+    Eq[i].FaultLatch := FALSE;
+END_IF;
+
+(* Un voyant n'a pas de defaut a lui: il n'y a aucun moyen de savoir depuis
+   l'automate qu'une LED est grillee. Le dire ici evite qu'on cherche. *)
+mode := Eq[i].Mode;
+
+(* Le mode 5 traduit une gravite. Une seule regle, ici, plutot que la meme
+   correspondance recopiee dans chaque section qui allume un voyant. *)
+IF mode = 5 THEN
+    IF Eq[i].Severity >= 3 THEN
+        mode := 3;
+    ELSIF Eq[i].Severity = 2 THEN
+        mode := 2;
+    ELSIF Eq[i].Severity = 1 THEN
+        mode := 1;
+    ELSE
+        mode := 0;
+    END_IF;
+END_IF;
+
+IF Eq[i].Trigger AND NOT Eq[i].PrevTrigger THEN
+    Eq[i].PulseLeft := Eq[i].PulseMs;
+END_IF;
+Eq[i].PrevTrigger := Eq[i].Trigger;
+
+IF Eq[i].PulseLeft > 0 THEN
+    Eq[i].PulseLeft := Eq[i].PulseLeft - CycleMs;
+END_IF;
+
+half := 0;
+IF mode = 2 THEN
+    half := Eq[i].SlowMs;
+ELSIF mode = 3 THEN
+    half := Eq[i].FastMs;
+END_IF;
+
+IF half > 0 THEN
+    Eq[i].BlinkMs := Eq[i].BlinkMs + CycleMs;
+    IF Eq[i].BlinkMs >= half * 2 THEN
+        Eq[i].BlinkMs := 0;
+    END_IF;
+ELSE
+    Eq[i].BlinkMs := 0;
+END_IF;
+
+IF NOT Eq[i].Enable THEN
+    Eq[i].Out := FALSE;
+ELSIF mode = 1 THEN
+    Eq[i].Out := TRUE;
+ELSIF mode = 4 THEN
+    Eq[i].Out := Eq[i].PulseLeft > 0;
+ELSIF half > 0 THEN
+    Eq[i].Out := Eq[i].BlinkMs < half;
+ELSE
+    Eq[i].Out := Eq[i].PulseLeft > 0;
+END_IF;
+
+
+(* Fault est la copie PUBLIEE de FaultLatch, posee en fin de cycle.
+   Les sorties, elles, se coupent sur FaultLatch - c'est-a-dire dans le meme
+   cycle que le defaut. Les couper sur Fault laissait l'equipement commande un
+   cycle de plus : vingt millisecondes pendant lesquelles une vanne reste
+   pilotee alors qu'on vient de decouvrir qu'on ne sait pas ou elle est. *)
+
+(* Le defaut est MEMORISE. Un thermique qui se rearme tout seul en refroidissant
+   effacerait la trace de son declenchement, et personne ne saurait pourquoi la
+   machine s'est arretee cette nuit-la. *)
+(* Un equipement desactive ne publie pas de defaut, meme si la condition est
+   toujours la. Le prologue efface la memorisation, mais le corps la repose au
+   meme cycle : c'est ici qu'il faut le dire, une fois, plutot que d'entourer
+   chaque famille d'un IF Enable. *)
+Eq[i].Fault := Eq[i].FaultLatch AND Eq[i].Enable;
+Eq[i].Ready := Eq[i].Enable AND NOT Eq[i].Fault;
+
+(* L'ETAT PUBLIE, et le temps passe dedans. StateMs n'etait jamais remis a
+   zero - il comptait depuis la mise en route du bloc - et debordait au bout de
+   24,8 jours. Il repart maintenant a chaque changement d'etat, et plafonne. *)
+IF NOT Eq[i].Enable THEN
+    st := 0;
+ELSIF Eq[i].Fault THEN
+    st := 1;
+ELSIF Eq[i].Out THEN
+    st := 3;
+ELSE
+    st := 2;
+END_IF;
+IF st <> Eq[i].PrevState THEN
+    Eq[i].StateMs := 0;
+    Eq[i].PrevState := st;
+ELSIF Eq[i].StateMs < MAXMS - CycleMs THEN
+    Eq[i].StateMs := Eq[i].StateMs + CycleMs;
+ELSE
+    Eq[i].StateMs := MAXMS;
+END_IF;
+Eq[i].State := st;
+
+IF Eq[i].Fault THEN
+    FaultCount := FaultCount + 1;
+END_IF;
+IF Eq[i].Ready THEN
+    ReadyCount := ReadyCount + 1;
+END_IF;
+
+END_FOR;
+<<<end>>>

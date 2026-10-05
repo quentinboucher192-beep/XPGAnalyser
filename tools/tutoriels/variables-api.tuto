@@ -1,0 +1,52 @@
+# API. : les variables de l'automate, par leur nom complet (1.11.1, décisions 104, 115 et 119).
+# Bac : Armoire_Gaz. Son programme : les Globales, puis les unités Gestion_armoires, Logigrammes_A et
+# Logigrammes_B ; index_armoire_utilisee est une E/S (InOut) de Gestion_armoires.
+# Il remplace le tutoriel déduit du sujet variables-api (T2, 7bf387b).
+# Il demande la 1.11.1 entière : API. dans un texte à trous (API-M), API proposé par l'aide à la
+# saisie (API-V) et l'arbre des variables du programme (API-V : une ui::TableView, la cible ligne:).
+# Sur une branche qui ne les a pas, le vérificateur le dit en échec.
+# Format : v111/agents/CONCEPTION-T1.md, section 1.
+= variables-api | API. : les variables de l'automate
+@sujet variables-api
+@bac Armoire_Gaz | Vue_Tuto
+
+@avant
+vue Vue_Tuto
+poser Texte 370,200 Txt_Armoire
+
+== 1 | API. dans un texte à trous
+: Toute variable de l'automate s'écrit aussi **API.** suivi de son chemin : `API.<Unité>.<variable>` pour une variable d'une unité de programme. Dès **AP**, l'aide à la saisie propose **API** en tête.
+clic vue:Txt_Armoire
+clic propriete:Texte
+texte propriete:Texte "Armoire : {AP"
+encadrer saisie:API
+dire "API, en tête de la liste. Après API., les unités et les globales ; après l'unité, ses variables."
+attendre 1s
+# Le nom entier, tapé : Entrée prendrait la première ligne de la liste (index_armoire_non_utilisee
+# peut passer avant). Après « } », la liste se ferme et Entrée valide la case.
+texte "I.Gestion_armoires.index_armoire_utilise"
+encadrer saisie:index_armoire_utilisee
+attendre 1s
+texte "e}"
+touche Return
+encadrer vue:Txt_Armoire
+dire "Le nom sans API. marche toujours : API. dit seulement que c'est une variable de l'automate."
+@atoi Choisis le texte et écris Armoire : {API.Gestion_armoires.index_armoire_utilisee} dans sa case Texte.
+@cible vue:Txt_Armoire
+@verifier objet(Txt_Armoire).text = "Armoire : {API.Gestion_armoires.index_armoire_utilisee}"
+
+== 2 | L'arbre des variables du programme
+: IHM › **Configuration** › **Variables du programme** : d'abord les **Globales**, puis une branche par **unité de programme**, ses variables rangées en **Publiques**, **Privées** et **E/S**. La recherche trouve un nom dans tout l'arbre.
+clic "arbre:IHM/Configuration"
+encadrer "ligne:Globales"
+dire "Le cadenas : un nom de l'automate ne se renomme pas ici ; il se renomme dans Control Expert."
+attendre 1s
+# Les Globales (251) et les unités sont dépliées à l'ouverture, Logigrammes_A d'abord : Gestion_armoires est
+# sous l'écran (vu au vérificateur, binaire d'API-V, 13 h 04 et 13 h 09). La recherche déplie ce qui y mène.
+texte "champ:hmi.config.vars.search" "index_armoire_utilisee"
+attendre 1s
+# Deux lignes de ce nom : la globale (la premiere, ligne: la prendrait) et l'E/S de Gestion_armoires
+# (vu au verificateur, 13 h 11) : j'encadre E/S, la seule visible apres la recherche.
+encadrer "ligne:E/S"
+dire "Deux index_armoire_utilisee : la globale (API.index_armoire_utilisee) et l'E/S de Gestion_armoires, employée une fois : par le texte de l'étape 1. Accessible : L/É, L, ou sans adresse (simulation seulement)."
+attendre 1s

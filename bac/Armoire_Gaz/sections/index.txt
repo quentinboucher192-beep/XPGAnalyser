@@ -1,0 +1,20 @@
+# Task sections, in execution order.
+# name ; task ; language ; order ; activation ; logic ; file
+Init ; MAST ; ST ; 1 ;  ;  ; Init.st
+Acquisitions_IHM ; MAST ; ST ; 2 ;  ;  ; Acquisitions_IHM.st
+Acquisitions_TOR ; MAST ; ST ; 3 ;  ;  ; Acquisitions_TOR.st
+Acquisitions_ANA ; MAST ; ST ; 4 ;  ;  ; Acquisitions_ANA.st
+Preconfig ; MAST ; ST ; 5 ;  ;  ; Preconfig.st
+Config_HCL ; MAST ; ST ; 6 ;  ;  ; Config_HCL.st
+Config_ND3 ; MAST ; ST ; 7 ;  ;  ; Config_ND3.st
+Initialisation_armoire ; MAST ; ST ; 8 ;  ;  ; Initialisation_armoire.st
+Modifications ; MAST ; ST ; 9 ;  ;  ; Modifications.st
+Reset ; MAST ; ST ; 10 ;  ;  ; Reset.st
+Reset_all ; MAST ; ST ; 11 ;  ;  ; Reset_all.st
+Lecture_configs ; MAST ; ST ; 12 ;  ;  ; Lecture_configs.st
+Choix_config ; MAST ; ST ; 13 ;  ;  ; Choix_config.st
+Affichage ; MAST ; ST ; 14 ;  ;  ; Affichage.st
+Gestion_sorties ; MAST ; ST ; 18 ;  ;  ; Gestion_sorties.st
+Matrice ; MAST ; ST ; 19 ;  ;  ; Matrice.st
+Gestion_reports ; MAST ; ST ; 20 ;  ;  ; Gestion_reports.st
+Reset_reset_config ; MAST ; ST ; 21 ;  ;  ; Reset_reset_config.st

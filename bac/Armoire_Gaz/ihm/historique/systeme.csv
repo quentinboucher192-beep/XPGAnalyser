@@ -1,0 +1,607 @@
+horodatage;type;source;message;utilisateur
+2026-09-27 03:33:39.772;Système;;IHM démarrée : 0 variable(s) IHM, 0 script(s) généraux;
+2026-09-27 03:33:39.772;Navigation;;vue de démarrage : Vue_Armoire_A;
+2026-09-27 03:34:21.806;Système;;IHM démarrée : 0 variable(s) IHM, 0 script(s) généraux;
+2026-09-27 03:34:21.806;Navigation;;vue de démarrage : Vue_Armoire_A;
+2026-09-27 03:34:24.706;Navigation;;Vue_Armoire_A → Vue_Donnees;
+2026-09-27 03:35:05.912;Système;;IHM démarrée : 4 variable(s) IHM, 4 script(s) généraux;
+2026-09-27 03:35:05.912;Journal;script Init;IHM démarrée : Production;
+2026-09-27 03:35:05.912;Navigation;;vue de démarrage : Vue_Armoire_A;
+2026-09-27 03:35:05.912;Journal;Vue_Armoire_A.OnOpen;Armoire A ouverte (1 fois);
+2026-09-27 03:35:05.912;Erreur;Vue_Armoire_A.OnCycle;ligne 2 : invalid argument: 'Armoires[0].bouteille_vide' is not declared;
+2026-09-27 03:35:06.012;Erreur;Vue_Armoire_A.OnCycle;ligne 2 : invalid argument: 'Armoires[0].bouteille_vide' is not declared;
+2026-09-27 03:35:06.112;Erreur;Vue_Armoire_A.OnCycle;ligne 2 : invalid argument: 'Armoires[0].bouteille_vide' is not declared;
+2026-09-27 03:35:06.212;Erreur;Vue_Armoire_A.OnCycle;ligne 2 : invalid argument: 'Armoires[0].bouteille_vide' is not declared;
+2026-09-27 03:35:06.945;Système;;IHM arrêtée;
+2026-09-27 03:35:07.334;Système;;IHM démarrée : 4 variable(s) IHM, 4 script(s) généraux;
+2026-09-27 03:35:07.334;Journal;script Init;IHM démarrée : Production;
+2026-09-27 03:35:07.334;Navigation;;vue de démarrage : Vue_Armoire_A;
+2026-09-27 03:35:07.334;Journal;Vue_Armoire_A.OnOpen;Armoire A ouverte (1 fois);
+2026-09-27 03:35:08.234;Navigation;;popup Popup_Aide;
+2026-09-27 03:35:09.534;Navigation;;popup fermée : Popup_Aide;
+2026-09-27 03:35:10.867;Action;Vue_Armoire_A/Btn_Armoire_B;Basculer Mode_Maintenance = TRUE;
+2026-09-27 03:35:10.934;Journal;script Suivi_Maintenance;Passage en maintenance;
+2026-09-27 03:35:11.467;Action;Vue_Armoire_A/Btn_Accueil;Compteur_Clics : 1 → 2;
+2026-09-27 03:35:11.467;Navigation;;Vue_Armoire_A → Vue_Accueil (Glissement, 500 ms);
+2026-09-27 03:35:12.767;Navigation;;Vue_Accueil → Vue_Armoire_A (Rotation, 600 ms);
+2026-09-27 03:35:12.767;Journal;Vue_Armoire_A.OnOpen;Armoire A ouverte (3 fois);
+2026-09-27 03:35:17.767;Journal;Vue_Armoire_A;"Pression PT1 : 7.5 bar ; Maintenance en cours";
+2026-09-27 03:35:34.628;Système;;IHM démarrée : 4 variable(s) IHM, 5 script(s) généraux;
+2026-09-27 03:35:34.628;Journal;script Init;IHM démarrée : Production;
+2026-09-27 03:35:34.628;Navigation;;vue de démarrage : Vue_Armoire_A;
+2026-09-27 03:35:34.628;Journal;Vue_Armoire_A.OnOpen;Armoire A ouverte (1 fois);
+2026-09-27 03:35:34.628;Erreur;Vue_Armoire_A.OnCycle;ligne 2 : invalid argument: 'Armoires[0].bouteille_vide' is not declared;
+2026-09-27 03:35:34.695;Erreur;Vue_Armoire_A.OnCycle;ligne 2 : invalid argument: 'Armoires[0].bouteille_vide' is not declared;
+2026-09-27 03:35:34.761;Erreur;Vue_Armoire_A.OnCycle;ligne 2 : invalid argument: 'Armoires[0].bouteille_vide' is not declared;
+2026-09-27 03:35:34.828;Erreur;Vue_Armoire_A.OnCycle;ligne 2 : invalid argument: 'Armoires[0].bouteille_vide' is not declared;
+2026-09-27 03:35:34.895;Erreur;Vue_Armoire_A.OnCycle;ligne 2 : invalid argument: 'Armoires[0].bouteille_vide' is not declared;
+2026-09-27 03:35:34.961;Erreur;Vue_Armoire_A.OnCycle;ligne 2 : invalid argument: 'Armoires[0].bouteille_vide' is not declared;
+2026-09-27 03:35:35.661;Système;;IHM arrêtée;
+2026-09-27 03:35:35.975;Système;;IHM démarrée : 4 variable(s) IHM, 5 script(s) généraux;
+2026-09-27 03:35:35.975;Journal;script Init;IHM démarrée : Production;
+2026-09-27 03:35:35.975;Navigation;;vue de démarrage : Vue_Armoire_A;
+2026-09-27 03:35:35.975;Journal;Vue_Armoire_A.OnOpen;Armoire A ouverte (1 fois);
+2026-09-27 03:35:36.342;Action;Vue_Armoire_A/Btn_Accueil;Compteur_Clics : 1 → 2;
+2026-09-27 03:35:36.342;Navigation;;Vue_Armoire_A → Vue_Accueil (Glissement, 500 ms);
+2026-09-27 03:35:37.208;Action;Vue_Accueil/Btn_Maintenance;Basculer Mode_Maintenance = TRUE;
+2026-09-27 03:35:37.242;Journal;script Suivi_Maintenance;Passage en maintenance;
+2026-09-27 03:35:37.242;Navigation;;popup Popup_Aide (Vue ouverte);
+2026-09-27 03:35:38.508;Navigation;;popup fermée : Popup_Aide;
+2026-09-27 03:35:39.042;Navigation;;Vue_Accueil → Vue_Armoire_A (Rotation, 600 ms);
+2026-09-27 03:35:39.042;Journal;Vue_Armoire_A.OnOpen;Armoire A ouverte (3 fois);
+2026-09-27 03:35:40.075;Journal;Vue_Armoire_A/Btn_Alarmes (script de l'action);"Alarmes : au lot 4 ; PT1 = 6.2 bar";
+2026-09-27 03:35:40.075;Action;Vue_Armoire_A/Btn_Alarmes (script de l'action);son : bip_alarme.wav;
+2026-09-27 03:35:40.075;Journal;script Remise_A_Zero;Compteurs remis à zéro;
+2026-09-27 03:35:40.075;Journal;Vue_Armoire_A/Btn_Alarmes (script de l'action);"Alarmes : au lot 4 ; PT1 = 6.2 bar";
+2026-09-27 03:35:40.075;Action;Vue_Armoire_A/Btn_Alarmes (script de l'action);son : bip_alarme.wav;
+2026-09-27 03:36:14.962;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:36:14.962;Système;;IHM démarrée : 4 variable(s) IHM, 5 script(s) généraux;operateur
+2026-09-27 03:36:14.962;Journal;script Init;IHM démarrée : Production;operateur
+2026-09-27 03:36:14.962;Navigation;;vue de démarrage : Vue_Supervision;operateur
+2026-09-27 03:36:14.962;Erreur;alarme PT1_A_Basse;condition illisible : Armoires[0].ana.PT1.mes < 20;operateur
+2026-09-27 03:36:14.962;Erreur;alarme PT1_A_Vide;condition illisible : Armoires[0].ana.PT1.mes < 8;operateur
+2026-09-27 03:36:14.962;Erreur;alarme Bouteille_B_Vide;condition illisible : Armoires[1].bouteille_vide;operateur
+2026-09-27 03:36:14.962;Erreur;alarme PT9_Hors_Service;condition illisible : Capteur_PT9 > 3;operateur
+2026-09-27 03:36:15.362;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 03:36:15.662;Système;;IHM arrêtée;operateur
+2026-09-27 03:36:15.925;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:36:15.925;Système;;IHM démarrée : 4 variable(s) IHM, 5 script(s) généraux;operateur
+2026-09-27 03:36:15.925;Journal;script Init;IHM démarrée : Production;operateur
+2026-09-27 03:36:15.925;Navigation;;vue de démarrage : Vue_Supervision;operateur
+2026-09-27 03:36:15.925;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 03:36:15.925;Erreur;alarme PT9_Hors_Service;condition illisible : Capteur_PT9 > 3;operateur
+2026-09-27 03:36:16.458;Apparition;PT1_A_Vide;[Critique] Bouteille A vide (0.0 bar) : basculer;operateur
+2026-09-27 03:36:16.858;Disparition;PT1_A_Vide;Bouteille A vide (0.0 bar) : basculer;operateur
+2026-09-27 03:36:19.058;Accès refusé;Vue_Supervision/Btn_Recette_Argon;"Btn_Recette_Argon : niveau d'accès 3 (Superviseur) requis ; operateur a le niveau 1";operateur
+2026-09-27 03:36:20.125;Connexion;chef;Claire Dubois connecté (Superviseur, niveau 3);chef
+2026-09-27 03:36:20.492;Recette;Reglages_Armoires;Argon appliqué : 3 valeur(s) écrite(s);chef
+2026-09-27 03:36:21.258;Réapparition;PT1_A_Vide;Bouteille A vide (0.0 bar) : basculer;chef
+2026-09-27 03:36:22.958;Acquittement;PT1_A_Vide;Bouteille A vide (0.0 bar) : basculer;chef
+2026-09-27 03:36:22.958;Acquittement;PT1_A_Basse;Bouteille A presque vide : 0.0 bar;chef
+2026-09-27 03:36:23.725;Disparition;PT1_A_Basse;Bouteille A presque vide : 0.0 bar;chef
+2026-09-27 03:36:23.725;Disparition;PT1_A_Vide;Bouteille A vide (0.0 bar) : basculer;chef
+2026-09-27 03:36:25.925;Recette;Reglages_Armoires;"Melange refusé : Seuil poids B : 75 hors bornes [0 ; 60] ; rien n'est écrit";chef
+2026-09-27 03:36:26.125;Recette;Reglages_Armoires;Azote appliqué : 3 valeur(s) écrite(s);chef
+2026-09-27 03:36:26.692;Action;Vue_Supervision/Btn_Cle_Maintenance;Basculer Mode_Maintenance = TRUE;chef
+2026-09-27 03:36:26.725;Journal;script Suivi_Maintenance;Passage en maintenance;chef
+2026-09-27 03:36:26.725;Apparition;Maintenance_En_Cours;[Basse] Intervention en cours : Maintenance en cours;chef
+2026-09-27 03:36:27.425;Connexion;technicien;Marc Leroy connecté (Maintenance, niveau 2);technicien
+2026-09-27 03:36:28.658;Action;Vue_Supervision/Btn_Cle_Maintenance;Basculer Mode_Maintenance = FALSE;technicien
+2026-09-27 03:36:28.725;Journal;script Suivi_Maintenance;Retour en production;technicien
+2026-09-27 03:36:28.725;Disparition;Maintenance_En_Cours;Intervention en cours : Maintenance en cours;technicien
+2026-09-27 03:36:29.025;Déconnexion;technicien;déconnecté : bouton Déconnecter;
+2026-09-27 03:36:39.374;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:36:39.374;Système;;IHM démarrée : 4 variable(s) IHM, 5 script(s) généraux;operateur
+2026-09-27 03:36:39.374;Journal;script Init;IHM démarrée : Production;operateur
+2026-09-27 03:36:39.374;Navigation;;vue de démarrage : Vue_Supervision;operateur
+2026-09-27 03:36:39.374;Erreur;alarme PT1_A_Basse;condition illisible : Armoires[0].ana.PT1.mes < 20;operateur
+2026-09-27 03:36:39.374;Erreur;alarme PT1_A_Vide;condition illisible : Armoires[0].ana.PT1.mes < 8;operateur
+2026-09-27 03:36:39.374;Erreur;alarme Bouteille_B_Vide;condition illisible : Armoires[1].bouteille_vide;operateur
+2026-09-27 03:36:39.374;Erreur;alarme PT9_Hors_Service;condition illisible : Capteur_PT9 > 3;operateur
+2026-09-27 03:36:40.574;Système;;IHM arrêtée;operateur
+2026-09-27 03:37:15.257;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:37:15.257;Système;;IHM démarrée : 4 variable(s) IHM, 5 script(s) généraux;operateur
+2026-09-27 03:37:15.257;Journal;script Init;IHM démarrée : Production;operateur
+2026-09-27 03:37:15.257;Navigation;;vue de démarrage : Vue_Supervision;operateur
+2026-09-27 03:37:15.257;Erreur;alarme PT1_A_Basse;condition illisible : Armoires[0].ana.PT1.mes < 20;operateur
+2026-09-27 03:37:15.257;Erreur;alarme PT1_A_Vide;condition illisible : Armoires[0].ana.PT1.mes < 8;operateur
+2026-09-27 03:37:15.257;Erreur;alarme Bouteille_B_Vide;condition illisible : Armoires[1].bouteille_vide;operateur
+2026-09-27 03:37:15.257;Erreur;alarme PT9_Hors_Service;condition illisible : Capteur_PT9 > 3;operateur
+2026-09-27 03:37:15.657;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 03:37:15.957;Système;;IHM arrêtée;operateur
+2026-09-27 03:37:16.257;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:37:16.257;Système;;IHM démarrée : 4 variable(s) IHM, 5 script(s) généraux;operateur
+2026-09-27 03:37:16.257;Journal;script Init;IHM démarrée : Production;operateur
+2026-09-27 03:37:16.257;Navigation;;vue de démarrage : Vue_Supervision;operateur
+2026-09-27 03:37:16.257;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 03:37:16.257;Erreur;alarme PT9_Hors_Service;condition illisible : Capteur_PT9 > 3;operateur
+2026-09-27 03:37:16.790;Apparition;PT1_A_Vide;[Critique] Bouteille A vide (0.0 bar) : basculer;operateur
+2026-09-27 03:37:16.957;Navigation;;Vue_Supervision → Vue_Production;operateur
+2026-09-27 03:37:16.957;Journal;Vue_Production (Modele_Conduite);Écran modèle : cadre et navigation en place;operateur
+2026-09-27 03:37:16.957;Journal;Vue_Production;Vue_Production : ses objets par-dessus le modèle;operateur
+2026-09-27 03:37:18.190;Action;Vue_Production/Btn_Maintenance;Basculer Mode_Maintenance = TRUE;operateur
+2026-09-27 03:37:18.257;Journal;script Suivi_Maintenance;Passage en maintenance;operateur
+2026-09-27 03:37:18.257;Apparition;Maintenance_En_Cours;[Basse] Intervention en cours : Maintenance en cours;operateur
+2026-09-27 03:37:18.890;Navigation;;popup Popup_Aide;operateur
+2026-09-27 03:37:31.917;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:37:31.917;Système;;IHM démarrée : 4 variable(s) IHM, 5 script(s) généraux;operateur
+2026-09-27 03:37:31.917;Journal;script Init;IHM démarrée : Production;operateur
+2026-09-27 03:37:31.917;Navigation;;vue de démarrage : Vue_Supervision;operateur
+2026-09-27 03:37:31.917;Erreur;alarme PT1_A_Basse;condition illisible : Armoires[0].ana.PT1.mes < 20;operateur
+2026-09-27 03:37:31.917;Erreur;alarme PT1_A_Vide;condition illisible : Armoires[0].ana.PT1.mes < 8;operateur
+2026-09-27 03:37:31.917;Erreur;alarme Bouteille_B_Vide;condition illisible : Armoires[1].bouteille_vide;operateur
+2026-09-27 03:37:31.917;Erreur;alarme PT9_Hors_Service;condition illisible : Capteur_PT9 > 3;operateur
+2026-09-27 03:37:32.317;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 03:37:32.617;Système;;IHM arrêtée;operateur
+2026-09-27 03:37:32.935;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:37:32.935;Système;;IHM démarrée : 4 variable(s) IHM, 5 script(s) généraux;operateur
+2026-09-27 03:37:32.935;Journal;script Init;IHM démarrée : Production;operateur
+2026-09-27 03:37:32.935;Navigation;;vue de démarrage : Vue_Supervision;operateur
+2026-09-27 03:37:32.935;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 03:37:32.935;Erreur;alarme PT9_Hors_Service;condition illisible : Capteur_PT9 > 3;operateur
+2026-09-27 03:37:33.468;Apparition;PT1_A_Vide;[Critique] Bouteille A vide (0.0 bar) : basculer;operateur
+2026-09-27 03:37:33.635;Navigation;;Vue_Supervision → Vue_Production;operateur
+2026-09-27 03:37:33.635;Journal;Vue_Production (Modele_Conduite);Écran modèle : cadre et navigation en place;operateur
+2026-09-27 03:37:33.635;Journal;Vue_Production;Vue_Production : ses objets par-dessus le modèle;operateur
+2026-09-27 03:37:34.602;Disparition;PT1_A_Vide;Bouteille A vide (0.0 bar) : basculer;operateur
+2026-09-27 03:37:37.668;Action;Vue_Production/Btn_Maintenance;Basculer Mode_Maintenance = TRUE;operateur
+2026-09-27 03:37:37.735;Journal;script Suivi_Maintenance;Passage en maintenance;operateur
+2026-09-27 03:37:37.735;Apparition;Maintenance_En_Cours;[Basse] Intervention en cours : Maintenance en cours;operateur
+2026-09-27 03:37:38.702;Accès refusé;Vue_Production/Gestion_Recettes;Appliquer : permission « Recettes » requise (utilisateur operateur);operateur
+2026-09-27 03:37:39.502;Connexion;admin;admin connecté (Administrateur, niveau 4);admin
+2026-09-27 03:37:39.868;Recette;Reglages_Armoires;Argon appliqué : 3 valeur(s) écrite(s);admin
+2026-09-27 03:37:55.120;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:37:55.120;Système;;IHM démarrée : 5 variable(s) IHM, 5 script(s) généraux;operateur
+2026-09-27 03:37:55.120;Journal;script Init;IHM démarrée : Production;operateur
+2026-09-27 03:37:55.120;Navigation;;vue de démarrage : Vue_Supervision;operateur
+2026-09-27 03:37:55.120;Erreur;alarme PT1_A_Basse;condition illisible : Armoires[0].ana.PT1.mes < 20;operateur
+2026-09-27 03:37:55.120;Erreur;alarme PT1_A_Vide;condition illisible : Armoires[0].ana.PT1.mes < 8;operateur
+2026-09-27 03:37:55.120;Erreur;alarme Bouteille_B_Vide;condition illisible : Armoires[1].bouteille_vide;operateur
+2026-09-27 03:37:55.120;Erreur;alarme PT9_Hors_Service;condition illisible : Capteur_PT9 > 3;operateur
+2026-09-27 03:37:55.520;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 03:37:55.820;Système;;IHM arrêtée;operateur
+2026-09-27 03:37:56.069;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:37:56.069;Système;;IHM démarrée : 5 variable(s) IHM, 5 script(s) généraux;operateur
+2026-09-27 03:37:56.069;Journal;script Init;IHM démarrée : Production;operateur
+2026-09-27 03:37:56.069;Navigation;;vue de démarrage : Vue_Supervision;operateur
+2026-09-27 03:37:56.069;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 03:37:56.069;Erreur;alarme PT9_Hors_Service;condition illisible : Capteur_PT9 > 3;operateur
+2026-09-27 03:37:56.602;Apparition;PT1_A_Vide;[Critique] Bouteille A vide (0.0 bar) : basculer;operateur
+2026-09-27 03:37:56.769;Navigation;;Vue_Supervision → Vue_Production;operateur
+2026-09-27 03:37:56.769;Journal;Vue_Production (Modele_Conduite);Écran modèle : cadre et navigation en place;operateur
+2026-09-27 03:37:56.769;Journal;Vue_Production;Vue_Production : ses objets par-dessus le modèle;operateur
+2026-09-27 03:37:57.469;Action;Vue_Production/Btn_Systeme;paramètres système;operateur
+2026-09-27 03:37:58.236;Action;Vue_Production/Btn_Base;Table_Mesures lié à historique;operateur
+2026-09-27 03:37:58.602;Action;Vue_Production/Btn_Son;son : bip_alarme.wav;operateur
+2026-09-27 03:37:59.169;Accès refusé;Vue_Production/Btn_Photo;Demander une ressource : permission « Administrer » requise (utilisateur operateur);operateur
+2026-09-27 03:37:59.936;Connexion;admin;admin connecté (Administrateur, niveau 4);admin
+2026-09-27 03:38:00.302;Action;Vue_Production/Btn_Photo;"demander une ressource (png;jpg)";admin
+2026-09-27 03:38:00.869;Action;Vue_Production/Btn_Photo;ressource ajoutée : photo_operateur.jpg;admin
+2026-09-27 03:38:19.971;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:38:19.971;Système;;IHM démarrée : 5 variable(s) IHM, 6 script(s) généraux;operateur
+2026-09-27 03:38:19.971;Journal;script Init;IHM démarrée : Production;operateur
+2026-09-27 03:38:19.971;Navigation;;vue de démarrage : Vue_Supervision;operateur
+2026-09-27 03:38:19.971;Erreur;alarme PT1_A_Basse;condition illisible : Armoires[0].ana.PT1.mes < 20;operateur
+2026-09-27 03:38:19.971;Erreur;alarme PT1_A_Vide;condition illisible : Armoires[0].ana.PT1.mes < 8;operateur
+2026-09-27 03:38:19.971;Erreur;alarme Bouteille_B_Vide;condition illisible : Armoires[1].bouteille_vide;operateur
+2026-09-27 03:38:19.971;Erreur;alarme PT9_Hors_Service;condition illisible : Capteur_PT9 > 3;operateur
+2026-09-27 03:38:20.371;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 03:38:20.671;Système;;IHM arrêtée;operateur
+2026-09-27 03:38:20.917;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:38:20.917;Système;;IHM démarrée : 5 variable(s) IHM, 6 script(s) généraux;operateur
+2026-09-27 03:38:20.917;Journal;script Init;IHM démarrée : Production;operateur
+2026-09-27 03:38:20.917;Navigation;;vue de démarrage : Vue_Supervision;operateur
+2026-09-27 03:38:20.917;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 03:38:20.917;Erreur;alarme PT9_Hors_Service;condition illisible : Capteur_PT9 > 3;operateur
+2026-09-27 03:38:21.450;Apparition;PT1_A_Vide;[Critique] Bouteille A vide (0.0 bar) : basculer;operateur
+2026-09-27 03:38:21.617;Navigation;;Vue_Supervision → Vue_Production;operateur
+2026-09-27 03:38:21.617;Journal;Vue_Production (Modele_Conduite);Écran modèle : cadre et navigation en place;operateur
+2026-09-27 03:38:21.617;Journal;Vue_Production;Vue_Production : ses objets par-dessus le modèle;operateur
+2026-09-27 03:38:22.584;Disparition;PT1_A_Vide;Bouteille A vide (0.0 bar) : basculer;operateur
+2026-09-27 03:38:25.850;Connexion;admin;admin connecté (Administrateur, niveau 4);admin
+2026-09-27 03:38:26.117;Journal;script Statistiques_Pression;Pression A : mini 0.0, maxi 15.0 bar (5 mesures);admin
+2026-09-27 03:38:26.217;Journal;fonction Tracer_Evenement;[ALERTE] Contrôle visuel fait;admin
+2026-09-27 03:38:31.117;Journal;script Statistiques_Pression;Pression A : mini 0.0, maxi 18.0 bar (10 mesures);admin
+2026-09-27 03:39:08.485;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:39:08.485;Système;;IHM démarrée : 5 variable(s) IHM, 6 script(s) généraux;operateur
+2026-09-27 03:39:08.485;Journal;script Init;IHM démarrée : Production;operateur
+2026-09-27 03:39:08.485;Navigation;;vue de démarrage : Vue_Supervision;operateur
+2026-09-27 03:39:08.485;Erreur;alarme PT1_A_Basse;condition illisible : Armoires[0].ana.PT1.mes < 20;operateur
+2026-09-27 03:39:08.485;Erreur;alarme PT1_A_Vide;condition illisible : Armoires[0].ana.PT1.mes < 8;operateur
+2026-09-27 03:39:08.485;Erreur;alarme Bouteille_B_Vide;condition illisible : Armoires[1].bouteille_vide;operateur
+2026-09-27 03:39:08.485;Erreur;alarme PT9_Hors_Service;condition illisible : Capteur_PT9 > 3;operateur
+2026-09-27 03:39:08.885;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 03:39:09.185;Système;;IHM arrêtée;operateur
+2026-09-27 03:39:09.460;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:39:09.460;Système;;IHM démarrée : 5 variable(s) IHM, 6 script(s) généraux;operateur
+2026-09-27 03:39:09.460;Journal;script Init;IHM démarrée : Production;operateur
+2026-09-27 03:39:09.460;Navigation;;vue de démarrage : Vue_Supervision;operateur
+2026-09-27 03:39:09.460;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 03:39:09.460;Erreur;alarme PT9_Hors_Service;condition illisible : Capteur_PT9 > 3;operateur
+2026-09-27 03:39:09.993;Apparition;PT1_A_Vide;[Critique] Bouteille A vide (0.0 bar) : basculer;operateur
+2026-09-27 03:39:10.160;Navigation;;Vue_Supervision → Vue_Armoires;operateur
+2026-09-27 03:39:11.127;Disparition;PT1_A_Vide;Bouteille A vide (0.0 bar) : basculer;operateur
+2026-09-27 03:39:12.327;Navigation;;"popup Popup_Armoire (Armoire := Armoires[0]; Nom := 'A')";operateur
+2026-09-27 03:39:14.460;Journal;script Statistiques_Pression;Pression A : mini 0.0, maxi 18.5 bar (5 mesures);operateur
+2026-09-27 03:39:16.993;Action;Popup_Armoire/Saisie_Seuil;saisie : Armoire.seuil_poids_saisi = 18.5;operateur
+2026-09-27 03:39:17.693;Navigation;;popup Popup_Aide;operateur
+2026-09-27 03:39:18.727;Navigation;;popup fermée : Popup_Aide;operateur
+2026-09-27 03:39:19.427;Navigation;;popup fermée : Popup_Armoire;operateur
+2026-09-27 03:39:19.460;Journal;script Statistiques_Pression;Pression A : mini 0.0, maxi 18.5 bar (10 mesures);operateur
+2026-09-27 03:39:27.838;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:39:27.838;Système;;IHM démarrée : 5 variable(s) IHM, 6 script(s) généraux;operateur
+2026-09-27 03:39:27.838;Journal;script Init;IHM démarrée : Production;operateur
+2026-09-27 03:39:27.838;Navigation;;vue de démarrage : Vue_Supervision;operateur
+2026-09-27 03:39:27.838;Erreur;alarme PT1_A_Basse;condition illisible : Armoires[0].ana.PT1.mes < 20;operateur
+2026-09-27 03:39:27.838;Erreur;alarme PT1_A_Vide;condition illisible : Armoires[0].ana.PT1.mes < 8;operateur
+2026-09-27 03:39:27.838;Erreur;alarme Bouteille_B_Vide;condition illisible : Armoires[1].bouteille_vide;operateur
+2026-09-27 03:39:27.838;Erreur;alarme PT9_Hors_Service;condition illisible : Capteur_PT9 > 3;operateur
+2026-09-27 03:39:28.238;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 03:39:28.538;Système;;IHM arrêtée;operateur
+2026-09-27 03:39:28.840;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:39:28.840;Système;;IHM démarrée : 5 variable(s) IHM, 6 script(s) généraux;operateur
+2026-09-27 03:39:28.840;Journal;script Init;IHM démarrée : Production;operateur
+2026-09-27 03:39:28.840;Navigation;;vue de démarrage : Vue_Supervision;operateur
+2026-09-27 03:39:28.840;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 03:39:28.840;Erreur;alarme PT9_Hors_Service;condition illisible : Capteur_PT9 > 3;operateur
+2026-09-27 03:39:29.373;Apparition;PT1_A_Vide;[Critique] Bouteille A vide (0.0 bar) : basculer;operateur
+2026-09-27 03:39:29.540;Navigation;;Vue_Supervision → Vue_Utilisateurs;operateur
+2026-09-27 03:39:30.240;Accès refusé;Vue_Utilisateurs/Gestion_Utilisateurs;Ajouter : permission « Administrer » requise (utilisateur operateur);operateur
+2026-09-27 03:39:30.807;Déconnexion;operateur;déconnecté : bouton Vue_Utilisateurs/Btn_Deconnexion;
+2026-09-27 03:39:31.407;Connexion;admin;admin connecté (Administrateur, niveau 4);admin
+2026-09-27 03:39:33.973;Déconnexion;admin;déconnecté : bouton Vue_Utilisateurs/Btn_Deconnexion;
+2026-09-27 03:39:34.173;Journal;script Statistiques_Pression;Pression A : mini 0.0, maxi 0.0 bar (5 mesures);
+2026-09-27 03:39:34.973;Connexion;stagiaire;stagiaire connecté (Opérateur, niveau 1);stagiaire
+2026-09-27 03:39:35.973;Mot de passe changé;stagiaire;par stagiaire (Vue_Utilisateurs/Panneau_Mot_De_Passe);stagiaire
+2026-09-27 03:42:49.713;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:42:49.713;Système;;IHM démarrée : 34 variable(s) IHM, 9 script(s) généraux;operateur
+2026-09-27 03:42:49.713;Journal;script Init;IHM démarrée : Production;operateur
+2026-09-27 03:42:49.713;Navigation;;vue de démarrage : Vue_Supervision;operateur
+2026-09-27 03:42:49.713;Erreur;alarme PT1_A_Basse;condition illisible : Armoires[0].ana.PT1.mes < 20;operateur
+2026-09-27 03:42:49.713;Erreur;alarme PT1_A_Vide;condition illisible : Armoires[0].ana.PT1.mes < 8;operateur
+2026-09-27 03:42:49.713;Erreur;alarme Bouteille_B_Vide;condition illisible : Armoires[1].bouteille_vide;operateur
+2026-09-27 03:42:49.713;Erreur;alarme PT9_Hors_Service;condition illisible : Capteur_PT9 > 3;operateur
+2026-09-27 03:42:49.713;Action;Vue_Commandes/Prog_Chauffage;Chauffage_Actif = FALSE (programmateur);operateur
+2026-09-27 03:42:50.113;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 03:42:50.413;Système;;IHM arrêtée;operateur
+2026-09-27 03:42:50.698;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:42:50.698;Système;;IHM démarrée : 34 variable(s) IHM, 9 script(s) généraux;operateur
+2026-09-27 03:42:50.698;Journal;script Init;IHM démarrée : Production;operateur
+2026-09-27 03:42:50.698;Navigation;;vue de démarrage : Vue_Supervision;operateur
+2026-09-27 03:42:50.698;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 03:42:50.698;Erreur;alarme PT9_Hors_Service;condition illisible : Capteur_PT9 > 3;operateur
+2026-09-27 03:42:50.698;Action;Vue_Commandes/Prog_Chauffage;Chauffage_Actif = FALSE (programmateur);operateur
+2026-09-27 03:42:51.231;Apparition;PT1_A_Vide;[Critique] Bouteille A vide (0.0 bar) : basculer;operateur
+2026-09-27 03:42:51.398;Navigation;;Vue_Supervision → Vue_Pictogrammes;operateur
+2026-09-27 03:42:52.798;Action;Vue_Pictogrammes/Case_Defaut_2;Defaut_Filtre = TRUE;operateur
+2026-09-27 03:42:53.298;Action;Vue_Pictogrammes/Case_Defaut_2;Defaut_Filtre = FALSE;operateur
+2026-09-27 03:43:07.598;Apparition;Bouteille_B_Vide;[Critique] Bouteille B vide;operateur
+2026-09-27 03:43:07.698;Navigation;;Vue_Pictogrammes → Vue_Cartes;operateur
+2026-09-27 03:43:07.865;Journal;script Statistiques_Pression;Pression A : mini 0.0, maxi 7.5 bar (5 mesures);operateur
+2026-09-27 03:43:08.398;Navigation;;"popup Popup_Armoire (Armoire := Armoires[1]; Nom := 'B')";operateur
+2026-09-27 03:43:09.231;Navigation;;popup fermée : Popup_Armoire;operateur
+2026-09-27 03:43:36.387;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:43:36.387;Système;;IHM démarrée : 39 variable(s) IHM, 10 script(s) généraux;operateur
+2026-09-27 03:43:36.387;Journal;script Init;IHM démarrée : Production;operateur
+2026-09-27 03:43:36.387;Navigation;;vue de démarrage : Vue_Supervision;operateur
+2026-09-27 03:43:36.387;Erreur;alarme PT1_A_Basse;condition illisible : Armoires[0].ana.PT1.mes < 20;operateur
+2026-09-27 03:43:36.387;Erreur;alarme PT1_A_Vide;condition illisible : Armoires[0].ana.PT1.mes < 8;operateur
+2026-09-27 03:43:36.387;Erreur;alarme Bouteille_B_Vide;condition illisible : Armoires[1].bouteille_vide;operateur
+2026-09-27 03:43:36.387;Erreur;alarme PT9_Hors_Service;condition illisible : Capteur_PT9 > 3;operateur
+2026-09-27 03:43:36.387;Action;Vue_Commandes/Prog_Chauffage;Chauffage_Actif = FALSE (programmateur);operateur
+2026-09-27 03:43:36.787;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 03:43:37.087;Système;;IHM arrêtée;operateur
+2026-09-27 03:43:37.466;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:43:37.466;Système;;IHM démarrée : 39 variable(s) IHM, 10 script(s) généraux;operateur
+2026-09-27 03:43:37.466;Journal;script Init;IHM démarrée : Production;operateur
+2026-09-27 03:43:37.466;Navigation;;vue de démarrage : Vue_Supervision;operateur
+2026-09-27 03:43:37.466;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 03:43:37.466;Erreur;alarme PT9_Hors_Service;condition illisible : Capteur_PT9 > 3;operateur
+2026-09-27 03:43:37.466;Action;Vue_Commandes/Prog_Chauffage;Chauffage_Actif = FALSE (programmateur);operateur
+2026-09-27 03:43:37.999;Apparition;PT1_A_Vide;[Critique] Bouteille A vide (0.0 bar) : basculer;operateur
+2026-09-27 03:43:38.166;Navigation;;Vue_Supervision → Vue_Graphiques;operateur
+2026-09-27 03:43:42.666;Journal;script Statistiques_Pression;Pression A : mini 0.0, maxi 0.0 bar (5 mesures);operateur
+2026-09-27 03:43:47.666;Journal;script Statistiques_Pression;Pression A : mini 0.0, maxi 0.0 bar (10 mesures);operateur
+2026-09-27 03:43:52.666;Journal;script Statistiques_Pression;Pression A : mini 0.0, maxi 0.0 bar (15 mesures);operateur
+2026-09-27 03:43:57.666;Journal;script Statistiques_Pression;Pression A : mini 0.0, maxi 0.0 bar (20 mesures);operateur
+2026-09-27 03:44:02.999;Journal;script Statistiques_Pression;Pression A : mini 0.0, maxi 0.0 bar (25 mesures);operateur
+2026-09-27 03:44:08.333;Journal;script Statistiques_Pression;Pression A : mini 0.0, maxi 0.0 bar (30 mesures);operateur
+2026-09-27 03:44:13.666;Journal;script Statistiques_Pression;Pression A : mini 0.0, maxi 0.0 bar (35 mesures);operateur
+2026-09-27 03:44:18.999;Journal;script Statistiques_Pression;Pression A : mini 0.0, maxi 0.0 bar (40 mesures);operateur
+2026-09-27 03:44:24.333;Journal;script Statistiques_Pression;Pression A : mini 0.0, maxi 0.0 bar (45 mesures);operateur
+2026-09-27 03:48:41.922;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:48:41.922;Système;;IHM démarrée : 43 variable(s) IHM, 11 script(s) généraux;operateur
+2026-09-27 03:48:41.922;Journal;script Init;IHM démarrée : Production;operateur
+2026-09-27 03:48:41.922;Navigation;;vue de démarrage : Vue_Supervision;operateur
+2026-09-27 03:48:41.922;Erreur;alarme PT1_A_Basse;condition illisible : Armoires[0].ana.PT1.mes < 20;operateur
+2026-09-27 03:48:41.922;Erreur;alarme PT1_A_Vide;condition illisible : Armoires[0].ana.PT1.mes < 8;operateur
+2026-09-27 03:48:41.922;Erreur;alarme Bouteille_B_Vide;condition illisible : Armoires[1].bouteille_vide;operateur
+2026-09-27 03:48:41.922;Erreur;alarme PT9_Hors_Service;condition illisible : Capteur_PT9 > 3;operateur
+2026-09-27 03:48:41.922;Action;Vue_Commandes/Prog_Chauffage;Chauffage_Actif = FALSE (programmateur);operateur
+2026-09-27 03:48:42.322;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 03:48:42.322;Action;alarme PT1_A_Basse;son : bip_alarme.wav;operateur
+2026-09-27 03:48:42.622;Système;;IHM arrêtée;operateur
+2026-09-27 03:48:42.973;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:48:42.973;Système;;IHM démarrée : 43 variable(s) IHM, 11 script(s) généraux;operateur
+2026-09-27 03:48:42.973;Journal;script Init;IHM démarrée : Production;operateur
+2026-09-27 03:48:42.973;Navigation;;vue de démarrage : Vue_Supervision;operateur
+2026-09-27 03:48:42.973;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 03:48:42.973;Action;alarme PT1_A_Basse;son : bip_alarme.wav;operateur
+2026-09-27 03:48:42.973;Erreur;alarme PT9_Hors_Service;condition illisible : Capteur_PT9 > 3;operateur
+2026-09-27 03:48:42.973;Action;Vue_Commandes/Prog_Chauffage;Chauffage_Actif = FALSE (programmateur);operateur
+2026-09-27 03:48:43.506;Apparition;PT1_A_Vide;[Critique] Bouteille A vide (0.0 bar) : basculer;operateur
+2026-09-27 03:48:43.506;Action;alarme PT1_A_Vide;son : bip_alarme.wav;operateur
+2026-09-27 03:48:43.673;Navigation;;Vue_Supervision → Vue_Commandes;operateur
+2026-09-27 03:48:44.373;Signature;Vue_Commandes/Btn_Purge;signature simple demandée : Vanne_Purge : FAUX → VRAI;operateur
+2026-09-27 03:48:45.273;Signature;Vue_Commandes/Btn_Purge;operateur : Vanne_Purge : FAUX → VRAI (motif : Purge avant intervention);operateur
+2026-09-27 03:48:45.273;Action;Vue_Commandes/Btn_Purge;Vanne_Purge = TRUE;operateur
+2026-09-27 03:48:45.640;Signature;Vue_Commandes/Potar_Pression;signature double demandée : Consigne_Pression : 12 → 28;operateur
+2026-09-27 03:48:46.406;Signature;Vue_Commandes/Potar_Pression;operateur + visa admin : Consigne_Pression : 12 → 28 (motif : Réglage process);operateur
+2026-09-27 03:48:46.406;Action;Vue_Commandes/Potar_Pression;Consigne_Pression = 28;operateur
+2026-09-27 03:48:46.773;Navigation;;Vue_Commandes → Vue_Navigation;operateur
+2026-09-27 03:48:47.473;Action;Vue_Navigation/Btn_Connexion;menu de connexion (Connexion);operateur
+2026-09-27 03:48:47.840;Déconnexion;operateur;déconnecté : menu de connexion;
+2026-09-27 03:48:48.073;Connexion refusée;operateur;mot de passe incorrect (encore 2 essais avant le verrouillage);
+2026-09-27 03:48:48.240;Connexion refusée;operateur;mot de passe incorrect (encore 1 essai avant le verrouillage);
+2026-09-27 03:48:48.306;Journal;script Statistiques_Pression;Pression A : mini 0.0, maxi 0.0 bar (5 mesures);
+2026-09-27 03:48:48.406;Compte verrouillé;operateur;3 échecs de suite : verrouillé jusqu'à 04:03;
+2026-09-27 03:48:48.406;Connexion refusée;operateur;mot de passe incorrect — compte verrouillé jusqu'à 04:03;
+2026-09-27 03:48:48.873;Connexion;admin;admin connecté (Administrateur, niveau 4);admin
+2026-09-27 03:48:49.640;Compte déverrouillé;operateur;par admin;admin
+2026-09-27 03:48:50.806;Déconnexion;admin;déconnecté : menu de connexion;
+2026-09-27 03:48:51.273;Mot de passe à renouveler;nuit;mot de passe donné par un administrateur : choisis le tien;
+2026-09-27 03:48:51.740;Mot de passe renouvelé;nuit;par nuit (menu de connexion);
+2026-09-27 03:48:51.740;Connexion;nuit;Luc Moreau connecté (Opérateur, niveau 1);nuit
+2026-09-27 03:48:52.306;Action;Vue_Navigation/Btn_Connexion;menu de connexion (Connexion);nuit
+2026-09-27 03:48:52.673;Déconnexion;nuit;déconnecté : menu de connexion;
+2026-09-27 03:48:53.240;Connexion;admin;admin connecté (Administrateur, niveau 4);admin
+2026-09-27 03:48:53.573;Journal;script Statistiques_Pression;Pression A : mini 0.0, maxi 0.0 bar (10 mesures);admin
+2026-09-27 03:48:53.806;Sécurité;déconnexion automatique;admin sera déconnecté dans 60 s (un toucher le garde connecté);admin
+2026-09-27 03:48:53.806;Accès modifié;Sécurité;déconnexion automatique : 1 min (menu de connexion);admin
+2026-09-27 03:48:53.940;Sécurité;déconnexion automatique;admin reste connecté;admin
+2026-09-27 03:48:53.940;Sécurité;déconnexion automatique;admin sera déconnecté dans 60 s (un toucher le garde connecté);admin
+2026-09-27 03:48:54.973;Sécurité;déconnexion automatique;admin reste connecté;admin
+2026-09-27 03:48:54.973;Sécurité;déconnexion automatique;admin sera déconnecté dans 60 s (un toucher le garde connecté);admin
+2026-09-27 03:48:55.740;Accès modifié;Sécurité;déconnexion automatique : jamais (menu de connexion);admin
+2026-09-27 03:48:56.073;Déconnexion;admin;déconnecté : badge (operateur);
+2026-09-27 03:48:56.073;Connexion;operateur;Paul Martin connecté (Opérateur, niveau 1);operateur
+2026-09-27 03:49:12.333;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:49:12.333;Système;;IHM démarrée : 43 variable(s) IHM, 11 script(s) généraux;operateur
+2026-09-27 03:49:12.333;Journal;script Init;IHM démarrée : Production;operateur
+2026-09-27 03:49:12.333;Navigation;;vue de démarrage : Vue_Supervision;operateur
+2026-09-27 03:49:12.333;Erreur;alarme PT1_A_Basse;condition illisible : Armoires[0].ana.PT1.mes < 20;operateur
+2026-09-27 03:49:12.333;Erreur;alarme PT1_A_Vide;condition illisible : Armoires[0].ana.PT1.mes < 8;operateur
+2026-09-27 03:49:12.333;Erreur;alarme Bouteille_B_Vide;condition illisible : Armoires[1].bouteille_vide;operateur
+2026-09-27 03:49:12.333;Erreur;alarme PT9_Hors_Service;condition illisible : Capteur_PT9 > 3;operateur
+2026-09-27 03:49:12.333;Action;Vue_Commandes/Prog_Chauffage;Chauffage_Actif = FALSE (programmateur);operateur
+2026-09-27 03:49:12.333;Navigation;;Vue_Supervision → Vue_Commandes;operateur
+2026-09-27 03:49:12.933;Signature;Vue_Commandes/Btn_Purge;signature simple demandée : Vanne_Purge : FAUX → VRAI;operateur
+2026-09-27 03:49:13.400;Erreur;script Statistiques_Pression;ligne 12 : invalid argument: 'Armoires[0].ana.PT1.mes' is not declared;operateur
+2026-09-27 03:49:13.533;Signature;Vue_Commandes/Btn_Purge;operateur : Vanne_Purge : FAUX → VRAI (motif : Purge avant intervention);operateur
+2026-09-27 03:49:13.533;Action;Vue_Commandes/Btn_Purge;Vanne_Purge = TRUE;operateur
+2026-09-27 03:49:14.466;Erreur;script Statistiques_Pression;ligne 12 : invalid argument: 'Armoires[0].ana.PT1.mes' is not declared;operateur
+2026-09-27 03:49:14.733;Signature;Vue_Commandes/Btn_Purge;signature simple demandée : Vanne_Purge : VRAI → FAUX;operateur
+2026-09-27 03:49:15.333;Signature;Vue_Commandes/Btn_Purge;operateur : Vanne_Purge : VRAI → FAUX (motif : Essai);operateur
+2026-09-27 03:49:15.333;Action;Vue_Commandes/Btn_Purge;Vanne_Purge = FALSE;operateur
+2026-09-27 03:49:15.533;Erreur;script Statistiques_Pression;ligne 12 : invalid argument: 'Armoires[0].ana.PT1.mes' is not declared;operateur
+2026-09-27 03:49:16.600;Erreur;script Statistiques_Pression;ligne 12 : invalid argument: 'Armoires[0].ana.PT1.mes' is not declared;operateur
+2026-09-27 03:49:18.566;Erreur;script Statistiques_Pression;ligne 12 : invalid argument: 'Armoires[0].ana.PT1.mes' is not declared;operateur
+2026-09-27 03:49:18.900;Navigation;;Vue_Commandes → Vue_Graphiques;operateur
+2026-09-27 03:49:19.633;Erreur;script Statistiques_Pression;ligne 12 : invalid argument: 'Armoires[0].ana.PT1.mes' is not declared;operateur
+2026-09-27 03:49:20.266;Navigation;;Vue_Graphiques → Vue_Synoptique;operateur
+2026-09-27 03:49:20.700;Erreur;script Statistiques_Pression;ligne 12 : invalid argument: 'Armoires[0].ana.PT1.mes' is not declared;operateur
+2026-09-27 03:49:21.700;Erreur;script Statistiques_Pression;ligne 12 : invalid argument: 'Armoires[0].ana.PT1.mes' is not declared;operateur
+2026-09-27 03:49:22.700;Erreur;script Statistiques_Pression;ligne 12 : invalid argument: 'Armoires[0].ana.PT1.mes' is not declared;operateur
+2026-09-27 03:50:10.063;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:50:10.063;Système;;IHM démarrée : 43 variable(s) IHM, 11 script(s) généraux;operateur
+2026-09-27 03:50:10.063;Journal;script Init;IHM démarrée : Production;operateur
+2026-09-27 03:50:10.063;Navigation;;vue de démarrage : Vue_Supervision;operateur
+2026-09-27 03:50:10.063;Erreur;alarme PT9_Hors_Service;condition illisible : Capteur_PT9 > 3;operateur
+2026-09-27 03:50:10.063;Action;Vue_Commandes/Prog_Chauffage;Chauffage_Actif = FALSE (programmateur);operateur
+2026-09-27 03:50:10.063;Communication;Liaison;Serveur de démonstration en marche : le simulateur en Modbus TCP sur 127.0.0.1:5020 (88 variables);operateur
+2026-09-27 03:50:10.063;Communication;Liaison;Serveur de démonstration en marche : le simulateur en Modbus TCP sur 127.0.0.1:5020 (103 variables);operateur
+2026-09-27 03:50:10.063;Communication;Liaison;Serveur de démonstration en marche : le simulateur en Modbus TCP sur 127.0.0.1:5020 (104 variables);operateur
+2026-09-27 03:50:10.063;Communication;Liaison;Serveur de démonstration en marche : le simulateur en Modbus TCP sur 127.0.0.1:5020 (104 variables);operateur
+2026-09-27 03:50:10.063;Communication;Liaison;Serveur de démonstration en marche : le simulateur en Modbus TCP sur 127.0.0.1:5020 (104 variables);operateur
+2026-09-27 03:50:10.063;Communication;Liaison;Liaison Modbus TCP vers 192.168.1.10:502 (esclave 255, 104 variables au plan d'adressage);operateur
+2026-09-27 03:50:10.063;Communication;Liaison;Liaison Modbus TCP vers 127.0.0.1:502 (esclave 255, 104 variables au plan d'adressage);operateur
+2026-09-27 03:50:10.063;Communication;Liaison;Automate injoignable (127.0.0.1:502) : connexion refusée (rien n'écoute sur ce port);operateur
+2026-09-27 03:50:10.063;Communication;Liaison;Liaison Modbus TCP vers 127.0.0.1:5020 (esclave 255, 104 variables au plan d'adressage);operateur
+2026-09-27 03:50:10.063;Communication;Liaison;Liaison établie avec l'automate 127.0.0.1:5020 (0 ms);operateur
+2026-09-27 03:50:10.063;Communication;Liaison;Liaison Modbus TCP vers 127.0.0.1:5020 (esclave 255, 104 variables au plan d'adressage);operateur
+2026-09-27 03:50:10.063;Communication;Liaison;Liaison établie avec l'automate 127.0.0.1:5020 (0 ms);operateur
+2026-09-27 03:50:10.396;Navigation;;Vue_Supervision → Vue_Communication;operateur
+2026-09-27 03:50:10.663;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 7.2 bar;operateur
+2026-09-27 03:50:10.663;Action;alarme PT1_A_Basse;son : bip_alarme.wav;operateur
+2026-09-27 03:50:11.196;Apparition;PT1_A_Vide;[Critique] Bouteille A vide (7.2 bar) : basculer;operateur
+2026-09-27 03:50:11.196;Action;alarme PT1_A_Vide;son : bip_alarme.wav;operateur
+2026-09-27 03:50:11.696;Action;Vue_Communication/Curseur_Modifs;NomArmoireModifs[3] = 42;operateur
+2026-09-27 03:50:12.063;Action;Vue_Communication/Inter_Active_A;Armoires[0].active = TRUE;operateur
+2026-09-27 03:50:14.030;Communication;Liaison;Serveur de démonstration muet : il ne répond plus (câble débranché);operateur
+2026-09-27 03:50:15.130;Communication;Liaison;Liaison perdue avec l'automate 127.0.0.1:5020 : pas de réponse en 1000 ms;operateur
+2026-09-27 03:50:15.363;Journal;script Statistiques_Pression;Pression A : mini 7.2, maxi 7.2 bar (5 mesures);operateur
+2026-09-27 03:50:17.163;Communication;Liaison;Automate injoignable (127.0.0.1:5020) : connexion acceptée mais aucune réponse Modbus (pas de réponse en 1000 ms);operateur
+2026-09-27 03:50:20.363;Journal;script Statistiques_Pression;Pression A : mini 7.2, maxi 7.2 bar (10 mesures);operateur
+2026-09-27 03:50:22.696;Communication;Liaison;Serveur de démonstration : il répond à nouveau;operateur
+2026-09-27 03:50:25.363;Communication;Liaison;Liaison retrouvée avec l'automate 127.0.0.1:5020 (0 ms);operateur
+2026-09-27 03:50:26.696;Journal;script Statistiques_Pression;Pression A : mini 7.2, maxi 7.2 bar (15 mesures);operateur
+2026-09-27 03:50:42.975;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:50:42.975;Système;;IHM démarrée : 43 variable(s) IHM, 11 script(s) généraux;operateur
+2026-09-27 03:50:42.975;Journal;script Init;IHM démarrée : Production;operateur
+2026-09-27 03:50:42.975;Navigation;;vue de démarrage : Vue_Supervision;operateur
+2026-09-27 03:50:42.975;Erreur;alarme PT9_Hors_Service;condition illisible : Capteur_PT9 > 3;operateur
+2026-09-27 03:50:42.975;Action;Vue_Commandes/Prog_Chauffage;Chauffage_Actif = FALSE (programmateur);operateur
+2026-09-27 03:50:42.975;Communication;Liaison;Liaison Modbus TCP vers 127.0.0.1:5020 (esclave 255, 104 variables au plan d'adressage);operateur
+2026-09-27 03:50:42.975;Communication;Liaison;Serveur de démonstration en marche : le simulateur en Modbus TCP sur 127.0.0.1:5020 (104 variables);operateur
+2026-09-27 03:50:42.975;Communication;Liaison;Automate injoignable (127.0.0.1:5020) : connexion refusée (rien n'écoute sur ce port);operateur
+2026-09-27 03:50:42.975;Système;Poste d'exploitation;Poste d'exploitation lancé (automate 127.0.0.1);operateur
+2026-09-27 03:50:47.642;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 7.2 bar;operateur
+2026-09-27 03:50:47.642;Action;alarme PT1_A_Basse;son : bip_alarme.wav;operateur
+2026-09-27 03:50:47.642;Communication;Liaison;Liaison établie avec l'automate 127.0.0.1:5020 (0 ms);operateur
+2026-09-27 03:50:48.175;Apparition;PT1_A_Vide;[Critique] Bouteille A vide (7.2 bar) : basculer;operateur
+2026-09-27 03:50:48.175;Action;alarme PT1_A_Vide;son : bip_alarme.wav;operateur
+2026-09-27 03:50:50.075;Sécurité;Poste d'exploitation;Sortie refusée : mot de passe de sortie faux;operateur
+2026-09-27 03:50:50.608;Sécurité;Poste d'exploitation;Sortie du poste : Passer en conception;operateur
+2026-09-27 03:50:50.642;Système;;IHM arrêtée;operateur
+2026-09-27 03:50:53.644;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:50:53.644;Système;;IHM démarrée : 43 variable(s) IHM, 11 script(s) généraux;operateur
+2026-09-27 03:50:53.644;Journal;script Init;IHM démarrée : Production;operateur
+2026-09-27 03:50:53.644;Navigation;;vue de démarrage : Vue_Supervision;operateur
+2026-09-27 03:50:53.644;Erreur;alarme PT9_Hors_Service;condition illisible : Capteur_PT9 > 3;operateur
+2026-09-27 03:50:53.644;Action;Vue_Commandes/Prog_Chauffage;Chauffage_Actif = FALSE (programmateur);operateur
+2026-09-27 03:50:53.644;Communication;Liaison;Liaison Modbus TCP vers 127.0.0.1:5020 (esclave 255, 104 variables au plan d'adressage);operateur
+2026-09-27 03:50:53.644;Communication;Liaison;Serveur de démonstration en marche : le simulateur en Modbus TCP sur 127.0.0.1:5020 (104 variables);operateur
+2026-09-27 03:50:53.644;Communication;Liaison;Automate injoignable (127.0.0.1:5020) : connexion refusée (rien n'écoute sur ce port);operateur
+2026-09-27 03:50:53.644;Notification;Notifications;Boîte d'essai ouverte : SMTP 127.0.0.1:2525, SMS http://127.0.0.1:2526;operateur
+2026-09-27 03:50:55.244;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 03:50:55.244;Action;alarme PT1_A_Basse;son : bip_alarme.wav;operateur
+2026-09-27 03:50:55.244;Communication;Liaison;Liaison établie avec l'automate 127.0.0.1:5020 (0 ms);operateur
+2026-09-27 03:50:55.277;Notification;Notifications;Courriel à Astreinte (astreinte.electricite@usine.fr) : PT1_A_Basse Apparition - envoyé;operateur
+2026-09-27 03:50:55.277;Notification;Notifications;SMS à Astreinte (+33612345678) : PT1_A_Basse Apparition - envoyé;operateur
+2026-09-27 03:50:55.777;Apparition;PT1_A_Vide;[Critique] Bouteille A vide (0.0 bar) : basculer;operateur
+2026-09-27 03:50:55.777;Action;alarme PT1_A_Vide;son : bip_alarme.wav;operateur
+2026-09-27 03:50:55.811;Notification;Notifications;Courriel à Astreinte (astreinte.electricite@usine.fr) : PT1_A_Vide Apparition - envoyé;operateur
+2026-09-27 03:50:55.811;Notification;Notifications;SMS à Astreinte (+33612345678) : PT1_A_Vide Apparition - envoyé;operateur
+2026-09-27 03:50:55.811;Notification;Notifications;Courriel à Chef (claire.dubois@usine.fr) : PT1_A_Vide Apparition - envoyé;operateur
+2026-09-27 03:50:57.977;Disparition;PT1_A_Basse;Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 03:50:57.977;Disparition;PT1_A_Vide;Bouteille A vide (0.0 bar) : basculer;operateur
+2026-09-27 03:50:58.011;Notification;Notifications;Courriel à Chef (claire.dubois@usine.fr) : PT1_A_Vide Disparition - envoyé;operateur
+2026-09-27 03:50:58.977;Journal;script Statistiques_Pression;Pression A : mini 0.0, maxi 25.0 bar (5 mesures);operateur
+2026-09-27 03:50:59.977;Réapparition;PT1_A_Basse;Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 03:50:59.977;Réapparition;PT1_A_Vide;Bouteille A vide (0.0 bar) : basculer;operateur
+2026-09-27 03:50:59.977;Notification;Notifications;PT1_A_Basse : Courriel à Astreinte non envoyé - déjà prévenu il y a 6 s (une fois en 600 s);operateur
+2026-09-27 03:50:59.977;Notification;Notifications;PT1_A_Basse : SMS à Astreinte non envoyé - déjà prévenu il y a 6 s (une fois en 600 s);operateur
+2026-09-27 03:50:59.977;Notification;Notifications;PT1_A_Vide : Courriel à Astreinte non envoyé - déjà prévenu il y a 6 s (une fois en 600 s);operateur
+2026-09-27 03:50:59.977;Notification;Notifications;PT1_A_Vide : SMS à Astreinte non envoyé - déjà prévenu il y a 6 s (une fois en 600 s);operateur
+2026-09-27 03:50:59.977;Notification;Notifications;PT1_A_Vide : Courriel à Chef non envoyé - déjà prévenu il y a 6 s (une fois en 600 s);operateur
+2026-09-27 03:51:01.911;Rapport;Journalier;du 2026-09-26 06:00 au 2026-09-27 03:51 : exports/rapport_Journalier_2026-09-27_0351.pdf;operateur
+2026-09-27 03:51:08.611;Notification;Notifications;Courriel à Chef (claire.dubois@usine.fr) [Rapport] - envoyé;operateur
+2026-09-27 03:51:08.611;Notification;Notifications;Accès web ouvert : http://127.0.0.1:8089 (connexion demandée);operateur
+2026-09-27 03:51:09.411;Notification;Notifications;Accès web : Connexion web : operateur (127.0.0.1) - commande;operateur
+2026-09-27 03:51:10.611;Journal;script Statistiques_Pression;Pression A : mini 0.0, maxi 25.0 bar (10 mesures);operateur
+2026-09-27 03:51:15.611;Journal;script Statistiques_Pression;Pression A : mini 0.0, maxi 25.0 bar (15 mesures);operateur
+2026-09-27 03:51:20.611;Journal;script Statistiques_Pression;Pression A : mini 0.0, maxi 25.0 bar (20 mesures);operateur
+2026-09-27 03:54:36.417;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 03:54:36.417;Système;;IHM démarrée : 51 variable(s) IHM, 11 script(s) généraux;operateur
+2026-09-27 03:54:36.417;Journal;script Init;IHM démarrée : Production;operateur
+2026-09-27 03:54:36.417;Navigation;;vue de démarrage : Vue_Supervision;operateur
+2026-09-27 03:54:36.417;Erreur;alarme PT9_Hors_Service;condition illisible : Capteur_PT9 > 3;operateur
+2026-09-27 03:54:36.417;Action;Vue_Commandes/Prog_Chauffage;Chauffage_Actif = FALSE (programmateur);operateur
+2026-09-27 03:54:36.417;Communication;Liaison;Liaison Modbus TCP vers 192.168.1.10:502 (esclave 255, 104 variables au plan d'adressage);operateur
+2026-09-27 03:54:36.417;Communication;Liaison;Serveur de démonstration en marche : le simulateur en Modbus TCP sur 127.0.0.1:5020 (104 variables);operateur
+2026-09-27 03:54:36.417;Communication;Liaison;Équipement Centrale PM5560 : liaison Modbus TCP vers 192.168.1.30:502 (esclave 1, 4 variables liées);operateur
+2026-09-27 03:54:36.417;Communication;Liaison;Équipement Variateur ATV320 : liaison Modbus TCP vers 192.168.1.31:502 (esclave 2, 1 variable liée);operateur
+2026-09-27 03:54:36.417;Communication;Liaison;Équipement Analyseur de gaz : liaison Modbus TCP vers 10.10.0.50:502 (esclave 1, 2 variables liées);operateur
+2026-09-27 03:54:36.417;Communication;Liaison;Jumeau Balance B (virtuel) en marche (esclave virtuel de Balance B, 127.0.0.1:42371);operateur
+2026-09-27 03:54:36.417;Communication;Liaison;Équipement Balance B : liaison Modbus TCP vers 127.0.0.1:42371 (esclave 1, 1 variable liée);operateur
+2026-09-27 03:54:36.417;Communication;Liaison;Équipement Moxa 50 : liaison Modbus TCP vers 192.168.1.50:502 (esclave 255, 0 variable liée);operateur
+2026-09-27 03:54:36.417;Notification;Notifications;Boîte d'essai ouverte : SMTP 127.0.0.1:2525, SMS http://127.0.0.1:2526;operateur
+2026-09-27 03:54:36.417;Notification;Notifications;Accès web ouvert : http://127.0.0.1:8089 (connexion demandée);operateur
+2026-09-27 03:54:36.417;Système;Poste d'exploitation;Poste d'exploitation lancé (automate 192.168.1.10);operateur
+2026-09-27 03:54:36.417;Navigation;;Vue_Supervision → Vue_Equipements;operateur
+2026-09-27 03:54:36.417;Reprise;Poste d'exploitation;État d'avant l'arrêt rechargé : 43 variable(s), 4 alarme(s) en cours, la vue Vue_Equipements (état de 2026-09-27 03:54:39);operateur
+2026-09-27 03:54:36.417;Système;Reprise;état d'avant l'arrêt rechargé : 43 variable(s), 4 alarme(s) en cours, la vue Vue_Equipements (état de 2026-09-27 03:54:39);operateur
+2026-09-27 03:54:37.317;Disparition;Variateur_Injoignable;Variateur ATV320 injoignable (hors ligne : Variateur ATV320, Caméra quai);operateur
+2026-09-27 03:54:37.317;Communication;Liaison;Liaison établie avec l'automate 192.168.1.10:502 (0 ms);operateur
+2026-09-27 03:54:37.317;Communication;Liaison;Centrale PM5560 : Liaison établie avec l'équipement Centrale PM5560 192.168.1.30:502 (1 ms);operateur
+2026-09-27 03:54:37.317;Communication;Liaison;Analyseur de gaz : Liaison établie avec l'équipement Analyseur de gaz 10.10.0.50:502 (0 ms);operateur
+2026-09-27 03:54:37.317;Communication;Liaison;Balance B : Liaison établie avec l'équipement Balance B 127.0.0.1:42371 (5 ms);operateur
+2026-09-27 03:54:37.317;Communication;Liaison;Moxa 50 : Liaison établie avec l'équipement Moxa 50 192.168.1.50:502 (0 ms);operateur
+2026-09-27 03:54:37.917;Réapparition;Variateur_Injoignable;Variateur ATV320 injoignable (hors ligne : Variateur ATV320, Caméra quai);operateur
+2026-09-27 03:54:37.917;Communication;Liaison;Variateur ATV320 : Automate injoignable (192.168.1.31:502) : pas de réponse en 1000 ms;operateur
+2026-09-27 03:54:37.917;Communication;Liaison;"Équipement Caméra quai : injoignable (ping : hôte injoignable (aucun port du PC dans ce réseau) ; port 554 : réseau injoignable)";operateur
+2026-09-27 03:54:37.950;Notification;Notifications;Courriel à Astreinte (astreinte.electricite@usine.fr) : Variateur_Injoignable Réapparition - envoyé;operateur
+2026-09-27 03:54:37.950;Notification;Notifications;SMS à Astreinte (+33612345678) : Variateur_Injoignable Réapparition - envoyé;operateur
+2026-09-27 03:54:39.984;Réapparition;Courant_L1_Haut;Courant L1 élevé : 14.5 A (centrale PM5560);operateur
+2026-09-27 03:54:40.017;Notification;Notifications;Courriel à Astreinte (astreinte.electricite@usine.fr) : Courant_L1_Haut Réapparition - envoyé;operateur
+2026-09-27 03:54:40.017;Notification;Notifications;SMS à Astreinte (+33612345678) : Courant_L1_Haut Réapparition - envoyé;operateur
+2026-09-27 03:54:41.650;Journal;script Statistiques_Pression;Pression A : mini 0.0, maxi 0.0 bar (5 mesures);operateur
+2026-09-27 03:54:42.384;Disparition;Courant_L1_Haut;Courant L1 élevé : 14.5 A (centrale PM5560);operateur
+2026-09-27 03:54:43.050;Sécurité;Poste d'exploitation;Sortie du poste : Passer en conception;operateur
+2026-09-27 03:54:43.084;Système;;IHM arrêtée;operateur
+2026-09-27 04:00:46.643;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 04:00:46.643;Système;;IHM démarrée : 59 variable(s) IHM, 13 script(s) généraux;operateur
+2026-09-27 04:00:46.643;Journal;script Init;IHM démarrée : Production;operateur
+2026-09-27 04:00:46.643;Navigation;;vue de démarrage : Vue_Supervision;operateur
+2026-09-27 04:00:46.643;Erreur;alarme PT9_Hors_Service;condition illisible : Capteur_PT9 > 3;operateur
+2026-09-27 04:00:46.643;Action;Vue_Commandes/Prog_Chauffage;Chauffage_Actif = FALSE (programmateur);operateur
+2026-09-27 04:00:46.643;Communication;Liaison;Liaison Modbus TCP vers 192.168.1.10:502 (esclave 255, 104 variables au plan d'adressage);operateur
+2026-09-27 04:00:46.643;Communication;Liaison;Serveur de démonstration en marche : le simulateur en Modbus TCP sur 127.0.0.1:5020 (104 variables);operateur
+2026-09-27 04:00:46.643;Communication;Liaison;Liaison établie avec l'automate 192.168.1.10:502 (0 ms);operateur
+2026-09-27 04:00:46.643;Communication;Liaison;Jumeau Centrale PM5560 (virtuel) en marche (esclave virtuel de Centrale PM5560, 127.0.0.1:43479);operateur
+2026-09-27 04:00:46.643;Communication;Liaison;Équipement Centrale PM5560 : liaison Modbus TCP vers 192.168.1.30:502 (esclave 1, 5 variables liées);operateur
+2026-09-27 04:00:46.643;Communication;Liaison;Jumeau Variateur ATV320 (virtuel) en marche (esclave virtuel de Variateur ATV320, 127.0.0.1:42885);operateur
+2026-09-27 04:00:46.643;Communication;Liaison;Équipement Variateur ATV320 : liaison Modbus TCP vers 127.0.0.1:42885 (esclave 2, 4 variables liées);operateur
+2026-09-27 04:00:46.643;Communication;Liaison;Équipement Analyseur de gaz : liaison Modbus TCP vers 10.10.0.50:502 (esclave 1, 2 variables liées);operateur
+2026-09-27 04:00:46.643;Communication;Liaison;Jumeau Balance B (virtuel) en marche (esclave virtuel de Balance B, 127.0.0.1:46809);operateur
+2026-09-27 04:00:46.643;Communication;Liaison;Équipement Balance B : liaison Modbus TCP vers 127.0.0.1:46809 (esclave 1, 15 variables liées);operateur
+2026-09-27 04:00:46.643;Communication;Liaison;Équipement Moxa 50 : liaison Modbus TCP vers 192.168.1.50:502 (esclave 255, 0 variable liée);operateur
+2026-09-27 04:00:46.643;Communication;Liaison;Jumeau Analyseur de test (virtuel) en marche (esclave virtuel de Analyseur de test, 127.0.0.1:34097);operateur
+2026-09-27 04:00:46.643;Communication;Liaison;Équipement Analyseur de test : liaison Modbus TCP vers 127.0.0.1:34097 (esclave 1, 0 variable liée);operateur
+2026-09-27 04:00:46.643;Communication;Liaison;Centrale PM5560 : Liaison établie avec l'équipement Centrale PM5560 192.168.1.30:502 (3 ms);operateur
+2026-09-27 04:00:46.643;Communication;Liaison;Variateur ATV320 : Liaison établie avec l'équipement Variateur ATV320 127.0.0.1:42885 (8 ms);operateur
+2026-09-27 04:00:46.643;Communication;Liaison;Analyseur de gaz : Liaison établie avec l'équipement Analyseur de gaz 10.10.0.50:502 (0 ms);operateur
+2026-09-27 04:00:46.643;Communication;Liaison;Balance B : Liaison établie avec l'équipement Balance B 127.0.0.1:46809 (4 ms);operateur
+2026-09-27 04:00:46.643;Communication;Liaison;Moxa 50 : Liaison établie avec l'équipement Moxa 50 192.168.1.50:502 (0 ms);operateur
+2026-09-27 04:00:46.643;Communication;Liaison;Analyseur de test : Liaison établie avec l'équipement Analyseur de test 127.0.0.1:34097 (4 ms);operateur
+2026-09-27 04:00:46.643;Communication;Liaison;Équipement Centrale PM5560 : liaison Modbus TCP vers 127.0.0.1:43479 (esclave 1, 5 variables liées);operateur
+2026-09-27 04:00:46.643;Communication;Liaison;Centrale PM5560 : Liaison établie avec l'équipement Centrale PM5560 127.0.0.1:43479 (4 ms);operateur
+2026-09-27 04:00:46.643;Notification;Notifications;Boîte d'essai ouverte : SMTP 127.0.0.1:2525, SMS http://127.0.0.1:2526;operateur
+2026-09-27 04:00:46.643;Notification;Notifications;Accès web ouvert : http://127.0.0.1:8089 (connexion demandée);operateur
+2026-09-27 04:00:46.976;Navigation;;Vue_Supervision → Vue_Equipements;operateur
+2026-09-27 04:00:47.376;Apparition;Courant_L1_Haut;[Haute] Courant L1 élevé : 52.8 A (centrale PM5560);operateur
+2026-09-27 04:00:47.376;Action;alarme Courant_L1_Haut;son : bip_alarme.wav;operateur
+2026-09-27 04:00:47.410;Notification;Notifications;Courriel à Astreinte (astreinte.electricite@usine.fr) : Courant_L1_Haut Apparition - envoyé;operateur
+2026-09-27 04:00:47.410;Notification;Notifications;SMS à Astreinte (+33612345678) : Courant_L1_Haut Apparition - envoyé;operateur
+2026-09-27 04:00:47.776;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 04:00:47.776;Action;alarme PT1_A_Basse;son : bip_alarme.wav;operateur
+2026-09-27 04:00:47.810;Notification;Notifications;Courriel à Astreinte (astreinte.electricite@usine.fr) : PT1_A_Basse Apparition - envoyé;operateur
+2026-09-27 04:00:47.810;Notification;Notifications;SMS à Astreinte (+33612345678) : PT1_A_Basse Apparition - envoyé;operateur
+2026-09-27 04:00:48.310;Apparition;PT1_A_Vide;[Critique] Bouteille A vide (0.0 bar) : basculer;operateur
+2026-09-27 04:00:48.310;Action;alarme PT1_A_Vide;son : bip_alarme.wav;operateur
+2026-09-27 04:00:48.343;Notification;Notifications;Courriel à Astreinte (astreinte.electricite@usine.fr) : PT1_A_Vide Apparition - envoyé;operateur
+2026-09-27 04:00:48.343;Notification;Notifications;SMS à Astreinte (+33612345678) : PT1_A_Vide Apparition - envoyé;operateur
+2026-09-27 04:00:48.343;Notification;Notifications;Courriel à Chef (claire.dubois@usine.fr) : PT1_A_Vide Apparition - envoyé;operateur
+2026-09-27 04:00:51.976;Journal;script Statistiques_Pression;Pression A : mini 0.0, maxi 0.0 bar (5 mesures);operateur
+2026-09-27 04:00:57.310;Journal;script Statistiques_Pression;Pression A : mini 0.0, maxi 0.0 bar (10 mesures);operateur
+2026-09-27 04:01:02.643;Journal;script Statistiques_Pression;Pression A : mini 0.0, maxi 0.0 bar (15 mesures);operateur
+2026-09-27 04:01:07.176;Disparition;Courant_L1_Haut;Courant L1 élevé : 52.8 A (centrale PM5560);operateur
+2026-09-27 04:01:07.976;Journal;script Statistiques_Pression;Pression A : mini 0.0, maxi 0.0 bar (20 mesures);operateur
+2026-09-27 04:01:13.310;Journal;script Statistiques_Pression;Pression A : mini 0.0, maxi 0.0 bar (25 mesures);operateur
+2026-09-27 04:02:40.279;Connexion;operateur;utilisateur de départ : operateur;operateur
+2026-09-27 04:02:40.279;Système;;IHM démarrée : 72 variable(s) IHM, 13 script(s) généraux;operateur
+2026-09-27 04:02:40.279;Journal;script Init;IHM démarrée : Production;operateur
+2026-09-27 04:02:40.279;Navigation;;vue de démarrage : Vue_Supervision;operateur
+2026-09-27 04:02:40.279;Erreur;alarme PT9_Hors_Service;condition illisible : Capteur_PT9 > 3;operateur
+2026-09-27 04:02:40.279;Action;Vue_Commandes/Prog_Chauffage;Chauffage_Actif = FALSE (programmateur);operateur
+2026-09-27 04:02:40.279;Communication;Liaison;Liaison Modbus TCP vers 192.168.1.10:502 (esclave 255, 104 variables au plan d'adressage);operateur
+2026-09-27 04:02:40.279;Communication;Liaison;Serveur de démonstration en marche : le simulateur en Modbus TCP sur 127.0.0.1:5020 (104 variables);operateur
+2026-09-27 04:02:40.279;Communication;Liaison;Liaison établie avec l'automate 192.168.1.10:502 (0 ms);operateur
+2026-09-27 04:02:40.279;Communication;Liaison;Jumeau Centrale PM5560 (virtuel) en marche (esclave virtuel de Centrale PM5560, 127.0.0.1:46845);operateur
+2026-09-27 04:02:40.279;Communication;Liaison;Équipement Centrale PM5560 : liaison Modbus TCP vers 127.0.0.1:46845 (esclave 1, 9 variables liées);operateur
+2026-09-27 04:02:40.279;Communication;Liaison;Jumeau Variateur ATV320 (virtuel) en marche (esclave virtuel de Variateur ATV320, 127.0.0.1:39601);operateur
+2026-09-27 04:02:40.279;Communication;Liaison;Équipement Variateur ATV320 : liaison Modbus TCP vers 127.0.0.1:39601 (esclave 2, 6 variables liées);operateur
+2026-09-27 04:02:40.279;Communication;Liaison;Équipement Analyseur de gaz : liaison Modbus TCP vers 10.10.0.50:502 (esclave 1, 2 variables liées);operateur
+2026-09-27 04:02:40.279;Communication;Liaison;Jumeau Balance B (virtuel) en marche (esclave virtuel de Balance B, 127.0.0.1:37171);operateur
+2026-09-27 04:02:40.279;Communication;Liaison;Équipement Balance B : liaison Modbus TCP vers 127.0.0.1:37171 (esclave 1, 17 variables liées);operateur
+2026-09-27 04:02:40.279;Communication;Liaison;Équipement Moxa 50 : liaison Modbus TCP vers 192.168.1.50:502 (esclave 255, 0 variable liée);operateur
+2026-09-27 04:02:40.279;Communication;Liaison;Jumeau Analyseur de test (virtuel) en marche (esclave virtuel de Analyseur de test, 127.0.0.1:45759);operateur
+2026-09-27 04:02:40.279;Communication;Liaison;Équipement Analyseur de test : liaison Modbus TCP vers 127.0.0.1:45759 (esclave 1, 0 variable liée);operateur
+2026-09-27 04:02:40.279;Communication;Liaison;Centrale PM5560 : Liaison établie avec l'équipement Centrale PM5560 127.0.0.1:46845 (5 ms);operateur
+2026-09-27 04:02:40.279;Communication;Liaison;Variateur ATV320 : Liaison établie avec l'équipement Variateur ATV320 127.0.0.1:39601 (7 ms);operateur
+2026-09-27 04:02:40.279;Communication;Liaison;Analyseur de gaz : Liaison établie avec l'équipement Analyseur de gaz 10.10.0.50:502 (0 ms);operateur
+2026-09-27 04:02:40.279;Communication;Liaison;Balance B : Liaison établie avec l'équipement Balance B 127.0.0.1:37171 (4 ms);operateur
+2026-09-27 04:02:40.279;Communication;Liaison;Moxa 50 : Liaison établie avec l'équipement Moxa 50 192.168.1.50:502 (0 ms);operateur
+2026-09-27 04:02:40.279;Communication;Liaison;Analyseur de test : Liaison établie avec l'équipement Analyseur de test 127.0.0.1:45759 (4 ms);operateur
+2026-09-27 04:02:40.279;Notification;Notifications;Boîte d'essai ouverte : SMTP 127.0.0.1:2525, SMS http://127.0.0.1:2526;operateur
+2026-09-27 04:02:40.279;Notification;Notifications;Accès web ouvert : http://127.0.0.1:8089 (connexion demandée);operateur
+2026-09-27 04:02:40.279;Navigation;;Vue_Supervision → Vue_Didacticiel;operateur
+2026-09-27 04:02:57.912;Apparition;PT1_A_Basse;[Haute] Bouteille A presque vide : 0.0 bar;operateur
+2026-09-27 04:02:57.912;Action;alarme PT1_A_Basse;son : bip_alarme.wav;operateur
+2026-09-27 04:02:57.946;Notification;Notifications;Courriel à Astreinte (astreinte.electricite@usine.fr) : PT1_A_Basse Apparition - envoyé;operateur
+2026-09-27 04:02:57.946;Notification;Notifications;SMS à Astreinte (+33612345678) : PT1_A_Basse Apparition - envoyé;operateur
+2026-09-27 04:02:58.446;Apparition;PT1_A_Vide;[Critique] Bouteille A vide (0.0 bar) : basculer;operateur
+2026-09-27 04:02:58.446;Action;alarme PT1_A_Vide;son : bip_alarme.wav;operateur
+2026-09-27 04:02:58.479;Notification;Notifications;Courriel à Astreinte (astreinte.electricite@usine.fr) : PT1_A_Vide Apparition - envoyé;operateur
+2026-09-27 04:02:58.479;Notification;Notifications;SMS à Astreinte (+33612345678) : PT1_A_Vide Apparition - envoyé;operateur
+2026-09-27 04:02:58.479;Notification;Notifications;Courriel à Chef (claire.dubois@usine.fr) : PT1_A_Vide Apparition - envoyé;operateur

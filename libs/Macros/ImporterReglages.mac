@@ -1,0 +1,197 @@
+(* ImporterReglages
+
+   Les reglages des equipements, depuis l'onglet Reglages du classeur : une
+   ligne par valeur - l'equipement, le champ, la valeur.
+
+   Ils sont ecrits dans une section Reglages_Init GARDEE par une signature :
+   elle pose les valeurs au premier cycle apres un demarrage a froid, et de
+   nouveau quand le classeur a change - pas a chaque cycle. Une valeur modifiee
+   ensuite depuis l'IHM tient donc jusqu'au prochain import qui la change.
+
+   #! summary = Pose les réglages des équipements (temps, seuils, options) depuis l'onglet Reglages, dans une section qui ne tourne qu'au premier cycle.
+   #! version = 1.10
+   #! changes 1.10 = Le formulaire : chaque question a son champ (le classeur par …, Ctrl+V ou en le glissant ; les tâches et les sections du projet ; des interrupteurs ; des choix à libellés), ses groupes, son aide et un libellé avec accents. Le code ne change pas.
+   #! usage = L'ONGLET Reglages : Equipement (le nom de l'onglet Equipements), Parametre (un champ de sa famille : FbkMs, MinOffMs, HasFdc...), Valeur, Unite, Commentaire. Une ligne par valeur.
+   #! usage = CHAQUE CHAMP EST VERIFIE contre la famille de l'equipement (MemberType) : un champ qui n'existe pas, ou une valeur qui ne se lit pas dans son type, est signale et saute - jamais ecrit.
+   #! usage = LES VALEURS : O / N (ou 1 / 0, VRAI / FAUX) pour un BOOL ; un nombre pour INT, DINT, REAL ; un texte pour un STRING. Le separateur decimal est le point.
+   #! usage = LA SECTION EST GARDEE par Reglages_Sig : elle ne pose les valeurs qu'au premier cycle, et apres un import qui les a changees. Elle va en tete de tache, apres Alarmes_Init ; RangerSections l'y met.
+   #! usage = LE NOM DE CHAQUE EQUIPEMENT (champ Name) est pose depuis la colonne Repere de l'onglet Equipements, si la famille a un champ Name et si la question noms vaut O.
+   #! see = ImporterProgramme, ImporterClasseur, VerifierClasseur, RangerSections
+   #! param classeur = Le classeur de l'affaire (.xlsx ou .xlsm) : glisse-le sur le champ, choisis-le avec …, ou colle-le (Ctrl+V) après l'avoir copié dans l'Explorateur. Vide : le dernier classeur ouvert, le cas normal quand on enchaîne les imports.
+   #! param tache = Les sections générées vont dans cette tâche.
+   #! param tache = La tache d'accueil de la section, MAST en general.
+   #! param prefSection = Vide en général : il sert quand deux automates partagent un projet.
+   #! param prefSection = Le prefixe des sections generees, le meme qu'a l'import. Vide en general.
+   #! param noms = Dans Reglages_Init, ce que l'opérateur lit.
+   #! param noms = O pose aussi le champ Name de chaque equipement actif, depuis sa colonne Repere. N ne touche qu'aux lignes de l'onglet Reglages.
+   #! categorie = Importer depuis le classeur/Étapes de l'import
+   #! champ classeur = fichier .xlsx .xlsm facultatif
+   #! libelle classeur = Le classeur de l'affaire
+   #! champ tache = tache
+   #! libelle tache = Tâche d'accueil des sections
+   #! champ prefSection = nom facultatif
+   #! libelle prefSection = Préfixe des noms de section
+   #! champ noms = oui-non
+   #! libelle noms = Poser aussi le nom (Name) de chaque équipement
+   #! exemple prefSection = {}Reglages_Init
+   #! groupe Programme = tache, prefSection, noms
+   #! avance = prefSection
+   #! produit = la section Reglages_Init, qui ne tourne qu'au premier cycle
+   #! appliquer = Appliquer : la section des réglages est réécrite en entier
+*)
+
+chemin := Ask('classeur', 'Chemin du classeur (vide = celui deja charge)', '');
+AskNow();
+tache       := Ask('tache', 'Tache d accueil des sections', 'MAST');
+prefSection := Ask('prefSection', 'Prefixe des noms de section (vide en general)', '');
+noms        := AskChoice('noms', 'Poser aussi le nom (Name) de chaque equipement', 'O,N', 'O');
+AskNow();
+
+wb := OpenWorkbook(chemin);
+IF wb < 0 THEN Fail('classeur introuvable'); END_IF;
+tReg := OpenSheet('Reglages');
+IF tReg < 0 THEN Fail('onglet "Reglages" introuvable : il se copie depuis onglets-a-ajouter.xlsx'); END_IF;
+tEq := OpenSheet('Equipements');
+IF tEq < 0 THEN Fail('onglet "Equipements" introuvable'); END_IF;
+
+nl := CHR(10);
+sect := prefSection + 'Reglages_Init';
+n := RowCount(tReg);
+neq := RowCount(tEq);
+i := 0; k := 0; q := 0;
+eq := ''; param := ''; val := ''; acces := ''; fam := ''; typ := ''; lit := ''; ch := '';
+ok := 0; points := 0; nombre := 0.0; entier := 0;
+sig := 0;
+poses := 0;
+sautes := 0;
+txt := '';
+
+(* ---- les noms des equipements ------------------------------------------ *)
+IF noms = 'O' THEN
+    FOR i := 0 TO neq - 1 DO
+        IF Cell(tEq, i, 'Actif') = 'O' AND Cell(tEq, i, 'Acces ST') <> ''
+           AND Cell(tEq, i, 'Repere') <> '' THEN
+            IF HasMember(Cell(tEq, i, 'Famille'), 'Name') THEN
+                txt := txt + nl + '    ' + Cell(tEq, i, 'Acces ST') + '.Name := '
+                    + QUOTE(MID(ASCII(Cell(tEq, i, 'Repere')), 0, 16)) + ';';
+                sig := (sig * 31 + LEN(Cell(tEq, i, 'Repere')) + i) MOD 30011;
+            END_IF;
+        END_IF;
+    END_FOR;
+END_IF;
+
+(* ---- les reglages ------------------------------------------------------ *)
+FOR i := 0 TO n - 1 DO
+    eq    := Cell(tReg, i, 'Equipement');
+    param := Cell(tReg, i, 'Parametre');
+    val   := Cell(tReg, i, 'Valeur');
+    acces := '';
+    fam := '';
+    FOR k := 0 TO neq - 1 DO
+        IF Cell(tEq, k, 'Nom') = eq AND Cell(tEq, k, 'Actif') = 'O' THEN
+            acces := Cell(tEq, k, 'Acces ST');
+            fam := Cell(tEq, k, 'Famille');
+        END_IF;
+    END_FOR;
+
+    lit := '';
+    IF eq = '' OR param = '' THEN
+        SkipRow('Reglages ligne ' + DINT_TO_STRING(i) + ' : equipement ou parametre vide');
+    ELSIF acces = '' THEN
+        Warn('Reglages : ' + eq + ' est introuvable ou inactif dans l onglet Equipements');
+        sautes := sautes + 1;
+    ELSE
+        typ := MemberType(fam, param);
+        IF typ = '' THEN
+            Warn('Reglages : ' + param + ' n est pas un champ de ' + fam + ' (' + eq + ')');
+            sautes := sautes + 1;
+        ELSIF typ = 'BOOL' THEN
+            IF val = 'O' OR val = 'o' OR val = '1' OR UPPER(val) = 'TRUE' OR UPPER(val) = 'VRAI' THEN
+                lit := 'TRUE';
+            ELSIF val = 'N' OR val = 'n' OR val = '0' OR UPPER(val) = 'FALSE' OR UPPER(val) = 'FAUX' THEN
+                lit := 'FALSE';
+            ELSE
+                Warn('Reglages : ' + eq + '.' + param + ' est un BOOL, "' + val + '" ne se lit pas (O ou N)');
+                sautes := sautes + 1;
+            END_IF;
+        ELSIF STARTSWITH(typ, 'STRING') THEN
+            lit := QUOTE(ASCII(val));
+        ELSIF typ = 'REAL' OR typ = 'INT' OR typ = 'DINT' OR typ = 'UINT' OR typ = 'UDINT' THEN
+            (* Un nombre, et rien d'autre : STRING_TO_REAL rend 0 pour
+               "trois secondes", et un 0 ecrit en silence est pire qu'un
+               refus. *)
+            ok := 0;
+            IF LEN(val) > 0 THEN ok := 1; END_IF;
+            points := 0;
+            FOR q := 0 TO LEN(val) - 1 DO
+                ch := MID(val, q, 1);
+                IF ch = '.' THEN points := points + 1; END_IF;
+                IF FIND('0123456789.-+', ch, 0) < 0 THEN ok := 0; END_IF;
+                IF (ch = '-' OR ch = '+') AND q > 0 THEN ok := 0; END_IF;
+            END_FOR;
+            IF points > 1 THEN ok := 0; END_IF;
+            nombre := STRING_TO_REAL(val);
+            IF ok = 0 THEN
+                Warn('Reglages : ' + eq + '.' + param + ' est un ' + typ + ', "' + val
+                     + '" n est pas un nombre');
+                sautes := sautes + 1;
+            ELSIF typ = 'REAL' THEN
+                lit := REAL_TO_STRING(nombre);
+            ELSE
+                entier := REAL_TO_INT(nombre);
+                IF nombre <> entier THEN
+                    Warn('Reglages : ' + eq + '.' + param + ' est un ' + typ + ', ' + val
+                         + ' est arrondi a ' + DINT_TO_STRING(entier));
+                END_IF;
+                IF (typ = 'UINT' OR typ = 'UDINT') AND entier < 0 THEN
+                    Warn('Reglages : ' + eq + '.' + param + ' est un ' + typ + ', il ne peut pas etre negatif');
+                    sautes := sautes + 1;
+                ELSIF typ = 'INT' AND (entier > 32767 OR entier < -32768) THEN
+                    Warn('Reglages : ' + eq + '.' + param + ' est un INT, ' + val + ' ne tient pas');
+                    sautes := sautes + 1;
+                ELSE
+                    lit := DINT_TO_STRING(entier);
+                END_IF;
+            END_IF;
+        ELSE
+            Warn('Reglages : ' + eq + '.' + param + ' est un ' + typ
+                 + ' ; seuls BOOL, INT, DINT, UINT, UDINT, REAL et STRING se reglent ici');
+            sautes := sautes + 1;
+        END_IF;
+    END_IF;
+
+    IF lit <> '' THEN
+        txt := txt + nl + '    ' + acces + '.' + param + ' := ' + lit + ';';
+        IF Cell(tReg, i, 'Unite') <> '' OR Cell(tReg, i, 'Commentaire') <> '' THEN
+            txt := txt + '   (* ' + ASCII(Cell(tReg, i, 'Unite')) + ' '
+                + ASCII(Cell(tReg, i, 'Commentaire')) + ' *)';
+        END_IF;
+        sig := (sig * 31 + LEN(param) * 7 + REAL_TO_INT(STRING_TO_REAL(val) * 10.0) MOD 9973 + LEN(lit)) MOD 30011;
+        poses := poses + 1;
+    END_IF;
+END_FOR;
+
+IF poses = 0 THEN
+    Fail('aucun reglage valable dans l onglet Reglages');
+END_IF;
+IF sig <= 0 THEN sig := sig + 30011; END_IF;
+IF sig = 0 THEN sig := 1; END_IF;
+
+IF NOT VariableExists('Reglages_Sig') THEN
+    AddVariable('Reglages_Sig', 'INT', 'Global', '', '0', 'signature des reglages deja poses');
+END_IF;
+IF NOT SectionExists(sect) THEN AddSection(sect, tache, 'ST', ''); END_IF;
+ClearSection(sect);
+AppendToSection(sect, '(* Genere par ImporterReglages depuis l onglet Reglages. GARDEE : les valeurs');
+AppendToSection(sect, '   ne sont posees qu au premier cycle, et apres un import qui les a changees.');
+AppendToSection(sect, '   Ce qui est modifie ensuite depuis l IHM tient jusque-la. *)');
+AppendToSection(sect, 'IF Reglages_Sig <> ' + DINT_TO_STRING(sig) + ' THEN' + txt);
+AppendToSection(sect, '    Reglages_Sig := ' + DINT_TO_STRING(sig) + ';');
+AppendToSection(sect, 'END_IF;');
+
+RunMacro('RangerSections');
+
+Log(DINT_TO_STRING(poses) + ' reglage(s) ecrit(s) dans ' + sect);
+IF sautes > 0 THEN
+    Warn(DINT_TO_STRING(sautes) + ' ligne(s) de l onglet Reglages ecartee(s) : voir ci-dessus');
+END_IF;

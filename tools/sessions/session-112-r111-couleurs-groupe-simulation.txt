@@ -1,0 +1,44 @@
+# =============================================================================
+#  Session 112 (R111, 1.11) : les couleurs du groupe dans le compteur des
+#  alarmes et le resume par zone, en simulation.
+#  IHM > Alarmes > Groupes d'alarmes : Equipements, « Couleur : active » #FF00FF ;
+#  puis la simulation (API + IHM), Vue_Alarmes : Courant_L1_Haut (groupe
+#  Equipements, la centrale PM5560 simulee) est active - le compteur et la tuile
+#  Equipements du resume prennent la couleur du groupe (sans elle : orange).
+#  Sur une copie d'Armoire_Gaz telle quelle (scratchpad/Q1103/qa/run.sh ... brut).
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- 1. La couleur active du groupe Equipements (replie, il se deplie d'un clic sur son titre)
+arbre "IHM/Configuration/Alarmes"
+attendre 6
+clic 1525 358
+attendre 3
+propriete-clic "Couleur : active"
+attendre 2
+couleur-champ R "255"
+couleur-champ G "0"
+couleur-champ B "255"
+attendre 1
+couleur-ok
+attendre 3
+# Reglé, Equipements passe en tete des groupes (les groupes declares d'abord) et
+# reste deplie : le depliage suit le nom du groupe (keepExpanded, 1.11), plus son rang.
+capture 112_01_groupe_couleur_active.png
+
+# ---- 2. En simulation : Vue_Alarmes, Courant_L1_Haut active
+arbre "Simulation/IHM"
+attendre 12
+survol 1650 1000
+sim-vue "Vue_Alarmes"
+attendre 6
+simulation-barre both.start
+attendre 20
+attendre 12
+capture 112_02_compteur_resume_couleur_du_groupe.png
+quitter

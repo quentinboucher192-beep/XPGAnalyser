@@ -1,0 +1,44 @@
+# Derived data type.
+name = armoire
+version = 0.47
+# checksum is recomputed by Control Expert on import; not stored.
+
+# name ; type ; address ; scope ; init ; comment ; attributes ; element comments
+entrees ; I ;  ; Member ;  ; entrees tor brutes 0 - 1 ;  ; 
+sorties ; Q ;  ; Member ;  ; sorties tor brutes 0 - 1 ;  ; 
+ana ; IW ;  ; Member ;  ; entrees ana brutes 0 - 10000 ;  ; 
+physiquement_prete ; BOOL ;  ; Member ;  ;  ;  ; 
+prete ; BOOL ;  ; Member ;  ;  ;  ; 
+active ; BOOL ;  ; Member ;  ;  ;  ; 
+demande_basculement ; BOOL ;  ; Member ;  ;  ;  ; 
+cmd_toggle_manu ; BOOL ;  ; Member ;  ;  ;  ; 
+en_cours_de_basculement ; BOOL ;  ; Member ;  ;  ;  ; 
+en_cours_de_chgt ; BOOL ;  ; Member ;  ;  ;  ; 
+en_cours_de_chgt_avant ; BOOL ;  ; Member ;  ;  ;  ; 
+en_cours_de_chgt_apres ; BOOL ;  ; Member ;  ;  ;  ; 
+bouteille_vide ; BOOL ;  ; Member ;  ;  ;  ; 
+bouteille_presque_vide ; BOOL ;  ; Member ;  ;  ;  ; 
+en_declenchement ; BOOL ;  ; Member ;  ;  ;  ; 
+compteur_cycle_surpression ; INT ;  ; Member ;  ;  ;  ; 
+compteur_cycle_purge ; INT ;  ; Member ;  ;  ;  ; 
+compteur_cycle_pompage ; INT ;  ; Member ;  ;  ;  ; 
+manu ; BOOL ;  ; Member ;  ;  ;  ; 
+etat ; INT ;  ; Member ;  ; 1 prete | 2 defaut | 3 active| 4 standby | 5 en basculement | 6 en changement ;  ; 
+defs ; defauts ;  ; Member ;  ;  ;  ; 
+seuil_poids_saisi ; REAL ;  ; Member ;  ;  ;  ; 
+seuil_poids_utilise ; REAL ;  ; Member ;  ;  ;  ; 
+CycleSurpressionBit ; BOOL ;  ; Member ;  ;  ;  ; 
+retour_sur_chgt ; BOOL ;  ; Member ;  ;  ;  ; 
+retour_sur_chgt_ap_decl ; BOOL ;  ; Member ;  ;  ;  ; 
+PrevActive ; BOOL ;  ; Member ;  ;  ;  ; 
+PrevDecl ; BOOL ;  ; Member ;  ;  ;  ; 
+CurrentTime ; TIME ;  ; Member ;  ;  ;  ; 
+TotalTimeMs ; UDINT ;  ; Member ;  ;  ;  ; 
+TotalTimeHours ; UDINT ;  ; Member ;  ;  ;  ; 
+CurrentTimeHours ; UDINT ;  ; Member ;  ;  ;  ; 
+CurrentTimeMinutes ; UDINT ;  ; Member ;  ;  ;  ; 
+EtalonPT1 ; INT ;  ; Member ;  ;  ;  ; 
+EtalonBalance ; INT ;  ; Member ;  ;  ;  ; 
+PoidsBouteille ; INT ;  ; Member ;  ;  ;  ; 
+EnAlarmeSansDeclenchement ; BOOL ;  ; Member ;  ;  ;  ; 
+init_chgt ; BOOL ;  ; Member ;  ;  ;  ; 

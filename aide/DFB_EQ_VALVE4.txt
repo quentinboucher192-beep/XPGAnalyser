@@ -1,0 +1,35 @@
+#! summary = Une vanne 4 voies : 4 commandes, 4 retours de position.
+#! usage = UNE INSTANCE TRAITE SEIZE EQUIPEMENTS, et cette taille est dans la signature
+#! usage = du bloc : en changer touche toutes les instances de tous les projets qui
+#! usage = l'ont importe. Seize suffit pour une station ; au-dela, on declare une
+#! usage = deuxieme instance.
+#! usage = Appeler une fois par cycle, apres les voies d'entree et avant les reports
+#! usage = vers l'IHM : le bloc lit ce que les voies ont ecrit, et ecrit ce que les
+#! usage = reports vont lire.
+#! usage = 
+#! usage = LA POSITION EST DEDUITE DES RETOURS, pas de la commande. Un seul retour actif
+#! usage = donne la position ; deux donnent le defaut 1 et la position -1 ; aucun laisse
+#! usage = -1 aussi. Rien n'est suppose, sauf quand HasFdc est faux et que c'est ecrit.
+#! example = (* declarer : Vannes : ARRAY[0..15] OF ST_EQ_Valve4; *)
+#! example = Vannes[0].PosReq := ChoixOperateur;
+#! example = Vannes[0].Fdc[0] := CarteDI_R0S4[8].Val;
+#! example = Vannes[0].Fdc[1] := CarteDI_R0S4[9].Val;
+#! example = 
+#! example = VAL_Melange(Count := 4, CycleMs := 20, Eq := Vannes);
+#! example = 
+#! example = CarteDO_R0S5[0].Val := Vannes[0].Cmd[0];
+#! example = CarteDO_R0S5[1].Val := Vannes[0].Cmd[1];
+#! param Count = Combien d'equipements du tableau sont traites. Borne a 16. En mettre moins
+#! param Count = ne fait pas gagner de memoire, seulement du temps de cycle.
+#! param CycleMs = La periode de la tache, en ms. Un DDT ne peut pas contenir de temporisateur,
+#! param CycleMs = donc tout le temps s'accumule depuis la : une valeur fausse ici fausse
+#! param CycleMs = toutes les temporisations de tous les equipements du tableau. DINT et non
+#! param CycleMs = INT - un INT de millisecondes deborde au bout de trente-trois secondes.
+#! param Eq = Le tableau des equipements, en InOut. Sa taille est figee a 16 : un InOut ne
+#! param Eq = peut pas etre dimensionne a l'appel.
+#! param FaultCount = Combien sont en defaut, recalcule a chaque cycle. De quoi allumer un voyant
+#! param FaultCount = de synthese sans reparcourir le tableau.
+#! param ReadyCount = Combien sont utilisables. FaultCount + ReadyCount n'est pas forcement egal a
+#! param ReadyCount = Count : un equipement desactive n'est ni l'un ni l'autre.
+#! see = ST_EQ_Valve4
+#! see = DFB_ITL_MATRIX

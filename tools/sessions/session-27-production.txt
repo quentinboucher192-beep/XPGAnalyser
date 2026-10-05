@@ -1,0 +1,353 @@
+# =============================================================================
+#  Session 27 - LOT 11 : la production. Une vue de ligne : compteurs de
+#  production et TRS, tableau de variables (saisie au clavier virtuel), editeur
+#  de recette (une valeur modifiee, l'installation, l'ecart), boutons d'export
+#  (CSV, Excel, PDF). Puis les restes du lot 10 : la vanne reglante et les
+#  seuils de la cuve, dans la vue synoptique. En marche, connecte en chef
+#  (la permission Recettes). Enfin l'exemple fige de chaque objet. Dans le
+#  projet des sessions 1 a 26 :
+#
+#    xpg_analyzer --script session-27-production.txt --captures captures --size 1920x1080
+# =============================================================================
+attendre 3
+theme Dark
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+arbre "API" replier
+attendre 3
+
+# ---- 1. les compteurs de la ligne et le script qui les fait tourner ----------------------------
+arbre "IHM/Programmation générale"
+attendre 5
+outil "Nouvelle variable IHM"
+attendre 3
+champ 1 "Pieces_Bonnes"
+liste 1
+choisir "DINT"
+champ 2 "0"
+champ 3 "Le compteur des pieces bonnes de la ligne 1"
+bouton "Créer"
+attendre 3
+outil "Nouvelle variable IHM"
+attendre 3
+champ 1 "Rebuts_Ligne"
+liste 1
+choisir "DINT"
+champ 2 "0"
+champ 3 "Le compteur des rebuts de la ligne 1"
+bouton "Créer"
+attendre 3
+outil "Nouvelle variable IHM"
+attendre 3
+champ 1 "Fraction_Piece"
+liste 1
+choisir "REAL"
+champ 2 "0.0"
+champ 3 "La piece en cours de fabrication (0 a 1)"
+bouton "Créer"
+attendre 3
+outil "Nouveau script ST"
+attendre 3
+champ 1 "Production_Ligne"
+liste 1
+choisir "Cyclique"
+champ 2 "100"
+champ 4 "La ligne 1 : 2,5 pieces par seconde quand la pompe tourne, un rebut sur treize"
+bouton "Créer"
+attendre 5
+editeur "(* La ligne 1 : 2,5 pieces par seconde quand la pompe tourne, un rebut sur treize *)\nIF Pompe_Marche THEN\n\tFraction_Piece := Fraction_Piece + 0.25;\nEND_IF;\nIF Fraction_Piece >= 1.0 THEN\n\tFraction_Piece := Fraction_Piece - 1.0;\n\tIF ((Pieces_Bonnes + Rebuts_Ligne) MOD 13) = 12 THEN\n\t\tRebuts_Ligne := Rebuts_Ligne + 1;\n\tELSE\n\t\tPieces_Bonnes := Pieces_Bonnes + 1;\n\tEND_IF;\nEND_IF;"
+attendre 5
+
+# ---- 2. la vue de la ligne ------------------------------------------------------------------
+arbre "IHM/Vues" deplier
+arbre "IHM/Vues/Vues"
+attendre 5
+outil "Nouvelle vue"
+attendre 5
+champ 1 "Vue_Ligne"
+champ 2 "1280"
+champ 3 "800"
+champ 4 "Compteurs de production, réglages, recette, exports"
+touche Return
+attendre 10
+palette "Compteurs de production"
+vue-clic 40 40
+attendre 2
+propriete "Nom" "Compteurs_Ligne"
+propriete "X" "20"
+propriete "Y" "20"
+propriete "Largeur" "620"
+propriete "Hauteur" "250"
+propriete "Titre" "Ligne 1"
+propriete "Pièces bonnes (compteur)" "Pieces_Bonnes"
+propriete "Rebuts (compteur)" "Rebuts_Ligne"
+propriete "En marche (expression)" "Pompe_Marche"
+propriete "Cadence nominale (pièces/h)" "10000"
+propriete "Objectif du poste (pièces)" "300"
+propriete "Fenêtre de cadence (s)" "30"
+propriete "TRS faible sous (%)" "30"
+propriete "TRS bon au-dessus de (%)" "60"
+palette "Tableau de variables"
+vue-clic 680 40
+attendre 2
+propriete "Nom" "Reglages_Ligne"
+propriete "X" "660"
+propriete "Y" "20"
+propriete "Largeur" "600"
+propriete "Hauteur" "250"
+propriete "Variables (a;b)" "Consigne_Pression; Vitesse_Pompe; Mode_Pompe; Gaz_Choisi; Pression_Ligne * 1.0"
+propriete "Noms (a;b)" "Consigne de pression; Vitesse de la pompe; Mode (0 manuel, 1 arrêt, 2 auto); Gaz de la ligne; Pression mesurée"
+propriete "Unités (a;b;c)" "bar; %; ; ; bar"
+propriete "Format" "0.0"
+propriete-clic "Clavier virtuel"
+choisir "numérique"
+attendre 2
+palette "Éditeur de recette"
+vue-clic 40 300
+attendre 2
+propriete "Nom" "Editeur_Recette"
+propriete "X" "20"
+propriete "Y" "290"
+propriete "Largeur" "740"
+propriete "Hauteur" "290"
+propriete-clic "Recette"
+choisir "Reglages_Armoires"
+attendre 2
+propriete-clic "Clavier virtuel"
+choisir "numérique"
+attendre 2
+palette "Bouton d'export"
+vue-clic 800 300
+attendre 2
+propriete "Nom" "Export_Alarmes"
+propriete "X" "790"
+propriete "Y" "300"
+propriete "Largeur" "230"
+propriete "Hauteur" "48"
+propriete "Texte" "Alarmes (CSV)"
+propriete "Nom du fichier" "alarmes_{SYS.Date}"
+palette "Bouton d'export"
+vue-clic 1040 300
+attendre 2
+propriete "Nom" "Export_Historique"
+propriete "X" "1030"
+propriete "Y" "300"
+propriete "Largeur" "230"
+propriete "Hauteur" "48"
+propriete "Texte" "Historique (Excel)"
+propriete-clic "Données exportées"
+choisir "historique"
+attendre 2
+propriete-clic "Format du fichier"
+choisir "Excel"
+attendre 2
+propriete "Nom du fichier" "historique_alarmes_{SYS.Date}"
+palette "Bouton d'export"
+vue-clic 800 370
+attendre 2
+propriete "Nom" "Export_TRS"
+propriete "X" "790"
+propriete "Y" "364"
+propriete "Largeur" "230"
+propriete "Hauteur" "48"
+propriete "Texte" "TRS du poste (PDF)"
+propriete-clic "Données exportées"
+choisir "objet:Compteurs_Ligne"
+attendre 2
+propriete-clic "Format du fichier"
+choisir "PDF"
+attendre 2
+propriete "Nom du fichier" "trs_{SYS.Date}"
+palette "Bouton d'export"
+vue-clic 1040 370
+attendre 2
+propriete "Nom" "Export_Recette"
+propriete "X" "1030"
+propriete "Y" "364"
+propriete "Largeur" "230"
+propriete "Hauteur" "48"
+propriete "Texte" "Recette (Excel)"
+propriete-clic "Données exportées"
+choisir "recette:Reglages_Armoires"
+attendre 2
+propriete-clic "Format du fichier"
+choisir "Excel"
+attendre 2
+propriete "Nom du fichier" "recette_armoires"
+palette "Texte"
+vue-clic 800 440
+attendre 2
+propriete "Nom" "Dernier_Export"
+propriete "X" "790"
+propriete "Y" "430"
+propriete "Largeur" "470"
+propriete "Hauteur" "70"
+propriete "Texte" "Dernier export : {SYS.LastExport}\n{SYS.ExportCount} fichier(s) écrit(s) dans exports/"
+propriete "Taille du texte" "15"
+propriete-clic "Retour à la ligne"
+attendre 2
+touche Escape
+attendre 3
+objet "Compteurs_Ligne"
+attendre 5
+survol 1200 1040
+attendre 5
+capture PNG_292_vue_production_editeur.png
+action project.save
+attendre 5
+bouton "Close"
+attendre 3
+
+# ---- 3. les restes du lot 10 : la vanne reglante, les seuils de la cuve ----------------------
+arbre "IHM/Vues/Vues/Vue_Synoptique"
+attendre 10
+objet "V_101"
+attendre 3
+propriete-clic "Commande de la vanne"
+choisir "réglante"
+attendre 2
+propriete "Ouverture (%)" "=Position_Verin"
+propriete "En mouvement (expression)" "=Marche_Ligne AND Position_Verin > 3.0 AND Position_Verin < 97.0"
+objet "Cuve_T1"
+attendre 3
+propriete "Seuil bas" "25"
+propriete "Seuil haut" "80"
+propriete "Alarme haute" "88"
+touche Escape
+action project.save
+attendre 5
+bouton "Close"
+attendre 3
+
+# ---- 4. en marche, connecte en chef --------------------------------------------------------------
+arbre "IHM/Simulation"
+attendre 10
+bouton "Marche"
+attendre 10
+bouton "Forcer..."
+attendre 3
+champ 1 "Armoires[0].ana.PT1.mes"
+champ 2 "28"
+touche Return
+attendre 10
+bouton "Redémarrer l'IHM"
+attendre 20
+bouton "Utilisateur..."
+attendre 5
+liste 1
+choisir "chef"
+attendre 3
+code 1 chef
+attendre 3
+bouton "Se connecter"
+attendre 10
+# La vue synoptique d'abord : la cuve monte, elle passe le seuil H vers 5 a 8 s.
+sim-vue "Vue_Synoptique"
+attendre 20
+glisser 1219 600 1880 600
+attendre 20
+survol 1900 1000
+attendre 110
+capture-sim PNG_297_vanne_reglante_seuils_cuve.png
+sim-vue "Vue_Ligne"
+attendre 900
+capture-sim PNG_293_trs_en_marche.png
+sim-partie "Reglages_Ligne" "ligne:0"
+attendre 10
+sim-touche "1"
+attendre 5
+sim-touche "4"
+attendre 10
+capture-sim PNG_294_tableau_variables_saisie.png
+sim-touche "↵"
+attendre 10
+sim-partie "Editeur_Recette" "ligne:0"
+attendre 10
+sim-touche "1"
+attendre 5
+sim-touche "5"
+attendre 5
+sim-touche "↵"
+attendre 20
+capture-sim PNG_295_editeur_recette_modifie.png
+sim-partie "Editeur_Recette" "bouton:Appliquer"
+attendre 20
+sim-clic "Export_Alarmes"
+bouton "Exporter"
+attendre 5
+attendre 20
+sim-clic "Export_Historique"
+bouton "Exporter"
+attendre 5
+attendre 20
+sim-clic "Export_Recette"
+bouton "Exporter"
+attendre 5
+attendre 20
+sim-clic "Export_TRS"
+bouton "Exporter"
+attendre 5
+attendre 20
+glisser 1795 600 1219 600
+attendre 20
+sous-onglet "Journal"
+attendre 10
+survol 1200 1040
+attendre 3
+capture PNG_296_export_fichiers.png
+bouton "Tout relâcher"
+attendre 10
+
+# ---- 5. l'aide : la page de la production, l'exemple de chaque objet ; la vanne et la cuve ------
+arbre "IHM/Vues/Vues/Vue_Ligne"
+attendre 10
+objet "Compteurs_Ligne"
+attendre 5
+touche f1
+attendre 20
+aide-sujet "production"
+attendre 5
+aide-sujet "objet-compteurs-de-production"
+attendre 3
+exemple-figer 11.0
+attendre 3
+capture-exemple EX_ProductionCounter.png
+aide-sujet "objet-tableau-de-variables"
+attendre 3
+exemple-figer 3.8
+attendre 3
+capture-exemple EX_VariableTable.png
+aide-sujet "objet-editeur-de-recette"
+attendre 3
+exemple-figer 5.0
+attendre 3
+capture-exemple EX_RecipeEditor.png
+aide-sujet "objet-bouton-d-export"
+attendre 3
+exemple-figer 11.5
+attendre 3
+capture-exemple EX_ExportButton.png
+aide-sujet "objet-vanne"
+attendre 3
+exemple-figer 3.0
+attendre 3
+capture-exemple EX_Valve.png
+aide-sujet "objet-cuve"
+attendre 3
+exemple-figer 5.0
+attendre 3
+capture-exemple EX_Tank.png
+aide-sujet "objet-silo"
+attendre 3
+exemple-figer 5.0
+attendre 3
+capture-exemple EX_Silo.png
+aide-sujet "objet-tremie"
+attendre 3
+exemple-figer 5.0
+attendre 3
+capture-exemple EX_Hopper.png
+exemple-figer -1
+attendre 3
+quitter

@@ -1,0 +1,28 @@
+# =============================================================================
+#  1.10 - L'aide a la saisie des scripts : le langage 1.10, les operateurs, les
+#  enumerations (chantier K2). Meme syntaxe que guide-ihm.txt.
+#  A reporter dans guide-ihm.txt, sujet « aide-saisie » : ce texte remplace la
+#  partie « ### Selon le type, et le langage 1.10 » (garder son @nouveau 1.10).
+#  Et dans le sujet « champs-expressions », apres « ### Retirer une expression » :
+#  la partie « ### Sous une ligne rouge : la raison » plus bas.
+# =============================================================================
+
+@nouveau 1.10
+### Selon le type, et le langage 1.10
+- Dans une case, la liste propose d'abord ce qui convient au type de la case (BOOL, nombre, couleur, vue, texte) ; le reste vient plus bas, grisé, avec son type : voir « Les champs à expression ».
+- Les **fonctions internes** du script (déclarées avant ou après), avec leur signature et leur ligne : `Moyenne(t : ARRAY[0..7] OF REAL) : REAL · ligne 9` ; à la parenthèse, la signature s'affiche comme pour une fonction du projet.
+- Les fonctions du langage : `MAP_HAS`, `MAP_GET`, `MAP_REMOVE`, `MAP_SIZE`, `MAP_CLEAR`, `MAP_KEYS`, `MAP_BEGIN`, `MAP_NEXT`, `MAP_END`, `REF`, `ADR`, `SIZEOF`, `LOWER_BOUND`, `UPPER_BOUND`, `TO_UPPER`, `TO_LOWER` ; et les modèles : `FUNCTION … END_FUNCTION`, `FOR EACH cle, valeur IN m DO … END_FOR`, `RETURN`, `ARRAY`, `MAP`, `REF_TO`, `POINTER TO`, `VAR_IN_OUT`, `NULL`.
+- Après un point : `it.` (un itérateur de `MAP_BEGIN`) propose `Key` et `Value`, avec leurs types ; `p^.` (un pointeur, une référence) les membres du type visé ; une variable locale d'un type IHM ses membres ; un tableau `Length`.
+- Après `m[` (une MAP) : les clés déjà écrites dans le script.
+- `TO_` : les conversions des types et des symboles (`TO_STRING(T_VECTEUR) : STRING`, le toString et le fromString d'une énumération), `TO_T_MODE(DINT)`, puis les conversions de base (`TO_INT`, `TO_REAL`, `TO_STRING`…).
+- Après un nom suivi d'une espace, **Ctrl+Espace** : les opérateurs de son type (`T_VECTEUR + T_VECTEUR : T_VECTEUR`).
+### Les énumérations
+- `T_MODE#` ouvre la liste des valeurs, dans l'ordre, avec leur nombre et leur texte (`T_MODE#Auto · 1 · Automatique`) ; une lettre la filtre.
+- Dans un `CASE` sur une énumération, en tête de branche : les valeurs d'abord (`T_MODE#Arret:`).
+- Là où une énumération est attendue (`m := `, `IF m = `, `RETURN ` d'une fonction qui en rend une, l'argument d'une fonction qui en attend une) : ses valeurs d'abord.
+- Tape `CASE` : le modèle **CASE avec toutes les valeurs** — une branche vide par valeur, comme la correction « Ajouter les valeurs manquantes » de Compiler.
+- Tape `FOR` : `FOR EACH v IN T_MODE DO … END_FOR` (les valeurs, dans l'ordre) ; après `FOR EACH v IN `, les énumérations puis les MAP et les tableaux du script.
+- Dans un bloc `VAR`, après `nom :`, les types IHM (énumérations et structures) en plus des types élémentaires.
+
+### Sous une ligne rouge : la raison
+Sous une case dont l'expression ne peut pas marcher, une ligne dit **pourquoi** (« Debit_Entre n'existe pas : veux-tu dire Debit_Entree ? »). Quand un nom proche existe, **Remplacer par Debit_Entree** corrige l'expression d'un clic ; **Ctrl+Z** l'annule.

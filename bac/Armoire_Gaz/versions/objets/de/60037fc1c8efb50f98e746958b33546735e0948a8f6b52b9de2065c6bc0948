@@ -1,0 +1,21 @@
+if (ConfigurationMemoireOk) then
+	for i := 0 to nombre_de_config - 1 do
+
+		config_a_reutiliser := false;
+		if (ConfigsGazModifications[i].Utilise) then
+			config_a_reutiliser := true;
+		end_if;
+
+		ECRITURE_MEMOIRE (config := ConfigsGaz[i]);
+		for j := 0 to taille_memoire_config - 1 do
+			%MW0[position_depart_memoire + i * taille_memoire_config + j] := ECRITURE_MEMOIRE.stockage_public[j];
+		end_for;
+		ConfigsGazModifications[i] := ConfigsGaz[i];
+
+		if (config_a_reutiliser) then
+			%MW0[position_depart_memoire + i * taille_memoire_config + (taille_memoire_config - 1)].0 := true;
+			ConfigsGazModifications[i].Utilise := true;
+		end_if;
+
+	end_for;
+end_if;

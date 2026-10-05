@@ -1,0 +1,32 @@
+# =============================================================================
+#  Session t1112-copie-ratee - 1.11.2 (T1, decision 164) : le modele du bac a
+#  sable est la, mais sa copie echoue (le disque plein, un dossier temporaire
+#  qui refuse l'ecriture). Avant : le lecteur partait muet, a 0:00. Maintenant :
+#  le tutoriel s'arrete, un dialogue « Tutoriel arrete » dit pourquoi (de, vers,
+#  la raison) et le remede (bouton Fermer), et le centre reste sur le sujet
+#  (aide-sujet le demande au-dessus).
+#  A lancer dans un HOME neuf, PROJETS=<dossier d'Armoire_Gaz>, sans
+#  XPG_TUTORIELS, --size 1920x1080, et TMPDIR=<un dossier> ou
+#  xpg-bac-a-sable est un FICHIER (la copie ne peut pas creer son dossier).
+# =============================================================================
+attendre 30
+bouton "Définir la clé"
+attendre 10
+action project.new
+attendre 10
+bouton Create
+attendre-projet
+attendre 30
+touche f1
+attendre 15
+aide-sujet objet-ligne
+attendre 10
+aide-cible tuto:objet-ligne
+attendre 30
+capture t1112-copie-ratee-01-dialogue.png
+bouton Fermer
+attendre 15
+aide-sujet objet-ligne
+attendre 10
+capture t1112-copie-ratee-02-centre.png
+quitter

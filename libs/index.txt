@@ -1,0 +1,118 @@
+# Shared library. One entry per line:
+#   kind ; category ; name ; version ; author ; comment
+# kind is ddt or dfb. The file itself lives at <category>/<name>.<kind>.
+# Versions here are what the library offers; a project keeps the copy it
+# imported until someone decides to update it.
+dfb ; Alarms ; AlmDecode ; 1.00 ; XpgAnalyzer ; Relit l'identifiant d'une alarme et rend sa provenance. L'inverse exact d'AlmUuid.
+dfb ; Alarms ; AlmUuid ; 1.00 ; XpgAnalyzer ; Compose l'identifiant d'une alarme depuis sa provenance. La seule fonction qui connait la disposition des 32 bits.
+dfb ; Alarms ; DFB_ALM_MANAGER ; 1.02 ; XpgAnalyzer ; Un gestionnaire d'alarmes pour 64 alarmes et 256 evenements d'historique : masquage, klaxon, premier defaut, date. Une instance par groupe.
+dfb ; Alarms ; DFB_ALM_MANAGER256 ; 1.00 ; XpgAnalyzer ; Un gestionnaire d'alarmes pour 256 alarmes et 512 evenements d'historique : masquage, klaxon, premier defaut, date. Une instance par groupe.
+ddt ; Alarms ; ST_ALM_Cmd ; 1.01 ; XpgAnalyzer ; Les commandes du gestionnaire d'alarmes. Toutes sont prises SUR FRONT MONTANT.
+ddt ; Alarms ; ST_ALM_Def ; 1.01 ; XpgAnalyzer ; Une alarme du registre : son identifiant, ce que l'operateur lit, et son etat.
+ddt ; Alarms ; ST_ALM_Event ; 1.01 ; XpgAnalyzer ; Un evenement de l'historique des alarmes : laquelle, quel genre, quand.
+ddt ; Alarms ; ST_ALM_Stat ; 1.01 ; XpgAnalyzer ; Ce que le gestionnaire d'alarmes rapporte a chaque cycle.
+dfb ; Client ; BUILDING ; 0.24 ; XpgAnalyzer ; Construit les etapes, transitions et actions du moteur GRAFCET depuis un texte : 'id=0|s=0|d=1|c=DEPART'.
+dfb ; Client ; CAPTEUR ; 0.03 ; XpgAnalyzer ; Une mesure analogique : mise a l'echelle, simulation, moyenne glissante sur 10 cycles, bande morte.
+dfb ; Client ; DFB_GRAFCETENGINE ; 1.49 ; XpgAnalyzer ; Un moteur GRAFCET en ST : jusqu'a 28 etapes, 28 transitions et 28 actions decrites par des tableaux, evaluees en trois phases.
+dfb ; Client ; RTCDECODED ; 0.12 ; XpgAnalyzer ; La date et l'heure a la milliseconde, depuis RRTC_DT_MS, et le temps ecoule depuis l'appel precedent.
+ddt ; Client ; ST_DebugLine4 ; 0.02 ; XpgAnalyzer ; Une ligne d'historique : 4 caracteres et leur date.
+ddt ; Client ; ST_DebugLine64 ; 0.02 ; XpgAnalyzer ; Une ligne d'historique : 64 caracteres et leur date.
+ddt ; Client ; ST_GC_Action ; 0.15 ; XpgAnalyzer ; Une action du moteur GRAFCET : l'etape qui la porte, son qualificatif, son retard, sa sortie.
+ddt ; Client ; ST_GC_CMD ; 0.02 ; XpgAnalyzer ; Les commandes d'un moteur GRAFCET, regroupees pour l'IHM.
+ddt ; Client ; ST_GC_CTRL ; 0.02 ; XpgAnalyzer ; Commandes et etat d'un moteur GRAFCET, en une structure.
+ddt ; Client ; ST_GC_Debug ; 0.26 ; XpgAnalyzer ; La mise au point du moteur GRAFCET : compteurs, defauts, historique date.
+ddt ; Client ; ST_GC_DebugStepFocus ; 0.14 ; XpgAnalyzer ; Le detail d'une etape du moteur GRAFCET : ses actions par qualificatif, ses transitions.
+ddt ; Client ; ST_GC_Runtime ; 0.04 ; XpgAnalyzer ; L'etat interne du moteur GRAFCET : le mode, la phase, le temps, et SES TAILLES.
+ddt ; Client ; ST_GC_STAT ; 0.01 ; XpgAnalyzer ; Ce qu'un moteur GRAFCET rapporte, regroupe pour l'IHM.
+ddt ; Client ; ST_GC_Step ; 0.10 ; XpgAnalyzer ; Une etape du moteur GRAFCET : son numero, son nom, initiale ou finale, active ou non, et depuis quand.
+ddt ; Client ; ST_GC_Transition ; 0.08 ; XpgAnalyzer ; Une transition du moteur GRAFCET : ses etapes sources et destinations, sa condition, sa temporisation.
+ddt ; Client ; ST_RTCDECODED ; 0.01 ; XpgAnalyzer ; La date et l'heure decodees par RTCDECODED, a la milliseconde.
+dfb ; Comm ; DFB_COM_MODBUS ; 1.00 ; XpgAnalyzer ; Huit requetes Modbus TCP periodiques, une a la fois, avec compte rendu et fraicheur.
+dfb ; Comm ; DFB_COM_WATCHDOG ; 1.00 ; XpgAnalyzer ; Surveille seize liaisons par battement de coeur, et fait battre le notre.
+ddt ; Comm ; ST_COM_Link ; 1.00 ; XpgAnalyzer ; Une liaison surveillee par battement de coeur : le compteur du partenaire doit changer avant TimeoutMs.
+ddt ; Comm ; ST_COM_Modbus ; 1.00 ; XpgAnalyzer ; Une requete Modbus TCP periodique : lire ou ecrire des registres d'un equipement distant.
+dfb ; Control ; DFB_CTL_LEVEL ; 1.00 ; XpgAnalyzer ; Regulation de niveau par paliers : combien d'equipements doivent tourner, pour vider ou pour remplir.
+dfb ; Control ; DFB_CTL_PID ; 1.00 ; XpgAnalyzer ; Huit boucles PID en un appel : sans a-coup manuel/auto, anti-emballement, derivee sur la mesure.
+dfb ; Control ; DFB_CTL_SCHEDULE ; 1.00 ; XpgAnalyzer ; Un programmateur horaire : seize plages, huit sorties, jours feries, et un repli quand l'heure n'est pas sure.
+dfb ; Control ; DFB_ITL_MATRIX ; 1.01 ; XpgAnalyzer ; Interverrouillage de 16 vannes par matrice : interdits et prerequis.
+dfb ; Control ; DFB_MODE_MANAGER ; 1.02 ; XpgAnalyzer ; Choisit le mode actif parmi 16 : priorite, temps minimum, repli.
+dfb ; Control ; DFB_SEQ_ROTATE ; 1.02 ; XpgAnalyzer ; Fait tourner N equipements parmi 16 : ordre fixe, carrousel, ou la moins usee.
+ddt ; Control ; ST_CTL_Pid ; 1.00 ; XpgAnalyzer ; Une boucle de regulation PID : consigne, mesure, sortie, et ses reglages.
+ddt ; Control ; ST_CTL_Slot ; 1.00 ; XpgAnalyzer ; Une plage horaire : quels jours, de quelle heure a quelle heure, sur quelle sortie.
+ddt ; Control ; ST_CTL_Stage ; 1.00 ; XpgAnalyzer ; Un palier d'une regulation de niveau : le niveau ou il s'enclenche, celui ou il retombe, et leurs retards.
+ddt ; Control ; ST_MODE_Def ; 1.01 ; XpgAnalyzer ; Un mode de marche : sa condition d'entree, sa priorite, son temps minimum.
+ddt ; Control ; ST_SEQ_Member ; 1.01 ; XpgAnalyzer ; Un equipement dans une rotation : disponible, selectionne, use.
+dfb ; Equipment ; DFB_EQ_ATV ; 1.01 ; XpgAnalyzer ; Seize variateurs Altivar pilotes par mots CiA402 : la machine d'etats, le sens, la consigne, les defauts.
+dfb ; Equipment ; DFB_EQ_CONVEYOR ; 1.02 ; XpgAnalyzer ; Un convoyeur : deux sens, thermique, arret d'urgence, detection de bourrage.
+dfb ; Equipment ; DFB_EQ_CTRLVALVE ; 1.00 ; XpgAnalyzer ; Seize vannes de regulation en un appel : limite de vitesse, recopie surveillee, repli.
+dfb ; Equipment ; DFB_EQ_CYLINDER ; 1.02 ; XpgAnalyzer ; Un verin : sortie, rentree, deux capteurs, monostable ou bistable.
+dfb ; Equipment ; DFB_EQ_DRIVE ; 1.02 ; XpgAnalyzer ; Un variateur : consigne, rampe, ecart, mots d'etat, sortie en points.
+dfb ; Equipment ; DFB_EQ_LED ; 1.02 ; XpgAnalyzer ; Un voyant : fixe, clignotant, impulsion, ou pilote par une gravite.
+dfb ; Equipment ; DFB_EQ_MOTOR ; 1.02 ; XpgAnalyzer ; Un moteur a vitesse fixe : commande, retour, thermique, anti court-cycle.
+dfb ; Equipment ; DFB_EQ_PUMP ; 1.02 ; XpgAnalyzer ; Une pompe : un moteur, plus la marche a sec, le debit et la pression.
+dfb ; Equipment ; DFB_EQ_TANK ; 1.02 ; XpgAnalyzer ; Une cuve : niveau, volume, quatre seuils, vitesse de variation.
+dfb ; Equipment ; DFB_EQ_VALVE2 ; 1.02 ; XpgAnalyzer ; Une vanne 2 voies : 2 commandes, 2 retours de position.
+dfb ; Equipment ; DFB_EQ_VALVE3 ; 1.02 ; XpgAnalyzer ; Une vanne 3 voies : 3 commandes, 3 retours de position.
+dfb ; Equipment ; DFB_EQ_VALVE4 ; 1.02 ; XpgAnalyzer ; Une vanne 4 voies : 4 commandes, 4 retours de position.
+ddt ; Equipment ; ST_EQ_Atv ; 1.01 ; XpgAnalyzer ; Un variateur Altivar pilote par mots (profil CiA402 / DRIVECOM) : ETA, CMD, LFR, RFR, LCR, LFT.
+ddt ; Equipment ; ST_EQ_Conveyor ; 1.01 ; XpgAnalyzer ; Un convoyeur : deux sens, thermique, arret d'urgence, detection de bourrage.
+ddt ; Equipment ; ST_EQ_CtrlValve ; 1.00 ; XpgAnalyzer ; Une vanne de regulation : position commandee en pourcent, recopie, ecart surveille, position de repli.
+ddt ; Equipment ; ST_EQ_Cylinder ; 1.01 ; XpgAnalyzer ; Un verin : sortie, rentree, deux capteurs, monostable ou bistable.
+ddt ; Equipment ; ST_EQ_Drive ; 1.01 ; XpgAnalyzer ; Un variateur : consigne, rampe, ecart, mots d'etat, sortie en points.
+ddt ; Equipment ; ST_EQ_Led ; 1.01 ; XpgAnalyzer ; Un voyant : fixe, clignotant, impulsion, ou pilote par une gravite.
+ddt ; Equipment ; ST_EQ_Motor ; 1.01 ; XpgAnalyzer ; Un moteur a vitesse fixe : commande, retour, thermique, anti court-cycle.
+ddt ; Equipment ; ST_EQ_Pump ; 1.01 ; XpgAnalyzer ; Une pompe : un moteur, plus la marche a sec, le debit et la pression.
+ddt ; Equipment ; ST_EQ_Tank ; 1.01 ; XpgAnalyzer ; Une cuve : niveau, volume, quatre seuils, vitesse de variation.
+ddt ; Equipment ; ST_EQ_Valve2 ; 1.01 ; XpgAnalyzer ; Une vanne 2 voies : 2 commandes, 2 retours de position.
+ddt ; Equipment ; ST_EQ_Valve3 ; 1.01 ; XpgAnalyzer ; Une vanne 3 voies : 3 commandes, 3 retours de position.
+ddt ; Equipment ; ST_EQ_Valve4 ; 1.01 ; XpgAnalyzer ; Une vanne 4 voies : 4 commandes, 4 retours de position.
+dfb ; IO ; DFB_IO_ANA04 ; 1.02 ; XpgAnalyzer ; Traite une carte de 4 voies analogiques en un appel.
+dfb ; IO ; DFB_IO_ANA08 ; 1.02 ; XpgAnalyzer ; Traite une carte de 8 voies analogiques en un appel.
+dfb ; IO ; DFB_IO_ANA16 ; 1.02 ; XpgAnalyzer ; Traite une carte de 16 voies analogiques en un appel.
+dfb ; IO ; DFB_IO_ANA32 ; 1.02 ; XpgAnalyzer ; Traite une carte de 32 voies analogiques en un appel.
+dfb ; IO ; DFB_IO_ANA64 ; 1.02 ; XpgAnalyzer ; Traite une carte de 64 voies analogiques en un appel.
+dfb ; IO ; DFB_IO_DIG04 ; 1.02 ; XpgAnalyzer ; Traite une carte de 4 voies tout ou rien en un appel.
+dfb ; IO ; DFB_IO_DIG08 ; 1.02 ; XpgAnalyzer ; Traite une carte de 8 voies tout ou rien en un appel.
+dfb ; IO ; DFB_IO_DIG16 ; 1.02 ; XpgAnalyzer ; Traite une carte de 16 voies tout ou rien en un appel.
+dfb ; IO ; DFB_IO_DIG32 ; 1.02 ; XpgAnalyzer ; Traite une carte de 32 voies tout ou rien en un appel.
+dfb ; IO ; DFB_IO_DIG64 ; 1.02 ; XpgAnalyzer ; Traite une carte de 64 voies tout ou rien en un appel.
+ddt ; IO ; ST_IO_Ana ; 1.01 ; XpgAnalyzer ; Une voie analogique, entree ou sortie : echelle, bande morte, filtre, limite de pente, mini/maxi et quatre seuils.
+ddt ; IO ; ST_IO_Dig ; 1.01 ; XpgAnalyzer ; Une voie tout ou rien, entree ou sortie : inversion, anti-rebond, fronts, compteurs, alarme de maintien.
+ddt ; IO ; ST_IO_Thr ; 1.01 ; XpgAnalyzer ; Un seuil d'alarme. Quatre de ceux-la vivent dans chaque voie analogique.
+mac ; Macros ; AppelerSR ; 1.10 ; XpgAnalyzer ; Ecrit l'appel d'une sous-routine, precede du remplissage de ses entrees et suivi de la relecture de ses sorties.
+mac ; Macros ; CreerEquipement ; 1.10 ; XpgAnalyzer ; Ajoute un equipement sans classeur : type et bloc importes, tableau et instance declares, appel ecrit ou son Count releve, nom pose.
+mac ; Macros ; CreerInstanceDDT ; 1.10 ; XpgAnalyzer ; Declare une variable d'un type derive, seule ou en tableau, en important le type au besoin.
+mac ; Macros ; CreerInstanceDFB ; 1.10 ; XpgAnalyzer ; Declare une instance de bloc fonction ET ecrit sa ligne d'appel.
+mac ; Macros ; CreerSR ; 1.10 ; XpgAnalyzer ; Cree une sous-routine et les variables convenues qui lui servent d'entrees et de sorties.
+mac ; Macros ; CreerVariable ; 1.10 ; XpgAnalyzer ; Cree une variable globale, ou privee a une unite de programme.
+mac ; Macros ; EnsureLibraryItem ; 1.20 ; XpgAnalyzer ; S'assure qu'un type ou un bloc de la bibliotheque est present dans le projet.
+mac ; Macros ; EnsureSection ; 1.20 ; XpgAnalyzer ; Cree une section si elle n'existe pas encore, dans une tache ou dans une unite.
+mac ; Macros ; GenererDiagnostic ; 1.10 ; XpgAnalyzer ; Ecrit le diagnostic de l'automate : bits systeme, temps de cycle, et le bit d'erreur de chaque module de l'onglet Cartes API.
+mac ; Macros ; GenererGrafcet ; 1.10 ; XpgAnalyzer ; Cree le squelette d'un grafcet a completer a la main : etapes en sequence, receptivites a ecrire, moteur appele, sans classeur.
+mac ; Macros ; GenererModes ; 1.10 ; XpgAnalyzer ; Genere la section qui fait tourner les modes de marche : l'appel du gestionnaire, puis le CASE des sous-routines.
+mac ; Macros ; GenererSimulation ; 1.10 ; XpgAnalyzer ; Genere la section Simulation : chaque voie d'entree recoit ce que la machine lui repondrait, et les variateurs Modbus sont emules - tout sous SimActive.
+mac ; Macros ; ImportES ; 3.20 ; XpgAnalyzer ; Declare les tableaux et les instances, puis cable et configure chaque voie, depuis un onglet du classeur exporte en CSV.
+mac ; Macros ; ImporterAlarmes ; 1.10 ; XpgAnalyzer ; Enregistre les alarmes de voie dans DFB_ALM_MANAGER : UUID, libelle, gravite, et la remontee d'etat a chaque cycle.
+mac ; Macros ; ImporterCablage ; 1.10 ; XpgAnalyzer ; Relie chaque voie d'E/S au parametre d'equipement qu'elle alimente.
+mac ; Macros ; ImporterCartes ; 1.10 ; XpgAnalyzer ; Declare les tableaux de voies et les instances de bloc de chaque carte du classeur.
+mac ; Macros ; ImporterClasseur ; 2.10 ; XpgAnalyzer ; Importe l'affaire entiere depuis le classeur : verification, programme, reglages, controle, Modbus, grafcets, diagnostic et simulation - une seule annulation pour tout.
+mac ; Macros ; ImporterControle ; 1.10 ; XpgAnalyzer ; Genere le controle depuis le classeur : paliers de niveau, rotations d'equipements, modes de marche et interverrouillages.
+mac ; Macros ; ImporterEquipements ; 1.10 ; XpgAnalyzer ; Declare les tableaux d'equipement, les instances de bloc de leur famille, et ecrit leurs appels.
+mac ; Macros ; ImporterGrafcet ; 1.10 ; XpgAnalyzer ; Genere les grafcets decrits dans le classeur (onglets Grafcet Etapes, Transitions, Actions) : tableaux, moteur DFB_GRAFCETENGINE, une sous-routine par grafcet, construits une fois.
+mac ; Macros ; ImporterModbus ; 1.10 ; XpgAnalyzer ; Genere les requetes Modbus TCP (DFB_COM_MODBUS) depuis l'onglet Modbus, et relie leurs registres aux champs des equipements.
+mac ; Macros ; ImporterProgramme ; 2.10 ; XpgAnalyzer ; Genere tout le programme depuis le classeur en une fois : types et blocs importes de libs, tableaux et instances declares, E/S, equipements, cablage, reports et alarmes, sections rangees.
+mac ; Macros ; ImporterReglages ; 1.10 ; XpgAnalyzer ; Pose les reglages des equipements (temps, seuils, options) depuis l'onglet Reglages, dans une section qui ne tourne qu'au premier cycle.
+mac ; Macros ; ImporterReports ; 1.10 ; XpgAnalyzer ; Ecrit les echanges avec l'IHM : commandes en tete de tache, mesures et recopie des alarmes en queue. Elle n'enregistre rien dans le gestionnaire d'alarmes.
+mac ; Macros ; ImporterVoies ; 1.10 ; XpgAnalyzer ; Ecrit les deux sections de mapping : le cablage de chaque voie, tous ses reglages, et l'appel du bloc de sa carte.
+mac ; Macros ; LierAlarmes ; 1.20 ; XpgAnalyzer ; Enregistre et cable toutes les alarmes d'un onglet exporte en CSV dans le gestionnaire d'alarmes.
+mac ; Macros ; MettreAJourBibliotheque ; 1.10 ; XpgAnalyzer ; Met a jour depuis la bibliotheque les types et les blocs du projet qui ont pris du retard - les types d'abord, les blocs ensuite.
+mac ; Macros ; PreparerGrafcets ; 1.10 ; XpgAnalyzer ; Prepare le projet pour les grafcets : bibliotheque GRAFCET, instance de BUILDING, temps des grafcets et section Grafcets qui appelle chacun.
+mac ; Macros ; RangerSections ; 1.10 ; XpgAnalyzer ; Range les sections generees par les imports dans l'ordre d'execution de la tache, sans deplacer les votres.
+mac ; Macros ; VerifierBibliotheque ; 1.10 ; XpgAnalyzer ; Compare les types et les blocs du projet a la bibliotheque et rapporte ce qui a pris du retard.
+mac ; Macros ; VerifierClasseur ; 2.10 ; XpgAnalyzer ; Lit le classeur et la bibliotheque, et dit ce qui va casser avant d'importer : champs inexistants, adresses en double ou hors zone, cartes trop petites, onglets de controle et de grafcets incoherents.
+dfb ; Measure ; DFB_CNT_TOTAL ; 1.00 ; XpgAnalyzer ; Seize totalisateurs en un appel : debits integres ou impulsions, total exact, jour et veille.
+ddt ; Measure ; ST_CNT_Total ; 1.00 ; XpgAnalyzer ; Un totalisateur : un debit integre, ou des impulsions de compteur, sans perte de precision.
+dfb ; System ; DFB_SYS_CLOCK ; 1.00 ; XpgAnalyzer ; L'heure de l'automate decodee, la date en secondes (EpochS), des impulsions par seconde, minute, heure et jour - et DtMs, le temps REELLEMENT ecoule depuis le cycle precedent.
+dfb ; System ; DFB_SYS_DIAG ; 1.00 ; XpgAnalyzer ; Le diagnostic de l'automate : bits systeme, temps de cycle, et jusqu'a 32 modules surveilles.
+ddt ; System ; ST_SYS_Diag ; 1.00 ; XpgAnalyzer ; L'etat de sante de l'automate en une structure : ce que l'IHM affiche sur sa page systeme.
+ddt ; System ; ST_SYS_Module ; 1.00 ; XpgAnalyzer ; Un module de l'automate surveille : son bit d'erreur, combien de fois, depuis quand.

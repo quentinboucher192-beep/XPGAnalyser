@@ -1,0 +1,12 @@
+# Derived data type.
+name = config_basculement
+version = 0.02
+# checksum is recomputed by Control Expert on import; not stored.
+
+# name ; type ; address ; scope ; init ; comment ; attributes ; element comments
+SPBASC1 ; INT ;  ; Member ;  ;  ;  ; 
+SPBASC2 ; INT ;  ; Member ;  ;  ;  ; 
+SEUILPREAL1 ; INT ;  ; Member ;  ;  ;  ; 
+SEUILPREAL2 ; INT ;  ; Member ;  ;  ;  ; 
+DLBASC1 ; INT ;  ; Member ;  ;  ;  ; 
+DLBASC2 ; INT ;  ; Member ;  ;  ;  ; 

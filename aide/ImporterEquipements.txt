@@ -1,0 +1,13 @@
+#! summary = Declare les tableaux d'equipement, les instances de bloc de leur famille, et ecrit leurs appels.
+#! usage = Depuis l'onglet Equipements. Groupe les lignes par tableau, declare ARRAY[0..n] OF ST_EQ_xxx, declare l'instance du bloc, ecrit l'appel.
+#! usage = LE GROUPEMENT SE FAIT SANS TABLEAU NI DICTIONNAIRE, parce que le langage n'en a pas. Pour chaque ligne on regarde si son tableau a deja ete rencontre plus haut ; sinon on parcourt tout l'onglet pour trouver son plus grand indice. C'est en n carre, ce qui sur trois cents equipements reste instantane.
+#! usage = LE BLOC SE DEDUIT DE LA FAMILLE PAR UNE LISTE EXPLICITE, pas par une regle de nommage : ST_EQ_Valve2 donne DFB_EQ_VALVE2, et la majuscule ne se calcule pas dans ce langage. La liste sert aussi de controle - une famille absente est une famille dont on n'a pas le bloc, et il vaut mieux le dire ici que laisser le projet refuser une instance d'un type inconnu. Le tableau est quand meme declare : la donnee existe, seul l'appel manque.
+#! usage = LA SECTION EST REECRITE ENTIEREMENT a chaque execution. Ce qui y a ete ajoute a la main est perdu. C'est voulu : une section a moitie ancienne et a moitie nouvelle est pire que les deux, et on ne peut pas deviner ce qui a ete ajoute expres.
+#! see = ImporterCablage, ImporterReports, ImporterClasseur
+#! param classeur = Le chemin du classeur. Laisser vide prend celui qui est deja charge par le bouton Classeur..., ce qui est le cas normal quand on enchaine plusieurs imports.
+#! param classeur = C'est un .xlsm, pas un export CSV : la macro lit les onglets directement, et les quatre familles d'E/S sont donc traitees en une seule execution.
+#! param section = La section qui recoit les appels des blocs d'equipement. Elle tourne au milieu de la tache : apres les entrees et les commandes, avant les mesures et les sorties.
+#! param prefixe = Ce qui precede le nom du tableau pour nommer l'instance du bloc : EQ_ donne EQ_Pompes pour le tableau Pompes.
+#! param prefixe = Le classeur ne nomme pas les instances - sa colonne Instance est vide sur l'onglet Equipements - donc la convention est posee ici.
+#! param tache = La tache d'accueil des sections creees, MAST en general.
+#! param tache = Creer la section ne la place pas dans le bon ordre : Control Expert execute les sections dans l'ordre du navigateur de projet, et cet ordre se pose a la main. Chaque macro rappelle a la fin ou sa section doit aller.

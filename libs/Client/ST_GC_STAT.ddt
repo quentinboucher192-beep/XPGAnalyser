@@ -1,0 +1,25 @@
+# Derived data type, shared.
+name = ST_GC_STAT
+version = 0.01
+#! summary = Ce qu'un moteur GRAFCET rapporte, regroupe pour l'IHM.
+#! usage = REPRIS DU PROJET MAST (champs inchanges).
+#! see = ST_GC_CTRL
+#! param Cycle = Le numero de cycle du moteur.
+#! param Phase = La phase en cours.
+#! param Mode = Le mode.
+#! param ActiveStepCount = Combien d'etapes sont actives.
+#! param LastTransitionFiredId = La derniere transition franchie.
+#! param ConfigFault = La configuration est incoherente : le moteur ne tourne pas.
+#! param WatchdogDetected = TsNow n'avance pas (copie de Debug.WatchdogDetected).
+#! param NoActiveStepFault = Plus aucune etape active.
+#! changes 0.01 = Range dans la bibliotheque, depuis le projet MAST.
+
+# name ; type ; scope ; initial ; comment
+Cycle ; DINT ; Member ;  ; 
+Phase ; INT ; Member ;  ; 
+Mode ; INT ; Member ;  ; 
+ActiveStepCount ; INT ; Member ;  ; 
+LastTransitionFiredId ; INT ; Member ;  ; 
+ConfigFault ; BOOL ; Member ;  ; 
+WatchdogDetected ; BOOL ; Member ;  ; 
+NoActiveStepFault ; BOOL ; Member ;  ; 

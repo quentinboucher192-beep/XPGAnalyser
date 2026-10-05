@@ -1,0 +1,15 @@
+# DFB type interface.
+name = ECRITURE_CONFIG_MEMOIRE
+version = 0.10
+attribute = TypeCodeCheckSumString = 3F62
+attribute = TypeSignatureCheckSumString = 87BF
+attribute = UseNewTplSignAlgo = TRUE
+
+# name ; type ; address ; scope ; init ; comment ; attributes ; element comments
+config ; config_gaz ;  ; Input ;  ;  ; PositionPin=1 ; 
+STOCKAGE_PUBLIC ; ARRAY[0..149] OF INT ;  ; Public ;  ;  ;  ; 
+stockage_nom ; ARRAY[0..7] OF INT ;  ; Local ;  ;  ;  ; 
+stockage_unite ; ARRAY[0..7] OF INT ;  ; Local ;  ;  ;  ; 
+
+# section ; name ; language ; order ; activation ; logic ; file
+section ; main ; ST ; 21 ;  ;  ; main.st

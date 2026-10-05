@@ -1,0 +1,890 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [ 5 0 R 7 0 R 9 0 R 11 0 R ] /Count 4 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 6 0 R >>
+endobj
+6 0 obj
+<< /Length 9025 >>
+stream
+BT /F2 16 Tf 0.1 g 40 786 Td (Rapport journalier - poste de gaz) Tj ET
+BT /F1 9 Tf 0.4 g 40 770 Td (Du 2026-09-26 06:00 au 2026-09-27 03:51 \227 Journalier, \351crit le 2026-09-27 03:51:01) Tj ET
+0.2 0.45 0.85 RG 1.5 w 40 762 m 555 762 l S
+BT /F2 12 Tf 0.15 g 40 740 Td (Synth\350se) Tj ET
+0.95 0.96 0.98 rg 40 716 515 14 re f
+BT /F2 9 Tf 0.2 g 46 720 Td (Alarmes apparues) Tj ET
+BT /F1 9 Tf 0.15 g 210 720 Td (5) Tj ET
+BT /F2 9 Tf 0.2 g 46 706 Td (Par priorit\351) Tj ET
+BT /F1 9 Tf 0.15 g 210 706 Td (Critique 2 \267 Haute 2 \267 Moyenne 0 \267 Basse 1) Tj ET
+0.95 0.96 0.98 rg 40 688 515 14 re f
+BT /F2 9 Tf 0.2 g 46 692 Td (Dur\351e cumul\351e) Tj ET
+BT /F1 9 Tf 0.15 g 210 692 Td (32 s) Tj ET
+BT /F2 9 Tf 0.2 g 46 678 Td (La plus longue) Tj ET
+BT /F1 9 Tf 0.15 g 210 678 Td (PT1_A_Basse \(8 s\)) Tj ET
+0.95 0.96 0.98 rg 40 660 515 14 re f
+BT /F2 9 Tf 0.2 g 46 664 Td (Non acquitt\351es) Tj ET
+BT /F1 9 Tf 0.15 g 210 664 Td (3) Tj ET
+BT /F2 9 Tf 0.2 g 46 650 Td (Mesures) Tj ET
+BT /F1 9 Tf 0.15 g 210 650 Td (2 variables, 606 mesures) Tj ET
+0.95 0.96 0.98 rg 40 632 515 14 re f
+BT /F2 9 Tf 0.2 g 46 636 Td (\311v\351nements) Tj ET
+BT /F1 9 Tf 0.15 g 210 636 Td (119) Tj ET
+BT /F2 12 Tf 0.15 g 40 614 Td (Alarmes par priorit\351) Tj ET
+BT /F1 9 Tf 0.2 g 46 588 Td (Critique) Tj ET
+0.85 0.25 0.22 rg 130 586 345 12 re f
+BT /F2 9 Tf 0.2 g 481 588 Td (2) Tj ET
+BT /F1 9 Tf 0.2 g 46 570 Td (Haute) Tj ET
+0.95 0.55 0.2 rg 130 568 345 12 re f
+BT /F2 9 Tf 0.2 g 481 570 Td (2) Tj ET
+BT /F1 9 Tf 0.2 g 46 552 Td (Moyenne) Tj ET
+0.93 0.76 0.2 rg 130 550 1 12 re f
+BT /F2 9 Tf 0.2 g 137 552 Td (0) Tj ET
+BT /F1 9 Tf 0.2 g 46 534 Td (Basse) Tj ET
+0.3 0.55 0.9 rg 130 532 172.5 12 re f
+BT /F2 9 Tf 0.2 g 308.5 534 Td (1) Tj ET
+BT /F2 12 Tf 0.15 g 40 504 Td (Alarmes) Tj ET
+0.85 0.88 0.93 rg 40 477 515 17 re f
+BT /F2 8.5 Tf 0.1 g 44 482.5 Td (Apparue) Tj ET
+BT /F2 8.5 Tf 0.1 g 86.48 482.5 Td (Alarme) Tj ET
+BT /F2 8.5 Tf 0.1 g 177.94 482.5 Td (Priorit\351) Tj ET
+BT /F2 8.5 Tf 0.1 g 215.7 482.5 Td (Message) Tj ET
+BT /F2 8.5 Tf 0.1 g 379.94 482.5 Td (Acquitt\351e) Tj ET
+BT /F2 8.5 Tf 0.1 g 426.67 482.5 Td (Par) Tj ET
+BT /F2 8.5 Tf 0.1 g 454.67 482.5 Td (Disparue) Tj ET
+BT /F2 8.5 Tf 0.1 g 499.04 482.5 Td (Dur\351e) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 467 Td (03:36:15) Tj ET
+BT /F1 8.5 Tf 0.15 g 86.48 467 Td (PT1_A_Basse) Tj ET
+BT /F1 8.5 Tf 0.15 g 177.94 467 Td (Haute) Tj ET
+BT /F1 8.5 Tf 0.15 g 215.7 467 Td (Bouteille A presque vide : 0.0 bar) Tj ET
+BT /F1 8.5 Tf 0.15 g 379.94 467 Td (03:36:22) Tj ET
+BT /F1 8.5 Tf 0.15 g 426.67 467 Td (chef) Tj ET
+BT /F1 8.5 Tf 0.15 g 454.67 467 Td (03:36:23) Tj ET
+BT /F1 8.5 Tf 0.15 g 499.04 467 Td (8 s) Tj ET
+0.96 0.97 0.98 rg 40 449 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 453 Td (03:36:16) Tj ET
+BT /F1 8.5 Tf 0.15 g 86.48 453 Td (PT1_A_Vide) Tj ET
+BT /F1 8.5 Tf 0.15 g 177.94 453 Td (Critique) Tj ET
+BT /F1 8.5 Tf 0.15 g 215.7 453 Td (Bouteille A vide \(0.0 bar\) : basculer) Tj ET
+BT /F1 8.5 Tf 0.15 g 379.94 453 Td (03:36:22) Tj ET
+BT /F1 8.5 Tf 0.15 g 426.67 453 Td (chef) Tj ET
+BT /F1 8.5 Tf 0.15 g 454.67 453 Td (03:36:23) Tj ET
+BT /F1 8.5 Tf 0.15 g 499.04 453 Td (7 s) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 439 Td (03:36:26) Tj ET
+BT /F1 8.5 Tf 0.15 g 86.48 439 Td (Maintenance_En_C...) Tj ET
+BT /F1 8.5 Tf 0.15 g 177.94 439 Td (Basse) Tj ET
+BT /F1 8.5 Tf 0.15 g 215.7 439 Td (Intervention en cours : Maintenance en...) Tj ET
+BT /F1 8.5 Tf 0.15 g 379.94 439 Td (non) Tj ET
+BT /F1 8.5 Tf 0.15 g 426.67 439 Td () Tj ET
+BT /F1 8.5 Tf 0.15 g 454.67 439 Td (03:36:28) Tj ET
+BT /F1 8.5 Tf 0.15 g 499.04 439 Td (2 s) Tj ET
+0.96 0.97 0.98 rg 40 421 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 425 Td (03:50:55) Tj ET
+BT /F1 8.5 Tf 0.15 g 86.48 425 Td (PT1_A_Basse) Tj ET
+BT /F1 8.5 Tf 0.15 g 177.94 425 Td (Haute) Tj ET
+BT /F1 8.5 Tf 0.15 g 215.7 425 Td (Bouteille A presque vide : 0.0 bar) Tj ET
+BT /F1 8.5 Tf 0.15 g 379.94 425 Td (non) Tj ET
+BT /F1 8.5 Tf 0.15 g 426.67 425 Td () Tj ET
+BT /F1 8.5 Tf 0.15 g 454.67 425 Td (en cours) Tj ET
+BT /F1 8.5 Tf 0.15 g 499.04 425 Td (8 s \(en cours\)) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 411 Td (03:50:55) Tj ET
+BT /F1 8.5 Tf 0.15 g 86.48 411 Td (PT1_A_Vide) Tj ET
+BT /F1 8.5 Tf 0.15 g 177.94 411 Td (Critique) Tj ET
+BT /F1 8.5 Tf 0.15 g 215.7 411 Td (Bouteille A vide \(0.0 bar\) : basculer) Tj ET
+BT /F1 8.5 Tf 0.15 g 379.94 411 Td (non) Tj ET
+BT /F1 8.5 Tf 0.15 g 426.67 411 Td () Tj ET
+BT /F1 8.5 Tf 0.15 g 454.67 411 Td (en cours) Tj ET
+BT /F1 8.5 Tf 0.15 g 499.04 411 Td (7 s \(en cours\)) Tj ET
+0.6 G 0.6 w 40 407 m 555 407 l S
+BT /F2 12 Tf 0.15 g 40 371 Td (Alarmes les plus fr\351quentes) Tj ET
+0.85 0.88 0.93 rg 40 344 261.1 17 re f
+BT /F2 8.5 Tf 0.1 g 44 349.5 Td (Alarme) Tj ET
+BT /F2 8.5 Tf 0.1 g 143.18 349.5 Td (Priorit\351) Tj ET
+BT /F2 8.5 Tf 0.1 g 180.94 349.5 Td (Apparitions) Tj ET
+BT /F2 8.5 Tf 0.1 g 236.16 349.5 Td (Dur\351e cumul\351e) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 334 Td (PT1_A_Basse) Tj ET
+BT /F1 8.5 Tf 0.15 g 143.18 334 Td (Haute) Tj ET
+BT /F1 8.5 Tf 0.15 g 180.94 334 Td (2) Tj ET
+BT /F1 8.5 Tf 0.15 g 236.16 334 Td (15 s) Tj ET
+0.96 0.97 0.98 rg 40 316 261.1 14 re f
+BT /F1 8.5 Tf 0.15 g 44 320 Td (PT1_A_Vide) Tj ET
+BT /F1 8.5 Tf 0.15 g 143.18 320 Td (Critique) Tj ET
+BT /F1 8.5 Tf 0.15 g 180.94 320 Td (2) Tj ET
+BT /F1 8.5 Tf 0.15 g 236.16 320 Td (14 s) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 306 Td (Maintenance_En_Cours) Tj ET
+BT /F1 8.5 Tf 0.15 g 143.18 306 Td (Basse) Tj ET
+BT /F1 8.5 Tf 0.15 g 180.94 306 Td (1) Tj ET
+BT /F1 8.5 Tf 0.15 g 236.16 306 Td (2 s) Tj ET
+0.6 G 0.6 w 40 302 m 301.1 302 l S
+BT /F2 12 Tf 0.15 g 40 266 Td (Mesures) Tj ET
+0.85 0.88 0.93 rg 40 239 355.93 17 re f
+BT /F2 8.5 Tf 0.1 g 44 244.5 Td (Variable) Tj ET
+BT /F2 8.5 Tf 0.1 g 148.36 244.5 Td (Unit\351) Tj ET
+BT /F2 8.5 Tf 0.1 g 177.61 244.5 Td (Minimum) Tj ET
+BT /F2 8.5 Tf 0.1 g 222.92 244.5 Td (Moyenne) Tj ET
+BT /F2 8.5 Tf 0.1 g 267.76 244.5 Td (Maximum) Tj ET
+BT /F2 8.5 Tf 0.1 g 314.96 244.5 Td (Derni\350re) Tj ET
+BT /F2 8.5 Tf 0.1 g 357.45 244.5 Td (Mesures) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 229 Td (Armoires[0].ana.PT1.mes) Tj ET
+BT /F1 8.5 Tf 0.15 g 148.36 229 Td () Tj ET
+BT /F1 8.5 Tf 0.15 g 177.61 229 Td (0.0) Tj ET
+BT /F1 8.5 Tf 0.15 g 222.92 229 Td (5.2) Tj ET
+BT /F1 8.5 Tf 0.15 g 267.76 229 Td (28.0) Tj ET
+BT /F1 8.5 Tf 0.15 g 314.96 229 Td (0.4) Tj ET
+BT /F1 8.5 Tf 0.15 g 357.45 229 Td (303) Tj ET
+0.96 0.97 0.98 rg 40 211 355.93 14 re f
+BT /F1 8.5 Tf 0.15 g 44 215 Td (Armoires[1].ana.PT1.mes) Tj ET
+BT /F1 8.5 Tf 0.15 g 148.36 215 Td () Tj ET
+BT /F1 8.5 Tf 0.15 g 177.61 215 Td (0.0) Tj ET
+BT /F1 8.5 Tf 0.15 g 222.92 215 Td (4.5) Tj ET
+BT /F1 8.5 Tf 0.15 g 267.76 215 Td (26.0) Tj ET
+BT /F1 8.5 Tf 0.15 g 314.96 215 Td (0.0) Tj ET
+BT /F1 8.5 Tf 0.15 g 357.45 215 Td (303) Tj ET
+0.6 G 0.6 w 40 211 m 395.93 211 l S
+BT /F2 12 Tf 0.15 g 40 175 Td (\311v\351nements) Tj ET
+0.85 0.88 0.93 rg 40 148 515 17 re f
+BT /F2 8.5 Tf 0.1 g 44 153.5 Td (Heure) Tj ET
+BT /F2 8.5 Tf 0.1 g 85.08 153.5 Td (Type) Tj ET
+BT /F2 8.5 Tf 0.1 g 182.39 153.5 Td (Source) Tj ET
+BT /F2 8.5 Tf 0.1 g 315.68 153.5 Td (Message) Tj ET
+BT /F2 8.5 Tf 0.1 g 509.44 153.5 Td (Utilisateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 138 Td (03:36:14) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 138 Td (Connexion) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 138 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 138 Td (utilisateur de d\351part : operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 138 Td (operateur) Tj ET
+0.96 0.97 0.98 rg 40 120 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 124 Td (03:36:15) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 124 Td (Apparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 124 Td (PT1_A_Basse) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 124 Td ([Haute] Bouteille A presque vide : 0.0 bar) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 124 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 110 Td (03:36:15) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 110 Td (Connexion) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 110 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 110 Td (utilisateur de d\351part : operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 110 Td (operateur) Tj ET
+0.96 0.97 0.98 rg 40 92 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 96 Td (03:36:15) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 96 Td (Apparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 96 Td (PT1_A_Basse) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 96 Td ([Haute] Bouteille A presque vide : 0.0 bar) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 96 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 82 Td (03:36:16) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 82 Td (Apparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 82 Td (PT1_A_Vide) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 82 Td ([Critique] Bouteille A vide \(0.0 bar\) : basculer) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 82 Td (operateur) Tj ET
+0.96 0.97 0.98 rg 40 64 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 68 Td (03:36:16) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 68 Td (Disparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 68 Td (PT1_A_Vide) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 68 Td (Bouteille A vide \(0.0 bar\) : basculer) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 68 Td (operateur) Tj ET
+BT /F1 8 Tf 0.45 g 518.53 22 Td (Page 1 / 4) Tj ET
+BT /F1 8 Tf 0.45 g 40 22 Td (XpgAnalyzer - Rapport journalier - poste de gaz) Tj ET
+endstream
+endobj
+7 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 8 0 R >>
+endobj
+8 0 obj
+<< /Length 16194 >>
+stream
+BT /F2 12 Tf 0.15 g 40 790 Td (\311v\351nements \(suite\)) Tj ET
+0.85 0.88 0.93 rg 40 763 515 17 re f
+BT /F2 8.5 Tf 0.1 g 44 768.5 Td (Heure) Tj ET
+BT /F2 8.5 Tf 0.1 g 85.08 768.5 Td (Type) Tj ET
+BT /F2 8.5 Tf 0.1 g 182.39 768.5 Td (Source) Tj ET
+BT /F2 8.5 Tf 0.1 g 315.68 768.5 Td (Message) Tj ET
+BT /F2 8.5 Tf 0.1 g 509.44 768.5 Td (Utilisateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 753 Td (03:36:19) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 753 Td (Acc\350s refus\351) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 753 Td (Vue_Supervision/Btn_Recette_...) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 753 Td (Btn_Recette_Argon : niveau d'acc\350s 3 \(Supervi...) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 753 Td (operateur) Tj ET
+0.96 0.97 0.98 rg 40 735 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 739 Td (03:36:20) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 739 Td (Connexion) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 739 Td (chef) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 739 Td (Claire Dubois connect\351 \(Superviseur, niveau 3\)) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 739 Td (chef) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 725 Td (03:36:20) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 725 Td (Recette) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 725 Td (Reglages_Armoires) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 725 Td (Argon appliqu\351 : 3 valeur\(s\) \351crite\(s\)) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 725 Td (chef) Tj ET
+0.96 0.97 0.98 rg 40 707 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 711 Td (03:36:21) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 711 Td (R\351apparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 711 Td (PT1_A_Vide) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 711 Td (Bouteille A vide \(0.0 bar\) : basculer) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 711 Td (chef) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 697 Td (03:36:22) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 697 Td (Acquittement) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 697 Td (PT1_A_Vide) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 697 Td (Bouteille A vide \(0.0 bar\) : basculer) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 697 Td (chef) Tj ET
+0.96 0.97 0.98 rg 40 679 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 683 Td (03:36:22) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 683 Td (Acquittement) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 683 Td (PT1_A_Basse) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 683 Td (Bouteille A presque vide : 0.0 bar) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 683 Td (chef) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 669 Td (03:36:23) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 669 Td (Disparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 669 Td (PT1_A_Basse) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 669 Td (Bouteille A presque vide : 0.0 bar) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 669 Td (chef) Tj ET
+0.96 0.97 0.98 rg 40 651 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 655 Td (03:36:23) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 655 Td (Disparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 655 Td (PT1_A_Vide) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 655 Td (Bouteille A vide \(0.0 bar\) : basculer) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 655 Td (chef) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 641 Td (03:36:25) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 641 Td (Recette) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 641 Td (Reglages_Armoires) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 641 Td (Melange refus\351 : Seuil poids B : 75 hors borne...) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 641 Td (chef) Tj ET
+0.96 0.97 0.98 rg 40 623 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 627 Td (03:36:26) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 627 Td (Recette) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 627 Td (Reglages_Armoires) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 627 Td (Azote appliqu\351 : 3 valeur\(s\) \351crite\(s\)) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 627 Td (chef) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 613 Td (03:36:26) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 613 Td (Apparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 613 Td (Maintenance_En_Cours) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 613 Td ([Basse] Intervention en cours : Maintenance en...) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 613 Td (chef) Tj ET
+0.96 0.97 0.98 rg 40 595 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 599 Td (03:36:27) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 599 Td (Connexion) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 599 Td (technicien) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 599 Td (Marc Leroy connect\351 \(Maintenance, niveau 2\)) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 599 Td (technicien) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 585 Td (03:36:28) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 585 Td (Disparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 585 Td (Maintenance_En_Cours) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 585 Td (Intervention en cours : Maintenance en cours) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 585 Td (technicien) Tj ET
+0.96 0.97 0.98 rg 40 567 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 571 Td (03:36:29) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 571 Td (D\351connexion) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 571 Td (technicien) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 571 Td (d\351connect\351 : bouton D\351connecter) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 571 Td () Tj ET
+BT /F1 8.5 Tf 0.15 g 44 557 Td (03:36:39) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 557 Td (Connexion) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 557 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 557 Td (utilisateur de d\351part : operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 557 Td (operateur) Tj ET
+0.96 0.97 0.98 rg 40 539 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 543 Td (03:37:15) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 543 Td (Connexion) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 543 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 543 Td (utilisateur de d\351part : operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 543 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 529 Td (03:37:15) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 529 Td (Apparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 529 Td (PT1_A_Basse) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 529 Td ([Haute] Bouteille A presque vide : 0.0 bar) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 529 Td (operateur) Tj ET
+0.96 0.97 0.98 rg 40 511 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 515 Td (03:37:16) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 515 Td (Connexion) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 515 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 515 Td (utilisateur de d\351part : operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 515 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 501 Td (03:37:16) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 501 Td (Apparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 501 Td (PT1_A_Basse) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 501 Td ([Haute] Bouteille A presque vide : 0.0 bar) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 501 Td (operateur) Tj ET
+0.96 0.97 0.98 rg 40 483 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 487 Td (03:37:16) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 487 Td (Apparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 487 Td (PT1_A_Vide) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 487 Td ([Critique] Bouteille A vide \(0.0 bar\) : basculer) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 487 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 473 Td (03:37:18) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 473 Td (Apparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 473 Td (Maintenance_En_Cours) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 473 Td ([Basse] Intervention en cours : Maintenance en...) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 473 Td (operateur) Tj ET
+0.96 0.97 0.98 rg 40 455 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 459 Td (03:37:31) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 459 Td (Connexion) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 459 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 459 Td (utilisateur de d\351part : operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 459 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 445 Td (03:37:32) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 445 Td (Apparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 445 Td (PT1_A_Basse) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 445 Td ([Haute] Bouteille A presque vide : 0.0 bar) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 445 Td (operateur) Tj ET
+0.96 0.97 0.98 rg 40 427 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 431 Td (03:37:32) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 431 Td (Connexion) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 431 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 431 Td (utilisateur de d\351part : operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 431 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 417 Td (03:37:32) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 417 Td (Apparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 417 Td (PT1_A_Basse) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 417 Td ([Haute] Bouteille A presque vide : 0.0 bar) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 417 Td (operateur) Tj ET
+0.96 0.97 0.98 rg 40 399 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 403 Td (03:37:33) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 403 Td (Apparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 403 Td (PT1_A_Vide) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 403 Td ([Critique] Bouteille A vide \(0.0 bar\) : basculer) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 403 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 389 Td (03:37:34) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 389 Td (Disparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 389 Td (PT1_A_Vide) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 389 Td (Bouteille A vide \(0.0 bar\) : basculer) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 389 Td (operateur) Tj ET
+0.96 0.97 0.98 rg 40 371 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 375 Td (03:37:37) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 375 Td (Apparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 375 Td (Maintenance_En_Cours) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 375 Td ([Basse] Intervention en cours : Maintenance en...) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 375 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 361 Td (03:37:38) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 361 Td (Acc\350s refus\351) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 361 Td (Vue_Production/Gestion_Rece...) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 361 Td (Appliquer : permission \253 Recettes \273 requise \(uti...) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 361 Td (operateur) Tj ET
+0.96 0.97 0.98 rg 40 343 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 347 Td (03:37:39) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 347 Td (Connexion) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 347 Td (admin) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 347 Td (admin connect\351 \(Administrateur, niveau 4\)) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 347 Td (admin) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 333 Td (03:37:39) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 333 Td (Recette) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 333 Td (Reglages_Armoires) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 333 Td (Argon appliqu\351 : 3 valeur\(s\) \351crite\(s\)) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 333 Td (admin) Tj ET
+0.96 0.97 0.98 rg 40 315 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 319 Td (03:37:55) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 319 Td (Connexion) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 319 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 319 Td (utilisateur de d\351part : operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 319 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 305 Td (03:37:55) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 305 Td (Apparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 305 Td (PT1_A_Basse) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 305 Td ([Haute] Bouteille A presque vide : 0.0 bar) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 305 Td (operateur) Tj ET
+0.96 0.97 0.98 rg 40 287 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 291 Td (03:37:56) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 291 Td (Connexion) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 291 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 291 Td (utilisateur de d\351part : operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 291 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 277 Td (03:37:56) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 277 Td (Apparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 277 Td (PT1_A_Basse) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 277 Td ([Haute] Bouteille A presque vide : 0.0 bar) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 277 Td (operateur) Tj ET
+0.96 0.97 0.98 rg 40 259 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 263 Td (03:37:56) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 263 Td (Apparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 263 Td (PT1_A_Vide) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 263 Td ([Critique] Bouteille A vide \(0.0 bar\) : basculer) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 263 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 249 Td (03:37:59) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 249 Td (Acc\350s refus\351) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 249 Td (Vue_Production/Btn_Photo) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 249 Td (Demander une ressource : permission \253 Admin...) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 249 Td (operateur) Tj ET
+0.96 0.97 0.98 rg 40 231 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 235 Td (03:37:59) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 235 Td (Connexion) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 235 Td (admin) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 235 Td (admin connect\351 \(Administrateur, niveau 4\)) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 235 Td (admin) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 221 Td (03:38:19) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 221 Td (Connexion) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 221 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 221 Td (utilisateur de d\351part : operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 221 Td (operateur) Tj ET
+0.96 0.97 0.98 rg 40 203 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 207 Td (03:38:20) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 207 Td (Apparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 207 Td (PT1_A_Basse) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 207 Td ([Haute] Bouteille A presque vide : 0.0 bar) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 207 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 193 Td (03:38:20) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 193 Td (Connexion) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 193 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 193 Td (utilisateur de d\351part : operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 193 Td (operateur) Tj ET
+0.96 0.97 0.98 rg 40 175 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 179 Td (03:38:20) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 179 Td (Apparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 179 Td (PT1_A_Basse) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 179 Td ([Haute] Bouteille A presque vide : 0.0 bar) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 179 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 165 Td (03:38:21) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 165 Td (Apparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 165 Td (PT1_A_Vide) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 165 Td ([Critique] Bouteille A vide \(0.0 bar\) : basculer) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 165 Td (operateur) Tj ET
+0.96 0.97 0.98 rg 40 147 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 151 Td (03:38:22) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 151 Td (Disparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 151 Td (PT1_A_Vide) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 151 Td (Bouteille A vide \(0.0 bar\) : basculer) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 151 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 137 Td (03:38:25) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 137 Td (Connexion) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 137 Td (admin) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 137 Td (admin connect\351 \(Administrateur, niveau 4\)) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 137 Td (admin) Tj ET
+0.96 0.97 0.98 rg 40 119 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 123 Td (03:39:08) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 123 Td (Connexion) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 123 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 123 Td (utilisateur de d\351part : operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 123 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 109 Td (03:39:08) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 109 Td (Apparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 109 Td (PT1_A_Basse) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 109 Td ([Haute] Bouteille A presque vide : 0.0 bar) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 109 Td (operateur) Tj ET
+0.96 0.97 0.98 rg 40 91 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 95 Td (03:39:09) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 95 Td (Connexion) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 95 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 95 Td (utilisateur de d\351part : operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 95 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 81 Td (03:39:09) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 81 Td (Apparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 81 Td (PT1_A_Basse) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 81 Td ([Haute] Bouteille A presque vide : 0.0 bar) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 81 Td (operateur) Tj ET
+0.96 0.97 0.98 rg 40 63 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 67 Td (03:39:09) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 67 Td (Apparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 67 Td (PT1_A_Vide) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 67 Td ([Critique] Bouteille A vide \(0.0 bar\) : basculer) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 67 Td (operateur) Tj ET
+BT /F1 8 Tf 0.45 g 518.53 22 Td (Page 2 / 4) Tj ET
+BT /F1 8 Tf 0.45 g 40 22 Td (XpgAnalyzer - Rapport journalier - poste de gaz) Tj ET
+endstream
+endobj
+9 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 10 0 R >>
+endobj
+10 0 obj
+<< /Length 16178 >>
+stream
+BT /F2 12 Tf 0.15 g 40 790 Td (\311v\351nements \(suite\)) Tj ET
+0.85 0.88 0.93 rg 40 763 515 17 re f
+BT /F2 8.5 Tf 0.1 g 44 768.5 Td (Heure) Tj ET
+BT /F2 8.5 Tf 0.1 g 85.08 768.5 Td (Type) Tj ET
+BT /F2 8.5 Tf 0.1 g 182.39 768.5 Td (Source) Tj ET
+BT /F2 8.5 Tf 0.1 g 315.68 768.5 Td (Message) Tj ET
+BT /F2 8.5 Tf 0.1 g 509.44 768.5 Td (Utilisateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 753 Td (03:39:11) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 753 Td (Disparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 753 Td (PT1_A_Vide) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 753 Td (Bouteille A vide \(0.0 bar\) : basculer) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 753 Td (operateur) Tj ET
+0.96 0.97 0.98 rg 40 735 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 739 Td (03:39:27) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 739 Td (Connexion) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 739 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 739 Td (utilisateur de d\351part : operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 739 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 725 Td (03:39:28) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 725 Td (Apparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 725 Td (PT1_A_Basse) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 725 Td ([Haute] Bouteille A presque vide : 0.0 bar) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 725 Td (operateur) Tj ET
+0.96 0.97 0.98 rg 40 707 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 711 Td (03:39:28) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 711 Td (Connexion) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 711 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 711 Td (utilisateur de d\351part : operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 711 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 697 Td (03:39:28) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 697 Td (Apparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 697 Td (PT1_A_Basse) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 697 Td ([Haute] Bouteille A presque vide : 0.0 bar) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 697 Td (operateur) Tj ET
+0.96 0.97 0.98 rg 40 679 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 683 Td (03:39:29) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 683 Td (Apparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 683 Td (PT1_A_Vide) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 683 Td ([Critique] Bouteille A vide \(0.0 bar\) : basculer) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 683 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 669 Td (03:39:30) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 669 Td (Acc\350s refus\351) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 669 Td (Vue_Utilisateurs/Gestion_Utilis...) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 669 Td (Ajouter : permission \253 Administrer \273 requise \(ut...) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 669 Td (operateur) Tj ET
+0.96 0.97 0.98 rg 40 651 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 655 Td (03:39:30) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 655 Td (D\351connexion) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 655 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 655 Td (d\351connect\351 : bouton Vue_Utilisateurs/Btn_Dec...) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 655 Td () Tj ET
+BT /F1 8.5 Tf 0.15 g 44 641 Td (03:39:31) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 641 Td (Connexion) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 641 Td (admin) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 641 Td (admin connect\351 \(Administrateur, niveau 4\)) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 641 Td (admin) Tj ET
+0.96 0.97 0.98 rg 40 623 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 627 Td (03:39:33) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 627 Td (D\351connexion) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 627 Td (admin) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 627 Td (d\351connect\351 : bouton Vue_Utilisateurs/Btn_Dec...) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 627 Td () Tj ET
+BT /F1 8.5 Tf 0.15 g 44 613 Td (03:39:34) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 613 Td (Connexion) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 613 Td (stagiaire) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 613 Td (stagiaire connect\351 \(Op\351rateur, niveau 1\)) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 613 Td (stagiaire) Tj ET
+0.96 0.97 0.98 rg 40 595 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 599 Td (03:39:35) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 599 Td (Mot de passe chang\351) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 599 Td (stagiaire) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 599 Td (par stagiaire \(Vue_Utilisateurs/Panneau_Mot_...) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 599 Td (stagiaire) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 585 Td (03:42:49) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 585 Td (Connexion) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 585 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 585 Td (utilisateur de d\351part : operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 585 Td (operateur) Tj ET
+0.96 0.97 0.98 rg 40 567 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 571 Td (03:42:50) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 571 Td (Apparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 571 Td (PT1_A_Basse) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 571 Td ([Haute] Bouteille A presque vide : 0.0 bar) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 571 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 557 Td (03:42:50) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 557 Td (Connexion) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 557 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 557 Td (utilisateur de d\351part : operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 557 Td (operateur) Tj ET
+0.96 0.97 0.98 rg 40 539 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 543 Td (03:42:50) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 543 Td (Apparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 543 Td (PT1_A_Basse) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 543 Td ([Haute] Bouteille A presque vide : 0.0 bar) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 543 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 529 Td (03:42:51) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 529 Td (Apparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 529 Td (PT1_A_Vide) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 529 Td ([Critique] Bouteille A vide \(0.0 bar\) : basculer) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 529 Td (operateur) Tj ET
+0.96 0.97 0.98 rg 40 511 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 515 Td (03:43:07) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 515 Td (Apparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 515 Td (Bouteille_B_Vide) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 515 Td ([Critique] Bouteille B vide) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 515 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 501 Td (03:43:36) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 501 Td (Connexion) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 501 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 501 Td (utilisateur de d\351part : operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 501 Td (operateur) Tj ET
+0.96 0.97 0.98 rg 40 483 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 487 Td (03:43:36) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 487 Td (Apparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 487 Td (PT1_A_Basse) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 487 Td ([Haute] Bouteille A presque vide : 0.0 bar) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 487 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 473 Td (03:43:37) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 473 Td (Connexion) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 473 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 473 Td (utilisateur de d\351part : operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 473 Td (operateur) Tj ET
+0.96 0.97 0.98 rg 40 455 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 459 Td (03:43:37) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 459 Td (Apparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 459 Td (PT1_A_Basse) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 459 Td ([Haute] Bouteille A presque vide : 0.0 bar) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 459 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 445 Td (03:43:37) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 445 Td (Apparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 445 Td (PT1_A_Vide) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 445 Td ([Critique] Bouteille A vide \(0.0 bar\) : basculer) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 445 Td (operateur) Tj ET
+0.96 0.97 0.98 rg 40 427 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 431 Td (03:48:41) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 431 Td (Connexion) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 431 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 431 Td (utilisateur de d\351part : operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 431 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 417 Td (03:48:42) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 417 Td (Apparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 417 Td (PT1_A_Basse) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 417 Td ([Haute] Bouteille A presque vide : 0.0 bar) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 417 Td (operateur) Tj ET
+0.96 0.97 0.98 rg 40 399 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 403 Td (03:48:42) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 403 Td (Connexion) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 403 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 403 Td (utilisateur de d\351part : operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 403 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 389 Td (03:48:42) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 389 Td (Apparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 389 Td (PT1_A_Basse) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 389 Td ([Haute] Bouteille A presque vide : 0.0 bar) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 389 Td (operateur) Tj ET
+0.96 0.97 0.98 rg 40 371 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 375 Td (03:48:43) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 375 Td (Apparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 375 Td (PT1_A_Vide) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 375 Td ([Critique] Bouteille A vide \(0.0 bar\) : basculer) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 375 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 361 Td (03:48:45) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 361 Td (Signature) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 361 Td (Vue_Commandes/Btn_Purge) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 361 Td (operateur : Vanne_Purge : FAUX -> VRAI \(mot...) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 361 Td (operateur) Tj ET
+0.96 0.97 0.98 rg 40 343 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 347 Td (03:48:46) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 347 Td (Signature) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 347 Td (Vue_Commandes/Potar_Press...) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 347 Td (operateur + visa admin : Consigne_Pression : ...) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 347 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 333 Td (03:48:47) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 333 Td (D\351connexion) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 333 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 333 Td (d\351connect\351 : menu de connexion) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 333 Td () Tj ET
+0.96 0.97 0.98 rg 40 315 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 319 Td (03:48:48) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 319 Td (Connexion refus\351e) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 319 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 319 Td (mot de passe incorrect \(encore 2 essais avant l...) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 319 Td () Tj ET
+BT /F1 8.5 Tf 0.15 g 44 305 Td (03:48:48) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 305 Td (Connexion refus\351e) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 305 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 305 Td (mot de passe incorrect \(encore 1 essai avant le...) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 305 Td () Tj ET
+0.96 0.97 0.98 rg 40 287 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 291 Td (03:48:48) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 291 Td (Compte verrouill\351) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 291 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 291 Td (3 \351checs de suite : verrouill\351 jusqu'\340 04:03) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 291 Td () Tj ET
+BT /F1 8.5 Tf 0.15 g 44 277 Td (03:48:48) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 277 Td (Connexion refus\351e) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 277 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 277 Td (mot de passe incorrect \227 compte verrouill\351 jusq...) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 277 Td () Tj ET
+0.96 0.97 0.98 rg 40 259 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 263 Td (03:48:48) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 263 Td (Connexion) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 263 Td (admin) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 263 Td (admin connect\351 \(Administrateur, niveau 4\)) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 263 Td (admin) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 249 Td (03:48:49) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 249 Td (Compte d\351verrouill\351) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 249 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 249 Td (par admin) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 249 Td (admin) Tj ET
+0.96 0.97 0.98 rg 40 231 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 235 Td (03:48:50) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 235 Td (D\351connexion) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 235 Td (admin) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 235 Td (d\351connect\351 : menu de connexion) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 235 Td () Tj ET
+BT /F1 8.5 Tf 0.15 g 44 221 Td (03:48:51) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 221 Td (Mot de passe \340 renou...) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 221 Td (nuit) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 221 Td (mot de passe donn\351 par un administrateur : ch...) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 221 Td () Tj ET
+0.96 0.97 0.98 rg 40 203 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 207 Td (03:48:51) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 207 Td (Mot de passe renouv...) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 207 Td (nuit) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 207 Td (par nuit \(menu de connexion\)) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 207 Td () Tj ET
+BT /F1 8.5 Tf 0.15 g 44 193 Td (03:48:51) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 193 Td (Connexion) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 193 Td (nuit) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 193 Td (Luc Moreau connect\351 \(Op\351rateur, niveau 1\)) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 193 Td (nuit) Tj ET
+0.96 0.97 0.98 rg 40 175 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 179 Td (03:48:52) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 179 Td (D\351connexion) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 179 Td (nuit) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 179 Td (d\351connect\351 : menu de connexion) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 179 Td () Tj ET
+BT /F1 8.5 Tf 0.15 g 44 165 Td (03:48:53) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 165 Td (Connexion) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 165 Td (admin) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 165 Td (admin connect\351 \(Administrateur, niveau 4\)) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 165 Td (admin) Tj ET
+0.96 0.97 0.98 rg 40 147 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 151 Td (03:48:53) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 151 Td (Acc\350s modifi\351) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 151 Td (S\351curit\351) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 151 Td (d\351connexion automatique : 1 min \(menu de co...) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 151 Td (admin) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 137 Td (03:48:55) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 137 Td (Acc\350s modifi\351) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 137 Td (S\351curit\351) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 137 Td (d\351connexion automatique : jamais \(menu de co...) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 137 Td (admin) Tj ET
+0.96 0.97 0.98 rg 40 119 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 123 Td (03:48:56) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 123 Td (D\351connexion) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 123 Td (admin) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 123 Td (d\351connect\351 : badge \(operateur\)) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 123 Td () Tj ET
+BT /F1 8.5 Tf 0.15 g 44 109 Td (03:48:56) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 109 Td (Connexion) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 109 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 109 Td (Paul Martin connect\351 \(Op\351rateur, niveau 1\)) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 109 Td (operateur) Tj ET
+0.96 0.97 0.98 rg 40 91 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 95 Td (03:49:12) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 95 Td (Connexion) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 95 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 95 Td (utilisateur de d\351part : operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 95 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 81 Td (03:49:13) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 81 Td (Signature) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 81 Td (Vue_Commandes/Btn_Purge) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 81 Td (operateur : Vanne_Purge : FAUX -> VRAI \(mot...) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 81 Td (operateur) Tj ET
+0.96 0.97 0.98 rg 40 63 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 67 Td (03:49:15) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 67 Td (Signature) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 67 Td (Vue_Commandes/Btn_Purge) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 67 Td (operateur : Vanne_Purge : VRAI -> FAUX \(mot...) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 67 Td (operateur) Tj ET
+BT /F1 8 Tf 0.45 g 518.53 22 Td (Page 3 / 4) Tj ET
+BT /F1 8 Tf 0.45 g 40 22 Td (XpgAnalyzer - Rapport journalier - poste de gaz) Tj ET
+endstream
+endobj
+11 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 12 0 R >>
+endobj
+12 0 obj
+<< /Length 4562 >>
+stream
+BT /F2 12 Tf 0.15 g 40 790 Td (\311v\351nements \(suite\)) Tj ET
+0.85 0.88 0.93 rg 40 763 515 17 re f
+BT /F2 8.5 Tf 0.1 g 44 768.5 Td (Heure) Tj ET
+BT /F2 8.5 Tf 0.1 g 85.08 768.5 Td (Type) Tj ET
+BT /F2 8.5 Tf 0.1 g 182.39 768.5 Td (Source) Tj ET
+BT /F2 8.5 Tf 0.1 g 315.68 768.5 Td (Message) Tj ET
+BT /F2 8.5 Tf 0.1 g 509.44 768.5 Td (Utilisateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 753 Td (03:50:10) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 753 Td (Connexion) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 753 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 753 Td (utilisateur de d\351part : operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 753 Td (operateur) Tj ET
+0.96 0.97 0.98 rg 40 735 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 739 Td (03:50:10) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 739 Td (Apparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 739 Td (PT1_A_Basse) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 739 Td ([Haute] Bouteille A presque vide : 7.2 bar) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 739 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 725 Td (03:50:11) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 725 Td (Apparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 725 Td (PT1_A_Vide) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 725 Td ([Critique] Bouteille A vide \(7.2 bar\) : basculer) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 725 Td (operateur) Tj ET
+0.96 0.97 0.98 rg 40 707 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 711 Td (03:50:42) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 711 Td (Connexion) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 711 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 711 Td (utilisateur de d\351part : operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 711 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 697 Td (03:50:47) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 697 Td (Apparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 697 Td (PT1_A_Basse) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 697 Td ([Haute] Bouteille A presque vide : 7.2 bar) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 697 Td (operateur) Tj ET
+0.96 0.97 0.98 rg 40 679 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 683 Td (03:50:48) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 683 Td (Apparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 683 Td (PT1_A_Vide) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 683 Td ([Critique] Bouteille A vide \(7.2 bar\) : basculer) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 683 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 669 Td (03:50:53) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 669 Td (Connexion) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 669 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 669 Td (utilisateur de d\351part : operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 669 Td (operateur) Tj ET
+0.96 0.97 0.98 rg 40 651 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 655 Td (03:50:55) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 655 Td (Apparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 655 Td (PT1_A_Basse) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 655 Td ([Haute] Bouteille A presque vide : 0.0 bar) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 655 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 641 Td (03:50:55) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 641 Td (Apparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 641 Td (PT1_A_Vide) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 641 Td ([Critique] Bouteille A vide \(0.0 bar\) : basculer) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 641 Td (operateur) Tj ET
+0.96 0.97 0.98 rg 40 623 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 627 Td (03:50:57) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 627 Td (Disparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 627 Td (PT1_A_Basse) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 627 Td (Bouteille A presque vide : 0.0 bar) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 627 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 613 Td (03:50:57) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 613 Td (Disparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 613 Td (PT1_A_Vide) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 613 Td (Bouteille A vide \(0.0 bar\) : basculer) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 613 Td (operateur) Tj ET
+0.96 0.97 0.98 rg 40 595 515 14 re f
+BT /F1 8.5 Tf 0.15 g 44 599 Td (03:50:59) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 599 Td (R\351apparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 599 Td (PT1_A_Basse) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 599 Td (Bouteille A presque vide : 0.0 bar) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 599 Td (operateur) Tj ET
+BT /F1 8.5 Tf 0.15 g 44 585 Td (03:50:59) Tj ET
+BT /F1 8.5 Tf 0.15 g 85.08 585 Td (R\351apparition) Tj ET
+BT /F1 8.5 Tf 0.15 g 182.39 585 Td (PT1_A_Vide) Tj ET
+BT /F1 8.5 Tf 0.15 g 315.68 585 Td (Bouteille A vide \(0.0 bar\) : basculer) Tj ET
+BT /F1 8.5 Tf 0.15 g 509.44 585 Td (operateur) Tj ET
+0.6 G 0.6 w 40 581 m 555 581 l S
+BT /F1 8 Tf 0.45 g 518.53 22 Td (Page 4 / 4) Tj ET
+BT /F1 8 Tf 0.45 g 40 22 Td (XpgAnalyzer - Rapport journalier - poste de gaz) Tj ET
+endstream
+endobj
+xref
+0 13
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000142 00000 n 
+0000000239 00000 n 
+0000000341 00000 n 
+0000000477 00000 n 
+0000009553 00000 n 
+0000009689 00000 n 
+0000025935 00000 n 
+0000026072 00000 n 
+0000042303 00000 n 
+0000042441 00000 n 
+trailer
+<< /Size 13 /Root 1 0 R >>
+startxref
+47055
+%%EOF

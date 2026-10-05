@@ -1,0 +1,40 @@
+# =============================================================================
+#  Session 115 - 1.10.4 (K1, K1104) : LE PLANTAGE DE LA 1.10.3. Le client tapait
+#  dans son script de demarrage (« Saisie dans Initialisation ») : un FOR en fin
+#  de script faisait lire un jeton hors du tableau (std::bad_alloc, l'appli
+#  fermee). On tape la meme chose a la fin du script Init (Demarrage) : la
+#  frappe continue, les diagnostics suivent.
+#  Copie d'Armoire_Gaz preparee par scratchpad/K1104/k1/run.sh.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+arbre "IHM/Programmation générale" double
+attendre 8
+ligne "Init" exact
+attendre 4
+clic 1300 260
+touche ctrl+end
+texte "FOR"
+attendre 8
+# Le FOR final (l'entree du plantage) : l'appli tient, le tableau dit ce qui manque.
+capture 115_01_for_en_fin_de_script.png
+texte " Compteur_Clics := 1 TO 3 DO"
+touche entree
+texte "IHM_JOURNAL('pas');"
+touche entree
+texte "END_FOR;"
+touche entree
+texte "IF"
+attendre 8
+capture 115_02_if_en_fin_de_script.png
+texte " Compteur_Clics > 2 THEN"
+touche entree
+texte "CASE"
+attendre 8
+capture 115_03_case_en_fin_de_script.png
+quitter

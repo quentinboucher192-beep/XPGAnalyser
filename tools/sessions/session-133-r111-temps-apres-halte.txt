@@ -1,0 +1,78 @@
+# =============================================================================
+#  Session 133 (R111, 1.11, decision 23) : « Ou passe le temps » apres une halte.
+#  Simulation > Debogage, Armoire_Gaz. Logigrammes_B.configuree forcee a FAUX,
+#  un cycle complet : ses sections sont inactives. Puis forcee a VRAI et 16 pas
+#  (Section suivante) : Logigrammes_B a tourne dans le cycle ouvert, mais la
+#  page donne toujours le dernier cycle complet, « inactive (configuree faux) »
+#  (avant la 1.11 : l'etat du cycle arrete et les temps du precedent, donc
+#  « 0 instruction » pour une section dite active). Puis le cycle fini :
+#  Logigrammes_B active, avec ses temps.
+#  Hors depot (scratchpad/R111/verif7.sh), une copie neuve d'Armoire_Gaz.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+debogage-ouvrir
+attendre 10
+sim-forcer "Logigrammes_B.configuree" "0"
+attendre 2
+debogage-cycle
+attendre 10
+debogage-cycle
+attendre 10
+etat-simulation
+simulation-temps
+sim-forcer "Logigrammes_B.configuree" "1"
+attendre 2
+debogage-section
+attendre 3
+debogage-section
+attendre 3
+debogage-section
+attendre 3
+debogage-section
+attendre 3
+debogage-section
+attendre 3
+debogage-section
+attendre 3
+debogage-section
+attendre 3
+debogage-section
+attendre 3
+debogage-section
+attendre 3
+debogage-section
+attendre 3
+debogage-section
+attendre 3
+debogage-section
+attendre 3
+debogage-section
+attendre 3
+debogage-section
+attendre 3
+debogage-section
+attendre 3
+debogage-section
+attendre 3
+etat-simulation
+simulation-temps
+attendre 5
+capture 133_01_pause_dans_le_cycle.png
+# La trace du cycle : jusqu'aux lignes de Logigrammes_B (rangs 32 a 48).
+molette 1300 760 -10
+attendre 5
+capture 133_02_pause_logigrammes_b_inactive.png
+debogage-cycle
+attendre 10
+etat-simulation
+simulation-temps
+attendre 5
+molette 1300 760 -10
+attendre 5
+capture 133_03_cycle_fini_logigrammes_b_active.png
+quitter

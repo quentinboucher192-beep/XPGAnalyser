@@ -1,0 +1,37 @@
+# Derived data type, shared.
+name = ST_SYS_Module
+version = 1.00
+#! summary = Un module de l'automate surveille : son bit d'erreur, combien de fois, depuis quand.
+#! usage = Une ligne par module, dans le tableau passe a DFB_SYS_DIAG. Err se cable
+#! usage = AVANT l'appel, sur le bit d'erreur du module : %I0.4.MOD.ERR pour le module
+#! usage = du rack 0, emplacement 4. La macro GenererDiagnostic ecrit ces lignes
+#! usage = depuis l'onglet Cartes API du classeur.
+#! see = DFB_SYS_DIAG
+#! param Name = Ce que l'operateur lit : 'DDI1602 armoire A'.
+#! param Addr = Ou il est : '0.4' pour le rack 0, emplacement 4.
+#! param Used = FALSE : l'emplacement est vide, ou le module n'est pas surveille.
+#! param Err = ENTREE. Le bit d'erreur du module : %Ir.m.MOD.ERR.
+#! param ErrCount = Combien de fois il est passe en erreur depuis la derniere remise a
+#! param ErrCount = zero.
+#! param ErrMs = Depuis combien de temps il est en erreur, en ms, plafonne ; 0 s'il va
+#! param ErrMs = bien.
+#! param PrevErr = Runtime.
+#! internal = PrevErr
+#! example = (* declarer : Modules : ARRAY[0..31] OF ST_SYS_Module; ErreurModule4 : BOOL; *)
+#! example = Modules[0].Name := 'DDI1602 armoire A';
+#! example = Modules[0].Addr := '0.4';
+#! example = Modules[0].Err := ErreurModule4;     (* %I0.4.MOD.ERR sur l'automate *)
+#! given = ErreurModule4 := TRUE
+#! expect = 1 : Modules[0].Err = TRUE
+#! changes 1.00 = NOUVEAU.
+
+# Un module de l'automate surveille.
+
+# name ; type ; scope ; initial ; comment
+Name ; STRING[16] ; Member ;  ; ce que l'operateur lit
+Addr ; STRING[12] ; Member ;  ; rack.emplacement : '0.4'
+Used ; BOOL ; Member ; TRUE ; FALSE : emplacement vide ou non surveille
+Err ; BOOL ; Member ;  ; ENTREE : %Ir.m.MOD.ERR
+ErrCount ; UDINT ; Member ; 0 ; combien de passages en erreur
+ErrMs ; DINT ; Member ; 0 ; depuis combien de temps il est en erreur, en ms
+PrevErr ; BOOL ; Member ;  ; runtime, ne pas ecrire

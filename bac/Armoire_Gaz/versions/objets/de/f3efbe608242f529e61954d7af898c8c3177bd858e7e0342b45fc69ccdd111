@@ -1,0 +1,20 @@
+[
+  {
+    "gaz": "Azote",
+    "pression": 7.5,
+    "purges": 3,
+    "actif": true
+  },
+  {
+    "gaz": "Argon",
+    "pression": 6.0,
+    "purges": 2,
+    "actif": false
+  },
+  {
+    "gaz": "Hélium",
+    "pression": 8.2,
+    "purges": 4,
+    "actif": true
+  }
+]

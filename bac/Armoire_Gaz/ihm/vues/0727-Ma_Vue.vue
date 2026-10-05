@@ -1,0 +1,35 @@
+# XpgAnalyzer - vue IHM (format 19)
+vue id=727 nom="Ma_Vue" description="Ma première vue (didacticiel)" largeur=1920 hauteur=1080 fond="#20242B" calque_actif=728
+grille visible=1 pas=10 magnetisme_grille=1 magnetisme_objets=1 magnetisme_guides=1
+calque id=728 nom="Calque 1" visible=1 verrou=0
+objet id=729 type=NumericDisplay nom="Afficheur_1" calque=728 parent=0 verrou=0 cache=0
+prop cle=x valeur="80"
+prop cle=y valeur="80"
+prop cle=w valeur="240"
+prop cle=h valeur="56"
+prop cle=rot valeur="0"
+prop cle=flipH valeur="FALSE"
+prop cle=flipV valeur="FALSE"
+prop cle=visible valeur="TRUE"
+prop cle=opacity valeur="100"
+prop cle=value valeur="0" expr="Armoires[0].ana.PT1.mes"
+prop cle=format valeur="0.0"
+prop cle=unit valeur="bar"
+prop cle=label valeur="Pression"
+prop cle=lowAlarm valeur=""
+prop cle=low valeur=""
+prop cle=high valeur=""
+prop cle=highAlarm valeur=""
+prop cle=font valeur="Sans"
+prop cle=fontSize valeur="24"
+prop cle=textColor valeur="#E6EAF0"
+prop cle=align valeur="droite"
+prop cle=colorWarning valeur="#F2C94C"
+prop cle=colorAlarm valeur="#E5534B"
+prop cle=fill valeur="#141820"
+prop cle=stroke valeur="#3A4556"
+prop cle=radius valeur="4"
+prop cle=variable valeur=""
+prop cle=refresh valeur="500"
+prop cle=access valeur="0"
+fin

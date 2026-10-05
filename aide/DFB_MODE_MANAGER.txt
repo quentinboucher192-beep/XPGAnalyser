@@ -1,0 +1,33 @@
+#! summary = Choisit le mode actif parmi 16 : priorite, temps minimum, repli.
+#! usage = CE QU'IL FAIT ET CE QU'IL NE FAIT PAS. Il decide QUEL mode tourne ;
+#! usage = il n'appelle rien. Ce qui s'execute dans chaque mode est une suite de
+#! usage = sous-routines, dans un ordre - et une suite de noms dans un ordre ne
+#! usage = se range pas dans un DDT. C'est du CODE, et c'est la macro
+#! usage = GenererModes qui l'ecrit, sous forme d'un CASE.
+#! usage = Separer les deux n'est pas une commodite : la condition d'entree d'un
+#! usage = mode se calcule dans votre programme et arrive par Def[i].Req, alors
+#! usage = que l'ordre des appels est fige a la generation.
+#! usage = UN MODE PRIORITAIRE PASSE MALGRE LE TEMPS MINIMUM, des que sa
+#! usage = priorite atteint ForcePriority. Un arret d'urgence qui attend la fin
+#! usage = d'un temps de sejour n'est pas un arret d'urgence.
+#! example = (* les conditions, calculees par vous *)
+#! example = Modes[0].Req := NOT Defaut AND NOT Manu;        (* automatique *)
+#! example = Modes[1].Req := Manu;                            (* manuel *)
+#! example = Modes[2].Req := Defaut;                          (* repli *)
+#! example =
+#! example = MODE_Station(Count := 3, CycleMs := 20, FallbackMode := 0,
+#! example =              ForcePriority := 100, Def := Modes,
+#! example =              Current := ModeCourant, PrevMode := ModePrecedent,
+#! example =              CurrentMs := ModeDepuisMs);
+#! param FallbackMode = Le mode choisi quand personne ne demande rien. -1 :
+#! param FallbackMode = aucun, et Current reste sur le dernier choisi.
+#! param ForcePriority = A partir de cette priorite, un mode passe malgre le
+#! param ForcePriority = temps minimum du mode courant. Mettez les securites
+#! param ForcePriority = au-dessus, et rien d'autre.
+#! param Held = Un changement est demande mais retenu par le temps minimum. A
+#! param Held = surveiller : un Held qui ne retombe jamais dit qu'une condition
+#! param Held = oscille plus vite que le MinMs ne le permet.
+#! param Changed = On vient de changer de mode, CE cycle-ci. Un seul cycle : de
+#! param Changed = quoi declencher une initialisation, pas de quoi tester un
+#! param Changed = etat.
+#! see = ST_MODE_Def

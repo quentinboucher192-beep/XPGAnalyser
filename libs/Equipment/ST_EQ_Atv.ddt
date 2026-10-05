@@ -1,0 +1,119 @@
+# Derived data type, shared.
+name = ST_EQ_Atv
+version = 1.01
+#! summary = Un variateur Altivar pilote par mots (profil CiA402 / DRIVECOM) : ETA, CMD, LFR, RFR, LCR, LFT.
+#! usage = Le contrat commun a toutes les familles d'equipement : Enable a FALSE fige
+#! usage = l'equipement ; ManMode fait primer les commandes Man* ; AckFault acquitte
+#! usage = SUR FRONT ; le defaut est MEMORISE par FaultLatch ; State, StateMs, RunS et
+#! usage = Starts se lisent comme partout. Voir COMMUN.hlp du dossier.
+#! usage = LES MOTS VOYAGENT AILLEURS. Ce type decrit le variateur, pas la liaison :
+#! usage = ETA, RFR, LCR et LFT arrivent par une lecture Modbus (DFB_COM_MODBUS, ou un
+#! usage = scanner d'E/S), CMD et LFR repartent par une ecriture. Sur un ATV320 : ETA
+#! usage = 3201, RFR 3202, LCR 3204, LFT 7121 ; CMD 8501, LFR 8502 - a verifier dans
+#! usage = le guide de communication du modele.
+#! usage = CommOk DOIT ETRE CABLE sur la fraicheur de la lecture (Ok de la requete
+#! usage = Modbus). Sans lui, un ETA fige par une liaison coupee serait lu comme un
+#! usage = variateur qui tourne encore.
+#! see = DFB_EQ_ATV
+#! see = DFB_COM_MODBUS
+#! param RunReq = Demande de marche en automatique.
+#! param ManRunReq = Demande de marche en manuel.
+#! param Reverse = Sens arriere : le bit 11 du mot de commande.
+#! param SpeedReq = La vitesse demandee en automatique, en Hz.
+#! param ManSpeedReq = La vitesse demandee en manuel, en Hz.
+#! param SpeedMin = La vitesse mini, en Hz : la consigne est bornee.
+#! param SpeedMax = La vitesse maxi, en Hz.
+#! param Eta = ENTREE. Le mot d'etat ETA lu dans le variateur.
+#! param Rfr = ENTREE. La frequence de sortie RFR, en 0,1 Hz.
+#! param Lcr = ENTREE. Le courant moteur LCR, en 0,1 A.
+#! param Lft = ENTREE. Le code du dernier defaut LFT : ce que le variateur dit de sa
+#! param Lft = panne.
+#! param CommOk = ENTREE. La lecture est fraiche : Ok de la requete Modbus. Faux
+#! param CommOk = plus de CommMs : defaut 2.
+#! param Cmd = SORTIE. Le mot de commande CMD a ecrire dans le variateur.
+#! param Lfr = SORTIE. La consigne de frequence LFR a ecrire, en 0,1 Hz.
+#! param DriveState = SORTIE. L'etat du variateur lu dans ETA : 1 pas pret, 2 mise
+#! param DriveState = sous tension interdite, 3 pret, 4 sous tension, 5 en marche, 6
+#! param DriveState = arret rapide, 7 reaction sur defaut, 8 defaut, 0 inconnu.
+#! param Speed = SORTIE. La consigne envoyee, en Hz ; 0 a l'arret.
+#! param SpeedFbk = SORTIE. La frequence reelle, en Hz (RFR / 10).
+#! param Current = SORTIE. Le courant moteur, en A (LCR / 10).
+#! param Run = SORTIE. La marche est demandee et permise.
+#! param Running = SORTIE. Le variateur est en marche : ETA dit 'operation enabled'.
+#! param StartMs = Le temps permis pour passer en marche apres la demande. Au-dela :
+#! param StartMs = defaut 3.
+#! param StartElapsed = Runtime.
+#! param ResetElapsed = Runtime : l'impulsion de reacquittement en cours.
+#! param CommMs = Combien de temps CommOk peut manquer sans defaut, en ms. Au
+#! param CommMs = demarrage, aucune lecture n'a encore abouti : sans ce delai, le
+#! param CommMs = defaut 2 tombait a chaque mise en route de l'automate.
+#! param CommElapsed = Runtime : depuis quand CommOk manque.
+#! internal = PrevAck, StartElapsed, ResetElapsed, PrevRunning, RunFracMs, PrevState, CommElapsed
+#! fault 1 = Defaut variateur : ETA dit 'defaut' ou 'reaction sur defaut'. Lft donne le code du variateur. L'acquittement envoie aussi le reacquittement au variateur.
+#! fault 2 = Liaison perdue : CommOk est faux depuis plus de CommMs. Le variateur applique sa propre reaction a la perte de communication - le plus souvent un arret.
+#! fault 3 = Pas de passage en marche dans StartMs : puissance absente, STO ouvert, variateur en mode local.
+#! example = (* declarer : Atv : ARRAY[0..15] OF ST_EQ_Atv; Req : ARRAY[0..7] OF ST_COM_Modbus; *)
+#! example = (* ce qui arrive du variateur, AVANT l'appel de DFB_EQ_ATV *)
+#! example = Atv[0].Eta    := Req[0].Data[0];
+#! example = Atv[0].Rfr    := Req[0].Data[1];
+#! example = Atv[0].CommOk := Req[0].Ok;
+#! example = (* ce qui y repart, APRES *)
+#! example = Req[1].Data[0] := Atv[0].Cmd;
+#! example = Req[1].Data[1] := Atv[0].Lfr;
+#! given = Req[0].Data[0] := 16#0027
+#! expect = 1 : Atv[0].Eta = 39
+#! changes 1.00 = NOUVEAU.
+#! changes 1.01 = AJOUTS EN FIN DE TYPE : CommMs et CommElapsed. Le defaut 2 attend
+#! changes 1.01 = CommMs (3 s) : au demarrage, la premiere lecture Modbus n'a pas
+#! changes 1.01 = encore abouti, et le defaut tombait a chaque mise en route.
+
+# Un variateur Altivar pilote par mots (CiA402).
+#
+# Codes de defaut (FaultCode):
+# 1  defaut variateur : Lft donne son code
+# 2  liaison perdue : CommOk faux depuis plus de CommMs
+# 3  pas de passage en marche dans StartMs
+
+# name ; type ; scope ; initial ; comment
+Name ; STRING[16] ; Member ;  ; ce que l'operateur lit
+Enable ; BOOL ; Member ; TRUE ; FALSE fige l'equipement: aucune sortie, aucun defaut
+ManMode ; BOOL ; Member ;  ; TRUE: les commandes manuelles priment sur l'automatisme
+AckFault ; BOOL ; Member ;  ; front montant: acquitte le defaut s'il a disparu
+PrevAck ; BOOL ; Member ;  ; runtime, ne pas ecrire
+RunReq ; BOOL ; Member ;  ; demande de marche
+ManRunReq ; BOOL ; Member ;  ; demande manuelle
+Reverse ; BOOL ; Member ;  ; sens arriere
+SpeedReq ; REAL ; Member ; 0.0 ; vitesse demandee, en Hz
+ManSpeedReq ; REAL ; Member ; 0.0 ; vitesse demandee en manuel, en Hz
+SpeedMin ; REAL ; Member ; 0.0 ; vitesse mini, en Hz
+SpeedMax ; REAL ; Member ; 50.0 ; vitesse maxi, en Hz
+Eta ; INT ; Member ; 0 ; ENTREE : le mot d'etat ETA
+Rfr ; INT ; Member ; 0 ; ENTREE : la frequence de sortie, en 0,1 Hz
+Lcr ; INT ; Member ; 0 ; ENTREE : le courant moteur, en 0,1 A
+Lft ; INT ; Member ; 0 ; ENTREE : le dernier defaut du variateur
+CommOk ; BOOL ; Member ;  ; ENTREE : la lecture est fraiche
+Cmd ; INT ; Member ; 0 ; SORTIE : le mot de commande CMD
+Lfr ; INT ; Member ; 0 ; SORTIE : la consigne de frequence, en 0,1 Hz
+DriveState ; INT ; Member ; 0 ; SORTIE : l'etat lu dans ETA, 0 a 8
+Speed ; REAL ; Member ; 0.0 ; SORTIE : la consigne envoyee, en Hz
+SpeedFbk ; REAL ; Member ; 0.0 ; SORTIE : la frequence reelle, en Hz
+Current ; REAL ; Member ; 0.0 ; SORTIE : le courant moteur, en A
+Run ; BOOL ; Member ;  ; SORTIE : la marche est demandee et permise
+Running ; BOOL ; Member ;  ; SORTIE : le variateur est en marche
+StartMs ; DINT ; Member ; 5000 ; temps permis pour passer en marche
+StartElapsed ; DINT ; Member ; 0 ; runtime, ne pas ecrire
+ResetElapsed ; DINT ; Member ; 0 ; runtime, ne pas ecrire
+PrevRunning ; BOOL ; Member ;  ; runtime, ne pas ecrire
+Fault ; BOOL ; Member ;  ; un defaut est present
+FaultCode ; INT ; Member ; 0 ; 0 aucun. Voir la table de la famille
+FaultLatch ; BOOL ; Member ;  ; le defaut reste jusqu'a AckFault, meme s'il disparait
+Ready ; BOOL ; Member ;  ; utilisable: active, sans defaut
+RunMs ; DINT ; Member ; 0 ; temps en service cumule, en ms, plafonne a 2 000 000 000 (555 h) : lire RunS
+Starts ; UDINT ; Member ; 0 ; nombre de mises en service depuis le dernier Reset
+StateMs ; DINT ; Member ; 0 ; temps dans l'etat courant (State), en ms, plafonne a 2 000 000 000
+RunS ; UDINT ; Member ; 0 ; temps en service cumule, en secondes : ne deborde pas avant 136 ans
+RunFracMs ; DINT ; Member ; 0 ; runtime, ne pas ecrire : les millisecondes pas encore comptees dans RunS
+State ; INT ; Member ; 0 ; etat publie : 0 desactive, 1 en defaut, 2 au repos, 3 en service
+PrevState ; INT ; Member ; -1 ; runtime, ne pas ecrire
+CommMs ; DINT ; Member ; 3000 ; CommOk peut manquer ce temps sans defaut : le demarrage, une requete perdue
+CommElapsed ; DINT ; Member ; 0 ; runtime, ne pas ecrire

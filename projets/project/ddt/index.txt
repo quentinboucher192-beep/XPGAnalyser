@@ -1,0 +1,12 @@
+# Derived types, in declaration order.
+ST_DebugLine4
+ST_DebugLine64
+ST_GC_DebugStepFocus
+ST_GC_Debug
+ST_GC_Runtime
+ST_GC_Step
+ST_GC_Transition
+ST_GC_Action
+ST_GC_CMD
+ST_GC_STAT
+ST_GC_CTRL

@@ -1,0 +1,18 @@
+# =============================================================================
+#  Session 121b (K2, K1104 - 1.10.4) : la 1.10.4 rouvre le projet qu'une 1.10.3 a
+#  reenregistre (session 121 : les vannes 3 voies y sont ecrites "Rectangle",
+#  avec toutes leurs proprietes). Elle le dit dans la barre d'etat ("relu comme
+#  une vanne 3 voies") et les redessine : rien n'est perdu. Sur le dossier de la
+#  session 121 (scratchpad/K2/run121/Projets/Armoire_Gaz, copie).
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+arbre "IHM/Vues/Vue_Vannes_3_Voies"
+attendre 4
+capture 121_01b_v1104_relit_les_vannes_3_voies.png
+attendre 5
+quitter

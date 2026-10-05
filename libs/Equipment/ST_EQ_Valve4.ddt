@@ -1,0 +1,117 @@
+# Derived data type, shared.
+name = ST_EQ_Valve4
+version = 1.01
+#! summary = Une vanne 4 voies : 4 commandes, 4 retours de position.
+#! usage = Le contrat commun a toutes les familles d'equipement :
+#! usage = Enable a FALSE fige l'equipement - aucune sortie, aucun defaut. Un
+#! usage = equipement consigne ne doit pas remplir le journal d'alarmes pendant
+#! usage = qu'on travaille dessus.
+#! usage = ManMode fait primer les commandes Man* sur l'automatisme.
+#! usage = AckFault acquitte SUR FRONT MONTANT, et seulement si la condition a
+#! usage = disparu.
+#! usage = LE DEFAUT EST MEMORISE par FaultLatch. Un thermique qui se rearme tout
+#! usage = seul en refroidissant effacerait la trace de son declenchement, et
+#! usage = personne ne saurait pourquoi la machine s'est arretee cette nuit-la.
+#! see = DFB_EQ_VALVE4
+#! see = DFB_ITL_MATRIX
+#! param Enable = FALSE fige l'equipement : aucune sortie, aucun defaut, et les compteurs
+#! param Enable = cessent d'avancer. C'est l'etat d'une machine consignee.
+#! param Fault = La copie PUBLIEE de FaultLatch, posee en fin de cycle. Les sorties, elles,
+#! param Fault = se coupent sur FaultLatch - c'est-a-dire dans le MEME cycle que le defaut.
+#! param Fault = Les couper sur Fault laisserait l'equipement pilote un cycle de plus :
+#! param Fault = vingt millisecondes pendant lesquelles on le commande alors qu'on vient de
+#! param Fault = decouvrir qu'on ne sait plus ou il en est.
+#! param FaultCode = Le dernier code pose, 0 quand il n'y a rien. Voir la table de cette famille,
+#! param FaultCode = en tete de fichier. Il n'est efface que par AckFault.
+#! param Ready = Active et sans defaut. C'est ce qu'on cable sur Available d'une rotation :
+#! param Ready = un equipement en defaut est alors saute, et il reprend son rang en revenant.
+#! param Starts = Nombre de demarrages depuis le dernier Reset. Un compteur qui grimpe vite
+#! param Starts = est la signature d'un court-cycle - voir MinOffMs quand la famille en a un.
+#! param Pos = La position atteinte, -1 tant qu'aucun retour n'est franc. -1 ne veut pas
+#! param Pos = dire "au repos" : il veut dire "on ne sait pas", et c'est une difference qui
+#! param Pos = compte quand on decide d'ouvrir autre chose.
+#! param PosReq = La position demandee en automatique, 0..3. En ManMode c'est ManPosReq qui
+#! param PosReq = est lue a la place.
+#! param HasFdc = FALSE : pas de retour de position. La position est alors SUPPOSEE atteinte au
+#! param HasFdc = bout de TravelMs. C'est une supposition, et elle explique pourquoi une vanne
+#! param HasFdc = sans fin de course ne detecte jamais un blocage - ni le defaut 2, ni le 4.
+#! param TravelMs = Temps de manoeuvre tolere avant le defaut 2. A regler au-dessus du temps reel
+#! param TravelMs = mesure, marge comprise : une vanne froide met plus longtemps.
+#! param Cmd = Les sorties, une par position. UN DEFAUT LES COUPE TOUTES : laisser une vanne
+#! param Cmd = commandee alors qu'on ne sait pas ou elle est, c'est le contraire d'un repli
+#! param Cmd = sur.
+#! param Ways = Le nombre de voies, FIXE pour ce type. Il n'est pas a changer : les tableaux
+#! param Ways = Cmd et Fdc sont dimensionnes en consequence.
+#! fault 1 = Deux retours actifs a la fois. C'est PHYSIQUEMENT IMPOSSIBLE : un capteur est
+#! fault 1 = casse ou mal cable. C'est le defaut que tout le monde oublie de traiter, et
+#! fault 1 = celui qui fait croire a une position que la vanne n'a pas.
+#! fault 2 = Aucun retour au bout de TravelMs : la vanne est bloquee, ou le capteur est
+#! fault 2 = mort. Ce defaut n'existe que si HasFdc est vrai - sans retour, il n'y a rien
+#! fault 2 = a attendre.
+#! fault 3 = Position demandee hors de 0..Ways-1. Elle est refusee AVANT de commander quoi
+#! fault 3 = que ce soit : une vanne a qui on demande la position 5 ne doit pas voir ses
+#! fault 3 = sorties a zero et se croire au repos.
+#! fault 4 = Le retour a disparu alors qu'aucun mouvement n'etait demande. La vanne a
+#! fault 4 = bouge toute seule, ou le capteur lache.
+#! internal = PrevAck, PrevPos, TravelElapsed, RunFracMs, PrevState
+#! param ManPosReq = Position demandee en manuel (0..3), suivie tant que ManMode est
+#! param ManPosReq = vrai.
+#! param Fdc = Les fins de course, un par position. Deux a la fois, c'est le defaut 1.
+#! changes 1.01 = AJOUTS EN FIN DE TYPE : RunS (temps de marche en secondes, sans
+#! changes 1.01 = debordement), State (etat publie : 0 desactive, 1 defaut, 2 repos, 3
+#! changes 1.01 = en service), et deux champs internes. RunMs et StateMs plafonnent a
+#! changes 1.01 = 2 000 000 000 ms au lieu de devenir negatifs.
+#! example = (* declarer :
+#! example =    V4 : ARRAY[0..15] OF ST_EQ_Valve4;
+#! example =    DI : ARRAY[0..15] OF ST_IO_Dig;
+#! example =    DQ : ARRAY[0..15] OF ST_IO_Dig; *)
+#! example = (* la configuration, une fois *)
+#! example = V4[0].Name     := 'XV703 distribution';
+#! example = V4[0].TravelMs := 6000;
+#! example = V4[0].HasFdc   := FALSE;          (* pas de fins de course : position supposee *)
+#! example = (* la position voulue : 0 a 3 *)
+#! example = V4[0].PosReq := 3;
+#! example = (* quatre bobines, APRES l'appel de DFB_EQ_VALVE4 *)
+#! example = DQ[0].Val := V4[0].Cmd[0];
+#! example = DQ[1].Val := V4[0].Cmd[1];
+#! example = DQ[2].Val := V4[0].Cmd[2];
+#! example = DQ[3].Val := V4[0].Cmd[3];
+#! expect = 1 : V4[0].HasFdc = FALSE
+#! expect = 1 : V4[0].Ways = 4
+
+# Une vanne 4 voies: 4 commandes, 4 retours de position.
+#
+# Codes de defaut (FaultCode):
+# 1  deux retours actifs a la fois: un capteur est casse ou mal cable
+# 2  aucun retour au bout de TravelMs: la vanne est bloquee ou le capteur est mort
+# 3  position demandee hors de 0..Ways-1
+# 4  le retour a disparu alors qu'aucun mouvement n'etait demande
+
+# name ; type ; scope ; initial ; comment
+Name ; STRING[16] ; Member ;  ; ce que l'operateur lit
+Enable ; BOOL ; Member ; TRUE ; FALSE fige l'equipement: aucune sortie, aucun defaut
+ManMode ; BOOL ; Member ;  ; TRUE: les commandes manuelles priment sur l'automatisme
+AckFault ; BOOL ; Member ;  ; front montant: acquitte le defaut s'il a disparu
+PrevAck ; BOOL ; Member ;  ; runtime, ne pas ecrire
+Ways ; INT ; Member ; 4 ; nombre de voies, fixe pour ce type
+PosReq ; INT ; Member ; 0 ; position demandee en automatique, 0..3
+ManPosReq ; INT ; Member ; 0 ; position demandee en manuel
+Pos ; INT ; Member ; -1 ; position atteinte, -1 tant qu'aucun retour n'est franc
+PrevPos ; INT ; Member ; -1 ; runtime
+Moving ; BOOL ; Member ;  ; en mouvement: une position demandee, aucune atteinte
+TravelMs ; DINT ; Member ; 5000 ; temps de manoeuvre tolere avant defaut
+TravelElapsed ; DINT ; Member ; 0 ; runtime
+HasFdc ; BOOL ; Member ; TRUE ; FALSE: pas de retour, la position est supposee atteinte au bout de TravelMs
+Cmd ; ARRAY[0..3] OF BOOL ; Member ;  ; les sorties de commande, une par position
+Fdc ; ARRAY[0..3] OF BOOL ; Member ;  ; les retours de position, un par position
+Fault ; BOOL ; Member ;  ; un defaut est present
+FaultCode ; INT ; Member ; 0 ; 0 aucun. Voir la table de la famille
+FaultLatch ; BOOL ; Member ;  ; le defaut reste jusqu'a AckFault, meme s'il disparait
+Ready ; BOOL ; Member ;  ; utilisable: active, sans defaut
+RunMs ; DINT ; Member ; 0 ; temps de fonctionnement cumule, en ms, plafonne a 2 000 000 000 (555 h) : lire RunS
+Starts ; UDINT ; Member ; 0 ; nombre de demarrages depuis le dernier Reset
+StateMs ; DINT ; Member ; 0 ; temps dans l'etat courant (State), en ms, plafonne a 2 000 000 000
+RunS ; UDINT ; Member ; 0 ; temps de fonctionnement cumule, en secondes : ne deborde pas avant 136 ans
+RunFracMs ; DINT ; Member ; 0 ; runtime, ne pas ecrire : les millisecondes pas encore comptees dans RunS
+State ; INT ; Member ; 0 ; etat publie : 0 desactive, 1 en defaut, 2 au repos, 3 en service
+PrevState ; INT ; Member ; -1 ; runtime, ne pas ecrire

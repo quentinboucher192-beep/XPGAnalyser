@@ -1,0 +1,8 @@
+#! summary = Declare les tableaux de voies et les instances de bloc de chaque carte du classeur.
+#! usage = Depuis l'onglet Cartes API. Pour chaque carte active : importe le DDT et le bloc depuis la bibliotheque, declare le tableau de voies a la taille du bloc, declare l'instance.
+#! usage = ELLE NE DEVINE PLUS LA TAILLE. L'ancienne ImportES parcourait deux fois l'onglet ES pour deduire le nombre de voies de chaque carte, puis arrondir a 4, 8, 16, 32 ou 64. Le classeur a deja fait ce calcul et l'a ecrit dans la colonne Bloc. Lire vaut mieux que recalculer : deux calculs finissent toujours par ne plus donner la meme chose.
+#! usage = ELLE N'ECRIT AUCUN CODE, et c'est ce qui la rend relancable sans rien salir. Declarer est idempotent ; ecrire du code ne l'est pas. Le mapping est ecrit par ImporterVoies, qui a besoin du cablage et de l'appel dans le meme ordre - et deux macros qui ajoutent chacune leur bout a une section ne peuvent pas obtenir cet ordre.
+#! usage = La taille du tableau vient du BLOC, pas du nombre de voies cablees : le bloc attend exactement sa taille en InOut.
+#! see = ImporterVoies, ImporterClasseur, VerifierClasseur
+#! param classeur = Le chemin du classeur. Laisser vide prend celui qui est deja charge par le bouton Classeur..., ce qui est le cas normal quand on enchaine plusieurs imports.
+#! param classeur = C'est un .xlsm, pas un export CSV : la macro lit les onglets directement, et les quatre familles d'E/S sont donc traitees en une seule execution.

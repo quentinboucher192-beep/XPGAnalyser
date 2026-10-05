@@ -1,0 +1,219 @@
+# Derived function block, shared.
+name = BUILDING
+version = 0.24
+attribute = TypeCodeCheckSumString = 0
+attribute = TypeSignatureCheckSumString = 0
+attribute = UseNewTplSignAlgo = TRUE
+#! summary = Construit les etapes, transitions et actions du moteur GRAFCET depuis un texte : 'id=0|s=0|d=1|c=DEPART'.
+#! usage = REPRIS DU PROJET MAST, CORRIGE EN 0.24 (changes plus bas). Les appels
+#! usage = restent les memes.
+#! usage = T choisit ce qu'on construit : 1 une etape (_Step), 2 une transition
+#! usage = (_Trans), 3 une action (_Act). Text est une suite de cles separees par des
+#! usage = '|', en minuscules ; les espaces autour sont toleres ('id=0 | n=X0').
+#! usage = ETAPE : id=numero, n=nom (4 caracteres), i=1 initiale, f=1 finale.
+#! usage = TRANSITION : id=numero, s=sources et d=destinations (listes separees par
+#! usage = des virgules : s=2,3 est une convergence en ET, d=4,5 une divergence en
+#! usage = ET - SplitKind passe a 1), c=texte de la condition (8 caracteres, pour la
+#! usage = mise au point). Le retard vient de l'entree d.
+#! usage = ACTION : id=numero, n=nom (8 caracteres), k=qualificatif (0 a 11), s=etape.
+#! usage = Le retard vient de l'entree d. Sans s=, l'action n'est liee a aucune etape.
+#! usage = LE TEXTE DECRIT TOUT L'ELEMENT : ce qu'il ne dit pas est remis a zero (nom,
+#! usage = drapeaux, listes). Un nom trop long est coupe (NB=FV9OV4NB++ donne
+#! usage = NB=FV9OV). Plus de 3 sources ou destinations : les 3 premieres sont
+#! usage = gardees, le compte dit le vrai nombre, et le moteur passe en ConfigFault.
+#! usage = UNE ENTREE NON PASSEE GARDE SA VALEUR : c'est ainsi que le projet MAST
+#! usage = appelle Builder une seconde fois avec seulement d := t#2s pour poser le
+#! usage = retard - Text est encore celui de l'appel precedent, et l'element est
+#! usage = reconstruit a l'identique.
+#! usage = CONSTRUIRE UNE FOIS : l'analyse d'un texte coute des dizaines
+#! usage = d'instructions. Appele pour chaque element a chaque cycle (le projet MAST
+#! usage = le fait 915 fois par cycle), c'est une bonne part du temps de cycle ; au
+#! usage = premier cycle, ou quand une consigne de retard change, suffit.
+#! usage = Attention : T = 3 remet EnableCond a TRUE ; ta condition d'action se pose
+#! usage = APRES l'appel de Builder.
+#! example = (* declarer : Etapes : ARRAY[0..27] OF ST_GC_Step; Trans : ARRAY[0..27] OF ST_GC_Transition; *)
+#! example = Builder(T := 1, Text := 'id=3|n=X3|f=1', _Step := Etapes[3]);
+#! example = Builder(T := 2, Text := 'id=4|s=2,3|d=0|c=RETOUR', d := T#2s, _Trans := Trans[4]);
+#! example = Builder(T := 2, Text := 'id=5 | s=0 | d=1,2 | c=DEPART', d := T#0s, _Trans := Trans[5]);
+#! see = DFB_GRAFCETENGINE
+#! param Text = La description, 100 caracteres au plus.
+#! param T = 1 etape, 2 transition, 3 action.
+#! param d = Le retard : ConditionTime d'une transition, Delay d'une action.
+#! param _Trans = La transition a construire (T = 2).
+#! param _Step = L'etape a construire (T = 1).
+#! param _Act = L'action a construire (T = 3).
+#! changes 0.24 = CORRECTIONS. B1 plus de 3 sources ou destinations : plus d'ecriture
+#! changes 0.24 = hors de Sources[0..2] ; le compte le dit, le moteur le signale.
+#! changes 0.24 = B2 'd=1,2' active les deux destinations (SplitKind 1) : la divergence
+#! changes 0.24 = en ET etait impossible. B3 une action sans s= n'est plus liee a
+#! changes 0.24 = l'etape 0 (BoundStepId -1). B4 un nom trop long est coupe au lieu
+#! changes 0.24 = d'etre ignore. B5 espaces toleres. B6 ce que le texte ne dit pas est
+#! changes 0.24 = remis a zero. Une seule boucle d'analyse pour les trois cas.
+#! changes 0.23 = CORRECTION : FIND_INT rend 0 quand il ne trouve pas le separateur,
+#! changes 0.23 = pas -1. Le test 'Pos = -1' ne voyait donc jamais le dernier jeton :
+#! changes 0.23 = LEFT_INT(Work, -1) ne rendait rien, Work ne raccourcissait plus, et
+#! changes 0.23 = la boucle ne s'arretait pas - chien de garde de l'automate. Le test
+#! changes 0.23 = est maintenant 'Pos <= 0', ce qui couvre les deux conventions.
+#! expect = 1 : Etapes[3].isFinal = TRUE
+#! expect = 1 : Trans[4].SourceCount = 2
+#! expect = 1 : Trans[4].Sources[1] = 3
+#! expect = 1 : Trans[4].Destinations[0] = 0
+#! expect = 1 : Trans[5].SplitKind = 1
+#! expect = 1 : Trans[5].Destinations[1] = 2
+
+# name ; type ; scope ; initial ; comment
+Text ; string[100] ; Input ;  ; arguments
+T ; INT ; Input ;  ; 1=step,2=trans,3=act
+d ; TIME ; Input ;  ; delay
+_Trans ; ST_GC_Transition ; InOut ;  ; ref
+_Step ; ST_GC_Step ; InOut ;  ; ref
+_Act ; ST_GC_Action ; InOut ;  ; ref
+Work ; string[100] ; Local ;  ;
+Token ; string[100] ; Local ;  ;
+Pos ; INT ; Local ;  ;
+Value ; string[100] ; Local ;  ;
+WorkList ; string[100] ; Local ;  ;
+Item ; string[100] ; Local ;  ;
+Key ; string[100] ; Local ;  ; la cle d'un jeton : id, n, i, f, s, d, c, k
+Spaced ; BOOL ; Local ;  ; le jeton contient des espaces
+
+<<<section Main ST>>>
+(* LE TEXTE DECRIT TOUT L'ELEMENT : ce qu'il ne dit pas repart de zero *)
+IF T = 1 THEN
+    _Step.IsInitial := FALSE;
+    _Step.IsFinal := FALSE;
+    _Step.Name := '';
+ELSIF T = 2 THEN
+    _Trans.Enabled := TRUE;
+    _Trans.JoinKind := 1;
+    _Trans.SplitKind := 0;
+    _Trans.ConditionTime := d;
+    _Trans.SourceCount := 0;
+    _Trans.DestCount := 0;
+    _Trans.CondText := '';
+ELSIF T = 3 THEN
+    _Act.EnableCond := TRUE;
+    _Act.Kind := 0;
+    _Act.Delay := d;
+    _Act.BoundStepId := -1;      (* sans s= : liee a aucune etape *)
+    _Act.Name := '';
+END_IF;
+
+Work := Text;
+
+WHILE LEN_INT(Work) > 0 DO
+
+    (* le jeton suivant ; FIND_INT rend 0 quand il ne trouve pas *)
+    Pos := FIND_INT(Work, '|');
+    IF Pos <= 0 THEN
+        Token := Work;
+        Work := '';
+    ELSE
+        Token := LEFT_INT(Work, Pos - 1);
+        Work := RIGHT_INT(Work, LEN_INT(Work) - Pos);
+    END_IF;
+
+    (* cle = valeur, au premier '=' : 'c=NB==NBSURP' garde 'NB==NBSURP' *)
+    Pos := FIND_INT(Token, '=');
+    Spaced := FALSE;
+    IF Pos > 1 THEN
+        Key := LEFT_INT(Token, Pos - 1);
+        Value := RIGHT_INT(Token, LEN_INT(Token) - Pos);
+        (* les espaces autour : retires seulement s'il y en a, pour ne pas
+           payer quatre boucles par jeton dans le cas courant *)
+        Spaced := FIND_INT(Token, ' ') > 0;
+        IF Spaced THEN
+            WHILE (LEN_INT(Key) > 0) AND (LEFT_INT(Key, 1) = ' ') DO
+                Key := RIGHT_INT(Key, LEN_INT(Key) - 1);
+            END_WHILE;
+            WHILE (LEN_INT(Key) > 0) AND (RIGHT_INT(Key, 1) = ' ') DO
+                Key := LEFT_INT(Key, LEN_INT(Key) - 1);
+            END_WHILE;
+            WHILE (LEN_INT(Value) > 0) AND (LEFT_INT(Value, 1) = ' ') DO
+                Value := RIGHT_INT(Value, LEN_INT(Value) - 1);
+            END_WHILE;
+            WHILE (LEN_INT(Value) > 0) AND (RIGHT_INT(Value, 1) = ' ') DO
+                Value := LEFT_INT(Value, LEN_INT(Value) - 1);
+            END_WHILE;
+        END_IF;
+    ELSE
+        Key := '';      (* pas de '=' : jeton ignore *)
+    END_IF;
+
+    (* rangement par genre d'element, puis par cle : le cas le plus
+       frequent (s= et d= d'une transition) passe en premier *)
+    IF T = 2 THEN
+
+        IF (Key = 's') OR (Key = 'd') THEN
+            (* ---------------- SOURCES, DESTINATIONS : 3 places ---------------- *)
+            WorkList := Value;
+            WHILE LEN_INT(WorkList) > 0 DO
+                Pos := FIND_INT(WorkList, ',');
+                IF Pos <= 0 THEN
+                    Item := WorkList;
+                    WorkList := '';
+                ELSE
+                    Item := LEFT_INT(WorkList, Pos - 1);
+                    WorkList := RIGHT_INT(WorkList, LEN_INT(WorkList) - Pos);
+                END_IF;
+                IF Spaced THEN
+                    WHILE (LEN_INT(Item) > 0) AND (LEFT_INT(Item, 1) = ' ') DO
+                        Item := RIGHT_INT(Item, LEN_INT(Item) - 1);
+                    END_WHILE;
+                END_IF;
+
+                IF LEN_INT(Item) > 0 THEN
+                    IF Key = 's' THEN
+                        IF _Trans.SourceCount < 3 THEN
+                            _Trans.Sources[_Trans.SourceCount] := STRING_TO_INT(Item);
+                        END_IF;
+                        _Trans.SourceCount := _Trans.SourceCount + 1;   (* au-dela de 3 : ConfigFault *)
+                    ELSE
+                        IF _Trans.DestCount < 3 THEN
+                            _Trans.Destinations[_Trans.DestCount] := STRING_TO_INT(Item);
+                        END_IF;
+                        _Trans.DestCount := _Trans.DestCount + 1;
+                    END_IF;
+                END_IF;
+            END_WHILE;
+
+        ELSIF Key = 'c' THEN
+            _Trans.CondText := LEFT_INT(Value, 8);     (* coupe a 8 *)
+
+        ELSIF Key = 'id' THEN
+            IF LEN_INT(Value) > 0 THEN _Trans.Id := STRING_TO_INT(Value); END_IF;
+        END_IF;
+
+    ELSIF T = 3 THEN
+
+        IF Key = 's' THEN
+            IF LEN_INT(Value) > 0 THEN _Act.BoundStepId := STRING_TO_INT(Value); END_IF;
+        ELSIF Key = 'k' THEN
+            IF LEN_INT(Value) > 0 THEN _Act.Kind := STRING_TO_INT(Value); END_IF;
+        ELSIF Key = 'n' THEN
+            _Act.Name := LEFT_INT(Value, 8);           (* coupe a 8 *)
+        ELSIF Key = 'id' THEN
+            IF LEN_INT(Value) > 0 THEN _Act.Id := STRING_TO_INT(Value); END_IF;
+        END_IF;
+
+    ELSIF T = 1 THEN
+
+        IF Key = 'n' THEN
+            _Step.Name := LEFT_INT(Value, 4);          (* coupe a 4 *)
+        ELSIF Key = 'id' THEN
+            IF LEN_INT(Value) > 0 THEN _Step.Id := STRING_TO_INT(Value); END_IF;
+        ELSIF Key = 'i' THEN
+            IF LEN_INT(Value) > 0 THEN _Step.IsInitial := STRING_TO_INT(Value) = 1; END_IF;
+        ELSIF Key = 'f' THEN
+            IF LEN_INT(Value) > 0 THEN _Step.IsFinal := STRING_TO_INT(Value) = 1; END_IF;
+        END_IF;
+
+    END_IF;
+
+END_WHILE;
+
+(* plusieurs destinations : divergence en ET, toutes s'activent *)
+IF (T = 2) AND (_Trans.DestCount > 1) THEN
+    _Trans.SplitKind := 1;
+END_IF;
+<<<end>>>

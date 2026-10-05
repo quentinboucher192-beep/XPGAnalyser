@@ -1,0 +1,17 @@
+#! summary = Un evenement de l'historique des alarmes : laquelle, quel genre, quand.
+#! usage = L'historique est un ANNEAU de 256 evenements. Un automate n'alloue
+#! usage = pas : quand il est plein, le plus ancien est perdu. Stat.Wrapped dit
+#! usage = que c'est arrive, et Stat.HistCount combien sont lisibles.
+#! usage = Pour relire dans l'ordre, partez de Stat.HistHead et reculez : c'est
+#! usage = la ou la prochaine ecriture ira, donc juste apres le plus ancien.
+#! param Seq = Le numero d'ordre ne recule JAMAIS, meme quand l'anneau reboucle.
+#! param Seq = C'est ce qui distingue un historique reboucle d'un historique a
+#! param Seq = trous : deux evenements voisins dont Seq passe de 12 a 68 disent
+#! param Seq = que cinquante-cinq ont ete perdus entre les deux.
+#! param Kind = 0 apparition, 1 disparition, 2 acquittement.
+#! param StampMs = Des millisecondes depuis le demarrage du gestionnaire, pas
+#! param StampMs = une heure du jour. Un automate n'a pas d'horloge juste, ou
+#! param StampMs = pas encore, au moment ou la premiere alarme tombe ; c'est a
+#! param StampMs = l'IHM de convertir si elle sait quand l'automate a demarre.
+#! see = DFB_ALM_MANAGER
+#! see = ST_ALM_Stat

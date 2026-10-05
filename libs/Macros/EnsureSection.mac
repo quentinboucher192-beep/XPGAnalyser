@@ -1,0 +1,56 @@
+(* EnsureSection
+
+   Creer une section qui existe deja est refuse, ce qui arrete la macro. Une
+   macro relancee doit pouvoir l'etre - c'est tout l'objet de ce fichier.
+
+   GLOBALE OU DANS UNE UNITE : les deux. La premiere version imposait une unite
+   de programme, ce qui n'a aucune raison d'etre. Une section de tache se cree
+   avec un proprietaire vide, et c'est un choix, pas un defaut.
+
+   #! summary = Crée une section si elle n'existe pas encore, dans une tâche ou dans une unité.
+   #! version = 1.20
+   #! changes 1.20 = Le formulaire : chaque question a son champ (le classeur par …, Ctrl+V ou en le glissant ; les tâches et les sections du projet ; des interrupteurs ; des choix à libellés), ses groupes, son aide et un libellé avec accents. Le code ne change pas.
+   #! usage = Creer une section qui existe deja est refuse, ce qui arrete la macro. Une macro relancee doit pouvoir l'etre : c'est tout l'objet de ce fichier.
+   #! usage = GLOBALE OU DANS UNE UNITE : les deux. Une premiere version imposait une unite de programme, ce qui n'avait aucune raison d'etre. Une section de tache se cree avec un proprietaire vide, et c'est un choix, pas un defaut.
+   #! usage = La section est creee en ST, dans MAST. Pour une autre tache ou un autre langage, il faut la creer a la main.
+   #! usage = Une macro se relance. C'est la regle de toutes celles-ci : relancee sur un projet ou elle a deja tourne, elle ne doit rien casser et rien dupliquer. C'est pour ca qu'elles testent avant de creer, et qu'elles disent "existe deja" au lieu de s'arreter.
+   #! usage = Les questions arrivent par TOURS. Ask() enregistre une question, AskNow() les pose. Une macro coupe ses tours la ou une reponse decide des questions suivantes : demander les quatre noms de section quand on vient de repondre "une seule famille" remplirait l'ecran de champs qu'on laisserait vides.
+   #! see = CreerSR, ImportES
+   #! param section = Si elle existe déjà, la macro le dit et ne fait rien.
+   #! param section = Le nom de la section. Si elle existe deja, la macro le dit et ne fait rien - y compris quand elle existe ailleurs que la ou vous la vouliez.
+   #! param ou = Dans la tâche, elle tourne à chaque cycle.
+   #! param ou = Section de tache (elle tourne a chaque cycle de MAST), ou section d'une unite de programme.
+   #! param unite = Elle doit exister : la macro ne crée pas d'unité au passage.
+   #! param unite = L'unite d'accueil. Elle doit exister : la macro s'arrete si elle n'existe pas, plutot que de creer une unite au passage. Creer une unite est une decision de structure, pas un effet de bord.
+   #! categorie = Créer
+   #! champ section = section nouvelle
+   #! libelle section = Nom de la section
+   #! champ ou = choix
+   #! libelle ou = Où la créer
+   #! champ unite = unite existant
+   #! libelle unite = Unité de programme
+   #! option ou Section de tache (globale) = Dans la tâche
+   #! option ou Dans une unite = Dans une unité
+   #! produit = une section vide, si elle n'existe pas encore
+   #! appliquer = Créer la section {section}
+*)
+
+nom := Ask('section', 'Nom de la section', 'Mapping_ES');
+ou  := AskChoice('ou', 'Ou la creer ?', 'Section de tache (globale),Dans une unite',
+                 'Section de tache (globale)');
+
+IF ou = 'Dans une unite' THEN
+    unite := Ask('unite', 'Dans quelle unite de programme ?', 'Logigrammes_A');
+    IF NOT PouExists(unite) THEN
+        Fail('l unite ' + unite + ' n existe pas');
+    END_IF;
+ELSE
+    unite := '';
+END_IF;
+
+IF SectionExists(nom) THEN
+    Log('la section ' + nom + ' existe deja');
+ELSE
+    Log('creation de ' + nom);
+    AddSection(nom, 'MAST', 'ST', unite);
+END_IF;

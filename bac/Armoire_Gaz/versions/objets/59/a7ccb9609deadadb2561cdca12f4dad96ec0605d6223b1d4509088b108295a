@@ -1,0 +1,15 @@
+# Derived data type.
+name = config_armoire
+version = 0.07
+# checksum is recomputed by Control Expert on import; not stored.
+
+# name ; type ; address ; scope ; init ; comment ; attributes ; element comments
+conf_poids ; BOOL ;  ; Member ;  ;  ;  ; 
+conf_pression ; BOOL ;  ; Member ;  ;  ;  ; 
+gaz ; STRING ;  ; Member ;  ;  ;  ; 
+pres_detoxal ; BOOL ;  ; Member ;  ;  ;  ; 
+pres_robinets ; BOOL ;  ; Member ;  ;  ;  ; 
+pres_vanne_bouteille ; BOOL ;  ; Member ;  ;  ;  ; 
+nb_departs ; INT ;  ; Member ;  ;  ;  ; 
+configuree ; BOOL ;  ; Member ;  ;  ;  ; 
+index_depart ; INT ;  ; Member ;  ;  ;  ; 

@@ -1,0 +1,128 @@
+(* GenererDiagnostic
+
+   Le diagnostic de l'automate, depuis l'onglet Cartes API : un DFB_SYS_DIAG
+   cable sur les bits systeme, et un module surveille par emplacement occupe,
+   sur son bit d'erreur %Ir.m.MOD.ERR.
+
+   Une carte MIXTE se declare en deux lignes (une par sens) sur le meme
+   emplacement : elle n'est surveillee qu'une fois.
+
+   #! summary = Écrit le diagnostic de l'automate : bits système, temps de cycle, et le bit d'erreur de chaque module de l'onglet Cartes API.
+   #! version = 1.10
+   #! changes 1.10 = Le formulaire : chaque question a son champ (le classeur par …, Ctrl+V ou en le glissant ; les tâches et les sections du projet ; des interrupteurs ; des choix à libellés), ses groupes, son aide et un libellé avec accents. Le code ne change pas.
+   #! usage = UN MODULE PAR EMPLACEMENT OCCUPE : chaque carte active de l'onglet Cartes API, une seule fois par rack et module. Diag_Modules[k].Err est cable sur %Ir.m.MOD.ERR, le bit d'erreur du module, AVANT l'appel.
+   #! usage = LES BITS SYSTEME : %S10 et %S16 (a 1 quand TOUT VA BIEN), %S19 (debordement), %S51 (horloge perdue), %S68 (pile), %S0 et %S1 (redemarrages), %SW30 (dernier temps de cycle).
+   #! usage = Ce qui en sort : Diag_Sante (ST_SYS_Diag) - Healthy, le premier module en erreur, les temps de cycle - et Diag_Modules, un par emplacement. A publier vers l'IHM par l'onglet Liens, comme un equipement.
+   #! usage = Les noms et adresses des modules sont poses une fois, gardes par Diag_Sig. La section va EN FIN de tache : RangerSections l'y met.
+   #! see = ImporterProgramme, RangerSections
+   #! param classeur = Le classeur de l'affaire (.xlsx ou .xlsm) : glisse-le sur le champ, choisis-le avec …, ou colle-le (Ctrl+V) après l'avoir copié dans l'Explorateur. Vide : le dernier classeur ouvert, le cas normal quand on enchaîne les imports.
+   #! param tache = Les sections générées vont dans cette tâche.
+   #! param tache = La tache d'accueil de la section, MAST en general.
+   #! param prefSection = Vide en général : il sert quand deux automates partagent un projet.
+   #! param prefSection = Le prefixe des sections generees, le meme qu'a l'import. Vide en general.
+   #! param instanceDiag = Créée si elle n'existe pas ; gardée sinon.
+   #! param instanceDiag = Le nom de l'instance de DFB_SYS_DIAG.
+   #! categorie = Générer
+   #! champ classeur = fichier .xlsx .xlsm facultatif
+   #! libelle classeur = Le classeur de l'affaire
+   #! champ tache = tache
+   #! libelle tache = Tâche d'accueil des sections
+   #! champ prefSection = nom facultatif
+   #! libelle prefSection = Préfixe des noms de section
+   #! champ instanceDiag = nom
+   #! libelle instanceDiag = Instance de DFB_SYS_DIAG
+   #! exemple prefSection = {}Diagnostic
+   #! groupe Programme = tache, prefSection, instanceDiag
+   #! avance = prefSection
+   #! produit = la section Diagnostic : bits système, temps de cycle, et le bit d'erreur de chaque module
+   #! appliquer = Appliquer : la section Diagnostic est réécrite en entier
+*)
+
+chemin := Ask('classeur', 'Chemin du classeur (vide = celui deja charge)', '');
+AskNow();
+tache       := Ask('tache', 'Tache d accueil des sections', 'MAST');
+prefSection := Ask('prefSection', 'Prefixe des noms de section (vide en general)', '');
+instance    := Ask('instanceDiag', 'Nom de l instance de DFB_SYS_DIAG', 'DIAG_Automate');
+AskNow();
+
+wb := OpenWorkbook(chemin);
+IF wb < 0 THEN Fail('classeur introuvable'); END_IF;
+tCartes := OpenSheet('Cartes API');
+IF tCartes < 0 THEN Fail('onglet "Cartes API" introuvable'); END_IF;
+
+periode := Setting('Periode (ms)');
+IF periode = '' THEN periode := '20'; END_IF;
+cycle := periode;
+IF VariableExists('Horloge') THEN cycle := 'Horloge.DtMs'; END_IF;
+
+IF NOT TypeExists('ST_SYS_Diag') AND LibHasItem('ST_SYS_Diag') THEN LibImport('ST_SYS_Diag'); END_IF;
+IF NOT TypeExists('ST_SYS_Module') AND LibHasItem('ST_SYS_Module') THEN LibImport('ST_SYS_Module'); END_IF;
+IF NOT PouExists('DFB_SYS_DIAG') AND LibHasItem('DFB_SYS_DIAG') THEN LibImport('DFB_SYS_DIAG'); END_IF;
+IF NOT VariableExists('Diag_Sante') THEN
+    AddVariable('Diag_Sante', 'ST_SYS_Diag', 'Global', '', '', 'la sante de l automate');
+END_IF;
+IF NOT VariableExists('Diag_Modules') THEN
+    AddVariable('Diag_Modules', 'ARRAY[0..31] OF ST_SYS_Module', 'Global', '', '', 'un module par emplacement');
+END_IF;
+IF NOT VariableExists(instance) THEN AddVariable(instance, 'DFB_SYS_DIAG', 'Global', ''); END_IF;
+IF NOT VariableExists('Diag_Sig') THEN
+    AddVariable('Diag_Sig', 'INT', 'Global', '', '0', 'signature de la liste des modules deja posee');
+END_IF;
+
+nl := CHR(10);
+sect := prefSection + 'Diagnostic';
+nc := RowCount(tCartes);
+c := 0; k := 0; deja := 0; m := 0;
+rack := ''; module := ''; nom := '';
+vus := ',';
+initTxt := '';
+cablage := '';
+sig := 0;
+
+FOR c := 0 TO nc - 1 DO
+    IF Cell(tCartes, c, 'Active') = 'O' THEN
+        rack := Cell(tCartes, c, 'Rack');
+        module := Cell(tCartes, c, 'Module');
+        nom := Cell(tCartes, c, 'Nom');
+        IF rack = '' OR module = '' THEN
+            Warn(nom + ' : rack ou module vide, carte non surveillee');
+        ELSIF FIND(vus, ',' + rack + '.' + module + ',', 0) < 0 THEN
+            IF m > 31 THEN
+                Warn(nom + ' : plus de 32 modules, celui-ci n est pas surveille');
+            ELSE
+                vus := vus + rack + '.' + module + ',';
+                initTxt := initTxt + nl + '    Diag_Modules[' + DINT_TO_STRING(m) + '].Name := '
+                    + QUOTE(MID(ASCII(nom), 0, 16)) + ';'
+                    + nl + '    Diag_Modules[' + DINT_TO_STRING(m) + '].Addr := '
+                    + QUOTE(rack + '.' + module) + ';'
+                    + nl + '    Diag_Modules[' + DINT_TO_STRING(m) + '].Used := TRUE;';
+                cablage := cablage + nl + 'Diag_Modules[' + DINT_TO_STRING(m) + '].Err := %I' + rack + '.'
+                    + module + '.MOD.ERR;   (* ' + ASCII(nom) + '   ' + ASCII(Cell(tCartes, c, 'Reference')) + ' *)';
+                sig := (sig * 31 + STRING_TO_INT(rack) * 64 + STRING_TO_INT(module) + LEN(nom)) MOD 30011;
+                m := m + 1;
+            END_IF;
+        END_IF;
+    END_IF;
+END_FOR;
+
+IF m = 0 THEN Fail('aucune carte active dans l onglet Cartes API'); END_IF;
+IF sig = 0 THEN sig := 1; END_IF;
+
+IF NOT SectionExists(sect) THEN AddSection(sect, tache, 'ST', ''); END_IF;
+ClearSection(sect);
+AppendToSection(sect, '(* Genere par GenererDiagnostic depuis l onglet Cartes API. EN FIN DE TACHE. *)');
+AppendToSection(sect, 'IF Diag_Sig <> ' + DINT_TO_STRING(sig) + ' THEN' + initTxt);
+AppendToSection(sect, '    Diag_Sig := ' + DINT_TO_STRING(sig) + ';');
+AppendToSection(sect, 'END_IF;');
+AppendToSection(sect, '');
+AppendToSection(sect, '(* le bit d erreur de chaque module, AVANT l appel *)' + cablage);
+AppendToSection(sect, '');
+AppendToSection(sect, '(* %S10 et %S16 valent 1 quand TOUT VA BIEN *)');
+AppendToSection(sect, instance + '(Count := ' + DINT_TO_STRING(m) + ', CycleMs := ' + cycle
+    + ', CycleTimeMs := %SW30, IoOk := %S10, TaskIoOk := %S16,');
+AppendToSection(sect, '    Overrun := %S19, RtcLost := %S51, BatteryLow := %S68, ColdStart := %S0, '
+    + 'WarmStart := %S1,');
+AppendToSection(sect, '    Diag := Diag_Sante, Mods := Diag_Modules);');
+
+RunMacro('RangerSections');
+Log(DINT_TO_STRING(m) + ' module(s) surveille(s) par ' + instance);

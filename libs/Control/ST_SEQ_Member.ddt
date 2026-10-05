@@ -1,0 +1,66 @@
+# Derived data type, shared.
+name = ST_SEQ_Member
+version = 1.01
+#! summary = Un equipement dans une rotation : disponible, selectionne, use.
+#! usage = Une ligne par equipement, dans le tableau passe a DFB_SEQ_ROTATE.
+#! usage = Les champs qui comptent sont cables sur l'equipement lui-meme :
+#! usage = Available sur son Ready, RunS et RunMs sur ses compteurs d'heures -
+#! usage = AVANT l'appel de la rotation - et RunReq repart vers sa demande de
+#! usage = marche, APRES.
+#! see = DFB_SEQ_ROTATE
+#! param Available = A cabler sur le Ready de l'equipement : sans defaut et non
+#! param Available = consigne. Un equipement indisponible est SAUTE, et quand il
+#! param Available = revient il reprend son rang - redistribuer tout le monde a
+#! param Available = chaque defaut ferait demarrer et arreter des machines qui
+#! param Available = n'avaient rien demande.
+#! param Locked = Exclue de la rotation SANS etre en defaut : essai, maintenance,
+#! param Locked = consignation. Distinguer les deux evite de chercher un defaut
+#! param Locked = qui n'existe pas.
+#! param RunMs = Heures de fonctionnement, en ms. Le mode 2 ne le regarde que pour
+#! param RunMs = departager deux RunS egaux - ou quand RunS n'est pas cable, ce qui
+#! param RunMs = marche jusqu'a 555 heures, ou RunMs plafonne. Si ni l'un ni l'autre
+#! param RunMs = n'est tenu a jour, ce mode se comporte comme un ordre fixe.
+#! param RunReq = SORTIE. L'equipement doit tourner. Le bloc ne commande rien
+#! param RunReq = lui-meme : il dit, l'equipement fait.
+#! param SelectedMs = Depuis combien de temps il est selectionne, en ms. Remis a zero
+#! param SelectedMs = des qu'il ne l'est plus, il plafonne a 2 000 000 000 au lieu de
+#! param SelectedMs = devenir negatif.
+#! param Name = Le nom que l'operateur lit, 16 caracteres. Le bloc ne s'en sert pas.
+#! param RunS = Heures de fonctionnement, en SECONDES : a cabler sur le RunS de
+#! param RunS = l'equipement. C'est ce que le mode 2 compare d'abord - RunMs ne sert
+#! param RunS = qu'a departager deux RunS egaux. RunMs plafonne a 555 heures, et
+#! param RunS = au-dela toutes les machines paraitraient egalement usees.
+#! param Rank = LE BLOC NE LE LIT PAS. L'ordre fixe (mode 0) est celui du tableau :
+#! param Rank = Mem[0] d'abord. Rank est libre - pour afficher un rang a l'IHM, ou le
+#! param Rank = tenir dans l'ordre de la tuyauterie.
+#! internal = PrevReq
+#! changes 1.01 = AJOUTS EN FIN DE TYPE : RunS (heures en secondes, que le mode 2
+#! changes 1.01 = compare d'abord) et PrevReq (interne : la selection du cycle
+#! changes 1.01 = precedent, qui rend le mode 2 stable).
+#! example = (* avant l'appel de la rotation *)
+#! example = Rot[0].Available := Pompes[0].Ready;
+#! example = Rot[0].RunS      := Pompes[0].RunS;
+#! example = Rot[0].RunMs     := Pompes[0].RunMs;
+#! example = Rot[0].Locked    := Pompes[0].ManMode;  (* en manuel : hors rotation, sans defaut *)
+#! example = 
+#! example = (* apres *)
+#! example = Pompes[0].RunReq := Rot[0].RunReq;
+#! given = Pompes[0].Ready := TRUE
+#! given = Pompes[0].RunS := 3600
+#! given = Pompes[0].ManMode := TRUE
+#! expect = 1 : Rot[0].Available = TRUE
+#! expect = 1 : Rot[0].RunS = 3600
+#! expect = 1 : Rot[0].Locked = TRUE
+
+# Un equipement dans une rotation: disponible, selectionne, use.
+
+# name ; type ; scope ; initial ; comment
+Name ; STRING[16] ; Member ;  ; ce que l'operateur lit
+Available ; BOOL ; Member ; TRUE ; utilisable: sans defaut, non consignee. A cabler sur Ready
+Locked ; BOOL ; Member ;  ; exclue de la rotation sans etre en defaut (essai, maintenance)
+RunReq ; BOOL ; Member ;  ; SORTIE: cet equipement doit tourner
+RunMs ; DINT ; Member ; 0 ; heures de fonctionnement, en ms. Departage deux RunS egaux
+SelectedMs ; DINT ; Member ; 0 ; depuis combien de temps il est selectionne, en ms, plafonne a 2 000 000 000
+Rank ; INT ; Member ; 0 ; libre, pour l'IHM : le bloc ne le lit pas, l'ordre fixe est celui du tableau
+RunS ; UDINT ; Member ; 0 ; heures de fonctionnement, en SECONDES. A cabler sur le RunS de l'equipement
+PrevReq ; BOOL ; Member ;  ; runtime, ne pas ecrire : selectionne au cycle precedent

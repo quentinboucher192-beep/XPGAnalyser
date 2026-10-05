@@ -1,0 +1,39 @@
+# Derived data type, shared.
+name = ST_GC_Debug
+version = 0.26
+#! summary = La mise au point du moteur GRAFCET : compteurs, defauts, historique date.
+#! usage = REPRIS DU PROJET MAST : le type est celui du projet (champs inchanges).
+#! usage = Ce qui suit decrit ce qu'en fait DFB_GRAFCETENGINE 1.49.
+#! see = DFB_GRAFCETENGINE
+#! param CurrentCycle = Le cycle.
+#! param ActiveStepCount = Combien d'etapes sont actives (compte a chaque cycle).
+#! param LastTransitionFiredId = La derniere transition franchie.
+#! param TotalTransitionsFired = Combien de franchissements depuis le demarrage.
+#! param Mode = Le mode.
+#! param Phase = La phase.
+#! param ConflictDetected = Deux transitions franchissables au meme cycle partaient de la
+#! param ConflictDetected = meme etape : receptivites non exclusives sur une divergence en
+#! param ConflictDetected = OU (les deux branches sont parties). Garde jusqu'a InitReq.
+#! param WatchdogDetected = TsNow n'avance pas depuis 100 appels : les temporisations
+#! param WatchdogDetected = sont a l'arret (une constante passee a TsNow ?).
+#! param StepFocus = Le detail d'une etape, pour l'IHM.
+#! param NoActiveStepFault = Plus aucune etape active.
+#! param ConfigFault = La configuration est incoherente.
+#! param HistSteps = Les dernieres etapes activees, datees ; une ligne par etape.
+#! param HistActions = Les dernieres actions sorties, datees : [X1:1]1->NOM:3.
+#! changes 0.26 = Range dans la bibliotheque, depuis le projet MAST.
+
+# name ; type ; scope ; initial ; comment
+CurrentCycle ; DINT ; Member ;  ; 
+ActiveStepCount ; INT ; Member ;  ; 
+LastTransitionFiredId ; INT ; Member ;  ; 
+TotalTransitionsFired ; DINT ; Member ;  ; 
+Mode ; INT ; Member ;  ; 
+Phase ; INT ; Member ;  ; 
+ConflictDetected ; BOOL ; Member ;  ; 
+WatchdogDetected ; BOOL ; Member ;  ; 
+StepFocus ; ST_GC_DebugStepFocus ; Member ;  ; 
+NoActiveStepFault ; BOOL ; Member ;  ; 
+ConfigFault ; BOOL ; Member ;  ; 
+HistSteps ; ARRAY[0..7] OF ST_DebugLine4 ; Member ;  ; 
+HistActions ; ARRAY[0..7] OF ST_DebugLine64 ; Member ;  ; 

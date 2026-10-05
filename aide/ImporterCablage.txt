@@ -1,0 +1,13 @@
+#! summary = Relie chaque voie d'E/S au parametre d'equipement qu'elle alimente.
+#! usage = Depuis l'onglet Cablage : Pompes[0].Fbk := CarteDI_R0S4[3].Val;
+#! usage = C'EST LA MOITIE DU TRAVAIL QUI MANQUAIT. Les macros CSV cablaient les voies vers leurs structures et declaraient les equipements, mais rien ne reliait les deux : la liaison se faisait a la main, ligne par ligne.
+#! usage = L'onglet donne les deux cotes et le sens ; il n'y a rien a deduire. Le seul travail est de retrouver l'acces ST de l'equipement, qui vit dans l'onglet Equipements et pas ici.
+#! usage = DEUX SECTIONS, PARCE QUE LE SENS DECIDE DE L'INSTANT. Une entree se lit AVANT que l'equipement ne tourne, une sortie s'ecrit APRES qu'il ait decide. Tout mettre au meme endroit ajoute un cycle de retard a l'un des deux sens.
+#! usage = LA SECTION EST REECRITE ENTIEREMENT a chaque execution. Ce qui y a ete ajoute a la main est perdu. C'est voulu : une section a moitie ancienne et a moitie nouvelle est pire que les deux, et on ne peut pas deviner ce qui a ete ajoute expres.
+#! see = ImporterVoies, ImporterEquipements, ImporterClasseur
+#! param classeur = Le chemin du classeur. Laisser vide prend celui qui est deja charge par le bouton Classeur..., ce qui est le cas normal quand on enchaine plusieurs imports.
+#! param classeur = C'est un .xlsm, pas un export CSV : la macro lit les onglets directement, et les quatre familles d'E/S sont donc traitees en une seule execution.
+#! param sEnt = Les voies vers les equipements. A placer APRES Mapping_Entrees et AVANT la section des equipements.
+#! param sSort = Les equipements vers les voies. A placer APRES la section des equipements et AVANT Mapping_Sorties.
+#! param tache = La tache d'accueil des sections creees, MAST en general.
+#! param tache = Creer la section ne la place pas dans le bon ordre : Control Expert execute les sections dans l'ordre du navigateur de projet, et cet ordre se pose a la main. Chaque macro rappelle a la fin ou sa section doit aller.

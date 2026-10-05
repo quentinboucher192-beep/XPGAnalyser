@@ -1,0 +1,120 @@
+# =============================================================================
+#  Aide F1 de la 1.9 - les alarmes des objets (chantier G).
+#  Meme syntaxe que guide-ihm.txt (ne pas modifier ce dernier : le chef de
+#  projet y reporte ces sujets). En fin de fichier : les sujets existants a
+#  completer, cle par cle, et ce qui change.
+# =============================================================================
+
+= Les alarmes des objets
+
+== alarmes-symboles | Les alarmes d'un symbole
+: Un symbole déclare ses alarmes dans son onglet Alarmes, écrites avec ses paramètres ; chaque instance posée les reçoit, développées avec ses arguments, dans son groupe d'alarmes à elle.
+@mots Alarmes du symbole, alarmes du symbole, Créer des alarmes, Proposer des alarmes, Aperçu du groupe, aperçu du groupe, alarme_symbole
+@voir symboles, groupes-objets, surcharge-alarmes, alarmes-bibliotheque, alarmes
+### L'onglet Alarmes d'un symbole
+Ouvre le symbole (IHM › Symboles) : en haut, les sous-onglets **Dessin | Alarmes | Instances**. Choisis **Alarmes** : la barre **Ajouter**, **Créer des alarmes…**, **Dupliquer**, **Supprimer**, **Monter**, **Descendre** ; à droite, la fiche **Alarme du symbole**, puis « Dans les instances » (le nom généré, les groupes, les instances, celles qui la surchargent). Chaque ligne est une alarme comme celles de Configuration › Alarmes : un nom, une condition, un message à trous, une priorité, une catégorie, un groupe, l'acquittement, le délai, une description et une consigne. La différence : la condition et les textes citent les **paramètres** du symbole.
+| Champ | Exemple dans le symbole Sym_Pompe (paramètres P et Nom) |
+| Nom | Discordance |
+| Condition | P.Marche XOR P.Retour |
+| Message | {Nom} : discordance marche / retour |
+| Groupe | Zone A (facultatif : le groupe déclaré) |
+### Sur chaque instance
+Posée sous le nom Pompe_3 dans Vue_Pompes avec `P := Pompes[3]; Nom := 'P3'`, l'instance reçoit l'alarme **Vue_Pompes.Pompe_3.Discordance** : condition `Pompes[3].Marche XOR Pompes[3].Retour`, message « P3 : discordance marche / retour ». Modifier l'alarme du symbole modifie celle de toutes ses instances. Un symbole posé dans un symbole passe ses arguments : ses alarmes se développent deux fois (Vue.Groupe_1.PA.Discordance).
+### Créer des alarmes depuis un paramètre typé
+**Créer des alarmes…** ouvre le panneau **Créer des alarmes**, en tête de la fiche : « Depuis le paramètre » (le premier paramètre typé du symbole), « Type du paramètre » (son type ; choisis-le si le paramètre n'en déclare pas : un type IHM du projet ou BOOL), puis les alarmes proposées : une par membre BOOL (`Defaut`, `Discordance`…), deux seuils par membre numérique ; une alarme dont le nom est déjà pris est marquée « déjà pris ». Coche **Créer les alarmes proposées** : elles sont ajoutées en un seul geste (Ctrl+Z les retire) ; **Fermer** referme le panneau. Un symbole sans paramètre : **Créer des alarmes…** ajoute un modèle vide. Un paramètre BOOL propose une alarme sur lui-même.
+### La pastille fx des conditions
+Une condition est une **expression** : comme une propriété pilotée de l'inspecteur, elle porte la pastille **fx** pleine (couleur d'accent), sa ligne est teintée avec une barre à gauche et l'expression s'écrit en chasse fixe ; l'infobulle dit « Expression : … » (et « Valeur actuelle : … » en simulation). Elle est jugée tout de suite, avec les paramètres du symbole connus : si elle ne peut pas marcher (une variable inconnue, un texte là où il faut vrai ou faux), la pastille passe au **rouge**, l'expression est soulignée de rouge et l'infobulle dit « Erreur : … ». Dans les tableaux (la liste des alarmes du symbole, Configuration › Alarmes), une petite pastille fx précède la condition, rouge si elle est impossible. Partout : la fiche et la colonne Condition du symbole, la section Alarmes de l'objet (condition et forme développée), Configuration › Alarmes, les alarmes par défaut de la bibliothèque (leur condition tirée de « Défaut » ou des seuils), l'aperçu du groupe généré.
+Les messages et les consignes sont des **textes à trous** ({Nom}), pas des expressions : pas de pastille fx (leurs trous restent vérifiés).
+### L'aperçu du groupe généré
+Le panneau **Aperçu du groupe généré** montre, pour l'instance choisie (« Sur l'instance »), ses arguments, son groupe interne et les groupes déclarés, chaque alarme avec son nom complet et sa condition développée (pastille fx ; le message développé dans la bande d'aide), puis chaque instance du symbole avec son nombre d'alarmes et de champs surchargés.
+! Une alarme fausse dans le symbole (une variable inexistante, une condition illisible) est dite **une fois**, dans le symbole. Sur une instance, Générer ne dit que ce que son argument rend faux.
+! Les objets d'une popup qui a des paramètres ne génèrent pas d'alarmes : leurs arguments ne sont connus qu'à l'ouverture. Générer le dit une fois.
+
+== groupes-objets | Le groupe d'alarmes d'un objet
+: Chaque objet qui porte des alarmes (un objet du synoptique, une instance de symbole) a son groupe d'alarmes interne, nommé d'après son chemin : Vue_Pompes.Pompe_3. Il sert de filtre aux objets d'alarmes et se lit dans les variables publiques de l'objet.
+@mots AlarmCount, AlarmActive, AlarmUnacked, AlarmActiveCount, AlarmUnackCount, AlarmHighest, AlarmGroup, groupe interne, groupe d'objet, symbole:
+@voir alarmes-objets, variables-instances, alarmes-symboles, alarmes
+### Le nom du groupe
+Le groupe d'un objet posé dans une vue s'appelle `<Vue>.<Objet>` (Vue_Pompes.Pompe_3). Un objet pris dans une instance : `<Vue>.<Instance>.<Objet>` (Vue_Pompes.Pompe_3.Moteur) ; le groupe de l'instance englobe ceux de ses objets. Une alarme générée s'appelle `<groupe>.<alarme>` (Vue_Pompes.Pompe_3.Discordance) et garde aussi le groupe déclaré dans sa définition (une zone, une armoire) : elle appartient aux deux.
+Un écran modèle, un en-tête, un pied de page : leurs objets génèrent leurs alarmes une fois, depuis leur propre vue (Modele_1.Moteur_M.Defaut), pas dans chaque vue qui en hérite.
+### Les variables publiques
+| Variable | Type | Ce qu'elle vaut |
+| Vue.Objet.AlarmActive | BOOL | Au moins une de ses alarmes a sa condition vraie. |
+| Vue.Objet.AlarmUnacked | BOOL | Au moins une de ses alarmes est à acquitter. |
+| Vue.Objet.AlarmCount | INT | Ses alarmes en cours : actives ou pas encore acquittées (une instance : avec celles de ses objets). |
+| Vue.Objet.AlarmActiveCount | INT | Celles dont la condition est vraie (0 : aucune). |
+| Vue.Objet.AlarmUnackCount | INT | Celles à acquitter (0 : aucune). |
+| Vue.Objet.AlarmHighest | INT | La priorité la plus forte en cours (1 = critique ; 0 : aucune). |
+| Vue.Objet.AlarmGroup | STRING | Le nom de son groupe interne. |
+Elles se lisent partout (expressions, textes à trous, scripts) et ne s'écrivent pas : `{Vue_Pompes.Pompe_3.AlarmCount}` sur un afficheur, `Vue_Pompes.Pompe_3.AlarmActive` sur un voyant, `Vue_Pompes.Pompe_3.AlarmHighest = 1` en condition de clignotement. Elles sont calquées sur SYS.AlarmActiveCount, SYS.AlarmUnackCount et SYS.AlarmHighestPriority. La fiche de l'objet les montre dans « Variables publiques de l'objet » (lecture seule).
+### Les filtres des objets d'alarmes
+Le champ Groupe d'un bandeau, d'un compteur, d'une liste, d'un résumé par zone, de l'historique ou des statistiques accepte :
+| Filtre | Ce qu'il prend |
+| (vide) ou * | Toutes les alarmes. |
+| Zone A | Le groupe déclaré Zone A (comme avant). |
+| Vue_Pompes.Pompe_3 | Le groupe de l'objet, et ceux des objets qu'il contient. |
+| Vue_Pompes.* | Un motif : tous les objets de la vue (le joker * vaut n'importe quels caractères). |
+| Zone A; Vue_Pompes.Pompe_3 | Plusieurs, séparés par ; |
+| symbole:Sym_Pompe | Les alarmes de toutes les instances de Sym_Pompe (et de leurs objets). |
+Le champ a un sélecteur : « Groupes du projet », « Groupes des objets » en arbre vue › objet (cocher une vue écrit `Vue_Pompes.*`), « Symboles » (« Tous les objets du symbole Sym_Pompe » écrit `symbole:Sym_Pompe`). Le champ reste modifiable à la main.
+L'action **Acquitter** avec `groupe:Vue_Pompes.Pompe_3` acquitte les alarmes de l'objet ; **Mettre de côté** avec le même groupe les met de côté.
+
+== alarmes-bibliotheque | Les alarmes par défaut des objets du synoptique
+: Les objets du synoptique (pompe, vanne, moteur, cuve…) portent des alarmes par défaut, actives dès qu'on pose l'objet et décochables. Chacune n'existe que si sa source est réglée.
+@mots Defaut, Niveau_Tres_Bas, Niveau_Bas, Niveau_Haut, Niveau_Tres_Haut, Course_Trop_Longue, sans objet
+@voir synoptique, groupes-objets, surcharge-alarmes
+| Objets | Alarme | Condition | Priorité / catégorie |
+| Tout objet du synoptique dont le défaut (fault) est relié | Defaut « {Libellé} : défaut » | l'expression du défaut | 2 Haute / Défaut |
+| Cuve, bouteille de gaz, silo, trémie | Niveau_Tres_Bas, Niveau_Bas, Niveau_Haut, Niveau_Tres_Haut | valeur ≤ seuil très bas / ≤ seuil bas / ≥ seuil haut / ≥ seuil très haut | très bas et très haut : 2 / Alarme ; bas et haut : 3 / Avertissement |
+| Vanne dont le mouvement (moving) est relié | Course_Trop_Longue « {Libellé} : ne finit pas sa course » | le mouvement vrai plus de 30 s | 3 / Alarme |
+{Libellé} est le libellé de l'objet, sinon son nom. Pour une bouteille de gaz, les messages parlent de pression (« Bouteille B1 presque vide »).
+Une alarme dont la source n'est pas réglée (le défaut n'est pas relié, un seuil est vide) est **sans objet** : sa ligne est grisée, la raison écrite à côté. Elle apparaît dès que tu règles sa source. La fiche de l'objet les montre dans « Alarmes de l'objet » (« par défaut · 3 actives · 2 sans objet »).
+Dans la **Bibliothèque**, chaque objet du synoptique porte une cloche et son nombre d'alarmes par défaut (Vanne 2, Pompe 1, Moteur 1, Cuve 5, Bouteille de gaz 5, Ventilateur 1).
+> Un projet d'avant la 1.9 se rouvre avec ces alarmes : ses objets du synoptique dont le défaut est relié les reçoivent, actives.
+
+== surcharge-alarmes | Surcharger une alarme sur un objet
+: Sur un objet posé, chaque champ d'une alarme (active, condition, message, priorité, catégorie, groupe, délai, acquittement, consigne, description) peut prendre une autre valeur que celle du symbole ou de la bibliothèque : c'est une surcharge, tenue par l'objet.
+@mots surchargé, surchargée, Revenir à la valeur du symbole, Tout revenir, surcharge, fx, pastille fx
+@voir alarmes-symboles, alarmes-bibliotheque, groupes-objets
+### Surcharger
+Choisis l'objet : sa fiche a une section **Alarmes de l'objet** (« 3 du symbole · 2 actives · 3 champs surchargés »), une ligne par alarme avec sa case Active ; déplie-la et change le champ. Ou choisis la ligne de l'alarme dans Configuration › Alarmes (sous-catégories générées). Décocher la case d'une alarme la retire de cet objet seulement (« désactivée sur cet objet ») ; les autres instances du symbole la gardent.
+### Dans quels termes
+Une condition ou un texte surchargé s'écrit **dans les termes du symbole** : `Moteur.Courant > 45.0`, `{Nom} : courant`. La forme développée sur l'instance (`Pompes[3].Courant > 45.0`) est montrée à côté, en lecture seule. Ainsi la surcharge suit l'instance si tu changes ses arguments.
+### Le repère
+Un champ surchargé porte un liseré de la couleur d'accent et l'étiquette **SURCHARGÉ** ; son infobulle dit « Priorité surchargée sur Pompe_3 » et montre la valeur du symbole (ou de la bibliothèque) : « Valeur du symbole Sym_Pompe : 3 - Moyenne ».
+Une **condition surchargée** porte les deux repères : la pastille **fx** (c'est une expression) et le liseré **SURCHARGÉ** (c'est une valeur propre à l'objet). Dans la liste des objets de la vue, le badge **fx** d'un objet compte aussi ses conditions d'alarmes surchargées, et passe au rouge si une de ses alarmes générées a une condition impossible.
+### Revenir
+**Revenir à la valeur du symbole**, à côté du champ, efface cette surcharge ; **Tout revenir**, sur la ligne de l'alarme, efface toutes celles de l'alarme. Chaque geste s'annule (Ctrl+Z).
+Renommer une alarme dans le symbole, ou un objet du symbole : les surcharges des instances suivent.
+! Une surcharge qui nomme une alarme qui n'existe plus (retirée du symbole) est ignorée ; Générer l'avertit. Une condition surchargée invalide est une erreur.
+
+# =============================================================================
+#  SUJETS EXISTANTS A COMPLETER (guide-ihm.txt) - cle : ce qui change
+# =============================================================================
+#  alarmes                     : sous les alarmes du projet, les sous-categories
+#                                generees (Symboles, PUIS Objets du synoptique -
+#                                decision 11 h 55 -, par vue et par objet ;
+#                                etiquette GENEREES, cadenas) ; une case par
+#                                alarme (surcharge) ; double-clic : l'objet dans
+#                                sa vue, sur sa section Alarmes de l'objet ; la
+#                                fiche "Generee par Sym_Pompe, sur Pompe_3" :
+#                                Ouvrir l'objet, Ouvrir le symbole, Tout revenir.
+#                                @voir + groupes-objets, alarmes-symboles.
+#  symboles                    : l'onglet Alarmes du symbole (voir alarmes-symboles) ;
+#                                l'apercu du groupe genere sur une instance.
+#  tutoriel-symbole            : une etape "ajouter une alarme" (Discordance).
+#  objet-instance-de-symbole   : son groupe d'alarmes, ses surcharges ; ses
+#                                variables publiques Alarm*.
+#  synoptique                  : le tableau des alarmes par defaut (voir
+#                                alarmes-bibliotheque) ; "fault" relie = Defaut.
+#  alarmes-objets              : le filtre de groupe accepte groupe d'objet,
+#                                motif Vue.*, liste a;b, symbole:Nom.
+#  objet-bandeau-d-alarme,
+#  objet-compteur-d-alarmes,
+#  objet-statistiques-d-alarmes: meme filtre (renvoi a groupes-objets).
+#  variables-instances         : les sept variables Alarm* d'un objet qui porte
+#                                des alarmes (lecture seule) : AlarmActive et
+#                                AlarmUnacked BOOL ; AlarmCount, AlarmActiveCount,
+#                                AlarmUnackCount, AlarmHighest INT ; AlarmGroup
+#                                STRING.
+#  bibliotheque (palette)      : la cloche et le nombre d'alarmes par defaut.

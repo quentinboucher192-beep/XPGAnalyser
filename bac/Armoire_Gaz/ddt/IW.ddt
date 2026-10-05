@@ -1,0 +1,9 @@
+# Derived data type.
+name = IW
+version = 0.04
+# checksum is recomputed by Control Expert on import; not stored.
+
+# name ; type ; address ; scope ; init ; comment ; attributes ; element comments
+PT1 ; entree_ana ;  ; Member ;  ;  ;  ; 
+PT3 ; entree_ana ;  ; Member ;  ;  ;  ; 
+Balance ; entree_ana ;  ; Member ;  ;  ;  ; 

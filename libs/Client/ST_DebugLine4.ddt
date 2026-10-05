@@ -1,0 +1,16 @@
+# Derived data type, shared.
+name = ST_DebugLine4
+version = 0.02
+#! summary = Une ligne d'historique : 4 caracteres et leur date.
+#! usage = REPRIS DU PROJET MAST, TEL QUEL : c'est ton code, range ici pour etre
+#! usage = importe dans d'autres projets. Seuls les accents des commentaires ont ete
+#! usage = retires - les fichiers de libs/ sont en ASCII - et les sommes de controle
+#! usage = mises a 0 : Control Expert les recalcule a l'import.
+#! see = ST_GC_Debug
+#! param Line = Le texte.
+#! param NtpcNow = La date (type systeme Display_NTPC).
+#! changes 0.02 = Range dans la bibliotheque, depuis le projet MAST.
+
+# name ; type ; scope ; initial ; comment
+Line ; string[4] ; Member ;  ; 
+NtpcNow ; Display_NTPC ; Member ;  ; 

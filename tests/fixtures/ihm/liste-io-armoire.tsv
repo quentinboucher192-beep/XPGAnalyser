@@ -1,0 +1,13 @@
+Nom	Type	Équipement	Adresse	Initiale	Description
+Pression_Entree	REAL	Centrale PM5560	%MW3010	0	Pression d'entrée (bar)
+Pression_Sortie	REAL	Centrale PM5560	%MW3012	0	Pression de sortie (bar)
+Debit_Gaz	REAL	Centrale PM5560	%MW3014	0	Débit de gaz (m³/h)
+Temperature_Local	REAL	Centrale PM5560	%MW3016	19.5	Température du local (°C)
+Vanne_V2_Ouverte	BOOL	Variateur ATV320	%MW8510.0	FALSE	Fin de course V2
+Vanne_V3_Ouverte	BOOL	Variateur ATV320	%MW8510.1	FALSE	Fin de course V3
+Seuil_Alarme_Haut	FLOTTANT			80	Seuil haut de pression
+Consigne_Pression	REAL			2.5	Consigne de pression (bar)
+Vitesse_Pompe	REAL			55	Consigne de vitesse (%)
+Mode_Pompe	INT			2	0 manuel, 1 arrêt, 2 automatique
+Compteur_Cycles	DINT	Balance B	40210	0	Cycles de la balance
+Nb_Bouteilles	INT	Balance B	40220	12	Bouteilles sur le quai

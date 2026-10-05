@@ -1,0 +1,112 @@
+(* MettreAJourBibliotheque
+
+   Met le projet a jour de la bibliotheque : chaque type et chaque bloc dont
+   la copie du projet est plus ancienne que celle de libs/.
+
+   LES TYPES D'ABORD, LES BLOCS ENSUITE. Un bloc 1.01 peut citer un champ que
+   seul son type 1.01 a : DFB_EQ_ATV 1.01 lit CommMs, que ST_EQ_Atv n'a que
+   depuis la 1.01. Dans l'autre ordre, le projet ne compilerait plus entre
+   les deux.
+
+   #! summary = Met à jour depuis la bibliothèque les types et les blocs du projet qui ont pris du retard - les types d'abord, les blocs ensuite.
+   #! version = 1.10
+   #! changes 1.10 = Le formulaire : les éléments en retard se cochent (« projet 1.48 → bibliothèque 1.49 ») au lieu de taper leurs noms ; tout coché, c'est tout.
+   #! usage = L'APERCU EST LA LISTE : chaque mise a jour y est annoncee avec ses versions (ST_EQ_Atv 1.00 -> 1.01). Rien n'est fait tant qu'on n'applique pas.
+   #! usage = PAS D'ANNULATION : une mise a jour de bibliotheque ecrit dans le projet sans commande, Ctrl+Z ne la reprend pas. Enregistrez le projet avant d'appliquer.
+   #! usage = LES TYPES D'ABORD, LES BLOCS ENSUITE : un bloc 1.01 peut citer un champ que seul son type 1.01 a (DFB_EQ_ATV 1.01 lit CommMs de ST_EQ_Atv 1.01).
+   #! usage = Un type de la bibliotheque ne fait que GAGNER des champs, en fin de type, d'une version a l'autre : les variables deja declarees gardent leurs valeurs, les champs nouveaux prennent leur valeur initiale. Lisez les #! changes de chaque element dans l'aide avant d'appliquer.
+   #! usage = Les blocs mis a jour doivent etre recompiles dans Control Expert (Generer le projet) : c'est la que se verra un appel qui ne correspond plus.
+   #! see = VerifierBibliotheque, EnsureLibraryItem
+   #! param seulement = Les éléments en retard ; tout coché, c'est tout.
+   #! param seulement = Les noms a mettre a jour, separes par des virgules : ST_EQ_Atv, DFB_EQ_ATV. Vide : tout ce que VerifierBibliotheque signale.
+   #! categorie = Bibliothèque
+   #! champ seulement = cases retard vide-si-tout
+   #! libelle seulement = Ce qu'il faut mettre à jour
+   #! produit = les types et les blocs du projet remplacés par ceux de la bibliothèque (pas annulable par Ctrl+Z)
+   #! appliquer = Mettre à jour depuis la bibliothèque (Ctrl+Z ne le reprend pas)
+*)
+
+seulement := Ask('seulement', 'Ne mettre a jour que (noms separes par des virgules, vide = tout)', '');
+AskNow();
+
+(* la liste demandee, sans espaces, encadree de virgules pour FIND *)
+voulu := '';
+k := 0;
+FOR k := 0 TO LEN(seulement) - 1 DO
+    IF MID(seulement, k, 1) <> ' ' THEN voulu := voulu + MID(seulement, k, 1); END_IF;
+END_FOR;
+voulu := ',' + voulu + ',';
+
+liste := LibOutdated();
+IF liste = '' THEN
+    Log('le projet est a jour de la bibliotheque : rien a faire');
+ELSE
+    faits := 0;
+    passe := 0;
+    debut := 0;
+    pos := 0;
+    nom := '';
+    estType := FALSE;
+    (* passe 0 : les types ; passe 1 : les blocs et le reste *)
+    FOR passe := 0 TO 1 DO
+        debut := 0;
+        WHILE debut < LEN(liste) DO
+            pos := FIND(liste, ',', debut);
+            IF pos < 0 THEN
+                nom := MID(liste, debut);
+                debut := LEN(liste);
+            ELSE
+                nom := MID(liste, debut, pos - debut);
+                debut := pos + 1;
+            END_IF;
+            IF nom <> '' AND (voulu = ',,' OR FIND(voulu, ',' + nom + ',', 0) >= 0) THEN
+                estType := TypeExists(nom);
+                IF (passe = 0 AND estType) OR (passe = 1 AND NOT estType) THEN
+                    IF LibUpdate(nom) THEN
+                        faits := faits + 1;
+                        Log(nom + ' -> ' + LibVersion(nom));
+                    END_IF;
+                END_IF;
+            END_IF;
+        END_WHILE;
+    END_FOR;
+
+    (* un TYPE laisse en retard alors qu on met a jour des blocs : un bloc a
+       jour peut citer un champ que seul le type a jour a *)
+    IF voulu <> ',,' AND faits > 0 THEN
+        debut := 0;
+        WHILE debut < LEN(liste) DO
+            pos := FIND(liste, ',', debut);
+            IF pos < 0 THEN
+                nom := MID(liste, debut);
+                debut := LEN(liste);
+            ELSE
+                nom := MID(liste, debut, pos - debut);
+                debut := pos + 1;
+            END_IF;
+            IF nom <> '' AND FIND(voulu, ',' + nom + ',', 0) < 0 AND TypeExists(nom) THEN
+                Warn(nom + ' (type) reste en retard : si un bloc mis a jour cite un de ses nouveaux champs, '
+                     + 'le projet ne compilera pas. Mettez-le a jour aussi.');
+            END_IF;
+        END_WHILE;
+    END_IF;
+
+    (* un nom demande qui n est pas en retard : le dire *)
+    IF voulu <> ',,' THEN
+        debut := 1;
+        WHILE debut < LEN(voulu) DO
+            pos := FIND(voulu, ',', debut);
+            nom := MID(voulu, debut, pos - debut);
+            debut := pos + 1;
+            IF nom <> '' AND FIND(',' + liste + ',', ',' + nom + ',', 0) < 0 THEN
+                Warn(nom + ' : pas en retard sur la bibliotheque (a jour, ou absent du projet)');
+            END_IF;
+        END_WHILE;
+    END_IF;
+
+    IF faits = 0 THEN
+        Log('aucune mise a jour');
+    ELSE
+        Log(DINT_TO_STRING(faits) + ' element(s) mis a jour. Ctrl+Z ne les reprend pas. Regenerez le projet dans Control Expert.');
+    END_IF;
+END_IF;

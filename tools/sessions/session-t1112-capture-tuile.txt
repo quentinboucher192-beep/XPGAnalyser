@@ -1,0 +1,21 @@
+# =============================================================================
+#  Session t1112-capture - 1.11.2 (T1), pour les captures de la livraison :
+#  dans un tutoriel d'objet, l'« A toi » montre la tuile a glisser (le
+#  LISEZ-MOI de la 1.11.0, « Pas encore fait » : « la bibliotheque est revenue
+#  en haut, alors cherche la tuile avec la molette »). Le Ventilateur (deduit),
+#  etape 1 en « A toi » : la remise en place rouvre une copie neuve du bac, la
+#  bibliotheque en haut ; la tuile Ventilateur, loin en dessous, est ramenee a
+#  l'ecran et encadree en orange, sous la consigne « Glisse ... dans la vue ».
+#  (session-t1112-atoi-tuile : la meme chose sur trois tutoriels, en 1600 x 900.)
+#  A lancer avec PROJETS=<dossier d'Armoire_Gaz>, XPG_TUTORIELS=tools/tutoriels
+#  et --size 1920x1080. Une capture.
+# =============================================================================
+attendre 30
+tutoriel objet-ventilateur - 1 atoi
+tutoriel-attendre
+attendre 20
+tutoriel-etat atoi
+capture t1112-atoi-tuile-ventilateur.png
+tutoriel-quitter
+attendre 10
+quitter
