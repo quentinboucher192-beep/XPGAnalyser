@@ -11,6 +11,9 @@
 #include "HmiOperatorPanes.hpp"       // 1.10 (S2) : les operateurs du symbole
 #include "HmiFunctionPanes.hpp"       // 1.11.10 : les fonctions du symbole
 #include "HmiSymbolPopupsPane.hpp"    // 1.11.10 : les popups du symbole
+#include "HmiActionDialogs.hpp"       // 1.11.10 : la fenetre du script (une redefinition)
+#include "HmiActionsPanel.hpp"
+#include "HmiPaneKit.hpp"
 #include "HmiTreeData.hpp"            // 1.10.3 (Q1103) : les lignes d'un objet deplie (les deux explorateurs)
 #include "HmiValueKind.hpp"           // 1.11.3 : le carre de legende, la liste des carres
 
@@ -725,6 +728,126 @@ void HmiEditor::syncFromCanvas() {
     objects_->setSelection(canvas_->selection());
 }
 
+// ---- 1.11.10 : les fonctions et les popups du symbole d'une instance -------------------
+std::vector<ui::PropertyGrid::Category> HmiEditor::instanceFunctionCategories(const hmi::View& v, const hmi::Object& inst) {
+    using PG = ui::PropertyGrid;
+    std::vector<PG::Category> out;
+    const hmi::View* sym = hmi::symbolOf(doc_->project, inst);
+    if (!sym) return out;
+    const Id instId = inst.id;
+    if (!sym->functions.empty()) {
+        PG::Category c;
+        c.name = "Fonctions du symbole (" + std::to_string(sym->functions.size()) + ")";
+        for (const auto& f : sym->functions) {
+            PG::Property p;
+            const bool over = hmi::functionOverride(inst, f.name) != nullptr;
+            p.name = "\xC6\x92 " + hmi::functionSignature(f);
+            const std::string call = v.name + "." + inst.name + "." + f.name + "()";
+            if (!f.isVirtual) {
+                p.type = PG::ValueType::ReadOnly;
+                p.value = "du symbole (non virtuelle)";
+                p.description = f.description + (f.description.empty() ? "" : "\n") + "Appel : " + call
+                              + ". Non virtuelle : le corps du symbole, pour toutes les instances.";
+            } else {
+                p.type = PG::ValueType::Enum;
+                p.value = over ? "red\xC3\xA9" "finie ici" : "du symbole";
+                p.enumValues = {"du symbole", "red\xC3\xA9" "finie ici"};
+                const std::string name = f.name;
+                p.commit = [this, instId, name](std::string_view val) {
+                    return val.rfind("red", 0) == 0 ? overrideFunction(instId, name, std::nullopt) : revertFunction(instId, name);
+                };
+                p.open = [this, instId, name] { editOverride(instId, name); };
+                p.openTip = over ? "Modifier la red\xC3\xA9" "finition de " + inst.name + "\xE2\x80\xA6" : "Red\xC3\xA9" "finir " + name + " pour " + inst.name + "\xE2\x80\xA6";
+                p.description = f.description + (f.description.empty() ? "" : "\n") + "Appel : " + call
+                              + ". Virtuelle : \xC2\xAB red\xC3\xA9" "finie ici \xC2\xBB donne \xC3\xA0 " + inst.name
+                              + " son propre corps (le bouton \xE2\x80\xA6 l'\xC3\xA9" "dite ; SUPER." + f.name
+                              + "(...) y rappelle celui du symbole) ; \xC2\xAB du symbole \xC2\xBB l'efface.";
+            }
+            c.properties.push_back(std::move(p));
+        }
+        out.push_back(std::move(c));
+    }
+    std::vector<const hmi::View*> pops;
+    for (const auto& w : doc_->project.views)
+        if (w.ownerSymbol == sym->id) pops.push_back(&w);
+    if (!pops.empty()) {
+        PG::Category c;
+        c.name = "Popups du symbole (" + std::to_string(pops.size()) + ")";
+        const auto args = hmi::symbolArguments(*sym, inst, &doc_->project);
+        std::string given;
+        for (const auto& [n, t] : args) given += (given.empty() ? "" : ", ") + n + " := " + t;
+        for (const auto* w : pops) {
+            PG::Property p;
+            p.name = w->name;
+            p.type = PG::ValueType::ReadOnly;
+            p.value = given.empty() ? std::string("les param\xC3\xA8tres par d\xC3\xA9" "faut") : "s'ouvre avec " + given;
+            const Id wid = w->id;
+            p.open = [this, wid] { openView->emit(wid); };
+            p.openTip = "Ouvrir le dessin de " + w->name;
+            p.description = "Dans la vue : action Ouvrir une popup, cible " + inst.name + "." + w->name + " ; depuis un script : IHM_POPUP('"
+                          + v.name + "." + inst.name + "." + w->name + "').";
+            c.properties.push_back(std::move(p));
+        }
+        out.push_back(std::move(c));
+    }
+    return out;
+}
+
+bool HmiEditor::overrideFunction(Id instance, const std::string& function, std::optional<std::string> body) {
+    const auto* v = doc_->project.view(viewId_);
+    const auto* inst = v ? v->object(instance) : nullptr;
+    const auto* sym = inst ? hmi::symbolOf(doc_->project, *inst) : nullptr;
+    const auto* f = sym ? hmi::symbolFunction(*sym, function) : nullptr;
+    if (!f || !f->isVirtual) return false;
+    // Les noms copies : la commande remplace la vue (les pointeurs ne valent plus apres).
+    const std::string text = body ? *body : f->body, fname = f->name, iname = inst->name;
+    auto cmd = hmi::changeView(doc_, viewId_, "Red\xC3\xA9" "finir " + fname + " dans " + iname, [&](hmi::Project&, hmi::View& vv) {
+        auto* o = vv.object(instance);
+        if (!o) return;
+        for (auto& fo : o->functionOverrides)
+            if (hmikit::same(fo.function, fname)) { fo.body = text; return; }
+        o->functionOverrides.push_back({fname, text});
+    });
+    if (!cmd) return true;
+    apply_(std::move(cmd));
+    statusBar_->setMessage(iname + " : " + fname + " red\xC3\xA9" "finie (Ctrl+Z la reprend)");
+    return true;
+}
+
+bool HmiEditor::revertFunction(Id instance, const std::string& function) {
+    auto cmd = hmi::changeView(doc_, viewId_, "Revenir au corps du symbole : " + function, [&](hmi::Project&, hmi::View& vv) {
+        if (auto* o = vv.object(instance))
+            std::erase_if(o->functionOverrides, [&](const hmi::FunctionOverride& fo) { return hmikit::same(fo.function, function); });
+    });
+    if (cmd) apply_(std::move(cmd));
+    return true;
+}
+
+void HmiEditor::editOverride(Id instance, const std::string& function) {
+    const auto* v = doc_->project.view(viewId_);
+    const auto* inst = v ? v->object(instance) : nullptr;
+    const auto* sym = inst ? hmi::symbolOf(doc_->project, *inst) : nullptr;
+    const auto* f = sym ? hmi::symbolFunction(*sym, function) : nullptr;
+    if (!f || !f->isVirtual) return;
+    const auto& host = actions_ ? actions_->dialogHost() : HmiActionsPanel::DialogHost{};
+    if (!host) return;
+    HmiActionScriptDialog::Spec spec;
+    spec.doc = doc_;
+    spec.view = sym->id;                      // les parametres du symbole, ses fonctions
+    spec.plc = plc_;
+    spec.function = *f;
+    const auto* fo = hmi::functionOverride(*inst, f->name);
+    spec.code = fo ? fo->body : f->body;
+    spec.where = v->name + "." + inst->name + "." + f->name + " \xC2\xB7 " + (fo ? "red\xC3\xA9" "finie dans l'instance" : "le corps du symbole pour d\xC3\xA9part");
+    spec.title = "Red\xC3\xA9" "finir " + f->name + " dans " + inst->name;
+    const std::string name = f->name;
+    std::weak_ptr<bool> alive = alive_;
+    host(std::make_unique<HmiActionScriptDialog>(std::move(spec)), [this, alive, instance, name](const menu::DialogResult& r) {
+        if (alive.expired() || r.button != menu::DialogResult::Button::Ok) return;
+        (void)overrideFunction(instance, name, r.payload);
+    });
+}
+
 void HmiEditor::rebuildProperties() {
     const auto* v = doc_->project.view(viewId_);
     if (!v) { props_->clearProperties(); return; }
@@ -744,6 +867,16 @@ void HmiEditor::rebuildProperties() {
             if (cats[k].name == "S\xC3\xA9" "curit\xC3\xA9") at = k + 1;
         cats.insert(cats.begin() + static_cast<long>(at), extra.begin(), extra.end());
     }
+    // 1.11.10 : une instance - les fonctions de son symbole (une virtuelle se redefinit ici)
+    // et ses popups, apres la section Parametres du symbole.
+    if (const auto sel = canvas_->selection(); sel.size() == 1)
+        if (const auto* inst = v->object(sel.front()); inst && inst->kind == hmi::Kind::SymbolInstance) {
+            auto extra = instanceFunctionCategories(*v, *inst);
+            std::size_t at = cats.size();
+            for (std::size_t k = 0; k < cats.size(); ++k)
+                if (cats[k].name.rfind("Param\xC3\xA8tres du symbole", 0) == 0) at = k + 1;
+            cats.insert(cats.begin() + static_cast<long>(at), extra.begin(), extra.end());
+        }
     // 1.10.2 (chantier D) : les REPERES de l'objet ($Vanne$ x 3), en tete de
     // l'inspecteur - "Dupliquer..." (Ctrl+D, le clic droit) les remplace.
     if (const auto sel = canvas_->selection(); sel.size() == 1 && !cats.empty()) {

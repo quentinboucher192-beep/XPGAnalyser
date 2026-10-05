@@ -246,8 +246,11 @@ private:
                 const hmi::TypeKnown knownType = [&p](std::string_view t) {
                     return !hmi::types::membersOf(p, t).empty() || hmi::findEnumeration(p, t) != nullptr;
                 };
-                auto d = hmi::checkScript(hmi::ScriptLang::ST, code, "action", knownType);
-                const auto placed = placedScriptDiagnostics(p, code, view_, nullptr, spec_.plc.get());
+                // 1.11.10 : une redefinition se controle comme une fonction (ses entrees, son resultat).
+                std::optional<hmi::HmiFunction> fn = spec_.function;
+                if (fn) fn->body = code;
+                auto d = fn ? hmi::checkFunction(*fn, knownType) : hmi::checkScript(hmi::ScriptLang::ST, code, "action", knownType);
+                const auto placed = placedScriptDiagnostics(p, code, view_, fn ? &*fn : nullptr, spec_.plc.get());
                 for (const auto& pp : hmi::types::pathProblems(p, code)) {
                     const bool said = std::any_of(placed.begin(), placed.end(), [&](const hmi::ScriptDiagnostic& x) {
                         return x.line == pp.line && x.message == pp.message;
@@ -294,7 +297,7 @@ private:
 HmiActionScriptDialog::HmiActionScriptDialog(Spec spec) : menu::WidgetMenu("dialog.actionScript"), spec_(std::move(spec)) {}
 HmiActionScriptDialog::~HmiActionScriptDialog() = default;
 menu::MenuTraits HmiActionScriptDialog::traits() const { return dialogTraits(); }
-std::string HmiActionScriptDialog::title() const { return "Script de l'action"; }
+std::string HmiActionScriptDialog::title() const { return spec_.title.empty() ? std::string("Script de l'action") : spec_.title; }
 
 core::Status HmiActionScriptDialog::buildUi() {
     auto body = std::make_unique<Body>(*this, spec_);

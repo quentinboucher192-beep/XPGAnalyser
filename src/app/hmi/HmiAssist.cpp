@@ -12,6 +12,7 @@
 #include "../../hmi/HmiEnums.hpp"            // 1.10 (chantier K2) : les enumerations (E)
 #include "../../hmi/HmiOperators.hpp"        // 1.10 (chantier K2) : les operateurs (S2)
 #include "../../hmi/HmiScriptCheck110.hpp"   // 1.10 (chantier K2) : le langage des scripts (S1)
+#include "../../hmi/HmiSymbols.hpp"           // 1.11.10 : les fonctions des symboles
 #include "../../project/BlockLibrary.hpp"
 #include "../../project/EditCommands.hpp"
 #include "../../ui/widgets/ColorPalette.hpp"
@@ -1791,6 +1792,30 @@ static std::vector<Item> suggestItems(const hmi::Project& hp, const domain::Proj
                     if (!items.empty()) break;
                 }
             }
+            // 1.11.10 : Vanne_3. (dans sa vue), Vue_Vannes.Vanne_3. (partout), SUPER. (dans le
+            // symbole) - les fonctions de l'instance, en tete ; ses variables publiques suivent.
+            {
+                const hmi::View* sym = nullptr;
+                const hmi::Object* inst = nullptr;
+                hmi::InstanceAt at;
+                const auto* av = hmiparams::assistView(hp);
+                if (av && hmi::isSymbolView(*av) && upper(where.path) == hmi::kSuperName) sym = av;
+                else if (av && hmi::instanceAt(hp, av->name + "." + where.path, at)) { sym = at.symbol; inst = &at.instance; }
+                else if (hmi::instanceAt(hp, where.path, at)) { sym = at.symbol; inst = &at.instance; }
+                if (const auto* owner = av ? hmi::popupOwner(hp, *av) : nullptr; !sym && owner) {
+                    hmi::InstanceAt in;
+                    if (hmi::instanceAt(hp, std::string(hmi::kInstanceAlias) + "." + where.path, in)) sym = in.symbol;
+                }
+                for (const auto& f : sym ? sym->functions : std::vector<hmi::HmiFunction>{}) {
+                    const int r = matchRank(f.name, needle);
+                    if (r < 0) continue;
+                    Item it = userFunctionItem(f, r);
+                    const bool over = inst && f.isVirtual && hmi::functionOverride(*inst, f.name);
+                    it.detail = "fonction de " + sym->name + "  \xC2\xB7  " + (f.returnType.empty() ? std::string("sans retour") : f.returnType)
+                              + (over ? "  \xC2\xB7  red\xC3\xA9" "finie ici" : f.isVirtual ? "  \xC2\xB7  virtuelle" : "");
+                    push(std::move(it));
+                }
+            }
             // Lot 9 : SYS., Vue., Vue.Objet. - les variables publiques.
             if (publicMembers(hp, where.path, needle, push)) break;
             // Lot 16 : Four1., Fours[i].Vannes., Consignes. - membres et proprietes.
@@ -1936,6 +1961,19 @@ static std::vector<Item> suggestItems(const hmi::Project& hp, const domain::Proj
                 const int r = matchRank(f.name, needle);
                 if (r < 0) continue;
                 push(userFunctionItem(f, r * 2));
+            }
+            // 1.11.10 : dans un symbole (ou une de ses popups), ses fonctions par leur nom.
+            if (const auto* av = hmiparams::assistView(hp)) {
+                const hmi::View* sym = hmi::isSymbolView(*av) ? av : hmi::popupOwner(hp, *av);
+                for (const auto& f : sym ? sym->functions : std::vector<hmi::HmiFunction>{}) {
+                    if (!full && f.returnType.empty()) continue;
+                    const int r = matchRank(f.name, needle);
+                    if (r < 0) continue;
+                    Item it = userFunctionItem(f, r * 2);
+                    it.detail = "fonction de " + sym->name + "  \xC2\xB7  " + (f.returnType.empty() ? std::string("sans retour") : f.returnType)
+                              + (f.isVirtual ? "  \xC2\xB7  virtuelle" : "");
+                    push(std::move(it));
+                }
             }
             if (plc) {
                 for (const auto& s : project::suggestionsFor(*plc, domain::kNoIndex, prefix)) {

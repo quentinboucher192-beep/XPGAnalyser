@@ -4816,7 +4816,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             walk(*page, [&](ui::Widget& x) {
                 auto* t = dynamic_cast<HmiSymbolTabs*>(&x);
                 if (symTabs || !t || !shown(*t)) return;
-                for (int i = HmiSymbolTabs::Drawing; i <= HmiSymbolTabs::Instances && !symTabs; ++i)
+                for (int i = HmiSymbolTabs::Drawing; i <= HmiSymbolTabs::Popups && !symTabs; ++i)   // 1.11.10 : jusqu'a Popups
                     if (startsWith(t->label(i), arg(1)) && t->tabRect(i, r)) symTabs = t;
             });
             if (symTabs) {

@@ -32,6 +32,7 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
 
 namespace domain { class Project; }
 
@@ -172,6 +173,15 @@ private:
     bool commitProp(const std::string& key, const std::string& value, bool expr);
     bool commitMeta(const std::string& field, const std::string& value);
     bool commitView(const std::string& field, const std::string& value);
+public:
+    // ---- 1.11.10 : les fonctions du symbole d'une instance (l'inspecteur) ----------------
+    // Redefinir `function` dans l'instance (`body` vide : le corps du symbole pour depart),
+    // revenir au corps du symbole, ouvrir la fenetre du script de la redefinition.
+    bool overrideFunction(hmi::Id instance, const std::string& function, std::optional<std::string> body);
+    bool revertFunction(hmi::Id instance, const std::string& function);
+    void editOverride(hmi::Id instance, const std::string& function);
+private:
+    [[nodiscard]] std::vector<ui::PropertyGrid::Category> instanceFunctionCategories(const hmi::View&, const hmi::Object&);
 
     hmi::DocumentPtr                        doc_;
     hmi::Id                                 viewId_;
@@ -203,6 +213,7 @@ private:
     HmiSymbolAlarmsPane* symbolAlarms_{nullptr};
     HmiOperatorsPane*    symbolOperators_{nullptr};   // 1.10 (S2) : le sous-onglet Operateurs
     HmiFunctionsPane*    symbolFunctions_{nullptr};   // 1.11.10 : le sous-onglet Fonctions
+    std::shared_ptr<bool> alive_{std::make_shared<bool>(true)};   // 1.11.10 : une fenetre qui se ferme apres l'editeur
     HmiSymbolPopupsPane* symbolPopups_{nullptr};      // 1.11.10 : le sous-onglet Popups
     core::ConnectionScope links_;
     bool              syncing_{false};

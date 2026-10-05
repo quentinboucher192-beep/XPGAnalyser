@@ -45,6 +45,7 @@
 #include "../src/app/hmi/HmiDuplicateDialog.hpp"   // 1.10.2 (chantier D)
 #include <set>
 #include "../src/app/hmi/HmiFunctionPanes.hpp"
+#include "../src/app/hmi/HmiSymbolPopupsPane.hpp"   // 1.11.10 : les popups d'un symbole
 #include "../src/app/hmi/HmiHelpPane.hpp"
 #include "../src/help/Novelties.hpp"                // 1.10 (chantier P) : le registre des nouveautes
 #include "../src/ui/NoveltyMarks.hpp"               // 1.10 (chantier P) : les reperes orange
@@ -15972,11 +15973,13 @@ void centreAide111() {
     // ---- les notes ----
     // 1.11.1 (T2, tranche 30) : la 1.11.1 en tete (9 versions).
     // 1.11.3 : la 1.11.3 en tete (11 versions). 1.11.4 : la 1.11.4 en tete (12 versions). 1.11.5 : 13. 1.11.6 : 14. 1.11.7 : 15. 1.11.8 : 16. 1.11.9 : 17.
-    check(hn::releases().size() == 17 && hn::releases().front().version == "1.11.9" && hn::releases()[1].version == "1.11.8"
-              && hn::releases()[2].version == "1.11.7" && hn::releases()[3].version == "1.11.6" && hn::releases()[4].version == "1.11.5"
-              && hn::releases()[5].version == "1.11.4" && hn::releases()[6].version == "1.11.3" && hn::releases()[7].version == "1.11.2"
-              && hn::releases()[8].version == "1.11.1" && hn::releases()[9].version == "1.11" && hn::releases()[10].version == "1.10.4",
-          "notes : 17 versions, la 1.11.9 en tete, puis la 1.11.8 \xC3\xA0 la 1.11, et la 1.10.4");
+    // 1.11.10 : 18.
+    check(hn::releases().size() == 18 && hn::releases().front().version == "1.11.10" && hn::releases()[1].version == "1.11.9"
+              && hn::releases()[2].version == "1.11.8"
+              && hn::releases()[3].version == "1.11.7" && hn::releases()[4].version == "1.11.6" && hn::releases()[5].version == "1.11.5"
+              && hn::releases()[6].version == "1.11.4" && hn::releases()[7].version == "1.11.3" && hn::releases()[8].version == "1.11.2"
+              && hn::releases()[9].version == "1.11.1" && hn::releases()[10].version == "1.11" && hn::releases()[11].version == "1.10.4",
+          "notes : 18 versions, la 1.11.10 en tete, puis la 1.11.9 \xC3\xA0 la 1.11, et la 1.10.4");
     // 1.11.2 (T2, tranches 41, 42 et 44 ; decisions 187, 201 et 216) : 23 lignes en 8 domaines, dont 2 cartes de la fenetre Nouveautes.
     // Tranche 46 (SYM, decision 240) : + Dupliquer dans un symbole (C) et la section Parametres du symbole (N) : 25 lignes.
     {
@@ -16247,7 +16250,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 182,
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 188,   // 1.11.10 : + 6
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -16390,7 +16393,7 @@ void centreAide111() {
     // Integration 1.11 (I111) : la 1.10.4 ajoute objet-vanne-3-voies (La bibliotheque d'objets) : 206.
     // 1.11.1 (T2, decision 107) : Programmer gagne variables-api (API. : les variables de l'automate) : 207.
     check(ix.count(hc::Chapter::Hmi) == 208, "centre : L'IHM a les 208 sujets des chapitres 2 a 8 du guide (1.11.1 : variables-api ; 1.11.2 : paquets-symboles)");
-    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 17, "centre : 11 expressions, 17 notes (1.11.9)");
+    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 18, "centre : 11 expressions, 18 notes (1.11.10)");
     // Tranche 3 : les 11 types de T3 (hmi::exprguide::all(), depot-o), passes par in.expressions ; les
     // cles de la liste de secours sont les siennes (enumeration, pas enum).
     {
@@ -16452,10 +16455,10 @@ void centreAide111() {
         check(o, "page Raccourcis : Ctrl+Maj+O dessine en trois touches, repere 1.11");
 
         const auto n110 = hc::notesPage("1.10");
-        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 17
+        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 18
                   && !n110.summary.empty() && !n110.date.empty(),
               "page Notes : 1.10 -> 1.10.0, 22 lignes en 7 domaines, sa date et son resume");
-        check(hc::notesPage("").version == "1.11.9" && hc::notesPage("9.9").version == "1.11.9",
+        check(hc::notesPage("").version == "1.11.10" && hc::notesPage("9.9").version == "1.11.10",
               "page Notes : sans version (ou inconnue), la plus recente");
         const auto simu = hc::notesPage("1.10.0", "Simulation");
         check(simu.sections.size() == 1 && simu.rows == 4 && simu.domains.size() == 7,
@@ -16799,7 +16802,7 @@ void centreAide111() {
         // Les notes de version n'ont pas de tutoriel : ni la carte "Regarder le tutoriel" (hasTutorial, que
         // lit HelpCenterScreen::showTopic), ni la pastille dans l'arbre. Les autres pages speciales gardent
         // les leurs (T1 ecrit les tutoriels des raccourcis et de Signaler).
-        bool notesSans = ix.count(hc::Chapter::Notes) == 17;   // 1.11.3 a 1.11.9 : une version de plus
+        bool notesSans = ix.count(hc::Chapter::Notes) == 18;   // 1.11.3 a 1.11.10 : une version de plus
         for (const auto* t : ix.ofChapter(hc::Chapter::Notes)) notesSans = notesSans && !hc::hasTutorial(*t);
         const auto* raccourcis = ix.find("page-raccourcis");
         const auto* signaler = ix.find("page-signaler");
@@ -25970,6 +25973,178 @@ void parametresInstances11110() {
     same_text(p.view(vid)->object(btn)->actions.front().value, "Four_X := Four1", "... son argument part du bouton");
 }
 
+// =============================================================================
+//  1.11.10 : LES FONCTIONS ET LES POPUPS D'UN SYMBOLE DANS L'EDITEUR - les
+//  sous-onglets Fonctions et Popups, l'inspecteur d'une instance (redefinir une
+//  fonction virtuelle, sa fenetre, Ctrl+Z), l'arbre deballe (violet).
+// =============================================================================
+void fonctionsSymboleEditeur11110() {
+    std::printf("== 1.11.10 : les fonctions et les popups d'un symbole dans l'\xC3\xA9" "diteur ==\n");
+    auto doc = std::make_shared<Document>();
+    core::CommandStack stack;
+    auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+    Project& p = doc->project;
+    {
+        Variable x;
+        x.id = p.allocate();
+        x.name = "Pos0";
+        x.type = "INT";
+        x.initial = "0";
+        p.programs.variables.push_back(x);
+    }
+    View sym = makeView(p, "S_Vanne");
+    sym.role = "symbole";
+    sym.params.push_back({"Pos", "0", "", "INT", ParamMode::Reference});
+    {
+        HmiFunction f;
+        f.id = p.allocate();
+        f.name = "Ouvrir";
+        f.body = "VAR_INPUT\n  Pas : INT := 10;\nEND_VAR\nPos := Pos + Pas;";
+        f.isVirtual = true;
+        sym.functions.push_back(f);
+        HmiFunction e;
+        e.id = p.allocate();
+        e.name = "Etat";
+        e.returnType = "INT";
+        e.body = "Etat := Pos * 2;";
+        sym.functions.push_back(e);
+    }
+    const Id symId = sym.id;
+    p.views.push_back(sym);
+    View v = makeView(p, "Vue_V");
+    const Id vid = v.id;
+    const Id i1 = placeSymbol(p, v, "S_Vanne", 10, 10);
+    v.object(i1)->name = "V1";
+    v.object(i1)->set("params", "Pos := Pos0");
+    p.views.push_back(v);
+    p.programs.scripts.push_back([&] {
+        Script sc;
+        sc.id = p.allocate();
+        sc.name = "Seq";
+        sc.event = "Appel";
+        sc.body = "Vue_V.V1.Ouvrir();\nx := Vue_V.V1.Etat();";
+        return sc;
+    }());
+    // ---- l'editeur du symbole : les sous-onglets
+    app::HmiEditor eds("ed11110f", doc, symId, apply);
+    eds.setBounds({0, 0, 1800, 1000});
+    eds.layout();
+    auto* tabs = eds.symbolTabs();
+    check(tabs && tabs->label(app::HmiSymbolTabs::Functions) == "Fonctions (2)" && tabs->label(app::HmiSymbolTabs::Popups) == "Popups (0)",
+          "les sous-onglets Fonctions (2) et Popups (0) (" + (tabs ? tabs->label(app::HmiSymbolTabs::Functions) : std::string("?")) + ")");
+    if (!tabs || !eds.symbolFunctions() || !eds.symbolPopups()) return;
+    tabs->setCurrent(app::HmiSymbolTabs::Functions);
+    eds.layout();
+    auto& fp = *eds.symbolFunctions();
+    check(fp.visible() && fp.functionTable().model() && fp.functionTable().model()->rowCount() == 2
+              && fp.functionTable().model()->cellStyle(0, 0).iconTone == ui::Tone::InOut,
+          "Fonctions : la liste du symbole, ses ic\xC3\xB4nes en violet");
+    const Id fermer = fp.addFunction("Fermer", "(aucun)", "Ferme la vanne");
+    check(fermer != kNoId && p.view(symId)->functions.size() == 3 && hmi::symbolFunction(*p.view(symId), "Fermer"),
+          "Nouvelle fonction : Fermer, dans le symbole (pas dans les fonctions IHM : " + std::to_string(p.programs.functions.size()) + ")");
+    std::string why;
+    check(fp.addFunction("Pos", "(aucun)", {}, &why) == kNoId && why.find("param") != std::string::npos,
+          "un nom pris par un param\xC3\xA8tre du symbole : refus\xC3\xA9 (" + why + ")");
+    check(fp.setVirtual(fermer, true) && hmi::symbolFunction(*p.view(symId), "Fermer")->isVirtual, "Fermer : virtuelle");
+    // Renommer Ouvrir : les appels suivent, partout.
+    const Id ouvrir = p.view(symId)->functions[0].id;
+    check(fp.renameFunction(ouvrir, "Ouvre") && p.programs.scripts[0].body == "Vue_V.V1.Ouvre();\nx := Vue_V.V1.Etat();",
+          "renommer Ouvrir en Ouvre : le script g\xC3\xA9n\xC3\xA9ral suit (" + p.programs.scripts[0].body + ")");
+    (void)stack.undo();
+    check(p.programs.scripts[0].body.find("V1.Ouvrir()") != std::string::npos && hmi::symbolFunction(*p.view(symId), "Ouvrir"),
+          "Ctrl+Z : Ouvrir et son appel reviennent");
+    // ---- les popups du symbole
+    tabs->setCurrent(app::HmiSymbolTabs::Popups);
+    eds.layout();
+    const Id pop = eds.symbolPopups()->addPopup();
+    const View* pv = p.view(pop);
+    check(pv && pv->role == "popup" && pv->ownerSymbol == symId && pv->name == "Pop_S_Vanne" && tabs->label(app::HmiSymbolTabs::Popups) == "Popups (1)",
+          "Nouvelle popup : Pop_S_Vanne, port\xC3\xA9" "e par le symbole");
+    check(hmi::viewsInFolder(p, hmi::ViewFolder::Popups).empty(), "... rang\xC3\xA9" "e sous le symbole, plus dans IHM > Popups");
+    // ---- l'inspecteur d'une instance
+    app::HmiEditor ed("ed11110v", doc, vid, apply);
+    ed.setBounds({0, 0, 1800, 1000});
+    menu::MenuManager mm{menu::MenuFactory{}};
+    ed.actions().setDialogHost([&](menu::MenuPtr d, std::function<void(const menu::DialogResult&)> done) { mm.ShowDialog(std::move(d), std::move(done)); }, {});
+    ed.layout();
+    ed.canvas().setSelection({i1});
+    ed.layout();
+    const auto row = [&](const std::string& name) -> const ui::PropertyGrid::Property* {
+        for (const auto& c : ed.properties().categories())
+            if (c.name.rfind("Fonctions du symbole", 0) == 0 || c.name.rfind("Popups du symbole", 0) == 0)
+                for (const auto& q : c.properties)
+                    if (q.name.find(name) != std::string::npos) return &q;
+        return nullptr;
+    };
+    const auto* ro = row("Ouvrir");
+    const auto* re = row("Etat");
+    check(ro && ro->value == "du symbole" && ro->commit && ro->open && re && re->value == "du symbole (non virtuelle)" && !re->commit,
+          "l'inspecteur de V1 : Ouvrir (virtuelle, du symbole), Etat (non virtuelle, en lecture)");
+    check(row("Pop_S_Vanne") && row("Pop_S_Vanne")->value == "s'ouvre avec Pos := Pos0", "... et la popup du symbole : s'ouvre avec Pos := Pos0");
+    check(ro && ro->commit("red\xC3\xA9" "finie ici") && p.view(vid)->object(i1)->functionOverrides.size() == 1
+              && p.view(vid)->object(i1)->functionOverrides[0].body == p.view(symId)->functions[0].body,
+          "red\xC3\xA9" "finie ici : V1 a son corps (celui du symbole pour d\xC3\xA9part)");
+    ed.layout();
+    check(row("Ouvrir") && row("Ouvrir")->value == "red\xC3\xA9" "finie ici", "... l'inspecteur le dit");
+    // La fenetre : le corps de V1, controle comme une fonction (Pas connu, Pos connu).
+    ed.editOverride(i1, "Ouvrir");
+    mm.applyPending();
+    auto* dlg = dynamic_cast<app::HmiActionScriptDialog*>(mm.top());
+    check(dlg && dlg->title() == "Red\xC3\xA9" "finir Ouvrir dans V1" && dlg->errorCount() == 0, "la fen\xC3\xAAtre : Red\xC3\xA9" "finir Ouvrir dans V1, sans faute");
+    if (dlg) {
+        dlg->setCode("VAR_INPUT\n  Pas : INT := 10;\nEND_VAR\nIF Pas > 0 THEN\n  SUPER.Ouvrir(Pas := Pas * 2);\nEND_IF;");
+        check(dlg->errorCount() == 0, "SUPER.Ouvrir(...) : aucune faute");
+        dlg->finish(true);
+        mm.applyPending();
+    }
+    check(p.view(vid)->object(i1)->functionOverrides.size() == 1
+              && p.view(vid)->object(i1)->functionOverrides[0].body.find("SUPER.Ouvrir(Pas := Pas * 2)") != std::string::npos,
+          "Valider : la red\xC3\xA9" "finition de V1 \xC3\xA9" "crite");
+    (void)stack.undo();
+    check(p.view(vid)->object(i1)->functionOverrides.size() == 1
+              && p.view(vid)->object(i1)->functionOverrides[0].body == p.view(symId)->functions[0].body,
+          "Ctrl+Z : le corps d'avant");
+    ed.layout();
+    check(row("Ouvrir") && row("Ouvrir")->commit && row("Ouvrir")->commit("du symbole") && p.view(vid)->object(i1)->functionOverrides.empty(),
+          "du symbole : la red\xC3\xA9" "finition s'efface");
+    // ---- l'arbre deballe : sous le symbole, Fonctions et Popups ; sous l'instance aussi
+    {
+        using NK = app::ProjectTreeModel::NodeKind;
+        app::ProjectTreeModel tree(std::make_shared<domain::Project>());
+        tree.setHmi(doc);
+        const auto symNode = app::ProjectTreeModel::pack(NK::HmiView, static_cast<domain::Index>(symId));
+        const auto n = tree.childCount(symNode);
+        const auto fns = n >= 7 ? tree.childAt(symNode, 5) : ui::kInvalidNode;
+        const auto pops = n >= 7 ? tree.childAt(symNode, 6) : ui::kInvalidNode;
+        // Le compteur part en pastille (counterOf) : le libelle seul.
+        check(n == 7 && tree.text(fns) == "Fonctions" && tree.counterOf(fns) == "3" && tree.style(fns).iconTone == ui::Tone::InOut
+                  && tree.text(pops) == "Popups" && tree.counterOf(pops) == "1",
+              "le symbole d\xC3\xA9" "ball\xC3\xA9 : Fonctions [3] (violet), Popups [1] (" + std::to_string(n) + ", " + tree.text(fns) + ", "
+                  + tree.text(pops) + ", ton " + std::to_string(static_cast<int>(tree.style(fns).iconTone)) + ")");
+        check(tree.childCount(fns) == 3 && tree.text(tree.childAt(fns, 0)).find("Ouvrir(Pas : INT)") == 0
+                  && tree.text(tree.childAt(fns, 0)).find("virtuelle") != std::string::npos,
+              "... ses fonctions, sign\xC3\xA9" "es (" + tree.text(tree.childAt(fns, 0)) + ")");
+        check(tree.childCount(pops) == 1 && app::ProjectTreeModel::kindOf(tree.childAt(pops, 0)) == NK::HmiView,
+              "... sa popup, une vue qui se d\xC3\xA9" "balle");
+        const auto viewNode = app::ProjectTreeModel::pack(NK::HmiView, static_cast<domain::Index>(vid));
+        check(tree.childCount(viewNode) == 5, "une vue ordinaire garde ses cinq parties");
+        const auto objs = tree.childAt(viewNode, 0);
+        ui::NodeId instNode = ui::kInvalidNode;
+        for (std::size_t k = 0; k < tree.childCount(objs); ++k)
+            if (tree.text(tree.childAt(objs, k)).find("V1") != std::string::npos) instNode = tree.childAt(objs, k);
+        ui::NodeId instFns = ui::kInvalidNode, instPops = ui::kInvalidNode;
+        for (std::size_t k = 0; instNode != ui::kInvalidNode && k < tree.childCount(instNode); ++k) {
+            const auto c = tree.childAt(instNode, k);
+            if (app::ProjectTreeModel::kindOf(c) == NK::HmiObjectFunctions) instFns = c;
+            if (app::ProjectTreeModel::kindOf(c) == NK::HmiObjectPopups) instPops = c;
+        }
+        check(instFns != ui::kInvalidNode && tree.text(instFns) == "Fonctions (3)" && tree.childCount(instFns) == 3
+                  && tree.text(tree.childAt(instFns, 0)).find("du symbole") != std::string::npos,
+              "l'instance V1 d\xC3\xA9" "ball\xC3\xA9" "e : Fonctions (3), du symbole");
+        check(instPops != ui::kInvalidNode && tree.text(instPops) == "Popups (1)", "... et Popups (1)");
+    }
+}
+
 int main(int argc, char** argv) {
     // 1.11.1 (API-V) : HMI_TEST_APIV=1 - la vue des variables de l'automate et API dans l'aide a la saisie, seules.
     if (const char* only = std::getenv("HMI_TEST_APIV"); only && *only == '1') {
@@ -25990,6 +26165,7 @@ int main(int argc, char** argv) {
     if (const char* only = std::getenv("HMI_TEST_1110"); only && *only == '1') {
         ecrituresContinues11110();
         parametresInstances11110();
+        fonctionsSymboleEditeur11110();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -26246,6 +26422,7 @@ int main(int argc, char** argv) {
     actionsFenetres1119();                  // 1.11.9 : l'operation en arbre, le script, Maths, le clavier
     ecrituresContinues11110();              // 1.11.10 : un script qui ecrit sans cesse n'empeche plus les lectures
     parametresInstances11110();             // 1.11.10 : les instances et les appelants suivent les parametres
+    fonctionsSymboleEditeur11110();         // 1.11.10 : les fonctions et les popups d'un symbole dans l'editeur
     if (argc > 1) simulationVariables1115(argv[1]);   // 1.11.5 : les onglets Variables IHM et Variables API
     if (argc > 1) forcageMouvement1116(argv[1]);   // 1.11.6 : le forcage par type et bornes
     scriptsExportImport1113();              // 1.11.3 : exporter / importer les scripts d'une vue et les operateurs (.xpgst)

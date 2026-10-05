@@ -319,11 +319,12 @@ bool HmiFunctionsPane::setVirtual(Id id, bool on) {
     const auto* f = fnOf(doc_->project, id);
     if (!f || symbol_ == kNoId) return false;
     if (f->isVirtual == on) return true;
-    auto cmd = hmi::changeProject(doc_, std::string(on ? "Rendre virtuelle " : "Rendre non virtuelle ") + f->name, [&](hmi::Project& p) {
+    const std::string fname = f->name;   // copie : la commande remplace les vues
+    auto cmd = hmi::changeProject(doc_, std::string(on ? "Rendre virtuelle " : "Rendre non virtuelle ") + fname, [&](hmi::Project& p) {
         if (auto* g = fnOf(p, id)) g->isVirtual = on;
     });
     if (cmd) apply_(std::move(cmd));
-    say(std::string(on ? "Virtuelle : une instance peut red\xC3\xA9" "finir " : "Non virtuelle : toutes les instances gardent ") + f->name
+    say(std::string(on ? "Virtuelle : une instance peut red\xC3\xA9" "finir " : "Non virtuelle : toutes les instances gardent ") + fname
         + (on ? std::string(" (inspecteur de l'instance, Fonctions du symbole).") : std::string(" du symbole.")));
     return true;
 }

@@ -273,6 +273,7 @@ bool MainAnalysisScreen::isHmiNode(ui::NodeId n) {
         // Operateurs 1.10 ; familles, parametres, reperes 1.10.2) : sans eux, un clic n'y
         // faisait rien (openHmiNode les attendait pourtant).
         || k == NK::HmiObjectAlarms || k == NK::HmiObjectAlarm || k == NK::HmiObjectOperators || k == NK::HmiObjectOperator
+        || (k >= NK::HmiObjectFunctions && k <= NK::HmiSymbolFunction)    // 1.11.10 : les fonctions et popups d'un symbole
         || k == NK::HmiObjectFamily || k == NK::HmiObjectParam || k == NK::HmiObjectMarker
         || k == NK::VersionsFolder || k == NK::VersionItem;                           // lot 21 : les versions
 }
@@ -513,8 +514,25 @@ void MainAnalysisScreen::openHmiNode(ui::NodeId n) {
         // ---- 1.10 (chantier O) : le noeud Operateurs d'un objet : sa vue, l'objet choisi ----
         case NK::HmiObjectOperators:
         case NK::HmiObjectOperator:
+        case NK::HmiObjectFunctions:       // 1.11.10 : l'instance choisie - son inspecteur dit
+        case NK::HmiObjectFunction:        //   ses fonctions (redefinir) et ses popups
+        case NK::HmiObjectPopups:
             openHmiView(treeModel_->hmiViewOf(n), -1, treeModel_->hmiObjectOf(n));
             break;
+        // ---- 1.11.10 : une fonction d'un symbole : son editeur, le sous-onglet Fonctions, elle ----
+        case NK::HmiSymbolFunction: {
+            const auto viewId = treeModel_->hmiViewOf(n);
+            openHmiView(viewId);
+            auto* editor = dynamic_cast<HmiEditor*>(hmiTab("vue:" + std::to_string(viewId)));
+            const auto* sym = app_.hmi()->project.view(asId(viewId));
+            const int k = treeModel_->hmiRankOf(n);
+            if (editor && editor->symbolTabs() && editor->symbolFunctions() && sym && k >= 0
+                && static_cast<std::size_t>(k) < sym->functions.size()) {
+                editor->symbolTabs()->setCurrent(HmiSymbolTabs::Functions);
+                editor->symbolFunctions()->selectFunction(sym->functions[static_cast<std::size_t>(k)].id);
+            }
+            break;
+        }
         // ---- 1.10 (chantier O) : le noeud Alarmes d'un objet, une alarme ----
         // L'objet choisi dans sa vue ; une alarme : la section Alarmes de l'objet
         // s'ouvre sur elle (comme un clic dans l'explorateur d'objets).

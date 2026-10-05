@@ -296,9 +296,20 @@ namespace app {
             //                     sub = celui de l'alarme.
             // A LA FIN, toujours.
             HmiInstParam, HmiInstAlarmGroup, HmiInstGroupVar, HmiInstAlarms, HmiInstAlarm, HmiInstAlarmVar,
+            // ---- 1.11.10 : LES FONCTIONS ET LES POPUPS D'UN SYMBOLE (en violet) ----
+            //   HmiObjectFunctions "Fonctions (n)" sous une instance (apres Operateurs) :
+            //                      index = vue, sub = objet ; HmiObjectFunction une
+            //                      signature (redefinie / du symbole) : sub = (objet << 8) | rang ;
+            //   HmiObjectPopups    "Popups (n)" sous une instance : ses enfants sont les
+            //                      vues des popups (HmiView) ;
+            //   HmiSymbolFunction  une fonction sous la partie Fonctions d'un symbole :
+            //                      index = symbole, sub = rang.
+            // A LA FIN, toujours.
+            HmiObjectFunctions, HmiObjectFunction, HmiObjectPopups, HmiSymbolFunction,
         };
-        // Les cinq parties d'une vue, dans l'ordre de l'arbre.
-        enum class HmiPart : std::uint8_t { Objects, Scripts, Animations, Layers, Groups, Count };
+        // Les parties d'une vue, dans l'ordre de l'arbre. 1.11.10 : un symbole a en plus
+        // ses Fonctions et ses Popups (les deux dernieres).
+        enum class HmiPart : std::uint8_t { Objects, Scripts, Animations, Layers, Groups, Functions, Popups, Count };
 
         explicit ProjectTreeModel(ProjectRef project);
 

@@ -75,7 +75,9 @@ enum class ViewFolder : std::uint8_t { Templates, Views, Popups, Symbols };
 }
 [[nodiscard]] inline std::vector<const View*> viewsInFolder(const Project& p, ViewFolder f) {
     std::vector<const View*> out;
-    for (const auto& v : p.views) if (viewFolderOf(v.role) == f) out.push_back(&v);
+    // 1.11.10 : une popup d'un symbole est rangee sous son symbole, pas dans IHM > Popups.
+    for (const auto& v : p.views)
+        if (viewFolderOf(v.role) == f && !(f == ViewFolder::Popups && v.ownerSymbol != kNoId)) out.push_back(&v);
     return out;
 }
 

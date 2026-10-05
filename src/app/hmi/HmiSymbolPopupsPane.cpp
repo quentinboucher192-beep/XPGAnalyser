@@ -170,7 +170,8 @@ Id HmiSymbolPopupsPane::addPopup(std::string name, std::string* why) {
         if (why) *why = "symbole introuvable";
         return kNoId;
     }
-    if (name.empty()) name = "Pop_" + sym->name;
+    const std::string symName = sym->name;   // copie : la commande remplace les vues
+    if (name.empty()) name = "Pop_" + symName;
     if (!hmi::isIdentifier(name)) {
         if (why) *why = "nom invalide : " + name;
         say("Popup refus\xC3\xA9" "e : nom invalide " + name, true);
@@ -178,7 +179,7 @@ Id HmiSymbolPopupsPane::addPopup(std::string name, std::string* why) {
     }
     Id made = kNoId;
     const Id owner = symbol_;
-    auto cmd = hmi::changeProject(doc_, "Nouvelle popup de " + sym->name, [&](hmi::Project& p) {
+    auto cmd = hmi::changeProject(doc_, "Nouvelle popup de " + symName, [&](hmi::Project& p) {
         auto v = hmi::makeView(p, hmi::uniqueViewName(p, name));
         v.role = "popup";
         v.width = 420;
@@ -192,7 +193,7 @@ Id HmiSymbolPopupsPane::addPopup(std::string name, std::string* why) {
     if (made) {
         refresh();
         selectPopup(made);
-        say("Popup " + doc_->project.view(made)->name + " cr\xC3\xA9\xC3\xA9" "e dans " + sym->name
+        say("Popup " + doc_->project.view(made)->name + " cr\xC3\xA9\xC3\xA9" "e dans " + symName
             + " : ses objets lisent les param\xC3\xA8tres du symbole. Ctrl+Z la retire.");
     }
     return made;

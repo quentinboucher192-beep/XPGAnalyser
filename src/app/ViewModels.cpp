@@ -412,6 +412,21 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             const auto* sym = hmi::symbolOf(d->project, *o);
             return sym && !sym->operators.empty() ? &sym->operators : nullptr;
         }
+        // 1.11.10 : les fonctions et les popups du symbole d'une instance (vides : aucune).
+        const hmi::View* objectSymbol(const hmi::Document* d, const hmi::Object* o) {
+            return d && o && o->kind == hmi::Kind::SymbolInstance ? hmi::symbolOf(d->project, *o) : nullptr;
+        }
+        const std::vector<hmi::HmiFunction>* objectFunctions(const hmi::Document* d, const hmi::Object* o) {
+            const auto* sym = objectSymbol(d, o);
+            return sym && !sym->functions.empty() ? &sym->functions : nullptr;
+        }
+        std::vector<const hmi::View*> ownedPopups(const hmi::Document* d, const hmi::View* sym) {
+            std::vector<const hmi::View*> out;
+            if (d && sym)
+                for (const auto& v : d->project.views)
+                    if (v.ownerSymbol == sym->id) out.push_back(&v);
+            return out;
+        }
     }
 
     ui::NodeId ProjectTreeModel::pack(NodeKind k, Index i, Index sub) {
@@ -779,8 +794,12 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             const auto all = hmi::fold::allFolders(hmi_->project, list);
             return i < all.size() ? hmilists::childrenOf(hmi_->project, list, all[i]).size() : 0;
         }
-        case NodeKind::HmiView:
-            return hmiViewById(hmi_.get(), i) ? static_cast<std::size_t>(HmiPart::Count) : 0;
+        case NodeKind::HmiView: {
+            // 1.11.10 : un symbole a en plus ses Fonctions et ses Popups.
+            const auto* v = hmiViewById(hmi_.get(), i);
+            if (!v) return 0;
+            return v->role == "symbole" ? static_cast<std::size_t>(HmiPart::Count) : static_cast<std::size_t>(HmiPart::Functions);
+        }
 
         // ---- lot 5 : ce qui se deballe ----------------------------------------
         case NodeKind::HmiViewPart: {
@@ -794,6 +813,8 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             case HmiPart::Groups:
                 return static_cast<std::size_t>(std::count_if(v->objects.begin(), v->objects.end(),
                     [](const hmi::Object& o) { return o.kind == hmi::Kind::Group; }));
+            case HmiPart::Functions:  return v->functions.size();                 // 1.11.10
+            case HmiPart::Popups:     return ownedPopups(hmi_.get(), v).size();
             case HmiPart::Count:      break;
             }
             return 0;
@@ -806,12 +827,22 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             return o ? objectFamilies(hmi_->project, *v, *o).size()
                            + (objectAlarms(v->id, o->id) ? 1u : 0u)                // 1.10 : son noeud Alarmes
                            + (objectOperators(hmi_.get(), o) ? 1u : 0u)             // 1.10 : puis Operateurs
+                           + (objectFunctions(hmi_.get(), o) ? 1u : 0u)             // 1.11.10 : puis Fonctions
+                           + (ownedPopups(hmi_.get(), objectSymbol(hmi_.get(), o)).empty() ? 0u : 1u)   //  et Popups
                      : 0;
         }
         case NodeKind::HmiObjectOperators: {
             const auto* ops = objectOperators(hmi_.get(), hmiObjectById(hmiViewById(hmi_.get(), i), subOf(n)));
             return ops ? ops->size() : 0;
         }
+        case NodeKind::HmiObjectFunctions: {                 // 1.11.10
+            const auto* fns = objectFunctions(hmi_.get(), hmiObjectById(hmiViewById(hmi_.get(), i), subOf(n)));
+            return fns ? fns->size() : 0;
+        }
+        case NodeKind::HmiObjectPopups:
+            return ownedPopups(hmi_.get(), objectSymbol(hmi_.get(), hmiObjectById(hmiViewById(hmi_.get(), i), subOf(n)))).size();
+        case NodeKind::HmiObjectFunction:
+        case NodeKind::HmiSymbolFunction: return 0;
         // ---- 1.10.2 (chantier A) : une famille de l'objet ----
         case NodeKind::HmiObjectFamily: {
             const auto* v = hmiViewById(hmi_.get(), i);
@@ -1153,9 +1184,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             return k < kids.size() ? kids[k] : ui::kInvalidNode;
         }
         case NodeKind::HmiView:
-            return k < static_cast<std::size_t>(HmiPart::Count)
-                ? pack(NodeKind::HmiViewPart, i, static_cast<Index>(k))
-                : ui::kInvalidNode;
+            return k < childCount(n) ? pack(NodeKind::HmiViewPart, i, static_cast<Index>(k)) : ui::kInvalidNode;
 
         // ---- lot 5 ------------------------------------------------------------
         case NodeKind::HmiViewPart: {
@@ -1181,6 +1210,12 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
                         return pack(NodeKind::HmiGroupEntry, i, static_cast<Index>(o.id & kMask28));
                 return ui::kInvalidNode;
             }
+            case HmiPart::Functions:                                            // 1.11.10
+                return k < v->functions.size() ? pack(NodeKind::HmiSymbolFunction, i, static_cast<Index>(k)) : ui::kInvalidNode;
+            case HmiPart::Popups: {
+                const auto pops = ownedPopups(hmi_.get(), v);
+                return k < pops.size() ? pack(NodeKind::HmiView, static_cast<Index>(pops[k]->id & kMask28)) : ui::kInvalidNode;
+            }
             case HmiPart::Count: break;
             }
             return ui::kInvalidNode;
@@ -1203,8 +1238,17 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             if (k == before && alarms)                                          // 1.10 : le noeud Alarmes
                 return pack(NodeKind::HmiObjectAlarms, i, static_cast<Index>(o->id & kMask28));
             if (k - alarms < fams.size()) return family(fams[k - alarms]);
-            if (k - alarms == fams.size() && objectOperators(hmi_.get(), o))  // 1.10 : puis Operateurs
-                return pack(NodeKind::HmiObjectOperators, i, static_cast<Index>(o->id & kMask28));
+            std::size_t at = k - alarms - fams.size();
+            if (objectOperators(hmi_.get(), o)) {                              // 1.10 : puis Operateurs
+                if (at == 0) return pack(NodeKind::HmiObjectOperators, i, static_cast<Index>(o->id & kMask28));
+                --at;
+            }
+            if (objectFunctions(hmi_.get(), o)) {                              // 1.11.10 : Fonctions
+                if (at == 0) return pack(NodeKind::HmiObjectFunctions, i, static_cast<Index>(o->id & kMask28));
+                --at;
+            }
+            if (at == 0 && !ownedPopups(hmi_.get(), objectSymbol(hmi_.get(), o)).empty())   //  et Popups
+                return pack(NodeKind::HmiObjectPopups, i, static_cast<Index>(o->id & kMask28));
             return ui::kInvalidNode;
         }
         // ---- 1.10.2 (chantier A) : les lignes d'une famille ----
@@ -1234,6 +1278,17 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             const auto* ops = objectOperators(hmi_.get(), o);
             if (!ops || k >= ops->size() || k > 0xFF) return ui::kInvalidNode;
             return pack(NodeKind::HmiObjectOperator, i, static_cast<Index>(((o->id & ((1ull << (28 - kItemBits)) - 1)) << kItemBits) | k));
+        }
+        case NodeKind::HmiObjectFunctions: {                 // 1.11.10 : les fonctions du symbole
+            const auto* v = hmiViewById(hmi_.get(), i);
+            const auto* o = hmiObjectById(v, subOf(n));
+            const auto* fns = objectFunctions(hmi_.get(), o);
+            if (!fns || k >= fns->size() || k > 0xFF) return ui::kInvalidNode;
+            return pack(NodeKind::HmiObjectFunction, i, static_cast<Index>(((o->id & ((1ull << (28 - kItemBits)) - 1)) << kItemBits) | k));
+        }
+        case NodeKind::HmiObjectPopups: {                    // 1.11.10 : ses popups, des vues
+            const auto pops = ownedPopups(hmi_.get(), objectSymbol(hmi_.get(), hmiObjectById(hmiViewById(hmi_.get(), i), subOf(n))));
+            return k < pops.size() ? pack(NodeKind::HmiView, static_cast<Index>(pops[k]->id & kMask28)) : ui::kInvalidNode;
         }
         // ---- 1.10 (chantier O) : les lignes du noeud Alarmes ----
         case NodeKind::HmiObjectAlarms:
@@ -1565,6 +1620,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
                 || k == NK::HmiObjectAlarms || k == NK::HmiObjectAlarm               // 1.10 (chantier O)
                 || k == NK::HmiTypeValues || k == NK::HmiTypeValue || k == NK::HmiTypeOperators || k == NK::HmiTypeOperator
                 || k == NK::HmiObjectOperators || k == NK::HmiObjectOperator
+                || (k >= NK::HmiObjectFunctions && k <= NK::HmiSymbolFunction)                       // 1.11.10
                 || k == NK::HmiObjectFamily || k == NK::HmiObjectParam || k == NK::HmiObjectMarker   // 1.10.2 (chantier A)
                 || (k >= NK::HmiInstParam && k <= NK::HmiInstAlarmVar);                              // 1.11.1 (decision 108)
         }
@@ -2152,6 +2208,8 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             case HmiPart::Animations: return "Animations  [" + std::to_string(animations) + "]";
             case HmiPart::Layers:     return "Calques  [" + std::to_string(v.layers.size()) + "]";
             case HmiPart::Groups:     return "Groupes  [" + std::to_string(groups) + "]";
+            case HmiPart::Functions:  return "Fonctions  [" + std::to_string(v.functions.size()) + "]";              // 1.11.10
+            case HmiPart::Popups:     return "Popups  [" + std::to_string(ownedPopups(hmi_.get(), &v).size()) + "]";
             case HmiPart::Count:      break;
             }
             return {};
@@ -2360,6 +2418,30 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             const auto* ops = objectOperators(hmi_.get(), hmiItemObject(hmiViewById(hmi_.get(), i), subOf(n)));
             const auto k = static_cast<std::size_t>(subOf(n) & 0xFF);
             return ops && k < ops->size() ? hmi::operatorSignature((*ops)[k]) : std::string{};
+        }
+        // ---- 1.11.10 : les fonctions et les popups d'un symbole ----
+        case NodeKind::HmiObjectFunctions: {
+            const auto* fns = objectFunctions(hmi_.get(), hmiObjectById(hmiViewById(hmi_.get(), i), subOf(n)));
+            return fns ? "Fonctions (" + std::to_string(fns->size()) + ")" : std::string{};
+        }
+        case NodeKind::HmiObjectFunction: {
+            const auto* o = hmiItemObject(hmiViewById(hmi_.get(), i), subOf(n));
+            const auto* fns = objectFunctions(hmi_.get(), o);
+            const auto k = static_cast<std::size_t>(subOf(n) & 0xFF);
+            if (!fns || k >= fns->size()) return {};
+            const auto& f = (*fns)[k];
+            return hmi::functionSignature(f) + (hmi::functionOverride(*o, f.name) && f.isVirtual ? "   \xC2\xB7 red\xC3\xA9" "finie"
+                                                : "   \xC2\xB7 du symbole");
+        }
+        case NodeKind::HmiObjectPopups: {
+            const auto pops = ownedPopups(hmi_.get(), objectSymbol(hmi_.get(), hmiObjectById(hmiViewById(hmi_.get(), i), subOf(n))));
+            return "Popups (" + std::to_string(pops.size()) + ")";
+        }
+        case NodeKind::HmiSymbolFunction: {
+            const auto* v = hmiViewById(hmi_.get(), i);
+            const auto k = static_cast<std::size_t>(subOf(n));
+            if (!v || k >= v->functions.size()) return {};
+            return hmi::functionSignature(v->functions[k]) + (v->functions[k].isVirtual ? "   \xC2\xB7 virtuelle" : "");
         }
         // ---- 1.10 (chantier O, decision 15) : "Valeurs (4)", "Arret = 0", "Operateurs (2)", une signature ----
         case NodeKind::HmiTypeValues:
@@ -2819,6 +2901,8 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             case HmiPart::Animations: s.icon = ui::Icon::Play; break;
             case HmiPart::Layers:     s.icon = ui::Icon::Layers; break;
             case HmiPart::Groups:     s.icon = ui::Icon::Folder; break;
+            case HmiPart::Functions:  s.icon = ui::Icon::FunctionBlock; s.iconTone = ui::Tone::InOut; break;   // 1.11.10 : en violet
+            case HmiPart::Popups:     s.icon = ui::Icon::Screen; s.iconTone = ui::Tone::Family2; break;
             case HmiPart::Count:      break;
             }
             break;
@@ -3009,6 +3093,22 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         case NodeKind::HmiTypeOperators:
         case NodeKind::HmiObjectOperators: s.icon = ui::Icon::Folder; break;
         case NodeKind::HmiObjectOperator:  s.icon = ui::Icon::Code; break;
+        // 1.11.10 : les fonctions d'un symbole, en violet ; une redefinition, une pastille.
+        case NodeKind::HmiObjectFunctions:
+        case NodeKind::HmiSymbolFunction:  s.icon = ui::Icon::FunctionBlock; s.iconTone = ui::Tone::InOut; break;
+        case NodeKind::HmiObjectFunction: {
+            s.icon = ui::Icon::FunctionBlock;
+            s.iconTone = ui::Tone::InOut;
+            const auto* o = hmiItemObject(hmiViewById(hmi_.get(), i), subOf(n));
+            const auto* fns = objectFunctions(hmi_.get(), o);
+            const auto k = static_cast<std::size_t>(subOf(n) & 0xFF);
+            if (fns && k < fns->size() && (*fns)[k].isVirtual && hmi::functionOverride(*o, (*fns)[k].name)) {
+                s.badge = "red\xC3\xA9" "finie";
+                s.badgeTone = ui::Tone::InOut;
+            }
+            break;
+        }
+        case NodeKind::HmiObjectPopups:    s.icon = ui::Icon::Screen; s.iconTone = ui::Tone::Family2; break;
         case NodeKind::HmiTypeValue: {
             const auto* ty = hmi_ ? byId(hmi_->project.programs.types, i) : nullptr;
             const auto k = static_cast<std::size_t>(subOf(n));
@@ -3199,7 +3299,12 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             return 0;
         case NodeKind::HmiObjectOperators:
         case NodeKind::HmiObjectAlarms:                // 1.10 (chantier O)
+        case NodeKind::HmiObjectFunctions:             // 1.11.10
+        case NodeKind::HmiObjectPopups:
             if (const auto* o = hmiObjectById(v, subOf(n))) return o->id;
+            return 0;
+        case NodeKind::HmiObjectFunction:              // 1.11.10
+            if (const auto* o = hmiItemObject(v, subOf(n))) return o->id;
             return 0;
         case NodeKind::HmiAnimation: {
             if (!v) return 0;
@@ -3215,7 +3320,9 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         case NodeKind::HmiObjectItem:
         case NodeKind::HmiObjectFamily:                 // 1.10.2 (chantier A) : la famille
         case NodeKind::HmiObjectParam:
-        case NodeKind::HmiObjectMarker: return static_cast<int>(subOf(n) & 0xFF);
+        case NodeKind::HmiObjectMarker:
+        case NodeKind::HmiObjectFunction: return static_cast<int>(subOf(n) & 0xFF);   // 1.11.10
+        case NodeKind::HmiSymbolFunction:                                              // 1.11.10
         case NodeKind::HmiViewScript:
         case NodeKind::HmiAnimation:
         case NodeKind::HmiLayer:        return static_cast<int>(subOf(n));
@@ -3360,6 +3467,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             || k == NodeKind::HmiLayer || k == NodeKind::HmiGroupEntry
             || k == NodeKind::HmiObjectAlarms || k == NodeKind::HmiObjectAlarm      // 1.10 (chantier O)
             || k == NodeKind::HmiObjectOperators || k == NodeKind::HmiObjectOperator
+            || (k >= NodeKind::HmiObjectFunctions && k <= NodeKind::HmiSymbolFunction)   // 1.11.10
             || k == NodeKind::HmiObjectFamily || k == NodeKind::HmiObjectParam
             || k == NodeKind::HmiObjectMarker;                                       // 1.10.2 (chantier A)
         if (!hmi_ || !inView) return 0;

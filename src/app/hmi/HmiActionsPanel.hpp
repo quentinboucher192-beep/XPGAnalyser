@@ -59,6 +59,8 @@ public:
     // rend la reponse ; sans hote, pas de bouton « … » (la liste et la case, comme avant).
     using DialogHost = std::function<void(menu::MenuPtr, std::function<void(const menu::DialogResult&)>)>;
     void setDialogHost(DialogHost host, std::function<std::shared_ptr<const domain::Project>()> plc = {});
+    // 1.11.10 : l'hote des petites fenetres (l'editeur s'en sert pour les redefinitions d'une instance).
+    [[nodiscard]] const DialogHost& dialogHost() const noexcept { return host_; }
     // Ouvre la fenetre d'une ligne de l'action choisie : "Op\xC3\xA9ration", "Code ST",
     // "Formule" (Maths) ; faux : pas de fenetre (pas d'hote, rien de choisi, pas cette ligne).
     bool openEditor(const std::string& name);

@@ -70,6 +70,10 @@ public:
         hmi::DocumentPtr doc;
         hmi::Id          view{hmi::kNoId};
         std::shared_ptr<const domain::Project> plc;
+        // 1.11.10 : la redefinition d'une fonction de symbole dans une instance - le corps est
+        // controle comme une fonction (ses VAR_INPUT, son resultat) ; `title` : le titre.
+        std::optional<hmi::HmiFunction> function{};
+        std::string      title{};
     };
     explicit HmiActionScriptDialog(Spec spec);
     ~HmiActionScriptDialog() override;

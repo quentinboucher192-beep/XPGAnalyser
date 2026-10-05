@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.11.10", "05/10/2026", "livr\xC3\xA9" "e le 05/10 au soir"},
     {"1.11.9", "05/10/2026", "livr\xC3\xA9" "e le 05/10"},
     {"1.11.8", "05/10/2026", "livr\xC3\xA9" "e le 05/10"},
     {"1.11.7", "05/10/2026", "livr\xC3\xA9" "e le 05/10"},
@@ -88,6 +89,26 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.11.10 (05/10/2026 au soir) : les fonctions et les popups d'un symbole ; les fonctions et
+        // les operateurs entre eux ; deux defauts (l'esclave simule, les parametres des instances).
+        note("1.11.10", "\xC3\x89" "diteur IHM", Kind::New,
+         "Un symbole porte des FONCTIONS (son sous-onglet Fonctions, ic\xC3\xB4nes violettes) : un retour (aucun, ou tous les types), des param\xC3\xA8tres de tous les types, un corps ST qui lit et \xC3\xA9" "crit les param\xC3\xA8tres du symbole (ceux de l'instance), toutes les variables, et appelle fonctions et op\xC3\xA9rateurs. Appel : Ouvrir() dans le symbole, Vanne_3.Ouvrir() dans sa vue, Vue_Vannes.Vanne_3.Ouvrir() partout (scripts g\xC3\xA9n\xC3\xA9raux, fonctions, expressions).",
+         "symboles", ""),
+        note("1.11.10", "\xC3\x89" "diteur IHM", Kind::New,
+         "Une fonction de symbole VIRTUELLE se red\xC3\xA9" "finit dans une instance : l'inspecteur de l'instance, section Fonctions du symbole, \xC2\xAB red\xC3\xA9" "finie ici \xC2\xBB et le bouton \xE2\x80\xA6 (la fen\xC3\xAAtre du script) ; SUPER.Ouvrir(...) y rappelle le corps du symbole ; \xC2\xAB du symbole \xC2\xBB l'efface. L'arbre du projet d\xC3\xA9" "balle les fonctions et les popups sous le symbole et sous chaque instance.",
+         "symboles", ""),
+        note("1.11.10", "\xC3\x89" "diteur IHM", Kind::New,
+         "Un symbole porte ses POPUPS (sous-onglet Popups, rang\xC3\xA9" "es sous le symbole) : ouvertes depuis une instance, elles connaissent d'office ses param\xC3\xA8tres (Vanne y vaut V[3]) et appellent ses fonctions. Depuis la vue : la cible Vanne_3.Pop_Detail ; depuis un script : IHM_POPUP('Vue_Vannes.Vanne_3.Pop_Detail').",
+         "symboles", ""),
+        note("1.11.10", "Scripts", Kind::New,
+         "Les fonctions et les op\xC3\xA9rateurs s'emploient entre eux : une fonction appelle les fonctions IHM, celles des symboles et les op\xC3\xA9rateurs ; un op\xC3\xA9rateur emploie un autre op\xC3\xA9rateur (Resultat := a + a) et une fonction. Jusqu'\xC3\xA0 32 appels imbriqu\xC3\xA9s (8 avant) ; au-del\xC3\xA0, l'appel s'arr\xC3\xAAte et le journal le dit.",
+         "scripts", ""),
+        note("1.11.10", "Communication", Kind::Fixed,
+         "Des valeurs \xC2\xAB mauvaises \xC2\xBB sur un esclave simul\xC3\xA9 aux zones compl\xC3\xA8tes (\xC2\xAB pas relue depuis 2 min 49 s \xC2\xBB) : un script qui \xC3\xA9" "crit \xC3\xA0 chaque image remplissait la file des \xC3\xA9" "critures plus vite que la liaison ne l'envoyait, et les lectures ne repassaient plus. La liaison n'envoie plus que les \xC3\xA9" "critures d\xC3\xA9j\xC3\xA0 en attente, puis lit ; les \xC3\xA9" "critures d'une m\xC3\xAAme case en attente se regroupent.",
+         "equipements", ""),
+        note("1.11.10", "\xC3\x89" "diteur IHM", Kind::Fixed,
+         "Modifier les param\xC3\xA8tres d'un symbole ou d'une popup met \xC3\xA0 jour les instances et les appelants : renommer (Name := 'A' devient Titre := 'A'), supprimer (l'argument part), d\xC3\xA9placer (les arguments positionnels passent en nomm\xC3\xA9s, ils gardent leur sens). Un seul Ctrl+Z.",
+         "symboles", ""),
         // 1.11.9 (05/10/2026, les demandes du 05/10 sur les actions) : l'operation en arbre, la fenetre
         // du script, Maths, le clavier virtuel.
         note("1.11.9", "\xC3\x89" "diteur IHM", Kind::New,
