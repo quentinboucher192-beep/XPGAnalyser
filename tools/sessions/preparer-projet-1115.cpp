@@ -4,10 +4,10 @@
 //  (session-1115-esclaves-arbre.txt).
 // -----------------------------------------------------------------------------
 //  Sur une copie d'Armoire_Gaz (celle des sessions, ou celle de la 1.11.4) :
-//    - les types IHM T_Vanne (Ouverte, Position) et T_Four (Temperature, Pression,
-//      Vannes : ARRAY[1..2] OF T_Vanne) ;
-//    - Four1 (T_Four) lie a la Centrale PM5560 en %MW3030 : ses sept valeurs
-//      se rangent sous Four1 > Vannes > [1] dans les valeurs simulees ;
+//    - les types IHM T_Vanne et T_Four, s'ils manquent (Armoire_Gaz les a deja :
+//      T_Four = Temperature, Consigne, Marche, Defaut, Vannes : ARRAY[1..3] OF T_Vanne) ;
+//    - Four1 (T_Four), s'il manque (Armoire_Gaz l'a deja, lu sur la Balance B) :
+//      ses valeurs se rangent sous Four1 > Vannes > [1] dans les valeurs simulees ;
 //    - Four2 (T_Four), locale : l'arbre de l'onglet Variables IHM.
 //
 //    g++ -std=c++20 -Isrc tools/sessions/preparer-projet-1115.cpp \

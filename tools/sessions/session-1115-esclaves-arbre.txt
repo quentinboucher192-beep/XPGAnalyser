@@ -2,8 +2,8 @@
 #  Session 1115 : LES ESCLAVES SIMULES EN ARBRE, LES BORNES AU CLAVIER,
 #  LES ONGLETS VARIABLES IHM ET VARIABLES API (ARBRES, RECHERCHE, FORCAGE).
 #  Le projet : une copie d'Armoire_Gaz preparee par preparer-projet-1113.cpp,
-#  preparer-projet-1114.cpp puis preparer-projet-1115.cpp (Four1 : T_Four lie a
-#  la Centrale PM5560 en %MW3030 ; Four2 : T_Four local).
+#  preparer-projet-1114.cpp puis preparer-projet-1115.cpp. Four1 (T_Four, deja
+#  dans Armoire_Gaz) est lu sur la Balance B ; Four2 (T_Four) est local.
 # =============================================================================
 attendre 3
 theme Dark
@@ -26,7 +26,7 @@ valeurs-chercher ""
 attendre 2
 valeur "Centrale PM5560" "%MW3002" bornes
 attendre 2
-texte "100 ; 450"
+texte "20 ; 80"
 attendre 2
 capture 1115_02_bornes_au_clavier.png
 touche entree
@@ -49,14 +49,17 @@ sous-onglet "Variables IHM"
 attendre 3
 simvar ihm chercher "Four"
 attendre 3
+simvar ihm noeud "Four1" fermer
+simvar ihm noeud "Fours" fermer
+attendre 2
 simvar ihm forcer "Four2.Temperature" "80"
 attendre 2
 simvar ihm forcer "Four2.Vannes[1].Ouverte"
 attendre 3
 capture 1115_05_variables_ihm_arbre_forcage.png
-simvar ihm editer "Four2.Pression"
+simvar ihm editer "Four2.Consigne"
 attendre 1
-texte "1013,5"
+texte "1150,5"
 attendre 2
 capture 1115_06_variables_ihm_champ_valeur.png
 touche entree

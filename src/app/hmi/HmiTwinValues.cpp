@@ -495,16 +495,21 @@ void HmiTwinValues::onLayout() {
     if (menu_) menu_->setBounds(b);
     if (compact_) {
         // 1.11.5 : la recherche, en haut de l'onglet.
-        if (searchBox_) searchBox_->setBounds({b.x + 8.f, b.y + 5.f, std::min(360.f, std::max(80.f, b.w - 16.f)), 26.f});
+        if (searchBox_) searchBox_->setBounds({b.x + 8.f, b.y + 5.f, std::min(360.f, std::max(80.f, b.w - 16.f - 200.f)), 26.f});
         return;
     }
     if (!twinBox_) return;
+    // 1.11.5 : les deux listes se serrent quand le volet est etroit - la recherche
+    // garde au moins 140 px (avant : elle sortait du volet).
+    const float room = b.w - 70.f - 76.f - 10.f - 140.f - 12.f;
+    const float k = std::clamp(room / 560.f, 0.45f, 1.f);
+    const float twinW = 260.f * k, showW = 300.f * k;
     float x = b.x + 70.f;
-    twinBox_->setBounds({x, b.y + 5.f, 260.f, 26.f});
-    x += 260.f + 76.f;
-    showBox_->setBounds({x, b.y + 5.f, 300.f, 26.f});
-    x += 310.f;
-    const float w = std::max(80.f, std::min(220.f, b.x + b.w - x - 300.f));
+    twinBox_->setBounds({x, b.y + 5.f, twinW, 26.f});
+    x += twinW + 76.f;
+    showBox_->setBounds({x, b.y + 5.f, showW, 26.f});
+    x += showW + 10.f;
+    const float w = std::max(80.f, std::min(220.f, b.x + b.w - x - (k < 1.f ? 12.f : 300.f)));
     searchBox_->setBounds({x, b.y + 5.f, w, 26.f});
 }
 
@@ -1126,7 +1131,11 @@ void HmiTwinValues::onPaint(const ui::PaintContext& ctx) {
             g.drawText({c.period, ty}, "P\xC3\xA9riode", kSmall, th.color.textMuted);
             g.drawText({c.spark, ty}, "Courbe 60 s", kSmall, th.color.textMuted);
         }
-        g.drawText({c.bar, ty}, compact_ ? "Zone de mouvement (tirer)" : "Plage de la valeur (tirer les poign\xC3\xA9" "es)", kSmall, th.color.textMuted);
+        // 1.11.5 : le titre de la barre tient dans sa colonne (avant : il passait sous Periode et Forcer).
+        g.drawText({c.bar, ty},
+                   fit(g, compact_ ? "Zone de mouvement (tirer)" : "Plage de la valeur (tirer les poign\xC3\xA9" "es)", kSmall,
+                       (compact_ ? c.force : c.period) - c.bar - 8.f),
+                   kSmall, th.color.textMuted);
         g.drawText({c.force, ty}, "Forcer", kSmall, th.color.textMuted);
         g.drawText({c.value, ty}, "Valeur", kSmall, th.color.textMuted);
     }

@@ -3705,6 +3705,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             }
             gfx::Rect r{};
             if (!tree.rowRect(arg(3), r)) {
+                (void)tree.reveal(arg(3));
                 if (retries_ < 4) return Step::Retry;
                 fail("simvar : la ligne " + arg(3) + " n'est pas montr\xC3\xA9" "e");
                 return Step::Next;

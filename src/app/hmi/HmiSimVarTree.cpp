@@ -259,7 +259,8 @@ gfx::Rect HmiSimVarTree::forceBox(const gfx::Rect& row) const {
 
 void HmiSimVarTree::onLayout() {
     const auto b = bounds();
-    if (search_) search_->setBounds({b.x + 8.f, b.y + 5.f, std::min(380.f, std::max(80.f, b.w - 16.f)), 26.f});
+    // La place du compte a droite de la recherche (« 86 sur 228 variables · 2 forcees »).
+    if (search_) search_->setBounds({b.x + 8.f, b.y + 5.f, std::min(380.f, std::max(80.f, b.w - 16.f - 190.f)), 26.f});
     if (!editPath_.empty()) {
         gfx::Rect r{};
         if (rowRect(editPath_, r)) edit_->setBounds({r.x + r.w * 0.62f, r.y + 1.f, std::max(80.f, r.w * 0.2f), kRowH - 2.f});
@@ -289,10 +290,23 @@ bool HmiSimVarTree::unforcePath(const std::string& path) {
     return true;
 }
 
+bool HmiSimVarTree::reveal(const std::string& path) {
+    const auto a = listArea();
+    for (std::size_t i = 0; i < rows_.size(); ++i)
+        if (rows_[i].path == path) {
+            const float top = static_cast<float>(i) * kRowH;
+            if (top < scroll_ || top + kRowH > scroll_ + a.h) scroll_ = std::max(0.f, top - a.h * 0.4f);
+            invalidate();
+            return true;
+        }
+    return false;
+}
+
 bool HmiSimVarTree::openValueEditor(const std::string& path) {
     for (const auto& r : rows_)
         if (r.path == path && r.leaf) {
             gfx::Rect rr{};
+            if (!rowRect(path, rr)) (void)reveal(path);
             if (!rowRect(path, rr)) return false;
             editPath_ = path;
             std::string now;
@@ -355,10 +369,12 @@ void HmiSimVarTree::onPaint(const ui::PaintContext& ctx) {
         const float hy = b.y + kBarH;
         g.fillRect({b.x, hy, b.w, kHeadH}, th.color.headerBg);
         const float ty = hy + (kHeadH - g.lineHeight(kSmall)) * 0.5f;
-        g.drawText({a.x + 10.f, ty}, "Variable " + what_, kSmall, th.color.textMuted);
-        g.drawText({xType, ty}, "Type", kSmall, th.color.textMuted);
-        g.drawText({xValue, ty}, "Valeur (double-clic : forcer \xC3\xA0)", kSmall, th.color.textMuted);
-        g.drawText({xForce, ty}, "Forcer", kSmall, th.color.textMuted);
+        // Chaque titre tient dans sa colonne (le volet peut etre etroit).
+        g.drawText({a.x + 10.f, ty}, fit(g, "Variable " + what_, kSmall, xType - a.x - 16.f), kSmall, th.color.textMuted);
+        g.drawText({xType, ty}, fit(g, "Type", kSmall, xValue - xType - 6.f), kSmall, th.color.textMuted);
+        g.drawText({xValue, ty}, fit(g, "Valeur (double-clic : forcer \xC3\xA0)", kSmall, xForce - xValue - 8.f), kSmall,
+                   th.color.textMuted);
+        g.drawText({xForce, ty}, fit(g, "Forcer", kSmall, a.x + w - xForce - 4.f), kSmall, th.color.textMuted);
     }
     scroll_ = std::clamp(scroll_, 0.f, std::max(0.f, content - a.h));
     g.pushClip(a);
