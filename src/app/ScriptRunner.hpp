@@ -106,6 +106,7 @@
 #include "../platform/InputEvent.hpp"
 #include "tutorial/UiDriver.hpp"            // 1.11 (T1) : l'entree simulee et les cibles, partagees avec les tutoriels
 
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -166,6 +167,11 @@ private:
     gfx::Point               clientMouse_{};      // 1.11.1 (T1, R111-18) : la souris de clic-souris
     std::optional<gfx::Rect> spot_;               // 1.11 (T1) : encadrer
     std::string              say_;                // 1.11 (T1) : dire
+    // 1.11.12 : arbre-parcourir - les noeuds a visiter, le suivant, ceux deja vus.
+    std::vector<std::uint64_t> crawl_;
+    std::size_t                crawlAt_{0};
+    bool                       crawling_{false};
+    int                        crawlStuck_{0};
 };
 
 } // namespace app

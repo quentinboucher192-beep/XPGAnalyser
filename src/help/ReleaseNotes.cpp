@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.11.12", "08/10/2026", "livr\xC3\xA9" "e le 08/10"},
     {"1.11.11", "05/10/2026", "livr\xC3\xA9" "e le 05/10 au soir"},
     {"1.11.10", "05/10/2026", "livr\xC3\xA9" "e le 05/10 au soir"},
     {"1.11.9", "05/10/2026", "livr\xC3\xA9" "e le 05/10"},
@@ -90,6 +91,11 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.11.12 (08/10/2026, les deux rapports de plantage du 05/10 a 22:59 et 23:00) : un clic
+        // dans l'arbre sur Fonctions ou Popups d'un symbole fermait le logiciel.
+        note("1.11.12", "\xC3\x89" "diteur IHM", Kind::Fixed,
+         "Un clic dans l'arbre sur Fonctions ou Popups d'un symbole fermait XPGAnalyser (rapports de plantage du 05/10 \xC3\xA0 22 h 59 et 23 h 00) : la barre d'\xC3\xA9tat lisait la phrase de la partie hors de sa liste, qui n'avait pas suivi les deux parties de la 1.11.10. Le clic ouvre maintenant le sous-onglet Fonctions ou Popups du symbole, et chaque partie a sa phrase.",
+         "symboles", ""),
         // 1.11.11 (05/10/2026 au soir, la capture du client : =GetActiveCount(30) dans un symbole,
         // refusee) : les fonctions des symboles dans les expressions, et l'aide a la saisie.
         note("1.11.11", "\xC3\x89" "diteur IHM", Kind::Fixed,

@@ -1643,15 +1643,15 @@ void MainAnalysisScreen::openHmiView(std::uint64_t viewId, int part, std::uint64
     }
     // Une partie de la vue, choisie dans l'arbre : ce qu'elle designe est deja
     // a l'ecran (explorateur d'objets, calques, groupes) ; le dire suffit.
+    // 1.11.12 : les Fonctions et les Popups d'un symbole ouvrent leur sous-onglet ;
+    // la phrase vient de hmiPartHint (la table de la 1.11.11 n'avait que 5 phrases
+    // pour 7 parties : un clic sur Fonctions ou Popups plantait).
     using Part = ProjectTreeModel::HmiPart;
     if (part >= 0 && part < static_cast<int>(Part::Count)) {
-        static const char* what[] = {
-            "Objets : l'explorateur d'objets, \xC3\xA0 gauche (recherche, filtre par type).",
-            "Scripts de la vue (OnOpen, OnCycle, OnClose) : leur onglet \xC2\xAB Scripts \xC2\xB7 vue \xC2\xBB.",
-            "Animations : les propri\xC3\xA9t\xC3\xA9s pilot\xC3\xA9" "es par une expression (=expression) ; les actions : onglet Actions de l'inspecteur.",
-            "Calques : le panneau Calques, en bas \xC3\xA0 gauche.",
-            "Groupes : dans l'explorateur d'objets ; double-clic sur un groupe pour l'\xC3\xA9" "diter de l'int\xC3\xA9rieur."};
-        status_->setTransientMessage(what[part], 8.0);
+        const auto which = static_cast<Part>(part);
+        if (auto* tabs = editor->symbolTabs(); tabs && (which == Part::Functions || which == Part::Popups))
+            tabs->setCurrent(which == Part::Functions ? HmiSymbolTabs::Functions : HmiSymbolTabs::Popups);
+        if (const char* hint = ProjectTreeModel::hmiPartHint(which)) status_->setTransientMessage(hint, 8.0);
     }
 }
 

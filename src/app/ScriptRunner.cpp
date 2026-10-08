@@ -2298,6 +2298,55 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     //  arbre-lignes           ce que montre l'arbre, une ligne par noeud visible (retrait = profondeur)
     //  arbre-versions-toutes [non]   toutes les versions dans l'arbre (non : en bref, les 5 dernieres)
     //  arbre-epingler "IHM/Vues/Vue_A" [non]   l'epingle en haut de l'arbre (non : la retire), comme le clic droit
+    //  1.11.12 : arbre-parcourir "IHM" [max]   chaque noeud du sous-arbre (lui compris,
+    //  profondeur d'abord, 4000 au plus), quatre par image : son menu du clic droit, sa
+    //  carte, puis son clic - ce que ferait la souris. Une fenetre qu'un clic ouvre se
+    //  ferme (Annuler). Ecrit le nombre de noeuds visites. La 1.11.11 plantait sur un
+    //  clic sur Fonctions ou Popups d'un symbole : ce parcours l'aurait trouve.
+    if (cmd == "arbre-parcourir") {
+        // Une fenetre ouverte par le noeud precedent : Annuler, puis on reprend.
+        if (crawling_ && !dynamic_cast<MainAnalysisScreen*>(app_.menus().top())) {
+            if (++crawlStuck_ > 60) {
+                fail("arbre-parcourir : une fenetre ne se ferme pas, apres le noeud " + std::to_string(crawlAt_));
+                crawl_.clear();
+                crawling_ = false;
+                crawlStuck_ = 0;
+                return Step::Next;
+            }
+            app_.menus().CloseDialog(menu::DialogResult{menu::DialogResult::Button::Cancel, {}});
+            retries_ = 0;
+            return Step::Retry;
+        }
+        crawlStuck_ = 0;
+        auto* screen = dynamic_cast<MainAnalysisScreen*>(app_.menus().top());
+        if (!screen) { fail(cmd + " : pas d'\xC3\xA9" "cran d'analyse"); return Step::Next; }
+        if (!crawling_) {
+            const auto from = screen->treeNodeOfPath(arg(1));
+            if (from == ui::kInvalidNode) { fail("arbre-parcourir : introuvable : " + arg(1)); return Step::Next; }
+            std::size_t cap = 4000;
+            if (!arg(2).empty()) cap = static_cast<std::size_t>(std::max(1, std::atoi(arg(2).c_str())));
+            const auto nodes = screen->treeSubtree(from, cap);
+            crawl_.assign(nodes.begin(), nodes.end());
+            crawlAt_ = 0;
+            crawling_ = true;
+            std::printf("[script] arbre-parcourir \"%s\" : %zu noeud(s)\n", arg(1).c_str(), crawl_.size());
+        }
+        for (int k = 0; k < 4 && crawlAt_ < crawl_.size(); ++k) {
+            const auto n = static_cast<ui::NodeId>(crawl_[crawlAt_++]);
+            const auto text = screen->visitTreeNode(n);
+            if (crawlAt_ % 100 == 0 || crawlAt_ == crawl_.size())
+                std::printf("[script] arbre-parcourir : %zu / %zu (%s)\n", crawlAt_, crawl_.size(), text.c_str());
+            if (!dynamic_cast<MainAnalysisScreen*>(app_.menus().top())) break;   // une fenetre : l'image suivante
+        }
+        if (crawlAt_ < crawl_.size() || !dynamic_cast<MainAnalysisScreen*>(app_.menus().top())) {
+            retries_ = 0;   // un long parcours n'est pas une attente
+            return Step::Retry;
+        }
+        std::printf("[script] arbre-parcourir : fini, %zu noeud(s) visit\xC3\xA9(s), sans plantage\n", crawl_.size());
+        crawl_.clear();
+        crawling_ = false;
+        return Step::Yield;
+    }
     if (cmd == "arbre-epingler") {
         auto* screen = dynamic_cast<MainAnalysisScreen*>(app_.menus().top());
         if (!screen) { fail(cmd + " : pas d'\xC3\xA9" "cran d'analyse"); return Step::Next; }

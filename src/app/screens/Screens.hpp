@@ -397,6 +397,15 @@ public:
     //  comme pour le script "arbre" ("IHM/Vues/Vue_A"). Faux : rien n'a change.
     bool pinTreeNode(ui::NodeId node, bool pin);
     bool pinTreePath(const std::string& path, bool pin);
+    //  1.11.12 : le noeud d'un chemin ("IHM/Symboles/S_Vanne", lu comme pour pinTreePath) ;
+    //  tout son sous-arbre (lui d'abord, profondeur d'abord, `cap` noeuds au plus, sans
+    //  les membres des variables ni Epingles / Recents) ; visiter un noeud : son menu
+    //  (clic droit), sa carte (survol), puis son clic - ce que fait la souris. Le script
+    //  arbre-parcourir s'en sert pour chercher les plantages d'un genre de noeud (la
+    //  1.11.11 plantait sur un clic sur Fonctions ou Popups d'un symbole).
+    [[nodiscard]] ui::NodeId treeNodeOfPath(const std::string& path) const;
+    [[nodiscard]] std::vector<ui::NodeId> treeSubtree(ui::NodeId from, std::size_t cap) const;
+    std::string visitTreeNode(ui::NodeId node);
     [[nodiscard]] bool isTreePinned(ui::NodeId node) const;
     [[nodiscard]] static bool treePinnable(ui::NodeId node);   // pas les titres ni les lignes du lot
     void tickTree(double now);                            // a chaque image (tickApiPanes)

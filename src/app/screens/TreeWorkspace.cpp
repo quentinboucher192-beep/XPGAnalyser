@@ -581,7 +581,12 @@ bool MainAnalysisScreen::pinTreeNode(ui::NodeId node, bool pin) {
 }
 
 bool MainAnalysisScreen::pinTreePath(const std::string& path, bool pin) {
-    if (!treeModel_ || path.empty()) return false;
+    const auto at = treeNodeOfPath(path);
+    return at != ui::kInvalidNode && pinTreeNode(at, pin);
+}
+
+ui::NodeId MainAnalysisScreen::treeNodeOfPath(const std::string& path) const {
+    if (!treeModel_ || path.empty()) return ui::kInvalidNode;
     // Chaque morceau : le premier descendant (4 niveaux au plus, sans les
     // membres des variables) dont le texte commence ainsi, sous le precedent.
     ui::NodeId at = treeModel_->root();
@@ -601,12 +606,47 @@ bool MainAnalysisScreen::pinTreePath(const std::string& path, bool pin) {
                 todo.emplace_back(child, depth + 1);
             }
         }
-        if (hit == ui::kInvalidNode) return false;
+        if (hit == ui::kInvalidNode) return ui::kInvalidNode;
         at = hit;
         if (slash == std::string::npos) break;
         from = slash + 1;
     }
-    return pinTreeNode(at, pin);
+    return at;
+}
+
+// 1.11.12 : arbre-parcourir. Profondeur d'abord, dans l'ordre des lignes.
+std::vector<ui::NodeId> MainAnalysisScreen::treeSubtree(ui::NodeId from, std::size_t cap) const {
+    std::vector<ui::NodeId> out;
+    if (!treeModel_ || from == ui::kInvalidNode) return out;
+    std::vector<ui::NodeId> todo{from};
+    while (!todo.empty() && out.size() < cap) {
+        const auto n = todo.back();
+        todo.pop_back();
+        const auto kind = ProjectTreeModel::kindOf(n);
+        if (kind == Kind::PinsFolder || kind == Kind::PinItem || kind == Kind::RecentFolder || kind == Kind::RecentItem) continue;
+        out.push_back(n);
+        if (ProjectTreeModel::holdsMembers(n)) continue;
+        const auto count = treeModel_->childCount(n);
+        for (std::size_t c = count; c-- > 0;) todo.push_back(treeModel_->childAt(n, c));
+    }
+    return out;
+}
+
+std::string MainAnalysisScreen::visitTreeNode(ui::NodeId node) {
+    if (!treeModel_ || node == ui::kInvalidNode) return {};
+    std::string text = treeModel_->text(node);
+    (void)treeModel_->style(node);
+    (void)treeCardText(node);
+    // Le menu du clic droit, construit comme a l'ouverture (sans s'ouvrir).
+    if (!contextMenu_ || !contextMenu_->isOpen()) {
+        contextNode_ = node;
+        std::vector<ui::PopupMenu::Item> items;
+        TreeKeys keys;
+        buildExplorerMenu(node, items, keys);
+        contextCalls_.clear();
+    }
+    onTreeSelection(node);
+    return text;
 }
 
 void MainAnalysisScreen::noteTreeRecent(ui::NodeId node) {

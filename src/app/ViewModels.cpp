@@ -3460,6 +3460,31 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         return i < versions_.size() ? versions_[i].number : -1;
     }
 
+    // 1.11.12 : un switch sans "default" - le compilateur dit la partie oubliee.
+    const char* ProjectTreeModel::hmiPartHint(HmiPart part) noexcept {
+        switch (part) {
+            case HmiPart::Objects:
+                return "Objets : l'explorateur d'objets, \xC3\xA0 gauche (recherche, filtre par type).";
+            case HmiPart::Scripts:
+                return "Scripts de la vue (OnOpen, OnCycle, OnClose) : leur onglet \xC2\xAB Scripts \xC2\xB7 vue \xC2\xBB.";
+            case HmiPart::Animations:
+                return "Animations : les propri\xC3\xA9t\xC3\xA9s pilot\xC3\xA9" "es par une expression (=expression) ; "
+                       "les actions : onglet Actions de l'inspecteur.";
+            case HmiPart::Layers:
+                return "Calques : le panneau Calques, en bas \xC3\xA0 gauche.";
+            case HmiPart::Groups:
+                return "Groupes : dans l'explorateur d'objets ; double-clic sur un groupe pour l'\xC3\xA9" "diter de l'int\xC3\xA9rieur.";
+            case HmiPart::Functions:
+                return "Fonctions du symbole : son sous-onglet \xC2\xAB Fonctions \xC2\xBB (virtuelles en violet, "
+                       "red\xC3\xA9" "finissables par instance).";
+            case HmiPart::Popups:
+                return "Popups du symbole : son sous-onglet \xC2\xAB Popups \xC2\xBB (chaque instance ouvre la sienne).";
+            case HmiPart::Count:
+                break;
+        }
+        return nullptr;
+    }
+
     std::uint64_t ProjectTreeModel::hmiViewOf(ui::NodeId n) const {
         const auto k = kindOf(n);
         const bool inView = k == NodeKind::HmiView || k == NodeKind::HmiViewPart || k == NodeKind::HmiObject
