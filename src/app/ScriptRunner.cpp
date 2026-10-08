@@ -2317,6 +2317,18 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         if (screen) buildScreen_ = screen;
         // la fenetre de progression est devant : l'ecran est dessous (le meme, il ne part pas)
         else if ((cmd == "ihm-build-attendre" || cmd == "ihm-build-etat") && app_.menus().depth() >= 2) screen = buildScreen_;
+        // ihm-sorties, la fenetre du build devant (il a dure plus de 0,3 s) : son
+        // bouton Voir les sorties, puis l'onglet voulu a l'image suivante.
+        if (!screen && cmd == "ihm-sorties" && buildScreen_ && app_.menus().depth() >= 2) {
+            ui::Button* outputs = nullptr;
+            if (auto* root = top())
+                walk(*root, [&](ui::Widget& x) {
+                    auto* b = dynamic_cast<ui::Button*>(&x);
+                    if (b && b->id() == "hmiBuildProgress.sorties" && shown(*b) && b->enabled()) outputs = b;
+                });
+            if (outputs) click(centre(outputs->bounds()), MouseButton::Left, 1, {});
+            if (outputs || retries_ < 600) return Step::Retry;
+        }
         if (!screen) {
             if (cmd == "ihm-build-attendre") { retries_ = 0; return Step::Retry; }
             fail(cmd + " : pas d'\xC3\xA9" "cran d'analyse");

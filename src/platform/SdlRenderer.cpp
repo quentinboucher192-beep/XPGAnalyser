@@ -291,6 +291,15 @@ namespace gfx {
 
         // LE CHEMIN NORMAL : une vraie police, glyphe par glyphe.
         if (auto* face = impl_->faceFor(font)) {
+            // 1.11.13 : LES GLYPHES NEUFS D'ABORD, L'ENVOI ENSUITE. Un caractere
+            // dessine pour la premiere fois etait rasterise pendant la boucle,
+            // apres l'envoi de la texture : il manquait une image (la fenetre du
+            // build s'ouvrait sur "%" au lieu de "8 %").
+            for (std::size_t at = 0; at < utf8.size();) {
+                const char32_t code = FontAtlas::decode(utf8, at);
+                if (code == 0) break;
+                (void)face->glyph(code);
+            }
             impl_->uploadIfDirty(font, *face);
             SDL_Texture* atlas = impl_->atlasTexture(font);
             if (atlas) {

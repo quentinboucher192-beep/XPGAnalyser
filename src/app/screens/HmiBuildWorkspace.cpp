@@ -100,6 +100,7 @@ void MainAnalysisScreen::ensureHmiBuild() {
         if (then) then(*rep);
     });
     hmiBuildLinks_ += hmiBuild_->statusChanged->connect([this] { applyHmiBuildMarks(); });
+    hmiBuild_->setClock([this] { return frameClock_; });   // les 300 ms en temps d'images (les sessions rejouees aussi)
     hmiBuild_->analyseNow();
 }
 
@@ -383,13 +384,24 @@ bool MainAnalysisScreen::scriptHmiBuild(const std::string& mode, const std::stri
     std::vector<std::string> sc;
     if (!scope.empty()) sc.push_back(scope);
     const bool chosen = !scope.empty() && scope.find('/') == std::string::npos;
-    if (!runHmiBuild(*m, sc, chosen, std::string(pl::modeLabel(*m)) + (scope.empty() ? std::string{} : " " + scope))) {
+    if (*m == pl::Mode::Start) {
+        // demarrer : comme Demarrer l'IHM - l'onglet Simulation . IHM, son build, puis la
+        // simulation s'il est valide (un build « Demarrer » sans elle mentirait dans sa fenetre).
+        if (!hmiTab("simulation")) openHmiPane("simulation");
+        auto* sim = dynamic_cast<HmiSimulationPane*>(hmiTab("simulation"));
+        if (sim && !(hmiBuild_ && hmiBuild_->building())) sim->startHmi("session");
+        if (!sim || !hmiBuild_ || !hmiBuild_->building()) {
+            if (why) *why = sim ? "la simulation tourne d\xC3\xA9j\xC3\xA0" : "pas d'onglet Simulation \xC2\xB7 IHM";
+            return false;
+        }
+    } else if (!runHmiBuild(*m, sc, chosen, std::string(pl::modeLabel(*m)) + (scope.empty() ? std::string{} : " " + scope))) {
         if (why) *why = "un build est d\xC3\xA9j\xC3\xA0 en cours";
         return false;
     }
+    if (!dialog) hmiBuildBackground_ = true;   // sans fenetre : la barre d'etat et les sorties seulement
     if (dialog && !hmiBuildDialogOpen_) {
         hmiBuildDialogOpen_ = true;
-        app_.menus().ShowDialog(std::make_unique<HmiBuildProgressDialog>(hmiBuild_, hmiBuildTitle_, false), [this](const menu::DialogResult& r) {
+        app_.menus().ShowDialog(std::make_unique<HmiBuildProgressDialog>(hmiBuild_, hmiBuildTitle_, hmiBuildStarts_), [this](const menu::DialogResult& r) {
             hmiBuildDialogOpen_ = false;
             if (r.payload == "outputs") (void)hmiBuildOutput(true);
         });
@@ -397,7 +409,9 @@ bool MainAnalysisScreen::scriptHmiBuild(const std::string& mode, const std::stri
     return true;
 }
 
-bool MainAnalysisScreen::hmiBuildBusy() const { return hmiBuild_ && (hmiBuild_->building() || !hmiStartPending_.empty()); }
+bool MainAnalysisScreen::hmiBuildBusy() const {
+    return hmiBuild_ && (hmiBuild_->building() || !hmiStartPending_.empty() || !hmiBuild_->settled());   // une analyse attendue compte
+}
 
 std::string MainAnalysisScreen::hmiBuildSummary() const {
     if (!hmiBuild_) return "pas de build";

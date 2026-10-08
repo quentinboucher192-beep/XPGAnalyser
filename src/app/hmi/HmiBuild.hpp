@@ -102,6 +102,9 @@ public:
     HmiBuildManager(const HmiBuildManager&) = delete;
     HmiBuildManager& operator=(const HmiBuildManager&) = delete;
 
+    // L'horloge des 300 ms (en secondes) : celle de l'ecran (une session rejouee avance a
+    // l'horloge fixe des images, pas a celle du mur) ; vide : steady_clock.
+    void setClock(std::function<double()> clock) { clock_ = std::move(clock); }
     // Le document a change : l'analyse sera refaite (au prochain poll, 300 ms apres).
     void invalidate();
     // L'analyse tout de suite (au prochain poll, sans attendre).
@@ -110,6 +113,8 @@ public:
     bool start(const hmi::pipeline::Request& request, std::string* why = nullptr);
     [[nodiscard]] bool building() const noexcept { return building_; }
     [[nodiscard]] bool busy() const noexcept { return worker_.joinable(); }
+    // Au repos : rien ne tourne et rien n'attend (pas d'analyse demandee).
+    [[nodiscard]] bool settled() const noexcept { return !busy() && !dirty_; }
     void cancel();
     [[nodiscard]] bool cancelling() const noexcept { return cancel_.load(); }
     // A chaque image (fil de l'interface) : ce qui est fini est applique, les
@@ -146,7 +151,9 @@ private:
     std::atomic<bool>       finishedFlag_{false};
     bool                    building_{false};
     bool                    dirty_{true};
-    std::chrono::steady_clock::time_point dirtyAt_{};
+    double                  dirtyAt_{-1.0};           // sur clock_
+    std::function<double()> clock_;
+    [[nodiscard]] double    now() const;
     std::chrono::steady_clock::time_point startedAt_{}, endedAt_{};
     mutable std::mutex      mutex_;
     hmi::pipeline::Progress progress_;

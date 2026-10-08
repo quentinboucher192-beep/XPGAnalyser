@@ -1,6 +1,6 @@
 # =============================================================================
 #  Session 11113 : LA GENERATION INCREMENTALE DE LA SIMULATION IHM (lot 1).
-#  Sur une copie d'Armoire_Gaz (preparer-projet-11111), sans cache de build :
+#  Sur une copie d'Armoire_Gaz corrigee de ses 8 erreurs reelles (session 11113a), sans cache :
 #    1. l'arbre avant tout build (non genere) ;
 #    2. un build complet, sa fenetre de progression (phases A a G, 4 + 16 etapes) ;
 #    3. l'arbre a jour ; demarrer sans rien changer : « Projet a jour » ;
@@ -25,10 +25,10 @@ capture 11113_01_arbre_avant_build.png
 # ---- 2. le premier build (tout), et sa fenetre ----
 ihm-build regenerer-compiler
 attendre 1
-capture-ecran 11113_02_progression_en_cours.png
+capture 11113_02_progression_en_cours.png
 ihm-build-attendre
 attendre 2
-capture-ecran 11113_03_progression_fin.png
+capture 11113_03_progression_fin.png
 ihm-build-etat "Projet"
 bouton "Fermer"
 attendre 2
@@ -44,6 +44,7 @@ capture 11113_05_demarrage_projet_a_jour.png
 
 # ---- 4. un script modifie, aussitot dans l'arbre ; son clic droit ----
 ihm-script-modifier "Horloge" "(* 1.11.13 : une ligne ajoutée *)"
+ihm-build-attendre
 attendre 3
 ihm-build-etat "1 modifi"
 capture 11113_06_script_modifie.png
@@ -57,7 +58,7 @@ attendre 2
 ihm-build generer-compiler "IHM/Programmation générale/Scripts/Horloge"
 ihm-build-attendre
 attendre 2
-capture-ecran 11113_08_un_seul_script.png
+capture 11113_08_un_seul_script.png
 ihm-build-etat "1 généré(s), 1 compilé(s)"
 bouton "Fermer"
 attendre 2
@@ -66,6 +67,7 @@ attendre 2
 bouton "Arrêter l'IHM"
 attendre 2
 ihm-script-modifier "Horloge" "Secondes_IHM := Secondes_IHM + ;"
+ihm-build-attendre
 attendre 3
 ihm-build-etat "1 modifi"
 bouton "Démarrer l'IHM"

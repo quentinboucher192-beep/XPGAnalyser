@@ -305,6 +305,15 @@ void premiereGenerationEtDemarrageSansModification() {
         check(contains(a, "Vanne_1") && contains(a, "Voyant"), "la vue generee contient l'instance deballee (le voyant du symbole)");
         check(a.size() > 4 && a.substr(a.size() - 4) == "fin\n", "un artefact finit par \"fin\"");
     }
+    {
+        // les dossiers et les noms sans accent ni octet UTF-8 ("05-scripts_generaux", pas "05-scripts_g__n__raux")
+        bool ascii = true, scripts = false;
+        for (const auto& [rel, t] : b.artifacts) {
+            for (const char c : rel) ascii = ascii && static_cast<unsigned char>(c) < 0x80;
+            scripts = scripts || rel.rfind("ihm/05-scripts_generaux/", 0) == 0;
+        }
+        check(ascii && scripts && !b.artifacts.empty(), "les chemins des artefacts sont en ASCII : ihm/05-scripts_generaux/...");
+    }
     // la progression : de vraies etapes, toutes terminees
     check(!seen.empty() && seen.back().done == seen.back().total && seen.back().total == r1.tasks, "la progression va de 0 a toutes les taches");
     bool apiFirst = true, sawIhm = false;
@@ -459,8 +468,15 @@ void echecEtCorrection() {
     (void)b.build(pl::Mode::Start);
     const std::string init = key(pl::ElementKind::Script, b.scriptInit);
     b.script(b.scriptInit).body = "Debit := Moyenne(1.0, 3.0);\nCompteur := Compteur + ;";
-    const auto r = b.build(pl::Mode::Start);
+    pl::Progress fin;
+    const auto r = b.build(pl::Mode::Start, {}, false, [&fin](const pl::Progress& pr) { fin = pr; });
     check(!r.ok && r.errors > 0, "erreur de syntaxe : le build echoue, la simulation ne demarre pas");
+    {
+        // la fenetre ne dit plus « a venir » pour F et G : bloques, et pourquoi
+        const auto f = static_cast<int>(pl::Phase::Start), g = static_cast<int>(pl::Phase::Restore);
+        check(fin.phases[f] == pl::PhaseState::Cancelled && fin.phases[g] == pl::PhaseState::Cancelled && contains(fin.phaseNotes[f], "bloqu"),
+              "build en echec : Demarrage et Restauration bloques (" + fin.phaseNotes[f] + "), jamais a venir");
+    }
     const pl::Diagnostic* d = nullptr;
     for (const auto& x : r.diagnostics) if (x.element == init && x.blocking()) { d = &x; break; }
     check(d && d->line == 2 && d->step == "Compilation" && d->path == "IHM/Programmation g\xC3\xA9n\xC3\xA9rale/Scripts/Init" && d->script == b.scriptInit,
@@ -475,8 +491,10 @@ void echecEtCorrection() {
     check(!r2.ok, "relancer sans corriger : toujours bloque");
     // corriger
     b.script(b.scriptInit).body = "Debit := Moyenne(1.0, 3.0);\nCompteur := Compteur + 1;";
-    const auto r3 = b.build(pl::Mode::Start);
+    const auto r3 = b.build(pl::Mode::Start, {}, false, [&fin](const pl::Progress& pr) { fin = pr; });
     check(r3.ok && b.compiled() == std::set<std::string>{init}, "corrige : Init seul est recompile, sans erreur");
+    check(fin.phases[static_cast<int>(pl::Phase::Start)] == pl::PhaseState::Done && fin.phases[static_cast<int>(pl::Phase::Restore)] == pl::PhaseState::Skipped,
+          "build valide : Demarrage fait (la simulation demarre), rien a restaurer");
     check(b.state(init) == pl::State::UpToDate && b.cache.entries[init].diagnostics.empty(), "corrige : a jour, plus de diagnostic");
     const auto r4 = b.build(pl::Mode::Start);
     check(r4.upToDate, "puis le projet est a jour");

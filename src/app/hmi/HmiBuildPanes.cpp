@@ -220,7 +220,7 @@ protected:
         y += box.h + 12.f;
         // l'etat final
         if (d_.done_ && rep) {
-            std::string fin;
+            std::string fin, detail;
             gfx::Color col = c.ok;
             if (rep->locked) { fin = "Build refus\xC3\xA9 : un autre build tourne sur ce projet."; col = c.error; }
             else if (rep->cancelled) { fin = "Build annul\xC3\xA9 : les artefacts valides pr\xC3\xA9" "c\xC3\xA9" "dents sont conserv\xC3\xA9s."; col = c.warning; }
@@ -229,13 +229,17 @@ protected:
                     + (d_.startsSimulation_ ? " \xE2\x80\x94 la simulation ne d\xC3\xA9marre pas." : ".");
                 col = c.error;
             } else if (rep->upToDate) fin = "Projet \xC3\xA0 jour : rien \xC3\xA0 g\xC3\xA9n\xC3\xA9rer ni \xC3\xA0 compiler.";
-            else
+            else {
+                // deux lignes : le verdict, puis les comptes (sur une seule, il sortait du cadre)
                 fin = "Build r\xC3\xA9ussi : " + plural(rep->errors, "erreur", "erreurs") + ", " + plural(rep->warnings, "avertissement", "avertissements")
-                    + " (" + std::to_string(rep->generated) + " g\xC3\xA9n\xC3\xA9r\xC3\xA9(s), " + std::to_string(rep->compiled) + " compil\xC3\xA9(s), "
-                    + std::to_string(rep->reused) + " r\xC3\xA9utilis\xC3\xA9(s))" + (d_.startsSimulation_ ? " \xE2\x80\x94 la simulation d\xC3\xA9marre." : ".");
-            const gfx::Rect fr{x, y, w, 30.f};
+                    + (d_.startsSimulation_ ? " \xE2\x80\x94 la simulation d\xC3\xA9marre." : ".");
+                detail = std::to_string(rep->generated) + " g\xC3\xA9n\xC3\xA9r\xC3\xA9(s), " + std::to_string(rep->compiled) + " compil\xC3\xA9(s), "
+                       + std::to_string(rep->reused) + " r\xC3\xA9utilis\xC3\xA9(s) depuis le build pr\xC3\xA9" "c\xC3\xA9" "dent";
+            }
+            const gfx::Rect fr{x, y, w, detail.empty() ? 30.f : 46.f};
             ctx.r.fillRoundedRect(fr, gfx::Color{col.r, col.g, col.b, 36}, 5.f);
             ctx.r.drawText({x + 12.f, y + 6.f}, fin, ctx.theme.font.uiBold, col);
+            if (!detail.empty()) ctx.r.drawText({x + 12.f, y + 26.f}, detail, kSmall, c.textMuted);
         } else {
             ctx.r.drawText({x, y + 6.f}, "L'application reste utilisable : le build tourne \xC3\xA0 c\xC3\xB4t\xC3\xA9, sur une copie du projet.", kSmall, c.textMuted);
         }
@@ -246,7 +250,7 @@ private:
         const int rows = static_cast<int>(pl::Phase::Count);
         return 12.f + static_cast<float>(rows) * 21.f + static_cast<float>((pl::kApiSteps + 1) / 2 + (pl::kIhmSteps + 1) / 2) * 18.f + 8.f;
     }
-    [[nodiscard]] float height() const { return 36.f + 12.f + 26.f + 20.f + 22.f * 2.f + 28.f + phasesHeight() + 12.f + 30.f + 16.f + 50.f; }
+    [[nodiscard]] float height() const { return 36.f + 12.f + 26.f + 20.f + 22.f * 2.f + 28.f + phasesHeight() + 12.f + 46.f + 16.f + 50.f; }
     HmiBuildProgressDialog& d_;
     gfx::Rect panel_{};
 };

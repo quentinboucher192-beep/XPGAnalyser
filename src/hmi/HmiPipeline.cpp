@@ -105,9 +105,34 @@ std::string nowText() {
     std::snprintf(buf, sizeof buf, "%04d-%02d-%02d %02d:%02d:%02d", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
     return buf;
 }
+// Un nom de fichier : lettres, chiffres, _ et -. Une lettre accentuee perd son
+// accent (« Scripts généraux » : scripts_generaux), tout autre caractere devient
+// un seul _ (et non un par octet de son UTF-8).
 std::string sanitize(std::string_view s) {
     std::string out;
-    for (const char c : s) out += (std::isalnum(static_cast<unsigned char>(c)) || c == '_' || c == '-') ? c : '_';
+    for (std::size_t i = 0; i < s.size(); ++i) {
+        const auto c = static_cast<unsigned char>(s[i]);
+        if (c < 0x80) {
+            out += (std::isalnum(c) || c == '_' || c == '-') ? static_cast<char>(c) : '_';
+            continue;
+        }
+        char base = 0;
+        if (c == 0xC3 && i + 1 < s.size()) {
+            const auto n = static_cast<unsigned char>(s[i + 1]);
+            switch (n | 0x20) {   // les majuscules (0x80 a 0x9F) comme leurs minuscules
+                case 0xA0: case 0xA1: case 0xA2: case 0xA4: base = 'a'; break;
+                case 0xA7: base = 'c'; break;
+                case 0xA8: case 0xA9: case 0xAA: case 0xAB: base = 'e'; break;
+                case 0xAE: case 0xAF: base = 'i'; break;
+                case 0xB4: case 0xB6: base = 'o'; break;
+                case 0xB9: case 0xBB: case 0xBC: base = 'u'; break;
+                default: break;
+            }
+            if (base && n < 0xA0) base = static_cast<char>(std::toupper(static_cast<unsigned char>(base)));
+        }
+        out += base ? base : '_';
+        while (i + 1 < s.size() && (static_cast<unsigned char>(s[i + 1]) & 0xC0) == 0x80) ++i;   // la suite du caractere
+    }
     if (out.size() > 48) out.resize(48);
     return out.empty() ? std::string("_") : out;
 }
@@ -1279,7 +1304,7 @@ namespace {
 std::string artifactPathOf(const Element& e) {
     char step[24];
     std::snprintf(step, sizeof step, "%02d-", stepOf(e.kind) + 1);
-    const std::string dir = std::string(areaOf(e.kind) == Area::Api ? "api/" : "ihm/") + step + sanitize(lower(stepName(areaOf(e.kind), stepOf(e.kind))));
+    const std::string dir = std::string(areaOf(e.kind) == Area::Api ? "api/" : "ihm/") + step + lower(sanitize(stepName(areaOf(e.kind), stepOf(e.kind))));
     return dir + "/" + sanitize(e.key) + "-" + sanitize(e.name) + ".txt";
 }
 
@@ -1501,6 +1526,24 @@ Report run(const Project& p, const ApiInfo& api, const Request& req, const Optio
     };
     const auto publish = [&] { if (onProgress) onProgress(pr); };
     const auto cancelled = [cancel] { return cancel && cancel->load(); };
+    // F et G d'un demarrage : ce que la fin du build en fait, jamais « a venir » apres
+    // la fin. Valide, l'appelant demarre la simulation (le contrat de Mode::Start) ;
+    // rien n'est encore restaure (la remanence de simulation n'existe pas encore).
+    const auto settleStart = [&] {
+        if (req.mode != Mode::Start) return;
+        const int f = static_cast<int>(Phase::Start), g = static_cast<int>(Phase::Restore);
+        if (rep.ok) {
+            pr.phases[f] = PhaseState::Done;
+            pr.phaseNotes[f] = "la simulation d\xC3\xA9marre";
+            pr.phases[g] = PhaseState::Skipped;
+            pr.phaseNotes[g] = "rien \xC3\xA0 restaurer";
+        } else {
+            pr.phases[f] = pr.phases[g] = PhaseState::Cancelled;
+            pr.phaseNotes[f] = pr.phaseNotes[g] = rep.cancelled ? std::string("annul\xC3\xA9")
+                                                                : "bloqu\xC3\xA9 : " + std::to_string(rep.errors) + (rep.errors > 1 ? " erreurs" : " erreur");
+        }
+        publish();
+    };
     const bool disk = !o.buildFolder.empty();
     // ---- A. analyse ----
     pr.phases[static_cast<int>(Phase::Analyse)] = PhaseState::Running;
@@ -1595,6 +1638,7 @@ Report run(const Project& p, const ApiInfo& api, const Request& req, const Optio
                                 + " \xC3\xA9l\xC3\xA9ment(s) restent \xC3\xA0 compiler (Compiler, ou G\xC3\xA9n\xC3\xA9rer et compiler).");
         else log(Severity::Success, "Analyse", "Projet \xC3\xA0 jour : rien \xC3\xA0 g\xC3\xA9n\xC3\xA9rer ni \xC3\xA0 compiler (analyse en " + std::string(ms) + " ms, "
                                      + std::to_string(a.elements.size()) + " \xC3\xA9l\xC3\xA9ments r\xC3\xA9utilis\xC3\xA9s).");
+        settleStart();
         rep.cache = std::move(cache);
         return rep;
     }
@@ -1900,6 +1944,7 @@ Report run(const Project& p, const ApiInfo& api, const Request& req, const Optio
     else
         log(rep.errors ? Severity::Error : Severity::Success, "Build", "Build termin\xC3\xA9 : " + std::to_string(rep.errors) + (rep.errors > 1 ? " erreurs, " : " erreur, ")
             + std::to_string(rep.warnings) + (rep.warnings > 1 ? " avertissements" : " avertissement") + " (" + ms + " ms).");
+    settleStart();
     rep.cache = std::move(cache);
     return rep;
 }

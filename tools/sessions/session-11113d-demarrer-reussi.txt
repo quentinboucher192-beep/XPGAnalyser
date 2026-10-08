@@ -1,0 +1,23 @@
+# =============================================================================
+#  Session 11113d : DEMARRER SUR UN PROJET SANS ERREUR. La copie corrigee
+#  d'Armoire_Gaz (session 11113), sans cache :
+#    1. Demarrer : tout est construit (533 taches), « Build reussi ... la simulation
+#       demarre », F « la simulation demarre », G « rien a restaurer » ;
+#    2. Fermer : la simulation tourne (IHM en marche).
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+ihm-build demarrer
+attendre 1
+ihm-build-attendre
+attendre 5
+capture 11113d_01_demarrage_reussi.png
+ihm-build-etat "0 erreur"
+bouton "Fermer"
+attendre 5
+capture 11113d_02_simulation_en_marche.png
+quitter

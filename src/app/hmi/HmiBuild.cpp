@@ -3,11 +3,27 @@
 #include "../../domain/ProjectModel.hpp"
 
 #include <algorithm>
+#include <cstdio>
+#include <cstdlib>
 
 namespace app {
 
 namespace pl = hmi::pipeline;
 using Clock = std::chrono::steady_clock;
+
+namespace {
+// XPG_BUILD_TRACE=1 : ce que fait le gestionnaire, sur la sortie (les sessions de test le lisent).
+bool traceOn() {
+    static const bool on = std::getenv("XPG_BUILD_TRACE") != nullptr;
+    return on;
+}
+template <class... A> void trace(const char* fmt, A... a) {
+    if (!traceOn()) return;
+    std::printf(fmt, a...);
+    std::printf("\n");
+    std::fflush(stdout);
+}
+} // namespace
 
 // ================================================================ l'apparence ==
 HmiStateLook hmiStateLook(pl::State s, int warnings) {
@@ -191,7 +207,13 @@ pl::ApiInfo hmiApiInfo(const domain::Project* plc) {
 }
 
 // ================================================================ le gestionnaire
-HmiBuildManager::HmiBuildManager(SetupFn setup) : setup_(std::move(setup)) { dirtyAt_ = Clock::now() - std::chrono::seconds(1); }
+HmiBuildManager::HmiBuildManager(SetupFn setup) : setup_(std::move(setup)) { dirtyAt_ = now() - 1.0; }
+
+double HmiBuildManager::now() const {
+    if (clock_) return clock_();
+    static const auto origin = Clock::now();
+    return std::chrono::duration<double>(Clock::now() - origin).count();
+}
 
 HmiBuildManager::~HmiBuildManager() {
     cancel_ = true;
@@ -204,12 +226,13 @@ void HmiBuildManager::join() {
 
 void HmiBuildManager::invalidate() {
     dirty_ = true;
-    dirtyAt_ = Clock::now();
+    dirtyAt_ = now();
+    trace("[build] invalidate (busy=%d building=%d)", busy() ? 1 : 0, building_ ? 1 : 0);
 }
 
 void HmiBuildManager::analyseNow() {
     dirty_ = true;
-    dirtyAt_ = Clock::now() - std::chrono::seconds(1);
+    dirtyAt_ = now() - 1.0;
 }
 
 void HmiBuildManager::cancel() {
@@ -262,6 +285,7 @@ void HmiBuildManager::launch(HmiBuildSetup setup, std::optional<pl::Request> req
         done_.reset();
     }
     if (request) startedAt_ = Clock::now();
+    trace("[build] launch %s", request ? std::string(pl::modeLabel(request->mode)).c_str() : "analyse");
     const std::string projectBuild = setup.projectFolder.empty() || memoryOnly_ ? std::string{} : pl::buildFolderOf(setup.projectFolder);
     std::optional<pl::Cache> mem = memCache_;
     worker_ = std::thread([this, setup = std::move(setup), request, projectBuild, mem]() mutable {
@@ -351,7 +375,7 @@ bool HmiBuildManager::poll() {
         }
     }
     if (collectDone()) changed = true;
-    if (!busy() && dirty_ && Clock::now() - dirtyAt_ >= std::chrono::milliseconds(300)) {
+    if (!busy() && dirty_ && now() - dirtyAt_ >= 0.3) {
         dirty_ = false;
         if (auto s = setup_ ? setup_() : std::nullopt; s && s->project) launch(std::move(*s), std::nullopt);
     }
@@ -377,6 +401,7 @@ bool HmiBuildManager::collectDone() {
             if (d->memCache) memCache_ = std::move(d->memCache);
             if (d->status) {
                 auto st = std::move(d->status);
+                trace("[build] statut : %s (%s)", st->headline().c_str(), wasBuild ? "build" : "analyse");
                 st->generation = status_->generation + 1;
                 status_ = std::move(st);
             }

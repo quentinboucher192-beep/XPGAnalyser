@@ -1,0 +1,39 @@
+# =============================================================================
+#  Session 11113a : DEMARRER SUR LE PROJET TEL QUEL. Armoire_Gaz porte 8 erreurs
+#  reelles que Compiler disait deja (des noms qui n'existent pas : {Debit_Entree}
+#  dans Vue_Armoire_A et B, Equipement.Marche et .Mesure dans Popup_Armoire, sans
+#  parametre Equipement ; Capteur_PT9 dans l'alarme PT9_Hors_Service). La 1.11.13
+#  ne demarre pas la simulation sur un build en erreur :
+#    1. l'arbre avant tout build ;
+#    2. l'onglet Simulation . IHM : le build part (l'onglet le dit), puis « Build echoue » ;
+#    3. les sorties, sur les diagnostics ; un double-clic : la source ;
+#    4. l'onglet Simulation : « Demarrage bloque ».
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+arbre "IHM/Vues" deplier
+attendre 3
+ihm-build-etat "non g"
+capture 11113a_01_arbre_avant_build.png
+arbre "Simulation/IHM"
+attendre 1
+capture 11113a_02_progression.png
+ihm-build-attendre
+attendre 2
+ihm-build-etat "8 erreur"
+capture 11113a_03_build_echoue.png
+ihm-sorties diagnostics
+attendre 3
+capture 11113a_04_diagnostics.png
+ligne "Capteur_PT9" double
+attendre 3
+capture 11113a_05_double_clic_source.png
+onglet "Simulation"
+attendre 3
+capture 11113a_06_demarrage_bloque.png
+attendre 2
+quitter

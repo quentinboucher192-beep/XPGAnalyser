@@ -1,0 +1,24 @@
+# =============================================================================
+#  Session 11113c : LA FENETRE DU BUILD QUAND LE DEMARRAGE ECHOUE. Armoire_Gaz tel
+#  quel (ses 8 erreurs reelles, voir la session 11113a), sans cache :
+#    1. Demarrer (comme le bouton Demarrer l'IHM) : la fenetre de progression, a la
+#       fin « Build echoue : 8 erreurs... la simulation ne demarre pas », les phases
+#       F et G « bloque : 8 erreurs » (jamais « a venir » apres la fin) ;
+#    2. Voir les sorties : la fenetre se ferme, IHM . Sorties sur ses diagnostics.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+ihm-build demarrer
+attendre 1
+ihm-build-attendre
+attendre 2
+capture 11113c_01_fenetre_echec.png
+ihm-build-etat "8 erreur"
+ihm-sorties diagnostics
+attendre 3
+capture 11113c_02_voir_les_sorties.png
+quitter
