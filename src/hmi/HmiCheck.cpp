@@ -139,6 +139,15 @@ bool known(const Project& p, const NameExists& plc, std::string_view name, const
             for (auto& c : b) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
             return a == b ? (p.variable(name) || !plc || plc(name)) : known(p, plc, roots.front(), nullptr);
         }
+    if (v) {
+        // 1.11.13 : une popup d'un symbole connait les parametres du symbole (ceux de l'instance
+        // qui l'ouvre, depuis la 1.11.10) : {Nom}, {Vanne.POSITION} dans Pop_Vanne de S_Vanne.
+        if (v->ownerSymbol != kNoId)
+            if (const View* owner = p.view(v->ownerSymbol); owner && owner != v && owner->param(name)) return known(p, plc, name, owner);
+        // 1.11.13 : une instance de symbole de la vue est une racine (Vanne_4.GetActiveCount(30),
+        // depuis la 1.11.11) ; l'appel lui-meme est verifie a part (la fonction, ses arguments).
+        if (const Object* o = v->objectByName(name); o && o->kind == Kind::SymbolInstance) return true;
+    }
     // Lot 9 : SYS et les noms de vue ouvrent les variables systeme et d'instances
     // (le chemin entier est verifie a part, par checkPublicVars).
     // 1.10 (decision 15, S1) : le nom seul d'une valeur d'enumeration (m := Auto) n'est pas une

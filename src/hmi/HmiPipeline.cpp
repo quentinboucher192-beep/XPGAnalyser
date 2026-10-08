@@ -1794,8 +1794,25 @@ Report run(const Project& p, const ApiInfo& api, const Request& req, const Optio
         std::map<std::string, std::vector<Diagnostic>> perElement;
         cache.project.clear();
         int quality = 0;
+        // Ce que Compiler a deja dit autrement : « variable inexistante dans le programme : X »
+        // (Generer) quand une expression ou une action de la meme vue dit deja « X n'existe pas ».
+        const auto saidByCompile = [&cache](const Issue& i) {
+            static constexpr std::string_view kPrefix = "variable inexistante dans le programme : ";
+            if (i.category != "Variable" || i.view == kNoId || i.message.rfind(kPrefix, 0) != 0) return false;
+            std::string name = i.message.substr(kPrefix.size());
+            if (const auto cut = name.find_first_of(" :"); cut != std::string::npos) name.resize(cut);
+            if (name.empty()) return false;
+            for (const char* k : {"animations:", "actions:"}) {
+                const auto it = cache.entries.find(std::string(k) + std::to_string(i.view));
+                if (it == cache.entries.end()) continue;
+                for (const auto& c : it->second.diagnostics)
+                    if (c.step == "Compilation" && c.blocking() && c.message.find(name) != std::string::npos) return true;
+            }
+            return false;
+        };
         for (const auto& i : generateWith(p, o.plcHasName, go)) {
             if (i.severity == Issue::Severity::Info) continue;
+            if (saidByCompile(i)) continue;
             auto d = fromIssue(i, "Validation");
             d.date = now;
             if (i.severity == Issue::Severity::Error && !blockingValidation(i)) {

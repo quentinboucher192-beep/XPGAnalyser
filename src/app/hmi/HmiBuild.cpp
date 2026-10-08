@@ -233,7 +233,7 @@ bool HmiBuildManager::start(const pl::Request& request, std::string* why) {
     }
     if (busy()) {   // une analyse : elle finit (quelques millisecondes), son etat est garde
         join();
-        (void)poll();
+        (void)collectDone();   // pas poll() : il relancerait une analyse sur le fil qu'on va prendre
     }
     auto s = setup_ ? setup_() : std::nullopt;
     if (!s || !s->project) {
@@ -248,6 +248,11 @@ bool HmiBuildManager::start(const pl::Request& request, std::string* why) {
 }
 
 void HmiBuildManager::launch(HmiBuildSetup setup, std::optional<pl::Request> request) {
+    // Un seul fil a la fois : un std::thread encore joignable remplace serait std::terminate.
+    if (worker_.joinable()) {
+        join();
+        (void)collectDone();
+    }
     cancel_ = false;
     finishedFlag_ = false;
     {
@@ -257,10 +262,23 @@ void HmiBuildManager::launch(HmiBuildSetup setup, std::optional<pl::Request> req
         done_.reset();
     }
     if (request) startedAt_ = Clock::now();
-    const std::string folder = setup.projectFolder.empty() ? std::string{} : pl::buildFolderOf(setup.projectFolder);
+    const std::string projectBuild = setup.projectFolder.empty() || memoryOnly_ ? std::string{} : pl::buildFolderOf(setup.projectFolder);
     std::optional<pl::Cache> mem = memCache_;
-    worker_ = std::thread([this, setup = std::move(setup), request, folder, mem]() mutable {
+    worker_ = std::thread([this, setup = std::move(setup), request, projectBuild, mem]() mutable {
         Done d;
+        std::string folder = projectBuild;
+        // Le verrou d'abord : un dossier en lecture seule (un projet sur un partage, une cle
+        // protegee) ne refuse pas le build - il reste en memoire, et le journal le dit.
+        pl::Lock lock;
+        std::string readOnlyWhy;
+        if (request && !folder.empty()) {
+            lock = pl::acquireLock(folder);
+            if (!lock.held && lock.owner.rfind("dossier en lecture seule", 0) == 0) {
+                readOnlyWhy = lock.owner;
+                folder.clear();
+                d.readOnly = true;
+            }
+        }
         pl::Options o;
         o.buildFolder = folder;
         o.projectFolder = setup.projectFolder;
@@ -279,8 +297,6 @@ void HmiBuildManager::launch(HmiBuildSetup setup, std::optional<pl::Request> req
         const pl::ArtifactCheck artifacts = folder.empty() ? o.artifacts : pl::diskArtifacts(folder);
         std::shared_ptr<HmiBuildStatus> status;
         if (request) {
-            pl::Lock lock;
-            if (!folder.empty()) lock = pl::acquireLock(folder);
             if (!folder.empty() && !lock.held) {
                 auto rep = std::make_shared<pl::Report>();
                 rep->locked = true;
@@ -302,6 +318,11 @@ void HmiBuildManager::launch(HmiBuildSetup setup, std::optional<pl::Request> req
                 };
                 auto rep = std::make_shared<pl::Report>(pl::run(*setup.project, setup.api, *request, o, onProgress, &cancel_));
                 if (!folder.empty()) pl::releaseLock(folder);
+                if (!readOnlyWhy.empty())
+                    rep->log.insert(rep->log.begin(), pl::LogLine{pl::Severity::Warning, "Cache",
+                                                                  "Le dossier du projet refuse l'\xC3\xA9" "criture (" + readOnlyWhy
+                                                                      + ") : le build reste en m\xC3\xA9moire, rien n'est \xC3\xA9" "crit sur le disque.",
+                                                                  {}, 0, 0});
                 if (folder.empty()) d.memCache = rep->cache;
                 status = hmiBuildStatusOf(pl::analyse(rep->analysis.elements, rep->cache, artifacts), rep->cache);
                 d.report = rep;
@@ -329,6 +350,16 @@ bool HmiBuildManager::poll() {
             changed = true;
         }
     }
+    if (collectDone()) changed = true;
+    if (!busy() && dirty_ && Clock::now() - dirtyAt_ >= std::chrono::milliseconds(300)) {
+        dirty_ = false;
+        if (auto s = setup_ ? setup_() : std::nullopt; s && s->project) launch(std::move(*s), std::nullopt);
+    }
+    return changed;
+}
+
+bool HmiBuildManager::collectDone() {
+    bool changed = false;
     if (finishedFlag_.load()) {
         join();
         std::optional<Done> d;
@@ -342,6 +373,7 @@ bool HmiBuildManager::poll() {
         building_ = false;
         if (wasBuild) endedAt_ = Clock::now();
         if (d) {
+            if (d->readOnly) memoryOnly_ = true;
             if (d->memCache) memCache_ = std::move(d->memCache);
             if (d->status) {
                 auto st = std::move(d->status);
@@ -353,10 +385,6 @@ bool HmiBuildManager::poll() {
         statusChanged->emit();
         if (wasBuild && report_) finished->emit(report_);
         changed = true;
-    }
-    if (!busy() && dirty_ && Clock::now() - dirtyAt_ >= std::chrono::milliseconds(300)) {
-        dirty_ = false;
-        if (auto s = setup_ ? setup_() : std::nullopt; s && s->project) launch(std::move(*s), std::nullopt);
     }
     return changed;
 }

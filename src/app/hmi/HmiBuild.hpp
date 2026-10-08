@@ -133,9 +133,12 @@ private:
         std::shared_ptr<const hmi::pipeline::Report> report;   // nul : une analyse
         std::shared_ptr<HmiBuildStatus>              status;
         std::optional<hmi::pipeline::Cache>          memCache;  // le cache en memoire (projet sans dossier)
+        bool                                         readOnly{false};   // le dossier refuse l'ecriture : en memoire desormais
     };
     void launch(HmiBuildSetup setup, std::optional<hmi::pipeline::Request> request);
     void join();
+    // Le travail fini applique (etat, rapport, signaux), sans rien relancer. Vrai : il y en avait.
+    bool collectDone();
 
     SetupFn                 setup_;
     std::thread             worker_;
@@ -153,6 +156,7 @@ private:
     std::shared_ptr<const hmi::pipeline::Report> report_;
     hmi::pipeline::Request  request_;
     std::optional<hmi::pipeline::Cache> memCache_;   // projet sans dossier
+    bool                    memoryOnly_{false};       // le dossier du projet est en lecture seule : rien n'est ecrit
 };
 
 } // namespace app

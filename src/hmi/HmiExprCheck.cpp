@@ -585,11 +585,20 @@ private:
             return v;
         }
         // 1.9 : un parametre type de la vue - Moteur.Vitesse est REAL d'apres T_Moteur.
-        if (p && ctx_.view)
-            if (const auto* prm = ctx_.view->param(root); prm && !prm->type.empty()) {
-                if (const auto ty = params::expressionType(*p, ctx_.view, text); !ty.empty()) v.type = typeOfName(ty);
+        // 1.11.13 : ou du symbole qui porte la popup (Vanne.POSITION dans Pop_Vanne de S_Vanne).
+        if (p && ctx_.view) {
+            const View* where = ctx_.view;
+            const ViewParam* prm = ctx_.view->param(root);
+            if (!prm)
+                if (const View* owner = popupOwner(*p, *ctx_.view)) {
+                    prm = owner->param(root);
+                    where = owner;
+                }
+            if (prm && !prm->type.empty()) {
+                if (const auto ty = params::expressionType(*p, where, text); !ty.empty()) v.type = typeOfName(ty);
                 return v;
             }
+        }
         // 1.11.1 (API-M) : API.<globale>, API.<Unite>.<variable>, jusqu'au bout des
         // membres (une variable IHM, une vue nommee API sont vues avant ; un
         // parametre de la vue aussi). Sans le modele : rien a dire.
@@ -645,8 +654,10 @@ private:
             problems.push_back(std::move(pb));
             return v;
         }
-        // Tranche 2 : un chemin de l'automate (pas un parametre de la vue).
-        if (ctx_.plc.rootType && !(ctx_.view && ctx_.view->param(root))) {
+        // Tranche 2 : un chemin de l'automate (pas un parametre de la vue, ni du symbole de la popup).
+        const bool ownerParam = ctx_.view && ctx_.project && popupOwner(*ctx_.project, *ctx_.view)
+                                && popupOwner(*ctx_.project, *ctx_.view)->param(root);
+        if (ctx_.plc.rootType && !(ctx_.view && ctx_.view->param(root)) && !ownerParam) {
             const std::string end = plcPath(root, segs);
             if (!end.empty()) v.type = typeOfName(end);
         }

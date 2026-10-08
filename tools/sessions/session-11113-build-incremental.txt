@@ -1,0 +1,95 @@
+# =============================================================================
+#  Session 11113 : LA GENERATION INCREMENTALE DE LA SIMULATION IHM (lot 1).
+#  Sur une copie d'Armoire_Gaz (preparer-projet-11111), sans cache de build :
+#    1. l'arbre avant tout build (non genere) ;
+#    2. un build complet, sa fenetre de progression (phases A a G, 4 + 16 etapes) ;
+#    3. l'arbre a jour ; demarrer sans rien changer : « Projet a jour » ;
+#    4. un script modifie : Modifie dans l'arbre, aussitot ; son clic droit (Build) ;
+#    5. Generer et compiler ce script : lui seul est refait ;
+#    6. une faute dans le script : Demarrer bloque, la fenetre le dit, les sorties ;
+#    7. Ctrl+Z : corrige, le build ne refait que lui, la simulation demarre.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+arbre "IHM/Vues" deplier
+arbre "IHM/Programmation générale" deplier
+arbre "IHM/Programmation générale/Scripts" deplier
+attendre 3
+ihm-build-etat "non g"
+capture 11113_01_arbre_avant_build.png
+
+# ---- 2. le premier build (tout), et sa fenetre ----
+ihm-build regenerer-compiler
+attendre 1
+capture-ecran 11113_02_progression_en_cours.png
+ihm-build-attendre
+attendre 2
+capture-ecran 11113_03_progression_fin.png
+ihm-build-etat "Projet"
+bouton "Fermer"
+attendre 2
+capture 11113_04_arbre_a_jour.png
+
+# ---- 3. demarrer sans rien changer : projet a jour ----
+arbre "Simulation/IHM"
+attendre 2
+ihm-build-attendre
+attendre 6
+ihm-build-etat "projet à jour"
+capture 11113_05_demarrage_projet_a_jour.png
+
+# ---- 4. un script modifie, aussitot dans l'arbre ; son clic droit ----
+ihm-script-modifier "Horloge" "(* 1.11.13 : une ligne ajoutée *)"
+attendre 3
+ihm-build-etat "1 modifi"
+capture 11113_06_script_modifie.png
+arbre-menu "IHM/Programmation générale/Scripts/Horloge"
+attendre 3
+capture 11113_07_clic_droit_build.png
+touche escape
+attendre 2
+
+# ---- 5. Generer et compiler ce script : lui seul ----
+ihm-build generer-compiler "IHM/Programmation générale/Scripts/Horloge"
+ihm-build-attendre
+attendre 2
+capture-ecran 11113_08_un_seul_script.png
+ihm-build-etat "1 généré(s), 1 compilé(s)"
+bouton "Fermer"
+attendre 2
+
+# ---- 6. une faute : Demarrer est bloque (les vrais boutons de l'onglet) ----
+bouton "Arrêter l'IHM"
+attendre 2
+ihm-script-modifier "Horloge" "Secondes_IHM := Secondes_IHM + ;"
+attendre 3
+ihm-build-etat "1 modifi"
+bouton "Démarrer l'IHM"
+attendre 1
+ihm-build-attendre
+attendre 3
+ihm-build-etat "erreur"
+capture 11113_09_sorties_diagnostics.png
+onglet "Simulation"
+attendre 3
+capture 11113_10_demarrage_bloque.png
+
+# ---- 7. Ctrl+Z : corrige ; Demarrer ne refait que lui, la simulation part ----
+annuler
+attendre 3
+bouton "Démarrer l'IHM"
+attendre 1
+ihm-build-attendre
+attendre 5
+ihm-build-etat "0 erreur"
+capture 11113_11_corrige_en_marche.png
+arbre-menu "IHM/Vues"
+attendre 3
+capture 11113_12_clic_droit_dossier.png
+touche escape
+attendre 2
+quitter

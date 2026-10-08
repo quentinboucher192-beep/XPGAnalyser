@@ -41,16 +41,6 @@ std::string clockNow() {
 }
 std::string plural(long long n, const char* one, const char* many) { return std::to_string(n) + " " + (n > 1 ? many : one); }
 
-gfx::Color severityColor(const ui::Palette& c, pl::Severity s) {
-    switch (s) {
-        case pl::Severity::Success: return c.ok;
-        case pl::Severity::Warning: return c.warning;
-        case pl::Severity::Error:
-        case pl::Severity::Critical: return c.error;
-        case pl::Severity::Information: break;
-    }
-    return c.text;
-}
 ui::Tone severityTone(pl::Severity s) {
     switch (s) {
         case pl::Severity::Success: return ui::Tone::Ok;
@@ -304,7 +294,7 @@ void HmiBuildProgressDialog::refreshButtons() {
     bg_->setVisibility(done_ ? ui::Visibility::Collapsed : ui::Visibility::Visible);
     outputs_->setVisibility(done_ ? ui::Visibility::Visible : ui::Visibility::Collapsed);
     cancel_->setText(done_ ? "Fermer" : "Annuler");
-    if (build_ && build_->cancelling() && !done_) cancel_->setEnabled(false);
+    cancel_->setEnabled(done_ || !(build_ && build_->cancelling()));   // annule : grise jusqu'a la fin, puis Fermer
     root().invalidateLayout();
 }
 

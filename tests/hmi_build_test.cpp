@@ -693,6 +693,56 @@ void formatDuCache() {
     check(!init.diagnostics.empty() && init.diagnostics.front().line == 2, "un diagnostic relu garde sa ligne");
 }
 
+// 1.11.13 : DEUX FAUSSES ALERTES de Compiler et Generer, trouvees sur Armoire_Gaz (le build les
+// rendait bloquantes) : une popup d'un symbole lit les parametres du symbole (1.11.10) ; une
+// vue appelle la fonction d'une instance (Vanne_1.Etat(), 1.11.11). Et une vraie erreur reste,
+// dite UNE fois (pas aussi par la validation, en d'autres mots).
+void faussesAlertes() {
+    std::printf("-- les fausses alertes de Compiler et Generer (popup de symbole, instance)\n");
+    Bench b;
+    fill(b);
+    b.p.view(b.symVanne)->functions.push_back(HmiFunction{b.p.allocate(), "Etat", "BOOL", "Etat := V.Ouverte;", {}, false});
+    View pop = makeView(b.p, "Pop_Vanne");
+    pop.role = "popup";
+    pop.ownerSymbol = b.symVanne;
+    {
+        const Id id = edit::add(b.p, pop, Kind::Text, 10, 10);
+        pop.object(id)->name = "Titre";
+        pop.object(id)->set("text", "Vanne {V.Position:0.0} %");
+        const Id v = edit::add(b.p, pop, Kind::Indicator, 10, 40);
+        pop.object(v)->name = "Voyant";
+        pop.object(v)->setExpr("value", "V.Ouverte");
+    }
+    const Id popId = pop.id;
+    b.p.views.push_back(pop);
+    View* syn = b.p.view(b.vueSyn);
+    const Id voyant = edit::add(b.p, *syn, Kind::Indicator, 600, 100);
+    syn->object(voyant)->name = "Voyant_Vanne";
+    syn->object(voyant)->setExpr("value", "Vanne_1.Etat()");
+    const auto names = b.options().plcHasName;
+    const auto errorsOf = [&](const std::vector<Issue>& issues, Id view, std::string_view word) {
+        int n = 0;
+        for (const auto& i : issues)
+            if (i.severity == Issue::Severity::Error && (view == kNoId || i.view == view) && i.message.find(word) != std::string::npos) ++n;
+        return n;
+    };
+    const auto comp = compileWith(b.p, names, {});
+    check(errorsOf(comp, popId, "") == 0, "Compiler : la popup du symbole lit V (le parametre du symbole) sans erreur");
+    check(errorsOf(comp, kNoId, "Vanne_1") == 0, "Compiler : Vanne_1.Etat() dans la vue, sans erreur");
+    const auto gen = generateWith(b.p, names, GenerateOptions{});
+    check(errorsOf(gen, popId, "inexistante") == 0, "Generer : la popup du symbole, sans \"variable inexistante\"");
+    check(errorsOf(gen, kNoId, "Vanne_1") == 0, "Generer : l'instance Vanne_1, sans \"variable inexistante\"");
+    const auto r = b.build(pl::Mode::Start);
+    check(r.ok, "le build passe (" + std::to_string(r.errors) + " erreur(s))");
+    // une vraie erreur : dite une fois, bloquante
+    syn->object(voyant)->setExpr("value", "Inconnu_X > 1");
+    const auto r2 = b.build(pl::Mode::Start);
+    int said = 0;
+    for (const auto& d : r2.diagnostics) said += d.blocking() && d.message.find("Inconnu_X") != std::string::npos ? 1 : 0;
+    check(!r2.ok && r2.errors == 1 && said == 1, "une vraie erreur : bloquante, dite une seule fois (" + std::to_string(said) + " fois, "
+                                                      + std::to_string(r2.errors) + " erreur(s))");
+}
+
 // Le gestionnaire de l'application (app/hmi/HmiBuild) : un vrai fil, poll a chaque
 // "image", l'analyse apres une modification, un build a la fois, l'annulation.
 void gestionnaire(const std::string& tmp) {
@@ -760,10 +810,21 @@ void gestionnaire(const std::string& tmp) {
     check(app::hmiStateLook(pl::State::Modified).glyph == "\xE2\x97\x8F" && app::hmiStateLook(pl::State::UpToDate).glyph == "\xE2\x9C\x93"
               && app::hmiStateLook(pl::State::InvalidDependency).glyph == "\xE2\x9B\x93" && app::hmiStateLook(pl::State::Obsolete).glyph == "\xE2\x8F\xB1",
           "les glyphes des etats");
-    // relancer : seul le script
+    // LA COURSE de la 1.11.13 (corrigee avant livraison) : une analyse tourne, une nouvelle
+    // modification la rend deja perimee, et Demarrer arrive - le build attend l'analyse et
+    // part sur le meme fil, sans en relancer une (avant : un std::thread ecrase, std::terminate).
+    m.analyseNow();
+    (void)m.poll();                       // l'analyse part
+    check(m.busy() && !m.building(), "une analyse tourne");
+    m.analyseNow();                       // ... et une modification la rend perimee
+    check(m.start(pl::Request{pl::Mode::Start, {}, false}, &why), "Demarrer pendant l'analyse : le build part (" + why + ")");
+    check(m.building(), "et c'est bien le build qui tourne");
+    pump(20);
+    check(got && got->ok && got->generated == 1 && got->compiled == 1 && m.status()->upToDate(), "seul le script est refait, puis a jour");
+    // relancer : rien
     check(m.start(pl::Request{pl::Mode::Start, {}, false}, &why), "le build suivant part");
     pump(20);
-    check(got && got->generated == 1 && got->compiled == 1 && m.status()->upToDate(), "seul le script est refait, puis a jour");
+    check(got && got->upToDate && got->generated == 0 && m.status()->upToDate(), "rien n'a change : projet a jour");
     // sur le disque : le cache et le verrou
     folder = (fs::path(tmp) / "projet").string();
     fs::create_directories(folder, ec);
@@ -797,6 +858,7 @@ int main(int argc, char** argv) {
     annulation();
     coupureSauvegarde(tmp + "_coupure");
     formatDuCache();
+    faussesAlertes();
     gestionnaire(tmp + "_gestionnaire");
     std::printf("\n%d verification(s), %d echec(s)\n", checks, failures);
     return failures == 0 ? 0 : 1;
