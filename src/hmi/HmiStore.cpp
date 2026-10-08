@@ -781,6 +781,7 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
                + field("initiale", var.initial) + field("description", var.description);
         if (!var.folder.empty()) index += field("dossier", var.folder);   // lot 16
         if (!var.packBools) index += fieldBool("bool_par_mot", false);
+        if (var.retain) index += fieldBool("remanente", true);              // 1.11.16 : en exploitation
         if (!var.places.empty()) {
             std::string places;
             for (const auto& pl : var.places) places += (places.empty() ? "" : ";") + pl.path + "=" + pl.address;
@@ -1262,6 +1263,7 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
             // Lot 16 : le dossier, les BOOL (16 par mot, ou un mot chacun), les adresses corrigees.
             var.folder = toStr(r.get("dossier"));
             var.packBools = toBool(r.get("bool_par_mot"), true);
+            var.retain = toBool(r.get("remanente"), false);                   // 1.11.16
             {
                 const std::string places = toStr(r.get("places"));
                 std::size_t from = 0;

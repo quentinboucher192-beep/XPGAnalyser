@@ -52,6 +52,34 @@ std::pair<long long, long long> rangeOf(sim::Type t) {
 }
 std::string typeName(sim::Type t) { return std::string(sim::toString(t)); }
 
+std::string str(const Record& r, const char* key) {
+    const auto* v = r.get(key);
+    return v ? *v : std::string{};
+}
+long long num(const Record& r, const char* key, long long fallback) {
+    const auto* v = r.get(key);
+    if (!v || v->empty()) return fallback;
+    long long n = 0;
+    const auto res = std::from_chars(v->data(), v->data() + v->size(), n);
+    return res.ec == std::errc{} && res.ptr == v->data() + v->size() ? n : fallback;
+}
+std::string plural(int n, const char* one, const char* many) { return std::to_string(n) + " " + (n > 1 ? many : one); }
+
+} // namespace
+
+std::string nowStamp() {
+    const std::time_t t = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+    std::tm tm{};
+#if defined(_WIN32)
+    localtime_s(&tm, &t);
+#else
+    localtime_r(&t, &tm);
+#endif
+    char buf[32];
+    std::snprintf(buf, sizeof buf, "%04d-%02d-%02d %02d:%02d:%02d", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
+    return buf;
+}
+
 std::string valueText(const sim::Value& v) {
     switch (v.type()) {
         case sim::Type::Bool: return v.isTruthy() ? "TRUE" : "FALSE";
@@ -88,34 +116,6 @@ std::optional<sim::Value> valueFrom(sim::Type t, const std::string& text) {
         }
     }
 }
-std::string str(const Record& r, const char* key) {
-    const auto* v = r.get(key);
-    return v ? *v : std::string{};
-}
-long long num(const Record& r, const char* key, long long fallback) {
-    const auto* v = r.get(key);
-    if (!v || v->empty()) return fallback;
-    long long n = 0;
-    const auto res = std::from_chars(v->data(), v->data() + v->size(), n);
-    return res.ec == std::errc{} && res.ptr == v->data() + v->size() ? n : fallback;
-}
-std::string plural(int n, const char* one, const char* many) { return std::to_string(n) + " " + (n > 1 ? many : one); }
-
-} // namespace
-
-std::string nowStamp() {
-    const std::time_t t = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-    std::tm tm{};
-#if defined(_WIN32)
-    localtime_s(&tm, &t);
-#else
-    localtime_r(&t, &tm);
-#endif
-    char buf[32];
-    std::snprintf(buf, sizeof buf, "%04d-%02d-%02d %02d:%02d:%02d", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
-    return buf;
-}
-
 std::optional<sim::Value> convert(const sim::Value& from, sim::Type to) {
     const sim::Type t = from.type();
     if (t == sim::Type::Unknown || to == sim::Type::Unknown) return std::nullopt;
@@ -240,10 +240,11 @@ bool parse(std::string_view text, Snapshot& out, std::string* why) {
     return true;
 }
 
-std::vector<Cell> captureVariables(const Project& p, const Reader& read) {
+std::vector<Cell> captureVariables(const Project& p, const Reader& read, const std::function<bool(const Variable&)>& keep) {
     std::vector<Cell> cells;
     for (const auto& var : p.programs.variables) {
         if (!var.equipment.empty()) continue;            // liee : la memoire de son esclave simule
+        if (keep && !keep(var)) continue;
         const auto put = [&](const std::string& rel) {
             const sim::Value* v = read(var.name + rel);
             if (!v || v->type() == sim::Type::Unknown) return;

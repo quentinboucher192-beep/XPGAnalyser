@@ -68,7 +68,8 @@ struct Snapshot {
 // Les cases a prendre : les variables IHM non liees, depliees ; `read` donne la
 // valeur du moment d'une case par son chemin complet ("Four1.Vannes[2].Position").
 using Reader = std::function<const sim::Value*(const std::string& path)>;
-[[nodiscard]] std::vector<Cell> captureVariables(const Project&, const Reader& read);
+// `keep` (1.11.16) : les seules variables a prendre (les remanentes du poste) ; vide : toutes.
+[[nodiscard]] std::vector<Cell> captureVariables(const Project&, const Reader& read, const std::function<bool(const Variable&)>& keep = {});
 
 // Ce que le retour a fait.
 struct Report {
@@ -92,5 +93,11 @@ Report restoreVariables(const Project&, const std::vector<Cell>&, const Slot& sl
 
 // "2026-10-08 21:12:30" (l'heure du poste).
 [[nodiscard]] std::string nowStamp();
+
+// Une valeur en texte (TRUE, -42, 21.537, 90500 pour un TIME en ms, le texte d'une STRING),
+// et dans l'autre sens pour un type donne (rien : illisible). 1.11.16 : la remanence
+// d'exploitation (hmi::retain) ecrit ses valeurs de la meme facon.
+[[nodiscard]] std::string               valueText(const sim::Value&);
+[[nodiscard]] std::optional<sim::Value> valueFrom(sim::Type, const std::string& text);
 
 } // namespace hmi::simdata

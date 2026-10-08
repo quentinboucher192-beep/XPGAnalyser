@@ -878,6 +878,11 @@ struct Variable {
     // 1.11.8 (« Recalculer la place memoire ») : vrai - un mot que n'occupent que des membres
     // internes est rendu et les membres suivants se resserrent ; faux : leur place reste reservee.
     bool        compact{false};
+    // 1.11.16 : REMANENTE EN EXPLOITATION - sur le poste d'exploitation seulement (jamais dans la
+    // simulation de l'editeur), sa valeur est gardee a chaque changement (regroupe : au plus une
+    // ecriture par seconde) et rendue au lancement suivant (hmi::retain : ihm/historique/
+    // remanence_exploitation.txt). Distincte de la remanence de simulation (hmi::simdata).
+    bool        retain{false};
     [[nodiscard]] bool bound() const noexcept { return !equipment.empty(); }
     [[nodiscard]] bool scaled() const noexcept { return rawMax != rawMin; }
     bool operator==(const Variable&) const = default;

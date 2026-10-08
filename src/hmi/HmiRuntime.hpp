@@ -590,8 +590,13 @@ public:
     // celles a rendre au prochain start(), apres les valeurs initiales et avant les
     // scripts de Demarrage (une seule fois). lastRestore : ce que ce retour a fait
     // (rien : le dernier demarrage n'avait rien a rendre).
-    [[nodiscard]] std::vector<simdata::Cell> captureData() const;
-    void setStartData(std::vector<simdata::Cell> cells) { startData_ = std::move(cells); }
+    // 1.11.16 : `keep` - les seules variables a prendre (les remanentes du poste) ; `label` - ce
+    // que dit le journal du retour ("Variables remanentes restaurees" ; vide : la simulation).
+    [[nodiscard]] std::vector<simdata::Cell> captureData(const std::function<bool(const Variable&)>& keep = {}) const;
+    void setStartData(std::vector<simdata::Cell> cells, std::string label = {}) {
+        startData_ = std::move(cells);
+        startLabel_ = std::move(label);
+    }
     [[nodiscard]] const std::optional<simdata::Report>& lastRestore() const noexcept { return lastRestore_; }
 
     // Lot 14 : la liaison Modbus TCP quand l'IHM est reliee a un automate reel
@@ -1323,6 +1328,7 @@ private:
     sim::ExecTrace           trace_;
     int                      session_{0};
     std::optional<std::vector<simdata::Cell>> startData_;    // 1.11.15 : a rendre au prochain start()
+    std::string                               startLabel_;   // 1.11.16 : ce qu'en dit le journal
     std::optional<simdata::Report>            lastRestore_;  // ... et ce que le dernier en a fait
     std::string              abort_;                     // un appel imbrique coupe : la raison
     std::string              actionOrigin_;              // lot 6 : l'action de vue vient de ce modele
