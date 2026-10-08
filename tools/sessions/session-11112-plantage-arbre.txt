@@ -1,0 +1,27 @@
+# =============================================================================
+#  Session 11112 : LE PLANTAGE DU 05/10 - un clic dans l'arbre sur Fonctions ou
+#  Popups d'un symbole (la 1.11.11 lisait une phrase hors de sa table et plantait
+#  dans strlen). Les deux clics, puis tout l'arbre IHM et Simulation, noeud par
+#  noeud (arbre-parcourir : le menu du clic droit, la carte, le clic).
+#  Le projet : une copie d'Armoire_Gaz (preparer-projet-1115, -1118, -11110, -11111).
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+arbre "IHM/Symboles/S_Vanne" deplier
+attendre 3
+arbre "IHM/Symboles/S_Vanne/Fonctions"
+attendre 6
+capture 11112_01_clic_fonctions.png
+arbre "IHM/Symboles/S_Vanne/Popups"
+attendre 6
+capture 11112_02_clic_popups.png
+arbre-parcourir "IHM" 60000
+attendre 5
+capture 11112_03_apres_parcours.png
+arbre-parcourir "Simulation" 5000
+attendre 5
+quitter
