@@ -25,6 +25,7 @@
 #pragma once
 
 #include "HmiBuild.hpp"
+#include "HmiConsole.hpp"
 #include "HmiPanels.hpp"
 #include "../../menu/IMenu.hpp"
 #include "../../ui/Widget.hpp"
@@ -32,6 +33,7 @@
 #include "../../ui/widgets/Controls.hpp"
 #include "../../ui/widgets/DataViews.hpp"
 
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -73,15 +75,21 @@ private:
 
 class HmiBuildOutputPane final : public ui::Widget {
 public:
+    // 1.11.14 : LE PANNEAU DU BAS - ses trois onglets.
+    static constexpr std::size_t kSorties = 0, kConsole = 1, kDiagnostics = 2;
+
     explicit HmiBuildOutputPane(std::string id);
     // Un build fini : son journal s'ajoute (a l'heure), ses diagnostics remplacent les precedents.
     void addReport(const hmi::pipeline::Report& report, const hmi::pipeline::Request& request, double seconds);
     // Une ligne dite par l'ecran (un demarrage refuse, un verrou).
     void say(hmi::pipeline::Severity severity, std::string category, std::string message);
+    // 1.11.14 : la simulation demarre ou s'arrete - une ligne des Sorties.
+    void simulationEvent(bool started, int session, const std::string& detail = {});
+    // Ce que montre l'onglet : Sorties, ses lignes ; Console, les siennes (Diagnostics : rien).
     void clear();
     [[nodiscard]] std::string copyText() const;
-    // 0 : Sorties ; 1 : Diagnostics.
     void showTab(std::size_t tab);
+    [[nodiscard]] std::size_t currentTab() const noexcept;
     [[nodiscard]] std::size_t lineCount() const noexcept { return lines_.size(); }
     [[nodiscard]] const std::vector<hmi::pipeline::Diagnostic>& diagnostics() const noexcept { return diags_; }
     [[nodiscard]] ui::TableView& outputTable() noexcept { return *out_; }
@@ -89,6 +97,32 @@ public:
     // Double-clic : un diagnostic (aller a sa source) ; une ligne du journal qui nomme un element.
     const core::SignalPtr<hmi::pipeline::Diagnostic> diagnosticActivated = core::Signal<hmi::pipeline::Diagnostic>::create();
     const core::SignalPtr<std::string> elementActivated = core::Signal<std::string>::create();
+
+    // ---- 1.11.14 : LA CONSOLE (HmiConsole.hpp) ----
+    [[nodiscard]] HmiConsole&       console() noexcept { return console_; }
+    [[nodiscard]] const HmiConsole& console() const noexcept { return console_; }
+    [[nodiscard]] ui::TableView&    consoleTable() noexcept { return *consoleTable_; }
+    [[nodiscard]] const HmiConsole::Filter& consoleFilter() const noexcept { return consoleFilter_; }
+    void setConsoleLevel(hmi::LogLevel level, bool shown);
+    void setSearch(const std::string& text);
+    // Les lignes montrees de la Console (filtrees), et l'une d'elles (nulle : hors bornes).
+    [[nodiscard]] std::size_t consoleRowCount() const noexcept;
+    [[nodiscard]] const ConsoleEntry* consoleRow(std::size_t row) const;
+    // A chaque image (l'ecran) : les lignes arrivees depuis - la table, ses pastilles,
+    // le defilement automatique.
+    void tick();
+    // Le defilement automatique (faux : en pause) ; aller en bas le reprend.
+    [[nodiscard]] bool following() const noexcept { return follow_; }
+    void setFollowing(bool on);
+    void scrollToEnd();
+    // Le dossier ou ecrire les exports (exports/ du projet) ; vide : pas de projet.
+    void setExportFolder(std::function<std::string()> folder) { exportFolder_ = std::move(folder); }
+    // Exporter ce que montre l'onglet : le chemin ecrit (vide : rien, `why` dit pourquoi).
+    std::string exportCurrent(bool csv, std::string* why = nullptr);
+    // La croix du panneau : l'ecran le replie.
+    void setOnClose(std::function<void()> f) { onClose_ = std::move(f); }
+    // Double-clic (ou Aller a la source) sur une ligne de la Console.
+    const core::SignalPtr<ConsoleEntry> consoleActivated = core::Signal<ConsoleEntry>::create();
 
 protected:
     void onLayout() override;
@@ -101,7 +135,11 @@ private:
         bool                     rule{false};   // la ligne de titre d'un build
     };
     void rebuild();
+    void rebuildConsole();
+    void refreshStatus();
+    void consoleMenu(int action);
     [[nodiscard]] bool shown(const Line&) const;
+    [[nodiscard]] const ConsoleEntry* selectedConsoleEntry() const;
 
     std::vector<Line>                       lines_;
     std::vector<hmi::pipeline::Diagnostic>  diags_;
@@ -113,9 +151,16 @@ private:
     ui::TabControl*                         tabs_{nullptr};
     ui::TableView*                          out_{nullptr};
     ui::TableView*                          diagTable_{nullptr};
+    ui::TableView*                          consoleTable_{nullptr};
     ui::StatusBar*                          status_{nullptr};
-    std::shared_ptr<ui::ITableModel>        outModel_, diagModel_;
+    std::shared_ptr<ui::ITableModel>        outModel_, diagModel_, consoleModel_;
     std::string                             summary_;
+    HmiConsole                              console_;
+    HmiConsole::Filter                      consoleFilter_;
+    std::uint64_t                           consoleSeen_{~std::uint64_t{0}};
+    bool                                    follow_{true};
+    std::function<std::string()>            exportFolder_;
+    std::function<void()>                   onClose_;
     core::ConnectionScope                   links_;
 };
 

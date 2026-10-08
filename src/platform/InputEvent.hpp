@@ -34,6 +34,7 @@ enum class Key : std::uint16_t {
     F7,
     F8,                         // 1.10 (integration) : F8 l'IHM demarrer / arreter, Maj+F8 (branchee par L)
     D,                          // 1.10.2 (chantier D) : Ctrl+D Dupliquer..., Ctrl+Maj+D Dupliquer tel quel
+    J,                          // 1.11.14 : Ctrl+J le panneau du bas (Sorties, Console, Diagnostics)
 };
 
 struct KeyMods {

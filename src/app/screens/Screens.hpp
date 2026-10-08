@@ -48,7 +48,8 @@ namespace app {
 
 class MacrosPane;   // lot macros 1 : l'onglet Macros
 class HmiBuildManager;      // 1.11.13 : la generation incrementale de l'IHM (hmi/HmiBuild.hpp)
-class HmiBuildOutputPane;   // 1.11.13 : ses sorties (hmi/HmiBuildPanes.hpp)
+class HmiBuildOutputPane;   // 1.11.13 : ses sorties (hmi/HmiBuildPanes.hpp) ; 1.11.14 : le panneau du bas
+struct ConsoleEntry;        // 1.11.14 : une ligne de la Console (hmi/HmiConsole.hpp)
 class MacroEditorView;         // lot API 6 : le mode Modifier d'une macro
 class TopBar;       // lot API 2 : la barre du haut
 class ApiDashboard; // lot API 2 : le tableau de bord de l'API
@@ -670,6 +671,20 @@ private:
     void applyHmiBuildMarks();
     [[nodiscard]] HmiBuildOutputPane* hmiBuildOutput(bool open);
     void replayHmiBuilds(HmiBuildOutputPane& pane);   // un onglet Sorties rouvert : les builds de la seance
+    // ---- 1.11.14 : LE PANNEAU DU BAS (Sorties, Console, Diagnostics) ----
+    //  Sous les onglets du centre, redimensionnable ; Ctrl+J le montre ou le replie,
+    //  Affichage > Panneaux aussi (le choix est retenu). `tab` : l'onglet a montrer.
+    void showBottomPanel(bool show, std::size_t tab = static_cast<std::size_t>(-1));
+    void toggleBottomPanel();
+    [[nodiscard]] bool bottomPanelShown() const;
+    void wireBottomPanel();                           // ses signaux (une fois, a la construction)
+    void openConsoleSource(const ConsoleEntry& e);    // le double-clic sur une ligne de la Console
+public:
+    // Pour les sessions rejouees (ihm-console-etat) : les chiffres de la Console et sa
+    // derniere ligne ; une ligne (message ou source) contient-elle ce texte ?
+    [[nodiscard]] std::string hmiConsoleSummary() const;
+    [[nodiscard]] bool hmiConsoleHas(std::string_view text) const;
+private:
     // Les barres des editeurs (scripts, fonctions) : leurs commandes de build et leur etat.
     template <class Hosts> void wireHmiBuildHosts(Hosts& hosts) {
         hosts.build = [this](hmi::pipeline::Mode mode, const std::string& key) { runHmiBuildFor(mode, key); };
@@ -1071,6 +1086,8 @@ private:
     ui::Splitter*         left_{nullptr};       // explorer over open documents
     ui::Splitter*         middle_{nullptr};     // DFB library / DB library / sections
     ui::Splitter*         bottom_{nullptr};     // diagnostics / summary / status
+    ui::Splitter*         centreColumn_{nullptr};  // 1.11.14 : les onglets du centre / le panneau du bas
+    HmiBuildOutputPane*   bottomPanel_{nullptr};   // 1.11.14 : Sorties, Console, Diagnostics
     ui::TreeView*         explorer_{nullptr};
     ui::TabArea*          centre_{nullptr};    // lot 7 : des groupes d'onglets, la mosaique
     ui::PropertyGrid*     configuration_{nullptr};

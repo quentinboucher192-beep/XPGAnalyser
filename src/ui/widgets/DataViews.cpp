@@ -1250,7 +1250,8 @@ TableView::TableView(std::string id) : Widget(std::move(id)) {
             // Lot recherche : "Effacer les filtres des colonnes", "Filtrer la colonne X".
             case 99: clearColumnFilters(); break;
             default:
-                if (action >= 100) (void)openColumnFilter(static_cast<std::size_t>(action - 100));
+                if (action >= 1000) contextAction->emit(action);          // 1.11.14 : une entree du proprietaire
+                else if (action >= 100) (void)openColumnFilter(static_cast<std::size_t>(action - 100));
                 break;
         }
     });
@@ -1386,6 +1387,11 @@ void TableView::openContextMenu(gfx::Point at) {
     const bool any = !selection_.empty();
     const bool paste = pasteEnabled();
     std::vector<PopupMenu::Item> items;
+    // 1.11.14 : les entrees du proprietaire d'abord (la Console : aller a la source...).
+    if (extraContext_) {
+        items = extraContext_();
+        if (!items.empty()) items.push_back({{}, {}, {}, Icon::None, true, true, -1});
+    }
     items.push_back({"Copier", "Ctrl+C", any ? std::string{} : std::string("aucune ligne choisie"), Icon::None, any, false, 1});
     items.push_back({"Copier sans les titres", "Ctrl+Maj+C", any ? std::string{} : std::string("aucune ligne choisie"), Icon::None, any, false, 2});
     items.push_back({{}, {}, {}, Icon::None, true, true, -1});

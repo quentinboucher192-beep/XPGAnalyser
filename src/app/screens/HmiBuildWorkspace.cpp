@@ -77,14 +77,14 @@ void MainAnalysisScreen::ensureHmiBuild() {
         const bool failed = !rep->ok && !rep->cancelled;
         if (auto* out = hmiBuildOutput(failed)) {
             out->addReport(*rep, done->request, done->seconds);
-            if (failed) out->showTab(1);
+            if (failed) out->showTab(HmiBuildOutputPane::kDiagnostics);
         }
         if (status_) {
             if (rep->locked) status_->setTransientMessage("Build refus\xC3\xA9 : un autre build tourne sur ce projet.", 8.0, StatusBar::Severity::Error);
             else if (rep->cancelled) status_->setTransientMessage("Build annul\xC3\xA9 : les artefacts valides pr\xC3\xA9" "c\xC3\xA9" "dents sont conserv\xC3\xA9s.", 6.0, StatusBar::Severity::Warning);
             else if (failed)
                 status_->setTransientMessage(hmiBuildTitle_ + " : " + plural(rep->errors, "erreur", "erreurs") + (hmiBuildStarts_ ? " \xE2\x80\x94 la simulation ne d\xC3\xA9marre pas" : std::string{})
-                                                 + " (IHM \xC2\xB7 Sorties, double-clic : la source).",
+                                                 + " (panneau du bas, Diagnostics : double-clic, la source).",
                                              10.0, StatusBar::Severity::Error);
             else if (rep->upToDate)
                 status_->setTransientMessage("Projet \xC3\xA0 jour" + std::string(hmiBuildStarts_ ? " \xE2\x80\x94 la simulation d\xC3\xA9marre." : "."), 4.0, StatusBar::Severity::Success);
@@ -143,6 +143,7 @@ void MainAnalysisScreen::startHmiBuild(const std::string& source) {
 }
 
 void MainAnalysisScreen::tickHmiBuild() {
+    if (bottomPanel_) bottomPanel_->tick();          // 1.11.14 : la Console (les lignes arrivees)
     if (!hmiBuild_) {
         if (app_.hmi()) ensureHmiBuild();
         return;
@@ -214,13 +215,68 @@ void MainAnalysisScreen::applyHmiBuildMarks() {
 }
 
 HmiBuildOutputPane* MainAnalysisScreen::hmiBuildOutput(bool open) {
-    auto* pane = dynamic_cast<HmiBuildOutputPane*>(hmiTab("sorties"));
-    if (!pane && open) {
-        openHmiPane("sorties");
-        pane = dynamic_cast<HmiBuildOutputPane*>(hmiTab("sorties"));
-    } else if (pane && open)
-        (void)showPage(pane);
-    return pane;
+    // 1.11.14 : les sorties vivent dans le panneau du bas (plus d'onglet IHM . Sorties).
+    if (open) showBottomPanel(true);
+    return bottomPanel_;
+}
+
+// 1.11.14 : le panneau du bas - ses signaux, une fois, a la construction de l'ecran.
+void MainAnalysisScreen::wireBottomPanel() {
+    if (!bottomPanel_) return;
+    links_ += bottomPanel_->diagnosticActivated->connect([this](const pl::Diagnostic& d) { openHmiDiagnostic(d); });
+    links_ += bottomPanel_->elementActivated->connect([this](const std::string& k) { openHmiElement(k); });
+    links_ += bottomPanel_->consoleActivated->connect([this](const ConsoleEntry& e) { openConsoleSource(e); });
+    bottomPanel_->setOnClose([this] { showBottomPanel(false); });
+    bottomPanel_->setExportFolder([this] {
+        const std::string folder = app_.projectFolder();
+        return folder.empty() ? std::string{} : (std::filesystem::path(folder) / "exports").string();
+    });
+}
+
+// 1.11.14 : une ligne de la Console - aller a ce qui l'a dite (le script a sa ligne,
+// la fonction a sa ligne, l'objet dans sa vue, la vue).
+void MainAnalysisScreen::openConsoleSource(const ConsoleEntry& e) {
+    auto doc = app_.hmi();
+    if (!doc) return;
+    if (status_)
+        status_->setTransientMessage(std::string(hmi::logLevelName(e.level)) + " \xC2\xB7 " + (e.where().empty() ? std::string{} : e.where() + " : ") + e.message, 8.0,
+                                     e.level >= hmi::LogLevel::Error ? StatusBar::Severity::Error
+                                     : e.level == hmi::LogLevel::Warning ? StatusBar::Severity::Warning : StatusBar::Severity::Info);
+    const auto& p = doc->project;
+    if (e.function != hmi::kNoId) {
+        for (const auto& f : p.programs.functions)
+            if (f.id == e.function) {
+                hmi::Issue i;
+                i.category = "Fonction";
+                i.item = e.function;
+                i.line = e.line;
+                i.message = e.message;
+                openHmiIssue(i);
+                return;
+            }
+        for (const auto& v : p.views)           // une fonction d'un symbole : le symbole, ses Fonctions
+            for (const auto& f : v.functions)
+                if (f.id == e.function) {
+                    openHmiView(v.id, static_cast<int>(ProjectTreeModel::HmiPart::Functions));
+                    return;
+                }
+    }
+    if (e.script != hmi::kNoId && p.script(e.script)) {
+        hmi::Issue i;
+        i.script = e.script;
+        i.line = e.line;
+        i.message = e.message;
+        openHmiIssue(i);
+        return;
+    }
+    if (e.view != hmi::kNoId) {
+        hmi::Issue i;
+        i.category = "Console";
+        i.view = e.view;
+        i.object = e.object;
+        i.message = e.message;
+        openHmiIssue(i);
+    }
 }
 
 // La barre d'un editeur : la commande sur l'element choisi, nomme dans la barre d'etat.
@@ -424,8 +480,26 @@ std::string MainAnalysisScreen::hmiBuildSummary() const {
     return out;
 }
 
+std::string MainAnalysisScreen::hmiConsoleSummary() const {
+    if (!bottomPanel_) return "pas de panneau du bas";
+    const auto& c = bottomPanel_->console();
+    std::string out = std::to_string(c.entries().size()) + " ligne(s), " + std::to_string(c.errors()) + " erreur(s), " + std::to_string(c.warnings())
+                    + " avertissement(s), session " + std::to_string(c.session());
+    if (!c.entries().empty()) out += " | derni\xC3\xA8re : " + HmiConsole::lineOf(c.entries().back());
+    return out;
+}
+
+bool MainAnalysisScreen::hmiConsoleHas(std::string_view text) const {
+    if (!bottomPanel_) return false;
+    for (const auto& e : bottomPanel_->console().entries())
+        if (HmiConsole::lineOf(e).find(text) != std::string::npos || e.message.find(text) != std::string::npos) return true;
+    return false;
+}
+
 void MainAnalysisScreen::showHmiBuildOutputs(int tab) {
-    if (auto* out = hmiBuildOutput(true)) out->showTab(tab == 1 ? 1 : 0);
+    // 0 : Sorties ; 1 : Diagnostics ; 2 : Console (1.11.14).
+    if (auto* out = hmiBuildOutput(true))
+        out->showTab(tab == 1 ? HmiBuildOutputPane::kDiagnostics : tab == 2 ? HmiBuildOutputPane::kConsole : HmiBuildOutputPane::kSorties);
 }
 
 bool MainAnalysisScreen::scriptHmiEditScript(const std::string& name, const std::string& line, std::string* why) {

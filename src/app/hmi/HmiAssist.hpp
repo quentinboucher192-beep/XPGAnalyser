@@ -58,6 +58,7 @@ enum class Context : std::uint8_t {
     Member,       // a.b.  : les membres de a.b
     LocalType,    // VAR ... x : |  : les types d'une variable locale (lot 7)
     EquipmentName,// IHM_ESCLAVE_SIMULE('  IHM_EQUIPEMENT_OK('  : les equipements (1.9)
+    LogLevel,     // IHM_LOG(|  NIVEAU_LOG#|  : les niveaux (1.11.14)
 };
 
 struct Where {
@@ -78,6 +79,7 @@ enum class Kind : std::uint8_t {
     Equipment,                               // 1.9 : un equipement du reseau (IHM_ESCLAVE_SIMULE('...'))
     Api,                                     // 1.11.1 (API-V) : API, la racine des variables de l'automate
     ApiUnit,                                 // 1.11.1 (API-V) : API.<Unite> (une unite de programme)
+    LogLevel,                                // 1.11.14 : un niveau de IHM_LOG (INFO, ERROR...)
 };
 
 // ---- 1.11.2 (API-V, decision 161) : ce qu'est une proposition, et d'ou elle vient --

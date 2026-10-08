@@ -10,6 +10,7 @@
 #include "HmiApiVars.hpp"   // 1.11.1 (API-M) : API.<globale>, API.<Unite>.<variable>
 
 #include "HmiExpr.hpp"
+#include "HmiLog.hpp"             // 1.11.14 : IHM_LOG et ses niveaux
 #include "HmiMarkers.hpp"         // 1.11.1 (REP) : les $ des reperes, transparents dans un script ST
 #include "HmiDuplicate.hpp"       // 1.11.1 (REP) : la phrase de Dupliquer sur l'ancien $Vanne$ d'un script d'action
 #include "HmiEnums.hpp"           // 1.10 (integration I2) : TO_<enumeration>
@@ -218,7 +219,7 @@ constexpr Arity kHmi[] = {
     {"IHM_PRECEDENTE", 0, 0},      {"IHM_SUIVANTE", 0, 0},       {"IHM_ACCUEIL", 0, 0},         {"IHM_MENU_CONNEXION", 0, 1},
     {"IHM_LANGUE", 1, 1},          {"IHM_THEME", 0, 1},          {"IHM_GIF_JOUER", 1, 2},       {"IHM_GIF_PAUSE", 1, 1},
     {"IHM_GIF_ARRETER", 1, 1},     {"IHM_GIF_REJOUER", 1, 2},    {"IHM_EQUIPEMENT_OK", 1, 1},   {"IHM_EQUIPEMENT_PING", 1, 1},
-    {"IHM_ESCLAVE_SIMULE", 1, 1},
+    {"IHM_ESCLAVE_SIMULE", 1, 1},  {"IHM_LOG", 2, 2},
 };
 
 std::string plural(int n, const char* one) { return std::to_string(n) + " " + one + (n > 1 ? "s" : ""); }
@@ -972,9 +973,68 @@ private:
                                                                           : " : veux-tu dire " + near + " ?"),
                       name.text, near);
         }
+        // 1.11.14 : IHM_LOG(niveau, message) - le niveau est une valeur de NIVEAU_LOG,
+        // pas un nom a chercher ; le message, un texte (ses trous bien formes).
+        if (U == "IHM_LOG") {
+            logCall(i, close);
+            return atEnd(close) ? close : close + 1;
+        }
         // Les arguments : leurs noms (un argument nomme : IN := x, Q => y).
         walkNames(i + 2, close);
         return atEnd(close) ? close : close + 1;
+    }
+
+    // 1.11.14 : IHM_LOG(INFO, 'Pompe {Numero} demarree') : le niveau, le message.
+    void logCall(std::size_t i, std::size_t close) {
+        using S = Finding::Severity;
+        std::vector<std::pair<std::size_t, std::size_t>> args;     // [debut, fin) de chaque argument
+        std::size_t from = i + 2;
+        int depth = 0;
+        for (std::size_t k = from; k < close && !atEnd(k); ++k) {
+            if (isOp(k, "(") || isOp(k, "[")) ++depth;
+            else if (isOp(k, ")") || isOp(k, "]")) --depth;
+            else if (depth == 0 && isOp(k, ",")) {
+                args.emplace_back(from, k);
+                from = k + 1;
+            }
+        }
+        if (from < close) args.emplace_back(from, close);
+        if (!args.empty()) {
+            const auto [a, b] = args[0];
+            const bool one = b == a + 1 && (toks_[a].k == Tok::K::Ident || toks_[a].k == Tok::K::Lit);
+            if (!one || !logLevelByName(toks_[a].text))
+                reportTok(a, std::max(b, a + 1), S::Error,
+                          "IHM_LOG : le premier argument est le niveau \xE2\x80\x94 TRACE, DEBUG, INFO, SUCCESS, WARNING, ERROR ou CRITICAL "
+                          "(trouv\xC3\xA9 : " + (b > a ? textOf(a, b) : std::string("rien")) + ")");
+            else if (toks_[a].k == Tok::K::Ident && (local(toks_[a].text) || (sc_.project && sc_.project->variable(toks_[a].text))))
+                // une variable du meme nom passe avant le niveau (comme pour une valeur d'enumeration)
+                reportTok(a, b, S::Warning,
+                          "IHM_LOG : " + toks_[a].text + " est aussi une variable \xE2\x80\x94 c'est sa valeur qui servira de niveau ; "
+                          "\xC3\xA9" "cris NIVEAU_LOG#" + std::string(logLevelName(*logLevelByName(toks_[a].text))) + " pour le niveau");
+        }
+        if (args.size() < 2) return;
+        const auto [a, b] = args[1];
+        if (b == a + 1 && toks_[a].k == Tok::K::Str) {
+            const std::string& q = toks_[a].text;
+            const std::string inner = q.size() >= 2 ? q.substr(1, q.size() - 2) : std::string{};
+            for (const auto& err : TextTemplate::compile(inner).errors()) reportTok(a, b, S::Error, "IHM_LOG : le message - " + err);
+            // Un { sans } reste du texte (TextTemplate) : presque toujours une faute de frappe.
+            for (std::size_t k = 0; k < inner.size(); ++k) {
+                if (inner.compare(k, 2, "{{") == 0 || inner.compare(k, 2, "}}") == 0) { ++k; continue; }
+                if (inner[k] == '{' && inner.find('}', k + 1) == std::string::npos) {
+                    reportTok(a, b, S::Warning, "IHM_LOG : le message a un \xC2\xAB { \xC2\xBB sans \xC2\xAB } \xC2\xBB \xE2\x80\x94 il s'\xC3\xA9" "crira tel quel "
+                                                "(\xC2\xAB {{ \xC2\xBB pour une accolade)");
+                    break;
+                }
+            }
+            return;
+        }
+        const bool number = b == a + 1 && (toks_[a].k == Tok::K::Num || isWord(a, "TRUE") || isWord(a, "FALSE"));
+        if (number)
+            reportTok(a, b, S::Error, "IHM_LOG : le message est un texte - 'Pompe d\xC3\xA9marr\xC3\xA9" "e', ou une variable STRING (trouv\xC3\xA9 : "
+                                          + textOf(a, b) + ")");
+        else
+            walkNames(a, b);
     }
 
     // Les noms d'une plage [a, b) : chaque racine, chaque appel.

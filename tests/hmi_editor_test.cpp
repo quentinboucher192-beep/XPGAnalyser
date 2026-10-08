@@ -2180,6 +2180,23 @@ void aide_saisie_scripts(const std::string& xpg) {
     check(ctx("IHM_SON('") == C::SoundName, "IHM_SON(' : un son");
     check(ctx("IHM_JOURNAL('Niveau {") == C::Placeholder, "IHM_JOURNAL('... { : une variable");
     check(ctx("IHM_JOURNAL('Niveau {x} ok ") == C::Text, "accolade ferm\xC3\xA9" "e : du texte");
+    // 1.11.14 : IHM_LOG(niveau, message) - le niveau, puis les trous du message.
+    check(ctx("IHM_LOG(") == C::LogLevel && ctx("x := 1;\nIHM_LOG( IN") == C::LogLevel && as::locate("IHM_LOG(IN").from == 8,
+          "IHM_LOG( : un niveau (remplac\xC3\xA9 depuis le d\xC3\xA9" "but du mot)");
+    check(ctx("IHM_LOG(INFO, ") == C::Code && ctx("IHM_LOG(INFO, 'Temp\xC3\xA9rature {") == C::Placeholder,
+          "IHM_LOG(INFO, ... : le message ; une accolade : une variable");
+    {
+        hmi::Project hp;
+        const auto levels = as::suggest(hp, nullptr, "IHM_LOG(", "");
+        check(levels.size() == 7 && levels.front().text == "TRACE" && levels.back().text == "CRITICAL" && levels.front().insert == "TRACE, '",
+              "IHM_LOG( : les sept niveaux, du plus bavard au plus grave ; le choix ouvre le message");
+        const auto er = as::suggest(hp, nullptr, "IHM_LOG(", "er");
+        check(!er.empty() && er.front().text == "ERROR", "IHM_LOG(er : ERROR d'abord");
+        const auto lit = as::suggest(hp, nullptr, "x := NIVEAU_LOG#", "");
+        check(lit.size() == 7 && lit[2].text == "NIVEAU_LOG#INFO" && lit[2].insert == "INFO", "NIVEAU_LOG# : les niveaux en litt\xC3\xA9ral");
+        const auto* fn = as::function("ihm_log");
+        check(fn && fn->parameters.size() == 2 && std::string(fn->snippet) == "IHM_LOG(|", "IHM_LOG dans les fonctions IHM_ (signature, aide)");
+    }
     const auto m1 = as::locate("x := Armoires[0].ana.");
     check(m1.context == C::Member && m1.path == "Armoires[0].ana", "apr\xC3\xA8s un point : les membres de " + m1.path);
     check(as::locate("x := Armoires[i + 1].").path == "Armoires[i + 1]", "un indice calcul\xC3\xA9 dans le chemin");
@@ -15893,9 +15910,9 @@ void centreAide111() {
     namespace hr = help::report;
 
     // ---- la table des raccourcis ----
-    check(hk::all().size() == 61, "raccourcis : les 60 lignes de la maquette validee, plus Ctrl+Maj+O (1.11)");
-    check(hk::ofContext(hk::Context::General).size() == 23 && hk::ofContext(hk::Context::Help).size() == 7,
-          "raccourcis : General 23, Aide 7");
+    check(hk::all().size() == 62, "raccourcis : les 60 lignes de la maquette validee, plus Ctrl+Maj+O (1.11) et Ctrl+J (1.11.14)");
+    check(hk::ofContext(hk::Context::General).size() == 24 && hk::ofContext(hk::Context::Help).size() == 7,
+          "raccourcis : General 24 (1.11.14 : Ctrl+J), Aide 7");
     // La table contre le registre d'App.cpp : chaque action qu'elle nomme a la touche que la table lui donne,
     // dans l'ecriture du registre (Alt+Left, Shift+F5). Le registre lui-meme est lu juste apres.
     const std::pair<const char*, const char*> attendu[] = {
@@ -15977,13 +15994,15 @@ void centreAide111() {
     // 1.11.11 : 19.
     // 1.11.12 : 20.
     // 1.11.13 : 21.
-    check(hn::releases().size() == 21 && hn::releases().front().version == "1.11.13" && hn::releases()[1].version == "1.11.12"
-              && hn::releases()[2].version == "1.11.11" && hn::releases()[3].version == "1.11.10"
-              && hn::releases()[4].version == "1.11.9" && hn::releases()[5].version == "1.11.8"
-              && hn::releases()[6].version == "1.11.7" && hn::releases()[7].version == "1.11.6" && hn::releases()[8].version == "1.11.5"
-              && hn::releases()[9].version == "1.11.4" && hn::releases()[10].version == "1.11.3" && hn::releases()[11].version == "1.11.2"
-              && hn::releases()[12].version == "1.11.1" && hn::releases()[13].version == "1.11" && hn::releases()[14].version == "1.10.4",
-          "notes : 21 versions, la 1.11.13 en tete, puis la 1.11.12 \xC3\xA0 la 1.11, et la 1.10.4");
+    // 1.11.14 : 22.
+    check(hn::releases().size() == 22 && hn::releases().front().version == "1.11.14" && hn::releases()[1].version == "1.11.13"
+              && hn::releases()[2].version == "1.11.12"
+              && hn::releases()[3].version == "1.11.11" && hn::releases()[4].version == "1.11.10"
+              && hn::releases()[5].version == "1.11.9" && hn::releases()[6].version == "1.11.8"
+              && hn::releases()[7].version == "1.11.7" && hn::releases()[8].version == "1.11.6" && hn::releases()[9].version == "1.11.5"
+              && hn::releases()[10].version == "1.11.4" && hn::releases()[11].version == "1.11.3" && hn::releases()[12].version == "1.11.2"
+              && hn::releases()[13].version == "1.11.1" && hn::releases()[14].version == "1.11" && hn::releases()[15].version == "1.10.4",
+          "notes : 22 versions, la 1.11.14 en tete, puis la 1.11.13 \xC3\xA0 la 1.11, et la 1.10.4");
     // 1.11.2 (T2, tranches 41, 42 et 44 ; decisions 187, 201 et 216) : 23 lignes en 8 domaines, dont 2 cartes de la fenetre Nouveautes.
     // Tranche 46 (SYM, decision 240) : + Dupliquer dans un symbole (C) et la section Parametres du symbole (N) : 25 lignes.
     {
@@ -16254,7 +16273,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 196,   // 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 199,   // 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -16397,7 +16416,7 @@ void centreAide111() {
     // Integration 1.11 (I111) : la 1.10.4 ajoute objet-vanne-3-voies (La bibliotheque d'objets) : 206.
     // 1.11.1 (T2, decision 107) : Programmer gagne variables-api (API. : les variables de l'automate) : 207.
     check(ix.count(hc::Chapter::Hmi) == 208, "centre : L'IHM a les 208 sujets des chapitres 2 a 8 du guide (1.11.1 : variables-api ; 1.11.2 : paquets-symboles)");
-    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 21, "centre : 11 expressions, 21 notes (1.11.13)");
+    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 22, "centre : 11 expressions, 22 notes (1.11.14)");
     // Tranche 3 : les 11 types de T3 (hmi::exprguide::all(), depot-o), passes par in.expressions ; les
     // cles de la liste de secours sont les siennes (enumeration, pas enum).
     {
@@ -16459,10 +16478,10 @@ void centreAide111() {
         check(o, "page Raccourcis : Ctrl+Maj+O dessine en trois touches, repere 1.11");
 
         const auto n110 = hc::notesPage("1.10");
-        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 21
+        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 22
                   && !n110.summary.empty() && !n110.date.empty(),
               "page Notes : 1.10 -> 1.10.0, 22 lignes en 7 domaines, sa date et son resume");
-        check(hc::notesPage("").version == "1.11.13" && hc::notesPage("9.9").version == "1.11.13",
+        check(hc::notesPage("").version == "1.11.14" && hc::notesPage("9.9").version == "1.11.14",
               "page Notes : sans version (ou inconnue), la plus recente");
         const auto simu = hc::notesPage("1.10.0", "Simulation");
         check(simu.sections.size() == 1 && simu.rows == 4 && simu.domains.size() == 7,
@@ -16806,7 +16825,7 @@ void centreAide111() {
         // Les notes de version n'ont pas de tutoriel : ni la carte "Regarder le tutoriel" (hasTutorial, que
         // lit HelpCenterScreen::showTopic), ni la pastille dans l'arbre. Les autres pages speciales gardent
         // les leurs (T1 ecrit les tutoriels des raccourcis et de Signaler).
-        bool notesSans = ix.count(hc::Chapter::Notes) == 21;   // 1.11.3 a 1.11.13 : une version de plus
+        bool notesSans = ix.count(hc::Chapter::Notes) == 22;   // 1.11.3 a 1.11.14 : une version de plus
         for (const auto* t : ix.ofChapter(hc::Chapter::Notes)) notesSans = notesSans && !hc::hasTutorial(*t);
         const auto* raccourcis = ix.find("page-raccourcis");
         const auto* signaler = ix.find("page-signaler");

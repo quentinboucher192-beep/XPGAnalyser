@@ -9,6 +9,7 @@
 #include "../../hmi/HmiPublicVars.hpp"
 #include "../../hmi/HmiTemplates.hpp"
 #include "../../hmi/HmiScript.hpp"
+#include "../../hmi/HmiLog.hpp"              // 1.11.14 : IHM_LOG et ses niveaux
 #include "../../hmi/HmiEnums.hpp"            // 1.10 (chantier K2) : les enumerations (E)
 #include "../../hmi/HmiOperators.hpp"        // 1.10 (chantier K2) : les operateurs (S2)
 #include "../../hmi/HmiScriptCheck110.hpp"   // 1.10 (chantier K2) : le langage des scripts (S1)
@@ -220,6 +221,10 @@ std::vector<Function> makeFunctions() {
         {"IHM_POPUP_OUVERTE", {"vue : STRING"}, "BOOL", "vrai si cette popup est ouverte", "IHM_POPUP_OUVERTE('|')", true},
         {"IHM_JOURNAL", {"message : STRING"}, "BOOL",
          "\xC3\xA9" "crit une ligne dans le journal ; {Variable} ou {Variable:0.0} y met sa valeur", "IHM_JOURNAL('|')", false},
+        // 1.11.14 : la Console (le panneau du bas)
+        {"IHM_LOG", {"niveau : NIVEAU_LOG (TRACE, DEBUG, INFO, SUCCESS, WARNING, ERROR, CRITICAL)", "message : STRING"}, "BOOL",
+         "\xC3\xA9" "crit une ligne dans la Console, avec l'heure, le niveau, la source et la ligne du code ; "
+         "{Variable} ou {Variable:0.0} y met sa valeur", "IHM_LOG(|", true},
         {"IHM_APPELER", {"script : STRING"}, "BOOL", "ex\xC3\xA9" "cute tout de suite un script g\xC3\xA9n\xC3\xA9ral",
          "IHM_APPELER('|')", true},
         {"IHM_SON", {"son : STRING"}, "BOOL", "joue un son des ressources (WAV, MP3, OGG)", "IHM_SON('|')", true},
@@ -1389,7 +1394,7 @@ Where locate(std::string_view before, bool templateText) {
         else if (callee == "IHM_SON" && argument == 0) w.context = Context::SoundName;
         else if ((callee == "IHM_ESCLAVE_SIMULE" || callee == "IHM_EQUIPEMENT_OK" || callee == "IHM_EQUIPEMENT_PING") && argument == 0)
             w.context = Context::EquipmentName;                                    // 1.9
-        else if (callee == "IHM_JOURNAL") {
+        else if (callee == "IHM_JOURNAL" || (callee == "IHM_LOG" && argument == 1)) {
             const auto text = before.substr(quote + 1);
             const auto open = text.rfind('{');
             if (open != std::string_view::npos && text.find('}', open) == std::string_view::npos
@@ -1401,6 +1406,16 @@ Where locate(std::string_view before, bool templateText) {
         }
         if (w.context != Context::Text) w.from = quote + 1;
         return w;
+    }
+    // 1.11.14 : IHM_LOG(| - le niveau (INFO, ERROR...), pas une variable.
+    if (!parens.empty() && parens.back().commas == 0 && calleeAt(before, parens.back().at) == "IHM_LOG") {
+        std::size_t b = before.size();
+        while (b > 0 && identChar(before[b - 1])) --b;
+        if (before.find_first_not_of(" \t", parens.back().at + 1) >= b) {
+            w.context = Context::LogLevel;
+            w.from = b;
+            return w;
+        }
     }
     memberOrCode(Context::Code, 0);
     return w;
@@ -1635,6 +1650,22 @@ static std::vector<Item> suggestItems(const hmi::Project& hp, const domain::Proj
         std::size_t b = before.size() - 1;
         while (b > 0 && identChar(before[b - 1])) --b;
         const auto* e = hmi::findEnumeration(hp, before.substr(b, before.size() - 1 - b));
+        // 1.11.14 : NIVEAU_LOG# - les niveaux de IHM_LOG.
+        if (!e && iequals(before.substr(b, before.size() - 1 - b), hmi::kLogLevelType)) {
+            for (int k = 0; k < hmi::kLogLevelCount; ++k) {
+                const auto level = static_cast<hmi::LogLevel>(k);
+                const int r = matchRank(std::string(hmi::logLevelName(level)), needle);
+                if (r < 0) continue;
+                Item it;
+                it.text = std::string(hmi::kLogLevelType) + "#" + std::string(hmi::logLevelName(level));
+                it.detail = "niveau " + std::string(hmi::logLevelLabel(level)) + " de IHM_LOG";
+                it.kind = Kind::LogLevel;
+                it.rank = r * 100 + k;
+                it.insert = std::string(hmi::logLevelName(level));
+                push(std::move(it));
+            }
+            return out;
+        }
         if (!e) return out;
         const bool label = code && caseEnumeration(scope(), before.substr(0, b)) == e;   // une etiquette de CASE : "Auto: "
         int i = 0;
@@ -1664,6 +1695,22 @@ static std::vector<Item> suggestItems(const hmi::Project& hp, const domain::Proj
         case Context::Transition:
             for (const auto k : hmi::kTransitionKinds) named(std::string(hmi::transitionLabel(k)), "transition", Kind::Transition);
             break;
+        case Context::LogLevel:
+            // 1.11.14 : IHM_LOG(| - les sept niveaux, du plus bavard au plus grave.
+            for (int k = 0; k < hmi::kLogLevelCount; ++k) {
+                const auto level = static_cast<hmi::LogLevel>(k);
+                const int r = matchRank(std::string(hmi::logLevelName(level)), lower(std::string(prefix)));
+                if (r < 0) continue;
+                Item it;
+                it.text = std::string(hmi::logLevelName(level));
+                it.detail = "niveau " + std::string(hmi::logLevelLabel(level)) + " (NIVEAU_LOG)";
+                it.kind = Kind::LogLevel;
+                it.rank = r * 100 + k;
+                it.insert = it.text + ", '";
+                it.caret = it.insert.size();
+                push(std::move(it));
+            }
+            return out;
         case Context::LocalType:
             for (const auto t : hmi::kLocalTypes) {
                 const int r = matchRank(t, needle);
@@ -2191,6 +2238,7 @@ void classify(Item& it, const hmi::Project& hp, const domain::Project* plc, cons
         case Kind::Equipment:     set(Nature::Object, Origin::Hmi); break;
         case Kind::Api:           set(Nature::Root, Origin::Plc); break;
         case Kind::ApiUnit:       set(Nature::Unit, Origin::Plc); break;
+        case Kind::LogLevel:      set(Nature::EnumValue, Origin::Hmi); break;      // 1.11.14
     }
 }
 } // namespace
@@ -2250,6 +2298,7 @@ ui::Icon iconOf(Kind k) noexcept {
         case Kind::Equipment:        return ui::Icon::Network;      // 1.9
         case Kind::Api:              return ui::Icon::Cpu;          // 1.11.1 (API-V) : l'automate
         case Kind::ApiUnit:          return ui::Icon::Program;      // 1.11.1 (API-V) : une unite de programme
+        case Kind::LogLevel:         return ui::Icon::Constant;     // 1.11.14 : un niveau de IHM_LOG
     }
     return ui::Icon::None;
 }

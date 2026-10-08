@@ -56,6 +56,7 @@ ui::Key keyFrom(SDL_Keycode k) {
         case SDLK_H:         return ui::Key::H;
         case SDLK_K:         return ui::Key::K;
         case SDLK_D:         return ui::Key::D;          // 1.10.2 (chantier D) : Ctrl+D Dupliquer...
+        case SDLK_J:         return ui::Key::J;          // 1.11.14 : Ctrl+J le panneau du bas
         case SDLK_W:         return ui::Key::W;          // lot API 7
         case SDLK_F9:        return ui::Key::F9;
         case SDLK_F10:       return ui::Key::F10;        // Lot API 8 : Simulation > Debogage

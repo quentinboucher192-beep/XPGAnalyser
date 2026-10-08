@@ -2310,13 +2310,15 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     //    s'ouvre tout de suite (sauf sans-fenetre).
     //  ihm-build-attendre [secondes] : jusqu'a la fin du build (et du demarrage qui suit).
     //  ihm-build-etat [texte] : l'etat dans le journal ; avec un texte, il doit y etre.
-    //  ihm-sorties [diagnostics] : l'onglet IHM . Sorties (ou ses diagnostics).
+    //  ihm-sorties [diagnostics|console] : le panneau du bas, sur Sorties (ou Diagnostics, ou la Console).
+    //  ihm-console-etat [texte] : les chiffres de la Console ; avec un texte, une ligne doit le contenir (1.11.14).
     //  ihm-script-modifier <script> <ligne> : une ligne ajoutee au script (une commande).
-    if (cmd == "ihm-build" || cmd == "ihm-build-attendre" || cmd == "ihm-build-etat" || cmd == "ihm-sorties" || cmd == "ihm-script-modifier") {
+    if (cmd == "ihm-build" || cmd == "ihm-build-attendre" || cmd == "ihm-build-etat" || cmd == "ihm-sorties" || cmd == "ihm-script-modifier"
+        || cmd == "ihm-console-etat") {
         auto* screen = dynamic_cast<MainAnalysisScreen*>(app_.menus().top());
         if (screen) buildScreen_ = screen;
         // la fenetre de progression est devant : l'ecran est dessous (le meme, il ne part pas)
-        else if ((cmd == "ihm-build-attendre" || cmd == "ihm-build-etat") && app_.menus().depth() >= 2) screen = buildScreen_;
+        else if ((cmd == "ihm-build-attendre" || cmd == "ihm-build-etat" || cmd == "ihm-console-etat") && app_.menus().depth() >= 2) screen = buildScreen_;
         // ihm-sorties, la fenetre du build devant (il a dure plus de 0,3 s) : son
         // bouton Voir les sorties, puis l'onglet voulu a l'image suivante.
         if (!screen && cmd == "ihm-sorties" && buildScreen_ && app_.menus().depth() >= 2) {
@@ -2356,8 +2358,13 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             return Step::Next;
         }
         if (cmd == "ihm-sorties") {
-            screen->showHmiBuildOutputs(arg(1) == "diagnostics" ? 1 : 0);
+            screen->showHmiBuildOutputs(arg(1) == "diagnostics" ? 1 : arg(1) == "console" ? 2 : 0);
             return Step::Yield;
+        }
+        if (cmd == "ihm-console-etat") {
+            std::printf("[script] console IHM : %s\n", screen->hmiConsoleSummary().c_str());
+            if (!arg(1).empty() && !screen->hmiConsoleHas(arg(1))) fail("ihm-console-etat : \"" + arg(1) + "\" absent de la Console");
+            return Step::Next;
         }
         std::string why;
         if (!screen->scriptHmiEditScript(arg(1), arg(2), &why)) fail("ihm-script-modifier : " + why);
@@ -3114,25 +3121,39 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         click(centre(r), MouseButton::Left, 1, {});
         return Step::Yield;
     }
+    // 1.11.14 : le panneau du bas (Sorties, Console, Diagnostics), hors des onglets du centre :
+    // outil et ligne y cherchent aussi, apres l'onglet courant.
+    const auto bottomPanel = [&]() -> ui::Widget* {
+        ui::Widget* found = nullptr;
+        if (auto* root = top())
+            walk(*root, [&](ui::Widget& x) {
+                if (!found && x.id() == "hmi.sorties" && shown(x)) found = &x;
+            });
+        return found;
+    };
     if (cmd == "outil") {
         auto* page = currentPage();
-        if (!page) { fail("aucun onglet"); return Step::Next; }
+        auto* panel = bottomPanel();
+        if (!page && !panel) { fail("aucun onglet"); return Step::Next; }
         gfx::Rect r{};
         bool ok = false;
-        walk(*page, [&](ui::Widget& x) {
+        const auto look = [&](ui::Widget& x) {
             auto* strip = dynamic_cast<HmiToolStrip*>(&x);
             if (ok || !strip || !shown(*strip)) return;
             const int a = strip->actionByTip(arg(1));
             if (a >= 0) { r = strip->rectOf(a); ok = r.w > 0.f; }
-        });
+        };
+        if (page) walk(*page, look);
+        if (!ok && panel) walk(*panel, look);
         if (!ok) { fail("outil introuvable : " + arg(1)); return Step::Next; }
         click(centre(r), MouseButton::Left, 1, {});
         return Step::Yield;
     }
     if (cmd == "ligne") {
-        // Une ligne de tableau de l'onglet courant, par un texte qu'elle contient.
+        // Une ligne de tableau de l'onglet courant (1.11.14 : puis du panneau du bas), par un texte qu'elle contient.
         auto* page = currentPage();
-        if (!page) { fail("aucun onglet"); return Step::Next; }
+        auto* panel = bottomPanel();
+        if (!page && !panel) { fail("aucun onglet"); return Step::Next; }
         gfx::Rect r{};
         bool ok = false;
         bool offscreen = false;
@@ -3145,7 +3166,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         // zone visible vient a la molette : la choisir l'aurait fait perdre aux autres.
         const bool adding = has("ctrl") || has("maj") || has("shift");
         bool wheeled = false;
-        walk(*page, [&](ui::Widget& x) {
+        const auto scan = [&](ui::Widget& x) {
             auto* table = dynamic_cast<ui::TableView*>(&x);
             if (ok || wheeled || !table || !shown(*table) || !table->model()) return;
             for (std::size_t i = 0; i < table->visibleRowCount() && !ok && !wheeled; ++i)
@@ -3177,7 +3198,9 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
                     }
                     break;
                 }
-        });
+        };
+        if (page) walk(*page, scan);
+        if (!ok && !offscreen && !wheeled && panel) walk(*panel, scan);
         if (!ok && offscreen && retries_ < (wheeled ? 40 : 3)) return Step::Retry;
         if (!ok) { fail("ligne introuvable : " + arg(1)); return Step::Next; }
         const gfx::Point p{r.x + 40.f, r.y + r.h * 0.5f};

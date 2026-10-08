@@ -377,6 +377,11 @@ bool MainAnalysisScreen::handleShortcut(const KeyDown& k, bool beforeWidgets) {
         case Key::S:
             app_.saveFromKeyboard();
             return true;
+        // 1.11.14 : Ctrl+J - le panneau du bas (Sorties, Console, Diagnostics).
+        case Key::J:
+            if (k.mods.shift) return false;
+            toggleBottomPanel();
+            return true;
         case Key::H:
             toggleHistory();
             return true;

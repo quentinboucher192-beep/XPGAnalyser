@@ -291,6 +291,18 @@ std::vector<NameUse> scriptNamesRaw(std::string_view s) {
                 while (i < s.size() && (identChar(s[i]) || s[i] == '.')) ++i;
                 continue;
             }
+            // 1.11.14 : IHM_LOG(INFO, ...) - le premier argument est un niveau (NIVEAU_LOG),
+            // pas une variable : il n'est pas lu ici (Compiler verifie que c'est un niveau).
+            if (call && !member && upper(word) == "IHM_LOG") {
+                std::size_t a = k + 1;
+                while (a < s.size() && (s[a] == ' ' || s[a] == '\t')) ++a;
+                std::size_t b = a;
+                while (b < s.size() && identChar(s[b])) ++b;
+                std::size_t after = b;
+                while (after < s.size() && (s[after] == ' ' || s[after] == '\t')) ++after;
+                if (b > a && identStart(s[a]) && after < s.size() && (s[after] == ',' || s[after] == ')')) advanceTo(b);
+                continue;
+            }
             if (member || call || stKeywords().count(upper(word))) continue;
             const bool seen = std::any_of(out.begin(), out.end(), [&](const NameUse& u) { return upper(u.name) == upper(word); });
             if (!seen) out.push_back({word, line});
@@ -883,7 +895,9 @@ bool isHmiFunction(std::string_view name) noexcept {
                                    "IHM_EQUIPEMENT_OK", "IHM_EQUIPEMENT_PING",
                                    "IHM_GIF_JOUER", "IHM_GIF_PAUSE", "IHM_GIF_ARRETER", "IHM_GIF_REJOUER",
                                    // 1.9 : l'IHM lit-elle cet equipement sur son esclave simule ?
-                                   "IHM_ESCLAVE_SIMULE"};
+                                   "IHM_ESCLAVE_SIMULE",
+                                   // 1.11.14 : une ligne de la Console, d'un niveau
+                                   "IHM_LOG"};
     const std::string u = upper(name);
     for (const char* n : kNames) if (u == n) return true;
     return false;

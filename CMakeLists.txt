@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(xpg_analyzer VERSION 1.11.13 LANGUAGES C CXX)
+project(xpg_analyzer VERSION 1.11.14 LANGUAGES C CXX)
 
 # ---------------------------------------------------------------------------
 # C++23 is requested, C++20 is the floor. The one feature that needs C++23 is
@@ -521,6 +521,9 @@ if(XPG_BUILD_TESTS)
     # ---- 1.11.13 : la generation incrementale de l'IHM (cache, dependances, etats, artefacts) ----
     xpg_add_test_executable(hmi_build_test tests/hmi_build_test.cpp src/app/hmi/HmiBuild.cpp)
     xpg_target_link_libraries(hmi_build_test PRIVATE xpg_hmi xpg_import)
+    # ---- 1.11.14 : IHM_LOG et la Console (niveaux, verification, source et ligne) ----
+    xpg_add_test_executable(hmi_log_test tests/hmi_log_test.cpp src/app/hmi/HmiConsole.cpp)
+    xpg_target_link_libraries(hmi_log_test PRIVATE xpg_hmi)
     # ---- Lot API 8 : didacticiels et aide (les huit parcours, leurs pages de l'aide, le menu Aide) ----
     xpg_add_test_executable(lot8tutorials_test tests/lot8tutorials_test.cpp src/app/TopBar.cpp src/app/TopBarLot8.cpp src/app/TutorialsLot8.cpp)   # Lot API 8 : bandeau haut (+ TopBarLot8.cpp)
     # ---- Lot API 8 : tests - xpg_ui AVANT xpg_import : ui::buildHelp (ui/HelpDocument.cpp) appelle
@@ -631,6 +634,7 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME hmieditor    COMMAND hmi_editor_test ${XPG_FIXTURE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ihm)
     xpg_add_test(NAME hmicheckexpr COMMAND hmicheck_expr_test)               # ---- Lot API 8 : les expressions impossibles ----
     xpg_add_test(NAME hmibuild     COMMAND hmi_build_test)                   # ---- 1.11.13 : la generation incrementale ----
+    xpg_add_test(NAME hmilog       COMMAND hmi_log_test)                     # ---- 1.11.14 : IHM_LOG et la Console ----
     xpg_add_test(NAME searchfocus COMMAND searchfocus_test)                  # ---- Lot API 8 : finitions (Ctrl+F) ----
     xpg_add_test(NAME lot8tutorials COMMAND lot8tutorials_test)              # ---- Lot API 8 : didacticiels et aide ----
     xpg_add_test(NAME topbar8 COMMAND topbar8_test)                          # ---- Lot API 8 : bandeau haut ----

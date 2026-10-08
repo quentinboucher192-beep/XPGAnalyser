@@ -12971,7 +12971,9 @@ const std::vector<Topic>& topics() {
                          "popups\nIHM_POPUP_OUVERTE('Vue')\tBOOL\tvrai si cette popup est ouverte (en "
                          "lecture, aussi dans une expression)\nIHM_JOURNAL('texte "
                          "{Var:0.0}')\tBOOL\t\xC3\xA9" "crit une ligne dans le journal (texte \xC3\xA0 "
-                         "trous)\nIHM_APPELER('Script')\tBOOL\tex\xC3\xA9" "cute tout de suite un script "
+                         "trous)\nIHM_LOG(INFO, 'texte {Var:0.0}')\tBOOL\t\xC3\xA9" "crit une ligne dans la Console (le "
+                         "panneau du bas) : l'heure, le niveau (TRACE, DEBUG, INFO, SUCCESS, WARNING, ERROR, CRITICAL ; "
+                         "ou NIVEAU_LOG#INFO), la source, la ligne du code\nIHM_APPELER('Script')\tBOOL\tex\xC3\xA9" "cute tout de suite un script "
                          "g\xC3\xA9n\xC3\xA9ral\nIHM_SON('bip.wav')\tBOOL\tjoue un son des ressources (WAV, "
                          "MP3, OGG)\nIHM_VUE()\tSTRING\tle nom de la vue "
                          "affich\xC3\xA9" "e\nIHM_TEMPS()\tTIME\tle temps \xC3\xA9" "coul\xC3\xA9 depuis le "
@@ -13045,7 +13047,7 @@ const std::vector<Topic>& topics() {
                          "trous : `{IHM_NOM_UTILISATEUR()}`.", {}},
          },
          {"scripts", "fonctions", "actions", "navigation-marche", "equipements", "variables-esclaves"},
-         {"IHM_NAVIGUER", "IHM_POPUP", "IHM_FERMER_POPUP", "IHM_JOURNAL", "IHM_APPELER", "IHM_SON", "IHM_VUE", "IHM_TEMPS", "IHM_UTILISATEUR", "IHM_NOM_UTILISATEUR", "IHM_GROUPE", "IHM_NIVEAU", "IHM_DECONNECTER", "IHM_PARAMETRES_SYSTEME", "IHM_METTRE_DE_COTE", "IHM_REMETTRE", "IHM_FAIRE_TAIRE", "IHM_EXPORTER", "IHM_PRECEDENTE", "IHM_SUIVANTE", "IHM_ACCUEIL", "IHM_MENU_CONNEXION", "IHM_LANGUE", "IHM_THEME", "IHM_EQUIPEMENT_OK", "IHM_EQUIPEMENT_PING", "IHM_GIF_JOUER", "IHM_GIF_PAUSE", "IHM_GIF_ARRETER", "IHM_GIF_REJOUER"},
+         {"IHM_NAVIGUER", "IHM_POPUP", "IHM_FERMER_POPUP", "IHM_JOURNAL", "IHM_LOG", "NIVEAU_LOG", "IHM_APPELER", "IHM_SON", "IHM_VUE", "IHM_TEMPS", "IHM_UTILISATEUR", "IHM_NOM_UTILISATEUR", "IHM_GROUPE", "IHM_NIVEAU", "IHM_DECONNECTER", "IHM_PARAMETRES_SYSTEME", "IHM_METTRE_DE_COTE", "IHM_REMETTRE", "IHM_FAIRE_TAIRE", "IHM_EXPORTER", "IHM_PRECEDENTE", "IHM_SUIVANTE", "IHM_ACCUEIL", "IHM_MENU_CONNEXION", "IHM_LANGUE", "IHM_THEME", "IHM_EQUIPEMENT_OK", "IHM_EQUIPEMENT_PING", "IHM_GIF_JOUER", "IHM_GIF_PAUSE", "IHM_GIF_ARRETER", "IHM_GIF_REJOUER"},
          {},
          {{"PNG_133_st_fonction_ihm_signature_et_vues.png", "IHM_NAVIGUER : sa signature, et les vues propos\xC3\xA9" "es entre les guillemets."}, {"PNG_191_aide_reference_ihm.png", "F1 sur IHM_JOURNAL, dans un script : la r\xC3\xA9" "f\xC3\xA9rence des fonctions IHM_."}},
          "",

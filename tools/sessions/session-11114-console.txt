@@ -1,0 +1,128 @@
+# =============================================================================
+#  Session 11114 : LE PANNEAU DU BAS ET IHM_LOG (lot 2).
+#  Sur la copie corrigee d'Armoire_Gaz (session 11113), sans cache :
+#    1. le panneau du bas, sous les onglets : Sorties, Console, Diagnostics ;
+#    2. des IHM_LOG dans les scripts Init (les sept niveaux) et Horloge (un trou) ;
+#    3. Demarrer : la Console se remplit (couleurs, source, ligne, session) ;
+#    4. le filtre par niveau : les erreurs seules ;
+#    5. un double-clic sur une ligne : le script, a sa ligne ; le clic droit ;
+#    6. les Sorties : le build, puis « Simulation demarree (session 1) » ;
+#    7. un IHM_LOG mal ecrit : Compiler le dit (Diagnostics), Ctrl+Z ;
+#    8. Exporter ; Ctrl+J replie le panneau, puis le rouvre ;
+#    9. l'aide a la saisie : IHM_LOG choisi dans la liste, puis les niveaux.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+arbre "IHM/Programmation générale" deplier
+arbre "IHM/Programmation générale/Scripts" deplier
+attendre 3
+capture 11114_01_panneau_du_bas.png
+
+# ---- 2. des IHM_LOG dans les scripts ----
+ihm-script-modifier "Init" "IHM_LOG(TRACE, 'Init : les variables sont prêtes');"
+ihm-script-modifier "Init" "IHM_LOG(INFO, 'Ouverture de la vue principale');"
+ihm-script-modifier "Init" "IHM_LOG(SUCCESS, 'Initialisation terminée');"
+ihm-script-modifier "Init" "IHM_LOG(WARNING, 'Valeur proche de la limite');"
+ihm-script-modifier "Init" "IHM_LOG(ERROR, 'Impossible de charger la ressource');"
+ihm-script-modifier "Init" "IHM_LOG(NIVEAU_LOG#CRITICAL, 'Perte de communication avec l$'API');"
+ihm-script-modifier "Horloge" "IF Secondes_IHM MOD 2 = 0 THEN IHM_LOG(DEBUG, 'Horloge : {Secondes_IHM} s'); END_IF;"
+ihm-build-attendre
+attendre 3
+
+# ---- 3. Demarrer : la Console ----
+arbre "Simulation/IHM"
+attendre 2
+ihm-build-attendre
+attendre 150
+ihm-sorties console
+attendre 3
+ihm-console-etat "Initialisation terminée"
+ihm-console-etat "Horloge :"
+survol 1350 400
+attendre 3
+capture 11114_02_console.png
+
+# ---- 4. le filtre : les erreurs seules ----
+outil "TRACE"
+outil "DEBUG"
+outil "INFO"
+outil "SUCCESS"
+outil "WARNING"
+survol 1350 400
+attendre 3
+capture 11114_03_console_erreurs.png
+outil "TRACE"
+outil "DEBUG"
+outil "INFO"
+outil "SUCCESS"
+outil "WARNING"
+attendre 3
+
+# ---- 5. un double-clic : la source ; le clic droit ----
+ligne "Valeur proche de la limite" double
+attendre 6
+capture 11114_04_double_clic_source.png
+ihm-sorties console
+attendre 3
+ligne "Initialisation terminée" droit
+attendre 3
+capture 11114_05_clic_droit_console.png
+touche escape
+attendre 2
+
+# ---- 6. les Sorties ----
+ihm-sorties
+attendre 3
+capture 11114_06_sorties.png
+
+# ---- 7. un IHM_LOG mal ecrit : Compiler le dit ----
+arbre "Simulation/IHM"
+attendre 2
+bouton "Arrêter l'IHM"
+attendre 2
+ihm-script-modifier "Horloge" "IHM_LOG(BLABLA, 'x');"
+ihm-build-attendre
+bouton "Démarrer l'IHM"
+attendre 1
+ihm-build-attendre
+attendre 3
+ihm-build-etat "erreur"
+ihm-sorties diagnostics
+attendre 3
+capture 11114_07_diagnostic_ihm_log.png
+annuler
+attendre 3
+
+# ---- 8. Exporter ; Ctrl+J ----
+ihm-sorties console
+attendre 2
+outil "Exporter"
+attendre 3
+capture 11114_08_export.png
+touche ctrl+j
+attendre 3
+capture 11114_09_panneau_replie.png
+touche ctrl+j
+attendre 3
+
+# ---- 9. l'aide a la saisie : IHM_LOG( ----
+#  l'onglet des scripts, ouvert sur Init par le double-clic de l'etape 5 ;
+#  un clic dans le code, la fin du texte, une ligne neuve.
+onglet "IHM · Programmation"
+attendre 5
+clic 1300 300
+attendre 2
+touche ctrl+end
+touche return
+texte "IHM_LO"
+attendre 3
+touche return
+attendre 5
+capture 11114_10_aide_saisie_niveaux.png
+touche escape
+attendre 2
+quitter

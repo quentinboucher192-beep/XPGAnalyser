@@ -149,7 +149,8 @@ bool UiDriver::parseKey(const std::string& combo, Key& key, KeyMods& mods) {
         {"f10", Key::F10},                                                     // Lot API 8 : Centre de simulation (F10 : la section suivante)
         {"f7", Key::F7},                                                       // 1.10 (chantier N) : Compiler l'IHM
         {"f8", Key::F8},                                                       // 1.10 : l'IHM demarrer / arreter (chantier L)
-        {"d", Key::D}};                                                        // 1.10.2 (chantier D) : Ctrl+D Dupliquer...
+        {"d", Key::D},                                                         // 1.10.2 (chantier D) : Ctrl+D Dupliquer...
+        {"j", Key::J}};                                                        // 1.11.14 : Ctrl+J le panneau du bas
     mods = {};
     std::string rest = lower(combo);
     for (;;) {

@@ -639,6 +639,10 @@ public:
     // nouvelles lignes, Tout choisir (les scripts le choisissent par libelle).
     [[nodiscard]] PopupMenu* contextMenu() const noexcept { return context_; }
     void openContextMenu(gfx::Point at);
+    // 1.11.14 : DES ENTREES EN PLUS, en tete de ce menu (la Console : aller a la source,
+    // filtrer sur cette source...). Leurs id (1000 et plus) reviennent par contextAction.
+    void setExtraContextItems(std::function<std::vector<PopupMenu::Item>()> provider) { extraContext_ = std::move(provider); }
+    const core::SignalPtr<int> contextAction = core::Signal<int>::create();
     // (lignes copiees, avec les titres)
     const core::SignalPtr<std::size_t, bool> copied = core::Signal<std::size_t, bool>::create();
 
@@ -761,6 +765,7 @@ private:
     [[nodiscard]] float bannerHeight() const noexcept { return banner_.empty() ? 0.f : 28.f; }
     std::function<void(const PasteRequest&)> pasteHandler_;
     PopupMenu*                   context_{nullptr};
+    std::function<std::vector<PopupMenu::Item>()> extraContext_;   // 1.11.14
     int                          lastClickColumn_{-1};
     std::string                  banner_;
     std::vector<Mark>            marks_;

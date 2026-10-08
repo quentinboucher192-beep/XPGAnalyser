@@ -826,6 +826,11 @@ void MainAnalysisScreen::askHmiBind(const std::string& equipment, const std::str
 }
 
 void MainAnalysisScreen::openHmiPane(const std::string& key) {
+    // 1.11.14 : les sorties du build vivent dans le panneau du bas.
+    if (key == "sorties") {
+        showBottomPanel(true, HmiBuildOutputPane::kSorties);
+        return;
+    }
     auto doc = app_.hmi();
     if (!doc || !centre_) return;
     setHmiProjectFolder(app_.projectFolder());     // "Enregistrer sous" a pu le changer
@@ -953,6 +958,13 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         host.login = [this](std::string login) { askHmiLogin(std::move(login)); };
         // 1.11.13 : demarrer passe par le build de l'IHM (un projet a jour demarre aussitot).
         host.buildGate = [this](const std::string& source) { startHmiBuild(source); };
+        // 1.11.14 : la Console (chaque ligne du moteur) et les Sorties (demarree, arretee).
+        host.console = [this](const hmi::JournalEntry& e) {
+            if (bottomPanel_) bottomPanel_->console().addRuntime(e);
+        };
+        host.lifecycle = [this](bool started, int session) {
+            if (bottomPanel_) bottomPanel_->simulationEvent(started, session);
+        };
         // 1.10 (decision 12) : le plein ecran de l'IHM - la fenetre en plein ecran, puis
         // rendue comme avant (deja en plein ecran par F11 : elle le reste).
         host.fullScreenWindow = [this, before = std::make_shared<bool>(false)](bool on) {
@@ -1567,15 +1579,6 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         page = std::move(pane);
         title = "Versions";
         icon = Icon::History;
-    } else if (key == "sorties") {
-        // 1.11.13 : les sorties du build de l'IHM - son journal, ses diagnostics (double-clic : la source).
-        auto pane = std::make_unique<HmiBuildOutputPane>("hmi.sorties");
-        hmiLinks_ += pane->diagnosticActivated->connect([this](const hmi::pipeline::Diagnostic& d) { openHmiDiagnostic(d); });
-        hmiLinks_ += pane->elementActivated->connect([this](const std::string& k) { openHmiElement(k); });
-        replayHmiBuilds(*pane);
-        page = std::move(pane);
-        title = "IHM \xC2\xB7 Sorties";
-        icon = Icon::Document;
     } else {
         auto info = laterPane(key);
         page = std::make_unique<HmiInfoPane>("hmi." + key, info.title, std::move(info.lines));

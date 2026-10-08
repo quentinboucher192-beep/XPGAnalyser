@@ -49,6 +49,7 @@
 #include "HmiDisplay.hpp"              // lot 13 : l'affichage
 #include "HmiTypes.hpp"                // lot 16 : structures et tableaux
 #include "HmiMedia.hpp"                // lot 16 : les GIF animes
+#include "HmiLog.hpp"                  // 1.11.14 : les niveaux de IHM_LOG
 
 #include <cstdint>
 #include <deque>
@@ -82,9 +83,18 @@ struct Frame {
 struct JournalEntry {
     double      time{0};       // secondes depuis le lancement de l'IHM
     std::string stamp;         // "14:05:12.350" (l'heure du poste)
-    std::string kind;          // "Action", "Navigation", "Script", "Journal", "Erreur"
+    std::string kind;          // "Action", "Navigation", "Script", "Journal", "Erreur", "IHM_LOG"
     std::string source;        // "Vue_Armoire_A/Btn_Accueil", "script Demarrage"
     std::string message;
+    // 1.11.14 : la Console. Le niveau (IHM_LOG le donne ; sinon celui de la categorie),
+    // le code qui l'a dit (le script, la fonction, la vue, l'objet ; kNoId : aucun) et
+    // sa ligne (0 : inconnue), le cycle du moteur et la session (le numero du demarrage).
+    LogLevel      level{LogLevel::Info};
+    std::string   code;        // "Horloge", "Vue_A.OnOpen", "fonction Moyenne" ("" : pas de code)
+    Id            view{kNoId}, object{kNoId}, script{kNoId}, function{kNoId};
+    int           line{0};
+    long long     cycle{0};
+    int           session{0};
 };
 
 // ---- alarmes en cours (lot 4) ---------------------------------------------------
@@ -494,7 +504,7 @@ public:
     // Variables IHM a leur valeur initiale, scripts Demarrage, vue de demarrage
     // ouverte (OnOpen, actions d'ouverture).
     void start(double now);
-    void stop(double now);
+    void stop(double now, const std::string& why = {});   // 1.11.14 : why - la raison, dans la meme ligne du journal
     [[nodiscard]] bool running() const noexcept { return running_; }
     void tick(double now);
 
@@ -568,6 +578,12 @@ public:
     [[nodiscard]] const std::deque<JournalEntry>& journal() const noexcept { return journal_; }
     void clearJournal() { journal_.clear(); }
     void log(std::string kind, std::string source, std::string message);
+    // 1.11.14 : une ligne d'un niveau donne (IHM_LOG) ; `line` : la ligne du code (0 : celle
+    // de l'instruction en cours, s'il y en a une).
+    void logAt(LogLevel level, std::string kind, std::string source, std::string message, int line = 0);
+    // 1.11.14 : la session de la Console - le numero du demarrage depuis l'ouverture de
+    // l'application (1 au premier start, toutes les IHM simulees confondues).
+    [[nodiscard]] int session() const noexcept { return session_; }
 
     // Lot 14 : la liaison Modbus TCP quand l'IHM est reliee a un automate reel
     // (nulle : le simulateur, ou rien).
@@ -1288,6 +1304,15 @@ private:
     std::map<Id, std::size_t> runs_;
     std::map<Id, std::string> errors_;
     std::string              source_;                    // qui execute (pour le journal)
+    // 1.11.14 : le code qui tourne (la source d'une ligne de la Console) et sa ligne en
+    // cours (l'interprete l'ecrit a chaque instruction : sim::RunLimits::trace).
+    struct CodeOrigin {
+        std::string name;                                   // "Horloge", "Vue_A.OnOpen", "fonction Moyenne"
+        Id          view{kNoId}, object{kNoId}, script{kNoId}, function{kNoId};
+    };
+    CodeOrigin               origin_;
+    sim::ExecTrace           trace_;
+    int                      session_{0};
     std::string              abort_;                     // un appel imbrique coupe : la raison
     std::string              actionOrigin_;              // lot 6 : l'action de vue vient de ce modele
     Id                       pressed_{kNoId};

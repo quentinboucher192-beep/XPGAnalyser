@@ -2684,6 +2684,7 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
     hooks.equipmentStatus = host_.equipmentStatus;
     hooks.simSlaves = host_.simSlaves;           // 1.9 : les esclaves simules (la page Simulation)
     hooks.simSlaveCommand = host_.simSlaveCommand;
+    hooks.journaled = host_.console;             // 1.11.14 : la Console du panneau du bas
     runtime_.setHooks(std::move(hooks));
 
     links_ += doc_->changed->connect([this](Id) {
@@ -2999,6 +3000,7 @@ void HmiSimulationPane::ensureStarted(double now) {
         // 1.9 : les DDT du programme (les membres que capture une copie de parametre).
         runtime_.setPlcTypes(hmiparams::plcTypesOf(hmiparams::program().get()));
         runtime_.start(now);
+        if (host_.lifecycle) host_.lifecycle(true, runtime_.session());     // 1.11.14 : les Sorties
     }
 }
 
@@ -3032,6 +3034,7 @@ void HmiSimulationPane::stopScenario() {
 
 void HmiSimulationPane::restart() {
     runtime_.stop(now_);
+    if (started_ && host_.lifecycle) host_.lifecycle(false, runtime_.session());   // 1.11.14
     started_ = false;
     layers_.reset();
     ensureStarted(now_);
@@ -3199,8 +3202,8 @@ void HmiSimulationPane::buildDone(bool ok, const std::string& why) {
     waitingBuild_ = false;
     if (!ok) {
         autoStart_ = false;   // arretee : elle le reste jusqu'a Demarrer
-        blockedNote_ = "D\xC3\xA9marrage bloqu\xC3\xA9 : " + why + "\nCorrige (IHM \xC2\xB7 Sorties, double-clic : la source), puis D\xC3\xA9marrer l'IHM.";
-        runtime_.log("Simulation", "IHM", "D\xC3\xA9marrage bloqu\xC3\xA9 : " + why);
+        blockedNote_ = "D\xC3\xA9marrage bloqu\xC3\xA9 : " + why + "\nCorrige (panneau du bas, Diagnostics : double-clic, la source), puis D\xC3\xA9marrer l'IHM.";
+        runtime_.logAt(hmi::LogLevel::Error, "Simulation", "IHM", "D\xC3\xA9marrage bloqu\xC3\xA9 : " + why);   // 1.11.14 : une erreur de la Console
         status_->setTransientMessage("D\xC3\xA9marrage bloqu\xC3\xA9 : " + why, 10.0, ui::StatusBar::Severity::Error);
         gateSource_.clear();
         refreshPane();
@@ -3238,8 +3241,8 @@ void HmiSimulationPane::startHmi(const std::string& source) {
 void HmiSimulationPane::stopHmi(const std::string& source) {
     if (!started_) return;
     stopScenario();
-    runtime_.log("Simulation", "IHM", "IHM arr\xC3\xAAt\xC3\xA9" "e" + (source.empty() ? std::string{} : " (" + source + ")"));
-    runtime_.stop(now_);
+    runtime_.stop(now_, source);                                            // 1.11.14 : une seule ligne, avec la raison
+    if (host_.lifecycle) host_.lifecycle(false, runtime_.session());       // 1.11.14 : les Sorties
     started_ = false;
     autoStart_ = false;   // arretee par l'utilisateur : elle le reste (l'onglet ne la relance pas)
     status_->setTransientMessage("IHM arr\xC3\xAAt\xC3\xA9" "e \xE2\x80\x94 l'API " + plcStateText(), 5.0);

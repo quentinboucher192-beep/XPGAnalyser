@@ -120,6 +120,12 @@ struct HmiSimulationHost {
     //  sur un build valide. Nul : elle demarre tout de suite (le poste
     //  d'exploitation, les essais, les exemples de l'aide).
     std::function<void(const std::string& source)>        buildGate;
+    // ---- 1.11.14 : LA CONSOLE ET LES SORTIES ----
+    //  Chaque ligne du journal du moteur (IHM_LOG, une erreur d'execution, une action,
+    //  la navigation) : l'hote la passe a la Console du panneau du bas. Le demarrage et
+    //  l'arret de l'IHM (la session : le numero du demarrage) : une ligne des Sorties.
+    std::function<void(const hmi::JournalEntry&)>         console;
+    std::function<void(bool started, int session)>        lifecycle;
 };
 
 // Une vue a dessiner : evaluee, avec l'etat de sa transition.

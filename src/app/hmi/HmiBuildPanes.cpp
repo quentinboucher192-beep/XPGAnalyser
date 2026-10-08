@@ -3,6 +3,7 @@
 // =============================================================================
 #include "HmiBuildPanes.hpp"
 
+#include "../../core/AtomicFile.hpp"
 #include "../../menu/MenuManager.hpp"
 #include "../../ui/Icons.hpp"
 
@@ -10,6 +11,7 @@
 #include <cmath>
 #include <cstdio>
 #include <ctime>
+#include <filesystem>
 
 namespace app {
 
@@ -351,34 +353,198 @@ void HmiBuildProgressDialog::finish(const std::string& payload) {
 }
 
 // ======================================================== les sorties ========
+// ============================================== le panneau du bas (1.11.14) ===
+namespace {
+// Les couleurs des niveaux, lisibles en theme sombre : TRACE gris, DEBUG bleu, INFO
+// clair, SUCCESS vert, WARNING orange, ERROR rouge, CRITICAL rouge intense.
+ui::Tone levelTone(hmi::LogLevel l) {
+    switch (l) {
+        case hmi::LogLevel::Trace: return ui::Tone::Muted;
+        case hmi::LogLevel::Debug: return ui::Tone::Info;
+        case hmi::LogLevel::Info: return ui::Tone::None;
+        case hmi::LogLevel::Success: return ui::Tone::Ok;
+        case hmi::LogLevel::Warning: return ui::Tone::Warning;
+        case hmi::LogLevel::Error:
+        case hmi::LogLevel::Critical: return ui::Tone::Error;
+    }
+    return ui::Tone::None;
+}
+ui::Icon levelIcon(hmi::LogLevel l) {
+    switch (l) {
+        case hmi::LogLevel::Success: return ui::Icon::Ok;
+        case hmi::LogLevel::Warning: return ui::Icon::Warning;
+        case hmi::LogLevel::Error:
+        case hmi::LogLevel::Critical: return ui::Icon::Error;
+        default: break;
+    }
+    return ui::Icon::Info;
+}
+// 5000 -> "5 000"
+std::string thousands(std::size_t n) {
+    std::string s = std::to_string(n);
+    for (int i = static_cast<int>(s.size()) - 3; i > 0; i -= 3) s.insert(static_cast<std::size_t>(i), " ");
+    return s;
+}
+std::string stampForFile() {
+    const std::time_t t = std::time(nullptr);
+    std::tm tm{};
+#ifdef _WIN32
+    localtime_s(&tm, &t);
+#else
+    localtime_r(&t, &tm);
+#endif
+    char buf[40];
+    std::snprintf(buf, sizeof buf, "%04d-%02d-%02d_%02d-%02d-%02d", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
+    return buf;
+}
+
+// Les lignes montrees de la Console : leur place dans HmiConsole::entries(), relue a
+// chaque changement (tick) - rien n'est copie.
+class ConsoleRows final : public ui::ITableModel {
+public:
+    explicit ConsoleRows(const HmiConsole& c) : c_(c) {}
+    std::vector<std::size_t> rows;
+    [[nodiscard]] const ConsoleEntry* at(ui::RowIndex r) const {
+        if (r >= rows.size() || rows[r] >= c_.entries().size()) return nullptr;
+        return &c_.entries()[rows[r]];
+    }
+    [[nodiscard]] std::size_t rowCount() const override { return rows.size(); }
+    [[nodiscard]] std::size_t columnCount() const override { return 7; }
+    [[nodiscard]] std::string headerText(std::size_t c) const override {
+        static const char* const kHeads[] = {"Heure", "Niveau", "Source", "Ligne", "Message", "Cat\xC3\xA9gorie", "Session"};
+        return c < 7 ? kHeads[c] : std::string{};
+    }
+    [[nodiscard]] std::string cellText(ui::RowIndex r, std::size_t c) const override {
+        const auto* e = at(r);
+        if (!e) return {};
+        switch (c) {
+            case 0: return e->time;
+            case 1: return std::string(hmi::logLevelName(e->level));
+            case 2: return !e->source.empty() ? e->source : e->code;
+            case 3: return e->line > 0 ? std::to_string(e->line) : std::string{};
+            case 4: return e->message;
+            case 5: return e->category;
+            case 6: return "S" + std::to_string(e->session) + " \xC2\xB7 c" + std::to_string(e->cycle);
+            default: break;
+        }
+        return {};
+    }
+    [[nodiscard]] ui::CellStyle cellStyle(ui::RowIndex r, std::size_t c) const override {
+        ui::CellStyle st;
+        const auto* e = at(r);
+        if (!e) return st;
+        const auto l = e->level;
+        const ui::Tone tone = levelTone(l);
+        if (l == hmi::LogLevel::Critical) st.bg = gfx::Color{229, 53, 53, 70};
+        else if (l == hmi::LogLevel::Error) st.bg = gfx::Color{229, 83, 75, 40};
+        else if (l == hmi::LogLevel::Warning) st.bg = gfx::Color{242, 153, 74, 30};
+        if (c == 1) {
+            st.icon = levelIcon(l);
+            st.iconTone = tone;
+            st.bold = l >= hmi::LogLevel::Success;
+        }
+        if (c == 1 || c == 4) {
+            if (l == hmi::LogLevel::Critical) {
+                st.fg = gfx::Color{255, 64, 64, 255};           // le rouge intense
+                st.bold = true;
+            } else {
+                st.fgTone = tone;
+            }
+        }
+        if (c == 0 || c == 3) st.monospace = true;
+        if (c == 0 || c == 5 || c == 6) st.fgTone = ui::Tone::Muted;
+        return st;
+    }
+    [[nodiscard]] bool less(ui::RowIndex a, ui::RowIndex b, std::size_t c) const override {
+        const auto* x = at(a);
+        const auto* y = at(b);
+        if (!x || !y) return false;
+        if (c == 0 || c == 6) return x->seq < y->seq;
+        if (c == 1) return x->level < y->level;
+        if (c == 3) return x->line < y->line;
+        return cellText(a, c) < cellText(b, c);
+    }
+    [[nodiscard]] std::string rowTooltip(ui::RowIndex r) const override {
+        const auto* e = at(r);
+        if (!e) return {};
+        std::string tip = std::string(hmi::logLevelLabel(e->level)) + " \xC2\xB7 " + e->date + " " + e->time + " \xC2\xB7 session " + std::to_string(e->session)
+                        + ", cycle " + std::to_string(e->cycle);
+        if (const auto w = e->where(); !w.empty()) tip += "\n" + w;
+        tip += "\n" + e->message;
+        if (e->hasSource()) tip += "\nDouble-clic : aller \xC3\xA0 la source.";
+        return tip;
+    }
+
+private:
+    const HmiConsole& c_;
+};
+} // namespace
+
 HmiBuildOutputPane::HmiBuildOutputPane(std::string id) : ui::Widget(std::move(id)) {
     auto tools = std::make_unique<HmiToolStrip>(this->id() + ".tools");
+    // Sorties et Diagnostics : les gravites du build.
     tools->add(10, HmiGlyph::Check, "Les informations (le d\xC3\xA9roulement du build)", "Informations");
-    tools->add(11, HmiGlyph::Check, "Les succ\xC3\xA8s (build termin\xC3\xA9, projet \xC3\xA0 jour)", "Succ\xC3\xA8s");
+    tools->add(11, HmiGlyph::Check, "Les succ\xC3\xA8s (build termin\xC3\xA9, projet \xC3\xA0 jour, simulation d\xC3\xA9marr\xC3\xA9" "e)", "Succ\xC3\xA8s");
     tools->add(12, HmiGlyph::Bell, "Les avertissements", "Avertissements");
     tools->add(13, HmiGlyph::Stop, "Les erreurs (et les erreurs critiques)", "Erreurs");
+    // La Console : les sept niveaux de IHM_LOG.
+    static const char* const kLevelTips[hmi::kLogLevelCount] = {
+        "TRACE : le d\xC3\xA9tail du d\xC3\xA9roulement (gris)", "DEBUG : la mise au point (bleu)", "INFO : ce qui se passe (clair)",
+        "SUCCESS : ce qui a r\xC3\xA9ussi (vert)", "WARNING : ce qui m\xC3\xA9rite attention (orange)", "ERROR : ce qui a \xC3\xA9" "chou\xC3\xA9 (rouge)",
+        "CRITICAL : ce qui met l'installation en cause (rouge intense)"};
+    static const HmiGlyph kLevelGlyphs[hmi::kLogLevelCount] = {HmiGlyph::List, HmiGlyph::Search, HmiGlyph::Check, HmiGlyph::Check,
+                                                                HmiGlyph::Bell, HmiGlyph::Stop, HmiGlyph::Stop};
+    for (int k = 0; k < hmi::kLogLevelCount; ++k)
+        tools->add(20 + k, kLevelGlyphs[k], kLevelTips[k], std::string(hmi::logLevelName(static_cast<hmi::LogLevel>(k))));
     tools->separator();
-    tools->add(1, HmiGlyph::Delete, "Effacer les sorties (les diagnostics du dernier build restent)", "Effacer");
-    tools->add(2, HmiGlyph::Copy, "Copier les lignes montr\xC3\xA9" "es (et les diagnostics) dans le presse-papiers", "Copier");
-    for (int k = 0; k < 4; ++k) tools->setCheckedWhen(10 + k, [this, k] { return levels_[k == 3 ? 3 : k]; });
+    tools->add(1, HmiGlyph::Delete, "Effacer ce que montre l'onglet (les diagnostics du dernier build restent)", "Effacer");
+    tools->add(2, HmiGlyph::Copy, "Copier les lignes montr\xC3\xA9" "es dans le presse-papiers", "Copier");
+    tools->add(3, HmiGlyph::Export, "Exporter les lignes montr\xC3\xA9" "es dans un fichier texte (le dossier exports/ du projet)", "Exporter");
+    tools->add(4, HmiGlyph::Pause, "Mettre en pause le d\xC3\xA9" "filement automatique (les lignes continuent d'arriver)", "Pause");
+    tools->add(5, HmiGlyph::Down, "Aller en bas, et reprendre le d\xC3\xA9" "filement automatique", "En bas");
+    tools->add(6, HmiGlyph::History, "Combien de lignes la Console garde (un clic : la valeur suivante ; les plus anciennes tombent)", "Garder 5 000");
+    tools->separator();
+    tools->add(7, HmiGlyph::EyeOff, "Replier le panneau du bas (Ctrl+J le rouvre)", "Replier");
+    for (int k = 0; k < 4; ++k) {
+        tools->setCheckedWhen(10 + k, [this, k] { return levels_[k]; });
+        tools->setVisibleWhen(10 + k, [this] { return currentTab() != kConsole; });
+    }
+    for (int k = 0; k < hmi::kLogLevelCount; ++k) {
+        tools->setCheckedWhen(20 + k, [this, k] { return consoleFilter_.levels[static_cast<std::size_t>(k)]; });
+        tools->setVisibleWhen(20 + k, [this] { return currentTab() == kConsole; });
+    }
+    tools->setVisibleWhen(1, [this] { return currentTab() != kDiagnostics; });
+    tools->setVisibleWhen(4, [this] { return currentTab() != kDiagnostics; });
+    tools->setVisibleWhen(5, [this] { return currentTab() != kDiagnostics; });
+    tools->setCheckedWhen(4, [this] { return !follow_; });
+    tools->setVisibleWhen(6, [this] { return currentTab() == kConsole; });
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
     auto search = std::make_unique<ui::InputText>(this->id() + ".search");
-    search->setPlaceholder("Rechercher dans les sorties et les diagnostics\xE2\x80\xA6");
+    search->setPlaceholder("Rechercher dans les sorties, la console et les diagnostics\xE2\x80\xA6");
     search_ = &static_cast<ui::InputText&>(addChild(std::move(search)));
     auto tabs = std::make_unique<ui::TabControl>(this->id() + ".tabs");
     auto out = std::make_unique<ui::TableView>(this->id() + ".sorties");
     out->setColumns({{"Heure", 90.f}, {"Niveau", 150.f}, {"Cat\xC3\xA9gorie", 130.f}, {"Message", 900.f}});
     out->setSelectionMode(ui::SelectionMode::Single);
     out_ = out.get();
+    auto console = std::make_unique<ui::TableView>(this->id() + ".console");
+    console->setColumns({{"Heure", 110.f}, {"Niveau", 120.f}, {"Source", 240.f}, {"Ligne", 56.f}, {"Message", 760.f}, {"Cat\xC3\xA9gorie", 110.f},
+                         {"Session", 110.f}});
+    console->setSelectionMode(ui::SelectionMode::Single);
+    consoleTable_ = console.get();
     auto diag = std::make_unique<ui::TableView>(this->id() + ".diagnostics");
     diag->setColumns({{"Code", 80.f}, {"Gravit\xC3\xA9", 140.f}, {"Message", 520.f}, {"\xC3\x89l\xC3\xA9ment", 320.f}, {"Fichier", 200.f},
                       {"Ligne", 60.f}, {"Col.", 50.f}, {"\xC3\x89tape", 110.f}, {"Suggestion", 300.f}});
     diag->setSelectionMode(ui::SelectionMode::Single);
     diagTable_ = diag.get();
     tabs->addTab({"Sorties", ui::Icon::Document, false, false}, std::move(out));
+    tabs->addTab({"Console", ui::Icon::Code, false, false}, std::move(console));
     tabs->addTab({"Diagnostics", ui::Icon::Warning, false, false}, std::move(diag));
     tabs_ = &static_cast<ui::TabControl&>(addChild(std::move(tabs)));
     status_ = &static_cast<ui::StatusBar&>(addChild(std::make_unique<ui::StatusBar>(this->id() + ".status")));
+    auto rows = std::make_shared<ConsoleRows>(console_);
+    consoleModel_ = rows;
+    consoleTable_->setModel(consoleModel_);
     links_ += tools_->triggered->connect([this](int a) {
         if (a >= 10 && a <= 13) {
             const int k = a - 10;
@@ -387,13 +553,48 @@ HmiBuildOutputPane::HmiBuildOutputPane(std::string id) : ui::Widget(std::move(id
             rebuild();
             return;
         }
-        if (a == 1) clear();
-        if (a == 2) {
-            ui::setClipboardText(copyText());
-            status_->setTransientMessage("Sorties copi\xC3\xA9" "es dans le presse-papiers.", 4.0, ui::StatusBar::Severity::Success);
+        if (a >= 20 && a < 20 + hmi::kLogLevelCount) {
+            const auto k = static_cast<std::size_t>(a - 20);
+            consoleFilter_.levels[k] = !consoleFilter_.levels[k];
+            rebuildConsole();
+            return;
+        }
+        switch (a) {
+            case 1: clear(); break;
+            case 2:
+                ui::setClipboardText(copyText());
+                status_->setTransientMessage("Lignes copi\xC3\xA9" "es dans le presse-papiers.", 4.0, ui::StatusBar::Severity::Success);
+                break;
+            case 3: {
+                std::string why;
+                const std::string where = exportCurrent(false, &why);
+                if (where.empty()) status_->setTransientMessage("Export impossible : " + why, 8.0, ui::StatusBar::Severity::Warning);
+                else status_->setTransientMessage("Export\xC3\xA9 : " + where, 10.0, ui::StatusBar::Severity::Success);
+                break;
+            }
+            case 4: setFollowing(!follow_); break;
+            case 5: scrollToEnd(); break;
+            case 6:
+                console_.setRetention(HmiConsole::nextRetention(console_.retention()));
+                tools_->setText(6, "Combien de lignes la Console garde (un clic : la valeur suivante ; les plus anciennes tombent)",
+                                "Garder " + thousands(console_.retention()));
+                tick();
+                break;
+            case 7:
+                if (onClose_) onClose_();
+                break;
+            default: break;
         }
     });
-    links_ += search_->textChanged->connect([this](const std::string&) { rebuild(); });
+    links_ += search_->textChanged->connect([this](const std::string& q) {
+        consoleFilter_.search = q;
+        rebuild();
+        rebuildConsole();
+    });
+    links_ += tabs_->currentChanged->connect([this](std::size_t) {
+        refreshStatus();
+        invalidateLayout();
+    });
     links_ += out_->activated->connect([this](ui::RowIndex r) {
         if (r >= outRows_.size()) return;
         const auto& l = lines_[outRows_[r]];
@@ -402,18 +603,45 @@ HmiBuildOutputPane::HmiBuildOutputPane(std::string id) : ui::Widget(std::move(id
     links_ += diagTable_->activated->connect([this](ui::RowIndex r) {
         if (r < diagRows_.size()) diagnosticActivated->emit(diags_[diagRows_[r]]);
     });
+    links_ += consoleTable_->activated->connect([this](ui::RowIndex r) {
+        // une copie : la ligne peut tomber (conservation) pendant que l'ecran ouvre sa source
+        if (const auto* e = consoleRow(r); e && e->hasSource()) consoleActivated->emit(ConsoleEntry(*e));
+    });
+    // Le clic droit de la Console : aller a la source, filtrer, copier la ligne, exporter, effacer.
+    consoleTable_->setExtraContextItems([this] {
+        const ConsoleEntry* e = selectedConsoleEntry();
+        const bool any = e != nullptr;
+        const bool src = any && e->hasSource();
+        std::vector<ui::PopupMenu::Item> items;
+        items.push_back({"Aller \xC3\xA0 la source", "Double-clic", src ? std::string{} : any ? std::string("cette ligne n'a pas de source") : std::string("aucune ligne choisie"),
+                         ui::Icon::None, src, false, 1001});
+        const std::string who = any ? (!e->code.empty() ? e->code : e->source) : std::string{};
+        items.push_back({who.empty() ? std::string("Filtrer sur cette source") : "Filtrer sur \xC2\xAB " + who + " \xC2\xBB", {},
+                         who.empty() ? std::string("aucune source") : std::string{}, ui::Icon::Filter, !who.empty(), false, 1002});
+        items.push_back({"Copier la ligne (texte)", {}, any ? std::string{} : std::string("aucune ligne choisie"), ui::Icon::None, any, false, 1003});
+        items.push_back({{}, {}, {}, ui::Icon::None, true, true, -1});
+        items.push_back({"Exporter en texte", {}, {}, ui::Icon::None, true, false, 1004});
+        items.push_back({"Exporter en CSV (Excel)", {}, {}, ui::Icon::None, true, false, 1005});
+        items.push_back({"Effacer la console", {}, console_.entries().empty() ? std::string("elle est vide") : std::string{}, ui::Icon::None,
+                         !console_.entries().empty(), false, 1006});
+        return items;
+    });
+    links_ += consoleTable_->contextAction->connect([this](int a) { consoleMenu(a); });
     summary_ = "Aucun build depuis l'ouverture : D\xC3\xA9marrer (ou G\xC3\xA9n\xC3\xA9rer dans l'arbre) en lance un.";
     rebuild();
+    tick();
 }
 
 void HmiBuildOutputPane::onLayout() {
     const auto b = bounds();
-    const float searchW = std::min(360.f, std::max(160.f, b.w * 0.3f));
-    tools_->setBounds({b.x, b.y, b.w - searchW - 8.f, 38});
-    search_->setBounds({b.x + b.w - searchW - 4.f, b.y + 5.f, searchW, 28.f});
+    const float searchW = std::min(260.f, std::max(140.f, b.w * 0.2f));
+    tools_->setBounds({b.x, b.y, b.w - searchW - 8.f, 36});
+    search_->setBounds({b.x + b.w - searchW - 4.f, b.y + 4.f, searchW, 28.f});
     status_->setBounds({b.x, b.y + b.h - 24, b.w, 24});
-    tabs_->setBounds({b.x, b.y + 38, b.w, std::max(0.f, b.h - 62)});
+    tabs_->setBounds({b.x, b.y + 36, b.w, std::max(0.f, b.h - 60)});
 }
+
+std::size_t HmiBuildOutputPane::currentTab() const noexcept { return tabs_ ? tabs_->currentIndex() : kSorties; }
 
 bool HmiBuildOutputPane::shown(const Line& l) const {
     if (!l.rule && !levels_[severityIndex(l.severity)]) return false;
@@ -443,6 +671,7 @@ void HmiBuildOutputPane::rebuild() {
     outModel_ = std::make_shared<Rows>(std::vector<std::string>{"Heure", "Niveau", "Cat\xC3\xA9gorie", "Message"}, std::move(rows), std::move(sev),
                                       std::move(rules), 3);
     out_->setModel(outModel_);
+    if (follow_) out_->setScrollOffset(1e9f);
     std::vector<std::vector<std::string>> drows;
     std::vector<pl::Severity> dsev;
     diagRows_.clear();
@@ -464,10 +693,153 @@ void HmiBuildOutputPane::rebuild() {
     diagModel_ = std::make_shared<Rows>(std::vector<std::string>{"Code", "Gravit\xC3\xA9", "Message", "\xC3\x89l\xC3\xA9ment", "Fichier", "Ligne", "Col.", "\xC3\x89tape", "Suggestion"},
                                        std::move(drows), std::move(dsev), std::vector<bool>{}, 2);
     diagTable_->setModel(diagModel_);
-    tabs_->setTabBadge(0, lines_.empty() ? std::string{} : std::to_string(lines_.size()), errs ? ui::Tone::Error : warns ? ui::Tone::Warning : ui::Tone::None);
-    tabs_->setTabBadge(1, diags_.empty() ? std::string{} : std::to_string(diags_.size()), blocking ? ui::Tone::Error : ui::Tone::Warning);
-    status_->setMessage(summary_, blocking ? ui::StatusBar::Severity::Error : ui::StatusBar::Severity::Info);
+    tabs_->setTabBadge(kSorties, lines_.empty() ? std::string{} : std::to_string(lines_.size()), errs ? ui::Tone::Error : warns ? ui::Tone::Warning : ui::Tone::None);
+    tabs_->setTabBadge(kDiagnostics, diags_.empty() ? std::string{} : std::to_string(diags_.size()), blocking ? ui::Tone::Error : ui::Tone::Warning);
+    refreshStatus();
     invalidate();
+}
+
+void HmiBuildOutputPane::rebuildConsole() {
+    auto* rows = static_cast<ConsoleRows*>(consoleModel_.get());
+    rows->rows.clear();
+    const auto& all = console_.entries();
+    rows->rows.reserve(all.size());
+    for (std::size_t k = 0; k < all.size(); ++k)
+        if (HmiConsole::matches(all[k], consoleFilter_)) rows->rows.push_back(k);
+    rows->modelReset->emit();
+    if (follow_) consoleTable_->setScrollOffset(1e9f);
+    // La pastille : les erreurs (rouge), sinon les avertissements, sinon le nombre de lignes.
+    const int errs = console_.errors(), warns = console_.warnings();
+    std::string badge;
+    if (errs) badge = "\xE2\x9C\x95 " + std::to_string(errs) + (warns ? "  \xE2\x9A\xA0 " + std::to_string(warns) : std::string{});
+    else if (warns) badge = "\xE2\x9A\xA0 " + std::to_string(warns);
+    else if (!all.empty()) badge = std::to_string(all.size());
+    tabs_->setTabBadge(kConsole, badge, errs ? ui::Tone::Error : warns ? ui::Tone::Warning : ui::Tone::None);
+    refreshStatus();
+    invalidate();
+}
+
+void HmiBuildOutputPane::refreshStatus() {
+    if (!status_) return;
+    if (currentTab() != kConsole) {
+        status_->setMessage(summary_, std::any_of(diags_.begin(), diags_.end(), [](const pl::Diagnostic& d) { return d.blocking(); })
+                                          ? ui::StatusBar::Severity::Error : ui::StatusBar::Severity::Info);
+        return;
+    }
+    // La session, les lignes, les erreurs : de quoi savoir ou on en est.
+    const auto& all = console_.entries();
+    std::string s = console_.session() ? "Session " + std::to_string(console_.session()) + " \xC2\xB7 " : std::string("Aucune simulation depuis l'ouverture \xC2\xB7 ");
+    s += plural(static_cast<long long>(all.size()), "ligne", "lignes");
+    const auto shownRows = consoleRowCount();
+    if (shownRows != all.size()) s += " (" + std::to_string(shownRows) + " montr\xC3\xA9" "e" + (shownRows > 1 ? "s" : "") + ")";
+    s += " \xC2\xB7 " + plural(console_.errors(), "erreur", "erreurs") + " \xC2\xB7 " + plural(console_.warnings(), "avertissement", "avertissements");
+    if (console_.dropped()) s += " \xC2\xB7 " + thousands(console_.dropped()) + " plus ancienne" + (console_.dropped() > 1 ? "s" : "") + " tomb\xC3\xA9" "e" + (console_.dropped() > 1 ? "s" : "");
+    s += " \xC2\xB7 garde " + thousands(console_.retention()) + " lignes";
+    if (!follow_) s += " \xC2\xB7 d\xC3\xA9" "filement en pause";
+    status_->setMessage(s, console_.errors() ? ui::StatusBar::Severity::Error : console_.warnings() ? ui::StatusBar::Severity::Warning : ui::StatusBar::Severity::Info);
+}
+
+void HmiBuildOutputPane::tick() {
+    if (console_.revision() == consoleSeen_) return;
+    consoleSeen_ = console_.revision();
+    rebuildConsole();
+}
+
+std::size_t HmiBuildOutputPane::consoleRowCount() const noexcept {
+    return consoleModel_ ? static_cast<const ConsoleRows*>(consoleModel_.get())->rows.size() : 0;
+}
+
+const ConsoleEntry* HmiBuildOutputPane::consoleRow(std::size_t row) const {
+    return consoleModel_ ? static_cast<const ConsoleRows*>(consoleModel_.get())->at(row) : nullptr;
+}
+
+const ConsoleEntry* HmiBuildOutputPane::selectedConsoleEntry() const {
+    const auto sel = consoleTable_->selectedModelRows();
+    return sel.empty() ? nullptr : consoleRow(sel.front());
+}
+
+void HmiBuildOutputPane::setConsoleLevel(hmi::LogLevel level, bool shown) {
+    consoleFilter_.levels[static_cast<std::size_t>(level)] = shown;
+    rebuildConsole();
+}
+
+void HmiBuildOutputPane::setSearch(const std::string& text) {
+    search_->setText(text);
+    consoleFilter_.search = text;
+    rebuild();
+    rebuildConsole();
+}
+
+void HmiBuildOutputPane::setFollowing(bool on) {
+    follow_ = on;
+    if (on) scrollToEnd();
+    refreshStatus();
+    invalidate();
+}
+
+void HmiBuildOutputPane::scrollToEnd() {
+    follow_ = true;
+    out_->setScrollOffset(1e9f);
+    consoleTable_->setScrollOffset(1e9f);
+    refreshStatus();
+}
+
+void HmiBuildOutputPane::consoleMenu(int action) {
+    const ConsoleEntry* e = selectedConsoleEntry();
+    switch (action) {
+        case 1001:
+            if (e && e->hasSource()) consoleActivated->emit(ConsoleEntry(*e));
+            break;
+        case 1002:
+            if (e) setSearch(!e->code.empty() ? e->code : e->source);
+            break;
+        case 1003:
+            if (e) {
+                ui::setClipboardText(HmiConsole::lineOf(*e));
+                status_->setTransientMessage("Ligne copi\xC3\xA9" "e.", 3.0, ui::StatusBar::Severity::Success);
+            }
+            break;
+        case 1004:
+        case 1005: {
+            showTab(kConsole);
+            std::string why;
+            const std::string where = exportCurrent(action == 1005, &why);
+            if (where.empty()) status_->setTransientMessage("Export impossible : " + why, 8.0, ui::StatusBar::Severity::Warning);
+            else status_->setTransientMessage("Export\xC3\xA9 : " + where, 10.0, ui::StatusBar::Severity::Success);
+            break;
+        }
+        case 1006:
+            console_.clear();
+            tick();
+            break;
+        default: break;
+    }
+}
+
+std::string HmiBuildOutputPane::exportCurrent(bool csv, std::string* why) {
+    const std::string folder = exportFolder_ ? exportFolder_() : std::string{};
+    if (folder.empty()) {
+        if (why) *why = "aucun projet ouvert (le fichier va dans exports/ du projet)";
+        return {};
+    }
+    const std::size_t tab = currentTab();
+    std::string text, name;
+    if (tab == kConsole) {
+        text = csv ? console_.exportCsv(consoleFilter_) : console_.exportText(consoleFilter_);
+        name = "console_" + stampForFile() + (csv ? ".csv" : ".txt");
+        if (csv) text = "\xEF\xBB\xBF" + text;     // le BOM : Excel lit l'UTF-8
+    } else {
+        text = copyText();
+        name = (tab == kDiagnostics ? "diagnostics_" : "sorties_") + stampForFile() + ".txt";
+    }
+    std::error_code ec;
+    std::filesystem::create_directories(std::filesystem::path(folder), ec);
+    const auto target = std::filesystem::path(folder) / name;
+    if (auto s = core::writeFileAtomic(target, text); !s) {
+        if (why) *why = s.error().message();
+        return {};
+    }
+    return target.string();
 }
 
 void HmiBuildOutputPane::addReport(const pl::Report& report, const pl::Request& request, double secs) {
@@ -511,19 +883,39 @@ void HmiBuildOutputPane::say(pl::Severity severity, std::string category, std::s
     rebuild();
 }
 
+void HmiBuildOutputPane::simulationEvent(bool started, int session, const std::string& detail) {
+    say(started ? pl::Severity::Success : pl::Severity::Information, "Simulation",
+        std::string(started ? "Simulation d\xC3\xA9marr\xC3\xA9" "e" : "Simulation arr\xC3\xAAt\xC3\xA9" "e") + " (session " + std::to_string(session) + ")"
+            + (detail.empty() ? std::string{} : " \xE2\x80\x94 " + detail) + ".");
+}
+
 void HmiBuildOutputPane::clear() {
+    if (currentTab() == kConsole) {
+        console_.clear();
+        tick();
+        return;
+    }
     lines_.clear();
     rebuild();
 }
 
 std::string HmiBuildOutputPane::copyText() const {
     std::string out;
-    for (const auto k : outRows_) {
-        const auto& l = lines_[k];
-        out += l.time + "\t" + (l.rule ? std::string("----") : std::string(pl::severityLabel(l.severity))) + "\t" + l.category + "\t" + l.message + "\n";
+    const std::size_t tab = currentTab();
+    if (tab == kConsole) {
+        const auto n = consoleRowCount();
+        for (std::size_t r = 0; r < n; ++r)
+            if (const auto* e = consoleRow(r)) out += HmiConsole::lineOf(*e) + "\n";
+        return out;
     }
+    if (tab == kSorties)
+        for (const auto k : outRows_) {
+            const auto& l = lines_[k];
+            out += l.time + "\t" + (l.rule ? std::string("----") : std::string(pl::severityLabel(l.severity))) + "\t" + l.category + "\t" + l.message + "\n";
+        }
     if (!diags_.empty()) {
-        out += "\nDiagnostics\n";
+        if (!out.empty()) out += "\n";
+        out += "Diagnostics\n";
         for (const auto k : diagRows_) {
             const auto& d = diags_[k];
             out += d.code + "\t" + std::string(pl::severityLabel(d.severity)) + "\t" + d.message + "\t" + d.path
@@ -535,6 +927,7 @@ std::string HmiBuildOutputPane::copyText() const {
 
 void HmiBuildOutputPane::showTab(std::size_t tab) {
     if (tabs_ && tab < tabs_->tabCount()) tabs_->setCurrentIndex(tab);
+    refreshStatus();
 }
 
 } // namespace app

@@ -226,6 +226,11 @@ public:
                 out = sim::Value::integer(sim::Type::DInt, value->value);
                 return true;
             }
+            // 1.11.14 : NIVEAU_LOG#INFO, le niveau de IHM_LOG.
+            if (const auto level = logLevelByName(n)) {
+                out = sim::Value::integer(sim::Type::DInt, static_cast<long long>(*level));
+                return true;
+            }
             return false;
         }
         if (aliases)
@@ -244,7 +249,14 @@ public:
         if (!rt_.aggregates_.empty() && rt_.aggregateRead(r, out)) return true;
         // Lot 9 : SYS.UserName, Vue.Objet.Propriete, Vue.Open.
         if (r.find('.') != std::string::npos && rt_.publicRead(r, out)) return true;
-        return rt_.plc_ && rt_.plc_->read(plcOf(r), out);
+        if (rt_.plc_ && rt_.plc_->read(plcOf(r), out)) return true;
+        // 1.11.14 : INFO, ERROR... - les niveaux de IHM_LOG, en dernier : une vraie
+        // variable du meme nom passe avant.
+        if (const auto level = logLevelByName(n); level && n.find('.') == std::string_view::npos) {
+            out = sim::Value::integer(sim::Type::DInt, static_cast<long long>(*level));
+            return true;
+        }
+        return false;
     }
     bool write(std::string_view n, const sim::Value& v) override {
         if (!frames.empty())
@@ -586,6 +598,25 @@ private:
             result = sim::Value::boolean(true);
             return true;
         }
+        // 1.11.14 : IHM_LOG(INFO, 'message {Variable:0.0}') - une ligne de la Console, de ce
+        // niveau, avec la source et la ligne de l'instruction (lue avant que le message ne
+        // calcule ses trous : une fonction appelee la changerait).
+        if (u == "IHM_LOG") {
+            std::optional<LogLevel> level;
+            if (!args.empty()) {
+                const auto& v = args[0].second;
+                level = v.type() == sim::Type::String ? logLevelByName(v.asString()) : logLevelOf(v.asInteger());
+            }
+            if (!level) {
+                diagnostics.push_back({sim::Diagnostic::Severity::Error,
+                                       "IHM_LOG : niveau inconnu (TRACE, DEBUG, INFO, SUCCESS, WARNING, ERROR ou CRITICAL)", 0, {}});
+                return false;
+            }
+            const int line = static_cast<int>(rt_.trace_.line);
+            rt_.logAt(*level, "IHM_LOG", rt_.source_, TextTemplate::compile(text(1)).render(*this), line > 0 ? line : -1);
+            result = sim::Value::boolean(true);
+            return true;
+        }
         if (u == "IHM_APPELER") {
             std::string why;
             result = sim::Value::boolean(rt_.callScript(text(0), now, &why));
@@ -840,12 +871,27 @@ std::string Runtime::dateStampOf(double now) const {
 }
 
 void Runtime::log(std::string kind, std::string source, std::string message) {
+    const LogLevel level = logLevelOfKind(kind);
+    logAt(level, std::move(kind), std::move(source), std::move(message));
+}
+
+void Runtime::logAt(LogLevel level, std::string kind, std::string source, std::string message, int line) {
     JournalEntry e;
     e.time = now_ - startNow_;
     e.stamp = stampOf(now_);
     e.kind = std::move(kind);
     e.source = std::move(source);
     e.message = std::move(message);
+    // 1.11.14 : la Console - le niveau, le code qui tourne (sa ligne), le cycle, la session.
+    e.level = level;
+    e.code = origin_.name;
+    e.view = origin_.view;
+    e.object = origin_.object;
+    e.script = origin_.script;
+    e.function = origin_.function;
+    e.line = line > 0 ? line : line == 0 && !origin_.name.empty() ? static_cast<int>(trace_.line) : 0;
+    e.cycle = cycles_;
+    e.session = session_;
     if (hooks_.journaled) hooks_.journaled(e);
     // L'historique systeme : le journal, date, avec l'utilisateur du moment.
     if (history_ && project_ && project_->history.system) {
@@ -916,6 +962,13 @@ bool Runtime::write(const std::string& name, const sim::Value& v, const std::str
 }
 
 namespace {
+// 1.11.14 : "ligne 3 : ..." -> 3 ; -1 : le message ne dit pas de ligne.
+int announcedLine(const std::string& why) {
+    if (why.rfind("ligne ", 0) != 0) return -1;
+    const int n = std::atoi(why.c_str() + 6);
+    return n > 0 ? n : -1;
+}
+
 // La valeur de depart d'une variable locale : son type, puis son ":= valeur".
 sim::Value localInitial(const LocalVar& l, sim::Environment& env, std::string* why) {
     sim::Value v = sim::Value::defaultOf(sim::typeFromName(l.type == "LREAL" ? std::string("REAL") : l.type));
@@ -967,7 +1020,7 @@ bool Runtime::runStatements(const std::string& code, const std::string& source, 
         const std::string why = prep.error;
         if (error) *error = why;
         if (scriptId) errors_[scriptId] = why;
-        log("Erreur", source, why);
+        logAt(LogLevel::Error, "Erreur", source, why, announcedLine(why));
         return false;
     }
     const std::string previous = source_;
@@ -985,14 +1038,21 @@ bool Runtime::runStatements(const std::string& code, const std::string& source, 
     limits.maxIterationsPerLoop = 100000;
     limits.maxStatementsPerScan = 200000;
     limits.locals = kept;
+    // 1.11.14 : la ligne en cours (IHM_LOG la dit) ; celle de l'appelant revient apres.
+    const sim::ExecTrace callerTrace = trace_;
+    trace_ = {};
+    limits.trace = &trace_;
     const auto result = sim::execute(*prep.program, *env_, limits);
+    trace_ = callerTrace;
     env_->frames.pop_back();
     source_ = previous;
     if (scriptId) ++runs_[scriptId];
     std::string why;
+    int whyLine = -1;                // -1 : pas de ligne (un budget depasse)
     for (const auto& d : env_->diagnostics)
         if (d.severity == sim::Diagnostic::Severity::Error) {
             why = (d.line ? "ligne " + std::to_string(d.line) + " : " : std::string{}) + frenchSimMessage(d.message);
+            if (d.line) whyLine = static_cast<int>(d.line);
             break;
         }
     // Un appel imbrique a ete coupe (appel circulaire) : tout l'enchainement
@@ -1003,7 +1063,7 @@ bool Runtime::runStatements(const std::string& code, const std::string& source, 
         if (error) *error = why;
         if (scriptId) errors_[scriptId] = why;
         if (why != abort_ || depth_ <= 1) {
-            if (why != abort_) log("Erreur", source, why);
+            if (why != abort_) logAt(LogLevel::Error, "Erreur", source, why, whyLine);
         }
         if (depth_ <= 1) abort_.clear();    // l'appel le plus haut l'a rapporte
         return false;
@@ -1035,9 +1095,10 @@ bool Runtime::callFunction(const HmiFunction& f, const std::vector<std::pair<std
     // premiere (abort_) qui remonte, dite une fois par celui qui la trouve.
     // Depuis une expression de vue (evaluee a chaque image), elle ne se dit
     // qu'une fois pour toutes, et l'echec s'arrete a l'expression.
+    int failLine = 0;                // 1.11.14 : la ligne de la faute dans la fonction (0 : celle de l'appel)
     const auto say = [&](const std::string& message) {
         if (readOnly_ > 0 && !functionErrors_.insert(f.name + "|" + message).second) return;
-        log("Erreur", source, message);
+        logAt(LogLevel::Error, "Erreur", source, message, failLine);
     };
     const auto fail = [&](const std::string& why) {
         if (abort_.empty()) {
@@ -1084,21 +1145,36 @@ bool Runtime::callFunction(const HmiFunction& f, const std::vector<std::pair<std
     env_->diagnostics.clear();
     const std::string previous = source_;
     source_ = source;
+    // 1.11.14 : la Console - la fonction est la source de ce qu'elle dit, a sa ligne.
+    struct OriginBack {
+        CodeOrigin& slot;
+        CodeOrigin  saved;
+        ~OriginBack() { slot = std::move(saved); }
+    } originBack{origin_, origin_};
+    origin_.name = source;
+    origin_.function = f.id;
+    origin_.script = kNoId;
+    const sim::ExecTrace callerTrace = trace_;
+    trace_ = {};
     ++depth_;
     sim::RunLimits limits;
     limits.maxIterationsPerLoop = 100000;
     limits.maxStatementsPerScan = 200000;
+    limits.trace = &trace_;
     const auto run = sim::execute(*prep.program, *env_, limits);
     --depth_;
+    trace_ = callerTrace;
     source_ = previous;
     env_->frames.pop_back();
     auto mine = std::move(env_->diagnostics);
     env_->diagnostics = std::move(saved);
     ++runs_[f.id];
     std::string why = initWhy;
+    failLine = -1;
     for (const auto& d : mine)
         if (d.severity == sim::Diagnostic::Severity::Error) {
             why = (d.line ? "ligne " + std::to_string(d.line) + " : " : std::string{}) + frenchSimMessage(d.message);
+            if (d.line) failLine = static_cast<int>(d.line);
             break;
         }
     if (why.empty() && !run.completed) why = "arr\xC3\xAAt\xC3\xA9" " : budget d'instructions d\xC3\xA9pass\xC3\xA9 (boucle sans fin ?)";
@@ -1128,7 +1204,14 @@ bool Runtime::runScript(const Script& sc, const std::string& source, double now,
     // cycliques et "sur changement" passent nullptr) : la trace du rapport la dit.
     std::string reason;
     std::string* why = error ? error : &reason;
+    // 1.11.14 : la Console - ce script est la source de ce qu'il dit (sa vue, s'il en a une).
+    const CodeOrigin callerOrigin = origin_;
+    origin_ = CodeOrigin{};
+    origin_.script = sc.id;
+    origin_.view = project_ ? project_->viewOfScript(sc.id) : kNoId;
+    origin_.name = origin_.view != kNoId ? source : sc.name;
     const bool ok = runStatements(sc.body, source, now, why, sc.id);
+    origin_ = callerOrigin;
     if (!ok) XPG_TRACE(Script, "erreur du script %s : %s", source.c_str(), why->empty() ? "(raison inconnue)" : why->c_str());
     auto& sp = perf_.scripts[sc.id];
     if (sp.name.empty()) sp.name = source;
@@ -1330,7 +1413,13 @@ void Runtime::fire(const View& v, const Object* o, const Action& a, double now, 
         case Operation::RunScript: {
             if (depth_ >= kMaxDepth) { log("Erreur", source, "appel circulaire"); break; }
             ++depth_;
+            const CodeOrigin callerOrigin = origin_;           // 1.11.14 : la source, pour la Console
+            origin_ = CodeOrigin{};
+            origin_.name = source + " (script de l'action)";
+            origin_.view = v.id;
+            origin_.object = o ? o->id : kNoId;
             (void)runStatements(a.value, source + " (script de l'action)", now, nullptr);
+            origin_ = callerOrigin;
             --depth_;
             break;
         }
@@ -1949,6 +2038,10 @@ double Runtime::animationProgress(double now) const {
 }
 
 void Runtime::start(double now) {
+    // 1.11.14 : la session de la Console - le numero du demarrage depuis l'ouverture de
+    // l'application (un onglet Simulation referme puis rouvert ne repart pas a 1).
+    static int sessions = 0;
+    session_ = ++sessions;
     composed_.clear(); boundCalls_.clear();
     slaveReads_.clear();                // 1.9 : les bascules d'avant ne comptent plus
     forcedIhm_.clear();                 // 1.11.5 : les variables repartent de leur valeur initiale
@@ -2253,7 +2346,7 @@ bool Runtime::runFunction(std::string_view name, const std::vector<std::pair<std
     return true;
 }
 
-void Runtime::stop(double now) {
+void Runtime::stop(double now, const std::string& why) {
     if (!running_) return;
     now_ = std::max(now_, now);
     while (!slots_.empty()) {
@@ -2264,7 +2357,7 @@ void Runtime::stop(double now) {
     }
     if (current_ != kNoId) closeView(current_, now);
     focused_ = kNoId;
-    log("Syst\xC3\xA8me", {}, "IHM arr\xC3\xAAt\xC3\xA9" "e");
+    log("Syst\xC3\xA8me", {}, "IHM arr\xC3\xAAt\xC3\xA9" "e" + (why.empty() ? std::string{} : " (" + why + ")"));
     running_ = false;
     animation_.reset();
     unfollowAll();                      // 1.9 : les liaisons ne suivent plus rien pour l'IHM

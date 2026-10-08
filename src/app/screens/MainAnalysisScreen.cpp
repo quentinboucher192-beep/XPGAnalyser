@@ -53,6 +53,7 @@
 #include "../hmi/HmiPanels.hpp"
 #include "../hmi/HmiApiVarsPane.hpp"  // 1.11.1 (API-V) : une variable de l'automate glissee dans un script
 #include "../hmi/HmiSimulation.hpp"   // 1.10 : la pastille IHM de la barre du haut
+#include "../hmi/HmiBuildPanes.hpp"   // 1.11.14 : le panneau du bas (Sorties, Console, Diagnostics)
 
 #include <algorithm>
 #include <cctype>
@@ -95,6 +96,7 @@ constexpr const char* kViewBottomRow   = "view.bottomRow";
 constexpr const char* kViewDiagnostics = "view.diagnostics";
 constexpr const char* kViewSummary     = "view.analysisSummary";
 constexpr const char* kViewStatus      = "view.projectStatus";
+constexpr const char* kViewOutputPanel = "view.outputPanel";        // 1.11.14 : le panneau du bas
 
 constexpr const char* kLayoutOuter  = "layout.outer";
 constexpr const char* kLayoutUpper  = "layout.upper";
@@ -102,6 +104,11 @@ constexpr const char* kLayoutMiddle = "layout.middle";
 constexpr const char* kLayoutModeKey = "view.layoutMode";   // lot 7 : onglets, groupes, mosaique
 constexpr const char* kLayoutBottom = "layout.bottom";
 constexpr const char* kLayoutLeft   = "layout.left";
+constexpr const char* kLayoutCentre = "layout.centreColumn";        // 1.11.14 : le centre / le panneau du bas
+constexpr std::size_t kLayoutCount  = 6;
+const char* layoutKey(std::size_t i) {
+    return i == 0 ? kLayoutOuter : i == 1 ? kLayoutUpper : i == 2 ? kLayoutMiddle : i == 3 ? kLayoutBottom : i == 4 ? kLayoutLeft : kLayoutCentre;
+}
 
 // One open source file: a strip of per-document controls above the viewer.
 // Language, folding and zoom belong to the document, not to the application -
@@ -1027,7 +1034,15 @@ core::Status MainAnalysisScreen::buildUi() {
             keptPages_["panneaux"] = KeptPage{TabControl::Tab{"Panneaux", Icon::Settings, true, false}, std::move(panel), raw};
         }
         fixedTabCount_ = 0;
-        upper_->addPane(std::move(centre), 0.48f, 320.f);
+        // 1.11.14 : LE PANNEAU DU BAS - Sorties (le build, la simulation), Console (IHM_LOG,
+        // les erreurs d'execution), Diagnostics - sous les onglets du centre.
+        auto column = std::make_unique<Splitter>(Orientation::Vertical, "analysis.centreColumn");
+        centreColumn_ = column.get();
+        column->addPane(std::move(centre), 0.68f, 200.f);
+        auto outputs = std::make_unique<HmiBuildOutputPane>("hmi.sorties");
+        bottomPanel_ = outputs.get();
+        column->addPane(std::move(outputs), 0.32f, 120.f);
+        upper_->addPane(std::move(column), 0.48f, 320.f);
 
         auto right = std::make_unique<BoxLayout>(Orientation::Vertical, "analysis.right");
         {
@@ -1137,6 +1152,7 @@ WidgetPtr MainAnalysisScreen::buildViewPanel() {
         {"Diagnostics",                     kViewDiagnostics, 3, 0},
         {"R\xC3\xA9sum\xC3\xA9 de l'analyse", kViewSummary, 3, 1},
         {"\xC3\x89tat du projet",         kViewStatus,      3, 2},
+        {"Panneau du bas : Sorties, Console, Diagnostics (Ctrl+J)", kViewOutputPanel, 5, 1},
     };
 
     for (const auto& e : entries) {
@@ -1159,6 +1175,7 @@ Splitter* MainAnalysisScreen::splitterFor(std::size_t which) const {
         case 1:  return upper_;
         case 2:  return middle_;
         case 3:  return bottom_;
+        case 5:  return centreColumn_;      // 1.11.14
         default: return left_;
     }
 }
@@ -1171,6 +1188,28 @@ void MainAnalysisScreen::applyPanelVisibility() {
     // reste en memoire : des recherches et des filtres s'en servent encore.
     if (upper_) upper_->collapsePane(2, true);
     if (variables_) variables_->setAlternatingRowColors(altRowsBox_->isChecked());
+}
+
+// 1.11.14 : le panneau du bas - sa case dans Affichage > Panneaux fait foi (retenue).
+bool MainAnalysisScreen::bottomPanelShown() const {
+    for (const auto& p : panels_)
+        if (std::string_view(p.key) == kViewOutputPanel) return p.box->isChecked();
+    return false;
+}
+
+void MainAnalysisScreen::showBottomPanel(bool show, std::size_t tab) {
+    for (const auto& p : panels_)
+        if (std::string_view(p.key) == kViewOutputPanel && p.box->isChecked() != show)
+            p.box->setState(show ? Checkbox::State::Checked : Checkbox::State::Unchecked);   // stateChanged : le replie et retient
+    if (show && bottomPanel_ && tab != static_cast<std::size_t>(-1)) bottomPanel_->showTab(tab);
+}
+
+void MainAnalysisScreen::toggleBottomPanel() {
+    const bool show = !bottomPanelShown();
+    showBottomPanel(show);
+    if (status_)
+        status_->setTransientMessage(show ? "Panneau du bas : Sorties, Console, Diagnostics (Ctrl+J le replie)"
+                                          : "Panneau du bas repli\xC3\xA9 (Ctrl+J le rouvre)", 3.0);
 }
 
 void MainAnalysisScreen::loadWorkspace() {
@@ -1198,11 +1237,7 @@ void MainAnalysisScreen::loadWorkspace() {
     const bool wantAltRows = s.getBool("view.alternatingRows", true);
 
     std::vector<std::vector<float>> ratios;
-    for (std::size_t i = 0; i < 5; ++i) {
-        const char* key = i == 0 ? kLayoutOuter : i == 1 ? kLayoutUpper
-                        : i == 2 ? kLayoutMiddle : i == 3 ? kLayoutBottom : kLayoutLeft;
-        ratios.push_back(s.getFloats(key));
-    }
+    for (std::size_t i = 0; i < kLayoutCount; ++i) ratios.push_back(s.getFloats(layoutKey(i)));
 
     const RestoreGuard guard{restoring_};       // suppresses saveWorkspace()
 
@@ -1211,7 +1246,7 @@ void MainAnalysisScreen::loadWorkspace() {
                                            : Checkbox::State::Unchecked);
     altRowsBox_->setState(wantAltRows ? Checkbox::State::Checked : Checkbox::State::Unchecked);
 
-    for (std::size_t i = 0; i < 5; ++i)
+    for (std::size_t i = 0; i < kLayoutCount; ++i)
         // Lot 7 : seulement s'ils ont le bon nombre de panneaux - la rangee des
         // bibliotheques est partie, trois valeurs d'avant ne vont plus a deux.
         if (auto* sp = splitterFor(i); sp && !ratios[i].empty() && ratios[i].size() == sp->ratios().size())
@@ -1231,11 +1266,8 @@ void MainAnalysisScreen::saveWorkspace() {
     auto& s = app_.settings();
     for (const auto& p : panels_) s.set(p.key, p.box->isChecked());
     s.set("view.alternatingRows", altRowsBox_->isChecked());
-    for (std::size_t i = 0; i < 5; ++i) {
-        const char* key = i == 0 ? kLayoutOuter : i == 1 ? kLayoutUpper
-                        : i == 2 ? kLayoutMiddle : i == 3 ? kLayoutBottom : kLayoutLeft;
-        if (auto* sp = splitterFor(i)) s.setFloats(key, sp->ratios());
-    }
+    for (std::size_t i = 0; i < kLayoutCount; ++i)
+        if (auto* sp = splitterFor(i)) s.setFloats(layoutKey(i), sp->ratios());
     s.save();
 }
 
@@ -3434,6 +3466,7 @@ void MainAnalysisScreen::onEnter() {
             applyPanelVisibility();
             saveWorkspace();
         });
+    wireBottomPanel();     // 1.11.14 : le panneau du bas (HmiBuildWorkspace.cpp)
     links_ += altRowsBox_->stateChanged->connect([this](Checkbox::State) {
         applyPanelVisibility();
         saveWorkspace();

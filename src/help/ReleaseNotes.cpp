@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.11.14", "08/10/2026", "livr\xC3\xA9" "e le 08/10 dans la soir\xC3\xA9" "e"},
     {"1.11.13", "08/10/2026", "livr\xC3\xA9" "e le 08/10 au soir"},
     {"1.11.12", "08/10/2026", "livr\xC3\xA9" "e le 08/10"},
     {"1.11.11", "05/10/2026", "livr\xC3\xA9" "e le 05/10 au soir"},
@@ -92,6 +93,17 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.11.14 (08/10/2026 dans la soiree) : le panneau du bas (Sorties, Console, Diagnostics) et
+        // IHM_LOG (lot 2 de la specification du 08/10).
+        note("1.11.14", "Simulation IHM", Kind::New,
+         "IHM_LOG(niveau, 'message') dans tous les scripts de l'IHM (g\xC3\xA9n\xC3\xA9raux, de vue, d'action, fonctions IHM et de symbole) : une ligne dans la Console, avec l'heure, le niveau (TRACE, DEBUG, INFO, SUCCESS, WARNING, ERROR, CRITICAL, ou NIVEAU_LOG#INFO), la source et la ligne du code ; {Temperature:0.0} y met la valeur. Compiler v\xC3\xA9rifie le niveau et le message ; l'aide \xC3\xA0 la saisie propose les niveaux ; F1 en parle.",
+         "simulation", ""),
+        note("1.11.14", "Simulation IHM", Kind::New,
+         "Le PANNEAU DU BAS, sous les onglets : Sorties (le build, le d\xC3\xA9marrage et l'arr\xC3\xAAt de la simulation), Console (IHM_LOG, les erreurs d'ex\xC3\xA9" "cution, les actions, la navigation, le moteur IHM) et Diagnostics (les erreurs du dernier build). Redimensionnable ; Ctrl+J le montre ou le replie (Affichage > Panneaux aussi). Il remplace l'onglet IHM \xC2\xB7 Sorties.",
+         "simulation", ""),
+        note("1.11.14", "Simulation IHM", Kind::New,
+         "La Console : un filtre par niveau, la recherche, Effacer, Copier, Exporter (texte, ou CSV pour Excel, dans exports/), la pause du d\xC3\xA9" "filement et En bas, les erreurs et les avertissements compt\xC3\xA9s sur l'onglet, la session de simulation et la conservation r\xC3\xA9glable (500 \xC3\xA0 100 000 lignes). Un double-clic (ou le clic droit, Aller \xC3\xA0 la source) ouvre le script, la fonction ou l'objet \xC3\xA0 sa ligne.",
+         "simulation", ""),
         // 1.11.13 (08/10/2026 au soir) : la generation incrementale de la Simulation IHM (lot 1 de la
         // specification du 08/10 : le moteur de build, ses etats, ses commandes, sa progression).
         note("1.11.13", "Simulation IHM", Kind::New,

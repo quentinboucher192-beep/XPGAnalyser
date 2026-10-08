@@ -1560,7 +1560,7 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId node, std::vector<PopupMenu::I
             std::vector<Item> more;
             more.push_back(m.make("Voir les diagnostics (" + std::to_string(info.diagnostics.size()) + ")", Icon::Warning,
                                   [this] {
-                                      if (auto* out = hmiBuildOutput(true)) out->showTab(1);
+                                      if (auto* out = hmiBuildOutput(true)) out->showTab(HmiBuildOutputPane::kDiagnostics);
                                   },
                                   {}, info.diagnostics.empty() ? std::string("aucun diagnostic au dernier build") : std::string{}));
             const pl::Diagnostic* first = nullptr;
