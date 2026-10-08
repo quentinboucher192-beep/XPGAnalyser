@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.11.13", "08/10/2026", "livr\xC3\xA9" "e le 08/10 au soir"},
     {"1.11.12", "08/10/2026", "livr\xC3\xA9" "e le 08/10"},
     {"1.11.11", "05/10/2026", "livr\xC3\xA9" "e le 05/10 au soir"},
     {"1.11.10", "05/10/2026", "livr\xC3\xA9" "e le 05/10 au soir"},
@@ -91,6 +92,23 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.11.13 (08/10/2026 au soir) : la generation incrementale de la Simulation IHM (lot 1 de la
+        // specification du 08/10 : le moteur de build, ses etats, ses commandes, sa progression).
+        note("1.11.13", "Simulation IHM", Kind::New,
+         "D\xC3\xA9marrer la simulation IHM passe par un BUILD INCR\xC3\x89MENTAL : analyse des modifications, g\xC3\xA9n\xC3\xA9ration de l'API (ce que l'IHM en utilise), g\xC3\xA9n\xC3\xA9ration de l'IHM (16 \xC3\xA9tapes, des variables IHM \xC3\xA0 la configuration de simulation), compilation, validation. Seul ce qui a chang\xC3\xA9 - et ce qui en d\xC3\xA9pend vraiment - est refait ; un projet \xC3\xA0 jour d\xC3\xA9marre aussit\xC3\xB4t (\xC2\xAB Projet \xC3\xA0 jour \xC2\xBB). Une erreur bloquante emp\xC3\xAA" "che le d\xC3\xA9marrage et se double-clique vers sa source.",
+         "simulation", ""),
+        note("1.11.13", "Simulation IHM", Kind::New,
+         "L'arbre montre l'\xC3\xA9tat de build de chaque \xC3\xA9l\xC3\xA9ment de l'IHM, tout \xC3\xA0 droite : \xE2\x9C\x93 \xC3\xA0 jour, \xE2\x97\x8F modifi\xC3\xA9 (build requis), \xE2\x97\x8C non g\xC3\xA9n\xC3\xA9r\xC3\xA9, \xE2\x9A\x99 g\xC3\xA9n\xC3\xA9ration en cours, \xE2\x97\x94 compilation en cours, \xE2\x9C\x95 en \xC3\xA9" "chec, \xE2\x9B\x93 d\xC3\xA9pendance invalide, \xE2\x8F\xB1 obsol\xC3\xA8te, \xE2\x9A\xA0 avec des avertissements ; un dossier dit le pire de ce qu'il contient. L'infobulle donne la raison (\xC2\xAB d\xC3\xA9pendance modifi\xC3\xA9" "e : Pression_Gaz : REAL \xE2\x86\x92 LREAL \xC2\xBB). L'\xC3\xA9tat suit chaque modification, sans rien construire.",
+         "simulation", ""),
+        note("1.11.13", "Simulation IHM", Kind::New,
+         "G\xC3\xA9n\xC3\xA9rer, R\xC3\xA9g\xC3\xA9n\xC3\xA9rer, Compiler, G\xC3\xA9n\xC3\xA9rer et compiler partout : au clic droit de chaque \xC3\xA9l\xC3\xA9ment ou dossier de l'IHM (avec les diagnostics, la premi\xC3\xA8re erreur, l'artefact g\xC3\xA9n\xC3\xA9r\xC3\xA9, Nettoyer), et dans la barre des \xC3\xA9" "diteurs de scripts et de fonctions (l'\xC3\xA9tat de l'\xC3\xA9l\xC3\xA9ment choisi \xC3\xA0 c\xC3\xB4t\xC3\xA9). Une entr\xC3\xA9" "e gris\xC3\xA9" "e dit pourquoi.",
+         "simulation", ""),
+        note("1.11.13", "Simulation IHM", Kind::New,
+         "La fen\xC3\xAAtre de progression du build : la barre, les t\xC3\xA2" "ches faites sur le total, l'\xC3\xA9tape et l'\xC3\xA9l\xC3\xA9ment en cours, le temps, les avertissements et les erreurs, les phases A \xC3\xA0 G avec les 4 \xC3\xA9tapes de l'API et les 16 de l'IHM ; Annuler (rien n'est coup\xC3\xA9 en deux), Continuer en arri\xC3\xA8re-plan. L'onglet IHM \xC2\xB7 Sorties garde le journal de chaque build et les diagnostics (code, \xC3\xA9l\xC3\xA9ment, fichier, ligne, colonne, \xC3\xA9tape, suggestion).",
+         "simulation", ""),
+        note("1.11.13", "Simulation IHM", Kind::New,
+         "Le cache de build (.xpg/build/build-cache.txt) et les artefacts g\xC3\xA9n\xC3\xA9r\xC3\xA9s s'\xC3\xA9" "crivent d'un bloc (un fichier temporaire relu et v\xC3\xA9rifi\xC3\xA9, puis renomm\xC3\xA9 ; l'ancien gard\xC3\xA9 en .bak) : une coupure ne laisse jamais un fichier \xC3\xA0 moiti\xC3\xA9 \xC3\xA9" "crit. Un cache absent, coup\xC3\xA9 ou d'une autre version fait tout r\xC3\xA9g\xC3\xA9n\xC3\xA9rer, et le journal dit pourquoi ; un artefact supprim\xC3\xA9 \xC3\xA0 la main ne refait que lui.",
+         "simulation", ""),
         // 1.11.12 (08/10/2026, les deux rapports de plantage du 05/10 a 22:59 et 23:00) : un clic
         // dans l'arbre sur Fonctions ou Popups d'un symbole fermait le logiciel.
         note("1.11.12", "\xC3\x89" "diteur IHM", Kind::Fixed,

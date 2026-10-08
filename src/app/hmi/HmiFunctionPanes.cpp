@@ -53,7 +53,8 @@ protected:
     }
 };
 
-enum ToolAction : int { TNew = 1, TDelete, TTry, TCompile, TExport, TImport };   // 1.11.2 : TExport, TImport (decision 174)
+enum ToolAction : int { TNew = 1, TDelete, TTry, TCompile, TExport, TImport,   // 1.11.2 : TExport, TImport (decision 174)
+                        TBuildGen, TBuildRegen, TBuildGenComp, TBuildState };   // 1.11.13 : la generation incrementale
 
 constexpr const char* kNoReturn = "(aucun)";
 
@@ -129,6 +130,22 @@ private:
 
 } // namespace
 
+// 1.11.13 : la cle de build de la fonction choisie, et l'etat que montre la barre.
+std::string HmiFunctionsPane::buildKey() const {
+    const Id sel = selectedFunction();
+    if (sel == kNoId) return {};
+    return std::string(symbol_ != kNoId ? "fonction-symbole:" : "fonction:") + std::to_string(sel);
+}
+
+void HmiFunctionsPane::refreshBuildState() {
+    if (!hosts_.buildState || !tools_) return;
+    const auto key = buildKey();
+    const auto st = key.empty() ? std::pair<std::string, std::string>{"\xE2\x80\x94", "Aucune fonction choisie."} : hosts_.buildState(key);
+    if (st.first == buildStateText_) return;
+    buildStateText_ = st.first;
+    tools_->setText(TBuildState, st.second.empty() ? std::string("L'\xC3\xA9tat de build de la fonction choisie") : st.second, st.first);
+}
+
 HmiFunctionsPane::HmiFunctionsPane(std::string id, hmi::DocumentPtr doc, Apply apply)
     : ui::Widget(std::move(id)), doc_(std::move(doc)), apply_(std::move(apply)) {
     const std::string base = this->id();
@@ -138,6 +155,12 @@ HmiFunctionsPane::HmiFunctionsPane(std::string id, hmi::DocumentPtr doc, Apply a
     tools->separator();
     tools->add(TTry, HmiGlyph::Play, "Essayer la fonction : des arguments, le r\xC3\xA9sultat (sans toucher le projet)", "Essayer");
     tools->add(TCompile, HmiGlyph::Code, "Compiler (F7) : toutes les fonctions, scripts, expressions et actions", "Compiler (F7)");
+    // 1.11.13 : la generation incrementale de la fonction choisie, et son etat.
+    tools->add(TBuildGen, HmiGlyph::Refresh, "G\xC3\xA9n\xC3\xA9rer la fonction choisie : rien n'est refait si elle est \xC3\xA0 jour", "G\xC3\xA9n\xC3\xA9rer");
+    tools->add(TBuildRegen, HmiGlyph::Refresh, "R\xC3\xA9g\xC3\xA9n\xC3\xA9rer la fonction choisie, m\xC3\xAAme \xC3\xA0 jour", "R\xC3\xA9g\xC3\xA9n\xC3\xA9rer");
+    tools->add(TBuildGenComp, HmiGlyph::Play, "G\xC3\xA9n\xC3\xA9rer et compiler la fonction choisie (seuls ses appelants touch\xC3\xA9s par sa signature suivent)",
+               "G\xC3\xA9n\xC3\xA9rer et compiler");
+    tools->add(TBuildState, HmiGlyph::None, "L'\xC3\xA9tat de build de la fonction choisie (un clic : les sorties du build)", "\xE2\x80\x94");
     tools->separator();   // 1.11.2 (decision 174) : les fonctions voyagent (.xpgfonctions)
     tools->add(TExport, HmiGlyph::Export,
                "Exporter des fonctions (.xpgfonctions) avec ce dont elles ont besoin : les fonctions qu'elles appellent, types IHM, variables IHM",
@@ -151,6 +174,10 @@ HmiFunctionsPane::HmiFunctionsPane(std::string id, hmi::DocumentPtr doc, Apply a
     tools_->setVisibleWhen(TImport, [this] { return static_cast<bool>(hosts_.importAny); });
     tools_->setEnabledWhen(TDelete, [this] { return selectedFunction() != kNoId; });
     tools_->setEnabledWhen(TTry, [this] { return selectedFunction() != kNoId; });
+    for (const int a : {static_cast<int>(TBuildGen), static_cast<int>(TBuildRegen), static_cast<int>(TBuildGenComp), static_cast<int>(TBuildState)}) {   // 1.11.13
+        tools_->setVisibleWhen(a, [this] { return static_cast<bool>(hosts_.build); });
+        if (a != TBuildState) tools_->setEnabledWhen(a, [this] { return selectedFunction() != kNoId; });
+    }
     tools_->setVisibleWhen(TTry, [this] { return symbol_ == kNoId; });   // 1.11.10 : une fonction de symbole s'essaie en marche
 
     auto split = std::make_unique<ui::Splitter>(ui::Orientation::Horizontal, base + ".split");
@@ -239,8 +266,13 @@ HmiFunctionsPane::HmiFunctionsPane(std::string id, hmi::DocumentPtr doc, Apply a
                 break;
             case TCompile:
                 updateDiagnostics();
+                if (hosts_.build && selectedFunction() != kNoId) hosts_.build(hmi::pipeline::Mode::Compile, buildKey());   // 1.11.13 : son etat
                 if (hosts_.compile) hosts_.compile();
                 break;
+            case TBuildGen: if (hosts_.build && selectedFunction() != kNoId) hosts_.build(hmi::pipeline::Mode::Generate, buildKey()); break;
+            case TBuildRegen: if (hosts_.build && selectedFunction() != kNoId) hosts_.build(hmi::pipeline::Mode::Regenerate, buildKey()); break;
+            case TBuildGenComp: if (hosts_.build && selectedFunction() != kNoId) hosts_.build(hmi::pipeline::Mode::GenerateCompile, buildKey()); break;
+            case TBuildState: if (hosts_.buildOutputs) hosts_.buildOutputs(); break;
             default: break;
         }
     });

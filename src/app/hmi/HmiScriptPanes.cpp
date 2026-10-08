@@ -97,7 +97,8 @@ protected:
 enum ToolAction : int { TAddSt = 1, TAddC, TAddCpp, TRename, TDelete, TCompile, TClear, TAddVar, TEditVar, TDeleteVar,
                         TFolder,               // lot 21 : un dossier de scripts
                         TFix,                  // 1.10 (I2) : Ajouter les valeurs manquantes (CASE sur une enumeration)
-                        TExport, TImport };    // 1.11.2 (decision 174) : les scripts generaux voyagent (.xpgscripts)
+                        TExport, TImport,      // 1.11.2 (decision 174) : les scripts generaux voyagent (.xpgscripts)
+                        TBuildGen, TBuildRegen, TBuildGenComp, TBuildState };   // 1.11.13 : la generation incrementale
 
 ui::Language languageOf(ScriptLang l) {
     switch (l) {
@@ -282,6 +283,22 @@ std::vector<ui::MultiLineText::Squiggle> squigglesOf(const std::vector<hmi::Scri
     return waves;
 }
 
+// 1.11.13 : la cle de build du script choisi, et l'etat que montre la barre.
+std::string HmiScriptsPane::buildKey() const {
+    const Id sel = selectedScript();
+    if (sel == kNoId) return {};
+    return std::string(general() ? "script:" : "script-vue:") + std::to_string(sel);
+}
+
+void HmiScriptsPane::refreshBuildState() {
+    if (!hosts_.buildState || !tools_) return;
+    const auto key = buildKey();
+    const auto st = key.empty() ? std::pair<std::string, std::string>{"\xE2\x80\x94", "Aucun script choisi."} : hosts_.buildState(key);
+    if (st.first == buildStateText_) return;
+    buildStateText_ = st.first;
+    tools_->setText(TBuildState, st.second.empty() ? std::string("L'\xC3\xA9tat de build du script choisi") : st.second, st.first);
+}
+
 HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply, Id view)
     : ui::Widget(std::move(id)), doc_(std::move(doc)), apply_(std::move(apply)), view_(view) {
     const std::string base = this->id();
@@ -315,9 +332,16 @@ HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply
     }
     tools->separator();
     // 1.10 (maquette, scene 4) : les resultats ici, sous le code.
+    // 1.11.13 : la generation incrementale - Generer, Regenerer, Compiler, Generer et compiler
+    // le script choisi (seul ce qui a change est refait) ; son etat a droite.
+    tools->add(TBuildGen, HmiGlyph::Refresh, "G\xC3\xA9n\xC3\xA9rer le script choisi (et ce dont il d\xC3\xA9pend, s'il le faut) : rien n'est refait s'il est \xC3\xA0 jour",
+               "G\xC3\xA9n\xC3\xA9rer");
+    tools->add(TBuildRegen, HmiGlyph::Refresh, "R\xC3\xA9g\xC3\xA9n\xC3\xA9rer le script choisi, m\xC3\xAAme \xC3\xA0 jour", "R\xC3\xA9g\xC3\xA9n\xC3\xA9rer");
     tools->add(TCompile, HmiGlyph::Code,
                "Compiler (F7) : les fautes de tous les scripts, ici sous le code (un clic y m\xC3\xA8ne) ; le rapport entier : IHM > Compiler",
                "Compiler (F7)");
+    tools->add(TBuildGenComp, HmiGlyph::Play, "G\xC3\xA9n\xC3\xA9rer et compiler le script choisi (son \xC3\xA9tat dans l'arbre suit)", "G\xC3\xA9n\xC3\xA9rer et compiler");
+    tools->add(TBuildState, HmiGlyph::None, "L'\xC3\xA9tat de build du script choisi (un clic : les sorties du build)", "\xE2\x80\x94");
     // 1.10 (decision 15 ; integration I2) : la correction d'un avertissement de S1 -
     // un CASE sur une enumeration, sans ELSE, qui oublie des valeurs.
     tools->add(TFix, HmiGlyph::Plus,
@@ -340,6 +364,10 @@ HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply
     tools_->setEnabledWhen(TEditVar, [this] { return selectedVariable() != kNoId; });
     tools_->setEnabledWhen(TDeleteVar, [this] { return selectedVariable() != kNoId; });
     tools_->setVisibleWhen(TFix, [this] { return fixRow() >= 0; });     // 1.10 (I2) : seulement s'il y a a corriger
+    for (const int a : {static_cast<int>(TBuildGen), static_cast<int>(TBuildRegen), static_cast<int>(TBuildGenComp), static_cast<int>(TBuildState)}) {   // 1.11.13
+        tools_->setVisibleWhen(a, [this] { return static_cast<bool>(hosts_.build); });
+        if (a != TBuildState) tools_->setEnabledWhen(a, [this] { return selectedScript() != kNoId; });
+    }
     if (general()) {   // 1.11.2 (decision 174) : seulement avec un hote (l'ecran)
         tools_->setVisibleWhen(TExport, [this] { return static_cast<bool>(hosts_.exportItems); });
         tools_->setVisibleWhen(TImport, [this] { return static_cast<bool>(hosts_.importAny); });
@@ -494,7 +522,12 @@ HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply
             case TClear: if (sel) (void)deleteScript(sel); break;
             case TCompile:
                 (void)compileHere();          // 1.10 : les resultats ici, sans quitter l'editeur
+                if (hosts_.build && sel) hosts_.build(hmi::pipeline::Mode::Compile, buildKey());   // 1.11.13 : son etat de build
                 break;
+            case TBuildGen: if (hosts_.build && sel) hosts_.build(hmi::pipeline::Mode::Generate, buildKey()); break;
+            case TBuildRegen: if (hosts_.build && sel) hosts_.build(hmi::pipeline::Mode::Regenerate, buildKey()); break;
+            case TBuildGenComp: if (hosts_.build && sel) hosts_.build(hmi::pipeline::Mode::GenerateCompile, buildKey()); break;
+            case TBuildState: if (hosts_.buildOutputs) hosts_.buildOutputs(); break;
             case TFix:                        // 1.10 (I2) : Ajouter les valeurs manquantes
                 if (const int r = fixRow(); r >= 0) (void)applyResultFix(static_cast<std::size_t>(r));
                 break;

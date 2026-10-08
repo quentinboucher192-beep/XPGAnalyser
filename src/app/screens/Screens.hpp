@@ -42,10 +42,13 @@
 #include <vector>
 
 namespace hmi { struct Issue; enum class ScriptLang : std::uint8_t; struct RecipeRequest; struct ResourceRequest; struct UserRequest; struct ExportRequest; }
+namespace hmi::pipeline { struct Report; struct Diagnostic; struct Request; enum class Mode : std::uint8_t; }   // 1.11.13
 
 namespace app {
 
 class MacrosPane;   // lot macros 1 : l'onglet Macros
+class HmiBuildManager;      // 1.11.13 : la generation incrementale de l'IHM (hmi/HmiBuild.hpp)
+class HmiBuildOutputPane;   // 1.11.13 : ses sorties (hmi/HmiBuildPanes.hpp)
 class MacroEditorView;         // lot API 6 : le mode Modifier d'une macro
 class TopBar;       // lot API 2 : la barre du haut
 class ApiDashboard; // lot API 2 : le tableau de bord de l'API
@@ -435,6 +438,16 @@ public:
     [[nodiscard]] std::string treeCurrentCard() const;    // la carte du noeud choisi (arbre-carte)
     bool treeActionOnCurrent(std::size_t action);         // 0 epingler, 1 detacher, 2 le menu (arbre-action)
     // ---- fin Lot API 8 : l'arbre du projet ----
+    // ---- 1.11.13 : la generation incrementale, pour les scripts (ScriptRunner) et les essais ----
+    //  mode : "generer", "regenerer", "compiler", "generer-compiler", "regenerer-compiler",
+    //  "demarrer", "nettoyer" ; portee : une cle ("script:12") ou un chemin ("IHM/Vues"),
+    //  vide : tout. `dialog` : la fenetre de progression tout de suite.
+    bool scriptHmiBuild(const std::string& mode, const std::string& scope, bool dialog, std::string* why);
+    [[nodiscard]] bool hmiBuildBusy() const;
+    [[nodiscard]] std::string hmiBuildSummary() const;   // l'etat du projet et le dernier build, en une ligne
+    void showHmiBuildOutputs(int tab);                    // 0 : Sorties ; 1 : Diagnostics
+    // Modifier le code d'un script de l'IHM (comme au clavier : une commande, Ctrl+Z la rend).
+    bool scriptHmiEditScript(const std::string& name, const std::string& line, std::string* why);
 private:
     // ---- Lot API 8 : l'arbre du projet ----
     [[nodiscard]] ui::WidgetPtr wrapExplorer(std::unique_ptr<ui::TreeView> tree);   // le champ au-dessus de l'arbre
@@ -628,6 +641,58 @@ private:
     void refreshBuildState(bool full = false);
     std::shared_ptr<hmi::build::Cache> buildState_;
     const domain::Project*             buildStateOf_{nullptr};
+    // ---- 1.11.13 : LA GENERATION INCREMENTALE DE L'IHM (HmiBuildWorkspace.cpp) ----
+    //  Le gestionnaire de build (un fil a part, une copie du projet), ses etats dans
+    //  l'arbre (refaits a chaque analyse), ses commandes (le menu de l'arbre, les
+    //  barres des editeurs, Demarrer), sa progression (une fenetre apres 0,3 s) et
+    //  ses sorties (l'onglet IHM . Sorties, double-clic : la source).
+    std::shared_ptr<HmiBuildManager> hmiBuild_;
+    std::uint64_t                    hmiBuildMarksGen_{~0ull};
+    bool                             hmiBuildDialogOpen_{false};
+    bool                             hmiBuildBackground_{false};
+    double                           hmiBuildStartedAt_{-1.0};   // l'heure de l'ecran au lancement
+    std::string                      hmiBuildTitle_;
+    bool                             hmiBuildStarts_{false};     // un Demarrer (la fenetre se ferme seule)
+    std::function<void(const hmi::pipeline::Report&)> hmiBuildThen_;
+    struct HmiBuildDone;
+    std::vector<std::shared_ptr<HmiBuildDone>> hmiBuildHistory_;   // les derniers builds (l'onglet Sorties les relit)
+    core::ConnectionScope            hmiBuildLinks_;
+    void ensureHmiBuild();
+    // Lancer un build ; faux (et pourquoi dans la barre d'etat) : un build tourne deja.
+    // `then` : a la fin (le rapport), sur le fil de l'interface.
+    bool runHmiBuild(hmi::pipeline::Mode mode, std::vector<std::string> scope, bool chosen, std::string title,
+                     std::function<void(const hmi::pipeline::Report&)> then = {});
+    void tickHmiBuild();
+    // Le build d'un demarrage de la simulation IHM (buildGate) ; un build deja en
+    // cours (Generer depuis l'arbre) : le demarrage le suit.
+    void startHmiBuild(const std::string& source);
+    std::string hmiStartPending_;   // non vide : un demarrage attend la fin du build en cours
+    void applyHmiBuildMarks();
+    [[nodiscard]] HmiBuildOutputPane* hmiBuildOutput(bool open);
+    void replayHmiBuilds(HmiBuildOutputPane& pane);   // un onglet Sorties rouvert : les builds de la seance
+    // Les barres des editeurs (scripts, fonctions) : leurs commandes de build et leur etat.
+    template <class Hosts> void wireHmiBuildHosts(Hosts& hosts) {
+        hosts.build = [this](hmi::pipeline::Mode mode, const std::string& key) { runHmiBuildFor(mode, key); };
+        hosts.buildState = [this](const std::string& key) {
+            const auto b = hmiBuildBadge(key);
+            return std::pair<std::string, std::string>{b.known ? b.glyph + " " + b.label : std::string("\xE2\x80\x94 analyse\xE2\x80\xA6"), b.tip};
+        };
+        hosts.buildOutputs = [this] { (void)hmiBuildOutput(true); };
+    }
+    void runHmiBuildFor(hmi::pipeline::Mode mode, const std::string& key);
+    void openHmiDiagnostic(const hmi::pipeline::Diagnostic& d);
+    void openHmiElement(const std::string& key);
+    // L'etat d'un element pour une barre d'editeur : glyphe, ton, libelle, raison.
+    struct HmiBuildBadge { std::string glyph, label, tip; ui::Tone tone{ui::Tone::None}; bool known{false}; };
+    [[nodiscard]] HmiBuildBadge hmiBuildBadge(const std::string& key) const;
+    // Ce qu'un noeud (une cle, ou des dossiers) a au dernier build : son etat en mots,
+    // ses diagnostics, son artefact (le chemin complet ; vide : aucun).
+    struct HmiBuildInfo {
+        std::string                            state;         // "A jour", "Modifie", "3 elements : 1 en erreur..."
+        std::vector<hmi::pipeline::Diagnostic> diagnostics;   // les erreurs d'abord
+        std::string                            artifact;      // le chemin complet de l'artefact (vide : aucun)
+    };
+    [[nodiscard]] HmiBuildInfo hmiBuildInfo(const std::string& key, const std::vector<std::string>& paths) const;
     void onHmiChanged(std::uint64_t viewId);  // une commande IHM vient de passer
     void forgetHmiTab(std::size_t tabIndex);  // cet onglet va etre ferme
     void askNewHmiView(const std::string& role = "vue");   // le dialogue "Nouvelle vue" (lot 8 : et son role)

@@ -113,6 +113,13 @@ struct HmiSimulationHost {
     // 1.10 (decision 12) : le plein ecran de l'IHM - la fenetre de l'appli en plein
     // ecran (vrai), puis rendue comme avant (faux). Nul : la vue couvre la fenetre seule.
     std::function<void(bool)>                             fullScreenWindow;
+    // ---- 1.11.13 : LA GENERATION INCREMENTALE ----
+    //  Demarrer l'IHM passe par le build (analyse des modifications, API, IHM,
+    //  compilation, validation ; un projet a jour ne refait rien) : l'hote le lance
+    //  et rappelle buildDone(ok, pourquoi) a la fin - la simulation ne demarre que
+    //  sur un build valide. Nul : elle demarre tout de suite (le poste
+    //  d'exploitation, les essais, les exemples de l'aide).
+    std::function<void(const std::string& source)>        buildGate;
 };
 
 // Une vue a dessiner : evaluee, avec l'etat de sa transition.
@@ -506,6 +513,10 @@ public:
     [[nodiscard]] bool hmiRunning() const noexcept { return started_; }
     void startHmi(const std::string& source = {});
     void stopHmi(const std::string& source = {});
+    // 1.11.13 : la fin du build d'un demarrage (l'hote, buildGate) - valide : l'IHM
+    // demarre ; sinon elle reste arretee et dit pourquoi (les sorties, la source).
+    void buildDone(bool ok, const std::string& why = {});
+    [[nodiscard]] bool waitingBuild() const noexcept { return waitingBuild_; }
     // L'etat de l'API en clair ("en marche \xC2\xB7 cycle 1204") et son ton
     // ("running", "paused", "stopped", "halted", "off").
     [[nodiscard]] std::string plcStateText() const;
@@ -599,6 +610,12 @@ private:
     hmi::Runtime          runtime_;
     bool                  started_{false};
     bool                  autoStart_{true};  // 1.10
+    // 1.11.13 : le demarrage attend son build (buildGate) ; gateOpen_ : le build est
+    // valide, le prochain demarrage passe ; blockedNote_ : pourquoi il a ete refuse.
+    bool                  waitingBuild_{false};
+    bool                  gateOpen_{false};
+    std::string           gateSource_, blockedNote_;
+    bool                  askBuild(const std::string& source);
     bool                  station_{false};   // lot 14
     // 1.10 : la barre de l'onglet - les boutons qui suivent les etats, les pastilles
     // (IHM, API, zoom), le choix de la vue ; la vue d'avant (Precedente).

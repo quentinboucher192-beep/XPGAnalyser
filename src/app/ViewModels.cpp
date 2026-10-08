@@ -2609,6 +2609,145 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
     }
 
     // 1.11 (chantier T3, C4) : ce que les deux filtres de l'arbre retiennent (lu dans le cache).
+    // 1.11.13 : ce que designe un noeud pour le build de l'IHM (hmi::pipeline) - les
+    // chemins sont ceux du moteur (HmiPipeline.cpp, collect) ; une vue : le sien,
+    // donne par l'analyse (son dossier de liste compris), ses scripts dessous.
+    ProjectTreeModel::HmiBuildTarget ProjectTreeModel::hmiBuildTarget(ui::NodeId n) const {
+        HmiBuildTarget t;
+        if (!hmi_) return t;
+        const auto& p = hmi_->project;
+        const std::string pg = "IHM/Programmation g\xC3\xA9n\xC3\xA9rale";
+        const std::string models = "IHM/Mod\xC3\xA8les";
+        const auto key = [](const char* kind, std::uint64_t id) { return std::string(kind) + ":" + std::to_string(id); };
+        const auto viewPath = [this](std::uint64_t id) -> std::string {
+            if (!buildMarks_) return {};
+            const auto it = buildMarks_->viewPaths.find(id);
+            return it == buildMarks_->viewPaths.end() ? std::string{} : it->second;
+        };
+        const auto i = indexOf(n);
+        switch (kindOf(n)) {
+        case NodeKind::HmiFolder: t.paths = {"IHM"}; t.label = "l'IHM"; t.code = true; break;
+        case NodeKind::ApiFolder: if (!p.views.empty()) { t.paths = {"API"}; t.label = "l'API (ce que l'IHM en utilise)"; } break;
+        case NodeKind::HmiViews: t.paths = {"IHM/Vues", "IHM/Popups", models}; t.label = "les vues"; t.code = true; break;
+        case NodeKind::HmiViewFolder:
+            t.paths = {i == 0 ? models : i == 2 ? std::string("IHM/Popups") : std::string("IHM/Vues")};
+            t.label = i == 0 ? "les mod\xC3\xA8les" : i == 2 ? "les popups" : "les vues";
+            t.code = true;
+            break;
+        case NodeKind::HmiTemplateFolder: t.paths = {models}; t.label = "les mod\xC3\xA8les"; t.code = true; break;
+        case NodeKind::HmiSymbolsFolder: t.paths = {"IHM/Symboles"}; t.label = "les symboles"; t.code = true; break;
+        case NodeKind::HmiListFolder: {
+            int list = -1;
+            std::string folder;
+            if (!hmiListFolderOf(n, list, folder) || folder.empty()) break;
+            using L = hmi::fold::List;
+            const auto l = static_cast<L>(list);
+            const std::string base = l == L::Views ? "IHM/Vues" : l == L::Popups ? "IHM/Popups" : l == L::Symbols ? "IHM/Symboles"
+                                   : l == L::Scripts ? pg + "/Scripts" : l == L::Resources ? std::string("IHM/Ressources") : std::string{};
+            if (base.empty()) break;
+            t.paths = {base + "/" + folder};
+            t.label = "le dossier " + folder;
+            t.code = l != L::Resources;
+            break;
+        }
+        case NodeKind::HmiView: {
+            const auto id = hmiViewOf(n);
+            const auto* v = p.view(static_cast<hmi::Id>(id));
+            const auto path = viewPath(id);
+            if (!v || path.empty()) break;
+            t.paths = {path};
+            t.label = (v->role == "symbole" ? "le symbole " : v->role == "popup" ? "la popup " : hmi::isTemplateRole(v->role) ? "le mod\xC3\xA8le " : "la vue ") + v->name;
+            t.code = true;
+            break;
+        }
+        case NodeKind::HmiViewPart: {
+            const auto id = hmiViewOf(n);
+            const auto path = viewPath(id);
+            if (path.empty()) break;
+            switch (static_cast<HmiPart>(subOf(n))) {
+            case HmiPart::Scripts:    t.paths = {path + "/Scripts"}; t.label = "ses scripts"; t.code = true; break;
+            case HmiPart::Animations: t.key = key("animations", id); t.label = "ses animations"; t.code = true; break;
+            case HmiPart::Functions:  t.paths = {path + "/Fonctions"}; t.label = "ses fonctions"; t.code = true; break;
+            case HmiPart::Popups:     t.paths = {path + "/Popups"}; t.label = "ses popups"; t.code = true; break;
+            default: break;
+            }
+            break;
+        }
+        case NodeKind::HmiViewScript: {
+            const auto* v = hmiViewById(hmi_.get(), i);
+            if (!v || subOf(n) >= v->scripts.size()) break;
+            t.key = key("script-vue", v->scripts[subOf(n)].id);
+            t.label = "le script " + v->scripts[subOf(n)].name;
+            t.code = true;
+            break;
+        }
+        case NodeKind::HmiSymbolFunction: {
+            const auto* v = hmiViewById(hmi_.get(), i);
+            if (!v || subOf(n) >= v->functions.size()) break;
+            t.key = key("fonction-symbole", v->functions[subOf(n)].id);
+            t.label = "la fonction " + v->name + "." + v->functions[subOf(n)].name;
+            t.code = true;
+            break;
+        }
+        case NodeKind::HmiScripts:         t.paths = {pg}; t.label = "la programmation g\xC3\xA9n\xC3\xA9rale"; t.code = true; break;
+        case NodeKind::HmiScriptsFolder:   t.paths = {pg + "/Scripts"}; t.label = "les scripts g\xC3\xA9n\xC3\xA9raux"; t.code = true; break;
+        case NodeKind::HmiFunctionsFolder: t.paths = {pg + "/Fonctions"}; t.label = "les fonctions IHM"; t.code = true; break;
+        case NodeKind::HmiVariablesFolder: t.paths = {pg + "/Variables IHM"}; t.label = "les variables IHM"; t.code = true; break;
+        case NodeKind::HmiTypesFolder:     t.paths = {pg + "/Types IHM"}; t.label = "les types IHM"; t.code = true; break;
+        case NodeKind::HmiGeneralScript:
+            if (const auto* sc = byId(p.programs.scripts, i)) { t.key = key("script", sc->id); t.label = "le script " + sc->name; t.code = true; }
+            break;
+        case NodeKind::HmiFunction:
+            if (const auto* f = byId(p.programs.functions, i)) { t.key = key("fonction", f->id); t.label = "la fonction " + f->name; t.code = true; }
+            break;
+        case NodeKind::HmiVariable:
+            if (const auto* v = byId(p.programs.variables, i)) { t.key = key("variable", v->id); t.label = "la variable " + v->name; t.code = true; }
+            break;
+        case NodeKind::HmiTypeNode:
+            if (const auto* ty = byId(p.programs.types, i)) { t.key = key("type", ty->id); t.label = "le type " + ty->name; t.code = true; }
+            break;
+        case NodeKind::HmiAlarms:  t.paths = {"IHM/Alarmes"}; t.label = "les alarmes"; t.code = true; break;
+        case NodeKind::HmiAlarm:
+            if (const auto* a = byId(p.alarms, i)) { t.key = key("alarme", a->id); t.label = "l'alarme " + a->name; t.code = true; }
+            break;
+        case NodeKind::HmiRecipes: t.paths = {"IHM/Recettes"}; t.label = "les recettes"; t.code = true; break;
+        case NodeKind::HmiRecipe:
+            if (const auto* r = byId(p.recipes, i)) { t.key = key("recette", r->id); t.label = "la recette " + r->name; t.code = true; }
+            break;
+        case NodeKind::HmiUsers:         t.key = "securite"; t.label = "les utilisateurs et la s\xC3\xA9" "curit\xC3\xA9"; t.code = true; break;
+        case NodeKind::HmiHistory:       t.key = "historiques"; t.label = "les historiques"; t.code = true; break;
+        case NodeKind::HmiResources:     t.paths = {"IHM/Ressources"}; t.label = "les ressources"; break;
+        case NodeKind::HmiExternalFiles: t.paths = {"IHM/Fichiers externes"}; t.label = "les fichiers externes"; break;
+        case NodeKind::HmiStyles:        t.key = "styles"; t.label = "les styles"; break;
+        case NodeKind::HmiLanguages:     t.key = "langues"; t.label = "les langues"; break;
+        case NodeKind::HmiUnits:         t.key = "affichages"; t.label = "les unit\xC3\xA9s et formats"; t.code = true; break;
+        case NodeKind::HmiConfig:        t.paths = {"IHM/Configuration", "IHM/Configuration de simulation"}; t.label = "la configuration"; t.code = true; break;
+        default: break;
+        }
+        return t;
+    }
+
+    // 1.11.13 : l'etat du build (tout a droite de la ligne), et son infobulle : la raison.
+    void ProjectTreeModel::buildMark(ui::NodeId n, ui::CellStyle& s) const {
+        if (!buildMarks_ || !hmi_) return;
+        const auto t = hmiBuildTarget(n);
+        if (t.empty()) return;
+        const HmiBuildMarks::Mark* m = nullptr;
+        if (!t.key.empty())
+            if (const auto it = buildMarks_->byKey.find(t.key); it != buildMarks_->byKey.end()) m = &it->second;
+        for (const auto& path : t.paths)
+            if (const auto it = buildMarks_->byPath.find(path); it != buildMarks_->byPath.end() && (!m || it->second.rank > m->rank)) m = &it->second;
+        if (!m) return;
+        // Un script de l'IHM : son etat de build dit aussi s'il compile (la 1.11 le disait a part).
+        const auto k = kindOf(n);
+        if (k == NodeKind::HmiGeneralScript || k == NodeKind::HmiViewScript || k == NodeKind::HmiScriptsFolder) s.trail.clear();
+        ui::CellStyle::Trail tr;
+        tr.glyph = m->glyph;
+        tr.tone = m->tone;
+        tr.tip = m->tip;
+        s.trail.push_back(std::move(tr));
+    }
+
     std::uint8_t ProjectTreeModel::buildFlags(ui::NodeId n) const {
         if (!buildState_) return 0;
         const auto i = indexOf(n);
@@ -2637,6 +2776,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             s = style(n);
             decoGuard_ = false;
             decorate(n, s);
+            buildMark(n, s);   // 1.11.13 : l'etat du build de l'IHM
             return s;
         }
         // ---- fin Lot API 8 ----

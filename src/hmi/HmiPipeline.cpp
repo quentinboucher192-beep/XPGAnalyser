@@ -482,6 +482,8 @@ std::vector<Element> collect(const Project& p, const ApiInfo& api) {
         out.push_back(std::move(e));
         return out.back();
     };
+    // un symbole : "IHM/Symboles/<son dossier>/<nom>" ; ses fonctions, ses popups, ses scripts dessous
+    const auto symbolPath = [](const View& v) { return "IHM/Symboles/" + (v.folder.empty() ? std::string{} : v.folder + "/") + v.name; };
     const auto dep = [](Element& e, std::set<std::string>& seen, const std::string& name, const std::string& key, DepMode mode, const char* via) {
         if (key.empty()) { e.deps.push_back({name, {}, mode, via}); return; }
         if (key == e.key || !seen.insert(key).second) return;
@@ -570,7 +572,7 @@ std::vector<Element> collect(const Project& p, const ApiInfo& api) {
     // ---- C4. symboles, leurs fonctions ----
     for (const auto& v : p.views) {
         if (viewKind(v) != ElementKind::Symbol) continue;
-        auto& e = make(ElementKind::Symbol, keyOf(ElementKind::Symbol, v.id), v.name, "IHM/Symboles/" + (v.folder.empty() ? std::string{} : v.folder + "/") + v.name, v.id, kNoId);
+        auto& e = make(ElementKind::Symbol, keyOf(ElementKind::Symbol, v.id), v.name, symbolPath(v), v.id, kNoId);
         e.content = serializeView(strippedView(v));
         e.config = viewConfig(v);
         e.iface = v.name + "(" + paramsText(v) + ")";
@@ -586,7 +588,7 @@ std::vector<Element> collect(const Project& p, const ApiInfo& api) {
         for (const auto& o : v.operators) resolveCode(n, &v, o.body, e.deps, seen, {"a", "b"});
         for (const auto& f : v.functions) {
             auto& fe = make(ElementKind::SymbolFunction, keyOf(ElementKind::SymbolFunction, f.id), f.name,
-                            "IHM/Symboles/" + v.name + "/Fonctions/" + f.name, f.id, v.id);
+                            symbolPath(v) + "/Fonctions/" + f.name, f.id, v.id);
             fe.content = functionCanon(f);
             fe.iface = functionIface(v.name + "." + f.name, f);
             std::set<std::string> fseen;
@@ -653,8 +655,8 @@ std::vector<Element> collect(const Project& p, const ApiInfo& api) {
     for (const auto& v : p.views) {
         const ElementKind vk = viewKind(v);
         const std::string vkey = keyOf(vk, v.id);
-        const std::string base = vk == ElementKind::Symbol ? "IHM/Symboles/" + v.name
-                               : vk == ElementKind::Popup ? (v.ownerSymbol != kNoId ? "IHM/Symboles/" + (p.view(v.ownerSymbol) ? p.view(v.ownerSymbol)->name : std::string("?")) + "/Popups/" + v.name
+        const std::string base = vk == ElementKind::Symbol ? symbolPath(v)
+                               : vk == ElementKind::Popup ? (v.ownerSymbol != kNoId ? (p.view(v.ownerSymbol) ? symbolPath(*p.view(v.ownerSymbol)) : std::string("IHM/Symboles/?")) + "/Popups/" + v.name
                                                                                      : "IHM/Popups/" + (v.folder.empty() ? std::string{} : v.folder + "/") + v.name)
                                : vk == ElementKind::ViewTemplate ? "IHM/Mod\xC3\xA8les/" + v.name
                                : "IHM/Vues/" + (v.folder.empty() ? std::string{} : v.folder + "/") + v.name;
@@ -1170,7 +1172,10 @@ Shown shown(const Analysis& a, const Cache& c, std::string_view key) {
     for (const auto& r : it->reasons) reasons += (reasons.empty() ? "" : " ; ") + r;
     const bool code = compilable(e->kind);
     switch (it->status) {
-        case Status::Full: s.state = State::GenerationRequired; s.detail = "g\xC3\xA9n\xC3\xA9ration requise"; break;
+        case Status::Full:   // jamais construit (pas de cache) : non genere ; un cache illisible : a regenerer
+            s.state = c.status == Cache::Status::Absent && !en ? State::NotGenerated : State::GenerationRequired;
+            s.detail = s.state == State::NotGenerated ? "jamais g\xC3\xA9n\xC3\xA9r\xC3\xA9" : "g\xC3\xA9n\xC3\xA9ration requise";
+            break;
         case Status::Added: s.state = State::NotGenerated; s.detail = "jamais g\xC3\xA9n\xC3\xA9r\xC3\xA9"; break;
         case Status::Modified:
         case Status::Renamed: s.state = State::Modified; s.detail = code ? "compilation requise" : "g\xC3\xA9n\xC3\xA9ration requise"; break;
@@ -1302,6 +1307,19 @@ std::string generatedText(const Project& p, const Element& e, const Item& it) {
     }
     s += "fin\n";
     return s;
+}
+
+// La validation (les controles de Generer) : ce qui empeche vraiment la
+// simulation de tourner - la structure (vues, objets, calques, identifiants,
+// references circulaires, la vue de demarrage), les ressources, la coherence
+// API / IHM (une variable inexistante), le code. Le reste de Generer (bornes
+// d'une recette, parametres d'une action, deux ecritures sur un registre,
+// qualite, langues...) est dit en avertissement : la simulation tournait avec
+// avant, elle tourne encore.
+bool blockingValidation(const Issue& i) {
+    static const std::set<std::string, std::less<>> kBlocking = {
+        "Projet", "Vue", "Objet", "Ressource", "Variable", "Type", "Script", "Fonction", "Expression", "Symbole", "Popup"};
+    return i.severity == Issue::Severity::Error && kBlocking.count(i.category) != 0;
 }
 
 // Ou va un constat de Compiler ou de Generer : la cle de son element.
@@ -1775,10 +1793,16 @@ Report run(const Project& p, const ApiInfo& api, const Request& req, const Optio
         int verrors = 0, vwarnings = 0;
         std::map<std::string, std::vector<Diagnostic>> perElement;
         cache.project.clear();
+        int quality = 0;
         for (const auto& i : generateWith(p, o.plcHasName, go)) {
             if (i.severity == Issue::Severity::Info) continue;
             auto d = fromIssue(i, "Validation");
             d.date = now;
+            if (i.severity == Issue::Severity::Error && !blockingValidation(i)) {
+                d.severity = Severity::Warning;
+                d.suggestion = "Non bloquant pour la simulation (une erreur pour G\xC3\xA9n\xC3\xA9rer) : " + i.category + ".";
+                ++quality;
+            }
             const std::string key = elementOfIssue(p, i);
             if (!key.empty() && cache.entries.count(key)) {
                 auto& en = cache.entries[key];
@@ -1826,6 +1850,9 @@ Report run(const Project& p, const ApiInfo& api, const Request& req, const Optio
             }
         for (const auto& d : rep.diagnostics)
             if (d.step == "Validation") log(d.blocking() ? Severity::Error : Severity::Warning, "Validation", (d.path.empty() ? std::string{} : d.path + " : ") + d.message, d.element);
+        if (quality)
+            log(Severity::Information, "Validation", std::to_string(quality) + " erreur(s) de G\xC3\xA9n\xC3\xA9rer non bloquante(s) pour la simulation "
+                                                     "(bornes, param\xC3\xA8tres d'action, communication, qualit\xC3\xA9\xE2\x80\xA6) : dites en avertissement.");
         rep.errors += verrors;
         rep.warnings += vwarnings;
         pr.errors += verrors;

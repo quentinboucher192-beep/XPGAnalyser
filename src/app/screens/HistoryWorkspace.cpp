@@ -437,6 +437,7 @@ void MainAnalysisScreen::Update(const menu::FrameContext& f) {
     // ---- Lot API 8 : le bandeau bas (StatusStripWorkspace.cpp) ----
     tickStatusStrip(f.totalSeconds);
     // ---- fin Lot API 8 : le bandeau bas ----
+    tickHmiBuild();                // 1.11.13 : le build de l'IHM (sa fin, la progression, l'analyse)
 }
 
 void MainAnalysisScreen::refreshHistoryButtons() {

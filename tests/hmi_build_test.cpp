@@ -15,6 +15,7 @@
 //  absent ou coupe, un artefact supprime a la main, une annulation, un verrou,
 //  une coupure pendant l'ecriture d'un fichier.
 // =============================================================================
+#include "../src/app/hmi/HmiBuild.hpp"
 #include "../src/core/AtomicFile.hpp"
 #include "../src/hmi/HmiEdit.hpp"
 #include "../src/hmi/HmiModel.hpp"
@@ -29,6 +30,7 @@
 #include <map>
 #include <set>
 #include <string>
+#include <thread>
 #include <vector>
 
 #ifndef _WIN32
@@ -691,6 +693,92 @@ void formatDuCache() {
     check(!init.diagnostics.empty() && init.diagnostics.front().line == 2, "un diagnostic relu garde sa ligne");
 }
 
+// Le gestionnaire de l'application (app/hmi/HmiBuild) : un vrai fil, poll a chaque
+// "image", l'analyse apres une modification, un build a la fois, l'annulation.
+void gestionnaire(const std::string& tmp) {
+    std::printf("-- le gestionnaire de build (fil a part, poll, analyse, refus, annulation)\n");
+    Bench b;
+    fill(b);
+    std::error_code ec;
+    fs::remove_all(tmp, ec);
+    fs::create_directories(tmp, ec);
+    std::string folder;   // vide d'abord : le cache en memoire
+    app::HmiBuildManager m([&]() -> std::optional<app::HmiBuildSetup> {
+        app::HmiBuildSetup s;
+        s.project = std::make_shared<const Project>(b.p);
+        s.api = b.api;
+        s.projectFolder = folder;
+        s.plcHasName = b.options().plcHasName;
+        s.plcPaths = b.options().plcPaths;
+        return s;
+    });
+    int statusSignals = 0, finishedSignals = 0;
+    std::shared_ptr<const pl::Report> got;
+    core::ConnectionScope links;
+    links += m.statusChanged->connect([&] { ++statusSignals; });
+    links += m.finished->connect([&](std::shared_ptr<const pl::Report> r) { ++finishedSignals; got = r; });
+    const auto pump = [&](double seconds) {
+        const auto end = std::chrono::steady_clock::now() + std::chrono::duration<double>(seconds);
+        while (std::chrono::steady_clock::now() < end) {
+            (void)m.poll();
+            if (!m.busy() && !m.building()) {
+                (void)m.poll();
+                if (!m.busy()) break;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+    };
+    // l'analyse de depart (sans rien construire)
+    m.analyseNow();
+    pump(10);
+    pump(0.05);
+    auto st = m.status();
+    check(st && st->totals.elements >= 25 && st->totals.notGenerated == st->totals.elements, "analyse : tout est Non genere au depart (" + st->headline() + ")");
+    check(statusSignals >= 1, "le signal statusChanged part");
+    // un build : pendant ce temps, un second est refuse
+    std::string why;
+    check(m.start(pl::Request{pl::Mode::Start, {}, false}, &why), "un build part");
+    check(m.building(), "il tourne");
+    check(!m.start(pl::Request{pl::Mode::Start, {}, false}, &why) && contains(why, "en cours"), "un second build est refuse (" + why + ")");
+    pump(20);
+    check(!m.building() && finishedSignals == 1 && got && got->ok, "le build finit, le signal finished part avec le rapport");
+    st = m.status();
+    check(st && st->upToDate() && contains(st->headline(), "Projet \xC3\xA0 jour"), "apres le build : projet a jour (" + (st ? st->headline() : std::string("?")) + ")");
+    const auto* fold = st ? st->folder("IHM/Vues") : nullptr;
+    check(fold && fold->elements > 0 && fold->state == pl::State::UpToDate, "le dossier IHM/Vues est resume (a jour)");
+    // une modification : l'analyse suit (300 ms apres), l'element est Modifie, son dossier aussi
+    b.script(b.scriptInit).body += "\nCompteur := 2;";
+    m.invalidate();
+    std::this_thread::sleep_for(std::chrono::milliseconds(320));
+    pump(10);
+    pump(0.05);
+    st = m.status();
+    const auto* sh = st ? st->of(key(pl::ElementKind::Script, b.scriptInit)) : nullptr;
+    check(sh && sh->state == pl::State::Modified, "un script modifie : Modifie, sans rien construire");
+    const auto* scripts = st ? st->folder("IHM/Programmation g\xC3\xA9n\xC3\xA9rale/Scripts") : nullptr;
+    check(scripts && scripts->state == pl::State::Modified && scripts->pending == 1, "son dossier dit 1 element a refaire");
+    check(app::hmiStateLook(pl::State::Modified).glyph == "\xE2\x97\x8F" && app::hmiStateLook(pl::State::UpToDate).glyph == "\xE2\x9C\x93"
+              && app::hmiStateLook(pl::State::InvalidDependency).glyph == "\xE2\x9B\x93" && app::hmiStateLook(pl::State::Obsolete).glyph == "\xE2\x8F\xB1",
+          "les glyphes des etats");
+    // relancer : seul le script
+    check(m.start(pl::Request{pl::Mode::Start, {}, false}, &why), "le build suivant part");
+    pump(20);
+    check(got && got->generated == 1 && got->compiled == 1 && m.status()->upToDate(), "seul le script est refait, puis a jour");
+    // sur le disque : le cache et le verrou
+    folder = (fs::path(tmp) / "projet").string();
+    fs::create_directories(folder, ec);
+    check(m.start(pl::Request{pl::Mode::Start, {}, false}, &why), "un build sur le disque part");
+    pump(20);
+    check(got && got->ok && fs::exists(fs::path(pl::buildFolderOf(folder)) / "build-cache.txt") && !fs::exists(fs::path(pl::buildFolderOf(folder)) / "build.lock"),
+          "le cache est ecrit, le verrou rendu");
+    // annuler : le build s'arrete entre deux taches
+    check(m.start(pl::Request{pl::Mode::RegenerateCompile, {}, false}, &why), "Regenerer et compiler part");
+    m.cancel();
+    pump(20);
+    check(got && (got->cancelled || got->ok), "annule (ou deja fini) : le rapport le dit");
+    fs::remove_all(tmp, ec);
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -709,6 +797,7 @@ int main(int argc, char** argv) {
     annulation();
     coupureSauvegarde(tmp + "_coupure");
     formatDuCache();
+    gestionnaire(tmp + "_gestionnaire");
     std::printf("\n%d verification(s), %d echec(s)\n", checks, failures);
     return failures == 0 ? 0 : 1;
 }

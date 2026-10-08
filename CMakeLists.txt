@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(xpg_analyzer VERSION 1.11.12 LANGUAGES C CXX)
+project(xpg_analyzer VERSION 1.11.13 LANGUAGES C CXX)
 
 # ---------------------------------------------------------------------------
 # C++23 is requested, C++20 is the floor. The one feature that needs C++23 is
@@ -519,8 +519,8 @@ if(XPG_BUILD_TESTS)
     xpg_add_test_executable(hmicheck_expr_test tests/hmicheck_expr_test.cpp)
     xpg_target_link_libraries(hmicheck_expr_test PRIVATE xpg_hmi)
     # ---- 1.11.13 : la generation incrementale de l'IHM (cache, dependances, etats, artefacts) ----
-    xpg_add_test_executable(hmi_build_test tests/hmi_build_test.cpp)
-    xpg_target_link_libraries(hmi_build_test PRIVATE xpg_hmi)
+    xpg_add_test_executable(hmi_build_test tests/hmi_build_test.cpp src/app/hmi/HmiBuild.cpp)
+    xpg_target_link_libraries(hmi_build_test PRIVATE xpg_hmi xpg_import)
     # ---- Lot API 8 : didacticiels et aide (les huit parcours, leurs pages de l'aide, le menu Aide) ----
     xpg_add_test_executable(lot8tutorials_test tests/lot8tutorials_test.cpp src/app/TopBar.cpp src/app/TopBarLot8.cpp src/app/TutorialsLot8.cpp)   # Lot API 8 : bandeau haut (+ TopBarLot8.cpp)
     # ---- Lot API 8 : tests - xpg_ui AVANT xpg_import : ui::buildHelp (ui/HelpDocument.cpp) appelle

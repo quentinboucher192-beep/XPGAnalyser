@@ -70,6 +70,8 @@
 #include "../hmi/HmiStationPanes.hpp"               // lot 14 : le poste d'exploitation
 #include "../hmi/HmiNotifyPanes.hpp"                // lot 14 : les notifications
 #include "../hmi/HmiReportPanes.hpp"                // lot 14 : les rapports
+#include "../hmi/HmiBuild.hpp"                      // 1.11.13 : la generation incrementale
+#include "../hmi/HmiBuildPanes.hpp"                 // 1.11.13 : ses sorties
 #include "../hmi/HmiWebPanes.hpp"                   // lot 14 : l'acces web
 #include "../hmi/HmiScriptPanes.hpp"
 #include "../hmi/HmiSimulation.hpp"
@@ -360,6 +362,10 @@ void MainAnalysisScreen::bindHmi() {
         hmiTabs_.clear();
         hmiLinks_.clear();
         boundHmi_ = doc;
+        // 1.11.13 : une autre IHM - ses etats de build sont a refaire (l'ancienne n'en dit plus rien).
+        hmiBuildMarksGen_ = ~0ull;
+        if (treeModel_) treeModel_->setHmiBuildMarks(nullptr);
+        if (hmiBuild_) hmiBuild_->analyseNow();
         if (!doc) return;
         hmiLinks_ += doc->changed->connect([this](hmi::Id v) { onHmiChanged(v); });
         hmiLinks_ += app_.events().subscribe<HmiTabsCheck>([this](const HmiTabsCheck&) {
@@ -416,6 +422,9 @@ void MainAnalysisScreen::onHmiChanged(std::uint64_t viewId) {
     // 1.11 (chantier T3, C4) : un script modifie a ses icones a jour tout de suite
     // (seuls les scripts dont le texte ou le langage a change sont recalcules).
     refreshBuildState();
+    // 1.11.13 : la generation incrementale - l'analyse repart (300 ms apres la derniere
+    // modification) : l'element touche passe a « Modifie » dans l'arbre.
+    if (hmiBuild_) hmiBuild_->invalidate();
     app_.events().publish(HmiTabsCheck{});
 }
 
@@ -942,6 +951,8 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
             if (auto* rt = app_.simulationRuntime()) rt->unforceAll();
         };
         host.login = [this](std::string login) { askHmiLogin(std::move(login)); };
+        // 1.11.13 : demarrer passe par le build de l'IHM (un projet a jour demarre aussitot).
+        host.buildGate = [this](const std::string& source) { startHmiBuild(source); };
         // 1.10 (decision 12) : le plein ecran de l'IHM - la fenetre en plein ecran, puis
         // rendue comme avant (deja en plein ecran par F11 : elle le reste).
         host.fullScreenWindow = [this, before = std::make_shared<bool>(false)](bool on) {
@@ -1048,6 +1059,7 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         hosts.openIssue = [this](const hmi::Issue& i) { openHmiIssue(i); };   // 1.10 (chantier N) : un resultat de Compiler d'ailleurs
         hosts.exportItems = [this](hmi::Id sc) { askHmiExportPrograms(2, sc); };   // 1.11.2 (decision 174)
         hosts.importAny = [this] { askHmiImport(); };
+        wireHmiBuildHosts(hosts);   // 1.11.13 : Generer, Regenerer, Compiler, Generer et compiler
         pane->setHosts(std::move(hosts));
         // Lot 16 : les variables IHM (dossiers, structures, tableaux, liaison) et les types IHM.
         if (auto* vars = pane->variablesPane()) {
@@ -1179,6 +1191,7 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         };
         hosts.exportItems = [this](hmi::Id f) { askHmiExportPrograms(1, f); };   // 1.11.2 (decision 174)
         hosts.importAny = [this] { askHmiImport(); };
+        wireHmiBuildHosts(hosts);   // 1.11.13
         pane->setHosts(std::move(hosts));
         wireAssist(*pane, app_, [this] { return dynamic_cast<HmiSimulationPane*>(hmiTab("simulation")); });
         page = std::move(pane);
@@ -1554,6 +1567,15 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         page = std::move(pane);
         title = "Versions";
         icon = Icon::History;
+    } else if (key == "sorties") {
+        // 1.11.13 : les sorties du build de l'IHM - son journal, ses diagnostics (double-clic : la source).
+        auto pane = std::make_unique<HmiBuildOutputPane>("hmi.sorties");
+        hmiLinks_ += pane->diagnosticActivated->connect([this](const hmi::pipeline::Diagnostic& d) { openHmiDiagnostic(d); });
+        hmiLinks_ += pane->elementActivated->connect([this](const std::string& k) { openHmiElement(k); });
+        replayHmiBuilds(*pane);
+        page = std::move(pane);
+        title = "IHM \xC2\xB7 Sorties";
+        icon = Icon::Document;
     } else {
         auto info = laterPane(key);
         page = std::make_unique<HmiInfoPane>("hmi." + key, info.title, std::move(info.lines));
@@ -2368,6 +2390,7 @@ void MainAnalysisScreen::openHmiScripts(std::uint64_t viewId, std::uint64_t scri
             HmiScriptsPane::Hosts hosts;
             hosts.compile = [this] { openHmiPane("compiler"); };
             hosts.openIssue = [this](const hmi::Issue& i) { openHmiIssue(i); };   // 1.10 (chantier N)
+            wireHmiBuildHosts(hosts);   // 1.11.13
             made->setHosts(std::move(hosts));
             wireAssist(*made, app_, [this] { return dynamic_cast<HmiSimulationPane*>(hmiTab("simulation")); });
             pane = made.get();

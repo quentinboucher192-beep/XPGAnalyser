@@ -59,6 +59,10 @@
 #include <string>
 #include <vector>
 
+#include "../hmi/HmiBuild.hpp"          // 1.11.13 : le build de l'IHM
+#include "../hmi/HmiBuildPanes.hpp"
+#include "../FilePreview.hpp"
+
 namespace app {
 
 using namespace ui;
@@ -1525,6 +1529,63 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId node, std::vector<PopupMenu::I
         // Compiler, Styles, Essais...) : un onglet chacune.
         if (isHmi) m.add("Ouvrir", Icon::Open, [this, node] { openHmiNode(node); });
         break;
+    }
+
+    // =====================================================================================
+    //  1.11.13 : LE BUILD DE L'IHM (la generation incrementale) - tout ce qui se genere :
+    //  Generer, Regenerer, Compiler, Generer et compiler, les diagnostics, l'artefact,
+    //  Nettoyer. Une entree grisee dit pourquoi (un build tourne, rien a compiler...).
+    // =====================================================================================
+    if (treeModel_ && hmiDoc) {
+        const auto target = treeModel_->hmiBuildTarget(node);
+        if (!target.empty()) {
+            ensureHmiBuild();
+            namespace pl = hmi::pipeline;
+            const bool busy = hmiBuild_ && hmiBuild_->building();
+            const std::string busyWhy = busy ? std::string("un build est d\xC3\xA9j\xC3\xA0 en cours") : std::string{};
+            const std::vector<std::string> scope = target.key.empty() ? target.paths : std::vector<std::string>{target.key};
+            const bool chosen = !target.key.empty();
+            const auto info = hmiBuildInfo(target.key, target.paths);
+            m.separator();
+            m.heading("Build \xC2\xB7 " + clipped(target.label, 40), info.state);
+            const auto run = [this, scope, chosen, label = target.label](pl::Mode mode) {
+                return [this, scope, chosen, label, mode] { (void)runHmiBuild(mode, scope, chosen, std::string(pl::modeLabel(mode)) + " " + label); };
+            };
+            m.add("G\xC3\xA9n\xC3\xA9rer", Icon::Analyze, run(pl::Mode::Generate), {}, busyWhy);
+            m.add("R\xC3\xA9g\xC3\xA9n\xC3\xA9rer", Icon::Refresh, run(pl::Mode::Regenerate), {}, busyWhy);
+            m.add("Compiler", Icon::Code, run(pl::Mode::Compile), {},
+                  busy ? busyWhy : !target.code ? std::string("rien \xC3\xA0 compiler ici (pas de code)") : std::string{});
+            m.add("G\xC3\xA9n\xC3\xA9rer et compiler", Icon::Play, run(pl::Mode::GenerateCompile), {},
+                  busy ? busyWhy : !target.code ? std::string("rien \xC3\xA0 compiler ici : G\xC3\xA9n\xC3\xA9rer suffit") : std::string{});
+            std::vector<Item> more;
+            more.push_back(m.make("Voir les diagnostics (" + std::to_string(info.diagnostics.size()) + ")", Icon::Warning,
+                                  [this] {
+                                      if (auto* out = hmiBuildOutput(true)) out->showTab(1);
+                                  },
+                                  {}, info.diagnostics.empty() ? std::string("aucun diagnostic au dernier build") : std::string{}));
+            const pl::Diagnostic* first = nullptr;
+            for (const auto& d : info.diagnostics)
+                if (d.blocking()) { first = &d; break; }
+            more.push_back(m.make("Aller \xC3\xA0 la premi\xC3\xA8re erreur", Icon::Error,
+                                  first ? std::function<void()>([this, d = *first] { openHmiDiagnostic(d); }) : std::function<void()>{}, {},
+                                  first ? std::string{} : std::string("aucune erreur")));
+            std::string errors;
+            for (const auto& d : info.diagnostics)
+                if (d.blocking())
+                    errors += (d.code.empty() ? std::string{} : d.code + " ") + d.path + (d.line ? ", ligne " + std::to_string(d.line) : std::string{}) + " : " + d.message + "\n";
+            more.push_back(m.make("Copier les erreurs", Icon::Document, errors.empty() ? std::function<void()>{} : copy(errors), {},
+                                  errors.empty() ? std::string("aucune erreur") : std::string{}));
+            const std::string artifact = info.artifact;
+            more.push_back(m.make("Ouvrir l'artefact g\xC3\xA9n\xC3\xA9r\xC3\xA9", Icon::Document,
+                                  artifact.empty() ? std::function<void()>{} : std::function<void()>([this, artifact] {
+                                      const auto why = preview::openWithSystem(artifact);
+                                      if (status_) status_->setTransientMessage(why.empty() ? "Artefact ouvert : " + artifact : "Artefact : " + why, 6.0,
+                                                                                why.empty() ? StatusBar::Severity::Info : StatusBar::Severity::Warning);
+                                  }),
+                                  {}, artifact.empty() ? (target.key.empty() ? std::string("un dossier : choisis un \xC3\xA9l\xC3\xA9ment") : std::string("pas encore g\xC3\xA9n\xC3\xA9r\xC3\xA9")) : std::string{}));
+            more.push_back(m.make("Nettoyer les artefacts", Icon::Close, run(pl::Mode::Clean), {}, busyWhy));
+            m.sub("Build : diagnostics, artefacts", Icon::Analyze, std::move(more));
+        }
     }
 
     // =====================================================================================

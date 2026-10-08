@@ -256,7 +256,7 @@ std::vector<FileEntry> scan(const std::string& projectFolder) {
         std::error_code ec2;
         const std::string rel = fs::relative(it->path(), root, ec2).generic_string();
         if (it->is_directory(ec2)) {
-            if (rel == "versions" || rel == "exports" || rel == "ihm/historique" || rel == "ihm/corbeille") it.disable_recursion_pending();
+            if (rel == "versions" || rel == "exports" || rel == ".xpg" || rel == "ihm/historique" || rel == "ihm/corbeille") it.disable_recursion_pending();   // 1.11.13 : .xpg (le build)
             continue;
         }
         if (!it->is_regular_file(ec2) || !included(rel)) continue;

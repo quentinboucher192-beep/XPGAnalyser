@@ -525,6 +525,32 @@ namespace app {
         //  genere (un script) ; 0 : rien a signaler, ou pas d'etat pour ce noeud.
         enum : std::uint8_t { BuildNotCompiling = 1, BuildNotGenerated = 2 };
         [[nodiscard]] std::uint8_t buildFlags(ui::NodeId) const;
+        //  1.11.13 : LES ETATS DU BUILD DE L'IHM (app/hmi/HmiBuild, la generation
+        //  incrementale). Ce que l'arbre en lit, pose a chaque analyse (jamais
+        //  calcule a l'image) : par element (sa cle : "vue:12", "script:45"...) et
+        //  par dossier (un debut de chemin : "IHM/Vues"), un glyphe, son ton, son
+        //  rang (le pire l'emporte) et l'infobulle. Avec elles, les noeuds de l'IHM
+        //  montrent leur etat de build tout a droite (a la place des icones de
+        //  Compiler / Generer de la 1.11 pour les scripts) ; nullptr : comme avant.
+        struct HmiBuildMarks {
+            struct Mark { std::string glyph; ui::Tone tone{ui::Tone::None}; int rank{0}; std::string tip; };
+            std::unordered_map<std::string, Mark> byKey, byPath;
+            std::unordered_map<std::uint64_t, std::string> viewPaths;   // une vue -> son chemin (ses scripts, animations, actions dessous)
+            std::unordered_map<std::uint64_t, std::string> viewKeys;    // une vue -> sa cle (vue:, popup:, symbole:, modele:)
+        };
+        void setHmiBuildMarks(std::shared_ptr<const HmiBuildMarks> marks) { buildMarks_ = std::move(marks); }
+        [[nodiscard]] const HmiBuildMarks* hmiBuildMarks() const noexcept { return buildMarks_.get(); }
+        //  Ce que designe un noeud pour le build : la cle d'un element, ou des debuts
+        //  de chemin (un dossier) ; `label` : ce que dit le menu ("la vue Vue_Accueil") ;
+        //  `code` : il y a du code dessous (Compiler a un sens). Vide : rien a construire.
+        struct HmiBuildTarget {
+            std::string              key;
+            std::vector<std::string> paths;
+            std::string              label;
+            bool                     code{false};
+            [[nodiscard]] bool empty() const noexcept { return key.empty() && paths.empty(); }
+        };
+        [[nodiscard]] HmiBuildTarget hmiBuildTarget(ui::NodeId) const;
         //  Les versions en bref : le dossier Versions montre le travail en cours
         //  et les kBriefVersions dernieres, puis VersionsMore ; setAllVersions(true) :
         //  toutes (comme avant). Vrai : ca a change.
@@ -676,6 +702,8 @@ namespace app {
         [[nodiscard]] const ConfigCounts& configCounts() const;
         mutable std::optional<ConfigCounts> configCounts_;
         std::shared_ptr<const hmi::build::Cache> buildState_;   // 1.11 (chantier T3, C4)
+        std::shared_ptr<const HmiBuildMarks>     buildMarks_;   // 1.11.13 : les etats du build de l'IHM
+        void buildMark(ui::NodeId, ui::CellStyle&) const;
     };
 
     // --------------------------------------------- library explorer (TreeView) ---

@@ -21,6 +21,8 @@
 // =============================================================================
 #pragma once
 
+#include "../../hmi/HmiPipeline.hpp"   // 1.11.13 : les commandes du build
+
 #include "HmiAssist.hpp"
 #include "HmiPanels.hpp"
 #include "HmiVariablePanes.hpp"
@@ -158,8 +160,18 @@ public:
         // 1.11.2 (decision 174) : Exporter (les elements coches, celui-ci d'avance) et Importer... (tout paquet).
         std::function<void(hmi::Id)>            exportItems;
         std::function<void()>                   importAny;
+        // 1.11.13 : la generation incrementale - Generer, Regenerer, Compiler, Generer et
+        // compiler le script choisi (sa cle : "script:12", "script-vue:30") ; son etat de
+        // build (le libelle de la barre, et l'infobulle : la raison). Sans hote : pas de boutons.
+        std::function<void(hmi::pipeline::Mode, const std::string& key)>           build;
+        std::function<std::pair<std::string, std::string>(const std::string& key)> buildState;
+        std::function<void()>                                                      buildOutputs;   // l'onglet IHM . Sorties
     };
     void setHosts(Hosts h) { hosts_ = std::move(h); }
+    // 1.11.13 : la cle de build du script choisi ("" : aucun) ; l'etat de la barre relu (l'ecran,
+    // a chaque image : rien ne change si l'etat est le meme).
+    [[nodiscard]] std::string buildKey() const;
+    void refreshBuildState();
 
     // Lot 16 : la Programmation generale a trois onglets - les scripts, les
     // variables IHM (dossiers, structures, tableaux, liaison), les types IHM.
@@ -171,6 +183,7 @@ public:
     [[nodiscard]] ui::TabControl*   tabs() noexcept { return tabs_; }
 
     [[nodiscard]] HmiToolStrip&      tools() noexcept { return *tools_; }
+    [[nodiscard]] const std::string& buildStateText() const noexcept { return buildStateText_; }   // 1.11.13
     [[nodiscard]] ui::MultiLineText& editor() noexcept { return *editor_; }
     [[nodiscard]] ui::TableView&     scriptTable() noexcept { return *scripts_; }
     [[nodiscard]] ui::TableView&     variableTable() noexcept { return *variables_; }
@@ -195,6 +208,7 @@ private:
     Apply             apply_;
     hmi::Id           view_;
     Hosts             hosts_;
+    std::string       buildStateText_;   // 1.11.13 : ce que montre la barre (pour ne la refaire qu'au changement)
     HmiToolStrip*     tools_{nullptr};
     ui::TabControl*   tabs_{nullptr};          // lot 16 (la Programmation generale seulement)
     HmiVariablesPane* varsPane_{nullptr};

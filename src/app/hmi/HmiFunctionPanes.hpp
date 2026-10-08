@@ -26,6 +26,8 @@
 // =============================================================================
 #pragma once
 
+#include "../../hmi/HmiPipeline.hpp"   // 1.11.13 : les commandes du build
+
 #include "HmiAssist.hpp"
 #include "HmiPanels.hpp"
 #include "../../core/Command.hpp"
@@ -107,8 +109,17 @@ public:
         // 1.11.2 (decision 174) : Exporter (les elements coches, celui-ci d'avance) et Importer... (tout paquet).
         std::function<void(hmi::Id)>            exportItems;
         std::function<void()>                   importAny;
+        // 1.11.13 : la generation incrementale (comme les scripts) - la fonction choisie
+        // ("fonction:7", ou "fonction-symbole:31" dans un symbole), son etat de build.
+        std::function<void(hmi::pipeline::Mode, const std::string& key)>           build;
+        std::function<std::pair<std::string, std::string>(const std::string& key)> buildState;
+        std::function<void()>                                                      buildOutputs;
     };
     void setHosts(Hosts h) { hosts_ = std::move(h); }
+    [[nodiscard]] const Hosts& hosts() const noexcept { return hosts_; }   // 1.11.13 : les completer (l'ecran)
+    [[nodiscard]] std::string buildKey() const;   // 1.11.13
+    void refreshBuildState();
+    [[nodiscard]] const std::string& buildStateText() const noexcept { return buildStateText_; }
 
     [[nodiscard]] HmiToolStrip&      tools() noexcept { return *tools_; }
     [[nodiscard]] ui::MultiLineText& editor() noexcept { return *editor_; }
@@ -140,6 +151,7 @@ private:
     hmi::DocumentPtr   doc_;
     Apply              apply_;
     Hosts              hosts_;
+    std::string        buildStateText_;   // 1.11.13
     hmi::Id            symbol_{hmi::kNoId};   // 1.11.10 : le symbole dont on edite les fonctions
     HmiToolStrip*      tools_{nullptr};
     ui::Splitter*      split_{nullptr};

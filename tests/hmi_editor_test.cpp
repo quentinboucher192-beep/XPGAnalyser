@@ -15976,13 +15976,14 @@ void centreAide111() {
     // 1.11.10 : 18.
     // 1.11.11 : 19.
     // 1.11.12 : 20.
-    check(hn::releases().size() == 20 && hn::releases().front().version == "1.11.12" && hn::releases()[1].version == "1.11.11"
-              && hn::releases()[2].version == "1.11.10"
-              && hn::releases()[3].version == "1.11.9" && hn::releases()[4].version == "1.11.8"
-              && hn::releases()[5].version == "1.11.7" && hn::releases()[6].version == "1.11.6" && hn::releases()[7].version == "1.11.5"
-              && hn::releases()[8].version == "1.11.4" && hn::releases()[9].version == "1.11.3" && hn::releases()[10].version == "1.11.2"
-              && hn::releases()[11].version == "1.11.1" && hn::releases()[12].version == "1.11" && hn::releases()[13].version == "1.10.4",
-          "notes : 20 versions, la 1.11.12 en tete, puis la 1.11.11 \xC3\xA0 la 1.11, et la 1.10.4");
+    // 1.11.13 : 21.
+    check(hn::releases().size() == 21 && hn::releases().front().version == "1.11.13" && hn::releases()[1].version == "1.11.12"
+              && hn::releases()[2].version == "1.11.11" && hn::releases()[3].version == "1.11.10"
+              && hn::releases()[4].version == "1.11.9" && hn::releases()[5].version == "1.11.8"
+              && hn::releases()[6].version == "1.11.7" && hn::releases()[7].version == "1.11.6" && hn::releases()[8].version == "1.11.5"
+              && hn::releases()[9].version == "1.11.4" && hn::releases()[10].version == "1.11.3" && hn::releases()[11].version == "1.11.2"
+              && hn::releases()[12].version == "1.11.1" && hn::releases()[13].version == "1.11" && hn::releases()[14].version == "1.10.4",
+          "notes : 21 versions, la 1.11.13 en tete, puis la 1.11.12 \xC3\xA0 la 1.11, et la 1.10.4");
     // 1.11.2 (T2, tranches 41, 42 et 44 ; decisions 187, 201 et 216) : 23 lignes en 8 domaines, dont 2 cartes de la fenetre Nouveautes.
     // Tranche 46 (SYM, decision 240) : + Dupliquer dans un symbole (C) et la section Parametres du symbole (N) : 25 lignes.
     {
@@ -16253,7 +16254,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 191,   // 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 196,   // 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -16396,7 +16397,7 @@ void centreAide111() {
     // Integration 1.11 (I111) : la 1.10.4 ajoute objet-vanne-3-voies (La bibliotheque d'objets) : 206.
     // 1.11.1 (T2, decision 107) : Programmer gagne variables-api (API. : les variables de l'automate) : 207.
     check(ix.count(hc::Chapter::Hmi) == 208, "centre : L'IHM a les 208 sujets des chapitres 2 a 8 du guide (1.11.1 : variables-api ; 1.11.2 : paquets-symboles)");
-    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 20, "centre : 11 expressions, 20 notes (1.11.12)");
+    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 21, "centre : 11 expressions, 21 notes (1.11.13)");
     // Tranche 3 : les 11 types de T3 (hmi::exprguide::all(), depot-o), passes par in.expressions ; les
     // cles de la liste de secours sont les siennes (enumeration, pas enum).
     {
@@ -16458,10 +16459,10 @@ void centreAide111() {
         check(o, "page Raccourcis : Ctrl+Maj+O dessine en trois touches, repere 1.11");
 
         const auto n110 = hc::notesPage("1.10");
-        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 20
+        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 21
                   && !n110.summary.empty() && !n110.date.empty(),
               "page Notes : 1.10 -> 1.10.0, 22 lignes en 7 domaines, sa date et son resume");
-        check(hc::notesPage("").version == "1.11.12" && hc::notesPage("9.9").version == "1.11.12",
+        check(hc::notesPage("").version == "1.11.13" && hc::notesPage("9.9").version == "1.11.13",
               "page Notes : sans version (ou inconnue), la plus recente");
         const auto simu = hc::notesPage("1.10.0", "Simulation");
         check(simu.sections.size() == 1 && simu.rows == 4 && simu.domains.size() == 7,
@@ -16805,7 +16806,7 @@ void centreAide111() {
         // Les notes de version n'ont pas de tutoriel : ni la carte "Regarder le tutoriel" (hasTutorial, que
         // lit HelpCenterScreen::showTopic), ni la pastille dans l'arbre. Les autres pages speciales gardent
         // les leurs (T1 ecrit les tutoriels des raccourcis et de Signaler).
-        bool notesSans = ix.count(hc::Chapter::Notes) == 20;   // 1.11.3 a 1.11.12 : une version de plus
+        bool notesSans = ix.count(hc::Chapter::Notes) == 21;   // 1.11.3 a 1.11.13 : une version de plus
         for (const auto* t : ix.ofChapter(hc::Chapter::Notes)) notesSans = notesSans && !hc::hasTutorial(*t);
         const auto* raccourcis = ix.find("page-raccourcis");
         const auto* signaler = ix.find("page-signaler");

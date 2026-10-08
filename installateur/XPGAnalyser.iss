@@ -46,7 +46,7 @@
   #define Editeur "XPGAnalyser"
 #endif
 #ifndef Version
-  #define Version "1.11.12"
+  #define Version "1.11.13"
 #endif
 #ifndef AppGuid
   #define AppGuid "68A57092-419E-4BEF-8486-57B131E9C592"

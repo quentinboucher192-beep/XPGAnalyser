@@ -2303,6 +2303,54 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     //  carte, puis son clic - ce que ferait la souris. Une fenetre qu'un clic ouvre se
     //  ferme (Annuler). Ecrit le nombre de noeuds visites. La 1.11.11 plantait sur un
     //  clic sur Fonctions ou Popups d'un symbole : ce parcours l'aurait trouve.
+    // ---- 1.11.13 : la generation incrementale de l'IHM ----
+    //  ihm-build <mode> [portee] [sans-fenetre] : generer, regenerer, compiler,
+    //    generer-compiler, regenerer-compiler, demarrer, nettoyer ; la portee : une
+    //    cle ("script:12") ou un chemin ("IHM/Vues") ; la fenetre de progression
+    //    s'ouvre tout de suite (sauf sans-fenetre).
+    //  ihm-build-attendre [secondes] : jusqu'a la fin du build (et du demarrage qui suit).
+    //  ihm-build-etat [texte] : l'etat dans le journal ; avec un texte, il doit y etre.
+    //  ihm-sorties [diagnostics] : l'onglet IHM . Sorties (ou ses diagnostics).
+    //  ihm-script-modifier <script> <ligne> : une ligne ajoutee au script (une commande).
+    if (cmd == "ihm-build" || cmd == "ihm-build-attendre" || cmd == "ihm-build-etat" || cmd == "ihm-sorties" || cmd == "ihm-script-modifier") {
+        auto* screen = dynamic_cast<MainAnalysisScreen*>(app_.menus().top());
+        if (screen) buildScreen_ = screen;
+        // la fenetre de progression est devant : l'ecran est dessous (le meme, il ne part pas)
+        else if ((cmd == "ihm-build-attendre" || cmd == "ihm-build-etat") && app_.menus().depth() >= 2) screen = buildScreen_;
+        if (!screen) {
+            if (cmd == "ihm-build-attendre") { retries_ = 0; return Step::Retry; }
+            fail(cmd + " : pas d'\xC3\xA9" "cran d'analyse");
+            return Step::Next;
+        }
+        if (cmd == "ihm-build") {
+            std::string why;
+            if (!screen->scriptHmiBuild(arg(1), arg(2) == "sans-fenetre" ? std::string{} : arg(2), arg(2) != "sans-fenetre" && arg(3) != "sans-fenetre", &why))
+                fail("ihm-build " + arg(1) + " : " + why);
+            return Step::Yield;
+        }
+        if (cmd == "ihm-build-attendre") {
+            if (screen->hmiBuildBusy()) {
+                const double limit = arg(1).empty() ? 120.0 : std::max(1.0, static_cast<double>(num(1)));
+                if (static_cast<double>(retries_) / 60.0 < limit) return Step::Retry;
+                fail("ihm-build-attendre : le build ne finit pas");
+            }
+            std::printf("[script] build IHM : %s\n", screen->hmiBuildSummary().c_str());
+            return Step::Next;
+        }
+        if (cmd == "ihm-build-etat") {
+            const auto text = screen->hmiBuildSummary();
+            std::printf("[script] build IHM : %s\n", text.c_str());
+            if (!arg(1).empty() && text.find(arg(1)) == std::string::npos) fail("ihm-build-etat : \"" + arg(1) + "\" absent de : " + text);
+            return Step::Next;
+        }
+        if (cmd == "ihm-sorties") {
+            screen->showHmiBuildOutputs(arg(1) == "diagnostics" ? 1 : 0);
+            return Step::Yield;
+        }
+        std::string why;
+        if (!screen->scriptHmiEditScript(arg(1), arg(2), &why)) fail("ihm-script-modifier : " + why);
+        return Step::Yield;
+    }
     if (cmd == "arbre-parcourir") {
         // Une fenetre ouverte par le noeud precedent : Annuler, puis on reprend.
         if (crawling_ && !dynamic_cast<MainAnalysisScreen*>(app_.menus().top())) {

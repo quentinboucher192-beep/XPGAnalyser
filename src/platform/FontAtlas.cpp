@@ -153,6 +153,32 @@ bool symbolShape(char32_t code, SymbolShape& s) {
     case 0x22EF: return box(1.15f, 0.3f, { discP({0.14f, 0.5f}, 0.45f), discP({0.5f, 0.5f}, 0.45f), discP({0.86f, 0.5f}, 0.45f) });
     case 0x232B: return box(1.25f, 0.88f, { loopP({{0.3f, 0.06f}, {0.97f, 0.06f}, {0.97f, 0.94f}, {0.3f, 0.94f}, {0.03f, 0.5f}}, 0.8f),
                                             lineP({{0.5f, 0.3f}, {0.78f, 0.7f}}), lineP({{0.78f, 0.3f}, {0.5f, 0.7f}}) });
+    // 1.11.13 : les etats du build de l'IHM - ◌ non genere (un cercle en pointilles),
+    // ⚙ generation en cours (une roue dentee), ◔ compilation en cours (un quart plein),
+    // ⛓ dependance invalide (deux maillons), ⏱ obsolete (un chronometre)
+    case 0x25CC: {
+        s.w = 0.8f; s.h = 0.8f;
+        for (int k = 0; k < 8; ++k) {
+            const float a = static_cast<float>(k) * kPi / 4.f;
+            s.prims.push_back(discP({0.5f + 0.42f * std::cos(a), 0.5f + 0.42f * std::sin(a)}, 0.085f));
+        }
+        return true;
+    }
+    case 0x2699: {
+        s.w = 0.95f; s.h = 0.95f;
+        s.prims.push_back(ringP({0.5f, 0.5f}, 0.3f, 1.25f));
+        for (int k = 0; k < 8; ++k) {
+            const float a = static_cast<float>(k) * kPi / 4.f;
+            s.prims.push_back(lineP({{0.5f + 0.3f * std::cos(a), 0.5f + 0.3f * std::sin(a)}, {0.5f + 0.47f * std::cos(a), 0.5f + 0.47f * std::sin(a)}}, 1.3f));
+        }
+        return true;
+    }
+    case 0x25D4: return box(0.85f, 0.85f, { ringP({0.5f, 0.5f}, 0.5f), fillP({{0.5f, 0.5f}, {0.5f, 0.02f}, {0.7f, 0.06f}, {0.86f, 0.16f}, {0.95f, 0.32f}, {0.98f, 0.5f}}) });
+    case 0x26D3: return box(1.05f, 0.95f, { loopP({{0.06f, 0.62f}, {0.32f, 0.36f}, {0.5f, 0.54f}, {0.24f, 0.8f}}, 0.95f),
+                                            loopP({{0.5f, 0.46f}, {0.76f, 0.2f}, {0.94f, 0.38f}, {0.68f, 0.64f}}, 0.95f),
+                                            lineP({{0.37f, 0.63f}, {0.63f, 0.37f}}, 0.95f) });
+    case 0x23F1: return box(0.9f, 1.0f, { ringP({0.5f, 0.56f}, 0.42f, 1.f), lineP({{0.5f, 0.56f}, {0.5f, 0.32f}}), lineP({{0.5f, 0.56f}, {0.68f, 0.66f}}),
+                                          lineP({{0.4f, 0.04f}, {0.6f, 0.04f}}), lineP({{0.5f, 0.04f}, {0.5f, 0.14f}}) });
     // espaces fines, puis largeur nulle
     case 0x2009: case 0x202F: s.space = 0.5f; return true;
     case 0x200A:              s.space = 0.25f; return true;

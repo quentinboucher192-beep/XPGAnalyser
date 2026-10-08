@@ -156,6 +156,7 @@ private:
     std::size_t              pc_{0};
     int                      wait_{0};
     int                      retries_{0};
+    class MainAnalysisScreen* buildScreen_{nullptr};   // 1.11.13 : l'ecran sous la fenetre de progression
     // Lot 14 : attendre en temps reel (la liaison Modbus vit a l'horloge du
     // poste, pas a celle, fixe, de la session) : l'echeance en cours.
     double                   realUntil_{-1};

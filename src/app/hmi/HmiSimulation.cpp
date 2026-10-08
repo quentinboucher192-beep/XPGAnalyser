@@ -2989,6 +2989,10 @@ void HmiSimulationPane::ensureStarted(double now) {
     }
     runtime_.bind(&doc_->project, link ? link : static_cast<sim::Environment*>(rt));
     if (!started_) {
+        // 1.11.13 : pas de demarrage sans build valide (l'hote le lance ; buildDone suit).
+        if (!askBuild(gateSource_.empty() ? std::string("d\xC3\xA9marrage") : gateSource_)) return;
+        gateOpen_ = false;
+        blockedNote_.clear();
         started_ = true;
         // 1.9 : les choix de la page Simulation durent jusqu'au redemarrage de l'IHM.
         if (auto* eq = host_.equipments ? host_.equipments() : nullptr) eq->clearRuntimeChoices();
@@ -3044,6 +3048,7 @@ void HmiSimulationPane::goToView(Id view) {
     // 1.10 : l'IHM arretee - choisir une vue la demarre, et on le dit.
     if (!started_ && !autoStart_ && doc_->project.view(view)) startHmi("choix de la vue " + doc_->project.view(view)->name);
     ensureStarted(now_);
+    if (!started_) return;   // 1.11.13 : le build d'abord
     if (!doc_->project.view(view)) return;
     (void)runtime_.navigate(view, hmi::Transition{}, now_);
     refreshPane();
@@ -3177,10 +3182,47 @@ void HmiSimulationPane::run(core::ActionId id) {
 void HmiSimulationPane::refreshNow() { refreshPane(); }
 
 // ======================================= 1.10 : l'IHM et l'API independantes ===
+// 1.11.13 : vrai - on peut demarrer (pas de build demande par l'hote, ou il est valide).
+bool HmiSimulationPane::askBuild(const std::string& source) {
+    if (!host_.buildGate || gateOpen_) return true;
+    if (!waitingBuild_) {
+        waitingBuild_ = true;
+        gateSource_ = source;
+        status_->setTransientMessage("D\xC3\xA9marrage : build de l'IHM\xE2\x80\xA6 (seul ce qui a chang\xC3\xA9 est refait)", 4.0);
+        host_.buildGate(source);   // l'hote rappelle buildDone, tout de suite ou a la fin du build
+    }
+    return false;
+}
+
+void HmiSimulationPane::buildDone(bool ok, const std::string& why) {
+    if (!waitingBuild_) return;
+    waitingBuild_ = false;
+    if (!ok) {
+        autoStart_ = false;   // arretee : elle le reste jusqu'a Demarrer
+        blockedNote_ = "D\xC3\xA9marrage bloqu\xC3\xA9 : " + why + "\nCorrige (IHM \xC2\xB7 Sorties, double-clic : la source), puis D\xC3\xA9marrer l'IHM.";
+        runtime_.log("Simulation", "IHM", "D\xC3\xA9marrage bloqu\xC3\xA9 : " + why);
+        status_->setTransientMessage("D\xC3\xA9marrage bloqu\xC3\xA9 : " + why, 10.0, ui::StatusBar::Severity::Error);
+        gateSource_.clear();
+        refreshPane();
+        return;
+    }
+    gateOpen_ = true;
+    const std::string source = gateSource_.empty() ? std::string("build valide") : gateSource_;
+    gateSource_.clear();
+    startHmi(source);
+    gateOpen_ = false;
+}
+
 void HmiSimulationPane::startHmi(const std::string& source) {
     if (started_) return;
+    if (host_.buildGate && !gateOpen_) {   // 1.11.13 : le build d'abord
+        (void)askBuild(source);
+        refreshBar();
+        return;
+    }
     const bool plcPrepared = host_.runtime && host_.runtime();
     ensureStarted(now_);
+    if (!started_) return;
     runtime_.log("Simulation", "IHM", "IHM d\xC3\xA9marr\xC3\xA9" "e" + (source.empty() ? std::string{} : " (" + source + ")"));
     // Rien ne demarre l'autre en cachette : ce que l'IHM lit, dit tout de suite.
     const std::string plc = plcStateText();
@@ -3545,6 +3587,19 @@ void HmiSimulationPane::refreshPane() {
     }
     // 1.10 : l'IHM arretee ne tourne pas - la derniere image reste, sous un voile ;
     // la barre et la ligne d'etat disent les deux etats.
+    // 1.11.13 : le demarrage attend son build (la fenetre de progression le suit).
+    if (!started_ && waitingBuild_) {
+        refreshBar();
+        canvas_->setStoppedNote("Build de l'IHM en cours\xE2\x80\xA6\nLa simulation d\xC3\xA9marre d\xC3\xA8s qu'il est valide.");
+        status_->setMessage("Build en cours avant le d\xC3\xA9marrage\xE2\x80\xA6", ui::StatusBar::Severity::Info);
+        return;
+    }
+    if (!started_ && !autoStart_ && !blockedNote_.empty()) {
+        refreshBar();
+        canvas_->setStoppedNote(blockedNote_);
+        status_->setMessage("D\xC3\xA9marrage bloqu\xC3\xA9 \xC2\xB7 API " + plcStateText(), ui::StatusBar::Severity::Error);
+        return;
+    }
     if (!started_ && !autoStart_) {
         refreshBar();
         // (les mots de la maquette 1.10, scene 3)
@@ -3557,6 +3612,12 @@ void HmiSimulationPane::refreshPane() {
                                                                 : "L'API aussi est arr\xC3\xAAt\xC3\xA9" "e.\n";
         canvas_->setStoppedNote(std::string("L'IHM est arr\xC3\xAAt\xC3\xA9" "e\n") + plcLine + "D\xC3\xA9marrer l'IHM (barre ci-dessus), ou Les deux.");
         status_->setMessage("IHM arr\xC3\xAAt\xC3\xA9" "e  \xC2\xB7  API " + plcStateText(), ui::StatusBar::Severity::Info);
+        return;
+    }
+    if (!started_ && host_.buildGate && !gateOpen_) {   // 1.11.13 : l'onglet qui s'ouvre demarre par le build
+        (void)askBuild("ouverture de l'onglet");
+        canvas_->setStoppedNote("Build de l'IHM en cours\xE2\x80\xA6\nLa simulation d\xC3\xA9marre d\xC3\xA8s qu'il est valide.");
+        refreshBar();
         return;
     }
     canvas_->setStoppedNote({});
