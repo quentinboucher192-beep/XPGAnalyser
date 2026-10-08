@@ -712,6 +712,7 @@ private:
     bool                  retainPending_{false};
     int                   retainIgnored_{0};
     bool                  retainLockHeld_{false};            // ce poste ecrit le stockage (le verrou)
+    bool                  retainLockError_{false};           // sinon : le dossier est inaccessible (pas un autre poste)
     std::string           retainLockOwner_{};                // sinon : qui l'ecrit
     double                retainLockAt_{-1.0};               // le dernier rafraichissement (ou essai)
     void                  loadRetained();

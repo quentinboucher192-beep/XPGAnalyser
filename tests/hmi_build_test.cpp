@@ -20,6 +20,7 @@
 #include "../src/hmi/HmiEdit.hpp"
 #include "../src/hmi/HmiModel.hpp"
 #include "../src/hmi/HmiPipeline.hpp"
+#include "../src/hmi/HmiScript.hpp"   // 1.11.16 : renameFunctionEverywhere (la commande Renommer)
 
 #include <algorithm>
 #include <atomic>
@@ -31,6 +32,7 @@
 #include <set>
 #include <string>
 #include <thread>
+#include <unordered_map>
 #include <vector>
 
 #ifndef _WIN32
@@ -428,6 +430,83 @@ void fonctionIhm() {
     b.script(b.scriptInit).body = "Debit := Moyenne3(1.0, 3.0);\nCompteur := 0;";
     const auto r2 = b.build(pl::Mode::Start);
     check(r2.ok && b.state(init) == pl::State::UpToDate, "l'appel renomme : Init se recompile sans erreur");
+    // 1.11.16 : LA VRAIE COMMANDE Renommer (les appels suivent partout), puis le build incremental.
+    const std::size_t followed = renameFunctionEverywhere(b.p, "Moyenne3", "Moyenne_Ponderee");
+    for (auto& f : b.p.programs.functions)
+        if (f.name == "Moyenne3") f.name = "Moyenne_Ponderee";
+    check(followed >= 2 && contains(b.script(b.scriptInit).body, "Moyenne_Ponderee(1.0, 3.0)")
+              && contains(b.p.programs.functions[0].body, "Moyenne_Ponderee := "),
+          "Renommer (la commande) : l'appel de Init et le retour du corps suivent (" + std::to_string(followed) + " textes)");
+    {
+        const auto a = b.analysis();
+        const auto* it = a.item(fn);
+        check(it && it->status == pl::Status::Renamed, "... la fonction est Renommee dans l'arbre, tout de suite");
+    }
+    const auto r3 = b.build(pl::Mode::Start);
+    check(r3.ok && b.generated().count(fn) && b.generated().count(init) && b.state(init) == pl::State::UpToDate && b.state(fn) == pl::State::UpToDate,
+          "renommee par la commande : la fonction et son appelant refaits, sans erreur (" + join(b.generated()) + ")");
+}
+
+// 1.11.16 : un appel invalide a IHM_LOG fait echouer le build (une erreur bloquante, sur sa
+// ligne, qui dit les niveaux permis) ; corrige, le build passe.
+void ihmLogInvalide() {
+    std::printf("-- IHM_LOG : un appel invalide fait echouer le build ; corrige, il passe\n");
+    Bench b;
+    fill(b);
+    (void)b.build(pl::Mode::Start);
+    const std::string init = key(pl::ElementKind::Script, b.scriptInit);
+    const std::string before = b.script(b.scriptInit).body;
+    b.script(b.scriptInit).body = before + "\nIHM_LOG(BLABLA, 'x');";
+    const auto r = b.build(pl::Mode::Start);
+    const pl::Diagnostic* bad = nullptr;
+    for (const auto& d : r.diagnostics)
+        if (!bad && d.element == init && d.blocking() && contains(d.message, "BLABLA")) bad = &d;
+    check(!r.ok && bad, "IHM_LOG(BLABLA, 'x') : le build \xC3\xA9" "choue, une erreur bloquante sur Init");
+    check(bad && bad->line == 3 && contains(bad->message, "niveau"), "... sur sa ligne (3), qui dit le niveau attendu (" + (bad ? bad->message : std::string("?")) + ")");
+    check(b.state(init) == pl::State::CompilationFailed, "Init : Compilation \xC3\xA9" "chou\xC3\xA9" "e dans l'arbre");
+    b.script(b.scriptInit).body = before + "\nIHM_LOG(INFO, 'Init : {Compteur}');";
+    const auto r2 = b.build(pl::Mode::Start);
+    check(r2.ok && b.state(init) == pl::State::UpToDate, "IHM_LOG(INFO, 'Init : {Compteur}') : le build passe");
+}
+
+// 1.11.16 : LA REGLE DE L'ARRET SUR MODIFICATION (pl::runChange ; l'ecran l'applique a
+// chaque analyse pendant la marche) - ce qui l'arrete, ce qui ne l'arrete pas, la carte.
+void arretSurModification() {
+    std::printf("-- la regle de l'arret sur modification : ce qui arrete la simulation, ce qui ne l'arrete pas\n");
+    Bench b;
+    fill(b);
+    (void)b.build(pl::Mode::Start);
+    const auto start = b.analysis();
+    const auto prints = pl::runPrints(start);
+    std::unordered_map<std::string, std::string> paths;
+    for (const auto& e : start.elements) paths[e.key] = e.path;
+    check(prints.size() == start.elements.size() && !prints.empty(), "une empreinte d'ex\xC3\xA9" "cution par \xC3\xA9l\xC3\xA9ment au d\xC3\xA9marrage");
+    auto c = pl::runChange(prints, paths, b.analysis(), true);
+    check(!c.stop && c.changed.empty() && c.removed.empty(), "rien de chang\xC3\xA9 : la simulation continue");
+    b.script(b.scriptInit).description = "autre";
+    b.view(b.vueMes).description = "autre";
+    c = pl::runChange(prints, paths, b.analysis(), true);
+    check(!c.stop && c.changed.empty(), "une description (un script, une vue) : la simulation continue");
+    b.script(b.scriptCycle).body = "Compteur := Compteur + 2;";
+    c = pl::runChange(prints, paths, b.analysis(), true);
+    check(c.stop && c.changed == std::vector<std::string>{key(pl::ElementKind::ViewScript, b.scriptCycle)} && c.compile == 1 && c.generate == 0,
+          "un script modifi\xC3\xA9 par le d\xC3\xA9veloppeur : arr\xC3\xAAt, 1 \xC3\xA0 compiler");
+    check(c.head == "1 \xC3\xA9l\xC3\xA9ment modifi\xC3\xA9 : 1 \xC3\xA0 compiler" && contains(c.card, "\xC2\xB7 Cycle (Script de vue, \xC3\xA0 compiler)"),
+          "la carte : " + c.head + " / " + c.card);
+    c = pl::runChange(prints, paths, b.analysis(), false);
+    check(!c.stop && !c.changed.empty(), "le m\xC3\xAAme changement \xC3\xA9" "crit par la simulation (une recette, un utilisateur) : elle continue");
+    b.view(b.vueAide).object(b.texteAide)->set("x", "70");
+    c = pl::runChange(prints, paths, b.analysis(), true);
+    check(c.stop && c.compile == 1 && c.generate == 1 && c.head == "2 \xC3\xA9l\xC3\xA9ments modifi\xC3\xA9s : 1 \xC3\xA0 compiler, 1 \xC3\xA0 g\xC3\xA9n\xC3\xA9rer",
+          "un script et une vue : " + c.head);
+    std::erase_if(b.p.alarms, [&b](const AlarmDef& a) { return a.id == b.alarme; });
+    b.script(b.scriptInit).body += "\n(* encore *)";
+    b.script(b.scriptMes).body = "Mode := 'Autre';";
+    c = pl::runChange(prints, paths, b.analysis(), true);
+    const std::size_t total = c.changed.size() + c.removed.size();
+    check(c.stop && c.removed.size() == 1 && c.changed.size() >= 4 && contains(c.card, "\xE2\x80\xA6 et " + std::to_string(total - 3) + " autre(s)")
+              && c.paths.size() == total && contains(c.paths.back(), "(supprim\xC3\xA9)"),
+          "des modifi\xC3\xA9s et l'alarme supprim\xC3\xA9" "e : 3 lignes sur la carte, \xC2\xAB \xE2\x80\xA6 et N autre(s) \xC2\xBB, tous les chemins pour les Sorties (" + c.head + ")");
 }
 
 // suppression d'un symbole utilise
@@ -884,6 +963,8 @@ int main(int argc, char** argv) {
     unSeulScriptEtUneVue();
     variableApi();
     fonctionIhm();
+    ihmLogInvalide();               // 1.11.16
+    arretSurModification();         // 1.11.16
     suppressionSymbole();
     echecEtCorrection();
     commandes();

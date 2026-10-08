@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.11.16", "09/10/2026", "livr\xC3\xA9" "e le 09/10 dans la nuit"},
     {"1.11.15", "08/10/2026", "livr\xC3\xA9" "e le 08/10 dans la nuit"},
     {"1.11.14", "08/10/2026", "livr\xC3\xA9" "e le 08/10 dans la soir\xC3\xA9" "e"},
     {"1.11.13", "08/10/2026", "livr\xC3\xA9" "e le 08/10 au soir"},
@@ -94,6 +95,20 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.11.16 (09/10/2026 dans la nuit) : la remanence d'exploitation par variable, la robustesse
+        // (lot 4 de la specification du 08/10).
+        note("1.11.16", "\xC3\x89" "diteur IHM", Kind::New,
+         "Variables IHM : la case R\xC3\x89MANENTE (une colonne de la table, et la fiche). Coch\xC3\xA9" "e, sur le POSTE D'EXPLOITATION, la valeur de la variable est gard\xC3\xA9" "e \xC3\xA0 chaque changement (au plus une \xC3\xA9" "criture par seconde, d'un bloc, sans attendre l'arr\xC3\xAAt) et rendue au lancement suivant, apr\xC3\xA8s les valeurs initiales et avant les scripts de D\xC3\xA9marrage. La simulation de l'\xC3\xA9" "diteur n'y \xC3\xA9" "crit jamais : sa r\xC3\xA9manence reste \xC3\xA0 part (.xpg/simulation), celle du poste a son propre fichier (ihm/historique). Une variable li\xC3\xA9" "e \xC3\xA0 un \xC3\xA9quipement n'en a pas besoin : l'\xC3\xA9quipement garde sa valeur.",
+         "variables-ihm", ""),
+        note("1.11.16", "\xC3\x89" "diteur IHM", Kind::New,
+         "La fiche \xC2\xAB R\xC3\xA9manence (exploitation) \xC2\xBB d'une variable : valeur initiale, valeur actuelle, derni\xC3\xA8re valeur sauvegard\xC3\xA9" "e, sa date, l'\xC3\xA9tat (\xC3\xA0 jour, type chang\xC3\xA9 : converti ou valeur initiale, jamais sauvegard\xC3\xA9" "e) et le fichier. Au clic droit : R\xC3\xA9initialiser cette variable r\xC3\xA9manente (ou toutes), Exporter et Importer les valeurs (un tableau CSV pour Excel, ou le format du poste), Afficher l'emplacement du stockage, V\xC3\xA9rifier l'int\xC3\xA9grit\xC3\xA9 des donn\xC3\xA9" "es.",
+         "variables-ihm", ""),
+        note("1.11.16", "Simulation IHM", Kind::New,
+         "Un seul poste \xC3\xA9" "crit les variables r\xC3\xA9manentes d'un projet : un second poste lanc\xC3\xA9 sur le m\xC3\xAAme projet les lit sans les \xC3\xA9" "crire (le journal le dit) et prend la rel\xC3\xA8ve quand le premier s'arr\xC3\xAAte ; un poste arr\xC3\xAAt\xC3\xA9 brutalement ne bloque rien plus de 3 minutes. Une \xC3\xA9" "criture qui \xC3\xA9" "choue (disque plein, dossier refus\xC3\xA9) est dite au journal et r\xC3\xA9" "essay\xC3\xA9" "e 5 s plus tard ; un fichier coup\xC3\xA9 par une panne est refus\xC3\xA9 et sa copie de secours reprise.",
+         "simulation", ""),
+        note("1.11.16", "Simulation IHM", Kind::Fixed,
+         "Le poste d'exploitation relanc\xC3\xA9 apr\xC3\xA8s un arr\xC3\xAAt brutal recharge l'\xC3\xA9tat d'avant (pris toutes les 10 s) : il ne fait plus reculer une variable r\xC3\xA9manente, dont la valeur gard\xC3\xA9" "e, plus r\xC3\xA9" "cente, l'emporte.",
+         "simulation", ""),
         // 1.11.15 (08/10/2026 dans la nuit) : le cycle de la simulation et la remanence de simulation
         // (lot 3 de la specification du 08/10).
         note("1.11.15", "Simulation IHM", Kind::New,

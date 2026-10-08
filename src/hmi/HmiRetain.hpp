@@ -96,7 +96,8 @@ std::size_t reset(Store& store, Id variable);
 //  lockedBy : qui le tient (vide : personne d'autre, ou un verrou perime).
 struct Lock {
     bool        held{false};
-    std::string owner;       // "PID 4120, depuis 2026-10-08 21:10:05"
+    std::string owner;       // un autre poste : "PID 4120, depuis 2026-10-08 21:10:05"
+    std::string error;       // ou le verrou ne s'ecrit pas (dossier refuse, disque plein) : pourquoi
 };
 [[nodiscard]] Lock        acquireLock(const std::filesystem::path& file);
 void                      refreshLock(const std::filesystem::path& file);

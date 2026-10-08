@@ -63,6 +63,7 @@
 #include "../src/app/hmi/HmiDisplayPanes.hpp"
 #include "../src/app/hmi/HmiScriptPanes.hpp"
 #include "../src/app/hmi/HmiSimulation.hpp"
+#include "../src/app/hmi/HmiBuildPanes.hpp"         // 1.11.16 : le double-clic vers la source
 #include "../src/app/hmi/HmiSimVarTree.hpp"   // 1.11.5
 #include "../src/app/ExportTarget.hpp"                 // lot API 8 : les exports qui demandent ou
 #include "../src/app/hmi/HmiPaneKit.hpp"
@@ -3893,6 +3894,49 @@ void remanence1116() {
         check(station.retainLockHeld() && stored() == 30 && logged(station, "est libre"), "l'autre arr\xC3\xAAt\xC3\xA9 : la rel\xC3\xA8ve (le verrou pris, 30 \xC3\xA9" "crit)");
         station.command("hmi.stop");
     }
+    // ---- Une ecriture qui echoue (disque plein, acces refuse) : le dernier fichier valide reste,
+    //      l'etat et le journal le disent, un nouvel essai 5 s plus tard ----
+    {
+        app::HmiSimulationPane station("station1116d", doc, host());
+        station.setStationMode(true);
+        station.setBounds({0, 0, 1200, 800});
+        station.layout();
+        station.refreshAt(0.0);
+        check(station.retainLockHeld() && value(station, "Compteur") == 30, "relanc\xC3\xA9 : Compteur = 30, le verrou pris");
+        const fs::path tmp = file.string() + ".tmp";
+        fs::create_directories(tmp, ec);   // le fichier temporaire ne peut plus s'ecrire
+        (void)station.runtime().callScript("Plus", 0.1, &why);
+        station.refreshAt(1.2);
+        check(stored() == 30 && station.retainState().find("\xC3\xA9" "criture en \xC3\xA9" "chec") != std::string::npos
+                  && logged(station, "nouvel essai dans 5 s"),
+              "l'\xC3\xA9" "criture \xC3\xA9" "choue : le dernier fichier valide reste (30), l'\xC3\xA9tat et le journal le disent (" + station.retainState() + ")");
+        fs::remove_all(tmp, ec);
+        station.refreshAt(3.0);
+        check(stored() == 30, "avant 5 s : pas de nouvel essai");
+        station.refreshAt(6.5);
+        check(stored() == 35 && station.retainState().find("\xC3\xA9" "crites le") != std::string::npos, "5 s plus tard : r\xC3\xA9\xC3\xA9" "crit (35)");
+        station.command("hmi.stop");
+    }
+    // ---- Le dossier du stockage inaccessible : le poste demarre, dit qu'il ne garde rien ----
+    {
+        const fs::path other = dir / "autre";
+        fs::create_directories(other / "ihm", ec);
+        {
+            std::ofstream f(other / "ihm" / "historique", std::ios::binary | std::ios::trunc);
+            f << "un fichier, pas un dossier";
+        }
+        app::HmiSimulationHost h;
+        h.retainFile = [&] { return hmi::retain::fileOf(other.string()).string(); };
+        app::HmiSimulationPane station("station1116e", doc, h);
+        station.setStationMode(true);
+        station.setBounds({0, 0, 1200, 800});
+        station.layout();
+        station.refreshAt(0.0);
+        check(station.hmiRunning() && !station.retainLockHeld() && station.retainState().find("dossier inaccessible") != std::string::npos
+                  && logged(station, "inaccessible"),
+              "le dossier inaccessible : le poste d\xC3\xA9marre quand m\xC3\xAAme et dit qu'il ne garde rien (" + station.retainState() + ")");
+        station.command("hmi.stop");
+    }
     // ---- L'editeur des variables : la colonne, la fiche, les commandes ----
     core::CommandStack stack;
     auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
@@ -3920,10 +3964,10 @@ void remanence1116() {
         return std::string("?");
     };
     vars.selectVariable(compteur);
-    check(fiche("R\xC3\xA9manente") == "TRUE" && fiche("Derni\xC3\xA8re valeur sauvegard\xC3\xA9" "e") == "30" && fiche("Date de derni\xC3\xA8re sauvegarde") != "\xE2\x80\x94"
+    check(fiche("R\xC3\xA9manente") == "TRUE" && fiche("Derni\xC3\xA8re valeur sauvegard\xC3\xA9" "e") == "35" && fiche("Date de derni\xC3\xA8re sauvegarde") != "\xE2\x80\x94"
               && fiche("\xC3\x89tat de sauvegarde").find("\xC3\xA0 jour") != std::string::npos && fiche("Valeur initiale") == "0"
               && fiche("Stockage") == file.string(),
-          "la fiche : R\xC3\xA9manente, 30 gard\xC3\xA9, sa date, \xC3\xA0 jour, la valeur initiale, le fichier");
+          "la fiche : R\xC3\xA9manente, 35 gard\xC3\xA9, sa date, \xC3\xA0 jour, la valeur initiale, le fichier");
     check(fiche("Valeur actuelle").find("simulation arr\xC3\xAAt\xC3\xA9" "e") != std::string::npos, "valeur actuelle : la simulation est arr\xC3\xAAt\xC3\xA9" "e (pas de fausse valeur)");
     // La case : cocher, decocher (une commande, Ctrl+Z) ; une variable liee : refusee.
     check(vars.setRetain(libre, true, &why) && p.variableById(libre)->retain && cellOfVar(libre, 6) == "oui", "Libre coch\xC3\xA9" "e");
@@ -3953,8 +3997,8 @@ void remanence1116() {
         std::ifstream in(csv, std::ios::binary);
         std::stringstream text;
         text << in.rdbuf();
-        check(text.str().rfind("\xEF\xBB\xBF" "Variable;Chemin;Type;Valeur;Date;", 0) == 0 && text.str().find("Compteur;;INT;30;") != std::string::npos,
-              "le CSV : BOM, titres, Compteur;;INT;30");
+        check(text.str().rfind("\xEF\xBB\xBF" "Variable;Chemin;Type;Valeur;Date;", 0) == 0 && text.str().find("Compteur;;INT;35;") != std::string::npos,
+              "le CSV : BOM, titres, Compteur;;INT;35");
     }
     {
         std::ofstream out(dir / "exports" / "a_importer.csv", std::ios::binary | std::ios::trunc);
@@ -3988,6 +4032,89 @@ void remanence1116() {
     }
     check(!vars.importRetained(csv, &why) && why.find("PID 999999") != std::string::npos, "un poste d'un autre processus en marche : refus\xC3\xA9 (" + why + ")");
     fs::remove_all(dir, ec);
+}
+
+// 1.11.16 : LE DOUBLE-CLIC VERS LA SOURCE (§ 19) - une ligne des Diagnostics, une ligne
+// des Sorties qui nomme un element, une ligne de la Console : le panneau du bas dit a
+// l'ecran ce qu'il faut ouvrir (l'element, le script, sa ligne) ; l'ecran l'ouvre.
+void sources1116() {
+    std::printf("1.11.16 : le double-clic d'un diagnostic, d'une sortie, d'une ligne de Console vers sa source\n");
+    namespace pl = hmi::pipeline;
+    app::HmiBuildOutputPane out("out1116");
+    const gfx::Rect area{0, 0, 1200, 320};
+    out.setBounds(area);
+    out.layout();
+    Recorder rec;
+    const auto theme = ui::Theme::dark();
+    const auto paint = [&] {
+        rec.clear();
+        out.layout();
+        out.render(ui::PaintContext{rec, theme, area, 0.0, nullptr});
+    };
+    pl::Report rep;
+    rep.errors = 1;
+    pl::Diagnostic d;
+    d.severity = pl::Severity::Error;
+    d.code = "S0201";
+    d.message = "Inconnue n'existe pas";
+    d.category = "Script";
+    d.element = "script:42";
+    d.path = "IHM/Programmation g\xC3\xA9n\xC3\xA9rale/Scripts/Init";
+    d.line = 3;
+    d.step = "Compilation";
+    d.script = 42;
+    rep.diagnostics = {d};
+    rep.log = {pl::LogLine{pl::Severity::Error, "Compilation", "Init : 1 erreur (ligne 3)", "script:42", 3, 0}};
+    out.addReport(rep, pl::Request{pl::Mode::Compile, {}, false}, 0.4);
+    const auto dbl = [&](ui::TableView& t, std::size_t row) {
+        paint();
+        gfx::Rect rr{};
+        bool ok = false;
+        for (std::size_t i = 0; i < t.visibleRowCount() && !ok; ++i)
+            if (t.viewRow(i) == static_cast<ui::RowIndex>(row)) ok = t.rowRect(i, rr);
+        if (!ok) return false;
+        const gfx::Point at{rr.x + 60.f, rr.y + rr.h * 0.5f};
+        t.dispatch(ui::MouseDown{at, ui::MouseButton::Left, 1, {}});
+        t.dispatch(ui::MouseUp{at, ui::MouseButton::Left, {}});
+        t.dispatch(ui::MouseDown{at, ui::MouseButton::Left, 2, {}});
+        t.dispatch(ui::MouseUp{at, ui::MouseButton::Left, {}});
+        return true;
+    };
+    std::optional<pl::Diagnostic> diag;
+    std::string element;
+    std::optional<app::ConsoleEntry> entry;
+    core::ConnectionScope links;
+    links += out.diagnosticActivated->connect([&](const pl::Diagnostic& x) { diag = x; });
+    links += out.elementActivated->connect([&](const std::string& k) { element = k; });
+    links += out.consoleActivated->connect([&](const app::ConsoleEntry& e) { entry = e; });
+    out.showTab(app::HmiBuildOutputPane::kDiagnostics);
+    check(out.diagnosticTable().model() && out.diagnosticTable().model()->rowCount() == 1, "les Diagnostics : l'erreur du build");
+    check(dbl(out.diagnosticTable(), 0) && diag && diag->element == "script:42" && diag->line == 3 && diag->script == 42,
+          "double-clic sur l'erreur : l'\xC3\xA9" "cran re\xC3\xA7oit le script (42) et sa ligne (3), pour l'ouvrir l\xC3\xA0");
+    out.showTab(app::HmiBuildOutputPane::kSorties);
+    std::size_t row = static_cast<std::size_t>(-1);
+    if (const auto m = out.outputTable().model())
+        for (std::size_t r = 0; r < m->rowCount() && row == static_cast<std::size_t>(-1); ++r)
+            for (std::size_t c = 0; c < m->columnCount(); ++c)
+                if (m->cellText(r, c).find("Init : 1 erreur") != std::string::npos) row = r;
+    check(row != static_cast<std::size_t>(-1) && dbl(out.outputTable(), row) && element == "script:42",
+          "double-clic sur une ligne des Sorties qui nomme un \xC3\xA9l\xC3\xA9ment : son \xC3\xA9l\xC3\xA9ment (script:42)");
+    app::ConsoleEntry ce;
+    ce.level = hmi::LogLevel::Error;
+    ce.category = "Erreur";
+    ce.source = "script Horloge";
+    ce.code = "Horloge";
+    ce.message = "division par z\xC3\xA9ro";
+    ce.line = 5;
+    ce.script = 7;
+    out.console().add(ce);
+    out.tick();
+    out.showTab(app::HmiBuildOutputPane::kConsole);
+    std::size_t crow = static_cast<std::size_t>(-1);
+    for (std::size_t r = 0; r < out.consoleRowCount(); ++r)
+        if (const auto* e = out.consoleRow(r); e && e->message == "division par z\xC3\xA9ro") crow = r;
+    check(crow != static_cast<std::size_t>(-1) && dbl(out.consoleTable(), crow) && entry && entry->script == 7 && entry->line == 5,
+          "double-clic sur une ligne de la Console : le script (7) et sa ligne (5)");
 }
 
 void lot6_simulation() {
@@ -16386,15 +16513,15 @@ void centreAide111() {
     // 1.11.11 : 19.
     // 1.11.12 : 20.
     // 1.11.13 : 21.
-    // 1.11.14 : 22 ; 1.11.15 : 23.
-    check(hn::releases().size() == 23 && hn::releases().front().version == "1.11.15" && hn::releases()[1].version == "1.11.14"
-              && hn::releases()[2].version == "1.11.13" && hn::releases()[3].version == "1.11.12"
-              && hn::releases()[4].version == "1.11.11" && hn::releases()[5].version == "1.11.10"
-              && hn::releases()[6].version == "1.11.9" && hn::releases()[7].version == "1.11.8"
-              && hn::releases()[8].version == "1.11.7" && hn::releases()[9].version == "1.11.6" && hn::releases()[10].version == "1.11.5"
-              && hn::releases()[11].version == "1.11.4" && hn::releases()[12].version == "1.11.3" && hn::releases()[13].version == "1.11.2"
-              && hn::releases()[14].version == "1.11.1" && hn::releases()[15].version == "1.11" && hn::releases()[16].version == "1.10.4",
-          "notes : 23 versions, la 1.11.15 en tete, puis la 1.11.14 \xC3\xA0 la 1.11, et la 1.10.4");
+    // 1.11.14 : 22 ; 1.11.15 : 23 ; 1.11.16 : 24.
+    check(hn::releases().size() == 24 && hn::releases().front().version == "1.11.16" && hn::releases()[1].version == "1.11.15"
+              && hn::releases()[2].version == "1.11.14" && hn::releases()[3].version == "1.11.13" && hn::releases()[4].version == "1.11.12"
+              && hn::releases()[5].version == "1.11.11" && hn::releases()[6].version == "1.11.10"
+              && hn::releases()[7].version == "1.11.9" && hn::releases()[8].version == "1.11.8"
+              && hn::releases()[9].version == "1.11.7" && hn::releases()[10].version == "1.11.6" && hn::releases()[11].version == "1.11.5"
+              && hn::releases()[12].version == "1.11.4" && hn::releases()[13].version == "1.11.3" && hn::releases()[14].version == "1.11.2"
+              && hn::releases()[15].version == "1.11.1" && hn::releases()[16].version == "1.11" && hn::releases()[17].version == "1.10.4",
+          "notes : 24 versions, la 1.11.16 en tete, puis la 1.11.15 \xC3\xA0 la 1.11, et la 1.10.4");
     // 1.11.2 (T2, tranches 41, 42 et 44 ; decisions 187, 201 et 216) : 23 lignes en 8 domaines, dont 2 cartes de la fenetre Nouveautes.
     // Tranche 46 (SYM, decision 240) : + Dupliquer dans un symbole (C) et la section Parametres du symbole (N) : 25 lignes.
     {
@@ -16665,7 +16792,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 202,   // 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 206,   // 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 4
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -16808,7 +16935,7 @@ void centreAide111() {
     // Integration 1.11 (I111) : la 1.10.4 ajoute objet-vanne-3-voies (La bibliotheque d'objets) : 206.
     // 1.11.1 (T2, decision 107) : Programmer gagne variables-api (API. : les variables de l'automate) : 207.
     check(ix.count(hc::Chapter::Hmi) == 208, "centre : L'IHM a les 208 sujets des chapitres 2 a 8 du guide (1.11.1 : variables-api ; 1.11.2 : paquets-symboles)");
-    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 23, "centre : 11 expressions, 23 notes (1.11.15)");
+    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 24, "centre : 11 expressions, 24 notes (1.11.16)");
     // Tranche 3 : les 11 types de T3 (hmi::exprguide::all(), depot-o), passes par in.expressions ; les
     // cles de la liste de secours sont les siennes (enumeration, pas enum).
     {
@@ -16870,10 +16997,10 @@ void centreAide111() {
         check(o, "page Raccourcis : Ctrl+Maj+O dessine en trois touches, repere 1.11");
 
         const auto n110 = hc::notesPage("1.10");
-        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 23
+        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 24
                   && !n110.summary.empty() && !n110.date.empty(),
               "page Notes : 1.10 -> 1.10.0, 22 lignes en 7 domaines, sa date et son resume");
-        check(hc::notesPage("").version == "1.11.15" && hc::notesPage("9.9").version == "1.11.15",
+        check(hc::notesPage("").version == "1.11.16" && hc::notesPage("9.9").version == "1.11.16",
               "page Notes : sans version (ou inconnue), la plus recente");
         const auto simu = hc::notesPage("1.10.0", "Simulation");
         check(simu.sections.size() == 1 && simu.rows == 4 && simu.domains.size() == 7,
@@ -17217,7 +17344,7 @@ void centreAide111() {
         // Les notes de version n'ont pas de tutoriel : ni la carte "Regarder le tutoriel" (hasTutorial, que
         // lit HelpCenterScreen::showTopic), ni la pastille dans l'arbre. Les autres pages speciales gardent
         // les leurs (T1 ecrit les tutoriels des raccourcis et de Signaler).
-        bool notesSans = ix.count(hc::Chapter::Notes) == 23;   // 1.11.3 a 1.11.15 : une version de plus
+        bool notesSans = ix.count(hc::Chapter::Notes) == 24;   // 1.11.3 a 1.11.16 : une version de plus
         for (const auto* t : ix.ofChapter(hc::Chapter::Notes)) notesSans = notesSans && !hc::hasTutorial(*t);
         const auto* raccourcis = ix.find("page-raccourcis");
         const auto* signaler = ix.find("page-signaler");
@@ -26906,6 +27033,7 @@ int main(int argc, char** argv) {
     lot6_simulation();
     cycle1115();                 // 1.11.15 : le cycle de la simulation, la remanence
     remanence1116();             // 1.11.16 : la remanence d'exploitation (le poste, l'editeur des variables)
+    sources1116();               // 1.11.16 : le double-clic vers la source (Diagnostics, Sorties, Console)
     lot6_arbre();
     lot7_aide_saisie();
     lot7_volet_fonctions();

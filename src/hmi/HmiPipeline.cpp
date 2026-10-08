@@ -1953,6 +1953,58 @@ Report run(const Project& p, const ApiInfo& api, const Request& req, const Optio
 }
 
 // ============================================================== le verrou ====
+// ---- 1.11.15 : l'arret sur modification (voir le .hpp) ----
+RunPrints runPrints(const Analysis& a) {
+    RunPrints out;
+    for (const auto& item : a.items)
+        if (item.element < a.elements.size()) out[a.elements[item.element].key] = item.contentHash + "|" + item.configHash + "|" + item.ifaceHash;
+    return out;
+}
+
+RunChange runChange(const RunPrints& atStart, const std::unordered_map<std::string, std::string>& pathsAtStart, const Analysis& now,
+                    bool developer) {
+    RunChange c;
+    const auto prints = runPrints(now);
+    for (const auto& [key, print] : prints) {
+        const auto it = atStart.find(key);
+        if (it == atStart.end() || it->second != print) c.changed.push_back(key);
+    }
+    for (const auto& [key, print] : atStart)
+        if (!prints.count(key)) c.removed.push_back(key);
+    std::sort(c.changed.begin(), c.changed.end());
+    std::sort(c.removed.begin(), c.removed.end());
+    if ((c.changed.empty() && c.removed.empty()) || !developer) return c;   // rien, ou la simulation seule : elle continue
+    c.stop = true;
+    // Ce qui a change, et ce que cela demande : une compilation (du code) ou une generation.
+    std::vector<std::string> lines;
+    for (const auto& key : c.changed) {
+        const auto* e = now.element(key);
+        if (!e) continue;
+        const bool code = compilable(e->kind);
+        ++(code ? c.compile : c.generate);
+        if (lines.size() < 3)
+            lines.push_back("\xC2\xB7 " + e->name + " (" + std::string(kindLabel(e->kind)) + (code ? ", \xC3\xA0 compiler)" : ", \xC3\xA0 g\xC3\xA9n\xC3\xA9rer)"));
+        c.paths.push_back(e->path);
+    }
+    for (const auto& key : c.removed) {
+        ++c.generate;
+        const auto it = pathsAtStart.find(key);
+        const std::string path = it != pathsAtStart.end() ? it->second : key;
+        if (lines.size() < 3) lines.push_back("\xC2\xB7 " + path + " (supprim\xC3\xA9)");
+        c.paths.push_back(path + " (supprim\xC3\xA9)");
+    }
+    const std::size_t total = c.changed.size() + c.removed.size();
+    c.head = std::to_string(total) + (total > 1 ? " \xC3\xA9l\xC3\xA9ments modifi\xC3\xA9s" : " \xC3\xA9l\xC3\xA9ment modifi\xC3\xA9");
+    std::vector<std::string> needs;
+    if (c.compile) needs.push_back(std::to_string(c.compile) + " \xC3\xA0 compiler");
+    if (c.generate) needs.push_back(std::to_string(c.generate) + " \xC3\xA0 g\xC3\xA9n\xC3\xA9rer");
+    for (std::size_t i = 0; i < needs.size(); ++i) c.head += (i ? ", " : " : ") + needs[i];
+    c.card = c.head;
+    for (const auto& l : lines) c.card += "\n" + l;
+    if (total > lines.size()) c.card += "\n\xC2\xB7 \xE2\x80\xA6 et " + std::to_string(total - lines.size()) + " autre(s)";
+    return c;
+}
+
 Lock acquireLock(const std::string& buildFolder) {
     Lock l;
     std::error_code ec;

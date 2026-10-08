@@ -3472,8 +3472,11 @@ void HmiSimulationPane::loadRetained() {
     // Un seul poste ecrit ce stockage : le verrou (rafraichi en marche, rendu a l'arret).
     const auto lock = hmi::retain::acquireLock(retainFile_);
     retainLockHeld_ = lock.held;
-    retainLockOwner_ = lock.held ? std::string{} : lock.owner;
-    const std::string readOnly = lock.held ? std::string{} : " ; non \xC3\xA9" "crites : un autre poste \xC3\xA9" "crit ce stockage (" + lock.owner + ")";
+    retainLockError_ = !lock.held && !lock.error.empty();
+    retainLockOwner_ = lock.held ? std::string{} : retainLockError_ ? lock.error : lock.owner;
+    const std::string readOnly = lock.held          ? std::string{}
+                               : retainLockError_   ? " ; non \xC3\xA9" "crites : dossier inaccessible (" + lock.error + ")"
+                                                    : " ; non \xC3\xA9" "crites : un autre poste \xC3\xA9" "crit ce stockage (" + lock.owner + ")";
     std::error_code ec;
     if (!std::filesystem::exists(retainFile_, ec) && !std::filesystem::exists(retainFile_ + ".bak", ec)) {
         retainState_ = "aucune valeur gard\xC3\xA9" "e : les valeurs initiales" + readOnly;
@@ -3502,8 +3505,11 @@ void HmiSimulationPane::reportRetained() {
     if (!retainNote_.empty()) runtime_.logAt(hmi::LogLevel::Warning, "R\xC3\xA9manence", "IHM", retainNote_);
     if (!retainFile_.empty() && !retainLockHeld_)
         runtime_.logAt(hmi::LogLevel::Warning, "R\xC3\xA9manence", "IHM",
-                       "Un autre poste d'exploitation \xC3\xA9" "crit d\xC3\xA9j\xC3\xA0 les variables r\xC3\xA9manentes de ce projet (" + retainLockOwner_
-                           + ") : ce poste les lit mais ne les \xC3\xA9" "crit pas tant que l'autre tourne.");
+                       retainLockError_
+                           ? "Le dossier des variables r\xC3\xA9manentes est inaccessible (" + retainLockOwner_
+                                 + ") : ce poste ne les \xC3\xA9" "crit pas (nouvel essai toutes les 30 s)."
+                           : "Un autre poste d'exploitation \xC3\xA9" "crit d\xC3\xA9j\xC3\xA0 les variables r\xC3\xA9manentes de ce projet (" + retainLockOwner_
+                                 + ") : ce poste les lit mais ne les \xC3\xA9" "crit pas tant que l'autre tourne.");
     if (retainIgnored_ > 0)
         runtime_.logAt(hmi::LogLevel::Info, "R\xC3\xA9manence", "IHM",
                        std::to_string(retainIgnored_) + " variable(s) gard\xC3\xA9" "e(s) ne sont plus r\xC3\xA9manentes : leur valeur est ignor\xC3\xA9" "e.");
@@ -3520,10 +3526,12 @@ void HmiSimulationPane::retainTick() {
         retainLockAt_ = now_;
         const auto lock = hmi::retain::acquireLock(retainFile_);
         if (!lock.held) {
-            retainLockOwner_ = lock.owner;
+            retainLockError_ = !lock.error.empty();
+            retainLockOwner_ = retainLockError_ ? lock.error : lock.owner;
             return;
         }
         retainLockHeld_ = true;
+        retainLockError_ = false;
         retainLockOwner_.clear();
         retainState_ = std::to_string(retainStore_.entries.size()) + " valeur(s) gard\xC3\xA9" "e(s) ; le stockage est libre : ce poste y \xC3\xA9" "crit";
         runtime_.logAt(hmi::LogLevel::Info, "R\xC3\xA9manence", "IHM", "Le stockage des variables r\xC3\xA9manentes est libre : ce poste y \xC3\xA9" "crit d\xC3\xA9sormais.");

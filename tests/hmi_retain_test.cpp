@@ -245,6 +245,12 @@ void verrou() {
     retain::releaseLock(file);
     check(!fs::exists(lock), "rendu a l'arret : le fichier part");
     check(!retain::acquireLock({}).held, "sans stockage : pas de verrou");
+    // Le dossier inaccessible (ici : "historique" est un fichier) : une erreur, pas un autre poste.
+    const fs::path other = dir / "autre";
+    fs::create_directories(other / "ihm", ec);
+    if (FILE* f = std::fopen((other / "ihm" / "historique").string().c_str(), "wb")) std::fclose(f);
+    l = retain::acquireLock(retain::fileOf(other.string()));
+    check(!l.held && !l.error.empty() && l.owner.empty(), "un dossier inaccessible : le verrou ne s'ecrit pas, l'erreur le dit (" + l.error + ")");
     fs::remove_all(dir, ec);
 }
 

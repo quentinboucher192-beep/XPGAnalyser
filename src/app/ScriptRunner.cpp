@@ -27,6 +27,7 @@
 #include "hmi/HmiTemplateGallery.hpp"      // lot 20 : la galerie des modeles
 #include "hmi/HmiQualityPanes.hpp"
 #include "hmi/HmiSimulation.hpp"
+#include "hmi/HmiScriptPanes.hpp"         // 1.11.16 : ihm-curseur
 #include "hmi/HmiSimVarTree.hpp"         // 1.11.5 : les variables en arbre
 #include "hmi/HmiPublicVarsPane.hpp"     // 1.9 : les structures des esclaves simules (vars-dossier, vars-choisir)
 #include "screens/StationScreen.hpp"      // lot 14 : le poste d'exploitation
@@ -2349,6 +2350,25 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     //  une saisie de l'operateur (sur le poste, sinon la simulation de l'editeur) ;
     //  ihm-remanence-poste [texte] : ce que le poste dit de ses variables remanentes ;
     //  ihm-remanence-poste-ecrire : les ecrire tout de suite (comme a l'arret).
+    //  ihm-curseur [ligne] [script] : l'editeur de scripts IHM (l'onglet courant) - le script
+    //  choisi et la ligne du curseur (1, 2...) ; avec une ligne (et un nom), les exiger : apres
+    //  un double-clic sur un diagnostic, la source est ouverte a sa ligne (§ 19).
+    if (cmd == "ihm-curseur") {
+        HmiScriptsPane* scripts = nullptr;
+        if (auto* page = currentPage())
+            walk(*page, [&](ui::Widget& x) {
+                if (auto* p = dynamic_cast<HmiScriptsPane*>(&x); p && !scripts && shown(*p)) scripts = p;
+            });
+        if (!scripts) { fail(cmd + " : l'onglet courant n'est pas l'\xC3\xA9" "diteur des scripts IHM"); return Step::Next; }
+        const std::size_t line = scripts->editor().caretLine() + 1;
+        std::string name;
+        if (const auto r = scripts->scriptTable().selectedModelRows(); !r.empty() && scripts->scriptTable().model())
+            name = scripts->scriptTable().model()->cellText(r.front(), 0);
+        std::printf("[script] editeur IHM : %s, ligne %zu\n", name.empty() ? "(aucun script)" : name.c_str(), line);
+        if (!arg(1).empty() && std::to_string(line) != arg(1)) fail(cmd + " : ligne " + std::to_string(line) + ", pas " + arg(1));
+        if (!arg(2).empty() && name.find(arg(2)) == std::string::npos) fail(cmd + " : script \"" + name + "\", pas " + arg(2));
+        return Step::Next;
+    }
     if (cmd == "ihm-variable" || cmd == "ihm-variable-ecrire" || cmd == "ihm-remanence-poste" || cmd == "ihm-remanence-poste-ecrire") {
         HmiSimulationPane* live = nullptr;
         if (auto* station = dynamic_cast<StationScreen*>(app_.menus().top())) live = station->pane();

@@ -309,18 +309,6 @@ void MainAnalysisScreen::openConsoleSource(const ConsoleEntry& e) {
 
 // La barre d'un editeur : la commande sur l'element choisi, nomme dans la barre d'etat.
 // ========================================= 1.11.15 : le cycle de la simulation ===
-namespace {
-// L'empreinte d'un element : son contenu, sa configuration, son interface (pas ses
-// dependances : un script modifie change, ce qui l'appelle non).
-std::unordered_map<std::string, std::string> printsOf(const HmiBuildStatus& st) {
-    std::unordered_map<std::string, std::string> out;
-    for (const auto& item : st.analysis.items)
-        if (item.element < st.analysis.elements.size())
-            out[st.analysis.elements[item.element].key] = item.contentHash + "|" + item.configHash + "|" + item.ifaceHash;
-    return out;
-}
-} // namespace
-
 void MainAnalysisScreen::applyFromSimulation(core::CommandPtr cmd) {
     if (!cmd) return;
     ++hmiApplyingLive_;
@@ -337,7 +325,7 @@ void MainAnalysisScreen::hmiSimulationLifecycle(bool started) {
     if (!started) return;
     const auto st = hmiBuild_ ? hmiBuild_->status() : nullptr;
     if (!st || st->analysis.elements.empty()) return;
-    hmiRunPrints_ = printsOf(*st);
+    hmiRunPrints_ = pl::runPrints(st->analysis);   // 1.11.16 : la regle est dans le moteur (essayee)
     for (const auto& e : st->analysis.elements) hmiRunPaths_[e.key] = e.path;
     hmiRunWatch_ = true;
 }
@@ -352,19 +340,11 @@ void MainAnalysisScreen::checkRunningModifications() {
     }
     const auto st = hmiBuild_->status();
     if (!st) return;
-    auto prints = printsOf(*st);
-    std::vector<std::string> changed, removed;
-    for (const auto& [key, print] : prints) {
-        const auto it = hmiRunPrints_.find(key);
-        if (it == hmiRunPrints_.end() || it->second != print) changed.push_back(key);
-    }
-    for (const auto& [key, print] : hmiRunPrints_)
-        if (!prints.count(key)) removed.push_back(key);
-    std::sort(changed.begin(), changed.end());
-    std::sort(removed.begin(), removed.end());
     const bool dev = hmiEditSeen_;
     hmiEditSeen_ = hmiLiveSeen_ = false;
-    if (changed.empty() && removed.empty()) {
+    // 1.11.16 : la regle (ce qui a change, ce qui arrete) est dans le moteur : pl::runChange.
+    const auto change = pl::runChange(hmiRunPrints_, hmiRunPaths_, st->analysis, dev);
+    if (change.changed.empty() && change.removed.empty()) {
         // Une description, un dossier, la grille de l'editeur : rien qui touche l'execution.
         if (dev && bottomPanel_)
             bottomPanel_->say(pl::Severity::Information, "Simulation",
@@ -372,49 +352,21 @@ void MainAnalysisScreen::checkRunningModifications() {
                               "la simulation continue.");
         return;
     }
-    if (!dev) {
+    if (!change.stop) {
         // Seule la simulation a ecrit dans le projet (une recette, un utilisateur, un
         // forcage de jumeau) : ses donnees, pas du code - elle continue.
-        hmiRunPrints_ = std::move(prints);
+        hmiRunPrints_ = pl::runPrints(st->analysis);
         for (const auto& e : st->analysis.elements) hmiRunPaths_[e.key] = e.path;
         return;
     }
-    // Ce qui a change, et ce que cela demande : une compilation (du code) ou une generation.
-    std::size_t compile = 0, generate = 0;
-    std::vector<std::string> lines, paths;
-    for (const auto& key : changed) {
-        const auto* e = st->analysis.element(key);
-        if (!e) continue;
-        const bool code = pl::compilable(e->kind);
-        ++(code ? compile : generate);
-        if (lines.size() < 3)
-            lines.push_back("\xC2\xB7 " + e->name + " (" + std::string(pl::kindLabel(e->kind)) + (code ? ", \xC3\xA0 compiler)" : ", \xC3\xA0 g\xC3\xA9n\xC3\xA9rer)"));
-        paths.push_back(e->path);
-    }
-    for (const auto& key : removed) {
-        ++generate;
-        const auto it = hmiRunPaths_.find(key);
-        const std::string path = it != hmiRunPaths_.end() ? it->second : key;
-        if (lines.size() < 3) lines.push_back("\xC2\xB7 " + path + " (supprim\xC3\xA9)");
-        paths.push_back(path + " (supprim\xC3\xA9)");
-    }
-    const std::size_t total = changed.size() + removed.size();
-    std::string head = std::to_string(total) + (total > 1 ? " \xC3\xA9l\xC3\xA9ments modifi\xC3\xA9s" : " \xC3\xA9l\xC3\xA9ment modifi\xC3\xA9");
-    std::vector<std::string> needs;
-    if (compile) needs.push_back(std::to_string(compile) + " \xC3\xA0 compiler");
-    if (generate) needs.push_back(std::to_string(generate) + " \xC3\xA0 g\xC3\xA9n\xC3\xA9rer");
-    for (std::size_t i = 0; i < needs.size(); ++i) head += (i ? ", " : " : ") + needs[i];
-    std::string what = head;
-    for (const auto& l : lines) what += "\n" + l;
-    if (total > lines.size()) what += "\n\xC2\xB7 \xE2\x80\xA6 et " + std::to_string(total - lines.size()) + " autre(s)";
     hmiRunWatch_ = false;
-    sim->stopForModification(what);
+    sim->stopForModification(change.card);
     if (bottomPanel_) {
         std::string list;
-        for (std::size_t i = 0; i < paths.size() && i < 8; ++i) list += (i ? " ; " : "") + paths[i];
-        if (paths.size() > 8) list += " ; \xE2\x80\xA6";
+        for (std::size_t i = 0; i < change.paths.size() && i < 8; ++i) list += (i ? " ; " : "") + change.paths[i];
+        if (change.paths.size() > 8) list += " ; \xE2\x80\xA6";
         bottomPanel_->say(pl::Severity::Warning, "Simulation",
-                          "La simulation a \xC3\xA9t\xC3\xA9 arr\xC3\xAAt\xC3\xA9" "e car le projet IHM a \xC3\xA9t\xC3\xA9 modifi\xC3\xA9 \xE2\x80\x94 " + head + " : " + list + ".");
+                          "La simulation a \xC3\xA9t\xC3\xA9 arr\xC3\xAAt\xC3\xA9" "e car le projet IHM a \xC3\xA9t\xC3\xA9 modifi\xC3\xA9 \xE2\x80\x94 " + change.head + " : " + list + ".");
     }
 }
 

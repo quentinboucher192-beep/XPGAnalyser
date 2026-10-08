@@ -48,6 +48,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 namespace hmi::pipeline {
@@ -283,6 +284,28 @@ struct Report {
 using ProgressFn = std::function<void(const Progress&)>;
 [[nodiscard]] Report run(const Project&, const ApiInfo&, const Request&, const Options&,
                          const ProgressFn& onProgress = {}, const std::atomic<bool>* cancel = nullptr);
+
+// ---- 1.11.15 : L'ARRET SUR MODIFICATION (la regle ; l'ecran l'applique en marche) ----
+//  Au demarrage de la simulation : l'empreinte d'execution de chaque element (son
+//  contenu, sa configuration, son interface - pas ses dependances : un script
+//  modifie change, ce qui l'appelle non). A chaque analyse en marche : ce qui a
+//  change ou disparu depuis. Une modification du DEVELOPPEUR qui en change une
+//  arrete la simulation ; une description, un dossier (aucune empreinte ne change)
+//  ou ce que la simulation ecrit elle-meme (`developer` faux : une recette, un
+//  utilisateur, un forcage de jumeau) la laissent tourner. (1.11.16 : sortie de
+//  l'ecran pour etre essayee.)
+using RunPrints = std::unordered_map<std::string, std::string>;
+[[nodiscard]] RunPrints runPrints(const Analysis&);
+struct RunChange {
+    bool                     stop{false};
+    std::vector<std::string> changed, removed;   // les cles, triees
+    std::size_t              compile{0}, generate{0};
+    std::string              head;               // "2 elements modifies : 1 a compiler, 1 a generer"
+    std::string              card;               // head, puis 3 lignes au plus ("· Plus (Script general, a compiler)")
+    std::vector<std::string> paths;              // les chemins (les Sorties)
+};
+[[nodiscard]] RunChange runChange(const RunPrints& atStart, const std::unordered_map<std::string, std::string>& pathsAtStart,
+                                  const Analysis& now, bool developer);
 
 // ---- le verrou (plusieurs instances) -------------------------------------------
 //  build.lock : le PID et l'heure de l'instance qui construit. Un verrou de plus

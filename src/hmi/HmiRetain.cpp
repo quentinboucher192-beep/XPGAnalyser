@@ -322,7 +322,7 @@ VariableState stateOf(const Project& p, const Variable& var, const Store* store)
 Lock acquireLock(const fs::path& file) {
     Lock l;
     if (file.empty()) {
-        l.owner = "pas de stockage";
+        l.error = "pas de stockage";
         return l;
     }
     const fs::path lock = lockOf(file);
@@ -334,7 +334,7 @@ Lock acquireLock(const fs::path& file) {
     fs::create_directories(lock.parent_path(), ec);
     const auto st = core::writeFileAtomic(lock, "verrou " + mineKey() + "depuis=" + quote(simdata::nowStamp()) + "\n", core::AtomicWrite{false, false});
     if (!st) {
-        l.owner = "dossier en lecture seule (" + st.error().message() + ")";
+        l.error = st.error().message();
         return l;
     }
     l.held = true;
