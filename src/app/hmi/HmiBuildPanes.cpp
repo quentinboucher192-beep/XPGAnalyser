@@ -352,6 +352,112 @@ void HmiBuildProgressDialog::finish(const std::string& payload) {
     manager().CloseDialog(menu::DialogResult{payload == "close" ? menu::DialogResult::Button::Ok : menu::DialogResult::Button::Cancel, payload});
 }
 
+// ============================================ 1.11.15 : Redemarrer, la question ===
+namespace {
+constexpr float kAskW = 560.f, kAskH = 196.f;
+const char* const kAskText =
+    "Le red\xC3\xA9marrage va r\xC3\xA9initialiser les donn\xC3\xA9" "es de simulation et supprimer l'\xC3\xA9tat r\xC3\xA9manent courant. Continuer ?";
+} // namespace
+
+class HmiRestartBody final : public ui::Widget {
+public:
+    explicit HmiRestartBody(HmiRestartDialog& d) : ui::Widget("hmiRestart.body"), d_(d) {}
+
+protected:
+    void onLayout() override {
+        const auto r = bounds();
+        panel_ = {std::floor((r.w - kAskW) * 0.5f), std::floor(std::max(10.f, (r.h - kAskH) * 0.5f)), kAskW, kAskH};
+        if (d_.noMore_) d_.noMore_->setBounds({panel_.x + 16.f, panel_.y + panel_.h - 84.f, panel_.w - 32.f, 26.f});
+        float bx = panel_.x + panel_.w - 16.f;
+        for (auto* b : {d_.yes_, d_.no_}) {
+            if (!b) continue;
+            const float bw = std::max(110.f, ui::measureWidth(b->text(), gfx::FontId{16}) + 32.f);
+            bx -= bw;
+            b->setBounds({bx, panel_.y + panel_.h - 42.f, bw, 30.f});
+            bx -= 10.f;
+        }
+    }
+    void onPaint(const ui::PaintContext& ctx) override {
+        const auto& c = ctx.theme.color;
+        ctx.r.fillRect(panel_, c.panelBg);
+        ctx.r.strokeRect(panel_, c.borderStrong, 1.f);
+        const float titleH = 36.f;
+        ctx.r.fillRect({panel_.x, panel_.y, panel_.w, titleH}, c.headerBg);
+        ui::drawIcon(ctx.r, ui::Icon::Warning, {panel_.x + 12.f, panel_.y + 10.f, 16.f, 16.f}, c.warning);
+        ctx.r.drawText({panel_.x + 36.f, panel_.y + (titleH - ctx.r.lineHeight(ctx.theme.font.uiBold)) * 0.5f}, d_.title(), ctx.theme.font.uiBold, c.text);
+        // Le texte, a la ligne au mot pres.
+        const gfx::FontId font = ctx.theme.font.ui;
+        const float x = panel_.x + 16.f, w = panel_.w - 32.f;
+        float y = panel_.y + titleH + 14.f;
+        std::string line, word;
+        const std::string text = kAskText;
+        const auto flush = [&] {
+            ctx.r.drawText({x, y}, line, font, c.text);
+            y += ctx.r.lineHeight(font) + 4.f;
+            line.clear();
+        };
+        for (std::size_t i = 0; i <= text.size(); ++i) {
+            if (i == text.size() || text[i] == ' ') {
+                const std::string tryLine = line.empty() ? word : line + " " + word;
+                if (!line.empty() && ctx.r.measure(tryLine, font).width > w) {
+                    flush();
+                    line = word;
+                } else {
+                    line = tryLine;
+                }
+                word.clear();
+            } else {
+                word.push_back(text[i]);
+            }
+        }
+        if (!line.empty()) flush();
+    }
+
+private:
+    HmiRestartDialog& d_;
+    gfx::Rect         panel_{};
+};
+
+HmiRestartDialog::HmiRestartDialog() : menu::WidgetMenu("dialog.hmiRestart") {}
+
+menu::MenuTraits HmiRestartDialog::traits() const {
+    menu::MenuTraits t;
+    t.kind = menu::MenuKind::Dialog;
+    t.rendersBelow = true;
+    t.updatesBelow = true;
+    t.blocksInput = true;
+    t.dimsBelow = true;
+    return t;
+}
+
+core::Status HmiRestartDialog::buildUi() {
+    auto body = std::make_unique<HmiRestartBody>(*this);
+    noMore_ = &static_cast<ui::Checkbox&>(body->addChild(std::make_unique<ui::Checkbox>("Ne plus demander pour cette session", "hmiRestart.nePlusDemander")));
+    no_ = &static_cast<ui::Button&>(body->addChild(std::make_unique<ui::Button>("Annuler", "hmiRestart.annuler")));
+    yes_ = &static_cast<ui::Button&>(body->addChild(std::make_unique<ui::Button>("Red\xC3\xA9marrer", "hmiRestart.redemarrer")));
+    yes_->setStyle(ui::Button::Style::Primary);
+    yes_->setTooltip("Les donn\xC3\xA9" "es de simulation et l'\xC3\xA9tat r\xC3\xA9manent effac\xC3\xA9s, les valeurs initiales, un d\xC3\xA9marrage propre");
+    links_ += yes_->clicked->connect([this] { answer(true); });
+    links_ += no_->clicked->connect([this] { answer(false); });
+    setRoot(std::move(body));
+    return core::ok();
+}
+
+void HmiRestartDialog::answer(bool yes) {
+    if (closed_) return;
+    closed_ = true;
+    manager().CloseDialog(menu::DialogResult{yes ? menu::DialogResult::Button::Ok : menu::DialogResult::Button::Cancel,
+                                             yes && noMore_ && noMore_->isChecked() ? std::string("nomore") : std::string{}});
+}
+
+ui::EventResult HmiRestartDialog::HandleEvent(const ui::InputEvent& ev) {
+    if (const auto* k = std::get_if<ui::KeyDown>(&ev)) {
+        // Echap : non. Entree ne repond pas d'office : la question efface des donnees.
+        if (k->key == ui::Key::Escape) { answer(false); return ui::EventResult::Consumed; }
+    }
+    return menu::WidgetMenu::HandleEvent(ev);
+}
+
 // ======================================================== les sorties ========
 // ============================================== le panneau du bas (1.11.14) ===
 namespace {

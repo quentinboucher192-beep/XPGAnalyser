@@ -225,6 +225,11 @@ struct Request {
     std::vector<std::string> scope;
     // Un choix explicite (un element, pas un dossier) : Compiler le recompile meme a jour.
     bool explicitSelection{false};
+    // 1.11.15 : la phase G d'un Demarrer - ce que la remanence de simulation rendra au
+    // demarrage ("donnees du 2026-10-08 22:10:05 : rendues au demarrage") ; vide : rien a
+    // restaurer, ou (restoreOff) la remanence est decochee.
+    std::string restore{};
+    bool        restoreOff{false};
 };
 struct Plan {
     std::vector<std::size_t> generate, compile;   // rangs dans Analysis::elements, dans l'ordre

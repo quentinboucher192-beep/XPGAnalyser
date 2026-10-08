@@ -933,6 +933,32 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         else std::printf("[script] capture %s\n", path.c_str());
         return Step::Next;
     }
+    // 1.11.15 : ihm-carte "<libelle>" - un bouton de la carte de l'IHM arretee (Demarrer
+    // l'IHM, Generer et redemarrer, Annuler le redemarrage...), dessine sur la vue.
+    if (cmd == "ihm-carte") {
+        auto* root = top();
+        gfx::Rect at{};
+        if (root)
+            walk(*root, [&](ui::Widget& x) {
+                auto* canvas = dynamic_cast<HmiLiveCanvas*>(&x);
+                if (!canvas || !shown(*canvas) || at.w > 0.f || canvas->stoppedNote().empty()) return;
+                const auto& buttons = canvas->noteButtons();
+                if (buttons.empty()) {      // la carte ordinaire : Demarrer l'IHM, Demarrer les deux
+                    if (arg(1) == "D\xC3\xA9marrer l'IHM") at = canvas->stoppedButtonRect(false);
+                    else if (arg(1) == "D\xC3\xA9marrer les deux") at = canvas->stoppedButtonRect(true);
+                    return;
+                }
+                for (std::size_t i = 0; i < buttons.size(); ++i)
+                    if (buttons[i].label == arg(1)) at = canvas->noteButtonRect(i);
+            });
+        if (at.w <= 0.f) {
+            if (retries_ < 30) return Step::Retry;     // la carte se dessine a l'image suivante
+            fail("ihm-carte : pas de bouton \"" + arg(1) + "\" sur la carte");
+            return Step::Next;
+        }
+        click({at.x + at.w / 2.f, at.y + at.h / 2.f}, MouseButton::Left, 1, {});
+        return Step::Yield;
+    }
     if (cmd == "clic") {
         const gfx::Point p{num(1), num(2)};
         const auto b = has("droit") ? MouseButton::Right : MouseButton::Left;
@@ -2313,12 +2339,20 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     //  ihm-sorties [diagnostics|console] : le panneau du bas, sur Sorties (ou Diagnostics, ou la Console).
     //  ihm-console-etat [texte] : les chiffres de la Console ; avec un texte, une ligne doit le contenir (1.11.14).
     //  ihm-script-modifier <script> <ligne> : une ligne ajoutee au script (une commande).
+    //  ihm-remanence on|off : l'option « Conserver les donnees de simulation entre les demarrages » (1.11.15).
+    //  ihm-sim-etat [texte] : l'etat de la simulation IHM (en marche, arretee, la carte, la remanence) ;
+    //    avec un texte, il doit y etre (1.11.15).
+    //  ihm-variable <nom> [valeur] : la valeur d'une variable IHM dans la simulation ; avec une
+    //    valeur, elle doit l'avoir (1.11.15).
     if (cmd == "ihm-build" || cmd == "ihm-build-attendre" || cmd == "ihm-build-etat" || cmd == "ihm-sorties" || cmd == "ihm-script-modifier"
-        || cmd == "ihm-console-etat") {
+        || cmd == "ihm-console-etat" || cmd == "ihm-remanence" || cmd == "ihm-sim-etat" || cmd == "ihm-variable") {
         auto* screen = dynamic_cast<MainAnalysisScreen*>(app_.menus().top());
         if (screen) buildScreen_ = screen;
         // la fenetre de progression est devant : l'ecran est dessous (le meme, il ne part pas)
-        else if ((cmd == "ihm-build-attendre" || cmd == "ihm-build-etat" || cmd == "ihm-console-etat") && app_.menus().depth() >= 2) screen = buildScreen_;
+        else if ((cmd == "ihm-build-attendre" || cmd == "ihm-build-etat" || cmd == "ihm-console-etat" || cmd == "ihm-sim-etat" || cmd == "ihm-variable"
+                  || cmd == "ihm-remanence")
+                 && app_.menus().depth() >= 2)
+            screen = buildScreen_;
         // ihm-sorties, la fenetre du build devant (il a dure plus de 0,3 s) : son
         // bouton Voir les sorties, puis l'onglet voulu a l'image suivante.
         if (!screen && cmd == "ihm-sorties" && buildScreen_ && app_.menus().depth() >= 2) {
@@ -2364,6 +2398,23 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         if (cmd == "ihm-console-etat") {
             std::printf("[script] console IHM : %s\n", screen->hmiConsoleSummary().c_str());
             if (!arg(1).empty() && !screen->hmiConsoleHas(arg(1))) fail("ihm-console-etat : \"" + arg(1) + "\" absent de la Console");
+            return Step::Next;
+        }
+        if (cmd == "ihm-remanence") {
+            if (arg(1) != "on" && arg(1) != "off") { fail("ihm-remanence : on ou off"); return Step::Next; }
+            screen->scriptHmiKeepData(arg(1) == "on");
+            return Step::Yield;
+        }
+        if (cmd == "ihm-sim-etat") {
+            const auto text = screen->hmiSimulationSummary();
+            std::printf("[script] simulation IHM : %s\n", text.c_str());
+            if (!arg(1).empty() && text.find(arg(1)) == std::string::npos) fail("ihm-sim-etat : \"" + arg(1) + "\" absent de : " + text);
+            return Step::Next;
+        }
+        if (cmd == "ihm-variable") {
+            const auto text = screen->hmiVariableText(arg(1));
+            std::printf("[script] variable IHM %s = %s\n", arg(1).c_str(), text.empty() ? "(inconnue)" : text.c_str());
+            if (!arg(2).empty() && text != arg(2)) fail("ihm-variable : " + arg(1) + " vaut " + (text.empty() ? std::string("(inconnue)") : text) + ", pas " + arg(2));
             return Step::Next;
         }
         std::string why;

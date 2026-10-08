@@ -50,6 +50,7 @@
 #include "HmiTypes.hpp"                // lot 16 : structures et tableaux
 #include "HmiMedia.hpp"                // lot 16 : les GIF animes
 #include "HmiLog.hpp"                  // 1.11.14 : les niveaux de IHM_LOG
+#include "HmiSimData.hpp"              // 1.11.15 : la remanence de simulation
 
 #include <cstdint>
 #include <deque>
@@ -584,6 +585,14 @@ public:
     // 1.11.14 : la session de la Console - le numero du demarrage depuis l'ouverture de
     // l'application (1 au premier start, toutes les IHM simulees confondues).
     [[nodiscard]] int session() const noexcept { return session_; }
+    // 1.11.15 : LA REMANENCE DE SIMULATION (hmi::simdata). captureData : les cases des
+    // variables IHM non liees, a leur valeur du moment (prises a l'arret). setStartData :
+    // celles a rendre au prochain start(), apres les valeurs initiales et avant les
+    // scripts de Demarrage (une seule fois). lastRestore : ce que ce retour a fait
+    // (rien : le dernier demarrage n'avait rien a rendre).
+    [[nodiscard]] std::vector<simdata::Cell> captureData() const;
+    void setStartData(std::vector<simdata::Cell> cells) { startData_ = std::move(cells); }
+    [[nodiscard]] const std::optional<simdata::Report>& lastRestore() const noexcept { return lastRestore_; }
 
     // Lot 14 : la liaison Modbus TCP quand l'IHM est reliee a un automate reel
     // (nulle : le simulateur, ou rien).
@@ -1313,6 +1322,8 @@ private:
     CodeOrigin               origin_;
     sim::ExecTrace           trace_;
     int                      session_{0};
+    std::optional<std::vector<simdata::Cell>> startData_;    // 1.11.15 : a rendre au prochain start()
+    std::optional<simdata::Report>            lastRestore_;  // ... et ce que le dernier en a fait
     std::string              abort_;                     // un appel imbrique coupe : la raison
     std::string              actionOrigin_;              // lot 6 : l'action de vue vient de ce modele
     Id                       pressed_{kNoId};

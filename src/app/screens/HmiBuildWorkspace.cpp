@@ -24,6 +24,7 @@
 #include "../hmi/HmiPanels.hpp"
 #include "../hmi/HmiScriptPanes.hpp"
 #include "../hmi/HmiSimulation.hpp"
+#include "../../core/AtomicFile.hpp"           // 1.11.15 : la date de l'instantane de simulation
 
 #include <algorithm>
 #include <cctype>
@@ -99,7 +100,10 @@ void MainAnalysisScreen::ensureHmiBuild() {
         hmiBuildThen_ = nullptr;
         if (then) then(*rep);
     });
-    hmiBuildLinks_ += hmiBuild_->statusChanged->connect([this] { applyHmiBuildMarks(); });
+    hmiBuildLinks_ += hmiBuild_->statusChanged->connect([this] {
+        applyHmiBuildMarks();
+        checkRunningModifications();              // 1.11.15 : l'arret sur modification
+    });
     hmiBuild_->setClock([this] { return frameClock_; });   // les 300 ms en temps d'images (les sessions rejouees aussi)
     hmiBuild_->analyseNow();
 }
@@ -109,7 +113,13 @@ bool MainAnalysisScreen::runHmiBuild(pl::Mode mode, std::vector<std::string> sco
     ensureHmiBuild();
     if (!hmiBuild_) return false;
     std::string why;
-    if (!hmiBuild_->start(pl::Request{mode, std::move(scope), chosen}, &why)) {
+    pl::Request request{mode, std::move(scope), chosen};
+    if (mode == pl::Mode::Start) {           // 1.11.15 : la phase G dit ce que la remanence rendra
+        request.restore = std::move(hmiStartRestore_);
+        request.restoreOff = hmiStartRestoreOff_;
+        hmiStartRestore_.clear();
+    }
+    if (!hmiBuild_->start(std::move(request), &why)) {
         if (status_) status_->setTransientMessage(title + " impossible : " + why + ".", 6.0, StatusBar::Severity::Warning);
         return false;
     }
@@ -128,6 +138,24 @@ void MainAnalysisScreen::startHmiBuild(const std::string& source) {
         hmiStartPending_ = source.empty() ? std::string("d\xC3\xA9marrage") : source;
         if (status_) status_->setTransientMessage("Un build est en cours : la simulation d\xC3\xA9marrera \xC3\xA0 sa fin (sur un build valide).", 6.0);
         return;
+    }
+    // 1.11.15 : la remanence de simulation - l'option, l'instantane et sa date (sa ligne "prise").
+    hmiStartRestore_.clear();
+    hmiStartRestoreOff_ = !app_.settings().getBool("simulation.keepData", false);
+    if (!hmiStartRestoreOff_) {
+        const auto* sim = dynamic_cast<HmiSimulationPane*>(hmiTab("simulation"));
+        const std::string folder = app_.projectFolder();
+        std::string text;
+        if (sim && !sim->restoreSkipped() && !folder.empty()
+            && core::readFileAll(std::filesystem::path(folder) / ".xpg" / "simulation" / "remanence.txt", text)) {
+            std::string date;
+            if (const auto at = text.find("prise date=\""); at != std::string::npos) {
+                const auto from = at + 12, to = text.find('"', from);
+                if (to != std::string::npos) date = text.substr(from, to - from);
+            }
+            hmiStartRestore_ = date.empty() ? std::string("donn\xC3\xA9" "es gard\xC3\xA9" "es : rendues au d\xC3\xA9marrage")
+                                            : "donn\xC3\xA9" "es du " + date + " : rendues au d\xC3\xA9marrage";
+        }
     }
     const bool launched = runHmiBuild(pl::Mode::Start, {}, false, "D\xC3\xA9marrer la simulation", [this](const pl::Report& r) {
         auto* sim = dynamic_cast<HmiSimulationPane*>(hmiTab("simulation"));
@@ -280,6 +308,140 @@ void MainAnalysisScreen::openConsoleSource(const ConsoleEntry& e) {
 }
 
 // La barre d'un editeur : la commande sur l'element choisi, nomme dans la barre d'etat.
+// ========================================= 1.11.15 : le cycle de la simulation ===
+namespace {
+// L'empreinte d'un element : son contenu, sa configuration, son interface (pas ses
+// dependances : un script modifie change, ce qui l'appelle non).
+std::unordered_map<std::string, std::string> printsOf(const HmiBuildStatus& st) {
+    std::unordered_map<std::string, std::string> out;
+    for (const auto& item : st.analysis.items)
+        if (item.element < st.analysis.elements.size())
+            out[st.analysis.elements[item.element].key] = item.contentHash + "|" + item.configHash + "|" + item.ifaceHash;
+    return out;
+}
+} // namespace
+
+void MainAnalysisScreen::applyFromSimulation(core::CommandPtr cmd) {
+    if (!cmd) return;
+    ++hmiApplyingLive_;
+    app_.apply(std::move(cmd), false);
+    --hmiApplyingLive_;
+}
+
+// La simulation demarre : les empreintes de son build ; elle s'arrete : plus rien a surveiller.
+void MainAnalysisScreen::hmiSimulationLifecycle(bool started) {
+    hmiEditSeen_ = hmiLiveSeen_ = false;
+    hmiRunPrints_.clear();
+    hmiRunPaths_.clear();
+    hmiRunWatch_ = false;
+    if (!started) return;
+    const auto st = hmiBuild_ ? hmiBuild_->status() : nullptr;
+    if (!st || st->analysis.elements.empty()) return;
+    hmiRunPrints_ = printsOf(*st);
+    for (const auto& e : st->analysis.elements) hmiRunPaths_[e.key] = e.path;
+    hmiRunWatch_ = true;
+}
+
+// Chaque analyse pendant la marche : ce qui a change depuis le demarrage.
+void MainAnalysisScreen::checkRunningModifications() {
+    if (!hmiRunWatch_ || !hmiBuild_ || hmiBuild_->building()) return;
+    auto* sim = dynamic_cast<HmiSimulationPane*>(hmiTab("simulation"));
+    if (!sim || !sim->hmiRunning()) {
+        hmiRunWatch_ = false;
+        return;
+    }
+    const auto st = hmiBuild_->status();
+    if (!st) return;
+    auto prints = printsOf(*st);
+    std::vector<std::string> changed, removed;
+    for (const auto& [key, print] : prints) {
+        const auto it = hmiRunPrints_.find(key);
+        if (it == hmiRunPrints_.end() || it->second != print) changed.push_back(key);
+    }
+    for (const auto& [key, print] : hmiRunPrints_)
+        if (!prints.count(key)) removed.push_back(key);
+    std::sort(changed.begin(), changed.end());
+    std::sort(removed.begin(), removed.end());
+    const bool dev = hmiEditSeen_;
+    hmiEditSeen_ = hmiLiveSeen_ = false;
+    if (changed.empty() && removed.empty()) {
+        // Une description, un dossier, la grille de l'editeur : rien qui touche l'execution.
+        if (dev && bottomPanel_)
+            bottomPanel_->say(pl::Severity::Information, "Simulation",
+                              "Modification sans effet sur l'ex\xC3\xA9" "cution (une description, un dossier, la grille de l'\xC3\xA9" "diteur\xE2\x80\xA6) : "
+                              "la simulation continue.");
+        return;
+    }
+    if (!dev) {
+        // Seule la simulation a ecrit dans le projet (une recette, un utilisateur, un
+        // forcage de jumeau) : ses donnees, pas du code - elle continue.
+        hmiRunPrints_ = std::move(prints);
+        for (const auto& e : st->analysis.elements) hmiRunPaths_[e.key] = e.path;
+        return;
+    }
+    // Ce qui a change, et ce que cela demande : une compilation (du code) ou une generation.
+    std::size_t compile = 0, generate = 0;
+    std::vector<std::string> lines, paths;
+    for (const auto& key : changed) {
+        const auto* e = st->analysis.element(key);
+        if (!e) continue;
+        const bool code = pl::compilable(e->kind);
+        ++(code ? compile : generate);
+        if (lines.size() < 3)
+            lines.push_back("\xC2\xB7 " + e->name + " (" + std::string(pl::kindLabel(e->kind)) + (code ? ", \xC3\xA0 compiler)" : ", \xC3\xA0 g\xC3\xA9n\xC3\xA9rer)"));
+        paths.push_back(e->path);
+    }
+    for (const auto& key : removed) {
+        ++generate;
+        const auto it = hmiRunPaths_.find(key);
+        const std::string path = it != hmiRunPaths_.end() ? it->second : key;
+        if (lines.size() < 3) lines.push_back("\xC2\xB7 " + path + " (supprim\xC3\xA9)");
+        paths.push_back(path + " (supprim\xC3\xA9)");
+    }
+    const std::size_t total = changed.size() + removed.size();
+    std::string head = std::to_string(total) + (total > 1 ? " \xC3\xA9l\xC3\xA9ments modifi\xC3\xA9s" : " \xC3\xA9l\xC3\xA9ment modifi\xC3\xA9");
+    std::vector<std::string> needs;
+    if (compile) needs.push_back(std::to_string(compile) + " \xC3\xA0 compiler");
+    if (generate) needs.push_back(std::to_string(generate) + " \xC3\xA0 g\xC3\xA9n\xC3\xA9rer");
+    for (std::size_t i = 0; i < needs.size(); ++i) head += (i ? ", " : " : ") + needs[i];
+    std::string what = head;
+    for (const auto& l : lines) what += "\n" + l;
+    if (total > lines.size()) what += "\n\xC2\xB7 \xE2\x80\xA6 et " + std::to_string(total - lines.size()) + " autre(s)";
+    hmiRunWatch_ = false;
+    sim->stopForModification(what);
+    if (bottomPanel_) {
+        std::string list;
+        for (std::size_t i = 0; i < paths.size() && i < 8; ++i) list += (i ? " ; " : "") + paths[i];
+        if (paths.size() > 8) list += " ; \xE2\x80\xA6";
+        bottomPanel_->say(pl::Severity::Warning, "Simulation",
+                          "La simulation a \xC3\xA9t\xC3\xA9 arr\xC3\xAAt\xC3\xA9" "e car le projet IHM a \xC3\xA9t\xC3\xA9 modifi\xC3\xA9 \xE2\x80\x94 " + head + " : " + list + ".");
+    }
+}
+
+void MainAnalysisScreen::askHmiRestart(std::function<void(bool)> answer) {
+    if (hmiRestartNoAsk_) {          // « Ne plus demander pour cette session »
+        answer(true);
+        return;
+    }
+    app_.menus().ShowDialog(std::make_unique<HmiRestartDialog>(), [this, answer = std::move(answer)](const menu::DialogResult& r) {
+        if (!dynamic_cast<HmiSimulationPane*>(hmiTab("simulation"))) return;   // l'onglet ferme entre-temps
+        const bool yes = r.button == menu::DialogResult::Button::Ok;
+        if (yes && r.payload == "nomore") hmiRestartNoAsk_ = true;
+        answer(yes);
+    });
+}
+
+void MainAnalysisScreen::rebuildHmiFor(const std::string& mode) {
+    if (mode == "compiler") {
+        (void)runHmiBuild(pl::Mode::Compile, {}, false, "Compiler");
+        return;
+    }
+    (void)runHmiBuild(pl::Mode::RegenerateCompile, {}, false, "R\xC3\xA9g\xC3\xA9n\xC3\xA9rer et red\xC3\xA9marrer", [this](const pl::Report& r) {
+        if (!r.ok || r.cancelled) return;
+        if (auto* sim = dynamic_cast<HmiSimulationPane*>(hmiTab("simulation"))) sim->buildAndRestart("R\xC3\xA9g\xC3\xA9n\xC3\xA9rer et red\xC3\xA9marrer");
+    });
+}
+
 void MainAnalysisScreen::runHmiBuildFor(pl::Mode mode, const std::string& key) {
     if (key.empty()) return;
     std::string what = key;
@@ -478,6 +640,41 @@ std::string MainAnalysisScreen::hmiBuildSummary() const {
              + ", " + std::to_string(rep->generated) + " g\xC3\xA9n\xC3\xA9r\xC3\xA9(s), " + std::to_string(rep->compiled) + " compil\xC3\xA9(s), "
              + std::to_string(rep->errors) + " erreur(s)";
     return out;
+}
+
+void MainAnalysisScreen::scriptHmiKeepData(bool on) {
+    if (auto* sim = dynamic_cast<HmiSimulationPane*>(hmiTab("simulation"))) sim->setKeepData(on);
+    else app_.settings().set("simulation.keepData", on);
+}
+
+std::string MainAnalysisScreen::hmiSimulationSummary() const {
+    const auto it = hmiTabs_.find("simulation");
+    auto* sim = it == hmiTabs_.end() ? nullptr : dynamic_cast<HmiSimulationPane*>(it->second);
+    const bool keep = app_.settings().getBool("simulation.keepData", false);
+    const std::string folder = app_.projectFolder();
+    std::error_code ec;
+    const bool file = !folder.empty() && std::filesystem::exists(std::filesystem::path(folder) / ".xpg" / "simulation" / "remanence.txt", ec);
+    std::string out = !sim ? std::string("pas d'onglet Simulation")
+                    : sim->hmiRunning() ? "en marche (session " + std::to_string(sim->runtime().session()) + ")"
+                    : sim->stoppedByModification() ? std::string("arr\xC3\xAAt\xC3\xA9" "e (projet modifi\xC3\xA9)")
+                    : sim->waitingBuild() ? std::string("en attente du build")
+                                          : std::string("arr\xC3\xAAt\xC3\xA9" "e");
+    out += std::string(" | r\xC3\xA9manence : ") + (keep ? "oui" : "non") + (file ? ", instantan\xC3\xA9 pr\xC3\xA9sent" : ", pas d'instantan\xC3\xA9");
+    if (sim) {
+        std::string note = sim->canvasNote();
+        for (auto& ch : note) if (ch == '\n') ch = ' ';
+        if (!note.empty()) out += " | carte : " + note;
+    }
+    return out;
+}
+
+std::string MainAnalysisScreen::hmiVariableText(const std::string& name) const {
+    const auto it = hmiTabs_.find("simulation");
+    auto* sim = it == hmiTabs_.end() ? nullptr : dynamic_cast<HmiSimulationPane*>(it->second);
+    if (!sim) return {};
+    const auto* v = sim->runtime().variable(name);
+    if (!v) return {};
+    return v->type() == ::sim::Type::String ? v->asString() : v->display();
 }
 
 std::string MainAnalysisScreen::hmiConsoleSummary() const {

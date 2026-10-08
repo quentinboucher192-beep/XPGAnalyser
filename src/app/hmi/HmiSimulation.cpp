@@ -1,4 +1,6 @@
 #include "HmiSimulation.hpp"
+#include "../../core/AtomicFile.hpp"   // 1.11.15 : l'instantane de la simulation, ecrit d'un bloc
+#include "../../hmi/HmiSimData.hpp"
 #include "HmiParamPanes.hpp"   // 1.9 : setPlcTypes, le repere des copies modifiees
 #include "../ExportTarget.hpp"
 #include "HmiTwinValues.hpp"
@@ -586,12 +588,18 @@ void HmiLiveCanvas::showLayers(std::vector<HmiLiveLayer> layers, bool interactiv
 }
 
 // 1.10 : l'IHM arretee - un voile sur la derniere image, et une carte au milieu
-// (ses lignes ; puis deux boutons : Demarrer l'IHM, Demarrer les deux, dont le
-// cadre revient dans `start` et `both`).
-static void paintStoppedNote(const ui::PaintContext& ctx, gfx::Rect b, const std::string& text, gfx::Rect& start, gfx::Rect& both) {
-    start = {};
-    both = {};
+// (ses lignes ; puis ses boutons, dont les cadres reviennent dans `rects`).
+// 1.11.15 : les boutons sont donnes (l'arret sur modification en a quatre) ; aucun :
+// Demarrer l'IHM et Demarrer les deux. Trop larges pour une rangee : plusieurs.
+static void paintStoppedNote(const ui::PaintContext& ctx, gfx::Rect b, const std::string& text,
+                             const std::vector<HmiLiveCanvas::NoteButton>& given, std::vector<gfx::Rect>& rects,
+                             std::vector<std::string>& actions) {
+    rects.clear();
+    actions.clear();
     if (text.empty()) return;
+    static const std::vector<HmiLiveCanvas::NoteButton> kDefault = {
+        {"D\xC3\xA9marrer l'IHM", "hmi.start", true}, {"D\xC3\xA9marrer les deux", "both.start", false}};
+    const auto& buttons = given.empty() ? kDefault : given;
     const auto& c = ctx.theme.color;
     ctx.r.fillRect(b, gfx::Color{0, 0, 0, 96});
     const gfx::FontId font = ctx.theme.font.ui;
@@ -604,12 +612,26 @@ static void paintStoppedNote(const ui::PaintContext& ctx, gfx::Rect b, const std
         if (nl == std::string::npos) break;
         at = nl + 1;
     }
-    const std::string startText = "D\xC3\xA9marrer l'IHM", bothText = "D\xC3\xA9marrer les deux";
-    const float sw = ctx.r.measure(startText, font).width + 28.f, bw = ctx.r.measure(bothText, font).width + 28.f;
-    w = std::max(w, sw + bw + 10.f);
+    // Les rangees de boutons : a la suite tant qu'ils tiennent dans la place.
+    const float room = std::max(220.f, b.w - 96.f);
+    std::vector<std::vector<std::size_t>> rows(1);
+    std::vector<float> widths;
+    float rowW = 0.f, widest = 0.f;
+    for (std::size_t i = 0; i < buttons.size(); ++i) {
+        const float bw = ctx.r.measure(buttons[i].label, font).width + 28.f;
+        widths.push_back(bw);
+        if (!rows.back().empty() && rowW + 10.f + bw > room) {
+            rows.emplace_back();
+            rowW = 0.f;
+        }
+        rowW += (rows.back().empty() ? 0.f : 10.f) + bw;
+        rows.back().push_back(i);
+        widest = std::max(widest, rowW);
+    }
+    w = std::min(std::max(w, widest), std::max(w, room));
     const float lh = ctx.r.lineHeight(font) + 6.f;
     const float bh = 32.f;
-    const float h = lh * static_cast<float>(lines.size()) + 32.f + bh + 12.f;
+    const float h = lh * static_cast<float>(lines.size()) + 32.f + static_cast<float>(rows.size()) * (bh + 8.f) + 4.f;
     const gfx::Rect card{b.x + (b.w - w - 48.f) / 2.f, b.y + (b.h - h) / 2.f, w + 48.f, h};
     ctx.r.fillRoundedRect(card, c.border, 10.f);
     ctx.r.fillRoundedRect({card.x + 1.f, card.y + 1.f, card.w - 2.f, card.h - 2.f}, c.panelBg, 9.f);
@@ -618,13 +640,26 @@ static void paintStoppedNote(const ui::PaintContext& ctx, gfx::Rect b, const std
         ctx.r.drawText({card.x + 24.f, y}, lines[i], font, i == 0 ? c.text : c.textMuted);
         if (i == 0) ctx.r.drawText({card.x + 24.6f, y}, lines[i], font, c.text);
     }
-    start = {card.x + 24.f, y + 6.f, sw, bh};
-    both = {start.right() + 10.f, start.y, bw, bh};
-    ctx.r.fillRoundedRect(start, c.accent, 6.f);
-    ctx.r.drawText({start.x + 14.f, start.y + (bh - ctx.r.lineHeight(font)) / 2.f}, startText, font, c.selectionText);
-    ctx.r.fillRoundedRect(both, c.border, 6.f);
-    ctx.r.fillRoundedRect({both.x + 1.f, both.y + 1.f, both.w - 2.f, both.h - 2.f}, c.panelBg, 5.f);
-    ctx.r.drawText({both.x + 14.f, both.y + (bh - ctx.r.lineHeight(font)) / 2.f}, bothText, font, c.text);
+    y += 6.f;
+    rects.assign(buttons.size(), gfx::Rect{});
+    for (const auto& row : rows) {
+        float x = card.x + 24.f;
+        for (const std::size_t i : row) {
+            const gfx::Rect r{x, y, widths[i], bh};
+            rects[i] = r;
+            if (buttons[i].primary) {
+                ctx.r.fillRoundedRect(r, c.accent, 6.f);
+                ctx.r.drawText({r.x + 14.f, r.y + (bh - ctx.r.lineHeight(font)) / 2.f}, buttons[i].label, font, c.selectionText);
+            } else {
+                ctx.r.fillRoundedRect(r, c.border, 6.f);
+                ctx.r.fillRoundedRect({r.x + 1.f, r.y + 1.f, r.w - 2.f, r.h - 2.f}, c.panelBg, 5.f);
+                ctx.r.drawText({r.x + 14.f, r.y + (bh - ctx.r.lineHeight(font)) / 2.f}, buttons[i].label, font, c.text);
+            }
+            x += widths[i] + 10.f;
+        }
+        y += bh + 8.f;
+    }
+    for (const auto& bt : buttons) actions.push_back(bt.action);
 }
 
 // 1.10 : la vue zoomee qui depasse - la petite carte en bas a gauche (la vue
@@ -718,7 +753,7 @@ void HmiLiveCanvas::onPaint(const ui::PaintContext& ctx) {
     keyboardRect_ = {};
     keys_.clear();
     if (layers_.empty() || layers_.front().view.width <= 0 || layers_.front().view.height <= 0) {
-        paintStoppedNote(ctx, b, stoppedNote_, stoppedStart_, stoppedBoth_);   // 1.10 : l'IHM pas encore demarree
+        paintStoppedNote(ctx, b, stoppedNote_, noteButtons_, noteRects_, noteActions_);   // 1.10 : l'IHM pas encore demarree
         return;
     }
     // CHAQUE VUE AJUSTEE A LA PLACE : pendant une navigation, celle qui part et
@@ -1068,7 +1103,7 @@ void HmiLiveCanvas::onPaint(const ui::PaintContext& ctx) {
     if (viewOverflows() && stoppedNote_.empty() && !station_ && vp_.zoom > 0.f)
         paintZoomMap(ctx, b, shownViewW_, shownViewH_,
                      {static_cast<float>(vp_.toViewX(b.x)), static_cast<float>(vp_.toViewY(b.y)), b.w / vp_.zoom, b.h / vp_.zoom});
-    paintStoppedNote(ctx, b, stoppedNote_, stoppedStart_, stoppedBoth_);   // 1.10 : l'IHM arretee
+    paintStoppedNote(ctx, b, stoppedNote_, noteButtons_, noteRects_, noteActions_);   // 1.10 : l'IHM arretee
     ctx.r.popClip();
 }
 
@@ -1678,8 +1713,12 @@ ui::EventResult HmiLiveCanvas::onEvent(const ui::InputEvent& ev) {
     if (const auto* d = std::get_if<ui::MouseDown>(&ev)) {
         // 1.10 : l'IHM arretee - les boutons de la carte ; le reste ne repond pas.
         if (!stoppedNote_.empty() && bounds().contains(d->pos)) {
-            if (d->button == ui::MouseButton::Left && stoppedStart_.contains(d->pos)) stoppedAction->emit(std::string("hmi.start"));
-            else if (d->button == ui::MouseButton::Left && stoppedBoth_.contains(d->pos)) stoppedAction->emit(std::string("both.start"));
+            if (d->button == ui::MouseButton::Left)
+                for (std::size_t i = 0; i < noteRects_.size() && i < noteActions_.size(); ++i)
+                    if (noteRects_[i].contains(d->pos)) {
+                        stoppedAction->emit(std::string(noteActions_[i]));   // une copie : l'action peut refaire la carte
+                        break;
+                    }
             return ui::EventResult::Consumed;
         }
         // 1.10 : le bouton du milieu deplace la vue zoomee, ou qu'il appuie.
@@ -2241,7 +2280,24 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
     hmiStopBtn_ = &bar->addButton("Arr\xC3\xAAter l'IHM", "hmi.stop", ui::Icon::Stop);
     hmiStopBtn_->setTooltip("Arr\xC3\xAAter l'IHM seule (Maj+F8) : l'API continue (ou reste arr\xC3\xAAt\xC3\xA9" "e)");
     bar->addButton("Red\xC3\xA9marrer l'IHM", "hmi.restart", ui::Icon::Refresh)
-        .setTooltip("Variables IHM \xC3\xA0 leur valeur initiale, scripts de d\xC3\xA9marrage, vue de d\xC3\xA9marrage (l'API ne bouge pas)");
+        .setTooltip("Red\xC3\xA9marrer (apr\xC3\xA8s confirmation) : les donn\xC3\xA9" "es de simulation et l'\xC3\xA9tat r\xC3\xA9manent effac\xC3\xA9s, "
+                    "variables IHM \xC3\xA0 leur valeur initiale, esclaves simul\xC3\xA9s \xC3\xA0 leur d\xC3\xA9part, scripts et vue de d\xC3\xA9marrage "
+                    "(l'API ne bouge pas)");
+    // 1.11.15 : Generer et redemarrer - les donnees gardees, seul ce qui a change est refait.
+    bar->addButton("G\xC3\xA9n\xC3\xA9rer et red\xC3\xA9marrer", "hmi.buildRestart", ui::Icon::Analyze)
+        .setTooltip("G\xC3\xA9n\xC3\xA9rer et red\xC3\xA9marrer : les donn\xC3\xA9" "es de simulation gard\xC3\xA9" "es (l'option R\xC3\xA9manence coch\xC3\xA9" "e), "
+                    "seul ce qui a chang\xC3\xA9 est g\xC3\xA9n\xC3\xA9r\xC3\xA9 et compil\xC3\xA9, puis la simulation repart avec ses donn\xC3\xA9" "es "
+                    "(pas de remise \xC3\xA0 z\xC3\xA9ro)");
+    {
+        // 1.11.15 : l'option globale « Conserver les donnees de simulation entre les demarrages ».
+        auto keep = std::make_unique<ui::ToggleButton>("R\xC3\xA9manence", base + ".keepData");
+        keep->setChecked(host_.keepData && host_.keepData());
+        keep->setTooltip("Conserver les donn\xC3\xA9" "es de simulation entre les d\xC3\xA9marrages : \xC3\xA0 l'arr\xC3\xAAt, les variables IHM et la "
+                         "m\xC3\xA9moire des esclaves simul\xC3\xA9s sont gard\xC3\xA9" "es (.xpg/simulation du projet) et rendues au d\xC3\xA9marrage "
+                         "suivant. Red\xC3\xA9marrer les efface. Jamais le stockage du poste d'exploitation.");
+        keepButton_ = &static_cast<ui::ToggleButton&>(bar->addCustom(std::move(keep)));
+        links_ += keepButton_->toggled->connect([this](bool on) { setKeepData(on); });
+    }
     bar->addSeparator();
     plcChip_ = &bar->addCustom(std::make_unique<StateChip>(base + ".plcState"));
     plcChip_->setTooltip("L'API : le programme de l'automate simul\xC3\xA9. Ses commandes compl\xC3\xA8tes (pause, un cycle) "
@@ -2972,6 +3028,18 @@ HmiSimulationPane::~HmiSimulationPane() {
     // ou relie) et les liaisons des equipements peuvent etre deja detruits ;
     // Runtime::stop les quitte (unfollowAll) : l'IHM s'arrete sans eux.
     if (started_) {
+        // 1.11.15 : quitter pendant la marche est un arret - les donnees gardees (l'option
+        // et le fichier du demarrage : l'hote est peut-etre deja parti ; les variables
+        // seulement, les esclaves simules aussi le sont peut-etre).
+        if (keepAtStart_ && !dataFileAtStart_.empty()) {
+            hmi::simdata::Snapshot snap;
+            snap.date = hmi::simdata::nowStamp();
+            snap.session = runtime_.session();
+            snap.cells = runtime_.captureData();
+            std::error_code ec;
+            std::filesystem::create_directories(std::filesystem::path(dataFileAtStart_).parent_path(), ec);
+            (void)core::writeFileAtomic(dataFileAtStart_, hmi::simdata::serialize(snap));
+        }
         runtime_.bind(&doc_->project, nullptr);
         runtime_.setHooks({});
         runtime_.stop(now_);
@@ -2999,8 +3067,11 @@ void HmiSimulationPane::ensureStarted(double now) {
         if (auto* eq = host_.equipments ? host_.equipments() : nullptr) eq->clearRuntimeChoices();
         // 1.9 : les DDT du programme (les membres que capture une copie de parametre).
         runtime_.setPlcTypes(hmiparams::plcTypesOf(hmiparams::program().get()));
+        loadData();                                                          // 1.11.15 : la remanence de simulation
         runtime_.start(now);
+        modifiedStop_ = false;
         if (host_.lifecycle) host_.lifecycle(true, runtime_.session());     // 1.11.14 : les Sorties
+        reportRestore();
     }
 }
 
@@ -3032,10 +3103,13 @@ void HmiSimulationPane::stopScenario() {
     canvas_->setTouch(kNoId, 0.f);
 }
 
+// 1.11.15 : restart() garde son sens d'avant (le poste d'exploitation au lancement, les
+// didacticiels) - relancer, les variables a leur valeur initiale, sans rien effacer ni
+// demander ; le Redemarrer destructif (l'etat garde, les esclaves simules) est restartClean.
 void HmiSimulationPane::restart() {
-    runtime_.stop(now_);
-    if (started_ && host_.lifecycle) host_.lifecycle(false, runtime_.session());   // 1.11.14
-    started_ = false;
+    if (started_) stopRuntime("red\xC3\xA9marrage");
+    modifiedStop_ = false;
+    skipRestore_ = true;                 // les valeurs initiales, pas l'etat garde
     layers_.reset();
     ensureStarted(now_);
     refreshPane();
@@ -3100,10 +3174,39 @@ void HmiSimulationPane::run(core::ActionId id) {
     }
     if (id == "hmi.restart") {
         // 1.10 : redemarrer l'IHM la demarre si elle etait arretee ; l'API ne bouge pas.
-        restart();
-        status_->setTransientMessage("IHM red\xC3\xA9marr\xC3\xA9" "e (l'API " + plcStateText() + ")", 4.0);
+        // 1.11.15 : destructif (les donnees de simulation, l'etat garde) : la question d'abord.
+        const auto go = [this] {
+            restartClean("bouton Red\xC3\xA9marrer l'IHM");
+            status_->setTransientMessage("IHM red\xC3\xA9marr\xC3\xA9" "e : valeurs initiales (l'API " + plcStateText() + ")", 4.0);
+        };
+        std::error_code ec;
+        const std::string file = host_.dataFile ? host_.dataFile() : std::string{};
+        const bool destructive = started_ || (!file.empty() && std::filesystem::exists(file, ec));
+        if (host_.confirmRestart && destructive) host_.confirmRestart([go](bool yes) { if (yes) go(); });
+        else go();
         return;
     }
+    // ---- 1.11.15 : la suite d'un arret sur modification, Generer et redemarrer ----
+    if (id == "hmi.buildRestart") { buildAndRestart("G\xC3\xA9n\xC3\xA9rer et red\xC3\xA9marrer"); return; }
+    if (id == "hmi.rebuildRestart") {
+        modifiedStop_ = false;
+        if (host_.rebuild) host_.rebuild("regenerer");
+        else buildAndRestart("R\xC3\xA9g\xC3\xA9n\xC3\xA9rer et red\xC3\xA9marrer");
+        refreshPane();
+        return;
+    }
+    if (id == "hmi.compile") {
+        if (host_.rebuild) host_.rebuild("compiler");
+        return;
+    }
+    if (id == "hmi.cancelRestart") {
+        modifiedStop_ = false;
+        output(0, "Red\xC3\xA9marrage annul\xC3\xA9 : la simulation reste arr\xC3\xAAt\xC3\xA9" "e (D\xC3\xA9marrer l'IHM la relance).");
+        status_->setTransientMessage("Red\xC3\xA9marrage annul\xC3\xA9 : la simulation reste arr\xC3\xAAt\xC3\xA9" "e", 5.0);
+        refreshPane();
+        return;
+    }
+    if (id == "hmi.keepData") { setKeepData(!keepData()); return; }
     // ---- 1.10 : l'IHM et l'API, chacune ses commandes ----
     if (id == "hmi.start") { startHmi("bouton D\xC3\xA9marrer l'IHM"); return; }
     if (id == "hmi.stop") { stopHmi("bouton Arr\xC3\xAAter l'IHM"); return; }
@@ -3238,9 +3341,178 @@ void HmiSimulationPane::startHmi(const std::string& source) {
     refreshPane();
 }
 
+// ============================ 1.11.15 : le cycle de la simulation, la remanence ===
+namespace {
+std::string countText(long long n, const char* one, const char* many) { return std::to_string(n) + " " + (n > 1 ? many : one); }
+} // namespace
+
+std::string HmiSimulationPane::canvasNote() const { return canvas_ ? canvas_->stoppedNote() : std::string{}; }
+
+void HmiSimulationPane::output(int severity, const std::string& text) {
+    if (host_.outputs) host_.outputs(severity, text);
+}
+
+void HmiSimulationPane::setKeepData(bool on) {
+    if (keepButton_ && keepButton_->checked() != on) {
+        keepButton_->setChecked(on);    // le bouton rappelle setKeepData (son signal)
+        return;
+    }
+    if (host_.setKeepData) host_.setKeepData(on);
+    keepAtStart_ = on && started_;      // l'arret en quittant suit l'option du moment
+    output(0, on ? std::string("R\xC3\xA9manence de simulation activ\xC3\xA9" "e : les donn\xC3\xA9" "es seront gard\xC3\xA9" "es \xC3\xA0 l'arr\xC3\xAAt et rendues au d\xC3\xA9marrage suivant.")
+                 : std::string("R\xC3\xA9manence de simulation d\xC3\xA9sactiv\xC3\xA9" "e : le prochain d\xC3\xA9marrage repart des valeurs initiales "
+                               "(l'\xC3\xA9tat gard\xC3\xA9 est ignor\xC3\xA9)."));
+    status_->setTransientMessage(on ? "R\xC3\xA9manence de simulation : activ\xC3\xA9" "e" : "R\xC3\xA9manence de simulation : d\xC3\xA9sactiv\xC3\xA9" "e", 4.0);
+}
+
+bool HmiSimulationPane::saveData(const std::string& why) {
+    if (!started_ || !keepData()) return false;
+    const std::string file = host_.dataFile ? host_.dataFile() : std::string{};
+    if (file.empty()) {
+        output(2, "R\xC3\xA9manence de simulation : le projet n'est pas encore enregistr\xC3\xA9 \xE2\x80\x94 rien n'est gard\xC3\xA9.");
+        return false;
+    }
+    hmi::simdata::Snapshot snap;
+    snap.date = hmi::simdata::nowStamp();
+    snap.session = runtime_.session();
+    snap.cells = runtime_.captureData();
+    if (auto* eq = host_.equipments ? host_.equipments() : nullptr)
+        for (const auto& e : doc_->project.equipments)
+            if (auto bank = eq->twinBank(e.name)) snap.twins.push_back(hmi::simdata::TwinMemory{e.id, e.name, bank->snapshot()});
+    std::error_code ec;
+    std::filesystem::create_directories(std::filesystem::path(file).parent_path(), ec);
+    const auto st = core::writeFileAtomic(file, hmi::simdata::serialize(snap));
+    if (!st) {
+        const std::string reason = "R\xC3\xA9manence de simulation : sauvegarde impossible \xE2\x80\x94 " + st.error().message();
+        output(3, reason);
+        runtime_.logAt(hmi::LogLevel::Error, "Simulation", "IHM", reason);
+        return false;
+    }
+    output(1, "Donn\xC3\xA9" "es de simulation sauvegard\xC3\xA9" "es (" + why + ") : " + countText(static_cast<long long>(snap.cells.size()), "valeur", "valeurs")
+                  + (snap.twins.empty() ? std::string{} : ", " + countText(static_cast<long long>(snap.twins.size()), "esclave simul\xC3\xA9", "esclaves simul\xC3\xA9s"))
+                  + " \xE2\x80\x94 " + std::filesystem::path(file).filename().string() + ".");
+    return true;
+}
+
+void HmiSimulationPane::clearData() {
+    const std::string file = host_.dataFile ? host_.dataFile() : std::string{};
+    if (file.empty()) return;
+    std::error_code ec;
+    const bool had = std::filesystem::remove(file, ec);
+    std::filesystem::remove(file + ".bak", ec);
+    std::filesystem::remove(file + ".tmp", ec);
+    if (had) output(1, "\xC3\x89tat r\xC3\xA9manent de simulation supprim\xC3\xA9.");
+}
+
+// Avant runtime_.start : l'instantane lu (sa copie de secours s'il est abime), ses variables
+// donnees au moteur (rendues apres les valeurs initiales), les esclaves simules recharges.
+void HmiSimulationPane::loadData() {
+    restoredTwins_ = 0;
+    loadedFrom_.clear();
+    loadNote_.clear();
+    keepAtStart_ = keepData();
+    dataFileAtStart_ = host_.dataFile ? host_.dataFile() : std::string{};
+    if (skipRestore_) {          // Redemarrer : un depart propre
+        skipRestore_ = false;
+        return;
+    }
+    if (!keepAtStart_ || dataFileAtStart_.empty()) return;
+    std::error_code ec;
+    if (!std::filesystem::exists(dataFileAtStart_, ec)) {
+        loadNote_ = "Aucune donn\xC3\xA9" "e de simulation gard\xC3\xA9" "e : les valeurs initiales.";
+        return;
+    }
+    hmi::simdata::Snapshot snap;
+    std::string text, why;
+    if (!core::readFileAll(dataFileAtStart_, text) || !hmi::simdata::parse(text, snap, &why)) {
+        std::string bak, why2;
+        if (core::readFileAll(dataFileAtStart_ + ".bak", bak) && hmi::simdata::parse(bak, snap, &why2)) {
+            output(2, "R\xC3\xA9manence de simulation : l'instantan\xC3\xA9 est illisible (" + (why.empty() ? std::string("illisible") : why)
+                          + ") \xE2\x80\x94 sa copie de secours est reprise.");
+        } else {
+            output(2, "R\xC3\xA9manence de simulation : l'instantan\xC3\xA9 est illisible (" + (why.empty() ? std::string("illisible") : why)
+                          + ") \xE2\x80\x94 les valeurs initiales.");
+            runtime_.logAt(hmi::LogLevel::Warning, "Simulation", "IHM", "Instantan\xC3\xA9 de simulation illisible : " + why);
+            return;
+        }
+    }
+    runtime_.setStartData(snap.cells);
+    if (auto* eq = host_.equipments ? host_.equipments() : nullptr)
+        for (const auto& t : snap.twins)
+            for (const auto& e : doc_->project.equipments)
+                if (e.id == t.equipment)
+                    if (auto bank = eq->twinBank(e.name)) {
+                        bank->clear();
+                        bank->load(t.memory);
+                        ++restoredTwins_;
+                    }
+    loadedFrom_ = snap.date;
+}
+
+// Apres runtime_.start : ce que le retour a fait, dans les Sorties.
+void HmiSimulationPane::reportRestore() {
+    if (!keepAtStart_) return;
+    if (const auto& r = runtime_.lastRestore()) {
+        auto rep = *r;
+        rep.twins = restoredTwins_;
+        output(rep.incompatible > 0 ? 2 : 1, "Donn\xC3\xA9" "es de simulation restaur\xC3\xA9" "es" + (loadedFrom_.empty() ? std::string{} : " (gard\xC3\xA9" "es le " + loadedFrom_ + ")")
+                                                 + " : " + rep.summary() + ".");
+        for (const auto& w : rep.warnings) output(2, w);
+    } else if (!loadNote_.empty()) {
+        output(0, loadNote_);
+    }
+}
+
+void HmiSimulationPane::stopRuntime(const std::string& why) {
+    stopScenario();
+    runtime_.stop(now_, why);
+    if (host_.lifecycle) host_.lifecycle(false, runtime_.session());
+    started_ = false;
+}
+
+void HmiSimulationPane::restartClean(const std::string& source) {
+    if (started_) stopRuntime(source);
+    clearData();                                         // l'etat garde : efface
+    if (auto* eq = host_.equipments ? host_.equipments() : nullptr)
+        for (const auto& e : doc_->project.equipments) eq->restartTwin(e.name);   // les esclaves simules a leur depart
+    modifiedStop_ = false;
+    skipRestore_ = true;                                 // le demarrage qui suit ne rend rien
+    autoStart_ = true;
+    layers_.reset();
+    output(0, "Red\xC3\xA9marrage (" + source + ") : les donn\xC3\xA9" "es de simulation repartent de leurs valeurs initiales.");
+    ensureStarted(now_);                                 // le build d'abord (un projet a jour : tout de suite)
+    refreshPane();
+}
+
+void HmiSimulationPane::buildAndRestart(const std::string& source) {
+    modifiedStop_ = false;
+    if (started_) {
+        (void)saveData(source);                          // l'option cochee : les donnees repartent avec elle
+        stopRuntime(source);
+    }
+    autoStart_ = true;
+    layers_.reset();
+    startHmi(source);                                    // le build de ce qui a change, puis la simulation
+    refreshPane();
+}
+
+void HmiSimulationPane::stopForModification(const std::string& what) {
+    if (!started_) return;
+    const bool kept = saveData("arr\xC3\xAAt sur modification");
+    runtime_.logAt(hmi::LogLevel::Warning, "Simulation", "IHM", "La simulation a \xC3\xA9t\xC3\xA9 arr\xC3\xAAt\xC3\xA9" "e car le projet IHM a \xC3\xA9t\xC3\xA9 modifi\xC3\xA9 : " + what);
+    stopRuntime("le projet IHM a \xC3\xA9t\xC3\xA9 modifi\xC3\xA9");
+    autoStart_ = false;
+    modifiedStop_ = true;
+    modifiedNote_ = "La simulation a \xC3\xA9t\xC3\xA9 arr\xC3\xAAt\xC3\xA9" "e car le projet IHM a \xC3\xA9t\xC3\xA9 modifi\xC3\xA9.\n" + what
+                  + (kept ? "\nLes donn\xC3\xA9" "es de simulation sont gard\xC3\xA9" "es ; les journaux et les diagnostics restent." : "\nLes journaux et les diagnostics restent.");
+    status_->setTransientMessage("La simulation a \xC3\xA9t\xC3\xA9 arr\xC3\xAAt\xC3\xA9" "e car le projet IHM a \xC3\xA9t\xC3\xA9 modifi\xC3\xA9.", 8.0, ui::StatusBar::Severity::Warning);
+    refreshPane();
+}
+
 void HmiSimulationPane::stopHmi(const std::string& source) {
     if (!started_) return;
     stopScenario();
+    (void)saveData(source.empty() ? std::string("arr\xC3\xAAt") : source);   // 1.11.15 : l'option cochee
     runtime_.stop(now_, source);                                            // 1.11.14 : une seule ligne, avec la raison
     if (host_.lifecycle) host_.lifecycle(false, runtime_.session());       // 1.11.14 : les Sorties
     started_ = false;
@@ -3595,6 +3867,16 @@ void HmiSimulationPane::refreshPane() {
         refreshBar();
         canvas_->setStoppedNote("Build de l'IHM en cours\xE2\x80\xA6\nLa simulation d\xC3\xA9marre d\xC3\xA8s qu'il est valide.");
         status_->setMessage("Build en cours avant le d\xC3\xA9marrage\xE2\x80\xA6", ui::StatusBar::Severity::Info);
+        return;
+    }
+    // 1.11.15 : arretee parce que le projet IHM a change - la carte et ses quatre boutons.
+    if (!started_ && modifiedStop_) {
+        refreshBar();
+        canvas_->setStoppedNote(modifiedNote_, {{"G\xC3\xA9n\xC3\xA9rer et red\xC3\xA9marrer", "hmi.buildRestart", true},
+                                                {"R\xC3\xA9g\xC3\xA9n\xC3\xA9rer et red\xC3\xA9marrer", "hmi.rebuildRestart", false},
+                                                {"Compiler", "hmi.compile", false},
+                                                {"Annuler le red\xC3\xA9marrage", "hmi.cancelRestart", false}});
+        status_->setMessage("Arr\xC3\xAAt\xC3\xA9" "e : le projet IHM a \xC3\xA9t\xC3\xA9 modifi\xC3\xA9 \xC2\xB7 API " + plcStateText(), ui::StatusBar::Severity::Warning);
         return;
     }
     if (!started_ && !autoStart_ && !blockedNote_.empty()) {

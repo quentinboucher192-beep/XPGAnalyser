@@ -803,6 +803,15 @@ sim::Value* Runtime::ihmSlot(std::string_view name) {
     return it == env_->vars.end() ? nullptr : &it->second;
 }
 
+// 1.11.15 : les cases des variables IHM non liees, a leur valeur du moment.
+std::vector<simdata::Cell> Runtime::captureData() const {
+    if (!project_) return {};
+    return simdata::captureVariables(*project_, [this](const std::string& path) -> const sim::Value* {
+        const auto it = env_->vars.find(upper(path));
+        return it == env_->vars.end() ? nullptr : &it->second;
+    });
+}
+
 const View* Runtime::viewOf(Id id) const {
     const View* v = project_ ? project_->view(id) : nullptr;
     if (!v) return v;
@@ -2141,6 +2150,15 @@ void Runtime::start(double now) {
         }
     }
     initVariables();
+    // 1.11.15 : la remanence de simulation - les valeurs gardees, rendues avant les
+    // scripts de Demarrage (une fois : le demarrage d'apres repart des valeurs initiales).
+    lastRestore_.reset();
+    if (startData_) {
+        lastRestore_ = simdata::restoreVariables(*project_, *startData_, [this](const std::string& path) { return ihmSlot(path); });
+        startData_.reset();
+        logAt(LogLevel::Info, "Simulation", {}, "Donn\xC3\xA9" "es de simulation restaur\xC3\xA9" "es : " + lastRestore_->summary());
+        for (const auto& w : lastRestore_->warnings) logAt(LogLevel::Warning, "Simulation", {}, w);
+    }
     log("Syst\xC3\xA8me", {}, "IHM d\xC3\xA9marr\xC3\xA9" "e : " + std::to_string(project_->programs.variables.size())
                                  + " variable(s) IHM, " + std::to_string(project_->programs.scripts.size())
                                  + " script(s) g\xC3\xA9n\xC3\xA9raux");

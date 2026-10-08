@@ -126,6 +126,20 @@ struct HmiSimulationHost {
     //  l'arret de l'IHM (la session : le numero du demarrage) : une ligne des Sorties.
     std::function<void(const hmi::JournalEntry&)>         console;
     std::function<void(bool started, int session)>        lifecycle;
+    // ---- 1.11.15 : LE CYCLE DE LA SIMULATION ET LA REMANENCE DE SIMULATION ----
+    //  keepData / setKeepData : l'option « Conserver les donnees de simulation entre les
+    //  demarrages » (un reglage de l'application). dataFile : le fichier de l'instantane
+    //  (<projet>/.xpg/simulation/remanence.txt ; vide : un projet jamais enregistre).
+    //  outputs : une ligne des Sorties (0 information, 1 succes, 2 avertissement,
+    //  3 erreur). confirmRestart : la question avant un redemarrage destructif (la
+    //  reponse : vrai, redemarrer) ; nulle : pas de question. rebuild : Regenerer et
+    //  redemarrer ("regenerer") ou Compiler ("compiler"), lances par l'hote.
+    std::function<bool()>                                 keepData;
+    std::function<void(bool)>                             setKeepData;
+    std::function<std::string()>                          dataFile;
+    std::function<void(int severity, const std::string&)> outputs;
+    std::function<void(std::function<void(bool)> answer)> confirmRestart;
+    std::function<void(const std::string& mode)>          rebuild;
 };
 
 // Une vue a dessiner : evaluee, avec l'etat de sa transition.
@@ -286,12 +300,26 @@ public:
     const core::SignalPtr<> displayZoomChanged = core::Signal<>::create();
     // 1.10 : L'IHM ARRETEE - la derniere image reste, sous un voile, avec ce texte
     // au milieu (vide : l'IHM tourne).
-    void setStoppedNote(std::string text) { stoppedNote_ = std::move(text); invalidate(); }
+    void setStoppedNote(std::string text) { stoppedNote_ = std::move(text); noteButtons_.clear(); invalidate(); }
     [[nodiscard]] const std::string& stoppedNote() const noexcept { return stoppedNote_; }
     // Les deux boutons de la carte ("Demarrer l'IHM", "Demarrer les deux") :
     // un clic envoie "hmi.start" ou "both.start" ; leur cadre au dernier dessin.
     const core::SignalPtr<std::string> stoppedAction = core::Signal<std::string>::create();
-    [[nodiscard]] gfx::Rect stoppedButtonRect(bool both) const noexcept { return both ? stoppedBoth_ : stoppedStart_; }
+    [[nodiscard]] gfx::Rect stoppedButtonRect(bool both) const noexcept { return noteButtonRect(both ? 1u : 0u); }
+    // 1.11.15 : la carte peut proposer d'autres boutons (l'arret sur modification :
+    // Generer et redemarrer, Regenerer et redemarrer, Compiler, Annuler le redemarrage) ;
+    // un clic envoie l'action du bouton. Leur cadre au dernier dessin (vide : aucun).
+    struct NoteButton {
+        std::string label, action;
+        bool        primary{false};
+    };
+    void setStoppedNote(std::string text, std::vector<NoteButton> buttons) {
+        stoppedNote_ = std::move(text);
+        noteButtons_ = std::move(buttons);
+        invalidate();
+    }
+    [[nodiscard]] const std::vector<NoteButton>& noteButtons() const noexcept { return noteButtons_; }
+    [[nodiscard]] gfx::Rect noteButtonRect(std::size_t index) const noexcept { return index < noteRects_.size() ? noteRects_[index] : gfx::Rect{}; }
     // Lot 13 : le dernier dessin, en ms, et les objets dessines (les performances).
     [[nodiscard]] double      lastPaintMs() const noexcept { return lastPaintMs_; }
     [[nodiscard]] std::size_t lastPaintObjects() const noexcept { return lastPaintObjects_; }
@@ -393,7 +421,9 @@ private:
     bool                      displayPanning_{false};
     gfx::Point                displayGrab_{}, displayPanStart_{};
     std::string               stoppedNote_;
-    gfx::Rect                 stoppedStart_{}, stoppedBoth_{};
+    std::vector<NoteButton>   noteButtons_;         // 1.11.15 : vide - Demarrer l'IHM, Demarrer les deux
+    std::vector<gfx::Rect>    noteRects_;           // ... leur cadre au dernier dessin
+    std::vector<std::string>  noteActions_;
 };
 
 // Lot 8 : les couches de l'IHM en marche - la vue courante (les deux vues d'une
@@ -523,6 +553,29 @@ public:
     // demarre ; sinon elle reste arretee et dit pourquoi (les sorties, la source).
     void buildDone(bool ok, const std::string& why = {});
     [[nodiscard]] bool waitingBuild() const noexcept { return waitingBuild_; }
+    // ---- 1.11.15 : DEMARRER, ARRETER, REDEMARRER, GENERER ET REDEMARRER ------------------
+    //  Demarrer (startHmi) : le build de ce qui a change, les donnees gardees rendues
+    //  (l'option cochee), la simulation. Arreter (stopHmi) : les donnees gardees (l'option
+    //  cochee), rien n'est efface. Redemarrer (restartClean ; la barre demande d'abord) :
+    //  l'etat garde efface, les variables a leur valeur initiale, les esclaves simules a
+    //  leur depart, un demarrage propre. Generer et redemarrer (buildAndRestart) : les
+    //  donnees gardees, le build de ce qui a change, la simulation repart avec elles.
+    //  stopForModification : le projet IHM a change pendant la marche - arret propre, les
+    //  donnees et les journaux gardes ; la carte dit pourquoi et propose la suite.
+    void restartClean(const std::string& source);
+    void buildAndRestart(const std::string& source);
+    void stopForModification(const std::string& what);
+    [[nodiscard]] bool stoppedByModification() const noexcept { return modifiedStop_; }
+    // Redemarrer : le demarrage qui vient ne rendra rien (la phase G du build le dit).
+    [[nodiscard]] bool restoreSkipped() const noexcept { return skipRestore_; }
+    // Le texte de la carte au milieu de la vue (vide : l'IHM tourne) - les sessions le lisent.
+    [[nodiscard]] std::string canvasNote() const;
+    // L'instantane : pris et ecrit (l'IHM en marche, l'option cochee ; faux : rien
+    // d'ecrit) ; efface (Redemarrer) ; l'option.
+    bool saveData(const std::string& why);
+    void clearData();
+    [[nodiscard]] bool keepData() const { return host_.keepData && host_.keepData(); }
+    void setKeepData(bool on);
     // L'etat de l'API en clair ("en marche \xC2\xB7 cycle 1204") et son ton
     // ("running", "paused", "stopped", "halted", "off").
     [[nodiscard]] std::string plcStateText() const;
@@ -622,6 +675,21 @@ private:
     bool                  gateOpen_{false};
     std::string           gateSource_, blockedNote_;
     bool                  askBuild(const std::string& source);
+    // 1.11.15 : l'arret sur modification (la carte et ses quatre boutons) ; Redemarrer :
+    // le prochain demarrage ne rend rien ; l'instantane rendu (sa date, les esclaves
+    // simules recharges) ; l'option et le fichier du demarrage (l'arret en quittant
+    // l'application ne demande rien a l'hote, peut-etre deja parti).
+    bool                  modifiedStop_{false};
+    std::string           modifiedNote_;
+    bool                  skipRestore_{false};
+    bool                  keepAtStart_{false};
+    std::string           dataFileAtStart_, loadedFrom_, loadNote_;
+    int                   restoredTwins_{0};
+    ui::ToggleButton*     keepButton_{nullptr};
+    void                  loadData();
+    void                  reportRestore();
+    void                  output(int severity, const std::string& text);
+    void                  stopRuntime(const std::string& why);
     bool                  station_{false};   // lot 14
     // 1.10 : la barre de l'onglet - les boutons qui suivent les etats, les pastilles
     // (IHM, API, zoom), le choix de la vue ; la vue d'avant (Precedente).

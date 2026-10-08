@@ -73,6 +73,30 @@ private:
     core::ConnectionScope            links_;
 };
 
+// 1.11.15 : LA QUESTION AVANT UN REDEMARRAGE DESTRUCTIF - « Le redemarrage va reinitialiser
+// les donnees de simulation et supprimer l'etat remanent courant. Continuer ? », la case
+// « Ne plus demander pour cette session ». Ok : redemarrer ; la charge "nomore" : la case
+// cochee.
+class HmiRestartDialog final : public menu::WidgetMenu {
+public:
+    HmiRestartDialog();
+    [[nodiscard]] menu::MenuTraits traits() const override;
+    [[nodiscard]] std::string title() const override { return "Red\xC3\xA9marrer la simulation"; }
+    ui::EventResult HandleEvent(const ui::InputEvent& ev) override;
+    void answer(bool yes);
+
+protected:
+    core::Status buildUi() override;
+
+private:
+    friend class HmiRestartBody;
+    ui::Checkbox*         noMore_{nullptr};
+    ui::Button*           yes_{nullptr};
+    ui::Button*           no_{nullptr};
+    bool                  closed_{false};
+    core::ConnectionScope links_;
+};
+
 class HmiBuildOutputPane final : public ui::Widget {
 public:
     // 1.11.14 : LE PANNEAU DU BAS - ses trois onglets.

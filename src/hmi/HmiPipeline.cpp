@@ -1535,8 +1535,11 @@ Report run(const Project& p, const ApiInfo& api, const Request& req, const Optio
         if (rep.ok) {
             pr.phases[f] = PhaseState::Done;
             pr.phaseNotes[f] = "la simulation d\xC3\xA9marre";
-            pr.phases[g] = PhaseState::Skipped;
-            pr.phaseNotes[g] = "rien \xC3\xA0 restaurer";
+            // 1.11.15 : la remanence de simulation - ce qu'elle rend au demarrage, ou pourquoi rien.
+            pr.phases[g] = req.restore.empty() ? PhaseState::Skipped : PhaseState::Done;
+            pr.phaseNotes[g] = !req.restore.empty() ? req.restore
+                             : req.restoreOff      ? std::string("r\xC3\xA9manence d\xC3\xA9sactiv\xC3\xA9" "e")
+                                                   : std::string("rien \xC3\xA0 restaurer");
         } else {
             pr.phases[f] = pr.phases[g] = PhaseState::Cancelled;
             pr.phaseNotes[f] = pr.phaseNotes[g] = rep.cancelled ? std::string("annul\xC3\xA9")

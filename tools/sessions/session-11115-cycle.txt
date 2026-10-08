@@ -1,0 +1,120 @@
+# =============================================================================
+#  Session 11115 : LE CYCLE DE LA SIMULATION ET LA REMANENCE (lot 3).
+#  Sur la copie corrigee d'Armoire_Gaz (session 11113), sans cache :
+#    1. l'option Remanence cochee (la barre de l'onglet Simulation . IHM) ;
+#    2. la simulation tourne : Secondes_IHM avance (le script Horloge) ;
+#       Arreter : les donnees gardees (les Sorties le disent) ;
+#    3. Demarrer : Secondes_IHM reprend ou il en etait ;
+#    4. Redemarrer : la question ; Redemarrer : les valeurs initiales ;
+#    5. Generer et redemarrer : les donnees gardees, la simulation repart avec elles ;
+#    6. une ligne ajoutee au script Horloge pendant la marche : l'arret, la carte ;
+#    7. Generer et redemarrer depuis la carte : seul Horloge est refait, les
+#       donnees reviennent ;
+#    8. l'option decochee : le demarrage repart des valeurs initiales.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- 1. la simulation, l'option Remanence ----
+arbre "Simulation/IHM"
+attendre 2
+ihm-build-attendre
+attendre 60
+ihm-remanence on
+attendre 3
+ihm-sim-etat "en marche"
+survol 1350 400
+attendre 2
+capture 11115_01_remanence_cochee.png
+#  le panneau du bas : la recherche « simulation » - les lignes de la simulation seules
+clic 1480 626
+attendre 2
+texte "simulation"
+attendre 3
+survol 1350 400
+
+# ---- 2. Secondes_IHM avance ; Arreter : les donnees gardees ----
+attendre 150
+ihm-variable "Secondes_IHM"
+bouton "Arrêter l'IHM"
+attendre 3
+ihm-sim-etat "instantané présent"
+ihm-sorties
+attendre 3
+capture 11115_02_arreter_donnees_gardees.png
+
+# ---- 3. Demarrer : les donnees rendues ----
+bouton "Démarrer l'IHM"
+attendre 1
+ihm-build-attendre
+attendre 3
+ihm-sim-etat "en marche"
+ihm-variable "Secondes_IHM"
+attendre 3
+capture 11115_03_demarrer_donnees_rendues.png
+
+# ---- 4. Redemarrer : la question, puis les valeurs initiales ----
+bouton "Redémarrer l'IHM"
+attendre 3
+capture 11115_04_question_redemarrer.png
+bouton "Redémarrer"
+attendre 1
+ihm-build-attendre
+attendre 3
+ihm-sim-etat "pas d'instantané"
+ihm-variable "Secondes_IHM"
+capture 11115_05_redemarrer_valeurs_initiales.png
+
+# ---- 5. Generer et redemarrer : les donnees gardees ----
+attendre 120
+ihm-variable "Secondes_IHM"
+bouton "Générer et redémarrer"
+attendre 1
+ihm-build-attendre
+attendre 3
+ihm-variable "Secondes_IHM"
+capture 11115_06_generer_et_redemarrer.png
+
+# ---- 6. une modification pendant la marche : l'arret ----
+ihm-script-modifier "Horloge" "IHM_LOG(DEBUG, 'tic {Secondes_IHM}');"
+attendre 20
+ihm-sim-etat "projet modifié"
+onglet "Simulation · IHM"
+attendre 3
+survol 1350 400
+attendre 2
+capture 11115_07_arret_sur_modification.png
+ihm-sorties console
+attendre 3
+capture 11115_08_console_arret.png
+
+# ---- 7. Generer et redemarrer depuis la carte ----
+onglet "Simulation · IHM"
+attendre 2
+ihm-carte "Générer et redémarrer"
+attendre 1
+ihm-build-attendre
+attendre 3
+ihm-sim-etat "en marche"
+ihm-variable "Secondes_IHM"
+ihm-build-etat "1 généré"
+ihm-sorties
+attendre 3
+capture 11115_09_carte_generer_et_redemarrer.png
+
+# ---- 8. l'option decochee : les valeurs initiales ----
+ihm-remanence off
+bouton "Arrêter l'IHM"
+attendre 2
+bouton "Démarrer l'IHM"
+attendre 1
+ihm-build-attendre
+attendre 3
+ihm-variable "Secondes_IHM"
+ihm-sim-etat "rémanence : non"
+capture 11115_10_remanence_decochee.png
+quitter

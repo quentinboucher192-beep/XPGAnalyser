@@ -425,6 +425,9 @@ void MainAnalysisScreen::onHmiChanged(std::uint64_t viewId) {
     // 1.11.13 : la generation incrementale - l'analyse repart (300 ms apres la derniere
     // modification) : l'element touche passe a « Modifie » dans l'arbre.
     if (hmiBuild_) hmiBuild_->invalidate();
+    // 1.11.15 : qui a modifie - la simulation elle-meme (une recette, un jumeau...) ou le developpeur.
+    if (hmiApplyingLive_ > 0) hmiLiveSeen_ = true;
+    else hmiEditSeen_ = true;
     app_.events().publish(HmiTabsCheck{});
 }
 
@@ -964,7 +967,24 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         };
         host.lifecycle = [this](bool started, int session) {
             if (bottomPanel_) bottomPanel_->simulationEvent(started, session);
+            hmiSimulationLifecycle(started);               // 1.11.15 : l'arret sur modification
         };
+        // 1.11.15 : la remanence de simulation (l'option, l'instantane dans .xpg/simulation,
+        // hors des versions du projet) et la suite d'un arret (la question, les builds).
+        host.keepData = [this] { return app_.settings().getBool("simulation.keepData", false); };
+        host.setKeepData = [this](bool on) { app_.settings().set("simulation.keepData", on); };
+        host.dataFile = [this] {
+            const std::string folder = app_.projectFolder();
+            return folder.empty() ? std::string{} : (std::filesystem::path(folder) / ".xpg" / "simulation" / "remanence.txt").string();
+        };
+        host.outputs = [this](int severity, const std::string& text) {
+            if (!bottomPanel_) return;
+            bottomPanel_->say(severity >= 3 ? hmi::pipeline::Severity::Error : severity == 2 ? hmi::pipeline::Severity::Warning
+                              : severity == 1 ? hmi::pipeline::Severity::Success : hmi::pipeline::Severity::Information,
+                              "Simulation", text);
+        };
+        host.confirmRestart = [this](std::function<void(bool)> answer) { askHmiRestart(std::move(answer)); };
+        host.rebuild = [this](const std::string& mode) { rebuildHmiFor(mode); };
         // 1.10 (decision 12) : le plein ecran de l'IHM - la fenetre en plein ecran, puis
         // rendue comme avant (deja en plein ecran par F11 : elle le reste).
         host.fullScreenWindow = [this, before = std::make_shared<bool>(false)](bool on) {
@@ -1054,7 +1074,7 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         host.reportWritten = [this](const hmi::ReportOutput& r) { app_.notify().report(r); };
         // Lot 18 : l'onglet Jumeaux (les esclaves simules, les commandes du projet).
         host.equipments = [this] { return &app_.equipments(); };
-        host.apply = apply;
+        host.apply = [this](core::CommandPtr c) { applyFromSimulation(std::move(c)); };   // 1.11.15 : n'arrete pas la simulation
         page = std::make_unique<HmiSimulationPane>("hmi.simulation", doc, std::move(host));
         title = "Simulation \xC2\xB7 IHM";   // Lot API 8 : Centre de simulation (etait "IHM . Simulation" ; les scripts gardent l'ancien titre)
         icon = Icon::Play;

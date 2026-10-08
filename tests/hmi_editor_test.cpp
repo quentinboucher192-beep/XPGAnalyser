@@ -3598,6 +3598,154 @@ void lot6_actions_ressources() {
           "l'action ouvre le diagnostic ; la liste le dit");
 }
 
+// 1.11.15 : LE CYCLE DE LA SIMULATION ET LA REMANENCE DE SIMULATION (le volet) - Arreter
+// garde les donnees, Demarrer les rend, Redemarrer demande puis efface, Generer et
+// redemarrer garde, l'arret sur modification et sa carte, l'option decochee.
+void cycle1115() {
+    std::printf("1.11.15 : Demarrer, Arreter, Redemarrer, Generer et redemarrer, l'arret sur modification\n");
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    const fs::path dir = fs::temp_directory_path(ec) / "xpg_cycle1115";
+    fs::remove_all(dir, ec);
+    auto doc = std::make_shared<Document>();
+    auto& p = doc->project;
+    View vue = makeView(p, "Vue");
+    p.views = {vue};
+    p.config.startView = vue.id;
+    Variable compteur;
+    compteur.id = p.allocate();
+    compteur.name = "Compteur";
+    compteur.type = "INT";
+    compteur.initial = "0";
+    p.programs.variables.push_back(compteur);
+    Script plus;
+    plus.id = p.allocate();
+    plus.name = "Plus";
+    plus.event = "Appel";
+    plus.body = "Compteur := Compteur + 5;";
+    plus.lang = ScriptLang::ST;
+    p.programs.scripts.push_back(plus);
+    bool keep = true;
+    std::vector<std::pair<int, std::string>> outs;
+    int asked = 0;
+    std::function<void(bool)> pending;
+    std::string rebuilt;
+    app::HmiSimulationHost host;
+    host.keepData = [&] { return keep; };
+    host.setKeepData = [&](bool on) { keep = on; };
+    host.dataFile = [&] { return (dir / "remanence.txt").string(); };
+    host.outputs = [&](int severity, const std::string& text) { outs.emplace_back(severity, text); };
+    host.confirmRestart = [&](std::function<void(bool)> answer) {
+        ++asked;
+        pending = std::move(answer);
+    };
+    host.rebuild = [&](const std::string& mode) { rebuilt = mode; };
+    app::HmiSimulationPane pane("sim1115", doc, host);
+    pane.setBounds({0, 0, 1600, 900});
+    pane.layout();
+    Recorder rec;
+    const auto theme = ui::Theme::dark();
+    auto paintAt = [&](double t) {
+        rec.clear();
+        pane.layout();
+        pane.render(ui::PaintContext{rec, theme, {0, 0, 1600, 900}, t, nullptr});
+    };
+    const auto said = [&](std::string_view text) {
+        for (const auto& o : outs)
+            if (o.second.find(text) != std::string::npos) return true;
+        return false;
+    };
+    const auto value = [&]() -> long long {
+        const auto* v = pane.runtime().variable("Compteur");
+        return v ? v->asInteger() : -1;
+    };
+    const auto clickNote = [&](std::size_t i) {
+        const auto r = pane.canvas().noteButtonRect(i);
+        const gfx::Point c{r.x + r.w / 2, r.y + r.h / 2};
+        pane.canvas().dispatch(ui::MouseDown{c, ui::MouseButton::Left, 1, {}});
+        pane.canvas().dispatch(ui::MouseUp{c, ui::MouseButton::Left, {}});
+    };
+    const fs::path file = dir / "remanence.txt";
+    paintAt(0.0);
+    check(pane.hmiRunning(), "la simulation d\xC3\xA9marre");
+    std::string why;
+    (void)pane.runtime().callScript("Plus", 0.1, &why);
+    (void)pane.runtime().callScript("Plus", 0.2, &why);
+    check(value() == 10, "deux appels : Compteur = 10");
+    pane.command("hmi.stop");
+    check(!pane.hmiRunning() && fs::exists(file, ec) && said("sauvegard\xC3\xA9" "es"), "Arr\xC3\xAAter : les donn\xC3\xA9" "es gard\xC3\xA9" "es (le fichier, les Sorties)");
+    pane.command("hmi.start");
+    paintAt(0.5);
+    check(pane.hmiRunning() && value() == 10 && said("restaur\xC3\xA9" "es"), "D\xC3\xA9marrer : Compteur rendu (10)");
+    // Redemarrer : la question d'abord, rien ne change avant la reponse.
+    pane.command("hmi.restart");
+    check(asked == 1 && pane.hmiRunning() && value() == 10, "Red\xC3\xA9marrer : la question, rien ne change avant la r\xC3\xA9ponse");
+    if (pending) pending(false);
+    check(pane.hmiRunning() && value() == 10 && fs::exists(file, ec), "la question, Annuler : rien n'est effac\xC3\xA9");
+    pane.command("hmi.restart");
+    if (pending) pending(true);
+    paintAt(0.8);
+    check(asked == 2 && pane.hmiRunning() && value() == 0 && !fs::exists(file, ec) && said("supprim\xC3\xA9"),
+          "Red\xC3\xA9marrer : les valeurs initiales, l'\xC3\xA9tat gard\xC3\xA9 supprim\xC3\xA9");
+    // Generer et redemarrer : les donnees repartent avec la simulation.
+    (void)pane.runtime().callScript("Plus", 1.0, &why);
+    pane.command("hmi.buildRestart");
+    paintAt(1.1);
+    check(pane.hmiRunning() && value() == 5, "G\xC3\xA9n\xC3\xA9rer et red\xC3\xA9marrer : Compteur gard\xC3\xA9 (5), pas de remise \xC3\xA0 z\xC3\xA9ro");
+    // L'arret sur modification : la carte, ses quatre boutons.
+    pane.stopForModification("1 \xC3\xA9l\xC3\xA9ment modifi\xC3\xA9 : 1 \xC3\xA0 compiler\n\xC2\xB7 Plus (Script g\xC3\xA9n\xC3\xA9ral, \xC3\xA0 compiler)");
+    paintAt(1.2);
+    check(!pane.hmiRunning() && pane.stoppedByModification(), "arr\xC3\xAAt\xC3\xA9" "e par une modification du projet");
+    check(pane.canvas().stoppedNote().find("arr\xC3\xAAt\xC3\xA9" "e car le projet IHM a \xC3\xA9t\xC3\xA9 modifi\xC3\xA9") != std::string::npos
+              && pane.canvas().noteButtons().size() == 4 && pane.canvas().noteButtons()[0].action == "hmi.buildRestart",
+          "la carte le dit, avec quatre boutons (G\xC3\xA9n\xC3\xA9rer et red\xC3\xA9marrer d'abord)");
+    check(pane.canvas().noteButtonRect(3).w > 0.f, "les quatre boutons sont dessin\xC3\xA9s");
+    clickNote(2);
+    check(rebuilt == "compiler" && pane.stoppedByModification(), "Compiler : le build de l'h\xC3\xB4te ; la carte reste");
+    clickNote(1);
+    check(rebuilt == "regenerer", "R\xC3\xA9g\xC3\xA9n\xC3\xA9rer et red\xC3\xA9marrer : le build complet de l'h\xC3\xB4te");
+    pane.stopForModification("encore");   // deja arretee : rien
+    check(!pane.hmiRunning(), "d\xC3\xA9j\xC3\xA0 arr\xC3\xAAt\xC3\xA9" "e : rien de plus");
+    pane.command("hmi.start");
+    paintAt(1.3);
+    check(pane.hmiRunning() && value() == 5, "les donn\xC3\xA9" "es gard\xC3\xA9" "es \xC3\xA0 l'arr\xC3\xAAt sur modification reviennent");
+    pane.stopForModification("une vue");
+    paintAt(1.35);
+    clickNote(3);
+    paintAt(1.4);
+    check(!pane.stoppedByModification() && !pane.hmiRunning() && said("annul\xC3\xA9"), "Annuler le red\xC3\xA9marrage : arr\xC3\xAAt\xC3\xA9" "e, la carte ordinaire");
+    // L'option decochee : le prochain demarrage repart des valeurs initiales.
+    pane.setKeepData(false);
+    check(!keep, "l'option se d\xC3\xA9" "coche (le r\xC3\xA9glage de l'h\xC3\xB4te)");
+    pane.command("hmi.start");
+    paintAt(1.5);
+    check(pane.hmiRunning() && value() == 0, "l'option d\xC3\xA9" "coch\xC3\xA9" "e : les valeurs initiales (l'\xC3\xA9tat gard\xC3\xA9 est ignor\xC3\xA9)");
+    // Un instantane abime : la copie de secours, sinon les valeurs initiales.
+    pane.setKeepData(true);
+    (void)pane.runtime().callScript("Plus", 1.6, &why);
+    pane.command("hmi.stop");          // garde 5 (la copie d'avant devient le .bak)
+    {
+        std::ofstream f(file, std::ios::binary | std::ios::trunc);
+        f << "xpg-simulation-remanence 1\ncase variable=1 nom=\"Compteur\" declare=\"INT\" chemin=\"\" type=INT valeur=\"7\"\n";   // coupe : pas de fin
+    }
+    outs.clear();
+    pane.command("hmi.start");
+    paintAt(1.7);
+    check(pane.hmiRunning() && said("illisible") && said("copie de secours"), "un instantan\xC3\xA9 coup\xC3\xA9 : refus\xC3\xA9, la copie de secours reprise");
+    check(value() != 7, "jamais la valeur d'un fichier coup\xC3\xA9");
+    // restart() (le poste d'exploitation au lancement, les didacticiels) : les valeurs
+    // initiales, sans rien effacer ni demander - seul le bouton Redemarrer est destructif.
+    {
+        const bool had = fs::exists(file, ec);
+        const int questions = asked;
+        pane.restart();
+        paintAt(1.8);
+        check(pane.hmiRunning() && value() == 0 && fs::exists(file, ec) == had && asked == questions,
+              "restart() : les valeurs initiales, sans question, l'\xC3\xA9tat gard\xC3\xA9 n'est pas effac\xC3\xA9");
+    }
+    fs::remove_all(dir, ec);
+}
+
 void lot6_simulation() {
     std::printf("lot 6 : en marche - modele, gestionnaire de recettes, parametres systeme\n");
     auto doc = std::make_shared<Document>();
@@ -15994,15 +16142,15 @@ void centreAide111() {
     // 1.11.11 : 19.
     // 1.11.12 : 20.
     // 1.11.13 : 21.
-    // 1.11.14 : 22.
-    check(hn::releases().size() == 22 && hn::releases().front().version == "1.11.14" && hn::releases()[1].version == "1.11.13"
-              && hn::releases()[2].version == "1.11.12"
-              && hn::releases()[3].version == "1.11.11" && hn::releases()[4].version == "1.11.10"
-              && hn::releases()[5].version == "1.11.9" && hn::releases()[6].version == "1.11.8"
-              && hn::releases()[7].version == "1.11.7" && hn::releases()[8].version == "1.11.6" && hn::releases()[9].version == "1.11.5"
-              && hn::releases()[10].version == "1.11.4" && hn::releases()[11].version == "1.11.3" && hn::releases()[12].version == "1.11.2"
-              && hn::releases()[13].version == "1.11.1" && hn::releases()[14].version == "1.11" && hn::releases()[15].version == "1.10.4",
-          "notes : 22 versions, la 1.11.14 en tete, puis la 1.11.13 \xC3\xA0 la 1.11, et la 1.10.4");
+    // 1.11.14 : 22 ; 1.11.15 : 23.
+    check(hn::releases().size() == 23 && hn::releases().front().version == "1.11.15" && hn::releases()[1].version == "1.11.14"
+              && hn::releases()[2].version == "1.11.13" && hn::releases()[3].version == "1.11.12"
+              && hn::releases()[4].version == "1.11.11" && hn::releases()[5].version == "1.11.10"
+              && hn::releases()[6].version == "1.11.9" && hn::releases()[7].version == "1.11.8"
+              && hn::releases()[8].version == "1.11.7" && hn::releases()[9].version == "1.11.6" && hn::releases()[10].version == "1.11.5"
+              && hn::releases()[11].version == "1.11.4" && hn::releases()[12].version == "1.11.3" && hn::releases()[13].version == "1.11.2"
+              && hn::releases()[14].version == "1.11.1" && hn::releases()[15].version == "1.11" && hn::releases()[16].version == "1.10.4",
+          "notes : 23 versions, la 1.11.15 en tete, puis la 1.11.14 \xC3\xA0 la 1.11, et la 1.10.4");
     // 1.11.2 (T2, tranches 41, 42 et 44 ; decisions 187, 201 et 216) : 23 lignes en 8 domaines, dont 2 cartes de la fenetre Nouveautes.
     // Tranche 46 (SYM, decision 240) : + Dupliquer dans un symbole (C) et la section Parametres du symbole (N) : 25 lignes.
     {
@@ -16273,7 +16421,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 199,   // 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 202,   // 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -16416,7 +16564,7 @@ void centreAide111() {
     // Integration 1.11 (I111) : la 1.10.4 ajoute objet-vanne-3-voies (La bibliotheque d'objets) : 206.
     // 1.11.1 (T2, decision 107) : Programmer gagne variables-api (API. : les variables de l'automate) : 207.
     check(ix.count(hc::Chapter::Hmi) == 208, "centre : L'IHM a les 208 sujets des chapitres 2 a 8 du guide (1.11.1 : variables-api ; 1.11.2 : paquets-symboles)");
-    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 22, "centre : 11 expressions, 22 notes (1.11.14)");
+    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 23, "centre : 11 expressions, 23 notes (1.11.15)");
     // Tranche 3 : les 11 types de T3 (hmi::exprguide::all(), depot-o), passes par in.expressions ; les
     // cles de la liste de secours sont les siennes (enumeration, pas enum).
     {
@@ -16478,10 +16626,10 @@ void centreAide111() {
         check(o, "page Raccourcis : Ctrl+Maj+O dessine en trois touches, repere 1.11");
 
         const auto n110 = hc::notesPage("1.10");
-        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 22
+        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 23
                   && !n110.summary.empty() && !n110.date.empty(),
               "page Notes : 1.10 -> 1.10.0, 22 lignes en 7 domaines, sa date et son resume");
-        check(hc::notesPage("").version == "1.11.14" && hc::notesPage("9.9").version == "1.11.14",
+        check(hc::notesPage("").version == "1.11.15" && hc::notesPage("9.9").version == "1.11.15",
               "page Notes : sans version (ou inconnue), la plus recente");
         const auto simu = hc::notesPage("1.10.0", "Simulation");
         check(simu.sections.size() == 1 && simu.rows == 4 && simu.domains.size() == 7,
@@ -16825,7 +16973,7 @@ void centreAide111() {
         // Les notes de version n'ont pas de tutoriel : ni la carte "Regarder le tutoriel" (hasTutorial, que
         // lit HelpCenterScreen::showTopic), ni la pastille dans l'arbre. Les autres pages speciales gardent
         // les leurs (T1 ecrit les tutoriels des raccourcis et de Signaler).
-        bool notesSans = ix.count(hc::Chapter::Notes) == 22;   // 1.11.3 a 1.11.14 : une version de plus
+        bool notesSans = ix.count(hc::Chapter::Notes) == 23;   // 1.11.3 a 1.11.15 : une version de plus
         for (const auto* t : ix.ofChapter(hc::Chapter::Notes)) notesSans = notesSans && !hc::hasTutorial(*t);
         const auto* raccourcis = ix.find("page-raccourcis");
         const auto* signaler = ix.find("page-signaler");
@@ -26512,6 +26660,7 @@ int main(int argc, char** argv) {
     lot6_contenu();
     lot6_actions_ressources();
     lot6_simulation();
+    cycle1115();                 // 1.11.15 : le cycle de la simulation, la remanence
     lot6_arbre();
     lot7_aide_saisie();
     lot7_volet_fonctions();

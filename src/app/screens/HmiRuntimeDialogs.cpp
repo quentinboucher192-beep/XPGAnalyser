@@ -89,7 +89,7 @@ void MainAnalysisScreen::askHmiRecipeRecord(const hmi::RecipeRequest& rq) {
             rec->modified = hmi::nowStamp();
         });
         if (cmd) {
-            app_.apply(std::move(cmd), false);
+            applyFromSimulation(std::move(cmd));
             status_->setTransientMessage(rq.recipe + " / " + name + " : enregistr\xC3\xA9 (Ctrl+Z pour revenir)", 8.0,
                                          ui::StatusBar::Severity::Success);
         }
@@ -112,7 +112,7 @@ void MainAnalysisScreen::askHmiRecipeRecord(const hmi::RecipeRequest& rq) {
             rec->modified = hmi::nowStamp();
         });
         if (cmd) {
-            app_.apply(std::move(cmd), false);
+            applyFromSimulation(std::move(cmd));
             status_->setTransientMessage(rq.recipe + " / " + name + " : valeurs lues dans l'installation (Ctrl+Z pour revenir)", 8.0,
                                          ui::StatusBar::Severity::Success);
         } else {
@@ -139,7 +139,7 @@ void MainAnalysisScreen::askHmiRecipeRecord(const hmi::RecipeRequest& rq) {
                                                          [&](const hmi::RecipeRecord& x) { return x.id == recordId; }),
                                           rc->records.end());
                 });
-                if (cmd) app_.apply(std::move(cmd), false);
+                if (cmd) applyFromSimulation(std::move(cmd));
                 status_->setTransientMessage("Jeu " + name + " supprim\xC3\xA9 (Ctrl+Z le rend)", 6.0);
                 refreshPane();
             });
@@ -212,7 +212,7 @@ void MainAnalysisScreen::askHmiRecipeRecord(const hmi::RecipeRequest& rq) {
                 rec->modified = hmi::nowStamp();
             }
         });
-        if (cmd) app_.apply(std::move(cmd), false);
+        if (cmd) applyFromSimulation(std::move(cmd));
         // Le nouveau jeu devient le jeu choisi du gestionnaire.
         if (auto* pane = dynamic_cast<HmiSimulationPane*>(hmiTab("simulation")); pane && made != hmi::kNoId)
             pane->runtime().selectRecipeRecord(object, made);
@@ -370,7 +370,7 @@ void MainAnalysisScreen::askHmiRuntimeResource(const hmi::ResourceRequest& rq) {
         }
         const std::string name = res->name;
         auto cmd = hmi::changeProject(current, "Ajouter " + name, [&](hmi::Project& p) { p.assets.resources.push_back(*res); });
-        if (cmd) app_.apply(std::move(cmd), false);
+        if (cmd) applyFromSimulation(std::move(cmd));
         rt.resourceProvided(rq, name, rt.now());
         status_->setTransientMessage("Ressource ajout\xC3\xA9" "e : " + name + (rq.variable.empty() ? std::string{} : " \xE2\x86\x92 " + rq.variable),
                                      6.0, ui::StatusBar::Severity::Success);
@@ -414,7 +414,7 @@ void MainAnalysisScreen::askHmiUserRecord(const hmi::UserRequest& rq) {
         auto cmd = hmi::changeProject(doc, "Mot de passe de " + login, [&](hmi::Project& p) {
             if (auto* u = p.user(userId)) hmi::storePassword(p.security, *u, salt, hash, day, false);
         });
-        if (cmd) app_.apply(std::move(cmd), false);
+        if (cmd) applyFromSimulation(std::move(cmd));
         say("Mot de passe de " + login + (rq.op == "renouveler" ? " renouvel\xC3\xA9" : " chang\xC3\xA9") + " (Ctrl+Z pour revenir)");
         refreshPane();
         return;
@@ -426,7 +426,7 @@ void MainAnalysisScreen::askHmiUserRecord(const hmi::UserRequest& rq) {
         auto cmd = hmi::changeProject(doc, std::string(enabled ? "Activer " : "D\xC3\xA9sactiver ") + login, [&](hmi::Project& p) {
             if (auto* u = p.user(userId)) u->enabled = enabled;
         });
-        if (cmd) app_.apply(std::move(cmd), false);
+        if (cmd) applyFromSimulation(std::move(cmd));
         say(login + (enabled ? " activ\xC3\xA9" : " d\xC3\xA9sactiv\xC3\xA9") + " (Ctrl+Z pour revenir)");
         refreshPane();
         return;
@@ -442,7 +442,7 @@ void MainAnalysisScreen::askHmiUserRecord(const hmi::UserRequest& rq) {
         auto cmd = hmi::changeProject(doc, "Groupe de " + login, [&](hmi::Project& p) {
             if (auto* u = p.user(userId)) u->group = groupId;
         });
-        if (cmd) app_.apply(std::move(cmd), false);
+        if (cmd) applyFromSimulation(std::move(cmd));
         say(login + " passe dans le groupe " + groupName + " (Ctrl+Z pour revenir)");
         refreshPane();
         return;
@@ -468,7 +468,7 @@ void MainAnalysisScreen::askHmiUserRecord(const hmi::UserRequest& rq) {
                 std::stable_sort(g.roles.begin(), g.roles.end(), [&](const std::string& a, const std::string& b) { return rank(a) < rank(b); });
             }
         });
-        if (cmd) app_.apply(std::move(cmd), false);
+        if (cmd) applyFromSimulation(std::move(cmd));
         say(groupName + (give ? " re\xC3\xA7oit le r\xC3\xB4le " : " perd le r\xC3\xB4le ") + role + " (Ctrl+Z pour revenir)");
         refreshPane();
         return;
@@ -476,7 +476,7 @@ void MainAnalysisScreen::askHmiUserRecord(const hmi::UserRequest& rq) {
     if (rq.op == "deconnexion") {
         const int minutes = std::max(0, rq.minutes);
         auto cmd = hmi::changeProject(doc, "D\xC3\xA9" "connexion automatique", [&](hmi::Project& p) { p.security.autoLogoutMin = minutes; });
-        if (cmd) app_.apply(std::move(cmd), false);
+        if (cmd) applyFromSimulation(std::move(cmd));
         say("D\xC3\xA9" "connexion automatique : " + (minutes == 0 ? std::string("jamais") : std::to_string(minutes) + " min") + " (Ctrl+Z pour revenir)");
         refreshPane();
         return;
@@ -494,7 +494,7 @@ void MainAnalysisScreen::askHmiUserRecord(const hmi::UserRequest& rq) {
                 auto cmd = hmi::changeProject(current, "Supprimer l'utilisateur " + login, [&](hmi::Project& p) {
                     std::erase_if(p.security.users, [&](const hmi::User& u) { return u.id == userId; });
                 });
-                if (cmd) app_.apply(std::move(cmd), false);
+                if (cmd) applyFromSimulation(std::move(cmd));
                 status_->setTransientMessage("Utilisateur " + login + " supprim\xC3\xA9 (Ctrl+Z le rend)", 6.0);
                 refreshPane();
             });
@@ -533,7 +533,7 @@ void MainAnalysisScreen::askHmiUserRecord(const hmi::UserRequest& rq) {
                 auto cmd = hmi::changeProject(current, "Mot de passe de " + login, [&](hmi::Project& p) {
                     if (auto* u = p.user(userId)) hmi::storePassword(p.security, *u, salt, hash, day, true);
                 });
-                if (cmd) app_.apply(std::move(cmd), false);
+                if (cmd) applyFromSimulation(std::move(cmd));
                 const bool first = current->project.security.pwChangeFirst;
                 audit("Mot de passe", login, std::string("donn\xC3\xA9 par un administrateur") + (first ? " (\xC3\xA0 changer \xC3\xA0 la connexion)" : ""));
                 status_->setTransientMessage("Mot de passe de " + login + " d\xC3\xA9" "fini"
@@ -615,7 +615,7 @@ void MainAnalysisScreen::askHmiUserRecord(const hmi::UserRequest& rq) {
                 label = u->login;
             }
         });
-        if (cmd) app_.apply(std::move(cmd), false);
+        if (cmd) applyFromSimulation(std::move(cmd));
         if (create) audit("Compte", label, "cr\xC3\xA9\xC3\xA9 (mot de passe donn\xC3\xA9 par un administrateur)");     // lot 13
         status_->setTransientMessage((create ? "Utilisateur " + label + " ajout\xC3\xA9" : label + " modifi\xC3\xA9") + " (Ctrl+Z pour revenir)",
                                      8.0, ui::StatusBar::Severity::Success);

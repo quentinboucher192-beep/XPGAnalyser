@@ -498,6 +498,21 @@ void echecEtCorrection() {
     check(b.state(init) == pl::State::UpToDate && b.cache.entries[init].diagnostics.empty(), "corrige : a jour, plus de diagnostic");
     const auto r4 = b.build(pl::Mode::Start);
     check(r4.upToDate, "puis le projet est a jour");
+    // 1.11.15 : la phase G dit ce que la remanence de simulation rendra, ou pourquoi rien.
+    {
+        const auto g = static_cast<int>(pl::Phase::Restore);
+        pl::Request rq{pl::Mode::Start, {}, false};
+        rq.restore = "donn\xC3\xA9" "es du 2026-10-08 22:10:05 : rendues au d\xC3\xA9marrage";
+        pl::Progress seen;
+        (void)pl::run(b.p, b.api, rq, b.options(), [&seen](const pl::Progress& pr) { seen = pr; });
+        check(seen.phases[g] == pl::PhaseState::Done && contains(seen.phaseNotes[g], "2026-10-08 22:10:05"),
+              "1.11.15 : un instantane a rendre - la phase G le dit (" + seen.phaseNotes[g] + ")");
+        pl::Request off{pl::Mode::Start, {}, false};
+        off.restoreOff = true;
+        (void)pl::run(b.p, b.api, off, b.options(), [&seen](const pl::Progress& pr) { seen = pr; });
+        check(seen.phases[g] == pl::PhaseState::Skipped && contains(seen.phaseNotes[g], "sactiv"),
+              "1.11.15 : la remanence decochee - la phase G le dit (" + seen.phaseNotes[g] + ")");
+    }
 }
 
 // Generer seul, Compiler seul ; regeneration d'un element, d'une branche, de tout

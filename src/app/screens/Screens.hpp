@@ -31,6 +31,7 @@
 #include "../RackView.hpp"
 #include "../ViewModels.hpp"
 #include "../../core/CodeIcons.hpp"          // 1.8.0 : les icones au choix
+#include "../../core/Command.hpp"            // 1.11.15 : applyFromSimulation
 #include "../../project/MastImport.hpp"      // 1.8.0 : l'import suivi (le recapitulatif)
 
 #include <array>
@@ -39,6 +40,7 @@
 #include <memory>
 #include <optional>
 #include <thread>
+#include <unordered_map>
 #include <vector>
 
 namespace hmi { struct Issue; enum class ScriptLang : std::uint8_t; struct RecipeRequest; struct ResourceRequest; struct UserRequest; struct ExportRequest; }
@@ -668,6 +670,9 @@ private:
     // cours (Generer depuis l'arbre) : le demarrage le suit.
     void startHmiBuild(const std::string& source);
     std::string hmiStartPending_;   // non vide : un demarrage attend la fin du build en cours
+    // 1.11.15 : la phase G du prochain Demarrer (la remanence de simulation : ce qui sera rendu).
+    std::string hmiStartRestore_;
+    bool        hmiStartRestoreOff_{false};
     void applyHmiBuildMarks();
     [[nodiscard]] HmiBuildOutputPane* hmiBuildOutput(bool open);
     void replayHmiBuilds(HmiBuildOutputPane& pane);   // un onglet Sorties rouvert : les builds de la seance
@@ -679,11 +684,36 @@ private:
     [[nodiscard]] bool bottomPanelShown() const;
     void wireBottomPanel();                           // ses signaux (une fois, a la construction)
     void openConsoleSource(const ConsoleEntry& e);    // le double-clic sur une ligne de la Console
+    // ---- 1.11.15 : LE CYCLE DE LA SIMULATION (HmiBuildWorkspace.cpp) ----
+    //  L'ARRET SUR MODIFICATION : au demarrage de la simulation, l'empreinte de chaque
+    //  element (son contenu, sa configuration, son interface) ; a chaque analyse pendant
+    //  la marche, ce qui a change. Une modification du developpeur qui change une
+    //  empreinte arrete la simulation (proprement : donnees gardees, journaux gardes) ;
+    //  celle que la simulation fait elle-meme (une recette, un utilisateur, un forcage
+    //  de jumeau : applyFromSimulation) ne l'arrete pas ; une modification qui ne change
+    //  aucune empreinte (une description, un dossier, la grille de l'editeur) non plus.
+    std::unordered_map<std::string, std::string> hmiRunPrints_, hmiRunPaths_;
+    bool hmiRunWatch_{false};
+    bool hmiEditSeen_{false}, hmiLiveSeen_{false};
+    int  hmiApplyingLive_{0};
+    bool hmiRestartNoAsk_{false};                    // « Ne plus demander pour cette session »
+    void hmiSimulationLifecycle(bool started);
+    void checkRunningModifications();
+    void askHmiRestart(std::function<void(bool)> answer);
+    void rebuildHmiFor(const std::string& mode);    // "regenerer" (puis redemarrer), "compiler"
 public:
+    // Une modification venue de la simulation (une recette, un utilisateur, un jumeau) :
+    // appliquee comme les autres, elle n'arrete pas la simulation.
+    void applyFromSimulation(core::CommandPtr cmd);
     // Pour les sessions rejouees (ihm-console-etat) : les chiffres de la Console et sa
     // derniere ligne ; une ligne (message ou source) contient-elle ce texte ?
     [[nodiscard]] std::string hmiConsoleSummary() const;
     [[nodiscard]] bool hmiConsoleHas(std::string_view text) const;
+    // 1.11.15 (ihm-remanence, ihm-sim-etat, ihm-variable) : l'option de la remanence de
+    // simulation ; l'etat de la simulation IHM en clair ; la valeur d'une variable IHM.
+    void scriptHmiKeepData(bool on);
+    [[nodiscard]] std::string hmiSimulationSummary() const;
+    [[nodiscard]] std::string hmiVariableText(const std::string& name) const;
 private:
     // Les barres des editeurs (scripts, fonctions) : leurs commandes de build et leur etat.
     template <class Hosts> void wireHmiBuildHosts(Hosts& hosts) {

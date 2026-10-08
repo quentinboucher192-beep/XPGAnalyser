@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.11.15", "08/10/2026", "livr\xC3\xA9" "e le 08/10 dans la nuit"},
     {"1.11.14", "08/10/2026", "livr\xC3\xA9" "e le 08/10 dans la soir\xC3\xA9" "e"},
     {"1.11.13", "08/10/2026", "livr\xC3\xA9" "e le 08/10 au soir"},
     {"1.11.12", "08/10/2026", "livr\xC3\xA9" "e le 08/10"},
@@ -93,6 +94,17 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.11.15 (08/10/2026 dans la nuit) : le cycle de la simulation et la remanence de simulation
+        // (lot 3 de la specification du 08/10).
+        note("1.11.15", "Simulation IHM", Kind::New,
+         "La R\xC3\xA9MANENCE DE SIMULATION : l'option R\xC3\xA9manence de la barre (\xC2\xAB Conserver les donn\xC3\xA9" "es de simulation entre les d\xC3\xA9marrages \xC2\xBB). Coch\xC3\xA9" "e, \xC3\xA0 l'arr\xC3\xAAt, les variables IHM et la m\xC3\xA9moire des esclaves simul\xC3\xA9s sont gard\xC3\xA9" "es (dans .xpg/simulation du projet, \xC3\xA9" "crites d'un bloc) et rendues au d\xC3\xA9marrage suivant, avant les scripts de D\xC3\xA9marrage. Chaque valeur suit l'identifiant de sa variable : un renommage, un nouvel ordre ne la perdent pas ; un type compatible est converti, un autre reprend la valeur initiale (un avertissement le dit).",
+         "simulation", ""),
+        note("1.11.15", "Simulation IHM", Kind::New,
+         "D\xC3\xA9marrer, Arr\xC3\xAAter, Red\xC3\xA9marrer et G\xC3\xA9n\xC3\xA9rer et red\xC3\xA9marrer sont distincts : Arr\xC3\xAAter garde les donn\xC3\xA9" "es ; Red\xC3\xA9marrer (apr\xC3\xA8s une question, \xC2\xAB Ne plus demander pour cette session \xC2\xBB) les efface et repart des valeurs initiales ; G\xC3\xA9n\xC3\xA9rer et red\xC3\xA9marrer garde les donn\xC3\xA9" "es, refait ce qui a chang\xC3\xA9 et repart avec elles.",
+         "simulation", ""),
+        note("1.11.15", "Simulation IHM", Kind::New,
+         "L'ARR\xC3\x8AT SUR MODIFICATION : une modification du projet IHM qui touche l'ex\xC3\xA9" "cution arr\xC3\xAAte proprement la simulation (donn\xC3\xA9" "es et journaux gard\xC3\xA9s) ; la carte le dit, avec ce qui a chang\xC3\xA9, et propose G\xC3\xA9n\xC3\xA9rer et red\xC3\xA9marrer, R\xC3\xA9g\xC3\xA9n\xC3\xA9rer et red\xC3\xA9marrer, Compiler ou Annuler le red\xC3\xA9marrage. Une description, un dossier ou ce que la simulation \xC3\xA9" "crit elle-m\xC3\xAAme (une recette, un utilisateur, un for\xC3\xA7" "age de jumeau) ne l'arr\xC3\xAAtent pas.",
+         "simulation", ""),
         // 1.11.14 (08/10/2026 dans la soiree) : le panneau du bas (Sorties, Console, Diagnostics) et
         // IHM_LOG (lot 2 de la specification du 08/10).
         note("1.11.14", "Simulation IHM", Kind::New,
