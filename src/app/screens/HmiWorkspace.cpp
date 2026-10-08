@@ -1111,6 +1111,32 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
                 }
             };
             vh.link = [this](const std::string& equipment) { return app_.equipments().link(equipment); };
+            // ---- 1.11.16 : la remanence d'exploitation - le stockage du poste ----
+            vh.retainFile = [this] {
+                const std::string folder = app_.projectFolder();
+                return folder.empty() ? std::string{} : hmi::retain::fileOf(folder).string();
+            };
+            vh.stationRunning = [this] { return app_.stationActive(); };
+            // La valeur actuelle : la simulation de l'editeur (le poste ne tourne pas sous l'editeur).
+            vh.currentValue = [this](const std::string& name) -> std::string {
+                auto* sim = dynamic_cast<HmiSimulationPane*>(hmiTab("simulation"));
+                if (!sim || !sim->runtime().running()) return {};
+                const auto* v = sim->runtime().variable(name);
+                if (!v) return "(une structure : voir ses membres)";
+                return v->type() == ::sim::Type::String ? "'" + v->asString() + "'" : v->display();
+            };
+            vh.confirm = [this](const std::string& head, const std::string& text, const std::string& button, std::function<void()> yes) {
+                app_.menus().ShowDialog(std::make_unique<MessageDialog>(head, text, MessageDialog::Icon::Question, button),
+                                        [yes = std::move(yes)](const menu::DialogResult& r) {
+                                            if (r.accepted() && yes) yes();
+                                        });
+            };
+            vh.askPath = [this](const std::string& head, const std::string& text, const std::string& initial, ui::PathBrowse browse,
+                                std::function<void(const std::string&)> done) { askApiText(head, text, initial, std::move(done), std::move(browse)); };
+            vh.report = [this](const std::string& head, const std::string& text, bool warning) {
+                app_.menus().ShowDialog(std::make_unique<MessageDialog>(head, text, warning ? MessageDialog::Icon::Warning : MessageDialog::Icon::Info),
+                                        [](const menu::DialogResult&) {});
+            };
             // ---- 1.10 (chantier O) : la fenetre graphique temporaire des variables IHM ----
             // Les valeurs : la simulation de l'IHM (son environnement lit aussi
             // l'automate). La fenetre : une fenetre a elle (DetachedWindows) ; la

@@ -157,6 +157,8 @@ core::Status StationScreen::buildUi() {
         if (!folder.empty() && hmi::exists(folder)) (void)hmi::appendAuditFile(e, folder);
     };
     hmiparams::setProgram([this] { return app_.project(); });   // 1.9 : les DDT pour les copies des parametres
+    // 1.11.16 : la remanence d'exploitation - le stockage du poste, dans le dossier du projet.
+    host.retainFile = [this] { const std::string folder = app_.projectFolder(); return folder.empty() ? std::string{} : hmi::retain::fileOf(folder).string(); };
     auto pane = std::make_unique<HmiSimulationPane>("station.pane", doc, std::move(host));
     pane->setStationMode(true);
     pane_ = pane.get();
@@ -201,6 +203,7 @@ void StationScreen::onEnter() {
         if (!ask) {
             std::string report;
             (void)pane_->runtime().restoreState(*state, pane_->runtime().now(), &report);
+            pane_->reapplyRetained();   // 1.11.16 : les remanentes, plus recentes, l'emportent
             pane_->refreshNow();
         } else {
             auto dialog = std::make_unique<MessageDialog>(
@@ -220,6 +223,7 @@ void StationScreen::onEnter() {
                 }
                 std::string report;
                 (void)pane_->runtime().restoreState(text, pane_->runtime().now(), &report);
+                pane_->reapplyRetained();   // 1.11.16 : les remanentes, plus recentes, l'emportent
                 pane_->refreshNow();
             });
         }

@@ -20,6 +20,7 @@
 #pragma once
 
 #include "HmiPainter.hpp"
+#include "../../hmi/HmiRetain.hpp"
 #include "../../hmi/HmiViewPaths.hpp"   // 1.11.6 : sur la vue actuelle
 #include "../../hmi/HmiVarMotion.hpp"   // 1.11.6 : le forcage par type et bornes
 #include "../../hmi/HmiTwin.hpp"        // 1.11.7 : le forcage commun (les cases des esclaves)
@@ -140,6 +141,12 @@ struct HmiSimulationHost {
     std::function<void(int severity, const std::string&)> outputs;
     std::function<void(std::function<void(bool)> answer)> confirmRestart;
     std::function<void(const std::string& mode)>          rebuild;
+    // ---- 1.11.16 : LA REMANENCE D'EXPLOITATION (le poste seulement) ----
+    //  retainFile : <projet>/ihm/historique/remanence_exploitation.txt ; nul ou vide :
+    //  pas de stockage (la simulation de l'editeur n'y ecrit jamais). Les variables
+    //  cochees « Remanente » y sont ecrites a chaque changement (regroupe : au plus une
+    //  ecriture par seconde) et rendues au lancement suivant du poste.
+    std::function<std::string()>                          retainFile;
 };
 
 // Une vue a dessiner : evaluee, avec l'etat de sa transition.
@@ -575,6 +582,18 @@ public:
     bool saveData(const std::string& why);
     void clearData();
     [[nodiscard]] bool keepData() const { return host_.keepData && host_.keepData(); }
+    // 1.11.16 : LA REMANENCE D'EXPLOITATION. retainState : ce que le poste en dit (vide :
+    // pas un poste) ; retainStore : les valeurs gardees ; saveRetained : les ecrire tout
+    // de suite (force : capturer d'abord) - faux : l'ecriture a echoue (essai suivant
+    // dans 5 s, le journal le dit).
+    [[nodiscard]] const std::string&        retainState() const noexcept { return retainState_; }
+    [[nodiscard]] const hmi::retain::Store& retainStore() const noexcept { return retainStore_; }
+    [[nodiscard]] const std::string&        retainFile() const noexcept { return retainFile_; }
+    bool                                    saveRetained(bool force);
+    // Apres la reprise d'un arret brutal (l'etat d'avant, pris toutes les 10 s) : les
+    // variables remanentes, plus recentes, sont rendues a nouveau (elles l'emportent).
+    void                                    reapplyRetained();
+    [[nodiscard]] bool                      retainLockHeld() const noexcept { return retainLockHeld_; }
     void setKeepData(bool on);
     // L'etat de l'API en clair ("en marche \xC2\xB7 cycle 1204") et son ton
     // ("running", "paused", "stopped", "halted", "off").
@@ -686,6 +705,19 @@ private:
     std::string           dataFileAtStart_, loadedFrom_, loadNote_;
     int                   restoredTwins_{0};
     ui::ToggleButton*     keepButton_{nullptr};
+    // 1.11.16 : la remanence d'exploitation (le poste seulement)
+    hmi::retain::Store    retainStore_{};
+    std::string           retainFile_{}, retainState_{}, retainNote_{};
+    double                retainLastCheck_{-1.0}, retainLastWrite_{-1.0}, retainRetryAt_{-1.0};
+    bool                  retainPending_{false};
+    int                   retainIgnored_{0};
+    bool                  retainLockHeld_{false};            // ce poste ecrit le stockage (le verrou)
+    std::string           retainLockOwner_{};                // sinon : qui l'ecrit
+    double                retainLockAt_{-1.0};               // le dernier rafraichissement (ou essai)
+    void                  loadRetained();
+    void                  reportRetained();
+    void                  retainTick();
+    void                  finishRetained();                  // a l'arret : ecrire, rendre le verrou
     void                  loadData();
     void                  reportRestore();
     void                  output(int severity, const std::string& text);

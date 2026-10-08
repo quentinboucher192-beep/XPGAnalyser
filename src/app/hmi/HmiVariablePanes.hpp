@@ -36,6 +36,8 @@
 #include "../../ui/widgets/Controls.hpp"
 #include "../../ui/widgets/DataViews.hpp"
 #include "../../ui/widgets/FilterMemory.hpp"   // lot API 8 : la recherche retenue
+#include "../../ui/widgets/PathBrowse.hpp"     // 1.11.16 : exporter, importer les valeurs remanentes
+#include "../../hmi/HmiRetain.hpp"             // 1.11.16 : la remanence d'exploitation
 
 #include <functional>
 #include <map>
@@ -71,6 +73,26 @@ public:
     bool setAddress(hmi::Id, const std::string& address, std::string* why = nullptr);
     bool setReadOnly(hmi::Id, bool readOnly, std::string* why = nullptr);
     bool setPackBools(hmi::Id, bool pack);
+    // ---- 1.11.16 : LA REMANENCE D'EXPLOITATION ----
+    //  La case « Remanente » d'une variable de l'IHM (non liee) : sur le poste
+    //  d'exploitation, sa valeur est gardee a chaque changement et rendue au
+    //  lancement suivant (hmi::retain) - jamais par la simulation de l'editeur.
+    //  Les commandes agissent sur le stockage du poste (retainFile :
+    //  <projet>/ihm/historique/remanence_exploitation.txt), refusees pendant que le
+    //  poste tourne (il y ecrit lui-meme). Faux : refuse, `why` dit pourquoi.
+    bool setRetain(hmi::Id, bool on, std::string* why = nullptr);
+    [[nodiscard]] std::string retainFile() const;
+    // Reinitialiser : oublier les valeurs gardees d'une variable (kNoId : toutes) ; le
+    // poste reprendra la valeur initiale. `count` : combien de valeurs sont parties.
+    bool resetRetained(hmi::Id variable, std::size_t* count = nullptr, std::string* why = nullptr);
+    // Exporter (.csv : pour Excel ; sinon le format du poste) ; importer l'un ou l'autre
+    // (les valeurs remplacent celles des memes variables) - `report` : le compte rendu.
+    bool exportRetained(const std::string& path, std::string* why = nullptr);
+    bool importRetained(const std::string& path, std::string* report = nullptr);
+    // Verifier l'integrite du stockage : lisible, complet, ce qu'il garde et sa copie.
+    [[nodiscard]] std::string retainIntegrity() const;
+    // Les valeurs gardees, relues quand le fichier change (nul : rien de lisible).
+    [[nodiscard]] const hmi::retain::Store* retainStore() const;
     // L'adresse corrigee d'un membre ("Heures", "Vannes[2].Position") ; vide : la place calculee.
     bool setMemberAddress(hmi::Id, const std::string& relPath, const std::string& address, std::string* why = nullptr);
     // 1.11.8 : des membres INTERNES (gardes dans l'IHM : l'equipement ne les lit ni ne les ecrit) ou
@@ -127,6 +149,19 @@ public:
         // garde, trends() - les essais) ; ce qui la nourrit (la simulation).
         std::function<HmiQuickTrend*(std::unique_ptr<HmiQuickTrend>)> showTrend;
         HmiQuickTrend::Source                                          trendSource;
+        // ---- 1.11.16 : la remanence d'exploitation ----
+        //  retainFile : le stockage du poste (vide : projet jamais enregistre) ;
+        //  stationRunning : le poste tourne (il ecrit le stockage) ; currentValue :
+        //  la valeur d'une variable dans la simulation de l'editeur (vide :
+        //  arretee) ; confirm : une question (titre, texte, bouton ; rappel si oui) ;
+        //  askPath : un chemin, avec le bouton ... ; report : un compte rendu.
+        std::function<std::string()>                                   retainFile;
+        std::function<bool()>                                          stationRunning;
+        std::function<std::string(const std::string&)>                 currentValue;
+        std::function<void(const std::string&, const std::string&, const std::string&, std::function<void()>)> confirm;
+        std::function<void(const std::string&, const std::string&, const std::string&, ui::PathBrowse,
+                           std::function<void(const std::string&)>)>   askPath;
+        std::function<void(const std::string&, const std::string&, bool)> report;
     };
     void setHosts(Hosts h) { hosts_ = std::move(h); }
 
@@ -231,6 +266,13 @@ private:
     // ---- Lot API 8 : les filtres retenus - la recherche tapee, d'une seance a l'autre ----
     ui::SearchMemory  searchMemory_;
     // ---- fin Lot API 8 ----
+    // 1.11.16 : le stockage du poste relu (son empreinte : date et taille du fichier et de sa copie).
+    [[nodiscard]] bool retainBusy(std::string* why) const;
+    void askRetainExport();
+    void askRetainImport();
+    mutable std::optional<hmi::retain::Store> retainCache_;
+    mutable std::string retainStamp_, retainNote_;
+    mutable bool        retainReadable_{false};
 };
 
 class HmiTypesPane final : public ui::Widget {

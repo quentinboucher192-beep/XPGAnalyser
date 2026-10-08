@@ -3040,6 +3040,7 @@ HmiSimulationPane::~HmiSimulationPane() {
             std::filesystem::create_directories(std::filesystem::path(dataFileAtStart_).parent_path(), ec);
             (void)core::writeFileAtomic(dataFileAtStart_, hmi::simdata::serialize(snap));
         }
+        if (station_) finishRetained();   // 1.11.16 : quitter le poste en marche garde ses variables remanentes
         runtime_.bind(&doc_->project, nullptr);
         runtime_.setHooks({});
         runtime_.stop(now_);
@@ -3067,11 +3068,12 @@ void HmiSimulationPane::ensureStarted(double now) {
         if (auto* eq = host_.equipments ? host_.equipments() : nullptr) eq->clearRuntimeChoices();
         // 1.9 : les DDT du programme (les membres que capture une copie de parametre).
         runtime_.setPlcTypes(hmiparams::plcTypesOf(hmiparams::program().get()));
-        loadData();                                                          // 1.11.15 : la remanence de simulation
+        if (station_) loadRetained();                                        // 1.11.16 : le poste, ses variables remanentes
+        else loadData();                                                     // 1.11.15 : la remanence de simulation
         runtime_.start(now);
         modifiedStop_ = false;
         if (host_.lifecycle) host_.lifecycle(true, runtime_.session());     // 1.11.14 : les Sorties
-        reportRestore();
+        if (station_) reportRetained(); else reportRestore();
     }
 }
 
@@ -3449,6 +3451,134 @@ void HmiSimulationPane::loadData() {
     loadedFrom_ = snap.date;
 }
 
+// ============================================================ 1.11.16 =====
+//  LA REMANENCE D'EXPLOITATION. Au lancement du poste : le stockage lu (sa copie
+//  .bak s'il est abime), les cases des variables encore remanentes donnees au
+//  moteur (rendues apres les valeurs initiales, avant les scripts de Demarrage).
+//  En marche : toutes les 0,25 s, les variables remanentes capturees ; une valeur
+//  qui change prend sa date ; au plus une ecriture par seconde ; une ecriture qui
+//  echoue est dite au journal et reessayee 5 s plus tard. A l'arret : tout de suite.
+void HmiSimulationPane::loadRetained() {
+    retainStore_ = {};
+    retainNote_.clear();
+    retainIgnored_ = 0;
+    retainPending_ = false;
+    retainLastCheck_ = retainLastWrite_ = retainRetryAt_ = retainLockAt_ = -1.0;
+    skipRestore_ = false;   // restart() (le lancement du poste) : il rend quand meme ses variables remanentes
+    retainLockHeld_ = false;
+    retainLockOwner_.clear();
+    retainFile_ = host_.retainFile ? host_.retainFile() : std::string{};
+    if (retainFile_.empty()) { retainState_ = "pas de stockage (projet jamais enregistr\xC3\xA9)"; return; }
+    // Un seul poste ecrit ce stockage : le verrou (rafraichi en marche, rendu a l'arret).
+    const auto lock = hmi::retain::acquireLock(retainFile_);
+    retainLockHeld_ = lock.held;
+    retainLockOwner_ = lock.held ? std::string{} : lock.owner;
+    const std::string readOnly = lock.held ? std::string{} : " ; non \xC3\xA9" "crites : un autre poste \xC3\xA9" "crit ce stockage (" + lock.owner + ")";
+    std::error_code ec;
+    if (!std::filesystem::exists(retainFile_, ec) && !std::filesystem::exists(retainFile_ + ".bak", ec)) {
+        retainState_ = "aucune valeur gard\xC3\xA9" "e : les valeurs initiales" + readOnly;
+        return;
+    }
+    std::string why;
+    bool fromBackup = false;
+    if (!hmi::retain::load(retainFile_, retainStore_, &why, &fromBackup)) {
+        retainStore_ = {};
+        retainNote_ = "Stockage des variables r\xC3\xA9manentes illisible (" + (why.empty() ? std::string("illisible") : why)
+                      + ") \xE2\x80\x94 les valeurs initiales.";
+        retainState_ = "illisible : les valeurs initiales";
+        return;
+    }
+    if (fromBackup)
+        retainNote_ = "Stockage des variables r\xC3\xA9manentes ab\xC3\xAEm\xC3\xA9 (" + (why.empty() ? std::string("illisible") : why)
+                      + ") \xE2\x80\x94 sa copie de secours est reprise.";
+    auto cells = hmi::retain::retainedCells(doc_->project, retainStore_, &retainIgnored_);
+    runtime_.setStartData(std::move(cells), "Variables r\xC3\xA9manentes restaur\xC3\xA9" "es");
+    retainState_ = std::to_string(retainStore_.entries.size()) + " valeur(s) gard\xC3\xA9" "e(s)"
+                   + (retainStore_.date.empty() ? std::string{} : " (\xC3\xA9" "crites le " + retainStore_.date + ")") + readOnly;
+}
+
+// Apres runtime_.start (le journal repart a vide au demarrage) : ce que le retour a fait.
+void HmiSimulationPane::reportRetained() {
+    if (!retainNote_.empty()) runtime_.logAt(hmi::LogLevel::Warning, "R\xC3\xA9manence", "IHM", retainNote_);
+    if (!retainFile_.empty() && !retainLockHeld_)
+        runtime_.logAt(hmi::LogLevel::Warning, "R\xC3\xA9manence", "IHM",
+                       "Un autre poste d'exploitation \xC3\xA9" "crit d\xC3\xA9j\xC3\xA0 les variables r\xC3\xA9manentes de ce projet (" + retainLockOwner_
+                           + ") : ce poste les lit mais ne les \xC3\xA9" "crit pas tant que l'autre tourne.");
+    if (retainIgnored_ > 0)
+        runtime_.logAt(hmi::LogLevel::Info, "R\xC3\xA9manence", "IHM",
+                       std::to_string(retainIgnored_) + " variable(s) gard\xC3\xA9" "e(s) ne sont plus r\xC3\xA9manentes : leur valeur est ignor\xC3\xA9" "e.");
+}
+
+void HmiSimulationPane::retainTick() {
+    if (!station_ || !started_ || retainFile_.empty()) return;
+    if (retainLastCheck_ >= 0.0 && now_ - retainLastCheck_ < 0.25) return;
+    retainLastCheck_ = now_;
+    // Le verrou : repris des que l'autre poste s'arrete (un essai toutes les 30 s) ;
+    // le notre, rafraichi toutes les 60 s (un verrou de 3 minutes est perime).
+    if (!retainLockHeld_) {
+        if (retainLockAt_ >= 0.0 && now_ - retainLockAt_ < 30.0) return;
+        retainLockAt_ = now_;
+        const auto lock = hmi::retain::acquireLock(retainFile_);
+        if (!lock.held) {
+            retainLockOwner_ = lock.owner;
+            return;
+        }
+        retainLockHeld_ = true;
+        retainLockOwner_.clear();
+        retainState_ = std::to_string(retainStore_.entries.size()) + " valeur(s) gard\xC3\xA9" "e(s) ; le stockage est libre : ce poste y \xC3\xA9" "crit";
+        runtime_.logAt(hmi::LogLevel::Info, "R\xC3\xA9manence", "IHM", "Le stockage des variables r\xC3\xA9manentes est libre : ce poste y \xC3\xA9" "crit d\xC3\xA9sormais.");
+    } else if (retainLockAt_ < 0.0 || now_ - retainLockAt_ >= 60.0) {
+        retainLockAt_ = now_;
+        hmi::retain::refreshLock(retainFile_);
+    }
+    auto cells = runtime_.captureData([](const hmi::Variable& v) { return v.retain; });
+    if (hmi::retain::merge(retainStore_, doc_->project, cells, hmi::simdata::nowStamp())) retainPending_ = true;
+    if (!retainPending_) return;
+    if (retainRetryAt_ >= 0.0 && now_ < retainRetryAt_) return;            // apres un echec : 5 s
+    if (retainLastWrite_ >= 0.0 && now_ - retainLastWrite_ < 1.0) return;  // au plus une ecriture par seconde
+    (void)saveRetained(false);
+}
+
+bool HmiSimulationPane::saveRetained(bool force) {
+    if (retainFile_.empty()) return true;
+    if (!retainLockHeld_) return false;   // un autre poste ecrit ce stockage (retainState le dit)
+    if (force && started_) {
+        auto cells = runtime_.captureData([](const hmi::Variable& v) { return v.retain; });
+        if (hmi::retain::merge(retainStore_, doc_->project, cells, hmi::simdata::nowStamp())) retainPending_ = true;
+    }
+    if (!retainPending_) return true;
+    retainStore_.project = doc_->project.config.name;
+    retainStore_.date = hmi::simdata::nowStamp();
+    std::error_code ec;
+    std::filesystem::create_directories(std::filesystem::path(retainFile_).parent_path(), ec);
+    const auto st = hmi::retain::save(retainFile_, retainStore_);
+    if (!st) {
+        const std::string msg = st.error().message();
+        retainRetryAt_ = now_ + 5.0;
+        retainState_ = "\xC3\xA9" "criture en \xC3\xA9" "chec : " + msg;
+        if (started_) runtime_.logAt(hmi::LogLevel::Error, "R\xC3\xA9manence", "IHM", "Variables r\xC3\xA9manentes non \xC3\xA9" "crites (" + msg + ") \xE2\x80\x94 nouvel essai dans 5 s.");
+        return false;
+    }
+    retainPending_ = false;
+    retainLastWrite_ = now_;
+    retainRetryAt_ = -1.0;
+    retainState_ = std::to_string(retainStore_.entries.size()) + " valeur(s) gard\xC3\xA9" "e(s), \xC3\xA9" "crites le " + retainStore_.date;
+    return true;
+}
+
+void HmiSimulationPane::finishRetained() {
+    (void)saveRetained(true);
+    if (retainLockHeld_) hmi::retain::releaseLock(retainFile_);
+    retainLockHeld_ = false;
+}
+
+void HmiSimulationPane::reapplyRetained() {
+    if (!station_ || !started_ || retainStore_.entries.empty()) return;
+    (void)runtime_.applyData(hmi::retain::retainedCells(doc_->project, retainStore_),
+                             "Variables r\xC3\xA9manentes rendues apr\xC3\xA8s la reprise (plus r\xC3\xA9" "centes que l'\xC3\xA9tat de reprise)");
+    refreshNow();
+}
+
 // Apres runtime_.start : ce que le retour a fait, dans les Sorties.
 void HmiSimulationPane::reportRestore() {
     if (!keepAtStart_) return;
@@ -3465,6 +3595,7 @@ void HmiSimulationPane::reportRestore() {
 
 void HmiSimulationPane::stopRuntime(const std::string& why) {
     stopScenario();
+    if (station_) finishRetained();                                          // 1.11.16 : avant l'arret
     runtime_.stop(now_, why);
     if (host_.lifecycle) host_.lifecycle(false, runtime_.session());
     started_ = false;
@@ -3513,6 +3644,7 @@ void HmiSimulationPane::stopHmi(const std::string& source) {
     if (!started_) return;
     stopScenario();
     (void)saveData(source.empty() ? std::string("arr\xC3\xAAt") : source);   // 1.11.15 : l'option cochee
+    if (station_) finishRetained();                                          // 1.11.16 : le poste
     runtime_.stop(now_, source);                                            // 1.11.14 : une seule ligne, avec la raison
     if (host_.lifecycle) host_.lifecycle(false, runtime_.session());       // 1.11.14 : les Sorties
     started_ = false;
@@ -3908,6 +4040,7 @@ void HmiSimulationPane::refreshPane() {
     canvas_->setStoppedNote({});
     ensureStarted(now_);
     runtime_.tick(now_);
+    retainTick();                                                            // 1.11.16 : le poste garde ses variables remanentes
     // Lot 14 : la communication au journal (liaison etablie, perdue, retrouvee...).
     if (host_.commEvents)
         for (const auto& e : host_.commEvents()) {

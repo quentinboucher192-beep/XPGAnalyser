@@ -812,6 +812,16 @@ std::vector<simdata::Cell> Runtime::captureData(const std::function<bool(const V
     }, keep);
 }
 
+// 1.11.16 : des cases rendues en marche (voir le .hpp).
+simdata::Report Runtime::applyData(const std::vector<simdata::Cell>& cells, const std::string& label) {
+    simdata::Report rep;
+    if (!project_ || cells.empty()) return rep;
+    rep = simdata::restoreVariables(*project_, cells, [this](const std::string& path) { return ihmSlot(path); });
+    logAt(LogLevel::Info, "R\xC3\xA9manence", {}, label + " : " + rep.summary());
+    for (const auto& w : rep.warnings) logAt(LogLevel::Warning, "R\xC3\xA9manence", {}, w);
+    return rep;
+}
+
 const View* Runtime::viewOf(Id id) const {
     const View* v = project_ ? project_->view(id) : nullptr;
     if (!v) return v;

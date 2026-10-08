@@ -2344,6 +2344,54 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     //    avec un texte, il doit y etre (1.11.15).
     //  ihm-variable <nom> [valeur] : la valeur d'une variable IHM dans la simulation ; avec une
     //    valeur, elle doit l'avoir (1.11.15).
+    // ---- 1.11.16 : le poste d'exploitation devant (commande poste) ----
+    //  ihm-variable <nom> [valeur] : lue sur le poste ; ihm-variable-ecrire <nom> <valeur> :
+    //  une saisie de l'operateur (sur le poste, sinon la simulation de l'editeur) ;
+    //  ihm-remanence-poste [texte] : ce que le poste dit de ses variables remanentes ;
+    //  ihm-remanence-poste-ecrire : les ecrire tout de suite (comme a l'arret).
+    if (cmd == "ihm-variable" || cmd == "ihm-variable-ecrire" || cmd == "ihm-remanence-poste" || cmd == "ihm-remanence-poste-ecrire") {
+        HmiSimulationPane* live = nullptr;
+        if (auto* station = dynamic_cast<StationScreen*>(app_.menus().top())) live = station->pane();
+        if (!live && cmd == "ihm-variable-ecrire") live = app_.liveHmiPane();   // la simulation de l'editeur (son onglet)
+        if (cmd == "ihm-remanence-poste" || cmd == "ihm-remanence-poste-ecrire") {
+            if (!live) { fail(cmd + " : pas de poste d'exploitation devant"); return Step::Next; }
+            if (cmd == "ihm-remanence-poste-ecrire") {
+                if (!live->saveRetained(true)) fail(cmd + " : " + live->retainState());
+                return Step::Yield;
+            }
+            std::printf("[script] poste, remanence : %s\n", live->retainState().c_str());
+            if (!arg(1).empty() && live->retainState().find(arg(1)) == std::string::npos) fail(cmd + " : \"" + arg(1) + "\" absent de : " + live->retainState());
+            return Step::Next;
+        }
+        if (cmd == "ihm-variable-ecrire") {
+            if (!live) { fail(cmd + " : ni poste ni simulation IHM"); return Step::Next; }
+            auto& rt = live->runtime();
+            const auto* cur = rt.variable(arg(1));
+            if (!cur) { fail(cmd + " : variable IHM inconnue (ou une structure) : " + arg(1)); return Step::Next; }
+            const std::string& t = arg(2);
+            ::sim::Value v;
+            switch (cur->type()) {
+                case ::sim::Type::Bool: v = ::sim::Value::boolean(t == "TRUE" || t == "true" || t == "1" || t == "VRAI" || t == "vrai"); break;
+                case ::sim::Type::Real: v = ::sim::Value::real(std::strtod(t.c_str(), nullptr)); break;
+                case ::sim::Type::String: v = ::sim::Value::text(t); break;
+                case ::sim::Type::Time: v = ::sim::Value::time(std::strtoll(t.c_str(), nullptr, 10)); break;
+                default: v = ::sim::Value::integer(cur->type(), std::strtoll(t.c_str(), nullptr, 10)); break;
+            }
+            // Une ecriture (forcer puis liberer : la valeur reste, les scripts reprennent la main).
+            std::string why;
+            if (!rt.forceVariable(arg(1), v, &why)) fail(cmd + " : " + why);
+            (void)rt.unforceVariable(arg(1));
+            return Step::Yield;
+        }
+        if (live) {
+            const auto* v = live->runtime().variable(arg(1));
+            const std::string text = !v ? std::string{} : v->type() == ::sim::Type::String ? v->asString() : v->display();
+            std::printf("[script] poste, variable IHM %s = %s\n", arg(1).c_str(), text.empty() ? "(inconnue)" : text.c_str());
+            if (!arg(2).empty() && text != arg(2)) fail("ihm-variable : " + arg(1) + " vaut " + (text.empty() ? std::string("(inconnue)") : text) + ", pas " + arg(2));
+            return Step::Next;
+        }
+        // l'editeur : la suite (la simulation IHM de l'editeur)
+    }
     if (cmd == "ihm-build" || cmd == "ihm-build-attendre" || cmd == "ihm-build-etat" || cmd == "ihm-sorties" || cmd == "ihm-script-modifier"
         || cmd == "ihm-console-etat" || cmd == "ihm-remanence" || cmd == "ihm-sim-etat" || cmd == "ihm-variable") {
         auto* screen = dynamic_cast<MainAnalysisScreen*>(app_.menus().top());
@@ -5163,6 +5211,13 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     //   varihm deplier "V[0]" | replier "V[0]"    deplie (replie) une variable ou un membre compose
     //   varihm choisir "V[0].NOM"                 choisit la ligne (ses parents se deplient)
     //   varihm menu "V[0].NOM"                    le vrai clic droit sur sa ligne (le menu du volet)
+    // 1.11.16 : la remanence d'exploitation -
+    //   varihm remanente "Compteur" oui|non       la case Remanente (comme dans la table)
+    //   varihm remanence-reinit ["Compteur"]      oublier ses valeurs gardees (rien : toutes)
+    //   varihm remanence-exporter "f.csv"         .csv pour Excel, sinon le format du poste
+    //   varihm remanence-importer "f.csv"         l'un ou l'autre ; le compte rendu est ecrit
+    //   varihm remanence-etat ["texte"]           l'integrite du stockage ; avec un texte : l'exiger
+    //   varihm fiche "Propriete" ["texte"]        une ligne de la fiche de la ligne choisie ; avec un texte : l'exiger
     if (cmd == "varihm") {
         HmiVariablesPane* pane = nullptr;
         if (auto* page = currentPage())
@@ -5171,6 +5226,52 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             });
         if (!pane) { fail("l'onglet courant n'est pas IHM \xC2\xB7 Variables IHM (" + cmd + ")"); return Step::Next; }
         const std::string what = arg(1), path = arg(2);
+        // ---- 1.11.16 : la remanence d'exploitation ----
+        if (what == "remanente") {
+            const auto* v = app_.hmi() ? app_.hmi()->project.variable(path) : nullptr;
+            std::string why;
+            if (!v) fail("varihm remanente : variable IHM introuvable : " + path);
+            else if (!pane->setRetain(v->id, arg(3) == "oui" || arg(3) == "on", &why)) fail("varihm remanente : " + why);
+            return Step::Yield;
+        }
+        if (what == "remanence-reinit") {
+            const auto* v = path.empty() || !app_.hmi() ? nullptr : app_.hmi()->project.variable(path);
+            if (!path.empty() && !v) { fail("varihm remanence-reinit : variable IHM introuvable : " + path); return Step::Next; }
+            std::string why;
+            std::size_t n = 0;
+            if (!pane->resetRetained(v ? v->id : hmi::kNoId, &n, &why)) fail("varihm remanence-reinit : " + why);
+            else std::printf("[script] remanence : %zu valeur(s) oubliee(s)\n", n);
+            return Step::Yield;
+        }
+        if (what == "remanence-exporter" || what == "remanence-importer") {
+            std::string target = path;
+            if (!target.empty() && std::filesystem::path(target).is_relative()) target = (capturesDir_ / target).string();
+            std::string why;
+            const bool ok = what == "remanence-exporter" ? pane->exportRetained(target, &why) : pane->importRetained(target, &why);
+            std::printf("[script] %s %s : %s\n", what.c_str(), target.c_str(), why.c_str());
+            if (!ok) fail("varihm " + what + " : " + why);
+            return Step::Yield;
+        }
+        if (what == "remanence-etat") {
+            const std::string text = pane->retainIntegrity();
+            std::printf("[script] remanence d'exploitation : %s\n", text.c_str());
+            if (!path.empty() && text.find(path) == std::string::npos) fail("varihm remanence-etat : \"" + path + "\" absent de : " + text);
+            return Step::Next;
+        }
+        if (what == "fiche") {
+            std::string found;
+            bool seen = false;
+            for (const auto& c : pane->properties().categories())
+                for (const auto& pr : c.properties)
+                    if (!seen && pr.name == path) {
+                        found = pr.value;
+                        seen = true;
+                    }
+            std::printf("[script] fiche %s = %s\n", path.c_str(), seen ? found.c_str() : "(absente)");
+            if (!seen) fail("varihm fiche : pas de ligne \"" + path + "\"");
+            else if (!arg(3).empty() && found.find(arg(3)) == std::string::npos) fail("varihm fiche : " + path + " = " + found + ", sans \"" + arg(3) + "\"");
+            return Step::Next;
+        }
         if (what == "deplier" || what == "replier") {
             pane->setExpanded(path, what == "deplier");
             return Step::Yield;
@@ -5193,7 +5294,8 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             click({rr.x + 120.f, rr.y + rr.h * 0.5f}, MouseButton::Right, 1, {});
             return Step::Yield;
         }
-        fail("varihm : " + what + " ? (deplier, replier, choisir, menu)");
+        fail("varihm : " + what + " ? (deplier, replier, choisir, menu, remanente, remanence-reinit, remanence-exporter, remanence-importer, "
+             "remanence-etat, fiche)");
         return Step::Next;
     }
     if (cmd == "vars-dossier" || cmd == "vars-choisir") {

@@ -598,6 +598,10 @@ public:
         startLabel_ = std::move(label);
     }
     [[nodiscard]] const std::optional<simdata::Report>& lastRestore() const noexcept { return lastRestore_; }
+    // 1.11.16 : des cases rendues EN MARCHE (le poste, apres la reprise d'un arret brutal :
+    // ses variables remanentes, plus recentes que l'etat de reprise, l'emportent) - les
+    // memes regles que le retour au demarrage ; le journal le dit sous `label`.
+    simdata::Report applyData(const std::vector<simdata::Cell>& cells, const std::string& label);
 
     // Lot 14 : la liaison Modbus TCP quand l'IHM est reliee a un automate reel
     // (nulle : le simulateur, ou rien).

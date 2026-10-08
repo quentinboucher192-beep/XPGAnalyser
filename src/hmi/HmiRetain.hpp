@@ -87,4 +87,44 @@ std::size_t reset(Store& store, Id variable);
 // Verifier l'integrite du fichier : lisible, complet, ses valeurs et sa copie .bak.
 [[nodiscard]] std::string checkIntegrity(const std::filesystem::path& file, const Project&);
 
+// ---- Le verrou : un seul poste ecrit le stockage (plusieurs instances) ----
+//  remanence_exploitation.lock, a cote du fichier : le PID et l'heure du poste qui
+//  ecrit. Le poste le rafraichit en marche (au moins toutes les 60 s) et le rend a
+//  l'arret ; le verrou d'un autre PID que personne n'a rafraichi depuis 3 minutes
+//  est repris (un poste arrete brutalement). Un autre poste en marche : celui-ci lit
+//  les valeurs gardees mais n'ecrit pas (il le dit, et reessaie toutes les 30 s).
+//  lockedBy : qui le tient (vide : personne d'autre, ou un verrou perime).
+struct Lock {
+    bool        held{false};
+    std::string owner;       // "PID 4120, depuis 2026-10-08 21:10:05"
+};
+[[nodiscard]] Lock        acquireLock(const std::filesystem::path& file);
+void                      refreshLock(const std::filesystem::path& file);
+void                      releaseLock(const std::filesystem::path& file);
+[[nodiscard]] std::string lockedBy(const std::filesystem::path& file);
+
+// ---- Exporter, importer les valeurs gardees ----
+//  Le format du poste (ce fichier), ou un CSV pour Excel (';', UTF-8 avec BOM) :
+//  Variable;Chemin;Type;Valeur;Date;Type declare;Id - un nombre a virgule ecrit
+//  avec une virgule (Excel en francais), un texte qui commencerait par = + - @
+//  precede d'une apostrophe (Excel n'en fait pas une formule). A la lecture : la
+//  virgule ou le point, TRUE/FALSE, VRAI/FAUX, oui/non, 1/0 ; le separateur de la
+//  ligne des titres (';', ',' ou tabulation) ou d'une ligne "sep=;" ; les colonnes
+//  se trouvent par leur titre, dans n'importe quel ordre.
+[[nodiscard]] std::string toCsv(const Store&);
+[[nodiscard]] bool        fromCsv(std::string_view text, Store& out, std::string* why = nullptr);
+// L'un ou l'autre : l'en-tete du poste, sinon un CSV.
+[[nodiscard]] bool        parseAny(std::string_view text, Store& out, std::string* why = nullptr);
+
+// Importer : les valeurs de `incoming` remplacent celles des memes variables dans
+// `store` ; les autres valeurs gardees restent. Une valeur va a sa variable par son
+// identifiant si le nom concorde, sinon par son nom (un autre projet, un CSV sans
+// Id). Ecartees : les variables inconnues, non remanentes ou liees. Un type devenu
+// incompatible est compte : le poste reprendra la valeur initiale (et le dira).
+struct ImportReport {
+    std::size_t values{0}, variables{0}, unknown{0}, notRetained{0}, incompatible{0};
+    [[nodiscard]] std::string summary() const;
+};
+ImportReport importInto(Store& store, const Project&, const Store& incoming, const std::string& now);
+
 } // namespace hmi::retain

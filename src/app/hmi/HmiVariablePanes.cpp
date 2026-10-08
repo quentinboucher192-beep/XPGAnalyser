@@ -11,6 +11,7 @@
 #include "HmiOperatorPanes.hpp"           // 1.10 (chantier S2)
 #include "HmiEnumPanes.hpp"               // 1.10 (chantier U) : le type enumeration
 #include "../../hmi/HmiTypes.hpp"
+#include "../../core/AtomicFile.hpp"   // 1.11.16 : exporter les valeurs remanentes
 #include "../../ui/Theme.hpp"
 
 #include <algorithm>
@@ -38,7 +39,8 @@ enum TypeAction : int { TAdd = 1, TMember, TUp, TDown, TRemoveMember, TDuplicate
 // table. La table garde ses id (1 a 5, 99, 100 et plus) ; celles du volet :
 // kMenuBase - action (des id negatifs, -1 etant un trait).
 enum VarMenu : int { MTrend = 1, MCopyName, MRename, MDuplicate, MDelete,
-                     MInternal, MInternalAll, MAttach, MAttachAll, MRecalc, MRestore };   // 1.11.8
+                     MInternal, MInternalAll, MAttach, MAttachAll, MRecalc, MRestore,     // 1.11.8
+                     MRetainReset, MRetainResetAll, MRetainExport, MRetainImport, MRetainWhere, MRetainCheck };   // 1.11.16
 
 // 1.11.8 : le meme membre dans toutes les cases : chaque indice devient [*] ("[0].NOM" -> "[*].NOM").
 std::string allElementsOf(std::string_view rel) {
@@ -59,7 +61,7 @@ std::string allElementsOf(std::string_view rel) {
     return out;
 }
 constexpr int kMenuBase = -1000;
-enum Col : std::size_t { CName, CType, CInitial, CEquipment, CAddress, CAccess, CPlace, CQuality, CCount };
+enum Col : std::size_t { CName, CType, CInitial, CEquipment, CAddress, CAccess, CRetain, CPlace, CQuality, CCount };   // 1.11.16 : CRetain
 
 const std::string kDash = "\xE2\x80\x94";
 const std::string kRW = "lecture, \xC3\xA9" "criture";
@@ -84,6 +86,28 @@ std::string trimmed(std::string_view s) {
 
 bool fail(std::string* why, std::string text) {
     if (why) *why = std::move(text);
+    return false;
+}
+
+// 1.11.16 : la case Remanente - oui, non ; liee : sans objet (l'equipement garde sa valeur).
+std::string retainCellOf(const hmi::Variable& v) {
+    if (v.bound()) return v.retain ? std::string("oui (li\xC3\xA9" "e : sans effet)") : std::string("\xE2\x80\x94");
+    return v.retain ? "oui" : "non";
+}
+// oui / non, comme Excel ou une personne l'ecrivent (VRAI, x, 1, vide...) ; faux : illisible.
+bool yesNo(std::string_view text, bool& out) {
+    std::string u(text);
+    for (auto& c : u) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    while (!u.empty() && std::isspace(static_cast<unsigned char>(u.back()))) u.pop_back();
+    while (!u.empty() && std::isspace(static_cast<unsigned char>(u.front()))) u.erase(u.begin());
+    if (u == "OUI" || u == "VRAI" || u == "TRUE" || u == "1" || u == "X" || u == "O" || u == "YES" || u.rfind("OUI (", 0) == 0) {
+        out = true;
+        return true;
+    }
+    if (u == "NON" || u == "FAUX" || u == "FALSE" || u == "0" || u == "N" || u == "NO" || u.empty() || u == "-" || u == "\xE2\x80\x94") {
+        out = false;
+        return true;
+    }
     return false;
 }
 
@@ -256,7 +280,7 @@ public:
     [[nodiscard]] std::size_t rowCount() const override { return rows_.size(); }
     [[nodiscard]] std::size_t columnCount() const override { return CCount; }
     [[nodiscard]] std::string headerText(std::size_t c) const override {
-        static const char* h[] = {"Nom", "Type", "Initiale", "\xC3\x89quipement", "Adresse", "Acc\xC3\xA8s", "Place Modbus", "Qualit\xC3\xA9 (en marche)"};
+        static const char* h[] = {"Nom", "Type", "Initiale", "\xC3\x89quipement", "Adresse", "Acc\xC3\xA8s", "R\xC3\xA9manente", "Place Modbus", "Qualit\xC3\xA9 (en marche)"};
         return c < CCount ? h[c] : std::string{};
     }
     [[nodiscard]] std::string cellText(ui::RowIndex r, std::size_t c) const override {
@@ -305,6 +329,9 @@ public:
         if (c == CAddress && row.kind == Row::Kind::Member && row.cells.size() > c && row.cells[c].find('\xE2') != std::string::npos)
             st.fgTone = ui::Tone::Warning;           // une adresse corrigee (le crayon)
         if (c == CQuality) st.fgTone = tone(row.tone);
+        // 1.11.16 : Remanente - oui en vert, non en gris ; liee mais cochee : l'avertissement.
+        if (c == CRetain && row.kind == Row::Kind::Variable && row.cells.size() > c)
+            st.fgTone = row.cells[c] == "oui" ? ui::Tone::Ok : row.cells[c] == "non" || row.cells[c] == kDash ? ui::Tone::Muted : ui::Tone::Warning;
         (void)p_;
         return st;
     }
@@ -504,6 +531,7 @@ HmiVariablesPane::HmiVariablesPane(std::string id, hmi::DocumentPtr doc, Apply a
     // ---- fin Lot API 8 ----
     table->setColumns({{"Nom", 240.f, 80.f, true, false}, {"Type", 175.f, 60.f, true, false}, {"Initiale", 80.f, 40.f, true, false},
                        {"\xC3\x89quipement", 140.f, 60.f, true, false}, {"Adresse", 86.f, 50.f, true, false}, {"Acc\xC3\xA8s", 112.f, 50.f, true, false},
+                       {"R\xC3\xA9manente", 92.f, 50.f, true, false},   // 1.11.16 : la remanence d'exploitation
                        {"Place Modbus", 180.f, 60.f, true, false, true, ui::Align::Start, 0, false},
                        {"Qualit\xC3\xA9 (en marche)", 170.f, 60.f, true, false, true, ui::Align::Start, 0, false}});
     // Lot 20 : plusieurs lignes se choisissent (Maj, Ctrl) - pour les copier vers Excel.
@@ -718,6 +746,7 @@ std::string HmiVariablesPane::cellOf(const hmi::Variable& v, std::size_t column)
         case CEquipment: return v.bound() ? v.equipment : std::string("(locale)");
         case CAddress: return v.bound() ? (v.address.empty() ? std::string("(sans)") : v.address) : kDash;
         case CAccess: return v.bound() ? (v.readOnly ? kRO : kRW) : kDash;
+        case CRetain: return retainCellOf(v);   // 1.11.16
         default: return {};
     }
 }
@@ -795,7 +824,7 @@ void HmiVariablesPane::emitFolder(const std::string& folder, int depth) {
         r.depth = depth;
         const bool isOpen = !collapsed_.count(upper(f)) || !searchText_.empty() || filtered;
         r.expander = isOpen ? 1 : 0;
-        r.cells = {ty::folderLeaf(f), std::to_string(count) + " variable" + (count > 1 ? "s" : ""), "", "", "", "", "", ""};
+        r.cells = {ty::folderLeaf(f), std::to_string(count) + " variable" + (count > 1 ? "s" : ""), "", "", "", "", "", "", ""};
         rows_.push_back(std::move(r));
         if (isOpen) emitFolder(f, depth + 1);
     }
@@ -836,7 +865,7 @@ void HmiVariablesPane::emitVariable(const hmi::Variable& v, int depth) {
         }
     }
     r.cells = {v.name, v.type, initial, v.bound() ? v.equipment : std::string("(locale)"), v.bound() ? (v.address.empty() ? std::string("(sans)") : v.address) : kDash,
-               v.bound() ? (v.readOnly ? kRO : kRW) : kDash, place, quality};
+               v.bound() ? (v.readOnly ? kRO : kRW) : kDash, retainCellOf(v), place, quality};
     rows_.push_back(std::move(r));
     if (!isOpen) return;
     Leaves leaves;
@@ -942,7 +971,7 @@ void HmiVariablesPane::emitMembers(const hmi::Variable& v, const Leaves& leaves,
         else if (internals > 0) equipmentCell += " \xC2\xB7 " + std::to_string(internals) + " interne" + (internals > 1 ? "s" : "");
         if (internal) quality.clear();
         r.cells = {k.path, k.type, initial, equipmentCell, v.bound() && !internal ? address : std::string{},
-                   !v.bound() ? std::string{} : internal ? std::string("IHM") : "(" + v.name + ")",
+                   !v.bound() ? std::string{} : internal ? std::string("IHM") : "(" + v.name + ")", std::string{},
                    place.empty() && v.bound() ? std::string("sans place") : place, quality};
         rows_.push_back(std::move(r));
         if (isOpen) emitMembers(v, leaves, k.path, k.rel, k.type, depth + 1);
@@ -954,7 +983,7 @@ void HmiVariablesPane::emitMembers(const hmi::Variable& v, const Leaves& leaves,
         more.var = v.id;
         more.depth = depth;
         more.cells = {"\xE2\x80\xA6 " + std::to_string(hidden) + " autres cases (d\xC3\xA9pli\xC3\xA9" "es : les " + std::to_string(kShown) + " premi\xC3\xA8res)",
-                      "", "", "", "", "", "", ""};
+                      "", "", "", "", "", "", "", ""};
         rows_.push_back(std::move(more));
     }
 }
@@ -992,7 +1021,7 @@ void HmiVariablesPane::refresh() {
         std::size_t count = 0;
         for (const auto& v : p.programs.variables)
             if ((sameText(v.folder, filterFolder_) || upper(v.folder).rfind(upper(filterFolder_) + "/", 0) == 0) && passes(v)) ++count;
-        r.cells = {filterFolder_, std::to_string(count) + " variable" + (count > 1 ? "s" : ""), "", "", "", "", "", ""};
+        r.cells = {filterFolder_, std::to_string(count) + " variable" + (count > 1 ? "s" : ""), "", "", "", "", "", "", ""};
         rows_.push_back(std::move(r));
         emitFolder(filterFolder_, 1);
     }
@@ -1041,6 +1070,7 @@ bool HmiVariablesPane::cellEditable(std::size_t row, std::size_t col) const {
                 return !ty::isComposite(v->type) || (ty::parseSpec(v->type, s) && s.array() && ty::isElementary(s.element));
             }
             if (col == CAddress || col == CAccess) return v->bound();
+            if (col == CRetain) return !v->bound();   // 1.11.16 : une variable de l'IHM
             return false;
         }
         case Row::Kind::Member: return col == CAddress && r.editableAddress;
@@ -1060,6 +1090,7 @@ std::vector<std::string> HmiVariablesPane::choicesFor(std::size_t row, std::size
         return out;
     }
     if (col == CAccess) return {kRW, kRO};
+    if (col == CRetain) return {"oui", "non"};   // 1.11.16
     if (col == CInitial)   // 1.10 (chantier U) : une enumeration, ses valeurs << Auto (1) >>
         if (const auto* v = p.variableById(rows_[row].var))
             if (const auto* e = hmi::findEnumeration(p, v->type)) {
@@ -1117,6 +1148,11 @@ bool HmiVariablesPane::commitCell(std::size_t row, std::size_t col, const std::s
                 case CEquipment: ok = setEquipment(r.var, text, &why); break;
                 case CAddress: ok = setAddress(r.var, text, &why); break;
                 case CAccess: ok = setReadOnly(r.var, text == kRO, &why); break;
+                case CRetain: {   // 1.11.16
+                    bool on = false;
+                    ok = yesNo(text, on) ? setRetain(r.var, on, &why) : fail(&why, "R\xC3\xA9manente : oui ou non");
+                    break;
+                }
                 default: break;
             }
             break;
@@ -1543,6 +1579,13 @@ paste::Target HmiVariablesPane::pasteTarget(const ui::TableView::PasteRequest& r
                                     return fail(why, "acc\xC3\xA8s inconnu : lecture seule, ou lecture/\xC3\xA9" "criture");
                                 return setReadOnly(idOf(k), ro, why);
                             }));
+    // 1.11.16 : Remanente - oui / non (VRAI, x, 1...) ; une variable liee : sans objet.
+    t.columns.push_back(col("R\xC3\xA9manente", {"Remanente", "Retain", "Retentive", "Persistante", "Sauvegardee", "Memorisee"}, CRetain,
+                            [this, idOf](const std::string& k, const std::string& v, std::string* why) {
+                                bool on = false;
+                                if (!yesNo(v, on)) return fail(why, "R\xC3\xA9manente : oui ou non");
+                                return setRetain(idOf(k), on, why);
+                            }));
     t.columns.push_back(col("Place Modbus", {"Place"}, CPlace, nullptr));
     t.columns.push_back(col("Qualit\xC3\xA9 (en marche)", {"Qualite"}, CQuality, nullptr));
     t.columns.push_back(col("Description", {"Commentaire", "Comment", "Libelle", "Designation"}, -1,
@@ -1590,6 +1633,177 @@ paste::Target HmiVariablesPane::pasteTarget(const ui::TableView::PasteRequest& r
         if (r < rows_.size() && rows_[r].kind == Row::Kind::Variable) t.keysFromAnchor.push_back(rows_[r].key);
     }
     return t;
+}
+
+// ============================================================ 1.11.16 =====
+//  LA REMANENCE D'EXPLOITATION, dans l'editeur : la case de chaque variable, et
+//  le stockage du poste (hmi::retain) - lu pour la fiche, reinitialise, exporte,
+//  importe, verifie. La simulation de l'editeur ne l'ecrit jamais.
+bool HmiVariablesPane::setRetain(Id id, bool on, std::string* why) {
+    const auto* v = doc_->project.variableById(id);
+    if (!v) return fail(why, "variable introuvable");
+    if (v->retain == on) return true;
+    if (on && v->bound())
+        return fail(why, v->name + " est li\xC3\xA9" "e \xC3\xA0 " + v->equipment + " : sa valeur vient de l'\xC3\xA9quipement, qui la garde "
+                         "(R\xC3\xA9manente vaut pour une variable de l'IHM)");
+    return change(id, std::string(on ? "R\xC3\xA9manente : " : "Non r\xC3\xA9manente : ") + v->name, [&](hmi::Variable& x) { x.retain = on; });
+}
+
+std::string HmiVariablesPane::retainFile() const { return hosts_.retainFile ? hosts_.retainFile() : std::string{}; }
+
+bool HmiVariablesPane::retainBusy(std::string* why) const {
+    if (hosts_.stationRunning && hosts_.stationRunning()) {
+        (void)fail(why, "le poste d'exploitation est en marche : il \xC3\xA9" "crit lui-m\xC3\xAAme ses valeurs (passe en conception d'abord)");
+        return true;
+    }
+    // Un poste d'exploitation d'un autre processus (le verrou du stockage, encore frais).
+    if (const std::string other = hmi::retain::lockedBy(retainFile()); !other.empty()) {
+        (void)fail(why, "un poste d'exploitation en marche \xC3\xA9" "crit ce stockage (" + other + ") : arr\xC3\xAAte-le d'abord");
+        return true;
+    }
+    return false;
+}
+
+const hmi::retain::Store* HmiVariablesPane::retainStore() const {
+    const std::string file = retainFile();
+    if (file.empty()) {
+        retainCache_.reset();
+        retainStamp_.clear();
+        retainNote_.clear();
+        retainReadable_ = false;
+        return nullptr;
+    }
+    // L'empreinte : la date et la taille du fichier et de sa copie (relu s'il change).
+    std::string stamp = file;
+    for (const auto& f : {std::filesystem::path(file), std::filesystem::path(file + ".bak")}) {
+        std::error_code ec;
+        const auto t = std::filesystem::last_write_time(f, ec);
+        stamp += ec ? std::string("|-") : "|" + std::to_string(t.time_since_epoch().count());
+        const auto size = std::filesystem::file_size(f, ec);
+        stamp += ec ? std::string("|-") : "|" + std::to_string(size);
+    }
+    if (!retainCache_ || stamp != retainStamp_) {
+        retainStamp_ = stamp;
+        retainCache_.emplace();
+        std::string why;
+        bool backup = false;
+        retainReadable_ = hmi::retain::load(file, *retainCache_, &why, &backup);
+        std::error_code ec;
+        retainNote_ = !retainReadable_ ? (std::filesystem::exists(file, ec) ? "stockage illisible (" + why + ")" : std::string{})
+                    : backup           ? "stockage ab\xC3\xAEm\xC3\xA9 : sa copie de secours est reprise"
+                                       : std::string{};
+    }
+    return retainReadable_ ? &*retainCache_ : nullptr;
+}
+
+bool HmiVariablesPane::resetRetained(Id variable, std::size_t* count, std::string* why) {
+    if (count) *count = 0;
+    const std::string file = retainFile();
+    if (file.empty()) return fail(why, "projet jamais enregistr\xC3\xA9 : pas de stockage");
+    if (variable != kNoId && !doc_->project.variableById(variable)) return fail(why, "variable introuvable");
+    if (retainBusy(why)) return false;
+    hmi::retain::Store s;
+    std::string w;
+    bool backup = false;
+    std::error_code ec;
+    if (!hmi::retain::load(file, s, &w, &backup)) {
+        if (!std::filesystem::exists(file, ec)) return true;   // rien n'a jamais ete garde
+        s = {};                                                 // illisible et sans copie : un stockage vide le remplace
+        backup = true;
+    }
+    const std::size_t n = hmi::retain::reset(s, variable);
+    if (count) *count = n;
+    if (n == 0 && !backup) return true;
+    s.project = doc_->project.config.name;
+    s.date = hmi::simdata::nowStamp();
+    if (const auto st = hmi::retain::save(file, s); !st) return fail(why, "\xC3\xA9" "criture impossible : " + st.error().message());
+    return true;
+}
+
+bool HmiVariablesPane::exportRetained(const std::string& path, std::string* why) {
+    const std::string file = retainFile();
+    if (file.empty()) return fail(why, "projet jamais enregistr\xC3\xA9 : pas de stockage");
+    if (trimmed(path).empty()) return fail(why, "pas de fichier");
+    hmi::retain::Store s;
+    std::string w;
+    if (!hmi::retain::load(file, s, &w)) return fail(why, "rien \xC3\xA0 exporter : " + w);
+    std::string ext = std::filesystem::path(path).extension().string();
+    for (auto& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    const std::u8string u8(path.begin(), path.end());
+    const std::filesystem::path out(u8);
+    std::error_code ec;
+    if (out.has_parent_path()) std::filesystem::create_directories(out.parent_path(), ec);
+    const auto st = core::writeFileAtomic(out, ext == ".csv" ? hmi::retain::toCsv(s) : hmi::retain::serialize(s));
+    if (!st) return fail(why, "\xC3\xA9" "criture impossible : " + st.error().message());
+    if (why) *why = std::to_string(s.entries.size()) + " valeur(s) export\xC3\xA9" "e(s)";
+    return true;
+}
+
+bool HmiVariablesPane::importRetained(const std::string& path, std::string* report) {
+    const std::string file = retainFile();
+    if (file.empty()) return fail(report, "projet jamais enregistr\xC3\xA9 : pas de stockage");
+    if (retainBusy(report)) return false;
+    const std::u8string u8(path.begin(), path.end());
+    std::string text;
+    if (trimmed(path).empty() || !core::readFileAll(std::filesystem::path(u8), text)) return fail(report, "impossible de lire " + path);
+    hmi::retain::Store incoming, s;
+    std::string w;
+    if (!hmi::retain::parseAny(text, incoming, &w)) return fail(report, "fichier refus\xC3\xA9 : " + w);
+    std::error_code ec;
+    if (!hmi::retain::load(file, s, &w) && std::filesystem::exists(file, ec)) s = {};   // illisible : remplace
+    const std::string now = hmi::simdata::nowStamp();
+    const auto rep = hmi::retain::importInto(s, doc_->project, incoming, now);
+    if (rep.variables == 0) return fail(report, "rien d'import\xC3\xA9 : " + rep.summary());
+    s.project = doc_->project.config.name;
+    s.date = now;
+    if (const auto st = hmi::retain::save(file, s); !st) return fail(report, "\xC3\xA9" "criture impossible : " + st.error().message());
+    if (report) *report = rep.summary();
+    return true;
+}
+
+std::string HmiVariablesPane::retainIntegrity() const {
+    std::size_t flagged = 0;
+    for (const auto& v : doc_->project.programs.variables) flagged += v.retain && !v.bound() ? 1u : 0u;
+    return std::to_string(flagged) + " variable(s) r\xC3\xA9manente(s). " + hmi::retain::checkIntegrity(retainFile(), doc_->project);
+}
+
+void HmiVariablesPane::askRetainExport() {
+    const std::string file = retainFile();
+    const std::string folder = file.empty() ? std::string{} : std::filesystem::path(file).parent_path().parent_path().parent_path().string();
+    const std::string initial = ui::pathIn(folder, "exports/remanence_exploitation.csv");
+    const auto write = [this](const std::string& path) {
+        std::string why;
+        if (exportRetained(path, &why)) say("Valeurs r\xC3\xA9manentes export\xC3\xA9" "es : " + why + " \xE2\x86\x92 " + path);
+        else say("Exporter : " + why, true);
+    };
+    if (hosts_.askPath)
+        hosts_.askPath("Exporter les valeurs r\xC3\xA9manentes",
+                       "Les valeurs gard\xC3\xA9" "es par le poste d'exploitation. En .csv : un tableau pour Excel (Variable;Chemin;Type;Valeur;Date) ; "
+                       "sinon le format du poste (.txt).",
+                       initial, ui::saveFile("Tableau Excel (CSV)|*.csv|Format du poste|*.txt", initial, "Exporter les valeurs r\xC3\xA9manentes"), write);
+    else
+        write(initial);
+}
+
+void HmiVariablesPane::askRetainImport() {
+    const std::string file = retainFile();
+    const std::string folder = file.empty() ? std::string{} : std::filesystem::path(file).parent_path().parent_path().parent_path().string();
+    const std::string initial = ui::pathIn(folder, "exports/remanence_exploitation.csv");
+    const auto read = [this](const std::string& path) {
+        std::string rep;
+        const bool ok = importRetained(path, &rep);
+        say(ok ? "Valeurs r\xC3\xA9manentes import\xC3\xA9" "es : " + rep + " \xE2\x80\x94 rendues au prochain lancement du poste." : "Importer : " + rep, !ok);
+        if (hosts_.report) hosts_.report(ok ? "Import des valeurs r\xC3\xA9manentes" : "Import refus\xC3\xA9", ok ? rep + "." : rep, !ok);
+        rebuildProperties();
+    };
+    if (hosts_.askPath)
+        hosts_.askPath("Importer les valeurs r\xC3\xA9manentes",
+                       "Un fichier fait par Exporter (le format du poste, ou un tableau CSV d'Excel : Variable;Chemin;Type;Valeur). "
+                       "Ses valeurs remplacent celles des m\xC3\xAAmes variables ; les variables inconnues, non r\xC3\xA9manentes ou li\xC3\xA9" "es "
+                       "sont \xC3\xA9" "cart\xC3\xA9" "es. L'ancien stockage reste en copie (.bak).",
+                       initial, ui::openFile("Valeurs r\xC3\xA9manentes|*.csv;*.txt", initial, "Importer les valeurs r\xC3\xA9manentes"), read);
+    else
+        read(initial);
 }
 
 bool HmiVariablesPane::setPackBools(Id id, bool pack) {
@@ -1888,6 +2102,12 @@ void HmiVariablesPane::rebuildProperties() {
         c.properties.push_back(prop("Variables", std::to_string(p.programs.variables.size())));
         c.properties.push_back(prop("Dossiers", std::to_string(ty::allFolders(p).size())));
         c.properties.push_back(prop("Types IHM", std::to_string(p.programs.types.size())));
+        // 1.11.16 : la remanence d'exploitation - combien de variables, et le stockage du poste.
+        std::size_t flagged = 0;
+        for (const auto& v : p.programs.variables) flagged += v.retain && !v.bound() ? 1u : 0u;
+        c.properties.push_back(prop("R\xC3\xA9manentes (poste)", std::to_string(flagged)));
+        c.properties.push_back(prop("Stockage du poste", retainIntegrity(), PG::ValueType::ReadOnly, {}, {},
+                                    "Clic droit sur une variable : R\xC3\xA9initialiser, Exporter, Importer, Afficher l'emplacement, V\xC3\xA9rifier l'int\xC3\xA9grit\xC3\xA9."));
         cats.push_back(std::move(c));
         props_->setCategories(std::move(cats));
         return;
@@ -2057,6 +2277,44 @@ void HmiVariablesPane::rebuildProperties() {
                                                 "resserrent (le bouton \xC2\xAB Recalculer la place m\xC3\xA9moire \xC2\xBB). R\xC3\xA9serv\xC3\xA9" "e : chaque membre garde sa place d'origine."));
             }
         }
+        cats.push_back(std::move(c));
+    }
+    {
+        // ---- 1.11.16 : LA REMANENCE D'EXPLOITATION (le poste) - a part de celle de la simulation ----
+        PG::Category c;
+        c.name = "R\xC3\xA9manence (exploitation)";
+        const std::string help = "Coch\xC3\xA9" "e : sur le poste d'exploitation, sa valeur est gard\xC3\xA9" "e \xC3\xA0 chaque changement (d'un bloc, "
+                                 "au plus une \xC3\xA9" "criture par seconde) et rendue au lancement suivant, apr\xC3\xA8s les valeurs initiales et avant "
+                                 "les scripts de D\xC3\xA9marrage. La simulation de l'\xC3\xA9" "diteur n'y \xC3\xA9" "crit jamais (sa r\xC3\xA9manence est \xC3\xA0 part).";
+        if (v->bound())
+            c.properties.push_back(prop("R\xC3\xA9manente", v->retain ? "oui (sans effet : li\xC3\xA9" "e)" : "sans objet (li\xC3\xA9" "e)", PG::ValueType::ReadOnly,
+                                        {}, {}, "Li\xC3\xA9" "e \xC3\xA0 " + v->equipment + " : sa valeur vient de l'\xC3\xA9quipement, qui la garde."));
+        else
+            c.properties.push_back(prop("R\xC3\xA9manente", v->retain ? "TRUE" : "FALSE", PG::ValueType::Boolean, [this, id](std::string_view text) {
+                std::string why;
+                const bool ok = setRetain(id, text == "TRUE", &why);
+                if (!ok) say("Refus\xC3\xA9 : " + why, true);
+                return ok;
+            }, {}, help));
+        std::string initial = v->initial;
+        if (const auto* e = hmi::findEnumeration(p, v->type)) initial = enumInitialText(*e, v->initial);
+        else if (trimmed(initial).empty()) initial = composite ? std::string("celles du type") : std::string("la valeur par d\xC3\xA9" "faut du type");
+        c.properties.push_back(prop("Valeur initiale", initial, PG::ValueType::ReadOnly, {}, {},
+                                    "Reprise quand rien n'est gard\xC3\xA9, apr\xC3\xA8s une r\xC3\xA9initialisation, ou si le type a chang\xC3\xA9 sans conversion possible."));
+        const std::string current = hosts_.currentValue ? hosts_.currentValue(v->name) : std::string{};
+        c.properties.push_back(prop("Valeur actuelle", current.empty() ? std::string("\xE2\x80\x94 (simulation arr\xC3\xAAt\xC3\xA9" "e)")
+                                                                        : current + " (simulation de l'\xC3\xA9" "diteur : jamais gard\xC3\xA9" "e)",
+                                    PG::ValueType::ReadOnly, {}, {},
+                                    "Sur le poste d'exploitation, c'est la valeur du moment qui est gard\xC3\xA9" "e ; ici, la simulation de l'\xC3\xA9" "diteur (s\xC3\xA9par\xC3\xA9" "e)."));
+        const auto* store = retainStore();
+        const auto st = hmi::retain::stateOf(p, *v, store);
+        c.properties.push_back(prop("Derni\xC3\xA8re valeur sauvegard\xC3\xA9" "e", st.saved ? st.value : std::string("aucune")));
+        c.properties.push_back(prop("Date de derni\xC3\xA8re sauvegarde", st.date.empty() ? kDash : st.date));
+        c.properties.push_back(prop("\xC3\x89tat de sauvegarde", retainNote_.empty() ? st.state : retainNote_ + " \xE2\x80\x94 " + st.state, PG::ValueType::ReadOnly,
+                                    {}, {}, "Lu dans le stockage du poste. Clic droit : R\xC3\xA9initialiser cette variable r\xC3\xA9manente."));
+        const std::string file = retainFile();
+        c.properties.push_back(prop("Stockage", file.empty() ? std::string("projet jamais enregistr\xC3\xA9") : file, PG::ValueType::ReadOnly, {}, {},
+                                    "Le fichier du poste (et sa copie .bak) : \xC3\xA9" "crit d'un bloc, hors des versions du projet."));
         cats.push_back(std::move(c));
     }
     if (composite && v->bound()) {
@@ -2250,6 +2508,29 @@ void HmiVariablesPane::openContextMenu(gfx::Point at) {
                          ty::spanText(doc_->project, *v), v->internal.empty() && !v->compact ? std::string("aucun membre interne : rien \xC3\xA0 rendre") : std::string{},
                          ui::Icon::None, !v->internal.empty() || v->compact, false, kMenuBase - (v->compact ? MRestore : MRecalc)});
     }
+    // ---- 1.11.16 : la remanence d'exploitation ----
+    {
+        items.push_back({"", "", "", ui::Icon::None, true, true, -1});
+        const auto* v = doc_->project.variableById(selectedVariable());
+        const bool hasFile = !retainFile().empty();
+        const std::string noFile = "projet jamais enregistr\xC3\xA9 : pas de stockage";
+        const auto* store = hasFile ? retainStore() : nullptr;
+        const bool saved = v && store && std::any_of(store->entries.begin(), store->entries.end(), [v](const hmi::retain::Entry& e) { return e.cell.variable == v->id; });
+        items.push_back({"R\xC3\xA9initialiser cette variable r\xC3\xA9manente", v ? v->name : std::string{},
+                         !hasFile ? noFile : !v ? std::string("choisis une variable") : !saved ? std::string("aucune valeur gard\xC3\xA9" "e pour elle") : std::string{},
+                         ui::Icon::None, hasFile && saved, false, kMenuBase - MRetainReset});
+        const std::size_t kept = store ? store->entries.size() : 0;
+        items.push_back({"R\xC3\xA9initialiser toutes les variables r\xC3\xA9manentes", std::to_string(kept) + " valeur(s)",
+                         !hasFile ? noFile : kept == 0 && retainNote_.empty() ? std::string("aucune valeur gard\xC3\xA9" "e") : std::string{}, ui::Icon::None,
+                         hasFile && (kept > 0 || !retainNote_.empty()), false, kMenuBase - MRetainResetAll});
+        items.push_back({"Exporter les valeurs r\xC3\xA9manentes\xE2\x80\xA6", "", !hasFile ? noFile : !store ? std::string("aucune valeur gard\xC3\xA9" "e") : std::string{},
+                         ui::Icon::None, hasFile && store, false, kMenuBase - MRetainExport});
+        items.push_back({"Importer les valeurs r\xC3\xA9manentes\xE2\x80\xA6", "", hasFile ? std::string{} : noFile, ui::Icon::None, hasFile, false,
+                         kMenuBase - MRetainImport});
+        items.push_back({"Afficher l'emplacement du stockage", "", hasFile ? std::string{} : noFile, ui::Icon::None, hasFile, false, kMenuBase - MRetainWhere});
+        items.push_back({"V\xC3\xA9rifier l'int\xC3\xA9grit\xC3\xA9 des donn\xC3\xA9" "es r\xC3\xA9manentes", "", hasFile ? std::string{} : noFile, ui::Icon::None, hasFile, false,
+                         kMenuBase - MRetainCheck});
+    }
     items.push_back({"", "", "", ui::Icon::None, true, true, -1});
     for (const auto& it : menu_->items()) items.push_back(it);
     menu_->setItems(std::move(items));
@@ -2280,6 +2561,44 @@ void HmiVariablesPane::runMenu(int action) {
         case MRecalc: case MRestore: {
             std::string why;
             if (!recalculatePlace(selectedVariable(), action == MRecalc, &why)) say("Refus\xC3\xA9 : " + why, true);
+            break;
+        }
+        // ---- 1.11.16 : la remanence d'exploitation ----
+        case MRetainReset: case MRetainResetAll: {
+            const Id id = action == MRetainReset ? selectedVariable() : kNoId;
+            const auto* v = doc_->project.variableById(id);
+            if (action == MRetainReset && !v) break;
+            const auto go = [this, id] {
+                std::string why;
+                std::size_t n = 0;
+                const auto* var = doc_->project.variableById(id);
+                if (!resetRetained(id, &n, &why)) say("R\xC3\xA9initialiser : " + why, true);
+                else say(std::to_string(n) + " valeur(s) oubli\xC3\xA9" "e(s)" + (var ? " pour " + var->name : std::string{})
+                         + " : le poste reprendra la valeur initiale au prochain lancement.");
+                rebuildProperties();
+            };
+            const std::string what = v ? "la valeur gard\xC3\xA9" "e de \xC2\xAB " + v->name + " \xC2\xBB" : std::string("toutes les valeurs gard\xC3\xA9" "es");
+            if (hosts_.confirm)
+                hosts_.confirm(action == MRetainReset ? "R\xC3\xA9initialiser la variable r\xC3\xA9manente ?" : "R\xC3\xA9initialiser toutes les variables r\xC3\xA9manentes ?",
+                               "Le poste d'exploitation oubliera " + what + " et reprendra la valeur initiale \xC3\xA0 son prochain lancement. "
+                               "Ce n'est pas annulable par Ctrl+Z (l'ancien stockage reste en copie .bak).", "R\xC3\xA9initialiser", go);
+            else
+                go();
+            break;
+        }
+        case MRetainExport: askRetainExport(); break;
+        case MRetainImport: askRetainImport(); break;
+        case MRetainWhere: {
+            const std::string file = retainFile();
+            ui::setClipboardText(file);
+            say("Stockage du poste : " + file + " (chemin copi\xC3\xA9)");
+            if (hosts_.report) hosts_.report("Emplacement du stockage", file + "\n\nLe chemin est copi\xC3\xA9 dans le presse-papiers.", false);
+            break;
+        }
+        case MRetainCheck: {
+            const std::string text = retainIntegrity();
+            say(text, text.find("ab\xC3\xAEm\xC3\xA9") != std::string::npos || text.find("manque") != std::string::npos);
+            if (hosts_.report) hosts_.report("Int\xC3\xA9grit\xC3\xA9 des donn\xC3\xA9" "es r\xC3\xA9manentes", text, text.find("ab\xC3\xAEm\xC3\xA9") != std::string::npos);
             break;
         }
         default: break;

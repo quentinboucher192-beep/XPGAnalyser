@@ -3746,6 +3746,250 @@ void cycle1115() {
     fs::remove_all(dir, ec);
 }
 
+// 1.11.16 : LA REMANENCE D'EXPLOITATION - le poste garde ses variables cochees
+// « Remanente » (des le changement, au plus une ecriture par seconde, et a l'arret)
+// et les rend au lancement suivant ; la reprise d'un arret brutal ne les fait pas
+// reculer ; un autre poste qui ecrit deja : lecture seule, puis la releve ; la
+// simulation de l'editeur n'y ecrit jamais. L'editeur des variables : la colonne
+// Remanente, sa fiche, Reinitialiser, Exporter (CSV pour Excel), Importer, l'integrite.
+void remanence1116() {
+    std::printf("1.11.16 : la remanence d'exploitation - le poste, la reprise, le verrou, l'editeur des variables\n");
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    const fs::path dir = fs::temp_directory_path(ec) / "xpg_remanence1116";
+    fs::remove_all(dir, ec);
+    const fs::path file = hmi::retain::fileOf(dir.string());
+    fs::path lock = file;
+    lock.replace_extension(".lock");
+    auto doc = std::make_shared<Document>();
+    auto& p = doc->project;
+    View vue = makeView(p, "Vue");
+    p.views = {vue};
+    p.config.startView = vue.id;
+    const auto addVar = [&](const char* name, const char* type, const char* initial, bool retain) {
+        Variable v;
+        v.id = p.allocate();
+        v.name = name;
+        v.type = type;
+        v.initial = initial;
+        v.retain = retain;
+        p.programs.variables.push_back(v);
+        return v.id;
+    };
+    const Id compteur = addVar("Compteur", "INT", "0", true);
+    const Id libre = addVar("Libre", "INT", "0", false);
+    Script plus;
+    plus.id = p.allocate();
+    plus.name = "Plus";
+    plus.event = "Appel";
+    plus.body = "Compteur := Compteur + 5;\nLibre := Libre + 1;";
+    plus.lang = ScriptLang::ST;
+    p.programs.scripts.push_back(plus);
+    const auto host = [&] {
+        app::HmiSimulationHost h;
+        h.retainFile = [&] { return file.string(); };
+        return h;
+    };
+    const auto stored = [&]() -> long long {   // Compteur dans le stockage (-1 : rien)
+        hmi::retain::Store s;
+        if (!hmi::retain::load(file, s)) return -1;
+        const auto* e = s.find(compteur, "");
+        return e ? e->cell.value.asInteger() : -1;
+    };
+    const auto value = [](app::HmiSimulationPane& pane, const char* name) -> long long {
+        const auto* v = pane.runtime().variable(name);
+        return v ? v->asInteger() : -1;
+    };
+    const auto logged = [](app::HmiSimulationPane& pane, std::string_view text) {
+        for (const auto& e : pane.runtime().journal())
+            if (e.message.find(text) != std::string::npos) return true;
+        return false;
+    };
+    std::string why;
+    // ---- La simulation de l'editeur : jamais dans le stockage du poste ----
+    {
+        app::HmiSimulationPane sim("sim1116", doc, host());
+        sim.setBounds({0, 0, 1200, 800});
+        sim.layout();
+        sim.refreshAt(0.0);
+        (void)sim.runtime().callScript("Plus", 0.1, &why);
+        sim.refreshAt(3.0);
+        check(value(sim, "Compteur") == 5 && sim.retainState().empty(), "la simulation de l'\xC3\xA9" "diteur tourne (Compteur = 5), sans r\xC3\xA9manence d'exploitation");
+        sim.command("hmi.stop");
+    }
+    check(!fs::exists(file, ec) && !fs::exists(lock, ec), "la simulation de l'\xC3\xA9" "diteur n'\xC3\xA9" "crit jamais le stockage du poste (ni son verrou)");
+    // ---- Le poste : Compteur (coche) garde des qu'il change ; Libre non ----
+    {
+        app::HmiSimulationPane station("station1116", doc, host());
+        station.setStationMode(true);
+        station.setBounds({0, 0, 1200, 800});
+        station.layout();
+        station.refreshAt(0.0);
+        check(station.retainLockHeld() && fs::exists(lock, ec) && stored() == 0,
+              "le poste lanc\xC3\xA9 (premier lancement) : le verrou pris, la valeur du moment gard\xC3\xA9" "e d'embl\xC3\xA9" "e (0) - " + station.retainState());
+        (void)station.runtime().callScript("Plus", 0.1, &why);
+        (void)station.runtime().callScript("Plus", 0.2, &why);
+        station.refreshAt(1.2);
+        check(stored() == 10, "Compteur = 10 \xC3\xA9" "crit en marche (sans attendre l'arr\xC3\xAAt)");
+        hmi::retain::Store s;
+        check(hmi::retain::load(file, s) && s.entries.size() == 1, "seul Compteur est gard\xC3\xA9 (Libre n'est pas coch\xC3\xA9" "e)");
+        (void)station.runtime().callScript("Plus", 1.3, &why);
+        station.refreshAt(1.5);
+        check(stored() == 10, "Compteur = 15 : pas encore \xC3\xA9" "crit (au plus une \xC3\xA9" "criture par seconde)");
+        station.refreshAt(2.3);
+        check(stored() == 15, "une seconde apr\xC3\xA8s la pr\xC3\xA9" "c\xC3\xA9" "dente : 15 \xC3\xA9" "crit");
+        (void)station.runtime().callScript("Plus", 2.4, &why);
+        check(value(station, "Compteur") == 20 && value(station, "Libre") == 4, "en marche : Compteur = 20, Libre = 4");
+    }   // quitter le poste en marche : la derniere valeur ecrite, le verrou rendu
+    check(stored() == 20 && !fs::exists(lock, ec), "quitter le poste : 20 \xC3\xA9" "crit, le verrou rendu");
+    // ---- Le lancement suivant : Compteur rendu, Libre a sa valeur initiale ----
+    {
+        app::HmiSimulationPane station("station1116b", doc, host());
+        station.setStationMode(true);
+        station.setBounds({0, 0, 1200, 800});
+        station.layout();
+        station.refreshAt(0.0);
+        check(value(station, "Compteur") == 20 && value(station, "Libre") == 0, "relanc\xC3\xA9 : Compteur rendu (20), Libre \xC3\xA0 sa valeur initiale (0)");
+        check(logged(station, "Variables r\xC3\xA9manentes restaur\xC3\xA9" "es"), "le journal le dit (R\xC3\xA9manence)");
+        check(station.retainState().find("1 valeur(s) gard\xC3\xA9" "e(s)") != std::string::npos, "l'\xC3\xA9tat : " + station.retainState());
+        // restart() : ce que fait le poste a son lancement (StationScreen) - il rend quand meme.
+        station.restart();
+        station.refreshAt(0.2);
+        check(value(station, "Compteur") == 20, "restart() (le lancement du poste) : Compteur rendu");
+        // La reprise d'un arret brutal : l'etat d'avant (plus ancien) ne fait pas reculer une remanente.
+        const std::string before = station.runtime().stateSnapshot();
+        (void)station.runtime().callScript("Plus", 0.3, &why);
+        station.refreshAt(1.5);
+        check(stored() == 25, "Compteur = 25 \xC3\xA9" "crit");
+        std::string report;
+        (void)station.runtime().restoreState(before, station.runtime().now(), &report);
+        const long long afterRestore = value(station, "Compteur");
+        station.reapplyRetained();
+        check(afterRestore == 20 && value(station, "Compteur") == 25,
+              "la reprise rend l'\xC3\xA9tat d'avant (20), puis les r\xC3\xA9manentes, plus r\xC3\xA9" "centes, l'emportent (25)");
+        check(logged(station, "rendues apr\xC3\xA8s la reprise"), "le journal le dit");
+        station.command("hmi.stop");
+        check(!fs::exists(lock, ec), "Arr\xC3\xAAter : le verrou rendu");
+    }
+    // ---- Un autre poste ecrit deja ce stockage : lecture seule, puis la releve ----
+    {
+        {
+            std::ofstream f(lock, std::ios::binary | std::ios::trunc);
+            f << "verrou pid=999999 depuis=\"2026-10-08 20:00:00\"\n";
+        }
+        app::HmiSimulationPane station("station1116c", doc, host());
+        station.setStationMode(true);
+        station.setBounds({0, 0, 1200, 800});
+        station.layout();
+        station.refreshAt(0.0);
+        check(!station.retainLockHeld() && value(station, "Compteur") == 25 && station.retainState().find("un autre poste") != std::string::npos,
+              "un autre poste \xC3\xA9" "crit d\xC3\xA9j\xC3\xA0 : les valeurs lues (25), rien d'\xC3\xA9" "crit (" + station.retainState() + ")");
+        check(logged(station, "Un autre poste d'exploitation"), "le journal le dit");
+        (void)station.runtime().callScript("Plus", 0.1, &why);
+        station.refreshAt(2.0);
+        check(stored() == 25, "en lecture seule : 30 n'est pas \xC3\xA9" "crit");
+        fs::remove(lock, ec);   // l'autre poste s'arrete
+        station.refreshAt(40.0);
+        check(station.retainLockHeld() && stored() == 30 && logged(station, "est libre"), "l'autre arr\xC3\xAAt\xC3\xA9 : la rel\xC3\xA8ve (le verrou pris, 30 \xC3\xA9" "crit)");
+        station.command("hmi.stop");
+    }
+    // ---- L'editeur des variables : la colonne, la fiche, les commandes ----
+    core::CommandStack stack;
+    auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+    app::HmiVariablesPane vars("vars1116", doc, apply);
+    bool stationOn = false;
+    app::HmiVariablesPane::Hosts vh;
+    vh.retainFile = [&] { return file.string(); };
+    vh.stationRunning = [&] { return stationOn; };
+    vars.setHosts(vh);
+    vars.setBounds({0, 0, 1600, 700});
+    vars.layout();
+    vars.refresh();
+    const auto cellOfVar = [&](Id id, std::size_t c) {
+        for (const auto& r : vars.rows())
+            if (r.var == id && r.kind == app::HmiVariablesPane::Row::Kind::Variable && c < r.cells.size()) return r.cells[c];
+        return std::string("?");
+    };
+    check(vars.table().model() && vars.table().model()->headerText(6) == "R\xC3\xA9manente" && vars.table().model()->headerText(7) == "Place Modbus",
+          "la colonne R\xC3\xA9manente (apr\xC3\xA8s Acc\xC3\xA8s, avant Place Modbus)");
+    check(cellOfVar(compteur, 6) == "oui" && cellOfVar(libre, 6) == "non", "Compteur : oui ; Libre : non");
+    const auto fiche = [&](const std::string& name) {
+        for (const auto& c : vars.properties().categories())
+            for (const auto& pr : c.properties)
+                if (pr.name == name) return pr.value;
+        return std::string("?");
+    };
+    vars.selectVariable(compteur);
+    check(fiche("R\xC3\xA9manente") == "TRUE" && fiche("Derni\xC3\xA8re valeur sauvegard\xC3\xA9" "e") == "30" && fiche("Date de derni\xC3\xA8re sauvegarde") != "\xE2\x80\x94"
+              && fiche("\xC3\x89tat de sauvegarde").find("\xC3\xA0 jour") != std::string::npos && fiche("Valeur initiale") == "0"
+              && fiche("Stockage") == file.string(),
+          "la fiche : R\xC3\xA9manente, 30 gard\xC3\xA9, sa date, \xC3\xA0 jour, la valeur initiale, le fichier");
+    check(fiche("Valeur actuelle").find("simulation arr\xC3\xAAt\xC3\xA9" "e") != std::string::npos, "valeur actuelle : la simulation est arr\xC3\xAAt\xC3\xA9" "e (pas de fausse valeur)");
+    // La case : cocher, decocher (une commande, Ctrl+Z) ; une variable liee : refusee.
+    check(vars.setRetain(libre, true, &why) && p.variableById(libre)->retain && cellOfVar(libre, 6) == "oui", "Libre coch\xC3\xA9" "e");
+    (void)stack.undo();
+    check(!p.variableById(libre)->retain, "Ctrl+Z : d\xC3\xA9" "coch\xC3\xA9" "e");
+    Variable lie;
+    lie.id = p.allocate();
+    lie.name = "Lie";
+    lie.type = "INT";
+    lie.equipment = "API";
+    lie.address = "%MW10";
+    p.programs.variables.push_back(lie);
+    vars.refresh();
+    check(!vars.setRetain(lie.id, true, &why) && why.find("l'\xC3\xA9quipement") != std::string::npos && cellOfVar(lie.id, 6) == "\xE2\x80\x94",
+          "une variable li\xC3\xA9" "e : refus\xC3\xA9" "e (" + why + "), la case \xE2\x80\x94");
+    // Le type change : la fiche le dit.
+    for (auto& v : p.programs.variables)
+        if (v.id == compteur) v.type = "REAL";
+    vars.selectVariable(compteur);
+    check(fiche("\xC3\x89tat de sauvegarde").find("convertie") != std::string::npos, "INT devenu REAL : la fiche dit \xC2\xAB convertie \xC2\xBB");
+    for (auto& v : p.programs.variables)
+        if (v.id == compteur) v.type = "INT";
+    // Exporter (CSV pour Excel), importer, reinitialiser, l'integrite.
+    const std::string csv = (dir / "exports" / "remanence.csv").string();
+    check(vars.exportRetained(csv, &why) && fs::exists(csv, ec), "Exporter : " + why);
+    {
+        std::ifstream in(csv, std::ios::binary);
+        std::stringstream text;
+        text << in.rdbuf();
+        check(text.str().rfind("\xEF\xBB\xBF" "Variable;Chemin;Type;Valeur;Date;", 0) == 0 && text.str().find("Compteur;;INT;30;") != std::string::npos,
+              "le CSV : BOM, titres, Compteur;;INT;30");
+    }
+    {
+        std::ofstream out(dir / "exports" / "a_importer.csv", std::ios::binary | std::ios::trunc);
+        out << "sep=;\r\nVariable;Type;Valeur\r\nCompteur;INT;42\r\nInconnue;INT;1\r\n";
+    }
+    check(vars.importRetained((dir / "exports" / "a_importer.csv").string(), &why) && stored() == 42 && why.find("1 variable inconnue") != std::string::npos,
+          "Importer : Compteur = 42 (" + why + ")");
+    stationOn = true;
+    check(!vars.importRetained(csv, &why) && why.find("poste d'exploitation est en marche") != std::string::npos, "le poste en marche : Importer refus\xC3\xA9");
+    std::size_t gone = 0;
+    check(!vars.resetRetained(compteur, &gone, &why), "le poste en marche : R\xC3\xA9initialiser refus\xC3\xA9");
+    stationOn = false;
+    check(vars.retainIntegrity().find("lisible et complet") != std::string::npos, "V\xC3\xA9rifier l'int\xC3\xA9grit\xC3\xA9 : " + vars.retainIntegrity());
+    check(vars.resetRetained(compteur, &gone, &why) && gone == 1 && stored() == -1, "R\xC3\xA9initialiser Compteur : sa valeur oubli\xC3\xA9" "e");
+    vars.selectVariable(compteur);
+    check(fiche("Derni\xC3\xA8re valeur sauvegard\xC3\xA9" "e") == "aucune", "la fiche relit le stockage : aucune");
+    // Le menu du clic droit : les six commandes.
+    vars.openContextMenu({200.f, 200.f});
+    std::size_t found = 0;
+    if (auto* menu = vars.contextMenu())
+        for (const auto& it : menu->items())
+            for (const char* label : {"R\xC3\xA9initialiser cette variable r\xC3\xA9manente", "R\xC3\xA9initialiser toutes les variables r\xC3\xA9manentes",
+                                      "Exporter les valeurs r\xC3\xA9manentes\xE2\x80\xA6", "Importer les valeurs r\xC3\xA9manentes\xE2\x80\xA6",
+                                      "Afficher l'emplacement du stockage", "V\xC3\xA9rifier l'int\xC3\xA9grit\xC3\xA9 des donn\xC3\xA9" "es r\xC3\xA9manentes"})
+                found += it.label == label ? 1u : 0u;
+    check(found == 6, "le clic droit : les six commandes de la r\xC3\xA9manence (" + std::to_string(found) + ")");
+    // Un poste d'un autre processus ecrit le stockage (son verrou frais) : Importer refuse.
+    {
+        std::ofstream f(lock, std::ios::binary | std::ios::trunc);
+        f << "verrou pid=999999 depuis=\"2026-10-08 20:00:00\"\n";
+    }
+    check(!vars.importRetained(csv, &why) && why.find("PID 999999") != std::string::npos, "un poste d'un autre processus en marche : refus\xC3\xA9 (" + why + ")");
+    fs::remove_all(dir, ec);
+}
+
 void lot6_simulation() {
     std::printf("lot 6 : en marche - modele, gestionnaire de recettes, parametres systeme\n");
     auto doc = std::make_shared<Document>();
@@ -22734,7 +22978,7 @@ void variablesInternes1118() {
     const auto* v = doc->project.variableById(vid);
     check(v && v->internal == std::vector<std::string>{"[0].NOM"}, "V[0].NOM interne (une seule commande)");
     vars.refresh();
-    check(cellOf("V[0].NOM", 3) == "interne (IHM)" && cellOf("V[0].NOM", 4).empty() && cellOf("V[0].NOM", 6) == "dans l'IHM",
+    check(cellOf("V[0].NOM", 3) == "interne (IHM)" && cellOf("V[0].NOM", 4).empty() && cellOf("V[0].NOM", 7) == "dans l'IHM",
           "la ligne le dit : interne (IHM), sans adresse, dans l'IHM");
     check(cellOf("V[0].CMD_OUV", 4) == "%MW35.0", "la place reste r\xC3\xA9serv\xC3\xA9" "e : V[0].CMD_OUV ne bouge pas");
     check(cellOf("V[0]", 3).find("1 interne") != std::string::npos, "V[0] le dit : \xE2\x86\xB3 V \xC2\xB7 1 interne");
@@ -22749,7 +22993,7 @@ void variablesInternes1118() {
     check(vars.lastMessage().find("mots 17 \xC3\xA0 208") != std::string::npos && vars.lastMessage().find("mots 17 \xC3\xA0 1232") != std::string::npos,
           "le message : " + vars.lastMessage());
     vars.refresh();
-    check(cellOf("V[0].CMD_OUV", 4) == "%MW19.0" && cellOf("V", 6) == "mots 17 \xC3\xA0 208", "recalcul\xC3\xA9" "e : V[0].CMD_OUV %MW19.0, V : mots 17 \xC3\xA0 208");
+    check(cellOf("V[0].CMD_OUV", 4) == "%MW19.0" && cellOf("V", 7) == "mots 17 \xC3\xA0 208", "recalcul\xC3\xA9" "e : V[0].CMD_OUV %MW19.0, V : mots 17 \xC3\xA0 208");
     // Ctrl+Z : la place d'origine ; Ctrl+Z encore : V[0].NOM seulement.
     (void)stack.undo();
     check(!doc->project.variableById(vid)->compact, "Ctrl+Z : la place d'origine");
@@ -26661,6 +26905,7 @@ int main(int argc, char** argv) {
     lot6_actions_ressources();
     lot6_simulation();
     cycle1115();                 // 1.11.15 : le cycle de la simulation, la remanence
+    remanence1116();             // 1.11.16 : la remanence d'exploitation (le poste, l'editeur des variables)
     lot6_arbre();
     lot7_aide_saisie();
     lot7_volet_fonctions();
