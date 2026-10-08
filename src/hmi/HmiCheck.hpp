@@ -21,6 +21,7 @@
 #include "HmiExprCheck.hpp"   // ---- Lot API 8 : les expressions impossibles (les chemins de l'automate) ----
 
 #include <functional>
+#include <set>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -86,6 +87,28 @@ struct GenerateOptions {
 // Chacune est une ERREUR a son endroit. generateWith() les dit aussi (avec les
 // expressions illisibles) : elles bloquent comme ses autres erreurs.
 [[nodiscard]] std::vector<Issue> compileWith(const Project&, const NameExists& plcHasName, const exprcheck::PlcPaths& plcPaths = {});
+// ---- 1.11.13 : COMPILER UNE PARTIE (le build incremental, HmiPipeline.hpp) -------------
+//  Ce qui n'est pas dans le filtre n'est pas controle : le build ne recompile que ce
+//  qui a change, ou ce dont une dependance a change d'interface. Les memes controles
+//  que compileWith, au meme endroit (vue, objet, script, element).
+struct CompileFocus {
+    std::set<Id> animations;      // les expressions et les textes de ces vues (objets, parametres, titre de popup)
+    std::set<Id> actions;         // les actions de ces vues (de la vue et de ses objets)
+    std::set<Id> scripts;         // ces scripts (de vue ou generaux)
+    std::set<Id> functions;       // ces fonctions IHM
+    std::set<Id> alarms;          // ces alarmes (condition, message)
+    std::set<Id> recipes;         // ces recettes (valeurs)
+    std::set<Id> operatorOwners;  // les operateurs de ces symboles (vues) ou de ces types IHM
+    bool variables{false};        // les valeurs initiales des variables IHM, les noms reserves (API)
+    bool users{false};            // les autorisations des utilisateurs
+    bool rest{false};             // le reste : historiques, unites, modeles de vues, liens des groupes d'alarmes
+    [[nodiscard]] bool anim(Id v) const { return animations.count(v) != 0; }
+    [[nodiscard]] bool act(Id v) const { return actions.count(v) != 0; }
+};
+[[nodiscard]] std::vector<Issue> compileWith(const Project&, const NameExists& plcHasName, const exprcheck::PlcPaths& plcPaths,
+                                             const CompileFocus& focus);
+[[nodiscard]] std::vector<Issue> compileWith(const Project&, const NameExists& plcHasName, const exprcheck::PlcPaths& plcPaths,
+                                             const CompileFocus* focus);
 // Ces seules erreurs (et les expressions illisibles), pour un controle rapide.
 [[nodiscard]] std::vector<Issue> expressionIssues(const Project&, const NameExists& plcHasName, const exprcheck::PlcPaths& plcPaths = {});
 [[nodiscard]] IssueCounts        count(const std::vector<Issue>&);

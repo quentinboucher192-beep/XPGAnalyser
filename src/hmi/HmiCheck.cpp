@@ -2796,6 +2796,9 @@ struct ExprWalker {
     std::vector<Issue>& out;
     bool                syntax;    // Generer : la syntaxe aussi
     exprcheck::PlcPaths paths{};   // les chemins de l'automate (vides : pas verifies)
+    const CompileFocus* focus{nullptr};   // 1.11.13 : une partie seulement (nul : tout)
+    [[nodiscard]] bool animOn(Id v) const { return !focus || focus->anim(v); }
+    [[nodiscard]] bool actOn(Id v) const { return !focus || focus->act(v); }
 
     struct Where {
         const View* view{nullptr};
@@ -2905,7 +2908,10 @@ struct ExprWalker {
     void run() {
         using W = exprcheck::Want;
         for (const auto& v : p.views) {
+            const bool anim = animOn(v.id), act = actOn(v.id);   // 1.11.13 : le filtre
+            if (!anim && !act) continue;
             for (const auto& o : v.objects) {
+                if (!anim) { if (!o.actions.empty()) actions(v, &o, o.actions); continue; }
                 for (const auto& prop : o.props) {
                     const Where w{&v, o.id, "Expression", prop.key};
                     if (!prop.expr.empty()) expr(w, prop.expr, exprcheck::wantOf(prop.key));
@@ -2943,9 +2949,10 @@ struct ExprWalker {
                         double x = 0;
                         if (!b.empty() && !parseNumber(b, x)) expr(Where{&v, o.id, "Expression", key}, b, W::Number);
                     }
-                if (!o.actions.empty()) actions(v, &o, o.actions);
+                if (!o.actions.empty() && act) actions(v, &o, o.actions);
             }
-            actions(v, nullptr, v.actions);
+            if (act) actions(v, nullptr, v.actions);
+            if (!anim) continue;
             if (v.role == "popup" && !v.popup.title.empty()) text(Where{&v, kNoId, "Popup", "popup_libelle"}, v.popup.title, "titre ");
             for (const auto& prm : v.params) {
                 const std::string def = trimmedCopy(prm.defaultValue);
@@ -2953,26 +2960,32 @@ struct ExprWalker {
             }
         }
         for (const auto& sc : p.programs.scripts)
-            if (sc.event == "Changement") expr(Where{nullptr, kNoId, "Script", sc.name, kNoId, sc.id}, sc.watch, W::Any, "expression surveill\xC3\xA9" "e ");
+            if (sc.event == "Changement" && (!focus || focus->scripts.count(sc.id)))
+                expr(Where{nullptr, kNoId, "Script", sc.name, kNoId, sc.id}, sc.watch, W::Any, "expression surveill\xC3\xA9" "e ");
         for (const auto& a : p.alarms) {
+            if (focus && !focus->alarms.count(a.id)) continue;
             const Where w{nullptr, kNoId, "Alarme", a.name, a.id};
             expr(w, a.condition, W::Bool, "condition ");
             text(w, a.message, "message ");
         }
-        for (const auto& r : p.recipes)
+        for (const auto& r : p.recipes) {
+            if (focus && !focus->recipes.count(r.id)) continue;
             for (const auto& rec : r.records)
                 for (std::size_t i = 0; i < rec.values.size(); ++i)
                     expr(Where{nullptr, kNoId, "Recette", r.name, r.id}, rec.values[i], W::Any,
                          rec.name + " / " + (i < r.fields.size() ? r.fields[i].name : std::to_string(i + 1)) + " : ");
-        for (const auto& u : p.security.users)
-            if (u.protection == "expression") expr(Where{nullptr, kNoId, "Utilisateur", u.login, u.id}, u.expression, W::Bool, "autorisation ");
+        }
+        if (!focus || focus->users)
+            for (const auto& u : p.security.users)
+                if (u.protection == "expression") expr(Where{nullptr, kNoId, "Utilisateur", u.login, u.id}, u.expression, W::Bool, "autorisation ");
         // Les variables archivees (Configuration > Historiques) et les plumes des
         // courbes (sauf une courbe historique lue dans un fichier externe).
-        for (const auto& archived : p.history.archived)
-            expr(Where{nullptr, kNoId, "Historique", archived}, archived, W::Any, "variable archiv\xC3\xA9" "e ");
+        if (!focus || focus->rest)
+            for (const auto& archived : p.history.archived)
+                expr(Where{nullptr, kNoId, "Historique", archived}, archived, W::Any, "variable archiv\xC3\xA9" "e ");
         for (const auto& v : p.views)
             for (const auto& o : v.objects) {
-                if (o.kind != Kind::Trend) continue;
+                if (o.kind != Kind::Trend || !animOn(v.id)) continue;
                 if (o.text("mode").rfind("historique", 0) == 0 && !o.text("source").empty()) continue;
                 for (const auto& pen : splitPens(o.text("variables"))) expr(Where{&v, o.id, "Courbe", "variables"}, pen, W::Any, "plume ");
             }
@@ -3058,6 +3071,7 @@ struct ExprWalker {
         using W = exprcheck::Want;
         // Les formats d'unites.
         for (const auto& d : p.displays) {
+            if (focus && !focus->rest) break;   // 1.11.13 : le filtre
             const Where w{nullptr, kNoId, "Unit\xC3\xA9", d.path};
             // Le meme message que Generer (checkDisplay) : dit une fois ; Compiler le dit aussi.
             if (!d.format.empty() && !looksLikeFormat(d.format))
@@ -3078,14 +3092,14 @@ struct ExprWalker {
         // Les symboles.
         for (const auto& v : p.views)
             for (const auto& o : v.objects) {
-                if (o.kind != Kind::SymbolInstance) continue;
+                if (o.kind != Kind::SymbolInstance || !animOn(v.id)) continue;
                 const View* sv = symbolOf(p, o);
                 if (!sv) continue;                                           // checkSymbols le dit
                 for (const auto& [name, value] : parseArguments(o.text("params")))
                     if (sv->param(name)) expr(Where{&v, o.id, "Symbole", "params"}, value, W::Any, "argument " + name + " := ");
             }
         for (const auto& sv : p.views) {
-            if (!isSymbolView(sv)) continue;
+            if (!isSymbolView(sv) || !animOn(sv.id)) continue;
             SymbolArguments defaults;
             std::string shownDefaults;
             for (const auto& prm : sv.params) {
@@ -3144,7 +3158,7 @@ struct ExprWalker {
         // verifies (les variables de l'automate ne voyagent pas ; on les choisit a la
         // creation) : le reste l'est (fonctions, types, couleurs, divisions...).
         for (const auto& tpl : p.viewTemplates) {
-            if (!tpl.data || tpl.data->empty()) continue;
+            if (!tpl.data || tpl.data->empty() || (focus && !focus->rest)) continue;
             auto pack = pkg::fromZip(*tpl.data);
             if (!pack) continue;
             std::vector<Issue> inner;
@@ -3204,6 +3218,10 @@ void checkApiName(const Project& p, const exprcheck::PlcPaths& paths, std::vecto
 }
 } // namespace
 
+namespace {
+std::vector<Issue> compileFocused(const Project& p, const CompileFocus* f);   // 1.11.13 : plus bas
+} // namespace
+
 std::vector<Issue> expressionIssues(const Project& p, const NameExists& plcHasName, const exprcheck::PlcPaths& plcPathsIn) {
     std::vector<Issue> out;
     const auto plcPaths = boundTo(p, plcPathsIn);
@@ -3213,18 +3231,30 @@ std::vector<Issue> expressionIssues(const Project& p, const NameExists& plcHasNa
 }
 
 std::vector<Issue> compileWith(const Project& p, const NameExists& plcHasName, const exprcheck::PlcPaths& plcPathsIn) {
-    auto out = compile(p);
+    return compileWith(p, plcHasName, plcPathsIn, nullptr);
+}
+
+std::vector<Issue> compileWith(const Project& p, const NameExists& plcHasName, const exprcheck::PlcPaths& plcPaths,
+                               const CompileFocus& focus) {
+    return compileWith(p, plcHasName, plcPaths, &focus);
+}
+
+// 1.11.13 : les deux formes passent ici ; `focus` nul : tout.
+std::vector<Issue> compileWith(const Project& p, const NameExists& plcHasName, const exprcheck::PlcPaths& plcPathsIn,
+                               const CompileFocus* focus) {
+    auto out = compileFocused(p, focus);
     const auto plcPaths = boundTo(p, plcPathsIn);
-    ExprWalker{p, plcHasName, out, false, plcPaths}.run();
-    checkApiName(p, plcPaths, out);   // 1.11.1 (API-M) : une variable ou une vue nommee API
+    ExprWalker{p, plcHasName, out, false, plcPaths, focus}.run();
+    if (!focus || focus->variables) checkApiName(p, plcPaths, out);   // 1.11.1 (API-M) : une variable ou une vue nommee API
     // 1.10 : les erreurs des scripts (noms, membres, appels, ecritures, types), a leur place.
-    for (auto& i : scriptcheck::projectIssues(p, plcHasName, plcPaths)) out.push_back(std::move(i));
+    for (auto& i : scriptcheck::projectIssues(p, plcHasName, plcPaths, focus)) out.push_back(std::move(i));
     // 1.10 (decision 14 ; integration I2, pour N et S2) : les operateurs des symboles
     // et des types IHM - en double, operandes ou retour impossibles, la syntaxe et le
     // resultat de leur script (hmi::operatorIssues ; un DDT de l'automate est une
     // cible permise). Issue::item = l'operateur, Issue::line = la ligne de son
     // script : le double-clic l'y ouvre (l'ecran, openHmiIssue).
     for (const auto& oi : operatorIssues(p, plcPaths.isStruct)) {
+        if (focus && !focus->operatorOwners.count(oi.owner.id)) continue;   // 1.11.13 : le filtre
         Issue i;
         i.severity = oi.error ? Issue::Severity::Error : Issue::Severity::Warning;
         i.category = "Op\xC3\xA9rateur";
@@ -3490,7 +3520,15 @@ std::vector<Issue> generateWith(const Project& p, const NameExists& plcHasName, 
     return out;
 }
 
-std::vector<Issue> compile(const Project& p) {
+namespace {
+std::vector<Issue> compileFocused(const Project& p, const CompileFocus* f);
+} // namespace
+
+std::vector<Issue> compile(const Project& p) { return compileFocused(p, nullptr); }
+
+namespace {
+// 1.11.13 : compile(), limite a une partie (le build incremental) ; `f` nul : tout.
+std::vector<Issue> compileFocused(const Project& p, const CompileFocus* f) {
     using S = Issue::Severity;
     std::vector<Issue> out;
     std::size_t expressions = 0, templates = 0, scripts = 0, actions = 0;
@@ -3500,10 +3538,12 @@ std::vector<Issue> compile(const Project& p) {
         return !types::membersOf(p, t).empty() || findEnumeration(p, t) != nullptr;   // 1.10 (S1) : une enumeration aussi
     };
     for (const auto& v : p.views) {
+        const bool anim = !f || f->anim(v.id), act = !f || f->act(v.id);   // 1.11.13 : le filtre
         // 1.11 (REP) : plus d'avertissement "repere non remplace" ; un champ a repere
         // s'analyse comme les autres (ses $ sont transparents).
         for (const auto& o : v.objects)
             for (const auto& prop : o.props) {
+                if (!anim) break;
                 if (!prop.expr.empty()) {
                     ++expressions;
                     const auto e = Expression::compile(prop.expr);
@@ -3544,26 +3584,27 @@ std::vector<Issue> compile(const Project& p) {
                 }
             }
         for (const auto& sc : v.scripts) {
+            if (f && !f->scripts.count(sc.id)) continue;
             ++scripts;
             for (const auto& d : checkScript(sc.lang, sc.body, sc.name, knownType))
                 add(out, severityOf(d.severity), "Script", v.id, kNoId, sc.name, d.message, sc.id, d.line);
         }
         // Lot 8 : le titre a trous d'une popup, la valeur par defaut des
         // parametres, les bornes d'un champ de saisie.
-        if (v.role == "popup" && !v.popup.title.empty()) {
+        if (anim && v.role == "popup" && !v.popup.title.empty()) {
             const auto t = TextTemplate::compile(v.popup.title);
             if (t.dynamic()) ++templates;
             for (const auto& err : t.errors()) add(out, S::Error, "Popup", v.id, kNoId, "popup_libelle", "titre : " + err);
         }
         for (const auto& prm : v.params) {
             const std::string def = trimmedCopy(prm.defaultValue);
-            if (def.empty() || isVariablePath(def)) continue;
+            if (!anim || def.empty() || isVariablePath(def)) continue;
             ++expressions;
             const auto e = Expression::compile(def);
             if (!e.valid()) add(out, S::Error, "Param\xC3\xA8tre", v.id, kNoId, "parametres", prm.name + " := " + def + " : " + e.error());
         }
         for (const auto& o : v.objects)
-            if (o.kind == Kind::InputField)
+            if (anim && o.kind == Kind::InputField)
                 for (const char* key : {"min", "max"}) {
                     const std::string b = trimmedCopy(o.text(key));
                     double x = 0;
@@ -3600,11 +3641,14 @@ std::vector<Issue> compile(const Project& p) {
                         if (!isVariablePath(markers::strip(value))) expr(value, ("param\xC3\xA8tre " + name + " :").c_str());
             }
         };
-        actionsOf(nullptr, v.actions);
-        for (const auto& o : v.objects)
-            if (!o.actions.empty()) actionsOf(&o, o.actions);
+        if (act) {
+            actionsOf(nullptr, v.actions);
+            for (const auto& o : v.objects)
+                if (!o.actions.empty()) actionsOf(&o, o.actions);
+        }
     }
     for (const auto& sc : p.programs.scripts) {
+        if (f && !f->scripts.count(sc.id)) continue;
         ++scripts;
         for (const auto& d : checkScript(sc.lang, sc.body, sc.name, knownType))
             add(out, severityOf(d.severity), "Script", kNoId, kNoId, sc.name, d.message, sc.id, d.line);
@@ -3615,21 +3659,22 @@ std::vector<Issue> compile(const Project& p) {
     }
     // Lot 7 : le corps des fonctions IHM (declarations, code, retour).
     std::size_t functions = 0;
-    for (const auto& f : p.programs.functions) {
+    for (const auto& fn : p.programs.functions) {
+        if (f && !f->functions.count(fn.id)) continue;
         ++functions;
-        for (const auto& d : checkFunction(f, knownType)) {
+        for (const auto& d : checkFunction(fn, knownType)) {
             Issue i;
             i.severity = severityOf(d.severity);
             i.category = "Fonction";
-            i.property = f.name;
+            i.property = fn.name;
             i.message = d.message;
-            i.item = f.id;
+            i.item = fn.id;
             i.line = d.line;
             out.push_back(std::move(i));
         }
     }
     for (const auto& var : p.programs.variables)
-        if (!var.initial.empty()) {
+        if (!var.initial.empty() && (!f || f->variables)) {
             // Lot 16 : un tableau de cases simples accepte une liste ("1.5, 2, 3") ;
             // une structure prend les valeurs de son type.
             types::Spec spec;
@@ -3655,6 +3700,7 @@ std::vector<Issue> compile(const Project& p) {
     // Lot 4 : conditions et messages d'alarme, valeurs de recette, autorisations.
     std::size_t alarms = 0;
     for (const auto& a : p.alarms) {
+        if (f && !f->alarms.count(a.id)) continue;
         ++alarms;
         if (!a.condition.empty()) {
             ++expressions;
@@ -3668,7 +3714,7 @@ std::vector<Issue> compile(const Project& p) {
     for (const auto& r : p.recipes)
         for (const auto& rec : r.records)
             for (std::size_t i = 0; i < rec.values.size(); ++i)
-                if (!rec.values[i].empty()) {
+                if (!rec.values[i].empty() && (!f || f->recipes.count(r.id))) {
                     ++expressions;
                     const auto e = Expression::compile(rec.values[i]);
                     if (!e.valid())
@@ -3677,7 +3723,7 @@ std::vector<Issue> compile(const Project& p) {
                                     + rec.values[i] + " : " + e.error(), r.id);
                 }
     for (const auto& u : p.security.users)
-        if (u.protection == "expression" && !u.expression.empty()) {
+        if (u.protection == "expression" && !u.expression.empty() && (!f || f->users)) {
             ++expressions;
             const auto e = Expression::compile(u.expression);
             if (!e.valid()) addItem(out, S::Error, "Utilisateur", u.login, "autorisation " + u.expression + " : " + e.error(), u.id);
@@ -3686,6 +3732,7 @@ std::vector<Issue> compile(const Project& p) {
     for (const auto& v : p.views)
         for (const auto& o : v.objects)
             for (const char* key : {"state", "lamp", "condition"}) {
+                if (f && !f->anim(v.id)) break;
                 const auto* prop = o.find(key);
                 if (!prop || !prop->expr.empty() || trimmedCopy(prop->value).empty()) continue;
                 if (!kindWritesVariable(o.kind) && o.kind != Kind::HourMeter) continue;
@@ -3697,12 +3744,14 @@ std::vector<Issue> compile(const Project& p) {
     for (const auto& v : p.views)
         for (const auto& o : v.objects)
             for (const char* key : valueExpressionKeys(o.kind)) {
+                if (f && !f->anim(v.id)) break;
                 const auto* prop = o.find(key);
                 if (!prop || !prop->expr.empty() || trimmedCopy(prop->value).empty()) continue;
                 ++expressions;
                 const auto e = Expression::compile(prop->value);
                 if (!e.valid()) add(out, S::Error, "Expression", v.id, o.id, key, prop->value + " : " + e.error());
             }
+    if (f) return out;   // 1.11.13 : une partie - ni bilan, ni liens des groupes (le reste)
     add(out, S::Info, "Bilan", kNoId, kNoId, {},
         std::to_string(expressions) + " expression(s), " + std::to_string(templates) + " texte(s) \xC3\xA0 trous, "
             + std::to_string(scripts) + " script(s), " + std::to_string(actions) + " action(s), " + std::to_string(alarms)
@@ -3710,5 +3759,6 @@ std::vector<Issue> compile(const Project& p) {
     checkAlarmGroupLinks(p, out);   // 1.10.2 (AL) : Compiler dit les liens vers un groupe absent
     return out;
 }
+} // namespace
 
 } // namespace hmi

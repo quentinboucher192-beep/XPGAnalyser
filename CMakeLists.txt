@@ -518,6 +518,9 @@ if(XPG_BUILD_TESTS)
     # ---- Lot API 8 : les expressions impossibles (Compiler, Generer) ----
     xpg_add_test_executable(hmicheck_expr_test tests/hmicheck_expr_test.cpp)
     xpg_target_link_libraries(hmicheck_expr_test PRIVATE xpg_hmi)
+    # ---- 1.11.13 : la generation incrementale de l'IHM (cache, dependances, etats, artefacts) ----
+    xpg_add_test_executable(hmi_build_test tests/hmi_build_test.cpp)
+    xpg_target_link_libraries(hmi_build_test PRIVATE xpg_hmi)
     # ---- Lot API 8 : didacticiels et aide (les huit parcours, leurs pages de l'aide, le menu Aide) ----
     xpg_add_test_executable(lot8tutorials_test tests/lot8tutorials_test.cpp src/app/TopBar.cpp src/app/TopBarLot8.cpp src/app/TutorialsLot8.cpp)   # Lot API 8 : bandeau haut (+ TopBarLot8.cpp)
     # ---- Lot API 8 : tests - xpg_ui AVANT xpg_import : ui::buildHelp (ui/HelpDocument.cpp) appelle
@@ -627,6 +630,7 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME hmi          COMMAND hmi_test ${XPG_FIXTURE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ihm)
     xpg_add_test(NAME hmieditor    COMMAND hmi_editor_test ${XPG_FIXTURE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ihm)
     xpg_add_test(NAME hmicheckexpr COMMAND hmicheck_expr_test)               # ---- Lot API 8 : les expressions impossibles ----
+    xpg_add_test(NAME hmibuild     COMMAND hmi_build_test)                   # ---- 1.11.13 : la generation incrementale ----
     xpg_add_test(NAME searchfocus COMMAND searchfocus_test)                  # ---- Lot API 8 : finitions (Ctrl+F) ----
     xpg_add_test(NAME lot8tutorials COMMAND lot8tutorials_test)              # ---- Lot API 8 : didacticiels et aide ----
     xpg_add_test(NAME topbar8 COMMAND topbar8_test)                          # ---- Lot API 8 : bandeau haut ----

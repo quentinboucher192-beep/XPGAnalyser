@@ -97,6 +97,7 @@ struct Scope {
 // parametres), les actions Executer un script, les fonctions IHM. Chaque
 // constat a sa ligne et sa colonne (Issue::column, Issue::length).
 [[nodiscard]] std::vector<Issue> projectIssues(const Project&, const NameExists& plcHasName,
-                                               const exprcheck::PlcPaths& plcPaths = {});
+                                               const exprcheck::PlcPaths& plcPaths = {},
+                                               const CompileFocus* focus = nullptr);   // 1.11.13 : une partie (nul : tout)
 
 } // namespace hmi::scriptcheck

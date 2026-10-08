@@ -1338,7 +1338,8 @@ std::string actionWhere(std::size_t index, const Action& a) {
 }
 } // namespace
 
-std::vector<Issue> projectIssues(const Project& p, const NameExists& plcHasName, const exprcheck::PlcPaths& plcPaths) {
+std::vector<Issue> projectIssues(const Project& p, const NameExists& plcHasName, const exprcheck::PlcPaths& plcPaths,
+                                 const CompileFocus* focus) {
     std::vector<Issue> out;
     const auto scopeFor = [&](const View* v, const HmiFunction* f) {
         Scope s;
@@ -1361,7 +1362,7 @@ std::vector<Issue> projectIssues(const Project& p, const NameExists& plcHasName,
         out.push_back(std::move(i));
     };
     for (const auto& sc : p.programs.scripts) {
-        if (sc.lang != ScriptLang::ST) continue;
+        if (sc.lang != ScriptLang::ST || (focus && !focus->scripts.count(sc.id))) continue;
         for (const auto& f : check(scopeFor(nullptr, nullptr), sc.body)) {
             Issue i;
             i.category = "Script";
@@ -1372,7 +1373,7 @@ std::vector<Issue> projectIssues(const Project& p, const NameExists& plcHasName,
     }
     for (const auto& v : p.views) {
         for (const auto& sc : v.scripts) {
-            if (sc.lang != ScriptLang::ST) continue;
+            if (sc.lang != ScriptLang::ST || (focus && !focus->scripts.count(sc.id))) continue;
             for (const auto& f : check(scopeFor(&v, nullptr), sc.body)) {
                 Issue i;
                 i.category = "Script";
@@ -1402,10 +1403,12 @@ std::vector<Issue> projectIssues(const Project& p, const NameExists& plcHasName,
                 }
             }
         };
+        if (focus && !focus->act(v.id)) continue;
         actions(nullptr, v.actions);
         for (const auto& o : v.objects) actions(&o, o.actions);
     }
     for (const auto& fn : p.programs.functions) {
+        if (focus && !focus->functions.count(fn.id)) continue;
         for (const auto& f : check(scopeFor(nullptr, &fn), fn.body)) {
             Issue i;
             i.category = "Fonction";
