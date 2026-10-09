@@ -460,6 +460,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\AboutDialog.cpp" />
     <ClCompile Include="src\app\ConditionsNotice.cpp" />
     <ClCompile Include="src\app\CrashDialogs.cpp" />
+    <ClCompile Include="src\app\EditionMigration.cpp" />
     <ClCompile Include="src\app\GrafcetCodePanel.cpp" />
     <ClCompile Include="src\app\NoveltyCenter.cpp" />
     <ClCompile Include="src\app\hmi\HmiApiVarsPane.cpp" />
@@ -851,6 +852,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\AboutDialog.hpp" />
     <ClInclude Include="src\app\ConditionsNotice.hpp" />
     <ClInclude Include="src\app\CrashDialogs.hpp" />
+    <ClInclude Include="src\app\EditionMigration.hpp" />
     <ClInclude Include="src\app\GrafcetCodePanel.hpp" />
     <ClInclude Include="src\app\NoveltyCenter.hpp" />
     <ClInclude Include="src\app\hmi\HmiApiVarsPane.hpp" />

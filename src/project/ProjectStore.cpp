@@ -1,6 +1,7 @@
 #include "ProjectStore.hpp"
 #include "ProjectIcon.hpp"
 
+#include "../core/Edition.hpp"   // 1.12.0 : XPGAnalyser IHM ne lit ni n'ecrit le programme
 #include "../export/XpgWriter.hpp"
 #include "../import/ProjectParser.hpp"
 #include "../import/XmlReader.hpp"
@@ -279,6 +280,7 @@ core::Status ProjectStore::save(const Project& p, const Manifest& manifest,
         m << "content = "      << (manifest.contentKind.empty() ? p.header.contentKind : manifest.contentKind) << '\n';
         m << "content-date = " << (manifest.contentDateTime.empty() ? p.header.contentDateTime : manifest.contentDateTime) << '\n';
         m << "crlf = "         << (p.header.crlf ? "oui" : "non") << '\n';
+        if (!manifest.edition.empty()) m << "edition = " << manifest.edition << '\n';   // 1.12.0
         if (auto r = writeText(root / "project.xpgproj", m.str()); !r) return r;
     }
 
@@ -296,6 +298,10 @@ core::Status ProjectStore::save(const Project& p, const Manifest& manifest,
     } else {
         fs::remove(root / "project.lock", ec);
     }
+
+    // 1.12.0 : XPGAnalyser IHM n'a pas de programme - et n'ecrase pas celui d'un
+    // dossier de la 1.11 (son modele est vide : il n'a rien lu).
+    if (!core::hasApi()) return core::ok();
 
     // ---- hardware ---------------------------------------------------------
     {
@@ -543,6 +549,7 @@ core::Result<Manifest> ProjectStore::readManifest(const std::string& folder) {
         else if (k == "content")       m.contentKind = v;
         else if (k == "content-date")  m.contentDateTime = v;
         else if (k == "crlf")          m.crlf = v != "non" && v != "0";
+        else if (k == "edition")       m.edition = v;      // 1.12.0
     });
     return m;
 }
@@ -935,6 +942,8 @@ core::Result<OpenResult> ProjectStore::open(const std::string& folder) {
     out.project->header.contentKind    = out.manifest.contentKind;
     out.project->header.contentDateTime = out.manifest.contentDateTime;
     out.project->header.crlf           = out.manifest.crlf;
+    // 1.12.0 : XPGAnalyser IHM ne lit rien du programme (meme dans un dossier de la 1.11).
+    if (!core::hasApi()) return out;
     if (auto r = loadModel(fs::path(folder), *out.project); !r)
         return core::Err<core::Error>(r.error());
     return out;
@@ -964,6 +973,8 @@ core::Result<OpenResult> ProjectStore::open(const std::string& folder,
     out.project->header.contentKind    = out.manifest.contentKind;
     out.project->header.contentDateTime = out.manifest.contentDateTime;
     out.project->header.crlf           = out.manifest.crlf;
+    // 1.12.0 : XPGAnalyser IHM ne lit rien du programme (meme dans un dossier de la 1.11).
+    if (!core::hasApi()) return out;
     if (auto r = loadModel(fs::path(folder), *out.project); !r)
         return core::Err<core::Error>(r.error());
     return out;
@@ -978,7 +989,22 @@ core::Status ProjectStore::duplicate(const std::string& from, const std::string&
     if (fs::exists(to, ec))
         return core::fail(core::ErrorCode::InvalidArgument, "destination already exists", to);
 
-    fs::copy(from, to, fs::copy_options::recursive, ec);
+    // 1.12.0 : chaque application copie sa moitie - XPGAnalyser IHM : le manifeste,
+    // ihm/, donnees/, versions/ ; XPGAnalyser API : tout sauf ihm/.
+    if (core::edition() == core::Edition::Both) {
+        fs::copy(from, to, fs::copy_options::recursive, ec);
+    } else {
+        fs::create_directories(to, ec);
+        for (fs::directory_iterator it(from, ec), end; !ec && it != end; it.increment(ec)) {
+            const std::string top = it->path().filename().string();
+            const bool ihm = top == "ihm";
+            const bool shared = top == "project.xpgproj" || top == "project.lock" || top == "donnees" || top == "versions";
+            if (!shared && (core::hasApi() ? ihm : !ihm)) continue;
+            std::error_code one;
+            fs::copy(it->path(), fs::path(to) / it->path().filename(), fs::copy_options::recursive, one);
+            if (one) { ec = one; break; }
+        }
+    }
     if (ec) return core::fail(core::ErrorCode::FileUnreadable, ec.message(), to);
 
     // A copy is a new project: it goes back to DEV, loses the lock, and drops
@@ -991,6 +1017,7 @@ core::Status ProjectStore::duplicate(const std::string& from, const std::string&
     if (!manifest) return core::Err<core::Error>(manifest.error());
     manifest->name     = newName.empty() ? manifest->name + " (copy)" : std::move(newName);
     manifest->state    = State::Dev;
+    if (const auto key = core::editionKey(); !key.empty()) manifest->edition = std::string(key);   // 1.12.0
     manifest->created  = nowStamp();
     manifest->modified = nowStamp();
 
@@ -1006,6 +1033,7 @@ core::Status ProjectStore::duplicate(const std::string& from, const std::string&
     m << "cpu = "      << manifest->cpuReference << '\n';
     m << "firmware = " << manifest->cpuFirmware << '\n';
     m << "comment = "  << manifest->comment << '\n';
+    if (!manifest->edition.empty()) m << "edition = " << manifest->edition << '\n';   // 1.12.0
     return writeText(fs::path(to) / "project.xpgproj", m.str());
 }
 

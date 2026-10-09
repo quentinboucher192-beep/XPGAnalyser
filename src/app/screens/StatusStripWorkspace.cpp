@@ -12,6 +12,8 @@
 //  les moins utiles s'effacent (les raccourcis d'abord).
 // =============================================================================
 #include "Screens.hpp"
+#include "../../core/Edition.hpp"   // 1.12.0 : la bande d'etat de chaque application
+#include "../hmi/HmiSimulation.hpp"   // 1.12.0 : l'etat de la simulation de l'IHM (XPGAnalyser IHM)
 
 #include "../App.hpp"
 #include "../ApiPanes.hpp"
@@ -267,9 +269,11 @@ void MainAnalysisScreen::buildStatusStrip(OverlayHost& host) {
     tip(st.sim, "La simulation : un clic ouvre Simulation \xE2\x80\xBA Vue d'ensemble");
     st.sim->setOnClick([this] { openSimCenter("ensemble"); });
     st.target = &chip("analysis.status.target", 40);
-    st.target->setIcon(Icon::Cpu);
-    tip(st.target, "La cible : l'automate et la t\xC3\xA2" "che MAST (un clic : Configuration)");
-    st.target->setOnClick([this] { openApiPane("configuration"); });
+    st.target->setIcon(core::hasApi() ? Icon::Cpu : Icon::Screen);
+    // 1.12.0 : XPGAnalyser IHM - l'ecran de l'IHM (un clic : IHM > Configuration).
+    tip(st.target, core::hasApi() ? "La cible : l'automate et la t\xC3\xA2" "che MAST (un clic : Configuration)"
+                                  : "L'\xC3\xA9" "cran de l'IHM : sa taille (un clic : IHM \xE2\x80\xBA Configuration)");
+    st.target->setOnClick([this] { if (core::hasApi()) openApiPane("configuration"); else openHmiPane("config"); });
     st.zoom = &chip("analysis.status.zoom", 50);
     st.zoom->setIcon(Icon::Search);
     st.zoom->setOnClick([this] { openStatusMenu(1); });
@@ -392,11 +396,24 @@ void MainAnalysisScreen::tickStatusStrip(double now) {
     tip(st.errors, "Le dernier Compiler de l'IHM : " + std::to_string(st.hmiErrors) + " erreur(s). Un clic ouvre IHM \xE2\x80\xBA Compiler.");
     st.warnings->setText(std::to_string(warnings) + (warnings > 1 ? " avertissements" : " avertissement"));
     st.warnings->setShown(warnings > 0);
-    tip(st.warnings, "IHM (dernier Compiler) : " + std::to_string(st.hmiWarnings) + " avertissement(s)\nAPI (\xC3\x80 regarder) : "
-                            + std::to_string(st.apiPoints) + " point(s)" + st.apiDetail);
+    // 1.12.0 : chaque application, ses avertissements.
+    tip(st.warnings, !core::hasApi() ? "IHM (dernier Compiler) : " + std::to_string(st.hmiWarnings) + " avertissement(s)"
+                     : !core::hasIhm() ? "API (\xC3\x80 regarder) : " + std::to_string(st.apiPoints) + " point(s)" + st.apiDetail
+                                       : "IHM (dernier Compiler) : " + std::to_string(st.hmiWarnings) + " avertissement(s)\nAPI (\xC3\x80 regarder) : "
+                                             + std::to_string(st.apiPoints) + " point(s)" + st.apiDetail);
 
     // La simulation.
-    {
+    if (!core::hasApi()) {
+        // 1.12.0 : XPGAnalyser IHM - la simulation de l'IHM (pas d'automate).
+        const auto tab = hmiTabs_.find("simulation");
+        const auto* hsim = dynamic_cast<const HmiSimulationPane*>(tab != hmiTabs_.end() ? tab->second : nullptr);
+        const bool running = hsim && hsim->hmiRunning();
+        st.sim->setShown(project != nullptr);
+        if (project) {
+            st.sim->setText(running ? "IHM en marche" : "IHM arr\xC3\xAAt\xC3\xA9" "e");
+            st.sim->setDot(true, running ? Tone::Ok : Tone::Warning);
+        }
+    } else {
         using State = SimulationHost::State;
         const auto& sim = app_.simulation();
         std::string text;
@@ -430,8 +447,12 @@ void MainAnalysisScreen::tickStatusStrip(double now) {
         }
     }
 
-    // La cible : l'automate, la periode de MAST.
-    if (project) {
+    // La cible : l'automate, la periode de MAST. 1.12.0 : XPGAnalyser IHM - l'ecran de l'IHM.
+    if (!core::hasApi()) {
+        const auto doc = app_.hmi();
+        st.target->setShown(doc != nullptr);
+        if (doc) st.target->setText("\xC3\x89" "cran " + std::to_string(doc->project.config.width) + " \xC3\x97 " + std::to_string(doc->project.config.height));
+    } else if (project) {
         std::string t = project->hardware.cpuReference.empty() ? std::string("Automate") : project->hardware.cpuReference;
         for (const auto& task : project->tasks)
             if (project->strings.text(task.name) == "MAST") {

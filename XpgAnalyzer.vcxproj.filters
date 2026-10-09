@@ -1039,6 +1039,9 @@
     <ClCompile Include="src\app\CrashDialogs.cpp">
       <Filter>app</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\EditionMigration.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\GrafcetCodePanel.cpp">
       <Filter>app</Filter>
     </ClCompile>
@@ -2192,6 +2195,9 @@
       <Filter>app</Filter>
     </ClInclude>
     <ClInclude Include="src\app\CrashDialogs.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\EditionMigration.hpp">
       <Filter>app</Filter>
     </ClInclude>
     <ClInclude Include="src\app\GrafcetCodePanel.hpp">

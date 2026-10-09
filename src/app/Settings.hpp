@@ -25,7 +25,13 @@ public:
     // %APPDATA%\XpgAnalyzer\settings.txt on Windows, $XDG_CONFIG_HOME or
     // ~/.config/xpg-analyzer/settings.txt elsewhere. Falls back to the working
     // directory if neither is set, so it always has somewhere to write.
+    // 1.12.0 : chaque application a les siens, dans un sous-dossier (API\, IHM\) :
+    // ses projets recents, sa reprise, ses plantages. Au premier lancement d'une
+    // edition, elle part d'une copie de ceux de la 1.11 (settings.txt commun).
     [[nodiscard]] static std::string defaultPath();
+    // 1.12.0 : %APPDATA%\XpgAnalyzer - ce que les deux applications partagent :
+    // XPGAnalyser.ini (les dossiers des donnees), les themes.
+    [[nodiscard]] static std::string sharedFolder();
 
     bool load(std::string path);
     bool save() const;

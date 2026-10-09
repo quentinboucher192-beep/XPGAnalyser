@@ -1,6 +1,7 @@
 // =============================================================================
 //  resources/windows/xpg_analyzer.rc.in - l'icone et la version de
-//  xpg_analyzer.exe (lot 12)
+//  XpgAnalyzer-API.exe et de XpgAnalyzer-IHM.exe (lot 12 ; 1.12.0 : un par
+//  edition, XPG_RC_EDITION et XPG_RC_EXE donnes par CMakeLists.txt)
 // -----------------------------------------------------------------------------
 //  CMake le configure (le chemin absolu de l'icone) et le compile avec rc.exe
 //  (MSVC) ou windres (MinGW) : l'Explorateur, la barre des taches et Alt+Tab
@@ -30,11 +31,11 @@ BEGIN
     BEGIN
         BLOCK "040C04B0"
         BEGIN
-            VALUE "FileDescription",  "XPGAnalyser - analyse, IHM et simulation"
+            VALUE "FileDescription",  "XPGAnalyser @XPG_RC_EDITION@"
             VALUE "FileVersion",      "@PROJECT_VERSION@"
-            VALUE "InternalName",     "xpg_analyzer"
-            VALUE "OriginalFilename", "XpgAnalyzer.exe"
-            VALUE "ProductName",      "XPGAnalyser"
+            VALUE "InternalName",     "@XPG_RC_EXE@"
+            VALUE "OriginalFilename", "@XPG_RC_EXE@.exe"
+            VALUE "ProductName",      "XPGAnalyser @XPG_RC_EDITION@"
             VALUE "ProductVersion",   "@PROJECT_VERSION@"
         END
     END

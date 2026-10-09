@@ -1,4 +1,5 @@
 #include "ViewModels.hpp"
+#include "../core/Edition.hpp"   // 1.12.0 : les domaines de la racine, ceux de chaque application
 
 #include "../project/CodeIconKeys.hpp"
 
@@ -661,6 +662,35 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
     }
 
     namespace {
+        // 1.12.0 : LES DOMAINES DE LA RACINE. Les essais (Both) : API, IHM, Simulation,
+        // Versions avec l'IHM ; sans elle, la racine d'avant (vide ici). XPGAnalyser API :
+        // API, Simulation, Versions ; XPGAnalyser IHM : IHM, Simulation, Versions.
+        const std::vector<ProjectTreeModel::NodeKind>& rootDomainList(bool hmiDoc) {
+            using NK = ProjectTreeModel::NodeKind;
+            static const std::vector<NK> both{NK::ApiFolder, NK::HmiFolder, NK::SimFolder, NK::VersionsFolder};
+            static const std::vector<NK> api{NK::ApiFolder, NK::SimFolder, NK::VersionsFolder};
+            static const std::vector<NK> ihm{NK::HmiFolder, NK::SimFolder, NK::VersionsFolder};
+            static const std::vector<NK> legacy{};
+            switch (core::edition()) {
+            case core::Edition::Api: return api;
+            case core::Edition::Ihm: return ihm;
+            case core::Edition::Both: break;
+            }
+            return hmiDoc ? both : legacy;
+        }
+        // Les dossiers du centre de simulation : avec l'IHM et l'automate (Both), l'automate
+        // seul (XPGAnalyser API, ou les essais sans IHM), l'IHM seule (XPGAnalyser IHM).
+        const std::vector<ProjectTreeModel::NodeKind>& simFolderList(bool hmiDoc) {
+            using NK = ProjectTreeModel::NodeKind;
+            static const std::vector<NK> both{NK::SimOverview, NK::ApiSimulation, NK::HmiSimulation, NK::SimEquipment,
+                                              NK::SimDebug, NK::SimForcing, NK::SimTrends, NK::SimJournal};
+            static const std::vector<NK> plcOnly{NK::SimOverview, NK::ApiSimulation, NK::SimDebug, NK::SimForcing, NK::SimTrends, NK::SimJournal};
+            static const std::vector<NK> hmiOnly{NK::SimOverview, NK::HmiSimulation, NK::SimEquipment, NK::SimForcing, NK::SimTrends, NK::SimJournal};
+            if (core::edition() == core::Edition::Ihm) return hmiOnly;
+            if (core::edition() == core::Edition::Api || !hmiDoc) return plcOnly;
+            return both;
+        }
+
         VariableScope scopeForFolder(ProjectTreeModel::NodeKind k) {
             using NK = ProjectTreeModel::NodeKind;
             switch (k) {
@@ -737,8 +767,12 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         if (kindOf(n) == NodeKind::RecentFolder) return recents_.size();
         if (kindOf(n) == NodeKind::PinItem || kindOf(n) == NodeKind::RecentItem) return 0;
         // 2e partie : la portee du rail - la racine ne montre que ce domaine (Epingles : ses deux dossiers).
-        if (kindOf(n) == NodeKind::Root && hmi_ && scope_ != 0 && !rootGuard_)
-            return scope_ == 1 ? shortcutFolders() : 1;
+        if (kindOf(n) == NodeKind::Root && !rootDomainList(hmi_ != nullptr).empty() && scope_ != 0 && !rootGuard_) {
+            if (scope_ == 1) return shortcutFolders();
+            static constexpr NodeKind heads[] = {NodeKind::ApiFolder, NodeKind::HmiFolder, NodeKind::SimFolder, NodeKind::VersionsFolder};
+            const auto& d = rootDomainList(hmi_ != nullptr);
+            return scope_ <= 5 && std::find(d.begin(), d.end(), heads[scope_ - 2]) != d.end() ? 1 : 0;   // 1.12.0 : un domaine de l'application
+        }
         if (kindOf(n) == NodeKind::Root && !rootGuard_ && shortcutFolders() > 0) {
             rootGuard_ = true;
             const auto base = childCount(n);
@@ -750,13 +784,16 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         switch (kindOf(n)) {
         // Lot 10 : avec l'IHM, deux dossiers au meme niveau (API, IHM).
         // Lot API 8 : API, IHM, Simulation, Versions ; sans IHM : les dix dossiers, puis Simulation.
-        case NodeKind::Root:                return hmi_ ? 4 : 11;       // lot 21 : API, IHM, Versions
+        case NodeKind::Root: {                                          // lot 21 : API, IHM, Versions
+            const auto& d = rootDomainList(hmi_ != nullptr);                // 1.12.0 : ceux de l'application
+            return d.empty() ? 11 : d.size();
+        }
         case NodeKind::VersionsFolder:      return versions_.size();
         case NodeKind::VersionItem:         return 0;
         // Lot API 7 : + Simulation, Statistiques ; lot API 8 : Simulation part dans son dossier.
         case NodeKind::ApiFolder:           return 11;
         // ---- Lot API 8 : Centre de simulation ----
-        case NodeKind::SimFolder:           return hmi_ ? 8 : 6;        // sans IHM : ni IHM ni Equipements
+        case NodeKind::SimFolder:           return simFolderList(hmi_ != nullptr).size();   // sans IHM : ni IHM ni Equipements ; 1.12.0 : IHM seule
         case NodeKind::SimOverview:
         case NodeKind::SimEquipment:
         case NodeKind::SimDebug:            return simRows_[0].size();   // 1.11.22 : ses points d'arret
@@ -1071,9 +1108,11 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         // Outil Modbus, Generer, Compiler n'y sont plus.
         if (kindOf(n) == NodeKind::PinsFolder) return k < pins_.size() ? pack(NodeKind::PinItem, static_cast<Index>(k)) : ui::kInvalidNode;
         if (kindOf(n) == NodeKind::RecentFolder) return k < recents_.size() ? pack(NodeKind::RecentItem, static_cast<Index>(k)) : ui::kInvalidNode;
-        if (kindOf(n) == NodeKind::Root && hmi_ && scope_ > 1 && !rootGuard_) {   // 2e partie : la portee du rail
+        if (kindOf(n) == NodeKind::Root && !rootDomainList(hmi_ != nullptr).empty() && scope_ > 1 && !rootGuard_) {   // 2e partie : la portee du rail
             static constexpr NodeKind heads[] = {NodeKind::ApiFolder, NodeKind::HmiFolder, NodeKind::SimFolder, NodeKind::VersionsFolder};
-            return k == 0 && scope_ <= 5 ? pack(heads[scope_ - 2], 0) : ui::kInvalidNode;
+            const auto& d = rootDomainList(hmi_ != nullptr);
+            if (k != 0 || scope_ > 5 || std::find(d.begin(), d.end(), heads[scope_ - 2]) == d.end()) return ui::kInvalidNode;
+            return pack(heads[scope_ - 2], 0);
         }
         if (kindOf(n) == NodeKind::Root && !rootGuard_) {          // Epingles, Recents, puis la racine d'avant
             if (!pins_.empty()) {
@@ -1104,9 +1143,8 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         case NodeKind::Root:
             // Lot 10 : l'automate et l'IHM, cote a cote. Lot API 8 : la
             // simulation entre l'IHM et les versions.
-            if (hmi_) return k == 0 ? pack(NodeKind::ApiFolder, 0) : k == 1 ? pack(NodeKind::HmiFolder, 0)
-                           : k == 2 ? pack(NodeKind::SimFolder, 0)
-                           : k == 3 ? pack(NodeKind::VersionsFolder, 0) : ui::kInvalidNode;
+            // 1.12.0 : les domaines de l'application (XPGAnalyser API : sans IHM ; IHM : sans API).
+            if (const auto& d = rootDomainList(hmi_ != nullptr); !d.empty()) return k < d.size() ? pack(d[k], 0) : ui::kInvalidNode;
             // Lot API 8 : sans IHM, le dossier Simulation apres les dix dossiers de l'automate.
             if (k == 10) return pack(NodeKind::SimFolder, 0);
             [[fallthrough]];
@@ -1254,8 +1292,10 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             static constexpr NodeKind plcOnly[] = {
                 NodeKind::SimOverview, NodeKind::ApiSimulation, NodeKind::SimDebug,
                 NodeKind::SimForcing, NodeKind::SimTrends, NodeKind::SimJournal};
-            if (!hmi_) return k < std::size(plcOnly) ? pack(plcOnly[k], 0) : ui::kInvalidNode;
-            return k < std::size(order) ? pack(order[k], 0) : ui::kInvalidNode;
+            (void)order;
+            (void)plcOnly;
+            const auto& list = simFolderList(hmi_ != nullptr);     // 1.12.0 : selon l'application
+            return k < list.size() ? pack(list[k], 0) : ui::kInvalidNode;
         }
         // ---- 1.11.22 : le deballage du dossier Simulation ----
         case NodeKind::SimDebug:
@@ -1685,7 +1725,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
     std::vector<domain::Index> ProjectTreeModel::hitsUnder(ui::NodeId n) const {
         std::vector<domain::Index> out;
         const auto k = kindOf(n);
-        const bool apiHome = hmi_ ? k == NodeKind::ApiFolder : k == NodeKind::Root;
+        const bool apiHome = !rootDomainList(hmi_ != nullptr).empty() ? k == NodeKind::ApiFolder : k == NodeKind::Root;
         const bool hmiHome = hmi_ && k == NodeKind::HmiFolder;
         if (!apiHome && !hmiHome) return out;
         for (std::size_t r = 0; r < filterHits_.size(); ++r)

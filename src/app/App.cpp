@@ -1,5 +1,7 @@
 #include "App.hpp"
+#include "../core/Edition.hpp"   // 1.12.0 : XPGAnalyser API, XPGAnalyser IHM
 #include "Dossiers.hpp"
+#include "EditionMigration.hpp"   // 1.12.0 : les projets de la 1.11, recopies dans projets\api et projets\ihm
 #include "Epinglage.hpp"
 #include "BackgroundTasks.hpp"          // Lot API 8 : bandeau haut (la cloche : l'export termine)
 #include "screens/StationScreen.hpp"
@@ -204,19 +206,41 @@ std::string frenchLabel(const std::string& en, const std::string& place) {
 core::Result<std::unique_ptr<App>> App::create(AppOptions options) {
     std::unique_ptr<App> a(new App());
     a->options_ = std::move(options);
+    // 1.12.0 : la fenetre porte le nom de son application (XPGAnalyser API, XPGAnalyser IHM).
+    if (!core::editionLabel().empty() && a->options_.title == AppOptions{}.title) a->options_.title = core::productName();
 
     // Settings are loaded before anything is built, so the first frame already
     // shows the workspace the user left behind rather than the default one.
     // 1.10 (chantier P) : des reglages existaient deja (un profil d'une version d'avant).
     const bool hadSettings = a->settings_.load(Settings::defaultPath());
     a->recent_ = a->settings_.getList("recent.projects");
+    // 1.12.0 : au premier lancement de chaque application, ses projets de la 1.11
+    // (projets\<Nom>, l'automate et l'IHM ensemble) recopies dans son rangement -
+    // sa moitie ; les originaux restent ; les projets recents suivent les copies.
+    if (core::edition() != core::Edition::Both) {
+        const auto root = a->projectsRoot();
+        const auto report = edition::migrateLegacyProjects(root.parent_path(), root, core::edition());
+        if (report.ran && !report.copied.empty()) {
+            edition::remapRecent(a->recent_, report);
+            a->settings_.setList("recent.projects", a->recent_);
+            const auto n = report.copied.size();
+            bgtasks::post({"edition:migration", "Projets",
+                           std::to_string(n) + (n > 1 ? " projets de la 1.11 recopi\xC3\xA9s" : " projet de la 1.11 recopi\xC3\xA9") + " dans "
+                               + dossiers::utf8De(root),
+                           core::hasApi() ? std::string("Leur programme, sans leur IHM (elle est dans XPGAnalyser IHM). Les originaux restent dans le dossier parent.")
+                                          : std::string("Leur IHM, sans le programme de l'automate : les noms de l'automate qu'elle lisait sont \xC3\xA0 "
+                                                        "cr\xC3\xA9" "er en variables IHM, li\xC3\xA9" "es aux adresses de leur \xC3\xA9quipement. Les originaux restent dans le dossier parent."),
+                           "Ouvrir le dossier", "open.folder:" + dossiers::utf8De(root), "info"});
+        }
+        for (const auto& problem : report.problems) std::fprintf(stderr, "projets de la 1.11 : %s\n", problem.c_str());
+    }
     a->masterKey_.loadStored(a->settings_.getString("security.masterKey"));
     // ---- Lot API 8 : themes ----
     // Les themes de l'utilisateur (un .xpgtheme chacun, dans "themes/" a cote
     // de settings.txt) : relus AVANT d'appliquer le theme retenu, qui peut en
     // etre un. Un fichier abime n'empeche rien : il est dit, les autres chargent.
     {
-        const auto themesDir = std::filesystem::path(Settings::defaultPath()).parent_path() / "themes";
+        const auto themesDir = std::filesystem::path(Settings::sharedFolder()) / "themes";   // 1.12.0 : communs aux deux applications
         const auto u8 = themesDir.u8string();
         ui::UserThemes::setFolder(std::string(u8.begin(), u8.end()));
         for (const auto& problem : ui::UserThemes::load()) std::fprintf(stderr, "theme : %s\n", problem.c_str());
@@ -741,6 +765,11 @@ void App::registerActions() {
     actions_.add(Action{"project.new", "Nouveau projet\xE2\x80\xA6", help::keys::bindingOf("project.new"), {}, {}, nullptr,
                         [this] {
                             namespace fs = std::filesystem;
+                            // 1.12.0 : XPGAnalyser IHM - un dossier d'IHM, sans programme : son nom, son dossier.
+                            if (!core::hasApi()) {
+                                newHmiProject();
+                                return;
+                            }
                             std::vector<FormDialog::Field> f;
                             f.push_back({"Name", "New machine", "", false, {}});
                             // SOUS ./projets/, ET PAS A COTE DE L'EXECUTABLE.
@@ -769,6 +798,7 @@ void App::registerActions() {
                                     m.name         = v[0];
                                     m.state        = project::State::New;
                                     m.cpuReference = v[2];
+                                    if (const auto key = core::editionKey(); !key.empty()) m.edition = std::string(key);   // 1.12.0
                                     if (auto ok = project::ProjectStore::save(*p, m, v[1]); !ok) {
                                         menus_->ShowDialog(std::make_unique<MessageDialog>(
                                             "Impossible de cr\xC3\xA9" "er", ok.error().message(),
@@ -815,6 +845,7 @@ void App::registerActions() {
                                     project::Manifest m = manifest_;
                                     m.name  = v[0];
                                     m.state = project::State::Dev;
+                                    if (const auto key = core::editionKey(); !key.empty()) m.edition = std::string(key);   // 1.12.0
                                     m.company    = project_->header.company;
                                     m.product    = project_->header.product;
                                     m.dtdVersion = project_->header.dtdVersion;
@@ -1359,6 +1390,21 @@ void App::registerActions() {
 void App::openPath(std::string path) {
     if (path.empty()) return;
     XPG_PORTEE_TEXTE("App::openPath", std::filesystem::path(path).filename().string());   // 1.10.2 (CR)
+    // 1.12.0 : XPGAnalyser IHM ouvre ses dossiers de projet, pas les exports de Control Expert.
+    if (!core::hasApi()) {
+        if (project::ProjectStore::isProjectFolder(path)) {
+            openProjectFolder(std::move(path));
+            return;
+        }
+        menus_->ShowDialog(std::make_unique<MessageDialog>(
+                               "Un export de l'automate",
+                               std::filesystem::path(path).filename().string()
+                                   + " : les exports de Control Expert (.XPG, .XHW, .XDB) s'ouvrent avec XPGAnalyser API.\n\n"
+                                     "XPGAnalyser IHM ouvre les dossiers de ses projets (Projets\\ihm).",
+                               MessageDialog::Icon::Info),
+                           [](const menu::DialogResult&) {});
+        return;
+    }
 
     // A .XPG starts a new project. A .XHW or .XDB completes the one in hand,
     // because those exports carry no program of their own.
@@ -1715,6 +1761,14 @@ void App::offerRecovery() {
 //  nom du projet. Rien n'est ecrit tant qu'on n'enregistre pas - ouvrir un
 //  projet ne doit pas modifier son dossier.
 void App::bindHmi() {
+    // 1.12.0 : XPGAnalyser API n'a pas d'IHM (meme dans un dossier de la 1.11 qui en a une).
+    if (!core::hasIhm()) {
+        hmi_.reset();
+        hmiKey_.clear();
+        hmiWarnings_.clear();
+        hmiUnreadable_.clear();
+        return;
+    }
     const std::string key = !projectFolder_.empty() ? projectFolder_
                           : !sources_.empty()       ? sources_.front()
                                                     : std::string{};
@@ -1805,6 +1859,17 @@ core::Status App::saveProject() {
     return core::ok();
 }
 
+// 1.12.0 : le projet d'une autre application - "" : celui-ci s'ouvre ici. Un projet
+// de la 1.11 (sans edition) s'ouvre dans les deux : chacune n'y voit que sa moitie.
+static std::string editionMismatch(const project::Manifest& m) {
+    const std::string name = m.name.empty() ? std::string("Ce projet") : "\xC2\xAB " + m.name + " \xC2\xBB";
+    if (m.edition == "ihm" && !core::hasIhm())
+        return name + " est un projet IHM : il s'ouvre avec XPGAnalyser IHM.\n\nXPGAnalyser API ouvre les projets de l'automate (Projets\\api).";
+    if (m.edition == "api" && !core::hasApi())
+        return name + " est un projet de l'automate : il s'ouvre avec XPGAnalyser API.\n\nXPGAnalyser IHM ouvre les projets IHM (Projets\\ihm).";
+    return {};
+}
+
 void App::openProjectFolder(std::string folder) {
     XPG_PORTEE_TEXTE("App::openProjectFolder", std::filesystem::path(folder).filename().string());   // 1.10.2 (CR)
     core::crash::setOpenDocuments(std::filesystem::path(folder).filename().string());   // le nom seul, pour le rapport
@@ -1813,6 +1878,12 @@ void App::openProjectFolder(std::string folder) {
         menus_->ShowDialog(std::make_unique<MessageDialog>("Impossible d'ouvrir",
                                                            opened.error().message(),
                                                            MessageDialog::Icon::Error),
+                           [](const menu::DialogResult&) {});
+        return;
+    }
+    // 1.12.0 : un projet de l'autre application s'ouvre avec elle.
+    if (const std::string why = editionMismatch(opened->manifest); !why.empty()) {
+        menus_->ShowDialog(std::make_unique<MessageDialog>("Un projet de l'autre application", why, MessageDialog::Icon::Warning),
                            [](const menu::DialogResult&) {});
         return;
     }
@@ -2142,10 +2213,57 @@ std::filesystem::path App::projectsRoot() {
     // 1.8.0 : la version installee les range ou dit XPGAnalyser.ini (app/Dossiers.hpp) ;
     // sinon (developpement, portable, sessions rejouees) projets\ du dossier de travail.
     const std::string regle = dossiers::actif(dossiers::Cle::Projets);
-    const auto racine = regle.empty() ? fs::current_path() / "projets" : dossiers::cheminDe(regle);
+    auto racine = regle.empty() ? fs::current_path() / "projets" : dossiers::cheminDe(regle);
+    // 1.12.0 : deux applications, deux rangements - projets\api, projets\ihm.
+    if (const auto key = core::editionKey(); !key.empty()) racine /= std::string(key);
     std::error_code ec;
     fs::create_directories(racine, ec);
     return ec ? fs::current_path() : racine;
+}
+
+// 1.12.0 : XPGAnalyser IHM - un nouveau projet IHM : un dossier (Projets\ihm\<Nom>), son
+// manifeste (edition = ihm), une vue de demarrage. Pas de programme : les variables de
+// l'IHM sont les siennes, liees aux adresses de ses equipements.
+void App::newHmiProject() {
+    namespace fs = std::filesystem;
+    std::vector<FormDialog::Field> f;
+    f.push_back({"Nom", "Nouvelle IHM", "", false, {}});
+    f.push_back({"Dossier", dossiers::utf8De(projectsRoot() / "Nouvelle IHM"), "sous Projets\\ihm par d\xC3\xA9" "faut", false, {}});
+    menus_->ShowDialog(
+        FormDialog::withBrowse(std::make_unique<FormDialog>("dialog.newProject", "Nouveau projet IHM",
+                                   "Cr\xC3\xA9" "e le dossier d'une IHM : une vue de d\xC3\xA9marrage, ses variables, ses \xC3\xA9quipements. "
+                                   "Pas de programme d'automate : les variables de l'IHM se lient aux adresses de ses \xC3\xA9quipements (Modbus).",
+                                   std::move(f), "Cr\xC3\xA9" "er"),
+                               1, ui::newFolder(dossiers::utf8De(projectsRoot()), "Dossier du nouveau projet IHM")),
+        [this](const menu::DialogResult& r) {
+            if (!r.accepted()) return;
+            const auto v = FormDialog::split(r.payload);
+            if (v.size() < 2 || v[0].empty() || v[1].empty()) return;
+            std::error_code ec;
+            if (fs::exists(dossiers::cheminDe(v[1]) / "project.xpgproj", ec)) {
+                menus_->ShowDialog(std::make_unique<MessageDialog>("Impossible de cr\xC3\xA9" "er", v[1] + " est d\xC3\xA9j\xC3\xA0 un projet.",
+                                                                   MessageDialog::Icon::Error),
+                                   [](const menu::DialogResult&) {});
+                return;
+            }
+            auto p = std::make_shared<domain::Project>();
+            p->header.projectName = v[0];
+            p->header.sourceFile = v[1];
+            project::Manifest m;
+            m.name = v[0];
+            m.state = project::State::New;
+            m.edition = "ihm";
+            m.company.clear();
+            m.dtdVersion.clear();
+            if (auto ok = project::ProjectStore::save(*p, m, v[1]); !ok) {
+                menus_->ShowDialog(std::make_unique<MessageDialog>("Impossible de cr\xC3\xA9" "er", ok.error().message(), MessageDialog::Icon::Error),
+                                   [](const menu::DialogResult&) {});
+                return;
+            }
+            adoptProject(p, m, v[1]);
+            // Le dossier est un projet IHM complet des sa creation (ihm/ et sa vue de demarrage).
+            if (auto ok = saveHmi(v[1]); ok) hmiKey_ = v[1];
+        });
 }
 
 void App::goHome() {

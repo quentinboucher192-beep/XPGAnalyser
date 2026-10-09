@@ -6,6 +6,7 @@
 //  les deux champs (chercher, coller un chemin) et la liste du tri.
 // =============================================================================
 #include "StartPage.hpp"
+#include "../core/Edition.hpp"   // 1.12.0 : XPGAnalyser API, XPGAnalyser IHM
 
 #include "Brand.hpp"
 #include "../project/ProjectIcon.hpp"
@@ -807,10 +808,13 @@ void FilterChips::setCurrent(Filter f) {
 
 std::string FilterChips::text(std::size_t i) const { return filterLabel(static_cast<Filter>(i)); }
 
+// 1.12.0 : XPGAnalyser IHM n'ouvre pas d'export de Control Expert - pas de puce Exports.
+static bool chipShown(std::size_t i) { return i != static_cast<std::size_t>(Filter::Exports) || core::hasApi(); }
+
 float FilterChips::naturalWidth() const {
     float w = 0.f;
     for (std::size_t i = 0; i < kFilterCount; ++i)
-        w += ui::measureWidth(text(i), kBody) + 6.f + ui::measureWidth(std::to_string(counts_[i]), kBody) + 22.f + (i ? 6.f : 0.f);
+        if (chipShown(i)) w += ui::measureWidth(text(i), kBody) + 6.f + ui::measureWidth(std::to_string(counts_[i]), kBody) + 22.f + (i ? 6.f : 0.f);
     return std::ceil(w);
 }
 
@@ -818,6 +822,10 @@ gfx::Rect FilterChips::chipRect(Filter f) const {
     const auto b = bounds();
     float x = b.x;
     for (std::size_t i = 0; i < kFilterCount; ++i) {
+        if (!chipShown(i)) {
+            if (i == static_cast<std::size_t>(f)) return {};
+            continue;
+        }
         const float w = ui::measureWidth(text(i), kBody) + 6.f + ui::measureWidth(std::to_string(counts_[i]), kBody) + 22.f;
         if (i == static_cast<std::size_t>(f)) return {std::round(x), b.y, std::round(w), b.h};
         x += w + 6.f;
@@ -835,6 +843,7 @@ void FilterChips::onPaint(const ui::PaintContext& ctx) {
     const auto& c = ctx.theme.color;
     if (!hovered()) hover_ = -1;
     for (std::size_t i = 0; i < kFilterCount; ++i) {
+        if (!chipShown(i)) continue;
         const auto r = chipRect(static_cast<Filter>(i));
         const bool on = static_cast<std::size_t>(current_) == i;
         const bool hot = hover_ == static_cast<int>(i);
@@ -1340,12 +1349,20 @@ void ProjectDetail::onPaint(const ui::PaintContext& ctx) {
         drawBold(ctx.r, {x0, y}, "Premiers pas", kDetailName, c.text);
         y += ctx.r.lineHeight(kDetailName) + 14.f;
         struct Tip { StartButton::Glyph glyph; const char* title; const char* text; };
-        static const Tip kTips[] = {
+        static const Tip kApiTips[] = {
             {StartButton::Glyph::Plus, "Nouveau projet  (Ctrl+N)", "un dossier et la t\xC3\xA2" "che MAST, pr\xC3\xAAts \xC3\xA0 remplir"},
             {StartButton::Glyph::Open, "Ouvrir\xE2\x80\xA6  (Ctrl+O)", "un dossier de projet, ou un export .XPG, .XHW ou .XDB de Control Expert"},
             {StartButton::Glyph::None, "Glisser-d\xC3\xA9poser", "un dossier ou un export, n'importe o\xC3\xB9 dans cette fen\xC3\xAAtre"},
             {StartButton::Glyph::Tutorial, "D\xC3\xA9" "couvrir l'application", "le didacticiel, sur un projet ouvert ; F1 ouvre l'aide depuis n'importe quel \xC3\xA9" "cran"},
         };
+        // 1.12.0 : XPGAnalyser IHM - ses projets, pas d'export de l'automate.
+        static const Tip kHmiTips[] = {
+            {StartButton::Glyph::Plus, "Nouveau projet IHM  (Ctrl+N)", "un dossier et une vue de d\xC3\xA9marrage, pr\xC3\xAAts \xC3\xA0 dessiner"},
+            {StartButton::Glyph::Open, "Ouvrir\xE2\x80\xA6  (Ctrl+O)", "un dossier de projet IHM (Projets\\ihm)"},
+            {StartButton::Glyph::None, "Glisser-d\xC3\xA9poser", "un dossier de projet, une image, un paquet d'IHM, n'importe o\xC3\xB9 dans cette fen\xC3\xAAtre"},
+            {StartButton::Glyph::Tutorial, "D\xC3\xA9" "couvrir l'IHM", "le didacticiel, sur un projet ouvert ; F1 ouvre l'aide depuis n'importe quel \xC3\xA9" "cran"},
+        };
+        const auto& kTips = core::hasApi() ? kApiTips : kHmiTips;
         for (const auto& t : kTips) {
             const gfx::Rect g{x0, y + 1.f, 16.f, 16.f};
             if (t.glyph == StartButton::Glyph::None) dropGlyph(ctx.r, g, c.textMuted);
@@ -1447,30 +1464,37 @@ StartRail::StartRail(std::string id) : ui::Widget(std::move(id)) {
     const auto make = [this](std::string text, std::string wid, L look, G glyph) {
         return &static_cast<StartButton&>(addChild(std::make_unique<StartButton>(std::move(text), std::move(wid), look, glyph)));
     };
-    new_ = make("Nouveau projet", "startup.new", L::CardPrimary, G::Plus);
-    new_->setSubtitle("un dossier, la t\xC3\xA2" "che MAST, pr\xC3\xAAt \xC3\xA0 remplir");
+    const bool api = core::hasApi();     // 1.12.0 : XPGAnalyser API ou XPGAnalyser IHM
+    new_ = make(api ? "Nouveau projet" : "Nouveau projet IHM", "startup.new", L::CardPrimary, G::Plus);
+    new_->setSubtitle(api ? "un dossier, la t\xC3\xA2" "che MAST, pr\xC3\xAAt \xC3\xA0 remplir" : "un dossier, une vue de d\xC3\xA9marrage, pr\xC3\xAAt \xC3\xA0 dessiner");
     new_->setHint("Ctrl+N");
-    new_->setTooltip("Cr\xC3\xA9" "e un dossier de projet avec la t\xC3\xA2" "che MAST ; les sections, les types et les blocs s'ajoutent ensuite (Ctrl+N)");
+    new_->setTooltip(api ? "Cr\xC3\xA9" "e un dossier de projet avec la t\xC3\xA2" "che MAST ; les sections, les types et les blocs s'ajoutent ensuite (Ctrl+N)"
+                         : "Cr\xC3\xA9" "e le dossier d'un projet IHM (Projets\\ihm) : ses vues, ses variables, ses \xC3\xA9quipements (Ctrl+N)");
     open_ = make("Ouvrir\xE2\x80\xA6", "startup.open", L::Card, G::Open);
-    open_->setSubtitle("un dossier de projet, ou un export .XPG / .XHW / .XDB");
+    open_->setSubtitle(api ? "un dossier de projet, ou un export .XPG / .XHW / .XDB" : "un dossier de projet IHM");
     open_->setHint("Ctrl+O");
-    open_->setTooltip("Ouvre un dossier de projet ou un export Control Expert (Ctrl+O) ; un .XHW ou un .XDB compl\xC3\xA8te le projet ouvert");
+    open_->setTooltip(api ? "Ouvre un dossier de projet ou un export Control Expert (Ctrl+O) ; un .XHW ou un .XDB compl\xC3\xA8te le projet ouvert"
+                          : "Ouvre le dossier d'un projet IHM (Ctrl+O)");
     path_ = &static_cast<StartField&>(addChild(std::make_unique<StartField>("startup.path", ui::Icon::Folder)));
-    path_->setPlaceholder("chemin d'un dossier ou d'un export, puis Entr\xC3\xA9" "e");
-    path_->setTooltip("Un dossier de projet ou un export, puis Entr\xC3\xA9" "e. Plusieurs fichiers s\xC3\xA9par\xC3\xA9s par ';' (un .XPG et son .XHW) "
-                      "s'importent ensemble. Ctrl+V colle un chemin copi\xC3\xA9.");
+    path_->setPlaceholder(api ? "chemin d'un dossier ou d'un export, puis Entr\xC3\xA9" "e" : "chemin d'un dossier de projet IHM, puis Entr\xC3\xA9" "e");
+    path_->setTooltip(api ? "Un dossier de projet ou un export, puis Entr\xC3\xA9" "e. Plusieurs fichiers s\xC3\xA9par\xC3\xA9s par ';' (un .XPG et son .XHW) "
+                            "s'importent ensemble. Ctrl+V colle un chemin copi\xC3\xA9."
+                          : "Le dossier d'un projet IHM, puis Entr\xC3\xA9" "e. Ctrl+V colle un chemin copi\xC3\xA9.");
     // Le bouton ... : l'explorateur de fichiers. Un export, ou le project.xpgproj
     // d'un dossier de projet (l'ecran ouvre alors le dossier).
     browse_ = &static_cast<ui::BrowseButton&>(addChild(std::make_unique<ui::BrowseButton>(
-        *path_, ui::openFile("Projets et exports|*.xpgproj;*.xpg;*.xhw;*.xdb;*.xef|Projets (project.xpgproj)|*.xpgproj"
-                             "|Exports Control Expert|*.xpg;*.xhw;*.xdb;*.xef", {}, "Ouvrir un projet ou un export"),
+        *path_, api ? ui::openFile("Projets et exports|*.xpgproj;*.xpg;*.xhw;*.xdb;*.xef|Projets (project.xpgproj)|*.xpgproj"
+                                   "|Exports Control Expert|*.xpg;*.xhw;*.xdb;*.xef", {}, "Ouvrir un projet ou un export")
+                    : ui::openFile("Projets IHM (project.xpgproj)|*.xpgproj", {}, "Ouvrir un projet IHM"),
         "startup.parcourir")));
-    browse_->setFieldLabel("Un dossier de projet ou un export");
-    tutorial_ = make("D\xC3\xA9" "couvrir l'application", "startup.tutorial", L::Link, G::Tutorial);
+    browse_->setFieldLabel(api ? "Un dossier de projet ou un export" : "Un dossier de projet IHM");
+    tutorial_ = make(api ? "D\xC3\xA9" "couvrir l'application" : "D\xC3\xA9" "couvrir l'IHM", "startup.tutorial", L::Link, G::Tutorial);
     tutorial_->setSubtitle("le didacticiel, 5 min");
     tutorial_->setHint(">");
-    tutorial_->setTooltip("La visite \xC2\xAB D\xC3\xA9" "couvrir l'API \xC2\xBB (14 \xC3\xA9tapes, 5 min), sur le projet ouvert ou sur celui que tu choisis ici ; "
-                          "les parcours guid\xC3\xA9s sont dans l'onglet API \xC2\xB7 Didacticiel");
+    tutorial_->setTooltip(api ? "La visite \xC2\xAB D\xC3\xA9" "couvrir l'API \xC2\xBB (14 \xC3\xA9tapes, 5 min), sur le projet ouvert ou sur celui que tu choisis ici ; "
+                                "les parcours guid\xC3\xA9s sont dans l'onglet API \xC2\xB7 Didacticiel"
+                              : "La visite \xC2\xAB D\xC3\xA9" "couvrir l'IHM \xC2\xBB, sur le projet ouvert ou sur celui que tu choisis ici ; "
+                                "les parcours guid\xC3\xA9s sont dans l'onglet IHM \xC2\xB7 Didacticiel");
     help_ = make("Aide", "startup.help", L::Link, G::Help);
     help_->setHint("F1");
     help_->setTooltip("L'aide de l'application (F1, depuis n'importe quel \xC3\xA9" "cran)");
@@ -1525,8 +1549,12 @@ float StartRail::placeBody(int level) {
     const float logoSide = level == 3 ? 52.f : roomy ? 72.f : 58.f;
     textX_ = x0 + logoSide + 16.f;
     const float textW = std::max(40.f, b.right() - pad - textX_);
-    title_ = wrap("PLC Project Analyzer", kBrand, textW, 2);
-    tagline_ = wrap("L'atelier de tes projets Control Expert : l'API, l'IHM, les macros et les versions.", kBody, textW, taglineLines);
+    // 1.12.0 : le nom de l'application, et ce qu'elle fait.
+    title_ = wrap(core::editionLabel().empty() ? std::string("PLC Project Analyzer") : core::productName(), kBrand, textW, 2);
+    tagline_ = wrap(core::edition() == core::Edition::Api   ? "L'atelier de tes programmes Control Expert : l'analyse, la simulation, les macros et les versions."
+                    : core::edition() == core::Edition::Ihm ? "L'atelier de tes IHM : les vues, les symboles, les \xC3\xA9quipements, la simulation et le poste d'exploitation."
+                                                            : "L'atelier de tes projets Control Expert : l'API, l'IHM, les macros et les versions.",
+                    kBody, textW, taglineLines);
     const float titleH = ui::lineHeight(kBrand) * static_cast<float>(title_.size());
     const float tagH = ui::lineHeight(kBody) * static_cast<float>(tagline_.size());
     // 1.11.7 : les lignes de code, sous la pastille (pas dans une fenetre tres basse).
@@ -1549,7 +1577,9 @@ float StartRail::placeBody(int level) {
 
     // ---- la zone ou glisser un dossier (et son chemin a coller) --------------
     // Sans son texte (niveau 3), le pictogramme passe a gauche du champ.
-    dropText_ = wrap("Glisse ici un dossier de projet ou un export \xE2\x80\x94 ou colle son chemin et Entr\xC3\xA9" "e.", kBody, w - 28.f, dropLines);
+    dropText_ = wrap(core::hasApi() ? "Glisse ici un dossier de projet ou un export \xE2\x80\x94 ou colle son chemin et Entr\xC3\xA9" "e."
+                                    : "Glisse ici un dossier de projet IHM \xE2\x80\x94 ou colle son chemin et Entr\xC3\xA9" "e.",
+                     kBody, w - 28.f, dropLines);
     const float lineT = ui::lineHeight(kBody);
     const float dropH = dropText_.empty() ? 12.f + 30.f + 12.f
                                           : 14.f + 18.f + 6.f + lineT * static_cast<float>(dropText_.size()) + 10.f + 30.f + 14.f;
@@ -1598,7 +1628,10 @@ void StartRail::onLayout() {
     const float bw = std::min(autostart_->naturalWidth(), w - 24.f);
     stationStacked_ = w - 12.f - 22.f - 10.f - bw - 10.f < 180.f;
     const float lines = autostartName_.empty() ? 2.f : 3.f;
-    const float stationH = stationStacked_ ? std::round(10.f + lines * lh + 8.f + 26.f + 10.f) : 52.f;
+    // 1.12.0 : le poste d'exploitation est celui de XPGAnalyser IHM - XPGAnalyser API n'en a pas.
+    const bool station = core::hasIhm();
+    autostart_->setVisibility(station ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+    const float stationH = !station ? 0.f : stationStacked_ ? std::round(10.f + lines * lh + 8.f + 26.f + 10.f) : 52.f;
 
     // LA HAUTEUR DECIDE CE QUI SE MONTRE : le premier niveau dont tout tient au-
     // dessus du poste (1080 : le niveau 0 ; 1280 x 720 : 1 ou 2 ; plus bas : 3).
@@ -1609,6 +1642,7 @@ void StartRail::onLayout() {
         if (y + 12.f + stationH + margin <= b.bottom()) break;
     }
     station_ = {x0, std::max(y + 12.f, b.bottom() - margin - stationH), w, stationH};
+    if (!station) station_ = {};
     stationTextY_ = station_.y + 10.f;
     if (stationStacked_)
         autostart_->setBounds({station_.right() - 10.f - bw, station_.bottom() - 10.f - 26.f, bw, 26.f});
@@ -1673,6 +1707,7 @@ void StartRail::onPaint(const ui::PaintContext& ctx) {
     ctx.r.drawText({themeLabel_.x, themeLabel_.y}, "TH\xC3\x88ME \xC2\xB7 " + ui::Theme::labelOf(th.name), kTiny, c.textMuted);
 
     // ---- le poste au demarrage du PC ----------------------------------------------
+    if (!core::hasIhm()) return;      // 1.12.0 : XPGAnalyser API n'a pas de poste d'exploitation
     const auto green = th.onSurface(c.ok);
     const bool none = autostartName_.empty();
     ctx.r.fillRoundedRect(station_, c.border, 8.f);

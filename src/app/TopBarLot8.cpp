@@ -14,6 +14,7 @@
 //  le bandeau (la liste d'Annuler le donne) et son action reste joignable.
 // =============================================================================
 #include "TopBar.hpp"
+#include "../core/Edition.hpp"   // 1.12.0 : le bandeau de chaque application
 
 #include "../ui/Theme.hpp"
 #include "../ui/widgets/Controls.hpp"
@@ -160,6 +161,10 @@ void TopBar::layoutLot8() const {
         // serre : Deposer un fichier tombe (le glisser-deposer et la palette ">deposer" restent)
         if (!tight) putR("deposer", 34.f);
         rx -= 8.f;
+        // 1.12.0 : la sortie vers Control Expert (Release/Debug) est celle de l'automate.
+        configRect_ = {};
+        exportBox_ = {};
+        if (core::hasApi()) {
         const float exportEnd = rx;
         const float configW = 104.f;
         rx -= configW;
@@ -169,6 +174,7 @@ void TopBar::layoutLot8() const {
             putR("control-expert", compact ? 36.f : 10.f + 24.f + ui::measureWidth(ce->label, kLabel8) + 12.f);
         exportBox_ = {rx, y, exportEnd - rx, kItemH8};
         rx -= 8.f;
+        }
         // serre et rien ne tourne : l'horloge tombe
         if (!(tight && tasks_.empty())) putR("taches", tasks_.empty() || tight ? 34.f : 168.f);
         putR("cloche", 40.f);
@@ -187,6 +193,9 @@ void TopBar::layoutLot8() const {
             rx -= 8.f;
         }
         const float simEnd = rx;
+        stateRect_ = {};
+        simRect_ = {};
+        if (core::hasApi()) {     // 1.12.0 : la simulation de l'automate (XPGAnalyser API)
         const float textW = std::max({ui::measureWidth(hmi_ == Hmi::None ? "en d\xC3\xA9" "faut" : "API en d\xC3\xA9" "faut", kSmall8) + 1.f,
                                       ui::measureWidth("cycle 9\xE2\x80\xAF" "999\xE2\x80\xAF" "999", kTiny8),
                                       ui::measureWidth("F5 la lance", kTiny8)});
@@ -197,6 +206,7 @@ void TopBar::layoutLot8() const {
         putR("arreter", 32.f);
         putR("simuler", 34.f);
         simRect_ = {rx, y, simEnd - rx, kItemH8};
+        }
         const float rightStart = rx - 12.f;
 
         // ---- au centre : la palette, aussi large que la place le permet ----

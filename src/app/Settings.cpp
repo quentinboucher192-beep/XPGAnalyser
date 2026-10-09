@@ -1,5 +1,7 @@
 #include "Settings.hpp"
 
+#include "../core/Edition.hpp"   // 1.12.0 : les reglages de chaque application
+
 #include <array>
 #include <charconv>
 #include <cstdlib>
@@ -44,7 +46,7 @@ std::string envOr(const char* name, const char* fallback) {
 
 } // namespace
 
-std::string Settings::defaultPath() {
+std::string Settings::sharedFolder() {
     namespace fs = std::filesystem;
 #if defined(_WIN32)
     const auto base = envOr("APPDATA", ".");
@@ -56,7 +58,23 @@ std::string Settings::defaultPath() {
 #endif
     std::error_code ec;
     fs::create_directories(dir, ec);
-    return (dir / "settings.txt").string();
+    return dir.string();
+}
+
+std::string Settings::defaultPath() {
+    namespace fs = std::filesystem;
+    const fs::path shared(sharedFolder());
+    const auto label = core::editionLabel();
+    if (label.empty()) return (shared / "settings.txt").string();
+    const fs::path dir = shared / std::string(label);
+    std::error_code ec;
+    fs::create_directories(dir, ec);
+    const fs::path mine = dir / "settings.txt";
+    // 1.12.0 : le premier lancement d'une edition reprend les reglages de la 1.11
+    // (le theme, les dispositions, les projets recents) ; ensuite, chacune les siens.
+    if (!fs::exists(mine, ec) && fs::is_regular_file(shared / "settings.txt", ec))
+        fs::copy_file(shared / "settings.txt", mine, fs::copy_options::skip_existing, ec);
+    return mine.string();
 }
 
 bool Settings::load(std::string path) {

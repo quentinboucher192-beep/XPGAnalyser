@@ -12,6 +12,7 @@
 #include "app/Dossiers.hpp"
 #include "app/Settings.hpp"
 #include "core/Version.hpp"
+#include "core/Edition.hpp"    // 1.12.0 : XPGAnalyser API, XPGAnalyser IHM
 #include "help/TutorialLaunch.hpp"
 #include "core/CrashGuard.hpp"   // 1.10.2 (CR) : le rapport de plantage et de blocage
 #include "core/CallTrail.hpp"    // 1.10.2 (CR) : --sans-historique
@@ -167,6 +168,14 @@ static std::string tutorialCheckSession(const std::string& lot, bool captures, c
 }
 
 int main(int argc, char** argv) {
+    // 1.12.0 : DEUX APPLICATIONS, UN SEUL CODE - l'edition est fixee a la construction
+    // (CMakeLists.txt : XPG_EDITION_API, XPG_EDITION_IHM), avant tout le reste : les
+    // reglages, l'instance unique, les dossiers des projets en dependent.
+#if defined(XPG_EDITION_API)
+    core::setEdition(core::Edition::Api);
+#elif defined(XPG_EDITION_IHM)
+    core::setEdition(core::Edition::Ihm);
+#endif
     std::vector<std::string> files;
     app::AppOptions options;
     bool cli = false;
@@ -225,7 +234,11 @@ int main(int argc, char** argv) {
         else if (a == "--captures" && i + 1 < argc) options.capturesDir = argv[++i];
         // Lot 14 : le poste d'exploitation - l'IHM seule, en plein ecran, sans
         // l'editeur (Configuration > Poste d'exploitation).
-        else if ((a == "--ihm" || a == "--poste") && i + 1 < argc) options.station = argv[++i];
+        // 1.12.0 : le poste est celui de XPGAnalyser IHM.
+        else if ((a == "--ihm" || a == "--poste") && i + 1 < argc) {
+            if (core::hasIhm()) options.station = argv[++i];
+            else std::fprintf(stderr, "warning: %s : le poste d'exploitation est dans XPGAnalyser IHM\n", argv[++i]);
+        }
         else if (a == "--size" && i + 1 < argc) {
             int w = 0, h = 0;
             if (std::sscanf(argv[++i], "%dx%d", &w, &h) == 2 && w > 0 && h > 0) {
@@ -246,13 +259,18 @@ int main(int argc, char** argv) {
 
     if (version) {
         attachParentConsole();
-        std::printf("%s %s\n", XPG_ANALYZER_NAME, XPG_ANALYZER_VERSION);
+        std::printf("%s %s\n", core::productName().c_str(), XPG_ANALYZER_VERSION);
         std::fflush(stdout);
         return 0;
     }
 
     if (cli) {
         attachParentConsole();
+        // 1.12.0 : l'analyse d'un export (.XPG) est celle de l'automate.
+        if (!core::hasApi()) {
+            std::fprintf(stderr, "--cli : l'analyse d'un programme est dans XPGAnalyser API\n");
+            return 2;
+        }
         if (files.empty()) {
             std::fprintf(stderr, "usage: xpg-analyzer --cli <file.XPG> [more files\xE2\x80\xA6]\n");
             return 2;
@@ -272,7 +290,10 @@ int main(int argc, char** argv) {
         if (core::instance::exempted(args, std::getenv("XPG_INSTANCES_MULTIPLES"), &why)) {
             // (rien : les sessions, les essais et les series de R111 ne se genent pas)
         } else {
-            instance = core::instance::Guard::acquire();
+            // 1.12.0 : une instance de chaque application (XPGAnalyser-API, XPGAnalyser-IHM).
+            core::instance::Options single;
+            if (const auto label = core::editionLabel(); !label.empty()) single.name += "-" + std::string(label);
+            instance = core::instance::Guard::acquire(single);
             if (instance->role() == core::instance::Guard::Role::Secondary) {
                 namespace fs = std::filesystem;
                 std::vector<std::string> request;
@@ -288,8 +309,8 @@ int main(int argc, char** argv) {
                 for (const auto& f : files) request.push_back(absolute(f));
                 std::string failed;
                 if (instance->forward(request, &failed)) return 0;
-                core::instance::alert(XPG_ANALYZER_NAME,
-                    "XPGAnalyser est d\xC3\xA9j\xC3\xA0 ouvert, mais sa fen\xC3\xAAtre ne r\xC3\xA9pond pas ("
+                core::instance::alert(core::productName(),
+                    core::productName() + " est d\xC3\xA9j\xC3\xA0 ouvert, mais sa fen\xC3\xAAtre ne r\xC3\xA9pond pas ("
                     + failed + ").\n\nAttends qu'elle r\xC3\xA9ponde, ou ferme-la (Gestionnaire des t\xC3\xA2" "ches), puis relance.");
                 return 4;
             }
@@ -315,7 +336,8 @@ int main(int argc, char** argv) {
         const bool installed = !exe.empty() && fs::is_regular_file(exe / app::dossiers::cheminDe(app::dossiers::kNomIniInstallation), ec);
         if (installed) makeAbsolute(paths);
         else settleWorkingFolder(paths);
-        const std::string settings = app::dossiers::utf8De(fs::path(app::Settings::defaultPath()).parent_path());
+        // 1.12.0 : XPGAnalyser.ini (les dossiers des donnees) est commun aux deux applications.
+        const std::string settings = app::dossiers::utf8De(fs::path(app::Settings::sharedFolder()));
         const auto folders = app::dossiers::preparer(exe, settings);
         if (folders.installe)
             project::SharedLibrary::setDefaultRoot(

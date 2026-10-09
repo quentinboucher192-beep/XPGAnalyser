@@ -169,6 +169,7 @@ void MainAnalysisScreen::onBarAction(std::string_view id) {
         return;
     }
     if (id == "help.apiTutorial") { openApiTutorial(); return; }      // lot API 7 : le didacticiel de l'API
+    if (id == "help.hmiTutorial") { openHmiHelp("didacticiel"); return; }   // 1.12.0 : celui de l'IHM (ses parcours)
     // ---- Lot API 8 : didacticiels et aide ----
     if (id == lot8::kNewsAction) { openApiTutorial("nouveautes-lot8"); return; }   // l'onglet des nouveautes
     if (id == lot8::kShortcutsAction) {                                           // la page des raccourcis

@@ -13,6 +13,7 @@
 //     refait) et l'ecran montre l'endroit.
 // =============================================================================
 #include "Screens.hpp"
+#include "../../core/Edition.hpp"   // 1.12.0 : les raccourcis de chaque application
 #include "../MacrosPane.hpp"
 #include "../../help/HelpSession.hpp"
 #include "../TablePaste.hpp"
@@ -336,7 +337,7 @@ bool MainAnalysisScreen::handleShortcut(const KeyDown& k, bool beforeWidgets) {
         return true;
     }
     // ---- Lot API 8 : Centre de simulation (F5 Simuler / Continuer, Maj+F5 Arreter, F10 la section suivante) ----
-    if (!beforeWidgets && simCenterShortcut(k)) return true;
+    if (!beforeWidgets && core::hasApi() && simCenterShortcut(k)) return true;   // 1.12.0 : la simulation de l'automate
     // ---- fin Lot API 8 : Centre de simulation ----
     // ---- Lot API 8 : l'arbre du projet (Echap dans l'arbre filtre : le filtre s'efface) ----
     if (!beforeWidgets && k.key == Key::Escape && k.mods.none() && explorer_ && explorer_->focused() && !treeFilterText().empty()) {
@@ -381,7 +382,7 @@ bool MainAnalysisScreen::handleShortcut(const KeyDown& k, bool beforeWidgets) {
             return true;
         // 1.11.14 : Ctrl+J - le panneau du bas (Sorties, Console, Diagnostics).
         case Key::J:
-            if (k.mods.shift) return false;
+            if (k.mods.shift || !core::hasIhm()) return false;   // 1.12.0 : le panneau du build de l'IHM
             toggleBottomPanel();
             return true;
         case Key::H:
@@ -400,15 +401,16 @@ bool MainAnalysisScreen::handleShortcut(const KeyDown& k, bool beforeWidgets) {
         // file.open pose d'abord la question de l'accueil si le projet est modifie.
         case Key::O:
             if (k.repeat) return false;
+            if (k.mods.shift && !core::hasApi()) return false;   // 1.12.0 : le .XHW est celui de l'automate
             (void)app_.actions().trigger(k.mods.shift ? "file.importHardware" : "file.open", app_.commands());
             return true;
         // Lot API 7 : Ctrl+1 l'onglet API > Variables, Ctrl+5 API > Statistiques.
         case Key::Num1:
-            if (k.mods.shift) return false;
+            if (k.mods.shift || !core::hasApi()) return false;
             openApiTabFromAction("variables");
             return true;
         case Key::Num5:
-            if (k.mods.shift) return false;
+            if (k.mods.shift || !core::hasApi()) return false;
             openApiTabFromAction("statistiques");
             return true;
         default:

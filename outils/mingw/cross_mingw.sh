@@ -1,10 +1,12 @@
 #!/bin/bash
 # =============================================================================
-#  outils/mingw/cross_mingw.sh - 1.11.3 : XpgAnalyzer.exe pour Windows, compile
-#  sous Linux avec MinGW-w64 (comme l'exe des installateurs du lot 8 et de la
-#  1.11.2). Il faut : g++-mingw-w64-x86-64-posix, cmake, ninja.
+#  outils/mingw/cross_mingw.sh - 1.11.3 : l'exe pour Windows, compile sous Linux
+#  avec MinGW-w64 (comme l'exe des installateurs du lot 8 et de la 1.11.2). Il
+#  faut : g++-mingw-w64-x86-64-posix, cmake, ninja. 1.12.0 : DEUX EXE, faits du
+#  meme code - XpgAnalyzer-API.exe (l'automate) et XpgAnalyzer-IHM.exe (l'IHM).
 #
-#    outils/mingw/cross_mingw.sh            -> build-mingw/XpgAnalyzer.exe (+ SDL3.dll)
+#    outils/mingw/cross_mingw.sh            -> build-mingw/XpgAnalyzer-API.exe,
+#                                              build-mingw/XpgAnalyzer-IHM.exe (+ SDL3.dll)
 #    JOBS=2 outils/mingw/cross_mingw.sh     -> moins de compilations a la fois
 #
 #  Le runtime C++ est lie dans l'exe (-static) : a cote, seulement SDL3.dll.
@@ -32,8 +34,10 @@ cmake -S . -B "$OUT" -G Ninja \
     -DXPG_BUILD_TESTS=OFF \
     -DSDL3_DIR="$ROOT/outils/mingw" \
     -DSDL3_MINGW_IMPLIB="$IMPLIB"
-ninja -C "$OUT" -j "$JOBS" xpg_analyzer
-cp -f "$OUT/xpg_analyzer.exe" "$OUT/XpgAnalyzer.exe"
+ninja -C "$OUT" -j "$JOBS" xpg_api xpg_ihm
 cp -f third_party/SDL3/lib/x64/SDL3.dll "$OUT/SDL3.dll"
-x86_64-w64-mingw32-strip "$OUT/XpgAnalyzer.exe"
-echo "fait : $OUT/XpgAnalyzer.exe"
+rm -f "$OUT/XpgAnalyzer.exe" "$OUT/xpg_analyzer.exe"     # la 1.11 : un seul exe
+for exe in XpgAnalyzer-API XpgAnalyzer-IHM; do
+    x86_64-w64-mingw32-strip "$OUT/$exe.exe"
+    echo "fait : $OUT/$exe.exe"
+done

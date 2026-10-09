@@ -165,35 +165,62 @@ else()
 endif()
 
 # --- application -------------------------------------------------------------
-xpg_sources(APP_SOURCES app)
-add_executable(xpg_analyzer ${APP_SOURCES} src/main.cpp)
-target_link_libraries(xpg_analyzer PRIVATE xpg_ui xpg_import xpg_help xpg_hmi)
-
-# --- lot 12 : le logo de l'executable Windows ---------------------------------
 #
-#  resources/logo/xpg_analyzer.ico (fait depuis le SVG, 16 a 256 pixels) entre
-#  dans xpg_analyzer.exe par une ressource : l'Explorateur, la barre des taches
-#  et Alt+Tab le montrent. Le .rc est configure pour porter le chemin ABSOLU de
-#  l'icone : rc.exe et windres cherchent un nom relatif dans leur dossier de
-#  travail, qui est celui de la construction. La fenetre, elle, prend le logo
-#  partout (app/Brand.cpp, SDL_SetWindowIcon).
-if(WIN32)
-    enable_language(RC)
-    set(XPG_ICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/logo/xpg_analyzer.ico")
-    set(XPG_MANIFEST "${CMAKE_CURRENT_SOURCE_DIR}/resources/windows/xpg_analyzer.manifest")   # 1.11.3 : MinGW
-    configure_file(resources/windows/xpg_analyzer.rc.in ${CMAKE_CURRENT_BINARY_DIR}/xpg_analyzer.rc @ONLY)
-    target_sources(xpg_analyzer PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/xpg_analyzer.rc)
-endif()
+#  1.12.0 : DEUX APPLICATIONS, UN SEUL CODE. XPGAnalyser API (l'automate) et
+#  XPGAnalyser IHM (l'IHM seule) sont deux executables independants. Les sources
+#  de app/ sont compilees une fois, dans une bibliotheque d'objets (xpg_app : a
+#  l'edition des liens, rien n'en est laisse de cote, contrairement a une .a) ;
+#  chaque executable n'a en propre que main.cpp, compile avec XPG_EDITION_API ou
+#  XPG_EDITION_IHM (core/Edition.hpp), et sa ressource Windows (son nom, son
+#  icone). xpg_analyzer construit les deux.
+xpg_sources(APP_SOURCES app)
+add_library(xpg_app OBJECT ${APP_SOURCES})
+target_link_libraries(xpg_app PUBLIC xpg_ui xpg_import xpg_help xpg_hmi)
 
 if(XPG_WITH_SDL)
     find_package(SDL3 CONFIG REQUIRED)
     file(GLOB SDL_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/platform/Sdl*.cpp")
     # SdlRenderer dessine le texte avec FontAtlas : sans lui, l'executable ne
     # se lie pas ("undefined reference to gfx::FontAtlas").
-    target_sources(xpg_analyzer PRIVATE ${SDL_SOURCES} src/platform/FontAtlas.cpp)
-    target_link_libraries(xpg_analyzer PRIVATE SDL3::SDL3)
-    target_compile_definitions(xpg_analyzer PRIVATE XPG_WITH_SDL=1)
+    target_sources(xpg_app PRIVATE ${SDL_SOURCES} src/platform/FontAtlas.cpp)
+    target_link_libraries(xpg_app PUBLIC SDL3::SDL3)
+    target_compile_definitions(xpg_app PUBLIC XPG_WITH_SDL=1)
 endif()
+
+# --- lot 12 : le logo de l'executable Windows ---------------------------------
+#
+#  resources/logo/xpg_analyzer.ico (fait depuis le SVG, 16 a 256 pixels) entre
+#  dans chaque .exe par une ressource : l'Explorateur, la barre des taches et
+#  Alt+Tab le montrent. Le .rc est configure pour porter le chemin ABSOLU de
+#  l'icone : rc.exe et windres cherchent un nom relatif dans leur dossier de
+#  travail, qui est celui de la construction. La fenetre, elle, prend le logo
+#  partout (app/Brand.cpp, SDL_SetWindowIcon). 1.12.0 : un .rc par executable
+#  (XPG_RC_EDITION : "API" ou "IHM" dans le nom et la description).
+if(WIN32)
+    enable_language(RC)
+    set(XPG_MANIFEST "${CMAKE_CURRENT_SOURCE_DIR}/resources/windows/xpg_analyzer.manifest")   # 1.11.3 : MinGW
+endif()
+
+function(xpg_add_edition target edition label exe)
+    add_executable(${target} src/main.cpp)
+    target_link_libraries(${target} PRIVATE xpg_app)
+    target_compile_definitions(${target} PRIVATE XPG_EDITION_${edition}=1)
+    set_target_properties(${target} PROPERTIES OUTPUT_NAME ${exe})
+    if(WIN32)
+        set(XPG_RC_EDITION ${label})
+        set(XPG_RC_EXE ${exe})
+        set(XPG_ICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/logo/xpg_analyzer_${edition}.ico")
+        if(NOT EXISTS "${XPG_ICON}")
+            set(XPG_ICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/logo/xpg_analyzer.ico")
+        endif()
+        configure_file(resources/windows/xpg_analyzer.rc.in ${CMAKE_CURRENT_BINARY_DIR}/${target}.rc @ONLY)
+        target_sources(${target} PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/${target}.rc)
+    endif()
+endfunction()
+
+xpg_add_edition(xpg_api API API XpgAnalyzer-API)
+xpg_add_edition(xpg_ihm IHM IHM XpgAnalyzer-IHM)
+add_custom_target(xpg_analyzer DEPENDS xpg_api xpg_ihm)
 
 # ---------------------------------------------------------------------------
 #  tests - all headless, so CI needs no display server
@@ -543,6 +570,10 @@ if(XPG_BUILD_TESTS)
     xpg_target_link_libraries(hmi_reperes_test PRIVATE xpg_hmi)
     xpg_add_test_executable(hmi_natives_test tests/hmi_natives_test.cpp)      # 1.12.0 : les natives de l'IHM, chaque exemple execute
     xpg_target_link_libraries(hmi_natives_test PRIVATE xpg_hmi)
+    # 1.12.0 : deux applications, deux rangements (la recopie des projets de la 1.11,
+    # ProjectStore et les versions dans chaque application).
+    xpg_add_test_executable(edition_test tests/edition_test.cpp src/app/EditionMigration.cpp)
+    xpg_target_link_libraries(edition_test PRIVATE xpg_hmi)
     # ---- Lot API 8 : didacticiels et aide (les huit parcours, leurs pages de l'aide, le menu Aide) ----
     xpg_add_test_executable(lot8tutorials_test tests/lot8tutorials_test.cpp src/app/TopBar.cpp src/app/TopBarLot8.cpp src/app/TutorialsLot8.cpp)   # Lot API 8 : bandeau haut (+ TopBarLot8.cpp)
     # ---- Lot API 8 : tests - xpg_ui AVANT xpg_import : ui::buildHelp (ui/HelpDocument.cpp) appelle
@@ -664,6 +695,7 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME hmitypes     COMMAND hmi_types_test)                   # ---- 1.11.19 : le registre des types (lot 6) ----
     xpg_add_test(NAME hmireperes   COMMAND hmi_reperes_test)                 # ---- 1.11.24 : les reperes dans les symboles ----
     xpg_add_test(NAME hminatives   COMMAND hmi_natives_test)                 # ---- 1.12.0 : les natives de l'IHM ----
+    xpg_add_test(NAME edition      COMMAND edition_test)                     # ---- 1.12.0 : deux applications ----
     xpg_add_test(NAME hmioverload  COMMAND hmi_overload_test)                # ---- 1.11.20 : les signatures et les surcharges ----
     xpg_add_test(NAME hmidecl      COMMAND hmi_decl_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/decl/corpus.txt   # ---- 1.11.18 : les declarations (lot 2) ----
                  ${CMAKE_CURRENT_SOURCE_DIR}/bac/Armoire_Gaz ${CMAKE_CURRENT_SOURCE_DIR}/projets/project)

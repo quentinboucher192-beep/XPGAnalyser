@@ -31,6 +31,7 @@
 //  est faite.
 // =============================================================================
 #include "Screens.hpp"
+#include "../../core/Edition.hpp"   // 1.12.0 : Aller a, dans chaque application
 
 #include "../../project/CodeIconKeys.hpp"
 
@@ -235,7 +236,9 @@ void MainAnalysisScreen::refreshGoToIndex() {
         ix.libraryAt = now;
         ix.library.clear();
         project::SharedLibrary library(project::SharedLibrary::defaultRoot());
-        if (library.scan()) {
+        // 1.12.0 : les macros et l'aide de la bibliotheque sont celles de l'automate ; l'aide
+        // de l'IHM, celle de XPGAnalyser IHM.
+        if (core::hasApi() && library.scan()) {
             for (const auto& item : library.items()) {
                 if (item.kind != project::LibraryItemKind::Macro) continue;
                 std::ifstream in(item.path, std::ios::binary);
@@ -249,14 +252,15 @@ void MainAnalysisScreen::refreshGoToIndex() {
                 push(ix.library, GMacro, item.name, std::move(sub), "macro:" + item.name, ui::Icon::Code, std::move(extra));
             }
         }
-        for (const auto& t : hmi::guide::topics()) {
+        static const std::vector<hmi::guide::Topic> kNoTopic;
+        for (const auto& t : core::hasIhm() ? hmi::guide::topics() : kNoTopic) {
             std::string extra;
             for (const auto& w : t.words) extra += w + " ";
             push(ix.library, GHelp, t.title, "Aide de l'IHM" + std::string(kDot) + t.chapter + (t.summary.empty() ? std::string{} : kDot + t.summary),
                  "help:" + t.key, ui::Icon::Info, std::move(extra));
         }
         for (const auto& e : helpLibrary()) {
-            if (!e.hasHelp) continue;
+            if (!e.hasHelp || !core::hasApi()) continue;
             push(ix.library, GHelp, e.name, "Aide de la biblioth\xC3\xA8que" + std::string(kDot) + e.category
                                                 + (e.help.summary.empty() ? std::string{} : kDot + e.help.summary),
                  "libhelp:" + e.name, ui::Icon::Library, e.help.usage.substr(0, std::min<std::size_t>(e.help.usage.size(), 400)));
@@ -450,13 +454,17 @@ void MainAnalysisScreen::refreshGoToIndex() {
     }
 
     // ---- les volets et les actions ---------------------------------------------------
-    for (const auto& pe : kApiPanes) push(ix.entries, GPane, pe.title, "Onglet de l'API", std::string("apipane:") + pe.key, ui::Icon::Cpu);
+    // 1.12.0 : les onglets de l'API dans XPGAnalyser API, les volets et actions de l'IHM dans XPGAnalyser IHM.
+    if (core::hasApi())
+        for (const auto& pe : kApiPanes) push(ix.entries, GPane, pe.title, "Onglet de l'API", std::string("apipane:") + pe.key, ui::Icon::Cpu);
     if (doc)
         for (const auto& pe : kPanes)
             push(ix.entries, GPane, pe.title, "Volet de l'IHM", std::string("pane:") + pe.key + ":" + std::to_string(pe.tab), ui::Icon::Folder);
-    for (const auto& ae : kActions) push(ix.entries, GAction, ae.title, "Action", ae.key, ui::Icon::Play, {}, ae.shortcut);
+    if (core::hasIhm())
+        for (const auto& ae : kActions) push(ix.entries, GAction, ae.title, "Action", ae.key, ui::Icon::Play, {}, ae.shortcut);
     std::vector<std::string> seen;
     for (const auto& bp : kBarParts) {
+        if (!core::hasApi()) break;          // 1.12.0 : la simulation de l'automate, Vers Control Expert
         seen.emplace_back(bp.key);
         push(ix.entries, GAction, bp.title, "Action de la barre du haut", std::string("bar:") + bp.key, ui::Icon::Play, {}, bp.shortcut);
     }
@@ -744,10 +752,12 @@ std::optional<GoToPanel::Outcome> MainAnalysisScreen::topBarPalette(const std::s
     const auto add = [&](std::string title, std::string key, ui::Icon icon, std::string hint = {}) {
         gotosearch::Index::add(cmds.entries, gotosearch::GAction, std::move(title), "Commande", std::move(key), icon, {}, std::move(hint));
     };
-    add("Compiler l'IHM (les expressions impossibles, les liens)", "cmd:compiler", ui::Icon::Code);
-    add("G\xC3\xA9n\xC3\xA9rer l'IHM", "cmd:generer", ui::Icon::Code);
-    add("Simuler (lancer la simulation)", "bar:sim.run", ui::Icon::Play, "F5");
-    add("Nouvelle variable", "bar:create.variable", ui::Icon::Variable);
+    // 1.12.0 : les commandes de l'application.
+    if (core::hasIhm()) add("Compiler l'IHM (les expressions impossibles, les liens)", "cmd:compiler", ui::Icon::Code);
+    if (core::hasIhm()) add("G\xC3\xA9n\xC3\xA9rer l'IHM", "cmd:generer", ui::Icon::Code);
+    if (core::hasApi()) add("Simuler (lancer la simulation)", "bar:sim.run", ui::Icon::Play, "F5");
+    if (core::hasIhm() && !core::hasApi()) add("D\xC3\xA9marrer l'IHM simul\xC3\xA9" "e", "bar:hmi.start", ui::Icon::Play, "F8");
+    if (core::hasApi()) add("Nouvelle variable", "bar:create.variable", ui::Icon::Variable);
     add("Notifications (la cloche du bandeau)", "cmd:cloche", ui::Icon::Info);
     add("Revenir avant\xE2\x80\xA6 (les 10 derni\xC3\xA8res actions)", "cmd:annuler-liste", ui::Icon::Undo);
     add("T\xC3\xA2" "ches de fond", "cmd:taches", ui::Icon::History);

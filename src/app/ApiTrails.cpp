@@ -2033,6 +2033,11 @@ void MainAnalysisScreen::takePendingApiTutorial() {
     if (!pending || !app_.project() || !centre_) return;
     const std::string trail = *pending;
     pending.reset();
+    // 1.12.0 : XPGAnalyser IHM - un parcours de l'IHM (« decouvrir »), sans l'onglet API.
+    if (!ApiTrails::find(trail) && !trail.empty()) {
+        startTrail(trail, false);
+        return;
+    }
     openApiTutorial(trail);
 }
 

@@ -25,6 +25,7 @@
 //  de le relire du disque.
 // =============================================================================
 #include "../../help/Novelties.hpp"     // 1.10 (chantier P)
+#include "../../core/Edition.hpp"   // 1.12.0 : XPGAnalyser API, XPGAnalyser IHM
 #include "Screens.hpp"
 
 #include "../App.hpp"
@@ -384,7 +385,8 @@ core::Status StartupScreen::buildUi() {
     rail.setCodeStats(codeStatsText());              // 1.11.7 : les lignes de code (.h, .hpp, .c, .cpp)
     std::string program = leafName(station::currentExecutable());
     if (program.empty()) program = "xpg_analyzer";
-    page_->setStatusRight("Entr\xC3\xA9" "e : ouvrir \xC2\xB7 F2 : renommer \xC2\xB7 Suppr : supprimer \xC2\xB7 Ctrl+F : chercher", "PLC Project Analyzer \xC2\xB7 " + program);
+    page_->setStatusRight("Entr\xC3\xA9" "e : ouvrir \xC2\xB7 F2 : renommer \xC2\xB7 Suppr : supprimer \xC2\xB7 Ctrl+F : chercher",
+                          (core::editionLabel().empty() ? std::string("PLC Project Analyzer") : core::productName()) + " \xC2\xB7 " + program);
     page_->setDetailsLoader([this](start::ProjectEntry& e) { loadDetails(e); });
     page_->status().setMessage("Pr\xC3\xAAt");
     // 1.10 (chantier P) : l'accueil propose les nouveautes pas encore vues.
@@ -616,6 +618,8 @@ std::vector<start::ProjectEntry> StartupScreen::readRecent(std::string& autostar
         e.recentRank = i;
         std::error_code ec;
         e.isFolder = project::ProjectStore::isProjectFolder(e.path);
+        // 1.12.0 : XPGAnalyser IHM n'ouvre pas les exports de Control Expert (des recents de la 1.11).
+        if (!core::hasApi() && !e.isFolder && fs::exists(e.path, ec)) continue;
         if (e.isFolder) {
             // A project folder knows its own name and state; a bare export does
             // not, so it is labelled by its file name.
@@ -625,7 +629,7 @@ std::vector<start::ProjectEntry> StartupScreen::readRecent(std::string& autostar
                 // distingue pas deux affaires.
                 e.name = leafName(e.path);
                 if (e.name.empty()) e.name = m->name;
-                e.cpu = prettyCpu(m->cpuReference);
+                if (core::hasApi()) e.cpu = prettyCpu(m->cpuReference);   // 1.12.0 : pas d'automate dans XPGAnalyser IHM
                 e.state = m->state;
                 e.stamp = m->modified;
             }
@@ -713,6 +717,9 @@ void StartupScreen::loadDetails(start::ProjectEntry& e) {
         return;
     }
 
+    // 1.12.0 : chaque application, sa moitie du dossier.
+    const bool withApi = core::hasApi(), withIhm = core::hasIhm();
+    if (withApi) {
     // L'automate : la reference, et sa famille (config/hardware.txt).
     std::string family;
     if (std::string hw; readFile(root / "config" / "hardware.txt", hw, 16u * 1024u * 1024u))
@@ -747,9 +754,11 @@ void StartupScreen::loadDetails(start::ProjectEntry& e) {
         });
     e.facts.emplace_back("Variables", globals == 0 ? std::string("aucune")
                                                    : plural(globals, "globale", "globales") + (located ? " \xC2\xB7 " + plural(located, "situ\xC3\xA9" "e", "situ\xC3\xA9" "es") : std::string{}));
+    }
 
     // L'IHM : l'index ihm/ihm.txt (une ligne par vue, variable IHM, alarme).
-    if (std::string ihm; readFile(root / "ihm" / "ihm.txt", ihm)) {
+    if (!withIhm) {
+    } else if (std::string ihm; readFile(root / "ihm" / "ihm.txt", ihm)) {
         std::size_t views = 0, hmiVars = 0, alarms = 0;
         eachLine(ihm, [&](std::string_view line) {
             if (line.rfind("vue ", 0) == 0) ++views;
@@ -1211,7 +1220,8 @@ void StartupScreen::supprimerProjet() {
 // est la (MainAnalysisScreen::takePendingApiTutorial).
 void StartupScreen::showTutorial() {
     if (!claimDialog()) return;
-    MainAnalysisScreen::requestApiTutorial("api-decouvrir");
+    // 1.12.0 : XPGAnalyser IHM - la visite « Decouvrir l'IHM ».
+    MainAnalysisScreen::requestApiTutorial(core::hasApi() ? "api-decouvrir" : "decouvrir");
     if (app_.project()) {
         page_->status().setMessage("Le didacticiel s'ouvre sur le projet ouvert\xE2\x80\xA6", StatusBar::Severity::Info);
         app_.menus().SwitchMenu("analysis");

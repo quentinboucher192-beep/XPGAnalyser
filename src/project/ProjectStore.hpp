@@ -18,6 +18,12 @@
 //      src/MAST.XPG             generated on export
 //      src/CONFIG.XHW           generated on export
 //
+//  1.12.0 : DEUX APPLICATIONS. Dans XPGAnalyser IHM (core::hasApi() faux), un
+//  projet n'est que son manifeste (edition = ihm), son verrou et ihm/ (ecrit par
+//  hmi::save) : open() ne lit pas le programme (un modele vide, au nom du projet),
+//  save() n'ecrit que le manifeste et le verrou - jamais config/, vars/... (un
+//  dossier de la 1.11 garde son programme intact).
+//
 //  WHY A FOLDER
 //
 //  Code lives in .st files, one per section. That means an engineer can open a
@@ -64,6 +70,10 @@ namespace project {
         bool        crlf{ true };
         std::string contentDateTime;
         std::string contentKind;
+        // 1.12.0 : l'application du projet - "api" (XPGAnalyser API : le programme),
+        // "ihm" (XPGAnalyser IHM : ihm/ seule) ; vide : un projet de la 1.11, qui a
+        // les deux (chaque application n'y lit et n'y ecrit que sa moitie).
+        std::string edition;
     };
 
     struct OpenResult {

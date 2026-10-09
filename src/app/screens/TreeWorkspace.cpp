@@ -21,6 +21,8 @@
 
 #include "../App.hpp"
 #include "../GoToSearch.hpp"
+#include "../../core/Edition.hpp"   // 1.12.0 : le rail de chaque application
+#include "../hmi/HmiSimulation.hpp"   // 1.12.0 : l'etat de la simulation de l'IHM
 #include "../../project/SharedLibrary.hpp"
 #include "../../ui/TextSearch.hpp"
 #include "../../hmi/HmiBuildState.hpp"   // 1.11 (chantier T3, C4) : la legende des icones
@@ -1068,7 +1070,8 @@ void MainAnalysisScreen::refreshTreeChrome() {
     if (!rail && !foot) return;
     // Un autre projet (un autre modele) repart de "tout" : le rail le suit.
     if (treeModel_) treeScope_ = kTreeScopes[std::clamp(treeModel_->scope(), 0, 5)];
-    const bool hmi = treeModel_ && treeModel_->hasHmi();
+    // 1.12.0 : le rail moderne dans les deux applications (XPGAnalyser API n'a pas d'IHM).
+    const bool hmi = treeModel_ && (treeModel_->hasHmi() || core::edition() != core::Edition::Both);
     // L'etat de la simulation : la pastille du dossier Simulation (Centre de simulation).
     std::string simText;
     ui::Tone simTone = ui::Tone::None;
@@ -1087,7 +1090,15 @@ void MainAnalysisScreen::refreshTreeChrome() {
                 : state == State::Halted ? ui::Tone::Error : ui::Tone::Muted;
     }
     // 1.11.23 : la ligne d'etat du titre Simulation ("arretee \xC2\xB7 cycle 0").
-    if (treeModel_) {
+    // 1.12.0 : XPGAnalyser IHM - la simulation de l'IHM (pas d'automate).
+    if (treeModel_ && !core::hasApi()) {
+        const auto tab = hmiTabs_.find("simulation");
+        const auto* hsim = dynamic_cast<const HmiSimulationPane*>(tab != hmiTabs_.end() ? tab->second : nullptr);
+        const bool running = hsim && hsim->hmiRunning();
+        simText = running ? "IHM en marche" : "IHM arr\xC3\xAAt\xC3\xA9" "e";
+        simTone = running ? ui::Tone::Ok : ui::Tone::Muted;
+        if (treeModel_->setSimStatus(simText, running) && explorer_) explorer_->invalidate();
+    } else if (treeModel_) {
         const bool running = host.attached() && host.state() == SimulationHost::State::Running;
         const std::string line = simText + " \xC2\xB7 cycle " + std::to_string(host.attached() ? host.scanCount() : 0);
         if (treeModel_->setSimStatus(line, running) && explorer_) explorer_->invalidate();
@@ -1119,8 +1130,8 @@ void MainAnalysisScreen::refreshTreeChrome() {
         if (hmi) {
             item("epingles", "\xC3\x89pingl\xC3\xA9s et r\xC3\xA9" "cents", ui::Icon::StarFilled, 0,
                  treePins_.empty() ? std::string{} : std::to_string(treePins_.size()), ui::Tone::None);
-            item("api", "API seulement", ui::Icon::Cpu, 1, updates ? std::to_string(updates) : std::string{}, ui::Tone::Warning);
-            item("ihm", "IHM seulement", ui::Icon::Screen, 2, errors ? std::to_string(errors) : std::string{}, ui::Tone::Error);
+            if (core::hasApi()) item("api", "API seulement", ui::Icon::Cpu, 1, updates ? std::to_string(updates) : std::string{}, ui::Tone::Warning);
+            if (core::hasIhm()) item("ihm", "IHM seulement", ui::Icon::Screen, 2, errors ? std::to_string(errors) : std::string{}, ui::Tone::Error);
             item("simulation", "Simulation seulement", ui::Icon::Play, 3, ".", simTone);
             item("versions", "Versions seulement", ui::Icon::History, 4, versions ? std::to_string(versions) : std::string{}, ui::Tone::None);
         }
@@ -1228,6 +1239,11 @@ void MainAnalysisScreen::treeHeadAction(ui::NodeId node, std::size_t action) {
         break;
     }
     case Kind::SimFolder: {
+        // 1.12.0 : XPGAnalyser IHM - la simulation de l'IHM (F8 / Maj+F8).
+        if (!core::hasApi()) {
+            (void)topBarLot8Action("hmi.toggle");
+            break;
+        }
         const auto& sim = app_.simulation();
         runSimulationTransport(sim.attached() && sim.state() == SimulationHost::State::Running ? "sim.stop" : "sim.run");
         break;

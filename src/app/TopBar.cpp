@@ -2,6 +2,7 @@
 //  app/TopBar.cpp - lot API 2 : la barre du haut, repensee
 // =============================================================================
 #include "TopBar.hpp"
+#include "../core/Edition.hpp"   // 1.12.0 : le bandeau de chaque application
 #include "../core/CallTrail.hpp"   // 1.10.2 (CR) : le journal interne
 #include "NoveltyCenter.hpp"           // 1.10 (R2, menu Aide) : les reperes, ce qui n'a pas ete vu
 #include "../help/Novelties.hpp"
@@ -133,7 +134,8 @@ TopBar::TopBar(std::string id) : ui::Widget(std::move(id)) {
         p.primary = primary;
         parts_.push_back(std::move(p));
     };
-    part("projet", "Projet", "Le projet : ouvrir, enregistrer, importer le .XHW, son \xC3\xA9tat, Vers Control Expert, le menu principal",
+    part("projet", "Projet", core::hasApi() ? "Le projet : ouvrir, enregistrer, importer le .XHW, son \xC3\xA9tat, Vers Control Expert, le menu principal"
+                                            : "Le projet IHM : ouvrir, enregistrer, son \xC3\xA9tat, ses dossiers, le menu principal",
          {}, ui::Icon::Project, Menu::Project);
     part("version", "Version", "La version que tu modifies et d'o\xC3\xB9 elle part ; Terminer (FINISH), Livrer et verrouiller (LOCK), Version interm\xC3\xA9" "diaire",
          {}, ui::Icon::None, Menu::Version);
@@ -178,6 +180,16 @@ TopBar::TopBar(std::string id) : ui::Widget(std::move(id)) {
     for (auto& p : parts_)
         if (p.key == "simuler" || p.key == "nouveau" || p.key == "affichage" || p.key == "aide") p.iconOnly = true;
     // ---- fin Lot API 8 : bandeau haut ----
+    // 1.12.0 : CHAQUE APPLICATION, SON BANDEAU. XPGAnalyser API : ni l'IHM ni « Les deux » ;
+    // XPGAnalyser IHM : ni la simulation de l'automate (Simuler, Arreter, Un cycle), ni
+    // « Les deux », ni Vers Control Expert, ni + Nouveau (des sections, des blocs, des racks).
+    std::erase_if(parts_, [](const Part& p) {
+        if (!core::hasIhm() && (p.key == "ihm" || p.key == "ihm-demarrer" || p.key == "ihm-arreter" || p.key == "les-deux")) return true;
+        if (!core::hasApi() && (p.key == "simuler" || p.key == "arreter" || p.key == "cycle" || p.key == "les-deux"
+                                || p.key == "control-expert" || p.key == "nouveau"))
+            return true;
+        return false;
+    });
 
     const auto e = [](std::vector<Entry>& v, std::string label, std::string shortcut, ui::Icon icon, std::string action) {
         Entry x;
@@ -193,17 +205,21 @@ TopBar::TopBar(std::string id) : ui::Widget(std::move(id)) {
     e(project_, "Enregistrer", "Ctrl+S", ui::Icon::Save, "project.save");
     e(project_, "Enregistrer sous\xE2\x80\xA6", "", ui::Icon::Document, "project.saveAs");
     sep(project_);
+    if (core::hasApi()) {      // 1.12.0 : l'automate (XPGAnalyser API)
     e(project_, "Importer la configuration mat\xC3\xA9rielle (.XHW)\xE2\x80\xA6", "Ctrl+Maj+O", ui::Icon::Rack, "file.importHardware");   // 1.11 (T2) : la table help::keys
     // Lot 7 : un nouveau MAST dans le projet ouvert (le recapitulatif d'abord).
     e(project_, "Importer un .XPG (nouveau MAST)\xE2\x80\xA6", "", ui::Icon::Program, "file.importMast");
     e(project_, "R\xC3\xA9importer et r\xC3\xA9" "analyser", "", ui::Icon::Refresh, "analyze.run");   // Lot API 8 : F5 est Simuler (la maquette ; il n'a jamais relance l'analyse)
     sep(project_);
+    }
     e(project_, "Ic\xC3\xB4ne du projet\xE2\x80\xA6", "", ui::Icon::Image, "project.icon");
     e(project_, "\xC3\x89tat du projet\xE2\x80\xA6", "", ui::Icon::Settings, "project.state");
     e(project_, "D\xC3\xA9verrouiller\xE2\x80\xA6", "", ui::Icon::Lock, "project.unlock");
+    if (core::hasApi()) {
     e(project_, "Vers Control Expert\xE2\x80\xA6", "", ui::Icon::Export, "project.exportSources");
     // 1.8.0 : le programme lisible (Excel, PDF, texte), dans l'ordre d'execution.
     e(project_, "Exporter le programme lisible\xE2\x80\xA6", "Ctrl+Maj+E", ui::Icon::Document, "program.export");
+    }
     sep(project_);
     e(project_, "Fermer le projet", "", ui::Icon::Close, "file.close");    // Lot API 8 : bandeau haut
     // 1.8.0 : les dossiers de l'application (XPGAnalyser.ini) : voir, ouvrir, changer.
@@ -226,9 +242,11 @@ TopBar::TopBar(std::string id) : ui::Widget(std::move(id)) {
     // onglets de l'API (l'arbre : API > Simulation, Variables, Statistiques).
     // Leurs actions et leurs raccourcis restent ; legacyButtons() retrouve
     // toujours "Simulate", "Variables", "Statistics".
+    if (core::hasApi()) {      // 1.12.0 : l'automate seulement
     e(view_, "Tableau de bord de l'API", "", ui::Icon::Cpu, "api.dashboard");
     e(view_, "Onglet Macros", "", ui::Icon::Code, "macros.open");
     sep(view_);
+    }
     // Lot 7 : L'AFFICHAGE MULTI-FENETRE - le centre en un groupe d'onglets, en
     // groupes cote a cote, en mosaique automatique ; un onglet dans une fenetre.
     e(view_, "Disposition : onglets", "", ui::Icon::Document, "layout.tabs");
@@ -258,14 +276,16 @@ TopBar::TopBar(std::string id) : ui::Widget(std::move(id)) {
     e(help_, "Raccourcis clavier", "", ui::Icon::Document, "help.shortcuts");
     sep(help_);
     head(help_, "Les guides");
-    e(help_, "L'API et son programme", "", ui::Icon::Cpu, "help.open");
-    e(help_, "L'IHM", "", ui::Icon::Screen, "help.hmi");
-    e(help_, "Les macros", "", ui::Icon::Code, "help.macros");
-    e(help_, "Blocs DFB / DDT", "", ui::Icon::FunctionBlock, "help.blocs");
-    e(help_, "Les expressions", "", ui::Icon::Code, "help.expressions");   // 1.11 (chantier T3, D5)
+    // 1.12.0 : les guides de l'application.
+    if (core::hasApi()) e(help_, "L'API et son programme", "", ui::Icon::Cpu, "help.open");
+    if (core::hasIhm()) e(help_, "L'IHM", "", ui::Icon::Screen, "help.hmi");
+    if (core::hasApi()) e(help_, "Les macros", "", ui::Icon::Code, "help.macros");
+    if (core::hasApi()) e(help_, "Blocs DFB / DDT", "", ui::Icon::FunctionBlock, "help.blocs");
+    if (core::hasIhm()) e(help_, "Les expressions", "", ui::Icon::Code, "help.expressions");   // 1.11 (chantier T3, D5)
     sep(help_);
     head(help_, "Apprendre");
-    e(help_, "Didacticiel de l'API", "", ui::Icon::Play, "help.apiTutorial");     // lot API 7
+    if (core::hasApi()) e(help_, "Didacticiel de l'API", "", ui::Icon::Play, "help.apiTutorial");     // lot API 7
+    if (!core::hasApi()) e(help_, "Didacticiel de l'IHM", "", ui::Icon::Play, "help.hmiTutorial");    // 1.12.0 : XPGAnalyser IHM
     sep(help_);
     head(help_, "Nouveaut\xC3\xA9s et support");
     e(help_, "Nouveaut\xC3\xA9s\xE2\x80\xA6", "", ui::Icon::StarFilled, "help.news");
@@ -303,6 +323,8 @@ void TopBar::setGoTo(ui::WidgetPtr w) {
 void TopBar::setConfiguration(ui::WidgetPtr w) {
     if (!w) return;
     config_ = &addChild(std::move(w));
+    // 1.12.0 : Release / Debug (la sortie vers Control Expert) est celle de l'automate.
+    if (!core::hasApi()) config_->setVisibility(ui::Visibility::Collapsed);
     invalidateLayout();
 }
 
@@ -688,6 +710,7 @@ void TopBar::paintVersion(const ui::PaintContext& ctx, const Part& p, bool hot) 
 }
 
 void TopBar::paintSim(const ui::PaintContext& ctx) const {
+    if (simRect_.w <= 0.f) return;       // 1.12.0 : XPGAnalyser IHM n'a pas la simulation de l'automate
     const auto& c = ctx.theme.color;
     ctx.r.fillRoundedRect(simRect_, c.border, 7.f);
     ctx.r.fillRoundedRect({simRect_.x + 1.f, simRect_.y + 1.f, simRect_.w - 2.f, simRect_.h - 2.f}, c.panelBg, 6.f);

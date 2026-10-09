@@ -39,6 +39,7 @@
 //  deux ; la fenetre principale donne le rythme.
 // =============================================================================
 #include "DetachedWindows.hpp"
+#include "../core/Edition.hpp"   // 1.12.0 : le nom de l'application
 #include "SimDebugPane.hpp"            // Lot API 8 : F11 dans Simulation > Debogage
 #include "hmi/HmiSimulation.hpp"       // 1.10 : F11 dans Simulation . IHM (le plein ecran de l'IHM)
 
@@ -89,7 +90,8 @@ namespace {
 constexpr float kBand = 38.f;
 // Le titre de l'application, apres celui de l'onglet quand la fenetre
 // principale n'en dit pas plus (App : AppOptions::title).
-constexpr const char* kAppTitle = "PLC Project Analyzer";
+// 1.12.0 : celui de son application (XPGAnalyser API, XPGAnalyser IHM).
+std::string appTitle() { return core::editionLabel().empty() ? std::string("PLC Project Analyzer") : core::productName(); }
 
 std::string lowerAscii(std::string_view s) {
     std::string out(s);
@@ -291,7 +293,7 @@ struct DetachedWindows::Impl {
     }
 
     [[nodiscard]] std::string windowTitle(const std::string& tab) const {
-        std::string after = kAppTitle;
+        std::string after = appTitle();
 #if XPG_HAVE_SDL3
         // Celui de la fenetre principale : "<projet> * - PLC Project Analyzer".
         if (mainWindow)

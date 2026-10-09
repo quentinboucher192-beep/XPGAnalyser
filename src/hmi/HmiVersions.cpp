@@ -2,6 +2,7 @@
 //  hmi/HmiVersions.cpp - les versions du projet (lot 21)
 // =============================================================================
 #include "HmiVersions.hpp"
+#include "../core/Edition.hpp"   // 1.12.0 : chaque application, sa moitie
 
 #include "HmiCrypto.hpp"
 #include "HmiExport.hpp"
@@ -242,7 +243,13 @@ bool included(std::string_view p) {
     if (p == "project.xpgproj" || p == "project.lock") return true;
     static const char* const kDirs[] = {"config/", "vars/", "ddt/", "dfb/", "units/", "sections/", "tables/", "ihm/", "donnees/"};
     for (const char* d : kDirs)
-        if (startsWith(p, d)) return !startsWith(p, "ihm/historique/") && !startsWith(p, "ihm/corbeille/");
+        if (startsWith(p, d)) {
+            // 1.12.0 : chaque application versionne (et restaure) sa moitie : XPGAnalyser IHM
+            // ne touche pas au programme d'un dossier de la 1.11, XPGAnalyser API pas a ihm/.
+            const bool ihm = startsWith(p, "ihm/");
+            if (!startsWith(p, "donnees/") && (ihm ? !core::hasIhm() : !core::hasApi())) return false;
+            return !startsWith(p, "ihm/historique/") && !startsWith(p, "ihm/corbeille/");
+        }
     return false;
 }
 
