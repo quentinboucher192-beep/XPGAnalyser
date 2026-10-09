@@ -5237,7 +5237,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     //   varihm remanence-exporter "f.csv"         .csv pour Excel, sinon le format du poste
     //   varihm remanence-importer "f.csv"         l'un ou l'autre ; le compte rendu est ecrit
     //   varihm remanence-etat ["texte"]           l'integrite du stockage ; avec un texte : l'exiger
-    //   varihm fiche "Propriete" ["texte"]        une ligne de la fiche de la ligne choisie ; avec un texte : l'exiger
+    //   varihm fiche "[Categorie/]Ligne" ["texte"] une ligne de la fiche de la ligne choisie ; avec un texte : l'exiger
     if (cmd == "varihm") {
         HmiVariablesPane* pane = nullptr;
         if (auto* page = currentPage())
@@ -5279,14 +5279,21 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             return Step::Next;
         }
         if (what == "fiche") {
+            // "Categorie/Ligne" (une ligne de meme nom dans deux categories : Initiale), ou "Ligne".
+            std::string category, name = path;
+            if (const auto slash = path.find('/'); slash != std::string::npos) {
+                category = path.substr(0, slash);
+                name = path.substr(slash + 1);
+            }
             std::string found;
             bool seen = false;
             for (const auto& c : pane->properties().categories())
-                for (const auto& pr : c.properties)
-                    if (!seen && pr.name == path) {
-                        found = pr.value;
-                        seen = true;
-                    }
+                if (category.empty() || c.name == category)
+                    for (const auto& pr : c.properties)
+                        if (!seen && pr.name == name) {
+                            found = pr.value;
+                            seen = true;
+                        }
             std::printf("[script] fiche %s = %s\n", path.c_str(), seen ? found.c_str() : "(absente)");
             if (!seen) fail("varihm fiche : pas de ligne \"" + path + "\"");
             else if (!arg(3).empty() && found.find(arg(3)) == std::string::npos) fail("varihm fiche : " + path + " = " + found + ", sans \"" + arg(3) + "\"");

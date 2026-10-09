@@ -3954,23 +3954,24 @@ void remanence1116() {
             if (r.var == id && r.kind == app::HmiVariablesPane::Row::Kind::Variable && c < r.cells.size()) return r.cells[c];
         return std::string("?");
     };
-    check(vars.table().model() && vars.table().model()->headerText(6) == "R\xC3\xA9manente" && vars.table().model()->headerText(7) == "Place Modbus",
-          "la colonne R\xC3\xA9manente (apr\xC3\xA8s Acc\xC3\xA8s, avant Place Modbus)");
-    check(cellOfVar(compteur, 6) == "oui" && cellOfVar(libre, 6) == "non", "Compteur : oui ; Libre : non");
-    const auto fiche = [&](const std::string& name) {
+    check(vars.table().model() && vars.table().model()->headerText(3) == "R\xC3\xA9manente" && vars.table().model()->headerText(4) == "\xC3\x89quipement",
+          "la colonne R\xC3\xA9manente (apr\xC3\xA8s Initiale : visible sans d\xC3\xA9" "filer)");
+    check(cellOfVar(compteur, 3) == "oui" && cellOfVar(libre, 3) == "non", "Compteur : oui ; Libre : non");
+    const auto fiche = [&](const std::string& name) {   // la ligne de la categorie Remanence (exploitation)
         for (const auto& c : vars.properties().categories())
-            for (const auto& pr : c.properties)
-                if (pr.name == name) return pr.value;
+            if (c.name == "R\xC3\xA9manence (exploitation)")
+                for (const auto& pr : c.properties)
+                    if (pr.name == name) return pr.value;
         return std::string("?");
     };
     vars.selectVariable(compteur);
-    check(fiche("R\xC3\xA9manente") == "TRUE" && fiche("Derni\xC3\xA8re valeur sauvegard\xC3\xA9" "e") == "35" && fiche("Date de derni\xC3\xA8re sauvegarde") != "\xE2\x80\x94"
-              && fiche("\xC3\x89tat de sauvegarde").find("\xC3\xA0 jour") != std::string::npos && fiche("Valeur initiale") == "0"
-              && fiche("Stockage") == file.string(),
+    check(fiche("R\xC3\xA9manente") == "TRUE" && fiche("Gard\xC3\xA9" "e") == "35" && fiche("Gard\xC3\xA9" "e le") != "\xE2\x80\x94"
+              && fiche("\xC3\x89tat").find("\xC3\xA0 jour") != std::string::npos && fiche("Initiale") == "0"
+              && fiche("Fichier") == file.string(),
           "la fiche : R\xC3\xA9manente, 35 gard\xC3\xA9, sa date, \xC3\xA0 jour, la valeur initiale, le fichier");
-    check(fiche("Valeur actuelle").find("simulation arr\xC3\xAAt\xC3\xA9" "e") != std::string::npos, "valeur actuelle : la simulation est arr\xC3\xAAt\xC3\xA9" "e (pas de fausse valeur)");
+    check(fiche("Actuelle").find("simulation arr\xC3\xAAt\xC3\xA9" "e") != std::string::npos, "valeur actuelle : la simulation est arr\xC3\xAAt\xC3\xA9" "e (pas de fausse valeur)");
     // La case : cocher, decocher (une commande, Ctrl+Z) ; une variable liee : refusee.
-    check(vars.setRetain(libre, true, &why) && p.variableById(libre)->retain && cellOfVar(libre, 6) == "oui", "Libre coch\xC3\xA9" "e");
+    check(vars.setRetain(libre, true, &why) && p.variableById(libre)->retain && cellOfVar(libre, 3) == "oui", "Libre coch\xC3\xA9" "e");
     (void)stack.undo();
     check(!p.variableById(libre)->retain, "Ctrl+Z : d\xC3\xA9" "coch\xC3\xA9" "e");
     Variable lie;
@@ -3981,13 +3982,13 @@ void remanence1116() {
     lie.address = "%MW10";
     p.programs.variables.push_back(lie);
     vars.refresh();
-    check(!vars.setRetain(lie.id, true, &why) && why.find("l'\xC3\xA9quipement") != std::string::npos && cellOfVar(lie.id, 6) == "\xE2\x80\x94",
+    check(!vars.setRetain(lie.id, true, &why) && why.find("l'\xC3\xA9quipement") != std::string::npos && cellOfVar(lie.id, 3) == "\xE2\x80\x94",
           "une variable li\xC3\xA9" "e : refus\xC3\xA9" "e (" + why + "), la case \xE2\x80\x94");
     // Le type change : la fiche le dit.
     for (auto& v : p.programs.variables)
         if (v.id == compteur) v.type = "REAL";
     vars.selectVariable(compteur);
-    check(fiche("\xC3\x89tat de sauvegarde").find("convertie") != std::string::npos, "INT devenu REAL : la fiche dit \xC2\xAB convertie \xC2\xBB");
+    check(fiche("\xC3\x89tat").find("convertie") != std::string::npos, "INT devenu REAL : la fiche dit \xC2\xAB convertie \xC2\xBB");
     for (auto& v : p.programs.variables)
         if (v.id == compteur) v.type = "INT";
     // Exporter (CSV pour Excel), importer, reinitialiser, l'integrite.
@@ -4014,7 +4015,7 @@ void remanence1116() {
     check(vars.retainIntegrity().find("lisible et complet") != std::string::npos, "V\xC3\xA9rifier l'int\xC3\xA9grit\xC3\xA9 : " + vars.retainIntegrity());
     check(vars.resetRetained(compteur, &gone, &why) && gone == 1 && stored() == -1, "R\xC3\xA9initialiser Compteur : sa valeur oubli\xC3\xA9" "e");
     vars.selectVariable(compteur);
-    check(fiche("Derni\xC3\xA8re valeur sauvegard\xC3\xA9" "e") == "aucune", "la fiche relit le stockage : aucune");
+    check(fiche("Gard\xC3\xA9" "e") == "aucune", "la fiche relit le stockage : aucune");
     // Le menu du clic droit : les six commandes.
     vars.openContextMenu({200.f, 200.f});
     std::size_t found = 0;
@@ -9126,7 +9127,7 @@ void lot16_variables_types_tutoriel() {
         const int r = vars.rowOf(key);
         return r >= 0 && table.model()->setCellText(static_cast<ui::RowIndex>(r), col, text);
     };
-    check(cell("Four1", 3, "Balance") && cell("Four1", 4, "43001"), "Four1 li\xC3\xA9 dans la case : Balance, 43001");
+    check(cell("Four1", 4, "Balance") && cell("Four1", 5, "43001"), "Four1 li\xC3\xA9 dans la case : Balance, 43001");   // 1.11.16 : apres la colonne R\xC3\xA9manente
     const auto* v1 = doc->project.variableById(four1);
     check(v1 && v1->equipment == "Balance" && v1->address == "43001", "les donn\xC3\xA9" "es de la liaison (les m\xC3\xAAmes que Variables li\xC3\xA9" "es)");
     // Un type neuf a deux membres pour commencer (Valeur : REAL, Marche : BOOL) : 13 mots.
@@ -9962,8 +9963,8 @@ void lot20_copier_coller_excel() {
     table.selectModelRows({static_cast<ui::RowIndex>(vars.rowOf("Pression_Entree")), static_cast<ui::RowIndex>(vars.rowOf("Consigne_Pression"))});
     check(table.copySelection(true) == 2, "Ctrl+C : deux lignes copi\xC3\xA9" "es");
     const auto copied = app::paste::parseGrid(essaiPressePapiers());
-    check(copied.size() == 3 && copied[0][0] == "Nom" && copied[0][3] == "\xC3\x89quipement" && copied[1][0] == "Consigne_Pression"
-              && copied[2][0] == "Pression_Entree" && copied[2][4] == "%MW3010",
+    check(copied.size() == 3 && copied[0][0] == "Nom" && copied[0][3] == "R\xC3\xA9manente" && copied[0][4] == "\xC3\x89quipement"
+              && copied[1][0] == "Consigne_Pression" && copied[2][0] == "Pression_Entree" && copied[2][5] == "%MW3010",
           "le presse-papiers : les titres, puis les lignes dans l'ordre de la table");
     (void)table.copySelection(false);
     check(app::paste::parseGrid(essaiPressePapiers()).size() == 2, "Ctrl+Maj+C : sans les titres");
@@ -23085,7 +23086,7 @@ void variablesInternes1118() {
         const int r = vars.rowOf(key);
         return r >= 0 && static_cast<std::size_t>(r) < vars.rows().size() && vars.rows()[r].cells.size() > col ? vars.rows()[r].cells[col] : std::string("?");
     };
-    check(cellOf("V[0].NOM", 3) == "\xE2\x86\xB3 V" && cellOf("V[0].NOM", 4) == "%MW19", "V[0].NOM : attribu\xC3\xA9" "e \xC3\xA0 V, %MW19 (la capture)");
+    check(cellOf("V[0].NOM", 4) == "\xE2\x86\xB3 V" && cellOf("V[0].NOM", 5) == "%MW19", "V[0].NOM : attribu\xC3\xA9" "e \xC3\xA0 V, %MW19 (la capture)");
     // Le clic droit sur la ligne choisie : Rendre interne.
     auto* menu = vars.table().contextMenu();
     const auto entry = [&](const std::string& label) -> const ui::PopupMenu::Item* {
@@ -23105,10 +23106,10 @@ void variablesInternes1118() {
     const auto* v = doc->project.variableById(vid);
     check(v && v->internal == std::vector<std::string>{"[0].NOM"}, "V[0].NOM interne (une seule commande)");
     vars.refresh();
-    check(cellOf("V[0].NOM", 3) == "interne (IHM)" && cellOf("V[0].NOM", 4).empty() && cellOf("V[0].NOM", 7) == "dans l'IHM",
+    check(cellOf("V[0].NOM", 4) == "interne (IHM)" && cellOf("V[0].NOM", 5).empty() && cellOf("V[0].NOM", 7) == "dans l'IHM",
           "la ligne le dit : interne (IHM), sans adresse, dans l'IHM");
-    check(cellOf("V[0].CMD_OUV", 4) == "%MW35.0", "la place reste r\xC3\xA9serv\xC3\xA9" "e : V[0].CMD_OUV ne bouge pas");
-    check(cellOf("V[0]", 3).find("1 interne") != std::string::npos, "V[0] le dit : \xE2\x86\xB3 V \xC2\xB7 1 interne");
+    check(cellOf("V[0].CMD_OUV", 5) == "%MW35.0", "la place reste r\xC3\xA9serv\xC3\xA9" "e : V[0].CMD_OUV ne bouge pas");
+    check(cellOf("V[0]", 4).find("1 interne") != std::string::npos, "V[0] le dit : \xE2\x86\xB3 V \xC2\xB7 1 interne");
     // Dans toutes les cases (V[*].NOM), puis Recalculer la place memoire (le bouton).
     vars.selectPath("V[0].NOM");
     vars.openContextMenu({400, 300});
@@ -23120,7 +23121,7 @@ void variablesInternes1118() {
     check(vars.lastMessage().find("mots 17 \xC3\xA0 208") != std::string::npos && vars.lastMessage().find("mots 17 \xC3\xA0 1232") != std::string::npos,
           "le message : " + vars.lastMessage());
     vars.refresh();
-    check(cellOf("V[0].CMD_OUV", 4) == "%MW19.0" && cellOf("V", 7) == "mots 17 \xC3\xA0 208", "recalcul\xC3\xA9" "e : V[0].CMD_OUV %MW19.0, V : mots 17 \xC3\xA0 208");
+    check(cellOf("V[0].CMD_OUV", 5) == "%MW19.0" && cellOf("V", 7) == "mots 17 \xC3\xA0 208", "recalcul\xC3\xA9" "e : V[0].CMD_OUV %MW19.0, V : mots 17 \xC3\xA0 208");
     // Ctrl+Z : la place d'origine ; Ctrl+Z encore : V[0].NOM seulement.
     (void)stack.undo();
     check(!doc->project.variableById(vid)->compact, "Ctrl+Z : la place d'origine");
@@ -23148,7 +23149,7 @@ void variablesInternes1118() {
     check(vars.setMemberAddress(vid, "[2]", "%MW500", &why), "V[2] part de %MW500" + (why.empty() ? std::string{} : " (" + why + ")"));
     vars.refresh();
     vars.setExpanded("V[2]", true);
-    check(cellOf("V[2].POSITION", 4) == "%MW500" && cellOf("V[2].OUV", 4) == "%MW501.0" && cellOf("V[2]", 4).find("%MW500") == 0,
+    check(cellOf("V[2].POSITION", 5) == "%MW500" && cellOf("V[2].OUV", 5) == "%MW501.0" && cellOf("V[2]", 5).find("%MW500") == 0,
           "V[2].POSITION %MW500, V[2].OUV %MW501.0 ; V[2] porte le crayon");
     check(!vars.setMemberAddress(vid, "[2]", "%M100", &why), "un bit pour le d\xC3\xA9part d'une structure de mots : refus\xC3\xA9 (" + why + ")");
     check(!vars.setMemberAddress(vid, "[0].OUV", "%MW900.1", &why), "un membre interne n'a pas d'adresse : refus\xC3\xA9 (" + why + ")");

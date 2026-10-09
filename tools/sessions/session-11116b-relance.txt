@@ -1,0 +1,63 @@
+# =============================================================================
+#  Session 11116 B : LA RELANCE (lot 4). L'application a ete quittee pendant que
+#  le poste tournait (session A : Consigne_Pression = 3.75, Vitesse_Pompe = 72.5).
+#  Relancee :
+#    1. l'editeur : la fiche relit le stockage du poste (3.75, a jour) ;
+#    2. Exporter (CSV pour Excel), Verifier l'integrite, Reinitialiser
+#       Consigne_Pression (la question) ;
+#    3. le poste : Vitesse_Pompe rendue (72.5) ; Secondes_IHM repart d'ou elle en
+#       etait ; Consigne_Pression, reinitialisee, repart de sa valeur initiale
+#       (2.5) ; Mode_Pompe, non remanente, a sa valeur initiale (2).
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- 1. L'editeur : la fiche relit le stockage du poste ----
+arbre "IHM/Programmation générale/Variables IHM"
+attendre 8
+varihm choisir "Consigne_Pression"
+attendre 3
+varihm fiche "Rémanente" "TRUE"
+varihm fiche "Rémanence (exploitation)/Gardée" "3.75"
+varihm fiche "Rémanence (exploitation)/État" "à jour"
+varihm remanence-etat "lisible et complet"
+capture 11116b_01_fiche_apres_relance.png
+
+# ---- 2. Exporter, Verifier l'integrite, Reinitialiser ----
+varihm remanence-exporter "remanence_exploitation.csv"
+varihm menu "Consigne_Pression"
+attendre 3
+choisir "Vérifier l'intégrité des données rémanentes"
+attendre 6
+capture 11116b_02_verifier_integrite.png
+bouton "Fermer"
+attendre 3
+varihm menu "Consigne_Pression"
+attendre 3
+choisir "Réinitialiser cette variable rémanente"
+attendre 6
+capture 11116b_03_question_reinitialiser.png
+bouton "Réinitialiser"
+attendre 5
+varihm choisir "Vitesse_Pompe"
+attendre 2
+varihm choisir "Consigne_Pression"
+attendre 3
+varihm fiche "Rémanence (exploitation)/Gardée" "aucune"
+capture 11116b_04_reinitialisee.png
+
+# ---- 3. Le poste : les valeurs rendues apres la relance ----
+poste
+attendre-poste
+attendre 10
+ihm-variable "Vitesse_Pompe" "72.5"
+ihm-variable "Consigne_Pression" "2.5"
+ihm-variable "Mode_Pompe" "2"
+ihm-variable "Secondes_IHM"
+ihm-remanence-poste "valeur(s) gardée(s)"
+capture 11116b_05_poste_valeurs_rendues.png
+quitter

@@ -1,0 +1,76 @@
+# =============================================================================
+#  Session 11116 A : LA REMANENCE D'EXPLOITATION (lot 4) - l'editeur, le poste.
+#  Sur la copie corrigee d'Armoire_Gaz (session 11113), sans cache ni stockage
+#  du poste (ihm/historique/remanence_exploitation.txt absent) :
+#    1. Variables IHM : la colonne Remanente ; Consigne_Pression, Vitesse_Pompe
+#       et Secondes_IHM cochees (pas Compteur_Clics : le script Init, au
+#       Demarrage, le remet a 0 - les valeurs rendues passent avant lui) ;
+#       la fiche « Remanence (exploitation) » ; le clic droit et ses commandes ;
+#    2. § 19 : un diagnostic double-clique ouvre le script a sa ligne ;
+#    3. le projet enregistre ; le poste d'exploitation : une saisie gardee des
+#       qu'elle change (sans attendre l'arret) ;
+#    4. l'application quittee PENDANT que le poste tourne. La session B la relance.
+#  (Le poste d'Armoire_Gaz a un mot de passe de sortie : la session ne le quitte
+#  pas par sa fenetre de sortie, elle ferme l'application.)
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- 1. Variables IHM : la colonne Remanente, la fiche, le clic droit ----
+arbre "IHM/Programmation générale/Variables IHM"
+attendre 8
+varihm remanente "Consigne_Pression" oui
+varihm remanente "Vitesse_Pompe" oui
+varihm remanente "Secondes_IHM" oui
+attendre 2
+varihm choisir "Consigne_Pression"
+attendre 3
+varihm fiche "Rémanente" "TRUE"
+varihm fiche "Rémanence (exploitation)/Initiale" "2.5"
+varihm fiche "Rémanence (exploitation)/État" "jamais sauvegardée"
+varihm remanence-etat "3 variable(s) rémanente(s)"
+capture 11116_01_colonne_remanente_et_fiche.png
+varihm menu "Consigne_Pression"
+attendre 2
+capture 11116_02_clic_droit_remanence.png
+touche Escape
+attendre 2
+
+# ---- 2. § 19 : le double-clic d'un diagnostic ouvre le script a sa ligne ----
+ihm-script-modifier "Horloge" "IHM_LOG(BLABLA, 'x');"
+attendre 5
+ihm-build compiler sans-fenetre
+ihm-build-attendre 600
+ihm-build-etat "erreur"
+ihm-sorties diagnostics
+attendre 3
+ligne "BLABLA" double
+attendre 6
+ihm-curseur 2 "Horloge"
+capture 11116_03_diagnostic_vers_la_source.png
+annuler
+attendre 3
+
+# ---- 3. Le projet enregistre ; le poste : une saisie gardee des qu'elle change ----
+action project.save
+attendre 5
+poste
+attendre-poste
+attendre 10
+ihm-remanence-poste "valeur(s) gardée(s)"
+ihm-variable-ecrire "Consigne_Pression" "3.75"
+ihm-variable-ecrire "Vitesse_Pompe" "72.5"
+#  (le poste ecrit au plus une fois par seconde : deux secondes)
+attendre 120
+ihm-remanence-poste "écrites le"
+ihm-variable "Consigne_Pression" "3.75"
+ihm-variable "Vitesse_Pompe" "72.5"
+ihm-variable "Secondes_IHM"
+capture 11116_04_poste_saisie_gardee.png
+
+# ---- 4. L'application quittee pendant que le poste tourne ----
+quitter

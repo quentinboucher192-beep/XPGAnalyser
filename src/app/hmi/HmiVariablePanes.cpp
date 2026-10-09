@@ -61,7 +61,7 @@ std::string allElementsOf(std::string_view rel) {
     return out;
 }
 constexpr int kMenuBase = -1000;
-enum Col : std::size_t { CName, CType, CInitial, CEquipment, CAddress, CAccess, CRetain, CPlace, CQuality, CCount };   // 1.11.16 : CRetain
+enum Col : std::size_t { CName, CType, CInitial, CRetain, CEquipment, CAddress, CAccess, CPlace, CQuality, CCount };   // 1.11.16 : CRetain, apres Initiale
 
 const std::string kDash = "\xE2\x80\x94";
 const std::string kRW = "lecture, \xC3\xA9" "criture";
@@ -280,7 +280,7 @@ public:
     [[nodiscard]] std::size_t rowCount() const override { return rows_.size(); }
     [[nodiscard]] std::size_t columnCount() const override { return CCount; }
     [[nodiscard]] std::string headerText(std::size_t c) const override {
-        static const char* h[] = {"Nom", "Type", "Initiale", "\xC3\x89quipement", "Adresse", "Acc\xC3\xA8s", "R\xC3\xA9manente", "Place Modbus", "Qualit\xC3\xA9 (en marche)"};
+        static const char* h[] = {"Nom", "Type", "Initiale", "R\xC3\xA9manente", "\xC3\x89quipement", "Adresse", "Acc\xC3\xA8s", "Place Modbus", "Qualit\xC3\xA9 (en marche)"};
         return c < CCount ? h[c] : std::string{};
     }
     [[nodiscard]] std::string cellText(ui::RowIndex r, std::size_t c) const override {
@@ -530,8 +530,8 @@ HmiVariablesPane::HmiVariablesPane(std::string id, hmi::DocumentPtr doc, Apply a
     table->onContextMenu = [this](gfx::Point at) { openContextMenu(at); };     // 1.10 (chantier O)
     // ---- fin Lot API 8 ----
     table->setColumns({{"Nom", 240.f, 80.f, true, false}, {"Type", 175.f, 60.f, true, false}, {"Initiale", 80.f, 40.f, true, false},
+                       {"R\xC3\xA9manente", 92.f, 50.f, true, false},   // 1.11.16 : la remanence d'exploitation (pres de la valeur initiale)
                        {"\xC3\x89quipement", 140.f, 60.f, true, false}, {"Adresse", 86.f, 50.f, true, false}, {"Acc\xC3\xA8s", 112.f, 50.f, true, false},
-                       {"R\xC3\xA9manente", 92.f, 50.f, true, false},   // 1.11.16 : la remanence d'exploitation
                        {"Place Modbus", 180.f, 60.f, true, false, true, ui::Align::Start, 0, false},
                        {"Qualit\xC3\xA9 (en marche)", 170.f, 60.f, true, false, true, ui::Align::Start, 0, false}});
     // Lot 20 : plusieurs lignes se choisissent (Maj, Ctrl) - pour les copier vers Excel.
@@ -864,8 +864,8 @@ void HmiVariablesPane::emitVariable(const hmi::Variable& v, int depth) {
             if (q == hmi::comm::Quality::None) quality = "en attente de la liaison";
         }
     }
-    r.cells = {v.name, v.type, initial, v.bound() ? v.equipment : std::string("(locale)"), v.bound() ? (v.address.empty() ? std::string("(sans)") : v.address) : kDash,
-               v.bound() ? (v.readOnly ? kRO : kRW) : kDash, retainCellOf(v), place, quality};
+    r.cells = {v.name, v.type, initial, retainCellOf(v), v.bound() ? v.equipment : std::string("(locale)"),
+               v.bound() ? (v.address.empty() ? std::string("(sans)") : v.address) : kDash, v.bound() ? (v.readOnly ? kRO : kRW) : kDash, place, quality};
     rows_.push_back(std::move(r));
     if (!isOpen) return;
     Leaves leaves;
@@ -970,8 +970,8 @@ void HmiVariablesPane::emitMembers(const hmi::Variable& v, const Leaves& leaves,
         if (internal) equipmentCell = "interne (IHM)";
         else if (internals > 0) equipmentCell += " \xC2\xB7 " + std::to_string(internals) + " interne" + (internals > 1 ? "s" : "");
         if (internal) quality.clear();
-        r.cells = {k.path, k.type, initial, equipmentCell, v.bound() && !internal ? address : std::string{},
-                   !v.bound() ? std::string{} : internal ? std::string("IHM") : "(" + v.name + ")", std::string{},
+        r.cells = {k.path, k.type, initial, std::string{}, equipmentCell, v.bound() && !internal ? address : std::string{},
+                   !v.bound() ? std::string{} : internal ? std::string("IHM") : "(" + v.name + ")",
                    place.empty() && v.bound() ? std::string("sans place") : place, quality};
         rows_.push_back(std::move(r));
         if (isOpen) emitMembers(v, leaves, k.path, k.rel, k.type, depth + 1);
@@ -2288,7 +2288,7 @@ void HmiVariablesPane::rebuildProperties() {
                                  "les scripts de D\xC3\xA9marrage. La simulation de l'\xC3\xA9" "diteur n'y \xC3\xA9" "crit jamais (sa r\xC3\xA9manence est \xC3\xA0 part).";
         if (v->bound())
             c.properties.push_back(prop("R\xC3\xA9manente", v->retain ? "oui (sans effet : li\xC3\xA9" "e)" : "sans objet (li\xC3\xA9" "e)", PG::ValueType::ReadOnly,
-                                        {}, {}, "Li\xC3\xA9" "e \xC3\xA0 " + v->equipment + " : sa valeur vient de l'\xC3\xA9quipement, qui la garde."));
+                                        {}, {}, "R\xC3\xA9manente : li\xC3\xA9" "e \xC3\xA0 " + v->equipment + ", sa valeur vient de l'\xC3\xA9quipement, qui la garde."));
         else
             c.properties.push_back(prop("R\xC3\xA9manente", v->retain ? "TRUE" : "FALSE", PG::ValueType::Boolean, [this, id](std::string_view text) {
                 std::string why;
@@ -2299,22 +2299,25 @@ void HmiVariablesPane::rebuildProperties() {
         std::string initial = v->initial;
         if (const auto* e = hmi::findEnumeration(p, v->type)) initial = enumInitialText(*e, v->initial);
         else if (trimmed(initial).empty()) initial = composite ? std::string("celles du type") : std::string("la valeur par d\xC3\xA9" "faut du type");
-        c.properties.push_back(prop("Valeur initiale", initial, PG::ValueType::ReadOnly, {}, {},
-                                    "Reprise quand rien n'est gard\xC3\xA9, apr\xC3\xA8s une r\xC3\xA9initialisation, ou si le type a chang\xC3\xA9 sans conversion possible."));
+        c.properties.push_back(prop("Initiale", initial, PG::ValueType::ReadOnly, {}, {},
+                                    "Valeur initiale : reprise quand rien n'est gard\xC3\xA9, apr\xC3\xA8s une r\xC3\xA9initialisation, ou si le type a chang\xC3\xA9 sans conversion possible."));
         const std::string current = hosts_.currentValue ? hosts_.currentValue(v->name) : std::string{};
-        c.properties.push_back(prop("Valeur actuelle", current.empty() ? std::string("\xE2\x80\x94 (simulation arr\xC3\xAAt\xC3\xA9" "e)")
-                                                                        : current + " (simulation de l'\xC3\xA9" "diteur : jamais gard\xC3\xA9" "e)",
+        c.properties.push_back(prop("Actuelle", current.empty() ? std::string("\xE2\x80\x94 (simulation arr\xC3\xAAt\xC3\xA9" "e)")
+                                                                 : current + " (simulation de l'\xC3\xA9" "diteur : jamais gard\xC3\xA9" "e)",
                                     PG::ValueType::ReadOnly, {}, {},
-                                    "Sur le poste d'exploitation, c'est la valeur du moment qui est gard\xC3\xA9" "e ; ici, la simulation de l'\xC3\xA9" "diteur (s\xC3\xA9par\xC3\xA9" "e)."));
+                                    "Valeur actuelle : sur le poste d'exploitation, c'est la valeur du moment qui est gard\xC3\xA9" "e ; ici, celle de la simulation de "
+                                    "l'\xC3\xA9" "diteur (s\xC3\xA9par\xC3\xA9" "e, jamais gard\xC3\xA9" "e)."));
         const auto* store = retainStore();
         const auto st = hmi::retain::stateOf(p, *v, store);
-        c.properties.push_back(prop("Derni\xC3\xA8re valeur sauvegard\xC3\xA9" "e", st.saved ? st.value : std::string("aucune")));
-        c.properties.push_back(prop("Date de derni\xC3\xA8re sauvegarde", st.date.empty() ? kDash : st.date));
-        c.properties.push_back(prop("\xC3\x89tat de sauvegarde", retainNote_.empty() ? st.state : retainNote_ + " \xE2\x80\x94 " + st.state, PG::ValueType::ReadOnly,
-                                    {}, {}, "Lu dans le stockage du poste. Clic droit : R\xC3\xA9initialiser cette variable r\xC3\xA9manente."));
+        c.properties.push_back(prop("Gard\xC3\xA9" "e", st.saved ? st.value : std::string("aucune"), PG::ValueType::ReadOnly, {}, {},
+                                    "Derni\xC3\xA8re valeur sauvegard\xC3\xA9" "e par le poste d'exploitation (une structure : son nombre de cases)."));
+        c.properties.push_back(prop("Gard\xC3\xA9" "e le", st.date.empty() ? kDash : st.date, PG::ValueType::ReadOnly, {}, {},
+                                    "Date de derni\xC3\xA8re sauvegarde : une valeur qui ne change pas garde sa date."));
+        c.properties.push_back(prop("\xC3\x89tat", retainNote_.empty() ? st.state : retainNote_ + " \xE2\x80\x94 " + st.state, PG::ValueType::ReadOnly,
+                                    {}, {}, "\xC3\x89tat de sauvegarde, lu dans le stockage du poste. Clic droit : R\xC3\xA9initialiser cette variable r\xC3\xA9manente."));
         const std::string file = retainFile();
-        c.properties.push_back(prop("Stockage", file.empty() ? std::string("projet jamais enregistr\xC3\xA9") : file, PG::ValueType::ReadOnly, {}, {},
-                                    "Le fichier du poste (et sa copie .bak) : \xC3\xA9" "crit d'un bloc, hors des versions du projet."));
+        c.properties.push_back(prop("Fichier", file.empty() ? std::string("projet jamais enregistr\xC3\xA9") : file, PG::ValueType::ReadOnly, {}, {},
+                                    "Le stockage du poste (et sa copie .bak) : \xC3\xA9" "crit d'un bloc, hors des versions du projet."));
         cats.push_back(std::move(c));
     }
     if (composite && v->bound()) {
