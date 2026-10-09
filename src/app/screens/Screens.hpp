@@ -716,6 +716,11 @@ public:
     // derniere ligne ; une ligne (message ou source) contient-elle ce texte ?
     [[nodiscard]] std::string hmiConsoleSummary() const;
     [[nodiscard]] bool hmiConsoleHas(std::string_view text) const;
+    // 1.11.21 (les sessions) : ce que montrent les Diagnostics du panneau du bas (le direct, puis le
+    // build) ; une ligne des Sorties.
+    [[nodiscard]] std::string hmiDiagnosticsSummary() const;
+    [[nodiscard]] bool hmiDiagnosticsHas(std::string_view text) const;
+    [[nodiscard]] bool hmiOutputsHas(std::string_view text) const;
     // 1.11.15 (ihm-remanence, ihm-sim-etat, ihm-variable) : l'option de la remanence de
     // simulation ; l'etat de la simulation IHM en clair ; la valeur d'une variable IHM.
     void scriptHmiKeepData(bool on);
@@ -795,6 +800,8 @@ private:
     void askHmiDeleteVariable(std::uint64_t variableId);
     // Le lot 7 : les fonctions IHM (Programmation generale > Fonctions).
     void openHmiFunctions(std::uint64_t functionId = 0, int line = 0);
+    // 1.11.21 : un noeud du contenu d'un code (l'arbre) : son code, a l'onglet ou a la ligne voulus.
+    void openHmiCodeTarget(const ProjectTreeModel::CodeTarget& t);
     void askHmiNewFunction();
     void askHmiDeleteFunction(std::uint64_t functionId);
     void askHmiTryFunction(std::uint64_t functionId);

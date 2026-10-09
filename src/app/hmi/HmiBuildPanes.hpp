@@ -127,6 +127,8 @@ public:
     [[nodiscard]] const std::vector<hmi::pipeline::Diagnostic>& liveDiagnostics() const noexcept { return live_; }
     // Ce que l'onglet Diagnostics montre, dans son ordre (le direct, puis le dernier build), filtres compris.
     [[nodiscard]] std::vector<hmi::pipeline::Diagnostic> shownDiagnostics() const;
+    // Une ligne des Sorties contient `text` (les sessions rejouees le verifient).
+    [[nodiscard]] bool hasLine(std::string_view text) const;
     const core::SignalPtr<hmi::pipeline::Diagnostic> liveActivated = core::Signal<hmi::pipeline::Diagnostic>::create();
     [[nodiscard]] ui::TableView& outputTable() noexcept { return *out_; }
     [[nodiscard]] ui::TableView& diagnosticTable() noexcept { return *diagTable_; }

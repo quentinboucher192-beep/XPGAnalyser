@@ -282,6 +282,7 @@ bool MainAnalysisScreen::isHmiNode(ui::NodeId n) {
         // faisait rien (openHmiNode les attendait pourtant).
         || k == NK::HmiObjectAlarms || k == NK::HmiObjectAlarm || k == NK::HmiObjectOperators || k == NK::HmiObjectOperator
         || (k >= NK::HmiObjectFunctions && k <= NK::HmiSymbolFunction)    // 1.11.10 : les fonctions et popups d'un symbole
+        || (k >= NK::HmiCodeGroup && k <= NK::HmiSymbolOverloads)         // 1.11.21 : le contenu d'un code, les surcharges
         || k == NK::HmiObjectFamily || k == NK::HmiObjectParam || k == NK::HmiObjectMarker
         || k == NK::VersionsFolder || k == NK::VersionItem;                           // lot 21 : les versions
 }
@@ -540,6 +541,7 @@ void MainAnalysisScreen::openHmiNode(ui::NodeId n) {
             openHmiView(treeModel_->hmiViewOf(n), -1, treeModel_->hmiObjectOf(n));
             break;
         // ---- 1.11.10 : une fonction d'un symbole : son editeur, le sous-onglet Fonctions, elle ----
+        case NK::HmiSymbolOverloads:       // 1.11.21 : les surcharges d'un nom - la premiere
         case NK::HmiSymbolFunction: {
             const auto viewId = treeModel_->hmiViewOf(n);
             openHmiView(viewId);
@@ -677,8 +679,17 @@ void MainAnalysisScreen::openHmiNode(ui::NodeId n) {
             openHmiPane("fonctions");
             break;
         case NK::HmiFunction:
+        case NK::HmiOverloads:             // 1.11.21 : les surcharges d'un nom - la premiere
             openHmiFunctions(treeModel_->hmiIdOf(n));
             break;
+        // ---- 1.11.21 : le contenu d'un code (un groupe, une declaration, une fonction interne) ----
+        case NK::HmiCodeGroup:
+        case NK::HmiCodeEntry:
+        case NK::HmiCodeInner: {
+            ProjectTreeModel::CodeTarget t;
+            if (treeModel_->codeTargetOf(n, t)) openHmiCodeTarget(t);
+            break;
+        }
         case NK::HmiUsedVariable: {
             // Une variable IHM : la ou elle se declare ; une variable de
             // l'automate : la table des variables du programme (et leurs emplois).
@@ -2756,6 +2767,49 @@ void MainAnalysisScreen::askHmiDeleteVariable(std::uint64_t variableId) {
 }
 
 // ---- lot 7 : les fonctions IHM ---------------------------------------------------
+// 1.11.21 : un noeud du contenu d'un code (l'arbre) - le code ouvert, puis : un groupe, son onglet
+// (Parametres, Constantes, Variables ; Fonctions internes : le code) ; une declaration, sa ligne
+// dans son onglet (une declaration restee dans le texte : sa ligne dans le code) ; une fonction
+// interne ou l'une de ses declarations, sa ligne dans le code.
+void MainAnalysisScreen::openHmiCodeTarget(const ProjectTreeModel::CodeTarget& t) {
+    using OK = hmitree::OutlineKind;
+    const bool inner = t.group == static_cast<int>(OK::Functions);
+    const bool declaration = !t.name.empty() && !inner;
+    if (t.kind == 1 || t.kind == 2) {                       // un script general, un script de vue
+        openHmiScripts(t.owner, t.id, inner && t.line > 0 ? t.line : 0);
+        auto* pane = dynamic_cast<HmiScriptsPane*>(hmiTab(t.owner ? "scripts:" + std::to_string(t.owner) : std::string("scripts")));
+        if (!pane) return;
+        if (t.kind == 1) pane->showTab(HmiScriptsPane::TabScripts);
+        if (declaration) {
+            if (!pane->showDeclaration(t.name) && t.line > 0) pane->goTo(asId(t.id), t.line);
+        } else if (t.group == static_cast<int>(OK::Constants)) pane->showCodeTab(HmiScriptsPane::CodeTabConstants);
+        else if (t.group == static_cast<int>(OK::Variables)) pane->showCodeTab(HmiScriptsPane::CodeTabVariables);
+        else if (!inner || t.line <= 0) pane->showCodeTab(HmiScriptsPane::CodeTabCode);
+        return;
+    }
+    HmiFunctionsPane* pane = nullptr;
+    if (t.kind == 3) {                                      // une fonction IHM
+        openHmiFunctions(t.id, inner && t.line > 0 ? t.line : 0);
+        pane = dynamic_cast<HmiFunctionsPane*>(hmiTab("fonctions"));
+    } else if (t.kind == 4) {                               // une fonction d'un symbole
+        openHmiView(t.owner);
+        auto* editor = dynamic_cast<HmiEditor*>(hmiTab("vue:" + std::to_string(t.owner)));
+        if (editor && editor->symbolTabs() && editor->symbolFunctions()) {
+            editor->symbolTabs()->setCurrent(HmiSymbolTabs::Functions);
+            pane = editor->symbolFunctions();
+            if (inner && t.line > 0) pane->goTo(asId(t.id), t.line);
+            else pane->selectFunction(asId(t.id));
+        }
+    }
+    if (!pane) return;
+    if (declaration) {
+        if (!pane->showDeclaration(t.name) && t.line > 0) pane->goTo(asId(t.id), t.line);
+    } else if (t.group == static_cast<int>(OK::Parameters)) pane->showCodeTab(HmiFunctionsPane::CodeTabParameters);
+    else if (t.group == static_cast<int>(OK::Constants)) pane->showCodeTab(HmiFunctionsPane::CodeTabConstants);
+    else if (t.group == static_cast<int>(OK::Variables)) pane->showCodeTab(HmiFunctionsPane::CodeTabLocals);
+    else if (!inner || t.line <= 0) pane->showCodeTab(HmiFunctionsPane::CodeTabCode);
+}
+
 void MainAnalysisScreen::openHmiFunctions(std::uint64_t functionId, int line) {
     openHmiPane("fonctions");
     auto* pane = dynamic_cast<HmiFunctionsPane*>(hmiTab("fonctions"));

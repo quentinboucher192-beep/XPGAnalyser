@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.11.20", "09/10/2026", "livr\xC3\xA9" "e le 09/10 dans l'apr\xC3\xA8s-midi"},
+    {"1.11.21", "09/10/2026", "livr\xC3\xA9" "e le 09/10 dans l'apr\xC3\xA8s-midi"},
+    {"1.11.20", "09/10/2026", "livr\xC3\xA9" "e le 09/10 en fin de matin\xC3\xA9" "e"},
     {"1.11.19", "09/10/2026", "livr\xC3\xA9" "e le 09/10 \xC3\xA0 la mi-journ\xC3\xA9" "e"},
     {"1.11.18", "09/10/2026", "livr\xC3\xA9" "e le 09/10 dans la matin\xC3\xA9" "e"},
     {"1.11.17", "09/10/2026", "livr\xC3\xA9" "e le 09/10 au matin"},
@@ -101,7 +102,21 @@ const std::vector<Note>& table() {
     static const std::vector<Note> t = {
         // 1.11.16 (09/10/2026 dans la nuit) : la remanence d'exploitation par variable, la robustesse
         // (lot 4 de la specification du 08/10).
-        // 1.11.20 (09/10/2026 dans l'apres-midi) : les signatures - E/S et sorties comptees partout,
+        // 1.11.21 (09/10/2026 dans l'apres-midi) : les editeurs sans bandeaux, les explorateurs deplies,
+        // les types des arguments, la valeur d'une declaration qui suit son type.
+        note("1.11.21", "Scripts", Kind::Changed,
+         "PLUS DE BANDEAUX DIAGNOSTICS ET ESSAI DANS LES \xC3\x89" "DITEURS : l'\xC3\xA9" "diteur d'un script, d'une fonction ou d'op\xC3\xA9rateurs prend toute la hauteur. Ses fautes restent soulign\xC3\xA9" "es dans le code ; elles vont en direct au panneau du bas, onglet Diagnostics, en t\xC3\xAAte (l'\xC3\xA9tape Saisie) - un double-clic y ram\xC3\xA8ne le curseur. La barre du volet les compte ; un clic sur elle ouvre le panneau. Le r\xC3\xA9sultat d'Essayer va aux Sorties (cat\xC3\xA9gorie Essai).",
+         "verifier", ""),
+        note("1.11.21", "Scripts", Kind::New,
+         "LES EXPLORATEURS D\xC3\x89PLIENT LES CODES : dans l'arbre, un script montre ses Constantes, ses Variables et ses Fonctions internes (leur signature, leurs param\xC3\xA8tres et leurs locales) ; une fonction IHM ou d'un symbole, ses Param\xC3\xA8tres (avec leur mode : E/S, sortie), ses Variables locales et ses Constantes. Les surcharges sont regroup\xC3\xA9" "es sous leur nom (\xC2\xAB Convertir \xC2\xB7 3 surcharges \xC2\xBB). Un clic ouvre le code \xC3\xA0 la d\xC3\xA9" "claration ou \xC3\xA0 la ligne. L'explorateur d'objets montre les fonctions d'une instance de symbole.",
+         "fonctions", ""),
+        note("1.11.21", "Scripts", Kind::Fixed,
+         "LES TYPES DES ARGUMENTS : un appel \xC3\xA0 une seule surcharge du bon nombre d'arguments est contr\xC3\xB4l\xC3\xA9 aussi - une E/S d'un autre type est une faute (la simulation refuse l'appel), une autre conversion interdite un avertissement (la simulation la fait sans rien dire). Dans une expression de vue, un avertissement d'appel n'est plus une erreur qui bloque la simulation.",
+         "fonctions", ""),
+        note("1.11.21", "Scripts", Kind::Fixed,
+         "LA VALEUR D'UNE D\xC3\x89" "CLARATION SUIT SON TYPE : changer le type retire la valeur initiale qui ne lui convient plus (0 pour un ARRAY[1..4] OF T_Four ; une constante prend la valeur nulle de son type), et la barre le dit - un seul Ctrl+Z. Une valeur qui ne convient pas au type (un texte pour un INT, 40000 pour un INT, une valeur pour une structure) est refus\xC3\xA9" "e.",
+         "variables-locales", ""),
+        // 1.11.20 (09/10/2026 en fin de matinee) : les signatures - E/S et sorties comptees partout,
         // les surcharges (la spec, § 10, avancee a la demande du 09/10).
         note("1.11.20", "Scripts", Kind::Fixed,
          "LES PARAM\xC3\x88TRES E/S ET SORTIES COMPTENT : un param\xC3\xA8tre VAR_IN_OUT (par r\xC3\xA9" "f\xC3\xA9rence) ou VAR_OUTPUT (une sortie) est un param\xC3\xA8tre comme une entr\xC3\xA9" "e. L'appel Random(0.0, 1.0, Graine, Tirage) n'est plus refus\xC3\xA9 (\xC2\xAB Random prend 2 arguments \xC2\xBB) ; la signature, la liste et la propri\xC3\xA9t\xC3\xA9 Param\xC3\xA8tres, l'arbre, l'aide \xC3\xA0 la saisie et Essayer les montrent tous. Un argument pass\xC3\xA9 par r\xC3\xA9" "f\xC3\xA9rence doit \xC3\xAAtre une variable, et c'est dit \xC3\xA0 la saisie ; le param\xC3\xA8tre qui manque est nomm\xC3\xA9.",

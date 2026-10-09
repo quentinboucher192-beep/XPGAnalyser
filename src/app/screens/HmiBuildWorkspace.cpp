@@ -686,6 +686,25 @@ bool MainAnalysisScreen::hmiConsoleHas(std::string_view text) const {
     return false;
 }
 
+// ---- 1.11.21 : les sessions verifient les Diagnostics (le direct) et les Sorties ----
+std::string MainAnalysisScreen::hmiDiagnosticsSummary() const {
+    if (!bottomPanel_) return "pas de panneau du bas";
+    const auto shown = bottomPanel_->shownDiagnostics();
+    std::string out = std::to_string(shown.size()) + " diagnostic(s) montr\xC3\xA9(s), " + std::to_string(bottomPanel_->liveDiagnostics().size())
+                    + " en direct (" + (bottomPanel_->liveElement().empty() ? std::string("aucun document") : bottomPanel_->liveElement()) + ")";
+    if (!shown.empty()) out += " | premier : " + shown.front().step + " \xC2\xB7 " + shown.front().message;
+    return out;
+}
+
+bool MainAnalysisScreen::hmiDiagnosticsHas(std::string_view text) const {
+    if (!bottomPanel_) return false;
+    for (const auto& d : bottomPanel_->shownDiagnostics())
+        if (d.message.find(text) != std::string::npos || (d.step + " \xC2\xB7 " + d.message).find(text) != std::string::npos) return true;
+    return false;
+}
+
+bool MainAnalysisScreen::hmiOutputsHas(std::string_view text) const { return bottomPanel_ && bottomPanel_->hasLine(text); }
+
 void MainAnalysisScreen::showHmiBuildOutputs(int tab) {
     // 0 : Sorties ; 1 : Diagnostics ; 2 : Console (1.11.14).
     if (auto* out = hmiBuildOutput(true))

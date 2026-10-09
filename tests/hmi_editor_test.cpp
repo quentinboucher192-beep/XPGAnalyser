@@ -16678,17 +16678,17 @@ void centreAide111() {
     // 1.11.11 : 19.
     // 1.11.12 : 20.
     // 1.11.13 : 21.
-    // 1.11.14 : 22 ; 1.11.15 : 23 ; 1.11.16 : 24 ; 1.11.17 : 25 ; 1.11.18 : 26 ; 1.11.19 : 27.
-    check(hn::releases().size() == 28 && hn::releases().front().version == "1.11.20" && hn::releases()[1].version == "1.11.19"
-              && hn::releases()[2].version == "1.11.18" && hn::releases()[3].version == "1.11.17"
-              && hn::releases()[4].version == "1.11.16" && hn::releases()[5].version == "1.11.15"
-              && hn::releases()[6].version == "1.11.14" && hn::releases()[7].version == "1.11.13" && hn::releases()[8].version == "1.11.12"
-              && hn::releases()[9].version == "1.11.11" && hn::releases()[10].version == "1.11.10"
-              && hn::releases()[11].version == "1.11.9" && hn::releases()[12].version == "1.11.8"
-              && hn::releases()[13].version == "1.11.7" && hn::releases()[14].version == "1.11.6" && hn::releases()[15].version == "1.11.5"
-              && hn::releases()[16].version == "1.11.4" && hn::releases()[17].version == "1.11.3" && hn::releases()[18].version == "1.11.2"
-              && hn::releases()[19].version == "1.11.1" && hn::releases()[20].version == "1.11" && hn::releases()[21].version == "1.10.4",
-          "notes : 28 versions, la 1.11.20 en tete, puis la 1.11.19 \xC3\xA0 la 1.11, et la 1.10.4");
+    // 1.11.14 : 22 ; 1.11.15 : 23 ; 1.11.16 : 24 ; 1.11.17 : 25 ; 1.11.18 : 26 ; 1.11.19 : 27 ; 1.11.20 : 28 ; 1.11.21 : 29.
+    check(hn::releases().size() == 29 && hn::releases().front().version == "1.11.21" && hn::releases()[1].version == "1.11.20" && hn::releases()[2].version == "1.11.19"
+              && hn::releases()[3].version == "1.11.18" && hn::releases()[4].version == "1.11.17"
+              && hn::releases()[5].version == "1.11.16" && hn::releases()[6].version == "1.11.15"
+              && hn::releases()[7].version == "1.11.14" && hn::releases()[8].version == "1.11.13" && hn::releases()[9].version == "1.11.12"
+              && hn::releases()[10].version == "1.11.11" && hn::releases()[11].version == "1.11.10"
+              && hn::releases()[12].version == "1.11.9" && hn::releases()[13].version == "1.11.8"
+              && hn::releases()[14].version == "1.11.7" && hn::releases()[15].version == "1.11.6" && hn::releases()[16].version == "1.11.5"
+              && hn::releases()[17].version == "1.11.4" && hn::releases()[18].version == "1.11.3" && hn::releases()[19].version == "1.11.2"
+              && hn::releases()[20].version == "1.11.1" && hn::releases()[21].version == "1.11" && hn::releases()[22].version == "1.10.4",
+          "notes : 29 versions, la 1.11.21 en tete, puis la 1.11.20 \xC3\xA0 la 1.11, et la 1.10.4");
     // 1.11.2 (T2, tranches 41, 42 et 44 ; decisions 187, 201 et 216) : 23 lignes en 8 domaines, dont 2 cartes de la fenetre Nouveautes.
     // Tranche 46 (SYM, decision 240) : + Dupliquer dans un symbole (C) et la section Parametres du symbole (N) : 25 lignes.
     {
@@ -16959,7 +16959,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 228,   // 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 232,   // 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -17102,7 +17102,7 @@ void centreAide111() {
     // Integration 1.11 (I111) : la 1.10.4 ajoute objet-vanne-3-voies (La bibliotheque d'objets) : 206.
     // 1.11.1 (T2, decision 107) : Programmer gagne variables-api (API. : les variables de l'automate) : 207.
     check(ix.count(hc::Chapter::Hmi) == 208, "centre : L'IHM a les 208 sujets des chapitres 2 a 8 du guide (1.11.1 : variables-api ; 1.11.2 : paquets-symboles)");
-    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 28, "centre : 11 expressions, 28 notes (1.11.20)");
+    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 29, "centre : 11 expressions, 29 notes (1.11.21)");
     // Tranche 3 : les 11 types de T3 (hmi::exprguide::all(), depot-o), passes par in.expressions ; les
     // cles de la liste de secours sont les siennes (enumeration, pas enum).
     {
@@ -17164,10 +17164,10 @@ void centreAide111() {
         check(o, "page Raccourcis : Ctrl+Maj+O dessine en trois touches, repere 1.11");
 
         const auto n110 = hc::notesPage("1.10");
-        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 28
+        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 29
                   && !n110.summary.empty() && !n110.date.empty(),
               "page Notes : 1.10 -> 1.10.0, 22 lignes en 7 domaines, sa date et son resume");
-        check(hc::notesPage("").version == "1.11.20" && hc::notesPage("9.9").version == "1.11.20",
+        check(hc::notesPage("").version == "1.11.21" && hc::notesPage("9.9").version == "1.11.21",
               "page Notes : sans version (ou inconnue), la plus recente");
         const auto simu = hc::notesPage("1.10.0", "Simulation");
         check(simu.sections.size() == 1 && simu.rows == 4 && simu.domains.size() == 7,
@@ -17511,7 +17511,7 @@ void centreAide111() {
         // Les notes de version n'ont pas de tutoriel : ni la carte "Regarder le tutoriel" (hasTutorial, que
         // lit HelpCenterScreen::showTopic), ni la pastille dans l'arbre. Les autres pages speciales gardent
         // les leurs (T1 ecrit les tutoriels des raccourcis et de Signaler).
-        bool notesSans = ix.count(hc::Chapter::Notes) == 28;   // 1.11.3 a 1.11.20 : une version de plus
+        bool notesSans = ix.count(hc::Chapter::Notes) == 29;   // 1.11.3 a 1.11.21 : une version de plus
         for (const auto* t : ix.ofChapter(hc::Chapter::Notes)) notesSans = notesSans && !hc::hasTutorial(*t);
         const auto* raccourcis = ix.find("page-raccourcis");
         const auto* signaler = ix.find("page-signaler");
@@ -26700,6 +26700,145 @@ void parametresInstances11110() {
 //  sous-onglets Fonctions et Popups, l'inspecteur d'une instance (redefinir une
 //  fonction virtuelle, sa fenetre, Ctrl+Z), l'arbre deballe (violet).
 // =============================================================================
+// 1.11.21 : LES EXPLORATEURS DEPLIENT LES CODES - un script : ses Constantes, Variables et
+// Fonctions internes (leurs parametres et locales) ; une fonction : ses Parametres (leur mode),
+// Variables locales, Constantes ; les surcharges regroupees sous leur nom (le dossier Fonctions,
+// la partie Fonctions d'un symbole) ; l'explorateur d'objets : les fonctions d'une instance.
+void explorateurs1121() {
+    std::printf("1.11.21 : les explorateurs d\xC3\xA9plient les scripts et les fonctions, les surcharges regroup\xC3\xA9" "es\n");
+    using NK = app::ProjectTreeModel::NodeKind;
+    auto plc = std::make_shared<domain::Project>();
+    app::ProjectTreeModel tree(plc);
+    auto doc = std::make_shared<Document>();
+    auto& p = doc->project;
+    const auto param = [&](const char* name, const char* type, PassMode mode, const char* value = "") {
+        Declaration d;
+        d.id = p.allocate();
+        d.kind = DeclKind::Parameter;
+        d.name = name;
+        d.type = type;
+        d.mode = mode;
+        d.value = value;
+        return d;
+    };
+    const auto local = [&](DeclKind kind, const char* name, const char* type, const char* value, const char* doc_ = "") {
+        Declaration d;
+        d.id = p.allocate();
+        d.kind = kind;
+        d.name = name;
+        d.type = type;
+        d.value = value;
+        d.description = doc_;
+        return d;
+    };
+    {
+        HmiFunction f = makeFunction(p, "Random", "REAL", "test := Min;\nRandom := test;");
+        f.decls = {param("Min", "REAL", PassMode::In), param("Max", "REAL", PassMode::In), param("RandomSeed", "REAL", PassMode::InOut),
+                   param("test", "REAL", PassMode::Out), local(DeclKind::Variable, "Pas", "REAL", "0.5")};
+        p.programs.functions.push_back(f);
+    }
+    for (const char* t : {"INT", "REAL", "BOOL"}) {
+        HmiFunction f = makeFunction(p, "Convertir", "STRING", "Convertir := 'x';");
+        f.decls = {param("valeur", t, PassMode::In)};
+        p.programs.functions.push_back(f);
+    }
+    p.programs.functions.push_back(makeFunction(p, "Moyenne", "REAL", "VAR_INPUT\n  a : REAL;\n  b : REAL;\nEND_VAR\nMoyenne := (a + b) / 2.0;"));
+    Script sc;
+    sc.id = p.allocate();
+    sc.name = "Essai";
+    sc.event = "Appel";
+    sc.body = "FUNCTION Double(x : INT) : INT\n    VAR r : INT; END_VAR\n    r := x * 2;\n    Double := r;\nEND_FUNCTION\nCompteur := Double(Max);\n";
+    sc.decls = {local(DeclKind::Constant, "Max", "INT", "10", "la borne"), local(DeclKind::Variable, "Compteur", "INT", "0")};
+    p.programs.scripts.push_back(sc);
+    // Un symbole et ses deux fonctions Ouvrir (des surcharges), une instance.
+    View sym = makeView(p, "S_Porte");
+    sym.role = "symbole";
+    for (const char* t : {"INT", "REAL"}) {
+        HmiFunction f;
+        f.id = p.allocate();
+        f.name = "Ouvrir";
+        f.decls = {param("Pas", t, PassMode::In)};
+        f.body = "IHM_JOURNAL('ouvrir');";
+        sym.functions.push_back(f);
+    }
+    const Id symId = sym.id;
+    p.views.push_back(sym);
+    View v = makeView(p, "Vue_P");
+    const Id vid = v.id;
+    const Id inst = placeSymbol(p, v, "S_Porte", 10, 10);
+    v.object(inst)->name = "P1";
+    p.views.push_back(v);
+    tree.setHmi(doc);
+
+    const auto prog = tree.childAt(tree.hmiFolderNode(), 8);
+    const auto fonctions = tree.childAt(prog, 1);
+    check(tree.childCount(fonctions) == 3, "Fonctions : Random, Convertir (ses 3 surcharges), Moyenne - 3 lignes (" + std::to_string(tree.childCount(fonctions)) + ")");
+    const auto conv = tree.childAt(fonctions, 1);
+    check(tree.kindOf(conv) == NK::HmiOverloads && tree.text(conv) == "Convertir   \xC2\xB7 3 surcharges" && tree.childCount(conv) == 3,
+          "les surcharges regroup\xC3\xA9" "es sous leur nom : " + tree.text(conv));
+    check(tree.text(tree.childAt(conv, 1)) == "Convertir(valeur : REAL) : STRING" && tree.hmiIdOf(tree.childAt(conv, 1)) == p.programs.functions[2].id,
+          "... chacune sa signature, sa fonction (" + tree.text(tree.childAt(conv, 1)) + ")");
+    check(tree.kindOf(tree.childAt(fonctions, 2)) == NK::HmiFunction && tree.childCount(tree.childAt(fonctions, 2)) == 1,
+          "une fonction seule : comme avant, son contenu en dessous (ses param\xC3\xA8tres)");
+    // Random deplie : Parametres (leur mode), Variables locales.
+    const auto rnd = tree.childAt(fonctions, 0);
+    check(tree.childCount(rnd) == 2 && tree.text(tree.childAt(rnd, 0)) == "Param\xC3\xA8tres (4)" && tree.text(tree.childAt(rnd, 1)) == "Variables locales (1)",
+          "Random : Param\xC3\xA8tres (4), Variables locales (1)");
+    const auto params = tree.childAt(rnd, 0);
+    std::string got;
+    for (std::size_t k = 0; k < tree.childCount(params); ++k) got += tree.text(tree.childAt(params, k)) + " | ";
+    check(got == "Min : REAL | Max : REAL | RandomSeed : REAL  (E/S) | test : REAL  (sortie) | ", "ses param\xC3\xA8tres, leur mode : " + got);
+    check(tree.text(tree.childAt(tree.childAt(rnd, 1), 0)) == "Pas : REAL := 0.5", "sa locale, sa valeur initiale");
+    // Le script deplie : Constantes, Variables, Fonctions internes (et leur contenu).
+    const auto scripts = tree.childAt(prog, 0);
+    ui::NodeId essai = ui::kInvalidNode;
+    for (std::size_t k = 0; k < tree.childCount(scripts); ++k)
+        if (tree.kindOf(tree.childAt(scripts, k)) == NK::HmiGeneralScript) essai = tree.childAt(scripts, k);
+    check(essai != ui::kInvalidNode && tree.childCount(essai) == 3, "le script Essai : 3 groupes");
+    if (essai != ui::kInvalidNode && tree.childCount(essai) == 3) {
+        check(tree.text(tree.childAt(essai, 0)) == "Constantes (1)" && tree.text(tree.childAt(tree.childAt(essai, 0), 0)) == "Max : INT = 10   // la borne",
+              "Constantes : Max : INT = 10, sa documentation (" + tree.text(tree.childAt(tree.childAt(essai, 0), 0)) + ")");
+        check(tree.text(tree.childAt(tree.childAt(essai, 1), 0)) == "Compteur : INT := 0", "Variables : Compteur : INT := 0");
+        const auto inner = tree.childAt(tree.childAt(essai, 2), 0);
+        check(tree.text(tree.childAt(essai, 2)) == "Fonctions internes (1)" && tree.text(inner) == "Double(x : INT) : INT" && tree.childCount(inner) == 2
+                  && tree.text(tree.childAt(inner, 0)) == "x : INT" && tree.text(tree.childAt(inner, 1)) == "r : INT",
+              "Fonctions internes : Double(x : INT) : INT, son param\xC3\xA8tre et sa locale (" + tree.text(inner) + ")");
+        app::ProjectTreeModel::CodeTarget tg;
+        check(tree.codeTargetOf(tree.childAt(tree.childAt(essai, 1), 0), tg) && tg.kind == 1 && tg.id == sc.id && tg.name == "Compteur"
+                  && tg.group == static_cast<int>(app::hmitree::OutlineKind::Variables),
+              "un clic sur Compteur : le script Essai, sa variable Compteur");
+        check(tree.codeTargetOf(inner, tg) && tg.name == "Double" && tg.line == 1, "un clic sur Double : sa ligne dans le code (" + std::to_string(tg.line) + ")");
+    }
+    // Le document change : le contenu suit (le cache est oublie).
+    p.programs.scripts.back().decls.push_back(local(DeclKind::Variable, "Total", "REAL", ""));
+    doc->touched(hmi::kNoId);
+    tree.hmiChanged();
+    if (essai != ui::kInvalidNode) check(tree.text(tree.childAt(essai, 1)) == "Variables (2)", "une variable ajout\xC3\xA9" "e : Variables (2)");
+    // La partie Fonctions du symbole : ses deux Ouvrir regroupees.
+    const auto symNode = tree.hmiViewNode(symId);
+    ui::NodeId part = ui::kInvalidNode;
+    for (std::size_t k = 0; k < tree.childCount(symNode); ++k)
+        if (tree.text(tree.childAt(symNode, k)).rfind("Fonctions", 0) == 0) part = tree.childAt(symNode, k);
+    check(part != ui::kInvalidNode && tree.childCount(part) == 1 && tree.kindOf(tree.childAt(part, 0)) == NK::HmiSymbolOverloads
+              && tree.childCount(tree.childAt(part, 0)) == 2 && tree.hmiViewOf(tree.childAt(part, 0)) == symId,
+          "le symbole : Ouvrir \xC2\xB7 2 surcharges, sous sa partie Fonctions");
+    // L'explorateur d'objets de la vue : l'instance P1 et les fonctions de son symbole.
+    core::CommandStack stack;
+    auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+    app::HmiEditor ed("ed1121", doc, vid, apply);
+    ed.setBounds({0, 0, 2000, 1600});
+    ed.layout();
+    auto& list = ed.objects();
+    list.setObjectOpen(inst, true);
+    list.setFamilyOpen(inst, 101, true);
+    ed.layout();
+    const auto rows = list.familyRowTexts(inst);
+    std::string all;
+    for (const auto& r : rows) all += r + " | ";
+    check(all.find("Fonctions (2) | Ouvrir(Pas : INT) | Ouvrir(Pas : REAL) | ") != std::string::npos,
+          "l'explorateur d'objets : P1 \xE2\x80\xBA Fonctions (2), leurs signatures (" + all + ")");
+}
+
 void fonctionsSymboleEditeur11110() {
     std::printf("== 1.11.10 : les fonctions et les popups d'un symbole dans l'\xC3\xA9" "diteur ==\n");
     auto doc = std::make_shared<Document>();
@@ -27598,6 +27737,7 @@ int main(int argc, char** argv) {
     // 1.11.21 : HMI_TEST_1121=1 - les diagnostics en direct, l'essai aux Sorties, seuls.
     if (const char* only = std::getenv("HMI_TEST_1121"); only && *only == '1') {
         direct1121();
+        explorateurs1121();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -27935,6 +28075,7 @@ int main(int argc, char** argv) {
     selecteurTypes1119();                   // 1.11.19 (refonte, lot 6) : le selecteur de types
     surcharges1120();                       // 1.11.20 : les signatures et les surcharges
     direct1121();                           // 1.11.21 : les diagnostics en direct au panneau du bas
+    explorateurs1121();                     // 1.11.21 : les explorateurs deplient les codes
     if (argc > 1) configuration_et_variables(argv[1]);
     if (argc > 1) aide_saisie_scripts(argv[1]);
     if (argc > 1) aide_saisie_champs(argv[1]);

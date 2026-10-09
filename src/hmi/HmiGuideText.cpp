@@ -12623,6 +12623,16 @@ const std::vector<Topic>& topics() {
                          "(la variable de l'appelant est \xC3\xA9" "crite), Sortie ; un d\xC3\xA9" "faut rend le "
                          "param\xC3\xA8tre facultatif. Les blocs VAR_INPUT d'une fonction d'avant sont toujours "
                          "lus, et \xC2\xAB Migrer ce code \xC2\xBB les passe dans les onglets.", {}, "1.11.18"},
+             {K::Heading, "Dans l'arbre (1.11.21)", {}, "1.11.21"},
+             {K::Paragraph, "Une fonction se **d\xC3\xA9plie** : ses **Param\xC3\xA8tres** (avec leur mode : "
+                         "\xC2\xAB Graine : REAL  (E/S) \xC2\xBB, \xC2\xAB Tirage : REAL  (sortie) \xC2\xBB), ses "
+                         "**Variables locales** et ses **Constantes** ; un script, ses Constantes, ses Variables "
+                         "et ses **Fonctions internes** (leur signature, leurs param\xC3\xA8tres et leurs locales "
+                         "dessous). Les **surcharges** d'un nom sont regroup\xC3\xA9" "es : \xC2\xAB Convertir \xC2\xB7 3 "
+                         "surcharges \xC2\xBB, chacune avec sa signature. Un clic ouvre le code : sur un groupe, "
+                         "son onglet ; sur une d\xC3\xA9" "claration, sa ligne ; sur une fonction interne, sa ligne "
+                         "dans le code. L'explorateur d'objets d'une vue montre aussi les **Fonctions** d'une "
+                         "instance de symbole.", {}, "1.11.21"},
              {K::Code, "(* Moyenne pond\xC3\xA9r\xC3\xA9" "e des pressions de deux armoires, en bar "
                          "*)\nVAR_INPUT\n    A : REAL;\n    B : REAL;\n    Poids_A : REAL := 0.5;   (* "
                          "facultatif : 0.5 par d\xC3\xA9" "faut *)\nEND_VAR\nVAR_TEMP\n    Somme : "

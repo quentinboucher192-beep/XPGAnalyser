@@ -417,7 +417,12 @@ void HmiObjectList::setFilter(std::string text, std::optional<hmi::Kind> kind) {
 
 // 1.10.3 (Q1103) : la "famille" Operateurs d'une instance (les operateurs de son
 // symbole, comme le noeud Operateurs de l'arbre), apres les familles de hmitree.
-namespace { constexpr int kOperatorsRow = 100; }
+namespace {
+constexpr int kOperatorsRow = 100;
+// 1.11.21 : la "famille" Fonctions d'une instance - les fonctions de son symbole, leur
+// signature (redefinie par l'instance, virtuelle), comme le noeud Fonctions de l'arbre.
+constexpr int kFunctionsRow = 101;
+}
 
 void HmiObjectList::rebuild() {
     rows_.clear();
@@ -458,7 +463,8 @@ void HmiObjectList::rebuild() {
                                                          : std::vector<hmitree::Family>{};
             const auto* sym = !filtering && exprProject_ ? hmi::symbolOf(*exprProject_, *o) : nullptr;
             const auto* ops = sym && !sym->operators.empty() ? &sym->operators : nullptr;
-            const bool group = kids || alarms != alarmNodes_.end() || !fams.empty() || ops;
+            const auto* fns = sym && !sym->functions.empty() ? &sym->functions : nullptr;   // 1.11.21
+            const bool group = kids || alarms != alarmNodes_.end() || !fams.empty() || ops || fns;
             rows_.push_back({id, depth, group, !filtering || matches(*o)});
             // Un groupe est deplie au depart ; un autre objet (ses familles, ses alarmes), replie.
             const bool open = kids ? (filtering || !collapsed_.count(id)) : objectsOpen_.count(id) > 0;
@@ -494,6 +500,13 @@ void HmiObjectList::rebuild() {
                 if (familiesOpen_.count({id, kOperatorsRow}))
                     for (std::size_t k = 0; k < ops->size(); ++k)
                         rows_.push_back({id, depth + 2, false, true, -1, kOperatorsRow, static_cast<int>(k)});
+            }
+            // 1.11.21 : puis ses fonctions (leur signature), comme dans l'arbre.
+            if (fns) {
+                rows_.push_back({id, depth + 1, true, true, -1, kFunctionsRow, -1});
+                if (familiesOpen_.count({id, kFunctionsRow}))
+                    for (std::size_t k = 0; k < fns->size(); ++k)
+                        rows_.push_back({id, depth + 2, false, true, -1, kFunctionsRow, static_cast<int>(k)});
             }
         }
     };
@@ -557,6 +570,17 @@ std::string HmiObjectList::familyRowText(const Row& row) const {
         if (row.line < 0) return "Op\xC3\xA9rateurs (" + std::to_string(sym->operators.size()) + ")";
         const auto k = static_cast<std::size_t>(row.line);
         return k < sym->operators.size() ? hmi::operatorSignature(sym->operators[k]) : std::string{};
+    }
+    if (o && exprProject_ && row.family == kFunctionsRow) {                   // 1.11.21
+        const auto* sym = hmi::symbolOf(*exprProject_, *o);
+        if (!sym) return {};
+        if (row.line < 0) return "Fonctions (" + std::to_string(sym->functions.size()) + ")";
+        const auto k = static_cast<std::size_t>(row.line);
+        if (k >= sym->functions.size()) return {};
+        const auto& f = sym->functions[k];
+        bool redefined = false;
+        for (const auto& fo : o->functionOverrides) redefined = redefined || fo.function == f.name;
+        return hmitree::signatureOf(f) + (redefined ? "   \xC2\xB7 red\xC3\xA9" "finie ici" : f.isVirtual ? "   \xC2\xB7 virtuelle" : "");
     }
     if (!o || !exprProject_ || row.family < 0 || row.family >= static_cast<int>(hmitree::Family::Count)) return {};
     const auto fam = static_cast<hmitree::Family>(row.family);
@@ -711,8 +735,8 @@ void HmiObjectList::onPaint(const ui::PaintContext& ctx) {
                 else ui::shapes::fillPolygon(ctx.r, {{m.x - 2, m.y - 4}, {m.x + 3, m.y}, {m.x - 2, m.y + 4}}, c.textMuted);
                 fx += 12;
                 const bool accent = fam == hmitree::Family::Actions || fam == hmitree::Family::Links || fam == hmitree::Family::Params;
-                ui::drawIcon(ctx.r, row.family == kOperatorsRow ? ui::Icon::Folder : hmitree::familyIcon(fam), {fx, y + (rowH_ - 16) / 2, 16, 16},
-                             markers ? c.warning : accent ? c.accent : c.textMuted);
+                ui::drawIcon(ctx.r, row.family == kOperatorsRow ? ui::Icon::Folder : row.family == kFunctionsRow ? ui::Icon::FunctionBlock : hmitree::familyIcon(fam),
+                             {fx, y + (rowH_ - 16) / 2, 16, 16}, markers ? c.warning : accent || row.family == kFunctionsRow ? c.accent : c.textMuted);
                 fx += 22;
                 textCentred(ctx, {fx, y, std::max(20.f, b.x + b.w - 8 - fx), rowH_}, fit(ctx.r, text, small, b.x + b.w - 8 - fx), small,
                             markers ? c.warning : c.text);
@@ -723,7 +747,8 @@ void HmiObjectList::onPaint(const ui::PaintContext& ctx) {
             const auto* line = static_cast<std::size_t>(row.line) < lines.size() ? &lines[static_cast<std::size_t>(row.line)] : nullptr;
             const bool help = line && line->icon == ui::Icon::Info;
             fx += 12;
-            ui::drawIcon(ctx.r, line && line->icon != ui::Icon::None ? line->icon : row.family == kOperatorsRow ? ui::Icon::Code : ui::Icon::Play,
+            ui::drawIcon(ctx.r, line && line->icon != ui::Icon::None ? line->icon : row.family == kOperatorsRow ? ui::Icon::Code
+                                                                             : row.family == kFunctionsRow ? ui::Icon::FunctionBlock : ui::Icon::Play,
                          {fx, y + (rowH_ - 14) / 2, 14, 14},
                          help ? c.textMuted : markers ? c.warning : c.textMuted);
             fx += 20;

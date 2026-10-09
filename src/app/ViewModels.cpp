@@ -284,6 +284,61 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             for (const auto& x : list) if ((x.id & kMask28) == id) return &x;
             return nullptr;
         }
+        // ---- 1.11.21 : le contenu d'un code deplie ----
+        // Le genre d'un code (ProjectTreeModel::CodeTarget::kind).
+        constexpr std::uint32_t kCodeScript = 1, kCodeViewScript = 2, kCodeFunction = 3, kCodeSymbolFunction = 4;
+        // Un script, general ou d'une vue, par son identifiant ; `owner` : sa vue (0 : general).
+        const hmi::Script* anyScriptById(const hmi::Project& p, std::uint64_t id, std::uint64_t* owner = nullptr) {
+            if (const auto* s = byId(p.programs.scripts, id)) {
+                if (owner) *owner = 0;
+                return s;
+            }
+            for (const auto& v : p.views)
+                if (const auto* s = byId(v.scripts, id)) {
+                    if (owner) *owner = v.id;
+                    return s;
+                }
+            return nullptr;
+        }
+        // Une fonction d'un symbole, par son identifiant ; `owner` : le symbole.
+        const hmi::HmiFunction* symbolFunctionById(const hmi::Project& p, std::uint64_t id, std::uint64_t* owner = nullptr) {
+            for (const auto& v : p.views)
+                if (const auto* f = byId(v.functions, id)) {
+                    if (owner) *owner = v.id;
+                    return f;
+                }
+            return nullptr;
+        }
+        bool sameNameNoCase(std::string_view a, std::string_view b) {
+            if (a.size() != b.size()) return false;
+            for (std::size_t k = 0; k < a.size(); ++k)
+                if (std::toupper(static_cast<unsigned char>(a[k])) != std::toupper(static_cast<unsigned char>(b[k]))) return false;
+            return true;
+        }
+        // Les fonctions d'une liste, regroupees par nom (sans casse), dans l'ordre de leur premiere :
+        // un groupe d'une seule, une fonction ; de plusieurs, ses surcharges.
+        std::vector<std::vector<std::size_t>> overloadUnits(const std::vector<hmi::HmiFunction>& fs) {
+            std::vector<std::vector<std::size_t>> out;
+            for (std::size_t k = 0; k < fs.size(); ++k) {
+                bool placed = false;
+                for (auto& u : out)
+                    if (sameNameNoCase(fs[u.front()].name, fs[k].name)) {
+                        u.push_back(k);
+                        placed = true;
+                        break;
+                    }
+                if (!placed) out.push_back({k});
+            }
+            return out;
+        }
+        // Les rangs des fonctions de `fs` qui portent le nom de fs[first].
+        std::vector<std::size_t> sameNameAs(const std::vector<hmi::HmiFunction>& fs, std::size_t first) {
+            std::vector<std::size_t> out;
+            if (first >= fs.size()) return out;
+            for (std::size_t k = 0; k < fs.size(); ++k)
+                if (sameNameNoCase(fs[k].name, fs[first].name)) out.push_back(k);
+            return out;
+        }
         // Le libelle de chaque genre : la table de l'en-tete du modele (en ligne,
         // ce fichier n'appelle pas la bibliotheque de l'IHM).
         std::string_view kindText(hmi::Kind k) { return hmi::kindLabel(k); }
@@ -654,6 +709,11 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
 
     ui::NodeId ProjectTreeModel::root() const { return pack(NodeKind::Root, 0); }
 
+    // 1.11.21 : le contenu deplie d'un code (hmitree::outlineOf), garde par le modele.
+    struct ProjectTreeModel::CodeOutline {
+        std::vector<hmitree::OutlineGroup> groups;
+    };
+
     std::size_t ProjectTreeModel::childCount(ui::NodeId n) const {
         // ---- Lot API 8 : l'arbre du projet (les resultats du filtre, a la fin du dossier de leur domaine) ----
         if (kindOf(n) == NodeKind::FilterHit) return 0;
@@ -813,7 +873,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             case HmiPart::Groups:
                 return static_cast<std::size_t>(std::count_if(v->objects.begin(), v->objects.end(),
                     [](const hmi::Object& o) { return o.kind == hmi::Kind::Group; }));
-            case HmiPart::Functions:  return v->functions.size();                 // 1.11.10
+            case HmiPart::Functions:  return overloadUnits(v->functions).size();  // 1.11.10 ; 1.11.21 : les surcharges regroupees
             case HmiPart::Popups:     return ownedPopups(hmi_.get(), v).size();
             case HmiPart::Count:      break;
             }
@@ -841,8 +901,58 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         }
         case NodeKind::HmiObjectPopups:
             return ownedPopups(hmi_.get(), objectSymbol(hmi_.get(), hmiObjectById(hmiViewById(hmi_.get(), i), subOf(n)))).size();
-        case NodeKind::HmiObjectFunction:
-        case NodeKind::HmiSymbolFunction: return 0;
+        case NodeKind::HmiObjectFunction: return 0;
+        // ---- 1.11.21 : un code se deplie (ses parametres, constantes, variables, fonctions internes) ----
+        case NodeKind::HmiSymbolFunction: {
+            const auto* v = hmiViewById(hmi_.get(), i);
+            const auto k = static_cast<std::size_t>(subOf(n));
+            if (!v || k >= v->functions.size()) return 0;
+            const auto* o = outlineOf(kCodeSymbolFunction, v->functions[k].id & kMask28);
+            return o ? o->groups.size() : 0;
+        }
+        case NodeKind::HmiGeneralScript: {
+            const auto* o = outlineOf(kCodeScript, i);
+            return o ? o->groups.size() : 0;
+        }
+        case NodeKind::HmiViewScript: {
+            const auto* v = hmiViewById(hmi_.get(), i);
+            const auto k = static_cast<std::size_t>(subOf(n));
+            if (!v || k >= v->scripts.size()) return 0;
+            const auto* o = outlineOf(kCodeViewScript, v->scripts[k].id & kMask28);
+            return o ? o->groups.size() : 0;
+        }
+        case NodeKind::HmiFunction: {
+            const auto* o = outlineOf(kCodeFunction, i);
+            return o ? o->groups.size() : 0;
+        }
+        case NodeKind::HmiCodeGroup: {
+            const auto* o = outlineOf(static_cast<std::uint32_t>(subOf(n) >> 8), i);
+            if (!o) return 0;
+            for (const auto& g : o->groups)
+                if (static_cast<std::uint64_t>(g.kind) == (subOf(n) & 0xFF)) return g.items.size();
+            return 0;
+        }
+        case NodeKind::HmiCodeEntry: {
+            const auto sub = subOf(n);
+            if (((sub >> 16) & 0xFF) != static_cast<std::uint64_t>(hmitree::OutlineKind::Functions)) return 0;
+            const auto* o = outlineOf(static_cast<std::uint32_t>(sub >> 24), i);
+            if (!o) return 0;
+            for (const auto& g : o->groups)
+                if (g.kind == hmitree::OutlineKind::Functions && (sub & 0xFFFF) < g.items.size()) return g.items[sub & 0xFFFF].children.size();
+            return 0;
+        }
+        case NodeKind::HmiCodeInner: return 0;
+        case NodeKind::HmiOverloads: {
+            if (!hmi_) return 0;
+            const auto& fs = hmi_->project.programs.functions;
+            for (std::size_t k = 0; k < fs.size(); ++k)
+                if ((fs[k].id & kMask28) == i) return sameNameAs(fs, k).size();
+            return 0;
+        }
+        case NodeKind::HmiSymbolOverloads: {
+            const auto* v = hmiViewById(hmi_.get(), i);
+            return v ? sameNameAs(v->functions, static_cast<std::size_t>(subOf(n))).size() : 0;
+        }
         // ---- 1.10.2 (chantier A) : une famille de l'objet ----
         case NodeKind::HmiObjectFamily: {
             const auto* v = hmiViewById(hmi_.get(), i);
@@ -904,7 +1014,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         case NodeKind::HmiRoles:      return hmi_ ? hmi_->project.security.roles.size() : 0;
         case NodeKind::HmiScripts:    return hmi_ ? 7 : 0;   // lot 9 : + variables systeme, d'instances ; lot 16 : + types IHM
         case NodeKind::HmiScriptsFolder:   return hmi_ ? hmilists::childrenOf(hmi_->project, hmi::fold::List::Scripts, {}).size() : 0;
-        case NodeKind::HmiFunctionsFolder: return hmi_ ? hmi_->project.programs.functions.size() : 0;
+        case NodeKind::HmiFunctionsFolder: return hmi_ ? overloadUnits(hmi_->project.programs.functions).size() : 0;   // 1.11.21 : regroupees
         case NodeKind::HmiTypesFolder:     return hmi_ ? hmilists::childrenOf(hmi_->project, hmi::fold::List::Types, {}).size() : 0;   // lot 16, 21
         case NodeKind::HmiVariablesFolder: return hmi_ ? hmivars::childrenOf(hmi_->project, {}).size() : 0;
         case NodeKind::HmiVarFolder: {
@@ -1210,8 +1320,11 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
                         return pack(NodeKind::HmiGroupEntry, i, static_cast<Index>(o.id & kMask28));
                 return ui::kInvalidNode;
             }
-            case HmiPart::Functions:                                            // 1.11.10
-                return k < v->functions.size() ? pack(NodeKind::HmiSymbolFunction, i, static_cast<Index>(k)) : ui::kInvalidNode;
+            case HmiPart::Functions: {                                          // 1.11.10 ; 1.11.21 : les surcharges regroupees
+                const auto units = overloadUnits(v->functions);
+                if (k >= units.size()) return ui::kInvalidNode;
+                return pack(units[k].size() == 1 ? NodeKind::HmiSymbolFunction : NodeKind::HmiSymbolOverloads, i, static_cast<Index>(units[k].front()));
+            }
             case HmiPart::Popups: {
                 const auto pops = ownedPopups(hmi_.get(), v);
                 return k < pops.size() ? pack(NodeKind::HmiView, static_cast<Index>(pops[k]->id & kMask28)) : ui::kInvalidNode;
@@ -1389,10 +1502,66 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             const auto kids = hmivars::childrenOf(hmi_->project, all[i]);
             return k < kids.size() ? kids[k] : ui::kInvalidNode;
         }
-        case NodeKind::HmiFunctionsFolder:
-            return hmi_ && k < hmi_->project.programs.functions.size()
-                ? pack(NodeKind::HmiFunction, static_cast<Index>(hmi_->project.programs.functions[k].id & kMask28))
-                : ui::kInvalidNode;
+        case NodeKind::HmiFunctionsFolder: {
+            // 1.11.21 : une fonction seule, ou le nom de ses surcharges (HmiOverloads).
+            if (!hmi_) return ui::kInvalidNode;
+            const auto& fs = hmi_->project.programs.functions;
+            const auto units = overloadUnits(fs);
+            if (k >= units.size()) return ui::kInvalidNode;
+            const auto first = static_cast<Index>(fs[units[k].front()].id & kMask28);
+            return pack(units[k].size() == 1 ? NodeKind::HmiFunction : NodeKind::HmiOverloads, first);
+        }
+        case NodeKind::HmiOverloads: {
+            if (!hmi_) return ui::kInvalidNode;
+            const auto& fs = hmi_->project.programs.functions;
+            for (std::size_t f = 0; f < fs.size(); ++f)
+                if ((fs[f].id & kMask28) == i) {
+                    const auto same = sameNameAs(fs, f);
+                    return k < same.size() ? pack(NodeKind::HmiFunction, static_cast<Index>(fs[same[k]].id & kMask28)) : ui::kInvalidNode;
+                }
+            return ui::kInvalidNode;
+        }
+        case NodeKind::HmiSymbolOverloads: {
+            const auto* v = hmiViewById(hmi_.get(), i);
+            if (!v) return ui::kInvalidNode;
+            const auto same = sameNameAs(v->functions, static_cast<std::size_t>(subOf(n)));
+            return k < same.size() ? pack(NodeKind::HmiSymbolFunction, i, static_cast<Index>(same[k])) : ui::kInvalidNode;
+        }
+        // ---- 1.11.21 : le contenu d'un code - ses groupes, leurs entrees, celles d'une fonction interne ----
+        case NodeKind::HmiGeneralScript:
+        case NodeKind::HmiViewScript:
+        case NodeKind::HmiFunction:
+        case NodeKind::HmiSymbolFunction: {
+            std::uint32_t kind = 0;
+            std::uint64_t id = 0;
+            if (kindOf(n) == NodeKind::HmiGeneralScript) { kind = kCodeScript; id = i; }
+            else if (kindOf(n) == NodeKind::HmiFunction) { kind = kCodeFunction; id = i; }
+            else if (const auto* v = hmiViewById(hmi_.get(), i)) {
+                const auto r = static_cast<std::size_t>(subOf(n));
+                if (kindOf(n) == NodeKind::HmiViewScript && r < v->scripts.size()) { kind = kCodeViewScript; id = v->scripts[r].id & kMask28; }
+                if (kindOf(n) == NodeKind::HmiSymbolFunction && r < v->functions.size()) { kind = kCodeSymbolFunction; id = v->functions[r].id & kMask28; }
+            }
+            const auto* o = kind ? outlineOf(kind, id) : nullptr;
+            if (!o || k >= o->groups.size()) return ui::kInvalidNode;
+            return pack(NodeKind::HmiCodeGroup, static_cast<Index>(id), static_cast<Index>((kind << 8) | static_cast<std::uint32_t>(o->groups[k].kind)));
+        }
+        case NodeKind::HmiCodeGroup: {
+            const auto kind = static_cast<std::uint32_t>(subOf(n) >> 8);
+            const auto group = static_cast<std::uint32_t>(subOf(n) & 0xFF);
+            const auto* o = outlineOf(kind, i);
+            if (!o || k > 0xFFFF) return ui::kInvalidNode;
+            for (const auto& g : o->groups)
+                if (static_cast<std::uint32_t>(g.kind) == group)
+                    return k < g.items.size() ? pack(NodeKind::HmiCodeEntry, i, static_cast<Index>((kind << 24) | (group << 16) | k)) : ui::kInvalidNode;
+            return ui::kInvalidNode;
+        }
+        case NodeKind::HmiCodeEntry: {
+            const auto sub = subOf(n);
+            const auto kind = static_cast<std::uint32_t>(sub >> 24);
+            const auto fn = static_cast<std::uint32_t>(sub & 0xFFFF);
+            if (fn > 0xFFF || k > 0xFFF) return ui::kInvalidNode;
+            return k < childCount(n) ? pack(NodeKind::HmiCodeInner, i, static_cast<Index>((kind << 24) | (fn << 12) | k)) : ui::kInvalidNode;
+        }
         case NodeKind::HmiScriptsFolder: {              // lot 21 : ses dossiers, puis ses scripts
             if (!hmi_) return ui::kInvalidNode;
             const auto kids = hmilists::childrenOf(hmi_->project, hmi::fold::List::Scripts, {});
@@ -1621,6 +1790,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
                 || k == NK::HmiTypeValues || k == NK::HmiTypeValue || k == NK::HmiTypeOperators || k == NK::HmiTypeOperator
                 || k == NK::HmiObjectOperators || k == NK::HmiObjectOperator
                 || (k >= NK::HmiObjectFunctions && k <= NK::HmiSymbolFunction)                       // 1.11.10
+                || (k >= NK::HmiCodeGroup && k <= NK::HmiSymbolOverloads)                            // 1.11.21 : le contenu d'un code
                 || k == NK::HmiObjectFamily || k == NK::HmiObjectParam || k == NK::HmiObjectMarker   // 1.10.2 (chantier A)
                 || (k >= NK::HmiInstParam && k <= NK::HmiInstAlarmVar);                              // 1.11.1 (decision 108)
         }
@@ -2443,6 +2613,51 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             if (!v || k >= v->functions.size()) return {};
             return hmi::functionSignature(v->functions[k]) + (v->functions[k].isVirtual ? "   \xC2\xB7 virtuelle" : "");
         }
+        // ---- 1.11.21 : les surcharges d'un nom ; le contenu d'un code ----
+        case NodeKind::HmiOverloads:
+        case NodeKind::HmiSymbolOverloads: {
+            const std::vector<hmi::HmiFunction>* fs = nullptr;
+            std::size_t first = 0;
+            if (kindOf(n) == NodeKind::HmiOverloads && hmi_) {
+                fs = &hmi_->project.programs.functions;
+                for (std::size_t k = 0; k < fs->size(); ++k)
+                    if (((*fs)[k].id & kMask28) == i) first = k;
+            } else if (const auto* v = hmiViewById(hmi_.get(), i)) {
+                fs = &v->functions;
+                first = static_cast<std::size_t>(subOf(n));
+            }
+            if (!fs || first >= fs->size()) return {};
+            return (*fs)[first].name + "   \xC2\xB7 " + std::to_string(sameNameAs(*fs, first).size()) + " surcharges";
+        }
+        case NodeKind::HmiCodeGroup: {
+            const auto* o = outlineOf(static_cast<std::uint32_t>(subOf(n) >> 8), i);
+            if (o)
+                for (const auto& g : o->groups)
+                    if (static_cast<std::uint64_t>(g.kind) == (subOf(n) & 0xFF)) return hmitree::outlineTitle(g);
+            return {};
+        }
+        case NodeKind::HmiCodeEntry:
+        case NodeKind::HmiCodeInner: {
+            const auto sub = subOf(n);
+            const auto* o = outlineOf(static_cast<std::uint32_t>(sub >> 24), i);
+            if (!o) return {};
+            const auto group = kindOf(n) == NodeKind::HmiCodeEntry ? static_cast<std::uint32_t>((sub >> 16) & 0xFF)
+                                                                   : static_cast<std::uint32_t>(hmitree::OutlineKind::Functions);
+            for (const auto& g : o->groups) {
+                if (static_cast<std::uint32_t>(g.kind) != group) continue;
+                const hmitree::OutlineItem* it = nullptr;
+                if (kindOf(n) == NodeKind::HmiCodeEntry) {
+                    if ((sub & 0xFFFF) < g.items.size()) it = &g.items[sub & 0xFFFF];
+                } else if (((sub >> 12) & 0xFFF) < g.items.size()) {
+                    const auto& fn = g.items[(sub >> 12) & 0xFFF];
+                    if ((sub & 0xFFF) < fn.children.size()) it = &fn.children[sub & 0xFFF];
+                }
+                if (!it) return {};
+                const bool inner = group == static_cast<std::uint32_t>(hmitree::OutlineKind::Functions) && kindOf(n) == NodeKind::HmiCodeEntry;
+                return it->label + (it->tip.empty() || inner ? std::string{} : "   // " + it->tip);
+            }
+            return {};
+        }
         // ---- 1.10 (chantier O, decision 15) : "Valeurs (4)", "Arret = 0", "Operateurs (2)", une signature ----
         case NodeKind::HmiTypeValues:
         case NodeKind::HmiTypeOperators: {
@@ -3197,6 +3412,29 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             }
             break;
         case NodeKind::HmiFunctionsFolder: s.icon = ui::Icon::FunctionBlock; break;
+        // ---- 1.11.21 : les surcharges d'un nom ; le contenu d'un code ----
+        case NodeKind::HmiOverloads:
+            s.icon = ui::Icon::FunctionBlock;
+            s.iconTone = ui::Tone::Accent;
+            break;
+        case NodeKind::HmiSymbolOverloads:
+            s.icon = ui::Icon::FunctionBlock;
+            s.iconTone = ui::Tone::InOut;                  // les fonctions d'un symbole, en violet
+            break;
+        case NodeKind::HmiCodeGroup:
+            s.icon = ui::Icon::Folder;
+            s.fgTone = ui::Tone::Muted;
+            break;
+        case NodeKind::HmiCodeEntry:
+        case NodeKind::HmiCodeInner: {
+            const auto sub = subOf(n);
+            const auto group = kindOf(n) == NodeKind::HmiCodeEntry ? static_cast<hmitree::OutlineKind>((sub >> 16) & 0xFF) : hmitree::OutlineKind::Variables;
+            s.icon = group == hmitree::OutlineKind::Functions   ? ui::Icon::FunctionBlock
+                   : group == hmitree::OutlineKind::Constants ? ui::Icon::Constant
+                                                              : ui::Icon::Variable;
+            if (group == hmitree::OutlineKind::Parameters) s.iconTone = ui::Tone::Accent;
+            break;
+        }
         case NodeKind::HmiFunction:
             s.icon = ui::Icon::FunctionBlock;
             s.iconTone = ui::Tone::Accent;
@@ -3367,18 +3605,86 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
     }
     // ---- fin Lot API 8 ----
 
+    // ---- 1.11.21 : le contenu deplie des codes ----
+    const ProjectTreeModel::CodeOutline* ProjectTreeModel::outlineOf(std::uint32_t codeKind, std::uint64_t id) const {
+        if (!hmi_ || codeKind == 0) return nullptr;
+        const std::uint64_t key = (static_cast<std::uint64_t>(codeKind) << 32) | id;
+        if (const auto it = outlines_.find(key); it != outlines_.end()) return it->second.get();
+        auto o = std::make_shared<CodeOutline>();
+        const auto& p = hmi_->project;
+        if (codeKind == kCodeScript || codeKind == kCodeViewScript) {
+            if (const auto* s = anyScriptById(p, id)) o->groups = hmitree::outlineOf(*s);
+        } else if (codeKind == kCodeFunction) {
+            if (const auto* f = byId(p.programs.functions, id)) o->groups = hmitree::outlineOf(*f);
+        } else if (codeKind == kCodeSymbolFunction) {
+            if (const auto* f = symbolFunctionById(p, id)) o->groups = hmitree::outlineOf(*f);
+        }
+        const auto* raw = o.get();
+        outlines_[key] = std::move(o);
+        return raw;
+    }
+
+    bool ProjectTreeModel::codeTargetOf(ui::NodeId n, CodeTarget& out) const {
+        const auto k = kindOf(n);
+        if (!hmi_ || (k != NodeKind::HmiCodeGroup && k != NodeKind::HmiCodeEntry && k != NodeKind::HmiCodeInner)) return false;
+        const auto sub = subOf(n);
+        out = CodeTarget{};
+        out.id = indexOf(n);
+        out.kind = static_cast<std::uint32_t>(k == NodeKind::HmiCodeGroup ? sub >> 8 : sub >> 24);
+        out.group = k == NodeKind::HmiCodeGroup ? static_cast<int>(sub & 0xFF)
+                  : k == NodeKind::HmiCodeEntry ? static_cast<int>((sub >> 16) & 0xFF)
+                                                : static_cast<int>(hmitree::OutlineKind::Functions);
+        const auto& p = hmi_->project;
+        if (out.kind == kCodeScript || out.kind == kCodeViewScript) {
+            const auto* s = anyScriptById(p, out.id, &out.owner);
+            if (!s) return false;
+            out.id = s->id;
+        } else if (out.kind == kCodeFunction) {
+            const auto* f = byId(p.programs.functions, out.id);
+            if (!f) return false;
+            out.id = f->id;
+        } else if (out.kind == kCodeSymbolFunction) {
+            const auto* f = symbolFunctionById(p, out.id, &out.owner);
+            if (!f) return false;
+            out.id = f->id;
+        } else {
+            return false;
+        }
+        if (k == NodeKind::HmiCodeGroup) return true;
+        const auto* o = outlineOf(out.kind, indexOf(n));
+        if (!o) return false;
+        for (const auto& g : o->groups) {
+            if (static_cast<int>(g.kind) != out.group) continue;
+            if (k == NodeKind::HmiCodeEntry) {
+                if ((sub & 0xFFFF) >= g.items.size()) return false;
+                const auto& it = g.items[sub & 0xFFFF];
+                out.name = it.name;
+                out.line = it.line;
+                return true;
+            }
+            const auto fn = (sub >> 12) & 0xFFF;
+            if (fn >= g.items.size() || (sub & 0xFFF) >= g.items[fn].children.size()) return false;
+            out.name = g.items[fn].children[sub & 0xFFF].name;
+            out.line = g.items[fn].line;          // une declaration d'une fonction interne : dans son texte
+            return true;
+        }
+        return false;
+    }
+
     // ---------------------------------------------------------------- IHM ----
     void ProjectTreeModel::setHmi(std::shared_ptr<const hmi::Document> hmi) {
         hmi_ = std::move(hmi);
         hmiLinks_.clear();
         usedDirty_ = true;
         alarmCache_.clear();                   // 1.10 (chantier O)
+        outlines_.clear();                     // 1.11.21
         // Le contenu d'une vue change (une expression posee, une action...) :
         // les surcharges et les variables employees sous l'IHM suivent.
         if (hmi_)
             hmiLinks_ += hmi_->changed->connect([this](hmi::Id) {
                 usedDirty_ = true;
                 alarmCache_.clear();           // 1.10 : les alarmes des objets aussi
+                outlines_.clear();             // 1.11.21 : le contenu des codes
                 childrenReady->emit(hmiFolderNode());
             });
         modelReset->emit();
@@ -3463,6 +3769,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         case NodeKind::HmiObjectMarker:
         case NodeKind::HmiObjectFunction: return static_cast<int>(subOf(n) & 0xFF);   // 1.11.10
         case NodeKind::HmiSymbolFunction:                                              // 1.11.10
+        case NodeKind::HmiSymbolOverloads:                                             // 1.11.21 : la premiere
         case NodeKind::HmiViewScript:
         case NodeKind::HmiAnimation:
         case NodeKind::HmiLayer:        return static_cast<int>(subOf(n));
@@ -3484,7 +3791,8 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         case NodeKind::HmiUserGroup:     if (const auto* g = byId(p.security.groups, i)) return g->id; return 0;
         case NodeKind::HmiUser:          if (const auto* u = byId(p.security.users, i)) return u->id; return 0;
         case NodeKind::HmiGeneralScript: if (const auto* sc = byId(p.programs.scripts, i)) return sc->id; return 0;
-        case NodeKind::HmiFunction:      if (const auto* f = byId(p.programs.functions, i)) return f->id; return 0;
+        case NodeKind::HmiFunction:
+        case NodeKind::HmiOverloads:     if (const auto* f = byId(p.programs.functions, i)) return f->id; return 0;   // 1.11.21 : la premiere
         case NodeKind::HmiVariable:      if (const auto* v = byId(p.programs.variables, i)) return v->id; return 0;
         case NodeKind::HmiTypeValues: case NodeKind::HmiTypeValue:            // 1.10 (chantier O) : le type
         case NodeKind::HmiTypeOperators: case NodeKind::HmiTypeOperator:
@@ -3633,6 +3941,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             || k == NodeKind::HmiObjectAlarms || k == NodeKind::HmiObjectAlarm      // 1.10 (chantier O)
             || k == NodeKind::HmiObjectOperators || k == NodeKind::HmiObjectOperator
             || (k >= NodeKind::HmiObjectFunctions && k <= NodeKind::HmiSymbolFunction)   // 1.11.10
+            || k == NodeKind::HmiSymbolOverloads                                     // 1.11.21 : ses surcharges d'un nom
             || k == NodeKind::HmiObjectFamily || k == NodeKind::HmiObjectParam
             || k == NodeKind::HmiObjectMarker;                                       // 1.10.2 (chantier A)
         if (!hmi_ || !inView) return 0;

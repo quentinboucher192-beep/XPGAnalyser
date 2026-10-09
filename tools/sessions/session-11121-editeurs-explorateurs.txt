@@ -1,0 +1,88 @@
+# =============================================================================
+#  Session 11121 : LES EDITEURS SANS BANDEAUX, LES EXPLORATEURS DEPLIES (1.11.21).
+#  Sur une copie d'Armoire_Gaz preparee par preparer-projet-11120 puis
+#  preparer-projet-11121 (Random a E/S et sortie, trois Convertir, Essai_Signatures ;
+#  Essai_Explorateur : une constante, deux variables, une fonction interne) :
+#    1. l'arbre : Random deplie (ses parametres et leur mode), Convertir . 3 surcharges ;
+#    2. l'arbre : Essai_Explorateur deplie (Constantes, Variables, Fonctions internes) ;
+#    3. une faute tapee : soulignee, et en direct au panneau du bas (plus de bandeau) -
+#       Convertir(Graine, 2) : la seule surcharge a deux arguments, Graine un REAL pour un
+#       STRING (le controle des types, un avertissement) ;
+#    4. Essayer Random : le resultat aux Sorties du panneau du bas (plus de bandeau ESSAI) ;
+#    5. la grille : Compteur passe en STRING, sa valeur 0 retiree (et dite).
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- 1. L'arbre : Random deplie, les surcharges de Convertir regroupees ----
+arbre "IHM/Programmation générale/Fonctions" deplier
+attendre 3
+arbre "IHM/Programmation générale/Fonctions/Convertir" deplier
+attendre 2
+arbre "IHM/Programmation générale/Fonctions/Random" deplier
+attendre 2
+arbre "IHM/Programmation générale/Fonctions/Random/Paramètres" deplier
+attendre 2
+#  (un clic sur Parametres : la fonction s'ouvre sur son onglet Parametres)
+arbre "IHM/Programmation générale/Fonctions/Random/Paramètres"
+attendre 6
+capture 11121_01_arbre_fonctions.png
+
+# ---- 2. L'arbre : le script deplie, sa fonction interne ----
+arbre "IHM/Programmation générale/Scripts/Essai_Explorateur" deplier
+attendre 2
+arbre "IHM/Programmation générale/Scripts/Essai_Explorateur/Fonctions internes" deplier
+attendre 2
+arbre "IHM/Programmation générale/Scripts/Essai_Explorateur/Fonctions internes/Ecart" deplier
+attendre 2
+#  (un clic sur Ecart : le script s'ouvre a sa ligne)
+arbre "IHM/Programmation générale/Scripts/Essai_Explorateur/Fonctions internes/Ecart"
+attendre 6
+capture 11121_02_arbre_script.png
+
+# ---- 3. Une faute tapee : en direct au panneau du bas ----
+clic 1300 320
+attendre 1
+touche ctrl+fin
+touche entree
+texte "Texte_Entier := Convertir(Graine, 2);"
+attendre 5
+ihm-sorties diagnostics
+attendre 4
+ihm-diagnostics "Saisie · Convertir(STRING, INT) : texte attend un STRING, pas un REAL"
+capture 11121_03_saisie_au_panneau_du_bas.png
+touche ctrl+z
+attendre 4
+ihm-diagnostics
+
+# ---- 4. Essayer Random : le resultat aux Sorties ----
+arbre "IHM/Programmation générale/Fonctions/Random"
+attendre 6
+outil "Essayer"
+attendre 4
+champ 1 "0.0"
+champ 2 "10.0"
+champ 3 "1.0"
+attendre 1
+bouton "Essayer"
+attendre 6
+ihm-sorties-contient "Essai de Random("
+ihm-sorties-contient "Paramètre rendu : RandomSeed (E/S) = 1.75"
+capture 11121_04_essai_aux_sorties.png
+
+# ---- 5. La grille : le type change, la valeur qui ne convient plus est retiree ----
+arbre "IHM/Programmation générale/Scripts/Essai_Explorateur"
+attendre 6
+sous-onglet "Variables"
+attendre 4
+cellule "Compteur" "Type" "STRING"
+attendre 4
+volet-message "valeur 0 retirée"
+capture 11121_05_valeur_retiree.png
+touche ctrl+z
+attendre 4
+quitter

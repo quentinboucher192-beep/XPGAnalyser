@@ -16554,8 +16554,9 @@ void guideNouveautes110() {
                   && labels[4] == "C" && labels[5] == "C++",
               "guide 1.10 : les blocs ```ST, ```C, ```C++ gardent leur notation (fonctions : deux exemples a trois notations)");
         // 1.11.18 (refonte, lot 5) : le sujet a aussi ses onglets (un bloc marque 1.11.18) ; 1.11.20 : les E/S,
-        // les sorties et les surcharges (des blocs marques 1.11.20) - son changement le plus recent.
-        check(firstSince == "1.10" && guide::latestChange(*f) == "1.11.20", "guide 1.10 : @nouveau avant un exemple marque son premier bloc");
+        // les sorties et les surcharges (des blocs marques 1.11.20) ; 1.11.21 : l'arbre deplie (un bloc
+        // marque 1.11.21) - son changement le plus recent.
+        check(firstSince == "1.10" && guide::latestChange(*f) == "1.11.21", "guide 1.10 : @nouveau avant un exemple marque son premier bloc");
     } else {
         check(false, "guide 1.10 : le sujet fonctions existe");
     }

@@ -1017,6 +1017,12 @@ void HmiBuildOutputPane::setLive(std::string element, std::vector<pl::Diagnostic
     rebuild();
 }
 
+bool HmiBuildOutputPane::hasLine(std::string_view text) const {
+    for (const auto& l : lines_)
+        if (l.message.find(text) != std::string::npos) return true;
+    return false;
+}
+
 std::vector<pl::Diagnostic> HmiBuildOutputPane::shownDiagnostics() const {
     std::vector<pl::Diagnostic> out;
     out.reserve(diagRows_.size());

@@ -306,6 +306,22 @@ namespace app {
             //                      index = symbole, sub = rang.
             // A LA FIN, toujours.
             HmiObjectFunctions, HmiObjectFunction, HmiObjectPopups, HmiSymbolFunction,
+            // ---- 1.11.21 : LE CONTENU D'UN CODE DEPLIE (hmitree::outlineOf) ----
+            //   sous un script (general ou de vue), une fonction IHM ou d'un symbole - le code :
+            //   son genre (1 script general, 2 script de vue, 3 fonction IHM, 4 fonction de
+            //   symbole) et son identifiant :
+            //   HmiCodeGroup  "Parametres (4)", "Constantes", "Variables", "Fonctions internes" :
+            //                 index = le code, sub = (genre << 8) | groupe (hmitree::OutlineKind) ;
+            //   HmiCodeEntry  une declaration, une fonction interne : index = le code,
+            //                 sub = (genre << 24) | (groupe << 16) | rang ;
+            //   HmiCodeInner  un parametre ou une locale d'une fonction interne : index = le
+            //                 code, sub = (genre << 24) | (rang de la fonction << 12) | rang ;
+            //   HmiOverloads  "Convertir . 3 surcharges" sous Fonctions : les fonctions IHM d'un
+            //                 meme nom ; index = la premiere (son identifiant) ;
+            //   HmiSymbolOverloads  les fonctions d'un symbole d'un meme nom : index = le
+            //                 symbole, sub = le rang de la premiere.
+            // A LA FIN, toujours.
+            HmiCodeGroup, HmiCodeEntry, HmiCodeInner, HmiOverloads, HmiSymbolOverloads,
         };
         // Les parties d'une vue, dans l'ordre de l'arbre. 1.11.10 : un symbole a en plus
         // ses Fonctions et ses Popups (les deux dernieres).
@@ -444,6 +460,19 @@ namespace app {
         // L'alarme derriere un noeud HmiObjectAlarm : son nom dans le symbole (ou
         // la bibliotheque) et son chemin dans le symbole ; faux pour le reste.
         [[nodiscard]] bool hmiObjectAlarmOf(ui::NodeId, std::string& name, std::string& path) const;
+        // 1.11.21 : ce que designe un noeud du contenu d'un code (HmiCodeGroup, HmiCodeEntry,
+        // HmiCodeInner) - son code (genre : 1 script general, 2 script de vue, 3 fonction IHM,
+        // 4 fonction de symbole ; son identifiant ; `owner` : la vue d'un script de vue, le symbole
+        // d'une fonction de symbole), son groupe (hmitree::OutlineKind ; -1 : aucun), le nom d'une
+        // declaration, la ligne d'une fonction interne. Faux : pas un tel noeud (ou plus la).
+        struct CodeTarget {
+            std::uint32_t kind{0};
+            std::uint64_t id{0}, owner{0};
+            int           group{-1};
+            std::string   name;
+            int           line{0};
+        };
+        [[nodiscard]] bool codeTargetOf(ui::NodeId, CodeTarget& out) const;
         // Lot 16 : le dossier de variables IHM d'un noeud ("Ligne/Convoyeur") ; vide sinon.
         [[nodiscard]] std::string   hmiFolderOf(ui::NodeId) const;
         // Lot 21 : le texte d'un dossier d'une liste IHM ("Armoires  [3]").
@@ -683,6 +712,11 @@ namespace app {
         std::vector<std::string>   macroFolders_;         // lot macros 1 : les dossiers
         [[nodiscard]] std::vector<ui::NodeId> macroChildren(const std::string& folder) const;
         std::shared_ptr<const hmi::Document> hmi_;
+        // 1.11.21 : le contenu deplie des codes (hmitree::outlineOf), garde par (genre, code) et
+        // oublie quand le document change (pas a chaque dessin).
+        struct CodeOutline;
+        mutable std::map<std::uint64_t, std::shared_ptr<const CodeOutline>> outlines_;
+        [[nodiscard]] const CodeOutline* outlineOf(std::uint32_t codeKind, std::uint64_t id) const;
         // 1.10 (chantier O) : les alarmes des objets, gardees par (vue, objet) et
         // oubliees quand le document change.
         ObjectAlarms objectAlarms_;

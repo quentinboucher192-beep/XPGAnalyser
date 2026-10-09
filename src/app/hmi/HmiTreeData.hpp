@@ -550,6 +550,109 @@ inline Declared withoutDeclarations(std::string_view s) {
     }
     return out;
 }
+// ---- 1.11.21 : LE CONTENU D'UN CODE (les explorateurs le deplient) ----
+//  Ce qu'un script ou une fonction declare, lu comme le moteur le lit (decl::extract de son code
+//  reconstruit : le modele de ses onglets, puis les blocs restes dans son texte) - ses groupes,
+//  dans l'ordre : Parametres (une fonction ; leur mode), Constantes, Variables (les locales
+//  d'une fonction), Fonctions internes (FUNCTION ... END_FUNCTION : leur signature, leurs
+//  parametres et leurs locales en dessous). Un groupe vide n'est pas rendu.
+struct OutlineItem {
+    std::string              label;      // "Min : REAL", "RandomSeed : REAL  (E/S)", "Max : INT = 10", "Double(x : INT) : INT"
+    std::string              name;       // le nom (aller a sa declaration)
+    std::string              tip;        // son commentaire ; vide : aucun
+    int                      line{0};    // sa ligne dans le code (une fonction interne : sa premiere ; une
+                                         // declaration du modele : 1, ses onglets la montrent)
+    std::vector<OutlineItem> children;   // une fonction interne : ses parametres, puis ses locales
+};
+enum class OutlineKind : std::uint8_t { Parameters = 0, Constants = 1, Variables = 2, Functions = 3 };
+struct OutlineGroup {
+    OutlineKind              kind{OutlineKind::Variables};
+    std::string              label;      // "Param\xC3\xA8tres", "Constantes", "Variables", "Variables locales", "Fonctions internes"
+    std::vector<OutlineItem> items;
+};
+// Une declaration lue, en une ligne : "Max : INT = 10" (une constante), "Compteur : INT := 0",
+// "Graine : REAL  (E/S)", "Tirage : REAL  (sortie)", "b : REAL := 0.5" (une entree facultative).
+inline std::string outlineLabel(const hmi::decl::Decl& d) {
+    std::string s = d.name + " : " + d.type;
+    if (!d.initial.empty()) s += (d.constant ? " = " : " := ") + d.initial;
+    if (d.section == hmi::decl::Section::InOut) s += "  (E/S)";
+    else if (d.section == hmi::decl::Section::Output) s += "  (sortie)";
+    else if (d.retain) s += "  (conserv\xC3\xA9" "e)";
+    return s;
+}
+inline std::vector<OutlineGroup> outlineOfCode(std::string_view code, bool function) {
+    const auto x = hmi::decl::extract(code);
+    const auto item = [](const hmi::decl::Decl& d) {
+        OutlineItem it;
+        it.label = outlineLabel(d);
+        it.name = d.name;
+        it.tip = d.comment;
+        it.line = d.line;
+        return it;
+    };
+    OutlineGroup params{OutlineKind::Parameters, "Param\xC3\xA8tres", {}};
+    OutlineGroup consts{OutlineKind::Constants, "Constantes", {}};
+    OutlineGroup vars{OutlineKind::Variables, function ? "Variables locales" : "Variables", {}};
+    OutlineGroup inner{OutlineKind::Functions, "Fonctions internes", {}};
+    for (const auto& d : x.decls) {
+        if (hmi::decl::isParameter(d.section)) params.items.push_back(item(d));
+        else if (d.constant) consts.items.push_back(item(d));
+        else vars.items.push_back(item(d));
+    }
+    for (const auto& f : x.functions) {
+        OutlineItem it;
+        it.name = f.name;
+        it.line = f.firstLine;
+        std::string sig = f.name + "(";
+        bool first = true;
+        for (const auto& d : f.decls) {
+            if (!hmi::decl::isParameter(d.section)) continue;
+            sig += (first ? "" : ", ") + std::string(d.section == hmi::decl::Section::InOut ? "VAR_IN_OUT "
+                                                     : d.section == hmi::decl::Section::Output ? "VAR_OUTPUT " : "")
+                 + d.name + " : " + d.type;
+            first = false;
+        }
+        it.label = sig + ")" + (f.returnType.empty() ? std::string{} : " : " + f.returnType);
+        it.tip = "ligne " + std::to_string(f.firstLine);
+        for (const auto& d : f.decls)                                   // ses parametres d'abord...
+            if (hmi::decl::isParameter(d.section)) it.children.push_back(item(d));
+        for (const auto& d : f.decls)                                   // ... puis ses locales
+            if (!hmi::decl::isParameter(d.section)) it.children.push_back(item(d));
+        inner.items.push_back(std::move(it));
+    }
+    std::vector<OutlineGroup> out;
+    for (auto* g : {&params, &consts, &vars, &inner})
+        if (!g->items.empty()) out.push_back(std::move(*g));
+    return out;
+}
+// La documentation et le stockage des declarations du modele (le code reconstruit ne les dit pas).
+inline void outlineDocs(std::vector<OutlineGroup>& groups, const std::vector<hmi::Declaration>& decls) {
+    for (auto& g : groups) {
+        if (g.kind == OutlineKind::Functions) continue;
+        for (auto& it : g.items)
+            for (const auto& d : decls) {
+                if (d.name != it.name) continue;
+                if (it.tip.empty() && !d.description.empty()) it.tip = d.description;
+                const bool said = it.label.find("  (") != std::string::npos;
+                if (!said && d.kind == hmi::DeclKind::Variable && d.storage == hmi::Storage::Kept) it.label += "  (conserv\xC3\xA9" "e)";
+                if (!said && d.kind == hmi::DeclKind::Variable && d.storage == hmi::Storage::Persistent) it.label += "  (persistante)";
+            }
+    }
+}
+inline std::vector<OutlineGroup> outlineOf(const hmi::Script& s) {
+    if (s.lang != hmi::ScriptLang::ST) return {};                       // C, C++ : rien a deplier
+    auto out = outlineOfCode(hmi::decl::codeOf(s), false);
+    outlineDocs(out, s.decls);
+    return out;
+}
+inline std::vector<OutlineGroup> outlineOf(const hmi::HmiFunction& f) {
+    auto out = outlineOfCode(hmi::decl::codeOf(f), true);
+    outlineDocs(out, f.decls);
+    return out;
+}
+// Le titre d'un groupe dans un arbre : "Param\xC3\xA8tres (4)".
+inline std::string outlineTitle(const OutlineGroup& g) { return g.label + " (" + std::to_string(g.items.size()) + ")"; }
+
 // "Moyenne(a : REAL, b : REAL) : REAL" ; sans retour : "Tracer(Message : STRING)".
 inline std::string signatureOf(const hmi::HmiFunction& f) {
     const auto d = withoutDeclarations(hmi::decl::codeOf(f));          // 1.11.18 (lot 3) : ses parametres du modele aussi

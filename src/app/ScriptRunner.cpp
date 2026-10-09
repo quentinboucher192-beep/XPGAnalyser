@@ -2440,11 +2440,13 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         // l'editeur : la suite (la simulation IHM de l'editeur)
     }
     if (cmd == "ihm-build" || cmd == "ihm-build-attendre" || cmd == "ihm-build-etat" || cmd == "ihm-sorties" || cmd == "ihm-script-modifier"
-        || cmd == "ihm-console-etat" || cmd == "ihm-remanence" || cmd == "ihm-sim-etat" || cmd == "ihm-variable") {
+        || cmd == "ihm-console-etat" || cmd == "ihm-remanence" || cmd == "ihm-sim-etat" || cmd == "ihm-variable"
+        || cmd == "ihm-diagnostics" || cmd == "ihm-sorties-contient") {
         auto* screen = dynamic_cast<MainAnalysisScreen*>(app_.menus().top());
         if (screen) buildScreen_ = screen;
         // la fenetre de progression est devant : l'ecran est dessous (le meme, il ne part pas)
         else if ((cmd == "ihm-build-attendre" || cmd == "ihm-build-etat" || cmd == "ihm-console-etat" || cmd == "ihm-sim-etat" || cmd == "ihm-variable"
+                  || cmd == "ihm-diagnostics" || cmd == "ihm-sorties-contient"
                   || cmd == "ihm-remanence")
                  && app_.menus().depth() >= 2)
             screen = buildScreen_;
@@ -2489,6 +2491,19 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         if (cmd == "ihm-sorties") {
             screen->showHmiBuildOutputs(arg(1) == "diagnostics" ? 1 : arg(1) == "console" ? 2 : 0);
             return Step::Yield;
+        }
+        // 1.11.21 : ihm-diagnostics ["texte"] - les Diagnostics du panneau du bas (le direct en tete) :
+        // dits, et l'un d'eux contient le texte (« Saisie · ... » : une ligne en direct) ;
+        // ihm-sorties-contient "texte" : une ligne des Sorties le contient (l'essai d'une fonction).
+        if (cmd == "ihm-diagnostics") {
+            std::printf("[script] diagnostics IHM : %s\n", screen->hmiDiagnosticsSummary().c_str());
+            if (!arg(1).empty() && !screen->hmiDiagnosticsHas(arg(1))) fail("ihm-diagnostics : \"" + arg(1) + "\" absent des Diagnostics");
+            return Step::Next;
+        }
+        if (cmd == "ihm-sorties-contient") {
+            if (!screen->hmiOutputsHas(arg(1))) fail("ihm-sorties-contient : \"" + arg(1) + "\" absent des Sorties");
+            else std::printf("[script] sorties IHM : \"%s\" y est\n", arg(1).c_str());
+            return Step::Next;
         }
         if (cmd == "ihm-console-etat") {
             std::printf("[script] console IHM : %s\n", screen->hmiConsoleSummary().c_str());
