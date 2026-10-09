@@ -1,6 +1,7 @@
 #include "HmiStore.hpp"
 #include "HmiEnums.hpp"            // 1.10 (E) : les enumerations IHM
 #include "HmiPopupParams.hpp"
+#include "HmiTypeRegistry.hpp"     // 1.11.19 (refonte, lot 6) : la cle du type d'une declaration
 #include "HmiZones.hpp"
 
 #include <algorithm>
@@ -187,6 +188,10 @@ bool toBool(const std::string* s, bool fallback) {
 }
 std::string toStr(const std::string* s) { return s ? *s : std::string{}; }
 
+// 1.11.19 (refonte, lot 6) : le registre des types du projet qu'on enregistre (serializeProject le
+// pose le temps d'ecrire) - une declaration d'un type IHM y ajoute sa cle (type_cle).
+thread_local const typereg::Registry* tSavedTypes = nullptr;
+
 // 1.11.18 (refonte, lot 3) : les declarations d'un code (constantes, variables,
 // parametres), chacune sur sa ligne, juste apres la ligne de son porteur (script,
 // fonction, fonction_symbole, redefinition, operateur_symbole, operateur_type).
@@ -195,6 +200,12 @@ std::string serializeDeclarations(const std::vector<Declaration>& decls) {
     for (const auto& d : decls) {
         s += "declaration" + fieldInt("id", d.id) + fieldBare("genre", declKindKey(d.kind)) + field("nom", d.name)
            + field("type", d.type);
+        // 1.11.19 (lot 6) : un type IHM (ou un tableau, une reference de lui) : sa cle stable,
+        // qui le retrouve s'il est renomme hors de l'application. Le format 23 la lit ou l'ignore.
+        if (tSavedTypes) {
+            const auto r = tSavedTypes->resolve(d.type);
+            if (r.ok && r.key.find("ihm:") != std::string::npos) s += field("type_cle", r.key);
+        }
         if (!d.value.empty()) s += field("valeur", d.value);
         if (d.kind == DeclKind::Variable) s += fieldBare("stockage", storageKey(d.storage));
         if (d.kind == DeclKind::Parameter) s += fieldBare("mode", passModeKey(d.mode));
@@ -212,6 +223,7 @@ bool parseDeclaration(const Record& r, Declaration& d) {
     d.kind = *kind;
     d.name = toStr(r.get("nom"));
     d.type = toStr(r.get("type"));
+    d.typeKey = toStr(r.get("type_cle"));                 // 1.11.19 (lot 6) : suivi au chargement, puis vide
     d.value = toStr(r.get("valeur"));
     d.description = toStr(r.get("description"));
     d.storage = storageFromKey(toStr(r.get("stockage"))).value_or(Storage::Execution);
@@ -749,6 +761,13 @@ std::shared_ptr<const Bytes> textBytes(const std::string& text) {
 
 std::vector<ProjectFile> serializeProject(const Project& p) {
     std::vector<ProjectFile> files;
+    // 1.11.19 (lot 6) : les cles des types des declarations, le temps d'ecrire.
+    const auto savedTypes = typereg::Registry::build(p);
+    struct TypesScope {
+        const typereg::Registry* before;
+        explicit TypesScope(const typereg::Registry* r) : before(tSavedTypes) { tSavedTypes = r; }
+        ~TypesScope() { tSavedTypes = before; }
+    } typesScope(savedTypes.get());
     const Config& cfg = p.config;
     // 1.10.2 (AL) : le format 22 n'ajoute que les groupes d'alarmes regles et les liens.
     // Un projet qui n'en a pas s'ecrit encore au format 21 : la 1.10.1 l'ouvre.
@@ -1973,6 +1992,10 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
     // 1.11.18 (lot 3) : une declaration sans identifiant, ou en double, en recoit un neuf.
     if (uniqueDeclarationIds(p) && report)
         report->warnings.push_back("d\xC3\xA9" "clarations : identifiants absents ou en double, renouvel\xC3\xA9s");
+    // 1.11.19 (lot 6) : un type IHM renomme hors de l'application (le fichier edite a la main, un
+    // morceau venu d'ailleurs) : la cle lue (type_cle) retrouve son nom d'aujourd'hui.
+    for (const auto& said : typereg::followTypeKeys(p))
+        if (report) report->warnings.push_back(said);
     // Lot 15 : un equipement ecrit a la main sans identifiant en recoit un.
     for (auto& e : p.equipments)
         if (e.id == kNoId) e.id = p.nextId++;

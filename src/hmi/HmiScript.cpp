@@ -6,6 +6,7 @@
 #include "HmiMarkers.hpp"          // 1.11.1 (REP) : les $ des reperes, transparents dans un script ST
 #include "HmiOperators.hpp"        // 1.11.17 : la signature d'un operateur (le lieu d'un appel)
 #include "HmiSymbols.hpp"          // 1.11.17 : la portee d'un symbole, rewriteNames (les textes d'un objet)
+#include "HmiTypeRegistry.hpp"     // 1.11.19 (refonte, lot 6) : les types d'une locale
 
 #include <algorithm>
 #include <cctype>
@@ -427,10 +428,12 @@ std::vector<const LocalVar*> ScriptParts::inputs() const {
     return out;
 }
 
+// 1.11.19 (refonte, lot 6) : les types d'une locale viennent du registre des types (ceux qu'une
+// declaration propose : BOOL, SINT ... STRING, TIME), sous leur nom exact.
 bool localTypeSupported(std::string_view type) noexcept {
     const std::string u = upper(type);
-    for (const auto t : kLocalTypes) if (u == t) return true;
-    return false;
+    const auto* e = typereg::baseRegistry().byName(u);
+    return e && (e->proposed & typereg::UseDeclaration) != 0 && u == e->name;
 }
 
 bool richLocalType(std::string_view type, const std::function<bool(std::string_view)>& knownType) {
@@ -439,7 +442,9 @@ bool richLocalType(std::string_view type, const std::function<bool(std::string_v
     if (u.empty()) return false;
     for (std::string_view p : {"ARRAY", "MAP", "REF_TO", "REFERENCE", "POINTER", "STRING"})
         if (u.rfind(p, 0) == 0 && (u.size() == p.size() || !identChar(u[p.size()]))) return true;
-    if (u == "MAP_ITERATOR" || u == "ITERATOR" || u == "LREAL" || u == "LINT" || u == "ULINT" || u == "TIME") return true;
+    if (u == "MAP_ITERATOR" || u == "ITERATOR") return true;
+    // un type de base permis a une declaration (LINT, ULINT : sans etre proposes)
+    if (const auto* e = typereg::baseRegistry().byName(u); e && e->usable(typereg::UseDeclaration) && u == e->name) return true;
     // Un type IHM (structure) : un nom que le projet connait.
     if (!identStart(u[0])) return false;
     for (const char c : u) if (!identChar(c)) return false;

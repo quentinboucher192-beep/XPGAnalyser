@@ -5,6 +5,7 @@
 
 #include "HmiEquipment.hpp"
 #include "HmiMarkers.hpp"   // 1.11.1 (REP) : pathProblems lit un script sans les $ de ses reperes
+#include "HmiTypeRegistry.hpp"   // 1.11.19 (refonte, lot 6) : les types elementaires d'une variable
 
 #include <algorithm>
 #include <cctype>
@@ -297,10 +298,11 @@ std::string pathKey(std::string_view s) {
 } // namespace
 
 // ------------------------------------------------------------------ types ---
+// 1.11.19 (refonte, lot 6) : les types elementaires d'une variable IHM viennent du registre des
+// types (typereg::UseVariable : ceux qui ont une place Modbus), sous leur nom exact.
 bool isElementary(std::string_view name) noexcept {
-    for (const auto t : kVariableTypes)
-        if (sameText(t, name)) return true;
-    return false;
+    const auto* e = typereg::baseRegistry().byName(name);
+    return e && e->usable(typereg::UseVariable) && e->category != typereg::Category::Generic && sameText(e->name, name);
 }
 
 bool isComposite(std::string_view type) noexcept {

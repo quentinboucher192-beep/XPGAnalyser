@@ -83,6 +83,11 @@ public:
     bool moveSelected(int delta);
     // Ecrire la case `column` de la ligne `row` (une ligne du modele, dans l'ordre du code).
     bool setCell(std::size_t row, hmi::decledit::Column column, const std::string& text);
+    // 1.11.19 (lot 6) : "Choisir un type..." dans la case Type - le selecteur de types (par son
+    // hote, app::typepicker) ; le type choisi va a la declaration (retrouvee par son identifiant :
+    // la grille a pu changer entre-temps). Sans hote : la barre le dit.
+    void pickType(std::size_t row);
+    bool setTypeOf(hmi::Id declaration, const std::string& type);
     [[nodiscard]] std::vector<std::size_t> selectedRows() const;
     void selectRows(const std::vector<std::size_t>& rows);
     // Choisir la declaration `name` (sans casse) ; faux : pas dans cet onglet.
@@ -135,6 +140,7 @@ private:
     int                    usesColumn_{-1};
     std::string            message_;
     paste::Binding         paste_;
+    std::shared_ptr<int>   alive_{std::make_shared<int>(0)};   // le selecteur repond apres coup : la grille vit-elle encore ?
     core::ConnectionScope  links_;
 };
 

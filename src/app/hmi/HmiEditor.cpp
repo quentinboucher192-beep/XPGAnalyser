@@ -16,6 +16,7 @@
 #include "HmiPaneKit.hpp"
 #include "HmiTreeData.hpp"            // 1.10.3 (Q1103) : les lignes d'un objet deplie (les deux explorateurs)
 #include "HmiValueKind.hpp"           // 1.11.3 : le carre de legende, la liste des carres
+#include "HmiTypePicker.hpp"           // 1.11.19 (lot 6) : le type d'un parametre, au selecteur de types
 
 #include <set>
 
@@ -1209,6 +1210,27 @@ bool HmiEditor::commitView(const std::string& field, const std::string& value) {
                 hmiparams::openObject(t.view, t.object);
             }
             return true;
+        }
+        // 1.11.19 (lot 6) : "Choisir un type..." - le selecteur, puis le type entier (tableau compris).
+        if (value == typepicker::kChoose && field.size() > 5 && field.compare(field.size() - 5, 5, ":type") == 0) {
+            const auto* cur = doc_->project.view(viewId_);
+            const std::string rest = field.substr(hmiparams::kFieldPrefix.size());
+            const std::size_t index = static_cast<std::size_t>(std::strtoul(rest.c_str(), nullptr, 10));
+            if (!cur || index >= cur->params.size()) return false;
+            HmiTypePicker::Spec spec;
+            spec.field = "Type de " + cur->params[index].name;
+            spec.current = cur->params[index].type.empty() ? std::string("ANY") : cur->params[index].type;
+            spec.use = hmi::typereg::UseParameter;
+            spec.doc = doc_;
+            spec.plc = hmiparams::plcTypesOf(hmiparams::program().get());
+            const std::string whole = field.substr(0, field.size() - 5) + ":type_complet";
+            const std::weak_ptr<bool> alive = alive_;
+            typepicker::ask(std::move(spec), [this, alive, whole](const HmiTypePicker::Answer& a) {
+                if (alive.expired() || a.type.empty()) return;
+                (void)commitView(whole, a.type);
+                rebuildProperties();
+            });
+            return false;
         }
         hmiparams::FieldResult res;
         auto cmd = hmi::changeProject(doc_, hmiparams::fieldLabel(field, value),

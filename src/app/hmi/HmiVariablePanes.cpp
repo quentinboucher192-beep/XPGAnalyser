@@ -13,6 +13,8 @@
 #include "../../hmi/HmiTypes.hpp"
 #include "../../core/AtomicFile.hpp"   // 1.11.16 : exporter les valeurs remanentes
 #include "../../ui/Theme.hpp"
+#include "../../hmi/HmiTypeRegistry.hpp"   // 1.11.19 (refonte, lot 6) : les types, un seul catalogue
+#include "HmiTypePicker.hpp"                // 1.11.19 (refonte, lot 6) : "Choisir un type..."
 
 #include <algorithm>
 #include <iterator>
@@ -67,6 +69,7 @@ const std::string kDash = "\xE2\x80\x94";
 const std::string kRW = "lecture, \xC3\xA9" "criture";
 const std::string kRO = "lecture seule";
 const std::string kArray = "Tableau\xE2\x80\xA6";
+const std::string& kPickType = typepicker::kChoose;              // 1.11.19 (lot 6) : le selecteur de types
 constexpr long long kShown = 200;       // les cases montrees d'un tableau deplie
 
 std::string upper(std::string_view s) {
@@ -123,10 +126,11 @@ std::string placeOf(const std::string& address, const std::string& type) {
 
 std::vector<std::string> typeChoices(const hmi::Project& p, std::string_view except = {}) {
     std::vector<std::string> out;
-    for (const auto t : hmi::kVariableTypes) out.emplace_back(t);
+    for (const auto& t : hmi::typereg::baseRegistry().names(hmi::typereg::UseVariable)) out.push_back(t);   // 1.11.19 : le registre
     for (const auto& t : p.programs.types)
         if (except.empty() || !sameText(t.name, except)) out.push_back(t.name);
     out.push_back(kArray);
+    if (app::typepicker::available()) out.push_back(kPickType);
     return out;
 }
 
@@ -1125,6 +1129,23 @@ bool HmiVariablesPane::commitCell(std::size_t row, std::size_t col, const std::s
                     ok = setName(r.var, text, &why);
                     break;
                 case CType:
+                    if (text == kPickType) {
+                        // 1.11.19 (lot 6) : le selecteur de types (les types d'une variable IHM).
+                        const auto* v = doc_->project.variableById(r.var);
+                        app::HmiTypePicker::Spec spec;
+                        spec.field = "Type de " + (v ? v->name : std::string{});
+                        spec.current = v ? v->type : std::string{};
+                        spec.use = hmi::typereg::UseVariable;
+                        spec.doc = doc_;
+                        const Id id = r.var;
+                        const std::weak_ptr<int> alive = alive_;
+                        app::typepicker::ask(std::move(spec), [this, id, alive](const app::HmiTypePicker::Answer& a) {
+                            if (alive.expired() || a.type.empty()) return;
+                            std::string w;
+                            if (!setType(id, a.type, &w)) say("Type refus\xC3\xA9 : " + w, true);
+                        });
+                        return false;
+                    }
                     if (text == kArray) {
                         // Tableau... : les bornes et le type des cases, dans une fenetre.
                         const auto* v = doc_->project.variableById(r.var);
@@ -2936,6 +2957,26 @@ bool HmiTypesPane::commitMemberCell(std::size_t row, std::size_t col, const std:
     if (!t || row >= t->members.size()) return false;
     hmi::TypeMember m = t->members[row];
     const Id tid = t->id;
+    if (col == 1 && text == kPickType) {
+        // 1.11.19 (lot 6) : le selecteur de types (un membre : les types d'une variable IHM).
+        app::HmiTypePicker::Spec spec;
+        spec.field = "Type de " + t->name + "." + m.name;
+        spec.current = m.type;
+        spec.use = hmi::typereg::UseVariable;
+        spec.doc = doc_;
+        const std::size_t index = row;
+        const std::weak_ptr<int> alive = alive_;
+        app::typepicker::ask(std::move(spec), [this, tid, index, alive](const app::HmiTypePicker::Answer& a) {
+            if (alive.expired() || a.type.empty()) return;
+            const auto* t2 = doc_->project.hmiType(tid);
+            if (!t2 || index >= t2->members.size()) return;
+            hmi::TypeMember m2 = t2->members[index];
+            m2.type = a.type;
+            std::string why;
+            if (!setMember(tid, index, m2, &why)) say("Refus\xC3\xA9 : " + why, true);
+        });
+        return false;
+    }
     if (col == 1 && text == kArray) {
         const std::size_t index = row;
         if (hosts_.arrayType) {

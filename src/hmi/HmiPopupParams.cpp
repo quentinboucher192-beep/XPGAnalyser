@@ -6,6 +6,7 @@
 #include "HmiMarkers.hpp"   // 1.11.1 (REP) : un repere ecrit comme son morceau ($Vit$ := ...)
 #include "HmiRuntime.hpp"   // parseArguments, isVariablePath
 #include "HmiSymbols.hpp"   // 1.11.10 : les instances d'un symbole (withArgument)
+#include "HmiTypeRegistry.hpp"   // 1.11.19 (refonte, lot 6) : les types et la regle, un seul catalogue
 #include "HmiTypes.hpp"
 
 #include <algorithm>
@@ -31,24 +32,6 @@ bool same(std::string_view a, std::string_view b) { return up(a) == up(b); }
 bool identStart(char c) { return std::isalpha(static_cast<unsigned char>(c)) != 0 || c == '_'; }
 bool identChar(char c) { return std::isalnum(static_cast<unsigned char>(c)) != 0 || c == '_'; }
 
-// Les entiers : (signe, bits). WORD et DWORD sont des mots de bits (non signes).
-struct IntInfo { bool isInt{false}; bool isSigned{false}; int bits{0}; bool bitString{false}; };
-IntInfo intInfo(std::string_view t) {
-    const std::string u = up(t);
-    if (u == "SINT") return {true, true, 8, false};
-    if (u == "INT") return {true, true, 16, false};
-    if (u == "DINT") return {true, true, 32, false};
-    if (u == "LINT") return {true, true, 64, false};
-    if (u == "USINT") return {true, false, 8, false};
-    if (u == "UINT") return {true, false, 16, false};
-    if (u == "UDINT") return {true, false, 32, false};
-    if (u == "ULINT") return {true, false, 64, false};
-    if (u == "BYTE") return {true, false, 8, true};
-    if (u == "WORD") return {true, false, 16, true};
-    if (u == "DWORD") return {true, false, 32, true};
-    if (u == "LWORD") return {true, false, 64, true};
-    return {};
-}
 
 // Les noms lus (racines) d'un texte, hors chaines et commentaires.
 template <class F>
@@ -121,75 +104,43 @@ std::string_view paramModeHelp(ParamMode m) noexcept {
 }
 
 // ---------------------------------------------------------------- types -----
+// 1.11.19 (refonte, lot 6) : la liste, la lecture et la regle viennent du registre des types
+// (hmi::typereg) ; les memes paires passent qu'avant (l'essai hmitypes le prouve, case par case).
 const std::vector<std::string>& baseTypes() {
-    static const std::vector<std::string> k{"BOOL", "INT", "UINT", "WORD", "DINT", "UDINT", "DWORD",
-                                            "REAL", "LREAL", "STRING", "TIME", "ANY"};
+    static const std::vector<std::string> k = typereg::baseRegistry().names(typereg::UseParameter);
     return k;
 }
 
 std::vector<TypeChoice> proposedTypes(const Project& p, const PlcTypes& plc) {
     std::vector<TypeChoice> out;
-    for (const auto& t : baseTypes()) out.push_back({t, "Base"});
-    for (const auto& t : p.programs.types) out.push_back({t.name, "Types IHM"});
-    if (plc.names)
-        for (auto& n : plc.names()) {
-            const bool dup = std::any_of(out.begin(), out.end(), [&](const TypeChoice& c) { return same(c.name, n); });
-            if (!dup) out.push_back({std::move(n), "DDT de l'API"});
-        }
+    const auto reg = typereg::Registry::build(p, &plc);
+    for (const auto* e : reg->usable(typereg::UseParameter, true)) {
+        const char* group = e->category == typereg::Category::PlcType ? "DDT de l'API"
+                            : e->category == typereg::Category::Structure || e->category == typereg::Category::Enumeration ? "Types IHM"
+                                                                                                                        : "Base";
+        out.push_back({e->name, group});
+    }
     return out;
 }
 
-std::string normalizedType(std::string_view type) {
-    std::string out;
-    for (const char c : type)
-        if (!std::isspace(static_cast<unsigned char>(c))) out += static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
-    if (out.empty()) return "ANY";
-    if (out.rfind("STRING[", 0) == 0) return "STRING";
-    // ARRAY[0..9]OFREAL : on garde la forme sans espaces (comparee telle quelle)
-    return out;
-}
+std::string normalizedType(std::string_view type) { return typereg::comparable(type); }
 
 bool typeKnown(const Project& p, std::string_view type, const PlcTypes& plc) {
-    const std::string n = normalizedType(type);
-    if (n == "ANY") return true;
-    if (std::find(baseTypes().begin(), baseTypes().end(), n) != baseTypes().end()) return true;
-    if (intInfo(n).isInt || n == "LREAL" || n == "REAL" || n == "STRING" || n == "TIME" || n == "BOOL") return true;
-    if (types::validType(p, type)) return true;
-    const auto isDdt = [&](std::string_view t) {
-        if (!plc.names) return false;
-        for (const auto& d : plc.names()) if (same(d, t)) return true;
-        return false;
-    };
-    if (isDdt(n) || (plc.isType && plc.isType(type))) return true;
-    // ARRAY[a..b] OF <DDT>
+    if (trim(type).empty()) return true;            // ANY
+    const auto reg = typereg::Registry::build(p, &plc);
+    const auto r = reg->resolve(type, typereg::UseParameter);
+    if (r.ok) return true;
+    // Un DDT que seul isType connait (la verification de Generer, sans la liste des noms) :
+    // le nom, ou l'element d'un tableau.
+    if (!plc.isType) return false;
     types::Spec spec;
-    if (types::parseSpec(type, spec) && spec.array()) return typeKnown(p, spec.element, plc);
-    return false;
+    if (types::parseSpec(type, spec)) return plc.isType(spec.element) || (spec.array() && typeKnown(p, spec.element, plc));
+    return plc.isType(type);
 }
 
-bool typeAccepts(std::string_view declared, std::string_view given) {
-    const std::string d = normalizedType(declared);
-    if (trim(given).empty()) return true;           // inconnu : pas d'erreur sure
-    const std::string g = normalizedType(given);
-    if (d == "ANY" || g == "ANY") return true;
-    if (d == g) return true;
-    const IntInfo di = intInfo(d), gi = intInfo(g);
-    if (di.isInt && gi.isInt) {
-        if (di.bitString) return !gi.isSigned && gi.bits <= di.bits;     // un mot de bits : un non signe pas plus large
-        if (di.isSigned) return gi.isSigned ? gi.bits <= di.bits : gi.bits < di.bits;
-        return !gi.isSigned && gi.bits <= di.bits;
-    }
-    if (d == "REAL") return gi.isInt && gi.bits <= 16;
-    if (d == "LREAL") return gi.isInt || g == "REAL";
-    // ARRAY : memes bornes, element exactement le meme (deja compare : d == g)
-    return false;
-}
+bool typeAccepts(std::string_view declared, std::string_view given) { return typereg::conversion(given, declared).safe(); }
 
-bool typeExact(std::string_view declared, std::string_view given) {
-    if (trim(given).empty()) return true;           // inconnu : pas d'erreur sure
-    const std::string d = normalizedType(declared), g = normalizedType(given);
-    return d == "ANY" || g == "ANY" || d == g;
-}
+bool typeExact(std::string_view declared, std::string_view given) { return typereg::conversion(given, declared).exact(); }
 
 bool typeAcceptsFor(ParamMode mode, std::string_view declared, std::string_view given, bool variable) {
     if (mode == ParamMode::Copy || !variable) return typeAccepts(declared, given);

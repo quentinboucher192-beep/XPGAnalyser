@@ -28,6 +28,7 @@
 // constructions sont reconnues ici seulement (scanDialect).
 #if __has_include("HmiScriptCheck110.hpp")
 #include "HmiScriptCheck110.hpp"
+#include "HmiTypeRegistry.hpp"   // 1.11.19 (refonte, lot 6) : un type est-il un nombre ?
 #define XPG_HMI_LANG110 1
 #endif
 
@@ -236,9 +237,7 @@ Kind kindOf(std::string_view type) {
     if (u == "BOOL" || u == "EBOOL") return Kind::Bool;
     if (u == "STRING" || u.rfind("STRING[", 0) == 0 || u == "WSTRING") return Kind::Text;
     if (u == "TIME" || u == "LTIME") return Kind::Time;
-    static const std::set<std::string> kNum = {"INT",  "UINT", "DINT", "UDINT", "SINT", "USINT", "LINT", "ULINT",
-                                               "WORD", "DWORD", "BYTE", "LWORD", "REAL", "LREAL"};
-    return kNum.count(u) ? Kind::Num : Kind::Other;
+    return typereg::isNumber(u) ? Kind::Num : Kind::Other;     // 1.11.19 (lot 6) : les nombres du registre
 }
 bool elementary(std::string_view type) { return kindOf(type) != Kind::Other; }
 

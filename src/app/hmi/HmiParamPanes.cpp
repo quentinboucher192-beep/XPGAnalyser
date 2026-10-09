@@ -14,6 +14,7 @@
 #include "../../project/RenamePlan.hpp"
 #include "HmiPaneKit.hpp"
 #include "HmiPanels.hpp"
+#include "HmiTypePicker.hpp"   // 1.11.19 (refonte, lot 6) : "Choisir un type..."
 #include "../../ui/widgets/ExprField.hpp"   // 1.10 (chantier K) : les champs a expression, partout pareils
 
 #include <algorithm>
@@ -247,6 +248,7 @@ std::vector<PG::Category> paramCategories(const hmi::Project& p, const hmi::View
         // Les types proposes : base, types IHM, DDT de l'API (dans cet ordre).
         std::vector<std::string> typeChoices;
         for (const auto& c : hmi::params::proposedTypes(p, plc)) typeChoices.push_back(c.name);
+        if (typepicker::available()) typeChoices.push_back(typepicker::kChoose);   // 1.11.19 : le selecteur de types
         std::vector<std::string> modeChoices;
         for (const auto m : hmi::params::kParamModes) modeChoices.emplace_back(hmi::params::paramModeLabel(m));
         for (std::size_t i = 0; i < v.params.size(); ++i) {
@@ -422,7 +424,15 @@ FieldResult applyParamField(hmi::Project& p, hmi::Id viewId, std::string_view fi
         (void)hmi::params::renameParam(p, viewName, from, name);
         return r;
     }
+    // 1.11.19 (lot 6) : le type entier, tableau compris (le selecteur de types le donne ainsi).
+    if (what == "type_complet") {
+        std::string t = trim(value);
+        if (upper(t) == "ANY") t.clear();
+        prm.type = t;
+        return r;
+    }
     if (what == "type") {
+        if (value == typepicker::kChoose) { r.ok = false; r.why = "le s\xC3\xA9lecteur de types n'est pas ouvert ici"; return r; }
         const auto [bounds, element] = splitArray(prm.type);
         std::string t = trim(value);
         if (upper(t) == "ANY") t.clear();

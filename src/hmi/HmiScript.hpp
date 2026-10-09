@@ -105,9 +105,8 @@ struct ScriptParts {
 // `function` : VAR_INPUT est permis (les parametres d'une fonction IHM).
 // 1.10 : `knownType` dit si un nom est un type IHM (une locale de ce type est permise).
 [[nodiscard]] ScriptParts splitDeclarations(std::string_view code, bool function = false, const TypeKnown& knownType = {});
-// Les types d'une variable locale : elementaires (pas de tableau ni de structure).
-inline constexpr std::string_view kLocalTypes[] = {"BOOL", "INT", "DINT", "UINT", "UDINT", "SINT", "USINT", "REAL",
-                                                   "LREAL", "WORD", "DWORD", "BYTE", "TIME", "STRING"};
+// Les types elementaires d'une variable locale (1.11.19 : ceux que le registre des types propose
+// a une declaration, hmi::typereg::UseDeclaration - BOOL, SINT ... STRING, TIME).
 [[nodiscard]] bool localTypeSupported(std::string_view type) noexcept;
 // 1.10 (dialecte IHM) : un type riche pour une locale de script : ARRAY[..] (N
 // dimensions), MAP[STRING] OF T, REF_TO T, POINTER TO T, MAP_ITERATOR, une

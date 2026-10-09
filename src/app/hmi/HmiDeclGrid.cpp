@@ -5,6 +5,7 @@
 #include "HmiDeclGrid.hpp"
 
 #include "HmiIcons.hpp"
+#include "HmiTypePicker.hpp"
 #include "../../hmi/HmiMigrate.hpp"
 #include "../../hmi/HmiOperators.hpp"
 #include "../../ui/Theme.hpp"
@@ -23,6 +24,7 @@ namespace {
 
 enum GridAction : int { GAdd = 1, GRemove, GDuplicate, GUp, GDown, GUses };
 constexpr int kUses = -1;                                   // la colonne calculee Utilisations
+const std::string& kPickType = typepicker::kChoose;            // 1.11.19 (lot 6) : le selecteur de types
 const std::string kOtherType = "Autre type\xE2\x80\xA6";    // ouvre un champ libre (ARRAY, REF_TO...)
 
 bool sameText(std::string_view a, std::string_view b) noexcept {
@@ -63,6 +65,7 @@ public:
     mutable int              freeTypeRow{-1};   // "Autre type..." : la prochaine case Type de cette ligne est un champ
     std::function<bool(std::size_t, de::Column, const std::string&)> commit;
     std::function<void(std::size_t)>                                askFreeType;
+    std::function<void(std::size_t)>                                askPickType;
 
     [[nodiscard]] std::size_t rowCount() const override { return rows.size(); }
     [[nodiscard]] std::size_t columnCount() const override { return columns.size(); }
@@ -123,6 +126,7 @@ public:
                 const std::string& cur = rows[r].d.type;
                 if (!cur.empty() && std::none_of(out.begin(), out.end(), [&](const std::string& t) { return sameText(t, cur); }))
                     out.insert(out.begin(), cur);
+                if (typepicker::available()) out.push_back(kPickType);   // sans hote (un essai) : pas d'entree
                 out.push_back(kOtherType);
                 return out;
             }
@@ -144,6 +148,10 @@ public:
         const auto col = static_cast<de::Column>(columns[c]);
         if (col == de::Column::Type && text == kOtherType) {
             if (askFreeType) askFreeType(r);
+            return false;
+        }
+        if (col == de::Column::Type && text == kPickType) {
+            if (askPickType) askPickType(r);
             return false;
         }
         return commit(r, col, std::string(text));
@@ -201,6 +209,7 @@ HmiDeclGrid::HmiDeclGrid(std::string id, hmi::DocumentPtr doc, Apply apply, de::
         rows_->freeTypeRow = static_cast<int>(row);
         (void)table_->beginCellEdit(static_cast<ui::RowIndex>(row), static_cast<std::size_t>(c));
     };
+    rows_->askPickType = [this](std::size_t row) { pickType(row); };
     table_->setModel(rows_);
 
     links_ += tools_->triggered->connect([this](int a) {
@@ -568,6 +577,33 @@ bool HmiDeclGrid::setCell(std::size_t row, de::Column column, const std::string&
             false);
     }
     return true;
+}
+
+void HmiDeclGrid::pickType(std::size_t row) {
+    if (row >= rows_->rows.size() || !usable()) return;
+    if (!typepicker::available()) {
+        say("Le s\xC3\xA9lecteur de types n'est pas ouvert ici : \xC2\xAB Autre type\xE2\x80\xA6 \xC2\xBB pour \xC3\xA9" "crire le type.", true);
+        return;
+    }
+    const auto& d = rows_->rows[row].d;
+    HmiTypePicker::Spec spec;
+    spec.field = "Type de " + d.name;
+    spec.current = d.type;
+    spec.use = hmi::typereg::UseDeclaration;
+    spec.doc = doc_;
+    const std::weak_ptr<int> alive = alive_;
+    const hmi::Id id = d.id;
+    typepicker::ask(std::move(spec), [this, alive, id](const HmiTypePicker::Answer& a) {
+        if (alive.expired() || a.type.empty()) return;   // la grille est partie, ou rien de choisi
+        (void)setTypeOf(id, a.type);
+    });
+}
+
+bool HmiDeclGrid::setTypeOf(hmi::Id declaration, const std::string& type) {
+    for (std::size_t i = 0; i < rows_->rows.size(); ++i)
+        if (rows_->rows[i].d.id == declaration) return setCell(i, de::Column::Type, type);
+    say("Cette d\xC3\xA9" "claration n'est plus dans l'onglet : son type n'a pas chang\xC3\xA9.", true);
+    return false;
 }
 
 paste::Target HmiDeclGrid::pasteTarget(const ui::TableView::PasteRequest& rq) {

@@ -1108,6 +1108,9 @@
     <ClCompile Include="src\app\hmi\HmiSymbolPopupsPane.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiTypePicker.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\hmi\HmiValueKind.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
@@ -1277,6 +1280,9 @@
       <Filter>hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\hmi\HmiTutorialDeduce.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiTypeRegistry.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\hmi\HmiVarMotion.cpp">
@@ -2230,6 +2236,9 @@
     <ClInclude Include="src\app\hmi\HmiSymbolPopupsPane.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiTypePicker.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
     <ClInclude Include="src\app\hmi\HmiValueKind.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
@@ -2399,6 +2408,9 @@
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiTutorialDeduce.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiTypeRegistry.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiVarMotion.hpp">

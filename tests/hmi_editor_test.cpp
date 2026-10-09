@@ -38,6 +38,7 @@
 #include "../src/hmi/HmiActionKinds.hpp"
 #include "../src/hmi/HmiViewPaths.hpp"
 #include "../src/hmi/HmiVarMotion.hpp"              // 1.11.6         // 1.11.3 : le selecteur de valeur
+#include "../src/hmi/HmiTypeRegistry.hpp"            // 1.11.19 (refonte, lot 6)
 #include "../src/menu/MenuManager.hpp"
 #include "../src/ui/widgets/ExprField.hpp"          // 1.10 (chantier K)
 #include "../src/app/hmi/HmiDesignPanes.hpp"
@@ -4370,7 +4371,8 @@ void lot7_aide_saisie() {
     check(!items.empty() && items[0].text == "REAL" && items[0].kind == K::Type && items[0].insert == "REAL;",
           "RE : REAL; (le point-virgule avec)");
     items = as::suggest(p, nullptr, "VAR_INPUT\n  x : ", "");
-    check(items.size() == std::size(hmi::kLocalTypes), "les 14 types d'une locale");
+    check(items.size() == 14 && items.size() == hmi::typereg::baseRegistry().names(hmi::typereg::UseDeclaration).size(),
+          "les 14 types d'une locale (1.11.19 : ceux du registre)");
     // Les fonctions du projet.
     items = as::suggest(p, nullptr, "x := ", "Moy");
     const auto moy = std::find_if(items.begin(), items.end(), [](const as::Item& it) { return it.text == "Moyenne"; });

@@ -9,6 +9,7 @@
 #include "HmiOperators.hpp"
 #include "HmiScript.hpp"
 #include "HmiSymbols.hpp"     // replacePath, symbolOf, symbolFunction
+#include "HmiTypeRegistry.hpp" // 1.11.19 (refonte, lot 6) : les types proposes, lus, remis en forme
 #include "HmiTypes.hpp"
 
 #include <algorithm>
@@ -407,19 +408,13 @@ std::vector<Storage> storagesFor(decl::Role role) noexcept {
     return {Storage::Execution};
 }
 
-std::vector<std::string> typeChoices(const Project& p) {
-    std::vector<std::string> out;
-    for (const auto t : kLocalTypes) out.emplace_back(t);
-    for (const auto& t : p.programs.types)
-        if (std::none_of(out.begin(), out.end(), [&](const std::string& x) { return same(x, t.name); })) out.push_back(t.name);
-    return out;
-}
+// 1.11.19 (refonte, lot 6) : le registre des types - les types de base qu'une declaration propose,
+// puis les structures et les enumerations du projet ; un type lu par lui (un tableau dont
+// l'element est inconnu n'est plus accepte sur sa seule forme).
+std::vector<std::string> typeChoices(const Project& p) { return typereg::Registry::build(p)->names(typereg::UseDeclaration); }
 
 bool typeAllowed(const Project& p, std::string_view type) {
-    const std::string t = trimmed(type);
-    if (t.empty()) return false;
-    const TypeKnown known = [&p](std::string_view n) { return !types::membersOf(p, n).empty() || findEnumeration(p, n) != nullptr; };
-    return localTypeSupported(t) || richLocalType(t, known);
+    return typereg::Registry::build(p)->resolve(type, typereg::UseDeclaration).ok;
 }
 
 // ------------------------------------------------------- ce que la grille montre ----
@@ -632,15 +627,11 @@ bool set(Project& p, const Place& at, Tab t, std::size_t row, Column col, std::s
         }
         case Column::Type: {
             if (v.empty()) return fail(why, "un type est obligatoire");
-            if (!typeAllowed(p, v))
-                return fail(why, "type " + quoted(v) + " non pris en charge : un type de base (BOOL, INT, DINT, REAL, TIME, STRING...), "
-                                 "un tableau (ARRAY[1..10] OF REAL), un type IHM du projet");
-            std::string type = v;
-            for (const auto base : kLocalTypes)
-                if (same(base, v)) type = std::string(base);
-            for (const auto& ht : p.programs.types)
-                if (same(ht.name, v)) type = ht.name;
-            d.type = std::move(type);
+            const auto r = typereg::Registry::build(p)->resolve(v, typereg::UseDeclaration);
+            if (!r.ok)
+                return fail(why, r.missing ? r.why + " - \xC2\xAB Choisir un type\xE2\x80\xA6 \xC2\xBB les montre"
+                                           : "type " + quoted(v) + " non pris en charge : " + r.why);
+            d.type = r.text;                 // la forme du registre : REAL, ARRAY[0..9] OF REAL, T_Four (son nom ecrit)
             return true;
         }
         case Column::Value: {

@@ -545,7 +545,15 @@ struct Declaration {
     Storage     storage{Storage::Execution};     // une variable
     PassMode    mode{PassMode::In};              // un parametre
     Visibility  visibility{Visibility::Public};  // D11 : neuve publique ; migree (lot 4) privee
-    bool operator==(const Declaration&) const = default;
+    // 1.11.19 (lot 6) : la cle de son type lue dans le fichier (type_cle : ihm:615...), le temps
+    // du chargement - un type renomme hors de l'application y est retrouve, puis elle est videe
+    // (l'enregistrement la recalcule du texte du type). Vide en memoire.
+    std::string typeKey{};
+    // La cle lue n'est pas la declaration : deux declarations egales le restent sans elle.
+    bool operator==(const Declaration& o) const {
+        return id == o.id && kind == o.kind && name == o.name && type == o.type && value == o.value && description == o.description
+            && storage == o.storage && mode == o.mode && visibility == o.visibility;
+    }
 };
 [[nodiscard]] std::string_view           declKindKey(DeclKind) noexcept;       // "constante", "variable", "parametre"
 [[nodiscard]] std::optional<DeclKind>    declKindFromKey(std::string_view) noexcept;
@@ -941,7 +949,8 @@ struct Variable {
     [[nodiscard]] bool scaled() const noexcept { return rawMax != rawMin; }
     bool operator==(const Variable&) const = default;
 };
-inline constexpr std::string_view kVariableTypes[] = {"BOOL", "INT", "UINT", "WORD", "DINT", "UDINT", "DWORD", "REAL", "LREAL", "STRING", "TIME"};
+// 1.11.19 (refonte, lot 6) : les types d'une variable IHM sont ceux du registre des types
+// (hmi::typereg::UseVariable, HmiTypeRegistry.hpp) - kVariableTypes n'est plus.
 
 // ---- lot 16 : les types IHM (structures) ---------------------------------------
 //  UN TYPE IHM EST UNE STRUCTURE, comme un DDT de l'automate : des membres, chacun

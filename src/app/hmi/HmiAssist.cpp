@@ -17,6 +17,7 @@
 #include "../../project/BlockLibrary.hpp"
 #include "../../project/EditCommands.hpp"
 #include "../../ui/widgets/ColorPalette.hpp"
+#include "../../hmi/HmiTypeRegistry.hpp"   // 1.11.19 (refonte, lot 6) : les types, un seul catalogue
 
 #include <algorithm>
 #include <set>
@@ -1712,7 +1713,7 @@ static std::vector<Item> suggestItems(const hmi::Project& hp, const domain::Proj
             }
             return out;
         case Context::LocalType:
-            for (const auto t : hmi::kLocalTypes) {
+            for (const auto& t : hmi::typereg::baseRegistry().names(hmi::typereg::UseDeclaration)) {
                 const int r = matchRank(t, needle);
                 if (r < 0) continue;
                 Item it;
@@ -2831,10 +2832,8 @@ std::string detailType(std::string_view detail) {
 }
 // 1 : convient ; 0 : on ne sait pas (une structure : ses membres, une fonction) ; -1 : ne convient pas.
 int fits(Expect e, const std::string& type) {
-    static const char* kNumbers[] = {"INT", "DINT", "UINT", "UDINT", "SINT", "USINT", "LINT", "ULINT", "REAL", "LREAL",
-                                     "WORD", "DWORD", "BYTE", "LWORD"};
     const bool isBool = type == "BOOL" || type == "EBOOL";
-    const bool isNumber = std::any_of(std::begin(kNumbers), std::end(kNumbers), [&](const char* n) { return type == n; });
+    const bool isNumber = hmi::typereg::isNumber(type);       // 1.11.19 (lot 6) : les nombres du registre
     const bool isTime = type == "TIME";
     const bool isText = type.rfind("STRING", 0) == 0;
     if (!isBool && !isNumber && !isTime && !isText) return 0;

@@ -483,6 +483,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\hmi\HmiSimVarTree.cpp" />
     <ClCompile Include="src\app\hmi\HmiSlavePanes.cpp" />
     <ClCompile Include="src\app\hmi\HmiSymbolPopupsPane.cpp" />
+    <ClCompile Include="src\app\hmi\HmiTypePicker.cpp" />
     <ClCompile Include="src\app\hmi\HmiValueKind.cpp" />
     <ClCompile Include="src\app\hmi\HmiValuePicker.cpp" />
     <ClCompile Include="src\app\screens\HelpCenterScreen.cpp" />
@@ -540,6 +541,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\hmi\HmiScriptFile.cpp" />
     <ClCompile Include="src\hmi\HmiSimData.cpp" />
     <ClCompile Include="src\hmi\HmiTutorialDeduce.cpp" />
+    <ClCompile Include="src\hmi\HmiTypeRegistry.cpp" />
     <ClCompile Include="src\hmi\HmiVarMotion.cpp" />
     <ClCompile Include="src\hmi\HmiViewPaths.cpp" />
     <ClCompile Include="src\project\ActivationConditions.cpp" />
@@ -863,6 +865,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\hmi\HmiSimMarks.hpp" />
     <ClInclude Include="src\app\hmi\HmiSimVarTree.hpp" />
     <ClInclude Include="src\app\hmi\HmiSymbolPopupsPane.hpp" />
+    <ClInclude Include="src\app\hmi\HmiTypePicker.hpp" />
     <ClInclude Include="src\app\hmi\HmiValueKind.hpp" />
     <ClInclude Include="src\app\hmi\HmiValuePicker.hpp" />
     <ClInclude Include="src\app\screens\HelpCenterScreen.hpp" />
@@ -920,6 +923,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\hmi\HmiScriptFile.hpp" />
     <ClInclude Include="src\hmi\HmiSimData.hpp" />
     <ClInclude Include="src\hmi\HmiTutorialDeduce.hpp" />
+    <ClInclude Include="src\hmi\HmiTypeRegistry.hpp" />
     <ClInclude Include="src\hmi\HmiVarMotion.hpp" />
     <ClInclude Include="src\hmi\HmiViewPaths.hpp" />
     <ClInclude Include="src\platform\AtlasSymbols.hpp" />

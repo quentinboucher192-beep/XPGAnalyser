@@ -548,7 +548,8 @@ void modele() {
               && views.find("(format 23)") != std::string::npos,
           "avec des declarations : l'index et les vues au format 23");
     check(index.find("declaration id=") != std::string::npos && index.find("genre=constante nom=\"Max\" type=\"INT\" valeur=\"10\"") != std::string::npos
-              && index.find("genre=parametre nom=\"v\" type=\"T_VEC\" mode=entree_sortie") != std::string::npos
+              && index.find("genre=parametre nom=\"v\" type=\"T_VEC\" type_cle=\"ihm:" + std::to_string(p.hmiTypeByName("T_VEC")->id)
+                            + "\" mode=entree_sortie") != std::string::npos   // 1.11.19 (lot 6) : la cle du type IHM
               && index.find("stockage=persistante") != std::string::npos && index.find("visibilite=privee") != std::string::npos,
           "les lignes declaration de l'index : genre, nom, type, valeur, mode, stockage, visibilite");
     check(views.find("fonction_symbole") < views.find("genre=parametre nom=\"Pct\"")

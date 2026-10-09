@@ -258,6 +258,7 @@ private:
     std::string       message_;
     bool              syncing_{false};
     paste::Binding    paste_;              // lot 20 : coller depuis Excel
+    std::shared_ptr<int>  alive_{std::make_shared<int>(0)};   // 1.11.19 : le selecteur de types repond apres coup
     core::ConnectionScope links_;
     hmi::Id           naming_{hmi::kNoId}; // lot API 8 : la variable qui vient d'etre creee (son nom s'ecrit sur place)
     ui::PopupMenu*    menu_{nullptr};      // 1.10 : le menu du clic droit
@@ -401,6 +402,7 @@ private:
     int               member_{-1};
     std::string       message_;
     bool              syncing_{false};
+    std::shared_ptr<int>  alive_{std::make_shared<int>(0)};   // 1.11.19 : le selecteur de types repond apres coup
     core::ConnectionScope links_;
 };
 

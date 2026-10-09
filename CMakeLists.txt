@@ -535,6 +535,8 @@ if(XPG_BUILD_TESTS)
     xpg_target_link_libraries(hmi_migrate_test PRIVATE xpg_hmi)
     xpg_add_test_executable(hmi_decl_test tests/hmi_decl_test.cpp)            # 1.11.18 : les declarations lues sans perte (refonte, lot 2)
     xpg_target_link_libraries(hmi_decl_test PRIVATE xpg_hmi xpg_ui)   # xpg_ui : hmitree (l'arbre du projet)
+    xpg_add_test_executable(hmi_types_test tests/hmi_types_test.cpp)          # 1.11.19 : le registre des types (refonte, lot 6)
+    xpg_target_link_libraries(hmi_types_test PRIVATE xpg_hmi)
     # ---- Lot API 8 : didacticiels et aide (les huit parcours, leurs pages de l'aide, le menu Aide) ----
     xpg_add_test_executable(lot8tutorials_test tests/lot8tutorials_test.cpp src/app/TopBar.cpp src/app/TopBarLot8.cpp src/app/TutorialsLot8.cpp)   # Lot API 8 : bandeau haut (+ TopBarLot8.cpp)
     # ---- Lot API 8 : tests - xpg_ui AVANT xpg_import : ui::buildHelp (ui/HelpDocument.cpp) appelle
@@ -653,6 +655,7 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME hmimigrate   COMMAND hmi_migrate_test ${CMAKE_CURRENT_SOURCE_DIR}/bac/Armoire_Gaz)    # ---- 1.11.18 : la migration (lot 4) ----
     xpg_add_test(NAME hmitracemig  COMMAND hmi_trace_test ${CMAKE_CURRENT_SOURCE_DIR}/bac/Armoire_Gaz      # ---- la meme trace, migre ----
                  ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/trace/armoire_gaz.trace --migrer)
+    xpg_add_test(NAME hmitypes     COMMAND hmi_types_test)                   # ---- 1.11.19 : le registre des types (lot 6) ----
     xpg_add_test(NAME hmidecl      COMMAND hmi_decl_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/decl/corpus.txt   # ---- 1.11.18 : les declarations (lot 2) ----
                  ${CMAKE_CURRENT_SOURCE_DIR}/bac/Armoire_Gaz ${CMAKE_CURRENT_SOURCE_DIR}/projets/project)
     # ---- 1.11.17 (refonte des scripts, lot 0) : XpgAnalyzer.vcxproj (outils\build.bat, MSBuild)

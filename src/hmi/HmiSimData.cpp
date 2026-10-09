@@ -5,6 +5,7 @@
 
 #include "HmiEnums.hpp"
 #include "HmiStore.hpp"
+#include "HmiTypeRegistry.hpp"   // 1.11.19 (refonte, lot 6) : la regle de conversion
 #include "HmiTypes.hpp"
 #include "HmiZones.hpp"
 
@@ -116,17 +117,19 @@ std::optional<sim::Value> valueFrom(sim::Type t, const std::string& text) {
         }
     }
 }
+// 1.11.19 (refonte, lot 6) : la regle du registre (typereg::conversion), et pour une VALEUR
+// entiere, sa place : elle passe dans un autre entier, meme plus petit, si elle y tient.
 std::optional<sim::Value> convert(const sim::Value& from, sim::Type to) {
     const sim::Type t = from.type();
     if (t == sim::Type::Unknown || to == sim::Type::Unknown) return std::nullopt;
     if (t == to) return from;
-    if (plainInteger(t) && plainInteger(to)) {
-        const long long v = from.asInteger();
-        const auto [lo, hi] = rangeOf(to);
-        if (v < lo || v > hi) return std::nullopt;            // elle n'y tient pas : rien de tronque en cachette
-        return sim::Value::integer(to, v);
+    const std::string a(sim::toString(t)), b(sim::toString(to));
+    if (typereg::isInteger(a) && typereg::isInteger(b)) {
+        if (!typereg::valueFits(from.asInteger(), b)) return std::nullopt;   // elle n'y tient pas : rien de tronque en cachette
+        return sim::Value::integer(to, from.asInteger());
     }
-    if (plainInteger(t) && to == sim::Type::Real) return sim::Value::real(static_cast<double>(from.asInteger()));
+    if (typereg::isInteger(a) && to == sim::Type::Real && typereg::conversion(a, b).lenient())
+        return sim::Value::real(static_cast<double>(from.asInteger()));
     return std::nullopt;                                       // BOOL, TIME, STRING, REAL -> entier : incompatibles
 }
 

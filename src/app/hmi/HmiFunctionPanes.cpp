@@ -13,6 +13,8 @@
 #include "../../hmi/HmiSymbols.hpp"   // 1.11.10 : les fonctions des symboles
 #include "../../sim/Runtime.hpp"
 #include "../../ui/Theme.hpp"
+#include "../../hmi/HmiTypeRegistry.hpp"   // 1.11.19 (refonte, lot 6) : les types, un seul catalogue
+#include "HmiTypePicker.hpp"   // 1.11.19 (refonte, lot 6) : le retour, au selecteur de types
 
 #include <algorithm>
 #include <cctype>
@@ -558,12 +560,13 @@ void HmiFunctionsPane::rebuildProperties() {
     if (!f) { props_->setCategories({}); return; }
     const Id id = f->id;
     std::vector<std::string> types{kNoReturn};
-    for (const auto t : hmi::kLocalTypes) types.emplace_back(t);
+    for (const auto& t : hmi::typereg::baseRegistry().names(hmi::typereg::UseDeclaration)) types.push_back(t);
     // 1.10 (S1) : les types IHM du projet (structures, enumerations) ; un retour riche
     // deja ecrit (ARRAY[0..9] OF REAL, MAP[STRING] OF REAL...) reste dans la liste.
     for (const auto& t : doc_->project.programs.types) types.push_back(t.name);
     if (!f->returnType.empty() && std::find(types.begin(), types.end(), f->returnType) == types.end())
         types.push_back(f->returnType);
+    if (typepicker::available()) types.push_back(typepicker::kChoose);   // 1.11.19 (lot 6) : le selecteur de types
     PG::Category c;
     c.name = "Fonction";
     c.properties.push_back(hmikit::prop("Nom", f->name, PG::ValueType::Text,
@@ -857,6 +860,22 @@ bool HmiFunctionsPane::renameFunction(Id id, const std::string& name, std::strin
 bool HmiFunctionsPane::setReturnType(Id id, const std::string& type, std::string* why) {
     const auto* f = fnOf(doc_->project, id);
     if (!f) return false;
+    // 1.11.19 (lot 6) : "Choisir un type..." - le selecteur (les types d'un retour, Aucun compris).
+    if (type == typepicker::kChoose) {
+        HmiTypePicker::Spec spec;
+        spec.field = "Retour de " + f->name;
+        spec.current = f->returnType.empty() ? std::string("Aucun") : f->returnType;
+        spec.use = hmi::typereg::UseReturn;
+        spec.doc = doc_;
+        const std::weak_ptr<int> alive = alive_;
+        typepicker::ask(std::move(spec), [this, id, alive](const HmiTypePicker::Answer& a) {
+            if (alive.expired() || a.type.empty()) return;
+            std::string w;
+            if (!setReturnType(id, a.type, &w)) say("Retour refus\xC3\xA9 : " + w, true);
+            rebuildProperties();
+        });
+        return false;
+    }
     const std::string t = isNoReturn(type) ? std::string{} : type;
     if (!t.empty() && !returnTypeAllowed(doc_->project, t)) {
         if (why) *why = "type de retour non pris en charge : " + t;

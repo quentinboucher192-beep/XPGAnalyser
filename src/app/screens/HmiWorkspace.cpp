@@ -98,6 +98,9 @@
 #include "../../hmi/HmiScript.hpp"
 #include "../../hmi/HmiStore.hpp"
 #include "../../hmi/HmiHistory.hpp"
+#include "../../hmi/HmiTypeRegistry.hpp"   // 1.11.19 (refonte, lot 6) : les types, un seul catalogue
+#include "../ApiPanes.hpp"     // 1.11.19 (lot 6) : Ouvrir la definition d'un DDT
+#include "../TypePanes.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -356,6 +359,8 @@ void MainAnalysisScreen::bindHmi() {
             if (o.name == object) obj = o.id;
         openHmiView(v->id, -1, obj);
     });
+    // 1.11.19 (refonte, lot 6) : le selecteur de types, demande par une grille ou un volet.
+    typepicker::setHost([this](HmiTypePicker::Spec spec, typepicker::Done done) { askHmiType(std::move(spec), std::move(done)); });
     // Les chemins relatifs des fichiers externes partent du dossier du projet.
     setHmiProjectFolder(app_.projectFolder());
 
@@ -808,8 +813,7 @@ void MainAnalysisScreen::askHmiBind(const std::string& equipment, const std::str
     }
     std::string chosen = equipment;
     if (std::find(equipments.begin(), equipments.end(), chosen) == equipments.end()) chosen = equipments.front();
-    std::vector<std::string> types;
-    for (const auto t : hmi::kVariableTypes) types.emplace_back(t);
+    const auto types = hmi::typereg::baseRegistry().names(hmi::typereg::UseVariable);   // 1.11.19 : le registre des types
     std::vector<FormDialog::Field> fields;
     fields.push_back({"Variable", hmi::uniqueVariableName(doc->project, "Mesure"), "un nom (Tension_L1) ; une variable IHM qui existe : elle est li\xC3\xA9" "e", false, {}});
     fields.push_back({"Type", type.empty() ? std::string("INT") : type, "", false, types});
@@ -1847,7 +1851,7 @@ void MainAnalysisScreen::askHmiCreateVariable(std::uint64_t viewId, const valuek
     }
     const auto hmiTypes = [doc, wanted] {
         std::vector<std::string> out{wanted};
-        for (const auto t : hmi::kVariableTypes) if (std::string(t) != wanted) out.emplace_back(t);
+        for (const auto& t : hmi::typereg::baseRegistry().names(hmi::typereg::UseVariable)) if (t != wanted) out.push_back(t);
         for (const auto& t : doc->project.programs.types) if (t.name != wanted) out.push_back(t.name);
         return out;
     };
@@ -2634,9 +2638,7 @@ void MainAnalysisScreen::askHmiVariable(std::uint64_t variableId) {
     for (const auto& v : doc->project.programs.variables) if (v.id == asId(variableId)) var = &v;
     if (variableId != 0 && !var) return;
     // Lot 16 : les types IHM aussi, un tableau (ses bornes), un dossier.
-    std::vector<std::string> types;
-    for (const auto t : hmi::kVariableTypes) types.emplace_back(t);
-    for (const auto& t : doc->project.programs.types) types.push_back(t.name);
+    std::vector<std::string> types = hmi::typereg::Registry::build(doc->project)->names(hmi::typereg::UseVariable);   // 1.11.19
     hmi::types::Spec spec;
     const bool parsed = var && hmi::types::parseSpec(var->type, spec);
     // Un type que l'analyse ne decompose pas reste tel quel (jamais remplace par INT).
@@ -2698,9 +2700,7 @@ void MainAnalysisScreen::askHmiArrayType(const std::string& current, std::functi
         bounds = std::to_string(spec.low[0]) + ".." + std::to_string(spec.high[0]);
         if (spec.dims == 2) bounds += ", " + std::to_string(spec.low[1]) + ".." + std::to_string(spec.high[1]);
     }
-    std::vector<std::string> types;
-    for (const auto t : hmi::kVariableTypes) types.emplace_back(t);
-    for (const auto& t : doc->project.programs.types) types.push_back(t.name);
+    std::vector<std::string> types = hmi::typereg::Registry::build(doc->project)->names(hmi::typereg::UseVariable);   // 1.11.19
     std::vector<FormDialog::Field> fields;
     fields.push_back({"Bornes", bounds, "0..9 : 10 cases ; 1..4 ; -5..5 ; 0..3, 0..9 : deux dimensions (4 lignes, 10 colonnes)", false, {}});
     fields.push_back({"Type des cases", parsed ? spec.element : std::string("INT"), "", false, types});
@@ -2760,7 +2760,9 @@ void MainAnalysisScreen::askHmiNewFunction() {
     auto doc = app_.hmi();
     if (!doc) return;
     std::vector<std::string> types{"Aucun"};          // 1.11.18 (lot 5) : une procedure (avant : "(aucun)")
-    for (const auto t : hmi::kLocalTypes) types.emplace_back(t);
+    // 1.11.19 (lot 6) : le registre des types - la base, puis les structures et les enumerations
+    // du projet (comme le retour dans les proprietes de la fonction ; avant : la base seule).
+    for (const auto& t : hmi::typereg::Registry::build(doc->project)->names(hmi::typereg::UseDeclaration)) types.push_back(t);
     std::vector<FormDialog::Field> fields;
     fields.push_back({"Nom", hmi::uniqueFunctionName(doc->project, "Fonction"), "lettres, chiffres, _", false, {}});
     fields.push_back({"Type de retour", "REAL", "", false, types});
@@ -2901,6 +2903,51 @@ void MainAnalysisScreen::askHmiMigrateDeclarations() {
         }
         run(said);
     });
+}
+
+// ---- 1.11.19 (refonte des scripts, lot 6) : LE SELECTEUR DE TYPES ----
+//  Le projet, les DDT du programme, les recents (le reglage hmi.types.recents) ; a la reponse :
+//  le type choisi va a qui l'a demande (`done`), ou l'on mene a la definition du type.
+void MainAnalysisScreen::askHmiType(HmiTypePicker::Spec spec, typepicker::Done done) {
+    if (!spec.doc) spec.doc = app_.hmi();
+    if (!spec.doc) return;
+    if (!spec.plc.names) spec.plc = hmiparams::plcTypesOf(app_.project().get());
+    spec.recents = app_.settings().getList("hmi.types.recents");
+    app_.menus().ShowDialog(std::make_unique<HmiTypePicker>(std::move(spec)), [this, done](const menu::DialogResult& r) {
+        if (!r.accepted()) return;
+        const auto a = HmiTypePicker::parse(r.payload);
+        if (!a.open.empty()) {
+            openHmiTypeDefinition(a.open);
+            return;
+        }
+        if (a.type.empty()) return;
+        auto recents = app_.settings().getList("hmi.types.recents");
+        HmiTypePicker::remember(recents, a.element);
+        app_.settings().setList("hmi.types.recents", recents);
+        if (done) done(a);
+    });
+}
+
+void MainAnalysisScreen::openHmiTypeDefinition(const std::string& key) {
+    if (key.rfind("ihm:", 0) == 0) {                     // un type IHM : l'onglet Types IHM, sur lui
+        const auto id = static_cast<hmi::Id>(std::strtoull(key.c_str() + 4, nullptr, 10));
+        openHmiPane("scripts");
+        if (auto* pane = dynamic_cast<HmiScriptsPane*>(hmiTab("scripts"))) {
+            pane->showTab(HmiScriptsPane::TabTypes);
+            if (auto* types = pane->typesPane()) types->selectType(id);
+        }
+        return;
+    }
+    if (key.rfind("api:", 0) == 0) {                     // un DDT : les types derives de l'API
+        const std::string wanted = key.substr(4);
+        std::string name = wanted;
+        if (const auto plc = hmiparams::plcTypesOf(app_.project().get()); plc.names)
+            for (const auto& n : plc.names())
+                if (hmi::typereg::comparable(n) == wanted) name = n;
+        openApiPane("types");
+        if (auto* frame = dynamic_cast<ApiFrame*>(apiTab("types")))
+            if (auto* pane = dynamic_cast<DerivedTypesPane*>(&frame->content())) (void)pane->selectType(name);
+    }
 }
 
 void MainAnalysisScreen::askHmiDeleteFunction(std::uint64_t functionId) {

@@ -16,6 +16,7 @@
 #include "HmiEnums.hpp"       // 1.10 (decision 15) : les enumerations IHM dans les scripts (S1)
 #include "HmiMarkers.hpp"     // 1.11 (REP) : les reperes $...$, transparents pour le calcul
 #include "HmiApiVars.hpp"     // 1.11.1 (API-M) : API.<...> est le nom que l'automate connait
+#include "HmiTypeRegistry.hpp" // 1.11.19 (refonte, lot 6) : le type du moteur d'un nom de type
 #include "../sim/Interpreter.hpp"
 #include "../sim/Runtime.hpp"
 
@@ -877,7 +878,7 @@ void Runtime::restorePersistent(Id script, sim::Locals& locals) {
         const simdata::Cell cell = it->second;
         persistPending_.erase(it);
         const std::string type = upper(trimText(d.type));
-        sim::Type t = sim::typeFromName(type == "LREAL" ? std::string("REAL") : type);
+        sim::Type t = typereg::simTypeOf(type);
         std::string typeName;
         if (t == sim::Type::Unknown && findEnumeration(*project_, d.type)) {      // une enumeration : un DINT qui garde son nom
             t = sim::Type::DInt;
@@ -1092,7 +1093,7 @@ int announcedLine(const std::string& why) {
 
 // La valeur de depart d'une variable locale : son type, puis son ":= valeur".
 sim::Value localInitial(const LocalVar& l, sim::Environment& env, std::string* why) {
-    sim::Value v = sim::Value::defaultOf(sim::typeFromName(l.type == "LREAL" ? std::string("REAL") : l.type));
+    sim::Value v = sim::Value::defaultOf(typereg::simTypeOf(l.type));   // 1.11.19 : LINT, USINT, lreal... (avant : un INT)
     if (!l.initial.empty()) {
         auto init = Expression::compile(l.initial).evaluate(env);
         if (init) v.assignFrom(*init);
@@ -1211,8 +1212,8 @@ bool Runtime::callFunction(const HmiFunction& f, const std::vector<std::pair<std
     // Lot 8 : une fonction ne voit pas les parametres de la vue qui l'appelle.
     AliasGuard aliasGuard(env_->aliases, nullptr);
     const std::string source = "fonction " + f.name;
-    const std::string rt = f.returnType == "LREAL" ? std::string("REAL") : f.returnType;
-    result = f.returnType.empty() ? sim::Value::boolean(true) : sim::Value::defaultOf(sim::typeFromName(rt));
+    const sim::Type rt = typereg::simTypeOf(f.returnType);
+    result = f.returnType.empty() ? sim::Value::boolean(true) : sim::Value::defaultOf(rt);
     // Une faute dans une fonction : l'appel echoue (l'instruction qui
     // l'appelle s'arrete), et tout l'enchainement avec lui - c'est la cause
     // premiere (abort_) qui remonte, dite une fois par celui qui la trouve.
@@ -1252,7 +1253,7 @@ bool Runtime::callFunction(const HmiFunction& f, const std::vector<std::pair<std
                 if (upper(inputs[j]->name) == upper(name)) k = j;
             if (k == inputs.size()) return fail("param\xC3\xA8tre inconnu : " + name);
         }
-        sim::Value v = sim::Value::defaultOf(sim::typeFromName(inputs[k]->type == "LREAL" ? std::string("REAL") : inputs[k]->type));
+        sim::Value v = sim::Value::defaultOf(typereg::simTypeOf(inputs[k]->type));
         v.assignFrom(value);
         frame[upper(inputs[k]->name)] = v;
         given[k] = true;
@@ -1264,7 +1265,7 @@ bool Runtime::callFunction(const HmiFunction& f, const std::vector<std::pair<std
     // Une fonction n'a pas de memoire : ses VAR et VAR_TEMP repartent a chaque appel.
     for (const auto& l : prep.locals)
         if (l.section != LocalVar::Section::Input) frame[upper(l.name)] = localInitial(l, *env_, &initWhy);
-    if (!f.returnType.empty()) frame[upper(f.name)] = sim::Value::defaultOf(sim::typeFromName(rt));
+    if (!f.returnType.empty()) frame[upper(f.name)] = sim::Value::defaultOf(rt);
     auto saved = std::move(env_->diagnostics);
     env_->diagnostics.clear();
     const std::string previous = source_;
@@ -2310,7 +2311,7 @@ void Runtime::initVariables() {
     // Consignes[3]) ; une meme valeur initiale ne se calcule qu'une fois.
     std::map<std::string, std::optional<sim::Value>> computed;
     const auto slot = [&](const std::string& name, const std::string& type, const std::string& initial, const std::string& owner) {
-        sim::Value v = sim::Value::defaultOf(sim::typeFromName(type == "LREAL" ? "REAL" : type));
+        sim::Value v = sim::Value::defaultOf(typereg::simTypeOf(type));
         if (!initial.empty()) {
             auto it = computed.find(initial);
             if (it == computed.end()) {
@@ -2412,7 +2413,7 @@ bool Runtime::aggregateRead(const std::string& path, sim::Value& out) {
     std::string why;
     if (!outOfBoundsPath(path, &why)) return false;
     const std::string type = project_ ? types::typeOfPath(*project_, path) : std::string{};
-    const sim::Type t = sim::typeFromName(type == "LREAL" ? "REAL" : type);
+    const sim::Type t = typereg::simTypeOf(type);
     out = sim::Value::defaultOf(t == sim::Type::Unknown ? sim::Type::Int : t);
     reportBounds(path, why + " : lu " + out.display());
     return true;

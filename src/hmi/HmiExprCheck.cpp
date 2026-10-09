@@ -17,6 +17,7 @@
 #include "HmiSymbols.hpp"   // 1.11.10 : les fonctions des symboles
 #include "HmiTypes.hpp"
 #include "../project/MemberTree.hpp"
+#include "HmiTypeRegistry.hpp"   // 1.11.19 (refonte, lot 6) : un type est-il un nombre ?
 
 #include <algorithm>
 #include <cctype>
@@ -64,9 +65,7 @@ T typeOfName(std::string_view type) {
     if (u == "BOOL" || u == "EBOOL") return T::Bool;
     if (u == "STRING" || u.rfind("STRING[", 0) == 0 || u == "WSTRING") return T::Text;
     if (u == "TIME" || u == "LTIME") return T::Time;
-    static const std::set<std::string> kNum = {"INT",  "UINT", "DINT", "UDINT", "SINT", "USINT", "LINT", "ULINT",
-                                               "WORD", "DWORD", "BYTE", "LWORD", "REAL", "LREAL"};
-    return kNum.count(u) ? T::Num : T::Unknown;
+    return typereg::isNumber(u) ? T::Num : T::Unknown;     // 1.11.19 (lot 6) : les nombres du registre
 }
 
 // ------------------------------------------------------------ les jetons ---

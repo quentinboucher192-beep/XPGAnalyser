@@ -16,6 +16,7 @@
 #include "../../hmi/HmiExpr.hpp"
 #include "../../hmi/HmiHistory.hpp"
 #include "../../ui/widgets/Controls.hpp"
+#include "../../hmi/HmiTypeRegistry.hpp"   // 1.11.19 (refonte, lot 6) : les types, un seul catalogue
 
 #include <algorithm>
 #include <cctype>
@@ -1095,7 +1096,7 @@ bool HmiCommPane::bindVariable(const std::string& rawVariable, const std::string
     const auto* existing = p.variable(name);
     std::string type = upper(trimmed(rawType));
     if (type.empty()) type = existing ? existing->type : "INT";
-    if (std::find(std::begin(hmi::kVariableTypes), std::end(hmi::kVariableTypes), type) == std::end(hmi::kVariableTypes))
+    if (!hmi::types::isElementary(type))
         return fail("type \xC2\xAB " + type + " \xC2\xBB : INT, REAL, BOOL, DINT...");
     std::string address = trimmed(rawAddress);
     if (address.empty()) address = eq::nextFreeAddress(p, *e, eq::typeOfName(type));
@@ -1189,7 +1190,7 @@ bool HmiCommPane::setBoundField(const std::string& variable, const std::string& 
         (void)canon;
     } else if (key == "type") {
         const std::string t = upper(v);
-        if (std::find(std::begin(hmi::kVariableTypes), std::end(hmi::kVariableTypes), t) == std::end(hmi::kVariableTypes)) return fail("type \xC2\xAB " + v + " \xC2\xBB inconnu");
+        if (!hmi::types::isElementary(t)) return fail("type \xC2\xAB " + v + " \xC2\xBB inconnu");
         next.type = t;
         hmi::comm::Point pt;
         std::string reason;
@@ -1278,8 +1279,7 @@ void HmiCommPane::rebuildBoundProperties(std::vector<PG::Category>& cats) {
         main.properties.push_back(prop("Type", v->type, PG::ValueType::ReadOnly, {},
                                        "Une structure ou un tableau : son type se change dans Programmation g\xC3\xA9n\xC3\xA9rale \xE2\x80\xBA Variables IHM."));
     } else {
-        std::vector<std::string> types;
-        for (const auto t : hmi::kVariableTypes) types.emplace_back(t);
+        const auto types = hmi::typereg::baseRegistry().names(hmi::typereg::UseVariable);
         main.properties.push_back(prop("Type", v->type, PG::ValueType::Enum, field("type"), "Le type de la variable IHM (REAL : deux registres).", types));
     }
     main.properties.push_back(prop("Lecture seule", tf(v->readOnly), PG::ValueType::Boolean, field("lecture_seule"), "L'IHM la lit, ne l'\xC3\xA9" "crit jamais."));

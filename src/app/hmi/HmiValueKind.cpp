@@ -18,6 +18,7 @@
 #include "../../hmi/HmiSymbols.hpp"
 #include "../../hmi/HmiTypes.hpp"
 #include "../../ui/widgets/ExprField.hpp"
+#include "../../hmi/HmiTypeRegistry.hpp"   // 1.11.19 (refonte, lot 6)
 
 #include <algorithm>
 #include <cctype>
@@ -119,12 +120,9 @@ bool knownRoot(const Env& env, std::string_view root) {
     return isPlcRoot(env, root);
 }
 
-bool isNumericType(std::string_view t) {
-    static const std::set<std::string> kNum{"SINT", "INT", "DINT", "LINT", "USINT", "UINT", "UDINT", "ULINT", "BYTE",
-                                            "WORD", "DWORD", "LWORD", "REAL", "LREAL"};
-    return kNum.count(upper(trimmed(t))) > 0;
-}
-bool isIntegerType(std::string_view t) { return isNumericType(t) && upper(trimmed(t)).find("REAL") == std::string::npos; }
+// 1.11.19 (refonte, lot 6) : les nombres et les entiers du registre des types.
+bool isNumericType(std::string_view t) { return hmi::typereg::isNumber(t); }
+bool isIntegerType(std::string_view t) { return hmi::typereg::isInteger(t); }
 
 // Le texte sans ses $ de repere (hors chaines) : ce qu'on analyse.
 std::string withoutMarkers(std::string_view t) {

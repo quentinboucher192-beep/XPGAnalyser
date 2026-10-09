@@ -28,6 +28,7 @@
 #include "../../hmi/HmiVersions.hpp"   // lot 21 : les versions
 #include "../hmi/HmiTrails.hpp"         // lot 21 : les parcours du didacticiel
 #include "../hmi/HmiValueKind.hpp"      // 1.11.3 : la demande du carre de legende
+#include "../hmi/HmiTypePicker.hpp"     // 1.11.19 (lot 6) : le selecteur de types
 #include "../RackView.hpp"
 #include "../ViewModels.hpp"
 #include "../../core/CodeIcons.hpp"          // 1.8.0 : les icones au choix
@@ -756,6 +757,11 @@ private:
     // 1.11.18 (refonte des scripts, lot 5) : "Migrer les declarations..." (IHM > Compiler) - le
     // rapport et les codes a cocher, la version "Avant migration des declarations", une commande.
     void askHmiMigrateDeclarations();
+    // 1.11.19 (refonte des scripts, lot 6) : le selecteur de types (app::typepicker : une grille,
+    // un volet le demandent) - les recents (reglage hmi.types.recents), et "Ouvrir la definition"
+    // d'un type IHM (Types IHM) ou d'un DDT (les types derives de l'API).
+    void askHmiType(HmiTypePicker::Spec spec, typepicker::Done done);
+    void openHmiTypeDefinition(const std::string& key);
     void askHmiViewFromType();                           // lot 12 : "Depuis un type" (DDT, DFB)
     // Les dialogues des volets Ressources et Fichiers externes (HmiWorkspace.cpp).
     void askHmiImportResource();

@@ -9,6 +9,7 @@
 #include "HmiPublicVars.hpp" // 1.10.1 (U2) : les proprietes d'une instance de symbole
 #include "HmiScript.hpp"
 #include "HmiSymbols.hpp"
+#include "HmiTypeRegistry.hpp"   // 1.11.19 (refonte, lot 6) : les types de base et la regle de conversion
 #include "HmiTypes.hpp"
 
 #include <algorithm>
@@ -58,36 +59,24 @@ const OpInfo* infoOf(std::string_view op) noexcept {
     return nullptr;
 }
 
-// Les types de base qu'un operateur peut prendre ou rendre.
-constexpr std::string_view kBaseTypes[] = {"BOOL", "SINT", "INT", "DINT", "LINT", "USINT", "UINT", "UDINT", "ULINT",
-                                           "BYTE", "WORD", "DWORD", "LWORD", "REAL", "LREAL", "TIME", "STRING"};
+// Les types de base qu'un operateur peut prendre ou rendre : ceux du registre (un operande),
+// sous leur nom exact (EBOOL, STRING[20] n'en sont pas).
 bool isBaseType(std::string_view t) noexcept {
     const std::string u = upperOf(trimmedOf(t));
-    for (const auto b : kBaseTypes) if (u == b) return true;
-    return false;
+    const auto* e = typereg::baseRegistry().byName(u);
+    return e && e->usable(typereg::UseOperand) && u == e->name;
 }
-// Le rang d'un nombre (0 : pas un nombre) : entiers 1..4 par largeur, reels 10, 11.
-int numericRank(std::string_view t) noexcept {
-    const std::string u = upperOf(trimmedOf(t));
-    if (u == "SINT" || u == "USINT" || u == "BYTE") return 1;
-    if (u == "INT" || u == "UINT" || u == "WORD") return 2;
-    if (u == "DINT" || u == "UDINT" || u == "DWORD") return 3;
-    if (u == "LINT" || u == "ULINT" || u == "LWORD") return 4;
-    if (u == "REAL") return 10;
-    if (u == "LREAL") return 11;
-    return 0;
-}
-// Le cout pour passer un `given` la ou on attend `wanted` (-1 : impossible) :
-// 0 exact ; 1 un nombre de la meme famille, plus large (ou un reel l'un pour
-// l'autre : un litteral 1.5 peut arriver en LREAL) ; 2 un entier vers un reel.
+// 1.11.19 (refonte, lot 6) : le cout pour passer un `given` la ou on attend `wanted` (-1 :
+// impossible) est celui de la regle du registre (typereg::conversion) : 0 exact ; 1 un entier
+// elargi, un reel elargi ; 2 un entier vers un reel ; 4 avec perte possible (UINT vers INT,
+// DINT vers REAL, LREAL vers REAL - acceptes comme avant, mais en dernier choix). Un vide
+// (un operateur unaire) et ANY ne sont jamais des jokers ici.
 int matchCost(std::string_view wanted, std::string_view given) noexcept {
     if (sameTypeName(wanted, given)) return 0;
-    const int w = numericRank(wanted), g = numericRank(given);
-    if (w == 0 || g == 0) return -1;
-    if (w >= 10 && g >= 10) return 1;
-    if (w < 10 && g < 10) return g <= w ? 1 : -1;
-    if (w >= 10 && g < 10) return 2;
-    return -1;
+    if (trimmedOf(wanted).empty() || trimmedOf(given).empty()) return -1;
+    if (typereg::comparable(wanted) == "ANY" || typereg::comparable(given) == "ANY") return -1;
+    const auto v = typereg::conversion(given, wanted);
+    return v.lenient() ? v.cost : -1;
 }
 
 std::string displayType(std::string_view t) {
@@ -119,7 +108,7 @@ Members membersFor(const Project& p, std::string_view typeName) {
     if (const auto* t = p.hmiTypeByName(typeName)) {
         for (const auto& mem : t->members) {
             if (m.all.size() < 6) m.all.push_back(mem.name);
-            if (numericRank(mem.type) != 0 && m.numeric.size() < 4) m.numeric.push_back(mem.name);
+            if (typereg::isNumber(mem.type) && m.numeric.size() < 4) m.numeric.push_back(mem.name);
             if (m.firstText.empty() && sameTypeName(mem.type, "STRING")) m.firstText = mem.name;
         }
         return m;
@@ -127,7 +116,7 @@ Members membersFor(const Project& p, std::string_view typeName) {
     if (const auto* v = p.viewByName(typeName); v && isSymbolView(*v)) {
         for (const auto& prm : v->params) {
             if (m.all.size() < 6) m.all.push_back(prm.name);
-            if (numericRank(prm.type) != 0 && m.numeric.size() < 4) m.numeric.push_back(prm.name);
+            if (typereg::isNumber(prm.type) && m.numeric.size() < 4) m.numeric.push_back(prm.name);
             if (m.firstText.empty() && sameTypeName(prm.type, "STRING")) m.firstText = prm.name;
         }
     }
