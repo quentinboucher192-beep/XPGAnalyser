@@ -1,4 +1,5 @@
 #include "HmiCheck.hpp"
+#include "HmiKeys.hpp"            // 1.11.23 : les raccourcis
 #include "HmiOverload.hpp"   // 1.11.20 : les surcharges
 #include "HmiActionKinds.hpp"   // 1.11.7 : Maths, le clavier virtuel
 #include <cmath>
@@ -213,6 +214,23 @@ void checkActions(const Project& p, const NameExists& plc, const View& v, const 
             add(out, S::Error, "Action", v.id, obj, where, "aucune expression surveill\xC3\xA9" "e");
         if ((a.trigger == Trigger::Click || a.trigger == Trigger::DoubleClick || a.trigger == Trigger::LongPress) && !o)
             add(out, S::Warning, "Action", v.id, obj, where, "un clic se fait sur un objet : cette action de vue ne partira jamais");
+        // 1.11.23 : les raccourcis - une touche lisible, sur une vue qui prend le clavier.
+        if (triggerIsKey(a.trigger)) {
+            std::string why;
+            const auto chord = keys::parseChord(a.key, &why);
+            if (o)
+                add(out, S::Warning, "Raccourci", v.id, obj, where,
+                    "un raccourci est une action de la vue : sur un objet, il ne partira jamais (section Raccourcis de la vue)");
+            else if (a.key.empty())
+                add(out, S::Error, "Raccourci", v.id, obj, where, "aucune touche (section Raccourcis de la vue : la case Touche)");
+            else if (!chord)
+                add(out, S::Error, "Raccourci", v.id, obj, where, "touche illisible : " + a.key + " - " + why);
+            else if (const auto r = keys::reserved(*chord); !r.empty())
+                add(out, S::Warning, "Raccourci", v.id, obj, where, keys::label(*chord) + " : " + r + " ; le raccourci peut ne pas partir");
+            if (isSymbolView(v))
+                add(out, S::Warning, "Raccourci", v.id, obj, where,
+                    "un symbole ne prend pas le clavier : ses raccourcis ne partiront pas (mettez-les sur la vue ou la popup)");
+        }
         if (operationWritesVariable(a.operation)) {
             if (a.target.empty()) add(out, S::Error, "Action", v.id, obj, where, "aucune variable \xC3\xA0 \xC3\xA9" "crire");
             else if (!known(p, plc, target, &v) && !known(p, plc, scanRoots(target).empty() ? target : scanRoots(target).front(), &v))

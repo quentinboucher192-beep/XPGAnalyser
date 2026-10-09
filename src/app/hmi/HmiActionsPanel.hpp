@@ -38,7 +38,16 @@ namespace app {
 class HmiActionsPanel final : public ui::Widget {
 public:
     using Apply = std::function<void(core::CommandPtr)>;
-    HmiActionsPanel(std::string id, hmi::DocumentPtr doc, hmi::Id view, Apply apply);
+    // 1.11.23 : LES RACCOURCIS D'UNE VUE (Scope::Shortcuts) - le meme volet, sur les actions
+    // de la vue dont le declencheur est une touche (Touche enfoncee, relachee, maintenue,
+    // repetee) : la liste n'a qu'elles, l'inspecteur regle la touche et son declencheur.
+    // Scope::Actions (le defaut) : les autres actions (celles de la vue ou de l'objet choisi).
+    // Les index (selectedIndex, selectIndex, set, remove...) sont ceux de la liste entiere.
+    enum class Scope : std::uint8_t { Actions, Shortcuts };
+    HmiActionsPanel(std::string id, hmi::DocumentPtr doc, hmi::Id view, Apply apply, Scope scope = Scope::Actions);
+    [[nodiscard]] Scope scope() const noexcept { return scope_; }
+    // Les index (dans la liste entiere) des lignes montrees, dans l'ordre.
+    [[nodiscard]] const std::vector<int>& shownIndexes() const noexcept { return rows_; }
 
     // L'objet dont on montre les actions ; kNoId : celles de la vue.
     void setOwner(hmi::Id object);
@@ -78,6 +87,10 @@ protected:
 private:
     void rebuildGrid();
     [[nodiscard]] std::string ownerName() const;
+    [[nodiscard]] bool shows(const hmi::Action&) const;   // 1.11.23 : la ligne est de ce volet
+    [[nodiscard]] int  rowOf(int index) const;            // la ligne d'un index (-1 : pas montree)
+    Scope            scope_{Scope::Actions};
+    std::vector<int> rows_;                               // ligne -> index dans la liste entiere
     hmi::DocumentPtr doc_;
     hmi::Id          view_;
     hmi::Id          owner_{hmi::kNoId};

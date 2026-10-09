@@ -27,6 +27,7 @@
 #pragma once
 
 #include "HmiModel.hpp"
+#include "HmiKeys.hpp"            // 1.11.23 : SYS.Key.<touche>
 #include "HmiObjectAlarms.hpp"   // 1.11.1 (decision 108) : les alarmes d'un objet (Vue.Objet.Alarmes.<alarme>)
 #include "HmiTemplates.hpp"
 
@@ -63,6 +64,7 @@ inline constexpr std::string_view kSysDomains[] = {
     "Historiques et journal", "Automate", "IHM en marche", "Projet", "Poste et application", "Ressources",
     "Param\xC3\xA8tres syst\xC3\xA8me", "Communication",
     "Esclaves simul\xC3\xA9s",      // 1.9 : 13 - les compteurs, puis une structure SYS.Slave.<nom> par esclave
+    "Souris et clavier",            // 1.11.23 : 14 - la souris, les touches, les raccourcis ; SYS.Key.<touche>
 };
 inline constexpr std::size_t kSysDomainCount = sizeof(kSysDomains) / sizeof(kSysDomains[0]);
 
@@ -191,7 +193,7 @@ inline constexpr SysVar kSysVars[] = {
     {"UptimeSeconds",       7, "DINT",   "La m\xC3\xAAme dur\xC3\xA9" "e, en secondes."},
     {"CycleTime",           7, "INT",    "La p\xC3\xA9riode du cycle IHM, en ms (Configuration)."},
     {"CycleCount",          7, "DINT",   "Les cycles IHM depuis le lancement."},
-    {"IdleTime",            7, "TIME",   "Depuis le dernier clic de l'op\xC3\xA9rateur."},
+    {"IdleTime",            7, "TIME",   "Depuis le dernier clic ou la derni\xC3\xA8re touche de l'op\xC3\xA9rateur."},
     {"ScriptCount",         7, "INT",    "Les scripts g\xC3\xA9n\xC3\xA9raux."},
     {"ScriptErrorCount",    7, "INT",    "Les scripts dont la derni\xC3\xA8re ex\xC3\xA9" "cution a \xC3\xA9" "chou\xC3\xA9."},
     {"SoundCount",          7, "INT",    "Les sons jou\xC3\xA9s depuis le lancement."},
@@ -296,6 +298,29 @@ inline constexpr SysVar kSysVars[] = {
     {"SimFallbacks",        13, "INT",    "Les bascules automatiques en cours (le vrai ne r\xC3\xA9pond pas)."},
     {"SimAnimated",         13, "INT",    "Les valeurs anim\xC3\xA9" "es."},
     {"SimForced",           13, "INT",    "Les cases forc\xC3\xA9" "es."},
+    // ---- 14 : la souris et le clavier (1.11.23) - sur la vue qui tourne (la simulation de
+    //      l'editeur, le poste d'exploitation) ; les raccourcis des vues (Action::key)
+    {"MouseX",              14, "REAL",   "La position de la souris sur la vue, en pixels de la vue (depuis la gauche)."},
+    {"MouseY",              14, "REAL",   "... depuis le haut."},
+    {"MouseView",           14, "STRING", "La vue (ou la popup) sous la souris ('' : hors de l'IHM)."},
+    {"MouseObject",         14, "STRING", "L'objet sous la souris (Vue.Objet ; '' : aucun)."},
+    {"MouseInside",         14, "BOOL",   "La souris est sur l'IHM."},
+    {"MouseLeft",           14, "BOOL",   "Le bouton gauche est enfonc\xC3\xA9."},
+    {"MouseRight",          14, "BOOL",   "Le bouton droit est enfonc\xC3\xA9."},
+    {"MouseMiddle",         14, "BOOL",   "Le bouton du milieu (la molette) est enfonc\xC3\xA9."},
+    {"MouseButtons",        14, "INT",    "Les boutons enfonc\xC3\xA9s : 1 gauche + 2 droit + 4 milieu."},
+    {"MouseWheel",          14, "DINT",   "Les crans de molette depuis le lancement (vers le haut : +1, vers le bas : -1)."},
+    {"KeyLast",             14, "STRING", "La derni\xC3\xA8re touche enfonc\xC3\xA9" "e, avec Ctrl, Maj, Alt (Ctrl+F5 ; '' : aucune)."},
+    {"KeysDown",            14, "STRING", "Les touches tenues, s\xC3\xA9par\xC3\xA9" "es par ; (F5;Haut ; '' : aucune)."},
+    {"KeyDownCount",        14, "INT",    "Le nombre de touches tenues."},
+    {"KeyAnyDown",          14, "BOOL",   "Une touche au moins est tenue."},
+    {"KeyCtrl",             14, "BOOL",   "Ctrl est tenue."},
+    {"KeyShift",            14, "BOOL",   "Maj est tenue."},
+    {"KeyAlt",              14, "BOOL",   "Alt est tenue."},
+    {"KeyHoldTime",         14, "TIME",   "Depuis quand la derni\xC3\xA8re touche enfonc\xC3\xA9" "e est tenue (T#0s : rel\xC3\xA2" "ch\xC3\xA9" "e)."},
+    {"KeyPresses",          14, "DINT",   "Les touches enfonc\xC3\xA9" "es depuis le lancement."},
+    {"ShortcutLast",        14, "STRING", "Le dernier raccourci parti : Vue \xC2\xB7 touche ('' : aucun)."},
+    {"ShortcutCount",       14, "DINT",   "Les raccourcis partis depuis le lancement."},
 };
 inline constexpr std::size_t kSysVarCount = sizeof(kSysVars) / sizeof(kSysVars[0]);
 
@@ -466,6 +491,10 @@ inline constexpr InfoVar kSlaveMembers[] = {
 inline constexpr std::size_t kSlaveMemberCount = sizeof(kSlaveMembers) / sizeof(kSlaveMembers[0]);
 inline constexpr std::string_view kSlaveRoot = "Slave";    // SYS.Slave.<nom>.<membre>
 inline constexpr int kSlaveDomain = 13;                    // "Esclaves simules" dans kSysDomains
+// 1.11.23 : la souris et le clavier - SYS.Key.<touche> (BOOL : la touche est tenue ; les
+// jetons de hmi/HmiKeys.hpp : A..Z, Digit0..Digit9, F1..F12, Enter, Escape, Space...).
+inline constexpr std::string_view kKeyRoot = "Key";
+inline constexpr int kInputDomain = 14;                    // "Souris et clavier" dans kSysDomains
 [[nodiscard]] inline const InfoVar* slaveMember(std::string_view name) noexcept {
     for (const auto& m : kSlaveMembers) if (same(m.name, name)) return &m;
     return nullptr;
@@ -689,6 +718,8 @@ struct Resolved {
     std::string    alarm;             // "Vue_1.Pompe_1.Defaut"
     std::string    alarmLocal;        // "Defaut"
     const InfoVar* alarmMember{nullptr};
+    // 1.11.23 : SYS.Key.<touche> - what vaut Sys, `sys` reste NUL : le jeton de la touche.
+    std::string    keyName;           // "F5", "Enter", "Digit1"
 };
 
 // 1.10.2 (chantier A) : LES PARAMETRES D'UNE INSTANCE DE SYMBOLE, lus partout
@@ -833,6 +864,26 @@ struct InstanceParam {
             }
             r.what = Resolved::What::Sys;
             r.type = std::string(r.slaveMember->type);
+            r.access = Access::Read;
+            return r;
+        }
+        // 1.11.23 : SYS.Key.<touche> - la touche est tenue (BOOL, en lecture).
+        if (same(parts[1], kKeyRoot) && !sysVar(parts[1])) {
+            if (parts.size() == 2) { r.what = Resolved::What::Incomplete; return r; }
+            const auto token = parts.size() == 3 ? keys::tokenOf(parts[2]) : std::string_view{};
+            // un identifiant seulement : SYS.Key.1 se lirait comme un bit (Digit1)
+            const bool ident = parts.size() == 3 && !parts[2].empty() && !std::isdigit(static_cast<unsigned char>(parts[2].front()));
+            if (token.empty() || !ident) {
+                r.what = Resolved::What::Unknown;
+                r.error = parts.size() == 3 ? "touche inconnue : SYS.Key." + std::string(parts[2])
+                                                  + " (A \xC3\xA0 Z, Digit0 \xC3\xA0 Digit9, F1 \xC3\xA0 F12, Enter, Escape, Space, Tab, "
+                                                    "Backspace, Delete, Insert, Home, End, PageUp, PageDown, Up, Down, Left, Right)"
+                                            : std::string(path) + " : une touche s'\xC3\xA9" "crit SYS.Key.<touche>";
+                return r;
+            }
+            r.what = Resolved::What::Sys;
+            r.keyName = std::string(token);
+            r.type = "BOOL";
             r.access = Access::Read;
             return r;
         }

@@ -558,7 +558,101 @@ private:
 } // namespace
 
 // ------------------------------------------------------------ le dessin ----
-HmiLiveCanvas::HmiLiveCanvas(std::string id) : ui::Widget(std::move(id)) { setFocusPolicy(true); }
+HmiLiveCanvas::HmiLiveCanvas(std::string id) : ui::Widget(std::move(id)) {
+    setFocusPolicy(true);
+    // 1.11.23 : la souris sortie du canevas - dehors, et ses boutons relaches (un MouseUp
+    // dehors ne revient jamais).
+    (void)hoverChanged->connect([this](bool in) {
+        if (in || !pointerInside_) return;
+        pointerInside_ = false;
+        pointerMoved->emit(hmi::kNoId, 0.0, 0.0, hmi::kNoId, false);
+    });
+}
+
+// ---- 1.11.23 : la souris et le clavier de l'IHM en marche ----------------------------
+std::string HmiLiveCanvas::keyToken(ui::Key k) {
+    using K = ui::Key;
+    switch (k) {
+        case K::A: return "A"; case K::B: return "B"; case K::C: return "C"; case K::D: return "D"; case K::E: return "E";
+        case K::F: return "F"; case K::G: return "G"; case K::H: return "H"; case K::I: return "I"; case K::J: return "J";
+        case K::K: return "K"; case K::L: return "L"; case K::M: return "M"; case K::N: return "N"; case K::O: return "O";
+        case K::P: return "P"; case K::Q: return "Q"; case K::R: return "R"; case K::S: return "S"; case K::T: return "T";
+        case K::U: return "U"; case K::V: return "V"; case K::W: return "W"; case K::X: return "X"; case K::Y: return "Y";
+        case K::Z: return "Z";
+        case K::Num0: return "Digit0"; case K::Num1: return "Digit1"; case K::Num2: return "Digit2"; case K::Num3: return "Digit3";
+        case K::Num4: return "Digit4"; case K::Num5: return "Digit5"; case K::Num6: return "Digit6"; case K::Num7: return "Digit7";
+        case K::Num8: return "Digit8"; case K::Num9: return "Digit9";
+        case K::F1: return "F1"; case K::F2: return "F2"; case K::F3: return "F3"; case K::F4: return "F4"; case K::F5: return "F5";
+        case K::F6: return "F6"; case K::F7: return "F7"; case K::F8: return "F8"; case K::F9: return "F9"; case K::F10: return "F10";
+        case K::F11: return "F11"; case K::F12: return "F12";
+        case K::Return: return "Enter"; case K::Escape: return "Escape"; case K::Space: return "Space"; case K::Tab: return "Tab";
+        case K::Backspace: return "Backspace"; case K::Delete: return "Delete"; case K::Insert: return "Insert";
+        case K::Home: return "Home"; case K::End: return "End"; case K::PageUp: return "PageUp"; case K::PageDown: return "PageDown";
+        case K::Up: return "Up"; case K::Down: return "Down"; case K::Left: return "Left"; case K::Right: return "Right";
+        case K::Unknown: break;
+    }
+    return {};
+}
+
+int HmiLiveCanvas::layerUnder(gfx::Point p) const {
+    if (layers_.empty() || vps_.size() != layers_.size() || !bounds().contains(p)) return -1;
+    for (auto it = popupRects_.rbegin(); it != popupRects_.rend(); ++it)
+        if (it->window.contains(p) && it->layer < layers_.size()) return static_cast<int>(it->layer);
+    for (std::size_t k = layers_.size(); k-- > 0;)
+        if (!layers_[k].popup) {
+            const auto& vp = vps_[k];
+            const double x = vp.toViewX(p.x), y = vp.toViewY(p.y);
+            const auto& v = layers_[k].view;
+            return x >= 0 && y >= 0 && x <= v.width && y <= v.height ? static_cast<int>(k) : -1;
+        }
+    return -1;
+}
+
+void HmiLiveCanvas::notePointer(const ui::InputEvent& ev) {
+    const auto moved = [&](gfx::Point p) {
+        const int li = layerUnder(p);
+        if (li < 0) {
+            if (pointerInside_) pointerMoved->emit(hmi::kNoId, 0.0, 0.0, hmi::kNoId, false);
+            pointerInside_ = false;
+            return;
+        }
+        const auto& vp = vps_[static_cast<std::size_t>(li)];
+        pointerInside_ = true;
+        pointerMoved->emit(layers_[static_cast<std::size_t>(li)].view.id, vp.toViewX(p.x), vp.toViewY(p.y),
+                           objectAtLayer(static_cast<std::size_t>(li), p), true);
+    };
+    const auto index = [](ui::MouseButton b) { return b == ui::MouseButton::Left ? 0 : b == ui::MouseButton::Right ? 1 : b == ui::MouseButton::Middle ? 2 : -1; };
+    if (const auto* m = std::get_if<ui::MouseMove>(&ev)) moved(m->pos);
+    else if (const auto* d = std::get_if<ui::MouseDown>(&ev)) {
+        if (!bounds().contains(d->pos)) return;
+        moved(d->pos);
+        if (const int b = index(d->button); b >= 0) pointerButton->emit(b, true);
+    } else if (const auto* u = std::get_if<ui::MouseUp>(&ev)) {
+        if (const int b = index(u->button); b >= 0) pointerButton->emit(b, false);
+    } else if (const auto* w = std::get_if<ui::MouseWheel>(&ev)) {
+        if (bounds().contains(w->pos) && w->dy != 0.f) wheelTurned->emit(w->dy > 0 ? 1.0 : -1.0);
+    }
+}
+
+bool HmiLiveCanvas::routeKey(const ui::InputEvent& ev) {
+    if (!keyHandler_ || !(focused() || station_)) return false;
+    if (const auto* f = std::get_if<ui::FocusChange>(&ev); f && !f->gained) {
+        keysLost->emit();
+        return false;
+    }
+    const auto* kd = std::get_if<ui::KeyDown>(&ev);
+    const auto* ku = std::get_if<ui::KeyUp>(&ev);
+    if (!kd && !ku) return false;
+    const ui::Key key = kd ? kd->key : ku->key;
+    const ui::KeyMods mods = kd ? kd->mods : ku->mods;
+    // L'editeur garde les siennes : F8 et Maj+F8 (l'IHM), F11 (plein ecran), Ctrl+Alt+S.
+    if (!station_ && (key == ui::Key::F8 || key == ui::Key::F11 || (key == ui::Key::S && mods.ctrl && mods.alt))) return false;
+    return keyHandler_(keyToken(key), mods, kd != nullptr, kd ? kd->repeat : false);
+}
+
+void HmiLiveCanvas::onFocusChanged(bool gained) {
+    if (!gained) keysLost->emit();
+}
 
 void HmiLiveCanvas::show(hmi::View evaluated, std::vector<Id> errors) {
     HmiLiveLayer l;
@@ -1710,6 +1804,10 @@ void HmiLiveCanvas::pressObject(std::size_t layer, gfx::Point p, int clickCount)
 }
 
 ui::EventResult HmiLiveCanvas::onEvent(const ui::InputEvent& ev) {
+    // 1.11.23 : la souris (SYS.Mouse*) d'abord, puis le clavier - une touche qu'un raccourci
+    // de la vue prend ne va nulle part ailleurs (ni Echap qui ferme la popup, ni le badge).
+    notePointer(ev);
+    if (routeKey(ev)) return ui::EventResult::Consumed;
     if (const auto* d = std::get_if<ui::MouseDown>(&ev)) {
         // 1.10 : l'IHM arretee - les boutons de la carte ; le reste ne repond pas.
         if (!stoppedNote_.empty() && bounds().contains(d->pos)) {
@@ -2761,6 +2859,36 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
             status_->setTransientMessage(o->name + " : aucune action sur cet objet", 4.0);
     });
     links_ += canvas_->released->connect([this](Id object, bool inside) { runtime_.release(object, now_, inside); });
+    // 1.11.23 : la souris et le clavier (SYS.Mouse*, SYS.Key*) et les raccourcis des vues.
+    links_ += canvas_->pointerMoved->connect([this](Id view, double x, double y, Id object, bool inside) {
+        runtime_.pointerMoved(view, x, y, object, inside);
+    });
+    links_ += canvas_->pointerButton->connect([this](int button, bool down) { runtime_.pointerButton(button, down, now_); });
+    links_ += canvas_->wheelTurned->connect([this](double notches) { runtime_.pointerWheel(notches); });
+    links_ += canvas_->keysLost->connect([this] {
+        runtime_.releaseAllKeys(now_);
+        refreshNow();
+    });
+    canvas_->setKeyHandler([this](const std::string& token, ui::KeyMods mods, bool down, bool repeat) {
+        if (token.empty()) {                                   // Ctrl, Maj ou Alt seules
+            runtime_.keyModifiers(mods.ctrl, mods.shift, mods.alt);
+            return false;
+        }
+        bool taken = false;
+        if (down) {
+            hmi::keys::Chord chord;
+            chord.key = token;
+            chord.ctrl = mods.ctrl;
+            chord.shift = mods.shift;
+            chord.alt = mods.alt;
+            taken = runtime_.keyDown(chord, now_, repeat);
+        } else {
+            taken = runtime_.keyUp(token, now_);
+            runtime_.keyModifiers(mods.ctrl, mods.shift, mods.alt);
+        }
+        if (taken && !repeat) refreshNow();
+        return taken;
+    });
     // Lot 6 : le gestionnaire de recettes (une ligne, un bouton) ; les
     // parametres systeme se ferment d'un clic.
     links_ += canvas_->partClicked->connect([this](Id object, const std::string& part) {

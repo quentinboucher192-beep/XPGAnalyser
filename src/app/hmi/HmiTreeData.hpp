@@ -19,6 +19,7 @@
 #include "HmiPaneKit.hpp"
 #include "../../hmi/HmiDecl.hpp"        // 1.11.18 : les blocs de declaration (withoutDeclarations)
 #include "../../hmi/HmiDuplicate.hpp"
+#include "../../hmi/HmiKeys.hpp"        // 1.11.23 : la touche d'un raccourci
 #include "../../hmi/HmiModel.hpp"
 #include "../../hmi/HmiPublicVars.hpp"
 #include "../../ui/Icons.hpp"
@@ -75,6 +76,10 @@ inline std::string_view triggerText(hmi::Trigger t) {
         case hmi::Trigger::ViewOpen:    return "Ouverture";
         case hmi::Trigger::ViewClose:   return "Fermeture";
         case hmi::Trigger::Timer:       return "Minuterie";
+        case hmi::Trigger::KeyPress:    return "Touche enfonc\xC3\xA9" "e";      // 1.11.23 : les raccourcis
+        case hmi::Trigger::KeyRelease:  return "Touche rel\xC3\xA2" "ch\xC3\xA9" "e";
+        case hmi::Trigger::KeyHold:     return "Touche maintenue";
+        case hmi::Trigger::KeyRepeat:   return "Touche r\xC3\xA9p\xC3\xA9t\xC3\xA9" "e";
     }
     return "?";
 }
@@ -140,6 +145,7 @@ inline std::string actionText(const hmi::Action& a) {
             break;
     }
     std::string when(triggerText(a.trigger));
+    if (hmi::triggerIsKey(a.trigger)) when += " " + hmi::keys::label(a.key);     // 1.11.23 : la touche du raccourci
     if (!a.watch.empty()) when += " (" + a.watch + ")";
     return when + " \xE2\x86\x92 " + what + (a.guard.empty() ? std::string{} : "   si " + a.guard);
 }

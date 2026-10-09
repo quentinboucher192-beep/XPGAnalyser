@@ -11,6 +11,7 @@ const std::vector<Place>& places() {
         {Kind::HmiPlace, "vue", "\xC3\x89" "diteur de vue", "editeur", "help.hmi"},
         {Kind::HmiPlace, "actions", "\xC3\x89" "diteur de vue \xE2\x80\xBA inspecteur \xE2\x80\xBA Actions", "actions", "help.hmi"},
         {Kind::HmiPlace, "contenu", "\xC3\x89" "diteur de vue \xE2\x80\xBA inspecteur \xE2\x80\xBA Contenu", "contenu", "help.hmi"},
+        {Kind::HmiPlace, "raccourcis", "\xC3\x89" "diteur de vue \xE2\x80\xBA inspecteur \xE2\x80\xBA Raccourcis", "raccourcis-vue", "help.hmi"},   // 1.11.23
         {Kind::HmiPlace, "scripts-vue", "Script d'une vue", "scripts", "help.hmi"},
         {Kind::HmiPlace, "scripts", "Scripts g\xC3\xA9n\xC3\xA9raux", "scripts", "help.hmi"},
         {Kind::HmiPlace, "fonctions", "Fonctions", "fonctions", "help.hmi"},

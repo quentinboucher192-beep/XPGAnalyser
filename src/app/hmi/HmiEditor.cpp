@@ -337,6 +337,12 @@ HmiEditor::HmiEditor(std::string widgetId, hmi::DocumentPtr doc, Id view, Apply 
                                                          [this](core::CommandPtr c) { apply_(std::move(c)); });
         content_ = content.get();
         tabs->addTab(ui::TabControl::Tab{"Contenu", ui::Icon::AnimationTable, false, false}, std::move(content));
+        // 1.11.23 : la section Raccourcis - montree quand rien n'est choisi (onLayout).
+        auto keys = std::make_unique<HmiActionsPanel>(base + ".shortcuts", doc_, viewId_,
+                                                      [this](core::CommandPtr c) { apply_(std::move(c)); },
+                                                      HmiActionsPanel::Scope::Shortcuts);
+        shortcuts_ = keys.get();
+        shortcutsPage_ = std::move(keys);
         tabs->setCurrentIndex(0);
         inspector_ = &static_cast<ui::TabControl&>(right->addPane(std::move(tabs), 0.58f, 140.f));
     }
@@ -579,6 +585,11 @@ HmiEditor::HmiEditor(std::string widgetId, hmi::DocumentPtr doc, Id view, Apply 
     links_ += actions_->countChanged->connect([this](std::size_t n) {
         inspector_->setTabBadge(1, n ? std::to_string(n) : std::string{}, ui::Tone::Accent);
     });
+    links_ += shortcuts_->countChanged->connect([this](std::size_t n) {
+        // 1.11.23 : l'onglet Raccourcis peut etre cache (indexOf : -1).
+        if (const int at = inspector_->indexOf(shortcuts_); at >= 0)
+            inspector_->setTabBadge(static_cast<std::size_t>(at), n ? std::to_string(n) : std::string{}, ui::Tone::Accent);
+    });
     links_ += content_->countChanged->connect([this](std::size_t n) {
         // 1.10.4 (K3) : l'onglet peut etre cache (indexOf : -1).
         if (const int at = inspector_->indexOf(content_); at >= 0)
@@ -722,6 +733,7 @@ void HmiEditor::refresh() {
     objects_->setSelection(canvas_->selection());
     layers_->setView(v);
     if (actions_) actions_->refresh();
+    if (shortcuts_) shortcuts_->refresh();          // 1.11.23
     if (content_) content_->refresh();
     invalidateLayout();
     invalidate();
@@ -1571,6 +1583,16 @@ void HmiEditor::showAction(Id object, int index) {
     if (object != kNoId && !v->object(object)) object = kNoId;
     canvas_->setSelection(object != kNoId ? std::vector<Id>{object} : std::vector<Id>{});
     if (object != kNoId) objects_->revealSelection();
+    // 1.11.23 : un raccourci (une action de la vue a declencheur Touche) : l'onglet Raccourcis.
+    if (object == kNoId && index >= 0 && index < static_cast<int>(v->actions.size())
+        && hmi::triggerIsKey(v->actions[static_cast<std::size_t>(index)].trigger)) {
+        actions_->setOwner(kNoId);
+        layout();                                   // l'onglet Raccourcis se montre (rien de choisi)
+        if (const int at = inspector_->indexOf(shortcuts_); at >= 0) inspector_->setCurrentIndex(static_cast<std::size_t>(at));
+        shortcuts_->refresh();
+        shortcuts_->selectIndex(index);
+        return;
+    }
     actions_->setOwner(object);
     inspector_->setCurrentIndex(1);
     if (index >= 0) actions_->selectIndex(index);
@@ -1676,6 +1698,19 @@ void HmiEditor::onLayout() {
         inspector_->setTabBadge(at, n ? std::to_string(n) : std::string{}, ui::Tone::Accent);
     } else if (!wantContent && contentTab >= 0) {
         contentPage_ = inspector_->takeTab(static_cast<std::size_t>(contentTab));
+    }
+    // 1.11.23 : l'onglet Raccourcis, rien de choisi (la vue) - pas pour un symbole (ses
+    // instances ne prennent pas le clavier).
+    const auto* sv = doc_->project.view(viewId_);
+    const bool wantKeys = owner == kNoId && sv && !hmi::isSymbolView(*sv);
+    const int keysTab = inspector_->indexOf(shortcuts_);
+    if (wantKeys && keysTab < 0 && shortcutsPage_) {
+        const std::size_t at = inspector_->addTab(ui::TabControl::Tab{"Raccourcis", ui::Icon::Keyboard, false, false},
+                                                  std::move(shortcutsPage_));
+        const std::size_t n = shortcuts_->shownIndexes().size();
+        inspector_->setTabBadge(at, n ? std::to_string(n) : std::string{}, ui::Tone::Accent);
+    } else if (!wantKeys && keysTab >= 0) {
+        shortcutsPage_ = inspector_->takeTab(static_cast<std::size_t>(keysTab));
     }
 }
 

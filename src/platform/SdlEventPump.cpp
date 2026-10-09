@@ -73,6 +73,25 @@ ui::Key keyFrom(SDL_Keycode k) {
         case SDLK_F5:        return ui::Key::F5;
         case SDLK_F11:       return ui::Key::F11;
         case SDLK_F12:       return ui::Key::F12;
+        // 1.11.23 : les raccourcis des vues - les autres lettres, chiffres (rangee et pave), F4, F6.
+        case SDLK_B:         return ui::Key::B;
+        case SDLK_E:         return ui::Key::E;
+        case SDLK_G:         return ui::Key::G;
+        case SDLK_I:         return ui::Key::I;
+        case SDLK_M:         return ui::Key::M;
+        case SDLK_R:         return ui::Key::R;
+        case SDLK_T:         return ui::Key::T;
+        case SDLK_U:         return ui::Key::U;
+        case SDLK_0: case SDLK_KP_0: return ui::Key::Num0;
+        case SDLK_2: case SDLK_KP_2: return ui::Key::Num2;
+        case SDLK_3: case SDLK_KP_3: return ui::Key::Num3;
+        case SDLK_4: case SDLK_KP_4: return ui::Key::Num4;
+        case SDLK_6: case SDLK_KP_6: return ui::Key::Num6;
+        case SDLK_7: case SDLK_KP_7: return ui::Key::Num7;
+        case SDLK_8: case SDLK_KP_8: return ui::Key::Num8;
+        case SDLK_9: case SDLK_KP_9: return ui::Key::Num9;
+        case SDLK_F4:        return ui::Key::F4;
+        case SDLK_F6:        return ui::Key::F6;
         default:             return ui::Key::Unknown;
     }
 }

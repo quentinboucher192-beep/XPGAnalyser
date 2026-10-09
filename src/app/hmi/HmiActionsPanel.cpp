@@ -2,6 +2,7 @@
 #include "HmiActionDialogs.hpp"   // 1.11.9 : l'operation en arbre, le script, la formule de Maths
 #include "HmiParamPanes.hpp"   // 1.9 : les arguments types d'Ouvrir une popup
 #include "../../hmi/HmiActionKinds.hpp"
+#include "../../hmi/HmiKeys.hpp"          // 1.11.23 : les raccourcis
 #include "../../hmi/HmiExport.hpp"
 #include "HmiAssist.hpp"
 #include "../../ui/widgets/ExprField.hpp"   // 1.10 (chantier K) : les champs a expression, partout pareils
@@ -29,25 +30,51 @@ namespace {
 
 enum Act : int { AAdd = 1, ADuplicate, ARemove, AUp, ADown };
 
+// Les lignes du volet : "#", puis les colonnes (l'action ; 1.11.23, un raccourci : la touche,
+// le declencheur, l'action).
 class ActionRows final : public ui::ITableModel {
 public:
-    explicit ActionRows(std::vector<std::string> rows) : rows_(std::move(rows)) {}
+    ActionRows(std::vector<std::string> headers, std::vector<std::vector<std::string>> rows)
+        : headers_(std::move(headers)), rows_(std::move(rows)) {}
     [[nodiscard]] std::size_t rowCount() const override { return rows_.size(); }
-    [[nodiscard]] std::size_t columnCount() const override { return 2; }
-    [[nodiscard]] std::string headerText(std::size_t c) const override { return c == 0 ? "#" : "Action"; }
+    [[nodiscard]] std::size_t columnCount() const override { return headers_.size() + 1; }
+    [[nodiscard]] std::string headerText(std::size_t c) const override { return c == 0 ? std::string("#") : c - 1 < headers_.size() ? headers_[c - 1] : std::string{}; }
     [[nodiscard]] std::string cellText(ui::RowIndex r, std::size_t c) const override {
         if (r >= rows_.size()) return {};
-        return c == 0 ? std::to_string(r + 1) : rows_[r];
+        if (c == 0) return std::to_string(r + 1);
+        return c - 1 < rows_[r].size() ? rows_[r][c - 1] : std::string{};
     }
     [[nodiscard]] ui::CellStyle cellStyle(ui::RowIndex, std::size_t c) const override {
         ui::CellStyle s;
-        if (c == 1) s.icon = ui::Icon::Play;
+        if (c == 1) s.icon = headers_.size() > 1 ? ui::Icon::Keyboard : ui::Icon::Play;
         return s;
     }
     [[nodiscard]] bool less(ui::RowIndex a, ui::RowIndex b, std::size_t) const override { return a < b; }
 private:
-    std::vector<std::string> rows_;
+    std::vector<std::string>              headers_;
+    std::vector<std::vector<std::string>> rows_;
 };
+
+// 1.11.23 : les declencheurs d'un raccourci, tels que l'inspecteur les propose.
+struct KeyTriggerName { Trigger t; const char* label; };
+constexpr KeyTriggerName kKeyTriggerNames[] = {
+    {Trigger::KeyPress, "Front montant (touche enfonc\xC3\xA9" "e)"},
+    {Trigger::KeyRelease, "Front descendant (touche rel\xC3\xA2" "ch\xC3\xA9" "e)"},
+    {Trigger::KeyHold, "Dur\xC3\xA9" "e (touche maintenue)"},
+    {Trigger::KeyRepeat, "R\xC3\xA9p\xC3\xA9tition (tant qu'elle est tenue)"},
+};
+std::string keyTriggerLabel(Trigger t) {
+    for (const auto& n : kKeyTriggerNames) if (n.t == t) return n.label;
+    return kKeyTriggerNames[0].label;
+}
+std::string keyTriggerShort(Trigger t) {
+    switch (t) {
+        case Trigger::KeyRelease: return "Front descendant";
+        case Trigger::KeyHold:    return "Dur\xC3\xA9" "e";
+        case Trigger::KeyRepeat:  return "R\xC3\xA9p\xC3\xA9tition";
+        default:                  return "Front montant";
+    }
+}
 
 // "\n" dans une case d'une ligne : le code d'un script, un message multiligne.
 std::string escapeLines(const std::string& s) {
@@ -102,25 +129,31 @@ std::string shownCurve(const std::string& v) {
 
 } // namespace
 
-HmiActionsPanel::HmiActionsPanel(std::string id, hmi::DocumentPtr doc, Id view, Apply apply)
-    : ui::Widget(std::move(id)), doc_(std::move(doc)), view_(view), apply_(std::move(apply)) {
+HmiActionsPanel::HmiActionsPanel(std::string id, hmi::DocumentPtr doc, Id view, Apply apply, Scope scope)
+    : ui::Widget(std::move(id)), scope_(scope), doc_(std::move(doc)), view_(view), apply_(std::move(apply)) {
     const std::string base = this->id();
+    const bool keys = scope_ == Scope::Shortcuts;
     auto tools = std::make_unique<HmiToolStrip>(base + ".tools");
-    tools->add(AAdd, HmiGlyph::Plus, "Ajouter une action (Ctrl+Z la retire)", "Ajouter");
-    tools->add(ADuplicate, HmiGlyph::Duplicate, "Dupliquer l'action choisie");
-    tools->add(ARemove, HmiGlyph::Delete, "Retirer l'action choisie");
+    tools->add(AAdd, HmiGlyph::Plus, keys ? "Ajouter un raccourci : une touche et son action (Ctrl+Z le retire)"
+                                          : "Ajouter une action (Ctrl+Z la retire)", "Ajouter");
+    tools->add(ADuplicate, HmiGlyph::Duplicate, keys ? "Dupliquer le raccourci choisi" : "Dupliquer l'action choisie");
+    tools->add(ARemove, HmiGlyph::Delete, keys ? "Retirer le raccourci choisi" : "Retirer l'action choisie");
     tools->add(AUp, HmiGlyph::Up, "Monter l'action (elles s'ex\xC3\xA9" "cutent dans l'ordre)");
     tools->add(ADown, HmiGlyph::Down, "Descendre l'action");
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
     tools_->setEnabledWhen(ADuplicate, [this] { return selectedIndex() >= 0; });
     tools_->setEnabledWhen(ARemove, [this] { return selectedIndex() >= 0; });
-    tools_->setEnabledWhen(AUp, [this] { return selectedIndex() > 0; });
+    tools_->setEnabledWhen(AUp, [this] { return rowOf(selectedIndex()) > 0; });
     tools_->setEnabledWhen(ADown, [this] {
-        const auto* list = actions();
-        return list && selectedIndex() >= 0 && selectedIndex() + 1 < static_cast<int>(list->size());
+        const int row = rowOf(selectedIndex());
+        return row >= 0 && row + 1 < static_cast<int>(rows_.size());
     });
     auto table = std::make_unique<ui::TableView>(base + ".list");
-    table->setColumns({{"#", 40.f, 32.f, false, false, true, ui::Align::End}, {"Action", 520.f}});
+    if (keys)
+        table->setColumns({{"#", 40.f, 32.f, false, false, true, ui::Align::End}, {"Touche", 120.f}, {"D\xC3\xA9" "clencheur", 140.f},
+                           {"Action", 360.f}});
+    else
+        table->setColumns({{"#", 40.f, 32.f, false, false, true, ui::Align::End}, {"Action", 520.f}});
     table->setSelectionMode(ui::SelectionMode::Single);
     table_ = &static_cast<ui::TableView&>(addChild(std::move(table)));
     auto grid = std::make_unique<ui::PropertyGrid>(base + ".grid");
@@ -143,7 +176,21 @@ HmiActionsPanel::HmiActionsPanel(std::string id, hmi::DocumentPtr doc, Id view, 
         switch (a) {
             case AAdd: {
                 Action fresh;
-                if (owner_ == kNoId) {
+                if (scope_ == Scope::Shortcuts) {
+                    // 1.11.23 : la premiere touche libre de F2 a F12 (F1 : l'aide), Journaliser.
+                    fresh.trigger = Trigger::KeyPress;
+                    fresh.operation = Operation::Log;
+                    const auto* list = actions();
+                    for (int f = 2; f <= 12 && fresh.key.empty(); ++f) {
+                        if (f == 11) continue;                       // F11 : le plein ecran du poste
+                        const std::string k = "F" + std::to_string(f);
+                        const bool used = list && std::any_of(list->begin(), list->end(),
+                                                              [&k](const Action& a) { return hmi::triggerIsKey(a.trigger) && a.key == k; });
+                        if (!used) fresh.key = k;
+                    }
+                    if (fresh.key.empty()) fresh.key = "F2";
+                    fresh.value = "Raccourci " + fresh.key;
+                } else if (owner_ == kNoId) {
                     fresh.trigger = Trigger::ViewOpen;
                     fresh.operation = Operation::Log;
                     fresh.value = "Vue ouverte";
@@ -158,16 +205,28 @@ HmiActionsPanel::HmiActionsPanel(std::string id, hmi::DocumentPtr doc, Id view, 
                 if (const auto* list = actions(); list && sel >= 0) selectIndex(add((*list)[static_cast<std::size_t>(sel)]));
                 break;
             case ARemove: (void)remove(sel); break;
-            case AUp: if (move(sel, -1)) selectIndex(sel - 1); break;
-            case ADown: if (move(sel, +1)) selectIndex(sel + 1); break;
+            case AUp: if (move(sel, -1)) selectIndex(selected_); break;
+            case ADown: if (move(sel, +1)) selectIndex(selected_); break;
             default: break;
         }
     });
     links_ += table_->selectionChanged->connect([this](const std::vector<ui::RowIndex>& rows) {
-        selected_ = rows.empty() ? -1 : static_cast<int>(rows.front());
+        selected_ = rows.empty() || rows.front() >= rows_.size() ? -1 : rows_[rows.front()];
         rebuildGrid();
     });
     refresh();
+}
+
+bool HmiActionsPanel::shows(const Action& a) const {
+    // 1.11.23 : les raccourcis (les actions de la vue a declencheur Touche) dans leur volet ;
+    // les autres actions dans celui des actions.
+    return (scope_ == Scope::Shortcuts) == hmi::triggerIsKey(a.trigger);
+}
+
+int HmiActionsPanel::rowOf(int index) const {
+    for (std::size_t r = 0; r < rows_.size(); ++r)
+        if (rows_[r] == index) return static_cast<int>(r);
+    return -1;
 }
 
 const std::vector<Action>* HmiActionsPanel::actions() const {
@@ -275,37 +334,58 @@ std::string HmiActionsPanel::ownerName() const {
 }
 
 void HmiActionsPanel::setOwner(Id object) {
+    if (scope_ == Scope::Shortcuts) object = kNoId;          // 1.11.23 : les raccourcis sont a la vue
     if (object == owner_) { refresh(); return; }
     owner_ = object;
     selected_ = -1;
     refresh();
-    if (const auto* list = actions(); list && !list->empty()) selectIndex(0);
+    if (!rows_.empty()) selectIndex(rows_.front());
 }
 
 int HmiActionsPanel::selectedIndex() const {
     const auto* list = actions();
     if (!list || selected_ < 0 || selected_ >= static_cast<int>(list->size())) return -1;
+    if (!shows((*list)[static_cast<std::size_t>(selected_)])) return -1;
     return selected_;
 }
 
 void HmiActionsPanel::selectIndex(int index) {
     const auto* list = actions();
     if (!list || index < 0 || index >= static_cast<int>(list->size())) return;
-    hmiSelectModelRow(*table_, static_cast<ui::RowIndex>(index));
+    const int row = rowOf(index);
+    if (row < 0) return;
+    hmiSelectModelRow(*table_, static_cast<ui::RowIndex>(row));
     selected_ = index;
     rebuildGrid();
 }
 
 void HmiActionsPanel::refresh() {
-    std::vector<std::string> rows;
+    std::vector<std::vector<std::string>> rows;
+    rows_.clear();
+    const bool keys = scope_ == Scope::Shortcuts;
     if (const auto* list = actions())
-        for (const auto& a : *list) rows.push_back(hmi::describeAction(a));
+        for (std::size_t i = 0; i < list->size(); ++i) {
+            const auto& a = (*list)[i];
+            if (!shows(a)) continue;
+            rows_.push_back(static_cast<int>(i));
+            if (keys) {
+                // "Ctrl+F5", "Front montant", puis l'operation (ce que dit la liste des actions,
+                // sans son declencheur).
+                std::string what = hmi::describeAction(a);
+                if (const auto arrow = what.find("\xE2\x86\x92 "); arrow != std::string::npos) what = what.substr(arrow + 4);
+                rows.push_back({a.key.empty() ? std::string("(aucune)") : hmi::keys::label(a.key), keyTriggerShort(a.trigger), what});
+            } else {
+                rows.push_back({hmi::describeAction(a)});
+            }
+        }
     const std::size_t count = rows.size();
-    model_ = std::make_shared<ActionRows>(std::move(rows));
+    model_ = std::make_shared<ActionRows>(keys ? std::vector<std::string>{"Touche", "D\xC3\xA9" "clencheur", "Action"}
+                                               : std::vector<std::string>{"Action"},
+                                          std::move(rows));
     const int keep = selected_;
     table_->setModel(model_);
-    if (keep >= 0 && keep < static_cast<int>(count)) {
-        hmiSelectModelRow(*table_, static_cast<ui::RowIndex>(keep));
+    if (const int row = rowOf(keep); row >= 0) {
+        hmiSelectModelRow(*table_, static_cast<ui::RowIndex>(row));
         selected_ = keep;
     } else {
         selected_ = -1;
@@ -350,29 +430,37 @@ bool HmiActionsPanel::set(int index, const Action& a) {
 
 bool HmiActionsPanel::remove(int index) {
     const Id owner = owner_;
-    auto cmd = hmi::changeView(doc_, view_, "Retirer une action", [&](hmi::Project&, hmi::View& v) {
+    // La ligne d'avant (dans ce volet) sera choisie : son index, avant le retrait.
+    const int row = rowOf(index);
+    const int before = row > 0 ? rows_[static_cast<std::size_t>(row - 1)] : -1;
+    auto cmd = hmi::changeView(doc_, view_, scope_ == Scope::Shortcuts ? "Retirer un raccourci" : "Retirer une action",
+                               [&](hmi::Project&, hmi::View& v) {
         auto* list = owner == kNoId ? &v.actions : (v.object(owner) ? &v.object(owner)->actions : nullptr);
         if (!list || index < 0 || index >= static_cast<int>(list->size())) return;
         list->erase(list->begin() + index);
     });
     if (!cmd) return false;
     apply_(std::move(cmd));
-    selected_ = std::max(-1, index - 1);
+    selected_ = before;
     refresh();
     return true;
 }
 
 bool HmiActionsPanel::move(int index, int delta) {
     const Id owner = owner_;
+    // 1.11.23 : la voisine dans ce volet (les raccourcis et les actions se melent dans la liste).
+    const int row = rowOf(index);
+    const int toRow = row + delta;
+    if (row < 0 || toRow < 0 || toRow >= static_cast<int>(rows_.size())) return false;
+    const int to = rows_[static_cast<std::size_t>(toRow)];
     auto cmd = hmi::changeView(doc_, view_, "Ordonner les actions", [&](hmi::Project&, hmi::View& v) {
         auto* list = owner == kNoId ? &v.actions : (v.object(owner) ? &v.object(owner)->actions : nullptr);
-        const int to = index + delta;
         if (!list || index < 0 || to < 0 || index >= static_cast<int>(list->size()) || to >= static_cast<int>(list->size())) return;
         std::swap((*list)[static_cast<std::size_t>(index)], (*list)[static_cast<std::size_t>(to)]);
     });
     if (!cmd) return false;
     apply_(std::move(cmd));
-    selected_ = index + delta;
+    selected_ = to;
     refresh();
     return true;
 }
@@ -383,6 +471,21 @@ void HmiActionsPanel::rebuildGrid() {
     const int index = selectedIndex();
     if (!list || index < 0) {
         PG::Category info;
+        if (scope_ == Scope::Shortcuts) {
+            // 1.11.23 : la section Raccourcis, vide ou rien de choisi.
+            info.name = rows_.empty() ? "Aucun raccourci" : "Choisis un raccourci";
+            PG::Property p;
+            p.name = "Raccourcis de";
+            p.value = ownerName();
+            p.type = PG::ValueType::ReadOnly;
+            p.description = "Un raccourci : une touche (F5, Ctrl+S, Maj+Entr\xC3\xA9" "e\xE2\x80\xA6) li\xC3\xA9" "e \xC3\xA0 une action, avec son "
+                            "d\xC3\xA9" "clencheur : le front montant (la touche enfonc\xC3\xA9" "e), le front descendant (rel\xC3\xA2" "ch\xC3\xA9" "e), "
+                            "une dur\xC3\xA9" "e (maintenue), une r\xC3\xA9p\xC3\xA9tition (tant qu'elle est tenue). Il part quand la vue "
+                            "(ou la popup) est montr\xC3\xA9" "e en marche. \xC2\xAB Ajouter \xC2\xBB en cr\xC3\xA9" "e un \xC3\xA0 r\xC3\xA9gler ci-dessous.";
+            info.properties.push_back(std::move(p));
+            grid_->setCategories({std::move(info)});
+            return;
+        }
         info.name = list ? (list->empty() ? "Aucune action" : "Choisis une action") : "Rien \xC3\xA0 montrer";
         PG::Property p;
         p.name = "Actions de";
@@ -415,6 +518,68 @@ void HmiActionsPanel::rebuildGrid() {
         return p;
     };
     std::vector<PG::Category> cats;
+    if (scope_ == Scope::Shortcuts) {
+        // ---- 1.11.23 : le raccourci - sa touche, son declencheur, sa duree ou sa periode
+        PG::Category key;
+        key.name = "Raccourci";
+        const int row = rowOf(index);
+        key.properties.push_back(prop("Raccourci de", ownerName() + "  \xC2\xB7  n\xC2\xB0 " + std::to_string(row + 1),
+                                      PG::ValueType::ReadOnly, {}, nullptr,
+                                      "Un raccourci de la vue : il part quand elle est montr\xC3\xA9" "e en marche (une popup du dessus "
+                                      "passe avant la vue)."));
+        std::string why;
+        const auto chord = hmi::keys::parseChord(a.key, &why);
+        std::string help = "La touche, avec ou sans Ctrl, Maj, Alt : F5, Ctrl+S, Maj+Entr\xC3\xA9" "e, Alt+Haut, A, 1. "
+                           "Les lettres, les chiffres, F1 \xC3\xA0 F12, Entr\xC3\xA9" "e, \xC3\x89" "chap, Espace, Tab, Suppr, Inser, D\xC3\xA9" "but, "
+                           "Fin, Page pr\xC3\xA9" "c, Page suiv, les fl\xC3\xA8" "ches.";
+        if (!chord) help = "Touche illisible : " + why + ". " + help;
+        else if (const auto r = hmi::keys::reserved(*chord); !r.empty()) help = "Attention : " + r + " - le raccourci ne partira pas partout. " + help;
+        key.properties.push_back(prop("Touche", chord ? hmi::keys::label(*chord) : a.key, PG::ValueType::Text, {},
+                                      commitWith([](Action& n, std::string_view v) {
+                                          const auto c = hmi::keys::parseChord(v);
+                                          if (!c) return false;
+                                          n.key = hmi::keys::canonical(*c);
+                                          if (n.operation == Operation::Log && n.value.rfind("Raccourci ", 0) == 0)
+                                              n.value = "Raccourci " + hmi::keys::label(*c);   // le message d'exemple suit
+                                          return true;
+                                      }),
+                                      help));
+        std::vector<std::string> kinds;
+        for (const auto& n : kKeyTriggerNames) kinds.emplace_back(n.label);
+        key.properties.push_back(prop("D\xC3\xA9" "clencheur", keyTriggerLabel(a.trigger), PG::ValueType::Enum, kinds,
+                                      commitWith([](Action& n, std::string_view v) {
+                                          for (const auto& k : kKeyTriggerNames)
+                                              if (v == k.label) {
+                                                  n.trigger = k.t;
+                                                  if (n.trigger == Trigger::KeyHold && n.delayMs <= 0) n.delayMs = hmi::keys::kHoldDefaultMs;
+                                                  if (n.trigger == Trigger::KeyRepeat && n.delayMs <= 0) n.delayMs = hmi::keys::kRepeatDefaultMs;
+                                                  return true;
+                                              }
+                                          return false;
+                                      }),
+                                      "Front montant : \xC3\xA0 l'appui (la r\xC3\xA9p\xC3\xA9tition du clavier ne compte pas). Front descendant : "
+                                      "au rel\xC3\xA2" "chement, m\xC3\xAA" "me si la vue s'est ferm\xC3\xA9" "e entre-temps. Dur\xC3\xA9" "e : une fois, "
+                                      "la touche tenue assez longtemps. R\xC3\xA9p\xC3\xA9tition : \xC3\xA0 chaque p\xC3\xA9riode, tant qu'elle est tenue."));
+        if (a.trigger == Trigger::KeyHold || a.trigger == Trigger::KeyRepeat) {
+            const bool hold = a.trigger == Trigger::KeyHold;
+            key.properties.push_back(prop(hold ? "Dur\xC3\xA9" "e (ms)" : "P\xC3\xA9riode (ms)",
+                                          std::to_string(a.delayMs > 0 ? a.delayMs : (hold ? hmi::keys::kHoldDefaultMs : hmi::keys::kRepeatDefaultMs)),
+                                          PG::ValueType::Integer, {},
+                                          commitWith([hold](Action& n, std::string_view v) {
+                                              double ms = 0;
+                                              if (!hmi::parseNumber(v, ms) || ms < (hold ? 10 : 50)) return false;
+                                              n.delayMs = static_cast<int>(ms);
+                                              return true;
+                                          }),
+                                          hold ? "Combien de temps la touche doit \xC3\xAAtre tenue (10 ms au moins)."
+                                               : "Toutes les combien l'action repart tant que la touche est tenue (50 ms au moins)."));
+        }
+        key.properties.push_back(prop("Condition (facultative)", a.guard, PG::ValueType::Text, {},
+                                      commitWith([](Action& n, std::string_view v) { n.guard = std::string(v); return true; }),
+                                      "Le raccourci ne part que si cette expression est vraie. Ex. : SYS.UserLevel >= 2"));
+        ui::exprfield::markWhole(key.properties.back(), ui::exprfield::Expect::Bool);
+        cats.push_back(std::move(key));
+    }
     // ---- le declencheur (et a qui est l'action : un objet, ou la vue)
     PG::Category trig;
     trig.name = "D\xC3\xA9" "clencheur";
@@ -454,7 +619,7 @@ void HmiActionsPanel::rebuildGrid() {
                                    commitWith([](Action& n, std::string_view v) { n.guard = std::string(v); return true; }),
                                    "L'action ne part que si cette expression est vraie. Ex. : Mode_Manuel AND NOT Defaut"));
     ui::exprfield::markWhole(trig.properties.back(), ui::exprfield::Expect::Bool);   // 1.10 (chantier K)
-    cats.push_back(std::move(trig));
+    if (scope_ != Scope::Shortcuts) cats.push_back(std::move(trig));   // 1.11.23 : un raccourci a la sienne (plus haut)
     // ---- l'operation
     PG::Category op;
     op.name = "Op\xC3\xA9ration";

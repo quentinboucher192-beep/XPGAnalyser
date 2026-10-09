@@ -1722,6 +1722,12 @@ void MainAnalysisScreen::openHmiView(std::uint64_t viewId, int part, std::uint64
                 app_.menus().ShowDialog(std::move(dialog), std::move(onClose));
             },
             [this] { return app_.project(); });
+        if (auto* keys = made->shortcuts())                                // 1.11.23 : les raccourcis aussi
+            keys->setDialogHost(
+                [this](menu::MenuPtr dialog, std::function<void(const menu::DialogResult&)> onClose) {
+                    app_.menus().ShowDialog(std::move(dialog), std::move(onClose));
+                },
+                [this] { return app_.project(); });
         made->setStyleAsker([this, viewId] { askHmiStyle(viewId); });     // lot 12
         made->setDuplicateAsker([this, viewId] { askHmiDuplicate(viewId); });   // 1.10.2 (chantier D)
         made->setTemplateAsker([this, viewId] { askHmiSaveTemplate(viewId); });   // lot 20
@@ -3262,6 +3268,7 @@ bool MainAnalysisScreen::openHmiHelpNow() {
             if (auto* editor = dynamic_cast<HmiEditor*>(hmiTab(key))) {
                 const auto tab = editor->inspector().currentIndex();
                 if (tab == 1) place = "actions";
+                else if (editor->shortcuts() && static_cast<int>(tab) == editor->inspector().indexOf(editor->shortcuts())) place = "raccourcis";   // 1.11.23
                 else if (tab == 2) place = "contenu";
             }
             topic = help::f1::keyForPlace(place);   // 1.11 (T2, tranche 16) : la table de F1, puis le guide

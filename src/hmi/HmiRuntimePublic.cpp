@@ -220,10 +220,13 @@ bool Runtime::viewOpen(Id view) const {
 bool Runtime::sysValue(std::string_view wanted, sim::Value& out) const {
     // 1.9 : SYS.Slave.<nom>.<membre> - une structure par esclave simule (HmiRuntimeSimPage.cpp).
     if (wanted.size() > 6 && pub::same(wanted.substr(0, 6), "Slave.")) return slaveSysValue(wanted, out);
+    // 1.11.23 : SYS.Key.<touche> - la touche est tenue (HmiRuntimeInput.cpp).
+    if (wanted.size() > 4 && pub::same(wanted.substr(0, 4), "Key.")) return keySysValue(wanted.substr(4), out);
     const pub::SysVar* sv = pub::sysVar(wanted);
     if (!sv) return false;
     const std::string_view n = sv->name;
     if (sv->domain == 13) return slaveSysValue(n, out);   // 1.9 : SYS.Sim* (les esclaves simules)
+    if (sv->domain == pub::kInputDomain) return inputSysValue(n, out);   // 1.11.23 : la souris et le clavier
     const auto text = [&](std::string s) { out = sim::Value::text(std::move(s)); return true; };
     const auto flag = [&](bool b) { out = sim::Value::boolean(b); return true; };
     const auto integer = [&](long long v) { out = sim::Value::integer(sim::Type::Int, v); return true; };

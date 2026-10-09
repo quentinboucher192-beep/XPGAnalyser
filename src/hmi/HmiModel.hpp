@@ -345,6 +345,11 @@ struct Box {
 //  de la liste.
 enum class Trigger : std::uint8_t {
     Click, DoubleClick, RisingEdge, FallingEdge, LongPress, ValueChange, ViewOpen, ViewClose, Timer,
+    // 1.11.23 : LES RACCOURCIS D'UNE VUE (ou d'une popup) - une touche (Action::key), et quand
+    // l'action part : la touche enfoncee (le front montant), relachee (le front descendant),
+    // maintenue delayMs (une fois), repetee toutes les delayMs tant qu'elle est tenue. Des
+    // actions de la vue seulement (kTriggers ne les propose pas aux objets) ; hmi/HmiKeys.hpp.
+    KeyPress, KeyRelease, KeyHold, KeyRepeat,
 };
 enum class Operation : std::uint8_t {
     Toggle, Set, Reset, Increment, Decrement, Assign, Navigate, Popup, ClosePopup, RunScript, CallScript, Log,
@@ -383,6 +388,11 @@ inline constexpr Trigger kTriggers[] = {
     Trigger::Click, Trigger::DoubleClick, Trigger::RisingEdge, Trigger::FallingEdge, Trigger::LongPress,
     Trigger::ValueChange, Trigger::ViewOpen, Trigger::ViewClose, Trigger::Timer,
 };
+// 1.11.23 : les declencheurs d'un raccourci (la section Raccourcis d'une vue).
+inline constexpr Trigger kKeyTriggers[] = {Trigger::KeyPress, Trigger::KeyRelease, Trigger::KeyHold, Trigger::KeyRepeat};
+[[nodiscard]] constexpr bool triggerIsKey(Trigger t) noexcept {
+    return t == Trigger::KeyPress || t == Trigger::KeyRelease || t == Trigger::KeyHold || t == Trigger::KeyRepeat;
+}
 inline constexpr Operation kOperations[] = {
     Operation::Toggle, Operation::Set, Operation::Reset, Operation::Increment, Operation::Decrement,
     Operation::Assign, Operation::Navigate, Operation::Popup, Operation::ClosePopup, Operation::RunScript,
@@ -475,6 +485,10 @@ struct Action {
     // 1.11.6 : les parametres de l'operation, "Nom := valeur; ..." - Maths : les
     // references de la formule ; Clavier virtuel : ses reglages (HmiActionKinds.hpp).
     std::string params;
+    // 1.11.23 : un raccourci - sa touche, sous sa forme enregistree ("Ctrl+F5", "Shift+Enter" :
+    // hmi::keys::canonical) ; vide : pas un raccourci. delayMs : maintenue, la duree ;
+    // repetee, la periode.
+    std::string key;
     bool operator==(const Action&) const = default;
 };
 // "Clic -> Naviguer vers Vue_Donnees (Glissement, 400 ms)" : ce que montre la liste.

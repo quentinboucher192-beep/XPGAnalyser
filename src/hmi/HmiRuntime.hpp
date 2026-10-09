@@ -35,6 +35,7 @@
 #pragma once
 
 #include "HmiExport.hpp"
+#include "HmiKeys.hpp"                // 1.11.23 : les raccourcis des vues
 #include "HmiExpr.hpp"
 #include "HmiPopupParams.hpp"
 #include "HmiHistory.hpp"
@@ -514,6 +515,41 @@ public:
     void release(Id object, double now, bool inside);
     void doubleClick(Id object, double now);
     [[nodiscard]] Id pressed() const noexcept { return pressed_; }
+
+    // ---- 1.11.23 : LA SOURIS ET LE CLAVIER (SYS.Mouse*, SYS.Key*, SYS.Key.<touche>) ET LES
+    //      RACCOURCIS DES VUES (HmiRuntimeInput.cpp) ------------------------------------------
+    //  Le canevas qui montre l'IHM (la simulation de l'editeur, le poste) dit ou est la souris,
+    //  ses boutons, sa molette, et chaque touche enfoncee ou relachee. Une touche enfoncee
+    //  cherche son raccourci : les popups du dessus vers le dessous, puis la vue (avec son
+    //  modele, son en-tete, son pied) ; la premiere qui a une action de cette touche (memes
+    //  Ctrl, Maj, Alt) la prend - une popup modale sans elle arrete la recherche. Puis :
+    //  Touche enfoncee part tout de suite (le front montant ; la repetition du systeme ne
+    //  compte pas), Touche maintenue une fois apres sa duree, Touche repetee toutes ses
+    //  periodes tant qu'elle est tenue et sa vue montree, Touche relachee au relachement (le
+    //  front descendant), dans la vue qui l'a prise meme fermee depuis. Des gestes de
+    //  l'operateur : la securite, l'audit et le journal (Raccourci) les voient.
+    struct Pointer {
+        Id           view{kNoId};
+        std::string  viewName, objectName;   // "Vue_1", "Vue_1.Bouton_2" ('' : aucun)
+        double       x{0}, y{0};             // en pixels de la vue
+        bool         inside{false};
+        std::uint8_t buttons{0};             // 1 gauche, 2 droit, 4 milieu
+        std::int64_t wheel{0};               // les crans depuis le lancement
+    };
+    void pointerMoved(Id view, double x, double y, Id object, bool inside);
+    void pointerButton(int button /* 0 gauche, 1 droit, 2 milieu */, bool down, double now);
+    void pointerWheel(double notches);
+    void keyModifiers(bool ctrl, bool shift, bool alt);
+    // Vrai : un raccourci a pris la touche (l'hote ne la passe pas a ses propres raccourcis).
+    // `typing` : un champ de saisie a le clavier - seules F1..F12 y partent en raccourci.
+    bool keyDown(const keys::Chord& chord, double now, bool repeat = false, bool typing = false);
+    bool keyUp(std::string_view key, double now);
+    // Le clavier perdu (le canevas n'a plus le focus) : chaque touche tenue est relachee.
+    void releaseAllKeys(double now);
+    // La vue qui prendrait cette touche (kNoId : aucune).
+    [[nodiscard]] Id keyOwner(const keys::Chord&) const;
+    [[nodiscard]] const Pointer& pointer() const noexcept { return pointer_; }
+    [[nodiscard]] bool keyHeld(std::string_view key) const;
 
     bool navigate(Id view, const Transition&, double now);
     bool navigate(std::string_view viewName, const Transition&, double now);
@@ -1237,6 +1273,8 @@ private:
     [[nodiscard]] std::optional<sim::Value> choiceValue(const Object&, const Choice&);
     // ---- lot 9 : les variables publiques (HmiRuntimePublic.cpp)
     bool sysValue(std::string_view name, sim::Value& out) const;
+    bool inputSysValue(std::string_view name, sim::Value& out) const;   // 1.11.23 : SYS.Mouse*, SYS.Key*, SYS.Shortcut*
+    bool keySysValue(std::string_view key, sim::Value& out) const;      // 1.11.23 : SYS.Key.<touche>
     bool commSysValue(std::string_view name, sim::Value& out) const;   // lot 14 : SYS.Comm*
     bool notifySysValue(std::string_view name, sim::Value& out) const; // lot 14 : SYS.Notify*
     void notice(const LiveAlarm&, std::string kind);                    // lot 14 : aux notifications
@@ -1402,6 +1440,27 @@ private:
     std::deque<AlarmOccurrence>      closed_;
     std::string                      user_;
     double                           lastActivity_{0};
+    // ---- 1.11.23 : la souris, le clavier, les raccourcis (HmiRuntimeInput.cpp) ----
+    struct HeldKey {
+        keys::Chord                  chord;        // la touche et ses modificateurs a l'appui
+        double                       since{0};
+        Id                           owner{kNoId}; // la vue qui l'a prise (kNoId : aucune)
+        std::shared_ptr<const View>  snapshot;     // cette vue a l'appui (le relachement apres sa fermeture)
+        std::shared_ptr<const Scope> scope;        // ses parametres (une popup)
+        std::set<std::size_t>        held;         // Touche maintenue : les actions deja parties
+        std::map<std::size_t, double> next;        // Touche repetee : la prochaine fois
+    };
+    std::map<std::string, HeldKey, std::less<>> keysDown_;
+    Pointer                          pointer_;
+    bool                             keyCtrl_{false}, keyShift_{false}, keyAlt_{false};
+    std::string                      keyLast_, keyLastKey_, shortcutLast_;   // "Ctrl+F5", "F5", "Vue_1 . F5"
+    double                           keyLastSince_{-1};
+    Id                               keyScopeView_{kNoId};   // le relachement d'une popup fermee : ses parametres
+    std::shared_ptr<const Scope>     keyScope_;
+    std::int64_t                     keyPresses_{0}, shortcutCount_{0};
+    void resetInput();
+    void keysTick(double now);
+    void runKeyActions(const View&, Trigger, const keys::Chord&, double now, const std::function<bool(std::size_t)>& pick = {});
     std::map<std::string, std::vector<TrendSeries>> trends_;   // "vue:objet"
     std::vector<TrendMarker>                        markers_;  // lot 18
     double                           nextSample_{-1};

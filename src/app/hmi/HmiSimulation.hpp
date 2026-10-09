@@ -212,6 +212,21 @@ public:
     // Lot 6 : une partie d'un gestionnaire de recettes a l'ecran ("bouton:Ajouter",
     // "ligne:0"), pour les scripts qui cliquent dessus.
     [[nodiscard]] bool    partRect(std::string_view name, std::string_view part, gfx::Rect& out) const;
+    // ---- 1.11.23 : LA SOURIS ET LE CLAVIER DE L'IHM EN MARCHE (SYS.Mouse*, SYS.Key*) ET LES
+    //      RACCOURCIS DES VUES - ou est la souris (la vue et l'objet dessous, en pixels de la
+    //      vue), ses boutons, sa molette ; chaque touche (son jeton : hmi/HmiKeys.hpp ; "" :
+    //      Ctrl, Maj ou Alt seules) va d'abord a l'hote, qui dit si un raccourci la prend :
+    //      elle ne va alors nulle part ailleurs (ni a l'IHM, ni aux raccourcis de l'appli).
+    //      L'editeur garde F8, Maj+F8, F11 et Ctrl+Alt+S ; le clavier perdu (le focus parti) :
+    //      keysLost (les touches tenues sont relachees).
+    const core::SignalPtr<hmi::Id, double, double, hmi::Id, bool> pointerMoved =
+        core::Signal<hmi::Id, double, double, hmi::Id, bool>::create();
+    const core::SignalPtr<int, bool> pointerButton = core::Signal<int, bool>::create();   // 0 gauche, 1 droit, 2 milieu
+    const core::SignalPtr<double> wheelTurned = core::Signal<double>::create();           // +1 : un cran vers le haut
+    const core::SignalPtr<> keysLost = core::Signal<>::create();
+    using KeyHandler = std::function<bool(const std::string& token, ui::KeyMods mods, bool down, bool repeat)>;
+    void setKeyHandler(KeyHandler h) { keyHandler_ = std::move(h); }
+    [[nodiscard]] static std::string keyToken(ui::Key k);
     const core::SignalPtr<hmi::Id> clicked = core::Signal<hmi::Id>::create();
     const core::SignalPtr<hmi::Id> pressed = core::Signal<hmi::Id>::create();
     const core::SignalPtr<hmi::Id, bool> released = core::Signal<hmi::Id, bool>::create();
@@ -337,8 +352,15 @@ public:
 protected:
     void            onPaint(const ui::PaintContext&) override;
     ui::EventResult onEvent(const ui::InputEvent&) override;
+    void            onFocusChanged(bool gained) override;   // 1.11.23 : le clavier perdu
 private:
     [[nodiscard]] hmi::Id objectAtLayer(std::size_t layer, gfx::Point p) const;
+    // 1.11.23 : la couche sous ce point (la popup du dessus qui le contient, sinon la vue) ; -1 : aucune.
+    [[nodiscard]] int     layerUnder(gfx::Point p) const;
+    void                  notePointer(const ui::InputEvent&);
+    [[nodiscard]] bool    routeKey(const ui::InputEvent&);
+    KeyHandler            keyHandler_;
+    bool                  pointerInside_{false};
     void pressObject(std::size_t layer, gfx::Point p, int clickCount);
     void paintKeyboard(const ui::PaintContext&);
     // Lot 9 : l'objet dont on tire la valeur (curseur, potentiometre), et sa couche.

@@ -81,6 +81,9 @@ public:
     [[nodiscard]] HmiFunctionsPane*    symbolFunctions() noexcept { return symbolFunctions_; }   // 1.11.10
     [[nodiscard]] HmiSymbolPopupsPane* symbolPopups() noexcept { return symbolPopups_; }         // 1.11.10
     [[nodiscard]] HmiActionsPanel&  actions() noexcept { return *actions_; }
+    // 1.11.23 : la section Raccourcis de la vue (l'onglet de l'inspecteur, rien de choisi ;
+    // pas pour un symbole).
+    [[nodiscard]] HmiActionsPanel*  shortcuts() noexcept { return shortcuts_; }
     // Lot 6 : l'onglet Contenu (lignes d'un tableau, plumes, etats, recette).
     [[nodiscard]] HmiContentPanel&  content() noexcept { return *content_; }
     // Aller a une action (Generer / Compiler) : l'objet choisi (kNoId : la vue),
@@ -202,6 +205,8 @@ private:
     void applyPropertyFilters(const hmi::View& v, std::vector<ui::PropertyGrid::Category>& cats);
     ui::TabControl*   inspector_{nullptr};
     HmiActionsPanel*  actions_{nullptr};
+    HmiActionsPanel*  shortcuts_{nullptr};      // 1.11.23 : les raccourcis de la vue
+    ui::WidgetPtr     shortcutsPage_;           // ... sa page, gardee ici quand l'onglet est cache
     HmiContentPanel*  content_{nullptr};
     // 1.10.4 (K3) : l'onglet Contenu cache (un objet qui ne peut pas avoir de contenu) :
     // sa page est gardee ici, et remise quand un objet qui en a est choisi.

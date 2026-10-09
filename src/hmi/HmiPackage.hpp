@@ -75,7 +75,7 @@ inline constexpr std::string_view kAllExtensions[] = {".xpgvues", ".xpgsymboles"
 // plus recent que celui de cet outil, est REFUSE, et la raison le dit (la
 // version qui l'a ecrit) : rien n'est importe a moitie.
 inline constexpr int              kPackageFormat = 2;
-inline constexpr std::string_view kWriterVersion = "1.11.22";
+inline constexpr std::string_view kWriterVersion = "1.11.23";
 
 struct Manifest {
     int         format{kPackageFormat}; // 1.11.2 : le format du paquet (1 : ecrit avant la 1.11.2)

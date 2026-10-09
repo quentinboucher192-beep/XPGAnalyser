@@ -16681,16 +16681,17 @@ void centreAide111() {
     // 1.11.12 : 20.
     // 1.11.13 : 21.
     // 1.11.14 : 22 ; 1.11.15 : 23 ; 1.11.16 : 24 ; 1.11.17 : 25 ; 1.11.18 : 26 ; 1.11.19 : 27 ; 1.11.20 : 28 ; 1.11.21 : 29.
-    check(hn::releases().size() == 30 && hn::releases().front().version == "1.11.22" && hn::releases()[1].version == "1.11.21" && hn::releases()[2].version == "1.11.20" && hn::releases()[3].version == "1.11.19"
-              && hn::releases()[4].version == "1.11.18" && hn::releases()[5].version == "1.11.17"
-              && hn::releases()[6].version == "1.11.16" && hn::releases()[7].version == "1.11.15"
-              && hn::releases()[8].version == "1.11.14" && hn::releases()[9].version == "1.11.13" && hn::releases()[10].version == "1.11.12"
-              && hn::releases()[11].version == "1.11.11" && hn::releases()[12].version == "1.11.10"
-              && hn::releases()[13].version == "1.11.9" && hn::releases()[14].version == "1.11.8"
-              && hn::releases()[15].version == "1.11.7" && hn::releases()[16].version == "1.11.6" && hn::releases()[17].version == "1.11.5"
-              && hn::releases()[18].version == "1.11.4" && hn::releases()[19].version == "1.11.3" && hn::releases()[20].version == "1.11.2"
-              && hn::releases()[21].version == "1.11.1" && hn::releases()[22].version == "1.11" && hn::releases()[23].version == "1.10.4",
-          "notes : 30 versions, la 1.11.22 en tete, puis la 1.11.21 \xC3\xA0 la 1.11, et la 1.10.4");
+    // 1.11.22 : 30 ; 1.11.23 : 31.
+    check(hn::releases().size() == 31 && hn::releases().front().version == "1.11.23" && hn::releases()[1].version == "1.11.22" && hn::releases()[2].version == "1.11.21" && hn::releases()[3].version == "1.11.20" && hn::releases()[4].version == "1.11.19"
+              && hn::releases()[5].version == "1.11.18" && hn::releases()[6].version == "1.11.17"
+              && hn::releases()[7].version == "1.11.16" && hn::releases()[8].version == "1.11.15"
+              && hn::releases()[9].version == "1.11.14" && hn::releases()[10].version == "1.11.13" && hn::releases()[11].version == "1.11.12"
+              && hn::releases()[12].version == "1.11.11" && hn::releases()[13].version == "1.11.10"
+              && hn::releases()[14].version == "1.11.9" && hn::releases()[15].version == "1.11.8"
+              && hn::releases()[16].version == "1.11.7" && hn::releases()[17].version == "1.11.6" && hn::releases()[18].version == "1.11.5"
+              && hn::releases()[19].version == "1.11.4" && hn::releases()[20].version == "1.11.3" && hn::releases()[21].version == "1.11.2"
+              && hn::releases()[22].version == "1.11.1" && hn::releases()[23].version == "1.11" && hn::releases()[24].version == "1.10.4",
+          "notes : 31 versions, la 1.11.23 en tete, puis la 1.11.22 \xC3\xA0 la 1.11, et la 1.10.4");
     // 1.11.2 (T2, tranches 41, 42 et 44 ; decisions 187, 201 et 216) : 23 lignes en 8 domaines, dont 2 cartes de la fenetre Nouveautes.
     // Tranche 46 (SYM, decision 240) : + Dupliquer dans un symbole (C) et la section Parametres du symbole (N) : 25 lignes.
     {
@@ -16961,7 +16962,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 237,   // 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 239,   // 1.11.23 : + 2 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -17103,8 +17104,8 @@ void centreAide111() {
     check(ix.duplicates().empty(), "centre : aucune cle en double");
     // Integration 1.11 (I111) : la 1.10.4 ajoute objet-vanne-3-voies (La bibliotheque d'objets) : 206.
     // 1.11.1 (T2, decision 107) : Programmer gagne variables-api (API. : les variables de l'automate) : 207.
-    check(ix.count(hc::Chapter::Hmi) == 208, "centre : L'IHM a les 208 sujets des chapitres 2 a 8 du guide (1.11.1 : variables-api ; 1.11.2 : paquets-symboles)");
-    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 30, "centre : 11 expressions, 30 notes (1.11.22)");
+    check(ix.count(hc::Chapter::Hmi) == 209, "centre : L'IHM a les 209 sujets des chapitres 2 a 8 du guide (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue)");
+    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 31, "centre : 11 expressions, 31 notes (1.11.23)");
     // Tranche 3 : les 11 types de T3 (hmi::exprguide::all(), depot-o), passes par in.expressions ; les
     // cles de la liste de secours sont les siennes (enumeration, pas enum).
     {
@@ -17166,10 +17167,10 @@ void centreAide111() {
         check(o, "page Raccourcis : Ctrl+Maj+O dessine en trois touches, repere 1.11");
 
         const auto n110 = hc::notesPage("1.10");
-        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 30
+        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 31
                   && !n110.summary.empty() && !n110.date.empty(),
               "page Notes : 1.10 -> 1.10.0, 22 lignes en 7 domaines, sa date et son resume");
-        check(hc::notesPage("").version == "1.11.22" && hc::notesPage("9.9").version == "1.11.22",
+        check(hc::notesPage("").version == "1.11.23" && hc::notesPage("9.9").version == "1.11.23",
               "page Notes : sans version (ou inconnue), la plus recente");
         const auto simu = hc::notesPage("1.10.0", "Simulation");
         check(simu.sections.size() == 1 && simu.rows == 4 && simu.domains.size() == 7,
@@ -17513,7 +17514,7 @@ void centreAide111() {
         // Les notes de version n'ont pas de tutoriel : ni la carte "Regarder le tutoriel" (hasTutorial, que
         // lit HelpCenterScreen::showTopic), ni la pastille dans l'arbre. Les autres pages speciales gardent
         // les leurs (T1 ecrit les tutoriels des raccourcis et de Signaler).
-        bool notesSans = ix.count(hc::Chapter::Notes) == 30;   // 1.11.3 a 1.11.22 : une version de plus
+        bool notesSans = ix.count(hc::Chapter::Notes) == 31;   // 1.11.3 a 1.11.23 : une version de plus
         for (const auto* t : ix.ofChapter(hc::Chapter::Notes)) notesSans = notesSans && !hc::hasTutorial(*t);
         const auto* raccourcis = ix.find("page-raccourcis");
         const auto* signaler = ix.find("page-signaler");
@@ -25102,7 +25103,7 @@ void inspecteur_range_1104() {
     same_text(tabsOf(), "Propri\xC3\xA9t\xC3\xA9s | Actions", "un bouton : pas d'onglet Contenu");
     b.editor->canvas().setSelection({});
     b.editor->layout();
-    same_text(tabsOf(), "Propri\xC3\xA9t\xC3\xA9s | Actions", "la vue seule : pas d'onglet Contenu");
+    same_text(tabsOf(), "Propri\xC3\xA9t\xC3\xA9s | Actions | Raccourcis", "la vue seule : pas d'onglet Contenu ; 1.11.23 : l'onglet Raccourcis");
     ui::FilterMemory::install({});
 }
 
@@ -26912,6 +26913,95 @@ void valeurGrille1121() {
 // 1.11.22 : LA LISTE DU CLIENT (09/10) - des surcharges dans un symbole (Nouvelle surcharge,
 // renommer en surcharge), un parametre renomme PARTOUT, un parametre retire qui casse les
 // instances, le dossier Simulation deballe.
+// ---- 1.11.23 : l'onglet Raccourcis d'une vue (l'inspecteur, rien de choisi) ----
+void raccourcis1123() {
+    std::printf("1.11.23 : l'onglet Raccourcis d'une vue\n");
+    Bench b;
+    const Id btn = b.place(Kind::Button, 100, 100);
+    const auto tabsOf = [&] {
+        std::string t;
+        for (std::size_t i = 0; i < b.editor->inspector().tabCount(); ++i) t += (t.empty() ? "" : " | ") + b.editor->inspector().tab(i)->title;
+        return t;
+    };
+    b.editor->canvas().setSelection({btn});
+    b.editor->layout();
+    same_text(tabsOf(), "Propri\xC3\xA9t\xC3\xA9s | Actions", "un objet choisi : pas d'onglet Raccourcis (ils sont \xC3\xA0 la vue)");
+    b.editor->canvas().setSelection({});
+    b.editor->layout();
+    same_text(tabsOf(), "Propri\xC3\xA9t\xC3\xA9s | Actions | Raccourcis", "rien de choisi : l'onglet Raccourcis");
+    auto* keys = b.editor->shortcuts();
+    if (!keys) { check(false, "le volet des raccourcis"); return; }
+    keys->tools().triggered->emit(keys->tools().actionByTip("Ajouter un raccourci"));
+    check(b.v().actions.size() == 1 && b.v().actions[0].trigger == Trigger::KeyPress && b.v().actions[0].key == "F2"
+              && b.v().actions[0].operation == Operation::Log && b.v().actions[0].value == "Raccourci F2",
+          "Ajouter : F2, Touche enfonc\xC3\xA9" "e \xE2\x86\x92 Journaliser Raccourci F2");
+    same_text(b.editor->inspector().tab(2)->badge, "1", "la pastille compte les raccourcis");
+    check(b.editor->actions().shownIndexes().empty() && keys->shownIndexes().size() == 1,
+          "l'onglet Actions de la vue ne le montre pas ; Raccourcis, si");
+    // La touche tapee dans la grille : lue, puis enregistree sous sa forme stable.
+    b.editor->inspector().setCurrentIndex(2);
+    b.editor->layout();
+    auto& grid = keys->grid();
+    grid.layout();
+    check(grid.revealValue("Touche") && grid.revealValue("D\xC3\xA9" "clencheur") && !grid.revealValue("Dur\xC3\xA9" "e (ms)"),
+          "grille : la touche et le d\xC3\xA9" "clencheur (pas de dur\xC3\xA9" "e pour le front montant)");
+    gfx::Rect cell;
+    (void)grid.revealValue("Touche");
+    grid.layout();
+    check(grid.valueRect("Touche", cell), "case Touche");
+    grid.dispatch(ui::MouseDown{{cell.x + 10, cell.y + cell.h / 2}, ui::MouseButton::Left, 1, {}});
+    b.editor->dispatch(ui::KeyDown{ui::Key::A, ui::KeyMods{true, false, false, false}, false});
+    b.editor->dispatch(ui::TextInput{"ctrl+maj+f5"});
+    b.editor->dispatch(ui::KeyDown{ui::Key::Return, {}, false});
+    same_text(b.v().actions[0].key, "Ctrl+Shift+F5", "la touche tap\xC3\xA9" "e (ctrl+maj+f5) : Ctrl+Shift+F5");
+    same_text(b.v().actions[0].value, "Raccourci Ctrl+Maj+F5", "le message d'exemple suit la touche");
+    same_text(cellOf(keys->table(), "1", 1), "Ctrl+Maj+F5", "la liste : la touche");
+    same_text(cellOf(keys->table(), "1", 2), "Front montant", "... le d\xC3\xA9" "clencheur");
+    // Une duree : la grille la montre ; la liste suit.
+    Action hold = b.v().actions[0];
+    hold.trigger = Trigger::KeyHold;
+    hold.delayMs = 1500;
+    check(keys->set(0, hold), "r\xC3\xA9gler : touche maintenue 1500 ms");
+    grid.layout();
+    check(grid.revealValue("Dur\xC3\xA9" "e (ms)"), "grille : la dur\xC3\xA9" "e");
+    same_text(cellOf(keys->table(), "1", 2), "Dur\xC3\xA9" "e", "la liste : Dur\xC3\xA9" "e");
+    // Une action ordinaire de la vue : dans l'onglet Actions, pas dans Raccourcis.
+    Action opened;
+    opened.trigger = Trigger::ViewOpen;
+    opened.operation = Operation::Log;
+    opened.value = "ouverte";
+    check(b.editor->actions().add(opened) == 1
+              && b.editor->actions().shownIndexes() == std::vector<int>{1} && keys->shownIndexes() == std::vector<int>{0},
+          "une action d'ouverture : dans Actions (index 1), Raccourcis garde le sien (index 0)");
+    // showAction d'un raccourci : l'onglet Raccourcis, la ligne choisie.
+    b.editor->inspector().setCurrentIndex(0);
+    b.editor->showAction(kNoId, 0);
+    check(b.editor->inspector().currentIndex() == 2 && keys->selectedIndex() == 0, "aller \xC3\xA0 un raccourci : l'onglet Raccourcis, sa ligne");
+    // Ctrl+Z : la duree, la touche, puis l'ajout.
+    (void)b.stack.undo();   // l'action d'ouverture
+    (void)b.stack.undo();   // la duree
+    check(b.v().actions.size() == 1 && b.v().actions[0].trigger == Trigger::KeyPress && b.v().actions[0].key == "Ctrl+Shift+F5",
+          "Ctrl+Z : le front montant revient");
+    (void)b.stack.undo();
+    (void)b.stack.undo();
+    check(b.v().actions.empty(), "Ctrl+Z encore : plus de raccourci");
+    // Un symbole : pas d'onglet Raccourcis.
+    {
+        auto doc = std::make_shared<Document>();
+        core::CommandStack stack;
+        View sym = makeView(doc->project, "S_Clavier");
+        sym.role = "symbole";
+        const Id sid = sym.id;
+        doc->project.views.push_back(sym);
+        app::HmiEditor eds("edk", doc, sid, [&](core::CommandPtr c) { (void)stack.push(std::move(c)); });
+        eds.setBounds({0, 0, 1800, 1000});
+        eds.layout();
+        bool none = true;
+        for (std::size_t i = 0; i < eds.inspector().tabCount(); ++i) none = none && eds.inspector().tab(i)->title != "Raccourcis";
+        check(none, "un symbole : pas d'onglet Raccourcis (il ne prend pas le clavier)");
+    }
+}
+
 void lot1122() {
     std::printf("1.11.22 : surcharges d'un symbole, param\xC3\xA8tres partout, Simulation d\xC3\xA9" "ball\xC3\xA9" "e\n");
     auto doc = std::make_shared<Document>();
@@ -27944,6 +28034,7 @@ int main(int argc, char** argv) {
         explorateurs1121();
         valeurGrille1121();
         lot1122();
+        raccourcis1123();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -28284,6 +28375,7 @@ int main(int argc, char** argv) {
     explorateurs1121();                     // 1.11.21 : les explorateurs deplient les codes
     valeurGrille1121();                     // 1.11.21 : la grille - la valeur suit le type, un seul Ctrl+Z
     lot1122();                              // 1.11.22 : surcharges d'un symbole, parametres partout, Simulation deballee
+    raccourcis1123();                       // 1.11.23 : l'onglet Raccourcis d'une vue
     if (argc > 1) configuration_et_variables(argv[1]);
     if (argc > 1) aide_saisie_scripts(argv[1]);
     if (argc > 1) aide_saisie_champs(argv[1]);

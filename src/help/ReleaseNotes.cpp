@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.11.23", "09/10/2026", "livr\xC3\xA9" "e le 09/10 en soir\xC3\xA9" "e"},
     {"1.11.22", "09/10/2026", "livr\xC3\xA9" "e le 09/10 en fin d'apr\xC3\xA8s-midi"},
     {"1.11.21", "09/10/2026", "livr\xC3\xA9" "e le 09/10 en d\xC3\xA9" "but d'apr\xC3\xA8s-midi"},
     {"1.11.20", "09/10/2026", "livr\xC3\xA9" "e le 09/10 en fin de matin\xC3\xA9" "e"},
@@ -103,6 +104,14 @@ const std::vector<Note>& table() {
     static const std::vector<Note> t = {
         // 1.11.16 (09/10/2026 dans la nuit) : la remanence d'exploitation par variable, la robustesse
         // (lot 4 de la specification du 08/10).
+        // 1.11.23 (09/10/2026 en soiree) : la fin de la liste du client du 09/10 - la souris et le clavier
+        // en variables systeme, les raccourcis des vues et des popups.
+        note("1.11.23", "Vues", Kind::New,
+         "LES RACCOURCIS D'UNE VUE OU D'UNE POPUP : rien de choisi, l'onglet Raccourcis de l'inspecteur lie une touche (F5, Ctrl+S, Maj+Entr\xC3\xA9" "e...) \xC3\xA0 une action, avec son d\xC3\xA9" "clencheur - front montant (touche enfonc\xC3\xA9" "e), front descendant (rel\xC3\xA2" "ch\xC3\xA9" "e, m\xC3\xAA" "me la popup ferm\xC3\xA9" "e entre-temps), dur\xC3\xA9" "e (maintenue N ms), r\xC3\xA9p\xC3\xA9tition (toutes les N ms tant qu'elle est tenue). La popup du dessus passe avant la vue ; un champ de saisie garde ses touches (sauf F1 \xC3\xA0 F12) ; une touche prise ne va nulle part ailleurs. Compiler dit une touche illisible ou r\xC3\xA9serv\xC3\xA9" "e.",
+         "raccourcis-vue", ""),
+        note("1.11.23", "Variables syst\xC3\xA8me", Kind::New,
+         "LA SOURIS ET LE CLAVIER : un domaine Souris et clavier - SYS.MouseX, SYS.MouseY (en pixels de la vue), SYS.MouseView, SYS.MouseObject, les boutons (SYS.MouseLeft, Right, Middle, Buttons), la molette ; SYS.KeyLast, SYS.KeysDown, SYS.KeyCtrl, Shift, Alt, SYS.KeyHoldTime, les compteurs ; SYS.ShortcutLast ; et SYS.Key.<touche> (SYS.Key.F5, SYS.Key.Up, SYS.Key.Digit1), vraie tant que la touche est tenue.",
+         "variables-systeme", ""),
         // 1.11.22 (09/10/2026 en fin d'apres-midi) : la liste du client du 09/10 - les surcharges d'un
         // symbole, les parametres retires ou renommes partout, Simulation depliee, l'explorateur modernise,
         // les champs de saisie (rien n'est ecrit avant la validation).

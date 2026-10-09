@@ -1261,6 +1261,9 @@
     <ClCompile Include="src\hmi\HmiRetain.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\hmi\HmiRuntimeInput.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\hmi\HmiRuntimeObjectAlarms.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
@@ -2372,6 +2375,9 @@
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiExprGuide.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiKeys.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiLiveGeometry.hpp">

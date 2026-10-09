@@ -1823,7 +1823,8 @@ void Runtime::fire(const View& v, const Object* o, const Action& a, double now, 
 }
 
 void Runtime::runActions(const View& v, const Object* o, Trigger t, double now) {
-    const bool byUser = t == Trigger::Click || t == Trigger::DoubleClick || t == Trigger::LongPress;
+    const bool byUser = t == Trigger::Click || t == Trigger::DoubleClick || t == Trigger::LongPress
+                     || triggerIsKey(t);                      // 1.11.23 : un raccourci (runKeyActions)
     // Lot 10 : un objet d'une instance de symbole qui n'a pas d'action pour ce
     // geste : ce sont celles de l'instance (un clic n'importe ou sur la carte
     // ouvre sa popup ; un bouton de la carte garde les siennes).
@@ -1985,7 +1986,9 @@ void Runtime::syncPopupIds() {
 std::shared_ptr<const Scope> Runtime::scopePtr(Id view) const {
     for (auto it = slots_.rbegin(); it != slots_.rend(); ++it)
         if (it->view == view) return it->scope;
-    return view == current_ ? currentScope_ : nullptr;
+    if (view == current_) return currentScope_;
+    // 1.11.23 : le relachement d'un raccourci dont la popup s'est fermee - ses parametres d'alors.
+    return view == keyScopeView_ ? keyScope_ : nullptr;
 }
 
 const Scope* Runtime::viewScope(Id view) const { return scopePtr(view).get(); }
@@ -2240,6 +2243,7 @@ void Runtime::start(double now) {
     slaveReads_.clear();                // 1.9 : les bascules d'avant ne comptent plus
     forcedIhm_.clear();                 // 1.11.5 : les variables repartent de leur valeur initiale
     prompt_.reset();                    // 1.11.7 : aucun clavier d'action ouvert
+    resetInput();                       // 1.11.23 : ni touche tenue ni bouton enfonce
     running_ = true;
     now_ = startNow_ = now;
     startWallMs_ = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -2579,6 +2583,7 @@ void Runtime::stop(double now, const std::string& why) {
     focused_ = kNoId;
     log("Syst\xC3\xA8me", {}, "IHM arr\xC3\xAAt\xC3\xA9" "e" + (why.empty() ? std::string{} : " (" + why + ")"));
     running_ = false;
+    keysDown_.clear();                  // 1.11.23 : l'arret ne relache rien (aucune action ne part)
     animation_.reset();
     unfollowAll();                      // 1.9 : les liaisons ne suivent plus rien pour l'IHM
 }
@@ -2787,6 +2792,7 @@ void Runtime::tick(double now) {
     if (animation_ && now - animation_->start >= std::max(1, animation_->spec.durationMs) / 1000.0) animation_.reset();
     // Lot 9 : le bouton a confirmation par appui maintenu.
     holdTick(now);
+    keysTick(now);                      // 1.11.23 : les raccourcis maintenus et repetes
     // L'appui long : une fois par appui, quand sa duree est atteinte.
     if (pressed_ != kNoId && !longFired_) {
         if (const auto* v = shownViewOf(pressed_)) {

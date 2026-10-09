@@ -1,4 +1,5 @@
 #include "HmiStore.hpp"
+#include "HmiKeys.hpp"            // 1.11.23 : la touche d'un raccourci
 #include "HmiEnums.hpp"            // 1.10 (E) : les enumerations IHM
 #include "HmiPopupParams.hpp"
 #include "HmiTypeRegistry.hpp"     // 1.11.19 (refonte, lot 6) : la cle du type d'une declaration
@@ -343,6 +344,7 @@ std::string serializeAction(Id owner, const Action& a) {
     if (!a.value.empty()) s += field("valeur", a.value);
     if (!a.placement.empty()) s += field("position", a.placement);   // lot 8
     if (!a.params.empty()) s += field("parametres", a.params);        // 1.11.6 : Maths, clavier virtuel
+    if (!a.key.empty()) s += field("touche", a.key);                  // 1.11.23 : un raccourci
     // Lot API 8 : "Demander ou enregistrer", ecrit seulement decoche - absent (un
     // projet d'avant, ou coche) se relit coche : les fichiers d'avant ne changent pas.
     if (!a.askWhere) s += fieldBool("demander_ou", false);
@@ -468,6 +470,10 @@ bool parseAction(const Record& r, Action& a, std::string& why) {
     a.value = toStr(r.get("valeur"));
     a.placement = toStr(r.get("position"));
     a.params = toStr(r.get("parametres"));                  // 1.11.6
+    // 1.11.23 : la touche d'un raccourci, remise sous sa forme enregistree si elle se lit ;
+    // sinon gardee telle quelle (Compiler la dit).
+    a.key = toStr(r.get("touche"));
+    if (const auto chord = keys::parseChord(a.key)) a.key = keys::canonical(*chord);
     a.askWhere = toBool(r.get("demander_ou"), true);        // Lot API 8 : absent (projet d'avant) = coche
     auto& t = a.transition;
     t.kind = transitionFromLabel(toStr(r.get("transition"))).value_or(TransitionKind::Instant);
@@ -775,7 +781,17 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
     // qui n'en a pas s'ecrit au format 22 (ou 21) : la 1.11.17 l'ouvre.
     bool declared = false;
     forEachDeclarations(p, [&](const std::vector<Declaration>& list) { declared = declared || !list.empty(); });
-    const int format = declared ? kFormatVersion : (p.alarmGroups.empty() && p.alarmGroupLinks.empty()) ? 21 : 22;
+    // 1.11.23 : le format 24 n'ajoute que les raccourcis des vues ; un projet qui n'en a pas
+    // s'ecrit au format 23 (ou 22, 21) : la 1.11.22 l'ouvre.
+    bool shortcuts = false;
+    const auto keyed = [](const std::vector<Action>& list) {
+        return std::any_of(list.begin(), list.end(), [](const Action& a) { return triggerIsKey(a.trigger) || !a.key.empty(); });
+    };
+    for (const auto& v : p.views) {
+        shortcuts = shortcuts || keyed(v.actions);
+        for (const auto& o : v.objects) shortcuts = shortcuts || keyed(o.actions);
+    }
+    const int format = shortcuts ? kFormatVersion : declared ? 23 : (p.alarmGroups.empty() && p.alarmGroupLinks.empty()) ? 21 : 22;
     std::string index;
     index += "# XpgAnalyzer - projet IHM (format " + std::to_string(format) + ")\n";
     index += "ihm" + fieldInt("format", format) + fieldInt("prochain_id", p.nextId) + "\n";

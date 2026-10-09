@@ -35,6 +35,9 @@ enum class Key : std::uint16_t {
     F8,                         // 1.10 (integration) : F8 l'IHM demarrer / arreter, Maj+F8 (branchee par L)
     D,                          // 1.10.2 (chantier D) : Ctrl+D Dupliquer..., Ctrl+Maj+D Dupliquer tel quel
     J,                          // 1.11.14 : Ctrl+J le panneau du bas (Sorties, Console, Diagnostics)
+    // 1.11.23 : les raccourcis des vues (toutes les lettres, tous les chiffres, F4 et F6) -
+    // ajoutes a la fin : les valeurs d'avant ne bougent pas.
+    B, E, G, I, M, R, T, U, Num0, Num2, Num3, Num4, Num6, Num7, Num8, Num9, F4, F6,
 };
 
 struct KeyMods {

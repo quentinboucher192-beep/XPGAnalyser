@@ -59,6 +59,8 @@ enum class Icon : std::uint8_t {
     // dix-huit, dans l'ordre du catalogue. A la FIN, toujours.
     CodeInit, CodeTor, CodeAna, CodeOutputs, CodeGrafcet, CodeActions, CodeConfig, CodeReset, CodeAlarm,
     CodeSafety, CodeHmi, CodeComm, CodeCalc, CodeTimer, CodeMatrix, CodeReports, CodeData, CodeDebug,
+    // 1.11.23 : un clavier (les raccourcis des vues). A la FIN, toujours.
+    Keyboard,
 };
 
 // 1.8.0 : l'icone du catalogue `index` (core::codeicons::info(index)) ; hors

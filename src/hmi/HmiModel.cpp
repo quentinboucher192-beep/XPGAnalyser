@@ -1,4 +1,5 @@
 #include "HmiModel.hpp"
+#include "HmiKeys.hpp"            // 1.11.23 : les raccourcis
 
 #include <algorithm>
 #include <cctype>
@@ -1740,6 +1741,11 @@ constexpr TriggerName kTriggerNames[] = {
     {Trigger::ViewOpen, "Ouverture de la vue"},
     {Trigger::ViewClose, "Fermeture de la vue"},
     {Trigger::Timer, "Timer"},
+    // 1.11.23 : les raccourcis (des libelles a eux : Front montant et Front descendant sont pris)
+    {Trigger::KeyPress, "Touche enfonc\xC3\xA9" "e"},
+    {Trigger::KeyRelease, "Touche rel\xC3\xA2" "ch\xC3\xA9" "e"},
+    {Trigger::KeyHold, "Touche maintenue"},
+    {Trigger::KeyRepeat, "Touche r\xC3\xA9p\xC3\xA9t\xC3\xA9" "e"},
 };
 struct OperationName { Operation o; const char* label; };
 constexpr OperationName kOperationNames[] = {
@@ -1853,7 +1859,9 @@ std::optional<TransitionKind> transitionFromLabel(std::string_view s) noexcept {
 bool triggerWatches(Trigger t) noexcept {
     return t == Trigger::RisingEdge || t == Trigger::FallingEdge || t == Trigger::ValueChange;
 }
-bool triggerWaits(Trigger t) noexcept { return t == Trigger::LongPress || t == Trigger::Timer; }
+bool triggerWaits(Trigger t) noexcept {
+    return t == Trigger::LongPress || t == Trigger::Timer || t == Trigger::KeyHold || t == Trigger::KeyRepeat;   // 1.11.23
+}
 bool operationWritesVariable(Operation o) noexcept {
     return o == Operation::Toggle || o == Operation::Set || o == Operation::Reset || o == Operation::Increment
         || o == Operation::Decrement || o == Operation::Assign
@@ -1897,6 +1905,13 @@ std::string describeAction(const Action& a) {
     if (triggerWatches(a.trigger) && !a.watch.empty()) s += " de " + a.watch;
     if (a.trigger == Trigger::LongPress) s += " (" + std::to_string(a.delayMs > 0 ? a.delayMs : 800) + " ms)";
     if (a.trigger == Trigger::Timer) s += " (" + formatDuration((a.delayMs > 0 ? a.delayMs : 1000) / 1000.0) + ")";
+    // 1.11.23 : un raccourci - "Touche maintenue Ctrl+F5 (1000 ms) -> ..."
+    if (triggerIsKey(a.trigger)) {
+        s += " " + (a.key.empty() ? std::string("(aucune touche)") : keys::label(a.key));
+        if (a.trigger == Trigger::KeyHold) s += " (" + std::to_string(a.delayMs > 0 ? a.delayMs : keys::kHoldDefaultMs) + " ms)";
+        if (a.trigger == Trigger::KeyRepeat)
+            s += " (toutes les " + std::to_string(a.delayMs > 0 ? a.delayMs : keys::kRepeatDefaultMs) + " ms)";
+    }
     s += " \xE2\x86\x92 ";
     s += operationLabel(a.operation);
     const auto transition = [&] {

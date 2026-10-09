@@ -512,6 +512,13 @@ void drawIcon(gfx::IRenderer& r, Icon icon, const gfx::Rect& box, gfx::Color col
             break;
         }
 
+        case Icon::Keyboard:                   // 1.11.23 : un clavier, ses touches et sa barre d'espace
+            g.frame(1.5f, 4.f, 13.f, 8.5f);
+            g.dot(4.f, 6.5f); g.dot(6.7f, 6.5f); g.dot(9.3f, 6.5f); g.dot(12.f, 6.5f);
+            g.dot(5.3f, 8.5f); g.dot(8.f, 8.5f); g.dot(10.7f, 8.5f);
+            g.line(5.f, 10.5f, 11.f, 10.5f);
+            break;
+
         case Icon::None: break;
         // 1.8.0 : les icones au choix sont tracees plus haut (codeGlyph).
         case Icon::CodeInit: case Icon::CodeTor: case Icon::CodeAna: case Icon::CodeOutputs: case Icon::CodeGrafcet:

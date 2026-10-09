@@ -568,16 +568,17 @@ void modele() {
     const std::string plainIndex = fileText(serializeProject(plain), "ihm.txt");
     check(plainIndex.find("ihm format=21") != std::string::npos && plainIndex.find("declaration") == std::string::npos,
           "sans declaration du modele : le format 21, sans ligne declaration (la 1.11.17 l'ouvre)");
-    // Un format plus recent (24) : refuse.
+    // Un format plus recent (kFormatVersion + 1 ; 1.11.23 : 25, le 24 est celui des raccourcis) : refuse.
     {
         auto newer = files;
         std::string text = fileText(files, "ihm.txt");
         const auto at = text.find("ihm format=23");
-        text.replace(at, 13, "ihm format=24");
+        const std::string next = std::to_string(hmi::kFormatVersion + 1);
+        text.replace(at, 13, "ihm format=" + next);
         for (auto& f : newer)
             if (f.path == "ihm.txt") f.data = std::make_shared<const Bytes>(text.begin(), text.end());
         const auto refused = parseProject(readerOf(newer));
-        check(!refused.has_value() && refused.error().context.find("24") != std::string::npos, "un projet au format 24 : refuse, et dit pourquoi");
+        check(!refused.has_value() && refused.error().context.find(next) != std::string::npos, "un projet au format " + next + " : refuse, et dit pourquoi");
     }
     // A la main : une declaration sans porteur, sans nom ; deux identifiants egaux, un absent.
     {

@@ -150,7 +150,11 @@ bool UiDriver::parseKey(const std::string& combo, Key& key, KeyMods& mods) {
         {"f7", Key::F7},                                                       // 1.10 (chantier N) : Compiler l'IHM
         {"f8", Key::F8},                                                       // 1.10 : l'IHM demarrer / arreter (chantier L)
         {"d", Key::D},                                                         // 1.10.2 (chantier D) : Ctrl+D Dupliquer...
-        {"j", Key::J}};                                                        // 1.11.14 : Ctrl+J le panneau du bas
+        {"j", Key::J},                                                         // 1.11.14 : Ctrl+J le panneau du bas
+        // 1.11.23 : les raccourcis des vues - les autres lettres, chiffres, F4, F6
+        {"b", Key::B}, {"e", Key::E}, {"g", Key::G}, {"i", Key::I}, {"m", Key::M}, {"r", Key::R}, {"t", Key::T},
+        {"u", Key::U}, {"0", Key::Num0}, {"2", Key::Num2}, {"3", Key::Num3}, {"4", Key::Num4}, {"6", Key::Num6},
+        {"7", Key::Num7}, {"8", Key::Num8}, {"9", Key::Num9}, {"f4", Key::F4}, {"f6", Key::F6}};
     mods = {};
     std::string rest = lower(combo);
     for (;;) {

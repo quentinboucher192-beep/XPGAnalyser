@@ -1464,6 +1464,61 @@ const std::vector<Topic>& topics() {
          {},
          "",
          {}},
+        // ---- Concevoir les vues / raccourcis-vue (1.11.23)
+        {"raccourcis-vue", "Les raccourcis d'une vue", "Concevoir les vues",
+         "Une touche du clavier (F5, Ctrl+S, Maj+Entr\xC3\xA9" "e...) li\xC3\xA9" "e \xC3\xA0 une action de la vue ou de la "
+         "popup, avec son d\xC3\xA9" "clencheur : le front montant (la touche enfonc\xC3\xA9" "e), le front descendant "
+         "(rel\xC3\xA2" "ch\xC3\xA9" "e), une dur\xC3\xA9" "e (maintenue), une r\xC3\xA9p\xC3\xA9tition (tant qu'elle est tenue).",
+         {
+             {K::Heading, "Ajouter un raccourci", {}, "1.11.23"},
+             {K::Paragraph, "Dans l'\xC3\xA9" "diteur d'une vue ou d'une popup, rien de choisi, l'inspecteur montre l'onglet "
+                         "**Raccourcis** (\xC3\xA0 c\xC3\xB4t\xC3\xA9 de Propri\xC3\xA9t\xC3\xA9s et Actions). **Ajouter** cr\xC3\xA9" "e un "
+                         "raccourci sur la premi\xC3\xA8re touche libre de F2 \xC3\xA0 F12, qui journalise \xC2\xAB Raccourci F2 \xC2\xBB : "
+                         "r\xC3\xA8gle sa **Touche**, son **D\xC3\xA9" "clencheur**, puis son **Op\xC3\xA9ration**, comme une action "
+                         "(\xC3\xA9" "crire une variable, naviguer, ouvrir une popup, lancer un script...). La liste montre la touche, "
+                         "le d\xC3\xA9" "clencheur et l'op\xC3\xA9ration. Ctrl+Z retire ce qu'on vient de faire.", {}, "1.11.23"},
+             {K::Heading, "La touche", {}, "1.11.23"},
+             {K::Paragraph, "Elle s'\xC3\xA9" "crit comme on la lit sur le clavier, sans casse ni accents : `F5`, `Ctrl+S`, "
+                         "`Maj+Entr\xC3\xA9" "e`, `Alt+Haut`, `A`, `1`. Les touches : les lettres, les chiffres, F1 \xC3\xA0 F12, "
+                         "Entr\xC3\xA9" "e, \xC3\x89" "chap, Espace, Tab, Retour arri\xC3\xA8re, Suppr, Inser, D\xC3\xA9" "but, Fin, Page "
+                         "pr\xC3\xA9" "c, Page suiv et les fl\xC3\xA8" "ches. Ctrl, Maj et Alt comptent : `Ctrl+F5` n'est pas `F5`.", {}, "1.11.23"},
+             {K::Table, "D\xC3\xA9" "clencheur\tQuand l'action part\n"
+                         "Front montant (touche enfonc\xC3\xA9" "e)\t\xC3\x80 l'appui, une fois : la r\xC3\xA9p\xC3\xA9tition du clavier, la touche tenue, ne compte pas\n"
+                         "Front descendant (touche rel\xC3\xA2" "ch\xC3\xA9" "e)\tAu rel\xC3\xA2" "chement, dans la vue qui a pris la touche, m\xC3\xAA" "me si elle s'est ferm\xC3\xA9" "e entre-temps "
+                         "(un \xC2\xAB Mettre \xC3\xA0 0 \xC2\xBB au rel\xC3\xA2" "chement n'est jamais perdu)\n"
+                         "Dur\xC3\xA9" "e (touche maintenue)\tUne fois, la touche tenue sa dur\xC3\xA9" "e (1000 ms par d\xC3\xA9" "faut)\n"
+                         "R\xC3\xA9p\xC3\xA9tition (tant qu'elle est tenue)\tToutes les p\xC3\xA9riodes (200 ms par d\xC3\xA9" "faut), tant que la touche "
+                         "est tenue et la vue montr\xC3\xA9" "e", {}, "1.11.23"},
+             {K::Paragraph, "Une **Condition** (facultative) retient le raccourci tant qu'elle est fausse : `SYS.UserLevel >= 2`. "
+                         "Exemple : un pas \xC3\xA0 pas \xE2\x80\x94 Front montant de `Haut` \xE2\x86\x92 Mettre \xC3\xA0 1 `Jog_Haut`, "
+                         "Front descendant de `Haut` \xE2\x86\x92 Mettre \xC3\xA0 0 `Jog_Haut`.", {}, "1.11.23"},
+             {K::Heading, "Qui prend la touche", {}, "1.11.23"},
+             {K::Bullet, "Les popups ouvertes d'abord, de celle du dessus vers le dessous, puis la vue (avec son mod\xC3\xA8le, "
+                         "son en-t\xC3\xAAte et son pied) : la premi\xC3\xA8re qui a un raccourci de cette touche le fait partir. "
+                         "Une popup modale qui n'en a pas arr\xC3\xAAte la recherche.", {}, "1.11.23"},
+             {K::Bullet, "\xC3\x89" "chap seul, une popup ouverte : son raccourci si elle en a un, sinon elle se ferme, comme avant.", {}, "1.11.23"},
+             {K::Bullet, "Un champ de saisie qui a le clavier garde ses touches : seules F1 \xC3\xA0 F12 y partent en raccourci. "
+                         "De m\xC3\xAA" "me pendant le menu de connexion, la signature, le clavier d'une action, et pour les "
+                         "chiffres du lecteur de badge.", {}, "1.11.23"},
+             {K::Bullet, "Une touche prise par un raccourci ne va nulle part ailleurs : dans la simulation de "
+                         "l'\xC3\xA9" "diteur, ni Ctrl+S ni F5 de l'application ne partent. L'\xC3\xA9" "diteur garde F8, Maj+F8, F11 "
+                         "et Ctrl+Alt+S ; le poste d'exploitation, F1, F11, F12, Ctrl+Alt+Q et Ctrl+Alt+S.", {}, "1.11.23"},
+             {K::Bullet, "Un raccourci est un geste de l'op\xC3\xA9rateur : sous s\xC3\xA9" "curit\xC3\xA9, sa permission est "
+                         "demand\xC3\xA9" "e (Piloter pour \xC3\xA9" "crire...), l'audit le voit, et le journal dit chaque raccourci parti "
+                         "(type Raccourci). SYS.ShortcutLast et SYS.ShortcutCount le disent aussi.", {}, "1.11.23"},
+             {K::Warning, "Le clavier va \xC3\xA0 l'IHM qui tourne quand elle a le focus : dans la simulation de l'\xC3\xA9" "diteur, "
+                         "un clic dans la vue le lui donne. Si elle le perd, les touches tenues sont rel\xC3\xA2" "ch\xC3\xA9" "es "
+                         "(leur front descendant part). **Compiler** signale une touche illisible, une touche que le poste garde, "
+                         "un raccourci sur un objet ou dans un symbole.", {}, "1.11.23"},
+         },
+         {"actions", "variables-systeme", "popups", "securite", "simulation"},
+         {"raccourci", "raccourcis", "touche", "clavier", "front montant", "front descendant", "touche maintenue", "touche r\xC3\xA9p\xC3\xA9t\xC3\xA9" "e", "F5", "Ctrl+S"},
+         {"raccourcis"},
+         {},
+         "",
+         {},
+         "",
+         {}},
         // ---- Concevoir les vues / modeles
         {"modeles", "\xC3\x89" "crans mod\xC3\xA8les, en-t\xC3\xAAte et pied de page", "Concevoir les vues",
          "Une vue peut h\xC3\xA9riter d'un \xC3\xA9" "cran mod\xC3\xA8le (son cadre, sa navigation) et "
@@ -13450,7 +13505,7 @@ const std::vector<Topic>& topics() {
                          "range par domaine : utilisateur et s\xC3\xA9" "curit\xC3\xA9, date et heure, vues "
                          "et popups, alarmes, recettes, historiques et journal, automate, IHM en marche, "
                          "projet, poste et application, ressources, param\xC3\xA8tres syst\xC3\xA8me, "
-                         "esclaves simul\xC3\xA9s. Chacune est marqu\xC3\xA9" "e **R** (lecture seule). Un "
+                         "esclaves simul\xC3\xA9s, souris et clavier. Chacune est marqu\xC3\xA9" "e **R** (lecture seule). Un "
                          "clic ouvre leur volet : le chemin, le domaine, le type, l'acc\xC3\xA8s, la "
                          "**valeur** \xE2\x80\x94 lue \xC3\xA0 l'instant quand la simulation tourne "
                          "\xE2\x80\x94 et ce qu'elle vaut. Un double-clic (ou **Copier le chemin**) la met "
@@ -13607,7 +13662,7 @@ const std::vector<Topic>& topics() {
                          "tourne.\n`SYS.UptimeSeconds`\tDINT\tLa m\xC3\xAAme dur\xC3\xA9" "e, en "
                          "secondes.\n`SYS.CycleTime`\tINT\tLa p\xC3\xA9riode du cycle IHM, en ms "
                          "(Configuration).\n`SYS.CycleCount`\tDINT\tLes cycles IHM depuis le "
-                         "lancement.\n`SYS.IdleTime`\tTIME\tDepuis le dernier clic de "
+                         "lancement.\n`SYS.IdleTime`\tTIME\tDepuis le dernier clic ou la derni\xC3\xA8re touche de "
                          "l'op\xC3\xA9rateur.\n`SYS.ScriptCount`\tINT\tLes scripts "
                          "g\xC3\xA9n\xC3\xA9raux.\n`SYS.ScriptErrorCount`\tINT\tLes scripts dont la "
                          "derni\xC3\xA8re ex\xC3\xA9" "cution a "
@@ -13739,8 +13794,38 @@ const std::vector<Topic>& topics() {
              {K::Paragraph, "Et une structure par esclave simul\xC3\xA9, `SYS.Slave.<nom>`, de seize membres "
                          "(Running, Read, Fallback, Mode, Port, Requests\xE2\x80\xA6) : voir \xC2\xAB Les "
                          "variables syst\xC3\xA8me des esclaves simul\xC3\xA9s \xC2\xBB.", {}},
+             {K::Heading, "Souris et clavier (1.11.23)", {}, "1.11.23"},
+             {K::Table, "Variable\tType\tCe qu'elle vaut\n"
+                         "`SYS.MouseX`\tREAL\tLa position de la souris sur la vue, en pixels de la vue (depuis la gauche).\n"
+                         "`SYS.MouseY`\tREAL\t\xE2\x80\xA6 depuis le haut.\n"
+                         "`SYS.MouseView`\tSTRING\tLa vue (ou la popup) sous la souris ('' : hors de l'IHM).\n"
+                         "`SYS.MouseObject`\tSTRING\tL'objet sous la souris (Vue.Objet ; '' : aucun).\n"
+                         "`SYS.MouseInside`\tBOOL\tLa souris est sur l'IHM.\n"
+                         "`SYS.MouseLeft`\tBOOL\tLe bouton gauche est enfonc\xC3\xA9.\n"
+                         "`SYS.MouseRight`\tBOOL\tLe bouton droit est enfonc\xC3\xA9.\n"
+                         "`SYS.MouseMiddle`\tBOOL\tLe bouton du milieu (la molette) est enfonc\xC3\xA9.\n"
+                         "`SYS.MouseButtons`\tINT\tLes boutons enfonc\xC3\xA9s : 1 gauche + 2 droit + 4 milieu.\n"
+                         "`SYS.MouseWheel`\tDINT\tLes crans de molette depuis le lancement (vers le haut : +1, vers le bas : -1).\n"
+                         "`SYS.KeyLast`\tSTRING\tLa derni\xC3\xA8re touche enfonc\xC3\xA9" "e, avec Ctrl, Maj, Alt (Ctrl+F5 ; '' : aucune).\n"
+                         "`SYS.KeysDown`\tSTRING\tLes touches tenues, s\xC3\xA9par\xC3\xA9" "es par ; (F5;Haut).\n"
+                         "`SYS.KeyDownCount`\tINT\tLe nombre de touches tenues.\n"
+                         "`SYS.KeyAnyDown`\tBOOL\tUne touche au moins est tenue.\n"
+                         "`SYS.KeyCtrl`\tBOOL\tCtrl est tenue.\n"
+                         "`SYS.KeyShift`\tBOOL\tMaj est tenue.\n"
+                         "`SYS.KeyAlt`\tBOOL\tAlt est tenue.\n"
+                         "`SYS.KeyHoldTime`\tTIME\tDepuis quand la derni\xC3\xA8re touche enfonc\xC3\xA9" "e est tenue (T#0s : rel\xC3\xA2" "ch\xC3\xA9" "e).\n"
+                         "`SYS.KeyPresses`\tDINT\tLes touches enfonc\xC3\xA9" "es depuis le lancement.\n"
+                         "`SYS.ShortcutLast`\tSTRING\tLe dernier raccourci parti : Vue \xC2\xB7 touche ('' : aucun).\n"
+                         "`SYS.ShortcutCount`\tDINT\tLes raccourcis partis depuis le lancement.", {}, "1.11.23"},
+             {K::Paragraph, "Et une variable par touche, `SYS.Key.<touche>` (BOOL) : vraie tant que la touche est "
+                         "tenue. Les touches : `A` \xC3\xA0 `Z`, `Digit0` \xC3\xA0 `Digit9` (les chiffres : `SYS.Key.1` "
+                         "se lirait comme un bit), `F1` \xC3\xA0 `F12`, `Enter`, `Escape`, `Space`, `Tab`, `Backspace`, "
+                         "`Delete`, `Insert`, `Home`, `End`, `PageUp`, `PageDown`, `Up`, `Down`, `Left`, `Right`. "
+                         "Par exemple : `SYS.Key.Up AND NOT SYS.KeyCtrl`. La souris et le clavier sont ceux de la vue "
+                         "qui tourne (la simulation de l'\xC3\xA9" "diteur, le poste d'exploitation) ; pour lier une "
+                         "touche \xC3\xA0 une action, voir \xC2\xAB Les raccourcis d'une vue \xC2\xBB.", {}, "1.11.23"},
          },
-         {"variables-instances", "variables-ihm", "securite", "reference", "simulation", "variables-esclaves"},
+         {"variables-instances", "variables-ihm", "securite", "reference", "simulation", "variables-esclaves", "raccourcis-vue"},
          {"SYS"},
          {"variables-systeme"},
          {{"PNG_232_arbre_variables_systeme.png", "L'explorateur : Programmation g\xC3\xA9n\xC3\xA9rale \xE2\x80\xBA Variables syst\xC3\xA8me, rang\xC3\xA9" "es par domaine, chacune marqu\xC3\xA9" "e R."}, {"PNG_233_st_completion_sys.png", "Dans un script, \xC2\xAB SYS. \xC2\xBB ouvre la liste des variables syst\xC3\xA8me."}, {"PNG_239_volet_variables_systeme_en_marche.png", "Le volet des variables syst\xC3\xA8me, en marche : chaque valeur lue \xC3\xA0 l'instant."}},

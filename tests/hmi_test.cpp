@@ -14946,9 +14946,10 @@ void pageSimulation19() {
     using W = pub::Resolved::What;
     std::size_t domain13 = 0;
     for (const auto& v : pub::kSysVars) domain13 += v.domain == pub::kSlaveDomain ? 1 : 0;
-    check(pub::kSysDomainCount == 14 && std::string(pub::kSysDomains[pub::kSlaveDomain]) == "Esclaves simul\xC3\xA9s" && domain13 == 7
-              && pub::kSlaveMemberCount == 16,
-          "le 14e domaine \xC2\xAB Esclaves simul\xC3\xA9s \xC2\xBB : 7 variables, et 16 membres par esclave");
+    // 1.11.23 : un 15e domaine, Souris et clavier (apres les esclaves simules).
+    check(pub::kSysDomainCount == 15 && std::string(pub::kSysDomains[pub::kSlaveDomain]) == "Esclaves simul\xC3\xA9s" && domain13 == 7
+              && pub::kSlaveMemberCount == 16 && std::string(pub::kSysDomains[pub::kInputDomain]) == "Souris et clavier",
+          "le 14e domaine \xC2\xAB Esclaves simul\xC3\xA9s \xC2\xBB : 7 variables, et 16 membres par esclave (1.11.23 : puis Souris et clavier)");
     check(pub::slaveEquipments(p).size() == 2 && pub::slaveKeysText(p) == "Variateur_ATV320, Balance_B",
           "les esclaves du projet : le variateur (li\xC3\xA9) et la balance (seulement simul\xC3\xA9" "e), pas la cam\xC3\xA9ra");
     const auto r1 = pub::resolve(p, "SYS.Slave.Variateur_ATV320.Read");
@@ -21194,6 +21195,183 @@ void renommerPartout1117() {
     check(sp->functions[0].body.find("T_MODE#Automatique") != std::string::npos, "renommer T_MODE#Auto : la fonction du symbole suit");
 }
 
+// ---- 1.11.23 : la souris et le clavier (SYS.Mouse*, SYS.Key*), les raccourcis des vues ----
+void clavierSouris11123() {
+    std::printf("-- 1.11.23 : la souris, le clavier, les raccourcis des vues\n");
+    namespace k = hmi::keys;
+    {
+        std::string why;
+        const auto c = k::parseChord("ctrl + maj + entree", &why);
+        check(c && c->ctrl && c->shift && !c->alt && c->key == "Enter" && k::canonical(*c) == "Ctrl+Shift+Enter"
+                  && k::label(*c) == "Ctrl+Maj+Entr\xC3\xA9" "e",
+              "touche : ctrl + maj + entree se lit Ctrl+Shift+Enter, se montre Ctrl+Maj+Entree");
+        check(k::parseChord("F5") && k::parseChord("1")->key == "Digit1" && k::parseChord("\xC3\x89" "chap")->key == "Escape"
+                  && k::parseChord("Haut")->key == "Up" && k::parseChord("pg suiv")->key == "PageDown",
+              "touche : F5, 1 (Digit1), Echap, Haut, Pg suiv");
+        check(!k::parseChord("Ctrl+", &why) && why.find("une touche") != std::string::npos, "touche : Ctrl+ seul, refuse (" + why + ")");
+        why.clear();
+        check(!k::parseChord("Hyper+A", &why) && why.find("modificateur inconnu") != std::string::npos, "touche : Hyper+A, refuse (" + why + ")");
+        why.clear();
+        check(!k::parseChord("Pomme", &why) && why.find("touche inconnue") != std::string::npos, "touche : Pomme, refusee (" + why + ")");
+        check(k::matches("Ctrl+F5", *k::parseChord("ctrl+f5")) && !k::matches("Ctrl+F5", *k::parseChord("F5")),
+              "touche : Ctrl+F5 n'est pas F5 (memes Ctrl, Maj, Alt)");
+        check(!k::reserved(*k::parseChord("F1")).empty() && !k::reserved(*k::parseChord("Ctrl+Alt+Q")).empty()
+                  && k::reserved(*k::parseChord("F2")).empty(),
+              "touche : F1 et Ctrl+Alt+Q gardees, F2 libre");
+    }
+    Project p;
+    View v = makeView(p, "Vue_K");
+    View pop = makeView(p, "Pop_Modale");
+    pop.role = "popup";
+    pop.popup.modal = true;
+    View libre = makeView(p, "Pop_Libre");
+    libre.role = "popup";
+    libre.popup.modal = false;
+    for (const char* n : {"Appuis", "Relaches", "Tenues", "Repetitions", "Popup_Ok", "Fonction"})
+        p.programs.variables.push_back(hmiVar(p, n, "INT", "0"));
+    p.programs.variables.push_back(hmiVar(p, "Texte", "STRING", "''"));
+    const auto key = [](Trigger t, const char* chord, Operation o, const char* target, int ms = 0) {
+        Action a = act(t, o, target);
+        a.key = chord;
+        a.delayMs = ms;
+        return a;
+    };
+    v.actions.push_back(key(Trigger::KeyPress, "F5", Operation::Increment, "Appuis"));
+    v.actions.push_back(key(Trigger::KeyRelease, "F5", Operation::Increment, "Relaches"));
+    v.actions.push_back(key(Trigger::KeyHold, "Ctrl+H", Operation::Increment, "Tenues", 500));
+    v.actions.push_back(key(Trigger::KeyRepeat, "Up", Operation::Increment, "Repetitions", 100));
+    v.actions.push_back(key(Trigger::KeyPress, "A", Operation::Increment, "Appuis"));
+    v.actions.push_back(key(Trigger::KeyPress, "F2", Operation::Increment, "Fonction"));
+    pop.actions.push_back(key(Trigger::KeyPress, "F5", Operation::Increment, "Popup_Ok"));
+    pop.actions.push_back(key(Trigger::KeyRelease, "F5", Operation::Increment, "Popup_Ok"));
+    const Id champ = edit::add(p, v, Kind::InputField, 10, 200);
+    v.object(champ)->name = "Saisie";
+    v.object(champ)->set("variable", "Texte");
+    v.object(champ)->set("mode", "texte");
+    p.views = {v, pop, libre};
+    p.config.startView = v.id;
+    p.config.cycleMs = 50;
+    check(describeAction(p.views[0].actions[2]).find("Touche maintenue Ctrl+H (500 ms)") == 0,
+          "decrire un raccourci : " + describeAction(p.views[0].actions[2]));
+
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    rt.tick(0.0);
+    const auto I = [&](const char* n) { return rt.variable(n) ? static_cast<int>(rt.variable(n)->asInteger()) : -1; };
+    const auto chord = [](const char* s) { return *hmi::keys::parseChord(s); };
+    const auto sys = [&](const char* n) { sim::Value x; return rt.environment().read(n, x) ? x : sim::Value{}; };
+
+    // F5 : le front montant, la repetition du clavier ignoree, le front descendant.
+    check(rt.keyOwner(chord("F5")) == v.id && rt.keyOwner(chord("F6")) == kNoId, "F5 : la vue le prend ; F6 : personne");
+    check(rt.keyDown(chord("F5"), 0.10) && I("Appuis") == 1, "F5 enfoncee : Touche enfoncee part (le front montant)");
+    check(rt.keyDown(chord("F5"), 0.15, true) && I("Appuis") == 1, "la repetition du clavier ne compte pas");
+    check(rt.keyDown(chord("F5"), 0.20) && I("Appuis") == 1, "une touche tenue ne repart pas");
+    check(sys("SYS.Key.F5").isTruthy() && sys("SYS.KeyDownCount").asInteger() == 1 && sys("SYS.KeyLast").asString() == "F5"
+              && sys("SYS.KeyAnyDown").isTruthy(),
+          "SYS.Key.F5 vrai, SYS.KeyDownCount 1, SYS.KeyLast F5");
+    check(rt.keyUp("F5", 0.30) && I("Relaches") == 1 && I("Appuis") == 1, "F5 relachee : Touche relachee part (le front descendant)");
+    check(!sys("SYS.Key.F5").isTruthy() && sys("SYS.ShortcutCount").asInteger() == 2
+              && sys("SYS.ShortcutLast").asString() == "Vue_K \xC2\xB7 F5" && journalHas(rt, "Raccourci", "F5"),
+          "SYS.Key.F5 faux ; SYS.ShortcutCount 2, SYS.ShortcutLast ; le journal le dit (Raccourci)");
+    // Ctrl+H maintenue 500 ms : une fois ; H seule n'est pas Ctrl+H.
+    check(!rt.keyDown(chord("H"), 1.00), "H seule : pas Ctrl+H");
+    (void)rt.keyUp("H", 1.05);
+    check(rt.keyDown(chord("Ctrl+H"), 1.10) && sys("SYS.KeyCtrl").isTruthy(), "Ctrl+H : prise, SYS.KeyCtrl vrai");
+    rt.tick(1.40);
+    check(I("Tenues") == 0, "maintenue : rien avant 500 ms");
+    rt.tick(1.65);
+    check(I("Tenues") == 1, "maintenue 500 ms : part une fois");
+    rt.tick(2.50);
+    check(I("Tenues") == 1 && sys("SYS.KeyHoldTime").type() == sim::Type::Time, "... et une seule (SYS.KeyHoldTime : un TIME)");
+    (void)rt.keyUp("H", 2.60);
+    // Haut repetee toutes les 100 ms.
+    (void)rt.keyDown(chord("Haut"), 3.00);
+    rt.tick(3.05);
+    check(I("Repetitions") == 0, "repetee : rien avant la premiere periode");
+    rt.tick(3.35);
+    check(I("Repetitions") == 3, "repetee : 3 fois en 350 ms (" + std::to_string(I("Repetitions")) + ")");
+    (void)rt.keyUp("Up", 3.40);
+    rt.tick(3.80);
+    check(I("Repetitions") == 3, "relachee : plus rien");
+    // Une popup modale qui a F5 le prend ; sans Haut, elle arrete la recherche.
+    (void)rt.openPopup(p.views[1].id, Transition{}, 4.00);
+    check(rt.keyOwner(chord("F5")) == p.views[1].id && rt.keyOwner(chord("Haut")) == kNoId,
+          "popup modale : F5 a elle (avant la vue) ; Haut, qu'elle n'a pas : personne");
+    (void)rt.keyDown(chord("F5"), 4.10);
+    check(I("Popup_Ok") == 1 && I("Appuis") == 1, "F5 : la popup, pas la vue");
+    (void)rt.closePopup(Transition{}, 4.20);
+    check(rt.keyUp("F5", 4.30) && I("Popup_Ok") == 2 && I("Relaches") == 1,
+          "relachee apres la fermeture de la popup : son front descendant part quand meme");
+    (void)rt.openPopup(p.views[2].id, Transition{}, 4.40);
+    check(rt.keyOwner(chord("F5")) == v.id && rt.keyOwner(chord("Echap")) == kNoId,
+          "popup non modale sans F5 : la vue le prend ; Echap seul : personne (la popup se ferme, comme avant)");
+    (void)rt.closePopup(Transition{}, 4.50);
+    // Un champ de saisie qui a le clavier garde ses touches, sauf F1..F12.
+    rt.objectPart(champ, "champ", 5.00);
+    check(rt.focusedObject() == champ, "le champ prend le clavier");
+    check(!rt.keyDown(chord("A"), 5.10) && I("Appuis") == 1, "A, un champ de saisie a le clavier : pas de raccourci");
+    (void)rt.keyUp("A", 5.15);
+    check(rt.keyDown(chord("F2"), 5.20) && I("Fonction") == 1, "F2, un champ a le clavier : le raccourci part (F1..F12)");
+    (void)rt.keyUp("F2", 5.25);
+    // Le clavier perdu : les touches tenues sont relachees (leur front descendant).
+    rt.typeKey(EditKey::Escape, 5.30);
+    (void)rt.keyDown(chord("F5"), 6.00);
+    rt.releaseAllKeys(6.10);
+    check(I("Relaches") == 2 && sys("SYS.KeyDownCount").asInteger() == 0, "le clavier perdu : F5 relachee, son front descendant part");
+    // La souris.
+    rt.pointerMoved(v.id, 120.5, 64.0, champ, true);
+    rt.pointerButton(0, true, 6.20);
+    rt.pointerButton(2, true, 6.20);
+    rt.pointerWheel(-1.0);
+    check(sys("SYS.MouseX").asReal() == 120.5 && sys("SYS.MouseY").asReal() == 64.0 && sys("SYS.MouseView").asString() == "Vue_K"
+              && sys("SYS.MouseObject").asString() == "Vue_K.Saisie" && sys("SYS.MouseInside").isTruthy()
+              && sys("SYS.MouseLeft").isTruthy() && !sys("SYS.MouseRight").isTruthy() && sys("SYS.MouseButtons").asInteger() == 5
+              && sys("SYS.MouseWheel").asInteger() == -1,
+          "SYS.MouseX/Y, MouseView, MouseObject, les boutons (gauche + milieu : 5), la molette");
+    rt.pointerMoved(kNoId, 0, 0, kNoId, false);
+    check(!sys("SYS.MouseInside").isTruthy() && sys("SYS.MouseButtons").asInteger() == 0 && sys("SYS.MouseView").asString().empty(),
+          "la souris sortie : dehors, ses boutons relaches");
+    // L'arret : rien ne part, tout repart de zero au demarrage.
+    (void)rt.keyDown(chord("F5"), 7.00);
+    rt.stop(7.10);
+    rt.start(8.00);
+    check(sys("SYS.KeyDownCount").asInteger() == 0 && sys("SYS.KeyPresses").asInteger() == 0 && I("Relaches") == 0,
+          "redemarree : ni touche tenue ni compteur (et les variables IHM repartent)");
+    // Le controle : une touche illisible, un raccourci sur un objet, une touche gardee.
+    {
+        Project q = p;
+        q.views[0].actions.push_back(key(Trigger::KeyPress, "Pomme", Operation::Increment, "Appuis"));
+        q.views[0].actions.push_back(key(Trigger::KeyPress, "F1", Operation::Increment, "Appuis"));
+        q.views[0].object(champ)->actions.push_back(key(Trigger::KeyPress, "F7", Operation::Increment, "Appuis"));
+        bool illisible = false, objet = false, gardee = false;
+        for (const auto& is : generate(q, {})) {
+            if (is.category != "Raccourci") continue;
+            illisible = illisible || (is.severity == Issue::Severity::Error && is.message.find("touche illisible : Pomme") != std::string::npos);
+            objet = objet || (is.severity == Issue::Severity::Warning && is.message.find("sur un objet") != std::string::npos);
+            gardee = gardee || (is.severity == Issue::Severity::Warning && is.message.find("F1 ouvre l'aide") != std::string::npos);
+        }
+        check(illisible && objet && gardee, "Compiler : une touche illisible (erreur), un raccourci sur un objet, F1 gardee (avertissements)");
+    }
+    // Enregistre et relu : format 24, touche= (un projet sans raccourci reste au format 23 ou avant).
+    {
+        const auto dir = fs::temp_directory_path() / "xpg_raccourcis_11123";
+        fs::remove_all(dir);
+        check(static_cast<bool>(save(p, dir.string())), "enregistrer le projet aux raccourcis");
+        std::ifstream in(dir / "ihm" / "ihm.txt");
+        std::stringstream ss;
+        ss << in.rdbuf();
+        const auto back = load(dir.string());
+        bool keys = false;
+        if (back)
+            for (const auto& vv : back->views)
+                for (const auto& a : vv.actions) keys = keys || (a.trigger == Trigger::KeyHold && a.key == "Ctrl+H" && a.delayMs == 500);
+        check(ss.str().find("ihm format=24") != std::string::npos && back && keys,
+              "enregistre au format 24 (touche=), relu : Touche maintenue Ctrl+H (500 ms)");
+        fs::remove_all(dir);
+    }
+}
+
 int main(int argc, char** argv) {
     // 1.11.10 : HMI_TEST_1110=1 - les fonctions et les popups des symboles, seules.
     if (const char* only = std::getenv("HMI_TEST_1110"); only && *only == '1') {
@@ -21340,6 +21518,7 @@ int main(int argc, char** argv) {
     blocages1112();                   // 1.11.2 (BLK, decision 203) : l'index des ecritures, la raison d'un script cyclique
     renommerPartout1117();            // 1.11.17 (refonte, lot 0) : renommer une fonction suit chaque appel
     journalLocales1117();             // 1.11.17 (refonte, lot 0) : IHM_JOURNAL et IHM_LOG lisent les locales
+    clavierSouris11123();             // 1.11.23 : la souris, le clavier, les raccourcis des vues
     if (argc > 1) simulateurModbusLot14(argv[1]);
     if (argc > 1) simulateur(argv[1]);
     if (argc > 1) dossierRouvert(argv[1]);
