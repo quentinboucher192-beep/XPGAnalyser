@@ -387,7 +387,7 @@ std::string intText(long double v) {
 std::string_view categoryLabel(Category c) noexcept {
     switch (c) {
         case Category::Elementary: return "\xC3\x89l\xC3\xA9mentaires";
-        case Category::TextTime: return "Cha\xC3\xAEnes et dur\xC3\xA9" "es";
+        case Category::TextTime: return "Textes, dur\xC3\xA9" "es et dates";   // 1.12.1 : + CHAR, WSTRING, DATE, TOD, DT
         case Category::Collection: return "Tableaux et collections";
         case Category::Structure: return "Structures IHM";
         case Category::Enumeration: return "\xC3\x89num\xC3\xA9rations";
