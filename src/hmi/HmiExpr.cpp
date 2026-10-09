@@ -357,6 +357,12 @@ std::string formatValue(const sim::Value& v, std::string_view format) {
             std::snprintf(b, sizeof b, "%.6g", v.asReal());
             return b;
         }
+        // 1.12.1 : une date, une heure, une date et heure - sans leur prefixe (2026-10-09 14:30:00).
+        if (sim::isDateType(v.type())) {
+            std::string t = sim::dateText(v.type(), v.asInteger());
+            if (v.type() == sim::Type::Dt && t.size() > 10) t[10] = ' ';
+            return t;
+        }
         return v.type() == sim::Type::String ? v.asString() : v.display();
     }
     // Le texte d'un booleen (ou de toute valeur : vrai = non nulle).
@@ -491,7 +497,20 @@ TextTemplate TextTemplate::compile(std::string_view source) {
         // Le format est apres le dernier ':' qui n'est pas celui d'un ":=" et
         // qui ne suit que des caracteres de format.
         const auto colon = inside.rfind(':');
-        if (colon != std::string::npos && colon + 1 < inside.size() && inside[colon + 1] != '=') {
+        // 1.12.1 : pas celui d'une heure ({Debut = TOD#14:30:00}, DT#2026-10-09-14:30).
+        const auto inTimeLiteral = [&](std::size_t at) {
+            std::size_t b = at;
+            while (b > 0 && (std::isdigit(static_cast<unsigned char>(inside[b - 1])) || inside[b - 1] == ':' || inside[b - 1] == '-'
+                             || inside[b - 1] == '.'))
+                --b;
+            if (b == 0 || inside[b - 1] != '#') return false;
+            std::size_t w = b - 1;
+            while (w > 0 && (std::isalpha(static_cast<unsigned char>(inside[w - 1])) || inside[w - 1] == '_')) --w;
+            std::string word = inside.substr(w, b - 1 - w);
+            for (auto& ch : word) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+            return word == "TOD" || word == "DT" || word == "TIME_OF_DAY" || word == "DATE_AND_TIME";
+        };
+        if (colon != std::string::npos && colon + 1 < inside.size() && inside[colon + 1] != '=' && !inTimeLiteral(colon)) {
             const std::string fmt = inside.substr(colon + 1);
             if (looksLikeFormat(fmt)) {
                 p.format = fmt;

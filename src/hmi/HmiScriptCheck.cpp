@@ -149,14 +149,16 @@ std::vector<Tok> lex(std::string_view s) {
 }
 
 const std::set<std::string>& operatorWords() {
-    static const std::set<std::string> k = {"AND", "OR", "XOR", "NOT", "MOD", "TRUE", "FALSE", "NULL"};   // NULL : 1.10 (13 bis)
+    static const std::set<std::string> k = {"AND", "OR", "XOR", "NOT", "MOD", "TRUE", "FALSE", "NULL",   // NULL : 1.10 (13 bis)
+                                            "ENTRE", "ET"};                                           // 1.12.1
     return k;
 }
 const std::set<std::string>& statementWords() {
     static const std::set<std::string> k = {"IF",    "THEN",      "ELSIF",   "ELSE",       "END_IF", "CASE",   "OF",
                                             "END_CASE", "FOR",    "TO",      "BY",         "DO",     "END_FOR", "WHILE",
                                             "END_WHILE", "REPEAT", "UNTIL",  "END_REPEAT", "EXIT",   "RETURN",
-                                            "EACH",  "IN",        "FUNCTION", "END_FUNCTION"};   // 1.10 : le dialecte IHM (13)
+                                            "EACH",  "IN",        "FUNCTION", "END_FUNCTION",    // 1.10 : le dialecte IHM (13)
+                                            "CONTINUE", "TRY", "CATCH", "END_TRY"};                // 1.12.1
     return k;
 }
 // 1.10 (decisions 13 et 13 bis) : les fonctions du dialecte IHM - reconnues
@@ -164,7 +166,7 @@ const std::set<std::string>& statementWords() {
 const std::set<std::string>& dialectFunctions() {
     static const std::set<std::string> k = {"MAP_HAS",  "MAP_REMOVE", "MAP_SIZE", "MAP_CLEAR", "MAP_KEYS",    "MAP_GET",
                                             "MAP_BEGIN", "MAP_END",   "MAP_NEXT", "REF",       "ADR",         "SIZEOF",
-                                            "LOWER_BOUND", "UPPER_BOUND"};
+                                            "LOWER_BOUND", "UPPER_BOUND", "ASSERT"};   // ASSERT : 1.12.1
     return k;
 }
 // Un bloc de declarations (VAR, VAR_TEMP, VAR_INPUT : blanchis par
@@ -1186,7 +1188,8 @@ private:
             else if (depth == 0 && toks_[k].k == Tok::K::Ident) {
                 const std::string U = up(toks_[k].text);
                 if (U == "END_IF" || U == "ELSE" || U == "ELSIF" || U == "END_FOR" || U == "END_WHILE" || U == "END_CASE"
-                    || U == "END_REPEAT" || U == "UNTIL" || U == "FUNCTION" || U == "END_FUNCTION")
+                    || U == "END_REPEAT" || U == "UNTIL" || U == "FUNCTION" || U == "END_FUNCTION"
+                    || U == "CATCH" || U == "END_TRY")                       // 1.12.1
                     return k;
             }
         }
@@ -1293,6 +1296,13 @@ private:
                 walkNames(by + 1, d);
             }
             i = isOp(d, ";") ? d : after(d);
+            return;
+        }
+        // 1.12.1 : CATCH Erreur - la variable (un nom seul sur la ligne du CATCH) recoit le message.
+        if (U == "CATCH" && isIdent(i + 1) && body_.find('\n', t.end()) >= toks_[i + 1].at
+            && (atEnd(i + 2) || isOp(i + 2, ";") || body_.find('\n', toks_[i + 1].end()) < toks_[i + 2].at)) {
+            walkNames(i + 1, i + 2);
+            i = isOp(i + 2, ";") ? i + 3 : i + 2;
             return;
         }
         if (statementWords().count(U)) { ++i; return; }

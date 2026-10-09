@@ -139,6 +139,15 @@ def main():
     w("    return k;")
     w("}")
     w("")
+    # ---- les generiques (1.12.1)
+    w("const std::vector<Generic>& generics() {")
+    w("    static const std::vector<Generic> k = {")
+    for nom, membres, phr in cat.GENERIQUES:
+        w("        {%s, %s, %s}," % (cstr(nom), cstr(membres), cstr(phr)))
+    w("    };")
+    w("    return k;")
+    w("}")
+    w("")
     # ---- ce que les types ont en plus du registre
     w("const std::vector<TypeExtra>& typeExtras() {")
     w("    static const std::vector<TypeExtra> k = {")

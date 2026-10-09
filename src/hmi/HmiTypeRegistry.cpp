@@ -89,6 +89,18 @@ const Base kBase[] = {
      "Cha\xC3\xAEne de caract\xC3\xA8res : 'texte' ; STRING[20] en borne la longueur."},
     {"TIME", Category::TextTime, {Family::Time, 32, true, false, 0, 0}, V | D | P | R | O, V | D | P | R | O,
      "Dur\xC3\xA9" "e : T#5s, T#1m30s, T#250ms."},
+    // 1.12.1 : les scripts, les fonctions, les parametres, les operateurs - pas encore une
+    // variable IHM (sa place Modbus), comme SINT ou BYTE.
+    {"CHAR", Category::TextTime, {Family::String, 8, false, false, 0, 0}, D | P | R | O, D | R | O,
+     "Un caract\xC3\xA8re : 'A' ; un texte d'un caract\xC3\xA8re pour l'IHM (STRING le re\xC3\xA7oit, l'inverse garde le premier)."},
+    {"WSTRING", Category::TextTime, {Family::String, 16, false, false, 0, 0}, D | P | R | O, D | R | O,
+     "Cha\xC3\xAEne Unicode : \"texte\" ; l'IHM \xC3\xA9" "crit tous ses textes en UTF-8, WSTRING et STRING s'\xC3\xA9" "changent."},
+    {"DATE", Category::TextTime, {Family::Date, 64, false, false, 1, 0}, D | P | R | O, D | R | O,
+     "Une date : D#2026-10-09 ; DATE - DATE est une dur\xC3\xA9" "e."},
+    {"TIME_OF_DAY", Category::TextTime, {Family::Date, 64, false, false, 2, 0}, D | P | R | O, D | R | O,
+     "Une heure du jour : TOD#14:30:00 (TOD) ; TOD + TIME tourne sur 24 h."},
+    {"DATE_AND_TIME", Category::TextTime, {Family::Date, 64, false, false, 3, 0}, D | P | R | O, D | R | O,
+     "Une date et une heure : DT#2026-10-09-14:30:00 (DT) ; DT + TIME, DT - DT ; MAINTENANT() la donne."},
 };
 
 const char* const kIec = "IEC 61131-3";
@@ -468,7 +480,10 @@ const Entry* Registry::byName(std::string_view name) const noexcept {
     while (!n.empty() && std::isspace(static_cast<unsigned char>(n.front()))) n.remove_prefix(1);
     while (!n.empty() && std::isspace(static_cast<unsigned char>(n.back()))) n.remove_suffix(1);
     if (n.size() > 7 && sameText(n.substr(0, 7), "STRING[")) n = n.substr(0, 6);
+    if (n.size() > 8 && sameText(n.substr(0, 8), "WSTRING[")) n = n.substr(0, 7);   // 1.12.1
     if (sameText(n, "EBOOL")) n = "BOOL";                 // un BOOL de l'automate
+    if (sameText(n, "TOD")) n = "TIME_OF_DAY";            // 1.12.1 : les noms courts de la norme
+    if (sameText(n, "DT")) n = "DATE_AND_TIME";
     for (const auto& e : entries_)
         if (sameText(e.name, n)) return &e;
     return nullptr;
@@ -507,7 +522,10 @@ Numeric numericOf(std::string_view type) noexcept {
     for (const char c : type)
         if (!std::isspace(static_cast<unsigned char>(c))) u += static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
     if (u.rfind("STRING[", 0) == 0) u = "STRING";
+    if (u.rfind("WSTRING[", 0) == 0) u = "WSTRING";       // 1.12.1
     if (u == "EBOOL") u = "BOOL";
+    if (u == "TOD") u = "TIME_OF_DAY";
+    if (u == "DT") u = "DATE_AND_TIME";
     if (const auto* b = baseByName(u)) return b->numeric;
     return {};
 }
@@ -518,7 +536,10 @@ std::string comparable(std::string_view type) {
         if (!std::isspace(static_cast<unsigned char>(c))) out += static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
     if (out.empty()) return "ANY";
     if (out.rfind("STRING[", 0) == 0) return "STRING";
+    if (out.rfind("WSTRING[", 0) == 0) return "WSTRING";  // 1.12.1
     if (out == "EBOOL") return "BOOL";
+    if (out == "TOD") return "TIME_OF_DAY";
+    if (out == "DT") return "DATE_AND_TIME";
     return out;
 }
 
@@ -536,6 +557,8 @@ sim::Type simTypeOf(std::string_view type) noexcept {
         case Family::Real: return sim::Type::Real;
         case Family::String: return sim::Type::String;
         case Family::Time: return sim::Type::Time;
+        case Family::Date:                                   // 1.12.1 : low dit lequel
+            return n.low == 1 ? sim::Type::Date : n.low == 2 ? sim::Type::Tod : sim::Type::Dt;
         case Family::Integer:
             if (n.bitString) return n.bits <= 8 ? sim::Type::Byte : n.bits <= 16 ? sim::Type::Word : sim::Type::DWord;
             if (n.isSigned) return n.bits <= 16 ? sim::Type::Int : sim::Type::DInt;
@@ -573,6 +596,16 @@ Verdict conversion(std::string_view from, std::string_view to) {
     if (a.family == Family::Real && b.family == Family::Real) {
         if (b.bits >= a.bits) return done(Conversion::Widening, 1);
         return done(Conversion::Lossy, 4, fn + " vers " + tn + " : moins de pr\xC3\xA9" "cision");
+    }
+    // 1.12.1 : CHAR, STRING, WSTRING entre eux ; les dates, chacune la sienne.
+    if (a.family == Family::String && b.family == Family::String) {
+        if (t == "CHAR") return done(Conversion::Lossy, 4, fn + " vers CHAR : le premier caract\xC3\xA8re seul");
+        return done(Conversion::Widening, 1);
+    }
+    if (a.family == Family::Date || b.family == Family::Date) {
+        if (f == "DATE_AND_TIME" && (t == "DATE" || t == "TIME_OF_DAY"))
+            return done(Conversion::Forbidden, -1, "DATE_AND_TIME vers " + tn + " : \xC3\xA9" "crivez DT_TO_" + (t == "DATE" ? "DATE" : "TOD") + "(\xE2\x80\xA6)");
+        return done(Conversion::Forbidden, -1, fn + " n'est pas " + tn + " : une date, une heure du jour, une date et heure et une dur\xC3\xA9" "e ne s'\xC3\xA9" "changent pas");
     }
     if (a.family == Family::Real && b.family == Family::Integer)
         return done(Conversion::Forbidden, -1, "un r\xC3\xA9" "el ne devient pas " + tn + " sans conversion : \xC3\xA9" "crivez TO_" + t + "(\xE2\x80\xA6)");

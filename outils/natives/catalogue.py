@@ -36,8 +36,9 @@ CATS = [
     ("export", "Exports", "Exporter des données en CSV, XLSX ou PDF.", "Fonctions IHM_"),
     ("couleur", "Couleurs", "Composer, mélanger, éclaircir une couleur ; une couleur selon une valeur.", "Couleurs et aléatoire"),
     ("alea", "Aléatoire", "Des nombres au hasard, et une suite qu'on peut rejouer.", "Couleurs et aléatoire"),
+    ("date", "Dates et heures", "Maintenant, la date ou l'heure d'une date et heure, les assembler.", "Couleurs et aléatoire"),
     ("op", "Opérateurs", "Calculer, comparer, combiner : + - * / MOD ** AND OR...", "Le langage"),
-    ("instr", "Instructions", "IF, CASE, FOR, FOR EACH, WHILE, REPEAT, EXIT, RETURN.", "Le langage"),
+    ("instr", "Instructions", "IF, CASE, FOR, FOR EACH, WHILE, REPEAT, EXIT, CONTINUE, RETURN, TRY, ASSERT.", "Le langage"),
 ]
 
 # Une fonction : dict(name, cat, params=[(nom, type, phrase, facultatif)], ret, short, notes=[...],
@@ -398,6 +399,25 @@ fn(name="RANDOM_SEED", cat="alea", params=[("N", "DINT", "la graine", False)], r
    short="Fait repartir la suite : la même graine donne les mêmes nombres (pour rejouer un essai).", st="RANDOM_SEED(42);",
    c="srand(42);", cpp="gen.seed(42);", essai=None)
 
+# ------------------------------------------------------------- dates et heures (1.12.1) --
+fn(name="MAINTENANT", cat="date", params=[], ret="DATE_AND_TIME",
+   short="La date et l'heure du poste (en simulation : celles du PC), à la milliseconde.",
+   notes=["L'heure du mur, sans fuseau : DT#2026-10-09-14:30:00 est 14 h 30 là où tourne l'IHM."],
+   st="Debut := MAINTENANT();", c="time_t debut = time(NULL);   /* localtime() pour la date */",
+   cpp="auto debut = std::chrono::system_clock::now();", essai=("BOOL", "MAINTENANT() > DT#2020-01-01-00:00:00", "TRUE"))
+fn(name="DT_TO_DATE", cat="date", params=[("IN", "DATE_AND_TIME", "une date et heure", False)], ret="DATE",
+   short="La date d'une date et heure (à minuit).", st="Jour := DT_TO_DATE(MAINTENANT());",
+   c="/* pas d'équivalent : localtime(), puis tm_year, tm_mon, tm_mday */", cpp="auto jour = std::chrono::floor<std::chrono::days>(maintenant);",
+   essai=("BOOL", "DT_TO_DATE(DT#2026-10-09-14:30:00) = D#2026-10-09", "TRUE"), plc="DT_TO_DATE (EF)")
+fn(name="DT_TO_TOD", cat="date", params=[("IN", "DATE_AND_TIME", "une date et heure", False)], ret="TIME_OF_DAY",
+   short="L'heure du jour d'une date et heure.", st="Heure := DT_TO_TOD(MAINTENANT());",
+   c="/* pas d'équivalent : localtime(), puis tm_hour, tm_min, tm_sec */", cpp="auto heure = maintenant - std::chrono::floor<std::chrono::days>(maintenant);",
+   essai=("BOOL", "DT_TO_TOD(DT#2026-10-09-14:30:00) = TOD#14:30:00", "TRUE"), plc="DT_TO_TOD (EF)")
+fn(name="CONCAT_DATE_TOD", cat="date", params=[("D", "DATE", "la date", False), ("TOD", "TIME_OF_DAY", "l'heure", False)], ret="DATE_AND_TIME",
+   short="Une date et une heure du jour assemblées en une date et heure.", st="Rendez_vous := CONCAT_DATE_TOD(D#2026-10-09, TOD#14:30:00);",
+   c="/* pas d'équivalent : mktime() sur un struct tm rempli */", cpp="auto rdv = jour + heure;   // std::chrono",
+   essai=("BOOL", "CONCAT_DATE_TOD(D#2026-10-09, TOD#14:30:00) = DT#2026-10-09-14:30:00", "TRUE"), plc="CONCAT_DATE_TOD (EF)")
+
 # ------------------------------------------------------------ enumerations natives --
 #  Un litteral NOM#Valeur vaut son nombre (un DINT), comme une enumeration du projet ;
 #  la fonction qui l'attend (colonne `fonction`, argument `rang`) recoit le mot `arg`.
@@ -595,23 +615,55 @@ OPS = [
     ("< <= > >=", "Comparaisons", "Comparer deux nombres, deux durées, deux textes.", "Alerte := Pression > 3.5;", "Alerte = Pression > 3.5f;", "Alerte = Pression > 3.5f;", ("BOOL", "Niveau >= 42.5", "TRUE")),
     ("AND OR XOR", "Logique et bits", "Sur des BOOL : et, ou, ou exclusif ; sur des mots : bit à bit.", "Pret := Marche AND NOT Defaut;", "Pret = Marche && !Defaut;   /* & | ^ sur des mots */", "Pret = Marche && !Defaut;", ("BOOL", "Marche AND NOT FALSE", "TRUE")),
     ("NOT", "Négation", "Le contraire d'un BOOL ; sur un mot, tous ses bits inversés.", "Arret := NOT Marche;", "Arret = !Marche;   /* ~Mot pour un mot */", "Arret = !Marche;", ("BOOL", "NOT Marche", "FALSE")),
-    ("&", "Et (autre écriture)", "AND, écrit &.", "Pret := Marche & Ok;", "Pret = Marche && Ok;", "Pret = Marche && Ok;", None),
+    ("&", "Et (autre écriture)", "AND, écrit &.", "Pret := Marche & Ok;", "Pret = Marche && Ok;", "Pret = Marche && Ok;", ("BOOL", "Marche & (Compteur = 7)", "TRUE")),
     ("^", "Déréférence", "La variable désignée par une référence ou un pointeur.", "r^ := 0.0;", "*r = 0.0f;", "r = 0.0f;   // une référence C++", None),
     ("+= -= *= /=", "Affectation combinée (opérateurs de type)", "Un opérateur écrit pour un type IHM (Programmation générale › Types).", "Total += Mesure;", "Total += Mesure;", "Total += Mesure;", None),
+    # 1.12.1
+    ("? :", "Conditionnel", "c ? a : b vaut a si c est vrai, b sinon. Seul le côté choisi est lu : x <> 0 ? 100 / x : 0 ne divise jamais par zéro. Le plus faible des opérateurs ; c ? a : d ? e : f se lit de droite à gauche.",
+     "Vitesse := Marche ? 1500.0 : 0.0;", "Vitesse = Marche ? 1500.0f : 0.0f;", "Vitesse = Marche ? 1500.0f : 0.0f;", ("REAL", "Compteur > 5 ? Niveau * 2.0 : 0.0", "85")),
+    ("??", "Valeur de secours", "a ?? b vaut a, ou b quand a ne se lit pas : un nom inconnu, une case hors du tableau, une clé absente d'une MAP, une division par zéro, NULL. Plus fort que ? :, plus faible que OR.",
+     "Texte := Recettes['B'] ?? 'aucune';", "/* pas d'équivalent : tester avant de lire */", "Texte = recettes.count(\"B\") ? recettes[\"B\"] : \"aucune\";", ("INT", "(100 / (Compteur - 7)) ?? -1", "-1")),
+    ("IN [ ]", "Dans la liste", "x IN [a, b, c..d] : vrai si x vaut une des valeurs ou tombe dans une des plages (bornes comprises). Des nombres, des textes, des valeurs d'une énumération (Mode IN [Auto, Manu]).",
+     "Arret := Etat IN [0, 3, 7..9];", "Arret = Etat == 0 || Etat == 3 || (Etat >= 7 && Etat <= 9);", "Arret = Etat == 0 || Etat == 3 || (Etat >= 7 && Etat <= 9);", ("BOOL", "Compteur IN [1, 3, 5..8]", "TRUE")),
+    ("ENTRE … ET", "Entre deux bornes", "x ENTRE a ET b : vrai si a <= x <= b (bornes comprises). Au rang des comparaisons : Niveau ENTRE 10 ET 90 AND Marche.",
+     "Normal := Pression ENTRE 0.5 ET 3.5;", "Normal = Pression >= 0.5f && Pression <= 3.5f;", "Normal = Pression >= 0.5f && Pression <= 3.5f;", ("BOOL", "Niveau ENTRE 40 ET 50", "TRUE")),
 ]
 INSTR = [
     ("IF", "Si", "IF cond THEN ... ELSIF cond THEN ... ELSE ... END_IF", "IF Pression > 3.5 THEN\n    Alarme := TRUE;\nELSIF Pression < 0.5 THEN\n    Vide := TRUE;\nELSE\n    Alarme := FALSE;\nEND_IF",
      "if (Pression > 3.5f) {\n    Alarme = 1;\n} else if (Pression < 0.5f) {\n    Vide = 1;\n} else {\n    Alarme = 0;\n}", "if (Pression > 3.5f) {\n    Alarme = true;\n} else if (Pression < 0.5f) {\n    Vide = true;\n} else {\n    Alarme = false;\n}"),
-    ("CASE", "Selon", "CASE x OF 1: ... 2, 3: ... 4..9: ... ELSE ... END_CASE", "CASE Mode OF\n    T_MODE#Auto: Texte := 'Automatique';\n    T_MODE#Manu: Texte := 'Manuel';\nELSE\n    Texte := '?';\nEND_CASE",
+    ("CASE", "Selon", "CASE x OF 1: ... 2, 3: ... 4..9: ... -5..-1: ... ELSE ... END_CASE ; sur un texte : 'Auto': ... ; sur une énumération : T_MODE#Auto: ...", "CASE Mode OF\n    T_MODE#Auto: Texte := 'Automatique';\n    T_MODE#Manu: Texte := 'Manuel';\nELSE\n    Texte := '?';\nEND_CASE",
      "switch (Mode) {\n    case MODE_AUTO: strcpy(Texte, \"Automatique\"); break;\n    case MODE_MANU: strcpy(Texte, \"Manuel\"); break;\n    default: strcpy(Texte, \"?\");\n}", "switch (Mode) {\n    case T_MODE::Auto: Texte = \"Automatique\"; break;\n    case T_MODE::Manu: Texte = \"Manuel\"; break;\n    default: Texte = \"?\";\n}"),
     ("FOR", "Pour", "FOR i := début TO fin BY pas DO ... END_FOR", "FOR i := 1 TO 5 DO\n    Somme := Somme + Tab[i];\nEND_FOR", "for (i = 1; i <= 5; ++i)\n    Somme += Tab[i];", "for (int i = 1; i <= 5; ++i)\n    Somme += Tab[i];"),
     ("FOR EACH", "Pour chaque", "FOR EACH v IN tableau DO ... ; FOR EACH cle, valeur IN map DO ...", "FOR EACH cle, qte IN Stock DO\n    Total := Total + qte;\nEND_FOR", "/* pas d'équivalent : une boucle sur les indices */", "for (auto& [cle, qte] : stock)\n    total += qte;"),
     ("WHILE", "Tant que", "WHILE cond DO ... END_WHILE", "WHILE i < 10 AND Tab[i] <> 0 DO\n    i := i + 1;\nEND_WHILE", "while (i < 10 && Tab[i] != 0)\n    ++i;", "while (i < 10 && Tab[i] != 0)\n    ++i;"),
     ("REPEAT", "Répéter", "REPEAT ... UNTIL cond END_REPEAT", "REPEAT\n    i := i + 1;\nUNTIL Tab[i] = 0 END_REPEAT", "do {\n    ++i;\n} while (Tab[i] != 0);", "do {\n    ++i;\n} while (Tab[i] != 0);"),
     ("EXIT", "Sortir", "Quitte la boucle en cours.", "FOR i := 1 TO 5 DO\n    IF Tab[i] = 0 THEN EXIT; END_IF\nEND_FOR", "if (Tab[i] == 0) break;", "if (Tab[i] == 0) break;"),
+    # 1.12.1
+    ("CONTINUE", "Continuer", "Passe au tour suivant de la boucle en cours (FOR, FOR EACH, WHILE, REPEAT).", "FOR i := 1 TO 5 DO\n    IF Tab[i] = 0 THEN CONTINUE; END_IF\n    Compteur := Compteur + 100 / Tab[i];\nEND_FOR",
+     "for (i = 1; i <= 5; ++i) {\n    if (Tab[i] == 0) continue;\n    Compteur += 100 / Tab[i];\n}", "for (int i = 1; i <= 5; ++i) {\n    if (Tab[i] == 0) continue;\n    Compteur += 100 / Tab[i];\n}"),
+    ("TRY", "Essayer", "TRY ... CATCH Erreur ... END_TRY : une erreur du bloc (division par zéro, nom inconnu, case hors du tableau, ASSERT faux) n'arrête plus le script ; le CATCH s'exécute, son message dans la variable STRING nommée après CATCH (facultative).",
+     "TRY\n    Compteur := 100 / Compteur;\nCATCH Texte\n    Compteur := 0;\n    IHM_LOG(NIVEAU_LOG#WARNING, Texte);\nEND_TRY",
+     "/* pas d'équivalent en C : tester avant */\nif (Compteur != 0) Compteur = 100 / Compteur; else Compteur = 0;",
+     "try {\n    Compteur = 100 / Compteur;   // une division entière par zéro ne lève rien en C++ : tester avant\n} catch (const std::exception& e) {\n    Compteur = 0;\n}"),
+    ("ASSERT", "Vérifier", "ASSERT(condition, 'message') : faux, une erreur - le script s'arrête, la Console et les Diagnostics disent le message (dans un TRY : son CATCH) ; vrai, rien.",
+     "ASSERT(Niveau ENTRE 0 ET 100, 'niveau hors de 0..100');", "assert(Niveau >= 0.0f && Niveau <= 100.0f);   /* <assert.h> */", "assert(Niveau >= 0.0f && Niveau <= 100.0f);   // <cassert>"),
     ("RETURN", "Retour", "Quitte le script ou la fonction.", "IF NOT Marche THEN RETURN; END_IF", "if (!Marche) return;", "if (!Marche) return;"),
     ("VAR … END_VAR", "Déclarations", "VAR, VAR_TEMP, VAR CONSTANT ; dans une fonction aussi VAR_INPUT, VAR_IN_OUT, VAR_OUTPUT.", "VAR\n    Total : REAL;       (* gardée d'un appel à l'autre *)\nEND_VAR\nVAR_TEMP\n    i : INT;\nEND_VAR",
      "static float Total;   /* gardée */\nint16_t i;", "static float Total;   // gardée\nint16_t i;"),
+]
+
+# ------------------------------------------------------- les generiques (1.12.1) --
+#  nom, ses types, ou on le lit. Ils ne se declarent pas : ils disent, dans la
+#  signature d'une native, ce qu'un parametre accepte (ABS(IN : ANY_NUM)).
+GENERIQUES = [
+    ("ANY", "tous les types", "Un paramètre de popup ou de symbole qui accepte toute valeur ; LIMIT, SEL, MIN, MAX rendent le type de leur entrée."),
+    ("ANY_ELEMENTARY", "les 22 types de base", "Une valeur simple, ni tableau, ni structure, ni MAP."),
+    ("ANY_NUM", "SINT, INT, DINT, LINT, USINT, UINT, UDINT, ULINT, REAL, LREAL", "Un nombre : ABS, les comparaisons, + - * / **."),
+    ("ANY_INT", "SINT, INT, DINT, LINT, USINT, UINT, UDINT, ULINT", "Un entier : MOD, les bornes d'un FOR, un indice de tableau, RANDOM_INT."),
+    ("ANY_REAL", "REAL, LREAL", "Un réel : SQRT, LN, LOG, EXP, SIN, COS, TAN..."),
+    ("ANY_BIT", "BOOL, BYTE, WORD, DWORD, LWORD", "Des bits : AND, OR, XOR, NOT bit à bit, SHL, SHR, ROL, ROR."),
+    ("ANY_STRING", "STRING, WSTRING, CHAR", "Un texte : LEN, LEFT, RIGHT, MID, CONCAT, FIND, TO_UPPER..."),
+    ("ANY_DATE", "DATE, TIME_OF_DAY, DATE_AND_TIME", "Une date ou une heure : DT_TO_DATE, DT_TO_TOD, CONCAT_DATE_TOD, les comparaisons."),
 ]
 
 LITERALS = {
@@ -620,6 +672,10 @@ LITERALS = {
     "UDINT": ["4000000000", "UDINT#7"], "ULINT": ["ULINT#5"], "BYTE": ["16#FF", "BYTE#65"], "WORD": ["16#00F0", "2#0000_1111_0000_0000"],
     "DWORD": ["16#DEAD_BEEF"], "LWORD": ["16#FF"], "REAL": ["3.14", "-0.5", "1.5E3", "REAL#1"], "LREAL": ["3.141592653589793", "LREAL#1.5"],
     "STRING": ["'texte'", "''", "'l$'armoire'", "'ligne 1$Nligne 2'", "'5 $$'"], "TIME": ["T#5s", "T#1m30s", "T#250ms", "TIME#1h", "T#1d2h"],
+    # 1.12.1
+    "CHAR": ["'A'", "'$N'"], "WSTRING": ["'texte'", "'été'"],
+    "DATE": ["D#2026-10-09", "DATE#2026-01-01"], "TIME_OF_DAY": ["TOD#14:30:00", "TOD#06:00", "TIME_OF_DAY#23:59:59.5"],
+    "DATE_AND_TIME": ["DT#2026-10-09-14:30:00", "DATE_AND_TIME#2026-01-01-00:00:00"],
 }
 
 # ------------------------------------------------------------ les types, en plus du registre --
@@ -659,6 +715,22 @@ TYPE_EXTRA = {
     "TIME": {"c": "uint32_t   /* des ms */", "cpp": "TIME (std::chrono::milliseconds)", "def": "T#0ms", "modbus": "2 mots (%MD)",
              "notes": ["Une durée en millisecondes sur 32 bits. Pas de durée négative : T#-5s est refusé.",
                        "L'affichage du moteur compte en millisecondes (T#5000ms) ; {d:t} l'écrit lisiblement (2 min 05 s)."]},
+    # 1.12.1
+    "CHAR": {"c": "char", "cpp": "CHAR (char)", "def": "''", "modbus": "—",
+             "notes": ["Un texte d'un caractère pour l'IHM : une STRING le reçoit ; vers CHAR, le premier caractère.",
+                       "Pas une variable IHM (pas de place Modbus) : une locale, un paramètre, un opérande."]},
+    "WSTRING": {"c": "wchar_t[33]", "cpp": "WSTRING (std::wstring)", "def": "''", "modbus": "—",
+                "notes": ["L'IHM écrit ses textes en UTF-8 : WSTRING et STRING s'échangent sans conversion.",
+                          "Pas une variable IHM (pas de place Modbus) : une locale, un paramètre, un opérande."]},
+    "DATE": {"c": "time_t   /* minuit */", "cpp": "DATE (std::chrono::sys_days)", "def": "D#1970-01-01", "modbus": "—",
+             "notes": ["DATE - DATE est une durée (TIME) ; DT_TO_DATE(dt) en tire la date.",
+                       "Pas une variable IHM (pas de place Modbus) : une locale, un paramètre, un opérande."]},
+    "TIME_OF_DAY": {"c": "uint32_t   /* ms depuis minuit */", "cpp": "TIME_OF_DAY (std::chrono::milliseconds)", "def": "TOD#00:00:00", "modbus": "—",
+                    "notes": ["Son nom court : TOD. TOD + TIME tourne sur 24 h (TOD#23:00:00 + T#2h = TOD#01:00:00) ; TOD - TOD est une durée.",
+                              "Pas une variable IHM (pas de place Modbus) : une locale, un paramètre, un opérande."]},
+    "DATE_AND_TIME": {"c": "time_t", "cpp": "DATE_AND_TIME (std::chrono::system_clock::time_point)", "def": "DT#1970-01-01-00:00:00", "modbus": "—",
+                      "notes": ["Son nom court : DT. DT + TIME, DT - TIME, DT - DT (une durée) ; MAINTENANT() la donne.",
+                                "Pas une variable IHM (pas de place Modbus) : une locale, un paramètre, un opérande."]},
 }
 
 # Les types construits : (nom, exemple, ce que c'est, C, C++, ST)

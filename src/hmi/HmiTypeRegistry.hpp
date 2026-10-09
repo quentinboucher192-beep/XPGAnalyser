@@ -87,7 +87,8 @@ enum Use : unsigned {
 };
 
 // ---- un nombre -----------------------------------------------------------------------
-enum class Family : std::uint8_t { None, Bool, Integer, Real, String, Time };
+enum class Family : std::uint8_t { None, Bool, Integer, Real, String, Time,
+                                   Date };   // 1.12.1 : DATE, TIME_OF_DAY, DATE_AND_TIME
 struct Numeric {
     Family      family{Family::None};
     int         bits{0};            // entier : 8, 16, 32, 64 ; reel : 32 (REAL), 64 (LREAL)

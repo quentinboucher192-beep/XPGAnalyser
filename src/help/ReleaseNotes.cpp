@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.12.1", "10/10/2026", "livr\xC3\xA9" "e le 10/10 en fin de nuit"},
     {"1.12.0", "10/10/2026", "livr\xC3\xA9" "e le 10/10 dans la nuit"},
     {"1.11.24", "09/10/2026", "livr\xC3\xA9" "e le 09/10 en fin de soir\xC3\xA9" "e"},
     {"1.11.23", "09/10/2026", "livr\xC3\xA9" "e le 09/10 en soir\xC3\xA9" "e"},
@@ -106,6 +107,20 @@ const std::vector<Note>& table() {
     static const std::vector<Note> t = {
         // 1.11.16 (09/10/2026 dans la nuit) : la remanence d'exploitation par variable, la robustesse
         // (lot 4 de la specification du 08/10).
+        // 1.12.1 (10/10/2026 en fin de nuit) : les enumerations natives des objets, les operateurs,
+        // les instructions et les types de la liste du 10/10.
+        note("1.12.1", "Natives", Kind::New,
+         "LES \xC3\x89NUM\xC3\x89RATIONS DES OBJETS : 52 nouvelles \xC3\xA9num\xC3\xA9rations natives (59 en tout), une par liste fixe de l'inspecteur - POLICE, ALIGNEMENT, ORIENTATION, FORME_VOYANT, STYLE_SELECTEUR, MODE_COURBE, SOURCE_HISTORIQUE, LECTURE_GIF... - et JOUR, MOIS, QUALITE, ETAT_MOTEUR, MODE_MARCHE pour les scripts. Dans la case \xC6\x92 d'une propri\xC3\xA9t\xC3\xA9, ALIGNEMENT#Centre (ou SEL(Defaut, ALIGNEMENT#Gauche, ALIGNEMENT#Centre)) : l'objet re\xC3\xA7oit le mot de la liste. Compiler et la pastille \xC6\x92 refusent la valeur d'une autre \xC3\xA9num\xC3\xA9ration ; l'aide \xC3\xA0 la saisie propose les valeurs ; la fiche de chaque \xC3\xA9num\xC3\xA9ration dit o\xC3\xB9 elle sert. TRANSITION, ONGLET_CONNEXION (+ Connexion) et SOURCE_EXPORT (+ Audit) servent aussi la barre de navigation, le menu de connexion et le bouton d'export.",
+         "reference", ""),
+        note("1.12.1", "Natives", Kind::New,
+         "LES OP\xC3\x89RATEURS : c ? a : b (seul le c\xC3\xB4t\xC3\xA9 choisi est lu : x <> 0 ? 100 / x : 0), a ?? b (b quand a ne se lit pas : une division par z\xC3\xA9ro, une case hors du tableau, une cl\xC3\xA9 absente, NULL), x IN [1, 3, 5..9] (des nombres, des textes, des valeurs d'\xC3\xA9num\xC3\xA9ration), x ENTRE 0 ET 100 (bornes comprises) ; & s'\xC3\xA9" "crit pour AND. Dans les scripts, les fonctions, les cases \xC6\x92 et les textes \xC3\xA0 trous ; le ST de l'automate ne change pas.",
+         "reference", ""),
+        note("1.12.1", "Natives", Kind::New,
+         "LES INSTRUCTIONS : CONTINUE (le tour suivant de la boucle), TRY ... CATCH Erreur ... END_TRY (une erreur du bloc n'arr\xC3\xAAte plus le script : le CATCH s'ex\xC3\xA9" "cute, son message en fran\xC3\xA7" "ais dans Erreur ; une boucle sans fin arr\xC3\xAAte toujours tout), ASSERT(condition, 'message') (faux : le script s'arr\xC3\xAAte, la Console le dit) ; CASE sur un texte ('Auto':) et sur des nombres n\xC3\xA9gatifs (-5..-1:).",
+         "reference", ""),
+        note("1.12.1", "Natives", Kind::New,
+         "LES TYPES : CHAR et WSTRING (des textes), DATE, TIME_OF_DAY (TOD) et DATE_AND_TIME (DT), leurs litt\xC3\xA9raux (D#2026-10-09, TOD#14:30:00, DT#2026-10-09-14:30:00) et leur calcul (DT + TIME, DT - DT, TOD + TIME sur 24 h, DATE - DATE) ; MAINTENANT(), DT_TO_DATE, DT_TO_TOD, CONCAT_DATE_TOD. Des locales, des param\xC3\xA8tres, des op\xC3\xA9randes (pas encore des variables IHM). Les g\xC3\xA9n\xC3\xA9riques ANY_NUM, ANY_INT, ANY_REAL, ANY_BIT, ANY_STRING, ANY_DATE expliqu\xC3\xA9s dans la fiche des types (F1 sur leur nom).",
+         "reference", ""),
         // 1.12.0 (10/10/2026 dans la nuit) : deux applications (XPGAnalyser API, XPGAnalyser IHM), les
         // projets separes, l'IHM sans automate, les natives (la branche, les fiches), les couleurs,
         // l'aleatoire et les enumerations natives.

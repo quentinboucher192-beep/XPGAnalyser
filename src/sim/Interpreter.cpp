@@ -97,6 +97,28 @@ public:
                 auto word = std::string(src_.substr(begin, pos_ - begin));
                 const auto upper = upperOf(word);
 
+                // 1.12.1 (dialecte IHM) : D#2026-10-09, TOD#14:30:00, DT#2026-10-09-14:30:00 (et
+                // DATE#, TIME_OF_DAY#, DATE_AND_TIME#).
+                if (dialect_ && pos_ + 1 < src_.size() && src_[pos_] == '#' && std::isdigit(static_cast<unsigned char>(src_[pos_ + 1]))) {
+                    const Type dateType = upper == "D" || upper == "DATE" ? Type::Date
+                                        : upper == "TOD" || upper == "TIME_OF_DAY" ? Type::Tod
+                                        : upper == "DT" || upper == "DATE_AND_TIME" ? Type::Dt : Type::Unknown;
+                    if (dateType != Type::Unknown) {
+                        auto end = pos_ + 1;
+                        while (end < src_.size() && (std::isdigit(static_cast<unsigned char>(src_[end])) || src_[end] == '-' || src_[end] == ':'
+                                                     || src_[end] == '.'))
+                            ++end;
+                        while (end > pos_ + 1 && (src_[end - 1] == '-' || src_[end - 1] == ':' || src_[end - 1] == '.')) --end;   // DT#...-T#1h
+                        const auto body = src_.substr(pos_ + 1, end - pos_ - 1);
+                        std::int64_t ms = 0;
+                        if (!parseDateText(dateType, body, ms))
+                            return core::fail(core::ErrorCode::InvalidArgument,
+                                              "line " + std::to_string(startLine) + ": bad date literal '" + word + "#" + std::string(body) + "'");
+                        pos_ = end;
+                        out.push_back(Token{Tok::TimeLiteral, "", "", startLine, Value::integer(dateType, ms)});
+                        continue;
+                    }
+                }
                 // 1.10 (dialecte IHM) : un litteral d'enumeration T_MODE#Auto - un nom,
                 // lu par l'environnement (ni T#, ni TIME#, ni 16#, ni INT#3).
                 if (dialect_ && pos_ + 1 < src_.size() && src_[pos_] == '#' && identStart(src_[pos_ + 1])
@@ -305,8 +327,9 @@ public:
             }
             if (matched) continue;
             // 1.10 (dialecte IHM) : += -= *= /= et le dereferencement p^.
+            // 1.12.1 : ?? (une valeur de secours) et ? (c ? a : b).
             if (dialect_) {
-                for (std::string_view op : {"+=", "-=", "*=", "/="}) {
+                for (std::string_view op : {"+=", "-=", "*=", "/=", "??"}) {
                     if (src_.compare(pos_, 2, op) == 0) {
                         out.push_back(Token{Tok::Punct, std::string(op), std::string(op), startLine, {}});
                         pos_ += 2;
@@ -315,8 +338,13 @@ public:
                     }
                 }
                 if (matched) continue;
-                if (c == '^') {
-                    out.push_back(Token{Tok::Punct, "^", "^", startLine, {}});
+                if (c == '^' || c == '?') {
+                    out.push_back(Token{Tok::Punct, std::string(1, c), std::string(1, c), startLine, {}});
+                    ++pos_;
+                    continue;
+                }
+                if (c == '&') {                                 // 1.12.1 : & s'ecrit pour AND (la fiche le disait)
+                    out.push_back(Token{Tok::Keyword, "AND", "&", startLine, {}});
                     ++pos_;
                     continue;
                 }
@@ -374,6 +402,10 @@ struct Expr {
     enum class Kind : std::uint8_t {
         Literal, Reference, Unary, Binary, Call, Index, Member,
         Deref, Null,          // 1.10 (dialecte IHM) : p^, NULL
+        // 1.12.1 (dialecte IHM) : c ? a : b (lhs, rhs, rhs2) ; a ?? b (lhs, rhs) ;
+        // x IN [a, b, c..d] (lhs, more : une plage est un Between sans lhs) ;
+        // x ENTRE a ET b (lhs, rhs, rhs2).
+        Conditional, Coalesce, InList, Between,
     };
     Kind          kind{Kind::Literal};
     Value         literal;
@@ -403,12 +435,15 @@ struct CaseArm {
     std::vector<std::pair<std::int64_t, std::int64_t>> ranges;   // inclusive
     std::vector<StmtPtr> body;
     std::vector<std::string> names;   // 1.10 (dialecte IHM) : T_MODE#Auto, lus a l'execution
+    std::vector<std::string> texts;   // 1.12.1 (dialecte IHM) : 'Auto': un CASE sur un texte
 };
 
 struct Stmt {
     enum class Kind : std::uint8_t {
         Assign, Call, If, Case, For, While, Repeat, Exit, Return,
         ForEach,              // 1.10 (dialecte IHM) : FOR EACH k, v IN m DO ... END_FOR
+        // 1.12.1 (dialecte IHM) : CONTINUE ; TRY body CATCH [loopVariable] elseBody END_TRY.
+        Continue, Try,
     };
     Kind          kind{Kind::Assign};
     ExprPtr       target, value, condition;
@@ -619,6 +654,16 @@ private:
         if (atKeyword("FOR"))    return forStatement();
         if (atKeyword("WHILE"))  return whileStatement();
         if (atKeyword("REPEAT")) return repeatStatement();
+        // 1.12.1 (dialecte IHM) : CONTINUE (le tour suivant de la boucle) ; TRY ... CATCH ... END_TRY.
+        if (dialect_ && atWord("CONTINUE") && !(peek(1).kind == Tok::Punct && (peek(1).text == ":=" || peek(1).text == "("))) {
+            if (loops_ == 0) return error("CONTINUE is only allowed inside a loop (FOR, WHILE, REPEAT)");
+            auto s = std::make_shared<Stmt>();
+            s->kind = Stmt::Kind::Continue;
+            s->line = advance().line;
+            accept(";");
+            return s;
+        }
+        if (dialect_ && atWord("TRY") && !(peek(1).kind == Tok::Punct && (peek(1).text == ":=" || peek(1).text == "("))) return tryStatement();
         if (atKeyword("EXIT")) {
             auto s = std::make_shared<Stmt>();
             s->kind = Stmt::Kind::Exit;
@@ -696,6 +741,12 @@ private:
         if (dialect_ && peek().kind == Tok::Identifier && peek(1).kind == Tok::Punct
             && (peek(1).text == ":" || peek(1).text == ","))
             return true;
+        // 1.12.1 : 'Auto': (un texte) ; -5: et -10..-1: (un nombre negatif).
+        if (dialect_ && peek().kind == Tok::StringLiteral && peek(1).kind == Tok::Punct && (peek(1).text == ":" || peek(1).text == ","))
+            return true;
+        if (dialect_ && peek().kind == Tok::Punct && peek().text == "-" && peek(1).kind == Tok::Number && peek(2).kind == Tok::Punct
+            && (peek(2).text == ":" || peek(2).text == ".." || peek(2).text == ","))
+            return true;
         return peek().kind == Tok::Number && peek(1).kind == Tok::Punct
             && (peek(1).text == ":" || peek(1).text == ".." || peek(1).text == ",");
     }
@@ -742,6 +793,34 @@ private:
         return s;
     }
 
+    // 1.12.1 (dialecte IHM) : TRY ... CATCH [Erreur] ... END_TRY. Une erreur du corps (une
+    // division par zero, un nom inconnu, une case hors du tableau, ASSERT) n'arrete plus le
+    // script : le CATCH s'execute, le message dans la variable STRING nommee apres CATCH.
+    core::Result<StmtPtr> tryStatement() {
+        auto s = std::make_shared<Stmt>();
+        s->kind = Stmt::Kind::Try;
+        s->line = advance().line;                       // TRY
+        auto body = block({"CATCH", "END_TRY"});
+        if (!body) return core::Err<core::Error>(body.error());
+        s->body = *body;
+        if (atWord("CATCH")) {
+            const auto catchLine = advance().line;
+            // CATCH Erreur : un nom seul sur la ligne du CATCH (ou suivi de ';') - pas
+            // le debut d'une instruction (CATCH Etat := 0;).
+            if (peek().kind == Tok::Identifier && peek().line == catchLine
+                && (peek(1).line != catchLine || peek(1).kind == Tok::End || (peek(1).kind == Tok::Punct && peek(1).text == ";"))) {
+                s->loopVariable = advance().raw;
+                accept(";");
+            }
+            auto handler = block({"END_TRY"});
+            if (!handler) return core::Err<core::Error>(handler.error());
+            s->elseBody = *handler;
+        }
+        if (!acceptWord("END_TRY")) return error("expected END_TRY");
+        accept(";");
+        return s;
+    }
+
     core::Result<StmtPtr> caseStatement() {
         auto s = std::make_shared<Stmt>();
         s->kind = Stmt::Kind::Case;
@@ -759,12 +838,19 @@ private:
                     if (!accept(",")) break;
                     continue;
                 }
+                if (dialect_ && peek().kind == Tok::StringLiteral) {      // 1.12.1 : 'Auto':
+                    arm.texts.push_back(advance().literal.asString());
+                    if (!accept(",")) break;
+                    continue;
+                }
+                const bool negative = dialect_ && accept("-");             // 1.12.1 : -10..-1:
                 if (peek().kind != Tok::Number) return error("expected a case label");
-                const auto low = advance().literal.asInteger();
+                const auto low = (negative ? -1 : 1) * advance().literal.asInteger();
                 std::int64_t high = low;
                 if (accept("..")) {
+                    const bool below = dialect_ && accept("-");
                     if (peek().kind != Tok::Number) return error("expected the end of the range");
-                    high = advance().literal.asInteger();
+                    high = (below ? -1 : 1) * advance().literal.asInteger();
                 }
                 arm.ranges.emplace_back(low, high);
                 if (!accept(",")) break;
@@ -805,7 +891,9 @@ private:
             if (!from) return core::Err<core::Error>(from.error());
             s->from = *from;
             if (!acceptKeyword("DO")) return error("expected DO");
+            ++loops_;
             auto body = block({"END_FOR"});
+            --loops_;
             if (!body) return core::Err<core::Error>(body.error());
             s->body = *body;
             if (!acceptKeyword("END_FOR")) return error("expected END_FOR");
@@ -828,7 +916,9 @@ private:
             s->step = *step;
         }
         if (!acceptKeyword("DO")) return error("expected DO");
+        ++loops_;
         auto body = block({"END_FOR"});
+        --loops_;
         if (!body) return core::Err<core::Error>(body.error());
         s->body = *body;
         if (!acceptKeyword("END_FOR")) return error("expected END_FOR");
@@ -844,7 +934,9 @@ private:
         if (!cond) return core::Err<core::Error>(cond.error());
         s->condition = *cond;
         if (!acceptKeyword("DO")) return error("expected DO");
+        ++loops_;
         auto body = block({"END_WHILE"});
+        --loops_;
         if (!body) return core::Err<core::Error>(body.error());
         s->body = *body;
         if (!acceptKeyword("END_WHILE")) return error("expected END_WHILE");
@@ -856,7 +948,9 @@ private:
         auto s = std::make_shared<Stmt>();
         s->kind = Stmt::Kind::Repeat;
         s->line = advance().line;
+        ++loops_;
         auto body = block({"UNTIL"});
+        --loops_;
         if (!body) return core::Err<core::Error>(body.error());
         s->body = *body;
         if (!acceptKeyword("UNTIL")) return error("expected UNTIL");
@@ -869,7 +963,43 @@ private:
     }
 
     // --- expressions, lowest precedence first ------------------------------
-    core::Result<ExprPtr> expression() { return orExpr(); }
+    core::Result<ExprPtr> expression() { return dialect_ ? conditionalExpr() : orExpr(); }
+
+    // 1.12.1 (dialecte IHM) : c ? a : b, le plus faible (a droite : c ? a : d ? e : f) ;
+    // puis a ?? b (b quand a ne se lit pas : un nom inconnu, une division par zero, NULL).
+    core::Result<ExprPtr> conditionalExpr() {
+        auto cond = coalesceExpr();
+        if (!cond || !atPunct("?")) return cond;
+        const auto line = advance().line;
+        auto yes = conditionalExpr();
+        if (!yes) return yes;
+        if (!accept(":")) return error("expected ':' after the value of '?' (c ? a : b)");
+        auto no = conditionalExpr();
+        if (!no) return no;
+        auto node = std::make_shared<Expr>();
+        node->kind = Expr::Kind::Conditional;
+        node->lhs  = *cond;
+        node->rhs  = *yes;
+        node->rhs2 = *no;
+        node->line = line;
+        return node;
+    }
+    core::Result<ExprPtr> coalesceExpr() {
+        auto lhs = orExpr();
+        if (!lhs) return lhs;
+        while (atPunct("??")) {
+            const auto line = advance().line;
+            auto rhs = orExpr();
+            if (!rhs) return rhs;
+            auto node = std::make_shared<Expr>();
+            node->kind = Expr::Kind::Coalesce;
+            node->lhs  = *lhs;
+            node->rhs  = *rhs;
+            node->line = line;
+            lhs = node;
+        }
+        return lhs;
+    }
 
     core::Result<ExprPtr> binaryLevel(
         const std::vector<std::string_view>& ops,
@@ -900,7 +1030,53 @@ private:
     core::Result<ExprPtr> xorExpr()     { return binaryLevel({"XOR"}, &Parser::andExpr); }
     core::Result<ExprPtr> andExpr()     { return binaryLevel({"AND"}, &Parser::compareExpr); }
     core::Result<ExprPtr> compareExpr() {
-        return binaryLevel({"=", "<>", "<", ">", "<=", ">="}, &Parser::addExpr);
+        auto lhs = binaryLevel({"=", "<>", "<", ">", "<=", ">="}, &Parser::addExpr);
+        if (!lhs || !dialect_) return lhs;
+        // 1.12.1 (dialecte IHM) : x IN [1, 3, 5..9] ; x ENTRE 0 ET 100 (bornes comprises).
+        if (atWord("IN") && peek(1).kind == Tok::Punct && peek(1).text == "[") {
+            const auto line = advance().line;
+            advance();                                          // [
+            auto node = std::make_shared<Expr>();
+            node->kind = Expr::Kind::InList;
+            node->lhs  = *lhs;
+            node->line = line;
+            if (!atPunct("]"))
+                for (;;) {
+                    auto item = addExpr();
+                    if (!item) return item;
+                    if (accept("..")) {
+                        auto high = addExpr();
+                        if (!high) return high;
+                        auto range = std::make_shared<Expr>();
+                        range->kind = Expr::Kind::Between;
+                        range->rhs  = *item;
+                        range->rhs2 = *high;
+                        range->line = line;
+                        node->more.push_back(range);
+                    } else {
+                        node->more.push_back(*item);
+                    }
+                    if (!accept(",")) break;
+                }
+            if (!accept("]")) return error("expected ']' at the end of the list of IN");
+            return node;
+        }
+        if (atWord("ENTRE")) {
+            const auto line = advance().line;
+            auto low = addExpr();
+            if (!low) return low;
+            if (!acceptWord("ET")) return error("expected ET (x ENTRE a ET b)");
+            auto high = addExpr();
+            if (!high) return high;
+            auto node = std::make_shared<Expr>();
+            node->kind = Expr::Kind::Between;
+            node->lhs  = *lhs;
+            node->rhs  = *low;
+            node->rhs2 = *high;
+            node->line = line;
+            return node;
+        }
+        return lhs;
     }
     core::Result<ExprPtr> addExpr()     { return binaryLevel({"+", "-"}, &Parser::mulExpr); }
     core::Result<ExprPtr> mulExpr()     { return binaryLevel({"*", "/", "MOD"}, &Parser::powerExpr); }
@@ -1056,7 +1232,8 @@ private:
     // ---- 1.10 : le dialecte IHM ---------------------------------------------
     // La fin d'un bloc (RETURN seul en fin de branche : "RETURN END_IF").
     [[nodiscard]] bool atBlockEnd() const {
-        for (std::string_view w : {"END_IF", "ELSIF", "ELSE", "END_CASE", "END_FOR", "END_WHILE", "UNTIL", "END_REPEAT", "END_FUNCTION"})
+        for (std::string_view w : {"END_IF", "ELSIF", "ELSE", "END_CASE", "END_FOR", "END_WHILE", "UNTIL", "END_REPEAT", "END_FUNCTION",
+                                   "CATCH", "END_TRY"})
             if (atWord(w)) return true;
         return false;
     }
@@ -1321,6 +1498,7 @@ private:
     std::string        section_;
     std::size_t        pos_{0};
     bool               dialect_{false};
+    int                loops_{0};          // 1.12.1 : la profondeur de boucle (CONTINUE)
 };
 
 } // namespace
@@ -1350,6 +1528,9 @@ std::string valueTypeName(Type t) {
         case Type::Real:   return "REAL";
         case Type::Time:   return "TIME";
         case Type::String: return "STRING";
+        case Type::Date:   return "DATE";            // 1.12.1
+        case Type::Tod:    return "TIME_OF_DAY";
+        case Type::Dt:     return "DATE_AND_TIME";
         case Type::Unknown: break;
     }
     return {};
@@ -1395,6 +1576,15 @@ std::string exprText(const Expr& e, int depth = 0) {
         case Expr::Kind::Binary:
             return (e.lhs ? exprText(*e.lhs, depth + 1) : std::string{}) + " " + e.op + " " + (e.rhs ? exprText(*e.rhs, depth + 1) : std::string{});
         case Expr::Kind::Call: return (e.lhs ? exprText(*e.lhs, depth + 1) : std::string{}) + "(...)";
+        case Expr::Kind::Conditional:
+            return (e.lhs ? exprText(*e.lhs, depth + 1) : std::string{}) + " ? " + (e.rhs ? exprText(*e.rhs, depth + 1) : std::string{}) + " : "
+                 + (e.rhs2 ? exprText(*e.rhs2, depth + 1) : std::string{});
+        case Expr::Kind::Coalesce:
+            return (e.lhs ? exprText(*e.lhs, depth + 1) : std::string{}) + " ?? " + (e.rhs ? exprText(*e.rhs, depth + 1) : std::string{});
+        case Expr::Kind::InList: return (e.lhs ? exprText(*e.lhs, depth + 1) : std::string{}) + " IN [...]";
+        case Expr::Kind::Between:
+            return (e.lhs ? exprText(*e.lhs, depth + 1) + " ENTRE " : std::string{}) + (e.rhs ? exprText(*e.rhs, depth + 1) : std::string{})
+                 + (e.lhs ? " ET " : "..") + (e.rhs2 ? exprText(*e.rhs2, depth + 1) : std::string{});
     }
     return "...";
 }
@@ -1442,6 +1632,15 @@ public:
             case Expr::Kind::Unary: return e.lhs ? typeOf(*e.lhs, depth + 1) : std::string{};
             case Expr::Kind::Binary: return binaryType(e, depth);
             case Expr::Kind::Call: return callType(e, depth);
+            case Expr::Kind::Conditional:
+            case Expr::Kind::Coalesce: {                        // le type d'un cote, sinon de l'autre
+                std::string t = e.rhs ? typeOf(*e.rhs, depth + 1) : std::string{};
+                if (t.empty()) t = e.kind == Expr::Kind::Conditional ? (e.rhs2 ? typeOf(*e.rhs2, depth + 1) : std::string{})
+                                                                     : (e.lhs ? typeOf(*e.lhs, depth + 1) : std::string{});
+                return t;
+            }
+            case Expr::Kind::InList:
+            case Expr::Kind::Between: return "BOOL";
         }
         return {};
     }
@@ -1493,6 +1692,16 @@ private:
         if (a == "STRING" || b == "STRING") return op == "+" ? "STRING" : std::string{};
         if (a == "LREAL" || b == "LREAL") return "LREAL";
         if (a == "REAL" || b == "REAL") return "REAL";
+        // 1.12.1 : DT + TIME (DT), DT - DT (TIME), TOD + TIME (TOD), DATE - DATE (TIME).
+        const auto dateName = [](const std::string& n) {
+            return n == "DATE" || n == "TIME_OF_DAY" || n == "TOD" || n == "DATE_AND_TIME" || n == "DT";
+        };
+        if (dateName(a) || dateName(b)) {
+            if (dateName(a) && b == "TIME") return a;
+            if (a == "TIME" && dateName(b) && op == "+") return b;
+            if (op == "-" && dateName(a) && dateName(b)) return "TIME";
+            return {};
+        }
         if (a == "TIME" || b == "TIME") return "TIME";
         const int x = integerBits(a), y = integerBits(b);
         if (!x || !y) return {};
@@ -1589,6 +1798,15 @@ private:
                 expr(e->lhs);
                 expr(e->rhs);
                 return;
+            case Expr::Kind::Conditional:                // 1.12.1
+            case Expr::Kind::Coalesce:
+            case Expr::Kind::InList:
+            case Expr::Kind::Between:
+                expr(e->lhs);
+                expr(e->rhs);
+                expr(e->rhs2);
+                for (const auto& m : e->more) expr(m);
+                return;
             case Expr::Kind::Call: {
                 CallSite c;
                 if (e->lhs) c.callee = e->lhs->kind == Expr::Kind::Reference ? e->lhs->name : dottedName(*e->lhs);
@@ -1638,7 +1856,7 @@ private:
     std::vector<CallSite>       sites_;
 };
 
-struct Flow { enum class Kind : std::uint8_t { Normal, Exit, Return, Aborted } kind{Kind::Normal}; };
+struct Flow { enum class Kind : std::uint8_t { Normal, Exit, Return, Aborted, Continue /* 1.12.1 */ } kind{Kind::Normal}; };
 
 // Lot API 8 : les noms d'une ligne (point d'arret) - une expression, ou le nom
 // d'une variable de boucle (FOR i := ...), dans l'ordre ou le code les ecrit.
@@ -1654,6 +1872,15 @@ void collectExpr(const ExprPtr& e, std::uint32_t line, std::vector<LineName>& ou
         case Expr::Kind::Binary:
             collectExpr(e->lhs, line, out);
             collectExpr(e->rhs, line, out);
+            return;
+        case Expr::Kind::Conditional:                    // 1.12.1
+        case Expr::Kind::Coalesce:
+        case Expr::Kind::InList:
+        case Expr::Kind::Between:
+            collectExpr(e->lhs, line, out);
+            collectExpr(e->rhs, line, out);
+            collectExpr(e->rhs2, line, out);
+            for (const auto& m : e->more) collectExpr(m, line, out);
             return;
         case Expr::Kind::Call:
             // Ce qu'on appelle n'a pas de valeur a lui (une fonction, une
@@ -1821,7 +2048,8 @@ private:
     void fail(std::uint32_t line, std::string message) {
         // Lot API 8 : une lecture au passage (point d'arret) ne dit rien au
         // journal et n'arrete pas le cycle : l'erreur revient en valeur.
-        if (probing_) return;
+        // 1.12.1 : le cote gauche de a ?? b non plus (son erreur choisit b).
+        if (probing_ || quiet_ > 0) return;
         // 1.10 : dans le dialecte IHM, le message seul (sans "invalid argument: ") ;
         // dans une fonction du projet, sa ligne a elle, l'appel a la ligne de l'appelant.
         if (dialect_) {
@@ -1831,6 +2059,14 @@ private:
                 message = "fonction " + calleeLabel_ + ", ligne " + std::to_string(line) + " : " + message;
                 line = calleeLine_;
             }
+        }
+        // 1.12.1 : dans un TRY, l'erreur est gardee pour son CATCH (pas au journal) - sauf une
+        // boucle sans fin, un cycle trop long : ceux-la arretent tout, comme avant.
+        if (catching_ > 0 && !caught_.any && message.find(" loop ran more than ") == std::string::npos
+            && message.find("the scan exceeded") == std::string::npos) {
+            caught_ = Caught{true, std::move(message), line};
+            aborted_ = true;
+            return;
         }
         env_.report(Diagnostic{Diagnostic::Severity::Error, std::move(message), line, section_});
         aborted_ = true;
@@ -1952,7 +2188,11 @@ private:
             case Expr::Kind::Binary:  return binary(e);
             case Expr::Kind::Call:    return call(e);
             case Expr::Kind::Deref:
-            case Expr::Kind::Null:    break;      // 1.10 : le dialecte seulement
+            case Expr::Kind::Null:                // 1.10 : le dialecte seulement
+            case Expr::Kind::Conditional:         // 1.12.1 : le dialecte seulement
+            case Expr::Kind::Coalesce:
+            case Expr::Kind::InList:
+            case Expr::Kind::Between: break;
         }
         return core::fail(core::ErrorCode::NotImplemented, "unsupported expression");
     }
@@ -1994,6 +2234,24 @@ private:
         if (a.type() == Type::String || b.type() == Type::String) {
             if (e.op == "+") return Value::text(a.asString() + b.asString());
             return core::fail(core::ErrorCode::InvalidArgument, "'" + e.op + "' on a string");
+        }
+
+        // 1.12.1 (le dialecte de l'IHM) : les dates. DT + TIME, DT - TIME, TOD + TIME (modulo un
+        // jour), TIME + DT ; DT - DT, DATE - DATE, TOD - TOD : une duree.
+        if (isDateType(a.type()) || isDateType(b.type())) {
+            constexpr std::int64_t kDay = 86400000;
+            const Type ta = a.type(), tb = b.type();
+            const auto x = a.asInteger(), y = b.asInteger();
+            const auto shifted = [&](Type t, std::int64_t r) {
+                return Value::integer(t, t == Type::Tod ? ((r % kDay) + kDay) % kDay : r);
+            };
+            if ((ta == Type::Dt || ta == Type::Tod) && tb == Type::Time && (e.op == "+" || e.op == "-"))
+                return shifted(ta, e.op == "+" ? x + y : x - y);
+            if (ta == Type::Time && (tb == Type::Dt || tb == Type::Tod) && e.op == "+") return shifted(tb, x + y);
+            if (ta == tb && e.op == "-") return Value::time(x - y);
+            return core::fail(core::ErrorCode::InvalidArgument,
+                              "'" + e.op + "' entre " + std::string(toString(ta)) + " et " + std::string(toString(tb))
+                                  + " : on \xC3\xA9" "crit DT + TIME, DT - TIME, TOD + TIME, DT - DT, DATE - DATE, TOD - TOD");
         }
 
         const bool useReal = a.type() == Type::Real || b.type() == Type::Real;
@@ -2250,6 +2508,14 @@ private:
             case Stmt::Kind::Case: {
                 auto selector = evaluate(*s.condition);
                 if (!selector) { if (!aborted_) fail(s.line, selector.error().message()); return {Flow::Kind::Aborted}; }
+                // 1.12.1 (dialecte IHM) : un CASE sur un texte - ses bras 'Auto', 'Manu': (a la casse pres).
+                if (dialect_ && selector->type() == Type::String) {
+                    const std::string text = selector->asString();
+                    for (const auto& arm : s.arms)
+                        for (const auto& t : arm.texts)
+                            if (t == text) return sequence(arm.body, s.line);
+                    return sequence(s.elseBody, s.line);
+                }
                 const auto v = selector->asInteger();
                 for (const auto& arm : s.arms)
                     for (const auto& [low, high] : arm.ranges)
@@ -2292,8 +2558,27 @@ private:
                 if (dialect_ && s.value) return returnValue(s);   // 1.10 : RETURN expr
                 return {Flow::Kind::Return};
             case Stmt::Kind::ForEach: return forEach(s);          // 1.10
+            case Stmt::Kind::Continue: return {Flow::Kind::Continue};   // 1.12.1
+            case Stmt::Kind::Try: return tryBlock(s);                  // 1.12.1
         }
         return {};
+    }
+
+    // 1.12.1 : TRY ... CATCH [Erreur] ... END_TRY. Le corps s'execute ; une erreur (fail) y
+    // est gardee au lieu d'arreter le script : le CATCH s'execute, le message dans Erreur.
+    Flow tryBlock(const Stmt& s) {
+        const Caught outer = caught_;
+        caught_ = {};
+        ++catching_;
+        const Flow flow = sequence(s.body, s.line);
+        --catching_;
+        const Caught got = caught_;
+        caught_ = outer;
+        if (!got.any) return flow;                       // rien : Normal, EXIT, RETURN, CONTINUE...
+        aborted_ = false;
+        if (!s.loopVariable.empty() && !assignName(s.loopVariable, Value::text(env_.caughtMessage(got.message)), s.line))
+            return {Flow::Kind::Aborted};
+        return sequence(s.elseBody, s.line);
     }
 
     Flow sequence(const std::vector<StmtPtr>& body, std::uint32_t parentLine) {
@@ -2334,7 +2619,7 @@ private:
             }
             const auto flow = sequence(s.body, s.line);
             if (flow.kind == Flow::Kind::Exit)   break;
-            if (flow.kind != Flow::Kind::Normal) return flow;
+            if (flow.kind != Flow::Kind::Normal && flow.kind != Flow::Kind::Continue) return flow;
         }
         return {};
     }
@@ -2353,7 +2638,7 @@ private:
             }
             const auto flow = sequence(s.body, s.line);
             if (flow.kind == Flow::Kind::Exit)   break;
-            if (flow.kind != Flow::Kind::Normal) return flow;
+            if (flow.kind != Flow::Kind::Normal && flow.kind != Flow::Kind::Continue) return flow;
         }
         return {};
     }
@@ -2363,7 +2648,7 @@ private:
         for (;;) {
             const auto flow = sequence(s.body, s.line);
             if (flow.kind == Flow::Kind::Exit)   break;
-            if (flow.kind != Flow::Kind::Normal) return flow;
+            if (flow.kind != Flow::Kind::Normal && flow.kind != Flow::Kind::Continue) return flow;
             if (++iterations > limits_.maxIterationsPerLoop) {
                 fail(s.line, "REPEAT loop ran more than "
                                  + std::to_string(limits_.maxIterationsPerLoop) + " times");
@@ -3116,6 +3401,49 @@ private:
             }
             case Expr::Kind::Binary: return binaryRich(e);
             case Expr::Kind::Call: return callRich(e);
+            case Expr::Kind::Conditional: {
+                // 1.12.1 : seul le cote choisi est lu (x <> 0 ? 100 / x : 0).
+                auto c = rich(*e.lhs);
+                if (!c) return c;
+                if (c->o || c->v.type() != Type::Bool)
+                    return dialectError("'?' : la condition doit \xC3\xAAtre un BOOL (c ? a : b), pas un " + typeNameOf(*c));
+                return rich(c->v.isTruthy() ? *e.rhs : *e.rhs2);
+            }
+            case Expr::Kind::Coalesce: {
+                // 1.12.1 : a ?? b - b quand a ne se lit pas (un nom inconnu, une case hors du
+                // tableau, une cle absente, une division par zero) ou vaut NULL.
+                ++quiet_;
+                auto a = rich(*e.lhs);
+                --quiet_;
+                if (a && !(a->o && a->o->type && a->o->type->kind == TypeDesc::Kind::Pointer && !a->o->type->element)) return a;
+                return rich(*e.rhs);
+            }
+            case Expr::Kind::InList: {
+                auto x = rich(*e.lhs);
+                if (!x) return x;
+                for (const auto& item : e.more) {
+                    if (!item) continue;
+                    if (item->kind == Expr::Kind::Between && !item->lhs) {          // une plage a..b de la liste
+                        auto in = between(*item, *x);
+                        if (!in) return in;
+                        if (in->v.isTruthy()) return RV{Value::boolean(true), nullptr};
+                        continue;
+                    }
+                    Value lit;                                                      // Mode IN [Auto, Manu]
+                    auto v = bareName(*item) && bareEnum(enumTypeOf(*e.lhs), *item, lit) ? core::Result<RV>(RV{lit, nullptr}) : rich(*item);
+                    if (!v) return v;
+                    auto same = compareRich(e, "=", *x, *v);
+                    if (!same) return same;
+                    if (same->v.isTruthy()) return RV{Value::boolean(true), nullptr};
+                }
+                return RV{Value::boolean(false), nullptr};
+            }
+            case Expr::Kind::Between: {
+                if (!e.lhs) return dialectError("une plage a..b se lit dans une liste de IN");
+                auto x = rich(*e.lhs);
+                if (!x) return x;
+                return between(e, *x);
+            }
             case Expr::Kind::Reference:
             case Expr::Kind::Member:
             case Expr::Kind::Index:
@@ -3165,6 +3493,26 @@ private:
     static std::map<std::string, std::shared_ptr<const Function>>& operatorCache() {
         static std::map<std::string, std::shared_ptr<const Function>> cache;
         return cache;
+    }
+
+    // 1.12.1 : low <= x <= high (ENTRE ... ET, une plage de IN).
+    core::Result<RV> between(const Expr& e, const RV& x) {
+        auto low = rich(*e.rhs);
+        if (!low) return low;
+        auto high = rich(*e.rhs2);
+        if (!high) return high;
+        auto above = compareRich(e, ">=", x, *low);
+        if (!above) return above;
+        if (!above->v.isTruthy()) return RV{Value::boolean(false), nullptr};
+        return compareRich(e, "<=", x, *high);
+    }
+    // Une comparaison faite pour IN, ENTRE : un noeud de comparaison a la ligne de `e`.
+    core::Result<RV> compareRich(const Expr& e, const char* op, const RV& a, const RV& b) {
+        Expr c;
+        c.kind = Expr::Kind::Binary;
+        c.op   = op;
+        c.line = e.line;
+        return combineRich(c, c.op, a, b);
     }
 
     core::Result<RV> binaryRich(const Expr& e) {
@@ -3683,6 +4031,7 @@ private:
             lastFlow_ = sequence(s.body, s.line);
             frames_.back().scopes.pop_back();
             if (lastFlow_.kind == Flow::Kind::Exit) return 1;
+            if (lastFlow_.kind == Flow::Kind::Continue) return 0;      // 1.12.1
             if (lastFlow_.kind != Flow::Kind::Normal) return 2;
             return 0;
         };
@@ -3763,7 +4112,7 @@ private:
     std::optional<core::Result<RV>> dialectBuiltin(const std::string& u, const Expr& e) {
         static const char* kNames[] = {"MAP_HAS", "MAP_GET", "MAP_REMOVE", "MAP_SIZE", "MAP_CLEAR", "MAP_KEYS",
                                        "MAP_BEGIN", "MAP_NEXT", "MAP_END", "REF", "ADR", "LOWER_BOUND", "UPPER_BOUND", "SIZEOF",
-                                       "TO_UPPER", "TO_LOWER"};
+                                       "TO_UPPER", "TO_LOWER", "ASSERT"};
         bool known = false;
         for (const char* n : kNames) if (u == n) known = true;
         if (!known) return std::nullopt;
@@ -3782,6 +4131,21 @@ private:
         const auto bad = [&](std::string_view sig) {
             return core::Result<RV>(dialectError("mauvais nombre d'arguments : " + std::string(sig)));
         };
+        // 1.12.1 : ASSERT(condition, 'message') - faux : une erreur (le script s'arrete, la
+        // Console le dit ; dans un TRY, son CATCH) ; vrai : rien.
+        if (u == "ASSERT") {
+            if (!want(1, 2)) return bad("ASSERT(condition, 'message')");
+            auto c = evaluate(*e.arguments[0].second);
+            if (!c) return core::Result<RV>(core::Err<core::Error>(c.error()));
+            if (c->type() != Type::Bool) return core::Result<RV>(dialectError("ASSERT : la condition doit \xC3\xAAtre un BOOL"));
+            if (c->isTruthy()) return core::Result<RV>(RV{Value::boolean(true), nullptr});
+            std::string why = exprText(*e.arguments[0].second) + " est faux";
+            if (argc == 2) {
+                auto m = evaluate(*e.arguments[1].second);
+                if (m) why = m->type() == Type::String ? m->asString() : m->display();
+            }
+            return core::Result<RV>(dialectError("ASSERT : " + why));
+        }
         // Le premier argument designe (sans copie) : une MAP, un tableau, un iterateur.
         const auto subject = [&]() -> core::Result<ObjRef> {
             const Expr& a = *e.arguments[0].second;
@@ -3973,6 +4337,11 @@ private:
     const Program*                   program_{nullptr};
     const std::vector<std::uint8_t>* breaks_{&noBreakLines()};
     bool                             probing_{false};
+    int                              quiet_{0};       // 1.12.1 : a ?? b, le cote a en cours
+    // 1.12.1 : TRY ... CATCH - la profondeur, l'erreur gardee (la premiere).
+    struct Caught { bool any{false}; std::string message; std::uint32_t line{0}; };
+    int                              catching_{0};
+    Caught                           caught_{};
 };
 
 } // namespace

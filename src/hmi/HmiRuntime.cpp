@@ -553,6 +553,7 @@ public:
             || u == "IHM_ESCLAVE_SIMULE";                                                   // 1.9
     }
     void report(sim::Diagnostic d) override { diagnostics.push_back(std::move(d)); }
+    std::string caughtMessage(std::string_view m) override { return frenchSimMessage(m); }   // 1.12.1 : CATCH Erreur
 
     // ---- 1.10 : le dialecte IHM ----
     // Le type d'une variable IHM composee ("T_Four", "ARRAY[0..9] OF REAL") : une

@@ -5,6 +5,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstdio>
+#include <chrono>
 #include <ctime>
 #include <mutex>
 #include <random>
@@ -391,7 +392,7 @@ std::string propertyProblem(std::string_view kind, std::string_view key, std::st
 // ------------------------------------------------------- les fonctions propres a l'IHM ---
 bool isOwnFunction(std::string_view name) noexcept {
     const auto* f = function(name);
-    return f && (f->category == "couleur" || f->category == "alea");
+    return f && (f->category == "couleur" || f->category == "alea" || f->category == "date");   // date : 1.12.1
 }
 
 bool parseColor(std::string_view t, std::uint8_t& r, std::uint8_t& g, std::uint8_t& b, std::uint8_t& a) noexcept {
@@ -429,7 +430,7 @@ void seedRandom(std::uint32_t seed) noexcept {
 bool call(std::string_view name, const std::vector<sim::Value>& args, sim::Value& out, std::string* why) {
     const std::string u = upper(name);
     const auto* f = function(u);
-    if (!f || (f->category != "couleur" && f->category != "alea")) return false;
+    if (!f || (f->category != "couleur" && f->category != "alea" && f->category != "date")) return false;
     int min = 0, max = 0;
     (void)arity(u, min, max);
     const int n = static_cast<int>(args.size());
@@ -527,6 +528,39 @@ bool call(std::string_view name, const std::vector<sim::Value>& args, sim::Value
         out = sim::Value::boolean(true);
         return true;
     }
+    // 1.12.1 : les dates et heures.
+    constexpr std::int64_t kDay = 86400000;
+    const auto want = [&](int i, sim::Type t) {
+        if (args[static_cast<std::size_t>(i)].type() == t) return true;
+        if (why) *why = u + " : " + std::string(sim::toString(t)) + " attendu, pas " + args[static_cast<std::size_t>(i)].display();
+        return false;
+    };
+    if (u == "MAINTENANT") {
+        const auto now = std::chrono::system_clock::now();
+        const std::time_t t = std::chrono::system_clock::to_time_t(now);
+        std::tm tm{};
+#ifdef _WIN32
+        localtime_s(&tm, &t);
+#else
+        localtime_r(&t, &tm);
+#endif
+        const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count() % 1000;
+        const std::int64_t days = sim::daysFromCivil(tm.tm_year + 1900, static_cast<unsigned>(tm.tm_mon + 1), static_cast<unsigned>(tm.tm_mday));
+        out = sim::Value::integer(sim::Type::Dt, days * kDay + (tm.tm_hour * 3600 + tm.tm_min * 60 + tm.tm_sec) * 1000LL + ms);
+        return true;
+    }
+    if (u == "DT_TO_DATE" || u == "DT_TO_TOD") {
+        if (!want(0, sim::Type::Dt)) return false;
+        const auto v = args[0].asInteger();
+        const auto day = (v >= 0 ? v / kDay : (v - kDay + 1) / kDay) * kDay;
+        out = u == "DT_TO_DATE" ? sim::Value::integer(sim::Type::Date, day) : sim::Value::integer(sim::Type::Tod, v - day);
+        return true;
+    }
+    if (u == "CONCAT_DATE_TOD") {
+        if (!want(0, sim::Type::Date) || !want(1, sim::Type::Tod)) return false;
+        out = sim::Value::integer(sim::Type::Dt, args[0].asInteger() + args[1].asInteger());
+        return true;
+    }
     return false;
 }
 
@@ -566,6 +600,21 @@ std::vector<TypeCard> typeCards() {
         } else if (e.name == "STRING") {
             t.minText = "'' (vide)";
             t.maxText = "STRING[n] : n caract\xC3\xA8res";
+        } else if (e.name == "CHAR") {                             // 1.12.1
+            t.minText = "'' (aucun)";
+            t.maxText = "un caract\xC3\xA8re";
+        } else if (e.name == "WSTRING") {
+            t.minText = "'' (vide)";
+            t.maxText = "WSTRING[n] : n caract\xC3\xA8res";
+        } else if (e.name == "DATE") {
+            t.minText = "D#1970-01-01";
+            t.maxText = "D#9999-12-31";
+        } else if (e.name == "TIME_OF_DAY") {
+            t.minText = "TOD#00:00:00";
+            t.maxText = "TOD#23:59:59.999";
+        } else if (e.name == "DATE_AND_TIME") {
+            t.minText = "DT#1970-01-01-00:00:00";
+            t.maxText = "DT#9999-12-31-23:59:59";
         }
         if (e.numeric.bits > 0) {
             t.size = std::to_string(e.numeric.bits) + " bit" + (e.numeric.bits > 1 ? "s" : "");

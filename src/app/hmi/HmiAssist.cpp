@@ -309,7 +309,9 @@ bool isKeyword(std::string_view w) {
         "BYTE", "TIME", "STRING", "EBOOL",
         // 1.10 (chantier K) : le dialecte des scripts de l'IHM
         "FUNCTION", "END_FUNCTION", "MAP", "ARRAY", "REF_TO", "REFERENCE", "POINTER", "NULL", "VAR_INPUT",
-        "EACH", "IN", "VAR_IN_OUT", "VAR_OUTPUT", "MAP_ITERATOR"};
+        "EACH", "IN", "VAR_IN_OUT", "VAR_OUTPUT", "MAP_ITERATOR",
+        // 1.12.1
+        "CONTINUE", "TRY", "CATCH", "END_TRY", "ENTRE", "ET"};
     const auto u = upper(w);
     for (const char* k : kWords) if (u == k) return true;
     return false;

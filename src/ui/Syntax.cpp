@@ -53,7 +53,7 @@ constexpr std::string_view kCTypes[] = {
 // IEC 61131-3 Structured Text, plus the Control Expert extensions that appear in
 // a Schneider export.
 constexpr std::string_view kStKeywords[] = {
-    "action", "and", "array", "at", "by", "case", "configuration", "constant", "do",
+    "action", "and", "array", "at", "by", "case", "configuration", "constant", "continue", "do",
     "else", "elsif", "end_action", "end_case", "end_configuration", "end_for",
     "end_function", "end_function_block", "end_if", "end_program", "end_repeat",
     "end_resource", "end_step", "end_struct", "end_transition", "end_type",
@@ -62,6 +62,7 @@ constexpr std::string_view kStKeywords[] = {
     "repeat", "resource", "retain", "return", "step", "struct", "then", "to",
     "transition", "true", "type", "until", "var", "var_global", "var_in_out",
     "var_input", "var_output", "var_temp", "while", "with", "xor",
+    "try", "catch", "end_try",          // 1.12.1 : le dialecte de l'IHM
 };
 constexpr std::string_view kStTypes[] = {
     "bool", "byte", "date", "date_and_time", "dint", "dt", "dword", "ebool", "int",

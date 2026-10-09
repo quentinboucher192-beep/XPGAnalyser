@@ -82,9 +82,13 @@ const std::set<std::string>& stKeywords() {
     static const std::set<std::string> k = {
         "AND", "OR", "XOR", "NOT", "MOD", "TRUE", "FALSE", "IF", "THEN", "ELSIF", "ELSE", "END_IF", "CASE", "OF",
         "END_CASE", "FOR", "TO", "BY", "DO", "END_FOR", "WHILE", "END_WHILE", "REPEAT", "UNTIL", "END_REPEAT",
-        "EXIT", "RETURN"};
+        "EXIT", "RETURN",
+        "CONTINUE", "TRY", "CATCH", "END_TRY", "ENTRE"};   // 1.12.1 : le dialecte de l'IHM
     return k;
 }
+// 1.12.1 : x ENTRE a ET b - ET n'est un mot du langage qu'apres ENTRE (une variable peut
+// s'appeler ET) : les noms d'un script le sautent, il n'est pas reserve.
+bool operatorWord(const std::string& upperWord) { return upperWord == "ET"; }
 
 // Les arguments textes d'un appel : IHM_APPELER('X') -> X, pour chaque appel.
 std::vector<std::string> quotedArgs(std::string_view body, std::string_view function) {
@@ -183,6 +187,10 @@ std::string frenchSimMessage(std::string_view english) {
     } else if (m.find("has no output called") != std::string::npos) {
         replaceAll(" has no output called ", " n'a pas de sortie ");
         out = m;
+    } else if (startsWith(m, "bad date literal ")) {        // 1.12.1
+        out = "date ou heure illisible : " + m.substr(17) + " (D#2026-10-09, TOD#14:30:00, DT#2026-10-09-14:30:00)";
+    } else if (startsWith(m, "bad time literal ")) {
+        out = "dur\xC3\xA9" "e illisible : " + m.substr(17) + " (T#5s, T#1m30s, T#250ms)";
     } else if (startsWith(m, "unexpected character ")) {
         out = "caract\xC3\xA8re inattendu : " + m.substr(21);
     } else if (startsWith(m, "unexpected ")) {
@@ -326,7 +334,7 @@ std::vector<NameUse> scriptNamesRaw(std::string_view s) {
                 if (b > a && identStart(s[a]) && after < s.size() && (s[after] == ',' || s[after] == ')')) advanceTo(b);
                 continue;
             }
-            if (member || call || stKeywords().count(upper(word))) continue;
+            if (member || call || stKeywords().count(upper(word)) || operatorWord(upper(word))) continue;
             const bool seen = std::any_of(out.begin(), out.end(), [&](const NameUse& u) { return upper(u.name) == upper(word); });
             if (!seen) out.push_back({word, line});
             continue;
@@ -387,7 +395,7 @@ std::vector<PathUse> scriptPaths(std::string_view source) {
             const bool call = k < s.size() && s[k] == '(';
             const bool assigned = k + 1 < s.size() && s[k] == ':' && s[k + 1] == '=';
             const std::string word(s.substr(start, i - start));
-            if (!call && !stKeywords().count(upper(word)) && end > i)
+            if (!call && !stKeywords().count(upper(word)) && !operatorWord(upper(word)) && end > i)
                 out.push_back({std::string(s.substr(start, end - start)), line, assigned});
             i = end;
             continue;
@@ -439,7 +447,7 @@ std::vector<const LocalVar*> ScriptParts::parameters() const {
 bool localTypeSupported(std::string_view type) noexcept {
     const std::string u = upper(type);
     const auto* e = typereg::baseRegistry().byName(u);
-    return e && (e->proposed & typereg::UseDeclaration) != 0 && u == e->name;
+    return e && (e->proposed & typereg::UseDeclaration) != 0 && typereg::comparable(u) == e->name;   // TOD, DT : 1.12.1
 }
 
 bool richLocalType(std::string_view type, const std::function<bool(std::string_view)>& knownType) {

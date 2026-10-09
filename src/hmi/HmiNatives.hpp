@@ -84,6 +84,8 @@ struct TypeExtra {
     std::vector<std::string_view> literals, notes;
 };
 struct Constructed { std::string_view name, example, summary, st, c, cpp; };
+// 1.12.1 : un generique (ANY_NUM...) : ses types, ce qu'il dit dans une signature.
+struct Generic { std::string_view name, members, summary; };
 
 [[nodiscard]] const std::vector<Category>&    categories();
 [[nodiscard]] const std::vector<Function>&    functions();      // sans les X_TO_Y (conversions())
@@ -92,6 +94,7 @@ struct Constructed { std::string_view name, example, summary, st, c, cpp; };
 [[nodiscard]] const std::vector<NativeEnum>&  enums();
 [[nodiscard]] const std::vector<TypeExtra>&   typeExtras();
 [[nodiscard]] const std::vector<Constructed>& constructed();
+[[nodiscard]] const std::vector<Generic>&     generics();       // 1.12.1
 
 // ------------------------------------------------------------- autour du catalogue ---
 [[nodiscard]] const Function*  function(std::string_view name) noexcept;     // sans casse

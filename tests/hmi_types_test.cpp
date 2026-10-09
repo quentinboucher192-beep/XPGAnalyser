@@ -153,8 +153,9 @@ void usages() {
     check(asSet(r.names(tr::UseVariable)) == asSet({"BOOL", "INT", "UINT", "WORD", "DINT", "UDINT", "DWORD", "REAL", "LREAL", "STRING", "TIME"}),
           "variable IHM : les types de kVariableTypes - " + joined(r.names(tr::UseVariable)));
     // kLocalTypes (HmiScript.hpp)
+    // 1.12.1 : + CHAR, WSTRING, DATE, TIME_OF_DAY, DATE_AND_TIME.
     check(asSet(r.names(tr::UseDeclaration)) == asSet({"BOOL", "INT", "DINT", "UINT", "UDINT", "SINT", "USINT", "REAL", "LREAL", "WORD", "DWORD",
-                                                       "BYTE", "TIME", "STRING"}),
+                                                       "BYTE", "TIME", "STRING", "CHAR", "WSTRING", "DATE", "TIME_OF_DAY", "DATE_AND_TIME"}),
           "declaration : les types de kLocalTypes - " + joined(r.names(tr::UseDeclaration)));
     // richLocalType acceptait aussi LINT et ULINT (sans les proposer)
     check(r.resolve("LINT", tr::UseDeclaration).ok && r.resolve("ulint", tr::UseDeclaration).ok
@@ -168,7 +169,8 @@ void usages() {
         check(r.resolve(t, tr::UseParameter).ok, std::string("parametre de popup : ") + t + " accepte (typeKnown)");
     // kBaseTypes (HmiOperators.cpp)
     check(asSet(r.names(tr::UseOperand)) == asSet({"BOOL", "SINT", "INT", "DINT", "LINT", "USINT", "UINT", "UDINT", "ULINT", "BYTE", "WORD", "DWORD",
-                                                   "LWORD", "REAL", "LREAL", "TIME", "STRING"}),
+                                                   "LWORD", "REAL", "LREAL", "TIME", "STRING", "CHAR", "WSTRING", "DATE", "TIME_OF_DAY",
+                                                   "DATE_AND_TIME"}),
           "operande : les types de kBaseTypes - " + joined(r.names(tr::UseOperand)));
     // le dialogue Nouvelle fonction : Aucun, puis kLocalTypes
     auto ret = r.names(tr::UseReturn);
@@ -180,7 +182,8 @@ void usages() {
           "ANY : un parametre seulement ; Aucun : un retour seulement");
     // l'ordre : celui de la norme, le meme partout
     const auto all = r.names(tr::UseAll, false);
-    check(joined(all) == "BOOL SINT INT DINT LINT USINT UINT UDINT ULINT BYTE WORD DWORD LWORD REAL LREAL STRING TIME ANY Aucun",
+    check(joined(all) == "BOOL SINT INT DINT LINT USINT UINT UDINT ULINT BYTE WORD DWORD LWORD REAL LREAL STRING TIME CHAR WSTRING DATE TIME_OF_DAY "
+                         "DATE_AND_TIME ANY Aucun",
           "l'ordre du registre : " + joined(all));
     // chaque type de base : sa cle, sa categorie, sa provenance, sa phrase
     bool good = true;
@@ -246,7 +249,7 @@ void registre() {
           "un DDT : api:T_ANA, un parametre de popup seulement");
     // les listes : la base proposee, puis les types du projet
     const auto decl = r->names(tr::UseDeclaration);
-    check(decl.size() == 16 && decl[14] == "T_Four" && decl[15] == "E_Mode", "declaration : la base, puis T_Four et E_Mode - " + joined(decl));
+    check(decl.size() == 21 && decl[19] == "T_Four" && decl[20] == "E_Mode", "declaration : la base, puis T_Four et E_Mode - " + joined(decl));
     const auto prm = r->names(tr::UseParameter);
     check(prm.size() == 16 && prm[12] == "T_Four" && prm[14] == "T_ANA" && prm[15] == "T_ARMOIRE",
           "parametre : la base, ANY, les types IHM, puis les DDT - " + joined(prm));

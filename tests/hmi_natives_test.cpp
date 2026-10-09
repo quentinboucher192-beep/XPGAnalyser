@@ -18,6 +18,7 @@
 #include "../src/hmi/HmiScript.hpp"
 #include "../src/hmi/HmiScriptCheck.hpp"
 #include "../src/hmi/HmiTypeRegistry.hpp"
+#include "../src/sim/Interpreter.hpp"     // 1.12.1 : le ST de l'automate (sans le dialecte)
 
 #include <cmath>
 #include <cstdio>
@@ -260,7 +261,7 @@ void litteraux() {
 void typesDuRegistre() {
     std::printf("-- les types : le registre et le catalogue\n");
     const auto cards = nt::typeCards();
-    check(cards.size() == 17, "17 types de base (" + std::to_string(cards.size()) + ")");
+    check(cards.size() == 22, "22 types de base : les 17 de la 1.12.0, CHAR, WSTRING, DATE, TIME_OF_DAY, DATE_AND_TIME (" + std::to_string(cards.size()) + ")");
     for (const auto& c : cards) {
         check(!c.minText.empty() && !c.maxText.empty(), c.name + " : MIN et MAX (" + c.minText + " / " + c.maxText + ")");
         check(!c.cType.empty() && !c.cppType.empty() && !c.defaultValue.empty(), c.name + " : C, C++, defaut");
@@ -354,6 +355,126 @@ void couleursEtHasard() {
 
 } // namespace
 
+// 1.12.1 : LES OPERATEURS ET LES INSTRUCTIONS DU DIALECTE. c ? a : b ne lit que le cote
+// choisi ; a ?? b ; IN [..] ; ENTRE ... ET ; CONTINUE ; TRY ... CATCH ... END_TRY ; ASSERT ;
+// CASE sur un texte, sur des nombres negatifs. Rien de cela dans le ST de l'automate.
+void langage1121() {
+    std::printf("-- 1.12.1 : les operateurs et les instructions du dialecte\n");
+    const auto run = [](const std::string& type, const std::string& body, std::string* err = nullptr) {
+        Bench b(type, body);
+        return b.runScript(err);
+    };
+    std::string err;
+    check(run("INT", "Compteur := 0;\nR := Compteur <> 0 ? 100 / Compteur : -1;", &err) == "-1" && err.empty(),
+          "? : seul le cote choisi est lu (pas de division par zero)" + (err.empty() ? std::string{} : " [" + err + "]"));
+    check(run("STRING", "R := Compteur > 10 ? 'grand' : Compteur > 5 ? 'moyen' : 'petit';") == "moyen", "? : imbrique, de droite a gauche (moyen)");
+    (void)run("INT", "R := Compteur ? 1 : 2;", &err);
+    check(err.find("BOOL") != std::string::npos, "? : une condition qui n'est pas un BOOL est une erreur (" + err + ")");
+    check(run("INT", "R := (Compteur / 0) ?? 5;", &err) == "5" && err.empty(), "?? : la division par zero choisit la valeur de secours, sans erreur");
+    check(run("INT", "R := Compteur ?? 5;") == "7", "?? : une valeur lisible reste (7)");
+    check(run("BOOL", "R := Texte IN ['Pompe 1', 'Pompe 3'];") == "TRUE", "IN : des textes");
+    check(run("BOOL", "R := Compteur IN [];") == "FALSE", "IN [] : jamais");
+    check(run("BOOL", "R := Compteur IN [1, 2..6, 9];") == "FALSE", "IN : 7 n'est ni 1, ni dans 2..6, ni 9");
+    check(run("BOOL", "R := THEME_IHM#Nuit IN [THEME_IHM#Jour];") == "FALSE", "IN : des valeurs d'une enumeration native");
+    check(run("BOOL", "R := Niveau ENTRE 42.5 ET 42.5;") == "TRUE", "ENTRE : bornes comprises");
+    check(run("BOOL", "R := NOT (Compteur ENTRE 0 ET 5) AND Marche;") == "TRUE", "ENTRE : au rang des comparaisons (NOT (...) AND ...)");
+
+    check(run("INT", "VAR i : INT; END_VAR\nR := 0;\nFOR i := 1 TO 10 DO\n    IF i MOD 2 = 0 THEN CONTINUE; END_IF\n    R := R + i;\nEND_FOR") == "25",
+          "CONTINUE dans un FOR : 1 + 3 + 5 + 7 + 9 = 25");
+    check(run("INT", "VAR i : INT; END_VAR\nR := 0;\ni := 0;\nWHILE i < 5 DO\n    i := i + 1;\n    IF i = 3 THEN CONTINUE; END_IF\n    R := R + i;\nEND_WHILE") == "12",
+          "CONTINUE dans un WHILE : 1 + 2 + 4 + 5 = 12");
+    check(run("INT", "VAR i : INT; END_VAR\nR := 0;\nFOR EACH i IN Tab DO\n    R := R + 1;\n    CONTINUE;\n    R := 100;\nEND_FOR") == "5",
+          "CONTINUE dans un FOR EACH : la suite du corps sautee (5 tours)");
+    (void)run("INT", "R := 1;\nCONTINUE;", &err);
+    check(err.find("CONTINUE") != std::string::npos, "CONTINUE hors d'une boucle : refuse (" + err + ")");
+
+    check(run("STRING", "VAR n : INT; END_VAR\nn := 0;\nTRY\n    n := 10 / n;\n    R := 'pas ici';\nCATCH\n    R := 'attrape';\nEND_TRY", &err) == "attrape"
+              && err.empty(),
+          "TRY : la division par zero va au CATCH, le script continue" + (err.empty() ? std::string{} : " [" + err + "]"));
+    const std::string message = run("STRING", "VAR n : INT; END_VAR\nTRY\n    n := 10 / n;\nCATCH R\nEND_TRY");
+    check(message.find("division par z\xC3\xA9ro") != std::string::npos, "CATCH R : le message, en francais (" + message + ")");
+    check(run("INT", "R := 1;\nTRY\n    R := 2;\nCATCH\n    R := 3;\nEND_TRY") == "2", "TRY sans erreur : le CATCH ne s'execute pas");
+    check(run("STRING", "TRY\n    TRY\n        R := Tab[1] / 0;\n    CATCH\n        R := 'dedans';\n    END_TRY\nCATCH\n    R := 'dehors';\nEND_TRY") == "dedans",
+          "TRY imbriques : le plus proche attrape");
+    (void)run("INT", "VAR i : INT; END_VAR\nTRY\n    WHILE TRUE DO\n        i := i + 1;\n    END_WHILE\nCATCH\n    R := 9;\nEND_TRY", &err);
+    check(err.find("WHILE") != std::string::npos || err.find("tour") != std::string::npos || err.find("boucle") != std::string::npos,
+          "une boucle sans fin n'est pas attrapee : le script s'arrete et le dit (" + err + ")");
+
+    (void)run("INT", "R := 1;\nASSERT(Compteur < 5, 'trop grand');\nR := 2;", &err);
+    check(err.find("trop grand") != std::string::npos, "ASSERT faux : le script s'arrete, le message dit (" + err + ")");
+    check(run("INT", "R := 1;\nASSERT(Compteur ENTRE 0 ET 10);\nR := 2;") == "2", "ASSERT vrai : rien");
+    check(run("INT", "R := 1;\nTRY\n    ASSERT(FALSE, 'non');\n    R := 2;\nCATCH\n    R := 3;\nEND_TRY") == "3", "ASSERT dans un TRY : son CATCH");
+
+    check(run("INT", "CASE Texte OF\n    'Pompe 1': R := 1;\n    'Pompe 3', 'Pompe 4': R := 3;\nELSE\n    R := 0;\nEND_CASE") == "3", "CASE sur un texte");
+    check(run("INT", "VAR x : INT; END_VAR\nx := -3;\nCASE x OF\n    -5..-1: R := -1;\n    0: R := 0;\nELSE\n    R := 1;\nEND_CASE") == "-1",
+          "CASE : une plage negative (-5..-1)");
+
+    // Compiler : les exemples des fiches se lisent ; le ST de l'automate ne connait rien de cela.
+    for (const auto& s : nt::instructions()) compiles("instruction " + std::string(s.keyword), s.st, true);
+    for (const auto& o : nt::operators()) compiles("operateur " + std::string(o.symbol), o.st, true);
+    for (const char* plc : {"x := a ? 1 : 2;", "x := a ?? 2;", "TRY x := 1; END_TRY", "FOR i := 1 TO 2 DO CONTINUE; END_FOR"}) {
+        const auto parsed = sim::parse(plc, "automate", sim::ParseOptions{false});
+        check(!parsed, std::string("le ST de l'automate refuse : ") + plc);
+    }
+}
+
+// 1.12.1 : LES TYPES CHAR, WSTRING, DATE, TIME_OF_DAY, DATE_AND_TIME. Des locales, des
+// parametres, des operandes (pas encore des variables IHM) ; leurs litteraux, leur calcul.
+void types1121() {
+    std::printf("-- 1.12.1 : CHAR, WSTRING, DATE, TIME_OF_DAY, DATE_AND_TIME\n");
+    const auto run = [](const std::string& type, const std::string& body, std::string* err = nullptr) {
+        Bench b(type, body);
+        return b.runScript(err);
+    };
+    std::string err;
+    check(run("STRING", "VAR d : DATE; END_VAR\nd := D#2026-10-09;\nR := TO_STRING(d);", &err) == "D#2026-10-09" && err.empty(),
+          "DATE : D#2026-10-09 se lit et s'ecrit" + (err.empty() ? std::string{} : " [" + err + "]"));
+    check(run("BOOL", "R := (DT#2026-10-09-14:30:00 - DT#2026-10-09-12:00:00) = T#2h30m;") == "TRUE", "DT - DT : une duree (2 h 30)");
+    check(run("BOOL", "R := DT#2026-10-09-23:00:00 + T#2h = DT#2026-10-10-01:00:00;") == "TRUE", "DT + TIME : le jour suivant");
+    check(run("BOOL", "R := TOD#23:00:00 + T#2h = TOD#01:00:00;") == "TRUE", "TOD + TIME tourne sur 24 h");
+    check(run("BOOL", "R := D#2024-03-01 - D#2024-02-28 = T#2d;") == "TRUE", "DATE - DATE : 2024 est bissextile (2 jours)");
+    check(run("BOOL", "R := D#2026-10-09 < D#2026-10-10;") == "TRUE", "les dates se comparent");
+    check(run("STRING", "VAR h : TIME_OF_DAY; END_VAR\nh := TOD#06:00;\nR := TO_STRING(h);") == "TOD#06:00:00", "TOD#06:00 : les secondes facultatives");
+    check(run("STRING", "VAR c : CHAR; w : WSTRING; END_VAR\nc := 'A';\nw := 'été';\nR := w + c;") == "étéA", "CHAR et WSTRING : des textes");
+    (void)run("INT", "VAR d : DATE; END_VAR\nd := D#2026-13-01;", &err);
+    check(err.find("illisible") != std::string::npos, "D#2026-13-01 : un mois 13, illisible (" + err + ")");
+    (void)run("INT", "VAR d : DATE; END_VAR\nR := D#2026-10-09 + T#1h;", &err);
+    check(!err.empty(), "DATE + TIME : refuse (on ecrit DT + TIME) [" + err + "]");
+    // Dans une case fx et un texte a trous : sans prefixe, lisibles.
+    {
+        Bench b("STRING", "");
+        const auto e = Expression::compile("CONCAT_DATE_TOD(D#2026-10-09, TOD#14:30:00)");
+        const auto v = e.evaluate(b.rt.environment());
+        check(v && formatValue(*v) == "2026-10-09 14:30:00", "une case fx : 2026-10-09 14:30:00 (" + (v ? formatValue(*v) : e.error()) + ")");
+        const auto t = TextTemplate::compile("Le {DT_TO_DATE(DT#2026-10-09-14:30:00)} a {TOD#14:30:00}");
+        check(t.render(b.rt.environment()) == "Le 2026-10-09 a 14:30:00", "un texte a trous : " + t.render(b.rt.environment()));
+    }
+    // Compiler : un script qui les emploie se lit sans faute.
+    {
+        std::string errors;
+        for (const auto& d : checkScript(ScriptLang::ST,
+                                         "VAR\n    d : DATE;\n    h : TOD;\n    t : DATE_AND_TIME;\n    c : CHAR;\n    w : WSTRING;\nEND_VAR\n"
+                                         "t := MAINTENANT();\nd := DT_TO_DATE(t);\nh := DT_TO_TOD(t) + T#1h;\nt := CONCAT_DATE_TOD(d, h);\nc := 'A';\nw := 'x';",
+                                         "Dates"))
+            if (d.severity == ScriptDiagnostic::Severity::Error) errors += " | " + d.message;
+        check(errors.empty(), "Compiler : DATE, TOD, DATE_AND_TIME, CHAR, WSTRING et leurs fonctions" + errors);
+    }
+    // Le registre : leurs usages et la regle.
+    const auto& reg = typereg::baseRegistry();
+    for (const char* n : {"CHAR", "WSTRING", "DATE", "TIME_OF_DAY", "DATE_AND_TIME", "TOD", "DT"}) {
+        const auto* e = reg.byName(n);
+        check(e && e->usable(typereg::UseDeclaration) && !e->usable(typereg::UseVariable), std::string(n) + " : une locale, pas une variable IHM");
+    }
+    check(typereg::conversion("CHAR", "STRING").kind == typereg::Conversion::Widening, "CHAR vers STRING : sans perte");
+    check(typereg::conversion("STRING", "CHAR").kind == typereg::Conversion::Lossy, "STRING vers CHAR : le premier caractere");
+    check(typereg::conversion("DT", "DATE").kind == typereg::Conversion::Forbidden
+              && typereg::conversion("DT", "DATE").why.find("DT_TO_DATE") != std::string::npos,
+          "DT vers DATE : DT_TO_DATE (" + typereg::conversion("DT", "DATE").why + ")");
+    check(typereg::conversion("TIME", "TOD").kind == typereg::Conversion::Forbidden, "TIME vers TOD : refuse");
+    check(typereg::simTypeOf("DT") == sim::Type::Dt && typereg::simTypeOf("TIME_OF_DAY") == sim::Type::Tod && typereg::simTypeOf("CHAR") == sim::Type::String,
+          "le type du moteur : DT, TOD, CHAR (un texte)");
+}
+
 int main() {
     std::printf("1.12.0 : les natives de l'IHM (catalogue, exemples, conversions, types, enumerations, couleurs, aleatoire)\n");
     catalogueComplet();
@@ -363,6 +484,8 @@ int main() {
     typesDuRegistre();
     enumerations();
     couleursEtHasard();
+    langage1121();
+    types1121();
     std::printf("%d controles, %d echec(s)\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

@@ -286,6 +286,16 @@ ui::HelpArticle typesCard() {
         for (const auto& c : hn::constructed()) t2 += "\n" + std::string(c.name) + "\t" + std::string(c.example) + "\t" + std::string(c.summary);
         a.blocks.push_back(block(K::Table, t2));
     }
+    if (!hn::generics().empty()) {
+        // 1.12.1 : ANY_NUM, ANY_INT... - lus dans les signatures, jamais declares.
+        a.blocks.push_back(block(K::Heading, "Les g\xC3\xA9n\xC3\xA9riques (ANY_\xE2\x80\xA6)"));
+        a.blocks.push_back(block(K::Paragraph, "Ils ne se d\xC3\xA9" "clarent pas : dans la signature d'une native, ils disent ce qu'un param\xC3\xA8tre "
+                                                   "accepte. ABS(IN : ANY_NUM) prend tout nombre et rend le m\xC3\xAAme type ; un param\xC3\xA8tre ANY "
+                                                   "d'une popup accepte toute valeur."));
+        std::string t3 = "G\xC3\xA9n\xC3\xA9rique\tSes types\tO\xC3\xB9 on le lit";
+        for (const auto& g : hn::generics()) t3 += "\n" + std::string(g.name) + "\t" + std::string(g.members) + "\t" + std::string(g.summary);
+        a.blocks.push_back(block(K::Table, t3));
+    }
     a.blocks.push_back(links("Les fiches", std::move(go)));
     return a;
 }
@@ -613,6 +623,8 @@ std::string keyOfWord(std::string_view word) {
     if (const auto c = hn::conversion(word)) return "conversion:" + c->name;
     if (const auto* e = hn::nativeEnum(word)) return "enum:" + std::string(e->name);
     if (const auto t = hn::typeCard(word)) return "type:" + t->name;
+    for (const auto& g : hn::generics())                    // 1.12.1 : F1 sur ANY_NUM : les types
+        if (upper(g.name) == upper(word)) return "types";
     return {};
 }
 

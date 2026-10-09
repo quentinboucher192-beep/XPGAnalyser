@@ -1423,7 +1423,8 @@ bool identChar(char c) { return std::isalnum(static_cast<unsigned char>(c)) || c
 bool keyword(std::string_view w) {
     static const char* const kWords[] = {"TRUE", "FALSE", "AND", "OR", "XOR", "NOT", "MOD", "IF", "THEN", "ELSE", "ELSIF", "END_IF",
                                          "VAR", "END_VAR", "FOR", "TO", "BY", "DO", "END_FOR", "WHILE", "END_WHILE", "REPEAT",
-                                         "UNTIL", "END_REPEAT", "CASE", "OF", "END_CASE", "RETURN", "EXIT"};
+                                         "UNTIL", "END_REPEAT", "CASE", "OF", "END_CASE", "RETURN", "EXIT",
+                                         "CONTINUE", "TRY", "CATCH", "END_TRY", "ENTRE", "ET"};   // 1.12.1
     const std::string u = upper(w);
     for (const char* k : kWords)
         if (u == k) return true;

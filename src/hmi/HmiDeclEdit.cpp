@@ -687,6 +687,8 @@ std::string zeroOf(std::string_view type) {
         case typereg::Family::Real:    return "0.0";
         case typereg::Family::String:  return "''";
         case typereg::Family::Time:    return "T#0s";
+        case typereg::Family::Date:                                       // 1.12.1
+            return n.low == 1 ? "D#1970-01-01" : n.low == 2 ? "TOD#00:00:00" : "DT#1970-01-01-00:00:00";
         case typereg::Family::None:    break;
     }
     return {};

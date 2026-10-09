@@ -41,6 +41,7 @@ bool isKeyword(std::string_view word) {
         "IF","THEN","ELSE","ELSIF","END_IF","FOR","TO","BY","DO","END_FOR",
         "WHILE","END_WHILE","REPEAT","UNTIL","END_REPEAT","CASE","OF","END_CASE",
         "TRUE","FALSE","AND","OR","NOT","XOR","MOD","RETURN","EXIT","VAR","END_VAR",
+        "CONTINUE","TRY","CATCH","END_TRY","ENTRE","ET",   // 1.12.1
     };
     return kWords.count(upper(word)) != 0;
 }

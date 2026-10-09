@@ -67,6 +67,7 @@ bool reservedWord(std::string_view name) {
     static const std::set<std::string> kWords = {
         "IF", "THEN", "ELSE", "ELSIF", "END_IF", "CASE", "OF", "END_CASE", "FOR", "TO", "BY", "DO", "END_FOR",
         "WHILE", "END_WHILE", "REPEAT", "UNTIL", "END_REPEAT", "RETURN", "EXIT", "CONTINUE", "TRUE", "FALSE",
+        "TRY", "CATCH", "END_TRY", "ENTRE",   // 1.12.1
         "AND", "OR", "XOR", "NOT", "MOD", "VAR", "VAR_INPUT", "VAR_OUTPUT", "VAR_IN_OUT", "VAR_TEMP", "END_VAR",
         "FUNCTION", "END_FUNCTION", "EACH", "IN", "ARRAY", "MAP", "POINTER", "REF_TO", "REFERENCE", "NULL",
         "BOOL", "INT", "UINT", "DINT", "UDINT", "WORD", "DWORD", "REAL", "LREAL", "STRING", "TIME", "BYTE",

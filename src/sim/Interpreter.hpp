@@ -88,6 +88,9 @@ public:
     }
 
     virtual void report(Diagnostic) = 0;
+    // 1.12.1 : le message d'une erreur gardee par TRY ... CATCH Erreur, tel que le lit
+    // l'utilisateur (l'IHM : en francais) ; par defaut, tel quel.
+    [[nodiscard]] virtual std::string caughtMessage(std::string_view message) { return std::string(message); }
 
     // Lot API 7 : UNE FONCTION QUE LE SIMULATEUR NE CONNAIT PAS. Vrai : l'appel
     // rend 0 et le cycle continue (l'environnement le note, pour le dire) ;

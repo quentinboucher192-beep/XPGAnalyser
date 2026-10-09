@@ -1,0 +1,65 @@
+# =============================================================================
+#  Session 1121 IHM : XPGAnalyser IHM (1.12.1), XpgAnalyzer-IHM.exe - les
+#  enumerations des objets, les operateurs, les instructions et les types de la
+#  liste du 10/10. Armoire_Gaz (un projet de la 1.11) est pose dans projets\ ;
+#  au premier lancement, XPGAnalyser IHM le recopie dans projets\ihm.
+#    1. les Natives : ALIGNEMENT et ou elle sert, le sommaire des enumerations,
+#       l'operateur ? :, l'instruction TRY, les types (les generiques ANY_),
+#       DATE_AND_TIME, MAINTENANT ;
+#    2. un script qui s'en sert (Init : ENTRE ... ET, ? :, TRY ... CATCH, une date) ;
+#    3. la simulation de l'IHM : le script tourne, sans erreur.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 8
+ouvrir "${PROJETS}/ihm/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- 1. Les natives de la 1.12.1 ----
+arbre "IHM/Programmation générale/Natives"
+attendre 6
+natives "enum:ALIGNEMENT"
+attendre 4
+natives-attendre "ALIGNEMENT"
+capture 1121_ihm_01_enum_alignement.png
+natives "enumerations"
+attendre 4
+capture 1121_ihm_02_enumerations.png
+natives "operateur:? :"
+attendre 4
+capture 1121_ihm_03_operateur_conditionnel.png
+natives "operateur:IN [ ]"
+attendre 4
+capture 1121_ihm_04_operateur_in.png
+natives "instruction:TRY"
+attendre 4
+capture 1121_ihm_05_instruction_try.png
+natives "type:DATE_AND_TIME"
+attendre 4
+capture 1121_ihm_06_type_dt.png
+natives "types"
+attendre 4
+capture 1121_ihm_07_types_generiques.png
+natives "fonction:MAINTENANT"
+attendre 4
+capture 1121_ihm_08_maintenant.png
+
+# ---- 2. Un script qui s'en sert ----
+arbre "IHM/Programmation générale/Scripts/Init"
+attendre 6
+editeur "\nIF Compteur_Clics ENTRE 0 ET 1000 THEN\n    Compteur_Clics := Compteur_Clics > 500 ? 0 : Compteur_Clics + 1;\nEND_IF\nTRY\n    Compteur_Clics := 100 / (Compteur_Clics - Compteur_Clics);\nCATCH\n    Compteur_Clics := DT_TO_TOD(MAINTENANT()) > TOD#12:00:00 ? 2 : 1;\nEND_TRY" ajout
+touche escape
+attendre 4
+capture 1121_ihm_09_script_init.png
+
+# ---- 3. La simulation de l'IHM ----
+arbre "Simulation/IHM"
+attendre 2
+ihm-build-attendre 600
+attendre 60
+ihm-sim-etat "en marche"
+attendre 5
+ihm-diagnostics
+capture 1121_ihm_10_simulation.png
+quitter

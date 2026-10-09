@@ -650,6 +650,7 @@ const std::vector<Builtin>& builtins() {
         {"SIZEOF", "SIZEOF(t) : DINT", "Le nombre de cases d'un tableau (toutes dimensions)."},
         {"TO_UPPER", "TO_UPPER(texte) : STRING", "Le texte en MAJUSCULES."},
         {"TO_LOWER", "TO_LOWER(texte) : STRING", "Le texte en minuscules."},
+        {"ASSERT", "ASSERT(condition, 'message')", "Faux : une erreur (le message), le script s'arr\xC3\xAAte - dans un TRY, son CATCH."},   // 1.12.1
     };
     return b;
 }
@@ -666,6 +667,9 @@ const std::vector<Builtin>& snippets() {
         {"VAR_IN_OUT", "VAR_IN_OUT x : REAL", "Un param\xC3\xA8tre par r\xC3\xA9" "f\xC3\xA9rence : la fonction \xC3\xA9" "crit dans la variable donn\xC3\xA9" "e."},
         {"MAP_ITERATOR", "MAP_ITERATOR", "Un it\xC3\xA9rateur de MAP (MAP_BEGIN, MAP_NEXT, MAP_END, it.Key, it.Value)."},
         {"NULL", "NULL", "Le pointeur qui ne vise rien."},
+        // 1.12.1
+        {"TRY", "TRY\n    \nCATCH Erreur\n    \nEND_TRY", "Essayer : une erreur du bloc va au CATCH (son message dans Erreur) au lieu d'arr\xC3\xAAter le script."},
+        {"CONTINUE", "CONTINUE;", "Le tour suivant de la boucle."},
     };
     return s;
 }

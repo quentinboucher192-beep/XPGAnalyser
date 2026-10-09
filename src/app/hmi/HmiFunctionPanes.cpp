@@ -793,7 +793,8 @@ bool HmiFunctionsPane::nameAllowed(const std::string& name, Id self, std::string
     static const char* kReserved[] = {"IF", "THEN", "ELSE", "ELSIF", "END_IF", "FOR", "TO", "BY", "DO", "END_FOR", "WHILE",
                                       "END_WHILE", "REPEAT", "UNTIL", "END_REPEAT", "CASE", "OF", "END_CASE", "EXIT",
                                       "RETURN", "AND", "OR", "XOR", "NOT", "MOD", "TRUE", "FALSE", "VAR", "VAR_TEMP",
-                                      "VAR_INPUT", "END_VAR", "FUNCTION", "END_FUNCTION"};
+                                      "VAR_INPUT", "END_VAR", "FUNCTION", "END_FUNCTION",
+                                      "CONTINUE", "TRY", "CATCH", "END_TRY", "ENTRE", "ASSERT"};   // 1.12.1
     for (const char* k : kReserved) if (u == k) return refuse("'" + name + "' est un mot du langage ST");
     if (hmi::localTypeSupported(u) || hmi::isStandardFunction(u)) return refuse("'" + name + "' est un type ou une fonction standard");
     // 1.11.20 : plusieurs fonctions du meme nom (des surcharges) - a la creation (sa forme differera,
