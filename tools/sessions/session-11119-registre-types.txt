@@ -2,7 +2,7 @@
 #  Session 11119 : LE REGISTRE DES TYPES ET LE SELECTEUR (refonte des scripts, lot 6).
 #  Sur une copie d'Armoire_Gaz (celle de la 1.11.17 : ses scripts declarent encore leurs
 #  variables dans leur texte) :
-#    1. Statistiques_Pression migre, une variable Fours ajoutee dans l'onglet Variables ;
+#    1. Statistiques_Pression migre, une variable Fours_Suivis ajoutee dans l'onglet Variables ;
 #    2. sa case Type, "Choisir un type..." : le selecteur (la liste d'une declaration,
 #       les categories, la provenance, la cle de chaque type) ;
 #    3. la recherche "four" ; Tableau 1..4 : ARRAY[1..4] OF T_Four ; Choisir ;
@@ -17,7 +17,7 @@ ouvrir "${PROJETS}/Armoire_Gaz"
 attendre-projet
 attendre 10
 
-# ---- 1. Statistiques_Pression migre, une variable Fours ----
+# ---- 1. Statistiques_Pression migre, une variable Fours_Suivis ----
 arbre "IHM/Programmation générale/Scripts" double
 attendre 8
 ligne "Statistiques_Pression" exact
@@ -28,11 +28,11 @@ sous-onglet "Variables"
 attendre 4
 outil "Ajouter une déclaration"
 attendre 3
-cellule "Variable" "Nom" "Fours"
+cellule "Variable" "Nom" "Fours_Suivis"
 attendre 3
 
 # ---- 2. Choisir un type... : le selecteur ----
-cellule "Fours" "Type" "Choisir un type…"
+cellule "Fours_Suivis" "Type" "Choisir un type…"
 attendre 5
 choix-type-etat "INT"
 capture 11119_01_selecteur_de_types.png

@@ -83,6 +83,7 @@ public:
     [[nodiscard]] std::string result() const;          // le type qu'on choisirait
     [[nodiscard]] std::string resultProblem() const;   // vide : il est bon
     [[nodiscard]] std::string notice() const;          // le type actuel introuvable, dit
+    [[nodiscard]] bool selectionVisible() const;       // la ligne choisie se voit dans la liste (une fois placee)
     void choose();                                     // Choisir (rien si le resultat est mauvais)
     void openDefinition();                             // Ouvrir la definition
     void finish(bool ok);

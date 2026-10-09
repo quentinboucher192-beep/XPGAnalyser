@@ -27170,6 +27170,20 @@ void selecteurTypes1119() {
               && !has(shown, "Aucun") && !has(shown, "T_ANA") && shown.size() == 18,
           "une d\xC3\xA9" "claration : 16 types de base (LINT, ULINT compris), T_Four, E_Mode ; ni ANY, ni Aucun, ni DDT (" + std::to_string(shown.size()) + ")");
     check(picker->result() == "REAL" && picker->resultProblem().empty(), "le type actuel, choisi d'office : REAL");
+    // 1.11.19 (Wine) : choisi avant la mise en page, il doit se voir une fois la liste placee
+    // (il sortait par le haut : INT, 3e de la liste, cache sous LINT).
+    for (const char* cur : {"INT", "BOOL", "REAL", "T_Four"}) {
+        auto sp = spec;
+        sp.current = cur;
+        auto* p = open(sp);
+        if (!p) continue;
+        p->widgetRoot()->setBounds({0.f, 0.f, 1600.f, 900.f});
+        p->widgetRoot()->layout();
+        check(p->result() == cur && p->selectionVisible(), std::string("le type actuel se voit d\xC3\xA8s l'ouverture : ") + cur);
+        p->finish(false);
+        mm.applyPending();
+    }
+    check(mm.top() == picker, "les s\xC3\xA9lecteurs d'essai referm\xC3\xA9s");
     picker->setSearch("four");
     check(picker->shownNames() == std::vector<std::string>{"T_Four"}, "la recherche : four -> T_Four");
     picker->setSearch("\xC3\xA9num\xC3\xA9ration");

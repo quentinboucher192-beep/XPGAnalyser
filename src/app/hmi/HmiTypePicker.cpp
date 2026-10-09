@@ -132,6 +132,12 @@ public:
                    : std::string{};
     }
     [[nodiscard]] bool searchFocused() const { return search_->focused(); }
+    // La ligne choisie est-elle dans la partie visible de la liste (une fois placee) ?
+    [[nodiscard]] bool selectionVisible() const {
+        if (sel_ < 0 || rowsArea_.h <= 0.f) return false;
+        const float top = static_cast<float>(sel_) * kRow;
+        return top >= scroll_ && top + kRow <= scroll_ + rowsArea_.h + 0.5f;
+    }
 
     void focusFirst() { owner_.focus().focus(search_); }
     void setSearch(const std::string& t) { search_->setText(t); filter(); }
@@ -205,6 +211,11 @@ protected:
         ok_->setBounds({panel_.right() - 16.f - bw, bottom_ + 10.f, bw, 32.f});
         open_->setBounds({ok_->bounds().x - 10.f - 190.f, bottom_ + 10.f, 190.f, 32.f});
         cancel_->setBounds({open_->bounds().x - 10.f - 100.f, bottom_ + 10.f, 100.f, 32.f});
+        rowsArea_ = {list_.x + 1.f, list_.y + kRow + 1.f, list_.w - 2.f, list_.h - kRow - 2.f};   // comme onPaint
+        if (revealPending_) {
+            revealPending_ = false;
+            reveal();
+        }
         scroll_ = std::clamp(scroll_, 0.f, maxScroll());
     }
 
@@ -475,6 +486,12 @@ private:
 
     void reveal() {
         if (sel_ < 0) return;
+        // Pas encore placee (le selecteur s'ouvre sur le type actuel) : a la mise en page,
+        // quand la hauteur de la liste est connue (sinon la ligne choisie sortait du haut).
+        if (list_.h <= 0.f) {
+            revealPending_ = true;
+            return;
+        }
         const float top = static_cast<float>(sel_) * kRow, view = rowsArea_.h > 0.f ? rowsArea_.h : list_.h - kRow;
         if (top < scroll_) scroll_ = top;
         else if (top + kRow > scroll_ + view) scroll_ = top + kRow - view;
@@ -559,6 +576,7 @@ private:
     bool                                   array_{false}, ref_{false}, map_{false};
     std::string                            notice_;
     float                                  scroll_{0.f}, bottom_{0.f}, constructY_{0.f}, detailY_{0.f};
+    bool                                   revealPending_{false};   // la ligne choisie, a montrer des la mise en page
     ui::InputText*                         search_{nullptr};
     ui::InputText*                         bounds_{nullptr};
     ui::Button*                            cancel_{nullptr};
@@ -630,6 +648,7 @@ std::vector<std::string> HmiTypePicker::shownNames() const { return body_ ? body
 std::string HmiTypePicker::result() const { return body_ ? body_->result() : std::string{}; }
 std::string HmiTypePicker::resultProblem() const { return body_ ? body_->problem() : std::string("pas de s\xC3\xA9lecteur"); }
 std::string HmiTypePicker::notice() const { return body_ ? body_->notice() : std::string{}; }
+bool HmiTypePicker::selectionVisible() const { return body_ && body_->selectionVisible(); }
 
 void HmiTypePicker::choose() {
     if (!body_ || done_ || !body_->problem().empty()) return;

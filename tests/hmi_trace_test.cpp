@@ -30,6 +30,7 @@
 #include "../src/project/ProjectStore.hpp"
 #include "../src/sim/Runtime.hpp"
 
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
@@ -136,6 +137,16 @@ std::string trace(const std::string& folder) {
     Runtime rt;
     rt.bind(&p, &plc);
     rt.start(0.0);
+    // 1.11.19 : l'heure du poste ne compte pas. Le programmateur hebdomadaire de Vue_Commandes
+    // (Prog_Chauffage, Lu-Ve 07:00-12:00 et 13:30-17:00) ecrivait Chauffage_Actif selon l'heure du
+    // lancement : la trace changeait un jour ouvre a 7 h. L'IHM vit un dimanche a midi (UTC) - un
+    // dimanche dans tous les fuseaux de -12 h a +11 h, loin de toute plage.
+    {
+        SystemSettings s = rt.settings();
+        const double wall = std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch()).count();
+        s.clockOffset = 1790510400.0 - wall;      // 2026-09-27 12:00:00 UTC, un dimanche
+        rt.setSettings(s);
+    }
     std::map<std::string, std::string> cells, states;
     // Le journal, lu a chaque image (il garde ses 500 dernieres lignes : plein, il perd les
     // plus anciennes ; la derniere lue s'y retrouve en partant de la fin).
