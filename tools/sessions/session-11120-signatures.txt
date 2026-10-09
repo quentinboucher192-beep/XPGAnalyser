@@ -1,0 +1,75 @@
+# =============================================================================
+#  Session 11120 : LES SIGNATURES ET LES SURCHARGES (1.11.20).
+#  Sur une copie d'Armoire_Gaz preparee par preparer-projet-11120 (Random a E/S et
+#  sortie, trois Convertir, le script Essai_Signatures au demarrage) :
+#    1. Fonctions : Random et ses 4 parametres (E/S, sortie), les trois Convertir ;
+#    2. Nouvelle fonction Convertir : une surcharge de la meme forme qu'une autre, dite ;
+#    3. son parametre passe en BOOL : une vraie surcharge, plus de faute ;
+#    4. le script Essai_Signatures : aucun appel refuse ;
+#    5. un appel tape qu'aucune surcharge n'accepte : dit a sa place (puis Ctrl+Z) ;
+#    6. la simulation : la Console dit ce que chaque appel a pris, et Graine ecrite.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- 1. Les fonctions : Random (E/S, sortie), les trois Convertir ----
+arbre "IHM/Programmation générale/Fonctions" double
+attendre 8
+ligne "Random" exact
+attendre 4
+capture 11120_01_fonctions_et_surcharges.png
+
+# ---- 2. Nouvelle fonction Convertir : une surcharge, sa forme identique dite ----
+outil "Nouvelle fonction"
+attendre 4
+champ 1 "Convertir"
+attendre 1
+bouton "Créer"
+attendre 5
+volet-message "Même forme que Convertir(REAL)"
+capture 11120_02_meme_forme.png
+
+# ---- 3. Son parametre en BOOL : une vraie surcharge ----
+sous-onglet "Paramètres"
+attendre 4
+cellule "Entree" "Type" "BOOL"
+attendre 5
+capture 11120_03_une_vraie_surcharge.png
+
+# ---- 4. Le script : chaque appel prend la sienne ----
+arbre "IHM/Programmation générale/Scripts" double
+attendre 8
+ligne "Essai_Signatures" exact
+attendre 5
+capture 11120_04_script_sans_faute.png
+
+# ---- 5. Un appel qu'aucune surcharge n'accepte : dit a sa place ----
+clic 1300 320
+attendre 1
+touche ctrl+fin
+touche entree
+texte "Texte_Entier := Convertir(Graine, 2);"
+attendre 5
+capture 11120_05_aucune_surcharge.png
+touche ctrl+z
+attendre 4
+
+# ---- 6. La simulation : ce que chaque appel a pris ----
+arbre "Simulation/IHM"
+attendre 2
+ihm-build-attendre 600
+#  (le script Essai_Signatures part au demarrage de la simulation)
+attendre 150
+ihm-sorties console
+attendre 3
+ihm-console-etat "Signatures 1.11.20 - Convertir(5) = entier, Convertir(2.5) = reel, Convertir(FF, 16) = 16"
+champ "hmi.sorties.search" "Signatures"
+attendre 4
+survol 1350 400
+attendre 3
+capture 11120_06_la_simulation.png
+quitter
