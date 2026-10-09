@@ -101,6 +101,9 @@ namespace project {
         [[nodiscard]] static core::Result<OpenResult> open(const std::string& folder,
             std::string_view password,
             std::string_view masterKey = {});
+        // 1.12.0 : le programme d'un dossier, lu meme dans XPGAnalyser IHM - pour rendre son
+        // IHM autonome (hmi::standalone) a la migration. Un dossier verrouille : sans modele.
+        [[nodiscard]] static core::Result<OpenResult> openModel(const std::string& folder);
 
         // ---- operations --------------------------------------------------------
         [[nodiscard]] static core::Status duplicate(const std::string& from, const std::string& to,

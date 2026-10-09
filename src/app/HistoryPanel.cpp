@@ -1,4 +1,5 @@
 #include "HistoryPanel.hpp"
+#include "../core/Edition.hpp"   // 1.12.0 : les filtres de chaque application
 
 #include "../ui/Icons.hpp"
 #include "../ui/Theme.hpp"
@@ -301,6 +302,11 @@ void HistoryPanel::onPaint(const ui::PaintContext& ctx) {
     float cx = d.x + 12.f;
     const float cy = d.y + kHeaderH + 8.f;
     for (int i = 0; i < 4; ++i) {
+        // 1.12.0 : une application, un domaine - ni API ni IHM a choisir (XPGAnalyser API ou IHM).
+        if ((i == 1 || i == 2) && core::edition() != core::Edition::Both) {
+            chips_[i] = {};
+            continue;
+        }
         const float cw = ctx.r.measure(chipLabels[i], f.caption).width + 20.f;
         chips_[i] = {cx, cy, cw, 22.f};
         const bool on = static_cast<int>(filter_) == i;

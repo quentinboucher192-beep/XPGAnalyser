@@ -17,6 +17,7 @@
 //  d'avant, et Tout defaire rend l'etat du debut du parcours).
 // =============================================================================
 #include "ApiTrails.hpp"
+#include "../core/Edition.hpp"   // 1.12.0 : les parcours de chaque application
 
 #include "AnimationTablesPane.hpp"
 #include "ApiPanes.hpp"
@@ -1941,6 +1942,7 @@ std::vector<TrailCard> MainAnalysisScreen::ApiTrails::cards(MainAnalysisScreen& 
     const auto& settings = s.app_.settings();
     const std::string running = s.runningTrail();
     for (const auto& d : all()) {   // Lot API 8 : didacticiels et aide (all() : + ceux du lot 8)
+        if (!core::hasIhm() && std::string_view(d.key) == "api-ihm-table") continue;   // 1.12.0 : XPGAnalyser API n'a pas d'IHM
         TrailCard c;
         c.key = d.key;
         c.title = d.title;
@@ -2001,6 +2003,7 @@ void MainAnalysisScreen::openApiTutorial(const std::string& trail) {
             return reached > 0 && reached < d->steps;
         });
         tools.setEnabledWhen(PHmiTrails, [this] { return app_.hmi() != nullptr; });
+        tools.setVisibleWhen(PHmiTrails, [] { return core::hasIhm(); });      // 1.12.0 : XPGAnalyser API n'a pas d'IHM
         paneLinks_ += tools.triggered->connect([this, last](int action) {
             switch (action) {
                 case PVisit: startTrail("api-decouvrir", false); break;
@@ -2011,8 +2014,9 @@ void MainAnalysisScreen::openApiTutorial(const std::string& trail) {
                 default: (void)app_.actions().trigger("help.open", app_.commands()); break;
             }
         });
-        frame->setHint("Le didacticiel retient o\xC3\xB9 tu en es, projet par projet \xC2\xB7 le m\xC3\xAAme moteur que celui de l'IHM (ses parcours : "
-                       "Didacticiel de l'IHM)");
+        frame->setHint(core::hasIhm() ? "Le didacticiel retient o\xC3\xB9 tu en es, projet par projet \xC2\xB7 le m\xC3\xAAme moteur que celui de l'IHM (ses parcours : "
+                                        "Didacticiel de l'IHM)"
+                                      : "Le didacticiel retient o\xC3\xB9 tu en es, projet par projet");   // 1.12.0
         auto* raw = frame.get();
         const auto index = centre_->addTab(TabControl::Tab{"API \xC2\xB7 Didacticiel", Icon::Info, true, false}, std::move(frame));
         apiTabs_["didacticiel"] = raw;

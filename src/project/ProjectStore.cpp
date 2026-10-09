@@ -949,6 +949,24 @@ core::Result<OpenResult> ProjectStore::open(const std::string& folder) {
     return out;
 }
 
+core::Result<OpenResult> ProjectStore::openModel(const std::string& folder) {
+    auto manifest = readManifest(folder);
+    if (!manifest) return core::Err<core::Error>(manifest.error());
+    OpenResult out;
+    out.manifest = *manifest;
+    out.lock     = readLock(fs::path(folder));
+    if (out.manifest.state == State::Lock && out.lock.valid()) {
+        out.needsPassword = true;
+        return out;
+    }
+    out.project = std::make_shared<Project>();
+    out.project->header.projectName = out.manifest.name;
+    out.project->header.sourceFile  = folder;
+    if (auto r = loadModel(fs::path(folder), *out.project); !r)
+        return core::Err<core::Error>(r.error());
+    return out;
+}
+
 core::Result<OpenResult> ProjectStore::open(const std::string& folder,
                                             std::string_view password,
                                             std::string_view masterKey) {

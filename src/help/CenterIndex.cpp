@@ -9,6 +9,7 @@
 //  par version), Signaler un probleme.
 // =============================================================================
 #include "CenterIndex.hpp"
+#include "../core/Edition.hpp"   // 1.12.0 : l'aide de chaque application
 #include "HelpIndex.hpp"
 #include "HelpSession.hpp"   // 1.11.2 (T2) : help::parseTarget, pour keyOfLink sur "lib:" et "par:"
 
@@ -143,27 +144,34 @@ Index Index::build(const Inputs& in) {
         ix.add(Topic{"api-" + s.key, c, {}, s.title, s.summary, Source::ApiPage, s.key, s.kind, s.headings});
     };
 
+    // 1.12.0 : CHAQUE APPLICATION, SON AIDE. XPGAnalyser API : Demarrer (sans la page
+    // de l'IHM), l'automate, les macros, les blocs ; XPGAnalyser IHM : Demarrer (sans les
+    // pages de l'API), l'IHM, les expressions. Les deux : les raccourcis, les notes, Signaler.
+    const bool api = core::hasApi(), ihm = core::hasIhm();
+
     // Demarrer : le chapitre 1 du guide, puis les pages generales de l'API.
     for (const auto& s : in.guide)
-        if (s.group == kGuideStart) fromGuide(s, Chapter::Start, {});
+        if (s.group == kGuideStart && (ihm || s.key.rfind("ihm", 0) != 0)) fromGuide(s, Chapter::Start, {});
     for (const auto& s : in.api)
-        if (s.group == "start") fromApi(s, Chapter::Start);
+        if (api && s.group == "start") fromApi(s, Chapter::Start);
 
-    // L'IHM : les chapitres 2 a 8 du guide, chacun un sous-chapitre.
+    // L'IHM : les chapitres 2 a 8 du guide, chacun un sous-chapitre. XPGAnalyser IHM n'a pas
+    // d'automate : ni « API. » (variables-api), ni les deux simulations (simulation-api-ihm).
     for (const auto& s : in.guide)
-        if (s.group != kGuideStart && s.group != kGuidePlc) fromGuide(s, Chapter::Hmi, s.group);
+        if (ihm && s.group != kGuideStart && s.group != kGuidePlc && (api || (s.key != "variables-api" && s.key != "simulation-api-ihm")))
+            fromGuide(s, Chapter::Hmi, s.group);
 
     // L'automate (API) : le chapitre 9 du guide, puis les pages de l'API.
     for (const auto& s : in.guide)
-        if (s.group == kGuidePlc) fromGuide(s, Chapter::Plc, {});
+        if (api && s.group == kGuidePlc) fromGuide(s, Chapter::Plc, {});
     for (const auto& s : in.api)
-        if (s.group != "start") fromApi(s, Chapter::Plc);
+        if (api && s.group != "start") fromApi(s, Chapter::Plc);
 
     // Macros. Tranche 11 : la bibliotheque les range dans une seule famille, "Macros",
     // le nom du chapitre : sans ce sous-niveau, l'arbre et le fil d'Ariane ne disent
     // plus "Macros > Macros > CreerEquipement". Une autre famille garde son niveau.
     for (const auto& s : in.library)
-        if (s.kind == "macro") {
+        if (api && s.kind == "macro") {
             const std::string group = s.group == chapterLabel(Chapter::Macros) ? std::string{} : s.group;
             ix.add(Topic{"macro-" + s.key, Chapter::Macros, group, s.title, s.summary, Source::Macro, s.key, s.kind, 0});
         }
@@ -171,7 +179,7 @@ Index Index::build(const Inputs& in) {
     // Blocs DFB / DDT, par categorie (l'ordre des categories : leur premiere apparition).
     std::vector<std::string> categories;
     for (const auto& s : in.library)
-        if (s.kind != "macro" && std::find(categories.begin(), categories.end(), s.group) == categories.end())
+        if (api && s.kind != "macro" && std::find(categories.begin(), categories.end(), s.group) == categories.end())
             categories.push_back(s.group);
     for (const auto& cat : categories)
         for (const auto& s : in.library)
@@ -181,7 +189,9 @@ Index Index::build(const Inputs& in) {
     // Expressions : les 11 types de la page des expressions. L'appli les lit
     // dans hmi::exprguide::all() (T3) et les passe dans in.expressions (cle,
     // titre, resume) ; sans eux, la meme liste ecrite ici (cles et titres de T3).
-    if (!in.expressions.empty()) {
+    if (!ihm) {
+        // XPGAnalyser API : les expressions sont celles de l'IHM.
+    } else if (!in.expressions.empty()) {
         for (const auto& s : in.expressions)
             ix.add(Topic{"expr-" + s.key, Chapter::Expressions, {}, s.title, s.summary, Source::Expression, s.key, {}, 0});
     } else {

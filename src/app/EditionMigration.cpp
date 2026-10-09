@@ -1,5 +1,9 @@
 #include "EditionMigration.hpp"
 
+#include "../hmi/HmiStandalone.hpp"   // l'IHM recopiee, rendue autonome
+#include "../hmi/HmiStore.hpp"
+#include "../project/ProjectStore.hpp"
+
 #include <algorithm>
 #include <ctime>
 #include <fstream>
@@ -153,6 +157,23 @@ MigrationReport migrateLegacyProjects(const fs::path& legacyRoot, const fs::path
             fs::remove_all(to, gone);                                     // pas de copie a moitie faite
             continue;
         }
+        // L'IHM recopiee, rendue autonome : les noms de l'automate qu'elle lisait deviennent ses
+        // variables (et leurs types), depuis le programme de l'original (hmi::standalone).
+        if (edition == core::Edition::Ihm) {
+            const auto plc = project::ProjectStore::openModel(utf8(from));
+            auto hmi = hmi::load(utf8(to));
+            if (plc && plc->project && hmi) {
+                const auto made = hmi::standalone::fromPlc(*hmi, *plc->project);
+                if (made.changed()) {
+                    if (auto saved = hmi::save(*hmi, utf8(to)); !saved)
+                        r.problems.push_back(name + " : l'IHM autonome n'a pas pu \xC3\xAAtre \xC3\xA9" "crite (" + saved.error().message() + ")");
+                    else
+                        r.standalone.emplace_back(name, hmi::standalone::describe(made));
+                }
+            } else if (plc && plc->needsPassword) {
+                r.skipped.push_back(name + " : verrouill\xC3\xA9 (LOCK) - son IHM n'a pas \xC3\xA9t\xC3\xA9 rendue autonome");
+            }
+        }
         r.copied.emplace_back(utf8(from), utf8(to));
     }
     // Le marqueur : fait, et ce qui l'a ete (pour qui se demande d'ou viennent ces copies).
@@ -162,6 +183,7 @@ MigrationReport migrateLegacyProjects(const fs::path& legacyRoot, const fs::path
     for (const auto& [a, b] : r.copied) o << "copie : " << a << " -> " << b << "\n";
     for (const auto& s : r.skipped) o << "laisse : " << s << "\n";
     for (const auto& s : r.problems) o << "probleme : " << s << "\n";
+    for (const auto& [n, what] : r.standalone) o << "IHM autonome : " << n << "\n" << what;
     return r;
 }
 

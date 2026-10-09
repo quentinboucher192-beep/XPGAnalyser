@@ -1300,6 +1300,9 @@
     <ClCompile Include="src\hmi\HmiSimData.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\hmi\HmiStandalone.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\hmi\HmiTutorialDeduce.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
@@ -2447,6 +2450,9 @@
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiSimData.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiStandalone.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiTutorialDeduce.hpp">

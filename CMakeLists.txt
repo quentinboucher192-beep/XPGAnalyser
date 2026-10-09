@@ -695,7 +695,7 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME hmitypes     COMMAND hmi_types_test)                   # ---- 1.11.19 : le registre des types (lot 6) ----
     xpg_add_test(NAME hmireperes   COMMAND hmi_reperes_test)                 # ---- 1.11.24 : les reperes dans les symboles ----
     xpg_add_test(NAME hminatives   COMMAND hmi_natives_test)                 # ---- 1.12.0 : les natives de l'IHM ----
-    xpg_add_test(NAME edition      COMMAND edition_test)                     # ---- 1.12.0 : deux applications ----
+    xpg_add_test(NAME edition      COMMAND edition_test ${CMAKE_CURRENT_SOURCE_DIR}/bac/Armoire_Gaz)   # ---- 1.12.0 : deux applications ----
     xpg_add_test(NAME hmioverload  COMMAND hmi_overload_test)                # ---- 1.11.20 : les signatures et les surcharges ----
     xpg_add_test(NAME hmidecl      COMMAND hmi_decl_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/decl/corpus.txt   # ---- 1.11.18 : les declarations (lot 2) ----
                  ${CMAKE_CURRENT_SOURCE_DIR}/bac/Armoire_Gaz ${CMAKE_CURRENT_SOURCE_DIR}/projets/project)

@@ -8,9 +8,13 @@
 // =============================================================================
 #include "../src/app/EditionMigration.hpp"
 #include "../src/core/Edition.hpp"
+#include "../src/hmi/HmiCheck.hpp"
+#include "../src/hmi/HmiStandalone.hpp"
+#include "../src/hmi/HmiStore.hpp"
 #include "../src/hmi/HmiVersions.hpp"
 #include "../src/project/ProjectStore.hpp"
 
+#include <algorithm>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -54,7 +58,7 @@ void legacyProject(const fs::path& dir, const std::string& name, bool fullHmi) {
 
 } // namespace
 
-int main() {
+int main(int argc, char** argv) {
     const fs::path root = fs::temp_directory_path() / "xpg-edition-test";
     std::error_code ec;
     fs::remove_all(root, ec);
@@ -164,6 +168,41 @@ int main() {
         auto ok = project::ProjectStore::duplicate((projets / "Armoire").string(), (root / "copies" / "API").string(), "Copie");
         check(static_cast<bool>(ok) && fs::exists(root / "copies" / "API" / "sections" / "Principal.st") && !fs::exists(root / "copies" / "API" / "ihm"),
               "API : dupliquer copie le programme, pas ihm/");
+    }
+
+    // ---- l'IHM d'un projet de la 1.11, rendue autonome (bac/Armoire_Gaz) ---------------
+    if (argc > 1 && fs::is_directory(argv[1])) {
+        core::setEdition(core::Edition::Ihm);
+        const fs::path legacy = root / "bac" / "projets";
+        fs::create_directories(legacy);
+        fs::copy(argv[1], legacy / "Armoire_Gaz", fs::copy_options::recursive, ec);
+        check(!ec, "le bac copie");
+        const auto before = hmi::load((legacy / "Armoire_Gaz").string());
+        std::size_t errorsBefore = 0;
+        if (before)
+            for (const auto& i : hmi::compileWith(*before, [](std::string_view) { return false; }))
+                errorsBefore += i.severity == hmi::Issue::Severity::Error;
+        const auto rep = app::edition::migrateLegacyProjects(legacy, legacy / "ihm", core::Edition::Ihm);
+        check(rep.copied.size() == 1 && rep.standalone.size() == 1, "Armoire_Gaz recopiee et rendue autonome");
+        const auto after = hmi::load((legacy / "ihm" / "Armoire_Gaz").string());
+        check(static_cast<bool>(after), "son IHM se relit");
+        if (after) {
+            const auto* armoires = after->variable("Armoires");
+            check(armoires && armoires->type.rfind("ARRAY[", 0) == 0, "Armoires : une variable IHM, un tableau (" + std::string(armoires ? armoires->type : "absente") + ")");
+            bool armoireType = false;
+            for (const auto& t : after->programs.types) armoireType = armoireType || t.name == "armoire";
+            check(armoireType, "le DDT armoire : un type IHM");
+            const bool equipment = std::any_of(after->equipments.begin(), after->equipments.end(),
+                                               [](const hmi::Equipment& e) { return e.name == hmi::standalone::kPlcEquipment; });
+            check(equipment == after->comm.modbus(), "l'automate relie par Modbus : l'equipement Automate");
+            std::size_t errorsAfter = 0;
+            for (const auto& i : hmi::compileWith(*after, [](std::string_view) { return false; }))
+                errorsAfter += i.severity == hmi::Issue::Severity::Error;
+            check(errorsBefore > 100 && errorsAfter * 10 < errorsBefore,
+                  "Compiler sans automate : " + std::to_string(errorsBefore) + " erreurs avant, " + std::to_string(errorsAfter) + " apres");
+        }
+        check(fs::exists(legacy / "Armoire_Gaz" / "sections") && !fs::exists(legacy / "ihm" / "Armoire_Gaz" / "sections"), "l'original garde son programme, la copie n'en a pas");
+        std::printf("%s", rep.standalone.empty() ? "" : rep.standalone.front().second.c_str());
     }
 
     core::setEdition(core::Edition::Both);

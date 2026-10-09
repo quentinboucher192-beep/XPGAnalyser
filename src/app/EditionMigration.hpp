@@ -11,6 +11,8 @@
 //    - API : tout, sauf ihm/ ;
 //    - IHM : le manifeste, ihm/, donnees/, versions/ (si l'IHM n'est pas la vue
 //      vide que la 1.11 creait pour chaque projet).
+//  XPGAnalyser IHM rend chaque IHM recopiee autonome (hmi::standalone) : les noms de
+//  l'automate qu'elle lisait deviennent ses variables, depuis le programme d'origine.
 //  Le manifeste de la copie dit son application (edition = api | ihm). Les
 //  originaux ne bougent pas ; versions/ suit (chaque application n'y voit et
 //  n'y restaure que sa moitie : hmi::ver::included).
@@ -34,6 +36,7 @@ struct MigrationReport {
     std::vector<std::pair<std::string, std::string>> copied;      // l'original, la copie (UTF-8)
     std::vector<std::string> skipped;                             // "Nom : raison"
     std::vector<std::string> problems;                            // ce qui n'a pas pu se faire
+    std::vector<std::pair<std::string, std::string>> standalone;  // IHM : le projet, ce qui a ete fait (hmi::standalone)
 };
 
 // Le nom du marqueur, dans le rangement de l'application.
