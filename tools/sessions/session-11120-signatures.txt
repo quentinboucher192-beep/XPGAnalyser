@@ -6,7 +6,8 @@
 #    2. Nouvelle fonction Convertir : une surcharge de la meme forme qu'une autre, dite ;
 #    3. son parametre passe en BOOL : une vraie surcharge, plus de faute ;
 #    4. le script Essai_Signatures : aucun appel refuse ;
-#    5. un appel tape qu'aucune surcharge n'accepte : dit a sa place (puis Ctrl+Z) ;
+#    5. un appel tape qu'aucune surcharge n'accepte (Convertir('texte') : aucune ne prend
+#       un STRING seul) : dit a sa place (puis Ctrl+Z) ;
 #    6. la simulation : la Console dit ce que chaque appel a pris, et Graine ecrite.
 # =============================================================================
 attendre 3
@@ -38,6 +39,9 @@ sous-onglet "Paramètres"
 attendre 4
 cellule "Entree" "Type" "BOOL"
 attendre 5
+#  (le message de la creation dure 8 s - 240 images a l'horloge fixe de la session :
+#   passe, la barre dit l'etat du volet)
+attendre 260
 capture 11120_03_une_vraie_surcharge.png
 
 # ---- 4. Le script : chaque appel prend la sienne ----
@@ -52,8 +56,11 @@ clic 1300 320
 attendre 1
 touche ctrl+fin
 touche entree
-texte "Texte_Entier := Convertir(Graine, 2);"
+texte "Texte_Entier := Convertir('texte');"
 attendre 5
+#  (la bulle de la faute, sur Convertir de la ligne 8)
+survol 1150 326
+attendre 40
 capture 11120_05_aucune_surcharge.png
 touche ctrl+z
 attendre 4
