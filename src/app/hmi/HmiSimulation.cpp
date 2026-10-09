@@ -1643,7 +1643,7 @@ void HmiLiveCanvas::pressObject(std::size_t layer, gfx::Point p, int clickCount)
                 rows = project_ ? project_->security.users.size() : 0;
             }
             const auto part = hmi::recipeManagerHit(*o, box.w, box.h, lx, ly, rows);
-            if (runtime_ && runtime_->focusedObject() != kNoId) clickedAway->emit();
+            if (runtime_ && runtime_->focusedObject() != kNoId) clickedAway->emit(id);
             if (!part.empty()) partClicked->emit(id, part);
             return;
         }
@@ -1678,7 +1678,7 @@ void HmiLiveCanvas::pressObject(std::size_t layer, gfx::Point p, int clickCount)
                 }
             }
             const bool form = o->kind == hmi::Kind::VariableTable || o->kind == hmi::Kind::RecipeEditor;
-            if (runtime_ && runtime_->focusedObject() != kNoId && (!form || runtime_->focusedObject() != id || part.empty())) clickedAway->emit();
+            if (runtime_ && runtime_->focusedObject() != kNoId && (!form || runtime_->focusedObject() != id || part.empty())) clickedAway->emit(id);
             if (!part.empty()) partClicked->emit(id, part);
             const bool alsoClick = o->kind == hmi::Kind::AlarmSummary || o->kind == hmi::Kind::History
                                 || ((o->kind == hmi::Kind::AlarmBanner || o->kind == hmi::Kind::ProductionCounter) && part.empty());
@@ -1687,14 +1687,14 @@ void HmiLiveCanvas::pressObject(std::size_t layer, gfx::Point p, int clickCount)
         // Lot 14 : un bouton du diagnostic automate (Reconnecter, Remettre a zero).
         if (o->kind == hmi::Kind::PlcDiagnostic) {
             const std::string part = hmi::comm::diagnosticHit(*o, box.w, box.h, lx, ly, 0);
-            if (runtime_ && runtime_->focusedObject() != kNoId) clickedAway->emit();
+            if (runtime_ && runtime_->focusedObject() != kNoId) clickedAway->emit(id);
             if (!part.empty()) partClicked->emit(id, part);
             return;
         }
         // Lot 13 : un bouton du selecteur de theme (Jour, Nuit).
         if (o->kind == hmi::Kind::ThemeSelector) {
             const std::string part = hmi::themeSelectorHit(*o, box.w, box.h, lx, ly);
-            if (runtime_ && runtime_->focusedObject() != kNoId) clickedAway->emit();
+            if (runtime_ && runtime_->focusedObject() != kNoId) clickedAway->emit(id);
             if (!part.empty()) partClicked->emit(id, part);
             return;
         }
@@ -1702,7 +1702,7 @@ void HmiLiveCanvas::pressObject(std::size_t layer, gfx::Point p, int clickCount)
         if (o->kind == hmi::Kind::LanguageSelector) {
             const std::size_t n = project_ ? hmi::languageChoices(*o, project_->languages).size() : 0;
             const std::string part = hmi::languageSelectorHit(*o, box.w, box.h, lx, ly, n);
-            if (runtime_ && runtime_->focusedObject() != kNoId) clickedAway->emit();
+            if (runtime_ && runtime_->focusedObject() != kNoId) clickedAway->emit(id);
             if (!part.empty()) partClicked->emit(id, part);
             return;
         }
@@ -1710,7 +1710,7 @@ void HmiLiveCanvas::pressObject(std::size_t layer, gfx::Point p, int clickCount)
         // un onglet, un bandeau, une zone ; la barre d'un panneau defilant se tire.
         if (hmi::kindIsNavigation(o->kind) && o->kind != hmi::Kind::Frame) {
             const std::string part = lot12PartAt(layers_[layer].view, *o, box.w, box.h, lx, ly, runtime_, project_);
-            if (runtime_ && runtime_->focusedObject() != kNoId) clickedAway->emit();
+            if (runtime_ && runtime_->focusedObject() != kNoId) clickedAway->emit(id);
             if (!part.empty()) {
                 if (o->kind == hmi::Kind::ScrollPanel) {
                     scrollDrag_ = id;
@@ -1733,7 +1733,7 @@ void HmiLiveCanvas::pressObject(std::size_t layer, gfx::Point p, int clickCount)
         // Lot 9 : les commandes a parties (selecteur, boutons radio, liste deroulante,
         // date et heure, programmateur) ; le curseur et le potentiometre se tirent.
         if (o->kind == hmi::Kind::Slider || o->kind == hmi::Kind::Knob) {
-            if (runtime_ && runtime_->focusedObject() != kNoId) clickedAway->emit();
+            if (runtime_ && runtime_->focusedObject() != kNoId) clickedAway->emit(id);
             valueDrag_ = id;
             valueDragLayer_ = layer;
             valueDragged->emit(id, dragFraction(layer, *o, p), false);
@@ -1754,7 +1754,7 @@ void HmiLiveCanvas::pressObject(std::size_t layer, gfx::Point p, int clickCount)
                     break;
                 }
             }
-            if (runtime_ && runtime_->focusedObject() != kNoId) clickedAway->emit();
+            if (runtime_ && runtime_->focusedObject() != kNoId) clickedAway->emit(id);
             if (!part.empty()) partClicked->emit(id, part);
             return;
         }
@@ -1762,7 +1762,7 @@ void HmiLiveCanvas::pressObject(std::size_t layer, gfx::Point p, int clickCount)
             || o->kind == hmi::Kind::LogoutButton) {
             const auto part = hmi::formHit(*o, box.w, box.h, lx, ly);
             if (part.empty()) {
-                if (runtime_ && runtime_->focusedObject() != kNoId && runtime_->focusedObject() != id) clickedAway->emit();
+                if (runtime_ && runtime_->focusedObject() != kNoId && runtime_->focusedObject() != id) clickedAway->emit(id);
             } else {
                 partClicked->emit(id, part);
             }
@@ -1771,7 +1771,7 @@ void HmiLiveCanvas::pressObject(std::size_t layer, gfx::Point p, int clickCount)
         }
     }
     // Un clic ailleurs que dans le champ en saisie : il perd le focus.
-    if (runtime_ && runtime_->focusedObject() != kNoId && runtime_->focusedObject() != id) clickedAway->emit();
+    if (runtime_ && runtime_->focusedObject() != kNoId && runtime_->focusedObject() != id) clickedAway->emit(id);
     // Lot 12 : le fond de la vue - un glisser horizontal change de vue ; une vue
     // qu'on peut zoomer, zoomee, se tire.
     if (id == kNoId && layer < layers_.size() && !layers_[layer].popup) {
@@ -1949,7 +1949,7 @@ ui::EventResult HmiLiveCanvas::onEvent(const ui::InputEvent& ev) {
             }
             if (pr.modal) {
                 if (pr.closeOutside) popupCloseRequested->emit(pr.slot, false);
-                else if (runtime_ && runtime_->focusedObject() != kNoId) clickedAway->emit();
+                else if (runtime_ && runtime_->focusedObject() != kNoId) clickedAway->emit(hmi::kNoId);
                 return ui::EventResult::Consumed;
             }
             // Non modale : un clic dehors la ferme si elle le demande (une aide, un
@@ -2935,8 +2935,8 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
         runtime_.typeKey(static_cast<hmi::EditKey>(key), now_);
         refreshNow();
     });
-    links_ += canvas_->clickedAway->connect([this] {
-        runtime_.unfocus(now_);
+    links_ += canvas_->clickedAway->connect([this](Id towards) {
+        runtime_.unfocus(now_, towards);
         refreshNow();
     });
     // Lot 10 : le menu natif Parametres systeme, l'ecran en veille.

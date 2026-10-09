@@ -112,6 +112,9 @@ const std::vector<Note>& table() {
         note("1.11.23", "Variables syst\xC3\xA8me", Kind::New,
          "LA SOURIS ET LE CLAVIER : un domaine Souris et clavier - SYS.MouseX, SYS.MouseY (en pixels de la vue), SYS.MouseView, SYS.MouseObject, les boutons (SYS.MouseLeft, Right, Middle, Buttons), la molette ; SYS.KeyLast, SYS.KeysDown, SYS.KeyCtrl, Shift, Alt, SYS.KeyHoldTime, les compteurs ; SYS.ShortcutLast ; et SYS.Key.<touche> (SYS.Key.F5, SYS.Key.Up, SYS.Key.Digit1), vraie tant que la touche est tenue.",
          "variables-systeme", ""),
+        note("1.11.23", "Objets", Kind::Fixed,
+         "VALIDER LES SAISIES : une op\xC3\xA9ration nouvelle \xC3\xA9" "crit la saisie en cours de la vue, comme Entr\xC3\xA9" "e - le clic sur son bouton ne fait plus perdre la saisie au champ ; refus\xC3\xA9" "e (hors bornes), les actions suivantes du bouton ne partent pas. Le bouton Valider du mod\xC3\xA8le Saisie d'une consigne s'en sert : avant, il fermait la popup sans rien \xC3\xA9" "crire si l'on n'avait pas appuy\xC3\xA9 sur Entr\xC3\xA9" "e.",
+         "objet-champ-de-saisie", ""),
         // 1.11.22 (09/10/2026 en fin d'apres-midi) : la liste du client du 09/10 - les surcharges d'un
         // symbole, les parametres retires ou renommes partout, Simulation depliee, l'explorateur modernise,
         // les champs de saisie (rien n'est ecrit avant la validation).

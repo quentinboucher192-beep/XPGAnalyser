@@ -601,7 +601,9 @@ public:
     void objectPart(Id object, std::string_view part, double now);
     void typeText(std::string_view text, double now);
     void typeKey(EditKey, double now);
-    void unfocus(double now);                                   // un clic ailleurs
+    // Un clic ailleurs. 1.11.23 : `towards` - l'objet clique ; un bouton qui porte Valider les
+    // saisies (au clic) ne fait pas perdre la saisie : il la valide lui-meme.
+    void unfocus(double now, Id towards = kNoId);
     [[nodiscard]] Id               focusedObject() const noexcept { return focused_; }
     [[nodiscard]] const FormState* formState(Id object) const;
     // Le clavier virtuel du champ qui a le focus : "numerique", "complet", ou "".
@@ -1460,6 +1462,8 @@ private:
     std::int64_t                     keyPresses_{0}, shortcutCount_{0};
     void resetInput();
     void keysTick(double now);
+    bool submitFailed_{false};          // 1.11.23 : Valider les saisies refusee - la suite du geste ne part pas
+    [[nodiscard]] bool clickSubmits(Id object) const;   // ... cet objet la porte (au clic)
     void runKeyActions(const View&, Trigger, const keys::Chord&, double now, const std::function<bool(std::size_t)>& pick = {});
     std::map<std::string, std::vector<TrendSeries>> trends_;   // "vue:objet"
     std::vector<TrendMarker>                        markers_;  // lot 18

@@ -383,6 +383,11 @@ enum class Operation : std::uint8_t {
     // Clavier virtuel - un champ de saisie et son clavier ; ce qu'on tape va dans
     // la cible (params : titre, clavier, min, max, unite, masque). HmiActionKinds.hpp.
     Maths, Keyboard,
+    // 1.11.23 : Valider les saisies - le champ de saisie en cours de la vue (de la popup) ecrit
+    // sa valeur, comme Entree ; refusee (hors bornes...), les actions suivantes du meme geste
+    // ne partent pas (un Fermer la popup apres elle attend une saisie juste). Un clic sur un
+    // bouton qui la porte ne fait pas perdre la saisie au champ.
+    SubmitInputs,
 };
 inline constexpr Trigger kTriggers[] = {
     Trigger::Click, Trigger::DoubleClick, Trigger::RisingEdge, Trigger::FallingEdge, Trigger::LongPress,
@@ -407,6 +412,7 @@ inline constexpr Operation kOperations[] = {
     Operation::GifPlay, Operation::GifPause, Operation::GifStop, Operation::GifReplay,   // lot 16
     Operation::ApplyCopy,                                                                // 1.9
     Operation::Maths, Operation::Keyboard,                                               // 1.11.6
+    Operation::SubmitInputs,                                                             // 1.11.23
 };
 // Lot 16 : les operations qui visent un GIF anime de la vue.
 [[nodiscard]] constexpr bool operationTargetsGif(Operation o) noexcept {

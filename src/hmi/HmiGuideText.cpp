@@ -2283,8 +2283,8 @@ const std::vector<Topic>& topics() {
                          "courbe, le tableau des variables\nConfirmation\tune popup \xC3\xA0 "
                          "param\xC3\xA8tres (Question, Reponse) : la question, Oui (Reponse \xC3\xA0 VRAI) "
                          "et Non (\xC3\xA0 FAUX), qui la ferment\nSaisie d'une consigne\tune popup \xC3\xA0 "
-                         "param\xC3\xA8tre (Consigne) : la valeur actuelle, le champ de saisie, Valider et "
-                         "Fermer\nPopup moteur\tune popup \xC3\xA0 param\xC3\xA8tre (Moteur) : le moteur "
+                         "param\xC3\xA8tre (Consigne) : la valeur actuelle, le champ de saisie, Valider (1.11.23 : "
+                         "\xC3\xA9" "crit la saisie, puis ferme) et Fermer\nPopup moteur\tune popup \xC3\xA0 param\xC3\xA8tre (Moteur) : le moteur "
                          "(Moteur.Marche, d\xC3\xA9" "faut Moteur.Defaut), son \xC3\xA9tat, Auto / Manu "
                          "(Moteur.Auto), Marche et Arr\xC3\xAAt, le compteur horaire\nPopup vanne\tune popup "
                          "\xC3\xA0 param\xC3\xA8tre (Vanne) : la vanne r\xC3\xA9glante (Vanne.Position, "
@@ -5765,6 +5765,10 @@ const std::vector<Topic>& topics() {
                          "passe au champ suivant), ou un clic ailleurs si Valider en quittant est coch\xC3\xA9. "
                          "\xC3\x89" "chap, ou un clic ailleurs sans Valider en quittant, annule la saisie. Les autres "
                          "objets qui montrent la m\xC3\xAAme variable gardent l'ancienne valeur jusque-l\xC3\xA0.", {}},
+             {K::Paragraph, "**Un bouton Valider** (1.11.23) : son action **Valider les saisies** \xC3\xA9" "crit la saisie en cours "
+                         "de la vue, comme Entr\xC3\xA9" "e ; le clic sur ce bouton ne fait pas perdre la saisie au champ. "
+                         "Refus\xC3\xA9" "e (hors bornes), les actions suivantes du bouton ne partent pas : un \xC2\xAB Fermer la popup \xC2\xBB "
+                         "apr\xC3\xA8s elle attend une saisie juste. Le mod\xC3\xA8le \xC2\xAB Saisie d'une consigne \xC2\xBB l'utilise.", {}, "1.11.23"},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nVariable "
                          "\xC3\xA9" "crite\t(vide)\tLa variable (IHM ou automate) que le champ montre et "

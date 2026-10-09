@@ -41,7 +41,7 @@ HmiExampleView::HmiExampleView(std::string id) : ui::Widget(std::move(id)) {
     });
     links_ += canvas_->textTyped->connect([this, live](const std::string& text) { if (live()) { runtime_->typeText(text, clock_); showNow(); } });
     links_ += canvas_->keyTyped->connect([this, live](int key) { if (live()) { runtime_->typeKey(static_cast<hmi::EditKey>(key), clock_); showNow(); } });
-    links_ += canvas_->clickedAway->connect([this, live] { if (live()) { runtime_->unfocus(clock_); showNow(); } });
+    links_ += canvas_->clickedAway->connect([this, live](hmi::Id towards) { if (live()) { runtime_->unfocus(clock_, towards); showNow(); } });
     links_ += canvas_->loginPartClicked->connect([this, live](const std::string& part) { if (live()) { runtime_->loginPart(part, clock_); showNow(); } });
     links_ += canvas_->systemPartClicked->connect([this, live](const std::string& part) { if (live()) { runtime_->systemPart(part, clock_); showNow(); } });
     links_ += canvas_->signaturePartClicked->connect([this, live](const std::string& part) {

@@ -143,6 +143,8 @@ inline std::string actionText(const hmi::Action& a) {
         case hmi::Operation::ApplyCopy:
             what = "appliquer copie sur r\xC3\xA9" "f\xC3\xA9rence " + (a.target.empty() || a.target == "*" ? std::string("(tous)") : a.target);
             break;
+        case hmi::Operation::SubmitInputs: what = "valider les saisies"; break;     // 1.11.23
+        default: break;
     }
     std::string when(triggerText(a.trigger));
     if (hmi::triggerIsKey(a.trigger)) when += " " + hmi::keys::label(a.key);     // 1.11.23 : la touche du raccourci

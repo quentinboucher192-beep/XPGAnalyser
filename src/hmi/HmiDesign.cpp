@@ -527,7 +527,8 @@ const std::vector<ViewTemplate>& viewTemplates() {
         {"confirmation", "Confirmation", "Une popup \xC3\xA0 param\xC3\xA8tres (Question, Reponse) : la question, Oui et Non.", "popup",
          {"popup"}, 420, 200},
         {"consigne", "Saisie d'une consigne",
-         "Une popup \xC3\xA0 param\xC3\xA8tre (Consigne) : la valeur actuelle, le champ de saisie, Valider et Fermer.", "popup", {"popup"}, 420, 260},
+         "Une popup \xC3\xA0 param\xC3\xA8tre (Consigne) : la valeur actuelle, le champ de saisie, Valider (\xC3\xA9" "crit la saisie, puis ferme) "
+         "et Fermer.", "popup", {"popup"}, 420, 260},
         {"moteur", "Popup moteur",
          "Une popup \xC3\xA0 param\xC3\xA8tre (Moteur) : le moteur, son \xC3\xA9tat, Auto / Manu, Marche et Arr\xC3\xAAt, le compteur horaire.",
          "popup", {"popup"}, 480, 300},
@@ -762,6 +763,8 @@ void fillFromTemplate(Project& p, View& v, std::string_view key) {
         in.set("variable", "Consigne");
         const double bw = (W - 60) / 2;
         auto& ok = button("Btn_Valider", "Valider", 20, H - 68, bw, 48);
+        // 1.11.23 : Valider ecrit d'abord la saisie en cours (refusee : la popup reste ouverte).
+        act(ok, Operation::SubmitInputs, "");
         act(ok, Operation::ClosePopup, "");
         auto& close = button("Btn_Fermer", "Fermer", 40 + bw, H - 68, bw, 48);
         act(close, Operation::ClosePopup, "");

@@ -135,7 +135,7 @@ const std::vector<Group>& groups() {
     static const std::vector<Group> g = {
         {"Variables", "\xC3\x89" "crire, calculer ou faire saisir une variable",
          {Operation::Set, Operation::Reset, Operation::Toggle, Operation::Assign, Operation::Increment, Operation::Decrement,
-          Operation::Maths, Operation::Keyboard}},
+          Operation::Maths, Operation::Keyboard, Operation::SubmitInputs}},
         {"Navigation", "Changer de vue", {Operation::Navigate, Operation::NavigateBack, Operation::NavigateForward, Operation::NavigateHome}},
         {"Popups", "Ouvrir, changer, fermer une popup",
          {Operation::Popup, Operation::ChangePopup, Operation::ClosePopup, Operation::CloseAllPopups, Operation::PreviousPopup,
@@ -174,6 +174,10 @@ std::string_view help(Operation o) noexcept {
         case Operation::Keyboard:
             return "Ouvre un champ de saisie avec le clavier virtuel ; la valeur tap\xC3\xA9" "e va dans la variable (titre, "
                    "clavier, minimum, maximum, unit\xC3\xA9, masqu\xC3\xA9).";
+        case Operation::SubmitInputs:
+            return "\xC3\x89" "crit la valeur tap\xC3\xA9" "e dans le champ de saisie en cours de la vue, comme Entr\xC3\xA9" "e. Refus\xC3\xA9" "e (hors "
+                   "bornes...), les actions suivantes du m\xC3\xAA" "me geste ne partent pas : un \xC2\xAB Fermer la popup \xC2\xBB apr\xC3\xA8s elle "
+                   "attend une saisie juste. Le clic sur le bouton ne fait pas perdre la saisie au champ.";
         case Operation::Navigate: return "Ouvre une autre vue (avec ses param\xC3\xA8tres et une transition).";
         case Operation::NavigateBack: return "Revient \xC3\xA0 la vue d'avant (l'historique).";
         case Operation::NavigateForward: return "Repart vers la vue quitt\xC3\xA9" "e par Vue pr\xC3\xA9" "c\xC3\xA9" "dente.";

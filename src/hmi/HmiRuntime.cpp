@@ -1762,6 +1762,18 @@ void Runtime::fire(const View& v, const Object* o, const Action& a, double now, 
         case Operation::Keyboard:
             openPrompt(v, o, a, source);
             break;
+        // 1.11.23 : Valider les saisies - le champ en cours de cette vue ecrit sa valeur (comme
+        // Entree) ; refusee, il garde le focus et son message, et la suite du geste s'arrete.
+        case Operation::SubmitInputs: {
+            submitFailed_ = false;
+            const Object* field = focused_ != kNoId ? v.object(focused_) : nullptr;
+            if (field && field->kind == Kind::InputField) {
+                const Id id = field->id;
+                submitForm(v, *field, now);
+                submitFailed_ = focused_ == id;
+            }
+            break;
+        }
         case Operation::GifReplay: {
             bool ok = false;
             const std::string n = trimText(a.value).empty() ? std::string("1") : evalText(a.value, &ok);
@@ -1858,6 +1870,11 @@ void Runtime::runActions(const View& v, const Object* o, Trigger t, double now) 
         if (copy[i].trigger != t) continue;
         actionOrigin_ = i < origins.size() ? origins[i] : std::string{};
         fire(v, o, copy[i], now, byUser);
+        // 1.11.23 : une saisie refusee par Valider les saisies arrete le geste (la popup reste).
+        if (copy[i].operation == Operation::SubmitInputs && submitFailed_) {
+            submitFailed_ = false;
+            break;
+        }
     }
     actionOrigin_.clear();
 }
@@ -4207,8 +4224,18 @@ void Runtime::typeKey(EditKey k, double now) {
     }
 }
 
-void Runtime::unfocus(double now) {
+bool Runtime::clickSubmits(Id object) const {
+    const View* v = object != kNoId ? shownViewOf(object) : nullptr;
+    const Object* o = v ? v->object(object) : nullptr;
+    return o && std::any_of(o->actions.begin(), o->actions.end(), [](const Action& a) {
+               return a.trigger == Trigger::Click && a.operation == Operation::SubmitInputs;
+           });
+}
+
+void Runtime::unfocus(double now, Id towards) {
     if (focused_ == kNoId) return;
+    // 1.11.23 : le bouton Valider les saisies - le champ garde sa saisie, le bouton la valide.
+    if (towards != kNoId && clickSubmits(towards)) return;
     const Id object = focused_;
     const View* v = shownViewOf(object);
     const Object* o = v ? v->object(object) : nullptr;

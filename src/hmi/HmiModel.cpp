@@ -1797,6 +1797,8 @@ constexpr OperationName kOperationNames[] = {
     // 1.11.6
     {Operation::Maths, "Maths"},
     {Operation::Keyboard, "Clavier virtuel"},
+    // 1.11.23
+    {Operation::SubmitInputs, "Valider les saisies"},
 };
 struct PlacementName { const char* key; const char* label; };
 constexpr PlacementName kPlacementNames[] = {
@@ -2026,6 +2028,8 @@ std::string describeAction(const Action& a) {
         }
         case Operation::Keyboard:
             s += " \xE2\x86\x92 " + a.target;
+            break;
+        case Operation::SubmitInputs:                       // 1.11.23 : le libelle suffit
             break;
         // 1.9 : un parametre en mode Les deux, ou tous
         case Operation::ApplyCopy: {

@@ -21195,6 +21195,63 @@ void renommerPartout1117() {
     check(sp->functions[0].body.find("T_MODE#Automatique") != std::string::npos, "renommer T_MODE#Auto : la fonction du symbole suit");
 }
 
+// ---- 1.11.23 : Valider les saisies - le bouton Valider d'une popup ecrit la saisie en cours ----
+void validerSaisies11123() {
+    std::printf("-- 1.11.23 : Valider les saisies (le bouton Valider de la popup Saisie d'une consigne)\n");
+    Project p;
+    View v = makeView(p, "Vue_V");
+    View pop = makeView(p, "Pop_Consigne");
+    p.programs.variables.push_back(hmiVar(p, "Consigne", "REAL", "20.0"));
+    hmi::design::fillFromTemplate(p, pop, "consigne");
+    pop.params.clear();                                     // sans parametre : le champ ecrit Consigne directement
+    const Object* champ = nullptr;
+    const Object* valider = nullptr;
+    for (const auto& o : pop.objects) {
+        if (o.name == "Saisie_Consigne") champ = &o;
+        if (o.name == "Btn_Valider") valider = &o;
+    }
+    check(champ && valider && valider->actions.size() == 2 && valider->actions[0].operation == Operation::SubmitInputs
+              && valider->actions[1].operation == Operation::ClosePopup,
+          "le modele Saisie d'une consigne : Valider \xE2\x86\x92 Valider les saisies, puis Fermer la popup");
+    if (!champ || !valider) return;
+    const Id fieldId = champ->id, okId = valider->id;
+    pop.object(fieldId)->set("max", "40");
+    p.views = {v, pop};
+    p.config.startView = v.id;
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    rt.tick(0.0);
+    (void)rt.openPopup(p.views[1].id, Transition{}, 0.10);
+    const auto consigne = [&] { return rt.variable("Consigne") ? rt.variable("Consigne")->asReal() : -1.0; };
+    // 12 tape, puis un clic sur Valider : la saisie n'est pas perdue, elle est ecrite, la popup se ferme.
+    rt.objectPart(fieldId, "champ", 0.20);
+    rt.typeText("12", 0.25);
+    rt.unfocus(0.30, okId);                                 // le canevas : un clic sur Valider, hors du champ
+    check(rt.focusedObject() == fieldId && consigne() == 20.0, "le clic sur Valider ne fait pas perdre la saisie (rien d'ecrit encore)");
+    rt.press(okId, 0.30);
+    rt.release(okId, 0.35, true);
+    check(consigne() == 12.0 && rt.popups().empty(), "Valider : Consigne = 12, la popup se ferme");
+    // 999 (au-dela de 40) : refusee - la popup reste, le champ garde le clavier et dit pourquoi.
+    (void)rt.openPopup(p.views[1].id, Transition{}, 1.00);
+    rt.objectPart(fieldId, "champ", 1.10);
+    rt.typeText("999", 1.15);
+    rt.unfocus(1.20, okId);
+    rt.press(okId, 1.20);
+    rt.release(okId, 1.25, true);
+    const auto* form = rt.formState(fieldId);
+    check(consigne() == 12.0 && rt.popups().size() == 1 && rt.focusedObject() == fieldId && form
+              && form->message.find("hors bornes") != std::string::npos,
+          "999 : refuse (hors bornes), la popup reste ouverte, le champ garde le clavier");
+    // Fermer, lui, abandonne la saisie (le clic ailleurs).
+    Id fermer = kNoId;
+    for (const auto& o : p.views[1].objects) if (o.name == "Btn_Fermer") fermer = o.id;
+    rt.unfocus(1.40, fermer);
+    rt.press(fermer, 1.40);
+    rt.release(fermer, 1.45, true);
+    check(consigne() == 12.0 && rt.popups().empty() && rt.focusedObject() == kNoId, "Fermer : la saisie abandonnee, la popup fermee");
+}
+
 // ---- 1.11.23 : la souris et le clavier (SYS.Mouse*, SYS.Key*), les raccourcis des vues ----
 void clavierSouris11123() {
     std::printf("-- 1.11.23 : la souris, le clavier, les raccourcis des vues\n");
@@ -21519,6 +21576,7 @@ int main(int argc, char** argv) {
     renommerPartout1117();            // 1.11.17 (refonte, lot 0) : renommer une fonction suit chaque appel
     journalLocales1117();             // 1.11.17 (refonte, lot 0) : IHM_JOURNAL et IHM_LOG lisent les locales
     clavierSouris11123();             // 1.11.23 : la souris, le clavier, les raccourcis des vues
+    validerSaisies11123();            // 1.11.23 : Valider les saisies (le bouton Valider de la popup consigne)
     if (argc > 1) simulateurModbusLot14(argv[1]);
     if (argc > 1) simulateur(argv[1]);
     if (argc > 1) dossierRouvert(argv[1]);

@@ -285,7 +285,9 @@ public:
     const core::SignalPtr<int> popupRaised = core::Signal<int>::create();                      // cliquee dessous
     const core::SignalPtr<std::string> textTyped = core::Signal<std::string>::create();        // un champ a le focus
     const core::SignalPtr<int> keyTyped = core::Signal<int>::create();                         // hmi::EditKey
-    const core::SignalPtr<> clickedAway = core::Signal<>::create();                            // hors du champ en saisie
+    // Hors du champ en saisie ; 1.11.23 : l'objet clique (kNoId : le fond) - un bouton Valider les
+    // saisies ne fait pas perdre la saisie.
+    const core::SignalPtr<hmi::Id> clickedAway = core::Signal<hmi::Id>::create();
     // Ou sont, a l'ecran, la fenetre d'une popup, sa barre de titre et sa croix
     // (pour les scripts et les tests) ; le clavier virtuel et ses touches.
     struct PopupRect { gfx::Rect window, title, close, content; int slot{-1}; bool modal{true}, movable{false}, closeOutside{false}; std::size_t layer{0}; };
