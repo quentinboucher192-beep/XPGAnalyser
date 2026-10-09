@@ -185,8 +185,13 @@ struct Expansion {
 //  que le moteur resout (boundSymbolFunction) : le corps en vigueur pour cette instance,
 //  ses parametres remplaces par les arguments de l'instance.
 inline constexpr std::string_view kSuperName = "SUPER";
-// La fonction `name` du symbole (sans casse) ; nul : aucune.
+// La fonction `name` du symbole (sans casse) ; nul : aucune. 1.11.20 : la premiere de ce nom ;
+// "Ouvrir#702" (la cle d'une surcharge) : celle d'identifiant 702.
 [[nodiscard]] const HmiFunction* symbolFunction(const View& symbol, std::string_view name);
+// 1.11.20 : LES SURCHARGES - les fonctions de ce nom du symbole, dans l'ordre.
+[[nodiscard]] std::vector<const HmiFunction*> symbolFunctions(const View& symbol, std::string_view name);
+// 1.11.20 : celles que vise un appel d'instance ("Vue_Vannes.Vanne_3.Ouvrir", "....SUPER.Ouvrir") ; vide : aucune.
+[[nodiscard]] std::vector<const HmiFunction*> symbolFunctionsAt(const Project&, std::string_view call);
 // La redefinition de `function` dans l'instance ; nul : aucune.
 [[nodiscard]] const FunctionOverride* functionOverride(const Object& instance, std::string_view function);
 // Le corps qui tourne pour l'instance : sa redefinition (une fonction virtuelle), sinon celui du symbole.

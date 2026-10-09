@@ -26886,7 +26886,7 @@ void fonctionsExpressions11111() {
     check(err(s, "text", "GetActiveCount(30)").empty(), "dans le symbole : =GetActiveCount(30) passe (" + err(s, "text", "GetActiveCount(30)") + ")");
     check(err(s, "visible", "GetActiveCount(2) > 1").empty(), "... dans un calcul : GetActiveCount(2) > 1");
     check(err(s, "text", "Raz()").find("ne rend pas de valeur") != std::string::npos, "Raz() (sans retour) : refus\xC3\xA9" "e dans une expression");
-    check(err(s, "text", "GetActiveCount()").find("1 argument") != std::string::npos,
+    check(err(s, "text", "GetActiveCount()").find("il manque l'argument n") != std::string::npos,      // 1.11.20 : nomme
           "GetActiveCount() : il manque l'argument (" + err(s, "text", "GetActiveCount()") + ")");
     check(err(s, "text", "GetActiveCont(30)").find("veux-tu dire GetActiveCount") != std::string::npos,
           "une faute de frappe : veux-tu dire GetActiveCount ?");

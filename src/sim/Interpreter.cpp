@@ -5,7 +5,9 @@
 #include <charconv>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
+#include <functional>
 #include <map>
 #include <optional>
 #include <unordered_map>
@@ -139,7 +141,8 @@ public:
                         return core::fail(core::ErrorCode::InvalidArgument,
                                           "line " + std::to_string(startLine)
                                               + ": bad based literal");
-                    out.push_back(Token{Tok::Number, "", "", startLine, Value::integer(Type::DInt, v)});
+                    // 1.11.20 : INT#5 garde le nom de son type (16#FF : un nombre seul).
+                    out.push_back(Token{Tok::Number, base == 10 ? upper : std::string{}, "", startLine, Value::integer(Type::DInt, v)});
                     continue;
                 }
 
@@ -344,6 +347,9 @@ struct Expr {
     // whole point of the call is often the output binding.
     std::vector<std::pair<std::string, ExprPtr>> outputs;
     std::uint32_t line{0};
+    // 1.11.20 : un litteral type (INT#5 : "INT") ; vide : un nombre ecrit seul (5, 16#FF), dont
+    // le type se choisit a l'appel d'une surcharge.
+    std::string   literalType;
 };
 
 struct Stmt;
@@ -438,11 +444,15 @@ public:
             if (dialect_ && atWord("FUNCTION")) {
                 auto f = functionDeclaration();
                 if (!f) return core::Err<core::Error>(f.error());
+                // 1.11.20 : deux fonctions internes du meme nom (des surcharges) si leurs
+                // parametres different (nombre, modes, types ecrits) ; le controle (hmi::overload)
+                // refuse aussi deux types que le moteur calcule pareil (REAL et LREAL).
                 for (const auto& other : program->functions)
-                    if (upperOf(other->name) == upperOf((*f)->name))
+                    if (upperOf(other->name) == upperOf((*f)->name) && sameParameters(*other, **f))
                         return core::fail(core::ErrorCode::InvalidArgument,
                                           "line " + std::to_string((*f)->line) + ": function '" + (*f)->name
-                                              + "' is declared twice (first at line " + std::to_string(other->line) + ")",
+                                              + "' is declared twice with the same parameters (first at line "
+                                              + std::to_string(other->line) + ")",
                                           section_);
                 program->functions.push_back(*f);
                 continue;
@@ -458,6 +468,17 @@ public:
             if (*s) program->body.push_back(*s);
         }
         return program;
+    }
+
+    static bool sameParameters(const Function& a, const Function& b) {
+        if (a.params.size() != b.params.size()) return false;
+        for (std::size_t k = 0; k < a.params.size(); ++k) {
+            const auto& x = a.params[k];
+            const auto& y = b.params[k];
+            if (x.mode != y.mode) return false;
+            if (upperOf(x.type ? x.type->text() : std::string{}) != upperOf(y.type ? y.type->text() : std::string{})) return false;
+        }
+        return true;
     }
 
     // 1.10 : un type seul (le type d'une variable de l'environnement).
@@ -952,6 +973,7 @@ private:
             node->kind    = Expr::Kind::Literal;
             node->literal = t.literal;
             node->line    = t.line;
+            if (t.kind == Tok::Number && !t.text.empty() && t.text != "TRUE" && t.text != "FALSE") node->literalType = t.text;   // 1.11.20
             advance();
             return node;
         }
@@ -1256,6 +1278,313 @@ namespace {
 
 // 1.10 : un type ecrit ("ARRAY[0..9] OF REAL", "T_FOUR"), lu par le parseur du dialecte.
 core::Result<TypeRef> parseTypeText(std::string_view text);
+
+// ---- 1.11.20 : LE TYPE D'UNE EXPRESSION, SANS L'EVALUER (le choix d'une surcharge) ----
+// Les litteraux, les noms (une locale : son type declare ; sinon l'environnement), les
+// membres, les cases, p^, les operateurs (comme combine() les calcule : un reel l'emporte,
+// sinon l'entier le plus large ; un nombre seul compte pour un DINT, comme le moteur le
+// lit), les appels (leur type rendu). Vide : inconnu. Le controle (callSites) et le moteur
+// (Runner::shapesOf) s'en servent tous deux : ils choisissent la meme surcharge.
+std::string valueTypeName(Type t) {
+    switch (t) {
+        case Type::Bool:   return "BOOL";
+        case Type::Byte:   return "BYTE";
+        case Type::Word:   return "WORD";
+        case Type::DWord:  return "DWORD";
+        case Type::Int:    return "INT";
+        case Type::DInt:   return "DINT";
+        case Type::UInt:   return "UINT";
+        case Type::UDInt:  return "UDINT";
+        case Type::Real:   return "REAL";
+        case Type::Time:   return "TIME";
+        case Type::String: return "STRING";
+        case Type::Unknown: break;
+    }
+    return {};
+}
+
+int integerBits(const std::string& u) {
+    if (u == "SINT" || u == "USINT" || u == "BYTE") return 8;
+    if (u == "INT" || u == "UINT" || u == "WORD") return 16;
+    if (u == "DINT" || u == "UDINT" || u == "DWORD") return 32;
+    if (u == "LINT" || u == "ULINT" || u == "LWORD") return 64;
+    return 0;
+}
+
+// "Vue_A.Vanne_3.Ouvrir" : une chaine de noms et de membres (sans case) ; vide sinon.
+std::string dottedName(const Expr& e) {
+    if (e.kind == Expr::Kind::Reference) return e.name;
+    if (e.kind == Expr::Kind::Member && e.lhs) {
+        const std::string base = dottedName(*e.lhs);
+        return base.empty() ? std::string{} : base + "." + e.name;
+    }
+    return {};
+}
+
+// Le texte court d'un argument, pour les messages ("x + 1", "Tab[...]", "F(...)").
+std::string exprText(const Expr& e, int depth = 0) {
+    if (depth > 6) return "...";
+    switch (e.kind) {
+        case Expr::Kind::Literal:
+            if (e.literal.type() == Type::String) return "'" + e.literal.asString() + "'";
+            if (e.literal.type() == Type::Bool) return e.literal.isTruthy() ? "TRUE" : "FALSE";
+            if (e.literal.type() == Type::Real) {
+                char b[48];
+                std::snprintf(b, sizeof b, "%g", e.literal.asReal());
+                return b;
+            }
+            return (e.literalType.empty() ? std::string{} : e.literalType + "#") + std::to_string(e.literal.asInteger());
+        case Expr::Kind::Null: return "NULL";
+        case Expr::Kind::Reference: return e.name;
+        case Expr::Kind::Member: return (e.lhs ? exprText(*e.lhs, depth + 1) : std::string{}) + "." + e.name;
+        case Expr::Kind::Index: return (e.lhs ? exprText(*e.lhs, depth + 1) : std::string{}) + "[...]";
+        case Expr::Kind::Deref: return (e.lhs ? exprText(*e.lhs, depth + 1) : std::string{}) + "^";
+        case Expr::Kind::Unary: return e.op + (e.op.size() > 1 ? " " : "") + (e.lhs ? exprText(*e.lhs, depth + 1) : std::string{});
+        case Expr::Kind::Binary:
+            return (e.lhs ? exprText(*e.lhs, depth + 1) : std::string{}) + " " + e.op + " " + (e.rhs ? exprText(*e.rhs, depth + 1) : std::string{});
+        case Expr::Kind::Call: return (e.lhs ? exprText(*e.lhs, depth + 1) : std::string{}) + "(...)";
+    }
+    return "...";
+}
+
+class Typer {
+public:
+    using LocalType = std::function<std::string(std::string_view)>;     // le type d'une locale ; "" : pas une locale
+    Typer(Environment& env, const Program* program, LocalType local) : env_(env), program_(program), local_(std::move(local)) {}
+
+    std::string typeOf(const Expr& e, int depth = 0) {
+        if (depth > 32) return {};
+        switch (e.kind) {
+            case Expr::Kind::Literal:
+                if (!e.literalType.empty()) return upperOf(e.literalType);
+                if (e.literal.type() != Type::Time && e.literal.type() != Type::Bool && isInteger(e.literal.type())) return "DINT";
+                return valueTypeName(e.literal.type());
+            case Expr::Kind::Null: return {};
+            case Expr::Kind::Reference: {
+                if (const auto hash = e.name.find('#'); hash != std::string::npos) return e.name.substr(0, hash);   // T_MODE#Auto
+                if (std::string t = local_ ? local_(e.name) : std::string{}; !t.empty()) return t;
+                return env_.declaredType(e.name);
+            }
+            case Expr::Kind::Member: {
+                const std::string base = e.lhs ? typeOf(*e.lhs, depth + 1) : std::string{};
+                if (!base.empty()) {
+                    std::vector<std::pair<std::string, std::string>> members;
+                    if (env_.structMembers(base, members))
+                        for (const auto& [name, type] : members)
+                            if (upperOf(name) == upperOf(e.name)) return type.rfind('#', 0) == 0 ? std::string{} : type;
+                }
+                if (const std::string dotted = dottedName(e); !dotted.empty()) return env_.declaredType(dotted);
+                return {};
+            }
+            case Expr::Kind::Index:
+            case Expr::Kind::Deref: {
+                const std::string base = e.lhs ? typeOf(*e.lhs, depth + 1) : std::string{};
+                if (base.empty()) return {};
+                auto t = parseTypeText(base);
+                if (!t || !*t || !(*t)->element) return {};
+                const auto k = (*t)->kind;
+                const bool ok = e.kind == Expr::Kind::Index ? (k == TypeDesc::Kind::Array || k == TypeDesc::Kind::Map)
+                                                            : (k == TypeDesc::Kind::Ref || k == TypeDesc::Kind::Pointer);
+                return ok ? (*t)->element->text() : std::string{};
+            }
+            case Expr::Kind::Unary: return e.lhs ? typeOf(*e.lhs, depth + 1) : std::string{};
+            case Expr::Kind::Binary: return binaryType(e, depth);
+            case Expr::Kind::Call: return callType(e, depth);
+        }
+        return {};
+    }
+
+    ArgShape shapeOf(const std::string& name, bool output, const Expr& a, int depth = 0) {
+        ArgShape s;
+        s.name = name;
+        s.output = output;
+        const Expr* x = &a;
+        bool negative = false;
+        if (x->kind == Expr::Kind::Unary && (x->op == "-" || x->op == "+") && x->lhs && x->lhs->kind == Expr::Kind::Literal) {
+            negative = x->op == "-";
+            x = x->lhs.get();
+        }
+        const Type lt = x->literal.type();
+        if (x->kind == Expr::Kind::Literal && x->literalType.empty() && lt != Type::Time && lt != Type::Bool && isInteger(lt)) {
+            s.literal = true;
+            s.value = negative ? -x->literal.asInteger() : x->literal.asInteger();
+            s.text = std::to_string(s.value);
+            return s;
+        }
+        s.designator = (a.kind == Expr::Kind::Reference && a.name.find('#') == std::string::npos) || a.kind == Expr::Kind::Member
+                    || a.kind == Expr::Kind::Index || a.kind == Expr::Kind::Deref;
+        s.type = typeOf(a, depth);
+        s.text = exprText(a);
+        return s;
+    }
+
+    std::vector<ArgShape> shapesOf(const Expr& call, int depth = 0) {
+        std::vector<ArgShape> out;
+        for (const auto& [name, x] : call.arguments)
+            if (x) out.push_back(shapeOf(name, false, *x, depth));
+        for (const auto& [name, x] : call.outputs)
+            if (x) out.push_back(shapeOf(name, true, *x, depth));
+        return out;
+    }
+
+private:
+    std::string binaryType(const Expr& e, int depth) {
+        const std::string& op = e.op;
+        if (op == "=" || op == "<>" || op == "<" || op == ">" || op == "<=" || op == ">=") return "BOOL";
+        const std::string a = upperOf(e.lhs ? typeOf(*e.lhs, depth + 1) : std::string{});
+        const std::string b = upperOf(e.rhs ? typeOf(*e.rhs, depth + 1) : std::string{});
+        if (a.empty() || b.empty()) return {};
+        if (op == "AND" || op == "OR" || op == "XOR") {
+            if (a == "BOOL" && b == "BOOL") return "BOOL";
+            return integerBits(a) >= integerBits(b) ? a : b;
+        }
+        if (a == "STRING" || b == "STRING") return op == "+" ? "STRING" : std::string{};
+        if (a == "LREAL" || b == "LREAL") return "LREAL";
+        if (a == "REAL" || b == "REAL") return "REAL";
+        if (a == "TIME" || b == "TIME") return "TIME";
+        const int x = integerBits(a), y = integerBits(b);
+        if (!x || !y) return {};
+        return x >= y ? a : b;
+    }
+
+    std::string callType(const Expr& e, int depth) {
+        if (!e.lhs) return {};
+        const std::string callee = e.lhs->kind == Expr::Kind::Reference ? e.lhs->name : dottedName(*e.lhs);
+        if (callee.empty()) return {};
+        const std::string u = upperOf(callee);
+        if (program_) {
+            std::vector<const Function*> inner;
+            for (const auto& f : program_->functions)
+                if (upperOf(f->name) == u) inner.push_back(f.get());
+            if (!inner.empty()) {
+                if (inner.size() == 1) return inner.front()->result ? inner.front()->result->text() : std::string{};
+                std::string why;
+                const int k = env_.chooseInner(inner, shapesOf(e, depth + 1), why);
+                return k >= 0 && inner[static_cast<std::size_t>(k)]->result ? inner[static_cast<std::size_t>(k)]->result->text() : std::string{};
+            }
+        }
+        if (const auto to = u.find("_TO_"); to != std::string::npos && to > 0) return u.substr(to + 4);   // INT_TO_REAL
+        if (u.rfind("TO_", 0) == 0 && u.size() > 3) return callee.substr(3);                           // TO_REAL, TO_T_MODE
+        return env_.resultType(callee, shapesOf(e, depth + 1));
+    }
+
+    Environment&   env_;
+    const Program* program_;
+    LocalType      local_;
+};
+
+// Les appels d'une section, dans l'ordre du texte (le controle des surcharges).
+class CallWalker {
+public:
+    CallWalker(Environment& env, const Program* program) : env_(env), program_(program) {}
+
+    void walkProgram(const Program& p) {
+        scope_ = &p.locals;
+        fn_ = nullptr;
+        within_.clear();
+        stmts(p.body);
+        for (const auto& f : p.functions) {
+            fn_ = f.get();
+            within_ = f->name;
+            stmts(f->body);
+        }
+        fn_ = nullptr;
+        within_.clear();
+    }
+    void walkExpression(const ExprPtr& e) { expr(e); }
+
+    std::vector<CallSite> finish() {
+        std::stable_sort(sites_.begin(), sites_.end(), [](const CallSite& a, const CallSite& b) { return a.line < b.line; });
+        std::map<std::pair<std::string, std::uint32_t>, std::uint32_t> seen;
+        for (auto& c : sites_) c.rank = ++seen[{upperOf(c.callee), c.line}];
+        return std::move(sites_);
+    }
+
+private:
+    std::string localType(std::string_view n) const {
+        const std::string u = upperOf(n);
+        if (fn_) {
+            for (const auto& prm : fn_->params)
+                if (upperOf(prm.name) == u) return prm.type ? prm.type->text() : std::string{};
+            for (const auto& l : fn_->locals)
+                if (upperOf(l.name) == u) return l.type ? l.type->text() : std::string{};
+            if (upperOf(fn_->name) == u && fn_->result) return fn_->result->text();
+        }
+        if (scope_)
+            for (const auto& l : *scope_)
+                if (upperOf(l.name) == u) return l.type ? l.type->text() : std::string{};
+        return {};
+    }
+    void expr(const ExprPtr& e) {
+        if (!e) return;
+        switch (e->kind) {
+            case Expr::Kind::Literal:
+            case Expr::Kind::Null:
+            case Expr::Kind::Reference:
+                return;
+            case Expr::Kind::Member:
+            case Expr::Kind::Deref:
+            case Expr::Kind::Unary:
+                expr(e->lhs);
+                return;
+            case Expr::Kind::Index:
+                expr(e->lhs);
+                expr(e->rhs);
+                expr(e->rhs2);
+                for (const auto& m : e->more) expr(m);
+                return;
+            case Expr::Kind::Binary:
+                expr(e->lhs);
+                expr(e->rhs);
+                return;
+            case Expr::Kind::Call: {
+                CallSite c;
+                if (e->lhs) c.callee = e->lhs->kind == Expr::Kind::Reference ? e->lhs->name : dottedName(*e->lhs);
+                c.line = e->lhs ? e->lhs->line : e->line;
+                c.within = within_;
+                Typer typer(env_, program_, [this](std::string_view n) { return localType(n); });
+                c.args = typer.shapesOf(*e);
+                if (!c.callee.empty()) sites_.push_back(std::move(c));
+                if (e->lhs && e->lhs->kind != Expr::Kind::Reference) expr(e->lhs);
+                for (const auto& a : e->arguments) expr(a.second);
+                for (const auto& o : e->outputs) expr(o.second);
+                return;
+            }
+        }
+    }
+    void stmts(const std::vector<StmtPtr>& body) {
+        for (const auto& s : body)
+            if (s) stmt(*s);
+    }
+    void stmt(const Stmt& s) {
+        if (s.kind == Stmt::Kind::Repeat) {          // REPEAT ... UNTIL c : le corps est ecrit avant
+            stmts(s.body);
+            expr(s.condition);
+            return;
+        }
+        expr(s.target);
+        for (const auto& t : s.extraTargets) expr(t);
+        expr(s.value);
+        expr(s.condition);
+        expr(s.from);
+        expr(s.to);
+        expr(s.step);
+        for (const auto& [cond, body] : s.branches) {
+            expr(cond);
+            stmts(body);
+        }
+        for (const auto& arm : s.arms) stmts(arm.body);
+        stmts(s.body);
+        stmts(s.elseBody);
+    }
+
+    Environment&                env_;
+    const Program*              program_;
+    const std::vector<VarDecl>* scope_{nullptr};
+    const Function*             fn_{nullptr};
+    std::string                 within_;
+    std::vector<CallSite>       sites_;
+};
 
 struct Flow { enum class Kind : std::uint8_t { Normal, Exit, Return, Aborted } kind{Kind::Normal}; };
 
@@ -1653,11 +1982,23 @@ private:
         return core::fail(core::ErrorCode::NotImplemented, "operator '" + e.op + "'");
     }
 
-    core::Result<Value> call(const Expr& e) {
+    core::Result<Value> call(const Expr& e, std::string_view chosen = {}) {
         // The callee is either a plain name (a function) or a member/reference
         // naming a function-block instance.
         auto target = qualify(*e.lhs);
         if (!target) return core::Err<core::Error>(target.error());
+        // 1.11.20 : une fonction du projet surchargee - la sienne, sous sa cle ("Convertir#615") ;
+        // `chosen` : deja choisie (le dialecte).
+        if (!chosen.empty()) {
+            *target = std::string(chosen);
+        } else if (env_.overloads(*target) > 1) {
+            std::string key, why;
+            if (!env_.chooseOverload(*target, shapesOf(e), key, why)) {
+                fail(e.line, why);
+                return core::fail(core::ErrorCode::InvalidArgument, why);
+            }
+            *target = key;
+        }
 
         // 1.10.2 (SIM) : ASCII_TO_STRING(tableau) - le tableau n'a pas de valeur a
         // lui : son NOM est passe a l'environnement, a la place de l'instance
@@ -2219,6 +2560,43 @@ private:
         if (auto* p = search(frames_.back())) return p;
         if (frames_.size() > 1 && frames_.back().seesScript) return search(frames_.front());
         return nullptr;
+    }
+
+    // 1.11.20 : les fonctions internes de ce nom (plusieurs : des surcharges).
+    std::vector<const Function*> findFunctions(std::string_view name) const {
+        std::vector<const Function*> out;
+        if (!program_) return out;
+        const std::string u = upperOf(name);
+        for (const auto& f : program_->functions)
+            if (upperOf(f->name) == u) out.push_back(f.get());
+        return out;
+    }
+
+    // 1.11.20 : les arguments d'un appel, vus sans les evaluer (le choix d'une surcharge) :
+    // comme le controle les voit (Typer), et une variable au type inconnu prend celui de sa
+    // valeur (la lire n'ecrit rien).
+    std::vector<ArgShape> shapesOf(const Expr& call) {
+        Typer typer(env_, program_, [this](std::string_view n) -> std::string {
+            const Place* p = findLocal(n);
+            if (!p) return {};
+            if (p->obj && p->obj->type) return p->obj->type->text();
+            if (!p->name.empty()) return env_.declaredType(p->name);
+            return {};
+        });
+        auto shapes = typer.shapesOf(call);
+        std::size_t k = 0;
+        const auto fill = [&](const ExprPtr& x) {
+            ArgShape& sh = shapes[k++];
+            if (!sh.designator || !sh.type.empty() || !x) return;
+            const std::string name = dottedName(*x);
+            Value v;
+            if (!name.empty() && !findLocal(name) && env_.read(name, v)) sh.type = valueTypeName(v.type());
+        };
+        for (const auto& a : call.arguments)
+            if (a.second) fill(a.second);
+        for (const auto& o : call.outputs)
+            if (o.second) fill(o.second);
+        return shapes;
     }
 
     const Function* findFunction(std::string_view name) const {
@@ -2804,12 +3182,33 @@ private:
         // Les fonctions internes du script, puis les fonctions IHM du projet (dialecte).
         // 1.11.10 : Vue_Vannes.Vanne_3.Vecteur() - la fonction d'une instance de symbole,
         // aux types riches (une structure rendue, VAR_IN_OUT) : l'environnement la donne.
+        // 1.11.20 : une fonction du projet (ou d'un symbole) surchargee : la sienne, par sa cle.
+        const auto chosen = [&](const std::string& name) -> std::optional<core::Result<RV>> {
+            if (env_.overloads(name) < 2) return std::nullopt;
+            std::string key, why;
+            if (!env_.chooseOverload(name, shapesOf(e), key, why)) return core::Result<RV>(dialectError(why));
+            if (auto f = env_.dialectFunction(key)) return callDeclared(*f, e, true);
+            auto v = call(e, key);                     // une fonction simple : par l'environnement, sous sa cle
+            if (!v) return core::Result<RV>(core::Err<core::Error>(v.error()));
+            return core::Result<RV>(RV{*v, nullptr});
+        };
         if (callee.empty() && e.lhs && e.lhs->kind == Expr::Kind::Member)
-            if (auto q = qualify(*e.lhs))
+            if (auto q = qualify(*e.lhs)) {
+                if (auto r = chosen(*q)) return std::move(*r);
                 if (auto f = env_.dialectFunction(*q)) return callDeclared(*f, e, true);
+            }
         if (!callee.empty()) {
-            if (const Function* f = findFunction(callee)) return callDeclared(*f, e, false);
+            // 1.11.20 : des fonctions internes du meme nom (des surcharges) : la sienne.
+            const auto inner = findFunctions(callee);
+            if (inner.size() > 1) {
+                std::string why;
+                const int k = env_.chooseInner(inner, shapesOf(e), why);
+                if (k < 0) return dialectError(why);
+                return callDeclared(*inner[static_cast<std::size_t>(k)], e, false);
+            }
+            if (inner.size() == 1) return callDeclared(*inner.front(), e, false);
             if (auto builtin = dialectBuiltin(u, e)) return std::move(*builtin);
+            if (auto r = chosen(callee)) return std::move(*r);
             if (auto f = env_.dialectFunction(callee)) return callDeclared(*f, e, true);
             // TO_xxx(objet) : une conversion du projet (S2).
             if (u.rfind("TO_", 0) == 0 && e.arguments.size() == 1 && e.outputs.empty()) {
@@ -3562,6 +3961,49 @@ core::Result<std::shared_ptr<const Function>> parseFunction(std::string_view tex
 }
 
 const std::string& functionName(const Function& f) noexcept { return f.name; }
+
+std::vector<ParamInfo> functionParams(const Function& f) {
+    std::vector<ParamInfo> out;
+    for (const auto& p : f.params) {
+        ParamInfo i;
+        i.mode = p.mode == VarDecl::Mode::InOut ? ParamInfo::Mode::InOut : p.mode == VarDecl::Mode::Output ? ParamInfo::Mode::Output : ParamInfo::Mode::Input;
+        i.name = p.name;
+        i.type = p.type ? p.type->text() : std::string{};
+        i.hasDefault = p.initial != nullptr;
+        out.push_back(std::move(i));
+    }
+    return out;
+}
+
+std::string functionResult(const Function& f) { return f.result ? f.result->text() : std::string{}; }
+
+std::uint32_t functionLine(const Function& f) noexcept { return f.line; }
+
+int Environment::chooseInner(const std::vector<const Function*>& candidates, const std::vector<ArgShape>& args, std::string& why) {
+    std::size_t positional = 0;
+    for (const auto& a : args) positional += a.name.empty() ? 1 : 0;
+    for (std::size_t i = 0; i < candidates.size(); ++i)
+        if (candidates[i] && positional <= candidates[i]->params.size()) return static_cast<int>(i);
+    why = (candidates.empty() || !candidates.front() ? std::string("fonction") : candidates.front()->name) + " : aucune ne prend "
+        + std::to_string(positional) + " argument(s)";
+    return -1;
+}
+
+std::vector<CallSite> callSites(const Program& program, Environment& typing) {
+    CallWalker w(typing, &program);
+    w.walkProgram(program);
+    return w.finish();
+}
+
+std::vector<CallSite> callSites(const Expression& expression, Environment& typing) {
+    CallWalker w(typing, nullptr);
+    w.walkExpression(expression.root);
+    return w.finish();
+}
+
+std::vector<std::shared_ptr<const Function>> innerFunctions(const Program& program) {
+    return {program.functions.begin(), program.functions.end()};
+}
 
 bool functionIsSimple(const Function& f) noexcept {
     const auto scalar = [](const TypeRef& t) { return !t || t->kind == TypeDesc::Kind::Scalar; };

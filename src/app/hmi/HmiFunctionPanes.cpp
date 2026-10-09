@@ -112,9 +112,11 @@ std::string trialText(const sim::Value& v) {
 
 std::string parameterList(const hmi::HmiFunction& f) {
     std::string out;
-    const auto parts = hmi::splitDeclarations(hmi::decl::codeOf(f), true);   // les pointeurs de inputs() vivent avec lui ; 1.11.18 : le modele aussi
-    for (const auto* in : parts.inputs())
-        out += (out.empty() ? "" : ", ") + in->name + " : " + in->type;
+    const auto parts = hmi::splitDeclarations(hmi::decl::codeOf(f), true);   // les pointeurs de parameters() vivent avec lui ; 1.11.18 : le modele aussi
+    for (const auto* in : parts.parameters())                                  // 1.11.20 : E/S (par reference) et sorties comprises
+        out += (out.empty() ? "" : ", ")
+             + std::string(in->section == hmi::LocalVar::Section::InOut ? "VAR_IN_OUT " : in->section == hmi::LocalVar::Section::Output ? "VAR_OUTPUT " : "")
+             + in->name + " : " + in->type;
     return out.empty() ? std::string("-") : out;
 }
 
@@ -586,7 +588,7 @@ void HmiFunctionsPane::rebuildProperties() {
         temps += l.section == hmi::LocalVar::Section::Temp;
     }
     // 1.11.18 (lot 5) : ses onglets les montrent (ceux d'un ancien bloc VAR du code aussi comptes).
-    c.properties.push_back(hmikit::prop("Param\xC3\xA8tres", std::to_string(parts.inputs().size()), PG::ValueType::ReadOnly,
+    c.properties.push_back(hmikit::prop("Param\xC3\xA8tres", std::to_string(parts.parameters().size()), PG::ValueType::ReadOnly,   // 1.11.20 : E/S, sorties
                                         nullptr, "Les param\xC3\xA8tres de la fonction : l'onglet Param\xC3\xA8tres (l'ordre est la signature)."));
     c.properties.push_back(hmikit::prop("Locales", std::to_string(kept + temps), PG::ValueType::ReadOnly, nullptr,
                                         "Ses variables locales (onglet Locales) : elles repartent \xC3\xA0 chaque appel."));
@@ -626,6 +628,7 @@ void HmiFunctionsPane::rebuildTrial() {
         if (!trial_.ok) add("Erreur", trial_.error, ui::Tone::Error);
         else if (trial_.result.empty()) add("R\xC3\xA9sultat", "(sans retour)", ui::Tone::Muted);
         else add("R\xC3\xA9sultat", trial_.result + "   (" + trial_.type + ")", ui::Tone::Ok);
+        for (const auto& o : trial_.outputs) add("Param\xC3\xA8tre rendu", o, ui::Tone::Ok);      // 1.11.20 : E/S, sorties
         for (const auto& j : trial_.journal) add("Journal", j);
         for (const auto& v : trial_.changed) add("Variable IHM", v, ui::Tone::Warning);
         add("Automate", trial_.livePlc ? "lu dans la simulation en marche (sans y \xC3\xA9" "crire)"
@@ -940,13 +943,16 @@ bool HmiFunctionsPane::tryFunction(Id id, const std::vector<std::string>& argume
         if (const auto* val = rt.variable(v.name)) before.emplace_back(v.name, hmi::formatValue(*val));
 
     const auto parts = hmi::splitDeclarations(hmi::decl::codeOf(*f), true);   // 1.11.18 (lot 3) : ses parametres du modele aussi
-    const auto inputs = parts.inputs();
+    // 1.11.20 : tous ses parametres, dans l'ordre : une E/S recoit sa valeur de depart, une sortie
+    // n'en demande pas (sa case est ignoree) ; leur valeur finale est montree apres l'essai.
+    const auto inputs = parts.parameters();
     std::vector<std::pair<std::string, sim::Value>> args;
     std::string shown;
     bool bad = false;
     for (std::size_t k = 0; k < arguments.size(); ++k) {
         const std::string text = hmikit::trimmed(arguments[k]);
         if (text.empty()) continue;
+        if (k < inputs.size() && inputs[k]->section == hmi::LocalVar::Section::Output) continue;   // une sortie : rien a donner
         if (k >= inputs.size()) {
             trial_.error = "trop d'arguments (" + std::to_string(arguments.size()) + " pour " + std::to_string(inputs.size()) + ")";
             bad = true;
@@ -973,12 +979,19 @@ bool HmiFunctionsPane::tryFunction(Id id, const std::vector<std::string>& argume
     if (!bad) {
         sim::Value result;
         std::string why;
-        trial_.ok = rt.runFunction(f->name, args, result, &why);
+        std::vector<std::pair<std::string, sim::Value>> outputs;
+        trial_.ok = rt.runFunction(f->id, args, result, &why, &outputs);     // 1.11.20 : par son identifiant (surcharges)
         if (!trial_.ok) trial_.error = why;
         else if (!f->returnType.empty()) {
             trial_.result = trialText(result);
             trial_.type = f->returnType;
         }
+        if (trial_.ok)
+            for (const auto& [name, value] : outputs) {
+                const hmi::LocalVar* p = parts.local(name);
+                const bool inOut = p && p->section == hmi::LocalVar::Section::InOut;
+                trial_.outputs.push_back(name + (inOut ? " (E/S)" : " (sortie)") + " = " + trialText(value));
+            }
         for (const auto& e : rt.journal())
             if (e.kind != "Syst\xC3\xA8me" && e.kind != "Erreur")
                 trial_.journal.push_back(e.kind == "Journal" ? e.message : e.kind + " : " + e.message);

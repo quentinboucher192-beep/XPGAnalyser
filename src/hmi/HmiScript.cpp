@@ -428,6 +428,12 @@ std::vector<const LocalVar*> ScriptParts::inputs() const {
     return out;
 }
 
+std::vector<const LocalVar*> ScriptParts::parameters() const {
+    std::vector<const LocalVar*> out;
+    for (const auto& l : locals) if (l.isParameter()) out.push_back(&l);
+    return out;
+}
+
 // 1.11.19 (refonte, lot 6) : les types d'une locale viennent du registre des types (ceux qu'une
 // declaration propose : BOOL, SINT ... STRING, TIME), sous leur nom exact.
 bool localTypeSupported(std::string_view type) noexcept {
@@ -535,12 +541,16 @@ ScriptParts splitDeclarations(std::string_view code, bool function, const TypeKn
             }
             continue;
         }
-        if (word != "VAR" && word != "VAR_TEMP" && word != "VAR_INPUT") continue;
+        // 1.11.20 : VAR_IN_OUT et VAR_OUTPUT aussi - des parametres comme VAR_INPUT (avant, ils
+        // restaient dans le corps : une fonction qui en avait n'etait comptee que par ses entrees).
+        if (word != "VAR" && word != "VAR_TEMP" && word != "VAR_INPUT" && word != "VAR_IN_OUT" && word != "VAR_OUTPUT") continue;
         const int blockLine = line;
         LocalVar::Section section = word == "VAR" ? LocalVar::Section::Var
-                                  : word == "VAR_TEMP" ? LocalVar::Section::Temp : LocalVar::Section::Input;
-        if (section == LocalVar::Section::Input && !function)
-            out.errors.push_back({E::Error, blockLine, "VAR_INPUT : seulement dans une fonction IHM (les param\xC3\xA8tres)"});
+                                  : word == "VAR_TEMP"   ? LocalVar::Section::Temp
+                                  : word == "VAR_INPUT"  ? LocalVar::Section::Input
+                                  : word == "VAR_IN_OUT" ? LocalVar::Section::InOut : LocalVar::Section::Output;
+        if (section != LocalVar::Section::Var && section != LocalVar::Section::Temp && !function)
+            out.errors.push_back({E::Error, blockLine, word + " : seulement dans une fonction IHM (les param\xC3\xA8tres)"});
         // Le contenu du bloc, commentaires ote, jusqu'a END_VAR.
         std::string decl;
         std::vector<int> declLines;   // la ligne de chaque caractere de `decl`
@@ -994,8 +1004,11 @@ std::string functionSignature(const HmiFunction& f) {
     std::string s = f.name + "(";
     const auto parts = splitDeclarations(decl::codeOf(f), true);       // 1.11.18 (lot 3) : ses parametres du modele aussi
     bool first = true;
-    for (const auto* in : parts.inputs()) {
-        s += (first ? "" : ", ") + in->name + " : " + in->type;
+    for (const auto* in : parts.parameters()) {                        // 1.11.20 : E/S et sorties comprises
+        s += (first ? "" : ", ");
+        if (in->section == LocalVar::Section::InOut) s += "VAR_IN_OUT ";
+        else if (in->section == LocalVar::Section::Output) s += "VAR_OUTPUT ";
+        s += in->name + " : " + in->type;
         first = false;
     }
     s += ")";

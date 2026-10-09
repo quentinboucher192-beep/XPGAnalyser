@@ -2071,6 +2071,22 @@ const HmiFunction* Project::functionByName(std::string_view name) const noexcept
     for (const auto& f : programs.functions) if (iequals(f.name, name)) return &f;
     return nullptr;
 }
+std::vector<const HmiFunction*> Project::functionsNamed(std::string_view name) const {
+    std::vector<const HmiFunction*> out;
+    for (const auto& f : programs.functions) if (iequals(f.name, name)) out.push_back(&f);
+    return out;
+}
+const HmiFunction* Project::functionByKey(std::string_view key) const noexcept {
+    const auto hash = key.find('#');
+    if (hash == std::string_view::npos) return functionByName(key);
+    Id id = kNoId;
+    for (const char c : key.substr(hash + 1)) {
+        if (c < '0' || c > '9') return nullptr;
+        id = id * 10 + static_cast<Id>(c - '0');
+    }
+    const HmiFunction* f = function(id);
+    return f && iequals(f->name, key.substr(0, hash)) ? f : nullptr;
+}
 Id Project::viewOfScript(Id id) const noexcept {
     for (const auto& v : views) for (const auto& s : v.scripts) if (s.id == id) return v.id;
     return kNoId;

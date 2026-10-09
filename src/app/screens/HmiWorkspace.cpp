@@ -2973,17 +2973,22 @@ void MainAnalysisScreen::askHmiTryFunction(std::uint64_t functionId) {
     auto* pane = dynamic_cast<HmiFunctionsPane*>(hmiTab("fonctions"));
     if (!f || !pane) return;
     const auto parts = hmi::splitDeclarations(hmi::decl::codeOf(*f), true);   // 1.11.18 (lot 3) : ses parametres du modele aussi
-    const auto inputs = parts.inputs();
+    const auto inputs = parts.parameters();     // 1.11.20 : E/S et sorties comprises (l'ordre de l'appel)
     // Sans parametre : l'essai part tout de suite.
     if (inputs.empty()) {
         (void)pane->tryFunction(f->id, {});
         return;
     }
     std::vector<FormDialog::Field> fields;
-    for (const auto* in : inputs)
-        fields.push_back({in->name + " : " + in->type, "",
-                          "vide : " + (in->initial.empty() ? std::string("la valeur par d\xC3\xA9" "faut du type") : in->initial),
+    for (const auto* in : inputs) {
+        using S = hmi::LocalVar::Section;
+        const std::string mode = in->section == S::InOut ? " (E/S : sa valeur de d\xC3\xA9part)"
+                               : in->section == S::Output ? " (sortie : rendue apr\xC3\xA8s l'essai)" : std::string{};
+        fields.push_back({in->name + " : " + in->type + mode, "",
+                          in->section == S::Output ? std::string("laissez vide : la fonction la calcule")
+                                                   : "vide : " + (in->initial.empty() ? std::string("la valeur par d\xC3\xA9" "faut du type") : in->initial),
                           false, {}});
+    }
     auto dialog = std::make_unique<FormDialog>("dialog.hmiTryFunction", "Essayer " + hmi::functionSignature(*f),
         "Les arguments en ST : 2.5, TRUE, 'texte', T#5s, ou une expression (variables IHM \xC3\xA0 leur valeur initiale ; "
         "celles de l'automate lues dans la simulation si elle tourne). L'essai ne modifie ni le projet ni la simulation.",

@@ -1301,9 +1301,27 @@ std::size_t renameSymbol(Project& p, std::string_view from, std::string_view to)
 
 // ============================================== 1.11.10 : les fonctions d'un symbole ====
 const HmiFunction* symbolFunction(const View& symbol, std::string_view name) {
+    if (const auto hash = name.find('#'); hash != std::string_view::npos) {      // 1.11.20 : une cle de surcharge
+        const std::string_view digits = name.substr(hash + 1);
+        Id id = kNoId;
+        for (const char c : digits) {
+            if (c < '0' || c > '9') return nullptr;
+            id = id * 10 + static_cast<Id>(c - '0');
+        }
+        for (const auto& f : symbol.functions)
+            if (f.id == id && sameName(f.name, name.substr(0, hash))) return &f;
+        return nullptr;
+    }
     for (const auto& f : symbol.functions)
         if (sameName(f.name, name)) return &f;
     return nullptr;
+}
+
+std::vector<const HmiFunction*> symbolFunctions(const View& symbol, std::string_view name) {
+    std::vector<const HmiFunction*> out;
+    for (const auto& f : symbol.functions)
+        if (sameName(f.name, name)) out.push_back(&f);
+    return out;
 }
 
 const FunctionOverride* functionOverride(const Object& instance, std::string_view function) {
@@ -1423,10 +1441,23 @@ bool instanceAt(const Project& p, std::string_view path, InstanceAt& out) {
     return true;
 }
 
+std::vector<const HmiFunction*> symbolFunctionsAt(const Project& p, std::string_view call) {
+    auto segs = dottedSegments(call);
+    if (segs.size() < 3) return {};
+    const std::string name = segs.back();
+    segs.pop_back();
+    if (sameName(segs.back(), kSuperName)) segs.pop_back();
+    std::string path;
+    for (const auto& sgm : segs) path += (path.empty() ? "" : ".") + sgm;
+    InstanceAt at;
+    if (!instanceAt(p, path, at)) return {};
+    return symbolFunctions(*at.symbol, name);
+}
+
 bool boundSymbolFunction(const Project& p, std::string_view call, BoundFunction& out) {
     auto segs = dottedSegments(call);
     if (segs.size() < 3) return false;
-    const std::string name = segs.back();
+    const std::string name = segs.back();         // 1.11.20 : "Ouvrir#702" designe une surcharge
     segs.pop_back();
     const bool base = sameName(segs.back(), kSuperName);
     if (base) segs.pop_back();

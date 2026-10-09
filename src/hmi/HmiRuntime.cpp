@@ -17,6 +17,7 @@
 #include "HmiMarkers.hpp"     // 1.11 (REP) : les reperes $...$, transparents pour le calcul
 #include "HmiApiVars.hpp"     // 1.11.1 (API-M) : API.<...> est le nom que l'automate connait
 #include "HmiTypeRegistry.hpp" // 1.11.19 (refonte, lot 6) : le type du moteur d'un nom de type
+#include "HmiOverload.hpp"     // 1.11.20 : les surcharges (la regle partagee avec le controle)
 #include "../sim/Interpreter.hpp"
 #include "../sim/Runtime.hpp"
 
@@ -391,7 +392,7 @@ public:
         if (u.rfind("IHM_", 0) == 0) return ihm(u, args, result);
         // Lot 7 : une fonction IHM du projet passe avant celles de l'automate.
         if (rt_.project_)
-            if (const auto* f = rt_.project_->functionByName(name)) return rt_.callFunction(*f, args, result);
+            if (const auto* f = rt_.project_->functionByKey(name)) return rt_.callFunction(*f, args, result);   // 1.11.20 : "Nom#id"
         // 1.11.10 : la fonction d'une instance de symbole (Vue_Vannes.Vanne_3.Ouvrir).
         if (const auto* f = symbolCall(name)) return rt_.callFunction(*f, args, result);
         if (rt_.plc_) return rt_.plc_->call(name, instance, args, result);
@@ -409,7 +410,7 @@ public:
     // et les fonctions IHM_ qui ne font que lire (l'utilisateur, la vue...).
     [[nodiscard]] bool hostsFunction(std::string_view name) const override {
         if (readOnlyIhm(upper(name))) return true;
-        if (rt_.project_ && rt_.project_->functionByName(name) != nullptr) return true;
+        if (rt_.project_ && rt_.project_->functionByKey(name) != nullptr) return true;
         return const_cast<Env*>(this)->symbolCall(name) != nullptr;   // 1.11.10 : {Vanne_3.Etat()}
     }
     // 1.11.10 : "Vue.Instance.Fonction" (ou un parametre de popup qui y mene) : la fonction
@@ -428,7 +429,7 @@ public:
             --rt_.readOnly_;
             return ok;
         }
-        const auto* f = rt_.project_ ? rt_.project_->functionByName(name) : nullptr;
+        const auto* f = rt_.project_ ? rt_.project_->functionByKey(name) : nullptr;
         if (!f) f = symbolCall(name);                     // 1.11.10 : {Vanne_3.Etat()}
         if (!f) return false;
         ++rt_.readOnly_;
@@ -490,7 +491,7 @@ public:
     // POINTER TO, ARRAY, MAP, structure) tourne dans le dialecte, appelee du
     // script avec ses arguments riches ; une fonction simple, comme avant (env.call).
     std::shared_ptr<const sim::Function> dialectFunction(std::string_view name) override {
-        const auto* f = rt_.project_ ? rt_.project_->functionByName(name) : nullptr;
+        const auto* f = rt_.project_ ? rt_.project_->functionByKey(name) : nullptr;        // 1.11.20 : "Nom#id" aussi
         if (!f) f = symbolCall(name);                     // 1.11.10 : une fonction d'instance aux types riches
         if (!f) return nullptr;
         const std::string text = functionText(*f);
@@ -499,6 +500,63 @@ public:
         if (auto parsed = sim::parseFunction(text, "fonction " + f->name); parsed && !sim::functionIsSimple(**parsed)) fn = *parsed;
         richFunctions_[text] = fn;
         return fn;
+    }
+    // ---- 1.11.20 : les surcharges (la regle de hmi::overload, celle du controle) ----
+    // Les fonctions de ce nom : du projet ("Convertir"), ou du symbole d'une instance
+    // ("Vue.Vanne_3.Ouvrir", un parametre de popup qui y mene).
+    std::vector<const HmiFunction*> named(std::string_view name) {
+        if (!rt_.project_ || name.find('#') != std::string_view::npos) return {};
+        if (name.find('.') == std::string_view::npos) return rt_.project_->functionsNamed(name);
+        const std::string r = resolved(name);
+        return symbolFunctionsAt(*rt_.project_, r.empty() ? std::string(name) : r);
+    }
+    // Le choix a l'execution : un type encore inconnu ici ne peut plus attendre - ambigu.
+    static bool decide(const std::vector<overload::Signature>& sigs, const std::vector<sim::ArgShape>& shapes, int& index,
+                       std::string& why) {
+        const auto c = overload::choose(sigs, overload::argsOf(shapes));
+        index = c.chosen;
+        if (c.chosen >= 0) return true;
+        if (c.uncertain) {
+            std::string shapesText;
+            for (std::size_t i = 0; i < c.tied.size(); ++i)
+                shapesText += (i ? " et " : "") + sigs[static_cast<std::size_t>(c.tied[i])].shape();
+            why = "appel ambigu de " + sigs.front().name + " : " + shapesText
+                + " conviennent autant (le type d'un argument n'est pas connu) - pr\xC3\xA9" "cisez-le (TO_INT(x), INT#5)";
+        } else {
+            why = c.why;
+        }
+        return false;
+    }
+    int overloads(std::string_view name) override { return static_cast<int>(named(name).size()); }
+    bool chooseOverload(std::string_view name, const std::vector<sim::ArgShape>& args, std::string& key, std::string& why) override {
+        const auto fs = named(name);
+        if (fs.empty()) return false;
+        std::vector<overload::Signature> sigs;
+        for (const auto* f : fs) sigs.push_back(overload::signatureOf(*f));
+        int k = -1;
+        if (!decide(sigs, args, k, why)) return false;
+        key = std::string(name) + sigs[static_cast<std::size_t>(k)].key;       // "Convertir#615", "Vue.Vanne_3.Ouvrir#702"
+        return true;
+    }
+    int chooseInner(const std::vector<const sim::Function*>& candidates, const std::vector<sim::ArgShape>& args, std::string& why) override {
+        std::vector<overload::Signature> sigs;
+        for (const auto* f : candidates) sigs.push_back(overload::signatureOf(*f));
+        int k = -1;
+        if (sigs.empty() || !decide(sigs, args, k, why)) return -1;
+        return k;
+    }
+    std::string resultType(std::string_view name, const std::vector<sim::ArgShape>& args) override {
+        const auto fs = named(name);
+        if (fs.empty()) {
+            const HmiFunction* f = rt_.project_ ? rt_.project_->functionByKey(name) : nullptr;
+            if (!f && name.find('.') != std::string_view::npos) f = symbolCall(name);
+            return f ? f->returnType : std::string{};
+        }
+        if (fs.size() == 1) return fs.front()->returnType;
+        std::vector<overload::Signature> sigs;
+        for (const auto* f : fs) sigs.push_back(overload::signatureOf(*f));
+        const auto c = overload::choose(sigs, overload::argsOf(args));
+        return c.chosen >= 0 ? sigs[static_cast<std::size_t>(c.chosen)].result : std::string{};
     }
     // Une fonction du projet ne voit pas les parametres de la vue qui l'appelle.
     void enterFunction(std::string_view) override {
@@ -1208,7 +1266,7 @@ const HmiFunction* Runtime::symbolCall(std::string_view call) {
 }
 
 bool Runtime::callFunction(const HmiFunction& f, const std::vector<std::pair<std::string, sim::Value>>& args,
-                           sim::Value& result) {
+                           sim::Value& result, std::vector<std::pair<std::string, sim::Value>>* outputs) {
     // Lot 8 : une fonction ne voit pas les parametres de la vue qui l'appelle.
     AliasGuard aliasGuard(env_->aliases, nullptr);
     const std::string source = "fonction " + f.name;
@@ -1238,8 +1296,14 @@ bool Runtime::callFunction(const HmiFunction& f, const std::vector<std::pair<std
     if (!prep.program) return fail(prep.error);
     Env::Frame frame;
     // Les parametres : dans l'ordre (Moyenne(1, 2)) ou par leur nom (Moyenne(b := 2, a := 1)).
+    // 1.11.20 : TOUS - VAR_INPUT, VAR_IN_OUT, VAR_OUTPUT - dans l'ordre de leur declaration (avant,
+    // les seules entrees : Random(Min, Max, Graine, Tirage) disait « trop d'arguments »). Ici un
+    // argument est une VALEUR (une expression de vue, l'essai d'une fonction) : une E/S part de la
+    // valeur donnee, une sortie de sa valeur par defaut, et leur valeur finale revient a `outputs`.
+    // Depuis un script, l'appel passe par le dialecte : E/S et sorties y ecrivent dans la variable
+    // de l'appelant.
     std::vector<const LocalVar*> inputs;
-    for (const auto& l : prep.locals) if (l.section == LocalVar::Section::Input) inputs.push_back(&l);
+    for (const auto& l : prep.locals) if (l.isParameter()) inputs.push_back(&l);
     std::vector<bool> given(inputs.size(), false);
     std::size_t next = 0;
     for (const auto& [name, value] : args) {
@@ -1253,6 +1317,7 @@ bool Runtime::callFunction(const HmiFunction& f, const std::vector<std::pair<std
                 if (upper(inputs[j]->name) == upper(name)) k = j;
             if (k == inputs.size()) return fail("param\xC3\xA8tre inconnu : " + name);
         }
+        if (inputs[k]->section == LocalVar::Section::Output) continue;      // une sortie : sa valeur par defaut
         sim::Value v = sim::Value::defaultOf(typereg::simTypeOf(inputs[k]->type));
         v.assignFrom(value);
         frame[upper(inputs[k]->name)] = v;
@@ -1264,7 +1329,7 @@ bool Runtime::callFunction(const HmiFunction& f, const std::vector<std::pair<std
         if (!given[j]) frame[upper(inputs[j]->name)] = localInitial(*inputs[j], *env_, &initWhy);
     // Une fonction n'a pas de memoire : ses VAR et VAR_TEMP repartent a chaque appel.
     for (const auto& l : prep.locals)
-        if (l.section != LocalVar::Section::Input) frame[upper(l.name)] = localInitial(l, *env_, &initWhy);
+        if (!l.isParameter()) frame[upper(l.name)] = localInitial(l, *env_, &initWhy);
     if (!f.returnType.empty()) frame[upper(f.name)] = sim::Value::defaultOf(rt);
     auto saved = std::move(env_->diagnostics);
     env_->diagnostics.clear();
@@ -1305,6 +1370,9 @@ bool Runtime::callFunction(const HmiFunction& f, const std::vector<std::pair<std
     if (why.empty() && !run.completed) why = "arr\xC3\xAAt\xC3\xA9" " : budget d'instructions d\xC3\xA9pass\xC3\xA9 (boucle sans fin ?)";
     if (!why.empty()) return fail(why);
     if (!f.returnType.empty()) result = frame[upper(f.name)];
+    if (outputs)
+        for (const auto* p : inputs)
+            if (p->section != LocalVar::Section::Input) outputs->emplace_back(p->name, frame[upper(p->name)]);
     return true;
 }
 
@@ -2472,12 +2540,22 @@ bool Runtime::runFunction(std::string_view name, const std::vector<std::pair<std
         if (why) *why = "fonction IHM '" + std::string(name) + "' introuvable";
         return false;
     }
+    return runFunction(f->id, args, result, why);
+}
+
+bool Runtime::runFunction(Id id, const std::vector<std::pair<std::string, sim::Value>>& args, sim::Value& result,
+                          std::string* why, std::vector<std::pair<std::string, sim::Value>>* outputs) {
+    const auto* f = project_ ? project_->function(id) : nullptr;
+    if (!f) {
+        if (why) *why = "fonction IHM introuvable";
+        return false;
+    }
     // Comme depuis un script : une faute (declaration, execution, appel
     // circulaire, argument) remonte ici au lieu d'etre dite une fois.
     const std::string before = abort_;
     abort_.clear();
     ++depth_;
-    (void)callFunction(*f, args, result);
+    (void)callFunction(*f, args, result, outputs);
     --depth_;
     const std::string fault = abort_;
     abort_ = before;

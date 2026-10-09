@@ -1793,7 +1793,11 @@ struct Project {
     [[nodiscard]] const HmiType*      hmiTypeByName(std::string_view) const noexcept;   // sans casse
     [[nodiscard]] HmiFunction*        function(Id) noexcept;             // lot 7
     [[nodiscard]] const HmiFunction*  function(Id) const noexcept;
-    [[nodiscard]] const HmiFunction*  functionByName(std::string_view) const noexcept;   // sans casse
+    [[nodiscard]] const HmiFunction*  functionByName(std::string_view) const noexcept;   // sans casse ; la premiere de ce nom
+    // 1.11.20 : LES SURCHARGES - les fonctions de ce nom (sans casse), dans l'ordre du projet ; et
+    // une fonction par sa cle d'appel ("Convertir#615" : la surcharge d'identifiant 615) ou son nom.
+    [[nodiscard]] std::vector<const HmiFunction*> functionsNamed(std::string_view) const;
+    [[nodiscard]] const HmiFunction*  functionByKey(std::string_view) const noexcept;
     // La vue qui porte ce script (kNoId : un script general).
     [[nodiscard]] Id                  viewOfScript(Id) const noexcept;
     [[nodiscard]] AlarmDef*           alarm(Id) noexcept;

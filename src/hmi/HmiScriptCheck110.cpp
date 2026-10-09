@@ -1,6 +1,7 @@
 #include "HmiScriptCheck110.hpp"
 
 #include "HmiEnums.hpp"
+#include "HmiOverload.hpp"   // 1.11.20 : deux fonctions internes de meme forme
 #include "HmiModel.hpp"
 #include "HmiScript.hpp"
 #include "HmiTypes.hpp"
@@ -547,10 +548,26 @@ Analysis analyze(std::string_view code, const std::function<bool(std::string_vie
                 if (!param) f.locals.push_back(Param{Param::Mode::Value, l.name, l.type});
             }
         }
-        if (out.function(f.name)) {
-            out.findings.push_back({words[k + 1].line, words[k + 1].column, static_cast<int>(f.name.size()),
-                                    "fonction interne d\xC3\xA9" "clar\xC3\xA9" "e deux fois : " + f.name, true});
-        }
+        // 1.11.20 : deux fonctions internes du meme nom sont des surcharges si leurs parametres
+        // different (nombre, modes, types que le moteur distingue) ; de meme forme : refusees.
+        const auto shapeOf = [](const InnerFunction& g) {
+            overload::Signature sg;
+            sg.name = g.name;
+            for (const auto& pa : g.params)
+                sg.params.push_back({pa.name, pa.type,
+                                     pa.mode == Param::Mode::InOut ? overload::Mode::InOut
+                                     : pa.mode == Param::Mode::Output ? overload::Mode::Out : overload::Mode::In,
+                                     pa.mode != Param::Mode::InOut});
+            return sg;
+        };
+        for (const auto& other : out.functions)
+            if (upper(other.name) == upper(f.name) && overload::sameShape(shapeOf(other), shapeOf(f))) {
+                out.findings.push_back({words[k + 1].line, words[k + 1].column, static_cast<int>(f.name.size()),
+                                        "fonction interne d\xC3\xA9" "clar\xC3\xA9" "e deux fois avec les m\xC3\xAAmes param\xC3\xA8tres : "
+                                            + shapeOf(f).shape() + " (d\xC3\xA9j\xC3\xA0 ligne " + std::to_string(other.firstLine) + ")",
+                                        true});
+                break;
+            }
         out.functions.push_back(std::move(f));
         k = end;
     }
@@ -570,23 +587,42 @@ Analysis analyze(std::string_view code, const std::function<bool(std::string_vie
         }
         for (const auto n : names) out.names.push_back({words[n].text, {}, words[k].line, last});
     }
-    // Les appels aux fonctions internes : le nombre d'arguments.
-    for (const auto& w : words) {
+    // Les appels aux fonctions internes : le nombre d'arguments (1.11.20 : celui de l'une de ses
+    // surcharges ; le controle des appels, quand le code se lit, juge aussi les types).
+    for (std::size_t wi = 0; wi < words.size(); ++wi) {
+        const auto& w = words[wi];
         if (w.next != '(') continue;
         const auto* f = out.function(w.text);
         if (!f) continue;
-        if (w.line == f->firstLine) continue;                  // l'en-tete lui-meme
+        if (wi > 0 && words[wi - 1].up == "FUNCTION") continue;   // un en-tete (de chaque surcharge)
         const auto open = code.find('(', w.at + w.text.size());
         const int n = argumentCount(code, open);
-        const int want = static_cast<int>(f->params.size());
-        if (n >= 0 && n > want)
-            out.findings.push_back({w.line, w.column, static_cast<int>(w.text.size()),
-                                    f->name + " : trop d'arguments (" + std::to_string(n) + " pour " + std::to_string(want) + ")", true});
-        int inOut = 0;
-        for (const auto& p : f->params) inOut += p.mode == Param::Mode::InOut ? 1 : 0;
-        if (n >= 0 && n < inOut)
-            out.findings.push_back({w.line, w.column, static_cast<int>(w.text.size()),
-                                    f->name + " : il manque des arguments (" + std::to_string(n) + " pour " + std::to_string(want) + ")", true});
+        if (n < 0) continue;
+        std::vector<const InnerFunction*> all;
+        for (const auto& g : out.functions)
+            if (upper(g.name) == upper(w.text)) all.push_back(&g);
+        bool fits = false;
+        for (const auto* g : all) {
+            int inOut = 0;
+            for (const auto& p : g->params) inOut += p.mode == Param::Mode::InOut ? 1 : 0;
+            fits = fits || (n <= static_cast<int>(g->params.size()) && n >= inOut);
+        }
+        if (fits) continue;
+        Finding bad;
+        if (all.size() > 1) {
+            bad = {w.line, w.column, static_cast<int>(w.text.size()),
+                   f->name + " : aucune de ses " + std::to_string(all.size()) + " surcharges ne prend " + std::to_string(n) + " argument"
+                       + (n > 1 ? "s" : ""),
+                   true};
+        } else {
+            const int want = static_cast<int>(f->params.size());
+            bad = {w.line, w.column, static_cast<int>(w.text.size()),
+                   f->name + (n > want ? " : trop d'arguments (" : " : il manque des arguments (") + std::to_string(n) + " pour "
+                       + std::to_string(want) + ")",
+                   true};
+        }
+        bad.arity = true;
+        out.findings.push_back(std::move(bad));
     }
     enumChecks(code, out, typeOf, enumValues, project);       // 1.10 (decision 15)
     return out;

@@ -5,6 +5,8 @@
 //  les types, et ne s'arrete jamais sur ce qu'elle ne comprend pas.
 // =============================================================================
 #include "HmiExprCheck.hpp"
+#include "HmiCallCheck.hpp"     // 1.11.20 : les appels, controles comme le moteur les fait
+#include "HmiOverload.hpp"      // 1.11.20 : les signatures et les surcharges
 #include "HmiDecl.hpp"   // 1.11.18 (refonte, lot 3) : les declarations du modele, reconstruites
 #include "HmiApiVars.hpp"   // 1.11.1 (API-M) : API.<globale>, API.<Unite>.<variable>
 #include "HmiPopupParams.hpp"
@@ -265,6 +267,9 @@ public:
     // `$Vanne$` qui n'est pas une variable n'a pas de "veux-tu dire Vanne_Purge ?" : la
     // fausse piste ; c'est Dupliquer qui le remplit.
     std::set<std::string> markerRoots;
+    // 1.11.20 : l'expression se lit et ses appels de fonctions de l'utilisateur sont juges par
+    // le controle des appels (la regle du moteur) : leur nombre d'arguments n'est plus compte ici.
+    bool callsChecked{false};
 
 private:
     const Context&   ctx_;
@@ -696,6 +701,50 @@ private:
     }
     const HmiFunction* pendingFn_{nullptr};
 
+    // 1.11.20 : les surcharges d'une fonction de symbole (les fonctions de meme nom de son symbole).
+    std::vector<const HmiFunction*> siblingsOf(const HmiFunction* f) const {
+        if (!f) return {};
+        if (ctx_.project)
+            for (const auto& v : ctx_.project->views)
+                for (const auto& g : v.functions)
+                    if (&g == f) return symbolFunctions(v, f->name);
+        return {f};
+    }
+    // 1.11.20 : un appel d'une fonction de l'utilisateur (ses surcharges) : le nombre d'arguments
+    // (E/S et sorties comptees) - sauf si le controle des appels l'a juge - et le type rendu (celui
+    // de la surcharge qui prend ce nombre ; plusieurs : leur type commun).
+    void userCall(const std::string& name, const std::vector<const HmiFunction*>& fs, int n, Val& r) {
+        std::vector<const HmiFunction*> fitting;
+        int lo = -1, hi = 0;
+        for (const auto* f : fs) {
+            const auto sig = overload::signatureOf(*f);
+            int last = -1;
+            for (std::size_t k = 0; k < sig.params.size(); ++k)
+                if (!sig.params[k].optional) last = static_cast<int>(k);
+            const int mn = last + 1, mx = static_cast<int>(sig.params.size());
+            lo = lo < 0 ? mn : std::min(lo, mn);
+            hi = std::max(hi, mx);
+            if (n >= mn && n <= mx) fitting.push_back(f);
+        }
+        const auto& pool = fitting.empty() ? fs : fitting;
+        std::string rt = pool.front()->returnType;
+        for (const auto* f : pool)
+            if (up(trimmed(f->returnType)) != up(trimmed(rt))) rt.clear();
+        bool anyResult = false;
+        for (const auto* f : pool) anyResult = anyResult || !trimmed(f->returnType).empty();
+        r.type = rt.empty() ? T::Unknown : typeOfName(rt);
+        if (!anyResult) {
+            problem(name + " ne rend pas de valeur : une expression ne peut appeler qu'une fonction qui rend quelque chose");
+            return;
+        }
+        if (!fitting.empty() || callsChecked) return;
+        if (fs.size() > 1)
+            problem(name + " : aucune de ses " + std::to_string(fs.size()) + " surcharges ne prend " + plural(n, "argument"));
+        else
+            problem(name + " prend " + (lo == hi ? plural(lo, "argument") : std::to_string(lo) + " \xC3\xA0 " + plural(hi, "argument")) + ", pas "
+                    + std::to_string(n));
+    }
+
     Val call(const std::string& name) {
         // 1.11.10 : une fonction de symbole (par son nom dans le symbole, ou Instance.Fonction).
         const HmiFunction* symFn = pendingFn_;
@@ -716,20 +765,7 @@ private:
         Val r;
         r.show = name + "(...)";
         if (symFn) {
-            r.type = typeOfName(symFn->returnType);
-            if (trimmed(symFn->returnType).empty())
-                problem(name + " ne rend pas de valeur : une expression ne peut appeler qu'une fonction qui rend quelque chose");
-            else {
-                // Le nombre d'arguments : ses VAR_INPUT (une entree avec une valeur initiale est facultative).
-                const auto parts = splitDeclarations(decl::codeOf(*symFn), true);   // 1.11.18 (lot 3) : ses parametres du modele
-                const auto inputs = parts.inputs();
-                int required = 0;
-                for (const auto* in : inputs) required += in->initial.empty() ? 1 : 0;
-                if (n < required || n > static_cast<int>(inputs.size()))
-                    problem(name + " prend " + (required == static_cast<int>(inputs.size()) ? plural(required, "argument")
-                                                                                            : std::to_string(required) + " \xC3\xA0 " + plural(static_cast<int>(inputs.size()), "argument"))
-                            + ", pas " + std::to_string(n));
-            }
+            userCall(name, siblingsOf(symFn), n, r);
             return r;
         }
         if (isStandardFunction(u)) {
@@ -786,15 +822,11 @@ private:
             }
             return r;
         }
-        if (const Project* p = ctx_.project) {
-            for (const auto& f : p->programs.functions)
-                if (up(f.name) == u) {
-                    r.type = typeOfName(f.returnType);
-                    if (trimmed(f.returnType).empty())
-                        problem(name + " ne rend pas de valeur : une expression ne peut appeler qu'une fonction qui rend quelque chose");
-                    return r;
-                }
-        }
+        if (const Project* p = ctx_.project)
+            if (const auto fs = p->functionsNamed(name); !fs.empty()) {
+                userCall(name, fs, n, r);          // 1.11.20 : ses surcharges, tous leurs parametres
+                return r;
+            }
         if (isHmiFunction(u)) return r;
         // 1.10.2 (chantier T3) : TO_STRING(Mode), TO_INT(x), TO_T_MODE(2) - les conversions
         // du dialecte et celles des types du projet, que le moteur sert (HmiExpr.cpp).
@@ -847,11 +879,22 @@ std::vector<Problem> check(const Context& ctx, std::string_view written, Want wa
     const std::string plain = markers::strip(written, markers::Mode::Expression);
     const std::string_view source = plain;
     if (trimmed(source).empty()) return out;
+    // 1.11.20 : les appels des fonctions de l'utilisateur, lus par le simulateur et juges par la
+    // regle du moteur (E/S et sorties comptees, references, surcharges).
+    bool callsRead = false;
+    const auto calls = ctx.calls ? callcheck::checkExpression(callcheck::Context{ctx.project, ctx.view, nullptr, ctx.plc}, source, &callsRead)
+                                 : std::vector<callcheck::Problem>{};
     Checker c(ctx, lex(source));
+    c.callsChecked = callsRead || !ctx.calls;
     for (const auto& m : markers::find(written, markers::Mode::Expression))   // 1.11.1 (REP-10)
         if (const auto roots = scanRoots(m.content(written)); !roots.empty()) c.markerRoots.insert(up(roots.front()));
     const Val v = c.run();
     out = std::move(c.problems);
+    for (const auto& pr : calls) {
+        bool twice = false;
+        for (const auto& o : out) twice = twice || o.message == pr.message;
+        if (!twice) out.push_back(Problem{pr.message, {}, {}});
+    }
     const auto add = [&out](std::string m) {
         for (const auto& p : out) if (p.message == m) return;
         out.push_back(Problem{std::move(m), {}, {}});

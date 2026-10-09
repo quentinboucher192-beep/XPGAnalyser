@@ -365,6 +365,8 @@ std::string localSection(const hmi::LocalVar& l) {
         case hmi::LocalVar::Section::Var:   return "locale (VAR, gard\xC3\xA9" "e)";
         case hmi::LocalVar::Section::Temp:  return "locale (VAR_TEMP)";
         case hmi::LocalVar::Section::Input: return "param\xC3\xA8tre (VAR_INPUT)";
+        case hmi::LocalVar::Section::InOut: return "param\xC3\xA8tre (VAR_IN_OUT, par r\xC3\xA9" "f\xC3\xA9rence)";   // 1.11.20
+        case hmi::LocalVar::Section::Output: return "param\xC3\xA8tre (VAR_OUTPUT, sortie)";
     }
     return "locale";
 }
@@ -388,7 +390,7 @@ Item userFunctionItem(const hmi::HmiFunction& f, int rank) {
               + (about.empty() ? std::string{} : "  \xC2\xB7  " + about);
     it.kind = Kind::UserFunction;
     it.rank = rank;
-    const bool params = !hmi::splitDeclarations(hmi::decl::codeOf(f), true).inputs().empty();   // 1.11.18 : le modele aussi
+    const bool params = !hmi::splitDeclarations(hmi::decl::codeOf(f), true).parameters().empty();   // 1.11.18 : le modele aussi ; 1.11.20 : E/S, sorties
     it.insert = f.name + "()";
     it.caret = params ? f.name.size() + 1 : it.insert.size();
     return it;
@@ -772,7 +774,7 @@ struct Scope {
         }
         if (const auto* hf = hp->functionByName(name)) {
             const auto decls = hmi::splitDeclarations(hmi::decl::codeOf(*hf), true, [this](std::string_view t) { return lang::knownHmiType(hp, t); });
-            const auto ins = decls.inputs();
+            const auto ins = decls.parameters();      // 1.11.20 : E/S et sorties comprises, dans l'ordre
             return index < ins.size() ? ins[index]->type : std::string{};
         }
         return {};
@@ -2337,9 +2339,12 @@ bool signature(const hmi::Project* hp, const domain::Project* plc, std::string_v
         if (const auto* f = hp->functionByName(name)) {
             out.name = f->name;
             out.parameters.clear();
-            const auto parts = hmi::splitDeclarations(hmi::decl::codeOf(*f), true);   // inputs() pointe dans parts ; 1.11.18 : le modele aussi
-            for (const auto* in : parts.inputs())
-                out.parameters.push_back(in->name + " : " + in->type + (in->initial.empty() ? std::string{} : " := " + in->initial));
+            const auto parts = hmi::splitDeclarations(hmi::decl::codeOf(*f), true);   // parameters() pointe dans parts ; 1.11.18 : le modele aussi
+            for (const auto* in : parts.parameters())                                   // 1.11.20 : E/S et sorties comprises
+                out.parameters.push_back(std::string(in->section == hmi::LocalVar::Section::InOut    ? "VAR_IN_OUT "
+                                                     : in->section == hmi::LocalVar::Section::Output ? "VAR_OUTPUT "
+                                                                                                     : "")
+                                         + in->name + " : " + in->type + (in->initial.empty() ? std::string{} : " := " + in->initial));
             out.returns = f->returnType;
             return true;
         }

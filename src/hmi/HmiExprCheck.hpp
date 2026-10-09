@@ -58,6 +58,10 @@ struct Context {
     // Des noms en plus pour proposer le plus proche (ceux de l'automate).
     std::vector<std::string> candidates{};
     PlcPaths plc{};
+    // 1.11.20 : juger ici les appels des fonctions de l'utilisateur (le controle des appels,
+    // hmi::callcheck). Faux : l'appelant les juge lui-meme (le controle d'un script, qui
+    // verifie aussi les types de ses expressions) - un seul message par faute.
+    bool calls{true};
 };
 
 struct Problem {

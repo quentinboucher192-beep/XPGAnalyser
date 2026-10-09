@@ -988,7 +988,7 @@ void sameAsSplit(const std::string& code, const std::string& where, Tally& t) {
     ++t.compared;
     std::vector<const dc::Decl*> mine;
     for (const auto& d : x.decls)
-        if (d.section == dc::Section::Var || d.section == dc::Section::Temp || d.section == dc::Section::Input) mine.push_back(&d);
+        mine.push_back(&d);       // 1.11.20 : splitDeclarations lit aussi VAR_IN_OUT et VAR_OUTPUT
     std::string why;
     if (!x.errors.empty()) why = "extract dit une faute : " + errorsOf(x);
     else if (mine.size() != old.locals.size())
@@ -999,17 +999,16 @@ void sameAsSplit(const std::string& code, const std::string& where, Tally& t) {
             const auto& d = *mine[i];
             const bool section = (o.section == LocalVar::Section::Var && d.section == dc::Section::Var)
                               || (o.section == LocalVar::Section::Temp && d.section == dc::Section::Temp)
-                              || (o.section == LocalVar::Section::Input && d.section == dc::Section::Input);
+                              || (o.section == LocalVar::Section::Input && d.section == dc::Section::Input)
+                              || (o.section == LocalVar::Section::InOut && d.section == dc::Section::InOut)
+                              || (o.section == LocalVar::Section::Output && d.section == dc::Section::Output);
             const bool type = localTypeSupported(d.type) ? o.type == upperOf(d.type) : flat(o.type) == d.type;
             if (o.name != d.name || !section || !type || flat(o.initial) != d.initial || o.line != d.line)
                 why = "\xC2\xAB " + o.name + " : " + o.type + " := " + o.initial + " \xC2\xBB ligne " + std::to_string(o.line) + " / \xC2\xAB "
                     + d.name + " : " + d.type + " := " + d.initial + " \xC2\xBB ligne " + std::to_string(d.line);
         }
-    // splitDeclarations laisse VAR_IN_OUT et VAR_OUTPUT dans le corps (le simulateur les lit).
-    const bool rich = std::any_of(x.blocks.begin(), x.blocks.end(), [](const dc::Block& b) {
-        return b.section == dc::Section::InOut || b.section == dc::Section::Output;
-    });
-    if (why.empty() && !rich && old.body != x.body) why = "le corps differe";
+    // 1.11.20 : splitDeclarations blanchit aussi VAR_IN_OUT et VAR_OUTPUT : les corps sont les memes.
+    if (why.empty() && old.body != x.body) why = "le corps differe";
     check(why.empty(), where + " : extract lit comme splitDeclarations" + (why.empty() ? std::string{} : " - " + why));
     t.decls += mine.size();
 }

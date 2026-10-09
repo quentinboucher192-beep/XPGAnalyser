@@ -45,6 +45,20 @@ class LineProbe;   // lot API 8 : plus bas
 class Function;           // 1.10 : une FUNCTION du dialecte IHM (plus bas)
 struct OperatorSource;    // 1.10 : un operateur du projet (plus bas)
 
+// 1.11.20 : UN ARGUMENT D'UN APPEL, VU SANS L'EVALUER (le choix d'une surcharge, le
+// controle) : son nom (a := x, q => y ; vide : par position), son type deduit ("" :
+// inconnu), une variable (un nom, un membre, une case, p^) ?, un litteral entier sans
+// type ecrit (5, 16#FF : son type se choisit) et sa valeur, son texte (les messages).
+struct ArgShape {
+    std::string  name;
+    bool         output{false};
+    std::string  type;
+    bool         designator{false};
+    bool         literal{false};
+    std::int64_t value{0};
+    std::string  text;
+};
+
 // What the interpreter needs from the world: reading and writing named things.
 // Keeping it an interface means the expression evaluator can be tested without
 // a project, and the runtime can add forcing without the evaluator knowing.
@@ -109,6 +123,29 @@ public:
         (void)name;
         return nullptr;
     }
+    // ---- 1.11.20 : LES SURCHARGES (plusieurs fonctions du meme nom) ----
+    // Combien de fonctions du projet (ou d'un symbole : "Vue.Instance.Ouvrir") portent ce
+    // nom : 0 ou 1, rien a choisir (le chemin d'avant).
+    virtual int overloads(std::string_view name) {
+        (void)name;
+        return 0;
+    }
+    // La surcharge de `name` qui convient a ces arguments : vrai et `key`, le nom a passer
+    // ensuite a dialectFunction() et call() ("Convertir#615") ; faux et `why` (aucune ne
+    // convient, l'appel est ambigu).
+    virtual bool chooseOverload(std::string_view name, const std::vector<ArgShape>& args, std::string& key, std::string& why) {
+        (void)name; (void)args; (void)key; (void)why;
+        return false;
+    }
+    // Des fonctions internes du script de meme nom : l'indice de la sienne, ou -1 et `why`.
+    // Par defaut : la premiere dont le nombre de parametres convient.
+    virtual int chooseInner(const std::vector<const Function*>& candidates, const std::vector<ArgShape>& args, std::string& why);
+    // Le type rendu par l'appel d'une fonction du projet ("" : inconnu) : le type d'un
+    // argument calcule (Convertir(Moyenne(a, b))).
+    virtual std::string resultType(std::string_view name, const std::vector<ArgShape>& args) {
+        (void)name; (void)args;
+        return {};
+    }
     // Une fonction du projet commence / finit (les journaux, la profondeur).
     virtual void enterFunction(std::string_view name) { (void)name; }
     virtual void leaveFunction(std::string_view name) { (void)name; }
@@ -162,6 +199,36 @@ struct ParseOptions {
 // retour elementaires, locales elementaires) : elle peut tourner comme avant.
 [[nodiscard]] bool functionIsSimple(const Function&) noexcept;
 
+// 1.11.20 : SES PARAMETRES (dans l'ordre : leur nom, leur type ecrit, leur mode, une valeur
+// par defaut ?), son type rendu ("" : aucun), sa ligne (FUNCTION).
+struct ParamInfo {
+    enum class Mode : std::uint8_t { Input, InOut, Output } mode{Mode::Input};
+    std::string name, type;
+    bool        hasDefault{false};
+};
+[[nodiscard]] std::vector<ParamInfo> functionParams(const Function&);
+[[nodiscard]] std::string            functionResult(const Function&);
+[[nodiscard]] std::uint32_t          functionLine(const Function&) noexcept;
+
+// 1.11.20 : LES APPELS D'UNE SECTION, dans l'ordre du texte - pour le controle des
+// surcharges, "Appelee par" et renommer une surcharge. `rank` : le rang de cet appel
+// parmi les appels du meme nom sur sa ligne (1, 2...) ; `within` : la fonction interne
+// qui le contient ("" : le corps du script) ; `args` : ses arguments, vus sans les
+// evaluer. `typing` repond aux types des noms (declaredType), aux membres
+// (structMembers) et aux fonctions du projet (overloads, chooseOverload, resultType) ;
+// rien n'y est lu ni ecrit. Les appels d'un bloc (TON...) et les fonctions standard y
+// sont aussi : a l'appelant de trier.
+struct CallSite {
+    std::string           callee;    // tel qu'ecrit : "Ouvrir", "Vue_A.Vanne_3.Ouvrir"
+    std::uint32_t         line{0};
+    std::uint32_t         rank{1};
+    std::string           within;
+    std::vector<ArgShape> args;
+};
+[[nodiscard]] std::vector<CallSite> callSites(const Program&, Environment& typing);
+// Les fonctions internes d'une section du dialecte, dans l'ordre.
+[[nodiscard]] std::vector<std::shared_ptr<const Function>> innerFunctions(const Program&);
+
 // 1.10 : un operateur du projet (chantier S2), sous forme d'une FUNCTION du
 // dialecte : `key` stable tant que son texte ne change pas, `function` le texte
 // complet (en-tete compris), `owner` pour les messages.
@@ -197,6 +264,8 @@ void setBreakLines(Program&, const std::vector<std::uint32_t>& lines);
 class Expression;
 [[nodiscard]] core::Result<std::shared_ptr<const Expression>> parseExpression(std::string_view source);
 [[nodiscard]] core::Result<Value> evaluate(const Expression&, Environment&);
+// 1.11.20 : les appels d'une expression seule (voir callSites d'une section).
+[[nodiscard]] std::vector<CallSite> callSites(const Expression&, Environment& typing);
 
 struct RunLimits {
     std::uint32_t maxIterationsPerLoop{1000000};

@@ -16697,7 +16697,10 @@ void scriptsCompiles110() {
         const auto* e = find(f, "fonction inconnue : Moyene : veux-tu dire Moyenne ?");
         check(e && e->column == 17 && e->length == 6, "fonction inconnue : sa place, le nom proche" + dump(f));
         const auto a = run(p, "Temp_Moteur1 := Moyenne(1);\nTemp_Moteur1 := ABS(1, 2);\nIHM_JOURNAL();\n");
-        check(find(a, "Moyenne prend 2 arguments, pas 1") != nullptr, "fonction IHM : mauvais nombre d'arguments" + dump(a));
+        // 1.11.20 : le parametre qui manque est nomme (le controle des appels, la regle du moteur).
+        check(find(a, "Moyenne : il manque l'argument b (REAL)") != nullptr, "fonction IHM : mauvais nombre d'arguments" + dump(a));
+        check(std::count_if(a.begin(), a.end(), [](const Finding& x) { return x.message.find("Moyenne") != std::string::npos; }) == 1,
+              "... dit une seule fois" + dump(a));
         check(find(a, "ABS prend 1 argument, pas 2") != nullptr, "fonction standard : mauvais nombre d'arguments");
         const auto* j = find(a, "IHM_JOURNAL prend 1 argument, pas 0");
         check(j && j->line == 3, "IHM_ : mauvais nombre d'arguments, ligne 3");
@@ -16709,7 +16712,8 @@ void scriptsCompiles110() {
         for (auto& fn : q.programs.functions)
             if (fn.name == "Moyenne") fn.body = "VAR_INPUT\n    a : REAL;\n    b : REAL;\n    Poids : REAL := 0.5;\nEND_VAR\nMoyenne := a * Poids + b * (1.0 - Poids);\n";
         check(run(q, "Temp_Moteur1 := Moyenne(1, 2);\nTemp_Moteur1 := Moyenne(1, 2, 0.3);\n").empty(), "une entr\xC3\xA9" "e facultative : 2 ou 3 arguments");
-        check(find(run(q, "Temp_Moteur1 := Moyenne(1);\n"), "Moyenne prend 2 \xC3\xA0 3 arguments, pas 1") != nullptr, "... mais pas 1");
+        check(find(run(q, "Temp_Moteur1 := Moyenne(1);\n"), "Moyenne : il manque l'argument b (REAL)") != nullptr, "... mais pas 1");
+        check(find(run(q, "Temp_Moteur1 := Moyenne(1, 2, 0.3, 4);\n"), "Moyenne : trop d'arguments (4 pour 3)") != nullptr, "... ni 4");
         const auto proc = run(p, "Texte := Tracer('x');\n");
         check(find(proc, "Tracer ne rend pas de valeur") != nullptr, "une proc\xC3\xA9" "dure dans un calcul" + dump(proc));
     }
@@ -16868,7 +16872,7 @@ void scriptsCompiles110() {
     // ---- 1.10 (decisions 13 et 13 bis) : le dialecte IHM du chantier S1 reconnu ----
     {
         const std::string code = "VAR\n    Notes : MAP[STRING] OF REAL;\n    p : POINTER TO REAL;\n    Tab : ARRAY[0..3, 0..9] OF REAL;\nEND_VAR\n"
-                                 "Temp_Moteur1 := Moyenne3(Consignes);\n"
+                                 "Temp_Moteur1 := Moyenne3(Consignes, 10, Temp_Moteur1);\n"
                                  "FOR EACH cle, valeur IN Notes DO\n"
                                  "    IF MAP_HAS(Notes, cle) THEN valeur := valeur + 1.0; END_IF;\n"
                                  "END_FOR;\n"
@@ -16884,6 +16888,12 @@ void scriptsCompiles110() {
         const auto f = n110::run(p, code);
         check(f.empty(), "dialecte IHM : fonction interne (appel\xC3\xA9" "e avant sa d\xC3\xA9" "claration), ses param\xC3\xA8tres, FOR EACH, MAP, "
                          "pointeur, tableau 2D : pas un nom inconnu" + n110::dump(f));
+        // 1.11.20 : son E/S (Total, VAR_IN_OUT) est due - le moteur refusait deja l'appel sans elle.
+        std::string sans = code;
+        sans.replace(sans.find("Moyenne3(Consignes, 10, Temp_Moteur1)"), std::string("Moyenne3(Consignes, 10, Temp_Moteur1)").size(), "Moyenne3(Consignes)");
+        const auto sansIo = n110::run(p, sans);
+        const auto* io = n110::find(sansIo, "Moyenne3 : il manque Total (VAR_IN_OUT : une variable)");
+        check(io && io->line == 6, "une fonction interne sans son E/S : dit, a sa ligne" + n110::dump(sansIo));
         // Les fautes restent dites, a leur place.
         const auto g = n110::run(p, "Temp_Moteur1 := Moyene3(Consignes);\n"
                                     "FOR EACH v IN Consignes DO\n    Temp_Moteur1 := v;\nEND_FOR;\n"

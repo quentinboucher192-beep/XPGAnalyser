@@ -88,6 +88,7 @@ public:
         std::string              error;
         std::vector<std::string> journal;     // ce que la fonction a ecrit au journal
         std::vector<std::string> changed;     // "Compteur_Clics : 0 -> 1"
+        std::vector<std::string> outputs;     // 1.11.20 : "Graine (E/S) = 12345", "Tirage (sortie) = 0.42"
         bool                     livePlc{false};
     };
     bool tryFunction(hmi::Id, const std::vector<std::string>& arguments);

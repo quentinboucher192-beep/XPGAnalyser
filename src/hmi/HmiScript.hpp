@@ -90,19 +90,27 @@ struct PathUse {
 //  en plus ses parametres (VAR_INPUT) ; ses VAR ne sont pas gardees (une
 //  fonction n'a pas de memoire, comme une FUNCTION de l'automate).
 struct LocalVar {
-    enum class Section : std::uint8_t { Var, Temp, Input };
+    // 1.11.20 : InOut (VAR_IN_OUT, par reference) et Output (VAR_OUTPUT) sont des parametres
+    // comme Input : un appel les donne (une variable), dans l'ordre de leur declaration.
+    enum class Section : std::uint8_t { Var, Temp, Input, InOut, Output };
     std::string name, type, initial;
     Section     section{Section::Var};
     int         line{0};
+    [[nodiscard]] bool isParameter() const noexcept {
+        return section == Section::Input || section == Section::InOut || section == Section::Output;
+    }
 };
 struct ScriptParts {
     std::string                   body;     // le code, les blocs de declaration blanchis (les lignes restent)
     std::vector<LocalVar>         locals;   // dans l'ordre des declarations
     std::vector<ScriptDiagnostic> errors;
     [[nodiscard]] const LocalVar* local(std::string_view name) const noexcept;   // sans casse
-    [[nodiscard]] std::vector<const LocalVar*> inputs() const;                   // VAR_INPUT, dans l'ordre
+    [[nodiscard]] std::vector<const LocalVar*> inputs() const;                   // VAR_INPUT seuls, dans l'ordre
+    // 1.11.20 : TOUS les parametres - VAR_INPUT, VAR_IN_OUT, VAR_OUTPUT - dans l'ordre de leur
+    // declaration : ceux qu'un appel donne par position (le nombre d'arguments, la signature).
+    [[nodiscard]] std::vector<const LocalVar*> parameters() const;
 };
-// `function` : VAR_INPUT est permis (les parametres d'une fonction IHM).
+// `function` : VAR_INPUT, VAR_IN_OUT et VAR_OUTPUT sont permis (les parametres d'une fonction IHM).
 // 1.10 : `knownType` dit si un nom est un type IHM (une locale de ce type est permise).
 [[nodiscard]] ScriptParts splitDeclarations(std::string_view code, bool function = false, const TypeKnown& knownType = {});
 // Les types elementaires d'une variable locale (1.11.19 : ceux que le registre des types propose

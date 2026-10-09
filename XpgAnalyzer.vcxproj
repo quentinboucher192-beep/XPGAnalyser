@@ -515,6 +515,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\hmi\HmiAlarmGroups.cpp" />
     <ClCompile Include="src\hmi\HmiApiVars.cpp" />
     <ClCompile Include="src\hmi\HmiBuildState.cpp" />
+    <ClCompile Include="src\hmi\HmiCallCheck.cpp" />
     <ClCompile Include="src\hmi\HmiDecl.cpp" />
     <ClCompile Include="src\hmi\HmiDeclEdit.cpp" />
     <ClCompile Include="src\hmi\HmiDuplicate.cpp" />
@@ -528,6 +529,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\hmi\HmiModbusCyclic.cpp" />
     <ClCompile Include="src\hmi\HmiObjectAlarms.cpp" />
     <ClCompile Include="src\hmi\HmiOperators.cpp" />
+    <ClCompile Include="src\hmi\HmiOverload.cpp" />
     <ClCompile Include="src\hmi\HmiPipeline.cpp" />
     <ClCompile Include="src\hmi\HmiPopupParams.cpp" />
     <ClCompile Include="src\hmi\HmiPrompt.cpp" />
@@ -901,6 +903,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\hmi\HmiAlarmGroups.hpp" />
     <ClInclude Include="src\hmi\HmiApiVars.hpp" />
     <ClInclude Include="src\hmi\HmiBuildState.hpp" />
+    <ClInclude Include="src\hmi\HmiCallCheck.hpp" />
     <ClInclude Include="src\hmi\HmiDecl.hpp" />
     <ClInclude Include="src\hmi\HmiDeclEdit.hpp" />
     <ClInclude Include="src\hmi\HmiDuplicate.hpp" />
@@ -914,6 +917,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\hmi\HmiModbusCyclic.hpp" />
     <ClInclude Include="src\hmi\HmiObjectAlarms.hpp" />
     <ClInclude Include="src\hmi\HmiOperators.hpp" />
+    <ClInclude Include="src\hmi\HmiOverload.hpp" />
     <ClInclude Include="src\hmi\HmiPipeline.hpp" />
     <ClInclude Include="src\hmi\HmiPopupParams.hpp" />
     <ClInclude Include="src\hmi\HmiPrompt.hpp" />

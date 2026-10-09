@@ -1204,6 +1204,9 @@
     <ClCompile Include="src\hmi\HmiBuildState.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\hmi\HmiCallCheck.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\hmi\HmiDecl.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
@@ -1241,6 +1244,9 @@
       <Filter>hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\hmi\HmiOperators.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiOverload.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\hmi\HmiPipeline.cpp">
@@ -2344,6 +2350,9 @@
     <ClInclude Include="src\hmi\HmiBuildState.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
+    <ClInclude Include="src\hmi\HmiCallCheck.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
     <ClInclude Include="src\hmi\HmiDecl.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
@@ -2381,6 +2390,9 @@
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiOperators.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiOverload.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiPipeline.hpp">

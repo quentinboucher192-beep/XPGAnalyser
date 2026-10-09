@@ -65,6 +65,7 @@ struct Finding {
     std::string fixLabel{};
     int         fixLine{0};
     std::string fixText{};
+    bool        arity{false};                // 1.11.20 : le nombre d'arguments d'un appel (le controle des appels le refait)
 };
 
 struct Analysis {

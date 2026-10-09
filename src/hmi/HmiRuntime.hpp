@@ -883,6 +883,10 @@ public:
     void prime(double now);
     bool runFunction(std::string_view name, const std::vector<std::pair<std::string, sim::Value>>& args,
                      sim::Value& result, std::string* why = nullptr);
+    // 1.11.20 : une fonction par son identifiant (deux surcharges portent le meme nom) ; `outputs` :
+    // la valeur finale de ses parametres E/S et sorties, dans l'ordre (l'essai les montre).
+    bool runFunction(Id id, const std::vector<std::pair<std::string, sim::Value>>& args, sim::Value& result,
+                     std::string* why = nullptr, std::vector<std::pair<std::string, sim::Value>>* outputs = nullptr);
 
     // ---- lot 9 : les commandes et les afficheurs --------------------------------------
     //  Les commandes ECRIVENT leur variable ("variable"), sous la permission
@@ -1370,7 +1374,8 @@ private:
     void restorePersistent(Id script, sim::Locals& locals);            // 1.11.18 (lot 5)
     // Les cases de declaration de `cells` gardees pour leur script (les autres : rendues par l'appelant).
     std::vector<simdata::Cell> takePersistent(const std::vector<simdata::Cell>& cells);
-    bool callFunction(const HmiFunction&, const std::vector<std::pair<std::string, sim::Value>>& args, sim::Value& result);
+    bool callFunction(const HmiFunction&, const std::vector<std::pair<std::string, sim::Value>>& args, sim::Value& result,
+                      std::vector<std::pair<std::string, sim::Value>>* outputs = nullptr);
     std::map<std::string, Prepared, std::less<>> programs_;   // par source
     // Les VAR gardees d'un script (lot 7) : "s<id>" ou, pour le code d'une action, "c<code>".
     std::map<std::string, std::map<std::string, sim::Value, std::less<>>> retained_;

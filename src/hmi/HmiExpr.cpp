@@ -115,7 +115,22 @@ public:
     std::string canonicalName(std::string_view name) override {
         return plc_.canonicalName(scope_ ? scope_->resolve(name) : std::string(name));
     }
+    // 1.11.20 : les surcharges des fonctions du projet - le choix de l'hote (la regle du controle) ;
+    // une fonction d'instance par un parametre de la vue (INSTANCE_DU_SYMBOLE.Etat) : son chemin.
+    int overloads(std::string_view name) override { return plc_.overloads(throughScope(name)); }
+    bool chooseOverload(std::string_view name, const std::vector<sim::ArgShape>& args, std::string& key, std::string& why) override {
+        return plc_.chooseOverload(throughScope(name), args, key, why);
+    }
+    int chooseInner(const std::vector<const sim::Function*>& candidates, const std::vector<sim::ArgShape>& args, std::string& why) override {
+        return plc_.chooseInner(candidates, args, why);
+    }
+    std::string resultType(std::string_view name, const std::vector<sim::ArgShape>& args) override {
+        return plc_.resultType(throughScope(name), args);
+    }
 
+    [[nodiscard]] std::string throughScope(std::string_view name) const {
+        return scope_ && name.find('.') != std::string_view::npos ? scope_->resolve(name) : std::string(name);
+    }
     [[nodiscard]] bool               got() const noexcept { return got_; }
     [[nodiscard]] const sim::Value&  result() const noexcept { return result_; }
     [[nodiscard]] const std::string& message() const noexcept { return message_; }

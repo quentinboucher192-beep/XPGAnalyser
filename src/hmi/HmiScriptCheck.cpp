@@ -21,6 +21,8 @@
 #include "HmiTemplates.hpp"
 #include "HmiTypes.hpp"
 #include "../project/MemberTree.hpp"
+#include "HmiCallCheck.hpp"     // 1.11.20 : les appels, controles comme le moteur les fait
+#include "HmiOverload.hpp"      // 1.11.20 : les signatures (E/S, sorties) et les surcharges
 
 // 1.10 (decisions 13 et 13 bis) : le dialecte IHM du chantier S1 - ses
 // fonctions internes, ses noms et ses constats (hmi::lang110::analyze ; voir
@@ -311,6 +313,10 @@ public:
     }
     // 1.10 : les constats du chantier S1 (lang110::analyze) - vide sans lui.
     [[nodiscard]] const std::vector<Finding>& dialect() const noexcept { return dialect_; }
+    // 1.11.20 : le code se lit et ses appels de fonctions de l'utilisateur sont juges par le
+    // controle des appels (callcheck, la regle du moteur) : le nombre de leurs arguments n'est
+    // plus compte ici (un seul message par faute).
+    void setCallsChecked(bool on) noexcept { callsChecked_ = on; }
     // 1.10 : les noms du dialecte de ce code (en majuscules).
     [[nodiscard]] std::set<std::string> declared() const {
         std::set<std::string> out;
@@ -495,6 +501,7 @@ private:
             g.fixLabel = f.fixLabel;          // 1.10 (integration I2) : "Ajouter les valeurs manquantes"
             g.fixLine = f.fixLine;
             g.fixText = f.fixText;
+            g.callArity = f.arity;            // 1.11.20
             dialect_.push_back(std::move(g));
         }
 #endif
@@ -874,6 +881,16 @@ private:
         return nullptr;
     }
     const HmiFunction* pendingSymbolFn_{nullptr};
+    bool callsChecked_{false};                   // 1.11.20 : voir setCallsChecked
+    // 1.11.20 : les surcharges d'une fonction de symbole (les fonctions de meme nom de son symbole).
+    std::vector<const HmiFunction*> siblingsOf(const HmiFunction* f) const {
+        if (!f) return {};
+        if (sc_.project)
+            for (const auto& v : sc_.project->views)
+                for (const auto& g : v.functions)
+                    if (&g == f) return symbolFunctions(v, f->name);
+        return {f};
+    }
     // Un appel de fonction d'instance : ses arguments controles comme ceux d'une fonction IHM.
     std::size_t instanceCall(std::size_t i, std::size_t j, const HmiFunction& f, bool statement) {
         (void)i;
@@ -934,23 +951,34 @@ private:
         } else if (isHmiFunction(U)) {
             found = true;
             for (const auto& a : kHmi) if (U == a.name) arity(a.min, a.max);
-        } else if (const auto* f = pendingSymbolFn_ ? pendingSymbolFn_ : sc_.project ? sc_.project->functionByName(name.text) : nullptr) {
+        } else if (const auto fs = pendingSymbolFn_ ? siblingsOf(pendingSymbolFn_)
+                                 : sc_.project ? sc_.project->functionsNamed(name.text) : std::vector<const HmiFunction*>{};
+                   !fs.empty()) {
             found = true;
-            // Une entree qui a une valeur initiale (Poids : REAL := 0.5) est facultative.
-            const std::string code = decl::codeOf(*f);      // 1.11.18 (lot 3) : ses parametres du modele aussi
-#ifdef XPG_HMI_LANG110
-            // le dialecte IHM (S1) : entrees riches ; `parts` garde les locales que inputs() designe
-            const auto parts = splitDeclarations(code, true, [p = sc_.project](std::string_view t) {
-                return lang110::knownHmiType(p, t);          // 1.10 (S1) : structure ou enumeration
-            });
-#else
-            const auto parts = splitDeclarations(code, true);
-#endif
-            const auto inputs = parts.inputs();
-            int required = 0;
-            for (const auto* in : inputs) required += in->initial.empty() ? 1 : 0;
-            if (!named) arity(required, static_cast<int>(inputs.size()));
-            if (!statement && f->returnType.empty())
+            // 1.11.20 : toutes ses surcharges, et TOUS leurs parametres - VAR_INPUT, VAR_IN_OUT,
+            // VAR_OUTPUT (avant : les entrees seules, « Random prend 2 arguments, pas 4 »). Une
+            // entree qui a une valeur par defaut et une sortie sont facultatives. Le code se lit :
+            // le controle des appels juge (types et references compris) - rien a compter ici.
+            if (!named && !callsChecked_) {
+                int lo = -1, hi = 0;
+                bool fits = false;
+                for (const auto* f : fs) {
+                    const auto sig = overload::signatureOf(*f);
+                    int last = -1;
+                    for (std::size_t k = 0; k < sig.params.size(); ++k)
+                        if (!sig.params[k].optional) last = static_cast<int>(k);
+                    const int mn = last + 1, mx = static_cast<int>(sig.params.size());
+                    lo = lo < 0 ? mn : std::min(lo, mn);
+                    hi = std::max(hi, mx);
+                    fits = fits || (n >= mn && n <= mx);
+                }
+                if (!fits && fs.size() == 1) arity(lo, hi);
+                else if (!fits)
+                    reportTok(i, i + 1, S::Error, name.text + " : aucune de ses " + std::to_string(fs.size()) + " surcharges ne prend "
+                                                      + std::to_string(n) + " argument" + (n > 1 ? "s" : ""));
+            }
+            const bool anyResult = std::any_of(fs.begin(), fs.end(), [](const HmiFunction* f) { return !f->returnType.empty(); });
+            if (!statement && !anyResult)
                 reportTok(i, i + 1, S::Error, name.text + " ne rend pas de valeur : appelle-la seule sur sa ligne (" + name.text + "(...);)");
         } else if (local(name.text) || (sc_.project && sc_.project->variable(name.text)) || (sc_.plcKnown && sc_.plcKnown(name.text))
                    || !sc_.plcKnown) {
@@ -1070,6 +1098,7 @@ private:
         c.project = sc_.project;
         c.view = sc_.view;
         c.known = [](std::string_view) { return true; };    // les noms : dits ici, a leur place
+        c.calls = false;                                     // 1.11.20 : les appels aussi (callcheck, une fois)
         return c;
     }
     // Les problemes de type d'une expression [a, b) (pas les noms, membres ou
@@ -1315,15 +1344,31 @@ std::vector<Finding> check(const Scope& scope, std::string_view source) {
     // 1.11.1 (REP) : le code se lit comme une expression, sans les $ de ses reperes.
     const auto st = markers::stripKeep(source);
     const std::string_view code = st.text;
+    // 1.11.20 : les appels des fonctions de l'utilisateur, lus par le simulateur et juges par la
+    // regle du moteur (E/S et sorties comptees, references, surcharges).
+    bool callsRead = false;
+    const auto calls = callcheck::checkCode(callcheck::Context{scope.project, scope.view, scope.function, scope.plc}, code, &callsRead);
     Walker w(scope, code);
+    w.setCallsChecked(callsRead);
     for (const auto& m : markers::find(source))   // 1.11.1 (REP-10)
         if (const auto roots = scanRoots(m.content(source)); !roots.empty()) w.markerRoots.insert(up(roots.front()));
     auto out = w.run();
+    bool added = false;
+    for (const auto& c : calls) {
+        Finding f;
+        f.severity = c.error ? Finding::Severity::Error : Finding::Severity::Warning;
+        f.line = c.line;
+        f.column = c.column;
+        f.length = c.length;
+        f.message = c.message;
+        out.push_back(std::move(f));
+        added = true;
+    }
     // 1.10 (decisions 13 et 13 bis) : les constructions du dialecte IHM,
     // controlees par le chantier S1 (lang110::analyze) - une seule fois
     // chaque constat, dans l'ordre du texte.
-    bool added = false;
     for (auto f : w.dialect()) {
+        if (callsRead && f.callArity) continue;           // 1.11.20 : le controle des appels l'a dit
         bool twice = false;
         for (const auto& o : out) twice = twice || (o.line == f.line && o.column == f.column && o.message == f.message);
         if (twice) continue;

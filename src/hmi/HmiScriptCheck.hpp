@@ -51,6 +51,9 @@ struct Finding {
     std::string fixLabel{};
     int         fixLine{0};
     std::string fixText{};
+    // 1.11.20 : le nombre d'arguments d'une fonction interne, compte par S1 - remplace par le
+    // controle des appels (callcheck) quand le code se lit.
+    bool        callArity{false};
 };
 
 // Ce que le script voit.
