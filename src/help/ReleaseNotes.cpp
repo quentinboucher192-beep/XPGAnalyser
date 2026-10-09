@@ -109,6 +109,9 @@ const std::vector<Note>& table() {
         note("1.11.16", "Simulation IHM", Kind::Fixed,
          "Le poste d'exploitation relanc\xC3\xA9 apr\xC3\xA8s un arr\xC3\xAAt brutal recharge l'\xC3\xA9tat d'avant (pris toutes les 10 s) : il ne fait plus reculer une variable r\xC3\xA9manente, dont la valeur gard\xC3\xA9" "e, plus r\xC3\xA9" "cente, l'emporte.",
          "simulation", ""),
+        note("1.11.16", "Simulation IHM", Kind::Fixed,
+         "Un double-clic sur un diagnostic (ou une ligne de la Console) qui vise un script g\xC3\xA9n\xC3\xA9ral montre maintenant l'onglet Scripts g\xC3\xA9n\xC3\xA9raux de la Programmation g\xC3\xA9n\xC3\xA9rale, le script ouvert \xC3\xA0 sa ligne ; il restait sur Variables IHM ou Types IHM si l'un d'eux \xC3\xA9tait affich\xC3\xA9.",
+         "simulation", ""),
         // 1.11.15 (08/10/2026 dans la nuit) : le cycle de la simulation et la remanence de simulation
         // (lot 3 de la specification du 08/10).
         note("1.11.15", "Simulation IHM", Kind::New,
