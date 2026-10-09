@@ -18,7 +18,8 @@
 //    3. S'IL RESTE PLUSIEURS SURCHARGES, LES TYPES : chaque argument coute sa
 //       conversion (hmi::typereg::conversion) - exacte 0, elargie 1 ou 2, avec
 //       perte 4, vers un entier plus petit 8, d'un reel vers un entier 16 (le moteur
-//       tronque, comme il l'a toujours fait) ; interdite (un texte pour un nombre,
+//       arrondit a l'entier le plus proche, comme il l'a toujours fait : 2.5 -> 3) ;
+//       interdite (un texte pour un nombre,
 //       deux structures) : non. Un litteral entier (5) coute 0 vers son type
 //       naturel (INT s'il y tient, sinon DINT, LINT), 1 vers un autre entier ou il
 //       tient, 2 vers un reel. Par reference : le meme type 0, un nombre pour un
@@ -26,8 +27,11 @@
 //       l'appel est AMBIGU - sauf si un type inconnu en est la cause : alors
 //       `uncertain`, et le moteur tranche avec les types qu'il voit.
 //  Une seule surcharge qui remplit l'arite est choisie sans regarder les types :
-//  une fonction non surchargee se controle comme avant (ajouter une surcharge ne
-//  rend pas fautif un appel qui ne la concerne pas).
+//  une fonction non surchargee se choisit comme avant (ajouter une surcharge ne
+//  rend pas fautif un appel qui ne la concerne pas). 1.11.21 : ses arguments sont
+//  ensuite controles (typeMisfits) - une E/S d'un autre type est une faute (le
+//  moteur la refuse), une autre conversion interdite un avertissement (le moteur
+//  la fait sans rien dire : 'a' pour un REAL donne 0).
 //
 //  DEUX SURCHARGES NE DOIVENT PAS AVOIR LA MEME FORME : meme nombre de
 //  parametres, memes modes, des types que le moteur calcule de la meme facon
@@ -93,6 +97,15 @@ struct Choice {
 // Une signature seule : pourquoi l'appel ne la remplit pas (arite, reference) ; vide : il la remplit.
 // Les types ne sont pas exiges (une fonction non surchargee se controle comme avant).
 [[nodiscard]] std::string misfit(const Signature&, const std::vector<Arg>&);
+// 1.11.21 : LES TYPES DES ARGUMENTS d'un appel a la surcharge `sig` (celle que choose() a
+// prise) : chaque argument dont la conversion est interdite (cost() < 0). `error` : le moteur
+// refuserait l'appel (une E/S d'un autre type) ; sinon un avertissement (il convertit sans
+// rien dire). Un type inconnu, ANY : rien. Vide : rien a dire (ou l'arite n'est pas remplie).
+struct Misfit {
+    std::string message;    // "texte attend un STRING, pas un REAL"
+    bool        error{false};
+};
+[[nodiscard]] std::vector<Misfit> typeMisfits(const Signature& sig, const std::vector<Arg>& args);
 // Deux signatures qu'un appel ne saurait distinguer (la meme forme) ; le nom n'est pas compare.
 [[nodiscard]] bool sameShape(const Signature& a, const Signature& b);
 // Le cout d'un argument pour un parametre (-1 : non) - la regle, pour les essais.

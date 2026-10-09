@@ -2840,9 +2840,9 @@ struct ExprWalker {
     }
 
     void push(const Where& w, std::string msg, const std::string& unknownName = {}, const std::string& suggestion = {},
-              const std::string& source = {}) {
+              const std::string& source = {}, Issue::Severity severity = Issue::Severity::Error) {
         Issue i;
-        i.severity = Issue::Severity::Error;
+        i.severity = severity;                          // 1.11.21 : un avertissement d'appel (exprcheck::Problem::warning)
         i.category = w.category;
         i.view = w.view ? w.view->id : kNoId;
         i.object = w.object;
@@ -2894,7 +2894,8 @@ struct ExprWalker {
             return;
         }
         for (auto& pb : exprcheck::check(context(w.view), s, want))
-            push(w, prefix + s + " : " + pb.message + dup::markerHint(s, pb.unknownName), pb.unknownName, pb.suggestion);
+            push(w, prefix + s + " : " + pb.message + dup::markerHint(s, pb.unknownName), pb.unknownName, pb.suggestion, {},
+                 pb.warning ? Issue::Severity::Warning : Issue::Severity::Error);
     }
     void text(const Where& w, const std::string& value, const std::string& prefix = {}) {
         for (const auto& piece : exprcheck::templateExpressions(value)) expr(w, piece, exprcheck::Want::Any, prefix + "{" + piece + "} : ");
@@ -3105,7 +3106,8 @@ struct ExprWalker {
             replaceAll(sample, "[]", "[SYS.Seconde]");
             for (auto& pb : exprcheck::check(context(nullptr), sample, W::Any)) {
                 replaceAll(pb.message, "SYS.Seconde", "");
-                push(w, "chemin " + path + " : " + pb.message, pb.unknownName, pb.suggestion);
+                push(w, "chemin " + path + " : " + pb.message, pb.unknownName, pb.suggestion, {},
+                     pb.warning ? Issue::Severity::Warning : Issue::Severity::Error);
             }
         }
         // Les symboles.
@@ -3148,7 +3150,8 @@ struct ExprWalker {
                         for (const auto& [t, pb] : problemsOf(sv, site, &defaults)) {
                             withDefaults.insert(pb.message);
                             if (plain.count(pb.message) || !pb.unknownName.empty()) continue;
-                            push(Where{&sv, c.id, site.category, site.key}, site.prefix + t + " : " + pb.message + " (avec " + shownDefaults + ")");
+                            push(Where{&sv, c.id, site.category, site.key}, site.prefix + t + " : " + pb.message + " (avec " + shownDefaults + ")",
+                                 {}, {}, {}, pb.warning ? Issue::Severity::Warning : Issue::Severity::Error);
                         }
                     for (std::size_t k = 0; k < instances.size(); ++k) {
                         const auto& [iv, inst] = instances[k];
@@ -3165,7 +3168,8 @@ struct ExprWalker {
                             if (withDefaults.count(back)) continue;
                             push(Where{iv, inst->id, "Symbole", "params"},
                                  "symbole " + sv.name + ", " + (c.name.empty() ? std::string("objet") : c.name) + " (" + site.key + ") : "
-                                     + site.prefix + t + " : " + pb.message);
+                                     + site.prefix + t + " : " + pb.message,
+                                 {}, {}, {}, pb.warning ? Issue::Severity::Warning : Issue::Severity::Error);
                         }
                     }
                 }

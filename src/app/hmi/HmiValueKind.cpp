@@ -604,6 +604,7 @@ Result classify(const Env& env, std::string_view text, bool fx, std::string_view
     std::vector<hmi::exprcheck::Problem> problems;
     if (env.project) problems = hmi::exprcheck::check(ctx, clean, wantOf(expected));
     for (const auto& pb : problems) {
+        if (pb.warning) continue;                 // 1.11.21 : un avertissement - Compiler le dit, la case n'est pas fautive
         if (!pb.unknownName.empty()) {
             Diag d = unknownDiag(env, t, true, pb.unknownName, expected, single, pb.suggestion, r.unknown);
             r.diags.push_back(std::move(d));

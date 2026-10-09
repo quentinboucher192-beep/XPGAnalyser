@@ -527,6 +527,7 @@ Outcome Bench::evaluate(std::string_view field, const TypeEntry& as) const {
     std::string wantProblem;
     const auto plainProblems = exprcheck::check(ctx, s, exprcheck::Want::Any);
     for (auto& pb : exprcheck::check(ctx, s, wantOf(as))) {
+        if (pb.warning) continue;                 // 1.11.21 : un avertissement - le moteur sert l'expression
         // TO_STRING(Mode), TO_T_MODE(2) : des conversions du dialecte ou du projet, que le moteur sert.
         const std::string unknownFn = "fonction inconnue : ";
         if (pb.message.rfind(unknownFn, 0) == 0) {

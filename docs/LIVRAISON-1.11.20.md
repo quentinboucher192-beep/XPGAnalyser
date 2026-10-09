@@ -61,7 +61,7 @@ Deux fonctions de même forme sont une faute, dite dans l'éditeur et par Compil
 | un littéral entier vers un réel | 2 |
 | avec perte possible (DINT → REAL, LREAL → REAL) ; un nombre pour un nombre, par référence | 4 |
 | vers un entier plus petit (DINT → INT) | 8 |
-| un réel vers un entier (la simulation tronque, comme avant) | 16 |
+| un réel vers un entier (la simulation arrondit à l'entier le plus proche, comme avant : 2.5 donne 3) | 16 |
 | interdite (un texte pour un nombre, deux structures) | écartée |
 
 La moins chère gagne. À égalité, l'appel est **ambigu**. Si un type inconnu cause l'égalité (une variable de l'automate non branché, par exemple), l'éditeur avertit et la simulation choisit avec le vrai type.

@@ -192,8 +192,29 @@ std::vector<Problem> judge(const Context& c, std::string_view code, const std::v
         if (sigs.empty())
             for (const auto* f : candidates(c, site.callee)) sigs.push_back(overload::signatureOf(*f));
         if (sigs.empty()) continue;
-        const auto choice = overload::choose(sigs, overload::argsOf(site.args));
-        if (choice.chosen >= 0) continue;
+        const auto args = overload::argsOf(site.args);
+        const auto choice = overload::choose(sigs, args);
+        if (choice.chosen >= 0) {
+            // 1.11.21 : la surcharge prise - ses arguments aux conversions interdites (une seule
+            // surcharge de cette arite est prise sans regarder les types).
+            const auto& chosen = sigs[static_cast<std::size_t>(choice.chosen)];
+            const auto bad = overload::typeMisfits(chosen, args);
+            if (bad.empty()) continue;
+            Problem p;
+            p.line = static_cast<int>(site.line);
+            p.error = false;
+            std::string text;
+            for (const auto& m : bad) {
+                p.error = p.error || m.error;
+                text += (text.empty() ? "" : " ; ") + m.message
+                      + (m.error ? " (une E/S : la simulation refuserait l'appel)"
+                                 : " (une conversion interdite, que la simulation fait sans rien dire)");
+            }
+            p.message = (sigs.size() == 1 ? chosen.name : chosen.shape()) + " : " + text;
+            locate(code, site, p);
+            out.push_back(std::move(p));
+            continue;
+        }
         Problem p;
         p.line = static_cast<int>(site.line);
         p.error = !choice.uncertain;

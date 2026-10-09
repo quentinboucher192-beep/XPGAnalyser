@@ -2229,8 +2229,10 @@ std::string hmiExpressionError(const hmi::View& view, std::string_view key, cons
                 return e.error() + " \xE2\x80\x94 " + std::string(hmi::dup::kMarkerHint);
         return e.error();
     }
-    const auto problems = hmi::exprcheck::check(ctx, expr, hmi::exprcheck::wantOf(key));
-    return problems.empty() ? std::string{} : problems.front().message + hmi::dup::markerHint(expr, problems.front().unknownName);
+    // 1.11.21 : un avertissement (exprcheck::Problem::warning) ne la rend pas fautive : Compiler le dit.
+    for (const auto& pb : hmi::exprcheck::check(ctx, expr, hmi::exprcheck::wantOf(key)))
+        if (!pb.warning) return pb.message + hmi::dup::markerHint(expr, pb.unknownName);
+    return {};
 }
 
 namespace {

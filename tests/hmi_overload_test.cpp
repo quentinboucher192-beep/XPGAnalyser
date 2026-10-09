@@ -8,6 +8,7 @@
 //  - le moteur : un script appelle une fonction a E/S et sortie, les variables
 //    de l'appelant sont ecrites ; les surcharges choisies a l'execution.
 // =============================================================================
+#include "../src/hmi/HmiCallCheck.hpp"
 #include "../src/hmi/HmiExpr.hpp"
 #include "../src/hmi/HmiModel.hpp"
 #include "../src/hmi/HmiOverload.hpp"
@@ -266,6 +267,65 @@ std::string text(const Runtime& rt, const char* name) {
     return v ? v->asString() : std::string("?");
 }
 
+// ---- 1.11.21 : les types des arguments d'une surcharge prise par son arite -----------------
+void typesDesArguments() {
+    std::printf("1.11.21 : les types des arguments\n");
+    const auto seule = sig("Seule", {in("v", "INT")});
+    auto m = ov::typeMisfits(seule, {var("STRING", "Nom")});
+    check(m.size() == 1 && !m.front().error && m.front().message == "v attend un INT, pas un STRING",
+          "Seule(un STRING) : un avertissement (" + (m.empty() ? std::string("rien") : m.front().message) + ")");
+    check(ov::typeMisfits(seule, {var("", "Inconnue")}).empty(), "Seule(un type inconnu) : rien");
+    check(ov::typeMisfits(seule, {val("REAL", "x * 2.0")}).empty(), "Seule(un REAL) : rien (la simulation arrondit, permis)");
+    check(ov::typeMisfits(seule, {lit(5)}).empty(), "Seule(5) : rien");
+    check(ov::typeMisfits(seule, {}).empty(), "Seule() : l'arite n'est pas remplie - choose() le dit, pas ici");
+    const auto texte = sig("Journal", {in("t", "STRING")});
+    m = ov::typeMisfits(texte, {lit(5)});
+    check(m.size() == 1 && !m.front().error && m.front().message == "t attend un STRING, pas un INT", "Journal(5) : un avertissement");
+    const auto random = sig("Random", {in("Min", "REAL"), in("Max", "REAL"), io("Graine", "REAL"), out("Tirage", "REAL")}, "REAL");
+    m = ov::typeMisfits(random, {lit(0), lit(1), var("STRING", "Nom"), var("REAL")});
+    check(m.size() == 1 && m.front().error && m.front().message == "Graine attend un REAL, pas un STRING",
+          "Random(.., une E/S STRING) : une faute (la simulation la refuse)");
+    check(ov::typeMisfits(random, {lit(0), lit(1), var("DINT"), var("REAL")}).empty(), "Random(.., une E/S DINT) : un nombre pour un nombre, permis");
+    m = ov::typeMisfits(random, {val("STRING", "'a'"), lit(1), var("REAL"), var("BOOL", "Marche")});
+    check(m.size() == 2 && !m[0].error && !m[1].error && m[0].message == "Min attend un REAL, pas un STRING"
+              && m[1].message == "Tirage attend un REAL, pas un BOOL",
+          "Random('a', 1, x, un BOOL) : deux avertissements (une entree, une sortie)");
+
+    // Le controle des appels d'un code : la surcharge prise, puis ses arguments.
+    Project p;
+    for (auto v : {variable(p, "Graine", "REAL", "1.0"), variable(p, "Tirage", "REAL"), variable(p, "Nom", "STRING"),
+                   variable(p, "Code", "INT")})
+        p.programs.variables.push_back(v);
+    p.programs.functions.push_back(function(p, "Random", "REAL",
+        "VAR_INPUT Min : REAL; Max : REAL; END_VAR\nVAR_IN_OUT RandomSeed : REAL; END_VAR\nVAR_OUTPUT test : REAL; END_VAR\nRandom := Min;\n"));
+    p.programs.functions.push_back(function(p, "Convertir", "STRING", "VAR_INPUT valeur : INT; END_VAR\nConvertir := 'entier';\n"));
+    p.programs.functions.push_back(function(p, "Convertir", "STRING", "VAR_INPUT valeur : REAL; END_VAR\nConvertir := 'reel';\n"));
+    p.programs.functions.push_back(function(p, "Convertir", "INT", "VAR_INPUT texte : STRING; base : INT; END_VAR\nConvertir := base;\n"));
+    const callcheck::Context ctx{&p, nullptr, nullptr, {}};
+    bool ok = false;
+    auto pbs = callcheck::checkCode(ctx, "Code := Convertir(Graine, 2);\n", &ok);
+    check(ok && pbs.size() == 1 && !pbs.front().error && pbs.front().line == 1 && pbs.front().column == 9
+              && pbs.front().message == "Convertir(STRING, INT) : texte attend un STRING, pas un REAL "
+                                        "(une conversion interdite, que la simulation fait sans rien dire)",
+          "Convertir(Graine, 2) : un avertissement a sa place (" + (pbs.empty() ? std::string("rien") : pbs.front().message) + ")");
+    pbs = callcheck::checkCode(ctx, "Graine := Random(0.0, 1.0, Nom, Tirage);\n", &ok);
+    check(ok && pbs.size() == 1 && pbs.front().error && pbs.front().message.rfind("Random : RandomSeed attend un REAL, pas un STRING", 0) == 0,
+          "Random(.., Nom, ..) : l'E/S d'un autre type, une faute (" + (pbs.empty() ? std::string("rien") : pbs.front().message) + ")");
+    pbs = callcheck::checkCode(ctx, "Code := Convertir('FF', 16);\nNom := Convertir(5);\nGraine := Random(0.0, 1.0, Graine, Tirage);\n", &ok);
+    check(ok && pbs.empty(), "les bons appels : rien");
+    pbs = callcheck::checkCode(ctx, "Nom := Convertir('texte');\n", &ok);
+    check(ok && pbs.size() == 1 && pbs.front().error && pbs.front().message.find("n'accepte ces types (STRING)") != std::string::npos,
+          "Convertir('texte') : aucune surcharge, une faute (inchange)");
+    // Une expression de vue : l'avertissement en est un (exprcheck::Problem::warning).
+    exprcheck::Context ec;
+    ec.project = &p;
+    ec.known = [](std::string_view) { return true; };
+    const auto eps = exprcheck::check(ec, "Convertir(Graine, 2)", exprcheck::Want::Any);
+    bool warned = false;
+    for (const auto& e : eps) warned = warned || (e.warning && e.message.find("texte attend un STRING, pas un REAL") != std::string::npos);
+    check(warned, "une expression de vue : l'appel dit en avertissement");
+}
+
 void moteur() {
     std::printf("le moteur : E/S, sorties, surcharges\n");
     Project p;
@@ -353,6 +413,7 @@ int main() {
     arite();
     regle();
     choix();
+    typesDesArguments();
     formes();
     moteur();
     std::printf("%d controles, %d echec(s)\n", g_checks, g_failures);

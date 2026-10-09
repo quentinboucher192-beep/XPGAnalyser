@@ -176,6 +176,23 @@ std::string misfit(const Signature& sig, const std::vector<Arg>& args) {
     return bind(sig, args, slots);
 }
 
+std::vector<Misfit> typeMisfits(const Signature& sig, const std::vector<Arg>& args) {
+    std::vector<Misfit> out;
+    std::vector<int> slots;
+    if (!bind(sig, args, slots).empty()) return out;
+    for (std::size_t k = 0; k < slots.size() && k < sig.params.size(); ++k) {
+        if (slots[k] < 0) continue;
+        const Arg& a = args[static_cast<std::size_t>(slots[k])];
+        const Param& p = sig.params[k];
+        if (cost(a, p) >= 0) continue;
+        const std::string t = a.literal ? literalType(a.value) : a.type;
+        // Le moteur refuse une E/S d'un autre type (ni le meme, ni un nombre pour un nombre) ;
+        // une entree, une sortie, un REF_TO : il convertit, ou lie, sans rien dire.
+        out.push_back({p.name + " attend un " + p.type + ", pas un " + t, p.mode == Mode::InOut});
+    }
+    return out;
+}
+
 bool sameShape(const Signature& a, const Signature& b) {
     if (a.params.size() != b.params.size()) return false;
     for (std::size_t k = 0; k < a.params.size(); ++k) {

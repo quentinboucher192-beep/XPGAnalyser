@@ -893,7 +893,7 @@ std::vector<Problem> check(const Context& ctx, std::string_view written, Want wa
     for (const auto& pr : calls) {
         bool twice = false;
         for (const auto& o : out) twice = twice || o.message == pr.message;
-        if (!twice) out.push_back(Problem{pr.message, {}, {}});
+        if (!twice) out.push_back(Problem{pr.message, {}, {}, !pr.error});    // 1.11.21 : sa gravite
     }
     const auto add = [&out](std::string m) {
         for (const auto& p : out) if (p.message == m) return;

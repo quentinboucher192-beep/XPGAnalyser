@@ -68,6 +68,10 @@ struct Problem {
     std::string message;        // en francais, tutoie, dit quoi faire
     std::string unknownName;    // un nom inconnu : lequel (vide : un autre probleme)
     std::string suggestion;     // ... et le nom connu le plus proche (vide : aucun)
+    // 1.11.21 : un avertissement - l'expression marche (un appel dont la surcharge depend d'un
+    // type inconnu, un argument que la simulation convertit sans rien dire). Compiler le dit en
+    // avertissement ; l'inspecteur ne la marque pas fautive.
+    bool        warning{false};
 };
 
 // Les problemes d'une expression qui se lit (sinon : rien, la syntaxe est
