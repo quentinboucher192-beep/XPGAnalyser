@@ -85,7 +85,8 @@ std::size_t apply(Project&, const Plan&);
 // Le rapport, en texte (le volet le montre ; le guide le cite) : un resume, puis code par
 // code - ses declarations, ses valeurs, ses commentaires, ses points d'attention.
 [[nodiscard]] std::string report(const Plan&);
-// "12 codes migres, 41 declarations ; 2 laisses tels quels ; 3 points d'attention".
-[[nodiscard]] std::string summary(const Plan&);
+// "12 codes migres, 41 declarations ; 2 laisses tels quels ; 3 points d'attention" ;
+// `before` (la question posee avant d'agir) : "12 codes a migrer, 41 declarations...".
+[[nodiscard]] std::string summary(const Plan&, bool before = false);
 
 } // namespace hmi::migrate

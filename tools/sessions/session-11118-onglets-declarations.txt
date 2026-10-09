@@ -1,0 +1,112 @@
+# =============================================================================
+#  Session 11118 : LES ONGLETS DE DECLARATIONS (refonte des scripts, lots 2 a 5).
+#  Sur une copie d'Armoire_Gaz, dont les scripts et les fonctions declarent encore
+#  leurs variables dans leur texte (VAR ... END_VAR) :
+#    1. Statistiques_Pression : le bandeau de l'ancien format, les onglets ;
+#    2. Migrer ce code : ses blocs VAR dans l'onglet Variables, ses commentaires
+#       en documentation ;
+#    3. la grille : Tours Persistante, puis renomme Mesures - le code suit, et le
+#       trou {Tours} de son IHM_JOURNAL aussi ;
+#    4. une constante ajoutee, puis deux collees depuis Excel (un seul Ctrl+Z) ;
+#    5. Moyenne_Pression migree : ses parametres (l'ordre, le defaut 0.5) ;
+#    6. IHM > Compiler > Migrer les declarations... : le rapport, les codes coches,
+#       la version d'abord ;
+#    7. tout migre, la simulation ecrit les memes lignes qu'avant
+#       (Pression A : mini, maxi, mesures).
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- 1. Le bandeau de l'ancien format, les onglets ----
+arbre "IHM/Programmation générale/Scripts" double
+attendre 8
+ligne "Statistiques_Pression" exact
+attendre 4
+capture 11118_01_ancien_format_bandeau.png
+
+# ---- 2. Migrer ce code ----
+bouton "Migrer ce code"
+attendre 5
+volet-message "1 code migr"
+attendre 2
+capture 11118_02_code_migre.png
+sous-onglet "Variables"
+attendre 4
+capture 11118_03_onglet_variables.png
+# la grille defilee vers la droite (Maj+molette) : Utilisations, et les commentaires
+# du bloc VAR devenus la Documentation
+molette 1280 330 -8 maj
+attendre 3
+capture 11118_04_commentaires_en_documentation.png
+molette 1280 330 8 maj
+attendre 2
+
+# ---- 3. Tours Persistante, puis renommee Mesures : le code suit ----
+cellule "Tours" "Stockage" "Persistante"
+attendre 3
+cellule "Tours" "Nom" "Mesures"
+attendre 4
+volet-message "Tours renommée en Mesures"
+capture 11118_05_renommer_dans_la_grille.png
+sous-onglet "Code"
+attendre 4
+capture 11118_06_le_code_et_le_trou_suivent.png
+
+# ---- 4. Une constante, puis deux collees depuis Excel ----
+sous-onglet "Constantes"
+attendre 3
+outil "Ajouter une déclaration"
+attendre 3
+cellule "Constante" "Nom" "Seuil_Haut"
+attendre 3
+cellule "Seuil_Haut" "Valeur" "30.0"
+attendre 3
+cellule "Seuil_Haut" "Documentation" "la moyenne qui trace un événement"
+attendre 3
+presse-papiers "Nom\tType\tValeur\tDocumentation\nPression_Max\tREAL\t40.0\tla limite haute (bar)\nPression_Min\tREAL\t2,5\tla limite basse (bar)"
+ligne "Seuil_Haut" exact
+attendre 2
+touche Ctrl+V
+attendre 5
+volet-message "2 constantes"
+capture 11118_07_coller_depuis_excel.png
+
+# ---- 5. Moyenne_Pression : migree, ses parametres ----
+arbre "IHM/Programmation générale/Fonctions" double
+attendre 8
+ligne "Moyenne_Pression" exact
+attendre 4
+bouton "Migrer ce code"
+attendre 5
+sous-onglet "Paramètres"
+attendre 4
+capture 11118_08_parametres_de_la_fonction.png
+
+# ---- 6. IHM > Compiler > Migrer les declarations... ----
+arbre "IHM/Compiler" double
+attendre 8
+outil "Migrer les déclarations"
+attendre 5
+capture 11118_09_migrer_le_projet.png
+bouton "Migrer*"
+attendre 10
+capture 11118_10_projet_migre.png
+
+# ---- 7. Tout migre : la simulation ecrit les memes lignes ----
+arbre "Simulation/IHM"
+attendre 2
+ihm-build-attendre 600
+attendre 420
+ihm-sorties console
+attendre 3
+ihm-console-etat "Pression A : mini 0.0, maxi 0.0 bar (5 mesures)"
+champ "hmi.sorties.search" "Pression A"
+attendre 4
+survol 1350 400
+attendre 3
+capture 11118_11_simulation_apres_migration.png
+quitter

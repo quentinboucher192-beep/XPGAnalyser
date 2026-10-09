@@ -273,6 +273,13 @@ Plan plan(const Project& p, const std::function<bool(const Place&)>& only) {
                         it.notes.clear();
                     }
                 }
+                // Ses parametres, les memes que ceux de la fonction : leur bloc s'en va, elle les
+                // recoit de la fonction (le rapport et la question le disent).
+                if (it.migrated && !mine.empty()) {
+                    std::string names;
+                    for (const auto* d : read.parameters()) names += (names.empty() ? "" : ", ") + d->name;
+                    it.notes.push_back({false, "ses param\xC3\xA8tres (" + names + ") : ceux de " + v.name + "." + f.name});
+                }
                 // Une redefinition qui garde ses parametres dans son code : la fonction aussi.
                 if (baseNow && !it.migrated && !mine.empty()) {
                     baseNow = false;
@@ -359,10 +366,11 @@ std::size_t apply(Project& p, const Plan& plan) {
     return changed;
 }
 
-std::string summary(const Plan& plan) {
+std::string summary(const Plan& plan, bool before) {
     const auto plural = [](std::size_t n, const char* one, const char* many) { return std::to_string(n) + " " + (n > 1 ? many : one); };
     if (plan.items.empty()) return "aucun bloc VAR dans le code : rien \xC3\xA0 migrer";
-    std::string s = plural(plan.migrated(), "code migr\xC3\xA9", "codes migr\xC3\xA9s") + ", "
+    std::string s = (before ? plural(plan.migrated(), "code \xC3\xA0 migrer", "codes \xC3\xA0 migrer")
+                            : plural(plan.migrated(), "code migr\xC3\xA9", "codes migr\xC3\xA9s")) + ", "
                   + plural(plan.declarations(), "d\xC3\xA9" "claration", "d\xC3\xA9" "clarations");
     if (plan.skipped()) s += " ; " + plural(plan.skipped(), "laiss\xC3\xA9 tel quel", "laiss\xC3\xA9s tels quels");
     if (plan.attentions()) s += " ; " + plural(plan.attentions(), "point d'attention", "points d'attention");
@@ -379,7 +387,9 @@ std::string report(const Plan& plan) {
     };
     for (const auto& it : plan.items) {
         if (!it.migrated) continue;
-        out += "\n" + it.place.label + " : " + std::to_string(it.decls.size()) + " d\xC3\xA9" "claration" + (it.decls.size() > 1 ? "s" : "");
+        out += "\n" + it.place.label + " : "
+             + (it.decls.empty() ? std::string("aucune d\xC3\xA9" "claration propre")
+                                 : std::to_string(it.decls.size()) + " d\xC3\xA9" "claration" + (it.decls.size() > 1 ? "s" : ""));
         if (it.defaults) out += ", " + std::to_string(it.defaults) + " valeur" + (it.defaults > 1 ? "s" : "");
         if (it.comments) out += ", " + std::to_string(it.comments) + " commentaire" + (it.comments > 1 ? "s" : "") + " en documentation";
         out += "\n";

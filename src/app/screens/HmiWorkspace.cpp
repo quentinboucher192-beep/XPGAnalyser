@@ -2801,7 +2801,7 @@ void MainAnalysisScreen::askHmiMigrateDeclarations() {
     HmiAskDialog::Spec spec;
     spec.id = "dialog.hmiMigrate";
     spec.title = "Migrer les d\xC3\xA9" "clarations du projet";
-    spec.text = hmi::migrate::summary(plan) + ".\n\n"
+    spec.text = hmi::migrate::summary(plan, /*before=*/true) + ".\n\n"
                 "Chaque code coch\xC3\xA9 perd ses blocs VAR \xE2\x80\xA6 END_VAR : ses constantes, variables et param\xC3\xA8tres "
                 "passent dans ses onglets, leurs commentaires deviennent leur documentation. Le moteur lit les m\xC3\xAAmes "
                 "d\xC3\xA9" "clarations : l'ex\xC3\xA9" "cution ne change pas.\n"
@@ -2817,9 +2817,15 @@ void MainAnalysisScreen::askHmiMigrateDeclarations() {
             ++nSkipped;
             continue;
         }
-        std::string names;
+        std::string names, detail;
         for (const auto& d : it.decls) names += (names.empty() ? "" : ", ") + d.name;
-        std::string detail = std::to_string(it.decls.size()) + (it.decls.size() > 1 ? " d\xC3\xA9" "clarations : " : " d\xC3\xA9" "claration : ") + names;
+        if (it.decls.empty()) {                    // une redefinition : ses parametres sont ceux de sa fonction
+            for (const auto& n : it.notes)
+                if (!n.attention) detail += (detail.empty() ? "" : " \xC2\xB7 ") + n.text;
+            if (detail.empty()) detail = "un bloc vide, retir\xC3\xA9";
+        } else {
+            detail = std::to_string(it.decls.size()) + (it.decls.size() > 1 ? " d\xC3\xA9" "clarations : " : " d\xC3\xA9" "claration : ") + names;
+        }
         if (it.comments) detail += " \xC2\xB7 " + std::to_string(it.comments) + " commentaire(s) en documentation";
         for (const auto& n : it.notes)
             if (n.attention) detail += " \xC2\xB7 attention : " + n.text;

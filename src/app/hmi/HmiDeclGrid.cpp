@@ -704,6 +704,7 @@ HmiDeclBanner::HmiDeclBanner(std::string id) : ui::Widget(std::move(id)) {
 void HmiDeclBanner::setText(std::string text) {
     if (text == text_) return;
     text_ = std::move(text);
+    setTooltip(text_);                         // le texte entier, s'il est coupe
     setVisibility(text_.empty() ? ui::Visibility::Collapsed : ui::Visibility::Visible);
     invalidateLayout();
     invalidate();
@@ -721,7 +722,17 @@ void HmiDeclBanner::onPaint(const ui::PaintContext& ctx) {
     ctx.r.fillRect({b.x, b.y, 4.f, b.h}, ctx.theme.color.warning);
     ctx.r.fillRect({b.x, b.bottom() - 1.f, b.w, 1.f}, ctx.theme.color.border);
     const float lh = ctx.r.lineHeight(ctx.theme.font.smallUi);
-    ctx.r.drawText({b.x + 12.f, b.y + (b.h - lh) / 2.f}, text_, ctx.theme.font.smallUi, ctx.theme.color.text);
+    // Le texte s'arrete avant le bouton (des points de suite ; l'infobulle le dit en entier).
+    const float room = std::max(0.f, button_->bounds().x - (b.x + 12.f) - 10.f);
+    std::string shown = text_;
+    if (ctx.r.measure(shown, ctx.theme.font.smallUi).width > room) {
+        const std::string dots = "\xE2\x80\xA6";
+        std::size_t cut = std::min(shown.size(), ctx.r.fitCharacters(shown, ctx.theme.font.smallUi,
+                                                                     std::max(0.f, room - ctx.r.measure(dots, ctx.theme.font.smallUi).width)));
+        while (cut > 0 && (static_cast<unsigned char>(shown[cut]) & 0xC0) == 0x80) --cut;
+        shown = shown.substr(0, cut) + dots;
+    }
+    ctx.r.drawText({b.x + 12.f, b.y + (b.h - lh) / 2.f}, shown, ctx.theme.font.smallUi, ctx.theme.color.text);
 }
 
 // ------------------------------------------------------------- les onglets ----

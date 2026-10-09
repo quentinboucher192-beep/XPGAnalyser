@@ -229,6 +229,24 @@ void symboles() {
         // Seule la redefinition demandee : sa fonction et la famille suivent.
         const auto only = mg::plan(p, [](const mg::Place& at) { return at.kind == mg::Place::Kind::Override; });
         check(only.migrated() == 2, "Migrer la redefinition : sa fonction suit (" + std::to_string(only.migrated()) + ")");
+        // 1.11.18 : la note de ses parametres ; la question dit "a migrer", le rapport "migres".
+        check(std::any_of(o->notes.begin(), o->notes.end(), [](const mg::Note& n) { return !n.attention && n.text == "ses param\xC3\xA8tres (Pct) : ceux de Vanne.Ouvrir"; }),
+              "la redefinition : ses parametres sont ceux de sa fonction (une note, pas une alerte)");
+        check(mg::summary(plan, true).rfind("2 codes \xC3\xA0 migrer, ", 0) == 0 && mg::summary(plan).rfind("2 codes migr\xC3\xA9s, ", 0) == 0,
+              "le resume : avant (a migrer) et apres (migres) - " + mg::summary(plan, true));
+    }
+    {
+        // Une redefinition qui ne declare que les parametres de sa fonction : aucune declaration
+        // propre, son bloc s'en va ; le rapport le dit sans "0 declaration".
+        const Project p = project(base, "VAR_INPUT\n    Pct : INT := 100;\nEND_VAR\nOuvert := FALSE;\n");
+        const auto plan = mg::plan(p);
+        const auto* o = itemOf(plan, "Synoptique/V1.Ouvrir (red\xC3\xA9" "finition)");
+        const std::string text = mg::report(plan);
+        check(o && o->migrated && o->decls.empty() && o->body == "Ouvert := FALSE;\n"
+                  && text.find("Synoptique/V1.Ouvrir (red\xC3\xA9" "finition) : aucune d\xC3\xA9" "claration propre\n  - ses param\xC3\xA8tres (Pct) : ceux de Vanne.Ouvrir\n")
+                         != std::string::npos
+                  && text.find("0 d\xC3\xA9" "claration") == std::string::npos,
+              "les seuls parametres de la fonction : aucune declaration propre, la note\n" + text);
     }
     {
         const Project p = project(base, "VAR_INPUT\n    Pct : REAL;\nEND_VAR\nOuvert := FALSE;\n");

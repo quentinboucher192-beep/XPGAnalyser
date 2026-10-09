@@ -5077,16 +5077,19 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         bool ok = false;
         ui::TabControl* owner = nullptr;
         std::size_t index = 0;
-        walk(*page, [&](ui::Widget& x) {
-            auto* tabs = dynamic_cast<ui::TabControl*>(&x);
-            if (ok || !tabs || !shown(*tabs)) return;
-            for (std::size_t i = 0; i < tabs->tabCount() && !ok; ++i)
-                if (startsWith(tabs->tab(i)->title, arg(1)) && tabs->headerRect(i, r)) {
-                    ok = true;
-                    owner = tabs;
-                    index = i;
-                }
-        });
+        // 1.11.18 : le titre exact d'abord ("Variables" : l'onglet du code, pas "Variables IHM"),
+        // puis le debut du titre.
+        for (int pass = 0; pass < 2 && !ok; ++pass)
+            walk(*page, [&](ui::Widget& x) {
+                auto* tabs = dynamic_cast<ui::TabControl*>(&x);
+                if (ok || !tabs || !shown(*tabs)) return;
+                for (std::size_t i = 0; i < tabs->tabCount() && !ok; ++i)
+                    if ((pass == 0 ? tabs->tab(i)->title == arg(1) : startsWith(tabs->tab(i)->title, arg(1))) && tabs->headerRect(i, r)) {
+                        ok = true;
+                        owner = tabs;
+                        index = i;
+                    }
+            });
         if (!ok) {
             // 1.9 : les sous-onglets du document d'un symbole (Dessin | Alarmes | Instances).
             HmiSymbolTabs* symTabs = nullptr;
