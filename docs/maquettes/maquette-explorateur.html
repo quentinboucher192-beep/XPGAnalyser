@@ -1,0 +1,755 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Explorateur XPGAnalyser</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Mise en page : une bande d'en-tete, puis trois colonnes - l'arbre d'aujourd'hui (fige),
+   l'arbre propose (vivant : deplier, chercher, filtrer, survoler) et ce qui change.
+   L'appli est dessinee avec sa police ; la page autour, en IBM Plex. */
+:root{
+  /* la page */
+  --page:#eceef2; --page-2:#e2e5ea; --ink:#1b2027; --ink-2:#4b535e; --ink-3:#6a727e; --rule:#d3d8df;
+  /* l'appli, theme clair */
+  --app:#f6f7f9; --app-2:#ffffff; --app-3:#eef1f5; --app-line:#dde1e7; --app-fg:#1d232b; --app-fg-2:#4d5662; --app-fg-3:#727a86;
+  --hover:#e8edf5; --sel:#d9e6fb; --sel-fg:#0f2a52; --accent:#1f6fe0; --guide:#d6dbe2;
+  --d-api:#2f6fe4; --d-ihm:#7553db; --d-sim:#178f58; --d-ver:#b26f08;
+  --ok:#1a8f4c; --mod:#d27503; --err:#d23434; --never:#878e99; --redo:#2a6fd6;
+  --k-folder:#7f8792; --k-script:#2f78e0; --k-func:#8456dc; --k-const:#b8720f; --k-var:#0f8c81; --k-param:#5b9327;
+  --k-type:#a68200; --k-view:#3a73b3; --k-sym:#ad3f99; --k-popup:#5577bb; --k-style:#c04a76; --k-res:#93733a;
+  --k-test:#1a8f4c; --k-cpu:#596779; --k-dbg:#c9481f; --k-curve:#2b8bb0;
+  --tag-io:#ddf3f0; --tag-io-fg:#0b6a61; --tag-out:#ece5fd; --tag-out-fg:#5636b3; --tag-keep:#fbefdc; --tag-keep-fg:#8a560a;
+  --pill:#e6e9ee; --pill-fg:#4d5662; --err-bg:#fbe9e9; --mod-bg:#fcf0e0; --ok-bg:#e3f4ea; --redo-bg:#e3edfb;
+  --old-bg:#f3f4f6; --old-sel:#cfe0fa; --old-ico:#5c7fae;
+  --ui:"Segoe UI","Noto Sans","DejaVu Sans",system-ui,sans-serif;
+  --doc:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+  --mono:"IBM Plex Mono","Cascadia Mono",Consolas,"DejaVu Sans Mono",monospace;
+  --row:26px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --page:#0f1114; --page-2:#15181c; --ink:#e6e8ec; --ink-2:#b2b8c2; --ink-3:#858c97; --rule:#272b31;
+    --app:#1a1d22; --app-2:#1f2227; --app-3:#252930; --app-line:#2f333b; --app-fg:#e3e6eb; --app-fg-2:#acb3bd; --app-fg-3:#7e8691;
+    --hover:#252a32; --sel:#1c3354; --sel-fg:#ffffff; --accent:#4a8dff; --guide:#2d3139;
+    --d-api:#5b95ff; --d-ihm:#a38aff; --d-sim:#3acb88; --d-ver:#efb24a;
+    --ok:#4fcb85; --mod:#f2a23c; --err:#ff6b6b; --never:#7b838e; --redo:#6aa8ff;
+    --k-folder:#8b939f; --k-script:#5ca3ff; --k-func:#b58cff; --k-const:#e5a552; --k-var:#35c6b7; --k-param:#9ccc65;
+    --k-type:#eec84b; --k-view:#7fb0e6; --k-sym:#d58be8; --k-popup:#8fb7e8; --k-style:#ef8fb0; --k-res:#d3ae6e;
+    --k-test:#4fcb85; --k-cpu:#9aaac2; --k-dbg:#ff8a5c; --k-curve:#5cc6ee;
+    --tag-io:#113a36; --tag-io-fg:#5fe0d0; --tag-out:#2b2346; --tag-out-fg:#c9b3ff; --tag-keep:#3a2c15; --tag-keep-fg:#f2c27a;
+    --pill:#2a2f37; --pill-fg:#aeb5bf; --err-bg:#3a1c1f; --mod-bg:#3a2a16; --ok-bg:#163223; --redo-bg:#1b2c45;
+    --old-bg:#1c1f24; --old-sel:#23395b; --old-ico:#7e9cc7;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --page:#0f1114; --page-2:#15181c; --ink:#e6e8ec; --ink-2:#b2b8c2; --ink-3:#858c97; --rule:#272b31;
+  --app:#1a1d22; --app-2:#1f2227; --app-3:#252930; --app-line:#2f333b; --app-fg:#e3e6eb; --app-fg-2:#acb3bd; --app-fg-3:#7e8691;
+  --hover:#252a32; --sel:#1c3354; --sel-fg:#ffffff; --accent:#4a8dff; --guide:#2d3139;
+  --d-api:#5b95ff; --d-ihm:#a38aff; --d-sim:#3acb88; --d-ver:#efb24a;
+  --ok:#4fcb85; --mod:#f2a23c; --err:#ff6b6b; --never:#7b838e; --redo:#6aa8ff;
+  --k-folder:#8b939f; --k-script:#5ca3ff; --k-func:#b58cff; --k-const:#e5a552; --k-var:#35c6b7; --k-param:#9ccc65;
+  --k-type:#eec84b; --k-view:#7fb0e6; --k-sym:#d58be8; --k-popup:#8fb7e8; --k-style:#ef8fb0; --k-res:#d3ae6e;
+  --k-test:#4fcb85; --k-cpu:#9aaac2; --k-dbg:#ff8a5c; --k-curve:#5cc6ee;
+  --tag-io:#113a36; --tag-io-fg:#5fe0d0; --tag-out:#2b2346; --tag-out-fg:#c9b3ff; --tag-keep:#3a2c15; --tag-keep-fg:#f2c27a;
+  --pill:#2a2f37; --pill-fg:#aeb5bf; --err-bg:#3a1c1f; --mod-bg:#3a2a16; --ok-bg:#163223; --redo-bg:#1b2c45;
+  --old-bg:#1c1f24; --old-sel:#23395b; --old-ico:#7e9cc7;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--page);color:var(--ink);font:14px/1.5 var(--doc);padding-inline:16px;padding-block:0 32px}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+kbd{font:11px/1 var(--mono);padding:2px 5px 3px;border:1px solid var(--app-line);border-bottom-width:2px;border-radius:4px;background:var(--app-3);color:var(--app-fg-2);white-space:nowrap}
+.num{font-variant-numeric:tabular-nums}
+svg.i{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+
+/* ---- l'en-tete de page ---- */
+.top{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:flex-end;justify-content:space-between;padding-block:22px 16px;max-width:1500px;margin-inline:auto}
+.top h1{font:600 22px/1.2 var(--doc);margin:0;letter-spacing:-.01em;text-wrap:balance}
+.top p{margin:4px 0 0;color:var(--ink-2);max-width:68ch}
+.ctl{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.seg{display:inline-flex;border:1px solid var(--rule);border-radius:7px;overflow:hidden;background:var(--page-2)}
+.seg button{border:0;background:transparent;padding:5px 11px;font-size:12.5px;color:var(--ink-2)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--page)}
+.ctl label{font-size:12px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.06em}
+
+/* ---- les trois colonnes ---- */
+.stage{max-width:1500px;margin-inline:auto;display:grid;gap:20px;grid-template-columns:minmax(280px,340px) minmax(340px,430px) minmax(280px,1fr);align-items:start}
+@media (max-width:1180px){.stage{grid-template-columns:minmax(280px,1fr) minmax(320px,1fr)}.notes{grid-column:1/-1}}
+@media (max-width:760px){.stage{grid-template-columns:minmax(0,1fr)}}
+.colhead{display:flex;align-items:baseline;gap:10px;margin:0 0 8px}
+.colhead h2{font:600 13px/1.3 var(--doc);text-transform:uppercase;letter-spacing:.08em;margin:0;color:var(--ink-2)}
+.colhead span{font-size:12.5px;color:var(--ink-3)}
+.frame{border:1px solid var(--app-line);border-radius:8px;background:var(--app);color:var(--app-fg);font:13px/1.35 var(--ui);height:760px;display:flex;flex-direction:column;overflow:hidden;position:relative;min-width:0}
+.scroll{flex:1;overflow:auto;scrollbar-width:thin;position:relative}
+
+/* ---- l'arbre d'aujourd'hui (fige, d'apres les captures 1.11.21) ---- */
+.old{background:var(--old-bg)}
+.old .ofilter{padding:7px 10px;border-bottom:1px solid var(--app-line);color:var(--app-fg-3);font-size:12.5px}
+.orow{display:flex;align-items:center;gap:5px;height:24px;padding-right:8px;white-space:nowrap;position:relative}
+.orow .lab{overflow:hidden;text-overflow:ellipsis}
+.orow .lab b{font-weight:600}
+.orow .chev{width:14px;color:var(--app-fg-3);font-size:10px;text-align:center;flex:none}
+.orow .ico{color:var(--old-ico)}
+.orow .dot{width:6px;height:6px;border-radius:50%;background:var(--mod);flex:none}
+.orow .right{margin-left:auto;display:flex;gap:6px;align-items:center;flex:none}
+.orow .tr{font-size:11px;color:var(--app-fg-3)}
+.orow .tr.ok{color:var(--ok)}
+.orow .cnt{min-width:22px;height:17px;border-radius:9px;border:1px solid var(--app-line);font-size:10.5px;line-height:15px;text-align:center;color:var(--app-fg-2);padding:0 5px}
+.orow.sel{background:var(--old-sel)}
+.orow .guides{display:flex;flex:none;height:100%}
+.orow .guides i{width:16px;border-left:1px solid var(--guide);margin-left:7px;width:9px}
+.otools{display:flex;gap:4px;padding:2px 0 4px 44px}
+.otools span{width:22px;height:18px;border:1px solid var(--app-line);border-radius:9px;display:grid;place-items:center;color:var(--app-fg-3);font-size:9px}
+.ofoot{border-top:1px solid var(--app-line);padding:6px 10px;font-size:12px;color:var(--app-fg-3);display:flex;gap:8px}
+.ofoot b{color:var(--mod);font-weight:400}
+
+/* ---- l'arbre propose ---- */
+.nw .bar{padding:8px 8px 6px;border-bottom:1px solid var(--app-line);display:flex;flex-direction:column;gap:7px;background:var(--app)}
+.scopes{display:flex;gap:2px;background:var(--app-3);border-radius:7px;padding:2px}
+.scopes button{flex:1;border:0;background:transparent;border-radius:5px;padding:4px 0;font-size:12px;color:var(--app-fg-2);display:flex;gap:5px;align-items:center;justify-content:center;min-width:0}
+.scopes button .sw{width:7px;height:7px;border-radius:2px;flex:none}
+.scopes button[aria-pressed="true"]{background:var(--app-2);color:var(--app-fg);box-shadow:0 1px 2px rgba(0,0,0,.18)}
+.search{display:flex;align-items:center;gap:6px;border:1px solid var(--app-line);background:var(--app-2);border-radius:6px;padding:0 6px 0 8px;height:28px}
+.search input{border:0;background:transparent;outline:none;flex:1;min-width:0;font:13px var(--ui);color:var(--app-fg)}
+.search svg{color:var(--app-fg-3)}
+.iconbtn{border:0;background:transparent;width:26px;height:24px;border-radius:5px;display:grid;place-items:center;color:var(--app-fg-2)}
+.iconbtn:hover,.iconbtn[aria-pressed="true"]{background:var(--app-3);color:var(--app-fg)}
+.chips{display:flex;gap:5px;flex-wrap:wrap}
+.chip{border:1px solid var(--app-line);background:var(--app-2);border-radius:12px;padding:1px 8px 1px 6px;font-size:11.5px;color:var(--app-fg-2);display:inline-flex;gap:5px;align-items:center}
+.chip .g{font-size:10px;line-height:1}
+.chip b{font-weight:600;color:var(--app-fg)}
+.chip[aria-pressed="true"]{border-color:var(--accent);background:var(--sel);color:var(--sel-fg)}
+.chip[aria-pressed="true"] b{color:var(--sel-fg)}
+
+.sec{font:600 10.5px/1 var(--ui);letter-spacing:.08em;text-transform:uppercase;color:var(--app-fg-3);padding:10px 12px 5px;display:flex;gap:6px;align-items:center}
+.pins{display:flex;flex-wrap:wrap;gap:5px;padding:0 10px 8px}
+.pin{display:inline-flex;gap:5px;align-items:center;border:1px solid var(--app-line);background:var(--app-2);border-radius:6px;padding:2px 8px 2px 6px;font-size:12px;cursor:pointer}
+.pin:hover{border-color:var(--accent)}
+
+.dh{position:sticky;top:0;z-index:3;display:flex;align-items:center;gap:8px;height:40px;padding:0 8px 0 6px;background:var(--app);border-bottom:1px solid var(--app-line);cursor:pointer}
+.dh .badge{width:24px;height:24px;border-radius:6px;display:grid;place-items:center;color:#fff;flex:none}
+.dh .badge svg{stroke:#fff}
+.dh .t{display:flex;flex-direction:column;min-width:0;line-height:1.2}
+.dh .t b{font-weight:600;font-size:13px}
+.dh .t span{font-size:11.5px;color:var(--app-fg-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dh .chev{color:var(--app-fg-3);width:12px;text-align:center;font-size:10px;flex:none}
+.dh .acts{margin-left:auto;display:flex;gap:2px;opacity:0;transition:opacity .12s}
+.dh:hover .acts,.dh:focus-within .acts{opacity:1}
+
+.row{display:flex;align-items:center;gap:6px;height:var(--row);padding-right:6px;white-space:nowrap;position:relative;cursor:default}
+.row:hover{background:var(--hover)}
+.row.sel{background:var(--sel);color:var(--sel-fg)}
+.row.sel::before{content:"";position:absolute;left:0;top:3px;bottom:3px;width:3px;border-radius:0 2px 2px 0;background:var(--dom)}
+.row .ind{display:flex;flex:none;align-self:stretch}
+.row .ind i{width:16px;position:relative}
+.row .ind i::after{content:"";position:absolute;left:7px;top:0;bottom:0;border-left:1px solid var(--guide)}
+.row .ind i.dom::after{border-left-color:color-mix(in srgb,var(--dom) 45%,transparent)}
+.row .tw{width:12px;flex:none;color:var(--app-fg-3);font-size:9px;text-align:center;cursor:pointer;user-select:none}
+.row .ki{width:16px;flex:none;display:grid;place-items:center}
+.row .name{overflow:hidden;text-overflow:ellipsis;min-width:0;display:flex;align-items:baseline;gap:6px}
+.row .name .sig{font:12px var(--mono);color:var(--app-fg-3);overflow:hidden;text-overflow:ellipsis}
+.row.sel .name .sig,.row.sel .meta{color:inherit;opacity:.8}
+.row .meta{font-size:11.5px;color:var(--app-fg-3)}
+.row .vdot{width:6px;height:6px;border-radius:50%;background:var(--mod);flex:none;margin-left:-2px}
+.row .tag{font:500 10.5px/1 var(--ui);padding:2px 6px 3px;border-radius:4px;flex:none}
+.tag.io{background:var(--tag-io);color:var(--tag-io-fg)}
+.tag.out{background:var(--tag-out);color:var(--tag-out-fg)}
+.tag.keep{background:var(--tag-keep);color:var(--tag-keep-fg)}
+.tag.ovl{background:var(--pill);color:var(--pill-fg)}
+.tag.upd{background:var(--mod-bg);color:var(--mod)}
+.tag.run{background:var(--ok-bg);color:var(--ok)}
+.tag.stop{background:var(--pill);color:var(--pill-fg)}
+.row .end{margin-left:auto;display:flex;align-items:center;gap:6px;flex:none;padding-left:8px}
+.row .st{width:26px;display:flex;justify-content:center;font-size:11px}
+.row .cnt{min-width:24px;text-align:right;font-size:11.5px;color:var(--app-fg-3)}
+.row .hov{display:none;gap:1px}
+.row:hover .hov{display:flex}
+.row:hover .cnt{display:none}
+.row .hov button{border:0;background:transparent;width:22px;height:20px;border-radius:4px;display:grid;place-items:center;color:var(--app-fg-2)}
+.row .hov button:hover{background:var(--app-3);color:var(--app-fg)}
+.row.grp .name{font:600 10.5px/1 var(--ui);letter-spacing:.07em;text-transform:uppercase;color:var(--app-fg-3)}
+.row.grp{height:calc(var(--row) - 4px)}
+.row mark{background:color-mix(in srgb,var(--mod) 35%,transparent);color:inherit;border-radius:2px}
+.s-ok{color:var(--ok)}.s-err{color:var(--err)}.s-never{color:var(--never)}.s-redo{color:var(--redo)}
+.errn{background:var(--err-bg);color:var(--err);border-radius:8px;padding:0 6px;font:600 10.5px/16px var(--ui)}
+.empty{padding:24px 16px;color:var(--app-fg-3);font-size:12.5px;text-align:center}
+
+.foot{border-top:1px solid var(--app-line);background:var(--app);display:flex;gap:2px;padding:4px}
+.foot button{flex:1;min-width:0;border:0;background:transparent;border-radius:5px;padding:4px 6px;display:flex;gap:6px;align-items:center;font-size:11.5px;color:var(--app-fg-2);white-space:nowrap;overflow:hidden}
+.foot button:hover{background:var(--app-3)}
+.foot .lead{width:8px;height:8px;border-radius:50%;flex:none}
+
+.card{position:absolute;z-index:10;width:300px;background:var(--app-2);border:1px solid var(--app-line);border-radius:8px;box-shadow:0 10px 28px rgba(0,0,0,.28);padding:10px 12px;font-size:12px;pointer-events:none}
+.card h4{margin:0 0 4px;font:600 13px/1.3 var(--ui);display:flex;gap:6px;align-items:center;color:var(--app-fg)}
+.card .path{color:var(--app-fg-3);margin-bottom:8px;line-height:1.4}
+.card dl{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;margin:0 0 8px}
+.card dt{color:var(--app-fg-3)}.card dd{margin:0;color:var(--app-fg)}
+.card .keys{display:flex;gap:6px;flex-wrap:wrap;color:var(--app-fg-3);border-top:1px solid var(--app-line);padding-top:7px}
+
+.legend-pop{position:absolute;right:8px;top:118px;z-index:12;width:290px;max-height:560px;overflow:auto;background:var(--app-2);border:1px solid var(--app-line);border-radius:8px;box-shadow:0 12px 30px rgba(0,0,0,.3);padding:4px 12px 12px}
+
+/* ---- la legende (dans la colonne et dans l'appli) ---- */
+.lg h5{font:600 10.5px/1 var(--ui);text-transform:uppercase;letter-spacing:.08em;color:var(--app-fg-3);margin:12px 0 6px}
+.lg ul{list-style:none;margin:0;padding:0;display:grid;gap:4px}
+.lg li{display:flex;gap:8px;align-items:center;font:12px/1.35 var(--ui);color:var(--app-fg)}
+.lg li .k{width:30px;display:flex;justify-content:center;flex:none}
+.lg li small{color:var(--app-fg-3)}
+.lg .kinds{grid-template-columns:repeat(2,minmax(0,1fr))}
+
+/* ---- ce qui change ---- */
+.notes{min-width:0}
+.notes ol{list-style:none;margin:0;padding:0;display:grid;gap:10px;counter-reset:n}
+.notes li{display:grid;grid-template-columns:24px minmax(0,1fr);gap:10px;align-items:start;cursor:pointer;border-radius:8px;padding:8px 10px 9px;border:1px solid transparent}
+.notes li:hover,.notes li.on{border-color:var(--rule);background:var(--page-2)}
+.notes li::before{counter-increment:n;content:counter(n);width:22px;height:22px;border-radius:50%;background:var(--ink);color:var(--page);font:600 11.5px/22px var(--doc);text-align:center}
+.notes li b{display:block;font-weight:600}
+.notes li span{color:var(--ink-2);font-size:13.5px}
+.box{border:1px solid var(--rule);border-radius:10px;padding:12px 14px;margin-top:18px;background:var(--page-2)}
+.box h3{font:600 13px/1.3 var(--doc);margin:0 0 8px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-2)}
+.box ul{margin:0;padding-left:18px;display:grid;gap:6px;color:var(--ink-2)}
+.box .lgwrap{background:var(--app-2);border:1px solid var(--app-line);border-radius:8px;padding:2px 12px 12px;color:var(--app-fg)}
+.flash{animation:flash 1.4s ease-out 1}
+@keyframes flash{0%,40%{box-shadow:0 0 0 3px var(--accent)}100%{box-shadow:0 0 0 3px transparent}}
+@media (prefers-reduced-motion:reduce){.flash{animation:none;outline:3px solid var(--accent)}.dh .acts{transition:none}}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-folder" viewBox="0 0 16 16"><path d="M1.5 4.5v8a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1v-6.5a1 1 0 0 0-1-1H8L6.5 3h-4a1 1 0 0 0-1 1.5z"/></symbol>
+    <symbol id="i-script" viewBox="0 0 16 16"><path d="M5.5 4.5 2 8l3.5 3.5M10.5 4.5 14 8l-3.5 3.5M9 3 7 13"/></symbol>
+    <symbol id="i-func" viewBox="0 0 16 16"><rect x="5" y="4" width="7" height="8" rx="1.2"/><path d="M1.5 8H5M12 6h2.5M12 10h2.5"/></symbol>
+    <symbol id="i-var" viewBox="0 0 16 16"><path d="M4 3.5h8M4 3.5v9M4 8h6"/></symbol>
+    <symbol id="i-const" viewBox="0 0 16 16"><path d="M3 5h10M3 8h10M3 11h10"/></symbol>
+    <symbol id="i-param" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.2"/><path d="M1.5 8h4.3M10.2 8h4.3"/></symbol>
+    <symbol id="i-type" viewBox="0 0 16 16"><path d="M6 2.5c-2 0-2 1.2-2 2.7S3.4 7.6 2.5 8c.9.4 1.5 1.3 1.5 2.8s0 2.7 2 2.7M10 2.5c2 0 2 1.2 2 2.7s.6 2.4 1.5 2.8c-.9.4-1.5 1.3-1.5 2.8s0 2.7-2 2.7"/></symbol>
+    <symbol id="i-view" viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/><path d="M1.5 5.5h13"/></symbol>
+    <symbol id="i-popup" viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="10" height="8" rx="1.3"/><rect x="5" y="6" width="9.5" height="7.5" rx="1.3"/></symbol>
+    <symbol id="i-sym" viewBox="0 0 16 16"><path d="M8 1.8 14.2 8 8 14.2 1.8 8z"/><circle cx="8" cy="8" r="1.6"/></symbol>
+    <symbol id="i-style" viewBox="0 0 16 16"><path d="M10.5 2.5 13.5 5.5 7 12H4v-3z"/><path d="M2 14h5"/></symbol>
+    <symbol id="i-res" viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/><path d="m3.5 11.5 3.5-4 2.5 2.5 1.5-1.5 2 3"/><circle cx="10.5" cy="5.5" r="1"/></symbol>
+    <symbol id="i-file" viewBox="0 0 16 16"><path d="M3.5 1.5h6l3 3v10h-9z"/><path d="M9.5 1.5v3h3M5.5 8h5M5.5 11h5"/></symbol>
+    <symbol id="i-test" viewBox="0 0 16 16"><path d="M2.5 4.5l1.5 1.5 3-3M2.5 11l1.5 1.5 3-3M9 5h5M9 11.5h5"/></symbol>
+    <symbol id="i-cpu" viewBox="0 0 16 16"><rect x="4" y="4" width="8" height="8" rx="1"/><path d="M6 1.5v2.5M10 1.5v2.5M6 12v2.5M10 12v2.5M1.5 6H4M1.5 10H4M12 6h2.5M12 10h2.5"/></symbol>
+    <symbol id="i-task" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.5 1.5"/></symbol>
+    <symbol id="i-list" viewBox="0 0 16 16"><path d="M5.5 4h8M5.5 8h8M5.5 12h8"/><circle cx="2.8" cy="4" r=".6"/><circle cx="2.8" cy="8" r=".6"/><circle cx="2.8" cy="12" r=".6"/></symbol>
+    <symbol id="i-block" viewBox="0 0 16 16"><rect x="3" y="2.5" width="10" height="11" rx="1"/><path d="M1 5.5h2M1 10.5h2M13 8h2"/></symbol>
+    <symbol id="i-macro" viewBox="0 0 16 16"><path d="M5 3.5 12 8l-7 4.5z"/></symbol>
+    <symbol id="i-table" viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="1.2"/><path d="M1.5 6.5h13M1.5 10h13M6 6.5v7"/></symbol>
+    <symbol id="i-sim" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.2"/><path d="M6.5 5.3 11 8l-4.5 2.7z"/></symbol>
+    <symbol id="i-api" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M5 6.5h2M9 6.5h2M5 9.5h6"/></symbol>
+    <symbol id="i-ihm" viewBox="0 0 16 16"><rect x="1.5" y="2" width="13" height="9.5" rx="1.5"/><path d="M5.5 14.5h5M8 11.5v3"/></symbol>
+    <symbol id="i-ver" viewBox="0 0 16 16"><circle cx="4.5" cy="4" r="1.8"/><circle cx="4.5" cy="12" r="1.8"/><circle cx="11.5" cy="6.5" r="1.8"/><path d="M4.5 5.8v4.4M11.5 8.3c0 2-2.5 2.2-5.2 3"/></symbol>
+    <symbol id="i-dbg" viewBox="0 0 16 16"><ellipse cx="8" cy="9" rx="3.5" ry="4.5"/><path d="M8 4.5V2.5M4.5 7 2 6M11.5 7 14 6M4.5 11 2 12.5M11.5 11 14 12.5"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 16 16"><rect x="3" y="7" width="10" height="7" rx="1.3"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></symbol>
+    <symbol id="i-curve" viewBox="0 0 16 16"><path d="M1.5 12c2.5 0 2.5-8 5-8s2.5 6 5 6c1.5 0 2-1.5 3-3"/></symbol>
+    <symbol id="i-journal" viewBox="0 0 16 16"><path d="M3.5 1.5h9v13h-9z"/><path d="M6 5h4M6 8h4M6 11h2.5"/></symbol>
+    <symbol id="i-gauge" viewBox="0 0 16 16"><path d="M2.5 11.5a5.5 5.5 0 1 1 11 0"/><path d="M8 11.5 10.5 6.5"/></symbol>
+    <symbol id="i-break" viewBox="0 0 16 16"><circle cx="8" cy="8" r="4.5"/></symbol>
+    <symbol id="i-tag" viewBox="0 0 16 16"><path d="M1.5 8.2V2.5h5.7l7.3 7.3-5.7 5.7z"/><circle cx="5" cy="5.5" r="1"/></symbol>
+    <symbol id="i-star" viewBox="0 0 16 16"><path d="m8 1.8 1.9 3.9 4.3.6-3.1 3 .7 4.3L8 11.6l-3.8 2 .7-4.3-3.1-3 4.3-.6z"/></symbol>
+    <symbol id="i-open" viewBox="0 0 16 16"><path d="M9 2.5h4.5V7M13.5 2.5 7.5 8.5M12 10v3.5H2.5V4H6"/></symbol>
+    <symbol id="i-more" viewBox="0 0 16 16"><circle cx="3.5" cy="8" r=".9"/><circle cx="8" cy="8" r=".9"/><circle cx="12.5" cy="8" r=".9"/></symbol>
+    <symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3.5 3.5"/></symbol>
+    <symbol id="i-help" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.3"/><path d="M6.2 6.3a1.9 1.9 0 1 1 2.6 1.8c-.5.2-.8.6-.8 1.2v.4"/><circle cx="8" cy="11.6" r=".5"/></symbol>
+    <symbol id="i-dens" viewBox="0 0 16 16"><path d="M2.5 4h11M2.5 8h11M2.5 12h11"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 16 16"><path d="M13 3.5v3.5H9.5"/><path d="M12.6 7A5 5 0 1 0 13 9.5"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.8v2M8 12.2v2M1.8 8h2M12.2 8h2M3.6 3.6 5 5M11 11l1.4 1.4M3.6 12.4 5 11M11 5l1.4-1.4"/></symbol>
+  </defs>
+</svg>
+
+<header class="top">
+  <div>
+    <h1>Explorateur d'application : la proposition</h1>
+    <p>À gauche, l'arbre tel qu'il est dans la 1.11.21. Au milieu, celui que je propose : il se déplie, se filtre et se survole comme le vrai. À droite, ce qui change, et la légende. Le projet montré est Armoire_Gaz.</p>
+  </div>
+  <div class="ctl">
+    <label for="th-auto">Thème</label>
+    <div class="seg" role="group" aria-label="Thème de l'appli">
+      <button id="th-auto" type="button" data-th="" aria-pressed="true">Système</button>
+      <button id="th-dark" type="button" data-th="dark" aria-pressed="false">Sombre</button>
+      <button id="th-light" type="button" data-th="light" aria-pressed="false">Clair</button>
+    </div>
+    <label for="dn-1">Densité</label>
+    <div class="seg" role="group" aria-label="Densité des lignes">
+      <button id="dn-0" type="button" data-row="22" aria-pressed="false">Serré</button>
+      <button id="dn-1" type="button" data-row="26" aria-pressed="true">Normal</button>
+      <button id="dn-2" type="button" data-row="30" aria-pressed="false">Large</button>
+    </div>
+  </div>
+</header>
+
+<main class="stage">
+  <section aria-labelledby="h-old">
+    <div class="colhead"><h2 id="h-old">Aujourd'hui</h2><span>1.11.21, figé</span></div>
+    <div class="frame old">
+      <div class="ofilter">Filtrer l'arbre &nbsp;(Ctrl+Maj+F)</div>
+      <div class="scroll" id="oldTree"></div>
+      <div class="ofoot"><span>● Simulation arrêtée</span><span>·</span><b>V4 modifié</b></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-new">
+    <div class="colhead"><h2 id="h-new">Proposé</h2><span>essayez : déplier, chercher, filtrer, survoler</span></div>
+    <div class="frame nw" id="newFrame">
+      <div class="bar">
+        <div class="scopes" role="group" aria-label="Portée de l'arbre" id="scopes"></div>
+        <div style="display:flex;gap:4px;align-items:center">
+          <div class="search" style="flex:1">
+            <svg class="i"><use href="#i-search"/></svg>
+            <input id="q" type="search" placeholder="Filtrer l'arbre" autocomplete="off" aria-label="Filtrer l'arbre">
+            <kbd>Ctrl+Maj+F</kbd>
+          </div>
+          <button class="iconbtn" id="btnLegend" type="button" aria-pressed="false" title="Légende : ce que veulent dire les marques"><svg class="i"><use href="#i-help"/></svg></button>
+        </div>
+        <div class="chips" id="chips" role="group" aria-label="Filtres rapides"></div>
+      </div>
+      <div class="scroll" id="newTree"></div>
+      <div class="foot" id="foot"></div>
+      <div class="legend-pop" id="legendPop" hidden><div class="lg" id="lgPop"></div></div>
+      <div class="card" id="card" hidden></div>
+    </div>
+  </section>
+
+  <aside class="notes" aria-labelledby="h-notes">
+    <div class="colhead"><h2 id="h-notes">Ce qui change</h2><span>un clic montre l'endroit</span></div>
+    <ol id="notes">
+      <li data-t="dh"><div><b>Un en-tête par domaine, collé en haut</b><span>API, IHM, Simulation et Versions ont chacun leur couleur, leur icône et une ligne d'état (« 29 POU · 891 variables », « arrêtée · cycle 0 »). Au survol : Réanalyser, Générer, Démarrer.</span></div></li>
+      <li data-t="scopes"><div><b>La portée en onglets, des filtres en puces</b><span>Tout, API, IHM, Simulation, Versions, Épinglés. Sous la recherche : Modifiés, En faute, À générer, Épinglés, avec leur nombre. Un clic suffit pour ne voir que ce qui demande du travail.</span></div></li>
+      <li data-t="st"><div><b>Une seule colonne d'état, alignée</b><span>✓ à jour, ◐ à refaire, ✕ en faute avec le nombre, ○ jamais généré. Fini les icônes empilées à des places différentes selon la ligne. Le point orange garde son sens : modifié depuis la dernière version.</span></div></li>
+      <li data-t="ki"><div><b>Une couleur et une icône par genre</b><span>Script, fonction, variable, constante, type, vue, popup, symbole : chacun la sienne, les mêmes que dans les éditeurs. Les dossiers restent gris, c'est le contenu qui se voit.</span></div></li>
+      <li data-t="grp"><div><b>Le contenu du code en sous-titres</b><span>PARAMÈTRES · 4, VARIABLES · 2… en petites capitales, sans icône de dossier : un code déplié reste léger. Les modes sont des étiquettes : E/S, sortie, conservée.</span></div></li>
+      <li data-t="ovl"><div><b>Surcharges et signatures lisibles</b><span>« Convertir · 3 surcharges », puis chaque signature dans la police du code, le nom en clair et le reste en gris.</span></div></li>
+      <li data-t="hov"><div><b>Les gestes au survol</b><span>Épingler ★, ouvrir ↗, le menu ⋯ apparaissent à la place du compteur. La carte au survol donne le chemin, l'état et les touches.</span></div></li>
+      <li data-t="foot"><div><b>Un pied qui résume le projet</b><span>La simulation (arrêtée, en marche, cycle), le build (à jour, en faute, à générer) et la version (V4, 12 changements). Chaque morceau ouvre son onglet.</span></div></li>
+      <li data-t="legend"><div><b>La légende dans l'appli</b><span>Le bouton ? ouvre la légende de toutes les marques. Elle est aussi ci-dessous.</span></div></li>
+      <li data-t="sim"><div><b>Simulation dépliée</b><span>Points d'arrêt, forçages avec leur valeur, courbes : le déballage que tu as demandé pour Simulation, dans le même style.</span></div></li>
+    </ol>
+    <div class="box">
+      <h3>Légende</h3>
+      <div class="lgwrap"><div class="lg" id="lgSide"></div></div>
+    </div>
+    <div class="box">
+      <h3>À valider</h3>
+      <ul>
+        <li>Pour une ligne à jour : on garde le ✓ vert, ou on ne montre rien pour alléger (seuls ◐ ✕ ○ restent) ?</li>
+        <li>Les couleurs des domaines : bleu API, violet IHM, vert Simulation, ambre Versions.</li>
+        <li>Les compteurs des dossiers : toujours visibles, ou seulement au survol ?</li>
+        <li>Les sous-titres du code (PARAMÈTRES · 4) à la place des dossiers « Paramètres (4) ».</li>
+      </ul>
+    </div>
+  </aside>
+</main>
+
+<script>
+(() => {
+  // ---------------------------------------------------------------- les donnees ----
+  // Un noeud : label, k (genre), et au choix : meta (texte gris), sig (signature), n (compteur),
+  // st (ok | redo | err | never), errs, v (modifie depuis la version), tag [texte, classe],
+  // grp (sous-titre de code), open, pin, d (domaine, pour les en-tetes).
+  let uid = 0;
+  const N = (label, k, o = {}, kids) => { const n = { id: 'n' + (++uid), label, k, ...o }; if (kids) n.kids = kids; return n; };
+  const F = (label, o, kids) => N(label, 'folder', o, kids);
+
+  const api = N('API', 'api', { d: 'api', open: true, sum: '29 POU · 891 variables · analysé à 10:32' }, [
+    N('Configuration', 'cpu', { meta: 'BMX P34 2020' }),
+    F('Types dérivés', { n: 28, tag: ['3 mises à jour', 'upd'] }),
+    F('Blocs DFB', { n: 8, st: 'ok' }),
+    F('Unités de programme', { n: 3, st: 'ok', v: true }),
+    F('Ordre d’exécution', { n: 21, meta: '65 sections' }),
+    F('Tâches', { n: 1 }, [N('MAST', 'task', { meta: 'cyclique · 20 ms' })]),
+    F('Variables', { n: 251 }),
+    F('Sous-routines', { n: 0 }),
+    F('Macros', { n: 11 }),
+    F('Tables d’animation', { n: 5 }),
+  ]);
+
+  const fnRandom = N('Random', 'func', { sig: '(Min, Max, RandomSeed, test) : REAL', st: 'ok', pin: true, open: true }, [
+    N('Paramètres', 'grp', { grp: true, n: 4, open: true }, [
+      N('Min', 'param', { meta: 'REAL' }),
+      N('Max', 'param', { meta: 'REAL' }),
+      N('RandomSeed', 'param', { meta: 'REAL', tag: ['E/S', 'io'] }),
+      N('test', 'param', { meta: 'REAL', tag: ['sortie', 'out'] }),
+    ]),
+  ]);
+  const fnConv = N('Convertir', 'func', { tag: ['3 surcharges', 'ovl'], open: true, ovl: true }, [
+    N('Convertir', 'func', { sig: '(valeur : INT) : STRING', st: 'ok' }),
+    N('Convertir', 'func', { sig: '(valeur : REAL) : STRING', st: 'ok' }),
+    N('Convertir', 'func', { sig: '(texte : STRING; base : INT) : INT', st: 'redo', v: true }),
+  ]);
+  const scExpl = N('Essai_Explorateur', 'script', { meta: 'ST · Appelé', st: 'redo', v: true, pin: true, open: true }, [
+    N('Constantes', 'grp', { grp: true, n: 1, open: true }, [N('Seuil_Haut', 'const', { meta: 'REAL = 80.0' })]),
+    N('Variables', 'grp', { grp: true, n: 2, open: true }, [
+      N('Nb_Appels', 'var', { meta: 'INT := 0', tag: ['conservée', 'keep'] }),
+      N('Ecart_Max', 'var', { meta: 'REAL' }),
+    ]),
+    N('Fonctions internes', 'grp', { grp: true, n: 1, open: true }, [
+      N('Ecart', 'func', { sig: '(a : REAL; b : REAL) : REAL' }),
+    ]),
+  ]);
+  const symVanne = N('S_Vanne', 'sym', { meta: 'symbole · 6 instances', st: 'ok', open: true }, [
+    N('Scripts', 'grp', { grp: true, n: 1 }, [N('OnOpen', 'script', { meta: 'ST · Ouverture', st: 'ok' })]),
+    N('Fonctions', 'grp', { grp: true, n: 3, open: true }, [
+      N('Move', 'func', { sig: '(deltaMs : TIME) : BOOL', st: 'ok' }),
+      N('Ouvrir', 'func', { tag: ['2 surcharges', 'ovl'], ovl: true }, [
+        N('Ouvrir', 'func', { sig: '(Pas : INT)', st: 'ok' }),
+        N('Ouvrir', 'func', { sig: '(Pas : REAL)', st: 'ok' }),
+      ]),
+    ]),
+    N('Popups', 'grp', { grp: true, n: 0 }),
+  ]);
+  const ihm = N('IHM', 'ihm', { d: 'ihm', open: true, sum: '39 vues · 4 symboles · 2 en faute' }, [
+    N('Configuration', 'gear', {}),
+    F('Fichiers externes', { n: 7 }),
+    F('Ressources', { n: 18, v: true }),
+    F('Vues', { n: 39, v: true, open: true }, [
+      N('Vue_Production', 'view', { meta: 'démarrage', st: 'ok', pin: true }),
+      N('Vue_Synoptique', 'view', { st: 'err', errs: 2, v: true }),
+      N('Vue_Alarmes', 'view', { st: 'ok' }),
+      N('Popup_Vanne', 'popup', { meta: 'popup · 3 paramètres', st: 'never' }),
+    ]),
+    F('Symboles', { n: 4, v: true, open: true }, [symVanne]),
+    F('Styles', { n: 2 }),
+    F('Essais', { n: 1, kind: 'test' }),
+    F('Programmation générale', { open: true }, [
+      F('Scripts', { n: 16, open: true }, [
+        F('Animations', { n: 3 }), F('Calculs', { n: 3 }),
+        N('Init', 'script', { meta: 'ST · Démarrage', st: 'ok' }),
+        N('Horloge', 'script', { meta: 'ST · Cyclique', st: 'ok' }),
+        scExpl,
+      ]),
+      F('Fonctions', { n: 8, open: true }, [
+        N('Moyenne_Pression', 'func', { sig: '(A, B, Poids_A) : REAL', st: 'ok' }),
+        fnRandom, fnConv,
+      ]),
+      F('Types IHM', { n: 5 }),
+      F('Variables IHM', { n: 96 }),
+      F('Variables système', { n: 207 }),
+      F('Variables d’instances', { n: 43 }),
+    ]),
+  ]);
+  const sim = N('Simulation', 'sim', { d: 'sim', open: true, sum: 'arrêtée · cycle 0', state: 'arrêtée' }, [
+    N('Vue d’ensemble', 'gauge', {}),
+    N('Automate', 'cpu', { meta: 'MAST · cycle 0' }),
+    N('IHM', 'ihm', { tag: ['arrêtée', 'stop'] }),
+    N('Débogage', 'dbg', { open: true }, [
+      N('Points d’arrêt', 'grp', { grp: true, n: 2, open: true }, [
+        N('Logigrammes_A', 'break', { meta: 'ligne 12' }),
+        N('Regulation', 'break', { meta: 'ligne 40 · désactivé', off: true }),
+      ]),
+    ]),
+    N('Forçages', 'lock', { n: 3, open: true }, [
+      N('Pression_Entree', 'var', { meta: '= 4.2 (bar)' }),
+      N('V13.Ouvert', 'var', { meta: '= TRUE' }),
+      N('Mode', 'var', { meta: '= 2' }),
+    ]),
+    N('Courbes', 'curve', { n: 2 }, [N('Pression', 'curve', { meta: '3 traces' }), N('Débit', 'curve', { meta: '1 trace' })]),
+    N('Journal', 'journal', { n: 128 }),
+  ]);
+  const ver = N('Versions', 'ver', { d: 'ver', open: false, sum: 'V4 en cours · 12 changements' }, [
+    N('V4', 'tag', { meta: 'en cours · DEV', v: true }),
+    N('V3', 'tag', { meta: 'FINISH · 08/10' }),
+    N('V2', 'tag', { meta: '06/10' }),
+    N('V1', 'tag', { meta: '02/10' }),
+  ]);
+  const domains = [api, ihm, sim, ver];
+  const DOM = { api: ['API', '--d-api', 'api'], ihm: ['IHM', '--d-ihm', 'ihm'], sim: ['Simulation', '--d-sim', 'sim'], ver: ['Versions', '--d-ver', 'ver'] };
+
+  // Les genres : icone et couleur.
+  const KIND = {
+    folder: ['folder', '--k-folder'], script: ['script', '--k-script'], func: ['func', '--k-func'], var: ['var', '--k-var'],
+    const: ['const', '--k-const'], param: ['param', '--k-param'], type: ['type', '--k-type'], view: ['view', '--k-view'],
+    popup: ['popup', '--k-popup'], sym: ['sym', '--k-sym'], style: ['style', '--k-style'], res: ['res', '--k-res'],
+    test: ['test', '--k-test'], cpu: ['cpu', '--k-cpu'], task: ['task', '--k-cpu'], gear: ['gear', '--k-folder'],
+    sim: ['sim', '--k-test'], ihm: ['ihm', '--k-view'], api: ['api', '--d-api'], ver: ['ver', '--d-ver'], dbg: ['dbg', '--k-dbg'],
+    lock: ['lock', '--k-const'], curve: ['curve', '--k-curve'], journal: ['journal', '--k-folder'], gauge: ['gauge', '--k-test'],
+    break: ['break', '--err'], tag: ['tag', '--d-ver'], grp: ['folder', '--k-folder'],
+  };
+  const ico = (name, color) => `<svg class="i" style="color:var(${color})"><use href="#i-${name}"/></svg>`;
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  // ---------------------------------------------------------------- l'etat ----
+  const S = { scope: 'all', q: '', chip: '', sel: 'n' + 0, legend: false };
+  const all = []; const parent = new Map();
+  (function walk(list, p) { for (const n of list) { all.push(n); if (p) parent.set(n.id, p); if (n.kids) walk(n.kids, n); } })(domains, null);
+  const domainOf = n => { let x = n; while (parent.get(x.id)) x = parent.get(x.id); return x; };
+  const pathOf = n => { const out = []; let x = parent.get(n.id); while (x) { out.unshift(x.label + (x.ovl ? ' · surcharges' : '')); x = parent.get(x.id); } return out; };
+  S.sel = scExpl.id;
+
+  const sel = all.find(n => n.label === 'Essai_Explorateur');
+  const counts = {
+    mod: all.filter(n => n.v).length,
+    err: all.filter(n => n.st === 'err').length,
+    gen: all.filter(n => n.st === 'never' || n.st === 'redo').length,
+    pin: all.filter(n => n.pin).length,
+  };
+  const CHIPS = [
+    ['mod', '<span class="g" style="color:var(--mod)">●</span>', 'Modifiés', counts.mod],
+    ['err', '<span class="g s-err">✕</span>', 'En faute', counts.err],
+    ['gen', '<span class="g s-redo">◐</span>', 'À générer', counts.gen],
+    ['pin', ico('star', '--d-ver').replace('class="i"', 'class="i" width="12" height="12" style="width:12px;height:12px;color:var(--d-ver)"'), 'Épinglés', counts.pin],
+  ];
+  const SCOPES = [['all', 'Tout', ''], ['api', 'API', '--d-api'], ['ihm', 'IHM', '--d-ihm'], ['sim', 'Simul.', '--d-sim'], ['ver', 'Versions', '--d-ver']];
+
+  const matchChip = n => S.chip === 'mod' ? n.v : S.chip === 'err' ? n.st === 'err' : S.chip === 'gen' ? (n.st === 'never' || n.st === 'redo') : S.chip === 'pin' ? n.pin : true;
+  const fold = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  const matchQ = n => !S.q || fold(n.label + ' ' + (n.meta || '') + ' ' + (n.sig || '')).includes(fold(S.q));
+  // Garde un noeud s'il correspond, ou si un descendant correspond (filtre ou puce).
+  function keep(n) {
+    const self = matchQ(n) && matchChip(n) && !n.d;
+    if (!S.q && !S.chip) return true;
+    if (self) return true;
+    return (n.kids || []).some(keep);
+  }
+  const filtering = () => !!(S.q || S.chip);
+
+  // ---------------------------------------------------------------- l'arbre propose ----
+  function stCell(n) {
+    if (n.st === 'ok') return '<span class="s-ok" title="À jour : compilé et généré">✓</span>';
+    if (n.st === 'redo') return '<span class="s-redo" title="À refaire : modifié depuis le dernier build">◐</span>';
+    if (n.st === 'err') return `<span class="errn" title="En faute : ${n.errs} diagnostics">✕ ${n.errs}</span>`;
+    if (n.st === 'never') return '<span class="s-never" title="Jamais généré">○</span>';
+    return '';
+  }
+  function hl(text) {
+    if (!S.q) return esc(text);
+    const f = fold(text), i = f.indexOf(fold(S.q));
+    if (i < 0) return esc(text);
+    return esc(text.slice(0, i)) + '<mark>' + esc(text.slice(i, i + S.q.length)) + '</mark>' + esc(text.slice(i + S.q.length));
+  }
+  function rowHtml(n, depth, dom) {
+    const kids = (n.kids || []).filter(keep);
+    const open = filtering() ? true : n.open;
+    const [icon, color] = KIND[n.k] || KIND.folder;
+    const guides = Array.from({ length: depth }, (_, i) => `<i class="${i === 0 ? 'dom' : ''}"></i>`).join('');
+    const tw = kids.length ? (open ? '▾' : '▸') : '';
+    const cls = ['row', n.grp ? 'grp' : '', S.sel === n.id ? 'sel' : ''].join(' ');
+    let name;
+    if (n.grp) name = `<span class="name" data-t="grp">${esc(n.label)} · ${n.n}</span>`;
+    else name = `<span class="name"><span>${hl(n.label)}</span>${n.sig ? `<span class="sig">${hl(n.sig)}</span>` : ''}</span>`;
+    const meta = n.meta && !n.grp ? `<span class="meta">${hl(n.meta)}</span>` : '';
+    const tag = n.tag ? `<span class="tag ${n.tag[1]}" ${n.ovl ? 'data-t="ovl"' : ''}>${esc(n.tag[0])}</span>` : '';
+    const vdot = n.v ? '<span class="vdot" title="Modifié depuis la V3"></span>' : '';
+    const cnt = n.n != null && !n.grp ? `<span class="cnt num">${n.n}</span>` : '<span class="cnt"></span>';
+    const off = n.off ? ' style="opacity:.55"' : '';
+    let html = `<div class="${cls}" data-id="${n.id}" style="--dom:var(${DOM[dom][1]})"${off}>
+      <span class="ind">${guides}</span>
+      <span class="tw" data-tw="${n.id}">${tw}</span>
+      ${n.grp ? '' : `<span class="ki" data-t="ki">${ico(icon, color)}</span>`}
+      ${name}${vdot}${meta}${tag}
+      <span class="end"><span class="st" data-t="st">${stCell(n)}</span>${cnt}
+        <span class="hov" data-t="hov"><button type="button" title="Épingler">${ico('star', '--app-fg-2')}</button><button type="button" title="Ouvrir">${ico('open', '--app-fg-2')}</button><button type="button" title="Plus">${ico('more', '--app-fg-2')}</button></span>
+      </span></div>`;
+    if (open) for (const c of kids) html += rowHtml(c, depth + 1, dom);
+    return html;
+  }
+  function renderNew() {
+    const host = document.getElementById('newTree');
+    let html = '';
+    if (!filtering() && S.scope === 'all') {
+      const pins = all.filter(n => n.pin);
+      html += `<div class="sec">${ico('star', '--d-ver')}Épinglés</div><div class="pins">` +
+        pins.map(p => { const [ic, col] = KIND[p.k]; return `<span class="pin" data-go="${p.id}">${ico(ic, col)}${esc(p.label)}</span>`; }).join('') + '</div>';
+    }
+    let shown = 0;
+    for (const d of domains) {
+      if (S.scope !== 'all' && S.scope !== d.d) continue;
+      const kids = (d.kids || []).filter(keep);
+      if (filtering() && !kids.length) continue;
+      const [title, color, icon] = DOM[d.d];
+      const open = filtering() || S.scope !== 'all' ? true : d.open;
+      const acts = d.d === 'api' ? ['refresh', 'Réanalyser'] : d.d === 'ihm' ? ['plus', 'Générer'] : d.d === 'sim' ? ['sim', 'Démarrer'] : ['plus', 'Créer une version'];
+      html += `<div class="dh" data-dom="${d.id}" data-t="dh" tabindex="0">
+        <span class="chev">${open ? '▾' : '▸'}</span>
+        <span class="badge" style="background:var(${color})"><svg class="i"><use href="#i-${icon}"/></svg></span>
+        <span class="t"><b>${title}</b><span>${esc(d.sum)}</span></span>
+        <span class="acts"><button class="iconbtn" type="button" title="${acts[1]}">${ico(acts[0], '--app-fg-2')}</button><button class="iconbtn" type="button" title="Plus">${ico('more', '--app-fg-2')}</button></span>
+      </div>`;
+      if (open) for (const c of kids) { html += rowHtml(c, 1, d.d); shown++; }
+    }
+    if (!html) html = `<div class="empty">Rien ne correspond à « ${esc(S.q)} »${S.chip ? ' avec ce filtre' : ''}.</div>`;
+    host.innerHTML = html;
+  }
+
+  // ---------------------------------------------------------------- l'arbre d'aujourd'hui ----
+  function renderOld() {
+    const host = document.getElementById('oldTree');
+    const oldIcon = n => n.k === 'folder' || n.k === 'grp' ? 'folder' : (KIND[n.k] || KIND.folder)[0];
+    let html = '<div class="orow"><span class="chev">▾</span><svg class="i ico"><use href="#i-folder"/></svg><span class="lab"><b>Projet</b></span></div>';
+    function row(n, depth) {
+      const kids = n.kids || [];
+      const guides = '<span class="guides">' + '<i></i>'.repeat(depth) + '</span>';
+      let label = esc(n.label);
+      if (n.grp) label += ` (${n.n})`;
+      if (n.sig) label += esc(n.sig.replace(/;/g, ','));
+      if (n.ovl) label = esc(n.label) + '  · ' + esc(n.tag[0]);
+      if (n.meta && n.k === 'script') label += '   ' + esc(n.meta.replace(' · ', '   '));
+      const tr = n.st === 'ok' ? '<span class="tr ok">✓</span>' : n.st ? '<span class="tr">○</span>' : '<span class="tr">○</span>';
+      const cnt = n.n != null && !n.grp ? `<span class="cnt">${n.n}</span>` : '';
+      const isSel = n === sel;
+      html += `<div class="orow${isSel ? ' sel' : ''}">${guides}<span class="chev">${kids.length ? (n.open ? '▾' : '›') : ''}</span>
+        <svg class="i ico"><use href="#i-${oldIcon(n)}"/></svg><span class="lab">${label}</span>${n.v ? '<span class="dot"></span>' : ''}
+        <span class="right">${d0(n) ? '' : tr}${cnt}</span></div>`;
+      if (n.d === 'ihm' && n.open) html += '<div class="otools"><span>▤</span><span>⌕</span><span>✚</span><span>⌕</span><span>⟨⟩</span></div>';
+      if (n.open) for (const c of kids) row(c, depth + 1);
+    }
+    const d0 = n => !!n.d;
+    for (const d of domains) {
+      html += `<div class="orow"><span class="guides"><i></i></span><span class="chev">${d.open ? '▾' : '›'}</span><svg class="i ico"><use href="#i-${DOM[d.d][2]}"/></svg><span class="lab"><b>${DOM[d.d][0]}</b></span>${d.d === 'sim' ? '<span class="right"><span class="cnt" style="width:auto">arrêtée</span></span>' : ''}</div>`;
+      if (d.d === 'sim') { for (const c of d.kids) { if (c.kids) { const k = c.kids; c.kids = undefined; row(c, 2); c.kids = k; } else row(c, 2); } continue; }
+      if (d.open) for (const c of d.kids) row(c, 2);
+    }
+    host.innerHTML = html;
+  }
+
+  // ---------------------------------------------------------------- l'en-tete, le pied ----
+  function renderBar() {
+    document.getElementById('scopes').innerHTML = SCOPES.map(([k, l, c]) =>
+      `<button type="button" data-scope="${k}" aria-pressed="${S.scope === k}">${c ? `<span class="sw" style="background:var(${c})"></span>` : ''}${l}</button>`).join('') +
+      `<button type="button" data-scope="pin" title="Épinglés" aria-pressed="${S.chip === 'pin'}" style="flex:none;width:30px">${ico('star', '--d-ver')}</button>`;
+    document.getElementById('chips').innerHTML = CHIPS.map(([k, g, l, c]) =>
+      `<button class="chip" type="button" data-chip="${k}" aria-pressed="${S.chip === k}">${g}${l} <b class="num">${c}</b></button>`).join('');
+  }
+  function renderFoot() {
+    document.getElementById('foot').innerHTML = `
+      <button type="button" data-t="foot" title="Simulation : ouvrir la vue d'ensemble"><span class="lead" style="background:var(--never)"></span>Simulation arrêtée</button>
+      <button type="button" data-t="foot" title="Build : ouvrir le panneau du bas"><span class="s-ok">✓ 320</span><span class="s-err">✕ ${counts.err ? 2 : 0}</span><span class="s-redo">◐ ${counts.gen}</span></button>
+      <button type="button" data-t="foot" title="Versions : voir les changements"><span class="lead" style="background:var(--mod)"></span>V4 · 12 changements</button>`;
+  }
+
+  // ---------------------------------------------------------------- la legende ----
+  function legendHtml() {
+    const k = (icon, c, l) => `<li><span class="k">${ico(icon, c)}</span>${l}</li>`;
+    return `
+      <h5>État du build (colonne de droite)</h5>
+      <ul>
+        <li><span class="k s-ok">✓</span>À jour <small>compilé et généré</small></li>
+        <li><span class="k s-redo">◐</span>À refaire <small>modifié depuis le dernier build</small></li>
+        <li><span class="k"><span class="errn">✕ 2</span></span>En faute <small>le nombre de diagnostics</small></li>
+        <li><span class="k s-never">○</span>Jamais généré</li>
+      </ul>
+      <h5>Après le nom</h5>
+      <ul>
+        <li><span class="k"><span class="vdot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--mod)"></span></span>Modifié depuis la dernière version <small>(V3)</small></li>
+        <li><span class="k"><span class="tag io" style="font-size:10px;padding:1px 4px;border-radius:3px">E/S</span></span>Paramètre en entrée/sortie</li>
+        <li><span class="k"><span class="tag out" style="font-size:10px;padding:1px 4px;border-radius:3px">sortie</span></span>Paramètre de sortie</li>
+        <li><span class="k"><span class="tag keep" style="font-size:10px;padding:1px 4px;border-radius:3px">cons.</span></span>Variable conservée entre deux exécutions</li>
+        <li><span class="k"><span class="tag upd" style="font-size:10px;padding:1px 4px;border-radius:3px">maj</span></span>Mises à jour de bibliothèque</li>
+      </ul>
+      <h5>Genres</h5>
+      <ul class="kinds">
+        ${k('script', '--k-script', 'Script')}${k('func', '--k-func', 'Fonction')}
+        ${k('var', '--k-var', 'Variable')}${k('const', '--k-const', 'Constante')}
+        ${k('param', '--k-param', 'Paramètre')}${k('type', '--k-type', 'Type')}
+        ${k('view', '--k-view', 'Vue')}${k('popup', '--k-popup', 'Popup')}
+        ${k('sym', '--k-sym', 'Symbole')}${k('folder', '--k-folder', 'Dossier')}
+        ${k('lock', '--k-const', 'Forçage')}${k('break', '--err', 'Point d’arrêt')}
+      </ul>
+      <h5>Domaines</h5>
+      <ul class="kinds">
+        <li><span class="k"><span style="width:12px;height:12px;border-radius:3px;background:var(--d-api)"></span></span>API</li>
+        <li><span class="k"><span style="width:12px;height:12px;border-radius:3px;background:var(--d-ihm)"></span></span>IHM</li>
+        <li><span class="k"><span style="width:12px;height:12px;border-radius:3px;background:var(--d-sim)"></span></span>Simulation</li>
+        <li><span class="k"><span style="width:12px;height:12px;border-radius:3px;background:var(--d-ver)"></span></span>Versions</li>
+      </ul>`;
+  }
+
+  // ---------------------------------------------------------------- la carte au survol ----
+  const card = document.getElementById('card');
+  const frame = document.getElementById('newFrame');
+  function showCard(row) {
+    const n = all.find(x => x.id === row.dataset.id);
+    if (!n || n.grp) { card.hidden = true; return; }
+    const [icon, color] = KIND[n.k] || KIND.folder;
+    const st = n.st === 'ok' ? '<span class="s-ok">✓ à jour</span>' : n.st === 'redo' ? '<span class="s-redo">◐ à refaire</span>'
+      : n.st === 'err' ? `<span class="s-err">✕ ${n.errs} en faute</span>` : n.st === 'never' ? '<span class="s-never">○ jamais généré</span>' : '—';
+    const what = n.sig ? esc(n.label + n.sig) : esc(n.label + (n.meta ? ' · ' + n.meta : ''));
+    card.innerHTML = `<h4>${ico(icon, color)}${what}</h4>
+      <div class="path">${pathOf(n).map(esc).join(' › ')}</div>
+      <dl><dt>Build</dt><dd>${st}</dd>${n.v ? '<dt>Version</dt><dd>modifié depuis la V3</dd>' : ''}${n.n != null ? `<dt>Contenu</dt><dd>${n.n} élément${n.n > 1 ? 's' : ''}</dd>` : ''}</dl>
+      <div class="keys"><span><kbd>Clic</kbd> ouvrir</span><span><kbd>F2</kbd> renommer</span><span><kbd>Suppr</kbd> supprimer</span></div>`;
+    const fr = frame.getBoundingClientRect(), r = row.getBoundingClientRect();
+    let top = r.bottom - fr.top + 4;
+    if (top + 170 > fr.height) top = r.top - fr.top - 170;
+    card.style.top = Math.max(110, top) + 'px';
+    card.style.left = Math.min(fr.width - 310, 40) + 'px';
+    card.hidden = false;
+  }
+
+  // ---------------------------------------------------------------- les gestes ----
+  function render() { renderBar(); renderNew(); renderFoot(); }
+  document.getElementById('newTree').addEventListener('click', e => {
+    const go = e.target.closest('[data-go]');
+    if (go) { S.sel = go.dataset.go; let p = parent.get(go.dataset.go); while (p) { p.open = true; p = parent.get(p.id); } renderNew(); scrollToSel(); return; }
+    const dh = e.target.closest('.dh');
+    if (dh && !e.target.closest('button')) { const d = all.find(x => x.id === dh.dataset.dom); d.open = !d.open; renderNew(); return; }
+    const row = e.target.closest('.row');
+    if (!row || e.target.closest('button')) return;
+    const n = all.find(x => x.id === row.dataset.id);
+    if (e.target.closest('[data-tw]') || (n.kids && n.id === S.sel)) n.open = !n.open;
+    S.sel = n.id;
+    renderNew();
+  });
+  function scrollToSel() { const el = document.querySelector(`#newTree .row[data-id="${S.sel}"]`); if (el) el.scrollIntoView({ block: 'center' }); }
+  document.getElementById('newTree').addEventListener('mouseover', e => { const row = e.target.closest('.row'); if (row) showCard(row); });
+  document.getElementById('newTree').addEventListener('mouseleave', () => { card.hidden = true; });
+  document.getElementById('newTree').addEventListener('scroll', () => { card.hidden = true; });
+  document.getElementById('scopes').addEventListener('click', e => {
+    const b = e.target.closest('[data-scope]'); if (!b) return;
+    if (b.dataset.scope === 'pin') S.chip = S.chip === 'pin' ? '' : 'pin'; else S.scope = b.dataset.scope;
+    render();
+  });
+  document.getElementById('chips').addEventListener('click', e => {
+    const b = e.target.closest('[data-chip]'); if (!b) return;
+    S.chip = S.chip === b.dataset.chip ? '' : b.dataset.chip; render();
+  });
+  document.getElementById('q').addEventListener('input', e => { S.q = e.target.value.trim(); renderNew(); });
+  const btnLegend = document.getElementById('btnLegend'), pop = document.getElementById('legendPop');
+  btnLegend.addEventListener('click', () => { S.legend = !S.legend; pop.hidden = !S.legend; btnLegend.setAttribute('aria-pressed', S.legend); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && S.legend) btnLegend.click(); });
+
+  // Le theme de l'appli (les tokens de la page suivent) et la densite.
+  document.querySelectorAll('[data-th]').forEach(b => b.addEventListener('click', () => {
+    const t = b.dataset.th;
+    if (t) document.documentElement.setAttribute('data-theme', t); else document.documentElement.removeAttribute('data-theme');
+    document.querySelectorAll('[data-th]').forEach(x => x.setAttribute('aria-pressed', x === b));
+  }));
+  document.querySelectorAll('[data-row]').forEach(b => b.addEventListener('click', () => {
+    document.documentElement.style.setProperty('--row', b.dataset.row + 'px');
+    document.querySelectorAll('[data-row]').forEach(x => x.setAttribute('aria-pressed', x === b));
+  }));
+
+  // Ce qui change : un clic montre l'endroit dans l'arbre propose.
+  document.getElementById('notes').addEventListener('click', e => {
+    const li = e.target.closest('li'); if (!li) return;
+    document.querySelectorAll('#notes li').forEach(x => x.classList.toggle('on', x === li));
+    const t = li.dataset.t;
+    if (t === 'legend') { if (!S.legend) btnLegend.click(); pop.classList.remove('flash'); void pop.offsetWidth; pop.classList.add('flash'); return; }
+    if (t === 'sim') { S.scope = 'sim'; S.chip = ''; S.q = ''; document.getElementById('q').value = ''; render(); }
+    if (t === 'scopes') { const el = document.querySelector('#newFrame .bar'); el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); return; }
+    if (t === 'hov') { const r = document.querySelector('#newTree .row:not(.grp)'); if (r) { r.classList.remove('flash'); void r.offsetWidth; r.classList.add('flash'); showCard(r); } return; }
+    if (t !== 'sim' && S.scope === 'sim') { S.scope = 'all'; render(); }
+    const target = document.querySelector(`#newFrame [data-t="${t}"]`);
+    if (!target) return;
+    const box = target.closest('.row, .dh, .foot') || target;
+    box.scrollIntoView({ block: 'nearest' });
+    box.classList.remove('flash'); void box.offsetWidth; box.classList.add('flash');
+  });
+
+  document.getElementById('lgSide').innerHTML = legendHtml();
+  document.getElementById('lgPop').innerHTML = legendHtml();
+  renderOld();
+  render();
+})();
+</script>
+</body>
+</html>
