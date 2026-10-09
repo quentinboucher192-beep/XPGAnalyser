@@ -1,0 +1,104 @@
+# =============================================================================
+#  Session 11123 : LA SOURIS ET LE CLAVIER, LES RACCOURCIS DES VUES, L'EXPLORATEUR
+#  (1.11.23). Sur une copie d'Armoire_Gaz preparee par preparer-projet-11120, -11121
+#  puis -11123 (la vue Vue_Clavier : ses textes montrent SYS.Mouse*, SYS.Key*,
+#  SYS.Shortcut* ; trois raccourcis : F5 front montant, F6 duree 1 s, Haut repetition
+#  200 ms) :
+#    1. l'explorateur : les titres de domaine disent leur etat, les puces comptent ;
+#    2. la puce A generer : l'arbre ne garde que ce qui est a generer ;
+#    3. la legende (le ? du rail) : une page du guide ;
+#    4. l'onglet Raccourcis de Vue_Clavier : les trois raccourcis, plus un quatrieme
+#       ajoute ici (Maj+Entree, front descendant, Journaliser) ;
+#    5. en marche : un clic dans la vue, F5 trois fois, F6 tenue deux secondes (la
+#       capture pendant qu'elle est tenue), Haut tenue une seconde, Maj+Entree ;
+#    6. les Variables systeme, domaine Souris et clavier, avec leurs valeurs en marche.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- 1. L'explorateur : les titres de domaine, les puces ----
+arbre-sante
+arbre-puce aucune
+attendre 4
+capture 11123_01_explorateur.png
+
+# ---- 2. La puce A generer (la meme puce : tout revient) ----
+arbre-puce generer
+attendre 6
+capture 11123_02_puce_a_generer.png
+arbre-puce generer
+attendre 4
+
+# ---- 3. La legende : le ? du rail ----
+arbre-legende
+attendre 10
+capture 11123_03_legende.png
+touche Escape
+attendre 6
+
+# ---- 4. L'onglet Raccourcis de Vue_Clavier ----
+arbre "IHM/Vues/Vue_Clavier" double
+attendre 10
+sous-onglet "Raccourcis"
+attendre 4
+#  (Ajouter : la premiere touche libre, Journaliser ; la touche devient Maj+Entree, le
+#   message d'exemple la suit ; le declencheur : front descendant)
+outil "Ajouter un raccourci"
+attendre 3
+propriete "Touche" "Maj+Entree"
+attendre 3
+propriete-clic "Déclencheur"
+attendre 2
+choisir "Front descendant"
+attendre 4
+capture 11123_04_onglet_raccourcis.png
+
+# ---- 5. En marche ----
+#  (Simulation > IHM : le build d'abord - generer, compiler -, puis l'IHM demarre)
+arbre "Simulation/IHM"
+attendre 2
+ihm-build-attendre 600
+attendre 60
+ihm-sim-etat "en marche"
+sim-vue "Vue_Clavier"
+attendre 8
+sim-clic "Zone_Clic"
+attendre 3
+touche F5
+attendre 2
+touche F5
+attendre 2
+touche F5
+attendre 3
+ihm-variable "Compteur_F5" "3"
+#  (F6 tenue : SYS.Key.F6 vrai, la duree court ; apres une seconde Lampe_F6 bascule)
+touche-enfoncer F6
+attendre-reel 2
+attendre 4
+capture 11123_05_en_marche_f6_tenue.png
+ihm-variable "Lampe_F6" "TRUE"
+touche-relacher F6
+attendre 3
+#  (Haut tenue un peu plus d'une seconde : Niveau monte toutes les 200 ms)
+touche-enfoncer Up
+attendre-reel 1.2
+touche-relacher Up
+attendre 3
+ihm-variable "Niveau"
+touche maj+return
+attendre 6
+capture 11123_06_en_marche_raccourcis.png
+
+# ---- 6. Les variables systeme en marche : le domaine Souris et clavier ----
+arbre "IHM/Programmation générale/Variables système"
+attendre 8
+vars-dossier "Souris et clavier"
+attendre 3
+vars-choisir "SYS.ShortcutLast"
+attendre 6
+capture 11123_07_variables_souris_clavier.png
+quitter
