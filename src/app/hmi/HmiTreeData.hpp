@@ -522,7 +522,9 @@ inline std::string withoutComments(std::string_view s) {
 struct Declared {
     std::string                                      code;
     std::set<std::string>                            locals;   // en majuscules
-    std::vector<std::pair<std::string, std::string>> inputs;   // (nom, TYPE), dans l'ordre
+    // (nom, TYPE), dans l'ordre ; 1.11.20 : TOUS les parametres - le nom d'une E/S ou d'une sortie
+    // porte son mot ("VAR_IN_OUT Graine", "VAR_OUTPUT Tirage"), comme une signature l'ecrit.
+    std::vector<std::pair<std::string, std::string>> inputs;
 };
 inline Declared withoutDeclarations(std::string_view s) {
     Declared out;
@@ -536,6 +538,8 @@ inline Declared withoutDeclarations(std::string_view s) {
     for (const auto& d : x.decls) {
         out.locals.insert(up(d.name));
         if (d.section == hmi::decl::Section::Input) out.inputs.emplace_back(d.name, up(d.type));
+        else if (d.section == hmi::decl::Section::InOut) out.inputs.emplace_back("VAR_IN_OUT " + d.name, up(d.type));
+        else if (d.section == hmi::decl::Section::Output) out.inputs.emplace_back("VAR_OUTPUT " + d.name, up(d.type));
     }
     // Une fonction interne : ses parametres et ses locales ne sont pas des variables de l'application.
     for (const auto& f : x.functions) {

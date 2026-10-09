@@ -196,6 +196,9 @@ namespace ui {
             std::string              name;
             std::vector<std::string> parameters;   // "IN  start : BOOL"
             std::string              returns;
+            // 1.11.20 : les autres signatures du meme nom (des surcharges) : la bulle montre celle
+            // qui prend l'argument en cours de frappe, les autres en dessous.
+            std::vector<Signature>   overloads{};
         };
         using SignatureProvider = std::function<bool(std::string_view name, Signature& out)>;
         using CompletionProvider =

@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.11.20", "09/10/2026", "livr\xC3\xA9" "e le 09/10 dans l'apr\xC3\xA8s-midi"},
     {"1.11.19", "09/10/2026", "livr\xC3\xA9" "e le 09/10 \xC3\xA0 la mi-journ\xC3\xA9" "e"},
     {"1.11.18", "09/10/2026", "livr\xC3\xA9" "e le 09/10 dans la matin\xC3\xA9" "e"},
     {"1.11.17", "09/10/2026", "livr\xC3\xA9" "e le 09/10 au matin"},
@@ -100,6 +101,17 @@ const std::vector<Note>& table() {
     static const std::vector<Note> t = {
         // 1.11.16 (09/10/2026 dans la nuit) : la remanence d'exploitation par variable, la robustesse
         // (lot 4 de la specification du 08/10).
+        // 1.11.20 (09/10/2026 dans l'apres-midi) : les signatures - E/S et sorties comptees partout,
+        // les surcharges (la spec, § 10, avancee a la demande du 09/10).
+        note("1.11.20", "Scripts", Kind::Fixed,
+         "LES PARAM\xC3\x88TRES E/S ET SORTIES COMPTENT : un param\xC3\xA8tre VAR_IN_OUT (par r\xC3\xA9" "f\xC3\xA9rence) ou VAR_OUTPUT (une sortie) est un param\xC3\xA8tre comme une entr\xC3\xA9" "e. L'appel Random(0.0, 1.0, Graine, Tirage) n'est plus refus\xC3\xA9 (\xC2\xAB Random prend 2 arguments \xC2\xBB) ; la signature, la liste et la propri\xC3\xA9t\xC3\xA9 Param\xC3\xA8tres, l'arbre, l'aide \xC3\xA0 la saisie et Essayer les montrent tous. Un argument pass\xC3\xA9 par r\xC3\xA9" "f\xC3\xA9rence doit \xC3\xAAtre une variable, et c'est dit \xC3\xA0 la saisie ; le param\xC3\xA8tre qui manque est nomm\xC3\xA9.",
+         "fonctions", ""),
+        note("1.11.20", "Scripts", Kind::New,
+         "LES SURCHARGES : plusieurs fonctions du m\xC3\xAAme nom si leurs param\xC3\xA8tres diff\xC3\xA8rent (nombre, types, modes) - les fonctions IHM, les fonctions d'un symbole, les fonctions internes d'un script. Chaque appel prend la sienne : celle qui convertit le moins ses arguments (5 va \xC3\xA0 INT, 2.5 \xC3\xA0 REAL) ; le contr\xC3\xB4le et la simulation appliquent la m\xC3\xAAme r\xC3\xA8gle. Un appel ambigu, ou qu'aucune n'accepte, est dit \xC3\xA0 sa place avec les formes possibles. Le type de retour seul ne distingue pas deux fonctions ; deux formes identiques (REAL et LREAL, INT et SINT comptent pour une) sont une faute.",
+         "fonctions", ""),
+        note("1.11.20", "Scripts", Kind::Changed,
+         "Nouvelle fonction accepte un nom d\xC3\xA9j\xC3\xA0 pris (une surcharge) ; renommer une fonction renomme ses surcharges avec elle (et tous leurs appels) ; renommer vers le nom d'une autre fonction reste refus\xC3\xA9. L'aide \xC3\xA0 la saisie montre toutes les signatures d'un nom, celle qui prend l'argument en cours d'abord. \xC3\x80 l'import d'un paquet, une fonction se reconna\xC3\xAEt \xC3\xA0 son nom et \xC3\xA0 sa forme : une surcharge s'ajoute, Remplacer ne touche que celle de m\xC3\xAAme forme.",
+         "fonctions", ""),
         // 1.11.19 (09/10/2026 a la mi-journee) : la refonte des scripts et des fonctions, lot 6 -
         // le registre des types, la regle de conversion, le selecteur de types.
         note("1.11.19", "Scripts", Kind::New,

@@ -300,6 +300,9 @@ std::string functionIface(std::string_view name, const HmiFunction& f) { return 
 // ----------------------------------------------- les noms et les references ----
 struct Names {
     std::unordered_map<std::string, std::string> variables, functions, types, views, scripts, resources, apiVars, apiTypes, alarms;   // nom (minuscules) -> cle
+    // 1.11.20 : les surcharges - un nom de fonction designe toutes les fonctions de ce nom (l'appel
+    // choisit l'une selon ses arguments : un changement de l'une ou l'autre recompile l'appelant).
+    std::unordered_map<std::string, std::vector<std::string>> overloads;
     std::unordered_map<std::string, std::string> viewNames;   // cle de vue -> nom
     const Project* p{nullptr};
 };
@@ -327,7 +330,12 @@ void resolveCode(const Names& n, const View* here, std::string_view code, std::v
         const std::string root = rootOf(id), lroot = lower(root);
         if (locals.count(lroot)) continue;
         if (auto it = n.variables.find(lroot); it != n.variables.end()) { add(root, it->second, DepMode::Interface, "variable"); continue; }
-        if (auto it = n.functions.find(lroot); it != n.functions.end()) { add(root, it->second, DepMode::Interface, "fonction"); continue; }
+        if (auto it = n.functions.find(lroot); it != n.functions.end()) {
+            add(root, it->second, DepMode::Interface, "fonction");
+            if (auto o = n.overloads.find(lroot); o != n.overloads.end())          // 1.11.20 : toutes ses surcharges
+                for (const auto& k : o->second) add(root, k, DepMode::Interface, "fonction");
+            continue;
+        }
         if (auto it = n.types.find(lroot); it != n.types.end()) { add(root, it->second, DepMode::Interface, "type"); continue; }
         if (auto it = n.apiVars.find(lroot); it != n.apiVars.end()) { add(root, it->second, DepMode::Interface, "API"); continue; }
         // Vue.Instance.Fonction (partout) ou Instance.Fonction (dans la vue qui pose l'instance)
@@ -457,7 +465,10 @@ std::vector<Element> collect(const Project& p, const ApiInfo& api) {
     Names n;
     n.p = &p;
     for (const auto& v : p.programs.variables) n.variables[lower(v.name)] = keyOf(ElementKind::Variable, v.id);
-    for (const auto& f : p.programs.functions) n.functions[lower(f.name)] = keyOf(ElementKind::Function, f.id);
+    for (const auto& f : p.programs.functions) {
+        n.functions[lower(f.name)] = keyOf(ElementKind::Function, f.id);
+        n.overloads[lower(f.name)].push_back(keyOf(ElementKind::Function, f.id));   // 1.11.20
+    }
     for (const auto& t : p.programs.types) n.types[lower(t.name)] = keyOf(ElementKind::Type, t.id);
     for (const auto& v : p.views) { n.views[lower(v.name)] = keyOf(viewKind(v), v.id); n.viewNames[keyOf(viewKind(v), v.id)] = v.name; }
     for (const auto& s : p.programs.scripts) n.scripts[lower(s.name)] = keyOf(ElementKind::Script, s.id);

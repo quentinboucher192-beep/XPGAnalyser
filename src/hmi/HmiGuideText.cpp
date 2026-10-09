@@ -12677,10 +12677,35 @@ const std::vector<Topic>& topics() {
                          "scripts, fonctions, actions, expressions, textes \xC3\xA0 trous, alarmes ; un seul "
                          "Ctrl+Z reprend le tout. La propri\xC3\xA9t\xC3\xA9 **Appel\xC3\xA9" "e par** dit "
                          "qui l'utilise ; supprimer une fonction le rappelle avant de confirmer.", {}},
-             {K::Warning, "G\xC3\xA9n\xC3\xA9rer refuse un nom qui commence par IHM_, une fonction en double, "
-                         "un nom d\xC3\xA9j\xC3\xA0 port\xC3\xA9 par une variable IHM, une variable inconnue "
+             {K::Warning, "G\xC3\xA9n\xC3\xA9rer refuse un nom qui commence par IHM_, deux fonctions de m\xC3\xAAme "
+                         "nom et de m\xC3\xAAme forme, un nom d\xC3\xA9j\xC3\xA0 port\xC3\xA9 par une variable IHM, une variable inconnue "
                          "dans son corps ; il avertit d'un appel r\xC3\xA9" "cursif et d'un nom qui existe "
                          "aussi dans l'automate.", {}},
+             {K::Heading, "Entr\xC3\xA9" "es, E/S et sorties (1.11.20)", {}, "1.11.20"},
+             {K::Paragraph, "Un param\xC3\xA8tre est une **Entr\xC3\xA9" "e** (VAR_INPUT : une valeur), une **E/S** "
+                         "(VAR_IN_OUT : la fonction travaille sur la variable de l'appelant) ou une **Sortie** "
+                         "(VAR_OUTPUT : la fonction l'\xC3\xA9" "crit dans la variable donn\xC3\xA9" "e). Tous comptent dans "
+                         "l'appel, dans l'ordre de l'onglet Param\xC3\xA8tres : `Random(0.0, 1.0, Graine, Tirage)`. "
+                         "Une entr\xC3\xA9" "e qui a une valeur par d\xC3\xA9" "faut et une sortie sont facultatives ; une "
+                         "E/S est due. Une E/S et une sortie veulent une **variable** (un nom, un membre, une case), "
+                         "pas une valeur calcul\xC3\xA9" "e : `Random(0.0, 1.0, Graine * 2)` est refus\xC3\xA9.", {}, "1.11.20"},
+             {K::Heading, "Les surcharges (1.11.20)", {}, "1.11.20"},
+             {K::Paragraph, "Plusieurs fonctions peuvent porter le **m\xC3\xAAme nom** si leurs param\xC3\xA8tres "
+                         "diff\xC3\xA8rent (leur nombre, leurs types, leurs modes) : `Convertir(valeur : INT)`, "
+                         "`Convertir(valeur : REAL)`, `Convertir(texte : STRING; base : INT)`. **Nouvelle fonction** "
+                         "accepte un nom pris ; donnez-lui ses param\xC3\xA8tres. Chaque appel prend la sienne : "
+                         "celle qui convertit le moins ses arguments (`Convertir(5)` : INT, `Convertir(2.5)` : REAL, "
+                         "`Convertir('FF', 16)` : la troisi\xC3\xA8me). L'\xC3\xA9" "diteur, Compiler et la simulation "
+                         "appliquent la m\xC3\xAAme r\xC3\xA8gle.", {}, "1.11.20"},
+             {K::Bullet, "**Ambigu** : deux surcharges conviennent autant (`Melanger(5, 5)` pour (INT, REAL) et "
+                         "(REAL, INT)) - pr\xC3\xA9" "cisez un type : `INT#5`, `5.0`, `TO_REAL(x)`.", {}, "1.11.20"},
+             {K::Bullet, "**M\xC3\xAAme forme** : le type de retour seul ne distingue pas deux fonctions, ni deux types "
+                         "que la simulation calcule pareil (REAL et LREAL, INT et SINT, DINT et LINT) - c'est une faute.", {}, "1.11.20"},
+             {K::Bullet, "Renommer une fonction renomme **ses surcharges avec elle** et tous leurs appels ; une "
+                         "fonction **virtuelle** d'un symbole ne se surcharge pas (ses red\xC3\xA9" "finitions la "
+                         "d\xC3\xA9signent par son nom).", {}, "1.11.20"},
+             {K::Tip, "La bulle d'aide d'un appel montre toutes les signatures du nom : celle qui prend "
+                         "l'argument que vous tapez passe devant.", {}, "1.11.20"},
              {K::Heading, "Param\xC3\xA8tres et retours riches (1.10)", {}, "1.10"},
              {K::Paragraph, "Une fonction IHM du projet accepte **VAR_IN_OUT**, `REF_TO`, `POINTER TO`, des "
                          "tableaux, des MAP et des \xC3\xA9num\xC3\xA9rations en param\xC3\xA8tres, et un "
@@ -12689,7 +12714,7 @@ const std::vector<Topic>& topics() {
                          "r\xC3\xA9" "f\xC3\xA9rences et pointeurs \xC2\xBB.", {}, "1.10"},
          },
          {"variables-locales", "scripts", "reference", "aide-saisie", "verifier", "retours-fonctions", "copies-references", "fonctions-internes"},
-         {"VAR_INPUT"},
+         {"VAR_INPUT", "VAR_IN_OUT", "VAR_OUTPUT", "surcharge", "surcharges", "signature"},
          {"fonctions"},
          {{"PNG_174_fonction_avec_retour_signature.png", "Une fonction avec retour : ses param\xC3\xA8tres (VAR_INPUT), sa VAR_TEMP, sa signature."}, {"PNG_177_essai_resultat.png", "L'essai de Moyenne_Pression(12, 20, 0.25) : 18.0."}, {"PNG_178_essai_procedure_journal_variable.png", "L'essai d'une proc\xC3\xA9" "dure : la ligne du journal et la variable IHM chang\xC3\xA9" "e."}, {"PNG_183_action_appelle_procedure.png", "Une action \xC2\xAB Ex\xC3\xA9" "cuter un script \xC2\xBB qui appelle une proc\xC3\xA9" "dure."}},
          "",

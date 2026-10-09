@@ -283,6 +283,28 @@ Signature signatureOf(const HmiFunction& f) {
     return s;
 }
 
+std::vector<Clash> clashes(const std::vector<HmiFunction>& functions) {
+    std::vector<Clash> out;
+    std::vector<Signature> sigs;
+    sigs.reserve(functions.size());
+    for (const auto& f : functions) sigs.push_back(signatureOf(f));
+    for (std::size_t i = 0; i < functions.size(); ++i) {
+        bool overloaded = false;
+        for (std::size_t j = 0; j < functions.size(); ++j) {
+            if (i == j || !sameName(functions[i].name, functions[j].name)) continue;
+            overloaded = true;
+            if (sameShape(sigs[i], sigs[j]))
+                out.push_back({functions[i].id, "deux fonctions " + functions[i].name + " ont la m\xC3\xAAme forme " + sigs[i].shape()
+                                                    + " : un appel ne saurait laquelle prendre - changez les param\xC3\xA8tres de l'une"
+                                                      " (le type de retour seul ne les distingue pas)"});
+        }
+        if (overloaded && functions[i].isVirtual)
+            out.push_back({functions[i].id, functions[i].name + " est virtuelle et surcharg\xC3\xA9" "e : une fonction virtuelle ne se surcharge pas"
+                                                                " (ses red\xC3\xA9" "finitions la d\xC3\xA9signent par son nom)"});
+    }
+    return out;
+}
+
 Signature signatureOf(const sim::Function& f) {
     Signature s;
     s.name = sim::functionName(f);

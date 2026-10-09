@@ -107,6 +107,15 @@ struct Choice {
 // La signature d'une fonction du projet ou d'un symbole : ses parametres (du modele ou de ses
 // blocs), dans l'ordre ; `key` = "#" + son identifiant.
 [[nodiscard]] Signature signatureOf(const HmiFunction&);
+
+// LES SURCHARGES MAL DISTINGUEES d'une liste de fonctions (celles du projet, celles d'un
+// symbole) : deux fonctions du meme nom et de la meme forme (chacune est dite), une
+// fonction virtuelle qui a des surcharges. `function` : l'identifiant de la fonction en faute.
+struct Clash {
+    std::uint32_t function{0};
+    std::string   message;
+};
+[[nodiscard]] std::vector<Clash> clashes(const std::vector<HmiFunction>& functions);
 // Celle d'une fonction interne d'un script (lue par le simulateur) : une entree non donnee y
 // prend sa valeur initiale (le dialecte) - seules les E/S sont dues.
 [[nodiscard]] Signature signatureOf(const sim::Function&);

@@ -4465,8 +4465,16 @@ void lot7_volet_fonctions() {
     same_text(cellOf(pane.functionTable(), "Moyenne", 4), "OK", "colonne \xC3\xA9tat");
     std::string why;
     {
-        const bool ok_ = pane.addFunction("Moyenne", "REAL", {}, &why) == kNoId && why.find("d\xC3\xA9j\xC3\xA0") != std::string::npos;
-        check(ok_, "nom d\xC3\xA9j\xC3\xA0 pris : " + why);
+        // 1.11.20 : un nom pris - une surcharge ; de la meme forme que l'autre (le modele : Entree : REAL), dite.
+        const Id dup = pane.addFunction("Moyenne", "REAL", {}, &why);
+        check(dup != kNoId && p.programs.functions.size() == 2
+                  && pane.lastMessage().find("M\xC3\xAAme forme que Moyenne(REAL)") != std::string::npos,
+              "un nom pris : une surcharge, sa forme identique dite (" + pane.lastMessage() + ")");
+        bool clash = false;
+        for (const auto& d : pane.diagnostics()) clash = clash || d.message.find("deux fonctions Moyenne ont la m\xC3\xAAme forme") != std::string::npos;
+        check(clash, "... ses diagnostics la disent");
+        (void)stack.undo();
+        check(p.programs.functions.size() == 1, "Ctrl+Z retire la surcharge");
     }
     {
         const bool ok_ = pane.addFunction("Resultat", "REAL", {}, &why) == kNoId && why.find("variable IHM") != std::string::npos;
@@ -16573,16 +16581,16 @@ void centreAide111() {
     // 1.11.12 : 20.
     // 1.11.13 : 21.
     // 1.11.14 : 22 ; 1.11.15 : 23 ; 1.11.16 : 24 ; 1.11.17 : 25 ; 1.11.18 : 26 ; 1.11.19 : 27.
-    check(hn::releases().size() == 27 && hn::releases().front().version == "1.11.19" && hn::releases()[1].version == "1.11.18"
-              && hn::releases()[2].version == "1.11.17"
-              && hn::releases()[3].version == "1.11.16" && hn::releases()[4].version == "1.11.15"
-              && hn::releases()[5].version == "1.11.14" && hn::releases()[6].version == "1.11.13" && hn::releases()[7].version == "1.11.12"
-              && hn::releases()[8].version == "1.11.11" && hn::releases()[9].version == "1.11.10"
-              && hn::releases()[10].version == "1.11.9" && hn::releases()[11].version == "1.11.8"
-              && hn::releases()[12].version == "1.11.7" && hn::releases()[13].version == "1.11.6" && hn::releases()[14].version == "1.11.5"
-              && hn::releases()[15].version == "1.11.4" && hn::releases()[16].version == "1.11.3" && hn::releases()[17].version == "1.11.2"
-              && hn::releases()[18].version == "1.11.1" && hn::releases()[19].version == "1.11" && hn::releases()[20].version == "1.10.4",
-          "notes : 27 versions, la 1.11.19 en tete, puis la 1.11.18 \xC3\xA0 la 1.11, et la 1.10.4");
+    check(hn::releases().size() == 28 && hn::releases().front().version == "1.11.20" && hn::releases()[1].version == "1.11.19"
+              && hn::releases()[2].version == "1.11.18" && hn::releases()[3].version == "1.11.17"
+              && hn::releases()[4].version == "1.11.16" && hn::releases()[5].version == "1.11.15"
+              && hn::releases()[6].version == "1.11.14" && hn::releases()[7].version == "1.11.13" && hn::releases()[8].version == "1.11.12"
+              && hn::releases()[9].version == "1.11.11" && hn::releases()[10].version == "1.11.10"
+              && hn::releases()[11].version == "1.11.9" && hn::releases()[12].version == "1.11.8"
+              && hn::releases()[13].version == "1.11.7" && hn::releases()[14].version == "1.11.6" && hn::releases()[15].version == "1.11.5"
+              && hn::releases()[16].version == "1.11.4" && hn::releases()[17].version == "1.11.3" && hn::releases()[18].version == "1.11.2"
+              && hn::releases()[19].version == "1.11.1" && hn::releases()[20].version == "1.11" && hn::releases()[21].version == "1.10.4",
+          "notes : 28 versions, la 1.11.20 en tete, puis la 1.11.19 \xC3\xA0 la 1.11, et la 1.10.4");
     // 1.11.2 (T2, tranches 41, 42 et 44 ; decisions 187, 201 et 216) : 23 lignes en 8 domaines, dont 2 cartes de la fenetre Nouveautes.
     // Tranche 46 (SYM, decision 240) : + Dupliquer dans un symbole (C) et la section Parametres du symbole (N) : 25 lignes.
     {
@@ -16853,7 +16861,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 225,   // 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 228,   // 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -16996,7 +17004,7 @@ void centreAide111() {
     // Integration 1.11 (I111) : la 1.10.4 ajoute objet-vanne-3-voies (La bibliotheque d'objets) : 206.
     // 1.11.1 (T2, decision 107) : Programmer gagne variables-api (API. : les variables de l'automate) : 207.
     check(ix.count(hc::Chapter::Hmi) == 208, "centre : L'IHM a les 208 sujets des chapitres 2 a 8 du guide (1.11.1 : variables-api ; 1.11.2 : paquets-symboles)");
-    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 27, "centre : 11 expressions, 27 notes (1.11.19)");
+    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 28, "centre : 11 expressions, 28 notes (1.11.20)");
     // Tranche 3 : les 11 types de T3 (hmi::exprguide::all(), depot-o), passes par in.expressions ; les
     // cles de la liste de secours sont les siennes (enumeration, pas enum).
     {
@@ -17058,10 +17066,10 @@ void centreAide111() {
         check(o, "page Raccourcis : Ctrl+Maj+O dessine en trois touches, repere 1.11");
 
         const auto n110 = hc::notesPage("1.10");
-        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 27
+        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 28
                   && !n110.summary.empty() && !n110.date.empty(),
               "page Notes : 1.10 -> 1.10.0, 22 lignes en 7 domaines, sa date et son resume");
-        check(hc::notesPage("").version == "1.11.19" && hc::notesPage("9.9").version == "1.11.19",
+        check(hc::notesPage("").version == "1.11.20" && hc::notesPage("9.9").version == "1.11.20",
               "page Notes : sans version (ou inconnue), la plus recente");
         const auto simu = hc::notesPage("1.10.0", "Simulation");
         check(simu.sections.size() == 1 && simu.rows == 4 && simu.domains.size() == 7,
@@ -17405,7 +17413,7 @@ void centreAide111() {
         // Les notes de version n'ont pas de tutoriel : ni la carte "Regarder le tutoriel" (hasTutorial, que
         // lit HelpCenterScreen::showTopic), ni la pastille dans l'arbre. Les autres pages speciales gardent
         // les leurs (T1 ecrit les tutoriels des raccourcis et de Signaler).
-        bool notesSans = ix.count(hc::Chapter::Notes) == 27;   // 1.11.3 a 1.11.19 : une version de plus
+        bool notesSans = ix.count(hc::Chapter::Notes) == 28;   // 1.11.3 a 1.11.20 : une version de plus
         for (const auto* t : ix.ofChapter(hc::Chapter::Notes)) notesSans = notesSans && !hc::hasTutorial(*t);
         const auto* raccourcis = ix.find("page-raccourcis");
         const auto* signaler = ix.find("page-signaler");
@@ -27118,6 +27126,113 @@ void onglets1118() {
 //  (declarations, Variables IHM, membres) et le retour d'une fonction, par un
 //  hote d'essai : le type choisi arrive, Ctrl+Z le reprend.
 // =============================================================================
+// 1.11.20 : LES SIGNATURES ET LES SURCHARGES dans l'editeur - creer une surcharge (son nom pris, une
+// autre forme), le controle (chaque appel prend la sienne, aucune ne convient, l'E/S due), renommer
+// le groupe, une virtuelle refusee, la bulle d'aide qui montre toutes les signatures, l'arbre.
+void surcharges1120() {
+    std::printf("1.11.20 : les signatures et les surcharges dans l'\xC3\xA9" "diteur\n");
+    auto doc = std::make_shared<Document>();
+    core::CommandStack stack;
+    auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+    auto& p = doc->project;
+    for (const auto& [n, t] : std::vector<std::pair<const char*, const char*>>{{"Seed", "REAL"}, {"Draw", "REAL"}, {"Code", "INT"}, {"Texte", "STRING"}}) {
+        hmi::Variable v;
+        v.id = p.allocate();
+        v.name = n;
+        v.type = t;
+        p.programs.variables.push_back(v);
+    }
+    Script sc;
+    sc.id = p.allocate();
+    sc.name = "Calcul";
+    sc.event = "Appel";
+    sc.body = "Texte := Convertir(Code);\nTexte := Convertir(2.5);\n";
+    p.programs.scripts.push_back(sc);
+    p.programs.functions.push_back(makeFunction(p, "Convertir", "STRING", "VAR_INPUT\n  valeur : INT;\nEND_VAR\nConvertir := 'entier';"));
+    p.programs.functions.push_back(makeFunction(p, "Random", "REAL",
+        "VAR_INPUT\n  Min : REAL;\n  Max : REAL;\nEND_VAR\nVAR_IN_OUT\n  RandomSeed : REAL;\nEND_VAR\nVAR_OUTPUT\n  test : REAL;\nEND_VAR\n"
+        "RandomSeed := RandomSeed * 2.0;\ntest := Min;\nRandom := test;"));
+    const Id c1 = p.programs.functions[0].id;
+    const Id rnd = p.programs.functions[1].id;
+
+    app::HmiFunctionsPane pane("fonctions", doc, apply);
+    pane.setBounds({0, 0, 1500, 900});
+    pane.layout();
+    // ---- la liste et les proprietes : E/S et sorties comptees ----
+    same_text(cellOf(pane.functionTable(), "Random", 2), "Min : REAL, Max : REAL, VAR_IN_OUT RandomSeed : REAL, VAR_OUTPUT test : REAL",
+              "la colonne Param\xC3\xA8tres : les quatre, leur mode dit");
+    pane.selectFunction(rnd);
+    std::string count, signature;
+    for (const auto& c : pane.properties().categories())
+        for (const auto& pr : c.properties) {
+            if (pr.name == "Param\xC3\xA8tres") count = pr.value;
+            if (pr.name == "Signature") signature = pr.value;
+        }
+    check(count == "4", "la propri\xC3\xA9t\xC3\xA9 Param\xC3\xA8tres : 4 (" + count + ")");
+    same_text(signature, "Random(Min : REAL; Max : REAL; VAR_IN_OUT RandomSeed : REAL; VAR_OUTPUT test : REAL) : REAL", "la Signature");
+    // ---- une surcharge : le nom pris, une autre forme ----
+    std::string why;
+    const Id c2 = pane.addFunction("Convertir", "STRING", "un r\xC3\xA9" "el en texte", &why);
+    check(c2 != kNoId && p.programs.functions.size() == 3 && pane.lastMessage().find("Une surcharge : 2 fonctions Convertir") != std::string::npos,
+          "Nouvelle fonction Convertir : une surcharge (" + pane.lastMessage() + why + ")");
+    if (auto cmd = changeProject(doc, "Ses param\xC3\xA8tres", [&](Project& q) {
+            if (auto* fn = q.function(c2)) {
+                fn->decls.clear();
+                fn->body = "VAR_INPUT\n  valeur : REAL;\nEND_VAR\nConvertir := 'reel';";
+            }
+        }))
+        apply(std::move(cmd));
+    pane.selectFunction(c2);
+    check(pane.diagnostics().empty(), "Convertir(REAL) : sans faute (une autre forme que Convertir(INT))");
+    // ---- le controle d'un script : chaque appel prend la sienne ----
+    hmi::scriptcheck::Scope scope;
+    scope.project = &p;
+    const auto none = hmi::scriptcheck::check(scope, p.programs.scripts[0].body);
+    check(none.empty(), "Convertir(Code) et Convertir(2.5) : chacun la sienne, aucune faute");
+    const auto bad = hmi::scriptcheck::check(scope, "Texte := Convertir(Code, 2);\n");
+    check(!bad.empty() && bad.front().message.find("aucune surcharge de Convertir ne prend cet appel") != std::string::npos && bad.front().column == 10,
+          "Convertir(Code, 2) : aucune ne convient, a sa place (" + (bad.empty() ? std::string("rien") : bad.front().message) + ")");
+    const auto io = hmi::scriptcheck::check(scope, "Draw := Random(0.0, 1.0, Seed, Draw);\nDraw := Random(0.0, 1.0);\nDraw := Random(0.0, 1.0, 2.0);\n");
+    check(io.size() == 2 && io[0].line == 2 && io[0].message.find("il manque RandomSeed (VAR_IN_OUT") != std::string::npos && io[1].line == 3
+              && io[1].message.find("il faut une variable") != std::string::npos,
+          "Random : 4 arguments accept\xC3\xA9s ; l'E/S due ; une valeur pour l'E/S refus\xC3\xA9" "e");
+    // ---- la bulle d'aide : toutes les signatures ----
+    ui::MultiLineText::Signature bubble;
+    check(app::assist::signature(&p, nullptr, "Convertir", bubble) && bubble.overloads.size() == 1 && bubble.parameters.size() == 1
+              && bubble.overloads[0].parameters.size() == 1,
+          "la bulle de Convertir : ses deux signatures");
+    ui::MultiLineText::Signature rbubble;
+    check(app::assist::signature(&p, nullptr, "Random", rbubble) && rbubble.parameters.size() == 4
+              && rbubble.parameters[2] == "VAR_IN_OUT RandomSeed : REAL" && rbubble.parameters[3] == "VAR_OUTPUT test : REAL",
+          "la bulle de Random : quatre param\xC3\xA8tres, leurs modes");
+    // ---- l'arbre : la signature complete ----
+    same_text(app::hmitree::signatureOf(*p.function(rnd)), "Random(Min : REAL, Max : REAL, VAR_IN_OUT RandomSeed : REAL, VAR_OUTPUT test : REAL) : REAL",
+              "l'arbre : la signature compl\xC3\xA8te");
+    // ---- renommer : le groupe entier, ses appels suivent ----
+    check(pane.renameFunction(c1, "VersTexte"), "renommer Convertir en VersTexte");
+    check(p.function(c1)->name == "VersTexte" && p.function(c2)->name == "VersTexte"
+              && p.programs.scripts[0].body == "Texte := VersTexte(Code);\nTexte := VersTexte(2.5);\n"
+              && pane.lastMessage().find("avec son autre surcharge") != std::string::npos,
+          "les deux surcharges et leurs appels suivent (" + pane.lastMessage() + ")");
+    (void)stack.undo();
+    check(p.function(c1)->name == "Convertir" && p.function(c2)->name == "Convertir", "Ctrl+Z : le groupe reprend son nom");
+    check(!pane.renameFunction(rnd, "Convertir", &why) && why.find("surcharge de Convertir") != std::string::npos,
+          "renommer vers un nom pris : refus\xC3\xA9 (" + why + ")");
+    // ---- deux surcharges de meme forme : dites ----
+    const Id c3 = pane.addFunction("Convertir", "STRING", {}, &why);      // le modele : Entree : STRING (une forme neuve)
+    if (auto cmd = changeProject(doc, "Sa forme", [&](Project& q) {
+            if (auto* fn = q.function(c3)) {
+                fn->decls.clear();
+                fn->body = "VAR_INPUT\n  x : SINT;\nEND_VAR\nConvertir := 'petit';";
+            }
+        }))
+        apply(std::move(cmd));
+    pane.selectFunction(c3);
+    bool clash = false;
+    for (const auto& d : pane.diagnostics()) clash = clash || d.message.find("deux fonctions Convertir ont la m\xC3\xAAme forme Convertir(SINT)") != std::string::npos;
+    check(clash, "Convertir(SINT) et Convertir(INT) : le moteur les calcule pareil - dites de m\xC3\xAAme forme");
+}
+
 void selecteurTypes1119() {
     std::printf("1.11.19 (refonte, lot 6) : le s\xC3\xA9lecteur de types\n");
     namespace tr = hmi::typereg;
@@ -27373,6 +27488,12 @@ int main(int argc, char** argv) {
         if (argc > 1) configuration_et_variables(argv[1]);
         if (argc > 1) apiVue1112_dupliquer(argv[1]);   // 1.11.2 (D13)
         if (argc > 1) valuePickerApi1113(argv[1]);     // 1.11.3 : le selecteur et les membres de l'automate
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
+    // 1.11.20 : HMI_TEST_1120=1 - les signatures et les surcharges, seules.
+    if (const char* only = std::getenv("HMI_TEST_1120"); only && *only == '1') {
+        surcharges1120();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -27708,6 +27829,7 @@ int main(int argc, char** argv) {
     jumeauValeurs1112();                    // 1.11.2 (BLK) : les valeurs du jumeau, 2 000 lignes, plus de n x n x n par image
     onglets1118();                          // 1.11.18 (refonte, lot 5) : les onglets de declarations, Migrer ce code
     selecteurTypes1119();                   // 1.11.19 (refonte, lot 6) : le selecteur de types
+    surcharges1120();                       // 1.11.20 : les signatures et les surcharges
     if (argc > 1) configuration_et_variables(argv[1]);
     if (argc > 1) aide_saisie_scripts(argv[1]);
     if (argc > 1) aide_saisie_champs(argv[1]);

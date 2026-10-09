@@ -172,7 +172,11 @@ private:
     [[nodiscard]] hmi::HmiFunction*       fnOf(hmi::Project&, hmi::Id) const;
     [[nodiscard]] const hmi::HmiFunction* fnOf(const hmi::Project&, hmi::Id) const;
     [[nodiscard]] const hmi::View*        symbolView() const;
-    [[nodiscard]] bool nameAllowed(const std::string& name, hmi::Id self, std::string* why) const;
+    // 1.11.20 : `overload` - un nom deja pris est permis (une surcharge : sa forme differera) ;
+    // faux (renommer) : le nom doit etre libre (hors ses propres surcharges, renommees avec elle).
+    [[nodiscard]] bool nameAllowed(const std::string& name, hmi::Id self, std::string* why, bool overload = false) const;
+    // 1.11.20 : les fonctions de ce nom la ou vit le volet (le symbole, ou le projet).
+    [[nodiscard]] std::vector<const hmi::HmiFunction*> named(std::string_view name) const;
 
     hmi::DocumentPtr   doc_;
     Apply              apply_;

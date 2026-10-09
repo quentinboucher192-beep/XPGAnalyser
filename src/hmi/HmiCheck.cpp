@@ -1,4 +1,5 @@
 #include "HmiCheck.hpp"
+#include "HmiOverload.hpp"   // 1.11.20 : les surcharges
 #include "HmiActionKinds.hpp"   // 1.11.7 : Maths, le clavier virtuel
 #include <cmath>
 #include "HmiPopupParams.hpp"
@@ -347,7 +348,7 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
     }
 
     // ---- lot 7 : les fonctions IHM (nom, retour, variables, appels en boucle)
-    std::set<std::string> fnSeen;
+    const auto fnClashes = overload::clashes(p.programs.functions);   // 1.11.20 : les surcharges mal distinguees
     std::map<std::string, std::vector<std::string>> fnCalls;
     const auto upperOf = [](std::string_view v) {
         std::string u(v);
@@ -367,7 +368,9 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
         };
         const std::string key = upperOf(f.name);
         if (!isIdentifier(f.name)) issue(S::Error, "nom invalide : '" + f.name + "'");
-        else if (!fnSeen.insert(key).second) issue(S::Error, "fonction en double : " + f.name);
+        // 1.11.20 : plusieurs fonctions du meme nom sont des surcharges ; de la meme forme, une faute.
+        for (const auto& c : fnClashes)
+            if (c.function == f.id) issue(S::Error, c.message);
         if (key.rfind("IHM_", 0) == 0) issue(S::Error, "le pr\xC3\xA9" "fixe IHM_ est r\xC3\xA9serv\xC3\xA9 aux fonctions de l'IHM");
         if (p.variable(f.name)) issue(S::Error, "une variable IHM porte d\xC3\xA9j\xC3\xA0 ce nom : " + f.name);
         if (plc && plc(f.name)) issue(S::Warning, "'" + f.name + "' existe aussi dans l'automate : la fonction IHM passe avant");
@@ -1479,6 +1482,10 @@ void checkObjectAlarms(const Project& p, const NameExists& plc, std::vector<Issu
     std::map<std::string, std::set<std::string>> symbolMissing;   // "Sym/Alarme" -> les racines deja dites
     for (const auto& v : p.views) {
         if (!isSymbolView(v)) continue;
+        // 1.11.20 : ses fonctions de meme nom (des surcharges) : de formes differentes, pas virtuelles.
+        for (const auto& c : overload::clashes(v.functions))
+            for (const auto& f : v.functions)
+                if (f.id == c.function) add(out, S::Error, "Fonction", v.id, kNoId, v.name + "." + f.name, c.message);
         std::set<std::string> names;
         for (const auto& a : v.alarms) {
             const std::string where = "alarme " + a.name;

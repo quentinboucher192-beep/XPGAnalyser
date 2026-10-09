@@ -1054,15 +1054,23 @@ std::string allValuesBranches(const hmi::Project& hp, const hmi::HmiType& e) {
 // La signature d'une fonction interne du script, ou d'une fonction du dialecte (S1).
 bool dialectSignature(std::string_view code, std::string_view name, ui::MultiLineText::Signature& out) {
     const auto a = lang::analyze(code);
-    if (const auto* f = a.function(name)) {
-        out.name = f->name;
-        out.parameters.clear();
-        for (const auto& p : f->params)
-            out.parameters.push_back(std::string(p.mode == lang::Param::Mode::InOut    ? "VAR_IN_OUT "
-                                                 : p.mode == lang::Param::Mode::Output ? "VAR_OUTPUT "
-                                                                                       : "")
-                                     + p.name + " : " + p.type);
-        out.returns = f->returnType;
+    if (a.function(name)) {
+        // 1.11.20 : toutes les fonctions internes de ce nom (des surcharges).
+        bool first = true;
+        for (const auto& f : a.functions) {
+            if (!iequals(f.name, name)) continue;
+            ui::MultiLineText::Signature one;
+            one.name = f.name;
+            for (const auto& p : f.params)
+                one.parameters.push_back(std::string(p.mode == lang::Param::Mode::InOut    ? "VAR_IN_OUT "
+                                                     : p.mode == lang::Param::Mode::Output ? "VAR_OUTPUT "
+                                                                                           : "")
+                                         + p.name + " : " + p.type);
+            one.returns = f.returnType;
+            if (first) out = std::move(one);
+            else out.overloads.push_back(std::move(one));
+            first = false;
+        }
         return true;
     }
     for (const auto& b : lang::builtins()) {
@@ -2333,19 +2341,29 @@ const Function* function(std::string_view name) noexcept {
     return nullptr;
 }
 
+namespace {
+// 1.11.20 : la bulle d'une fonction de l'utilisateur - tous ses parametres (E/S et sorties dites), leurs
+// valeurs par defaut, son retour.
+ui::MultiLineText::Signature bubbleOf(const hmi::HmiFunction& f) {
+    ui::MultiLineText::Signature out;
+    out.name = f.name;
+    const auto parts = hmi::splitDeclarations(hmi::decl::codeOf(f), true, [](std::string_view) { return true; });
+    for (const auto* in : parts.parameters())
+        out.parameters.push_back(std::string(in->section == hmi::LocalVar::Section::InOut    ? "VAR_IN_OUT "
+                                             : in->section == hmi::LocalVar::Section::Output ? "VAR_OUTPUT "
+                                                                                             : "")
+                                 + in->name + " : " + in->type + (in->initial.empty() ? std::string{} : " := " + in->initial));
+    out.returns = f.returnType;
+    return out;
+}
+} // namespace
+
 bool signature(const hmi::Project* hp, const domain::Project* plc, std::string_view name,
                ui::MultiLineText::Signature& out) {
     if (hp)
-        if (const auto* f = hp->functionByName(name)) {
-            out.name = f->name;
-            out.parameters.clear();
-            const auto parts = hmi::splitDeclarations(hmi::decl::codeOf(*f), true);   // parameters() pointe dans parts ; 1.11.18 : le modele aussi
-            for (const auto* in : parts.parameters())                                   // 1.11.20 : E/S et sorties comprises
-                out.parameters.push_back(std::string(in->section == hmi::LocalVar::Section::InOut    ? "VAR_IN_OUT "
-                                                     : in->section == hmi::LocalVar::Section::Output ? "VAR_OUTPUT "
-                                                                                                     : "")
-                                         + in->name + " : " + in->type + (in->initial.empty() ? std::string{} : " := " + in->initial));
-            out.returns = f->returnType;
+        if (const auto fs = hp->functionsNamed(name); !fs.empty()) {
+            out = bubbleOf(*fs.front());
+            for (std::size_t k = 1; k < fs.size(); ++k) out.overloads.push_back(bubbleOf(*fs[k]));   // 1.11.20 : ses surcharges
             return true;
         }
     return signature(plc, name, out);

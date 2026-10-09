@@ -3173,7 +3173,10 @@ void fonctionsLot7() {
 
     // ---- Generer et Compiler
     p.programs.functions.push_back(hmiFunction(p, "IHM_Moi", "INT", "IHM_Moi := 1;"));
-    p.programs.functions.push_back(hmiFunction(p, "Mean", "INT", "Mean := 1;"));
+    // 1.11.20 : une seconde Mean de la meme forme que la premiere (a, b : REAL) - une autre forme
+    // serait une surcharge permise.
+    p.programs.functions.push_back(hmiFunction(p, "Mean", "INT", "VAR_INPUT\n  x : REAL;\n  y : REAL;\nEND_VAR\nMean := 1;"));
+    p.programs.functions.push_back(hmiFunction(p, "Mean", "INT", "VAR_INPUT\n  t : STRING;\nEND_VAR\nMean := 2;"));
     p.programs.functions.push_back(hmiFunction(p, "Resultat", "INT", "Resultat := 1;"));
     p.programs.functions.push_back(hmiFunction(p, "Fantome", "INT", "Fantome := Inconnue_X + 1;"));
     p.programs.functions.push_back(hmiFunction(p, "Ping", "INT", "Ping := Pong();"));
@@ -3187,7 +3190,12 @@ void fonctionsLot7() {
     };
     using S = Issue::Severity;
     check(has("pr\xC3\xA9" "fixe IHM_ est r\xC3\xA9serv\xC3\xA9", S::Error), "G\xC3\xA9n\xC3\xA9rer : IHM_ r\xC3\xA9serv\xC3\xA9");
-    check(has("fonction en double : Mean", S::Error), "G\xC3\xA9n\xC3\xA9rer : fonction en double");
+    check(has("deux fonctions Mean ont la m\xC3\xAAme forme Mean(REAL, REAL)", S::Error), "G\xC3\xA9n\xC3\xA9rer : deux surcharges de m\xC3\xAAme forme");
+    {
+        int clashes = 0;
+        for (const auto& i : issues) clashes += i.message.find("deux fonctions Mean") != std::string::npos ? 1 : 0;
+        check(clashes == 2, "... les deux dites, pas Mean(STRING) (une vraie surcharge) : " + std::to_string(clashes));
+    }
     check(has("une variable IHM porte d\xC3\xA9j\xC3\xA0 ce nom : Resultat", S::Error), "G\xC3\xA9n\xC3\xA9rer : nom d'une variable IHM");
     check(has("variable inexistante : Inconnue_X", S::Error), "G\xC3\xA9n\xC3\xA9rer : variable inconnue dans une fonction");
     check(has("existe aussi dans l'automate", S::Warning), "G\xC3\xA9n\xC3\xA9rer : un nom de l'automate, averti");
@@ -14387,7 +14395,9 @@ void paquetsProgrammes1112() {
         mode.kind = HmiTypeKind::Enumeration;
         mode.values = {{"Arret", 0, "", ""}, {"Marche", 1, "", ""}};
         mine.programs.types.push_back(mode);
-        mine.programs.functions.push_back({mine.allocate(), "Moyenne", "REAL", "Moyenne := 0.0;", ""});
+        // 1.11.20 : la meme forme que celle du paquet (a, b : REAL) - d'une autre forme, ce serait une surcharge.
+        mine.programs.functions.push_back({mine.allocate(), "Moyenne", "REAL", "VAR_INPUT a : REAL; b : REAL; END_VAR\nMoyenne := 0.0;", ""});
+        mine.programs.functions.push_back({mine.allocate(), "Moyenne", "REAL", "VAR_INPUT t : STRING; END_VAR\nMoyenne := 1.0;", ""});
     }
     {
         Project dst = mine;
@@ -14402,7 +14412,8 @@ void paquetsProgrammes1112() {
               "T_Mode en conflit (employ\xC3\xA9) : celui du projet par d\xC3\xA9" "faut, ou T_Mode_2");
         const auto r = pk::importInto(dst, fpkg, pl);
         const HmiFunction* m2 = dst.functionByName("Moyenne_2");
-        check(m2 && m2->body.find("Moyenne_2 := (Carre(a) + b) / 2.0;") != std::string::npos && dst.functionByName("Moyenne")->body == "Moyenne := 0.0;"
+        check(m2 && m2->body.find("Moyenne_2 := (Carre(a) + b) / 2.0;") != std::string::npos
+                  && dst.functionByName("Moyenne")->body == "VAR_INPUT a : REAL; b : REAL; END_VAR\nMoyenne := 0.0;"
                   && dst.hmiTypeByName("T_Mode")->values.size() == 2 && !dst.hmiTypeByName("T_Mode_2"),
               "renommer : Moyenne_2 rend sa valeur sous son nom neuf ; la Moyenne et le T_Mode du projet restent les leurs : " + r.summary());
     }
@@ -14417,6 +14428,9 @@ void paquetsProgrammes1112() {
         const HmiType* t2 = dst.hmiTypeByName("T_Mode_2");
         const HmiFunction* c = dst.functionByName("Carre");
         check(m && m->id == ours && m->body.find("Carre(a)") != std::string::npos, "remplacer : la Moyenne du projet prend le corps du paquet (son identifiant reste)");
+        const auto both = dst.functionsNamed("Moyenne");
+        check(both.size() == 2 && both[1]->body.find("Moyenne := 1.0;") != std::string::npos,
+              "1.11.20 : remplacer ne touche que la Moyenne de meme forme - sa surcharge (STRING) reste");
         check(t2 && t2->kind == HmiTypeKind::Enumeration && t2->values.size() == 3 && dst.hmiTypeByName("T_Mode")->values.size() == 2 && c
                   && c->body.find("m : T_Mode_2;") != std::string::npos,
               "renommer le type : T_Mode_2 (ses 3 valeurs) ; Carre, import\xC3\xA9" "e, l'emploie sous son nom neuf");
@@ -14462,8 +14476,8 @@ void paquetsProgrammes1112() {
         (void)stack.push(std::move(cmd));
         check(doc->project.generalScript("Calcul") && doc->project.functionByName("Carre") && doc->project.variable("Vanne1"), "fait : le script, Carre, Vanne1");
         (void)stack.undo();
-        check(doc->project.programs.scripts.empty() && doc->project.programs.functions.size() == 1 && doc->project.programs.types.size() == 1
-                  && doc->project.programs.variables.empty(),
+        check(doc->project.programs.scripts.empty() && doc->project.programs.functions.size() == mine.programs.functions.size()
+                  && doc->project.programs.types.size() == 1 && doc->project.programs.variables.empty(),
               "Ctrl+Z : tout revient");
     }
 }
@@ -16539,8 +16553,9 @@ void guideNouveautes110() {
         check(labels.size() == 6 && labels[0] == "ST" && labels[1] == "C" && labels[2] == "C++" && labels[3] == "ST"
                   && labels[4] == "C" && labels[5] == "C++",
               "guide 1.10 : les blocs ```ST, ```C, ```C++ gardent leur notation (fonctions : deux exemples a trois notations)");
-        // 1.11.18 (refonte, lot 5) : le sujet a aussi ses onglets (un bloc marque 1.11.18), son changement le plus recent.
-        check(firstSince == "1.10" && guide::latestChange(*f) == "1.11.18", "guide 1.10 : @nouveau avant un exemple marque son premier bloc");
+        // 1.11.18 (refonte, lot 5) : le sujet a aussi ses onglets (un bloc marque 1.11.18) ; 1.11.20 : les E/S,
+        // les sorties et les surcharges (des blocs marques 1.11.20) - son changement le plus recent.
+        check(firstSince == "1.10" && guide::latestChange(*f) == "1.11.20", "guide 1.10 : @nouveau avant un exemple marque son premier bloc");
     } else {
         check(false, "guide 1.10 : le sujet fonctions existe");
     }

@@ -6,6 +6,7 @@
 #include "HmiAssets.hpp"
 #include "HmiDesign.hpp"
 #include "HmiExport.hpp"
+#include "HmiOverload.hpp"   // 1.11.20 : une fonction se reconnait a son nom ET a sa forme (les surcharges)
 #include "HmiStore.hpp"
 #include "HmiSymbols.hpp"
 #include "HmiTemplates.hpp"
@@ -805,8 +806,17 @@ Plan plan(const Project& dst, const Package& pkg) {
         Item it;
         it.kind = ItemKind::Function;
         it.name = f.name;
-        const HmiFunction* ours = dst.functionByName(f.name);
-        if (!ours) { it.state = State::Missing; it.choice = Choice::Add; it.detail = "absente du projet"; }
+        // 1.11.20 : la fonction du projet de meme nom ET de meme forme (une surcharge d'une autre forme
+        // s'ajoute a cote, elle ne remplace rien).
+        const HmiFunction* ours = nullptr;
+        const auto sameName = dst.functionsNamed(f.name);
+        for (const auto* g : sameName)
+            if (overload::sameShape(overload::signatureOf(*g), overload::signatureOf(f))) ours = g;
+        if (!ours && !sameName.empty()) {
+            it.state = State::Missing;
+            it.choice = Choice::Add;
+            it.detail = "nouvelle surcharge de " + f.name + " (" + overload::signatureOf(f).shape() + ")";
+        } else if (!ours) { it.state = State::Missing; it.choice = Choice::Add; it.detail = "absente du projet"; }
         else if (ours->body == f.body && ours->returnType == f.returnType && sameDeclarations(ours->decls, f.decls)) { it.state = State::Same; it.choice = Choice::KeepOurs; it.detail = "identique, gard\xC3\xA9" "e"; }
         else {
             it.state = State::Different;
@@ -1072,20 +1082,32 @@ ImportResult importInto(Project& dst, const Package& pkg, const Plan& pl) {
         if (choice == Choice::Rename && it) res.renamed.push_back("type " + it->name + " \xE2\x86\x92 " + t.name);
         else res.added.push_back("type " + t.name);
     }
+    // 1.11.20 : les fonctions du paquet et leurs lignes du plan, dans le meme ordre (deux surcharges
+    // portent le meme nom : le nom ne suffit pas a retrouver la sienne).
+    std::vector<const Item*> functionItems;
+    for (const auto& x : pl.items)
+        if (x.kind == ItemKind::Function) functionItems.push_back(&x);
+    std::size_t functionAt = 0;
     for (const auto& f : src.programs.functions) {
-        const Item* it = itemOf(ItemKind::Function, f.name);
+        const Item* it = functionAt < functionItems.size() ? functionItems[functionAt] : itemOf(ItemKind::Function, f.name);
+        ++functionAt;
         const Choice choice = it ? it->choice : Choice::Add;
         if (choice == Choice::KeepOurs) { res.kept.push_back("fonction " + f.name); continue; }
         if (choice == Choice::Replace) {
+            // Celle de meme nom et de meme forme seulement (ses surcharges restent).
+            bool done = false;
             for (auto& ours : dst.programs.functions)
-                if (upper(ours.name) == upper(f.name)) {
+                if (!done && upper(ours.name) == upper(f.name) && overload::sameShape(overload::signatureOf(ours), overload::signatureOf(f))) {
                     ours.body = f.body;
                     ours.decls = f.decls;                  // 1.11.18 (lot 3) : leurs identifiants renouveles (changeProject)
                     ours.returnType = f.returnType;
                     ours.description = f.description;
+                    done = true;
                 }
-            res.replaced.push_back("fonction " + f.name);
-            continue;
+            if (done) {
+                res.replaced.push_back("fonction " + f.name);
+                continue;
+            }
         }
         HmiFunction copy = f;
         copy.id = dst.allocate();

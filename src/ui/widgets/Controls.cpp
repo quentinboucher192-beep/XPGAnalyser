@@ -1272,9 +1272,27 @@ namespace ui {
         Signature found;
         if (!signatureProvider_(text.substr(begin, end - begin), found)) return;
 
+        // 1.11.20 : des surcharges - celle qui prend l'argument en cours de frappe passe devant.
+        if (!found.overloads.empty()) {
+            std::vector<Signature> all;
+            auto others = std::move(found.overloads);
+            found.overloads.clear();
+            all.push_back(std::move(found));
+            for (auto& o : others) {
+                o.overloads.clear();
+                all.push_back(std::move(o));
+            }
+            std::size_t pick = 0;
+            for (std::size_t k = 0; k < all.size(); ++k)
+                if (all[k].parameters.size() > commas) { pick = k; break; }
+            Signature main = all[pick];
+            for (std::size_t k = 0; k < all.size(); ++k)
+                if (k != pick) main.overloads.push_back(all[k]);
+            found = std::move(main);
+        }
         signature_ = std::move(found);
         activeParameter_ = commas;
-        signatureActive_ = !signature_.parameters.empty();
+        signatureActive_ = !signature_.parameters.empty() || !signature_.overloads.empty();
         invalidate();
     }
 
@@ -1292,9 +1310,25 @@ namespace ui {
         pieces.push_back(")");
         if (!signature_.returns.empty()) pieces.push_back(" : " + signature_.returns);
 
+        // 1.11.20 : les autres surcharges, une par ligne, en dessous (au plus quatre).
+        std::vector<std::string> others;
+        for (const auto& o : signature_.overloads) {
+            if (others.size() == 4) {
+                others.push_back("\xE2\x80\xA6 " + std::to_string(signature_.overloads.size() - 4) + " autre(s)");
+                break;
+            }
+            std::string line = o.name + "(";
+            for (std::size_t i = 0; i < o.parameters.size(); ++i) line += (i ? ", " : "") + o.parameters[i];
+            line += ")";
+            if (!o.returns.empty()) line += " : " + o.returns;
+            others.push_back(std::move(line));
+        }
+        if (!others.empty()) pieces.push_back("   (1/" + std::to_string(signature_.overloads.size() + 1) + ")");
+
         float width = 16.f;
         for (const auto& p : pieces) width += ctx.r.measure(p, f).width;
-        const float height = ctx.r.lineHeight(f) + 8.f;
+        for (const auto& o : others) width = std::max(width, 16.f + ctx.r.measure(o, f).width);
+        const float height = ctx.r.lineHeight(f) * static_cast<float>(1 + others.size()) + 8.f;
 
         const auto inner = contentRect();
         float x = inner.x + paintGutter_ + columnX(caret_.line, caret_.column) - scrollX_;
@@ -1317,6 +1351,8 @@ namespace ui {
                 active ? c.accent : c.textMuted);
             tx += ctx.r.measure(pieces[i], f).width;
         }
+        for (std::size_t k = 0; k < others.size(); ++k)
+            ctx.r.drawText({ box.x + 8.f, box.y + 4.f + ctx.r.lineHeight(f) * static_cast<float>(k + 1) }, others[k], f, c.textMuted);
     }
 
     // ------------------------------------------------------------- selection ---
