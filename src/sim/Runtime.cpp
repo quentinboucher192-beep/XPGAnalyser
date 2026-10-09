@@ -1299,7 +1299,26 @@ bool Runtime::runFunction(const std::string& name,
     // pair keeps this honest - the library file decides which exist, and this
     // only has to know how to perform one.
     if (const auto at = upper.find("_TO_"); at != std::string::npos && arguments.size() == 1) {
-        const auto target = typeFromName(upper.substr(at + 4));
+        // 1.11.25 : les types que le moteur n'a pas prennent leur type de calcul (celui de
+        // typereg::simTypeOf) : LREAL un REAL, LINT un DINT, ULINT un UDINT, LWORD un DWORD ;
+        // SINT et USINT un INT et un UINT ramenes a 8 bits. INT_TO_LREAL, REAL_TO_SINT...
+        // n'existaient pas (fonction ou bloc inconnu du simulateur).
+        const auto targetName = upper.substr(at + 4);
+        auto target = typeFromName(targetName);
+        int eightBits = 0;                                    // 1 : SINT, 2 : USINT
+        if (target == Type::Unknown) {
+            if (targetName == "LREAL") target = Type::Real;
+            else if (targetName == "LINT") target = Type::DInt;
+            else if (targetName == "ULINT") target = Type::UDInt;
+            else if (targetName == "LWORD") target = Type::DWord;
+            else if (targetName == "SINT") { target = Type::Int; eightBits = 1; }
+            else if (targetName == "USINT") { target = Type::UInt; eightBits = 2; }
+        }
+        const auto narrow = [eightBits](std::int64_t v) -> std::int64_t {
+            if (eightBits == 1) return static_cast<std::int8_t>(static_cast<std::uint8_t>(v & 0xFF));
+            if (eightBits == 2) return v & 0xFF;
+            return v;
+        };
         const auto& in = arguments.front().second;
         // UNE CHAINE SE LIT. STRING_TO_INT('3') rendait 0 : asInteger() d'une
         // chaine ne la lit pas. Control Expert la lit en decimal, espaces de
@@ -1311,8 +1330,8 @@ bool Runtime::runFunction(const std::string& name,
             } else if (target == Type::Bool) {
                 result = Value::boolean(std::strtoll(text.c_str(), nullptr, 10) != 0);
             } else {
-                result = Value::integer(target, static_cast<std::int64_t>(
-                                                    std::strtoll(text.c_str(), nullptr, 10)));
+                result = Value::integer(target, narrow(static_cast<std::int64_t>(
+                                                    std::strtoll(text.c_str(), nullptr, 10))));
             }
             return true;
         }
@@ -1324,7 +1343,7 @@ bool Runtime::runFunction(const std::string& name,
             const auto raw = in.type() == Type::Real
                                  ? static_cast<std::int64_t>(std::llround(in.asReal()))
                                  : in.asInteger();
-            result = Value::integer(target, raw);
+            result = Value::integer(target, narrow(raw));
             return true;
         }
     }
@@ -1340,9 +1359,40 @@ bool Runtime::runFunction(const std::string& name,
     if (upper == "SIN")  { result = Value::real(std::sin(arg(0).asReal())); return true; }
     if (upper == "COS")  { result = Value::real(std::cos(arg(0).asReal())); return true; }
     if (upper == "TAN")  { result = Value::real(std::tan(arg(0).asReal())); return true; }
+    // 1.11.25 : acceptees par Compiler (et par l'IHM) depuis longtemps, mais inconnues en marche
+    // ("fonction ou bloc inconnu du simulateur") - ASIN, ACOS, ATAN, EXPT, TRUNC, ROUND, NEG.
+    if (upper == "ASIN") { result = Value::real(std::asin(arg(0).asReal())); return true; }
+    if (upper == "ACOS") { result = Value::real(std::acos(arg(0).asReal())); return true; }
+    if (upper == "ATAN") { result = Value::real(std::atan(arg(0).asReal())); return true; }
+    if (upper == "EXPT") { result = Value::real(std::pow(arg(0).asReal(), arg(1).asReal())); return true; }
+    if (upper == "TRUNC") {   // vers zero : TRUNC(-2.7) = -2 ; un DINT
+        result = Value::integer(Type::DInt, static_cast<std::int64_t>(std::trunc(arg(0).asReal())));
+        return true;
+    }
+    if (upper == "ROUND") {   // au plus proche (2.5 -> 3) ; ROUND(x, n) : a n decimales ; un REAL
+        const double x = arg(0).asReal();
+        const auto n = arguments.size() > 1 ? std::clamp<std::int64_t>(arg(1).asInteger(), -15, 15) : 0;
+        const double f = std::pow(10.0, static_cast<double>(n));
+        result = Value::real(std::round(x * f) / f);
+        return true;
+    }
+    if (upper == "NEG") {
+        const auto v = arg(0);
+        result = v.type() == Type::Real ? Value::real(-v.asReal()) : Value::integer(v.type(), -v.asInteger());
+        return true;
+    }
 
-    if (upper == "MIN")  { const auto a = arg(0), b = arg(1); result = a.compare(b) <= 0 ? a : b; return true; }
-    if (upper == "MAX")  { const auto a = arg(0), b = arg(1); result = a.compare(b) >= 0 ? a : b; return true; }
+    // 1.11.25 : toutes les valeurs (MIN(3, 2, 1) rendait 2 : seules les deux premieres comptaient).
+    if (upper == "MIN" || upper == "MAX") {
+        if (arguments.empty()) return false;
+        auto best = arg(0);
+        for (std::size_t k = 1; k < arguments.size(); ++k) {
+            const auto v = arg(k);
+            if (upper == "MIN" ? v.compare(best) < 0 : v.compare(best) > 0) best = v;
+        }
+        result = best;
+        return true;
+    }
     if (upper == "LIMIT") {
         const auto mn = arg(0), in = arg(1), mx = arg(2);
         result = in.compare(mn) < 0 ? mn : (in.compare(mx) > 0 ? mx : in);
@@ -1400,6 +1450,31 @@ bool Runtime::runFunction(const std::string& name,
         std::string out;
         for (const auto& [argName, value] : arguments) out += value.asString();
         result = Value::text(out);
+        return true;
+    }
+    // 1.11.25 : INSERT, DELETE, REPLACE (les positions commencent a 1, comme MID) - acceptees
+    // par Compiler, inconnues en marche.
+    if (upper == "INSERT_INT" || upper == "INSERT") {   // IN2 dans IN1, apres le caractere P
+        const auto s = arg(0).asString(), add = arg(1).asString();
+        const auto p = static_cast<std::size_t>(std::clamp<std::int64_t>(arg(2).asInteger(), 0, static_cast<std::int64_t>(s.size())));
+        result = Value::text(s.substr(0, p) + add + s.substr(p));
+        return true;
+    }
+    if (upper == "DELETE_INT" || upper == "DELETE") {   // L caracteres a partir de P
+        auto s = arg(0).asString();
+        const auto n = static_cast<std::size_t>(std::max<std::int64_t>(0, arg(1).asInteger()));
+        const auto p = static_cast<std::size_t>(std::max<std::int64_t>(1, arg(2).asInteger()));
+        if (p - 1 < s.size()) s.erase(p - 1, n);
+        result = Value::text(std::move(s));
+        return true;
+    }
+    if (upper == "REPLACE_INT" || upper == "REPLACE") {   // L caracteres de IN1 a partir de P, remplaces par IN2
+        auto s = arg(0).asString();
+        const auto with = arg(1).asString();
+        const auto n = static_cast<std::size_t>(std::max<std::int64_t>(0, arg(2).asInteger()));
+        const auto p = static_cast<std::size_t>(std::max<std::int64_t>(1, arg(3).asInteger()));
+        if (p - 1 <= s.size()) s.replace(p - 1, n, with);
+        result = Value::text(std::move(s));
         return true;
     }
     if (upper == "FIND_INT" || upper == "FIND") {

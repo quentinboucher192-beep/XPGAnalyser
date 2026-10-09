@@ -113,8 +113,16 @@ public:
                 if (pos_ < src_.size() && src_[pos_] == '#') {
                     ++pos_;
                     const auto bodyBegin = pos_;
+                    // 1.11.25 : un signe apres le type (INT#-3, REAL#-0.5) - refuse avant
+                    // ("bad based literal") ; pas apres une base (16#-1 n'existe pas).
+                    const bool typed = !std::all_of(upper.begin(), upper.end(),
+                                                    [](char ch) { return std::isdigit(static_cast<unsigned char>(ch)); });
+                    if (typed && upper != "T" && upper != "TIME" && pos_ < src_.size() && (src_[pos_] == '-' || src_[pos_] == '+')) ++pos_;
                     while (pos_ < src_.size()
-                           && (identChar(src_[pos_]) || src_[pos_] == '.' || src_[pos_] == '_'))
+                           && (identChar(src_[pos_]) || src_[pos_] == '.' || src_[pos_] == '_'
+                               // 1.5E+3 dans un litteral type reel
+                               || ((src_[pos_] == '+' || src_[pos_] == '-') && pos_ > bodyBegin
+                                   && (src_[pos_ - 1] == 'e' || src_[pos_ - 1] == 'E') && (upper == "REAL" || upper == "LREAL"))))
                         ++pos_;
                     const auto body = src_.substr(bodyBegin, pos_ - bodyBegin);
 
@@ -128,6 +136,27 @@ public:
                         out.push_back(Token{Tok::TimeLiteral, "", "", startLine, Value::time(ms)});
                         continue;
                     }
+                    // 1.11.25 : REAL#1.5 (lu 1 : la partie decimale etait perdue), BOOL#1 et BOOL#TRUE
+                    // (un BOOL, pas l'entier 1).
+                    if (upper == "REAL" || upper == "LREAL") {
+                        std::string digits;
+                        for (char ch : body) if (ch != '_') digits.push_back(ch);
+                        char* end = nullptr;
+                        const double d = std::strtod(digits.c_str(), &end);
+                        if (digits.empty() || end != digits.c_str() + digits.size())
+                            return core::fail(core::ErrorCode::InvalidArgument,
+                                              "line " + std::to_string(startLine) + ": bad based literal");
+                        out.push_back(Token{Tok::Number, upper, "", startLine, Value::real(d)});
+                        continue;
+                    }
+                    if (upper == "BOOL") {
+                        const auto b = upperOf(std::string(body));
+                        if (b != "0" && b != "1" && b != "TRUE" && b != "FALSE")
+                            return core::fail(core::ErrorCode::InvalidArgument,
+                                              "line " + std::to_string(startLine) + ": bad based literal");
+                        out.push_back(Token{Tok::Number, upper, "", startLine, Value::boolean(b == "1" || b == "TRUE")});
+                        continue;
+                    }
                     // Based literal: 16#FF00, 2#1010, 8#777.
                     int base = 10;
                     if (std::all_of(upper.begin(), upper.end(),
@@ -136,13 +165,20 @@ public:
                     std::string digits;
                     for (char ch : body) if (ch != '_') digits.push_back(ch);
                     std::int64_t v = 0;
+                    const bool negative = !digits.empty() && digits.front() == '-';
+                    if (!digits.empty() && (digits.front() == '-' || digits.front() == '+')) digits.erase(0, 1);
                     const auto* first = digits.data();
-                    if (std::from_chars(first, first + digits.size(), v, base).ec != std::errc{})
+                    const auto parsed = std::from_chars(first, first + digits.size(), v, base);
+                    // 1.11.25 : tout le texte, ou rien (INT#1.5 n'est plus lu 1).
+                    if (parsed.ec != std::errc{} || parsed.ptr != first + digits.size())
                         return core::fail(core::ErrorCode::InvalidArgument,
                                           "line " + std::to_string(startLine)
                                               + ": bad based literal");
+                    if (negative) v = -v;
                     // 1.11.20 : INT#5 garde le nom de son type (16#FF : un nombre seul).
-                    out.push_back(Token{Tok::Number, base == 10 ? upper : std::string{}, "", startLine, Value::integer(Type::DInt, v)});
+                    // 1.11.25 : 16#FFFF_FFFF (au-dela de DINT) est un UDINT, pas -1.
+                    const Type numberType = base != 10 && v > 2147483647LL && v <= 4294967295LL ? Type::UDInt : Type::DInt;
+                    out.push_back(Token{Tok::Number, base == 10 ? upper : std::string{}, "", startLine, Value::integer(numberType, v)});
                     continue;
                 }
 
@@ -190,12 +226,20 @@ public:
                     if (std::from_chars(first, first + body.size(), v, base).ec != std::errc{})
                         return core::fail(core::ErrorCode::InvalidArgument,
                                           "line " + std::to_string(startLine) + ": bad literal");
-                    out.push_back(Token{Tok::Number, "", "", startLine, Value::integer(Type::DInt, v)});
+                    // 1.11.25 : 16#FFFF_FFFF (au-dela de DINT) est un UDINT, pas -1.
+                    out.push_back(Token{Tok::Number, "", "", startLine,
+                                        Value::integer(v > 2147483647LL && v <= 4294967295LL ? Type::UDInt : Type::DInt, v)});
                     continue;
                 }
-                out.push_back(Token{Tok::Number, "", digits, startLine,
-                                    isReal ? Value::real(std::stod(digits))
-                                           : Value::integer(Type::DInt, std::stoll(digits))});
+                // 1.11.25 : un entier au-dela de DINT (3000000000) est un UDINT ; avant, il
+                // devenait negatif (-1294967296) dans une expression.
+                if (!isReal) {
+                    const long long v = std::stoll(digits);
+                    out.push_back(Token{Tok::Number, "", digits, startLine,
+                                        Value::integer(v > 2147483647LL && v <= 4294967295LL ? Type::UDInt : Type::DInt, v)});
+                    continue;
+                }
+                out.push_back(Token{Tok::Number, "", digits, startLine, Value::real(std::stod(digits))});
                 continue;
             }
 
@@ -870,6 +914,14 @@ private:
             node->line = advance().line;
             auto operand = unaryExpr();
             if (!operand) return operand;
+            // 1.11.25 : -2147483648 reste le plus petit DINT : 2147483648 seul est un UDINT
+            // (au-dela de DINT), son oppose se replie en DINT.
+            if (node->op == "-" && (*operand)->kind == Expr::Kind::Literal && (*operand)->literal.type() == Type::UDInt
+                && (*operand)->literal.asInteger() <= 2147483648LL) {
+                auto folded = std::make_shared<Expr>(**operand);
+                folded->literal = Value::integer(Type::DInt, -(*operand)->literal.asInteger());
+                return folded;
+            }
             node->lhs = *operand;
             return node;
         }
@@ -2539,11 +2591,15 @@ private:
         Type t = typeFromName(target);
         if (target == "SINT" || target == "LINT") t = target == "SINT" ? Type::Int : Type::DInt;
         if (target == "USINT" || target == "ULINT") t = target == "USINT" ? Type::UInt : Type::UDInt;
+        if (target == "LWORD") t = Type::DWord;                    // 1.11.25 : TO_LWORD (calcule sur 32 bits)
         if (t == Type::Unknown || t == Type::String) return false;
         std::int64_t n = 0;
         if (v.type() == Type::String) n = std::strtoll(v.asString().c_str(), nullptr, 10);
         else if (v.type() == Type::Real) n = static_cast<std::int64_t>(std::llround(v.asReal()));
         else n = v.asInteger();
+        // 1.11.25 : SINT et USINT ramenes a 8 bits (TO_SINT(200) = -56), comme X_TO_SINT.
+        if (target == "SINT") n = static_cast<std::int8_t>(static_cast<std::uint8_t>(n & 0xFF));
+        if (target == "USINT") n &= 0xFF;
         out = t == Type::Time ? Value::time(n) : Value::integer(t, n);
         return true;
     }
@@ -3263,7 +3319,7 @@ private:
     static bool isStandardConversionTarget(const std::string& u) {
         static const char* kTargets[] = {"TO_STRING", "TO_REAL", "TO_LREAL", "TO_BOOL", "TO_INT", "TO_DINT", "TO_UINT",
                                          "TO_UDINT", "TO_SINT", "TO_USINT", "TO_LINT", "TO_ULINT", "TO_WORD", "TO_DWORD",
-                                         "TO_BYTE", "TO_TIME"};
+                                         "TO_BYTE", "TO_TIME", "TO_LWORD"};   // 1.11.25 : TO_LWORD
         for (const char* t : kTargets)
             if (u == t) return true;
         return false;
