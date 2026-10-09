@@ -388,6 +388,8 @@ public:
     static constexpr std::string_view kTreeFilterToBuild  = "@a-generer";
     // Une puce : "modifies", "faute", "generer", "epingles" (la portee) ; "aucune" : tout montrer.
     bool pickTreeChip(const std::string& key);
+    [[nodiscard]] std::string treeChipsText() const;      // les puces, leur nombre ; [ ] : l'allumee (arbre-puce)
+    void openTreeLegend();                                // le ? du rail : la page de la legende (arbre-legende)
     [[nodiscard]] const std::string& treeFilterText() const noexcept { return treeFilterText_; }
     [[nodiscard]] std::size_t treeFilterCount() const noexcept { return treeFilterCount_; }
     [[nodiscard]] std::vector<std::string> treeLines() const;   // ce que montre l'arbre (arbre-lignes)

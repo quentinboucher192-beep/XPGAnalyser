@@ -379,7 +379,7 @@ ui::WidgetPtr MainAnalysisScreen::wrapExplorer(std::unique_ptr<ui::TreeView> tre
     rail->onPick = [this](const std::string& key) {
         if (key == "suivre") setTreeFollow(!treeFollow_);
         else if (key == "replier") collapseTree();
-        else if (key == "legende") openHmiHelp("legende-explorateur");   // 1.11.23 : la page de la legende (avant : l'infobulle seule)
+        else if (key == "legende") openTreeLegend();   // 1.11.23 : la page de la legende (avant : l'infobulle seule)
         else if (key == "densite") {
             const float h = explorer_ ? explorer_->rowHeightOverride() : 0.f;
             (void)setTreeDensity(h == 22.f ? "large" : h == 26.f ? "normal" : "serre");
@@ -437,6 +437,17 @@ bool MainAnalysisScreen::pickTreeChip(const std::string& key) {
     refreshTreeChrome();
     return true;
 }
+
+std::string MainAnalysisScreen::treeChipsText() const {
+    std::string out;
+    if (const auto* chips = dynamic_cast<const TreeChips*>(treeChips_))
+        for (const auto& c : chips->chips())
+            out += (out.empty() ? "" : " \xC2\xB7 ") + (c.on ? "[" + c.label : c.label) + " " + std::to_string(c.count)
+                 + (c.on ? "]" : "");
+    return out;
+}
+
+void MainAnalysisScreen::openTreeLegend() { openHmiHelp("legende-explorateur"); }
 
 void MainAnalysisScreen::focusTreeFilter() {
     if (treeFilter_) treeFilter_->focusAndSelectAll();

@@ -1012,6 +1012,16 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         send(ui::KeyUp{k, m});
         return Step::Yield;
     }
+    // 1.11.23 : une touche tenue (les raccourcis Duree et Repetition, SYS.Key.<touche>) -
+    //   touche-enfoncer F6 ; attendre-reel 2 ; touche-relacher F6
+    if (cmd == "touche-enfoncer" || cmd == "touche-relacher") {
+        Key k{};
+        KeyMods m;
+        if (!parseKey(arg(1), k, m)) { fail("touche inconnue : " + arg(1)); return Step::Next; }
+        if (cmd == "touche-enfoncer") send(ui::KeyDown{k, m, false});
+        else send(ui::KeyUp{k, m});
+        return Step::Yield;
+    }
     // ---- 1.11 (T1) : les gestes des tutoriels (encadrer, dire), dessines sur les images ----
     if (cmd == "encadrer") {
         if (arg(1).empty()) { spot_.reset(); return Step::Yield; }
@@ -2620,8 +2630,12 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     //  arbre-sante [simulation|erreurs|bibliotheque|versions]   ecrit la sante du projet (le pied) ; un mot : clique ce morceau
     //  arbre-carte            ecrit la carte du noeud choisi (celle du survol)
     //  arbre-action epingler|detacher|plus   une action au survol, sur le noeud choisi
+    //  1.11.23 :
+    //  arbre-puce modifies|faute|generer|epingles|aucune   une puce de filtre (la meme : tout revient), ecrit les puces
+    //  arbre-legende          le ? du rail : la page de la legende
     if (cmd == "arbre-portee" || cmd == "arbre-densite" || cmd == "arbre-replier" || cmd == "arbre-suivre"
-        || cmd == "arbre-sante" || cmd == "arbre-carte" || cmd == "arbre-action") {
+        || cmd == "arbre-sante" || cmd == "arbre-carte" || cmd == "arbre-action" || cmd == "arbre-puce"
+        || cmd == "arbre-legende") {
         auto* screen = dynamic_cast<MainAnalysisScreen*>(app_.menus().top());
         if (!screen) { fail(cmd + " : pas d'\xC3\xA9" "cran d'analyse"); return Step::Next; }
         if (cmd == "arbre-portee") {
@@ -2644,6 +2658,14 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             std::printf("[script] arbre : carte : %s\n", screen->treeCurrentCard().c_str());
             return Step::Next;
         }
+        if (cmd == "arbre-puce") {
+            screen->refreshTreeState();
+            if (!screen->pickTreeChip(lower(arg(1))))
+                fail("arbre-puce : modifies, faute, generer, epingles ou aucune (\"" + arg(1) + "\")");
+            std::printf("[script] arbre : puces : %s\n", screen->treeChipsText().c_str());
+            return Step::Yield;
+        }
+        if (cmd == "arbre-legende") { screen->openTreeLegend(); return Step::Yield; }
         const auto a = lower(arg(1));
         const std::size_t action = a == "epingler" ? 0u : a == "detacher" ? 1u : a == "plus" ? 2u : 9u;
         if (action > 2 || !screen->treeActionOnCurrent(action)) fail("arbre-action : epingler, detacher ou plus, sur un noeud choisi (\"" + arg(1) + "\")");
