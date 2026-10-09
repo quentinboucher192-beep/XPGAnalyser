@@ -327,6 +327,19 @@ namespace app {
             //   SimRow  index = son rang, sub = sa liste (SimList : points d'arret sous Debogage,
             //           forcages, courbes).
             SimRow,
+            // 1.12.0 : les NATIVES (IHM > Programmation generale > Natives) - verrouillees,
+            // tout ce que le langage de l'IHM connait sans rien declarer (app::natives) :
+            //   NativesFolder > NativesFunctions > NativesCategory (index = son rang) >
+            //     NativesFunction (index = la categorie, sub = son rang dedans) ;
+            //     NativesConversions > NativesConvSource (index = le type de depart) >
+            //     NativesConversion (index = le depart, sub = l'arrivee : rangs de conversionTypes) ;
+            //   NativesTypes > NativesType ; NativesOperators > NativesOperator ;
+            //   NativesInstructions > NativesInstruction (index = le rang) ;
+            //   NativesEnums > NativesEnum (index) > NativesEnumValue (index = l'enumeration, sub = la valeur).
+            // A LA FIN, toujours ; contigus (treeHmiKind, isNativesKind les prennent en plage).
+            NativesFolder, NativesFunctions, NativesCategory, NativesFunction, NativesConversions,
+            NativesConvSource, NativesConversion, NativesTypes, NativesType, NativesOperators, NativesOperator,
+            NativesInstructions, NativesInstruction, NativesEnums, NativesEnum, NativesEnumValue,
         };
         // Les parties d'une vue, dans l'ordre de l'arbre. 1.11.10 : un symbole a en plus
         // ses Fonctions et ses Popups (les deux dernieres).
@@ -452,6 +465,10 @@ namespace app {
         // (Vue.Variable, Vue.Objet.Membre, Vue.Pompe_3.Armoire, Vue.Objet.AlarmGroup,
         // Vue.Objet.Alarmes.Defaut.Acked) ; "" pour un dossier ou un autre noeud.
         [[nodiscard]] std::string   hmiInstPathOf(ui::NodeId) const;
+        // 1.12.0 : la cle de la fiche d'une native (app::natives::article) ; vide : pas une native.
+        [[nodiscard]] std::string   nativeKeyOf(ui::NodeId) const;
+        [[nodiscard]] ui::NodeId    nativeNodeOf(std::string_view key) const;   // l'inverse ; kInvalidNode : pas une cle
+        [[nodiscard]] static bool   isNativesKind(NodeKind k) noexcept { return k >= NodeKind::NativesFolder && k <= NodeKind::NativesEnumValue; }
         // Le debut commun des chemins sous un noeud de « Variables d'instances »
         // ("Vue.", "Vue.Objet.", "Vue.Objet.Alarmes.Defaut.") : le filtre du volet.
         [[nodiscard]] std::string   hmiInstPrefixOf(ui::NodeId) const;

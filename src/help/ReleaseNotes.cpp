@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.12.0", "10/10/2026", "livr\xC3\xA9" "e le 10/10 dans la nuit"},
     {"1.11.24", "09/10/2026", "livr\xC3\xA9" "e le 09/10 en fin de soir\xC3\xA9" "e"},
     {"1.11.23", "09/10/2026", "livr\xC3\xA9" "e le 09/10 en soir\xC3\xA9" "e"},
     {"1.11.22", "09/10/2026", "livr\xC3\xA9" "e le 09/10 en fin d'apr\xC3\xA8s-midi"},
@@ -105,6 +106,30 @@ const std::vector<Note>& table() {
     static const std::vector<Note> t = {
         // 1.11.16 (09/10/2026 dans la nuit) : la remanence d'exploitation par variable, la robustesse
         // (lot 4 de la specification du 08/10).
+        // 1.12.0 (10/10/2026 dans la nuit) : deux applications (XPGAnalyser API, XPGAnalyser IHM), les
+        // projets separes, l'IHM sans automate, les natives (la branche, les fiches), les couleurs,
+        // l'aleatoire et les enumerations natives.
+        note("1.12.0", "Deux applications", Kind::New,
+         "DEUX APPLICATIONS : XPGAnalyser API (le programme de l'automate : l'analyse, les variables, les tables, sa simulation) et XPGAnalyser IHM (les vues, les scripts, les \xC3\xA9quipements, la simulation de l'IHM seule). Chacune son programme (XpgAnalyzer-API.exe, XpgAnalyzer-IHM.exe), son raccourci, ses r\xC3\xA9glages, son rangement des projets (projets\\api, projets\\ihm), ses menus, son aide et ses tutoriels ; un seul installateur pose les deux.",
+         "ihm", ""),
+        note("1.12.0", "Projets", Kind::Changed,
+         "LES PROJETS DE LA 1.11 : au premier lancement, chaque application recopie sa moiti\xC3\xA9 de chaque projet dans son rangement (XPGAnalyser API : tout sauf l'IHM ; XPGAnalyser IHM : l'IHM, ses donn\xC3\xA9" "es, ses versions) ; les originaux ne bougent pas, les projets r\xC3\xA9" "cents suivent. Un projet de l'autre application est refus\xC3\xA9 avec la raison.",
+         "versions", ""),
+        note("1.12.0", "XPGAnalyser IHM", Kind::New,
+         "UNE IHM SANS AUTOMATE : les noms de l'automate qu'une IHM de la 1.11 lisait deviennent ses variables (m\xC3\xAAme nom, m\xC3\xAAme type, m\xC3\xAAme valeur initiale ; un DDT un type IHM, un tableau, un bloc ses entr\xC3\xA9" "es et sorties ; dossier Automate) ; l'automate reli\xC3\xA9 par Modbus TCP devient l'\xC3\xA9quipement \xC2\xAB Automate \xC2\xBB, ses variables situ\xC3\xA9" "es y sont li\xC3\xA9" "es. API. et les noms de l'automate n'existent plus : la v\xC3\xA9rification les dit inconnus.",
+         "variables-ihm", ""),
+        note("1.12.0", "XPGAnalyser IHM", Kind::Changed,
+         "LA SIMULATION DE L'IHM SEULE : ni simulateur de l'automate, ni D\xC3\xA9marrer l'API, ni Les deux ; ni SYS.Plc, ni SYS.Comm, ni objets de diagnostic de l'automate. Les \xC3\xA9quipements simul\xC3\xA9s r\xC3\xA9pondent toujours.",
+         "simulation", ""),
+        note("1.12.0", "Natives", Kind::New,
+         "LES NATIVES (IHM > Programmation g\xC3\xA9n\xC3\xA9rale > Natives, verrouill\xC3\xA9" "es) : toutes les fonctions du langage de l'IHM par cat\xC3\xA9gorie (dont les 272 conversions X_TO_Y), les types de base (MIN, MAX, taille, place Modbus, en C et en C++), les op\xC3\xA9rateurs, les instructions, les \xC3\xA9num\xC3\xA9rations. Chaque fiche : la signature, o\xC3\xB9 l'\xC3\xA9" "crire, la disponibilit\xC3\xA9 en ST, C et C++ (un exemple dans chaque notation), un exemple v\xC3\xA9rifi\xC3\xA9. Ins\xC3\xA9rer pose l'appel dans le script ; F1 sur un nom ouvre sa fiche.",
+         "reference", ""),
+        note("1.12.0", "Natives", Kind::New,
+         "COULEURS ET AL\xC3\x89" "ATOIRE : RGB, RGBA, HSL, COULEUR_MELANGER, COULEUR_DEGRADE, COULEUR_ECLAIRCIR, COULEUR_ASSOMBRIR, COULEUR_OPACITE, COULEUR_CONTRASTE et leurs composantes ; RANDOM, RANDOM_INT, RANDOM_REAL, RANDOM_SEED. Les \xC3\xA9num\xC3\xA9rations natives (TRANSITION#Fondu...) dans les fonctions IHM_, que la v\xC3\xA9rification conna\xC3\xAEt. Une fonction du projet de m\xC3\xAAme nom passe avant la native.",
+         "reference", ""),
+        note("1.12.0", "XPGAnalyser API", Kind::Changed,
+         "XPGAnalyser API SANS IHM : ni colonne ni filtre IHM des variables, ni + Variable IHM des tables d'animation, ni cartes de l'IHM dans la vue d'ensemble de la simulation ; l'accueil, l'arbre, la barre du haut, les raccourcis et Aller \xC3\xA0 de l'automate seul.",
+         "simulation", ""),
         // 1.11.24 (09/10/2026 en fin de soiree) : les reperes dans les symboles (la campagne d'essais
         // demandee par le client, sa capture : saisie : variable inconnue (V[0]).IN_Percent), et les
         // onglets Journal, Alarmes, Recettes retires de la simulation.

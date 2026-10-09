@@ -32,6 +32,7 @@
 #include "hmi/HmiFunctionPanes.hpp"       // 1.11.17 : volet-message (le volet des fonctions)
 #include "hmi/HmiOperatorPanes.hpp"       // 1.11.17 : volet-message (le volet des operateurs)
 #include "hmi/HmiSimVarTree.hpp"         // 1.11.5 : les variables en arbre
+#include "hmi/HmiNativesPane.hpp"         // 1.12.0 : les natives (natives, natives-lien...)
 #include "hmi/HmiPublicVarsPane.hpp"     // 1.9 : les structures des esclaves simules (vars-dossier, vars-choisir)
 #include "screens/StationScreen.hpp"      // lot 14 : le poste d'exploitation
 #include "screens/HelpChrome.hpp"         // lot macros 1 : les onglets de l'aide
@@ -5415,6 +5416,67 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         }
         fail("varihm : " + what + " ? (deplier, replier, choisir, menu, remanente, remanence-reinit, remanence-exporter, remanence-importer, "
              "remanence-etat, fiche)");
+        return Step::Next;
+    }
+    // 1.12.0 : les natives -
+    //   natives "fonction:LIMIT"       la fiche d'une cle (le volet Natives s'ouvre ; app::natives)
+    //   natives-lien "notation:C++"    un clic sur ce lien de la fiche montree (la page y defile)
+    //   natives-inserer                Inserer dans le script (le dernier onglet de code)
+    //   natives-copier | natives-precedente
+    //   natives-attendre "texte"       la barre d'etat du volet dit ce texte (Insere : ...)
+    if (cmd == "natives") {
+        auto* screen = dynamic_cast<MainAnalysisScreen*>(app_.menus().top());
+        if (!screen || !screen->openNative(arg(1))) fail("natives : fiche inconnue : " + arg(1));
+        return Step::Yield;
+    }
+    if (cmd.rfind("natives-", 0) == 0) {
+        HmiNativesPane* pane = nullptr;
+        if (auto* root0 = top()) walk(*root0, [&](ui::Widget& x) {
+            if (auto* p = dynamic_cast<HmiNativesPane*>(&x); !pane && p && shown(*p)) pane = p;
+        });
+        if (!pane) {
+            if (retries_ < 30) return Step::Retry;
+            fail(cmd + " : le volet des natives n'est pas montr\xC3\xA9");
+            return Step::Next;
+        }
+        if (cmd == "natives-lien") {
+            auto& page = pane->view();
+            (void)page.revealHotspots(arg(1));
+            const auto r = page.contentRect();
+            const float top0 = r.y - page.scrollOffset();
+            gfx::Rect hit{};
+            for (const auto& h : page.layoutForTest().hotspots) {
+                if (h.target != arg(1)) continue;
+                const gfx::Rect rc{r.x + h.rect.x, top0 + h.rect.y, h.rect.w, h.rect.h};
+                if (r.contains(centre(rc))) { hit = rc; break; }
+            }
+            if (hit.w <= 0.f) {
+                if (retries_ < 30) return Step::Retry;
+                fail("natives : pas de lien " + arg(1) + " \xC3\xA0 l'\xC3\xA9" "cran (fiche " + pane->current() + ")");
+                return Step::Next;
+            }
+            click(centre(hit), MouseButton::Left, 1, {});
+            return Step::Yield;
+        }
+        if (cmd == "natives-inserer") {
+            if (!pane->insertCurrent()) fail("natives-inserer : " + pane->lastMessage());
+            return Step::Yield;
+        }
+        if (cmd == "natives-copier") {
+            if (!pane->copyCurrent()) fail("natives-copier : rien \xC3\xA0 copier (fiche " + pane->current() + ")");
+            return Step::Yield;
+        }
+        if (cmd == "natives-precedente") {
+            if (!pane->back()) fail("natives-precedente : aucune fiche d'avant");
+            return Step::Yield;
+        }
+        if (cmd == "natives-attendre") {
+            if (pane->lastMessage().find(arg(1)) != std::string::npos) return Step::Next;
+            if (retries_ < 30) return Step::Retry;
+            fail("natives-attendre : \xC2\xAB " + arg(1) + " \xC2\xBB absent (" + pane->lastMessage() + ")");
+            return Step::Next;
+        }
+        fail(cmd + " ? (natives, natives-lien, natives-inserer, natives-copier, natives-precedente, natives-attendre)");
         return Step::Next;
     }
     if (cmd == "vars-dossier" || cmd == "vars-choisir") {

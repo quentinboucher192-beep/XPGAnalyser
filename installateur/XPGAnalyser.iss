@@ -46,13 +46,17 @@
   #define Editeur "XPGAnalyser"
 #endif
 #ifndef Version
-  #define Version "1.11.24"
+  #define Version "1.12.0"
 #endif
 #ifndef AppGuid
   #define AppGuid "68A57092-419E-4BEF-8486-57B131E9C592"
 #endif
 #ifndef Exe
-  #define Exe "XpgAnalyzer.exe"
+  #define Exe "XpgAnalyzer-API.exe"
+#endif
+; 1.12.0 : deux applications - XPGAnalyser API ({#Exe}) et XPGAnalyser IHM ({#ExeIhm}).
+#ifndef ExeIhm
+  #define ExeIhm "XpgAnalyzer-IHM.exe"
 #endif
 #ifndef Description
   #define Description "Analyse, IHM et simulation de projets Control Expert"
@@ -127,13 +131,14 @@ Name: "fr"; MessagesFile: "compiler:Languages\French.isl"
 
 [Messages]
 ; Le texte d'origine parle d'icônes « sur le Bureau », même quand il n'y en a pas.
-FinishedLabel=L'assistant a terminé l'installation de [name].%n%n[name] est dans le menu Démarrer, avec sa Maintenance (vérifier, réparer, restaurer). Pour le désinstaller : tape « désinstaller » dans la recherche Windows. Tes dossiers se règlent dans l'application : accueil > Dossiers.
+FinishedLabel=L'assistant a terminé l'installation de [name].%n%n{#Nom} API et {#Nom} IHM sont dans le menu Démarrer, avec sa Maintenance (vérifier, réparer, restaurer). Pour le désinstaller : tape « désinstaller » dans la recherche Windows. Tes dossiers se règlent dans l'application : accueil > Dossiers.
 FinishedLabelNoIcons=L'assistant a terminé l'installation de [name].
 
 [CustomMessages]
 fr.RaccourciBureau=Créer un raccourci sur le Bureau
 fr.Raccourcis=Raccourcis :
-fr.Lancer=Lancer {#Nom}
+fr.Lancer=Lancer {#Nom} API
+fr.LancerIhm=Lancer {#Nom} IHM
 fr.EpinglerBarre=Épingler {#Nom} à la barre des tâches (au premier lancement : Windows te demande de confirmer)
 
 [Tasks]
@@ -155,8 +160,15 @@ Source: "{#Staging}\maintenance\config.ini"; DestDir: "{tmp}\xpg"; Flags: dontco
 Source: "aide\xpgliste.dll"; Flags: dontcopy
 Source: "{#Staging}\libs\index.txt"; DestName: "libs-index.txt"; Flags: dontcopy
 
+[InstallDelete]
+; 1.12.0 : deux applications - l'exe unique de la 1.11 et ses raccourcis s'en vont.
+Type: files; Name: "{app}\XpgAnalyzer.exe"
+Type: files; Name: "{autoprograms}\{#Nom}\{#Nom}.lnk"
+Type: files; Name: "{autodesktop}\{#Nom}.lnk"
+
 [Icons]
-Name: "{autoprograms}\{#Nom}\{#Nom}"; Filename: "{app}\{#Exe}"; WorkingDir: "{app}"; Comment: "{#Description}"
+Name: "{autoprograms}\{#Nom}\{#Nom} API"; Filename: "{app}\{#Exe}"; WorkingDir: "{app}"; Comment: "Le programme de l'automate : analyse, variables, tables, simulation"
+Name: "{autoprograms}\{#Nom}\{#Nom} IHM"; Filename: "{app}\{#ExeIhm}"; WorkingDir: "{app}"; Comment: "Les vues, les scripts, les équipements, la simulation de l'IHM"
 Name: "{autoprograms}\{#Nom}\Maintenance\Réparer"; Filename: "{app}\maintenance\repair.bat"; WorkingDir: "{app}\maintenance"; IconFilename: "{app}\{#Exe}"
 Name: "{autoprograms}\{#Nom}\Maintenance\Vérifier l'installation"; Filename: "{app}\maintenance\verify_installation.bat"; WorkingDir: "{app}\maintenance"; IconFilename: "{app}\{#Exe}"
 Name: "{autoprograms}\{#Nom}\Maintenance\Reprendre une installation interrompue"; Filename: "{app}\maintenance\resume_installation.bat"; WorkingDir: "{app}\maintenance"; IconFilename: "{app}\{#Exe}"
@@ -166,7 +178,8 @@ Name: "{autoprograms}\{#Nom}\Maintenance\Réinitialiser mes réglages"; Filename
 Name: "{autoprograms}\{#Nom}\Tes données"; Filename: "{code:DonneesReel}"; Check: not IsAdminInstallMode
 ; 1.8.0 : trouvé par la recherche Windows (« désinstaller »). Tes données restent (voir plus bas).
 Name: "{autoprograms}\{#Nom}\Désinstaller {#Nom}"; Filename: "{uninstallexe}"; Comment: "Désinstaller {#Nom} (tes données sont gardées)"
-Name: "{autodesktop}\{#Nom}"; Filename: "{app}\{#Exe}"; WorkingDir: "{app}"; Tasks: bureau
+Name: "{autodesktop}\{#Nom} API"; Filename: "{app}\{#Exe}"; WorkingDir: "{app}"; Tasks: bureau
+Name: "{autodesktop}\{#Nom} IHM"; Filename: "{app}\{#ExeIhm}"; WorkingDir: "{app}"; Tasks: bureau
 
 [Registry]
 Root: HKA; Subkey: "Software\{#Nom}"; Flags: uninsdeletekey
@@ -177,6 +190,7 @@ Root: HKA; Subkey: "Software\{#Nom}"; ValueType: string; ValueName: "DossierDonn
 
 [Run]
 Filename: "{app}\{#Exe}"; Description: "{cm:Lancer}"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#ExeIhm}"; Description: "{cm:LancerIhm}"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent unchecked
 
 [UninstallDelete]
 Type: files; Name: "{app}\installation.ini"
@@ -393,7 +407,8 @@ end;
 // registre ; un autre dossier peut toujours etre ajoute a la main.)
 function AUneApplication(Dossier: String): Boolean;
 begin
-  Result := FileExists(Dossier + '\{#Exe}') or FileExists(Dossier + '\xpg_analyzer.exe');
+  Result := FileExists(Dossier + '\{#Exe}') or FileExists(Dossier + '\{#ExeIhm}') or FileExists(Dossier + '\XpgAnalyzer.exe')
+            or FileExists(Dossier + '\xpg_analyzer.exe');
 end;
 
 function AUnAncienContenu(Dossier: String): Boolean;
@@ -654,7 +669,8 @@ begin
   Ajoute(L, 'Ce PC : ' + LeWindows);
   Ajoute(L, '');
   Ajoute(L, 'LES PROGRAMMES');
-  Ajoute(L, '  ' + Colonne('{#Exe}', 17) + Colonne('le programme', 27) + Colonne('64 bits (x64)', 15) + TailleDe(App + '\{#Exe}'));
+  Ajoute(L, '  ' + Colonne('{#Exe}', 21) + Colonne('XPGAnalyser API', 23) + Colonne('64 bits (x64)', 15) + TailleDe(App + '\{#Exe}'));
+  Ajoute(L, '  ' + Colonne('{#ExeIhm}', 21) + Colonne('XPGAnalyser IHM', 23) + Colonne('64 bits (x64)', 15) + TailleDe(App + '\{#ExeIhm}'));
   Ajoute(L, '  ' + Colonne(ExtractFileName(Unins), 17) + Colonne('le désinstallateur', 27) + Colonne('32 bits (x86)', 15) + TailleDe(Unins));
   Ajoute(L, '  ' + Colonne('SDL3.dll', 17) + Colonne('fenêtres, affichage, son', 27) + Colonne('64 bits (x64)', 15) + TailleDe(App + '\SDL3.dll'));
   Ajoute(L, '  ' + Colonne('maintenance\', 17) + '6 scripts (.bat) et leurs étapes PowerShell :');
@@ -663,7 +679,8 @@ begin
   Ajoute(L, '  Rien d''autre à installer : tout est à côté de l''exe.');
   Ajoute(L, '');
   Ajoute(L, 'LE PROGRAMME   ' + App);
-  Ajoute(L, '  ├─ ' + Colonne('{#Exe}', 32));
+  Ajoute(L, '  ├─ ' + Colonne('{#Exe}', 32) + 'XPGAnalyser API');
+  Ajoute(L, '  ├─ ' + Colonne('{#ExeIhm}', 32) + 'XPGAnalyser IHM');
   Ajoute(L, '  ├─ ' + Colonne('SDL3.dll', 32));
   Ajoute(L, '  ├─ ' + Colonne(ExtractFileName(Unins) + ', .dat', 32) + 'le désinstallateur');
   Ajoute(L, '  ├─ ' + Colonne('installation.ini', 32) + 'écrit par l''installateur');
@@ -696,12 +713,13 @@ begin
   Ajoute(L, '  └─ ' + Colonne('Etat\', 32));
   Ajoute(L, '');
   Ajoute(L, 'LE MENU DÉMARRER   ' + Menu);
-  Ajoute(L, '  ├─ ' + Colonne('{#Nom}', 32));
+  Ajoute(L, '  ├─ ' + Colonne('{#Nom} API', 32));
+  Ajoute(L, '  ├─ ' + Colonne('{#Nom} IHM', 32));
   Ajoute(L, '  ├─ ' + Colonne('Désinstaller {#Nom}', 32) + 'la recherche Windows le trouve');
   if not IsAdminInstallMode then Ajoute(L, '  ├─ ' + Colonne('Tes données', 32));
   Ajoute(L, '  └─ ' + Colonne('Maintenance\', 32) + '6 raccourcis');
   Ajoute(L, '');
-  if WizardIsTaskSelected('bureau') then S := '{#Nom}' else S := 'aucun raccourci';
+  if WizardIsTaskSelected('bureau') then S := '{#Nom} API, {#Nom} IHM' else S := 'aucun raccourci';
   Ajoute(L, Colonne('LE BUREAU', 20) + S);
   if WizardIsTaskSelected('barre') then S := 'épinglage proposé au premier lancement' else S := 'rien (non demandé)';
   Ajoute(L, Colonne('LA BARRE DES TÂCHES', 20) + S);
@@ -1012,7 +1030,7 @@ begin
          Space + 'elle est d''abord sauvegardée (programme, réglages, registre).' + NewLine;
   if MemoTasksInfo <> '' then S := S + NewLine + MemoTasksInfo;
   // 1.8.0 : toujours, dans le menu Demarrer (la recherche Windows le trouve).
-  S := S + NewLine + 'Menu Démarrer :' + NewLine + Space + '{#Nom}, Désinstaller {#Nom}, Maintenance' + NewLine;
+  S := S + NewLine + 'Menu Démarrer :' + NewLine + Space + '{#Nom} API, {#Nom} IHM, Désinstaller {#Nom}, Maintenance' + NewLine;
   Result := S;
 end;
 

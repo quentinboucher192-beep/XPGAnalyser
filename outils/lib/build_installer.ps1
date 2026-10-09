@@ -59,7 +59,8 @@ try {
         Editeur = Get-XpgConfig -Section 'Produit' -Cle 'editeur' -Obligatoire
         Version = $version
         AppGuid = $guid
-        Exe = Get-XpgConfig -Section 'Produit' -Cle 'exe' -Defaut 'XpgAnalyzer.exe'
+        Exe = Get-XpgConfig -Section 'Produit' -Cle 'exe' -Defaut 'XpgAnalyzer-API.exe'
+        ExeIhm = Get-XpgConfig -Section 'Produit' -Cle 'exe_ihm' -Defaut 'XpgAnalyzer-IHM.exe'   # 1.12.0
         Description = Get-XpgConfig -Section 'Produit' -Cle 'description' -Defaut ''
         UrlSupport = Get-XpgConfig -Section 'Produit' -Cle 'url_support' -Defaut ''
         Staging = (Get-Item -LiteralPath $st).FullName

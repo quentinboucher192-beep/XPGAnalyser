@@ -1,0 +1,38 @@
+# =============================================================================
+#  Session 1200 API : XPGAnalyser API (1.12.0), XpgAnalyzer-API.exe - le
+#  programme de l'automate seul. Avant le lancement, Armoire_Gaz (un projet de
+#  la 1.11 : l'automate et son IHM ensemble) est pose dans projets\ ; au premier
+#  lancement, XPGAnalyser API en recopie sa moitie (tout sauf l'IHM) dans
+#  projets\api.
+#    1. l'accueil et l'arbre de XPGAnalyser API (API, Simulation, Versions :
+#       ni IHM, ni simulation de l'IHM) ;
+#    2. les variables, sans colonne ni filtre IHM ;
+#    3. la vue d'ensemble de la simulation : l'automate seul ;
+#    4. le centre d'aide : ses chapitres, les notes de la 1.12.0.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 8
+capture 1200_api_01_accueil.png
+ouvrir "${PROJETS}/api/Armoire_Gaz"
+attendre-projet
+attendre 10
+capture 1200_api_02_arbre.png
+
+# ---- 2. Les variables ----
+arbre "API/Variables"
+attendre 8
+capture 1200_api_03_variables.png
+
+# ---- 3. La simulation de l'automate seul ----
+arbre "Simulation/Vue d'ensemble"
+attendre 8
+capture 1200_api_04_simulation_ensemble.png
+
+# ---- 4. Le centre d'aide, les notes de la 1.12.0 ----
+action "help.open"
+attendre 8
+aide-cible "sujet:notes-1.12.0"
+attendre 6
+capture 1200_api_05_notes_1_12_0.png
+quitter

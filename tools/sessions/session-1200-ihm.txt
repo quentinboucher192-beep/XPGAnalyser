@@ -1,0 +1,81 @@
+# =============================================================================
+#  Session 1200 IHM : XPGAnalyser IHM (1.12.0), XpgAnalyzer-IHM.exe - l'IHM
+#  seule. Avant le lancement, Armoire_Gaz (un projet de la 1.11 : l'automate et
+#  son IHM ensemble) est pose dans projets\ ; au premier lancement, XPGAnalyser
+#  IHM le recopie dans projets\ihm et rend son IHM autonome (les globales de
+#  l'automate qu'elle lisait deviennent ses variables, dossier Automate).
+#    1. l'accueil et l'arbre de XPGAnalyser IHM (ni API, ni simulation de
+#       l'automate) ;
+#    2. les Natives (IHM > Programmation generale > Natives) : le sommaire,
+#       LIMIT en ST puis en C++, les couleurs, l'aleatoire, une conversion
+#       X_TO_Y, un type, une enumeration, les operateurs ;
+#    3. Inserer dans un script, F1 sur un nom : sa fiche ;
+#    4. les variables IHM venues de l'automate (dossier Automate) ;
+#    5. la simulation de l'IHM seule, en marche.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 8
+capture 1200_ihm_01_accueil.png
+ouvrir "${PROJETS}/ihm/Armoire_Gaz"
+attendre-projet
+attendre 10
+capture 1200_ihm_02_arbre.png
+
+# ---- 2. Les natives ----
+arbre "IHM/Programmation générale/Natives"
+attendre 6
+capture 1200_ihm_03_natives_sommaire.png
+arbre "IHM/Programmation générale/Natives/Fonctions/Sélection et bornes/LIMIT"
+attendre 6
+capture 1200_ihm_04_limit_st.png
+natives-lien "notation:C++"
+attendre 4
+capture 1200_ihm_05_limit_cpp.png
+natives-lien "notation:ST"
+attendre 2
+natives "fonction:COULEUR_MELANGER"
+attendre 4
+capture 1200_ihm_06_couleur_melanger.png
+natives "fonction:RANDOM_INT"
+attendre 4
+capture 1200_ihm_07_random_int.png
+natives "conversion:INT_TO_REAL"
+attendre 4
+capture 1200_ihm_08_int_to_real.png
+natives "type:INT"
+attendre 4
+capture 1200_ihm_09_type_int.png
+natives "enum:TRANSITION"
+attendre 4
+capture 1200_ihm_10_enum_transition.png
+natives "operateurs"
+attendre 4
+capture 1200_ihm_11_operateurs.png
+
+# ---- 3. Inserer dans un script, F1 ----
+arbre "IHM/Programmation générale/Scripts/Init"
+attendre 6
+natives "fonction:LIMIT"
+attendre 3
+natives-inserer
+attendre 4
+capture 1200_ihm_12_inserer_limit.png
+touche F1
+attendre 4
+capture 1200_ihm_13_f1_limit.png
+
+# ---- 4. Les variables venues de l'automate ----
+arbre "IHM/Programmation générale/Variables IHM/Automate"
+attendre 6
+capture 1200_ihm_14_variables_automate.png
+
+# ---- 5. La simulation de l'IHM seule ----
+arbre "Simulation/IHM"
+attendre 2
+ihm-build-attendre 600
+attendre 60
+ihm-sim-etat "en marche"
+attendre 5
+capture 1200_ihm_15_simulation_ihm_seule.png
+quitter

@@ -29,6 +29,7 @@
 //  menu de ce noeud (treeKey) - ou disent pourquoi elles sont grisees.
 // =============================================================================
 #include "Screens.hpp"
+#include "../hmi/HmiNativesCards.hpp"   // 1.12.0 : ce qu'Inserer pose
 
 #include "../AnimationTablesPane.hpp"
 #include "../ApiPanes.hpp"
@@ -1395,6 +1396,27 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId node, std::vector<PopupMenu::I
         m.add("Importer" + kDots, Icon::Open, [this] { askHmiImport(); });
         break;
     }
+    // 1.12.0 : les natives - lire, inserer, copier ; ni renommer ni supprimer.
+    case NK::NativesFolder: case NK::NativesFunctions: case NK::NativesCategory: case NK::NativesFunction:
+    case NK::NativesConversions: case NK::NativesConvSource: case NK::NativesConversion: case NK::NativesTypes:
+    case NK::NativesType: case NK::NativesOperators: case NK::NativesOperator: case NK::NativesInstructions:
+    case NK::NativesInstruction: case NK::NativesEnums: case NK::NativesEnum: case NK::NativesEnumValue: {
+        m.add("Ouvrir la fiche", Icon::Open, [this, node] { openHmiNode(node); });
+        const auto what = natives::insertText(treeModel_ ? treeModel_->nativeKeyOf(node) : std::string{});
+        if (!what.empty()) {
+            m.add("Ins\xC3\xA9rer dans le script", Icon::Code, [this, what] {
+                if (insertInCodeTab(what)) return;
+                ui::setClipboardText(what);
+                if (status_)
+                    status_->setTransientMessage("Aucun script en cours d'\xC3\xA9" "dition : \xC2\xAB " + what + " \xC2\xBB est copi\xC3\xA9", 6.0,
+                                                 StatusBar::Severity::Info);
+            });
+            m.add("Copier \xC2\xAB " + what + " \xC2\xBB", Icon::Document, copy(what));
+        }
+        addRename("Renommer" + kDots, {}, "natif : verrouill\xC3\xA9");
+        addRemove("Supprimer", {}, "natif : verrouill\xC3\xA9");
+        break;
+    }
     case NK::HmiSysVar: {
         m.add("Ouvrir", Icon::Open, [this, node] { openHmiNode(node); });
         if (index < hmi::pub::kSysVarCount) m.add("Copier le chemin", Icon::Document, copy("SYS." + std::string(hmi::pub::kSysVars[index].name)));
@@ -1658,7 +1680,11 @@ void MainAnalysisScreen::runExplorerAction(int action) {
             return;
 
         // Lot API 7 : pas les membres des variables (ils se deplient a l infini).
-        case ActionExpandAll:   explorer_->expandToDepth(99, [](ui::NodeId n) { return ProjectTreeModel::holdsMembers(n); }); return;
+        case ActionExpandAll:   // 1.12.0 : les natives restent repliees (plus de six cents lignes)
+            explorer_->expandToDepth(99, [](ui::NodeId n) {
+                return ProjectTreeModel::holdsMembers(n) || ProjectTreeModel::kindOf(n) == NK::NativesFolder;
+            });
+            return;
         case ActionCollapseAll: explorer_->expandToDepth(0);  return;
 
         case ActionMoveUp:

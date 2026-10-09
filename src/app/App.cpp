@@ -228,8 +228,9 @@ core::Result<std::unique_ptr<App>> App::create(AppOptions options) {
                            std::to_string(n) + (n > 1 ? " projets de la 1.11 recopi\xC3\xA9s" : " projet de la 1.11 recopi\xC3\xA9") + " dans "
                                + dossiers::utf8De(root),
                            core::hasApi() ? std::string("Leur programme, sans leur IHM (elle est dans XPGAnalyser IHM). Les originaux restent dans le dossier parent.")
-                                          : std::string("Leur IHM, sans le programme de l'automate : les noms de l'automate qu'elle lisait sont \xC3\xA0 "
-                                                        "cr\xC3\xA9" "er en variables IHM, li\xC3\xA9" "es aux adresses de leur \xC3\xA9quipement. Les originaux restent dans le dossier parent."),
+                                          : std::string("Leur IHM, sans le programme de l'automate : les noms de l'automate qu'elle lisait sont devenus "
+                                                        "ses variables IHM (dossier Automate), l'automate reli\xC3\xA9 par Modbus TCP l'\xC3\xA9quipement \xC2\xAB Automate \xC2\xBB. "
+                                                        "Les originaux restent dans le dossier parent."),
                            "Ouvrir le dossier", "open.folder:" + dossiers::utf8De(root), "info"});
         }
         for (const auto& problem : report.problems) std::fprintf(stderr, "projets de la 1.11 : %s\n", problem.c_str());

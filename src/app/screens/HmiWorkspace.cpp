@@ -59,6 +59,8 @@
 #include "../hmi/HmiAskDialog.hpp"                 // 1.11.18 (lot 5) : migrer les declarations (les codes a cocher)
 #include "../../hmi/HmiMigrate.hpp"                // 1.11.18 (lot 5) : le plan de la migration
 #include "../hmi/HmiPublicVarsPane.hpp"
+#include "../hmi/HmiNativesCards.hpp"   // 1.12.0 : les natives
+#include "../hmi/HmiNativesPane.hpp"
 #include "../hmi/HmiQualityPanes.hpp"                // lot 13 : les essais
 #include "../hmi/HmiDisplayPanes.hpp"               // lot 13 : les langues
 #include "../hmi/HmiCommPanes.hpp"                  // lot 14 : la communication
@@ -285,7 +287,8 @@ bool MainAnalysisScreen::isHmiNode(ui::NodeId n) {
         || (k >= NK::HmiObjectFunctions && k <= NK::HmiSymbolFunction)    // 1.11.10 : les fonctions et popups d'un symbole
         || (k >= NK::HmiCodeGroup && k <= NK::HmiSymbolOverloads)         // 1.11.21 : le contenu d'un code, les surcharges
         || k == NK::HmiObjectFamily || k == NK::HmiObjectParam || k == NK::HmiObjectMarker
-        || k == NK::VersionsFolder || k == NK::VersionItem;                           // lot 21 : les versions
+        || k == NK::VersionsFolder || k == NK::VersionItem                            // lot 21 : les versions
+        || ProjectTreeModel::isNativesKind(k);                                         // 1.12.0 : les natives
 }
 
 ui::Widget* MainAnalysisScreen::hmiTab(const std::string& key) const {
@@ -712,6 +715,13 @@ void MainAnalysisScreen::openHmiNode(ui::NodeId n) {
             }
             break;
         }
+        // ---- 1.12.0 : les natives, leur fiche dans le volet Natives ------------------
+        case NK::NativesFolder: case NK::NativesFunctions: case NK::NativesCategory: case NK::NativesFunction:
+        case NK::NativesConversions: case NK::NativesConvSource: case NK::NativesConversion: case NK::NativesTypes:
+        case NK::NativesType: case NK::NativesOperators: case NK::NativesOperator: case NK::NativesInstructions:
+        case NK::NativesInstruction: case NK::NativesEnums: case NK::NativesEnum: case NK::NativesEnumValue:
+            (void)openNative(treeModel_->nativeKeyOf(n));
+            break;
         // ---- lot 9 : les variables systeme et d'instances, dans leur volet ------------
         case NK::HmiSysFolder: case NK::HmiSysDomain: case NK::HmiSysVar:
         case NK::HmiInstFolder: case NK::HmiInstView: case NK::HmiInstViewVar: case NK::HmiInstObject: case NK::HmiInstVar:
@@ -1546,6 +1556,22 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         page = std::move(pane);
         title = "IHM \xC2\xB7 Variables syst\xC3\xA8me et d'instances";
         icon = Icon::Variable;
+    } else if (key == "natives") {
+        // 1.12.0 : les natives - une fiche a la fois, en lecture seule.
+        auto pane = std::make_unique<HmiNativesPane>("hmi.natives");
+        HmiNativesPane::Hosts hosts;
+        hosts.insert = [this](const std::string& text) { return insertInCodeTab(text); };
+        hosts.help = [this](const std::string& topic) { openHmiHelp(topic); };
+        hosts.shown = [this](const std::string& nativeKey) {
+            // Un lien d'une fiche : l'arbre montre la native (si la branche est dans la portee du rail).
+            if (!treeModel_ || !explorer_) return;
+            if (const auto node = treeModel_->nativeNodeOf(nativeKey); node != ui::kInvalidNode && revealTreeNode(node))
+                explorer_->setCurrentNode(node);
+        };
+        pane->setHosts(std::move(hosts));
+        page = std::move(pane);
+        title = "IHM \xC2\xB7 Natives";
+        icon = Icon::Lock;
     } else if (key == "aide") {
         auto pane = std::make_unique<HmiHelpPane>("hmi.help");
         HmiHelpPane::Hosts hosts;
@@ -3238,6 +3264,15 @@ bool MainAnalysisScreen::openHmiHelpNow() {
         std::string word;
         if (auto* scripts = dynamic_cast<HmiScriptsPane*>(hmiTab(key))) word = scripts->editor().symbolAtCaret();
         if (auto* functions = dynamic_cast<HmiFunctionsPane*>(hmiTab(key))) word = functions->editor().symbolAtCaret();
+        // 1.12.0 : une native (LIMIT, RGB, INT_TO_REAL, TRANSITION#Fondu...) : sa fiche - une
+        // fonction du projet de meme nom passe avant (comme a l'execution).
+        if (!word.empty() && !doc->project.functionByName(word))
+            if (const auto native = natives::keyOfWord(word); !native.empty() && openNative(native)) return true;
+        // F1 dans le volet des natives : l'aide du langage.
+        if (key == "natives") {
+            openHmiHelp("reference");
+            return true;
+        }
         if (!word.empty()) {
             topic = hmi::guide::topicForWord(word);
             // Lot 9 : SYS.X, Vue.Objet.Propriete.
@@ -3342,6 +3377,54 @@ void MainAnalysisScreen::askHmiDuplicate(std::uint64_t viewId) {
         }
     };
     app_.menus().ShowDialog(std::make_unique<HmiDuplicateDialog>(std::move(spec)), [](const menu::DialogResult&) {});
+}
+
+// ---- 1.12.0 : les natives -------------------------------------------------------
+bool MainAnalysisScreen::openNative(const std::string& key) {
+    if (key.empty() || natives::article(key, HmiNativesPane::notation()).empty()) return false;
+    openHmiPane("natives");
+    auto* pane = dynamic_cast<HmiNativesPane*>(hmiTab("natives"));
+    return pane && pane->show(key);
+}
+
+void MainAnalysisScreen::noteCodePage() {
+    if (!centre_ || centre_->tabCount() == 0) return;
+    auto* page = centre_->page(centre_->currentIndex());
+    if (dynamic_cast<HmiScriptsPane*>(page) || dynamic_cast<HmiFunctionsPane*>(page)) lastCodePage_ = page;
+}
+
+bool MainAnalysisScreen::insertInCodeTab(const std::string& text) {
+    if (!centre_ || text.empty()) return false;
+    // Un script montre a cote (un autre groupe d'onglets, une fenetre detachee) : la.
+    ui::Widget* root = centre_;
+    while (root->parent()) root = root->parent();
+    if (HmiApiVarsView::insertInShownScript(*root, text)) return true;
+    // Sinon le dernier onglet de code montre, s'il est encore ouvert ; a defaut, le premier.
+    ui::Widget* target = nullptr;
+    for (std::size_t t = 0; t < centre_->tabCount(); ++t) {
+        auto* page = centre_->page(t);
+        const bool code = dynamic_cast<HmiScriptsPane*>(page) || dynamic_cast<HmiFunctionsPane*>(page);
+        if (!code) continue;
+        if (page == lastCodePage_) {
+            target = page;
+            break;
+        }
+        if (!target) target = page;
+    }
+    if (!target) return false;
+    (void)showPage(target);
+    ui::MultiLineText* ed = nullptr;
+    if (auto* scripts = dynamic_cast<HmiScriptsPane*>(target)) {
+        if (scripts->tabs()) scripts->showTab(HmiScriptsPane::TabScripts);
+        ed = &scripts->editor();
+    } else if (auto* functions = dynamic_cast<HmiFunctionsPane*>(target)) {
+        ed = &functions->editor();
+    }
+    if (!ed || ed->readOnly()) return false;
+    ed->insertText(text);
+    ed->dismissCompletion();
+    ed->takeFocus();
+    return true;
 }
 
 } // namespace app

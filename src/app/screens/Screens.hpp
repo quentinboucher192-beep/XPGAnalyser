@@ -305,6 +305,11 @@ public:
     //  "equipements", "debogage", "forcages", "courbes", "journal". Faux : cle
     //  inconnue (ou pas de projet, pas d'IHM : la barre d'etat le dit).
     bool openSimCenter(const std::string& key);
+    // 1.12.0 : la fiche d'une native (app::natives : "fonction:LIMIT"...) dans le volet
+    // Natives ; faux : cle inconnue. Inserer d'une fiche : le dernier script (ou la
+    // derniere fonction) montre au centre ; faux : aucun.
+    bool openNative(const std::string& key);
+    bool insertInCodeTab(const std::string& text);
     //  Suivre une cle "aller a" (SimJournal.hpp) : un onglet du Centre, une
     //  ligne ("ligne:<section>:<n>"), une variable, une vue, les alarmes,
     //  Simuler / Pause / Un cycle / Arreter / Relancer, la bibliotheque.
@@ -643,6 +648,7 @@ private:
     [[nodiscard]] static bool isHmiNode(ui::NodeId);
     void openHmiNode(ui::NodeId node);
     void openHmiPane(const std::string& key);
+    void noteCodePage();   // 1.12.0 : le dernier onglet de code montre (insertInCodeTab)
     // Lot 15 : l'outil Modbus vers cette cible ; tab : "lecture", "cyclique",
     // "trames", "espion", "ping".
     void openHmiModbusTool(const std::string& host, int port, int unit, const std::string& tab);
@@ -961,6 +967,7 @@ private:
     bool openHmiSupervisionIssue(const hmi::Issue& issue);
     [[nodiscard]] ui::Widget* hmiTab(const std::string& key) const;
     std::map<std::string, ui::Widget*> hmiTabs_;
+    ui::Widget*                        lastCodePage_{nullptr};   // 1.12.0 : le dernier onglet de code montre
     std::shared_ptr<hmi::Document>     boundHmi_;
     core::ConnectionScope              hmiLinks_;
 

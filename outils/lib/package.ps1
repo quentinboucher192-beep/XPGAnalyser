@@ -103,7 +103,8 @@ function Get-XpgDllImportees {
 try {
     $racine = $X.Racine
     $produit = Get-XpgConfig -Section 'Produit' -Cle 'nom' -Obligatoire
-    $exeNom = Get-XpgConfig -Section 'Produit' -Cle 'exe' -Defaut 'XpgAnalyzer.exe'
+    $exeNom = Get-XpgConfig -Section 'Produit' -Cle 'exe' -Defaut 'XpgAnalyzer-API.exe'
+    $exeIhmNom = Get-XpgConfig -Section 'Produit' -Cle 'exe_ihm' -Defaut 'XpgAnalyzer-IHM.exe'   # 1.12.0 : XPGAnalyser IHM
     $chaine = (Get-XpgOption -Noms @('chaine') -Defaut 'msvc').ToLowerInvariant()
     $exeFourni = Get-XpgOption -Noms @('exe')
 
@@ -151,6 +152,10 @@ try {
     if (-not $exe) { $exe = Join-Path $racine "build\Release\$exeNom" }
     if (-not (Test-Path -LiteralPath $exe)) { Stop-Xpg -Code 1 -Message "Exe introuvable : $exe" }
     Copy-Item -LiteralPath $exe -Destination (Join-Path $st $exeNom) -Force
+    # 1.12.0 : XPGAnalyser IHM, a cote (le meme dossier que l'exe de XPGAnalyser API).
+    $exeIhm = Join-Path (Split-Path -Parent $exe) $exeIhmNom
+    if (-not (Test-Path -LiteralPath $exeIhm)) { Stop-Xpg -Code 1 -Message "Exe introuvable : $exeIhm" -Conseil 'build.bat compile les deux applications (XPGAnalyser API et XPGAnalyser IHM).' }
+    Copy-Item -LiteralPath $exeIhm -Destination (Join-Path $st $exeIhmNom) -Force
     $sdl = Get-XpgOption -Noms @('sdl')
     if (-not $sdl) { $sdl = Join-Path $racine 'third_party\SDL3\lib\x64\SDL3.dll' }
     if (-not (Test-Path -LiteralPath $sdl)) { Stop-Xpg -Code 1 -Message "SDL3.dll introuvable : $sdl" }
@@ -196,6 +201,7 @@ editeur = $(Get-XpgConfig -Section 'Produit' -Cle 'editeur')
 version = $version
 app_id = $(Get-XpgConfig -Section 'Produit' -Cle 'app_id' -Obligatoire)
 exe = $exeNom
+exe_ihm = $exeIhmNom
 chaine = $chaine
 
 [Maintenance]
@@ -237,7 +243,7 @@ anciens_dossiers = $(Get-XpgConfig -Section 'Installateur' -Cle 'anciens_dossier
     }
     $manifeste = [ordered]@{
         produit = $produit; version = $version; chaine = $chaine; date = (Get-Date).ToString('s')
-        exe = $exeNom; dependances = @($aLivrer); runtime_local = @($runtime)
+        exe = $exeNom; exe_ihm = $exeIhmNom; dependances = @($aLivrer); runtime_local = @($runtime)
         fichiers = @($fichiers)
     }
     Write-XpgTexte -Chemin (Join-Path $st 'manifeste.json') -Texte ($manifeste | ConvertTo-Json -Depth 5) -SansBom

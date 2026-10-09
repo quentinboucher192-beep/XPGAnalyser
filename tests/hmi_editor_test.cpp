@@ -60,6 +60,9 @@
 #include "../src/app/hmi/HmiPainter.hpp"
 #include "../src/app/hmi/HmiPanes.hpp"
 #include "../src/app/hmi/HmiPublicVarsPane.hpp"
+#include "../src/app/hmi/HmiNativesCards.hpp"   // 1.12.0
+#include "../src/hmi/HmiNatives.hpp"
+#include "../src/app/hmi/HmiNativesPane.hpp"
 #include "../src/app/hmi/HmiQualityPanes.hpp"
 #include "../src/app/hmi/HmiDisplayPanes.hpp"
 #include "../src/app/hmi/HmiScriptPanes.hpp"
@@ -2784,8 +2787,8 @@ void arbre_deballe() {
     // Lot 7 : Fonctions entre Scripts et Variables IHM.
     // Lot 9 : + Variables systeme, Variables d'instances.
     // Lot 16 : + Types IHM, avant Variables IHM.
-    check(tree.childCount(prog) == 7, "Programmation g\xC3\xA9n\xC3\xA9rale : Scripts, Fonctions, Types IHM, Variables IHM, Variables employ\xC3\xA9" "es, "
-                                      "Variables syst\xC3\xA8me, Variables d'instances");
+    check(tree.childCount(prog) == 8, "Programmation g\xC3\xA9n\xC3\xA9rale : Scripts, Fonctions, Types IHM, Variables IHM, Variables employ\xC3\xA9" "es, "
+                                      "Variables syst\xC3\xA8me, Variables d'instances, Natives (1.12.0)");
     same_text(tree.text(tree.childAt(tree.childAt(prog, 0), 0)), "Init   ST   D\xC3\xA9marrage", "un script g\xC3\xA9n\xC3\xA9ral");
     same_text(tree.text(tree.childAt(tree.childAt(prog, 3), 0)), "Compteur : INT = 0", "une variable IHM");
     const auto used = tree.childAt(prog, 4);   // lot 16 : apres Types IHM
@@ -4767,8 +4770,8 @@ void lot7_arbre() {
     const auto prog = tree.childAt(tree.hmiFolderNode(), 8);   // Lot API 8 : Simulation est partie dans le dossier Simulation
     // Lot 9 : + Variables systeme, Variables d'instances.
     // Lot 16 : + Types IHM, avant Variables IHM.
-    check(tree.childCount(prog) == 7, "Programmation g\xC3\xA9n\xC3\xA9rale : Scripts, Fonctions, Types IHM, Variables IHM, Variables employ\xC3\xA9" "es, "
-                                      "Variables syst\xC3\xA8me, Variables d'instances");
+    check(tree.childCount(prog) == 8, "Programmation g\xC3\xA9n\xC3\xA9rale : Scripts, Fonctions, Types IHM, Variables IHM, Variables employ\xC3\xA9" "es, "
+                                      "Variables syst\xC3\xA8me, Variables d'instances, Natives (1.12.0)");
     const auto fonctions = tree.childAt(prog, 1);
     check(app::ProjectTreeModel::kindOf(fonctions) == app::ProjectTreeModel::NodeKind::HmiFunctionsFolder, "le 2e dossier : Fonctions");
     check(tree.text(fonctions).rfind("Fonctions", 0) == 0 && tree.counterOf(fonctions) == "2",   // Lot API 8 : la pastille
@@ -5741,7 +5744,7 @@ void lot9_variables_publiques() {
 
     // ---- l'arbre : deux dossiers de plus sous Programmation generale
     const auto prog = tree.childAt(tree.hmiFolderNode(), 8);   // Lot API 8 : Simulation est partie dans le dossier Simulation
-    check(tree.childCount(prog) == 7, "Programmation g\xC3\xA9n\xC3\xA9rale : sept dossiers (lot 16 : Types IHM)");
+    check(tree.childCount(prog) == 8, "Programmation g\xC3\xA9n\xC3\xA9rale : huit dossiers (lot 16 : Types IHM ; 1.12.0 : Natives)");
     const auto sys = tree.childAt(prog, 5);
     const auto inst = tree.childAt(prog, 6);
     check(app::ProjectTreeModel::kindOf(sys) == NK::HmiSysFolder, "le 6e : Variables syst\xC3\xA8me");
@@ -16670,18 +16673,19 @@ void centreAide111() {
     // 1.11.12 : 20.
     // 1.11.13 : 21.
     // 1.11.14 : 22 ; 1.11.15 : 23 ; 1.11.16 : 24 ; 1.11.17 : 25 ; 1.11.18 : 26 ; 1.11.19 : 27 ; 1.11.20 : 28 ; 1.11.21 : 29.
-    // 1.11.22 : 30 ; 1.11.23 : 31 ; 1.11.24 : 32.
-    check(hn::releases().size() == 32 && hn::releases().front().version == "1.11.24" && hn::releases()[1].version == "1.11.23"
-              && hn::releases()[2].version == "1.11.22" && hn::releases()[3].version == "1.11.21" && hn::releases()[4].version == "1.11.20" && hn::releases()[5].version == "1.11.19"
-              && hn::releases()[6].version == "1.11.18" && hn::releases()[7].version == "1.11.17"
-              && hn::releases()[8].version == "1.11.16" && hn::releases()[9].version == "1.11.15"
-              && hn::releases()[10].version == "1.11.14" && hn::releases()[11].version == "1.11.13" && hn::releases()[12].version == "1.11.12"
-              && hn::releases()[13].version == "1.11.11" && hn::releases()[14].version == "1.11.10"
-              && hn::releases()[15].version == "1.11.9" && hn::releases()[16].version == "1.11.8"
-              && hn::releases()[17].version == "1.11.7" && hn::releases()[18].version == "1.11.6" && hn::releases()[19].version == "1.11.5"
-              && hn::releases()[20].version == "1.11.4" && hn::releases()[21].version == "1.11.3" && hn::releases()[22].version == "1.11.2"
-              && hn::releases()[23].version == "1.11.1" && hn::releases()[24].version == "1.11" && hn::releases()[25].version == "1.10.4",
-          "notes : 32 versions, la 1.11.24 en tete, puis la 1.11.23 \xC3\xA0 la 1.11, et la 1.10.4");
+    // 1.11.22 : 30 ; 1.11.23 : 31 ; 1.11.24 : 32 ; 1.12.0 : 33 (la 1.12.0 en tete, un rang de plus pour les autres).
+    const auto& rel = hn::releases();
+    check(rel.size() == 33 && rel.front().version == "1.12.0" && rel[1].version == "1.11.24" && rel[2].version == "1.11.23"
+              && rel[3].version == "1.11.22" && rel[4].version == "1.11.21" && rel[5].version == "1.11.20" && rel[6].version == "1.11.19"
+              && rel[7].version == "1.11.18" && rel[8].version == "1.11.17"
+              && rel[9].version == "1.11.16" && rel[10].version == "1.11.15"
+              && rel[11].version == "1.11.14" && rel[12].version == "1.11.13" && rel[13].version == "1.11.12"
+              && rel[14].version == "1.11.11" && rel[15].version == "1.11.10"
+              && rel[16].version == "1.11.9" && rel[17].version == "1.11.8"
+              && rel[18].version == "1.11.7" && rel[19].version == "1.11.6" && rel[20].version == "1.11.5"
+              && rel[21].version == "1.11.4" && rel[22].version == "1.11.3" && rel[23].version == "1.11.2"
+              && rel[24].version == "1.11.1" && rel[25].version == "1.11" && rel[26].version == "1.10.4",
+          "notes : 33 versions, la 1.12.0 en tete, puis la 1.11.24 \xC3\xA0 la 1.11, et la 1.10.4");
     // 1.11.2 (T2, tranches 41, 42 et 44 ; decisions 187, 201 et 216) : 23 lignes en 8 domaines, dont 2 cartes de la fenetre Nouveautes.
     // Tranche 46 (SYM, decision 240) : + Dupliquer dans un symbole (C) et la section Parametres du symbole (N) : 25 lignes.
     {
@@ -16952,7 +16956,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 244,   // 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 251,   // 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -17095,7 +17099,7 @@ void centreAide111() {
     // Integration 1.11 (I111) : la 1.10.4 ajoute objet-vanne-3-voies (La bibliotheque d'objets) : 206.
     // 1.11.1 (T2, decision 107) : Programmer gagne variables-api (API. : les variables de l'automate) : 207.
     check(ix.count(hc::Chapter::Hmi) == 209, "centre : L'IHM a les 209 sujets des chapitres 2 a 8 du guide (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue)");
-    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 32, "centre : 11 expressions, 32 notes (1.11.24)");
+    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 33, "centre : 11 expressions, 33 notes (1.12.0)");
     // Tranche 3 : les 11 types de T3 (hmi::exprguide::all(), depot-o), passes par in.expressions ; les
     // cles de la liste de secours sont les siennes (enumeration, pas enum).
     {
@@ -17157,10 +17161,10 @@ void centreAide111() {
         check(o, "page Raccourcis : Ctrl+Maj+O dessine en trois touches, repere 1.11");
 
         const auto n110 = hc::notesPage("1.10");
-        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 32
+        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 33
                   && !n110.summary.empty() && !n110.date.empty(),
               "page Notes : 1.10 -> 1.10.0, 22 lignes en 7 domaines, sa date et son resume");
-        check(hc::notesPage("").version == "1.11.24" && hc::notesPage("9.9").version == "1.11.24",
+        check(hc::notesPage("").version == "1.12.0" && hc::notesPage("9.9").version == "1.12.0",
               "page Notes : sans version (ou inconnue), la plus recente");
         const auto simu = hc::notesPage("1.10.0", "Simulation");
         check(simu.sections.size() == 1 && simu.rows == 4 && simu.domains.size() == 7,
@@ -17504,7 +17508,7 @@ void centreAide111() {
         // Les notes de version n'ont pas de tutoriel : ni la carte "Regarder le tutoriel" (hasTutorial, que
         // lit HelpCenterScreen::showTopic), ni la pastille dans l'arbre. Les autres pages speciales gardent
         // les leurs (T1 ecrit les tutoriels des raccourcis et de Signaler).
-        bool notesSans = ix.count(hc::Chapter::Notes) == 32;   // 1.11.3 a 1.11.24 : une version de plus
+        bool notesSans = ix.count(hc::Chapter::Notes) == 33;   // 1.11.3 a 1.12.0 : une version de plus
         for (const auto* t : ix.ofChapter(hc::Chapter::Notes)) notesSans = notesSans && !hc::hasTutorial(*t);
         const auto* raccourcis = ix.find("page-raccourcis");
         const auto* signaler = ix.find("page-signaler");
@@ -28064,6 +28068,108 @@ void selecteurTypes1119() {
     check(!app::typepicker::available(), "sans h\xC3\xB4te : pas de s\xC3\xA9lecteur (et pas d'entr\xC3\xA9" "e dans les listes)");
 }
 
+// 1.12.0 : LES NATIVES - la branche de l'arbre (IHM > Programmation generale > Natives),
+// ses fiches (app::natives), le volet. Chaque noeud a sa fiche, chaque fiche se compose
+// et se met en page dans les trois notations, la cle revient a son noeud.
+void natives1200() {
+    std::printf("1.12.0 : les natives - l'arbre, les fiches, le volet\n");
+    using NK = app::ProjectTreeModel::NodeKind;
+    auto doc = std::make_shared<Document>();
+    Project& p = doc->project;
+    p.views = {makeView(p, "Vue_1")};
+    auto plc = std::make_shared<domain::Project>();
+    app::ProjectTreeModel tree(plc);
+    tree.setHmi(doc);
+    const auto prog = tree.childAt(tree.hmiFolderNode(), 8);
+    check(app::ProjectTreeModel::kindOf(prog) == NK::HmiScripts, "natives : Programmation g\xC3\xA9n\xC3\xA9rale");
+    const auto root = tree.childAt(prog, 7);
+    check(app::ProjectTreeModel::kindOf(root) == NK::NativesFolder, "natives : le 8e dossier de Programmation g\xC3\xA9n\xC3\xA9rale");
+    same_text(tree.text(root), "Natives", "natives : son nom");
+    check(tree.style(root).icon == ui::Icon::Lock, "natives : le cadenas");
+    check(tree.childCount(root) == 5, "natives : Fonctions, Types, Op\xC3\xA9rateurs, Instructions, \xC3\x89num\xC3\xA9rations");
+    // Tout l'arbre des natives : chaque noeud a un texte, une cle, une fiche ; la cle rend le noeud.
+    const auto keys = app::natives::allKeys();
+    std::vector<ui::NodeId> stack{root};
+    std::size_t nodes = 0, bad = 0, roundTrip = 0;
+    std::vector<std::string> seen;
+    while (!stack.empty()) {
+        const auto n = stack.back();
+        stack.pop_back();
+        ++nodes;
+        const auto key = tree.nativeKeyOf(n);
+        seen.push_back(key);
+        if (tree.text(n).empty() || key.empty() || app::natives::article(key, "ST").empty()) {
+            if (++bad < 5) std::printf("    noeud sans texte, cle ou fiche : %s (%s)\n", tree.text(n).c_str(), key.c_str());
+        }
+        if (tree.nativeNodeOf(key) == n) ++roundTrip;
+        else if (roundTrip + 5 > nodes) std::printf("    la cle %s ne rend pas son noeud\n", key.c_str());
+        (void)tree.style(n);
+        (void)tree.counterOf(n);
+        for (std::size_t k = tree.childCount(n); k-- > 0;) stack.push_back(tree.childAt(n, k));
+    }
+    check(bad == 0, "natives : chaque noeud a son texte, sa cle, sa fiche (" + std::to_string(bad) + " sans)");
+    check(nodes == keys.size(), "natives : un noeud par cle (" + std::to_string(nodes) + " noeuds, " + std::to_string(keys.size()) + " cles)");
+    check(roundTrip == nodes, "natives : chaque cle rend son noeud (" + std::to_string(roundTrip) + " / " + std::to_string(nodes) + ")");
+    std::sort(seen.begin(), seen.end());
+    check(std::adjacent_find(seen.begin(), seen.end()) == seen.end(), "natives : des cles toutes differentes");
+    check(nodes > 500, "natives : plus de 500 natives (" + std::to_string(nodes) + ")");
+    // Les fiches, dans les trois notations : composees et mises en page sans rien qui depasse.
+    ui::HelpMetrics hm;
+    hm.measure = [](std::string_view t, bool, bool) { return 8.f * static_cast<float>(t.size()); };
+    std::size_t composed = 0, heroes = 0;
+    for (const auto& key : keys)
+        for (const char* notation : {"ST", "C", "C++"}) {
+            const auto a = app::natives::article(key, notation);
+            if (a.empty()) continue;
+            ++composed;
+            heroes += a.blocks.front().kind == ui::HelpBlockKind::Hero ? 1 : 0;
+            const auto lay = ui::layoutArticle(a, 760.f, hm);
+            (void)lay;
+        }
+    check(composed == keys.size() * 3, "natives : " + std::to_string(composed) + " fiches compos\xC3\xA9" "es (3 notations)");
+    check(heroes == composed, "natives : chaque fiche commence par son en-t\xC3\xAAte");
+    // Une fonction : signature, langages, ou l'ecrire, parametres, exemple verifie, selecteur.
+    const auto limit = app::natives::article("fonction:LIMIT", "C");
+    bool sel = false, accentC = false, param = false;
+    for (const auto& b : limit.blocks) {
+        if (b.kind == ui::HelpBlockKind::Code && b.links.size() > 1) {
+            sel = true;
+            for (const auto& l : b.links) accentC = accentC || (l.target == "notation:C" && l.tone == ui::Tone::Accent);
+        }
+        param = param || (b.kind == ui::HelpBlockKind::Term && b.label == "MN");
+    }
+    check(sel && accentC, "natives : LIMIT, le selecteur ST | C | C++ (C choisie)");
+    check(param, "natives : LIMIT, ses param\xC3\xA8tres (MN)");
+    // Les mots : F1 dans un script.
+    same_text(app::natives::keyOfWord("limit"), "fonction:LIMIT", "natives : F1 sur limit");
+    same_text(app::natives::keyOfWord("INT_TO_REAL"), "conversion:INT_TO_REAL", "natives : F1 sur INT_TO_REAL");
+    same_text(app::natives::keyOfWord("TRANSITION#Fondu"), "enum-valeur:TRANSITION#Fondu", "natives : F1 sur TRANSITION#Fondu");
+    same_text(app::natives::keyOfWord("Pompe_1"), "", "natives : un nom du projet n'est pas une native");
+    same_text(app::natives::insertText("fonction:LIMIT"), "LIMIT()", "natives : Inserer pose l'appel");
+    same_text(app::natives::insertText("enum-valeur:TRANSITION#Fondu"), "TRANSITION#Fondu", "natives : Inserer pose la valeur");
+    same_text(app::natives::insertText("types"), "", "natives : un dossier, rien a inserer");
+    // Le volet : une fiche, un lien, la notation gardee, Precedente, Inserer.
+    const auto before = help::news::session().helpNotation;
+    help::news::session().helpNotation = "ST";
+    app::HmiNativesPane pane("natives.essai");
+    std::string inserted, shownKey;
+    app::HmiNativesPane::Hosts hosts;
+    hosts.insert = [&inserted](const std::string& t) { inserted = t; return true; };
+    hosts.shown = [&shownKey](const std::string& k) { shownKey = k; };
+    pane.setHosts(hosts);
+    same_text(pane.current(), "natives", "volet natives : le sommaire d'abord");
+    check(pane.show("fonction:LIMIT"), "volet natives : la fiche de LIMIT");
+    check(!pane.show("fonction:N_EXISTE_PAS"), "volet natives : une cle inconnue ne change rien");
+    same_text(pane.current(), "fonction:LIMIT", "volet natives : ... LIMIT reste");
+    check(pane.follow("notation:C++") && help::news::session().helpNotation == "C++", "volet natives : C++ choisie, gardee pour l'aide");
+    check(!pane.follow("notation:C++"), "volet natives : la meme notation, rien a faire");
+    check(pane.follow("native:categorie:" + std::string(hmi::natives::function("LIMIT")->category)) && shownKey.rfind("categorie:", 0) == 0,
+          "volet natives : un lien, l'arbre suit (" + shownKey + ")");
+    check(pane.back() && pane.current() == "fonction:LIMIT", "volet natives : Pr\xC3\xA9" "c\xC3\xA9" "dente");
+    check(pane.insertCurrent() && inserted == "LIMIT()", "volet natives : Ins\xC3\xA9rer (" + inserted + ")");
+    help::news::session().helpNotation = before;
+}
+
 int main(int argc, char** argv) {
     // 1.11.1 (API-V) : HMI_TEST_APIV=1 - la vue des variables de l'automate et API dans l'aide a la saisie, seules.
     if (const char* only = std::getenv("HMI_TEST_APIV"); only && *only == '1') {
@@ -28077,6 +28183,12 @@ int main(int argc, char** argv) {
         if (argc > 1) configuration_et_variables(argv[1]);
         if (argc > 1) apiVue1112_dupliquer(argv[1]);   // 1.11.2 (D13)
         if (argc > 1) valuePickerApi1113(argv[1]);     // 1.11.3 : le selecteur et les membres de l'automate
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
+    // 1.12.0 : HMI_TEST_NATIVES=1 - les natives, seules.
+    if (const char* only = std::getenv("HMI_TEST_NATIVES"); only && *only == '1') {
+        natives1200();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -28436,6 +28548,7 @@ int main(int argc, char** argv) {
     lot1122();                              // 1.11.22 : surcharges d'un symbole, parametres partout, Simulation deballee
     raccourcis1123();                       // 1.11.23 : l'onglet Raccourcis d'une vue
     explorateur1123();                      // 1.11.23 : l'explorateur - puces, titres de domaine
+    natives1200();                          // 1.12.0 : les natives - l'arbre, les fiches, le volet
     if (argc > 1) configuration_et_variables(argv[1]);
     if (argc > 1) aide_saisie_scripts(argv[1]);
     if (argc > 1) aide_saisie_champs(argv[1]);

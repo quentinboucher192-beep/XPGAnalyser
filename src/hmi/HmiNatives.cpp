@@ -511,4 +511,29 @@ std::optional<TypeCard> typeCard(std::string_view name) {
     return std::nullopt;
 }
 
+const Tree& tree() {
+    static const Tree t = [] {
+        Tree out;
+        for (const auto& c : categories()) {
+            std::vector<std::size_t> list;
+            for (std::size_t i = 0; i < functions().size(); ++i)
+                if (functions()[i].category == c.id) list.push_back(i);
+            if (list.empty()) continue;                    // op, instr : les operateurs et les instructions
+            out.categories.push_back(&c);
+            out.functionsOf.push_back(std::move(list));
+        }
+        out.types = typeCards();
+        out.conversionCount = conversions().size();
+        out.functionCount = functions().size() + out.conversionCount;
+        return out;
+    }();
+    return t;
+}
+
+std::string conversionName(std::size_t from, std::size_t to) {
+    const auto& types = conversionTypes();
+    if (from >= types.size() || to >= types.size() || from == to) return {};
+    return std::string(types[from]) + "_TO_" + std::string(types[to]);
+}
+
 } // namespace hmi::natives

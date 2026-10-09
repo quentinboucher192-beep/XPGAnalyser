@@ -1,6 +1,8 @@
 // =============================================================================
 //  resources/windows/xpg_analyzer.rc - l'icone et la version de
-//  xpg_analyzer.exe, pour un projet Visual Studio fait a la main
+//  XpgAnalyzer-API.exe et de XpgAnalyzer-IHM.exe, pour le projet Visual Studio
+//  (1.12.0 : XPG_EDITION_IHM, donne par XpgAnalyzer.vcxproj selon XpgEdition,
+//  choisit les textes de XPGAnalyser IHM ; sans lui, ceux de XPGAnalyser API)
 // -----------------------------------------------------------------------------
 //  Avec CMake, c'est xpg_analyzer.rc.in qui sert (le chemin de l'icone y est
 //  mis en absolu). Ici le chemin est relatif au dossier du projet (celui du
@@ -13,8 +15,8 @@
 1 ICON "resources\\logo\\xpg_analyzer.ico"
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION     1,11,24,0
- PRODUCTVERSION  1,11,24,0
+ FILEVERSION     1,12,0,0
+ PRODUCTVERSION  1,12,0,0
  FILEFLAGSMASK   0x3fL
  FILEFLAGS       0x0L
  FILEOS          VOS_NT_WINDOWS32
@@ -25,12 +27,19 @@ BEGIN
     BEGIN
         BLOCK "040C04B0"
         BEGIN
-            VALUE "FileDescription",  "XPGAnalyser - analyse, IHM et simulation"
-            VALUE "FileVersion",      "1.11.24"
-            VALUE "InternalName",     "XpgAnalyzer"
-            VALUE "OriginalFilename", "XpgAnalyzer.exe"
-            VALUE "ProductName",      "XPGAnalyser"
-            VALUE "ProductVersion",   "1.11.24"
+#ifdef XPG_EDITION_IHM
+            VALUE "FileDescription",  "XPGAnalyser IHM"
+            VALUE "InternalName",     "XpgAnalyzer-IHM"
+            VALUE "OriginalFilename", "XpgAnalyzer-IHM.exe"
+            VALUE "ProductName",      "XPGAnalyser IHM"
+#else
+            VALUE "FileDescription",  "XPGAnalyser API"
+            VALUE "InternalName",     "XpgAnalyzer-API"
+            VALUE "OriginalFilename", "XpgAnalyzer-API.exe"
+            VALUE "ProductName",      "XPGAnalyser API"
+#endif
+            VALUE "FileVersion",      "1.12.0"
+            VALUE "ProductVersion",   "1.12.0"
         END
     END
     BLOCK "VarFileInfo"

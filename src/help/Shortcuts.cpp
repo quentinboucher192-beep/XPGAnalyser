@@ -13,6 +13,7 @@
 //  la lit par bindingOf().
 // =============================================================================
 #include "Shortcuts.hpp"
+#include "../core/Edition.hpp"   // 1.12.0 : les raccourcis de chaque application
 
 #include <algorithm>
 #include <cctype>
@@ -290,6 +291,15 @@ const std::vector<Shortcut>& all() { return kTable; }
 const std::vector<Context>& contexts() {
     static const std::vector<Context> k = {Context::General, Context::HmiEditor, Context::Scripts,
                                            Context::Simulation, Context::Grafcet, Context::Help};
+    // 1.12.0 : chaque application ses raccourcis - XPGAnalyser API sans l'editeur ni les
+    // scripts de l'IHM, XPGAnalyser IHM sans le Grafcet de l'automate.
+    static const std::vector<Context> api = {Context::General, Context::Simulation, Context::Grafcet, Context::Help};
+    static const std::vector<Context> ihm = {Context::General, Context::HmiEditor, Context::Scripts, Context::Simulation, Context::Help};
+    switch (core::edition()) {
+        case core::Edition::Api: return api;
+        case core::Edition::Ihm: return ihm;
+        case core::Edition::Both: break;
+    }
     return k;
 }
 
@@ -358,7 +368,9 @@ std::string bindingOf(std::string_view action) {
 std::vector<const Shortcut*> search(std::string_view term) {
     const auto t = fold(trim(term));
     std::vector<const Shortcut*> onKey, onText;
+    const auto& shown = contexts();   // 1.12.0 : ceux de l'application
     for (const auto& s : kTable) {
+        if (std::find(shown.begin(), shown.end(), s.context) == shown.end()) continue;
         if (t.empty()) { onKey.push_back(&s); continue; }
         if (fold(s.keys).find(t) != std::string::npos) { onKey.push_back(&s); continue; }
         std::string hay(s.text);

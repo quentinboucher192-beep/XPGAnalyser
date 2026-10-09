@@ -163,27 +163,37 @@ try {
     $sln = Join-Path $X.Racine (Get-XpgConfig -Section 'Projet' -Cle 'solution' -Defaut 'XpgAnalyzer.sln')
     if (-not (Test-Path -LiteralPath $sln)) { Stop-Xpg -Code 1 -Message "Solution introuvable : $sln" }
     $cible = 'Build'; if ($Action -eq 'rebuild') { $cible = 'Rebuild' }
-    $code = Invoke-XpgProcessus -Fichier $msvc.MsBuild -Arguments @($sln, "/t:$cible", "/p:Configuration=$Configuration", "/p:Platform=$plateforme", '/m', '/nologo', '/v:minimal', '/nr:false', '/clp:Summary') `
-            -Dossier $X.Racine -Afficher -Libelle 'MSBuild'
-    if ($code -ne 0) {
-        Stop-Xpg -Code 1 -Message "La compilation a échoué (MSBuild, code $code)." -Conseil "Les erreurs sont ci-dessus et dans le journal ($($X.Journal)). Une erreur MSVC dans le code : envoie ce journal."
+    # 1.12.0 : deux applications, un seul projet (XpgEdition) - XPGAnalyser API, puis XPGAnalyser IHM.
+    $exes = @()
+    foreach ($ed in @(@{ Edition = 'API'; Cle = 'exe'; Defaut = 'XpgAnalyzer-API.exe' }, @{ Edition = 'IHM'; Cle = 'exe_ihm'; Defaut = 'XpgAnalyzer-IHM.exe' })) {
+        $code = Invoke-XpgProcessus -Fichier $msvc.MsBuild -Arguments @($sln, "/t:$cible", "/p:Configuration=$Configuration", "/p:Platform=$plateforme", "/p:XpgEdition=$($ed.Edition)", '/m', '/nologo', '/v:minimal', '/nr:false', '/clp:Summary') `
+                -Dossier $X.Racine -Afficher -Libelle "MSBuild ($($ed.Edition))"
+        if ($code -ne 0) {
+            Stop-Xpg -Code 1 -Message "La compilation de XPGAnalyser $($ed.Edition) a échoué (MSBuild, code $code)." -Conseil "Les erreurs sont ci-dessus et dans le journal ($($X.Journal)). Une erreur MSVC dans le code : envoie ce journal."
+        }
+        $e = Join-Path $X.Racine ("build\{0}\{1}" -f $Configuration, (Get-XpgConfig -Section 'Produit' -Cle $ed.Cle -Defaut $ed.Defaut))
+        if (-not (Test-Path -LiteralPath $e)) { Stop-Xpg -Code 1 -Message "MSBuild dit OK mais l'exe est absent : $e" }
+        $exes += $e
     }
-    $exe = Join-Path $X.Racine ("build\{0}\{1}" -f $Configuration, (Get-XpgConfig -Section 'Produit' -Cle 'exe' -Defaut 'XpgAnalyzer.exe'))
-    if (-not (Test-Path -LiteralPath $exe)) { Stop-Xpg -Code 1 -Message "MSBuild dit OK mais l'exe est absent : $exe" }
-    Complete-XpgEtape -Statut OK -Detail ("{0} ({1}, {2})" -f $exe, (Format-XpgTaille (Get-Item -LiteralPath $exe).Length), (Get-XpgArchitecturePe $exe))
+    $exe = $exes[0]
+    Complete-XpgEtape -Statut OK -Detail (($exes | ForEach-Object { "{0} ({1}, {2})" -f $_, (Format-XpgTaille (Get-Item -LiteralPath $_).Length), (Get-XpgArchitecturePe $_) }) -join ' ; ')
 
     Start-XpgEtape 'Vérification de l''exe (--version)' | Out-Null
     $sdl = Join-Path (Split-Path -Parent $exe) 'SDL3.dll'
     if (-not (Test-Path -LiteralPath $sdl)) { Complete-XpgEtape -Statut ECHEC -Detail 'SDL3.dll absent à côté de l''exe'; Stop-Xpg -Code 1 -Message 'SDL3.dll n''a pas été copié (événement après génération du projet).' }
-    $sortie = Join-Path ([System.IO.Path]::GetTempPath()) ("xpg-version-{0}.txt" -f $PID)
-    $p = Start-Process -FilePath $exe -ArgumentList '--version' -Wait -PassThru -NoNewWindow -RedirectStandardOutput $sortie
-    $texte = ''
-    if (Test-Path -LiteralPath $sortie) { $texte = ([System.IO.File]::ReadAllText($sortie)).Trim(); Remove-Item -LiteralPath $sortie -Force -ErrorAction SilentlyContinue }
-    if ($p.ExitCode -ne 0 -or $texte -notmatch [regex]::Escape($version)) {
-        Complete-XpgEtape -Statut ECHEC -Detail "code $($p.ExitCode), sortie « $texte »"
-        Stop-Xpg -Code 1 -Message 'L''exe compilé ne démarre pas correctement.' -Conseil 'Une DLL manque souvent (SDL3.dll, runtime) : voir le journal.'
+    $textes = @()
+    foreach ($e in $exes) {
+        $sortie = Join-Path ([System.IO.Path]::GetTempPath()) ("xpg-version-{0}.txt" -f $PID)
+        $p = Start-Process -FilePath $e -ArgumentList '--version' -Wait -PassThru -NoNewWindow -RedirectStandardOutput $sortie
+        $texte = ''
+        if (Test-Path -LiteralPath $sortie) { $texte = ([System.IO.File]::ReadAllText($sortie)).Trim(); Remove-Item -LiteralPath $sortie -Force -ErrorAction SilentlyContinue }
+        if ($p.ExitCode -ne 0 -or $texte -notmatch [regex]::Escape($version)) {
+            Complete-XpgEtape -Statut ECHEC -Detail "$([System.IO.Path]::GetFileName($e)) : code $($p.ExitCode), sortie « $texte »"
+            Stop-Xpg -Code 1 -Message 'L''exe compilé ne démarre pas correctement.' -Conseil 'Une DLL manque souvent (SDL3.dll, runtime) : voir le journal.'
+        }
+        $textes += $texte
     }
-    Complete-XpgEtape -Statut OK -Detail $texte
+    Complete-XpgEtape -Statut OK -Detail ($textes -join ' ; ')
     Exit-Xpg -Code 0
 } catch {
     Stop-Xpg -Code 1 -Message "Erreur inattendue : $($_.Exception.Message)" -Exception $_

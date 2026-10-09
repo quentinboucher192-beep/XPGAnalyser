@@ -59,9 +59,13 @@
          une variable d'environnement SDL3_DIR (souvent posee pour CMake, vers un autre
          dossier) ne le detourne pas. Une autre SDL3 : msbuild /p:SDL3_DIR=dossier. -->
     <SDL3_DIR>$(ProjectDir)third_party\SDL3</SDL3_DIR>
+    <!-- 1.12.0 : deux applications, un seul projet. XpgEdition = API (par defaut) ou IHM
+         (msbuild /p:XpgEdition=IHM ; build.bat compile les deux) : XpgAnalyzer-API.exe et
+         XpgAnalyzer-IHM.exe, cote a cote dans build\<Configuration>, chacun ses .obj. -->
+    <XpgEdition Condition="'$(XpgEdition)'==''">API</XpgEdition>
     <OutDir>$(ProjectDir)build\$(Configuration)\</OutDir>
-    <IntDir>$(ProjectDir)build\obj\$(Configuration)\</IntDir>
-    <TargetName>XpgAnalyzer</TargetName>
+    <IntDir>$(ProjectDir)build\obj\$(Configuration)-$(XpgEdition)\</IntDir>
+    <TargetName>XpgAnalyzer-$(XpgEdition)</TargetName>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
@@ -82,8 +86,12 @@
         fois, et aucun .obj compile avec un ancien en-tete (HmiModel.hpp)
         ne reste. Au prochain lot, 22 : la meme chose.
       -->
-      <PreprocessorDefinitions>NOMINMAX;WIN32_LEAN_AND_MEAN;_CRT_SECURE_NO_WARNINGS;XPG_WITH_SDL=1;XPG_HAVE_MINIZ=1;XPG_EDITION=24;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NOMINMAX;WIN32_LEAN_AND_MEAN;_CRT_SECURE_NO_WARNINGS;XPG_WITH_SDL=1;XPG_HAVE_MINIZ=1;XPG_EDITION=25;XPG_EDITION_$(XpgEdition)=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
+    <!-- 1.12.0 : les textes de la version (resources\windows\xpg_analyzer.rc) de chaque application. -->
+    <ResourceCompile>
+      <PreprocessorDefinitions>XPG_EDITION_$(XpgEdition);%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ResourceCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <AdditionalLibraryDirectories>$(SDL3_DIR)\lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
@@ -475,6 +483,8 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\hmi\HmiEnumPanes.cpp" />
     <ClCompile Include="src\app\hmi\HmiExprPage.cpp" />
     <ClCompile Include="src\app\hmi\HmiExprPageView.cpp" />
+    <ClCompile Include="src\app\hmi\HmiNativesCards.cpp" />
+    <ClCompile Include="src\app\hmi\HmiNativesPane.cpp" />
     <ClCompile Include="src\app\hmi\HmiObjectAlarmPanes.cpp" />
     <ClCompile Include="src\app\hmi\HmiObjectAlarmTree.cpp" />
     <ClCompile Include="src\app\hmi\HmiOperatorPanes.cpp" />
@@ -867,6 +877,8 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\hmi\HmiExprPage.hpp" />
     <ClInclude Include="src\app\hmi\HmiExprPageView.hpp" />
     <ClInclude Include="src\app\hmi\HmiLive.hpp" />
+    <ClInclude Include="src\app\hmi\HmiNativesCards.hpp" />
+    <ClInclude Include="src\app\hmi\HmiNativesPane.hpp" />
     <ClInclude Include="src\app\hmi\HmiObjectAlarmPanes.hpp" />
     <ClInclude Include="src\app\hmi\HmiObjectAlarmTree.hpp" />
     <ClInclude Include="src\app\hmi\HmiOperatorPanes.hpp" />

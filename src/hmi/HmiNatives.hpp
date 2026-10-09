@@ -140,4 +140,20 @@ struct TypeCard {
 [[nodiscard]] std::vector<TypeCard>   typeCards();
 [[nodiscard]] std::optional<TypeCard> typeCard(std::string_view name);
 
+// ------------------------------------------------------------------------ l'arbre ---
+// 1.12.0 : la branche Natives de l'arbre (IHM > Programmation generale) : ses listes,
+// gardees - conversions() et typeCards() se recomposent a chaque appel, l'arbre les
+// lit plusieurs fois par ligne et par image.
+struct Tree {
+    std::vector<const Category*>          categories;     // celles qui ont des fonctions, dans l'ordre du catalogue
+    std::vector<std::vector<std::size_t>> functionsOf;    // par categorie : les rangs dans functions()
+    std::vector<TypeCard>                 types;
+    std::size_t                           conversionCount{0};
+    std::size_t                           functionCount{0};   // les fonctions et les conversions
+};
+[[nodiscard]] const Tree& tree();
+// Du type de rang `from`, la conversion vers le type de rang `to` (rangs de
+// conversionTypes) ; vide : hors bornes, ou le meme type.
+[[nodiscard]] std::string conversionName(std::size_t from, std::size_t to);
+
 } // namespace hmi::natives

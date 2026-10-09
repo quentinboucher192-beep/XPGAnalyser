@@ -806,6 +806,7 @@ void MainAnalysisScreen::tickTree(double now) {
     }
     // 2e partie : suivre l'onglet actif ; le rail et le pied deux fois par seconde ;
     // les mises a jour de bibliotheque quand le projet a change (au plus une fois par seconde).
+    noteCodePage();     // 1.12.0 : Inserer d'une native y ecrit
     followActiveTab();
     if (explorer_ && app_.scripted() && explorer_->hasHoverActions()) explorer_->setHoverActions({});   // un script : pas d'actions au survol
     if (now - treeChromeAt_ >= 0.5) {
@@ -912,7 +913,7 @@ ui::NodeId pageTreeNode(const std::map<std::string, ui::Widget*>& apiTabs, const
         {"ressources", Kind::HmiResources}, {"scripts", Kind::HmiScripts}, {"alarmes", Kind::HmiAlarms},
         {"recettes", Kind::HmiRecipes}, {"utilisateurs", Kind::HmiUsers}, {"langues", Kind::HmiLanguages},
         {"unites", Kind::HmiUnits}, {"communication", Kind::HmiComm}, {"simulation", Kind::HmiSimulation},
-        {"versions", Kind::VersionsFolder}};
+        {"versions", Kind::VersionsFolder}, {"natives", Kind::NativesFolder}};   // 1.12.0 : les natives
     if (!page) return ui::kInvalidNode;
     for (const auto& [key, w] : apiTabs)
         if (w == page)

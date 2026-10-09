@@ -12,7 +12,7 @@ namespace help::center {
 
 KeysPage keysPage(std::string_view term, std::optional<keys::Context> only) {
     KeysPage page;
-    page.total = keys::all().size();
+    page.total = keys::search({}).size();   // 1.12.0 : ceux de l'application
     const auto found = keys::search(term);   // un terme vide : tout, dans l'ordre de la table
     for (const auto c : keys::contexts()) {
         if (only && *only != c) continue;

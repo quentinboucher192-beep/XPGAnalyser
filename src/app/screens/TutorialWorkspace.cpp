@@ -370,7 +370,10 @@ bool MainAnalysisScreen::revealTreeNode(ui::NodeId node, gfx::Rect* rowOut) {
                          || kind == NK::HmiTypesFolder || kind == NK::HmiConfig || kind == NK::VersionsFolder
                          || kind == NK::HmiListFolder || kind == NK::ApiFolder || kind == NK::TablesFolder
                          || kind == NK::MacroFolder || kind == NK::MacroSubFolder || kind == NK::TaskFolder || kind == NK::Task
-                         || kind == NK::SimFolder;   // Lot API 8 : Centre de simulation (Automate, IHM y sont)
+                         || kind == NK::SimFolder    // Lot API 8 : Centre de simulation (Automate, IHM y sont)
+                         // 1.12.0 : les dossiers des natives, seulement pour y montrer une native
+                         || (ProjectTreeModel::isNativesKind(kind) && ProjectTreeModel::isNativesKind(ProjectTreeModel::kindOf(node))
+                             && treeModel_->childCount(at) > 0);
         if (!folder) return false;
         path.push_back(at);
         for (std::size_t i = 0; i < treeModel_->childCount(at); ++i)

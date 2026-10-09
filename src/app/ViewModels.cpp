@@ -13,6 +13,7 @@
 #include <optional>
 #include "../hmi/HmiCommands.hpp"
 #include "../hmi/HmiPublicVars.hpp"
+#include "../hmi/HmiNatives.hpp"   // 1.12.0 : la branche Natives
 #include "../hmi/HmiAlarmGroups.hpp"   // 1.11.1 (decision 108) : le groupe de l'IHM lie a celui d'un objet
 #include "hmi/HmiTreeData.hpp"
 #include "hmi/HmiObjectAlarmTree.hpp"   // 1.10 (chantier O) : les donnees seulement (pas de lien avec l'IHM)
@@ -25,6 +26,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
 #include <cstring>
 
 namespace app {
@@ -1050,7 +1052,21 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             return g ? hmitree::usersOf(hmi_->project, g->id).size() : 0;
         }
         case NodeKind::HmiRoles:      return hmi_ ? hmi_->project.security.roles.size() : 0;
-        case NodeKind::HmiScripts:    return hmi_ ? 7 : 0;   // lot 9 : + variables systeme, d'instances ; lot 16 : + types IHM
+        case NodeKind::HmiScripts:    return hmi_ ? 8 : 0;   // lot 9 : + variables systeme, d'instances ; lot 16 : + types IHM ; 1.12.0 : + Natives
+        // ---- 1.12.0 : les natives (hmi::natives::tree) ----
+        case NodeKind::NativesFolder:       return hmi_ ? 5 : 0;
+        case NodeKind::NativesFunctions:    return hmi::natives::tree().categories.size() + 1;
+        case NodeKind::NativesCategory:     return i < hmi::natives::tree().functionsOf.size() ? hmi::natives::tree().functionsOf[i].size() : 0;
+        case NodeKind::NativesConversions:  return hmi::natives::conversionTypes().size();
+        case NodeKind::NativesConvSource:   return i < hmi::natives::conversionTypes().size() ? hmi::natives::conversionTypes().size() - 1 : 0;
+        case NodeKind::NativesTypes:        return hmi::natives::tree().types.size();
+        case NodeKind::NativesOperators:    return hmi::natives::operators().size();
+        case NodeKind::NativesInstructions: return hmi::natives::instructions().size();
+        case NodeKind::NativesEnums:        return hmi::natives::enums().size();
+        case NodeKind::NativesEnum:         return i < hmi::natives::enums().size() ? hmi::natives::enums()[i].values.size() : 0;
+        case NodeKind::NativesFunction: case NodeKind::NativesConversion: case NodeKind::NativesType:
+        case NodeKind::NativesOperator: case NodeKind::NativesInstruction: case NodeKind::NativesEnumValue:
+            return 0;
         case NodeKind::HmiScriptsFolder:   return hmi_ ? hmilists::childrenOf(hmi_->project, hmi::fold::List::Scripts, {}).size() : 0;
         case NodeKind::HmiFunctionsFolder: return hmi_ ? overloadUnits(hmi_->project.programs.functions).size() : 0;   // 1.11.21 : regroupees
         case NodeKind::HmiTypesFolder:     return hmi_ ? hmilists::childrenOf(hmi_->project, hmi::fold::List::Types, {}).size() : 0;   // lot 16, 21
@@ -1063,9 +1079,9 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         case NodeKind::HmiUsedFolder:      return hmi_ ? usedVariables().size() : 0;
         // ---- lot 9
         case NodeKind::HmiSysFolder: {                                   // 1.12.0 : les domaines montres
-            std::size_t n = 0;
-            for (std::size_t d = 0; d < hmi::pub::kSysDomainCount; ++d) n += hmi::pub::sysDomainShown(d) ? 1 : 0;
-            return hmi_ ? n : 0;
+            std::size_t shown = 0;
+            for (std::size_t d = 0; d < hmi::pub::kSysDomainCount; ++d) shown += hmi::pub::sysDomainShown(d) ? 1 : 0;
+            return hmi_ ? shown : 0;
         }
         case NodeKind::HmiSysDomain:  return hmi_ ? hmi::pub::sysVarsOf(static_cast<int>(i)).size() : 0;
         case NodeKind::HmiInstFolder: return hmi_ ? hmi_->project.views.size() : 0;
@@ -1522,9 +1538,40 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             // Lot 16 : les types IHM avant les variables.
             static constexpr NodeKind folders[] = {NodeKind::HmiScriptsFolder, NodeKind::HmiFunctionsFolder, NodeKind::HmiTypesFolder,
                                                    NodeKind::HmiVariablesFolder, NodeKind::HmiUsedFolder,
-                                                   NodeKind::HmiSysFolder, NodeKind::HmiInstFolder};
+                                                   NodeKind::HmiSysFolder, NodeKind::HmiInstFolder, NodeKind::NativesFolder};
             return k < std::size(folders) ? pack(folders[k], 0) : ui::kInvalidNode;
         }
+        // ---- 1.12.0 : les natives ----
+        case NodeKind::NativesFolder: {
+            static constexpr NodeKind parts[] = {NodeKind::NativesFunctions, NodeKind::NativesTypes, NodeKind::NativesOperators,
+                                                 NodeKind::NativesInstructions, NodeKind::NativesEnums};
+            return k < std::size(parts) ? pack(parts[k], 0) : ui::kInvalidNode;
+        }
+        case NodeKind::NativesFunctions: {
+            const auto cats = hmi::natives::tree().categories.size();
+            return k < cats ? pack(NodeKind::NativesCategory, static_cast<Index>(k)) : k == cats ? pack(NodeKind::NativesConversions, 0) : ui::kInvalidNode;
+        }
+        case NodeKind::NativesCategory:
+            return i < hmi::natives::tree().functionsOf.size() && k < hmi::natives::tree().functionsOf[i].size()
+                       ? pack(NodeKind::NativesFunction, i, static_cast<Index>(k)) : ui::kInvalidNode;
+        case NodeKind::NativesConversions:
+            return k < hmi::natives::conversionTypes().size() ? pack(NodeKind::NativesConvSource, static_cast<Index>(k)) : ui::kInvalidNode;
+        case NodeKind::NativesConvSource: {
+            const auto types = hmi::natives::conversionTypes().size();
+            const auto to = k < i ? k : k + 1;                       // le meme type saute
+            return i < types && to < types ? pack(NodeKind::NativesConversion, i, static_cast<Index>(to)) : ui::kInvalidNode;
+        }
+        case NodeKind::NativesTypes:
+            return k < hmi::natives::tree().types.size() ? pack(NodeKind::NativesType, static_cast<Index>(k)) : ui::kInvalidNode;
+        case NodeKind::NativesOperators:
+            return k < hmi::natives::operators().size() ? pack(NodeKind::NativesOperator, static_cast<Index>(k)) : ui::kInvalidNode;
+        case NodeKind::NativesInstructions:
+            return k < hmi::natives::instructions().size() ? pack(NodeKind::NativesInstruction, static_cast<Index>(k)) : ui::kInvalidNode;
+        case NodeKind::NativesEnums:
+            return k < hmi::natives::enums().size() ? pack(NodeKind::NativesEnum, static_cast<Index>(k)) : ui::kInvalidNode;
+        case NodeKind::NativesEnum:
+            return i < hmi::natives::enums().size() && k < hmi::natives::enums()[i].values.size()
+                       ? pack(NodeKind::NativesEnumValue, i, static_cast<Index>(k)) : ui::kInvalidNode;
         case NodeKind::HmiTypesFolder: {                // lot 21 : ses dossiers, puis ses types
             if (!hmi_) return ui::kInvalidNode;
             const auto kids = hmilists::childrenOf(hmi_->project, hmi::fold::List::Types, {});
@@ -1803,6 +1850,9 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             case NK::HmiVarFolder: case NK::HmiUsedFolder: case NK::HmiSysFolder: case NK::HmiSysDomain:
             case NK::HmiInstFolder: case NK::HmiInstViewInfo: case NK::HmiListFolder:
             case NK::HmiInstAlarmGroup: case NK::HmiInstAlarms:            // 1.11.1 (decision 108)
+            case NK::NativesFunctions: case NK::NativesCategory: case NK::NativesConversions: case NK::NativesConvSource:
+            case NK::NativesTypes: case NK::NativesOperators: case NK::NativesInstructions: case NK::NativesEnums:
+            case NK::NativesEnum:                                          // 1.12.0
                 return true;
             default:
                 return false;
@@ -1850,7 +1900,8 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
                 || (k >= NK::HmiObjectFunctions && k <= NK::HmiSymbolFunction)                       // 1.11.10
                 || (k >= NK::HmiCodeGroup && k <= NK::HmiSymbolOverloads)                            // 1.11.21 : le contenu d'un code
                 || k == NK::HmiObjectFamily || k == NK::HmiObjectParam || k == NK::HmiObjectMarker   // 1.10.2 (chantier A)
-                || (k >= NK::HmiInstParam && k <= NK::HmiInstAlarmVar);                              // 1.11.1 (decision 108)
+                || (k >= NK::HmiInstParam && k <= NK::HmiInstAlarmVar)                               // 1.11.1 (decision 108)
+                || ProjectTreeModel::isNativesKind(k);                                               // 1.12.0
         }
     } // namespace
 
@@ -2784,12 +2835,57 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             if (v->bound()) label += "   \xE2\x86\x94 " + v->equipment + (v->address.empty() ? std::string{} : " " + v->address);
             return label + (v->description.empty() ? std::string{} : "   // " + v->description);
         }
+        // ---- 1.12.0 : les natives (verrouillees) -------------------------------------
+        case NodeKind::NativesFolder:      return "Natives";
+        case NodeKind::NativesFunctions:   return "Fonctions" + countTag(hmi::natives::tree().functionCount);
+        case NodeKind::NativesCategory: {
+            const auto& t = hmi::natives::tree();
+            return i < t.categories.size() ? std::string(t.categories[i]->title) + countTag(t.functionsOf[i].size()) : std::string{};
+        }
+        case NodeKind::NativesFunction: {
+            const auto& t = hmi::natives::tree();
+            const auto sub = subOf(n);
+            if (i >= t.functionsOf.size() || sub >= t.functionsOf[i].size()) return {};
+            const auto& f = hmi::natives::functions()[t.functionsOf[i][sub]];
+            return std::string(f.name) + hmi::natives::shortSignature(f) + (f.returns.empty() ? std::string{} : " : " + std::string(f.returns));
+        }
+        case NodeKind::NativesConversions: return "Conversions X_TO_Y" + countTag(hmi::natives::tree().conversionCount);
+        case NodeKind::NativesConvSource: {
+            const auto& types = hmi::natives::conversionTypes();
+            return i < types.size() ? std::string(types[i]) + "_TO_\xE2\x80\xA6" + countTag(types.size() - 1) : std::string{};
+        }
+        case NodeKind::NativesConversion:  return hmi::natives::conversionName(i, subOf(n));
+        case NodeKind::NativesTypes:       return "Types" + countTag(hmi::natives::tree().types.size());
+        case NodeKind::NativesType: {
+            const auto& types = hmi::natives::tree().types;
+            if (i >= types.size()) return {};
+            const auto& t = types[i];
+            return t.name + "   " + t.size + (t.bits ? " \xC2\xB7 " + std::to_string(t.bits) + " bits" : std::string{});
+        }
+        case NodeKind::NativesOperators:   return "Op\xC3\xA9rateurs" + countTag(hmi::natives::operators().size());
+        case NodeKind::NativesOperator:
+            return i < hmi::natives::operators().size()
+                       ? std::string(hmi::natives::operators()[i].symbol) + "   " + std::string(hmi::natives::operators()[i].name) : std::string{};
+        case NodeKind::NativesInstructions: return "Instructions" + countTag(hmi::natives::instructions().size());
+        case NodeKind::NativesInstruction:
+            return i < hmi::natives::instructions().size()
+                       ? std::string(hmi::natives::instructions()[i].keyword) + "   " + std::string(hmi::natives::instructions()[i].name) : std::string{};
+        case NodeKind::NativesEnums:       return "\xC3\x89num\xC3\xA9rations" + countTag(hmi::natives::enums().size());
+        case NodeKind::NativesEnum:
+            return i < hmi::natives::enums().size()
+                       ? std::string(hmi::natives::enums()[i].name) + countTag(hmi::natives::enums()[i].values.size()) : std::string{};
+        case NodeKind::NativesEnumValue: {
+            const auto sub = subOf(n);
+            if (i >= hmi::natives::enums().size() || sub >= hmi::natives::enums()[i].values.size()) return {};
+            const auto& e = hmi::natives::enums()[i];
+            return std::string(e.name) + "#" + std::string(e.values[sub].name) + " = " + std::to_string(e.values[sub].number);
+        }
         // ---- lot 9 : les variables systeme et d'instances --------------------------
         case NodeKind::HmiSysFolder: {
-            std::size_t n = 0;                                           // 1.12.0 : celles des domaines montres
+            std::size_t shown = 0;                                       // 1.12.0 : celles des domaines montres
             for (std::size_t d = 0; d < hmi::pub::kSysDomainCount; ++d)
-                if (hmi::pub::sysDomainShown(d)) n += hmi::pub::sysVarsOf(static_cast<int>(d)).size();
-            return "Variables syst\xC3\xA8me" + countTag(core::hasApi() ? hmi::pub::kSysVarCount : n);
+                if (hmi::pub::sysDomainShown(d)) shown += hmi::pub::sysVarsOf(static_cast<int>(d)).size();
+            return "Variables syst\xC3\xA8me" + countTag(core::hasApi() ? hmi::pub::kSysVarCount : shown);
         }
         case NodeKind::HmiSysDomain:
             return i < hmi::pub::kSysDomainCount ? std::string(hmi::pub::kSysDomains[i]) + countTag(hmi::pub::sysVarsOf(static_cast<int>(i)).size())
@@ -3033,7 +3129,9 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         const auto isCodeKind = k == NodeKind::HmiGeneralScript || k == NodeKind::HmiViewScript || k == NodeKind::HmiFunction
                              || k == NodeKind::HmiSymbolFunction || k == NodeKind::HmiObjectFunction || k == NodeKind::HmiOverloads
                              || k == NodeKind::HmiSymbolOverloads || k == NodeKind::HmiCodeEntry || k == NodeKind::HmiCodeInner
-                             || k == NodeKind::HmiView || k == NodeKind::HmiVariable;
+                             || k == NodeKind::HmiView || k == NodeKind::HmiVariable
+                             || k == NodeKind::NativesFunction || k == NodeKind::NativesType || k == NodeKind::NativesOperator
+                             || k == NodeKind::NativesInstruction || k == NodeKind::NativesEnumValue;   // 1.12.0
         if (!isCodeKind) return;
         std::string t = text(n);
         // Les marques entre parentheses deviennent des etiquettes : "  (E/S)", "  (sortie)",
@@ -3106,6 +3204,18 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             break;
         case NodeKind::HmiVariable:
             if (s.iconTone == ui::Tone::None) tint(ui::Tone::Family2);
+            break;
+        case NodeKind::NativesFunction:                         // 1.12.0 : "LIMIT(MN, IN, MX) : ANY"
+            tint(ui::Tone::Family1);
+            muteAt(t.find('('), true);
+            break;
+        case NodeKind::NativesType:                             // "INT   2 octets . 16 bits"
+        case NodeKind::NativesOperator:                         // "**   Puissance"
+        case NodeKind::NativesInstruction:                      // "IF   Si ... alors"
+            muteAt(t.find("   "), false);
+            break;
+        case NodeKind::NativesEnumValue:                        // "TRANSITION#Fondu = 1"
+            muteAt(t.find(" = "), true);
             break;
         default:
             break;
@@ -3783,6 +3893,24 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         }
         case NodeKind::HmiVarFolder:     s.icon = ui::Icon::Folder; s.iconTone = ui::Tone::Warning; break;
         // ---- lot 9 : la pastille dit R (lecture seule) ou R/W
+        // ---- 1.12.0 : les natives - le cadenas sur la branche, des feuilles en lecture seule ----
+        case NodeKind::NativesFolder:
+            s.icon = ui::Icon::Lock;
+            s.iconTone = ui::Tone::Accent;
+            s.tags.push_back({"verrouill\xC3\xA9" "es", ui::Tone::Muted});
+            break;
+        case NodeKind::NativesFunctions: case NodeKind::NativesCategory: case NodeKind::NativesConversions:
+        case NodeKind::NativesConvSource: case NodeKind::NativesTypes: case NodeKind::NativesOperators:
+        case NodeKind::NativesInstructions: case NodeKind::NativesEnums:
+            s.icon = ui::Icon::Folder;
+            break;
+        case NodeKind::NativesFunction:
+        case NodeKind::NativesConversion:  s.icon = ui::Icon::Code; break;
+        case NodeKind::NativesType:        s.icon = ui::Icon::DerivedType; s.iconTone = ui::Tone::Family3; break;
+        case NodeKind::NativesOperator:    s.icon = ui::Icon::Code; s.iconTone = ui::Tone::Muted; break;
+        case NodeKind::NativesInstruction: s.icon = ui::Icon::Section; s.iconTone = ui::Tone::Family4; break;
+        case NodeKind::NativesEnum:        s.icon = ui::Icon::Constant; s.iconTone = ui::Tone::Family3; break;
+        case NodeKind::NativesEnumValue:   s.icon = ui::Icon::Constant; s.iconTone = ui::Tone::Muted; break;
         case NodeKind::HmiSysFolder:     s.icon = ui::Icon::Settings; break;
         case NodeKind::HmiSysDomain:     s.icon = ui::Icon::Folder; break;
         case NodeKind::HmiSysVar:
@@ -4110,6 +4238,121 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
     }
 
     // 1.11.1 (decision 108) : le chemin d'une variable de « Variables d'instances ».
+    // 1.12.0 : la cle de la fiche d'une native (app::natives::article).
+    std::string ProjectTreeModel::nativeKeyOf(ui::NodeId n) const {
+        namespace hn = hmi::natives;
+        const auto i = indexOf(n);
+        const auto sub = subOf(n);
+        switch (kindOf(n)) {
+        case NodeKind::NativesFolder:       return "natives";
+        case NodeKind::NativesFunctions:    return "fonctions";
+        case NodeKind::NativesCategory:
+            return i < hn::tree().categories.size() ? "categorie:" + std::string(hn::tree().categories[i]->id) : std::string{};
+        case NodeKind::NativesFunction: {
+            const auto& t = hn::tree();
+            return i < t.functionsOf.size() && sub < t.functionsOf[i].size()
+                       ? "fonction:" + std::string(hn::functions()[t.functionsOf[i][sub]].name) : std::string{};
+        }
+        case NodeKind::NativesConversions:  return "conversions";
+        case NodeKind::NativesConvSource:
+            return i < hn::conversionTypes().size() ? "conv-source:" + std::string(hn::conversionTypes()[i]) : std::string{};
+        case NodeKind::NativesConversion: {
+            const auto name = hn::conversionName(i, sub);
+            return name.empty() ? std::string{} : "conversion:" + name;
+        }
+        case NodeKind::NativesTypes:        return "types";
+        case NodeKind::NativesType:         return i < hn::tree().types.size() ? "type:" + hn::tree().types[i].name : std::string{};
+        case NodeKind::NativesOperators:    return "operateurs";
+        case NodeKind::NativesOperator:     return i < hn::operators().size() ? "operateur:" + std::to_string(i) : std::string{};
+        case NodeKind::NativesInstructions: return "instructions";
+        case NodeKind::NativesInstruction:  return i < hn::instructions().size() ? "instruction:" + std::to_string(i) : std::string{};
+        case NodeKind::NativesEnums:        return "enumerations";
+        case NodeKind::NativesEnum:         return i < hn::enums().size() ? "enum:" + std::string(hn::enums()[i].name) : std::string{};
+        case NodeKind::NativesEnumValue:
+            return i < hn::enums().size() && sub < hn::enums()[i].values.size()
+                       ? "enum-valeur:" + std::string(hn::enums()[i].name) + "#" + std::string(hn::enums()[i].values[sub].name) : std::string{};
+        default:
+            return {};
+        }
+    }
+
+    // La cle d'une native -> son noeud (la fiche montree, l'arbre qui suit).
+    ui::NodeId ProjectTreeModel::nativeNodeOf(std::string_view key) const {
+        namespace hn = hmi::natives;
+        const auto after = [&key](std::string_view prefix) {
+            return key.rfind(prefix, 0) == 0 ? std::string(key.substr(prefix.size())) : std::string{};
+        };
+        const auto upper = [](std::string v) {
+            for (auto& c : v) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+            return v;
+        };
+        if (key == "natives") return pack(NodeKind::NativesFolder, 0);
+        if (key == "fonctions") return pack(NodeKind::NativesFunctions, 0);
+        if (key == "conversions") return pack(NodeKind::NativesConversions, 0);
+        if (key == "types") return pack(NodeKind::NativesTypes, 0);
+        if (key == "operateurs") return pack(NodeKind::NativesOperators, 0);
+        if (key == "instructions") return pack(NodeKind::NativesInstructions, 0);
+        if (key == "enumerations") return pack(NodeKind::NativesEnums, 0);
+        const auto& t = hn::tree();
+        if (const auto id = after("categorie:"); !id.empty()) {
+            for (std::size_t c = 0; c < t.categories.size(); ++c)
+                if (t.categories[c]->id == id) return pack(NodeKind::NativesCategory, static_cast<Index>(c));
+        }
+        if (const auto name = upper(after("fonction:")); !name.empty()) {
+            for (std::size_t c = 0; c < t.functionsOf.size(); ++c)
+                for (std::size_t r = 0; r < t.functionsOf[c].size(); ++r)
+                    if (upper(std::string(hn::functions()[t.functionsOf[c][r]].name)) == name)
+                        return pack(NodeKind::NativesFunction, static_cast<Index>(c), static_cast<Index>(r));
+        }
+        const auto typeRank = [](const std::string& name) {
+            const auto& types = hn::conversionTypes();
+            for (std::size_t r = 0; r < types.size(); ++r)
+                if (std::string(types[r]) == name) return r;
+            return types.size();
+        };
+        if (const auto from = upper(after("conv-source:")); !from.empty()) {
+            if (const auto r = typeRank(from); r < hn::conversionTypes().size()) return pack(NodeKind::NativesConvSource, static_cast<Index>(r));
+        }
+        if (const auto name = upper(after("conversion:")); !name.empty()) {
+            if (const auto c = hn::conversion(name)) {
+                const auto a = typeRank(upper(c->from));
+                const auto b = typeRank(upper(c->to));
+                if (a < hn::conversionTypes().size() && b < hn::conversionTypes().size())
+                    return pack(NodeKind::NativesConversion, static_cast<Index>(a), static_cast<Index>(b));
+            }
+        }
+        if (const auto name = upper(after("type:")); !name.empty()) {
+            for (std::size_t r = 0; r < t.types.size(); ++r)
+                if (upper(t.types[r].name) == name) return pack(NodeKind::NativesType, static_cast<Index>(r));
+        }
+        if (const auto r = after("operateur:"); !r.empty()) {
+            const auto v = static_cast<std::size_t>(std::strtoul(r.c_str(), nullptr, 10));
+            if (v < hn::operators().size()) return pack(NodeKind::NativesOperator, static_cast<Index>(v));
+        }
+        if (const auto r = after("instruction:"); !r.empty()) {
+            const auto v = static_cast<std::size_t>(std::strtoul(r.c_str(), nullptr, 10));
+            if (v < hn::instructions().size()) return pack(NodeKind::NativesInstruction, static_cast<Index>(v));
+        }
+        const auto enumRank = [&upper](const std::string& name) {
+            for (std::size_t r = 0; r < hn::enums().size(); ++r)
+                if (upper(std::string(hn::enums()[r].name)) == upper(name)) return r;
+            return hn::enums().size();
+        };
+        if (const auto name = after("enum:"); !name.empty()) {
+            if (const auto r = enumRank(name); r < hn::enums().size()) return pack(NodeKind::NativesEnum, static_cast<Index>(r));
+        }
+        if (const auto lit = after("enum-valeur:"); !lit.empty()) {
+            const auto hash = lit.find('#');
+            if (const auto r = enumRank(lit.substr(0, hash)); hash != std::string::npos && r < hn::enums().size()) {
+                const auto& values = hn::enums()[r].values;
+                for (std::size_t v = 0; v < values.size(); ++v)
+                    if (upper(std::string(values[v].name)) == upper(lit.substr(hash + 1)))
+                        return pack(NodeKind::NativesEnumValue, static_cast<Index>(r), static_cast<Index>(v));
+            }
+        }
+        return ui::kInvalidNode;
+    }
+
     std::string ProjectTreeModel::hmiInstPathOf(ui::NodeId n) const {
         if (!hmi_) return {};
         const auto i = indexOf(n);
