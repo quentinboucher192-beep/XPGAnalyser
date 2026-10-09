@@ -126,6 +126,7 @@ const PaneEntry kPanes[] = {
     {"scripts", "Programmation g\xC3\xA9n\xC3\xA9rale \xE2\x80\xBA Types IHM", 2},
     {"fonctions", "Programmation g\xC3\xA9n\xC3\xA9rale \xE2\x80\xBA Fonctions", -1},
     {"variables-publiques", "Programmation g\xC3\xA9n\xC3\xA9rale \xE2\x80\xBA Variables syst\xC3\xA8me et d'instances", -1},
+    {"natives", "Programmation g\xC3\xA9n\xC3\xA9rale \xE2\x80\xBA Natives (fonctions, types, \xC3\xA9num\xC3\xA9rations)", -1},   // 1.12.0
     {"communication", "\xC3\x89quipements \xE2\x80\xBA R\xC3\xA9seau du PC", HmiCommPane::TNetwork},
     {"communication", "\xC3\x89quipements \xE2\x80\xBA Scanner IP", HmiCommPane::TScanner},
     {"communication", "\xC3\x89quipements \xE2\x80\xBA \xC3\x89quipements", HmiCommPane::TEquipments},

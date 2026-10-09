@@ -1303,6 +1303,11 @@ std::string MainAnalysisScreen::treeCardText(ui::NodeId node) const {
         if (!st.pill.empty() && st.pillTone == ui::Tone::Warning)
             card += "\n" + st.pill + (kind == Kind::ApiFolder ? "" : " avec une version plus r\xC3\xA9" "cente en biblioth\xC3\xA8que");
     if (st.dotTone != ui::Tone::None) card += "\n" + st.dotTip;
+    // 1.12.0 : une native se lit et s'insere ; elle ne se renomme ni ne se supprime.
+    if (ProjectTreeModel::isNativesKind(kind)) {
+        card += "\nNatif, en lecture seule \xC2\xB7 clic : sa fiche \xC2\xB7 clic droit : ins\xC3\xA9rer dans le script, copier";
+        return card;
+    }
     card += "\nClic : ouvrir \xC2\xB7 clic droit : \xC3\xA9pingler, renommer\xE2\x80\xA6 \xC2\xB7 F2 : renommer";
     return card;
 }
