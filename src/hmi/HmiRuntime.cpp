@@ -11,6 +11,7 @@
 #include "HmiPolicy.hpp"
 
 #include "HmiScript.hpp"
+#include "HmiDecl.hpp"        // 1.11.18 (refonte, lot 3) : les declarations du modele, reconstruites
 #include "HmiOperators.hpp"   // 1.10 (integration) : les operateurs du projet (S2) a l'execution (S1)
 #include "HmiEnums.hpp"       // 1.10 (decision 15) : les enumerations IHM dans les scripts (S1)
 #include "HmiMarkers.hpp"     // 1.11 (REP) : les reperes $...$, transparents pour le calcul
@@ -1143,7 +1144,8 @@ bool Runtime::callFunction(const HmiFunction& f, const std::vector<std::pair<std
         return false;
     };
     if (depth_ >= kMaxDepth) return fail("appel circulaire (plus de " + std::to_string(kMaxDepth) + " niveaux)");
-    const Prepared& prep = prepare(f.body, source, true);
+    std::string composed;                                            // 1.11.18 (lot 3) : ses declarations du modele
+    const Prepared& prep = prepare(decl::codeOf(f, composed), source, true);
     if (!prep.program) return fail(prep.error);
     Env::Frame frame;
     // Les parametres : dans l'ordre (Moyenne(1, 2)) ou par leur nom (Moyenne(b := 2, a := 1)).
@@ -1244,7 +1246,8 @@ bool Runtime::runScript(const Script& sc, const std::string& source, double now,
     origin_.script = sc.id;
     origin_.view = project_ ? project_->viewOfScript(sc.id) : kNoId;
     origin_.name = origin_.view != kNoId ? source : sc.name;
-    const bool ok = runStatements(sc.body, source, now, why, sc.id);
+    std::string composed;                                            // 1.11.18 (lot 3) : ses declarations du modele
+    const bool ok = runStatements(decl::codeOf(sc, composed), source, now, why, sc.id);
     origin_ = callerOrigin;
     if (!ok) XPG_TRACE(Script, "erreur du script %s : %s", source.c_str(), why->empty() ? "(raison inconnue)" : why->c_str());
     auto& sp = perf_.scripts[sc.id];

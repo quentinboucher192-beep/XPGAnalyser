@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <initializer_list>
 #include <iterator>
+#include <set>
 #include <utility>
 
 namespace hmi {
@@ -70,6 +71,53 @@ std::optional<ScriptLang> scriptLangFromKey(std::string_view s) noexcept {
     if (iequals(s, "ST"))  return ScriptLang::ST;
     if (iequals(s, "C"))   return ScriptLang::C;
     if (iequals(s, "C++") || iequals(s, "CPP")) return ScriptLang::Cpp;
+    return std::nullopt;
+}
+
+// ---- 1.11.18 (refonte, lot 3) : les declarations ----------------------------
+std::string_view declKindKey(DeclKind k) noexcept {
+    switch (k) {
+        case DeclKind::Constant:  return "constante";
+        case DeclKind::Variable:  return "variable";
+        case DeclKind::Parameter: return "parametre";
+    }
+    return "variable";
+}
+std::optional<DeclKind> declKindFromKey(std::string_view s) noexcept {
+    for (const DeclKind k : {DeclKind::Constant, DeclKind::Variable, DeclKind::Parameter})
+        if (iequals(s, declKindKey(k))) return k;
+    return std::nullopt;
+}
+std::string_view storageKey(Storage st) noexcept {
+    switch (st) {
+        case Storage::Execution:  return "execution";
+        case Storage::Kept:       return "conservee";
+        case Storage::Persistent: return "persistante";
+    }
+    return "execution";
+}
+std::optional<Storage> storageFromKey(std::string_view s) noexcept {
+    for (const Storage st : {Storage::Execution, Storage::Kept, Storage::Persistent})
+        if (iequals(s, storageKey(st))) return st;
+    return std::nullopt;
+}
+std::string_view passModeKey(PassMode m) noexcept {
+    switch (m) {
+        case PassMode::In:    return "entree";
+        case PassMode::InOut: return "entree_sortie";
+        case PassMode::Out:   return "sortie";
+    }
+    return "entree";
+}
+std::optional<PassMode> passModeFromKey(std::string_view s) noexcept {
+    for (const PassMode m : {PassMode::In, PassMode::InOut, PassMode::Out})
+        if (iequals(s, passModeKey(m))) return m;
+    return std::nullopt;
+}
+std::string_view visibilityKey(Visibility v) noexcept { return v == Visibility::Private ? "privee" : "publique"; }
+std::optional<Visibility> visibilityFromKey(std::string_view s) noexcept {
+    if (iequals(s, "privee")) return Visibility::Private;
+    if (iequals(s, "publique")) return Visibility::Public;
     return std::nullopt;
 }
 
@@ -2420,6 +2468,72 @@ std::string uniqueFunctionName(const Project& p, std::string_view wanted) {
         if (!taken(candidate)) return candidate;
     }
     return std::string(wanted);
+}
+
+// ---- 1.11.18 (refonte, lot 3) : chaque liste de declarations ------------------
+namespace {
+template <class V, class F>
+void visitViewDeclarations(V& v, F& f) {
+    for (auto& sc : v.scripts) f(sc.decls);
+    for (auto& fn : v.functions) f(fn.decls);
+    for (auto& o : v.operators) f(o.decls);
+    for (auto& ob : v.objects)
+        for (auto& fo : ob.functionOverrides) f(fo.decls);
+}
+template <class P, class F>
+void visitDeclarations(P& p, F& f) {
+    for (auto& sc : p.programs.scripts) f(sc.decls);
+    for (auto& fn : p.programs.functions) f(fn.decls);
+    for (auto& t : p.programs.types)
+        for (auto& o : t.operators) f(o.decls);
+    for (auto& v : p.views) visitViewDeclarations(v, f);
+}
+} // namespace
+
+void forEachDeclarations(Project& p, const std::function<void(std::vector<Declaration>&)>& f) { visitDeclarations(p, f); }
+void forEachDeclarations(const Project& p, const std::function<void(const std::vector<Declaration>&)>& f) { visitDeclarations(p, f); }
+void forEachDeclarations(View& v, const std::function<void(std::vector<Declaration>&)>& f) { visitViewDeclarations(v, f); }
+
+bool uniqueDeclarationIds(Project& p) {
+    std::set<Id> seen;
+    bool changed = false;
+    const Id limit = p.nextId;                 // un identifiant venu d'un autre projet (un paquet) : neuf aussi
+    forEachDeclarations(p, [&](std::vector<Declaration>& list) {
+        for (auto& d : list)
+            if (d.id == kNoId || d.id >= limit || !seen.insert(d.id).second) {
+                d.id = p.allocate();
+                seen.insert(d.id);
+                changed = true;
+            }
+    });
+    return changed;
+}
+
+bool uniqueDeclarationIds(Project& p, View& changed) {
+    std::set<Id> taken;
+    const auto collect = [&](const std::vector<Declaration>& list) {
+        for (const auto& d : list) taken.insert(d.id);
+    };
+    for (const auto& sc : p.programs.scripts) collect(sc.decls);
+    for (const auto& fn : p.programs.functions) collect(fn.decls);
+    for (const auto& t : p.programs.types)
+        for (const auto& o : t.operators) collect(o.decls);
+    for (const auto& v : p.views)
+        if (v.id != changed.id) {
+            const auto add = [&](const std::vector<Declaration>& list) { collect(list); };
+            visitViewDeclarations(v, add);
+        }
+    bool renewed = false;
+    const Id limit = p.nextId;
+    forEachDeclarations(changed, [&](std::vector<Declaration>& list) {
+        for (auto& d : list)
+            if (d.id == kNoId || d.id >= limit || !taken.insert(d.id).second) {
+                d.id = p.allocate();
+                taken.insert(d.id);
+                renewed = true;
+            }
+    });
+    return renewed;
 }
 
 namespace {

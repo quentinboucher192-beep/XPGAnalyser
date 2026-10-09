@@ -37,6 +37,7 @@
 #include <array>
 #include <cstdint>
 #include <map>
+#include <functional>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -507,12 +508,61 @@ struct AlarmOverride {
     bool operator==(const AlarmOverride&) const = default;
 };
 
+// ---- 1.11.18 (refonte des scripts, lot 3) : LES DECLARATIONS D'UN CODE, DANS LE MODELE ----
+//  Les constantes, les variables et les parametres d'un script, d'une fonction (IHM
+//  ou de symbole), d'une redefinition (ses locales : sa signature est celle de la
+//  fonction redefinie) ou d'un operateur (ses locales : A et B sont implicites),
+//  hors du texte du code. Le moteur et les controles les lisent en texte : les blocs
+//  VAR... END_VAR reconstruits devant le corps, sur sa premiere ligne (hmi::decl::codeOf,
+//  HmiDecl.hpp) - les lignes du corps ne bougent pas. Un code sans declaration du
+//  modele se lit tel quel : un projet d'avant la 1.11.18 tourne a l'identique.
+//
+//                       un script            une fonction (redefinition, operateur)
+//    Constante          VAR CONSTANT         VAR CONSTANT
+//    Variable Execution VAR_TEMP             VAR (une fonction n'a pas de memoire)
+//    Variable Conservee VAR                  - (une faute)
+//    Variable Persistante VAR, rendue au lancement suivant - (une faute)
+//    Parametre          - (une faute)        VAR_INPUT / VAR_IN_OUT / VAR_OUTPUT
+//
+//  L'identifiant est stable (Project::allocate, jamais reutilise ; un double recoit un
+//  identifiant neuf au chargement et a chaque commande) : la remanence d'une variable
+//  Persistante, les references (lot 7) et le renommage (lot 10) s'y tiennent.
+enum class DeclKind : std::uint8_t { Constant, Variable, Parameter };
+// Une variable : remise a sa valeur initiale a chaque execution, gardee d'une
+// execution a l'autre, ou gardee aussi d'un lancement de l'IHM a l'autre.
+enum class Storage : std::uint8_t { Execution, Kept, Persistent };
+enum class PassMode : std::uint8_t { In, InOut, Out };   // le mode de passage d'un parametre
+// Sans effet avant le lot 7 (noms qualifies) : une declaration n'est vue que de son code.
+enum class Visibility : std::uint8_t { Private, Public };
+struct Declaration {
+    Id          id{kNoId};
+    DeclKind    kind{DeclKind::Variable};
+    std::string name;
+    std::string type;             // le texte du type (INT, ARRAY[1..4] OF REAL, T_VECTEUR...)
+    std::string value{};          // une constante : sa valeur ; une variable : sa valeur initiale ;
+                                  // un parametre : sa valeur par defaut ("" : aucune)
+    std::string description{};    // la documentation
+    Storage     storage{Storage::Execution};     // une variable
+    PassMode    mode{PassMode::In};              // un parametre
+    Visibility  visibility{Visibility::Public};  // D11 : neuve publique ; migree (lot 4) privee
+    bool operator==(const Declaration&) const = default;
+};
+[[nodiscard]] std::string_view           declKindKey(DeclKind) noexcept;       // "constante", "variable", "parametre"
+[[nodiscard]] std::optional<DeclKind>    declKindFromKey(std::string_view) noexcept;
+[[nodiscard]] std::string_view           storageKey(Storage) noexcept;         // "execution", "conservee", "persistante"
+[[nodiscard]] std::optional<Storage>     storageFromKey(std::string_view) noexcept;
+[[nodiscard]] std::string_view           passModeKey(PassMode) noexcept;       // "entree", "entree_sortie", "sortie"
+[[nodiscard]] std::optional<PassMode>    passModeFromKey(std::string_view) noexcept;
+[[nodiscard]] std::string_view           visibilityKey(Visibility) noexcept;   // "privee", "publique"
+[[nodiscard]] std::optional<Visibility>  visibilityFromKey(std::string_view) noexcept;
+
 // 1.11.10 : UNE FONCTION D'UN SYMBOLE REDEFINIE PAR UNE INSTANCE. Le symbole la
 // declare virtuelle (HmiFunction::isVirtual) ; l'instance garde son propre corps,
 // avec la meme signature (ses VAR_INPUT, son retour) : seule l'implementation change.
 struct FunctionOverride {
     std::string function;         // le nom de la fonction du symbole
     std::string body;             // le corps de l'instance (ST, avec ses declarations)
+    std::vector<Declaration> decls{};   // 1.11.18 (lot 3) : ses constantes et variables (pas de parametre)
     bool operator==(const FunctionOverride&) const = default;
 };
 
@@ -626,6 +676,7 @@ struct Script {
     std::string watch;
     std::string description;
     std::string folder{};           // lot 21 : son dossier dans la liste des scripts generaux ("" : la racine)
+    std::vector<Declaration> decls{};   // 1.11.18 (lot 3) : ses constantes et variables
     bool operator==(const Script&) const = default;
 };
 inline constexpr std::string_view kViewEvents[] = {"OnOpen", "OnCycle", "OnClose"};
@@ -647,6 +698,7 @@ struct HmiFunction {
     // 1.11.10 : une fonction d'un symbole (View::functions) - virtuelle : une instance
     // peut la redefinir (Object::functionOverrides). Sans effet sur une fonction IHM.
     bool        isVirtual{false};
+    std::vector<Declaration> decls{};   // 1.11.18 (lot 3) : ses parametres (dans l'ordre), constantes et variables
     bool operator==(const HmiFunction&) const = default;
 };
 
@@ -674,6 +726,7 @@ struct HmiOperator {
     std::string result{};         // le type rendu (d'une conversion : sa cible) ; vide : += -= *= /=
     std::string body{};           // le script
     std::string description{};
+    std::vector<Declaration> decls{};   // 1.11.18 (lot 3) : ses constantes et variables (A et B : implicites)
     bool operator==(const HmiOperator&) const = default;
 };
 
@@ -1787,6 +1840,18 @@ struct Project {
 [[nodiscard]] std::string uniqueLogin(const Project&, std::string_view wanted);
 [[nodiscard]] std::string uniqueStyleName(const Project&, std::string_view wanted);   // lot 12
 [[nodiscard]] std::string uniqueEquipmentName(const Project&, std::string_view wanted);   // lot 15
+// 1.11.18 (refonte, lot 3) : chaque liste de declarations du projet - scripts generaux et
+// de vue, fonctions IHM et de symbole, redefinitions des instances, operateurs des symboles
+// et des types IHM.
+void forEachDeclarations(Project&, const std::function<void(std::vector<Declaration>&)>&);
+void forEachDeclarations(const Project&, const std::function<void(const std::vector<Declaration>&)>&);
+void forEachDeclarations(View&, const std::function<void(std::vector<Declaration>&)>&);
+// Une declaration sans identifiant, dont l'identifiant est deja pris (une copie, un
+// fichier edite a la main) ou n'a pas encore ete donne par le projet (un paquet venu
+// d'un autre projet), en recoit un neuf. Vrai : l'une a change. La seconde forme :
+// une vue modifiee, pas encore remise au projet (changeView), contre le reste du projet.
+bool uniqueDeclarationIds(Project&);
+bool uniqueDeclarationIds(Project&, View& changed);
 // Ce que l'utilisateur peut : ses roles, par son groupe. "Administrer" vaut tout.
 [[nodiscard]] bool        userHas(const Project&, const User&, std::string_view permission);
 [[nodiscard]] int         userLevel(const Project&, const User&);

@@ -2,6 +2,7 @@
 
 #include "../sim/Interpreter.hpp"
 #include "HmiScriptCheck110.hpp"   // 1.10 : les noms du dialecte (fonctions internes, FOR EACH)
+#include "HmiDecl.hpp"              // 1.11.18 (refonte, lot 3) : les declarations du modele, reconstruites
 #include "HmiMarkers.hpp"          // 1.11.1 (REP) : les $ des reperes, transparents dans un script ST
 #include "HmiOperators.hpp"        // 1.11.17 : la signature d'un operateur (le lieu d'un appel)
 #include "HmiSymbols.hpp"          // 1.11.17 : la portee d'un symbole, rewriteNames (les textes d'un objet)
@@ -226,6 +227,24 @@ std::vector<ScriptDiagnostic> checkScript(ScriptLang lang, std::string_view code
     return out;
 }
 
+std::vector<ScriptDiagnostic> checkScript(const Script& sc, const TypeKnown& knownType) {
+    if (sc.decls.empty() || sc.lang != ScriptLang::ST) return checkScript(sc.lang, sc.body, sc.name, knownType);
+    // 1.11.18 (refonte, lot 3) : ses declarations du modele d'abord ; le code se lit avec
+    // celles qui sont justes, reconstruites sur sa ligne 1 (les lignes ne bougent pas).
+    std::vector<Declaration> valid;
+    auto out = decl::checkDeclarations(sc.decls, decl::Role::Script, sc.body, knownType, nullptr, &valid);
+    if (sc.body.find_first_not_of(" \t\r\n") == std::string::npos) {
+        out.push_back({ScriptDiagnostic::Severity::Warning, 0, "script vide"});
+        return out;
+    }
+    const auto composed = decl::composeCode(sc.body, valid, decl::Role::Script);
+    for (auto d : checkScript(sc.lang, composed.text, sc.name, knownType)) {
+        d.column = composed.bodyColumn(d.line, d.column);
+        out.push_back(std::move(d));
+    }
+    return out;
+}
+
 std::vector<NameUse> scriptNames(std::string_view source) {
     const std::string code = markers::strip(source);   // 1.11.1 (REP) : les $ des reperes, transparents
     // Lot 7 : ce que les blocs de declaration nomment n'est pas lu ailleurs, et
@@ -378,6 +397,13 @@ std::vector<PathUse> scriptPaths(std::string_view source) {
 }
 
 std::vector<std::string> scriptCalls(std::string_view body) { return quotedArgs(body, "IHM_APPELER"); }
+
+bool isReservedWord(std::string_view name) {
+    static const std::set<std::string> blocks = {"VAR", "VAR_TEMP", "VAR_INPUT", "VAR_IN_OUT", "VAR_OUTPUT", "END_VAR", "CONSTANT",
+                                                 "RETAIN", "FUNCTION", "END_FUNCTION"};
+    const std::string u = upper(name);
+    return stKeywords().count(u) > 0 || blocks.count(u) > 0;
+}
 
 std::vector<std::string> scriptViews(std::string_view body) {
     auto v = quotedArgs(body, "IHM_NAVIGUER");
@@ -717,6 +743,14 @@ CodeForm actionForm(const Action& a) {
     return a.operation == Operation::Log ? CodeForm::Template : CodeForm::Expression;
 }
 
+// 1.11.18 (refonte, lot 3) : les valeurs des declarations du modele d'un code (initiale,
+// constante, par defaut) - des expressions, lues dans le meme lieu que lui.
+template <class Decls, class Visit>
+void visitDeclarations(Decls& decls, const CodeSite& site, Visit& visit) {
+    for (auto& d : decls)
+        if (!d.value.empty()) visit(d.value, CodeForm::Expression, site);
+}
+
 // Les morceaux qu'en lit rewriteNames (une expression, une accolade d'un texte a trous,
 // une plume, un etat, une cellule, un argument...) ; vrai : l'un d'eux a change.
 template <class Visit>
@@ -766,9 +800,11 @@ void visitObject(const Project& p, O& o, const View* view, const View* scope, Vi
     }
     // 1.11.10 : le corps d'une redefinition est lu dans SON symbole (celui de l'instance).
     const View* own = o.functionOverrides.empty() ? nullptr : symbolOf(p, o);
-    for (auto& fo : o.functionOverrides)
-        visit(fo.body, CodeForm::Code,
-              CodeSite{.scope = own, .view = own, .where = at + "." + fo.function + " (red\xC3\xA9" "finition)"});
+    for (auto& fo : o.functionOverrides) {
+        const CodeSite site{.scope = own, .view = own, .where = at + "." + fo.function + " (red\xC3\xA9" "finition)"};
+        visit(fo.body, CodeForm::Code, site);
+        visitDeclarations(fo.decls, site, visit);
+    }
 }
 
 template <class P, class Visit>
@@ -780,23 +816,34 @@ void visitProject(P& p, Visit& visit) {
         visit(a.instruction, CodeForm::Template, site);
     };
     const auto ops = [&](auto& list, const std::string& owner) {
-        for (auto& o : list)
-            visit(o.body, CodeForm::Code, CodeSite{.where = "op\xC3\xA9rateur " + operatorSignature(o) + " (" + owner + ")"});
+        for (auto& o : list) {
+            const CodeSite site{.where = "op\xC3\xA9rateur " + operatorSignature(o) + " (" + owner + ")"};
+            visit(o.body, CodeForm::Code, site);
+            visitDeclarations(o.decls, site, visit);
+        }
     };
     for (auto& sc : p.programs.scripts) {
         if (sc.lang != ScriptLang::ST) continue;
         const CodeSite site{.where = "script " + sc.name};
         visit(sc.body, CodeForm::Code, site);
         visit(sc.watch, CodeForm::Expression, site);
+        visitDeclarations(sc.decls, site, visit);
     }
-    for (auto& f : p.programs.functions) visit(f.body, CodeForm::Code, CodeSite{.own = &f, .where = "fonction " + f.name});
+    for (auto& f : p.programs.functions) {
+        const CodeSite site{.own = &f, .where = "fonction " + f.name};
+        visit(f.body, CodeForm::Code, site);
+        visitDeclarations(f.decls, site, visit);
+    }
     for (auto& t : p.programs.types) ops(t.operators, "type " + t.name);
     for (auto& v : p.views) {
         // Le code d'un symbole, et d'une popup qu'il porte : un appel court y vise d'abord ses fonctions.
         const View* scope = isSymbolView(v) ? &v : popupOwner(p, v);
         for (auto& sc : v.scripts)
-            if (sc.lang == ScriptLang::ST)
-                visit(sc.body, CodeForm::Code, CodeSite{.scope = scope, .view = &v, .where = v.name + "." + sc.event});
+            if (sc.lang == ScriptLang::ST) {
+                const CodeSite site{.scope = scope, .view = &v, .where = v.name + "." + sc.event};
+                visit(sc.body, CodeForm::Code, site);
+                visitDeclarations(sc.decls, site, visit);
+            }
         if (!v.actions.empty()) {
             const CodeSite site{.scope = scope, .view = &v, .where = v.name + " (action de vue)"};
             Object holder;
@@ -812,8 +859,11 @@ void visitProject(P& p, Visit& visit) {
         visit(v.popup.title, CodeForm::Template, CodeSite{.where = v.name + " (titre)"});
         for (auto& prm : v.params)
             visit(prm.defaultValue, CodeForm::Expression, CodeSite{.where = v.name + " (param\xC3\xA8tre " + prm.name + ")"});
-        for (auto& fn : v.functions)
-            visit(fn.body, CodeForm::Code, CodeSite{.scope = scope, .view = &v, .where = "fonction " + v.name + "." + fn.name});
+        for (auto& fn : v.functions) {
+            const CodeSite site{.scope = scope, .view = &v, .where = "fonction " + v.name + "." + fn.name};
+            visit(fn.body, CodeForm::Code, site);
+            visitDeclarations(fn.decls, site, visit);
+        }
         ops(v.operators, v.name);
         for (auto& a : v.alarms) alarm(a, "alarme " + v.name + "." + a.name);
     }
@@ -896,7 +946,8 @@ std::string functionTemplate(std::string_view name, std::string_view returnType,
 
 std::string functionText(const HmiFunction& f) {
     // 1.11.1 (REP) : le corps sans les $ de ses reperes (ce texte ne sert qu'a l'analyse ; les lignes restent).
-    return "FUNCTION " + f.name + (f.returnType.empty() ? std::string{} : " : " + f.returnType) + " " + markers::strip(f.body)
+    // 1.11.18 (lot 3) : ses declarations du modele reconstruites sur la ligne 1 (decl::codeOf).
+    return "FUNCTION " + f.name + (f.returnType.empty() ? std::string{} : " : " + f.returnType) + " " + markers::strip(decl::codeOf(f))
          + "\nEND_FUNCTION\n";
 }
 
@@ -907,7 +958,7 @@ std::string functionSignature(const HmiFunction& f) {
         return sig;
     }
     std::string s = f.name + "(";
-    const auto parts = splitDeclarations(f.body, true);
+    const auto parts = splitDeclarations(decl::codeOf(f), true);       // 1.11.18 (lot 3) : ses parametres du modele aussi
     bool first = true;
     for (const auto* in : parts.inputs()) {
         s += (first ? "" : ", ") + in->name + " : " + in->type;
@@ -920,6 +971,25 @@ std::string functionSignature(const HmiFunction& f) {
 
 std::vector<ScriptDiagnostic> checkFunction(const HmiFunction& source, const TypeKnown& knownType) {
     using E = ScriptDiagnostic::Severity;
+    // 1.11.18 (refonte, lot 3) : ses declarations du modele d'abord ; le code se lit avec
+    // celles qui sont justes, reconstruites sur sa ligne 1 (les lignes ne bougent pas).
+    if (!source.decls.empty()) {
+        std::vector<Declaration> valid;
+        auto out = decl::checkDeclarations(source.decls, decl::Role::Function, source.body, knownType, nullptr, &valid);
+        valid.erase(std::remove_if(valid.begin(), valid.end(), [&](const Declaration& d) {
+                        if (upper(d.name) != upper(source.name)) return false;
+                        out.push_back({E::Error, 0, "d\xC3\xA9" "claration \xC2\xAB " + d.name
+                                                        + " \xC2\xBB : elle ne peut pas porter le nom de la fonction"});
+                        return true;
+                    }),
+                    valid.end());
+        HmiFunction flat = source;
+        flat.decls = std::move(valid);
+        flat.body = decl::codeOf(flat);
+        flat.decls.clear();
+        for (auto& d : checkFunction(flat, knownType)) out.push_back(std::move(d));
+        return out;
+    }
     HmiFunction f = source;                // 1.11.1 (REP) : le corps sans les $ de ses reperes (les lignes restent)
     f.body = markers::strip(source.body);
     std::vector<ScriptDiagnostic> out;

@@ -9,6 +9,7 @@
 #include "HmiLoginMenu.hpp"
 #include "HmiNavigation.hpp"
 #include "HmiScript.hpp"
+#include "HmiDecl.hpp"         // 1.11.18 (refonte, lot 3) : les declarations du modele, reconstruites
 
 #include "HmiEdit.hpp"
 #include "HmiExpr.hpp"
@@ -304,12 +305,13 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
     const auto names = [&](const Script& sc, Id view) {
         if (sc.lang != ScriptLang::ST) return;
         const View* owner = view != kNoId ? p.view(view) : nullptr;
-        const auto dialect = scriptcheck::dialectDeclared(sc.body);   // 1.10 : le dialecte IHM (S1) n'est pas inexistant
-        for (const auto& u : scriptNames(sc.body))
+        const std::string code = decl::codeOf(sc);                    // 1.11.18 (lot 3) : ses declarations du modele
+        const auto dialect = scriptcheck::dialectDeclared(code);      // 1.10 : le dialecte IHM (S1) n'est pas inexistant
+        for (const auto& u : scriptNames(code))
             if (!known(p, plc, u.name, owner) && !dialect.count(upperText(u.name)))
                 add(out, S::Error, "Script", view, kNoId, sc.name, "variable inexistante : " + u.name, sc.id, u.line);
         // Lot 16 : les structures et tableaux IHM - membres, indices constants, proprietes.
-        for (const auto& pp : types::pathProblems(p, sc.body))
+        for (const auto& pp : types::pathProblems(p, code))
             add(out, S::Error, "Script", view, kNoId, sc.name, pp.message, sc.id, pp.line);
         for (const auto& called : scriptCalls(sc.body))
             if (!p.generalScript(called))
@@ -369,12 +371,13 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
         if (key.rfind("IHM_", 0) == 0) issue(S::Error, "le pr\xC3\xA9" "fixe IHM_ est r\xC3\xA9serv\xC3\xA9 aux fonctions de l'IHM");
         if (p.variable(f.name)) issue(S::Error, "une variable IHM porte d\xC3\xA9j\xC3\xA0 ce nom : " + f.name);
         if (plc && plc(f.name)) issue(S::Warning, "'" + f.name + "' existe aussi dans l'automate : la fonction IHM passe avant");
-        const auto dialect = scriptcheck::dialectDeclared(f.body);   // 1.10 : le dialecte IHM (S1)
-        for (const auto& u : scriptNames(f.body))
+        const std::string code = decl::codeOf(f);                     // 1.11.18 (lot 3) : ses parametres du modele
+        const auto dialect = scriptcheck::dialectDeclared(code);      // 1.10 : le dialecte IHM (S1)
+        for (const auto& u : scriptNames(code))
             if (upperOf(u.name) != key && !known(p, plc, u.name) && !dialect.count(upperOf(u.name)))
                 issue(S::Error, "variable inexistante : " + u.name, u.line);
         auto& to = fnCalls[f.name];
-        for (const auto& c : scriptCallees(f.body))
+        for (const auto& c : scriptCallees(code))
             if (const auto* g = p.functionByName(c.name)) to.push_back(g->name);
     }
     cycles(fnCalls, [&](const std::vector<std::string>& loop) {
@@ -1363,15 +1366,15 @@ void checkPublicVars(const Project& p, std::vector<Issue>& out) {
         }
         for (const auto& sc : v.scripts)
             if (sc.lang == ScriptLang::ST)
-                code(sc.body, [&](std::string m, int line) { add(out, S::Error, "Script", v.id, kNoId, sc.name, std::move(m), sc.id, line); });
+                code(decl::codeOf(sc), [&](std::string m, int line) { add(out, S::Error, "Script", v.id, kNoId, sc.name, std::move(m), sc.id, line); });
     }
     for (const auto& sc : p.programs.scripts) {
         if (sc.lang == ScriptLang::ST)
-            code(sc.body, [&](std::string m, int line) { add(out, S::Error, "Script", kNoId, kNoId, sc.name, std::move(m), sc.id, line); });
+            code(decl::codeOf(sc), [&](std::string m, int line) { add(out, S::Error, "Script", kNoId, kNoId, sc.name, std::move(m), sc.id, line); });
         if (sc.event == "Changement") expr(sc.watch, false, [&](std::string m) { add(out, S::Error, "Script", kNoId, kNoId, sc.name, std::move(m), sc.id); });
     }
     for (const auto& f : p.programs.functions)
-        code(f.body, [&](std::string m, int line) {
+        code(decl::codeOf(f), [&](std::string m, int line) {
             Issue i;
             i.severity = S::Error;
             i.category = "Fonction";
@@ -3595,7 +3598,7 @@ std::vector<Issue> compileFocused(const Project& p, const CompileFocus* f) {
         for (const auto& sc : v.scripts) {
             if (f && !f->scripts.count(sc.id)) continue;
             ++scripts;
-            for (const auto& d : checkScript(sc.lang, sc.body, sc.name, knownType))
+            for (const auto& d : checkScript(sc, knownType))      // 1.11.18 (lot 3) : avec ses declarations du modele
                 add(out, severityOf(d.severity), "Script", v.id, kNoId, sc.name, d.message, sc.id, d.line);
         }
         // Lot 8 : le titre a trous d'une popup, la valeur par defaut des
@@ -3659,7 +3662,7 @@ std::vector<Issue> compileFocused(const Project& p, const CompileFocus* f) {
     for (const auto& sc : p.programs.scripts) {
         if (f && !f->scripts.count(sc.id)) continue;
         ++scripts;
-        for (const auto& d : checkScript(sc.lang, sc.body, sc.name, knownType))
+        for (const auto& d : checkScript(sc, knownType))      // 1.11.18 (lot 3) : avec ses declarations du modele
             add(out, severityOf(d.severity), "Script", kNoId, kNoId, sc.name, d.message, sc.id, d.line);
         if (sc.event == "Changement" && !sc.watch.empty()) {
             const auto e = Expression::compile(sc.watch);

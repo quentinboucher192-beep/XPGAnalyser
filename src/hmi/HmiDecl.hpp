@@ -140,4 +140,58 @@ struct Extract {
 // rendent la meme signature : l'empreinte d'interface du build (pipeline::functionIface).
 [[nodiscard]] std::string parameterSignature(const Extract&);
 
+// ---- 1.11.18 (refonte des scripts, lot 3) : LE PONT (voie A) ---------------------------
+//  Les declarations du modele (hmi::Declaration, HmiModel.hpp) rendues en texte pour le
+//  moteur et les controles, qui lisent du texte : les blocs VAR... END_VAR reconstruits
+//  devant le corps, SUR SA PREMIERE LIGNE. Les lignes du corps ne bougent pas ; seules les
+//  colonnes de sa ligne 1 glissent de `prefix`. Un code sans declaration du modele : son
+//  corps, tel quel - un projet d'avant la 1.11.18 se lit et tourne a l'identique.
+//    Script   : constante VAR CONSTANT ; variable Execution VAR_TEMP, Conservee et
+//               Persistante VAR (un parametre : VAR_INPUT, que le controle refuse) ;
+//    Function : parametres VAR_INPUT / VAR_IN_OUT / VAR_OUTPUT dans leur ordre, constante
+//               VAR CONSTANT, variable VAR (une fonction n'a pas de memoire).
+enum class Role : std::uint8_t { Script, Function, Operator };   // Operator : comme Function, sans parametre (A, B)
+struct Composed {
+    std::string text;                  // les blocs reconstruits, puis le corps
+    std::size_t prefix{0};             // les octets ajoutes devant la ligne 1 du corps
+    struct Span {
+        Id          id{kNoId};
+        std::size_t begin{0};          // "Nom : TYPE := valeur; " dans `text`
+        std::size_t end{0};
+    };
+    std::vector<Span> spans;
+    // Une colonne (1 = le premier octet) de `text`, sur la ligne `line` : dans les
+    // declarations reconstruites ? Sinon, sa colonne dans le corps.
+    [[nodiscard]] bool inDeclarations(int line, int column) const noexcept;
+    [[nodiscard]] int  bodyColumn(int line, int column) const noexcept;
+    [[nodiscard]] Id   declarationAt(int line, int column) const noexcept;   // kNoId : aucune
+};
+// `inherited` : une redefinition lit les parametres de la fonction redefinie.
+[[nodiscard]] Composed composeCode(std::string_view body, const std::vector<Declaration>& decls, Role,
+                                   const std::vector<Declaration>* inherited = nullptr);
+// Le texte complet d'un code (un script C ou C++ : son corps).
+[[nodiscard]] std::string codeOf(const Script&);
+[[nodiscard]] std::string codeOf(const HmiFunction&);
+[[nodiscard]] std::string codeOf(const FunctionOverride&, const HmiFunction* base);
+[[nodiscard]] std::string codeOf(const HmiOperator&);
+// Les memes, sans copie quand il n'y a rien a reconstruire (le moteur, a chaque appel) :
+// le corps lui-meme, sinon `storage`, qui garde le texte reconstruit.
+[[nodiscard]] const std::string& codeOf(const Script&, std::string& storage);
+[[nodiscard]] const std::string& codeOf(const HmiFunction&, std::string& storage);
+// Le bloc ou une declaration se reconstruit : "VAR CONSTANT", "VAR_TEMP", "VAR_INPUT"...
+[[nodiscard]] std::string_view blockOf(const Declaration&, Role) noexcept;
+
+// Les fautes des declarations elles-memes, sans le moteur : un nom vide, illisible,
+// reserve ou en double (dans le modele, ou aussi declare dans un bloc VAR du corps :
+// "declare deux fois") ; un type manquant ou non pris en charge ; une constante sans
+// valeur ; un parametre dans un script ou dans une redefinition (elle garde ceux de sa
+// fonction) ; une variable Conservee ou Persistante dans une fonction (sans memoire).
+// Ligne 0 (tout le code) ; le message nomme la declaration. `valid` : celles qui sont
+// justes (le controle du corps se fait avec elles seules : une faute de declaration ne
+// devient pas une faute de sa ligne 1).
+[[nodiscard]] std::vector<ScriptDiagnostic> checkDeclarations(const std::vector<Declaration>& decls, Role,
+                                                              std::string_view body, const TypeKnown& knownType = {},
+                                                              const std::vector<Declaration>* inherited = nullptr,
+                                                              std::vector<Declaration>* valid = nullptr);
+
 } // namespace hmi::decl

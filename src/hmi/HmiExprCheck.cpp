@@ -5,6 +5,7 @@
 //  les types, et ne s'arrete jamais sur ce qu'elle ne comprend pas.
 // =============================================================================
 #include "HmiExprCheck.hpp"
+#include "HmiDecl.hpp"   // 1.11.18 (refonte, lot 3) : les declarations du modele, reconstruites
 #include "HmiApiVars.hpp"   // 1.11.1 (API-M) : API.<globale>, API.<Unite>.<variable>
 #include "HmiPopupParams.hpp"
 
@@ -721,7 +722,7 @@ private:
                 problem(name + " ne rend pas de valeur : une expression ne peut appeler qu'une fonction qui rend quelque chose");
             else {
                 // Le nombre d'arguments : ses VAR_INPUT (une entree avec une valeur initiale est facultative).
-                const auto parts = splitDeclarations(symFn->body, true);
+                const auto parts = splitDeclarations(decl::codeOf(*symFn), true);   // 1.11.18 (lot 3) : ses parametres du modele
                 const auto inputs = parts.inputs();
                 int required = 0;
                 for (const auto* in : inputs) required += in->initial.empty() ? 1 : 0;

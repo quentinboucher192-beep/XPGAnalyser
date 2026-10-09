@@ -3042,6 +3042,8 @@ bool HmiTypesPane::renameType(Id id, const std::string& raw, std::string* why) {
             for (auto& m : x.members) rename(m.type);
         }
         for (auto& v : p.programs.variables) rename(v.type);
+        // 1.11.18 (refonte, lot 3) : les declarations du modele des scripts et des fonctions aussi.
+        hmi::forEachDeclarations(p, [&](std::vector<hmi::Declaration>& list) { for (auto& d : list) rename(d.type); });
         (void)hmi::renameTypeInOperators(p, before, name);   // 1.10 (chantier S2) : les operateurs suivent
         (void)hmi::renameEnumType(p, before, name);          // 1.10 (chantier E) : T_ANCIEN#x -> T_NOUVEAU#x
     }));

@@ -2,6 +2,7 @@
 //  hmi/HmiBuildState.cpp - 1.11 (C4) : voir HmiBuildState.hpp
 // =============================================================================
 #include "HmiBuildState.hpp"
+#include "HmiDecl.hpp"   // 1.11.18 (refonte, lot 3) : les declarations du modele, reconstruites
 
 #include "HmiEnums.hpp"
 #include "HmiTypes.hpp"
@@ -105,7 +106,7 @@ TypeKnown knownTypesOf(const Project& p) {
 
 State ofScript(const Script& sc, const TypeKnown& knownType) {
     State st;
-    const auto diags = checkScript(sc.lang, sc.body, sc.name, knownType);
+    const auto diags = checkScript(sc, knownType);                 // 1.11.18 (lot 3) : avec ses declarations du modele
     const ScriptDiagnostic* first = nullptr;
     for (const auto& d : diags)
         if (d.severity == ScriptDiagnostic::Severity::Error) {
@@ -226,7 +227,7 @@ void Cache::syncScripts(const Project& hmi) {
 }
 
 void Cache::updateScript(const Script& sc, const TypeKnown& knownType) {
-    const auto h = std::hash<std::string>{}(sc.body);
+    const auto h = std::hash<std::string>{}(decl::codeOf(sc));     // 1.11.18 (lot 3) : ses declarations aussi
     auto it = scripts_.find(sc.id);
     if (it != scripts_.end() && it->second.lang == sc.lang && it->second.bodyHash == h) return;   // rien n'a change
     ScriptEntry e;

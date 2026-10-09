@@ -44,6 +44,21 @@ std::string through(const char* key, const std::string& text, const Fn& f) {
 
 bool isTemplateRole(const View& v) { return v.role == "modele" || v.role == "entete" || v.role == "pied"; }
 
+// 1.11.18 (refonte, lot 3) : les valeurs des declarations du modele d'un code (des
+// expressions) suivent le renommage, comme son corps. Vrai : l'une a change.
+template <class F>
+bool renameInDeclarations(std::vector<Declaration>& decls, const F& f) {
+    bool changed = false;
+    for (auto& d : decls) {
+        if (d.value.empty()) continue;
+        std::string next = f(d.value, false);
+        if (next == d.value) continue;
+        d.value = std::move(next);
+        changed = true;
+    }
+    return changed;
+}
+
 // ---- Lot API 8 : finitions (les chaines comparees, les scripts C / C++) ----
 // Les morceaux d'un texte ST (le meme decoupage que le dialogue Renommer) : les
 // commentaires sautes, une chaine avec ses guillemets.
@@ -313,10 +328,12 @@ std::size_t renameObjectReferences(Project& p, const std::string& view, const st
                 note(v.name + " / script " + (sc.name.empty() ? sc.event : sc.name));
                 continue;
             }
-            if (sc.lang != ScriptLang::ST || sc.body.empty()) continue;
-            std::string next = f(sc.body, true);
+            if (sc.lang != ScriptLang::ST) continue;
+            const bool decls = renameInDeclarations(sc.decls, f);                     // 1.11.18 (lot 3)
+            if (sc.body.empty() && !decls) continue;
+            std::string next = sc.body.empty() ? sc.body : f(sc.body, true);
             if (owner && gif) next = renameFirstArguments(next, gifFns, from, to);    // lot API 8 : finitions (suite)
-            if (next == sc.body) continue;
+            if (next == sc.body && !decls) continue;
             sc.body = next;
             note(v.name + " / script " + (sc.name.empty() ? sc.event : sc.name));
         }
@@ -335,15 +352,16 @@ std::size_t renameObjectReferences(Project& p, const std::string& view, const st
         const std::string body = sc.lang == ScriptLang::ST && !sc.body.empty() ? f(sc.body, true)
                                : sc.body.empty() ? sc.body : cStrings(sc.body);      // lot API 8 : finitions - C / C++
         const std::string watch = through("variable", sc.watch, f);
-        if (body == sc.body && watch == sc.watch) continue;
+        const bool decls = sc.lang == ScriptLang::ST && renameInDeclarations(sc.decls, f);   // 1.11.18 (lot 3)
+        if (body == sc.body && watch == sc.watch && !decls) continue;
         sc.body = body;
         sc.watch = watch;
         note("Scripts g\xC3\xA9n\xC3\xA9raux / " + sc.name);
     }
     for (auto& fn : p.programs.functions) {
-        if (fn.body.empty()) continue;
-        const std::string body = f(fn.body, true);
-        if (body == fn.body) continue;
+        const bool decls = renameInDeclarations(fn.decls, f);                       // 1.11.18 (lot 3)
+        const std::string body = fn.body.empty() ? fn.body : f(fn.body, true);
+        if (body == fn.body && !decls) continue;
         fn.body = body;
         note("Fonctions / " + fn.name);
     }
@@ -505,7 +523,8 @@ std::size_t renameAlarmReferences(Project& p, const std::string& from, const std
             note(v.name + " / actions de la vue");
         }
         for (auto& sc : v.scripts)
-            if (sc.lang == ScriptLang::ST && st(sc.body)) note(v.name + " / script " + (sc.name.empty() ? sc.event : sc.name));
+            if (sc.lang == ScriptLang::ST && (renameInDeclarations(sc.decls, f) | st(sc.body)))     // 1.11.18 : ses declarations aussi
+                note(v.name + " / script " + (sc.name.empty() ? sc.event : sc.name));
         for (auto& prm : v.params)
             if (const std::string next = through("variable", prm.defaultValue, f); next != prm.defaultValue) {
                 prm.defaultValue = next;
@@ -517,7 +536,7 @@ std::size_t renameAlarmReferences(Project& p, const std::string& from, const std
         }
     }
     for (auto& sc : p.programs.scripts) {
-        bool changed = sc.lang == ScriptLang::ST && st(sc.body);
+        bool changed = sc.lang == ScriptLang::ST && (renameInDeclarations(sc.decls, f) | st(sc.body));   // 1.11.18 : ses declarations aussi
         if (const std::string w = through("variable", sc.watch, f); w != sc.watch) {
             sc.watch = w;
             changed = true;
@@ -525,7 +544,7 @@ std::size_t renameAlarmReferences(Project& p, const std::string& from, const std
         if (changed) note("Scripts g\xC3\xA9n\xC3\xA9raux / " + sc.name);
     }
     for (auto& fn : p.programs.functions)
-        if (st(fn.body)) note("Fonctions / " + fn.name);
+        if (renameInDeclarations(fn.decls, f) | st(fn.body)) note("Fonctions / " + fn.name);   // 1.11.18 : ses declarations aussi
     for (auto& a : p.alarms) {
         const std::string c = through("variable", a.condition, f), m = through("text", a.message, f),
                           i = through("text", a.instruction, f);

@@ -378,7 +378,8 @@ HmiOperatorsPane::HmiOperatorsPane(std::string id, hmi::DocumentPtr doc, Apply a
     // (a : T_VECTEUR, l'objet... ; a.x : REAL, membre de a).
     links_ += editor_->caretSymbolChanged->connect([this](const std::string& symbol) {
         const auto plc = assist_.plc ? assist_.plc() : nullptr;
-        const auto d = assist::describe(doc_->project, plc.get(), symbol, editor_->text(), selectedOperator());
+        const auto d = assist::describe(doc_->project, plc.get(), symbol,
+                                        (assist_.declarations ? assist_.declarations() : std::string{}) + editor_->text(), selectedOperator());
         symbolLine_ = symbol.empty() || d.keyword ? std::string{} : d.found ? d.line : symbol + "  \xE2\x80\x94  inconnu ici";
         symbolBar_->setMessage(symbolLine_);
     });
@@ -387,6 +388,10 @@ HmiOperatorsPane::HmiOperatorsPane(std::string id, hmi::DocumentPtr doc, Apply a
     // branchait pas) : le programme de l'automate pose par l'ecran ; a, b, Resultat.
     assist_ = assist::sourcesFor(doc_);
     assist_.op = [this] { return selectedOperator(); };
+    assist_.declarations = [this] {                                        // 1.11.18 (lot 3) : ses constantes et variables du modele
+        const auto* o = current();
+        return o ? assist::declarationsPrefix(o->decls, hmi::decl::Role::Operator) : std::string{};
+    };
     assist::attach(*editor_, assist_);
     // 1.10.1 (U2) : les DDT de l'automate (une cible de conversion permise, la liste
     // Cible des proprietes), lus dans le programme de l'aide a la saisie : aucun hote

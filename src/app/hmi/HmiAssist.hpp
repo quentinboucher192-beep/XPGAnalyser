@@ -30,6 +30,7 @@
 #pragma once
 
 #include "../../hmi/HmiCommands.hpp"
+#include "../../hmi/HmiDecl.hpp"   // 1.11.18 (refonte, lot 3) : decl::Role, composeCode
 #include "../../hmi/HmiDesign.hpp"
 #include "../../hmi/HmiModel.hpp"
 #include "../../ui/widgets/Controls.hpp"
@@ -188,7 +189,15 @@ struct Sources {
     // 1.10.1 (U2) : l'editeur montre le script de cet operateur (kNoId : un autre
     // script) - a, b, Resultat et leurs types (suggest, describe).
     std::function<hmi::Id()>                                op;
+    // 1.11.18 (refonte, lot 3) : les declarations du modele du code montre, reconstruites
+    // (declarationsPrefix) : l'aide les lit comme si elles etaient tapees en tete de la
+    // ligne 1 - ses constantes, variables et parametres sont proposes. Vide : aucune.
+    std::function<std::string()>                            declarations{};
 };
+// Le texte des declarations du modele d'un code, tel que le moteur le lit devant sa ligne 1
+// (hmi::decl::composeCode) ; vide : aucune.
+[[nodiscard]] std::string declarationsPrefix(const std::vector<hmi::Declaration>&, hmi::decl::Role,
+                                             const std::vector<hmi::Declaration>* inherited = nullptr);
 void attach(ui::MultiLineText&, Sources);
 
 // La meme aide pour un champ d'une ligne (une variable, une expression, un

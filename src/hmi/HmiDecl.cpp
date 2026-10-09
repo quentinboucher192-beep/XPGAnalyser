@@ -675,6 +675,165 @@ std::string compose(const Block& b, const std::vector<Decl>& decls, std::size_t 
     return out;
 }
 
+// ---- 1.11.18 (lot 3) : le pont -------------------------------------------------------
+std::string_view blockOf(const Declaration& d, Role role) noexcept {
+    switch (d.kind) {
+        case DeclKind::Constant: return "VAR CONSTANT";
+        case DeclKind::Parameter:
+            return d.mode == PassMode::InOut ? "VAR_IN_OUT" : d.mode == PassMode::Out ? "VAR_OUTPUT" : "VAR_INPUT";
+        case DeclKind::Variable:
+            if (role != Role::Script) return "VAR";
+            return d.storage == Storage::Execution ? "VAR_TEMP" : "VAR";
+    }
+    return "VAR";
+}
+
+namespace {
+// Sur une ligne : le texte reconstruit ne doit pas decaler les lignes du corps.
+std::string onOneLine(std::string_view s) {
+    std::string out(s);
+    for (auto& c : out)
+        if (c == '\n' || c == '\r') c = ' ';
+    return out;
+}
+} // namespace
+
+Composed composeCode(std::string_view body, const std::vector<Declaration>& decls, Role role,
+                     const std::vector<Declaration>* inherited) {
+    Composed c;
+    std::vector<const Declaration*> all;
+    if (inherited)
+        for (const auto& d : *inherited)
+            if (d.kind == DeclKind::Parameter) all.push_back(&d);
+    for (const auto& d : decls) all.push_back(&d);
+    if (all.empty()) {
+        c.text.assign(body.begin(), body.end());
+        return c;
+    }
+    std::string_view open;
+    for (const auto* d : all) {
+        const auto block = blockOf(*d, role);
+        if (block != open) {
+            if (!open.empty()) c.text += "END_VAR ";
+            c.text += block;
+            c.text += ' ';
+            open = block;
+        }
+        Composed::Span span;
+        span.id = d->id;
+        span.begin = c.text.size();
+        c.text += onOneLine(d->name) + " : " + onOneLine(d->type);
+        if (!d->value.empty()) c.text += " := " + onOneLine(d->value);
+        c.text += "; ";
+        span.end = c.text.size();
+        c.spans.push_back(span);
+    }
+    c.text += "END_VAR ";
+    c.prefix = c.text.size();
+    c.text.append(body.begin(), body.end());
+    return c;
+}
+
+bool Composed::inDeclarations(int line, int column) const noexcept {
+    return prefix > 0 && line == 1 && column >= 1 && static_cast<std::size_t>(column) <= prefix;
+}
+
+int Composed::bodyColumn(int line, int column) const noexcept {
+    if (prefix == 0 || line != 1 || column <= 0) return column;
+    return static_cast<std::size_t>(column) > prefix ? column - static_cast<int>(prefix) : 1;
+}
+
+Id Composed::declarationAt(int line, int column) const noexcept {
+    if (!inDeclarations(line, column)) return kNoId;
+    const auto at = static_cast<std::size_t>(column - 1);
+    for (const auto& s : spans)
+        if (at >= s.begin && at < s.end) return s.id;
+    return kNoId;
+}
+
+std::string codeOf(const Script& s) {
+    if (s.decls.empty() || s.lang != ScriptLang::ST) return s.body;
+    return composeCode(s.body, s.decls, Role::Script).text;
+}
+
+std::string codeOf(const HmiFunction& f) {
+    if (f.decls.empty()) return f.body;
+    return composeCode(f.body, f.decls, Role::Function).text;
+}
+
+const std::string& codeOf(const Script& s, std::string& storage) {
+    if (s.decls.empty() || s.lang != ScriptLang::ST) return s.body;
+    storage = composeCode(s.body, s.decls, Role::Script).text;
+    return storage;
+}
+
+const std::string& codeOf(const HmiFunction& f, std::string& storage) {
+    if (f.decls.empty()) return f.body;
+    storage = composeCode(f.body, f.decls, Role::Function).text;
+    return storage;
+}
+
+std::string codeOf(const FunctionOverride& o, const HmiFunction* base) {
+    const bool inherits = base && std::any_of(base->decls.begin(), base->decls.end(),
+                                              [](const Declaration& d) { return d.kind == DeclKind::Parameter; });
+    if (o.decls.empty() && !inherits) return o.body;
+    return composeCode(o.body, o.decls, Role::Function, base ? &base->decls : nullptr).text;
+}
+
+std::string codeOf(const HmiOperator& o) {
+    if (o.decls.empty()) return o.body;
+    return composeCode(o.body, o.decls, Role::Operator).text;
+}
+
+std::vector<ScriptDiagnostic> checkDeclarations(const std::vector<Declaration>& decls, Role role, std::string_view body,
+                                                const TypeKnown& knownType, const std::vector<Declaration>* inherited,
+                                                std::vector<Declaration>* valid) {
+    std::vector<ScriptDiagnostic> out;
+    bool ok = true;
+    const auto fail = [&](const Declaration& d, const std::string& why) {
+        out.push_back(fault(0, 0, 0, "d\xC3\xA9" "claration " + quoted(d.name.empty() ? std::string("?") : d.name) + " : " + why));
+        ok = false;
+    };
+    // Les noms deja pris : les parametres herites (une redefinition), ceux des blocs du corps.
+    std::vector<std::string> taken;
+    if (inherited)
+        for (const auto& d : *inherited)
+            if (d.kind == DeclKind::Parameter) taken.push_back(upper(d.name));
+    const auto inBody = extract(body);
+    for (std::size_t i = 0; i < decls.size(); ++i) {
+        const Declaration& d = decls[i];
+        ok = true;
+        if (d.name.empty()) {
+            out.push_back(fault(0, 0, 0, "d\xC3\xA9" "claration sans nom"));
+            continue;
+        }
+        bool ident = identStart(d.name[0]);
+        for (const char c : d.name) ident = ident && identChar(c);
+        if (!ident) fail(d, "nom illisible (lettres, chiffres, _ ; pas un chiffre en t\xC3\xAAte)");
+        else if (isReservedWord(d.name)) fail(d, "nom r\xC3\xA9serv\xC3\xA9 du langage");
+        const std::string u = upper(d.name);
+        bool twice = std::find(taken.begin(), taken.end(), u) != taken.end();
+        for (std::size_t j = 0; j < i && !twice; ++j) twice = sameWord(decls[j].name, d.name);
+        if (twice) fail(d, "d\xC3\xA9" "clar\xC3\xA9" "e deux fois");
+        else if (inBody.find(d.name))
+            fail(d, "d\xC3\xA9" "clar\xC3\xA9" "e deux fois (aussi dans un bloc " + std::string(keyword(inBody.find(d.name)->section))
+                        + " du code)");
+        if (d.type.find_first_not_of(" \t") == std::string::npos) fail(d, "type manquant");
+        else if (!localTypeSupported(d.type) && !richLocalType(d.type, knownType))
+            fail(d, "type non pris en charge : " + d.type + " (BOOL, INT, DINT, REAL, TIME, STRING, un tableau, un type IHM...)");
+        if (d.kind == DeclKind::Constant && d.value.find_first_not_of(" \t") == std::string::npos) fail(d, "une constante sans valeur");
+        if (d.kind == DeclKind::Parameter && role == Role::Script) fail(d, "un param\xC3\xA8tre dans un script (seule une fonction en a)");
+        if (d.kind == DeclKind::Parameter && role == Role::Operator)
+            fail(d, "un param\xC3\xA8tre dans un op\xC3\xA9rateur (ses op\xC3\xA9randes sont A et B)");
+        if (d.kind == DeclKind::Parameter && inherited)
+            fail(d, "un param\xC3\xA8tre dans une red\xC3\xA9" "finition (elle garde ceux de sa fonction)");
+        if (d.kind == DeclKind::Variable && role != Role::Script && d.storage != Storage::Execution)
+            fail(d, "une fonction n'a pas de m\xC3\xA9moire : sa variable repart \xC3\xA0 chaque appel (stockage Ex\xC3\xA9" "cution)");
+        if (ok && valid) valid->push_back(d);
+    }
+    return out;
+}
+
 std::string parameterSignature(const Extract& x) {
     std::string out;
     for (const Decl* d : x.parameters()) {

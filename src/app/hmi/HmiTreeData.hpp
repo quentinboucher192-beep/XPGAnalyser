@@ -548,7 +548,7 @@ inline Declared withoutDeclarations(std::string_view s) {
 }
 // "Moyenne(a : REAL, b : REAL) : REAL" ; sans retour : "Tracer(Message : STRING)".
 inline std::string signatureOf(const hmi::HmiFunction& f) {
-    const auto d = withoutDeclarations(f.body);
+    const auto d = withoutDeclarations(hmi::decl::codeOf(f));          // 1.11.18 (lot 3) : ses parametres du modele aussi
     std::string sig = f.name + "(";
     for (std::size_t k = 0; k < d.inputs.size(); ++k) sig += (k ? ", " : "") + d.inputs[k].first + " : " + d.inputs[k].second;
     sig += ")";
@@ -651,7 +651,7 @@ inline std::vector<Used> usedVariables(const hmi::Project& p) {
     };
     auto noteScript = [&](const hmi::Script& s) {
         if (s.lang == hmi::ScriptLang::ST) {
-            const auto decl = withoutDeclarations(withoutComments(s.body));
+            const auto decl = withoutDeclarations(withoutComments(hmi::decl::codeOf(s)));   // 1.11.18 : ses declarations du modele aussi
             localNames = decl.locals;
             const auto& code = decl.code;
             noteCode(code);
@@ -692,7 +692,7 @@ inline std::vector<Used> usedVariables(const hmi::Project& p) {
     for (const auto& s : p.programs.scripts) { noteScript(s); flush(); }
     // Lot 7 : le corps des fonctions IHM (leurs parametres et leur nom exclus).
     for (const auto& f : p.programs.functions) {
-        const auto decl = withoutDeclarations(withoutComments(f.body));
+        const auto decl = withoutDeclarations(withoutComments(hmi::decl::codeOf(f)));   // 1.11.18 : ses declarations du modele aussi
         localNames = decl.locals;
         std::string fn = f.name;
         for (auto& c : fn) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));

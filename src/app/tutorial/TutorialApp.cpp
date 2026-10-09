@@ -611,7 +611,7 @@ std::optional<std::string> read(Session& s, std::string_view path) {
             // Tranche 5 : les fautes de Compiler (les memes que l'editeur souligne), comptees.
             if (what == "erreurs") {
                 int n = 0;
-                for (const auto& d : placedScriptDiagnostics(doc->project, sc.body, nullptr, nullptr, g_app->project().get()))
+                for (const auto& d : placedScriptDiagnostics(doc->project, sc.body, nullptr, nullptr, g_app->project().get(), nullptr, &sc.decls))
                     n += d.severity == hmi::ScriptDiagnostic::Severity::Error;
                 return std::to_string(n);
             }

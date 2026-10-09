@@ -38,6 +38,10 @@ struct ScriptDiagnostic {
 using TypeKnown = std::function<bool(std::string_view)>;
 [[nodiscard]] std::vector<ScriptDiagnostic> checkScript(ScriptLang, std::string_view body, std::string_view name = {},
                                                         const TypeKnown& knownType = {});
+// 1.11.18 (refonte, lot 3) : un script et ses declarations du modele (constantes, variables) :
+// celles-ci controlees d'abord (decl::checkDeclarations, ligne 0), puis le code, avec celles
+// qui sont justes reconstruites sur sa ligne 1 (decl::codeOf ; les lignes ne bougent pas).
+[[nodiscard]] std::vector<ScriptDiagnostic> checkScript(const Script&, const TypeKnown& knownType = {});
 // Les messages du simulateur, en francais ("line 3: expected THEN" -> "THEN attendu").
 [[nodiscard]] std::string frenchSimMessage(std::string_view english);
 // "line 3: ..." : la ligne annoncee (0 sinon), et le message sans elle.
@@ -66,6 +70,8 @@ struct PathUse {
 [[nodiscard]] std::vector<std::string> scriptViews(std::string_view body);
 // Les fonctions IHM_ connues (pour ne pas les prendre pour des variables).
 [[nodiscard]] bool isHmiFunction(std::string_view name) noexcept;
+// 1.11.18 (refonte, lot 3) : un mot reserve du ST (IF, END_FOR, AND, VAR, END_VAR...) - pas un nom.
+[[nodiscard]] bool isReservedWord(std::string_view name);
 
 // ============================================================== lot 7 ======
 //  LES VARIABLES LOCALES. Un script ST peut commencer par des blocs de

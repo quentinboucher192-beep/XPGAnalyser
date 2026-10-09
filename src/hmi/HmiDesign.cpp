@@ -293,6 +293,13 @@ bool geometric(const std::string& key) { return key == "x" || key == "y" || key 
 template <class P, class F>
 void walk(P& p, const FindOptions& o, F&& fn) {
     const std::string dot = " \xC2\xB7 ";
+    // 1.11.18 (refonte, lot 3) : les declarations du modele d'un code - leur type et leur valeur.
+    const auto declarations = [&](auto& list, Id view, const std::string& where) {
+        for (auto& d : list) {
+            fn(d.type, view, kNoId, where + dot + "d\xC3\xA9" "claration " + d.name + " (type)");
+            fn(d.value, view, kNoId, where + dot + "d\xC3\xA9" "claration " + d.name + " (valeur)");
+        }
+    };
     for (auto& v : p.views) {
         if (o.view != kNoId && v.id != o.view) continue;
         for (auto& obj : v.objects) {
@@ -321,13 +328,23 @@ void walk(P& p, const FindOptions& o, F&& fn) {
             fn(a.watch, v.id, kNoId, an + "(surveill\xC3\xA9" "e)");
             fn(a.params, v.id, kNoId, an + "(param\xC3\xA8tres)");      // 1.11.6
         }
-        for (auto& s : v.scripts) fn(s.body, v.id, kNoId, v.name + dot + "script " + (s.name.empty() ? s.event : s.name));
+        for (auto& s : v.scripts) {
+            const std::string where = v.name + dot + "script " + (s.name.empty() ? s.event : s.name);
+            fn(s.body, v.id, kNoId, where);
+            declarations(s.decls, v.id, where);                         // 1.11.18 (lot 3)
+        }
         for (auto& prm : v.params) fn(prm.defaultValue, v.id, kNoId, v.name + dot + "param\xC3\xA8tre " + prm.name);
         fn(v.popup.title, v.id, kNoId, v.name + dot + "titre de la popup");
     }
     if (o.view != kNoId) return;
-    for (auto& s : p.programs.scripts) fn(s.body, kNoId, kNoId, "Script g\xC3\xA9n\xC3\xA9ral" + dot + s.name);
-    for (auto& f : p.programs.functions) fn(f.body, kNoId, kNoId, "Fonction IHM" + dot + f.name);
+    for (auto& s : p.programs.scripts) {
+        fn(s.body, kNoId, kNoId, "Script g\xC3\xA9n\xC3\xA9ral" + dot + s.name);
+        declarations(s.decls, kNoId, "Script g\xC3\xA9n\xC3\xA9ral" + dot + s.name);   // 1.11.18 (lot 3)
+    }
+    for (auto& f : p.programs.functions) {
+        fn(f.body, kNoId, kNoId, "Fonction IHM" + dot + f.name);
+        declarations(f.decls, kNoId, "Fonction IHM" + dot + f.name);          // 1.11.18 (lot 3)
+    }
     for (auto& a : p.alarms) {
         fn(a.condition, kNoId, kNoId, "Alarme" + dot + a.name + dot + "condition");
         fn(a.message, kNoId, kNoId, "Alarme" + dot + a.name + dot + "message");

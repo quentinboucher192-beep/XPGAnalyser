@@ -112,7 +112,8 @@
 namespace fs = std::filesystem;
 using namespace hmi;
 // 1.10.2 (AL) : un projet sans groupe d'alarmes regle ni lien s'ecrit encore au format 21
-// (la 1.10.1 l'ouvre) ; kFormatVersion (22) : seulement s'il en a.
+// (la 1.10.1 l'ouvre) ; 22 : seulement s'il en a. 1.11.18 : 23 (kFormatVersion), seulement
+// s'il a des declarations dans le modele (refonte des scripts, lot 3).
 constexpr int kPlainFormat = 21;
 
 namespace {
@@ -18579,8 +18580,9 @@ void groupesAlarmes1102() {
     const auto files = serializeProject(p);
     {
         const std::string index(files.front().data->begin(), files.front().data->end());
-        check(index.find("ihm format=" + std::to_string(kFormatVersion)) != std::string::npos,
-              "avec un groupe r\xC3\xA9gl\xC3\xA9 ou un lien : \xC3\xA9" "crit au format " + std::to_string(kFormatVersion));
+        // 1.11.18 : le format 23 (les declarations du modele) n'est ecrit que s'il en a.
+        check(index.find("ihm format=22") != std::string::npos,
+              "avec un groupe r\xC3\xA9gl\xC3\xA9 ou un lien : \xC3\xA9" "crit au format 22");
     }
     const FileReader reader = [&](const std::string& path, std::string& content) {
         for (const auto& f : files)
@@ -18592,7 +18594,7 @@ void groupesAlarmes1102() {
           "les groupes (et leurs r\xC3\xA9glages) et les liens, enregistr\xC3\xA9s et relus");
     {
         std::string index(files.front().data->begin(), files.front().data->end());
-        const std::string current = "format=" + std::to_string(kFormatVersion);
+        const std::string current = "format=22";      // 1.11.18 : un projet a groupes, sans declaration du modele
         if (const auto at = index.find(current); at != std::string::npos) index.replace(at, current.size(), "format=21");
         std::string kept;
         for (std::size_t at = 0; at < index.size();) {
@@ -18606,7 +18608,7 @@ void groupesAlarmes1102() {
             return reader(path, content);
         };
         const auto q = parseProject(old);
-        check(kFormatVersion == 22 && static_cast<bool>(q) && q->alarmGroups.empty() && q->alarmGroupLinks.empty()
+        check(kFormatVersion >= 22 && static_cast<bool>(q) && q->alarmGroups.empty() && q->alarmGroupLinks.empty()
                   && alarmGroupsOf(*q).size() == 1 && q->alarms.size() == 1,
               "un projet au format 21 s'ouvre tel quel (son groupe Zone_Gaz, r\xC3\xA9glages par d\xC3\xA9" "faut)");
     }

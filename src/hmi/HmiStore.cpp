@@ -187,6 +187,44 @@ bool toBool(const std::string* s, bool fallback) {
 }
 std::string toStr(const std::string* s) { return s ? *s : std::string{}; }
 
+// 1.11.18 (refonte, lot 3) : les declarations d'un code (constantes, variables,
+// parametres), chacune sur sa ligne, juste apres la ligne de son porteur (script,
+// fonction, fonction_symbole, redefinition, operateur_symbole, operateur_type).
+std::string serializeDeclarations(const std::vector<Declaration>& decls) {
+    std::string s;
+    for (const auto& d : decls) {
+        s += "declaration" + fieldInt("id", d.id) + fieldBare("genre", declKindKey(d.kind)) + field("nom", d.name)
+           + field("type", d.type);
+        if (!d.value.empty()) s += field("valeur", d.value);
+        if (d.kind == DeclKind::Variable) s += fieldBare("stockage", storageKey(d.storage));
+        if (d.kind == DeclKind::Parameter) s += fieldBare("mode", passModeKey(d.mode));
+        s += fieldBare("visibilite", visibilityKey(d.visibility));
+        if (!d.description.empty()) s += field("description", d.description);
+        s += "\n";
+    }
+    return s;
+}
+// Faux : sans nom, ou d'un genre inconnu (la ligne est ignoree, avec un avertissement).
+bool parseDeclaration(const Record& r, Declaration& d) {
+    d.id = static_cast<Id>(toInt(r.get("id"), 0));
+    const auto kind = declKindFromKey(toStr(r.get("genre")));
+    if (!kind) return false;
+    d.kind = *kind;
+    d.name = toStr(r.get("nom"));
+    d.type = toStr(r.get("type"));
+    d.value = toStr(r.get("valeur"));
+    d.description = toStr(r.get("description"));
+    d.storage = storageFromKey(toStr(r.get("stockage"))).value_or(Storage::Execution);
+    d.mode = passModeFromKey(toStr(r.get("mode"))).value_or(PassMode::In);
+    d.visibility = visibilityFromKey(toStr(r.get("visibilite"))).value_or(Visibility::Public);
+    return !d.name.empty();
+}
+// Le message d'une ligne "declaration" ignoree.
+std::string declarationIgnored(bool holder) {
+    return holder ? "d\xC3\xA9" "claration sans nom ou d'un genre inconnu : ignor\xC3\xA9" "e"
+                  : "d\xC3\xA9" "claration hors d'un script, d'une fonction ou d'un op\xC3\xA9rateur : ignor\xC3\xA9" "e";
+}
+
 // 1.10 : un operateur d'un symbole ("operateur_symbole", dans le fichier de la vue)
 // ou d'un type IHM ("operateur_type", dans l'index, apres les membres du type).
 std::string serializeOperator(std::string_view word, const HmiOperator& o) {
@@ -195,7 +233,7 @@ std::string serializeOperator(std::string_view word, const HmiOperator& o) {
     if (!o.right.empty()) s += field("droite", o.right);
     if (!o.result.empty()) s += field("resultat", o.result);
     if (!o.description.empty()) s += field("description", o.description);
-    return s + field("corps", o.body) + "\n";
+    return s + field("corps", o.body) + "\n" + serializeDeclarations(o.decls);   // 1.11.18 (lot 3)
 }
 // Faux : ni genre ni operande (la ligne est ignoree, avec un avertissement).
 bool parseOperator(const Record& r, HmiOperator& o) {
@@ -349,7 +387,8 @@ std::string serializeView(const View& v) {
     for (const auto& fn : v.functions)
         s += "fonction_symbole" + fieldInt("id", fn.id) + field("nom", fn.name) + field("retour", fn.returnType)
            + (fn.isVirtual ? fieldBool("virtuelle", true) : std::string{})
-           + (fn.description.empty() ? std::string{} : field("description", fn.description)) + field("corps", fn.body) + "\n";
+           + (fn.description.empty() ? std::string{} : field("description", fn.description)) + field("corps", fn.body) + "\n"
+           + serializeDeclarations(fn.decls);                                     // 1.11.18 (lot 3)
     s += "grille" + fieldBool("visible", v.grid.visible) + fieldInt("pas", v.grid.step)
        + fieldBool("magnetisme_grille", v.grid.snapGrid)
        + fieldBool("magnetisme_objets", v.grid.snapObjects)
@@ -369,7 +408,9 @@ std::string serializeView(const View& v) {
             s += "\n";
         }
         // 1.11.10 : ses fonctions redefinies (une instance).
-        for (const auto& fo : o.functionOverrides) s += "redefinition" + field("fonction", fo.function) + field("corps", fo.body) + "\n";
+        for (const auto& fo : o.functionOverrides)
+            s += "redefinition" + field("fonction", fo.function) + field("corps", fo.body) + "\n"
+               + serializeDeclarations(fo.decls);                                   // 1.11.18 (lot 3)
         // 1.9 : ses alarmes surchargees - seulement les champs surcharges.
         for (const auto& ov : o.alarmOverrides) {
             s += "surcharge_alarme" + field("alarme", ov.alarm);
@@ -389,7 +430,8 @@ std::string serializeView(const View& v) {
     }
     for (const auto& sc : v.scripts)
         s += "script" + fieldInt("id", sc.id) + field("nom", sc.name) + fieldBare("langage", scriptLangKey(sc.lang))
-           + fieldBare("evenement", sc.event.empty() ? "-" : sc.event) + field("corps", sc.body) + "\n";
+           + fieldBare("evenement", sc.event.empty() ? "-" : sc.event) + field("corps", sc.body) + "\n"
+           + serializeDeclarations(sc.decls);                                     // 1.11.18 (lot 3)
     // Les actions, apres tous les objets : chacune designe le sien (0 = la vue).
     for (const auto& a : v.actions) s += serializeAction(kNoId, a);
     for (const auto& o : v.objects)
@@ -438,6 +480,7 @@ core::Result<View> parseView(std::string_view text, LoadReport* report) {
     bool sawView = false, sawEnd = false;
     int fileFormat = kFormatVersion;     // "# XpgAnalyzer - vue IHM (format 6)" : l'en-tete le dit
     Object* current = nullptr;
+    std::vector<Declaration>* holder = nullptr;   // 1.11.18 (lot 3) : le porteur des lignes "declaration" qui suivent
     std::size_t lineNo = 0;
     std::size_t pos = 0;
     auto warn = [&](std::string w) { if (report) report->warnings.push_back(std::move(w)); };
@@ -462,7 +505,12 @@ core::Result<View> parseView(std::string_view text, LoadReport* report) {
         if (!parseRecord(line, r, error))
             return core::fail(core::ErrorCode::XmlMalformed,
                               "ligne " + std::to_string(lineNo) + " : " + error);
-        if (r.word == "vue") {
+        if (r.word != "declaration") holder = nullptr;
+        if (r.word == "declaration") {                                // 1.11.18 (lot 3)
+            Declaration d;
+            if (!holder || !parseDeclaration(r, d)) { warn("ligne " + std::to_string(lineNo) + " : " + declarationIgnored(holder)); continue; }
+            holder->push_back(std::move(d));
+        } else if (r.word == "vue") {
             sawView = true;
             v.id = static_cast<Id>(toInt(r.get("id"), 0));
             v.name = toStr(r.get("nom"));
@@ -519,6 +567,7 @@ core::Result<View> parseView(std::string_view text, LoadReport* report) {
             HmiOperator o;
             if (!parseOperator(r, o)) { warn("ligne " + std::to_string(lineNo) + " : op\xC3\xA9rateur sans genre ou sans op\xC3\xA9rande"); continue; }
             v.operators.push_back(std::move(o));
+            holder = &v.operators.back().decls;
         } else if (r.word == "fonction_symbole") {                    // 1.11.10
             HmiFunction fn;
             fn.id = static_cast<Id>(toInt(r.get("id"), 0));
@@ -529,6 +578,7 @@ core::Result<View> parseView(std::string_view text, LoadReport* report) {
             fn.body = toStr(r.get("corps"));
             if (fn.name.empty()) { warn("ligne " + std::to_string(lineNo) + " : fonction de symbole sans nom"); continue; }
             v.functions.push_back(std::move(fn));
+            holder = &v.functions.back().decls;
         } else if (r.word == "redefinition") {                        // 1.11.10
             if (!current) { warn("ligne " + std::to_string(lineNo) + " : red\xC3\xA9" "finition hors d'un objet"); continue; }
             FunctionOverride fo;
@@ -536,6 +586,7 @@ core::Result<View> parseView(std::string_view text, LoadReport* report) {
             fo.body = toStr(r.get("corps"));
             if (fo.function.empty()) { warn("ligne " + std::to_string(lineNo) + " : red\xC3\xA9" "finition sans fonction"); continue; }
             current->functionOverrides.push_back(std::move(fo));
+            holder = &current->functionOverrides.back().decls;
         } else if (r.word == "surcharge_alarme") {                    // 1.9
             if (!current) { warn("ligne " + std::to_string(lineNo) + " : surcharge d'alarme hors d'un objet"); continue; }
             AlarmOverride ov;
@@ -609,6 +660,7 @@ core::Result<View> parseView(std::string_view text, LoadReport* report) {
             if (sc.event == "-") sc.event.clear();
             sc.body = toStr(r.get("corps"));
             v.scripts.push_back(std::move(sc));
+            holder = &v.scripts.back().decls;
         } else if (r.word == "action") {
             Action a;
             std::string why;
@@ -700,7 +752,11 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
     const Config& cfg = p.config;
     // 1.10.2 (AL) : le format 22 n'ajoute que les groupes d'alarmes regles et les liens.
     // Un projet qui n'en a pas s'ecrit encore au format 21 : la 1.10.1 l'ouvre.
-    const int format = (p.alarmGroups.empty() && p.alarmGroupLinks.empty()) ? 21 : kFormatVersion;
+    // 1.11.18 (lot 3) : le format 23 n'ajoute que les declarations du modele ; un projet
+    // qui n'en a pas s'ecrit au format 22 (ou 21) : la 1.11.17 l'ouvre.
+    bool declared = false;
+    forEachDeclarations(p, [&](const std::vector<Declaration>& list) { declared = declared || !list.empty(); });
+    const int format = declared ? kFormatVersion : (p.alarmGroups.empty() && p.alarmGroupLinks.empty()) ? 21 : 22;
     std::string index;
     index += "# XpgAnalyzer - projet IHM (format " + std::to_string(format) + ")\n";
     index += "ihm" + fieldInt("format", format) + fieldInt("prochain_id", p.nextId) + "\n";
@@ -812,7 +868,7 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
                + fieldBare("evenement", sc.event.empty() ? "Appel" : sc.event) + fieldInt("periode", sc.periodMs)
                + field("surveille", sc.watch) + field("fichier", "scripts/" + file) + field("description", sc.description)
                + (sc.folder.empty() ? std::string{} : field("dossier", sc.folder))           // lot 21
-               + "\n";
+               + "\n" + serializeDeclarations(sc.decls);                                    // 1.11.18 (lot 3)
     }
     // Lot 7 : les fonctions IHM, chacune dans son fichier (ihm/fonctions/).
     for (const auto& f : p.programs.functions) {
@@ -822,7 +878,8 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
         const std::string file = scriptFileName(named);
         files.push_back({"fonctions/" + file, textBytes(f.body)});
         index += "fonction" + fieldInt("id", f.id) + field("nom", f.name) + field("retour", f.returnType)
-               + field("fichier", "fonctions/" + file) + field("description", f.description) + "\n";
+               + field("fichier", "fonctions/" + file) + field("description", f.description) + "\n"
+               + serializeDeclarations(f.decls);                                            // 1.11.18 (lot 3)
     }
     // Lot 4 : alarmes, recettes, securite, historiques.
     for (const auto& a : p.alarms)
@@ -1144,6 +1201,7 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
     std::size_t lineNo = 0, pos = 0;
     std::vector<std::pair<Id, std::string>> files;
     std::map<Id, std::string> viewFolders;                          // lot 21 : le dossier de chaque vue (l'index le dit)
+    std::vector<Declaration>* holder = nullptr;                     // 1.11.18 (lot 3) : le porteur des lignes "declaration"
     while (pos <= index.size()) {
         const std::size_t eol = index.find('\n', pos);
         std::string_view line(index.data() + pos, (eol == std::string::npos ? index.size() : eol) - pos);
@@ -1157,7 +1215,15 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
         std::string error;
         if (!parseRecord(line, r, error))
             return core::fail(core::ErrorCode::XmlMalformed, "ihm.txt ligne " + std::to_string(lineNo) + " : " + error);
-        if (r.word == "ihm") {
+        if (r.word != "declaration") holder = nullptr;
+        if (r.word == "declaration") {                                 // 1.11.18 (lot 3)
+            Declaration d;
+            if (!holder || !parseDeclaration(r, d)) {
+                if (report) report->warnings.push_back("ihm.txt ligne " + std::to_string(lineNo) + " : " + declarationIgnored(holder));
+                continue;
+            }
+            holder->push_back(std::move(d));
+        } else if (r.word == "ihm") {
             const auto format = toInt(r.get("format"), kFormatVersion);
             if (format > kFormatVersion)
                 return core::fail(core::ErrorCode::XmlUnsupportedDtd,
@@ -1332,6 +1398,7 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
                 continue;
             }
             p.programs.types.back().operators.push_back(std::move(o));
+            holder = &p.programs.types.back().operators.back().decls;
         } else if (r.word == "dossier_variables") {
             const std::string f = toStr(r.get("nom"));
             if (!f.empty()) p.programs.folders.push_back(f);
@@ -1352,6 +1419,7 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
             if ((file.empty() || !read(file, sc.body)) && report)
                 report->warnings.push_back("script '" + sc.name + "' : fichier " + file + " absent");
             p.programs.scripts.push_back(std::move(sc));
+            holder = &p.programs.scripts.back().decls;
         } else if (r.word == "fonction") {
             HmiFunction f;
             f.id = static_cast<Id>(toInt(r.get("id"), 0));
@@ -1362,6 +1430,7 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
             if ((file.empty() || !read(file, f.body)) && report)
                 report->warnings.push_back("fonction '" + f.name + "' : fichier " + file + " absent");
             p.programs.functions.push_back(std::move(f));
+            holder = &p.programs.functions.back().decls;
         } else if (r.word == "alarme") {
             AlarmDef a;
             a.id = static_cast<Id>(toInt(r.get("id"), 0));
@@ -1894,9 +1963,16 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
     for (const auto& e : p.equipments) highest = std::max(highest, e.id);    // lot 15
     for (const auto& g : p.security.groups)
         if (g.id < 0xFFFFFE00u) highest = std::max(highest, g.id);      // hors groupes par defaut
+    // 1.11.18 (lot 3) : les declarations des scripts, fonctions, redefinitions et operateurs.
+    forEachDeclarations(static_cast<const Project&>(p), [&](const std::vector<Declaration>& list) {
+        for (const auto& d : list) highest = std::max(highest, d.id);
+    });
     // Un index edite a la main ne doit pas faire reattribuer un identifiant
     // deja pris : le compteur repart au-dessus du plus grand vu.
     if (p.nextId <= highest) p.nextId = highest + 1;
+    // 1.11.18 (lot 3) : une declaration sans identifiant, ou en double, en recoit un neuf.
+    if (uniqueDeclarationIds(p) && report)
+        report->warnings.push_back("d\xC3\xA9" "clarations : identifiants absents ou en double, renouvel\xC3\xA9s");
     // Lot 15 : un equipement ecrit a la main sans identifiant en recoit un.
     for (auto& e : p.equipments)
         if (e.id == kNoId) e.id = p.nextId++;

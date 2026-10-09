@@ -938,13 +938,14 @@ private:
         } else if (const auto* f = pendingSymbolFn_ ? pendingSymbolFn_ : sc_.project ? sc_.project->functionByName(name.text) : nullptr) {
             found = true;
             // Une entree qui a une valeur initiale (Poids : REAL := 0.5) est facultative.
+            const std::string code = decl::codeOf(*f);      // 1.11.18 (lot 3) : ses parametres du modele aussi
 #ifdef XPG_HMI_LANG110
             // le dialecte IHM (S1) : entrees riches ; `parts` garde les locales que inputs() designe
-            const auto parts = splitDeclarations(f->body, true, [p = sc_.project](std::string_view t) {
+            const auto parts = splitDeclarations(code, true, [p = sc_.project](std::string_view t) {
                 return lang110::knownHmiType(p, t);          // 1.10 (S1) : structure ou enumeration
             });
 #else
-            const auto parts = splitDeclarations(f->body, true);
+            const auto parts = splitDeclarations(code, true);
 #endif
             const auto inputs = parts.inputs();
             int required = 0;
@@ -1338,6 +1339,31 @@ std::vector<Finding> check(const Scope& scope, std::string_view source) {
     return out;
 }
 
+std::vector<Finding> check(const Scope& scope, std::string_view body, const std::vector<Declaration>& decls, decl::Role role,
+                           const std::vector<Declaration>* inherited) {
+    const bool inherits = inherited && std::any_of(inherited->begin(), inherited->end(),
+                                                   [](const Declaration& d) { return d.kind == DeclKind::Parameter; });
+    if (decls.empty() && !inherits) return check(scope, body);
+    const auto composed = decl::composeCode(body, decls, role, inherited);
+    auto out = check(scope, composed.text);
+    for (auto& f : out) {
+        if (composed.inDeclarations(f.line, f.column)) {
+            const Id id = composed.declarationAt(f.line, f.column);
+            std::string name = "?";
+            for (const auto* list : {&decls, inherited})
+                if (list)
+                    for (const auto& d : *list)
+                        if (d.id == id) name = d.name;
+            f.message = "d\xC3\xA9" "claration \xC2\xAB " + name + " \xC2\xBB : " + f.message;
+            f.line = f.column = f.length = 0;
+            f.fixLine = 0;                       // une correction du texte : pas dans une declaration
+        } else {
+            f.column = composed.bodyColumn(f.line, f.column);
+        }
+    }
+    return out;
+}
+
 std::vector<Finding> dialectFindings(const Scope& scope, std::string_view source) {
     if (source.find_first_not_of(" \t\r\n") == std::string_view::npos) return {};
     const auto st = markers::stripKeep(source);   // 1.11.1 (REP)
@@ -1423,7 +1449,7 @@ std::vector<Issue> projectIssues(const Project& p, const NameExists& plcHasName,
     };
     for (const auto& sc : p.programs.scripts) {
         if (sc.lang != ScriptLang::ST || (focus && !focus->scripts.count(sc.id))) continue;
-        for (const auto& f : check(scopeFor(nullptr, nullptr), sc.body)) {
+        for (const auto& f : check(scopeFor(nullptr, nullptr), sc.body, sc.decls, decl::Role::Script)) {
             Issue i;
             i.category = "Script";
             i.property = sc.name;
@@ -1434,7 +1460,7 @@ std::vector<Issue> projectIssues(const Project& p, const NameExists& plcHasName,
     for (const auto& v : p.views) {
         for (const auto& sc : v.scripts) {
             if (sc.lang != ScriptLang::ST || (focus && !focus->scripts.count(sc.id))) continue;
-            for (const auto& f : check(scopeFor(&v, nullptr), sc.body)) {
+            for (const auto& f : check(scopeFor(&v, nullptr), sc.body, sc.decls, decl::Role::Script)) {
                 Issue i;
                 i.category = "Script";
                 i.view = v.id;
@@ -1469,7 +1495,7 @@ std::vector<Issue> projectIssues(const Project& p, const NameExists& plcHasName,
     }
     for (const auto& fn : p.programs.functions) {
         if (focus && !focus->functions.count(fn.id)) continue;
-        for (const auto& f : check(scopeFor(nullptr, &fn), fn.body)) {
+        for (const auto& f : check(scopeFor(nullptr, &fn), fn.body, fn.decls, decl::Role::Function)) {
             Issue i;
             i.category = "Fonction";
             i.property = fn.name;

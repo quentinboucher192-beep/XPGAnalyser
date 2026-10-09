@@ -3,6 +3,7 @@
 // =============================================================================
 #include "HmiOperators.hpp"
 
+#include "HmiDecl.hpp"       // 1.11.18 (refonte, lot 3) : les declarations du modele, reconstruites
 #include "HmiEnums.hpp"      // 1.10 (decision 15) : toString / fromString des enumerations
 #include "HmiExprCheck.hpp"  // 1.10.1 (U2) : le nom le plus proche (veux-tu dire ?)
 #include "HmiPublicVars.hpp" // 1.10.1 (U2) : les proprietes d'une instance de symbole
@@ -540,7 +541,7 @@ std::string operatorFunctionText(const HmiOperator& o) {
     if (fam != OperatorFamily::Conversion) head += "; b : " + displayType(o.right);
     head += ")";
     if (fam != OperatorFamily::Assignment && !o.result.empty()) head += " : " + displayType(o.result);
-    std::string body = renameBareWord(o.body, kResultName, internal);
+    std::string body = renameBareWord(decl::codeOf(o), kResultName, internal);   // 1.11.18 (lot 3) : ses declarations du modele
     if (const auto fn = operatorFunctionName(o); !fn.empty()) body = renameBareWord(body, fn, internal);
     if (!body.empty() && body.back() != '\n') body += '\n';
     return head + "\n" + body + "END_FUNCTION\n";
@@ -944,7 +945,16 @@ std::vector<OperatorIssue> operatorIssues(const Project& p, const std::function<
         // Le script : ses declarations, sa syntaxe (a et b sont ses operandes). Une
         // locale peut etre d'un type IHM (structure ou enumeration).
         const TypeKnown knownType = [&p](std::string_view t) { return p.hmiTypeByName(trimmedOf(t)) != nullptr; };
-        const auto parts = splitDeclarations(o.body, false, knownType);
+        // 1.11.18 (refonte, lot 3) : ses declarations du modele d'abord ; le script se lit avec
+        // celles qui sont justes, reconstruites sur sa ligne 1.
+        HmiOperator flat = o;
+        flat.decls.clear();
+        for (const auto& e : decl::checkDeclarations(o.decls, decl::Role::Operator, o.body, knownType, nullptr, &flat.decls)) {
+            OperatorIssue i = base;
+            i.message = e.message;
+            out.push_back(std::move(i));
+        }
+        const auto parts = splitDeclarations(decl::codeOf(flat), false, knownType);
         for (const auto& e : parts.errors) {
             OperatorIssue i = base;
             i.line = e.line;

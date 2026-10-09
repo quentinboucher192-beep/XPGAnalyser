@@ -25,6 +25,26 @@ namespace hmi::pkg {
 
 namespace {
 
+// 1.11.18 (refonte, lot 3) : deux listes de declarations du modele "identiques" : a leurs
+// identifiants pres.
+bool sameDeclarations(const std::vector<Declaration>& a, const std::vector<Declaration>& b) {
+    if (a.size() != b.size()) return false;
+    for (std::size_t i = 0; i < a.size(); ++i) {
+        Declaration x = a[i], y = b[i];
+        x.id = y.id = kNoId;
+        if (!(x == y)) return false;
+    }
+    return true;
+}
+std::string declarationsText(const std::vector<Declaration>& decls) {
+    std::string s;
+    for (const auto& d : decls)
+        s += "  D " + std::string(declKindKey(d.kind)) + " " + d.name + " : " + d.type + " := " + d.value + " " + std::string(storageKey(d.storage))
+           + " " + std::string(passModeKey(d.mode)) + " " + std::string(visibilityKey(d.visibility)) + " " + d.description + "\n";
+    return s;
+}
+
+
 constexpr const char* kManifestFile = "paquet.txt";
 
 std::string upper(std::string_view s) {
@@ -79,7 +99,7 @@ std::string viewSignature(const View& v) {
         for (const auto& a : o.actions) s += "  A " + describeAction(a) + "|" + a.value + "|" + a.guard + "\n";
     }
     for (const auto& a : v.actions) s += "VA " + describeAction(a) + "|" + a.value + "|" + a.guard + "\n";
-    for (const auto& sc : v.scripts) s += "S " + sc.name + " " + sc.event + "\n" + sc.body + "\n";
+    for (const auto& sc : v.scripts) s += "S " + sc.name + " " + sc.event + "\n" + sc.body + "\n" + declarationsText(sc.decls);
     for (const auto& pa : v.params) s += "P " + pa.name + "=" + pa.defaultValue + "\n";
     return s;
 }
@@ -193,7 +213,8 @@ const char* programKindWord(ProgramKind k) {
 bool sameOperators(const std::vector<HmiOperator>& a, const std::vector<HmiOperator>& b) {
     if (a.size() != b.size()) return false;
     for (std::size_t i = 0; i < a.size(); ++i)
-        if (a[i].op != b[i].op || a[i].left != b[i].left || a[i].right != b[i].right || a[i].result != b[i].result || a[i].body != b[i].body)
+        if (a[i].op != b[i].op || a[i].left != b[i].left || a[i].right != b[i].right || a[i].result != b[i].result || a[i].body != b[i].body
+            || !sameDeclarations(a[i].decls, b[i].decls))
             return false;
     return true;
 }
@@ -201,7 +222,8 @@ bool sameType(const HmiType& a, const HmiType& b) {
     return a.kind == b.kind && a.members == b.members && a.values == b.values && sameOperators(a.operators, b.operators);
 }
 bool sameScript(const Script& a, const Script& b) {
-    return a.lang == b.lang && a.event == b.event && a.body == b.body && a.periodMs == b.periodMs && a.watch == b.watch;
+    return a.lang == b.lang && a.event == b.event && a.body == b.body && a.periodMs == b.periodMs && a.watch == b.watch
+        && sameDeclarations(a.decls, b.decls);
 }
 
 // Un nom libre dans le projet ET dans le paquet (T_Mode_2...), pour un type, une
@@ -395,17 +417,20 @@ Package collectPrograms(const Project& p, ProgramKind kind, const std::vector<Id
                     texts.push_back(o.right);
                     texts.push_back(o.result);
                     texts.push_back(o.body);
+                    for (const auto& d : o.decls) texts.push_back(d.type + " " + d.value);    // 1.11.18 (lot 3)
                 }
             }
         for (const auto& f : p.programs.functions)
             if (functions.count(upper(f.name))) {
                 texts.push_back(f.returnType);
                 texts.push_back(f.body);
+                for (const auto& d : f.decls) texts.push_back(d.type + " " + d.value);        // 1.11.18 (lot 3)
             }
         for (const auto& sc : p.programs.scripts)
             if (scripts.count(upper(sc.name))) {
                 texts.push_back(sc.body);
                 texts.push_back(sc.watch);
+                for (const auto& d : sc.decls) texts.push_back(d.type + " " + d.value);       // 1.11.18 (lot 3)
             }
         for (const auto& v : p.programs.variables)
             if (variables.count(upper(v.name))) texts.push_back(v.type);
@@ -782,7 +807,7 @@ Plan plan(const Project& dst, const Package& pkg) {
         it.name = f.name;
         const HmiFunction* ours = dst.functionByName(f.name);
         if (!ours) { it.state = State::Missing; it.choice = Choice::Add; it.detail = "absente du projet"; }
-        else if (ours->body == f.body && ours->returnType == f.returnType) { it.state = State::Same; it.choice = Choice::KeepOurs; it.detail = "identique, gard\xC3\xA9" "e"; }
+        else if (ours->body == f.body && ours->returnType == f.returnType && sameDeclarations(ours->decls, f.decls)) { it.state = State::Same; it.choice = Choice::KeepOurs; it.detail = "identique, gard\xC3\xA9" "e"; }
         else {
             it.state = State::Different;
             it.newName = uniqueProgramName(dst, src, ItemKind::Function, f.name);   // 1.11.2 (decision 174)
@@ -880,14 +905,29 @@ ImportResult importInto(Project& dst, const Package& pkg, const Plan& pl) {
                         op.right = renamedWord(op.right, it.name, it.newName);
                         op.result = renamedWord(op.result, it.name, it.newName);
                         op.body = renamedWord(op.body, it.name, it.newName);
+                        for (auto& d : op.decls) {                                   // 1.11.18 (lot 3)
+                            d.type = renamedWord(d.type, it.name, it.newName);
+                            d.value = renamedWord(d.value, it.name, it.newName);
+                        }
                     }
                 }
+                // 1.11.18 (lot 3) : les declarations du modele (type, valeur) suivent.
+                const auto decls = [&](std::vector<Declaration>& list) {
+                    for (auto& d : list) {
+                        d.type = renamedWord(d.type, it.name, it.newName);
+                        d.value = renamedWord(d.value, it.name, it.newName);
+                    }
+                };
                 for (auto& f : src.programs.functions) {
                     if (it.kind == ItemKind::Function && upper(f.name) == upper(it.name)) f.name = it.newName;
                     f.returnType = renamedWord(f.returnType, it.name, it.newName);
                     f.body = renamedWord(f.body, it.name, it.newName);
+                    decls(f.decls);
                 }
-                for (auto& sc : src.programs.scripts) sc.body = renamedWord(sc.body, it.name, it.newName);
+                for (auto& sc : src.programs.scripts) {
+                    sc.body = renamedWord(sc.body, it.name, it.newName);
+                    decls(sc.decls);
+                }
                 for (auto& v : src.programs.variables) v.type = renamedWord(v.type, it.name, it.newName);
                 break;
             }
@@ -1040,6 +1080,7 @@ ImportResult importInto(Project& dst, const Package& pkg, const Plan& pl) {
             for (auto& ours : dst.programs.functions)
                 if (upper(ours.name) == upper(f.name)) {
                     ours.body = f.body;
+                    ours.decls = f.decls;                  // 1.11.18 (lot 3) : leurs identifiants renouveles (changeProject)
                     ours.returnType = f.returnType;
                     ours.description = f.description;
                 }

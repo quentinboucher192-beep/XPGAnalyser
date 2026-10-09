@@ -132,7 +132,7 @@ std::vector<mast::HmiRef> hmiReferences(const hmi::Project& p) {
     };
     const auto noteScript = [&](const std::string& where, const hmi::Script& s) {
         if (s.lang == hmi::ScriptLang::ST) {
-            const auto decl = hmitree::withoutDeclarations(hmitree::withoutComments(s.body));
+            const auto decl = hmitree::withoutDeclarations(hmitree::withoutComments(hmi::decl::codeOf(s)));   // 1.11.18 : le modele aussi
             locals = decl.locals;
             note(where, s.name, decl.code);
             // Les textes a trous des chaines : IHM_JOURNAL('Niveau {Cuve.niveau:0.0}').
@@ -176,7 +176,7 @@ std::vector<mast::HmiRef> hmiReferences(const hmi::Project& p) {
     }
     for (const auto& s : p.programs.scripts) noteScript("Scripts g\xC3\xA9n\xC3\xA9raux", s);
     for (const auto& f : p.programs.functions) {
-        const auto decl = hmitree::withoutDeclarations(hmitree::withoutComments(f.body));
+        const auto decl = hmitree::withoutDeclarations(hmitree::withoutComments(hmi::decl::codeOf(f)));   // 1.11.18 : le modele aussi
         locals = decl.locals;
         std::string name = f.name;
         for (auto& c : name) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));

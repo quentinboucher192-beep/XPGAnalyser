@@ -2,6 +2,7 @@
 //  hmi/HmiSymbols.cpp - voir HmiSymbols.hpp
 // =============================================================================
 #include "HmiSymbols.hpp"
+#include "HmiDecl.hpp"   // 1.11.18 (refonte, lot 3) : les declarations du modele, reconstruites
 #include "HmiLiveGeometry.hpp"   // 1.11.4 : la geometrie en marche (les notes de l'expansion)
 #include "HmiMarkers.hpp"        // 1.11.4 : un repere dans une constante texte ('$Nom$')
 
@@ -1089,7 +1090,10 @@ Expansion expandInstance(const Project& p, const Object& inst, int depth, std::s
         Script s = sc;
         s.id = expandedId(inst.id, sc.id);
         s.name = inst.name + "." + sc.name;
-        if (s.lang == ScriptLang::ST && (!args.empty() || calls)) s.body = relink(s.body, true);
+        if (s.lang == ScriptLang::ST && (!args.empty() || calls)) {
+            s.body = relink(s.body, true);
+            for (auto& d : s.decls) d.value = relink(d.value, false);   // 1.11.18 (lot 3) : une valeur initiale cite un parametre
+        }
         out.scripts.push_back(std::move(s));
     }
     if (!sym->actions.empty()) {
@@ -1129,7 +1133,10 @@ View expandInstances(const Project& p, const View& v) {
     };
     instancePopups(out.actions);
     for (auto& sc : out.scripts)
-        if (sc.lang == ScriptLang::ST) sc.body = qualifyViewCalls(sc.body, p, v);
+        if (sc.lang == ScriptLang::ST) {
+            sc.body = qualifyViewCalls(sc.body, p, v);
+            for (auto& d : sc.decls) d.value = qualifyViewCalls(d.value, p, v);   // 1.11.18 (lot 3)
+        }
     if (!out.actions.empty()) {
         Object holder;
         holder.actions = std::move(out.actions);
@@ -1429,8 +1436,11 @@ bool boundSymbolFunction(const Project& p, std::string_view call, BoundFunction&
     if (!instanceAt(p, path, at)) return false;
     const HmiFunction* f = symbolFunction(*at.symbol, name);
     if (!f) return false;
-    bool overridden = false;
-    const std::string& body = base ? f->body : effectiveFunctionBody(*f, at.instance, &overridden);
+    // 1.11.18 (refonte, lot 3) : le texte complet (ses declarations du modele sur la ligne 1 ;
+    // une redefinition : les parametres de la fonction et ses propres locales).
+    const FunctionOverride* ov = !base && f->isVirtual ? functionOverride(at.instance, f->name) : nullptr;
+    const bool overridden = ov != nullptr;
+    const std::string body = ov ? decl::codeOf(*ov, f) : decl::codeOf(*f);
     // Les parametres du symbole, sauf ceux que la fonction cache (ses declarations, son nom).
     SymbolArguments args = symbolArguments(*at.symbol, at.instance, &p);
     const auto parts = splitDeclarations(body, true);
@@ -1438,6 +1448,7 @@ bool boundSymbolFunction(const Project& p, std::string_view call, BoundFunction&
                               [&](const auto& a) { return parts.local(a.first) != nullptr || sameName(a.first, f->name); }),
                args.end());
     out.function = *f;
+    out.function.decls.clear();                                   // dans le texte (une copie pour l'appel)
     out.function.body = substituteParams(qualifySymbolCalls(body, p, *at.symbol, path), args, true);
     // Un identifiant a lui (les compteurs d'appels du moteur) : stable pour ce chemin.
     std::uint64_t h = 1469598103934665603ull;
@@ -1594,7 +1605,10 @@ View qualifiedOwnedPopup(const Project& p, const View& popup) {
     const auto calls = [&](std::string_view t, bool) { return qualifySymbolCalls(t, p, *sym, kInstanceAlias); };
     for (auto& o : out.objects) rewriteNames(o, calls);
     for (auto& sc : out.scripts)
-        if (sc.lang == ScriptLang::ST) sc.body = qualifySymbolCalls(sc.body, p, *sym, kInstanceAlias);
+        if (sc.lang == ScriptLang::ST) {
+            sc.body = qualifySymbolCalls(sc.body, p, *sym, kInstanceAlias);
+            for (auto& d : sc.decls) d.value = qualifySymbolCalls(d.value, p, *sym, kInstanceAlias);   // 1.11.18 (lot 3)
+        }
     Object holder;
     holder.actions = std::move(out.actions);
     rewriteNames(holder, calls);

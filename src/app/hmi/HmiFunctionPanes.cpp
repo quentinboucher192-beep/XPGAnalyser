@@ -4,6 +4,7 @@
 #include "HmiIcons.hpp"
 #include "HmiPaneKit.hpp"
 #include "HmiScriptPanes.hpp"    // 1.10 : placedScriptDiagnostics, squigglesOf
+#include "../../hmi/HmiDecl.hpp"        // 1.11.18 (refonte, lot 3) : les declarations du modele, reconstruites
 #include "../../hmi/HmiScript.hpp"
 #include "../../hmi/HmiScriptCheck110.hpp"   // 1.10 (S1) : un type de retour riche (structure, enumeration, ARRAY, MAP...)
 #include "../../domain/ProjectModel.hpp"
@@ -96,7 +97,7 @@ std::string trialText(const sim::Value& v) {
 
 std::string parameterList(const hmi::HmiFunction& f) {
     std::string out;
-    const auto parts = hmi::splitDeclarations(f.body, true);   // les pointeurs de inputs() vivent avec lui
+    const auto parts = hmi::splitDeclarations(hmi::decl::codeOf(f), true);   // les pointeurs de inputs() vivent avec lui ; 1.11.18 : le modele aussi
     for (const auto* in : parts.inputs())
         out += (out.empty() ? "" : ", ") + in->name + " : " + in->type;
     return out.empty() ? std::string("-") : out;
@@ -506,7 +507,7 @@ void HmiFunctionsPane::rebuildProperties() {
     c.properties.push_back(hmikit::prop("Description", f->description, PG::ValueType::Text,
         [this, id](std::string_view v) { return setDescription(id, std::string(v)); }));
     c.properties.push_back(hmikit::prop("Signature", hmi::functionSignature(*f), PG::ValueType::ReadOnly));
-    const auto parts = hmi::splitDeclarations(f->body, true);
+    const auto parts = hmi::splitDeclarations(hmi::decl::codeOf(*f), true);   // 1.11.18 (lot 3) : ses declarations du modele aussi
     std::size_t kept = 0, temps = 0;
     for (const auto& l : parts.locals) {
         kept += l.section == hmi::LocalVar::Section::Var;
@@ -585,7 +586,8 @@ void HmiFunctionsPane::updateDiagnostics() {
                 // nom inconnu de l'IHM peut etre a lui : rien n'est dit.
                 const auto plc = assist_.plc ? assist_.plc() : nullptr;
                 // 1.11.10 : une fonction de symbole lit les parametres et appelle les fonctions du symbole.
-                for (auto& d : placedScriptDiagnostics(doc_->project, f->body, symbolView(), f, plc.get())) all.push_back(std::move(d));
+                for (auto& d : placedScriptDiagnostics(doc_->project, f->body, symbolView(), f, plc.get(), nullptr, &f->decls))
+                    all.push_back(std::move(d));                                   // 1.11.18 : ses declarations du modele
                 return all;
             },
             line, f->name);
@@ -628,6 +630,10 @@ void HmiFunctionsPane::setAssist(std::function<std::shared_ptr<const domain::Pro
     assist_.hmi = [doc = doc_]() -> const hmi::Project* { return doc ? &doc->project : nullptr; };
     assist_.plc = std::move(plc);
     assist_.live = std::move(live);
+    assist_.declarations = [this] {                                        // 1.11.18 (lot 3) : ses parametres et locales du modele
+        const auto* f = current();
+        return f ? assist::declarationsPrefix(f->decls, hmi::decl::Role::Function) : std::string{};
+    };
     assist::attach(*editor_, assist_);
     updateDiagnostics();
     updateSymbolLine();
@@ -667,7 +673,7 @@ void HmiFunctionsPane::updateSymbolLine() {
         return;
     }
     const auto plc = assist_.plc ? assist_.plc() : nullptr;
-    const auto d = assist::describe(*hp, plc.get(), symbol, text);
+    const auto d = assist::describe(*hp, plc.get(), symbol, (assist_.declarations ? assist_.declarations() : std::string{}) + text);
     if (d.keyword || (!d.found && editor_->completionOpen())) { symbolBar_->setMessage({}); return; }
     gfx::Color accent{0, 0, 0, 0};
     if (!d.found) accent = gfx::Color{232, 196, 111, 255};
@@ -841,7 +847,7 @@ bool HmiFunctionsPane::tryFunction(Id id, const std::vector<std::string>& argume
     for (const auto& v : doc_->project.programs.variables)
         if (const auto* val = rt.variable(v.name)) before.emplace_back(v.name, hmi::formatValue(*val));
 
-    const auto parts = hmi::splitDeclarations(f->body, true);
+    const auto parts = hmi::splitDeclarations(hmi::decl::codeOf(*f), true);   // 1.11.18 (lot 3) : ses parametres du modele aussi
     const auto inputs = parts.inputs();
     std::vector<std::pair<std::string, sim::Value>> args;
     std::string shown;

@@ -49,10 +49,13 @@ namespace app {
 // ecriture interdite, type) - les memes que Compiler : un script (de vue :
 // `view`, ses parametres) ou le corps d'une fonction IHM (`function`). `plc` :
 // le programme de l'automate (nullptr : un nom inconnu de l'IHM peut etre a lui).
+// 1.11.18 (refonte, lot 3) : `decls` - les declarations du modele du code (sur sa ligne 1,
+// comme le moteur les lit ; leurs fautes nomment la declaration, ligne 0).
 [[nodiscard]] std::vector<hmi::ScriptDiagnostic> placedScriptDiagnostics(const hmi::Project&, std::string_view code,
                                                                        const hmi::View* view, const hmi::HmiFunction* function,
                                                                        const domain::Project* plc,
-                                                                       std::vector<hmi::scriptcheck::Finding>* fixes = nullptr);
+                                                                       std::vector<hmi::scriptcheck::Finding>* fixes = nullptr,
+                                                                       const std::vector<hmi::Declaration>* decls = nullptr);
 // 1.10.4 (le plantage de la 1.10.3, pendant la frappe) : un diagnostic ne fait
 // jamais tomber l'appli. Une exception, quelle qu'elle soit, est ecrite dans le
 // journal interne (`where` : le script, la fonction) ; la ligne `line` (1, 2...)

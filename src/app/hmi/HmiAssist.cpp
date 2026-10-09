@@ -387,7 +387,7 @@ Item userFunctionItem(const hmi::HmiFunction& f, int rank) {
               + (about.empty() ? std::string{} : "  \xC2\xB7  " + about);
     it.kind = Kind::UserFunction;
     it.rank = rank;
-    const bool params = !hmi::splitDeclarations(f.body, true).inputs().empty();
+    const bool params = !hmi::splitDeclarations(hmi::decl::codeOf(f), true).inputs().empty();   // 1.11.18 : le modele aussi
     it.insert = f.name + "()";
     it.caret = params ? f.name.size() + 1 : it.insert.size();
     return it;
@@ -770,7 +770,7 @@ struct Scope {
             return {};
         }
         if (const auto* hf = hp->functionByName(name)) {
-            const auto decls = hmi::splitDeclarations(hf->body, true, [this](std::string_view t) { return lang::knownHmiType(hp, t); });
+            const auto decls = hmi::splitDeclarations(hmi::decl::codeOf(*hf), true, [this](std::string_view t) { return lang::knownHmiType(hp, t); });
             const auto ins = decls.inputs();
             return index < ins.size() ? ins[index]->type : std::string{};
         }
@@ -2336,7 +2336,7 @@ bool signature(const hmi::Project* hp, const domain::Project* plc, std::string_v
         if (const auto* f = hp->functionByName(name)) {
             out.name = f->name;
             out.parameters.clear();
-            const auto parts = hmi::splitDeclarations(f->body, true);   // inputs() pointe dans parts
+            const auto parts = hmi::splitDeclarations(hmi::decl::codeOf(*f), true);   // inputs() pointe dans parts ; 1.11.18 : le modele aussi
             for (const auto* in : parts.inputs())
                 out.parameters.push_back(in->name + " : " + in->type + (in->initial.empty() ? std::string{} : " := " + in->initial));
             out.returns = f->returnType;
@@ -2668,6 +2668,12 @@ Description describe(const hmi::Project& hp, const domain::Project* plc, std::st
 }
 
 // ------------------------------------------------------------- brancher -----
+std::string declarationsPrefix(const std::vector<hmi::Declaration>& decls, hmi::decl::Role role,
+                               const std::vector<hmi::Declaration>* inherited) {
+    if (decls.empty() && !inherited) return {};
+    return hmi::decl::composeCode({}, decls, role, inherited).text;
+}
+
 void attach(ui::MultiLineText& editor, Sources src) {
     auto* ed = &editor;
     editor.setCompleteAfterDot(true);
@@ -2676,8 +2682,10 @@ void attach(ui::MultiLineText& editor, Sources src) {
         const auto* hp = src.hmi ? src.hmi() : nullptr;
         if (!hp) return;
         const auto plc = src.plc ? src.plc() : nullptr;
-        const std::string text = ed->text();
-        const std::size_t at = std::min(ed->caretOffset(), text.size());
+        // 1.11.18 (lot 3) : les declarations du modele, devant (comme tapees en tete de la ligne 1).
+        const std::string decls = src.declarations ? src.declarations() : std::string{};
+        const std::string text = decls + ed->text();
+        const std::size_t at = std::min(decls.size() + ed->caretOffset(), text.size());
         const std::size_t start = at >= prefix.size() ? at - prefix.size() : 0;
         tAfterCaret = std::string_view(text).substr(at);   // 1.10 (chantier K) : les fonctions declarees plus bas
         // 1.10.1 (U2) : le script d'un operateur (a, b, Resultat).
@@ -2688,7 +2696,7 @@ void attach(ui::MultiLineText& editor, Sources src) {
     editor.setSignatureProvider([ed, src](std::string_view name, ui::MultiLineText::Signature& out) {
         if (ed->language() != ui::Language::StructuredText) return false;
         // 1.10 (chantier K2) : une fonction interne du script, une fonction du dialecte (S1).
-        if (dialectSignature(ed->text(), name, out)) return true;
+        if (dialectSignature((src.declarations ? src.declarations() : std::string{}) + ed->text(), name, out)) return true;
         const auto plc = src.plc ? src.plc() : nullptr;
         return signature(src.hmi ? src.hmi() : nullptr, plc.get(), name, out);
     });
@@ -2699,7 +2707,8 @@ void attach(ui::MultiLineText& editor, Sources src) {
         const auto plc = src.plc ? src.plc() : nullptr;
         // Un nom connu seulement : un mot d'un commentaire ou d'une chaine n'a
         // pas d'infobulle (la barre sous le code, elle, dit "inconnu").
-        const auto d = describe(*hp, plc.get(), symbol, ed->text(), src.op ? src.op() : hmi::kNoId);   // 1.10.1 (U2)
+        const auto d = describe(*hp, plc.get(), symbol, (src.declarations ? src.declarations() : std::string{}) + ed->text(),
+                                src.op ? src.op() : hmi::kNoId);   // 1.10.1 (U2) ; 1.11.18 : les declarations du modele
         if (d.keyword || !d.found) return false;
         text = d.line;
         std::string value;

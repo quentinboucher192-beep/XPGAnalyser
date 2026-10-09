@@ -219,7 +219,7 @@ View strippedView(const View& v) {
     c.activeLayer = kNoId;
     c.scripts.clear();
     c.actions.clear();
-    for (auto& f : c.functions) f.body.clear(), f.description.clear();
+    for (auto& f : c.functions) f.body.clear(), f.description.clear(), f.decls.clear();   // 1.11.18 (lot 3) : leurs elements
     for (auto& o : c.objects) {
         o.actions.clear();
         for (auto& pr : o.props) pr.expr.clear();
@@ -278,11 +278,24 @@ std::string actionsText(const View& v) {
     if (a.actions.empty() && a.objects.empty()) return {};
     return serializeView(a);
 }
-std::string scriptText(const Script& s) {
-    return "langage=" + std::string(scriptLangKey(s.lang)) + " evenement=" + s.event + " periode=" + std::to_string(s.periodMs) + " surveille=" + s.watch + "\n" + s.body;
+// 1.11.18 (refonte, lot 3) : les declarations du modele d'un code, dans son contenu - tout
+// ce qui change son execution (genre, nom, type, valeur, stockage, mode, visibilite) ; sa
+// documentation seule ne relance rien. Vide sans declaration : les empreintes d'avant.
+std::string declarationsCanon(const std::vector<Declaration>& decls) {
+    std::string s;
+    for (const auto& d : decls)
+        s += "\ndecl " + std::string(declKindKey(d.kind)) + " " + d.name + " : " + d.type + " := " + d.value + " "
+           + std::string(storageKey(d.storage)) + " " + std::string(passModeKey(d.mode)) + " " + std::string(visibilityKey(d.visibility));
+    return s;
 }
-std::string functionCanon(const HmiFunction& f) { return "retour=" + f.returnType + " virtuelle=" + std::string(f.isVirtual ? "1" : "0") + "\n" + f.body; }
-std::string functionIface(std::string_view name, const HmiFunction& f) { return std::string(name) + "(" + signatureOf(f.body) + ")" + (f.returnType.empty() ? "" : " : " + f.returnType); }
+std::string scriptText(const Script& s) {
+    return "langage=" + std::string(scriptLangKey(s.lang)) + " evenement=" + s.event + " periode=" + std::to_string(s.periodMs) + " surveille=" + s.watch + "\n" + s.body
+         + declarationsCanon(s.decls);
+}
+std::string functionCanon(const HmiFunction& f) {
+    return "retour=" + f.returnType + " virtuelle=" + std::string(f.isVirtual ? "1" : "0") + "\n" + f.body + declarationsCanon(f.decls);
+}
+std::string functionIface(std::string_view name, const HmiFunction& f) { return std::string(name) + "(" + signatureOf(decl::codeOf(f)) + ")" + (f.returnType.empty() ? "" : " : " + f.returnType); }
 
 // ----------------------------------------------- les noms et les references ----
 struct Names {
@@ -462,12 +475,12 @@ std::vector<Element> collect(const Project& p, const ApiInfo& api) {
                 for (const auto& a : o.actions) all += a.target + "\n" + a.value + "\n" + a.watch + "\n" + a.guard + "\n";
             }
             for (const auto& a : v.actions) all += a.target + "\n" + a.value + "\n" + a.watch + "\n" + a.guard + "\n";
-            for (const auto& s : v.scripts) all += s.body + "\n";
-            for (const auto& f : v.functions) all += f.body + "\n";
+            for (const auto& s : v.scripts) all += decl::codeOf(s) + "\n";
+            for (const auto& f : v.functions) all += decl::codeOf(f) + "\n";
             for (const auto& prm : v.params) all += prm.defaultValue + "\n";
         }
-        for (const auto& s : p.programs.scripts) all += s.body + "\n" + s.watch + "\n";
-        for (const auto& f : p.programs.functions) all += f.body + "\n";
+        for (const auto& s : p.programs.scripts) all += decl::codeOf(s) + "\n" + s.watch + "\n";
+        for (const auto& f : p.programs.functions) all += decl::codeOf(f) + "\n";
         for (const auto& a : p.alarms) all += a.condition + "\n" + a.message + "\n";
         for (const auto& r : p.recipes) for (const auto& f : r.fields) all += f.variable + "\n";
         for (const auto& h : p.history.archived) all += h + "\n";
@@ -564,7 +577,7 @@ std::vector<Element> collect(const Project& p, const ApiInfo& api) {
         e.content = functionCanon(f);
         e.iface = functionIface(f.name, f);
         std::set<std::string> seen;
-        resolveCode(n, nullptr, f.body, e.deps, seen, {lower(f.name)});
+        resolveCode(n, nullptr, decl::codeOf(f), e.deps, seen, {lower(f.name)});
     }
     // ---- C3. types IHM ----
     for (const auto& t : p.programs.types) {
@@ -580,7 +593,7 @@ std::vector<Element> collect(const Project& p, const ApiInfo& api) {
         for (const auto& m : t.members)
             for (const auto& u : p.programs.types)
                 if (u.id != t.id && lower(m.type).find(lower(u.name)) != std::string::npos) dep(e, seen, u.name, keyOf(ElementKind::Type, u.id), DepMode::Content, "type");
-        for (const auto& o : t.operators) resolveCode(n, nullptr, o.body, e.deps, seen, {"a", "b"});
+        for (const auto& o : t.operators) resolveCode(n, nullptr, decl::codeOf(o), e.deps, seen, {"a", "b"});
     }
     // ---- C4. symboles, leurs fonctions ----
     for (const auto& v : p.views) {
@@ -598,7 +611,7 @@ std::vector<Element> collect(const Project& p, const ApiInfo& api) {
         }
         std::set<std::string> params;
         for (const auto& prm : v.params) params.insert(lower(prm.name));
-        for (const auto& o : v.operators) resolveCode(n, &v, o.body, e.deps, seen, {"a", "b"});
+        for (const auto& o : v.operators) resolveCode(n, &v, decl::codeOf(o), e.deps, seen, {"a", "b"});
         for (const auto& f : v.functions) {
             auto& fe = make(ElementKind::SymbolFunction, keyOf(ElementKind::SymbolFunction, f.id), f.name,
                             symbolPath(v) + "/Fonctions/" + f.name, f.id, v.id);
@@ -611,11 +624,12 @@ std::vector<Element> collect(const Project& p, const ApiInfo& api) {
             locals.insert(lower(f.name));
             // ses soeurs, appelees par leur nom
             std::set<std::string> called;
-            for (const auto& x : identifiers(f.body)) called.insert(lower(rootOf(x)));
+            const std::string code = decl::codeOf(f);                 // 1.11.18 (lot 3) : ses declarations du modele
+            for (const auto& x : identifiers(code)) called.insert(lower(rootOf(x)));
             for (const auto& g : v.functions)
                 if (g.id != f.id && called.count(lower(g.name)))
                     dep(fe, fseen, g.name, keyOf(ElementKind::SymbolFunction, g.id), DepMode::Interface, "appel");
-            resolveCode(n, &v, f.body, fe.deps, fseen, locals);
+            resolveCode(n, &v, code, fe.deps, fseen, locals);
         }
     }
     // ---- C5. scripts generaux ----
@@ -625,7 +639,7 @@ std::vector<Element> collect(const Project& p, const ApiInfo& api) {
         e.content = scriptText(s);
         e.iface = s.name + " (" + s.event + ")";
         std::set<std::string> seen;
-        resolveCode(n, nullptr, s.body + "\n" + s.watch, e.deps, seen);
+        resolveCode(n, nullptr, decl::codeOf(s) + "\n" + s.watch, e.deps, seen);
     }
     // ---- C6. ressources, fichiers externes, langues ----
     for (const auto& r : p.assets.resources) {
@@ -706,7 +720,7 @@ std::vector<Element> collect(const Project& p, const ApiInfo& api) {
             e.iface = s.name;
             std::set<std::string> seen;
             dep(e, seen, v.name, vkey, DepMode::Interface, "vue");
-            resolveCode(n, &v, s.body, e.deps, seen, params);
+            resolveCode(n, &v, decl::codeOf(s), e.deps, seen, params);
         }
         {
             auto& e = make(ElementKind::Animations, keyOf(ElementKind::Animations, v.id), "Animations", base + "/Animations", v.id, v.id);
@@ -1441,7 +1455,7 @@ std::map<std::string, std::vector<Diagnostic>> compileElements(const Project& p,
         s.function = fn;
         s.plcKnown = o.plcHasName;
         s.plc = o.plcPaths;
-        for (const auto& fd : scriptcheck::check(s, fn->body)) {
+        for (const auto& fd : scriptcheck::check(s, fn->body, fn->decls, decl::Role::Function)) {
             Diagnostic x;
             x.severity = fd.severity == scriptcheck::Finding::Severity::Error ? Severity::Error : Severity::Warning;
             x.code = "Fonction";

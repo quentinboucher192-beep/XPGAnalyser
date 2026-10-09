@@ -37,6 +37,7 @@
 #include "../App.hpp"
 #include "../BackgroundTasks.hpp"      // Lot API 8 : bandeau haut (la cloche)
 #include "../../hmi/HmiBuildState.hpp"  // 1.11 (chantier T3, C4) : les icones compilable / generable
+#include "../../hmi/HmiDecl.hpp"   // 1.11.18 (refonte, lot 3) : les declarations du modele
 #include "../hmi/HmiDesignPanes.hpp"
 #include "../hmi/HmiAssetPanes.hpp"
 #include "../hmi/HmiAssist.hpp"
@@ -2801,7 +2802,7 @@ void MainAnalysisScreen::askHmiTryFunction(std::uint64_t functionId) {
     const auto* f = doc ? doc->project.function(asId(functionId)) : nullptr;
     auto* pane = dynamic_cast<HmiFunctionsPane*>(hmiTab("fonctions"));
     if (!f || !pane) return;
-    const auto parts = hmi::splitDeclarations(f->body, true);
+    const auto parts = hmi::splitDeclarations(hmi::decl::codeOf(*f), true);   // 1.11.18 (lot 3) : ses parametres du modele aussi
     const auto inputs = parts.inputs();
     // Sans parametre : l'essai part tout de suite.
     if (inputs.empty()) {

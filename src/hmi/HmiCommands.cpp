@@ -172,6 +172,8 @@ core::CommandPtr changeView(const DocumentPtr& doc, Id view, std::string label, 
     View before = *current;
     View after = before;
     fn(doc->project, after);
+    // 1.11.18 (lot 3) : une declaration copiee (une instance, un script dupliques) recoit un identifiant neuf.
+    uniqueDeclarationIds(doc->project, after);
     if (after == before) return nullptr;
     return std::make_unique<ViewCommand>(doc, std::move(before), std::move(after), std::move(label),
                                          std::move(mergeKey));
@@ -182,6 +184,9 @@ core::CommandPtr changeProject(const DocumentPtr& doc, std::string label, const 
     Project before = doc->project;
     Project after = before;
     fn(after);
+    // 1.11.18 (lot 3) : une declaration copiee (une vue, un script, une fonction dupliques, un
+    // paquet importe) recoit un identifiant neuf : chacune garde le sien, unique.
+    uniqueDeclarationIds(after);
     // Les identifiants attribues pendant la modification sont definitivement
     // pris, meme si la commande est annulee ensuite.
     doc->project.nextId = std::max(doc->project.nextId, after.nextId);

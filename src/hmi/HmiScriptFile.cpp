@@ -129,6 +129,17 @@ bool sameSignature(const HmiOperator& a, const HmiOperator& b) {
     return a.op == b.op && sameName(a.left, b.left) && sameName(a.right, b.right) && (a.op != "TO" || sameName(a.result, b.result));
 }
 
+// 1.11.18 (lot 3) : deux listes de declarations du modele egales, a leurs identifiants pres.
+bool sameDeclarations(const std::vector<Declaration>& a, const std::vector<Declaration>& b) {
+    if (a.size() != b.size()) return false;
+    for (std::size_t i = 0; i < a.size(); ++i) {
+        Declaration x = a[i], y = b[i];
+        x.id = y.id = kNoId;
+        if (!(x == y)) return false;
+    }
+    return true;
+}
+
 } // namespace
 
 // ---------------------------------------------------------------- ecrire ---
@@ -146,6 +157,7 @@ File fromView(const View& v, std::string_view onlyEvent) {
         e.event = std::string(ev);
         e.lang = s->lang;
         e.body = s->body;
+        e.decls = s->decls;                                 // 1.11.18 (lot 3)
         f.entries.push_back(std::move(e));
     }
     return f;
@@ -161,6 +173,7 @@ File fromOperators(const std::vector<HmiOperator>& ops, std::string_view owner, 
         Entry e;
         e.op = o;
         e.body = o.body;
+        e.decls = o.decls;                                  // 1.11.18 (lot 3)
         f.entries.push_back(std::move(e));
     }
     return f;
@@ -174,7 +187,9 @@ std::string write(const File& f) {
     out += "   Un bloc (*# ... *) avant chaque " + std::string(ops ? "op\xC3\xA9rateur" : "script")
          + ", puis son code jusqu'au bloc suivant. Le code se modifie ici ;\n"
            "   les blocs se gardent tels quels. Importer : Scripts (ou Op\xC3\xA9rateurs) > Importer\xE2\x80\xA6 *)\n";
-    out += "(*# xpgst format=" + std::to_string(f.format) + " genre=" + (ops ? "operateurs" : "scripts-vue") + " source=" + quote(f.source)
+    // 1.11.18 (lot 3) : le format 2 seulement s'il a des declarations du modele.
+    const bool declared = std::any_of(f.entries.begin(), f.entries.end(), [](const Entry& e) { return !e.decls.empty(); });
+    out += "(*# xpgst format=" + std::to_string(declared ? kFormat : 1) + " genre=" + (ops ? "operateurs" : "scripts-vue") + " source=" + quote(f.source)
          + (f.role.empty() ? std::string{} : " role=" + quote(f.role)) + " version=" + quote(f.writer.empty() ? XPG_ANALYZER_VERSION : f.writer)
          + " *)\n";
     for (const auto& e : f.entries) {
@@ -186,6 +201,15 @@ std::string write(const File& f) {
             out += " *)\n";
         } else {
             out += "(*# script evenement=" + e.event + " langage=" + std::string(scriptLangKey(e.lang)) + " *)\n";
+        }
+        for (const auto& d : e.decls) {                     // 1.11.18 (lot 3, decision D4)
+            out += "(*# declaration genre=" + std::string(declKindKey(d.kind)) + " nom=" + quote(d.name) + " type=" + quote(d.type);
+            if (!d.value.empty()) out += " valeur=" + quote(d.value);
+            if (d.kind == DeclKind::Variable) out += " stockage=" + std::string(storageKey(d.storage));
+            if (d.kind == DeclKind::Parameter) out += " mode=" + std::string(passModeKey(d.mode));
+            out += " visibilite=" + std::string(visibilityKey(d.visibility));
+            if (!d.description.empty()) out += " description=" + quote(d.description);
+            out += " *)\n";
         }
         const std::string body = normalBody(e.body);
         if (!body.empty()) out += body + "\n";
@@ -240,6 +264,23 @@ bool read(std::string_view text, File& out, std::string* why) {
             continue;
         }
         if (word == "fin") { open = nullptr; ended = true; continue; }
+        if (word == "declaration") {                        // 1.11.18 (lot 3, decision D4)
+            if (!open) return fail("Une d\xC3\xA9" "claration hors d'un script ou d'un op\xC3\xA9rateur" + where + ".");
+            Declaration d;
+            const auto kind = declKindFromKey(at(kv, "genre"));
+            if (!kind) return fail("Genre de d\xC3\xA9" "claration inconnu : \xC2\xAB " + at(kv, "genre") + " \xC2\xBB" + where + ".");
+            d.kind = *kind;
+            d.name = at(kv, "nom");
+            d.type = at(kv, "type");
+            d.value = at(kv, "valeur");
+            d.description = at(kv, "description");
+            d.storage = storageFromKey(at(kv, "stockage")).value_or(Storage::Execution);
+            d.mode = passModeFromKey(at(kv, "mode")).value_or(PassMode::In);
+            d.visibility = visibilityFromKey(at(kv, "visibilite")).value_or(Visibility::Public);
+            if (d.name.empty()) return fail("Une d\xC3\xA9" "claration sans nom" + where + ".");
+            open->decls.push_back(std::move(d));
+            continue;
+        }
         if (word == "script") {
             if (!header) out.genre = Genre::ViewScripts;
             if (out.genre != Genre::ViewScripts) return fail("Un script dans un fichier d'op\xC3\xA9rateurs" + where + ".");
@@ -275,7 +316,10 @@ bool read(std::string_view text, File& out, std::string* why) {
     (void)ended;
     for (auto& e : out.entries) {
         e.body = normalBody(e.body);
-        if (out.genre == Genre::Operators) e.op.body = e.body;
+        if (out.genre == Genre::Operators) {
+            e.op.body = e.body;
+            e.op.decls = e.decls;
+        }
     }
     if (!header && out.entries.empty()) {
         // Un fichier .st sans bloc : un seul script.
@@ -329,7 +373,7 @@ std::vector<State> compareView(const File& f, const View& v) {
     for (const auto& e : f.entries) {
         const Script* s = scriptOf(v, e.event);
         if (!s || normalBody(s->body).empty()) out.push_back(State::New);
-        else if (normalBody(s->body) == normalBody(e.body) && s->lang == e.lang) out.push_back(State::Same);
+        else if (normalBody(s->body) == normalBody(e.body) && s->lang == e.lang && sameDeclarations(s->decls, e.decls)) out.push_back(State::Same);
         else out.push_back(State::Different);
     }
     return out;
@@ -340,7 +384,8 @@ std::vector<State> compareOperators(const File& f, const std::vector<HmiOperator
     for (const auto& e : f.entries) {
         const auto it = std::find_if(ops.begin(), ops.end(), [&](const HmiOperator& o) { return sameSignature(o, e.op); });
         if (it == ops.end()) out.push_back(State::New);
-        else if (normalBody(it->body) == normalBody(e.body) && it->result == e.op.result && it->description == e.op.description)
+        else if (normalBody(it->body) == normalBody(e.body) && it->result == e.op.result && it->description == e.op.description
+                 && sameDeclarations(it->decls, e.decls))
             out.push_back(State::Same);
         else out.push_back(State::Different);
     }
@@ -380,17 +425,23 @@ std::size_t applyToView(Project& p, View& v, const File& f, const std::vector<bo
             made.lang = e.lang;
             made.event = e.event;
             made.body = e.body + "\n";
+            made.decls = e.decls;                           // 1.11.18 (lot 3) : leurs identifiants donnes par la commande
             v.scripts.push_back(std::move(made));
             ++changed;
             continue;
         }
         const std::string ours = normalBody(s->body);
-        if (ours == normalBody(e.body) && s->lang == e.lang) continue;
+        if (ours == normalBody(e.body) && s->lang == e.lang && sameDeclarations(s->decls, e.decls)) continue;
         if (mode == Mode::Append && !ours.empty()) {
             s->body = ours + "\n\n(* ---- import\xC3\xA9 de " + (f.source.empty() ? std::string("un fichier") : f.source) + " ---- *)\n" + e.body + "\n";
+            // 1.11.18 (lot 3) : ses declarations, sauf celles dont le script a deja le nom.
+            for (const auto& d : e.decls)
+                if (std::none_of(s->decls.begin(), s->decls.end(), [&](const Declaration& x) { return sameName(x.name, d.name); }))
+                    s->decls.push_back(d);
         } else {
             s->body = e.body + "\n";
             s->lang = e.lang;
+            s->decls = e.decls;
         }
         ++changed;
     }
@@ -403,6 +454,7 @@ std::size_t applyToOperators(Project& p, std::vector<HmiOperator>& ops, const Fi
         if (!chosen.empty() && (i >= chosen.size() || !chosen[i])) continue;
         HmiOperator o = f.entries[i].op;
         o.body = f.entries[i].body;
+        o.decls = f.entries[i].decls;                       // 1.11.18 (lot 3)
         const auto it = std::find_if(ops.begin(), ops.end(), [&](const HmiOperator& x) { return sameSignature(x, o); });
         if (it == ops.end()) {
             o.id = p.allocate();
@@ -410,7 +462,9 @@ std::size_t applyToOperators(Project& p, std::vector<HmiOperator>& ops, const Fi
             ++changed;
             continue;
         }
-        if (normalBody(it->body) == normalBody(o.body) && it->result == o.result && it->description == o.description) continue;
+        if (normalBody(it->body) == normalBody(o.body) && it->result == o.result && it->description == o.description
+            && sameDeclarations(it->decls, o.decls))
+            continue;
         o.id = it->id;
         *it = std::move(o);
         ++changed;

@@ -435,7 +435,13 @@ std::size_t renameParam(Project& p, std::string_view viewName, std::string_view 
     for (auto& sc : v->scripts) {
         if (sc.lang != ScriptLang::ST) continue;
         const std::string next = renameRoot(sc.body, from, to);
-        if (next == sc.body) continue;
+        bool decls = false;                                   // 1.11.18 (lot 3) : leurs valeurs initiales aussi
+        for (auto& d : sc.decls)
+            if (std::string value = renameRoot(d.value, from, to); value != d.value) {
+                d.value = std::move(value);
+                decls = true;
+            }
+        if (next == sc.body && !decls) continue;
         sc.body = next;
         note(v->name + " / script " + (sc.name.empty() ? sc.event : sc.name));
     }

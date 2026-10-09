@@ -39,7 +39,10 @@
 namespace hmi::scriptfile {
 
 inline constexpr std::string_view kExtension = ".xpgst";
-inline constexpr int              kFormat = 1;
+// 2 : 1.11.18 (refonte des scripts, lot 3) - les declarations du modele d'un script ou d'un
+// operateur, un bloc (*# declaration ... *) chacune, avant son code (decision D4) ; un
+// fichier sans declaration s'ecrit encore au format 1 (la 1.11.17 le lit).
+inline constexpr int              kFormat = 2;
 
 enum class Genre : std::uint8_t { ViewScripts, Operators };
 
@@ -50,6 +53,7 @@ struct Entry {
     // un operateur
     HmiOperator op{};
     std::string body;
+    std::vector<Declaration> decls{};  // 1.11.18 (lot 3) : ses declarations du modele (sans identifiant a la lecture)
 };
 
 struct File {

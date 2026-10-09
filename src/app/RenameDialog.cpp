@@ -5,6 +5,7 @@
 #include "../menu/MenuManager.hpp"          // Lot API 8 : didacticiels et aide (F1 : l'aide par-dessus)
 
 #include "../hmi/HmiCommands.hpp"
+#include "../hmi/HmiDecl.hpp"   // 1.11.18 (refonte, lot 3) : les declarations du modele
 #include "../hmi/HmiExpr.hpp"            // looksLikeFormat : le format d'un trou {X:0.0}
 #include "../hmi/HmiModel.hpp"
 #include "../hmi/HmiScenarios.hpp"       // stepKind : ce que vise un pas d'essai
@@ -663,23 +664,40 @@ private:
     }
 
     // ---- un script ST, le corps d'une fonction ----------------------------------------
-    void script(std::string& body, bool function, const std::vector<std::string>& path) {
-        if (body.empty()) return;
-        const auto parts = hmi::splitDeclarations(body, function);
+    // 1.11.18 (refonte, lot 3) : `decls` - ses declarations du modele : des locales comme
+    // celles de ses blocs ; leurs valeurs (initiales, par defaut) suivent le renommage.
+    void script(std::string& body, bool function, const std::vector<std::string>& path,
+                std::vector<hmi::Declaration>* decls = nullptr) {
+        const bool modeled = decls && !decls->empty();
+        if (body.empty() && !modeled) return;
+        const std::string whole = modeled ? hmi::decl::composeCode(body, *decls, function ? hmi::decl::Role::Function
+                                                                                          : hmi::decl::Role::Script).text
+                                          : body;
+        const auto parts = hmi::splitDeclarations(whole, function);
         // Une variable locale (un parametre) du meme nom : le script parle d'elle.
         // (Un champ : ses locales sont des racines, que hmiRoot connait.)
         const bool named = !view_ && !field_;
         if (named && parts.local(r_.from)) return;
         std::string next = body;
+        bool values = false;
         if (exprs_) {
             parts_ = &parts;
             next = f_(next, true);
             next = rewriteStringHoles(next, [this](std::string_view e) { return f_(e, false); });
+            if (modeled)
+                for (auto& d : *decls) {
+                    const std::string v = f_(d.value, false);
+                    if (v == d.value) continue;
+                    s_.change(path, "d\xC3\xA9" "claration " + d.name, d.value, v, true);
+                    d.value = v;
+                    values = true;
+                }
             parts_ = nullptr;
         }
-        if (next == body) return;
+        if (next == body && !values) return;
         if (named && parts.local(r_.to))
             s_.conflicts.push_back(path.back() + " a une variable locale " + r_.to + " : il la lirait \xC3\xA0 la place");
+        if (next == body) return;
         s_.lines(path, body, next);
         body = std::move(next);
     }
@@ -813,11 +831,11 @@ private:
             }
             for (auto& sc : v.scripts)
                 if (content || view_) {
-                    const std::string old = sc.body;
+                    const hmi::Script old = sc;
                     const auto where = joined(path, "script " + (sc.name.empty() ? sc.event : sc.name));
-                    if (sc.lang == hmi::ScriptLang::ST) script(sc.body, false, where);
+                    if (sc.lang == hmi::ScriptLang::ST) script(sc.body, false, where, &sc.decls);
                     else cscript(sc.body, where);                                   // lot API 8 : C, C++
-                    touched = touched || old != sc.body;
+                    touched = touched || !(old == sc);
                 }
             scopeView_ = nullptr;
             // Les valeurs par defaut des parametres : lues chez l'appelant.
@@ -839,12 +857,12 @@ private:
         for (auto& sc : p_.programs.scripts) {
             // Lot API 8 : un script C ou C++ aussi (voir rewriteC).
             if (sc.lang != hmi::ScriptLang::ST) cscript(sc.body, {"Scripts g\xC3\xA9n\xC3\xA9raux", sc.name});
-            else script(sc.body, false, {"Scripts g\xC3\xA9n\xC3\xA9raux", sc.name});
+            else script(sc.body, false, {"Scripts g\xC3\xA9n\xC3\xA9raux", sc.name}, &sc.decls);
             const std::string w = expr(sc.watch);
             s_.change({"Scripts g\xC3\xA9n\xC3\xA9raux", sc.name}, "surveille", sc.watch, w, true);
             sc.watch = w;
         }
-        for (auto& fn : p_.programs.functions) script(fn.body, true, {"Fonctions", fn.name});
+        for (auto& fn : p_.programs.functions) script(fn.body, true, {"Fonctions", fn.name}, &fn.decls);
     }
 
     // ---- alarmes, recettes, historiques, utilisateurs, essais, rapports --------------------

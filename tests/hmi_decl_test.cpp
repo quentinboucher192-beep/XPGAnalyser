@@ -11,19 +11,32 @@
 //  l'identique, et un code coupe n'importe ou se lit sans sortir de ses bornes.
 //  L'arbre du projet (hmitree::withoutDeclarations), relu par hmi::decl, y donne
 //  les memes locales, parametres et variables que sa lecture d'avant (figee ici).
+//  1.11.18 (lot 3) : les declarations dans le modele - l'aller-retour disque des cinq
+//  porteurs (format 23, seulement s'il y en a), les identifiants (absents, en double,
+//  copies par une commande) ; le pont (les blocs reconstruits sur la ligne 1) : les
+//  fautes a la meme ligne, la meme signature, la meme execution qu'avec des blocs ecrits.
 //
 //      hmi_decl_test <corpus.txt> [<dossier de projet>...]
 // =============================================================================
 #include "../src/app/hmi/HmiTreeData.hpp"     // hmitree::withoutDeclarations : relu par hmi::decl
+#include "../src/hmi/HmiCommands.hpp"
 #include "../src/hmi/HmiDecl.hpp"
+#include "../src/hmi/HmiDesign.hpp"
+#include "../src/hmi/HmiEnums.hpp"
 #include "../src/hmi/HmiModel.hpp"
+#include "../src/hmi/HmiPipeline.hpp"
+#include "../src/hmi/HmiRuntime.hpp"
 #include "../src/hmi/HmiScript.hpp"
+#include "../src/hmi/HmiScriptCheck.hpp"
+#include "../src/hmi/HmiScriptFile.hpp"
 #include "../src/hmi/HmiStore.hpp"
 
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
+#include <map>
+#include <set>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -388,6 +401,558 @@ void signature() {
     check(dc::parameterSignature(dc::extract("VAR t : INT; END_VAR t := 1;")).empty(), "sans parametre : vide");
 }
 
+// ---------------------------------------------------------- le modele (lot 3) --
+Declaration declared(DeclKind kind, std::string name, std::string type, std::string value = {},
+                     Storage storage = Storage::Execution, PassMode mode = PassMode::In) {
+    Declaration d;
+    d.kind = kind;
+    d.name = std::move(name);
+    d.type = std::move(type);
+    d.value = std::move(value);
+    d.storage = storage;
+    d.mode = mode;
+    return d;
+}
+
+// Un projet aux cinq porteurs : un script et une fonction generaux, l'operateur d'un type
+// IHM, la fonction, le script et l'operateur d'un symbole, la redefinition d'une instance.
+Project fivePlaces() {
+    Project p;
+    Script sc;
+    sc.id = p.allocate();
+    sc.name = "Compter";
+    sc.event = "Cyclique";
+    sc.body = "Compteur := Compteur + 1;\n";
+    auto max = declared(DeclKind::Constant, "Max", "INT", "10");
+    max.description = "la borne, \"entre guillemets\" ; et un point-virgule";
+    sc.decls = {max, declared(DeclKind::Variable, "Compteur", "INT", "0", Storage::Kept),
+                declared(DeclKind::Variable, "Tmp", "ARRAY[1..4] OF REAL", "[1.0, 2.0, 3.0, 4.0]"),
+                declared(DeclKind::Variable, "Total", "DINT", "", Storage::Persistent)};
+    sc.decls[1].visibility = Visibility::Private;
+    p.programs.scripts.push_back(sc);
+    HmiFunction f;
+    f.id = p.allocate();
+    f.name = "Moyenne";
+    f.returnType = "REAL";
+    f.body = "Moyenne := (a + b) / 2.0;\n";
+    f.decls = {declared(DeclKind::Parameter, "a", "REAL"), declared(DeclKind::Parameter, "b", "REAL", "0.5"),
+               declared(DeclKind::Parameter, "v", "T_VEC", "", Storage::Execution, PassMode::InOut),
+               declared(DeclKind::Parameter, "ok", "BOOL", "", Storage::Execution, PassMode::Out),
+               declared(DeclKind::Variable, "t", "REAL")};
+    p.programs.functions.push_back(f);
+    HmiType ty;
+    ty.id = p.allocate();
+    ty.name = "T_VEC";
+    ty.members.push_back({"x", "REAL", "", ""});
+    HmiOperator plus;
+    plus.id = p.allocate();
+    plus.op = "+";
+    plus.left = plus.right = plus.result = "T_VEC";
+    plus.body = "ADD.x := A.x + B.x;\n";
+    plus.decls = {declared(DeclKind::Variable, "k", "REAL", "1.0")};
+    ty.operators.push_back(plus);
+    p.programs.types.push_back(ty);
+    View sym = makeView(p, "Vanne");
+    sym.role = "symbole";
+    HmiFunction o;
+    o.id = p.allocate();
+    o.name = "Ouvrir";
+    o.isVirtual = true;
+    o.body = "Ouvert := Pct > 0;\n";
+    o.decls = {declared(DeclKind::Parameter, "Pct", "INT", "100")};
+    sym.functions.push_back(o);
+    Script open;
+    open.id = p.allocate();
+    open.name = "Vanne_OnOpen";
+    open.event = "OnOpen";
+    open.body = "n := n + 1;\n";
+    open.decls = {declared(DeclKind::Variable, "n", "INT", "0", Storage::Kept)};
+    sym.scripts.push_back(open);
+    HmiOperator eq = plus;
+    eq.id = p.allocate();
+    eq.op = "=";
+    eq.left = eq.right = "Vanne";
+    eq.result = "BOOL";
+    eq.decls = {declared(DeclKind::Constant, "Tolerance", "REAL", "0.01")};
+    sym.operators.push_back(eq);
+    p.views.push_back(sym);
+    View use = makeView(p, "Synoptique");
+    Object inst;
+    inst.id = p.allocate();
+    inst.kind = Kind::SymbolInstance;
+    inst.name = "Vanne_1";
+    inst.props.push_back({"symbol", "Vanne", ""});
+    FunctionOverride fo;
+    fo.function = "Ouvrir";
+    fo.body = "Ouvert := FALSE;\n";
+    fo.decls = {declared(DeclKind::Variable, "j", "INT")};
+    inst.functionOverrides.push_back(fo);
+    use.objects.push_back(inst);
+    p.views.push_back(use);
+    uniqueDeclarationIds(p);
+    return p;
+}
+
+// Les declarations du projet, en texte comparable (porteur par porteur).
+std::string declarationsOf(const Project& p) {
+    std::string out;
+    forEachDeclarations(p, [&](const std::vector<Declaration>& list) {
+        out += "[";
+        for (const auto& d : list)
+            out += std::to_string(d.id) + " " + std::string(declKindKey(d.kind)) + " " + d.name + " : " + d.type + " := " + d.value + " ("
+                 + std::string(storageKey(d.storage)) + ", " + std::string(passModeKey(d.mode)) + ", "
+                 + std::string(visibilityKey(d.visibility)) + ") " + d.description + "; ";
+        out += "]\n";
+    });
+    return out;
+}
+
+FileReader readerOf(const std::vector<ProjectFile>& files) {
+    return [files](const std::string& path, std::string& content) {
+        for (const auto& f : files)
+            if (f.path == path) {
+                content.assign(f.data->begin(), f.data->end());
+                return true;
+            }
+        return false;
+    };
+}
+
+std::string fileText(const std::vector<ProjectFile>& files, std::string_view prefix) {
+    std::string out;
+    for (const auto& f : files)
+        if (f.path.rfind(prefix, 0) == 0) out.append(f.data->begin(), f.data->end());
+    return out;
+}
+
+void modele() {
+    std::printf("-- lot 3 : les declarations dans le modele, sur disque (format 23)\n");
+    const Project p = fivePlaces();
+    std::size_t count = 0;
+    std::set<Id> ids;
+    forEachDeclarations(p, [&](const std::vector<Declaration>& list) {
+        for (const auto& d : list) {
+            ++count;
+            ids.insert(d.id);
+        }
+    });
+    check(count == 14 && ids.size() == 14 && !ids.count(kNoId), "quatorze declarations sur sept porteurs, chacune son identifiant");
+    const auto files = serializeProject(p);
+    const std::string index = fileText(files, "ihm.txt");
+    const std::string views = fileText(files, "vues/");
+    check(index.find("ihm format=23") != std::string::npos && index.find("(format 23)") != std::string::npos
+              && views.find("(format 23)") != std::string::npos,
+          "avec des declarations : l'index et les vues au format 23");
+    check(index.find("declaration id=") != std::string::npos && index.find("genre=constante nom=\"Max\" type=\"INT\" valeur=\"10\"") != std::string::npos
+              && index.find("genre=parametre nom=\"v\" type=\"T_VEC\" mode=entree_sortie") != std::string::npos
+              && index.find("stockage=persistante") != std::string::npos && index.find("visibilite=privee") != std::string::npos,
+          "les lignes declaration de l'index : genre, nom, type, valeur, mode, stockage, visibilite");
+    check(views.find("fonction_symbole") < views.find("genre=parametre nom=\"Pct\"")
+              && views.find("redefinition") < views.find("genre=variable nom=\"j\"")
+              && views.find("operateur_symbole") < views.find("nom=\"Tolerance\""),
+          "dans la vue : chaque declaration suit son porteur (fonction, redefinition, operateur)");
+    const auto back = parseProject(readerOf(files));
+    check(back.has_value(), "relu");
+    if (back.has_value()) {
+        check(declarationsOf(back.value()) == declarationsOf(p), "relu : les memes declarations, aux memes porteurs\n" + declarationsOf(back.value()));
+        check(back.value().nextId > *ids.rbegin(), "le compteur d'identifiants passe au-dessus des declarations");
+    }
+    // Sans declaration : le format 22 (ou 21), lisible par la 1.11.17.
+    Project plain = p;
+    forEachDeclarations(plain, [](std::vector<Declaration>& list) { list.clear(); });
+    const std::string plainIndex = fileText(serializeProject(plain), "ihm.txt");
+    check(plainIndex.find("ihm format=21") != std::string::npos && plainIndex.find("declaration") == std::string::npos,
+          "sans declaration du modele : le format 21, sans ligne declaration (la 1.11.17 l'ouvre)");
+    // Un format plus recent (24) : refuse.
+    {
+        auto newer = files;
+        std::string text = fileText(files, "ihm.txt");
+        const auto at = text.find("ihm format=23");
+        text.replace(at, 13, "ihm format=24");
+        for (auto& f : newer)
+            if (f.path == "ihm.txt") f.data = std::make_shared<const Bytes>(text.begin(), text.end());
+        const auto refused = parseProject(readerOf(newer));
+        check(!refused.has_value() && refused.error().context.find("24") != std::string::npos, "un projet au format 24 : refuse, et dit pourquoi");
+    }
+    // A la main : une declaration sans porteur, sans nom ; deux identifiants egaux, un absent.
+    {
+        auto edited = files;
+        std::string text = fileText(files, "ihm.txt");
+        const auto first = text.rfind("declaration id=", text.find("nom=\"Max\""));   // la constante Max du script
+        const auto eol = text.find('\n', first);
+        std::string line = text.substr(first, eol - first);          // la constante Max
+        std::string same = line;
+        same.replace(same.find("nom=\"Max\""), 9, "nom=\"Max2\"");    // le meme identifiant
+        std::string none = line;
+        none.replace(none.find("id="), none.find(' ', none.find("id=")) - none.find("id="), "id=0");
+        none.replace(none.find("nom=\"Max\""), 9, "nom=\"Max3\"");
+        text.insert(eol + 1, same + "\n" + none + "\n");
+        const auto head = text.find('\n', text.find("ihm format=")) + 1;
+        text.insert(head, "declaration id=9999 genre=variable nom=\"Perdue\" type=\"INT\"\ndeclaration genre=variable type=\"INT\"\n");
+        for (auto& f : edited)
+            if (f.path == "ihm.txt") f.data = std::make_shared<const Bytes>(text.begin(), text.end());
+        LoadReport report;
+        const auto got = parseProject(readerOf(edited), &report);
+        check(got.has_value(), "relu malgre les lignes editees a la main");
+        if (got.has_value()) {
+            const auto& d = got.value().programs.scripts.front().decls;
+            std::set<Id> seen;
+            forEachDeclarations(got.value(), [&](const std::vector<Declaration>& list) { for (const auto& x : list) seen.insert(x.id); });
+            check(d.size() == 6 && d[1].name == "Max2" && d[2].name == "Max3" && d[1].id != d[0].id && d[2].id != kNoId
+                      && seen.size() == 16 && !seen.count(kNoId),
+                  "deux identifiants egaux, un absent : chacun en recoit un neuf");
+            std::size_t ignored = 0;
+            bool renewed = false;
+            for (const auto& w : report.warnings) {
+                if (w.find("d\xC3\xA9" "claration hors d'un script") != std::string::npos) ++ignored;
+                if (w.find("identifiants absents ou en double") != std::string::npos) renewed = true;
+            }
+            check(ignored == 2 && renewed, "les lignes sans porteur : ignorees et dites ; les identifiants renouveles : dits");
+        }
+    }
+    // Une commande qui copie un script : ses declarations recoivent des identifiants neufs ;
+    // l'annuler rend le projet d'avant.
+    {
+        auto doc = std::make_shared<Document>();
+        doc->project = p;
+        core::CommandStack stack;
+        auto c = changeProject(doc, "Dupliquer", [](Project& q) {
+            Script copy = q.programs.scripts.front();
+            copy.id = q.allocate();
+            copy.name = "Compter_2";
+            q.programs.scripts.push_back(copy);
+        });
+        check(c != nullptr && static_cast<bool>(stack.push(std::move(c))), "dupliquer un script : une commande");
+        const auto& a = doc->project.programs.scripts[0].decls;
+        const auto& b = doc->project.programs.scripts[1].decls;
+        bool fresh = a.size() == b.size();
+        for (std::size_t i = 0; i < a.size() && i < b.size(); ++i) fresh = fresh && a[i].id != b[i].id && a[i].name == b[i].name;
+        check(fresh, "la copie : les memes declarations, des identifiants neufs");
+        (void)stack.undo();
+        check(doc->project.programs.scripts.size() == 1 && declarationsOf(doc->project) == declarationsOf(p), "annule : le projet d'avant");
+        // Une vue : une instance copiee (sa redefinition et sa variable).
+        const Id use = doc->project.views[1].id;
+        auto v = changeView(doc, use, "Copier", [&](Project& q, View& view) {
+            Object copy = view.objects.front();
+            copy.id = q.allocate();
+            copy.name = "Vanne_2";
+            view.objects.push_back(copy);
+        });
+        check(v != nullptr && static_cast<bool>(stack.push(std::move(v))), "copier une instance : une commande");
+        const auto& objects = doc->project.view(use)->objects;
+        check(objects.size() == 2 && objects[1].functionOverrides.front().decls.front().id != objects[0].functionOverrides.front().decls.front().id,
+              "l'instance copiee : la variable de sa redefinition a un identifiant neuf");
+    }
+}
+
+// ---------------------------------------------------------- le pont (lot 3) ----
+class FakePlc final : public sim::Environment {
+public:
+    std::map<std::string, sim::Value> values;
+    bool read(std::string_view n, sim::Value& out) override {
+        const auto it = values.find(std::string(n));
+        if (it == values.end()) return false;
+        out = it->second;
+        return true;
+    }
+    bool write(std::string_view n, const sim::Value& v) override {
+        const auto it = values.find(std::string(n));
+        if (it == values.end()) return false;
+        it->second = v;
+        return true;
+    }
+    bool exists(std::string_view n) override { return values.count(std::string(n)) != 0; }
+    bool call(std::string_view, std::string_view, const std::vector<std::pair<std::string, sim::Value>>&, sim::Value&) override {
+        return false;
+    }
+    void report(sim::Diagnostic) override {}
+};
+
+Variable hmiVariable(Project& p, std::string name, std::string type) {
+    Variable v;
+    v.id = p.allocate();
+    v.name = std::move(name);
+    v.type = std::move(type);
+    return v;
+}
+
+void pont() {
+    std::printf("-- lot 3 : le pont (les declarations reconstruites sur la ligne 1)\n");
+    // La reconstruction.
+    {
+        std::vector<Declaration> d = {declared(DeclKind::Constant, "Max", "INT", "10"),
+                                      declared(DeclKind::Variable, "Compteur", "INT", "0", Storage::Kept),
+                                      declared(DeclKind::Variable, "Tmp", "REAL"),
+                                      declared(DeclKind::Variable, "Total", "DINT", "", Storage::Persistent)};
+        for (std::size_t i = 0; i < d.size(); ++i) d[i].id = static_cast<Id>(100 + i);
+        const std::string body = "Compteur := Compteur + 1;\nTotal := Max;\n";
+        const auto c = dc::composeCode(body, d, dc::Role::Script);
+        const std::string head = "VAR CONSTANT Max : INT := 10; END_VAR VAR Compteur : INT := 0; END_VAR VAR_TEMP Tmp : REAL; END_VAR "
+                                 "VAR Total : DINT; END_VAR ";
+        check(c.text == head + body && c.prefix == head.size(), "un script : VAR CONSTANT, VAR (Conservee), VAR_TEMP (Execution), VAR (Persistante), sur la ligne 1\n" + c.text);
+        check(std::count(c.text.begin(), c.text.end(), '\n') == std::count(body.begin(), body.end(), '\n'), "les lignes du corps ne bougent pas");
+        check(c.inDeclarations(1, 5) && !c.inDeclarations(1, static_cast<int>(head.size()) + 1) && !c.inDeclarations(2, 3)
+                  && c.bodyColumn(1, static_cast<int>(head.size()) + 1) == 1 && c.bodyColumn(2, 7) == 7,
+              "les colonnes de la ligne 1 rendues au corps ; la ligne 2 telle quelle");
+        check(c.declarationAt(1, static_cast<int>(head.find("Tmp")) + 1) == 102 && c.declarationAt(1, 1) == kNoId,
+              "une colonne dans les declarations : la sienne");
+        const auto plain = dc::composeCode(body, {}, dc::Role::Script);
+        check(plain.text == body && plain.prefix == 0 && !plain.inDeclarations(1, 1), "sans declaration : le corps tel quel");
+        auto multi = d;
+        multi[0].value = "1\n+ 2";
+        const std::string flatValue = dc::composeCode(body, multi, dc::Role::Script).text;
+        check(std::count(flatValue.begin(), flatValue.end(), '\n') == 2 && flatValue.find("Max : INT := 1 + 2;") != std::string::npos,
+              "une valeur sur deux lignes : remise sur une (les lignes du corps tiennent)");
+    }
+    // Une fonction : ses parametres dans leur ordre, par blocs.
+    {
+        HmiFunction f;
+        f.name = "F";
+        f.body = "F := a;\n";
+        f.decls = {declared(DeclKind::Parameter, "a", "REAL"), declared(DeclKind::Parameter, "v", "T_VEC", "", Storage::Execution, PassMode::InOut),
+                   declared(DeclKind::Parameter, "b", "REAL", "0.5"), declared(DeclKind::Variable, "t", "REAL", "", Storage::Kept)};
+        check(dc::codeOf(f) == "VAR_INPUT a : REAL; END_VAR VAR_IN_OUT v : T_VEC; END_VAR VAR_INPUT b : REAL := 0.5; END_VAR VAR t : REAL; END_VAR F := a;\n",
+              "une fonction : VAR_INPUT, VAR_IN_OUT, VAR_INPUT dans l'ordre des parametres ; ses variables : VAR\n" + dc::codeOf(f));
+        FunctionOverride o;
+        o.function = "F";
+        o.body = "F := 2.0 * a;\n";
+        o.decls = {declared(DeclKind::Variable, "k", "INT")};
+        check(dc::codeOf(o, &f) == "VAR_INPUT a : REAL; END_VAR VAR_IN_OUT v : T_VEC; END_VAR VAR_INPUT b : REAL := 0.5; END_VAR VAR k : INT; END_VAR F := 2.0 * a;\n",
+              "une redefinition : les parametres de sa fonction, puis ses locales\n" + dc::codeOf(o, &f));
+        std::string storage;
+        const HmiFunction none;
+        check(&dc::codeOf(none, storage) == &none.body && &dc::codeOf(f, storage) == &storage, "sans declaration : le corps, sans copie");
+    }
+    // Les fautes des declarations elles-memes.
+    {
+        std::vector<Declaration> bad = {declared(DeclKind::Variable, "", "INT"), declared(DeclKind::Variable, "2x", "INT"),
+                                        declared(DeclKind::Variable, "IF", "INT"), declared(DeclKind::Variable, "a", "INT"),
+                                        declared(DeclKind::Variable, "A", "REAL"), declared(DeclKind::Variable, "n", ""),
+                                        declared(DeclKind::Variable, "m", "BIDULE"), declared(DeclKind::Constant, "C", "INT"),
+                                        declared(DeclKind::Parameter, "p", "INT"), declared(DeclKind::Variable, "Ok", "BOOL"),
+                                        declared(DeclKind::Variable, "Bloc", "INT")};
+        std::vector<Declaration> valid;
+        const auto e = dc::checkDeclarations(bad, dc::Role::Script, "VAR\n  Bloc : INT;\nEND_VAR\nOk := TRUE;", {}, nullptr, &valid);
+        std::string all;
+        for (const auto& x : e) all += x.message + "\n";
+        const auto says = [&](std::string_view what) { return all.find(what) != std::string::npos; };
+        check(e.size() == 9 && says("d\xC3\xA9" "claration sans nom") && says("\xC2\xAB 2x \xC2\xBB : nom illisible")
+                  && says("\xC2\xAB IF \xC2\xBB : nom r\xC3\xA9serv\xC3\xA9") && says("\xC2\xAB A \xC2\xBB : d\xC3\xA9" "clar\xC3\xA9" "e deux fois")
+                  && says("\xC2\xAB n \xC2\xBB : type manquant") && says("\xC2\xAB m \xC2\xBB : type non pris en charge : BIDULE")
+                  && says("\xC2\xAB C \xC2\xBB : une constante sans valeur") && says("\xC2\xAB p \xC2\xBB : un param\xC3\xA8tre dans un script")
+                  && says("\xC2\xAB Bloc \xC2\xBB : d\xC3\xA9" "clar\xC3\xA9" "e deux fois (aussi dans un bloc VAR du code)"),
+              "les fautes des declarations, chacune nommee (" + std::to_string(e.size()) + ")\n" + all);
+        check(valid.size() == 2 && valid[0].name == "a" && valid[1].name == "Ok", "les justes : a et Ok");
+        check(std::all_of(e.begin(), e.end(), [](const ScriptDiagnostic& x) { return x.line == 0; }), "ligne 0 : tout le code");
+        const auto f = dc::checkDeclarations({declared(DeclKind::Variable, "k", "INT", "", Storage::Kept)}, dc::Role::Function, "");
+        const auto o = dc::checkDeclarations({declared(DeclKind::Parameter, "x", "INT")}, dc::Role::Operator, "");
+        const auto r = dc::checkDeclarations({declared(DeclKind::Parameter, "x", "INT")}, dc::Role::Function, "", {},
+                                             &bad);
+        check(f.size() == 1 && f[0].message.find("une fonction n'a pas de m\xC3\xA9moire") != std::string::npos
+                  && o.size() == 1 && o[0].message.find("op\xC3\xA9rateur") != std::string::npos
+                  && r.size() == 1 && r[0].message.find("red\xC3\xA9" "finition") != std::string::npos,
+              "une fonction sans memoire ; un operateur et une redefinition sans parametre a eux");
+    }
+    // Les controles : un script a declarations du modele et le meme a blocs textuels.
+    {
+        Project p;
+        Script text;
+        text.name = "S";
+        text.body = "VAR\n  Compteur : INT := 0;\nEND_VAR\nCompteur := Compteur + 1;\nx := ;\n";
+        Script model;
+        model.name = "S";
+        model.body = "\n\n\nCompteur := Compteur + 1;\nx := ;\n";
+        model.decls = {declared(DeclKind::Variable, "Compteur", "INT", "0", Storage::Kept)};
+        const auto a = checkScript(text);
+        const auto b = checkScript(model);
+        check(!a.empty() && !b.empty() && a.front().line == 5 && b.front().line == 5 && a.front().message == b.front().message,
+              "une faute de la ligne 5 : la meme, a la meme ligne (" + (b.empty() ? std::string("aucune") : b.front().message) + ")");
+        Script badDecl = model;
+        badDecl.decls.push_back(declared(DeclKind::Variable, "Ecart", "BIDULE"));
+        const auto c = checkScript(badDecl);
+        check(!c.empty() && c.front().line == 0 && c.front().message.find("Ecart") != std::string::npos
+                  && std::any_of(c.begin(), c.end(), [](const ScriptDiagnostic& x) { return x.line == 5; }),
+              "une declaration fautive : dite ligne 0 ; le code reste controle (sa faute ligne 5)");
+        Script empty;
+        empty.decls = model.decls;
+        const auto v = checkScript(empty);
+        check(v.size() == 1 && v[0].message == "script vide", "des declarations sans code : script vide");
+    }
+    // Une fonction : signature, texte, controle, interface du build.
+    {
+        HmiFunction text;
+        text.name = "Moyenne";
+        text.returnType = "REAL";
+        text.body = "VAR_INPUT\n  a : REAL;\n  b : REAL := 0.5;\nEND_VAR\nMoyenne := (a + b) / 2.0;\n";
+        HmiFunction model = text;
+        model.body = "\n\n\n\nMoyenne := (a + b) / 2.0;\n";
+        model.decls = {declared(DeclKind::Parameter, "a", "REAL"), declared(DeclKind::Parameter, "b", "REAL", "0.5")};
+        check(functionSignature(model) == functionSignature(text) && functionSignature(model) == "Moyenne(a : REAL, b : REAL) : REAL",
+              "la signature : la meme (" + functionSignature(model) + ")");
+        check(checkFunction(model).empty() && checkFunction(text).empty(), "le controle : aucune faute, des deux cotes");
+        check(functionText(model).rfind("FUNCTION Moyenne : REAL VAR_INPUT a : REAL; b : REAL := 0.5; END_VAR \n", 0) == 0,
+              "le texte de la fonction : ses parametres sur la ligne de FUNCTION");
+        check(hmi::pipeline::signatureOf(dc::codeOf(model)) == hmi::pipeline::signatureOf(text.body), "l'interface du build : la meme");
+        HmiFunction self = model;
+        self.decls.push_back(declared(DeclKind::Variable, "Moyenne", "REAL"));
+        const auto s = checkFunction(self);
+        check(s.size() == 1 && s[0].line == 0 && s[0].message.find("nom de la fonction") != std::string::npos,
+              "une declaration du nom de la fonction : dite une fois, ligne 0");
+    }
+    // La meme execution : un script et une fonction a declarations du modele, et les memes a blocs textuels.
+    {
+        const auto run = [](bool modeled) {
+            Project p;
+            p.programs.variables.push_back(hmiVariable(p, "Total", "INT"));
+            p.programs.variables.push_back(hmiVariable(p, "Fois", "INT"));
+            p.programs.variables.push_back(hmiVariable(p, "Moy", "REAL"));
+            p.programs.variables.push_back(hmiVariable(p, "Borne", "INT"));
+            HmiFunction f;
+            f.id = p.allocate();
+            f.name = "Moyenne";
+            f.returnType = "REAL";
+            Script s;
+            s.id = p.allocate();
+            s.name = "Compter";
+            s.event = "Appel";
+            if (modeled) {
+                f.body = "Moyenne := (a + b) / 2.0;\n";
+                f.decls = {declared(DeclKind::Parameter, "a", "REAL"), declared(DeclKind::Parameter, "b", "REAL", "1.0")};
+                s.body = "Compteur := Compteur + 1;\nTmp := Tmp + 1;\nTotal := Compteur;\nFois := Tmp;\nMoy := Moyenne(5.0);\nBorne := Max;\n";
+                s.decls = {declared(DeclKind::Constant, "Max", "INT", "7"), declared(DeclKind::Variable, "Compteur", "INT", "0", Storage::Kept),
+                           declared(DeclKind::Variable, "Tmp", "INT", "10")};
+            } else {
+                f.body = "VAR_INPUT\n  a : REAL;\n  b : REAL := 1.0;\nEND_VAR\nMoyenne := (a + b) / 2.0;\n";
+                s.body = "VAR CONSTANT Max : INT := 7; END_VAR VAR Compteur : INT := 0; END_VAR VAR_TEMP Tmp : INT := 10; END_VAR "
+                         "Compteur := Compteur + 1;\nTmp := Tmp + 1;\nTotal := Compteur;\nFois := Tmp;\nMoy := Moyenne(5.0);\nBorne := Max;\n";
+            }
+            p.programs.functions.push_back(f);
+            p.programs.scripts.push_back(s);
+            uniqueDeclarationIds(p);
+            FakePlc plc;
+            Runtime rt;
+            rt.bind(&p, &plc);
+            rt.start(0.0);
+            std::string out, why;
+            for (int k = 0; k < 3; ++k) {
+                const bool ok = rt.callScript("Compter", 0.1 * k, &why);
+                out += (ok ? "ok" : "erreur " + why) + " Total=" + rt.variable("Total")->display() + " Fois=" + rt.variable("Fois")->display()
+                     + " Moy=" + rt.variable("Moy")->display() + " Borne=" + rt.variable("Borne")->display() + "\n";
+            }
+            return out;
+        };
+        const std::string text = run(false), model = run(true);
+        check(model == text && text.find("Total=3 Fois=11 Moy=3") != std::string::npos && text.find("Borne=7") != std::string::npos,
+              "trois appels : la meme execution (Conservee gardee, Execution remise, defaut d'un parametre, constante)\n" + text + model);
+    }
+    // Un appel de la fonction depuis une expression de vue : l'arite lue du modele.
+    {
+        Project p;
+        HmiFunction f;
+        f.id = p.allocate();
+        f.name = "Double";
+        f.returnType = "REAL";
+        f.body = "Double := 2.0 * x;\n";
+        f.decls = {declared(DeclKind::Parameter, "x", "REAL")};
+        p.programs.functions.push_back(f);
+        uniqueDeclarationIds(p);
+        hmi::scriptcheck::Scope scope;
+        scope.project = &p;
+        const auto ok = hmi::scriptcheck::check(scope, "y := Double(1.0);");
+        const auto bad = hmi::scriptcheck::check(scope, "y := Double(1.0, 2.0);");
+        check(std::none_of(ok.begin(), ok.end(), [](const auto& x) { return x.message.find("argument") != std::string::npos; })
+                  && std::any_of(bad.begin(), bad.end(), [](const auto& x) { return x.message.find("argument") != std::string::npos; }),
+              "un appel : ses arguments comptes d'apres les parametres du modele");
+        // Une faute de la ligne 1 du corps : a sa colonne dans le corps (pas dans le texte reconstruit).
+        scope.plcKnown = [](std::string_view) { return false; };
+        const auto v = hmi::scriptcheck::check(scope, "y := Inconnu_Total + Ref;\n", {declared(DeclKind::Variable, "Ref", "INT", "1")},
+                                               dc::Role::Script);
+        check(std::any_of(v.begin(), v.end(), [](const auto& x) { return x.line == 1 && x.column == 6 && x.message.find("Inconnu_Total") != std::string::npos; })
+                  && std::none_of(v.begin(), v.end(), [](const auto& x) { return x.message.find("Ref") != std::string::npos; }),
+              "une faute de la ligne 1 : sa colonne dans le corps (6) ; la variable du modele est connue");
+    }
+}
+
+// ---------------------------------------------------------- le suivi (lot 3) ----
+void suivi() {
+    std::printf("-- lot 3 : les declarations suivent (fichier .xpgst, renommages, rechercher)\n");
+    // Le fichier .xpgst d'une vue : un bloc (*# declaration ... *) par declaration (decision D4).
+    {
+        Project p;
+        View v = makeView(p, "Pompe");
+        Script s;
+        s.id = p.allocate();
+        s.name = "Pompe.OnCycle";
+        s.event = "OnCycle";
+        s.body = "Tours := Tours + 1;\n";
+        auto tours = declared(DeclKind::Variable, "Tours", "DINT", "0", Storage::Kept);
+        tours.description = "le compte des cycles, \"entre guillemets\" *) et une fin de commentaire";
+        tours.visibility = Visibility::Private;
+        s.decls = {declared(DeclKind::Constant, "Max", "INT", "100"), tours};
+        v.scripts.push_back(s);
+        const auto file = hmi::scriptfile::fromView(v);
+        const std::string text = hmi::scriptfile::write(file);
+        check(text.find("format=2") != std::string::npos && text.find("(*# declaration genre=constante nom=Max type=INT valeur=100 visibilite=publique *)") != std::string::npos
+                  && text.find("stockage=conservee visibilite=privee") != std::string::npos && text.find("VAR") == std::string::npos,
+              "le fichier : le format 2, une ligne (*# declaration *) par declaration, aucun VAR dans le code\n" + text);
+        hmi::scriptfile::File back;
+        std::string why;
+        check(hmi::scriptfile::read(text, back, &why) && back.entries.size() == 1 && back.entries[0].decls.size() == 2
+                  && back.entries[0].decls[1].description == tours.description && back.entries[0].decls[1].storage == Storage::Kept
+                  && back.entries[0].decls[1].visibility == Visibility::Private && back.entries[0].decls[0].value == "100",
+              "relu : les memes declarations (description, stockage, visibilite) - " + why);
+        View target = makeView(p, "Autre");
+        check(hmi::scriptfile::applyToView(p, target, back, {}, hmi::scriptfile::Mode::Replace) == 1 && target.scripts.size() == 1
+                  && target.scripts[0].decls.size() == 2 && target.scripts[0].decls[1].name == "Tours",
+              "importe dans une autre vue : le script et ses declarations");
+        View plain = v;
+        plain.scripts[0].decls.clear();
+        check(hmi::scriptfile::write(hmi::scriptfile::fromView(plain)).find("format=1") != std::string::npos,
+              "sans declaration : le format 1 (la 1.11.17 le lit)");
+        hmi::scriptfile::File stray;
+        check(!hmi::scriptfile::read("(*# xpgst format=2 genre=scripts-vue *)\n(*# declaration genre=variable nom=X type=INT *)\n", stray, &why)
+                  && why.find("hors d'un script") != std::string::npos,
+              "une declaration hors d'un script : refusee, et dit pourquoi");
+    }
+    // Renommer une fonction, une valeur d'enumeration : les valeurs des declarations suivent.
+    {
+        Project p;
+        HmiFunction f;
+        f.id = p.allocate();
+        f.name = "Seuil";
+        f.returnType = "INT";
+        f.body = "Seuil := 10;\n";
+        p.programs.functions.push_back(f);
+        HmiType mode;
+        mode.id = p.allocate();
+        mode.name = "T_MODE";
+        mode.kind = HmiTypeKind::Enumeration;
+        mode.values = {{"Auto", 0, "", ""}, {"Manu", 1, "", ""}};
+        p.programs.types.push_back(mode);
+        Script s;
+        s.id = p.allocate();
+        s.name = "Regler";
+        s.body = "Limite := Limite + 1;\n";
+        s.decls = {declared(DeclKind::Variable, "Limite", "INT", "Seuil() + 1", Storage::Kept),
+                   declared(DeclKind::Variable, "Etat", "T_MODE", "T_MODE#Auto")};
+        p.programs.scripts.push_back(s);
+        uniqueDeclarationIds(p);
+        const auto callers = functionCallers(p, "Seuil");
+        check(std::any_of(callers.begin(), callers.end(), [](const std::string& c) { return c.find("Regler") != std::string::npos; }),
+              "Appelee par : le script dont une valeur initiale appelle la fonction");
+        check(renameFunctionEverywhere(p, "Seuil", "Seuil_Haut") > 0 && p.programs.scripts[0].decls[0].value == "Seuil_Haut() + 1",
+              "renommer la fonction : la valeur initiale suit (" + p.programs.scripts[0].decls[0].value + ")");
+        check(renameEnumValue(p, "T_MODE", "Auto", "Automatique") > 0 && p.programs.scripts[0].decls[1].value == "T_MODE#Automatique",
+              "renommer une valeur d'enumeration : la valeur initiale suit (" + p.programs.scripts[0].decls[1].value + ")");
+        // Rechercher et remplacer : le type et la valeur d'une declaration aussi.
+        hmi::design::FindOptions o;
+        o.wholeWord = true;
+        check(hmi::design::replaceAll(p, "T_MODE", "T_ETAT", o) >= 2 && p.programs.scripts[0].decls[1].type == "T_ETAT"
+                  && p.programs.scripts[0].decls[1].value == "T_ETAT#Automatique",
+              "remplacer partout : le type et la valeur de la declaration");
+    }
+}
+
 // ---------------------------------------------------------- le corpus ----------
 struct Tally {
     int codes{0};
@@ -672,6 +1237,9 @@ int main(int argc, char** argv) {
     fautes();
     recomposer();
     signature();
+    modele();
+    pont();
+    suivi();
     Tally t;
     std::printf("-- le corpus : %s\n", argv[1]);
     corpusFile(argv[1], t);

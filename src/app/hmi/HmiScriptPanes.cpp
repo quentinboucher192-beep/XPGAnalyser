@@ -135,7 +135,7 @@ std::vector<hmi::ScriptDiagnostic> placedDiagnostics(const hmi::Project& p, cons
                                                      std::vector<hmi::scriptcheck::Finding>* fixes = nullptr) {
     if (sc.lang != ScriptLang::ST) return {};
     const auto plc = assist::sourcesFor(nullptr).plc();     // le programme de l'automate (vide : pas d'automate)
-    return placedScriptDiagnostics(p, sc.body, v, nullptr, plc.get(), fixes);
+    return placedScriptDiagnostics(p, sc.body, v, nullptr, plc.get(), fixes, &sc.decls);   // 1.11.18 : ses declarations du modele
 }
 // Le diagnostic complet d'un script : la syntaxe, les chemins IHM, les erreurs a leur place.
 // 1.10 (I2) : `fixes` recoit les constats qui ont une correction proposee.
@@ -147,10 +147,10 @@ std::vector<hmi::ScriptDiagnostic> allDiagnostics(const hmi::Project& p, const S
     const hmi::TypeKnown knownType = [&p](std::string_view t) {
         return !hmi::types::membersOf(p, t).empty() || hmi::findEnumeration(p, t) != nullptr;
     };
-    auto d = hmi::checkScript(sc.lang, sc.body, sc.name, knownType);
+    auto d = hmi::checkScript(sc, knownType);                        // 1.11.18 (lot 3) : avec ses declarations du modele
     const auto placed = placedDiagnostics(p, sc, v, fixes);
     if (sc.lang == ScriptLang::ST)                                   // lot 16
-        for (const auto& pp : hmi::types::pathProblems(p, sc.body)) {
+        for (const auto& pp : hmi::types::pathProblems(p, hmi::decl::codeOf(sc))) {
             const bool said = std::any_of(placed.begin(), placed.end(), [&](const hmi::ScriptDiagnostic& x) {
                 return x.line == pp.line && x.message == pp.message;
             });
@@ -207,7 +207,8 @@ std::string issueWhere(const hmi::Project& p, const hmi::Issue& i) {
 // 1.10 : les fautes d'un code ST a leur place - les memes que Compiler.
 std::vector<hmi::ScriptDiagnostic> placedScriptDiagnostics(const hmi::Project& p, std::string_view code, const hmi::View* view,
                                                            const hmi::HmiFunction* function, const domain::Project* plc,
-                                                           std::vector<hmi::scriptcheck::Finding>* fixes) {
+                                                           std::vector<hmi::scriptcheck::Finding>* fixes,
+                                                           const std::vector<hmi::Declaration>* decls) {
     std::vector<hmi::ScriptDiagnostic> out;
     hmi::scriptcheck::Scope scope;
     scope.project = &p;
@@ -220,7 +221,9 @@ std::vector<hmi::ScriptDiagnostic> placedScriptDiagnostics(const hmi::Project& p
         scope.plcKnown = [names](std::string_view r) { return names->count(upperOf(r)) > 0; };
         scope.plc = hmiPlcPaths(plc);
     }
-    for (const auto& f : hmi::scriptcheck::check(scope, code)) {
+    const auto findings = decls ? hmi::scriptcheck::check(scope, code, *decls, function ? hmi::decl::Role::Function : hmi::decl::Role::Script)
+                                : hmi::scriptcheck::check(scope, code);
+    for (const auto& f : findings) {
         hmi::ScriptDiagnostic d;
         d.severity = f.severity == hmi::scriptcheck::Finding::Severity::Error ? hmi::ScriptDiagnostic::Severity::Error
                                                                               : hmi::ScriptDiagnostic::Severity::Warning;
@@ -1056,6 +1059,10 @@ void HmiScriptsPane::setAssist(std::function<std::shared_ptr<const domain::Proje
     assist_.hmi = [doc = doc_]() -> const hmi::Project* { return doc ? &doc->project : nullptr; };
     assist_.plc = std::move(plc);
     assist_.live = std::move(live);
+    assist_.declarations = [this] {                                        // 1.11.18 (lot 3) : ses constantes et variables du modele
+        const auto* sc = doc_ ? doc_->project.script(selectedScript()) : nullptr;
+        return sc && sc->lang == ScriptLang::ST ? assist::declarationsPrefix(sc->decls, hmi::decl::Role::Script) : std::string{};
+    };
     assist::attach(*editor_, assist_);
     updateSymbolLine();
 }
@@ -1101,7 +1108,7 @@ void HmiScriptsPane::updateSymbolLine() {
     const auto* hp = assist_.hmi();
     if (!hp) return;
     const auto plc = assist_.plc ? assist_.plc() : nullptr;
-    const auto d = assist::describe(*hp, plc.get(), symbol, text);
+    const auto d = assist::describe(*hp, plc.get(), symbol, (assist_.declarations ? assist_.declarations() : std::string{}) + text);
     // Un mot-cle n'a rien a dire ; un nom en cours de frappe (la liste est
     // ouverte) n'est pas encore "inconnu".
     if (d.keyword || (!d.found && editor_->completionOpen())) { symbolBar_->setMessage({}); return; }

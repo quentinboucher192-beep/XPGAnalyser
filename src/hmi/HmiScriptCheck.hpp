@@ -23,6 +23,7 @@
 #pragma once
 
 #include "HmiCheck.hpp"
+#include "HmiDecl.hpp"        // 1.11.18 (refonte, lot 3) : decl::Role
 #include "HmiExprCheck.hpp"
 #include "HmiModel.hpp"
 
@@ -66,6 +67,12 @@ struct Scope {
 
 // Les fautes d'un code ST, dans l'ordre du texte (avec celles de dialectFindings).
 [[nodiscard]] std::vector<Finding> check(const Scope&, std::string_view code);
+// 1.11.18 (refonte, lot 3) : un corps et ses declarations du modele, reconstruites sur sa
+// ligne 1 (decl::composeCode) : les fautes rendues au corps (les colonnes de sa ligne 1) ;
+// celles qui tombent dans les declarations (une valeur initiale qui cite un nom inconnu...)
+// nomment la declaration, ligne 0. `inherited` : les parametres d'une fonction redefinie.
+[[nodiscard]] std::vector<Finding> check(const Scope&, std::string_view body, const std::vector<Declaration>& decls,
+                                         decl::Role role, const std::vector<Declaration>* inherited = nullptr);
 
 // 1.10 (decisions 13 et 13 bis) : LE POINT D'APPEL DU CHANTIER S1. Les
 // constructions que S1 ajoute aux scripts de l'IHM (fonctions internes,
