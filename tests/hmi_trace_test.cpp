@@ -17,8 +17,12 @@
 //  changement voulu (la relire avant de la verser) - et l'execute deux fois : rien
 //  ne doit dependre de l'horloge du poste.
 //
-//      hmi_trace_test <dossier du projet> <trace de reference>
+//      hmi_trace_test <dossier du projet> <trace de reference> [--migrer]
+//
+//  1.11.18 (refonte, lot 4) : --migrer - le projet migre d'abord (ses blocs VAR passent
+//  dans le modele, hmi::migrate) : la trace doit rester celle de la reference.
 // =============================================================================
+#include "../src/hmi/HmiMigrate.hpp"    // 1.11.18 (lot 4) : --migrer
 #include "../src/hmi/HmiModel.hpp"
 #include "../src/hmi/HmiRuntime.hpp"
 #include "../src/hmi/HmiSimData.hpp"
@@ -95,6 +99,8 @@ std::size_t firstDifference(const std::string& a, const std::string& b, std::str
     }
 }
 
+bool g_migrate = false;   // 1.11.18 (lot 4) : migrer les blocs VAR avant de tourner
+
 std::string trace(const std::string& folder) {
     std::ostringstream out;
     auto opened = project::ProjectStore::open(folder);
@@ -104,7 +110,14 @@ std::string trace(const std::string& folder) {
     if (!opened.has_value() || !opened.value().project || !loaded.has_value()) return {};
     sim::Runtime plc(opened.value().project);
     check(static_cast<bool>(plc.prepare("MAST")), "l'automate simule est pret (MAST)");
-    const Project p = std::move(loaded.value());
+    Project migrated = std::move(loaded.value());
+    if (g_migrate) {
+        const auto plan = migrate::plan(migrated);
+        check(plan.migrated() > 0 && plan.skipped() == 0, "le projet migre en entier : " + migrate::summary(plan));
+        (void)migrate::apply(migrated, plan);
+        check(!migrate::needed(migrated), "migre : plus aucun bloc VAR dans le code");
+    }
+    const Project p = std::move(migrated);
 
     // Les vues a visiter (pas les popups, symboles, modeles, entetes, pieds) et les scripts a appeler.
     std::vector<const View*> tour;
@@ -209,11 +222,12 @@ int main(int argc, char** argv) {
         std::printf("usage : hmi_trace_test <dossier du projet> <trace de reference>\n");
         return 2;
     }
-    std::printf("-- 1.11.17 : la trace de reference de %s\n", argv[1]);
+    g_migrate = argc > 3 && std::string(argv[3]) == "--migrer";
+    std::printf("-- 1.11.17 : la trace de reference de %s%s\n", argv[1], g_migrate ? " (migre : lot 4)" : "");
     const std::string got = trace(argv[1]);
     check(!got.empty(), "une trace");
     const std::string reference = argv[2];
-    if (const char* redo = std::getenv("XPG_TRACE_REFAIRE"); redo && *redo == '1') {
+    if (const char* redo = std::getenv("XPG_TRACE_REFAIRE"); redo && *redo == '1' && !g_migrate) {
         // Deux fois la meme execution : la meme trace (rien ne depend de l'horloge du poste).
         check(trace(argv[1]) == got, "deux executions, la meme trace");
         std::ofstream(reference, std::ios::binary) << got;

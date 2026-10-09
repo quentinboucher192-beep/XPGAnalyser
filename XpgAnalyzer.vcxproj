@@ -521,6 +521,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\hmi\HmiLiveGeometry.cpp" />
     <ClCompile Include="src\hmi\HmiLog.cpp" />
     <ClCompile Include="src\hmi\HmiMarkers.cpp" />
+    <ClCompile Include="src\hmi\HmiMigrate.cpp" />
     <ClCompile Include="src\hmi\HmiModbusCyclic.cpp" />
     <ClCompile Include="src\hmi\HmiObjectAlarms.cpp" />
     <ClCompile Include="src\hmi\HmiOperators.cpp" />
@@ -902,6 +903,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\hmi\HmiLiveGeometry.hpp" />
     <ClInclude Include="src\hmi\HmiLog.hpp" />
     <ClInclude Include="src\hmi\HmiMarkers.hpp" />
+    <ClInclude Include="src\hmi\HmiMigrate.hpp" />
     <ClInclude Include="src\hmi\HmiModbusCyclic.hpp" />
     <ClInclude Include="src\hmi\HmiObjectAlarms.hpp" />
     <ClInclude Include="src\hmi\HmiOperators.hpp" />
