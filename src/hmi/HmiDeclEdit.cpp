@@ -14,6 +14,9 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cerrno>
+#include <cstdint>
+#include <cstdlib>
 
 namespace hmi::decledit {
 
@@ -604,7 +607,146 @@ bool move(Project& p, const Place& at, Tab t, std::size_t row, int delta, std::s
     return true;
 }
 
-bool set(Project& p, const Place& at, Tab t, std::size_t row, Column col, std::string_view text, std::string* why) {
+namespace {
+
+std::string upperOf(std::string_view s) {
+    std::string u(s);
+    for (auto& c : u) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    return u;
+}
+
+// Le type naturel d'un entier ecrit : INT s'il y tient, sinon DINT, LINT.
+std::string integerTypeOf(long long v) {
+    if (v >= -32768 && v <= 32767) return "INT";
+    if (v >= -2147483648LL && v <= 2147483647LL) return "DINT";
+    return "LINT";
+}
+
+// Le type d'un litteral ecrit ; vide : pas un litteral (un nom, une expression). `integer` :
+// un entier ecrit (sa valeur dans `value`).
+std::string literalTypeOf(std::string_view text, bool& integer, long long& value) {
+    integer = false;
+    const std::string v = trimmed(text);
+    if (v.empty()) return {};
+    const std::string u = upperOf(v);
+    if (u == "TRUE" || u == "FALSE") return "BOOL";
+    if (v.front() == '\'') return "STRING";
+    if (v.front() == '"') return "WSTRING";
+    if (const auto hash = u.find('#'); hash != std::string::npos && hash > 0) {
+        const std::string head = u.substr(0, hash);
+        std::string rest = u.substr(hash + 1);
+        if (std::all_of(head.begin(), head.end(), [](char c) { return std::isdigit(static_cast<unsigned char>(c)) != 0; })) {
+            // 16#FF, 2#1010, 8#17 : un entier dans une base.
+            const int base = std::atoi(head.c_str());
+            std::erase(rest, '_');
+            if ((base != 2 && base != 8 && base != 16) || rest.empty()) return {};
+            char* end = nullptr;
+            const long long n = std::strtoll(rest.c_str(), &end, base);
+            if (!end || *end) return {};
+            integer = true;
+            value = n;
+            return integerTypeOf(n);
+        }
+        if (head == "T" || head == "TIME" || head == "LT" || head == "LTIME") return "TIME";
+        if (head == "D" || head == "DATE") return "DATE";
+        if (head == "TOD" || head == "TIME_OF_DAY") return "TIME_OF_DAY";
+        if (head == "DT" || head == "DATE_AND_TIME") return "DATE_AND_TIME";
+        return v.substr(0, hash);                    // INT#3, T_MODE#Auto : un litteral type
+    }
+    // Un nombre : signe, chiffres (et _), un point ou un exposant pour un reel.
+    std::string n;
+    for (const char c : v)
+        if (c != '_') n += c;
+    std::size_t i = (n[0] == '-' || n[0] == '+') ? 1 : 0;
+    if (i >= n.size() || !std::isdigit(static_cast<unsigned char>(n[i]))) return {};
+    bool real = false;
+    for (std::size_t k = i; k < n.size(); ++k) {
+        const char c = n[k];
+        if (std::isdigit(static_cast<unsigned char>(c))) continue;
+        if (c == '.' || c == 'e' || c == 'E' || ((c == '-' || c == '+') && (n[k - 1] == 'e' || n[k - 1] == 'E'))) {
+            real = true;
+            continue;
+        }
+        return {};                                   // 3 + x, 2s... : une expression
+    }
+    if (real) return "REAL";
+    errno = 0;
+    const long long x = std::strtoll(n.c_str(), nullptr, 10);
+    if (errno == ERANGE) return "LINT";
+    integer = true;
+    value = x;
+    return integerTypeOf(x);
+}
+
+// La valeur nulle d'un type de base (une constante qui change de type) ; vide : aucune.
+std::string zeroOf(std::string_view type) {
+    const auto n = typereg::numericOf(type);
+    switch (n.family) {
+        case typereg::Family::Bool:    return "FALSE";
+        case typereg::Family::Integer: return "0";
+        case typereg::Family::Real:    return "0.0";
+        case typereg::Family::String:  return "''";
+        case typereg::Family::Time:    return "T#0s";
+        case typereg::Family::None:    break;
+    }
+    return {};
+}
+
+} // namespace
+
+std::string valueMisfit(const Project& p, std::string_view type, std::string_view valueText) {
+    const std::string value = trimmed(valueText);
+    if (value.empty()) return {};
+    const auto r = typereg::Registry::build(p)->resolve(type, typereg::UseAll);
+    if (!r.ok) return {};                                         // un type inconnu : on ne sait pas
+    auto category = r.category;
+    std::string target = r.text;
+    const bool array = category == typereg::Category::Collection;
+    if (array) {
+        // Un tableau : son element (une valeur seule remplit toutes les cases) ; une MAP : rien.
+        if (!r.entry || upperOf(r.text).rfind("ARRAY", 0) != 0) return {};
+        category = r.entry->category;
+        target = r.entry->name;
+    }
+    switch (category) {
+        case typereg::Category::Structure:
+        case typereg::Category::PlcType:
+            return array ? "les cases d'un tableau de " + target + " prennent les valeurs initiales de leur type"
+                         : "une structure (" + target + ") prend les valeurs initiales de son type";
+        case typereg::Category::Enumeration: {
+            if (const auto* e = findEnumeration(p, target)) {
+                std::int64_t n = 0;
+                if (enumNumberOf(*e, value, n)) return {};
+                std::string names;
+                for (std::size_t i = 0; i < e->values.size() && i < 4; ++i) names += (names.empty() ? "" : ", ") + e->values[i].name;
+                return value + " n'est pas une valeur de " + e->name + (names.empty() ? std::string{} : " (" + names + "...)");
+            }
+            return {};
+        }
+        case typereg::Category::Elementary:
+        case typereg::Category::TextTime: {
+            bool integer = false;
+            long long n = 0;
+            const std::string lit = literalTypeOf(value, integer, n);
+            if (lit.empty()) return {};                           // un nom (une constante), une expression
+            if (integer && typereg::isInteger(target)) {
+                if (!typereg::valueFits(n, target)) return value + " est hors des bornes d'un " + target;
+                return {};
+            }
+            if (typereg::conversion(lit, target).kind == typereg::Conversion::Forbidden)
+                return "un " + lit + " (" + value + ") ne va pas dans un " + target;
+            return {};
+        }
+        case typereg::Category::Collection:
+        case typereg::Category::Reference:
+        case typereg::Category::Generic:
+        case typereg::Category::Void:
+            break;
+    }
+    return {};
+}
+
+bool set(Project& p, const Place& at, Tab t, std::size_t row, Column col, std::string_view text, std::string* why, std::string* note) {
     Code c = locate(p, at);
     if (!ready(c, t, why)) return false;
     const std::size_t i = indexOf(c, t, row);
@@ -632,6 +774,15 @@ bool set(Project& p, const Place& at, Tab t, std::size_t row, Column col, std::s
                 return fail(why, r.missing ? r.why + " - \xC2\xAB Choisir un type\xE2\x80\xA6 \xC2\xBB les montre"
                                            : "type " + quoted(v) + " non pris en charge : " + r.why);
             d.type = r.text;                 // la forme du registre : REAL, ARRAY[0..9] OF REAL, T_Four (son nom ecrit)
+            // 1.11.21 : sa valeur ne convient plus au nouveau type (0 pour un ARRAY[1..4] OF T_Four) :
+            // retiree - une constante prend la valeur nulle de son type. La meme commande : un Ctrl+Z.
+            if (const std::string bad = valueMisfit(p, d.type, d.value); !bad.empty()) {
+                const std::string old = d.value;
+                d.value = d.kind == DeclKind::Constant ? zeroOf(d.type) : std::string{};
+                if (note)
+                    *note = "valeur " + old + " " + (d.value.empty() ? std::string("retir\xC3\xA9" "e") : "remplac\xC3\xA9" "e par " + d.value)
+                          + " : " + bad;
+            }
             return true;
         }
         case Column::Value: {
@@ -640,6 +791,8 @@ bool set(Project& p, const Place& at, Tab t, std::size_t row, Column col, std::s
             std::string bad;
             if (!value.empty() && !declarationValueReadable(d.type, value, &bad))
                 return fail(why, "valeur " + quoted(v) + " illisible pour un " + d.type + (bad.empty() ? std::string{} : " : " + bad));
+            if (const std::string misfit = valueMisfit(p, d.type, value); !misfit.empty())   // 1.11.21
+                return fail(why, "valeur " + quoted(v) + " : " + misfit);
             d.value = value;
             return true;
         }

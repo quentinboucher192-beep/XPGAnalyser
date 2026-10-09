@@ -1428,6 +1428,70 @@ void edition() {
         check(one && sd[2].value == "1.5", "un tableau : une valeur pour toutes ses cases - " + why);
         const bool list = de::set(p, script, de::Tab::Variables, 1, de::Column::Value, "[1.0, 2.0, 3.0, 4.0]", &why);
         check(!list && sd[2].value == "1.5" && why.find("illisible") != std::string::npos, "une liste [..] : refusee - " + why);
+        // 1.11.21 : LE TYPE CHANGE, LA VALEUR QUI NE LUI CONVIENT PLUS EST RETIREE (la session de la
+        // 1.11.19 : 0 garde pour un ARRAY[1..4] OF T_Four) ; une valeur qui ne convient pas : refusee.
+        {
+            std::string note;
+            check(sd[3].type == "BOOL" && sd[3].value == "FALSE", "le depart : BOOL := FALSE");
+            check(de::set(p, script, de::Tab::Variables, 2, de::Column::Type, "INT", &why, &note) && sd[3].type == "INT" && sd[3].value.empty()
+                      && note == "valeur FALSE retir\xC3\xA9" "e : un BOOL (FALSE) ne va pas dans un INT",
+                  "BOOL -> INT : FALSE retiree (" + note + ")");
+            check(!de::set(p, script, de::Tab::Variables, 2, de::Column::Value, "40000", &why) && sd[3].value.empty()
+                      && why.find("hors des bornes d'un INT") != std::string::npos,
+                  "40000 pour un INT : refuse (" + why + ")");
+            check(de::set(p, script, de::Tab::Variables, 2, de::Column::Value, "7", &why) && sd[3].value == "7", "7 pour un INT : pris");
+            note.clear();
+            check(de::set(p, script, de::Tab::Variables, 2, de::Column::Type, "DINT", &why, &note) && sd[3].value == "7" && note.empty(),
+                  "INT -> DINT : 7 convient, garde, rien a dire");
+            check(de::set(p, script, de::Tab::Variables, 2, de::Column::Type, "REAL", &why, &note) && sd[3].value == "7" && note.empty(),
+                  "DINT -> REAL : 7 convient (un entier pour un reel)");
+            check(de::set(p, script, de::Tab::Variables, 2, de::Column::Type, "t_vec", &why, &note) && sd[3].type == "T_VEC" && sd[3].value.empty()
+                      && note.find("valeur 7 retir\xC3\xA9" "e : une structure (T_VEC) prend les valeurs initiales de son type") == 0,
+                  "REAL -> T_VEC : 7 retiree (" + note + ")");
+            check(!de::set(p, script, de::Tab::Variables, 2, de::Column::Value, "5", &why) && why.find("une structure (T_VEC)") != std::string::npos,
+                  "5 pour une structure : refuse (" + why + ")");
+            check(de::set(p, script, de::Tab::Variables, 2, de::Column::Type, "ARRAY[1..4] OF T_VEC", &why, &note)
+                      && !de::set(p, script, de::Tab::Variables, 2, de::Column::Value, "0", &why)
+                      && why.find("les cases d'un tableau de T_VEC prennent les valeurs initiales de leur type") != std::string::npos,
+                  "0 pour un ARRAY[1..4] OF T_VEC : refuse (" + why + ")");
+            note.clear();
+            check(de::set(p, script, de::Tab::Variables, 2, de::Column::Type, "STRING", &why, &note) && note.empty()
+                      && de::set(p, script, de::Tab::Variables, 2, de::Column::Value, "'abc'", &why) && sd[3].value == "'abc'"
+                      && de::set(p, script, de::Tab::Variables, 2, de::Column::Type, "REAL", &why, &note) && sd[3].value.empty()
+                      && note.find("un STRING ('abc') ne va pas dans un REAL") != std::string::npos,
+                  "STRING -> REAL : 'abc' retiree (" + note + ")");
+            check(de::set(p, script, de::Tab::Variables, 2, de::Column::Value, "Max * 0.5", &why)
+                      && de::set(p, script, de::Tab::Variables, 2, de::Column::Type, "INT", &why, &note) && sd[3].value == "Max * 0.5",
+                  "une expression : on ne sait pas la juger, gardee");
+            check(de::set(p, script, de::Tab::Variables, 2, de::Column::Value, "16#FF", &why) && sd[3].value == "16#FF"
+                      && !de::set(p, script, de::Tab::Variables, 2, de::Column::Value, "16#FFFFF", &why),
+                  "16#FF pour un INT : pris ; 16#FFFFF : hors des bornes");
+            // Une constante qui change de type : la valeur nulle du nouveau type (elle en a une).
+            note.clear();
+            check(sd[0].kind == DeclKind::Constant && sd[0].value == "10"
+                      && de::set(p, script, de::Tab::Constants, 0, de::Column::Type, "STRING", &why, &note) && sd[0].value == "''"
+                      && note == "valeur 10 remplac\xC3\xA9" "e par '' : un INT (10) ne va pas dans un STRING",
+                  "une constante INT 10 -> STRING : '' (" + note + ")");
+            // Une enumeration : une de ses valeurs.
+            HmiType mode;
+            mode.id = p.allocate();
+            mode.name = "T_MODE";
+            mode.kind = HmiTypeKind::Enumeration;
+            mode.values = {{"Auto", 0, "", ""}, {"Manu", 1, "", ""}};
+            p.programs.types.push_back(mode);
+            check(de::set(p, script, de::Tab::Variables, 2, de::Column::Type, "T_MODE", &why, &note) && sd[3].value.empty()
+                      && de::set(p, script, de::Tab::Variables, 2, de::Column::Value, "T_MODE#Manu", &why)
+                      && de::set(p, script, de::Tab::Variables, 2, de::Column::Value, "Auto", &why)
+                      && !de::set(p, script, de::Tab::Variables, 2, de::Column::Value, "Arret", &why)
+                      && why.find("Arret n'est pas une valeur de T_MODE (Auto, Manu...)") != std::string::npos,
+                  "une enumeration : T_MODE#Manu, Auto pris ; Arret refuse (" + why + ")");
+            de::set(p, script, de::Tab::Variables, 2, de::Column::Type, "REAL", &why);   // la suite ne connait pas T_MODE
+            p.programs.types.pop_back();
+            check(de::valueMisfit(p, "BOOL", "TRUE").empty() && de::valueMisfit(p, "TIME", "T#5s").empty() && !de::valueMisfit(p, "TIME", "5").empty()
+                      && de::valueMisfit(p, "LREAL", "2.5").empty() && !de::valueMisfit(p, "INT", "2.5").empty()
+                      && de::valueMisfit(p, "ARRAY[1..3] OF REAL", "1.5").empty() && de::valueMisfit(p, "BIDULE", "3").empty(),
+                  "valueMisfit : TRUE BOOL, T#5s TIME, 2.5 LREAL, 1.5 pour un ARRAY OF REAL ; 5 TIME et 2.5 INT non ; un type inconnu : rien");
+        }
         check(de::set(p, script, de::Tab::Constants, 0, de::Column::Description, "la borne\nhaute\t(bar)", &why) && sd[0].description == "la borne haute (bar)",
               "la documentation : sur une ligne");
         // Les libelles se relisent.

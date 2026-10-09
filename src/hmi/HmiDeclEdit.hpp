@@ -130,6 +130,18 @@ bool duplicate(Project&, const Place&, Tab, const std::vector<std::size_t>& rows
 // la signature : celui des appels sans nom.
 bool move(Project&, const Place&, Tab, std::size_t row, int delta, std::string* why);
 // Ecrire une case (le texte de la grille ou d'Excel). Le nom renomme les utilisations.
-bool set(Project&, const Place&, Tab, std::size_t row, Column, std::string_view text, std::string* why);
+// 1.11.21 : un TYPE change - la valeur qui ne lui convient plus est retiree (une constante
+// prend la valeur nulle de son type : 0, 0.0, FALSE, '', T#0s) et `note` le dit ; une VALEUR
+// qui ne convient pas au type est refusee (valueMisfit).
+bool set(Project&, const Place&, Tab, std::size_t row, Column, std::string_view text, std::string* why,
+         std::string* note = nullptr);
+// 1.11.21 : une valeur (initiale, d'une constante, par defaut) convient-elle au type ? Vide :
+// oui, ou on ne sait pas le dire (un nom, une expression, un type inconnu) ; sinon pourquoi.
+//   - une structure, un tableau de structures : non (ils prennent les valeurs de leur type) ;
+//   - une enumeration : une de ses valeurs (T_MODE#Auto, Auto, son nombre) ;
+//   - un litteral (TRUE, 5, 16#FF, 2.5, 'texte', T#5s, INT#3) : sa conversion vers le type
+//     (la regle du lot 6) - interdite, ou un entier hors des bornes : non. Un tableau d'un type
+//     de base : son element (une valeur seule remplit toutes les cases).
+[[nodiscard]] std::string valueMisfit(const Project&, std::string_view type, std::string_view value);
 
 } // namespace hmi::decledit

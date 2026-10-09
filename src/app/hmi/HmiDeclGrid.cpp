@@ -566,10 +566,12 @@ bool HmiDeclGrid::setCell(std::size_t row, de::Column column, const std::string&
     const de::Tab tab = tab_;
     const std::string what = column == de::Column::Name ? "Renommer " + name + " en " + text
                                                         : de::columnTitle(column, tab_) + " de " + name;
+    std::string note;                     // 1.11.21 : la valeur retiree par un changement de type
     if (!change(what + " (" + ownerLabel() + ")",
-                [&](hmi::Project& p, std::string* why) { return de::set(p, at, tab, row, column, text, why); }))
+                [&](hmi::Project& p, std::string* why) { return de::set(p, at, tab, row, column, text, why, &note); }))
         return false;
     refresh();
+    if (!note.empty()) say(name + " : " + note + " (Ctrl+Z la rend)", false);
     if (column == de::Column::Name && name != text) {
         const std::size_t uses = row < rows_->rows.size() ? rows_->rows[row].uses : 0;
         say(name + (feminine() ? " renomm\xC3\xA9" "e en " : " renomm\xC3\xA9 en ") + text
