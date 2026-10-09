@@ -1,0 +1,92 @@
+# =============================================================================
+#  Session 11124 : LES REPERES DANS LES SYMBOLES (1.11.24). Sur une copie
+#  d'Armoire_Gaz preparee par preparer-projet-11120, -11121, -11123 puis -11124 :
+#  la vue Vue_Reperes pose trois S_Cuve - Symbole_1 (Cuve := $Cuves[0]$ ; Titre :=
+#  '$Nom$' ; Haut := 80.0), Symbole_2 (Cuve := $Cuves[1]$), Symbole_3 (Cuve :=
+#  Cuves[$Idx$], un indice calcule). Chaque S_Cuve a InputField_1 (Cuve.IN_Percent,
+#  de 0 a Haut), Btn_Plus (Cuve.Consigne + 1) et Mini, un S_Mini qui recoit M := $Cuve$
+#  (le repere herite). La capture du client : saisie : variable inconnue
+#  (V[0]).IN_Percent - un champ de saisie dans un symbole, un argument a repere.
+#    1. l'editeur : Symbole_1 choisi, ses arguments a reperes ;
+#    2. Compiler : aucune faute sur S_Cuve, S_Mini, Vue_Reperes ;
+#    3. en marche : les saisies et les boutons ecrivent, le 95 est refuse (Haut = 80),
+#       la Console ne dit aucune erreur ;
+#    4. la liste des onglets de droite : plus de Journal, d'Alarmes ni de Recettes.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- 1. L'editeur : les arguments a reperes ----
+arbre "IHM/Vues/Vue_Reperes" double
+attendre 10
+objet "Symbole_1"
+attendre 4
+capture 11124_01_instances_a_reperes.png
+
+# ---- 2. Compiler ----
+ihm-build compiler sans-fenetre
+ihm-build-attendre 600
+ihm-build-etat
+ihm-sorties diagnostics
+attendre 4
+champ "hmi.sorties.search" "S_Cuve"
+attendre 4
+capture 11124_02_compiler_sans_faute.png
+champ "hmi.sorties.search" ""
+attendre 2
+
+# ---- 3. En marche ----
+arbre "Simulation/IHM"
+attendre 2
+ihm-build-attendre 600
+attendre 60
+ihm-sim-etat "en marche"
+sim-vue "Vue_Reperes"
+attendre 8
+#  (Symbole_1 : Cuve := $Cuves[0]$ - le cas de la capture du client)
+sim-clic "Symbole_1.InputField_1"
+attendre 2
+texte "42"
+touche Return
+attendre 3
+sim-clic "Symbole_1.Btn_Plus"
+attendre 2
+sim-clic "Symbole_1.Btn_Plus"
+attendre 2
+#  (Mini dans Symbole_1 : M := $Cuve$, le repere herite)
+sim-clic "Symbole_1.Mini.Saisie_M"
+attendre 2
+texte "7"
+touche Return
+attendre 3
+#  (Symbole_3 : Cuve := Cuves[$Idx$], Idx = 2)
+sim-clic "Symbole_3.InputField_1"
+attendre 2
+texte "55"
+touche Return
+attendre 3
+#  (Symbole_2 : 95 au-dessus de Haut = 80 - refuse)
+sim-clic "Symbole_2.InputField_1"
+attendre 2
+texte "95"
+touche Return
+attendre 6
+ihm-sorties console
+attendre 4
+ihm-console-etat
+capture 11124_03_en_marche.png
+champ "hmi.sorties.search" "saisie"
+attendre 4
+capture 11124_04_console_saisies.png
+
+# ---- 4. Les onglets de droite : plus de Journal, d'Alarmes ni de Recettes ----
+onglets-liste
+attendre 3
+capture 11124_05_onglets_de_droite.png
+touche Escape
+attendre 2
+quitter

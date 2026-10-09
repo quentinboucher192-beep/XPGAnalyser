@@ -784,7 +784,6 @@ void HmiObjectList::onPaint(const ui::PaintContext& ctx) {
         if (o->locked || showIcons)
             drawHmiGlyph(ctx.r, o->locked ? HmiGlyph::Lock : HmiGlyph::Unlock, lock, o->locked ? c.warning : fg.withAlpha(150));
         const std::string type = std::string(hmi::kindLabel(o->kind));
-        const float typeW = ctx.r.measure(type, small).width;
         // ---- Lot API 8 : les expressions impossibles ---- un badge "fx" : au moins une
         // propriete pilotee par une expression (rouge : l'une ne se lit pas).
         const auto badge = exprBadges_.find(row.id);
@@ -801,13 +800,19 @@ void HmiObjectList::onPaint(const ui::PaintContext& ctx) {
             drawHmiGlyph(ctx.r, HmiGlyph::Bell, {bx, y + (rowH_ - 14) / 2, 14, 14}, sel ? fg : c.textMuted);
             textCentred(ctx, {bx + 17, y, bellW - 17, rowH_}, alarmCount, small, sel ? fg : c.textMuted);
         }
-        const float nameW = std::max(20.f, lock.x - x - typeW - 16 - badgeW - bellW);
+        // 1.11.24 : le nom d'abord, le genre prend ce qui reste (coupe, ou rien) - "Instance
+        // de symbole" reduisait le nom d'une instance a "..." dans un explorateur etroit.
+        const float room = std::max(20.f, lock.x - x - 8 - badgeW - bellW);
+        const float nameW = std::min(room, std::max(20.f, ctx.r.measure(o->name, f).width));
         const std::string name = fit(ctx.r, o->name, f, nameW);
         textCentred(ctx, {x, y, nameW, rowH_}, name, f, fg);
         const float nx = x + ctx.r.measure(name, f).width + 8;
-        textCentred(ctx, {nx, y, typeW + 4, rowH_}, type, small, sel ? fg.withAlpha(200) : c.textMuted);
-        if (driven && nx + typeW + 32.f < lock.x) {
-            const gfx::Rect pill{nx + typeW + 8.f, y + (rowH_ - 15.f) * 0.5f, 22.f, 15.f};
+        const float typeRoom = x + room - nx;
+        const std::string kind = typeRoom >= 28.f ? fit(ctx.r, type, small, typeRoom) : std::string{};
+        const float kindW = kind.empty() ? 0.f : ctx.r.measure(kind, small).width;
+        if (!kind.empty()) textCentred(ctx, {nx, y, kindW + 4, rowH_}, kind, small, sel ? fg.withAlpha(200) : c.textMuted);
+        if (driven && nx + kindW + 32.f < lock.x) {
+            const gfx::Rect pill{nx + kindW + 8.f, y + (rowH_ - 15.f) * 0.5f, 22.f, 15.f};
             ctx.r.fillRoundedRect(pill, broken ? c.error : marked ? c.warning : c.accent, 7.f);
             const char* mark = marked ? "$" : "fx";
             ctx.r.drawText({pill.x + (pill.w - ctx.r.measure(mark, small).width) * 0.5f, pill.y + (pill.h - ctx.r.lineHeight(small)) * 0.5f},
