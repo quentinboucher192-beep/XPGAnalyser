@@ -207,10 +207,14 @@ Report fromPlc(Project& p, const domain::Project& plc) {
     // la sonde les note et dit oui) - les vues, les actions, les scripts, les fonctions, les
     // alarmes, les recettes, les historiques ; puis la table des adresses.
     std::set<std::string> asked;
-    (void)compileWith(p, [&asked](std::string_view root) {
+    const auto probe = [&asked](std::string_view root) {
         asked.insert(upper(root));
         return true;
-    });
+    };
+    (void)compileWith(p, probe);
+    // ... et Generer : ce que lit la propriete « variable » d'un objet (un afficheur, un
+    // voyant de la vue Communication...) n'est controle que par lui.
+    (void)generateWith(p, probe, GenerateOptions{});
     for (const auto& a : p.comm.addresses) asked.insert(upper(rootOf(a.variable)));
 
     Converter conv(p, plc, r);

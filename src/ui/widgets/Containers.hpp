@@ -260,6 +260,10 @@ public:
     void    addSeparator();
     Widget& addCustom(WidgetPtr w);          // e.g. the Build-configuration DropDown
     void    setOverflowEnabled(bool e) { overflow_ = e; }
+    // 1.12.0 : a slot its owner hides (one edition has no PLC). The layout no
+    // longer shows it, counts it, or lists it in the overflow menu. Setting a
+    // slot's visibility directly does not stick: the layout decides that.
+    void    setSlotHidden(const Widget& w, bool hidden);
     // Where a toolbar button's ActionId goes when it is clicked. The toolbar
     // does not own an ActionRegistry; the screen supplies the sink.
     void    setActionSink(std::function<void(core::ActionId)> sink);
@@ -273,7 +277,7 @@ protected:
     void onLayout() override;
     void onPaint(const PaintContext&) override;
 private:
-    struct Slot { Widget* w; bool separator; Button* button; };
+    struct Slot { Widget* w; bool separator; Button* button; bool hidden{false}; };
     void rebuildOverflow();
 
     std::vector<Slot>                     slots_;

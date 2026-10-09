@@ -264,6 +264,32 @@ bool impossibleExpression(const hmi::Issue& i) {
 
 } // namespace
 
+namespace {
+// 1.12.0 : le nom de l'appel dont le curseur est entre les parentheses (LIMIT(0, |) ;
+// vide : le curseur n'est dans aucun appel de sa ligne.
+std::string callNameAtCaret(const ui::MultiLineText& ed) {
+    const auto all = ed.text();
+    std::size_t i = std::min(ed.caretOffset(), all.size());
+    int depth = 0;
+    while (i > 0) {
+        const char c = all[i - 1];
+        if (c == '\n' || c == ';') return {};
+        if (c == ')') ++depth;
+        else if (c == '(') {
+            if (depth == 0) break;
+            --depth;
+        }
+        --i;
+    }
+    if (i == 0) return {};
+    --i;                                                 // la parenthese ouvrante
+    while (i > 0 && (all[i - 1] == ' ' || all[i - 1] == '\t')) --i;
+    const auto end = i;
+    while (i > 0 && (std::isalnum(static_cast<unsigned char>(all[i - 1])) || all[i - 1] == '_')) --i;
+    return all.substr(i, end - i);
+}
+} // namespace
+
 bool MainAnalysisScreen::isHmiNode(ui::NodeId n) {
     const auto k = ProjectTreeModel::kindOf(n);
     return (k >= NK::HmiFolder && k <= NK::HmiScripts) || (k >= NK::HmiAlarms && k <= NK::HmiHistory)
@@ -3262,12 +3288,16 @@ bool MainAnalysisScreen::openHmiHelpNow() {
             }
         }
         std::string word;
-        if (auto* scripts = dynamic_cast<HmiScriptsPane*>(hmiTab(key))) word = scripts->editor().symbolAtCaret();
-        if (auto* functions = dynamic_cast<HmiFunctionsPane*>(hmiTab(key))) word = functions->editor().symbolAtCaret();
+        ui::MultiLineText* codeEditor = nullptr;
+        if (auto* scripts = dynamic_cast<HmiScriptsPane*>(hmiTab(key))) codeEditor = &scripts->editor();
+        if (auto* functions = dynamic_cast<HmiFunctionsPane*>(hmiTab(key))) codeEditor = &functions->editor();
+        if (codeEditor) word = codeEditor->symbolAtCaret();
         // 1.12.0 : une native (LIMIT, RGB, INT_TO_REAL, TRANSITION#Fondu...) : sa fiche - une
-        // fonction du projet de meme nom passe avant (comme a l'execution).
-        if (!word.empty() && !doc->project.functionByName(word))
-            if (const auto native = natives::keyOfWord(word); !native.empty() && openNative(native)) return true;
+        // fonction du projet de meme nom passe avant (comme a l'execution). Entre les
+        // parentheses d'un appel (LIMIT(0, |) : la fonction appelee.
+        for (const auto& name : {word, codeEditor && word.empty() ? callNameAtCaret(*codeEditor) : std::string{}})
+            if (!name.empty() && !doc->project.functionByName(name))
+                if (const auto native = natives::keyOfWord(name); !native.empty() && openNative(native)) return true;
         // F1 dans le volet des natives : l'aide du langage.
         if (key == "natives") {
             openHmiHelp("reference");
@@ -3422,6 +3452,9 @@ bool MainAnalysisScreen::insertInCodeTab(const std::string& text) {
     }
     if (!ed || ed->readOnly()) return false;
     ed->insertText(text);
+    // Un appel (LIMIT()) : le curseur entre ses parentheses, pret pour les arguments.
+    if (text.size() > 2 && text.compare(text.size() - 2, 2, "()") == 0 && ed->caretColumnForTest() > 0)
+        ed->selectRange(ed->caretLine(), ed->caretColumnForTest() - 1, 0);
     ed->dismissCompletion();
     ed->takeFocus();
     return true;

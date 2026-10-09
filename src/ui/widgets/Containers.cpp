@@ -1156,8 +1156,18 @@ Widget& ToolBar::addCustom(WidgetPtr w) {
 //  silently unreachable: whatever comes off the bar goes into the overflow list,
 //  which is why step 3 reserves room for that control before deciding what fits.
 // ---------------------------------------------------------------------------
+void ToolBar::setSlotHidden(const Widget& w, bool hidden) {
+    for (auto& s : slots_)
+        if (s.w == &w && s.hidden != hidden) {
+            s.hidden = hidden;
+            invalidateLayout();
+        }
+}
+
 void ToolBar::onLayout() {
     const auto  area = contentRect();
+    for (const auto& s : slots_)
+        if (s.hidden) s.w->setVisibility(Visibility::Collapsed);
     const float gap = 4.f;
     const float separatorWidth = 11.f;
 
@@ -1165,6 +1175,7 @@ void ToolBar::onLayout() {
         float total = 0.f;
         for (const auto& s : slots_) {
             if (s.separator) { total += separatorWidth; continue; }
+            if (s.hidden) continue;
             if (s.button) s.button->setCompact(compact);
             total += s.w->sizeHint().preferred.w + gap;
         }
@@ -1189,6 +1200,7 @@ void ToolBar::onLayout() {
         float x = area.x;
         for (const auto& s : slots_) {
             if (s.separator) { x += separatorWidth; continue; }
+            if (s.hidden) continue;
             s.w->setVisibility(Visibility::Visible);
             const float w = s.w->sizeHint().preferred.w;
             s.w->setBounds({x, area.y, w, area.h});
@@ -1209,6 +1221,7 @@ void ToolBar::onLayout() {
             if (!overflowing) x += separatorWidth;
             continue;
         }
+        if (s.hidden) continue;
         const float w = s.w->sizeHint().preferred.w;
 
         // A custom widget has no action id, so it cannot be reached from the
@@ -1240,7 +1253,7 @@ void ToolBar::rebuildOverflow() {
     std::vector<DropDown::Item> items;
     items.reserve(slots_.size());
     for (const auto& s : slots_) {
-        if (!s.button || s.w->visibility() == Visibility::Visible) continue;
+        if (!s.button || s.hidden || s.w->visibility() == Visibility::Visible) continue;
         items.push_back(DropDown::Item{s.button->text(), std::string(s.button->action()),
                                        {}, s.button->enabled()});
     }

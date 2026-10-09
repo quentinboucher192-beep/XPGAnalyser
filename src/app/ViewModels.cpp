@@ -3388,6 +3388,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             const auto t = shortcutTarget(n);
             if (t != ui::kInvalidNode) s = style(t);
             s.chips.clear();
+            s.tags.clear();   // 1.12.0 : la place du domaine (« verrouillees » de Natives la chevauchait)
             const auto& list = kindOf(n) == NodeKind::PinItem ? pins_ : recents_;
             if (indexOf(n) < list.size()) s.hint = list[indexOf(n)].hint;
             return s;

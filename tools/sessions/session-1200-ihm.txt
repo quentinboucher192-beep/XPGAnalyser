@@ -54,15 +54,24 @@ attendre 4
 capture 1200_ihm_11_operateurs.png
 
 # ---- 3. Inserer dans un script, F1 ----
+#  (une ligne neuve a la fin d'Init, « Compteur_Clics := ; », le curseur avant le ;
+#  - Inserer y pose LIMIT(), le curseur entre ses parentheses ; les arguments tapes ;
+#  F1, le curseur dans l'appel : la fiche de LIMIT)
 arbre "IHM/Programmation générale/Scripts/Init"
 attendre 6
+editeur "\nCompteur_Clics := ;" ajout
+touche left
 natives "fonction:LIMIT"
 attendre 3
 natives-inserer
+attendre 3
+texte "0, Compteur_Clics, 100"
+touche escape
 attendre 4
 capture 1200_ihm_12_inserer_limit.png
-touche F1
+touche f1
 attendre 4
+natives-attendre "LIMIT"
 capture 1200_ihm_13_f1_limit.png
 
 # ---- 4. Les variables venues de l'automate ----

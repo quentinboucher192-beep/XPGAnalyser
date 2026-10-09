@@ -2384,8 +2384,8 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
     plcBtn_ = &bar->addButton("D\xC3\xA9marrer l'API", "plc.toggle", ui::Icon::Play);
     // 1.12.0 : XPGAnalyser IHM n'a pas d'automate - ni sa pastille, ni son bouton.
     if (!core::hasApi()) {
-        plcChip_->setVisibility(ui::Visibility::Collapsed);
-        plcBtn_->setVisibility(ui::Visibility::Collapsed);
+        bar->setSlotHidden(*plcChip_, true);      // la barre decide de la visibilite de ses emplacements
+        bar->setSlotHidden(*plcBtn_, true);
         hmiStartBtn_->setTooltip("D\xC3\xA9marrer l'IHM (F8) : scripts, actions, alarmes, vues ; ses variables, les esclaves simul\xC3\xA9s de ses \xC3\xA9quipements.");
         hmiStopBtn_->setTooltip("Arr\xC3\xAAter l'IHM (Maj+F8)");
     }
