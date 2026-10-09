@@ -16,3 +16,4 @@ outils/etat/
 ~$*
 # Installateurs fabriques (livres a part, pas dans le depot)
 /XPGAnalyser-Setup-*.exe
+__pycache__/
