@@ -128,7 +128,17 @@ Deux sessions ont été jouées avec les exe livrés : `tools/sessions/session-1
 - La barre de la simulation montrait encore « API : absente » et son bouton. La barre d'outils remettait visibles les éléments masqués ; elle les garde maintenant cachés.
 - Dans Récents, l'étiquette « verrouillées » des Natives chevauchait le nom du domaine.
 
-_(XPGAnalyser API : à compléter)_
+**XPGAnalyser API** (`XpgAnalyzer-API.exe`)
+
+| Étape | Ce qui s'est passé | Capture |
+|---|---|---|
+| **1.** L'accueil | L'accueil de XPGAnalyser API | `1200_api_01` |
+| **2.** La recopie, puis le projet ouvert | `projets\api\Armoire_Gaz` a été créé au lancement, sans `ihm\`. L'arbre a API (29 POU, 891 variables), Simulation (Vue d'ensemble, Automate, Débogage, Forçages, Courbes, Journal) et Versions : ni IHM, ni simulation de l'IHM | `1200_api_02` |
+| **3.** API › Variables | Les variables, sans colonne ni filtre IHM | `1200_api_03` |
+| **4.** Simulation › Vue d'ensemble | Les cartes de l'automate seul | `1200_api_04` |
+| **5.** Aide, puis Notes de version › 1.12.0 | Les chapitres de l'automate seulement : Démarrer, L'automate (API), Macros, Raccourcis, Notes de version. Pas de chapitre « L'IHM ». La page de la 1.12.0 : 4 nouveautés, 3 changements | `1200_api_05` |
+
+Aucun contrôle des deux sessions n'a échoué.
 
 ## 7. Fichiers modifiés
 
@@ -182,8 +192,37 @@ _(XPGAnalyser API : à compléter)_
 
 ## Installer
 
-_(à compléter)_
+1. Lancez `XPGAnalyser-Setup-1.12.0.exe`. Il met à jour la version installée : même identité d'installation, sauvegarde de l'ancienne version, données reprises sans être déplacées. Il pose les deux applications et leurs deux raccourcis ; `XpgAnalyzer.exe` et le raccourci « XPGAnalyser » de la 1.11 sont retirés. À la fin, « Lancer XPGAnalyser API » est coché, « Lancer XPGAnalyser IHM » ne l'est pas.
+2. Windows SmartScreen peut avertir, parce que l'installateur n'est pas signé. Choisissez « Informations complémentaires », puis « Exécuter quand même ».
+
+Empreinte SHA-256 de `XPGAnalyser-Setup-1.12.0.exe` (27,7 Mo, 29 086 723 octets) :
+`03943870D0E780E9A5107ECF9B5CA970BE57B5903B127ECCCE62488B29BA12A1`
+
+**Les zips portables.** Chacun contient une application et ce qu'il lui faut, dans un dossier `XPGAnalyser-API-1.12.0` ou `XPGAnalyser-IHM-1.12.0` : décompressez, puis lancez l'exe. Sans installation, les données suivent le dossier de travail, donc `projets\api` ou `projets\ihm` à côté de l'exe.
+- `XPGAnalyser-API-1.12.0-portable.zip` (20,7 Mo) :
+  `3BC54931698838A3E24B900EE1BFF8B24F286A915FC129ED94B5A1C1BF9C4718`
+- `XPGAnalyser-IHM-1.12.0-portable.zip` (20,7 Mo) :
+  `3FDF1E52041C27EF787A5C700E1D664B971234E896253FD9A92A519573D4A8FD`
 
 ## Vérifications
 
-_(à compléter)_
+**Tests Linux** (GCC 13) : la suite CTest complète passe (69 sur 69, avec les nouveaux essais `edition` et `hminatives`). Elle comprend les 6 649 contrôles de `hmieditor`, les 4 730 de `hmi` et les 258 de `hmireperes`. Après les corrections trouvées sous Wine (§ 6), les essais touchés ont été relancés et passent : `hmieditor`, `edition`, `layout` et `viewmodel`.
+
+**Les deux exe Windows**, compilés sous Linux avec MinGW-w64 et lancés sous Wine :
+- `--version` répond `XPGAnalyser API 1.12.0` et `XPGAnalyser IHM 1.12.0` ;
+- `XpgAnalyzer-API.exe --cli MAST.XPG` analyse le projet d'essai (891 variables, 29 POU) ;
+- les deux sessions du § 6 ont été rejouées avec les exe livrés : 15 captures `1200_ihm_*` et 5 captures `1200_api_*`, aucun contrôle en échec.
+
+**L'installateur**, compilé par Inno Setup 6.4.1 sous Wine, puis installé en silencieux pour tous les comptes, par-dessus la 1.11.24 :
+- « Installation process succeeded » ;
+- avant : `XpgAnalyzer.exe` et le raccourci « XPGAnalyser » ; après : `XpgAnalyzer-API.exe`, `XpgAnalyzer-IHM.exe` et les raccourcis « XPGAnalyser API » et « XPGAnalyser IHM » ;
+- les deux exe installés sont identiques à ceux qui ont été testés ;
+- le manifeste nomme les deux exe.
+
+**Pas encore fait :** ni les exe ni l'installateur n'ont été lancés sur un vrai Windows, et le projet Visual Studio n'a pas été compilé (pas de MSVC ici). La section « Tester vous-même » donne le parcours à refaire chez vous.
+
+## La suite
+
+- les raccourcis clavier des éditeurs (le § 14 de la spécification de la refonte des scripts) ;
+- les natives dans Aller à… une par une (aujourd'hui : le volet Natives), et l'aide à la saisie en C et en C++ ;
+- la source du guide Word, à remettre à jour depuis la 1.11.2.
