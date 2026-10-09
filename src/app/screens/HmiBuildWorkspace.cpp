@@ -193,7 +193,7 @@ void MainAnalysisScreen::tickHmiBuild() {
             }
             // 1.11.17 (refonte, lot 1) : Compiler les operateurs du symbole - le build du symbole.
             if (auto* so = ed->symbolOperators(); so && !so->build)
-                so->build = [this](pl::Mode mode, const std::string& key) { runHmiBuildFor(mode, key); };
+                so->build = [this](pl::Mode mode, const std::string& k) { runHmiBuildFor(mode, k); };
         }
     }
     // Un demarrage attendait la fin d'un autre build : son tour.
