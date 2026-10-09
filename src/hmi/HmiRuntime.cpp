@@ -1,4 +1,5 @@
 #include "HmiRuntime.hpp"
+#include "HmiNatives.hpp"   // 1.12.0 : couleurs, aleatoire, enumerations natives
 #include "HmiActionKinds.hpp"   // 1.11.7 : Maths, le clavier virtuel
 #include "../core/CallTrail.hpp"   // 1.10.2 (CR) : les scripts de l'IHM, dans le journal interne
 #include "HmiObjectAlarms.hpp"
@@ -331,6 +332,11 @@ public:
                 out = sim::Value::integer(sim::Type::DInt, static_cast<long long>(*level));
                 return true;
             }
+            // 1.12.0 : les enumerations natives (TRANSITION#Fondu, POSITION_POPUP#Objet...) : un DINT.
+            if (const natives::EnumValue* nv = nullptr; natives::parseEnumLiteral(n, nullptr, &nv) && nv) {
+                out = sim::Value::integer(sim::Type::DInt, nv->number);
+                return true;
+            }
             return false;
         }
         if (aliases)
@@ -484,6 +490,16 @@ public:
             if (const auto* f = rt_.project_->functionByKey(name)) return rt_.callFunction(*f, args, result);   // 1.11.20 : "Nom#id"
         // 1.11.10 : la fonction d'une instance de symbole (Vue_Vannes.Vanne_3.Ouvrir).
         if (const auto* f = symbolCall(name)) return rt_.callFunction(*f, args, result);
+        // 1.12.0 : les couleurs (RGB, COULEUR_...) et l'aleatoire (RANDOM...), natives de l'IHM -
+        // apres les fonctions du projet et des symboles (un projet qui avait sa fonction Random).
+        if (natives::isOwnFunction(u)) {
+            std::vector<sim::Value> values;
+            for (const auto& a : args) values.push_back(a.second);
+            std::string why;
+            if (natives::call(u, values, result, &why)) return true;
+            diagnostics.push_back({sim::Diagnostic::Severity::Error, why, 0, {}});
+            return false;
+        }
         if (rt_.plc_) return rt_.plc_->call(name, instance, args, result);
         // Lot 8 : sans automate (l'IHM seule, les exemples de l'aide), les
         // fonctions standard restent la : SEL, SIN, LIMIT, les conversions...
@@ -661,7 +677,16 @@ public:
     std::vector<const Scope*> savedAliases_;
 
 private:
-    bool ihm(const std::string& u, const std::vector<std::pair<std::string, sim::Value>>& args, sim::Value& result) {
+    bool ihm(const std::string& u, const std::vector<std::pair<std::string, sim::Value>>& given, sim::Value& result) {
+        // 1.12.0 : un argument donne par une enumeration native (TRANSITION#Fondu) : le mot que
+        // la fonction lisait deja ('Fondu').
+        std::vector<std::pair<std::string, sim::Value>> mapped;
+        for (std::size_t i = 0; i < given.size(); ++i)
+            if (auto word = natives::enumArgument(u, i, given[i].second)) {
+                if (mapped.empty()) mapped = given;
+                mapped[i].second = sim::Value::text(std::move(*word));
+            }
+        const auto& args = mapped.empty() ? given : mapped;
         // Depuis une expression de vue (par une fonction du projet) : lire oui,
         // agir non (naviguer, ecrire au journal, jouer un son, appeler un script).
         if (rt_.readOnly_ > 0 && !readOnlyIhm(u)) {

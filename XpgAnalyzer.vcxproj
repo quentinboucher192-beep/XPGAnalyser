@@ -495,6 +495,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\tutorial\UiDriver.cpp" />
     <ClCompile Include="src\core\CallTrail.cpp" />
     <ClCompile Include="src\core\CrashGuard.cpp" />
+    <ClCompile Include="src\core\Edition.cpp" />
     <ClCompile Include="src\core\SingleInstance.cpp" />
     <ClCompile Include="src\help\CenterIndex.cpp" />
     <ClCompile Include="src\help\CenterPages.cpp" />
@@ -527,6 +528,8 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\hmi\HmiMarkers.cpp" />
     <ClCompile Include="src\hmi\HmiMigrate.cpp" />
     <ClCompile Include="src\hmi\HmiModbusCyclic.cpp" />
+    <ClCompile Include="src\hmi\HmiNatives.cpp" />
+    <ClCompile Include="src\hmi\HmiNativesData.cpp" />
     <ClCompile Include="src\hmi\HmiObjectAlarms.cpp" />
     <ClCompile Include="src\hmi\HmiOperators.cpp" />
     <ClCompile Include="src\hmi\HmiOverload.cpp" />
@@ -882,6 +885,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\core\CallTrail.hpp" />
     <ClInclude Include="src\core\CodeStats.hpp" />
     <ClInclude Include="src\core\CrashGuard.hpp" />
+    <ClInclude Include="src\core\Edition.hpp" />
     <ClInclude Include="src\core\SingleInstance.hpp" />
     <ClInclude Include="src\help\CenterIndex.hpp" />
     <ClInclude Include="src\help\CenterPages.hpp" />
@@ -918,6 +922,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\hmi\HmiMarkers.hpp" />
     <ClInclude Include="src\hmi\HmiMigrate.hpp" />
     <ClInclude Include="src\hmi\HmiModbusCyclic.hpp" />
+    <ClInclude Include="src\hmi\HmiNatives.hpp" />
     <ClInclude Include="src\hmi\HmiObjectAlarms.hpp" />
     <ClInclude Include="src\hmi\HmiOperators.hpp" />
     <ClInclude Include="src\hmi\HmiOverload.hpp" />

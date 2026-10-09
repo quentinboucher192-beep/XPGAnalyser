@@ -1144,6 +1144,9 @@
     <ClCompile Include="src\core\CrashGuard.cpp">
       <Filter>core</Filter>
     </ClCompile>
+    <ClCompile Include="src\core\Edition.cpp">
+      <Filter>core</Filter>
+    </ClCompile>
     <ClCompile Include="src\core\SingleInstance.cpp">
       <Filter>core</Filter>
     </ClCompile>
@@ -1238,6 +1241,12 @@
       <Filter>hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\hmi\HmiModbusCyclic.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiNatives.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiNativesData.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\hmi\HmiObjectAlarms.cpp">
@@ -2287,6 +2296,9 @@
     <ClInclude Include="src\core\CrashGuard.hpp">
       <Filter>core</Filter>
     </ClInclude>
+    <ClInclude Include="src\core\Edition.hpp">
+      <Filter>core</Filter>
+    </ClInclude>
     <ClInclude Include="src\core\SingleInstance.hpp">
       <Filter>core</Filter>
     </ClInclude>
@@ -2393,6 +2405,9 @@
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiModbusCyclic.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiNatives.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiObjectAlarms.hpp">

@@ -1,4 +1,5 @@
 #include "HmiScriptCheck110.hpp"
+#include "HmiNatives.hpp"   // 1.12.0 : les enumerations natives
 
 #include "HmiEnums.hpp"
 #include "HmiOverload.hpp"   // 1.11.20 : deux fonctions internes de meme forme
@@ -293,6 +294,9 @@ EnumValuesFn enumValuesOf(const Project* project) {
         std::vector<std::pair<std::string, std::int64_t>> out;
         if (const auto* e = project ? findEnumeration(*project, type) : nullptr)
             for (const auto& v : e->values) out.emplace_back(v.name, v.value);
+        // 1.12.0 : les enumerations natives (NIVEAU_LOG, TRANSITION, POSITION_POPUP...).
+        if (const auto* n = out.empty() ? natives::nativeEnum(type) : nullptr)
+            for (const auto& v : n->values) out.emplace_back(std::string(v.name), v.number);
         return out;
     };
 }

@@ -6,6 +6,7 @@
 //  qui est appele. Les types et les divisions passent par exprcheck.
 // =============================================================================
 #include "HmiScriptCheck.hpp"
+#include "HmiNatives.hpp"   // 1.12.0 : les couleurs, l'aleatoire
 #include "HmiSymbols.hpp"   // 1.11.10 : les fonctions des symboles
 #include "HmiApiVars.hpp"   // 1.11.1 (API-M) : API.<globale>, API.<Unite>.<variable>
 
@@ -934,6 +935,8 @@ private:
                 reportTok(i, i + 1, S::Error, name.text + " prend " + arityText(min, max) + ", pas " + std::to_string(n));
         };
         bool found = false;
+        // 1.12.0 : une fonction du projet nommee comme une native de l'IHM (Random, RGB) passe avant.
+        const bool nativeShadowed = natives::isOwnFunction(U) && (pendingSymbolFn_ || (sc_.project && !sc_.project->functionsNamed(name.text).empty()));
         if (internalFunction(name.text) || dialectFunctions().count(U)) {
             found = true;      // 1.10 (13) : une fonction interne du script, une fonction du dialecte : S1 les controle
         } else if (conversion(U)) {
@@ -943,11 +946,13 @@ private:
         } else if (lang110::isBuiltin(U)) {
             found = true;      // 1.10 (S1) : TO_UPPER, TO_LOWER... du dialecte (S1 les controle)
 #endif
-        } else if (isStandardFunction(U)) {
+        } else if (isStandardFunction(U) && !nativeShadowed) {
             found = true;
             const auto to = U.find("_TO_");
             if (to != std::string::npos && to > 0) arity(1, 1);
             for (const auto& a : kStandard) if (U == a.name) arity(a.min, a.max);
+            // 1.12.0 : les couleurs et l'aleatoire (le catalogue des natives dit leurs arguments).
+            if (int mn = 0, mx = 0; natives::isOwnFunction(U) && natives::arity(U, mn, mx)) arity(mn, mx);
         } else if (isHmiFunction(U)) {
             found = true;
             for (const auto& a : kHmi) if (U == a.name) arity(a.min, a.max);
@@ -988,6 +993,8 @@ private:
             std::vector<std::string> names;
             for (const auto& a : kStandard) names.emplace_back(a.name);
             for (const auto& a : kHmi) names.emplace_back(a.name);
+            for (const auto& f : natives::functions())        // 1.12.0 : RGB, COULEUR_..., RANDOM...
+                if (f.category == "couleur" || f.category == "alea") names.emplace_back(f.name);
             for (const char* conv : {"INT_TO_REAL", "REAL_TO_INT", "INT_TO_STRING", "REAL_TO_STRING", "BOOL_TO_INT", "STRING_TO_REAL",
                                      "STRING_TO_INT"})
                 names.emplace_back(conv);

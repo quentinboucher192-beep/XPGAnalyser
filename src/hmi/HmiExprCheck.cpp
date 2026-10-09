@@ -5,6 +5,7 @@
 //  les types, et ne s'arrete jamais sur ce qu'elle ne comprend pas.
 // =============================================================================
 #include "HmiExprCheck.hpp"
+#include "HmiNatives.hpp"   // 1.12.0 : les couleurs, l'aleatoire
 #include "HmiCallCheck.hpp"     // 1.11.20 : les appels, controles comme le moteur les fait
 #include "HmiOverload.hpp"      // 1.11.20 : les signatures et les surcharges
 #include "HmiDecl.hpp"   // 1.11.18 (refonte, lot 3) : les declarations du modele, reconstruites
@@ -768,6 +769,18 @@ private:
             userCall(name, siblingsOf(symFn), n, r);
             return r;
         }
+        // 1.12.0 : les couleurs (RGB, COULEUR_...) et l'aleatoire (RANDOM...) : des textes de couleur
+        // en arguments ; leur resultat : une couleur (un texte), une composante ou un nombre. Une
+        // fonction du projet de meme nom (Random) passe avant.
+        if (natives::isOwnFunction(u) && !(ctx_.project && !ctx_.project->functionsNamed(name).empty())) {
+            int mn = 0, mx = 0;
+            if (natives::arity(u, mn, mx) && (n < mn || (mx >= 0 && n > mx)))
+                problem(u + " prend " + (mn == mx ? plural(mn, "argument") : std::to_string(mn) + " \xC3\xA0 " + plural(mx, "argument"))
+                        + ", pas " + std::to_string(n));
+            const auto* f = natives::function(u);
+            r.type = f && f->returns == "STRING" ? T::Text : f && f->returns == "BOOL" ? T::Bool : T::Num;
+            return r;
+        }
         if (isStandardFunction(u)) {
             const auto to = u.find("_TO_");
             if (to != std::string::npos && to > 0) {
@@ -837,6 +850,8 @@ private:
         }
         std::vector<std::string> names;
         for (const auto& a : kArity) names.emplace_back(a.name);
+        for (const auto& f : natives::functions())        // 1.12.0 : RGB, COULEUR_..., RANDOM...
+            if (f.category == "couleur" || f.category == "alea") names.emplace_back(f.name);
         for (const char* conv : {"INT_TO_REAL", "REAL_TO_INT", "INT_TO_STRING", "REAL_TO_STRING", "BOOL_TO_INT"}) names.emplace_back(conv);
         if (ctx_.project) for (const auto& f : ctx_.project->programs.functions) names.push_back(f.name);
         if (const View* sv = symbolHere()) for (const auto& f : sv->functions) names.push_back(f.name);   // 1.11.10

@@ -1,4 +1,5 @@
 #include "HmiExpr.hpp"
+#include "HmiNatives.hpp"   // 1.12.0 : les couleurs et l'aleatoire
 #include "HmiMarkers.hpp"
 #include "HmiMedia.hpp"
 #include "HmiScript.hpp"
@@ -39,6 +40,8 @@ bool isPureFunction(std::string_view name) {
         "CONCAT", "INSERT", "DELETE", "REPLACE", "FIND", "SHL", "SHR", "ROL", "ROR", "NEG"};
     const std::string u = upper(name);
     if (kPure.count(u)) return true;
+    // 1.12.0 : les couleurs (RGB, COULEUR_...) et l'aleatoire (RANDOM...), natives de l'IHM.
+    if (natives::isOwnFunction(u)) return true;
     // Toutes les conversions : INT_TO_REAL, REAL_TO_STRING, DINT_TO_TIME...
     const auto to = u.find("_TO_");
     return to != std::string::npos && to > 0 && to + 4 < u.size();
@@ -86,6 +89,15 @@ public:
         if (auto* host = dynamic_cast<FunctionHost*>(&plc_); host && scope_ && name.find('.') != std::string_view::npos) {
             const std::string resolved = scope_->resolve(name);
             if (resolved != name && host->hostsFunction(resolved)) return host->callFromExpression(resolved, arguments, result);
+        }
+        // 1.12.0 : les couleurs et l'aleatoire - servis ici, quel que soit l'environnement.
+        if (natives::isOwnFunction(name)) {
+            std::vector<sim::Value> values;
+            for (const auto& a : arguments) values.push_back(a.second);
+            std::string why;
+            if (natives::call(name, values, result, &why)) return true;
+            if (message_.empty()) message_ = why;
+            return false;
         }
         if (!isPureFunction(name)) {
             if (message_.empty())

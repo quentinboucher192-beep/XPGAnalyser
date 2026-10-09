@@ -541,6 +541,8 @@ if(XPG_BUILD_TESTS)
     xpg_target_link_libraries(hmi_overload_test PRIVATE xpg_hmi)
     xpg_add_test_executable(hmi_reperes_test tests/hmi_reperes_test.cpp)      # 1.11.24 : les reperes dans les symboles, partout
     xpg_target_link_libraries(hmi_reperes_test PRIVATE xpg_hmi)
+    xpg_add_test_executable(hmi_natives_test tests/hmi_natives_test.cpp)      # 1.12.0 : les natives de l'IHM, chaque exemple execute
+    xpg_target_link_libraries(hmi_natives_test PRIVATE xpg_hmi)
     # ---- Lot API 8 : didacticiels et aide (les huit parcours, leurs pages de l'aide, le menu Aide) ----
     xpg_add_test_executable(lot8tutorials_test tests/lot8tutorials_test.cpp src/app/TopBar.cpp src/app/TopBarLot8.cpp src/app/TutorialsLot8.cpp)   # Lot API 8 : bandeau haut (+ TopBarLot8.cpp)
     # ---- Lot API 8 : tests - xpg_ui AVANT xpg_import : ui::buildHelp (ui/HelpDocument.cpp) appelle
@@ -661,6 +663,7 @@ if(XPG_BUILD_TESTS)
                  ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/trace/armoire_gaz.trace --migrer)
     xpg_add_test(NAME hmitypes     COMMAND hmi_types_test)                   # ---- 1.11.19 : le registre des types (lot 6) ----
     xpg_add_test(NAME hmireperes   COMMAND hmi_reperes_test)                 # ---- 1.11.24 : les reperes dans les symboles ----
+    xpg_add_test(NAME hminatives   COMMAND hmi_natives_test)                 # ---- 1.12.0 : les natives de l'IHM ----
     xpg_add_test(NAME hmioverload  COMMAND hmi_overload_test)                # ---- 1.11.20 : les signatures et les surcharges ----
     xpg_add_test(NAME hmidecl      COMMAND hmi_decl_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/decl/corpus.txt   # ---- 1.11.18 : les declarations (lot 2) ----
                  ${CMAKE_CURRENT_SOURCE_DIR}/bac/Armoire_Gaz ${CMAKE_CURRENT_SOURCE_DIR}/projets/project)
