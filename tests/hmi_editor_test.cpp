@@ -16962,7 +16962,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 240,   // 1.11.23 : + 3 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 241,   // 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -17097,8 +17097,8 @@ void centreAide111() {
     }
     // 1.10.2 (fusion) : le guide passe de 216 a 222 sujets ; Demarrer gagne "plantages" (15 + 7 = 22),
     // Concevoir les vues en gagne 5 (l'IHM : 205). L'automate ne change pas (2 + 14).
-    check(ix.count(hc::Chapter::Start) == 22 && ix.count(hc::Chapter::Plc) == 16,
-          "centre : Demarrer 22 (21 de la maquette + plantages, 1.10.2) et L'automate 16");
+    check(ix.count(hc::Chapter::Start) == 23 && ix.count(hc::Chapter::Plc) == 16,
+          "centre : Demarrer 23 (21 de la maquette + plantages, 1.10.2 ; la legende de l'explorateur, 1.11.23) et L'automate 16");
     check(ix.find("api-dossiers") && ix.find("dossiers") && ix.find("api-alarmes") && ix.find("alarmes"),
           "centre : api-dossiers et dossiers, api-alarmes et alarmes, sans collision");
     check(ix.duplicates().empty(), "centre : aucune cle en double");
@@ -27002,6 +27002,74 @@ void raccourcis1123() {
     }
 }
 
+// ---- 1.11.23 : l'explorateur, la suite de la maquette - puces, titres de domaine ----
+void explorateur1123() {
+    std::printf("1.11.23 : l'explorateur - puces de filtre, titres de domaine\n");
+    using NK = app::ProjectTreeModel::NodeKind;
+    auto doc = std::make_shared<Document>();
+    Project& p = doc->project;
+    View v1 = makeView(p, "Vue_1");
+    View v2 = makeView(p, "Vue_2");
+    View s1 = makeView(p, "S_1");
+    s1.role = "symbole";
+    p.views = {v1, v2, s1};
+    auto plc = std::make_shared<domain::Project>();
+    app::ProjectTreeModel tree(plc);
+    tree.setHmi(doc);
+    // Les titres de domaine : leur ligne d'etat et leurs actions.
+    const auto hmiHead = app::ProjectTreeModel::hmiFolderNode();
+    const auto simHead = app::ProjectTreeModel::simFolderNode();
+    const auto st = tree.style(hmiHead);
+    check(st.domainHead && st.subtitle == "2 vues \xC2\xB7 pas encore g\xC3\xA9n\xC3\xA9r\xC3\xA9" "e" && st.headActions.size() == 2
+              && st.headActions[0].icon == ui::Icon::Analyze,
+          "titre IHM : \xC2\xAB 2 vues \xC2\xB7 pas encore g\xC3\xA9n\xC3\xA9r\xC3\xA9" "e \xC2\xBB (le symbole n'est pas une vue), G\xC3\xA9n\xC3\xA9rer puis Plus\xE2\x80\xA6 ("
+              + st.subtitle + ")");
+    check(tree.setSimStatus("arr\xC3\xAAt\xC3\xA9" "e \xC2\xB7 cycle 0", false) && !tree.setSimStatus("arr\xC3\xAAt\xC3\xA9" "e \xC2\xB7 cycle 0", false)
+              && tree.style(simHead).subtitle == "arr\xC3\xAAt\xC3\xA9" "e \xC2\xB7 cycle 0" && tree.style(simHead).headActions[0].icon == ui::Icon::Play,
+          "titre Simulation : la ligne poussee (une seule fois), D\xC3\xA9marrer");
+    (void)tree.setSimStatus("en marche \xC2\xB7 cycle 12", true);
+    check(tree.style(simHead).headActions[0].icon == ui::Icon::Stop, "en marche : Arr\xC3\xAAter");
+    check(tree.style(app::ProjectTreeModel::apiFolderNode()).subtitle == "0 POU \xC2\xB7 0 variables", "titre API : ses POU et ses variables");
+    // Les puces : les marques du build (en faute, a generer) et ce qui a change.
+    auto marks = std::make_shared<app::ProjectTreeModel::HmiBuildMarks>();
+    marks->byKey["vue:" + std::to_string(p.views[0].id)] = {"\xE2\x9C\x95", ui::Tone::Error, 8, "", app::ProjectTreeModel::QuickFault};
+    marks->byKey["vue:" + std::to_string(p.views[1].id)] = {"\xE2\x97\x8F", ui::Tone::Warning, 5, "", app::ProjectTreeModel::QuickToBuild};
+    marks->viewKeys[p.views[0].id] = "vue:" + std::to_string(p.views[0].id);
+    marks->viewKeys[p.views[1].id] = "vue:" + std::to_string(p.views[1].id);
+    // Une vue de l'arbre lit l'etat de son chemin (le dossier de ses elements).
+    marks->viewPaths[p.views[0].id] = "IHM/Vues/Vue_1";
+    marks->viewPaths[p.views[1].id] = "IHM/Vues/Vue_2";
+    marks->byPath["IHM/Vues/Vue_1"] = {"\xE2\x9C\x95", ui::Tone::Error, 8, "", app::ProjectTreeModel::QuickFault};
+    marks->byPath["IHM/Vues/Vue_2"] = {"\xE2\x97\x8F", ui::Tone::Warning, 5, "", app::ProjectTreeModel::QuickToBuild};
+    tree.setHmiBuildMarks(marks);
+    const auto counts = tree.quickCounts();
+    check(counts.faults == 1 && counts.toBuild == 1 && counts.modified == 0, "puces : 1 en faute, 1 \xC3\xA0 g\xC3\xA9n\xC3\xA9rer, rien de modifi\xC3\xA9");
+    check(tree.style(hmiHead).subtitle == "2 vues \xC2\xB7 1 en faute \xC2\xB7 1 \xC3\xA0 g\xC3\xA9n\xC3\xA9rer", "titre IHM : 1 en faute, 1 \xC3\xA0 g\xC3\xA9n\xC3\xA9rer ("
+              + tree.style(hmiHead).subtitle + ")");
+    // Les noeuds des vues : leurs drapeaux.
+    ui::NodeId views = ui::kInvalidNode;
+    for (std::size_t k = 0; k < tree.childCount(hmiHead); ++k)
+        if (tree.kindOf(tree.childAt(hmiHead, k)) == NK::HmiViews) views = tree.childAt(hmiHead, k);
+    std::uint8_t first = 0, second = 0;
+    // IHM > Vues > Vues (le dossier des vues, entre Modeles et Popups) > Vue_1, Vue_2.
+    if (views != ui::kInvalidNode)
+        for (std::size_t f = 0; f < tree.childCount(views); ++f) {
+            const auto folder = tree.childAt(views, f);
+            if (tree.kindOf(folder) != NK::HmiViewFolder || tree.text(folder).rfind("Vues", 0) != 0) continue;
+            for (std::size_t k = 0; k < tree.childCount(folder); ++k) {
+                const auto c = tree.childAt(folder, k);
+                if (tree.text(c).rfind("Vue_1", 0) == 0) first = tree.quickFlags(c);
+                if (tree.text(c).rfind("Vue_2", 0) == 0) second = tree.quickFlags(c);
+            }
+        }
+    check(first == app::ProjectTreeModel::QuickFault && second == app::ProjectTreeModel::QuickToBuild,
+          "Vue_1 en faute, Vue_2 \xC3\xA0 g\xC3\xA9n\xC3\xA9rer (leurs drapeaux " + std::to_string(first) + ", " + std::to_string(second) + ")");
+    // Les versions : le travail en cours, modifie.
+    tree.setVersions({{0, "Travail en cours \xC2\xB7 modifi\xC3\xA9", ui::Tone::Warning, "48"}, {4, "V4 \xC2\xB7 Essais", ui::Tone::Muted, ""}});
+    check(tree.style(app::ProjectTreeModel::versionsFolderNode()).subtitle == "V5 en cours \xC2\xB7 48 changements",
+          "titre Versions : \xC2\xAB V5 en cours \xC2\xB7 48 changements \xC2\xBB (" + tree.style(app::ProjectTreeModel::versionsFolderNode()).subtitle + ")");
+}
+
 void lot1122() {
     std::printf("1.11.22 : surcharges d'un symbole, param\xC3\xA8tres partout, Simulation d\xC3\xA9" "ball\xC3\xA9" "e\n");
     auto doc = std::make_shared<Document>();
@@ -28035,6 +28103,7 @@ int main(int argc, char** argv) {
         valeurGrille1121();
         lot1122();
         raccourcis1123();
+        explorateur1123();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -28376,6 +28445,7 @@ int main(int argc, char** argv) {
     valeurGrille1121();                     // 1.11.21 : la grille - la valeur suit le type, un seul Ctrl+Z
     lot1122();                              // 1.11.22 : surcharges d'un symbole, parametres partout, Simulation deballee
     raccourcis1123();                       // 1.11.23 : l'onglet Raccourcis d'une vue
+    explorateur1123();                      // 1.11.23 : l'explorateur - puces, titres de domaine
     if (argc > 1) configuration_et_variables(argv[1]);
     if (argc > 1) aide_saisie_scripts(argv[1]);
     if (argc > 1) aide_saisie_champs(argv[1]);

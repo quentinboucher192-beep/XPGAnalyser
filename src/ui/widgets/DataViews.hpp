@@ -166,6 +166,11 @@ struct CellStyle {
     // retire : "RandomSeed : REAL" et l'etiquette "E/S") ; vide : le texte du modele.
     // Le texte du modele (recherche, sessions, essais) ne change pas.
     std::string display{};
+    // 1.11.23 : un titre de domaine (le nouveau dessin) - sa ligne d'etat en gris apres le nom
+    // ("29 POU \xC2\xB7 891 variables", "arretee \xC2\xB7 cycle 0"), et ses actions au survol (Reanalyser,
+    // Generer, Demarrer, Creer une version) : TreeView::headActionClicked (noeud, rang).
+    std::string       subtitle{};
+    std::vector<Chip> headActions{};
 };
 
 // ============================================================== ListView ====
@@ -347,6 +352,9 @@ public:
     [[nodiscard]] bool modernLook() const noexcept { return modern_; }
     [[nodiscard]] bool hasHoverActions() const noexcept { return !hoverActions_.empty(); }
     const core::SignalPtr<NodeId, std::size_t> hoverActionClicked = core::Signal<NodeId, std::size_t>::create();
+    // 1.11.23 : une action au survol d'un titre de domaine (CellStyle::headActions) ; son cadre.
+    const core::SignalPtr<NodeId, std::size_t> headActionClicked = core::Signal<NodeId, std::size_t>::create();
+    [[nodiscard]] bool headActionRect(NodeId n, std::size_t action, gfx::Rect& out) const;
     [[nodiscard]] NodeId stickyNode() const noexcept { return stickyRow_ >= 0 && static_cast<std::size_t>(stickyRow_) < rows_.size() ? rows_[static_cast<std::size_t>(stickyRow_)].node : kInvalidNode; }
     // "Suivre l'onglet actif" : ce noeud devient le noeud choisi et se montre,
     // sans rien emettre (rien ne s'ouvre).
@@ -417,6 +425,7 @@ private:
     float                        rowOverride_{0.f};          // la densite
     std::vector<CellStyle::Chip> hoverActions_;              // les actions au survol
     mutable std::vector<ChipHit> actionHits_;                // ... dessinees
+    mutable std::vector<ChipHit> headHits_;                  // 1.11.23 : les actions d'un titre de domaine
     mutable std::vector<ChipHit> dotHits_;                   // les points (leur infobulle)
     mutable int                  stickyRow_{-1};             // le titre colle en haut
     mutable float                stickyY_{0.f};

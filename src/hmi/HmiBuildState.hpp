@@ -87,6 +87,8 @@ public:
     // n'est pas genere (n) » (les scripts).
     [[nodiscard]] int notCompiling() const noexcept;
     [[nodiscard]] int notGenerated() const noexcept;
+    // 1.11.23 : ceux de l'automate seulement (sections, corps des DFB) - les puces de l'explorateur.
+    [[nodiscard]] int notCompilingApi() const noexcept;
     // Le titre d'un dossier : « 2 ✕/⊘ · 2 non generes » (vide : tout va bien).
     [[nodiscard]] static std::string folderSummary(int notCompiling, int notGenerated);
 

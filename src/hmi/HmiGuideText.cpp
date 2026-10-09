@@ -694,6 +694,61 @@ const std::vector<Topic>& topics() {
          {},
          "",
          {}},
+        // ---- Demarrer / legende-explorateur (1.11.23)
+        {"legende-explorateur", "La l\xC3\xA9gende de l'explorateur", "D\xC3\xA9marrer",
+         "Ce que disent les marques de l'arbre de l'application : la colonne d'\xC3\xA9tat, le compteur, le point orange, "
+         "les \xC3\xA9tiquettes apr\xC3\xA8s le nom, les couleurs, les puces de filtre et les titres de domaine.",
+         {
+             {K::Heading, "\xC3\x80 droite : l'\xC3\xA9tat, puis le compteur", {}, "1.11.23"},
+             {K::Paragraph, "Chaque ligne finit par deux colonnes de largeur fixe, align\xC3\xA9" "es d'une ligne \xC3\xA0 l'autre : "
+                         "l'**\xC3\xA9tat du build**, puis le **compteur** (un nombre gris : les \xC3\xA9l\xC3\xA9ments du dossier). "
+                         "Au survol, les actions (\xC3\xA9pingler, ouvrir, le menu) se placent devant l'\xC3\xA9tat : le compteur "
+                         "reste lisible.", {}, "1.11.23"},
+             {K::Table, "Marque\tCe qu'elle dit\n"
+                         "\xE2\x9C\x93 (vert)\t\xC3\x80 jour : g\xC3\xA9n\xC3\xA9r\xC3\xA9 et compil\xC3\xA9, rien n'a chang\xC3\xA9 depuis\n"
+                         "\xE2\x9A\xA0 (orange)\t\xC3\x80 jour, avec des avertissements\n"
+                         "\xE2\x97\x8F (orange)\tModifi\xC3\xA9 depuis le dernier build : \xC3\xA0 g\xC3\xA9n\xC3\xA9rer ou \xC3\xA0 compiler\n"
+                         "\xE2\x97\x8C\tJamais g\xC3\xA9n\xC3\xA9r\xC3\xA9\n"
+                         "\xE2\x9A\x99 / \xE2\x97\x94\tEn g\xC3\xA9n\xC3\xA9ration / en compilation\n"
+                         "\xE2\x9C\x95 (rouge)\tEn faute : le build a \xC3\xA9" "chou\xC3\xA9, ou le code ne compile pas (le nombre d'erreurs au survol)\n"
+                         "\xE2\x9B\x93\tUne d\xC3\xA9pendance invalide (un symbole, un type qui a chang\xC3\xA9)\n"
+                         "\xE2\x8F\xB1\tObsol\xC3\xA8te : refait par le prochain build\n"
+                         "\xE2\x8A\x98\tNon compilable ici (LD, FBD, IL, SFC ; un script C ou C++)\n"
+                         "\xE2\x87\xA9\tG\xC3\xA9n\xC3\xA9r\xC3\xA9 ; barr\xC3\xA9 : non g\xC3\xA9n\xC3\xA9r\xC3\xA9", {}, "1.11.23"},
+             {K::Heading, "Apr\xC3\xA8s le nom", {}, "1.11.23"},
+             {K::Table, "Marque\tCe qu'elle dit\n"
+                         "\xE2\x97\x8F orange, contre le nom\tModifi\xC3\xA9 depuis la derni\xC3\xA8re version (V4)\n"
+                         "E/S, sortie\tLe mode d'un param\xC3\xA8tre de fonction\n"
+                         "conserv\xC3\xA9" "e, persistante\tUne variable qui garde sa valeur (\xC3\xA0 l'arr\xC3\xAAt, au red\xC3\xA9marrage)\n"
+                         "3 surcharges\tTrois fonctions du m\xC3\xAAme nom, chacune avec sa signature dessous\n"
+                         "popup, symbole, mod\xC3\xA8le\tLe r\xC3\xB4le d'une vue\n"
+                         "Texte gris\tLa signature d'une fonction (dans la police du code), le type d'une d\xC3\xA9" "claration, le langage d'un script", {}, "1.11.23"},
+             {K::Heading, "Les couleurs", {}, "1.11.23"},
+             {K::Paragraph, "Les **domaines** : API en bleu, IHM en violet, Simulation en vert, Versions en ambre (leur ic\xC3\xB4ne "
+                         "sur une pastille de leur couleur, et leurs lignes de rep\xC3\xA8re). Les **genres** : les scripts en bleu ciel, "
+                         "les fonctions en violet, les constantes en abricot, les variables en sarcelle, les param\xC3\xA8tres selon "
+                         "leur mode. Les dossiers restent gris : c'est le contenu qui se voit.", {}, "1.11.23"},
+             {K::Heading, "Les puces de filtre", {}, "1.11.23"},
+             {K::Paragraph, "Sous le champ de filtre : **Modifi\xC3\xA9s**, **En faute**, **\xC3\x80 g\xC3\xA9n\xC3\xA9rer** et **\xC3\x89pingl\xC3\xA9s**, "
+                         "chacune avec son nombre. Un clic ne montre que leurs lignes (et leurs dossiers, d\xC3\xA9pli\xC3\xA9s) ; un second "
+                         "rend tout l'arbre. \xC3\x89pingl\xC3\xA9s montre la port\xC3\xA9" "e \xC3\x89pingl\xC3\xA9s et r\xC3\xA9" "cents du rail. "
+                         "Modifi\xC3\xA9s montre les dossiers chang\xC3\xA9s depuis la derni\xC3\xA8re version.", {}, "1.11.23"},
+             {K::Heading, "Les titres de domaine", {}, "1.11.23"},
+             {K::Paragraph, "API, IHM, Simulation et Versions disent leur \xC3\xA9tat en gris apr\xC3\xA8s leur nom : "
+                         "\xC2\xAB 29 POU \xC2\xB7 891 variables \xC2\xBB, \xC2\xAB 39 vues \xC2\xB7 \xC3\xA0 jour \xC2\xBB, \xC2\xAB arr\xC3\xAAt\xC3\xA9" "e \xC2\xB7 cycle 0 \xC2\xBB, "
+                         "\xC2\xAB V5 en cours \xC2\xB7 48 changements \xC2\xBB. Au survol, leur action : R\xC3\xA9importer et r\xC3\xA9" "analyser (API), "
+                         "G\xC3\xA9n\xC3\xA9rer l'IHM, D\xC3\xA9marrer ou Arr\xC3\xAAter la simulation, Cr\xC3\xA9" "er une version ; puis Plus\xE2\x80\xA6 "
+                         "(le menu du clic droit).", {}, "1.11.23"},
+             {K::Tip, "Le bouton ? du rail, \xC3\xA0 gauche de l'arbre, ouvre cette page.", {}, "1.11.23"},
+         },
+         {"onglets", "aller-a", "versions", "simulation"},
+         {"l\xC3\xA9gende", "explorateur", "arbre", "puces", "Modifi\xC3\xA9s", "En faute", "\xC3\x80 g\xC3\xA9n\xC3\xA9rer", "\xC3\x89pingl\xC3\xA9s", "colonne d'\xC3\xA9tat"},
+         {"legende-explorateur"},
+         {},
+         "",
+         {},
+         "",
+         {}},
         // ---- Demarrer / excel
         {"excel", "Copier, coller avec Excel", "D\xC3\xA9marrer",
          "Un tableau copi\xC3\xA9 dans Excel se colle dans les tableaux de l'IHM : les colonnes sont "

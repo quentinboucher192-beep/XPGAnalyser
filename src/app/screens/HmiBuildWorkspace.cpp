@@ -258,7 +258,15 @@ void MainAnalysisScreen::applyHmiBuildMarks() {
     auto marks = std::make_shared<ProjectTreeModel::HmiBuildMarks>();
     const auto mark = [](pl::State state, int warnings, const std::string& tip) {
         const auto look = hmiStateLook(state, warnings);
-        return ProjectTreeModel::HmiBuildMarks::Mark{std::string(look.glyph), look.tone, hmiStateRank(state, warnings), tip};
+        // 1.11.23 : les puces de l'explorateur - en faute, a generer (ou a compiler).
+        using S = pl::State;
+        const std::uint8_t quick = state == S::GenerationFailed || state == S::CompilationFailed || state == S::InvalidDependency
+                                       ? ProjectTreeModel::QuickFault
+                                   : state == S::Modified || state == S::NotGenerated || state == S::GenerationRequired
+                                           || state == S::CompilationRequired || state == S::Obsolete
+                                       ? ProjectTreeModel::QuickToBuild
+                                       : std::uint8_t{0};
+        return ProjectTreeModel::HmiBuildMarks::Mark{std::string(look.glyph), look.tone, hmiStateRank(state, warnings), tip, quick};
     };
     for (const auto& [key, s] : st->shown) {
         std::string tip = s.tip;

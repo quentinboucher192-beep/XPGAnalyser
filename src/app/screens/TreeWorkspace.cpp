@@ -24,6 +24,7 @@
 #include "../../project/SharedLibrary.hpp"
 #include "../../ui/TextSearch.hpp"
 #include "../../hmi/HmiBuildState.hpp"   // 1.11 (chantier T3, C4) : la legende des icones
+#include "../../hmi/HmiPipeline.hpp"     // 1.11.23 : Generer l'IHM (l'action du titre IHM)
 #include "../../ui/widgets/TrailSymbols.hpp"   // 1.11 (chantier T3, tranche 11) : la legende tracee au trait
 
 #include <algorithm>
@@ -198,6 +199,100 @@ private:
     gfx::Point mouse_{-1.f, -1.f};
 };
 
+// 1.11.23 : LES PUCES DE FILTRE, sous le champ (la maquette validee) : Modifies, En faute,
+// A generer, Epingles, chacune avec son nombre ; un clic ne montre qu'elles (un second :
+// tout revient). Etroite : le glyphe et le nombre seuls.
+class TreeChips final : public ui::Widget {
+public:
+    struct Chip {
+        std::string key, label, glyph, tip;
+        ui::Tone    tone{ui::Tone::None};
+        std::size_t count{0};
+        bool        on{false};
+        bool operator==(const Chip& o) const {
+            return key == o.key && label == o.label && glyph == o.glyph && tone == o.tone && count == o.count && on == o.on && tip == o.tip;
+        }
+    };
+    explicit TreeChips(std::string id) : Widget(std::move(id)) {}
+    std::function<void(const std::string&)> onPick;
+    void setChips(std::vector<Chip> chips) {
+        if (chips == chips_) return;
+        chips_ = std::move(chips);
+        invalidate();
+    }
+    [[nodiscard]] const std::vector<Chip>& chips() const noexcept { return chips_; }
+    [[nodiscard]] bool chipRect(std::string_view key, gfx::Rect& out) const {
+        for (const auto& [r, k] : hits_)
+            if (k < chips_.size() && chips_[k].key == key) { out = r; return true; }
+        return false;
+    }
+    [[nodiscard]] bool hasTooltip() const override { return true; }
+    [[nodiscard]] std::string liveTooltip(gfx::Point mouse) const override {
+        for (const auto& [r, k] : hits_)
+            if (r.contains(mouse) && k < chips_.size()) return chips_[k].tip;
+        return "Les filtres rapides : un clic ne montre que les lignes de la puce, un second rend tout l'arbre.";
+    }
+
+protected:
+    void onPaint(const ui::PaintContext& ctx) override {
+        const auto& c = ctx.theme.color;
+        const auto b = bounds();
+        hits_.clear();
+        const auto font = ctx.theme.font.smallUi;
+        const float lh = ctx.r.lineHeight(font);
+        // Les libelles entiers s'ils tiennent, sinon le glyphe et le nombre.
+        const auto text = [&](const Chip& ch, bool full) {
+            return (full ? ch.label : ch.glyph) + (ch.count ? "  " + std::to_string(ch.count) : std::string{});
+        };
+        float need = 8.f;
+        for (const auto& ch : chips_) need += ctx.r.measure(text(ch, true), font).width + 24.f;
+        const bool full = need <= b.w;
+        float x = b.x + 8.f;
+        const float h = std::min(b.h - 6.f, lh + 8.f);
+        const float y = b.y + (b.h - h) * 0.5f;
+        ctx.r.pushClip(b);
+        for (std::size_t k = 0; k < chips_.size(); ++k) {
+            const auto& ch = chips_[k];
+            const std::string t = text(ch, full);
+            const float w = ctx.r.measure(t, font).width + 18.f;
+            const gfx::Rect r{x, y, w, h};
+            const auto tone = ctx.theme.tone(ch.tone, c.textMuted);
+            const bool hot = r.contains(mouse_);
+            // Le bord (une pastille de sa couleur, allumee ; du bord du theme sinon), puis le fond.
+            ctx.r.fillRoundedRect(r, ch.on ? tone : c.border, h * 0.5f);
+            const gfx::Rect in{r.x + 1.f, r.y + 1.f, r.w - 2.f, r.h - 2.f};
+            ctx.r.fillRoundedRect(in, c.panelBg, h * 0.5f - 1.f);
+            ctx.r.fillRoundedRect(in, ch.on ? tone.withAlpha(ctx.theme.isDark() ? 70 : 55) : hot ? c.rowAltBg : c.inputBg, h * 0.5f - 1.f);
+            ctx.r.drawText({x + 9.f, y + (h - lh) * 0.5f}, t, font, ch.on || ch.count ? ctx.theme.onSurface(tone) : c.textMuted);
+            hits_.push_back({r, k});
+            x += w + 6.f;
+        }
+        ctx.r.popClip();
+    }
+    ui::EventResult onEvent(const ui::InputEvent& ev) override {
+        if (const auto* m = std::get_if<ui::MouseMove>(&ev)) {
+            if (m->pos.x != mouse_.x || m->pos.y != mouse_.y) { mouse_ = m->pos; invalidate(); }
+            return ui::EventResult::Ignored;
+        }
+        if (const auto* d = std::get_if<ui::MouseDown>(&ev)) {
+            if (!bounds().contains(d->pos)) return ui::EventResult::Ignored;
+            for (const auto& [r, k] : hits_)
+                if (r.contains(d->pos) && k < chips_.size()) {
+                    const std::string key = chips_[k].key;
+                    if (onPick) onPick(key);
+                    break;
+                }
+            return ui::EventResult::Consumed;
+        }
+        return ui::EventResult::Ignored;
+    }
+
+private:
+    std::vector<Chip> chips_;
+    mutable std::vector<std::pair<gfx::Rect, std::size_t>> hits_;
+    gfx::Point mouse_{-1.f, -1.f};
+};
+
 // LA SANTE DU PROJET, en pied : "Simulation en marche . 2 expressions
 // impossibles . V48 modifie" - chaque morceau cliquable (onPick(cle)).
 class TreeFoot final : public ui::Widget {
@@ -284,7 +379,7 @@ ui::WidgetPtr MainAnalysisScreen::wrapExplorer(std::unique_ptr<ui::TreeView> tre
     rail->onPick = [this](const std::string& key) {
         if (key == "suivre") setTreeFollow(!treeFollow_);
         else if (key == "replier") collapseTree();
-        else if (key == "legende") {}           // 1.11 (chantier T3, C4) : la legende est son infobulle
+        else if (key == "legende") openHmiHelp("legende-explorateur");   // 1.11.23 : la page de la legende (avant : l'infobulle seule)
         else if (key == "densite") {
             const float h = explorer_ ? explorer_->rowHeightOverride() : 0.f;
             (void)setTreeDensity(h == 22.f ? "large" : h == 26.f ? "normal" : "serre");
@@ -300,6 +395,10 @@ ui::WidgetPtr MainAnalysisScreen::wrapExplorer(std::unique_ptr<ui::TreeView> tre
     field->setTooltip("Filtrer l'arbre (Ctrl+Maj+F) : il ne garde que ce qui correspond, et cherche aussi dans le contenu "
                       "(sections, types, vues, variables, recettes, alarmes, scripts). \xC3\x89" "chap efface le filtre.");
     treeFilter_ = &static_cast<ui::InputText&>(column->dock(std::move(field), Side::Top, 30.f));
+    // 1.11.23 : les puces de filtre, sous le champ.
+    auto chips = std::make_unique<TreeChips>("analysis.treeChips");
+    chips->onPick = [this](const std::string& key) { (void)pickTreeChip(key); };
+    treeChips_ = &column->dock(std::move(chips), Side::Top, 30.f);
     auto info = std::make_unique<TreeFilterInfo>("analysis.treeFilterInfo");
     info->setVisibility(ui::Visibility::Collapsed);
     treeFilterInfo_ = &column->dock(std::move(info), Side::Top, 20.f);
@@ -322,6 +421,21 @@ ui::WidgetPtr MainAnalysisScreen::wrapExplorer(std::unique_ptr<ui::TreeView> tre
 void MainAnalysisScreen::setTreeFilter(const std::string& text) {
     if (treeFilter_ && treeFilter_->text() != text) treeFilter_->setText(text);
     applyTreeFilter(text);     // setText ne previent pas toujours : on applique ici
+}
+
+// 1.11.23 : une puce de filtre - la sienne allumee : tout l'arbre revient.
+bool MainAnalysisScreen::pickTreeChip(const std::string& key) {
+    if (key == "epingles") return setTreeScope(treeScope_ == "epingles" ? "tout" : "epingles");
+    if (key == "aucune") {
+        setTreeFilter("");
+        return true;
+    }
+    const std::string_view word = key == "modifies" ? kTreeFilterModified : key == "faute" ? kTreeFilterFaults
+                                : key == "generer"  ? kTreeFilterToBuild  : std::string_view{};
+    if (word.empty()) return false;
+    setTreeFilter(treeFilterText_ == word ? std::string{} : std::string(word));
+    refreshTreeChrome();
+    return true;
 }
 
 void MainAnalysisScreen::focusTreeFilter() {
@@ -357,6 +471,10 @@ void MainAnalysisScreen::applyTreeFilter(const std::string& raw) {
     // filtre : ce qui ne compile pas (✕ et ⊘), ce qui n'est pas genere (les scripts).
     const std::uint8_t buildWant = text == kTreeFilterNotCompiling ? ProjectTreeModel::BuildNotCompiling
                                  : text == kTreeFilterNotGenerated ? ProjectTreeModel::BuildNotGenerated : 0;
+    // 1.11.23 : les puces (Modifies, En faute, A generer).
+    const std::uint8_t quickWant = text == kTreeFilterModified ? ProjectTreeModel::QuickModified
+                                 : text == kTreeFilterFaults   ? ProjectTreeModel::QuickFault
+                                 : text == kTreeFilterToBuild  ? ProjectTreeModel::QuickToBuild : 0;
 
     // 1. L'arbre lui-meme, sans les resultats d'un filtre precedent. En
     //    profondeur, le chemin en pile : un noeud trouve garde ses ancetres,
@@ -379,7 +497,9 @@ void MainAnalysisScreen::applyTreeFilter(const std::string& raw) {
         path.resize(f.depth);
         if (f.depth > 0) {
             const std::string t = model->text(f.node);
-            if (buildWant != 0 ? (model->buildFlags(f.node) & buildWant) != 0 : query.matches({std::string_view(t)})) {
+            if (buildWant != 0   ? (model->buildFlags(f.node) & buildWant) != 0
+                : quickWant != 0 ? (model->quickFlags(f.node) & quickWant) != 0
+                                 : query.matches({std::string_view(t)})) {
                 ++matches;
                 found.insert(firstWord(t));
                 keep.insert(f.node);
@@ -398,7 +518,7 @@ void MainAnalysisScreen::applyTreeFilter(const std::string& raw) {
     // 2. Le contenu, par l'index d'Aller a... : ce que l'arbre n'a pas deja.
     std::vector<ProjectTreeModel::FilterHitRow> rows;
     treeFilterResults_.clear();
-    auto content = buildWant != 0 ? GoToPanel::Outcome{} : goToSearchAll(text, -1);   // 1.11 (C4) : pas pour les deux filtres
+    auto content = buildWant != 0 || quickWant != 0 ? GoToPanel::Outcome{} : goToSearchAll(text, -1);   // 1.11 (C4) : pas pour les filtres d'etat
     for (auto& r : content.results) {
         bool hmi = false;
         if (!wantedGroup(r.group, hmi)) continue;
@@ -428,7 +548,7 @@ void MainAnalysisScreen::applyTreeFilter(const std::string& raw) {
     explorer_->setFilter([keep = std::move(keep)](ui::NodeId n) {
         return keep.count(n) != 0 || ProjectTreeModel::kindOf(n) == Kind::FilterHit;
     });
-    explorer_->setHighlight(text);
+    explorer_->setHighlight(quickWant != 0 ? std::string{} : text);
 
     treeFilterCount_ = matches + hits;
     if (info) {
@@ -437,6 +557,11 @@ void MainAnalysisScreen::applyTreeFilter(const std::string& raw) {
             info->setText((buildWant == ProjectTreeModel::BuildNotCompiling ? std::string("Ce qui ne compile pas : ")
                                                                            : std::string("Ce qui n'est pas g\xC3\xA9n\xC3\xA9r\xC3\xA9 : "))
                           + std::to_string(treeFilterCount_));
+        else if (quickWant != 0)                            // 1.11.23 : une puce
+            info->setText((quickWant == ProjectTreeModel::QuickModified ? std::string("Modifi\xC3\xA9 depuis la derni\xC3\xA8re version : ")
+                           : quickWant == ProjectTreeModel::QuickFault  ? std::string("En faute : ")
+                                                                        : std::string("\xC3\x80 g\xC3\xA9n\xC3\xA9rer ou \xC3\xA0 compiler : "))
+                          + std::to_string(matches) + " ligne(s), avec leurs dossiers \xE2\x80\x94 la puce, encore : tout l'arbre");
         else
             info->setText(std::to_string(treeFilterCount_) + (treeFilterCount_ > 1 ? " r\xC3\xA9sultats" : " r\xC3\xA9sultat")
                           + " pour \xC2\xAB " + text + " \xC2\xBB");
@@ -901,6 +1026,34 @@ std::string MainAnalysisScreen::treeHealthText() const {
 void MainAnalysisScreen::refreshTreeChrome() {
     auto* rail = dynamic_cast<TreeRail*>(treeRail_);
     auto* foot = dynamic_cast<TreeFoot*>(treeFoot_);
+    // 1.11.23 : les puces de filtre - leur nombre, celle qui est allumee.
+    if (auto* chips = dynamic_cast<TreeChips*>(treeChips_); chips && treeModel_) {
+        const auto counts = treeModel_->quickCounts();
+        std::vector<TreeChips::Chip> list;
+        const auto chip = [&](const char* key, std::string label, std::string glyph, std::string tip, ui::Tone tone, std::size_t n,
+                              bool on) {
+            TreeChips::Chip c;
+            c.key = key;
+            c.label = std::move(label);
+            c.glyph = std::move(glyph);
+            c.tip = std::move(tip);
+            c.tone = tone;
+            c.count = n;
+            c.on = on;
+            list.push_back(std::move(c));
+        };
+        chip("modifies", "Modifi\xC3\xA9s", "\xE2\x97\x8F",
+             "Modifi\xC3\xA9s : les dossiers chang\xC3\xA9s depuis la derni\xC3\xA8re version (le point orange)", ui::Tone::Warning,
+             counts.modified, treeFilterText_ == kTreeFilterModified);
+        chip("faute", "En faute", "\xE2\x9C\x95", "En faute : ce qui ne compile pas ou dont le build a \xC3\xA9" "chou\xC3\xA9 (\xE2\x9C\x95)",
+             ui::Tone::Error, counts.faults, treeFilterText_ == kTreeFilterFaults);
+        chip("generer", "\xC3\x80 g\xC3\xA9n\xC3\xA9rer", "\xE2\x87\xA9",
+             "\xC3\x80 g\xC3\xA9n\xC3\xA9rer : ce qui a chang\xC3\xA9 depuis le dernier build, ou n'a jamais \xC3\xA9t\xC3\xA9 g\xC3\xA9n\xC3\xA9r\xC3\xA9 ou compil\xC3\xA9",
+             ui::Tone::Accent, counts.toBuild, treeFilterText_ == kTreeFilterToBuild);
+        chip("epingles", "\xC3\x89pingl\xC3\xA9s", "\xE2\x98\x85", "\xC3\x89pingl\xC3\xA9s : la port\xC3\xA9" "e \xC3\x89pingl\xC3\xA9s et r\xC3\xA9" "cents du rail",
+             ui::Tone::Info, treePins_.size(), treeScope_ == "epingles");
+        chips->setChips(std::move(list));
+    }
     if (!rail && !foot) return;
     // Un autre projet (un autre modele) repart de "tout" : le rail le suit.
     if (treeModel_) treeScope_ = kTreeScopes[std::clamp(treeModel_->scope(), 0, 5)];
@@ -921,6 +1074,12 @@ void MainAnalysisScreen::refreshTreeChrome() {
                 : state == State::Halted ? "halte" : "arr\xC3\xAAt\xC3\xA9" "e";
         simTone = state == State::Running ? ui::Tone::Ok : state == State::Paused ? ui::Tone::Info
                 : state == State::Halted ? ui::Tone::Error : ui::Tone::Muted;
+    }
+    // 1.11.23 : la ligne d'etat du titre Simulation ("arretee \xC2\xB7 cycle 0").
+    if (treeModel_) {
+        const bool running = host.attached() && host.state() == SimulationHost::State::Running;
+        const std::string line = simText + " \xC2\xB7 cycle " + std::to_string(host.attached() ? host.scanCount() : 0);
+        if (treeModel_->setSimStatus(line, running) && explorer_) explorer_->invalidate();
     }
     const std::size_t errors = treeModel_ ? treeModel_->hmiExprErrors() : 0;
     const std::size_t updates = treeModel_ ? treeModel_->libraryUpdates() : 0;
@@ -1038,6 +1197,34 @@ void MainAnalysisScreen::treeHoverAction(ui::NodeId node, std::size_t action) {
         gfx::Rect r;
         if (explorer_->rowRect(node, r)) showExplorerMenu(node, {r.right() - 30.f, r.bottom()});
     }
+}
+
+// 1.11.23 : une action au survol d'un titre de domaine - la sienne, puis Plus... (le menu).
+void MainAnalysisScreen::treeHeadAction(ui::NodeId node, std::size_t action) {
+    if (!explorer_ || !treeModel_ || node == ui::kInvalidNode) return;
+    const auto st = treeModel_->style(node);
+    if (action + 1 >= st.headActions.size()) {                    // le dernier : Plus...
+        gfx::Rect r;
+        if (explorer_->rowRect(node, r)) showExplorerMenu(node, {r.right() - 30.f, r.bottom()});
+        return;
+    }
+    switch (ProjectTreeModel::kindOf(node)) {
+    case Kind::ApiFolder: (void)app_.actions().trigger("analyze.run", app_.commands()); break;
+    case Kind::HmiFolder: {                                       // comme le menu du clic droit : sa cible de build
+        const auto target = treeModel_->hmiBuildTarget(node);
+        std::vector<std::string> scope = target.key.empty() ? target.paths : std::vector<std::string>{target.key};
+        (void)runHmiBuild(hmi::pipeline::Mode::Generate, std::move(scope), !target.key.empty(), "G\xC3\xA9n\xC3\xA9rer l'IHM");
+        break;
+    }
+    case Kind::SimFolder: {
+        const auto& sim = app_.simulation();
+        runSimulationTransport(sim.attached() && sim.state() == SimulationHost::State::Running ? "sim.stop" : "sim.run");
+        break;
+    }
+    case Kind::VersionsFolder: askCreateVersion(); break;
+    default: break;
+    }
+    refreshTreeChrome();
 }
 
 void MainAnalysisScreen::refreshTreeState() {

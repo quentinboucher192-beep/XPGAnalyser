@@ -115,6 +115,9 @@ const std::vector<Note>& table() {
         note("1.11.23", "Objets", Kind::Fixed,
          "VALIDER LES SAISIES : une op\xC3\xA9ration nouvelle \xC3\xA9" "crit la saisie en cours de la vue, comme Entr\xC3\xA9" "e - le clic sur son bouton ne fait plus perdre la saisie au champ ; refus\xC3\xA9" "e (hors bornes), les actions suivantes du bouton ne partent pas. Le bouton Valider du mod\xC3\xA8le Saisie d'une consigne s'en sert : avant, il fermait la popup sans rien \xC3\xA9" "crire si l'on n'avait pas appuy\xC3\xA9 sur Entr\xC3\xA9" "e.",
          "objet-champ-de-saisie", ""),
+        note("1.11.23", "Projet", Kind::Changed,
+         "L'EXPLORATEUR, LA SUITE DE LA MAQUETTE : sous le filtre, les puces Modifi\xC3\xA9s, En faute, \xC3\x80 g\xC3\xA9n\xC3\xA9rer et \xC3\x89pingl\xC3\xA9s, avec leur nombre (un clic ne montre que leurs lignes, un second rend tout) ; les titres API, IHM, Simulation et Versions disent leur \xC3\xA9tat (29 POU \xC2\xB7 891 variables, arr\xC3\xAAt\xC3\xA9" "e \xC2\xB7 cycle 0...) et proposent au survol leur action (R\xC3\xA9" "analyser, G\xC3\xA9n\xC3\xA9rer, D\xC3\xA9marrer, Cr\xC3\xA9" "er une version) ; le ? du rail ouvre la l\xC3\xA9gende de toutes les marques.",
+         "legende-explorateur", ""),
         // 1.11.22 (09/10/2026 en fin d'apres-midi) : la liste du client du 09/10 - les surcharges d'un
         // symbole, les parametres retires ou renommes partout, Simulation depliee, l'explorateur modernise,
         // les champs de saisie (rien n'est ecrit avant la validation).

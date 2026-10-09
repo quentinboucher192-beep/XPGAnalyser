@@ -666,6 +666,12 @@ std::vector<NodeId> TreeView::visibleNodes() const {
     return out;
 }
 
+bool TreeView::headActionRect(NodeId n, std::size_t action, gfx::Rect& out) const {
+    for (const auto& h : headHits_)
+        if (h.node == n && h.chip == action) { out = h.rect; return true; }
+    return false;
+}
+
 bool TreeView::rowRect(NodeId n, gfx::Rect& out) const {
     const auto it = std::find_if(rows_.begin(), rows_.end(),
                                  [n](const VisualRow& r) { return r.node == n; });
@@ -724,6 +730,7 @@ void TreeView::onPaint(const PaintContext& ctx) {
 
     chipHits_.clear();                    // lot API 8 : l'arbre du projet (les boutons de ce dessin)
     actionHits_.clear();                  // lot API 8 : l'arbre du projet (2e partie)
+    headHits_.clear();                    // 1.11.23 : les actions des titres de domaine
     dotHits_.clear();
     stickyRow_ = -1;
     ctx.r.pushClip(area);
@@ -946,6 +953,35 @@ void TreeView::onPaint(const PaintContext& ctx) {
             }
             textEnd = tx;
         }
+        // ---- 1.11.23 : un titre de domaine - sa ligne d'etat en gris, ses actions au survol ----
+        if (modern_ && st.domainHead) {
+            const bool hotHead = hovered() && hoverRow_ == static_cast<int>(i) && !dragging_ && !st.headActions.empty();
+            float limit = textX + nodeRoom;
+            if (hotHead) {
+                const float side = std::min(rowH - 4.f, 20.f);
+                const float span = static_cast<float>(st.headActions.size()) * (side + 2.f) + 6.f;
+                float ax = statusLeft - span;
+                if (ax > textEnd + 24.f) {
+                    ctx.r.fillRoundedRect({ax - 2.f, r.y + 2.f, span, rowH - 4.f}, selected ? c.selectionBg : c.panelBg, 4.f);
+                    ax += 2.f;
+                    for (std::size_t k = 0; k < st.headActions.size(); ++k) {
+                        const gfx::Rect ar{ax, r.y + (rowH - side) * 0.5f, side, side};
+                        drawIcon(ctx.r, st.headActions[k].icon, {ar.x + (side - 12.f) * 0.5f, ar.y + (side - 12.f) * 0.5f, 12.f, 12.f},
+                                 selected ? c.selectionText : domainCol);
+                        headHits_.push_back({vr.node, k, ar, st.headActions[k].label});
+                        ax += side + 2.f;
+                    }
+                    limit = std::min(limit, statusLeft - span - 4.f);
+                }
+            }
+            if (!st.subtitle.empty()) {
+                const auto f = ctx.theme.font.caption;
+                const float sx = textEnd + 10.f;
+                if (limit - sx > 24.f)
+                    drawClipped(ctx, {sx, r.y + (rowH - ctx.r.lineHeight(f)) * 0.5f}, st.subtitle, f,
+                                selected ? c.selectionText : c.textMuted, limit - sx);
+            }
+        }
         // ---- Lot API 8 : l'arbre du projet (l'indication grise : ou est un resultat) ----
         if (!st.hint.empty()) {
             const float used = ctx.r.measure(nodeText, nodeFont).width + 10.f + (dot ? 10.f : 0.f);
@@ -1107,6 +1143,15 @@ EventResult TreeView::onEvent(const InputEvent& ev) {
         const auto vr = rows_[static_cast<std::size_t>(ri)];
         const float expanderX = contentRect().x + 4.f + static_cast<float>(vr.depth) * indent;
 
+        // ---- 1.11.23 : une action d'un titre de domaine ----
+        if (d->button == MouseButton::Left)
+            for (const auto& h : headHits_)
+                if (h.node == vr.node && h.rect.contains(d->pos)) {
+                    const auto node = h.node;
+                    const auto action = h.chip;
+                    headActionClicked->emit(node, action);
+                    return EventResult::Consumed;
+                }
         // ---- Lot API 8 : l'arbre du projet (une action au survol : 2e partie) ----
         if (d->button == MouseButton::Left)
             for (const auto& h : actionHits_)
@@ -1292,6 +1337,8 @@ void TreeView::cancelDrag() {
 std::string TreeView::liveTooltip(gfx::Point mouse) const {
     // ---- Lot API 8 : l'arbre du projet (un bouton de la ligne : son libelle) ----
     for (const auto& h : chipHits_)
+        if (h.rect.contains(mouse)) return h.label;
+    for (const auto& h : headHits_)                    // 1.11.23 : une action d'un titre de domaine
         if (h.rect.contains(mouse)) return h.label;
     for (const auto& h : actionHits_)                  // 2e partie : une action au survol, un point
         if (h.rect.contains(mouse)) return h.label;

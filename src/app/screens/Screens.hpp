@@ -382,6 +382,12 @@ public:
     // 1.11 (chantier T3, C4) : les deux filtres de l'arbre, des mots reserves du champ.
     static constexpr std::string_view kTreeFilterNotCompiling = "@ne-compile-pas";
     static constexpr std::string_view kTreeFilterNotGenerated = "@non-genere";
+    // 1.11.23 : les puces de l'explorateur (Modifies, En faute, A generer) - des mots reserves du filtre.
+    static constexpr std::string_view kTreeFilterModified = "@modifies";
+    static constexpr std::string_view kTreeFilterFaults   = "@en-faute";
+    static constexpr std::string_view kTreeFilterToBuild  = "@a-generer";
+    // Une puce : "modifies", "faute", "generer", "epingles" (la portee) ; "aucune" : tout montrer.
+    bool pickTreeChip(const std::string& key);
     [[nodiscard]] const std::string& treeFilterText() const noexcept { return treeFilterText_; }
     [[nodiscard]] std::size_t treeFilterCount() const noexcept { return treeFilterCount_; }
     [[nodiscard]] std::vector<std::string> treeLines() const;   // ce que montre l'arbre (arbre-lignes)
@@ -477,6 +483,7 @@ private:
     // 2e partie : le rail, le pied, la densite, suivre l'onglet actif.
     ui::Widget*                       treeRail_{nullptr};
     ui::Widget*                       treeFoot_{nullptr};
+    ui::Widget*                       treeChips_{nullptr};          // 1.11.23 : les puces de filtre
     std::string                       treeScope_{"tout"};
     bool                              treeFollow_{true};
     ui::Widget*                       treeFollowedPage_{nullptr};   // la derniere page suivie
@@ -485,6 +492,7 @@ private:
     void refreshTreeChrome();                                       // le rail et le pied (leurs etats)
     void openTreeHealth(const std::string& part);                   // un morceau du pied
     void treeHoverAction(ui::NodeId node, std::size_t action);      // Epingler, Detacher, ...
+    void treeHeadAction(ui::NodeId node, std::size_t action);       // 1.11.23 : Reanalyser, Generer, Demarrer, ...
     // ---- fin Lot API 8 : l'arbre du projet ----
     void shiftTabIndices(std::size_t removed);            // un onglet est sorti a cet indice
     void onTabInserted(std::size_t at);

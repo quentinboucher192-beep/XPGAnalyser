@@ -269,6 +269,13 @@ int Cache::notCompiling() const noexcept {
     return n;
 }
 
+int Cache::notCompilingApi() const noexcept {
+    int n = 0;
+    for (const auto& [i, s] : sections_)    n += s.compiles() ? 0 : 1;
+    for (const auto& [i, s] : dfbSections_) n += s.compiles() ? 0 : 1;
+    return n;
+}
+
 int Cache::notGenerated() const noexcept {
     int n = 0;
     for (const auto& [i, e] : scripts_) n += e.state.generated() ? 0 : 1;

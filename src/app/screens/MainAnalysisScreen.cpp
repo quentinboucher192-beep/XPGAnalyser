@@ -3327,6 +3327,7 @@ void MainAnalysisScreen::onEnter() {
         [this](NodeId n, std::size_t k) { openTreeTool(ProjectTreeModel::indexOf(n) == 1, k); });
     // 2e partie : les actions au survol d'une ligne (Epingler, Detacher, ...).
     links_ += explorer_->hoverActionClicked->connect([this](NodeId n, std::size_t k) { treeHoverAction(n, k); });
+    links_ += explorer_->headActionClicked->connect([this](NodeId n, std::size_t k) { treeHeadAction(n, k); });   // 1.11.23
     // ---- fin Lot API 8 : l'arbre du projet ----
     // Double-clicking an engine instance opens its chart, drawn.
     // Double-clicking a macro runs it - in preview first, always.

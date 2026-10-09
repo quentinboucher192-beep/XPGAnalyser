@@ -572,6 +572,19 @@ namespace app {
         //  Pour les deux filtres de l'arbre : 1 ne compile pas (✕ ou ⊘), 2 n'est pas
         //  genere (un script) ; 0 : rien a signaler, ou pas d'etat pour ce noeud.
         enum : std::uint8_t { BuildNotCompiling = 1, BuildNotGenerated = 2 };
+        // 1.11.23 : LES PUCES DE FILTRE de l'explorateur (la maquette validee) - Modifies, En faute,
+        // A generer : ce que dit un noeud (quickFlags ; 0 pour une ligne Epingles ou Recents), et
+        // combien en tout (quickCounts : les elements de l'IHM, les sections et DFB de l'automate,
+        // les dossiers modifies). Epingles est la portee du rail.
+        enum : std::uint8_t { QuickModified = 1, QuickFault = 2, QuickToBuild = 4 };
+        // 1.11.23 : la ligne d'etat du titre Simulation ("arretee \xC2\xB7 cycle 0"), poussee par l'ecran ;
+        // `running` : son action au survol est Arreter (sinon Demarrer). Vrai : ca a change.
+        bool setSimStatus(std::string line, bool running);
+        // La ligne d'etat d'un titre de domaine (API, IHM, Simulation, Versions) ; vide sinon.
+        [[nodiscard]] std::string domainStatus(ui::NodeId head) const;
+        [[nodiscard]] std::uint8_t quickFlags(ui::NodeId) const;
+        struct QuickCounts { std::size_t modified{0}, faults{0}, toBuild{0}; };
+        [[nodiscard]] QuickCounts quickCounts() const;
         [[nodiscard]] std::uint8_t buildFlags(ui::NodeId) const;
         //  1.11.13 : LES ETATS DU BUILD DE L'IHM (app/hmi/HmiBuild, la generation
         //  incrementale). Ce que l'arbre en lit, pose a chaque analyse (jamais
@@ -581,7 +594,8 @@ namespace app {
         //  montrent leur etat de build tout a droite (a la place des icones de
         //  Compiler / Generer de la 1.11 pour les scripts) ; nullptr : comme avant.
         struct HmiBuildMarks {
-            struct Mark { std::string glyph; ui::Tone tone{ui::Tone::None}; int rank{0}; std::string tip; };
+            struct Mark { std::string glyph; ui::Tone tone{ui::Tone::None}; int rank{0}; std::string tip;
+                          std::uint8_t quick{0}; };   // 1.11.23 : QuickFault, QuickToBuild
             std::unordered_map<std::string, Mark> byKey, byPath;
             std::unordered_map<std::uint64_t, std::string> viewPaths;   // une vue -> son chemin (ses scripts, animations, actions dessous)
             std::unordered_map<std::uint64_t, std::string> viewKeys;    // une vue -> sa cle (vue:, popup:, symbole:, modele:)
@@ -644,6 +658,8 @@ namespace app {
         // ---- Lot API 8 : l'arbre du projet (2e partie) ----
         mutable bool          counterGuard_{false};   // text() avec son compteur (counterOf)
         std::vector<NodeKind> changedKinds_;
+        std::string           simStatus_;                  // 1.11.23 : la ligne d'etat du titre Simulation
+        bool                  simRunning_{false};
         std::string           changedTip_;
         std::size_t           libDdt_{0}, libDfb_{0};
         int                   scope_{0};

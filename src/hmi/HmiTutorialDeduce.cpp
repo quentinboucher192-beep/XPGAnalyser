@@ -1171,6 +1171,7 @@ constexpr TopicPlace kTopicPlaces[] = {
     {"appliquer-copie", "arbre:IHM/Vues"}, {"tutoriel-symbole", "arbre:IHM/Symboles"},
     {"alarmes-symboles", "arbre:IHM/Symboles"}, {"contenu", "arbre:IHM/Vues"},
     {"raccourcis-vue", "arbre:IHM/Vues"},                                  // 1.11.23 : les raccourcis d'une vue
+    {"legende-explorateur", "arbre:IHM"},                                  // 1.11.23 : la legende de l'explorateur
     {"modeles-de-vues", "arbre:IHM/Vues/Mod\xC3\xA8les"}, {"paquets-de-vues", "arbre:IHM/Vues"},
     // 1.11.2 (T2, decision 247 : la chaine 4 le disait « sans lieu ») : l'export et l'import des symboles, des types, des
     // fonctions et des scripts partent du dossier IHM > Symboles (ses boutons, son clic droit), comme les vues de leur dossier.

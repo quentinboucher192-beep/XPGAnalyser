@@ -1869,6 +1869,21 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         s.domain = domainOf(n);
         s.domainHead = k == NodeKind::ApiFolder || k == NodeKind::HmiFolder || k == NodeKind::SimFolder
                     || k == NodeKind::VersionsFolder;
+        // 1.11.23 : sa ligne d'etat et ses actions au survol (le nouveau dessin les montre).
+        if (s.domainHead) {
+            s.subtitle = domainStatus(n);
+            switch (k) {
+            case NodeKind::ApiFolder: s.headActions.push_back({ui::Icon::Refresh, "R\xC3\xA9importer et r\xC3\xA9" "analyser le programme"}); break;
+            case NodeKind::HmiFolder: s.headActions.push_back({ui::Icon::Analyze, "G\xC3\xA9n\xC3\xA9rer l'IHM (ce qui a chang\xC3\xA9)"}); break;
+            case NodeKind::SimFolder:
+                s.headActions.push_back(simRunning_ ? ui::CellStyle::Chip{ui::Icon::Stop, "Arr\xC3\xAAter la simulation"}
+                                                    : ui::CellStyle::Chip{ui::Icon::Play, "D\xC3\xA9marrer la simulation"});
+                break;
+            case NodeKind::VersionsFolder: s.headActions.push_back({ui::Icon::Save, "Cr\xC3\xA9" "er une version\xE2\x80\xA6"}); break;
+            default: break;
+            }
+            s.headActions.push_back({ui::Icon::Settings, "Plus\xE2\x80\xA6 (le menu du clic droit)"});
+        }
         // Le compteur, en pastille neutre ; ce qu'elle portait deja passe a sa gauche.
         if (s.chips.empty() && (treeCounterKind(k) || k == NodeKind::PinItem || k == NodeKind::RecentItem)) {
             const auto t = k == NodeKind::PinItem || k == NodeKind::RecentItem ? shortcutTarget(n) : n;
@@ -3062,6 +3077,94 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         tr.tone = m->tone;
         tr.tip = m->tip;
         s.trail.push_back(std::move(tr));
+    }
+
+    std::uint8_t ProjectTreeModel::quickFlags(ui::NodeId n) const {
+        if (shortcutTarget(n) != ui::kInvalidNode) return 0;        // une ligne d'Epingles : sa cible compte
+        std::uint8_t q = 0;
+        const auto b = buildFlags(n);
+        if (b & BuildNotCompiling) q |= QuickFault;
+        if (b & BuildNotGenerated) q |= QuickToBuild;
+        if (buildMarks_ && hmi_) {
+            const auto t = hmiBuildTarget(n);
+            if (!t.key.empty())
+                if (const auto it = buildMarks_->byKey.find(t.key); it != buildMarks_->byKey.end()) q |= it->second.quick;
+            for (const auto& path : t.paths)
+                if (const auto it = buildMarks_->byPath.find(path); it != buildMarks_->byPath.end()) q |= it->second.quick;
+        }
+        if (changedSinceVersion(n)) q |= QuickModified;
+        return q;
+    }
+
+    bool ProjectTreeModel::setSimStatus(std::string line, bool running) {
+        if (line == simStatus_ && running == simRunning_) return false;
+        simStatus_ = std::move(line);
+        simRunning_ = running;
+        return true;
+    }
+
+    std::string ProjectTreeModel::domainStatus(ui::NodeId head) const {
+        const auto dot = std::string(" \xC2\xB7 ");
+        switch (kindOf(head)) {
+        case NodeKind::ApiFolder: {
+            if (!project_) return "aucun programme";
+            std::string s = std::to_string(project_->pous.size()) + " POU" + dot + std::to_string(project_->variables.size()) + " variables";
+            if (libDdt_ + libDfb_ > 0) s += dot + std::to_string(libDdt_ + libDfb_) + " \xC3\xA0 mettre \xC3\xA0 jour";
+            return s;
+        }
+        case NodeKind::HmiFolder: {
+            if (!hmi_) return {};
+            std::size_t views = 0;
+            for (const auto& v : hmi_->project.views) views += v.role == "symbole" ? 0 : 1;
+            std::string s = std::to_string(views) + (views > 1 ? " vues" : " vue");
+            // Les elements de l'IHM seulement (les marques du dernier build).
+            std::size_t faults = 0, toBuild = 0;
+            const bool marks = buildMarks_ && !buildMarks_->byKey.empty();
+            if (marks)
+                for (const auto& [key, m] : buildMarks_->byKey) {
+                    faults += (m.quick & QuickFault) ? 1 : 0;
+                    toBuild += (m.quick & QuickToBuild) ? 1 : 0;
+                }
+            if (faults) s += dot + std::to_string(faults) + " en faute";
+            if (toBuild) s += dot + std::to_string(toBuild) + " \xC3\xA0 g\xC3\xA9n\xC3\xA9rer";
+            if (!faults && !toBuild) s += dot + (marks ? std::string("\xC3\xA0 jour") : std::string("pas encore g\xC3\xA9n\xC3\xA9r\xC3\xA9" "e"));
+            return s;
+        }
+        case NodeKind::SimFolder:
+            return simStatus_;
+        case NodeKind::VersionsFolder: {
+            if (versions_.empty()) return "aucune version";
+            const auto& first = versions_.front();
+            int last = 0;
+            for (const auto& v : versions_) last = std::max(last, v.number);
+            if (first.number == 0 && first.tone == ui::Tone::Warning)
+                return "V" + std::to_string(last + 1) + " en cours"
+                     + (first.badge.empty() ? std::string{} : dot + first.badge + " changement" + (first.badge == "1" ? "" : "s"));
+            return last > 0 ? "V" + std::to_string(last) + dot + "\xC3\xA0 jour" : std::string("aucune version");
+        }
+        default:
+            return {};
+        }
+    }
+
+    ProjectTreeModel::QuickCounts ProjectTreeModel::quickCounts() const {
+        QuickCounts c;
+        const bool marks = buildMarks_ && !buildMarks_->byKey.empty();
+        if (marks)
+            for (const auto& [key, m] : buildMarks_->byKey) {
+                if (m.quick & QuickFault) ++c.faults;
+                if (m.quick & QuickToBuild) ++c.toBuild;
+            }
+        if (buildState_) {
+            const int api = buildState_->notCompilingApi();
+            c.faults += static_cast<std::size_t>(std::max(0, api));
+            if (!marks) {                                   // pas encore de build de l'IHM : ses scripts
+                c.faults += static_cast<std::size_t>(std::max(0, buildState_->notCompiling() - api));
+                c.toBuild += static_cast<std::size_t>(std::max(0, buildState_->notGenerated()));
+            }
+        }
+        c.modified = changedKinds_.size();
+        return c;
     }
 
     std::uint8_t ProjectTreeModel::buildFlags(ui::NodeId n) const {
