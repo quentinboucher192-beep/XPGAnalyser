@@ -44,6 +44,8 @@ struct KindInfo {
 };
 // Les huit carres, dans l'ordre de la liste (C, fx, $, A, I, S, V, !).
 [[nodiscard]] const std::vector<KindInfo>& kinds();
+// 1.12.0 : les huit, A compris (kinds() les donne sans A dans XPGAnalyser IHM).
+[[nodiscard]] const std::vector<KindInfo>& kindsWithApi();
 [[nodiscard]] const KindInfo& info(Style);
 // Le carre seul (la liste des carres, la legende du selecteur).
 [[nodiscard]] ui::PropertyGrid::Legend legendOf(Style);

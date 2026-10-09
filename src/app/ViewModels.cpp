@@ -1062,7 +1062,11 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         }
         case NodeKind::HmiUsedFolder:      return hmi_ ? usedVariables().size() : 0;
         // ---- lot 9
-        case NodeKind::HmiSysFolder:  return hmi_ ? hmi::pub::kSysDomainCount : 0;
+        case NodeKind::HmiSysFolder: {                                   // 1.12.0 : les domaines montres
+            std::size_t n = 0;
+            for (std::size_t d = 0; d < hmi::pub::kSysDomainCount; ++d) n += hmi::pub::sysDomainShown(d) ? 1 : 0;
+            return hmi_ ? n : 0;
+        }
         case NodeKind::HmiSysDomain:  return hmi_ ? hmi::pub::sysVarsOf(static_cast<int>(i)).size() : 0;
         case NodeKind::HmiInstFolder: return hmi_ ? hmi_->project.views.size() : 0;
         case NodeKind::HmiInstView: {
@@ -1625,7 +1629,13 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             return pack(NodeKind::HmiUsedVariable, static_cast<Index>(k));
         // ---- lot 9
         case NodeKind::HmiSysFolder:
-            return k < hmi::pub::kSysDomainCount ? pack(NodeKind::HmiSysDomain, static_cast<Index>(k)) : ui::kInvalidNode;
+            // 1.12.0 : le k-ieme domaine montre (XPGAnalyser IHM saute Automate et Communication).
+            for (std::size_t d = 0; d < hmi::pub::kSysDomainCount; ++d) {
+                if (!hmi::pub::sysDomainShown(d)) continue;
+                if (k == 0) return pack(NodeKind::HmiSysDomain, static_cast<Index>(d));
+                --k;
+            }
+            return ui::kInvalidNode;
         case NodeKind::HmiSysDomain: {
             const auto list = hmi::pub::sysVarsOf(static_cast<int>(i));
             return k < list.size() ? pack(NodeKind::HmiSysVar, static_cast<Index>(list[k] - hmi::pub::kSysVars)) : ui::kInvalidNode;
@@ -2775,8 +2785,12 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             return label + (v->description.empty() ? std::string{} : "   // " + v->description);
         }
         // ---- lot 9 : les variables systeme et d'instances --------------------------
-        case NodeKind::HmiSysFolder:
-            return "Variables syst\xC3\xA8me" + countTag(hmi::pub::kSysVarCount);
+        case NodeKind::HmiSysFolder: {
+            std::size_t n = 0;                                           // 1.12.0 : celles des domaines montres
+            for (std::size_t d = 0; d < hmi::pub::kSysDomainCount; ++d)
+                if (hmi::pub::sysDomainShown(d)) n += hmi::pub::sysVarsOf(static_cast<int>(d)).size();
+            return "Variables syst\xC3\xA8me" + countTag(core::hasApi() ? hmi::pub::kSysVarCount : n);
+        }
         case NodeKind::HmiSysDomain:
             return i < hmi::pub::kSysDomainCount ? std::string(hmi::pub::kSysDomains[i]) + countTag(hmi::pub::sysVarsOf(static_cast<int>(i)).size())
                                                  : std::string{};

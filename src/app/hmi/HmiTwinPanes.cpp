@@ -3,6 +3,7 @@
 // detection), la carte memoire et son scanner, les jumeaux (esclaves Modbus
 // virtuels) et le reseau simule.
 #include "HmiCommPanes.hpp"
+#include "../../core/Edition.hpp"   // 1.12.0 : XPGAnalyser IHM - pas de « suit l'automate »
 
 #include "HmiCommHost.hpp"
 #include "HmiEquipmentHost.hpp"
@@ -1236,7 +1237,8 @@ void HmiCommPane::rebuildMapProperties(std::vector<PG::Category>& cats) {
             if (zn::tableOf(pt.area) == t && o >= pt.offset && o < pt.offset + n) b = &x;
         }
         std::vector<std::string> kinds{"aucun"};
-        for (const auto k : hmi::kBehaviorKinds) kinds.emplace_back(hmi::behaviorKindLabel(k));
+        for (const auto k : hmi::kBehaviorKinds)
+            if (k != hmi::BehaviorKind::FollowPlc || core::hasApi()) kinds.emplace_back(hmi::behaviorKindLabel(k));   // 1.12.0
         // Pas encore de comportement : il se pose au debut de la variable qui couvre la case.
         std::string baddr = b ? b->address : address;
         if (!b)

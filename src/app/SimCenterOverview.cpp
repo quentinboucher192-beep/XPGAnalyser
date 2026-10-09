@@ -7,6 +7,7 @@
 //  (partRect) pour les scripts.
 // =============================================================================
 #include "SimCenter.hpp"
+#include "../core/Edition.hpp"   // 1.12.0 : la vue d'ensemble de chaque application
 #include "SimCenterKit.hpp"
 
 #include <algorithm>
@@ -128,6 +129,14 @@ std::string SimCenterModel::trendsCsv() const {
 SimOverviewPane::SimOverviewPane(std::string id, std::shared_ptr<SimCenterModel> model, SimCenterHosts hosts)
     : ui::Widget(std::move(id)), model_(std::move(model)), hosts_(std::move(hosts)) {}
 
+// 1.12.0 : les cartes de l'application - l'automate (XPGAnalyser API), l'IHM et ses
+// equipements (XPGAnalyser IHM), les trois (les essais).
+static std::vector<int> shownCards() {
+    if (!core::hasIhm()) return {0};
+    if (!core::hasApi()) return {1, 2};
+    return {0, 1, 2};
+}
+
 SimOverviewPane::Plan SimOverviewPane::plan(float width) const {
     Plan pl;
     const float inner = std::max(320.f, width - 2.f * pl.pad);
@@ -136,12 +145,15 @@ SimOverviewPane::Plan SimOverviewPane::plan(float width) const {
     y += pl.banner.h + pl.gap;
     pl.wide = inner >= 900.f;
     const float cardH = 184.f;
+    const auto shown = shownCards();
+    const auto n = static_cast<float>(shown.size());
+    for (int i = 0; i < 3; ++i) pl.cards[i] = {};
     if (pl.wide) {
-        const float cardW = std::floor((inner - 2.f * pl.gap) / 3.f);
-        for (int i = 0; i < 3; ++i) pl.cards[i] = {pl.pad + static_cast<float>(i) * (cardW + pl.gap), y, cardW, cardH};
+        const float cardW = std::floor((inner - (n - 1.f) * pl.gap) / n);
+        for (std::size_t k = 0; k < shown.size(); ++k) pl.cards[shown[k]] = {pl.pad + static_cast<float>(k) * (cardW + pl.gap), y, cardW, cardH};
         y += cardH + pl.gap;
     } else {
-        for (int i = 0; i < 3; ++i) {
+        for (const int i : shown) {
             pl.cards[i] = {pl.pad, y, inner, cardH};
             y += cardH + pl.gap;
         }
@@ -149,7 +161,12 @@ SimOverviewPane::Plan SimOverviewPane::plan(float width) const {
     const std::size_t rows = std::max<std::size_t>(1, model_ ? model_->report.attention.size() : 0);
     const float attH = 48.f + static_cast<float>(rows) * 52.f + 6.f;
     const float chainH = 210.f;
-    if (pl.wide) {
+    // 1.12.0 : XPGAnalyser API - l'automate seul : pas de chaine, l'attention sur toute la largeur.
+    if (!core::hasIhm()) {
+        pl.chain = {};
+        pl.attention = {pl.pad, y, inner, attH};
+        y += attH + pl.gap;
+    } else if (pl.wide) {
         const float leftW = std::floor(inner * 0.5f);
         const float h = std::max(chainH, attH);
         pl.chain = {pl.pad, y, leftW, h};
@@ -224,8 +241,9 @@ void SimOverviewPane::onPaint(const ui::PaintContext& ctx) {
     const auto at = [&](const gfx::Rect& r) { return gfx::Rect{b.x + r.x, b.y + r.y - scrollY_, r.w, r.h}; };
     ctx.r.pushClip(b);
     paintBanner(ctx, at(pl.banner));
-    for (int i = 0; i < 3; ++i) paintCard(ctx, at(pl.cards[i]), model_->report.cards[static_cast<std::size_t>(i)]);
-    paintChain(ctx, at(pl.chain));
+    for (int i = 0; i < 3; ++i)
+        if (pl.cards[i].w > 0.f) paintCard(ctx, at(pl.cards[i]), model_->report.cards[static_cast<std::size_t>(i)]);   // 1.12.0
+    if (pl.chain.w > 0.f) paintChain(ctx, at(pl.chain));
     paintAttention(ctx, at(pl.attention));
     paintTimeline(ctx, at(pl.timeline));
     // L'ascenseur : un trait fin a droite quand tout ne tient pas.
@@ -352,7 +370,9 @@ void SimOverviewPane::paintChain(const ui::PaintContext& ctx, const gfx::Rect& r
     // L'ordre de la maquette : Automate - IHM - Equipements (l'IHM lit l'automate
     // et interroge les equipements en Modbus TCP).
     ctx.r.drawText({r.x + 14.f, r.y + 32.f},
-                   fit(ctx, "Qui parle \xC3\xA0 qui, en ce moment : l'IHM lit l'automate et interroge les \xC3\xA9quipements (Modbus TCP)", kSmall, r.w - 28.f),
+                   fit(ctx, core::hasApi() ? "Qui parle \xC3\xA0 qui, en ce moment : l'IHM lit l'automate et interroge les \xC3\xA9quipements (Modbus TCP)"
+                                           : "Qui parle \xC3\xA0 qui, en ce moment : l'IHM interroge ses \xC3\xA9quipements (Modbus TCP)",   // 1.12.0
+                       kSmall, r.w - 28.f),
                    kSmall, c.textMuted);
     struct Box { const char* title; const char* key; ui::Icon icon; std::size_t card; };
     const Box boxes[3] = {{"AUTOMATE", "automate", ui::Icon::Cpu, 0},
@@ -365,7 +385,11 @@ void SimOverviewPane::paintChain(const ui::PaintContext& ctx, const gfx::Rect& r
     rects[0] = {r.x + 14.f, by, boxW, boxH};
     rects[2] = {r.right() - 14.f - boxW, by, boxW, boxH};
     rects[1] = {r.x + (r.w - boxW) * 0.5f, by, boxW, boxH};
+    // 1.12.0 : XPGAnalyser IHM - pas d'automate : l'IHM a gauche, les equipements a droite.
+    const bool noPlc = !core::hasApi();
+    if (noPlc) rects[1] = rects[0];
     for (int i = 0; i < 3; ++i) {
+        if (noPlc && i == 0) continue;
         const auto& bx = boxes[i];
         const auto& cd = rep.cards[bx.card];
         const auto tone = toneColor(ctx, cd.tone);
@@ -380,6 +404,7 @@ void SimOverviewPane::paintChain(const ui::PaintContext& ctx, const gfx::Rect& r
     }
     // Les deux liens : deux traits (un dans chaque sens), vivants, coupes ou au repos.
     for (int i = 0; i < 2; ++i) {
+        if (noPlc && i == 0) continue;                  // 1.12.0 : pas de lien automate <-> IHM
         const auto& lk = rep.chain[i == 0 ? 1u : 0u];   // automate <-> IHM, puis IHM <-> equipements
         const float x0 = rects[i].right() + 8.f, x1 = rects[i + 1].x - 8.f;
         const float my = by + boxH * 0.5f;
@@ -514,17 +539,26 @@ void SimOverviewPane::paintTimeline(const ui::PaintContext& ctx, const gfx::Rect
         hits_.push_back({lr, "frise:journal", "journal", "Tous les \xC3\xA9v\xC3\xA9nements de la simulation, filtr\xC3\xA9s et expliqu\xC3\xA9s", false});
         ctx.r.drawText({lr.x, lr.y}, link, kSmall, hot ? c.text : c.accent);
     }
-    static const SimSource lanes[4] = {SimSource::Automate, SimSource::Ihm, SimSource::Equipements, SimSource::Debogage};
-    static const char* const laneNames[4] = {"Automate", "IHM", "\xC3\x89quipements", "Toi / d\xC3\xA9" "bogage"};   // les mots de la maquette
+    // 1.12.0 : les lignes de l'application (XPGAnalyser API : l'automate ; IHM : l'IHM, ses equipements).
+    std::vector<SimSource> lanes;
+    std::vector<const char*> laneNames;
+    const auto lane = [&](SimSource src, const char* name) { lanes.push_back(src); laneNames.push_back(name); };
+    if (core::hasApi()) lane(SimSource::Automate, "Automate");
+    if (core::hasIhm()) {
+        lane(SimSource::Ihm, "IHM");
+        lane(SimSource::Equipements, "\xC3\x89quipements");
+    }
+    lane(SimSource::Debogage, core::hasApi() ? "Toi / d\xC3\xA9" "bogage" : "Toi");   // les mots de la maquette
+    const int laneCount = static_cast<int>(lanes.size());
     const float labelW = 96.f;
     const float x0 = r.x + 14.f + labelW, x1 = r.right() - 18.f;
     const float top = r.y + 40.f, laneH = 16.f;
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < laneCount; ++i) {
         const float y = top + static_cast<float>(i) * laneH;
         ctx.r.drawText({r.x + 14.f, y + 1.f}, laneNames[i], kTiny, c.textMuted);
         ctx.r.fillRect({x0, y + laneH * 0.5f, x1 - x0, 1.f}, c.border);
     }
-    const float axisY = top + 4.f * laneH + 4.f;
+    const float axisY = top + static_cast<float>(laneCount) * laneH + 4.f;
     for (int s = 0; s <= 30; s += 5) {
         const float x = x0 + (x1 - x0) * static_cast<float>(s) / 30.f;
         ctx.r.fillRect({x, top - 2.f, 1.f, axisY - top + 4.f}, c.border.withAlpha(120));
@@ -543,9 +577,9 @@ void SimOverviewPane::paintTimeline(const ui::PaintContext& ctx, const gfx::Rect
         ctx.r.drawText({x0 + (x1 - x0 - textWidth(ctx, none, kSmall)) * 0.5f, top + 1.5f * laneH}, none, kSmall, c.textMuted);
     }
     for (const auto* e : recent) {
-        int lane = 3;
-        for (int i = 0; i < 4; ++i)
-            if (lanes[i] == e->source) lane = i;
+        int lane = laneCount - 1;
+        for (int i = 0; i < laneCount; ++i)
+            if (lanes[static_cast<std::size_t>(i)] == e->source) lane = i;
         const double age = std::clamp(now - e->time, 0.0, 30.0);
         const float x = x0 + (x1 - x0) * static_cast<float>((30.0 - age) / 30.0);
         const float y = top + static_cast<float>(lane) * laneH + laneH * 0.5f;

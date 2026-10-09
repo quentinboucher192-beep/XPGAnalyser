@@ -27,6 +27,7 @@
 #pragma once
 
 #include "HmiModel.hpp"
+#include "../core/Edition.hpp"   // 1.12.0 : les domaines de XPGAnalyser IHM
 #include "HmiKeys.hpp"            // 1.11.23 : SYS.Key.<touche>
 #include "HmiObjectAlarms.hpp"   // 1.11.1 (decision 108) : les alarmes d'un objet (Vue.Objet.Alarmes.<alarme>)
 #include "HmiTemplates.hpp"
@@ -67,6 +68,10 @@ inline constexpr std::string_view kSysDomains[] = {
     "Souris et clavier",            // 1.11.23 : 14 - la souris, les touches, les raccourcis ; SYS.Key.<touche>
 };
 inline constexpr std::size_t kSysDomainCount = sizeof(kSysDomains) / sizeof(kSysDomains[0]);
+// 1.12.0 : XPGAnalyser IHM n'a pas d'automate - ni le domaine Automate (SYS.Plc...), ni
+// Communication (la liaison vers l'automate du projet) : ils ne se montrent pas (arbre,
+// volet, selecteurs, aide a la saisie). Le moteur les garde (des projets de la 1.11).
+[[nodiscard]] inline bool sysDomainShown(std::size_t domain) noexcept { return core::hasApi() || (domain != 6 && domain != 12); }
 
 inline constexpr SysVar kSysVars[] = {
     // ---- 0 : l'utilisateur et la securite

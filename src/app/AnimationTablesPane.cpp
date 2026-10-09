@@ -1,5 +1,6 @@
 // app/AnimationTablesPane.cpp - les tables d'animation, avec l'IHM (lot API 3).
 #include "AnimationTablesPane.hpp"
+#include "../core/Edition.hpp"   // 1.12.0 : XPGAnalyser API - pas de variable IHM
 
 #include "ApiPanes.hpp"
 #include "RenameDialog.hpp"               // lot 7 : requestRename (le dialogue qui montre tout)
@@ -502,6 +503,7 @@ void AnimationTablesPane::attach(ApiFrame& frame) {
     t.setEnabledWhen(ADelete, haveTable);
     t.setEnabledWhen(AAddApi, haveTable);
     t.setEnabledWhen(AAddHmi, [this, haveTable] { return haveTable() && hosts_.hmi && hosts_.hmi() != nullptr; });
+    t.setVisibleWhen(AAddHmi, [] { return core::hasIhm(); });   // 1.12.0 : XPGAnalyser API n'a pas d'IHM
     t.setEnabledWhen(ATable, [this] { return project() != nullptr; });
     t.setEnabledWhen(ARemove, [this] { return !selectedLines().empty(); });
     t.setEnabledWhen(AWrite, [this] { return !selectedLines().empty(); });

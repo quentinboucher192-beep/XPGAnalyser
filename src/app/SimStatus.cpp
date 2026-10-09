@@ -2,6 +2,7 @@
 //  app/SimStatus.cpp - lot API 8 : l'etat de la simulation, dit en clair
 // =============================================================================
 #include "SimStatus.hpp"
+#include "../core/Edition.hpp"   // 1.12.0 : la simulation de chaque application
 
 #include <algorithm>
 #include <cmath>
@@ -127,7 +128,32 @@ Banner banner(const Snapshot& s) {
         b.tone = Tone::Off;
         b.word = "AUCUN PROJET";
         b.title = "Aucun projet ouvert";
-        b.meaning = "La simulation fait tourner le programme du projet ouvert, son IHM et ses \xC3\xA9quipements : ouvre d'abord un projet.";
+        b.meaning = core::hasApi() ? "La simulation fait tourner le programme du projet ouvert, son IHM et ses \xC3\xA9quipements : ouvre d'abord un projet."
+                                   : "La simulation fait tourner l'IHM du projet ouvert et ses \xC3\xA9quipements : ouvre d'abord un projet.";
+        return b;
+    }
+    // 1.12.0 : XPGAnalyser IHM - la simulation est celle de l'IHM (pas d'automate).
+    if (!core::hasApi()) {
+        const auto sims = simulatedCount(s.equip);
+        const auto all = enabledCount(s.equip);
+        const std::string equipments = all == 0 ? std::string{}
+                                     : sims == all ? plural(all, "\xC3\xA9quipement simul\xC3\xA9", "\xC3\xA9quipements simul\xC3\xA9s")
+                                                   : plural(all, "\xC3\xA9quipement", "\xC3\xA9quipements");
+        if (s.hmi.running) {
+            b.tone = Tone::Ok;
+            b.word = "EN MARCHE";
+            b.title = "L'IHM tourne" + std::string(s.hmi.view.empty() ? std::string{} : " : " + s.hmi.view) + (equipments.empty() ? std::string{} : ", " + equipments);
+            b.meaning = "Ses scripts, ses alarmes, ses vues tournent ; ses variables li\xC3\xA9" "es lisent et \xC3\xA9" "crivent les \xC3\xA9quipements (leurs esclaves simul\xC3\xA9s, "
+                        "ou les appareils).";
+            b.fix = {"Voir l'IHM", "ihm"};
+            b.second = {"Voir les courbes", "courbes"};
+        } else {
+            b.tone = Tone::Off;
+            b.word = "ARR\xC3\x8AT\xC3\x89" "E";
+            b.title = "La simulation de l'IHM est arr\xC3\xAAt\xC3\xA9" "e";
+            b.meaning = "D\xC3\xA9marrer l'IHM (F8) : ses variables partent de leur valeur initiale, les esclaves simul\xC3\xA9s de ses \xC3\xA9quipements r\xC3\xA9pondent.";
+            b.fix = {"D\xC3\xA9marrer l'IHM", "ihm"};
+        }
         return b;
     }
     if (!p.prepared && !p.prepareError.empty()) {

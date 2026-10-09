@@ -2733,18 +2733,21 @@ void App::frame(double dt) {
     //     serveur de demonstration recoit les valeurs du simulateur.
     //     Le serveur expose le simulateur : il le prepare (sans le lancer), une
     //     fois par projet.
-    if (hmi_ && hmi_->project.comm.demoServer && project_ && !simulation_.attached() && demoPrepared_ != project_.get()) {
+    // 1.12.0 : XPGAnalyser IHM n'a pas d'automate - ni son simulateur, ni la liaison vers
+    // « l'automate du projet », ni le serveur de demonstration ; ses equipements, oui.
+    const bool plc = core::hasApi();
+    if (plc && hmi_ && hmi_->project.comm.demoServer && project_ && !simulation_.attached() && demoPrepared_ != project_.get()) {
         demoPrepared_ = project_.get();
         (void)simulation_.attach(project_);
     }
-    comm_.tick(hmi_ ? &hmi_->project : nullptr, project_, simulationRuntime(), dt);
+    if (plc) comm_.tick(hmi_ ? &hmi_->project : nullptr, project_, simulationRuntime(), dt);
     // 2c bis. Lot 15 : les equipements du reseau suivent le projet (liaisons,
     //     equipements simules, pings).
     //     Lot 17 : sur le poste, les vrais appareils ; dans l'application, les
     //     jumeaux (au choix de chaque equipement) ; "suit l'automate" lit le simulateur.
     equip_.setStation(stationActive_);
-    equip_.setPlcReader([this](const std::string& name) -> std::optional<double> {
-        auto* rt = simulationRuntime();
+    equip_.setPlcReader([this, plc](const std::string& name) -> std::optional<double> {
+        auto* rt = plc ? simulationRuntime() : nullptr;      // 1.12.0 : « suit l'automate » : pas d'automate
         if (!rt) return std::nullopt;
         sim::Value v;
         if (!rt->read(name, v)) return std::nullopt;

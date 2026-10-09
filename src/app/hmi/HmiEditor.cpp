@@ -1,4 +1,5 @@
 #include "HmiEditor.hpp"
+#include "../../core/Edition.hpp"   // 1.12.0 : XPGAnalyser IHM - pas de zone API
 #include "../RenameDialog.hpp"            // lot 7 : requestRename (en ligne : rien de plus a lier)
 #include "../../hmi/HmiSymbols.hpp"
 #include "../../hmi/HmiRenameRefs.hpp"     // Lot API 8 : renommer partout (IHM)
@@ -665,7 +666,8 @@ bool HmiEditor::openLegendMenu(const std::string& category, const std::string& p
     const std::string now = valuekind::summary(res);
     items.push_back({now.size() > 90 ? now.substr(0, 87) + "\xE2\x80\xA6" : now, {}, {}, ui::Icon::None, true, false, -1, true});
     for (std::size_t i = 0; i < legendUnknown_.size() && i < 3; ++i) {
-        ui::PopupMenu::Item it{"Cr\xC3\xA9" "er \xC2\xAB " + legendUnknown_[i] + " \xC2\xBB\xE2\x80\xA6", "le type et la zone (API ou IHM)", {},
+        ui::PopupMenu::Item it{"Cr\xC3\xA9" "er \xC2\xAB " + legendUnknown_[i] + " \xC2\xBB\xE2\x80\xA6",
+                               core::hasApi() ? "le type et la zone (API ou IHM)" : "une variable IHM, son type", {},   // 1.12.0
                                ui::Icon::None, true, false, 300 + static_cast<int>(i)};
         it.paintIcon = [](const ui::PaintContext& ctx, gfx::Rect r) { ui::paintLegend(ctx, r, valuekind::legendOf(S::Error)); };
         items.push_back(std::move(it));

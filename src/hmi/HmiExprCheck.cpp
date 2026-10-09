@@ -5,6 +5,7 @@
 //  les types, et ne s'arrete jamais sur ce qu'elle ne comprend pas.
 // =============================================================================
 #include "HmiExprCheck.hpp"
+#include "../core/Edition.hpp"   // 1.12.0 : XPGAnalyser IHM - pas d'espace API.
 #include "HmiNatives.hpp"   // 1.12.0 : les couleurs, l'aleatoire
 #include "HmiCallCheck.hpp"     // 1.11.20 : les appels, controles comme le moteur les fait
 #include "HmiOverload.hpp"      // 1.11.20 : les signatures et les surcharges
@@ -608,7 +609,7 @@ private:
         // 1.11.1 (API-M) : API.<globale>, API.<Unite>.<variable>, jusqu'au bout des
         // membres (une variable IHM, une vue nommee API sont vues avant ; un
         // parametre de la vue aussi). Sans le modele : rien a dire.
-        if (up(root) == "API" && !segs.empty() && !segs.front().index && !(p && pub::viewNamed(*p, root))) {
+        if (core::hasApi() && up(root) == "API" && !segs.empty() && !segs.front().index && !(p && pub::viewNamed(*p, root))) {   // 1.12.0 : pas dans XPGAnalyser IHM
             if (!ctx_.plc.api) return v;
             std::string apiText = root;
             for (const auto& sg : segs) {
@@ -636,7 +637,7 @@ private:
         }
         // 1.11.1 (remarque d'API-V) : API seul, API[...], ou API. en cours de frappe,
         // n'est pas un nom inconnu (« API n'existe pas ») : le chemin est incomplet.
-        if (up(root) == "API" && !(p && pub::viewNamed(*p, root))) {
+        if (core::hasApi() && up(root) == "API" && !(p && pub::viewNamed(*p, root))) {
             if (!ctx_.plc.api) return v;
             Problem pb;
             pb.message = "API : chemin incomplet \xE2\x80\x94 \xC3\xA9" "cris API.<globale> ou API.<Unit\xC3\xA9>.<variable>";
@@ -653,9 +654,12 @@ private:
             if (!pb.suggestion.empty())
                 pb.message += " : veux-tu dire " + pb.suggestion + " ?";
             else if (marker)
-                pb.message += " (ni variable IHM, ni variable syst\xC3\xA8me, ni variable de l'automate)";
+                pb.message += core::hasApi() ? " (ni variable IHM, ni variable syst\xC3\xA8me, ni variable de l'automate)"
+                                             : " (ni variable IHM, ni variable syst\xC3\xA8me)";   // 1.12.0
             else
-                pb.message += " (ni variable IHM, ni variable syst\xC3\xA8me, ni variable de l'automate) : corrige le nom ou d\xC3\xA9" "clare la variable";
+                pb.message += std::string(core::hasApi() ? " (ni variable IHM, ni variable syst\xC3\xA8me, ni variable de l'automate)"
+                                                         : " (ni variable IHM, ni variable syst\xC3\xA8me)")
+                              + " : corrige le nom ou d\xC3\xA9" "clare la variable";
             for (const auto& q : problems) if (q.message == pb.message) return v;
             problems.push_back(std::move(pb));
             return v;

@@ -304,6 +304,20 @@ void TabControl::setTabLive(std::size_t index, bool live) {
     invalidateLayout();
 }
 
+void TabControl::setTabHidden(std::size_t index, bool hidden) {
+    if (index >= tabs_.size() || tabs_[index].hidden == hidden) return;
+    tabs_[index].hidden = hidden;
+    // L'onglet ouvert qui se cache : le premier montre prend sa place.
+    if (hidden && index == current_)
+        for (std::size_t i = 0; i < tabs_.size(); ++i)
+            if (!tabs_[i].hidden) {
+                setCurrentIndex(i);
+                break;
+            }
+    invalidateLayout();
+    invalidate();
+}
+
 std::string TabControl::shortBadge(std::string_view badge) {
     std::string out;
     for (const char ch : badge) {
@@ -326,6 +340,7 @@ void TabControl::openTabList() {
     std::vector<PopupMenu::Item> items;
     items.reserve(tabs_.size());
     for (std::size_t i = 0; i < tabs_.size(); ++i) {
+        if (tabs_[i].hidden) continue;           // 1.12.0 : un onglet cache n'est pas dans la liste
         PopupMenu::Item it;
         it.label = (i == current_ ? "\xE2\x80\xA2 " : "") + tabs_[i].meta.title;
         it.shortcut = tabs_[i].meta.badge;
@@ -440,6 +455,7 @@ void TabControl::onLayout() {
 
     const auto width = [&](const Entry& t, bool shortened, bool compact) {
         float w = 0.f;
+        if (t.hidden) return 0.f;               // 1.12.0 : pas de place
         if (compact) {
             w = 2 * kTabPadCompact;
             if (t.meta.icon != Icon::None) w += 16.f;
@@ -582,6 +598,7 @@ void TabControl::onPaint(const PaintContext& ctx) {
         const bool active = i == current_;
         const bool hoverThis = !active && hoverTab_ == static_cast<int>(i);
         const auto& hr = t.headerRect;
+        if (t.hidden || hr.w <= 0.f) continue;  // 1.12.0 : un onglet cache
         if (hr.right() < viewport_.x || hr.x > viewport_.right()) continue;
         if (active) {
             ctx.r.fillRect({hr.x, hr.y, hr.w, th}, c.panelBg);

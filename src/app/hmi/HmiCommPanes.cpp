@@ -2,6 +2,7 @@
 // onglets et sa barre (lot 15). Les equipements, les variables liees, le
 // reseau du PC et le scanner : HmiEquipmentPanes.cpp.
 #include "HmiCommPanes.hpp"
+#include "../../core/Edition.hpp"   // 1.12.0 : XPGAnalyser IHM - ses equipements, pas d'automate du projet
 #include "../ExportTarget.hpp"
 
 #include "HmiIcons.hpp"
@@ -418,14 +419,17 @@ HmiCommPane::HmiCommPane(std::string id, hmi::DocumentPtr doc, Apply apply)
     tools_->setVisibleWhen(CTool, on({TNetwork, TScanner, TEquipments, TMap, TValues}));
     tools_->setVisibleWhen(CScanExport, on({TScanner}));
     tools_->setVisibleWhen(CRestore, real({TNetwork}));
-    tools_->setVisibleWhen(CTest, [on, planEquip] { return on({TTable, TPlan, TTest})() && !planEquip(); });
-    tools_->setVisibleWhen(CAdd, on({TTable}));
-    tools_->setVisibleWhen(CRemove, on({TTable}));
-    tools_->setVisibleWhen(CPropose, on({TTable}));
-    tools_->setVisibleWhen(CExport, on({TTable, TPlan}));
-    tools_->setVisibleWhen(CReconnect, on({TTable, TPlan, TState}));
-    tools_->setVisibleWhen(CMute, on({TTable, TState}));
-    tools_->setVisibleWhen(CUnmute, on({TTable, TState}));
+    // 1.12.0 : l'automate du projet (sa table, son essai, sa liaison, la demonstration) :
+    // XPGAnalyser API seulement - XPGAnalyser IHM lit ses equipements.
+    const auto withPlc = [](std::function<bool()> f) { return [f] { return core::hasApi() && f(); }; };
+    tools_->setVisibleWhen(CTest, withPlc([on, planEquip] { return on({TTable, TPlan, TTest})() && !planEquip(); }));
+    tools_->setVisibleWhen(CAdd, withPlc(on({TTable})));
+    tools_->setVisibleWhen(CRemove, withPlc(on({TTable})));
+    tools_->setVisibleWhen(CPropose, withPlc(on({TTable})));
+    tools_->setVisibleWhen(CExport, withPlc(on({TTable, TPlan})));
+    tools_->setVisibleWhen(CReconnect, withPlc(on({TTable, TPlan, TState})));
+    tools_->setVisibleWhen(CMute, withPlc(on({TTable, TState})));
+    tools_->setVisibleWhen(CUnmute, withPlc(on({TTable, TState})));
     tools_->setEnabledWhen(CRemove, [this] { return !selectedAddress().empty(); });
     tools_->setEnabledWhen(COpenVar, [this] {
         if (static_cast<int>(tabs_->currentIndex()) == TMap) {
@@ -550,7 +554,8 @@ HmiCommPane::HmiCommPane(std::string id, hmi::DocumentPtr doc, Apply apply)
     tabs->addTab({"R\xC3\xA9seau du PC", ui::Icon::Network}, std::move(diagram));
     tabs->addTab({"Scanner IP", ui::Icon::Search}, std::move(scan));
     tabs->addTab({"\xC3\x89quipements", ui::Icon::Module}, std::move(equipPage));
-    tabs->addTab({"Table des adresses", ui::Icon::LocatedVariable}, std::move(table));
+    const auto tableTab = tabs->addTab({"Table des adresses", ui::Icon::LocatedVariable}, std::move(table));
+    if (!core::hasApi()) tabs->setTabHidden(tableTab, true);   // 1.12.0 : la table de l'automate du projet
     tabs->addTab({"Plan d'adressage", ui::Icon::Document}, std::move(planPage));
     tabs->addTab({"Carte m\xC3\xA9moire", ui::Icon::LocatedVariable}, std::move(mapPage));
     tabs->addTab({"Valeurs simul\xC3\xA9" "es", ui::Icon::Play}, std::move(valuesPage));
@@ -957,6 +962,10 @@ void HmiCommPane::refresh() {
     for (const auto& [name, why] : plan.refused()) unlocated += why.rfind("non localis", 0) == 0;
     std::size_t bound = 0;
     for (const auto& v : doc_->project.programs.variables) bound += v.bound() ? 1 : 0;
+    if (!core::hasApi())      // 1.12.0 : XPGAnalyser IHM - ses equipements, ses variables liees
+        status_->setMessage(std::to_string(doc_->project.equipments.size()) + " \xC3\xA9quipement(s), " + std::to_string(bound) + " variable(s) IHM li\xC3\xA9" "e(s)",
+                            ui::StatusBar::Severity::Info);
+    else
     status_->setMessage(std::string(comm.modbus() ? "Automate : Modbus TCP vers " + comm.host + ":" + std::to_string(comm.port) : std::string("Automate : simulateur"))
                             + " \xC2\xB7 " + std::to_string(plan.points().size()) + " variable(s) au plan d'adressage \xC2\xB7 "
                             + std::to_string(unlocated) + " non localis\xC3\xA9" "e(s) \xC2\xB7 " + std::to_string(doc_->project.equipments.size())
@@ -990,10 +999,13 @@ void HmiCommPane::refreshPlan() {
     for (const auto& e : p.equipments) modbusEquipments += e.modbus() ? 1 : 0;
     {
         std::vector<ui::DropDown::Item> items{
-            {"Tous : l'automate du projet + " + std::to_string(modbusEquipments) + " \xC3\xA9quipement" + (modbusEquipments > 1 ? "s" : ""), "", {}, true},
-            {"L'automate du projet", kPlcKey, {}, true}};
+            {core::hasApi() ? "Tous : l'automate du projet + " + std::to_string(modbusEquipments) + " \xC3\xA9quipement" + (modbusEquipments > 1 ? "s" : "")
+                            : "Tous : " + std::to_string(modbusEquipments) + " \xC3\xA9quipement" + (modbusEquipments > 1 ? "s" : ""),
+             "", {}, true}};
+        // 1.12.0 : XPGAnalyser IHM n'a pas d'automate du projet.
+        if (core::hasApi()) items.push_back({"L'automate du projet", kPlcKey, {}, true});
         int selected = 0;
-        if (planFilter_ == kPlcKey) selected = 1;
+        if (planFilter_ == kPlcKey && core::hasApi()) selected = 1;
         for (const auto& e : p.equipments) {
             if (!e.modbus()) continue;
             items.push_back({"\xC3\x89quipement \xC2\xAB " + e.name + " \xC2\xBB", e.name, {}, true});
@@ -1010,7 +1022,7 @@ void HmiCommPane::refreshPlan() {
     std::size_t fromProgram = 0, fromTable = 0, unlocated = 0;
     for (const auto& pt : plan.points()) (pt.origin == "table" ? fromTable : fromProgram) += 1;
     for (const auto& [name, why] : plan.refused()) unlocated += why.rfind("non localis", 0) == 0 ? 1 : 0;
-    if (shown(kPlcKey)) {
+    if (core::hasApi() && shown(kPlcKey)) {     // 1.12.0 : XPGAnalyser API seulement
         const bool open = !planClosed_.count(upperOf(kPlcKey));
         std::string state = comm.modbus() ? (link ? (link->diagnostics().connected ? std::string("connect\xC3\xA9") : std::string("pas de liaison")) : std::string("pas de liaison"))
                                           : std::string("simulateur de l'application");

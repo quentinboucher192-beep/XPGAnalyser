@@ -1,4 +1,5 @@
 #include "HmiCheck.hpp"
+#include "../core/Edition.hpp"   // 1.12.0 : XPGAnalyser IHM - pas d'espace API.
 #include "HmiKeys.hpp"            // 1.11.23 : les raccourcis
 #include "HmiOverload.hpp"   // 1.11.20 : les surcharges
 #include "HmiActionKinds.hpp"   // 1.11.7 : Maths, le clavier virtuel
@@ -52,6 +53,11 @@
 #include <set>
 
 namespace hmi {
+
+std::string_view unknownVariablePrefix() noexcept {
+    return core::hasApi() ? std::string_view("variable inexistante dans le programme : ")
+                          : std::string_view("variable inexistante dans l'IHM : ");
+}
 
 namespace {
 
@@ -162,8 +168,9 @@ bool known(const Project& p, const NameExists& plc, std::string_view name, const
     };
     // 1.11.1 (API-M) : API est l'espace des variables de l'automate (API.<globale>,
     // API.<Unite>.<variable>) ; le chemin entier est verifie par le modele (HmiApiVars).
+    // 1.12.0 : XPGAnalyser IHM n'a pas d'automate - API n'y est qu'un nom comme un autre.
     return p.variable(name) || isHmiFunction(name) || pub::isSysRoot(name) || pub::viewNamed(p, name) || enumValue() || !plc
-        || plc(name) || upperText(name) == "API";
+        || plc(name) || (core::hasApi() && upperText(name) == "API");
 }
 
 // Un cycle dans un graphe de noms : "A -> B -> A", une fois par cycle.
@@ -271,7 +278,7 @@ void checkActions(const Project& p, const NameExists& plc, const View& v, const 
         const std::string fieldsText = a.watch + "\n" + a.guard + "\n" + a.value;
         for (const auto& r : roots)
             if (!known(p, plc, r, &v) && said.insert(r).second)
-                add(out, S::Error, "Variable", v.id, obj, where, "variable inexistante dans le programme : " + r + dup::markerHint(fieldsText, r));
+                add(out, S::Error, "Variable", v.id, obj, where, std::string(unknownVariablePrefix()) + r + dup::markerHint(fieldsText, r));
     }
 }
 } // namespace
@@ -801,7 +808,7 @@ void checkLot6(const Project& p, const NameExists& plc, std::vector<Issue>& out)
                         else if (cellIsTemplate(cell)) roots = TextTemplate::compile(cell).roots();
                         for (const auto& r : roots)
                             if (!known(p, plc, r, &v) && said.insert(r).second)
-                                add(out, S::Error, "Variable", v.id, o.id, "cells", "case : variable inexistante dans le programme : " + r);
+                                add(out, S::Error, "Variable", v.id, o.id, "cells", "case : " + std::string(unknownVariablePrefix()) + r);
                     }
             }
         }
@@ -934,7 +941,7 @@ void checkLot8(const Project& p, const NameExists& plc, std::vector<Issue>& out)
             if (!def.empty() && isVariablePath(def) && plc)
                 if (const auto roots = scanRoots(def); !roots.empty() && !known(p, plc, roots.front()))
                     add(out, S::Error, "Param\xC3\xA8tre", v.id, kNoId, "parametres",
-                        prm.name + " := " + def + " : variable inexistante dans le programme : " + roots.front());
+                        prm.name + " := " + def + " : " + std::string(unknownVariablePrefix()) + roots.front());
         }
         // ---- une popup : sa place, et de quoi la fermer
         if (v.role == "popup") {
@@ -1171,7 +1178,7 @@ void checkLot9(const Project& p, const NameExists& plc, std::vector<Issue>& out)
                 const std::string text = trimmedCopy(o.text(key));
                 if (text.empty()) continue;
                 for (const auto& r : scanRoots(text))
-                    if (!known(p, plc, r, &v)) issue(S::Error, key, std::string(key) + " : variable inexistante dans le programme : " + r);
+                    if (!known(p, plc, r, &v)) issue(S::Error, key, std::string(key) + " : " + std::string(unknownVariablePrefix()) + r);
             }
             if (kindWritesVariable(o.kind) || kindShowsValue(o.kind))
                 for (const char* key : {"min", "max", "step", "setpoint", "lowAlarm", "low", "high", "highAlarm"}) {
@@ -1187,7 +1194,7 @@ void checkLot9(const Project& p, const NameExists& plc, std::vector<Issue>& out)
                     const std::string out1 = trimmedCopy(o.text("output"));
                     if (!out1.empty())
                         for (const auto& r : scanRoots(out1))
-                            if (!known(p, plc, r, &v)) issue(S::Error, "output", "sortie : variable inexistante dans le programme : " + r);
+                            if (!known(p, plc, r, &v)) issue(S::Error, "output", "sortie : " + std::string(unknownVariablePrefix()) + r);
                 } else if (noVar) {
                     issue(S::Warning, "variable", "commande sans variable : elle n'\xC3\xA9" "crira rien");
                 }
@@ -1486,7 +1493,7 @@ void checkSymbols(const Project& p, const NameExists& plc, std::vector<Issue>& o
                 if (plc)
                     for (const auto& r : scanRoots(value))
                         if (!known(p, plc, r, &v))
-                            add(out, S::Error, "Variable", v.id, o.id, "params", "argument " + argName + " : variable inexistante dans le programme : " + r);
+                            add(out, S::Error, "Variable", v.id, o.id, "params", "argument " + argName + " : " + std::string(unknownVariablePrefix()) + r);
             }
             // 1.11.24 : les arguments positionnels comptent aussi ($V[3]$; 'C3'; 90.0), comme le moteur.
             const auto byRank = givenArguments(*sv, o.text("params"));
@@ -1677,7 +1684,7 @@ void checkLot11(const Project& p, const NameExists& plc, std::vector<Issue>& out
                 const auto c = Expression::compile(e);
                 if (!c.valid()) { issue(S::Error, key, what + " " + e + " : " + c.error()); return; }
                 for (const auto& r : scanRoots(e))
-                    if (!known(p, plc, r, &v)) issue(S::Error, key, what + " : variable inexistante dans le programme : " + r);
+                    if (!known(p, plc, r, &v)) issue(S::Error, key, what + " : " + std::string(unknownVariablePrefix()) + r);
             };
             const auto listCheck = [&](const char* key, const char* empty) {
                 const auto items = chartItems(o, key);
@@ -2774,7 +2781,7 @@ void checkDisplay(const Project& p, const NameExists& plc, std::vector<Issue>& o
         const std::string root = d.path.substr(0, end);
         // Un parametre d'une vue (Armoire dans une popup) : connu la ou il est declare.
         const bool param = std::any_of(p.views.begin(), p.views.end(), [&](const View& v) { return v.param(root) != nullptr; });
-        if (!param && !known(p, plc, root)) issue(S::Warning, d.path + " : variable inconnue (ni IHM, ni de l'automate)");
+        if (!param && !known(p, plc, root)) issue(S::Warning, d.path + (core::hasApi() ? " : variable inconnue (ni IHM, ni de l'automate)" : " : variable inconnue (pas une variable de l'IHM)"));
         else if (displayUses(p, d).empty()) issue(S::Info, d.path + " : aucun objet ne la montre encore");
         if (d.unit.empty() && d.format.empty()) issue(S::Info, d.path + " : ni unit\xC3\xA9 ni format - la ligne ne change rien");
     }
@@ -3517,7 +3524,7 @@ std::vector<Issue> generateWith(const Project& p, const NameExists& plcHasName, 
                     if (!known(p, plcHasName, r, &v)) {
                         const auto* prop = o.find(key);
                         const std::string hint = prop ? dup::markerHint(prop->expr, r) + (prop->expr.empty() ? dup::markerHint(prop->value, r, !isTemplateKey(key)) : std::string{}) : std::string{};
-                        add(out, S::Error, "Variable", v.id, o.id, key, "variable inexistante dans le programme : " + r + hint);
+                        add(out, S::Error, "Variable", v.id, o.id, key, std::string(unknownVariablePrefix()) + r + hint);
                     }
             }
         }

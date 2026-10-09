@@ -2,6 +2,7 @@
 //  app/hmi/HmiActionDialogs.cpp - voir HmiActionDialogs.hpp
 // =============================================================================
 #include "HmiActionDialogs.hpp"
+#include "../../core/Edition.hpp"   // 1.12.0
 
 #include "HmiAssist.hpp"
 #include "HmiScriptPanes.hpp"            // placedScriptDiagnostics : les fautes, comme Compiler
@@ -75,7 +76,9 @@ std::vector<Name> namesFor(const hmi::Project* hp, const hmi::View* view, const 
         std::sort(api.begin(), api.end(), [](const Name& a, const Name& b) { return a.name < b.name; });
         for (auto& n : api) out.push_back(std::move(n));
     }
-    for (const auto& sv : hmi::pub::kSysVars) out.push_back({"SYS", "SYS." + std::string(sv.name), std::string(sv.type), std::string(sv.text)});
+    for (const auto& sv : hmi::pub::kSysVars)
+        if (hmi::pub::sysDomainShown(sv.domain))      // 1.12.0 : XPGAnalyser IHM - ni Automate, ni Communication
+            out.push_back({"SYS", "SYS." + std::string(sv.name), std::string(sv.type), std::string(sv.text)});
     return out;
 }
 

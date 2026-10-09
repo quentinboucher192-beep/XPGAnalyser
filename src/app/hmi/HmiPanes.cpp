@@ -1,4 +1,5 @@
 #include "HmiPanes.hpp"
+#include "../../core/Edition.hpp"   // 1.12.0 : XPGAnalyser IHM - pas de variables du programme
 #include "../../hmi/HmiMigrate.hpp"   // 1.11.18 (lot 5) : des blocs VAR a migrer ?
 #include "../../hmi/HmiDuplicate.hpp"   // 1.10.4 : "Remplacer..." ; 1.11 (REP) : le constat d'un repere qui n'est pas une variable
 #include "../../hmi/HmiDesign.hpp"
@@ -252,7 +253,13 @@ HmiConfigPane::HmiConfigPane(std::string id, hmi::DocumentPtr doc, Apply apply,
     // tableaux se deplient), avec son filtre et sa recherche - plus la liste plate.
     auto vars = std::make_unique<HmiTitledPanel>(this->id() + ".varsPanel", "VARIABLES DU PROGRAMME");
     apiVars_ = &static_cast<HmiApiVarsView&>(vars->setBody(std::make_unique<HmiApiVarsView>(this->id() + ".vars")));
-    varsPanel_ = &static_cast<HmiTitledPanel&>(split->addPane(std::move(vars), 0.48f, 140.f));
+    if (core::hasApi()) {
+        varsPanel_ = &static_cast<HmiTitledPanel&>(split->addPane(std::move(vars), 0.48f, 140.f));
+    } else {
+        // 1.12.0 : XPGAnalyser IHM n'a pas d'automate - le panneau existe (ses liens), hors de l'ecran.
+        varsPanel_ = vars.get();
+        unshownVars_ = std::move(vars);
+    }
     split_ = &static_cast<ui::Splitter&>(addChild(std::move(split)));
 
     // Le double-clic sur une variable : son nom complet (API.…) dans le script
@@ -483,7 +490,7 @@ void HmiConfigPane::rebuild() {
     cats.push_back(std::move(stats));
 
     // Les compteurs de variables, lus dans le programme a chaque fois.
-    if (plc_) {
+    if (plc_ && core::hasApi()) {
         std::size_t g = 0, l = 0, d = 0, f = 0, io = 0;
         for (const auto& v : plc_->variables) {
             using S = domain::VariableScope;

@@ -1,4 +1,6 @@
 #include "HmiAssist.hpp"
+#include "../../hmi/HmiNatives.hpp"   // 1.12.0 : les natives de l'IHM (completion, signature, survol)
+#include "../../core/Edition.hpp"     // 1.12.0 : XPGAnalyser IHM - ni API, ni bibliotheque de l'automate
 #include "../../ui/widgets/ExprField.hpp"   // 1.10 (chantier K) : l'aide a la saisie selon le type du champ
 #include "HmiParamPanes.hpp"   // 1.9 : les parametres de la popup (type, mode)
 #include "../../hmi/HmiTypes.hpp"
@@ -498,6 +500,19 @@ Item builtinItem(const lang::Builtin& b, int rank) {
     const auto open = b.signature.find('(');
     const bool args = open != std::string_view::npos && open + 1 < b.signature.size() && b.signature[open + 1] != ')';
     it.caret = args ? it.text.size() + 1 : it.insert.size();
+    return it;
+}
+
+// 1.12.0 : une native de l'IHM (LIMIT, CONCAT, RGB, RANDOM...) : son appel, le curseur
+// entre les parentheses si elle prend un argument ; le detail : sa signature, sa phrase.
+Item nativeItem(const hmi::natives::Function& f, int rank) {
+    Item it;
+    it.text = std::string(f.name);
+    it.detail = hmi::natives::shortSignature(f) + (f.returns.empty() ? std::string{} : " : " + std::string(f.returns)) + kDot + std::string(f.summary);
+    it.kind = Kind::Function;
+    it.rank = rank;
+    it.insert = it.text + "()";
+    it.caret = f.params.empty() ? it.insert.size() : it.text.size() + 1;
     return it;
 }
 
@@ -1460,6 +1475,7 @@ bool publicMembers(const hmi::Project& hp, const std::string& path, const std::s
     };
     if (hmi::pub::isSysRoot(path)) {
         for (const auto& v : hmi::pub::kSysVars)
+            if (hmi::pub::sysDomainShown(v.domain))     // 1.12.0 : XPGAnalyser IHM - ni Automate, ni Communication
             add(std::string(v.name), std::string(v.type) + "  \xC2\xB7  R  \xC2\xB7  " + std::string(hmi::pub::kSysDomains[v.domain]) + "  \xC2\xB7  " + std::string(v.text),
                 Kind::SysVariable);
         // 1.9 : les structures des esclaves simules (le point pose, leurs noms ensuite).
@@ -1956,7 +1972,7 @@ static std::vector<Item> suggestItems(const hmi::Project& hp, const domain::Proj
             // (API.<globale>, API.<Unite>.<variable>, les instances DDT et DFB).
             // Des A ou AP, en tete - avant IHM_APPELER, MAP... ; le point pose,
             // la liste se rouvre sur les unites et les globales.
-            if (const int r = matchRank("API", needle); r >= 0 && !needle.empty()) {
+            if (const int r = matchRank("API", needle); r >= 0 && !needle.empty() && core::hasApi()) {   // 1.12.0 : pas dans XPGAnalyser IHM
                 Item it;
                 it.text = "API";
                 it.detail = "variables de l'automate : API.<globale>, API.<Unit\xC3\xA9>.<variable>, instances DDT et DFB";
@@ -2008,6 +2024,16 @@ static std::vector<Item> suggestItems(const hmi::Project& hp, const domain::Proj
                     it.chain = f.chain;
                     push(std::move(it));
                 }
+            // 1.12.0 : les natives de l'IHM (le catalogue de la branche Natives) - hors IHM_
+            // (au-dessus) et hors dialecte (MAP_, REF : dialectCode) ; dans un champ, celles
+            // qui s'ecrivent dans une expression.
+            for (const auto& f : hmi::natives::functions()) {
+                if (f.name.rfind("IHM_", 0) == 0 || f.category == "map" || f.category == "ref" || lang::isBuiltin(f.name)) continue;   // le dialecte les propose (dialectCode)
+                if (!full && !f.expression) continue;
+                const int r = matchRank(f.name, needle);
+                if (r < 0) continue;
+                push(nativeItem(f, r * 2 + 1));       // a egalite avec la bibliotheque, la native (poussee avant) reste
+            }
             // 1.10 (chantier K2) : le langage de S1 (fonctions internes du script, MAP_...,
             // modeles), les operateurs de S2 (TO_xxx, + - ...) et les enumerations (valeurs
             // d'abord dans un CASE ou apres m :=, le CASE avec toutes les valeurs, FOR EACH).
@@ -2048,6 +2074,10 @@ static std::vector<Item> suggestItems(const hmi::Project& hp, const domain::Proj
                             break;
                     }
                     const bool variable = kind == Kind::PlcVariable || kind == Kind::PlcLocated;
+                    // 1.12.0 : XPGAnalyser IHM - le langage (mots, modeles, types), pas l'automate :
+                    // ni ses variables, ni ses DDT, ni les blocs et fonctions de sa bibliotheque
+                    // (les fonctions de l'IHM sont ses natives, proposees plus haut).
+                    if (!core::hasApi() && (variable || kind == Kind::Function || kind == Kind::Block || kind == Kind::DerivedType)) continue;
                     // Un champ : des variables et les operateurs d'une expression.
                     if (!full && !variable) {
                         if (where.context == Context::Placeholder || kind != Kind::Keyword) continue;
@@ -2377,6 +2407,16 @@ bool signature(const domain::Project* plc, std::string_view name, ui::MultiLineT
         out.returns = std::string(f->returns);
         return true;
     }
+    // 1.12.0 : une native de l'IHM (LIMIT, CONCAT, RGB...) : son catalogue - avant la
+    // bibliotheque de l'automate (XPGAnalyser IHM n'a qu'elle).
+    if (const auto* n = hmi::natives::function(name); n && std::string_view(n->name).rfind("IHM_", 0) != 0) {
+        out.name = std::string(n->name);
+        out.parameters.clear();
+        for (const auto& p : n->params)
+            out.parameters.push_back(std::string(p.name) + " : " + std::string(p.type) + (p.optional ? " (facultatif)" : ""));
+        out.returns = std::string(n->returns);
+        return true;
+    }
     if (!plc) return false;
     project::CallSignature sig;
     if (!project::signatureFor(*plc, name, sig)) return false;
@@ -2546,6 +2586,25 @@ Description describe(const hmi::Project& hp, const domain::Project* plc, std::st
         if (!f->description.empty()) d.line += "   // " + f->description;
         return d;
     }
+    // 1.12.0 : une native de l'IHM (apres les fonctions du projet : une fonction du projet
+    // de meme nom passe avant) - sa signature, sa phrase ; F1 ouvre sa fiche (Natives).
+    if (const auto* n = hmi::natives::function(symbol); n && std::string_view(n->name).rfind("IHM_", 0) != 0) {
+        d.found = true;
+        d.type = std::string(n->returns);
+        d.line = hmi::natives::signature(*n) + "   native de l'IHM   // " + std::string(n->summary);
+        return d;
+    }
+    // 1.12.0 : une valeur d'enumeration native (TRANSITION#Fondu).
+    if (const hmi::natives::NativeEnum* ne = nullptr; symbol.find('#') != std::string_view::npos) {
+        const hmi::natives::EnumValue* nv = nullptr;
+        if (hmi::natives::parseEnumLiteral(symbol, &ne, &nv) && ne && nv) {
+            d.found = true;
+            d.type = "DINT";
+            d.line = std::string(ne->name) + "#" + std::string(nv->name) + " = " + std::to_string(nv->number) + "   \xC3\xA9num\xC3\xA9ration native   // "
+                   + std::string(nv->text);
+            return d;
+        }
+    }
 
     // Lot 9 : une variable systeme ou d'instance.
     if (symbol.find('.') != std::string_view::npos) {
@@ -2687,7 +2746,7 @@ Description describe(const hmi::Project& hp, const domain::Project* plc, std::st
         d.line = name + "   script g\xC3\xA9n\xC3\xA9ral (IHM_APPELER('" + name + "'))";
         return d;
     }
-    d.line = name + "  -  ni variable IHM, ni variable de l'automate";
+    d.line = name + (core::hasApi() ? "  -  ni variable IHM, ni variable de l'automate" : "  -  pas une variable de l'IHM");   // 1.12.0
     return d;
 }
 

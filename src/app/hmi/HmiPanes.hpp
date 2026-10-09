@@ -103,6 +103,8 @@ private:
     std::map<std::string, hmi::apivars::Node> apiNodes_;
     ApiVarNode adoptApiNode(const hmi::apivars::Node& n);
     HmiTitledPanel*   varsPanel_{nullptr};
+    // 1.12.0 : XPGAnalyser IHM - le panneau des variables du programme, garde hors de l'ecran.
+    ui::WidgetPtr unshownVars_;
     std::string       message_;
     core::ConnectionScope links_;
     bool dirty_{true};

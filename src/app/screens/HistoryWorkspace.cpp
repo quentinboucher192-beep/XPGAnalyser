@@ -297,7 +297,11 @@ void MainAnalysisScreen::cycleSubTab(int step) {
     auto* tabs = firstTabs(centre_->page(centre_->currentIndex()));
     if (!tabs || tabs->tabCount() < 2) { cycleCentreTab(step); return; }
     const auto n = static_cast<int>(tabs->tabCount());
-    const int next = ((static_cast<int>(tabs->currentIndex()) + step) % n + n) % n;
+    int next = static_cast<int>(tabs->currentIndex());
+    for (int guard = 0; guard < n; ++guard) {           // 1.12.0 : les onglets caches sont sautes
+        next = ((next + step) % n + n) % n;
+        if (!tabs->tabHidden(static_cast<std::size_t>(next))) break;
+    }
     tabs->setCurrentIndex(static_cast<std::size_t>(next));
     if (const auto* t = tabs->tab(static_cast<std::size_t>(next)); t && status_)
         status_->setTransientMessage(t->title + (t->badge.empty() ? std::string() : "  \xC2\xB7  " + t->badge), 2.5);

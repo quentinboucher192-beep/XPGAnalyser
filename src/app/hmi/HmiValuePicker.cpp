@@ -2,6 +2,7 @@
 //  app/hmi/HmiValuePicker.cpp - voir HmiValuePicker.hpp
 // =============================================================================
 #include "HmiValuePicker.hpp"
+#include "../../core/Edition.hpp"   // 1.12.0 : XPGAnalyser IHM - pas de source API
 
 #include "HmiAssist.hpp"
 #include "../../domain/ProjectModel.hpp"
@@ -114,7 +115,7 @@ std::vector<Node> buildCatalog(const hmi::Project* hp, const hmi::View* view, co
         return add(parent, std::move(v));
     };
     // ---- l'automate : les globales, leurs cases et leurs membres ----
-    if (plc) {
+    if (plc && core::hasApi()) {       // 1.12.0 : XPGAnalyser IHM n'en a pas
         const int g = group(Style::Api, zoneLong(Style::Api));
         // Par nom, comme l'editeur de donnees (le fichier les range dans l'ordre de declaration).
         std::vector<std::pair<std::string, const domain::Variable*>> globals;
@@ -171,6 +172,7 @@ std::vector<Node> buildCatalog(const hmi::Project* hp, const hmi::View* view, co
     {
         const int g = group(Style::System, zoneLong(Style::System));
         for (std::size_t d = 0; d < hmi::pub::kSysDomainCount; ++d) {
+            if (!hmi::pub::sysDomainShown(d)) continue;      // 1.12.0 : XPGAnalyser IHM - ni Automate, ni Communication
             int f = -1;
             for (const auto& sv : hmi::pub::kSysVars) {
                 if (sv.domain != static_cast<int>(d)) continue;
@@ -338,6 +340,7 @@ protected:
         float x = panel_.x + 16.f;
         const Style sources[] = {Style::Empty, Style::Api, Style::Hmi, Style::System, Style::Local, Style::Constant};
         for (const Style s : sources) {
+            if (s == Style::Api && !core::hasApi()) continue;     // 1.12.0 : XPGAnalyser IHM n'a pas d'automate
             const std::string label = zoneShort(s);
             const bool square = s != Style::Empty;
             const float tw = r.measure(label, kSmall).width + (square ? 42.f : 22.f);

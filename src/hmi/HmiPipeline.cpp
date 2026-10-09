@@ -1,4 +1,5 @@
 #include "HmiPipeline.hpp"
+#include "../core/Edition.hpp"   // 1.12.0 : XPGAnalyser IHM - pas de phase API
 
 #include "HmiComm.hpp"
 #include "HmiDecl.hpp"
@@ -528,12 +529,14 @@ std::vector<Element> collect(const Project& p, const ApiInfo& api) {
     };
 
     // ---- B. l'API ----
-    {
+    // 1.12.0 : XPGAnalyser IHM n'a pas d'automate - pas d'elements de l'API.
+    const bool withApi = core::hasApi();
+    if (withApi) {
         auto& e = make(ElementKind::ApiConfig, "api-config", "Configuration de l'API", "API/Configuration", kNoId, kNoId);
         e.content = api.config;
         e.iface = api.config;
     }
-    for (const auto& name : apiUsed) {
+    for (const auto& name : withApi ? apiUsed : decltype(apiUsed){}) {
         const auto* v = apiByName[name];
         auto& e = make(ElementKind::ApiVariable, "api-variable:" + v->name, v->name, "API/Variables/" + v->name, kNoId, kNoId);
         e.content = v->name + " : " + v->type + " @ " + v->address;
@@ -544,12 +547,12 @@ std::vector<Element> collect(const Project& p, const ApiInfo& api) {
                 dep(e, seen, t.name, "api-type:" + t.name, DepMode::Content, "type");
     }
     for (const auto& t : api.types) {
-        if (!apiTypesUsed.count(t.name)) continue;
+        if (!withApi || !apiTypesUsed.count(t.name)) continue;
         auto& e = make(ElementKind::ApiType, "api-type:" + t.name, t.name, "API/Types d\xC3\xA9riv\xC3\xA9s/" + t.name, kNoId, kNoId);
         e.content = t.definition;
         e.iface = t.name + " { " + t.definition + " }";
     }
-    {
+    if (withApi) {
         auto& e = make(ElementKind::ApiExchange, "api-echanges", "Tables d'\xC3\xA9" "change", "API/Tables d'\xC3\xA9" "change", kNoId, kNoId);
         e.content = rec.exchange;
         e.iface = rec.exchange;
@@ -1688,7 +1691,13 @@ Report run(const Project& p, const ApiInfo& api, const Request& req, const Optio
         const Phase ph = area == Area::Api ? Phase::Api : Phase::Ihm;
         std::vector<std::size_t> list;
         for (const auto k : pl.generate) if (areaOf(a.elements[k].kind) == area) list.push_back(k);
-        if (list.empty()) { pr.phases[static_cast<int>(ph)] = PhaseState::Skipped; pr.phaseNotes[static_cast<int>(ph)] = "\xC3\xA0 jour, r\xC3\xA9utilis\xC3\xA9"; publish(); continue; }
+        if (list.empty()) {
+            pr.phases[static_cast<int>(ph)] = PhaseState::Skipped;
+            // 1.12.0 : XPGAnalyser IHM - pas d'automate, pas d'API a generer.
+            pr.phaseNotes[static_cast<int>(ph)] = area == Area::Api && !core::hasApi() ? "pas d'automate (XPGAnalyser IHM)" : "\xC3\xA0 jour, r\xC3\xA9utilis\xC3\xA9";
+            publish();
+            continue;
+        }
         pr.phases[static_cast<int>(ph)] = PhaseState::Running;
         log(Severity::Information, "G\xC3\xA9n\xC3\xA9ration", area == Area::Api ? "G\xC3\xA9n\xC3\xA9ration de l'API\xE2\x80\xA6" : "G\xC3\xA9n\xC3\xA9ration de l'IHM\xE2\x80\xA6");
         for (const auto k : list) {
@@ -1873,7 +1882,7 @@ Report run(const Project& p, const ApiInfo& api, const Request& req, const Optio
         // Ce que Compiler a deja dit autrement : « variable inexistante dans le programme : X »
         // (Generer) quand une expression ou une action de la meme vue dit deja « X n'existe pas ».
         const auto saidByCompile = [&cache](const Issue& i) {
-            static constexpr std::string_view kPrefix = "variable inexistante dans le programme : ";
+            const std::string_view kPrefix = unknownVariablePrefix();   // 1.12.0 : « ... dans l'IHM : » dans XPGAnalyser IHM
             if (i.category != "Variable" || i.view == kNoId || i.message.rfind(kPrefix, 0) != 0) return false;
             std::string name = i.message.substr(kPrefix.size());
             if (const auto cut = name.find_first_of(" :"); cut != std::string::npos) name.resize(cut);

@@ -295,6 +295,7 @@ void HmiPublicVarsPane::rebuildRows() {
     for (auto& a : all_) a.clear();
     // ---- les variables systeme, par domaine (lot 7 : un dossier chacun)
     for (const auto& v : hmi::pub::kSysVars) {
+        if (!hmi::pub::sysDomainShown(v.domain)) continue;      // 1.12.0 : XPGAnalyser IHM - ni Automate, ni Communication
         Row r;
         r.cells[Path] = "SYS." + std::string(v.name);
         r.cells[Owner] = std::string(hmi::pub::kSysDomains[v.domain]);

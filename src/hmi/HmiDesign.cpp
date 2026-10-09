@@ -1,4 +1,5 @@
 #include "HmiDesign.hpp"
+#include "../core/Edition.hpp"   // 1.12.0 : XPGAnalyser IHM - pas d'automate dans les modeles de pages
 
 #include "HmiEdit.hpp"
 #include "HmiOperators.hpp"   // 1.10
@@ -682,7 +683,7 @@ void fillFromTemplate(Project& p, View& v, std::string_view key) {
         auto& hello = addAt(p, v, Kind::Text, "Texte_Accueil", m, 136, W - 2 * m, std::max(40.0, H - 240 - m));
         hello.set("text", "Bienvenue. Choisissez une vue dans la barre de navigation.");
         hello.setNumber("fontSize", 20);
-        (void)addAt(p, v, Kind::CommStatus, "Etat_Communication", m, H - 104, std::min(560.0, W - 2 * m), 40);
+        if (core::hasApi()) (void)addAt(p, v, Kind::CommStatus, "Etat_Communication", m, H - 104, std::min(560.0, W - 2 * m), 40);   // 1.12.0
         (void)addAt(p, v, Kind::AlarmBanner, "Bandeau_Alarmes", m, H - 56, W - 2 * m, 44);
         return;
     }
@@ -721,6 +722,11 @@ void fillFromTemplate(Project& p, View& v, std::string_view key) {
     }
     if (key == "communication") {
         (void)title(p, v, v.name, m, 12, W * 0.6, 24);
+        // 1.12.0 : XPGAnalyser IHM - pas d'automate du projet : l'historique seul.
+        if (!core::hasApi()) {
+            (void)addAt(p, v, Kind::History, "Historique", m, 72, W - 2 * m, H - 72 - m);
+            return;
+        }
         (void)addAt(p, v, Kind::CommStatus, "Etat_Communication", m, 72, W - 2 * m, 40);
         const double half = (W - 3 * m) / 2;
         (void)addAt(p, v, Kind::PlcDiagnostic, "Diagnostic", m, 128, half, H - 128 - m);
@@ -841,7 +847,7 @@ void fillFromTemplate(Project& p, View& v, std::string_view key) {
     }
     if (key == "pied") {
         (void)addAt(p, v, Kind::NavBar, "Barre_Navigation", m, (H - 46) / 2, W * 0.45, 46);
-        (void)addAt(p, v, Kind::CommStatus, "Etat_Communication", W * 0.45 + 2 * m, (H - 40) / 2, W * 0.2, 40);
+        if (core::hasApi()) (void)addAt(p, v, Kind::CommStatus, "Etat_Communication", W * 0.45 + 2 * m, (H - 40) / 2, W * 0.2, 40);   // 1.12.0
         (void)addAt(p, v, Kind::AlarmBanner, "Bandeau_Alarmes", W * 0.65 + 3 * m, (H - 44) / 2, W * 0.35 - 4 * m, 44);
         return;
     }

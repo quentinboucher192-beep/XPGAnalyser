@@ -2,6 +2,7 @@
 //  app/hmi/HmiValueKind.cpp - voir HmiValueKind.hpp
 // =============================================================================
 #include "HmiValueKind.hpp"
+#include "../../core/Edition.hpp"   // 1.12.0 : XPGAnalyser IHM - pas de variable API
 
 #include "HmiAssist.hpp"
 #include "HmiPanels.hpp"
@@ -108,7 +109,7 @@ bool isObjectOfView(const Env& env, std::string_view root) {
 // hmiExpressionError, plus THIS et les objets de la vue (leurs variables publiques).
 bool knownRoot(const Env& env, std::string_view root) {
     if (root.empty()) return false;
-    if (sameName(root, "THIS") || sameName(root, "API") || hmi::pub::isSysRoot(root)) return true;
+    if (sameName(root, "THIS") || (core::hasApi() && sameName(root, "API")) || hmi::pub::isSysRoot(root)) return true;   // 1.12.0
     if (hmi::isHmiFunction(root) || hmi::isStandardFunction(root)) return true;
     if (env.view && env.view->param(root)) return true;
     if (env.project) {
@@ -279,6 +280,19 @@ Diag unknownDiag(const Env& env, std::string_view text, bool fx, std::string_vie
 
 // ---------------------------------------------------------------- les carres ---
 const std::vector<KindInfo>& kinds() {
+    // 1.12.0 : XPGAnalyser IHM n'a pas de variable API - pas de carre A dans la legende.
+    if (!core::hasApi()) {
+        static const std::vector<KindInfo> h = [] {
+            std::vector<KindInfo> all = kindsWithApi();
+            std::erase_if(all, [](const KindInfo& k) { return k.style == Style::Api; });
+            return all;
+        }();
+        return h;
+    }
+    return kindsWithApi();
+}
+
+const std::vector<KindInfo>& kindsWithApi() {
     static const std::vector<KindInfo> k{
         {Style::Constant, "C", "Constante", "Une valeur fixe, convertie dans le type du champ"},
         {Style::Formula, "fx", "Formule", "Un calcul, un appel ou plusieurs sources"},
@@ -367,7 +381,7 @@ bool pathInfo(const Env& env, std::string_view path, Style& zone, std::string& t
         zone = Style::Local;
         return describe() || true;
     }
-    if (sameName(root, "API") || isPlcRoot(env, root)) {
+    if ((core::hasApi() && sameName(root, "API")) || isPlcRoot(env, root)) {   // 1.12.0 : pas dans XPGAnalyser IHM
         zone = Style::Api;
         if (const auto roots = plcRoots(env.plc); roots && p.size() == root.size()) {
             const std::string key = upper(root);

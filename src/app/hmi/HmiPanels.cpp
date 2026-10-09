@@ -1,4 +1,5 @@
 #include "HmiPanels.hpp"
+#include "../../core/Edition.hpp"   // 1.12.0 : XPGAnalyser IHM - pas d'automate
 #include "HmiParamPanes.hpp"   // 1.9 : les parametres des popups
 #include "HmiObjectAlarmPanes.hpp"    // 1.9 : la cloche des alarmes par defaut
 #include "HmiTreeData.hpp"            // 1.10.3 (Q1103) : l'objet deplie par familles, comme l'arbre
@@ -1129,13 +1130,23 @@ const std::vector<Category>& categories() {
                                      hmi::Kind::LanguageSelector, hmi::Kind::ThemeSelector,  // lot 13 : la langue, le theme
                                      hmi::Kind::Container}},
         // Lot 14 : la communication avec l'automate reel.
-        {"Communication", {hmi::Kind::CommStatus, hmi::Kind::PlcDiagnostic}},
+        {"Communication", {hmi::Kind::CommStatus, hmi::Kind::PlcDiagnostic}},   // 1.12.0 : pas dans XPGAnalyser IHM (retire plus bas)
         {"M\xC3\xA9" "dias", {hmi::Kind::Video, hmi::Kind::AnimatedImage, hmi::Kind::AnimatedGif}},
         // Lot 8 : se connecter, se deconnecter, voir qui est connecte, changer son
         // mot de passe, gerer les comptes.
         {"Utilisateurs", {hmi::Kind::LoginMenuButton, hmi::Kind::LoginPanel, hmi::Kind::LogoutButton, hmi::Kind::UserInfo,
                           hmi::Kind::PasswordChange, hmi::Kind::UserManager}},
     };
+    // 1.12.0 : XPGAnalyser IHM n'a pas d'automate du projet - ni l'etat de sa liaison, ni son diagnostic.
+    if (!core::hasApi()) {
+        static const std::vector<Category> h = [] {
+            std::vector<Category> out;
+            for (const auto& c : k)
+                if (std::string_view(c.name) != "Communication") out.push_back(c);
+            return out;
+        }();
+        return h;
+    }
     return k;
 }
 } // namespace

@@ -2,6 +2,7 @@
 //  app/StatisticsPane.cpp - lot API 7 : l'onglet API > Statistiques
 // =============================================================================
 #include "StatisticsPane.hpp"
+#include "../core/Edition.hpp"   // 1.12.0 : XPGAnalyser API - pas d'IHM
 
 #include "ApiPanes.hpp"
 #include "ApiListKit.hpp"                  // lot API 8 : la recherche (ApiFilterBar)
@@ -1170,8 +1171,22 @@ void StatisticsPane::paintVariables(const ui::PaintContext& ctx, const gfx::Rect
     counters.push_back({"compteur:es-sans-commentaire", "E/S sans commentaire", vs.ioWithoutComment.size(), vs.ioWithoutComment.empty() ? 0 : 1,
                         one(vs.ioWithoutComment, "variables"), "Les entr\xC3\xA9" "es et sorties (%I, %Q, %CH) sans commentaire."});
     // Les noms, dans l'infobulle.
-    const std::vector<const std::vector<st::NamedVariable>*> lists = {&vs.unused, &vs.readByHmi, &vs.writtenNeverRead, &vs.readNeverWritten, nullptr,
-                                                                      &vs.ioWithoutComment};
+    std::vector<const std::vector<st::NamedVariable>*> lists = {&vs.unused, &vs.readByHmi, &vs.writtenNeverRead, &vs.readNeverWritten, nullptr,
+                                                                &vs.ioWithoutComment};
+    // 1.12.0 : XPGAnalyser API n'a pas d'IHM - ni « lues par l'IHM », ni l'IHM dans les phrases.
+    if (!core::hasIhm()) {
+        counters.erase(counters.begin() + 1);
+        lists.erase(lists.begin() + 1);
+        for (auto& c : counters)
+            for (const char* from : {" l'IHM peut la lire.", " (ni le code ni l'IHM)", ", l'IHM ou un superviseur", " et celles que l'IHM lit"}) {
+                const auto at = c.tip.find(from);
+                if (at == std::string::npos) continue;
+                const std::string_view f(from);
+                c.tip.replace(at, f.size(), f == " l'IHM peut la lire." ? " un superviseur peut la lire."
+                                            : f == " (ni le code ni l'IHM)" ? " (ni le code)"
+                                            : f == ", l'IHM ou un superviseur" ? " ou un superviseur" : "");
+            }
+    }
     for (std::size_t k = 0; k < counters.size(); ++k) {
         if (lists[k] && !lists[k]->empty()) counters[k].tip += " " + namesOf(*lists[k], 8) + ".";
         if (!lists[k] && !vs.duplicates.empty()) {

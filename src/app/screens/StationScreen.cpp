@@ -1,5 +1,6 @@
 // app/screens/StationScreen.cpp - le poste d'exploitation (lot 14).
 #include "StationScreen.hpp"
+#include "../../core/Edition.hpp"   // 1.12.0 : le poste de XPGAnalyser IHM, sans automate
 #include "../hmi/HmiParamPanes.hpp"   // 1.9 : les parametres des popups
 
 #include "Screens.hpp"
@@ -83,8 +84,13 @@ core::Status StationScreen::buildUi() {
     if (!doc) return core::fail(core::ErrorCode::InvalidArgument, "pas d'IHM");
     auto root = std::make_unique<ui::DockLayout>("station.root");
     HmiSimulationHost host;
+    // 1.12.0 : XPGAnalyser IHM - le poste lit ses equipements (ou leurs esclaves
+    // simules), pas d'automate du projet : ni simulateur, ni liaison, ni demonstration.
+    const bool plc = core::hasApi();
+    if (plc) {
     host.runtime = [this] { return app_.simulationRuntime(); };
     host.link = [this]() -> sim::Environment* { return app_.comm().link(); };
+    }
     host.commEvents = [this] {
         auto events = app_.comm().takeEvents();
         for (auto& e : app_.equipments().takeEvents()) events.push_back(std::move(e));   // lot 15
@@ -104,7 +110,7 @@ core::Status StationScreen::buildUi() {
         return d && app_.equipments().simSlaveCommand(d->project, c, why);
     };
     host.equipments = [this] { return &app_.equipments(); };
-    host.commDemo = [this] { return std::make_pair(app_.comm().running(), app_.comm().demoPort()); };
+    if (plc) host.commDemo = [this] { return std::make_pair(app_.comm().running(), app_.comm().demoPort()); };
     // Lot 14 : les notifications des alarmes, les rapports a envoyer.
     host.alarmNotice = [this](const hmi::AlarmNotice& n) { app_.notify().notice(n); };
     host.notifyStats = [this] {
@@ -119,6 +125,7 @@ core::Status StationScreen::buildUi() {
     };
     host.reportWritten = [this](const hmi::ReportOutput& r) { app_.notify().report(r); };
     host.station = [this] { return std::make_pair(true, 1 + static_cast<int>(secondaryCount())); };
+    if (plc) {
     host.state = [this] { return app_.simulation().attached() ? app_.simulation().statusLine() : std::string("simulateur non lanc\xC3\xA9"); };
     host.transport = [this](std::string_view id) {
         auto& sim = app_.simulation();
@@ -145,6 +152,7 @@ core::Status StationScreen::buildUi() {
         if (const auto plcProject = app_.project()) st.project = plcProject->header.projectName;
         return st;
     };
+    }
     host.exportFile = [this](const hmi::ExportRequest& rq, std::string* where) { return writeExport(app_.projectFolder(), rq, where); };
     // ---- Lot API 8 : les exports qui demandent ou ----
     // Lance par un geste de l'operateur : le dialogue du poste, au doigt (askExport).
@@ -156,7 +164,7 @@ core::Status StationScreen::buildUi() {
         const std::string folder = app_.projectFolder();
         if (!folder.empty() && hmi::exists(folder)) (void)hmi::appendAuditFile(e, folder);
     };
-    hmiparams::setProgram([this] { return app_.project(); });   // 1.9 : les DDT pour les copies des parametres
+    if (plc) hmiparams::setProgram([this] { return app_.project(); });   // 1.9 : les DDT pour les copies des parametres
     // 1.11.16 : la remanence d'exploitation - le stockage du poste, dans le dossier du projet.
     host.retainFile = [this] { const std::string folder = app_.projectFolder(); return folder.empty() ? std::string{} : hmi::retain::fileOf(folder).string(); };
     auto pane = std::make_unique<HmiSimulationPane>("station.pane", doc, std::move(host));
@@ -185,7 +193,7 @@ void StationScreen::onEnter() {
     });
     // Sur le simulateur (ou le simulateur expose par le serveur de
     // demonstration) : l'automate simule tourne des le lancement.
-    if ((!doc->project.comm.modbus() || doc->project.comm.demoServer) && st.runSimulator && app_.project()) {
+    if (core::hasApi() && (!doc->project.comm.modbus() || doc->project.comm.demoServer) && st.runSimulator && app_.project()) {
         auto& sim = app_.simulation();
         if (!sim.attached()) (void)sim.attach(app_.project());
         if (sim.attached() && sim.state() != SimulationHost::State::Running) sim.setState(SimulationHost::State::Running);
@@ -193,7 +201,8 @@ void StationScreen::onEnter() {
     if (pane_) {
         pane_->restart();
         pane_->runtime().log("Syst\xC3\xA8me", "Poste d'exploitation",
-                             "Poste d'exploitation lanc\xC3\xA9" + std::string(doc->project.comm.modbus() ? " (automate " + doc->project.comm.host + ")" : " (simulateur)"));
+                             "Poste d'exploitation lanc\xC3\xA9" + std::string(!core::hasApi() ? std::string{}
+                                                                                 : doc->project.comm.modbus() ? " (automate " + doc->project.comm.host + ")" : " (simulateur)"));
     }
     openSecondaries();
     // Lot 15 : la reprise apres un arret brutal - l'etat d'avant (la vue, les

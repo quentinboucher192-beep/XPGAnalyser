@@ -51,6 +51,9 @@ struct IssueCounts {
 // Le programme connait-il ce nom (racine d'un chemin) ? Fourni par l'appelant,
 // qui a le projet automate : le module IHM ne le lit pas lui-meme.
 using NameExists = std::function<bool(std::string_view root)>;
+// 1.12.0 : « variable inexistante dans le programme : » - dans XPGAnalyser IHM (pas
+// d'automate), « variable inexistante dans l'IHM : ».
+[[nodiscard]] std::string_view unknownVariablePrefix() noexcept;
 
 // `projectFolder` : ou chercher les fichiers externes relatifs (vide : ils ne
 // sont verifies que s'ils sont designes par un chemin absolu).

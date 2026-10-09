@@ -1,5 +1,6 @@
 // app/hmi/HmiTwinValues.cpp - les valeurs simulees des jumeaux (lot 18).
 #include "HmiTwinValues.hpp"
+#include "../../core/Edition.hpp"   // 1.12.0 : XPGAnalyser IHM - pas de « suit l'automate »
 
 #include "HmiEquipmentHost.hpp"
 #include "HmiPaneKit.hpp"
@@ -866,6 +867,7 @@ void HmiTwinValues::openKindMenu(std::size_t i, gfx::Point at) {
         ui::PopupMenu::Item it;
         it.label = std::string(hmi::behaviorKindLabel(k));
         it.id = id++;
+        if (k == hmi::BehaviorKind::FollowPlc && !core::hasApi()) continue;   // 1.12.0 : pas d'automate (le rang suivant ne bouge pas)
         if (l.boolean && k != hmi::BehaviorKind::Blink && k != hmi::BehaviorKind::Constant && k != hmi::BehaviorKind::Copy
             && k != hmi::BehaviorKind::FollowPlc && k != hmi::BehaviorKind::Steps) {
             it.enabled = false;
@@ -2423,7 +2425,8 @@ void TwinValuesController::properties(std::vector<PG::Category>& cats) {
                                     [this, name, address](std::string_view v) { return setAnimated(name, address, v == "TRUE" || v == "true" || v == "1"); },
                                     "La valeur bouge toute seule. D\xC3\xA9" "coch\xC3\xA9" "e : ses r\xC3\xA9glages restent."));
         std::vector<std::string> kinds{"aucun"};
-        for (const auto k : hmi::kBehaviorKinds) kinds.emplace_back(hmi::behaviorKindLabel(k));
+        for (const auto k : hmi::kBehaviorKinds)
+            if (k != hmi::BehaviorKind::FollowPlc || core::hasApi()) kinds.emplace_back(hmi::behaviorKindLabel(k));   // 1.12.0
         a.properties.push_back(prop("Mouvement", b ? std::string(hmi::behaviorKindLabel(b->kind)) : std::string("aucun"), PG::ValueType::Enum,
                                     [this, name, address](std::string_view v) { return setKind(name, address, std::string(v)); },
                                     "sinus, rampe, al\xC3\xA9" "atoire : entre le minimum et le maximum ; clignote : \xC3\xA0 1 une partie de la p\xC3\xA9riode ; "

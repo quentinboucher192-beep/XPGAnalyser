@@ -81,6 +81,11 @@ public:
     void        setTabModified(std::size_t index, bool modified);
     void        setTabBadge(std::size_t index, std::string badge, Tone tone = Tone::None);
     void        setTabLive(std::size_t index, bool live);
+    // 1.12.0 : un onglet cache - ni en-tete, ni place, ni dans la liste ; son rang ne
+    // change pas (les rangs d'un volet restent ses constantes). XPGAnalyser IHM cache
+    // l'onglet Variables API de la simulation.
+    void        setTabHidden(std::size_t index, bool hidden);
+    [[nodiscard]] bool tabHidden(std::size_t index) const noexcept { return index < tabs_.size() && tabs_[index].hidden; }
     // Le titre suit ce que l'onglet montre : une vue renommee ailleurs.
     void        setTabTitle(std::size_t index, std::string title);
     // 1.8.0 : l'icone suit aussi (l'icone au choix d'une section).
@@ -182,7 +187,7 @@ protected:
     EventResult onEvent(const InputEvent&) override;
     [[nodiscard]] bool hitTest(gfx::Point local) const override;
 private:
-    struct Entry { Tab meta; Widget* page; gfx::Rect headerRect; bool compact{false}; bool shortBadge{false}; };
+    struct Entry { Tab meta; Widget* page; gfx::Rect headerRect; bool compact{false}; bool shortBadge{false}; bool hidden{false}; };
     // Lot 7 : ou poser le menu d'un onglet (sous son en-tete, dans la bande).
     [[nodiscard]] gfx::Point contextAnchor(std::size_t index) const;
     // Lot 7 (disposition) : la hauteur de la bande (plus basse pour une tuile),

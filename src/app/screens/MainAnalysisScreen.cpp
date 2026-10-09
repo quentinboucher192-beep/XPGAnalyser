@@ -18,6 +18,7 @@
 //    entry. A workspace the user arranged should survive closing the program.
 // =============================================================================
 #include "Screens.hpp"
+#include "../../core/Edition.hpp"   // 1.12.0 : l'ecran de chaque application
 #include "../../project/CodeIconKeys.hpp"   // 1.8.0 : l'icone des onglets de section
 #include "LibraryHelpScreen.hpp"   // lot macros 1 : helpMenuFor
 #include "../../help/F1Table.hpp"   // 1.11 (T2, tranche 16) : F1 ouvre le centre, au sujet de l'onglet
@@ -3648,7 +3649,17 @@ void MainAnalysisScreen::bindProject(ProjectRef project,
     // Lot API 2 : plus d'onglets fixes - un projet qui s'ouvre sur un centre
     // vide ouvre le tableau de bord de l'API (ce qu'est l'automate, ce qui est
     // a regarder), comme un clic sur API dans l'arbre.
-    if (centre_ && centre_->tabCount() == 0) openApiPane("api");
+    if (centre_ && centre_->tabCount() == 0) {
+        // 1.12.0 : XPGAnalyser IHM - la vue de demarrage de l'IHM (pas de tableau de bord de l'API).
+        if (!core::hasApi()) {
+            if (const auto doc = app_.hmi(); doc && doc->project.view(doc->project.config.startView))
+                openHmiView(doc->project.config.startView);
+            else
+                openHmiPane("config");
+        } else {
+            openApiPane("api");
+        }
+    }
 }
 
 // =============================================================================

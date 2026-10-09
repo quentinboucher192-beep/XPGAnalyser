@@ -448,6 +448,7 @@ void MainAnalysisScreen::refreshGoToIndex() {
         for (const auto& e : p.equipments)
             push(ix.entries, GEquipment, e.name, "\xC3\x89quipement du r\xC3\xA9seau", "hmieq:" + e.name, ui::Icon::Network);
         for (const auto& v : hmi::pub::kSysVars)
+            if (hmi::pub::sysDomainShown(v.domain))      // 1.12.0
             push(ix.entries, GSysVar, "SYS." + std::string(v.name), std::string(v.type) + kDot + std::string(hmi::pub::kSysDomains[v.domain]) + kDot
                                                                         + std::string(v.text),
                  "sysvar:" + std::string(v.name), ui::Icon::Variable);

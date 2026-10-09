@@ -6,6 +6,7 @@
 //  qui est appele. Les types et les divisions passent par exprcheck.
 // =============================================================================
 #include "HmiScriptCheck.hpp"
+#include "../core/Edition.hpp"   // 1.12.0 : XPGAnalyser IHM - pas d'espace API.
 #include "HmiNatives.hpp"   // 1.12.0 : les couleurs, l'aleatoire
 #include "HmiSymbols.hpp"   // 1.11.10 : les fonctions des symboles
 #include "HmiApiVars.hpp"   // 1.11.1 (API-M) : API.<globale>, API.<Unite>.<variable>
@@ -742,10 +743,10 @@ private:
         // une vue nommee API sont vues plus haut) ; sans le modele, rien a dire.
         const bool apiMember = !segs.empty() && !segs.front().index && !segs.front().member.empty()
                             && (std::isalpha(static_cast<unsigned char>(segs.front().member[0])) || segs.front().member[0] == '_');
-        if (R == "API" && apiMember) return apiPath(i, j, write);
+        if (core::hasApi() && R == "API" && apiMember) return apiPath(i, j, write);   // 1.12.0 : pas dans XPGAnalyser IHM
         // 1.11.1 (remarque d'API-V) : API seul, ou API. en cours de frappe, n'est pas
         // un nom inconnu (« API n'existe pas ») : le chemin est incomplet.
-        if (R == "API") {
+        if (core::hasApi() && R == "API") {
             if (sc_.plc.api)
                 reportTok(i, i + 1, S::Error,
                           "API : chemin incomplet \xE2\x80\x94 \xC3\xA9" "cris API.<globale> ou API.<Unit\xC3\xA9>.<variable> "
@@ -760,8 +761,9 @@ private:
         const std::string near = marker ? std::string{} : closestName(root.text);
         std::string msg = root.text + " n'existe pas";
         if (!near.empty()) msg += " : veux-tu dire " + near + " ?";
-        else if (marker) msg += " (ni variable IHM, ni variable de l'automate, ni variable locale)";
-        else msg += " (ni variable IHM, ni variable de l'automate, ni variable locale) : corrige le nom ou d\xC3\xA9" "clare-la (VAR ... END_VAR)";
+        else if (marker) msg += core::hasApi() ? " (ni variable IHM, ni variable de l'automate, ni variable locale)" : " (ni variable IHM, ni variable locale)";
+        else msg += std::string(core::hasApi() ? " (ni variable IHM, ni variable de l'automate, ni variable locale)" : " (ni variable IHM, ni variable locale)")
+                  + " : corrige le nom ou d\xC3\xA9" "clare-la (VAR ... END_VAR)";   // 1.12.0 : XPGAnalyser IHM n'a pas d'automate
         reportTok(i, i + 1, S::Error, std::move(msg), root.text, near);
         (void)R;
         return {};

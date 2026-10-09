@@ -33,6 +33,7 @@
 //  touche.
 // =============================================================================
 #include "Screens.hpp"
+#include "../../core/Edition.hpp"   // 1.12.0 : XPGAnalyser IHM - sans automate
 
 #include "../App.hpp"
 #include "../BackgroundTasks.hpp"      // Lot API 8 : bandeau haut (la cloche)
@@ -967,6 +968,10 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         icon = generate ? Icon::Analyze : Icon::Code;
     } else if (key == "simulation") {
         HmiSimulationHost host;
+        // 1.12.0 : XPGAnalyser IHM - pas d'automate : ni son simulateur, ni ses commandes, ni
+        // ses forcages ; l'IHM tourne seule (ses variables, les esclaves simules).
+        const bool plc = core::hasApi();
+        if (plc) {
         host.runtime = [this] { return app_.simulationRuntime(); };
         host.transport = [this](std::string_view id) { runSimulationTransport(id); };
         host.state = [this] {
@@ -977,6 +982,7 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         host.unforceAll = [this] {
             if (auto* rt = app_.simulationRuntime()) rt->unforceAll();
         };
+        }
         host.login = [this](std::string login) { askHmiLogin(std::move(login)); };
         // 1.11.13 : demarrer passe par le build de l'IHM (un projet a jour demarre aussitot).
         host.buildGate = [this](const std::string& source) { startHmiBuild(source); };
@@ -1043,7 +1049,7 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
             const std::string folder = app_.projectFolder();
             if (!folder.empty() && hmi::exists(folder)) (void)hmi::appendAuditFile(e, folder);
         };
-        host.plc = [this] {
+        if (plc) host.plc = [this] {
             hmi::PlcStatus st;
             const auto& sim = app_.simulation();
             st.attached = sim.attached();
@@ -1059,7 +1065,7 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         };
         // Lot 14 : relie a un automate reel (Configuration > Communication : Modbus
         // TCP), l'IHM lit la liaison ; ses evenements vont au journal.
-        host.link = [this]() -> ::sim::Environment* { return app_.comm().link(); };
+        if (plc) host.link = [this]() -> ::sim::Environment* { return app_.comm().link(); };   // 1.12.0 : l'automate du projet
         host.commEvents = [this] {
             auto events = app_.comm().takeEvents();
             for (auto& e : app_.equipments().takeEvents()) events.push_back(std::move(e));   // lot 15
@@ -1077,7 +1083,7 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
             const auto d = app_.hmi();
             return d && app_.equipments().simSlaveCommand(d->project, c, why);
         };
-        host.commDemo = [this] { return std::make_pair(app_.comm().running(), app_.comm().demoPort()); };
+        if (plc) host.commDemo = [this] { return std::make_pair(app_.comm().running(), app_.comm().demoPort()); };
         // Lot 14 : les notifications des alarmes, et les rapports a envoyer.
         host.alarmNotice = [this](const hmi::AlarmNotice& n) { app_.notify().notice(n); };
         host.notifyStats = [this] {
@@ -1903,14 +1909,19 @@ void MainAnalysisScreen::askHmiCreateVariable(std::uint64_t viewId, const valuek
     const std::string zoneApi = "API \xE2\x80\x94 une variable de l'automate";
     std::vector<FormDialog::Field> fields;
     fields.push_back({"Nom", name, "Debit_Max", false, {}});
-    fields.push_back({"Zone", zoneHmi, {}, false, plc ? std::vector<std::string>{zoneHmi, zoneApi} : std::vector<std::string>{zoneHmi}});
+    // 1.12.0 : XPGAnalyser IHM - une variable de l'IHM seulement (pas d'automate).
+    fields.push_back({"Zone", zoneHmi, {}, false, plc && core::hasApi() ? std::vector<std::string>{zoneHmi, zoneApi} : std::vector<std::string>{zoneHmi}});
     fields.push_back({"Type", wanted, {}, false, hmiTypes()});
     fields.push_back({"Valeur initiale (IHM)", {}, "vide : 0, FALSE ou ''", false, {}});
     fields.push_back({"Adresse (API, facultative)", {}, "%MW100 ; vide : non situ\xC3\xA9" "e", false, {}});
     fields.push_back({"Commentaire", "Cr\xC3\xA9\xC3\xA9" "e depuis le s\xC3\xA9lecteur de " + req.field, {}, false, {}});
     auto dialog = std::make_unique<FormDialog>(
         "dialog.hmiCreateVariable", "Cr\xC3\xA9" "er la variable \xC2\xAB " + name + " \xC2\xBB",
-        name + " n'existe ni dans l'automate, ni dans l'IHM. Le champ " + req.field + " attend " + valuekind::expectedLabel(req.expected)
+        !core::hasApi()
+            ? name + " n'existe pas dans l'IHM. Le champ " + req.field + " attend " + valuekind::expectedLabel(req.expected)
+                  + ".\nElle s'ajoute aux variables IHM du projet (Programmation g\xC3\xA9n\xC3\xA9rale > Variables IHM) ; li\xC3\xA9" "e \xC3\xA0 l'adresse "
+                    "d'un \xC3\xA9quipement (Configuration > \xC3\x89quipements), elle lit et \xC3\xA9" "crit l'appareil. Un seul Ctrl+Z retire la variable et la saisie."
+            : name + " n'existe ni dans l'automate, ni dans l'IHM. Le champ " + req.field + " attend " + valuekind::expectedLabel(req.expected)
             + ".\nIHM : elle s'ajoute aux variables IHM du projet (Programmation g\xC3\xA9n\xC3\xA9rale > Variables IHM). "
               "API : elle s'ajoute aux variables globales du programme ; elle devra exister dans Control Expert. "
               "Un seul Ctrl+Z retire la variable et la saisie.",
@@ -2082,7 +2093,8 @@ void MainAnalysisScreen::askHmiViewFromType() {
     for (auto& v : assist::designVariables(doc->project, plc.get()))
         if (hmi::design::shapeOf(v) == hmi::design::VarShape::Structure) structures.push_back(std::move(v));
     if (structures.empty()) {
-        status_->setTransientMessage("Aucune instance de DDT ou de DFB dans le programme de l'automate : rien \xC3\xA0 g\xC3\xA9n\xC3\xA9rer.",
+        status_->setTransientMessage(core::hasApi() ? "Aucune instance de DDT ou de DFB dans le programme de l'automate : rien \xC3\xA0 g\xC3\xA9n\xC3\xA9rer."
+                                                    : "Aucune variable IHM d'un type IHM (une structure) : rien \xC3\xA0 g\xC3\xA9n\xC3\xA9rer.",   // 1.12.0
                                      8.0, ui::StatusBar::Severity::Warning);
         return;
     }
