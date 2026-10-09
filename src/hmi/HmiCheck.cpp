@@ -1400,6 +1400,17 @@ void checkPublicVars(const Project& p, std::vector<Issue>& out) {
 }
 } // namespace
 
+// 1.11.22 : l'argument d'une instance que son symbole ne declare pas (ou plus : un parametre
+// retire). Le meme texte a la Validation (checkSymbols) et a la Compilation (les expressions
+// d'une vue) : le build le dit une fois (il ecarte ce que la compilation a deja dit).
+static std::string unknownSymbolArgument(const View& sv, const std::string& arg) {
+    std::string declared;
+    for (const auto& prm : sv.params) declared += (declared.empty() ? "" : ", ") + prm.name;
+    return "argument " + arg + " : " + sv.name + " n'a pas (ou plus) ce param\xC3\xA8tre"
+         + (declared.empty() ? std::string(" (il n'en d\xC3\xA9" "clare aucun)") : " (ses param\xC3\xA8tres : " + declared + ")")
+         + " - retirez-le de l'instance (inspecteur, Arguments), ou d\xC3\xA9" "clarez-le dans le symbole";
+}
+
 // ---- lot 10 : les symboles reutilisables ------------------------------------------
 //  Un symbole : pose quelque part, qui ne se contient pas, pas vue de demarrage.
 //  Une instance : son symbole existe et en est un ; ses arguments sont des
@@ -1439,14 +1450,11 @@ void checkSymbols(const Project& p, const NameExists& plc, std::vector<Issue>& o
             }
             if (o.number("w") <= 0 || o.number("h") <= 0)
                 add(out, S::Error, "Symbole", v.id, o.id, "w", "instance de taille nulle : elle ne se voit pas");
-            std::string declared;
-            for (const auto& prm : sv->params) declared += (declared.empty() ? "" : ", ") + prm.name;
             const auto given = parseArguments(o.text("params"));
             for (const auto& [argName, value] : given) {
                 if (!sv->param(argName)) {
                     add(out, S::Error, "Symbole", v.id, o.id, "params",        // 1.11.22 : une faute (le parametre a pu etre retire)
-                        "argument inconnu du symbole " + name + " : " + argName
-                            + (declared.empty() ? std::string(" (il ne d\xC3\xA9" "clare aucun param\xC3\xA8tre)") : " (ses param\xC3\xA8tres : " + declared + ")"));
+                        unknownSymbolArgument(*sv, argName));
                     continue;
                 }
                 if (plc)
@@ -3127,8 +3135,7 @@ struct ExprWalker {
                 for (const auto& [name, value] : parseArguments(o.text("params"))) {
                     if (sv->param(name)) expr(Where{&v, o.id, "Symbole", "params"}, value, W::Any, "argument " + name + " := ");
                     else push(Where{&v, o.id, "Symbole", "params"},     // 1.11.22 : un parametre retire du symbole casse l'instance
-                              "argument " + name + " : " + sv->name + " n'a pas (ou plus) ce param\xC3\xA8tre - retirez-le de l'instance "
-                              "(inspecteur, Arguments), ou d\xC3\xA9" "clarez-le dans le symbole");
+                              unknownSymbolArgument(*sv, name));
                 }
             }
         for (const auto& sv : p.views) {

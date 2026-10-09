@@ -26686,8 +26686,8 @@ void parametresInstances11110() {
         const auto issues = hmi::generate(p, {});
         bool flagged = false;
         for (const auto& is : issues)
-            if (is.severity == hmi::Issue::Severity::Error && is.message.find("argument inconnu du symbole S_Vanne : Value") != std::string::npos) flagged = true;
-        check(flagged, "... et Compiler le dit : une faute (argument inconnu du symbole S_Vanne : Value)");
+            if (is.severity == hmi::Issue::Severity::Error && is.message.find("argument Value : S_Vanne n'a pas (ou plus) ce param") != std::string::npos) flagged = true;
+        check(flagged, "... et Compiler le dit : une faute (argument Value : S_Vanne n'a pas (ou plus) ce param\xC3\xA8tre)");
     }
     ed.layout();
     same_text(rowNames(ed.properties()), "Titre \xC2\xB7 STRING", "l'inspecteur ouvert : Titre seul");
@@ -26999,8 +26999,8 @@ void lot1122() {
           "... l'argument de V1 reste (une faute \xC3\xA0 corriger), et le retrait le dit");
     bool flagged = false;
     for (const auto& is : hmi::generate(p, {}))
-        if (is.severity == hmi::Issue::Severity::Error && is.message.find("argument inconnu du symbole S_Vanne : Position") != std::string::npos) flagged = true;
-    check(flagged, "... Compiler : une faute sur V1 (argument inconnu du symbole S_Vanne : Position)");
+        if (is.severity == hmi::Issue::Severity::Error && is.message.find("argument Position : S_Vanne n'a pas (ou plus) ce param") != std::string::npos) flagged = true;
+    check(flagged, "... Compiler : une faute sur V1 (argument Position : S_Vanne n'a pas (ou plus) ce param\xC3\xA8tre)");
 
     // ---- le dossier Simulation deballe ----
     using NK = app::ProjectTreeModel::NodeKind;

@@ -48,6 +48,7 @@ public:
         std::string         note;            // en bas, en gris
         std::string         confirm{"OK"}, cancel{"Annuler"};
         bool                danger{false};   // le bouton dit une suppression
+        bool                plainItems{false};   // 1.11.22 : une liste a lire, sans cases (ce qui restera, par exemple)
         // Le libelle du bouton selon les cases et le choix (vide : confirm).
         std::function<std::string(const std::vector<bool>&, const std::vector<bool>&, int)> confirmLabel;
         // En direct : le paragraphe (remplace text), et si le bouton est permis.

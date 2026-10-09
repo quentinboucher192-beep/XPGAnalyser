@@ -1258,7 +1258,9 @@ bool HmiEditor::commitView(const std::string& field, const std::string& value) {
                                 "Ctrl+Z rend le param\xC3\xA8tre.";
                     spec.listTitle = std::to_string(linked.size() + inside.size()) + " emploi(s)";
                     for (const auto& w : inside) spec.items.push_back({w, "dans " + cur->name, false});
-                    for (const auto& w : linked) spec.items.push_back({w, "un argument donn\xC3\xA9 \xC3\xA0 " + param, false});
+                    for (const auto& w : linked) spec.items.push_back({w, {}, false});      // "Vue / Instance (son argument ... reste ...)"
+                    spec.plainItems = true;                                                 // une liste a lire : rien a cocher
+                    spec.width = 760.f;
                     spec.confirm = "Supprimer quand m\xC3\xAA" "me";
                     spec.danger = true;
                     const std::weak_ptr<bool> alive = alive_;

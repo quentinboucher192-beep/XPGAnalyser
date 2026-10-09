@@ -1,0 +1,109 @@
+# =============================================================================
+#  Session 1122 : LA LISTE DU CLIENT DU 09/10 (1.11.22). Sur une copie d'Armoire_Gaz
+#  preparee par preparer-projet-11120 puis preparer-projet-11121 (Random, les trois
+#  Convertir, Essai_Explorateur ; S_Vanne et ses instances Vanne_3, Vanne_4 existent) :
+#    1. l'explorateur modernise : les etiquettes (E/S, sortie, 3 surcharges), les
+#       signatures en gris, les colonnes alignees ;
+#    2. une surcharge dans un symbole : Etat choisie, Nouvelle surcharge (sa forme, celle
+#       d'Etat, dite), un parametre BOOL la distingue ;
+#    3. retirer le parametre Vanne de S_Vanne : la question liste ses emplois ;
+#    4. ... confirme : Compiler met une faute sur Vanne_3 et Vanne_4 (leurs arguments
+#       restent), et sur les emplois de Vanne dans le symbole ;
+#    5. le dossier Simulation deplie : un point d'arret, deux forcages, une courbe (celle
+#       du centre de simulation, onglet Courbes).
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- 1. L'explorateur modernise ----
+arbre "API" replier
+attendre 2
+arbre "IHM/Programmation générale/Fonctions" deplier
+attendre 2
+arbre "IHM/Programmation générale/Fonctions/Random" deplier
+attendre 2
+arbre "IHM/Programmation générale/Fonctions/Random/Paramètres" deplier
+attendre 2
+arbre "IHM/Programmation générale/Fonctions/Convertir" deplier
+attendre 2
+arbre "IHM/Programmation générale/Fonctions/Random"
+attendre 6
+capture 1122_01_explorateur_modernise.png
+
+# ---- 2. Une surcharge dans un symbole ----
+arbre "IHM/Programmation générale/Fonctions" replier
+attendre 2
+arbre "IHM/Symboles/S_Vanne" double
+attendre 10
+sous-onglet "Fonctions"
+attendre 4
+ligne "Etat" exact
+attendre 3
+#  (Nouvelle surcharge : une fonction Etat de plus ; le modele lui donne un parametre Entree,
+#   elle est deja une surcharge, la barre le dit ; l'onglet Parametres s'ouvre : un
+#   parametre BOOL de plus)
+outil "Nouvelle surcharge"
+attendre 4
+volet-message "Une surcharge : 2 fonctions Etat"
+outil "Ajouter une déclaration"
+attendre 3
+cellule "Parametre" "Nom" "Detail"
+attendre 3
+cellule "Detail" "Type" "BOOL"
+attendre 4
+arbre "IHM/Symboles/S_Vanne/Fonctions" deplier
+attendre 2
+arbre "IHM/Symboles/S_Vanne/Fonctions/Etat" deplier
+attendre 3
+capture 1122_02_surcharge_dans_le_symbole.png
+
+# ---- 3. Retirer le parametre Vanne : la question d'abord ----
+#  (le dessin, rien de choisi : l'inspecteur montre les parametres du symbole ; le premier
+#   Ordre est celui de Vanne)
+sous-onglet "Dessin"
+attendre 4
+propriete-clic "Ordre"
+attendre 2
+choisir "Supprimer"
+attendre 5
+capture 1122_03_retirer_un_parametre.png
+bouton "Supprimer quand même"
+attendre 6
+
+# ---- 4. Compiler : les instances qui donnent encore Vanne sont en faute ----
+ihm-build compiler sans-fenetre
+ihm-build-attendre 600
+ihm-sorties diagnostics
+attendre 4
+ihm-diagnostics "argument Vanne"
+#  (les Diagnostics filtres sur "argument" : les deux instances, sous les emplois du
+#   symbole lui-meme)
+champ "hmi.sorties.search" "argument"
+attendre 4
+capture 1122_04_instances_en_faute.png
+champ "hmi.sorties.search" ""
+attendre 2
+
+# ---- 5. Le dossier Simulation deplie ----
+point-arret "Acquisitions_ANA" 12
+attendre 4
+simulation-forcer "armoires[0].ana.PT1.mes" "5"
+attendre 3
+simulation-forcer "armoires[0].ana.PT3.mes" "7.5"
+attendre 3
+courbe-ajouter "Armoires[0].ana.PT1.mes"
+attendre 6
+arbre "IHM" replier
+attendre 2
+arbre "Simulation/Débogage" deplier
+attendre 2
+arbre "Simulation/Forçages" deplier
+attendre 2
+arbre "Simulation/Courbes" deplier
+attendre 6
+capture 1122_05_simulation_depliee.png
+quitter

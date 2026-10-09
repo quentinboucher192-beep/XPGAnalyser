@@ -6520,7 +6520,7 @@ void symbolesLot10() {
             for (const auto& i : issues) if (i.message.find(what) != std::string::npos) return true;
             return false;
         };
-        check(said("symbole introuvable : Carte_Disparue") && said("Vue_Armoires n'est pas un symbole") && said("argument inconnu du symbole Carte_Armoire : Couleur")
+        check(said("symbole introuvable : Carte_Disparue") && said("Vue_Armoires n'est pas un symbole") && said("argument Couleur : Carte_Armoire n'a pas (ou plus) ce param")
                   && said("symbole pos\xC3\xA9 nulle part"),
               "G\xC3\xA9n\xC3\xA9rer : symbole introuvable, pas un symbole, argument inconnu, symbole pos\xC3\xA9 nulle part");
         o2->set("params", "Armoire := Cuves[1]");

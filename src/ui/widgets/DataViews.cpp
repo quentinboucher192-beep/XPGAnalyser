@@ -532,12 +532,14 @@ std::vector<NodeId> TreeView::visibleAncestors(NodeId n) const {
 }
 
 // 2e partie : la couleur d'un domaine (CellStyle::domain), prise du theme.
-static gfx::Color treeDomainColour(const Theme& th, std::uint8_t domain) {
+// 1.11.22 (la maquette validee) : le nouveau dessin - API bleu, IHM violet, Simulation vert,
+// Versions ambre.
+static gfx::Color treeDomainColour(const Theme& th, std::uint8_t domain, bool modern = false) {
     switch (domain) {
     case 1: return th.color.accent;
-    case 2: return th.color.info;
+    case 2: return modern ? th.brand.family[1] : th.color.info;
     case 3: return th.color.ok;
-    case 4: return th.color.syntaxKeyword;
+    case 4: return modern ? th.color.warning : th.color.syntaxKeyword;
     default: return th.color.textMuted;
     }
 }
@@ -736,7 +738,7 @@ void TreeView::onPaint(const PaintContext& ctx) {
         // Lot API 8 : l'arbre du projet - le style d'abord (la couleur du domaine
         // teint les guides, la barre de la ligne choisie, le titre du domaine).
         const auto st = model_->style(vr.node);
-        const auto domainCol = treeDomainColour(ctx.theme, st.domain);
+        const auto domainCol = treeDomainColour(ctx.theme, st.domain, modern_);
         if (st.domainHead) hasHeads_ = true;
         if (st.domainHead && st.domain != 0)
             ctx.r.fillRect({r.x + 1.f, r.y + 2.f, 3.f, rowH - 4.f}, domainCol);
@@ -1040,7 +1042,7 @@ void TreeView::onPaint(const PaintContext& ctx) {
                 sy = std::min(sy, area.y + static_cast<float>(first + 1) * rowH - scrollY_ - rowH);
             const auto& hv = rows_[static_cast<std::size_t>(head)];
             const auto hs = model_->style(hv.node);
-            const auto col = treeDomainColour(ctx.theme, hs.domain);
+            const auto col = treeDomainColour(ctx.theme, hs.domain, modern_);
             const gfx::Rect r{area.x, sy, area.w, rowH};
             ctx.r.fillRect(r, c.panelBg);
             if (hovered() && hoverRow_ == head) paintRowState(ctx, r, false, true, false, false);

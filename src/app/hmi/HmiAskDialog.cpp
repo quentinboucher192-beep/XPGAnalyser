@@ -93,11 +93,12 @@ public:
         h.stretchX = 1.f;
         return h;
     }
+    bool plain{false};      // 1.11.22 : les libelles seuls, sans cases (les cases sont cachees)
 protected:
     void onLayout() override {
         const auto b = bounds();
         for (std::size_t i = 0; i < boxes_.size(); ++i) {
-            const float w = std::min(b.w - 20.f, ui::measureWidth(boxes_[i]->label(), gfx::FontId{16}) + 40.f);
+            const float w = std::min(b.w - 20.f, ui::measureWidth(boxes_[i]->label(), gfx::FontId{16}) + (plain ? 8.f : 40.f));
             boxes_[i]->setBounds({b.x + 8.f, b.y + 2.f + 28.f * static_cast<float>(i), w, 26.f});
         }
     }
@@ -107,6 +108,8 @@ protected:
         for (std::size_t i = 0; i < boxes_.size(); ++i) {
             const auto r = boxes_[i]->bounds();
             if (i % 2 == 1) ctx.r.fillRect({b.x, r.y - 1.f, b.w, 28.f}, gfx::Color{128, 128, 128, 18});
+            if (plain)
+                ctx.r.drawText({r.x, r.y + (r.h - ctx.r.lineHeight(gfx::FontId{16})) * 0.5f}, boxes_[i]->label(), gfx::FontId{16}, ctx.theme.color.text);
             const float x = r.x + r.w + 10.f;
             if (x < b.x + b.w - 20.f && !details_[i].empty())
                 ctx.r.drawText({x, r.y + (r.h - ctx.r.lineHeight(kSmall)) * 0.5f}, details_[i], kSmall, ctx.theme.color.textMuted);
@@ -278,9 +281,11 @@ core::Status HmiAskDialog::buildUi() {
         panel->setScrollPolicy(false, true);
         auto content = std::make_unique<ItemList>();
         auto* list = content.get();
+        list->plain = spec_.plainItems;
         for (std::size_t i = 0; i < spec_.items.size(); ++i) {
             auto box = std::make_unique<ui::Checkbox>(spec_.items[i].label, base + ".item" + std::to_string(i));
             box->setState(spec_.items[i].checked ? ui::Checkbox::State::Checked : ui::Checkbox::State::Unchecked);
+            if (spec_.plainItems) box->setVisibility(ui::Visibility::Collapsed);   // la ligne reste (sa place), sans case
             auto* raw = box.get();
             list->addChild(std::move(box));
             list->add(raw, spec_.items[i].detail);
