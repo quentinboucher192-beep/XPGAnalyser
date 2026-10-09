@@ -4116,6 +4116,28 @@ void sources1116() {
         if (const auto* e = out.consoleRow(r); e && e->message == "division par z\xC3\xA9ro") crow = r;
     check(crow != static_cast<std::size_t>(-1) && dbl(out.consoleTable(), crow) && entry && entry->script == 7 && entry->line == 5,
           "double-clic sur une ligne de la Console : le script (7) et sa ligne (5)");
+    // L'ecran ouvre la source (goTo) : la Programmation generale MONTRE l'onglet Scripts
+    // generaux, le script choisi, le curseur a sa ligne - meme si elle etait sur Variables IHM.
+    {
+        auto pdoc = std::make_shared<Document>();
+        Script sc;
+        sc.id = pdoc->project.allocate();
+        sc.name = "Horloge";
+        sc.event = "Cyclique";
+        sc.lang = ScriptLang::ST;
+        sc.body = "Secondes := Secondes + 1;\nIHM_LOG(BLABLA, 'x');";
+        pdoc->project.programs.scripts.push_back(sc);
+        core::CommandStack stack;
+        auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+        app::HmiScriptsPane prog("prog1116", pdoc, apply);
+        prog.setBounds({0, 0, 1400, 800});
+        prog.layout();
+        prog.showTab(app::HmiScriptsPane::TabVariables);
+        check(prog.currentTab() == app::HmiScriptsPane::TabVariables, "la Programmation g\xC3\xA9n\xC3\xA9rale sur Variables IHM");
+        prog.goTo(sc.id, 2);
+        check(prog.currentTab() == app::HmiScriptsPane::TabScripts && prog.editor().caretLine() == 1,
+              "aller \xC3\xA0 la source : l'onglet Scripts g\xC3\xA9n\xC3\xA9raux se montre, Horloge, le curseur \xC3\xA0 la ligne 2");
+    }
 }
 
 void lot6_simulation() {

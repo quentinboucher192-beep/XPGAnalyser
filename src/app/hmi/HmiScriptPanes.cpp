@@ -1131,6 +1131,9 @@ void HmiScriptsPane::selectEvent(std::string_view event) {
 }
 
 void HmiScriptsPane::goTo(Id script, int line) {
+    // 1.11.16 : aller a un script (un diagnostic, la Console) montre l'onglet Scripts generaux,
+    // meme si la Programmation generale etait sur Variables IHM ou Types IHM.
+    showTab(TabScripts);
     selectScript(script);
     if (line > 0) {
         editor_->goToLine(static_cast<std::size_t>(line - 1));
@@ -1143,6 +1146,7 @@ void HmiScriptsPane::goTo(Id script, int line) {
 // caracteres de la faute selectionnes (le nom inconnu, l'appel...).
 void HmiScriptsPane::goTo(Id script, int line, int column, int length) {
     if (column <= 0) { goTo(script, line); return; }
+    showTab(TabScripts);   // 1.11.16 (voir goTo)
     selectScript(script);
     if (line <= 0) return;
     for (std::size_t i = 0; i < results_.size(); ++i)

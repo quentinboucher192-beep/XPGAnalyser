@@ -2360,6 +2360,11 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
                 if (auto* p = dynamic_cast<HmiScriptsPane*>(&x); p && !scripts && shown(*p)) scripts = p;
             });
         if (!scripts) { fail(cmd + " : l'onglet courant n'est pas l'\xC3\xA9" "diteur des scripts IHM"); return Step::Next; }
+        // Le script doit se VOIR : la Programmation generale montre son onglet Scripts generaux.
+        if (scripts->tabs() && scripts->currentTab() != HmiScriptsPane::TabScripts) {
+            fail(cmd + " : l'onglet Scripts g\xC3\xA9n\xC3\xA9raux n'est pas montr\xC3\xA9 (onglet " + std::to_string(scripts->currentTab()) + ")");
+            return Step::Next;
+        }
         const std::size_t line = scripts->editor().caretLine() + 1;
         std::string name;
         if (const auto r = scripts->scriptTable().selectedModelRows(); !r.empty() && scripts->scriptTable().model())
