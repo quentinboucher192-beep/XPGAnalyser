@@ -281,6 +281,14 @@ void collecte() {
               && !got.count("T") && !got.count("s"),
           "identifiers : chaines, commentaires, indices, trous {Nom} et litteraux T#2s");
     check(pl::signatureOf("VAR_INPUT\n  a : REAL; (* x *)\n  b : REAL;\nEND_VAR\nRETURN;") == "a : REAL; b : REAL;", "signatureOf : le bloc VAR_INPUT normalise");
+    // 1.11.18 (refonte des scripts, lot 2) : lue par hmi::decl, l'interface est celle des parametres.
+    check(pl::signatureOf("VAR_INPUT a, b : REAL; END_VAR\nRETURN;") == pl::signatureOf("VAR_INPUT\n  a : REAL;   // le premier\n  b : REAL;\nEND_VAR\nx := 1;"),
+          "signatureOf : a, b : REAL ou deux lignes, un commentaire //, le code : la meme interface");
+    check(pl::signatureOf("VAR_INPUT a : REAL; END_VAR\nVAR_IN_OUT v : T_VEC; END_VAR") == "a : REAL; VAR_IN_OUT v : T_VEC;"
+              && pl::signatureOf("VAR_INPUT a : REAL; END_VAR\nVAR_IN_OUT v : T_VEC; END_VAR") != pl::signatureOf("VAR_INPUT a : REAL; END_VAR"),
+          "signatureOf : un parametre VAR_IN_OUT fait partie de l'interface");
+    check(pl::signatureOf("(* VAR_INPUT x : INT; END_VAR *)\nVAR t : INT; END_VAR\nt := 1;").empty(),
+          "signatureOf : un VAR_INPUT en commentaire n'est pas un parametre");
 }
 
 // demarrage sans modification ; premiere generation complete

@@ -1198,6 +1198,9 @@
     <ClCompile Include="src\hmi\HmiBuildState.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\hmi\HmiDecl.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\hmi\HmiDuplicate.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
@@ -2318,6 +2321,9 @@
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiBuildState.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiDecl.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiDuplicate.hpp">

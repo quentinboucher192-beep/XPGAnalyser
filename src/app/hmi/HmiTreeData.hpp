@@ -17,6 +17,7 @@
 #pragma once
 
 #include "HmiPaneKit.hpp"
+#include "../../hmi/HmiDecl.hpp"        // 1.11.18 : les blocs de declaration (withoutDeclarations)
 #include "../../hmi/HmiDuplicate.hpp"
 #include "../../hmi/HmiModel.hpp"
 #include "../../hmi/HmiPublicVars.hpp"
@@ -512,9 +513,12 @@ inline std::string withoutComments(std::string_view s) {
 }
 
 // ---- lot 7 : les blocs de declaration d'un script ou d'une fonction --------
-//  (lus ici sans la bibliotheque IHM, comme le reste de ce fichier)
 //  Le code sans ses blocs VAR / VAR_TEMP / VAR_INPUT ... END_VAR, et les noms
 //  qu'ils declarent (en majuscules), avec pour les parametres leur type.
+//  1.11.18 (refonte des scripts, lot 2) : lus par hmi::decl::extract, la lecture
+//  partagee (une chaine "...", un membre x.VAR ou un repere $VAR$ n'ouvrent plus de
+//  bloc ; VAR_IN_OUT, VAR_OUTPUT et les blocs des fonctions internes sont otes du
+//  code, leurs noms sont des locales ; le code garde ses colonnes).
 struct Declared {
     std::string                                      code;
     std::set<std::string>                            locals;   // en majuscules
@@ -527,59 +531,18 @@ inline Declared withoutDeclarations(std::string_view s) {
         for (auto& c : u) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
         return u;
     };
-    const auto ident = [](char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; };
-    std::size_t i = 0;
-    while (i < s.size()) {
-        if (!(std::isalpha(static_cast<unsigned char>(s[i])) || s[i] == '_') || (i > 0 && ident(s[i - 1]))) {
-            if (s[i] == '\'') {                                  // une chaine : recopiee telle quelle
-                const auto end = s.find('\'', i + 1);
-                const std::size_t to = end == std::string_view::npos ? s.size() : end + 1;
-                out.code.append(s.substr(i, to - i));
-                i = to;
-                continue;
-            }
-            out.code += s[i++];
-            continue;
-        }
-        std::size_t k = i;
-        while (k < s.size() && ident(s[k])) ++k;
-        const std::string w = up(s.substr(i, k - i));
-        if (w != "VAR" && w != "VAR_TEMP" && w != "VAR_INPUT") {
-            out.code.append(s.substr(i, k - i));
-            i = k;
-            continue;
-        }
-        const bool input = w == "VAR_INPUT";
-        const auto end = up(s).find("END_VAR", k);
-        const std::string_view block = s.substr(k, (end == std::string::npos ? s.size() : end) - k);
-        for (const char c : block) if (c == '\n') out.code += '\n';        // les lignes restent
-        i = end == std::string::npos ? s.size() : end + 7;
-        // "a, b : INT := 0;" : les noms avant ':'.
-        std::size_t start = 0;
-        while (start < block.size()) {
-            auto semi = block.find(';', start);
-            if (semi == std::string_view::npos) semi = block.size();
-            const std::string_view one = block.substr(start, semi - start);
-            start = semi + 1;
-            const auto colon = one.find(':');
-            if (colon == std::string_view::npos) continue;
-            std::string type(one.substr(colon + 1));
-            if (const auto assign = type.find(":="); assign != std::string::npos) type.resize(assign);
-            type = up(trimmed(type));
-            std::size_t ns = 0;
-            const std::string_view names = one.substr(0, colon);
-            while (ns <= names.size()) {
-                auto comma = names.find(',', ns);
-                if (comma == std::string_view::npos) comma = names.size();
-                std::string name = trimmed(names.substr(ns, comma - ns));
-                // Un commentaire devant le nom : garde le dernier mot.
-                if (const auto sp = name.find_last_of(" \t\n)"); sp != std::string::npos) name = name.substr(sp + 1);
-                ns = comma + 1;
-                if (name.empty()) continue;
-                out.locals.insert(up(name));
-                if (input) out.inputs.emplace_back(name, type);
-            }
-        }
+    const auto x = hmi::decl::extract(s);
+    out.code = x.body;
+    for (const auto& d : x.decls) {
+        out.locals.insert(up(d.name));
+        if (d.section == hmi::decl::Section::Input) out.inputs.emplace_back(d.name, up(d.type));
+    }
+    // Une fonction interne : ses parametres et ses locales ne sont pas des variables de l'application.
+    for (const auto& f : x.functions) {
+        for (const auto& d : f.decls) out.locals.insert(up(d.name));
+        for (const auto& b : f.blocks)
+            for (std::size_t i = b.begin; i < b.end && i < out.code.size(); ++i)
+                if (out.code[i] != '\n') out.code[i] = ' ';
     }
     return out;
 }

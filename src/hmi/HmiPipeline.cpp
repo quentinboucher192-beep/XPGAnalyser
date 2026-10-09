@@ -1,6 +1,7 @@
 #include "HmiPipeline.hpp"
 
 #include "HmiComm.hpp"
+#include "HmiDecl.hpp"
 #include "HmiEnums.hpp"
 #include "HmiScript.hpp"
 #include "HmiScriptCheck.hpp"
@@ -368,24 +369,11 @@ std::string hash(std::string_view text) {
     return buf;
 }
 
-std::string signatureOf(std::string_view body) {
-    const std::string l = lower(body);
-    const auto a = l.find("var_input");
-    if (a == std::string::npos) return {};
-    const auto b = l.find("end_var", a);
-    std::string block(body.substr(a + 9, (b == std::string::npos ? body.size() : b) - a - 9));
-    // sans commentaires, espaces resserres
-    std::string out;
-    bool space = false;
-    for (std::size_t i = 0; i < block.size(); ++i) {
-        if (block[i] == '(' && i + 1 < block.size() && block[i + 1] == '*') { const auto e = block.find("*)", i + 2); i = e == std::string::npos ? block.size() : e + 1; continue; }
-        if (std::isspace(static_cast<unsigned char>(block[i]))) { space = true; continue; }
-        if (space && !out.empty()) out += ' ';
-        space = false;
-        out += block[i];
-    }
-    return out;
-}
+// 1.11.18 (refonte des scripts, lot 2) : les parametres lus par hmi::decl (la lecture
+// partagee) - tous les blocs VAR_INPUT, VAR_IN_OUT et VAR_OUTPUT, et non plus le texte
+// du premier VAR_INPUT : "a, b : REAL" et "a : REAL; b : REAL" ont la meme interface,
+// un commentaire // ne la change plus, un parametre VAR_IN_OUT la change.
+std::string signatureOf(std::string_view body) { return decl::parameterSignature(decl::extract(body)); }
 
 std::vector<std::string> identifiers(std::string_view code) {
     std::vector<std::string> out;

@@ -319,7 +319,7 @@ void               releaseLock(const std::string& buildFolder);
 
 // ---- utilitaires (exposes pour les essais) ----------------------------------
 [[nodiscard]] std::string hash(std::string_view text);   // FNV-1a 64 bits, 16 chiffres hexadecimaux
-[[nodiscard]] std::string signatureOf(std::string_view body);   // le bloc VAR_INPUT d'un corps, normalise
+[[nodiscard]] std::string signatureOf(std::string_view body);   // ses parametres, forme canonique (decl::parameterSignature)
 [[nodiscard]] std::vector<std::string> identifiers(std::string_view code);   // hors chaines et commentaires
 
 } // namespace hmi::pipeline

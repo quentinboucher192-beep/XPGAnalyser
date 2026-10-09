@@ -1,0 +1,1031 @@
+@@ 1 tests/hmi_test.cpp:2938 156
+(* compteur *)
+VAR
+    Compte : INT := 5;
+    Dernier, Autre : STRING;
+END_VAR
+VAR_TEMP
+    i : INT;
+    Somme : REAL := 0.5;
+END_VAR
+Compte := Compte + 1;
+
+@@ 2 tests/hmi_test.cpp:2953 29
+VAR
+  x : INT
+END_VAR
+x := 1;
+@@ 3 tests/hmi_test.cpp:2955 24
+VAR
+  x : T_ANA;
+END_VAR
+@@ 4 tests/hmi_test.cpp:2958 7
+END_VAR
+@@ 5 tests/hmi_test.cpp:2958 16
+VAR sans END_VAR
+@@ 6 tests/hmi_test.cpp:2959 28
+VAR_INPUT
+  x : INT;
+END_VAR
+@@ 7 tests/hmi_test.cpp:2962 34
+VAR
+  x : INT;
+  X : REAL;
+END_VAR
+@@ 8 tests/hmi_test.cpp:2964 23
+VAR
+  IF : INT;
+END_VAR
+@@ 9 tests/hmi_test.cpp:2966 29
+VAR RETAIN
+  x : INT;
+END_VAR
+@@ 10 tests/hmi_test.cpp:2967 32
+x := 'VAR'; (* VAR *)
+// END_VAR
+@@ 11 tests/hmi_test.cpp:2968 33
+VAR
+  n : INT;
+END_VAR
+n := n + ;
+@@ 12 tests/hmi_test.cpp:2970 33
+VAR
+  n : BIDULE;
+END_VAR
+n := 1;
+@@ 13 tests/hmi_test.cpp:2983 112
+VAR
+  Fois : INT;
+END_VAR
+VAR_TEMP
+  Tmp : INT := 10;
+END_VAR
+Fois := Fois + 1;
+Tmp := Tmp + Fois;
+Total := Tmp;
+@@ 14 tests/hmi_test.cpp:2984 58
+VAR_TEMP
+  Ombre : INT := 100;
+END_VAR
+Ombre := Ombre + 1;
+@@ 15 tests/hmi_test.cpp:2985 32
+VAR
+  x : T_ANA;
+END_VAR
+x := 1;
+@@ 16 tests/hmi_test.cpp:2986 90
+VAR_TEMP
+  t : TIME := T#1500ms;
+  s : STRING := 'prêt';
+END_VAR
+Total := TIME_TO_INT(t);
+@@ 17 tests/hmi_test.cpp:2987 87
+VAR_TEMP
+  Tmp : INT := 1;
+END_VAR
+IHM_APPELER('Compter');
+Total := Total + Tmp * 1000;
+@@ 18 tests/hmi_test.cpp:2989 46
+VAR
+  n : INT;
+END_VAR
+n := n + 1;
+Total := n;
+@@ 19 tests/hmi_test.cpp:3031 75
+VAR_INPUT
+  a : REAL;
+  b : REAL := 10.0;
+END_VAR
+Moyenne := (a + b) / 2.0;
+@@ 20 tests/hmi_test.cpp:3033 81
+VAR_INPUT
+  Message : STRING;
+END_VAR
+Traces := Traces + 1;
+IHM_JOURNAL(Message);
+@@ 21 tests/hmi_test.cpp:3034 53
+VAR
+  n : INT;
+END_VAR
+n := n + 1;
+Sans_Memoire := n;
+@@ 22 tests/hmi_test.cpp:3036 97
+VAR_INPUT
+  n : DINT;
+END_VAR
+IF n <= 1 THEN
+  Fact := 1;
+ELSE
+  Fact := n * Fact(n - 1);
+END_IF;
+@@ 23 tests/hmi_test.cpp:3039 33
+VAR
+  x : INT
+END_VAR
+Casse := 1;
+@@ 24 tests/hmi_test.cpp:3052 43
+VAR_INPUT
+  a : REAL;
+END_VAR
+a := a + 1.0;
+@@ 25 tests/hmi_test.cpp:3058 34
+VAR
+  Dup : INT;
+END_VAR
+Dup := 1;
+@@ 26 tests/hmi_test.cpp:4034 47
+VAR_INPUT
+  x : REAL;
+END_VAR
+Bonus := x + 0.5;
+@@ 27 tests/hmi_test.cpp:4055 94
+VAR_INPUT
+  Pas : INT := 10;
+END_VAR
+Pos := Pos + Pas;
+Compter();
+Trace := CONCAT(Trace, 'o');
+@@ 28 tests/hmi_test.cpp:4098 137
+VAR_INPUT
+  Pas : INT := 10;
+END_VAR
+IF NOT Purge THEN
+  Trace := CONCAT(Trace, 'refus');
+  RETURN;
+END_IF;
+SUPER.Ouvrir(Pas := Pas * 2);
+@@ 29 tests/hmi_test.cpp:12838 429
+VAR i : INT; END_VAR
+Somme := 0.0;
+FOR i := Consignes.Low TO Consignes.High DO
+  Somme := Somme + Consignes[i];
+END_FOR;
+N := Consignes.Length;
+R := Matrice.Rows * Matrice.Columns + Matrice.High2;
+M := Matrice[2, 7] + Matrice.Dimensions;
+Fours[3].Vannes[2].Position := 12;
+Four1.Vannes[Fours[3].Vannes.Low + 1].Position := Fours[3].Vannes[2].Position * 2;
+W := Four1.Words + Fours.Words + Consignes.ElementBytes;
+Four2 := Four1;
+
+@@ 30 tests/hmi_test.cpp:12851 73
+VAR i : INT; END_VAR
+i := 12;
+Hors := Consignes[i];
+Consignes[i] := 5.0;
+
+@@ 31 tests/hmi_test.cpp:14295 67
+VAR_INPUT x : REAL; END_VAR
+VAR m : T_Mode; END_VAR
+Carre := x * x;
+@@ 32 tests/hmi_test.cpp:14296 70
+VAR_INPUT a : REAL; b : REAL; END_VAR
+Moyenne := (Carre(a) + b) / 2.0;
+@@ 33 tests/hmi_test.cpp:16610 70
+VAR_INPUT
+    a : REAL;
+    b : REAL;
+END_VAR
+Moyenne := (a + b) / 2;
+
+@@ 34 tests/hmi_test.cpp:16615 62
+VAR_INPUT
+    Message : STRING;
+END_VAR
+IHM_JOURNAL(Message);
+
+@@ 35 tests/hmi_test.cpp:16640 228
+VAR
+    Somme : REAL;
+END_VAR
+VAR_TEMP
+    i : INT;
+END_VAR
+FOR k := 0 TO 9 DO
+    Somme := Somme + Consignes[k];
+    i := i + 1;
+END_FOR;
+Temp_Moteur1 := Somme / 10;
+IF SYS.UserLevel > 2 THEN
+    Texte := SYS.UserName;
+END_IF;
+
+@@ 36 tests/hmi_test.cpp:16644 41
+VAR
+    i : INT;
+END_VAR
+i.Vitesse := 1;
+
+@@ 37 tests/hmi_test.cpp:16699 113
+VAR_INPUT
+    a : REAL;
+    b : REAL;
+    Poids : REAL := 0.5;
+END_VAR
+Moyenne := a * Poids + b * (1.0 - Poids);
+
+@@ 38 tests/hmi_test.cpp:16712 78
+VAR CONSTANT
+    Limite : INT := 10;
+END_VAR
+Limite := 3;
+Compteur := Limite;
+
+@@ 39 tests/hmi_test.cpp:16859 531
+VAR
+    Notes : MAP[STRING] OF REAL;
+    p : POINTER TO REAL;
+    Tab : ARRAY[0..3, 0..9] OF REAL;
+END_VAR
+Temp_Moteur1 := Moyenne3(Consignes);
+FOR EACH cle, valeur IN Notes DO
+    IF MAP_HAS(Notes, cle) THEN valeur := valeur + 1.0; END_IF;
+END_FOR;
+p := ADR(Temp_Moteur1);
+IF p <> NULL THEN p^ := 2.5; END_IF;
+Compteur := MAP_SIZE(Notes);
+Tab[1, 2] := Temp_Moteur1;
+FUNCTION Moyenne3(t : ARRAY[0..9] OF REAL; n : INT := 10) : REAL
+VAR_IN_OUT
+    Total : REAL;
+END_VAR
+    Moyenne3 := t[0] / n;
+    Total := Moyenne3;
+END_FUNCTION
+
+@@ 40 tests/hmi_test.cpp:16943 93
+VAR a : REAL := 5.0; END_VAR
+FUNCTION Raz(x : REAL)
+  x := 0.0;
+END_FUNCTION
+Raz(a); R1 := a;
+@@ 41 tests/hmi_test.cpp:16944 116
+VAR a : REAL := 5.0; END_VAR
+FUNCTION Inc(VAR_IN_OUT x : REAL)
+  x := x + 1.0;
+END_FUNCTION
+Inc(a); Inc(a); R1 := a;
+@@ 42 tests/hmi_test.cpp:16947 135
+FUNCTION Mettre(r : REF_TO REAL; v : REAL)
+  r^ := v;
+END_FUNCTION
+VAR x : REAL; END_VAR
+Mettre(REF(x), 2.5); R1 := x; Mettre(R3, 4.0);
+@@ 43 tests/hmi_test.cpp:16949 170
+VAR t : ARRAY[0..2] OF REAL; END_VAR
+FUNCTION Case2(VAR_IN_OUT tab : ARRAY[0..2] OF REAL) : REF_TO REAL
+  Case2 := REF(tab[2]);
+END_FUNCTION
+Case2(t)^ := 7.5; R1 := t[2];
+@@ 44 tests/hmi_test.cpp:16950 104
+VAR a : REAL := 3.0; p : POINTER TO REAL; END_VAR
+p := ADR(a); p^ := p^ + 4.0; R1 := a; Ok := p <> NULL;
+@@ 45 tests/hmi_test.cpp:16951 43
+VAR p : POINTER TO REAL; END_VAR
+p^ := 1.0;
+@@ 46 tests/hmi_test.cpp:16952 162
+FUNCTION Mauvais() : POINTER TO REAL
+VAR loc : REAL := 5.0; END_VAR
+  Mauvais := ADR(loc);
+END_FUNCTION
+VAR p : POINTER TO REAL; END_VAR
+p := Mauvais(); R1 := p^;
+@@ 47 tests/hmi_test.cpp:16953 216
+FUNCTION Rampe(n : REAL) : ARRAY[0..4] OF REAL
+VAR i : INT; END_VAR
+  FOR i := 0 TO 4 DO Rampe[i] := i * n; END_FOR
+END_FUNCTION
+VAR t : ARRAY[0..4] OF REAL; END_VAR
+t := Rampe(3.0); R1 := t[4]; Courbe := Rampe(2.0);
+@@ 48 tests/hmi_test.cpp:16954 210
+FUNCTION Ident() : ARRAY[1..3, 1..3] OF INT
+VAR i : INT; END_VAR
+  FOR i := 1 TO 3 DO Ident[i, i] := 1; END_FOR
+END_FUNCTION
+VAR m : ARRAY[1..3, 1..3] OF INT; END_VAR
+m := Ident(); R1 := m[2, 2] * 10 + m[2, 3];
+@@ 49 tests/hmi_test.cpp:16955 208
+FUNCTION Cube() : ARRAY[0..3, 0..9, 0..1] OF REAL
+  Cube[3, 9, 1] := 4.5;
+END_FUNCTION
+VAR c : ARRAY[0..3, 0..9, 0..1] OF REAL; END_VAR
+c := Cube(); R1 := c[3, 9, 1]; R2 := SIZEOF(c); R3 := UPPER_BOUND(c, 2);
+@@ 50 tests/hmi_test.cpp:16956 67
+VAR c : ARRAY[0..3, 0..9, 0..1] OF REAL; END_VAR
+c[4, 0, 0] := 1.0;
+@@ 51 tests/hmi_test.cpp:16957 181
+VAR a, b : ARRAY[1..3] OF INT; END_VAR
+a[1] := 1; a[2] := 2; b := a; Ok := a = b; b[3] := 9; R1 := b.Length; R2 := LOWER_BOUND(b, 1);
+IF a = b THEN R3 := 1.0; ELSE R3 := 2.0; END_IF
+@@ 52 tests/hmi_test.cpp:16958 213
+FUNCTION Milieu(a : T_Point; b : T_Point) : T_Point
+  Milieu.X := (a.X + b.X) / 2.0;
+  Milieu.Y := (a.Y + b.Y) / 2.0;
+END_FUNCTION
+VAR q : T_Point; END_VAR
+q.X := 10.0; q.Y := 4.0; P1 := Milieu(q, P1); R1 := P1.X;
+@@ 53 tests/hmi_test.cpp:16960 108
+VAR m : MAP[STRING] OF REAL; END_VAR
+m['b'] := 2.0; m['a'] := 1.5; R1 := m['a'] + m['b']; R2 := MAP_SIZE(m);
+@@ 54 tests/hmi_test.cpp:16961 50
+VAR m : MAP[STRING] OF REAL; END_VAR
+R1 := m['x'];
+@@ 55 tests/hmi_test.cpp:16962 190
+VAR m : MAP[DINT] OF STRING; END_VAR
+m[3] := 'trois'; m[1] := 'un'; Texte := MAP_GET(m, 4, 'rien'); Ok := MAP_HAS(m, 3);
+MAP_REMOVE(m, 3); R1 := MAP_SIZE(m); MAP_CLEAR(m); R2 := MAP_SIZE(m);
+@@ 56 tests/hmi_test.cpp:16963 49
+VAR m : MAP[DINT] OF REAL; END_VAR
+m['a'] := 1.0;
+@@ 57 tests/hmi_test.cpp:16964 176
+VAR m : MAP[STRING] OF REAL; s : STRING; END_VAR
+m['c'] := 3.0; m['a'] := 1.0; m['b'] := 2.0;
+FOR EACH k, v IN m DO s := s + k; v := v * 10.0; END_FOR
+Texte := s; R1 := m['c'];
+@@ 58 tests/hmi_test.cpp:16965 184
+VAR t : ARRAY[0..2] OF REAL; END_VAR
+t[0] := 1.0; t[1] := 2.0; t[2] := 3.0;
+FOR EACH x IN t DO R1 := R1 + x; x := 0.0; END_FOR
+R2 := t[1];
+FOR EACH y IN Courbe DO R3 := R3 + y; END_FOR
+@@ 59 tests/hmi_test.cpp:16966 219
+VAR m : MAP[STRING] OF INT; it : MAP_ITERATOR; s : STRING; END_VAR
+m['y'] := 1; m['x'] := 2;
+it := MAP_BEGIN(m);
+WHILE NOT MAP_END(it) DO s := s + it.Key; it.Value := 7; MAP_NEXT(it); END_WHILE
+Texte := s; R1 := m['x'];
+@@ 60 tests/hmi_test.cpp:16967 229
+FUNCTION Stock() : MAP[STRING] OF REAL
+  Stock['vis'] := 12.0; Stock['ecrou'] := 30.0;
+END_FUNCTION
+VAR m : MAP[STRING] OF REAL; k : ARRAY[0..1] OF STRING; END_VAR
+m := Stock(); k := MAP_KEYS(m); Texte := k[0]; R1 := MAP_SIZE(m);
+@@ 61 tests/hmi_test.cpp:16968 59
+VAR x : REAL; END_VAR
+FOR EACH k IN x DO R1 := 1.0; END_FOR
+@@ 62 tests/hmi_test.cpp:16969 101
+VAR n : INT; m : MAP[STRING] OF INT; END_VAR
+n := n + 1; m['tour'] := n; R1 := MAP_SIZE(m) * 100 + n;
+@@ 63 tests/hmi_test.cpp:16971 208
+VAR x : REAL := 1.0; y : REAL := 2.0; s : ARRAY[0..2] OF REAL; m : MAP[STRING] OF REAL; END_VAR
+Echanger(x, y); R1 := x * 10.0 + y; s := Serie(1.5); R2 := s[2]; m['a'] := 1.0; m['b'] := 2.0; R3 := Compter(m);
+@@ 64 tests/hmi_test.cpp:16973 42
+VAR x : REAL; END_VAR
+R1 := Serie(0.0)[5];
+@@ 65 tests/hmi_test.cpp:16975 86
+VAR_IN_OUT
+  a, b : REAL;
+END_VAR
+VAR_TEMP
+  t : REAL;
+END_VAR
+t := a; a := b; b := t;
+@@ 66 tests/hmi_test.cpp:16977 94
+VAR_INPUT
+  pas : REAL;
+END_VAR
+Serie[0] := pas; Serie[1] := 2.0 * pas; Serie[2] := 3.0 * pas;
+@@ 67 tests/hmi_test.cpp:16978 68
+VAR_INPUT
+  m : MAP[STRING] OF REAL;
+END_VAR
+Compter := MAP_SIZE(m);
+@@ 68 tests/hmi_test.cpp:17051 95
+VAR
+  m : MAP[STRING] OF REAL;
+  t : ARRAY[0..3, 0..9, 0..1] OF REAL;
+  r : REF_TO INT;
+END_VAR
+@@ 69 tests/hmi_test.cpp:17053 78
+FUNCTION F(VAR_IN_OUT x : INT)
+VAR_INPUT y : INT; END_VAR
+x := y;
+END_FUNCTION
+@@ 70 tests/hmi_test.cpp:17590 54
+VAR
+    m : T_MODE;
+END_VAR
+m := a;
+TO_STRING := 'x';
+
+@@ 71 tests/hmi_test.cpp:17666 118
+VAR m : T_MODE := T_MODE#Manu; END_VAR
+R1 := TO_DINT(m); IF m = T_MODE#Manu AND m > T_MODE#Auto THEN R2 := 1.0; END_IF
+@@ 72 tests/hmi_test.cpp:17667 142
+VAR m : T_MODE; END_VAR
+m := T_MODE#Manu;
+CASE m OF
+  T_MODE#Arret: R1 := 1.0;
+  T_MODE#Auto, T_MODE#Manu: R1 := 2.0;
+ELSE R1 := 3.0;
+END_CASE
+@@ 73 tests/hmi_test.cpp:17669 96
+VAR n : INT; END_VAR
+FOR EACH v IN T_MODE DO R1 := R1 + TO_REAL(v); n := n + 1; END_FOR
+R2 := n;
+@@ 74 tests/hmi_test.cpp:17673 344
+FUNCTION Suivant(m : T_MODE) : T_MODE
+  IF m = T_MODE#Arret THEN RETURN T_MODE#Auto; END_IF
+  RETURN T_MODE#Arret;
+END_FUNCTION
+FUNCTION Forcer(VAR_IN_OUT m : T_MODE)
+  m := T_MODE#Defaut;
+END_FUNCTION
+VAR x, y : T_MODE; t : ARRAY[0..1] OF T_MODE; END_VAR
+y := Suivant(T_MODE#Arret); R1 := TO_DINT(y); Forcer(x); t[1] := x; R2 := TO_DINT(t[1]);
+@@ 75 tests/hmi_test.cpp:17676 173
+VAR m : MAP[T_MODE] OF REAL; s : REAL; END_VAR
+m[T_MODE#Manu] := 2.5; m[T_MODE#Arret] := 1.0;
+FOR EACH k, v IN m DO s := s * 10.0 + v; END_FOR
+R1 := s; R2 := m[T_MODE#Manu];
+@@ 76 tests/hmi_test.cpp:17680 255
+FUNCTION Suivant(m : T_MODE) : T_MODE
+  CASE m OF
+    Arret: RETURN Auto;
+    Auto, Manu: RETURN Manu;
+  ELSE RETURN Arret;
+  END_CASE
+END_FUNCTION
+VAR m : T_MODE; END_VAR
+m := Auto; IF m = Auto THEN R1 := 1.0; END_IF
+m := Suivant(Auto); R2 := TO_DINT(m);
+@@ 77 tests/hmi_test.cpp:17682 259
+FUNCTION Libelle(p : POINTER TO T_MODE) : STRING
+  Libelle := TO_STRING(p^);
+END_FUNCTION
+FUNCTION Mettre(r : REF_TO T_MODE)
+  r^ := T_MODE#Defaut;
+END_FUNCTION
+VAR m : T_MODE := T_MODE#Manu; END_VAR
+Texte := Libelle(ADR(m)); Mettre(REF(m)); R1 := TO_DINT(m);
+@@ 78 tests/hmi_test.cpp:17685 106
+VAR m : T_MODE; END_VAR
+m := TO_T_MODE('Automatique'); R1 := TO_DINT(m); R2 := TO_DINT(TO_T_MODE('Manu'));
+@@ 79 tests/hmi_test.cpp:17686 293
+VAR s : STRING; d : MAP[T_MODE] OF REAL; it : MAP_ITERATOR; END_VAR
+FOR EACH v IN T_MODE DO s := s + TO_STRING(v) + ';'; END_FOR
+d[T_MODE#Manu] := 2.0; d[T_MODE#Auto] := 1.0;
+FOR EACH k, x IN d DO s := s + TO_STRING(k) + '='; END_FOR
+it := MAP_BEGIN(d); s := s + TO_STRING(it.Key); Texte := s;
+@@ 80 tests/hmi_test.cpp:17743 48
+VAR m : T_MODE; END_VAR
+m := T_MODE#Automatique;
+@@ 81 tests/hmi_test.cpp:17746 123
+VAR m : T_MODE; END_VAR
+CASE m OF
+  T_MODE#Arret: m := T_MODE#Auto;
+  T_MODE#Auto, T_MODE#Manu: m := T_MODE#Arret;
+END_CASE
+@@ 82 tests/hmi_test.cpp:17752 65
+VAR m : T_MODE; END_VAR
+CASE m OF T_MODE#Arret: ; ELSE ; END_CASE
+@@ 83 tests/hmi_test.cpp:17754 31
+VAR n : T_MODE; END_VAR
+n := 2;
+@@ 84 tests/hmi_test.cpp:17755 107
+FUNCTION Suivant(m : T_MODE) : T_MODE
+  Suivant := m;
+END_FUNCTION
+VAR x : T_MODE; END_VAR
+x := Suivant(1);
+@@ 85 tests/hmi_test.cpp:17758 74
+VAR m : T_MODE; e : T_ETAT; END_VAR
+IF m = e THEN m := T_MODE#Auto; END_IF
+@@ 86 tests/hmi_test.cpp:17760 70
+VAR m : T_MODE; END_VAR
+m := Auto; IF m = Manu THEN m := Arret; END_IF
+@@ 87 tests/hmi_test.cpp:17769 308
+VAR m : T_MODE; t : ARRAY[0..1] OF T_MODE; END_VAR
+m := Auto; IF m = T_MODE#Manu THEN t[0] := Defaut; END_IF
+CASE m OF Arret: m := Auto; ELSE m := Arret; END_CASE
+m := Suivant(Auto); m := Regler(Manu);
+FUNCTION Suivant(x : T_MODE) : T_MODE
+  IF x = Arret THEN RETURN Auto; END_IF
+  RETURN Arret;
+END_FUNCTION
+@@ 88 tests/hmi_test.cpp:17773 44
+VAR_INPUT
+  m : T_MODE;
+END_VAR
+Regler := m;
+@@ 89 tests/hmi_test.cpp:17787 39
+VAR m : T_MODE; END_VAR
+m := Regler(2);
+@@ 90 tests/hmi_test.cpp:17794 169
+VAR Notes : MAP[STRING] OF REAL; m : T_MODE; END_VAR
+FUNCTION F(x : REAL) : REAL
+  F := x;
+END_FUNCTION
+Notes['a'] := F(1.0); FOR EACH k, v IN Notes DO v := 0.0; END_FOR
+@@ 91 tests/hmi_test.cpp:17827 195
+VAR r : T_RESUME; m : T_MODE; END_VAR
+r := TO_T_RESUME(2.5);
+m := TO_T_MODE('auto');
+Texte := TO_STRING(m);
+Texte := TO_UPPER(Texte) + TO_STRING(3.5);
+m := TO_T_MODE(2);
+Mode := TO_T_MODE(Texte);
+@@ 92 tests/hmi_test.cpp:17830 110
+VAR m : T_MODE; END_VAR
+m := T_MODE#Auto;
+IF m = T_MODE#Manu THEN Mode := T_MODE#Defaut; END_IF
+Mode := Arret;
+@@ 93 tests/hmi_test.cpp:17831 164
+VAR m : T_MODE; END_VAR
+CASE m OF
+  T_MODE#Arret: m := T_MODE#Auto;
+  T_MODE#Auto: m := T_MODE#Arret;
+END_CASE
+CASE Mode OF
+  T_MODE#Manu: Texte := 'manu';
+END_CASE
+@@ 94 tests/hmi_test.cpp:17833 107
+VAR m : T_MODE; e : T_ETAT; END_VAR
+m := T_MODE#Automatique;
+m := 2;
+IF m = e THEN m := T_MODE#Auto; END_IF
+@@ 95 tests/hmi_test.cpp:17957 53
+VAR_IN_OUT
+  x : T_Vanne;
+END_VAR
+x.Pos := x.Pos + 1;
+@@ 96 tests/hmi_test.cpp:17961 66
+VAR e : T_Vanne; END_VAR
+e := W[0];
+e.Pos := e.Pos + 1;
+W[0] := e;
+@@ 97 tests/hmi_test.cpp:17962 51
+VAR i : INT := 6; END_VAR
+W[i].Pos := W[i].Pos + 1;
+@@ 98 tests/hmi_test.cpp:17964 69
+VAR c : ARRAY[0..3] OF INT; END_VAR
+c := T;
+c[0] := c[0] + 1;
+T := c;
+@@ 99 tests/hmi_test.cpp:17968 69
+VAR r : REF_TO T_Vanne; END_VAR
+r := REF(W[3]);
+r^.Pos := r^.Pos + 1;
+@@ 100 tests/hmi_test.cpp:17969 73
+VAR q : POINTER TO T_Vanne; END_VAR
+q := ADR(W[4]);
+q^.Pos := q^.Pos + 1;
+@@ 101 tests/hmi_test.cpp:17970 61
+VAR q : POINTER TO INT; END_VAR
+q := ADR(T[1]);
+q^ := q^ + 1;
+@@ 102 tests/hmi_test.cpp:18812 84
+VAR
+  i : INT;
+  s : REAL;
+END_VAR
+FOR i := 0 TO 9 BY 2 DO
+  s := s + 1.0;
+END_FOR;
+
+@@ 103 tests/hmi_test.cpp:18815 87
+VAR CONSTANT
+  N : INT := 5;
+END_VAR
+VAR
+  t : ARRAY[0..4] OF REAL;
+END_VAR
+t[0] := N;
+
+@@ 104 tests/hmi_test.cpp:18819 118
+VAR
+  m : MAP[STRING] OF INT;
+  p : POINTER TO INT;
+END_VAR
+FOR EACH k, v IN m DO
+  IHM_JOURNAL(k);
+END_FOR;
+p^ := 3;
+
+@@ 105 tests/hmi_test.cpp:19184 97
+VAR_TEMP
+  t : INT := 2;
+END_VAR
+$Total$ := $Seuil$ * t; (* 5$/h *)
+Msg := 'a$$b $Ab$ c'; // $Cd$
+@@ 106 tests/hmi_test.cpp:19322 56
+VAR_INPUT
+  Entree : INT;
+END_VAR
+Double := $Entree * 2;
+@@ 107 tests/hmi_test.cpp:20246 30
+VAR X : INT; END_VAR
+X := API;
+@@ 108 tests/hmi_test.cpp:20248 31
+VAR X : INT; END_VAR
+X := API.;
+@@ 109 tests/hmi_test.cpp:20249 30
+VAR X : INT; END_VAR
+X := API.
+@@ 110 tests/hmi_test.cpp:20252 52
+VAR X : INT; END_VAR
+X := API.Gestion_armoires.Etat;
+@@ 111 tests/hmi_test.cpp:20931 83
+VAR_INPUT
+  Quoi : STRING;
+  N : INT;
+END_VAR
+IHM_JOURNAL('fonction : {Quoi} {N}');
+@@ 112 tests/hmi_test.cpp:20933 296
+VAR
+  Mini : REAL := 4.5;
+  Tours : DINT;
+  i : INT;
+END_VAR
+VAR_TEMP
+  P : REAL;
+END_VAR
+P := 2.25;
+Tours := Tours + 1;
+IHM_JOURNAL('mini {Mini:0.0}, P {P:0.00}, {Tours} tour(s)');
+IHM_LOG(INFO, 'log : mini {Mini:0.0}');
+FOR i := 1 TO 2 DO
+  IHM_JOURNAL('boucle {i}');
+END_FOR;
+Dire('salut', 3);
+@@ 113 tests/hmi_test.cpp:20964 46
+VAR_INPUT
+  a : REAL;
+END_VAR
+Calc := a * 2.0;
+@@ 114 tests/hmi_editor_test.cpp:4347 59
+VAR_INPUT
+  Message : STRING;
+END_VAR
+IHM_JOURNAL(Message);
+@@ 115 tests/hmi_editor_test.cpp:4350 86
+VAR
+  Compte : INT := 0;
+  Compteur_Local : DINT;
+END_VAR
+VAR_TEMP
+  i : INT;
+END_VAR
+
+@@ 116 tests/hmi_editor_test.cpp:4367 28
+VAR
+  x : INT;
+END_VAR
+x := 
+@@ 117 tests/hmi_editor_test.cpp:4367 24
+après END_VAR : du code
+@@ 118 tests/hmi_editor_test.cpp:4496 89
+VAR_INPUT
+  a : REAL;
+  b : REAL := 10.0;
+END_VAR
+Moyenne := (a + b) / 2.0;
+Fantome := 1;
+@@ 119 tests/hmi_editor_test.cpp:4499 42
+VAR_INPUT
+  a : REAL
+END_VAR
+Moyenne := a;
+@@ 120 tests/hmi_editor_test.cpp:4600 89
+VAR_INPUT
+  a : REAL;
+  b : REAL := 10.0;
+END_VAR
+Moyenne := (a + b) / 2.0;
+b := b * 1.0;
+@@ 121 tests/hmi_editor_test.cpp:4623 83
+VAR_INPUT
+  a : REAL;
+  b : REAL;
+END_VAR
+Moyenne := (a + b) / 2.0 + Offset_Global;
+@@ 122 tests/hmi_editor_test.cpp:4629 91
+VAR
+  Fois : INT;
+END_VAR
+Fois := Fois + 1;
+Total_Global := Moyenne(Fois, Mesure_Automate);
+@@ 123 tests/hmi_editor_test.cpp:13458 46
+VAR
+  t : ARRAY[0..9] OF REAL;
+END_VAR
+n := t.
+@@ 124 tests/hmi_editor_test.cpp:13501 128
+VAR
+    m : T_MODE;
+    p : POINTER TO T_POMPE;
+    d : MAP[STRING] OF REAL;
+    it : MAP_ITERATOR;
+    v1 : T_VECTEUR;
+END_VAR
+
+@@ 125 tests/hmi_editor_test.cpp:13546 48
+VAR
+    x : T_MODE;
+END_VAR
+CASE x OF
+END_CASE;
+
+@@ 126 tests/hmi_editor_test.cpp:13603 140
+VAR
+    n : REAL;
+END_VAR
+FUNCTION Ecart() : REAL
+    Ecart := 1.0;
+END_FUNCTION
+FUNCTION Etat() : BOOL
+    Etat := TRUE;
+END_FUNCTION
+n := 
+@@ 127 tests/hmi_editor_test.cpp:15700 111
+VAR m : T_MODE; END_VAR
+CASE m OF
+  T_MODE#Arret: m := T_MODE#Auto;
+  T_MODE#Auto: m := T_MODE#Arret;
+END_CASE
+
+@@ 128 tests/hmi_editor_test.cpp:24440 41
+VAR_INPUT a : REAL; END_VAR
+Moyenne := a;
+@@ 129 tests/hmi_editor_test.cpp:24638 106
+VAR
+  i : INT;
+END_VAR
+FOR i := 0 TO 3 DO
+  IHM_JOURNAL('x');
+END_FOR;
+IF i > 2 THEN
+  i := 0;
+END_IF;
+FOR
+@@ 130 tests/hmi_editor_test.cpp:26602 54
+VAR_INPUT
+  Pas : INT := 10;
+END_VAR
+Pos := Pos + Pas;
+@@ 131 tests/hmi_editor_test.cpp:26695 92
+VAR_INPUT
+  Pas : INT := 10;
+END_VAR
+IF Pas > 0 THEN
+  SUPER.Ouvrir(Pas := Pas * 2);
+END_IF;
+@@ 132 tests/hmi_editor_test.cpp:26849 57
+VAR_INPUT
+  n : INT;
+END_VAR
+GetActiveCount := n + Value;
+@@ 133 tests/hmi_build_test.cpp:159 71
+VAR_INPUT
+    a : REAL;
+    b : REAL;
+END_VAR
+Moyenne := (a + b) / 2.0;
+@@ 134 tests/hmi_build_test.cpp:283 57
+VAR_INPUT
+  a : REAL; (* x *)
+  b : REAL;
+END_VAR
+RETURN;
+@@ 135 tests/hmi_build_test.cpp:285 38
+VAR_INPUT a, b : REAL; END_VAR
+RETURN;
+@@ 136 tests/hmi_build_test.cpp:285 65
+VAR_INPUT
+  a : REAL;   // le premier
+  b : REAL;
+END_VAR
+x := 1;
+@@ 137 tests/hmi_build_test.cpp:287 57
+VAR_INPUT a : REAL; END_VAR
+VAR_IN_OUT v : T_VEC; END_VAR
+@@ 138 tests/hmi_build_test.cpp:288 27
+VAR_INPUT a : REAL; END_VAR
+@@ 139 tests/hmi_build_test.cpp:290 61
+(* VAR_INPUT x : INT; END_VAR *)
+VAR t : INT; END_VAR
+t := 1;
+@@ 140 tests/hmi_build_test.cpp:415 71
+VAR_INPUT
+    a : REAL;
+    b : REAL;
+END_VAR
+Moyenne := (a + b) * 0.5;
+@@ 141 tests/hmi_build_test.cpp:419 96
+VAR_INPUT
+    a : REAL;
+    b : REAL;
+    c : REAL := 0.0;
+END_VAR
+Moyenne := (a + b + c) / 3.0;
+@@ 142 tests/hmi_build_test.cpp:424 97
+VAR_INPUT
+    a : REAL;
+    b : REAL;
+    c : REAL := 0.0;
+END_VAR
+Moyenne3 := (a + b + c) / 3.0;
+@@ 143 tests/hmi_build_test.cpp:642 59
+VAR_INPUT
+    a : REAL;
+    b : REAL;
+END_VAR
+Moyenne := a;
+@@ 144 tests/hmi_log_test.cpp:203 112
+VAR_INPUT
+    a : REAL;
+    b : REAL;
+END_VAR
+IHM_LOG(DEBUG, 'moyenne de {a} et {b}');
+Moyenne := (a + b) / 2.0;
+@@ 145 src/hmi/HmiGuideText.cpp:11557 574
+Un nom est connu s'il est une **variable IHM**, une **variable de l'automate** (ses globales, quand le programme est chargé), une **variable système** (`SYS.…`), une **variable d'instance** (`Vue.Objet.Propriété`), un **paramètre** de la vue (une popup, un symbole), une **variable locale** du script (`VAR … END_VAR`, `VAR_TEMP`), un **compteur de boucle** (`FOR i := …`), et dans une fonction IHM, ses **entrées** (`VAR_INPUT`) et son propre nom (sa valeur). Sans programme d'automate chargé, un nom inconnu de l'IHM peut être à lui : il n'est pas signalé.
+@@ 146 src/hmi/HmiGuideText.cpp:12325 338
+VAR v1, v2, v3 : T_VECTEUR; END_VAR
+v1.x := 1.0;  v1.y := 2.0;  v1.z := 2.0;
+v2.x := 0.5;  v2.y := 0.0;  v2.z := 1.0;
+v3 := v1 + v2 * 2.0;          (* T_VECTEUR * REAL, puis T_VECTEUR + T_VECTEUR *)
+v3 += v1;                     (* T_VECTEUR += T_VECTEUR *)
+Texte := TO_STRING(v3);
+Norme := TO_REAL(v3);
+Pompe_3_Txt := TO_STRING(Pompe_3);
+@@ 147 src/hmi/HmiGuideText.cpp:12474 441
+VAR                        (* gardées d'une exécution à l'autre *)
+    Mini : REAL := 1000.0;
+    Maxi : REAL;
+    Tours : DINT;
+END_VAR
+VAR_TEMP                   (* remises à leur valeur initiale à chaque exécution *)
+    P : REAL;
+END_VAR
+
+P := Armoires[0].ana.PT1.mes;
+Tours := Tours + 1;
+IF P > Maxi THEN
+    Maxi := P;
+END_IF;
+IF Tours MOD 5 = 0 THEN
+    IHM_JOURNAL('Pression A : maxi {Maxi:0.0} bar ({Tours} mesures)');
+END_IF;
+@@ 148 src/hmi/HmiGuideText.cpp:12516 166
+Une déclaration fautive (point-virgule manquant, type non pris en charge, nom en double, VAR sans END_VAR) est signalée à sa ligne, et le script ne s'exécute pas.
+@@ 149 src/hmi/HmiGuideText.cpp:12546 334
+(* Moyenne pondérée des pressions de deux armoires, en bar *)
+VAR_INPUT
+    A : REAL;
+    B : REAL;
+    Poids_A : REAL := 0.5;   (* facultatif : 0.5 par défaut *)
+END_VAR
+VAR_TEMP
+    Somme : REAL;
+END_VAR
+
+Somme := A * Poids_A + B * (1.0 - Poids_A);
+Moyenne_Pression := Somme;   (* le résultat : affecté au nom de la fonction *)
+@@ 150 src/hmi/HmiGuideText.cpp:12627 455
+Une fonction interne s'écrit au premier niveau du script (pas dans un IF ni une boucle) : son nom, ses paramètres entre parenthèses, son type de retour après les deux-points, ses variables locales (VAR ... END_VAR), puis ses instructions. Elle rend sa valeur en l'affectant à son nom (`Moyenne := ...;`) ou par `RETURN expression;`. Elle n'est vue que de son script ; elle voit les variables du script, les variables IHM, celles de l'automate et SYS.
+@@ 151 src/hmi/HmiGuideText.cpp:12634 271
+R1 := Moyenne(Mesures, 10);          (* appelee avant sa declaration : permis *)
+
+FUNCTION Moyenne(t : ARRAY[0..9] OF REAL; n : INT) : REAL
+VAR
+    i : INT;
+    s : REAL;
+END_VAR
+    FOR i := 0 TO n - 1 DO
+        s := s + t[i];
+    END_FOR
+    RETURN s / n;
+END_FUNCTION
+@@ 152 src/hmi/HmiGuideText.cpp:12682 301
+FUNCTION Echanger(VAR_IN_OUT a : REAL; VAR_IN_OUT b : REAL)
+VAR t : REAL; END_VAR
+    t := a; a := b; b := t;
+END_FUNCTION
+
+FUNCTION Borner(p : POINTER TO REAL; haut : REAL)
+    IF p <> NULL AND p^ > haut THEN p^ := haut; END_IF
+END_FUNCTION
+
+Echanger(Consigne1, Consigne2);
+Borner(ADR(Debit), 120.0);
+@@ 153 src/hmi/HmiGuideText.cpp:12730 364
+FUNCTION Rampe(pas : REAL) : ARRAY[0..4] OF REAL
+VAR i : INT; END_VAR
+    FOR i := 0 TO 4 DO Rampe[i] := i * pas; END_FOR
+END_FUNCTION
+
+FUNCTION Case2(VAR_IN_OUT t : ARRAY[0..2] OF REAL) : REF_TO REAL
+    Case2 := REF(t[2]);
+END_FUNCTION
+
+Courbe := Rampe(2.0);            (* copie dans le tableau IHM Courbe *)
+Case2(Table)^ := 7.5;            (* ecrit Table[2] *)
+@@ 154 src/hmi/HmiGuideText.cpp:12763 378
+VAR
+    Cube : ARRAY[0..3, 0..9, 0..1] OF REAL;     (* 4 x 10 x 2 = 80 cases *)
+    a, b : ARRAY[1..3] OF INT;
+END_VAR
+Cube[2, 7, 1] := 4.5;
+b := a;                                      (* copie entiere *)
+IF a = b THEN IHM_JOURNAL('identiques'); END_IF
+n := SIZEOF(Cube);                           (* 80 *)
+haut := UPPER_BOUND(Cube, 2);                (* 9 : la 2e dimension *)
+@@ 155 src/hmi/HmiGuideText.cpp:12799 445
+VAR
+    Stock : MAP[STRING] OF REAL;
+    Total : REAL;
+END_VAR
+Stock['vis'] := 120.0;                 (* cree la cle *)
+Stock['ecrou'] := 80.0;
+IF MAP_HAS(Stock, 'vis') THEN Stock['vis'] := Stock['vis'] - 1.0; END_IF
+FOR EACH nom, qte IN Stock DO          (* cles croissantes : ecrou, vis *)
+    Total := Total + qte;
+    qte := qte * 2.0;                  (* qte designe la valeur : elle change dans Stock *)
+END_FOR
+MAP_REMOVE(Stock, 'ecrou');
+@@ 156 src/hmi/HmiGuideText.cpp:12827 153
+VAR it : MAP_ITERATOR; END_VAR
+it := MAP_BEGIN(Stock);
+WHILE NOT MAP_END(it) DO
+    IHM_JOURNAL(it.Key);
+    it.Value := 0.0;
+    MAP_NEXT(it);
+END_WHILE
+@@ 157 src/hmi/HmiGuideText.cpp:12858 486
+VAR
+    m : T_MODE := T_MODE#Arret;
+    Duree : MAP[T_MODE] OF REAL;
+END_VAR
+
+FUNCTION Suivant(m : T_MODE) : T_MODE
+    CASE m OF
+        Arret:      RETURN Auto;
+        Auto, Manu: RETURN Manu;
+    ELSE
+        RETURN Arret;
+    END_CASE
+END_FUNCTION
+
+m := Suivant(m);
+Duree[m] := Duree[m] + 1.0;
+FOR EACH v IN T_MODE DO                 (* Arret, Auto, Manu, Defaut : dans l'ordre declare *)
+    IHM_JOURNAL(TO_STRING(v));          (* le toString du type : le texte affiche *)
+END_FOR
+@@ 158 src/hmi/HmiGuideText.cpp:12897 263
+FUNCTION Libelle(p : POINTER TO T_MODE) : STRING
+    Libelle := TO_STRING(p^);
+END_FUNCTION
+
+FUNCTION Forcer(VAR_IN_OUT m : T_MODE)
+    m := T_MODE#Defaut;
+END_FUNCTION
+
+VAR Modes : ARRAY[0..3] OF T_MODE; END_VAR
+Texte := Libelle(ADR(Modes[0]));
+Forcer(Modes[1]);
+@@ 159 src/app/hmi/HmiAssist.cpp:1034 30
+;
+END_VAR
+CASE x OF
+END_CASE;
+
+@@ 160 tools/sessions/preparer-projet-11110.cpp:65 57
+VAR_INPUT
+    Texte : STRING;
+END_VAR
+IHM_JOURNAL(Texte);
+@@ 161 tools/sessions/preparer-projet-11110.cpp:73 49
+VAR_INPUT
+    x : REAL;
+END_VAR
+Bonus := x + 0.5;
+@@ 162 tools/sessions/preparer-projet-11110.cpp:143 360
+VAR_INPUT
+    Motif : STRING := 'opérateur';
+END_VAR
+(* Vanne : le paramètre du symbole - V[3] pour l'instance Vanne_3 *)
+IF Etat() = 2 THEN
+    Journaliser(CONCAT(Nom, ' déjà ouverte'));
+    RETURN;
+END_IF;
+Vanne.CMD_FERM := FALSE;
+Vanne.CMD_OUV := TRUE;
+Vanne.POSITION := 100;
+Ouvertures := Ouvertures + 1;
+Journaliser(CONCAT(Nom, ' ouverte : ', Motif));
+@@ 163 tools/sessions/preparer-projet-11110.cpp:199 260
+VAR_INPUT
+    Motif : STRING := 'opérateur';
+END_VAR
+(* Vanne_3 : l'entrée gaz s'ouvre en deux temps - la purge d'abord *)
+IF NOT Purge_OK THEN
+    Journaliser('Vanne_3 : purge non faite');
+    RETURN;
+END_IF;
+SUPER.Ouvrir(Motif);   (* le corps du symbole *)
+@@ 164 tools/sessions/preparer-projet-11111.cpp:48 68
+VAR_INPUT
+    n : INT;
+END_VAR
+GetActiveCount := n + Vanne.POSITION;
