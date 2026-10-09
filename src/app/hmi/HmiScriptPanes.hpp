@@ -28,6 +28,7 @@
 #include "HmiPanels.hpp"
 #include "HmiVariablePanes.hpp"
 #include "HmiFolderTable.hpp"          // lot 21 : les scripts generaux ranges en dossiers
+#include "HmiLive.hpp"                  // 1.11.21 : les diagnostics en direct (le panneau du bas)
 #include "../../core/Command.hpp"
 #include "../../hmi/HmiCommands.hpp"
 #include "../../hmi/HmiCheck.hpp"         // 1.10 : hmi::Issue (les resultats de Compiler)
@@ -71,7 +72,7 @@ inline constexpr const char* kDiagnosticUnavailable =
 // ... et le titre du tableau des diagnostics qui les compte (`where` : "ce script").
 [[nodiscard]] std::string diagnosticsTitle(const std::vector<hmi::ScriptDiagnostic>&, std::string_view where);
 
-class HmiScriptsPane final : public ui::Widget {
+class HmiScriptsPane final : public ui::Widget, public HmiLiveSource {
 public:
     using Apply = std::function<void(core::CommandPtr)>;
     // `view` = kNoId : la Programmation generale ; sinon les scripts de cette vue.
@@ -174,6 +175,7 @@ public:
         std::function<void(hmi::pipeline::Mode, const std::string& key)>           build;
         std::function<std::pair<std::string, std::string>(const std::string& key)> buildState;
         std::function<void()>                                                      buildOutputs;   // l'onglet IHM . Sorties
+        std::function<void()>                                                      showDiagnostics;   // 1.11.21 : le panneau du bas, ses Diagnostics
     };
     void setHosts(Hosts h) { hosts_ = std::move(h); }
     // 1.11.13 : la cle de build du script choisi ("" : aucun) ; l'etat de la barre relu (l'ecran,
@@ -218,7 +220,16 @@ public:
     [[nodiscard]] ui::MultiLineText& editor() noexcept { return *editor_; }
     [[nodiscard]] ui::TableView&     scriptTable() noexcept { return *scripts_; }
     [[nodiscard]] ui::TableView&     variableTable() noexcept { return *variables_; }
-    [[nodiscard]] ui::TableView&     diagnosticTable() noexcept { return *diagTable_; }
+    // 1.11.21 : plus de bandeau Diagnostics sous l'editeur (HmiLive.hpp) - ce qu'il listait :
+    // le nombre de lignes (le script montre, puis ce que Compiler a dit des autres).
+    [[nodiscard]] std::size_t resultCount() const noexcept { return results_.size(); }
+    // 1.11.21 : ce que dit la barre du volet (les lignes, le langage, les fautes comptees).
+    [[nodiscard]] const std::string& statusText() const noexcept { return statusText_; }
+    // ---- 1.11.21 : HmiLiveSource (les diagnostics du script montre, au panneau du bas) ----
+    [[nodiscard]] std::uint64_t liveRevision() const noexcept override { return liveRev_; }
+    [[nodiscard]] std::string liveElement() const override { return buildKey(); }
+    [[nodiscard]] std::vector<hmi::pipeline::Diagnostic> liveDiagnostics() const override;
+    void goToLive(const hmi::pipeline::Diagnostic& d) override;
     [[nodiscard]] ui::PropertyGrid&  properties() noexcept { return *props_; }
     [[nodiscard]] const std::string& lastMessage() const noexcept { return message_; }
 
@@ -255,9 +266,10 @@ private:
     ui::MultiLineText* editor_{nullptr};
     ui::StatusBar*    symbolBar_{nullptr};
     assist::Sources   assist_;
-    ui::TableView*    diagTable_{nullptr};
     ui::StatusBar*    status_{nullptr};
-    std::shared_ptr<ui::ITableModel> scriptModel_, variableModel_, diagModel_;
+    std::shared_ptr<ui::ITableModel> scriptModel_, variableModel_;
+    std::uint64_t     liveRev_{0};                 // 1.11.21 : croit a chaque calcul des diagnostics
+    std::string       statusText_;                 // 1.11.21 : le message durable de la barre
     std::vector<hmi::Id>     scriptOrder_;     // vue : un par evenement (kNoId si vide) ; general : les scripts montres
     std::unique_ptr<HmiFolderTable> folders_;  // lot 21 : general - la liste rangee en dossiers
     std::vector<std::string> eventOrder_;

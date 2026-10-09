@@ -21,6 +21,7 @@
 #include "../hmi/HmiCommHost.hpp"
 #include "../hmi/HmiEditor.hpp"
 #include "../hmi/HmiFunctionPanes.hpp"
+#include "../hmi/HmiLive.hpp"               // 1.11.21 : les diagnostics en direct
 #include "../hmi/HmiOperatorPanes.hpp"        // 1.11.17 : Compiler les operateurs (le build du porteur)
 #include "../hmi/HmiPanels.hpp"
 #include "../hmi/HmiScriptPanes.hpp"
@@ -171,8 +172,38 @@ void MainAnalysisScreen::startHmiBuild(const std::string& source) {
         if (auto* sim = dynamic_cast<HmiSimulationPane*>(hmiTab("simulation"))) sim->buildDone(false, "le build n'a pas pu partir (aucun projet IHM ?)");
 }
 
+// ---- 1.11.21 : les diagnostics en direct (hmi/HmiLive.hpp) ----
+HmiLiveSource* MainAnalysisScreen::shownLiveSource() const {
+    auto* page = centre_ && centre_->tabCount() ? centre_->page(centre_->currentIndex()) : nullptr;
+    if (!page) return nullptr;
+    HmiLiveSource* found = nullptr;
+    // Le premier volet de code montre de la page (un widget cache cache aussi ses enfants).
+    const std::function<void(ui::Widget&)> walk = [&](ui::Widget& w) {
+        if (found || !w.visible()) return;
+        if (auto* s = dynamic_cast<HmiLiveSource*>(&w)) {
+            found = s;
+            return;
+        }
+        for (const auto& c : w.children()) walk(*c);
+    };
+    walk(*page);
+    return found;
+}
+
+void MainAnalysisScreen::tickHmiLive() {
+    if (!bottomPanel_) return;
+    HmiLiveSource* s = app_.hmi() ? shownLiveSource() : nullptr;
+    const std::string element = s ? s->liveElement() : std::string{};
+    const std::uint64_t rev = s ? s->liveRevision() : 0;
+    if (s == liveSource_ && rev == liveRevision_ && element == bottomPanel_->liveElement()) return;
+    liveSource_ = s;
+    liveRevision_ = rev;
+    bottomPanel_->setLive(element, s && !element.empty() ? s->liveDiagnostics() : std::vector<pl::Diagnostic>{});
+}
+
 void MainAnalysisScreen::tickHmiBuild() {
     if (bottomPanel_) bottomPanel_->tick();          // 1.11.14 : la Console (les lignes arrivees)
+    tickHmiLive();                                   // 1.11.21 : les diagnostics du document montre
     if (!hmiBuild_) {
         if (app_.hmi()) ensureHmiBuild();
         return;
@@ -256,6 +287,12 @@ HmiBuildOutputPane* MainAnalysisScreen::hmiBuildOutput(bool open) {
 void MainAnalysisScreen::wireBottomPanel() {
     if (!bottomPanel_) return;
     links_ += bottomPanel_->diagnosticActivated->connect([this](const pl::Diagnostic& d) { openHmiDiagnostic(d); });
+    // 1.11.21 : une ligne en direct - le volet montre y revient ; sinon (il n'est plus montre),
+    // comme un diagnostic de build.
+    links_ += bottomPanel_->liveActivated->connect([this](const pl::Diagnostic& d) {
+        if (auto* s = shownLiveSource(); s && s->liveElement() == d.element) s->goToLive(d);
+        else openHmiDiagnostic(d);
+    });
     links_ += bottomPanel_->elementActivated->connect([this](const std::string& k) { openHmiElement(k); });
     links_ += bottomPanel_->consoleActivated->connect([this](const ConsoleEntry& e) { openConsoleSource(e); });
     bottomPanel_->setOnClose([this] { showBottomPanel(false); });

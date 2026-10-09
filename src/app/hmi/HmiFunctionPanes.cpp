@@ -241,7 +241,7 @@ HmiFunctionsPane::HmiFunctionsPane(std::string id, hmi::DocumentPtr doc, Apply a
                            {"Description", 260.f}});
         table->setSelectionMode(ui::SelectionMode::Single);
         functions_ = &static_cast<ui::TableView&>(panel->setBody(std::move(table)));
-        left->addPane(std::move(panel), 0.36f, 100.f);
+        left->addPane(std::move(panel), 0.52f, 100.f);
     }
     {
         auto panel = std::make_unique<HmiTitledPanel>(base + ".propsPanel", "PROPRI\xC3\x89T\xC3\x89S DE LA FONCTION");
@@ -249,15 +249,8 @@ HmiFunctionsPane::HmiFunctionsPane(std::string id, hmi::DocumentPtr doc, Apply a
         grid->setShowDescriptionPane(false);
         grid->setNameColumnRatio(0.36f);
         props_ = &static_cast<ui::PropertyGrid&>(panel->setBody(std::move(grid)));
-        left->addPane(std::move(panel), 0.34f, 90.f);
-    }
-    {
-        auto panel = std::make_unique<HmiTitledPanel>(base + ".trialPanel", "ESSAI");
-        auto table = std::make_unique<ui::TableView>(base + ".trial");
-        table->setColumns({{"\xC3\x89l\xC3\xA9ment", 150.f}, {"Valeur", 420.f}});
-        table->setSelectionMode(ui::SelectionMode::Single);
-        trialTable_ = &static_cast<ui::TableView&>(panel->setBody(std::move(table)));
-        left->addPane(std::move(panel), 0.30f, 80.f);
+        // 1.11.21 : plus de bandeau ESSAI - le resultat d'Essayer va aux Sorties du panneau du bas.
+        left->addPane(std::move(panel), 0.48f, 90.f);
     }
     split->addPane(std::move(left), 0.42f, 260.f);
 
@@ -280,17 +273,9 @@ HmiFunctionsPane::HmiFunctionsPane(std::string id, hmi::DocumentPtr doc, Apply a
             base + ".codeTabs", doc_, apply_, std::move(area),
             std::vector{hmi::decledit::Tab::Parameters, hmi::decledit::Tab::Variables, hmi::decledit::Tab::Constants}, banner_)));
         editorPanel_ = panel.get();
-        right->addPane(std::move(panel), 0.74f, 120.f);
-    }
-    {
-        auto panel = std::make_unique<HmiTitledPanel>(base + ".diagPanel", "DIAGNOSTICS");
-        auto table = std::make_unique<ui::TableView>(base + ".diagnostics");
-        // 1.10 : la ligne et la colonne de chaque faute (comme le rapport de Compiler).
-        table->setColumns({{"Ligne", 62.f, 40.f, true, true, true, ui::Align::End}, {"Col.", 56.f, 36.f, true, true, true, ui::Align::End},
-                           {"Gravit\xC3\xA9", 120.f}, {"Message", 600.f}});
-        table->setSelectionMode(ui::SelectionMode::Single);
-        diagTable_ = &static_cast<ui::TableView&>(panel->setBody(std::move(table)));
-        right->addPane(std::move(panel), 0.26f, 70.f);
+        // 1.11.21 : l'editeur prend toute la hauteur - ses fautes vont au panneau du bas
+        // (Diagnostics, l'etape Saisie ; HmiLive.hpp), soulignees dans le code.
+        right->addPane(std::move(panel), 1.f, 120.f);
     }
     split->addPane(std::move(right), 0.58f, 300.f);
     split_ = &static_cast<ui::Splitter&>(addChild(std::move(split)));
@@ -334,18 +319,8 @@ HmiFunctionsPane::HmiFunctionsPane(std::string id, hmi::DocumentPtr doc, Apply a
     links_ += functions_->activated->connect([this](ui::RowIndex) {
         if (selectedFunction() && hosts_.tryIt) hosts_.tryIt(selectedFunction());
     });
-    links_ += diagTable_->selectionChanged->connect([this](const std::vector<ui::RowIndex>& rows) {
-        if (rows.empty() || rows.front() >= diagnostics_.size()) return;
-        const auto& d = diagnostics_[rows.front()];
-        if (d.line > 0) showCodeTab(CodeTabCode);
-        if (d.line > 0 && d.column > 0)        // 1.10 : la faute selectionnee
-            editor_->selectRange(static_cast<std::size_t>(d.line - 1), static_cast<std::uint32_t>(d.column - 1),
-                                 static_cast<std::uint32_t>(std::max(0, d.length)));
-        else if (d.line > 0)
-            editor_->goToLine(static_cast<std::size_t>(d.line - 1));
-        else if (const auto name = declarationNamed(d.message); !name.empty())
-            (void)showDeclaration(name);       // 1.11.18 (lot 5) : la faute d'une declaration, dans son onglet
-    });
+    // 1.11.21 : la barre du volet (ses fautes comptees) : un clic ouvre le panneau du bas, ou elles sont listees.
+    status_->setMessageClick([this] { if (hosts_.showDiagnostics) hosts_.showDiagnostics(); });
     links_ += editor_->caretSymbolChanged->connect([this](const std::string&) { updateSymbolLine(); });
     links_ += editor_->textChanged->connect([this](const std::string& text) {
         if (syncing_) return;
@@ -439,8 +414,6 @@ void HmiFunctionsPane::goTo(Id function, int line) {
     if (line > 0) {
         showCodeTab(CodeTabCode);             // 1.11.18 (lot 5) : le code, pas une grille
         editor_->goToLine(static_cast<std::size_t>(line - 1));
-        for (std::size_t i = 0; i < diagnostics_.size(); ++i)
-            if (diagnostics_[i].line == line) { hmiSelectModelRow(*diagTable_, i); break; }
     }
 }
 
@@ -450,8 +423,6 @@ void HmiFunctionsPane::goTo(Id function, int line, int column, int length) {
     selectFunction(function);
     if (line <= 0) return;
     showCodeTab(CodeTabCode);                 // 1.11.18 (lot 5)
-    for (std::size_t i = 0; i < diagnostics_.size(); ++i)
-        if (diagnostics_[i].line == line && diagnostics_[i].column == column) { hmiSelectModelRow(*diagTable_, i); break; }
     editor_->selectRange(static_cast<std::size_t>(line - 1), static_cast<std::uint32_t>(column - 1),
                          static_cast<std::uint32_t>(std::max(0, length)));
 }
@@ -495,12 +466,12 @@ void HmiFunctionsPane::refresh() {
     showSelected();
     const auto n = list ? list->size() : 0u;
     if (const auto* sv = symbolView())                                    // 1.11.10
-        status_->setMessage(std::to_string(n) + " fonction(s) de " + sv->name + "  \xC2\xB7  appel : Nom() dans le symbole, "
-                            "Instance.Nom() dans sa vue, Vue.Instance.Nom() partout (scripts g\xC3\xA9n\xC3\xA9raux, fonctions)");
+        countsText_ = std::to_string(n) + " fonction(s) de " + sv->name + "  \xC2\xB7  appel : Nom() dans le symbole, "
+                      "Instance.Nom() dans sa vue, Vue.Instance.Nom() partout (scripts g\xC3\xA9n\xC3\xA9raux, fonctions)";
     else
-    status_->setMessage(std::to_string(n) + " fonction(s) IHM  \xC2\xB7  " + std::to_string(withReturn) + " avec retour, "
-                        + std::to_string(n - withReturn) + " sans  \xC2\xB7  appel : Nom(a, b) dans un script, "
-                          "une action ou une expression de vue");
+        countsText_ = std::to_string(n) + " fonction(s) IHM  \xC2\xB7  " + std::to_string(withReturn) + " avec retour, "
+                    + std::to_string(n - withReturn) + " sans  \xC2\xB7  appel : Nom(a, b) dans un script, une action ou une expression de vue";
+    showStatus();
     invalidate();
 }
 
@@ -515,7 +486,6 @@ void HmiFunctionsPane::showSelected() {
     if (f) title += "  \xC2\xB7  " + hmi::functionSignature(*f);
     editorPanel_->setTitle(title);
     rebuildProperties();
-    rebuildTrial();
     updateDiagnostics();
     codeTabs_->setPlace(currentPlace(), "Choisis une fonction.");   // 1.11.18 (lot 5) : ses onglets
 }
@@ -622,34 +592,21 @@ void HmiFunctionsPane::rebuildProperties() {
     props_->setCategories({std::move(c)});
 }
 
-void HmiFunctionsPane::rebuildTrial() {
-    std::vector<std::vector<std::string>> rows;
-    std::vector<ui::Tone> tones;
-    const auto add = [&](std::string a, std::string b, ui::Tone t = ui::Tone::None) {
-        rows.push_back({std::move(a), std::move(b)});
-        tones.push_back(t);
-    };
-    if (trial_.function != kNoId && trial_.function == selectedFunction()) {
-        add("Appel", trial_.call);
-        if (!trial_.ok) add("Erreur", trial_.error, ui::Tone::Error);
-        else if (trial_.result.empty()) add("R\xC3\xA9sultat", "(sans retour)", ui::Tone::Muted);
-        else add("R\xC3\xA9sultat", trial_.result + "   (" + trial_.type + ")", ui::Tone::Ok);
-        for (const auto& o : trial_.outputs) add("Param\xC3\xA8tre rendu", o, ui::Tone::Ok);      // 1.11.20 : E/S, sorties
-        for (const auto& j : trial_.journal) add("Journal", j);
-        for (const auto& v : trial_.changed) add("Variable IHM", v, ui::Tone::Warning);
-        add("Automate", trial_.livePlc ? "lu dans la simulation en marche (sans y \xC3\xA9" "crire)"
-                                       : "simulation arr\xC3\xAAt\xC3\xA9" "e : ses variables ne sont pas lues",
-            ui::Tone::Muted);
-    } else if (current()) {
-        add("Essayer", "le bouton Essayer (ou double-clic sur la fonction) : ses arguments, puis le r\xC3\xA9sultat", ui::Tone::Muted);
-    }
-    trialModel_ = std::make_shared<Rows>(std::vector<std::string>{"\xC3\x89l\xC3\xA9ment", "Valeur"}, std::move(rows),
-                                         [tones](ui::RowIndex r, std::size_t c) {
-                                             ui::CellStyle s;
-                                             if (c == 1 && r < tones.size()) s.fgTone = tones[r];
-                                             return s;
-                                         });
-    trialTable_->setModel(trialModel_);
+// 1.11.21 : l'essai aux Sorties du panneau du bas (plus de bandeau ESSAI) - l'appel et son
+// resultat, les parametres rendus (E/S, sorties), le journal, les variables IHM changees, l'automate.
+std::vector<std::pair<hmi::pipeline::Severity, std::string>> HmiFunctionsPane::trialLines() const {
+    using S = hmi::pipeline::Severity;
+    std::vector<std::pair<S, std::string>> out;
+    if (trial_.function == kNoId) return out;
+    if (!trial_.ok) out.emplace_back(S::Error, "Essai de " + trial_.call + " : \xC3\xA9" "chou\xC3\xA9 - " + trial_.error);
+    else if (trial_.result.empty()) out.emplace_back(S::Success, "Essai de " + trial_.call + " : r\xC3\xA9ussi (sans retour)");
+    else out.emplace_back(S::Success, "Essai de " + trial_.call + " = " + trial_.result + "   (" + trial_.type + ")");
+    for (const auto& o : trial_.outputs) out.emplace_back(S::Information, "Param\xC3\xA8tre rendu : " + o);
+    for (const auto& j : trial_.journal) out.emplace_back(S::Information, "Journal : " + j);
+    for (const auto& v : trial_.changed) out.emplace_back(S::Warning, "Variable IHM : " + v);
+    out.emplace_back(S::Information, trial_.livePlc ? std::string("Automate : lu dans la simulation en marche (sans y \xC3\xA9" "crire)")
+                                                    : std::string("Automate : simulation arr\xC3\xAAt\xC3\xA9" "e, ses variables ne sont pas lues"));
+    return out;
 }
 
 void HmiFunctionsPane::updateDiagnostics() {
@@ -683,34 +640,67 @@ void HmiFunctionsPane::updateDiagnostics() {
             return a.line != b.line ? a.line < b.line : a.column < b.column;
         });
     }
-    std::vector<std::vector<std::string>> rows;
+    ++liveRev_;                                   // 1.11.21 : le panneau du bas les relira
     std::vector<std::pair<std::size_t, gfx::Color>> marks;
-    std::vector<hmi::ScriptDiagnostic::Severity> sev;
     for (const auto& d : diagnostics_) {
-        const char* label = d.severity == hmi::ScriptDiagnostic::Severity::Error ? "Erreur"
-                          : d.severity == hmi::ScriptDiagnostic::Severity::Warning ? "Avertissement" : "Information";
-        rows.push_back({d.line ? std::to_string(d.line) : std::string("-"), d.column > 0 ? std::to_string(d.column) : std::string{}, label,
-                        d.message});
-        sev.push_back(d.severity);
         if (d.line > 0 && d.column <= 0 && d.severity != hmi::ScriptDiagnostic::Severity::Info)
             marks.emplace_back(static_cast<std::size_t>(d.line - 1),
                                d.severity == hmi::ScriptDiagnostic::Severity::Error ? gfx::Color{231, 76, 60, 255}
                                                                                     : gfx::Color{241, 196, 15, 255});
     }
-    diagModel_ = std::make_shared<Rows>(std::vector<std::string>{"Ligne", "Col.", "Gravit\xC3\xA9", "Message"}, std::move(rows),
-                                        [sev](ui::RowIndex r, std::size_t c) {
-                                            ui::CellStyle s;
-                                            if (c == 2 && r < sev.size())
-                                                s.fgTone = sev[r] == hmi::ScriptDiagnostic::Severity::Error ? ui::Tone::Error
-                                                         : sev[r] == hmi::ScriptDiagnostic::Severity::Warning ? ui::Tone::Warning
-                                                                                                              : ui::Tone::Muted;
-                                            return s;
-                                        });
-    diagTable_->setModel(diagModel_);
     editor_->setMarkedLines(std::move(marks));
     editor_->setSquiggles(squigglesOf(diagnostics_));      // 1.10 : soulignees pendant la frappe
-    if (auto* panel = dynamic_cast<HmiTitledPanel*>(findById(id() + ".diagPanel")))   // 1.10 : le titre les compte
-        panel->setTitle(f ? diagnosticsTitle(diagnostics_, "cette fonction") : std::string("DIAGNOSTICS"));
+    showStatus();
+}
+
+// 1.11.21 : la barre - le compte du volet, puis les fautes de la fonction montree (le panneau du
+// bas les liste : un clic sur la barre l'ouvre).
+void HmiFunctionsPane::showStatus() {
+    if (!status_) return;
+    std::size_t errors = 0, warnings = 0;
+    for (const auto& d : diagnostics_) {
+        errors += d.severity == hmi::ScriptDiagnostic::Severity::Error;
+        warnings += d.severity == hmi::ScriptDiagnostic::Severity::Warning;
+    }
+    const auto* f = current();
+    if (!f || (!errors && !warnings)) {
+        status_->setMessage(countsText_, ui::StatusBar::Severity::Info);
+        return;
+    }
+    status_->setMessage(f->name + " : " + (errors ? std::to_string(errors) + " erreur(s)" : std::string{}) + (errors && warnings ? ", " : "")
+                            + (warnings ? std::to_string(warnings) + " avertissement(s)" : std::string{})
+                            + ", soulign\xC3\xA9" "(e)s pendant que tu tapes \xE2\x80\x94 la liste : panneau du bas, Diagnostics (clic ici)",
+                        ui::StatusBar::Severity::Warning);
+}
+
+// ---- 1.11.21 : les diagnostics de la fonction montree, au panneau du bas (HmiLive.hpp) ----
+std::vector<hmi::pipeline::Diagnostic> HmiFunctionsPane::liveDiagnostics() const {
+    std::vector<hmi::pipeline::Diagnostic> out;
+    const auto* f = current();
+    if (!f) return out;
+    const auto* sv = symbolView();
+    const std::string path = sv ? sv->name + " \xC2\xB7 " + f->name : f->name;
+    for (const auto& d : diagnostics_) {
+        auto x = liveDiagnostic(d, buildKey(), path, "Fonction");
+        x.item = f->id;
+        x.view = sv ? sv->id : hmi::kNoId;
+        x.property = f->name;
+        out.push_back(std::move(x));
+    }
+    return out;
+}
+
+void HmiFunctionsPane::goToLive(const hmi::pipeline::Diagnostic& d) {
+    if (d.item != hmi::kNoId && d.item != selectedFunction()) selectFunction(d.item);
+    if (d.line > 0) showCodeTab(CodeTabCode);
+    if (d.line > 0 && d.column > 0)
+        editor_->selectRange(static_cast<std::size_t>(d.line - 1), static_cast<std::uint32_t>(d.column - 1),
+                             static_cast<std::uint32_t>(std::max(0, d.length)));
+    else if (d.line > 0)
+        editor_->goToLine(static_cast<std::size_t>(d.line - 1));
+    else if (const auto name = declarationNamed(d.message); !name.empty())
+        (void)showDeclaration(name);       // la faute d'une declaration, dans son onglet
+    updateSymbolLine();
 }
 
 void HmiFunctionsPane::setAssist(std::function<std::shared_ptr<const domain::Project>()> plc,
@@ -1045,7 +1035,7 @@ bool HmiFunctionsPane::tryFunction(Id id, const std::vector<std::string>& argume
             if (const auto* now = rt.variable(name); now && hmi::formatValue(*now) != was)
                 trial_.changed.push_back(name + " : " + was + "  \xE2\x86\x92  " + hmi::formatValue(*now));
     }
-    rebuildTrial();
+    if (hosts_.trialOutput) hosts_.trialOutput(trialLines());      // 1.11.21 : aux Sorties du panneau du bas
     if (trial_.ok)
         say("Essai : " + trial_.call + (trial_.result.empty() ? std::string(" (sans retour)") : " = " + trial_.result));
     else

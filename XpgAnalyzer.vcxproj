@@ -859,6 +859,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\hmi\HmiEnumPanes.hpp" />
     <ClInclude Include="src\app\hmi\HmiExprPage.hpp" />
     <ClInclude Include="src\app\hmi\HmiExprPageView.hpp" />
+    <ClInclude Include="src\app\hmi\HmiLive.hpp" />
     <ClInclude Include="src\app\hmi\HmiObjectAlarmPanes.hpp" />
     <ClInclude Include="src\app\hmi\HmiObjectAlarmTree.hpp" />
     <ClInclude Include="src\app\hmi\HmiOperatorPanes.hpp" />

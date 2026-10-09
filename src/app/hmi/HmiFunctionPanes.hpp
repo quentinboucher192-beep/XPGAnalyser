@@ -31,6 +31,7 @@
 #include "HmiAssist.hpp"
 #include "HmiDeclGrid.hpp"             // 1.11.18 (refonte, lot 5) : les onglets Parametres, Locales, Constantes
 #include "HmiPanels.hpp"
+#include "HmiLive.hpp"                  // 1.11.21 : les diagnostics en direct (le panneau du bas)
 #include "../../core/Command.hpp"
 #include "../../hmi/HmiCommands.hpp"
 #include "../../hmi/HmiScript.hpp"
@@ -47,7 +48,7 @@
 
 namespace app {
 
-class HmiFunctionsPane final : public ui::Widget {
+class HmiFunctionsPane final : public ui::Widget, public HmiLiveSource {
 public:
     using Apply = std::function<void(core::CommandPtr)>;
     HmiFunctionsPane(std::string id, hmi::DocumentPtr doc, Apply apply);
@@ -117,6 +118,10 @@ public:
         std::function<void(hmi::pipeline::Mode, const std::string& key)>           build;
         std::function<std::pair<std::string, std::string>(const std::string& key)> buildState;
         std::function<void()>                                                      buildOutputs;
+        std::function<void()>                                                      showDiagnostics;   // 1.11.21 : le panneau du bas, ses Diagnostics
+        // 1.11.21 : le resultat d'Essayer, aux Sorties du panneau du bas (plus de bandeau ESSAI) :
+        // ses lignes (gravite, texte), dans l'ordre. Sans hote : la barre du volet seule.
+        std::function<void(const std::vector<std::pair<hmi::pipeline::Severity, std::string>>&)> trialOutput;
     };
     void setHosts(Hosts h) { hosts_ = std::move(h); }
     [[nodiscard]] const Hosts& hosts() const noexcept { return hosts_; }   // 1.11.13 : les completer (l'ecran)
@@ -149,8 +154,13 @@ public:
     [[nodiscard]] HmiToolStrip&      tools() noexcept { return *tools_; }
     [[nodiscard]] ui::MultiLineText& editor() noexcept { return *editor_; }
     [[nodiscard]] ui::TableView&     functionTable() noexcept { return *functions_; }
-    [[nodiscard]] ui::TableView&     diagnosticTable() noexcept { return *diagTable_; }
-    [[nodiscard]] ui::TableView&     trialTable() noexcept { return *trialTable_; }
+    // ---- 1.11.21 : HmiLiveSource (les diagnostics de la fonction montree, au panneau du bas) ----
+    [[nodiscard]] std::uint64_t liveRevision() const noexcept override { return liveRev_; }
+    [[nodiscard]] std::string liveElement() const override { return buildKey(); }
+    [[nodiscard]] std::vector<hmi::pipeline::Diagnostic> liveDiagnostics() const override;
+    void goToLive(const hmi::pipeline::Diagnostic& d) override;
+    // 1.11.21 : les lignes que l'essai envoie aux Sorties (trialLines(lastTrial())).
+    [[nodiscard]] std::vector<std::pair<hmi::pipeline::Severity, std::string>> trialLines() const;
     [[nodiscard]] ui::PropertyGrid&  properties() noexcept { return *props_; }
     [[nodiscard]] const std::string& lastMessage() const noexcept { return message_; }
 
@@ -162,7 +172,7 @@ protected:
 private:
     void showSelected();
     void rebuildProperties();
-    void rebuildTrial();
+    void showStatus();                       // 1.11.21 : la barre - le compte du volet, les fautes de la fonction montree
     void updateDiagnostics();
     void say(std::string text, bool warning = false);
     [[nodiscard]] const hmi::HmiFunction* current() const;
@@ -187,16 +197,16 @@ private:
     ui::Splitter*      split_{nullptr};
     ui::TableView*     functions_{nullptr};
     ui::PropertyGrid*  props_{nullptr};
-    ui::TableView*     trialTable_{nullptr};
     HmiTitledPanel*    editorPanel_{nullptr};
     HmiCodeTabs*       codeTabs_{nullptr};         // 1.11.18 (lot 5) : Code | Parametres | Locales | Constantes
     HmiDeclBanner*     banner_{nullptr};
     ui::MultiLineText* editor_{nullptr};
     ui::StatusBar*     symbolBar_{nullptr};
     assist::Sources    assist_;
-    ui::TableView*     diagTable_{nullptr};
     ui::StatusBar*     status_{nullptr};
-    std::shared_ptr<ui::ITableModel> functionModel_, diagModel_, trialModel_;
+    std::shared_ptr<ui::ITableModel> functionModel_;
+    std::string        countsText_;             // 1.11.21 : "9 fonction(s) IHM . 7 avec retour..." (refresh)
+    std::uint64_t      liveRev_{0};             // 1.11.21 : croit a chaque calcul des diagnostics
     std::vector<hmi::Id> order_;
     std::vector<hmi::ScriptDiagnostic> diagnostics_;
     Trial              trial_;

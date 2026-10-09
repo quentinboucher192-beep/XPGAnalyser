@@ -536,8 +536,8 @@ std::optional<std::string> read(Session& s, std::string_view path) {
             auto find = [&](auto&& self, ui::Widget& w) -> void {
                 if (out || !w.visible()) return;
                 if (auto* pane = dynamic_cast<HmiScriptsPane*>(&w)) {
-                    const auto& model = pane->diagnosticTable().model();
-                    out = pane->compiledHere() ? std::to_string(model ? model->rowCount() : 0u) : std::string();
+                    // 1.11.21 : plus de tableau sous l'editeur - ses lignes, comptees par le volet.
+                    out = pane->compiledHere() ? std::to_string(pane->resultCount()) : std::string();
                     return;
                 }
                 for (const auto& c : w.children()) self(self, *c);

@@ -310,15 +310,9 @@ HmiOperatorsPane::HmiOperatorsPane(std::string id, hmi::DocumentPtr doc, Apply a
             base + ".codeTabs", doc_, apply_, std::move(area), std::vector{hmi::decledit::Tab::Variables, hmi::decledit::Tab::Constants},
             banner_)));
         editorPanel_ = panel.get();
-        right->addPane(std::move(panel), 0.74f, 120.f);
-    }
-    {
-        auto panel = std::make_unique<HmiTitledPanel>(base + ".diagPanel", "DIAGNOSTICS");
-        auto table = std::make_unique<ui::TableView>(base + ".diagnostics");
-        table->setColumns({{"Ligne", 70.f, 40.f, true, true, true, ui::Align::End}, {"Gravit\xC3\xA9", 130.f}, {"Message", 620.f}});
-        table->setSelectionMode(ui::SelectionMode::Single);
-        diagTable_ = &static_cast<ui::TableView&>(panel->setBody(std::move(table)));
-        right->addPane(std::move(panel), 0.26f, 70.f);
+        // 1.11.21 : l'editeur prend toute la hauteur - ses fautes vont au panneau du bas
+        // (Diagnostics, l'etape Saisie ; HmiLive.hpp), leurs lignes marquees dans le code.
+        right->addPane(std::move(panel), 1.f, 120.f);
     }
     split->addPane(std::move(right), 0.58f, 300.f);
     split_ = &static_cast<ui::Splitter&>(addChild(std::move(split)));
@@ -372,16 +366,6 @@ HmiOperatorsPane::HmiOperatorsPane(std::string id, hmi::DocumentPtr doc, Apply a
     links_ += table_->selectionChanged->connect([this](const std::vector<ui::RowIndex>& rows) {
         selectedRow_ = rows.empty() ? -1 : static_cast<int>(rows.front());
         showSelected();
-    });
-    links_ += diagTable_->selectionChanged->connect([this](const std::vector<ui::RowIndex>& rows) {
-        if (rows.empty() || rows.front() >= diagnostics_.size()) return;
-        const int line = diagnostics_[rows.front()].line;
-        if (line > 0) {
-            showCodeTab(CodeTabCode);
-            editor_->goToLine(static_cast<std::size_t>(line - 1));
-        } else if (const auto name = declarationNamed(diagnostics_[rows.front()].message); !name.empty()) {
-            (void)showDeclaration(name);      // 1.11.18 (lot 5) : la faute d'une declaration, dans son onglet
-        }
     });
     links_ += editor_->textChanged->connect([this](const std::string& text) {
         if (syncing_) return;
@@ -466,8 +450,6 @@ void HmiOperatorsPane::goTo(Id op, int line) {
     if (line > 0) {
         showCodeTab(CodeTabCode);             // 1.11.18 (lot 5) : le code, pas une grille
         editor_->goToLine(static_cast<std::size_t>(line - 1));
-        for (std::size_t i = 0; i < diagnostics_.size(); ++i)
-            if (diagnostics_[i].line == line) { hmiSelectModelRow(*diagTable_, i); break; }
     }
 }
 
@@ -766,30 +748,40 @@ void HmiOperatorsPane::updateDiagnostics() {
     if (o)
         diagnostics_ = guardedDiagnostics([&] { return diagnosticsOf(hmi::operatorIssues(doc_->project, isPlcType), o->id); },
                                           editor_ ? static_cast<int>(editor_->caretLine()) + 1 : 1, o->op);
-    std::vector<std::vector<std::string>> rows;
+    ++liveRev_;                                   // 1.11.21 : le panneau du bas les relira
     std::vector<std::pair<std::size_t, gfx::Color>> marks;
-    std::vector<hmi::ScriptDiagnostic::Severity> sev;
     for (const auto& d : diagnostics_) {
-        const char* label = d.severity == hmi::ScriptDiagnostic::Severity::Error ? "Erreur"
-                          : d.severity == hmi::ScriptDiagnostic::Severity::Warning ? "Avertissement" : "Information";
-        rows.push_back({d.line ? std::to_string(d.line) : std::string("-"), label, d.message});
-        sev.push_back(d.severity);
         if (d.line > 0 && d.severity != hmi::ScriptDiagnostic::Severity::Info)
             marks.emplace_back(static_cast<std::size_t>(d.line - 1),
                                d.severity == hmi::ScriptDiagnostic::Severity::Error ? gfx::Color{231, 76, 60, 255}
                                                                                     : gfx::Color{241, 196, 15, 255});
     }
-    diagModel_ = std::make_shared<Rows>(std::vector<std::string>{"Ligne", "Gravit\xC3\xA9", "Message"}, std::move(rows),
-                                        [sev](ui::RowIndex r, std::size_t c) {
-                                            ui::CellStyle s;
-                                            if (c == 1 && r < sev.size())
-                                                s.fgTone = sev[r] == hmi::ScriptDiagnostic::Severity::Error ? ui::Tone::Error
-                                                         : sev[r] == hmi::ScriptDiagnostic::Severity::Warning ? ui::Tone::Warning
-                                                                                                              : ui::Tone::Muted;
-                                            return s;
-                                        });
-    diagTable_->setModel(diagModel_);
     editor_->setMarkedLines(std::move(marks));
+}
+
+// ---- 1.11.21 : les diagnostics de l'operateur montre, au panneau du bas (HmiLive.hpp) ----
+std::vector<hmi::pipeline::Diagnostic> HmiOperatorsPane::liveDiagnostics() const {
+    std::vector<hmi::pipeline::Diagnostic> out;
+    const auto* o = current();
+    if (!o || !owner_.valid()) return out;
+    for (const auto& d : diagnostics_) {
+        auto x = liveDiagnostic(d, buildKey(), owner_.label() + " \xC2\xB7 " + o->op, "Op\xC3\xA9rateur");
+        x.item = o->id;
+        x.view = owner_.kind == hmi::OperatorOwner::Kind::Symbol ? owner_.id : hmi::kNoId;
+        x.property = o->op;
+        out.push_back(std::move(x));
+    }
+    return out;
+}
+
+void HmiOperatorsPane::goToLive(const hmi::pipeline::Diagnostic& d) {
+    if (d.item != hmi::kNoId && d.item != selectedOperator()) selectOperator(d.item);
+    if (d.line > 0) {
+        showCodeTab(CodeTabCode);
+        editor_->goToLine(static_cast<std::size_t>(d.line - 1));
+    } else if (const auto name = declarationNamed(d.message); !name.empty()) {
+        (void)showDeclaration(name);      // la faute d'une declaration, dans son onglet
+    }
 }
 
 void HmiOperatorsPane::setAssist(std::function<std::shared_ptr<const domain::Project>()> plc,

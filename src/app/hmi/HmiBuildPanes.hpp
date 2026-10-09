@@ -116,6 +116,18 @@ public:
     [[nodiscard]] std::size_t currentTab() const noexcept;
     [[nodiscard]] std::size_t lineCount() const noexcept { return lines_.size(); }
     [[nodiscard]] const std::vector<hmi::pipeline::Diagnostic>& diagnostics() const noexcept { return diags_; }
+    // ---- 1.11.21 : LES DIAGNOSTICS EN DIRECT (HmiLive.hpp) ----
+    //  Ceux du document montre (un script, une fonction, des operateurs), recalcules a la
+    //  frappe par son volet : en tete de l'onglet Diagnostics (l'etape "Saisie"). Les
+    //  diagnostics du dernier build a l'etape Compilation pour le meme element sont caches
+    //  (la saisie les recalcule) ; ses autres etapes restent. `element` vide : plus rien en
+    //  direct. Un double-clic sur l'une de ces lignes : liveActivated (le volet y revient).
+    void setLive(std::string element, std::vector<hmi::pipeline::Diagnostic> diags);
+    [[nodiscard]] const std::string& liveElement() const noexcept { return liveElement_; }
+    [[nodiscard]] const std::vector<hmi::pipeline::Diagnostic>& liveDiagnostics() const noexcept { return live_; }
+    // Ce que l'onglet Diagnostics montre, dans son ordre (le direct, puis le dernier build), filtres compris.
+    [[nodiscard]] std::vector<hmi::pipeline::Diagnostic> shownDiagnostics() const;
+    const core::SignalPtr<hmi::pipeline::Diagnostic> liveActivated = core::Signal<hmi::pipeline::Diagnostic>::create();
     [[nodiscard]] ui::TableView& outputTable() noexcept { return *out_; }
     [[nodiscard]] ui::TableView& diagnosticTable() noexcept { return *diagTable_; }
     // Double-clic : un diagnostic (aller a sa source) ; une ligne du journal qui nomme un element.
@@ -167,8 +179,13 @@ private:
 
     std::vector<Line>                       lines_;
     std::vector<hmi::pipeline::Diagnostic>  diags_;
+    std::string                             liveElement_;    // 1.11.21 : le document montre
+    std::vector<hmi::pipeline::Diagnostic>  live_;           // ... ses diagnostics en direct
+    struct DiagRow { bool live{false}; std::size_t index{0}; };
+    [[nodiscard]] const hmi::pipeline::Diagnostic& diagOf(const DiagRow& r) const { return r.live ? live_[r.index] : diags_[r.index]; }
+    [[nodiscard]] bool hiddenByLive(const hmi::pipeline::Diagnostic& d) const;
     std::vector<std::size_t>                outRows_;    // la ligne de lines_ de chaque rangee
-    std::vector<std::size_t>                diagRows_;
+    std::vector<DiagRow>                    diagRows_;
     bool                                    levels_[5]{true, true, true, true, true};
     HmiToolStrip*                           tools_{nullptr};
     ui::InputText*                          search_{nullptr};

@@ -52,6 +52,7 @@ namespace app {
 class MacrosPane;   // lot macros 1 : l'onglet Macros
 class HmiBuildManager;      // 1.11.13 : la generation incrementale de l'IHM (hmi/HmiBuild.hpp)
 class HmiBuildOutputPane;   // 1.11.13 : ses sorties (hmi/HmiBuildPanes.hpp) ; 1.11.14 : le panneau du bas
+class HmiLiveSource;        // 1.11.21 : un volet de code montre (hmi/HmiLive.hpp)
 struct ConsoleEntry;        // 1.11.14 : une ligne de la Console (hmi/HmiConsole.hpp)
 class MacroEditorView;         // lot API 6 : le mode Modifier d'une macro
 class TopBar;       // lot API 2 : la barre du haut
@@ -667,6 +668,11 @@ private:
     bool runHmiBuild(hmi::pipeline::Mode mode, std::vector<std::string> scope, bool chosen, std::string title,
                      std::function<void(const hmi::pipeline::Report&)> then = {});
     void tickHmiBuild();
+    // 1.11.21 : LES DIAGNOSTICS EN DIRECT (hmi/HmiLive.hpp) - le volet de code montre sur la page
+    // courante (nul : aucun) ; a chaque image, le panneau du bas reprend ses diagnostics s'ils ont
+    // change (un autre document, une frappe).
+    [[nodiscard]] HmiLiveSource* shownLiveSource() const;
+    void tickHmiLive();
     // Le build d'un demarrage de la simulation IHM (buildGate) ; un build deja en
     // cours (Generer depuis l'arbre) : le demarrage le suit.
     void startHmiBuild(const std::string& source);
@@ -724,6 +730,7 @@ private:
             return std::pair<std::string, std::string>{b.known ? b.glyph + " " + b.label : std::string("\xE2\x80\x94 analyse\xE2\x80\xA6"), b.tip};
         };
         hosts.buildOutputs = [this] { (void)hmiBuildOutput(true); };
+        hosts.showDiagnostics = [this] { showHmiBuildOutputs(1); };     // 1.11.21 : la barre d'un volet de code
     }
     void runHmiBuildFor(hmi::pipeline::Mode mode, const std::string& key);
     void openHmiDiagnostic(const hmi::pipeline::Diagnostic& d);
@@ -1127,6 +1134,8 @@ private:
     ui::Splitter*         bottom_{nullptr};     // diagnostics / summary / status
     ui::Splitter*         centreColumn_{nullptr};  // 1.11.14 : les onglets du centre / le panneau du bas
     HmiBuildOutputPane*   bottomPanel_{nullptr};   // 1.11.14 : Sorties, Console, Diagnostics
+    const HmiLiveSource*  liveSource_{nullptr};    // 1.11.21 : le dernier volet lu (compare, jamais suivi)
+    std::uint64_t         liveRevision_{0};
     ui::TreeView*         explorer_{nullptr};
     ui::TabArea*          centre_{nullptr};    // lot 7 : des groupes d'onglets, la mosaique
     ui::PropertyGrid*     configuration_{nullptr};

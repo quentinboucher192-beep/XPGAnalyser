@@ -11573,16 +11573,17 @@ const std::vector<Topic>& topics() {
                          "tu tapes, sous ses caract\xC3\xA8res (rouge : erreur, orange : avertissement) ; le "
                          "**num\xC3\xA9ro de sa ligne** est sur fond rouge (ou orange). La souris sur le "
                          "trait : l'infobulle dit le message.", {}},
-             {K::Bullet, "Le tableau **Diagnostics** sous le code les liste : sa **ligne**, sa **colonne**, "
-                         "sa gravit\xC3\xA9, son message ; son titre les compte (\xC2\xAB 2 erreurs dans ce "
-                         "script \xC2\xBB). Un clic sur une ligne du tableau s\xC3\xA9lectionne la faute "
-                         "dans le code.", {}},
+             {K::Bullet, "Le **panneau du bas**, onglet **Diagnostics**, les liste en t\xC3\xAAte (l'\xC3\xA9tape "
+                         "**Saisie**, 1.11.21 : plus de tableau sous le code) : sa **ligne**, sa **colonne**, "
+                         "sa gravit\xC3\xA9, son message ; elles suivent la frappe. Un **double-clic** sur une "
+                         "ligne s\xC3\xA9lectionne la faute dans le code. La barre du volet les compte "
+                         "(\xC2\xAB 2 erreur(s), soulign\xC3\xA9" "e(s) pendant que tu tapes \xC2\xBB) ; un clic sur elle "
+                         "ouvre le panneau.", {}},
              {K::Bullet, "**Compiler (F7)** dans l'\xC3\xA9" "diteur, sans le quitter : il compile le "
-                         "**script affich\xC3\xA9**, lui seul (1.11.17) ; le tableau devient **R\xC3\xA9sultats "
-                         "de Compiler**, ses fautes avec leur ligne et leur colonne, son titre les compte ; "
-                         "elles suivent la frappe : corrig\xC3\xA9" "e, une faute dispara\xC3\xAEt tout de suite. "
-                         "En erreur, les **Diagnostics** du panneau du bas s'ouvrent, filtr\xC3\xA9s sur ce "
-                         "script. Le bouton est gris\xC3\xA9 sans script. Dans l'\xC3\xA9" "diteur des fonctions, "
+                         "**script affich\xC3\xA9**, lui seul (1.11.17) ; ses r\xC3\xA9sultats vont aux "
+                         "**Diagnostics** du panneau du bas, avec leur ligne et leur colonne ; ceux de la saisie "
+                         "suivent la frappe : corrig\xC3\xA9" "e, une faute dispara\xC3\xAEt tout de suite. "
+                         "En erreur, le panneau s'ouvre sur ses Diagnostics. Le bouton est gris\xC3\xA9 sans script. Dans l'\xC3\xA9" "diteur des fonctions, "
                          "Compiler (F7) compile la **fonction affich\xC3\xA9" "e** ; dans celui des op\xC3\xA9rateurs, "
                          "ceux du symbole ou du type affich\xC3\xA9. Le **projet entier** (expressions, "
                          "liaisons, actions, tous les scripts) : **IHM \xE2\x80\xBA Compiler**, ou F7 hors d'un "
@@ -11627,7 +11628,7 @@ const std::vector<Topic>& topics() {
          {"scripts", "fonctions", "variables-locales", "verifier", "variables-systeme", "parametres-popups", "types-ihm"},
          {"n'existe pas", "veux-tu dire", "F7", "R\xC3\xA9sultats de Compiler", "FUNCTION", "FOR EACH", "fonction interne", "fonction inconnue", "prend", "arguments", "lecture seule", "tu lui affectes", "est attendu", "n'est pas un tableau", "n'a pas de membre", "Diagnostics", "colonne", "soulign\xC3\xA9", "soulignement", "trait ondul\xC3\xA9", "constante"},
          {"scripts", "compiler", "fonctions"},
-         {{"PNG_1030_script_fautes_soulignees.png", "Trois fautes tap\xC3\xA9" "es : soulign\xC3\xA9" "es dans le code, le num\xC3\xA9ro de leur ligne en rouge, et le tableau des diagnostics les dit \xC3\xA0 leur ligne et leur colonne, pendant la frappe."}, {"PNG_1032_compiler_fautes_des_scripts.png", "Compiler : chaque faute des scripts, avec son script, sa ligne et sa colonne."}, {"PNG_1036_resultats_de_compiler_editeur.png", "Compiler (F7) dans l'\xC3\xA9" "diteur : les r\xC3\xA9sultats de tous les scripts sous le code (Script, Ligne, Col., Message) ; un clic y m\xC3\xA8ne."}},
+         {{"PNG_1030_script_fautes_soulignees.png", "Trois fautes tap\xC3\xA9" "es : soulign\xC3\xA9" "es dans le code, le num\xC3\xA9ro de leur ligne en rouge, et les Diagnostics du panneau du bas les disent \xC3\xA0 leur ligne et leur colonne, pendant la frappe."}, {"PNG_1032_compiler_fautes_des_scripts.png", "Compiler : chaque faute des scripts, avec son script, sa ligne et sa colonne."}, {"PNG_1036_resultats_de_compiler_editeur.png", "Compiler (F7) dans l'\xC3\xA9" "diteur : les r\xC3\xA9sultats du script montr\xC3\xA9 aux Diagnostics du panneau du bas (Ligne, Col., Message) ; un double-clic y m\xC3\xA8ne."}},
          "",
          {},
          "",
@@ -12669,9 +12670,11 @@ const std::vector<Topic>& topics() {
              {K::Paragraph, "**Essayer** (ou double-clic sur la fonction) demande ses arguments en ST (`2.5`, "
                          "`TRUE`, `'texte'`, `T#5s`, une expression) et l'ex\xC3\xA9" "cute sur un banc : "
                          "les variables IHM \xC3\xA0 leur valeur initiale, les variables de l'automate lues "
-                         "dans la simulation si elle tourne (sans jamais y \xC3\xA9" "crire). Le tableau "
-                         "ESSAI montre l'appel, le r\xC3\xA9sultat, les lignes \xC3\xA9" "crites au journal "
-                         "et les variables IHM chang\xC3\xA9" "es. Le projet n'est pas modifi\xC3\xA9.", {}},
+                         "dans la simulation si elle tourne (sans jamais y \xC3\xA9" "crire). Le r\xC3\xA9sultat "
+                         "va aux **Sorties** du panneau du bas (cat\xC3\xA9gorie Essai, 1.11.21 : plus de bandeau "
+                         "ESSAI) : l'appel, le r\xC3\xA9sultat, les param\xC3\xA8tres rendus (E/S, sorties), les "
+                         "lignes \xC3\xA9" "crites au journal et les variables IHM chang\xC3\xA9" "es. Le projet n'est "
+                         "pas modifi\xC3\xA9.", {}},
              {K::Heading, "Renommer, supprimer", {}},
              {K::Paragraph, "Renommer une fonction (propri\xC3\xA9t\xC3\xA9 Nom) renomme **tous ses appels** : "
                          "scripts, fonctions, actions, expressions, textes \xC3\xA0 trous, alarmes ; un seul "

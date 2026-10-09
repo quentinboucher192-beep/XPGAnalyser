@@ -2218,6 +2218,9 @@
     <ClInclude Include="src\app\hmi\HmiExprPageView.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiLive.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
     <ClInclude Include="src\app\hmi\HmiObjectAlarmPanes.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>

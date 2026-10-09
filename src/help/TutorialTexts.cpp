@@ -445,7 +445,7 @@ const std::vector<EmbeddedTutorial>& embeddedTutorials() {
          "@bravo Compiler a trouv\xC3\xA9 la faute, avec sa ligne et sa colonne, et propose Pos.\n"
          "\n"
          "== 5 | Corrige\n"
-         ": Un clic sur le r\xC3\xA9sultat place le curseur sur la faute ; on r\xC3\xA9\xC3\xA9" "crit la ligne avec **Pos**. Compiler confirme : aucune erreur.\n"
+         ": Les r\xC3\xA9sultats sont au panneau du bas (Diagnostics) : un double-clic place le curseur sur la faute. On r\xC3\xA9\xC3\xA9" "crit la ligne avec **Pos**. Compiler confirme : aucune erreur.\n"
          "# Tranche 8 : le double clic de l'editeur ne choisit pas le mot (verificateur : \"PosPosition\").\n"
          "# On choisit la ligne au clavier (Debut, puis Maj+Fin) et on la reecrit.\n"
          "clic resultats-compiler\n"

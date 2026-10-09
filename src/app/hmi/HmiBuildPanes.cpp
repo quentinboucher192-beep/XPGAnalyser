@@ -707,7 +707,10 @@ HmiBuildOutputPane::HmiBuildOutputPane(std::string id) : ui::Widget(std::move(id
         if (!l.element.empty()) elementActivated->emit(l.element);
     });
     links_ += diagTable_->activated->connect([this](ui::RowIndex r) {
-        if (r < diagRows_.size()) diagnosticActivated->emit(diags_[diagRows_[r]]);
+        if (r >= diagRows_.size()) return;
+        const auto row = diagRows_[r];
+        if (row.live) liveActivated->emit(pl::Diagnostic(live_[row.index]));     // 1.11.21 : une copie (le volet peut le refaire)
+        else diagnosticActivated->emit(diags_[row.index]);
     });
     links_ += consoleTable_->activated->connect([this](ui::RowIndex r) {
         // une copie : la ligne peut tomber (conservation) pendant que l'ecran ouvre sa source
@@ -782,25 +785,31 @@ void HmiBuildOutputPane::rebuild() {
     std::vector<pl::Severity> dsev;
     diagRows_.clear();
     int blocking = 0;
-    for (std::size_t k = 0; k < diags_.size(); ++k) {
-        const auto& d = diags_[k];
+    std::size_t counted = 0;
+    // 1.11.21 : le direct d'abord (le document montre), puis le dernier build - sans ce que la
+    // saisie recalcule (l'etape Compilation du meme element).
+    const auto add = [&](const pl::Diagnostic& d, DiagRow row) {
         if (d.blocking()) ++blocking;
+        ++counted;
         Line probe;
         probe.severity = d.severity;
         probe.category = d.category;
         probe.message = d.message;
         probe.element = d.path;
-        if (!shown(probe)) continue;
+        if (!shown(probe)) return;
         drows.push_back({d.code, std::string(pl::severityLabel(d.severity)), d.message, d.path, d.file, d.line ? std::to_string(d.line) : std::string{},
                          d.column ? std::to_string(d.column) : std::string{}, d.step, d.suggestion});
         dsev.push_back(d.severity);
-        diagRows_.push_back(k);
-    }
+        diagRows_.push_back(row);
+    };
+    for (std::size_t k = 0; k < live_.size(); ++k) add(live_[k], DiagRow{true, k});
+    for (std::size_t k = 0; k < diags_.size(); ++k)
+        if (!hiddenByLive(diags_[k])) add(diags_[k], DiagRow{false, k});
     diagModel_ = std::make_shared<Rows>(std::vector<std::string>{"Code", "Gravit\xC3\xA9", "Message", "\xC3\x89l\xC3\xA9ment", "Fichier", "Ligne", "Col.", "\xC3\x89tape", "Suggestion"},
                                        std::move(drows), std::move(dsev), std::vector<bool>{}, 2);
     diagTable_->setModel(diagModel_);
     tabs_->setTabBadge(kSorties, lines_.empty() ? std::string{} : std::to_string(lines_.size()), errs ? ui::Tone::Error : warns ? ui::Tone::Warning : ui::Tone::None);
-    tabs_->setTabBadge(kDiagnostics, diags_.empty() ? std::string{} : std::to_string(diags_.size()), blocking ? ui::Tone::Error : ui::Tone::Warning);
+    tabs_->setTabBadge(kDiagnostics, counted == 0 ? std::string{} : std::to_string(counted), blocking ? ui::Tone::Error : ui::Tone::Warning);
     refreshStatus();
     invalidate();
 }
@@ -828,8 +837,19 @@ void HmiBuildOutputPane::rebuildConsole() {
 void HmiBuildOutputPane::refreshStatus() {
     if (!status_) return;
     if (currentTab() != kConsole) {
-        status_->setMessage(summary_, std::any_of(diags_.begin(), diags_.end(), [](const pl::Diagnostic& d) { return d.blocking(); })
-                                          ? ui::StatusBar::Severity::Error : ui::StatusBar::Severity::Info);
+        // 1.11.21 : ce que la saisie trouve dans le document montre, dit apres le resume du build.
+        std::size_t liveErrors = 0, liveWarnings = 0;
+        for (const auto& d : live_) (d.blocking() ? liveErrors : liveWarnings) += 1;
+        // Des fautes en direct : en tete (le document qu'on tape) ; sinon apres le resume.
+        std::string text = summary_;
+        if (!liveElement_.empty() && !live_.empty())
+            text = "Saisie : " + plural(static_cast<long long>(liveErrors), "erreur", "erreurs") + ", "
+                 + plural(static_cast<long long>(liveWarnings), "avertissement", "avertissements") + " dans le document montr\xC3\xA9  \xC2\xB7  "
+                 + summary_;
+        else if (!liveElement_.empty())
+            text += "  \xC2\xB7  Saisie : aucune faute dans le document montr\xC3\xA9";
+        const bool bad = liveErrors > 0 || std::any_of(diags_.begin(), diags_.end(), [this](const pl::Diagnostic& d) { return d.blocking() && !hiddenByLive(d); });
+        status_->setMessage(text, bad ? ui::StatusBar::Severity::Error : ui::StatusBar::Severity::Info);
         return;
     }
     // La session, les lignes, les erreurs : de quoi savoir ou on en est.
@@ -979,6 +999,31 @@ void HmiBuildOutputPane::addReport(const pl::Report& report, const pl::Request& 
     rebuild();
 }
 
+// ---- 1.11.21 : les diagnostics en direct ----
+bool HmiBuildOutputPane::hiddenByLive(const pl::Diagnostic& d) const {
+    return !liveElement_.empty() && d.element == liveElement_ && d.step == "Compilation";
+}
+
+void HmiBuildOutputPane::setLive(std::string element, std::vector<pl::Diagnostic> diags) {
+    for (std::size_t k = 0; k < diags.size(); ++k) diags[k].id = "S" + std::to_string(k + 1);
+    // Rien de change (une frappe qui ne change pas les fautes) : la table reste telle quelle.
+    const auto same = [](const pl::Diagnostic& a, const pl::Diagnostic& b) {
+        return a.severity == b.severity && a.message == b.message && a.line == b.line && a.column == b.column && a.length == b.length
+            && a.path == b.path && a.suggestion == b.suggestion;
+    };
+    if (element == liveElement_ && diags.size() == live_.size() && std::equal(diags.begin(), diags.end(), live_.begin(), same)) return;
+    liveElement_ = std::move(element);
+    live_ = std::move(diags);
+    rebuild();
+}
+
+std::vector<pl::Diagnostic> HmiBuildOutputPane::shownDiagnostics() const {
+    std::vector<pl::Diagnostic> out;
+    out.reserve(diagRows_.size());
+    for (const auto& r : diagRows_) out.push_back(diagOf(r));
+    return out;
+}
+
 void HmiBuildOutputPane::say(pl::Severity severity, std::string category, std::string message) {
     Line x;
     x.time = clockNow();
@@ -1019,11 +1064,11 @@ std::string HmiBuildOutputPane::copyText() const {
             const auto& l = lines_[k];
             out += l.time + "\t" + (l.rule ? std::string("----") : std::string(pl::severityLabel(l.severity))) + "\t" + l.category + "\t" + l.message + "\n";
         }
-    if (!diags_.empty()) {
+    if (!diagRows_.empty()) {
         if (!out.empty()) out += "\n";
         out += "Diagnostics\n";
-        for (const auto k : diagRows_) {
-            const auto& d = diags_[k];
+        for (const auto& k : diagRows_) {
+            const auto& d = diagOf(k);
             out += d.code + "\t" + std::string(pl::severityLabel(d.severity)) + "\t" + d.message + "\t" + d.path
                  + (d.line ? "\tligne " + std::to_string(d.line) + (d.column ? ", colonne " + std::to_string(d.column) : std::string{}) : std::string{}) + "\n";
         }

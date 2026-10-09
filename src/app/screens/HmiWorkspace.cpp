@@ -1254,6 +1254,12 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         hosts.newFunction = [this] { askHmiNewFunction(); };
         hosts.remove = [this](hmi::Id f) { askHmiDeleteFunction(f); };
         hosts.tryIt = [this](hmi::Id f) { askHmiTryFunction(f); };
+        // 1.11.21 : le resultat d'Essayer aux Sorties du panneau du bas (plus de bandeau ESSAI).
+        hosts.trialOutput = [this](const std::vector<std::pair<hmi::pipeline::Severity, std::string>>& lines) {
+            if (!hmiBuildOutput(true) || !bottomPanel_) return;
+            for (const auto& [severity, text] : lines) bottomPanel_->say(severity, "Essai", text);
+            bottomPanel_->showTab(HmiBuildOutputPane::kSorties);
+        };
         hosts.compile = [this] { openHmiPane("compiler"); };
         hosts.plc = [this]() -> ::sim::Environment* {
             return app_.simulation().attached() ? app_.simulationRuntime() : nullptr;

@@ -26,6 +26,7 @@
 #include "HmiAssist.hpp"
 #include "HmiDeclGrid.hpp"             // 1.11.18 (refonte, lot 5) : les onglets Locales, Constantes
 #include "HmiPanels.hpp"
+#include "HmiLive.hpp"                  // 1.11.21 : les diagnostics en direct (le panneau du bas)
 #include "../../core/Command.hpp"
 #include "../../hmi/HmiCommands.hpp"
 #include "../../hmi/HmiOperators.hpp"
@@ -110,7 +111,7 @@ private:
     std::vector<Chip>         kindChips_, choiceChips_;
 };
 
-class HmiOperatorsPane final : public ui::Widget {
+class HmiOperatorsPane final : public ui::Widget, public HmiLiveSource {
 public:
     using Apply = std::function<void(core::CommandPtr)>;
     HmiOperatorsPane(std::string id, hmi::DocumentPtr doc, Apply apply, hmi::OperatorOwner owner = {});
@@ -207,7 +208,11 @@ public:
     [[nodiscard]] HmiToolStrip&      tools() noexcept { return *tools_; }
     [[nodiscard]] ui::MultiLineText& editor() noexcept { return *editor_; }
     [[nodiscard]] ui::TableView&     operatorTable() noexcept { return *table_; }
-    [[nodiscard]] ui::TableView&     diagnosticTable() noexcept { return *diagTable_; }
+    // ---- 1.11.21 : HmiLiveSource (les diagnostics de l'operateur montre, au panneau du bas) ----
+    [[nodiscard]] std::uint64_t liveRevision() const noexcept override { return liveRev_; }
+    [[nodiscard]] std::string liveElement() const override { return buildKey(); }
+    [[nodiscard]] std::vector<hmi::pipeline::Diagnostic> liveDiagnostics() const override;
+    void goToLive(const hmi::pipeline::Diagnostic& d) override;
     [[nodiscard]] ui::PropertyGrid&  properties() noexcept { return *props_; }
     [[nodiscard]] const std::string& lastMessage() const noexcept { return message_; }
     [[nodiscard]] std::string        editorTitle() const;
@@ -245,9 +250,9 @@ private:
     HmiOperatorDialog* dialog_{nullptr};        // 1.10.1 (U2) : "Ajouter un operateur"
     std::string        symbolLine_;
     assist::Sources    assist_;
-    ui::TableView*     diagTable_{nullptr};
     ui::StatusBar*     status_{nullptr};
-    std::shared_ptr<ui::ITableModel> model_, diagModel_;
+    std::shared_ptr<ui::ITableModel> model_;
+    std::uint64_t      liveRev_{0};             // 1.11.21 : croit a chaque calcul des diagnostics
     std::vector<hmi::Id> order_;
     std::vector<hmi::ScriptDiagnostic> diagnostics_;
     int                selectedRow_{-1};

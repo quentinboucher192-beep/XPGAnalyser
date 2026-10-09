@@ -195,12 +195,13 @@ std::optional<gfx::Rect> UiDriver::locate(std::string_view target, std::string* 
         // bibliotheque n'a pas ses cartes de variantes, la bibliotheque entiere).
         if (target == "variantes")
             if (auto* editor = currentEditor(); editor && editor->palette().bounds().w > 0.f) return editor->palette().bounds();
-        // Tranche 5. "resultats-compiler" : le tableau du bas des scripts (Resultats de Compiler,
-        // HmiScriptsPane, id "<...>.diagnostics") : sa premiere ligne, sinon le tableau entier.
+        // Tranche 5. "resultats-compiler" : les resultats de Compiler - 1.11.21 : l'onglet Diagnostics
+        // du panneau du bas (id "hmi.sorties.diagnostics" ; avant, le tableau sous l'editeur des
+        // scripts) : sa premiere ligne, sinon le tableau entier.
         if (target == "resultats-compiler") {
             std::optional<gfx::Rect> r;
-            if (auto* page = currentPage())
-                walk(*page, [&](ui::Widget& w) {
+            if (auto* root = top())
+                walk(*root, [&](ui::Widget& w) {
                     auto* t = dynamic_cast<ui::TableView*>(&w);
                     const std::string_view id = w.id();
                     if (r || !t || !shown(w) || id.size() < 12 || id.substr(id.size() - 12) != ".diagnostics") return;

@@ -452,18 +452,9 @@ HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply
             base + ".codeTabs", doc_, apply_, std::move(area), std::vector{hmi::decledit::Tab::Constants, hmi::decledit::Tab::Variables},
             banner_)));
         editorPanel_ = panel.get();
-        right->addPane(std::move(panel), 0.74f, 120.f);
-    }
-    {
-        auto panel = std::make_unique<HmiTitledPanel>(base + ".diagPanel", "DIAGNOSTICS");
-        auto table = std::make_unique<ui::TableView>(base + ".diagnostics");
-        // 1.10 : la ligne et la colonne de chaque faute (comme le rapport de Compiler).
-        // 1.10 (maquette, scene 4) : la colonne Script (1.11.17 : Compiler ne dit plus que le script montre).
-        table->setColumns({{"Script", 150.f}, {"Ligne", 62.f, 40.f, true, true, true, ui::Align::End},
-                           {"Col.", 56.f, 36.f, true, true, true, ui::Align::End}, {"Gravit\xC3\xA9", 110.f}, {"Message", 560.f}});
-        table->setSelectionMode(ui::SelectionMode::Single);
-        diagTable_ = &static_cast<ui::TableView&>(panel->setBody(std::move(table)));
-        right->addPane(std::move(panel), 0.26f, 70.f);
+        // 1.11.21 : l'editeur prend toute la hauteur - ses fautes vont au panneau du bas
+        // (Diagnostics, l'etape Saisie ; HmiLive.hpp), soulignees dans le code.
+        right->addPane(std::move(panel), 1.f, 120.f);
     }
     split->addPane(std::move(right), 0.58f, 300.f);
     split_ = &static_cast<ui::Splitter&>(host.addChild(std::move(split)));
@@ -568,27 +559,9 @@ HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply
     links_ += variables_->activated->connect([this](ui::RowIndex) {
         if (selectedVariable() && hosts_.editVariable) hosts_.editVariable(selectedVariable());
     });
-    links_ += diagTable_->selectionChanged->connect([this](const std::vector<ui::RowIndex>& rows) {
-        if (rows.empty() || rows.front() >= results_.size()) return;
-        const ResultRow row = results_[rows.front()];      // une copie : le tableau peut etre refait plus bas
-        const auto& d = row.d;
-        if (!row.here) {
-            // 1.10 : un autre script - de ce volet : il devient le script montre ;
-            // d'ailleurs (une autre vue, une fonction, une action) : l'hote y mene.
-            if (row.script != kNoId) goTo(row.script, d.line, d.column, d.length);
-            else if (hosts_.openIssue) hosts_.openIssue(row.issue);
-            return;
-        }
-        // 1.10 : une faute a sa place : le curseur dessus, ses caracteres selectionnes.
-        if (d.line > 0) showCodeTab(CodeTabCode);
-        if (d.line > 0 && d.column > 0)
-            editor_->selectRange(static_cast<std::size_t>(d.line - 1), static_cast<std::uint32_t>(d.column - 1),
-                                 static_cast<std::uint32_t>(std::max(0, d.length)));
-        else if (d.line > 0)
-            editor_->goToLine(static_cast<std::size_t>(d.line - 1));
-        else if (const auto name = declarationNamed(d.message); !name.empty())
-            (void)showDeclaration(name);      // 1.11.18 (lot 5) : la faute d'une declaration - sa ligne, dans son onglet
-    });
+    // 1.11.21 : la barre du volet (« 1 erreur(s), soulignee(s) pendant que tu tapes ») : un clic
+    // ouvre le panneau du bas, ou elles sont listees.
+    status_->setMessageClick([this] { if (hosts_.showDiagnostics) hosts_.showDiagnostics(); });
     links_ += editor_->caretSymbolChanged->connect([this](const std::string&) { updateSymbolLine(); });
     links_ += editor_->textChanged->connect([this](const std::string& text) {
         if (syncing_) return;
@@ -981,18 +954,8 @@ void HmiScriptsPane::updateDiagnostics() {
         mine();
         for (auto& r : others) results_.push_back(std::move(r));
     }
-    std::vector<std::vector<std::string>> rows;
+    ++liveRev_;                                   // 1.11.21 : le panneau du bas les relira
     std::vector<std::pair<std::size_t, gfx::Color>> marks;
-    std::vector<hmi::ScriptDiagnostic::Severity> sev;
-    for (const auto& r : results_) {
-        const auto& d = r.d;
-        const char* label = d.severity == hmi::ScriptDiagnostic::Severity::Error ? "Erreur"
-                          : d.severity == hmi::ScriptDiagnostic::Severity::Warning ? "Avertissement" : "Information";
-        // 1.10 : le script, la ligne et la colonne de la faute ("" : la ligne entiere).
-        rows.push_back({r.where, d.line ? std::to_string(d.line) : std::string("-"), d.column > 0 ? std::to_string(d.column) : std::string{},
-                        label, d.message});
-        sev.push_back(d.severity);
-    }
     for (const auto& d : diagnostics_)
         // 1.10 : une faute a sa place est soulignee (plus bas) ; la ligne
         // entiere n'est marquee que pour une faute sans colonne (la syntaxe).
@@ -1000,41 +963,62 @@ void HmiScriptsPane::updateDiagnostics() {
             marks.emplace_back(static_cast<std::size_t>(d.line - 1),
                                d.severity == hmi::ScriptDiagnostic::Severity::Error ? gfx::Color{231, 76, 60, 255}
                                                                                     : gfx::Color{241, 196, 15, 255});
-    diagModel_ = std::make_shared<Rows>(std::vector<std::string>{"Script", "Ligne", "Col.", "Gravit\xC3\xA9", "Message"}, std::move(rows),
-                                        [sev](ui::RowIndex r, std::size_t c) {
-                                            ui::CellStyle s;
-                                            if ((c == 0 || c == 3) && r < sev.size())
-                                                s.fgTone = sev[r] == hmi::ScriptDiagnostic::Severity::Error ? ui::Tone::Error
-                                                         : sev[r] == hmi::ScriptDiagnostic::Severity::Warning ? ui::Tone::Warning
-                                                                                                              : ui::Tone::Muted;
-                                            return s;
-                                        });
-    diagTable_->setModel(diagModel_);
     editor_->setMarkedLines(std::move(marks));
     // 1.10 : chaque faute a sa place soulignee pendant la frappe (rouge : erreur,
     // orange : avertissement), son numero de ligne teinte, son message dans
     // l'infobulle - les memes que Compiler, sans l'attendre.
     editor_->setSquiggles(squigglesOf(diagnostics_));
-    std::size_t errors = 0;
-    for (const auto& d : diagnostics_) errors += d.severity == hmi::ScriptDiagnostic::Severity::Error;
-    // 1.10 (maquette, scene 4) : le titre du tableau - les resultats de Compiler
-    // (1.11.17 : le script montre seul) et ses fautes.
-    if (auto* panel = dynamic_cast<HmiTitledPanel*>(findById(id() + ".diagPanel"))) {
-        std::string title = sc ? diagnosticsTitle(diagnostics_, "ce script") : std::string("DIAGNOSTICS");
-        if (compiled_) {
-            const std::string head = "DIAGNOSTICS";
-            title = "R\xC3\x89SULTATS DE COMPILER  \xC2\xB7  " + std::to_string(results_.size())
-                  + (title.size() > head.size() ? title.substr(head.size()) : std::string{});
-        }
-        panel->setTitle(std::move(title));
+    std::size_t errors = 0, warnings = 0;
+    for (const auto& d : diagnostics_) {
+        errors += d.severity == hmi::ScriptDiagnostic::Severity::Error;
+        warnings += d.severity == hmi::ScriptDiagnostic::Severity::Warning;
     }
     if (sc) {
-        status_->setMessage(std::to_string(lineCount(sc->body)) + " ligne(s)  \xC2\xB7  " + std::string(hmi::scriptLangKey(sc->lang))
-                                + "  \xC2\xB7  "
-                                + (errors ? std::to_string(errors) + " erreur(s), soulign\xC3\xA9" "e(s) pendant que tu tapes"
-                                          : std::string("aucune erreur")),
-                            errors ? ui::StatusBar::Severity::Warning : ui::StatusBar::Severity::Info);
+        // 1.11.21 : la barre compte les fautes ; le panneau du bas les liste (un clic l'ouvre).
+        std::string said = errors ? std::to_string(errors) + " erreur(s), soulign\xC3\xA9" "e(s) pendant que tu tapes"
+                         : warnings ? std::to_string(warnings) + " avertissement(s), soulign\xC3\xA9" "(s)"
+                                    : std::string("aucune erreur");
+        if (errors || warnings) said += " \xE2\x80\x94 la liste : panneau du bas, Diagnostics (clic ici)";
+        statusText_ = std::to_string(lineCount(sc->body)) + " ligne(s)  \xC2\xB7  " + std::string(hmi::scriptLangKey(sc->lang)) + "  \xC2\xB7  " + said;
+        status_->setMessage(statusText_, errors || warnings ? ui::StatusBar::Severity::Warning : ui::StatusBar::Severity::Info);
     }
+}
+
+// ---- 1.11.21 : les diagnostics du script montre, au panneau du bas (HmiLive.hpp) ----
+std::vector<hmi::pipeline::Diagnostic> HmiScriptsPane::liveDiagnostics() const {
+    std::vector<hmi::pipeline::Diagnostic> out;
+    const auto* sc = current();
+    if (!sc) return out;
+    const std::string where = scriptWhere(*sc, general() ? nullptr : doc_->project.view(view_));
+    for (const auto& r : results_) {
+        if (!r.here) continue;
+        auto x = liveDiagnostic(r.d, buildKey(), where, "Script",
+                                r.fixLabel.empty() ? std::string{} : r.fixLabel + " (l'outil du volet)");
+        x.script = sc->id;
+        x.view = general() ? hmi::kNoId : view_;
+        x.property = sc->name;
+        out.push_back(std::move(x));
+    }
+    return out;
+}
+
+void HmiScriptsPane::goToLive(const hmi::pipeline::Diagnostic& d) {
+    const auto* sc = current();
+    if (!sc || d.script != sc->id) {
+        if (d.script != hmi::kNoId) goTo(d.script, d.line, d.column, d.length);
+        return;
+    }
+    // Une faute a sa place : le curseur dessus, ses caracteres selectionnes ; la faute d'une
+    // declaration (ligne 0) : sa ligne, dans son onglet.
+    if (d.line > 0) showCodeTab(CodeTabCode);
+    if (d.line > 0 && d.column > 0)
+        editor_->selectRange(static_cast<std::size_t>(d.line - 1), static_cast<std::uint32_t>(d.column - 1),
+                             static_cast<std::uint32_t>(std::max(0, d.length)));
+    else if (d.line > 0)
+        editor_->goToLine(static_cast<std::size_t>(d.line - 1));
+    else if (const auto name = declarationNamed(d.message); !name.empty())
+        (void)showDeclaration(name);
+    updateSymbolLine();
 }
 
 // 1.10 (maquette, scene 4) : Compiler sans quitter l'editeur. 1.11.17 (refonte des
@@ -1083,10 +1067,10 @@ void HmiScriptsPane::compileCurrent() {
 // 1.10 (decision 15 ; integration I2) : la correction proposee - la ligne choisie
 // dans le tableau du bas si elle en a une, sinon la premiere du script montre.
 int HmiScriptsPane::fixRow() const {
-    if (!diagTable_) return -1;
-    const auto& sel = diagTable_->selection();
-    if (!sel.empty() && sel.front() < results_.size() && results_[sel.front()].here && results_[sel.front()].fixLine > 0)
-        return static_cast<int>(sel.front());
+    // 1.11.21 : plus de tableau sous l'editeur - celle de la ligne du curseur, sinon la premiere.
+    const int caret = editor_ ? static_cast<int>(editor_->caretLine()) + 1 : 0;
+    for (std::size_t i = 0; i < results_.size(); ++i)
+        if (results_[i].here && results_[i].fixLine > 0 && results_[i].d.line == caret) return static_cast<int>(i);
     for (std::size_t i = 0; i < results_.size(); ++i)
         if (results_[i].here && results_[i].fixLine > 0) return static_cast<int>(i);
     return -1;
@@ -1230,8 +1214,6 @@ void HmiScriptsPane::goTo(Id script, int line) {
     if (line > 0) {
         showCodeTab(CodeTabCode);             // 1.11.18 (lot 5) : le code, pas une grille
         editor_->goToLine(static_cast<std::size_t>(line - 1));
-        for (std::size_t i = 0; i < results_.size(); ++i)
-            if (results_[i].here && results_[i].d.line == line) { hmiSelectModelRow(*diagTable_, i); break; }
     }
 }
 
@@ -1243,8 +1225,6 @@ void HmiScriptsPane::goTo(Id script, int line, int column, int length) {
     selectScript(script);
     if (line <= 0) return;
     showCodeTab(CodeTabCode);                 // 1.11.18 (lot 5)
-    for (std::size_t i = 0; i < results_.size(); ++i)
-        if (results_[i].here && results_[i].d.line == line && results_[i].d.column == column) { hmiSelectModelRow(*diagTable_, i); break; }
     editor_->selectRange(static_cast<std::size_t>(line - 1), static_cast<std::uint32_t>(column - 1),
                          static_cast<std::uint32_t>(std::max(0, length)));
     updateSymbolLine();

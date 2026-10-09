@@ -1438,7 +1438,13 @@ void volet_programmation() {
     check(bad >= 2 && bad <= 3, "l'erreur est \xC3\xA0 sa ligne (" + std::to_string(bad) + ")");
     check(pane.diagnostics().front().message.find("THEN") != std::string::npos, "message en fran\xC3\xA7" "ais : " + pane.diagnostics().front().message);
     check(cellOf(pane.scriptTable(), "Init", 5).find("erreur") != std::string::npos, "le tableau dit l'erreur");
-    check(pane.diagnosticTable().model() && pane.diagnosticTable().model()->rowCount() >= 1, "le tableau des diagnostics");
+    {
+        // 1.11.21 : plus de tableau sous l'editeur - les fautes vont au panneau du bas, en direct.
+        const auto live = pane.liveDiagnostics();
+        check(!live.empty() && live.front().step == "Saisie" && live.front().script == init && live.front().element == pane.liveElement()
+                  && live.front().line == bad && live.front().severity == hmi::pipeline::Severity::Error,
+              "les diagnostics en direct (le panneau du bas) : l'\xC3\xA9tape Saisie, ce script, sa ligne");
+    }
     pane.goTo(init, 4);
     check(pane.editor().caretLineForTest() == 3, "aller \xC3\xA0 la ligne 4 : le curseur y est");
     check(pane.setBody(init, "Compteur := 10;\nIF Compteur > 5 THEN\n  Compteur := 0;\nEND_IF;\n") && pane.diagnostics().empty(),
@@ -4037,6 +4043,88 @@ void remanence1116() {
     fs::remove_all(dir, ec);
 }
 
+// 1.11.21 : LES DIAGNOSTICS EN DIRECT (HmiLive.hpp) - plus de bandeau sous les editeurs : le
+// volet de code montre donne ses fautes au panneau du bas (l'etape Saisie, en tete) ; les
+// diagnostics du build a l'etape Compilation du meme element sont caches ; un double-clic
+// sur une ligne en direct : liveActivated (le volet y revient) ; plus de document : le build.
+void direct1121() {
+    std::printf("1.11.21 : les diagnostics en direct au panneau du bas (plus de bandeau sous les \xC3\xA9" "diteurs)\n");
+    namespace pl = hmi::pipeline;
+    app::HmiBuildOutputPane out("out1121");
+    const gfx::Rect area{0, 0, 1200, 320};
+    out.setBounds(area);
+    out.layout();
+    Recorder rec;
+    const auto theme = ui::Theme::dark();
+    const auto paint = [&] {
+        rec.clear();
+        out.layout();
+        out.render(ui::PaintContext{rec, theme, area, 0.0, nullptr});
+    };
+    pl::Report rep;
+    rep.errors = 2;
+    pl::Diagnostic a;                                   // le script montre, au dernier build
+    a.severity = pl::Severity::Error;
+    a.message = "Inconnue n'existe pas";
+    a.category = "Script";
+    a.element = "script:42";
+    a.path = "Init";
+    a.line = 3;
+    a.step = "Compilation";
+    pl::Diagnostic b = a;                               // le meme element, une autre etape : reste
+    b.message = "le script n'est appele par rien";
+    b.severity = pl::Severity::Warning;
+    b.step = "Validation";
+    pl::Diagnostic c = a;                               // un autre element : reste
+    c.element = "fonction:7";
+    c.path = "Moyenne";
+    c.message = "Moyenne : il manque b";
+    rep.diagnostics = {a, b, c};
+    out.addReport(rep, pl::Request{pl::Mode::Compile, {}, false}, 0.3);
+    out.showTab(app::HmiBuildOutputPane::kDiagnostics);
+    check(out.shownDiagnostics().size() == 3, "le build seul : ses 3 diagnostics");
+    // Le volet du script 42 dit ce qu'il voit pendant la frappe.
+    ScriptDiagnostic sd;
+    sd.severity = ScriptDiagnostic::Severity::Error;
+    sd.line = 4;
+    sd.column = 5;
+    sd.length = 3;
+    sd.message = "Compteur est un INT : tu lui affectes un texte";
+    auto live = app::liveDiagnostic(sd, "script:42", "Init", "Script");
+    live.script = 42;
+    out.setLive("script:42", {live});
+    const auto shown = out.shownDiagnostics();
+    check(shown.size() == 3 && shown[0].step == "Saisie" && shown[0].line == 4 && shown[0].message == sd.message,
+          "en direct : en t\xC3\xAAte, l'\xC3\xA9tape Saisie");
+    bool aHidden = true, bShown = false, cShown = false;
+    for (const auto& d : shown) {
+        aHidden = aHidden && d.message != a.message;
+        bShown = bShown || d.message == b.message;
+        cShown = cShown || d.message == c.message;
+    }
+    check(aHidden && bShown && cShown, "le build : sa Compilation du m\xC3\xAAme \xC3\xA9l\xC3\xA9ment cach\xC3\xA9" "e (la saisie la recalcule), le reste montr\xC3\xA9");
+    paint();
+    check(rec.wrote("Saisie : 1 erreur, 0 avertissement dans le document montr\xC3\xA9"), "la barre du panneau : ce que la saisie trouve");
+    // Un double-clic sur la ligne en direct : liveActivated (pas diagnosticActivated).
+    std::optional<pl::Diagnostic> fromLive, fromBuild;
+    core::ConnectionScope links;
+    links += out.liveActivated->connect([&](const pl::Diagnostic& x) { fromLive = x; });
+    links += out.diagnosticActivated->connect([&](const pl::Diagnostic& x) { fromBuild = x; });
+    out.diagnosticTable().activated->emit(0);
+    check(fromLive && fromLive->script == 42 && fromLive->line == 4 && fromLive->column == 5 && !fromBuild,
+          "un double-clic sur la ligne en direct : le volet y revient (sa ligne, sa colonne)");
+    std::size_t rowC = 0;
+    for (std::size_t r = 0; r < shown.size(); ++r)
+        if (shown[r].message == c.message) rowC = r;
+    out.diagnosticTable().activated->emit(static_cast<ui::RowIndex>(rowC));
+    check(rowC > 0 && fromBuild && fromBuild->message == c.message, "... sur une ligne du build : sa source, comme avant");
+    // Corrigee : plus rien en direct pour ce document ; un autre document : son direct remplace.
+    out.setLive("script:42", {});
+    check(out.shownDiagnostics().size() == 2 && out.liveDiagnostics().empty(), "corrig\xC3\xA9" "e : rien en direct, la Compilation du build reste cach\xC3\xA9" "e");
+    out.setLive({}, {});
+    check(out.shownDiagnostics().size() == 3, "plus de document montr\xC3\xA9 : le build entier revient");
+}
+
 // 1.11.16 : LE DOUBLE-CLIC VERS LA SOURCE (§ 19) - une ligne des Diagnostics, une ligne
 // des Sorties qui nomme un element, une ligne de la Console : le panneau du bas dit a
 // l'ecran ce qu'il faut ouvrir (l'element, le script, sa ligne) ; l'ecran l'ouvre.
@@ -4583,7 +4671,17 @@ void lot7_volet_fonctions() {
     check(pane.lastTrial().changed.size() == 1 && pane.lastTrial().changed[0].find("Traces : 0") == 0,
           "... et la variable IHM chang\xC3\xA9" "e : " + (pane.lastTrial().changed.empty() ? std::string("?") : pane.lastTrial().changed[0]));
     check(p.variable("Traces") && stack.canUndo() && p.programs.variables.size() == 2, "le projet n'a pas boug\xC3\xA9");
-    check(pane.trialTable().model() && pane.trialTable().model()->rowCount() >= 4, "le tableau ESSAI : appel, r\xC3\xA9sultat, journal, variable");
+    {
+        // 1.11.21 : plus de bandeau ESSAI - l'essai va aux Sorties du panneau du bas (trialLines).
+        bool call = false, journal = false, variable = false;
+        const auto lines = pane.trialLines();
+        for (const auto& [sev, text] : lines) {
+            call = call || (sev == hmi::pipeline::Severity::Success && text.rfind("Essai de Tracer(", 0) == 0);
+            journal = journal || (text.rfind("Journal : ", 0) == 0 && text.find("porte ouverte") != std::string::npos);
+            variable = variable || (sev == hmi::pipeline::Severity::Warning && text.rfind("Variable IHM : Traces : 0", 0) == 0);
+        }
+        check(lines.size() >= 4 && call && journal && variable, "l'essai pour les Sorties : appel, r\xC3\xA9sultat, journal, variable");
+    }
     // Un automate branche (la simulation) : lu, jamais ecrit.
     FakeLive live;
     live.values["Pression"] = sim::Value::real(7.0);
@@ -4593,11 +4691,16 @@ void lot7_volet_fonctions() {
     hosts.plc = [&]() -> sim::Environment* { return &live; };
     hosts.compile = [&] { compiled = true; };
     hosts.build = [&](hmi::pipeline::Mode m, const std::string& k) { fnBuilds.emplace_back(m, k); };   // 1.11.17
+    std::vector<std::pair<hmi::pipeline::Severity, std::string>> sent;                                    // 1.11.21 : aux Sorties
+    hosts.trialOutput = [&](const std::vector<std::pair<hmi::pipeline::Severity, std::string>>& l) { sent = l; };
     pane.setHosts(hosts);
     const Id lit = pane.addFunction("Lire", "REAL", {});
     tried = pane.setBody(lit, "Lire := Pression * 2.0;") && pane.tryFunction(lit, {});
     check(tried && pane.lastTrial().result == "14.0" && pane.lastTrial().livePlc,
           "l'automate de la simulation est lu : Pression * 2 = " + pane.lastTrial().result + pane.lastTrial().error);
+    check(!sent.empty() && sent.front().second == "Essai de Lire() = 14.0   (REAL)"
+              && sent.back().second == "Automate : lu dans la simulation en marche (sans y \xC3\xA9" "crire)",
+          "l'essai envoy\xC3\xA9 aux Sorties du panneau du bas (" + (sent.empty() ? std::string("rien") : sent.front().second) + ")");
     const Id ecrit = pane.addFunction("Ecrire", "(aucun)", {});
     {
         const bool ok_ = pane.setBody(ecrit, "Pression := 0.0;") && !pane.tryFunction(ecrit, {}) && live.values["Pression"].asReal() == 7.0;
@@ -15153,21 +15256,21 @@ void v110_compiler_scripts() {
           "pendant la frappe : un texte dans un INT, ligne 2, colonne 13, 5 caract\xC3\xA8res");
     check(write && write->line == 3 && write->column == 1 && write->length == 13, "pendant la frappe : \xC3\xA9" "crire une variable en lecture seule");
     {
-        // Le tableau du bas : Script, Ligne, Col., Gravite, Message (maquette, scene 4).
-        const auto m = pane.diagnosticTable().model();
+        // 1.11.21 : la liste au panneau du bas (en direct) - Calcul, ligne 2, colonne 13, Erreur.
         bool row2 = false;
-        if (m)
-            for (std::size_t r = 0; r < m->rowCount(); ++r)
-                row2 = row2 || (m->cellText(r, 0) == "Calcul" && m->cellText(r, 1) == "2" && m->cellText(r, 2) == "13" && m->cellText(r, 3) == "Erreur");
-        check(row2, "le tableau des diagnostics : Calcul, ligne 2, colonne 13, Erreur");
+        for (const auto& d : pane.liveDiagnostics())
+            row2 = row2 || (d.path == "Calcul" && d.line == 2 && d.column == 13 && d.severity == hmi::pipeline::Severity::Error && d.step == "Saisie");
+        check(row2, "les diagnostics en direct : Calcul, ligne 2, colonne 13, Erreur");
     }
     {
-        // Le titre du tableau compte les fautes du script (maquette, scene 4).
+        // La barre du volet compte les fautes du script et dit ou est leur liste (plus de bandeau).
         const auto theme = ui::Theme::dark();
         Recorder rec;
         pane.render(ui::PaintContext{rec, theme, {0, 0, 1400, 800}, 0.0, nullptr});
-        check(rec.wrote("DIAGNOSTICS  \xC2\xB7  2 erreurs dans ce script (soulign\xC3\xA9" "s pendant que tu tapes)"),
-              "le titre du tableau : 2 erreurs dans ce script, soulign\xC3\xA9" "es pendant que tu tapes");
+        check(pane.statusText().find("2 erreur(s), soulign\xC3\xA9" "e(s) pendant que tu tapes \xE2\x80\x94 la liste : panneau du bas, Diagnostics")
+                  != std::string::npos,
+              "la barre : 2 erreurs, soulign\xC3\xA9" "es pendant que tu tapes, la liste au panneau du bas (" + pane.statusText() + ")");
+        check(!rec.wrote("DIAGNOSTICS  \xC2\xB7"), "plus de bandeau DIAGNOSTICS sous l'\xC3\xA9" "diteur");
     }
     // Le soulignement : sous les caracteres de la faute, rouge, avec son message.
     const ui::MultiLineText::Squiggle* wave = nullptr;
@@ -15243,18 +15346,13 @@ void v110_compiler_scripts() {
     check(pane.compiledHere() && !opened, "Compiler : ici, sans ouvrir le rapport du projet");
     check(builds.size() == 1 && builds[0].first == hmi::pipeline::Mode::Compile && builds[0].second == "script:" + std::to_string(sid),
           "... et le build de ce script seul (script:" + std::to_string(sid) + ")");
-    const std::size_t count = pane.diagnosticTable().model() ? pane.diagnosticTable().model()->rowCount() : 0;
+    const std::size_t count = pane.resultCount();          // 1.11.21 : les lignes de Compiler, comptees par le volet
     bool otherListed = false;
     for (std::size_t r = 0; r < count; ++r) otherListed = otherListed || pane.resultScript(r) == "Autre";
     check(!otherListed && count == 2, "les r\xC3\xA9sultats : les 2 fautes de Calcul, pas celle de Autre (" + std::to_string(count) + " lignes)");
     check(pane.lastMessage().rfind("Compiler le script Calcul : 2 fautes", 0) == 0, "le message : " + pane.lastMessage());
-    {
-        const auto theme = ui::Theme::dark();
-        Recorder rec;
-        pane.render(ui::PaintContext{rec, theme, {0, 0, 1400, 800}, 0.0, nullptr});
-        check(rec.wrote("R\xC3\x89SULTATS DE COMPILER  \xC2\xB7  2  \xC2\xB7  2 erreurs dans ce script"),
-              "le titre : R\xC3\xA9sultats de Compiler, le compte, les fautes du script montr\xC3\xA9");
-    }
+    // 1.11.21 : plus de titre « Resultats de Compiler » sous l'editeur - le build de ce script
+    // (ci-dessus) remplit les Diagnostics du panneau du bas.
     // Un autre script choisi : F7 (dans l'editeur) compile celui-la, lui seul.
     pane.selectScript(aid);
     check(!pane.compiledHere(), "un autre script choisi : le Compiler d'avant ne le concerne plus");
@@ -15264,7 +15362,7 @@ void v110_compiler_scripts() {
     check(pane.lastMessage().rfind("Compiler le script Autre : 1 faute", 0) == 0, "... son message : " + pane.lastMessage());
     // Corrigee : le soulignement et sa ligne disparaissent tout de suite.
     check(pane.setBody(aid, "Compteur := 2;\nCompteur := 3;\n") && pane.editor().squiggles().empty(), "corrig\xC3\xA9" "e : plus de soulignement");
-    check(!pane.diagnosticTable().model() || pane.diagnosticTable().model()->rowCount() == 0, "... ni de ligne dans les r\xC3\xA9sultats");
+    check(pane.resultCount() == 0 && pane.liveDiagnostics().empty(), "... ni de ligne dans les r\xC3\xA9sultats, ni en direct");
     // Une faute d'ailleurs (le script d'une vue) : plus dans les resultats de ce volet ; le
     // rapport du projet (IHM > Compiler) la trouve toujours.
     View vue;
@@ -15275,7 +15373,7 @@ void v110_compiler_scripts() {
     pane.selectScript(sid);
     (void)pane.compileHere();
     bool far = false;
-    for (std::size_t r = 0; pane.diagnosticTable().model() && r < pane.diagnosticTable().model()->rowCount(); ++r)
+    for (std::size_t r = 0; r < pane.resultCount(); ++r)
         far = far || pane.resultScript(r) == "Vue_N \xC2\xB7 OnOpen";
     bool inReport = false;
     for (const auto& i : hmi::compileWith(doc->project, {}, {})) inReport = inReport || i.script == vue.scripts.front().id;   // ce que montre IHM > Compiler
@@ -27497,6 +27595,12 @@ int main(int argc, char** argv) {
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
+    // 1.11.21 : HMI_TEST_1121=1 - les diagnostics en direct, l'essai aux Sorties, seuls.
+    if (const char* only = std::getenv("HMI_TEST_1121"); only && *only == '1') {
+        direct1121();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
     // 1.11.19 (refonte, lot 6) : HMI_TEST_LOT6=1 - le selecteur de types, seul.
     if (const char* only = std::getenv("HMI_TEST_LOT6"); only && *only == '1') {
         selecteurTypes1119();
@@ -27830,6 +27934,7 @@ int main(int argc, char** argv) {
     onglets1118();                          // 1.11.18 (refonte, lot 5) : les onglets de declarations, Migrer ce code
     selecteurTypes1119();                   // 1.11.19 (refonte, lot 6) : le selecteur de types
     surcharges1120();                       // 1.11.20 : les signatures et les surcharges
+    direct1121();                           // 1.11.21 : les diagnostics en direct au panneau du bas
     if (argc > 1) configuration_et_variables(argv[1]);
     if (argc > 1) aide_saisie_scripts(argv[1]);
     if (argc > 1) aide_saisie_champs(argv[1]);
