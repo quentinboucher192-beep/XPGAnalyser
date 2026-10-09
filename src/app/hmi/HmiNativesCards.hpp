@@ -27,6 +27,9 @@
 
 namespace app::natives {
 
+// 1.12.1 : un operateur, une instruction aussi par son nom ("operateur:? :",
+// "instruction:TRY") : la cle de l'arbre, son rang ("operateur:11", "instruction:9").
+[[nodiscard]] std::string canonicalKey(std::string_view key);
 // La fiche d'une cle ; vide : cle inconnue.
 [[nodiscard]] ui::HelpArticle article(std::string_view key, std::string_view notation);
 // Le titre de l'onglet pour une cle ("Natives · LIMIT").

@@ -513,7 +513,26 @@ std::string after(std::string_view key, std::string_view prefix) {
 
 } // namespace
 
-ui::HelpArticle article(std::string_view key, std::string_view notation) {
+std::string canonicalKey(std::string_view key) {
+    std::string k(key);
+    const auto byName = [&k](std::string_view prefix, std::size_t count, const auto& nameAt) {
+        if (k.rfind(prefix, 0) != 0) return;
+        const std::string n = k.substr(prefix.size());
+        if (n.empty() || std::all_of(n.begin(), n.end(), [](char c) { return std::isdigit(static_cast<unsigned char>(c)); })) return;
+        for (std::size_t i = 0; i < count; ++i)
+            if (upper(nameAt(i)) == upper(n)) {
+                k = std::string(prefix) + std::to_string(i);
+                return;
+            }
+    };
+    byName("operateur:", hn::operators().size(), [](std::size_t i) { return hn::operators()[i].symbol; });
+    byName("instruction:", hn::instructions().size(), [](std::size_t i) { return hn::instructions()[i].keyword; });
+    return k;
+}
+
+ui::HelpArticle article(std::string_view key0, std::string_view notation) {
+    const std::string canonical = canonicalKey(key0);
+    const std::string_view key = canonical;
     if (key == "natives") return rootCard();
     if (key == "fonctions") return functionsCard();
     if (key == "conversions") return conversionsCard();
@@ -547,7 +566,9 @@ ui::HelpArticle article(std::string_view key, std::string_view notation) {
     return {};
 }
 
-std::string title(std::string_view key) {
+std::string title(std::string_view key0) {
+    const std::string canonical = canonicalKey(key0);
+    const std::string_view key = canonical;
     std::string t;
     if (const auto colon = key.find(':'); colon != std::string_view::npos) t = std::string(key.substr(colon + 1));
     else if (key == "natives") return "IHM \xC2\xB7 Natives";
@@ -565,7 +586,9 @@ std::string title(std::string_view key) {
     return "Natives \xC2\xB7 " + t;
 }
 
-std::string insertText(std::string_view key) {
+std::string insertText(std::string_view key0) {
+    const std::string canonical = canonicalKey(key0);
+    const std::string_view key = canonical;
     if (const auto n = after(key, "fonction:"); !n.empty())
         if (const auto* f = hn::function(n)) return std::string(f->name) + "()";
     if (const auto n = after(key, "conversion:"); !n.empty()) return n + "()";

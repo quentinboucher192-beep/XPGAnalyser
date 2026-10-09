@@ -59,7 +59,8 @@ void HmiNativesPane::compose(bool keepScroll) {
     else view_->setArticle(std::move(a));
 }
 
-bool HmiNativesPane::show(const std::string& key) {
+bool HmiNativesPane::show(const std::string& key0) {
+    const std::string key = natives::canonicalKey(key0);    // 1.12.1 : instruction:TRY -> instruction:9
     if (key == key_) return true;
     if (natives::article(key, notation()).empty()) return false;
     if (!key_.empty()) {

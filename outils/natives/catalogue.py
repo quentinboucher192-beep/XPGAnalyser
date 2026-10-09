@@ -641,11 +641,11 @@ INSTR = [
     # 1.12.1
     ("CONTINUE", "Continuer", "Passe au tour suivant de la boucle en cours (FOR, FOR EACH, WHILE, REPEAT).", "FOR i := 1 TO 5 DO\n    IF Tab[i] = 0 THEN CONTINUE; END_IF\n    Compteur := Compteur + 100 / Tab[i];\nEND_FOR",
      "for (i = 1; i <= 5; ++i) {\n    if (Tab[i] == 0) continue;\n    Compteur += 100 / Tab[i];\n}", "for (int i = 1; i <= 5; ++i) {\n    if (Tab[i] == 0) continue;\n    Compteur += 100 / Tab[i];\n}"),
-    ("TRY", "Essayer", "TRY ... CATCH Erreur ... END_TRY : une erreur du bloc (division par zéro, nom inconnu, case hors du tableau, ASSERT faux) n'arrête plus le script ; le CATCH s'exécute, son message dans la variable STRING nommée après CATCH (facultative).",
+    ("TRY", "Essayer", "TRY ... CATCH Erreur ... END_TRY   (* une erreur du bloc va au CATCH, son message dans Erreur *)",
      "TRY\n    Compteur := 100 / Compteur;\nCATCH Texte\n    Compteur := 0;\n    IHM_LOG(NIVEAU_LOG#WARNING, Texte);\nEND_TRY",
      "/* pas d'équivalent en C : tester avant */\nif (Compteur != 0) Compteur = 100 / Compteur; else Compteur = 0;",
      "try {\n    Compteur = 100 / Compteur;   // une division entière par zéro ne lève rien en C++ : tester avant\n} catch (const std::exception& e) {\n    Compteur = 0;\n}"),
-    ("ASSERT", "Vérifier", "ASSERT(condition, 'message') : faux, une erreur - le script s'arrête, la Console et les Diagnostics disent le message (dans un TRY : son CATCH) ; vrai, rien.",
+    ("ASSERT", "Vérifier", "ASSERT(condition, 'message')   (* faux : le script s'arrête et le dit ; dans un TRY, son CATCH *)",
      "ASSERT(Niveau ENTRE 0 ET 100, 'niveau hors de 0..100');", "assert(Niveau >= 0.0f && Niveau <= 100.0f);   /* <assert.h> */", "assert(Niveau >= 0.0f && Niveau <= 100.0f);   // <cassert>"),
     ("RETURN", "Retour", "Quitte le script ou la fonction.", "IF NOT Marche THEN RETURN; END_IF", "if (!Marche) return;", "if (!Marche) return;"),
     ("VAR … END_VAR", "Déclarations", "VAR, VAR_TEMP, VAR CONSTANT ; dans une fonction aussi VAR_INPUT, VAR_IN_OUT, VAR_OUTPUT.", "VAR\n    Total : REAL;       (* gardée d'un appel à l'autre *)\nEND_VAR\nVAR_TEMP\n    i : INT;\nEND_VAR",

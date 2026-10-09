@@ -28259,6 +28259,12 @@ void enumsInspecteur1121() {
     bool where = false;
     for (const auto& bl : card.blocks) where = where || bl.text.find("Alignement") != std::string::npos;
     check(where, "la fiche de ALIGNEMENT : ou elle sert (Alignement)");
+    // Un operateur, une instruction aussi par leur nom (la session, un lien) : leur rang.
+    const auto tryKey = app::natives::canonicalKey("instruction:try");
+    check(tryKey.rfind("instruction:", 0) == 0 && tryKey != "instruction:0" && app::natives::title("instruction:TRY") == "Natives \xC2\xB7 TRY",
+          "instruction:TRY : la fiche de TRY (" + tryKey + ", " + app::natives::title("instruction:TRY") + ")");
+    check(app::natives::title("operateur:? :") == "Natives \xC2\xB7 ? :" && app::natives::canonicalKey("operateur:3") == "operateur:3",
+          "operateur:? : - sa fiche ; un rang reste un rang");
 }
 
 int main(int argc, char** argv) {
