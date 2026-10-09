@@ -4356,7 +4356,8 @@ void lot6_arbre() {
     check(tree.text(vueNode).find("\xE2\x86\x90 h\xC3\xA9rite de Modele, en-t\xC3\xAAte") != std::string::npos,
           "la vue dit ce qu'elle emprunte : " + tree.text(vueNode));
     const auto st = tree.style(tree.hmiViewNode(modeleId));
-    same_text(st.badge, "mod\xC3\xA8le", "un \xC3\xA9" "cran mod\xC3\xA8le porte sa pastille");
+    // 1.11.22 (l'explorateur modernise) : le role d'une vue est une etiquette apres son nom, plus une pastille.
+    same_text(st.tags.empty() ? std::string{} : st.tags.front().text, "mod\xC3\xA8le", "un \xC3\xA9" "cran mod\xC3\xA8le porte son \xC3\xA9tiquette");
     const auto objets = tree.childAt(vueNode, 0);
     std::string lines;
     for (std::size_t k = 0; k < tree.childCount(objets); ++k) {
@@ -5121,6 +5122,7 @@ void lot8_simulation_popups() {
     for (const char* k : {"1", "2", ",", "5"}) key(k);
     paintAt(1.0);
     check(rec.wrote("12,5"), "les touches tap\xC3\xA9" "es s'affichent dans le champ");
+    same_text(value("Consigne_B"), "2", "1.11.22 : tap\xC3\xA9" "es mais pas valid\xC3\xA9" "es, Consigne_B garde 2 (rien n'est \xC3\xA9" "crit en continu)");
     key("entree");
     paintAt(1.1);
     same_text(value("Consigne_B"), "12.5", "Entr\xC3\xA9" "e : 12,5 \xC3\xA9" "crit dans Consigne_B (Consigne := Consigne_B)");
@@ -6385,7 +6387,7 @@ void lot10_symboles() {
               "l'arbre : IHM > Symboles [1]");
         const auto node = tree.childAt(folder, 0);
         check(tree.text(node).rfind("Carte_Armoire", 0) == 0 && tree.text(node).find("(2 instances)") != std::string::npos
-                  && tree.style(node).badge == "symbole" && tree.hmiViewOf(node) == symId,
+                  && !tree.style(node).tags.empty() && tree.style(node).tags.front().text == "symbole" && tree.hmiViewOf(node) == symId,
               "... le symbole, ses instances compt\xC3\xA9" "es, sa pastille ; il s'ouvre comme une vue");
         check(tree.text(tree.childAt(ihm, 4)) == "Vues" && tree.counterOf(tree.childAt(ihm, 4)) == "1", "Vues ne compte plus les symboles");
     }
@@ -16679,16 +16681,16 @@ void centreAide111() {
     // 1.11.12 : 20.
     // 1.11.13 : 21.
     // 1.11.14 : 22 ; 1.11.15 : 23 ; 1.11.16 : 24 ; 1.11.17 : 25 ; 1.11.18 : 26 ; 1.11.19 : 27 ; 1.11.20 : 28 ; 1.11.21 : 29.
-    check(hn::releases().size() == 29 && hn::releases().front().version == "1.11.21" && hn::releases()[1].version == "1.11.20" && hn::releases()[2].version == "1.11.19"
-              && hn::releases()[3].version == "1.11.18" && hn::releases()[4].version == "1.11.17"
-              && hn::releases()[5].version == "1.11.16" && hn::releases()[6].version == "1.11.15"
-              && hn::releases()[7].version == "1.11.14" && hn::releases()[8].version == "1.11.13" && hn::releases()[9].version == "1.11.12"
-              && hn::releases()[10].version == "1.11.11" && hn::releases()[11].version == "1.11.10"
-              && hn::releases()[12].version == "1.11.9" && hn::releases()[13].version == "1.11.8"
-              && hn::releases()[14].version == "1.11.7" && hn::releases()[15].version == "1.11.6" && hn::releases()[16].version == "1.11.5"
-              && hn::releases()[17].version == "1.11.4" && hn::releases()[18].version == "1.11.3" && hn::releases()[19].version == "1.11.2"
-              && hn::releases()[20].version == "1.11.1" && hn::releases()[21].version == "1.11" && hn::releases()[22].version == "1.10.4",
-          "notes : 29 versions, la 1.11.21 en tete, puis la 1.11.20 \xC3\xA0 la 1.11, et la 1.10.4");
+    check(hn::releases().size() == 30 && hn::releases().front().version == "1.11.22" && hn::releases()[1].version == "1.11.21" && hn::releases()[2].version == "1.11.20" && hn::releases()[3].version == "1.11.19"
+              && hn::releases()[4].version == "1.11.18" && hn::releases()[5].version == "1.11.17"
+              && hn::releases()[6].version == "1.11.16" && hn::releases()[7].version == "1.11.15"
+              && hn::releases()[8].version == "1.11.14" && hn::releases()[9].version == "1.11.13" && hn::releases()[10].version == "1.11.12"
+              && hn::releases()[11].version == "1.11.11" && hn::releases()[12].version == "1.11.10"
+              && hn::releases()[13].version == "1.11.9" && hn::releases()[14].version == "1.11.8"
+              && hn::releases()[15].version == "1.11.7" && hn::releases()[16].version == "1.11.6" && hn::releases()[17].version == "1.11.5"
+              && hn::releases()[18].version == "1.11.4" && hn::releases()[19].version == "1.11.3" && hn::releases()[20].version == "1.11.2"
+              && hn::releases()[21].version == "1.11.1" && hn::releases()[22].version == "1.11" && hn::releases()[23].version == "1.10.4",
+          "notes : 30 versions, la 1.11.22 en tete, puis la 1.11.21 \xC3\xA0 la 1.11, et la 1.10.4");
     // 1.11.2 (T2, tranches 41, 42 et 44 ; decisions 187, 201 et 216) : 23 lignes en 8 domaines, dont 2 cartes de la fenetre Nouveautes.
     // Tranche 46 (SYM, decision 240) : + Dupliquer dans un symbole (C) et la section Parametres du symbole (N) : 25 lignes.
     {
@@ -16959,7 +16961,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 232,   // 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 237,   // 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -17102,7 +17104,7 @@ void centreAide111() {
     // Integration 1.11 (I111) : la 1.10.4 ajoute objet-vanne-3-voies (La bibliotheque d'objets) : 206.
     // 1.11.1 (T2, decision 107) : Programmer gagne variables-api (API. : les variables de l'automate) : 207.
     check(ix.count(hc::Chapter::Hmi) == 208, "centre : L'IHM a les 208 sujets des chapitres 2 a 8 du guide (1.11.1 : variables-api ; 1.11.2 : paquets-symboles)");
-    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 29, "centre : 11 expressions, 29 notes (1.11.21)");
+    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 30, "centre : 11 expressions, 30 notes (1.11.22)");
     // Tranche 3 : les 11 types de T3 (hmi::exprguide::all(), depot-o), passes par in.expressions ; les
     // cles de la liste de secours sont les siennes (enumeration, pas enum).
     {
@@ -17164,10 +17166,10 @@ void centreAide111() {
         check(o, "page Raccourcis : Ctrl+Maj+O dessine en trois touches, repere 1.11");
 
         const auto n110 = hc::notesPage("1.10");
-        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 29
+        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 30
                   && !n110.summary.empty() && !n110.date.empty(),
               "page Notes : 1.10 -> 1.10.0, 22 lignes en 7 domaines, sa date et son resume");
-        check(hc::notesPage("").version == "1.11.21" && hc::notesPage("9.9").version == "1.11.21",
+        check(hc::notesPage("").version == "1.11.22" && hc::notesPage("9.9").version == "1.11.22",
               "page Notes : sans version (ou inconnue), la plus recente");
         const auto simu = hc::notesPage("1.10.0", "Simulation");
         check(simu.sections.size() == 1 && simu.rows == 4 && simu.domains.size() == 7,
@@ -17511,7 +17513,7 @@ void centreAide111() {
         // Les notes de version n'ont pas de tutoriel : ni la carte "Regarder le tutoriel" (hasTutorial, que
         // lit HelpCenterScreen::showTopic), ni la pastille dans l'arbre. Les autres pages speciales gardent
         // les leurs (T1 ecrit les tutoriels des raccourcis et de Signaler).
-        bool notesSans = ix.count(hc::Chapter::Notes) == 29;   // 1.11.3 a 1.11.21 : une version de plus
+        bool notesSans = ix.count(hc::Chapter::Notes) == 30;   // 1.11.3 a 1.11.22 : une version de plus
         for (const auto* t : ix.ofChapter(hc::Chapter::Notes)) notesSans = notesSans && !hc::hasTutorial(*t);
         const auto* raccourcis = ix.find("page-raccourcis");
         const auto* signaler = ix.find("page-signaler");
@@ -26673,11 +26675,20 @@ void parametresInstances11110() {
     same_text(argsOf(i1), "Value=50 | Titre='Voiture'", "... et garde son sens");
     ed.layout();
     same_text(rowNames(ed.properties()), "Value \xC2\xB7 INT, Titre \xC2\xB7 STRING", "l'inspecteur ouvert : le nouvel ordre");
-    // Supprimer Value : son argument part des instances, l'instance imbriquee comprise.
+    // Supprimer Value. 1.11.22 (le client : "casser les compilations des elements lies") : les
+    // arguments donnes a Value RESTENT dans les instances (l'imbriquee comprise) - des fautes de
+    // compilation a corriger, plus un retrait sans rien dire.
     check((eds.layout(), deepCommit(eds.properties(), "Value", "Ordre", "Supprimer")), "S_Vanne : Value supprim\xC3\xA9");
-    same_text(paramsOf(vid, i1), "Titre := Voiture", "i1 : Value retir\xC3\xA9");
-    same_text(paramsOf(vid, i2), "Titre := 'B'", "i2 : Value retir\xC3\xA9");
-    same_text(nestedParams(), "", "l'instance dans S_Groupe : Value retir\xC3\xA9");
+    same_text(paramsOf(vid, i1), "Value := 50; Titre := Voiture", "i1 : son argument Value reste (une faute \xC3\xA0 corriger)");
+    same_text(paramsOf(vid, i2), "Value := 3; Titre := 'B'", "i2 : son argument Value reste");
+    same_text(nestedParams(), "Value := 7", "l'instance dans S_Groupe : son argument reste");
+    {
+        const auto issues = hmi::generate(p, {});
+        bool flagged = false;
+        for (const auto& is : issues)
+            if (is.severity == hmi::Issue::Severity::Error && is.message.find("argument inconnu du symbole S_Vanne : Value") != std::string::npos) flagged = true;
+        check(flagged, "... et Compiler le dit : une faute (argument inconnu du symbole S_Vanne : Value)");
+    }
     ed.layout();
     same_text(rowNames(ed.properties()), "Titre \xC2\xB7 STRING", "l'inspecteur ouvert : Titre seul");
     // Un seul Ctrl+Z par geste : le parametre et les instances reviennent ensemble.
@@ -26692,7 +26703,7 @@ void parametresInstances11110() {
     check((edp.layout(), deepCommit(edp.properties(), "Four", "Nom", "Four_X")), "Pop_Four : Four renomm\xC3\xA9 en Four_X");
     same_text(p.view(vid)->object(btn)->actions.front().value, "Four_X := Four1; Zone := 2", "le bouton qui l'ouvre suit");
     check((edp.layout(), deepCommit(edp.properties(), "Zone", "Ordre", "Supprimer")), "Pop_Four : Zone supprim\xC3\xA9");
-    same_text(p.view(vid)->object(btn)->actions.front().value, "Four_X := Four1", "... son argument part du bouton");
+    same_text(p.view(vid)->object(btn)->actions.front().value, "Four_X := Four1; Zone := 2", "1.11.22 : son argument reste dans le bouton (une faute \xC3\xA0 corriger)");
 }
 
 // =============================================================================
@@ -26788,6 +26799,21 @@ void explorateurs1121() {
     std::string got;
     for (std::size_t k = 0; k < tree.childCount(params); ++k) got += tree.text(tree.childAt(params, k)) + " | ";
     check(got == "Min : REAL | Max : REAL | RandomSeed : REAL  (E/S) | test : REAL  (sortie) | ", "ses param\xC3\xA8tres, leur mode : " + got);
+    {
+        // 1.11.22 (l'explorateur modernise) : le texte du noeud ne change pas ; ce qui est dessine dit
+        // le mode en etiquette, la fin (": REAL") en gris ; les surcharges : "Convertir" et "3 surcharges".
+        const auto es = tree.style(tree.childAt(params, 2));
+        check(es.display == "RandomSeed : REAL" && es.tags.size() == 1 && es.tags[0].text == "E/S" && es.tags[0].tone == ui::Tone::InOut
+                  && es.mutedFrom == std::string("RandomSeed").size(),
+              "1.11.22 : RandomSeed dessin\xC3\xA9 \"RandomSeed : REAL\", l'\xC3\xA9tiquette E/S, \": REAL\" en gris (" + es.display + ")");
+        const auto so = tree.style(tree.childAt(params, 3));
+        check(!so.tags.empty() && so.tags[0].text == "sortie" && so.tags[0].tone == ui::Tone::Output, "... test : l'\xC3\xA9tiquette sortie");
+        const auto cs = tree.style(conv);
+        check(cs.display == "Convertir" && !cs.tags.empty() && cs.tags[0].text == "3 surcharges", "... Convertir et l'\xC3\xA9tiquette 3 surcharges (" + cs.display + ")");
+        const auto fs = tree.style(tree.childAt(conv, 1));
+        check(fs.mutedFrom == std::string("Convertir").size() && fs.mutedMono && fs.iconTone == ui::Tone::Family1,
+              "... une signature : le nom, puis (valeur : REAL) : STRING en gris dans la police du code ; l'ic\xC3\xB4ne violette");
+    }
     check(tree.text(tree.childAt(tree.childAt(rnd, 1), 0)) == "Pas : REAL := 0.5", "sa locale, sa valeur initiale");
     // Le script deplie : Constantes, Variables, Fonctions internes (et leur contenu).
     const auto scripts = tree.childAt(prog, 0);
@@ -26881,6 +26907,130 @@ void valeurGrille1121() {
     check(!vars.setCell(0, de::Column::Value, "'abc'") && decl()->value == "0" && vars.lastMessage().find("'abc'") != std::string::npos,
           "une valeur qui ne convient pas est refus\xC3\xA9" "e, et la barre dit pourquoi (" + vars.lastMessage() + ")");
     check(vars.setCell(0, de::Column::Value, "7") && decl()->value == "7", "une valeur qui convient : prise");
+}
+
+// 1.11.22 : LA LISTE DU CLIENT (09/10) - des surcharges dans un symbole (Nouvelle surcharge,
+// renommer en surcharge), un parametre renomme PARTOUT, un parametre retire qui casse les
+// instances, le dossier Simulation deballe.
+void lot1122() {
+    std::printf("1.11.22 : surcharges d'un symbole, param\xC3\xA8tres partout, Simulation d\xC3\xA9" "ball\xC3\xA9" "e\n");
+    auto doc = std::make_shared<Document>();
+    core::CommandStack stack;
+    auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+    Project& p = doc->project;
+    {
+        Variable x;
+        x.id = p.allocate();
+        x.name = "Pos0";
+        x.type = "INT";
+        x.initial = "0";
+        p.programs.variables.push_back(x);
+    }
+    View sym = makeView(p, "S_Vanne");
+    sym.role = "symbole";
+    sym.params.push_back({"Pos", "0", "", "INT", ParamMode::Reference});
+    {
+        HmiFunction mv;
+        mv.id = p.allocate();
+        mv.name = "Move";
+        mv.returnType = "BOOL";
+        mv.body = "VAR_INPUT\n  deltaMs : TIME;\nEND_VAR\nMove := Pos > 0;";
+        sym.functions.push_back(mv);
+    }
+    {
+        auto o = makeObject(Kind::Indicator, p.allocate(), "Voyant", 0, 0, sym.layers.empty() ? kNoId : sym.layers.front().id);
+        o.set("state", "Pos > 0");
+        sym.objects.push_back(o);
+    }
+    const Id symId = sym.id;
+    p.views.push_back(sym);
+    View pop = makeView(p, "Pop_Vanne");
+    pop.role = "popup";
+    pop.ownerSymbol = symId;
+    {
+        auto o = makeObject(Kind::Text, p.allocate(), "Valeur", 0, 0, pop.layers.empty() ? kNoId : pop.layers.front().id);
+        o.set("text", "Position : {Pos}");
+        pop.objects.push_back(o);
+    }
+    const Id popId = pop.id;
+    p.views.push_back(pop);
+    View v = makeView(p, "Vue_V");
+    const Id vid = v.id;
+    const Id i1 = placeSymbol(p, v, "S_Vanne", 10, 10);
+    v.object(i1)->name = "V1";
+    v.object(i1)->set("params", "Pos := Pos0");
+    p.views.push_back(v);
+
+    // ---- les surcharges dans un symbole : Fonction renommee Move (sans appel, une autre forme) ----
+    app::HmiEditor eds("ed1122", doc, symId, apply);
+    eds.setBounds({0, 0, 1800, 1000});
+    eds.layout();
+    if (!eds.symbolTabs() || !eds.symbolFunctions()) { check(false, "l'\xC3\xA9" "diteur du symbole a ses fonctions"); return; }
+    eds.symbolTabs()->setCurrent(app::HmiSymbolTabs::Functions);
+    eds.layout();
+    auto& fp = *eds.symbolFunctions();
+    const Id move = p.view(symId)->functions[0].id;
+    const Id other = fp.addFunction("Fonction", "(aucun)", {});
+    check(other != kNoId && fp.renameFunction(other, "Move") && hmi::symbolFunctions(*p.view(symId), "Move").size() == 2,
+          "renommer Fonction en Move : une surcharge de Move (" + fp.lastMessage() + ")");
+    const Id third = fp.addOverload(move);
+    check(third != kNoId && hmi::symbolFunctions(*p.view(symId), "Move").size() == 3,
+          "Nouvelle surcharge sur Move : une troisi\xC3\xA8me Move (" + fp.lastMessage() + ")");
+    (void)stack.undo();
+    (void)stack.undo();
+    check(hmi::symbolFunctions(*p.view(symId), "Move").size() == 1 && hmi::symbolFunction(*p.view(symId), "Fonction"),
+          "deux Ctrl+Z : Move seule, Fonction revient");
+
+    // ---- renommer Pos en Position : partout ----
+    std::vector<std::string> where;
+    const auto n = hmi::params::renameParam(p, "S_Vanne", "Pos", "Position", &where);
+    const auto* s2 = p.view(symId);
+    const auto* voyant = s2 ? s2->objectByName("Voyant") : nullptr;
+    check(n > 0 && voyant && voyant->text("state") == "Position > 0", "renommer : l'\xC3\xA9tat du voyant suit (" + (voyant ? voyant->text("state") : std::string("?")) + ")");
+    check(s2 && s2->functions[0].body.find("Move := Position > 0") != std::string::npos, "... le corps de la fonction Move du symbole");
+    const auto* valeur = p.view(popId) ? p.view(popId)->objectByName("Valeur") : nullptr;
+    check(valeur && valeur->text("text") == "Position : {Position}", "... le texte \xC3\xA0 trous du popup du symbole");
+    check(p.view(vid)->object(i1)->text("params") == "Position := Pos0", "... l'argument de l'instance V1");
+
+    // ---- retirer Position : l'argument de V1 reste, et Compiler le dit ----
+    where.clear();
+    check(hmi::params::removeParam(p, "S_Vanne", 0, &where) && p.view(symId)->params.empty(), "retirer Position");
+    check(p.view(vid)->object(i1)->text("params") == "Position := Pos0" && !where.empty(),
+          "... l'argument de V1 reste (une faute \xC3\xA0 corriger), et le retrait le dit");
+    bool flagged = false;
+    for (const auto& is : hmi::generate(p, {}))
+        if (is.severity == hmi::Issue::Severity::Error && is.message.find("argument inconnu du symbole S_Vanne : Position") != std::string::npos) flagged = true;
+    check(flagged, "... Compiler : une faute sur V1 (argument inconnu du symbole S_Vanne : Position)");
+
+    // ---- le dossier Simulation deballe ----
+    using NK = app::ProjectTreeModel::NodeKind;
+    auto plc = std::make_shared<domain::Project>();
+    app::ProjectTreeModel tree(plc);
+    tree.setHmi(doc);
+    ui::NodeId debug = ui::kInvalidNode, forcing = ui::kInvalidNode;
+    for (std::size_t k = 0; k < tree.childCount(tree.simFolderNode()); ++k) {
+        const auto c = tree.childAt(tree.simFolderNode(), k);
+        if (tree.kindOf(c) == NK::SimDebug) debug = c;
+        if (tree.kindOf(c) == NK::SimForcing) forcing = c;
+    }
+    check(debug != ui::kInvalidNode && tree.childCount(debug) == 0 && !tree.hasChildren(debug), "D\xC3\xA9" "bogage sans point d'arr\xC3\xAAt : une feuille");
+    int ready = 0;
+    core::ConnectionScope links;
+    links += tree.childrenReady->connect([&](ui::NodeId) { ++ready; });
+    using SR = app::ProjectTreeModel::SimRow;
+    check(tree.setSimRows(app::ProjectTreeModel::SimList::Breakpoints, {SR{"SFC_A  \xC2\xB7  ligne 12", "", "bp:1"}, SR{"Regul  \xC2\xB7  ligne 40", "d\xC3\xA9sactiv\xC3\xA9", "bp:2", true}})
+              && ready == 1 && tree.childCount(debug) == 2,
+          "deux points d'arr\xC3\xAAt : D\xC3\xA9" "bogage se d\xC3\xA9plie (une liste nouvelle : childrenReady)");
+    const auto bp2 = tree.childAt(debug, 1);
+    check(tree.kindOf(bp2) == NK::SimRow && tree.text(bp2) == "Regul  \xC2\xB7  ligne 40" && app::ProjectTreeModel::isSimNode(bp2)
+              && tree.style(bp2).hint == "d\xC3\xA9sactiv\xC3\xA9" && tree.style(bp2).fgTone == ui::Tone::Muted,
+          "... le second : sa ligne, d\xC3\xA9sactiv\xC3\xA9 (gris)");
+    check(!tree.setSimRows(app::ProjectTreeModel::SimList::Breakpoints, {SR{"SFC_A  \xC2\xB7  ligne 12", "", "bp:1"}, SR{"Regul  \xC2\xB7  ligne 40", "d\xC3\xA9sactiv\xC3\xA9", "bp:2", true}}),
+          "les m\xC3\xAAmes lignes : rien \xC3\xA0 refaire");
+    check(tree.setSimRows(app::ProjectTreeModel::SimList::Forcings, {SR{"Pression = 4.2", "", "plc:Pression"}}) && ready == 2
+              && tree.setSimRows(app::ProjectTreeModel::SimList::Forcings, {SR{"Pression = 5.0", "", "plc:Pression"}}) && ready == 2
+              && tree.text(tree.childAt(forcing, 0)) == "Pression = 5.0",
+          "un for\xC3\xA7" "age : sa ligne ; sa valeur change, la ligne suit sans refaire l'arbre");
 }
 
 void fonctionsSymboleEditeur11110() {
@@ -27497,8 +27647,18 @@ void surcharges1120() {
           "les deux surcharges et leurs appels suivent (" + pane.lastMessage() + ")");
     (void)stack.undo();
     check(p.function(c1)->name == "Convertir" && p.function(c2)->name == "Convertir", "Ctrl+Z : le groupe reprend son nom");
-    check(!pane.renameFunction(rnd, "Convertir", &why) && why.find("surcharge de Convertir") != std::string::npos,
-          "renommer vers un nom pris : refus\xC3\xA9 (" + why + ")");
+    // 1.11.22 : RENOMMER EN SURCHARGE - Random n'est pas appelee et sa forme differe : permis ; elle
+    // rejoint les Convertir. Appelee, refuse (ses appels pourraient changer de cible).
+    check(pane.renameFunction(rnd, "Convertir", &why) && p.functionsNamed("Convertir").size() == 3
+              && pane.lastMessage().find("une surcharge : 3 fonctions Convertir") != std::string::npos,
+          "renommer en surcharge, sans appel ni m\xC3\xAAme forme : permis (" + why + " / " + pane.lastMessage() + ")");
+    (void)stack.undo();
+    check(p.function(rnd) && p.function(rnd)->name == "Random", "... Ctrl+Z : Random revient");
+    if (auto cmd = changeProject(doc, "Un appel de Random", [&](Project& q) { q.programs.scripts[0].body += "Tirage := Random(0.0, 1.0);\n"; }))
+        apply(std::move(cmd));
+    check(!pane.renameFunction(rnd, "Convertir", &why) && why.find("Random est appel") != std::string::npos,
+          "... appel\xC3\xA9" "e : refus\xC3\xA9, la raison dit quoi faire (" + why + ")");
+    (void)stack.undo();
     // ---- deux surcharges de meme forme : dites ----
     const Id c3 = pane.addFunction("Convertir", "STRING", {}, &why);      // le modele : Entree : STRING (une forme neuve)
     if (auto cmd = changeProject(doc, "Sa forme", [&](Project& q) {
@@ -27783,6 +27943,7 @@ int main(int argc, char** argv) {
         direct1121();
         explorateurs1121();
         valeurGrille1121();
+        lot1122();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -28122,6 +28283,7 @@ int main(int argc, char** argv) {
     direct1121();                           // 1.11.21 : les diagnostics en direct au panneau du bas
     explorateurs1121();                     // 1.11.21 : les explorateurs deplient les codes
     valeurGrille1121();                     // 1.11.21 : la grille - la valeur suit le type, un seul Ctrl+Z
+    lot1122();                              // 1.11.22 : surcharges d'un symbole, parametres partout, Simulation deballee
     if (argc > 1) configuration_et_variables(argv[1]);
     if (argc > 1) aide_saisie_scripts(argv[1]);
     if (argc > 1) aide_saisie_champs(argv[1]);

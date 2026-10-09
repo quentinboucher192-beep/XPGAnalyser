@@ -759,9 +759,10 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         case NodeKind::SimFolder:           return hmi_ ? 8 : 6;        // sans IHM : ni IHM ni Equipements
         case NodeKind::SimOverview:
         case NodeKind::SimEquipment:
-        case NodeKind::SimDebug:
-        case NodeKind::SimForcing:
-        case NodeKind::SimTrends:
+        case NodeKind::SimDebug:            return simRows_[0].size();   // 1.11.22 : ses points d'arret
+        case NodeKind::SimForcing:          return simRows_[1].size();   // ... chaque forcage
+        case NodeKind::SimTrends:           return simRows_[2].size();   // ... chaque courbe
+        case NodeKind::SimRow:
         case NodeKind::SimJournal:          return 0;
         // ---- fin Lot API 8 ----
         case NodeKind::ApiSimulation:
@@ -1255,6 +1256,13 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
                 NodeKind::SimForcing, NodeKind::SimTrends, NodeKind::SimJournal};
             if (!hmi_) return k < std::size(plcOnly) ? pack(plcOnly[k], 0) : ui::kInvalidNode;
             return k < std::size(order) ? pack(order[k], 0) : ui::kInvalidNode;
+        }
+        // ---- 1.11.22 : le deballage du dossier Simulation ----
+        case NodeKind::SimDebug:
+        case NodeKind::SimForcing:
+        case NodeKind::SimTrends: {
+            const Index list = kindOf(n) == NodeKind::SimDebug ? 0 : kindOf(n) == NodeKind::SimForcing ? 1 : 2;
+            return k < simRows_[list].size() ? pack(NodeKind::SimRow, static_cast<Index>(k), list) : ui::kInvalidNode;
         }
         // ---- fin Lot API 8 ----
         case NodeKind::HmiConfig: {
@@ -2114,6 +2122,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         case NodeKind::SimForcing:     return "For\xC3\xA7" "ages";
         case NodeKind::SimTrends:      return "Courbes";
         case NodeKind::SimJournal:     return "Journal";
+        case NodeKind::SimRow:         { const auto* r = simRowOf(n); return r ? r->text : std::string{}; }   // 1.11.22
         // ---- fin Lot API 8 ----
         case NodeKind::ConfigurationFolder: return "Configuration";
         // Lot API 2 : l'arbre de l'API en francais.
@@ -2943,6 +2952,98 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
     }
 
     // 1.11.13 : l'etat du build (tout a droite de la ligne), et son infobulle : la raison.
+    // 1.11.22 : L'EXPLORATEUR MODERNISE (la maquette validee le 09/10). Le texte du noeud ne
+    // change pas (la recherche, les sessions, les essais le lisent) : ce qui est dit autrement
+    // passe par le style - `display` (le texte dessine), `tags` (les etiquettes), `mutedFrom`
+    // (la fin grise) - et la couleur de l'icone dit le genre (sauf une icone choisie).
+    void ProjectTreeModel::modernize(ui::NodeId n, ui::CellStyle& s) const {
+        const auto k = kindOf(n);
+        const auto tint = [&s](ui::Tone tone) {
+            if (!s.iconColor) s.iconTone = tone;
+        };
+        const auto isCodeKind = k == NodeKind::HmiGeneralScript || k == NodeKind::HmiViewScript || k == NodeKind::HmiFunction
+                             || k == NodeKind::HmiSymbolFunction || k == NodeKind::HmiObjectFunction || k == NodeKind::HmiOverloads
+                             || k == NodeKind::HmiSymbolOverloads || k == NodeKind::HmiCodeEntry || k == NodeKind::HmiCodeInner
+                             || k == NodeKind::HmiView || k == NodeKind::HmiVariable;
+        if (!isCodeKind) return;
+        std::string t = text(n);
+        // Les marques entre parentheses deviennent des etiquettes : "  (E/S)", "  (sortie)",
+        // "  (conserv\xC3\xA9e)", "  (persistante)".
+        static const struct { const char* mark; const char* tag; ui::Tone tone; } kMarks[] = {
+            {"  (E/S)", "E/S", ui::Tone::InOut},
+            {"  (sortie)", "sortie", ui::Tone::Output},
+            {"  (conserv\xC3\xA9" "e)", "conserv\xC3\xA9" "e", ui::Tone::Warning},
+            {"  (persistante)", "persistante", ui::Tone::Info},
+        };
+        bool changed = false;
+        for (const auto& m : kMarks) {
+            if (const auto at = t.find(m.mark); at != std::string::npos) {
+                t.erase(at, std::char_traits<char>::length(m.mark));
+                s.tags.push_back({m.tag, m.tone});
+                changed = true;
+            }
+        }
+        const auto muteAt = [&](std::size_t at, bool mono) {
+            if (at != std::string::npos && at > 0 && at < t.size()) {
+                s.mutedFrom = at;
+                s.mutedMono = mono;
+            }
+        };
+        switch (k) {
+        case NodeKind::HmiGeneralScript:
+        case NodeKind::HmiViewScript:
+            tint(ui::Tone::Family4);
+            muteAt(t.find("   "), false);                       // "Init   ST   Demarrage"
+            break;
+        case NodeKind::HmiFunction:
+        case NodeKind::HmiSymbolFunction:
+        case NodeKind::HmiObjectFunction:
+            tint(ui::Tone::Family1);
+            muteAt(t.find('('), true);                          // la signature, dans la police du code
+            break;
+        case NodeKind::HmiOverloads:
+        case NodeKind::HmiSymbolOverloads: {
+            tint(ui::Tone::Family1);
+            // "Convertir   \xC2\xB7 3 surcharges" : le nom, et l'etiquette "3 surcharges".
+            if (const auto at = t.find("   \xC2\xB7 "); at != std::string::npos) {
+                s.tags.insert(s.tags.begin(), {t.substr(at + 6), ui::Tone::Muted});
+                t.erase(at);
+                changed = true;
+            }
+            break;
+        }
+        case NodeKind::HmiCodeEntry:
+        case NodeKind::HmiCodeInner: {
+            const auto sub = subOf(n);
+            const auto group = k == NodeKind::HmiCodeEntry ? static_cast<hmitree::OutlineKind>((sub >> 16) & 0xFF)
+                                                           : hmitree::OutlineKind::Variables;
+            switch (group) {
+            case hmitree::OutlineKind::Parameters: tint(ui::Tone::Input); break;
+            case hmitree::OutlineKind::Constants:  tint(ui::Tone::Family3); break;
+            case hmitree::OutlineKind::Variables:  tint(ui::Tone::Family2); break;
+            case hmitree::OutlineKind::Functions:  tint(ui::Tone::Family1); break;
+            }
+            if (group == hmitree::OutlineKind::Functions) muteAt(t.find('('), true);
+            else if (const auto colon = t.find(" :"); colon != std::string::npos) muteAt(colon, false);   // ": REAL = 80.0   // ..."
+            else muteAt(t.find("   //"), false);
+            break;
+        }
+        case NodeKind::HmiView:
+            // Le role d'une vue (popup, modele, en-tete, pied, symbole) : une etiquette, pas un compteur.
+            if (!s.badge.empty() && !std::all_of(s.badge.begin(), s.badge.end(), [](char c) { return c >= '0' && c <= '9'; })) {
+                s.tags.push_back({s.badge, ui::Tone::Muted});
+                s.badge.clear();
+            }
+            break;
+        case NodeKind::HmiVariable:
+            if (s.iconTone == ui::Tone::None) tint(ui::Tone::Family2);
+            break;
+        default:
+            break;
+        }
+        if (changed) s.display = t;
+    }
+
     void ProjectTreeModel::buildMark(ui::NodeId n, ui::CellStyle& s) const {
         if (!buildMarks_ || !hmi_) return;
         const auto t = hmiBuildTarget(n);
@@ -2992,6 +3093,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             decoGuard_ = false;
             decorate(n, s);
             buildMark(n, s);   // 1.11.13 : l'etat du build de l'IHM
+            modernize(n, s);   // 1.11.22 : l'explorateur modernise
             return s;
         }
         // ---- fin Lot API 8 ----
@@ -3054,6 +3156,18 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         case NodeKind::SimForcing:          s.icon = ui::Icon::Force; break;
         case NodeKind::SimTrends:           s.icon = ui::Icon::Chart; break;
         case NodeKind::SimJournal:          s.icon = ui::Icon::Document; break;
+        case NodeKind::SimRow: {                                         // 1.11.22 : une ligne poussee
+            const auto* r = simRowOf(n);
+            const auto list = simListOf(n);
+            s.icon = list == SimList::Breakpoints ? ui::Icon::Halt : list == SimList::Forcings ? ui::Icon::Force : ui::Icon::Chart;
+            s.iconTone = list == SimList::Breakpoints ? (r && r->off ? ui::Tone::Muted : ui::Tone::Error)
+                       : list == SimList::Forcings ? ui::Tone::Warning : ui::Tone::Info;
+            if (r) {
+                s.hint = r->hint;
+                if (r->off) s.fgTone = ui::Tone::Muted;
+            }
+            break;
+        }
         // ---- fin Lot API 8 ----
         case NodeKind::ConfigurationFolder:
         case NodeKind::TypesFolder:
@@ -3588,7 +3702,31 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
     // ---- Lot API 8 : Centre de simulation ----
     bool ProjectTreeModel::isSimNode(ui::NodeId n) noexcept {
         const auto k = kindOf(n);
-        return (k >= NodeKind::SimFolder && k <= NodeKind::SimJournal) || k == NodeKind::ApiSimulation || k == NodeKind::HmiSimulation;
+        return (k >= NodeKind::SimFolder && k <= NodeKind::SimJournal) || k == NodeKind::ApiSimulation || k == NodeKind::HmiSimulation
+            || k == NodeKind::SimRow;                                    // 1.11.22
+    }
+
+    // 1.11.22 : les lignes du dossier Simulation. Une autre liste (des cles qui changent) : les
+    // noeuds sont refaits (childrenReady) ; les memes cles, d'autres valeurs : le dessin suffit.
+    bool ProjectTreeModel::setSimRows(SimList list, std::vector<SimRow> rows) {
+        auto& mine = simRows_[static_cast<std::size_t>(list)];
+        if (mine == rows) return false;
+        bool structure = mine.size() != rows.size();
+        for (std::size_t k = 0; !structure && k < rows.size(); ++k) structure = mine[k].key != rows[k].key;
+        mine = std::move(rows);
+        if (structure) {
+            const auto parent = list == SimList::Breakpoints ? pack(NodeKind::SimDebug, 0)
+                              : list == SimList::Forcings ? pack(NodeKind::SimForcing, 0) : pack(NodeKind::SimTrends, 0);
+            childrenReady->emit(parent);
+        }
+        return true;
+    }
+
+    const ProjectTreeModel::SimRow* ProjectTreeModel::simRowOf(ui::NodeId n) const {
+        if (kindOf(n) != NodeKind::SimRow) return nullptr;
+        const auto list = static_cast<std::size_t>(simListOf(n));
+        const auto i = indexOf(n);
+        return list < simRows_.size() && i < simRows_[list].size() ? &simRows_[list][i] : nullptr;
     }
 
     bool ProjectTreeModel::setSimBadge(NodeKind kind, std::string text, ui::Tone tone) {

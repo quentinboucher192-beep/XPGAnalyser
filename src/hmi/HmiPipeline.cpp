@@ -739,6 +739,11 @@ std::vector<Element> collect(const Project& p, const ApiInfo& api) {
             e.iface = "animations";
             std::set<std::string> seen;
             dep(e, seen, v.name, vkey, DepMode::Interface, "vue");
+            // 1.11.22 : les arguments d'une instance sont compiles ici - un parametre retire ou renomme
+            // dans le symbole (son interface) recompile les animations de chaque vue qui l'emploie.
+            for (const auto& o : v.objects)
+                if (o.kind == Kind::SymbolInstance)
+                    if (const View* sv = symbolOf(p, o)) dep(e, seen, sv->name, keyOf(ElementKind::Symbol, sv->id), DepMode::Interface, "instance");
             std::string code;
             for (const auto& o : v.objects)
                 for (const auto& pr : o.props) {

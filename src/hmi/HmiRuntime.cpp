@@ -4185,6 +4185,7 @@ void Runtime::typeKey(EditKey k, double now) {
             // Annuler : rien n'est ecrit ; les mots de passe tapes s'effacent.
             if (o->kind != Kind::InputField)
                 for (auto& [name, text] : f.text) if (name != "utilisateur") text.clear();
+            if (o->kind == Kind::InputField) f.text.clear();     // 1.11.22 : la saisie en attente aussi (comme unfocus)
             f.focus.clear();
             f.fresh = false;
             focused_ = kNoId;

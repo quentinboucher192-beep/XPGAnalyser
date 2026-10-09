@@ -152,6 +152,20 @@ struct CellStyle {
     // genere). Chacune : son glyphe (texte), son ton, son infobulle (la raison).
     struct Trail { std::string glyph; Tone tone{Tone::None}; bool struck{false}; std::string tip; };
     std::vector<Trail> trail{};
+    // ---- 1.11.22 : l'explorateur modernise (TreeView::setModernLook) ----
+    // Des etiquettes apres le nom, teintees de leur ton : "E/S", "sortie", "conservee",
+    // "3 surcharges", "3 mises a jour". Vide : aucune.
+    struct Tag { std::string text; Tone tone{Tone::None}; };
+    std::vector<Tag> tags{};
+    // La fin du texte en gris, a partir de cet octet (la signature d'une fonction,
+    // "ST . Demarrage" d'un script) ; npos : tout le texte dans sa couleur. `mutedMono` :
+    // cette fin dans la police du code. Le texte du modele ne change pas.
+    std::size_t mutedFrom{std::string::npos};
+    bool        mutedMono{false};
+    // Le texte dessine a la place de celui du modele (ce que disent les etiquettes en est
+    // retire : "RandomSeed : REAL" et l'etiquette "E/S") ; vide : le texte du modele.
+    // Le texte du modele (recherche, sessions, essais) ne change pas.
+    std::string display{};
 };
 
 // ============================================================== ListView ====
@@ -323,6 +337,14 @@ public:
     // un clic emet (noeud, rang) ; la ligne n'est alors ni choisie ni ouverte.
     // Vide : aucune. Le titre colle en haut (domainHead) : stickyNode.
     void setHoverActions(std::vector<CellStyle::Chip> actions) { hoverActions_ = std::move(actions); invalidate(); }
+    // 1.11.22 : L'EXPLORATEUR MODERNISE (la maquette validee le 09/10) - les compteurs dans
+    // une colonne de largeur fixe tout a droite (un nombre gris), les etats du build dans
+    // une colonne fixe juste avant (alignes d'une ligne a l'autre), les actions au survol
+    // AVANT les etats (le compteur reste lisible), les etiquettes (CellStyle::tags) apres le
+    // nom, la fin grise du texte (mutedFrom), l'icone d'un titre de domaine sur une pastille
+    // de sa couleur. Faux (le defaut) : le dessin d'avant, pour les autres arbres.
+    void setModernLook(bool on) { modern_ = on; invalidate(); }
+    [[nodiscard]] bool modernLook() const noexcept { return modern_; }
     [[nodiscard]] bool hasHoverActions() const noexcept { return !hoverActions_.empty(); }
     const core::SignalPtr<NodeId, std::size_t> hoverActionClicked = core::Signal<NodeId, std::size_t>::create();
     [[nodiscard]] NodeId stickyNode() const noexcept { return stickyRow_ >= 0 && static_cast<std::size_t>(stickyRow_) < rows_.size() ? rows_[static_cast<std::size_t>(stickyRow_)].node : kInvalidNode; }
@@ -400,6 +422,7 @@ private:
     mutable float                stickyY_{0.f};
     mutable bool                 hasHeads_{false};           // des titres de domaine : ensureVisible garde une ligne pour eux
     // ---- fin Lot API 8 ----
+    bool                         modern_{false};             // 1.11.22 : l'explorateur modernise
 };
 
 // ============================================================= TableView ====

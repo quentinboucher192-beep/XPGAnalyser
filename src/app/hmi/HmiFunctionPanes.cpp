@@ -64,7 +64,8 @@ protected:
 };
 
 enum ToolAction : int { TNew = 1, TDelete, TTry, TCompile, TExport, TImport,   // 1.11.2 : TExport, TImport (decision 174)
-                        TBuildGen, TBuildRegen, TBuildGenComp, TBuildState };   // 1.11.13 : la generation incrementale
+                        TBuildGen, TBuildRegen, TBuildGenComp, TBuildState,     // 1.11.13 : la generation incrementale
+                        TOverload };                                             // 1.11.22 : une surcharge de la fonction choisie
 
 // 1.11.18 (refonte, lot 5) : "Aucun" (une procedure) ; "(aucun)", VOID et le vide se relisent aussi.
 constexpr const char* kNoReturn = "Aucun";
@@ -197,6 +198,12 @@ HmiFunctionsPane::HmiFunctionsPane(std::string id, hmi::DocumentPtr doc, Apply a
     const std::string base = this->id();
     auto tools = std::make_unique<HmiToolStrip>(base + ".tools");
     tools->add(TNew, HmiGlyph::Plus, "Nouvelle fonction (nom, type de retour, description)", "Nouvelle fonction");
+    // 1.11.22 : une surcharge de la fonction choisie - le meme nom, ses parametres a changer (l'onglet
+    // Parametres s'ouvre) ; aussi dans un symbole, ou Nouvelle fonction ne demandait pas de nom.
+    tools->add(TOverload, HmiGlyph::Duplicate,
+               "Nouvelle surcharge : une fonction du m\xC3\xAAme nom que la fonction choisie, avec d'autres param\xC3\xA8tres "
+               "(chaque appel prend la sienne)",
+               "Nouvelle surcharge");
     tools->add(TDelete, HmiGlyph::Delete, "Supprimer la fonction (Ctrl+Z la rend)", "Supprimer");
     tools->separator();
     tools->add(TTry, HmiGlyph::Play, "Essayer la fonction : des arguments, le r\xC3\xA9sultat (sans toucher le projet)", "Essayer");
@@ -229,7 +236,8 @@ HmiFunctionsPane::HmiFunctionsPane(std::string id, hmi::DocumentPtr doc, Apply a
         tools_->setVisibleWhen(a, [this] { return static_cast<bool>(hosts_.build); });
         if (a != TBuildState) tools_->setEnabledWhen(a, [this] { return selectedFunction() != kNoId; });
     }
-    tools_->setVisibleWhen(TTry, [this] { return symbol_ == kNoId; });   // 1.11.10 : une fonction de symbole s'essaie en marche
+    tools_->setVisibleWhen(TTry, [this] { return symbol_ == kNoId; });
+    tools_->setEnabledWhen(TOverload, [this] { const auto* f = current(); return f && !f->isVirtual; });   // 1.11.22   // 1.11.10 : une fonction de symbole s'essaie en marche
 
     auto split = std::make_unique<ui::Splitter>(ui::Orientation::Horizontal, base + ".split");
     auto left = std::make_unique<ui::Splitter>(ui::Orientation::Vertical, base + ".left");
@@ -286,6 +294,9 @@ HmiFunctionsPane::HmiFunctionsPane(std::string id, hmi::DocumentPtr doc, Apply a
         switch (a) {
             case TExport: if (hosts_.exportItems) hosts_.exportItems(sel); break;   // 1.11.2 (decision 174)
             case TImport: if (hosts_.importAny) hosts_.importAny(); break;
+            case TOverload:
+                if (sel) (void)addOverload(sel);
+                break;
             case TNew:
                 if (hosts_.newFunction) hosts_.newFunction();
                 else if (const auto* sv = symbolView()) {               // 1.11.10 : un nom libre dans le symbole
@@ -790,13 +801,41 @@ bool HmiFunctionsPane::nameAllowed(const std::string& name, Id self, std::string
     // fonction virtuelle (ses redefinitions la designent par son nom).
     std::string selfName;
     if (const auto* me = fnOf(doc_->project, self)) selfName = me->name;
+    std::vector<const hmi::HmiFunction*> joined;              // 1.11.22 : les fonctions de ce nom que le renommage rejoindrait
     for (const auto* other : named(name)) {
         if (other->id == self || (!selfName.empty() && hmikit::same(other->name, selfName))) continue;   // elle-meme, ses surcharges
         if (other->isVirtual)
             return refuse(name + " est virtuelle : une fonction virtuelle ne se surcharge pas (ses red\xC3\xA9" "finitions la d\xC3\xA9signent par son nom)");
-        if (!overload)
-            return refuse("une fonction porte d\xC3\xA9j\xC3\xA0 ce nom : la renommer ainsi en ferait une surcharge de " + name
-                          + ", et ses appels pourraient changer de cible (cr\xC3\xA9" "ez plut\xC3\xB4t la surcharge : Nouvelle fonction " + name + ")");
+        joined.push_back(other);
+    }
+    // 1.11.22 : RENOMMER EN SURCHARGE. La fonction (et ses surcharges) rejoint les fonctions de ce nom
+    // si elle n'est pas virtuelle, si aucune forme ne se repete, et si rien ne l'appelle encore : un
+    // appel renomme serait choisi parmi les surcharges, et pourrait changer de cible. Sinon : refuse,
+    // et la raison dit quoi faire (Nouvelle surcharge, ou changer ses parametres d'abord).
+    if (!overload && !joined.empty()) {
+        const auto mine = selfName.empty() ? std::vector<const hmi::HmiFunction*>{} : named(selfName);
+        for (const auto* g : mine)
+            if (g->isVirtual)
+                return refuse(selfName + " est virtuelle : une fonction virtuelle ne se surcharge pas (ses red\xC3\xA9" "finitions la d\xC3\xA9signent par son nom)");
+        for (const auto* g : mine)
+            for (const auto* o : joined)
+                if (hmi::overload::sameShape(hmi::overload::signatureOf(*g), hmi::overload::signatureOf(*o)))
+                    return refuse("m\xC3\xAAme forme que " + hmi::overload::signatureOf(*o).shape() + " : changez d'abord ses param\xC3\xA8tres "
+                                  "(onglet Param\xC3\xA8tres) pour en faire une surcharge de " + name);
+        if (!selfName.empty()) {
+            // Ses appels : un renommage a blanc, sur une copie du projet ; un texte change = un appel.
+            hmi::Project trial = doc_->project;
+            const auto* sv = symbolView();
+            std::size_t texts = sv ? hmi::renameSymbolFunction(trial, sv->name, selfName, name)
+                                   : hmi::renameFunctionEverywhere(trial, selfName, name);
+            // Son propre corps n'est pas un appel (son nom y est aussi son retour : Random := ...).
+            for (const auto* g : mine)
+                if (const auto* t = fnOf(trial, g->id); t && t->body != g->body && texts > 0) --texts;
+            if (texts > 0)
+                return refuse(selfName + " est appel\xC3\xA9" "e (" + std::to_string(texts) + " texte(s)) : renomm\xC3\xA9" "s, ses appels seraient choisis "
+                              "parmi les surcharges de " + name + " et pourraient changer de cible (cr\xC3\xA9" "ez plut\xC3\xB4t la surcharge : "
+                              "choisissez " + name + ", puis Nouvelle surcharge)");
+        }
     }
     if (const auto* sv = symbolView()) {
         if (sv->param(name)) return refuse("un param\xC3\xA8tre de " + sv->name + " porte d\xC3\xA9j\xC3\xA0 ce nom");
@@ -856,6 +895,22 @@ Id HmiFunctionsPane::addFunction(std::string name, std::string returnType, std::
     return made;
 }
 
+// 1.11.22 : NOUVELLE SURCHARGE - une fonction du meme nom que `of` (son type de retour, sa
+// description), partie du modele ; l'onglet Parametres s'ouvre : ce sont eux qui la distinguent.
+Id HmiFunctionsPane::addOverload(Id of, std::string* why) {
+    const auto* f = fnOf(doc_->project, of);
+    if (!f) return kNoId;
+    if (f->isVirtual) {
+        if (why) *why = f->name + " est virtuelle : une fonction virtuelle ne se surcharge pas";
+        say("Surcharge refus\xC3\xA9" "e : " + f->name + " est virtuelle (ses red\xC3\xA9" "finitions la d\xC3\xA9signent par son nom)", true);
+        return kNoId;
+    }
+    const std::string name = f->name, ret = f->returnType, text = f->description;
+    const Id made = addFunction(name, ret, text, why);
+    if (made) showCodeTab(CodeTabParameters);
+    return made;
+}
+
 bool HmiFunctionsPane::renameFunction(Id id, const std::string& name, std::string* why) {
     const auto* f = fnOf(doc_->project, id);
     if (!f) return false;
@@ -881,6 +936,9 @@ bool HmiFunctionsPane::renameFunction(Id id, const std::string& name, std::strin
     // portent le meme nom et suivent tous : chacun garde sa cible.
     std::vector<Id> group;
     for (const auto* g : named(old)) group.push_back(g->id);
+    std::size_t joining = 0;                                   // 1.11.22 : les fonctions de ce nom qu'elle rejoint
+    for (const auto* o : named(name))
+        if (!hmikit::same(o->name, old)) ++joining;
     std::size_t changed = 0;
     auto cmd = hmi::changeProject(doc_, "Renommer la fonction " + old + " en " + name, [&](hmi::Project& p) {
         // 1.11.10 : une fonction de symbole - ses appels (dans le symbole, Instance.Nom, Vue.Instance.Nom)
@@ -895,7 +953,10 @@ bool HmiFunctionsPane::renameFunction(Id id, const std::string& name, std::strin
     say(old + " devient " + name
         + (group.size() == 2 ? std::string(" avec son autre surcharge")
            : group.size() > 2 ? " avec ses " + std::to_string(group.size() - 1) + " autres surcharges" : std::string{})
-        + (changed ? " : " + std::to_string(changed) + " texte(s) suivent (appels, corps)" : std::string{}) + ". Ctrl+Z reprend tout.");
+        + (changed ? " : " + std::to_string(changed) + " texte(s) suivent (appels, corps)" : std::string{})
+        + (joining ? " - une surcharge : " + std::to_string(joining + group.size()) + " fonctions " + name + " (chaque appel prend la sienne)"
+                   : std::string{})
+        + ". Ctrl+Z reprend tout.");
     return true;
 }
 

@@ -737,9 +737,49 @@ void MainAnalysisScreen::refreshSimBadges() {
     };
     const std::string forcings = st.model->forcings.empty() ? std::string{} : std::to_string(st.model->forcings.size());
     const std::string trends = st.model->trends().empty() ? std::string{} : std::to_string(st.model->trends().size());
+    // ---- 1.11.22 : le deballage du dossier Simulation - les lignes, poussees ici (pas au dessin) ----
+    bool rows = false;
+    {
+        using SR = ProjectTreeModel::SimRow;
+        std::vector<SR> bps, frc, trs;
+        for (const auto& b : app_.simulation().breakpoints()) {
+            if (SimDebugPane::isTransient(b.id)) continue;      // "aller a la ligne" : pas un point de l'utilisateur
+            SR r;
+            r.text = b.section + "  \xC2\xB7  ligne " + std::to_string(b.line);
+            r.hint = !b.enabled ? std::string("d\xC3\xA9sactiv\xC3\xA9") : !b.condition.empty() ? "si " + b.condition
+                   : b.hits ? std::to_string(b.hits) + " passage(s)" : std::string{};
+            r.key = "bp:" + std::to_string(b.id);
+            r.off = !b.enabled;
+            bps.push_back(std::move(r));
+        }
+        for (const auto& f : st.model->forcings) {
+            SR r;
+            r.text = f.what + " = " + f.value;
+            r.hint = f.source == SimForcing::Source::Automate ? (f.programSays.empty() ? std::string{} : "le programme dirait " + f.programSays)
+                                                               : f.where;
+            r.key = f.key;
+            frc.push_back(std::move(r));
+        }
+        for (const auto& t : st.model->trends()) {
+            SR r;
+            r.text = t.path + (t.last.empty() ? std::string{} : " = " + t.last);
+            r.hint = t.hmi ? std::string("IHM") : std::string{};
+            r.key = t.path;
+            trs.push_back(std::move(r));
+        }
+        rows = treeModel_->setSimRows(ProjectTreeModel::SimList::Breakpoints, std::move(bps));
+        rows = treeModel_->setSimRows(ProjectTreeModel::SimList::Forcings, std::move(frc)) || rows;
+        rows = treeModel_->setSimRows(ProjectTreeModel::SimList::Trends, std::move(trs)) || rows;
+        const auto journal = app_.simJournal().size();
+        rows = treeModel_->setSimBadge(NK::SimJournal, journal ? std::to_string(journal) : std::string{}, ui::Tone::None) || rows;
+    }
+    // ---- fin 1.11.22 ----
     const std::string shown = rep.folderBadge + "|" + ss::toneName(rep.folderTone) + "|" + rep.hmiBadge + "|" + rep.equipBadge + "|"
                             + ss::toneName(rep.equipTone) + "|" + forcings + "|" + trends;
-    if (shown == st.badgesShown && st.badgeModel.lock() == treeModel_) return;
+    if (shown == st.badgesShown && st.badgeModel.lock() == treeModel_) {
+        if (rows) explorer_->invalidate();
+        return;
+    }
     bool changed = st.badgeModel.lock() != treeModel_;
     st.badgesShown = shown;
     st.badgeModel = treeModel_;
@@ -761,6 +801,34 @@ bool MainAnalysisScreen::routeSimNode(ui::NodeId node) {
         case NK::SimForcing:   (void)openSimCenter("forcages"); return true;
         case NK::SimTrends:    (void)openSimCenter("courbes"); return true;
         case NK::SimJournal:   (void)openSimCenter("journal"); return true;
+        case NK::SimRow: {                                 // 1.11.22 : une ligne du deballage
+            const auto* row = treeModel_ ? treeModel_->simRowOf(node) : nullptr;
+            switch (ProjectTreeModel::simListOf(node)) {
+                case ProjectTreeModel::SimList::Breakpoints: {
+                    std::string section;
+                    int line = 0;
+                    if (row && row->key.rfind("bp:", 0) == 0) {
+                        const auto id = static_cast<std::uint32_t>(std::strtoul(row->key.c_str() + 3, nullptr, 10));
+                        for (const auto& b : app_.simulation().breakpoints())
+                            if (b.id == id) { section = b.section; line = b.line; }
+                    }
+                    openSimDebugAt(section, line);
+                    return true;
+                }
+                case ProjectTreeModel::SimList::Forcings:
+                    (void)openSimCenter("forcages");
+                    if (auto* pane = dynamic_cast<SimForcingPane*>(simCenterPane("forcages")); pane && row) {
+                        pane->refresh();
+                        const auto eq = row->text.find(" = ");
+                        (void)pane->select(eq == std::string::npos ? row->text : row->text.substr(0, eq));
+                    }
+                    return true;
+                case ProjectTreeModel::SimList::Trends:
+                    (void)openSimCenter("courbes");
+                    return true;
+            }
+            return true;
+        }
         default:               return false;
     }
 }

@@ -3540,6 +3540,11 @@ void saisieLot8() {
     same(rt.formState(fReel)->text.at("valeur"), "2", "la premi\xC3\xA8re touche remplace la valeur montr\xC3\xA9" "e");
     rt.typeText("x4,5", 0.12);
     same(rt.formState(fReel)->text.at("valeur"), "24,5", "un champ num\xC3\xA9rique ignore les lettres");
+    // 1.11.22 (le client : "les champs de saisie n'ecrivent pas en continu") : tant qu'on tape,
+    // la variable ne bouge pas - la valeur tapee attend dans le champ.
+    near(rt.variable("Reel")->asReal(), 1.5, "pendant la frappe : la variable n'a pas boug\xC3\xA9 (1.5)");
+    rt.tick(0.125);
+    near(rt.variable("Reel")->asReal(), 1.5, "... ni apr\xC3\xA8s un cycle de l'IHM");
     rt.typeKey(EditKey::Enter, 0.13);
     near(rt.variable("Reel")->asReal(), 24.5, "Entr\xC3\xA9" "e \xC3\xA9" "crit 24,5 (la virgule vaut le point)");
     check(rt.focusedObject() == kNoId, "... et le champ rend le focus");
@@ -3550,6 +3555,7 @@ void saisieLot8() {
     check(msg(fReel).find("hors bornes") != std::string::npos && rt.focusedObject() == fReel, "... le champ le dit et garde le focus (" + msg(fReel) + ")");
     rt.typeKey(EditKey::Escape, 0.23);
     check(rt.focusedObject() == kNoId && rt.formState(fReel)->focus.empty(), "\xC3\x89" "chap annule");
+    check(rt.formState(fReel)->text.empty(), "1.11.22 : \xC3\x89" "chap efface aussi la saisie en attente (comme un clic ailleurs)");
     rt.objectPart(fEntier, "champ", 0.3);
     rt.typeText("2.5", 0.31);
     rt.typeKey(EditKey::Enter, 0.32);
@@ -3558,6 +3564,7 @@ void saisieLot8() {
     rt.typeKey(EditKey::Backspace, 0.34);
     rt.typeKey(EditKey::Backspace, 0.35);
     rt.typeText("7", 0.36);
+    check(rt.variable("Entier")->asInteger() == 3, "1.11.22 : corrig\xC3\xA9" "e mais pas valid\xC3\xA9" "e, la variable garde 3");
     rt.typeKey(EditKey::Enter, 0.37);
     check(rt.variable("Entier")->asInteger() == 7, "corrig\xC3\xA9 au retour arri\xC3\xA8re : 7");
     rt.objectPart(fTexte, "champ", 0.4);
@@ -4317,9 +4324,10 @@ void verificationsLot8() {
     check(has("rien ne ferme cette popup", S::Warning), "une popup modale que rien ne ferme");
     check(has("Aide est une popup : Naviguer", S::Warning), "Naviguer vers une popup");
     check(has("position inconnue : 'partout'", S::Warning), "la position d'une action, inconnue");
-    check(has("param\xC3\xA8tre inconnu de Pop : Vitesse", S::Warning), "un param\xC3\xA8tre que la vue ne d\xC3\xA9" "clare pas");
+    // 1.11.22 : une faute (un parametre retire ou renomme casse ceux qui ouvrent la vue avec lui).
+    check(has("param\xC3\xA8tre inconnu de Pop : Vitesse", S::Error), "un param\xC3\xA8tre que la vue ne d\xC3\xA9" "clare pas : une faute");
     check(has("Rien := Absent[0] : variable inexistante : Absent", S::Error), "un param\xC3\xA8tre reli\xC3\xA9 \xC3\xA0 une variable absente");
-    check(has("Aide ne d\xC3\xA9" "clare aucun param\xC3\xA8tre", S::Warning), "des param\xC3\xA8tres donn\xC3\xA9s \xC3\xA0 une vue qui n'en a pas");
+    check(has("Aide ne d\xC3\xA9" "clare aucun param\xC3\xA8tre", S::Error), "des param\xC3\xA8tres donn\xC3\xA9s \xC3\xA0 une vue qui n'en a pas : une faute");
     check(has("champ de saisie sans variable", S::Error), "un champ de saisie sans variable");
     check(has("minimum au-dessus du maximum", S::Error), "un champ aux bornes invers\xC3\xA9" "es");
     check(has("vue 'Vue_Absente' introuvable", S::Error), "Vue apr\xC3\xA8s connexion introuvable");
@@ -16556,7 +16564,7 @@ void guideNouveautes110() {
         // 1.11.18 (refonte, lot 5) : le sujet a aussi ses onglets (un bloc marque 1.11.18) ; 1.11.20 : les E/S,
         // les sorties et les surcharges (des blocs marques 1.11.20) ; 1.11.21 : l'arbre deplie (un bloc
         // marque 1.11.21) - son changement le plus recent.
-        check(firstSince == "1.10" && guide::latestChange(*f) == "1.11.21", "guide 1.10 : @nouveau avant un exemple marque son premier bloc");
+        check(firstSince == "1.10" && guide::latestChange(*f) == "1.11.22", "guide 1.10 : @nouveau avant un exemple marque son premier bloc");
     } else {
         check(false, "guide 1.10 : le sujet fonctions existe");
     }

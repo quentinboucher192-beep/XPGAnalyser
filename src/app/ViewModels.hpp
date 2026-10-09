@@ -28,6 +28,7 @@
 #include <string>
 #include <unordered_map>
 #include <utility>
+#include <array>
 #include <vector>
 
 namespace hmi { class Document; }
@@ -322,6 +323,10 @@ namespace app {
             //                 symbole, sub = le rang de la premiere.
             // A LA FIN, toujours.
             HmiCodeGroup, HmiCodeEntry, HmiCodeInner, HmiOverloads, HmiSymbolOverloads,
+            // 1.11.22 : le dossier Simulation deballe - une ligne poussee par l'ecran (setSimRows) :
+            //   SimRow  index = son rang, sub = sa liste (SimList : points d'arret sous Debogage,
+            //           forcages, courbes).
+            SimRow,
         };
         // Les parties d'une vue, dans l'ordre de l'arbre. 1.11.10 : un symbole a en plus
         // ses Fonctions et ses Popups (les deux dernieres).
@@ -513,6 +518,20 @@ namespace app {
         // Equipements, Forcages, Courbes, Journal) ; vide : pas de pastille.
         // Automate garde la sienne (setSimulationBadge). Vrai : elle a change.
         bool setSimBadge(NodeKind kind, std::string text, ui::Tone tone);
+        // 1.11.22 : LE DEBALLAGE DU DOSSIER SIMULATION - sous Debogage ses points d'arret, sous
+        // Forcages chaque forcage et sa valeur, sous Courbes chaque courbe et sa derniere valeur.
+        // L'ecran pousse les lignes (quelques fois par seconde, comme les pastilles) : rien n'est
+        // calcule au dessin. `key` dit ce qu'un clic ouvre ("bp:12", la cle d'un forcage, le chemin
+        // d'une courbe). Vrai : les lignes ont change (leur liste : childrenReady est emis).
+        enum class SimList : std::uint8_t { Breakpoints = 0, Forcings = 1, Trends = 2 };
+        struct SimRow {
+            std::string text, hint, key;
+            bool        off{false};       // un point d'arret desactive : grise
+            bool operator==(const SimRow&) const = default;
+        };
+        bool setSimRows(SimList list, std::vector<SimRow> rows);
+        [[nodiscard]] const SimRow* simRowOf(ui::NodeId) const;
+        [[nodiscard]] static SimList simListOf(ui::NodeId n) noexcept { return static_cast<SimList>(subOf(n) & 0x3); }
         // ---- fin Lot API 8 ----
 
         // ---- Lot API 8 : l'arbre du projet ----
@@ -630,6 +649,9 @@ namespace app {
         int                   scope_{0};
         mutable bool          decoGuard_{false};      // style() sans la decoration (decorate)
         void decorate(ui::NodeId n, ui::CellStyle& s) const;
+        // 1.11.22 : l'explorateur modernise - la couleur de l'icone par genre, les etiquettes
+        // (E/S, sortie, conservee, surcharges, le role d'une vue), la fin grise du texte.
+        void modernize(ui::NodeId n, ui::CellStyle& s) const;
         // ---- fin Lot API 8 ----
         // ---- Lot API 8 : l'arbre du projet ----
         [[nodiscard]] std::vector<domain::Index> hitsUnder(ui::NodeId) const;
@@ -700,6 +722,7 @@ namespace app {
         // ---- Lot API 8 : les pastilles du dossier Simulation (genre, texte, ton) ----
         struct SimBadge { NodeKind kind; std::string text; ui::Tone tone; };
         std::vector<SimBadge> simBadges_;
+        std::array<std::vector<SimRow>, 3> simRows_{};      // 1.11.22 : le deballage du dossier Simulation
 
         // Les instantanes. Ils pointent dans project_->variables et
         // project_->pous ; `refresh()` les refait.

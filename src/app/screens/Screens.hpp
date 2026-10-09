@@ -238,6 +238,8 @@ public:
     // ---- Lot API 8 : Centre de simulation > Debogage (SimDebugWorkspace.cpp) ----
     //  Ouvre (ou montre) l'onglet Simulation > Debogage.
     void openSimDebug();
+    // 1.11.22 : un point d'arret de l'arbre (Simulation > Debogage) : l'onglet, la section a sa ligne.
+    void openSimDebugAt(const std::string& section, int line);
     //  LES POINTS D'ARRET DANS L'ONGLET D'UNE SECTION (openDocument l'appelle) :
     //  la colonne de la marge - un clic, F9 sur la ligne du curseur (Ctrl+F9 :
     //  activer / desactiver) -, les ronds rouges, la ligne d'arret en pause, et
@@ -802,7 +804,7 @@ private:
     void openHmiFunctions(std::uint64_t functionId = 0, int line = 0);
     // 1.11.21 : un noeud du contenu d'un code (l'arbre) : son code, a l'onglet ou a la ligne voulus.
     void openHmiCodeTarget(const ProjectTreeModel::CodeTarget& t);
-    void askHmiNewFunction();
+    void askHmiNewFunction(std::uint64_t symbolView = 0);   // 1.11.22 : aussi pour les fonctions d'un symbole
     void askHmiDeleteFunction(std::uint64_t functionId);
     void askHmiTryFunction(std::uint64_t functionId);
     // F1 dans l'IHM : le volet d'aide sur le sujet de l'endroit (faux : pas

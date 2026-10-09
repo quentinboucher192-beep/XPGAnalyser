@@ -958,12 +958,13 @@ void checkLot8(const Project& p, const NameExists& plc, std::vector<Issue>& out)
                     if (given.empty())
                         add(out, S::Error, "Action", v.id, obj, where, "param\xC3\xA8tres illisibles : " + a.value + " (Nom := valeur; ...)");
                     for (const auto& [name, value] : given) {
+                        // 1.11.22 : une faute (un parametre retire ou renomme casse ceux qui l'ouvrent avec lui).
                         if (target->params.empty())
-                            add(out, S::Warning, "Action", v.id, obj, where,
-                                target->name + " ne d\xC3\xA9" "clare aucun param\xC3\xA8tre : " + name + " est ignor\xC3\xA9");
+                            add(out, S::Error, "Action", v.id, obj, where,
+                                target->name + " ne d\xC3\xA9" "clare aucun param\xC3\xA8tre : retirez " + name + " de l'appel, ou d\xC3\xA9" "clarez-le dans " + target->name);
                         else if (!target->param(name))
-                            add(out, S::Warning, "Action", v.id, obj, where,
-                                "param\xC3\xA8tre inconnu de " + target->name + " : " + name);
+                            add(out, S::Error, "Action", v.id, obj, where,
+                                "param\xC3\xA8tre inconnu de " + target->name + " : " + name + " (retir\xC3\xA9 ou renomm\xC3\xA9 ? corrigez l'appel)");
                         // Ce que l'appelant relie doit exister (chez lui : ses propres parametres comptent).
                         for (const auto& r : scanRoots(markers::strip(value)))   // 1.11.7 : $V[0]$ -> V
                             if (!known(p, plc, r, &v))
@@ -1443,7 +1444,7 @@ void checkSymbols(const Project& p, const NameExists& plc, std::vector<Issue>& o
             const auto given = parseArguments(o.text("params"));
             for (const auto& [argName, value] : given) {
                 if (!sv->param(argName)) {
-                    add(out, S::Warning, "Symbole", v.id, o.id, "params",
+                    add(out, S::Error, "Symbole", v.id, o.id, "params",        // 1.11.22 : une faute (le parametre a pu etre retire)
                         "argument inconnu du symbole " + name + " : " + argName
                             + (declared.empty() ? std::string(" (il ne d\xC3\xA9" "clare aucun param\xC3\xA8tre)") : " (ses param\xC3\xA8tres : " + declared + ")"));
                     continue;
@@ -2920,8 +2921,15 @@ struct ExprWalker {
             if (a.operation == Operation::Increment || a.operation == Operation::Decrement) expr(w, a.value, W::Number, "pas ");
             if (writes) target(w, a.target, "cible ");
             if (a.operation == Operation::Log) text(w, a.value, "message ");
-            if (operationTakesArguments(a.operation))
-                for (const auto& [name, value] : parseArguments(a.value)) expr(w, value, W::Any, "param\xC3\xA8tre " + name + " : ");
+            if (operationTakesArguments(a.operation)) {
+                const View* opened = p.viewByName(trimmedCopy(a.target));
+                for (const auto& [name, value] : parseArguments(a.value)) {
+                    expr(w, value, W::Any, "param\xC3\xA8tre " + name + " : ");
+                    if (opened && !opened->param(name))           // 1.11.22 : un parametre retire du popup casse l'appel
+                        push(w, "param\xC3\xA8tre " + name + " : " + opened->name + " n'a pas (ou plus) ce param\xC3\xA8tre - corrigez l'appel, "
+                                "ou d\xC3\xA9" "clarez-le dans " + opened->name);
+                }
+            }
         }
     }
 
@@ -3116,8 +3124,12 @@ struct ExprWalker {
                 if (o.kind != Kind::SymbolInstance || !animOn(v.id)) continue;
                 const View* sv = symbolOf(p, o);
                 if (!sv) continue;                                           // checkSymbols le dit
-                for (const auto& [name, value] : parseArguments(o.text("params")))
+                for (const auto& [name, value] : parseArguments(o.text("params"))) {
                     if (sv->param(name)) expr(Where{&v, o.id, "Symbole", "params"}, value, W::Any, "argument " + name + " := ");
+                    else push(Where{&v, o.id, "Symbole", "params"},     // 1.11.22 : un parametre retire du symbole casse l'instance
+                              "argument " + name + " : " + sv->name + " n'a pas (ou plus) ce param\xC3\xA8tre - retirez-le de l'instance "
+                              "(inspecteur, Arguments), ou d\xC3\xA9" "clarez-le dans le symbole");
+                }
             }
         for (const auto& sv : p.views) {
             if (!isSymbolView(sv) || !animOn(sv.id)) continue;

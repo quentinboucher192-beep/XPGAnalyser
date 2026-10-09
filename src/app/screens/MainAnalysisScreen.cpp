@@ -973,6 +973,7 @@ core::Status MainAnalysisScreen::buildUi() {
         // ---- fin Lot API 8 : l'arbre du projet ----
         // Lot 21 : Ctrl+clic en choisit plusieurs, pour les glisser ensemble dans un dossier.
         explorer_->setSelectionMode(SelectionMode::Extended);
+        explorer_->setModernLook(true);    // 1.11.22 : l'explorateur modernise (la maquette validee le 09/10)
         explorer_->setTooltip("Un clic ouvre l'onglet de l'entr\xC3\xA9" "e ; une section s'ouvre dans son \xC3\xA9" "diteur");
         // Lot 7 : sur une variable en simulation, sa valeur du moment ; sur API >
         // Simulation, l'etat et le cycle - relus tant que l'infobulle est ouverte.

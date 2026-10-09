@@ -6,6 +6,7 @@
 #include "HmiMarkers.hpp"   // 1.11.1 (REP) : un repere ecrit comme son morceau ($Vit$ := ...)
 #include "HmiRuntime.hpp"   // parseArguments, isVariablePath
 #include "HmiSymbols.hpp"   // 1.11.10 : les instances d'un symbole (withArgument)
+#include "HmiScript.hpp"    // 1.11.22 : forEachCode (renommer partout)
 #include "HmiTypeRegistry.hpp"   // 1.11.19 (refonte, lot 6) : les types et la regle, un seul catalogue
 #include "HmiTypes.hpp"
 
@@ -424,6 +425,66 @@ std::size_t renameParam(Project& p, std::string_view viewName, std::string_view 
                 note(other.name + " / " + o.name);
             }
     }
+    // ---- 1.11.22 : RENOMMER PARTOUT - tout ce qui lit le parametre, lu comme l'expansion le lit
+    //  (substituteParams : ni les chaines, ni les commentaires, ni les membres, ni les noms
+    //  d'arguments d'un appel) : chaque propriete de chaque objet (etats, voyants, conditions,
+    //  plumes, images, cases, arguments d'une instance imbriquee...), le titre du popup, les
+    //  valeurs par defaut des autres parametres ; pour un symbole, tout son code (fonctions,
+    //  alarmes, popups qui lui appartiennent, redefinitions des instances). Les passes d'avant
+    //  ont deja fait une partie : refaire est sans effet.
+    const SymbolArguments map{{std::string(from), std::string(to)}};
+    v = p.viewByName(viewName);
+    if (!v) return count;
+    const Id viewId = v->id;
+    const auto objects = [&](View& w) {
+        for (auto& o : w.objects) {
+            bool changed = false;
+            rewriteNames(o, [&](std::string_view t, bool code) {
+                std::string next = substituteParams(t, map, code);
+                if (next != t) changed = true;
+                return next;
+            });
+            if (changed) note(w.name + " / " + o.name);
+        }
+    };
+    objects(*v);
+    if (!v->popup.title.empty()) {
+        const std::string next = substituteInTemplate(v->popup.title, map);
+        if (next != v->popup.title) { v->popup.title = next; note(v->name + " / titre du popup"); }
+    }
+    for (auto& prm : v->params) {
+        if (same(prm.name, to) || prm.defaultValue.empty()) continue;
+        const std::string next = substituteParams(prm.defaultValue, map);
+        if (next != prm.defaultValue) { prm.defaultValue = next; note(v->name + " / param\xC3\xA8tre " + prm.name + " (d\xC3\xA9" "faut)"); }
+    }
+    if (isSymbolView(*v)) {
+        // Les popups du symbole : leurs objets, leurs actions, leurs scripts, leur titre.
+        for (auto& w : p.views) {
+            if (w.ownerSymbol != viewId) continue;
+            objects(w);
+            actions(w.actions, w.name + " / actions de la vue");
+            for (auto& sc : w.scripts) {
+                if (sc.lang != ScriptLang::ST) continue;
+                const std::string next = substituteParams(sc.body, map, true);
+                if (next != sc.body) { sc.body = next; note(w.name + " / script " + (sc.name.empty() ? sc.event : sc.name)); }
+            }
+            if (!w.popup.title.empty()) {
+                const std::string next = substituteInTemplate(w.popup.title, map);
+                if (next != w.popup.title) { w.popup.title = next; note(w.name + " / titre du popup"); }
+            }
+        }
+        // Son code : ses fonctions, ses alarmes, les redefinitions de ses instances (forEachCode :
+        // la portee d'un appel court est le symbole).
+        const View* sym = p.view(viewId);
+        forEachCode(p, [&](std::string& text, CodeForm form, const CodeSite& site) {
+            if (site.scope != sym || text.empty()) return;
+            const std::string next = form == CodeForm::Template ? substituteInTemplate(text, map)
+                                   : substituteParams(text, map, form == CodeForm::Code);
+            if (next == text) return;
+            text = next;
+            note(site.where);
+        });
+    }
     return count;
 }
 
@@ -495,29 +556,26 @@ bool removeParam(Project& p, std::string_view viewName, std::size_t index, std::
     if (!v || index >= v->params.size()) return false;
     const auto note = [&](std::string w) { if (where) where->push_back(std::move(w)); };
     const std::string name = v->params[index].name, target = v->name;
-    if (isSymbolView(*v)) {
-        nameInstanceArguments(p, *v, note);
-        forEachInstance(p, target, [&](View& owner, Object& o) {
-            const std::string before = o.text("params");
-            const std::string next = withoutArgument(before, name);
-            if (next == before) return;
-            o.set("params", next);
-            note(owner.name + " / " + o.name);
-        });
-    }
-    // Les actions qui ouvrent la vue (Ouvrir une popup, Changer de popup, Naviguer).
-    for (auto& other : p.views) {
-        const auto args = [&](std::vector<Action>& list, const std::string& label) {
-            bool changed = false;
-            for (auto& a : list) {
-                if (!operationTakesArguments(a.operation) || !same(trim(a.target), target)) continue;
-                const std::string next = withoutArgument(a.value, name);
-                if (next != a.value) { a.value = next; changed = true; }
-            }
-            if (changed) note(label);
+    // 1.11.22 (le client : "retirer des parametres ... et casser les compilations des elements lies") :
+    // les arguments donnes au parametre RESTENT (les instances, les appels qui ouvrent la vue) - ils
+    // deviennent des fautes de compilation a leur place, a corriger ; avant, ils etaient retires sans
+    // rien dire. Les arguments par rang sont d'abord nommes : les suivants ne glissent pas d'un rang.
+    if (isSymbolView(*v)) nameInstanceArguments(p, *v, note);
+    for (const auto& other : p.views) {
+        const auto args = [&](const std::vector<Action>& list, const std::string& label) {
+            for (const auto& a : list)
+                if (operationTakesArguments(a.operation) && same(trim(a.target), target) && withoutArgument(a.value, name) != a.value) {
+                    note(label + " (son argument " + name + " reste : une faute \xC3\xA0 corriger)");
+                    break;
+                }
         };
         args(other.actions, other.name + " / actions de la vue");
-        for (auto& o : other.objects) args(o.actions, other.name + " / " + o.name);
+        for (const auto& o : other.objects) {
+            args(o.actions, other.name + " / " + o.name);
+            if (o.kind == Kind::SymbolInstance && same(trim(o.text("symbol")), target)
+                && withoutArgument(o.text("params"), name) != o.text("params"))
+                note(other.name + " / " + o.name + " (son argument " + name + " reste : une faute \xC3\xA0 corriger)");
+        }
     }
     v = p.viewByName(viewName);
     v->params.erase(v->params.begin() + static_cast<std::ptrdiff_t>(index));

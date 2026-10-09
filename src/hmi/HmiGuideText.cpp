@@ -1637,6 +1637,15 @@ const std::vector<Topic>& topics() {
              {K::Bullet, "**Renommer** un param\xC3\xA8tre le renomme partout (ses emplois dans la popup, "
                          "Appliquer copie, et le nom de l'argument dans chaque action qui l'ouvre), en une "
                          "seule commande.", {}},
+             {K::Bullet, "1.11.22 : **Renommer** suit aussi chaque propri\xC3\xA9t\xC3\xA9 (\xC3\xA9tats, voyants, conditions, "
+                         "plumes, cases, arguments d'une instance imbriqu\xC3\xA9" "e), le titre de la popup et les valeurs par "
+                         "d\xC3\xA9" "faut des autres param\xC3\xA8tres ; pour un **symbole**, son code (ses fonctions, ses alarmes, "
+                         "ses popups) et les red\xC3\xA9" "finitions de ses instances.", {}, "1.11.22"},
+             {K::Bullet, "1.11.22 : **Supprimer** un param\xC3\xA8tre employ\xC3\xA9 pose d'abord une question qui liste ses "
+                         "emplois. Supprim\xC3\xA9, ses emplois et les arguments qui lui sont donn\xC3\xA9s (les instances "
+                         "d'un symbole, les actions qui ouvrent la popup) **restent** et deviennent des fautes de "
+                         "compilation, \xC3\xA0 leur place : la simulation ne d\xC3\xA9marre plus tant qu'ils restent. "
+                         "Ctrl+Z rend le param\xC3\xA8tre.", {}, "1.11.22"},
              {K::Bullet, "Sous la liste, les trois modes sont expliqu\xC3\xA9s en une ligne chacun.", {}},
              {K::Bullet, "Le **Mode** se lit \xC3\xA0 sa pastille de couleur : **REF** bord\xC3\xA9" "e de "
                          "bleu, **COPIE** bord\xC3\xA9" "e de cyan, **LES DEUX** pleine (du bleu au cyan). "
@@ -5696,6 +5705,11 @@ const std::vector<Topic>& topics() {
              {K::Paragraph, "Donner une consigne (une pression, un seuil de poids), un texte (un num\xC3\xA9ro "
                          "de lot, un message), un code. Le champ montre la valeur actuelle de sa variable ; "
                          "un clic le prend, la premi\xC3\xA8re touche remplace la valeur montr\xC3\xA9" "e.", {}},
+             {K::Paragraph, "**Rien n'est \xC3\xA9" "crit pendant la frappe** (1.11.22) : la valeur tap\xC3\xA9" "e attend "
+                         "dans le champ, et la variable ne change qu'\xC3\xA0 la validation - Entr\xC3\xA9" "e, Tab (qui "
+                         "passe au champ suivant), ou un clic ailleurs si Valider en quittant est coch\xC3\xA9. "
+                         "\xC3\x89" "chap, ou un clic ailleurs sans Valider en quittant, annule la saisie. Les autres "
+                         "objets qui montrent la m\xC3\xAAme variable gardent l'ancienne valeur jusque-l\xC3\xA0.", {}},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nVariable "
                          "\xC3\xA9" "crite\t(vide)\tLa variable (IHM ou automate) que le champ montre et "
@@ -12720,6 +12734,13 @@ const std::vector<Topic>& topics() {
                          "d\xC3\xA9signent par son nom).", {}, "1.11.20"},
              {K::Tip, "La bulle d'aide d'un appel montre toutes les signatures du nom : celle qui prend "
                          "l'argument que vous tapez passe devant.", {}, "1.11.20"},
+             {K::Bullet, "**Nouvelle surcharge** (1.11.22) : choisissez une fonction, puis Nouvelle surcharge - une "
+                         "fonction du m\xC3\xAAme nom, l'onglet Param\xC3\xA8tres ouvert pour lui donner une autre forme. "
+                         "Aussi dans un symbole, o\xC3\xB9 Nouvelle fonction demande d\xC3\xA9sormais son nom.", {}, "1.11.22"},
+             {K::Bullet, "**Renommer en surcharge** (1.11.22) : renommer une fonction vers un nom d\xC3\xA9j\xC3\xA0 pris en fait "
+                         "une surcharge si sa forme diff\xC3\xA8re et que rien ne l'appelle encore. Appel\xC3\xA9" "e, c'est refus\xC3\xA9 : "
+                         "ses appels, renomm\xC3\xA9s, seraient choisis parmi les surcharges et pourraient changer de cible - "
+                         "cr\xC3\xA9" "ez plut\xC3\xB4t la surcharge et d\xC3\xA9placez son code.", {}, "1.11.22"},
              {K::Heading, "Param\xC3\xA8tres et retours riches (1.10)", {}, "1.10"},
              {K::Paragraph, "Une fonction IHM du projet accepte **VAR_IN_OUT**, `REF_TO`, `POINTER TO`, des "
                          "tableaux, des MAP et des \xC3\xA9num\xC3\xA9rations en param\xC3\xA8tres, et un "

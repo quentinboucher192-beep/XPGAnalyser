@@ -259,8 +259,9 @@ std::vector<PG::Category> paramCategories(const hmi::Project& p, const hmi::View
                        + std::string(hmi::params::paramModeBadge(symbol ? ParamMode::Reference : prm.mode));
             row.pill = modePill(symbol ? ParamMode::Reference : prm.mode);   // 1.9 (chantier U) : la pastille du titre (P1)
             row.properties.push_back(prop("Nom", prm.name, PG::ValueType::Text,
-                                          "Renommer met \xC3\xA0 jour chaque emploi dans la vue et l'argument de chaque action qui "
-                                          "l'ouvre.",
+                                          "Renommer met \xC3\xA0 jour chaque emploi : la vue (propri\xC3\xA9t\xC3\xA9s, actions, scripts, "
+                                          "titre), et pour un symbole son code (fonctions, alarmes, popups, red\xC3\xA9" "finitions) ; "
+                                          "l'argument de chaque instance et de chaque action qui l'ouvre. Un seul Ctrl+Z.",
                                           {}, field(key + "nom")));
             auto [bounds, element] = splitArray(prm.type);
             std::vector<std::string> choices = typeChoices;
@@ -314,8 +315,9 @@ std::vector<PG::Category> paramCategories(const hmi::Project& p, const hmi::View
             if (i + 1 < v.params.size()) moves.emplace_back("Descendre");
             moves.emplace_back("Supprimer");
             row.properties.push_back(prop("Ordre", "\xE2\x80\xA6", PG::ValueType::Enum,
-                                          "Monter, Descendre : l'ordre des arguments propos\xC3\xA9s. Supprimer : retire le param\xC3\xA8tre "
-                                          "(ses emplois restent \xC3\xA0 revoir : G\xC3\xA9n\xC3\xA9rer les signale).",
+                                          "Monter, Descendre : l'ordre des arguments propos\xC3\xA9s. Supprimer : retire le param\xC3\xA8tre ; "
+                                          "employ\xC3\xA9, une question liste ses emplois d'abord. Ses emplois et les arguments qui lui sont "
+                                          "donn\xC3\xA9s restent et deviennent des fautes de compilation, \xC3\xA0 corriger.",
                                           moves, field(key + "ordre")));
             row.expanded = v.params.size() <= 4;
             sec.children.push_back(std::move(row));

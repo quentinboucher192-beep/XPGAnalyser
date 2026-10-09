@@ -1725,6 +1725,12 @@ void MainAnalysisScreen::openHmiView(std::uint64_t viewId, int part, std::uint64
         made->setStyleAsker([this, viewId] { askHmiStyle(viewId); });     // lot 12
         made->setDuplicateAsker([this, viewId] { askHmiDuplicate(viewId); });   // 1.10.2 (chantier D)
         made->setTemplateAsker([this, viewId] { askHmiSaveTemplate(viewId); });   // lot 20
+        // 1.11.22 : Nouvelle fonction d'un symbole demande son nom (un nom pris : une surcharge).
+        if (auto* fns = made->symbolFunctions()) {
+            auto h = fns->hosts();
+            h.newFunction = [this, viewId] { askHmiNewFunction(viewId); };
+            fns->setHosts(std::move(h));
+        }
         hmiLinks_ += made->openView->connect([this](hmi::Id v) { openHmiView(v); });
         hmiLinks_ += made->palette().favoritesChanged->connect([this, raw] {
             std::vector<std::string> keys;
@@ -2825,17 +2831,43 @@ void MainAnalysisScreen::openHmiFunctions(std::uint64_t functionId, int line) {
     if (pane && functionId != hmi::kNoId) pane->goTo(asId(functionId), line);
 }
 
-void MainAnalysisScreen::askHmiNewFunction() {
+void MainAnalysisScreen::askHmiNewFunction(std::uint64_t symbolView) {
     auto doc = app_.hmi();
     if (!doc) return;
+    // 1.11.22 : la fonction d'un symbole - un nom libre dans le symbole, sans retour par defaut ;
+    // un nom deja pris est une surcharge (comme pour les fonctions IHM).
+    const auto* sym = symbolView ? doc->project.view(asId(symbolView)) : nullptr;
+    if (symbolView && !sym) return;
     std::vector<std::string> types{"Aucun"};          // 1.11.18 (lot 5) : une procedure (avant : "(aucun)")
     // 1.11.19 (lot 6) : le registre des types - la base, puis les structures et les enumerations
     // du projet (comme le retour dans les proprietes de la fonction ; avant : la base seule).
     for (const auto& t : hmi::typereg::Registry::build(doc->project)->names(hmi::typereg::UseDeclaration)) types.push_back(t);
     std::vector<FormDialog::Field> fields;
-    fields.push_back({"Nom", hmi::uniqueFunctionName(doc->project, "Fonction"), "lettres, chiffres, _", false, {}});
-    fields.push_back({"Type de retour", "REAL", "", false, types});
+    std::string freeName = "Fonction";
+    if (sym)
+        for (int k = 2; hmi::symbolFunction(*sym, freeName); ++k) freeName = "Fonction" + std::to_string(k);
+    fields.push_back({"Nom", sym ? freeName : hmi::uniqueFunctionName(doc->project, "Fonction"), "lettres, chiffres, _ ; un nom d\xC3\xA9j\xC3\xA0 pris : une surcharge", false, {}});
+    fields.push_back({"Type de retour", sym ? "Aucun" : "REAL", "", false, types});
     fields.push_back({"Description", "", "ce qu'elle calcule ou fait", false, {}});
+    if (sym) {
+        app_.menus().ShowDialog(
+            std::make_unique<FormDialog>("dialog.hmiNewFunction", "Nouvelle fonction de " + sym->name,
+                "Une fonction du symbole s'appelle dans le symbole par son nom, et ailleurs par Vue.Instance.Nom(...). "
+                "Ses param\xC3\xA8tres, ses locales et ses constantes se d\xC3\xA9" "clarent dans ses onglets. Un nom d\xC3\xA9j\xC3\xA0 pris "
+                "est une surcharge : changez ses param\xC3\xA8tres pour la distinguer. Ctrl+Z la retire.",
+                std::move(fields), "Cr\xC3\xA9" "er"),
+            [this, symbolView](const menu::DialogResult& r) {
+                auto* editor = dynamic_cast<HmiEditor*>(hmiTab("vue:" + std::to_string(symbolView)));
+                auto* pane = editor ? editor->symbolFunctions() : nullptr;
+                if (!r.accepted() || !pane) return;
+                const auto v = FormDialog::split(r.payload);
+                if (v.empty()) return;
+                std::string why;
+                if (pane->addFunction(v[0], v.size() > 1 ? v[1] : std::string{}, v.size() > 2 ? v[2] : std::string{}, &why) == hmi::kNoId)
+                    status_->setTransientMessage("Fonction refus\xC3\xA9" "e : " + why, 8.0);
+            });
+        return;
+    }
     app_.menus().ShowDialog(
         std::make_unique<FormDialog>("dialog.hmiNewFunction", "Nouvelle fonction IHM",
             "Une fonction IHM s'appelle par son nom, comme une fonction de l'automate : Moyenne(a, b) dans un script, "

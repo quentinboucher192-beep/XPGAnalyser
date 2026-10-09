@@ -134,6 +134,12 @@ void openConditionDialog(App& app, const std::string& section, int line, const D
 } // namespace
 
 // --------------------------------------------------------------------- l'onglet ----
+// 1.11.22 : le clic sur un point d'arret, dans l'arbre (Simulation > Debogage).
+void MainAnalysisScreen::openSimDebugAt(const std::string& section, int line) {
+    openSimDebug();
+    if (auto* pane = debugPaneOf(apiTab("debogage")); pane && !section.empty()) (void)pane->showSection(section, line);
+}
+
 void MainAnalysisScreen::openSimDebug() {
     if (!simDebug_) simDebug_ = std::make_shared<SimDebugState>();
     if (!app_.project()) {

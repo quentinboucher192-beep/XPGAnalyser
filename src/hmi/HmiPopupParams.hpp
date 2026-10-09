@@ -177,9 +177,11 @@ std::size_t renameParam(Project&, std::string_view view, std::string_view from, 
                         std::vector<std::string>* where = nullptr);
 // 1.11.10 (defaut du 05/10 soir : « quand je modifie les parametres d'un popup ou d'un
 // symbole, il faut mettre a jour les instances ») : renommer suit aussi dans les
-// instances d'un symbole (l'argument nomme, dans toutes les vues). SUPPRIMER le
-// parametre `index` : son argument part des instances du symbole et des actions qui
-// ouvrent la vue. LE DEPLACER (Monter, Descendre) : les instances ecrites en
+// instances d'un symbole (l'argument nomme, dans toutes les vues). 1.11.22 : renommer
+// suit PARTOUT (chaque propriete, le titre, les defauts, et pour un symbole son code :
+// fonctions, alarmes, popups, redefinitions). SUPPRIMER le parametre `index` : 1.11.22 -
+// les arguments qui lui sont donnes (instances, actions qui ouvrent la vue) RESTENT et
+// deviennent des fautes de compilation ; `where` les liste. LE DEPLACER (Monter, Descendre) : les instances ecrites en
 // positionnels ("Voiture;50") passent en nommes avant, pour garder leur sens. Dans
 // une commande annulable, comme renameParam. Faux : rien a faire.
 bool removeParam(Project&, std::string_view view, std::size_t index, std::vector<std::string>* where = nullptr);

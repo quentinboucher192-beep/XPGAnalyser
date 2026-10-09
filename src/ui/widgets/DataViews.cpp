@@ -756,7 +756,15 @@ void TreeView::onPaint(const PaintContext& ctx) {
                         hovered() && hoverRow_ == static_cast<int>(i) ? c.text : c.textMuted);
 
         float textX = x + 18.f;
-        if (st.icon != Icon::None) {
+        if (st.icon != Icon::None && modern_ && st.domainHead && st.domain != 0) {
+            // 1.11.22 : l'icone blanche sur une pastille carree de la couleur du domaine.
+            const float side = std::min(rowH - 8.f, 14.f);
+            const float box = side + 6.f;
+            const gfx::Rect br{textX - 3.f, r.y + (rowH - box) * 0.5f, box, box};
+            ctx.r.fillRoundedRect(br, domainCol, 4.f);
+            drawIcon(ctx.r, st.icon, {br.x + 3.f, br.y + 3.f, side, side}, ctx.theme.onSurface(domainCol));
+            textX += box + 4.f;
+        } else if (st.icon != Icon::None) {
             const float side = std::min(rowH - 6.f, 16.f);
             drawIcon(ctx.r, st.icon, {textX, r.y + (rowH - side) * 0.5f, side, side},
                      st.domainHead && st.domain != 0 ? domainCol : iconColourOf(ctx.theme, st, selected));
@@ -768,7 +776,63 @@ void TreeView::onPaint(const PaintContext& ctx) {
                          iconColourOf(ctx.theme, st, selected));
             textX += side + 6.f;
         }
-        float badge = drawBadge(ctx, r, st);
+        float badge = 0.f;
+        float statusLeft = r.right();                       // 1.11.22 : ou commence la colonne d'etat
+        if (modern_ && st.chips.empty()) {
+            // ---- 1.11.22 : l'explorateur modernise - des colonnes fixes, alignees d'une ligne a l'autre ----
+            const float kCount = 34.f, kStatus = 30.f;
+            float right = r.right() - 8.f;
+            if (!st.badge.empty()) {
+                const bool count = st.badgeTone == Tone::None
+                                && std::all_of(st.badge.begin(), st.badge.end(), [](char ch) { return ch >= '0' && ch <= '9'; });
+                if (count) {
+                    // Un compteur : un nombre gris, aligne a droite (plus de pastille autour).
+                    const auto f = ctx.theme.font.smallUi;
+                    const float w = ctx.r.measure(st.badge, f).width;
+                    ctx.r.drawText({right - w, r.y + (rowH - ctx.r.lineHeight(f)) * 0.5f}, st.badge, f,
+                                   selected ? c.selectionText : c.textMuted);
+                    right -= std::max(kCount, w + 8.f);
+                } else {
+                    const float used = drawBadge(ctx, {r.x, r.y, right + 8.f - r.x, r.h}, st);   // a son bord droit : `right`
+                    right -= std::max(kCount, used - 4.f);
+                }
+            } else {
+                right -= kCount;
+            }
+            // Les etats du build : leur colonne, de largeur fixe (plus large s'ils sont deux).
+            float need = 0.f;
+            const auto trailFont = ctx.theme.font.uiBold;
+            const float lh = ctx.r.lineHeight(trailFont);
+            const float side = std::clamp(lh * 0.8f, 10.f, 16.f);
+            for (const auto& t : st.trail) need += trailsym::width(ctx.r, t.glyph, trailFont, side) + 6.f;
+            const float statusW = std::max(kStatus, need);
+            if (!st.trail.empty()) {
+                float tx = right - (statusW - need) * 0.5f;       // centres dans la colonne
+                for (std::size_t k = st.trail.size(); k-- > 0;) {
+                    const auto& t = st.trail[k];
+                    const float w = trailsym::width(ctx.r, t.glyph, trailFont, side);
+                    tx -= w + (k + 1 < st.trail.size() ? 6.f : 3.f);
+                    const auto col = selected ? c.selectionText : ctx.theme.tone(t.tone, c.textMuted);
+                    trailsym::draw(ctx.r, t.glyph, trailFont, tx, r.y + (rowH - lh) * 0.5f, r.y + rowH * 0.5f, side, col);
+                    if (t.struck)
+                        ctx.r.line({tx - 1.f, r.y + rowH * 0.5f + lh * 0.35f}, {tx + w + 1.f, r.y + rowH * 0.5f - lh * 0.35f}, col, 1.5f);
+                    dotHits_.push_back({vr.node, k, {tx - 2.f, r.y, w + 4.f, rowH}, t.tip});
+                }
+            }
+            right -= statusW;
+            statusLeft = right;
+            // La 2e pastille et les pips, a gauche de l'etat.
+            if (!st.pill.empty()) {
+                CellStyle ps;
+                ps.badge = st.pill;
+                ps.badgeTone = st.pillTone;
+                right -= drawBadge(ctx, {r.x, r.y, right + 8.f - r.x, r.h}, ps) - 4.f;
+            }
+            right -= drawPips(ctx, r, st, r.right() - 8.f - right, selected);
+            badge = r.right() - right;
+            // ---- fin 1.11.22 ----
+        } else {
+        badge = drawBadge(ctx, r, st);
         if (!st.pill.empty()) {                            // lot API 8 : l'arbre du projet (la 2e pastille)
             CellStyle ps;
             ps.badge = st.pill;
@@ -796,6 +860,7 @@ void TreeView::onPaint(const PaintContext& ctx) {
             badge = r.right() - 8.f - tx;
         }
         // ---- fin 1.11 (C4) ----
+        }
         // ---- Lot API 8 : l'arbre du projet (une rangee de boutons a la place du texte) ----
         if (!st.chips.empty()) {
             const auto chipFont = ctx.theme.font.smallUi;
@@ -824,7 +889,7 @@ void TreeView::onPaint(const PaintContext& ctx) {
         }
         // ---- fin Lot API 8 ----
         // ---- Lot API 8 : l'arbre du projet (le texte garde : surligne, suivi de l'indication) ----
-        const std::string nodeText = model_->text(vr.node);
+        const std::string nodeText = modern_ && !st.display.empty() ? st.display : model_->text(vr.node);   // 1.11.22
         const auto nodeFont = st.bold ? ctx.theme.font.uiBold : ctx.theme.font.ui;
         const float nodeRoom = r.right() - textX - 4.f - badge;
         if (!treeHighlight_.empty() && nodeRoom > 0.f)
@@ -835,18 +900,50 @@ void TreeView::onPaint(const PaintContext& ctx) {
                 if (x1 > x0) ctx.r.fillRoundedRect({x0 - 1.f, r.y + 3.f, x1 - x0 + 2.f, rowH - 6.f}, gfx::Color{230, 180, 60, 110}, 2.f);
             }
         // ---- fin Lot API 8 ----
-        drawMaybeBold(ctx, {textX, r.y + textY}, nodeText, nodeFont,
+        // 1.11.22 : la fin grise (une signature, "ST . Demarrage") - le texte garde ses deux morceaux.
+        const bool muted = modern_ && st.mutedFrom < nodeText.size();
+        const std::string_view headText = muted ? std::string_view(nodeText).substr(0, st.mutedFrom) : std::string_view(nodeText);
+        drawMaybeBold(ctx, {textX, r.y + textY}, std::string(headText), nodeFont,
                       textColourOf(ctx.theme, st, selected),
                       nodeRoom, st.bold);
+        float textEnd = textX + ctx.r.measure(headText, nodeFont).width;
+        if (muted) {
+            const auto tailFont = st.mutedMono ? ctx.theme.font.mono : ctx.theme.font.ui;
+            const std::string tail(std::string_view(nodeText).substr(st.mutedFrom));
+            const float room = textX + nodeRoom - textEnd;
+            if (room > 12.f) {
+                const float lhTail = ctx.r.lineHeight(tailFont);
+                drawClipped(ctx, {textEnd, r.y + (rowH - lhTail) * 0.5f}, tail, tailFont,
+                            selected ? textColourOf(ctx.theme, st, selected) : c.textMuted, room);
+                textEnd = std::min(textX + nodeRoom, textEnd + ctx.r.measure(tail, tailFont).width);
+            }
+        }
         // ---- Lot API 8 : l'arbre du projet (le point "modifie depuis V47", apres le nom) ----
         const bool dot = st.dotTone != Tone::None;
         if (dot) {
-            const float tw = std::min(ctx.r.measure(nodeText, nodeFont).width, std::max(0.f, nodeRoom - 12.f));
+            const float tw = std::min(modern_ ? textEnd - textX : ctx.r.measure(nodeText, nodeFont).width, std::max(0.f, nodeRoom - 12.f));
             const gfx::Rect dr{textX + tw + 5.f, r.y + (rowH - 7.f) * 0.5f, 7.f, 7.f};
             ctx.r.fillRoundedRect(dr, ctx.theme.tone(st.dotTone, c.warning), 3.5f);
             dotHits_.push_back({vr.node, 0, {dr.x - 3.f, r.y, dr.w + 6.f, rowH}, st.dotTip});
         }
         // ---- fin Lot API 8 ----
+        // ---- 1.11.22 : les etiquettes apres le nom (E/S, sortie, conservee, 3 surcharges...) ----
+        if (modern_ && !st.tags.empty()) {
+            const auto f = ctx.theme.font.caption;
+            const float lhT = ctx.r.lineHeight(f);
+            const float th = std::min(rowH - 6.f, lhT + 4.f);
+            float tx = textEnd + (dot ? 16.f : 7.f);
+            for (const auto& tag : st.tags) {
+                const float tw = ctx.r.measure(tag.text, f).width + 10.f;
+                if (tx + tw > textX + nodeRoom) break;
+                const auto col = ctx.theme.tone(tag.tone, c.textMuted);
+                ctx.r.fillRoundedRect({tx, r.y + (rowH - th) * 0.5f, tw, th}, col.withAlpha(ctx.theme.isDark() ? 60 : 36), 4.f);
+                ctx.r.drawText({tx + 5.f, r.y + (rowH - lhT) * 0.5f}, tag.text, f,
+                               selected ? c.selectionText : (tag.tone == Tone::None ? c.textMuted : col));
+                tx += tw + 4.f;
+            }
+            textEnd = tx;
+        }
         // ---- Lot API 8 : l'arbre du projet (l'indication grise : ou est un resultat) ----
         if (!st.hint.empty()) {
             const float used = ctx.r.measure(nodeText, nodeFont).width + 10.f + (dot ? 10.f : 0.f);
@@ -859,7 +956,7 @@ void TreeView::onPaint(const PaintContext& ctx) {
         if (!hoverActions_.empty() && hovered() && hoverRow_ == static_cast<int>(i) && !dragging_ && !st.domainHead) {
             const float side = std::min(rowH - 4.f, 20.f);
             const float span = static_cast<float>(hoverActions_.size()) * (side + 2.f) + 6.f;
-            float ax = r.right() - span;
+            float ax = (modern_ ? statusLeft : r.right()) - span;      // 1.11.22 : le compteur reste lisible
             if (ax > textX + 40.f) {
                 ctx.r.fillRoundedRect({ax - 2.f, r.y + 2.f, span, rowH - 4.f}, selected ? c.selectionBg : c.panelBg, 4.f);
                 ax += 2.f;

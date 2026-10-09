@@ -214,6 +214,7 @@ private:
     HmiOperatorsPane*    symbolOperators_{nullptr};   // 1.10 (S2) : le sous-onglet Operateurs
     HmiFunctionsPane*    symbolFunctions_{nullptr};   // 1.11.10 : le sous-onglet Fonctions
     std::shared_ptr<bool> alive_{std::make_shared<bool>(true)};   // 1.11.10 : une fenetre qui se ferme apres l'editeur
+    bool confirmedRemoval_{false};   // 1.11.22 : la suppression d'un parametre employe, confirmee
     HmiSymbolPopupsPane* symbolPopups_{nullptr};      // 1.11.10 : le sous-onglet Popups
     core::ConnectionScope links_;
     bool              syncing_{false};

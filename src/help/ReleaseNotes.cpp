@@ -35,9 +35,10 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.11.21", "09/10/2026", "livr\xC3\xA9" "e le 09/10 dans l'apr\xC3\xA8s-midi"},
+    {"1.11.22", "09/10/2026", "livr\xC3\xA9" "e le 09/10 en fin d'apr\xC3\xA8s-midi"},
+    {"1.11.21", "09/10/2026", "livr\xC3\xA9" "e le 09/10 en d\xC3\xA9" "but d'apr\xC3\xA8s-midi"},
     {"1.11.20", "09/10/2026", "livr\xC3\xA9" "e le 09/10 en fin de matin\xC3\xA9" "e"},
-    {"1.11.19", "09/10/2026", "livr\xC3\xA9" "e le 09/10 \xC3\xA0 la mi-journ\xC3\xA9" "e"},
+    {"1.11.19", "09/10/2026", "livr\xC3\xA9" "e le 09/10 dans la matin\xC3\xA9" "e"},
     {"1.11.18", "09/10/2026", "livr\xC3\xA9" "e le 09/10 dans la matin\xC3\xA9" "e"},
     {"1.11.17", "09/10/2026", "livr\xC3\xA9" "e le 09/10 au matin"},
     {"1.11.16", "09/10/2026", "livr\xC3\xA9" "e le 09/10 dans la nuit"},
@@ -102,7 +103,25 @@ const std::vector<Note>& table() {
     static const std::vector<Note> t = {
         // 1.11.16 (09/10/2026 dans la nuit) : la remanence d'exploitation par variable, la robustesse
         // (lot 4 de la specification du 08/10).
-        // 1.11.21 (09/10/2026 dans l'apres-midi) : les editeurs sans bandeaux, les explorateurs deplies,
+        // 1.11.22 (09/10/2026 en fin d'apres-midi) : la liste du client du 09/10 - les surcharges d'un
+        // symbole, les parametres retires ou renommes partout, Simulation depliee, l'explorateur modernise,
+        // les champs de saisie (rien n'est ecrit avant la validation).
+        note("1.11.22", "Scripts", Kind::Fixed,
+         "LES SURCHARGES DANS UN SYMBOLE : Nouvelle surcharge cr\xC3\xA9" "e une fonction du m\xC3\xAA" "me nom que la fonction choisie (ses param\xC3\xA8tres \xC3\xA0 changer, l'onglet Param\xC3\xA8tres s'ouvre) ; renommer une fonction vers un nom pris en fait une surcharge si sa forme diff\xC3\xA8re et que rien ne l'appelle encore (sinon la raison dit quoi faire) ; Nouvelle fonction d'un symbole demande son nom. Avant, le renommage \xC3\xA9tait refus\xC3\xA9 et Nouvelle fonction ne demandait rien.",
+         "fonctions", ""),
+        note("1.11.22", "Vues", Kind::Changed,
+         "RETIRER OU RENOMMER UN PARAM\xC3\x88TRE D'UN POPUP OU D'UN SYMBOLE : retir\xC3\xA9, ses emplois et les arguments qui lui sont donn\xC3\xA9s (instances, actions qui ouvrent la vue) restent et deviennent des fautes de compilation \xC3\xA0 leur place - une question les liste d'abord ; avant, les arguments partaient sans rien dire. Renomm\xC3\xA9, il suit partout : chaque propri\xC3\xA9t\xC3\xA9, le titre, les d\xC3\xA9" "fauts, et pour un symbole ses fonctions, ses alarmes, ses popups et les red\xC3\xA9" "finitions de ses instances.",
+         "parametres-popups", ""),
+        note("1.11.22", "Simulation", Kind::New,
+         "LE DOSSIER SIMULATION SE D\xC3\x89PLIE : D\xC3\xA9" "bogage montre ses points d'arr\xC3\xAAt (d\xC3\xA9sactiv\xC3\xA9s en gris), For\xC3\xA7" "ages chaque for\xC3\xA7" "age et sa valeur, Courbes chaque courbe et sa derni\xC3\xA8re valeur ; Journal compte ses lignes. Un clic ouvre l'onglet, \xC3\xA0 la ligne du point d'arr\xC3\xAAt ou sur le for\xC3\xA7" "age.",
+         "simulation", ""),
+        note("1.11.22", "Projet", Kind::Changed,
+         "L'EXPLORATEUR MODERNIS\xC3\x89 (la maquette valid\xC3\xA9" "e) : les compteurs et les \xC3\xA9tats du build dans des colonnes align\xC3\xA9" "es, les actions au survol ne cachent plus le compteur, l'ic\xC3\xB4ne color\xC3\xA9" "e selon le genre, les modes en \xC3\xA9tiquettes (E/S, sortie, conserv\xC3\xA9" "e), les surcharges et le r\xC3\xB4le d'une vue aussi, les signatures en gris dans la police du code, l'ic\xC3\xB4ne du domaine sur sa pastille de couleur.",
+         "api-arbre-lot8", ""),
+        note("1.11.22", "Objets", Kind::Fixed,
+         "CHAMPS DE SAISIE : rien n'est \xC3\xA9" "crit pendant la frappe - la valeur tap\xC3\xA9" "e attend la validation (Entr\xC3\xA9" "e, Tab, ou un clic ailleurs avec Valider en quittant) ; \xC3\x89" "chap efface la saisie en attente. Des essais le v\xC3\xA9rifient d\xC3\xA9sormais \xC3\xA0 chaque livraison.",
+         "objet-champ-de-saisie", ""),
+        // 1.11.21 (09/10/2026 en debut d'apres-midi) : les editeurs sans bandeaux, les explorateurs deplies,
         // les types des arguments, la valeur d'une declaration qui suit son type.
         note("1.11.21", "Scripts", Kind::Changed,
          "PLUS DE BANDEAUX DIAGNOSTICS ET ESSAI DANS LES \xC3\x89" "DITEURS : l'\xC3\xA9" "diteur d'un script, d'une fonction ou d'op\xC3\xA9rateurs prend toute la hauteur. Ses fautes restent soulign\xC3\xA9" "es dans le code ; elles vont en direct au panneau du bas, onglet Diagnostics, en t\xC3\xAAte (l'\xC3\xA9tape Saisie) - un double-clic y ram\xC3\xA8ne le curseur. La barre du volet les compte ; un clic sur elle ouvre le panneau. Le r\xC3\xA9sultat d'Essayer va aux Sorties (cat\xC3\xA9gorie Essai) ; sa derni\xC3\xA8re ligne dit l'\xC3\xA9tat de la simulation de l'API qu'il lit (\xC2\xAB arr\xC3\xAAt\xC3\xA9" "e : ses valeurs initiales \xC2\xBB) - l'ancien tableau disait \xC2\xAB en marche \xC2\xBB d\xC3\xA8s qu'elle \xC3\xA9tait charg\xC3\xA9" "e.",

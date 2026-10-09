@@ -17,6 +17,8 @@
 #include "HmiTreeData.hpp"            // 1.10.3 (Q1103) : les lignes d'un objet deplie (les deux explorateurs)
 #include "HmiValueKind.hpp"           // 1.11.3 : le carre de legende, la liste des carres
 #include "HmiTypePicker.hpp"           // 1.11.19 (lot 6) : le type d'un parametre, au selecteur de types
+#include "HmiAskDialog.hpp"            // 1.11.22 : supprimer un parametre employe (la question)
+#include "../../hmi/HmiPopupParams.hpp"   // 1.11.22 : ses emplois (un retrait a blanc)
 
 #include <set>
 
@@ -1231,6 +1233,45 @@ bool HmiEditor::commitView(const std::string& field, const std::string& value) {
                 rebuildProperties();
             });
             return false;
+        }
+        // 1.11.22 : SUPPRIMER UN PARAMETRE EMPLOYE - la question d'abord, avec ses emplois : ceux de
+        // la vue (et de son code) a revoir, les arguments donnes par les instances et par ceux qui
+        // ouvrent la vue, qui restent et deviennent des fautes de compilation. Sans emploi : tout de suite.
+        if (value == "Supprimer" && field.size() > 6 && field.compare(field.size() - 6, 6, ":ordre") == 0) {
+            const auto* cur = doc_->project.view(viewId_);
+            const std::string rest = field.substr(hmiparams::kFieldPrefix.size());
+            const std::size_t index = static_cast<std::size_t>(std::strtoul(rest.c_str(), nullptr, 10));
+            const auto& host = actions_ ? actions_->dialogHost() : HmiActionsPanel::DialogHost{};
+            if (cur && index < cur->params.size() && host && !confirmedRemoval_) {
+                const std::string param = cur->params[index].name;
+                std::vector<std::string> linked;
+                hmi::Project trial = doc_->project;                   // un retrait a blanc : ce qu'il touche
+                (void)hmi::params::removeParam(trial, cur->name, index, &linked);
+                std::vector<std::string> inside;
+                for (const auto& u : hmi::params::paramUses(*cur, param))
+                    inside.push_back((u.object.empty() ? std::string{} : u.object + " / ") + u.where);
+                if (!linked.empty() || !inside.empty()) {
+                    HmiAskDialog::Spec spec;
+                    spec.title = "Supprimer le param\xC3\xA8tre " + param + " de " + cur->name;
+                    spec.text = "Le param\xC3\xA8tre est employ\xC3\xA9. Ses emplois restent tels quels et deviennent des fautes de "
+                                "compilation, \xC3\xA0 leur place : la simulation ne d\xC3\xA9marre plus tant qu'ils restent. "
+                                "Ctrl+Z rend le param\xC3\xA8tre.";
+                    spec.listTitle = std::to_string(linked.size() + inside.size()) + " emploi(s)";
+                    for (const auto& w : inside) spec.items.push_back({w, "dans " + cur->name, false});
+                    for (const auto& w : linked) spec.items.push_back({w, "un argument donn\xC3\xA9 \xC3\xA0 " + param, false});
+                    spec.confirm = "Supprimer quand m\xC3\xAA" "me";
+                    spec.danger = true;
+                    const std::weak_ptr<bool> alive = alive_;
+                    host(std::make_unique<HmiAskDialog>(std::move(spec)), [this, alive, field, value](const menu::DialogResult& r) {
+                        if (alive.expired() || r.button != menu::DialogResult::Button::Ok) return;
+                        confirmedRemoval_ = true;
+                        (void)commitView(field, value);
+                        confirmedRemoval_ = false;
+                        rebuildProperties();
+                    });
+                    return false;
+                }
+            }
         }
         hmiparams::FieldResult res;
         auto cmd = hmi::changeProject(doc_, hmiparams::fieldLabel(field, value),

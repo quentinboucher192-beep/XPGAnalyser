@@ -72,6 +72,9 @@ public:
     // Les actions (sans hote : directes). kNoId / faux, et `why`, si refuse.
     // `returnType` vide ou "(aucun)" : sans retour.
     hmi::Id addFunction(std::string name, std::string returnType, std::string description, std::string* why = nullptr);
+    // 1.11.22 : une surcharge de `of` (le meme nom, son retour ; l'onglet Parametres s'ouvre). Refusee
+    // pour une fonction virtuelle.
+    hmi::Id addOverload(hmi::Id of, std::string* why = nullptr);
     bool    renameFunction(hmi::Id, const std::string& name, std::string* why = nullptr);
     bool    setReturnType(hmi::Id, const std::string& type, std::string* why = nullptr);
     bool    setDescription(hmi::Id, const std::string& description);
