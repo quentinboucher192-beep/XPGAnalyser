@@ -602,6 +602,13 @@ public:
     // ses variables remanentes, plus recentes que l'etat de reprise, l'emportent) - les
     // memes regles que le retour au demarrage ; le journal le dit sous `label`.
     simdata::Report applyData(const std::vector<simdata::Cell>& cells, const std::string& label);
+    // 1.11.18 (refonte des scripts, lot 5) : LES DECLARATIONS PERSISTANTES des scripts (une
+    // variable du modele au stockage Persistante). captureData les prend avec les variables -
+    // une case simdata::kDeclarationPath chacune : sa valeur du moment, ou celle rendue au
+    // demarrage si son script n'a pas encore tourne. start() (et applyData) les gardent ; la
+    // premiere execution de leur script les rend (un type simple ou une enumeration ; un type
+    // change : convertie si compatible, sinon la valeur initiale et un avertissement).
+    [[nodiscard]] std::size_t persistentPending() const noexcept { return persistPending_.size(); }
 
     // Lot 14 : la liaison Modbus TCP quand l'IHM est reliee a un automate reel
     // (nulle : le simulateur, ou rien).
@@ -1332,6 +1339,7 @@ private:
     sim::ExecTrace           trace_;
     int                      session_{0};
     std::optional<std::vector<simdata::Cell>> startData_;    // 1.11.15 : a rendre au prochain start()
+    std::map<Id, simdata::Cell>               persistPending_;   // 1.11.18 (lot 5) : par declaration, avant la 1re execution
     std::string                               startLabel_;   // 1.11.16 : ce qu'en dit le journal
     std::optional<simdata::Report>            lastRestore_;  // ... et ce que le dernier en a fait
     std::string              abort_;                     // un appel imbrique coupe : la raison
@@ -1359,6 +1367,9 @@ private:
         std::string                   error;       // la premiere faute (declaration ou syntaxe)
     };
     const Prepared& prepare(const std::string& code, const std::string& source, bool function);
+    void restorePersistent(Id script, sim::Locals& locals);            // 1.11.18 (lot 5)
+    // Les cases de declaration de `cells` gardees pour leur script (les autres : rendues par l'appelant).
+    std::vector<simdata::Cell> takePersistent(const std::vector<simdata::Cell>& cells);
     bool callFunction(const HmiFunction&, const std::vector<std::pair<std::string, sim::Value>>& args, sim::Value& result);
     std::map<std::string, Prepared, std::less<>> programs_;   // par source
     // Les VAR gardees d'un script (lot 7) : "s<id>" ou, pour le code d'une action, "c<code>".

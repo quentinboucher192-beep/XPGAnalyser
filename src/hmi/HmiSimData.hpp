@@ -48,6 +48,14 @@ struct Cell {
     std::string path;          // le chemin de la case dans la variable ("" : une variable simple)
     sim::Value  value;
 };
+// 1.11.18 (refonte des scripts, lot 5) : UNE DECLARATION PERSISTANTE d'un script (une variable
+// du modele au stockage Persistante, hmi::Declaration) se garde comme une case : `variable` est
+// l'identifiant de la declaration, `name` "Script.Nom", `declared` son type, et ce chemin.
+// restoreVariables ne la rend pas (ce n'est pas une variable IHM) : le moteur la rend a la
+// premiere execution de son script. La remanence d'exploitation (hmi::retain) la garde de meme.
+inline constexpr std::string_view kDeclarationPath = "@declaration";
+[[nodiscard]] inline bool isDeclarationCell(const Cell& c) noexcept { return c.path == kDeclarationPath; }
+
 struct TwinMemory {
     Id                       equipment{kNoId};
     std::string              name;

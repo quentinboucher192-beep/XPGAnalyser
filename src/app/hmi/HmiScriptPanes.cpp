@@ -74,7 +74,14 @@ protected:
         const auto b = bounds();
         constexpr float kBar = 22.f;
         if (children().size() < 2) return;
-        children()[0]->setBounds({b.x, b.y, b.w, std::max(0.f, b.h - kBar - 2.f)});
+        // 1.11.18 (refonte, lot 5) : le bandeau de l'ancien format (des blocs VAR dans le
+        // code), au-dessus du code, quand il est montre.
+        float top = 0.f;
+        if (children().size() > 2 && children()[2]->visible()) {
+            top = HmiDeclBanner::kHeight;
+            children()[2]->setBounds({b.x, b.y, b.w, top});
+        }
+        children()[0]->setBounds({b.x, b.y + top, b.w, std::max(0.f, b.h - kBar - 2.f - top)});
         children()[1]->setBounds({b.x, b.bottom() - kBar, b.w, kBar});
     }
 };
@@ -438,7 +445,12 @@ HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply
         auto bar = std::make_unique<ui::StatusBar>(base + ".symbol");
         bar->setTooltip("Le nom o\xC3\xB9 est le curseur : ce qu'il est, son type, son commentaire.");
         symbolBar_ = &static_cast<ui::StatusBar&>(area->addChild(std::move(bar)));
-        panel->setBody(std::move(area));
+        // 1.11.18 (refonte, lot 5) : les onglets du code - Code (et le bandeau de l'ancien
+        // format), Constantes, Variables : les declarations du modele du script montre.
+        banner_ = &static_cast<HmiDeclBanner&>(area->addChild(std::make_unique<HmiDeclBanner>(base + ".declBanner")));
+        codeTabs_ = &static_cast<HmiCodeTabs&>(panel->setBody(std::make_unique<HmiCodeTabs>(
+            base + ".codeTabs", doc_, apply_, std::move(area), std::vector{hmi::decledit::Tab::Constants, hmi::decledit::Tab::Variables},
+            banner_)));
         editorPanel_ = panel.get();
         right->addPane(std::move(panel), 0.74f, 120.f);
     }
@@ -568,11 +580,14 @@ HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply
             return;
         }
         // 1.10 : une faute a sa place : le curseur dessus, ses caracteres selectionnes.
+        if (d.line > 0) showCodeTab(CodeTabCode);
         if (d.line > 0 && d.column > 0)
             editor_->selectRange(static_cast<std::size_t>(d.line - 1), static_cast<std::uint32_t>(d.column - 1),
                                  static_cast<std::uint32_t>(std::max(0, d.length)));
         else if (d.line > 0)
             editor_->goToLine(static_cast<std::size_t>(d.line - 1));
+        else if (const auto name = declarationNamed(d.message); !name.empty())
+            (void)showDeclaration(name);      // 1.11.18 (lot 5) : la faute d'une declaration - sa ligne, dans son onglet
     });
     links_ += editor_->caretSymbolChanged->connect([this](const std::string&) { updateSymbolLine(); });
     links_ += editor_->textChanged->connect([this](const std::string& text) {
@@ -603,6 +618,11 @@ HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply
         links_ += folders_->message->connect([this](const std::string& text) { say(text); });
         links_ += folders_->relayout->connect([this] { refresh(); });
     }
+    // 1.11.18 (lot 5) : les grilles parlent dans la barre du volet ; leurs utilisations
+    // menent au code ; le bandeau migre le script montre.
+    links_ += codeTabs_->message->connect([this](const std::string& t, bool warning) { say(t, warning); });
+    links_ += codeTabs_->usesRequested->connect([this](const std::string& name) { (void)goToNextUse(name); });
+    links_ += codeTabs_->migrateRequested->connect([this] { (void)migrateCurrent(); });
     links_ += doc_->changed->connect([this](Id) { refresh(); });
     refresh();
     if (!scriptOrder_.empty() && !folders_) hmiSelectModelRow(*scripts_, 0);
@@ -773,7 +793,61 @@ void HmiScriptsPane::showSelected() {
     editorPanel_->setTitle(title);
     rebuildProperties();
     updateDiagnostics();
+    refreshDeclarations();
 }
+
+// 1.11.18 (refonte, lot 5) : les grilles du script montre, les titres de leurs onglets
+// (le nombre, rouge s'il y a une fautive) et le bandeau de l'ancien format.
+void HmiScriptsPane::refreshDeclarations() {
+    if (!codeTabs_) return;
+    const auto at = currentPlace();
+    std::string why;
+    if (!at)
+        why = !general() && !selectedEvent().empty()
+                  ? "Cet \xC3\xA9v\xC3\xA9nement n'a pas encore de script : tape du code dans l'onglet Code pour le cr\xC3\xA9" "er, puis d\xC3\xA9" "clare ici."
+                  : std::string("Choisis un script.");
+    codeTabs_->setPlace(at, why);
+}
+
+std::optional<hmi::decledit::Place> HmiScriptsPane::currentPlace() const {
+    const auto* sc = current();
+    if (!sc) return std::nullopt;
+    hmi::decledit::Place at;
+    at.kind = general() ? hmi::decledit::Place::Kind::Script : hmi::decledit::Place::Kind::ViewScript;
+    at.view = general() ? kNoId : view_;
+    at.id = sc->id;
+    at.label = general() ? "script " + sc->name : sc->name;
+    return at;
+}
+
+void HmiScriptsPane::showCodeTab(std::size_t tab) {
+    if (codeTabs_ && tab < codeTabs_->tabCount()) codeTabs_->setCurrentIndex(tab);
+}
+
+std::size_t HmiScriptsPane::currentCodeTab() const noexcept { return codeTabs_ ? codeTabs_->currentIndex() : 0; }
+
+bool HmiScriptsPane::migrateCurrent() {
+    const auto at = currentPlace();
+    if (!at) {
+        say("Migrer : aucun script choisi.", true);
+        return false;
+    }
+    std::string report;
+    const bool ok = migrateOne(doc_, apply_, *at, &report);
+    say(report, !ok);
+    return ok;
+}
+
+bool HmiScriptsPane::goToNextUse(const std::string& name) {
+    showCodeTab(CodeTabCode);
+    std::string said;
+    const bool ok = selectNextUse(*editor_, name, &said);
+    say(said, !ok);
+    if (ok) updateSymbolLine();
+    return ok;
+}
+
+bool HmiScriptsPane::showDeclaration(const std::string& name) { return codeTabs_->showDeclaration(name); }
 
 void HmiScriptsPane::rebuildProperties() {
     using PG = ui::PropertyGrid;
@@ -1154,6 +1228,7 @@ void HmiScriptsPane::goTo(Id script, int line) {
     showTab(TabScripts);
     selectScript(script);
     if (line > 0) {
+        showCodeTab(CodeTabCode);             // 1.11.18 (lot 5) : le code, pas une grille
         editor_->goToLine(static_cast<std::size_t>(line - 1));
         for (std::size_t i = 0; i < results_.size(); ++i)
             if (results_[i].here && results_[i].d.line == line) { hmiSelectModelRow(*diagTable_, i); break; }
@@ -1167,6 +1242,7 @@ void HmiScriptsPane::goTo(Id script, int line, int column, int length) {
     showTab(TabScripts);   // 1.11.16 (voir goTo)
     selectScript(script);
     if (line <= 0) return;
+    showCodeTab(CodeTabCode);                 // 1.11.18 (lot 5)
     for (std::size_t i = 0; i < results_.size(); ++i)
         if (results_[i].here && results_[i].d.line == line && results_[i].d.column == column) { hmiSelectModelRow(*diagTable_, i); break; }
     editor_->selectRange(static_cast<std::size_t>(line - 1), static_cast<std::uint32_t>(column - 1),

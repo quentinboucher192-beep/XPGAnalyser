@@ -801,12 +801,18 @@ bool HmiEditor::overrideFunction(Id instance, const std::string& function, std::
     if (!f || !f->isVirtual) return false;
     // Les noms copies : la commande remplace la vue (les pointeurs ne valent plus apres).
     const std::string text = body ? *body : f->body, fname = f->name, iname = inst->name;
+    // 1.11.18 (refonte, lot 5) : une redefinition neuve part du corps du symbole - avec ses
+    // locales et ses constantes du modele (le corps les lit), copiees ; ses parametres restent
+    // ceux de la fonction. La commande leur donne des identifiants neufs.
+    std::vector<hmi::Declaration> locals;
+    for (const auto& d : f->decls)
+        if (d.kind != hmi::DeclKind::Parameter) locals.push_back(d);
     auto cmd = hmi::changeView(doc_, viewId_, "Red\xC3\xA9" "finir " + fname + " dans " + iname, [&](hmi::Project&, hmi::View& vv) {
         auto* o = vv.object(instance);
         if (!o) return;
         for (auto& fo : o->functionOverrides)
             if (hmikit::same(fo.function, fname)) { fo.body = text; return; }
-        o->functionOverrides.push_back({fname, text});
+        o->functionOverrides.push_back({fname, text, locals});
     });
     if (!cmd) return true;
     apply_(std::move(cmd));
@@ -838,6 +844,15 @@ void HmiEditor::editOverride(Id instance, const std::string& function) {
     spec.function = *f;
     const auto* fo = hmi::functionOverride(*inst, f->name);
     spec.code = fo ? fo->body : f->body;
+    // 1.11.18 (lot 5) : le controle lit les parametres de la fonction et les declarations de la
+    // redefinition (une neuve : celles du symbole, qu'elle copiera).
+    if (fo) {
+        std::vector<hmi::Declaration> decls;
+        for (const auto& d : f->decls)
+            if (d.kind == hmi::DeclKind::Parameter) decls.push_back(d);
+        decls.insert(decls.end(), fo->decls.begin(), fo->decls.end());
+        spec.function->decls = std::move(decls);
+    }
     spec.where = fo ? std::string("sa red\xC3\xA9" "finition") : std::string("le corps du symbole pour d\xC3\xA9part");
     spec.title = "Red\xC3\xA9" "finir " + f->name + " dans " + inst->name;
     const std::string name = f->name;

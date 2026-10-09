@@ -3066,11 +3066,16 @@ void fonctionsLot7() {
     same(renameCalls("Moyenne := x;", "Moyenne", "Mean", true), "Mean := x;", "renommer dans son propre corps : le retour suit");
     same(renameCallsInText("Moy. : {Moyenne(a, b):0.0} bar", "Moyenne", "Mean"), "Moy. : {Mean(a, b):0.0} bar", "texte \xC3\xA0 trous : dans les accolades");
     same(renameCallsInText("=Moyenne(a, b) * 2", "Moyenne", "Mean"), "=Mean(a, b) * 2", "=expression : partout");
+    // 1.11.18 (refonte, lot 5) : sans bloc VAR - son parametre et sa locale dans le modele.
     const auto tpl = functionTemplate("Carre", "REAL", "x au carr\xC3\xA9");
-    check(tpl.find("VAR_INPUT") != std::string::npos && tpl.find("Carre := Resultat;") != std::string::npos
-              && checkFunction(hmiFunction(p, "Carre", "REAL", tpl.c_str())).empty(),
-          "le mod\xC3\xA8le d'une nouvelle fonction se v\xC3\xA9rifie sans faute");
-    check(checkFunction(hmiFunction(p, "Proc", "", functionTemplate("Proc", "", {}).c_str())).empty(), "... sans retour aussi");
+    HmiFunction carre = hmiFunction(p, "Carre", "REAL", tpl.c_str());
+    carre.decls = functionTemplateDecls("REAL");
+    check(tpl.find("VAR") == std::string::npos && tpl.find("Carre := Resultat;") != std::string::npos && carre.decls.size() == 2
+              && carre.decls[0].kind == DeclKind::Parameter && carre.decls[1].name == "Resultat" && checkFunction(carre).empty(),
+          "le mod\xC3\xA8le d'une nouvelle fonction (sans bloc VAR, ses d\xC3\xA9" "clarations dans le mod\xC3\xA8le) se v\xC3\xA9rifie sans faute");
+    HmiFunction proc = hmiFunction(p, "Proc", "", functionTemplate("Proc", "", {}).c_str());
+    proc.decls = functionTemplateDecls("");
+    check(checkFunction(proc).empty() && proc.decls.size() == 1 && proc.decls[0].type == "STRING", "... sans retour aussi");
 
     // ---- en marche : depuis un script
     Runtime rt;
@@ -6478,8 +6483,8 @@ void symbolesLot10() {
     // ---- Generer
     {
         View* h = p.view(hostId);
-        Object& o2 = *h->object(second);
-        o2.set("params", "Armoire := Armoires[1]; Nom := 'B'; Couleur := 'rouge'");
+        Object* o2 = h->object(second);
+        o2->set("params", "Armoire := Armoires[1]; Nom := 'B'; Couleur := 'rouge'");
         Object ghost = makeObject(Kind::SymbolInstance, p.allocate(), "Fantome", 0, 0, h->activeLayer);
         ghost.set("symbol", "Carte_Disparue");
         h->objects.push_back(ghost);
@@ -6490,6 +6495,10 @@ void symbolesLot10() {
         unused.role = "symbole";
         unused.params = {{"Sans", "", ""}};
         p.views.push_back(unused);
+        // 1.11.18 : ajouter une vue peut deplacer les vues du projet - h et o2 se relisent (avant :
+        // un pointeur perdu, qui plantait selon la place des vues en memoire).
+        h = p.view(hostId);
+        o2 = h->object(second);
         const auto issues = generate(p, [](std::string_view n) { return n == "Armoires" || n == "Montrer"; }, {});
         const auto said = [&](const std::string& what) {
             for (const auto& i : issues) if (i.message.find(what) != std::string::npos) return true;
@@ -6498,12 +6507,12 @@ void symbolesLot10() {
         check(said("symbole introuvable : Carte_Disparue") && said("Vue_Armoires n'est pas un symbole") && said("argument inconnu du symbole Carte_Armoire : Couleur")
                   && said("symbole pos\xC3\xA9 nulle part"),
               "G\xC3\xA9n\xC3\xA9rer : symbole introuvable, pas un symbole, argument inconnu, symbole pos\xC3\xA9 nulle part");
-        o2.set("params", "Armoire := Cuves[1]");
+        o2->set("params", "Armoire := Cuves[1]");
         const auto again = generate(p, [](std::string_view n) { return n == "Armoires" || n == "Montrer"; }, {});
         bool unknownVar = false;
         for (const auto& i : again) unknownVar = unknownVar || i.message.find("argument Armoire : variable inexistante dans le programme : Cuves") != std::string::npos;
         check(unknownVar, "G\xC3\xA9n\xC3\xA9rer : l'argument d'une instance cite une variable inexistante");
-        o2.set("params", "Armoire := Armoires[1]; Nom := 'B'");
+        o2->set("params", "Armoire := Armoires[1]; Nom := 'B'");
         std::erase_if(h->objects, [](const Object& x) { return x.name == "Fantome" || x.name == "Mauvais"; });
         std::erase_if(p.views, [](const View& x) { return x.name == "Symbole_Seul"; });
     }
@@ -16530,7 +16539,8 @@ void guideNouveautes110() {
         check(labels.size() == 6 && labels[0] == "ST" && labels[1] == "C" && labels[2] == "C++" && labels[3] == "ST"
                   && labels[4] == "C" && labels[5] == "C++",
               "guide 1.10 : les blocs ```ST, ```C, ```C++ gardent leur notation (fonctions : deux exemples a trois notations)");
-        check(firstSince == "1.10" && guide::latestChange(*f) == "1.10", "guide 1.10 : @nouveau avant un exemple marque son premier bloc");
+        // 1.11.18 (refonte, lot 5) : le sujet a aussi ses onglets (un bloc marque 1.11.18), son changement le plus recent.
+        check(firstSince == "1.10" && guide::latestChange(*f) == "1.11.18", "guide 1.10 : @nouveau avant un exemple marque son premier bloc");
     } else {
         check(false, "guide 1.10 : le sujet fonctions existe");
     }

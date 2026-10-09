@@ -937,11 +937,26 @@ std::vector<std::string> renameCaptures(const Project& p, const View* symbol, st
 
 std::string functionTemplate(std::string_view name, std::string_view returnType, std::string_view description) {
     std::string head = "(* " + std::string(name) + (description.empty() ? std::string{} : " : " + std::string(description)) + " *)\n";
+    // 1.11.18 (lot 5) : ses declarations dans le modele (functionTemplateDecls), plus dans le code.
+    if (returnType.empty()) return head + "IHM_JOURNAL(Message);\n";
+    return head + "Resultat := Entree;\n" + std::string(name) + " := Resultat;\n";
+}
+
+std::vector<Declaration> functionTemplateDecls(std::string_view returnType) {
+    const auto make = [](DeclKind kind, std::string name, std::string type, std::string doc) {
+        Declaration d;
+        d.kind = kind;
+        d.name = std::move(name);
+        d.type = std::move(type);
+        d.description = std::move(doc);
+        d.visibility = kind == DeclKind::Parameter ? Visibility::Public : Visibility::Private;
+        return d;
+    };
     if (returnType.empty())
-        return head + "VAR_INPUT\n    Message : STRING;\nEND_VAR\n\nIHM_JOURNAL(Message);\n";
+        return {make(DeclKind::Parameter, "Message", "STRING", "un exemple : le texte \xC3\xA9" "crit au journal")};
     const std::string t(returnType);
-    return head + "VAR_INPUT\n    Entree : " + t + ";\nEND_VAR\nVAR_TEMP\n    Resultat : " + t + ";\nEND_VAR\n\nResultat := Entree;\n"
-         + std::string(name) + " := Resultat;\n";
+    return {make(DeclKind::Parameter, "Entree", t, "un exemple : renommez-le, changez son type, ajoutez-en (onglet Param\xC3\xA8tres)"),
+            make(DeclKind::Variable, "Resultat", t, "le r\xC3\xA9sultat, avant de le rendre")};
 }
 
 std::string functionText(const HmiFunction& f) {

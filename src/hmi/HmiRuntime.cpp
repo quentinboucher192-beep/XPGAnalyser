@@ -822,17 +822,103 @@ sim::Value* Runtime::ihmSlot(std::string_view name) {
 // 1.11.15 : les cases des variables IHM non liees, a leur valeur du moment.
 std::vector<simdata::Cell> Runtime::captureData(const std::function<bool(const Variable&)>& keep) const {
     if (!project_) return {};
-    return simdata::captureVariables(*project_, [this](const std::string& path) -> const sim::Value* {
+    auto cells = simdata::captureVariables(*project_, [this](const std::string& path) -> const sim::Value* {
         const auto it = env_->vars.find(upper(path));
         return it == env_->vars.end() ? nullptr : &it->second;
     }, keep);
+    // 1.11.18 (lot 5) : les declarations Persistantes des scripts - leur valeur du moment ; un
+    // script qui n'a pas tourne depuis le demarrage garde celle qui lui avait ete rendue.
+    const auto take = [&](const Script& sc, const std::string& owner) {
+        const auto locals = scriptLocals_.find("s" + std::to_string(sc.id));
+        for (const auto& d : sc.decls) {
+            if (d.kind != DeclKind::Variable || d.storage != Storage::Persistent) continue;
+            simdata::Cell c;
+            c.variable = d.id;
+            c.name = owner + "." + d.name;
+            c.declared = d.type;
+            c.path = std::string(simdata::kDeclarationPath);
+            const sim::ObjRef obj = locals != scriptLocals_.end() ? locals->second.find(d.name) : nullptr;
+            if (obj && obj->type && obj->type->kind == sim::TypeDesc::Kind::Scalar) c.value = obj->value;
+            else if (const auto p = persistPending_.find(d.id); p != persistPending_.end()) c.value = p->second.value;
+            else continue;
+            if (c.value.type() != sim::Type::Unknown) cells.push_back(std::move(c));
+        }
+    };
+    for (const auto& sc : project_->programs.scripts) take(sc, sc.name);
+    for (const auto& v : project_->views)
+        for (const auto& sc : v.scripts) take(sc, v.name + "." + sc.event);
+    return cells;
+}
+
+// 1.11.18 (lot 5) : les cases des declarations Persistantes, gardees jusqu'a la premiere
+// execution de leur script ; les autres (les variables IHM) sont rendues a l'appelant.
+std::vector<simdata::Cell> Runtime::takePersistent(const std::vector<simdata::Cell>& cells) {
+    std::vector<simdata::Cell> rest;
+    rest.reserve(cells.size());
+    for (const auto& c : cells) {
+        if (!simdata::isDeclarationCell(c)) {
+            rest.push_back(c);
+            continue;
+        }
+        persistPending_[c.variable] = c;
+    }
+    return rest;
+}
+
+// 1.11.18 (lot 5) : rendre les declarations Persistantes de ce script, avant sa premiere
+// execution - le simulateur garde une VAR deja la si son type est le meme (startDialect).
+void Runtime::restorePersistent(Id script, sim::Locals& locals) {
+    const Script* sc = project_ ? project_->script(script) : nullptr;
+    if (!sc) return;
+    for (const auto& d : sc->decls) {
+        if (d.kind != DeclKind::Variable || d.storage != Storage::Persistent) continue;
+        const auto it = persistPending_.find(d.id);
+        if (it == persistPending_.end()) continue;
+        const simdata::Cell cell = it->second;
+        persistPending_.erase(it);
+        const std::string type = upper(trimText(d.type));
+        sim::Type t = sim::typeFromName(type == "LREAL" ? std::string("REAL") : type);
+        std::string typeName;
+        if (t == sim::Type::Unknown && findEnumeration(*project_, d.type)) {      // une enumeration : un DINT qui garde son nom
+            t = sim::Type::DInt;
+            typeName = d.type;
+        }
+        const std::string who = sc->name + "." + d.name;
+        if (t == sim::Type::Unknown) {
+            logAt(LogLevel::Warning, "R\xC3\xA9manence", {}, who + " : Persistante d'un type compos\xC3\xA9 (" + d.type
+                                                                + ") - repart de sa valeur initiale (seuls les types simples sont gard\xC3\xA9s)");
+            continue;
+        }
+        const auto v = simdata::convert(cell.value, t);
+        if (!v) {
+            logAt(LogLevel::Warning, "R\xC3\xA9manence", {}, who + " : " + cell.declared + " devient " + d.type
+                                                                + " - incompatible, valeur initiale");
+            continue;
+        }
+        auto obj = sim::makeObj(sim::scalarType(t, typeName));
+        obj->value = *v;
+        locals.set(d.name, obj);
+    }
 }
 
 // 1.11.16 : des cases rendues en marche (voir le .hpp).
 simdata::Report Runtime::applyData(const std::vector<simdata::Cell>& cells, const std::string& label) {
     simdata::Report rep;
     if (!project_ || cells.empty()) return rep;
-    rep = simdata::restoreVariables(*project_, cells, [this](const std::string& path) { return ihmSlot(path); });
+    // 1.11.18 (lot 5) : une declaration Persistante - dans son script s'il a deja tourne, sinon a
+    // sa premiere execution.
+    const auto variables = takePersistent(cells);
+    for (const auto& [id, cell] : std::map<Id, simdata::Cell>(persistPending_)) {
+        for (auto& [key, locals] : scriptLocals_) {
+            if (key.empty() || key[0] != 's') continue;
+            const Id script = static_cast<Id>(std::strtoull(key.c_str() + 1, nullptr, 10));
+            const Script* sc = project_->script(script);
+            if (!sc || std::none_of(sc->decls.begin(), sc->decls.end(), [&](const Declaration& d) { return d.id == id; })) continue;
+            locals.erase(std::find_if(sc->decls.begin(), sc->decls.end(), [&](const Declaration& d) { return d.id == id; })->name);
+            restorePersistent(script, locals);
+        }
+    }
+    rep = simdata::restoreVariables(*project_, variables, [this](const std::string& path) { return ihmSlot(path); });
     logAt(LogLevel::Info, "R\xC3\xA9manence", {}, label + " : " + rep.summary());
     for (const auto& w : rep.warnings) logAt(LogLevel::Warning, "R\xC3\xA9manence", {}, w);
     return rep;
@@ -1068,6 +1154,8 @@ bool Runtime::runStatements(const std::string& code, const std::string& source, 
     env_->frames.push_back(&frame);
     sim::Locals* kept = nullptr;
     if (!prep.locals.empty()) kept = &scriptLocals_[scriptId ? "s" + std::to_string(scriptId) : "c" + code];
+    // 1.11.18 (lot 5) : la premiere execution depuis le demarrage - ses declarations Persistantes.
+    if (kept && scriptId && kept->all().empty() && !persistPending_.empty()) restorePersistent(scriptId, *kept);
     env_->diagnostics.clear();
     sim::RunLimits limits;
     limits.maxIterationsPerLoop = 100000;
@@ -2181,8 +2269,13 @@ void Runtime::start(double now) {
     // 1.11.15 : la remanence de simulation - les valeurs gardees, rendues avant les
     // scripts de Demarrage (une fois : le demarrage d'apres repart des valeurs initiales).
     lastRestore_.reset();
+    persistPending_.clear();
     if (startData_) {
-        lastRestore_ = simdata::restoreVariables(*project_, *startData_, [this](const std::string& path) { return ihmSlot(path); });
+        // 1.11.18 (lot 5) : les declarations Persistantes attendent la premiere execution de leur script.
+        const auto variables = takePersistent(*startData_);
+        lastRestore_ = simdata::restoreVariables(*project_, variables, [this](const std::string& path) { return ihmSlot(path); });
+        if (!persistPending_.empty())
+            lastRestore_->notes.push_back(std::to_string(persistPending_.size()) + " d\xC3\xA9" "claration(s) Persistante(s) rendue(s) \xC3\xA0 la premi\xC3\xA8re ex\xC3\xA9" "cution de leur script");
         startData_.reset();
         const std::string label = startLabel_.empty() ? std::string("Donn\xC3\xA9" "es de simulation restaur\xC3\xA9" "es") : startLabel_;
         const std::string kind = startLabel_.empty() ? std::string("Simulation") : std::string("R\xC3\xA9manence");

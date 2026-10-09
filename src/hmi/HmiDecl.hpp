@@ -193,5 +193,11 @@ struct Composed {
                                                               std::string_view body, const TypeKnown& knownType = {},
                                                               const std::vector<Declaration>* inherited = nullptr,
                                                               std::vector<Declaration>* valid = nullptr);
+// 1.11.18 (lot 5) : les memes fautes, declaration par declaration (le meme ordre que `decls` ;
+// vide : juste) - les grilles marquent la ligne fautive. "sans nom" pour un nom vide. Un
+// operateur : a, b et Resultat sont les siens (son script les lit sans les declarer).
+[[nodiscard]] std::vector<std::vector<std::string>> declarationFaults(const std::vector<Declaration>& decls, Role,
+                                                                    std::string_view body, const TypeKnown& knownType = {},
+                                                                    const std::vector<Declaration>* inherited = nullptr);
 
 } // namespace hmi::decl

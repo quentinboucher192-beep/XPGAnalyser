@@ -24,6 +24,7 @@
 #pragma once
 
 #include "HmiAssist.hpp"
+#include "HmiDeclGrid.hpp"             // 1.11.18 (refonte, lot 5) : les onglets Locales, Constantes
 #include "HmiPanels.hpp"
 #include "../../core/Command.hpp"
 #include "../../hmi/HmiCommands.hpp"
@@ -37,6 +38,7 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -186,6 +188,22 @@ public:
     std::size_t compileCurrent();
     [[nodiscard]] std::string buildKey() const;   // "symbole:12", "type:7" ; vide : aucun porteur
 
+    // ---- 1.11.18 (refonte des scripts, lot 5) : LES ONGLETS DU SCRIPT ----
+    //  Code, Locales, Constantes : les declarations du modele de l'operateur montre
+    //  (HmiDeclGrid) - a, b et Resultat restent les siens, implicites. Le bandeau de
+    //  l'ancien format.
+    enum CodeTab : std::size_t { CodeTabCode = 0, CodeTabLocals = 1, CodeTabConstants = 2 };
+    void showCodeTab(std::size_t tab);
+    [[nodiscard]] std::size_t currentCodeTab() const noexcept;
+    [[nodiscard]] HmiCodeTabs&   codeTabs() noexcept { return *codeTabs_; }
+    [[nodiscard]] HmiDeclGrid&   localsGrid() noexcept { return *codeTabs_->grid(hmi::decledit::Tab::Variables); }
+    [[nodiscard]] HmiDeclGrid&   constantsGrid() noexcept { return *codeTabs_->grid(hmi::decledit::Tab::Constants); }
+    [[nodiscard]] HmiDeclBanner& declBanner() noexcept { return *banner_; }
+    [[nodiscard]] std::optional<hmi::decledit::Place> currentPlace() const;
+    bool migrateCurrent();
+    bool goToNextUse(const std::string& name);
+    bool showDeclaration(const std::string& name);
+
     [[nodiscard]] HmiToolStrip&      tools() noexcept { return *tools_; }
     [[nodiscard]] ui::MultiLineText& editor() noexcept { return *editor_; }
     [[nodiscard]] ui::TableView&     operatorTable() noexcept { return *table_; }
@@ -218,6 +236,8 @@ private:
     ui::TableView*     table_{nullptr};
     ui::PropertyGrid*  props_{nullptr};
     HmiTitledPanel*    editorPanel_{nullptr};
+    HmiCodeTabs*       codeTabs_{nullptr};         // 1.11.18 (lot 5) : Code | Locales | Constantes
+    HmiDeclBanner*     banner_{nullptr};
     ui::MultiLineText* editor_{nullptr};
     ui::StatusBar*     symbolBar_{nullptr};
     ui::StatusBar*     equivBar_{nullptr};      // C++ et C, au-dessus du script (comme la maquette)

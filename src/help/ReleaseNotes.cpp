@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.11.18", "09/10/2026", "livr\xC3\xA9" "e le 09/10 dans la matin\xC3\xA9" "e"},
     {"1.11.17", "09/10/2026", "livr\xC3\xA9" "e le 09/10 au matin"},
     {"1.11.16", "09/10/2026", "livr\xC3\xA9" "e le 09/10 dans la nuit"},
     {"1.11.15", "08/10/2026", "livr\xC3\xA9" "e le 08/10 dans la nuit"},
@@ -98,6 +99,32 @@ const std::vector<Note>& table() {
     static const std::vector<Note> t = {
         // 1.11.16 (09/10/2026 dans la nuit) : la remanence d'exploitation par variable, la robustesse
         // (lot 4 de la specification du 08/10).
+        // 1.11.18 (09/10/2026 dans la matinee) : la refonte des scripts et des fonctions, lots 2 a 5 -
+        // les declarations lues sans perte, dans le modele (format 23), migrees, et leurs onglets.
+        note("1.11.18", "Scripts", Kind::New,
+         "LES ONGLETS DE D\xC3\x89" "CLARATIONS : l'\xC3\xA9" "diteur d'un script a les onglets Code, Constantes et Variables ; celui d'une fonction Code, Param\xC3\xA8tres, Locales et Constantes ; celui d'un op\xC3\xA9rateur Code, Locales et Constantes. Le code ne garde que sa logique ; le moteur, Compiler et l'aide \xC3\xA0 la saisie lisent les d\xC3\xA9" "clarations des onglets comme des blocs VAR \xC3\xA9" "crits (l'ex\xC3\xA9" "cution est la m\xC3\xAAme). Le titre d'un onglet compte ses d\xC3\xA9" "clarations, en rouge si l'une est fautive.",
+         "variables-locales", ""),
+        note("1.11.18", "Scripts", Kind::New,
+         "La grille d'un onglet : Nom, Type, Valeur (Initiale, D\xC3\xA9" "faut), Stockage, Mode, Visibilit\xC3\xA9, Utilisations, Documentation. On \xC3\xA9" "crit dans la case (double-clic, F2) ; le type, le stockage, le mode et la visibilit\xC3\xA9 se choisissent dans une liste (Autre type\xE2\x80\xA6 : ARRAY, REF_TO, MAP). Inser ajoute, Suppr supprime, Ctrl+D duplique, Alt+Haut et Alt+Bas d\xC3\xA9placent (l'ordre des param\xC3\xA8tres est la signature) ; un champ filtre les lignes. Chaque geste s'annule (Ctrl+Z) ; un nom pris, un type inconnu, une constante sans valeur sont refus\xC3\xA9s et la barre dit pourquoi ; Utilisations m\xC3\xA8ne au code, l'une apr\xC3\xA8s l'autre.",
+         "variables-locales", ""),
+        note("1.11.18", "Scripts", Kind::New,
+         "Renommer une d\xC3\xA9" "claration dans sa grille renomme ses utilisations dans le code (ni les cha\xC3\xAEnes, ni les commentaires, ni les membres, ni les arguments nomm\xC3\xA9s), dans les valeurs des autres d\xC3\xA9" "clarations et, pour un param\xC3\xA8tre d'une fonction de symbole, dans ses red\xC3\xA9" "finitions.",
+         "variables-locales", ""),
+        note("1.11.18", "Scripts", Kind::New,
+         "EXCEL : Ctrl+C dans une grille de d\xC3\xA9" "clarations copie les lignes avec leurs titres ; Ctrl+V colle un tableau d'Excel - les colonnes reconnues par leur titre (Nom, Type, Valeur, Initiale, D\xC3\xA9" "faut, Stockage, Mode, Visibilit\xC3\xA9, Documentation, en fran\xC3\xA7" "ais ou en anglais, dans n'importe quel ordre), un nom existant mis \xC3\xA0 jour, un nouveau cr\xC3\xA9\xC3\xA9, les cases refus\xC3\xA9" "es marqu\xC3\xA9" "es ; un seul Ctrl+Z pour tout le collage.",
+         "variables-locales", ""),
+        note("1.11.18", "Scripts", Kind::New,
+         "Le STOCKAGE d'une variable de script : Ex\xC3\xA9" "cution (remise \xC3\xA0 sa valeur initiale \xC3\xA0 chaque ex\xC3\xA9" "cution, l'ancien VAR_TEMP), Conserv\xC3\xA9" "e (gard\xC3\xA9" "e d'une ex\xC3\xA9" "cution \xC3\xA0 l'autre, l'ancien VAR), Persistante (gard\xC3\xA9" "e aussi d'un lancement \xC3\xA0 l'autre : avec la r\xC3\xA9manence de simulation, et sur le poste d'exploitation ; rendue \xC3\xA0 la premi\xC3\xA8re ex\xC3\xA9" "cution de son script, convertie si son type a chang\xC3\xA9).",
+         "variables-locales", ""),
+        note("1.11.18", "Scripts", Kind::New,
+         "MIGRER LES BLOCS VAR : un code qui d\xC3\xA9" "clare encore ses variables dans son texte a un bandeau au-dessus de son code, \xC2\xAB Migrer ce code \xC2\xBB (ses constantes, variables et param\xC3\xA8tres passent dans les onglets, leurs commentaires deviennent leur documentation ; Ctrl+Z la reprend \xC3\xA0 l'octet pr\xC3\xA8s). Pour le projet entier : IHM \xE2\x80\xBA Compiler \xE2\x80\xBA Migrer les d\xC3\xA9" "clarations\xE2\x80\xA6 - le rapport, les codes \xC3\xA0 cocher, la version \xC2\xAB Avant migration des d\xC3\xA9" "clarations \xC2\xBB, une seule commande. Un code d\xC3\xA9" "j\xC3\xA0 \xC3\xA9" "crit avec des blocs VAR continue de tourner tel quel.",
+         "variables-locales", ""),
+        note("1.11.18", "Scripts", Kind::Changed,
+         "Une nouvelle fonction n'a plus de bloc VAR : son param\xC3\xA8tre d'exemple (Entree) et sa locale Resultat sont dans ses onglets. Le retour d'une proc\xC3\xA9" "dure s'appelle \xC2\xAB Aucun \xC2\xBB (\xC2\xAB (aucun) \xC2\xBB se relit). Une red\xC3\xA9" "finition neuve d'une fonction de symbole copie aussi ses locales et ses constantes.",
+         "fonctions", ""),
+        note("1.11.18", "Scripts", Kind::Changed,
+         "Le format IHM 23 : les d\xC3\xA9" "clarations du mod\xC3\xA8le s'enregistrent (une ligne par d\xC3\xA9" "claration, un identifiant stable) ; il n'est \xC3\xA9" "crit que si le projet en a - sinon le projet reste au format 22 et la 1.11.17 l'ouvre. La 1.11.17 refuse un projet au format 23 plut\xC3\xB4t que de perdre ses d\xC3\xA9" "clarations. Les fichiers .xpgst, les paquets d'export, Rechercher et Remplacer, et les renommages (fonction, valeur d'\xC3\xA9num\xC3\xA9ration, variable IHM, type) portent aussi les d\xC3\xA9" "clarations.",
+         "scripts", ""),
         // 1.11.17 (09/10/2026 au matin) : la refonte des scripts et des fonctions, lots 0 et 1 -
         // renommer suit chaque appel, la trace de reference ; Compiler le document actif.
         note("1.11.17", "Scripts", Kind::Changed,

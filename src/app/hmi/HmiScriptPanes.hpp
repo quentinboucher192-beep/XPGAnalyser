@@ -24,6 +24,7 @@
 #include "../../hmi/HmiPipeline.hpp"   // 1.11.13 : les commandes du build
 
 #include "HmiAssist.hpp"
+#include "HmiDeclGrid.hpp"             // 1.11.18 (refonte, lot 5) : les onglets Constantes, Variables
 #include "HmiPanels.hpp"
 #include "HmiVariablePanes.hpp"
 #include "HmiFolderTable.hpp"          // lot 21 : les scripts generaux ranges en dossiers
@@ -38,6 +39,7 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -188,6 +190,29 @@ public:
     [[nodiscard]] HmiTypesPane*     typesPane() noexcept { return typesPane_; }
     [[nodiscard]] ui::TabControl*   tabs() noexcept { return tabs_; }
 
+    // ---- 1.11.18 (refonte des scripts, lot 5) : LES ONGLETS DU CODE ----
+    //  L'editeur a trois onglets : Code, Constantes, Variables - les declarations du
+    //  modele du script montre (HmiDeclGrid : ajouter, renommer, collage d'Excel...), un
+    //  titre qui les compte (rouge : une fautive). Au-dessus du code, un bandeau quand le
+    //  script declare encore ses variables dans son texte : "Migrer ce code".
+    enum CodeTab : std::size_t { CodeTabCode = 0, CodeTabConstants = 1, CodeTabVariables = 2 };
+    void showCodeTab(std::size_t tab);
+    [[nodiscard]] std::size_t currentCodeTab() const noexcept;
+    [[nodiscard]] HmiCodeTabs&    codeTabs() noexcept { return *codeTabs_; }
+    [[nodiscard]] HmiDeclGrid&    constantsGrid() noexcept { return *codeTabs_->grid(hmi::decledit::Tab::Constants); }
+    [[nodiscard]] HmiDeclGrid&    variablesGrid() noexcept { return *codeTabs_->grid(hmi::decledit::Tab::Variables); }
+    [[nodiscard]] HmiDeclBanner&  declBanner() noexcept { return *banner_; }
+    // Le code montre, son adresse pour les grilles (vide : aucun script choisi).
+    [[nodiscard]] std::optional<hmi::decledit::Place> currentPlace() const;
+    // "Migrer ce code" : ses blocs VAR dans ses onglets (une commande). Faux : rien a migrer
+    // ou impossible (lastMessage() dit pourquoi).
+    bool migrateCurrent();
+    // Les utilisations d'un nom : l'onglet Code, la suivante apres le curseur (puis la
+    // premiere). Faux : le code ne l'emploie pas.
+    bool goToNextUse(const std::string& name);
+    // Une declaration du script montre : son onglet, sa ligne choisie. Faux : inconnue.
+    bool showDeclaration(const std::string& name);
+
     [[nodiscard]] HmiToolStrip&      tools() noexcept { return *tools_; }
     [[nodiscard]] const std::string& buildStateText() const noexcept { return buildStateText_; }   // 1.11.13
     [[nodiscard]] ui::MultiLineText& editor() noexcept { return *editor_; }
@@ -204,6 +229,7 @@ protected:
 
 private:
     void showSelected();                 // l'editeur et les proprietes suivent la selection
+    void refreshDeclarations();          // 1.11.18 (lot 5) : les grilles, leurs titres, le bandeau
     void rebuildProperties();
     void updateDiagnostics();
     void say(std::string text, bool warning = false);
@@ -224,6 +250,8 @@ private:
     ui::PropertyGrid* props_{nullptr};
     ui::TableView*    variables_{nullptr};
     HmiTitledPanel*   editorPanel_{nullptr};
+    HmiCodeTabs*      codeTabs_{nullptr};          // 1.11.18 (lot 5) : Code | Constantes | Variables
+    HmiDeclBanner*    banner_{nullptr};
     ui::MultiLineText* editor_{nullptr};
     ui::StatusBar*    symbolBar_{nullptr};
     assist::Sources   assist_;

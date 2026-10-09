@@ -200,6 +200,10 @@ public:
     bool replaceSelected();                      // "Remplacer..." (faux : rien a remplacer)
     // ---- Lot API 8 : l'arbre du projet ---- apres chaque run() (issues() a jour)
     const core::SignalPtr<> ran = core::Signal<>::create();
+    // 1.11.18 (refonte des scripts, lot 5) : Compiler - "Migrer les declarations..." (montre quand
+    // un code du projet declare encore ses variables dans son texte ; relu a chaque run()).
+    const core::SignalPtr<> migrateRequested = core::Signal<>::create();
+    [[nodiscard]] bool legacyDeclarations() const noexcept { return legacy_; }
     [[nodiscard]] ui::TableView& table() noexcept { return *table_; }
 protected:
     void onLayout() override;
@@ -216,6 +220,7 @@ private:
     ui::StatusBar* status_{nullptr};
     std::shared_ptr<ui::ITableModel> model_;
     float laidOutWidth_{-1.f};             // lot 13 : la largeur de la derniere mise en page
+    bool legacy_{false};                   // 1.11.18 (lot 5) : un code a encore un bloc VAR
     core::ConnectionScope links_;
 };
 

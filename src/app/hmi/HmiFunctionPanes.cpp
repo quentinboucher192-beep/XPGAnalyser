@@ -49,7 +49,13 @@ protected:
         const auto b = bounds();
         constexpr float kBar = 22.f;
         if (children().size() < 2) return;
-        children()[0]->setBounds({b.x, b.y, b.w, std::max(0.f, b.h - kBar - 2.f)});
+        // 1.11.18 (refonte, lot 5) : le bandeau de l'ancien format, au-dessus du code.
+        float top = 0.f;
+        if (children().size() > 2 && children()[2]->visible()) {
+            top = HmiDeclBanner::kHeight;
+            children()[2]->setBounds({b.x, b.y, b.w, top});
+        }
+        children()[0]->setBounds({b.x, b.y + top, b.w, std::max(0.f, b.h - kBar - 2.f - top)});
         children()[1]->setBounds({b.x, b.bottom() - kBar, b.w, kBar});
     }
 };
@@ -57,7 +63,14 @@ protected:
 enum ToolAction : int { TNew = 1, TDelete, TTry, TCompile, TExport, TImport,   // 1.11.2 : TExport, TImport (decision 174)
                         TBuildGen, TBuildRegen, TBuildGenComp, TBuildState };   // 1.11.13 : la generation incrementale
 
-constexpr const char* kNoReturn = "(aucun)";
+// 1.11.18 (refonte, lot 5) : "Aucun" (une procedure) ; "(aucun)", VOID et le vide se relisent aussi.
+constexpr const char* kNoReturn = "Aucun";
+bool isNoReturn(std::string_view t) {
+    std::string u;
+    for (const char c : t)
+        if (c != '(' && c != ')' && c != ' ') u += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return u.empty() || u == "aucun" || u == "void" || u == "none";
+}
 
 std::size_t lineCount(const std::string& s) {
     if (s.empty()) return 0;
@@ -256,7 +269,11 @@ HmiFunctionsPane::HmiFunctionsPane(std::string id, hmi::DocumentPtr doc, Apply a
         auto bar = std::make_unique<ui::StatusBar>(base + ".symbol");
         bar->setTooltip("Le nom o\xC3\xB9 est le curseur : param\xC3\xA8tre, locale, variable IHM ou de l'automate, fonction.");
         symbolBar_ = &static_cast<ui::StatusBar&>(area->addChild(std::move(bar)));
-        panel->setBody(std::move(area));
+        // 1.11.18 (refonte, lot 5) : Code, Parametres, Locales, Constantes ; le bandeau de l'ancien format.
+        banner_ = &static_cast<HmiDeclBanner&>(area->addChild(std::make_unique<HmiDeclBanner>(base + ".declBanner")));
+        codeTabs_ = &static_cast<HmiCodeTabs&>(panel->setBody(std::make_unique<HmiCodeTabs>(
+            base + ".codeTabs", doc_, apply_, std::move(area),
+            std::vector{hmi::decledit::Tab::Parameters, hmi::decledit::Tab::Variables, hmi::decledit::Tab::Constants}, banner_)));
         editorPanel_ = panel.get();
         right->addPane(std::move(panel), 0.74f, 120.f);
     }
@@ -315,11 +332,14 @@ HmiFunctionsPane::HmiFunctionsPane(std::string id, hmi::DocumentPtr doc, Apply a
     links_ += diagTable_->selectionChanged->connect([this](const std::vector<ui::RowIndex>& rows) {
         if (rows.empty() || rows.front() >= diagnostics_.size()) return;
         const auto& d = diagnostics_[rows.front()];
+        if (d.line > 0) showCodeTab(CodeTabCode);
         if (d.line > 0 && d.column > 0)        // 1.10 : la faute selectionnee
             editor_->selectRange(static_cast<std::size_t>(d.line - 1), static_cast<std::uint32_t>(d.column - 1),
                                  static_cast<std::uint32_t>(std::max(0, d.length)));
         else if (d.line > 0)
             editor_->goToLine(static_cast<std::size_t>(d.line - 1));
+        else if (const auto name = declarationNamed(d.message); !name.empty())
+            (void)showDeclaration(name);       // 1.11.18 (lot 5) : la faute d'une declaration, dans son onglet
     });
     links_ += editor_->caretSymbolChanged->connect([this](const std::string&) { updateSymbolLine(); });
     links_ += editor_->textChanged->connect([this](const std::string& text) {
@@ -327,6 +347,10 @@ HmiFunctionsPane::HmiFunctionsPane(std::string id, hmi::DocumentPtr doc, Apply a
         if (const Id sel = selectedFunction()) (void)setBody(sel, text);
         updateDiagnostics();
     });
+    // 1.11.18 (lot 5) : les grilles parlent dans la barre du volet ; leurs utilisations menent au code.
+    links_ += codeTabs_->message->connect([this](const std::string& t, bool warning) { say(t, warning); });
+    links_ += codeTabs_->usesRequested->connect([this](const std::string& name) { (void)goToNextUse(name); });
+    links_ += codeTabs_->migrateRequested->connect([this] { (void)migrateCurrent(); });
     links_ += doc_->changed->connect([this](Id) { refresh(); });
     refresh();
     if (!order_.empty()) {
@@ -403,6 +427,7 @@ void HmiFunctionsPane::selectFunction(Id id) {
 void HmiFunctionsPane::goTo(Id function, int line) {
     selectFunction(function);
     if (line > 0) {
+        showCodeTab(CodeTabCode);             // 1.11.18 (lot 5) : le code, pas une grille
         editor_->goToLine(static_cast<std::size_t>(line - 1));
         for (std::size_t i = 0; i < diagnostics_.size(); ++i)
             if (diagnostics_[i].line == line) { hmiSelectModelRow(*diagTable_, i); break; }
@@ -414,6 +439,7 @@ void HmiFunctionsPane::goTo(Id function, int line, int column, int length) {
     if (column <= 0) { goTo(function, line); return; }
     selectFunction(function);
     if (line <= 0) return;
+    showCodeTab(CodeTabCode);                 // 1.11.18 (lot 5)
     for (std::size_t i = 0; i < diagnostics_.size(); ++i)
         if (diagnostics_[i].line == line && diagnostics_[i].column == column) { hmiSelectModelRow(*diagTable_, i); break; }
     editor_->selectRange(static_cast<std::size_t>(line - 1), static_cast<std::uint32_t>(column - 1),
@@ -481,7 +507,50 @@ void HmiFunctionsPane::showSelected() {
     rebuildProperties();
     rebuildTrial();
     updateDiagnostics();
+    codeTabs_->setPlace(currentPlace(), "Choisis une fonction.");   // 1.11.18 (lot 5) : ses onglets
 }
+
+// ---- 1.11.18 (refonte des scripts, lot 5) : les onglets de la fonction ----
+std::optional<hmi::decledit::Place> HmiFunctionsPane::currentPlace() const {
+    const auto* f = current();
+    if (!f) return std::nullopt;
+    hmi::decledit::Place at;
+    at.kind = symbol_ != kNoId ? hmi::decledit::Place::Kind::SymbolFunction : hmi::decledit::Place::Kind::Function;
+    at.view = symbol_;
+    at.id = f->id;
+    const auto* sv = symbolView();
+    at.label = "fonction " + (sv ? sv->name + "." : std::string{}) + f->name;
+    return at;
+}
+
+void HmiFunctionsPane::showCodeTab(std::size_t tab) {
+    if (codeTabs_ && tab < codeTabs_->tabCount()) codeTabs_->setCurrentIndex(tab);
+}
+
+std::size_t HmiFunctionsPane::currentCodeTab() const noexcept { return codeTabs_ ? codeTabs_->currentIndex() : 0; }
+
+bool HmiFunctionsPane::migrateCurrent() {
+    const auto at = currentPlace();
+    if (!at) {
+        say("Migrer : aucune fonction choisie.", true);
+        return false;
+    }
+    std::string report;
+    const bool ok = migrateOne(doc_, apply_, *at, &report);
+    say(report, !ok);
+    return ok;
+}
+
+bool HmiFunctionsPane::goToNextUse(const std::string& name) {
+    showCodeTab(CodeTabCode);
+    std::string said;
+    const bool ok = selectNextUse(*editor_, name, &said);
+    say(said, !ok);
+    if (ok) updateSymbolLine();
+    return ok;
+}
+
+bool HmiFunctionsPane::showDeclaration(const std::string& name) { return codeTabs_->showDeclaration(name); }
 
 void HmiFunctionsPane::rebuildProperties() {
     using PG = ui::PropertyGrid;
@@ -502,7 +571,7 @@ void HmiFunctionsPane::rebuildProperties() {
         "Renommer la fonction renomme aussi ses appels, partout dans le projet."));
     c.properties.push_back(hmikit::prop("Type de retour", f->returnType.empty() ? std::string(kNoReturn) : f->returnType,
         PG::ValueType::Enum, [this, id](std::string_view v) { return setReturnType(id, std::string(v)); },
-        "(aucun) : une proc\xC3\xA9" "dure, appel\xC3\xA9" "e seule sur sa ligne. Sinon le corps affecte le r\xC3\xA9sultat "
+        "Aucun : une proc\xC3\xA9" "dure, appel\xC3\xA9" "e seule sur sa ligne. Sinon le corps affecte le r\xC3\xA9sultat "
         "\xC3\xA0 son nom : Moyenne := ... ;", types));
     c.properties.push_back(hmikit::prop("Description", f->description, PG::ValueType::Text,
         [this, id](std::string_view v) { return setDescription(id, std::string(v)); }));
@@ -513,9 +582,11 @@ void HmiFunctionsPane::rebuildProperties() {
         kept += l.section == hmi::LocalVar::Section::Var;
         temps += l.section == hmi::LocalVar::Section::Temp;
     }
-    c.properties.push_back(hmikit::prop("Param\xC3\xA8tres (VAR_INPUT)", std::to_string(parts.inputs().size()), PG::ValueType::ReadOnly));
-    c.properties.push_back(hmikit::prop("Locales (VAR / VAR_TEMP)", std::to_string(kept) + " / " + std::to_string(temps),
-                                        PG::ValueType::ReadOnly));
+    // 1.11.18 (lot 5) : ses onglets les montrent (ceux d'un ancien bloc VAR du code aussi comptes).
+    c.properties.push_back(hmikit::prop("Param\xC3\xA8tres", std::to_string(parts.inputs().size()), PG::ValueType::ReadOnly,
+                                        nullptr, "Les param\xC3\xA8tres de la fonction : l'onglet Param\xC3\xA8tres (l'ordre est la signature)."));
+    c.properties.push_back(hmikit::prop("Locales", std::to_string(kept + temps), PG::ValueType::ReadOnly, nullptr,
+                                        "Ses variables locales (onglet Locales) : elles repartent \xC3\xA0 chaque appel."));
     if (const auto* sv = symbolView()) {
         // 1.11.10 : virtuelle, et qui la redefinit.
         c.properties.push_back(hmikit::prop("Virtuelle", f->isVirtual ? "TRUE" : "FALSE", PG::ValueType::Boolean,
@@ -713,7 +784,7 @@ bool HmiFunctionsPane::nameAllowed(const std::string& name, Id self, std::string
 }
 
 Id HmiFunctionsPane::addFunction(std::string name, std::string returnType, std::string description, std::string* why) {
-    if (returnType == kNoReturn) returnType.clear();
+    if (isNoReturn(returnType)) returnType.clear();
     std::string reason;
     if (!nameAllowed(name, kNoId, &reason)) {
         if (why) *why = reason;
@@ -733,6 +804,8 @@ Id HmiFunctionsPane::addFunction(std::string name, std::string returnType, std::
         f.returnType = returnType;
         f.description = description;
         f.body = hmi::functionTemplate(name, returnType, description);
+        f.decls = hmi::functionTemplateDecls(returnType);         // 1.11.18 (lot 5) : dans ses onglets, plus dans le code
+        for (auto& d : f.decls) d.id = p.allocate();
         made = f.id;
         if (auto* l = listOf(p)) l->push_back(std::move(f));
         else made = kNoId;
@@ -784,7 +857,7 @@ bool HmiFunctionsPane::renameFunction(Id id, const std::string& name, std::strin
 bool HmiFunctionsPane::setReturnType(Id id, const std::string& type, std::string* why) {
     const auto* f = fnOf(doc_->project, id);
     if (!f) return false;
-    const std::string t = type == kNoReturn ? std::string{} : type;
+    const std::string t = isNoReturn(type) ? std::string{} : type;
     if (!t.empty() && !returnTypeAllowed(doc_->project, t)) {
         if (why) *why = "type de retour non pris en charge : " + t;
         return false;

@@ -273,6 +273,7 @@ Report restoreVariables(const Project& p, const std::vector<Cell>& cells, const 
     std::vector<Id> order;
     std::map<Id, std::vector<const Cell*>> groups;
     for (const auto& c : cells) {
+        if (isDeclarationCell(c)) continue;      // 1.11.18 (lot 5) : une declaration Persistante - le moteur la rend
         auto& g = groups[c.variable];
         if (g.empty()) order.push_back(c.variable);
         g.push_back(&c);

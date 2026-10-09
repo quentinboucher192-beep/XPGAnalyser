@@ -785,16 +785,11 @@ std::string codeOf(const HmiOperator& o) {
     return composeCode(o.body, o.decls, Role::Operator).text;
 }
 
-std::vector<ScriptDiagnostic> checkDeclarations(const std::vector<Declaration>& decls, Role role, std::string_view body,
-                                                const TypeKnown& knownType, const std::vector<Declaration>* inherited,
-                                                std::vector<Declaration>* valid) {
-    std::vector<ScriptDiagnostic> out;
-    bool ok = true;
-    const auto fail = [&](const Declaration& d, const std::string& why) {
-        out.push_back(fault(0, 0, 0, "d\xC3\xA9" "claration " + quoted(d.name.empty() ? std::string("?") : d.name) + " : " + why));
-        ok = false;
-    };
-    // Les noms deja pris : les parametres herites (une redefinition), ceux des blocs du corps.
+std::vector<std::vector<std::string>> declarationFaults(const std::vector<Declaration>& decls, Role role, std::string_view body,
+                                                       const TypeKnown& knownType, const std::vector<Declaration>* inherited) {
+    std::vector<std::vector<std::string>> out(decls.size());
+    // Les noms deja pris : les parametres herites (une redefinition), ceux des blocs du corps ;
+    // ceux d'un operateur (a, b, Resultat : son script les lit sans les declarer).
     std::vector<std::string> taken;
     if (inherited)
         for (const auto& d : *inherited)
@@ -802,34 +797,53 @@ std::vector<ScriptDiagnostic> checkDeclarations(const std::vector<Declaration>& 
     const auto inBody = extract(body);
     for (std::size_t i = 0; i < decls.size(); ++i) {
         const Declaration& d = decls[i];
-        ok = true;
+        auto& why = out[i];
         if (d.name.empty()) {
-            out.push_back(fault(0, 0, 0, "d\xC3\xA9" "claration sans nom"));
+            why.push_back("sans nom");
             continue;
         }
         bool ident = identStart(d.name[0]);
         for (const char c : d.name) ident = ident && identChar(c);
-        if (!ident) fail(d, "nom illisible (lettres, chiffres, _ ; pas un chiffre en t\xC3\xAAte)");
-        else if (isReservedWord(d.name)) fail(d, "nom r\xC3\xA9serv\xC3\xA9 du langage");
+        if (!ident) why.push_back("nom illisible (lettres, chiffres, _ ; pas un chiffre en t\xC3\xAAte)");
+        else if (isReservedWord(d.name)) why.push_back("nom r\xC3\xA9serv\xC3\xA9 du langage");
+        else if (role == Role::Operator && (sameWord(d.name, "A") || sameWord(d.name, "B") || sameWord(d.name, "Resultat")))
+            why.push_back("nom pris par l'op\xC3\xA9rateur (a, b et Resultat sont les siens)");
         const std::string u = upper(d.name);
         bool twice = std::find(taken.begin(), taken.end(), u) != taken.end();
         for (std::size_t j = 0; j < i && !twice; ++j) twice = sameWord(decls[j].name, d.name);
-        if (twice) fail(d, "d\xC3\xA9" "clar\xC3\xA9" "e deux fois");
+        if (twice) why.push_back("d\xC3\xA9" "clar\xC3\xA9" "e deux fois");
         else if (inBody.find(d.name))
-            fail(d, "d\xC3\xA9" "clar\xC3\xA9" "e deux fois (aussi dans un bloc " + std::string(keyword(inBody.find(d.name)->section))
-                        + " du code)");
-        if (d.type.find_first_not_of(" \t") == std::string::npos) fail(d, "type manquant");
+            why.push_back("d\xC3\xA9" "clar\xC3\xA9" "e deux fois (aussi dans un bloc " + std::string(keyword(inBody.find(d.name)->section))
+                          + " du code)");
+        if (d.type.find_first_not_of(" \t") == std::string::npos) why.push_back("type manquant");
         else if (!localTypeSupported(d.type) && !richLocalType(d.type, knownType))
-            fail(d, "type non pris en charge : " + d.type + " (BOOL, INT, DINT, REAL, TIME, STRING, un tableau, un type IHM...)");
-        if (d.kind == DeclKind::Constant && d.value.find_first_not_of(" \t") == std::string::npos) fail(d, "une constante sans valeur");
-        if (d.kind == DeclKind::Parameter && role == Role::Script) fail(d, "un param\xC3\xA8tre dans un script (seule une fonction en a)");
+            why.push_back("type non pris en charge : " + d.type + " (BOOL, INT, DINT, REAL, TIME, STRING, un tableau, un type IHM...)");
+        if (d.kind == DeclKind::Constant && d.value.find_first_not_of(" \t") == std::string::npos) why.push_back("une constante sans valeur");
+        if (d.kind == DeclKind::Parameter && role == Role::Script) why.push_back("un param\xC3\xA8tre dans un script (seule une fonction en a)");
         if (d.kind == DeclKind::Parameter && role == Role::Operator)
-            fail(d, "un param\xC3\xA8tre dans un op\xC3\xA9rateur (ses op\xC3\xA9randes sont A et B)");
+            why.push_back("un param\xC3\xA8tre dans un op\xC3\xA9rateur (ses op\xC3\xA9randes sont A et B)");
         if (d.kind == DeclKind::Parameter && inherited)
-            fail(d, "un param\xC3\xA8tre dans une red\xC3\xA9" "finition (elle garde ceux de sa fonction)");
+            why.push_back("un param\xC3\xA8tre dans une red\xC3\xA9" "finition (elle garde ceux de sa fonction)");
         if (d.kind == DeclKind::Variable && role != Role::Script && d.storage != Storage::Execution)
-            fail(d, "une fonction n'a pas de m\xC3\xA9moire : sa variable repart \xC3\xA0 chaque appel (stockage Ex\xC3\xA9" "cution)");
-        if (ok && valid) valid->push_back(d);
+            why.push_back("une fonction n'a pas de m\xC3\xA9moire : sa variable repart \xC3\xA0 chaque appel (stockage Ex\xC3\xA9" "cution)");
+    }
+    return out;
+}
+
+std::vector<ScriptDiagnostic> checkDeclarations(const std::vector<Declaration>& decls, Role role, std::string_view body,
+                                                const TypeKnown& knownType, const std::vector<Declaration>* inherited,
+                                                std::vector<Declaration>* valid) {
+    std::vector<ScriptDiagnostic> out;
+    const auto faults = declarationFaults(decls, role, body, knownType, inherited);
+    for (std::size_t i = 0; i < decls.size(); ++i) {
+        const Declaration& d = decls[i];
+        if (d.name.empty()) {
+            out.push_back(fault(0, 0, 0, "d\xC3\xA9" "claration sans nom"));
+            continue;
+        }
+        for (const auto& why : faults[i])
+            out.push_back(fault(0, 0, 0, "d\xC3\xA9" "claration " + quoted(d.name) + " : " + why));
+        if (faults[i].empty() && valid) valid->push_back(d);
     }
     return out;
 }

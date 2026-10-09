@@ -4489,6 +4489,17 @@ void lot7_volet_fonctions() {
     check(p.programs.functions.empty(), "Ctrl+Z retire la fonction cr\xC3\xA9\xC3\xA9" "e");
     (void)stack.redo();
     check(p.programs.functions.size() == 1 && pane.selectedFunction() == moy, "Ctrl+Y la rend (choisie : la seule)");
+    // 1.11.18 (refonte, lot 5) : le modele d'une nouvelle fonction a son parametre et sa locale dans
+    // ses onglets ; la suite essaie les blocs VAR ecrits dans le code (l'ancien format, toujours lu).
+    check(p.function(moy)->decls.size() == 2 && pane.parametersGrid().count() == 1 && pane.localsGrid().count() == 1,
+          "le mod\xC3\xA8le : Entree dans l'onglet Param\xC3\xA8tres, Resultat dans Locales");
+    const auto textOnly = [&](Id f) {
+        if (auto cmd = changeProject(doc, "Les d\xC3\xA9" "clarations dans le code", [&](Project& q) {
+                if (auto* fn = q.function(f)) fn->decls.clear();
+            }))
+            apply(std::move(cmd));
+    };
+    textOnly(moy);
 
     // Taper le corps : une commande fusionnee ; les diagnostics suivent.
     check(pane.setBody(moy, "VAR_INPUT\n  a : REAL;\n  b : REAL := 10.0;\nEND_VAR\nMoyenne := (a + b) / 2.0;"), "le corps : deux param\xC3\xA8tres");
@@ -4553,6 +4564,7 @@ void lot7_volet_fonctions() {
     const Id tracer = pane.addFunction("Tracer", "(aucun)", "une ligne au journal");
     check(tracer != kNoId && p.function(tracer)->returnType.empty() && pane.editor().text().find("IHM_JOURNAL(Message);") != std::string::npos,
           "une proc\xC3\xA9" "dure : son mod\xC3\xA8le \xC3\xA9" "crit au journal");
+    textOnly(tracer);                         // 1.11.18 (lot 5) : son parametre dans le code (l'ancien format)
     check(pane.setBody(tracer, "VAR_INPUT\n  Message : STRING;\nEND_VAR\nTraces := Traces + 1;\nIHM_JOURNAL(Message);"), "Tracer compte ses traces");
     check(pane.tryFunction(tracer, {"'porte ouverte'"}) && pane.lastTrial().result.empty(), "Essayer Tracer('porte ouverte') : sans retour");
     check(pane.lastTrial().journal.size() == 1 && pane.lastTrial().journal[0].find("porte ouverte") != std::string::npos,
@@ -16557,16 +16569,16 @@ void centreAide111() {
     // 1.11.11 : 19.
     // 1.11.12 : 20.
     // 1.11.13 : 21.
-    // 1.11.14 : 22 ; 1.11.15 : 23 ; 1.11.16 : 24 ; 1.11.17 : 25.
-    check(hn::releases().size() == 25 && hn::releases().front().version == "1.11.17" && hn::releases()[1].version == "1.11.16"
-              && hn::releases()[2].version == "1.11.15"
-              && hn::releases()[3].version == "1.11.14" && hn::releases()[4].version == "1.11.13" && hn::releases()[5].version == "1.11.12"
-              && hn::releases()[6].version == "1.11.11" && hn::releases()[7].version == "1.11.10"
-              && hn::releases()[8].version == "1.11.9" && hn::releases()[9].version == "1.11.8"
-              && hn::releases()[10].version == "1.11.7" && hn::releases()[11].version == "1.11.6" && hn::releases()[12].version == "1.11.5"
-              && hn::releases()[13].version == "1.11.4" && hn::releases()[14].version == "1.11.3" && hn::releases()[15].version == "1.11.2"
-              && hn::releases()[16].version == "1.11.1" && hn::releases()[17].version == "1.11" && hn::releases()[18].version == "1.10.4",
-          "notes : 25 versions, la 1.11.17 en tete, puis la 1.11.16 \xC3\xA0 la 1.11, et la 1.10.4");
+    // 1.11.14 : 22 ; 1.11.15 : 23 ; 1.11.16 : 24 ; 1.11.17 : 25 ; 1.11.18 : 26.
+    check(hn::releases().size() == 26 && hn::releases().front().version == "1.11.18" && hn::releases()[1].version == "1.11.17"
+              && hn::releases()[2].version == "1.11.16" && hn::releases()[3].version == "1.11.15"
+              && hn::releases()[4].version == "1.11.14" && hn::releases()[5].version == "1.11.13" && hn::releases()[6].version == "1.11.12"
+              && hn::releases()[7].version == "1.11.11" && hn::releases()[8].version == "1.11.10"
+              && hn::releases()[9].version == "1.11.9" && hn::releases()[10].version == "1.11.8"
+              && hn::releases()[11].version == "1.11.7" && hn::releases()[12].version == "1.11.6" && hn::releases()[13].version == "1.11.5"
+              && hn::releases()[14].version == "1.11.4" && hn::releases()[15].version == "1.11.3" && hn::releases()[16].version == "1.11.2"
+              && hn::releases()[17].version == "1.11.1" && hn::releases()[18].version == "1.11" && hn::releases()[19].version == "1.10.4",
+          "notes : 26 versions, la 1.11.18 en tete, puis la 1.11.17 \xC3\xA0 la 1.11, et la 1.10.4");
     // 1.11.2 (T2, tranches 41, 42 et 44 ; decisions 187, 201 et 216) : 23 lignes en 8 domaines, dont 2 cartes de la fenetre Nouveautes.
     // Tranche 46 (SYM, decision 240) : + Dupliquer dans un symbole (C) et la section Parametres du symbole (N) : 25 lignes.
     {
@@ -16837,7 +16849,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 212,   // 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 220,   // 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -16980,7 +16992,7 @@ void centreAide111() {
     // Integration 1.11 (I111) : la 1.10.4 ajoute objet-vanne-3-voies (La bibliotheque d'objets) : 206.
     // 1.11.1 (T2, decision 107) : Programmer gagne variables-api (API. : les variables de l'automate) : 207.
     check(ix.count(hc::Chapter::Hmi) == 208, "centre : L'IHM a les 208 sujets des chapitres 2 a 8 du guide (1.11.1 : variables-api ; 1.11.2 : paquets-symboles)");
-    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 25, "centre : 11 expressions, 25 notes (1.11.17)");
+    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 26, "centre : 11 expressions, 26 notes (1.11.18)");
     // Tranche 3 : les 11 types de T3 (hmi::exprguide::all(), depot-o), passes par in.expressions ; les
     // cles de la liste de secours sont les siennes (enumeration, pas enum).
     {
@@ -17042,10 +17054,10 @@ void centreAide111() {
         check(o, "page Raccourcis : Ctrl+Maj+O dessine en trois touches, repere 1.11");
 
         const auto n110 = hc::notesPage("1.10");
-        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 25
+        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 26
                   && !n110.summary.empty() && !n110.date.empty(),
               "page Notes : 1.10 -> 1.10.0, 22 lignes en 7 domaines, sa date et son resume");
-        check(hc::notesPage("").version == "1.11.17" && hc::notesPage("9.9").version == "1.11.17",
+        check(hc::notesPage("").version == "1.11.18" && hc::notesPage("9.9").version == "1.11.18",
               "page Notes : sans version (ou inconnue), la plus recente");
         const auto simu = hc::notesPage("1.10.0", "Simulation");
         check(simu.sections.size() == 1 && simu.rows == 4 && simu.domains.size() == 7,
@@ -17389,7 +17401,7 @@ void centreAide111() {
         // Les notes de version n'ont pas de tutoriel : ni la carte "Regarder le tutoriel" (hasTutorial, que
         // lit HelpCenterScreen::showTopic), ni la pastille dans l'arbre. Les autres pages speciales gardent
         // les leurs (T1 ecrit les tutoriels des raccourcis et de Signaler).
-        bool notesSans = ix.count(hc::Chapter::Notes) == 25;   // 1.11.3 a 1.11.17 : une version de plus
+        bool notesSans = ix.count(hc::Chapter::Notes) == 26;   // 1.11.3 a 1.11.18 : une version de plus
         for (const auto* t : ix.ofChapter(hc::Chapter::Notes)) notesSans = notesSans && !hc::hasTutorial(*t);
         const auto* raccourcis = ix.find("page-raccourcis");
         const auto* signaler = ix.find("page-signaler");
@@ -26908,6 +26920,189 @@ void fonctionsExpressions11111() {
     }
 }
 
+// =============================================================================
+//  1.11.18 (refonte des scripts, lot 5) : LES ONGLETS DE DECLARATIONS - les
+//  scripts (Code, Constantes, Variables), les fonctions (Parametres, Locales,
+//  Constantes ; Aucun en retour), les operateurs (Locales, Constantes) ; la
+//  grille (ajouter, ecrire dans la case, les listes, Autre type..., renommer,
+//  refuser, les fautes en rouge, Excel dans les deux sens, un seul Ctrl+Z) ; le
+//  bandeau de l'ancien format et "Migrer ce code" ; Compiler > Migrer.
+// =============================================================================
+void onglets1118() {
+    std::printf("1.11.18 (refonte, lot 5) : les onglets de d\xC3\xA9" "clarations\n");
+    namespace de = hmi::decledit;
+    auto doc = std::make_shared<Document>();
+    core::CommandStack stack;
+    auto apply = [&](core::CommandPtr c) { if (c) (void)stack.push(std::move(c)); };
+    Variable somme;
+    somme.id = doc->project.allocate();
+    somme.name = "Somme";
+    somme.type = "REAL";
+    somme.initial = "0";
+    doc->project.programs.variables.push_back(somme);
+    Script sc;
+    sc.id = doc->project.allocate();
+    sc.name = "Compter";
+    sc.event = "Appel";
+    sc.body = "Total := Total + Pas;\nSomme := Total;\n";
+    doc->project.programs.scripts.push_back(sc);
+    Script old;
+    old.id = doc->project.allocate();
+    old.name = "Ancien";
+    old.event = "Appel";
+    old.body = "VAR\n    Compte : INT; (* le compte des appels *)\nEND_VAR\nCompte := Compte + 1;\n";
+    doc->project.programs.scripts.push_back(old);
+    Script inC;
+    inC.id = doc->project.allocate();
+    inC.name = "EnC";
+    inC.lang = ScriptLang::C;
+    inC.body = "int x = 0;\n";
+    doc->project.programs.scripts.push_back(inC);
+
+    app::HmiScriptsPane pane("prog1118", doc, apply);
+    pane.setBounds({0, 0, 1400, 800});
+    pane.layout();
+    pane.selectScript(sc.id);
+    auto& tabs = pane.codeTabs();
+    check(tabs.tabCount() == 3 && tabs.tab(0)->title == "Code" && tabs.tab(1)->title == "Constantes" && tabs.tab(2)->title == "Variables",
+          "l'\xC3\xA9" "diteur d'un script : Code, Constantes, Variables");
+    auto& consts = pane.constantsGrid();
+    auto& vars = pane.variablesGrid();
+    check(consts.usable() && vars.usable() && consts.count() == 0, "le script sans d\xC3\xA9" "claration : deux grilles vides, utilisables");
+    const auto before = doc->project.programs;
+    // AJOUTER : le bouton, un nom libre, la case Nom ouverte tout de suite.
+    const int addC = consts.tools().actionByTip("Ajouter");
+    check(addC > 0, "la barre de la grille : Ajouter");
+    consts.tools().triggered->emit(addC);
+    const auto* s = doc->project.script(sc.id);
+    check(s && s->decls.size() == 1 && s->decls[0].name == "Constante" && s->decls[0].kind == DeclKind::Constant && consts.count() == 1,
+          "Ajouter : la constante Constante");
+    check(tabs.tab(1)->badge == "1", "le titre de l'onglet compte ses d\xC3\xA9" "clarations (" + tabs.tab(1)->badge + ")");
+    check(consts.table().cellEditing() && consts.table().editedColumn() == static_cast<std::size_t>(consts.tableColumnOf(de::Column::Name)),
+          "... et sa case Nom s'ouvre : on tape son nom");
+    consts.table().finishCellEdit(true, "Pas");
+    check(doc->project.script(sc.id)->decls[0].name == "Pas", "Entr\xC3\xA9" "e : la constante s'appelle Pas");
+    check(consts.setCell(0, de::Column::Value, "5") && consts.setCell(0, de::Column::Type, "int")
+              && doc->project.script(sc.id)->decls[0].type == "INT" && doc->project.script(sc.id)->decls[0].value == "5",
+          "la valeur et le type (int -> INT)");
+    // LES LISTES : le type (et Autre type...), le stockage.
+    const int tc = consts.tableColumnOf(de::Column::Type);
+    const auto types = consts.table().model()->cellChoices(0, static_cast<std::size_t>(tc));
+    check(!types.empty() && types.front() == "BOOL" && types.back() == "Autre type\xE2\x80\xA6", "la liste des types, et Autre type\xE2\x80\xA6 au bout");
+    (void)consts.table().beginCellEdit(0, static_cast<std::size_t>(tc));
+    check(consts.table().activeCellList() != nullptr, "la case Type : une liste");
+    consts.table().finishCellEdit(true, "Autre type\xE2\x80\xA6");
+    check(consts.table().cellEditing() && consts.table().activeCellField() != nullptr, "Autre type\xE2\x80\xA6 : un champ libre (ARRAY, REF_TO...)");
+    consts.table().finishCellEdit(false, {});
+    check(doc->project.script(sc.id)->decls[0].type == "INT", "... Echap : le type ne bouge pas");
+    const int addV = vars.tools().actionByTip("Ajouter");
+    vars.tools().triggered->emit(addV);
+    vars.table().finishCellEdit(true, "Total");
+    const int stc = vars.tableColumnOf(de::Column::Storage);
+    const auto storages = vars.table().model()->cellChoices(0, static_cast<std::size_t>(stc));
+    check(storages.size() == 3 && storages[1] == "Conserv\xC3\xA9" "e", "le stockage : Ex\xC3\xA9" "cution, Conserv\xC3\xA9" "e, Persistante");
+    check(vars.setCell(0, de::Column::Storage, "Conserv\xC3\xA9" "e") && doc->project.script(sc.id)->decls[1].storage == Storage::Kept,
+          "Total : Conserv\xC3\xA9" "e");
+    // Le code se verifie avec elles.
+    bool unknown = false;
+    for (const auto& d : pane.diagnostics()) unknown = unknown || d.message.find("Total") != std::string::npos || d.message.find("Pas") != std::string::npos;
+    check(!unknown, "le code ne dit plus Total ni Pas inconnus : les d\xC3\xA9" "clarations du mod\xC3\xA8le sont lues");
+    // REFUSER : un nom pris ; la barre du volet le dit.
+    check(!vars.setCell(0, de::Column::Name, "pas") && pane.lastMessage().find("d\xC3\xA9j\xC3\xA0") != std::string::npos,
+          "renommer Total en pas : refus\xC3\xA9 (" + pane.lastMessage() + ")");
+    // RENOMMER : le code suit.
+    check(consts.setCell(0, de::Column::Name, "Increment") && doc->project.script(sc.id)->body.find("Total := Total + Increment;") == 0
+              && pane.editor().text().find("Increment") != std::string::npos,
+          "renommer Pas : le code suit, l'\xC3\xA9" "diteur aussi");
+    // Les utilisations : l'onglet Code, la premiere.
+    pane.showCodeTab(app::HmiScriptsPane::CodeTabConstants);
+    consts.selectRows({0});
+    const int uses = consts.tools().actionByTip("Aller \xC3\xA0 ses utilisations");
+    if (uses > 0) consts.tools().triggered->emit(uses);
+    check(uses > 0 && pane.currentCodeTab() == app::HmiScriptsPane::CodeTabCode && pane.editor().caretLine() == 0
+              && pane.lastMessage().find("Utilisation 1 sur 1") != std::string::npos,
+          "Utilisations : le code, la premi\xC3\xA8re (" + pane.lastMessage() + ")");
+    // EXCEL : coller (titres reconnus, un nom nouveau cree, un existant mis a jour) ; un seul Ctrl+Z.
+    core::CommandGroupScope::registerStack(&stack);      // le collage : un groupe dans cette pile
+    const std::size_t depth = stack.done().size();
+    vars.selectRows({0});
+    check(vars.table().pasteText("Nom\tType\tInitiale\tStockage\tDocumentation\nSeuil\tREAL\t12.5\tPersistante\tle seuil haut\nTotal\tDINT\t\t\t\n", false),
+          "coller un tableau d'Excel dans Variables");
+    const auto* after = doc->project.script(sc.id);
+    const Declaration* seuil = nullptr;
+    for (const auto& d : after->decls)
+        if (d.name == "Seuil") seuil = &d;
+    check(seuil && seuil->type == "REAL" && seuil->value == "12.5" && seuil->storage == Storage::Persistent && seuil->description == "le seuil haut",
+          "Seuil cr\xC3\xA9\xC3\xA9" "e : REAL, 12.5, Persistante, sa documentation");
+    check(after->decls[1].type == "DINT", "Total mis \xC3\xA0 jour : DINT");
+    check(stack.done().size() == depth + 1, "le collage : un seul Ctrl+Z (" + std::to_string(stack.done().size() - depth) + ")");
+    core::CommandGroupScope::registerStack(nullptr);
+    (void)stack.undo();
+    check(doc->project.script(sc.id)->decls.size() == 2 && doc->project.script(sc.id)->decls[1].type == "INT", "Ctrl+Z : le collage entier repris");
+    const std::string copied = vars.table().copyText(true);
+    check(copied.find("Nom\tType\tInitiale\tStockage") == 0 && copied.find("Total\tINT\t0\tConserv\xC3\xA9" "e") != std::string::npos,
+          "Ctrl+C : les lignes avec leurs titres, s\xC3\xA9par\xC3\xA9" "es par des tabulations\n" + copied);
+    // UNE FAUTE : le nom aussi declare dans un bloc VAR du code - rouge, le titre aussi.
+    check(pane.setBody(sc.id, "VAR Total : INT; END_VAR\nTotal := Total + Increment;\nSomme := Total;\n"), "un bloc VAR remis dans le code");
+    check(vars.faultCount() == 1 && tabs.tab(2)->badgeTone == ui::Tone::Error, "Total d\xC3\xA9" "clar\xC3\xA9" "e deux fois : en faute, le titre rouge");
+    (void)stack.undo();
+    check(vars.faultCount() == 0, "Ctrl+Z : plus de faute");
+    // LE BANDEAU : un code a blocs VAR - Migrer ce code.
+    pane.selectScript(old.id);
+    check(pane.declBanner().shown() && pane.declBanner().text().find("Ancien format") == 0, "le bandeau : " + pane.declBanner().text());
+    pane.declBanner().migrate->emit();
+    const auto* migrated = doc->project.script(old.id);
+    check(migrated && migrated->decls.size() == 1 && migrated->decls[0].name == "Compte" && migrated->decls[0].description == "le compte des appels"
+              && migrated->body.find("VAR") == std::string::npos && !pane.declBanner().shown() && vars.count() == 1,
+          "Migrer ce code : Compte dans l'onglet Variables, son commentaire en documentation, le code sans VAR, le bandeau parti");
+    (void)stack.undo();
+    check(doc->project.script(old.id)->body == old.body && doc->project.script(old.id)->decls.empty(), "Ctrl+Z : le code d'avant, \xC3\xA0 l'octet");
+    // Un script C : les grilles ne s'appliquent pas, et le disent.
+    pane.selectScript(inC.id);
+    check(!consts.usable() && consts.hintBar().message().find("C ou C++") != std::string::npos, "un script C : " + consts.hintBar().message());
+    // LES FONCTIONS : Parametres, Locales, Constantes ; le modele sans VAR ; Aucun en retour.
+    app::HmiFunctionsPane fp("fn1118", doc, apply);
+    fp.setBounds({0, 0, 1400, 800});
+    fp.layout();
+    const Id carre = fp.addFunction("Carre", "REAL", "x au carr\xC3\xA9");
+    const auto* f = doc->project.function(carre);
+    check(f && f->body.find("VAR") == std::string::npos && f->decls.size() == 2 && f->decls[0].name == "Entree" && f->decls[1].name == "Resultat",
+          "une nouvelle fonction : son param\xC3\xA8tre et sa locale dans ses onglets, pas de VAR dans son code");
+    check(fp.codeTabs().tabCount() == 4 && fp.codeTabs().tab(1)->title == "Param\xC3\xA8tres" && fp.codeTabs().tab(2)->title == "Locales"
+              && fp.parametersGrid().count() == 1 && fp.localsGrid().count() == 1,
+          "l'\xC3\xA9" "diteur d'une fonction : Code, Param\xC3\xA8tres (1), Locales (1), Constantes");
+    check(fp.diagnostics().empty(), "le mod\xC3\xA8le se v\xC3\xA9rifie sans faute");
+    auto& params = fp.parametersGrid();
+    params.tools().triggered->emit(params.tools().actionByTip("Ajouter"));
+    params.table().finishCellEdit(true, "Facteur");
+    check(params.setCell(1, de::Column::Value, "2.0") && hmi::functionSignature(*doc->project.function(carre)).find("Facteur") != std::string::npos,
+          "un param\xC3\xA8tre Facteur (d\xC3\xA9" "faut 2.0) : la signature le dit");
+    params.selectRows({1});
+    check(params.moveSelected(-1) && doc->project.function(carre)->decls[0].name == "Facteur", "Alt+Haut : Facteur en t\xC3\xAAte (l'ordre est la signature)");
+    check(!fp.localsGrid().setCell(0, de::Column::Storage, "Conserv\xC3\xA9" "e"), "une locale Conserv\xC3\xA9" "e : refus\xC3\xA9" "e (une fonction n'a pas de m\xC3\xA9moire)");
+    check(fp.setReturnType(carre, "Aucun") && doc->project.function(carre)->returnType.empty(), "le retour Aucun : une proc\xC3\xA9" "dure");
+    // LES OPERATEURS : Locales, Constantes ; a, b, Resultat sont les leurs.
+    HmiType vec;
+    vec.id = doc->project.allocate();
+    vec.name = "T_VEC";
+    vec.members.push_back({"x", "REAL", "", ""});
+    doc->project.programs.types.push_back(vec);
+    app::HmiOperatorsPane ops("op1118", doc, apply, hmi::ownerOfType(*doc->project.hmiTypeByName("T_VEC")));
+    ops.setBounds({0, 0, 1400, 800});
+    ops.layout();
+    const Id plus = ops.addOperator("+", "T_VEC", "T_VEC", "T_VEC");
+    ops.selectOperator(plus);
+    check(ops.codeTabs().tabCount() == 3 && ops.codeTabs().tab(1)->title == "Locales" && ops.codeTabs().tab(2)->title == "Constantes",
+          "l'\xC3\xA9" "diteur d'un op\xC3\xA9rateur : Code, Locales, Constantes");
+    auto& locs = ops.localsGrid();
+    locs.tools().triggered->emit(locs.tools().actionByTip("Ajouter"));
+    locs.table().finishCellEdit(true, "a");
+    check(locs.count() == 1 && ops.lastMessage().find("op\xC3\xA9rateur") != std::string::npos, "une locale a : refus\xC3\xA9" "e (" + ops.lastMessage() + ")");
+    // Tout annuler : le projet d'avant (les identifiants pris restent pris).
+    while (stack.canUndo()) (void)stack.undo();
+    check(doc->project.programs.scripts == before.scripts, "tout annul\xC3\xA9 : les scripts d'avant");
+}
+
 int main(int argc, char** argv) {
     // 1.11.1 (API-V) : HMI_TEST_APIV=1 - la vue des variables de l'automate et API dans l'aide a la saisie, seules.
     if (const char* only = std::getenv("HMI_TEST_APIV"); only && *only == '1') {
@@ -26921,6 +27116,12 @@ int main(int argc, char** argv) {
         if (argc > 1) configuration_et_variables(argv[1]);
         if (argc > 1) apiVue1112_dupliquer(argv[1]);   // 1.11.2 (D13)
         if (argc > 1) valuePickerApi1113(argv[1]);     // 1.11.3 : le selecteur et les membres de l'automate
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
+    // 1.11.18 (refonte, lot 5) : HMI_TEST_LOT5=1 - les onglets de declarations, seuls.
+    if (const char* only = std::getenv("HMI_TEST_LOT5"); only && *only == '1') {
+        onglets1118();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -27242,6 +27443,7 @@ int main(int argc, char** argv) {
     apiVue1112_saisieConstante();           // 1.11.2 (API-V, decision 141) : L, pas L/E, pour une constante dans l'aide a la saisie
     saisieIcones1112();                     // 1.11.2 (API-V, decision 161) : l'icone (nature, provenance) devant chaque proposition
     jumeauValeurs1112();                    // 1.11.2 (BLK) : les valeurs du jumeau, 2 000 lignes, plus de n x n x n par image
+    onglets1118();                          // 1.11.18 (refonte, lot 5) : les onglets de declarations, Migrer ce code
     if (argc > 1) configuration_et_variables(argv[1]);
     if (argc > 1) aide_saisie_scripts(argv[1]);
     if (argc > 1) aide_saisie_champs(argv[1]);

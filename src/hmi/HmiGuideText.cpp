@@ -12469,7 +12469,34 @@ const std::vector<Topic>& topics() {
          "l'automate : VAR les garde d'une ex\xC3\xA9" "cution \xC3\xA0 l'autre, VAR_TEMP les remet \xC3\xA0 "
          "leur valeur initiale \xC3\xA0 chaque fois.",
          {
-             {K::Heading, "D\xC3\xA9" "clarer", {}},
+             {K::Heading, "Les onglets Constantes et Variables (1.11.18)", {}, "1.11.18"},
+             {K::Paragraph, "Depuis la 1.11.18, un script d\xC3\xA9" "clare ses constantes et ses variables dans les "
+                         "**onglets** de son \xC3\xA9" "diteur, \xC3\xA0 c\xC3\xB4t\xC3\xA9 de l'onglet Code : le code ne "
+                         "garde que sa logique. Le moteur lit les m\xC3\xAAmes d\xC3\xA9" "clarations que des blocs VAR "
+                         "\xC3\xA9" "crits : l'ex\xC3\xA9" "cution est la m\xC3\xAAme.", {}, "1.11.18"},
+             {K::Bullet, "**Constantes** : Nom, Type, Valeur, Visibilit\xC3\xA9, Utilisations, Documentation ;", {}, "1.11.18"},
+             {K::Bullet, "**Variables** : Nom, Type, Initiale, **Stockage**, Visibilit\xC3\xA9, Utilisations, "
+                         "Documentation. Le stockage dit la vie de la variable : **Ex\xC3\xA9" "cution** (remise "
+                         "\xC3\xA0 sa valeur initiale \xC3\xA0 chaque ex\xC3\xA9" "cution, l'ancien VAR_TEMP), "
+                         "**Conserv\xC3\xA9" "e** (gard\xC3\xA9" "e d'une ex\xC3\xA9" "cution \xC3\xA0 l'autre, l'ancien "
+                         "VAR), **Persistante** (gard\xC3\xA9" "e aussi d'un lancement \xC3\xA0 l'autre : avec la "
+                         "r\xC3\xA9manence de simulation, et sur le poste d'exploitation) ;", {}, "1.11.18"},
+             {K::Bullet, "on \xC3\xA9" "crit dans la case (double-clic, F2) ; le type, le stockage et la "
+                         "visibilit\xC3\xA9 se choisissent dans une liste ; Inser ajoute, Suppr supprime, Ctrl+D "
+                         "duplique ; chaque geste s'annule (Ctrl+Z) ;", {}, "1.11.18"},
+             {K::Bullet, "renommer une d\xC3\xA9" "claration renomme ses utilisations dans le code ; le bouton "
+                         "**Utilisations** y m\xC3\xA8ne, l'une apr\xC3\xA8s l'autre ; une d\xC3\xA9" "claration "
+                         "fautive a son nom en rouge, la raison en infobulle ;", {}, "1.11.18"},
+             {K::Bullet, "**Excel** : Ctrl+C copie les lignes choisies avec leurs titres ; Ctrl+V colle un "
+                         "tableau d'Excel (les colonnes reconnues par leur titre, en fran\xC3\xA7" "ais ou en "
+                         "anglais ; un nom existant mis \xC3\xA0 jour, un nouveau cr\xC3\xA9\xC3\xA9 ; un seul "
+                         "Ctrl+Z).", {}, "1.11.18"},
+             {K::Tip, "Un script qui d\xC3\xA9" "clare encore ses variables dans son texte a un bandeau "
+                         "au-dessus de son code : **Migrer ce code** les passe dans ses onglets (leurs "
+                         "commentaires deviennent leur documentation ; Ctrl+Z la reprend). Pour tout le "
+                         "projet : IHM \xE2\x80\xBA Compiler \xE2\x80\xBA **Migrer les d\xC3\xA9" "clarations\xE2\x80\xA6** "
+                         "(la version \xC2\xAB Avant migration des d\xC3\xA9" "clarations \xC2\xBB d'abord).", {}, "1.11.18"},
+             {K::Heading, "D\xC3\xA9" "clarer dans le code (l'ancien format, toujours lu)", {}},
              {K::Paragraph, "Les blocs de d\xC3\xA9" "claration se placent au d\xC3\xA9" "but du script :", {}},
              {K::Code, "VAR                        (* gard\xC3\xA9" "es d'une ex\xC3\xA9" "cution \xC3\xA0 "
                          "l'autre *)\n    Mini : REAL := 1000.0;\n    Maxi : REAL;\n    Tours : "
@@ -12526,7 +12553,7 @@ const std::vector<Topic>& topics() {
                          "EACH \xC2\xBB.", {}, "1.10"},
          },
          {"scripts", "fonctions", "variables-ihm", "aide-saisie", "tableaux-n", "map-iterateurs"},
-         {"VAR", "VAR_TEMP", "END_VAR", "RETAIN", "CONSTANT"},
+         {"VAR", "VAR_TEMP", "END_VAR", "RETAIN", "CONSTANT", "Constantes", "Stockage", "Persistante", "Migrer"},
          {},
          {{"PNG_181_script_variables_locales_barre.png", "Un script cyclique avec ses VAR (gard\xC3\xA9" "es) et sa VAR_TEMP ; la barre d\xC3\xA9" "crit la locale sous le curseur."}, {"PNG_182_bloc_var_types_proposes.png", "Dans un bloc VAR, apr\xC3\xA8s \xC2\xAB nom : \xC2\xBB, les types propos\xC3\xA9s."}},
          "",
@@ -12540,9 +12567,18 @@ const std::vector<Topic>& topics() {
          {
              {K::Heading, "Cr\xC3\xA9" "er une fonction", {}},
              {K::Paragraph, "Programmation g\xC3\xA9n\xC3\xA9rale \xE2\x80\xBA **Fonctions** \xE2\x80\xBA "
-                         "**Nouvelle fonction** : son nom, son **type de retour** (ou \xC2\xAB (aucun) "
+                         "**Nouvelle fonction** : son nom, son **type de retour** (ou \xC2\xAB Aucun "
                          "\xC2\xBB pour une proc\xC3\xA9" "dure) et une description. Le corps part d'un "
                          "mod\xC3\xA8le \xC3\xA0 compl\xC3\xA9ter.", {}},
+             {K::Heading, "Les onglets de la fonction (1.11.18)", {}, "1.11.18"},
+             {K::Paragraph, "\xC3\x80 c\xC3\xB4t\xC3\xA9 du Code : **Param\xC3\xA8tres** (Nom, Type, Mode, "
+                         "D\xC3\xA9" "faut, Documentation - l'ordre est la signature : Alt+Haut et Alt+Bas le "
+                         "changent), **Locales** (elles repartent \xC3\xA0 chaque appel) et **Constantes**. Une "
+                         "nouvelle fonction y re\xC3\xA7oit son param\xC3\xA8tre d'exemple et sa locale Resultat : "
+                         "son code n'a plus de bloc VAR. Le mode : Entr\xC3\xA9" "e (lue), Entr\xC3\xA9" "e/sortie "
+                         "(la variable de l'appelant est \xC3\xA9" "crite), Sortie ; un d\xC3\xA9" "faut rend le "
+                         "param\xC3\xA8tre facultatif. Les blocs VAR_INPUT d'une fonction d'avant sont toujours "
+                         "lus, et \xC2\xAB Migrer ce code \xC2\xBB les passe dans les onglets.", {}, "1.11.18"},
              {K::Code, "(* Moyenne pond\xC3\xA9r\xC3\xA9" "e des pressions de deux armoires, en bar "
                          "*)\nVAR_INPUT\n    A : REAL;\n    B : REAL;\n    Poids_A : REAL := 0.5;   (* "
                          "facultatif : 0.5 par d\xC3\xA9" "faut *)\nEND_VAR\nVAR_TEMP\n    Somme : "
@@ -12561,12 +12597,13 @@ const std::vector<Topic>& topics() {
                          "cadre, choisit la tienne (l'aide la garde pour tous les exemples). Les scripts de "
                          "l'IHM s'\xC3\xA9" "crivent en ST : le C et le C++ disent la m\xC3\xAAme chose "
                          "\xC3\xA0 qui les conna\xC3\xAEt mieux.", {}},
-             {K::Bullet, "les **param\xC3\xA8tres** sont les VAR_INPUT, dans l'ordre ; un param\xC3\xA8tre "
-                         "avec `:=` est facultatif ;", {}},
+             {K::Bullet, "les **param\xC3\xA8tres** (l'onglet Param\xC3\xA8tres, ou les VAR_INPUT d'un code "
+                         "d'avant) se lisent dans l'ordre ; un param\xC3\xA8tre avec un d\xC3\xA9" "faut est "
+                         "facultatif ;", {}},
              {K::Bullet, "le **r\xC3\xA9sultat** s'affecte au nom de la fonction ; une fonction avec retour "
                          "qui ne l'affecte jamais est signal\xC3\xA9" "e ;", {}},
-             {K::Bullet, "une fonction **n'a pas de m\xC3\xA9moire** : ses VAR et VAR_TEMP repartent "
-                         "\xC3\xA0 chaque appel.", {}},
+             {K::Bullet, "une fonction **n'a pas de m\xC3\xA9moire** : ses locales (et les VAR, VAR_TEMP "
+                         "d'un code d'avant) repartent \xC3\xA0 chaque appel.", {}},
              {K::Heading, "Appeler une fonction", {}},
              {K::Code, "Resultat := Moyenne_Pression(12.0, 20.0);                   (* par position "
                          "*)\nResultat := Moyenne_Pression(B := 20.0, A := 12.0);         (* par nom "

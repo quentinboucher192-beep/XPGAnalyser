@@ -1,4 +1,5 @@
 #include "HmiPanes.hpp"
+#include "../../hmi/HmiMigrate.hpp"   // 1.11.18 (lot 5) : des blocs VAR a migrer ?
 #include "../../hmi/HmiDuplicate.hpp"   // 1.10.4 : "Remplacer..." ; 1.11 (REP) : le constat d'un repere qui n'est pas une variable
 #include "../../hmi/HmiDesign.hpp"
 #include "../../hmi/HmiTemplates.hpp"
@@ -993,8 +994,16 @@ HmiReportPane::HmiReportPane(std::string id, hmi::DocumentPtr doc, Mode mode, hm
                    "Remplacer\xE2\x80\xA6 : le rep\xC3\xA8re de l'objet choisi ($Vanne$, qui n'est pas une variable) - Dupliquer "
                    "s'ouvre avec 0 copie pour le remplir dans l'original (Ctrl+Z le rend)",
                    "Remplacer\xE2\x80\xA6");
+    // 1.11.18 (refonte, lot 5) : les blocs VAR qui restent dans le texte des codes - leur migration.
+    if (mode_ == Mode::Compile)
+        tools->add(3, HmiGlyph::Refresh,
+                   "Migrer les d\xC3\xA9" "clarations\xE2\x80\xA6 : des codes d\xC3\xA9" "clarent encore leurs variables dans leur texte "
+                   "(VAR \xE2\x80\xA6 END_VAR) - le rapport, les codes \xC3\xA0 cocher, une version d'abord, un seul Ctrl+Z",
+                   "Migrer les d\xC3\xA9" "clarations\xE2\x80\xA6");
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
     if (mode_ == Mode::Compile) tools_->setEnabledWhen(2, [this] { return canReplace(); });
+    if (mode_ == Mode::Compile) tools_->setVisibleWhen(3, [this] { return legacy_; });
+    legacy_ = doc_ && hmi::migrate::needed(doc_->project);
     auto table = std::make_unique<ui::TableView>(this->id() + ".table");
     table->setColumns({{"Gravit\xC3\xA9", 165.f}, {"Cat\xC3\xA9gorie", 110.f}, {"Vue", 170.f}, {"Objet", 170.f},
                        {"Propri\xC3\xA9t\xC3\xA9 / script", 190.f}, {"Message", 540.f}});
@@ -1003,6 +1012,7 @@ HmiReportPane::HmiReportPane(std::string id, hmi::DocumentPtr doc, Mode mode, hm
     status_ = &static_cast<ui::StatusBar&>(addChild(std::make_unique<ui::StatusBar>(this->id() + ".status")));
     links_ += tools_->triggered->connect([this](int action) {
         if (action == 2) replaceSelected();      // 1.10.4
+        else if (action == 3) migrateRequested->emit();   // 1.11.18 (lot 5)
         else run();
     });
     links_ += table_->activated->connect([this](ui::RowIndex r) {
@@ -1031,6 +1041,7 @@ bool HmiReportPane::replaceSelected() {
 
 void HmiReportPane::run() {
     const auto t0 = std::chrono::steady_clock::now();
+    legacy_ = doc_ && hmi::migrate::needed(doc_->project);   // 1.11.18 (lot 5) : le bouton Migrer
     if (mode_ == Mode::Generate) {
         // Lot 13 : les textes qui debordent se mesurent avec les polices de l'ecran.
         hmi::GenerateOptions opt;

@@ -753,6 +753,9 @@ private:
     void askHmiStyle(std::uint64_t viewId);   // lot 12 : "Creer un style" (son nom)
     void askHmiDuplicate(std::uint64_t viewId);   // 1.10.2 (chantier D) : "Dupliquer..." (reperes, indices, pose)
     void askHmiDuplicateReplace(std::uint64_t viewId);   // lot 12 : "Dupliquer en remplacant"
+    // 1.11.18 (refonte des scripts, lot 5) : "Migrer les declarations..." (IHM > Compiler) - le
+    // rapport et les codes a cocher, la version "Avant migration des declarations", une commande.
+    void askHmiMigrateDeclarations();
     void askHmiViewFromType();                           // lot 12 : "Depuis un type" (DDT, DFB)
     // Les dialogues des volets Ressources et Fichiers externes (HmiWorkspace.cpp).
     void askHmiImportResource();

@@ -250,7 +250,9 @@ private:
                 std::optional<hmi::HmiFunction> fn = spec_.function;
                 if (fn) fn->body = code;
                 auto d = fn ? hmi::checkFunction(*fn, knownType) : hmi::checkScript(hmi::ScriptLang::ST, code, "action", knownType);
-                const auto placed = placedScriptDiagnostics(p, code, view_, fn ? &*fn : nullptr, spec_.plc.get());
+                // 1.11.18 (lot 5) : une redefinition - ses declarations du modele (sa ligne 1, comme le moteur).
+                const auto placed = placedScriptDiagnostics(p, code, view_, fn ? &*fn : nullptr, spec_.plc.get(), nullptr,
+                                                            fn && !fn->decls.empty() ? &fn->decls : nullptr);
                 for (const auto& pp : hmi::types::pathProblems(p, code)) {
                     const bool said = std::any_of(placed.begin(), placed.end(), [&](const hmi::ScriptDiagnostic& x) {
                         return x.line == pp.line && x.message == pp.message;

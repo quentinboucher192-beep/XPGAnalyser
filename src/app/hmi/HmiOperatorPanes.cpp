@@ -40,7 +40,12 @@ protected:
         // La legende : sa hauteur voulue, sans manger plus de la moitie du script.
         const float legend = children()[1]->visible() ? std::min(legendHeight(*children()[1]), std::max(48.f, b.h * 0.5f)) : 0.f;
         children()[1]->setBounds({b.x, b.y + kBar + 2.f, b.w, legend});
-        const float top = b.y + kBar + 2.f + (legend > 0.f ? legend + 2.f : 0.f);
+        float top = b.y + kBar + 2.f + (legend > 0.f ? legend + 2.f : 0.f);
+        // 1.11.18 (refonte, lot 5) : le bandeau de l'ancien format, juste au-dessus du code.
+        if (children().size() > 4 && children()[4]->visible()) {
+            children()[4]->setBounds({b.x, top, b.w, HmiDeclBanner::kHeight});
+            top += HmiDeclBanner::kHeight;
+        }
         children()[2]->setBounds({b.x, top, b.w, std::max(0.f, b.bottom() - kBar - 2.f - top)});
         children()[3]->setBounds({b.x, b.bottom() - kBar, b.w, kBar});
     }
@@ -299,7 +304,11 @@ HmiOperatorsPane::HmiOperatorsPane(std::string id, hmi::DocumentPtr doc, Apply a
         auto bar = std::make_unique<ui::StatusBar>(base + ".symbol");
         bar->setTooltip("Le nom o\xC3\xB9 est le curseur : a, b, Resultat, une locale, une variable IHM ou de l'automate.");
         symbolBar_ = &static_cast<ui::StatusBar&>(area->addChild(std::move(bar)));
-        panel->setBody(std::move(area));
+        // 1.11.18 (refonte, lot 5) : Code, Locales, Constantes ; le bandeau de l'ancien format.
+        banner_ = &static_cast<HmiDeclBanner&>(area->addChild(std::make_unique<HmiDeclBanner>(base + ".declBanner")));
+        codeTabs_ = &static_cast<HmiCodeTabs&>(panel->setBody(std::make_unique<HmiCodeTabs>(
+            base + ".codeTabs", doc_, apply_, std::move(area), std::vector{hmi::decledit::Tab::Variables, hmi::decledit::Tab::Constants},
+            banner_)));
         editorPanel_ = panel.get();
         right->addPane(std::move(panel), 0.74f, 120.f);
     }
@@ -367,7 +376,12 @@ HmiOperatorsPane::HmiOperatorsPane(std::string id, hmi::DocumentPtr doc, Apply a
     links_ += diagTable_->selectionChanged->connect([this](const std::vector<ui::RowIndex>& rows) {
         if (rows.empty() || rows.front() >= diagnostics_.size()) return;
         const int line = diagnostics_[rows.front()].line;
-        if (line > 0) editor_->goToLine(static_cast<std::size_t>(line - 1));
+        if (line > 0) {
+            showCodeTab(CodeTabCode);
+            editor_->goToLine(static_cast<std::size_t>(line - 1));
+        } else if (const auto name = declarationNamed(diagnostics_[rows.front()].message); !name.empty()) {
+            (void)showDeclaration(name);      // 1.11.18 (lot 5) : la faute d'une declaration, dans son onglet
+        }
     });
     links_ += editor_->textChanged->connect([this](const std::string& text) {
         if (syncing_) return;
@@ -383,6 +397,10 @@ HmiOperatorsPane::HmiOperatorsPane(std::string id, hmi::DocumentPtr doc, Apply a
         symbolLine_ = symbol.empty() || d.keyword ? std::string{} : d.found ? d.line : symbol + "  \xE2\x80\x94  inconnu ici";
         symbolBar_->setMessage(symbolLine_);
     });
+    // 1.11.18 (lot 5) : les grilles parlent dans la barre du volet ; leurs utilisations menent au code.
+    links_ += codeTabs_->message->connect([this](const std::string& t, bool warning) { say(t, warning); });
+    links_ += codeTabs_->usesRequested->connect([this](const std::string& name) { (void)goToNextUse(name); });
+    links_ += codeTabs_->migrateRequested->connect([this] { (void)migrateCurrent(); });
     links_ += doc_->changed->connect([this](Id) { refresh(); });
     // 1.10.1 (U2) : l'aide a la saisie, des la creation (le volet des types IHM ne la
     // branchait pas) : le programme de l'automate pose par l'ecran ; a, b, Resultat.
@@ -446,6 +464,7 @@ void HmiOperatorsPane::goTo(Id op, int line) {
     if (hmi::operatorById(doc_->project, op, &who) && (who.kind != owner_.kind || who.id != owner_.id)) setOwner(who);
     selectOperator(op);
     if (line > 0) {
+        showCodeTab(CodeTabCode);             // 1.11.18 (lot 5) : le code, pas une grille
         editor_->goToLine(static_cast<std::size_t>(line - 1));
         for (std::size_t i = 0; i < diagnostics_.size(); ++i)
             if (diagnostics_[i].line == line) { hmiSelectModelRow(*diagTable_, i); break; }
@@ -569,7 +588,53 @@ void HmiOperatorsPane::showSelected() {
     }
     rebuildProperties();
     updateDiagnostics();
+    codeTabs_->setPlace(currentPlace(), "Choisis un op\xC3\xA9rateur.");   // 1.11.18 (lot 5) : ses onglets
 }
+
+// ---- 1.11.18 (refonte des scripts, lot 5) : les onglets de l'operateur ----
+std::optional<hmi::decledit::Place> HmiOperatorsPane::currentPlace() const {
+    const auto* o = current();
+    if (!o || !owner_.valid()) return std::nullopt;
+    hmi::decledit::Place at;
+    if (owner_.kind == hmi::OperatorOwner::Kind::Type) {
+        at.kind = hmi::decledit::Place::Kind::TypeOperator;
+        at.type = owner_.id;
+    } else {
+        at.kind = hmi::decledit::Place::Kind::SymbolOperator;
+        at.view = owner_.id;
+    }
+    at.id = o->id;
+    at.label = "op\xC3\xA9rateur " + hmi::operatorSignature(*o) + " (" + owner_.name + ")";
+    return at;
+}
+
+void HmiOperatorsPane::showCodeTab(std::size_t tab) {
+    if (codeTabs_ && tab < codeTabs_->tabCount()) codeTabs_->setCurrentIndex(tab);
+}
+
+std::size_t HmiOperatorsPane::currentCodeTab() const noexcept { return codeTabs_ ? codeTabs_->currentIndex() : 0; }
+
+bool HmiOperatorsPane::migrateCurrent() {
+    const auto at = currentPlace();
+    if (!at) {
+        say("Migrer : aucun op\xC3\xA9rateur choisi.", true);
+        return false;
+    }
+    std::string report;
+    const bool ok = migrateOne(doc_, apply_, *at, &report);
+    say(report, !ok);
+    return ok;
+}
+
+bool HmiOperatorsPane::goToNextUse(const std::string& name) {
+    showCodeTab(CodeTabCode);
+    std::string said;
+    const bool ok = selectNextUse(*editor_, name, &said);
+    say(said, !ok);
+    return ok;
+}
+
+bool HmiOperatorsPane::showDeclaration(const std::string& name) { return codeTabs_->showDeclaration(name); }
 
 std::string HmiOperatorsPane::legendText() const {
     const auto* o = current();

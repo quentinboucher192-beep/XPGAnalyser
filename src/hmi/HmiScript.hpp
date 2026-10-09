@@ -190,7 +190,11 @@ std::size_t renameFunctionEverywhere(Project&, std::string_view from, std::strin
                                                       std::string_view to);
 // Le corps d'une nouvelle fonction : un en-tete, un parametre d'exemple et,
 // si elle rend une valeur, l'affectation de son nom.
+// 1.11.18 (refonte, lot 5) : SANS BLOC VAR - le parametre d'exemple (Entree, du type du
+// retour ; Message : STRING pour une procedure) et la locale Resultat sont des
+// declarations du modele (functionTemplateDecls), dans les onglets de la fonction.
 [[nodiscard]] std::string functionTemplate(std::string_view name, std::string_view returnType,
                                            std::string_view description);
+[[nodiscard]] std::vector<Declaration> functionTemplateDecls(std::string_view returnType);
 
 } // namespace hmi

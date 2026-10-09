@@ -21,10 +21,13 @@
 #include "../src/app/hmi/HmiTreeData.hpp"     // hmitree::withoutDeclarations : relu par hmi::decl
 #include "../src/hmi/HmiCommands.hpp"
 #include "../src/hmi/HmiDecl.hpp"
+#include "../src/hmi/HmiDeclEdit.hpp"     // 1.11.18 (lot 5) : editer les declarations
 #include "../src/hmi/HmiDesign.hpp"
 #include "../src/hmi/HmiEnums.hpp"
 #include "../src/hmi/HmiModel.hpp"
 #include "../src/hmi/HmiPipeline.hpp"
+#include "../src/hmi/HmiRetain.hpp"       // 1.11.18 (lot 5) : la remanence d'exploitation (Persistante)
+#include "../src/hmi/HmiSimData.hpp"      // 1.11.18 (lot 5) : la remanence de simulation (Persistante)
 #include "../src/hmi/HmiRuntime.hpp"
 #include "../src/hmi/HmiScript.hpp"
 #include "../src/hmi/HmiScriptCheck.hpp"
@@ -43,6 +46,7 @@
 
 using namespace hmi;
 namespace dc = hmi::decl;
+namespace de = hmi::decledit;
 namespace hmitree = app::hmitree;
 namespace hmikit = app::hmikit;
 
@@ -1222,7 +1226,399 @@ void corpusProject(const std::string& folder, Tally& t) {
     check(count > 0, folder + " : " + std::to_string(count) + " codes ST");
 }
 
+const Declaration* declNamed(const std::vector<Declaration>& list, std::string_view name) {
+    for (const auto& d : list)
+        if (d.name == name) return &d;
+    return nullptr;
+}
+
+void edition() {
+    std::printf("-- lot 5 : editer les declarations (hmi::decledit)\n");
+    using K = de::Place::Kind;
+    // Les sept porteurs : chacun se retrouve, avec son role et ses onglets.
+    {
+        Project p = fivePlaces();
+        const View* sym = nullptr;
+        const View* use = nullptr;
+        for (const auto& v : p.views) (v.name == "Vanne" ? sym : use) = &v;
+        const de::Place script{K::Script, kNoId, kNoId, kNoId, p.programs.scripts[0].id, {}, {}};
+        const de::Place fn{K::Function, kNoId, kNoId, kNoId, p.programs.functions[0].id, {}, {}};
+        const de::Place op{K::TypeOperator, kNoId, kNoId, p.programs.types[0].id, p.programs.types[0].operators[0].id, {}, {}};
+        const de::Place sfn{K::SymbolFunction, sym->id, kNoId, kNoId, sym->functions[0].id, {}, {}};
+        const de::Place vs{K::ViewScript, sym->id, kNoId, kNoId, sym->scripts[0].id, {}, {}};
+        const de::Place sop{K::SymbolOperator, sym->id, kNoId, kNoId, sym->operators[0].id, {}, {}};
+        const de::Place ov{K::Override, use->id, use->objects[0].id, kNoId, kNoId, "Ouvrir", {}};
+        const auto tabs = [&](const de::Place& at) {
+            std::string out;
+            for (const auto t : de::tabsOf(de::locate(p, at))) out += de::tabLabel(t, de::locate(p, at).role) + " ";
+            return out;
+        };
+        check(tabs(script) == "Constantes Variables " && tabs(vs) == "Constantes Variables ", "un script : Constantes, Variables (" + tabs(script) + ")");
+        check(tabs(fn) == "Param\xC3\xA8tres Locales Constantes " && tabs(sfn) == tabs(fn), "une fonction : Parametres, Locales, Constantes (" + tabs(fn) + ")");
+        check(tabs(op) == "Locales Constantes " && tabs(sop) == tabs(op), "un operateur : Locales, Constantes (" + tabs(op) + ")");
+        check(tabs(ov) == "Locales Constantes " && de::locate(p, ov).inherited && de::locate(p, ov).inherited->size() == 1,
+              "une redefinition : Locales, Constantes ; les parametres de sa fonction (" + tabs(ov) + ")");
+        check(!de::locate(p, de::Place{K::Script, kNoId, kNoId, kNoId, 999999, {}, {}}).valid(), "un code introuvable : invalide");
+        Script c;
+        c.id = p.allocate();
+        c.name = "EnC";
+        c.lang = ScriptLang::C;
+        p.programs.scripts.push_back(c);
+        const de::Place cs{K::Script, kNoId, kNoId, kNoId, c.id, {}, {}};
+        std::string why;
+        check(de::tabsOf(de::locate(p, cs)).empty() && !de::add(p, cs, de::Tab::Variables, -1, {}, nullptr, &why)
+                  && why.find("C ou C++") != std::string::npos,
+              "un script C : aucun onglet, rien a declarer (" + why + ")");
+
+        // AJOUTER : un nom libre, les valeurs par defaut, la visibilite du porteur.
+        Id made = kNoId;
+        check(de::add(p, script, de::Tab::Constants, -1, {}, &made, &why) && made != kNoId, "ajouter une constante au script");
+        const auto* k1 = declNamed(p.programs.scripts[0].decls, "Constante");
+        check(k1 && k1->id == made && k1->type == "REAL" && k1->value == "0.0" && k1->visibility == Visibility::Public && k1->kind == DeclKind::Constant,
+              "la constante neuve : Constante REAL 0.0 Public");
+        check(de::rowsOf(p.programs.scripts[0].decls, de::Tab::Constants).size() == 2
+                  && p.programs.scripts[0].decls[1].name == "Constante",
+              "... rangee apres la derniere constante (les genres restent groupes)");
+        check(de::add(p, script, de::Tab::Constants, -1, {}, nullptr, &why) && declNamed(p.programs.scripts[0].decls, "Constante2"),
+              "la suivante : Constante2");
+        check(!de::add(p, script, de::Tab::Constants, -1, "max", nullptr, &why) && why.find("d\xC3\xA9j\xC3\xA0") != std::string::npos,
+              "un nom pris (sans casse) : refuse (" + why + ")");
+        check(!de::add(p, script, de::Tab::Variables, -1, "IF", nullptr, &why) && why.find("r\xC3\xA9serv") != std::string::npos,
+              "un mot reserve : refuse (" + why + ")");
+        check(!de::add(p, script, de::Tab::Variables, -1, "2x", nullptr, &why) && why.find("illisible") != std::string::npos,
+              "un nom illisible : refuse (" + why + ")");
+        check(!de::add(p, script, de::Tab::Parameters, -1, {}, nullptr, &why) && why.find("param\xC3\xA8tre") != std::string::npos,
+              "un parametre dans un script : refuse (" + why + ")");
+        check(!de::add(p, ov, de::Tab::Parameters, -1, {}, nullptr, &why), "un parametre dans une redefinition : refuse");
+        check(!de::add(p, ov, de::Tab::Variables, -1, "Pct", nullptr, &why) && why.find("red\xC3\xA9" "finie") != std::string::npos,
+              "une locale de redefinition au nom d'un parametre de sa fonction : refusee (" + why + ")");
+        check(!de::add(p, fn, de::Tab::Variables, -1, "moyenne", nullptr, &why) && why.find("nom de la fonction") != std::string::npos,
+              "une locale au nom de la fonction : refusee (" + why + ")");
+        check(!de::add(p, op, de::Tab::Variables, -1, "A", nullptr, &why) && !de::add(p, op, de::Tab::Constants, -1, "Resultat", nullptr, &why)
+                  && !de::add(p, op, de::Tab::Constants, -1, "ADD", nullptr, &why),
+              "un operateur : a, b, Resultat et ADD sont les siens");
+        check(de::add(p, fn, de::Tab::Variables, -1, {}, &made, &why), "ajouter une locale a la fonction");
+        const auto* loc = declNamed(p.programs.functions[0].decls, "Locale");
+        check(loc && loc->visibility == Visibility::Private && loc->storage == Storage::Execution && loc->type == "INT",
+              "la locale neuve : Locale INT Execution, Privee (une locale reste locale)");
+        check(de::add(p, fn, de::Tab::Parameters, 0, {}, &made, &why) && p.programs.functions[0].decls[1].name == "Parametre",
+              "un parametre apres la premiere ligne : a la deuxieme place");
+        // Un bloc VAR encore dans le code : son nom est pris.
+        p.programs.scripts[0].body = "VAR Vieux : INT; END_VAR\nCompteur := Compteur + 1;\n";
+        check(!de::add(p, script, de::Tab::Variables, -1, "Vieux", nullptr, &why) && why.find("bloc VAR") != std::string::npos,
+              "un nom encore declare dans un bloc VAR du code : refuse (" + why + ")");
+        p.programs.scripts[0].body = "Compteur := Compteur + 1;\n";
+    }
+    // RENOMMER : le code suit (ni commentaire, ni chaine, ni membre, ni argument nomme).
+    {
+        Project p;
+        Script s;
+        s.id = p.allocate();
+        s.name = "Calcul";
+        s.body = "Compteur := Compteur + 1; (* Compteur *)\nMsg := 'Compteur';\nx.Compteur := Compteur;\nF(Compteur := 2);\nG(Compteur => y);\n"
+                 "Mode := E_Mode#Compteur;\n";
+        s.decls = {declared(DeclKind::Variable, "Compteur", "INT", "0", Storage::Kept), declared(DeclKind::Constant, "Pas", "INT", "Compteur * 2"),
+                   declared(DeclKind::Variable, "Libre", "INT")};
+        p.programs.scripts.push_back(s);
+        uniqueDeclarationIds(p);
+        const de::Place at{K::Script, kNoId, kNoId, kNoId, s.id, {}, {}};
+        const auto uses = de::usesIn(s.body, "compteur");
+        check(uses.size() == 3 && uses[0].line == 1 && uses[0].column == 1 && uses[1].column == 13 && uses[2].line == 3 && uses[2].column == 15,
+              "les utilisations : 3 (1:1, 1:13, 3:15) - ni le commentaire, ni la chaine, ni le membre, ni les arguments nommes, ni E_Mode#Compteur");
+        check(de::usageCount(de::locate(p, at), 0) == 4, "le compte : 3 dans le code, 1 dans la valeur d'une autre declaration");
+        std::string why;
+        check(de::set(p, at, de::Tab::Variables, 0, de::Column::Name, " Total ", &why), "renommer Compteur en Total : " + why);
+        const auto& b = p.programs.scripts[0].body;
+        check(b == "Total := Total + 1; (* Compteur *)\nMsg := 'Compteur';\nx.Compteur := Total;\nF(Compteur := 2);\nG(Compteur => y);\n"
+                   "Mode := E_Mode#Compteur;\n",
+              "le code suit, le reste ne bouge pas :\n" + b);
+        check(p.programs.scripts[0].decls[1].value == "Total * 2" && p.programs.scripts[0].decls[0].name == "Total",
+              "la valeur d'une autre declaration suit");
+        // Un nom que le code emploie deja pour autre chose : la declaration employee ne le prend pas.
+        p.programs.scripts[0].body += "Niveau := Total;\n";
+        check(!de::set(p, at, de::Tab::Variables, 0, de::Column::Name, "Niveau", &why) && why.find("confondrait") != std::string::npos,
+              "renommer vers un nom deja employe : refuse (" + why + ")");
+        check(de::set(p, at, de::Tab::Variables, 1, de::Column::Name, "Niveau", &why) && p.programs.scripts[0].decls[2].name == "Niveau",
+              "une declaration jamais employee peut le prendre (c'est la declarer) : " + why);
+        check(de::set(p, at, de::Tab::Variables, 0, de::Column::Name, "TOTAL", &why) && p.programs.scripts[0].body.find("TOTAL := TOTAL + 1;") == 0,
+              "changer la casse : le code suit");
+        // Les trous d'IHM_JOURNAL et d'IHM_LOG lisent les variables du code : ils suivent aussi.
+        p.programs.scripts[0].body = "TOTAL := TOTAL + 1;\nIHM_JOURNAL('total {TOTAL} ({TOTAL:0.0} ; {{TOTAL}} ; {x.TOTAL})');\n"
+                                     "IHM_LOG(INFO, 'fois : {TOTAL * 2}');\nMsg := '{TOTAL}';\n";
+        const auto holes = de::usesIn(p.programs.scripts[0].body, "Total");
+        check(holes.size() == 5 && holes[2].line == 2 && holes[2].column == 21 && holes[3].column == 30 && holes[4].line == 3,
+              "les utilisations : le code (2) et les trous de IHM_JOURNAL (2) et d'IHM_LOG (1) - ni {{...}}, ni un membre, ni une autre chaine ("
+                  + std::to_string(holes.size()) + ")");
+        check(de::set(p, at, de::Tab::Variables, 0, de::Column::Name, "Cumul", &why)
+                  && p.programs.scripts[0].body == "Cumul := Cumul + 1;\nIHM_JOURNAL('total {Cumul} ({Cumul:0.0} ; {{TOTAL}} ; {x.TOTAL})');\n"
+                                                    "IHM_LOG(INFO, 'fois : {Cumul * 2}');\nMsg := '{TOTAL}';\n",
+              "renommer : les trous suivent, le reste ne bouge pas\n" + p.programs.scripts[0].body);
+    }
+    // Le parametre d'une fonction de symbole : ses redefinitions le lisent aussi.
+    {
+        Project p = fivePlaces();
+        for (auto& v : p.views)
+            for (auto& o : v.objects)
+                for (auto& fo : o.functionOverrides) fo.body = "Ouvert := Pct > 50;\n";
+        const View* sym = nullptr;
+        for (const auto& v : p.views)
+            if (v.name == "Vanne") sym = &v;
+        const de::Place sfn{K::SymbolFunction, sym->id, kNoId, kNoId, sym->functions[0].id, {}, {}};
+        std::string why;
+        check(de::set(p, sfn, de::Tab::Parameters, 0, de::Column::Name, "Pourcent", &why), "renommer le parametre Pct : " + why);
+        std::string bodies;
+        for (const auto& v : p.views) {
+            for (const auto& f : v.functions) bodies += f.body;
+            for (const auto& o : v.objects)
+                for (const auto& fo : o.functionOverrides) bodies += fo.body;
+        }
+        check(bodies == "Ouvert := Pourcent > 0;\nOuvert := Pourcent > 50;\n", "la fonction et sa redefinition suivent :\n" + bodies);
+    }
+    // LES CASES : le type, le stockage, le mode, la visibilite, la valeur, la documentation.
+    {
+        Project p = fivePlaces();
+        const de::Place script{K::Script, kNoId, kNoId, kNoId, p.programs.scripts[0].id, {}, {}};
+        const de::Place fn{K::Function, kNoId, kNoId, kNoId, p.programs.functions[0].id, {}, {}};
+        auto& sd = p.programs.scripts[0].decls;
+        std::string why;
+        check(de::set(p, script, de::Tab::Variables, 0, de::Column::Type, "dint", &why) && sd[1].type == "DINT", "le type : dint -> DINT");
+        check(de::set(p, script, de::Tab::Variables, 0, de::Column::Type, "t_vec", &why) && sd[1].type == "T_VEC", "un type IHM : t_vec -> T_VEC");
+        check(de::set(p, script, de::Tab::Variables, 0, de::Column::Type, "ARRAY[1..3] OF INT", &why) && sd[1].type == "ARRAY[1..3] OF INT",
+              "un tableau : accepte");
+        check(!de::set(p, script, de::Tab::Variables, 0, de::Column::Type, "BIDULE", &why) && sd[1].type == "ARRAY[1..3] OF INT"
+                  && why.find("BIDULE") != std::string::npos,
+              "un type inconnu : refuse, la case ne bouge pas (" + why + ")");
+        check(de::set(p, script, de::Tab::Variables, 0, de::Column::Storage, "VAR_TEMP", &why) && sd[1].storage == Storage::Execution
+                  && de::set(p, script, de::Tab::Variables, 0, de::Column::Storage, "retain", &why) && sd[1].storage == Storage::Kept
+                  && de::set(p, script, de::Tab::Variables, 0, de::Column::Storage, "PERSISTANTE", &why) && sd[1].storage == Storage::Persistent
+                  && de::set(p, script, de::Tab::Variables, 0, de::Column::Storage, "Ex\xC3\xA9" "cution", &why) && sd[1].storage == Storage::Execution,
+              "le stockage : VAR_TEMP, retain, PERSISTANTE, Execution (accentue)");
+        check(!de::set(p, script, de::Tab::Variables, 0, de::Column::Storage, "parfois", &why), "un stockage inconnu : refuse");
+        check(!de::set(p, fn, de::Tab::Variables, 0, de::Column::Storage, "Conserv\xC3\xA9" "e", &why) && why.find("m\xC3\xA9moire") != std::string::npos,
+              "une locale de fonction Conservee : refusee (" + why + ")");
+        auto& fd = p.programs.functions[0].decls;
+        check(de::set(p, fn, de::Tab::Parameters, 0, de::Column::Mode, "IN_OUT", &why) && fd[0].mode == PassMode::InOut
+                  && de::set(p, fn, de::Tab::Parameters, 0, de::Column::Mode, "E/S", &why) && fd[0].mode == PassMode::InOut
+                  && de::set(p, fn, de::Tab::Parameters, 0, de::Column::Mode, "sortie", &why) && fd[0].mode == PassMode::Out
+                  && de::set(p, fn, de::Tab::Parameters, 0, de::Column::Mode, "Entr\xC3\xA9" "e", &why) && fd[0].mode == PassMode::In,
+              "le mode : IN_OUT, E/S, sortie, Entree");
+        check(!de::set(p, script, de::Tab::Variables, 0, de::Column::Mode, "IN", &why), "un mode sur une variable : refuse");
+        check(de::set(p, script, de::Tab::Constants, 0, de::Column::Visibility, "priv\xC3\xA9" "e", &why) && sd[0].visibility == Visibility::Private
+                  && de::set(p, script, de::Tab::Constants, 0, de::Column::Visibility, "Public", &why) && sd[0].visibility == Visibility::Public,
+              "la visibilite : privee, Public");
+        check(de::add(p, fn, de::Tab::Variables, -1, {}, nullptr, &why) && !de::set(p, fn, de::Tab::Variables, 1, de::Column::Visibility, "Public", &why)
+                  && why.find("locale") != std::string::npos,
+              "une locale de fonction (privee) rendue publique : refusee (" + why + ")");
+        check(!de::set(p, script, de::Tab::Constants, 0, de::Column::Value, "  ", &why) && sd[0].value == "10", "une constante sans valeur : refusee");
+        check(de::set(p, script, de::Tab::Variables, 1, de::Column::Value, "", &why) && sd[2].value.empty(), "une variable sans valeur initiale : permise");
+        check(de::set(p, script, de::Tab::Constants, 0, de::Column::Description, "la borne\nhaute\t(bar)", &why) && sd[0].description == "la borne haute (bar)",
+              "la documentation : sur une ligne");
+        // Les libelles se relisent.
+        bool round = true;
+        for (const auto s : {Storage::Execution, Storage::Kept, Storage::Persistent}) round = round && de::storageFromText(de::storageLabel(s)) == s;
+        for (const auto m : {PassMode::In, PassMode::InOut, PassMode::Out}) round = round && de::modeFromText(de::modeLabel(m)) == m;
+        for (const auto v : {Visibility::Public, Visibility::Private}) round = round && de::visibilityFromText(de::visibilityLabel(v)) == v;
+        for (const auto s : {Storage::Execution, Storage::Kept, Storage::Persistent}) round = round && de::storageFromText(storageKey(s)) == s;
+        for (const auto m : {PassMode::In, PassMode::InOut, PassMode::Out}) round = round && de::modeFromText(passModeKey(m)) == m;
+        check(round, "chaque libelle (et chaque cle du disque) se relit");
+        check(de::typeChoices(p).front() == "BOOL" && de::typeChoices(p).back() == "T_VEC", "les types proposes : de base, puis ceux du projet");
+    }
+    // DUPLIQUER, DEPLACER, SUPPRIMER.
+    {
+        Project p = fivePlaces();
+        const de::Place fn{K::Function, kNoId, kNoId, kNoId, p.programs.functions[0].id, {}, {}};
+        const de::Place script{K::Script, kNoId, kNoId, kNoId, p.programs.scripts[0].id, {}, {}};
+        std::string why;
+        std::vector<Id> made;
+        check(de::duplicate(p, script, de::Tab::Constants, {0}, &made, &why) && made.size() == 1, "dupliquer Max");
+        const auto& sd = p.programs.scripts[0].decls;
+        check(sd[1].name == "Max_copie" && sd[1].id == made[0] && sd[1].id != sd[0].id && sd[1].value == "10" && sd[1].description == sd[0].description,
+              "Max_copie, juste apres, un identifiant neuf, le reste copie");
+        check(de::duplicate(p, script, de::Tab::Constants, {0}, &made, &why) && declNamed(sd, "Max_copie2"), "encore : Max_copie2");
+        check(de::duplicate(p, script, de::Tab::Variables, {0, 2}, &made, &why) && made.size() == 2 && declNamed(sd, "Compteur_copie")
+                  && declNamed(sd, "Total_copie"),
+              "deux lignes d'un coup");
+        auto names = [&](const std::vector<Declaration>& list, de::Tab t) {
+            std::string out;
+            for (const auto i : de::rowsOf(list, t)) out += list[i].name + " ";
+            return out;
+        };
+        check(names(sd, de::Tab::Variables) == "Compteur Compteur_copie Tmp Total Total_copie ", "l'ordre : " + names(sd, de::Tab::Variables));
+        const auto& fd = p.programs.functions[0].decls;
+        check(!de::move(p, fn, de::Tab::Parameters, 0, -1, &why) && why.find("t\xC3\xAAte") != std::string::npos, "monter le premier : refuse");
+        check(!de::move(p, fn, de::Tab::Parameters, 3, +1, &why), "descendre le dernier : refuse");
+        check(de::move(p, fn, de::Tab::Parameters, 0, +1, &why) && names(fd, de::Tab::Parameters) == "b a v ok ",
+              "descendre a : b a v ok (l'ordre des appels sans nom)");
+        check(names(fd, de::Tab::Variables) == "t ", "les locales ne bougent pas");
+        check(hmi::functionSignature(p.programs.functions[0]).find("Moyenne(b") == 0, "la signature suit l'ordre : " + hmi::functionSignature(p.programs.functions[0]));
+        check(de::remove(p, script, de::Tab::Variables, {1, 4}, &why) && names(sd, de::Tab::Variables) == "Compteur Tmp Total ", "supprimer deux lignes");
+        check(!de::remove(p, script, de::Tab::Variables, {7}, &why), "une ligne hors de l'onglet : refuse");
+    }
+    // LES FAUTES, ligne a ligne.
+    {
+        Project p = fivePlaces();
+        p.programs.functions[0].decls.push_back(declared(DeclKind::Variable, "Moyenne", "REAL"));
+        p.programs.types[0].operators[0].decls.push_back(declared(DeclKind::Variable, "b", "REAL"));
+        p.programs.scripts[0].decls.push_back(declared(DeclKind::Constant, "Vide", "INT"));
+        const de::Place script{K::Script, kNoId, kNoId, kNoId, p.programs.scripts[0].id, {}, {}};
+        const de::Place fn{K::Function, kNoId, kNoId, kNoId, p.programs.functions[0].id, {}, {}};
+        const de::Place op{K::TypeOperator, kNoId, kNoId, p.programs.types[0].id, p.programs.types[0].operators[0].id, {}, {}};
+        const auto fs = de::faults(p, de::locate(p, script));
+        const auto ff = de::faults(p, de::locate(p, fn));
+        const auto fo = de::faults(p, de::locate(p, op));
+        check(fs.size() == 5 && fs[0].empty() && fs[4].find("sans valeur") != std::string::npos, "le script : seule Vide est fautive (" + fs[4] + ")");
+        check(ff.back().find("nom de la fonction") != std::string::npos && ff[0].empty(), "la fonction : la locale Moyenne (" + ff.back() + ")");
+        check(fo.back().find("op\xC3\xA9rateur") != std::string::npos && fo[0].empty(), "l'operateur : la locale b (" + fo.back() + ")");
+        const auto diags = dc::checkDeclarations(p.programs.types[0].operators[0].decls, dc::Role::Operator, p.programs.types[0].operators[0].body);
+        check(diags.size() == 1 && diags[0].message.find("\xC2\xAB b \xC2\xBB") != std::string::npos, "Compiler le dit aussi : " + (diags.empty() ? std::string("rien") : diags[0].message));
+    }
+    // UNE COMMANDE : Ctrl+Z rend le projet d'avant ; le code edite tourne.
+    {
+        auto doc = std::make_shared<Document>();
+        Project& p = doc->project;
+        p.programs.variables.push_back(hmiVariable(p, "Somme", "INT"));
+        Script s;
+        s.id = p.allocate();
+        s.name = "Cumul";
+        s.event = "Appel";
+        s.body = "Total := Total + Pas;\nSomme := Total;\n";
+        p.programs.scripts.push_back(s);
+        const de::Place at{K::Script, kNoId, kNoId, kNoId, s.id, {}, {}};
+        const Project before = p;
+        core::CommandStack stack;
+        const auto apply = [&](const std::string& label, const std::function<bool(Project&, std::string*)>& edit) {
+            std::string why;
+            bool ok = false;
+            auto cmd = changeProject(doc, label, [&](Project& q) { ok = edit(q, &why); });
+            if (cmd) (void)stack.push(std::move(cmd));
+            return ok;
+        };
+        check(apply("Ajouter", [&](Project& q, std::string* w) { return de::add(q, at, de::Tab::Constants, -1, "Pas", nullptr, w); })
+                  && apply("Valeur", [&](Project& q, std::string* w) { return de::set(q, at, de::Tab::Constants, 0, de::Column::Value, "5", w); })
+                  && apply("Type", [&](Project& q, std::string* w) { return de::set(q, at, de::Tab::Constants, 0, de::Column::Type, "INT", w); })
+                  && apply("Ajouter", [&](Project& q, std::string* w) { return de::add(q, at, de::Tab::Variables, -1, "Total", nullptr, w); })
+                  && apply("Stockage", [&](Project& q, std::string* w) {
+                         return de::set(q, at, de::Tab::Variables, 0, de::Column::Storage, "Conserv\xC3\xA9" "e", w);
+                     }),
+              "cinq gestes, cinq commandes");
+        check(p.programs.scripts[0].decls.size() == 2 && p.programs.scripts[0].decls[0].id != p.programs.scripts[0].decls[1].id,
+              "deux declarations, deux identifiants");
+        FakePlc plc;
+        Runtime rt;
+        rt.bind(&p, &plc);
+        rt.start(0.0);
+        std::string why;
+        for (int k = 0; k < 3; ++k) (void)rt.callScript("Cumul", 0.1 * k, &why);
+        check(rt.variable("Somme")->display() == "15", "trois appels : Total Conservee, Pas constante = 5 -> Somme = 15 (" + rt.variable("Somme")->display() + why + ")");
+        while (stack.canUndo()) (void)stack.undo();
+        check(p.programs == before.programs, "tout annule : le projet d'avant, a l'identique");
+    }
+}
+
+// ---------------------------------------------- le stockage Persistante (lot 5) ----
+void persistante() {
+    std::printf("-- lot 5 : le stockage Persistante (rendu au lancement suivant)\n");
+    const auto project = [](Storage storage, const std::string& type) {
+        Project p;
+        p.programs.variables.push_back(hmiVariable(p, "Somme", "REAL"));
+        Script s;
+        s.id = p.allocate();
+        s.name = "Compter";
+        s.event = "Appel";
+        s.body = "Total := Total + 1;\nSomme := Total;\n";
+        s.decls = {declared(DeclKind::Variable, "Total", type, "0", storage)};
+        p.programs.scripts.push_back(s);
+        Script idle = s;                       // un script qui ne tourne pas dans la seance
+        idle.id = p.allocate();
+        idle.name = "Jamais";
+        idle.decls = {declared(DeclKind::Variable, "Garde", "INT", "0", Storage::Persistent)};
+        idle.body = "Garde := Garde + 1;\n";
+        p.programs.scripts.push_back(idle);
+        uniqueDeclarationIds(p);
+        return p;
+    };
+    const auto session = [](const Project& p, const std::vector<simdata::Cell>* start, int calls, std::string& somme,
+                            std::vector<simdata::Cell>* captured, std::string* journal = nullptr) {
+        FakePlc plc;
+        Runtime rt;
+        rt.bind(&p, &plc);
+        if (start) rt.setStartData(*start);
+        rt.start(0.0);
+        std::string why;
+        for (int k = 0; k < calls; ++k) (void)rt.callScript("Compter", 0.1 * (k + 1), &why);
+        somme = rt.variable("Somme")->display();
+        if (captured) *captured = rt.captureData();
+        if (journal)
+            for (const auto& e : rt.journal()) *journal += e.message + "\n";
+        return rt.persistentPending();
+    };
+    Project p = project(Storage::Persistent, "INT");
+    std::string somme;
+    std::vector<simdata::Cell> cells;
+    (void)session(p, nullptr, 3, somme, &cells);
+    const auto decl = std::find_if(cells.begin(), cells.end(), [](const simdata::Cell& c) { return simdata::isDeclarationCell(c); });
+    check(somme == "3" && decl != cells.end() && decl->variable == p.programs.scripts[0].decls[0].id && decl->value.asInteger() == 3
+              && decl->name == "Compter.Total" && decl->declared == "INT",
+          "trois appels : Total = 3, pris a l'arret (une case de declaration, son identifiant) - " + somme);
+    // L'instantane de simulation : ecrit, relu.
+    simdata::Snapshot snap;
+    snap.date = "2026-10-09 10:00:00";
+    snap.cells = cells;
+    simdata::Snapshot back;
+    std::string why;
+    check(simdata::parse(simdata::serialize(snap), back, &why) && back.cells.size() == cells.size()
+              && std::any_of(back.cells.begin(), back.cells.end(), [](const simdata::Cell& c) { return simdata::isDeclarationCell(c); }),
+          "l'instantane de simulation garde la case (ecrit, relu) - " + why);
+    // Le lancement suivant : Total repart de 3.
+    (void)session(p, &back.cells, 1, somme, nullptr);
+    check(somme == "4", "le lancement suivant : Total continue (4) - " + somme);
+    // Un script qui ne tourne pas de la seance garde la valeur qui lui avait ete rendue.
+    auto withIdle = back.cells;
+    simdata::Cell g;
+    g.variable = p.programs.scripts[1].decls[0].id;
+    g.name = "Jamais.Garde";
+    g.declared = "INT";
+    g.path = std::string(simdata::kDeclarationPath);
+    g.value = sim::Value::integer(sim::Type::Int, 7);
+    withIdle.push_back(g);
+    std::vector<simdata::Cell> again;
+    const std::size_t pending = session(p, &withIdle, 1, somme, &again);
+    check(pending == 1, "le script qui n'a pas tourne : sa valeur attend sa premiere execution (Jamais.Garde)");
+    check(std::any_of(again.begin(), again.end(), [](const simdata::Cell& c) { return c.name == "Jamais.Garde" && c.value.asInteger() == 7; }),
+          "... et l'arret la reprend telle quelle (7)");
+    // Une variable Conservee repart de sa valeur initiale au lancement suivant.
+    Project kept = project(Storage::Kept, "INT");
+    std::vector<simdata::Cell> keptCells;
+    (void)session(kept, nullptr, 3, somme, &keptCells);
+    check(std::none_of(keptCells.begin(), keptCells.end(), [](const simdata::Cell& c) { return simdata::isDeclarationCell(c); }),
+          "Conservee : pas de case a l'arret");
+    (void)session(kept, &keptCells, 1, somme, nullptr);
+    check(somme == "1", "Conservee : le lancement suivant repart de 0 (1) - " + somme);
+    // Un type change : INT -> DINT converti ; INT -> STRING incompatible : la valeur initiale, dite.
+    Project wider = p;
+    wider.programs.scripts[0].decls[0].type = "DINT";
+    (void)session(wider, &back.cells, 1, somme, nullptr);
+    check(somme == "4", "INT devenu DINT : la valeur convertie (4) - " + somme);
+    Project text = p;
+    text.programs.scripts[0].decls[0].type = "STRING";
+    text.programs.scripts[0].decls[0].value = "''";
+    text.programs.scripts[0].body = "Total := CONCAT(Total, 'x');\n";
+    std::string journal;
+    (void)session(text, &back.cells, 1, somme, nullptr, &journal);
+    check(journal.find("Compter.Total : INT devient STRING") != std::string::npos, "INT devenu STRING : la valeur initiale, et le journal le dit\n" + journal);
+    // Le poste d'exploitation : le meme circuit (hmi::retain).
+    retain::Store store;
+    check(retain::merge(store, p, cells, "2026-10-09 10:00:00"), "le stockage du poste prend la case");
+    const auto restored = retain::retainedCells(p, store);
+    (void)session(p, &restored, 1, somme, nullptr);
+    check(somme == "4", "le poste : rendue au lancement suivant (4) - " + somme);
+    retain::Store reread;
+    check(retain::parse(retain::serialize(store), reread, &why) && reread.entries.size() == store.entries.size(),
+          "le fichier du poste garde la case - " + why);
+}
+
 } // namespace
+
 
 int main(int argc, char** argv) {
     if (argc < 2) {
@@ -1240,6 +1636,8 @@ int main(int argc, char** argv) {
     modele();
     pont();
     suivi();
+    edition();
+    persistante();
     Tally t;
     std::printf("-- le corpus : %s\n", argv[1]);
     corpusFile(argv[1], t);

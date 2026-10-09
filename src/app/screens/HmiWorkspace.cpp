@@ -55,6 +55,8 @@
 #include "../../hmi/HmiPublicVars.hpp"
 #include "../hmi/HmiImages.hpp"
 #include "../hmi/HmiPanes.hpp"
+#include "../hmi/HmiAskDialog.hpp"                 // 1.11.18 (lot 5) : migrer les declarations (les codes a cocher)
+#include "../../hmi/HmiMigrate.hpp"                // 1.11.18 (lot 5) : le plan de la migration
 #include "../hmi/HmiPublicVarsPane.hpp"
 #include "../hmi/HmiQualityPanes.hpp"                // lot 13 : les essais
 #include "../hmi/HmiDisplayPanes.hpp"               // lot 13 : les langues
@@ -893,6 +895,7 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
             generate ? "hmi.generate" : "hmi.compile", doc,
             generate ? HmiReportPane::Mode::Generate : HmiReportPane::Mode::Compile, plcNames(app_.project()));
         hmiLinks_ += pane->issueActivated->connect([this](const hmi::Issue& i) { openHmiIssue(i); });
+        hmiLinks_ += pane->migrateRequested->connect([this] { askHmiMigrateDeclarations(); });   // 1.11.18 (lot 5)
         // 1.10.4 : "Remplacer..." (l'avertissement d'un repere) - la vue s'ouvre, l'objet est
         // choisi, et Dupliquer s'ouvre avec 0 copie : on remplit le repere dans l'original.
         hmiLinks_ += pane->replaceMarkers->connect([this](hmi::Id v, hmi::Id o) {
@@ -2756,7 +2759,7 @@ void MainAnalysisScreen::openHmiFunctions(std::uint64_t functionId, int line) {
 void MainAnalysisScreen::askHmiNewFunction() {
     auto doc = app_.hmi();
     if (!doc) return;
-    std::vector<std::string> types{"(aucun)"};
+    std::vector<std::string> types{"Aucun"};          // 1.11.18 (lot 5) : une procedure (avant : "(aucun)")
     for (const auto t : hmi::kLocalTypes) types.emplace_back(t);
     std::vector<FormDialog::Field> fields;
     fields.push_back({"Nom", hmi::uniqueFunctionName(doc->project, "Fonction"), "lettres, chiffres, _", false, {}});
@@ -2765,9 +2768,9 @@ void MainAnalysisScreen::askHmiNewFunction() {
     app_.menus().ShowDialog(
         std::make_unique<FormDialog>("dialog.hmiNewFunction", "Nouvelle fonction IHM",
             "Une fonction IHM s'appelle par son nom, comme une fonction de l'automate : Moyenne(a, b) dans un script, "
-            "une action ou - si elle rend une valeur - une expression de vue. Ses param\xC3\xA8tres sont ses VAR_INPUT ; "
-            "(aucun) en retour : une proc\xC3\xA9" "dure, appel\xC3\xA9" "e seule sur sa ligne. Le corps part d'un mod\xC3\xA8le "
-            "\xC3\xA0 compl\xC3\xA9ter. Ctrl+Z la retire.",
+            "une action ou - si elle rend une valeur - une expression de vue. Ses param\xC3\xA8tres, ses locales et ses constantes "
+            "se d\xC3\xA9" "clarent dans ses onglets ; Aucun en retour : une proc\xC3\xA9" "dure, appel\xC3\xA9" "e seule sur sa ligne. "
+            "Le corps part d'un mod\xC3\xA8le \xC3\xA0 compl\xC3\xA9ter. Ctrl+Z la retire.",
             std::move(fields), "Cr\xC3\xA9" "er"),
         [this](const menu::DialogResult& r) {
             auto* pane = dynamic_cast<HmiFunctionsPane*>(hmiTab("fonctions"));
@@ -2778,6 +2781,120 @@ void MainAnalysisScreen::askHmiNewFunction() {
             if (pane->addFunction(v[0], v.size() > 1 ? v[1] : std::string{}, v.size() > 2 ? v[2] : std::string{}, &why) == hmi::kNoId)
                 status_->setTransientMessage("Fonction refus\xC3\xA9" "e : " + why, 8.0);
         });
+}
+
+// ---- 1.11.18 (refonte des scripts, lot 5) : MIGRER LES DECLARATIONS DU PROJET ----
+//  Le plan d'abord (hmi::migrate::plan) : chaque code a migrer, coche, avec ce qu'il devient ;
+//  ceux qui restent tels quels et pourquoi. Puis, comme l'import du MAST : le projet
+//  enregistre s'il le faut, la version "Avant migration des declarations", la migration
+//  (une commande : Ctrl+Z la reprend entiere).
+void MainAnalysisScreen::askHmiMigrateDeclarations() {
+    auto doc = app_.hmi();
+    if (!doc) return;
+    const auto plan = hmi::migrate::plan(doc->project);
+    if (plan.migrated() == 0) {
+        std::string why = plan.items.empty() ? std::string("aucun code ne d\xC3\xA9" "clare ses variables dans son texte.")
+                                             : "rien ne peut l'\xC3\xAAtre (" + plan.items.front().place.label + " : " + plan.items.front().why + ").";
+        status_->setTransientMessage("Migrer les d\xC3\xA9" "clarations : " + why, 8.0, ui::StatusBar::Severity::Warning);
+        return;
+    }
+    HmiAskDialog::Spec spec;
+    spec.id = "dialog.hmiMigrate";
+    spec.title = "Migrer les d\xC3\xA9" "clarations du projet";
+    spec.text = hmi::migrate::summary(plan) + ".\n\n"
+                "Chaque code coch\xC3\xA9 perd ses blocs VAR \xE2\x80\xA6 END_VAR : ses constantes, variables et param\xC3\xA8tres "
+                "passent dans ses onglets, leurs commentaires deviennent leur documentation. Le moteur lit les m\xC3\xAAmes "
+                "d\xC3\xA9" "clarations : l'ex\xC3\xA9" "cution ne change pas.\n"
+                "Avant : la version \xC2\xAB Avant migration des d\xC3\xA9" "clarations \xC2\xBB (le projet est d'abord enregistr\xC3\xA9). "
+                "Ensuite, Ctrl+Z reprend la migration enti\xC3\xA8re.";
+    spec.listTitle = "Les codes \xC3\xA0 migrer (d\xC3\xA9" "cochez ceux \xC3\xA0 laisser)";
+    std::vector<hmi::migrate::Place> places;
+    std::string skipped;
+    std::size_t nSkipped = 0;
+    for (const auto& it : plan.items) {
+        if (!it.migrated) {
+            skipped += (skipped.empty() ? "" : " ; ") + it.place.label + " (" + it.why + ")";
+            ++nSkipped;
+            continue;
+        }
+        std::string names;
+        for (const auto& d : it.decls) names += (names.empty() ? "" : ", ") + d.name;
+        std::string detail = std::to_string(it.decls.size()) + (it.decls.size() > 1 ? " d\xC3\xA9" "clarations : " : " d\xC3\xA9" "claration : ") + names;
+        if (it.comments) detail += " \xC2\xB7 " + std::to_string(it.comments) + " commentaire(s) en documentation";
+        for (const auto& n : it.notes)
+            if (n.attention) detail += " \xC2\xB7 attention : " + n.text;
+        spec.items.push_back({it.place.label, detail, true});
+        places.push_back(it.place);
+    }
+    if (nSkipped) spec.note = "Laiss\xC3\xA9" + std::string(nSkipped > 1 ? "s" : "") + " tel" + (nSkipped > 1 ? "s" : "") + " quel"
+                              + (nSkipped > 1 ? "s" : "") + " : " + skipped;
+    spec.confirm = "Migrer";
+    spec.confirmLabel = [](const std::vector<bool>& items, const std::vector<bool>&, int) {
+        const auto n = static_cast<std::size_t>(std::count(items.begin(), items.end(), true));
+        return n == 0 ? std::string("Rien \xC3\xA0 migrer") : "Migrer " + std::to_string(n) + (n > 1 ? " codes" : " code");
+    };
+    spec.width = 780.f;
+    app_.menus().ShowDialog(std::make_unique<HmiAskDialog>(std::move(spec)), [this, places](const menu::DialogResult& r) {
+        if (!r.accepted()) return;
+        const auto answer = HmiAskDialog::parse(r.payload);
+        std::vector<hmi::migrate::Place> chosen;
+        for (std::size_t i = 0; i < places.size(); ++i)
+            if (i >= answer.items.size() || answer.items[i]) chosen.push_back(places[i]);
+        if (chosen.empty()) return;
+        const auto run = [this, chosen](const std::string& versionSaid) {
+            auto d = app_.hmi();
+            if (!d) return;
+            const auto same = [](const hmi::migrate::Place& a, const hmi::migrate::Place& b) {
+                return a.kind == b.kind && a.view == b.view && a.object == b.object && a.type == b.type && a.id == b.id && a.function == b.function;
+            };
+            const auto again = hmi::migrate::plan(d->project, [&](const hmi::migrate::Place& at) {
+                return std::any_of(chosen.begin(), chosen.end(), [&](const hmi::migrate::Place& c) { return same(c, at); });
+            });
+            auto cmd = hmi::changeProject(d, "Migrer les d\xC3\xA9" "clarations (" + hmi::migrate::summary(again) + ")",
+                                          [&](hmi::Project& q) { (void)hmi::migrate::apply(q, again); });
+            if (cmd) app_.apply(std::move(cmd), /*refreshViews=*/false);
+            if (auto* report = dynamic_cast<HmiReportPane*>(hmiTab("compiler"))) report->run();
+            status_->setTransientMessage("Migr\xC3\xA9 : " + hmi::migrate::summary(again)
+                                             + (versionSaid.empty() ? std::string{} : " \xC2\xB7 version " + versionSaid)
+                                             + " \xC2\xB7 Ctrl+Z reprend la migration",
+                                         10.0, ui::StatusBar::Severity::Success);
+        };
+        // La version d'abord, le projet enregistre s'il le faut (comme l'import du MAST).
+        const std::string folder = app_.projectFolder();
+        if (folder.empty()) {
+            run({});
+            return;
+        }
+        std::string failed, said;
+        if (app_.commands().isModified())
+            if (auto st = app_.saveProject(); !st) failed = st.error().context.empty() ? st.error().message() : st.error().context;
+        if (failed.empty()) {
+            if (auto store = hmi::ver::open(folder); !store) {
+                failed = store.error().context.empty() ? store.error().message() : store.error().context;
+            } else if (auto made = hmi::ver::create(*store, "Avant migration des d\xC3\xA9" "clarations", hmi::ver::State::Draft,
+                                                    "Cr\xC3\xA9\xC3\xA9" "e avant la migration des blocs VAR (" + std::to_string(chosen.size())
+                                                        + (chosen.size() > 1 ? " codes)" : " code)"),
+                                                    hmi::ver::defaultAuthor());
+                       !made) {
+                failed = made.error().context.empty() ? made.error().message() : made.error().context;
+            } else {
+                said = made->label();
+            }
+            versionWatch_.checkedAt = -100.0;          // la barre du haut relit les versions
+        }
+        if (!failed.empty()) {
+            auto ask = std::make_unique<MessageDialog>(
+                "Version non cr\xC3\xA9\xC3\xA9" "e",
+                "La version \xC2\xAB Avant migration des d\xC3\xA9" "clarations \xC2\xBB n'a pas pu \xC3\xAAtre cr\xC3\xA9\xC3\xA9" "e : " + failed
+                    + "\n\nMigrer quand m\xC3\xAAme ? Ctrl+Z annulera la migration tant que le projet reste ouvert.",
+                MessageDialog::Icon::Question, "Migrer quand m\xC3\xAAme");
+            app_.menus().ShowDialog(std::move(ask), [run](const menu::DialogResult& rr) {
+                if (rr.accepted()) run({});
+            });
+            return;
+        }
+        run(said);
+    });
 }
 
 void MainAnalysisScreen::askHmiDeleteFunction(std::uint64_t functionId) {

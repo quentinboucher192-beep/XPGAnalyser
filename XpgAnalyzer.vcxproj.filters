@@ -1066,6 +1066,9 @@
     <ClCompile Include="src\app\hmi\HmiCyclicWidgets.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiDeclGrid.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\hmi\HmiDuplicateDialog.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
@@ -1199,6 +1202,9 @@
       <Filter>hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\hmi\HmiDecl.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiDeclEdit.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\hmi\HmiDuplicate.cpp">
@@ -2185,6 +2191,9 @@
     <ClInclude Include="src\app\hmi\HmiCyclicPage.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiDeclGrid.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
     <ClInclude Include="src\app\hmi\HmiDuplicateDialog.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
@@ -2327,6 +2336,9 @@
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiDecl.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiDeclEdit.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiDuplicate.hpp">

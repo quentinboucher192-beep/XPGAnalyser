@@ -29,6 +29,7 @@
 #include "../../hmi/HmiPipeline.hpp"   // 1.11.13 : les commandes du build
 
 #include "HmiAssist.hpp"
+#include "HmiDeclGrid.hpp"             // 1.11.18 (refonte, lot 5) : les onglets Parametres, Locales, Constantes
 #include "HmiPanels.hpp"
 #include "../../core/Command.hpp"
 #include "../../hmi/HmiCommands.hpp"
@@ -40,6 +41,7 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -126,6 +128,23 @@ public:
     std::size_t compileCurrent();
     [[nodiscard]] const std::string& buildStateText() const noexcept { return buildStateText_; }
 
+    // ---- 1.11.18 (refonte des scripts, lot 5) : LES ONGLETS DE LA FONCTION ----
+    //  Code, Parametres (l'ordre est la signature), Locales, Constantes : ses declarations
+    //  du modele (HmiDeclGrid). Une nouvelle fonction y recoit son parametre d'exemple et
+    //  sa locale Resultat (plus de bloc VAR dans son code). Le bandeau de l'ancien format.
+    enum CodeTab : std::size_t { CodeTabCode = 0, CodeTabParameters = 1, CodeTabLocals = 2, CodeTabConstants = 3 };
+    void showCodeTab(std::size_t tab);
+    [[nodiscard]] std::size_t currentCodeTab() const noexcept;
+    [[nodiscard]] HmiCodeTabs&   codeTabs() noexcept { return *codeTabs_; }
+    [[nodiscard]] HmiDeclGrid&   parametersGrid() noexcept { return *codeTabs_->grid(hmi::decledit::Tab::Parameters); }
+    [[nodiscard]] HmiDeclGrid&   localsGrid() noexcept { return *codeTabs_->grid(hmi::decledit::Tab::Variables); }
+    [[nodiscard]] HmiDeclGrid&   constantsGrid() noexcept { return *codeTabs_->grid(hmi::decledit::Tab::Constants); }
+    [[nodiscard]] HmiDeclBanner& declBanner() noexcept { return *banner_; }
+    [[nodiscard]] std::optional<hmi::decledit::Place> currentPlace() const;
+    bool migrateCurrent();
+    bool goToNextUse(const std::string& name);
+    bool showDeclaration(const std::string& name);
+
     [[nodiscard]] HmiToolStrip&      tools() noexcept { return *tools_; }
     [[nodiscard]] ui::MultiLineText& editor() noexcept { return *editor_; }
     [[nodiscard]] ui::TableView&     functionTable() noexcept { return *functions_; }
@@ -165,6 +184,8 @@ private:
     ui::PropertyGrid*  props_{nullptr};
     ui::TableView*     trialTable_{nullptr};
     HmiTitledPanel*    editorPanel_{nullptr};
+    HmiCodeTabs*       codeTabs_{nullptr};         // 1.11.18 (lot 5) : Code | Parametres | Locales | Constantes
+    HmiDeclBanner*     banner_{nullptr};
     ui::MultiLineText* editor_{nullptr};
     ui::StatusBar*     symbolBar_{nullptr};
     assist::Sources    assist_;
