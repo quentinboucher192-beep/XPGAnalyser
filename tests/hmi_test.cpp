@@ -23,6 +23,7 @@
 #include "../src/hmi/HmiGuide.hpp"
 #include "../src/hmi/HmiHistory.hpp"
 #include "../src/hmi/HmiLive.hpp"
+#include "../src/hmi/HmiNatives.hpp"     // 1.12.1 : les enumerations natives des proprietes
 #include "../src/hmi/HmiMedia.hpp"
 #include "../src/hmi/HmiPublicVars.hpp"
 #include "../src/hmi/HmiQr.hpp"
@@ -21257,6 +21258,93 @@ void validerSaisies11123() {
     check(consigne() == 12.0 && rt.popups().empty() && rt.focusedObject() == kNoId, "Fermer : la saisie abandonnee, la popup fermee");
 }
 
+// 1.12.1 : LES ENUMERATIONS NATIVES DANS LES PROPRIETES DES OBJETS. L'expression (fx) d'une
+// propriete qui prend une enumeration (align : ALIGNEMENT, style d'un selecteur :
+// STYLE_SELECTEUR) rend son nombre ; l'objet recoit le mot de l'inspecteur. Compiler : un
+// litteral d'une autre enumeration, un nombre hors de la sienne n'auraient aucun effet.
+void enumsProprietes1121() {
+    std::printf("-- 1.12.1 : les enumerations natives des proprietes des objets\n");
+    namespace nt = hmi::natives;
+    const auto* al = nt::propertyEnum("Text", "align");
+    check(al && al->name == "ALIGNEMENT", "Text.align : ALIGNEMENT (le genre * : tout objet qui l'a)");
+    const auto* st = nt::propertyEnum("Selector", "style");
+    check(st && st->name == "STYLE_SELECTEUR", "Selector.style : STYLE_SELECTEUR (le genre precis)");
+    check(!nt::propertyEnum("Text", "style"), "Text.style : aucune enumeration");
+    const auto* tr = nt::propertyEnum("NavBar", "transition");
+    check(tr && tr->name == "TRANSITION", "NavBar.transition : TRANSITION (aussi l'argument de IHM_NAVIGUER)");
+    const auto w = nt::propertyWord("Text", "align", sim::Value::integer(sim::Type::DInt, 2));
+    check(w && *w == "droite", "ALIGNEMENT : 2 donne 'droite'");
+    check(!nt::propertyWord("Text", "align", sim::Value::text("centre")), "un texte : deja le mot, rien a traduire");
+    check(!nt::propertyWord("Text", "align", sim::Value::integer(sim::Type::DInt, 9)), "9 : hors de ALIGNEMENT, rien a traduire");
+    const auto lits = nt::enumLiteralsIn("SEL(a, ALIGNEMENT#Gauche, 'TRANSITION#Fondu') (* POLICE#Mono *) + 16#FF + T_MODE#Auto // ORIENTATION#Verticale");
+    check(lits.size() == 1 && lits[0].text == "ALIGNEMENT#Gauche" && lits[0].enumeration == al,
+          "les litteraux natifs d'une expression : ni les chaines, ni les commentaires, ni 16#FF, ni T_MODE#Auto (" + std::to_string(lits.size()) + ")");
+    check(nt::enumForWords({"gauche", "centre", "droite"}) == al, "la liste gauche, centre, droite : ALIGNEMENT");
+    const std::vector<std::string> exports = {"alarmes", "historique", "\xC3\xA9v\xC3\xA9nements", "syst\xC3\xA8me", "mesures", "audit", "recette:R1"};
+    check(nt::enumForWords(exports) && nt::enumForWords(exports)->name == "SOURCE_EXPORT", "la liste du bouton d'export (ses recettes apres) : SOURCE_EXPORT");
+    check(!nt::enumForWords({"gauche", "droite", "haut"}), "une liste sans enumeration : aucune");
+    // Le catalogue : une propriete n'a qu'une enumeration, ses valeurs se suivent (0, 1...), ses mots different.
+    std::map<std::pair<std::string, std::string>, std::string> owner;
+    std::string twice, order;
+    for (const auto& e : nt::enums()) {
+        for (const auto& u : e.uses) {
+            const auto [it, fresh] = owner.emplace(std::make_pair(std::string(u.kind), std::string(u.key)), std::string(e.name));
+            if (!fresh) twice += " " + std::string(u.kind) + "." + std::string(u.key) + " (" + it->second + ", " + std::string(e.name) + ")";
+        }
+        std::set<std::string> words;
+        for (std::size_t i = 0; i < e.values.size(); ++i)
+            if ((!e.uses.empty() && e.values[i].number != static_cast<std::int64_t>(i)) || !words.insert(std::string(e.values[i].argument)).second)
+                order += " " + std::string(e.name) + "#" + std::string(e.values[i].name);
+    }
+    check(twice.empty(), "chaque propriete a une seule enumeration" + twice);
+    check(order.empty(), "les valeurs se suivent depuis 0, leurs mots different" + order);
+
+    // En marche : la vue suit.
+    Project p;
+    View v = makeView(p, "Vue_E");
+    const Id t = edit::add(p, v, Kind::Text, 10, 10);
+    const Id s = edit::add(p, v, Kind::Selector, 100, 10);
+    const Id q = edit::add(p, v, Kind::Indicator, 200, 10);
+    v.object(t)->setExpr("align", "SEL(Marche, ALIGNEMENT#Gauche, ALIGNEMENT#Droite)");
+    v.object(s)->setExpr("style", "STYLE_SELECTEUR#Boutons");
+    v.object(q)->setExpr("shape", "'carr\xC3\xA9'");
+    p.views = {v};
+    p.config.startView = v.id;
+    FakePlc plc;
+    plc.values["Marche"] = sim::Value::boolean(true);
+    Runtime rt;                                              // les litteraux NOM#Valeur : lus par le moteur
+    rt.bind(&p, &plc);
+    rt.start(0.0);
+    LiveView live;
+    live.bind(v);
+    std::vector<LiveValue> values;
+    View shown = live.evaluate(rt.environment(), &values);
+    same(shown.object(t)->text("align"), "droite", "align = SEL(Marche, ALIGNEMENT#Gauche, ALIGNEMENT#Droite) en marche : 'droite'");
+    same(shown.object(s)->text("style"), "boutons", "style = STYLE_SELECTEUR#Boutons : 'boutons'");
+    same(shown.object(q)->text("shape"), "carr\xC3\xA9", "shape = 'carre' (un mot entre quotes) : tel quel");
+    plc.values["Marche"] = sim::Value::boolean(false);
+    shown = live.evaluate(rt.environment(), &values);
+    same(shown.object(t)->text("align"), "gauche", "Marche a FAUX : 'gauche'");
+
+    // Compiler : un litteral d'une autre enumeration, un nombre hors de la sienne.
+    v.object(t)->setExpr("align", "TRANSITION#Fondu");
+    v.object(s)->setExpr("style", "7");
+    v.object(q)->setExpr("shape", "FORME_VOYANT#Carre");
+    p.views = {v};
+    const NameExists known = [](std::string_view name) { return name == "Marche"; };
+    bool other = false, range = false, good = true;
+    std::string seen;
+    for (const auto& i : compileWith(p, known)) {
+        if (i.object == t && i.property == "align") other = other || i.message.find("TRANSITION#Fondu n'est pas une valeur de ALIGNEMENT") != std::string::npos;
+        if (i.object == s && i.property == "style") range = range || i.message.find("7 n'est pas une valeur de STYLE_SELECTEUR") != std::string::npos;
+        if (i.object == q && i.property == "shape") good = false;
+        seen += " | " + i.message;
+    }
+    check(other, "Compiler : align = TRANSITION#Fondu n'est pas une valeur de ALIGNEMENT" + (other ? std::string{} : seen));
+    check(range, "Compiler : style = 7 n'est pas une valeur de STYLE_SELECTEUR");
+    check(good, "Compiler : shape = FORME_VOYANT#Carre, rien a dire" + (good ? std::string{} : seen));
+}
+
 // ---- 1.11.23 : la souris et le clavier (SYS.Mouse*, SYS.Key*), les raccourcis des vues ----
 void clavierSouris11123() {
     std::printf("-- 1.11.23 : la souris, le clavier, les raccourcis des vues\n");
@@ -21593,6 +21681,7 @@ int main(int argc, char** argv) {
     journalLocales1117();             // 1.11.17 (refonte, lot 0) : IHM_JOURNAL et IHM_LOG lisent les locales
     clavierSouris11123();             // 1.11.23 : la souris, le clavier, les raccourcis des vues
     validerSaisies11123();            // 1.11.23 : Valider les saisies (le bouton Valider de la popup consigne)
+    enumsProprietes1121();            // 1.12.1 : les enumerations natives des proprietes des objets
     if (argc > 1) simulateurModbusLot14(argv[1]);
     if (argc > 1) simulateur(argv[1]);
     if (argc > 1) dossierRouvert(argv[1]);

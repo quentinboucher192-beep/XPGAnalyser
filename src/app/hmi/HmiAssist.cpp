@@ -1693,6 +1693,23 @@ static std::vector<Item> suggestItems(const hmi::Project& hp, const domain::Proj
             }
             return out;
         }
+        // 1.12.1 : les enumerations natives (TRANSITION#, ALIGNEMENT#...) : leurs valeurs, leur
+        // nombre, leur mot.
+        if (const auto* ne = e ? nullptr : hmi::natives::nativeEnum(before.substr(b, before.size() - 1 - b))) {
+            int i = 0;
+            for (const auto& v : ne->values) {
+                const int r = matchRank(v.name, needle);
+                if (r < 0) { ++i; continue; }
+                Item it;
+                it.text = std::string(ne->name) + "#" + std::string(v.name);
+                it.detail = "= " + std::to_string(v.number) + kDot + std::string(v.text) + kDot + "native";
+                it.kind = Kind::Type;
+                it.rank = r * 100 + i++;
+                it.insert = std::string(v.name);
+                push(std::move(it));
+            }
+            return out;
+        }
         if (!e) return out;
         const bool label = code && caseEnumeration(scope(), before.substr(0, b)) == e;   // une etiquette de CASE : "Auto: "
         int i = 0;
@@ -2034,6 +2051,21 @@ static std::vector<Item> suggestItems(const hmi::Project& hp, const domain::Proj
                 if (r < 0) continue;
                 push(nativeItem(f, r * 2 + 1));       // a egalite avec la bibliotheque, la native (poussee avant) reste
             }
+            // 1.12.1 : les enumerations natives par leur nom (ALIGNEMENT# : puis ses valeurs) - par
+            // leur debut seulement (Marche ne propose pas MODE_MARCHE# : Entree le prendrait).
+            if (needle.size() >= 2)
+                for (const auto& ne : hmi::natives::enums()) {
+                    const int r = matchRank(ne.name, needle);
+                    if (r != 0) continue;
+                    Item it;
+                    it.text = std::string(ne.name) + "#";
+                    it.detail = "\xC3\xA9" "num\xC3\xA9" "ration native" + kDot + std::string(ne.summary);
+                    it.kind = Kind::Type;
+                    it.rank = r * 2 + 1;
+                    it.insert = it.text;
+                    it.chain = true;
+                    push(std::move(it));
+                }
             // 1.10 (chantier K2) : le langage de S1 (fonctions internes du script, MAP_...,
             // modeles), les operateurs de S2 (TO_xxx, + - ...) et les enumerations (valeurs
             // d'abord dans un CASE ou apres m :=, le CASE avec toutes les valeurs, FOR EACH).
@@ -2999,6 +3031,33 @@ static ui::InputText::Assist typedAssist(ui::InputText::Assist base, Sources src
             }
         }
         out.resize(first);
+        // 1.12.1 : une liste qui prend une enumeration native (Alignement : ALIGNEMENT) :
+        // ses litteraux d'abord (ALIGNEMENT#Centre), des le "=" ou le debut du nom.
+        if (equals && expect == Expect::List)
+            if (const auto* ne = hmi::natives::enumForWords(choices)) {
+                std::size_t start = before.size();
+                while (start > 0 && (std::isalnum(static_cast<unsigned char>(before[start - 1])) || before[start - 1] == '_' || before[start - 1] == '#'))
+                    --start;
+                const std::string typed(before.substr(start));
+                std::string head(before.substr(0, start));
+                while (!head.empty() && (head.back() == ' ' || head.back() == '=')) head.pop_back();
+                if (typed.find('#') == std::string::npos && (!typed.empty() || head.empty())) {   // apres le # : la completion du code
+                    std::vector<ui::InputText::Suggestion> lits;
+                    for (const auto& v : ne->values) {
+                        std::string text = std::string(ne->name) + "#" + std::string(v.name);
+                        if (!typed.empty() && !startsWithNoCase(text, typed)) continue;
+                        ui::InputText::Suggestion sg;
+                        sg.text = std::move(text);
+                        sg.detail = "\xC2\xAB " + std::string(v.argument) + " \xC2\xBB  \xC2\xB7  " + std::string(ne->name) + " (native) = "
+                                  + std::to_string(v.number);
+                        lits.push_back(std::move(sg));
+                    }
+                    if (!lits.empty()) {
+                        if (good.empty() && unknown.empty() && bad.empty()) from = start;   // sinon : le debut du nom, deja
+                        good.insert(good.begin(), std::make_move_iterator(lits.begin()), std::make_move_iterator(lits.end()));
+                    }
+                }
+            }
         for (auto* list : {&good, &unknown, &bad})
             for (auto& sg : *list) out.push_back(std::move(sg));
         // Une couleur ou une vue par expression : aussi les valeurs entre quotes.

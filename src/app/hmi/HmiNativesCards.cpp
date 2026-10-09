@@ -1,5 +1,7 @@
 #include "HmiNativesCards.hpp"
 
+#include "HmiPanels.hpp"                // 1.12.1 : le libelle d'une propriete (hmiPropertyInfo)
+#include "../../hmi/HmiModel.hpp"
 #include "../../hmi/HmiNatives.hpp"
 
 #include <algorithm>
@@ -390,6 +392,22 @@ ui::HelpArticle instructionCard(std::size_t i, std::string_view notation) {
     return a;
 }
 
+// 1.12.1 : "Selecteur (style)", "tout objet (align)" ; le libelle de l'inspecteur devant.
+std::string useText(const hn::PropertyUse& u) {
+    std::string label, help;
+    std::string kind = "tout objet";
+    if (u.kind != "*")
+        if (const auto k = hmi::kindFromKey(u.kind)) kind = std::string(hmi::kindLabel(*k));
+    if (app::hmiPropertyInfo(u.key, label, help) && !label.empty()) return kind + " \xC2\xB7 " + label + " (" + std::string(u.key) + ")";
+    return kind + " \xC2\xB7 " + std::string(u.key);
+}
+
+std::string usesText(const hn::NativeEnum& e) {
+    std::string out;
+    for (const auto& u : e.uses) out += (out.empty() ? "" : ", ") + useText(u);
+    return out;
+}
+
 ui::HelpArticle enumsCard() {
     ui::HelpArticle a;
     std::string table = "\xC3\x89num\xC3\xA9ration\tValeurs\tSert \xC3\xA0";
@@ -397,11 +415,14 @@ ui::HelpArticle enumsCard() {
     for (const auto& e : hn::enums()) {
         std::string values;
         for (const auto& v : e.values) values += (values.empty() ? "" : ", ") + std::string(v.name);
-        table += "\n" + std::string(e.name) + "\t" + values + "\t" + (e.function.empty() ? std::string(e.summary) : std::string(e.function));
+        std::string serves = std::string(e.function);
+        if (!e.uses.empty()) serves += (serves.empty() ? "" : ", ") + usesText(e);
+        table += "\n" + std::string(e.name) + "\t" + values + "\t" + (serves.empty() ? std::string(e.summary) : serves);
         go.push_back({std::string(e.name), "native:enum:" + std::string(e.name), std::string(e.summary)});
     }
     a.blocks.push_back(hero("\xC3\x89num\xC3\xA9rations", {}, {std::to_string(hn::enums().size()) + " \xC3\xA9num\xC3\xA9rations natives"}, ui::Icon::Constant));
-    a.blocks.push_back(block(K::Lead, "Les valeurs nomm\xC3\xA9" "es que les fonctions IHM_ attendent : NOM#Valeur vaut son nombre (un DINT), et la fonction "
+    a.blocks.push_back(block(K::Lead, "Les valeurs nomm\xC3\xA9" "es que les fonctions IHM_ attendent et que les propri\xC3\xA9t\xC3\xA9s des objets prennent : "
+                                      "NOM#Valeur vaut son nombre (un DINT) ; la fonction, ou la propri\xC3\xA9t\xC3\xA9 pilot\xC3\xA9" "e par une expression (\xC6\x92), "
                                       "re\xC3\xA7oit le mot qu'elle lisait d\xC3\xA9j\xC3\xA0. La v\xC3\xA9rification les conna\xC3\xAEt : une valeur mal \xC3\xA9" "crite est une erreur."));
     a.blocks.push_back(block(K::Table, table));
     a.blocks.push_back(links("Les fiches", std::move(go)));
@@ -411,7 +432,8 @@ ui::HelpArticle enumsCard() {
 ui::HelpArticle enumCard(const hn::NativeEnum& e, std::string_view valueName) {
     ui::HelpArticle a;
     a.blocks.push_back(hero(std::string(e.name), {{"\xC3\x89num\xC3\xA9rations", "enumerations"}},
-                            {std::to_string(e.values.size()) + " valeurs", e.function.empty() ? std::string{} : "pour " + std::string(e.function)}, ui::Icon::Constant));
+                            {std::to_string(e.values.size()) + " valeurs", !e.function.empty() ? "pour " + std::string(e.function)
+                                                                             : e.uses.empty() ? std::string{} : std::string("pour les objets")}, ui::Icon::Constant));
     a.blocks.push_back(block(K::Lead, std::string(e.summary)));
     std::string table = "Valeur\tNombre\tCe qu'elle dit\tLe mot re\xC3\xA7u";
     for (const auto& v : e.values) {
@@ -424,6 +446,29 @@ ui::HelpArticle enumCard(const hn::NativeEnum& e, std::string_view valueName) {
         a.blocks.push_back(block(K::Heading, "Exemple"));
         auto code = block(K::Code, "// " + std::string(e.function) + " : l'argument " + std::to_string(e.argument + 1) + "\nx := " + std::string(e.name) + "#"
                                        + std::string(e.values.size() > 1 ? e.values[1].name : e.values[0].name) + ";   // " + std::to_string(e.values.size() > 1 ? e.values[1].number : e.values[0].number));
+        code.label = "ST";
+        a.blocks.push_back(std::move(code));
+    }
+    if (!e.uses.empty() && !e.values.empty()) {
+        // 1.12.1 : les proprietes des objets qui la prennent - dans leur case \xC6\x92.
+        a.blocks.push_back(block(K::Heading, "O\xC3\xB9 elle sert"));
+        std::string where = "Objet\tPropri\xC3\xA9t\xC3\xA9\tCl\xC3\xA9";
+        for (const auto& u : e.uses) {
+            std::string label, help;
+            std::string kind = "tout objet qui l'a";
+            if (u.kind != "*")
+                if (const auto k = hmi::kindFromKey(u.kind)) kind = std::string(hmi::kindLabel(*k));
+            if (!app::hmiPropertyInfo(u.key, label, help) || label.empty()) label = std::string(u.key);
+            where += "\n" + kind + "\t" + label + "\t" + std::string(u.key);
+        }
+        a.blocks.push_back(block(K::Table, where));
+        a.blocks.push_back(block(K::Paragraph, "Dans l'inspecteur, la case \xC6\x92 de la propri\xC3\xA9t\xC3\xA9 : l'expression rend une valeur de "
+                                                   + std::string(e.name) + " (son nombre), l'objet re\xC3\xA7oit le mot de la liste ; un mot entre quotes marche aussi."));
+        const auto& first = e.values.front();
+        const auto& other = e.values.size() > 1 ? e.values[1] : e.values.front();
+        auto code = block(K::Code, "// " + std::string(e.uses.front().key) + " : '" + std::string(first.argument) + "' en marche, '" + std::string(other.argument)
+                                       + "' sinon\nSEL(Marche, " + std::string(e.name) + "#" + std::string(other.name) + ", " + std::string(e.name) + "#"
+                                       + std::string(first.name) + ")");
         code.label = "ST";
         a.blocks.push_back(std::move(code));
     }

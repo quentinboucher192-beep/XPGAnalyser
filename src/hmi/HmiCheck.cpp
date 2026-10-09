@@ -33,6 +33,7 @@
 #include "HmiTypes.hpp"        // lot 16
 #include "HmiEnums.hpp"        // 1.10 (S1) : knownType connait les enumerations
 #include "HmiOperators.hpp"    // 1.10 (integration I2) : les constats des operateurs (S2) dans Compiler
+#include "HmiNatives.hpp"      // 1.12.1 : les enumerations natives des proprietes
 #include "HmiLanguages.hpp"    // lot 13
 #include "HmiQuality.hpp"      // lot 13
 #include "HmiScenarios.hpp"    // lot 13
@@ -2977,6 +2978,13 @@ struct ExprWalker {
         }
     }
 
+    // 1.12.1 : une propriete qui prend une enumeration native (align : ALIGNEMENT) et
+    // dont l'expression est une constante - un litteral d'une autre enumeration
+    // (TRANSITION#Fondu), un nombre hors de la sienne (7) - n'aurait aucun effet.
+    void enumFamily(const Where& w, Kind kind, const std::string& key, const std::string& expression) {
+        if (auto msg = natives::propertyProblem(kindKey(kind), key, expression); !msg.empty()) push(w, std::move(msg));
+    }
+
     void run() {
         using W = exprcheck::Want;
         for (const auto& v : p.views) {
@@ -2987,6 +2995,7 @@ struct ExprWalker {
                 for (const auto& prop : o.props) {
                     const Where w{&v, o.id, "Expression", prop.key};
                     if (!prop.expr.empty()) expr(w, prop.expr, exprcheck::wantOf(prop.key));
+                    if (!prop.expr.empty()) enumFamily(w, o.kind, prop.key, prop.expr);
                     if (isTemplateKey(prop.key)) text(Where{&v, o.id, "Texte", prop.key}, prop.value);
                     if (prop.key == "cells" && prop.expr.empty()) {
                         const auto rows = parseCells(prop.value);

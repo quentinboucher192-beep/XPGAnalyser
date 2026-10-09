@@ -70,10 +70,14 @@ struct EnumValue {
     std::int64_t     number{0};
     std::string_view text, argument;            // le texte montre ; le mot que recoit la fonction
 };
+// 1.12.1 : une propriete d'objet qui prend une enumeration native ("Selector", "style") ;
+// kind "*" : tout objet qui a cette propriete (Text, Button... : "align").
+struct PropertyUse { std::string_view kind, key; };
 struct NativeEnum {
-    std::string_view       name, summary, function;   // function : la fonction IHM_ qui l'attend ("" : aucune)
-    int                    argument{-1};               // son rang
-    std::vector<EnumValue> values;
+    std::string_view         name, summary, function;   // function : la fonction IHM_ qui l'attend ("" : aucune)
+    int                      argument{-1};               // son rang
+    std::vector<EnumValue>   values;
+    std::vector<PropertyUse> uses;                       // 1.12.1 : les proprietes des objets qui la prennent
 };
 struct TypeExtra {
     std::string_view name, cType, cppType, defaultValue, modbus;
@@ -117,6 +121,26 @@ bool parseEnumLiteral(std::string_view text, const NativeEnum** e, const EnumVal
 // L'argument `index` de la fonction `function` (IHM_NAVIGUER, IHM_POPUP...) donne en
 // nombre (TRANSITION#Fondu) : le mot qu'elle attend ("Fondu"). Rien : pas un tel argument.
 [[nodiscard]] std::optional<std::string> enumArgument(std::string_view function, std::size_t index, const sim::Value& v);
+// 1.12.1 - LES PROPRIETES DES OBJETS. L'enumeration native que prend la propriete `key`
+// d'un objet `kind` (hmi::kindKey : "Selector", "Text"...) ; le genre precis d'abord,
+// puis "*". nullptr : une propriete sans enumeration.
+[[nodiscard]] const NativeEnum* propertyEnum(std::string_view kind, std::string_view key) noexcept;
+// La valeur d'une expression liee a une telle propriete : un nombre de l'enumeration
+// (STYLE_SELECTEUR#boutons, 1) donne le mot de l'inspecteur ("boutons"). Rien : pas
+// une telle propriete, un texte (le mot deja), ou un nombre hors de l'enumeration.
+[[nodiscard]] std::optional<std::string> propertyWord(std::string_view kind, std::string_view key, const sim::Value& v);
+// La liste d'une propriete dans l'inspecteur (ses choix) : l'enumeration native qui sert
+// a des proprietes et dont les mots sont ces choix, dans n'importe quel ordre - suivis,
+// au plus, de choix "recette:...", "objet:..." (le bouton d'export). nullptr : aucune.
+[[nodiscard]] const NativeEnum* enumForWords(const std::vector<std::string>& words) noexcept;
+// L'expression d'une telle propriete est une constante qui n'aurait aucun effet - un
+// litteral d'une autre enumeration (TRANSITION#Fondu dans align), un nombre hors de la
+// sienne (7) : le message de Compiler et de l'inspecteur. "" : rien a dire.
+[[nodiscard]] std::string propertyProblem(std::string_view kind, std::string_view key, std::string_view expression);
+// Les litteraux d'enumerations natives d'une expression ("ALIGNEMENT#centre", dans
+// l'ordre, sans les chaines ni les commentaires) : leur enumeration et leur texte.
+struct EnumLiteralUse { const NativeEnum* enumeration{nullptr}; std::string text; };
+[[nodiscard]] std::vector<EnumLiteralUse> enumLiteralsIn(std::string_view expression);
 
 // ------------------------------------------------------- les fonctions propres a l'IHM ---
 // Les couleurs et l'aleatoire : RGB, RGBA, HSL, COULEUR_..., RANDOM, RANDOM_INT...

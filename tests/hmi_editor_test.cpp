@@ -28170,6 +28170,96 @@ void natives1200() {
     help::news::session().helpNotation = before;
 }
 
+// 1.12.1 : LES ENUMERATIONS NATIVES ET L'INSPECTEUR. Chaque liste d'un objet de la
+// bibliotheque qui prend une enumeration native en a exactement les mots (la
+// propriete pilotee les recoit) ; une liste qui n'en prend pas n'est reconnue par aucune
+// (l'aide a la saisie). Puis la case fx : ALIGNEMENT#... propose, une valeur d'une autre
+// enumeration en rouge.
+void enumsInspecteur1121() {
+    std::printf("1.12.1 : les enumerations natives des proprietes et l'inspecteur\n");
+    namespace nt = hmi::natives;
+    namespace as = app::assist;
+    std::string wrong, phantom;
+    std::set<std::pair<std::string, std::string>> seen;     // (genre, cle) montres en liste
+    std::set<std::string> seenKeys;
+    int lists = 0, typed = 0, kinds = 0;
+    for (const auto& info : hmi::kKindInfos) {
+        if (info.kind == Kind::Group || info.kind == Kind::SymbolInstance) continue;
+        Bench b;
+        const Id id = b.place(info.kind, 300, 300);
+        if (id == kNoId) continue;
+        ++kinds;
+        b.editor->layout();
+        for (const auto& c : b.editor->properties().categories())
+            for (const auto& pr : c.properties) {
+                if (pr.key.empty() || pr.type != ui::PropertyGrid::ValueType::Enum) continue;
+                ++lists;
+                const auto* want = nt::propertyEnum(info.key, pr.key);
+                const auto* got = nt::enumForWords(pr.enumValues);
+                if (want) {
+                    ++typed;
+                    seen.insert({std::string(info.key), pr.key});
+                    seenKeys.insert(pr.key);
+                }
+                if (want != got) {
+                    std::string words;
+                    for (const auto& w : pr.enumValues) words += (words.empty() ? "" : "|") + w;
+                    wrong += " " + std::string(info.key) + "." + pr.key + " (" + (want ? std::string(want->name) : "-") + " / "
+                           + (got ? std::string(got->name) : "-") + " : " + words + ")";
+                }
+            }
+    }
+    for (const auto& e : nt::enums())
+        for (const auto& u : e.uses) {
+            if (u.key == "access") continue;   // la case Securite : les groupes d'utilisateurs et les niveaux (le nombre range)
+            const bool ok = u.kind == "*" ? seenKeys.count(std::string(u.key)) > 0 : seen.count({std::string(u.kind), std::string(u.key)}) > 0;
+            if (!ok) phantom += " " + std::string(e.name) + " (" + std::string(u.kind) + "." + std::string(u.key) + ")";
+        }
+    std::printf("   %d genres, %d listes, %d avec une enumeration native\n", kinds, lists, typed);
+    check(kinds > 90 && typed > 40, "l'inventaire : chaque genre pose, ses listes lues");
+    check(wrong.empty(), "chaque liste : son enumeration native, les memes mots" + wrong);
+    check(phantom.empty(), "chaque propriete d'une enumeration existe dans l'inspecteur" + phantom);
+
+    // La case fx de l'Alignement d'un texte.
+    Bench b;
+    const Id t = b.place(Kind::Text, 300, 300);
+    b.editor->layout();
+    const ui::PropertyGrid::Property* align = nullptr;
+    for (const auto& c : b.editor->properties().categories())
+        for (const auto& pr : c.properties)
+            if (pr.key == "align") align = &pr;
+    check(align != nullptr, "le texte : sa case Alignement (align)");
+    if (!align) return;
+    const auto rule = as::gridAssist(as::sourcesFor(b.doc));
+    const auto run = [&](std::string_view before) {
+        std::vector<ui::InputText::Suggestion> out;
+        std::size_t from = before.size();
+        if (auto a = rule("", *align)) a(before, from, out);
+        return out.empty() ? std::string{} : out.front().text + "@" + std::to_string(from);
+    };
+    same_text(run("="), "ALIGNEMENT#Gauche@1", "Alignement, = : ALIGNEMENT#Gauche d'abord");
+    same_text(run("=ALIGNEMENT#D"), "ALIGNEMENT#Droite@12", "Alignement, =ALIGNEMENT#D : ALIGNEMENT#Droite (apres le #)");
+    same_text(run("=SEL(Marche, al"), "ALIGNEMENT#Gauche@13", "Alignement, =SEL(Marche, al : ALIGNEMENT#Gauche");
+    // Une valeur d'une autre enumeration : la pastille rouge.
+    auto* o = b.v().object(t);
+    check(o != nullptr, "le texte pose");
+    if (!o) return;
+    o->setExpr("align", "TRANSITION#Fondu");
+    b.editor->refresh();
+    b.editor->layout();
+    std::string error;
+    for (const auto& c : b.editor->properties().categories())
+        for (const auto& pr : c.properties)
+            if (pr.key == "align") error = pr.exprError;
+    check(error.find("TRANSITION#Fondu n'est pas une valeur de ALIGNEMENT") != std::string::npos,
+          "l'inspecteur : align = TRANSITION#Fondu, la pastille rouge (" + error + ")");
+    // La fiche : ou elle sert.
+    const auto card = app::natives::article("enum:ALIGNEMENT", "ST");
+    bool where = false;
+    for (const auto& bl : card.blocks) where = where || bl.text.find("Alignement") != std::string::npos;
+    check(where, "la fiche de ALIGNEMENT : ou elle sert (Alignement)");
+}
+
 int main(int argc, char** argv) {
     // 1.11.1 (API-V) : HMI_TEST_APIV=1 - la vue des variables de l'automate et API dans l'aide a la saisie, seules.
     if (const char* only = std::getenv("HMI_TEST_APIV"); only && *only == '1') {
@@ -28189,6 +28279,7 @@ int main(int argc, char** argv) {
     // 1.12.0 : HMI_TEST_NATIVES=1 - les natives, seules.
     if (const char* only = std::getenv("HMI_TEST_NATIVES"); only && *only == '1') {
         natives1200();
+        enumsInspecteur1121();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -28549,6 +28640,7 @@ int main(int argc, char** argv) {
     raccourcis1123();                       // 1.11.23 : l'onglet Raccourcis d'une vue
     explorateur1123();                      // 1.11.23 : l'explorateur - puces, titres de domaine
     natives1200();                          // 1.12.0 : les natives - l'arbre, les fiches, le volet
+    enumsInspecteur1121();                  // 1.12.1 : les enumerations natives des proprietes et l'inspecteur
     if (argc > 1) configuration_et_variables(argv[1]);
     if (argc > 1) aide_saisie_scripts(argv[1]);
     if (argc > 1) aide_saisie_champs(argv[1]);

@@ -129,9 +129,12 @@ def main():
     # ---- enumerations natives
     w("const std::vector<NativeEnum>& enums() {")
     w("    static const std::vector<NativeEnum> k = {")
-    for nom, phr, fonction, rang, valeurs in cat.ENUMS:
+    for e in cat.ENUMS:
+        nom, phr, fonction, rang, valeurs = e[:5]
+        proprietes = e[5] if len(e) > 5 else []      # 1.12.1 : les proprietes des objets qui la prennent
         vals = ", ".join("{%s, %d, %s, %s}" % (cstr(v[0]), v[1], cstr(v[2]), cstr(v[3])) for v in valeurs)
-        w("        {%s, %s, %s, %d, {%s}}," % (cstr(nom), cstr(phr), cstr(fonction), rang, vals))
+        uses = ", ".join("{%s, %s}" % (cstr(g), cstr(k)) for g, k in proprietes)
+        w("        {%s, %s, %s, %d, {%s}, {%s}}," % (cstr(nom), cstr(phr), cstr(fonction), rang, vals, uses))
     w("    };")
     w("    return k;")
     w("}")

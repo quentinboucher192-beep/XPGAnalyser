@@ -1,4 +1,5 @@
 #include "HmiPanels.hpp"
+#include "../../hmi/HmiNatives.hpp"   // 1.12.1 : les enumerations natives des proprietes
 #include "../../core/Edition.hpp"   // 1.12.0 : XPGAnalyser IHM - pas d'automate
 #include "HmiParamPanes.hpp"   // 1.9 : les parametres des popups
 #include "HmiObjectAlarmPanes.hpp"    // 1.9 : la cloche des alarmes par defaut
@@ -2647,12 +2648,15 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
         const auto* info = infoOf(prop.key);
         PG::Property p;
         p.name = info ? info->label : prop.key;
+        p.key = prop.key;
         if (!prop.expr.empty()) p.name += "  \xC6\x92";   // f crochet : pilote par une expression
         // ---- Lot API 8 : les expressions impossibles ---- (la pastille fx, rouge si elle ne peut pas marcher)
         if (!prop.expr.empty()) {
             p.expression = prop.expr;
             if (!exprPaths) exprPaths = std::make_shared<const hmi::exprcheck::PlcPaths>(hmiPlcPaths(plc));
             p.exprError = hmiExpressionError(view, prop.key, prop.expr, plc, project, nullptr, exprPaths.get());
+            // 1.12.1 : une enumeration native d'une autre famille, un nombre hors de la sienne.
+            if (p.exprError.empty()) p.exprError = hmi::natives::propertyProblem(hmi::kindKey(o->kind), prop.key, prop.expr);
         }
         p.value = prop.value;
         p.type = info ? info->type : PG::ValueType::Text;

@@ -865,6 +865,7 @@ public:
         std::string  description;             // shown in the help strip
         std::vector<std::string> enumValues;
         std::function<bool(std::string_view)> commit;   // null => read-only
+        std::string  key{};           // 1.12.1 : la cle du modele, quand l'hote en a une ("align") ; vide : name
         // ---- Lot API 8 : les expressions impossibles ----
         // Non vide : la valeur est pilotee par cette expression - pastille "fx"
         // pleine, case teintee et barre d'accent, l'expression en chasse fixe.

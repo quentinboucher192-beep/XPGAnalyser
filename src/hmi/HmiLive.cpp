@@ -4,6 +4,7 @@
 #include "HmiWidgets.hpp"
 #include "HmiDuplicate.hpp"   // 1.11 (REP) : l'ancien $Vanne$ inconnu, la phrase de Dupliquer
 #include "HmiLiveGeometry.hpp"  // 1.11.4 : une instance, un groupe dont la geometrie vient d'une formule
+#include "HmiNatives.hpp"        // 1.12.1 : les enumerations natives des proprietes
 
 #include <algorithm>
 #include <map>
@@ -269,6 +270,9 @@ View LiveView::evaluate(sim::Environment& plc, std::vector<LiveValue>* values, c
                 lv.value = b.expr.error();
             } else if (auto v = b.expr.evaluate(plc, scope)) {
                 lv.value = formatValue(*v);
+                // 1.12.1 : une enumeration native (ALIGNEMENT#Centre vaut 1, un DINT) :
+                // la propriete recoit le mot de l'inspecteur ("centre").
+                if (auto word = natives::propertyWord(kindKey(o->kind), b.key, *v)) lv.value = std::move(*word);
                 // Une rotation, une position, une couleur : la valeur REMPLACE
                 // la statique. L'expression reste (l'objet est toujours pilote).
                 if (b.key == "rot") {

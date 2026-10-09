@@ -298,6 +298,96 @@ std::optional<std::string> enumArgument(std::string_view fn, std::size_t index, 
     return std::nullopt;
 }
 
+// 1.12.1 : les proprietes des objets.
+const NativeEnum* propertyEnum(std::string_view kind, std::string_view key) noexcept {
+    const NativeEnum* any = nullptr;
+    for (const auto& e : enums())
+        for (const auto& u : e.uses) {
+            if (u.key != key) continue;
+            if (u.kind == kind) return &e;
+            if (u.kind == "*" && !any) any = &e;
+        }
+    return any;
+}
+
+std::optional<std::string> propertyWord(std::string_view kind, std::string_view key, const sim::Value& v) {
+    if (v.type() == sim::Type::String || v.type() == sim::Type::Real || v.type() == sim::Type::Unknown) return std::nullopt;
+    const auto* e = propertyEnum(kind, key);
+    if (!e) return std::nullopt;
+    for (const auto& val : e->values)
+        if (val.number == v.asInteger()) return std::string(val.argument);
+    return std::nullopt;
+}
+
+const NativeEnum* enumForWords(const std::vector<std::string>& words) noexcept {
+    const NativeEnum* best = nullptr;
+    for (const auto& e : enums()) {
+        if (e.uses.empty() || e.values.empty() || e.values.size() > words.size()) continue;
+        bool same = true;
+        for (std::size_t i = 0; same && i < e.values.size(); ++i)   // dans un autre ordre aussi (le menu de connexion)
+            same = std::find(words.begin(), words.begin() + static_cast<std::ptrdiff_t>(e.values.size()), e.values[i].argument)
+                != words.begin() + static_cast<std::ptrdiff_t>(e.values.size());
+        for (std::size_t i = e.values.size(); same && i < words.size(); ++i) same = words[i].find(':') != std::string::npos;   // recette:..., objet:...
+        if (same && (!best || e.values.size() > best->values.size())) best = &e;
+    }
+    return best;
+}
+
+std::vector<EnumLiteralUse> enumLiteralsIn(std::string_view x) {
+    std::vector<EnumLiteralUse> out;
+    const auto ident = [](char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; };
+    std::size_t i = 0;
+    while (i < x.size()) {
+        const char c = x[i];
+        if (c == '\'' || c == '"') {                                   // une chaine : sautee
+            const auto end = x.find(c, i + 1);
+            i = end == std::string_view::npos ? x.size() : end + 1;
+            continue;
+        }
+        if (c == '(' && i + 1 < x.size() && x[i + 1] == '*') {          // (* commentaire *)
+            const auto end = x.find("*)", i + 2);
+            i = end == std::string_view::npos ? x.size() : end + 2;
+            continue;
+        }
+        if (c == '/' && i + 1 < x.size() && x[i + 1] == '/') {          // // commentaire
+            const auto end = x.find('\n', i);
+            i = end == std::string_view::npos ? x.size() : end + 1;
+            continue;
+        }
+        if (!ident(c) || std::isdigit(static_cast<unsigned char>(c))) {
+            if (std::isdigit(static_cast<unsigned char>(c)))              // 16#FF, 2#1010 : des nombres
+                while (i < x.size() && (ident(x[i]) || x[i] == '#' || x[i] == '.')) ++i;
+            else ++i;
+            continue;
+        }
+        const std::size_t start = i;
+        while (i < x.size() && ident(x[i])) ++i;
+        if (i >= x.size() || x[i] != '#') continue;
+        std::size_t end = i + 1;
+        while (end < x.size() && ident(x[end])) ++end;
+        const auto text = x.substr(start, end - start);
+        const NativeEnum* e = nullptr;
+        if (end > i + 1 && parseEnumLiteral(text, &e, nullptr)) out.push_back({e, std::string(text)});
+        i = end;
+    }
+    return out;
+}
+
+std::string propertyProblem(std::string_view kind, std::string_view key, std::string_view expression) {
+    const auto* want = propertyEnum(kind, key);
+    if (!want) return {};
+    const auto t = trimmed(expression);
+    const auto lits = enumLiteralsIn(t);
+    const bool other = lits.size() == 1 && lits.front().enumeration != want && t.size() == lits.front().text.size();
+    bool outside = !t.empty() && std::all_of(t.begin(), t.end(), [](char c) { return std::isdigit(static_cast<unsigned char>(c)); });
+    for (const auto& val : want->values) outside = outside && std::to_string(val.number) != t;
+    if (!other && !outside) return {};
+    std::string choices;
+    for (const auto& val : want->values) choices += (choices.empty() ? "" : ", ") + std::string(want->name) + "#" + std::string(val.name);
+    return (other ? lits.front().text : std::string(t)) + " n'est pas une valeur de " + std::string(want->name) + " : la propri\xC3\xA9t\xC3\xA9 "
+         + std::string(key) + " attend " + choices;
+}
+
 // ------------------------------------------------------- les fonctions propres a l'IHM ---
 bool isOwnFunction(std::string_view name) noexcept {
     const auto* f = function(name);
