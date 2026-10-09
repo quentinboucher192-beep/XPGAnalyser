@@ -11997,9 +11997,49 @@ const std::vector<Topic>& topics() {
              {K::Bullet, "Une **\xC3\xA9num\xC3\xA9ration** (T_MODE : Arret, Auto, Manu...) se "
                          "d\xC3\xA9" "crit dans \xC2\xAB Les \xC3\xA9num\xC3\xA9rations dans les scripts et "
                          "les fonctions \xC2\xBB.", {}, "1.10"},
+             // 1.11.19 (refonte des scripts, lot 6) : le registre des types, le selecteur, la regle.
+             {K::Heading, "Le registre des types et le s\xC3\xA9lecteur (1.11.19)", {}, "1.11.19"},
+             {K::Paragraph, "Depuis la 1.11.19, les types que l'IHM conna\xC3\xAEt sont dans **un seul registre** : "
+                         "les types de base de la norme, ANY, Aucun, les structures et les \xC3\xA9num\xC3\xA9rations "
+                         "du projet, les DDT du programme de l'automate. Chaque type y a une **cl\xC3\xA9 stable** "
+                         "(`base:REAL`, `ihm:615` pour un type IHM, `api:T_ANA` pour un DDT), sa cat\xC3\xA9gorie, sa "
+                         "provenance et une phrase. Les listes de types de l'application en viennent : la m\xC3\xAAme "
+                         "liste, dans le m\xC3\xAAme ordre, partout o\xC3\xB9 un type est permis.", {}, "1.11.19"},
+             {K::Bullet, "**Choisir un type\xE2\x80\xA6**, au bout de la liste des types (la case Type d'une "
+                         "d\xC3\xA9" "claration, d'une variable IHM, d'un membre ; le type d'un param\xC3\xA8tre de "
+                         "popup ; le retour d'une fonction), ouvre le **s\xC3\xA9lecteur** : une recherche (sans "
+                         "casse ni accents), les cat\xC3\xA9gories, les **R\xC3\xA9" "cents**, la provenance et "
+                         "l'identifiant de chaque type, sa phrase, ses membres ou ses valeurs ;", {}, "1.11.19"},
+             {K::Bullet, "**Construire** : cocher Tableau (des bornes `0..9`, ou `0..3, 0..9` pour deux "
+                         "dimensions), REF_TO ou MAP[STRING] OF, l\xC3\xA0 seulement o\xC3\xB9 l'usage les permet ; "
+                         "une borne illisible grise **Choisir** et dit pourquoi ;", {}, "1.11.19"},
+             {K::Bullet, "le s\xC3\xA9lecteur se tient \xC3\xA0 jour : un type cr\xC3\xA9\xC3\xA9 ailleurs pendant "
+                         "qu'il est ouvert y appara\xC3\xAEt ; un type actuel qui n'existe plus est dit ; **Ouvrir "
+                         "la d\xC3\xA9" "finition** m\xC3\xA8ne au type IHM (Types IHM) ou au DDT (les types "
+                         "d\xC3\xA9riv\xC3\xA9s de l'API) ;", {}, "1.11.19"},
+             {K::Bullet, "une d\xC3\xA9" "claration d'un type IHM enregistre aussi sa cl\xC3\xA9 : si le type est "
+                         "renomm\xC3\xA9 hors de l'application (le fichier \xC3\xA9" "dit\xC3\xA9 \xC3\xA0 la main), "
+                         "le chargement retrouve son nouveau nom, et le dit.", {}, "1.11.19"},
+             {K::Heading, "Ce qui passe o\xC3\xB9 : la r\xC3\xA8gle de conversion (1.11.19)", {}, "1.11.19"},
+             {K::Paragraph, "Une seule r\xC3\xA8gle dit si une valeur d'un type passe l\xC3\xA0 o\xC3\xB9 un autre "
+                         "est attendu :", {}, "1.11.19"},
+             {K::Bullet, "**sans perte** : un entier vers un entier qui contient toutes ses valeurs (INT vers "
+                         "DINT, USINT vers INT, UINT vers UDINT ou WORD), un entier de 16 bits au plus vers REAL, "
+                         "un entier vers LREAL, REAL vers LREAL ;", {}, "1.11.19"},
+             {K::Bullet, "**avec perte possible** : UINT vers INT, DINT vers REAL (24 bits de pr\xC3\xA9" "cision "
+                         "sur l'automate), LREAL vers REAL - permis pour un op\xC3\xA9rateur (en dernier choix), "
+                         "refus\xC3\xA9 pour un param\xC3\xA8tre de popup ;", {}, "1.11.19"},
+             {K::Bullet, "**refus\xC3\xA9** : un entier vers un plus petit (DINT vers INT : `TO_INT(\xE2\x80\xA6)`), "
+                         "un r\xC3\xA9" "el vers un entier, un nombre vers STRING (`TO_STRING(\xE2\x80\xA6)`), deux "
+                         "structures ou deux tableaux diff\xC3\xA9rents. La raison est dite, avec la conversion "
+                         "\xC3\xA0 \xC3\xA9" "crire.", {}, "1.11.19"},
+             {K::Tip, "Une valeur gard\xC3\xA9" "e (la r\xC3\xA9manence, le stockage Persistante) dont le type a "
+                         "chang\xC3\xA9 passe si elle tient dans le nouveau type : 300 passe de DINT \xC3\xA0 INT, "
+                         "40000 non (sa valeur initiale reprend, et le journal le dit).", {}, "1.11.19"},
          },
          {"variables-ihm", "tableaux-ihm", "variables-liees", "dossiers", "parametres-popups", "operateurs", "types-excel", "enum-scripts"},
-         {"type IHM", "types IHM", "structure", "T_Four", "membre", "membres", "DDT", "STRUCT", "d\xC3\xA9" "calage"},
+         {"type IHM", "types IHM", "structure", "T_Four", "membre", "membres", "DDT", "STRUCT", "d\xC3\xA9" "calage",
+          "registre des types", "s\xC3\xA9lecteur de types", "Choisir un type", "conversion", "cl\xC3\xA9 de type"},
          {"types-ihm"},
          {{"PNG_430_types_ihm_structure.png", "Programmation g\xC3\xA9n\xC3\xA9rale \xE2\x80\xBA Types IHM : T_Vanne et T_Four ; les membres de T_Four, leur type, leur valeur initiale, leur d\xC3\xA9" "calage et leur taille dans une liaison Modbus."}, {"PNG_441_arbre_types_et_dossiers.png", "L'arbre du projet : les types IHM (leurs membres, leurs mots) et les dossiers des variables IHM."}},
          "",
@@ -12496,6 +12536,9 @@ const std::vector<Topic>& topics() {
                          "commentaires deviennent leur documentation ; Ctrl+Z la reprend). Pour tout le "
                          "projet : IHM \xE2\x80\xBA Compiler \xE2\x80\xBA **Migrer les d\xC3\xA9" "clarations\xE2\x80\xA6** "
                          "(la version \xC2\xAB Avant migration des d\xC3\xA9" "clarations \xC2\xBB d'abord).", {}, "1.11.18"},
+             {K::Tip, "Le type d'une d\xC3\xA9" "claration : **Choisir un type\xE2\x80\xA6**, au bout de la liste, "
+                         "ouvre le s\xC3\xA9lecteur de types (recherche, cat\xC3\xA9gories, r\xC3\xA9" "cents, tableaux, "
+                         "REF_TO, MAP) - voir \xC2\xAB Les types IHM : les structures \xC2\xBB.", {}, "1.11.19"},
              {K::Heading, "D\xC3\xA9" "clarer dans le code (l'ancien format, toujours lu)", {}},
              {K::Paragraph, "Les blocs de d\xC3\xA9" "claration se placent au d\xC3\xA9" "but du script :", {}},
              {K::Code, "VAR                        (* gard\xC3\xA9" "es d'une ex\xC3\xA9" "cution \xC3\xA0 "

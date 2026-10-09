@@ -15,6 +15,7 @@
 #include "hmi/HmiCommPanes.hpp"         // lot 15 : les equipements, le reseau du PC
 #include "hmi/HmiEditor.hpp"
 #include "hmi/HmiValuePicker.hpp"        // 1.11.3 : le selecteur de valeur (selecteur-...)
+#include "hmi/HmiTypePicker.hpp"   // 1.11.19 (refonte, lot 6) : les commandes choix-type-...
 #include "hmi/HmiActionDialogs.hpp"      // 1.11.9 : les fenetres des actions (fenetre-action)
 #include "hmi/HmiDuplicateDialog.hpp"  // 1.10.2 (chantier D) : "Dupliquer..."
 #include "hmi/HmiMemoryMap.hpp"         // lot 17 : la carte memoire
@@ -3813,6 +3814,31 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         } else if (cmd == "selecteur-resultat") picker->setResult(arg(1), arg(2) != "constante");
         else if (cmd == "selecteur-valider") picker->validate(arg(1) == "force");
         else { fail("commande inconnue : " + cmd); }
+        return Step::Yield;
+    }
+
+    // 1.11.19 (refonte, lot 6) : le selecteur de types ouvert ("Choisir un type..." d'une liste).
+    //   choix-type-chercher "four" | choix-type-categorie "Structures IHM" | choix-type-choisir "T_Four"
+    //   choix-type-tableau "1..4" (vide : decoche) | choix-type-reference oui|non | choix-type-map oui|non
+    //   choix-type-etat "ARRAY[1..4] OF T_Four" (le type qu'on choisirait ; echoue s'il differe)
+    //   choix-type-valider | choix-type-definition | choix-type-annuler
+    if (cmd.rfind("choix-type-", 0) == 0) {
+        auto* picker = dynamic_cast<HmiTypePicker*>(app_.menus().top());
+        if (!picker) { fail("aucun s\xC3\xA9lecteur de types ouvert"); return Step::Next; }
+        if (cmd == "choix-type-chercher") picker->setSearch(arg(1));
+        else if (cmd == "choix-type-categorie") { if (!picker->setCategory(arg(1))) fail("cat\xC3\xA9gorie inconnue : " + arg(1)); }
+        else if (cmd == "choix-type-choisir") { if (!picker->select(arg(1))) fail("pas dans la liste : " + arg(1)); }
+        else if (cmd == "choix-type-tableau") picker->setArray(!arg(1).empty(), arg(1));
+        else if (cmd == "choix-type-reference") picker->setReference(arg(1) != "non");
+        else if (cmd == "choix-type-map") picker->setMap(arg(1) != "non");
+        else if (cmd == "choix-type-etat") {
+            std::printf("[script] choix de type : %s%s\n", picker->result().c_str(),
+                        picker->resultProblem().empty() ? "" : (" (" + picker->resultProblem() + ")").c_str());
+            if (picker->result() != arg(1)) fail("choix de type : " + picker->result() + " au lieu de " + arg(1));
+        } else if (cmd == "choix-type-valider") picker->choose();
+        else if (cmd == "choix-type-definition") picker->openDefinition();
+        else if (cmd == "choix-type-annuler") picker->finish(false);
+        else fail("commande inconnue : " + cmd);
         return Step::Yield;
     }
 

@@ -15,8 +15,11 @@
 //    les operateurs (matchCost) aussi, seuls des couts changent (liste exacte) ;
 //    une valeur gardee (simdata::convert) passe ou non exactement comme avant.
 // =============================================================================
+#include "../src/hmi/HmiExpr.hpp"
 #include "../src/hmi/HmiModel.hpp"
 #include "../src/hmi/HmiPopupParams.hpp"
+#include "../src/hmi/HmiRuntime.hpp"
+#include "../src/hmi/HmiStore.hpp"
 #include "../src/hmi/HmiTypeRegistry.hpp"
 
 #include <algorithm>
@@ -410,6 +413,141 @@ void valeurs() {
           "un type IHM n'est pas un nombre ; STRING[4] est un texte");
 }
 
+// ------------------------------------------------------------- le type du moteur ----
+void moteur() {
+    std::printf("-- le type du moteur, et une fonction LINT qui ne tronque plus\n");
+    struct Case { const char* name; sim::Type t; };
+    const Case cases[] = {{"BOOL", sim::Type::Bool}, {"ebool", sim::Type::Bool}, {"SINT", sim::Type::Int}, {"INT", sim::Type::Int},
+                          {"DINT", sim::Type::DInt}, {"LINT", sim::Type::DInt}, {"USINT", sim::Type::UInt}, {"UINT", sim::Type::UInt},
+                          {"UDINT", sim::Type::UDInt}, {"ULINT", sim::Type::UDInt}, {"BYTE", sim::Type::Byte}, {"WORD", sim::Type::Word},
+                          {"DWORD", sim::Type::DWord}, {"REAL", sim::Type::Real}, {"lreal", sim::Type::Real}, {"STRING[8]", sim::Type::String},
+                          {"TIME", sim::Type::Time}, {"T_Four", sim::Type::Unknown}, {"", sim::Type::Unknown}};
+    std::string bad;
+    for (const auto& c : cases)
+        if (tr::simTypeOf(c.name) != c.t) bad += std::string(c.name) + " ";
+    check(bad.empty(), "simTypeOf : chaque type de base, sans casse (LINT -> DINT, USINT -> UINT, lreal -> REAL) ; mal : " + bad);
+    // Avant le registre, une locale ou un parametre LINT d'une fonction etait un INT (16 bits) :
+    // 100000 devenait -31072. Et "lreal" ecrit en minuscules, un INT aussi.
+    Project p;
+    HmiFunction f;
+    f.id = p.allocate();
+    f.name = "Echo";
+    f.returnType = "LINT";
+    f.body = "Double := x * 2;\nEcho := Double;\n";
+    Declaration x;
+    x.id = p.allocate();
+    x.kind = DeclKind::Parameter;
+    x.name = "x";
+    x.type = "LINT";
+    f.decls.push_back(x);
+    Declaration dbl;
+    dbl.id = p.allocate();
+    dbl.kind = DeclKind::Variable;
+    dbl.name = "Double";
+    dbl.type = "LINT";
+    dbl.visibility = Visibility::Private;
+    f.decls.push_back(dbl);
+    p.programs.functions.push_back(f);
+    HmiFunction g;
+    g.id = p.allocate();
+    g.name = "Moitie";
+    g.returnType = "lreal";
+    g.body = "Moitie := v / 2.0;\n";
+    Declaration v;
+    v.id = p.allocate();
+    v.kind = DeclKind::Parameter;
+    v.name = "v";
+    v.type = "lreal";
+    g.decls.push_back(v);
+    p.programs.functions.push_back(g);
+    hmi::Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    rt.tick(0.05);
+    const auto e = hmi::Expression::compile("Echo(100000)").evaluate(rt.environment());
+    check(e && e->asInteger() == 200000, "Echo(100000) : un LINT garde 200000 (" + (e ? e->display() : std::string("erreur")) + ")");
+    const auto h = hmi::Expression::compile("Moitie(5.0)").evaluate(rt.environment());
+    check(h && h->asReal() == 2.5, "Moitie(5.0) : un lreal (en minuscules) est un reel, 2.5 (" + (h ? h->display() : std::string("erreur")) + ")");
+}
+
+// ------------------------------------------------------ la cle, au chargement ----
+void cles() {
+    std::printf("-- la cle du type d'une declaration : ecrite, relue, suivie\n");
+    Project p = projet();
+    const Id four = p.programs.types[0].id;
+    Script sc;
+    sc.id = p.allocate();
+    sc.name = "Chauffe";
+    sc.event = "Appel";
+    sc.body = "F.Consigne := 20.0;\n";
+    const auto decl = [&p](std::string name, std::string type) {
+        Declaration d;
+        d.id = p.allocate();
+        d.kind = DeclKind::Variable;
+        d.name = std::move(name);
+        d.type = std::move(type);
+        return d;
+    };
+    sc.decls.push_back(decl("F", "T_Four"));
+    sc.decls.push_back(decl("Fours", "ARRAY[0..3] OF T_Four"));
+    sc.decls.push_back(decl("N", "INT"));
+    p.programs.scripts.push_back(sc);
+    // ecrite : un type IHM a sa cle ; un type de base n'en a pas besoin
+    const auto files = serializeProject(p);
+    std::string index;
+    for (const auto& file : files)
+        if (file.path == "ihm.txt") index.assign(file.data->begin(), file.data->end());
+    const std::string k = "ihm:" + std::to_string(four);
+    check(index.find("nom=\"F\" type=\"T_Four\" type_cle=\"" + k + "\"") != std::string::npos
+              && index.find("type=\"ARRAY[0..3] OF T_Four\" type_cle=\"array[0..3]:" + k + "\"") != std::string::npos
+              && index.find("nom=\"N\" type=\"INT\" stockage=") != std::string::npos,
+          "ecrite : type_cle pour T_Four et son tableau, rien pour INT");
+    // Le type renomme a la main dans le fichier (pas ses declarations) : la cle les suit.
+    std::string edited = index;
+    const std::string was = "nom=\"T_Four\"";
+    const auto at = edited.find(was);
+    check(at != std::string::npos, "la ligne du type T_Four");
+    if (at != std::string::npos) edited.replace(at, was.size(), "nom=\"T_Fourneau\"");
+    const auto reader = [&](const std::string& path, std::string& content) {
+        if (path == "ihm.txt") {
+            content = edited;
+            return true;
+        }
+        for (const auto& file : files)
+            if (file.path == path) {
+                content.assign(file.data->begin(), file.data->end());
+                return true;
+            }
+        return false;
+    };
+    LoadReport report;
+    auto back = parseProject(reader, &report);
+    check(back.has_value(), "relu");
+    if (!back.has_value()) return;
+    const auto* s2 = back.value().script(sc.id);
+    check(s2 && s2->decls.size() == 3 && s2->decls[0].type == "T_Fourneau" && s2->decls[1].type == "ARRAY[0..3] OF T_Fourneau"
+              && s2->decls[2].type == "INT",
+          "relu : les declarations suivent le type renomme (T_Fourneau), le tableau aussi");
+    const bool said = std::any_of(report.warnings.begin(), report.warnings.end(), [](const std::string& w) {
+        return w.find("T_Four est devenu T_Fourneau") != std::string::npos;
+    });
+    check(said, "le chargement le dit (T_Four est devenu T_Fourneau)");
+    bool empty = true;
+    forEachDeclarations(static_cast<const Project&>(back.value()), [&](const std::vector<Declaration>& list) {
+        for (const auto& d : list) empty = empty && d.typeKey.empty();
+    });
+    check(empty, "en memoire, plus aucune cle (l'enregistrement les recalcule)");
+    // Un type supprime : la cle ne retrouve rien, le type reste tel quel (la faute le dira).
+    Project q = projet();
+    Script s3 = sc;
+    s3.decls[0].type = "T_Disparu";
+    s3.decls[0].typeKey = "ihm:999999";
+    q.programs.scripts.push_back(s3);
+    const auto followed = tr::followTypeKeys(q);
+    check(followed.empty() && q.programs.scripts[0].decls[0].type == "T_Disparu" && q.programs.scripts[0].decls[0].typeKey.empty(),
+          "une cle sans type : rien de suivi, le texte garde T_Disparu");
+}
+
 } // namespace
 
 int main() {
@@ -419,6 +557,8 @@ int main() {
     lecture();
     regle();
     valeurs();
+    moteur();
+    cles();
     std::printf("%d controles, %d echec(s)\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

@@ -1,0 +1,87 @@
+# =============================================================================
+#  Session 11119 : LE REGISTRE DES TYPES ET LE SELECTEUR (refonte des scripts, lot 6).
+#  Sur une copie d'Armoire_Gaz (celle de la 1.11.17 : ses scripts declarent encore leurs
+#  variables dans leur texte) :
+#    1. Statistiques_Pression migre, une variable Fours ajoutee dans l'onglet Variables ;
+#    2. sa case Type, "Choisir un type..." : le selecteur (la liste d'une declaration,
+#       les categories, la provenance, la cle de chaque type) ;
+#    3. la recherche "four" ; Tableau 1..4 : ARRAY[1..4] OF T_Four ; Choisir ;
+#    4. le selecteur rouvert : T_Four dans les Recents ;
+#    5. une variable IHM : sa liste (les types d'une place Modbus, sans SINT ni LINT) ;
+#    6. "Ouvrir la definition" de T_Vanne : l'onglet Types IHM, sur lui.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- 1. Statistiques_Pression migre, une variable Fours ----
+arbre "IHM/Programmation générale/Scripts" double
+attendre 8
+ligne "Statistiques_Pression" exact
+attendre 4
+bouton "Migrer ce code"
+attendre 5
+sous-onglet "Variables"
+attendre 4
+outil "Ajouter une déclaration"
+attendre 3
+cellule "Variable" "Nom" "Fours"
+attendre 3
+
+# ---- 2. Choisir un type... : le selecteur ----
+cellule "Fours" "Type" "Choisir un type…"
+attendre 5
+choix-type-etat "INT"
+capture 11119_01_selecteur_de_types.png
+
+# ---- 3. La recherche, un tableau, Choisir ----
+choix-type-chercher "four"
+attendre 3
+capture 11119_02_recherche_four.png
+choix-type-tableau "1..4"
+attendre 3
+choix-type-etat "ARRAY[1..4] OF T_Four"
+capture 11119_03_construire_un_tableau.png
+choix-type-valider
+attendre 4
+capture 11119_04_le_type_choisi.png
+
+# ---- 4. Les recents ----
+cellule "Mini" "Type" "Choisir un type…"
+attendre 5
+choix-type-categorie "Récents"
+attendre 3
+capture 11119_05_les_recents.png
+choix-type-annuler
+attendre 3
+
+# ---- 5. Une variable IHM : les types d'une place Modbus ----
+sous-onglet "Variables IHM"
+attendre 6
+cellule "Temperature_Local" "Type" "Choisir un type…"
+attendre 5
+choix-type-etat "REAL"
+capture 11119_06_une_variable_ihm.png
+choix-type-annuler
+attendre 3
+
+# ---- 6. Ouvrir la definition ----
+sous-onglet "Scripts généraux"
+attendre 4
+ligne "Statistiques_Pression" exact
+attendre 3
+sous-onglet "Variables"
+attendre 3
+cellule "Mini" "Type" "Choisir un type…"
+attendre 5
+choix-type-chercher "vanne"
+attendre 3
+choix-type-choisir "T_Vanne"
+attendre 2
+choix-type-definition
+attendre 6
+capture 11119_07_ouvrir_la_definition.png
+quitter

@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.11.19", "09/10/2026", "livr\xC3\xA9" "e le 09/10 \xC3\xA0 la mi-journ\xC3\xA9" "e"},
     {"1.11.18", "09/10/2026", "livr\xC3\xA9" "e le 09/10 dans la matin\xC3\xA9" "e"},
     {"1.11.17", "09/10/2026", "livr\xC3\xA9" "e le 09/10 au matin"},
     {"1.11.16", "09/10/2026", "livr\xC3\xA9" "e le 09/10 dans la nuit"},
@@ -99,6 +100,23 @@ const std::vector<Note>& table() {
     static const std::vector<Note> t = {
         // 1.11.16 (09/10/2026 dans la nuit) : la remanence d'exploitation par variable, la robustesse
         // (lot 4 de la specification du 08/10).
+        // 1.11.19 (09/10/2026 a la mi-journee) : la refonte des scripts et des fonctions, lot 6 -
+        // le registre des types, la regle de conversion, le selecteur de types.
+        note("1.11.19", "Scripts", Kind::New,
+         "LE S\xC3\x89LECTEUR DE TYPES : \xC2\xAB Choisir un type\xE2\x80\xA6 \xC2\xBB, au bout de la liste des types (la case Type d'une d\xC3\xA9" "claration, d'une variable IHM, d'un membre d'un type ; le type d'un param\xC3\xA8tre de popup ; le retour d'une fonction), ouvre le s\xC3\xA9lecteur : une recherche sans casse ni accents, les cat\xC3\xA9gories, les r\xC3\xA9" "cents, la provenance et l'identifiant de chaque type, ses membres ou ses valeurs ; construire un tableau (une ou deux dimensions), une r\xC3\xA9" "f\xC3\xA9rence REF_TO, une MAP l\xC3\xA0 o\xC3\xB9 l'usage les permet ; Ouvrir la d\xC3\xA9" "finition d'un type IHM ou d'un DDT. Il se tient \xC3\xA0 jour (un type cr\xC3\xA9\xC3\xA9 ailleurs y appara\xC3\xAEt) et dit un type actuel introuvable.",
+         "types-ihm", ""),
+        note("1.11.19", "Scripts", Kind::Changed,
+         "UN SEUL REGISTRE DES TYPES : chaque type a une cl\xC3\xA9 stable (base:REAL, ihm:615 pour un type IHM, api:T_ANA pour un DDT), sa cat\xC3\xA9gorie et sa provenance. Toutes les listes de types en viennent - la m\xC3\xAAme liste, dans le m\xC3\xAAme ordre, partout o\xC3\xB9 un type est permis ; le Type de retour d'une nouvelle fonction propose aussi les structures et les \xC3\xA9num\xC3\xA9rations du projet.",
+         "types-ihm", ""),
+        note("1.11.19", "Scripts", Kind::Changed,
+         "UNE SEULE R\xC3\x88GLE DE CONVERSION pour les param\xC3\xA8tres de popup, les op\xC3\xA9rateurs et les valeurs gard\xC3\xA9" "es (r\xC3\xA9manence) : sans perte (INT vers DINT, INT vers REAL, REAL vers LREAL), avec perte possible (UINT vers INT, DINT vers REAL, LREAL vers REAL), refus\xC3\xA9" "e (DINT vers INT, un r\xC3\xA9" "el vers un entier, un nombre vers STRING), la raison dite. Les param\xC3\xA8tres acceptent les m\xC3\xAAmes types qu'avant ; un op\xC3\xA9rateur aussi, mais choisit d'abord celui qui ne perd rien (avant : le premier trouv\xC3\xA9) ; STRING[n] vaut STRING et EBOOL vaut BOOL partout.",
+         "types-ihm", ""),
+        note("1.11.19", "Scripts", Kind::Fixed,
+         "Une locale ou un param\xC3\xA8tre LINT, ULINT ou USINT d'une fonction IHM \xC3\xA9tait calcul\xC3\xA9 comme un INT de 16 bits (100000 devenait -31072) ; un type \xC3\xA9" "crit en minuscules (lreal) aussi. Ils ont leur type.",
+         "fonctions", ""),
+        note("1.11.19", "Scripts", Kind::Changed,
+         "Une d\xC3\xA9" "claration d'un type IHM enregistre la cl\xC3\xA9 de son type (type_cle, format 23 inchang\xC3\xA9) : un type renomm\xC3\xA9 hors de l'application est retrouv\xC3\xA9 au chargement, et le chargement le dit. La 1.11.18 relit ces fichiers (elle ignore la cl\xC3\xA9).",
+         "types-ihm", ""),
         // 1.11.18 (09/10/2026 dans la matinee) : la refonte des scripts et des fonctions, lots 2 a 5 -
         // les declarations lues sans perte, dans le modele (format 23), migrees, et leurs onglets.
         note("1.11.18", "Scripts", Kind::New,

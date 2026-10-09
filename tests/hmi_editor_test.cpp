@@ -63,6 +63,7 @@
 #include "../src/app/hmi/HmiQualityPanes.hpp"
 #include "../src/app/hmi/HmiDisplayPanes.hpp"
 #include "../src/app/hmi/HmiScriptPanes.hpp"
+#include "../src/app/hmi/HmiTypePicker.hpp"          // 1.11.19 (refonte, lot 6) : le selecteur de types
 #include "../src/app/hmi/HmiSimulation.hpp"
 #include "../src/app/hmi/HmiBuildPanes.hpp"         // 1.11.16 : le double-clic vers la source
 #include "../src/app/hmi/HmiSimVarTree.hpp"   // 1.11.5
@@ -16571,16 +16572,17 @@ void centreAide111() {
     // 1.11.11 : 19.
     // 1.11.12 : 20.
     // 1.11.13 : 21.
-    // 1.11.14 : 22 ; 1.11.15 : 23 ; 1.11.16 : 24 ; 1.11.17 : 25 ; 1.11.18 : 26.
-    check(hn::releases().size() == 26 && hn::releases().front().version == "1.11.18" && hn::releases()[1].version == "1.11.17"
-              && hn::releases()[2].version == "1.11.16" && hn::releases()[3].version == "1.11.15"
-              && hn::releases()[4].version == "1.11.14" && hn::releases()[5].version == "1.11.13" && hn::releases()[6].version == "1.11.12"
-              && hn::releases()[7].version == "1.11.11" && hn::releases()[8].version == "1.11.10"
-              && hn::releases()[9].version == "1.11.9" && hn::releases()[10].version == "1.11.8"
-              && hn::releases()[11].version == "1.11.7" && hn::releases()[12].version == "1.11.6" && hn::releases()[13].version == "1.11.5"
-              && hn::releases()[14].version == "1.11.4" && hn::releases()[15].version == "1.11.3" && hn::releases()[16].version == "1.11.2"
-              && hn::releases()[17].version == "1.11.1" && hn::releases()[18].version == "1.11" && hn::releases()[19].version == "1.10.4",
-          "notes : 26 versions, la 1.11.18 en tete, puis la 1.11.17 \xC3\xA0 la 1.11, et la 1.10.4");
+    // 1.11.14 : 22 ; 1.11.15 : 23 ; 1.11.16 : 24 ; 1.11.17 : 25 ; 1.11.18 : 26 ; 1.11.19 : 27.
+    check(hn::releases().size() == 27 && hn::releases().front().version == "1.11.19" && hn::releases()[1].version == "1.11.18"
+              && hn::releases()[2].version == "1.11.17"
+              && hn::releases()[3].version == "1.11.16" && hn::releases()[4].version == "1.11.15"
+              && hn::releases()[5].version == "1.11.14" && hn::releases()[6].version == "1.11.13" && hn::releases()[7].version == "1.11.12"
+              && hn::releases()[8].version == "1.11.11" && hn::releases()[9].version == "1.11.10"
+              && hn::releases()[10].version == "1.11.9" && hn::releases()[11].version == "1.11.8"
+              && hn::releases()[12].version == "1.11.7" && hn::releases()[13].version == "1.11.6" && hn::releases()[14].version == "1.11.5"
+              && hn::releases()[15].version == "1.11.4" && hn::releases()[16].version == "1.11.3" && hn::releases()[17].version == "1.11.2"
+              && hn::releases()[18].version == "1.11.1" && hn::releases()[19].version == "1.11" && hn::releases()[20].version == "1.10.4",
+          "notes : 27 versions, la 1.11.19 en tete, puis la 1.11.18 \xC3\xA0 la 1.11, et la 1.10.4");
     // 1.11.2 (T2, tranches 41, 42 et 44 ; decisions 187, 201 et 216) : 23 lignes en 8 domaines, dont 2 cartes de la fenetre Nouveautes.
     // Tranche 46 (SYM, decision 240) : + Dupliquer dans un symbole (C) et la section Parametres du symbole (N) : 25 lignes.
     {
@@ -16851,7 +16853,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 220,   // 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 225,   // 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -16994,7 +16996,7 @@ void centreAide111() {
     // Integration 1.11 (I111) : la 1.10.4 ajoute objet-vanne-3-voies (La bibliotheque d'objets) : 206.
     // 1.11.1 (T2, decision 107) : Programmer gagne variables-api (API. : les variables de l'automate) : 207.
     check(ix.count(hc::Chapter::Hmi) == 208, "centre : L'IHM a les 208 sujets des chapitres 2 a 8 du guide (1.11.1 : variables-api ; 1.11.2 : paquets-symboles)");
-    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 26, "centre : 11 expressions, 26 notes (1.11.18)");
+    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 27, "centre : 11 expressions, 27 notes (1.11.19)");
     // Tranche 3 : les 11 types de T3 (hmi::exprguide::all(), depot-o), passes par in.expressions ; les
     // cles de la liste de secours sont les siennes (enumeration, pas enum).
     {
@@ -17056,10 +17058,10 @@ void centreAide111() {
         check(o, "page Raccourcis : Ctrl+Maj+O dessine en trois touches, repere 1.11");
 
         const auto n110 = hc::notesPage("1.10");
-        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 26
+        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 27
                   && !n110.summary.empty() && !n110.date.empty(),
               "page Notes : 1.10 -> 1.10.0, 22 lignes en 7 domaines, sa date et son resume");
-        check(hc::notesPage("").version == "1.11.18" && hc::notesPage("9.9").version == "1.11.18",
+        check(hc::notesPage("").version == "1.11.19" && hc::notesPage("9.9").version == "1.11.19",
               "page Notes : sans version (ou inconnue), la plus recente");
         const auto simu = hc::notesPage("1.10.0", "Simulation");
         check(simu.sections.size() == 1 && simu.rows == 4 && simu.domains.size() == 7,
@@ -17403,7 +17405,7 @@ void centreAide111() {
         // Les notes de version n'ont pas de tutoriel : ni la carte "Regarder le tutoriel" (hasTutorial, que
         // lit HelpCenterScreen::showTopic), ni la pastille dans l'arbre. Les autres pages speciales gardent
         // les leurs (T1 ecrit les tutoriels des raccourcis et de Signaler).
-        bool notesSans = ix.count(hc::Chapter::Notes) == 26;   // 1.11.3 a 1.11.18 : une version de plus
+        bool notesSans = ix.count(hc::Chapter::Notes) == 27;   // 1.11.3 a 1.11.19 : une version de plus
         for (const auto* t : ix.ofChapter(hc::Chapter::Notes)) notesSans = notesSans && !hc::hasTutorial(*t);
         const auto* raccourcis = ix.find("page-raccourcis");
         const auto* signaler = ix.find("page-signaler");
@@ -27105,6 +27107,245 @@ void onglets1118() {
     check(doc->project.programs.scripts == before.scripts, "tout annul\xC3\xA9 : les scripts d'avant");
 }
 
+
+// =============================================================================
+//  1.11.19 (refonte des scripts, lot 6) : LE SELECTEUR DE TYPES - la liste (les
+//  types permis pour l'usage, LINT et les DDT compris la ou ils le sont), la
+//  recherche (sans casse ni accents), les categories, les recents, le type
+//  actuel choisi d'office (un tableau : ses bornes), un type introuvable dit,
+//  construire (tableau, REF_TO, MAP) et sa verification, Ouvrir la definition,
+//  rafraichi quand le projet change ; puis "Choisir un type..." dans les grilles
+//  (declarations, Variables IHM, membres) et le retour d'une fonction, par un
+//  hote d'essai : le type choisi arrive, Ctrl+Z le reprend.
+// =============================================================================
+void selecteurTypes1119() {
+    std::printf("1.11.19 (refonte, lot 6) : le s\xC3\xA9lecteur de types\n");
+    namespace tr = hmi::typereg;
+    namespace de = hmi::decledit;
+    auto doc = std::make_shared<Document>();
+    core::CommandStack stack;
+    auto apply = [&](core::CommandPtr c) { if (c) (void)stack.push(std::move(c)); };
+    HmiType four;
+    four.id = doc->project.allocate();
+    four.name = "T_Four";
+    four.description = "Un four : sa temp\xC3\xA9rature et sa consigne.";
+    four.members.push_back({"Temperature", "REAL", "", ""});
+    four.members.push_back({"Consigne", "REAL", "", ""});
+    doc->project.programs.types.push_back(four);
+    HmiType mode;
+    mode.id = doc->project.allocate();
+    mode.name = "E_Mode";
+    mode.kind = HmiTypeKind::Enumeration;
+    mode.values.push_back({"Auto", 0, ""});
+    mode.values.push_back({"Manuel", 1, ""});
+    doc->project.programs.types.push_back(mode);
+    hmi::params::PlcTypes plc;
+    plc.names = [] { return std::vector<std::string>{"T_ANA"}; };
+    plc.members = [](std::string_view) { return std::vector<std::pair<std::string, std::string>>{{"mes", "REAL"}}; };
+
+    menu::MenuManager mm{menu::MenuFactory{}};
+    std::vector<app::HmiTypePicker::Answer> answers;
+    const auto open = [&](app::HmiTypePicker::Spec spec) -> app::HmiTypePicker* {
+        mm.ShowDialog(std::make_unique<app::HmiTypePicker>(std::move(spec)), [&](const menu::DialogResult& r) {
+            if (r.accepted()) answers.push_back(app::HmiTypePicker::parse(r.payload));
+        });
+        mm.applyPending();
+        return dynamic_cast<app::HmiTypePicker*>(mm.top());
+    };
+    const auto has = [](const std::vector<std::string>& v, const std::string& x) { return std::find(v.begin(), v.end(), x) != v.end(); };
+
+    // ---- une declaration : la base, LINT (permis sans etre propose), les types du projet ; ni ANY, ni Aucun, ni DDT ----
+    app::HmiTypePicker::Spec spec;
+    spec.field = "Type de Mini";
+    spec.current = "REAL";
+    spec.use = tr::UseDeclaration;
+    spec.doc = doc;
+    spec.plc = plc;
+    spec.recents = {"T_Four", "INT", "T_Disparu"};
+    auto* picker = open(spec);
+    check(picker != nullptr, "le s\xC3\xA9lecteur s'ouvre");
+    if (!picker) return;
+    auto shown = picker->shownNames();
+    check(has(shown, "BOOL") && has(shown, "LINT") && has(shown, "T_Four") && has(shown, "E_Mode") && !has(shown, "ANY")
+              && !has(shown, "Aucun") && !has(shown, "T_ANA") && shown.size() == 18,
+          "une d\xC3\xA9" "claration : 16 types de base (LINT, ULINT compris), T_Four, E_Mode ; ni ANY, ni Aucun, ni DDT (" + std::to_string(shown.size()) + ")");
+    check(picker->result() == "REAL" && picker->resultProblem().empty(), "le type actuel, choisi d'office : REAL");
+    picker->setSearch("four");
+    check(picker->shownNames() == std::vector<std::string>{"T_Four"}, "la recherche : four -> T_Four");
+    picker->setSearch("\xC3\xA9num\xC3\xA9ration");
+    check(picker->shownNames() == std::vector<std::string>{"E_Mode"}, "la recherche plie les accents : \xC3\xA9num\xC3\xA9ration -> E_Mode");
+    picker->setSearch("");
+    check(picker->setCategory("Structures IHM") && picker->shownNames() == std::vector<std::string>{"T_Four"}, "la cat\xC3\xA9gorie Structures IHM");
+    check(picker->setCategory("R\xC3\xA9" "cents") && picker->shownNames() == std::vector<std::string>{"T_Four", "INT"},
+          "R\xC3\xA9" "cents : T_Four, INT (un r\xC3\xA9" "cent disparu n'y est plus)");
+    check(picker->setCategory("Tous") && !picker->setCategory("Inconnue"), "Tous ; une cat\xC3\xA9gorie inconnue : refus\xC3\xA9" "e");
+    // construire
+    check(picker->select("T_Four"), "choisir T_Four");
+    picker->setArray(true, "1..4");
+    check(picker->result() == "ARRAY[1..4] OF T_Four" && picker->resultProblem().empty(), "Tableau [1..4] : " + picker->result());
+    picker->setArray(true, "4..1");
+    check(!picker->resultProblem().empty() && picker->resultProblem().find("borne haute") != std::string::npos,
+          "des bornes \xC3\xA0 l'envers : la raison (" + picker->resultProblem() + ")");
+    picker->choose();
+    mm.applyPending();
+    check(answers.empty() && mm.top() == picker, "Choisir est gris\xC3\xA9 : le s\xC3\xA9lecteur reste ouvert");
+    picker->setArray(true, "0..3, 0..9");
+    check(picker->result() == "ARRAY[0..3, 0..9] OF T_Four" && picker->resultProblem().empty(), "deux dimensions : " + picker->result());
+    picker->setArray(false);
+    picker->setReference(true);
+    check(picker->result() == "REF_TO T_Four", "REF_TO : " + picker->result());
+    picker->setMap(true);
+    check(picker->result() == "MAP[STRING] OF REF_TO T_Four", "MAP[STRING] OF : " + picker->result());
+    picker->setReference(false);
+    picker->setMap(false);
+    // rafraichi : un type cree pendant que le selecteur est ouvert
+    HmiType vanne;
+    vanne.id = doc->project.allocate();
+    vanne.name = "T_Vanne";
+    doc->project.programs.types.push_back(vanne);
+    doc->touched(kNoId);
+    check(has(picker->shownNames(), "T_Vanne") && picker->result() == "T_Four", "un type cr\xC3\xA9\xC3\xA9 ailleurs : il appara\xC3\xAEt, la ligne choisie reste");
+    picker->choose();
+    mm.applyPending();
+    check(answers.size() == 1 && answers[0].type == "T_Four" && answers[0].element == "T_Four" && answers[0].open.empty(), "Choisir : T_Four");
+    std::vector<std::string> recents{"INT", "REAL"};
+    app::HmiTypePicker::remember(recents, "T_Four");
+    app::HmiTypePicker::remember(recents, "INT");
+    check(recents == std::vector<std::string>{"INT", "T_Four", "REAL"}, "les r\xC3\xA9" "cents : le dernier en t\xC3\xAAte, sans double");
+
+    // ---- le type actuel : un tableau (ses bornes), un type introuvable ----
+    spec.current = "ARRAY[0..9] OF E_Mode";
+    picker = open(spec);
+    check(picker && picker->result() == "ARRAY[0..9] OF E_Mode", "un tableau actuel : ses bornes coch\xC3\xA9" "es (" + (picker ? picker->result() : std::string{}) + ")");
+    if (picker) picker->finish(false);
+    mm.applyPending();
+    spec.current = "T_Supprime";
+    picker = open(spec);
+    check(picker && picker->notice().find("T_Supprime") != std::string::npos, "un type introuvable : dit (" + (picker ? picker->notice() : std::string{}) + ")");
+    // Ouvrir la definition : la cle du type IHM
+    if (picker) {
+        (void)picker->select("E_Mode");
+        picker->openDefinition();
+        mm.applyPending();
+    }
+    check(answers.size() == 2 && answers[1].open == "ihm:" + std::to_string(mode.id) && answers[1].type.empty(),
+          "Ouvrir la d\xC3\xA9" "finition : la cl\xC3\xA9 ihm:" + std::to_string(mode.id));
+
+    // ---- une variable IHM : pas de SINT, ni REF_TO ; un parametre : ANY et les DDT ; un retour : Aucun ----
+    spec.use = tr::UseVariable;
+    spec.current = "INT";
+    picker = open(spec);
+    if (picker) {
+        shown = picker->shownNames();
+        check(!has(shown, "SINT") && !has(shown, "LINT") && has(shown, "T_Four") && shown.size() == 14,
+              "une variable IHM : les 11 types d'une place Modbus et les 3 types du projet (" + std::to_string(shown.size()) + ")");
+        (void)picker->select("REAL");
+        picker->setReference(true);
+        check(picker->result() == "REAL", "une variable IHM : pas de REF_TO");
+        picker->finish(false);
+        mm.applyPending();
+    }
+    spec.use = tr::UseParameter;
+    spec.current = "ANY";
+    picker = open(spec);
+    if (picker) {
+        shown = picker->shownNames();
+        check(has(shown, "ANY") && has(shown, "T_ANA") && picker->result() == "ANY", "un param\xC3\xA8tre de popup : ANY (choisi), le DDT T_ANA");
+        picker->finish(false);
+        mm.applyPending();
+    }
+    spec.use = tr::UseReturn;
+    spec.current = "Aucun";
+    picker = open(spec);
+    if (picker) {
+        check(has(picker->shownNames(), "Aucun") && picker->result() == "Aucun", "un retour : Aucun (choisi)");
+        picker->finish(false);
+        mm.applyPending();
+    }
+
+    // ---- "Choisir un type..." dans les grilles, par un hote d'essai ----
+    std::vector<app::HmiTypePicker::Spec> asked;
+    std::string reply = "ARRAY[0..2] OF E_Mode";
+    app::typepicker::setHost([&](app::HmiTypePicker::Spec sp, app::typepicker::Done done) {
+        asked.push_back(sp);
+        app::HmiTypePicker::Answer a;
+        a.type = reply;
+        a.element = "E_Mode";
+        done(a);
+    });
+    Script sc;
+    sc.id = doc->project.allocate();
+    sc.name = "Chauffe";
+    sc.event = "Appel";
+    sc.body = "Mode[0] := E_Mode#Auto;\n";
+    Declaration d;
+    d.id = doc->project.allocate();
+    d.kind = DeclKind::Variable;
+    d.name = "Mode";
+    d.type = "INT";
+    sc.decls.push_back(d);
+    doc->project.programs.scripts.push_back(sc);
+    {
+        app::HmiScriptsPane pane("prog1119", doc, apply);
+        pane.setBounds({0, 0, 1400, 800});
+        pane.layout();
+        pane.selectScript(sc.id);
+        auto& vars = pane.variablesGrid();
+        const int tc = vars.tableColumnOf(de::Column::Type);
+        const auto choices = vars.table().model()->cellChoices(0, static_cast<std::size_t>(tc));
+        check(!choices.empty() && choices[choices.size() - 2] == app::typepicker::kChoose && choices.back() == "Autre type\xE2\x80\xA6",
+              "la case Type d'une d\xC3\xA9" "claration : Choisir un type\xE2\x80\xA6, puis Autre type\xE2\x80\xA6");
+        (void)vars.table().model()->setCellText(0, static_cast<std::size_t>(tc), app::typepicker::kChoose);
+        check(asked.size() == 1 && asked[0].field == "Type de Mode" && asked[0].current == "INT" && asked[0].use == tr::UseDeclaration,
+              "l'h\xC3\xB4te re\xC3\xA7oit la demande : Type de Mode, INT, une d\xC3\xA9" "claration");
+        check(doc->project.script(sc.id)->decls[0].type == "ARRAY[0..2] OF E_Mode", "le type choisi arrive dans la d\xC3\xA9" "claration");
+        (void)stack.undo();
+        check(doc->project.script(sc.id)->decls[0].type == "INT", "Ctrl+Z : INT");
+        reply = "T_Inconnu";
+        (void)vars.table().model()->setCellText(0, static_cast<std::size_t>(tc), app::typepicker::kChoose);
+        check(doc->project.script(sc.id)->decls[0].type == "INT" && vars.lastMessage().find("T_Inconnu") != std::string::npos,
+              "un type refus\xC3\xA9 : la barre le dit (" + vars.lastMessage() + ")");
+    }
+    // Variables IHM : la case Type
+    Variable var;
+    var.id = doc->project.allocate();
+    var.name = "Consigne";
+    var.type = "REAL";
+    var.initial = "0";
+    doc->project.programs.variables.push_back(var);
+    {
+        app::HmiVariablesPane vp("vars1119", doc, apply);
+        vp.setBounds({0, 0, 1400, 800});
+        vp.layout();
+        vp.refresh();
+        const int row = vp.rowOf("Consigne");
+        check(row >= 0, "Variables IHM : la ligne Consigne");
+        if (row >= 0) {
+            const auto choices = vp.table().model()->cellChoices(static_cast<ui::RowIndex>(row), 1);
+            check(has(choices, app::typepicker::kChoose), "Variables IHM : la liste des types propose Choisir un type\xE2\x80\xA6");
+            reply = "T_Four";
+            asked.clear();
+            (void)vp.table().model()->setCellText(static_cast<ui::RowIndex>(row), 1, app::typepicker::kChoose);
+            check(asked.size() == 1 && asked[0].use == tr::UseVariable && asked[0].current == "REAL" && doc->project.variable("Consigne")->type == "T_Four",
+                  "Variables IHM : l'h\xC3\xB4te, puis Consigne devient un T_Four");
+        }
+    }
+    // Le retour d'une fonction
+    {
+        app::HmiFunctionsPane fp("fn1119", doc, apply);
+        fp.setBounds({0, 0, 1400, 800});
+        fp.layout();
+        const Id carre = fp.addFunction("Carre", "REAL", "x au carr\xC3\xA9");
+        reply = "LREAL";
+        asked.clear();
+        check(!fp.setReturnType(carre, app::typepicker::kChoose) && asked.size() == 1 && asked[0].use == tr::UseReturn
+                  && asked[0].current == "REAL" && doc->project.function(carre)->returnType == "LREAL",
+              "le retour d'une fonction : Choisir un type\xE2\x80\xA6 -> LREAL");
+    }
+    app::typepicker::setHost({});
+    check(!app::typepicker::available(), "sans h\xC3\xB4te : pas de s\xC3\xA9lecteur (et pas d'entr\xC3\xA9" "e dans les listes)");
+}
+
 int main(int argc, char** argv) {
     // 1.11.1 (API-V) : HMI_TEST_APIV=1 - la vue des variables de l'automate et API dans l'aide a la saisie, seules.
     if (const char* only = std::getenv("HMI_TEST_APIV"); only && *only == '1') {
@@ -27118,6 +27359,12 @@ int main(int argc, char** argv) {
         if (argc > 1) configuration_et_variables(argv[1]);
         if (argc > 1) apiVue1112_dupliquer(argv[1]);   // 1.11.2 (D13)
         if (argc > 1) valuePickerApi1113(argv[1]);     // 1.11.3 : le selecteur et les membres de l'automate
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
+    // 1.11.19 (refonte, lot 6) : HMI_TEST_LOT6=1 - le selecteur de types, seul.
+    if (const char* only = std::getenv("HMI_TEST_LOT6"); only && *only == '1') {
+        selecteurTypes1119();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -27446,6 +27693,7 @@ int main(int argc, char** argv) {
     saisieIcones1112();                     // 1.11.2 (API-V, decision 161) : l'icone (nature, provenance) devant chaque proposition
     jumeauValeurs1112();                    // 1.11.2 (BLK) : les valeurs du jumeau, 2 000 lignes, plus de n x n x n par image
     onglets1118();                          // 1.11.18 (refonte, lot 5) : les onglets de declarations, Migrer ce code
+    selecteurTypes1119();                   // 1.11.19 (refonte, lot 6) : le selecteur de types
     if (argc > 1) configuration_et_variables(argv[1]);
     if (argc > 1) aide_saisie_scripts(argv[1]);
     if (argc > 1) aide_saisie_champs(argv[1]);
