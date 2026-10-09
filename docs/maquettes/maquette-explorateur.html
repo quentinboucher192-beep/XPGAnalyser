@@ -171,11 +171,9 @@ svg.i{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-widt
 .row .cnt{min-width:24px;text-align:right;font-size:11.5px;color:var(--app-fg-3)}
 .row .hov{display:none;gap:1px}
 .row:hover .hov{display:flex}
-.row:hover .cnt{display:none}
 .row .hov button{border:0;background:transparent;width:22px;height:20px;border-radius:4px;display:grid;place-items:center;color:var(--app-fg-2)}
 .row .hov button:hover{background:var(--app-3);color:var(--app-fg)}
-.row.grp .name{font:600 10.5px/1 var(--ui);letter-spacing:.07em;text-transform:uppercase;color:var(--app-fg-3)}
-.row.grp{height:calc(var(--row) - 4px)}
+.row.grp .name{color:var(--app-fg-2)}
 .row mark{background:color-mix(in srgb,var(--mod) 35%,transparent);color:inherit;border-radius:2px}
 .s-ok{color:var(--ok)}.s-err{color:var(--err)}.s-never{color:var(--never)}.s-redo{color:var(--redo)}
 .errn{background:var(--err-bg);color:var(--err);border-radius:8px;padding:0 6px;font:600 10.5px/16px var(--ui)}
@@ -270,7 +268,7 @@ svg.i{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-widt
 <header class="top">
   <div>
     <h1>Explorateur d'application : la proposition</h1>
-    <p>À gauche, l'arbre tel qu'il est dans la 1.11.21. Au milieu, celui que je propose : il se déplie, se filtre et se survole comme le vrai. À droite, ce qui change, et la légende. Le projet montré est Armoire_Gaz.</p>
+    <p>À gauche, l'arbre tel qu'il est dans la 1.11.21. Au milieu, l'arbre retenu, validé le 09/10 : il se déplie, se filtre et se survole comme le vrai. À droite, ce qui change, et la légende. Le projet montré est Armoire_Gaz.</p>
   </div>
   <div class="ctl">
     <label for="th-auto">Thème</label>
@@ -299,7 +297,7 @@ svg.i{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-widt
   </section>
 
   <section aria-labelledby="h-new">
-    <div class="colhead"><h2 id="h-new">Proposé</h2><span>essayez : déplier, chercher, filtrer, survoler</span></div>
+    <div class="colhead"><h2 id="h-new">Retenu</h2><span>essayez : déplier, chercher, filtrer, survoler</span></div>
     <div class="frame nw" id="newFrame">
       <div class="bar">
         <div class="scopes" role="group" aria-label="Portée de l'arbre" id="scopes"></div>
@@ -327,9 +325,9 @@ svg.i{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-widt
       <li data-t="scopes"><div><b>La portée en onglets, des filtres en puces</b><span>Tout, API, IHM, Simulation, Versions, Épinglés. Sous la recherche : Modifiés, En faute, À générer, Épinglés, avec leur nombre. Un clic suffit pour ne voir que ce qui demande du travail.</span></div></li>
       <li data-t="st"><div><b>Une seule colonne d'état, alignée</b><span>✓ à jour, ◐ à refaire, ✕ en faute avec le nombre, ○ jamais généré. Fini les icônes empilées à des places différentes selon la ligne. Le point orange garde son sens : modifié depuis la dernière version.</span></div></li>
       <li data-t="ki"><div><b>Une couleur et une icône par genre</b><span>Script, fonction, variable, constante, type, vue, popup, symbole : chacun la sienne, les mêmes que dans les éditeurs. Les dossiers restent gris, c'est le contenu qui se voit.</span></div></li>
-      <li data-t="grp"><div><b>Le contenu du code en sous-titres</b><span>PARAMÈTRES · 4, VARIABLES · 2… en petites capitales, sans icône de dossier : un code déplié reste léger. Les modes sont des étiquettes : E/S, sortie, conservée.</span></div></li>
+      <li data-t="grp"><div><b>Le contenu du code, dans ses dossiers</b><span>Paramètres (4), Variables (2), Fonctions internes (1), comme aujourd'hui. Les modes deviennent des étiquettes : E/S, sortie, conservée.</span></div></li>
       <li data-t="ovl"><div><b>Surcharges et signatures lisibles</b><span>« Convertir · 3 surcharges », puis chaque signature dans la police du code, le nom en clair et le reste en gris.</span></div></li>
-      <li data-t="hov"><div><b>Les gestes au survol</b><span>Épingler ★, ouvrir ↗, le menu ⋯ apparaissent à la place du compteur. La carte au survol donne le chemin, l'état et les touches.</span></div></li>
+      <li data-t="hov"><div><b>Les gestes au survol</b><span>Épingler ★, ouvrir ↗, le menu ⋯ apparaissent devant la colonne d'état ; le compteur reste visible. La carte au survol donne le chemin, l'état et les touches.</span></div></li>
       <li data-t="foot"><div><b>Un pied qui résume le projet</b><span>La simulation (arrêtée, en marche, cycle), le build (à jour, en faute, à générer) et la version (V4, 12 changements). Chaque morceau ouvre son onglet.</span></div></li>
       <li data-t="legend"><div><b>La légende dans l'appli</b><span>Le bouton ? ouvre la légende de toutes les marques. Elle est aussi ci-dessous.</span></div></li>
       <li data-t="sim"><div><b>Simulation dépliée</b><span>Points d'arrêt, forçages avec leur valeur, courbes : le déballage que tu as demandé pour Simulation, dans le même style.</span></div></li>
@@ -339,12 +337,12 @@ svg.i{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-widt
       <div class="lgwrap"><div class="lg" id="lgSide"></div></div>
     </div>
     <div class="box">
-      <h3>À valider</h3>
+      <h3>Validé le 09/10</h3>
       <ul>
-        <li>Pour une ligne à jour : on garde le ✓ vert, ou on ne montre rien pour alléger (seuls ◐ ✕ ○ restent) ?</li>
+        <li>Une ligne à jour garde son ✓ vert.</li>
         <li>Les couleurs des domaines : bleu API, violet IHM, vert Simulation, ambre Versions.</li>
-        <li>Les compteurs des dossiers : toujours visibles, ou seulement au survol ?</li>
-        <li>Les sous-titres du code (PARAMÈTRES · 4) à la place des dossiers « Paramètres (4) ».</li>
+        <li>Les compteurs des dossiers restent toujours visibles.</li>
+        <li>Le contenu du code garde ses dossiers (« Paramètres (4) »).</li>
       </ul>
     </div>
   </aside>
@@ -534,20 +532,20 @@ svg.i{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-widt
     const tw = kids.length ? (open ? '▾' : '▸') : '';
     const cls = ['row', n.grp ? 'grp' : '', S.sel === n.id ? 'sel' : ''].join(' ');
     let name;
-    if (n.grp) name = `<span class="name" data-t="grp">${esc(n.label)} · ${n.n}</span>`;
+    if (n.grp) name = `<span class="name" data-t="grp"><span>${esc(n.label)} (${n.n})</span></span>`;
     else name = `<span class="name"><span>${hl(n.label)}</span>${n.sig ? `<span class="sig">${hl(n.sig)}</span>` : ''}</span>`;
     const meta = n.meta && !n.grp ? `<span class="meta">${hl(n.meta)}</span>` : '';
     const tag = n.tag ? `<span class="tag ${n.tag[1]}" ${n.ovl ? 'data-t="ovl"' : ''}>${esc(n.tag[0])}</span>` : '';
     const vdot = n.v ? '<span class="vdot" title="Modifié depuis la V3"></span>' : '';
-    const cnt = n.n != null && !n.grp ? `<span class="cnt num">${n.n}</span>` : '<span class="cnt"></span>';
+    const cnt = n.n != null ? `<span class="cnt num">${n.n}</span>` : '<span class="cnt"></span>';
     const off = n.off ? ' style="opacity:.55"' : '';
     let html = `<div class="${cls}" data-id="${n.id}" style="--dom:var(${DOM[dom][1]})"${off}>
       <span class="ind">${guides}</span>
       <span class="tw" data-tw="${n.id}">${tw}</span>
-      ${n.grp ? '' : `<span class="ki" data-t="ki">${ico(icon, color)}</span>`}
+      <span class="ki" ${n.grp ? '' : 'data-t="ki"'}>${ico(icon, color)}</span>
       ${name}${vdot}${meta}${tag}
-      <span class="end"><span class="st" data-t="st">${stCell(n)}</span>${cnt}
-        <span class="hov" data-t="hov"><button type="button" title="Épingler">${ico('star', '--app-fg-2')}</button><button type="button" title="Ouvrir">${ico('open', '--app-fg-2')}</button><button type="button" title="Plus">${ico('more', '--app-fg-2')}</button></span>
+      <span class="end"><span class="hov" data-t="hov"><button type="button" title="Épingler">${ico('star', '--app-fg-2')}</button><button type="button" title="Ouvrir">${ico('open', '--app-fg-2')}</button><button type="button" title="Plus">${ico('more', '--app-fg-2')}</button></span>
+        <span class="st" data-t="st">${stCell(n)}</span>${cnt}
       </span></div>`;
     if (open) for (const c of kids) html += rowHtml(c, depth + 1, dom);
     return html;
