@@ -79,6 +79,9 @@ attendre 420
 ihm-sorties console
 attendre 3
 ihm-console-etat "Pression A : mini 0.0, maxi 0.0 bar (5 mesures)"
+#  (la recherche de la Console : les seules lignes du script)
+champ "hmi.sorties.search" "Pression A"
+attendre 4
 survol 1350 400
 attendre 3
 capture 11117_06_journal_lit_les_locales.png
