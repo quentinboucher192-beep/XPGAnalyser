@@ -47,7 +47,7 @@ Fichiers livrés :
 - **Valider les saisies.** Une opération nouvelle, **Valider les saisies**, écrit la saisie en cours de la vue (ou du popup), comme Entrée. Le clic sur le bouton qui la porte ne fait plus perdre la saisie au champ. Refusée (hors bornes, illisible), elle arrête les actions suivantes du même bouton : un « Fermer le popup » placé après elle attend une saisie juste. Le bouton **Valider** du modèle « Saisie d'une consigne » s'en sert désormais. Pour vos popups déjà créés à partir de ce modèle, ajoutez « Valider les saisies » en tête des actions de leur bouton Valider (voir « Tester vous-même »).
 - **L'explorateur, la suite de la maquette.**
   - Sous le champ de filtre, quatre **puces** : **Modifiés**, **En faute**, **À générer** et **Épinglés**, chacune avec son nombre, toujours visible. Un clic ne montre que leurs lignes (et leurs dossiers, dépliés) ; un second clic rend tout l'arbre ;
-  - les **titres de domaine** disent leur état en gris après leur nom : « 29 POU · 891 variables » pour l'API, « 44 vues · 12 à générer » pour l'IHM, « arrêtée · cycle 0 » pour la Simulation, « V5 en cours · 48 changements » pour les Versions ;
+  - les **titres de domaine** disent leur état en gris après leur nom : « 29 POU · 891 variables » pour l'API, « 40 vues · 327 à générer » pour l'IHM, « arrêtée · cycle 0 » pour la Simulation, la version en cours et ses changements pour les Versions ;
   - au survol d'un titre, **son action** : Réimporter et réanalyser (API), Générer l'IHM, Démarrer ou Arrêter la simulation, Créer une version ; puis Plus… (le menu du clic droit) ;
   - le bouton **?** du rail, à gauche de l'arbre, ouvre **la légende** : une page du guide qui dit chaque marque (la colonne d'état, le compteur, le point orange, les étiquettes, les couleurs, les puces, les titres).
 
@@ -86,7 +86,26 @@ Fichiers livrés :
 - **Les titres de domaine** (`ProjectTreeModel::domainStatus`) : l'API compte ses POU et ses variables (et ses mises à jour de bibliothèque) ; l'IHM, ses vues et son état de build (en faute, à générer, à jour) ; la Simulation reçoit sa ligne de l'écran (arrêtée ou en marche, le nombre de cycles) ; les Versions disent la version en cours et ses changements. L'action au survol (`MainAnalysisScreen::treeHeadAction`) fait ce que fait le menu du clic droit.
 - **La légende** : un sujet du guide, « La légende de l'explorateur » (chapitre Démarrer), ouvert par le **?** du rail. Avant, le **?** ne montrait qu'une infobulle.
 
-<!-- PARCOURS -->
+## 6. Le parcours vérifié sous Wine
+
+Une session jouée avec l'exe livré (`tools/sessions/session-11123-clavier-explorateur.txt`), sur une copie d'Armoire_Gaz sans cache, celle de la 1.11.17, préparée comme pour la 1.11.22 (`preparer-projet-11120`, puis `preparer-projet-11121`), puis par `preparer-projet-11123`. Ce dernier ajoute la vue **Vue_Clavier** : des textes qui montrent les variables de la souris et du clavier, une zone à cliquer, les variables Compteur_F5, Lampe_F6 et Niveau, et trois raccourcis : **F5** (front montant : Compteur_F5 + 1), **F6** (durée : tenue une seconde, Lampe_F6 bascule), **Haut** (répétition : Niveau + 1 toutes les 200 ms).
+
+Les commandes de contrôle de la session (`ihm-sim-etat`, `ihm-variable`) échouent si le résultat n'est pas celui attendu ; il n'y a eu aucun échec.
+
+| Étape | Ce qui s'est passé | Capture |
+|---|---|---|
+| **1.** Le projet ouvert, l'explorateur | Sous le filtre, les puces : **Modifiés 9**, **En faute**, **À générer 327**, **Épinglés** (une puce à zéro ne montre pas de nombre). Les titres : API « 29 POU · 891 variables », IHM « 40 vues · 327 à générer » (aucun build depuis l'ouverture), Simulation « arrêtée · cycle 0 ». Le pied : « Simulation arrêtée · V4 modifié » | `11123_01` |
+| **2.** La puce **À générer**, puis la même encore | Le champ montre le mot réservé `@a-generer`, la ligne d'information « À générer ou à compiler : 275 ligne(s), avec leurs dossiers — la puce, encore : tout » ; l'arbre, déplié, ne garde que ces lignes (Configuration › Alarmes, Recettes, Vues…). Le second clic rend l'arbre entier | `11123_02` |
+| **3.** Le **?** du rail | La page « La légende de l'explorateur » du guide (chapitre Démarrer) : à droite l'état puis le compteur (le tableau des marques), après le nom, les couleurs, les puces, les titres de domaine. Échap revient à l'écran d'analyse | `11123_03` |
+| **4.** Vue_Clavier ouverte, rien de choisi, onglet **Raccourcis** ; **Ajouter**, Touche `Maj+Entree`, Déclencheur « Front descendant » | Ajouter a pris F2, la première touche libre (F5 et F6 sont pris). La touche tapée sans accent s'écrit **Maj+Entrée** ; le déclencheur « Front descendant (touche relâchée) ». L'onglet porte **4** ; la liste (# · Touche · Déclencheur) montre « 3 Haut Répétition » et « 4 Maj+Entrée Front descendant » | `11123_04` |
+| **5.** Simulation › IHM (le build d'abord : 327 générés, 243 compilés, 0 erreur ; l'IHM en marche) ; Vue_Clavier ; un clic sur la zone ; **F5** trois fois ; **F6** tenue deux secondes | La vue en marche : « Souris : X = 630 Y = 260 », « Sous la souris : Vue_Clavier.Zone_Clic », « sur l'IHM : TRUE » ; « Dernière touche : F6 », « Touches tenues : F6 (1) », « Tenue depuis : T#1267ms », « SYS.Key.F6 : TRUE », « Dernier raccourci : Vue_Clavier · F6 (4) » ; à droite « Compteur_F5 = 3 », « Lampe_F6 = TRUE ». Les contrôles : Compteur_F5 vaut 3, Lampe_F6 vaut TRUE | `11123_05` |
+| **6.** F6 relâchée, **Haut** tenue un peu plus d'une seconde, puis **Maj+Entrée** | « Dernière touche : Maj+Entrée », « Touches tenues : (0) », « SYS.Key.F6 : FALSE », « Touches enfoncées : 6 », « Niveau = 3 », « **Dernier raccourci : Vue_Clavier · Maj+Entrée (8)** » : le front descendant de Maj+Entrée est parti | `11123_06` |
+| **7.** IHM › Programmation générale › Variables système, domaine **Souris et clavier** | Les valeurs de l'IHM en marche : `SYS.KeyLast` « Maj+Entrée », `SYS.KeyPresses` 6, `SYS.KeyDownCount` 0, `SYS.KeyHoldTime` T#0ms, `SYS.ShortcutLast` « Vue_Clavier · Maj+Entrée », `SYS.ShortcutCount` 8 ; chaque variable avec son type (BOOL, INT, DINT, STRING, TIME) et sa description | `11123_07` |
+
+**Ce que la session a montré.**
+- **À la première exécution, Maj+Entrée n'est pas parti** : « Dernier raccourci » restait à « Haut (7) ». Armoire_Gaz a la **connexion par badge** (`badge=1`). Le moteur réservait au lecteur de badge les chiffres et Entrée, **avec ou sans Maj** : Maj+Entrée était donc pris pour la fin d'un badge. Un lecteur tape ses chiffres (avec Maj sur un clavier AZERTY), puis **Entrée seule**. La règle est corrigée : Entrée seule reste au lecteur, Maj+Entrée part en raccourci. Un essai le vérifie (*clavierSouris11123*), l'exe a été recompilé et la session rejouée : le raccourci est parti (capture 6 : « Maj+Entrée (8) »).
+- **Niveau = 3** pour Haut tenue un peu plus d'une seconde. La répétition suit l'horloge de l'IHM. Dans cette session sous Wine, cette horloge a avancé moins vite que celle du poste : au bout de deux secondes réelles, la durée affichée était de 1,267 s (capture 5). Les essais vérifient le rythme exact : 3 répétitions en 350 ms, à 100 ms de période.
+- **La liste de l'onglet Raccourcis est basse** dans cette disposition (la bibliothèque occupe le bas du panneau de droite) : on n'y voit qu'une ligne et demie, et la colonne Action est hors de vue. Il faut faire défiler la liste. C'est la même disposition que l'onglet Actions ; elle n'a pas été changée.
 
 ## 7. Fichiers modifiés
 
@@ -101,13 +120,14 @@ Fichiers livrés :
 
 ## 8. Les tests ajoutés
 
-- **`hmi`**, *clavierSouris11123* (37 contrôles) :
+- **`hmi`**, *clavierSouris11123* (38 contrôles) :
   - les touches : « ctrl + maj + entree » se lit `Ctrl+Shift+Enter` et se montre `Ctrl+Maj+Entrée` ; F5, 1 (Digit1), Échap, Haut, Pg suiv ; « Ctrl+ » seul, « Hyper+A » et « Pomme » refusés, avec leur raison ; `Ctrl+F5` n'est pas `F5` ; F1 et Ctrl+Alt+Q gardées, F2 libre ;
   - en marche : le front montant (une fois : ni la répétition du clavier ni la touche tenue ne le relancent), le front descendant, `H` seule qui n'est pas `Ctrl+H`, la durée (rien avant 500 ms, puis une seule fois), la répétition (rien avant la première période, 3 fois en 350 ms à 100 ms, plus rien une fois relâchée) ;
   - qui prend la touche : la popup modale qui a F5 le prend avant la vue, et arrête la recherche pour Haut, qu'elle n'a pas ; relâchée après la fermeture de la popup, son front descendant part quand même ; une popup non modale sans F5 laisse la vue le prendre ; Échap seul n'est à personne (la popup se ferme) ; un champ de saisie qui a le clavier garde A mais laisse partir F2 ; le clavier perdu relâche F5 (son front descendant part) ;
   - les variables : `SYS.Key.F5`, `SYS.KeyDownCount`, `SYS.KeyLast`, `SYS.KeyCtrl`, `SYS.KeyHoldTime` (un TIME), `SYS.ShortcutCount`, `SYS.ShortcutLast` et la ligne du journal (Raccourci) ; `SYS.MouseX`, `SYS.MouseY`, `SYS.MouseView`, `SYS.MouseObject`, `SYS.MouseInside`, les boutons (gauche + milieu : 5), la molette ; la souris sortie (dehors, boutons relâchés) ; l'IHM redémarrée repart de zéro ;
   - Compiler : une touche illisible (erreur), un raccourci sur un objet et F1 (avertissements) ;
-  - l'enregistrement : le format 24, et le raccourci relu (Touche maintenue Ctrl+H, 500 ms).
+  - l'enregistrement : le format 24, et le raccourci relu (Touche maintenue Ctrl+H, 500 ms) ;
+  - la connexion par badge : Entrée seule reste au lecteur, Maj+Entrée part en raccourci (ajouté après la session Wine, § 6).
 - **`hmi`**, *validerSaisies11123* (5 contrôles) : le modèle « Saisie d'une consigne » met Valider les saisies puis Fermer le popup sur son bouton Valider ; le clic sur Valider ne fait pas perdre la saisie ; Valider écrit la consigne (12) et ferme le popup ; 999, hors bornes, est refusé : le popup reste ouvert et le champ garde le clavier ; Fermer abandonne la saisie.
 - **`hmieditor`**, *raccourcis1123* (12 contrôles) : Ajouter crée F2 (front montant), que l'onglet Actions ne montre pas ; la grille a Touche et Déclencheur, et Durée (ms) seulement pour une touche maintenue ; aller à un raccourci ouvre l'onglet Raccourcis sur sa ligne ; la touche tapée devient `Ctrl+Shift+F5` ; Ctrl+Z ; un symbole n'a pas d'onglet Raccourcis.
 - **`hmieditor`**, *explorateur1123* (8 contrôles) : les lignes d'état des titres (« 2 vues · pas encore générée », « 0 POU · 0 variables », « V5 en cours · 48 changements », « 2 vues · 1 en faute · 1 à générer ») et leurs actions (Démarrer, puis Arrêter quand la simulation tourne) ; les nombres des puces (1 en faute, 1 à générer, rien de modifié) et les marques de chaque ligne.
@@ -132,6 +152,32 @@ Fichiers livrés :
 4. **Simuler l'IHM**, allez à la vue, **cliquez dedans** (elle prend le clavier), puis F5, F6 tenue, Haut tenue : les valeurs suivent.
 5. Ouvrez une popup « Saisie d'une consigne » créée avec cette version, tapez une valeur et cliquez **Valider** sans appuyer sur Entrée : la valeur est écrite. Pour une popup créée avant, ajoutez « Valider les saisies » en tête des actions de son bouton Valider.
 6. Dans l'explorateur, cliquez la puce **À générer**, puis encore : l'arbre filtre, puis revient. Survolez le titre IHM : « Générer l'IHM ». Le **?** du rail ouvre la légende.
+
+## Installer
+
+1. Lancez `XPGAnalyser-Setup-1.11.23.exe`. Il met à jour la version installée : même identité d'installation, sauvegarde de l'ancienne version, données reprises sans être déplacées.
+2. Windows SmartScreen peut avertir, parce que l'installateur n'est pas signé. Choisissez « Informations complémentaires », puis « Exécuter quand même ».
+
+Empreinte SHA-256 de `XPGAnalyser-Setup-1.11.23.exe` (15,3 Mo, 16 049 262 octets) :
+`A9AC10BE569E1D5DAED8AA2AE16B72F94C0B2A2484B22F3712C9EC168031C385`
+
+Le zip portable `XPGAnalyser-1.11.23-portable.zip` (20,5 Mo) contient le même exe et les mêmes fichiers que l'installateur, dans un dossier `XPGAnalyser-1.11.23`. Décompressez-le, puis lancez `XpgAnalyzer.exe`. Son empreinte SHA-256 :
+`90419DB695A723993FC010746A8A3DD468B23FF1B38309D0002A50843DFE1A3F`
+
+## Vérifications
+
+**Tests Linux** (GCC 13) : la suite CTest complète passe (66 sur 66). Elle comprend les 6 614 contrôles de `hmieditor` (31 de plus qu'en 1.11.22) et les 4 728 de `hmi` (44 de plus), ainsi que les deux traces de référence, `hmitrace` et `hmitracemig`.
+
+**L'exe Windows**, compilé sous Linux avec MinGW-w64 et lancé sous Wine :
+- `--version` répond `XPGAnalyser 1.11.23` ;
+- `--cli MAST.XPG` analyse le projet d'essai (891 variables) ;
+- la session du § 6 a été rejouée avec l'exe livré : 7 captures `11123_*`, aucun contrôle en échec.
+
+**L'installateur**, compilé par Inno Setup 6.4.1 sous Wine, puis installé en silencieux :
+- il s'est installé pour tous les comptes, par-dessus la 1.11.22 (puis par-dessus lui-même, après la correction du badge) : « Installation process succeeded » ;
+- l'exe installé est identique à celui qui a été testé, et répond `1.11.23`.
+
+**Pas encore fait :** ni l'exe ni l'installateur n'ont été lancés sur un vrai Windows. La section « Tester vous-même » donne le parcours à refaire chez vous.
 
 ## La suite
 

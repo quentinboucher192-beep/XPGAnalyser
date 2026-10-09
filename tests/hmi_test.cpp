@@ -21284,7 +21284,7 @@ void clavierSouris11123() {
     View libre = makeView(p, "Pop_Libre");
     libre.role = "popup";
     libre.popup.modal = false;
-    for (const char* n : {"Appuis", "Relaches", "Tenues", "Repetitions", "Popup_Ok", "Fonction"})
+    for (const char* n : {"Appuis", "Relaches", "Tenues", "Repetitions", "Popup_Ok", "Fonction", "Badge_Entree", "Badge_Maj"})
         p.programs.variables.push_back(hmiVar(p, n, "INT", "0"));
     p.programs.variables.push_back(hmiVar(p, "Texte", "STRING", "''"));
     const auto key = [](Trigger t, const char* chord, Operation o, const char* target, int ms = 0) {
@@ -21299,6 +21299,8 @@ void clavierSouris11123() {
     v.actions.push_back(key(Trigger::KeyRepeat, "Up", Operation::Increment, "Repetitions", 100));
     v.actions.push_back(key(Trigger::KeyPress, "A", Operation::Increment, "Appuis"));
     v.actions.push_back(key(Trigger::KeyPress, "F2", Operation::Increment, "Fonction"));
+    v.actions.push_back(key(Trigger::KeyPress, "Enter", Operation::Increment, "Badge_Entree"));
+    v.actions.push_back(key(Trigger::KeyRelease, "Shift+Enter", Operation::Increment, "Badge_Maj"));
     pop.actions.push_back(key(Trigger::KeyPress, "F5", Operation::Increment, "Popup_Ok"));
     pop.actions.push_back(key(Trigger::KeyRelease, "F5", Operation::Increment, "Popup_Ok"));
     const Id champ = edit::add(p, v, Kind::InputField, 10, 200);
@@ -21395,6 +21397,15 @@ void clavierSouris11123() {
     rt.start(8.00);
     check(sys("SYS.KeyDownCount").asInteger() == 0 && sys("SYS.KeyPresses").asInteger() == 0 && I("Relaches") == 0,
           "redemarree : ni touche tenue ni compteur (et les variables IHM repartent)");
+    // La connexion par badge : le lecteur tape ses chiffres puis Entree, seule - Entree lui reste,
+    // Maj+Entree part en raccourci (la session Wine de la 1.11.23 : Armoire_Gaz a badge=1).
+    p.security.badgeLogin = true;
+    (void)rt.keyDown(chord("Entree"), 9.00);
+    (void)rt.keyUp("Enter", 9.05);
+    (void)rt.keyDown(chord("Maj+Entree"), 9.10);
+    (void)rt.keyUp("Enter", 9.15);
+    check(I("Badge_Entree") == 0 && I("Badge_Maj") == 1, "connexion par badge : Entree au lecteur, Maj+Entree en raccourci");
+    p.security.badgeLogin = false;
     // Le controle : une touche illisible, un raccourci sur un objet, une touche gardee.
     {
         Project q = p;

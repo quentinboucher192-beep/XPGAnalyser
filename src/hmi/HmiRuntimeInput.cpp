@@ -116,8 +116,10 @@ bool Runtime::keyDown(const keys::Chord& chord, double now, bool repeat, bool ty
     lastActivity_ = std::max(lastActivity_, now);
     // Suspendus : l'IHM arretee, un champ de saisie qui a le clavier (sauf F1..F12), un menu
     // natif, la signature, le clavier d'une action, le lecteur de badge (ses chiffres, Entree).
+    // Le lecteur de badge tape ses chiffres (avec Maj sur un clavier AZERTY), puis Entree seule :
+    // Maj+Entree reste un raccourci.
     const bool bare = !chord.ctrl && !chord.alt;
-    const bool badgeKey = bare && (chord.key == "Enter" || chord.key.rfind("Digit", 0) == 0);
+    const bool badgeKey = bare && ((chord.key == "Enter" && !chord.shift) || chord.key.rfind("Digit", 0) == 0);
     const bool suspended = !running_ || repeat || wasAsleep
                         || ((typing || focused_ != kNoId) && !keys::isFunctionKey(chord.key))
                         || loginShown() || systemShown() || signatureShown() || promptShown()
