@@ -812,7 +812,11 @@ std::string substituteParams(std::string_view text, const SymbolArguments& args,
     if (args.empty() || text.empty()) return std::string(text);
     std::vector<std::pair<std::string, std::string>> table;
     for (const auto& [name, value] : args) {
-        const std::string t = trimmedCopy(value);
+        // 1.11.24 : les $ des reperes de l'argument ($V[0]$, pose par Dupliquer...) ne servent
+        // plus dans le symbole deplie (le calcul les retire) : un chemin a repere reste un chemin,
+        // colle tel quel. Avant : ($V[0]$).Consigne - lu, mais jamais ecrit (saisie : variable
+        // inconnue (V[0]).IN_Percent) ; et dans un repere du symbole ($M$), $($V[0]$)$ illisible.
+        const std::string t = trimmedCopy(markers::strip(value));
         table.emplace_back(upperCopy(name), standsAlone(t) ? t : "(" + t + ")");
     }
     return rewriteRoots(text, code, [&](std::string_view s, std::size_t b, std::size_t e) -> Replacement {
@@ -911,7 +915,10 @@ void rewriteNames(Object& o, const std::function<std::string(std::string_view, b
                    // lot 11 : l'abscisse d'une courbe XY, sa remise a zero, les compteurs de
                    // production, l'ouverture et le mouvement d'une vanne reglante
                    || p.key == "xVariable" || p.key == "reset" || p.key == "good" || p.key == "bad" || p.key == "running"
-                   || p.key == "opening" || p.key == "moving") {
+                   || p.key == "opening" || p.key == "moving"
+                   // 1.11.24 : les bornes d'un champ de saisie (une valeur ou un nom : max := Haut,
+                   // un parametre du symbole - avant, la borne restait "Haut", illisible, ignoree).
+                   || p.key == "min" || p.key == "max") {
             expr(p.value);
         } else if (p.key == "variables" || p.key == "references") {   // les plumes d'une courbe, les elements d'un graphique : a;b;c
             std::string rebuilt;
@@ -1054,9 +1061,12 @@ Expansion expandInstance(const Project& p, const Object& inst, int depth, std::s
     const double sy = sym->height > 0 ? ib.h / sym->height : 1.0;
     std::set<std::string> siblings;
     for (const auto& so : sym->objects) siblings.insert(so.name);
+    // 1.11.24 : les reperes du symbole lui-meme ($Cuve$.Niveau, Tab[$I$]) tombent avant le
+    // remplacement : I := 3 aurait donne Tab[$3$] (pas un repere : illisible).
     const auto relink = [&](std::string_view t, bool code) {
-        if (!calls) return substituteParams(t, args, code);
-        return substituteParams(qualifySymbolCalls(t, p, *sym, q), args, code);
+        const std::string bare = markers::strip(t);
+        if (!calls) return substituteParams(bare, args, code);
+        return substituteParams(qualifySymbolCalls(bare, p, *sym, q), args, code);
     };
     for (const Object* so : sym->paintOrder()) {
         Object c = *so;

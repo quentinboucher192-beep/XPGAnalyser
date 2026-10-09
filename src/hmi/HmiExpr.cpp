@@ -236,7 +236,10 @@ std::vector<std::string> scanRoots(std::string_view s) {
             const std::size_t start = i;
             while (i < s.size() && isIdentChar(s[i])) ++i;
             const std::string word(s.substr(start, i - start));
-            const bool member = start > 0 && s[start - 1] == '.';
+            // 1.11.24 : un repere autour du membre ($V[0]$.$Nom$) ne le fait pas racine.
+            std::size_t before = start;
+            while (before > 0 && s[before - 1] == '$') --before;
+            const bool member = before > 0 && s[before - 1] == '.';
             const bool typed = i < s.size() && s[i] == '#';          // T#5s, TIME#1s, INT#3
             std::size_t k = i;
             while (k < s.size() && std::isspace(static_cast<unsigned char>(s[k]))) ++k;

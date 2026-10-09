@@ -240,6 +240,12 @@ void checkActions(const Project& p, const NameExists& plc, const View& v, const 
         }
         if (operationOpensView(a.operation)) {
             const auto* opened = p.viewByName(target);
+            // 1.11.24 : la popup d'une instance (Vanne_3.Pop_Detail, Vue.Vanne_3.Pop_Detail) : celle de son
+            // symbole - le moteur l'ouvre (1.11.10), Generer la disait introuvable.
+            if (!opened && (a.operation == Operation::Popup || a.operation == Operation::ChangePopup)) {
+                std::string popup, given;
+                if (popupOfInstance(p, &v, target, popup, given)) opened = p.viewByName(popup);
+            }
             if (a.target.empty()) add(out, S::Error, "Action", v.id, obj, where, "aucune vue \xC3\xA0 ouvrir");
             else if (!opened) add(out, S::Error, "Action", v.id, obj, where, "vue '" + target + "' introuvable" + dup::markerHint(a.target, target));
             else if (a.operation == Operation::Popup && opened->id == v.id)
@@ -335,9 +341,11 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
         for (const auto& called : scriptCalls(sc.body))
             if (!p.generalScript(called))
                 add(out, S::Error, "Script", view, kNoId, sc.name, "IHM_APPELER : script '" + called + "' introuvable", sc.id);
-        for (const auto& target : scriptViews(sc.body))
-            if (!p.viewByName(target))
+        for (const auto& target : scriptViews(sc.body)) {
+            std::string popup, given;   // 1.11.24 : IHM_POPUP('Vue.Instance.Pop_Detail') - la popup du symbole
+            if (!p.viewByName(target) && !popupOfInstance(p, owner, target, popup, given))
                 add(out, S::Error, "Script", view, kNoId, sc.name, "vue '" + target + "' introuvable", sc.id);
+        }
     };
     std::set<std::string> scriptNamesSeen;
     for (const auto& sc : p.programs.scripts) {
@@ -1480,8 +1488,11 @@ void checkSymbols(const Project& p, const NameExists& plc, std::vector<Issue>& o
                         if (!known(p, plc, r, &v))
                             add(out, S::Error, "Variable", v.id, o.id, "params", "argument " + argName + " : variable inexistante dans le programme : " + r);
             }
-            for (const auto& prm : sv->params) {
-                bool has = !trimmedCopy(prm.defaultValue).empty();
+            // 1.11.24 : les arguments positionnels comptent aussi ($V[3]$; 'C3'; 90.0), comme le moteur.
+            const auto byRank = givenArguments(*sv, o.text("params"));
+            for (std::size_t k = 0; k < sv->params.size(); ++k) {
+                const auto& prm = sv->params[k];
+                bool has = !trimmedCopy(prm.defaultValue).empty() || (k < byRank.size() && !trimmedCopy(byRank[k]).empty());
                 for (const auto& g : given) has = has || sv->param(g.first) == &prm;
                 if (!has)
                     add(out, S::Warning, "Symbole", v.id, o.id, "params",
@@ -1989,12 +2000,12 @@ void checkLot12(const Project& p, const NameExists& plc, std::vector<Issue>& out
                     double n = 1;
                     if (pg && pg->expr.empty() && (!parseNumber(pg->value, n) || n < 1 || n > pages))
                         issue(S::Warning, "page", "onglet montr\xC3\xA9 hors de 1 \xC3\xA0 " + std::to_string(pages));
-                    const std::string var = trimmedCopy(o.text("variable"));
+                    const std::string var = trimmedCopy(markers::strip(o.text("variable")));   // 1.11.24 : $Reels[2]$
                     if (!var.empty() && !known(p, plc, rootOf(var), &v)) issue(S::Error, "variable", "variable inexistante : " + var);
                     break;
                 }
                 case Kind::CollapsiblePanel: {
-                    const std::string var = trimmedCopy(o.text("variable"));
+                    const std::string var = trimmedCopy(markers::strip(o.text("variable")));   // 1.11.24 : $Reels[2]$
                     if (!var.empty() && !known(p, plc, rootOf(var), &v)) issue(S::Error, "variable", "variable inexistante : " + var);
                     if (o.number("headerHeight", 34) >= o.number("h", 100)) issue(S::Warning, "headerHeight", "le bandeau prend toute la hauteur : aucun contenu visible");
                     break;
@@ -2020,7 +2031,7 @@ void checkLot12(const Project& p, const NameExists& plc, std::vector<Issue>& out
                         if (!groups.empty() && !groups.count(z.alarmGroup()))
                             issue(S::Info, "mapZones", "zone '" + z.name + "' : aucune alarme du groupe " + z.alarmGroup() + " (elle restera calme)");
                     }
-                    const std::string var = trimmedCopy(o.text("variable"));
+                    const std::string var = trimmedCopy(markers::strip(o.text("variable")));   // 1.11.24 : $Reels[2]$
                     if (!var.empty() && !known(p, plc, rootOf(var), &v)) issue(S::Error, "variable", "variable inexistante : " + var);
                     break;
                 }
@@ -2593,7 +2604,7 @@ void checkLot13(const Project& p, std::vector<Issue>& out) {
                 else if (active < 2)
                     issue(S::Error, "signature", "un seul compte actif : la double signature demande deux personnes");
             }
-            const std::string var = trimmedCopy(o.text("variable"));
+            const std::string var = trimmedCopy(markers::strip(o.text("variable")));   // 1.11.24 : $Reels[2]$
             if (!var.empty()) {
                 const std::string lv = lowerCopy(var);
                 for (const auto& [name, body] : cyclic)

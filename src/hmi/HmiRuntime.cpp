@@ -196,11 +196,94 @@ static sim::Runtime& standardFunctions() {
 }
 
 // =========================================================== environnement ==
+namespace {
+// 1.11.24 : un chemin qui n'est pas en clair - un indice calcule (V[Idx].Consigne,
+// Tab[I + 1]), des parentheses autour d'un chemin ((V[0]).Consigne). Le ST les defait
+// avant d'ecrire ; une saisie, une commande, l'action d'un bouton les donnaient tels quels
+// (variable inconnue). Rapide : la plupart des noms n'ont ni ( ni [ calcule.
+bool needsConcretePath(std::string_view n) {
+    if (n.empty()) return false;
+    if (n.front() == '(') return true;
+    for (std::size_t i = 0; i < n.size(); ++i) {
+        if (n[i] != '[') continue;
+        std::size_t j = i + 1;
+        while (j < n.size() && (n[j] == ' ' || n[j] == '-' || n[j] == ',' || std::isdigit(static_cast<unsigned char>(n[j])))) ++j;
+        if (j < n.size() && n[j] != ']') return true;
+    }
+    return false;
+}
+std::string trimmedView(std::string_view s) {
+    std::size_t a = 0, b = s.size();
+    while (a < b && std::isspace(static_cast<unsigned char>(s[a]))) ++a;
+    while (b > a && std::isspace(static_cast<unsigned char>(s[b - 1]))) --b;
+    return std::string(s.substr(a, b - a));
+}
+} // namespace
+
 // Les variables IHM d'abord (sans casse, comme le ST), puis l'automate ; les
 // fonctions IHM_... ici, les autres au simulateur.
 class Runtime::Env final : public sim::Environment, public FunctionHost {
 public:
     explicit Env(Runtime& rt) : rt_(rt) {}
+    // 1.11.24 : le chemin en clair (needsConcretePath) : les parentheses autour d'un chemin
+    // tombent, chaque indice calcule se calcule ici (ses noms lus comme le reste). Un texte
+    // qui n'est pas un chemin, un indice illisible : tel quel (la lecture, l'ecriture echouent).
+    std::string concretePath(std::string_view n) {
+        std::string t = trimmedView(n);
+        while (!t.empty() && t.front() == '(') {
+            int depth = 0;
+            std::size_t close = std::string::npos;
+            for (std::size_t i = 0; i < t.size(); ++i) {
+                if (t[i] == '(') ++depth;
+                else if (t[i] == ')' && --depth == 0) { close = i; break; }
+            }
+            if (close == std::string::npos) break;
+            const std::string inner = trimmedView(std::string_view(t).substr(1, close - 1));
+            const std::string rest = t.substr(close + 1);
+            if (!isVariablePath(inner) || !(rest.empty() || rest.front() == '.' || rest.front() == '[')) break;
+            t = inner + rest;
+        }
+        if (!isVariablePath(t)) return t;
+        std::string out;
+        for (std::size_t i = 0; i < t.size(); ++i) {
+            if (t[i] != '[') { out += t[i]; continue; }
+            int depth = 0;
+            std::size_t j = i;
+            for (; j < t.size(); ++j) {
+                if (t[j] == '[') ++depth;
+                else if (t[j] == ']' && --depth == 0) break;
+            }
+            if (j >= t.size()) return t;
+            // Les indices d'un tableau a plusieurs dimensions : coupes aux virgules de premier niveau.
+            std::vector<std::string> parts;
+            std::string cur;
+            int nest = 0;
+            for (std::size_t k = i + 1; k < j; ++k) {
+                const char c = t[k];
+                if (c == '[' || c == '(') ++nest;
+                else if ((c == ']' || c == ')') && nest > 0) --nest;
+                if (c == ',' && nest == 0) { parts.push_back(cur); cur.clear(); continue; }
+                cur += c;
+            }
+            parts.push_back(cur);
+            std::string index;
+            for (const auto& part : parts) {
+                std::string piece = trimmedView(part);
+                const bool literal = !piece.empty() && std::all_of(piece.begin() + (piece[0] == '-' ? 1 : 0), piece.end(), [](char c) {
+                    return std::isdigit(static_cast<unsigned char>(c)) != 0;
+                }) && piece != "-";
+                if (!literal) {
+                    const auto value = Expression::compile(piece).evaluate(*this);
+                    if (!value) return t;
+                    piece = std::to_string(value->asInteger());
+                }
+                index += (index.empty() ? "" : ",") + piece;
+            }
+            out += "[" + index + "]";
+            i = j;
+        }
+        return out;
+    }
     std::map<std::string, sim::Value, std::less<>> vars;
     std::vector<sim::Diagnostic> diagnostics;
     // Lot 7 : les variables locales du script (ou de la fonction) qui tourne.
@@ -230,6 +313,8 @@ public:
     [[nodiscard]] static std::string plcOf(std::string r) { return apivars::isApiPath(r) ? apivars::stripApi(r) : r; }
 
     bool read(std::string_view n, sim::Value& out) override {
+        if (needsConcretePath(n))                                   // 1.11.24 : V[Idx].Consigne, (V[0]).Consigne
+            if (const std::string c = concretePath(n); c != n && !needsConcretePath(c)) return read(c, out);
         if (!frames.empty())
             if (const auto it = frames.back()->find(upper(n)); it != frames.back()->end()) { out = it->second; return true; }
         if (callerLocals > 0 && sim::readCallerLocal(n, out)) return true;     // 1.11.17
@@ -274,6 +359,8 @@ public:
         return false;
     }
     bool write(std::string_view n, const sim::Value& v) override {
+        if (needsConcretePath(n))                                   // 1.11.24
+            if (const std::string c = concretePath(n); c != n && !needsConcretePath(c)) return write(c, v);
         if (!frames.empty())
             if (const auto it = frames.back()->find(upper(n)); it != frames.back()->end()) { it->second.assignFrom(v); return true; }
         if (aliases && aliases->value(n)) {
@@ -366,6 +453,8 @@ public:
         return rt_.plc_->write(pn, v);
     }
     bool exists(std::string_view n) override {
+        if (needsConcretePath(n))                                   // 1.11.24
+            if (const std::string c = concretePath(n); c != n && !needsConcretePath(c)) return exists(c);
         if (!frames.empty() && frames.back()->count(upper(n)) != 0) return true;
         if (sim::Value probe; callerLocals > 0 && sim::readCallerLocal(n, probe)) return true;     // 1.11.17
         if (aliases && aliases->value(n)) return true;
@@ -3771,7 +3860,9 @@ void Runtime::openPrompt(const View& v, const Object* o, const Action& a, const 
     }
     const auto spec = actionkinds::keyboardSpec(a);
     KeyboardPrompt p;
-    p.target = target;
+    // 1.11.24 : la variable en clair, maintenant - un parametre de la popup (C.Niveau -> V[0].Niveau),
+    // un indice calcule. Avant, C.Niveau s'ecrivait a la validation, hors de la popup : refuse.
+    p.target = env_->concretePath(env_->resolved(target));
     p.type = cur.type();
     // Le titre : un texte a trous (Consigne de {Four}) ; vide : le nom de la variable.
     {

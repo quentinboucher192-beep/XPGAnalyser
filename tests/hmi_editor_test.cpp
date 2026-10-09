@@ -3318,7 +3318,11 @@ void simulation_supervision() {
     paintAt(0.6);
     paintAt(0.8);
     check(pane.runtime().alarms().size() == 1 && pane.runtime().unacknowledged() == 1, "Niveau 102 : l'alarme Niveau_Haut appara\xC3\xAEt");
-    check(!pane.tabs().tab(app::HmiSimulationPane::TabAlarms)->badge.empty(), "l'onglet Alarmes a un badge");
+    {
+        bool alarmTab = false;
+        for (std::size_t i = 0; i < pane.tabs().tabCount(); ++i) alarmTab = alarmTab || pane.tabs().tab(i)->title == "Alarmes";
+        check(!alarmTab, "1.11.24 : plus d'onglet Alarmes dans la simulation (la Console dit leurs apparitions)");
+    }
     check(rec.wrote("Niveau haut : 102.0 %"), "l'objet Historique la montre, message rempli");
     check(rec.wrote("Niveau = 102"), "la courbe : la l\xC3\xA9gende montre la derni\xC3\xA8re valeur");
     const auto* series = pane.runtime().trend(doc->project.views[0].id, doc->project.views[0].objects[4].id);
@@ -3345,8 +3349,12 @@ void simulation_supervision() {
     check(!outOfBounds && value("Consigne") == "0", "Hors_Bornes refus\xC3\xA9, rien \xC3\xA9" "crit (" + why + ")");
     const bool standard = pane.applyRecipe("Reglages", "Standard", &why);
     check(standard && value("Consigne") == "75", "Standard appliqu\xC3\xA9 : Consigne = 75 (" + value("Consigne") + ")");
-    auto* recipes = dynamic_cast<ui::TableView*>(pane.tabs().page(app::HmiSimulationPane::TabRecipes));
-    check(recipes && cellOf(*recipes, "Reglages", 1) == "Standard", "l'onglet Recettes liste les jeux");
+    {
+        std::string titles;
+        for (std::size_t i = 0; i < pane.tabs().tabCount(); ++i) titles += (titles.empty() ? "" : " | ") + pane.tabs().tab(i)->title;
+        check(titles == "Expressions | Variables IHM | Variables API | Performances | Esclaves simul\xC3\xA9s | Popups",
+              "1.11.24 : les onglets de la simulation, sans Journal, Alarmes ni Recettes : " + titles);
+    }
     // Deconnexion : 1.10.3 - le bouton a quitte la barre ; le clic droit sur la barre
     // (et la commande du bouton).
     check(!pressButton(pane, "D\xC3\xA9" "connecter") && chooseFromSimBar(pane, "D\xC3\xA9" "connecter"),
@@ -16237,44 +16245,25 @@ void v1101_journal_vider() {
         pane.render(ui::PaintContext{rec, theme, {0, 0, 1600, 900}, t, nullptr});
         t += 0.1;
     };
-    const auto rows = [&]() -> std::size_t { return pane.journalTable().model() ? pane.journalTable().model()->rowCount() : 0; };
-    pane.tabs().setCurrentIndex(app::HmiSimulationPane::TabJournal);
+    // 1.11.24 (demande du client) : plus d'onglet Journal - le journal de la simulation va a la
+    // Console du panneau du bas (hooks.journaled) ; Vider (clearJournal) garde son sens : le journal
+    // de la seance s'efface, l'historique systeme non.
+    bool journalTab = false;
+    for (std::size_t i = 0; i < pane.tabs().tabCount(); ++i) journalTab = journalTab || pane.tabs().tab(i)->title == "Journal";
+    check(!journalTab, "1.11.24 : plus d'onglet Journal dans la simulation");
     paint();                                                 // l'IHM demarre
     for (int i = 0; i < 150; ++i) pane.runtime().log("Action", "essai", "ligne " + std::to_string(i));
     paint();
     const std::size_t before = pane.runtime().journal().size();
-    check(before >= 150 && rows() == before, "le journal montre ses lignes : " + std::to_string(rows()) + " sur " + std::to_string(before));
+    check(before >= 150, "le journal de la seance a ses lignes : " + std::to_string(before));
     const std::size_t history = doc->history.system.size();
     check(history >= 150, "l'historique systeme a les memes lignes, a part (" + std::to_string(history) + ")");
-
-    // La barre de l'onglet : Vider, son infobulle dit ce qui n'est pas touche.
-    auto* strip = dynamic_cast<app::HmiToolStrip*>(pane.findById("sim1101j.journalTools"));
-    const int clear = strip ? strip->actionByTip("Vider le journal de la s\xC3\xA9" "ance") : -1;
-    const gfx::Rect r = strip && clear >= 0 ? strip->rectOf(clear) : gfx::Rect{};
-    check(strip && clear >= 0 && r.w > 0.f && r.y < 900.f, "la barre de l'onglet Journal a Vider, a l'ecran");
-    if (strip && r.w > 0.f) v110::clickAt(*strip, v110::mid(r));
-    check(pane.runtime().journal().empty() && rows() == 0, "Vider : 0 ligne (" + std::to_string(rows()) + ")");
+    check(pane.clearJournal() == before && pane.runtime().journal().empty(), "Vider : 0 ligne");
     same_text(pane.statusBar().message(), "Journal vid\xC3\xA9 (" + std::to_string(before) + " lignes)", "l'avis dit combien de lignes");
     check(doc->history.system.size() == history, "Vider ne touche pas l'historique systeme");
-    paint();
-    check(rows() == 0, "rien ne revient au rafraichissement suivant");
-
-    // Les evenements suivants s'affichent normalement.
     pane.runtime().log("Navigation", "essai", "apr\xC3\xA8s");
     paint();
-    check(rows() == 1 && pane.journalTable().model()->cellText(0, 3) == "apr\xC3\xA8s", "un nouvel \xC3\xA9v\xC3\xA9nement s'affiche");
-
-    // Le clic droit : Vider le journal en tete du menu de la table.
-    paint();
-    gfx::Rect row{};
-    check(pane.journalTable().rowRect(0, row), "la ligne est a l'ecran");
-    pane.journalTable().dispatch(ui::MouseDown{{row.x + 40.f, row.y + row.h / 2.f}, ui::MouseButton::Right, 1, {}});
-    auto* menu = pane.journalTable().contextMenu();
-    const bool first = menu && menu->isOpen() && !menu->items().empty() && menu->items().front().label == "Vider le journal";
-    check(first, "clic droit : Vider le journal en t\xC3\xAA" "te, puis Copier...");
-    if (first) menu->itemChosen->emit(menu->items().front().id);
-    check(rows() == 0, "Vider le journal (clic droit) : 0 ligne");
-    same_text(pane.statusBar().message(), std::string("Journal vid\xC3\xA9 (1 ligne)"), "l'avis au singulier");
+    check(pane.runtime().journal().size() == 1, "un nouvel \xC3\xA9v\xC3\xA9nement s'ajoute");
 
     // ---- les nouveautes : 1.10.0 -> 1.10.1, un correctif sans nouveaute a lui ----
     {
@@ -16681,17 +16670,18 @@ void centreAide111() {
     // 1.11.12 : 20.
     // 1.11.13 : 21.
     // 1.11.14 : 22 ; 1.11.15 : 23 ; 1.11.16 : 24 ; 1.11.17 : 25 ; 1.11.18 : 26 ; 1.11.19 : 27 ; 1.11.20 : 28 ; 1.11.21 : 29.
-    // 1.11.22 : 30 ; 1.11.23 : 31.
-    check(hn::releases().size() == 31 && hn::releases().front().version == "1.11.23" && hn::releases()[1].version == "1.11.22" && hn::releases()[2].version == "1.11.21" && hn::releases()[3].version == "1.11.20" && hn::releases()[4].version == "1.11.19"
-              && hn::releases()[5].version == "1.11.18" && hn::releases()[6].version == "1.11.17"
-              && hn::releases()[7].version == "1.11.16" && hn::releases()[8].version == "1.11.15"
-              && hn::releases()[9].version == "1.11.14" && hn::releases()[10].version == "1.11.13" && hn::releases()[11].version == "1.11.12"
-              && hn::releases()[12].version == "1.11.11" && hn::releases()[13].version == "1.11.10"
-              && hn::releases()[14].version == "1.11.9" && hn::releases()[15].version == "1.11.8"
-              && hn::releases()[16].version == "1.11.7" && hn::releases()[17].version == "1.11.6" && hn::releases()[18].version == "1.11.5"
-              && hn::releases()[19].version == "1.11.4" && hn::releases()[20].version == "1.11.3" && hn::releases()[21].version == "1.11.2"
-              && hn::releases()[22].version == "1.11.1" && hn::releases()[23].version == "1.11" && hn::releases()[24].version == "1.10.4",
-          "notes : 31 versions, la 1.11.23 en tete, puis la 1.11.22 \xC3\xA0 la 1.11, et la 1.10.4");
+    // 1.11.22 : 30 ; 1.11.23 : 31 ; 1.11.24 : 32.
+    check(hn::releases().size() == 32 && hn::releases().front().version == "1.11.24" && hn::releases()[1].version == "1.11.23"
+              && hn::releases()[2].version == "1.11.22" && hn::releases()[3].version == "1.11.21" && hn::releases()[4].version == "1.11.20" && hn::releases()[5].version == "1.11.19"
+              && hn::releases()[6].version == "1.11.18" && hn::releases()[7].version == "1.11.17"
+              && hn::releases()[8].version == "1.11.16" && hn::releases()[9].version == "1.11.15"
+              && hn::releases()[10].version == "1.11.14" && hn::releases()[11].version == "1.11.13" && hn::releases()[12].version == "1.11.12"
+              && hn::releases()[13].version == "1.11.11" && hn::releases()[14].version == "1.11.10"
+              && hn::releases()[15].version == "1.11.9" && hn::releases()[16].version == "1.11.8"
+              && hn::releases()[17].version == "1.11.7" && hn::releases()[18].version == "1.11.6" && hn::releases()[19].version == "1.11.5"
+              && hn::releases()[20].version == "1.11.4" && hn::releases()[21].version == "1.11.3" && hn::releases()[22].version == "1.11.2"
+              && hn::releases()[23].version == "1.11.1" && hn::releases()[24].version == "1.11" && hn::releases()[25].version == "1.10.4",
+          "notes : 32 versions, la 1.11.24 en tete, puis la 1.11.23 \xC3\xA0 la 1.11, et la 1.10.4");
     // 1.11.2 (T2, tranches 41, 42 et 44 ; decisions 187, 201 et 216) : 23 lignes en 8 domaines, dont 2 cartes de la fenetre Nouveautes.
     // Tranche 46 (SYM, decision 240) : + Dupliquer dans un symbole (C) et la section Parametres du symbole (N) : 25 lignes.
     {
@@ -16962,7 +16952,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 241,   // 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 244,   // 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -17105,7 +17095,7 @@ void centreAide111() {
     // Integration 1.11 (I111) : la 1.10.4 ajoute objet-vanne-3-voies (La bibliotheque d'objets) : 206.
     // 1.11.1 (T2, decision 107) : Programmer gagne variables-api (API. : les variables de l'automate) : 207.
     check(ix.count(hc::Chapter::Hmi) == 209, "centre : L'IHM a les 209 sujets des chapitres 2 a 8 du guide (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue)");
-    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 31, "centre : 11 expressions, 31 notes (1.11.23)");
+    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 32, "centre : 11 expressions, 32 notes (1.11.24)");
     // Tranche 3 : les 11 types de T3 (hmi::exprguide::all(), depot-o), passes par in.expressions ; les
     // cles de la liste de secours sont les siennes (enumeration, pas enum).
     {
@@ -17167,10 +17157,10 @@ void centreAide111() {
         check(o, "page Raccourcis : Ctrl+Maj+O dessine en trois touches, repere 1.11");
 
         const auto n110 = hc::notesPage("1.10");
-        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 31
+        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 32
                   && !n110.summary.empty() && !n110.date.empty(),
               "page Notes : 1.10 -> 1.10.0, 22 lignes en 7 domaines, sa date et son resume");
-        check(hc::notesPage("").version == "1.11.23" && hc::notesPage("9.9").version == "1.11.23",
+        check(hc::notesPage("").version == "1.11.24" && hc::notesPage("9.9").version == "1.11.24",
               "page Notes : sans version (ou inconnue), la plus recente");
         const auto simu = hc::notesPage("1.10.0", "Simulation");
         check(simu.sections.size() == 1 && simu.rows == 4 && simu.domains.size() == 7,
@@ -17514,7 +17504,7 @@ void centreAide111() {
         // Les notes de version n'ont pas de tutoriel : ni la carte "Regarder le tutoriel" (hasTutorial, que
         // lit HelpCenterScreen::showTopic), ni la pastille dans l'arbre. Les autres pages speciales gardent
         // les leurs (T1 ecrit les tutoriels des raccourcis et de Signaler).
-        bool notesSans = ix.count(hc::Chapter::Notes) == 31;   // 1.11.3 a 1.11.23 : une version de plus
+        bool notesSans = ix.count(hc::Chapter::Notes) == 32;   // 1.11.3 a 1.11.24 : une version de plus
         for (const auto* t : ix.ofChapter(hc::Chapter::Notes)) notesSans = notesSans && !hc::hasTutorial(*t);
         const auto* raccourcis = ix.find("page-raccourcis");
         const auto* signaler = ix.find("page-signaler");

@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.11.24", "09/10/2026", "livr\xC3\xA9" "e le 09/10 en fin de soir\xC3\xA9" "e"},
     {"1.11.23", "09/10/2026", "livr\xC3\xA9" "e le 09/10 en soir\xC3\xA9" "e"},
     {"1.11.22", "09/10/2026", "livr\xC3\xA9" "e le 09/10 en fin d'apr\xC3\xA8s-midi"},
     {"1.11.21", "09/10/2026", "livr\xC3\xA9" "e le 09/10 en d\xC3\xA9" "but d'apr\xC3\xA8s-midi"},
@@ -104,6 +105,18 @@ const std::vector<Note>& table() {
     static const std::vector<Note> t = {
         // 1.11.16 (09/10/2026 dans la nuit) : la remanence d'exploitation par variable, la robustesse
         // (lot 4 de la specification du 08/10).
+        // 1.11.24 (09/10/2026 en fin de soiree) : les reperes dans les symboles (la campagne d'essais
+        // demandee par le client, sa capture : saisie : variable inconnue (V[0]).IN_Percent), et les
+        // onglets Journal, Alarmes, Recettes retires de la simulation.
+        note("1.11.24", "Symboles", Kind::Fixed,
+         "LES REP\xC3\x88RES DANS LES SYMBOLES : un argument \xC3\xA0 rep\xC3\xA8re (Cuve := $V[0]$, pos\xC3\xA9 par Dupliquer) s'\xC3\xA9" "crit enfin - champ de saisie, commandes, actions, clavier virtuel, Maths, popups du symbole et du projet (avant : saisie : variable inconnue (V[0]).IN_Percent) ; un rep\xC3\xA8re du symbole autour d'un param\xC3\xA8tre ($Cuve$, M := $Cuve$ dans un symbole imbriqu\xC3\xA9) ne casse plus l'expression ; un indice calcul\xC3\xA9 (V[Idx].Consigne) s'\xC3\xA9" "crit ; la borne max d'un champ peut \xC3\xAAtre un param\xC3\xA8tre.",
+         "symboles", ""),
+        note("1.11.24", "Symboles", Kind::Fixed,
+         "COMPILER ET G\xC3\x89N\xC3\x89RER : une lettre seule est un rep\xC3\xA8re ($V$, Tab[$I$] : avant, \xC2\xAB caract\xC3\xA8re inattendu : '$' \xC2\xBB) ; les arguments positionnels d'une instance comptent ; la popup d'une instance (Sym_0.Pop_Detail, IHM_POPUP('Vue.Sym_0.Pop_Detail')) n'est plus \xC2\xAB introuvable \xC2\xBB ; la variable d'un conteneur \xC3\xA0 onglets, d'un panneau repliable, d'un plan \xC3\xA0 zones se lit sans ses $.",
+         "dupliquer-reperes", ""),
+        note("1.11.24", "Simulation", Kind::Changed,
+         "LA SIMULATION DE L'IHM : les onglets Journal, Alarmes et Recettes sont retir\xC3\xA9s du panneau de droite. Le journal de la simulation est dans la Console du panneau du bas ; le clavier virtuel d'une popup \xC3\xA9" "crit le param\xC3\xA8tre de la popup (avant : \xC3\xA9" "criture refus\xC3\xA9" "e).",
+         "simulation", ""),
         // 1.11.23 (09/10/2026 en soiree) : la fin de la liste du client du 09/10 - la souris et le clavier
         // en variables systeme, les raccourcis des vues et des popups.
         note("1.11.23", "Vues", Kind::New,

@@ -144,6 +144,9 @@ std::string adviceFor(std::string_view t, const std::string& fix, Mode mode, con
 } // namespace
 
 bool validContent(std::string_view s) noexcept {
+    // 1.11.24 : une lettre seule ($V$, $I$ : un tableau, un indice d'une lettre) ; sinon deux
+    // caracteres au moins. Avant, $V$ etait refuse : "un repere s'ecrit entre deux $".
+    if (s.size() == 1) return std::isalpha(static_cast<unsigned char>(s[0])) || s[0] == '_';
     if (s.size() < 2) return false;
     const auto blank = [](char c) { return std::isspace(static_cast<unsigned char>(c)) != 0; };
     if (blank(s.front()) || blank(s.back()) || std::isdigit(static_cast<unsigned char>(s.front()))) return false;

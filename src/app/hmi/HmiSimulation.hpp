@@ -507,7 +507,8 @@ public:
     // lot 13 : Performances.
     // Lot 18 : Jumeaux (ce que font les esclaves simules : animer, la zone, forcer).
     // 1.11.5 : Variables API apres Variables IHM (les deux en arbre, avec la recherche et le forcage).
-    enum Tab : std::size_t { TabValues = 0, TabJournal = 1, TabVariables = 2, TabApiVariables = 3, TabAlarms = 4, TabRecipes = 5, TabPerf = 6, TabTwins = 7 };
+    // 1.11.24 : plus d'onglets Journal, Alarmes ni Recettes (la Console du panneau du bas les dit).
+    enum Tab : std::size_t { TabValues = 0, TabVariables = 1, TabApiVariables = 2, TabPerf = 3, TabTwins = 4 };
     [[nodiscard]] HmiTwinValues& twins() noexcept { return *twins_; }
     // 1.11.5 : les onglets Variables IHM et Variables API (pour les scripts et les tests).
     [[nodiscard]] HmiSimVarTree& ihmVariables() noexcept { return *ihmVars_; }
@@ -541,14 +542,11 @@ public:
     // Relancer l'IHM : variables a leur valeur initiale, scripts de demarrage,
     // vue de demarrage.
     void restart();
-    // 1.10.1 : VIDER LE JOURNAL de l'onglet Journal (Vider dans sa barre, Vider le
-    // journal au clic droit). Ce sont les lignes de la seance (Runtime::journal),
-    // que le tableau relit a chaque rafraichissement : vider le seul tableau ne
-    // servait a rien. Les lignes suivantes s'affichent comme avant. L'historique
-    // (alarmes, evenements, systeme : le document) n'est pas touche. Rend le
-    // nombre de lignes videes ; l'avis le dit ("Journal vide (154 lignes)").
+    // 1.10.1 : VIDER LE JOURNAL de la seance (Runtime::journal ; 1.11.24 : l'onglet Journal
+    // est retire, le journal va a la Console du panneau du bas). L'historique (alarmes,
+    // evenements, systeme : le document) n'est pas touche. Rend le nombre de lignes
+    // videes ; l'avis le dit ("Journal vide (154 lignes)").
     std::size_t clearJournal();
-    [[nodiscard]] ui::TableView& journalTable() noexcept { return *journal_; }
     [[nodiscard]] const ui::StatusBar& statusBar() const noexcept { return *status_; }
     // 1.9 : le menu natif Parametres systeme sur cet onglet (0 Reglages, 1
     // Diagnostic, 2 la page Simulation) - les boutons de la barre, Ctrl+Alt+S

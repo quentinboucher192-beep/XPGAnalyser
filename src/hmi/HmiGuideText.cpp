@@ -2038,6 +2038,16 @@ const std::vector<Topic>& topics() {
                          "`Armoires[1].ana.PT1.mes` ; `{Nom}` devient `B`. Les objets s'appellent "
                          "`Carte_B.Titre`, `Carte_B.Bouton` dans le journal. Un symbole dans un symbole se "
                          "d\xC3\xA9veloppe de proche en proche (4 niveaux au plus).", {}},
+             {K::Heading, "Des rep\xC3\xA8res dans les arguments et dans le symbole (1.11.24)", {}, "1.11.24"},
+             {K::Paragraph, "Un argument peut porter un **rep\xC3\xA8re** : `Cuve := $V[0]$`, `$V$[2]`, "
+                         "`V[$Idx$]`, `Titre := '$Nom$'` ; et le symbole lui-m\xC3\xAAme peut en mettre autour de "
+                         "ses param\xC3\xA8tres : `$Cuve$.IN_Percent`, `$Cuve.Consigne$`, `Tab[$I$]`. Le moteur "
+                         "les retire en d\xC3\xA9veloppant l'instance : `$Cuve$.IN_Percent` devient "
+                         "`V[0].IN_Percent`, qui se lit **et s'\xC3\xA9" "crit** (champ de saisie, commandes, "
+                         "actions, clavier virtuel, Maths, scripts, popups du symbole et du projet, symboles "
+                         "imbriqu\xC3\xA9s). Un indice calcul\xC3\xA9 (`V[Idx].Consigne`, `Tab[I + 1]`) se calcule au "
+                         "moment d'\xC3\xA9" "crire. **Dupliquer** une instance remplace ses rep\xC3\xA8res dans "
+                         "les copies (`$V[0]$` \xE2\x86\x92 `$V[1]$`), comme pour un objet.", {}, "1.11.24"},
              {K::Heading, "Dessin, Alarmes, Instances", {}},
              {K::Paragraph, "Un symbole ouvert a trois sous-onglets : **Dessin** (l'\xC3\xA9" "diteur), "
                          "**Alarmes** - ses alarmes, \xC3\xA9" "crites avec ses param\xC3\xA8tres - et "
@@ -2807,10 +2817,11 @@ const std::vector<Topic>& topics() {
              {K::Bullet, "**Dans un commentaire** d'une expression, `(* \xE2\x80\xA6 *)` ou `//` "
                          "jusqu'\xC3\xA0 la fin de la ligne, un `$` n'est pas un rep\xC3\xA8re : `=V[0].Pos "
                          "// tarif 10$/h, 12$/h` n'en a pas. Dans un texte, `//` ne commente rien.", {}},
-             {K::Bullet, "Un rep\xC3\xA8re fait **au moins deux caract\xC3\xA8res**, sur une seule ligne, "
-                         "sans chiffre ni espace en t\xC3\xAAte, ni espace \xC3\xA0 la fin : `$0D$` ou "
+             {K::Bullet, "Un rep\xC3\xA8re fait **au moins deux caract\xC3\xA8res**, ou **une lettre seule** "
+                         "(`$V$[2]`, `Tab[$I$]` : un tableau, un indice d'une lettre), sur une seule ligne, "
+                         "sans chiffre ni espace en t\xC3\xAAte, ni espace \xC3\xA0 la fin : `$0D$`, `$1$` ou "
                          "\xC2\xAB 12 $ ou 15 $ \xC2\xBB n'en sont pas. Dans un texte, le morceau commence "
-                         "par une lettre, `_` ou `[` : \xC2\xAB 10$, 20$ \xC2\xBB n'a pas de rep\xC3\xA8re.", {}},
+                         "par une lettre, `_` ou `[` : \xC2\xAB 10$, 20$ \xC2\xBB n'a pas de rep\xC3\xA8re.", {}, "1.11.24"},
              {K::Bullet, "Un `$` **rest\xC3\xA9 seul** dans une expression (un rep\xC3\xA8re sans son `$` de "
                          "fin : `=$V[1].Ouv`) est une faute : la case le dit, suivi de \xC2\xAB un "
                          "rep\xC3\xA8re s'\xC3\xA9" "crit entre deux $ ($V[1].Ouv$) ; un vrai $ "
@@ -15027,20 +15038,20 @@ const std::vector<Topic>& topics() {
              {K::Heading, "Les onglets", {}},
              {K::Bullet, "**Expressions** : chaque expression de la vue et sa valeur (en rouge si elle est "
                          "fausse) ;", {}},
-             {K::Bullet, "**Journal** : actions, navigations, scripts, erreurs, connexions, "
-                         "horodat\xC3\xA9s, avec leur source ; **Vider** (sa barre, ou le clic droit "
-                         "\xE2\x80\xBA **Vider le journal**) l'efface, et les lignes suivantes s'affichent "
-                         "comme avant. L'historique des alarmes et des \xC3\xA9v\xC3\xA9nements, "
-                         "rang\xC3\xA9 \xC3\xA0 part (Configuration \xE2\x80\xBA Historiques), n'est pas "
-                         "touch\xC3\xA9 ;", {}},
-             {K::Bullet, "**Variables IHM** : leurs valeurs du moment ;", {}},
-             {K::Bullet, "**Alarmes** et **Recettes** : en cours ;", {}},
+             {K::Bullet, "**Variables IHM** et **Variables API** : leurs valeurs du moment ;", {}},
+             {K::Bullet, "**Performances** : le cycle de l'IHM, les scripts, le calcul, le dessin ;", {}},
              {K::Bullet, "**Esclaves simul\xC3\xA9s** (l'ancien onglet Jumeaux) : les esclaves rang\xC3\xA9s "
                          "par groupe - li\xC3\xA9 pr\xC3\xAAt, li\xC3\xA9 lu par l'IHM, seulement "
                          "simul\xC3\xA9 - et les valeurs simul\xC3\xA9" "es des esclaves (animer, la zone de "
                          "mouvement, forcer), serr\xC3\xA9" "es, pour r\xC3\xA9gler pendant la marche ; les "
                          "Graphiques de la vue marquent une zone tir\xC3\xA9" "e, un for\xC3\xA7" "age (voir "
                          "\xC2\xAB Les valeurs simul\xC3\xA9" "es \xC2\xBB).", {}},
+             {K::Paragraph, "**Le journal** de la simulation (actions, navigations, scripts, erreurs, connexions, "
+                         "apparitions d'alarmes, horodat\xC3\xA9s, avec leur source) est dans la **Console** du "
+                         "panneau du bas, avec ses niveaux et sa recherche ; **Effacer** la vide. Les alarmes en "
+                         "cours se voient dans la vue (bandeau, compteur, historique), les recettes dans leurs "
+                         "objets et IHM \xE2\x80\xBA Recettes : la 1.11.24 a retir\xC3\xA9 les onglets Journal, "
+                         "Alarmes et Recettes de la simulation.", {}, "1.11.24"},
              {K::Heading, "Popups et saisie", {}},
              {K::Paragraph, "Les popups s'ouvrent \xC3\xA0 leur place, avec leur barre de titre : on les tire, "
                          "on les ferme par leur croix (ou d'un clic dehors si elles le permettent) ; une "
@@ -15061,7 +15072,7 @@ const std::vector<Topic>& topics() {
          {"verifier", "securite", "scripts", "valeurs-simulees", "lectures-simulees", "esclaves-lies", "page-simulation", "simulation-api-ihm", "simulation-zoom"},
          {"Vider le journal", "vider le journal", "Journal vid\xC3\xA9", "clic droit sur la barre", "barre du simulateur", "Tout acquitter", "Mesures \xC3\xA0 z\xC3\xA9ro", "Exporter les mesures", "Page Simulation", "Ctrl+Alt+S", "D\xC3\xA9" "connecter", "Vue de d\xC3\xA9marrage", "Forcer", "Tout rel\xC3\xA2" "cher"},
          {"simulation"},
-         {{"PNG_185_simulation_fonction_expression_locales.png", "En marche : une expression qui appelle une fonction, le journal d'une proc\xC3\xA9" "dure et d'un script \xC3\xA0 variables locales."}, {"PNG_085_simulation_journal.png", "L'onglet Journal."}, {"PNG_495_simulation_jumeaux.png", "L'onglet Esclaves simul\xC3\xA9s (alors appel\xC3\xA9 Jumeaux) en marche : la vue Vue_Equipements lit les esclaves simul\xC3\xA9s - la tension al\xC3\xA9" "atoire, le courant (sinus, au-dessus de son seuil : jaune), la puissance en rampe, la fr\xC3\xA9quence forc\xC3\xA9" "e \xC3\xA0 51,00 Hz, le poids de la balance B."}, {"PNG_496_simulation_zone_tiree.png", "La zone du courant tir\xC3\xA9" "e dans l'onglet Esclaves simul\xC3\xA9s, puis le courant forc\xC3\xA9 : la courbe de la vue suit, et les marque d'un trait (la zone tir\xC3\xA9" "e, le for\xC3\xA7" "age)."}},
+         {{"PNG_185_simulation_fonction_expression_locales.png", "En marche : une expression qui appelle une fonction, le journal d'une proc\xC3\xA9" "dure et d'un script \xC3\xA0 variables locales."}, {"PNG_495_simulation_jumeaux.png", "L'onglet Esclaves simul\xC3\xA9s (alors appel\xC3\xA9 Jumeaux) en marche : la vue Vue_Equipements lit les esclaves simul\xC3\xA9s - la tension al\xC3\xA9" "atoire, le courant (sinus, au-dessus de son seuil : jaune), la puissance en rampe, la fr\xC3\xA9quence forc\xC3\xA9" "e \xC3\xA0 51,00 Hz, le poids de la balance B."}, {"PNG_496_simulation_zone_tiree.png", "La zone du courant tir\xC3\xA9" "e dans l'onglet Esclaves simul\xC3\xA9s, puis le courant forc\xC3\xA9 : la courbe de la vue suit, et les marque d'un trait (la zone tir\xC3\xA9" "e, le for\xC3\xA7" "age)."}},
          "",
          {},
          "",

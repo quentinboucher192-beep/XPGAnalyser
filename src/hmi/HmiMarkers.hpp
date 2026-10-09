@@ -9,9 +9,10 @@
 //  l'analyse (Expression::compile, TextTemplate::compile, la verification de
 //  HmiExprCheck) lit le texte sans eux, dans l'editeur, la verification, la
 //  simulation et l'execution. Le texte enregistre les garde.
-//   - le contenu : 2 caracteres au moins, sur une ligne, sans `$`, qui ne
-//     commence ni par un chiffre ni par une espace et ne finit pas par une
-//     espace (`$N`, `$0D$0A`, "12 $ ou 15 $" ne sont pas des reperes) ;
+//   - le contenu : 2 caracteres au moins (1.11.24 : ou une lettre seule, $V$),
+//     sur une ligne, sans `$`, qui ne commence ni par un chiffre ni par une
+//     espace et ne finit pas par une espace (`$N`, `$0D$0A`, "12 $ ou 15 $" ne
+//     sont pas des reperes) ;
 //   - `$$` (la ou un repere pourrait s'ouvrir) ecrit un vrai `$` ;
 //   - dans une EXPRESSION, un `$` entre apostrophes (ou guillemets) n'est
 //     jamais un repere : les echappements du ST ('$N', '$0D', '5$$') gardent

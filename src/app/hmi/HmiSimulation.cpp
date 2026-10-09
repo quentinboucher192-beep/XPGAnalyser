@@ -472,10 +472,6 @@ private:
     std::string text_, tone_;
 };
 
-// 1.10.1 : L'ONGLET JOURNAL - une barre (Vider) au-dessus du tableau. Le clic droit
-// du tableau ouvre son menu (Copier...) ; le volet y met Vider le journal en tete.
-constexpr int kJournalClear = 1;              // le bouton de la barre
-constexpr int kJournalClearItem = -2001;      // l'entree du menu (-1 : un trait)
 constexpr int kExprExpandAll = -2101;         // 1.11.6 : le clic droit de l'onglet Expressions
 constexpr int kExprCollapseAll = -2102;
 
@@ -500,6 +496,8 @@ constexpr BarMenuItem kBarMenu[] = {
     {"Exporter les mesures (CSV)", "hmi.perfexport", ""},
 };
 
+// Un tableau dont le clic droit laisse le volet completer le menu (l'onglet Expressions :
+// Tout deplier, Tout replier ; avant la 1.11.24, aussi l'onglet Journal).
 class JournalTable final : public ui::TableView {
 public:
     using ui::TableView::TableView;
@@ -513,25 +511,6 @@ protected:
         }
         return ui::TableView::onEvent(ev);
     }
-};
-
-class JournalPage final : public ui::Widget {
-public:
-    JournalPage(std::string id, std::unique_ptr<HmiToolStrip> tools, std::unique_ptr<ui::TableView> table)
-        : ui::Widget(std::move(id)) {
-        tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
-        table_ = &static_cast<ui::TableView&>(addChild(std::move(table)));
-    }
-protected:
-    void onLayout() override {
-        const auto b = bounds();
-        const float h = std::min(b.h, tools_->sizeHint().preferred.h);
-        tools_->setBounds({b.x, b.y, b.w, h});
-        table_->setBounds({b.x, b.y + h, b.w, std::max(0.f, b.h - h)});
-    }
-private:
-    HmiToolStrip*  tools_{nullptr};
-    ui::TableView* table_{nullptr};
 };
 
 // 1.11.6 : la page Expressions - la recherche, puis l'arbre.
@@ -2484,39 +2463,9 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
         });
         tabs->addTab(ui::TabControl::Tab{"Expressions", ui::Icon::Code, false, false}, std::move(page));
     }
-    {
-        auto table = std::make_unique<JournalTable>(base + ".journal");
-        table->setColumns({{"Heure", 118.f}, {"Type", 96.f}, {"Source", 200.f}, {"Message", 460.f}});
-        table->setSelectionMode(ui::SelectionMode::Single);
-        journal_ = table.get();
-        // 1.10.1 : Vider (la barre de l'onglet, le clic droit) - demande du client.
-        const std::string tip = "Vider le journal de la s\xC3\xA9" "ance : les lignes suivantes s'afficheront ici. L'historique des "
-                                "alarmes et des \xC3\xA9v\xC3\xA9nements, rang\xC3\xA9 \xC3\xA0 part (Configuration \xE2\x80\xBA Historiques), "
-                                "n'est pas touch\xC3\xA9";
-        auto tools = std::make_unique<HmiToolStrip>(base + ".journalTools");
-        tools->add(kJournalClear, HmiGlyph::Delete, tip, "Vider");
-        tools->setEnabledWhen(kJournalClear, [this] { return !runtime_.journal().empty(); });
-        links_ += tools->triggered->connect([this](int a) {
-            if (a == kJournalClear) (void)clearJournal();
-        });
-        table->onContextMenu = [this](gfx::Point) {
-            auto* menu = journal_ ? journal_->contextMenu() : nullptr;
-            if (!menu) return;
-            const bool any = !runtime_.journal().empty();
-            std::vector<ui::PopupMenu::Item> items;
-            items.push_back({"Vider le journal", {}, any ? std::string{} : std::string("le journal est vide"), ui::Icon::Close, any, false,
-                             kJournalClearItem});
-            items.push_back({{}, {}, {}, ui::Icon::None, true, true, -1});
-            for (const auto& it : menu->items()) items.push_back(it);
-            menu->setItems(std::move(items));
-        };
-        if (auto* menu = table->contextMenu())
-            links_ += menu->itemChosen->connect([this](int a) {
-                if (a == kJournalClearItem) (void)clearJournal();
-            });
-        tabs->addTab(ui::TabControl::Tab{"Journal", ui::Icon::Document, false, false},
-                     std::make_unique<JournalPage>(base + ".journalPage", std::move(tools), std::move(table)));
-    }
+    // 1.11.24 (demande du client) : plus d'onglets Journal, Alarmes ni Recettes. Le journal de la
+    // simulation est dans la Console du panneau du bas (1.11.14), les alarmes dans la vue (ses
+    // objets d'alarmes) et dans la Console, les recettes dans leurs objets et l'onglet IHM > Recettes.
     {
         // 1.11.5 : les variables IHM en arbre (une structure a toute profondeur), la recherche,
         // le forcage (le moteur de l'IHM : forcee, elle ignore les ecritures).
@@ -2695,21 +2644,6 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
         tabs->addTab(ui::TabControl::Tab{"Variables API", ui::Icon::LocatedVariable, false, false}, std::move(tree));
     }
     {
-        auto table = std::make_unique<ui::TableView>(base + ".alarms");
-        table->setColumns({{"Apparue", 90.f}, {"Priorit\xC3\xA9", 104.f}, {"Alarme", 150.f}, {"\xC3\x89tat", 170.f},
-                           {"Message", 290.f}, {"Groupe", 96.f}, {"Par", 80.f}});
-        table->setSelectionMode(ui::SelectionMode::Single);
-        alarms_ = table.get();
-        tabs->addTab(ui::TabControl::Tab{"Alarmes", ui::Icon::Warning, false, false}, std::move(table));
-    }
-    {
-        auto table = std::make_unique<ui::TableView>(base + ".recipes");
-        table->setColumns({{"Recette", 150.f}, {"Jeu", 130.f}, {"Valeurs", 420.f}});
-        table->setSelectionMode(ui::SelectionMode::Single);
-        recipes_ = table.get();
-        tabs->addTab(ui::TabControl::Tab{"Recettes", ui::Icon::AnimationTable, false, false}, std::move(table));
-    }
-    {
         // Lot 13 : les performances - le cycle IHM, les scripts, l'evaluation, le dessin.
         auto table = std::make_unique<ui::TableView>(base + ".perf");
         table->setColumns({{"Mesure", 300.f}, {"Derni\xC3\xA8re", 100.f}, {"Moyenne", 100.f}, {"Maximum", 100.f}, {"Nombre", 96.f}});
@@ -2734,7 +2668,7 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
         twinsCtl_->attach(*twins_);
         tabs->addTab(ui::TabControl::Tab{"Esclaves simul\xC3\xA9s", ui::Icon::Play, false, false}, std::move(twins));
     }
-    // 1.9 : les popups ouvertes et les copies de leurs parametres (HmiParamPanes) - onglet 7.
+    // 1.9 : les popups ouvertes et les copies de leurs parametres (HmiParamPanes) - le dernier onglet.
     tabs->addTab(ui::TabControl::Tab{"Popups", ui::Icon::Document, false, false}, hmiparams::makePopupsTab(base + ".popups"));
     tabs->setCurrentIndex(0);
     tabs_ = &static_cast<ui::TabControl&>(split->addPane(std::move(tabs), 0.44f, 220.f));
@@ -2979,8 +2913,8 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
         const auto& e = values_[i].expression;
         host_.force(plainPath(e) ? e : std::string{});
     });
-    // Double-clic sur une alarme : l'acquitter ; sur un jeu : l'appliquer.
-    links_ += alarms_->activated->connect([this](ui::RowIndex r) {
+    // Double-clic sur une alarme : l'acquitter ; sur un jeu : l'appliquer (1.11.24 : sans leurs onglets, plus rien).
+    if (alarms_) links_ += alarms_->activated->connect([this](ui::RowIndex r) {
         const auto& list = runtime_.alarms();
         if (r >= list.size()) return;
         std::string why;
@@ -2989,7 +2923,7 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
                                      n ? ui::StatusBar::Severity::Success : ui::StatusBar::Severity::Warning);
         refreshNow();
     });
-    links_ += recipes_->activated->connect([this](ui::RowIndex r) {
+    if (recipes_) links_ += recipes_->activated->connect([this](ui::RowIndex r) {
         if (r >= recipeRows_.size()) return;
         (void)applyRecipe(recipeRows_[r].first, recipeRows_[r].second);
     });
@@ -4511,8 +4445,8 @@ void HmiSimulationPane::updateTables() {
         tabs_->setTabBadge(TabPerf, late ? std::to_string(pf.overruns) : std::string{}, ui::Tone::Warning);
     }
     const auto& j = runtime_.journal();
-    if (j.size() != journalShown_ || (!j.empty() && journalModel_ && journalModel_->rowCount() && 
-        journalModel_->cellText(journalModel_->rowCount() - 1, 3) != j.back().message)) {
+    if (journal_ && (j.size() != journalShown_ || (!j.empty() && journalModel_ && journalModel_->rowCount() && 
+        journalModel_->cellText(journalModel_->rowCount() - 1, 3) != j.back().message))) {
         std::vector<std::vector<std::string>> rows;
         std::vector<std::string> kinds;
         for (const auto& e : j) {
@@ -4534,10 +4468,10 @@ void HmiSimulationPane::updateTables() {
         journalShown_ = j.size();
         std::size_t errors = 0;
         for (const auto& e : j) errors += e.kind == "Erreur";
-        tabs_->setTabBadge(1, j.empty() ? std::string{} : std::to_string(j.size()), errors ? ui::Tone::Error : ui::Tone::Accent);
+        (void)errors;
     }
     // Les alarmes : refaites quand leur etat change.
-    {
+    if (alarms_) {
         std::string sig;
         for (const auto& a : runtime_.alarms()) sig += a.name + (a.active ? "1" : "0") + (a.acked ? "1" : "0") + a.message + "|";
         if (!alarmsModel_ || sig != alarmsShown_) {
@@ -4566,12 +4500,12 @@ void HmiSimulationPane::updateTables() {
             alarms_->setModel(alarmsModel_);
             const auto n = runtime_.unacknowledged();
             const int top = runtime_.highestPriority();
-            tabs_->setTabBadge(TabAlarms, runtime_.alarms().empty() ? std::string{} : std::to_string(runtime_.alarms().size()),
-                               n == 0 ? ui::Tone::Ok : top == 1 ? ui::Tone::Error : ui::Tone::Warning);
+            (void)n;
+            (void)top;
         }
     }
     // Les recettes : une ligne par jeu, double-clic pour l'appliquer.
-    {
+    if (recipes_) {
         std::string sig;
         for (const auto& r : doc_->project.recipes)
             for (const auto& rec : r.records) {
@@ -4600,7 +4534,7 @@ void HmiSimulationPane::updateTables() {
                                                            return st;
                                                        });
             recipes_->setModel(recipesModel_);
-            tabs_->setTabBadge(TabRecipes, recipeRows_.empty() ? std::string{} : std::to_string(recipeRows_.size()), ui::Tone::Accent);
+
         }
     }
     // 1.11.5 : les arbres des variables - refaits quand les variables changent (les valeurs,

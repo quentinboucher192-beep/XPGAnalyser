@@ -18193,7 +18193,8 @@ void dupliquerReperes1102() {
         check(markersIn("Prix : 12 $$").empty() && markersIn("$$Vanne$").empty(), "$$ ecrit un vrai $ et ne commence rien");
         check(markersIn("'$Repere$'").empty(), "1.11 : un $ dans une chaine ST n'est pas un repere");
         check(markersIn("$Ab$$Cd$").size() == 2, "deux reperes colles");
-        check(!validMarkerName("A") && validMarkerName("_x") && !validMarkerName("1A"), "au moins deux caracteres, un identifiant");
+        check(validMarkerName("A") && validMarkerName("_x") && !validMarkerName("1A") && !validMarkerName("1"),
+              "deux caracteres au moins, ou une lettre seule (1.11.24) ; pas un chiffre en tete");
         std::size_t n = 0;
         same(replaceMarkers("=$vanne$.OUV + $Repere$", {{"VANNE", "V102"}}, &n), "=$V102$.OUV + $Repere$",
              "remplacer sans la casse, la copie garde ses $ (1.11) ; un repere sans valeur reste");
@@ -19785,9 +19786,12 @@ void reperesTransparents111() {
         // $$, les chiffres, les espaces, la ligne.
         check(mk::find("Prix : 12 $$").empty() && mk::find("$$Vanne$").empty(), "$$ ecrit un vrai $ et ne commence rien");
         check(mk::find("$Ab$$Cd$").size() == 2, "deux reperes colles");
-        check(mk::find("$0D$").empty() && mk::find("12 $ ou 15 $").empty() && mk::find("$A$").empty()
+        check(mk::find("$0D$").empty() && mk::find("12 $ ou 15 $").empty() && mk::find("$1$").empty()
                   && mk::find("$Ab\nCd$").empty(),
-              "pas de repere : un chiffre en tete, une espace au bord, un caractere, deux lignes");
+              "pas de repere : un chiffre en tete, une espace au bord, un chiffre seul, deux lignes");
+        // 1.11.24 : une lettre seule est un repere ($V$ : un tableau d'une lettre, $I$ : un indice).
+        check(mk::find("$A$").size() == 1 && mk::strip("$V$[2].Nom + $I$") == "V[2].Nom + I",
+              "1.11.24 : une lettre seule ($A$, $V$, $I$) est un repere");
         same(mk::strip("X + $$"), "X + $$", "une expression : $$ reste (il n'a pas de sens hors chaine)");
         // Un texte : les apostrophes du francais ne ferment rien ; dans un trou {...}, si.
         check(mk::find("L'armoire $Arm$ de l'atelier", mk::Mode::Text).size() == 1, "un texte : l'armoire $Arm$ de l'atelier");
@@ -19874,7 +19878,8 @@ void reperesTransparents111() {
         // REP-2 : une valeur qui ne peut pas etre un repere s'ecrit sans ses $ (un $10$ ne se calculerait pas).
         same(replaceMarkers("= $Seuil$ * 2", {{"SEUIL", "10"}}), "= 10 * 2", "REP-2 : $Seuil$ -> 10 s'ecrit 10");
         same(replaceMarkers("Vanne $Num$", {{"NUM", "1"}}, nullptr, nullptr, false), "Vanne 1", "REP-2 : un texte, $Num$ -> 1");
-        same(replaceMarkers("$Arm$", {{"ARM", "A"}}, nullptr, nullptr, false), "A", "REP-2 : $Arm$ -> A (un caractere)");
+        same(replaceMarkers("$Arm$", {{"ARM", "A"}}, nullptr, nullptr, false), "$A$", "REP-2 : $Arm$ -> A (1.11.24 : une lettre est un repere, la copie le garde)");
+        same(replaceMarkers("$Arm$", {{"ARM", "7"}}, nullptr, nullptr, false), "7", "REP-2 : $Arm$ -> 7 (un chiffre n'est pas un repere : sans ses $)");
         same(replaceMarkers("$Vanne$.Ouv", {{"VANNE", "$V[2]$"}}), "$V[2]$.Ouv", "REP-2 : $V[2]$ tape avec ses $ : pas de $$V[2]$$");
         same(replaceMarkers("$Vanne$.Ouv", {{"VANNE", "V[2]"}}), "$V[2]$.Ouv", "un vrai morceau garde ses $");
         // REP-3 : un $ legitime d'un texte n'ouvre pas un repere.

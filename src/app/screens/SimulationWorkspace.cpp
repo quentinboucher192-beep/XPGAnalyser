@@ -1139,9 +1139,9 @@ void MainAnalysisScreen::simCenterGo(const std::string& key) {
         return;
     }
     if (key == "alarmes") {
+        // 1.11.24 : la simulation de l'IHM n'a plus d'onglet Alarmes - ses apparitions sont dans la Console.
         if (!openSimCenter("ihm")) return;
-        if (auto* sim = dynamic_cast<HmiSimulationPane*>(hmiTab("simulation")))
-            sim->tabs().setCurrentIndex(static_cast<std::size_t>(HmiSimulationPane::TabAlarms));
+        showHmiBuildOutputs(2);
         return;
     }
     if (key == "bibliotheque") {
