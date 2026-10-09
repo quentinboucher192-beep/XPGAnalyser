@@ -116,6 +116,10 @@ inline constexpr std::string_view kLocalTypes[] = {"BOOL", "INT", "DINT", "UINT"
 [[nodiscard]] bool richLocalType(std::string_view type, const std::function<bool(std::string_view)>& knownType = {});
 // 1.10 : les options du simulateur pour un code de l'IHM (le dialecte IHM).
 [[nodiscard]] inline sim::ParseOptions dialectOptions() noexcept { return sim::ParseOptions{true}; }
+// 1.11.18 (refonte, lot 5) : la valeur d'une declaration de ce type se lit-elle (une expression,
+// une liste [1, 2, 3] pour un tableau, T#5s, 'texte', E_Mode#Auto) ? Faux et `why` (en francais) :
+// la grille la refuse avant qu'elle ne rende tout le code illisible.
+[[nodiscard]] bool declarationValueReadable(std::string_view type, std::string_view value, std::string* why = nullptr);
 
 //  LES FONCTIONS IHM (Programmation generale > Fonctions). Leur signature :
 //  "Moyenne(a : REAL, b : REAL) : REAL" ; sans retour : "Tracer(Message : STRING)".

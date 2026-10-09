@@ -27026,14 +27026,14 @@ void onglets1118() {
     core::CommandGroupScope::registerStack(&stack);      // le collage : un groupe dans cette pile
     const std::size_t depth = stack.done().size();
     vars.selectRows({0});
-    check(vars.table().pasteText("Nom\tType\tInitiale\tStockage\tDocumentation\nSeuil\tREAL\t12.5\tPersistante\tle seuil haut\nTotal\tDINT\t\t\t\n", false),
-          "coller un tableau d'Excel dans Variables");
+    check(vars.table().pasteText("Nom\tType\tInitiale\tStockage\tDocumentation\nSeuil\tREAL\t12,5\tPersistante\tle seuil haut\nTotal\tDINT\t\t\t\n", false),
+          "coller un tableau d'Excel dans Variables (12,5 : la virgule d\xC3\xA9" "cimale d'un Excel en fran\xC3\xA7" "ais)");
     const auto* after = doc->project.script(sc.id);
     const Declaration* seuil = nullptr;
     for (const auto& d : after->decls)
         if (d.name == "Seuil") seuil = &d;
     check(seuil && seuil->type == "REAL" && seuil->value == "12.5" && seuil->storage == Storage::Persistent && seuil->description == "le seuil haut",
-          "Seuil cr\xC3\xA9\xC3\xA9" "e : REAL, 12.5, Persistante, sa documentation");
+          "Seuil cr\xC3\xA9\xC3\xA9" "e : REAL, 12.5 (lu depuis 12,5), Persistante, sa documentation");
     check(after->decls[1].type == "DINT", "Total mis \xC3\xA0 jour : DINT");
     check(stack.done().size() == depth + 1, "le collage : un seul Ctrl+Z (" + std::to_string(stack.done().size() - depth) + ")");
     core::CommandGroupScope::registerStack(nullptr);

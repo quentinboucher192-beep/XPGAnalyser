@@ -1411,6 +1411,23 @@ void edition() {
               "une locale de fonction (privee) rendue publique : refusee (" + why + ")");
         check(!de::set(p, script, de::Tab::Constants, 0, de::Column::Value, "  ", &why) && sd[0].value == "10", "une constante sans valeur : refusee");
         check(de::set(p, script, de::Tab::Variables, 1, de::Column::Value, "", &why) && sd[2].value.empty(), "une variable sans valeur initiale : permise");
+        // Une valeur venue d'Excel (en francais) : la virgule decimale, les espaces de milliers, VRAI / FAUX.
+        check(de::set(p, script, de::Tab::Variables, 2, de::Column::Type, "REAL", &why) && de::set(p, script, de::Tab::Variables, 2, de::Column::Value, "2,5", &why)
+                  && sd[3].value == "2.5",
+              "2,5 -> 2.5 (" + sd[3].value + ")");
+        check(de::set(p, script, de::Tab::Variables, 2, de::Column::Value, "-1 234,75", &why) && sd[3].value == "-1234.75", "-1 234,75 -> -1234.75 (" + sd[3].value + ")");
+        check(de::set(p, script, de::Tab::Variables, 2, de::Column::Value, "Max * 0.5", &why) && sd[3].value == "Max * 0.5", "une expression reste telle quelle");
+        check(de::set(p, script, de::Tab::Variables, 2, de::Column::Type, "BOOL", &why) && de::set(p, script, de::Tab::Variables, 2, de::Column::Value, "Vrai", &why)
+                  && sd[3].value == "TRUE" && de::set(p, script, de::Tab::Variables, 2, de::Column::Value, "faux", &why) && sd[3].value == "FALSE",
+              "BOOL : Vrai -> TRUE, faux -> FALSE");
+        check(!de::set(p, script, de::Tab::Variables, 2, de::Column::Value, "1 +* 2", &why) && sd[3].value == "FALSE" && why.find("illisible") != std::string::npos,
+              "une valeur illisible : refusee, la case ne bouge pas (" + why + ")");
+        // Un tableau : une seule valeur remplit toutes ses cases ; une liste [..] que le simulateur ne
+        // lit pas est refusee (elle rendrait tout le code illisible a l'execution).
+        const bool one = de::set(p, script, de::Tab::Variables, 1, de::Column::Value, "1.5", &why);
+        check(one && sd[2].value == "1.5", "un tableau : une valeur pour toutes ses cases - " + why);
+        const bool list = de::set(p, script, de::Tab::Variables, 1, de::Column::Value, "[1.0, 2.0, 3.0, 4.0]", &why);
+        check(!list && sd[2].value == "1.5" && why.find("illisible") != std::string::npos, "une liste [..] : refusee - " + why);
         check(de::set(p, script, de::Tab::Constants, 0, de::Column::Description, "la borne\nhaute\t(bar)", &why) && sd[0].description == "la borne haute (bar)",
               "la documentation : sur une ligne");
         // Les libelles se relisent.

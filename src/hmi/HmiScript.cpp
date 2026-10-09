@@ -935,6 +935,20 @@ std::vector<std::string> renameCaptures(const Project& p, const View* symbol, st
     return out;
 }
 
+bool declarationValueReadable(std::string_view type, std::string_view value, std::string* why) {
+    // Lue comme le simulateur la lira : une declaration du dialecte, seule.
+    const std::string code = "VAR\n    Valeur__ : " + std::string(type) + " := " + std::string(value) + ";\nEND_VAR\n";
+    const auto program = sim::parse(code, "valeur", dialectOptions());
+    if (program) return true;
+    if (why) {
+        const std::string raw = program.error().context.empty() ? program.error().message() : program.error().context;
+        std::string rest;
+        (void)splitLine(raw, &rest);
+        *why = frenchSimMessage(rest);
+    }
+    return false;
+}
+
 std::string functionTemplate(std::string_view name, std::string_view returnType, std::string_view description) {
     std::string head = "(* " + std::string(name) + (description.empty() ? std::string{} : " : " + std::string(description)) + " *)\n";
     // 1.11.18 (lot 5) : ses declarations dans le modele (functionTemplateDecls), plus dans le code.
