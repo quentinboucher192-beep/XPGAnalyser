@@ -604,8 +604,11 @@ std::vector<std::pair<hmi::pipeline::Severity, std::string>> HmiFunctionsPane::t
     for (const auto& o : trial_.outputs) out.emplace_back(S::Information, "Param\xC3\xA8tre rendu : " + o);
     for (const auto& j : trial_.journal) out.emplace_back(S::Information, "Journal : " + j);
     for (const auto& v : trial_.changed) out.emplace_back(S::Warning, "Variable IHM : " + v);
-    out.emplace_back(S::Information, trial_.livePlc ? std::string("Automate : lu dans la simulation en marche (sans y \xC3\xA9" "crire)")
-                                                    : std::string("Automate : simulation arr\xC3\xAAt\xC3\xA9" "e, ses variables ne sont pas lues"));
+    // 1.11.21 : la simulation de l'API est lue des qu'elle est chargee, meme arretee - son etat est dit.
+    out.emplace_back(S::Information, trial_.livePlc ? "Automate : lu dans la simulation de l'API ("
+                                                          + (trial_.plcState.empty() ? std::string{} : trial_.plcState + ", ")
+                                                          + "sans y \xC3\xA9" "crire)"
+                                                    : std::string("Automate : aucune simulation de l'API charg\xC3\xA9" "e, ses variables ne sont pas lues"));
     return out;
 }
 
@@ -970,6 +973,7 @@ bool HmiFunctionsPane::tryFunction(Id id, const std::vector<std::string>& argume
     trial_.function = id;
     auto* live = hosts_.plc ? hosts_.plc() : nullptr;
     trial_.livePlc = live != nullptr;
+    if (live && hosts_.plcState) trial_.plcState = hosts_.plcState();
     TrialPlc plc(live);
     hmi::Runtime rt;
     rt.bind(&doc_->project, &plc);

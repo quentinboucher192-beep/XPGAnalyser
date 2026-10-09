@@ -3,7 +3,7 @@
 //  1.11.21 (session-11121-editeurs-explorateurs.txt), sur une copie d'Armoire_Gaz deja
 //  preparee par preparer-projet-11120 (Random, les trois Convertir, Essai_Signatures) :
 //    - le script Essai_Explorateur (appele) : une constante Seuil_Haut (documentee), deux
-//      variables (Compteur, conservee ; Ecart_Max), une fonction interne Ecart(a, b) et sa
+//      variables (Nb_Appels, conservee ; Ecart_Max), une fonction interne Ecart(a, b) et sa
 //      locale - ce que l'arbre deplie ;
 //    - la variable IHM Ecart_Releve (REAL), qu'il ecrit.
 //
@@ -59,7 +59,7 @@ int main(int argc, char** argv) {
         sc.event = "Appel";
         sc.description = "Ce que l'arbre deplie : une constante, des variables, une fonction interne";
         sc.decls = {decl(DeclKind::Constant, "Seuil_Haut", "REAL", "80.0", "le seuil d'alarme (bar)"),
-                    decl(DeclKind::Variable, "Compteur", "INT", "0", "les appels", Storage::Kept),
+                    decl(DeclKind::Variable, "Nb_Appels", "INT", "0", "les appels", Storage::Kept),
                     decl(DeclKind::Variable, "Ecart_Max", "REAL", "", "le plus grand ecart vu")};
         sc.body = "FUNCTION Ecart(a : REAL; b : REAL) : REAL\n"
                   "    VAR d : REAL; END_VAR\n"
@@ -67,7 +67,7 @@ int main(int argc, char** argv) {
                   "    IF d < 0.0 THEN d := -d; END_IF;\n"
                   "    Ecart := d;\n"
                   "END_FUNCTION\n"
-                  "Compteur := Compteur + 1;\n"
+                  "Nb_Appels := Nb_Appels + 1;\n"
                   "Ecart_Max := Ecart(Seuil_Haut, 75.0);\n"
                   "Ecart_Releve := Ecart_Max;\n";
         p.programs.scripts.push_back(sc);

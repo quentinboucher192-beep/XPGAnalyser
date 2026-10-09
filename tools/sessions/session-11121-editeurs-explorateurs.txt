@@ -9,7 +9,7 @@
 #       Convertir(Graine, 2) : la seule surcharge a deux arguments, Graine un REAL pour un
 #       STRING (le controle des types, un avertissement) ;
 #    4. Essayer Random : le resultat aux Sorties du panneau du bas (plus de bandeau ESSAI) ;
-#    5. la grille : Compteur passe en STRING, sa valeur 0 retiree (et dite).
+#    5. la grille : Nb_Appels passe en STRING, sa valeur 0 retiree (et dite).
 # =============================================================================
 attendre 3
 theme Dark
@@ -19,6 +19,9 @@ attendre-projet
 attendre 10
 
 # ---- 1. L'arbre : Random deplie, les surcharges de Convertir regroupees ----
+#  (la branche API repliee : de la place pour l'IHM)
+arbre "API" replier
+attendre 2
 arbre "IHM/Programmation générale/Fonctions" deplier
 attendre 3
 arbre "IHM/Programmation générale/Fonctions/Convertir" deplier
@@ -33,14 +36,21 @@ attendre 6
 capture 11121_01_arbre_fonctions.png
 
 # ---- 2. L'arbre : le script deplie, sa fonction interne ----
+arbre "IHM/Programmation générale/Fonctions" replier
+attendre 2
 arbre "IHM/Programmation générale/Scripts/Essai_Explorateur" deplier
+attendre 2
+arbre "IHM/Programmation générale/Scripts/Essai_Explorateur/Constantes" deplier
+attendre 2
+arbre "IHM/Programmation générale/Scripts/Essai_Explorateur/Variables" deplier
 attendre 2
 arbre "IHM/Programmation générale/Scripts/Essai_Explorateur/Fonctions internes" deplier
 attendre 2
 arbre "IHM/Programmation générale/Scripts/Essai_Explorateur/Fonctions internes/Ecart" deplier
 attendre 2
-#  (un clic sur Ecart : le script s'ouvre a sa ligne)
-arbre "IHM/Programmation générale/Scripts/Essai_Explorateur/Fonctions internes/Ecart"
+#  (un clic sur d, la locale d'Ecart : le script s'ouvre a la ligne d'Ecart ; l'arbre
+#   defile jusqu'a d)
+arbre "IHM/Programmation générale/Scripts/Essai_Explorateur/Fonctions internes/Ecart/d"
 attendre 6
 capture 11121_02_arbre_script.png
 
@@ -60,6 +70,11 @@ attendre 4
 ihm-diagnostics
 
 # ---- 4. Essayer Random : le resultat aux Sorties ----
+#  (Scripts replie d'abord : sinon "Fonctions" designerait "Fonctions internes", deplie plus haut)
+arbre "IHM/Programmation générale/Scripts" replier
+attendre 2
+arbre "IHM/Programmation générale/Fonctions" deplier
+attendre 2
 arbre "IHM/Programmation générale/Fonctions/Random"
 attendre 6
 outil "Essayer"
@@ -79,7 +94,7 @@ arbre "IHM/Programmation générale/Scripts/Essai_Explorateur"
 attendre 6
 sous-onglet "Variables"
 attendre 4
-cellule "Compteur" "Type" "STRING"
+cellule "Nb_Appels" "Type" "STRING"
 attendre 4
 volet-message "valeur 0 retirée"
 capture 11121_05_valeur_retiree.png

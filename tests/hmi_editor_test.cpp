@@ -4699,7 +4699,7 @@ void lot7_volet_fonctions() {
     check(tried && pane.lastTrial().result == "14.0" && pane.lastTrial().livePlc,
           "l'automate de la simulation est lu : Pression * 2 = " + pane.lastTrial().result + pane.lastTrial().error);
     check(!sent.empty() && sent.front().second == "Essai de Lire() = 14.0   (REAL)"
-              && sent.back().second == "Automate : lu dans la simulation en marche (sans y \xC3\xA9" "crire)",
+              && sent.back().second == "Automate : lu dans la simulation de l'API (sans y \xC3\xA9" "crire)",
           "l'essai envoy\xC3\xA9 aux Sorties du panneau du bas (" + (sent.empty() ? std::string("rien") : sent.front().second) + ")");
     const Id ecrit = pane.addFunction("Ecrire", "(aucun)", {});
     {
@@ -26839,6 +26839,50 @@ void explorateurs1121() {
           "l'explorateur d'objets : P1 \xE2\x80\xBA Fonctions (2), leurs signatures (" + all + ")");
 }
 
+// 1.11.21 : la grille d'un script - le type change, la valeur qui ne lui convient plus est
+// retiree et la barre le dit ; un seul Ctrl+Z rend le type ET la valeur ; une valeur qui ne
+// convient pas est refusee (la session 11121, etape 5, le montre sous Wine).
+void valeurGrille1121() {
+    std::printf("1.11.21 : la grille - la valeur suit le type, un seul Ctrl+Z\n");
+    namespace de = hmi::decledit;
+    auto doc = std::make_shared<Document>();
+    core::CommandStack stack;
+    auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+    Script sc;
+    sc.id = doc->project.allocate();
+    sc.name = "Essai_Explorateur";
+    sc.event = "Appel";
+    sc.body = "Nb_Appels := Nb_Appels + 1;\n";
+    Declaration d;
+    d.id = doc->project.allocate();
+    d.kind = DeclKind::Variable;
+    d.name = "Nb_Appels";
+    d.type = "INT";
+    d.value = "0";
+    d.storage = Storage::Kept;
+    sc.decls.push_back(d);
+    doc->project.programs.scripts.push_back(sc);
+    app::HmiScriptsPane pane("val1121", doc, apply);
+    pane.setBounds({0, 0, 1400, 800});
+    pane.layout();
+    pane.selectScript(sc.id);
+    auto& vars = pane.variablesGrid();
+    const auto decl = [&]() -> const Declaration* {
+        const auto* s = doc->project.script(sc.id);
+        return s && !s->decls.empty() ? &s->decls[0] : nullptr;
+    };
+    check(vars.setCell(0, de::Column::Type, "STRING") && decl() && decl()->type == "STRING" && decl()->value.empty(),
+          "INT -> STRING : la valeur 0 retir\xC3\xA9" "e");
+    check(vars.lastMessage() == "Nb_Appels : valeur 0 retir\xC3\xA9" "e : un INT (0) ne va pas dans un STRING (Ctrl+Z la rend)",
+          "la barre le dit (" + vars.lastMessage() + ")");
+    (void)stack.undo();
+    check(decl() && decl()->type == "INT" && decl()->value == "0" && !stack.canUndo(),
+          "un seul Ctrl+Z rend le type et la valeur (INT, 0)");
+    check(!vars.setCell(0, de::Column::Value, "'abc'") && decl()->value == "0" && vars.lastMessage().find("'abc'") != std::string::npos,
+          "une valeur qui ne convient pas est refus\xC3\xA9" "e, et la barre dit pourquoi (" + vars.lastMessage() + ")");
+    check(vars.setCell(0, de::Column::Value, "7") && decl()->value == "7", "une valeur qui convient : prise");
+}
+
 void fonctionsSymboleEditeur11110() {
     std::printf("== 1.11.10 : les fonctions et les popups d'un symbole dans l'\xC3\xA9" "diteur ==\n");
     auto doc = std::make_shared<Document>();
@@ -27738,6 +27782,7 @@ int main(int argc, char** argv) {
     if (const char* only = std::getenv("HMI_TEST_1121"); only && *only == '1') {
         direct1121();
         explorateurs1121();
+        valeurGrille1121();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -28076,6 +28121,7 @@ int main(int argc, char** argv) {
     surcharges1120();                       // 1.11.20 : les signatures et les surcharges
     direct1121();                           // 1.11.21 : les diagnostics en direct au panneau du bas
     explorateurs1121();                     // 1.11.21 : les explorateurs deplient les codes
+    valeurGrille1121();                     // 1.11.21 : la grille - la valeur suit le type, un seul Ctrl+Z
     if (argc > 1) configuration_et_variables(argv[1]);
     if (argc > 1) aide_saisie_scripts(argv[1]);
     if (argc > 1) aide_saisie_champs(argv[1]);

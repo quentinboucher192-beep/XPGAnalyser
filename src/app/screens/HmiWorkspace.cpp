@@ -1275,6 +1275,15 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         hosts.plc = [this]() -> ::sim::Environment* {
             return app_.simulation().attached() ? app_.simulationRuntime() : nullptr;
         };
+        hosts.plcState = [this]() -> std::string {        // 1.11.21 : l'essai dit l'etat de ce qu'il lit
+            switch (app_.simulation().state()) {
+                case SimulationHost::State::Running: return "en marche";
+                case SimulationHost::State::Paused:  return "en pause";
+                case SimulationHost::State::Halted:  return "bloqu\xC3\xA9" "e";
+                case SimulationHost::State::Stopped: break;
+            }
+            return "arr\xC3\xAAt\xC3\xA9" "e : ses valeurs initiales";
+        };
         hosts.exportItems = [this](hmi::Id f) { askHmiExportPrograms(1, f); };   // 1.11.2 (decision 174)
         hosts.importAny = [this] { askHmiImport(); };
         wireHmiBuildHosts(hosts);   // 1.11.13

@@ -91,6 +91,7 @@ public:
         std::vector<std::string> changed;     // "Compteur_Clics : 0 -> 1"
         std::vector<std::string> outputs;     // 1.11.20 : "Graine (E/S) = 12345", "Tirage (sortie) = 0.42"
         bool                     livePlc{false};
+        std::string              plcState;    // 1.11.21 : "en marche", "arretee : ses valeurs initiales"... (vide : non dit)
     };
     bool tryFunction(hmi::Id, const std::vector<std::string>& arguments);
     [[nodiscard]] const Trial& lastTrial() const noexcept { return trial_; }
@@ -109,7 +110,8 @@ public:
         std::function<void(hmi::Id)>            remove;
         std::function<void(hmi::Id)>            tryIt;       // les arguments (un dialogue), puis tryFunction
         std::function<void()>                   compile;     // ouvrir IHM > Compiler (1.11.17 : plus par le bouton Compiler)
-        std::function<sim::Environment*()>      plc;         // l'automate de la simulation, s'il tourne
+        std::function<sim::Environment*()>      plc;         // l'automate de la simulation, s'il est charge (meme arrete)
+        std::function<std::string()>            plcState;    // 1.11.21 : son etat, dit par l'essai ("en marche"...)
         // 1.11.2 (decision 174) : Exporter (les elements coches, celui-ci d'avance) et Importer... (tout paquet).
         std::function<void(hmi::Id)>            exportItems;
         std::function<void()>                   importAny;
