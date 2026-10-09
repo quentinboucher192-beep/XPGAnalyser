@@ -21,6 +21,7 @@
 #include "../hmi/HmiCommHost.hpp"
 #include "../hmi/HmiEditor.hpp"
 #include "../hmi/HmiFunctionPanes.hpp"
+#include "../hmi/HmiOperatorPanes.hpp"        // 1.11.17 : Compiler les operateurs (le build du porteur)
 #include "../hmi/HmiPanels.hpp"
 #include "../hmi/HmiScriptPanes.hpp"
 #include "../hmi/HmiSimulation.hpp"
@@ -190,6 +191,9 @@ void MainAnalysisScreen::tickHmiBuild() {
                 }
                 sf->refreshBuildState();
             }
+            // 1.11.17 (refonte, lot 1) : Compiler les operateurs du symbole - le build du symbole.
+            if (auto* so = ed->symbolOperators(); so && !so->build)
+                so->build = [this](pl::Mode mode, const std::string& key) { runHmiBuildFor(mode, key); };
         }
     }
     // Un demarrage attendait la fin d'un autre build : son tour.

@@ -104,7 +104,7 @@ public:
         std::function<void()>                   newFunction;
         std::function<void(hmi::Id)>            remove;
         std::function<void(hmi::Id)>            tryIt;       // les arguments (un dialogue), puis tryFunction
-        std::function<void()>                   compile;     // ouvrir IHM > Compiler
+        std::function<void()>                   compile;     // ouvrir IHM > Compiler (1.11.17 : plus par le bouton Compiler)
         std::function<sim::Environment*()>      plc;         // l'automate de la simulation, s'il tourne
         // 1.11.2 (decision 174) : Exporter (les elements coches, celui-ci d'avance) et Importer... (tout paquet).
         std::function<void(hmi::Id)>            exportItems;
@@ -119,6 +119,11 @@ public:
     [[nodiscard]] const Hosts& hosts() const noexcept { return hosts_; }   // 1.11.13 : les completer (l'ecran)
     [[nodiscard]] std::string buildKey() const;   // 1.11.13
     void refreshBuildState();
+    // 1.11.17 (refonte des scripts, lot 1, spec. 13) : COMPILER LA FONCTION ACTUELLE (le
+    // bouton, F7) - ses fautes ici, puis le build de cet element (son etat, les Diagnostics
+    // du panneau du bas filtres sur lui). Avant, le bouton ouvrait aussi IHM > Compiler
+    // (le projet entier) ; il reste a part. Rend le nombre de fautes (0 : aucune fonction).
+    std::size_t compileCurrent();
     [[nodiscard]] const std::string& buildStateText() const noexcept { return buildStateText_; }
 
     [[nodiscard]] HmiToolStrip&      tools() noexcept { return *tools_; }
@@ -132,6 +137,7 @@ public:
 protected:
     void onLayout() override;
     void onPaint(const ui::PaintContext&) override;
+    ui::EventResult onEvent(const ui::InputEvent&) override;   // 1.11.17 : F7, la fonction actuelle
 
 private:
     void showSelected();

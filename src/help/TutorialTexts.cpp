@@ -430,7 +430,7 @@ const std::vector<EmbeddedTutorial>& embeddedTutorials() {
          "attendre 900ms\n"
          "\n"
          "== 4 | Compiler (F7) la trouve\n"
-         ": **Compiler (F7)** contr\xC3\xB4le tous les scripts : le script, la ligne, la colonne, et le nom le plus proche.\n"
+         ": **Compiler (F7)** contr\xC3\xB4le le script affich\xC3\xA9 : la ligne, la colonne, et le nom le plus proche (le projet entier : IHM \xE2\x80\xBA Compiler).\n"
          "survol outil:Compiler\n"
          "touche F7\n"
          "encadrer resultats-compiler\n"

@@ -321,7 +321,9 @@ bool MainAnalysisScreen::handleShortcut(const KeyDown& k, bool beforeWidgets) {
         openApiTabFromAction("sim:ensemble");   // Lot API 8 : Centre de simulation - F9 ouvre la Vue d'ensemble (la maquette)
         return true;
     }
-    // 1.10 (chantier N) : F7 - Compiler l'IHM (le rapport ; ouvert, il repart).
+    // 1.10 (chantier N) : F7 - Compiler l'IHM (le rapport ; ouvert, il repart). 1.11.17 (refonte,
+    // lot 1) : dans un editeur (scripts, fonctions, operateurs), le volet prend F7 avant : il
+    // compile le document affiche ; ici, ailleurs, le projet entier.
     if (k.key == Key::F7 && k.mods.none() && !beforeWidgets && !k.repeat && app_.hmi()) {
         refreshBuildState(true);            // 1.11 (chantier T3, C4) : les icones de l'arbre, refaites
         openHmiPane("compiler");

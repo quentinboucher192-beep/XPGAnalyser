@@ -4566,8 +4566,10 @@ void lot7_volet_fonctions() {
     live.values["Pression"] = sim::Value::real(7.0);
     app::HmiFunctionsPane::Hosts hosts;
     bool compiled = false;
+    std::vector<std::pair<hmi::pipeline::Mode, std::string>> fnBuilds;
     hosts.plc = [&]() -> sim::Environment* { return &live; };
     hosts.compile = [&] { compiled = true; };
+    hosts.build = [&](hmi::pipeline::Mode m, const std::string& k) { fnBuilds.emplace_back(m, k); };   // 1.11.17
     pane.setHosts(hosts);
     const Id lit = pane.addFunction("Lire", "REAL", {});
     tried = pane.setBody(lit, "Lire := Pression * 2.0;") && pane.tryFunction(lit, {});
@@ -4578,8 +4580,15 @@ void lot7_volet_fonctions() {
         const bool ok_ = pane.setBody(ecrit, "Pression := 0.0;") && !pane.tryFunction(ecrit, {}) && live.values["Pression"].asReal() == 7.0;
         check(ok_, "... mais jamais \xC3\xA9" "crit (" + pane.lastTrial().error + ")");
     }
-    pane.tools().triggered->emit(pane.tools().actionByTip("Compiler"));
-    check(compiled, "Compiler ouvre le rapport (h\xC3\xB4te)");
+    // 1.11.17 (refonte, lot 1, spec. 13) : Compiler la fonction actuelle - elle seule (son build) ;
+    // le rapport du projet (IHM > Compiler) ne s'ouvre plus par ce bouton.
+    pane.tools().triggered->emit(pane.tools().actionByTip("Compiler la fonction actuelle"));
+    check(!compiled && fnBuilds.size() == 1 && fnBuilds[0].first == hmi::pipeline::Mode::Compile
+              && fnBuilds[0].second == "fonction:" + std::to_string(ecrit),
+          "Compiler la fonction actuelle : son build (fonction:" + std::to_string(ecrit) + "), sans ouvrir le rapport du projet");
+    check(pane.lastMessage().rfind("Compiler la fonction Ecrire : ", 0) == 0, "... son message : " + pane.lastMessage());
+    pane.dispatch(ui::KeyDown{ui::Key::F7, {}, false});
+    check(!compiled && fnBuilds.size() == 2 && fnBuilds[1].second == "fonction:" + std::to_string(ecrit), "F7 dans l'\xC3\xA9" "diteur : la m\xC3\xAA" "me");
 
     // Supprimer, Ctrl+Z.
     check(pane.deleteFunction(tracer) && !p.function(tracer), "supprimer Tracer");
@@ -15188,9 +15197,10 @@ void v110_compiler_scripts() {
     check(pane.editor().caretLine() == 1 && pane.editor().selectedText() == "'abc'",
           "... et \xC3\xA0 la colonne : la faute s\xC3\xA9lectionn\xC3\xA9" "e (" + pane.editor().selectedText() + ")");
 
-    // Compiler (F7) dans l'editeur (maquette, scene 4) : les fautes de TOUS les
-    // scripts dans le tableau du bas, sans quitter l'editeur ; un clic sur celle
-    // d'un autre script : il devient le script montre, la faute selectionnee.
+    // Compiler (F7) dans l'editeur (maquette, scene 4). 1.11.17 (refonte des scripts, lot 1,
+    // spec. 13) : COMPILER LE SCRIPT ACTUEL - lui seul (avant : les fautes de TOUS les scripts) ;
+    // le build de cet element suit (son etat, les Diagnostics du bas) ; le rapport du projet
+    // (IHM > Compiler) ne s'ouvre pas.
     Script autre;
     autre.name = "Autre";
     autre.lang = ScriptLang::ST;
@@ -15199,52 +15209,63 @@ void v110_compiler_scripts() {
     check(pane.setBody(aid, "Compteur := 2;\nCompteur := 'zz';\n"), "un second script, une faute ligne 2");
     pane.selectScript(sid);
     bool opened = false;
+    std::vector<std::pair<hmi::pipeline::Mode, std::string>> builds;
     app::HmiScriptsPane::Hosts hosts;
     hosts.compile = [&] { opened = true; };
+    hosts.build = [&](hmi::pipeline::Mode m, const std::string& k) { builds.emplace_back(m, k); };
     pane.setHosts(hosts);
-    pane.tools().triggered->emit(pane.tools().actionByTip("Compiler"));
-    check(pane.compiledHere() && !opened, "Compiler (F7) : ici, sans ouvrir le rapport");
-    std::size_t other = pane.diagnosticTable().model() ? pane.diagnosticTable().model()->rowCount() : 0;
-    const std::size_t count = other;
-    for (std::size_t r = 0; r < count; ++r)
-        if (pane.resultScript(r) == "Autre") other = r;
-    check(other < count && pane.diagnosticTable().model()->cellText(other, 1) == "2" && pane.diagnosticTable().model()->cellText(other, 2) == "13"
-              && pane.diagnosticTable().model()->cellText(other, 4).rfind("Compteur est un INT : tu lui affectes un texte", 0) == 0,
-          "les r\xC3\xA9sultats : la faute de l'autre script (Autre, ligne 2, col. 13, son message)");
-    check(pane.selectedScript() == sid && count >= 3, "... et celles du script montr\xC3\xA9 (" + std::to_string(count) + " lignes)");
+    const int compileTool = pane.tools().actionByTip("Compiler le script actuel");
+    check(compileTool >= 0 && pane.tools().isEnabled(compileTool), "le bouton Compiler le script actuel, actif (un script est choisi)");
+    pane.tools().triggered->emit(compileTool);
+    check(pane.compiledHere() && !opened, "Compiler : ici, sans ouvrir le rapport du projet");
+    check(builds.size() == 1 && builds[0].first == hmi::pipeline::Mode::Compile && builds[0].second == "script:" + std::to_string(sid),
+          "... et le build de ce script seul (script:" + std::to_string(sid) + ")");
+    const std::size_t count = pane.diagnosticTable().model() ? pane.diagnosticTable().model()->rowCount() : 0;
+    bool otherListed = false;
+    for (std::size_t r = 0; r < count; ++r) otherListed = otherListed || pane.resultScript(r) == "Autre";
+    check(!otherListed && count == 2, "les r\xC3\xA9sultats : les 2 fautes de Calcul, pas celle de Autre (" + std::to_string(count) + " lignes)");
+    check(pane.lastMessage().rfind("Compiler le script Calcul : 2 fautes", 0) == 0, "le message : " + pane.lastMessage());
     {
         const auto theme = ui::Theme::dark();
         Recorder rec;
         pane.render(ui::PaintContext{rec, theme, {0, 0, 1400, 800}, 0.0, nullptr});
-        check(rec.wrote("R\xC3\x89SULTATS DE COMPILER  \xC2\xB7  " + std::to_string(count) + "  \xC2\xB7  2 erreurs dans ce script"),
+        check(rec.wrote("R\xC3\x89SULTATS DE COMPILER  \xC2\xB7  2  \xC2\xB7  2 erreurs dans ce script"),
               "le titre : R\xC3\xA9sultats de Compiler, le compte, les fautes du script montr\xC3\xA9");
     }
-    if (other < count) pane.diagnosticTable().selectModelRows({static_cast<ui::RowIndex>(other)});
-    check(pane.selectedScript() == aid && pane.editor().caretLine() == 1 && pane.editor().selectedText() == "'zz'",
-          "un clic sur la faute d'un autre script : il s'ouvre, la faute s\xC3\xA9lectionn\xC3\xA9" "e (" + pane.editor().selectedText() + ")");
+    // Un autre script choisi : F7 (dans l'editeur) compile celui-la, lui seul.
+    pane.selectScript(aid);
+    check(!pane.compiledHere(), "un autre script choisi : le Compiler d'avant ne le concerne plus");
+    pane.dispatch(ui::KeyDown{ui::Key::F7, {}, false});
+    check(pane.compiledHere() && builds.size() == 2 && builds[1].second == "script:" + std::to_string(aid),
+          "F7 dans l'\xC3\xA9" "diteur : le script Autre, et son build");
+    check(pane.lastMessage().rfind("Compiler le script Autre : 1 faute", 0) == 0, "... son message : " + pane.lastMessage());
     // Corrigee : le soulignement et sa ligne disparaissent tout de suite.
     check(pane.setBody(aid, "Compteur := 2;\nCompteur := 3;\n") && pane.editor().squiggles().empty(), "corrig\xC3\xA9" "e : plus de soulignement");
-    bool stillThere = false;
-    for (std::size_t r = 0; pane.diagnosticTable().model() && r < pane.diagnosticTable().model()->rowCount(); ++r)
-        stillThere = stillThere || pane.resultScript(r) == "Autre";
-    check(!stillThere, "... ni de ligne dans les r\xC3\xA9sultats (le script montr\xC3\xA9 suit la frappe)");
-    // Une faute d'ailleurs (le script d'une vue, vu des scripts generaux) : l'hote y mene.
+    check(!pane.diagnosticTable().model() || pane.diagnosticTable().model()->rowCount() == 0, "... ni de ligne dans les r\xC3\xA9sultats");
+    // Une faute d'ailleurs (le script d'une vue) : plus dans les resultats de ce volet ; le
+    // rapport du projet (IHM > Compiler) la trouve toujours.
     View vue;
     vue.id = doc->project.allocate();
     vue.name = "Vue_N";
     vue.scripts.push_back(Script{doc->project.allocate(), "Vue_N_OnOpen", ScriptLang::ST, "OnOpen", "Lecture_Seule := 1;", 1000, {}, {}});
     doc->project.views.push_back(vue);
-    hmi::Issue sent;
-    hosts.openIssue = [&](const hmi::Issue& i) { sent = i; };
-    pane.setHosts(hosts);
+    pane.selectScript(sid);
     (void)pane.compileHere();
-    std::size_t far = count + 100;
+    bool far = false;
     for (std::size_t r = 0; pane.diagnosticTable().model() && r < pane.diagnosticTable().model()->rowCount(); ++r)
-        if (pane.resultScript(r) == "Vue_N \xC2\xB7 OnOpen") far = r;
-    check(far < count + 100, "les r\xC3\xA9sultats : le script de la vue (Vue_N \xC2\xB7 OnOpen)");
-    if (far < count + 100) pane.diagnosticTable().selectModelRows({static_cast<ui::RowIndex>(far)});
-    check(sent.script == vue.scripts.front().id && sent.line == 1 && sent.column == 1 && sent.length == 13,
-          "... un clic : l'h\xC3\xB4te ouvre ce script \xC3\xA0 la faute");
+        far = far || pane.resultScript(r) == "Vue_N \xC2\xB7 OnOpen";
+    bool inReport = false;
+    for (const auto& i : hmi::compileWith(doc->project, {}, {})) inReport = inReport || i.script == vue.scripts.front().id;   // ce que montre IHM > Compiler
+    check(!far, "le script de la vue : pas dans les r\xC3\xA9sultats de ce volet");
+    check(inReport, "... mais dans le rapport du projet (IHM > Compiler)");
+    // Aucun script : le bouton est grise, et Compiler ne compile rien.
+    auto vide = std::make_shared<Document>();
+    app::HmiScriptsPane none("prog110.vide", vide, apply);
+    none.setBounds({0, 0, 1200, 700});
+    none.layout();
+    const int noneTool = none.tools().actionByTip("Compiler le script actuel");
+    check(noneTool >= 0 && !none.tools().isEnabled(noneTool) && none.compileHere() == 0 && !none.compiledHere(),
+          "aucun script : Compiler gris\xC3\xA9, rien n'est compil\xC3\xA9");
 }
 
 // 1.10 (chantier S2) : les operateurs d'un symbole et d'un type IHM dans l'editeur
@@ -16452,9 +16473,9 @@ void centreAide111() {
     namespace hr = help::report;
 
     // ---- la table des raccourcis ----
-    check(hk::all().size() == 62, "raccourcis : les 60 lignes de la maquette validee, plus Ctrl+Maj+O (1.11) et Ctrl+J (1.11.14)");
-    check(hk::ofContext(hk::Context::General).size() == 24 && hk::ofContext(hk::Context::Help).size() == 7,
-          "raccourcis : General 24 (1.11.14 : Ctrl+J), Aide 7");
+    check(hk::all().size() == 63, "raccourcis : les 60 lignes de la maquette validee, plus Ctrl+Maj+O (1.11), Ctrl+J (1.11.14) et F7 hors d'un \xC3\xA9" "diteur (1.11.17)");
+    check(hk::ofContext(hk::Context::General).size() == 25 && hk::ofContext(hk::Context::Help).size() == 7,
+          "raccourcis : General 25 (1.11.14 : Ctrl+J ; 1.11.17 : F7), Aide 7");
     // La table contre le registre d'App.cpp : chaque action qu'elle nomme a la touche que la table lui donne,
     // dans l'ecriture du registre (Alt+Left, Shift+F5). Le registre lui-meme est lu juste apres.
     const std::pair<const char*, const char*> attendu[] = {
@@ -16536,15 +16557,16 @@ void centreAide111() {
     // 1.11.11 : 19.
     // 1.11.12 : 20.
     // 1.11.13 : 21.
-    // 1.11.14 : 22 ; 1.11.15 : 23 ; 1.11.16 : 24.
-    check(hn::releases().size() == 24 && hn::releases().front().version == "1.11.16" && hn::releases()[1].version == "1.11.15"
-              && hn::releases()[2].version == "1.11.14" && hn::releases()[3].version == "1.11.13" && hn::releases()[4].version == "1.11.12"
-              && hn::releases()[5].version == "1.11.11" && hn::releases()[6].version == "1.11.10"
-              && hn::releases()[7].version == "1.11.9" && hn::releases()[8].version == "1.11.8"
-              && hn::releases()[9].version == "1.11.7" && hn::releases()[10].version == "1.11.6" && hn::releases()[11].version == "1.11.5"
-              && hn::releases()[12].version == "1.11.4" && hn::releases()[13].version == "1.11.3" && hn::releases()[14].version == "1.11.2"
-              && hn::releases()[15].version == "1.11.1" && hn::releases()[16].version == "1.11" && hn::releases()[17].version == "1.10.4",
-          "notes : 24 versions, la 1.11.16 en tete, puis la 1.11.15 \xC3\xA0 la 1.11, et la 1.10.4");
+    // 1.11.14 : 22 ; 1.11.15 : 23 ; 1.11.16 : 24 ; 1.11.17 : 25.
+    check(hn::releases().size() == 25 && hn::releases().front().version == "1.11.17" && hn::releases()[1].version == "1.11.16"
+              && hn::releases()[2].version == "1.11.15"
+              && hn::releases()[3].version == "1.11.14" && hn::releases()[4].version == "1.11.13" && hn::releases()[5].version == "1.11.12"
+              && hn::releases()[6].version == "1.11.11" && hn::releases()[7].version == "1.11.10"
+              && hn::releases()[8].version == "1.11.9" && hn::releases()[9].version == "1.11.8"
+              && hn::releases()[10].version == "1.11.7" && hn::releases()[11].version == "1.11.6" && hn::releases()[12].version == "1.11.5"
+              && hn::releases()[13].version == "1.11.4" && hn::releases()[14].version == "1.11.3" && hn::releases()[15].version == "1.11.2"
+              && hn::releases()[16].version == "1.11.1" && hn::releases()[17].version == "1.11" && hn::releases()[18].version == "1.10.4",
+          "notes : 25 versions, la 1.11.17 en tete, puis la 1.11.16 \xC3\xA0 la 1.11, et la 1.10.4");
     // 1.11.2 (T2, tranches 41, 42 et 44 ; decisions 187, 201 et 216) : 23 lignes en 8 domaines, dont 2 cartes de la fenetre Nouveautes.
     // Tranche 46 (SYM, decision 240) : + Dupliquer dans un symbole (C) et la section Parametres du symbole (N) : 25 lignes.
     {
@@ -16815,7 +16837,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 207,   // 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 212,   // 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -16958,7 +16980,7 @@ void centreAide111() {
     // Integration 1.11 (I111) : la 1.10.4 ajoute objet-vanne-3-voies (La bibliotheque d'objets) : 206.
     // 1.11.1 (T2, decision 107) : Programmer gagne variables-api (API. : les variables de l'automate) : 207.
     check(ix.count(hc::Chapter::Hmi) == 208, "centre : L'IHM a les 208 sujets des chapitres 2 a 8 du guide (1.11.1 : variables-api ; 1.11.2 : paquets-symboles)");
-    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 24, "centre : 11 expressions, 24 notes (1.11.16)");
+    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 25, "centre : 11 expressions, 25 notes (1.11.17)");
     // Tranche 3 : les 11 types de T3 (hmi::exprguide::all(), depot-o), passes par in.expressions ; les
     // cles de la liste de secours sont les siennes (enumeration, pas enum).
     {
@@ -17020,10 +17042,10 @@ void centreAide111() {
         check(o, "page Raccourcis : Ctrl+Maj+O dessine en trois touches, repere 1.11");
 
         const auto n110 = hc::notesPage("1.10");
-        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 24
+        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 25
                   && !n110.summary.empty() && !n110.date.empty(),
               "page Notes : 1.10 -> 1.10.0, 22 lignes en 7 domaines, sa date et son resume");
-        check(hc::notesPage("").version == "1.11.16" && hc::notesPage("9.9").version == "1.11.16",
+        check(hc::notesPage("").version == "1.11.17" && hc::notesPage("9.9").version == "1.11.17",
               "page Notes : sans version (ou inconnue), la plus recente");
         const auto simu = hc::notesPage("1.10.0", "Simulation");
         check(simu.sections.size() == 1 && simu.rows == 4 && simu.domains.size() == 7,
@@ -17367,7 +17389,7 @@ void centreAide111() {
         // Les notes de version n'ont pas de tutoriel : ni la carte "Regarder le tutoriel" (hasTutorial, que
         // lit HelpCenterScreen::showTopic), ni la pastille dans l'arbre. Les autres pages speciales gardent
         // les leurs (T1 ecrit les tutoriels des raccourcis et de Signaler).
-        bool notesSans = ix.count(hc::Chapter::Notes) == 24;   // 1.11.3 a 1.11.16 : une version de plus
+        bool notesSans = ix.count(hc::Chapter::Notes) == 25;   // 1.11.3 a 1.11.17 : une version de plus
         for (const auto* t : ix.ofChapter(hc::Chapter::Notes)) notesSans = notesSans && !hc::hasTutorial(*t);
         const auto* raccourcis = ix.find("page-raccourcis");
         const auto* signaler = ix.find("page-signaler");
@@ -24140,6 +24162,19 @@ void scriptsExportImport1113() {
     app::HmiOperatorsPane ops("op1113", doc, apply, hmi::ownerOfType(*doc->project.hmiTypeByName("T_VECTEUR")));
     ops.setBounds({0, 0, 1400, 800});
     ops.layout();
+    {
+        // 1.11.17 (refonte, lot 1, spec. 13) : Compiler les operateurs affiches - le build de leur type.
+        std::vector<std::pair<hmi::pipeline::Mode, std::string>> opBuilds;
+        ops.build = [&](hmi::pipeline::Mode m, const std::string& k) { opBuilds.emplace_back(m, k); };
+        const int opCompile = ops.tools().actionByTip("Compiler les op\xC3\xA9rateurs affich\xC3\xA9s");
+        check(opCompile >= 0 && ops.tools().isEnabled(opCompile), "Compiler les op\xC3\xA9rateurs affich\xC3\xA9s : le bouton, actif");
+        ops.tools().triggered->emit(opCompile);
+        const std::string typeKey = "type:" + std::to_string(doc->project.hmiTypeByName("T_VECTEUR")->id);
+        check(opBuilds.size() == 1 && opBuilds[0].first == hmi::pipeline::Mode::Compile && opBuilds[0].second == typeKey
+                  && ops.lastMessage().rfind("Compiler les op\xC3\xA9rateurs du type T_VECTEUR : ", 0) == 0,
+              "... le build du type (" + typeKey + ") ; " + ops.lastMessage());
+        ops.build = nullptr;
+    }
     check(ops.tools().actionByTip("Exporter les op\xC3\xA9rateurs") >= 0 && ops.tools().actionByTip("Importer des op\xC3\xA9rateurs") >= 0,
           "les op\xC3\xA9rateurs : Exporter\xE2\x80\xA6 et Importer\xE2\x80\xA6");
     const std::string opath = (std::filesystem::temp_directory_path() / "xpg_1113_ops.xpgst").string();

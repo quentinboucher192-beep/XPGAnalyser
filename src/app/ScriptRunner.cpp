@@ -28,6 +28,8 @@
 #include "hmi/HmiQualityPanes.hpp"
 #include "hmi/HmiSimulation.hpp"
 #include "hmi/HmiScriptPanes.hpp"         // 1.11.16 : ihm-curseur
+#include "hmi/HmiFunctionPanes.hpp"       // 1.11.17 : volet-message (le volet des fonctions)
+#include "hmi/HmiOperatorPanes.hpp"       // 1.11.17 : volet-message (le volet des operateurs)
 #include "hmi/HmiSimVarTree.hpp"         // 1.11.5 : les variables en arbre
 #include "hmi/HmiPublicVarsPane.hpp"     // 1.9 : les structures des esclaves simules (vars-dossier, vars-choisir)
 #include "screens/StationScreen.hpp"      // lot 14 : le poste d'exploitation
@@ -2353,6 +2355,25 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     //  ihm-curseur [ligne] [script] : l'editeur de scripts IHM (l'onglet courant) - le script
     //  choisi et la ligne du curseur (1, 2...) ; avec une ligne (et un nom), les exiger : apres
     //  un double-clic sur un diagnostic, la source est ouverte a sa ligne (§ 19).
+    // 1.11.17 (refonte des scripts, lot 1) : volet-message ["texte"] - le message du volet de
+    // code montre (scripts, fonctions, operateurs : « Compiler le script Horloge : 1 faute »)
+    // contient le texte ; sans texte, il est seulement ecrit.
+    if (cmd == "volet-message") {
+        auto* page = currentPage();
+        std::string said;
+        bool found = false;
+        if (page)
+            walk(*page, [&](ui::Widget& x) {
+                if (found || !shown(x)) return;
+                if (auto* sp = dynamic_cast<HmiScriptsPane*>(&x)) { said = sp->lastMessage(); found = true; }
+                else if (auto* fp = dynamic_cast<HmiFunctionsPane*>(&x)) { said = fp->lastMessage(); found = true; }
+                else if (auto* op = dynamic_cast<HmiOperatorsPane*>(&x)) { said = op->lastMessage(); found = true; }
+            });
+        std::printf("[script] volet : %s\n", found ? said.c_str() : "(aucun volet de code)");
+        if (!found) fail("volet-message : aucun volet de code montr\xC3\xA9");
+        else if (!arg(1).empty() && said.find(arg(1)) == std::string::npos) fail("volet-message : \"" + arg(1) + "\" absent de : " + said);
+        return Step::Next;
+    }
     if (cmd == "ihm-curseur") {
         HmiScriptsPane* scripts = nullptr;
         if (auto* page = currentPage())

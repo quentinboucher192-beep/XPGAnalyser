@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.11.17", "09/10/2026", "livr\xC3\xA9" "e le 09/10 au matin"},
     {"1.11.16", "09/10/2026", "livr\xC3\xA9" "e le 09/10 dans la nuit"},
     {"1.11.15", "08/10/2026", "livr\xC3\xA9" "e le 08/10 dans la nuit"},
     {"1.11.14", "08/10/2026", "livr\xC3\xA9" "e le 08/10 dans la soir\xC3\xA9" "e"},
@@ -97,6 +98,23 @@ const std::vector<Note>& table() {
     static const std::vector<Note> t = {
         // 1.11.16 (09/10/2026 dans la nuit) : la remanence d'exploitation par variable, la robustesse
         // (lot 4 de la specification du 08/10).
+        // 1.11.17 (09/10/2026 au matin) : la refonte des scripts et des fonctions, lots 0 et 1 -
+        // renommer suit chaque appel, la trace de reference ; Compiler le document actif.
+        note("1.11.17", "Scripts", Kind::Changed,
+         "COMPILER LE DOCUMENT AFFICH\xC3\x89 : le bouton Compiler (et F7) d'un \xC3\xA9" "diteur compile ce qu'il montre, lui seul \xE2\x80\x94 le script affich\xC3\xA9 (et plus tous les scripts du projet), la fonction affich\xC3\xA9" "e (sans ouvrir le rapport du projet), les op\xC3\xA9rateurs du symbole ou du type affich\xC3\xA9. Ses fautes sous le code et, en erreur, dans les Diagnostics du panneau du bas, filtr\xC3\xA9s sur lui. Sans document, le bouton est gris\xC3\xA9. Le projet entier reste IHM \xE2\x80\xBA Compiler (F7 hors d'un \xC3\xA9" "diteur).",
+         "erreurs-scripts", ""),
+        note("1.11.17", "Scripts", Kind::Changed,
+         "Un build cibl\xC3\xA9 (Compiler ou G\xC3\xA9n\xC3\xA9rer un \xC3\xA9l\xC3\xA9ment, depuis son \xC3\xA9" "diteur ou l'arbre) ne garde de la validation que ce qui le touche : une erreur ailleurs dans le projet ne le fait plus \xC3\xA9" "chouer, et les remarques des autres \xC3\xA9l\xC3\xA9ments restent les leurs. D\xC3\xA9marrer, Compiler le projet et Compiler l'IHM depuis la racine de l'arbre valident tout, comme avant.",
+         "erreurs-scripts", ""),
+        note("1.11.17", "Scripts", Kind::Fixed,
+         "Renommer une fonction IHM suit chaque appel : fonctions et popups des symboles, red\xC3\xA9" "finitions des instances, op\xC3\xA9rateurs (de symbole et de type), alarmes de symbole et leurs surcharges, propri\xC3\xA9t\xC3\xA9s-expressions des objets (condition, cellules, arguments d'instance), param\xC3\xA8tres et titres des vues, recettes, autorisations par expression ; \xC2\xAB Appel\xC3\xA9" "e par \xC2\xBB les liste. Un symbole qui a sa propre fonction du m\xC3\xAAme nom garde ses appels, qui la visent elle ; un renommage qui d\xC3\xA9tournerait un appel est refus\xC3\xA9 et dit o\xC3\xB9.",
+         "fonctions", ""),
+        note("1.11.17", "Scripts", Kind::Fixed,
+         "Renommer une fonction de symbole suit aussi ses popups (qui l'appellent par son nom court), les alarmes du projet, les autorisations, les op\xC3\xA9rateurs et les red\xC3\xA9" "finitions des autres instances ; renommer une valeur ou un type d'\xC3\xA9num\xC3\xA9ration suit les fonctions de symbole et les textes \xC3\xA0 trous.",
+         "fonctions", ""),
+        note("1.11.17", "Scripts", Kind::Fixed,
+         "IHM_JOURNAL et IHM_LOG remplissent leurs trous avec les variables locales du code qui les appelle (VAR, VAR_TEMP, l'indice d'une boucle, les param\xC3\xA8tres d'une fonction) : IHM_JOURNAL('mini {Mini:0.0}') \xC3\xA9" "crivait ### dans un script qui d\xC3\xA9" "clare Mini.",
+         "scripts", ""),
         note("1.11.16", "\xC3\x89" "diteur IHM", Kind::New,
          "Variables IHM : la case R\xC3\x89MANENTE (une colonne de la table, et la fiche). Coch\xC3\xA9" "e, sur le POSTE D'EXPLOITATION, la valeur de la variable est gard\xC3\xA9" "e \xC3\xA0 chaque changement (au plus une \xC3\xA9" "criture par seconde, d'un bloc, sans attendre l'arr\xC3\xAAt) et rendue au lancement suivant, apr\xC3\xA8s les valeurs initiales et avant les scripts de D\xC3\xA9marrage. La simulation de l'\xC3\xA9" "diteur n'y \xC3\xA9" "crit jamais : sa r\xC3\xA9manence reste \xC3\xA0 part (.xpg/simulation), celle du poste a son propre fichier (ihm/historique). Une variable li\xC3\xA9" "e \xC3\xA0 un \xC3\xA9quipement n'en a pas besoin : l'\xC3\xA9quipement garde sa valeur.",
          "variables-ihm", ""),

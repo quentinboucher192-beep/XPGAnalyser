@@ -137,6 +137,33 @@ std::string HmiFunctionsPane::buildKey() const {
     return std::string(symbol_ != kNoId ? "fonction-symbole:" : "fonction:") + std::to_string(sel);
 }
 
+std::size_t HmiFunctionsPane::compileCurrent() {
+    const auto* f = current();
+    if (!f) {
+        say("Compiler : aucune fonction choisie (le projet entier : IHM > Compiler).", true);
+        return 0;
+    }
+    updateDiagnostics();
+    std::size_t n = 0;
+    for (const auto& d : diagnostics_) n += d.severity != hmi::ScriptDiagnostic::Severity::Info ? 1 : 0;
+    const auto* sv = symbolView();
+    say("Compiler la fonction " + (sv ? sv->name + "." : std::string{}) + f->name + " : "
+            + (n ? std::to_string(n) + (n > 1 ? " fautes (un clic sur un r\xC3\xA9sultat y m\xC3\xA8ne)" : " faute (un clic sur le r\xC3\xA9sultat y m\xC3\xA8ne)")
+                 : std::string("aucune faute"))
+            + " \xC2\xB7 le projet entier : IHM > Compiler",
+        n > 0);
+    if (hosts_.build) hosts_.build(hmi::pipeline::Mode::Compile, buildKey());   // 1.11.13 : son etat ; 1.11.17 : ses Diagnostics
+    return n;
+}
+
+ui::EventResult HmiFunctionsPane::onEvent(const ui::InputEvent& ev) {
+    if (const auto* k = std::get_if<ui::KeyDown>(&ev); k && k->key == ui::Key::F7 && k->mods.none() && !k->repeat) {
+        (void)compileCurrent();
+        return ui::EventResult::Consumed;
+    }
+    return ui::EventResult::Ignored;
+}
+
 void HmiFunctionsPane::refreshBuildState() {
     if (!hosts_.buildState || !tools_) return;
     const auto key = buildKey();
@@ -154,7 +181,11 @@ HmiFunctionsPane::HmiFunctionsPane(std::string id, hmi::DocumentPtr doc, Apply a
     tools->add(TDelete, HmiGlyph::Delete, "Supprimer la fonction (Ctrl+Z la rend)", "Supprimer");
     tools->separator();
     tools->add(TTry, HmiGlyph::Play, "Essayer la fonction : des arguments, le r\xC3\xA9sultat (sans toucher le projet)", "Essayer");
-    tools->add(TCompile, HmiGlyph::Code, "Compiler (F7) : toutes les fonctions, scripts, expressions et actions", "Compiler (F7)");
+    // 1.11.17 (refonte, lot 1) : la fonction actuelle, elle seule ; le projet : IHM > Compiler.
+    tools->add(TCompile, HmiGlyph::Code,
+               "Compiler la fonction actuelle (F7) : elle seule, avec la signature de ce qu'elle appelle ; ses fautes ici et dans les "
+               "Diagnostics du panneau du bas ; le projet entier : IHM > Compiler",
+               "Compiler (F7)");
     // 1.11.13 : la generation incrementale de la fonction choisie, et son etat.
     tools->add(TBuildGen, HmiGlyph::Refresh, "G\xC3\xA9n\xC3\xA9rer la fonction choisie : rien n'est refait si elle est \xC3\xA0 jour", "G\xC3\xA9n\xC3\xA9rer");
     tools->add(TBuildRegen, HmiGlyph::Refresh, "R\xC3\xA9g\xC3\xA9n\xC3\xA9rer la fonction choisie, m\xC3\xAAme \xC3\xA0 jour", "R\xC3\xA9g\xC3\xA9n\xC3\xA9rer");
@@ -174,6 +205,7 @@ HmiFunctionsPane::HmiFunctionsPane(std::string id, hmi::DocumentPtr doc, Apply a
     tools_->setVisibleWhen(TImport, [this] { return static_cast<bool>(hosts_.importAny); });
     tools_->setEnabledWhen(TDelete, [this] { return selectedFunction() != kNoId; });
     tools_->setEnabledWhen(TTry, [this] { return selectedFunction() != kNoId; });
+    tools_->setEnabledWhen(TCompile, [this] { return selectedFunction() != kNoId; });     // 1.11.17 : rien a compiler
     for (const int a : {static_cast<int>(TBuildGen), static_cast<int>(TBuildRegen), static_cast<int>(TBuildGenComp), static_cast<int>(TBuildState)}) {   // 1.11.13
         tools_->setVisibleWhen(a, [this] { return static_cast<bool>(hosts_.build); });
         if (a != TBuildState) tools_->setEnabledWhen(a, [this] { return selectedFunction() != kNoId; });
@@ -264,11 +296,7 @@ HmiFunctionsPane::HmiFunctionsPane(std::string id, hmi::DocumentPtr doc, Apply a
                 if (hosts_.tryIt) hosts_.tryIt(sel);
                 else (void)tryFunction(sel, {});
                 break;
-            case TCompile:
-                updateDiagnostics();
-                if (hosts_.build && selectedFunction() != kNoId) hosts_.build(hmi::pipeline::Mode::Compile, buildKey());   // 1.11.13 : son etat
-                if (hosts_.compile) hosts_.compile();
-                break;
+            case TCompile: (void)compileCurrent(); break;   // 1.11.17 : la fonction actuelle (ici, et son build)
             case TBuildGen: if (hosts_.build && selectedFunction() != kNoId) hosts_.build(hmi::pipeline::Mode::Generate, buildKey()); break;
             case TBuildRegen: if (hosts_.build && selectedFunction() != kNoId) hosts_.build(hmi::pipeline::Mode::Regenerate, buildKey()); break;
             case TBuildGenComp: if (hosts_.build && selectedFunction() != kNoId) hosts_.build(hmi::pipeline::Mode::GenerateCompile, buildKey()); break;

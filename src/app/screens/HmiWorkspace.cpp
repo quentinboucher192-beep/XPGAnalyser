@@ -1232,6 +1232,9 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
             th.exportItems = [this](hmi::Id t) { askHmiExportPrograms(0, t); };   // 1.11.2 (decision 174)
             th.importAny = [this] { askHmiImport(); };
             types->setHosts(std::move(th));
+            // 1.11.17 (refonte, lot 1) : Compiler les operateurs d'un type - le build du type.
+            if (auto* ops = types->operators())
+                ops->build = [this](hmi::pipeline::Mode mode, const std::string& k) { runHmiBuildFor(mode, k); };
         }
         wireAssist(*pane, app_, [this] { return dynamic_cast<HmiSimulationPane*>(hmiTab("simulation")); });
         page = std::move(pane);

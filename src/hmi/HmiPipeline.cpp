@@ -1828,18 +1828,29 @@ Report run(const Project& p, const ApiInfo& api, const Request& req, const Optio
     }
     // ---- E. validation : les controles de Generer, sur tout le projet ----
     if (!cancelled()) {
+        // 1.11.17 (refonte des scripts, lot 1) : une demande ciblee (Compiler le script actuel,
+        // la fonction actuelle...) ne garde que ce qui touche sa portee - un element ailleurs en
+        // erreur ne la fait plus echouer, et les remarques des autres elements restent au cache.
+        // Demarrer, une demande sans portee ou de tout « IHM » (la racine de l'arbre) valident
+        // tout le projet, comme avant (avec les remarques du projet lui-meme).
+        const bool whole = std::any_of(req.scope.begin(), req.scope.end(), [](const std::string& s) { return s == "IHM" || s == "API"; });
+        const bool scoped = !req.scope.empty() && !whole && req.mode != Mode::Start;
+        const auto inRequest = [&](const std::string& key) {
+            const Element* e = key.empty() ? nullptr : a.element(key);
+            return e != nullptr && inScope(*e, req.scope);
+        };
         pr.phases[static_cast<int>(Phase::Validate)] = PhaseState::Running;
-        pr.step = "E. Validation du projet";
+        pr.step = scoped ? "E. Validation de la s\xC3\xA9lection" : "E. Validation du projet";
         pr.element = "r\xC3\xA9" "f\xC3\xA9rences, types, d\xC3\xA9pendances, coh\xC3\xA9rence API / IHM";
         publish();
-        log(Severity::Information, "Validation", "Validation du projet\xE2\x80\xA6");
+        log(Severity::Information, "Validation", scoped ? "Validation de la s\xC3\xA9lection\xE2\x80\xA6" : "Validation du projet\xE2\x80\xA6");
         GenerateOptions go;
         go.projectFolder = o.projectFolder;
         go.plan = o.commPlan;
         go.plcPaths = o.plcPaths;
         int verrors = 0, vwarnings = 0;
         std::map<std::string, std::vector<Diagnostic>> perElement;
-        cache.project.clear();
+        if (!scoped) cache.project.clear();
         int quality = 0;
         // Ce que Compiler a deja dit autrement : « variable inexistante dans le programme : X »
         // (Generer) quand une expression ou une action de la meme vue dit deja « X n'existe pas ».
@@ -1860,6 +1871,7 @@ Report run(const Project& p, const ApiInfo& api, const Request& req, const Optio
         for (const auto& i : generateWith(p, o.plcHasName, go)) {
             if (i.severity == Issue::Severity::Info) continue;
             if (saidByCompile(i)) continue;
+            if (scoped && !inRequest(elementOfIssue(p, i))) continue;     // 1.11.17 : hors de la demande
             auto d = fromIssue(i, "Validation");
             d.date = now;
             if (i.severity == Issue::Severity::Error && !blockingValidation(i)) {
@@ -1886,6 +1898,7 @@ Report run(const Project& p, const ApiInfo& api, const Request& req, const Optio
         }
         // les diagnostics de validation : a leur element (un element en erreur n'est pas valide)
         for (auto& [key, en] : cache.entries) {
+            if (scoped && !inRequest(key)) continue;                     // 1.11.17 : les remarques d'ailleurs restent
             en.diagnostics.erase(std::remove_if(en.diagnostics.begin(), en.diagnostics.end(), [](const Diagnostic& d) { return d.step == "Validation"; }), en.diagnostics.end());
             const auto f = perElement.find(key);
             if (f == perElement.end()) continue;

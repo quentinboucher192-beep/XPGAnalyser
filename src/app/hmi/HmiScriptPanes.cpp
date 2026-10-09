@@ -337,8 +337,10 @@ HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply
     tools->add(TBuildGen, HmiGlyph::Refresh, "G\xC3\xA9n\xC3\xA9rer le script choisi (et ce dont il d\xC3\xA9pend, s'il le faut) : rien n'est refait s'il est \xC3\xA0 jour",
                "G\xC3\xA9n\xC3\xA9rer");
     tools->add(TBuildRegen, HmiGlyph::Refresh, "R\xC3\xA9g\xC3\xA9n\xC3\xA9rer le script choisi, m\xC3\xAAme \xC3\xA0 jour", "R\xC3\xA9g\xC3\xA9n\xC3\xA9rer");
+    // 1.11.17 (refonte, lot 1) : le script actuel, lui seul ; le projet : IHM > Compiler.
     tools->add(TCompile, HmiGlyph::Code,
-               "Compiler (F7) : les fautes de tous les scripts, ici sous le code (un clic y m\xC3\xA8ne) ; le rapport entier : IHM > Compiler",
+               "Compiler le script actuel (F7) : lui seul, ses fautes ici sous le code (un clic y m\xC3\xA8ne) et dans les Diagnostics "
+               "du panneau du bas ; le projet entier : IHM > Compiler",
                "Compiler (F7)");
     tools->add(TBuildGenComp, HmiGlyph::Play, "G\xC3\xA9n\xC3\xA9rer et compiler le script choisi (son \xC3\xA9tat dans l'arbre suit)", "G\xC3\xA9n\xC3\xA9rer et compiler");
     tools->add(TBuildState, HmiGlyph::None, "L'\xC3\xA9tat de build du script choisi (un clic : les sorties du build)", "\xE2\x80\x94");
@@ -361,6 +363,7 @@ HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply
     tools_->setEnabledWhen(TRename, [this] { return selectedScript() != kNoId; });
     tools_->setEnabledWhen(TDelete, [this] { return selectedScript() != kNoId || (folders_ && !folders_->selectedFolder().empty()); });
     tools_->setEnabledWhen(TClear, [this] { return selectedScript() != kNoId; });
+    tools_->setEnabledWhen(TCompile, [this] { return selectedScript() != kNoId; });     // 1.11.17 : rien a compiler
     tools_->setEnabledWhen(TEditVar, [this] { return selectedVariable() != kNoId; });
     tools_->setEnabledWhen(TDeleteVar, [this] { return selectedVariable() != kNoId; });
     tools_->setVisibleWhen(TFix, [this] { return fixRow() >= 0; });     // 1.10 (I2) : seulement s'il y a a corriger
@@ -440,7 +443,7 @@ HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply
         auto panel = std::make_unique<HmiTitledPanel>(base + ".diagPanel", "DIAGNOSTICS");
         auto table = std::make_unique<ui::TableView>(base + ".diagnostics");
         // 1.10 : la ligne et la colonne de chaque faute (comme le rapport de Compiler).
-        // 1.10 (maquette, scene 4) : apres Compiler, les fautes de tous les scripts - la colonne Script.
+        // 1.10 (maquette, scene 4) : la colonne Script (1.11.17 : Compiler ne dit plus que le script montre).
         table->setColumns({{"Script", 150.f}, {"Ligne", 62.f, 40.f, true, true, true, ui::Align::End},
                            {"Col.", 56.f, 36.f, true, true, true, ui::Align::End}, {"Gravit\xC3\xA9", 110.f}, {"Message", 560.f}});
         table->setSelectionMode(ui::SelectionMode::Single);
@@ -520,10 +523,7 @@ HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply
                 else (void)deleteScript(sel);
                 break;
             case TClear: if (sel) (void)deleteScript(sel); break;
-            case TCompile:
-                (void)compileHere();          // 1.10 : les resultats ici, sans quitter l'editeur
-                if (hosts_.build && sel) hosts_.build(hmi::pipeline::Mode::Compile, buildKey());   // 1.11.13 : son etat de build
-                break;
+            case TCompile: compileCurrent(); break;   // 1.11.17 : le script actuel (ici, et son build)
             case TBuildGen: if (hosts_.build && sel) hosts_.build(hmi::pipeline::Mode::Generate, buildKey()); break;
             case TBuildRegen: if (hosts_.build && sel) hosts_.build(hmi::pipeline::Mode::Regenerate, buildKey()); break;
             case TBuildGenComp: if (hosts_.build && sel) hosts_.build(hmi::pipeline::Mode::GenerateCompile, buildKey()); break;
@@ -546,6 +546,8 @@ HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply
     });
     links_ += scripts_->selectionChanged->connect([this](const std::vector<ui::RowIndex>& rows) {
         selectedRow_ = rows.empty() ? -1 : static_cast<int>(rows.front());
+        compiled_ = false;                 // 1.11.17 : un autre script - le Compiler d'avant ne le concerne pas
+        compiledIssues_.clear();
         showSelected();
     });
     links_ += variables_->activated->connect([this](ui::RowIndex) {
@@ -939,7 +941,7 @@ void HmiScriptsPane::updateDiagnostics() {
     std::size_t errors = 0;
     for (const auto& d : diagnostics_) errors += d.severity == hmi::ScriptDiagnostic::Severity::Error;
     // 1.10 (maquette, scene 4) : le titre du tableau - les resultats de Compiler
-    // (tous les scripts) et les fautes du script montre.
+    // (1.11.17 : le script montre seul) et ses fautes.
     if (auto* panel = dynamic_cast<HmiTitledPanel*>(findById(id() + ".diagPanel"))) {
         std::string title = sc ? diagnosticsTitle(diagnostics_, "ce script") : std::string("DIAGNOSTICS");
         if (compiled_) {
@@ -958,10 +960,16 @@ void HmiScriptsPane::updateDiagnostics() {
     }
 }
 
-// 1.10 (maquette, scene 4) : Compiler sans quitter l'editeur - les constats des
-// scripts (generaux, de vue, actions Executer un script, fonctions IHM) du
-// projet entier ; les autres (expressions, liaisons...) restent a IHM > Compiler.
+// 1.10 (maquette, scene 4) : Compiler sans quitter l'editeur. 1.11.17 (refonte des
+// scripts, lot 1, spec. 13) : le SCRIPT ACTUEL seulement (CompileFocus) - avant, tous les
+// scripts du projet ; le projet entier reste a IHM > Compiler.
 std::size_t HmiScriptsPane::compileHere() {
+    const Id sel = selectedScript();
+    const auto* sc = sel != kNoId ? doc_->project.script(sel) : nullptr;
+    if (!sc) {
+        say("Compiler : aucun script choisi (le projet entier : IHM > Compiler).", true);
+        return 0;
+    }
     const auto plc = assist::sourcesFor(nullptr).plc();     // le programme de l'automate (vide : pas d'automate)
     hmi::NameExists names;
     if (plc) {
@@ -970,26 +978,29 @@ std::size_t HmiScriptsPane::compileHere() {
             if (gv.scope == domain::VariableScope::Global) known->insert(upperOf(plc->strings.text(gv.name)));
         names = [known](std::string_view r) { return known->count(upperOf(r)) > 0; };
     }
+    hmi::CompileFocus focus;
+    focus.scripts.insert(sel);
     compiledIssues_.clear();
-    std::size_t others = 0;
-    std::set<std::string> units;
-    for (auto& i : hmi::compileWith(doc_->project, names, hmiPlcPaths(plc.get()))) {
-        const bool scriptIssue = i.script != kNoId || i.category == "Fonction" || (i.category == "Action" && i.column > 0);
-        if (!scriptIssue) { ++others; continue; }
-        if (i.severity == hmi::Issue::Severity::Info) continue;
-        units.insert(issueWhere(doc_->project, i));
-        compiledIssues_.push_back(std::move(i));
-    }
+    for (auto& i : hmi::compileWith(doc_->project, names, hmiPlcPaths(plc.get()), focus))
+        if (i.script == sel && i.severity != hmi::Issue::Severity::Info) compiledIssues_.push_back(std::move(i));
     compiled_ = true;
     updateDiagnostics();
     const std::size_t n = compiledIssues_.size();
-    say(n ? "Compiler : " + std::to_string(n) + (n > 1 ? " fautes dans " : " faute dans ") + std::to_string(units.size())
-                + (units.size() > 1 ? " scripts" : " script") + " (un clic sur un r\xC3\xA9sultat y m\xC3\xA8ne)"
-                + (others ? " \xC2\xB7 " + std::to_string(others) + " autre(s) constat(s) : IHM > Compiler" : std::string{})
-          : std::string("Compiler : aucune faute dans les scripts")
-                + (others ? " \xC2\xB7 " + std::to_string(others) + " autre(s) constat(s) : IHM > Compiler" : std::string{}),
+    say("Compiler le script " + sc->name + " : "
+            + (n ? std::to_string(n) + (n > 1 ? " fautes (un clic sur un r\xC3\xA9sultat y m\xC3\xA8ne)" : " faute (un clic sur le r\xC3\xA9sultat y m\xC3\xA8ne)")
+                 : std::string("aucune faute"))
+            + " \xC2\xB7 le projet entier : IHM > Compiler",
         n > 0);
     return n;
+}
+
+void HmiScriptsPane::compileCurrent() {
+    if (selectedScript() == kNoId) {
+        say("Compiler : aucun script choisi (le projet entier : IHM > Compiler).", true);
+        return;
+    }
+    (void)compileHere();
+    if (hosts_.build) hosts_.build(hmi::pipeline::Mode::Compile, buildKey());   // 1.11.13 : son etat ; 1.11.17 : ses Diagnostics
 }
 
 // 1.10 (decision 15 ; integration I2) : la correction proposee - la ligne choisie
@@ -1032,9 +1043,9 @@ bool HmiScriptsPane::applyResultFix(std::size_t row) {
 
 ui::EventResult HmiScriptsPane::onEvent(const ui::InputEvent& ev) {
     // 1.10 : F7 dans l'editeur de scripts - Compiler ici (ailleurs, l'ecran
-    // ouvre IHM > Compiler).
+    // ouvre IHM > Compiler). 1.11.17 : le script actuel, comme le bouton.
     if (const auto* k = std::get_if<ui::KeyDown>(&ev); k && k->key == ui::Key::F7 && k->mods.none() && !k->repeat) {
-        (void)compileHere();
+        compileCurrent();
         return ui::EventResult::Consumed;
     }
     return ui::EventResult::Ignored;

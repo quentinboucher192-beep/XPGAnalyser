@@ -235,7 +235,11 @@ HmiOperatorsPane::HmiOperatorsPane(std::string id, hmi::DocumentPtr doc, Apply a
                "Dupliquer");
     tools->add(TDelete, HmiGlyph::Delete, "Supprimer l'op\xC3\xA9rateur (Ctrl+Z le rend)", "Supprimer");
     tools->separator();
-    tools->add(TCompile, HmiGlyph::Code, "Compiler : les op\xC3\xA9rateurs, les scripts, les expressions et les actions", "Compiler");
+    // 1.11.17 (refonte, lot 1) : les operateurs du porteur affiche ; le projet : IHM > Compiler.
+    tools->add(TCompile, HmiGlyph::Code,
+               "Compiler les op\xC3\xA9rateurs affich\xC3\xA9s (F7) : ceux de ce symbole ou de ce type, leurs fautes ici et dans les "
+               "Diagnostics du panneau du bas ; le projet entier : IHM > Compiler",
+               "Compiler (F7)");
     tools->separator();
     // 1.11.3 : exporter et importer les operateurs (un fichier .xpgst, lisible).
     tools->add(TExport, HmiGlyph::Export, "Exporter les op\xC3\xA9rateurs de ce symbole ou de ce type dans un fichier .xpgst, lisible et modifiable",
@@ -255,6 +259,7 @@ HmiOperatorsPane::HmiOperatorsPane(std::string id, hmi::DocumentPtr doc, Apply a
     tools_->setEnabledWhen(TImport, [this] { return owner_.valid(); });
     tools_->setEnabledWhen(TDuplicate, [this] { return selectedOperator() != kNoId; });
     tools_->setEnabledWhen(TDelete, [this] { return selectedOperator() != kNoId; });
+    tools_->setEnabledWhen(TCompile, [this] { return owner_.valid() && !order_.empty(); });     // 1.11.17 : rien a compiler
 
     auto split = std::make_unique<ui::Splitter>(ui::Orientation::Horizontal, base + ".split");
     auto left = std::make_unique<ui::Splitter>(ui::Orientation::Vertical, base + ".left");
@@ -351,10 +356,7 @@ HmiOperatorsPane::HmiOperatorsPane(std::string id, hmi::DocumentPtr doc, Apply a
                     say("Pas d'explorateur de fichiers ici.", true);
                 break;
             }
-            case TCompile:
-                updateDiagnostics();
-                if (compile) compile();
-                break;
+            case TCompile: (void)compileCurrent(); break;   // 1.11.17 : les operateurs affiches (ici, et leur build)
             default: break;
         }
     });
@@ -652,6 +654,38 @@ void HmiOperatorsPane::rebuildProperties() {
                                                                                            : "a " + cur.op + " b",
                                         PG::ValueType::ReadOnly));
     props_->setCategories({std::move(c)});
+}
+
+std::string HmiOperatorsPane::buildKey() const {
+    if (!owner_.valid()) return {};
+    return std::string(owner_.kind == hmi::OperatorOwner::Kind::Symbol ? "symbole:" : "type:") + std::to_string(owner_.id);
+}
+
+std::size_t HmiOperatorsPane::compileCurrent() {
+    if (!owner_.valid() || order_.empty()) {
+        say("Compiler : aucun op\xC3\xA9rateur ici (le projet entier : IHM > Compiler).", true);
+        return 0;
+    }
+    updateDiagnostics();
+    const auto issues = hmi::operatorIssues(doc_->project, isPlcType);
+    std::size_t n = 0;
+    for (const Id id : order_)
+        for (const auto& d : diagnosticsOf(issues, id)) n += d.severity != hmi::ScriptDiagnostic::Severity::Info ? 1 : 0;
+    say("Compiler les op\xC3\xA9rateurs du " + owner_.label() + " : "
+            + (n ? std::to_string(n) + (n > 1 ? " fautes" : " faute") : std::string("aucune faute"))
+            + " \xC2\xB7 le projet entier : IHM > Compiler",
+        n > 0);
+    if (build) build(hmi::pipeline::Mode::Compile, buildKey());
+    else if (compile) compile();
+    return n;
+}
+
+ui::EventResult HmiOperatorsPane::onEvent(const ui::InputEvent& ev) {
+    if (const auto* k = std::get_if<ui::KeyDown>(&ev); k && k->key == ui::Key::F7 && k->mods.none() && !k->repeat) {
+        (void)compileCurrent();
+        return ui::EventResult::Consumed;
+    }
+    return ui::EventResult::Ignored;
 }
 
 void HmiOperatorsPane::updateDiagnostics() {

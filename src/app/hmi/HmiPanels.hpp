@@ -83,6 +83,9 @@ public:
     // Pour les scripts : le bouton dont l'infobulle commence par `tip`
     // (sans distinction de casse), ou -1.
     [[nodiscard]] int actionByTip(std::string_view tip) const;
+    // 1.11.17 : pour les essais et les scripts - le bouton est-il actif (setEnabledWhen) ?
+    // Faux : grise, ou pas de bouton `action`.
+    [[nodiscard]] bool isEnabled(int action) const;
 protected:
     void            onPaint(const ui::PaintContext&) override;
     ui::EventResult onEvent(const ui::InputEvent&) override;

@@ -235,6 +235,12 @@ int HmiToolStrip::actionByTip(std::string_view tip) const {
     return hidden;
 }
 
+bool HmiToolStrip::isEnabled(int action) const {
+    for (const auto& it : items_)
+        if (!it.separator && it.action == action) return !it.enabled || it.enabled();
+    return false;
+}
+
 int HmiToolStrip::itemAt(gfx::Point p) const {
     for (std::size_t i = 0; i < items_.size(); ++i) {
         const auto& it = items_[i];

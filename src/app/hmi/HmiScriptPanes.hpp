@@ -87,14 +87,17 @@ public:
     // 1.10 : ... et la colonne (1 = le premier octet de la ligne) : les `length`
     // caracteres de la faute selectionnes (un constat de Compiler).
     void goTo(hmi::Id script, int line, int column, int length);
-    // 1.10 (maquette, scene 4) : Compiler (F7) sans quitter l'editeur. Le
-    // tableau du bas devient "Resultats de Compiler" : les fautes de TOUS les
-    // scripts du projet (Script, Ligne, Col., Gravite, Message) ; celles du
-    // script montre suivent la frappe. Un clic : le bon script, la faute
-    // selectionnee - d'ailleurs (une autre vue, une fonction, une action) :
-    // hosts.openIssue. Rend le nombre de fautes des scripts.
+    // 1.10 (maquette, scene 4) : Compiler (F7) sans quitter l'editeur ; le tableau du
+    // bas devient "Resultats de Compiler" (Script, Ligne, Col., Gravite, Message) et
+    // suit la frappe. 1.11.17 (refonte des scripts, lot 1, spec. 13) : COMPILER LE
+    // SCRIPT ACTUEL - lui seul (hmi::CompileFocus), plus tous les scripts du projet :
+    // le projet entier, c'est IHM > Compiler. Rend le nombre de fautes du script
+    // (0 : aucun script choisi, rien n'est compile).
     std::size_t compileHere();
     [[nodiscard]] bool compiledHere() const noexcept { return compiled_; }
+    // 1.11.17 : le bouton Compiler et F7 - compileHere, puis le build de cet element
+    // (son etat, et les Diagnostics du panneau du bas, filtres sur lui).
+    void compileCurrent();
     // Le script d'une ligne du tableau du bas ("Calcul", "Vue_A . OnOpen"...).
     [[nodiscard]] std::string resultScript(std::size_t row) const { return row < results_.size() ? results_[row].where : std::string{}; }
     // 1.10 (decision 15 ; integration I2) : la correction proposee d'une ligne du
@@ -229,8 +232,8 @@ private:
     std::vector<std::string> eventOrder_;
     std::vector<hmi::Id>     variableOrder_;
     std::vector<hmi::ScriptDiagnostic> diagnostics_;
-    // 1.10 : les lignes du tableau du bas - le script montre (suit la frappe) et,
-    // apres Compiler (F7), les autres scripts du projet.
+    // 1.10 : les lignes du tableau du bas - le script montre (suit la frappe). 1.11.17 :
+    // Compiler ne compile plus que lui (avant, aussi les autres scripts du projet).
     struct ResultRow {
         hmi::ScriptDiagnostic d;                 // ligne, colonne, longueur, gravite, message
         std::string           where;             // le script, tel que la colonne Script le dit

@@ -11577,16 +11577,16 @@ const std::vector<Topic>& topics() {
                          "sa gravit\xC3\xA9, son message ; son titre les compte (\xC2\xAB 2 erreurs dans ce "
                          "script \xC2\xBB). Un clic sur une ligne du tableau s\xC3\xA9lectionne la faute "
                          "dans le code.", {}},
-             {K::Bullet, "**Compiler (F7)** dans l'\xC3\xA9" "diteur, sans le quitter : le tableau devient "
-                         "**R\xC3\xA9sultats de Compiler** et liste les fautes de **tous** les scripts du "
-                         "projet (colonne **Script** : `Calcul`, `Vue_Pompes \xC2\xB7 OnOpen`, `Fonction "
-                         "Moyenne`\xE2\x80\xA6), avec leur ligne et leur colonne ; son titre les compte. "
-                         "Celles du script montr\xC3\xA9 suivent la frappe : corrig\xC3\xA9" "e, une faute "
-                         "dispara\xC3\xAEt tout de suite. Un **clic** sur la faute d'un autre script "
-                         "l'ouvre, le curseur \xC3\xA0 la faute, le nom s\xC3\xA9lectionn\xC3\xA9 (le script "
-                         "d'une autre vue, une fonction IHM, une action : leur \xC3\xA9" "diteur s'ouvre). "
-                         "Le rapport entier (expressions, liaisons, actions) reste dans **IHM \xE2\x80\xBA "
-                         "Compiler**.", {}},
+             {K::Bullet, "**Compiler (F7)** dans l'\xC3\xA9" "diteur, sans le quitter : il compile le "
+                         "**script affich\xC3\xA9**, lui seul (1.11.17) ; le tableau devient **R\xC3\xA9sultats "
+                         "de Compiler**, ses fautes avec leur ligne et leur colonne, son titre les compte ; "
+                         "elles suivent la frappe : corrig\xC3\xA9" "e, une faute dispara\xC3\xAEt tout de suite. "
+                         "En erreur, les **Diagnostics** du panneau du bas s'ouvrent, filtr\xC3\xA9s sur ce "
+                         "script. Le bouton est gris\xC3\xA9 sans script. Dans l'\xC3\xA9" "diteur des fonctions, "
+                         "Compiler (F7) compile la **fonction affich\xC3\xA9" "e** ; dans celui des op\xC3\xA9rateurs, "
+                         "ceux du symbole ou du type affich\xC3\xA9. Le **projet entier** (expressions, "
+                         "liaisons, actions, tous les scripts) : **IHM \xE2\x80\xBA Compiler**, ou F7 hors d'un "
+                         "\xC3\xA9" "diteur.", {}},
              {K::Bullet, "Le **curseur sur la faute** : son message s'\xC3\xA9" "crit dans la barre sous le "
                          "code.", {}},
              {K::Bullet, "La colonne **\xC3\x89tat** de la liste des scripts compte les erreurs de chaque "

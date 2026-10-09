@@ -66,7 +66,7 @@ dire "Ligne 5 : V[0].Position est soulignée. Le message est en infobulle ; Comp
 attendre 900ms
 
 == 4 | Compiler (F7) la trouve
-: **Compiler (F7)** contrôle tous les scripts : le script, la ligne, la colonne, et le nom le plus proche.
+: **Compiler (F7)** contrôle le script affiché : la ligne, la colonne, et le nom le plus proche (le projet entier : IHM › Compiler).
 survol outil:Compiler
 touche F7
 encadrer resultats-compiler

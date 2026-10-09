@@ -1,0 +1,85 @@
+# =============================================================================
+#  Session 11117 : COMPILER LE DOCUMENT ACTIF (refonte des scripts, lot 1) et le
+#  journal qui lit les locales de son script (lot 0). Sur une copie d'Armoire_Gaz :
+#    1. deux scripts en faute (Horloge, Init) ; Horloge affiche : Compiler le
+#       script actuel - sa faute seule, pas celle d'Init ; les Diagnostics du
+#       panneau du bas, filtres sur Horloge ;
+#    2. F7 sur Init : sa faute seule ;
+#    3. les fonctions : Compiler la fonction actuelle (Moyenne_Pression), sans
+#       ouvrir le rapport du projet ;
+#    4. le projet entier (IHM > Compiler) : les deux fautes ;
+#    5. les fautes retirees, la simulation : IHM_JOURNAL('... mini {Mini:0.0}
+#       ...') de Statistiques_Pression ecrit ses valeurs (avant : ###).
+# =============================================================================
+attendre 3
+theme Dark
+attendre 5
+ouvrir "${PROJETS}/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- 1. Deux scripts en faute ; Compiler le script actuel : Horloge, lui seul ----
+ihm-script-modifier "Horloge" "Secondes_IHM := 'zz';"
+ihm-script-modifier "Init" "Compteur_Clics := 'abc';"
+attendre 5
+arbre "IHM/Programmation générale/Scripts" double
+attendre 8
+ligne "Horloge" exact
+attendre 3
+outil "Compiler le script actuel"
+attendre 6
+volet-message "Compiler le script Horloge : 1 faute"
+ihm-build-attendre 600
+ihm-build-etat "erreur"
+attendre 6
+capture 11117_01_compiler_le_script_actuel.png
+ihm-sorties diagnostics
+attendre 4
+capture 11117_02_diagnostics_filtres_sur_horloge.png
+
+# ---- 2. F7 sur Init : sa faute seule ----
+ligne "Init" exact
+attendre 3
+touche F7
+attendre 6
+volet-message "Compiler le script Init : 1 faute"
+ihm-build-attendre 600
+attendre 6
+capture 11117_03_f7_compile_init.png
+
+# ---- 3. Les fonctions : Compiler la fonction actuelle ----
+arbre "IHM/Programmation générale/Fonctions" double
+attendre 8
+ligne "Moyenne_Pression" exact
+attendre 3
+outil "Compiler la fonction actuelle"
+attendre 6
+volet-message "Compiler la fonction Moyenne_Pression : aucune faute"
+ihm-build-attendre 600
+ihm-build-etat
+attendre 6
+capture 11117_04_compiler_la_fonction_actuelle.png
+
+# ---- 4. Le projet entier : les deux fautes ----
+ihm-build compiler sans-fenetre
+ihm-build-attendre 600
+ihm-build-etat "erreur"
+ihm-sorties diagnostics
+attendre 6
+capture 11117_05_compiler_le_projet.png
+
+# ---- 5. Les fautes retirees ; la simulation : le journal lit les locales ----
+annuler
+annuler
+attendre 5
+arbre "Simulation/IHM"
+attendre 2
+ihm-build-attendre 600
+attendre 420
+ihm-sorties console
+attendre 3
+ihm-console-etat "Pression A : mini 0.0, maxi 0.0 bar (5 mesures)"
+survol 1350 400
+attendre 3
+capture 11117_06_journal_lit_les_locales.png
+quitter

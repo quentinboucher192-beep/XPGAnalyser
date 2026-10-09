@@ -952,6 +952,57 @@ void gestionnaire(const std::string& tmp) {
     fs::remove_all(tmp, ec);
 }
 
+// 1.11.17 (refonte des scripts, lot 1, spec. 13) : COMPILER LE DOCUMENT ACTIF. Une demande
+// ciblee (le bouton Compiler d'un editeur) ne garde de la validation que ce qui touche sa
+// portee : un element ailleurs en erreur ne la fait plus echouer, et ses remarques restent
+// au cache ; le projet entier (et Demarrer) valide tout, comme avant.
+void compilerLeDocumentActif() {
+    std::printf("-- 1.11.17 : compiler le document actif (la validation limitee a la demande)\n");
+    Bench b;
+    fill(b);
+    // Une erreur que seule la validation (les controles de Generer) voit : une fonction IHM_.
+    HmiFunction bad;
+    bad.id = b.p.allocate();
+    bad.name = "IHM_Interdite";
+    bad.returnType = "INT";
+    bad.body = "IHM_Interdite := 1;";
+    b.p.programs.functions.push_back(bad);
+    const std::string badKey = key(pl::ElementKind::Function, bad.id);
+    const std::string initKey = key(pl::ElementKind::Script, b.scriptInit);
+    const auto mentions = [](const pl::Report& r) {
+        int n = 0;
+        for (const auto& d : r.diagnostics) n += d.message.find("IHM_") != std::string::npos ? 1 : 0;
+        return n;
+    };
+    // D'abord le script seul, sur un cache vide : il passe, rien n'est dit de la fonction.
+    const auto one = b.build(pl::Mode::Compile, {initKey}, true);
+    check(one.ok && mentions(one) == 0, "Compiler le script Init : il passe, rien sur IHM_Interdite (" + std::to_string(one.errors) + " erreur(s))");
+    // Le projet entier : la fonction le fait echouer, sa remarque va a son element.
+    const auto all = b.build(pl::Mode::Compile);
+    check(!all.ok && mentions(all) > 0, "Compiler le projet : IHM_Interdite le fait \xC3\xA9" "chouer");
+    const auto heldBy = [&](const std::string& k) {
+        const auto it = b.cache.entries.find(k);
+        if (it == b.cache.entries.end()) return 0;
+        int n = 0;
+        for (const auto& d : it->second.diagnostics) n += d.step == "Validation" && d.message.find("IHM_") != std::string::npos ? 1 : 0;
+        return n;
+    };
+    check(heldBy(badKey) > 0, "... sa remarque est au cache, sur la fonction");
+    // Le script seul, de nouveau : il passe ; la remarque de la fonction reste au cache.
+    const auto again = b.build(pl::Mode::Compile, {initKey}, true);
+    check(again.ok && mentions(again) == 0, "Compiler le script Init apr\xC3\xA8s : il passe toujours");
+    check(heldBy(badKey) > 0, "... et la remarque de la fonction reste au cache (un build cibl\xC3\xA9 ne l'efface pas)");
+    // La fonction elle-meme, ciblee : sa faute est dite, la demande echoue.
+    const auto fn = b.build(pl::Mode::Compile, {badKey}, true);
+    check(!fn.ok && mentions(fn) > 0, "Compiler la fonction IHM_Interdite : sa faute, la demande \xC3\xA9" "choue");
+    // Toute l'IHM (la racine de l'arbre) : comme le projet entier.
+    const auto ihm = b.build(pl::Mode::Compile, {"IHM"});
+    check(!ihm.ok && mentions(ihm) > 0, "Compiler l'IHM (la racine de l'arbre) : tout est valid\xC3\xA9, la fonction bloque");
+    // Demarrer valide tout le projet.
+    const auto start = b.build(pl::Mode::Start);
+    check(!start.ok, "D\xC3\xA9marrer : tout le projet est valid\xC3\xA9 (la fonction bloque)");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -973,6 +1024,7 @@ int main(int argc, char** argv) {
     coupureSauvegarde(tmp + "_coupure");
     formatDuCache();
     faussesAlertes();
+    compilerLeDocumentActif();     // 1.11.17 (refonte, lot 1)
     gestionnaire(tmp + "_gestionnaire");
     std::printf("\n%d verification(s), %d echec(s)\n", checks, failures);
     return failures == 0 ? 0 : 1;

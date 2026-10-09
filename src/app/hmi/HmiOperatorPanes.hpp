@@ -28,6 +28,7 @@
 #include "../../core/Command.hpp"
 #include "../../hmi/HmiCommands.hpp"
 #include "../../hmi/HmiOperators.hpp"
+#include "../../hmi/HmiPipeline.hpp"   // 1.11.17 : Compiler les operateurs (le build de leur porteur)
 #include "../../hmi/HmiScript.hpp"
 #include "../../hmi/HmiScriptFile.hpp"   // 1.11.3 : exporter / importer les operateurs (.xpgst)
 #include "../../ui/widgets/Containers.hpp"
@@ -176,7 +177,14 @@ public:
     // Les DDT de l'automate (des cibles de conversion), et pour les reconnaitre.
     std::function<std::vector<std::string>()>    plcTypes;
     std::function<bool(std::string_view)>        isPlcType;
-    std::function<void()>                        compile;     // ouvrir IHM > Compiler
+    std::function<void()>                        compile;     // ouvrir IHM > Compiler (sans `build` : le bouton Compiler)
+    // 1.11.17 (refonte, lot 1) : le build du porteur ("symbole:12", "type:7") - ses operateurs.
+    std::function<void(hmi::pipeline::Mode, const std::string& key)> build;
+    // 1.11.17 (spec. 13) : COMPILER LES OPERATEURS DU PORTEUR AFFICHE (le bouton, F7) - leurs
+    // fautes, puis le build du porteur (son etat, les Diagnostics du panneau du bas filtres
+    // sur lui) ; le projet entier reste a IHM > Compiler. Rend le nombre de fautes.
+    std::size_t compileCurrent();
+    [[nodiscard]] std::string buildKey() const;   // "symbole:12", "type:7" ; vide : aucun porteur
 
     [[nodiscard]] HmiToolStrip&      tools() noexcept { return *tools_; }
     [[nodiscard]] ui::MultiLineText& editor() noexcept { return *editor_; }
@@ -190,6 +198,7 @@ public:
 protected:
     void onLayout() override;
     void onPaint(const ui::PaintContext&) override;
+    ui::EventResult onEvent(const ui::InputEvent&) override;   // 1.11.17 : F7, les operateurs affiches
 
 private:
     void showSelected();
