@@ -722,7 +722,8 @@ struct View {
     std::vector<AlarmDef>  alarms;
     // ---- 1.10 : les operateurs d'un symbole (voir HmiOperator). Vide pour les autres vues.
     std::vector<HmiOperator> operators{};
-    // ---- 1.11.10 : les fonctions d'un symbole (HmiSymbolFunctions.hpp) ; vide pour les autres vues.
+    // ---- 1.11.10 : les fonctions d'un symbole (HmiSymbols.hpp : symbolFunction, boundSymbolFunction) ;
+    //  vide pour les autres vues.
     //  Elles lisent et ecrivent les parametres du symbole (ceux de l'instance qui les
     //  appelle) ; une virtuelle se redefinit dans une instance.
     std::vector<HmiFunction> functions{};

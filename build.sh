@@ -1,4 +1,10 @@
 #!/bin/bash
+# 1.11.17 (refonte des scripts, lot 0) : PLUS TENU A JOUR. Il ne construit ni
+# src/hmi ni src/help, ni l'application, ni les essais IHM : la reference est
+# CMake (cmake -S . -B build-linux -G Ninja ; ninja -C build-linux ; ctest), et
+# sous Windows outils\build.bat (XpgAnalyzer.vcxproj, que verifie
+# outils/verifier_vcxproj.py). Garde pour l'histoire des premiers lots.
+#
 # Build sans CMake (le conteneur n'a pas cmake). Reproduit les cibles du
 # CMakeLists : xpg_core, xpg_import, xpg_ui, puis les tests.
 set -e

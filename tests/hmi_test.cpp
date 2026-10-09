@@ -20917,6 +20917,237 @@ void blocages1112() {
           "un script cyclique en erreur : la trace dit pourquoi (" + seen + ")");
 }
 
+// 1.11.17 (refonte, lot 0 - trouve par la trace de reference) : LE TEXTE A TROUS D'IHM_JOURNAL
+// ET D'IHM_LOG LIT LES LOCALES du code qui l'appelle : VAR, VAR_TEMP, l'indice d'une boucle,
+// les parametres d'une fonction. Avant, '{Mini:0.0}' rendait ### (Armoire_Gaz,
+// Statistiques_Pression). Une locale passe avant une variable IHM du meme nom.
+void journalLocales1117() {
+    std::printf("-- 1.11.17 : IHM_JOURNAL et IHM_LOG lisent les locales de leur code\n");
+    Project p;
+    View v = makeView(p, "Vue");
+    p.config.startView = v.id;
+    p.views.push_back(v);
+    p.programs.variables.push_back(lot16::var(p, "Mini", "REAL", "99.0"));     // une variable IHM du meme nom
+    p.programs.functions.push_back(hmiFunction(p, "Dire", "", "VAR_INPUT\n  Quoi : STRING;\n  N : INT;\nEND_VAR\nIHM_JOURNAL('fonction : {Quoi} {N}');"));
+    p.programs.scripts.push_back(generalScript(p, "Stats",
+        "VAR\n  Mini : REAL := 4.5;\n  Tours : DINT;\n  i : INT;\nEND_VAR\nVAR_TEMP\n  P : REAL;\nEND_VAR\n"
+        "P := 2.25;\nTours := Tours + 1;\nIHM_JOURNAL('mini {Mini:0.0}, P {P:0.00}, {Tours} tour(s)');\n"
+        "IHM_LOG(INFO, 'log : mini {Mini:0.0}');\nFOR i := 1 TO 2 DO\n  IHM_JOURNAL('boucle {i}');\nEND_FOR;\nDire('salut', 3);"));
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    std::string why;
+    check(rt.callScript("Stats", 0.1, &why), "le script tourne (" + why + ")");
+    check(journalHas(rt, "Journal", "mini 4.5, P 2.25, 1 tour(s)"), "IHM_JOURNAL : VAR (Mini, Tours) et VAR_TEMP (P), la locale avant la variable IHM");
+    check(journalHas(rt, "IHM_LOG", "log : mini 4.5"), "IHM_LOG : la locale aussi");
+    check(journalHas(rt, "Journal", "boucle 1") && journalHas(rt, "Journal", "boucle 2"), "l'indice de la boucle");
+    check(journalHas(rt, "Journal", "fonction : salut 3"), "les param\xC3\xA8tres d'une fonction");
+    check(rt.callScript("Stats", 0.2, &why) && journalHas(rt, "Journal", "2 tour(s)"), "VAR gard\xC3\xA9" "e d'un appel \xC3\xA0 l'autre : 2 tours");
+    bool hashes = false;
+    for (const auto& e : rt.journal()) hashes = hashes || e.message.find("###") != std::string::npos;
+    check(!hashes, "plus de ### dans le journal");
+    // Hors d'un appel, une expression de vue ne voit aucune locale : la variable IHM.
+    const auto mini = Expression::compile("Mini").evaluate(rt.environment());
+    check(mini && std::fabs(mini->asReal() - 99.0) < 1e-9, "une expression de vue lit la variable IHM Mini (99)");
+}
+
+// 1.11.17 (refonte des scripts, lot 0) : RENOMMER UNE FONCTION SUIT CHAQUE APPEL. Avant,
+// renameFunctionEverywhere et functionCallers oubliaient les fonctions de symbole, les
+// redefinitions, les operateurs, les alarmes de symbole (et leurs surcharges) : un appel
+// casse, et "Appelee par" ne le montrait pas. Un symbole qui a SA fonction du meme nom
+// garde ses appels courts (ils la visent, elle) ; un renommage qui detournerait un appel
+// est refuse (renameCaptures). Renommer une fonction de symbole suit ses popups et tout
+// le projet ; une valeur d'enumeration suit dans une fonction de symbole.
+void renommerPartout1117() {
+    std::printf("-- 1.11.17 : renommer une fonction suit chaque appel (refonte, lot 0)\n");
+    Project p;
+    p.programs.functions.push_back(hmiFunction(p, "Calc", "REAL", "VAR_INPUT\n  a : REAL;\nEND_VAR\nCalc := a * 2.0;"));
+    HmiType mode;
+    mode.id = p.allocate();
+    mode.name = "T_MODE";
+    mode.kind = HmiTypeKind::Enumeration;
+    mode.values = {{"Auto", 0, "", ""}, {"Manu", 1, "", ""}};
+    p.programs.types.push_back(mode);
+    HmiType vec;
+    vec.id = p.allocate();
+    vec.name = "T_VEC";
+    vec.members = {{"X", "REAL", "", ""}, {"Y", "REAL", "", ""}};
+    HmiOperator fois = makeOperator(p, "*", "T_VEC", "REAL", "T_VEC");
+    fois.body = "Resultat := a;\nResultat.X := Calc(b);";
+    vec.operators.push_back(fois);
+    p.programs.types.push_back(vec);
+
+    // S_Pompe appelle la fonction IHM Calc (il n'a pas de Calc a lui).
+    View pompe = makeView(p, "S_Pompe");
+    pompe.role = "symbole";
+    pompe.params.push_back({"Debit", "0", "", "REAL", ParamMode::Reference});
+    HmiFunction regler;
+    regler.id = p.allocate();
+    regler.name = "Regler";
+    regler.returnType = "REAL";
+    regler.body = "IF Mode = T_MODE#Auto THEN\n  Regler := Calc(Debit);\nEND_IF;";
+    regler.isVirtual = true;
+    pompe.functions.push_back(regler);
+    HmiOperator plus = makeOperator(p, "+", "S_Pompe", "REAL", "REAL");
+    plus.body = "Resultat := Calc(b);";
+    pompe.operators.push_back(plus);
+    AlarmDef haut;
+    haut.id = p.allocate();
+    haut.name = "Debit_Haut";
+    haut.condition = "Calc(Debit) > 10.0";
+    haut.message = "D\xC3\xA9" "bit {Calc(Debit):0.0}";
+    haut.instruction = "R\xC3\xA9" "duire sous {Calc(5.0):0}";
+    pompe.alarms.push_back(haut);
+    {
+        auto& t = addButton(p, pompe, "Txt", 0, 0);
+        t.set("text", "{Calc(Debit):0.0}");
+        t.set("condition", "Calc(Debit) > 1.0");
+    }
+    const Id pompeId = pompe.id;
+    p.views.push_back(pompe);
+    View popP = makeView(p, "Pop_Pompe");                      // sa popup : Regler par son nom court
+    popP.role = "popup";
+    popP.ownerSymbol = pompeId;
+    addButton(p, popP, "BtnRegler", 0, 0).actions.push_back(act(Trigger::Click, Operation::RunScript, {}, "x := Regler();"));
+    p.views.push_back(popP);
+
+    // S_Ombre a SA fonction Calc : ses appels courts la visent, elle.
+    View ombre = makeView(p, "S_Ombre");
+    ombre.role = "symbole";
+    HmiFunction sienne;
+    sienne.id = p.allocate();
+    sienne.name = "Calc";
+    sienne.returnType = "REAL";
+    sienne.body = "Calc := 1.0;";
+    HmiFunction utilise;
+    utilise.id = p.allocate();
+    utilise.name = "Utilise";
+    utilise.returnType = "REAL";
+    utilise.body = "Utilise := Calc(2.0);";
+    utilise.isVirtual = true;
+    ombre.functions = {sienne, utilise};
+    const Id ombreId = ombre.id;
+    p.views.push_back(ombre);
+    View popO = makeView(p, "Pop_Ombre");
+    popO.role = "popup";
+    popO.ownerSymbol = ombreId;
+    addButton(p, popO, "BtnO", 0, 0).actions.push_back(act(Trigger::Click, Operation::RunScript, {}, "y := Calc(3.0);"));
+    p.views.push_back(popO);
+
+    // La vue : une instance de chacun, chacune sa redefinition ; P1 surcharge une alarme.
+    View v = makeView(p, "Vue_A");
+    const Id p1 = placeSymbol(p, v, "S_Pompe", 10, 10);
+    v.object(p1)->name = "P1";
+    v.object(p1)->functionOverrides.push_back({"Regler", "Regler := Calc(9.0) + SUPER.Regler();"});
+    AlarmOverride surcharge;
+    surcharge.alarm = "Debit_Haut";
+    surcharge.condition = "Calc(Debit) > 20.0";
+    v.object(p1)->alarmOverrides.push_back(surcharge);
+    const Id o1 = placeSymbol(p, v, "S_Ombre", 200, 10);
+    v.object(o1)->name = "O1";
+    v.object(o1)->functionOverrides.push_back({"Utilise", "Utilise := Calc(4.0);"});
+    addButton(p, v, "BtnVue", 400, 10).actions.push_back(act(Trigger::Click, Operation::RunScript, {}, "z := P1.Regler() + Calc(1.0);"));
+    const Id vid = v.id;
+    p.views.push_back(v);
+    AlarmDef projet;
+    projet.id = p.allocate();
+    projet.name = "Projet_Haut";
+    projet.condition = "Vue_A.P1.Regler() > 3.0";
+    p.alarms.push_back(projet);
+    User chef;
+    chef.id = p.allocate();
+    chef.login = "chef";
+    chef.protection = "expression";
+    chef.expression = "Calc(1.0) > 0.0 AND Vue_A.P1.Regler() > 0.0";
+    p.security.users.push_back(chef);
+
+    // ---- Appelee par : chaque lieu, pas S_Ombre
+    const auto callers = functionCallers(p, "Calc");
+    const auto has = [&](std::string_view c) { return std::find(callers.begin(), callers.end(), c) != callers.end(); };
+    const auto hasLike = [&](std::string_view head, std::string_view tail) {
+        return std::any_of(callers.begin(), callers.end(), [&](const std::string& c) {
+            return c.rfind(head, 0) == 0 && c.size() >= tail.size() && c.compare(c.size() - tail.size(), tail.size(), tail) == 0;
+        });
+    };
+    std::string all;
+    for (const auto& c : callers) all += (all.empty() ? "" : " | ") + c;
+    check(has("fonction S_Pompe.Regler"), "Appel\xC3\xA9" "e par : la fonction du symbole (" + all + ")");
+    check(has("Vue_A/P1.Regler (red\xC3\xA9" "finition)"), "... la red\xC3\xA9" "finition de l'instance P1");
+    check(hasLike("op\xC3\xA9rateur ", "(S_Pompe)") && hasLike("op\xC3\xA9rateur ", "(type T_VEC)"),
+          "... l'op\xC3\xA9rateur du symbole et celui du type");
+    check(has("alarme S_Pompe.Debit_Haut") && has("Vue_A/P1 (alarme Debit_Haut)"), "... l'alarme du symbole et sa surcharge dans P1");
+    check(has("S_Pompe/Txt (text)") || has("S_Pompe/Txt (condition)"), "... la propri\xC3\xA9t\xC3\xA9 d'un objet du symbole (une fois)");
+    check(has("utilisateur chef (autorisation)") && has("Vue_A/BtnVue (action)"), "... l'autorisation par expression, l'action de la vue");
+    check(!has("fonction S_Ombre.Utilise") && !has("fonction S_Ombre.Calc") && !has("Vue_A/O1.Utilise (red\xC3\xA9" "finition)")
+              && !has("Pop_Ombre/BtnO (action)"),
+          "... pas S_Ombre : ses appels courts visent SA fonction Calc (ni sa popup, ni la red\xC3\xA9" "finition de O1)");
+
+    // ---- Rien n'est detourne ; si S_Pompe avait sa fonction Calcul, renommer Calc en Calcul le serait.
+    check(renameCaptures(p, nullptr, "Calc", "Calcul").empty(), "renommer Calc en Calcul ne d\xC3\xA9tourne aucun appel");
+    {
+        Project q = p;
+        HmiFunction a2;
+        a2.id = q.allocate();
+        a2.name = "Calcul";
+        a2.returnType = "REAL";
+        a2.body = "Calcul := 0.0;";
+        q.viewByName("S_Pompe")->functions.push_back(a2);
+        const auto cap = renameCaptures(q, nullptr, "Calc", "Calcul");
+        const auto in = [&](std::string_view c) { return std::find(cap.begin(), cap.end(), c) != cap.end(); };
+        check(in("fonction S_Pompe.Regler") && in("Vue_A/P1.Regler (red\xC3\xA9" "finition)") && in("Pop_Pompe/BtnRegler (action)") == false,
+              "... S_Pompe a sa fonction Calcul : ses appels de Calc la viseraient (" + std::to_string(cap.size()) + ")");
+    }
+
+    // ---- Renommer : chaque appel suit, sauf dans S_Ombre
+    const std::size_t changed = renameFunctionEverywhere(p, "Calc", "Calcul");
+    for (auto& f : p.programs.functions) if (f.name == "Calc") f.name = "Calcul";
+    const View* sp = p.viewByName("S_Pompe");
+    const View* va = p.view(vid);
+    const Object* ip1 = va->objectByName("P1");
+    check(sp->functions[0].body == "IF Mode = T_MODE#Auto THEN\n  Regler := Calcul(Debit);\nEND_IF;", "renomm\xC3\xA9" "e : la fonction du symbole");
+    check(sp->operators[0].body == "Resultat := Calcul(b);" && p.programs.types[1].operators[0].body == "Resultat := a;\nResultat.X := Calcul(b);",
+          "... les op\xC3\xA9rateurs (du symbole, du type)");
+    check(sp->alarms[0].condition == "Calcul(Debit) > 10.0" && sp->alarms[0].message == "D\xC3\xA9" "bit {Calcul(Debit):0.0}"
+              && sp->alarms[0].instruction == "R\xC3\xA9" "duire sous {Calcul(5.0):0}",
+          "... l'alarme du symbole : condition, message, consigne");
+    check(sp->objectByName("Txt")->text("text") == "{Calcul(Debit):0.0}" && sp->objectByName("Txt")->text("condition") == "Calcul(Debit) > 1.0",
+          "... un texte \xC3\xA0 trous et une propri\xC3\xA9t\xC3\xA9-expression (condition)");
+    check(ip1->functionOverrides[0].body == "Regler := Calcul(9.0) + SUPER.Regler();" && ip1->alarmOverrides[0].condition
+              && *ip1->alarmOverrides[0].condition == "Calcul(Debit) > 20.0",
+          "... la red\xC3\xA9" "finition de P1 et son alarme surcharg\xC3\xA9" "e");
+    check(va->objectByName("BtnVue")->actions[0].value == "z := P1.Regler() + Calcul(1.0);"
+              && p.security.users[0].expression == "Calcul(1.0) > 0.0 AND Vue_A.P1.Regler() > 0.0",
+          "... l'action de la vue, l'autorisation");
+    check(p.functionByName("Calcul") && p.functionByName("Calcul")->body.find("Calcul := a * 2.0;") != std::string::npos,
+          "... et son propre retour");
+    const View* so = p.viewByName("S_Ombre");
+    check(so->functions[0].body == "Calc := 1.0;" && so->functions[1].body == "Utilise := Calc(2.0);"
+              && va->objectByName("O1")->functionOverrides[0].body == "Utilise := Calc(4.0);"
+              && p.viewByName("Pop_Ombre")->objects[0].actions[0].value == "y := Calc(3.0);",
+          "S_Ombre garde ses appels (sa fonction, sa popup, la red\xC3\xA9" "finition de O1)");
+    check(changed == 13, "13 textes suivent : " + std::to_string(changed));
+    check(functionCallers(p, "Calcul").size() == callers.size(), "Appel\xC3\xA9" "e par, apr\xC3\xA8s : les m\xC3\xAA" "mes lieux");
+
+    // ---- Une fonction de symbole : Regler -> Ajuster suit la popup, l'alarme du projet, l'autorisation
+    check(!renameCaptures(p, sp, "Regler", "Calcul").empty(), "renommer Regler en Calcul d\xC3\xA9tournerait Calcul(Debit) : refus\xC3\xA9");
+    check(renameCaptures(p, sp, "Regler", "Ajuster").empty(), "... en Ajuster : rien");
+    const std::size_t moved = renameSymbolFunction(p, "S_Pompe", "Regler", "Ajuster");
+    p.viewByName("S_Pompe")->functions[0].name = "Ajuster";
+    check(p.viewByName("Pop_Pompe")->objects[0].actions[0].value == "x := Ajuster();", "la popup du symbole suit (avant : oubli\xC3\xA9" "e)");
+    check(p.alarms[0].condition == "Vue_A.P1.Ajuster() > 3.0", "... l'alarme du projet (avant : oubli\xC3\xA9" "e)");
+    check(p.security.users[0].expression == "Calcul(1.0) > 0.0 AND Vue_A.P1.Ajuster() > 0.0", "... l'autorisation (avant : oubli\xC3\xA9" "e)");
+    check(ip1->functionOverrides[0].function == "Ajuster" && ip1->functionOverrides[0].body == "Ajuster := Calcul(9.0) + SUPER.Ajuster();",
+          "... la red\xC3\xA9" "finition : son nom, son retour, SUPER");
+    check(va->objectByName("BtnVue")->actions[0].value == "z := P1.Ajuster() + Calcul(1.0);"
+              && sp->functions[0].body == "IF Mode = T_MODE#Auto THEN\n  Ajuster := Calcul(Debit);\nEND_IF;",
+          "... Instance.Fonction dans la vue, et le retour dans son corps");
+    check(moved == 7, "7 textes suivent : " + std::to_string(moved));
+
+    // ---- Une valeur d'enumeration suit dans une fonction de symbole (avant : oubliee)
+    (void)renameEnumValue(p, "T_MODE", "Auto", "Automatique");
+    check(sp->functions[0].body.find("T_MODE#Automatique") != std::string::npos, "renommer T_MODE#Auto : la fonction du symbole suit");
+}
+
 int main(int argc, char** argv) {
     // 1.11.10 : HMI_TEST_1110=1 - les fonctions et les popups des symboles, seules.
     if (const char* only = std::getenv("HMI_TEST_1110"); only && *only == '1') {
@@ -21061,6 +21292,8 @@ int main(int argc, char** argv) {
     api1111();                        // 1.11.1 (API-M) : les variables de l'automate sous API.
     limiteCycle1111();                // 1.11.1 (API-M, decision 127) : XPG_SIM_LIMITE_CYCLE_MS
     blocages1112();                   // 1.11.2 (BLK, decision 203) : l'index des ecritures, la raison d'un script cyclique
+    renommerPartout1117();            // 1.11.17 (refonte, lot 0) : renommer une fonction suit chaque appel
+    journalLocales1117();             // 1.11.17 (refonte, lot 0) : IHM_JOURNAL et IHM_LOG lisent les locales
     if (argc > 1) simulateurModbusLot14(argv[1]);
     if (argc > 1) simulateur(argv[1]);
     if (argc > 1) dossierRouvert(argv[1]);

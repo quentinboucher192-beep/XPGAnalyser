@@ -220,9 +220,10 @@ struct BoundFunction {
 };
 [[nodiscard]] bool boundSymbolFunction(const Project&, std::string_view call, BoundFunction& out);
 // Renommer la fonction `from` du symbole `symbol` en `to` : ses appels dans le symbole
-// (Ouvrir(, SUPER.Ouvrir(), ceux des vues (Vanne_3.Ouvrir() et des scripts et fonctions
-// (Vue.Vanne_3.Ouvrir(), et les redefinitions des instances. Rend le nombre de textes changes
-// (la declaration elle-meme n'est pas renommee : a l'appelant).
+// et ses popups (Ouvrir(, SUPER.Ouvrir(), ceux des vues (Vanne_3.Ouvrir() et de tout le
+// projet (Vue.Vanne_3.Ouvrir() - 1.11.17 : chaque texte de forEachCode (HmiScript.hpp) -,
+// et les redefinitions des instances. Rend le nombre de textes changes (la declaration
+// elle-meme n'est pas renommee : a l'appelant).
 std::size_t renameSymbolFunction(Project&, std::string_view symbol, std::string_view from, std::string_view to);
 
 // ---- 1.11.10 : les popups d'un symbole ----------------------------------------------

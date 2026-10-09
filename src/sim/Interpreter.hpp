@@ -236,6 +236,13 @@ struct RunResult {
 
 [[nodiscard]] RunResult execute(const Program&, Environment&, const RunLimits& = {});
 
+// 1.11.17 : PENDANT UN APPEL DE L'ENVIRONNEMENT (Environment::call), les variables locales
+// du code qui appelle - VAR, VAR_TEMP, les parametres d'une fonction du dialecte, la
+// variable d'un FOR EACH - de valeur simple. L'IHM en remplit les trous d'un texte :
+// IHM_JOURNAL('mini {Mini:0.0}') dans un script qui declare Mini. Faux : pas d'appel en
+// cours, pas de locale de ce nom, ou une locale qui n'est pas une valeur simple.
+[[nodiscard]] bool readCallerLocal(std::string_view name, Value& out);
+
 // Exposed for the tests and for the editor's own use later.
 [[nodiscard]] core::Result<Value> evaluateExpression(std::string_view source, Environment&);
 

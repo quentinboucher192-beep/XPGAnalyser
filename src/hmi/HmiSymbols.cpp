@@ -1475,20 +1475,6 @@ std::size_t renameSymbolFunction(Project& p, std::string_view symbol, std::strin
         text = next;
         ++changed;
     };
-    for (auto& o : sym->objects) {
-        const Object before = o;
-        rewriteNames(o, inSymbol);
-        if (!(before == o)) ++changed;
-    }
-    for (auto& sc : sym->scripts)
-        if (sc.lang == ScriptLang::ST) apply(sc.body, inSymbol(sc.body, true));
-    {
-        Object holder;
-        holder.actions = sym->actions;
-        rewriteNames(holder, inSymbol);
-        if (!(holder.actions == sym->actions)) { sym->actions = std::move(holder.actions); ++changed; }
-    }
-    for (auto& fn : sym->functions) apply(fn.body, inSymbol(fn.body, true));
     // SUPER.from( dans les corps (les redefinitions le citent).
     const auto superCalls = [&](std::string_view t) {
         return rewriteRoots(t, true, [&](std::string_view s2, std::size_t b, std::size_t e) -> Replacement {
@@ -1498,15 +1484,20 @@ std::size_t renameSymbolFunction(Project& p, std::string_view symbol, std::strin
             return std::make_pair(end, std::string(s2.substr(b, e - b)) + "." + toName);
         });
     };
-    for (auto& fn : sym->functions) apply(fn.body, superCalls(fn.body));
-    // Les redefinitions des instances : leur nom, et les memes appels dans leur corps.
+    // 1.11.17 : chaque texte lu dans le symbole (forEachCode) - son code, ses fonctions, les
+    // redefinitions de ses instances et ses popups (avant oubliees : une popup du symbole
+    // appelle ses fonctions par leur nom court, qualifiedOwnedPopup).
+    forEachCode(p, [&](std::string& text, CodeForm form, const CodeSite& s) {
+        if (s.scope != sym || text.empty()) return;
+        apply(text, form == CodeForm::Template ? rewriteInText(text, [&](std::string_view e) { return inSymbol(e, false); })
+                                               : superCalls(inSymbol(text, form == CodeForm::Code)));
+    });
+    // Les redefinitions des instances : leur nom (leur corps a suivi plus haut).
     for (auto& v : p.views)
         for (auto& o : v.objects) {
             if (o.kind != Kind::SymbolInstance || !sameName(trimmedCopy(o.text("symbol")), symbol)) continue;
-            for (auto& fo : o.functionOverrides) {
+            for (auto& fo : o.functionOverrides)
                 if (sameName(fo.function, from)) { fo.function = toName; ++changed; }
-                apply(fo.body, superCalls(inSymbol(fo.body, true)));
-            }
         }
     // Les appels qualifies : Vanne_3.from( (dans une vue ou un symbole qui pose l'instance)
     // et Vue.Vanne_3.from( (partout).
@@ -1537,26 +1528,13 @@ std::size_t renameSymbolFunction(Project& p, std::string_view symbol, std::strin
             return std::make_pair(end, path + "." + toName);
         });
     };
-    for (auto& v : p.views) {
-        const View* here = &v;
-        for (auto& o : v.objects) {
-            const Object before = o;
-            rewriteNames(o, [&](std::string_view t, bool) { return qualified(t, here); });
-            if (!(before == o)) ++changed;
-        }
-        for (auto& sc : v.scripts)
-            if (sc.lang == ScriptLang::ST) apply(sc.body, qualified(sc.body, here));
-        Object holder;
-        holder.actions = v.actions;
-        rewriteNames(holder, [&](std::string_view t, bool) { return qualified(t, here); });
-        if (!(holder.actions == v.actions)) { v.actions = std::move(holder.actions); ++changed; }
-        for (auto& fn : v.functions) apply(fn.body, qualified(fn.body, here));
-    }
-    for (auto& sc : p.programs.scripts)
-        if (sc.lang == ScriptLang::ST) apply(sc.body, qualified(sc.body, nullptr));
-    for (auto& fn : p.programs.functions) apply(fn.body, qualified(fn.body, nullptr));
-    for (auto& ty : p.programs.types)
-        for (auto& op : ty.operators) apply(op.body, qualified(op.body, nullptr));
+    // 1.11.17 : partout (forEachCode) - avant, ni les operateurs des symboles, ni les
+    // redefinitions des autres instances, ni les alarmes, recettes, autorisations...
+    forEachCode(p, [&](std::string& text, CodeForm form, const CodeSite& s) {
+        if (text.find('(') == std::string::npos) return;
+        apply(text, form == CodeForm::Template ? rewriteInText(text, [&](std::string_view e) { return qualified(e, s.view); })
+                                               : qualified(text, s.view));
+    });
     return changed;
 }
 

@@ -208,6 +208,9 @@
     <ClCompile Include="src\ui\widgets\Controls.cpp">
       <Filter>ui\widgets</Filter>
     </ClCompile>
+    <ClCompile Include="src\core\AtomicFile.cpp">
+      <Filter>core</Filter>
+    </ClCompile>
     <ClCompile Include="src\core\Error.cpp">
       <Filter>core</Filter>
     </ClCompile>
@@ -237,6 +240,9 @@
     </ClCompile>
     <ClCompile Include="src\menu\IMenu.cpp">
       <Filter>menu</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiActionKinds.cpp">
+      <Filter>hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\hmi\HmiAlarmViews.cpp">
       <Filter>hmi</Filter>
@@ -438,6 +444,9 @@
     </ClCompile>
     <ClCompile Include="src\hmi\HmiZones.cpp">
       <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiActionDialogs.cpp">
+      <Filter>app\hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\app\hmi\HmiActionsPanel.cpp">
       <Filter>app\hmi</Filter>
@@ -967,6 +976,9 @@
     <ClCompile Include="src\ui\widgets\FilterMemory.cpp">
       <Filter>ui\widgets</Filter>
     </ClCompile>
+    <ClCompile Include="src\ui\widgets\ScrollBar.cpp">
+      <Filter>ui\widgets</Filter>
+    </ClCompile>
     <ClCompile Include="src\ui\widgets\SearchField.cpp">
       <Filter>ui\widgets</Filter>
     </ClCompile>
@@ -1036,6 +1048,15 @@
     <ClCompile Include="src\app\hmi\HmiApiVarsPane.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiBuild.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiBuildPanes.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiConsole.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\hmi\HmiCyclicPage.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
@@ -1075,10 +1096,25 @@
     <ClCompile Include="src\app\hmi\HmiSimMarks.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiSimVarTree.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\hmi\HmiSlavePanes.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiSymbolPopupsPane.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiValueKind.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiValuePicker.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\screens\HelpCenterScreen.cpp">
+      <Filter>app\screens</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\screens\HmiBuildWorkspace.cpp">
       <Filter>app\screens</Filter>
     </ClCompile>
     <ClCompile Include="src\app\screens\HmiExprScreen.cpp">
@@ -1174,6 +1210,12 @@
     <ClCompile Include="src\hmi\HmiExprGuide.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\hmi\HmiLiveGeometry.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiLog.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\hmi\HmiMarkers.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
@@ -1186,7 +1228,16 @@
     <ClCompile Include="src\hmi\HmiOperators.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\hmi\HmiPipeline.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\hmi\HmiPopupParams.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiPrompt.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiRetain.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\hmi\HmiRuntimeObjectAlarms.cpp">
@@ -1207,7 +1258,19 @@
     <ClCompile Include="src\hmi\HmiScriptCheck110.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\hmi\HmiScriptFile.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiSimData.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\hmi\HmiTutorialDeduce.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiVarMotion.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiViewPaths.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\project\ActivationConditions.cpp">
@@ -1390,6 +1453,9 @@
     <ClInclude Include="src\ui\widgets\Controls.hpp">
       <Filter>ui\widgets</Filter>
     </ClInclude>
+    <ClInclude Include="src\core\AtomicFile.hpp">
+      <Filter>core</Filter>
+    </ClInclude>
     <ClInclude Include="src\core\Command.hpp">
       <Filter>core</Filter>
     </ClInclude>
@@ -1431,6 +1497,9 @@
     </ClInclude>
     <ClInclude Include="src\ui\Widget.hpp">
       <Filter>ui</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiActionKinds.hpp">
+      <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiAlarmViews.hpp">
       <Filter>hmi</Filter>
@@ -1605,6 +1674,9 @@
     </ClInclude>
     <ClInclude Include="src\hmi\HmiZones.hpp">
       <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiActionDialogs.hpp">
+      <Filter>app\hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\app\hmi\HmiActionsPanel.hpp">
       <Filter>app\hmi</Filter>
@@ -2095,6 +2167,15 @@
     <ClInclude Include="src\app\hmi\HmiApiVarsPane.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiBuild.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiBuildPanes.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiConsole.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
     <ClInclude Include="src\app\hmi\HmiCyclicPage.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
@@ -2128,6 +2209,18 @@
     <ClInclude Include="src\app\hmi\HmiSimMarks.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiSimVarTree.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiSymbolPopupsPane.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiValueKind.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiValuePicker.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
     <ClInclude Include="src\app\screens\HelpCenterScreen.hpp">
       <Filter>app\screens</Filter>
     </ClInclude>
@@ -2150,6 +2243,9 @@
       <Filter>app\tutorial</Filter>
     </ClInclude>
     <ClInclude Include="src\core\CallTrail.hpp">
+      <Filter>core</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\CodeStats.hpp">
       <Filter>core</Filter>
     </ClInclude>
     <ClInclude Include="src\core\CrashGuard.hpp">
@@ -2236,6 +2332,12 @@
     <ClInclude Include="src\hmi\HmiExprGuide.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
+    <ClInclude Include="src\hmi\HmiLiveGeometry.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiLog.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
     <ClInclude Include="src\hmi\HmiMarkers.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
@@ -2248,7 +2350,16 @@
     <ClInclude Include="src\hmi\HmiOperators.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
+    <ClInclude Include="src\hmi\HmiPipeline.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
     <ClInclude Include="src\hmi\HmiPopupParams.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiPrompt.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiRetain.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiScriptCheck.hpp">
@@ -2257,7 +2368,19 @@
     <ClInclude Include="src\hmi\HmiScriptCheck110.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
+    <ClInclude Include="src\hmi\HmiScriptFile.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiSimData.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
     <ClInclude Include="src\hmi\HmiTutorialDeduce.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiVarMotion.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiViewPaths.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\platform\AtlasSymbols.hpp">
@@ -2294,6 +2417,9 @@
       <Filter>ui\widgets</Filter>
     </ClInclude>
     <ClInclude Include="src\ui\widgets\PropertyGridHooks.hpp">
+      <Filter>ui\widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\widgets\ScrollBar.hpp">
       <Filter>ui\widgets</Filter>
     </ClInclude>
     <ClInclude Include="src\ui\widgets\TrailSymbols.hpp">

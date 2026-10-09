@@ -2,6 +2,7 @@
 #include "HmiEnums.hpp"
 
 #include "HmiOperators.hpp"
+#include "HmiScript.hpp"   // 1.11.17 : forEachCode, le parcours commun des textes du projet
 
 #include <algorithm>
 #include <cctype>
@@ -133,36 +134,16 @@ std::string rewriteLiterals(std::string_view code,
     return out;
 }
 
-// Tous les textes ST du projet, a reecrire (les memes que renameFunctionEverywhere,
-// plus les scripts des operateurs).
+// Tous les textes du projet, a reecrire : 1.11.17, le parcours de Renommer une fonction
+// (forEachCode) - avant, une liste a part, sans les fonctions de symbole, les
+// redefinitions, les alarmes de symbole ni les textes a trous.
 std::size_t rewriteEverywhere(Project& p, const std::function<std::string(std::string_view)>& rewrite) {
     std::size_t changed = 0;
-    const auto code = [&](std::string& text) {
+    forEachCode(p, [&](std::string& text, CodeForm form, const CodeSite&) {
         if (text.find('#') == std::string::npos) return;
-        auto next = rewrite(text);
+        auto next = form == CodeForm::Template ? rewriteInText(text, rewrite) : rewrite(text);
         if (next != text) { text = std::move(next); ++changed; }
-    };
-    const auto actions = [&](std::vector<Action>& list) {
-        for (auto& a : list) {
-            code(a.watch);
-            code(a.guard);
-            if (a.operation != Operation::Log) code(a.value);
-            code(a.params);                                  // 1.11.6
-        }
-    };
-    for (auto& sc : p.programs.scripts) if (sc.lang == ScriptLang::ST) { code(sc.body); code(sc.watch); }
-    for (auto& f : p.programs.functions) code(f.body);
-    for (auto& ty : p.programs.types) for (auto& o : ty.operators) code(o.body);
-    for (auto& v : p.views) {
-        for (auto& sc : v.scripts) if (sc.lang == ScriptLang::ST) code(sc.body);
-        for (auto& o : v.operators) code(o.body);
-        actions(v.actions);
-        for (auto& o : v.objects) {
-            actions(o.actions);
-            for (auto& pr : o.props) code(pr.expr);
-        }
-    }
-    for (auto& a : p.alarms) code(a.condition);
+    });
     return changed;
 }
 

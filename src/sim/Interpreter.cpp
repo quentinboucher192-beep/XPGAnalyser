@@ -1361,10 +1361,30 @@ const std::vector<std::uint8_t>& noBreakLines() {
     return none;
 }
 
+// 1.11.17 : le Runner qui fait un appel de l'environnement, le temps de cet appel
+// (readCallerLocal). Un par fil ; un appel en fait d'autres : chacun remet le precedent.
+class Runner;
+thread_local Runner* t_caller = nullptr;
+struct CallerScope {
+    Runner* outer;
+    explicit CallerScope(Runner* r) noexcept : outer(t_caller) { t_caller = r; }
+    ~CallerScope() { t_caller = outer; }
+    CallerScope(const CallerScope&) = delete;
+    CallerScope& operator=(const CallerScope&) = delete;
+};
+
 class Runner {
 public:
     Runner(Environment& env, const RunLimits& limits, std::string section)
         : env_(env), limits_(limits), section_(std::move(section)) {}
+
+    // 1.11.17 : une locale de valeur simple (readCallerLocal).
+    bool readLocal(std::string_view name, Value& out) {
+        const Place* p = findLocal(name);
+        if (!p || !p->obj || (p->obj->type && p->obj->type->aggregate())) return false;
+        out = p->obj->value;
+        return true;
+    }
 
     RunResult run(const Program& program) {
         TraceScope traced(limits_.trace, program.tag);      // lot API 8
@@ -1689,7 +1709,13 @@ private:
         Value result;
         // An instance call and a function call look identical here; the
         // environment knows which names are instances.
-        if (!env_.call(*target, *target, arguments, result)) {
+        // 1.11.17 : pendant l'appel, l'appele peut lire nos locales (readCallerLocal).
+        bool called = false;
+        {
+            const CallerScope caller(this);
+            called = env_.call(*target, *target, arguments, result);
+        }
+        if (!called) {
             // Lot API 7 : l'environnement peut choisir de continuer - l'appel
             // rend 0, rien n'est rendu aux variables passees, le cycle va au bout.
             if (env_.tolerateUnknownCall(*target, e.line)) return Value::integer(Type::DInt, 0);
@@ -3565,6 +3591,8 @@ RunResult execute(const Program& program, Environment& env, const RunLimits& lim
     Runner runner(env, limits, program.name);
     return runner.run(program);
 }
+
+bool readCallerLocal(std::string_view name, Value& out) { return t_caller && t_caller->readLocal(name, out); }
 
 // ---- Lot API 8 : ce que le runtime demande a une section preparee ----
 void setProgramTag(Program& program, std::uint32_t tag) noexcept { program.tag = tag; }

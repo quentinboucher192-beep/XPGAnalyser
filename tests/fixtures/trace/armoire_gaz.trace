@@ -1,0 +1,914 @@
+# xpg-trace 1 : Armoire_Gaz, 800 images de 50 ms, 29 vues visitees, 3 script(s) Appel
+t=0.00  vue=Vue_Supervision
+  Compteur_Clics = 0
+  Mode_Maintenance = FALSE
+  Message_Operateur = 'Production'
+  Secondes_IHM = 0
+  Image_Choisie = 'logo_site.png'
+  Pompe_Marche = FALSE
+  Pas_A_Pas = FALSE
+  Vanne_Purge = FALSE
+  Purge_Auto = TRUE
+  Mode_Pompe = 2
+  Vitesse_Pompe = 55
+  Consigne_Pression = 2.5
+  Ventilation = 2
+  Gaz_Choisi = 'Azote'
+  Date_Maintenance = ''
+  Horaires_Chauffage = ''
+  Chauffage_Actif = FALSE
+  Mode_Nuit = FALSE
+  Temps_Ligne = 0
+  Debit_Ligne = 0
+  Pression_Ligne = 8
+  Surpression = 0
+  Niveau_Cuve = 60
+  Pieces_Produites = 0
+  Etat_Pompe = 0
+  Heures_Pompe = 0
+  Essai_Surpression = FALSE
+  Marche_Ligne = TRUE
+  Defaut_Filtre = FALSE
+  Position_Verin = 0
+  Niveau_Silo = 80
+  Charge_Tremie = 30
+  Temps_Synoptique = 0
+  Temps_Graphiques = 0
+  Debit_Essai = 0
+  Pression_Essai = 9.2
+  Poids_Sachet = 500
+  Vibration_Pompe = 40
+  Zone_Choisie = ''
+  Pieces_Bonnes = 0
+  Rebuts_Ligne = 0
+  Fraction_Piece = 0
+  Fours[1].Temperature = 0
+  Fours[1].Consigne = 850
+  Fours[1].Marche = FALSE
+  Fours[1].Defaut = FALSE
+  Fours[1].Vannes[1].Ouverte = FALSE
+  Fours[1].Vannes[1].Fermee = FALSE
+  Fours[1].Vannes[1].Position = 0
+  Fours[1].Vannes[2].Ouverte = FALSE
+  Fours[1].Vannes[2].Fermee = FALSE
+  Fours[1].Vannes[2].Position = 0
+  Fours[1].Vannes[3].Ouverte = FALSE
+  Fours[1].Vannes[3].Fermee = FALSE
+  Fours[1].Vannes[3].Position = 0
+  Fours[1].Heures = 0
+  Fours[2].Temperature = 0
+  Fours[2].Consigne = 850
+  Fours[2].Marche = FALSE
+  Fours[2].Defaut = FALSE
+  Fours[2].Vannes[1].Ouverte = FALSE
+  Fours[2].Vannes[1].Fermee = FALSE
+  Fours[2].Vannes[1].Position = 0
+  Fours[2].Vannes[2].Ouverte = FALSE
+  Fours[2].Vannes[2].Fermee = FALSE
+  Fours[2].Vannes[2].Position = 0
+  Fours[2].Vannes[3].Ouverte = FALSE
+  Fours[2].Vannes[3].Fermee = FALSE
+  Fours[2].Vannes[3].Position = 0
+  Fours[2].Heures = 0
+  Fours[3].Temperature = 0
+  Fours[3].Consigne = 850
+  Fours[3].Marche = FALSE
+  Fours[3].Defaut = FALSE
+  Fours[3].Vannes[1].Ouverte = FALSE
+  Fours[3].Vannes[1].Fermee = FALSE
+  Fours[3].Vannes[1].Position = 0
+  Fours[3].Vannes[2].Ouverte = FALSE
+  Fours[3].Vannes[2].Fermee = FALSE
+  Fours[3].Vannes[2].Position = 0
+  Fours[3].Vannes[3].Ouverte = FALSE
+  Fours[3].Vannes[3].Fermee = FALSE
+  Fours[3].Vannes[3].Position = 0
+  Fours[3].Heures = 0
+  Fours[4].Temperature = 0
+  Fours[4].Consigne = 850
+  Fours[4].Marche = FALSE
+  Fours[4].Defaut = FALSE
+  Fours[4].Vannes[1].Ouverte = FALSE
+  Fours[4].Vannes[1].Fermee = FALSE
+  Fours[4].Vannes[1].Position = 0
+  Fours[4].Vannes[2].Ouverte = FALSE
+  Fours[4].Vannes[2].Fermee = FALSE
+  Fours[4].Vannes[2].Position = 0
+  Fours[4].Vannes[3].Ouverte = FALSE
+  Fours[4].Vannes[3].Fermee = FALSE
+  Fours[4].Vannes[3].Position = 0
+  Fours[4].Heures = 0
+  Consignes[0] = 1.5
+  Consignes[1] = 2
+  Consignes[2] = 3
+  Consignes[3] = 0
+  Consignes[4] = 0
+  Consignes[5] = 0
+  Consignes[6] = 0
+  Consignes[7] = 0
+  Consignes[8] = 0
+  Consignes[9] = 0
+  Matrice[0,0] = 0
+  Matrice[0,1] = 0
+  Matrice[0,2] = 0
+  Matrice[0,3] = 0
+  Matrice[0,4] = 0
+  Matrice[0,5] = 0
+  Matrice[0,6] = 0
+  Matrice[0,7] = 0
+  Matrice[0,8] = 0
+  Matrice[0,9] = 0
+  Matrice[1,0] = 0
+  Matrice[1,1] = 0
+  Matrice[1,2] = 0
+  Matrice[1,3] = 0
+  Matrice[1,4] = 0
+  Matrice[1,5] = 0
+  Matrice[1,6] = 0
+  Matrice[1,7] = 0
+  Matrice[1,8] = 0
+  Matrice[1,9] = 0
+  Matrice[2,0] = 0
+  Matrice[2,1] = 0
+  Matrice[2,2] = 0
+  Matrice[2,3] = 0
+  Matrice[2,4] = 0
+  Matrice[2,5] = 0
+  Matrice[2,6] = 0
+  Matrice[2,7] = 0
+  Matrice[2,8] = 0
+  Matrice[2,9] = 0
+  Matrice[3,0] = 0
+  Matrice[3,1] = 0
+  Matrice[3,2] = 0
+  Matrice[3,3] = 0
+  Matrice[3,4] = 0
+  Matrice[3,5] = 0
+  Matrice[3,6] = 0
+  Matrice[3,7] = 0
+  Matrice[3,8] = 0
+  Matrice[3,9] = 0
+  Seuil_Alarme_Haut = 80
+  Pression_Sud = 0
+  Debit_Sud = 0
+  Temperature_Sud = 0
+  Niveau_Sud = 0
+  Alarme_Sud = FALSE
+  journal Connexion [operateur] utilisateur de départ : operateur
+  journal Système [] IHM démarrée : 72 variable(s) IHM, 13 script(s) généraux
+  journal Journal [script Init] IHM démarrée : Production
+  journal Navigation [] vue de démarrage : Vue_Supervision
+t=1.00  vue=Vue_Accueil
+  Secondes_IHM = 1
+  Pompe_Marche = TRUE
+  Temps_Ligne = 0.9
+  Pression_Ligne = 8.53346
+  Heures_Pompe = 0.000263889
+  Position_Verin = 12.4097
+  Niveau_Silo = 77.75
+  Charge_Tremie = 33.15
+  Temps_Synoptique = 0.9
+  Temps_Graphiques = 0.9
+  Debit_Essai = 0.89037
+  Pression_Essai = 9.26147
+  Poids_Sachet = 500.232
+  Vibration_Pompe = 65.5682
+  Pieces_Bonnes = 2
+  Fraction_Piece = 0.25
+  alarme PT1_A_Basse : Active
+  alarme PT1_A_Vide : Active
+  journal Apparition [PT1_A_Basse] [Haute] Bouteille A presque vide : 0.0 bar
+  journal Action [alarme PT1_A_Basse] son : bip_alarme.wav
+  journal Erreur [alarme PT9_Hors_Service] condition illisible : Capteur_PT9 > 3
+  journal Action [Vue_Commandes/Prog_Chauffage] Chauffage_Actif = FALSE (programmateur)
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x2)
+  appel Remise_A_Zero
+  journal Journal [script Remise_A_Zero] Compteurs remis à zéro
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x2)
+  vers Vue_Accueil
+  journal Navigation [] Vue_Supervision → Vue_Accueil
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560
+  journal Apparition [PT1_A_Vide] [Critique] Bouteille A vide (0.0 bar) : basculer
+  journal Action [alarme PT1_A_Vide] son : bip_alarme.wav
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x4)
+t=2.00  vue=Vue_Armoire_A
+  Compteur_Clics = 1
+  Secondes_IHM = 2
+  Temps_Ligne = 1.7
+  Pression_Ligne = 8.97635
+  Heures_Pompe = 0.000541667
+  Position_Verin = 39.5381
+  Niveau_Silo = 75.75
+  Charge_Tremie = 35.95
+  Temps_Synoptique = 1.7
+  Temps_Graphiques = 1.7
+  Debit_Essai = 3.15253
+  Pression_Essai = 9.04071
+  Poids_Sachet = 499.243
+  Vibration_Pompe = 73.8638
+  Pieces_Bonnes = 4
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x2)
+  appel Surveillance_Fours
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x2)
+  vers Vue_Armoire_A
+  journal Navigation [] Vue_Accueil → Vue_Armoire_A
+  journal Journal [Vue_Armoire_A.OnOpen] Armoire A ouverte (1 fois)
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x4)
+t=3.00  vue=Vue_Donnees
+  Secondes_IHM = 3
+  Temps_Ligne = 2.6
+  Pression_Ligne = 9.40656
+  Heures_Pompe = 0.000819444
+  Position_Verin = 74.3741
+  Niveau_Silo = 73.5
+  Charge_Tremie = 39.1
+  Temps_Synoptique = 2.6
+  Temps_Graphiques = 2.6
+  Debit_Essai = 7.26958
+  Pression_Essai = 9.34131
+  Poids_Sachet = 500.845
+  Vibration_Pompe = 80.8721
+  Pieces_Bonnes = 6
+  Fraction_Piece = 0.5
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x3)
+  appel Regulation_Variateur : Consigne_Variateur : pas de liaison avec Variateur ATV320
+  journal Erreur [script Regulation_Variateur] Consigne_Variateur : pas de liaison avec Variateur ATV320
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x2)
+  vers Vue_Donnees
+  journal Navigation [] Vue_Armoire_A → Vue_Donnees
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x4)
+t=4.00  vue=Vue_Production
+  Secondes_IHM = 4
+  Temps_Ligne = 3.4
+  Pression_Ligne = 9.70422
+  Heures_Pompe = 0.00109722
+  Position_Verin = 95.6219
+  Niveau_Silo = 71.5
+  Charge_Tremie = 41.9
+  Temps_Synoptique = 3.4
+  Temps_Graphiques = 3.4
+  Debit_Essai = 12.2126
+  Pression_Essai = 8.93992
+  Poids_Sachet = 499.258
+  Vibration_Pompe = 84.3359
+  Pieces_Bonnes = 8
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x4)
+  vers Vue_Production
+  journal Navigation [] Vue_Donnees → Vue_Production
+  journal Journal [Vue_Production (Modele_Conduite)] Écran modèle : cadre et navigation en place
+  journal Journal [Vue_Production] Vue_Production : ses objets par-dessus le modèle
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x4)
+t=5.00  vue=Vue_Armoires
+  Secondes_IHM = 5
+  Temps_Ligne = 4.4
+  Pression_Ligne = 9.93743
+  Heures_Pompe = 0.001375
+  Position_Verin = 96.4627
+  Niveau_Silo = 69
+  Charge_Tremie = 45.4
+  Temps_Synoptique = 4.4
+  Temps_Graphiques = 4.4
+  Debit_Essai = 19.8684
+  Pression_Essai = 9.09767
+  Poids_Sachet = 501.967
+  Vibration_Pompe = 84.4646
+  Pieces_Bonnes = 11
+  Fraction_Piece = 0
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x5)
+  vers Vue_Armoires
+  journal Navigation [] Vue_Production → Vue_Armoires
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x5)
+  journal Journal [script Statistiques_Pression] Pression A : mini 0.0, maxi 0.0 bar (5 mesures)
+t=6.00  vue=Vue_Utilisateurs
+  Secondes_IHM = 6
+  Temps_Ligne = 5.4
+  Pression_Ligne = 9.99758
+  Heures_Pompe = 0.00165278
+  Position_Verin = 69.1198
+  Niveau_Silo = 66.5
+  Charge_Tremie = 48.9
+  Temps_Synoptique = 5.4
+  Temps_Graphiques = 5.4
+  Debit_Essai = 28.8481
+  Pression_Essai = 8.49624
+  Poids_Sachet = 500.476
+  Vibration_Pompe = 79.9415
+  Pieces_Bonnes = 12
+  Rebuts_Ligne = 1
+  Fraction_Piece = 0.5
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x5)
+  vers Vue_Utilisateurs
+  journal Navigation [] Vue_Armoires → Vue_Utilisateurs
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x5)
+t=7.00  vue=Vue_Commandes
+  Secondes_IHM = 7
+  Temps_Ligne = 6.4
+  Pression_Ligne = 9.87929
+  Heures_Pompe = 0.00193056
+  Position_Verin = 30.1791
+  Niveau_Silo = 64
+  Charge_Tremie = 52.4
+  Temps_Synoptique = 6.4
+  Temps_Graphiques = 6.4
+  Debit_Essai = 38.7571
+  Pression_Essai = 8.35913
+  Poids_Sachet = 501.473
+  Vibration_Pompe = 71.4807
+  Pieces_Bonnes = 15
+  Fraction_Piece = 0
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x5)
+  vers Vue_Commandes
+  journal Navigation [] Vue_Utilisateurs → Vue_Commandes
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x5)
+t=8.00  vue=Vue_Afficheurs
+  Secondes_IHM = 8
+  Temps_Ligne = 7.4
+  Pression_Ligne = 9.59313
+  Heures_Pompe = 0.00220833
+  Position_Verin = 3.2615
+  Niveau_Silo = 61.5
+  Charge_Tremie = 55.9
+  Temps_Synoptique = 7.4
+  Temps_Graphiques = 7.4
+  Debit_Essai = 49.1602
+  Pression_Essai = 7.45867
+  Poids_Sachet = 499.536
+  Vibration_Pompe = 60.4179
+  Pieces_Bonnes = 17
+  Fraction_Piece = 0.5
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x5)
+  vers Vue_Afficheurs
+  journal Navigation [] Vue_Commandes → Vue_Afficheurs
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x5)
+t=9.00  vue=Vue_Synoptique
+  Secondes_IHM = 9
+  Temps_Ligne = 8.4
+  Pression_Ligne = 9.16466
+  Heures_Pompe = 0.00248611
+  Position_Verin = 4.69481
+  Niveau_Silo = 59
+  Charge_Tremie = 59.4
+  Temps_Synoptique = 8.4
+  Temps_Graphiques = 8.4
+  Debit_Essai = 59.6002
+  Pression_Essai = 6.99737
+  Poids_Sachet = 499.678
+  Vibration_Pompe = 48.4997
+  Pieces_Bonnes = 20
+  Fraction_Piece = 0
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x5)
+  vers Vue_Synoptique
+  journal Navigation [] Vue_Afficheurs → Vue_Synoptique
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x5)
+t=10.00  vue=Vue_Pictogrammes
+  Secondes_IHM = 10
+  Temps_Ligne = 9.4
+  Pression_Ligne = 8.63216
+  Heures_Pompe = 0.00276389
+  Position_Verin = 33.6096
+  Niveau_Silo = 56.5
+  Charge_Tremie = 62.9
+  Temps_Synoptique = 9.4
+  Temps_Graphiques = 9.4
+  Debit_Essai = 69.6184
+  Pression_Essai = 5.86409
+  Poids_Sachet = 499.717
+  Vibration_Pompe = 37.6079
+  Pieces_Bonnes = 22
+  Fraction_Piece = 0.5
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x5)
+  vers Vue_Pictogrammes
+  journal Navigation [] Vue_Synoptique → Vue_Pictogrammes
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x5)
+  journal Journal [script Statistiques_Pression] Pression A : mini 0.0, maxi 0.0 bar (10 mesures)
+t=11.00  vue=Vue_Cartes
+  Secondes_IHM = 11
+  Temps_Ligne = 10.4
+  Pression_Ligne = 8.04318
+  Heures_Pompe = 0.00304167
+  Position_Verin = 72.4666
+  Niveau_Silo = 54
+  Charge_Tremie = 66.4
+  Temps_Synoptique = 10.4
+  Temps_Graphiques = 10.4
+  Debit_Essai = 78.7745
+  Pression_Essai = 5.23652
+  Poids_Sachet = 500.358
+  Vibration_Pompe = 29.4618
+  Pieces_Bonnes = 24
+  Rebuts_Ligne = 2
+  Fraction_Piece = 0
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x5)
+  vers Vue_Cartes
+  journal Navigation [] Vue_Pictogrammes → Vue_Cartes
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x5)
+t=12.00  vue=Vue_Graphiques
+  Secondes_IHM = 12
+  Pompe_Marche = FALSE
+  Temps_Ligne = 11.4
+  Pression_Ligne = 7.45035
+  Heures_Pompe = 0.00309722
+  Position_Verin = 97.6957
+  Niveau_Silo = 51.5
+  Charge_Tremie = 69.9
+  Temps_Synoptique = 11.4
+  Temps_Graphiques = 11.4
+  Debit_Essai = 86.6664
+  Pression_Essai = 4.11579
+  Poids_Sachet = 501.907
+  Vibration_Pompe = 25.3477
+  Fraction_Piece = 0.5
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x5)
+  vers Vue_Graphiques
+  journal Navigation [] Vue_Cartes → Vue_Graphiques
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x5)
+t=13.00  vue=Vue_Supervision
+  Secondes_IHM = 13
+  Temps_Ligne = 12.4
+  Pression_Ligne = 6.90662
+  Position_Verin = 93.9932
+  Niveau_Silo = 49
+  Charge_Tremie = 73.4
+  Temps_Synoptique = 12.4
+  Temps_Graphiques = 12.4
+  Debit_Essai = 92.9472
+  Pression_Essai = 3.61963
+  Poids_Sachet = 500.695
+  Vibration_Pompe = 25.915
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x5)
+  vers Vue_Supervision
+  journal Navigation [] Vue_Graphiques → Vue_Supervision
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x5)
+t=14.00  vue=Vue_Alarmes
+  Secondes_IHM = 14
+  Temps_Ligne = 13.4
+  Pression_Ligne = 6.46055
+  Position_Verin = 63.605
+  Niveau_Silo = 46.5
+  Charge_Tremie = 76.9
+  Temps_Synoptique = 13.4
+  Temps_Graphiques = 13.4
+  Debit_Essai = 97.341
+  Pression_Essai = 2.83046
+  Poids_Sachet = 501.192
+  Vibration_Pompe = 31.0742
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x5)
+  vers Vue_Alarmes
+  journal Navigation [] Vue_Supervision → Vue_Alarmes
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x5)
+t=15.00  vue=Vue_Ligne
+  Secondes_IHM = 15
+  Temps_Ligne = 14.4
+  Pression_Ligne = 6.152
+  Position_Verin = 24.9642
+  Niveau_Silo = 44
+  Charge_Tremie = 80.4
+  Temps_Synoptique = 14.4
+  Temps_Graphiques = 14.4
+  Debit_Essai = 99.6547
+  Pression_Essai = 2.75554
+  Poids_Sachet = 498.33
+  Vibration_Pompe = 40.0107
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x5)
+  vers Vue_Ligne
+  journal Navigation [] Vue_Alarmes → Vue_Ligne
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x5)
+  journal Journal [script Statistiques_Pression] Pression A : mini 0.0, maxi 0.0 bar (15 mesures)
+t=16.00  vue=Vue_Navigation
+  Secondes_IHM = 16
+  Temps_Ligne = 15.4
+  Pression_Ligne = 6.00853
+  Position_Verin = 1.5098
+  Niveau_Silo = 41.5
+  Charge_Tremie = 83.9
+  Temps_Synoptique = 15.4
+  Temps_Graphiques = 15.4
+  Debit_Essai = 99.7867
+  Pression_Essai = 2.52411
+  Poids_Sachet = 500.17
+  Vibration_Pompe = 51.3138
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x5)
+  vers Vue_Navigation
+  journal Navigation [] Vue_Ligne → Vue_Navigation
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x5)
+t=17.00  vue=Vue_Poste_Gaz
+  Secondes_IHM = 17
+  Temps_Ligne = 16.2
+  Pression_Ligne = 6.02175
+  Position_Verin = 3.82384
+  Niveau_Silo = 39.5
+  Charge_Tremie = 86.7
+  Temps_Synoptique = 16.2
+  Temps_Graphiques = 16.2
+  Debit_Essai = 98.3143
+  Pression_Essai = 2.81246
+  Poids_Sachet = 498.832
+  Vibration_Pompe = 60.8664
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x4)
+  vers Vue_Poste_Gaz
+  journal Navigation [] Vue_Navigation → Vue_Poste_Gaz
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x4)
+t=18.00  vue=Vue_Detail_Armoire_B
+  Secondes_IHM = 18
+  Temps_Ligne = 17
+  Pression_Ligne = 6.14837
+  Position_Verin = 24.4148
+  Niveau_Silo = 37.5
+  Charge_Tremie = 89.5
+  Temps_Synoptique = 17
+  Temps_Graphiques = 17
+  Debit_Essai = 95.4814
+  Pression_Essai = 3.29991
+  Poids_Sachet = 499.18
+  Vibration_Pompe = 69.8234
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x4)
+  vers Vue_Detail_Armoire_B
+  journal Navigation [] Vue_Poste_Gaz → Vue_Detail_Armoire_B
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x4)
+t=19.00  vue=Vue_Armoire_B
+  Compteur_Clics = 2
+  Secondes_IHM = 19
+  Temps_Ligne = 17.8
+  Pression_Ligne = 6.38113
+  Position_Verin = 55.1326
+  Niveau_Silo = 35.5
+  Charge_Tremie = 22.1
+  Temps_Synoptique = 17.8
+  Temps_Graphiques = 17.8
+  Debit_Essai = 91.3679
+  Pression_Essai = 3.51392
+  Poids_Sachet = 499.193
+  Vibration_Pompe = 77.2754
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x4)
+  vers Vue_Armoire_B
+  journal Navigation [] Vue_Detail_Armoire_B → Vue_Armoire_B
+  journal Journal [Vue_Armoire_B.OnOpen] Armoire A ouverte (2 fois)
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x4)
+t=20.00  vue=Vue_Poste_Synoptique
+  Secondes_IHM = 20
+  Pompe_Marche = TRUE
+  Temps_Ligne = 18.6
+  Pression_Ligne = 6.7067
+  Heures_Pompe = 0.00333333
+  Position_Verin = 83.8189
+  Niveau_Silo = 33.5
+  Charge_Tremie = 24.9
+  Temps_Synoptique = 18.6
+  Temps_Graphiques = 18.6
+  Debit_Essai = 86.0896
+  Pression_Essai = 4.46979
+  Poids_Sachet = 498.238
+  Vibration_Pompe = 82.4658
+  Pieces_Bonnes = 26
+  Fraction_Piece = 0.25
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x4)
+  vers Vue_Poste_Synoptique
+  journal Navigation [] Vue_Armoire_B → Vue_Poste_Synoptique
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x4)
+  journal Journal [script Statistiques_Pression] Pression A : mini 0.0, maxi 0.0 bar (20 mesures)
+t=21.00  vue=Vue_Communication
+  Secondes_IHM = 21
+  Temps_Ligne = 19.4
+  Pression_Ligne = 7.1064
+  Heures_Pompe = 0.00361111
+  Position_Verin = 99.1193
+  Niveau_Silo = 31.5
+  Charge_Tremie = 27.7
+  Temps_Synoptique = 19.4
+  Temps_Graphiques = 19.4
+  Debit_Essai = 79.7951
+  Pression_Essai = 4.91936
+  Poids_Sachet = 501.255
+  Vibration_Pompe = 84.8676
+  Pieces_Bonnes = 28
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x4)
+  vers Vue_Communication
+  journal Navigation [] Vue_Poste_Synoptique → Vue_Communication
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x4)
+t=22.00  vue=Vue_Equipements
+  Secondes_IHM = 22
+  Temps_Ligne = 20.2
+  Pression_Ligne = 7.55733
+  Heures_Pompe = 0.00388889
+  Position_Verin = 94.978
+  Niveau_Silo = 29.5
+  Charge_Tremie = 30.5
+  Temps_Synoptique = 20.2
+  Temps_Graphiques = 20.2
+  Debit_Essai = 72.6617
+  Pression_Essai = 5.67754
+  Poids_Sachet = 500.966
+  Vibration_Pompe = 84.237
+  Pieces_Bonnes = 30
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x4)
+  vers Vue_Equipements
+  journal Navigation [] Vue_Communication → Vue_Equipements
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x4)
+t=23.00  vue=Vue_GIF
+  Secondes_IHM = 23
+  Temps_Ligne = 21
+  Pression_Ligne = 8.03363
+  Heures_Pompe = 0.00416667
+  Position_Verin = 73.0339
+  Niveau_Silo = 27.5
+  Charge_Tremie = 33.3
+  Temps_Synoptique = 21
+  Temps_Graphiques = 21
+  Debit_Essai = 64.8901
+  Pression_Essai = 6.5589
+  Poids_Sachet = 499.909
+  Vibration_Pompe = 80.638
+  Pieces_Bonnes = 32
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x4)
+  vers Vue_GIF
+  journal Navigation [] Vue_Equipements → Vue_GIF
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x4)
+t=24.00  vue=Vue_Armoires_Nord
+  Secondes_IHM = 24
+  Temps_Ligne = 21.8
+  Pression_Ligne = 8.508
+  Heures_Pompe = 0.00444444
+  Position_Verin = 41.9729
+  Niveau_Silo = 25.5
+  Charge_Tremie = 36.1
+  Temps_Synoptique = 21.8
+  Temps_Graphiques = 21.8
+  Debit_Essai = 56.6992
+  Pression_Essai = 6.89834
+  Poids_Sachet = 502.583
+  Vibration_Pompe = 74.4359
+  Pieces_Bonnes = 34
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x4)
+  vers Vue_Armoires_Nord
+  journal Navigation [] Vue_GIF → Vue_Armoires_Nord
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x4)
+t=25.00  vue=Vue_Mesures_Entree
+  Secondes_IHM = 25
+  Temps_Ligne = 22.6
+  Pression_Ligne = 8.95326
+  Heures_Pompe = 0.00472222
+  Position_Verin = 14.089
+  Niveau_Silo = 23.5
+  Charge_Tremie = 38.9
+  Temps_Synoptique = 22.6
+  Temps_Graphiques = 22.6
+  Debit_Essai = 48.3198
+  Pression_Essai = 7.80492
+  Poids_Sachet = 501.953
+  Vibration_Pompe = 66.2606
+  Pieces_Bonnes = 36
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x4)
+  vers Vue_Mesures_Entree
+  journal Navigation [] Vue_Armoires_Nord → Vue_Mesures_Entree
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x4)
+  journal Journal [script Statistiques_Pression] Pression A : mini 0.0, maxi 0.0 bar (25 mesures)
+t=26.00  vue=Vue_Armoires_Sud
+  Secondes_IHM = 26
+  Temps_Ligne = 23.4
+  Pression_Ligne = 9.34386
+  Heures_Pompe = 0.005
+  Position_Verin = 0.419032
+  Niveau_Silo = 21.5
+  Charge_Tremie = 41.7
+  Temps_Synoptique = 23.4
+  Temps_Graphiques = 23.4
+  Debit_Essai = 39.9876
+  Pression_Essai = 8.09433
+  Poids_Sachet = 501.613
+  Vibration_Pompe = 56.942
+  Pieces_Bonnes = 37
+  Rebuts_Ligne = 3
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x4)
+  vers Vue_Armoires_Sud
+  journal Navigation [] Vue_Mesures_Entree → Vue_Armoires_Sud
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x4)
+t=27.00  vue=Vue_Equipements_2
+  Secondes_IHM = 27
+  Temps_Ligne = 24.2
+  Pression_Ligne = 9.65744
+  Heures_Pompe = 0.00527778
+  Position_Verin = 6.37362
+  Niveau_Silo = 19.5
+  Charge_Tremie = 44.5
+  Temps_Synoptique = 24.2
+  Temps_Graphiques = 24.2
+  Debit_Essai = 31.9374
+  Pression_Essai = 8.46033
+  Poids_Sachet = 501.685
+  Vibration_Pompe = 47.4262
+  Pieces_Bonnes = 39
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x4)
+  vers Vue_Equipements_2
+  journal Navigation [] Vue_Armoires_Sud → Vue_Equipements_2
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x4)
+t=28.00  vue=Vue_Didacticiel
+  Secondes_IHM = 28
+  Temps_Ligne = 25
+  Pression_Ligne = 9.876
+  Heures_Pompe = 0.00555556
+  Position_Verin = 29.5959
+  Niveau_Silo = 17.5
+  Charge_Tremie = 47.3
+  Temps_Synoptique = 25
+  Temps_Graphiques = 25
+  Debit_Essai = 24.3957
+  Pression_Essai = 8.96242
+  Poids_Sachet = 499.839
+  Vibration_Pompe = 38.6794
+  Pieces_Bonnes = 41
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x4)
+  vers Vue_Didacticiel
+  journal Navigation [] Vue_Equipements_2 → Vue_Didacticiel
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x4)
+t=29.00  vue=Ma_Vue
+  Secondes_IHM = 29
+  Temps_Ligne = 25.8
+  Pression_Ligne = 9.98702
+  Heures_Pompe = 0.00583333
+  Position_Verin = 60.8943
+  Niveau_Silo = 15.5
+  Charge_Tremie = 50.1
+  Temps_Synoptique = 25.8
+  Temps_Graphiques = 25.8
+  Debit_Essai = 17.575
+  Pression_Essai = 8.81767
+  Poids_Sachet = 501.177
+  Vibration_Pompe = 31.5896
+  Pieces_Bonnes = 43
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x4)
+  vers Ma_Vue
+  journal Navigation [] Vue_Didacticiel → Ma_Vue
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x4)
+t=30.00  vue=Ma_Vue
+  Secondes_IHM = 30
+  Temps_Ligne = 26.6
+  Pression_Ligne = 9.98414
+  Heures_Pompe = 0.00611111
+  Position_Verin = 87.8806
+  Niveau_Silo = 88.75
+  Charge_Tremie = 52.9
+  Temps_Synoptique = 26.6
+  Temps_Graphiques = 26.6
+  Debit_Essai = 11.6674
+  Pression_Essai = 9.23657
+  Poids_Sachet = 499.941
+  Vibration_Pompe = 26.8766
+  Pieces_Bonnes = 45
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x8)
+  journal Journal [script Statistiques_Pression] Pression A : mini 0.0, maxi 0.0 bar (30 mesures)
+t=31.00  vue=Ma_Vue
+  Secondes_IHM = 31
+  Temps_Ligne = 27.4
+  Pression_Ligne = 9.86752
+  Heures_Pompe = 0.00638889
+  Position_Verin = 99.8735
+  Niveau_Silo = 86.75
+  Charge_Tremie = 55.7
+  Temps_Synoptique = 27.4
+  Temps_Graphiques = 27.4
+  Debit_Essai = 6.83907
+  Pression_Essai = 9.14812
+  Poids_Sachet = 497.566
+  Vibration_Pompe = 25.019
+  Pieces_Bonnes = 47
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x5)
+  journal Action [alarmes (répétition)] son : bip_alarme.wav
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x3)
+t=32.00  vue=Ma_Vue
+  Secondes_IHM = 32
+  Temps_Ligne = 28.2
+  Pression_Ligne = 9.64384
+  Heures_Pompe = 0.00666667
+  Position_Verin = 92.126
+  Niveau_Silo = 84.75
+  Charge_Tremie = 58.5
+  Temps_Synoptique = 28.2
+  Temps_Graphiques = 28.2
+  Debit_Essai = 3.22607
+  Pression_Essai = 9.09988
+  Poids_Sachet = 499.842
+  Vibration_Pompe = 26.2053
+  Pieces_Bonnes = 48
+  Rebuts_Ligne = 4
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x8)
+t=33.00  vue=Ma_Vue
+  Secondes_IHM = 33
+  Temps_Ligne = 29.1
+  Pression_Ligne = 9.28043
+  Heures_Pompe = 0.00694444
+  Position_Verin = 63.9112
+  Niveau_Silo = 82.5
+  Charge_Tremie = 61.65
+  Temps_Synoptique = 29.1
+  Temps_Graphiques = 29.1
+  Debit_Essai = 0.739365
+  Pression_Essai = 9.34021
+  Poids_Sachet = 498.65
+  Vibration_Pompe = 31.0167
+  Pieces_Bonnes = 50
+  Fraction_Piece = 0.5
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x9)
+t=34.00  vue=Ma_Vue
+  Secondes_IHM = 34
+  Pompe_Marche = FALSE
+  Temps_Ligne = 29.9
+  Pression_Ligne = 8.87853
+  Heures_Pompe = 0.007125
+  Position_Verin = 32.4773
+  Niveau_Silo = 80.5
+  Charge_Tremie = 64.45
+  Temps_Synoptique = 29.9
+  Temps_Graphiques = 29.9
+  Debit_Essai = 0.000437919
+  Pression_Essai = 9.02002
+  Poids_Sachet = 499.216
+  Vibration_Pompe = 37.9033
+  Pieces_Bonnes = 51
+  Fraction_Piece = 0.75
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x8)
+t=35.00  vue=Ma_Vue
+  Secondes_IHM = 35
+  Temps_Ligne = 30.7
+  Pression_Ligne = 8.42626
+  Position_Verin = 7.97907
+  Niveau_Silo = 78.5
+  Charge_Tremie = 67.25
+  Temps_Synoptique = 30.7
+  Temps_Graphiques = 30.7
+  Debit_Essai = 0.669382
+  Pression_Essai = 9.34315
+  Poids_Sachet = 499.749
+  Vibration_Pompe = 46.5258
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x8)
+  journal Journal [script Statistiques_Pression] Pression A : mini 0.0, maxi 0.0 bar (35 mesures)
+t=36.00  vue=Ma_Vue
+  Secondes_IHM = 36
+  Temps_Ligne = 31.5
+  Pression_Ligne = 7.94956
+  Position_Verin = 0.113051
+  Niveau_Silo = 76.5
+  Charge_Tremie = 70.05
+  Temps_Synoptique = 31.5
+  Temps_Graphiques = 31.5
+  Debit_Essai = 2.72736
+  Pression_Essai = 9.14871
+  Poids_Sachet = 498.041
+  Vibration_Pompe = 56.0087
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x8)
+t=37.00  vue=Ma_Vue
+  Secondes_IHM = 37
+  Temps_Ligne = 32.3
+  Pression_Ligne = 7.47575
+  Position_Verin = 11.9927
+  Niveau_Silo = 74.5
+  Charge_Tremie = 72.85
+  Temps_Synoptique = 32.3
+  Temps_Graphiques = 32.3
+  Debit_Essai = 6.11643
+  Pression_Essai = 9.10505
+  Poids_Sachet = 500.819
+  Vibration_Pompe = 65.3891
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x8)
+t=38.00  vue=Ma_Vue
+  Secondes_IHM = 38
+  Temps_Ligne = 33.1
+  Pression_Ligne = 7.032
+  Position_Verin = 38.916
+  Niveau_Silo = 72.5
+  Charge_Tremie = 75.65
+  Temps_Synoptique = 33.1
+  Temps_Graphiques = 33.1
+  Debit_Essai = 10.7412
+  Pression_Essai = 9.2811
+  Poids_Sachet = 501.722
+  Vibration_Pompe = 73.7148
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x8)
+t=39.00  vue=Ma_Vue
+  Secondes_IHM = 39
+  Temps_Ligne = 33.9
+  Pression_Ligne = 6.64373
+  Position_Verin = 70.2264
+  Niveau_Silo = 70.5
+  Charge_Tremie = 78.45
+  Temps_Synoptique = 33.9
+  Temps_Graphiques = 33.9
+  Debit_Essai = 16.4713
+  Pression_Essai = 8.84305
+  Poids_Sachet = 500.144
+  Vibration_Pompe = 80.1404
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x8)
+t=40.00  vue=Ma_Vue
+  Secondes_IHM = 40
+  Temps_Ligne = 34.7
+  Pression_Ligne = 6.33321
+  Position_Verin = 93.531
+  Niveau_Silo = 68.5
+  Charge_Tremie = 81.25
+  Temps_Synoptique = 34.7
+  Temps_Graphiques = 34.7
+  Debit_Essai = 23.1456
+  Pression_Essai = 8.96989
+  Poids_Sachet = 502.157
+  Vibration_Pompe = 84.0134
+  journal Erreur [script Animation_Ligne] Temperature_Local : pas de liaison avec Centrale PM5560 (x8)
+  journal Journal [script Statistiques_Pression] Pression A : mini 0.0, maxi 0.0 bar (40 mesures)

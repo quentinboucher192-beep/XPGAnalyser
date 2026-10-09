@@ -723,6 +723,16 @@ bool HmiFunctionsPane::renameFunction(Id id, const std::string& name, std::strin
         return false;
     }
     const std::string old = f->name;
+    // 1.11.17 : un appel court qui changerait de cible (une fonction du symbole du meme nom) : refuse.
+    if (const auto captured = hmi::renameCaptures(doc_->project, symbolView(), old, name); !captured.empty()) {
+        reason = symbolView() ? "dans " + hmikit::fewOf(captured, 3) + ", " + name + "() vise d\xC3\xA9j\xC3\xA0 une fonction IHM : "
+                                    "il viserait la fonction renomm\xC3\xA9" "e"
+                              : "dans " + hmikit::fewOf(captured, 3) + ", " + old + "() viserait la fonction " + name
+                                    + " du symbole, pas celle-ci";
+        if (why) *why = reason;
+        say("Renommage refus\xC3\xA9 : " + reason, true);
+        return false;
+    }
     std::size_t changed = 0;
     auto cmd = hmi::changeProject(doc_, "Renommer la fonction " + old + " en " + name, [&](hmi::Project& p) {
         // 1.11.10 : une fonction de symbole - ses appels (dans le symbole, Instance.Nom, Vue.Instance.Nom)

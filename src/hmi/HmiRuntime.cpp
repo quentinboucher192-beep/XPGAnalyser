@@ -208,6 +208,17 @@ public:
     // Lot 8 : les parametres de la vue dont le code tourne (Moteur -> Pompes[3]).
     // Les variables locales passent avant, les variables IHM et l'automate apres.
     const Scope* aliases{nullptr};
+    // 1.11.17 : le texte a trous d'IHM_JOURNAL ou d'IHM_LOG se remplit : il lit aussi les
+    // locales du code qui l'appelle (VAR, VAR_TEMP, parametres : sim::readCallerLocal).
+    // Avant, '{Mini:0.0}' dans un script qui declare Mini rendait ###.
+    int callerLocals{0};
+    struct CallerLocals {
+        Env& env;
+        explicit CallerLocals(Env& e) : env(e) { ++env.callerLocals; }
+        ~CallerLocals() { --env.callerLocals; }
+        CallerLocals(const CallerLocals&) = delete;
+        CallerLocals& operator=(const CallerLocals&) = delete;
+    };
 
     [[nodiscard]] std::string resolved(std::string_view n) const { return aliases ? aliases->resolve(n) : std::string(n); }
     // 1.11.1 (API-M) : API.<globale>, API.<Unite>.<variable> - le nom que
@@ -218,6 +229,7 @@ public:
     bool read(std::string_view n, sim::Value& out) override {
         if (!frames.empty())
             if (const auto it = frames.back()->find(upper(n)); it != frames.back()->end()) { out = it->second; return true; }
+        if (callerLocals > 0 && sim::readCallerLocal(n, out)) return true;     // 1.11.17
         // 1.10 (decision 15) : un litteral d'enumeration T_MODE#Auto (ou T_MODE#1) : sa valeur, un DINT.
         if (n.find('#') != std::string_view::npos && rt_.project_) {
             const HmiType* type = nullptr;
@@ -352,6 +364,7 @@ public:
     }
     bool exists(std::string_view n) override {
         if (!frames.empty() && frames.back()->count(upper(n)) != 0) return true;
+        if (sim::Value probe; callerLocals > 0 && sim::readCallerLocal(n, probe)) return true;     // 1.11.17
         if (aliases && aliases->value(n)) return true;
         const std::string r = resolved(n);
         if (!r.empty() && r[0] == '$') {   // 1.9 : la copie d'un parametre
@@ -594,6 +607,7 @@ private:
             return true;
         }
         if (u == "IHM_JOURNAL") {
+            const CallerLocals locals(*this);
             rt_.log("Journal", rt_.source_, TextTemplate::compile(text(0)).render(*this));
             result = sim::Value::boolean(true);
             return true;
@@ -613,6 +627,7 @@ private:
                 return false;
             }
             const int line = static_cast<int>(rt_.trace_.line);
+            const CallerLocals locals(*this);
             rt_.logAt(*level, "IHM_LOG", rt_.source_, TextTemplate::compile(text(1)).render(*this), line > 0 ? line : -1);
             result = sim::Value::boolean(true);
             return true;

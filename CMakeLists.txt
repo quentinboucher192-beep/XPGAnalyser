@@ -529,6 +529,8 @@ if(XPG_BUILD_TESTS)
     xpg_target_link_libraries(hmi_simdata_test PRIVATE xpg_hmi)
     xpg_add_test_executable(hmi_retain_test tests/hmi_retain_test.cpp)        # 1.11.16 : la remanence d'exploitation
     xpg_target_link_libraries(hmi_retain_test PRIVATE xpg_hmi)
+    xpg_add_test_executable(hmi_trace_test tests/hmi_trace_test.cpp)          # 1.11.17 : la trace de reference (refonte, lot 0)
+    xpg_target_link_libraries(hmi_trace_test PRIVATE xpg_hmi)
     # ---- Lot API 8 : didacticiels et aide (les huit parcours, leurs pages de l'aide, le menu Aide) ----
     xpg_add_test_executable(lot8tutorials_test tests/lot8tutorials_test.cpp src/app/TopBar.cpp src/app/TopBarLot8.cpp src/app/TutorialsLot8.cpp)   # Lot API 8 : bandeau haut (+ TopBarLot8.cpp)
     # ---- Lot API 8 : tests - xpg_ui AVANT xpg_import : ui::buildHelp (ui/HelpDocument.cpp) appelle
@@ -642,6 +644,14 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME hmilog       COMMAND hmi_log_test)                     # ---- 1.11.14 : IHM_LOG et la Console ----
     xpg_add_test(NAME hmisimdata   COMMAND hmi_simdata_test)                 # ---- 1.11.15 : la remanence de simulation ----
     xpg_add_test(NAME hmiretain    COMMAND hmi_retain_test)                  # ---- 1.11.16 : la remanence d'exploitation ----
+    xpg_add_test(NAME hmitrace     COMMAND hmi_trace_test ${CMAKE_CURRENT_SOURCE_DIR}/bac/Armoire_Gaz      # ---- 1.11.17 : la trace de reference ----
+                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/trace/armoire_gaz.trace)
+    # ---- 1.11.17 (refonte des scripts, lot 0) : XpgAnalyzer.vcxproj (outils\build.bat, MSBuild)
+    #  nomme chaque source que CMake ramasse ; il en manquait vingt et un depuis la 1.11.3.
+    find_package(Python3 COMPONENTS Interpreter QUIET)
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME vcxproj COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/outils/verifier_vcxproj.py)
+    endif()
     xpg_add_test(NAME searchfocus COMMAND searchfocus_test)                  # ---- Lot API 8 : finitions (Ctrl+F) ----
     xpg_add_test(NAME lot8tutorials COMMAND lot8tutorials_test)              # ---- Lot API 8 : didacticiels et aide ----
     xpg_add_test(NAME topbar8 COMMAND topbar8_test)                          # ---- Lot API 8 : bandeau haut ----

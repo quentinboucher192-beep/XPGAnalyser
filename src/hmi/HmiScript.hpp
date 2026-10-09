@@ -130,13 +130,58 @@ inline constexpr std::string_view kLocalTypes[] = {"BOOL", "INT", "DINT", "UINT"
 // Un texte a trous ("Moyenne : {Moyenne(a, b):0.0}") ou "=expression" : les
 // appels dans les accolades, ou dans toute l'expression.
 [[nodiscard]] std::string renameCallsInText(std::string_view text, std::string_view from, std::string_view to);
-// Partout dans le projet : scripts generaux et de vue, fonctions, actions,
-// proprietes et animations des objets, conditions et messages d'alarme.
-// Rend le nombre de textes changes.
+// 1.11.17 : la meme lecture pour toute reecriture : `f` recoit chaque expression
+// du texte a trous (le contenu des accolades) ou toute l'expression ("=...").
+[[nodiscard]] std::string rewriteInText(std::string_view text, const std::function<std::string(std::string_view)>& f);
+
+// ---- 1.11.17 (refonte des scripts, lot 0) : CHAQUE TEXTE DU PROJET QUI PEUT CITER
+//  UNE FONCTION, UNE VALEUR D'ENUMERATION... - une seule liste, pour que Renommer et
+//  "Appelee par" ne s'ecartent plus : les scripts (generaux, de vue, de popup, de
+//  symbole), les fonctions (IHM et de symbole), les redefinitions des instances, les
+//  operateurs (de symbole, de type), les actions et les proprietes des objets (lues
+//  comme rewriteNames les lit : expressions, listes, etats, cellules, arguments,
+//  cibles), les titres et parametres des vues, les alarmes (du projet, de symbole,
+//  surchargees : condition, message, consigne), les recettes, les historiques et les
+//  autorisations par expression.
+enum class CodeForm : std::uint8_t {
+    Code,         // du ST : des instructions (un script, une fonction, un operateur)
+    Expression,   // une expression (une condition, une propriete, un argument)
+    Template,     // un texte a trous : rien hors des accolades (ou "=expression")
+};
+struct CodeSite {
+    // Le symbole ou un appel court cherche d'abord sa propre fonction : le code d'un
+    // symbole, d'une de ses popups, d'une redefinition (HmiSymbols.hpp,
+    // qualifySymbolCalls) ; nullptr : un appel court vise une fonction IHM.
+    const View*        scope{nullptr};
+    // La vue (ou le symbole) dont un chemin relatif nomme les instances : Vanne_3.Ouvrir()
+    // dans son code (qualifyViewCalls, qualifySymbolCalls) ; nullptr : seulement Vue.Instance.
+    const View*        view{nullptr};
+    const HmiFunction* own{nullptr};    // le corps d'une fonction IHM : son nom y est aussi son retour
+    std::string        where;           // "script Calcul", "Vue_A/Btn (action)", "fonction Pompe.Ouvrir"...
+    std::string        group{};         // "Appelee par" ne cite un groupe qu'une fois ; "" : `where`
+};
+using CodeVisit = std::function<void(std::string& text, CodeForm, const CodeSite&)>;
+using ConstCodeVisit = std::function<void(const std::string& text, CodeForm, const CodeSite&)>;
+// Un texte vide est aussi passe (au visiteur de l'ignorer). Ecrire dans `text`
+// change le projet ; un texte d'objet n'est reecrit que si un morceau a change.
+void forEachCode(Project&, const CodeVisit&);
+void forEachCode(const Project&, const ConstCodeVisit&);
+
+// Partout dans le projet (forEachCode). Dans un symbole qui a sa propre fonction
+// `from`, un appel court la vise, elle : il ne change pas. Rend le nombre de textes changes.
 std::size_t renameFunctionEverywhere(Project&, std::string_view from, std::string_view to);
 // Qui appelle cette fonction : "script Demarrage", "fonction Moyenne",
-// "Vue_A.OnOpen", "Vue_A/Btn (action)", "Vue_A/Texte_1 (text)", "alarme Haute_P".
+// "Vue_A.OnOpen", "Vue_A/Btn (action)", "Vue_A/Texte_1 (text)", "alarme Haute_P",
+// "fonction Pompe.Ouvrir", "Vue_A/Pompe_1.Ouvrir (redefinition)"...
 [[nodiscard]] std::vector<std::string> functionCallers(const Project&, std::string_view name);
+// 1.11.17 : renommer `from` en `to` detournerait des appels courts - ou ils seraient :
+//  - `symbol` nul (une fonction IHM) : un symbole qui appelle `from` et a deja sa
+//    propre fonction `to` (l'appel renomme viserait la sienne) ;
+//  - une fonction de `symbol` : un appel court de `to` dans le symbole, qui vise
+//    aujourd'hui une fonction IHM (il viserait la fonction renommee).
+// Vide : le renommage ne detourne rien.
+[[nodiscard]] std::vector<std::string> renameCaptures(const Project&, const View* symbol, std::string_view from,
+                                                      std::string_view to);
 // Le corps d'une nouvelle fonction : un en-tete, un parametre d'exemple et,
 // si elle rend une valeur, l'affectation de son nom.
 [[nodiscard]] std::string functionTemplate(std::string_view name, std::string_view returnType,

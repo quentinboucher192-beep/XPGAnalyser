@@ -3,12 +3,15 @@
 #include "../sim/Interpreter.hpp"
 #include "HmiScriptCheck110.hpp"   // 1.10 : les noms du dialecte (fonctions internes, FOR EACH)
 #include "HmiMarkers.hpp"          // 1.11.1 (REP) : les $ des reperes, transparents dans un script ST
+#include "HmiOperators.hpp"        // 1.11.17 : la signature d'un operateur (le lieu d'un appel)
+#include "HmiSymbols.hpp"          // 1.11.17 : la portee d'un symbole, rewriteNames (les textes d'un objet)
 
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
 #include <cstring>
 #include <set>
+#include <type_traits>
 
 namespace hmi {
 
@@ -682,8 +685,8 @@ std::string renameCalls(std::string_view s, std::string_view from, std::string_v
     return out;
 }
 
-std::string renameCallsInText(std::string_view text, std::string_view from, std::string_view to) {
-    if (!text.empty() && text.front() == '=') return "=" + renameCalls(text.substr(1), from, to);
+std::string rewriteInText(std::string_view text, const std::function<std::string(std::string_view)>& f) {
+    if (!text.empty() && text.front() == '=') return "=" + f(text.substr(1));
     std::string out;
     std::size_t i = 0;
     while (i < text.size()) {
@@ -692,7 +695,7 @@ std::string renameCallsInText(std::string_view text, std::string_view from, std:
         const auto close = text.find('}', open);
         if (close == std::string_view::npos) break;
         out.append(text.substr(i, open + 1 - i));
-        out += renameCalls(text.substr(open + 1, close - open - 1), from, to);
+        out += f(text.substr(open + 1, close - open - 1));
         out += '}';
         i = close + 1;
     }
@@ -700,80 +703,185 @@ std::string renameCallsInText(std::string_view text, std::string_view from, std:
     return out;
 }
 
+std::string renameCallsInText(std::string_view text, std::string_view from, std::string_view to) {
+    return rewriteInText(text, [&](std::string_view e) { return renameCalls(e, from, to); });
+}
+
+// ---- 1.11.17 (refonte, lot 0) : le parcours de chaque texte du projet --------------
+namespace {
+
+// La valeur d'une action : un script (Executer un script), un texte a trous (Journal),
+// sinon une expression (une affectation, des arguments...).
+CodeForm actionForm(const Action& a) {
+    if (a.operation == Operation::RunScript) return CodeForm::Code;
+    return a.operation == Operation::Log ? CodeForm::Template : CodeForm::Expression;
+}
+
+// Les morceaux qu'en lit rewriteNames (une expression, une accolade d'un texte a trous,
+// une plume, un etat, une cellule, un argument...) ; vrai : l'un d'eux a change.
+template <class Visit>
+bool visitPieces(Object& holder, const CodeSite& site, Visit& visit) {
+    bool touched = false;
+    rewriteNames(holder, [&](std::string_view t, bool code) {
+        std::string text(t);
+        visit(text, code ? CodeForm::Code : CodeForm::Expression, site);
+        if (text != t) touched = true;
+        return text;
+    });
+    return touched;
+}
+
+// Un objet : ses proprietes, ses actions, ses alarmes surchargees et (une instance)
+// ses fonctions redefinies. `O` : Object ou const Object ; `view` : la vue qui le porte.
+template <class O, class Visit>
+void visitObject(const Project& p, O& o, const View* view, const View* scope, Visit& visit) {
+    constexpr bool kWrite = !std::is_const_v<O>;
+    const std::string at = view->name + "/" + o.name;
+    const std::string props = at + " (propri\xC3\xA9t\xC3\xA9s)";
+    for (auto& pr : o.props) {
+        const CodeSite site{.scope = scope, .view = view, .where = at + " (" + pr.key + ")", .group = props};
+        Object holder;
+        holder.kind = o.kind;
+        holder.props.push_back(pr);
+        if (visitPieces(holder, site, visit)) {
+            if constexpr (kWrite) pr = std::move(holder.props.front());
+        }
+        if (o.kind == Kind::InputField && (pr.key == "min" || pr.key == "max")) visit(pr.value, CodeForm::Expression, site);
+        visit(pr.value, CodeForm::Template, site);       // un texte a trous ailleurs que dans "text" (un nom de fichier...)
+    }
+    if (!o.actions.empty()) {
+        const CodeSite site{.scope = scope, .view = view, .where = at + " (action)"};
+        Object holder;
+        holder.actions = o.actions;
+        if (visitPieces(holder, site, visit)) {
+            if constexpr (kWrite) o.actions = std::move(holder.actions);
+        }
+        for (auto& a : o.actions) visit(a.value, actionForm(a), site);
+    }
+    for (auto& ov : o.alarmOverrides) {                   // 1.9 : une instance surcharge une alarme du symbole
+        const CodeSite site{.where = at + " (alarme " + ov.alarm + ")"};
+        if (ov.condition) visit(*ov.condition, CodeForm::Expression, site);
+        if (ov.message) visit(*ov.message, CodeForm::Template, site);
+        if (ov.instruction) visit(*ov.instruction, CodeForm::Template, site);
+    }
+    // 1.11.10 : le corps d'une redefinition est lu dans SON symbole (celui de l'instance).
+    const View* own = o.functionOverrides.empty() ? nullptr : symbolOf(p, o);
+    for (auto& fo : o.functionOverrides)
+        visit(fo.body, CodeForm::Code,
+              CodeSite{.scope = own, .view = own, .where = at + "." + fo.function + " (red\xC3\xA9" "finition)"});
+}
+
+template <class P, class Visit>
+void visitProject(P& p, Visit& visit) {
+    const auto alarm = [&](auto& a, const std::string& where) {
+        const CodeSite site{.where = where};              // une alarme de symbole : pas de qualification (HmiObjectAlarms)
+        visit(a.condition, CodeForm::Expression, site);
+        visit(a.message, CodeForm::Template, site);
+        visit(a.instruction, CodeForm::Template, site);
+    };
+    const auto ops = [&](auto& list, const std::string& owner) {
+        for (auto& o : list)
+            visit(o.body, CodeForm::Code, CodeSite{.where = "op\xC3\xA9rateur " + operatorSignature(o) + " (" + owner + ")"});
+    };
+    for (auto& sc : p.programs.scripts) {
+        if (sc.lang != ScriptLang::ST) continue;
+        const CodeSite site{.where = "script " + sc.name};
+        visit(sc.body, CodeForm::Code, site);
+        visit(sc.watch, CodeForm::Expression, site);
+    }
+    for (auto& f : p.programs.functions) visit(f.body, CodeForm::Code, CodeSite{.own = &f, .where = "fonction " + f.name});
+    for (auto& t : p.programs.types) ops(t.operators, "type " + t.name);
+    for (auto& v : p.views) {
+        // Le code d'un symbole, et d'une popup qu'il porte : un appel court y vise d'abord ses fonctions.
+        const View* scope = isSymbolView(v) ? &v : popupOwner(p, v);
+        for (auto& sc : v.scripts)
+            if (sc.lang == ScriptLang::ST)
+                visit(sc.body, CodeForm::Code, CodeSite{.scope = scope, .view = &v, .where = v.name + "." + sc.event});
+        if (!v.actions.empty()) {
+            const CodeSite site{.scope = scope, .view = &v, .where = v.name + " (action de vue)"};
+            Object holder;
+            holder.actions = v.actions;
+            if (visitPieces(holder, site, visit)) {
+                if constexpr (!std::is_const_v<P>) v.actions = std::move(holder.actions);
+            }
+            for (auto& a : v.actions) visit(a.value, actionForm(a), site);
+        }
+        for (auto& o : v.objects) visitObject(p, o, &v, scope, visit);
+        // Le titre d'une popup et la valeur par defaut d'un parametre ne sont pas qualifies
+        // (qualifiedOwnedPopup, symbolArguments) : un appel court y vise une fonction IHM.
+        visit(v.popup.title, CodeForm::Template, CodeSite{.where = v.name + " (titre)"});
+        for (auto& prm : v.params)
+            visit(prm.defaultValue, CodeForm::Expression, CodeSite{.where = v.name + " (param\xC3\xA8tre " + prm.name + ")"});
+        for (auto& fn : v.functions)
+            visit(fn.body, CodeForm::Code, CodeSite{.scope = scope, .view = &v, .where = "fonction " + v.name + "." + fn.name});
+        ops(v.operators, v.name);
+        for (auto& a : v.alarms) alarm(a, "alarme " + v.name + "." + a.name);
+    }
+    for (auto& a : p.alarms) alarm(a, "alarme " + a.name);
+    for (auto& r : p.recipes)
+        for (auto& rec : r.records)
+            for (auto& val : rec.values) visit(val, CodeForm::Expression, CodeSite{.where = "recette " + r.name});
+    for (auto& u : p.security.users)
+        if (u.protection == "expression")
+            visit(u.expression, CodeForm::Expression, CodeSite{.where = "utilisateur " + u.login + " (autorisation)"});
+    for (auto& archived : p.history.archived) visit(archived, CodeForm::Expression, CodeSite{.where = "historique"});
+}
+
+// Un appel court de `name` y vise la fonction du symbole, pas la fonction IHM.
+bool shadowed(const CodeSite& s, std::string_view name) { return s.scope && symbolFunction(*s.scope, name); }
+
+bool callsIn(const std::string& text, CodeForm form, std::string_view name) {
+    if (text.empty()) return false;
+    const auto next = form == CodeForm::Template ? renameCallsInText(text, name, "\x01") : renameCalls(text, name, "\x01");
+    return next != text;
+}
+
+} // namespace
+
+void forEachCode(Project& p, const CodeVisit& visit) { visitProject(p, visit); }
+void forEachCode(const Project& p, const ConstCodeVisit& visit) { visitProject(p, visit); }
+
 std::size_t renameFunctionEverywhere(Project& p, std::string_view from, std::string_view to) {
     std::size_t changed = 0;
-    const auto code = [&](std::string& text, bool bare = false) {
-        auto next = renameCalls(text, from, to, bare);
-        if (next != text) { text = std::move(next); ++changed; }
-    };
-    const auto templ = [&](std::string& text) {
-        auto next = renameCallsInText(text, from, to);
-        if (next != text) { text = std::move(next); ++changed; }
-    };
-    const auto actions = [&](std::vector<Action>& list) {
-        for (auto& a : list) {
-            code(a.watch);
-            code(a.guard);
-            if (a.operation == Operation::Log) templ(a.value);
-            else code(a.value);
-            code(a.params);                                  // 1.11.6 : Maths, clavier virtuel
-        }
-    };
-    for (auto& sc : p.programs.scripts) if (sc.lang == ScriptLang::ST) { code(sc.body); code(sc.watch); }
-    for (auto& f : p.programs.functions) code(f.body, upper(f.name) == upper(from) || upper(f.name) == upper(to));
-    for (auto& v : p.views) {
-        for (auto& sc : v.scripts) if (sc.lang == ScriptLang::ST) code(sc.body);
-        actions(v.actions);
-        for (auto& o : v.objects) {
-            actions(o.actions);
-            for (auto& pr : o.props) {
-                code(pr.expr);
-                templ(pr.value);
-            }
-        }
-    }
-    for (auto& a : p.alarms) {
-        code(a.condition);
-        templ(a.message);
-    }
+    const std::string key = upper(from), next = upper(to);
+    forEachCode(p, [&](std::string& text, CodeForm form, const CodeSite& s) {
+        if (text.empty() || shadowed(s, from)) return;
+        const bool bare = s.own && (upper(s.own->name) == key || upper(s.own->name) == next);
+        auto out = form == CodeForm::Template ? renameCallsInText(text, from, to) : renameCalls(text, from, to, bare);
+        if (out != text) { text = std::move(out); ++changed; }
+    });
     return changed;
 }
 
 std::vector<std::string> functionCallers(const Project& p, std::string_view name) {
     std::vector<std::string> out;
+    std::set<std::string> said;
     const std::string key = upper(name);
-    const auto calls = [&](std::string_view text) {
-        for (const auto& c : scriptCallees(text)) if (upper(c.name) == key) return true;
-        return false;
-    };
-    const auto inText = [&](std::string_view text) {
-        return renameCallsInText(text, name, "\x01") != text;      // un appel a ete trouve
-    };
-    const auto actionCalls = [&](const std::vector<Action>& list) {
-        for (const auto& a : list)
-            if (calls(a.watch) || calls(a.guard) || (a.operation == Operation::Log ? inText(a.value) : calls(a.value)) || calls(a.params))
-                return true;
-        return false;
-    };
-    for (const auto& sc : p.programs.scripts)
-        if (sc.lang == ScriptLang::ST && (calls(sc.body) || calls(sc.watch))) out.push_back("script " + sc.name);
-    for (const auto& f : p.programs.functions)
-        if (upper(f.name) != key && calls(f.body)) out.push_back("fonction " + f.name);
-    for (const auto& v : p.views) {
-        for (const auto& sc : v.scripts)
-            if (sc.lang == ScriptLang::ST && calls(sc.body)) out.push_back(v.name + "." + sc.event);
-        if (actionCalls(v.actions)) out.push_back(v.name + " (action de vue)");
-        for (const auto& o : v.objects) {
-            if (actionCalls(o.actions)) out.push_back(v.name + "/" + o.name + " (action)");
-            for (const auto& pr : o.props)
-                if (calls(pr.expr) || inText(pr.value)) {
-                    out.push_back(v.name + "/" + o.name + " (" + pr.key + ")");
-                    break;
-                }
+    forEachCode(p, [&](const std::string& text, CodeForm form, const CodeSite& s) {
+        if ((s.own && upper(s.own->name) == key) || shadowed(s, name)) return;   // pas elle-meme
+        const std::string& group = s.group.empty() ? s.where : s.group;
+        if (said.count(group) || !callsIn(text, form, name)) return;
+        said.insert(group);
+        out.push_back(s.where);
+    });
+    return out;
+}
+
+std::vector<std::string> renameCaptures(const Project& p, const View* symbol, std::string_view from, std::string_view to) {
+    std::vector<std::string> out;
+    std::set<std::string> said;
+    forEachCode(p, [&](const std::string& text, CodeForm form, const CodeSite& s) {
+        if (!s.scope) return;
+        std::string_view call;
+        if (!symbol) {
+            if (symbolFunction(*s.scope, from) || !symbolFunction(*s.scope, to)) return;
+            call = from;
+        } else {
+            if (s.scope != symbol || symbolFunction(*symbol, to)) return;
+            call = to;
         }
-    }
-    for (const auto& a : p.alarms)
-        if (calls(a.condition) || inText(a.message)) out.push_back("alarme " + a.name);
+        if (callsIn(text, form, call) && said.insert(s.where).second) out.push_back(s.where);
+    });
     return out;
 }
 
