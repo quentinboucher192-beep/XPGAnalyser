@@ -934,8 +934,32 @@ void HmiEditor::rebuildProperties() {
             cats.front().properties.insert(cats.front().properties.begin(), std::move(p));
         }
     }
+    // 1.12.3 : la ligne des etats d'un voyant ou d'un texte multi-etats - son bouton « ... »
+    // ouvre la table de l'onglet Contenu (un etat par ligne, selon la valeur ou des conditions).
+    if (const auto sel = canvas_->selection(); sel.size() == 1)
+        if (const auto* o = v->object(sel.front());
+            o && (o->kind == hmi::Kind::MultiStateIndicator || o->kind == hmi::Kind::MultiStateText))
+            for (auto& c : cats)
+                for (auto& p : c.properties)
+                    if (p.key == "stateList") {
+                        p.open = [this] { (void)openStatesTable(); };
+                        p.openTip = "Les \xC3\xA9tats en table : Contenu \xE2\x80\xBA \xC3\x89tats (une ligne par \xC3\xA9tat, "
+                                    "selon la valeur ou selon des conditions)";
+                    }
     applyPropertyFilters(*v, cats);
     props_->setCategories(std::move(cats));
+}
+
+// 1.12.3 : l'onglet Contenu, sur la table des etats de l'objet choisi.
+bool HmiEditor::openStatesTable() {
+    const auto sel = canvas_->selection();
+    if (sel.size() != 1) return false;
+    if (content_->object() != sel.front()) content_->setObject(sel.front());
+    layout();                                         // l'onglet Contenu se montre s'il etait cache
+    const int at = inspector_->indexOf(content_);
+    if (at < 0 || content_->mode() != HmiContentPanel::Mode::States) return false;
+    inspector_->setCurrentIndex(static_cast<std::size_t>(at));
+    return true;
 }
 
 // 1.10.3 : les filtres de l'onglet Proprietes - les nombres, puis ce qui reste montre.

@@ -3653,6 +3653,19 @@ void etats1123() {
     const Id txt = b.place(Kind::MultiStateText, 400, 100);
     b.editor->layout();
     check(content.object() == txt && content.mode() == app::HmiContentPanel::Mode::States && content.count() == 4, "un texte multi-\xC3\xA9tats : 4 \xC3\xA9tats");
+    // ---- le bouton « ... » de la ligne Etats de l'inspecteur : l'onglet Contenu
+    b.editor->inspector().setCurrentIndex(0);
+    const ui::PropertyGrid::Property* row = nullptr;
+    for (const auto& c : b.editor->properties().categories())
+        for (const auto& p : c.properties)
+            if (p.key == "stateList") row = &p;
+    check(row && row->open, "la ligne \xC3\x89tats a son bouton \xC2\xAB \xE2\x80\xA6 \xC2\xBB");
+    if (row && row->open) {
+        const auto open = row->open;           // la grille peut etre refaite
+        open();
+    }
+    const int at = b.editor->inspector().indexOf(&b.editor->content());
+    check(at >= 0 && b.editor->inspector().currentIndex() == static_cast<std::size_t>(at), "... il ouvre Contenu \xE2\x80\xBA \xC3\x89tats");
 }
 
 // 1.12.3 : PLUSIEURS OBJETS CHOISIS - l'inspecteur montre leurs proprietes communes, « (plusieurs
