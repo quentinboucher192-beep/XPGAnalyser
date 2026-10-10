@@ -17259,6 +17259,76 @@ void objetsListes1122() {
     }
 }
 
+// 1.12.3 : LES COURBES ENREGISTRENT DES LE DEMARRAGE - une courbe d'une vue jamais affichee (et un
+// chronogramme) s'echantillonne quand meme ; une popup a parametres ouverte aussi, sa plume lisant
+// son parametre.
+void courbesDemarrage1123() {
+    std::printf("1.12.3 : les courbes enregistrent des le demarrage, sans aller sur leur page\n");
+    Project p;
+    View a = makeView(p, "Vue_Accueil");
+    View b = makeView(p, "Vue_Courbes");
+    p.programs.variables.push_back(hmiVar(p, "Niveau", "REAL", "12.5"));
+    p.programs.variables.push_back(hmiVar(p, "Marche", "BOOL", "TRUE"));
+    const Id trend = edit::add(p, b, Kind::Trend, 10, 10);
+    b.object(trend)->set("variables", "Niveau");
+    const Id chart = edit::add(p, b, Kind::StateChart, 10, 300);
+    b.object(chart)->set("variables", "Marche");
+    p.views = {a, b};
+    p.config.startView = a.id;
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    for (int k = 1; k <= 5; ++k) rt.tick(0.5 * k);
+    check(rt.currentView() == a.id, "la vue d'accueil est affich\xC3\xA9" "e, pas celle des courbes");
+    const auto* series = rt.trend(b.id, trend);
+    check(series && series->size() == 1 && series->front().points.size() >= 4 && series->front().points.back().second == 12.5,
+          "la courbe de Vue_Courbes enregistre d\xC3\xA9j\xC3\xA0 (" + std::to_string(series && !series->empty() ? series->front().points.size() : 0) + " points)");
+    const auto* states = rt.chartSeries(b.id, chart);
+    check(states && states->size() == 1 && !states->front().points.empty(), "le chronogramme aussi");
+    rt.stop(3.0);
+}
+
+// 1.12.3 : UNE ECRITURE SUR UNE VARIABLE FORCEE - ignoree, mais dite : la Console (une fois par
+// variable, encore apres Defaire le forcage), l'action « ignoree (forcee) ».
+void ecritureForcee1123() {
+    std::printf("1.12.3 : une ecriture sur une variable forcee se dit\n");
+    Project p;
+    View v = makeView(p, "Vue");
+    p.programs.variables.push_back(hmiVar(p, "Niveau", "REAL", "0.0"));
+    auto& bt = addButton(p, v, "Remplir", 10, 10);
+    bt.actions.push_back(act(Trigger::Click, Operation::Assign, "Niveau", "45"));
+    const Id btId = bt.id;
+    p.views = {v};
+    p.config.startView = v.id;
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    std::string why;
+    check(rt.forceVariable("Niveau", sim::Value::real(80), &why), "forcer Niveau \xC3\xA0 80");
+    const auto warnings = [&] {
+        int n = 0;
+        for (const auto& e : rt.journal())
+            if (e.message.find("Niveau est forc\xC3\xA9" "e : \xC3\xA9" "criture ignor\xC3\xA9" "e (45)") != std::string::npos) ++n;
+        return n;
+    };
+    rt.press(btId, 0.1);
+    rt.release(btId, 0.15, true);
+    rt.press(btId, 0.2);
+    rt.release(btId, 0.25, true);
+    check(rt.variable("Niveau")->asReal() == 80, "le for\xC3\xA7" "age tient : 80");
+    check(warnings() == 1, "la Console le dit, une fois (" + std::to_string(warnings()) + ")");
+    check(journalHas(rt, "Action", "Niveau := 45 : ignor\xC3\xA9" "e (forc\xC3\xA9" "e)"), "l'action dit \xC2\xAB ignor\xC3\xA9" "e (forc\xC3\xA9" "e) \xC2\xBB");
+    check(rt.unforceVariable("Niveau") && rt.forceVariable("Niveau", sim::Value::real(70), &why), "d\xC3\xA9" "faire, puis reforcer");
+    rt.press(btId, 0.3);
+    rt.release(btId, 0.35, true);
+    check(warnings() == 2, "apr\xC3\xA8s D\xC3\xA9" "faire le for\xC3\xA7" "age, elle se redit");
+    rt.unforceAllVariables();
+    rt.press(btId, 0.4);
+    rt.release(btId, 0.45, true);
+    check(rt.variable("Niveau")->asReal() == 45 && journalHas(rt, "Action", "Niveau := 45"), "sans for\xC3\xA7" "age, l'action \xC3\xA9" "crit");
+    rt.stop(1.0);
+}
+
 void scriptsCollections1122() {
     std::printf("1.12.2 : les collections des scripts (LIST, VECTOR, TUPLE, litteraux, fonctions)\n");
     Project p;
@@ -21919,6 +21989,8 @@ int main(int argc, char** argv) {
     scriptsLangage110();              // 1.10 (S1) : le langage des scripts
     scriptsCollections1122();         // 1.12.2 : LIST, VECTOR, TUPLE, les litteraux
     objetsListes1122();               // 1.12.2 : la liste, les elements depuis une source, le tableau dynamique
+    courbesDemarrage1123();           // 1.12.3 : les courbes enregistrent des le demarrage
+    ecritureForcee1123();             // 1.12.3 : une ecriture sur une variable forcee se dit
     enumerationsLangage110();         // 1.10 (S1, decision 15) : les enumerations dans les scripts
     operateurs110();                  // 1.10 (chantier S2) : les operateurs des symboles et des types IHM
     operateurs1101();                 // 1.10.1 (chantier U2) : a, b et Resultat (types, legende, exemple, Compiler)

@@ -109,7 +109,10 @@ bool Runtime::writeCommand(const View& v, const Object& o, const sim::Value& val
         formMessage(o.id, "variable inconnue : " + var, true, now);
         return false;
     }
-    if (journal) {
+    if (journal && lastWriteForced_) {
+        // 1.12.3 : la variable est forcee - l'ecriture n'a rien fait, le journal le dit.
+        log("Action", source, var + " = " + formatValue(value) + " : ignor\xC3\xA9" "e (forc\xC3\xA9" "e)");
+    } else if (journal) {
         sim::Value after;
         const std::string text = environment().read(var, after) ? formatValue(after) : formatValue(value);
         log("Action", source, var + " = " + text + (shown.empty() || shown == text ? std::string{} : " (" + shown + ")"));

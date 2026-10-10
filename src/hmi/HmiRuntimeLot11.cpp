@@ -150,9 +150,8 @@ const std::vector<TrendSeries>* Runtime::chartSeries(Id view, Id object) const {
 }
 
 void Runtime::sampleCharts(double now) {
-    std::vector<Id> shown{current_};
-    shown.insert(shown.end(), popups_.begin(), popups_.end());
-    for (const Id id : shown) {
+    // 1.12.3 : le meme plan que les courbes - toutes les vues ou l'on peut naviguer, des le demarrage.
+    for (const Id id : samplingPlan(now)) {
         const auto* v = viewOf(id);
         if (!v) continue;
         const auto aliases = viewAliases(id);

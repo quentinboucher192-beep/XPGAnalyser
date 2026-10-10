@@ -1237,6 +1237,13 @@ private:
     void evaluateAlarms(double now);
     void closeAlarm(std::size_t index);
     void sampleTrends(double now);
+    // 1.12.3 : LE PLAN D'ECHANTILLONNAGE - les vues dont les courbes et les graphiques enregistrent :
+    // ce qui est ouvert (la vue, les popups), puis toutes les vues ou l'on peut naviguer (les vues
+    // ordinaires, les popups sans parametre) - une courbe enregistre des le demarrage, sans qu'on
+    // soit alle sur sa page. Les vues du projet : relues au plus une fois par seconde.
+    [[nodiscard]] std::vector<Id> samplingPlan(double now);
+    std::vector<Id> samplePlan_;
+    double          samplePlanAt_{-1e9};
     void sampleArchive(double now);
     void event(std::string kind, std::string source, std::string message);
     void watchTriggers(const View&, double now, bool cycle);
@@ -1315,6 +1322,11 @@ private:
     std::map<std::string, sim::ObjRef, std::less<>>      rich_;        // 1.12.2 : les variables objets (cle : le nom en majuscules)
     std::set<std::string>                                boundsReported_;
     std::set<std::string, std::less<>>                   forcedIhm_;   // 1.11.5 : les variables IHM forcees (en majuscules)
+    // 1.12.3 : une ecriture sur une variable forcee est ignoree - la Console le dit, une fois par
+    // variable (encore apres Defaire le forcage) ; lastWriteForced_ : la derniere ecriture l'etait.
+    std::set<std::string, std::less<>>                   forcedWarned_;
+    bool                                                 lastWriteForced_{false};
+    void forcedWriteIgnored(const std::string& key, const std::string& shown, const sim::Value& v);   // key : en majuscules
     bool aggregateRead(const std::string& path, sim::Value& out);
     [[nodiscard]] bool outOfBoundsPath(const std::string& path, std::string* why) const;
     void reportBounds(const std::string& path, const std::string& why);

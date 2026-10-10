@@ -394,11 +394,17 @@ public:
         }
         if (const auto it = vars.find(upper(r)); it != vars.end()) {
             // 1.11.5 : forcee (l'onglet Variables IHM de la simulation), elle garde sa valeur.
-            if (rt_.forcedIhm_.count(it->first)) return true;
+            // 1.12.3 : la Console le dit (une fois par variable), l'action aussi (lastWriteForced_).
+            if (rt_.forcedIhm_.count(it->first)) {
+                rt_.forcedWriteIgnored(it->first, std::string(r), v);
+                return true;
+            }
             // 1.11.7 : liee a un esclave simule qui la force (ou l'anime) : le forcage passe
             // avant le script - l'ecriture est ignoree, sans erreur.
-            if (!rt_.bound_.empty() && rt_.hooks_.boundForced && rt_.boundVariable(it->first) && rt_.hooks_.boundForced(it->first))
+            if (!rt_.bound_.empty() && rt_.hooks_.boundForced && rt_.boundVariable(it->first) && rt_.hooks_.boundForced(it->first)) {
+                rt_.forcedWriteIgnored(it->first, std::string(r), v);
                 return true;
+            }
             // Lot 15 : une variable liee a un equipement s'ecrit dans l'equipement ;
             // refusee (lecture seule, sans liaison), elle ne change pas.
             if (!rt_.bound_.empty()) {
@@ -1022,9 +1028,23 @@ bool Runtime::forceVariable(std::string_view name, const sim::Value& value, std:
     return true;
 }
 
-bool Runtime::unforceVariable(std::string_view name) { return forcedIhm_.erase(upper(name)) > 0; }
+bool Runtime::unforceVariable(std::string_view name) {
+    forcedWarned_.erase(upper(name));      // 1.12.3 : une nouvelle ecriture ignoree se redira
+    return forcedIhm_.erase(upper(name)) > 0;
+}
 
-void Runtime::unforceAllVariables() { forcedIhm_.clear(); }
+void Runtime::unforceAllVariables() {
+    forcedIhm_.clear();
+    forcedWarned_.clear();
+}
+
+void Runtime::forcedWriteIgnored(const std::string& key, const std::string& shown, const sim::Value& v) {
+    lastWriteForced_ = true;
+    if (!forcedWarned_.insert(key).second) return;
+    logAt(LogLevel::Warning, "Simulation", "IHM",
+          shown + " est forc\xC3\xA9" "e : \xC3\xA9" "criture ignor\xC3\xA9" "e (" + (v.type() == sim::Type::String ? "'" + v.asString() + "'" : v.display())
+              + ") - D\xC3\xA9" "faire le for\xC3\xA7" "age pour qu'elle reprenne");
+}
 
 bool Runtime::variableForced(std::string_view name) const { return forcedIhm_.count(upper(name)) > 0; }
 
@@ -1292,6 +1312,7 @@ bool Runtime::writeDirect(const std::string& path, const sim::Value& v, const st
 
 bool Runtime::write(const std::string& name, const sim::Value& v, const std::string& source) {
     publicWhy_.clear();
+    lastWriteForced_ = false;
     if (env_->exists(name) && env_->write(name, v)) return true;
     // Lot 9 : une variable systeme, une propriete en lecture seule - dit pourquoi.
     log("Erreur", source, "\xC3\xA9" "criture refus\xC3\xA9" "e : " + (publicWhy_.empty() ? name + " (variable inconnue)" : publicWhy_));
@@ -1676,7 +1697,7 @@ void Runtime::fire(const View& v, const Object* o, const Action& a, double now, 
                             : a.operation == Operation::Reset ? false
                             : !(known && cur.isTruthy());
             if (write(a.target, sim::Value::boolean(next), source))
-                log("Action", source, std::string(operationLabel(a.operation)) + " " + a.target + " = " + (next ? "TRUE" : "FALSE"));
+                log("Action", source, std::string(operationLabel(a.operation)) + " " + a.target + " = " + (next ? "TRUE" : "FALSE") + (lastWriteForced_ ? std::string(" : ignor\xC3\xA9" "e (forc\xC3\xA9" "e)") : std::string{}));
             break;
         }
         case Operation::Increment:
@@ -1697,7 +1718,7 @@ void Runtime::fire(const View& v, const Object* o, const Action& a, double now, 
             if (write(a.target, next, source)) {
                 sim::Value after;
                 (void)env_->read(a.target, after);
-                log("Action", source, a.target + " : " + formatValue(cur) + " \xE2\x86\x92 " + formatValue(after));
+                log("Action", source, a.target + " : " + formatValue(cur) + " \xE2\x86\x92 " + formatValue(after) + (lastWriteForced_ ? std::string(" : ignor\xC3\xA9" "e (forc\xC3\xA9" "e)") : std::string{}));
             }
             break;
         }
@@ -1706,7 +1727,7 @@ void Runtime::fire(const View& v, const Object* o, const Action& a, double now, 
             if (it == expressions_.end()) it = expressions_.emplace(a.value, Expression::compile(a.value)).first;
             auto val = it->second.evaluate(*env_);
             if (!val) { log("Erreur", source, a.target + " := " + a.value + " : " + val.error().message()); break; }
-            if (write(a.target, *val, source)) log("Action", source, a.target + " := " + formatValue(*val));
+            if (write(a.target, *val, source)) log("Action", source, a.target + " := " + formatValue(*val) + (lastWriteForced_ ? std::string(" : ignor\xC3\xA9" "e (forc\xC3\xA9" "e)") : std::string{}));
             break;
         }
         case Operation::Navigate: {
@@ -3656,12 +3677,36 @@ const std::vector<TrendSeries>* Runtime::trend(Id view, Id object) const {
     return it == trends_.end() ? nullptr : &it->second;
 }
 
+std::vector<Id> Runtime::samplingPlan(double now) {
+    if (project_ && (now - samplePlanAt_ >= 1.0 || now < samplePlanAt_)) {
+        samplePlanAt_ = now;
+        samplePlan_.clear();
+        for (const auto& v : project_->views) {
+            const bool navigable = v.role == "vue" || (v.role == "popup" && v.params.empty());
+            if (!navigable) continue;
+            // Seulement celles qui ont de quoi enregistrer (une courbe, un graphique en memoire) - la vue
+            // composee : son ecran modele, ses instances de symbole comptent.
+            const View* c = viewOf(v.id);
+            if (!c) continue;
+            const bool records = std::any_of(c->objects.begin(), c->objects.end(), [](const Object& o) {
+                return o.kind == Kind::Trend || o.kind == Kind::StateChart || o.kind == Kind::XYChart || o.kind == Kind::Histogram;
+            });
+            if (records) samplePlan_.push_back(v.id);
+        }
+    }
+    std::vector<Id> out{current_};
+    for (const Id p : popups_)
+        if (std::find(out.begin(), out.end(), p) == out.end()) out.push_back(p);
+    for (const Id p : samplePlan_)
+        if (std::find(out.begin(), out.end(), p) == out.end()) out.push_back(p);
+    return out;
+}
+
 void Runtime::sampleTrends(double now) {
-    std::vector<Id> shown{current_};
-    shown.insert(shown.end(), popups_.begin(), popups_.end());
-    for (const Id id : shown) {
+    for (const Id id : samplingPlan(now)) {
         const auto* v = viewOf(id);
         if (!v) continue;
+        const auto aliases = viewAliases(id);   // 1.12.3 : une plume qui cite un parametre de la vue (Cuve.Niveau)
         for (const auto& o : v->objects) {
             if (o.kind != Kind::Trend) continue;
             const std::string mode = o.text("mode", "temps r\xC3\xA9" "el");
