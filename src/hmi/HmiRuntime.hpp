@@ -836,6 +836,9 @@ public:
 
     // ---- courbes -------------------------------------------------------------------
     [[nodiscard]] const std::vector<TrendSeries>* trend(Id view, Id object) const;
+    // 1.12.3 : une popup a parametres garde une serie par jeu d'arguments (Cuves[2] et
+    // Cuves[3] ne se melangent plus) - "|CUVE=Cuves[2]" ; vide : une vue sans parametre.
+    [[nodiscard]] std::string argumentsKey(Id view) const;
     // Lot 18 : LES MARQUES DES COURBES - ce qui a change la valeur d'une variable
     // simulee (une zone de mouvement tiree, un forcage) : une ligne verticale sur
     // les courbes qui la tracent, a l'heure du changement (now()).

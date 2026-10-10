@@ -3752,8 +3752,24 @@ void Runtime::addTrendMarker(std::string variable, std::string text, bool forced
 }
 
 const std::vector<TrendSeries>* Runtime::trend(Id view, Id object) const {
-    const auto it = trends_.find(std::to_string(view) + ":" + std::to_string(object));
+    const auto it = trends_.find(std::to_string(view) + ":" + std::to_string(object) + argumentsKey(view));
     return it == trends_.end() ? nullptr : &it->second;
+}
+
+std::string Runtime::argumentsKey(Id view) const {
+    const View* v = project_ ? project_->view(view) : nullptr;
+    if (!v || v->params.empty()) return {};
+    const Scope* s = viewScope(view);
+    if (!s) return {};
+    std::vector<std::string> names = s->names();
+    std::sort(names.begin(), names.end());
+    std::string out;
+    for (const auto& n : names) {
+        out += "|" + n + "=";
+        if (const auto* a = s->alias(n)) out += *a;
+        else if (const auto* x = s->value(n)) out += x->display();
+    }
+    return out;
 }
 
 std::vector<Id> Runtime::samplingPlan(double now) {
@@ -3804,7 +3820,7 @@ void Runtime::sampleTrends(double now) {
                     from = at + 1;
                 }
             }
-            auto& series = trends_[std::to_string(id) + ":" + std::to_string(o.id)];
+            auto& series = trends_[std::to_string(id) + ":" + std::to_string(o.id) + argumentsKey(id)];   // 1.12.3 : par jeu d'arguments
             bool same = series.size() == pens.size();
             for (std::size_t i = 0; same && i < pens.size(); ++i) same = series[i].expression == pens[i];
             if (!same) {

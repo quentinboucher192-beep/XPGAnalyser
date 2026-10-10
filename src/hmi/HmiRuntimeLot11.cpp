@@ -145,7 +145,7 @@ void Runtime::resetLot11() {
 
 // ================================================================ graphiques ===
 const std::vector<TrendSeries>* Runtime::chartSeries(Id view, Id object) const {
-    const auto it = charts_.find(keyOf(view, object));
+    const auto it = charts_.find(keyOf(view, object) + argumentsKey(view));
     return it == charts_.end() ? nullptr : &it->second;
 }
 
@@ -157,7 +157,7 @@ void Runtime::sampleCharts(double now) {
         const auto aliases = viewAliases(id);
         for (const auto& o : v->objects) {
             if (o.kind != Kind::StateChart && o.kind != Kind::XYChart && o.kind != Kind::Histogram) continue;
-            const std::string key = keyOf(id, o.id);
+            const std::string key = keyOf(id, o.id) + argumentsKey(id);   // 1.12.3 : par jeu d'arguments
             auto& series = charts_[key];
             const auto eval = [&](const std::string& expr, double& out) {
                 if (plcUnread(expr)) return false;   // lot 14 : pas encore lue, ou illisible

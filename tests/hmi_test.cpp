@@ -17671,6 +17671,52 @@ void etatPoste1123() {
     check(relu && !relu->station.keepLayout, "l'option d\xC3\xA9" "coch\xC3\xA9" "e : enregistr\xC3\xA9" "e, relue");
 }
 
+// 1.12.3 : UNE POPUP A PARAMETRES GARDE UNE SERIE PAR JEU D'ARGUMENTS - Cuves[2] et
+// Cuves[3] ne se melangent plus quand on la rouvre avec d'autres arguments.
+void courbesParArguments1123() {
+    std::printf("1.12.3 : une popup a parametres garde une serie par jeu d'arguments\n");
+    Project p;
+    HmiType cuve;
+    cuve.id = p.allocate();
+    cuve.name = "T_Cuve";
+    cuve.members = {{"Niveau", "REAL", "", ""}};
+    p.programs.types.push_back(cuve);
+    p.programs.variables.push_back(hmiVar(p, "Cuves", "ARRAY[1..3] OF T_Cuve"));
+    View a = makeView(p, "Vue");
+    View pop = makeView(p, "Popup_Cuve");
+    pop.role = "popup";
+    pop.params = {{"Cuve", "", ""}};
+    const Id trend = edit::add(p, pop, Kind::Trend, 10, 10);
+    pop.object(trend)->set("variables", "Cuve.Niveau");
+    const Id popId = pop.id;
+    p.views = {a, pop};
+    p.config.startView = a.id;
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    (void)rt.environment().write("Cuves[2].Niveau", sim::Value::real(20));
+    (void)rt.environment().write("Cuves[3].Niveau", sim::Value::real(30));
+    const auto values = [&] {
+        std::set<double> seen;
+        if (const auto* s = rt.trend(popId, trend); s && !s->empty())
+            for (const auto& pt : s->front().points) seen.insert(pt.second);
+        return seen;
+    };
+    check(rt.openPopup(popId, Transition{}, 0.1, "Cuve := Cuves[2]", ""), "ouvrir Popup_Cuve (Cuves[2])");
+    for (int k = 1; k <= 4; ++k) rt.tick(0.1 + 0.5 * k);
+    check(values() == std::set<double>{20.0}, "Cuves[2] : sa s\xC3\xA9rie (20)");
+    (void)rt.closeAllPopups(Transition{}, 2.5);
+    check(rt.openPopup(popId, Transition{}, 2.6, "Cuve := Cuves[3]", ""), "rouvrir avec Cuves[3]");
+    for (int k = 1; k <= 4; ++k) rt.tick(2.6 + 0.5 * k);
+    check(values() == std::set<double>{30.0}, "Cuves[3] : une autre s\xC3\xA9rie, sans les points de Cuves[2]");
+    (void)rt.closeAllPopups(Transition{}, 5.0);
+    check(rt.openPopup(popId, Transition{}, 5.1, "Cuve := Cuves[2]", ""), "revenir sur Cuves[2]");
+    rt.tick(5.6);
+    check(values() == std::set<double>{20.0} && rt.trend(popId, trend)->front().points.size() >= 5,
+          "Cuves[2] retrouve sa s\xC3\xA9rie, qui continue");
+    rt.stop(6.0);
+}
+
 void scriptsCollections1122() {
     std::printf("1.12.2 : les collections des scripts (LIST, VECTOR, TUPLE, litteraux, fonctions)\n");
     Project p;
@@ -22339,6 +22385,7 @@ int main(int argc, char** argv) {
     sonsMelanges1123();               // 1.12.3 : les sons se melangent ; Silence, l'arret
     popupSymboleAlarmes1123();        // 1.12.3 : les popups de symbole, les alarmes de leurs objets
     etatPoste1123();                  // 1.12.3 : le poste garde onglets, panneaux replies, defilement
+    courbesParArguments1123();        // 1.12.3 : une serie par jeu d'arguments d'une popup
     enumerationsLangage110();         // 1.10 (S1, decision 15) : les enumerations dans les scripts
     operateurs110();                  // 1.10 (chantier S2) : les operateurs des symboles et des types IHM
     operateurs1101();                 // 1.10.1 (chantier U2) : a, b et Resultat (types, legende, exemple, Compiler)
