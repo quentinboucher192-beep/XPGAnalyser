@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.12.2", "10/10/2026", "livr\xC3\xA9" "e le 10/10 dans l'apr\xC3\xA8s-midi"},
     {"1.12.1", "10/10/2026", "livr\xC3\xA9" "e le 10/10 en fin de nuit"},
     {"1.12.0", "10/10/2026", "livr\xC3\xA9" "e le 10/10 dans la nuit"},
     {"1.11.24", "09/10/2026", "livr\xC3\xA9" "e le 09/10 en fin de soir\xC3\xA9" "e"},
@@ -107,6 +108,23 @@ const std::vector<Note>& table() {
     static const std::vector<Note> t = {
         // 1.11.16 (09/10/2026 dans la nuit) : la remanence d'exploitation par variable, la robustesse
         // (lot 4 de la specification du 08/10).
+        // 1.12.2 (10/10/2026 dans l'apres-midi) : les raccourcis de Visual Studio, les pieges de
+        // l'editeur, les types objets partout, la liste et le tableau dynamiques, l'IHM sans automate.
+        note("1.12.2", "\xC3\x89" "diteurs", Kind::New,
+         "LES RACCOURCIS DE VISUAL STUDIO dans les \xC3\xA9" "diteurs de code (scripts, fonctions, op\xC3\xA9rateurs, script d'une action) : les accords Ctrl+K puis Ctrl+C (commenter), Ctrl+K Ctrl+U (d\xC3\xA9" "commenter), Ctrl+K Ctrl+D (mettre en forme), Ctrl+K Ctrl+S (entourer de IF, FOR, WHILE, CASE, TRY) ; dupliquer, monter et descendre une ligne (Alt+fl\xC3\xA8" "ches), couper la ligne, Ctrl+C sans s\xC3\xA9lection, MAJUSCULES et minuscules, signets, plis au clavier, Rechercher / Remplacer, F12, Maj+F12, F2. Le profil \xC2\xAB classique \xC2\xBB (sans accords) se choisit dans Aller \xC3\xA0 ; la page des raccourcis les dessine.",
+         "raccourcis", ""),
+        note("1.12.2", "\xC3\x89" "diteur", Kind::Fixed,
+         "LES PI\xC3\x88GES DE L'\xC3\x89" "DITEUR : une action de vue ne propose plus Clic, Double clic ni Appui long (ils ne partaient jamais) ; lier une variable r\xC3\xA9manente \xC3\xA0 un \xC3\xA9quipement retire sa r\xC3\xA9manence ; plus de colonne Public / Priv\xC3\xA9 sans effet dans les d\xC3\xA9" "clarations ; le Profil utilisateur, que rien ne lisait, quitte l'inspecteur ; Projet > Nouveau propose les cr\xC3\xA9" "ations de l'IHM ; Aller \xC3\xA0 ne propose plus la Table des adresses cach\xC3\xA9" "e.",
+         "editeur", ""),
+        note("1.12.2", "Types", Kind::New,
+         "LES TYPES OBJETS PARTOUT : LIST OF T, VECTOR OF T, MAP[K] OF T, TUPLE(T1, T2...), ARRAY \xC3\xA0 une ou deux dimensions, dans tous les cr\xC3\xA9" "ateurs de variables (Nouvelle variable IHM, Cr\xC3\xA9" "er la variable, les d\xC3\xA9" "clarations des scripts et des fonctions, les constantes, le retour d'une fonction : sa Forme et son type pr\xC3\xA9" "cis). Les litt\xC3\xA9raux [1, 2, 3], ['a' := 1], (1, 'x'), un \xC3\xA9" "diteur des \xC3\xA9l\xC3\xA9ments (une valeur par ligne) ; 28 fonctions natives (LIST_ADD, LIST_SORT, LIST_SUM, VECTOR_PUSH, JOIN, SPLIT...). Une variable de taille variable vit dans la m\xC3\xA9moire de l'IHM : \xC3\x89quipement et Adresse bloqu\xC3\xA9s, et une variable li\xC3\xA9" "e qui le devient est d\xC3\xA9li\xC3\xA9" "e (le message le dit).",
+         "types-ihm", ""),
+        note("1.12.2", "Objets", Kind::New,
+         "LA LISTE, LA LISTE D\xC3\x89ROULANTE ET LE TABLEAU suivent une variable : \xC2\xAB \xC3\x89l\xC3\xA9ments depuis \xC2\xBB (une \xC3\xA9num\xC3\xA9ration, une variable LIST, VECTOR, MAP, un tableau, une expression a;b;c) remplace la liste \xC3\xA9" "crite \xC3\xA0 la main, aussi pour les boutons radio et le s\xC3\xA9lecteur. La Liste devient une commande : un clic \xC3\xA9" "crit sa ligne, la ligne choisie se surligne, elle d\xC3\xA9" "file. Le Tableau a des \xC2\xAB Lignes depuis \xC2\xBB une variable : une ligne par \xC3\xA9l\xC3\xA9ment, autant qu'elle en a, les colonnes de son type (membres, Item1..., Cl\xC3\xA9 et Valeur), il d\xC3\xA9" "file et s'exporte entier.",
+         "objet-liste", ""),
+        note("1.12.2", "Application", Kind::Changed,
+         "Programmation g\xC3\xA9n\xC3\xA9rale n'a plus la branche Variables employ\xC3\xA9" "es : o\xC3\xB9 une variable sert se trouve par IHM > Rechercher ou Maj+F12 dans un \xC3\xA9" "diteur. XPGAnalyser IHM ne parle plus d'automate : l'inspecteur, les bulles, la Communication (ses \xC3\xA9quipements seulement), le diagnostic syst\xC3\xA8me et le guide disent les mots de l'IHM.",
+         "variables-ihm", ""),
         // 1.12.1 (10/10/2026 en fin de nuit) : les enumerations natives des objets, les operateurs,
         // les instructions et les types de la liste du 10/10.
         note("1.12.1", "Natives", Kind::New,
