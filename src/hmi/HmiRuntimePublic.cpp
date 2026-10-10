@@ -405,13 +405,10 @@ bool Runtime::sysValue(std::string_view wanted, sim::Value& out) const {
     if (n == "LastJournal") return text(journal_.empty() ? std::string{} : journal_.back().message);
     if (n == "LastExport") return text(lastExport_);          // lot 11
     if (n == "ExportCount") return integer(exports_);
-    if (n == "ErrorCount" || n == "LastError") {
-        long long c = 0;
-        std::string last;
-        for (const auto& e : journal_)
-            if (e.kind == "Erreur") { ++c; last = e.message; }
-        return n == "ErrorCount" ? integer(c) : text(last);
-    }
+    // 1.12.3 : comptees depuis le demarrage - le nombre ne redescend plus quand la memoire oublie
+    // les vieilles lignes du journal.
+    if (n == "ErrorCount") return integer(errorCount_);
+    if (n == "LastError") return text(lastError_);
 
     // ---- l'automate
     // Lot 14 : relie a un automate reel (Modbus TCP), il est "connecte" quand il

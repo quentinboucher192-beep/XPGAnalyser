@@ -37,7 +37,7 @@ namespace hmi {
 namespace {
 
 constexpr int         kMaxDepth = 32;    // 1.11.10 : 8 avant - les fonctions et operateurs s'appellent entre eux
-constexpr std::size_t kJournalMax = 500;
+constexpr std::size_t kJournalMax = 500;    // sans projet ; 1.12.3 : sinon Configuration > Historiques (maxEntries, 2 000)
 
 std::string upper(std::string_view s) {
     std::string out(s);
@@ -1256,8 +1256,19 @@ void Runtime::logAt(LogLevel level, std::string kind, std::string source, std::s
         if (history_->system.size() > static_cast<std::size_t>(std::max(10, project_->history.maxEntries)) + 64)
             history_->trim(project_->history);
     }
+    // 1.12.3 : SYS.ErrorCount compte toutes les erreurs de la marche, meme celles que la memoire a oubliees.
+    if (e.kind == "Erreur") {
+        ++errorCount_;
+        lastError_ = e.message;
+    }
     journal_.push_back(std::move(e));
-    while (journal_.size() > kJournalMax) journal_.pop_front();
+    while (journal_.size() > journalCap()) journal_.pop_front();
+}
+
+// 1.12.3 : les lignes gardees en memoire (journal, evenements, alarmes closes) : le reglage des
+// Historiques (Lignes gardees, 2 000 par defaut), 100 au moins.
+std::size_t Runtime::journalCap() const {
+    return project_ ? static_cast<std::size_t>(std::max(100, project_->history.maxEntries)) : kJournalMax;
 }
 
 void Runtime::event(std::string kind, std::string source, std::string message) {
@@ -1268,7 +1279,7 @@ void Runtime::event(std::string kind, std::string source, std::string message) {
             history_->trim(project_->history);
     }
     events_.push_back(std::move(e));
-    while (events_.size() > kJournalMax) events_.pop_front();
+    while (events_.size() > journalCap()) events_.pop_front();
     log(std::move(kind), std::move(source), std::move(message));
 }
 
@@ -2496,6 +2507,8 @@ void Runtime::start(double now) {
                        std::chrono::system_clock::now().time_since_epoch()).count();
     lastCycle_ = -1;
     journal_.clear();
+    errorCount_ = 0;
+    lastError_.clear();
     triggers_.clear();
     scriptNext_.clear();
     scriptWatch_.clear();
@@ -2779,6 +2792,8 @@ void Runtime::prime(double now) {
     startWallMs_ = std::chrono::duration_cast<std::chrono::milliseconds>(
                        std::chrono::system_clock::now().time_since_epoch()).count();
     journal_.clear();
+    errorCount_ = 0;
+    lastError_.clear();
     runs_.clear();
     errors_.clear();
     depth_ = 0;
@@ -3148,7 +3163,7 @@ void Runtime::closeAlarm(std::size_t index) {
             history_->trim(project_->history);
     }
     closed_.push_back(std::move(occ));
-    while (closed_.size() > kJournalMax) closed_.pop_front();
+    while (closed_.size() > journalCap()) closed_.pop_front();
     alarms_.erase(alarms_.begin() + static_cast<long>(index));
 }
 

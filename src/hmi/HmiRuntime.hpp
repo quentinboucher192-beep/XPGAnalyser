@@ -1248,6 +1248,10 @@ private:
     // soit alle sur sa page. Les vues du projet : relues au plus une fois par seconde.
     [[nodiscard]] std::vector<Id> samplingPlan(double now);
     std::vector<Id> samplePlan_;
+    // 1.12.3 : les lignes gardees en memoire, et les erreurs comptees depuis le demarrage.
+    [[nodiscard]] std::size_t journalCap() const;
+    long long   errorCount_{0};
+    std::string lastError_;
     double          samplePlanAt_{-1e9};
     void sampleArchive(double now);
     void event(std::string kind, std::string source, std::string message);

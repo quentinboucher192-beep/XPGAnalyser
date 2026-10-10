@@ -17366,6 +17366,29 @@ void vraieCase1123() {
     rt.stop(1.0);
 }
 
+// 1.12.3 : LA MEMOIRE DU JOURNAL - un reglage des Historiques (Lignes gardees, 2 000 par defaut) ;
+// SYS.ErrorCount ne redescend plus quand les vieilles lignes partent.
+void memoireJournal1123() {
+    std::printf("1.12.3 : la memoire du journal, SYS.ErrorCount\n");
+    Project p;
+    View v = makeView(p, "Vue");
+    p.views = {v};
+    p.config.startView = v.id;
+    p.history.maxEntries = 150;
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    for (int k = 0; k < 120; ++k) rt.log("Erreur", "essai", "faute " + std::to_string(k));
+    for (int k = 0; k < 300; ++k) rt.log("Action", "essai", "geste " + std::to_string(k));
+    check(rt.journal().size() == 150, "le journal garde 150 lignes, le r\xC3\xA9glage (" + std::to_string(rt.journal().size()) + ")");
+    sim::Value n;
+    check(rt.environment().read("SYS.ErrorCount", n) && n.asInteger() == 120,
+          "SYS.ErrorCount : les 120 erreurs, m\xC3\xAAme sorties de la m\xC3\xA9moire (" + n.display() + ")");
+    sim::Value last;
+    check(rt.environment().read("SYS.LastError", last) && last.asString() == "faute 119", "SYS.LastError : la derni\xC3\xA8re");
+    rt.stop(1.0);
+}
+
 void scriptsCollections1122() {
     std::printf("1.12.2 : les collections des scripts (LIST, VECTOR, TUPLE, litteraux, fonctions)\n");
     Project p;
@@ -22029,6 +22052,7 @@ int main(int argc, char** argv) {
     courbesDemarrage1123();           // 1.12.3 : les courbes enregistrent des le demarrage
     ecritureForcee1123();             // 1.12.3 : une ecriture sur une variable forcee se dit
     vraieCase1123();                  // 1.12.3 : la Console ecrit la vraie case
+    memoireJournal1123();             // 1.12.3 : la memoire du journal, SYS.ErrorCount
     enumerationsLangage110();         // 1.10 (S1, decision 15) : les enumerations dans les scripts
     operateurs110();                  // 1.10 (chantier S2) : les operateurs des symboles et des types IHM
     operateurs1101();                 // 1.10.1 (chantier U2) : a, b et Resultat (types, legende, exemple, Compiler)

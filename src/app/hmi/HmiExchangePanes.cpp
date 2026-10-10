@@ -219,7 +219,9 @@ void HmiHistoryPane::rebuildProperties() {
     PG::Category lim;
     lim.name = "Limites";
     lim.properties.push_back(prop("Entr\xC3\xA9" "es par liste (max)", std::to_string(s.maxEntries), PG::ValueType::Integer, c("max"),
-                                  "Les plus anciennes tombent au-del\xC3\xA0."));
+                                  "Les plus anciennes tombent au-del\xC3\xA0. 1.12.3 : c'est aussi ce que la marche garde en m\xC3\xA9moire "
+                                  "(le journal, les \xC3\xA9v\xC3\xA9nements, les alarmes closes ; 100 au moins). SYS.ErrorCount compte "
+                                  "toutes les erreurs depuis le d\xC3\xA9marrage, m\xC3\xAAme oubli\xC3\xA9" "es."));
     lim.properties.push_back(prop("Conservation (jours)", std::to_string(s.retentionDays), PG::ValueType::Integer, c("conservation"),
                                   "Rien de plus vieux n'est gard\xC3\xA9 \xC3\xA0 l'enregistrement. 0 : sans limite de date."));
     lim.properties.push_back(prop("\xC3\x89" "chantillonnage (ms)", std::to_string(s.samplePeriodMs), PG::ValueType::Integer, c("echantillonnage"),
