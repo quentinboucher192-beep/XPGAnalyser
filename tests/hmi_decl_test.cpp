@@ -1423,12 +1423,16 @@ void edition() {
               "BOOL : Vrai -> TRUE, faux -> FALSE");
         check(!de::set(p, script, de::Tab::Variables, 2, de::Column::Value, "1 +* 2", &why) && sd[3].value == "FALSE" && why.find("illisible") != std::string::npos,
               "une valeur illisible : refusee, la case ne bouge pas (" + why + ")");
-        // Un tableau : une seule valeur remplit toutes ses cases ; une liste [..] que le simulateur ne
-        // lit pas est refusee (elle rendrait tout le code illisible a l'execution).
+        // Un tableau : une seule valeur remplit toutes ses cases ; 1.12.2 : une liste [..] se lit (le
+        // moteur la range case par case) ; une liste illisible est refusee (elle rendrait tout le code
+        // illisible a l'execution).
         const bool one = de::set(p, script, de::Tab::Variables, 1, de::Column::Value, "1.5", &why);
         check(one && sd[2].value == "1.5", "un tableau : une valeur pour toutes ses cases - " + why);
         const bool list = de::set(p, script, de::Tab::Variables, 1, de::Column::Value, "[1.0, 2.0, 3.0, 4.0]", &why);
-        check(!list && sd[2].value == "1.5" && why.find("illisible") != std::string::npos, "une liste [..] : refusee - " + why);
+        check(list && sd[2].value == "[1.0, 2.0, 3.0, 4.0]", "1.12.2 : une liste [..] : prise - " + why);
+        const bool broken = de::set(p, script, de::Tab::Variables, 1, de::Column::Value, "[1.0, 2.0", &why);
+        check(!broken && sd[2].value == "[1.0, 2.0, 3.0, 4.0]" && why.find("illisible") != std::string::npos, "une liste sans ] : refusee - " + why);
+        check(de::set(p, script, de::Tab::Variables, 1, de::Column::Value, "1.5", &why) && sd[2].value == "1.5", "retour a 1.5");
         // 1.11.21 : LE TYPE CHANGE, LA VALEUR QUI NE LUI CONVIENT PLUS EST RETIREE (la session de la
         // 1.11.19 : 0 garde pour un ARRAY[1..4] OF T_Four) ; une valeur qui ne convient pas : refusee.
         {

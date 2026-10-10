@@ -21,6 +21,8 @@
 #include "../src/hmi/HmiRuntime.hpp"
 #include "../src/hmi/HmiStore.hpp"
 #include "../src/hmi/HmiTypeRegistry.hpp"
+#include "../src/hmi/HmiTypeForms.hpp"
+#include "../src/hmi/HmiTypes.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -303,6 +305,13 @@ void lecture() {
         {"MAP_ITERATOR", tr::UseDeclaration, true, "MAP_ITERATOR", "iter", tr::Category::Collection},
         {"Aucun", tr::UseReturn, true, "Aucun", "void", tr::Category::Void},
         {"ARRAY[0..9] OF REAL", tr::UseReturn, true, "ARRAY[0..9] OF REAL", "array[0..9]:base:REAL", tr::Category::Collection},
+        // 1.12.2 : LIST, VECTOR, TUPLE ; une MAP pour une variable IHM (dans la memoire de l'IHM)
+        {"list of real", tr::UseVariable, true, "LIST OF REAL", "list:base:REAL", tr::Category::Collection},
+        {"VECTOR OF T_Four", tr::UseReturn, true, "VECTOR OF T_Four", "vector:" + fk, tr::Category::Collection},
+        {"TUPLE(int, STRING, T_Four)", tr::UseDeclaration, true, "TUPLE(INT, STRING, T_Four)", "tuple(base:INT,base:STRING," + fk + ")",
+         tr::Category::Collection},
+        {"MAP[STRING] OF REAL", tr::UseVariable, true, "MAP[STRING] OF REAL", "map[base:STRING]:base:REAL", tr::Category::Collection},
+        {"LIST OF TUPLE(STRING, REAL)", tr::UseReturn, true, "LIST OF TUPLE(STRING, REAL)", "list:tuple(base:STRING,base:REAL)", tr::Category::Collection},
     };
     for (const auto& c : cases) {
         const auto x = r->resolve(c.text, c.use);
@@ -315,7 +324,10 @@ void lecture() {
         {"T_Inconnu", tr::UseDeclaration, "type \xC2\xAB T_Inconnu \xC2\xBB inconnu", true},
         {"ARRAY[0..9] OF T_Inconnu", tr::UseVariable, "type \xC2\xAB T_Inconnu \xC2\xBB inconnu", true},
         {"T_ANA", tr::UseDeclaration, "T_ANA ne convient pas \xC3\xA0 une d\xC3\xA9" "claration", false},
-        {"MAP[STRING] OF REAL", tr::UseVariable, "MAP ne sert qu'\xC3\xA0 une d\xC3\xA9" "claration", false},
+        {"MAP[STRING] OF REAL", tr::UseParameter, "une MAP ne convient pas \xC3\xA0 un param\xC3\xA8tre de popup", false},
+        {"LIST OF REAL", tr::UseParameter, "une LIST ne convient pas \xC3\xA0 un param\xC3\xA8tre de popup", false},
+        {"TUPLE()", tr::UseDeclaration, "TUPLE : au moins un type", false},
+        {"LIST OF T_Inconnu", tr::UseVariable, "type \xC2\xAB T_Inconnu \xC2\xBB inconnu", true},
         {"MAP[REAL] OF INT", tr::UseDeclaration, "MAP : une cl\xC3\xA9 est un STRING, un entier ou une \xC3\xA9num\xC3\xA9ration", false},
         {"ARRAY[0..1, 0..1, 0..1] OF INT", tr::UseVariable, "ARRAY : deux dimensions au plus", false},
         {"ARRAY[9..0] OF INT", tr::UseVariable, "ARRAY : la borne haute est sous la borne basse", false},
@@ -551,6 +563,71 @@ void cles() {
           "une cle sans type : rien de suivi, le texte garde T_Disparu");
 }
 
+
+// 1.12.2 : les types objets de l'IHM (isRich, isDynamic, unbindableReason, validType et
+// validMemberType), la forme d'un type (typeform::compose, decompose) et la valeur d'un type
+// objet (valueFits, literalItems).
+void objets1122() {
+    std::printf("-- 1.12.2 : les types objets et la forme d'un type\n");
+    Project p = projet();
+    namespace ty = hmi::types;
+    namespace tf = hmi::typeform;
+    const auto npos = std::string::npos;
+    check(ty::isRich("LIST OF REAL") && ty::isDynamic("LIST OF REAL"), "LIST OF REAL : un objet, de taille variable");
+    check(ty::isRich("TUPLE(INT, STRING)") && !ty::isDynamic("TUPLE(INT, STRING)"), "TUPLE : un objet, de taille fixe (sans plan m\xC3\xA9moire)");
+    check(ty::isRich("MAP[STRING] OF INT") && ty::isDynamic("ARRAY[0..2] OF LIST OF INT"), "une MAP ; un tableau de listes : de taille variable");
+    check(!ty::isRich("REAL") && !ty::isRich("ARRAY[0..9] OF REAL") && !ty::isRich("T_Four") && !ty::isRich("MAP_ITERATOR"),
+          "pas des objets : REAL, ARRAY[0..9] OF REAL, T_Four, MAP_ITERATOR");
+    check(ty::unbindableReason("ARRAY[0..9] OF REAL").empty() && ty::unbindableReason("LIST OF REAL").find("taille variable") != npos
+              && ty::unbindableReason("TUPLE(INT, REAL)").find("plan m\xC3\xA9moire") != npos,
+          "la raison : une liste a une taille variable, un tuple n'a pas de plan m\xC3\xA9moire");
+    std::string why;
+    check(ty::validType(p, "list of t_four", &why), "validType : LIST OF T_Four (" + why + ")");
+    check(!ty::validType(p, "LIST OF T_Inconnu", &why) && why.find("T_Inconnu") != npos, "validType : LIST OF T_Inconnu refus\xC3\xA9 (" + why + ")");
+    check(!ty::validMemberType(p, "VECTOR OF REAL", &why) && why.find("place fixe") != npos, "un membre de type IHM : pas de VECTOR (" + why + ")");
+    check(ty::validMemberType(p, "ARRAY[0..3] OF REAL", &why), "un membre : un tableau, oui");
+    check(ty::normalized("list of real") == "LIST OF REAL" && ty::normalized("tuple( int ,string )") == "TUPLE(INT, STRING)",
+          "remis en forme : " + ty::normalized("tuple( int ,string )"));
+    const auto f = ty::flatten(p, "L", "LIST OF REAL");
+    check(f.ok() && f.leaves.empty() && f.aggregates.empty(), "flatten : un objet de l'IHM n'a pas de cases (et pas d'erreur)");
+    Variable lv;
+    lv.name = "Mesures";
+    lv.type = "LIST OF REAL";
+    check(ty::leafVariables(p, lv).empty() && ty::isComposite(lv.type), "leafVariables : aucune case ; isComposite : oui");
+    // la forme
+    for (const char* t : {"REAL", "ARRAY[0..9] OF REAL", "ARRAY[0..3, 0..9] OF INT", "LIST OF REAL", "VECTOR OF T_Four",
+                          "MAP[STRING] OF REF_TO T_Four", "TUPLE(INT, STRING, BOOL)", "TUPLE(INT)", "LIST OF TUPLE(STRING, REAL)"})
+        check(tf::compose(tf::decompose(t)) == t, std::string("compose(decompose(") + t + ")) = " + tf::compose(tf::decompose(t)));
+    check(tf::decompose("ARRAY[0..3, 0..9] OF INT").form == tf::Form::Array2D && tf::decompose("ARRAY[1..4] OF T_Four").form == tf::Form::Array,
+          "Tableau 2D, Tableau");
+    check(tf::decompose("MAP[STRING] OF REF_TO T_Four").reference && tf::decompose("MAP[STRING] OF REF_TO T_Four").element == "T_Four",
+          "MAP[STRING] OF REF_TO T_Four : une r\xC3\xA9" "f\xC3\xA9rence vers T_Four");
+    tf::Shape sh;
+    sh.form = tf::Form::Map;
+    sh.element = "REAL";
+    check(tf::compose(sh) == "MAP[STRING] OF REAL", "un dictionnaire sans cl\xC3\xA9 \xC3\xA9" "crite : STRING");
+    sh.form = tf::Form::Array;
+    sh.parameter = "[1..4]";
+    check(tf::compose(sh) == "ARRAY[1..4] OF REAL", "des bornes \xC3\xA9" "crites [1..4] : sans leurs crochets");
+    check(tf::forms(tr::UseParameter).size() == 3 && tf::forms(tr::UseVariable).size() == 7 && tf::forms(tr::UseOperand).size() == 1
+              && tf::referenceAllowed(tr::UseReturn) && !tf::referenceAllowed(tr::UseVariable),
+          "les formes : 3 pour un param\xC3\xA8tre, 7 pour une variable, 1 pour un op\xC3\xA9rande ; REF_TO pour un retour");
+    check(tf::fromText("dictionnaire (map)") == tf::Form::Map && tf::fromText("vecteur") == tf::Form::Vector && !tf::fromText("Matrice"),
+          "fromText : le libell\xC3\xA9 ou la cl\xC3\xA9, sans casse");
+    // la valeur d'un type objet
+    check(tf::valueFits(p, "LIST OF REAL", "[1, 2.5, 3]", &why), "[1, 2.5, 3] pour une LIST OF REAL (" + why + ")");
+    check(!tf::valueFits(p, "LIST OF REAL", "[1, 2", &why) && why.find("]") != npos, "[1, 2 : il manque ] (" + why + ")");
+    check(!tf::valueFits(p, "TUPLE(INT, STRING)", "(1, 'a', 2)", &why) && why.find("3 valeur") != npos, "un tuple de trois pour deux (" + why + ")");
+    check(tf::valueFits(p, "MAP[STRING] OF INT", "['a' := 1, 'b' := 2]", &why), "['a' := 1, 'b' := 2] pour une MAP (" + why + ")");
+    check(!tf::valueFits(p, "MAP[DINT] OF INT", "['a' := 1]", &why), "une cl\xC3\xA9 texte pour une MAP \xC3\xA0 cl\xC3\xA9s enti\xC3\xA8res (" + why + ")");
+    check(tf::valueFits(p, "LIST OF T_Four", "[]", &why) && tf::valueFits(p, "VECTOR OF REAL", "", &why), "[] et vide : une liste vide");
+    std::vector<std::string> items;
+    check(tf::literalItems("[1, 'a,b', [2, 3]]", items) && items.size() == 3 && items[1] == "'a,b'" && items[2] == "[2, 3]",
+          "literalItems : les virgules dans un texte et dans une liste ne coupent pas");
+    check(tf::literalItems("[]", items) && items.empty() && !tf::literalItems("1, 2", items), "literalItems : [] vide ; 1, 2 n'est pas un litt\xC3\xA9ral");
+    check(tf::literalOf({"1", " 2 ", ""}) == "[1, 2]" && tf::literalOf({"1", "'x'"}, true) == "(1, 'x')", "literalOf : [1, 2] ; (1, 'x')");
+}
+
 } // namespace
 
 int main() {
@@ -562,6 +639,7 @@ int main() {
     valeurs();
     moteur();
     cles();
+    objets1122();
     std::printf("%d controles, %d echec(s)\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

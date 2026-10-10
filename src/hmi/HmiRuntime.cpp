@@ -470,6 +470,7 @@ public:
             return rt_.copyRead(r, probe);
         }
         if (vars.count(upper(r)) != 0) return true;
+        if (rt_.rich_.count(upper(r)) != 0) return true;           // 1.12.2 : une variable objet
         // Lot 16 : une propriete (Consignes.Length) existe ; une structure ou un
         // tableau entier (Four1) non - l'interpreteur tente alors la copie en bloc.
         if (!rt_.aggregates_.empty()) {
@@ -571,6 +572,14 @@ public:
                     if (const auto* sym = symbolOf(*rt_.project_, *o)) return sym->name;
         }
         return {};
+    }
+    // 1.12.2 : une variable IHM d'un type objet (LIST, VECTOR, MAP, TUPLE) : son objet, en place.
+    sim::ObjRef richVariable(std::string_view n) override {
+        if (rt_.rich_.empty()) return nullptr;
+        if (!frames.empty() && frames.back()->count(upper(n)) != 0) return nullptr;    // une locale du meme nom
+        const std::string r = resolved(n);
+        const auto it = rt_.rich_.find(upper(r.empty() ? std::string(n) : r));
+        return it == rt_.rich_.end() ? nullptr : it->second;
     }
     bool structMembers(std::string_view typeName, std::vector<std::pair<std::string, std::string>>& out) override {
         if (!rt_.project_) return false;
@@ -967,6 +976,38 @@ sim::Environment& Runtime::environment() { return *env_; }
 const sim::Value* Runtime::variable(std::string_view name) const {
     const auto it = env_->vars.find(upper(name));
     return it == env_->vars.end() ? nullptr : &it->second;
+}
+
+sim::ObjRef Runtime::richVariable(std::string_view name) const {
+    const auto it = rich_.find(upper(name));
+    return it == rich_.end() ? nullptr : it->second;
+}
+
+std::string Runtime::richText(std::string_view name) const {
+    const auto o = richVariable(name);
+    if (!o) return {};
+    std::string out;
+    return sim::literalText(*o, out) ? out : sim::display(*o);
+}
+
+bool Runtime::setRichVariable(std::string_view name, std::string_view literal, std::string* why) {
+    const auto it = rich_.find(upper(name));
+    if (it == rich_.end() || !it->second || !it->second->type) {
+        if (why) *why = std::string(name) + " n'est pas une variable objet (LIST, VECTOR, MAP, TUPLE)";
+        return false;
+    }
+    std::string w;
+    auto fresh = sim::makeRichValue(it->second->type->text(), literal, *env_, &w);
+    if (!fresh) {
+        if (why) *why = frenchSimMessage(w);
+        return false;
+    }
+    // En place : les references et les scripts qui la tiennent voient la nouvelle valeur.
+    if (!sim::assignObj(*it->second, *fresh, &w)) {
+        if (why) *why = frenchSimMessage(w);
+        return false;
+    }
+    return true;
 }
 
 bool Runtime::forceVariable(std::string_view name, const sim::Value& value, std::string* why) {
@@ -2509,6 +2550,7 @@ void Runtime::start(double now) {
 void Runtime::initVariables() {
     if (!project_) return;
     aggregates_.clear();
+    rich_.clear();
     boundsReported_.clear();
     // Les variables IHM, a leur valeur initiale (une expression : 0, TRUE, T#5s, 'Azote').
     // Lot 16 : une structure ou un tableau, case par case (Four1.Temperature,
@@ -2530,6 +2572,19 @@ void Runtime::initVariables() {
     for (const auto& var : project_->programs.variables) {
         if (!types::isComposite(var.type)) {
             slot(var.name, var.type, var.initial, var.name);
+            continue;
+        }
+        // 1.12.2 : un type objet (LIST, VECTOR, MAP, TUPLE) : un objet entier, a sa valeur initiale
+        // (un litteral : [1, 2, 3], ['a' := 1], (1, 'x')) ; illisible : vide, et le journal le dit.
+        if (types::isRich(var.type)) {
+            std::string why;
+            auto o = sim::makeRichValue(var.type, var.initial, *env_, &why);
+            if (!o && !var.initial.empty()) {
+                log("Erreur", "variable " + var.name, "valeur initiale illisible : " + var.initial + " (" + frenchSimMessage(why) + ")");
+                o = sim::makeRichValue(var.type, {}, *env_, &why);
+            }
+            if (o) rich_[upper(var.name)] = std::move(o);
+            else log("Erreur", "variable " + var.name, frenchSimMessage(why));
             continue;
         }
         // 1.10 (decision 15) : une variable de type enumeration vaut un DINT, le nombre de

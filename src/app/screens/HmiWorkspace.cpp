@@ -73,6 +73,7 @@
 #include "../hmi/HmiEnumPanes.hpp"                   // 1.10 (chantier U) : choisir une valeur depuis l'arbre
 #include "../ExportTarget.hpp"                       // 1.10 (chantier O) : exporter les valeurs du graphique
 #include "../../hmi/HmiTypes.hpp"
+#include "../../hmi/HmiTypeForms.hpp"                // 1.12.2 : la forme d'un type (Liste, Vecteur, MAP, Tuple...)
 #include "../hmi/HmiStationPanes.hpp"               // lot 14 : le poste d'exploitation
 #include "../hmi/HmiNotifyPanes.hpp"                // lot 14 : les notifications
 #include "../hmi/HmiReportPanes.hpp"                // lot 14 : les rapports
@@ -119,6 +120,66 @@ namespace app {
 using ui::Icon;
 using ui::TabControl;
 using NK = ProjectTreeModel::NodeKind;
+
+namespace {
+
+// ---- 1.12.2 : LA FORME D'UN TYPE DANS UN DIALOGUE ------------------------------------------
+//  Les champs d'un FormDialog qui font un type : la forme (Simple, Tableau... Tuple), le parametre
+//  (bornes, cle, types suivants), un type ecrit (facultatif : il remplace les choix) et, s'il y en
+//  a une, la valeur initiale (son exemple suit la forme). npos : pas ce champ.
+struct ShapeFields {
+    std::size_t form{std::string::npos}, parameter{std::string::npos}, written{std::string::npos}, initial{std::string::npos};
+};
+std::string trimmedText(std::string_view s) {
+    std::size_t a = 0, b = s.size();
+    while (a < b && std::isspace(static_cast<unsigned char>(s[a]))) ++a;
+    while (b > a && std::isspace(static_cast<unsigned char>(s[b - 1]))) --b;
+    return std::string(s.substr(a, b - a));
+}
+// Les regles : le parametre suit la forme (actif, son aide, sa valeur par defaut quand la forme
+// change) ; un type ecrit grise la forme et le parametre ; la valeur initiale montre un exemple.
+FormDialog::Rules shapeRules(ShapeFields at, FormDialog::Rules more = {}) {
+    auto last = std::make_shared<std::string>();
+    return [at, last, more](const std::vector<std::string>& v, std::vector<FormDialog::FieldState>& st) {
+        namespace tf = hmi::typeform;
+        const auto has = [&](std::size_t i) { return i != std::string::npos && i < v.size() && i < st.size(); };
+        if (!has(at.form) || !has(at.parameter)) return;
+        const auto f = tf::fromText(v[at.form]).value_or(tf::Form::Simple);
+        const bool written = has(at.written) && !trimmedText(v[at.written]).empty();
+        const auto label = tf::parameterLabel(f);
+        if (!last->empty() && *last != v[at.form]) st[at.parameter].value = tf::defaultParameter(f);
+        *last = v[at.form];
+        st[at.parameter].enabled = !label.empty() && !written;
+        st[at.parameter].placeholder = std::string(tf::parameterHint(f));
+        st[at.parameter].hint = written ? std::string("le type \xC3\xA9" "crit le remplace")
+                               : label.empty() ? std::string("sans param\xC3\xA8tre pour cette forme")
+                                               : std::string(label) + " : " + std::string(tf::parameterHint(f));
+        st[at.form].enabled = !written;
+        st[at.form].hint = written ? std::string("le type \xC3\xA9" "crit le remplace")
+                         : tf::memoryOnly(f) ? std::string("dans la m\xC3\xA9moire de l'IHM : sans \xC3\xA9quipement ni adresse")
+                                             : std::string{};
+        if (has(at.initial)) st[at.initial].placeholder = std::string(tf::valueHint(f));
+        if (more) more(v, st);
+    };
+}
+// Le type que font ces champs : le type ecrit, sinon la forme, l'element et le parametre.
+std::string shapedTypeOf(const std::vector<std::string>& v, ShapeFields at, const std::string& element) {
+    namespace tf = hmi::typeform;
+    if (at.written < v.size() && !trimmedText(v[at.written]).empty()) return hmi::types::normalized(trimmedText(v[at.written]));
+    tf::Shape sh;
+    sh.form = at.form < v.size() ? tf::fromText(v[at.form]).value_or(tf::Form::Simple) : tf::Form::Simple;
+    sh.element = element;
+    sh.parameter = at.parameter < v.size() ? v[at.parameter] : std::string{};
+    return tf::compose(sh);
+}
+// Les types des elements proposes (une variable IHM, une declaration) ; `current` en tete s'il manque.
+std::vector<std::string> elementChoices(const hmi::Project& p, unsigned use, const std::string& current) {
+    std::vector<std::string> out = hmi::typereg::Registry::build(p)->names(use);
+    if (!current.empty() && std::find(out.begin(), out.end(), current) == out.end()) out.insert(out.begin(), current);
+    return out;
+}
+
+} // namespace
 
 namespace {
 
@@ -1165,6 +1226,9 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
                 }
             };
             vh.arrayType = [this](const std::string& current, std::function<void(const std::string&)> done) { askHmiArrayType(current, std::move(done)); };
+            vh.shapedType = [this](const std::string& current, const std::string& form, std::function<void(const std::string&)> done) {   // 1.12.2
+                askHmiShapedType(current, form, /*fixedOnly*/ false, std::move(done));
+            };
             vh.newType = [this] {
                 if (auto* p2 = dynamic_cast<HmiScriptsPane*>(hmiTab("scripts"))) {
                     p2->showTab(HmiScriptsPane::TabTypes);
@@ -1959,14 +2023,25 @@ void MainAnalysisScreen::askHmiCreateVariable(std::uint64_t viewId, const valuek
     };
     const std::string zoneHmi = "IHM \xE2\x80\x94 une variable de l'IHM";
     const std::string zoneApi = "API \xE2\x80\x94 une variable de l'automate";
+    // 1.12.0 : XPGAnalyser IHM - une variable de l'IHM seulement : ni zone, ni adresse d'automate
+    // (1.12.2 : les deux champs n'y sont plus du tout). Les champs se suivent par leur rang.
+    const bool withApi = plc && core::hasApi();
     std::vector<FormDialog::Field> fields;
     fields.push_back({"Nom", name, "Debit_Max", false, {}});
-    // 1.12.0 : XPGAnalyser IHM - une variable de l'IHM seulement (pas d'automate).
-    fields.push_back({"Zone", zoneHmi, {}, false, plc && core::hasApi() ? std::vector<std::string>{zoneHmi, zoneApi} : std::vector<std::string>{zoneHmi}});
-    fields.push_back({"Type", wanted, {}, false, hmiTypes()});
-    fields.push_back({"Valeur initiale (IHM)", {}, "vide : 0, FALSE ou ''", false, {}});
-    fields.push_back({"Adresse (API, facultative)", {}, "%MW100 ; vide : non situ\xC3\xA9" "e", false, {}});
+    if (withApi) fields.push_back({"Zone", zoneHmi, {}, false, std::vector<std::string>{zoneHmi, zoneApi}});
+    const std::size_t iType = fields.size();
+    fields.push_back({withApi ? "Type" : "Type des \xC3\xA9l\xC3\xA9ments", wanted, {}, false, hmiTypes()});
+    const std::size_t iInitial = fields.size();
+    fields.push_back({withApi ? "Valeur initiale (IHM)" : "Valeur initiale", {}, "vide : 0, FALSE ou ''", false, {}});
+    const std::size_t iAddress = withApi ? fields.size() : std::string::npos;
+    if (withApi) fields.push_back({"Adresse (API, facultative)", {}, "%MW100 ; vide : non situ\xC3\xA9" "e", false, {}});
+    const std::size_t iComment = fields.size();
     fields.push_back({"Commentaire", "Cr\xC3\xA9\xC3\xA9" "e depuis le s\xC3\xA9lecteur de " + req.field, {}, false, {}});
+    // 1.12.2 : la forme (une variable IHM) : Simple, Tableau... Liste, Dictionnaire, Tuple.
+    const ShapeFields at{fields.size(), fields.size() + 1, fields.size() + 2, iInitial};
+    fields.push_back({"Forme", "Simple", "", false, hmi::typeform::labels(hmi::typereg::UseVariable)});
+    fields.push_back({"Bornes, cl\xC3\xA9 ou types suivants", {}, "", false, {}});
+    fields.push_back({"Type \xC3\xA9" "crit (facultatif)", {}, "il remplace les choix", false, {}});
     auto dialog = std::make_unique<FormDialog>(
         "dialog.hmiCreateVariable", "Cr\xC3\xA9" "er la variable \xC2\xAB " + name + " \xC2\xBB",
         !core::hasApi()
@@ -1978,21 +2053,30 @@ void MainAnalysisScreen::askHmiCreateVariable(std::uint64_t viewId, const valuek
               "API : elle s'ajoute aux variables globales du programme ; elle devra exister dans Control Expert. "
               "Un seul Ctrl+Z retire la variable et la saisie.",
         std::move(fields), "Cr\xC3\xA9" "er et valider");
-    dialog->setRules([zoneApi, hmiTypes, plcTypes](const std::vector<std::string>& v, std::vector<FormDialog::FieldState>& st) {
-        if (v.size() < 6 || st.size() < 6) return;
+    dialog->setRules(shapeRules(at, [withApi, zoneApi, hmiTypes, plcTypes, iType, iInitial, iAddress, at](const std::vector<std::string>& v,
+                                                                                                     std::vector<FormDialog::FieldState>& st) {
+        if (!withApi || v.size() < at.written + 1 || st.size() < v.size()) return;
         const bool api = v[1] == zoneApi;
         const auto choices = api ? plcTypes() : hmiTypes();
-        st[2].choices = choices;
-        if (std::find(choices.begin(), choices.end(), v[2]) == choices.end()) st[2].value = choices.front();
-        st[3].enabled = !api;
-        st[3].hint = api ? "seulement pour une variable IHM" : std::string{};
-        st[4].enabled = api;
-        st[4].hint = api ? std::string{} : "seulement pour une variable de l'automate";
-    });
-    app_.menus().ShowDialog(std::move(dialog), [this, viewId, req, text, fx, name, zoneApi](const menu::DialogResult& r) {
+        st[iType].choices = choices;
+        if (std::find(choices.begin(), choices.end(), v[iType]) == choices.end()) st[iType].value = choices.front();
+        st[iInitial].enabled = !api;
+        st[iInitial].hint = api ? "seulement pour une variable IHM" : std::string{};
+        const auto f = hmi::typeform::fromText(v[at.form]).value_or(hmi::typeform::Form::Simple);
+        st[iAddress].enabled = api;
+        st[iAddress].hint = api ? std::string{} : "seulement pour une variable de l'automate";
+        if (api) {                                            // une variable de l'automate : une valeur simple
+            st[at.form].enabled = st[at.parameter].enabled = st[at.written].enabled = false;
+            st[at.form].hint = "une variable de l'automate se d\xC3\xA9" "clare dans son programme";
+        } else if (hmi::typeform::memoryOnly(f)) {
+            st[iAddress].enabled = false;
+        }
+    }));
+    app_.menus().ShowDialog(std::move(dialog), [this, viewId, req, text, fx, name, zoneApi, withApi, iType, iInitial, iAddress, iComment,
+                                                at](const menu::DialogResult& r) {
         if (!r.accepted()) return;
         const auto v = FormDialog::split(r.payload);
-        if (v.size() < 6) return;
+        if (v.size() < at.written + 1) return;
         auto hdoc = app_.hmi();
         if (!hdoc) return;
         const std::string newName = v[0];
@@ -2017,12 +2101,12 @@ void MainAnalysisScreen::askHmiCreateVariable(std::uint64_t viewId, const valuek
         if (value.empty()) value = newName;
         // UN SEUL CTRL+Z : la variable et la saisie.
         core::CommandGroupScope group("Cr\xC3\xA9" "er " + newName + " et l'utiliser");
-        if (v[1] == zoneApi) {
+        if (withApi && v[1] == zoneApi) {
             project::AddVariableCommand::Spec spec;
             spec.name = newName;
-            spec.type = v[2];
-            spec.address = v[4];
-            spec.comment = v[5];
+            spec.type = v[iType];
+            spec.address = iAddress < v.size() ? v[iAddress] : std::string{};
+            spec.comment = v[iComment];
             app_.apply(std::make_unique<project::AddVariableCommand>(app_.document(), spec), true);
             if (!app_.project() || std::none_of(app_.project()->variables.begin(), app_.project()->variables.end(), [&](const domain::Variable& x) {
                     return app_.project()->strings.text(x.name) == newName;
@@ -2031,11 +2115,16 @@ void MainAnalysisScreen::askHmiCreateVariable(std::uint64_t viewId, const valuek
                 return;
             }
         } else {
-            std::string initial = v[3];
-            const std::string type = hmi::types::normalized(v[2]);
+            std::string initial = v[iInitial];
+            const std::string type = hmi::types::normalized(shapedTypeOf(v, at, v[iType]));
             if (initial.empty()) initial = type == "BOOL" ? "FALSE" : type == "STRING" ? "''" : hmi::types::isComposite(type) ? "" : "0";
             if (!hmi::types::validType(hdoc->project, type, &why)) {
                 status_->setTransientMessage("Type refus\xC3\xA9 : " + why, 8.0);
+                return;
+            }
+            // 1.12.2 : une valeur initiale verifiee (un litteral pour un type objet).
+            if (hmi::types::isRich(type) && !hmi::typeform::valueFits(hdoc->project, type, initial, &why)) {
+                status_->setTransientMessage("Valeur initiale refus\xC3\xA9" "e : " + why, 8.0);
                 return;
             }
             auto cmd = hmi::changeProject(hdoc, "Nouvelle variable " + newName, [&](hmi::Project& p) {
@@ -2044,7 +2133,7 @@ void MainAnalysisScreen::askHmiCreateVariable(std::uint64_t viewId, const valuek
                 var.name = newName;
                 var.type = type;
                 var.initial = initial;
-                var.description = v[5];
+                var.description = v[iComment];
                 p.programs.variables.push_back(std::move(var));
             });
             if (cmd) app_.apply(std::move(cmd), false);
@@ -2739,88 +2828,100 @@ void MainAnalysisScreen::askHmiVariable(std::uint64_t variableId) {
     const hmi::Variable* var = nullptr;
     for (const auto& v : doc->project.programs.variables) if (v.id == asId(variableId)) var = &v;
     if (variableId != 0 && !var) return;
-    // Lot 16 : les types IHM aussi, un tableau (ses bornes), un dossier.
-    std::vector<std::string> types = hmi::typereg::Registry::build(doc->project)->names(hmi::typereg::UseVariable);   // 1.11.19
-    hmi::types::Spec spec;
-    const bool parsed = var && hmi::types::parseSpec(var->type, spec);
-    // Un type que l'analyse ne decompose pas reste tel quel (jamais remplace par INT).
-    std::string element = parsed ? spec.element : var ? var->type : std::string("INT");
-    std::string bounds;
-    if (parsed && spec.array()) {
-        bounds = std::to_string(spec.low[0]) + ".." + std::to_string(spec.high[0]);
-        if (spec.dims == 2) bounds += ", " + std::to_string(spec.low[1]) + ".." + std::to_string(spec.high[1]);
-    }
+    namespace tf = hmi::typeform;
+    // 1.12.2 : LA FORME (Simple, Tableau, Tableau 2D, Liste, Vecteur, Dictionnaire, Tuple), le type des
+    // elements et le parametre (bornes, cle, types suivants) - ou un type ecrit, qui les remplace.
+    const tf::Shape shape = var ? tf::decompose(var->type) : tf::Shape{};
+    const bool simpleElement = !shape.reference && tf::decompose(shape.element).form == tf::Form::Simple;
+    const std::string element = simpleElement ? shape.element : std::string("INT");
     std::vector<std::string> folders{"(racine)"};
     for (const auto& f : hmi::types::allFolders(doc->project)) folders.push_back(f);
     std::vector<FormDialog::Field> fields;
+    // L'ordre des lots precedents reste (Nom, Type, Valeur initiale, Description) : les habitudes et
+    // les scripts d'avant remplissent les memes champs ; les suivants s'ajoutent a la fin.
     fields.push_back({"Nom", var ? var->name : hmi::uniqueVariableName(doc->project, "Variable"), "lettres, chiffres, _", false, {}});
-    fields.push_back({"Type", element, "", false, types});
-    // L'ordre des lots precedents reste (Nom, Type, Valeur initiale, Description) : les
-    // habitudes et les scripts d'avant remplissent les memes champs ; le lot 16 ajoute a la fin.
-    fields.push_back({"Valeur initiale", var ? var->initial : std::string("0"), "0, TRUE, 2.5, 'texte', T#5s ; un tableau : 0 (toutes) ou 1, 2, 3", false, {}});
+    fields.push_back({"Type des \xC3\xA9l\xC3\xA9ments", element, "", false, elementChoices(doc->project, hmi::typereg::UseVariable, element)});
+    fields.push_back({"Valeur initiale", var ? var->initial : std::string("0"), std::string(tf::valueHint(shape.form)), false, {}});
     fields.push_back({"Description", var ? var->description : std::string{}, "\xC3\xA0 quoi elle sert", false, {}});
-    fields.push_back({"Tableau (facultatif)", bounds, "vide : une valeur ; 0..9 : 10 cases ; 0..3, 0..9 : deux dimensions", false, {}});
+    fields.push_back({"Forme", std::string(tf::label(shape.form)), "", false, tf::labels(hmi::typereg::UseVariable)});
+    fields.push_back({"Bornes, cl\xC3\xA9 ou types suivants", shape.form == tf::Form::Simple ? std::string{} : shape.parameter,
+                      std::string(tf::parameterHint(shape.form)), false, {}});
+    fields.push_back({"Type \xC3\xA9" "crit (facultatif)", simpleElement ? std::string{} : (var ? var->type : std::string{}),
+                      "LIST OF TUPLE(STRING, REAL) ; il remplace les choix", false, {}});
     fields.push_back({"Dossier", var && !var->folder.empty() ? var->folder : std::string("(racine)"), "", false, folders});
-    app_.menus().ShowDialog(
-        std::make_unique<FormDialog>(var ? "dialog.hmiEditVariable" : "dialog.hmiNewVariable",
-            var ? "Modifier " + var->name : std::string("Nouvelle variable IHM"),
-            "Une variable IHM vit dans l'IHM, pas dans l'automate : la vue courante, un compteur de clics, "
-            "un choix d'op\xC3\xA9rateur. Les expressions, les actions et les scripts la lisent et l'\xC3\xA9" "crivent "
-            "par son nom ; elle passe avant une variable du programme du m\xC3\xAAme nom. Ctrl+Z reprend.",
-            std::move(fields), var ? "Enregistrer" : "Cr\xC3\xA9" "er"),
-        [this, variableId](const menu::DialogResult& r) {
-            auto* pane = dynamic_cast<HmiScriptsPane*>(hmiTab("scripts"));
-            if (!r.accepted() || !pane) return;
-            const auto v = FormDialog::split(r.payload);
-            if (v.size() < 2) return;
-            // Lot 16 : le type et ses bornes font le type de la variable.
-            std::string range = v.size() > 4 ? v[4] : std::string{};
-            while (!range.empty() && (range.front() == ' ' || range.front() == '[')) range.erase(range.begin());
-            while (!range.empty() && (range.back() == ' ' || range.back() == ']')) range.pop_back();
-            const std::string type = range.empty() ? v[1] : "ARRAY[" + range + "] OF " + v[1];
-            const std::string initial = v.size() > 2 ? v[2] : std::string{}, description = v.size() > 3 ? v[3] : std::string{};
-            const std::string folder = v.size() > 5 && v[5] != "(racine)" ? v[5] : std::string{};
-            std::string why;
-            const hmi::Id made = variableId == 0 ? pane->addVariable(v[0], type, initial, description, &why) : asId(variableId);
-            const bool ok = variableId == 0 ? made != hmi::kNoId : pane->updateVariable(asId(variableId), v[0], type, initial, description, &why);
-            if (!ok) {
-                status_->setTransientMessage("Variable refus\xC3\xA9" "e : " + why, 8.0);
-                return;
-            }
-            if (auto* vars = pane->variablesPane()) (void)vars->setFolder(made, folder);
-        });
+    auto dialog = std::make_unique<FormDialog>(var ? "dialog.hmiEditVariable" : "dialog.hmiNewVariable",
+        var ? "Modifier " + var->name : std::string("Nouvelle variable IHM"),
+        "Une variable IHM : la vue courante, un compteur de clics, un choix d'op\xC3\xA9rateur, ou la valeur d'un \xC3\xA9quipement "
+        "(colonnes \xC3\x89quipement et Adresse des Variables IHM). Les expressions, les actions et les scripts la lisent et l'\xC3\xA9" "crivent "
+        "par son nom. Sa forme : une valeur, un tableau (fixe, il peut \xC3\xAAtre li\xC3\xA9 \xC3\xA0 un \xC3\xA9quipement), ou une liste, un vecteur, "
+        "un dictionnaire, un tuple (dans la m\xC3\xA9moire de l'IHM : sans \xC3\xA9quipement ni adresse). Ctrl+Z reprend.",
+        std::move(fields), var ? "Enregistrer" : "Cr\xC3\xA9" "er");
+    const ShapeFields at{4, 5, 6, 2};
+    dialog->setRules(shapeRules(at));
+    app_.menus().ShowDialog(std::move(dialog), [this, variableId, at](const menu::DialogResult& r) {
+        auto* pane = dynamic_cast<HmiScriptsPane*>(hmiTab("scripts"));
+        if (!r.accepted() || !pane) return;
+        const auto v = FormDialog::split(r.payload);
+        if (v.size() < 2) return;
+        const std::string type = shapedTypeOf(v, at, v[1]);
+        const std::string initial = v.size() > 2 ? v[2] : std::string{}, description = v.size() > 3 ? v[3] : std::string{};
+        const std::string folder = v.size() > 7 && v[7] != "(racine)" ? v[7] : std::string{};
+        std::string why;
+        const hmi::Id made = variableId == 0 ? pane->addVariable(v[0], type, initial, description, &why) : asId(variableId);
+        const bool ok = variableId == 0 ? made != hmi::kNoId : pane->updateVariable(asId(variableId), v[0], type, initial, description, &why);
+        if (!ok) {
+            status_->setTransientMessage("Variable refus\xC3\xA9" "e : " + why, 8.0);
+            return;
+        }
+        if (auto* vars = pane->variablesPane()) (void)vars->setFolder(made, folder);
+    });
 }
 
-// Lot 16 : Tableau... - les bornes (une ou deux dimensions) et le type des cases.
+// Lot 16 : Tableau... - les bornes (une ou deux dimensions) et le type des cases ; 1.12.2 : la forme
+// d'un type (askHmiShapedType), ouverte sur Tableau.
 void MainAnalysisScreen::askHmiArrayType(const std::string& current, std::function<void(const std::string&)> done) {
+    const auto sh = hmi::typeform::decompose(current);
+    askHmiShapedType(current, sh.form == hmi::typeform::Form::Array2D ? "tableau2d" : "tableau", /*fixedOnly*/ true, std::move(done));
+}
+
+void MainAnalysisScreen::askHmiShapedType(const std::string& current, const std::string& form, bool fixedOnly,
+                                          std::function<void(const std::string&)> done) {
     auto doc = app_.hmi();
     if (!doc) return;
-    hmi::types::Spec spec;
-    const bool parsed = hmi::types::parseSpec(current, spec);
-    std::string bounds = "0..9";
-    if (parsed && spec.array()) {
-        bounds = std::to_string(spec.low[0]) + ".." + std::to_string(spec.high[0]);
-        if (spec.dims == 2) bounds += ", " + std::to_string(spec.low[1]) + ".." + std::to_string(spec.high[1]);
+    namespace tf = hmi::typeform;
+    tf::Shape shape = tf::decompose(current);
+    const auto wanted = tf::fromText(form).value_or(tf::Form::Array);
+    const bool same = shape.form == wanted;
+    if (!same) {
+        shape.form = wanted;
+        shape.parameter = tf::defaultParameter(wanted);
     }
-    std::vector<std::string> types = hmi::typereg::Registry::build(doc->project)->names(hmi::typereg::UseVariable);   // 1.11.19
+    if (shape.parameter.empty()) shape.parameter = tf::defaultParameter(wanted);
+    const bool simpleElement = !shape.reference && tf::decompose(shape.element).form == tf::Form::Simple;
+    const std::string element = simpleElement && !shape.element.empty() ? shape.element : std::string("INT");
+    std::vector<std::string> forms;
+    for (const auto f : tf::kForms)
+        if (!fixedOnly || !tf::memoryOnly(f)) forms.emplace_back(tf::label(f));
     std::vector<FormDialog::Field> fields;
-    fields.push_back({"Bornes", bounds, "0..9 : 10 cases ; 1..4 ; -5..5 ; 0..3, 0..9 : deux dimensions (4 lignes, 10 colonnes)", false, {}});
-    fields.push_back({"Type des cases", parsed ? spec.element : std::string("INT"), "", false, types});
-    app_.menus().ShowDialog(
-        std::make_unique<FormDialog>("dialog.hmiArray", "Tableau",
-            "Un tableau a une ou deux dimensions, bornes libres : ARRAY[0..9] OF REAL, ARRAY[0..3, 0..9] OF INT, ARRAY[1..4] OF T_Four. "
-            "Ses cases s'\xC3\xA9" "crivent Consignes[i] ou Matrice[i, j] ; ses propri\xC3\xA9t\xC3\xA9s Consignes.Length, .Low, .High, .Rows, "
-            ".Columns, .Bytes, .Words se lisent partout (scripts, expressions, textes \xC3\xA0 trous).",
-            std::move(fields), "Appliquer"),
-        [done = std::move(done)](const menu::DialogResult& r) {
-            if (!r.accepted() || !done) return;
-            const auto v = FormDialog::split(r.payload);
-            if (v.size() < 2) return;
-            std::string range = v[0];
-            while (!range.empty() && (range.front() == ' ' || range.front() == '[')) range.erase(range.begin());
-            while (!range.empty() && (range.back() == ' ' || range.back() == ']')) range.pop_back();
-            done(range.empty() ? v[1] : "ARRAY[" + range + "] OF " + v[1]);
-        });
+    fields.push_back({"Forme", std::string(tf::label(shape.form)), "", false, forms});
+    fields.push_back({"Bornes, cl\xC3\xA9 ou types suivants", shape.parameter, std::string(tf::parameterHint(shape.form)), false, {}});
+    fields.push_back({"Type des \xC3\xA9l\xC3\xA9ments", element, "", false, elementChoices(doc->project, hmi::typereg::UseVariable, element)});
+    fields.push_back({"Type \xC3\xA9" "crit (facultatif)", simpleElement ? std::string{} : current, "il remplace les choix", false, {}});
+    auto dialog = std::make_unique<FormDialog>("dialog.hmiArray", fixedOnly ? "Tableau" : "Forme du type",
+        "Tableau : ARRAY[0..9] OF REAL, ARRAY[0..3, 0..9] OF INT, ARRAY[1..4] OF T_Four - ses cases s'\xC3\xA9" "crivent T[i] ou M[i, j], "
+        "ses propri\xC3\xA9t\xC3\xA9s T.Length, .Low, .High, .Rows, .Columns se lisent partout."
+        + std::string(fixedOnly ? "" : " Liste (LIST OF REAL) et vecteur (VECTOR OF REAL) : une taille variable, L[0], L.Count, LIST_ADD, VECTOR_PUSH ; "
+                                       "dictionnaire (MAP[STRING] OF REAL) : M['cl\xC3\xA9'] ; tuple (TUPLE(INT, STRING)) : t.Item1, t.Item2. "
+                                       "Ces quatre-l\xC3\xA0 vivent dans la m\xC3\xA9moire de l'IHM : sans \xC3\xA9quipement ni adresse."),
+        std::move(fields), "Appliquer");
+    const ShapeFields at{0, 1, 3, std::string::npos};
+    dialog->setRules(shapeRules(at));
+    app_.menus().ShowDialog(std::move(dialog), [done = std::move(done), at](const menu::DialogResult& r) {
+        if (!r.accepted() || !done) return;
+        const auto v = FormDialog::split(r.payload);
+        if (v.size() < 3) return;
+        done(shapedTypeOf(v, at, v[2]));
+    });
 }
 
 void MainAnalysisScreen::askHmiDeleteVariable(std::uint64_t variableId) {
@@ -2919,39 +3020,67 @@ void MainAnalysisScreen::askHmiNewFunction(std::uint64_t symbolView) {
     fields.push_back({"Nom", sym ? freeName : hmi::uniqueFunctionName(doc->project, "Fonction"), "lettres, chiffres, _ ; un nom d\xC3\xA9j\xC3\xA0 pris : une surcharge", false, {}});
     fields.push_back({"Type de retour", sym ? "Aucun" : "REAL", "", false, types});
     fields.push_back({"Description", "", "ce qu'elle calcule ou fait", false, {}});
+    // 1.12.2 : le retour a une forme (un tableau, une liste, un vecteur, un dictionnaire, un tuple),
+    // ou un type ecrit (LIST OF TUPLE(STRING, REAL), REF_TO T_Four...) qui remplace les choix.
+    fields.push_back({"Forme du retour", "Simple", "", false, hmi::typeform::labels(hmi::typereg::UseReturn)});
+    fields.push_back({"Bornes, cl\xC3\xA9 ou types suivants", {}, "", false, {}});
+    fields.push_back({"Type \xC3\xA9" "crit (facultatif)", {}, "MAP[STRING] OF LIST OF REAL ; il remplace les choix", false, {}});
+    const ShapeFields at{3, 4, 5, std::string::npos};
+    // Le type de retour de la fonction : Aucun reste Aucun (une procedure), sinon sa forme.
+    const auto returnOf = [at](const std::vector<std::string>& v) -> std::string {
+        if (v.size() < 2) return {};
+        const bool written = v.size() > at.written && !trimmedText(v[at.written]).empty();
+        if (!written && (v[1].empty() || v[1] == "Aucun")) return v[1];
+        return shapedTypeOf(v, at, v[1]);
+    };
+    // Aucun : ni forme, ni parametre.
+    const auto noForm = [](const std::vector<std::string>& v, std::vector<FormDialog::FieldState>& st) {
+        if (v.size() < 6 || st.size() < 6) return;
+        const bool none = (v[1].empty() || v[1] == "Aucun") && trimmedText(v[5]).empty();
+        if (!none) return;
+        st[3].enabled = false;
+        st[3].hint = "Aucun : une proc\xC3\xA9" "dure, sans valeur rendue";
+        st[4].enabled = false;
+    };
     if (sym) {
         app_.menus().ShowDialog(
-            std::make_unique<FormDialog>("dialog.hmiNewFunction", "Nouvelle fonction de " + sym->name,
+            [&] {
+                auto d = std::make_unique<FormDialog>("dialog.hmiNewFunction", "Nouvelle fonction de " + sym->name,
                 "Une fonction du symbole s'appelle dans le symbole par son nom, et ailleurs par Vue.Instance.Nom(...). "
                 "Ses param\xC3\xA8tres, ses locales et ses constantes se d\xC3\xA9" "clarent dans ses onglets. Un nom d\xC3\xA9j\xC3\xA0 pris "
                 "est une surcharge : changez ses param\xC3\xA8tres pour la distinguer. Ctrl+Z la retire.",
-                std::move(fields), "Cr\xC3\xA9" "er"),
-            [this, symbolView](const menu::DialogResult& r) {
+                std::move(fields), "Cr\xC3\xA9" "er");
+                d->setRules(shapeRules(at, noForm));
+                return d;
+            }(),
+            [this, symbolView, returnOf](const menu::DialogResult& r) {
                 auto* editor = dynamic_cast<HmiEditor*>(hmiTab("vue:" + std::to_string(symbolView)));
                 auto* pane = editor ? editor->symbolFunctions() : nullptr;
                 if (!r.accepted() || !pane) return;
                 const auto v = FormDialog::split(r.payload);
                 if (v.empty()) return;
                 std::string why;
-                if (pane->addFunction(v[0], v.size() > 1 ? v[1] : std::string{}, v.size() > 2 ? v[2] : std::string{}, &why) == hmi::kNoId)
+                if (pane->addFunction(v[0], returnOf(v), v.size() > 2 ? v[2] : std::string{}, &why) == hmi::kNoId)
                     status_->setTransientMessage("Fonction refus\xC3\xA9" "e : " + why, 8.0);
             });
         return;
     }
-    app_.menus().ShowDialog(
-        std::make_unique<FormDialog>("dialog.hmiNewFunction", "Nouvelle fonction IHM",
+    auto dialog = std::make_unique<FormDialog>("dialog.hmiNewFunction", "Nouvelle fonction IHM",
             "Une fonction IHM s'appelle par son nom, comme une fonction de l'automate : Moyenne(a, b) dans un script, "
             "une action ou - si elle rend une valeur - une expression de vue. Ses param\xC3\xA8tres, ses locales et ses constantes "
             "se d\xC3\xA9" "clarent dans ses onglets ; Aucun en retour : une proc\xC3\xA9" "dure, appel\xC3\xA9" "e seule sur sa ligne. "
-            "Le corps part d'un mod\xC3\xA8le \xC3\xA0 compl\xC3\xA9ter. Ctrl+Z la retire.",
-            std::move(fields), "Cr\xC3\xA9" "er"),
-        [this](const menu::DialogResult& r) {
+            "Le corps part d'un mod\xC3\xA8le \xC3\xA0 compl\xC3\xA9ter. Le retour peut \xC3\xAAtre un tableau, une liste, un vecteur, un "
+            "dictionnaire, un tuple (Forme du retour) ou tout type \xC3\xA9" "crit. Ctrl+Z la retire.",
+            std::move(fields), "Cr\xC3\xA9" "er");
+    dialog->setRules(shapeRules(at, noForm));
+    app_.menus().ShowDialog(std::move(dialog),
+        [this, returnOf](const menu::DialogResult& r) {
             auto* pane = dynamic_cast<HmiFunctionsPane*>(hmiTab("fonctions"));
             if (!r.accepted() || !pane) return;
             const auto v = FormDialog::split(r.payload);
             if (v.empty()) return;
             std::string why;
-            if (pane->addFunction(v[0], v.size() > 1 ? v[1] : std::string{}, v.size() > 2 ? v[2] : std::string{}, &why) == hmi::kNoId)
+            if (pane->addFunction(v[0], returnOf(v), v.size() > 2 ? v[2] : std::string{}, &why) == hmi::kNoId)
                 status_->setTransientMessage("Fonction refus\xC3\xA9" "e : " + why, 8.0);
         });
 }

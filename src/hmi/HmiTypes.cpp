@@ -104,6 +104,36 @@ std::vector<std::string> splitList(std::string_view s) {
     return out;
 }
 
+// 1.12.2 : une liste ecrite entre crochets, [1, 2, 3] - et [[1, 2], [3, 4]] pour deux
+// dimensions, ligne par ligne - comme les scripts l'ecrivent. `bracketed` : elle l'etait.
+std::vector<std::string> arrayInitials(std::string_view initial, bool& bracketed) {
+    const std::string t = trimmed(initial);
+    bracketed = false;
+    if (t.size() >= 2 && t.front() == '[' && t.back() == ']') {
+        int depth = 0;
+        bool quoted = false, whole = true;
+        for (std::size_t i = 0; i < t.size(); ++i) {
+            const char c = t[i];
+            if (c == '\'') quoted = !quoted;
+            if (quoted) continue;
+            if (c == '[') ++depth;
+            else if (c == ']' && --depth == 0 && i + 1 < t.size()) whole = false;   // [1] + [2] : pas une seule liste
+        }
+        if (whole) {
+            bracketed = true;
+            std::vector<std::string> out;
+            for (auto& item : splitList(std::string_view(t).substr(1, t.size() - 2))) {
+                if (item.size() >= 2 && item.front() == '[' && item.back() == ']')
+                    for (auto& x : splitList(std::string_view(item).substr(1, item.size() - 2))) out.push_back(std::move(x));
+                else if (!item.empty())
+                    out.push_back(std::move(item));
+            }
+            return out;
+        }
+    }
+    return splitList(t);
+}
+
 // La tete d'ecriture de la place Modbus.
 struct Cursor {
     long long word{0};             // le prochain mot libre
@@ -172,8 +202,9 @@ struct Walker {
             const HmiType* elementType = isElementary(s.element) ? nullptr : p.hmiTypeByName(s.element);
             const bool enumElement = elementType && elementType->kind == HmiTypeKind::Enumeration;
             const bool simple = isElementary(s.element) || enumElement;
-            const auto list = simple ? splitList(initial) : std::vector<std::string>{};
-            const bool perElement = list.size() > 1;
+            bool bracketed = false;
+            const auto list = simple ? arrayInitials(initial, bracketed) : std::vector<std::string>{};
+            const bool perElement = list.size() > 1 || bracketed;   // 1.12.2 : [5] : la premiere case seule
             long long k = 0;
             const auto elementInit = [&]() -> std::string {
                 if (!simple) return {};
@@ -352,16 +383,58 @@ std::string specText(const Spec& s) {
 
 std::string normalized(std::string_view type) {
     Spec s;
-    if (!parseSpec(type, s)) return trimmed(type);
+    if (!parseSpec(type, s)) {
+        // 1.12.2 : un type objet, remis en forme par le registre (list of int -> LIST OF INT).
+        if (isRich(type)) return typereg::baseRegistry().resolve(type, typereg::UseAll).text;
+        return trimmed(type);
+    }
     return specText(s);
 }
 
 bool validType(const Project& p, std::string_view type, std::string* why) {
+    if (isRich(type)) {                                       // 1.12.2
+        const auto r = typereg::Registry::build(p)->resolve(type, typereg::UseVariable);
+        if (!r.ok) return fail(why, r.why.empty() ? "type illisible \xC2\xAB " + trimmed(type) + " \xC2\xBB" : r.why);
+        return true;
+    }
     Spec s;
     if (!parseSpec(type, s, why)) return false;
     if (isElementary(s.element)) return true;
     if (!p.hmiTypeByName(s.element)) return fail(why, "type inconnu \xC2\xAB " + s.element + " \xC2\xBB");
     return true;
+}
+
+bool validMemberType(const Project& p, std::string_view type, std::string* why) {
+    if (isRich(type))
+        return fail(why, "un membre d'un type IHM a une place fixe : " + normalized(type)
+                             + (isDynamic(type) ? " (taille variable)" : " (sans plan m\xC3\xA9moire)")
+                             + " se d\xC3\xA9" "clare en variable IHM, ou dans un script");
+    return validType(p, type, why);
+}
+
+bool isRich(std::string_view type) {
+    const std::string t = trimmed(type);
+    if (t.empty() || identifier(t)) return false;              // un nom : elementaire ou type IHM
+    const std::string u = upperOf(t);
+    // Les mots qui ouvrent un type objet (ailleurs que dans les bornes d'un ARRAY).
+    if (u.find("LIST") == std::string::npos && u.find("VECTOR") == std::string::npos && u.find("MAP") == std::string::npos
+        && u.find("TUPLE") == std::string::npos)
+        return false;
+    return typereg::baseRegistry().resolve(t, typereg::UseAll).rich;
+}
+
+bool isDynamic(std::string_view type) {
+    return isRich(type) && typereg::baseRegistry().resolve(trimmed(type), typereg::UseAll).dynamic;
+}
+
+std::string unbindableReason(std::string_view type) {
+    if (!isRich(type)) return {};
+    const std::string t = normalized(type);
+    if (isDynamic(type))
+        return "un " + t + " a une taille variable : il vit dans la m\xC3\xA9moire de l'IHM, il ne tient pas dans la m\xC3\xA9moire fixe "
+               "d'un \xC3\xA9quipement (ni \xC3\xA9quipement, ni adresse)";
+    return "un " + t + " n'a pas de plan m\xC3\xA9moire : il vit dans la m\xC3\xA9moire de l'IHM (pour le lier \xC3\xA0 un \xC3\xA9quipement, "
+           "d\xC3\xA9" "clare un type IHM, une structure)";
 }
 
 std::string cycleOf(const Project& p, std::string_view typeName) {
@@ -393,7 +466,20 @@ std::vector<std::string> usersOf(const Project& p, std::string_view typeName) {
     std::vector<std::string> out;
     const auto uses = [&](std::string_view type) {
         Spec s;
-        return parseSpec(type, s) && sameText(s.element, typeName);
+        if (parseSpec(type, s)) return sameText(s.element, typeName);
+        // 1.12.2 : un type objet (LIST OF T_Four, TUPLE(T_Four, INT)) : le nom parmi ses mots.
+        const std::string t(type);
+        for (std::size_t i = 0; i < t.size();) {
+            if (std::isalpha(static_cast<unsigned char>(t[i])) || t[i] == '_') {
+                std::size_t j = i;
+                while (j < t.size() && (std::isalnum(static_cast<unsigned char>(t[j])) || t[j] == '_')) ++j;
+                if (sameText(std::string_view(t).substr(i, j - i), typeName)) return true;
+                i = j;
+            } else {
+                ++i;
+            }
+        }
+        return false;
     };
     for (const auto& ty : p.programs.types)
         for (const auto& m : ty.members)
@@ -429,6 +515,7 @@ Weight weightOf(const Project& p, std::string_view type, bool packBools) {
 
 Flat flatten(const Project& p, std::string_view root, std::string_view type, std::string_view initial, bool packBools) {
     Flat out;
+    if (isRich(type)) return out;                  // 1.12.2 : un objet de l'IHM n'a pas de cases
     Walker w{p, packBools, out, {}, {}};
     w.walk(std::string(root), {}, type, initial, {});
     if (!out.ok()) {
@@ -531,6 +618,7 @@ std::vector<Variable> leafVariables(const Project& p, const Variable& v, std::ve
         if (why) why->emplace_back();
         return out;
     }
+    if (isRich(v.type)) return out;                // 1.12.2 : un objet de l'IHM, sans cases
     const Flat f = flatten(p, v.name, v.type, v.initial, v.packBools);
     if (!f.ok()) {
         if (error) *error = f.error;

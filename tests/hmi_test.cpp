@@ -17074,7 +17074,7 @@ void scriptsLangage110() {
     check(run("Iterateur") && rt.variable("Texte")->asString() == "xy" && r("R1") == 7.0,
           "it\xC3\xA9rateur explicite : MAP_BEGIN, MAP_END, it.Key, it.Value := 7, MAP_NEXT");
     check(run("MapRetour") && rt.variable("Texte")->asString() == "ecrou" && r("R1") == 2.0, "une MAP rendue par une fonction, MAP_KEYS (tri\xC3\xA9" "es)");
-    check(!run("ForEachRien") && why.find("ni une MAP ni un tableau") != std::string::npos, "FOR EACH sur un REAL : refus\xC3\xA9 (" + why + ")");
+    check(!run("ForEachRien") && why.find("ni une MAP, ni un tableau") != std::string::npos, "FOR EACH sur un REAL : refus\xC3\xA9 (" + why + ")");
     check(run("FonctionsIHM") && r("R1") == 21.0 && r("R2") == 4.5 && r("R3") == 2.0,
           "fonctions IHM du projet : VAR_IN_OUT (Echanger), un tableau rendu (Serie), une MAP en param\xC3\xA8tre (" + why + ")");
     check(!run("FonctionIHMFaute") && why.find("hors des bornes") != std::string::npos, "un indice hors des bornes sur le tableau rendu : dit (" + why + ")");
@@ -17100,6 +17100,85 @@ void scriptsLangage110() {
     check(splitDeclarations("FUNCTION F(VAR_IN_OUT x : INT)\nVAR_INPUT y : INT; END_VAR\nx := y;\nEND_FUNCTION").errors.empty()
               && splitDeclarations("FUNCTION F(VAR_IN_OUT x : INT)\nVAR_INPUT y : INT; END_VAR\nx := y;\nEND_FUNCTION").locals.empty(),
           "splitDeclarations : les d\xC3\xA9" "clarations d'une fonction interne restent \xC3\xA0 elle");
+}
+
+// 1.12.2 : les collections du dialecte - LIST OF T, VECTOR OF T, TUPLE(T1, T2...), les litteraux
+// [1, 2], ['a' := 1], (1, 'x'), les constantes qui bornent un tableau, les fonctions LIST_ et VECTOR_.
+void scriptsCollections1122() {
+    std::printf("1.12.2 : les collections des scripts (LIST, VECTOR, TUPLE, litteraux, fonctions)\n");
+    Project p;
+    View a = makeView(p, "Vue_A");
+    for (const char* n : {"R1", "R2", "R3"}) p.programs.variables.push_back(hmiVar(p, n, "REAL"));
+    p.programs.variables.push_back(hmiVar(p, "Texte", "STRING"));
+    p.programs.variables.push_back(hmiVar(p, "Ok", "BOOL"));
+    p.programs.variables.push_back(hmiVar(p, "Courbe", "ARRAY[0..4] OF REAL"));
+    struct Case { const char* name; const char* code; };
+    const Case cases[] = {
+        {"Liste", "VAR L : LIST OF INT; END_VAR\nLIST_ADD(L, 3); LIST_ADD(L, 1); LIST_ADD(L, 2); R1 := L.Count; R2 := L[0];\n"
+                  "LIST_SORT(L); R3 := L[0] * 100 + L[1] * 10 + L[2];"},
+        {"Litteral", "VAR L : LIST OF REAL := [1, 2.5, 3]; END_VAR\nR1 := LIST_SUM(L); R2 := L.Count; Ok := L = [1.0, 2.5, 3.0];"},
+        {"Vecteur", "VAR V : VECTOR OF STRING; END_VAR\nVECTOR_PUSH(V, 'a'); VECTOR_PUSH(V, 'b'); VECTOR_PUSH(V, 'c'); Texte := VECTOR_POP(V);\n"
+                    "R1 := VECTOR_SIZE(V); VECTOR_RESIZE(V, 4, 'z'); Texte := Texte + JOIN(V, '-');"},
+        {"Tuple", "VAR t : TUPLE(INT, STRING, REAL) := (7, 'sept', 7.5); END_VAR\nR1 := t.Item1; Texte := t.Item2; R2 := t.Item3;\n"
+                  "t := (1, 'un', 0.5); R3 := t.Item1 + t.Item3;"},
+        {"TupleFaux", "VAR t : TUPLE(INT, STRING); END_VAR\nt := (1, 'un', 2);"},
+        {"TableauLitteral", "VAR a : ARRAY[1..3] OF INT := [4, 5, 6]; m : ARRAY[0..1, 0..1] OF INT := [[1, 2], [3, 4]]; END_VAR\n"
+                            "R1 := a[1] + a[3]; R2 := m[1, 0]; a := [9]; R3 := a[1] * 10 + a[2];"},
+        {"TableauTrop", "VAR a : ARRAY[1..2] OF INT; END_VAR\na := [1, 2, 3];"},
+        {"MapLitteral", "VAR m : MAP[STRING] OF INT := ['vis' := 12, 'ecrou' := 30]; END_VAR\nR1 := m['ecrou']; R2 := MAP_SIZE(m); m := []; R3 := MAP_SIZE(m);"},
+        {"ConstanteBorne", "VAR CONSTANT N : INT := 4; END_VAR\nVAR t : ARRAY[1..N] OF REAL; END_VAR\nR1 := SIZEOF(t); R2 := UPPER_BOUND(t, 1);"},
+        {"ConstanteListe", "VAR CONSTANT Noms : LIST OF STRING := ['A', 'B']; END_VAR\nR1 := Noms.Count; LIST_ADD(Noms, 'C');"},
+        {"ListeHors", "VAR L : LIST OF INT := [1]; END_VAR\nR1 := L[3];"},
+        {"ForEachListe", "VAR L : LIST OF INT := [1, 2, 3]; s : INT; END_VAR\nFOR EACH x IN L DO s := s + x; x := x * 2; END_FOR\n"
+                         "R1 := s; R2 := L[2]; FOR EACH i, v IN L DO R3 := R3 + i; END_FOR"},
+        {"Concat", "VAR a, b : LIST OF INT; END_VAR\na := [1, 2]; b := a + [3]; R1 := b.Count; R2 := LIST_INDEX_OF(b, 3);\n"
+                   "Ok := LIST_CONTAINS(b, 2) AND NOT LIST_CONTAINS(a, 3);"},
+        {"Split", "VAR L : LIST OF STRING; END_VAR\nL := SPLIT('a;b;c', ';'); R1 := L.Count; Texte := L.Last;"},
+        {"ListeTableau", "VAR L : LIST OF REAL; END_VAR\nCourbe[4] := 9.0; L := Courbe; R1 := L.Count; R2 := L[4]; Courbe := [5.0, 6.0]; R3 := Courbe[1] + Courbe[4];"},
+        {"RetourListe", "FUNCTION Pairs(n : INT) : LIST OF INT\nVAR i : INT; END_VAR\n  FOR i := 0 TO n DO IF i MOD 2 = 0 THEN LIST_ADD(Pairs, i); END_IF END_FOR\n"
+                        "END_FUNCTION\nVAR L : LIST OF INT; END_VAR\nL := Pairs(6); R1 := L.Count; R2 := LIST_MAX(L); R3 := LIST_AVG(L);"},
+        {"Retirer", "VAR L : LIST OF STRING := ['a', 'b', 'c', 'b']; END_VAR\nOk := LIST_REMOVE(L, 'b'); LIST_REMOVE_AT(L, 0); LIST_INSERT(L, 1, 'x');\n"
+                    "Texte := JOIN(L, ''); R1 := L.Count; LIST_REVERSE(L); Texte := Texte + '/' + LIST_FIRST(L) + LIST_GET(L, 9, '?');"},
+        {"ListeDeTuples", "VAR L : LIST OF TUPLE(STRING, REAL); END_VAR\nLIST_ADD(L, ('four', 850.0)); LIST_ADD(L, ('cuve', 20.5));\n"
+                          "Texte := L[1].Item1; R1 := L[0].Item2 + L[1].Item2; Ok := LIST_CONTAINS(L, ('cuve', 20.5));"},
+    };
+    for (const auto& c : cases) p.programs.scripts.push_back(generalScript(p, c.name, c.code));
+    p.views = {a};
+    p.config.startView = a.id;
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    double t = 0.1;
+    std::string why;
+    const auto run = [&](const char* name) {
+        for (const char* n : {"R1", "R2", "R3"}) (void)rt.environment().write(n, sim::Value::real(0.0));
+        why.clear();
+        t += 0.1;
+        return rt.callScript(name, t, &why);
+    };
+    const auto r = [&](const char* n) { return rt.variable(n) ? rt.variable(n)->asReal() : -999.0; };
+    const auto txt = [&]() { return rt.variable("Texte") ? rt.variable("Texte")->asString() : std::string("?"); };
+    const auto ok = [&]() { return rt.variable("Ok") && rt.variable("Ok")->isTruthy(); };
+    check(run("Liste") && r("R1") == 3.0 && r("R2") == 3.0 && r("R3") == 123.0, "LIST OF INT : LIST_ADD, L.Count, L[0], LIST_SORT (" + why + ")");
+    check(run("Litteral") && r("R1") == 6.5 && r("R2") == 3.0 && ok(), "litt\xC3\xA9ral [1, 2.5, 3] converti en LIST OF REAL ; L = [1.0, 2.5, 3.0] (" + why + ")");
+    check(run("Vecteur") && r("R1") == 2.0 && txt() == "ca-b-z-z", "VECTOR : PUSH, POP, SIZE, RESIZE avec une valeur, JOIN : " + txt() + " (" + why + ")");
+    check(run("Tuple") && r("R1") == 7.0 && txt() == "sept" && r("R2") == 7.5 && r("R3") == 1.5, "TUPLE(INT, STRING, REAL) : Item1..Item3, (1, 'un', 0.5) (" + why + ")");
+    check(!run("TupleFaux") && why.find("3 valeur(s)") != std::string::npos, "un tuple de 3 valeurs dans un TUPLE \xC3\xA0 2 : refus\xC3\xA9 (" + why + ")");
+    check(run("TableauLitteral") && r("R1") == 10.0 && r("R2") == 3.0 && r("R3") == 90.0,
+          "tableaux : [4, 5, 6], [[1, 2], [3, 4]] ligne par ligne, [9] remet les autres cases \xC3\xA0 0 (" + why + ")");
+    check(!run("TableauTrop") && why.find("trop de valeurs") != std::string::npos, "trop de valeurs pour le tableau : dit (" + why + ")");
+    check(run("MapLitteral") && r("R1") == 30.0 && r("R2") == 2.0 && r("R3") == 0.0, "MAP : ['vis' := 12, 'ecrou' := 30], m := [] la vide (" + why + ")");
+    check(run("ConstanteBorne") && r("R1") == 4.0 && r("R2") == 4.0, "ARRAY[1..N] OF REAL, N une constante d\xC3\xA9" "clar\xC3\xA9" "e plus haut (" + why + ")");
+    check(!run("ConstanteListe") && why.find("constante") != std::string::npos && r("R1") == 2.0, "une LIST constante : se lit, LIST_ADD refus\xC3\xA9 (" + why + ")");
+    check(!run("ListeHors") && why.find("hors de la liste") != std::string::npos, "L[3] d'une liste d'un \xC3\xA9l\xC3\xA9ment : dit (" + why + ")");
+    check(run("ForEachListe") && r("R1") == 6.0 && r("R2") == 6.0 && r("R3") == 3.0, "FOR EACH x IN L (\xC3\xA9" "crit en place), FOR EACH i, v IN L (" + why + ")");
+    check(run("Concat") && r("R1") == 3.0 && r("R2") == 2.0 && ok(), "a + [3], LIST_INDEX_OF, LIST_CONTAINS (" + why + ")");
+    check(run("Split") && r("R1") == 3.0 && txt() == "c", "SPLIT('a;b;c', ';'), L.Last (" + why + ")");
+    check(run("ListeTableau") && r("R1") == 5.0 && r("R2") == 9.0 && r("R3") == 6.0,
+          "une liste re\xC3\xA7oit un tableau IHM, un tableau IHM re\xC3\xA7oit [5.0, 6.0] (les autres cases \xC3\xA0 0) (" + why + ")");
+    check(run("RetourListe") && r("R1") == 4.0 && r("R2") == 6.0 && r("R3") == 3.0, "une fonction rend une LIST OF INT ; LIST_MAX, LIST_AVG (" + why + ")");
+    check(run("Retirer") && ok() && r("R1") == 3.0 && txt() == "cxb/b?", "LIST_REMOVE, REMOVE_AT, INSERT, REVERSE, FIRST, GET : " + txt() + " (" + why + ")");
+    check(run("ListeDeTuples") && txt() == "cuve" && r("R1") == 870.5 && ok(), "LIST OF TUPLE(STRING, REAL) : L[1].Item1, LIST_CONTAINS d'un tuple (" + why + ")");
 }
 
 // 1.10 (chantier S2) : les operateurs des symboles et des types IHM (decision 14)
@@ -21650,6 +21729,7 @@ int main(int argc, char** argv) {
     guideNouveautes110();             // 1.10 (chantier P) : @depuis et @nouveau dans le guide
     scriptsCompiles110();             // 1.10 : Compiler trouve les erreurs des scripts
     scriptsLangage110();              // 1.10 (S1) : le langage des scripts
+    scriptsCollections1122();         // 1.12.2 : LIST, VECTOR, TUPLE, les litteraux
     enumerationsLangage110();         // 1.10 (S1, decision 15) : les enumerations dans les scripts
     operateurs110();                  // 1.10 (chantier S2) : les operateurs des symboles et des types IHM
     operateurs1101();                 // 1.10.1 (chantier U2) : a, b et Resultat (types, legende, exemple, Compiler)

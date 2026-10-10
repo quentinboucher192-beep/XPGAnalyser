@@ -815,6 +815,11 @@ private:
     void askHmiVariable(std::uint64_t variableId);        // 0 : une nouvelle
     // Lot 16 : Tableau... (les bornes et le type des cases) ; `done` recoit le type.
     void askHmiArrayType(const std::string& current, std::function<void(const std::string&)> done);
+    // 1.12.2 : LA FORME D'UN TYPE (hmi::typeform) - Tableau, Tableau 2D, Liste, Vecteur, Dictionnaire
+    // (MAP), Tuple : la forme (sa cle, "liste"...), le type des elements, le parametre (bornes, cle,
+    // types suivants) ou un type ecrit. `fixedOnly` : un membre de type IHM (Simple et les tableaux).
+    void askHmiShapedType(const std::string& current, const std::string& form, bool fixedOnly,
+                          std::function<void(const std::string&)> done);
     void askHmiDeleteVariable(std::uint64_t variableId);
     // Le lot 7 : les fonctions IHM (Programmation generale > Fonctions).
     void openHmiFunctions(std::uint64_t functionId = 0, int line = 0);

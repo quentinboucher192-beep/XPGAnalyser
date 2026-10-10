@@ -142,6 +142,9 @@ public:
         std::function<void(hmi::Id)>                               removeVariable;   // confirmer
         std::function<void(const std::string&)>                    showEquipment;    // Voir dans Equipements
         std::function<void(const std::string&, std::function<void(const std::string&)>)> arrayType;   // Tableau... (type actuel, rappel)
+        // 1.12.2 : Liste..., Vecteur..., Dictionnaire (MAP)..., Tuple... : la forme (cle de
+        // hmi::typeform::Form), le type actuel, le rappel avec le type compose.
+        std::function<void(const std::string&, const std::string&, std::function<void(const std::string&)>)> shapedType;
         std::function<void()>                                      newType;          // + Type : l'onglet Types IHM
         std::function<hmi::comm::Link*(const std::string&)>        link;             // en marche : la liaison d'un equipement
         // ---- 1.10 (chantier O) : la fenetre graphique temporaire ----

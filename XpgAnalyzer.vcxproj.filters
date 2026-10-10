@@ -1321,6 +1321,9 @@
     <ClCompile Include="src\hmi\HmiTutorialDeduce.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\hmi\HmiTypeForms.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\hmi\HmiTypeRegistry.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
@@ -2480,6 +2483,9 @@
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiTutorialDeduce.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiTypeForms.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiTypeRegistry.hpp">

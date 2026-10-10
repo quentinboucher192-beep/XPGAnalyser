@@ -11,6 +11,7 @@
 #include "HmiOperatorPanes.hpp"           // 1.10 (chantier S2)
 #include "HmiEnumPanes.hpp"               // 1.10 (chantier U) : le type enumeration
 #include "../../hmi/HmiTypes.hpp"
+#include "../../hmi/HmiTypeForms.hpp"     // 1.12.2 : Liste..., Vecteur..., Dictionnaire..., Tuple...
 #include "../../core/AtomicFile.hpp"   // 1.11.16 : exporter les valeurs remanentes
 #include "../../ui/Theme.hpp"
 #include "../../hmi/HmiTypeRegistry.hpp"   // 1.11.19 (refonte, lot 6) : les types, un seul catalogue
@@ -69,6 +70,19 @@ const std::string kDash = "\xE2\x80\x94";
 const std::string kRW = "lecture, \xC3\xA9" "criture";
 const std::string kRO = "lecture seule";
 const std::string kArray = "Tableau\xE2\x80\xA6";
+// 1.12.2 : les types objets (dans la memoire de l'IHM, sans equipement).
+const std::string kList = "Liste\xE2\x80\xA6";
+const std::string kVector = "Vecteur\xE2\x80\xA6";
+const std::string kMap = "Dictionnaire (MAP)\xE2\x80\xA6";
+const std::string kTuple = "Tuple\xE2\x80\xA6";
+// La forme d'une entree Liste..., Vecteur... ; vide : pas une telle entree.
+std::string shapeOfChoice(const std::string& text) {
+    if (text == kList) return "liste";
+    if (text == kVector) return "vecteur";
+    if (text == kMap) return "map";
+    if (text == kTuple) return "tuple";
+    return {};
+}
 const std::string& kPickType = typepicker::kChoose;              // 1.11.19 (lot 6) : le selecteur de types
 constexpr long long kShown = 200;       // les cases montrees d'un tableau deplie
 
@@ -124,18 +138,27 @@ std::string placeOf(const std::string& address, const std::string& type) {
     return address.front() == '%' ? pt.placeText() : eq::modiconText(pt);
 }
 
-std::vector<std::string> typeChoices(const hmi::Project& p, std::string_view except = {}) {
+// `members` : la liste d'un membre de type IHM (une place fixe : ni liste, ni MAP, ni tuple).
+std::vector<std::string> typeChoices(const hmi::Project& p, std::string_view except = {}, bool members = false) {
     std::vector<std::string> out;
     for (const auto& t : hmi::typereg::baseRegistry().names(hmi::typereg::UseVariable)) out.push_back(t);   // 1.11.19 : le registre
     for (const auto& t : p.programs.types)
         if (except.empty() || !sameText(t.name, except)) out.push_back(t.name);
     out.push_back(kArray);
+    if (!members)
+        for (const auto* k : {&kList, &kVector, &kMap, &kTuple}) out.push_back(*k);    // 1.12.2
     if (app::typepicker::available()) out.push_back(kPickType);
     return out;
 }
 
 bool validInitial(const hmi::Project& p, const std::string& type, const std::string& initial, std::string* why) {
     if (trimmed(initial).empty()) return true;
+    // 1.12.2 : un type objet - un litteral que le moteur range dans son type ([1, 2, 3], ['a' := 1], (1, 'x')).
+    if (ty::isRich(type)) {
+        std::string w;
+        if (hmi::typeform::valueFits(p, type, initial, &w)) return true;
+        return fail(why, "valeur initiale illisible pour un " + ty::normalized(type) + " : " + w + " (" + std::string(hmi::typeform::valueHint(hmi::typeform::decompose(type).form)) + ")");
+    }
     // 1.10 (chantier U) : une enumeration prend le nom d'une de ses valeurs (T_MODE#Auto, le texte, le nombre).
     if (const auto* e = hmi::findEnumeration(p, type)) {
         std::int64_t n = 0;
@@ -497,7 +520,7 @@ HmiVariablesPane::HmiVariablesPane(std::string id, hmi::DocumentPtr doc, Apply a
     tools_->setEnabledWhen(VTrend, [this] { return table_ && !table_->selectedModelRows().empty(); });   // 1.10 (le clic dit s'il n'y a rien a tracer)
     tools_->setEnabledWhen(VLink, [this] {
         const auto* v = doc_->project.variableById(selectedVariable());
-        return v && !v->bound();
+        return v && !v->bound() && !ty::isRich(v->type);   // 1.12.2 : un objet de l'IHM ne se lie pas
     });
     tools_->setEnabledWhen(VUnlink, [this] {
         const auto* v = doc_->project.variableById(selectedVariable());
@@ -1067,14 +1090,19 @@ bool HmiVariablesPane::cellEditable(std::size_t row, std::size_t col) const {
         case Row::Kind::Variable: {
             const auto* v = doc_->project.variableById(r.var);
             if (!v) return false;
-            if (col == CName || col == CType || col == CEquipment) return true;
+            // 1.12.2 : un type objet (LIST, VECTOR, MAP, TUPLE) vit dans l'IHM : ni equipement, ni adresse,
+            // ni remanence ; sa valeur initiale est un litteral.
+            const bool rich = ty::isRich(v->type);
+            if (col == CName || col == CType) return true;
+            if (col == CEquipment) return !rich;
             if (col == CInitial) {
+                if (rich) return true;
                 if (hmi::findEnumeration(doc_->project, v->type)) return true;   // 1.10 (chantier U) : la liste des valeurs
                 ty::Spec s;
                 return !ty::isComposite(v->type) || (ty::parseSpec(v->type, s) && s.array() && ty::isElementary(s.element));
             }
-            if (col == CAddress || col == CAccess) return v->bound();
-            if (col == CRetain) return !v->bound();   // 1.11.16 : une variable de l'IHM
+            if (col == CAddress || col == CAccess) return v->bound() && !rich;
+            if (col == CRetain) return !v->bound() && !rich;   // 1.11.16 : une variable de l'IHM
             return false;
         }
         case Row::Kind::Member: return col == CAddress && r.editableAddress;
@@ -1146,7 +1174,25 @@ bool HmiVariablesPane::commitCell(std::size_t row, std::size_t col, const std::s
                         });
                         return false;
                     }
-                    if (text == kArray) {
+                    if (const std::string shape = shapeOfChoice(text); !shape.empty()) {
+                        // 1.12.2 : Liste..., Vecteur..., Dictionnaire (MAP)..., Tuple... : la forme et le type
+                        // des elements dans une fenetre ; sans hote, la forme sur le type actuel.
+                        const auto* v = doc_->project.variableById(r.var);
+                        const std::string current = v ? v->type : std::string("INT");
+                        const Id id = r.var;
+                        if (hosts_.shapedType) {
+                            hosts_.shapedType(current, shape, [this, id](const std::string& type) {
+                                std::string w;
+                                if (!setType(id, type, &w)) say("Type refus\xC3\xA9 : " + w, true);
+                            });
+                            return true;
+                        }
+                        auto sh = hmi::typeform::decompose(current);
+                        sh.form = hmi::typeform::fromText(shape).value_or(hmi::typeform::Form::List);
+                        sh.parameter.clear();
+                        sh.reference = false;
+                        ok = setType(r.var, hmi::typeform::compose(sh), &why);
+                    } else if (text == kArray) {
                         // Tableau... : les bornes et le type des cases, dans une fenetre.
                         const auto* v = doc_->project.variableById(r.var);
                         const std::string current = v ? v->type : std::string("INT");
@@ -1416,6 +1462,34 @@ bool HmiVariablesPane::setType(Id id, const std::string& raw, std::string* why) 
         say(v->name + " : " + name + " (\xC3\xA9num\xC3\xA9ration, un DINT) \xC2\xB7 valeur initiale " + (first.empty() ? std::string("vide") : first));
         return true;
     }
+    // 1.12.2 : UN TYPE OBJET (LIST, VECTOR, MAP, TUPLE) vit dans la memoire de l'IHM : la variable
+    // est deliee de son equipement (sa place n'a plus de sens) et n'est plus remanente ; sa valeur
+    // initiale, si elle ne va plus, est videe.
+    if (ty::isRich(type)) {
+        if (v->type == type) return true;
+        const bool wasBound = v->bound();
+        const std::string was = v->equipment + (v->address.empty() ? std::string{} : " (" + v->address + ")");
+        const bool wasRetained = v->retain;
+        const std::string name = v->name;
+        change(id, "Type de " + v->name + " : " + type, [&](hmi::Variable& x) {
+            x.type = type;
+            if (!validInitial(doc_->project, type, x.initial, nullptr)) x.initial.clear();
+            x.equipment.clear();
+            x.address.clear();
+            x.readOnly = false;
+            x.rawMin = x.rawMax = x.engMin = x.engMax = 0;
+            x.rawType.clear();
+            x.places.clear();
+            x.internal.clear();
+            x.compact = false;
+            x.retain = false;
+        });
+        std::string text = name + " : " + type + " \xC2\xB7 " + std::string(hmi::typeform::summary(hmi::typeform::decompose(type).form));
+        if (wasBound) text += " \xC2\xB7 d\xC3\xA9li\xC3\xA9" "e de " + was + " : " + ty::unbindableReason(type);
+        if (wasRetained) text += " \xC2\xB7 R\xC3\xA9manente retir\xC3\xA9" "e";
+        say(text, wasBound);
+        return true;
+    }
     if (ty::isComposite(type)) {
         const auto f = ty::flatten(doc_->project, v->name, type, {}, v->packBools);
         if (!f.ok()) return fail(why, f.error);
@@ -1495,6 +1569,8 @@ bool HmiVariablesPane::setEquipment(Id id, const std::string& raw, std::string* 
         say(v->name + " n'est plus li\xC3\xA9" "e \xC3\xA0 " + was + " : elle reste dans l'IHM");
         return true;
     }
+    // 1.12.2 : un type objet (taille variable, ou sans plan memoire) ne tient pas dans un equipement.
+    if (const std::string reason = ty::unbindableReason(v->type); !reason.empty()) return fail(why, v->name + " : " + reason);
     const auto* e = doc_->project.equipmentByName(name);
     if (!e) return fail(why, "\xC3\xA9quipement inconnu : " + name);
     if (!e->modbus()) return fail(why, e->name + " est un \xC3\xA9quipement Ethernet TCP/IP : il n'a pas de variables");
@@ -1522,6 +1598,7 @@ bool HmiVariablesPane::setEquipment(Id id, const std::string& raw, std::string* 
 bool HmiVariablesPane::setAddress(Id id, const std::string& raw, std::string* why) {
     const auto* v = doc_->project.variableById(id);
     if (!v) return fail(why, "variable introuvable");
+    if (const std::string reason = ty::unbindableReason(v->type); !reason.empty()) return fail(why, v->name + " : " + reason);   // 1.12.2
     if (!v->bound()) return fail(why, v->name + " n'est li\xC3\xA9" "e \xC3\xA0 aucun \xC3\xA9quipement (colonne \xC3\x89quipement)");
     const std::string address = trimmed(raw);
     if (address.empty()) return fail(why, "adresse vide (D\xC3\xA9lier pour la retirer de l'\xC3\xA9quipement)");
@@ -1668,6 +1745,8 @@ bool HmiVariablesPane::setRetain(Id id, bool on, std::string* why) {
     const auto* v = doc_->project.variableById(id);
     if (!v) return fail(why, "variable introuvable");
     if (v->retain == on) return true;
+    if (on && ty::isRich(v->type))   // 1.12.2
+        return fail(why, v->name + " est un " + ty::normalized(v->type) + " : un objet de l'IHM, que R\xC3\xA9manente ne garde pas (des cases simples seulement)");
     if (on && v->bound())
         return fail(why, v->name + " est li\xC3\xA9" "e \xC3\xA0 " + v->equipment + " : sa valeur vient de l'\xC3\xA9quipement, qui la garde "
                          "(R\xC3\xA9manente vaut pour une variable de l'IHM)");
@@ -2946,7 +3025,7 @@ void HmiTypesPane::refreshMembers() {
         [this, tid](std::size_t, std::size_t c) {
             if (c != 1) return std::vector<std::string>{};
             const auto* t2 = doc_->project.hmiType(tid);
-            return typeChoices(doc_->project, t2 ? t2->name : std::string_view{});
+            return typeChoices(doc_->project, t2 ? t2->name : std::string_view{}, /*members*/ true);   // 1.12.2 : une place fixe
         },
         [this](std::size_t r, std::size_t c, const std::string& text) { return commitMemberCell(r, c, text); });
     syncing_ = true;
@@ -3031,7 +3110,7 @@ bool HmiTypesPane::change(Id id, std::string label, const std::function<bool(hmi
     if (!edit(*tt, why)) return false;
     if (const auto cycle = ty::cycleOf(trial, tt->name); !cycle.empty()) return fail(why, "le type se contiendrait lui-m\xC3\xAAme : " + cycle);
     for (const auto& m : tt->members)
-        if (!ty::validType(trial, m.type, why)) return false;
+        if (!ty::validMemberType(trial, m.type, why)) return false;
     bool ok = true;
     apply_(hmi::changeProject(doc_, std::move(label), [&](hmi::Project& p) {
         if (auto* x = p.hmiType(id)) ok = edit(*x, nullptr);
@@ -3164,7 +3243,7 @@ bool HmiTypesPane::setMember(Id id, std::size_t index, const hmi::TypeMember& m,
         if (index >= t.members.size()) return fail(w, "membre introuvable");
         for (std::size_t i = 0; i < t.members.size(); ++i)
             if (i != index && sameText(t.members[i].name, m.name)) return fail(w, "le membre " + m.name + " existe d\xC3\xA9j\xC3\xA0");
-        if (!ty::validType(doc_->project, m.type, w)) return false;
+        if (!ty::validMemberType(doc_->project, m.type, w)) return false;
         t.members[index] = m;
         return true;
     }, why);
@@ -3467,7 +3546,7 @@ HmiTypesPane::MemberPaste HmiTypesPane::planMemberPaste(Id typeId, std::string_v
         if (hasType) {
             const std::string norm = ty::normalized(type);
             std::string why;
-            if (!ty::validType(trial, norm, &why)) {
+            if (!ty::validMemberType(trial, norm, &why)) {
                 const std::string near = nearestType(trial, type);    // 1.10 : comme la maquette (BOOOL -> BOOL)
                 plan.refused.push_back({line, name, "type inconnu : " + type + (near.empty() ? std::string{} : " \xE2\x80\x94 veux-tu dire " + near + " ?")});
                 continue;

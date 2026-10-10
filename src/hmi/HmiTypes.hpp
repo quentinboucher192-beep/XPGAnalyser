@@ -56,8 +56,22 @@ bool parseSpec(std::string_view text, Spec& out, std::string* why = nullptr);
 [[nodiscard]] std::string normalized(std::string_view type);
 [[nodiscard]] bool isElementary(std::string_view name) noexcept;     // BOOL, INT... (sans casse)
 [[nodiscard]] bool isComposite(std::string_view type) noexcept;      // un tableau ou un autre nom qu'un elementaire
-// Connu : elementaire, type IHM du projet, ou tableau de l'un d'eux, bornes lisibles.
+// Connu : elementaire, type IHM du projet, ou tableau de l'un d'eux, bornes lisibles ;
+// 1.12.2 : ou un type objet (isRich) que le registre lit pour une variable IHM.
 [[nodiscard]] bool validType(const Project&, std::string_view type, std::string* why = nullptr);
+// 1.12.2 : un MEMBRE d'un type IHM a une place fixe : validType, sans type objet.
+[[nodiscard]] bool validMemberType(const Project&, std::string_view type, std::string* why = nullptr);
+
+// 1.12.2 : LES TYPES OBJETS DE L'IHM - une MAP (MAP[STRING] OF REAL), une liste (LIST OF T), un
+// vecteur (VECTOR OF T), un tuple (TUPLE(INT, STRING)), ou un tableau de l'un d'eux. Une variable
+// IHM de ce type vit ENTIERE dans la memoire de l'IHM (un objet du moteur des scripts) : elle ne
+// se deplie pas en cases (flatten : aucune case, sans erreur), ne se lie a aucun equipement et
+// n'a pas d'adresse ; sa valeur initiale est un litteral ([1, 2, 3], ['a' := 1], (1, 'x')).
+[[nodiscard]] bool isRich(std::string_view type);
+// ... dont la TAILLE VARIE (MAP, LIST, VECTOR, ou un type qui en contient).
+[[nodiscard]] bool isDynamic(std::string_view type);
+// Pourquoi une variable de ce type ne se lie pas a un equipement, en une phrase ; vide : elle peut.
+[[nodiscard]] std::string unbindableReason(std::string_view type);
 // Un type IHM qui se contient lui-meme : le chemin du cycle ("T_A -> T_B -> T_A") ; vide : aucun.
 [[nodiscard]] std::string cycleOf(const Project&, std::string_view typeName);
 // Les variables et les types qui emploient ce type IHM (ses noms).

@@ -2485,6 +2485,8 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
         ihmVars_ = tree.get();
         HmiSimVarTree::Hooks h;
         h.read = [this](const std::string& path) -> std::optional<sim::Value> {
+            // 1.12.2 : une variable objet (LIST, VECTOR, MAP, TUPLE) : sa valeur ecrite, [1, 2, 3].
+            if (runtime_.richVariable(path)) return sim::Value::text(runtime_.richText(path));
             // 1.11.7 : forcee dans son esclave simule - la valeur forcee tout de suite (la liaison ne
             // la relit qu'a son prochain cycle).
             updateTwinPlaces();
@@ -2519,6 +2521,9 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
             return tp && (twinForced(*tp) || twinBehavior(*tp) != nullptr);
         };
         h.force = [this](const std::string& path, const std::string& text, std::string* why) {
+            // 1.12.2 : une variable objet recoit un litteral ([1, 2, 3], ['a' := 1]) : une ecriture,
+            // les scripts la changent ensuite (elle n'est pas tenue).
+            if (runtime_.richVariable(path)) return runtime_.setRichVariable(path, text, why);
             const auto* cur = runtime_.variable(path);
             if (!cur) {
                 if (why) *why = path + " : l'IHM ne tourne pas (le bouton D\xC3\xA9marrer l'IHM)";
@@ -4579,7 +4584,7 @@ void HmiSimulationPane::updateTables() {
             ihmVarsSig_ = sig;
             std::vector<HmiSimVarTree::Leaf> leaves;
             for (const auto& var : doc_->project.programs.variables) {
-                if (!hmi::types::isComposite(var.type)) {
+                if (!hmi::types::isComposite(var.type) || hmi::types::isRich(var.type)) {   // 1.12.2 : un objet, une ligne
                     leaves.push_back({var.name, var.type});
                     continue;
                 }

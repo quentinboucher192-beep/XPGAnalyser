@@ -63,7 +63,7 @@ namespace hmi::typereg {
 enum class Category : std::uint8_t {
     Elementary,     // BOOL, les entiers, les reels, les mots de bits
     TextTime,       // STRING, TIME
-    Collection,     // ARRAY, MAP (construits)
+    Collection,     // ARRAY, MAP, LIST, VECTOR, TUPLE (construits)
     Structure,      // les structures IHM du projet
     Enumeration,    // les enumerations IHM du projet
     PlcType,        // les DDT du programme de l'automate
@@ -123,6 +123,12 @@ struct Resolved {
     bool         missing{false};    // un nom qui n'est (plus) dans le projet : un type supprime, mal ecrit
     std::string  unknown;           // missing : ce nom-la (l'element d'un tableau, la cible d'une reference...)
     std::string  why;               // pas ok : pourquoi, en francais
+    // 1.12.2 : TAILLE VARIABLE - une MAP, une liste (LIST OF T), un vecteur (VECTOR OF T), ou un
+    // type qui en contient : jamais dans la memoire fixe d'un equipement.
+    bool         dynamic{false};
+    // 1.12.2 : UN OBJET DE L'IHM - dynamic, ou un TUPLE (sans plan memoire) : une variable IHM de
+    // ce type vit dans la memoire de l'IHM, entiere (elle ne se deplie pas en cases liees).
+    bool         rich{false};
 };
 
 class Registry {
@@ -140,8 +146,8 @@ public:
     [[nodiscard]] std::vector<const Entry*> usable(unsigned use, bool proposedOnly = false) const;
     [[nodiscard]] std::vector<std::string>  names(unsigned use, bool proposedOnly = true) const;
     // Un texte de type : un nom, ou un type construit (ARRAY, MAP, REF_TO, POINTER TO,
-    // MAP_ITERATOR, STRING[n]). `use` : l'usage demande (un type connu mais pas permis
-    // ici n'est pas ok, et `why` le dit).
+    // MAP_ITERATOR, STRING[n] ; 1.12.2 : LIST OF T, VECTOR OF T, TUPLE(T1, T2...)). `use` :
+    // l'usage demande (un type connu mais pas permis ici n'est pas ok, et `why` le dit).
     [[nodiscard]] Resolved resolve(std::string_view text, unsigned use = UseAll) const;
     // Le nom d'aujourd'hui d'une cle (un type IHM renomme) ; vide : la cle n'est plus la.
     [[nodiscard]] std::string nameOfKey(std::string_view key) const;

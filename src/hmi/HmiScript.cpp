@@ -454,7 +454,8 @@ bool richLocalType(std::string_view type, const std::function<bool(std::string_v
     std::string u = upper(type);
     while (!u.empty() && std::isspace(static_cast<unsigned char>(u.back()))) u.pop_back();
     if (u.empty()) return false;
-    for (std::string_view p : {"ARRAY", "MAP", "REF_TO", "REFERENCE", "POINTER", "STRING"})
+    // 1.12.2 : LIST OF T, VECTOR OF T, TUPLE(T1, T2...).
+    for (std::string_view p : {"ARRAY", "MAP", "REF_TO", "REFERENCE", "POINTER", "STRING", "LIST", "VECTOR", "TUPLE"})
         if (u.rfind(p, 0) == 0 && (u.size() == p.size() || !identChar(u[p.size()]))) return true;
     if (u == "MAP_ITERATOR" || u == "ITERATOR") return true;
     // un type de base permis a une declaration (LINT, ULINT : sans etre proposes)

@@ -120,6 +120,13 @@ public:
         (void)typeName; (void)out;
         return false;
     }
+    // 1.12.2 : UNE VARIABLE DU PROJET A TAILLE VARIABLE (LIST OF T, VECTOR OF T, MAP[K] OF V, ou
+    // un type qui en contient) : son objet, garde par l'environnement - le dialecte la lit et
+    // l'ecrit en place (L[0], L.Count, LIST_ADD(L, x)). Nul : pas une telle variable.
+    virtual ObjRef richVariable(std::string_view name) {
+        (void)name;
+        return nullptr;
+    }
     // Une fonction IHM du projet, lue dans le dialecte (nul : pas une fonction
     // du projet ; l'appel passe alors par call()).
     virtual std::shared_ptr<const Function> dialectFunction(std::string_view name) {
@@ -191,6 +198,12 @@ struct ParseOptions {
 [[nodiscard]] core::Result<std::shared_ptr<Program>> parse(std::string_view source, std::string sectionName,
                                                            const ParseOptions& options);
 [[nodiscard]] bool isDialect(const Program&) noexcept;
+
+// 1.12.2 : UN OBJET NEUF DU TYPE ECRIT `type` (LIST OF REAL, MAP[STRING] OF INT, TUPLE(INT, STRING),
+// ARRAY[1..3] OF REAL...), a la valeur du litteral `initial` ([1, 2.5], ['a' := 1], (1, 'x') ; vide :
+// celle du type) - une variable de l'IHM d'un type objet, la valeur d'une constante a verifier. Nul,
+// et `why`, si le type ou la valeur ne se lisent pas, ou si la valeur ne va pas dans le type.
+[[nodiscard]] ObjRef makeRichValue(std::string_view type, std::string_view initial, Environment& env, std::string* why = nullptr);
 
 // 1.10 : UNE FONCTION DU DIALECTE, lue seule (une fonction IHM du projet, un
 // operateur) : "FUNCTION Nom(A : T; VAR_IN_OUT B : U) : R  ...  END_FUNCTION".

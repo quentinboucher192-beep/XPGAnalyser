@@ -755,6 +755,14 @@ public:
     // Variables IHM, puis automate : ce que lisent les expressions des vues.
     [[nodiscard]] sim::Environment& environment();
     [[nodiscard]] const sim::Value* variable(std::string_view name) const;
+    // 1.12.2 : UNE VARIABLE IHM D'UN TYPE OBJET (LIST, VECTOR, MAP, TUPLE : types::isRich) - son
+    // objet, entier, dans la memoire de l'IHM (les scripts et les expressions le lisent et
+    // l'ecrivent en place) ; nul : pas une telle variable. `richText` : sa valeur ecrite comme un
+    // litteral ([1, 2, 3], ['a' := 1]) ; vide : pas une telle variable.
+    [[nodiscard]] sim::ObjRef richVariable(std::string_view name) const;
+    [[nodiscard]] std::string richText(std::string_view name) const;
+    // Lui donner la valeur d'un litteral (la simulation : « forcer ») ; faux et `why` sinon.
+    bool setRichVariable(std::string_view name, std::string_view literal, std::string* why = nullptr);
     // 1.11.5 : FORCER UNE VARIABLE IHM (l'onglet Variables IHM de la simulation), le meme
     // contrat que l'automate simule : forcee, elle prend la valeur donnee et ignore les
     // ecritures (scripts, actions, champs, equipement lie) jusqu'au deforcage. Une case
@@ -1292,6 +1300,7 @@ private:
     // Lot 16 : les structures et tableaux IHM (cle : le chemin en majuscules),
     // les indices hors des bornes deja dits au journal.
     std::map<std::string, types::Aggregate, std::less<>> aggregates_;
+    std::map<std::string, sim::ObjRef, std::less<>>      rich_;        // 1.12.2 : les variables objets (cle : le nom en majuscules)
     std::set<std::string>                                boundsReported_;
     std::set<std::string, std::less<>>                   forcedIhm_;   // 1.11.5 : les variables IHM forcees (en majuscules)
     bool aggregateRead(const std::string& path, sim::Value& out);

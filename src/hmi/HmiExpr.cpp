@@ -121,6 +121,13 @@ public:
     bool structMembers(std::string_view typeName, std::vector<std::pair<std::string, std::string>>& out) override {
         return plc_.structMembers(typeName, out);
     }
+    // 1.12.2 : une variable objet (LIST, MAP...) : une copie - une expression ne modifie rien
+    // (LIST_ADD(L, 1) dans une expression ajoute a la copie, pas a la variable).
+    sim::ObjRef richVariable(std::string_view name) override {
+        if (scope_ && scope_->value(name)) return nullptr;
+        auto o = plc_.richVariable(scope_ ? scope_->resolve(name) : std::string(name));
+        return o ? sim::deepCopy(*o) : nullptr;
+    }
     bool findOperator(std::string_view op, std::string_view l, std::string_view r, sim::OperatorSource& out) override {
         return plc_.findOperator(op, l, r, out);
     }

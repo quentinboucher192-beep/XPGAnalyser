@@ -31,6 +31,7 @@
 #include "HmiProduction.hpp"
 #include "HmiDisplay.hpp"      // lot 13
 #include "HmiTypes.hpp"        // lot 16
+#include "HmiTypeForms.hpp"    // 1.12.2 : la valeur initiale d'une variable objet
 #include "HmiEnums.hpp"        // 1.10 (S1) : knownType connait les enumerations
 #include "HmiOperators.hpp"    // 1.10 (integration I2) : les constats des operateurs (S2) dans Compiler
 #include "HmiNatives.hpp"      // 1.12.1 : les enumerations natives des proprietes
@@ -300,6 +301,10 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
         std::string why;
         if (!types::validType(p, var.type, &why)) {
             add(out, S::Error, "Variable IHM", kNoId, kNoId, var.name, var.name + " : " + why);
+        } else if (types::isRich(var.type)) {
+            // 1.12.2 : un type objet (LIST, VECTOR, MAP, TUPLE) - sa valeur initiale, un litteral.
+            if (!typeform::valueFits(p, var.type, var.initial, &why))
+                add(out, S::Error, "Variable IHM", kNoId, kNoId, var.name, var.name + " : valeur initiale illisible (" + why + ")");
         } else if (types::isComposite(var.type)) {
             const auto f = types::flatten(p, var.name, var.type, var.initial, var.packBools);
             if (!f.ok()) add(out, S::Error, "Variable IHM", kNoId, kNoId, var.name, f.error);
@@ -322,7 +327,7 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
             std::string why;
             if (!isIdentifier(m.name)) add(out, S::Error, cat, kNoId, kNoId, ty.name, ty.name + " : nom de membre invalide '" + m.name + "'");
             else if (!members.insert(upperText(m.name)).second) add(out, S::Error, cat, kNoId, kNoId, ty.name, ty.name + " : membre en double " + m.name);
-            if (!types::validType(p, m.type, &why)) add(out, S::Error, cat, kNoId, kNoId, ty.name, ty.name + "." + m.name + " : " + why);
+            if (!types::validMemberType(p, m.type, &why)) add(out, S::Error, cat, kNoId, kNoId, ty.name, ty.name + "." + m.name + " : " + why);
             if (types::property(m.name))
                 add(out, S::Info, cat, kNoId, kNoId, ty.name,
                     ty.name + "." + m.name + " : un membre de ce nom passe avant la propri\xC3\xA9t\xC3\xA9 " + m.name);
@@ -2458,6 +2463,11 @@ void checkEquipments(const Project& p, std::vector<Issue>& out) {
     for (const auto& v : p.programs.variables) {
         if (!v.bound()) continue;
         const std::string vcat = "Variable IHM";
+        // 1.12.2 : un type objet (taille variable, ou sans plan memoire) ne se lie pas.
+        if (const std::string reason = types::unbindableReason(v.type); !reason.empty()) {
+            add(out, S::Error, vcat, kNoId, kNoId, v.name, v.name + " est li\xC3\xA9" "e \xC3\xA0 " + v.equipment + " : " + reason + " (D\xC3\xA9lier dans Variables IHM)");
+            continue;
+        }
         const auto* e = p.equipmentByName(v.equipment);
         if (!e) {
             add(out, S::Error, vcat, kNoId, kNoId, v.name, v.name + " est li\xC3\xA9" "e \xC3\xA0 un \xC3\xA9quipement inconnu : " + v.equipment);
@@ -3763,7 +3773,9 @@ std::vector<Issue> compileFocused(const Project& p, const CompileFocus* f) {
     for (const auto& var : p.programs.variables)
         if (!var.initial.empty() && (!f || f->variables)) {
             // Lot 16 : un tableau de cases simples accepte une liste ("1.5, 2, 3") ;
-            // une structure prend les valeurs de son type.
+            // une structure prend les valeurs de son type. 1.12.2 : un type objet est
+            // verifie par checkPrograms (un litteral entier, lu par le moteur).
+            if (types::isRich(var.type)) continue;
             types::Spec spec;
             if (types::isComposite(var.type) && types::parseSpec(var.type, spec) && !(spec.array() && types::isElementary(spec.element)))
                 continue;

@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
+#include <cstdio>
 
 namespace sim {
 
@@ -28,8 +30,44 @@ std::string TypeDesc::text() const {
         case Kind::Ref: return "REF_TO " + (element ? element->text() : std::string("?"));
         case Kind::Pointer: return "POINTER TO " + (element ? element->text() : std::string("?"));
         case Kind::Iterator: return "MAP_ITERATOR";
+        case Kind::List: return (name.empty() ? std::string("LIST") : name) + " OF " + (element ? element->text() : std::string("?"));
+        case Kind::Tuple: {
+            std::string s = "TUPLE(";
+            for (std::size_t i = 0; i < members.size(); ++i)
+                s += (i ? ", " : "") + (members[i].second ? members[i].second->text() : std::string("?"));
+            return s + ")";
+        }
     }
     return "?";
+}
+
+bool TypeDesc::dynamic() const noexcept {
+    switch (kind) {
+        case Kind::Map:
+        case Kind::List: return true;
+        case Kind::Array: return element && element->dynamic();
+        case Kind::Struct:
+        case Kind::Tuple:
+            for (const auto& m : members)
+                if (m.second && m.second->dynamic()) return true;
+            return false;
+        default: return false;
+    }
+}
+
+TypeRef listType(TypeRef element, bool vector) {
+    auto d = std::make_shared<TypeDesc>();
+    d->kind = TypeDesc::Kind::List;
+    d->name = vector ? "VECTOR" : "LIST";
+    d->element = std::move(element);
+    return d;
+}
+
+TypeRef tupleType(std::vector<TypeRef> items) {
+    auto d = std::make_shared<TypeDesc>();
+    d->kind = TypeDesc::Kind::Tuple;
+    for (std::size_t i = 0; i < items.size(); ++i) d->members.emplace_back("Item" + std::to_string(i + 1), std::move(items[i]));
+    return d;
 }
 
 std::int64_t TypeDesc::count() const noexcept {
@@ -63,6 +101,13 @@ bool sameType(const TypeDesc& a, const TypeDesc& b) noexcept {
         case TypeDesc::Kind::Pointer:
             return a.element && b.element && sameType(*a.element, *b.element);
         case TypeDesc::Kind::Iterator: return true;
+        // 1.12.2 : LIST et VECTOR s'echangent (meme element) ; un tuple : memes types, dans l'ordre.
+        case TypeDesc::Kind::List: return a.element && b.element && sameType(*a.element, *b.element);
+        case TypeDesc::Kind::Tuple:
+            if (a.members.size() != b.members.size()) return false;
+            for (std::size_t i = 0; i < a.members.size(); ++i)
+                if (!a.members[i].second || !b.members[i].second || !sameType(*a.members[i].second, *b.members[i].second)) return false;
+            return true;
     }
     return false;
 }
@@ -80,10 +125,11 @@ ObjRef makeObj(const TypeRef& type) {
             break;
         }
         case TypeDesc::Kind::Struct:
+        case TypeDesc::Kind::Tuple:
             o->items.reserve(type->members.size());
             for (const auto& m : type->members) o->items.push_back(makeObj(m.second));
             break;
-        default: break;
+        default: break;                  // une liste nait vide
     }
     return o;
 }
@@ -127,9 +173,18 @@ bool assignObj(Obj& into, const Obj& from, std::string* why) {
     switch (t.kind) {
         case TypeDesc::Kind::Array:
         case TypeDesc::Kind::Struct:
+        case TypeDesc::Kind::Tuple:
             for (std::size_t i = 0; i < into.items.size() && i < from.items.size(); ++i)
                 if (into.items[i] && from.items[i] && !assignObj(*into.items[i], *from.items[i], why)) return false;
             return true;
+        case TypeDesc::Kind::List: {
+            if (&into == &from) return true;
+            std::vector<ObjRef> copy;
+            copy.reserve(from.items.size());
+            for (const auto& i : from.items) copy.push_back(i ? deepCopy(*i) : makeObj(t.element));
+            into.items = std::move(copy);
+            return true;
+        }
         case TypeDesc::Kind::Map:
             into.textKeys.clear();
             into.intKeys.clear();
@@ -155,6 +210,8 @@ bool deepEquals(const Obj& a, const Obj& b) {
     switch (a.type->kind) {
         case TypeDesc::Kind::Array:
         case TypeDesc::Kind::Struct:
+        case TypeDesc::Kind::Tuple:
+        case TypeDesc::Kind::List:
             if (a.items.size() != b.items.size()) return false;
             for (std::size_t i = 0; i < a.items.size(); ++i)
                 if (!a.items[i] || !b.items[i] || !deepEquals(*a.items[i], *b.items[i])) return false;
@@ -214,8 +271,88 @@ std::string display(const Obj& o) {
             return o.targetName.empty() ? (o.target.expired() ? std::string("(disparue)") : std::string("(locale)")) : "-> " + o.targetName;
         case TypeDesc::Kind::Iterator:
             return o.atEnd ? std::string("(fin)") : std::string("(cle ") + (o.textKey.empty() ? std::to_string(o.intKey) : o.textKey) + ")";
+        case TypeDesc::Kind::List: {
+            std::string s = "[";
+            for (std::size_t i = 0; i < o.items.size(); ++i) {
+                if (i == 16) { s += ", ... (" + std::to_string(o.items.size()) + ")"; break; }
+                s += (i ? ", " : "") + (o.items[i] ? display(*o.items[i]) : std::string("?"));
+            }
+            return s + "]";
+        }
+        case TypeDesc::Kind::Tuple: {
+            std::string s = "(";
+            for (std::size_t i = 0; i < o.items.size(); ++i) s += (i ? ", " : "") + (o.items[i] ? display(*o.items[i]) : std::string("?"));
+            return s + ")";
+        }
     }
     return "?";
+}
+
+namespace {
+std::string scalarLiteral(const Value& v) {
+    switch (v.type()) {
+        case Type::String: {
+            std::string s = "'";
+            for (const char c : v.asString()) {
+                if (c == '\'') s += "$'";
+                else if (c == '$') s += "$$";
+                else if (c == '\n') s += "$N";
+                else if (c == '\t') s += "$T";
+                else s += c;
+            }
+            return s + "'";
+        }
+        case Type::Real: {
+            const double r = v.asReal();
+            if (!std::isfinite(r)) return "0.0";
+            char buf[64];
+            std::snprintf(buf, sizeof buf, "%.15g", r);
+            std::string s = buf;
+            if (s.find_first_of(".eE") == std::string::npos) s += ".0";
+            return s;
+        }
+        default: return v.display();
+    }
+}
+} // namespace
+
+bool literalText(const Obj& o, std::string& out) {
+    if (!o.type) return false;
+    switch (o.type->kind) {
+        case TypeDesc::Kind::Scalar: out = scalarLiteral(o.value); return true;
+        case TypeDesc::Kind::Array:
+        case TypeDesc::Kind::List:
+        case TypeDesc::Kind::Tuple: {
+            const bool tuple = o.type->kind == TypeDesc::Kind::Tuple;
+            std::string s = tuple ? "(" : "[";
+            for (std::size_t i = 0; i < o.items.size(); ++i) {
+                std::string item;
+                if (!o.items[i] || !literalText(*o.items[i], item)) return false;
+                s += (i ? ", " : "") + item;
+            }
+            out = s + (tuple ? ")" : "]");
+            return true;
+        }
+        case TypeDesc::Kind::Map: {
+            std::string s = "[";
+            bool first = true;
+            for (const auto& [k, v] : o.textKeys) {
+                std::string item;
+                if (!v || !literalText(*v, item)) return false;
+                s += (first ? "" : ", ") + scalarLiteral(Value::text(k)) + " := " + item;
+                first = false;
+            }
+            for (const auto& [k, v] : o.intKeys) {
+                std::string item;
+                if (!v || !literalText(*v, item)) return false;
+                s += (first ? "" : ", ") + std::to_string(k) + " := " + item;
+                first = false;
+            }
+            out = s + "]";
+            return true;
+        }
+        default: return false;
+    }
 }
 
 bool flatIndex(const TypeDesc& t, const std::vector<std::int64_t>& indices, std::size_t& out, std::string* why) {

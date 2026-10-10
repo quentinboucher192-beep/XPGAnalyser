@@ -216,6 +216,24 @@ private:
         const std::size_t start = i_;
         skip();
         if (atWord("ARRAY")) return array(use, depth);
+        // 1.12.2 : LIST OF T, VECTOR OF T, TUPLE(T1, T2...).
+        if (atWord("LIST") || atWord("VECTOR")) {
+            std::size_t save = i_;
+            const bool vector = atWord("VECTOR");
+            (void)word();
+            if (atWord("OF")) {
+                (void)word();
+                return list(use, depth, vector);
+            }
+            i_ = save;                                  // un type IHM nomme LIST : un nom
+        }
+        if (atWord("TUPLE")) {
+            std::size_t save = i_;
+            (void)word();
+            skip();
+            if (i_ < s_.size() && s_[i_] == '(') return tuple(use, depth);
+            i_ = save;
+        }
         if (atWord("MAP")) {
             std::size_t save = i_;
             (void)word();
@@ -327,6 +345,8 @@ private:
         r.entry = e.entry;
         r.missing = e.missing;
         r.unknown = e.unknown;
+        r.dynamic = e.dynamic;                          // 1.12.2 : un tableau de listes...
+        r.rich = e.rich;
         r.ok = e.ok && (use & (UseVariable | UseDeclaration | UseParameter | UseReturn)) != 0;
         r.why = e.ok ? (r.ok ? std::string{} : "un tableau ne convient pas \xC3\xA0 " + useText(use)) : e.why;
         return r;
@@ -335,8 +355,9 @@ private:
     Resolved map(unsigned use, int depth) {
         if (!accept('[')) return fail("MAP : [ attendu");
         Resolved key = type(UseDeclaration, depth + 1);
-        if (!key.ok) return fail("MAP : " + key.why);
-        const bool keyOk = key.category == Category::Enumeration || key.text == "STRING"
+        if (!key.ok && !key.missing) return fail("MAP : " + key.why);
+        // Une cle d'un nom inconnu ici (une enumeration, lue sans le projet) : on la suit.
+        const bool keyOk = key.missing || key.category == Category::Enumeration || key.text == "STRING"
                            || (key.entry && key.entry->numeric.family == Family::Integer);
         if (!keyOk) return fail("MAP : une cl\xC3\xA9 est un STRING, un entier ou une \xC3\xA9num\xC3\xA9ration");
         if (!accept(']')) return fail("MAP : ] attendu apr\xC3\xA8s la cl\xC3\xA9");
@@ -348,10 +369,74 @@ private:
         r.key = "map[" + key.key + "]:" + e.key;
         r.category = Category::Collection;
         r.entry = e.entry;
+        r.missing = e.missing || key.missing;
+        r.unknown = key.missing ? key.unknown : e.unknown;
+        r.dynamic = true;
+        r.rich = true;
+        if (key.missing) {
+            r.ok = false;
+            r.why = key.why;
+            return r;
+        }
+        // 1.12.2 : une variable IHM aussi (dans la memoire de l'IHM) ; pas un parametre de popup.
+        r.ok = e.ok && (use & (UseVariable | UseDeclaration | UseReturn)) != 0;
+        r.why = e.ok ? (r.ok ? std::string{} : "une MAP ne convient pas \xC3\xA0 " + useText(use)) : e.why;
+        return r;
+    }
+
+    // 1.12.2 : LIST OF T, VECTOR OF T - une suite de taille variable (indices a partir de 0).
+    Resolved list(unsigned use, int depth, bool vector) {
+        Resolved e = type(UseDeclaration, depth + 1);
+        Resolved r;
+        const std::string head = vector ? "VECTOR" : "LIST";
+        r.text = head + " OF " + e.text;
+        r.key = (vector ? "vector:" : "list:") + e.key;
+        r.category = Category::Collection;
+        r.entry = e.entry;
         r.missing = e.missing;
         r.unknown = e.unknown;
-        r.ok = e.ok && (use & (UseDeclaration | UseReturn)) != 0;
-        r.why = e.ok ? (r.ok ? std::string{} : "MAP ne sert qu'\xC3\xA0 " + useText(UseDeclaration)) : e.why;
+        r.dynamic = true;
+        r.rich = true;
+        r.ok = e.ok && (use & (UseVariable | UseDeclaration | UseReturn)) != 0;
+        r.why = e.ok ? (r.ok ? std::string{} : "une " + head + " ne convient pas \xC3\xA0 " + useText(use)) : e.why;
+        return r;
+    }
+
+    // 1.12.2 : TUPLE(T1, T2...) - des valeurs de types fixes, t.Item1, t.Item2...
+    Resolved tuple(unsigned use, int depth) {
+        if (!accept('(')) return fail("TUPLE : ( attendu");
+        Resolved r;
+        r.category = Category::Collection;
+        r.rich = true;
+        r.ok = true;
+        std::string text, key;
+        int count = 0;
+        skip();
+        if (i_ < s_.size() && s_[i_] == ')') return fail("TUPLE : au moins un type, TUPLE(INT, STRING)");
+        for (;;) {
+            Resolved e = type(UseDeclaration, depth + 1);
+            if (!e.ok && !e.missing) return e;
+            text += (text.empty() ? "" : ", ") + e.text;
+            key += (key.empty() ? "" : ",") + e.key;
+            if (e.missing && !r.missing) {
+                r.missing = true;
+                r.unknown = e.unknown;
+                r.why = e.why;
+                r.ok = false;
+            }
+            r.dynamic = r.dynamic || e.dynamic;
+            if (!r.entry) r.entry = e.entry;
+            ++count;
+            if (!accept(',')) break;
+        }
+        if (!accept(')')) return fail("TUPLE : ) attendu apr\xC3\xA8s les types");
+        if (count > 16) return fail("TUPLE : 16 valeurs au plus");
+        r.text = "TUPLE(" + text + ")";
+        r.key = "tuple(" + key + ")";
+        if (r.ok && (use & (UseVariable | UseDeclaration | UseReturn)) == 0) {
+            r.ok = false;
+            r.why = "un TUPLE ne convient pas \xC3\xA0 " + useText(use);
+        }
         return r;
     }
 
