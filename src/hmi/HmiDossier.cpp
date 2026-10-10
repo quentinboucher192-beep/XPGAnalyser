@@ -174,7 +174,7 @@ Dossier buildDossier(const Project& p, const std::map<Id, DossierImage>& thumbna
              {"Changer de vue en glissant", yesNo(cfg.swipeNavigation)},
              {"Contr\xC3\xB4les de qualit\xC3\xA9 (G\xC3\xA9n\xC3\xA9rer)", yesNo(cfg.quality)},
              {"S\xC3\xA9" "curit\xC3\xA9", p.security.enabled ? std::string("active") : std::string("inactive")},
-             {"Journal d'audit", yesNo(p.history.audit)},
+             {"Journal d'audit", yesNo(p.history.audit) + (p.history.audit && p.history.auditScripts ? " (et les \xC3\xA9" "critures des scripts)" : "")},
              // lot 13 : les langues, l'affichage au lancement
              {"Langues", [&] {
                   std::string all;

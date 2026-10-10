@@ -1657,6 +1657,7 @@ private:
     void beginGesture(std::string where);
     void endGesture();
     [[nodiscard]] bool auditingWrites() const noexcept;
+    [[nodiscard]] bool auditingScriptWrites() const noexcept;   // 1.12.3
     void auditWrite(const std::string& name, const sim::Value& before, const sim::Value& after);
     void audit(std::string kind, std::string source, std::string target, std::string before = {}, std::string after = {},
                std::string reason = {});

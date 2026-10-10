@@ -213,6 +213,13 @@ void HmiHistoryPane::rebuildProperties() {
                                    "Qui a chang\xC3\xA9 quoi, quand, o\xC3\xB9, avant et apr\xC3\xA8s, pourquoi : les variables \xC3\xA9" "crites par "
                                    "l'op\xC3\xA9rateur, les recettes, les acquittements, les connexions, les signatures. Chaque ligne "
                                    "porte l'empreinte de la pr\xC3\xA9" "c\xC3\xA9" "dente : une ligne retouch\xC3\xA9" "e se voit."));
+    // 1.12.3 : les ecritures des scripts qui tournent seuls, avec le script pour source.
+    keep.properties.push_back(prop("Tracer aussi les \xC3\xA9" "critures des scripts", tf(s.auditScripts), PG::ValueType::Boolean,
+                                   c("audit_scripts"),
+                                   "Avec le journal d'audit : une valeur chang\xC3\xA9" "e par un script ou une fonction qui tourne seul "
+                                   "(au d\xC3\xA9marrage, en cycle, sur changement, \xC3\xA0 l'ouverture d'une vue) y est aussi "
+                                   "gard\xC3\xA9" "e, avec le script pour source. Sans elle, seuls les gestes de l'op\xC3\xA9rateur "
+                                   "comptent. Un script cyclique qui change une valeur \xC3\xA0 chaque cycle remplit vite le journal."));
     keep.properties.push_back(prop("Variables archiv\xC3\xA9" "es (a; b)", joinList(s.archived), PG::ValueType::Text, c("archivees"),
                                    "Mesur\xC3\xA9" "es \xC3\xA0 chaque p\xC3\xA9riode d'\xC3\xA9" "chantillonnage ; les courbes en mode "
                                    "historique les relisent. Ex. : Armoires[0].ana.PT1.mes; Armoires[1].ana.PT1.mes"));
@@ -343,6 +350,7 @@ bool HmiHistoryPane::setSetting(const std::string& field, const std::string& raw
     double n = 0;
     if (field == "alarmes") s.alarms = yes(value);
     else if (field == "audit") s.audit = yes(value);                 // lot 13
+    else if (field == "audit_scripts") s.auditScripts = yes(value);  // 1.12.3
     else if (field == "evenements") s.events = yes(value);
     else if (field == "systeme") s.system = yes(value);
     else if (field == "archivees") {

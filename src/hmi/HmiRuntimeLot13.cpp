@@ -120,13 +120,25 @@ void Runtime::endGesture() {
     }
 }
 
-bool Runtime::auditingWrites() const noexcept { return gesture_ > 0 && readOnly_ == 0 && auditMute_ == 0 && auditOn(); }
+// 1.12.3 : hors d'un geste, un script ou une fonction qui tourne seul (demarrage,
+// cycle, sur changement, evenement de vue) - si les Historiques le demandent.
+bool Runtime::auditingScriptWrites() const noexcept {
+    return gesture_ == 0 && !origin_.name.empty() && project_ && project_->history.auditScripts;
+}
+
+bool Runtime::auditingWrites() const noexcept {
+    return (gesture_ > 0 || auditingScriptWrites()) && readOnly_ == 0 && auditMute_ == 0 && auditOn();
+}
 
 void Runtime::auditWrite(const std::string& name, const sim::Value& before, const sim::Value& after) {
     const std::string b = before.type() == sim::Type::Unknown ? std::string{} : formatValue(before);
     const std::string a = formatValue(after);
     if (b == a) return;                  // rien n'a change : rien a dire
-    audit("\xC3\x89" "criture", {}, name, b, a);
+    // 1.12.3 : la source d'une ecriture de script est le script ("script Horloge",
+    // "Vue_A.OnOpen", "fonction Moyenne").
+    std::string source;
+    if (auditingScriptWrites()) source = !source_.empty() ? source_ : origin_.name;
+    audit("\xC3\x89" "criture", std::move(source), name, b, a);
 }
 
 // ========================================================== le verrouillage ===

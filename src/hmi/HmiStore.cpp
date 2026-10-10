@@ -996,7 +996,8 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
     index += "historique" + fieldBool("alarmes", hs.alarms) + fieldBool("evenements", hs.events) + fieldBool("systeme", hs.system)
            + fieldInt("max", hs.maxEntries) + fieldInt("conservation", hs.retentionDays)
            + fieldInt("echantillonnage", hs.samplePeriodMs) + field("archivees", joinList(hs.archived))
-           + (hs.audit ? fieldBool("audit", true) : std::string{}) + "\n";         // lot 13
+           + (hs.audit ? fieldBool("audit", true) : std::string{})                 // lot 13
+           + (hs.auditScripts ? fieldBool("audit_scripts", true) : std::string{}) + "\n";   // 1.12.3
     // Lot 12 (format 11) : les styles nommes, et leurs proprietes.
     for (const auto& st : p.styles) {
         index += "style" + fieldInt("id", st.id) + field("nom", st.name) + field("description", st.description)
@@ -1933,6 +1934,7 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
             hs.samplePeriodMs = static_cast<int>(std::clamp<long long>(toInt(r.get("echantillonnage"), 1000), 50, 3600000));
             hs.archived = splitList(toStr(r.get("archivees")));
             hs.audit = toBool(r.get("audit"), false);                   // lot 13
+            hs.auditScripts = toBool(r.get("audit_scripts"), false);    // 1.12.3
         } else if (r.word == "style") {
             Style st;                                                   // lot 12
             st.id = static_cast<Id>(toInt(r.get("id"), 0));

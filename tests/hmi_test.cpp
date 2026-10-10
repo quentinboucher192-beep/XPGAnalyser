@@ -17389,6 +17389,74 @@ void memoireJournal1123() {
     rt.stop(1.0);
 }
 
+// 1.12.3 : L'AUDIT DES SCRIPTS - « Tracer aussi les ecritures des scripts » (Historiques).
+void auditScripts1123() {
+    std::printf("1.12.3 : l'audit des ecritures des scripts\n");
+    Project p;
+    p.history.audit = true;
+    p.programs.variables.push_back(hmiVar(p, "Compteur", "INT", "0"));
+    p.programs.variables.push_back(hmiVar(p, "Consigne", "INT", "10"));
+    p.programs.variables.push_back(hmiVar(p, "Mode", "INT", "0"));
+    Script cyc = generalScript(p, "Compter", "Compteur := Compteur + 1;");
+    cyc.event = "Cyclique";
+    cyc.periodMs = 100;
+    p.programs.scripts.push_back(cyc);
+    Script init = generalScript(p, "Init", "Consigne := 42; Consigne := 42; Mode := Mode;");
+    init.event = "Demarrage";
+    p.programs.scripts.push_back(init);
+    View v = makeView(p, "Vue");
+    auto& bt = addButton(p, v, "Plus", 10, 10);
+    bt.actions.push_back(act(Trigger::Click, Operation::Assign, "Consigne", "Consigne + 5"));
+    const Id btId = bt.id;
+    p.views = {v};
+    p.config.startView = v.id;
+    const auto writes = [](const Runtime& rt, std::string_view target, std::string_view source) {
+        int n = 0;
+        for (const auto& e : rt.auditTrail())
+            if (e.kind == "\xC3\x89" "criture" && e.target == target && (source.empty() || e.source == source)) ++n;
+        return n;
+    };
+    {
+        Runtime rt;
+        rt.bind(&p, nullptr);
+        rt.start(0.0);
+        double t = 0.1;
+        for (int i = 0; i < 4; ++i) { rt.tick(t); t += 0.1; }
+        check(rt.variable("Compteur")->asInteger() > 0 && writes(rt, "Compteur", {}) == 0 && writes(rt, "Consigne", {}) == 0,
+              "sans l'option : les scripts \xC3\xA9" "crivent, rien au journal d'audit");
+        rt.stop(1.0);
+    }
+    p.history.auditScripts = true;
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    double t = 0.1;
+    for (int i = 0; i < 4; ++i) { rt.tick(t); t += 0.1; }
+    const int counted = writes(rt, "Compteur", "script Compter");
+    check(counted >= 1 && counted == static_cast<int>(rt.variable("Compteur")->asInteger()),
+          "avec l'option : chaque valeur chang\xC3\xA9" "e par le script cyclique, la source : script Compter ("
+              + std::to_string(counted) + ")");
+    check(writes(rt, "Consigne", "script Init") == 1, "le script de d\xC3\xA9marrage : une ligne (la 2e \xC3\xA9" "criture ne change rien)");
+    check(writes(rt, "Mode", {}) == 0, "une \xC3\xA9" "criture sans changement : rien");
+    const AuditEntry* last = nullptr;
+    for (const auto& e : rt.auditTrail())
+        if (e.target == "Consigne") last = &e;
+    check(last && last->before == "10" && last->after == "42", "avant 10, apr\xC3\xA8s 42");
+    rt.press(btId, t);
+    rt.release(btId, t + 0.05, true);
+    check(writes(rt, "Consigne", "Vue/Plus") == 1, "un geste garde sa source : le bouton");
+    rt.stop(2.0);
+    // Enregistre et relu.
+    const auto files = serializeProject(p);
+    const FileReader reader = [&](const std::string& path, std::string& content) {
+        for (const auto& f : files)
+            if (f.path == path) { content.assign(f.data->begin(), f.data->end()); return true; }
+        return false;
+    };
+    const auto back = parseProject(reader);
+    check(back && back->history.auditScripts && back->history.audit, "relu : l'option tient");
+}
+
 void scriptsCollections1122() {
     std::printf("1.12.2 : les collections des scripts (LIST, VECTOR, TUPLE, litteraux, fonctions)\n");
     Project p;
@@ -22053,6 +22121,7 @@ int main(int argc, char** argv) {
     ecritureForcee1123();             // 1.12.3 : une ecriture sur une variable forcee se dit
     vraieCase1123();                  // 1.12.3 : la Console ecrit la vraie case
     memoireJournal1123();             // 1.12.3 : la memoire du journal, SYS.ErrorCount
+    auditScripts1123();               // 1.12.3 : l'audit des ecritures des scripts
     enumerationsLangage110();         // 1.10 (S1, decision 15) : les enumerations dans les scripts
     operateurs110();                  // 1.10 (chantier S2) : les operateurs des symboles et des types IHM
     operateurs1101();                 // 1.10.1 (chantier U2) : a, b et Resultat (types, legende, exemple, Compiler)

@@ -14605,6 +14605,12 @@ const std::vector<Topic>& topics() {
                          "tout de suite : une panne ne perd rien. Il ne suit pas la conservation des autres "
                          "historiques ; au-del\xC3\xA0 de 100 000 lignes, les plus anciennes tombent. "
                          "**Vider** l'historique ne le vide pas.", {}},
+             {K::Paragraph, "**Tracer aussi les \xC3\xA9" "critures des scripts** (1.12.3) : une valeur chang\xC3\xA9" "e "
+                         "par un script ou une fonction qui tourne seul (au d\xC3\xA9marrage, en cycle, sur "
+                         "changement, \xC3\xA0 l'ouverture d'une vue) y est aussi gard\xC3\xA9" "e, avec le script pour "
+                         "source (`script Horloge`, `Vue_A.OnOpen`). Sans elle, seuls les gestes de "
+                         "l'op\xC3\xA9rateur comptent. Un script cyclique qui change une valeur \xC3\xA0 chaque cycle "
+                         "remplit vite le journal.", {}},
              {K::Heading, "Ce qu'il garde", {}},
              {K::Table, "Colonne\tCe qu'elle dit\nHorodatage\t\xC3\xA0 la milliseconde\nUtilisateur\tqui "
                          "\xC3\xA9tait connect\xC3\xA9 (vide : personne)\nNature\t\xC3\x89" "criture, "

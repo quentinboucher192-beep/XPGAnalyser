@@ -1276,6 +1276,10 @@ struct HistorySettings {
     // quand, ou, avant et apres, pourquoi ; chaque ligne chainee a la precedente
     // par son empreinte. Il ne suit pas la conservation : il a sa propre limite.
     bool                     audit{false};
+    // 1.12.3 : aussi les ecritures des scripts et des fonctions qui tournent seuls
+    // (au demarrage, en cycle, sur changement, sur un evenement de vue) : la
+    // source de la ligne est le script. Sans elle, seuls les gestes comptent.
+    bool                     auditScripts{false};
     bool operator==(const HistorySettings&) const = default;
 };
 

@@ -6967,6 +6967,7 @@ Un essai de réception signe comme l'opérateur : le pas **Signer** donne le mot
 @capture PNG_344_journal_audit.png | Configuration › Historiques, onglet Audit : les signatures en violet, les refus et les verrous en rouge ; la chaîne vérifiée.
 ### Le tenir
 Configuration › **Historiques** : coche **Journal d'audit**. Il s'écrit dans `ihm/historique/audit.csv`, une ligne à la fois, tout de suite : une panne ne perd rien. Il ne suit pas la conservation des autres historiques ; au-delà de 100 000 lignes, les plus anciennes tombent. **Vider** l'historique ne le vide pas.
+**Tracer aussi les écritures des scripts** (1.12.3) : une valeur changée par un script ou une fonction qui tourne seul (au démarrage, en cycle, sur changement, à l'ouverture d'une vue) y est aussi gardée, avec le script pour source (`script Horloge`, `Vue_A.OnOpen`). Sans elle, seuls les gestes de l'opérateur comptent. Un script cyclique qui change une valeur à chaque cycle remplit vite le journal.
 ### Ce qu'il garde
 | Colonne | Ce qu'elle dit |
 | Horodatage | à la milliseconde |
