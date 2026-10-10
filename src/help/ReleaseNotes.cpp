@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.12.3", "10/10/2026", "livr\xC3\xA9" "e le 10/10 au soir"},
     {"1.12.2", "10/10/2026", "livr\xC3\xA9" "e le 10/10 dans l'apr\xC3\xA8s-midi"},
     {"1.12.1", "10/10/2026", "livr\xC3\xA9" "e le 10/10 en fin de nuit"},
     {"1.12.0", "10/10/2026", "livr\xC3\xA9" "e le 10/10 dans la nuit"},
@@ -108,6 +109,29 @@ const std::vector<Note>& table() {
     static const std::vector<Note> t = {
         // 1.11.16 (09/10/2026 dans la nuit) : la remanence d'exploitation par variable, la robustesse
         // (lot 4 de la specification du 08/10).
+        // 1.12.3 (10/10/2026 au soir) : Projet > Disposition, les etats en table, plusieurs objets
+        // choisis, la simulation et le poste (courbes, forcage, Console, sons, onglets), l'audit.
+        note("1.12.3", "Application", Kind::New,
+         "PROJET \xE2\x80\xBA DISPOSITION\xE2\x80\xA6 (Ctrl+Maj+K ; Affichage \xE2\x80\xBA Panneaux \xC3\xA0 afficher\xE2\x80\xA6 ouvre la m\xC3\xAAme fen\xC3\xAAtre) : les panneaux de la fen\xC3\xAAtre, les sous-onglets (panneau du bas, inspecteur de l'\xC3\xA9" "diteur de vue, simulation, programmation g\xC3\xA9n\xC3\xA9rale, \xC3\xA9quipements) et les pages du centre. Pour chacun : quand le montrer (toujours, en \xC3\xA9" "dition, en simulation, cach\xC3\xA9 ; une page : \xC3\xA0 la demande, \xC3\xA0 l'ouverture du projet, au d\xC3\xA9marrage de la simulation), o\xC3\xB9 (l'explorateur \xC3\xA0 droite, le panneau du bas \xC3\xA0 droite de l'\xC3\xA9" "diteur, une page c\xC3\xB4te \xC3\xA0 c\xC3\xB4te ou d\xC3\xA9tach\xC3\xA9" "e), au d\xC3\xA9part (repli\xC3\xA9, le sous-onglet choisi). Des dispositions toutes faites et \xC2\xAB Ma disposition \xC2\xBB ; tout se garde dans les r\xC3\xA9glages de l'\xC3\xA9" "dition.",
+         "onglets", ""),
+        note("1.12.3", "Objets", Kind::New,
+         "LES \xC3\x89TATS EN TABLE : Contenu \xE2\x80\xBA \xC3\x89tats du voyant et du texte multi-\xC3\xA9tats - une ligne par \xC3\xA9tat (quand, texte, couleur \xC3\xA0 la palette, clignote), Ajouter, Retirer, \xE2\x86\x91\xE2\x86\x93, le \xC2\xAB sinon \xC2\xBB ; selon la valeur (0, 1, 10..20, 'Auto') ou selon des conditions (la Valeur est \xC3\xA9" "crite pour elles, puis relue). Le bouton \xC2\xAB \xE2\x80\xA6 \xC2\xBB de la ligne \xC3\x89tats de l'inspecteur y m\xC3\xA8ne ; un \xC2\xAB ; \xC2\xBB ou un \xC2\xAB | \xC2\xBB dans un texte est refus\xC3\xA9 tout de suite.",
+         "objet-voyant-multi-etats", ""),
+        note("1.12.3", "\xC3\x89" "diteur", Kind::New,
+         "PLUSIEURS OBJETS CHOISIS : l'inspecteur montre leurs propri\xC3\xA9t\xC3\xA9s communes ; une valeur qui diff\xC3\xA8re se lit \xC2\xAB (plusieurs valeurs) \xC2\xBB (une case \xC3\xA0 cocher en \xC2\xAB \xE2\x80\x93 \xC2\xBB, des formules diff\xC3\xA9rentes \xC2\xAB (plusieurs formules) \xC2\xBB) et une saisie part sur tous en une annulation. L'onglet Actions liste les objets choisis (un clic en choisit un). Dans l'explorateur d'objets : Ctrl+A, et Maj+clic depuis le dernier objet cliqu\xC3\xA9.",
+         "editeur", ""),
+        note("1.12.3", "Courbes", Kind::Fixed,
+         "LES COURBES ENREGISTRENT D\xC3\x88S LE D\xC3\x89MARRAGE, sans aller sur leur page : toutes les vues o\xC3\xB9 l'on peut naviguer, les popups sans param\xC3\xA8tre et ce qui est ouvert s'\xC3\xA9" "chantillonnent (les graphiques XY, chronogrammes et histogrammes aussi) ; une plume qui cite un param\xC3\xA8tre de sa vue s'enregistre ; une popup \xC3\xA0 param\xC3\xA8tres garde une s\xC3\xA9rie par jeu d'arguments (Cuves[2] et Cuves[3] ne se m\xC3\xA9langent plus).",
+         "objet-courbe", ""),
+        note("1.12.3", "Simulation", Kind::Fixed,
+         "CE QUI SE TAISAIT OU SE COUPAIT : une \xC3\xA9" "criture sur une variable forc\xC3\xA9" "e se dit (la Console, une fois par variable ; l'action : ignor\xC3\xA9" "e, forc\xC3\xA9" "e) ; la Console \xC3\xA9" "crit la vraie case (Cuves[2].Consigne := 75) ; les sons se m\xC3\xA9langent au lieu de se couper (la r\xC3\xA9p\xC3\xA9tition reprend le son du groupe ; Silence et l'arr\xC3\xAAt coupent ce qui joue) ; une popup de symbole ne fabrique plus d'alarme dont la condition cite un param\xC3\xA8tre du symbole ; la m\xC3\xA9moire du journal suit les Historiques (2 000 lignes) et SYS.ErrorCount ne redescend plus.",
+         "alarmes", ""),
+        note("1.12.3", "Poste", Kind::Fixed,
+         "LE POSTE GARDE l'onglet choisi, les panneaux repli\xC3\xA9s et le d\xC3\xA9" "filement d'un lancement \xC3\xA0 l'autre (option du poste, coch\xC3\xA9" "e), y compris dans un symbole, o\xC3\xB9 ces clics ne prenaient pas.",
+         "poste-exploitation", ""),
+        note("1.12.3", "Historiques", Kind::New,
+         "L'AUDIT DES SCRIPTS : \xC2\xAB Tracer aussi les \xC3\xA9" "critures des scripts \xC2\xBB (Configuration \xE2\x80\xBA Historiques) garde au journal d'audit une valeur chang\xC3\xA9" "e par un script ou une fonction qui tourne seul, avec le script pour source ; sans elle, rien ne change.",
+         "audit", ""),
         // 1.12.2 (10/10/2026 dans l'apres-midi) : les raccourcis de Visual Studio, les pieges de
         // l'editeur, les types objets partout, la liste et le tableau dynamiques, l'IHM sans automate.
         note("1.12.2", "\xC3\x89" "diteurs", Kind::New,

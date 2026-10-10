@@ -626,7 +626,7 @@ const std::vector<Topic>& topics() {
                          "droite de la bande** (trois traits et le nombre d'onglets) ouvre la **liste de "
                          "tous les onglets**, avec leur pastille enti\xC3\xA8re : un clic y va. Au survol "
                          "d'un onglet r\xC3\xA9" "duit, une infobulle donne son nom et sa pastille.", {}},
-             {K::Heading, "La disposition (1.12.3)", {}},
+             {K::Heading, "La disposition (1.12.3)", {}, "1.12.3"},
              {K::Paragraph, "**Projet \xE2\x80\xBA Disposition\xE2\x80\xA6** (Ctrl+Maj+K ; Affichage \xE2\x80\xBA "
                          "Panneaux \xC3\xA0 afficher\xE2\x80\xA6 ouvre la m\xC3\xAAme fen\xC3\xAAtre) : les panneaux de "
                          "la fen\xC3\xAAtre, les sous-onglets de chaque page et les pages du centre. Pour chacun : "
@@ -641,7 +641,7 @@ const std::vector<Topic>& topics() {
                          "suite ; tout se garde dans les r\xC3\xA9glages de l'\xC3\xA9" "dition (disposition.*) ; "
                          "\xC2\xAB R\xC3\xA9tablir la disposition d'origine \xC2\xBB les efface. Un \xC3\xA9l\xC3\xA9ment "
                          "\xC2\xAB en simulation \xC2\xBB appara\xC3\xAEt au d\xC3\xA9marrage de la simulation et repart "
-                         "\xC3\xA0 l'arr\xC3\xAAt.", {}},
+                         "\xC3\xA0 l'arr\xC3\xAAt.", {}, "1.12.3"},
              {K::Heading, "Les raccourcis", {}},
              {K::Table, "Touche\tCe qu'elle fait\nCtrl+Z\tAnnuler (dans un champ en cours de saisie : sa "
                          "saisie d'abord)\nCtrl+Y, "
@@ -1142,13 +1142,13 @@ const std::vector<Topic>& topics() {
              {K::Bullet, "un cadre tir\xC3\xA9 dans la vue choisit plusieurs objets ; Ctrl + clic en ajoute "
                          "un ;", {}},
              {K::Bullet, "dans l'explorateur d'objets (1.12.3) : **Ctrl+A** les prend tous, **Maj+clic** \xC3\xA9tend "
-                         "depuis le dernier objet cliqu\xC3\xA9 (ici ou dans la vue) ;", {}},
+                         "depuis le dernier objet cliqu\xC3\xA9 (ici ou dans la vue) ;", {}, "1.12.3"},
              {K::Bullet, "plusieurs objets choisis (1.12.3) : l'inspecteur montre leurs propri\xC3\xA9t\xC3\xA9s "
                          "communes ; une valeur qui diff\xC3\xA8re se lit \xC2\xAB (plusieurs valeurs) \xC2\xBB (une "
                          "case \xC3\xA0 cocher en \xC2\xAB \xE2\x80\x93 \xC2\xBB, des formules diff\xC3\xA9rentes : "
                          "\xC2\xAB (plusieurs formules) \xC2\xBB) ; une saisie part sur tous, en une annulation. "
                          "L'onglet **Actions** liste les objets choisis : une action est \xC3\xA0 un objet, un clic "
-                         "en choisit un ;", {}},
+                         "en choisit un ;", {}, "1.12.3"},
              {K::Bullet, "**Grouper** fait un groupe (double-clic pour l'\xC3\xA9" "diter de "
                          "l'int\xC3\xA9rieur, \xC3\x89" "chap pour en sortir) ;", {}},
              {K::Bullet, "**Aligner** (gauche, centre, droite, haut, milieu, bas), **Distribuer**, ordre de "
@@ -7014,7 +7014,7 @@ const std::vector<Topic>& topics() {
                          "`'Auto'`) ou **selon des conditions** (`Defaut`, `Marche AND NOT Defaut`) : la premi\xC3\xA8re "
                          "vraie gagne, et la Valeur est \xC3\xA9" "crite pour elles (`(Defaut) ? 1 : (Marche) ? 2 : 0`), "
                          "puis relue \xC3\xA0 la r\xC3\xA9ouverture. Un \xC2\xAB ; \xC2\xBB ou un \xC2\xAB | \xC2\xBB dans un "
-                         "texte est refus\xC3\xA9 tout de suite.", {}},
+                         "texte est refus\xC3\xA9 tout de suite.", {}, "1.12.3"},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nVariable "
                          "montr\xC3\xA9" "e\t(vide)\tLa variable dont l'\xC3\xA9tat est montr\xC3\xA9. "
@@ -7080,7 +7080,7 @@ const std::vector<Topic>& topics() {
                          "`'Auto'`) ou **selon des conditions** (`Defaut`, `Marche AND NOT Defaut`) : la premi\xC3\xA8re "
                          "vraie gagne, et la Valeur est \xC3\xA9" "crite pour elles (`(Defaut) ? 1 : (Marche) ? 2 : 0`), "
                          "puis relue \xC3\xA0 la r\xC3\xA9ouverture. Un \xC2\xAB ; \xC2\xBB ou un \xC2\xAB | \xC2\xBB dans un "
-                         "texte est refus\xC3\xA9 tout de suite.", {}},
+                         "texte est refus\xC3\xA9 tout de suite.", {}, "1.12.3"},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nVariable "
                          "montr\xC3\xA9" "e\t(vide)\tLa variable dont la valeur est traduite. Depuis la "
@@ -14279,7 +14279,7 @@ const std::vector<Topic>& topics() {
                          "s'entendent ensemble, le son du groupe de l'une et celui de la priorit\xC3\xA9 de "
                          "l'autre ; un m\xC3\xAA" "me son ne part qu'une fois par cycle. La r\xC3\xA9p\xC3\xA9tition "
                          "reprend le son de l'alarme la plus grave \xC3\xA0 acquitter (celui de son groupe, s'il en "
-                         "a un). **Silence** (Faire taire) et l'arr\xC3\xAAt de l'IHM coupent ce qui joue.", {}},
+                         "a un). **Silence** (Faire taire) et l'arr\xC3\xAAt de l'IHM coupent ce qui joue.", {}, "1.12.3"},
              {K::Heading, "En marche", {}},
              {K::Bullet, "une alarme reste list\xC3\xA9" "e tant qu'elle est **active** ou **non "
                          "acquitt\xC3\xA9" "e** ;", {}},
@@ -14640,7 +14640,7 @@ const std::vector<Topic>& topics() {
                          "changement, \xC3\xA0 l'ouverture d'une vue) y est aussi gard\xC3\xA9" "e, avec le script pour "
                          "source (`script Horloge`, `Vue_A.OnOpen`). Sans elle, seuls les gestes de "
                          "l'op\xC3\xA9rateur comptent. Un script cyclique qui change une valeur \xC3\xA0 chaque cycle "
-                         "remplit vite le journal.", {}},
+                         "remplit vite le journal.", {}, "1.12.3"},
              {K::Heading, "Ce qu'il garde", {}},
              {K::Table, "Colonne\tCe qu'elle dit\nHorodatage\t\xC3\xA0 la milliseconde\nUtilisateur\tqui "
                          "\xC3\xA9tait connect\xC3\xA9 (vide : personne)\nNature\t\xC3\x89" "criture, "
@@ -15663,7 +15663,7 @@ const std::vector<Topic>& topics() {
                          "coch\xC3\xA9" "e) : l'onglet choisi d'un conteneur \xC3\xA0 onglets, un panneau repli\xC3\xA9, "
                          "le d\xC3\xA9" "filement d'un panneau d\xC3\xA9" "filant - y compris dans un symbole - "
                          "reviennent au lancement suivant, avec les variables r\xC3\xA9manentes du poste. "
-                         "D\xC3\xA9" "coch\xC3\xA9" "e : tout repart comme dans l'\xC3\xA9" "diteur.", {}},
+                         "D\xC3\xA9" "coch\xC3\xA9" "e : tout repart comme dans l'\xC3\xA9" "diteur.", {}, "1.12.3"},
              {K::Tip, "Sur le poste, l'IHM est la m\xC3\xAAme que dans la simulation : ce qu'on a "
                          "essay\xC3\xA9 dans l'\xC3\xA9" "diteur (et les essais de r\xC3\xA9" "ception) "
                          "tourne tel quel \xC3\xA0 l'atelier.", {}},

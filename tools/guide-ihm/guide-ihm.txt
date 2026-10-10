@@ -305,6 +305,7 @@ Un volet à sous-onglets (Équipements, Simulation, Outil Modbus, Historiques, E
 2. puis les **onglets inactifs ne gardent que leur icône** et leur nombre ; l'onglet ouvert garde son nom et sa pastille entière ;
 3. s'ils ne tiennent toujours pas, des **flèches** (et la molette) les font défiler ; un dégradé au bord dit qu'il y en a d'autres.
 Dès qu'un onglet est réduit ou caché, un **bouton à droite de la bande** (trois traits et le nombre d'onglets) ouvre la **liste de tous les onglets**, avec leur pastille entière : un clic y va. Au survol d'un onglet réduit, une infobulle donne son nom et sa pastille.
+@nouveau 1.12.3
 ### La disposition (1.12.3)
 **Projet › Disposition…** (Ctrl+Maj+K ; Affichage › Panneaux à afficher… ouvre la même fenêtre) : les panneaux de la fenêtre, les sous-onglets de chaque page et les pages du centre. Pour chacun : **quand** le montrer (toujours, en édition, en simulation, caché ; une page : à la demande, à l'ouverture du projet, au démarrage de la simulation), **où** (l'explorateur à gauche ou à droite, le panneau du bas sous l'éditeur ou à sa droite, une page dans un onglet, côte à côte ou détachée) et **au départ** (le panneau du bas ouvert ou replié, le sous-onglet choisi). Des dispositions toutes faites : Par défaut, Dessin des vues, Mise au point, Écran large, et **Ma disposition** (« Garder comme Ma disposition »). **Appliquer** montre tout de suite ; tout se garde dans les réglages de l'édition (disposition.*) ; « Rétablir la disposition d'origine » les efface. Un élément « en simulation » apparaît au démarrage de la simulation et repart à l'arrêt.
 ### Les raccourcis
@@ -524,7 +525,9 @@ N'importe quelle vue peut s'ouvrir par-dessus (une popup) par l'action « Ouvrir
 - l'onglet **Variables** de la bibliothèque pose une variable d'un geste (voir « Concevoir plus vite »).
 ### Sélectionner, grouper, aligner
 - un cadre tiré dans la vue choisit plusieurs objets ; Ctrl + clic en ajoute un ;
+@nouveau 1.12.3
 - dans l'explorateur d'objets (1.12.3) : **Ctrl+A** les prend tous, **Maj+clic** étend depuis le dernier objet cliqué (ici ou dans la vue) ;
+@nouveau 1.12.3
 - plusieurs objets choisis (1.12.3) : l'inspecteur montre leurs propriétés communes ; une valeur qui diffère se lit « (plusieurs valeurs) » (une case à cocher en « – », des formules différentes : « (plusieurs formules) ») ; une saisie part sur tous, en une annulation. L'onglet **Actions** liste les objets choisis : une action est à un objet, un clic en choisit un ;
 - **Grouper** fait un groupe (double-clic pour l'éditer de l'intérieur, Échap pour en sortir) ;
 - **Aligner** (gauche, centre, droite, haut, milieu, bas), **Distribuer**, ordre de superposition ;
@@ -3061,6 +3064,7 @@ Lire une **mesure** d'un coup d'œil. Il montre sa variable (ou l'expression de 
 @capture PNG_246_sim_essai_surpression_defaut.png | En simulation : l'essai de surpression met la pompe en défaut - le voyant passe au rouge et clignote, l'aiguille entre dans la zone rouge.
 ### À quoi il sert
 Montrer l'**état** d'un équipement quand il en a plus de deux. Les états se décrivent dans une liste : `valeur = texte | couleur | clignote`, séparés par ;. La valeur peut être un nombre, un intervalle `10..20`, TRUE / FALSE, un texte (`'Auto'`), ou `*` (tout le reste) ; le premier qui correspond l'emporte.
+@nouveau 1.12.3
 **Contenu › États** (1.12.3) : une ligne par état - quand, texte, couleur à la palette, clignote -, Ajouter, Retirer, ↑↓ pour l'ordre, et la ligne « sinon ». L'état se choisit **selon la valeur** (0, 1, `10..20`, `'Auto'`) ou **selon des conditions** (`Defaut`, `Marche AND NOT Defaut`) : la première vraie gagne, et la Valeur est écrite pour elles (`(Defaut) ? 1 : (Marche) ? 2 : 0`), puis relue à la réouverture. Un « ; » ou un « | » dans un texte est refusé tout de suite.
 ### Ses paramètres
 @param variable | Variable montrée | (vide) | La variable dont l'état est montré. Depuis la 1.10.4 : tape plutôt =la variable dans Valeur ; une variable déjà réglée reste montrée et relue.
@@ -3083,6 +3087,7 @@ Montrer l'**état** d'un équipement quand il en a plus de deux. Les états se d
 @capture EX_MultiStateText.png | L'exemple animé : un texte par état, et le texte par défaut.
 ### À quoi il sert
 Traduire un **code** en mots : un numéro d'étape, un mode, un code de défaut. Même liste d'états que le voyant multi-états ; une valeur sans état montre le texte par défaut.
+@nouveau 1.12.3
 **Contenu › États** (1.12.3) : une ligne par état - quand, texte, couleur à la palette, clignote -, Ajouter, Retirer, ↑↓ pour l'ordre, et la ligne « sinon ». L'état se choisit **selon la valeur** (0, 1, `10..20`, `'Auto'`) ou **selon des conditions** (`Defaut`, `Marche AND NOT Defaut`) : la première vraie gagne, et la Valeur est écrite pour elles (`(Defaut) ? 1 : (Marche) ? 2 : 0`), puis relue à la réouverture. Un « ; » ou un « | » dans un texte est refusé tout de suite.
 ### Ses paramètres
 @param variable | Variable montrée | (vide) | La variable dont la valeur est traduite. Depuis la 1.10.4 : tape plutôt =la variable dans Valeur ; une variable déjà réglée reste montrée et relue.
@@ -6796,6 +6801,7 @@ La catégorie **Sons et mise de côté (toutes les alarmes)** de Configuration �
 | Son des alarmes critiques, hautes, moyennes, basses | le son (une ressource) joué quand une alarme de cette priorité apparaît ; vide : aucun |
 | Répéter le son (s) | tant qu'une alarme attend son acquittement, le son revient toutes les N secondes ; 0 : une fois |
 | Mise de côté : au plus (min) | la plus longue mise de côté permise (480 : 8 heures) |
+@nouveau 1.12.3
 Les sons se mélangent (1.12.3) : deux alarmes qui apparaissent ensemble s'entendent ensemble, le son du groupe de l'une et celui de la priorité de l'autre ; un même son ne part qu'une fois par cycle. La répétition reprend le son de l'alarme la plus grave à acquitter (celui de son groupe, s'il en a un). **Silence** (Faire taire) et l'arrêt de l'IHM coupent ce qui joue.
 ### En marche
 - une alarme reste listée tant qu'elle est **active** ou **non acquittée** ;
@@ -6973,6 +6979,7 @@ Un essai de réception signe comme l'opérateur : le pas **Signer** donne le mot
 @capture PNG_344_journal_audit.png | Configuration › Historiques, onglet Audit : les signatures en violet, les refus et les verrous en rouge ; la chaîne vérifiée.
 ### Le tenir
 Configuration › **Historiques** : coche **Journal d'audit**. Il s'écrit dans `ihm/historique/audit.csv`, une ligne à la fois, tout de suite : une panne ne perd rien. Il ne suit pas la conservation des autres historiques ; au-delà de 100 000 lignes, les plus anciennes tombent. **Vider** l'historique ne le vide pas.
+@nouveau 1.12.3
 **Tracer aussi les écritures des scripts** (1.12.3) : une valeur changée par un script ou une fonction qui tourne seul (au démarrage, en cycle, sur changement, à l'ouverture d'une vue) y est aussi gardée, avec le script pour source (`script Horloge`, `Vue_A.OnOpen`). Sans elle, seuls les gestes de l'opérateur comptent. Un script cyclique qui change une valeur à chaque cycle remplit vite le journal.
 ### Ce qu'il garde
 | Colonne | Ce qu'elle dit |
@@ -7445,6 +7452,7 @@ Le poste démarre à l'ouverture de la session ; pour qu'un PC qui redémarre (u
 ! Une session qui s'ouvre seule donne le PC à qui s'assoit devant : le kiosque et le mot de passe de sortie gardent l'éditeur et le système.
 ### Après une coupure
 Le poste garde son état toutes les 10 s ; relancé après un arrêt brutal, il propose de le recharger, et le recharge d'office au bout de 30 s si personne ne répond (voir « La reprise après un arrêt brutal »).
+@nouveau 1.12.3
 **Garder les onglets, les panneaux repliés et le défilement** (1.12.3, cochée) : l'onglet choisi d'un conteneur à onglets, un panneau replié, le défilement d'un panneau défilant - y compris dans un symbole - reviennent au lancement suivant, avec les variables rémanentes du poste. Décochée : tout repart comme dans l'éditeur.
 > Sur le poste, l'IHM est la même que dans la simulation : ce qu'on a essayé dans l'éditeur (et les essais de réception) tourne tel quel à l'atelier.
 > 1.9 : **Ctrl+Alt+S** ouvre la page Simulation de Paramètres système (permission Administrer) ; la fiche du poste a les cases **Page Simulation** et, dans Configuration › Équipements, **Repérer les lectures simulées** (voir « La page Simulation » et « Les lectures simulées et leurs repères »).
