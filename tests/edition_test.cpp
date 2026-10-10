@@ -9,6 +9,7 @@
 #include "../src/app/EditionMigration.hpp"
 #include "../src/core/Edition.hpp"
 #include "../src/hmi/HmiCheck.hpp"
+#include "../src/hmi/HmiGuide.hpp"   // 1.12.2 : les mots de XPGAnalyser IHM
 #include "../src/hmi/HmiStandalone.hpp"
 #include "../src/hmi/HmiStore.hpp"
 #include "../src/hmi/HmiVersions.hpp"
@@ -204,6 +205,32 @@ int main(int argc, char** argv) {
         check(fs::exists(legacy / "Armoire_Gaz" / "sections") && !fs::exists(legacy / "ihm" / "Armoire_Gaz" / "sections"), "l'original garde son programme, la copie n'en a pas");
         std::printf("%s", rep.standalone.empty() ? "" : rep.standalone.front().second.c_str());
     }
+
+    // ---- 1.12.2 : le guide de XPGAnalyser IHM, sans automate ---------------------------
+    check(hmi::guide::ihmWords("Une variable IHM ou de l'automate : Compteur") == "Une variable IHM : Compteur"
+              && hmi::guide::ihmWords("La variable (IHM ou automate) que le champ montre") == "La variable que le champ montre"
+              && hmi::guide::ihmWords("une expression la relie \xC3\xA0 l'automate.") == "une expression la relie \xC3\xA0 une variable."
+              && hmi::guide::ihmWords("L'automate r\xC3\xA9pond") == "L'\xC3\xA9quipement r\xC3\xA9pond",
+          "guide IHM : les phrases sans l'automate");
+    core::setEdition(core::Edition::Ihm);
+    {
+        std::size_t left = 0;
+        std::string first;
+        const auto look = [&](const std::string& t) {
+            if (t.find("automate") == std::string::npos && t.find("Automate") == std::string::npos) return;
+            if (!left++) first = t.substr(0, 120);
+        };
+        for (const auto& t : hmi::guide::topics()) {
+            look(t.title);
+            look(t.summary);
+            for (const auto& b : t.blocks) look(b.text);
+            for (const auto& prm : t.params) look(prm.text);
+        }
+        check(left == 0 && !hmi::guide::topics().empty(), "guide IHM : plus un \xC2\xAB automate \xC2\xBB (" + std::to_string(left) + (left ? " : " + first : std::string{}) + ")");
+        check(hmi::guide::paramHelp("Gauge", "value").find("automate") == std::string::npos, "guide IHM : l'aide des param\xC3\xA8tres aussi");
+    }
+    core::setEdition(core::Edition::Both);
+    check(!hmi::guide::topics().empty(), "guide (Both) : intact");
 
     core::setEdition(core::Edition::Both);
     fs::remove_all(root, ec);

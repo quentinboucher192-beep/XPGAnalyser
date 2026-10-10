@@ -1,4 +1,5 @@
 #include "HmiScenarios.hpp"
+#include "../core/Edition.hpp"   // 1.12.2 : XPGAnalyser IHM n'a pas d'automate
 
 #include "HmiCheck.hpp"
 #include "HmiExpr.hpp"
@@ -200,7 +201,7 @@ StepFields stepFields(StepKind k) {
         case StepKind::Type:
             return {"le champ de saisie", "le texte tap\xC3\xA9 (puis Entr\xC3\xA9" "e)", ""};
         case StepKind::Write:
-            return {"la variable (IHM ou automate)", "la valeur : une expression (12.5, TRUE, 'Azote', Consigne + 1)", ""};
+            return {core::hasApi() ? "la variable (IHM ou automate)" : "la variable IHM", "la valeur : une expression (12.5, TRUE, 'Azote', Consigne + 1)", ""};   // 1.12.2
         case StepKind::Wait:
             return {"", "la dur\xC3\xA9" "e, en ms", ""};
         case StepKind::WaitUntil:

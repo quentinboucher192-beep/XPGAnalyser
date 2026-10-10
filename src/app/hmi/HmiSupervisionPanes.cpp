@@ -1,4 +1,5 @@
 #include "HmiSupervisionPanes.hpp"
+#include "../../core/Edition.hpp"   // 1.12.2 : XPGAnalyser IHM n'a pas d'automate
 #include "HmiAssist.hpp"
 
 #include "HmiPaneKit.hpp"
@@ -505,8 +506,9 @@ void HmiAlarmsPane::rebuildProperties() {
         c.name = "Alarmes";
         c.properties.push_back(prop("Alarmes d\xC3\xA9" "finies", std::to_string(doc_->project.alarms.size()), PG::ValueType::ReadOnly));
         c.properties.push_back(prop("Pour commencer", "Nouvelle (barre d'outils)", PG::ValueType::ReadOnly, {},
-                                    "Une alarme = une condition (une expression bool\xC3\xA9" "enne sur les variables de "
-                                    "l'automate ou de l'IHM), un message, une priorit\xC3\xA9, une cat\xC3\xA9gorie et un groupe."));
+                                    std::string("Une alarme = une condition (une expression bool\xC3\xA9" "enne sur les variables de ")
+                                        + (core::hasApi() ? "l'automate ou de l'IHM" : "l'IHM")   // 1.12.2
+                                        + "), un message, une priorit\xC3\xA9, une cat\xC3\xA9gorie et un groupe."));
         grid_->setCategories({std::move(c), alarmGroupsCategory(doc_, apply_, [this] { refresh(); }, [this](const std::string& g) { openLinkDialog(g); }),
                               alarmSettingsCategory(doc_->project, settingCommit)});
         return;
@@ -1160,7 +1162,8 @@ void HmiRecipesPane::rebuildProperties() {
         };
         fc.properties.push_back(prop("Nom de l'\xC3\xA9l\xC3\xA9ment", f.name, PG::ValueType::Text, fieldCommit("nom")));
         fc.properties.push_back(prop("Variable", f.variable, PG::ValueType::Text, fieldCommit("variable"),
-                                     "La variable \xC3\xA9" "crite (automate ou IHM) : Armoires[0].seuil_poids_saisi"));
+                                     core::hasApi() ? "La variable \xC3\xA9" "crite (automate ou IHM) : Armoires[0].seuil_poids_saisi"
+                                                    : "La variable IHM \xC3\xA9" "crite : Armoires[0].seuil_poids_saisi"));   // 1.12.2
         fc.properties.push_back(prop("Unit\xC3\xA9", f.unit, PG::ValueType::Text, fieldCommit("unite")));
         fc.properties.push_back(prop("Minimum", f.min, PG::ValueType::Text, fieldCommit("min"), "Vide : sans borne basse."));
         fc.properties.push_back(prop("Maximum", f.max, PG::ValueType::Text, fieldCommit("max"), "Vide : sans borne haute."));

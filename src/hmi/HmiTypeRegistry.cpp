@@ -3,6 +3,7 @@
 //  des types et la regle de conversion (voir l'en-tete)
 // =============================================================================
 #include "HmiTypeRegistry.hpp"
+#include "../core/Edition.hpp"   // 1.12.2 : XPGAnalyser IHM n'a pas d'automate
 
 #include "HmiPopupParams.hpp"
 
@@ -82,7 +83,7 @@ const Base kBase[] = {
     {"LWORD", Category::Elementary, {Family::Integer, 64, false, true, 0, 18446744073709551615.0L}, P | O, O,
      "Mot de 64 bits (un op\xC3\xA9rande d'op\xC3\xA9rateur)."},
     {"REAL", Category::Elementary, {Family::Real, 32, true, false, 0, 0}, V | D | P | R | O, V | D | P | R | O,
-     "R\xC3\xA9" "el 32 bits (24 bits de mantisse sur l'automate) ; l'IHM le calcule en double pr\xC3\xA9" "cision."},
+     "R\xC3\xA9" "el 32 bits (24 bits de mantisse) ; l'IHM le calcule en double pr\xC3\xA9" "cision."},   // 1.12.2 : sans automate
     {"LREAL", Category::Elementary, {Family::Real, 64, true, false, 0, 0}, V | D | P | R | O, V | D | P | R | O,
      "R\xC3\xA9" "el 64 bits."},
     {"STRING", Category::TextTime, {Family::String, 0, false, false, 0, 0}, V | D | P | R | O, V | D | P | R | O,
@@ -676,7 +677,8 @@ Verdict conversion(std::string_view from, std::string_view to) {
     }
     if (a.family == Family::Integer && b.family == Family::Real) {
         if (b.bits >= 64 || a.bits <= 16) return done(Conversion::Widening, 2);
-        return done(Conversion::Lossy, 4, fn + " vers " + tn + " : un REAL de l'automate garde 24 bits de pr\xC3\xA9" "cision");
+        return done(Conversion::Lossy, 4, fn + " vers " + tn + (core::hasApi() ? " : un REAL de l'automate garde 24 bits de pr\xC3\xA9" "cision"
+                                                                               : " : un REAL garde 24 bits de pr\xC3\xA9" "cision"));   // 1.12.2
     }
     if (a.family == Family::Real && b.family == Family::Real) {
         if (b.bits >= a.bits) return done(Conversion::Widening, 1);

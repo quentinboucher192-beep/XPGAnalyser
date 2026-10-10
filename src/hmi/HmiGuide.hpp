@@ -88,8 +88,15 @@ struct Topic {
 // du plus recent de ses blocs (@nouveau) ; "" : rien de marque.
 [[nodiscard]] std::string latestChange(const Topic& t);
 
-// Tous les sujets, dans l'ordre du guide (HmiGuideText.cpp, genere).
+// Tous les sujets, dans l'ordre du guide (HmiGuideText.cpp, genere). 1.12.2 : dans XPGAnalyser
+// IHM, avec ses mots (ihmWorded) - l'IHM n'y a pas d'automate, ses equipements en tiennent lieu.
 [[nodiscard]] const std::vector<Topic>& topics();
+
+// 1.12.2 : LES MOTS DE XPGAnalyser IHM - une phrase du guide sans l'automate : « (IHM ou
+// automate) », « ou de l'automate » s'effacent ; « la relie a l'automate » : a une variable ;
+// ailleurs l'automate devient l'equipement (le meme genre : l'accord tient). Le reste tel quel.
+[[nodiscard]] std::string ihmWords(std::string_view text);
+[[nodiscard]] std::vector<Topic> ihmWorded(const std::vector<Topic>& topics);
 // Les chapitres, dans l'ordre.
 [[nodiscard]] std::vector<std::string> chapters();
 [[nodiscard]] const Topic* topic(std::string_view key) noexcept;

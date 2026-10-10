@@ -1774,7 +1774,8 @@ const std::vector<KeyInfo>& keyInfos() {
         {"textColor", "Couleur du texte", PG::ValueType::Color, {}, ""},
         {"align", "Alignement", PG::ValueType::Enum, {"gauche", "centre", "droite"}, ""},
         {"wrap", "Retour \xC3\xA0 la ligne", PG::ValueType::Boolean, {}, "Multiligne : le texte passe \xC3\xA0 la ligne au bord de l'objet."},
-        {"value", "Valeur", PG::ValueType::Text, {}, "La valeur affich\xC3\xA9" "e ; une expression la relie \xC3\xA0 l'automate."},
+        {"value", "Valeur", PG::ValueType::Text, {}, core::hasApi() ? "La valeur affich\xC3\xA9" "e ; une expression la relie \xC3\xA0 l'automate."
+                                                                    : "La valeur affich\xC3\xA9" "e ; une expression la relie \xC3\xA0 une variable."},   // 1.12.2
         {"min", "Minimum", PG::ValueType::Real, {}, ""},
         {"max", "Maximum", PG::ValueType::Real, {}, ""},
         {"unit", "Unit\xC3\xA9", PG::ValueType::Text, {}, ""},
@@ -1818,7 +1819,8 @@ const std::vector<KeyInfo>& keyInfos() {
         {"legend", "L\xC3\xA9gende", PG::ValueType::Boolean, {}, "Le nom et la derni\xC3\xA8re valeur de chaque plume."},
         {"points", "Points (x,y x,y ...)", PG::ValueType::Text, {}, "Dans le rep\xC3\xA8re de l'objet."},
         {"clip", "Rogner le contenu", PG::ValueType::Boolean, {}, ""},
-        {"variable", "Variable API", PG::ValueType::Text, {}, "La variable de l'automate que l'objet repr\xC3\xA9sente."},
+        {"variable", core::hasApi() ? "Variable API" : "Variable", PG::ValueType::Text, {},          // 1.12.2 : XPGAnalyser IHM
+         core::hasApi() ? "La variable de l'automate que l'objet repr\xC3\xA9sente." : "La variable que l'objet repr\xC3\xA9sente."},
         {"refresh", "Rafra\xC3\xAE" "chissement (ms)", PG::ValueType::Integer, {}, ""},
         {"access", "Niveau d'acc\xC3\xA8s", PG::ValueType::Integer, {},
          "0 = tout le monde. Au-dessus : le niveau minimal pour agir (1 op\xC3\xA9rateur, 2 maintenance, 3 superviseur, "
@@ -2002,7 +2004,8 @@ const std::vector<KeyInfo>& keyInfos() {
         {"sort", "Classer par", PG::ValueType::Enum, {"nombre", "dur\xC3\xA9" "e"}, ""},
         // ---- lot 11 : la production
         {"good", "Pi\xC3\xA8" "ces bonnes (compteur)", PG::ValueType::Text, {},
-         "Le compteur des pi\xC3\xA8" "ces bonnes de l'automate. Il peut repartir de 0 : l'objet suit."},
+         core::hasApi() ? "Le compteur des pi\xC3\xA8" "ces bonnes de l'automate. Il peut repartir de 0 : l'objet suit."
+                        : "Le compteur des pi\xC3\xA8" "ces bonnes (une variable). Il peut repartir de 0 : l'objet suit."},
         {"bad", "Rebuts (compteur)", PG::ValueType::Text, {}, "Le compteur des pi\xC3\xA8" "ces rebut\xC3\xA9" "es."},
         {"running", "En marche (expression)", PG::ValueType::Text, {},
          "Vraie quand la machine produit : le temps de marche (la disponibilit\xC3\xA9). Vide : toujours."},
@@ -2080,12 +2083,14 @@ const std::vector<KeyInfo>& keyInfos() {
         {"languageLabel", "Libell\xC3\xA9", PG::ValueType::Enum, {"code et nom", "code", "nom"},
          "Ce qu'on lit sur chaque bouton : EN  English, EN ou English (le nom dans sa langue)."},
         // ---- lot 14 : l'etat de la communication, le diagnostic automate
-        {"showAddress", "Montrer l'adresse", PG::ValueType::Boolean, {}, "L'adresse de l'automate (192.168.1.10:502) dans la ligne."},
+        {"showAddress", "Montrer l'adresse", PG::ValueType::Boolean, {},
+         core::hasApi() ? "L'adresse de l'automate (192.168.1.10:502) dans la ligne." : "L'adresse de l'\xC3\xA9quipement (192.168.1.10:502) dans la ligne."},
         {"showTime", "Montrer le temps de r\xC3\xA9ponse", PG::ValueType::Boolean, {}, "Le temps de r\xC3\xA9ponse de la derni\xC3\xA8re requ\xC3\xAAte, en ms."},
         {"compact", "Compact", PG::ValueType::Boolean, {}, "Le voyant et l'\xC3\xA9tat seuls : Connect\xC3\xA9, D\xC3\xA9" "connect\xC3\xA9, Simulateur."},
-        {"colorGood", "Couleur connect\xC3\xA9" "e", PG::ValueType::Color, {}, "L'automate r\xC3\xA9pond, toutes les valeurs sont bonnes."},
+        {"colorGood", "Couleur connect\xC3\xA9" "e", PG::ValueType::Color, {},
+         core::hasApi() ? "L'automate r\xC3\xA9pond, toutes les valeurs sont bonnes." : "L'\xC3\xA9quipement r\xC3\xA9pond, toutes les valeurs sont bonnes."},
         {"colorWarn", "Couleur attention", PG::ValueType::Color, {}, "Connexion en cours, valeurs anciennes."},
-        {"colorBad", "Couleur coup\xC3\xA9" "e", PG::ValueType::Color, {}, "L'automate est injoignable."},
+        {"colorBad", "Couleur coup\xC3\xA9" "e", PG::ValueType::Color, {}, core::hasApi() ? "L'automate est injoignable." : "L'\xC3\xA9quipement est injoignable."},
         {"colorSim", "Couleur simulateur", PG::ValueType::Color, {}, "L'IHM lit le simulateur de l'application."},
         {"showBad", "Variables en d\xC3\xA9" "faut", PG::ValueType::Boolean, {},
          "La liste des variables de qualit\xC3\xA9 ancienne ou mauvaise, avec la raison (adresse ill\xC3\xA9gale, sans adresse...)."},
@@ -2797,8 +2802,10 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
                 help = hmi::kindShowsValue(o->kind)
                            ? std::string("Montr\xC3\xA9" "e quand Valeur n'a pas d'expression (un projet d'avant la 1.10.4). Plus simple : "
                                          "tape =la variable dans Valeur, puis vide cette case.")
-                           : std::string("La variable de l'automate que l'objet repr\xC3\xA9sente (un projet d'avant la 1.10.4 ; "
-                                         "la liaison avec l'automate se r\xC3\xA8gle dans les Variables IHM). Vide-la si elle ne sert plus.");
+                           : core::hasApi() ? std::string("La variable de l'automate que l'objet repr\xC3\xA9sente (un projet d'avant la 1.10.4 ; "
+                                                          "la liaison avec l'automate se r\xC3\xA8gle dans les Variables IHM). Vide-la si elle ne sert plus.")
+                                            : std::string("La variable que l'objet repr\xC3\xA9sente (un projet d'avant la 1.10.4 ; la liaison avec "
+                                                          "un \xC3\xA9quipement se r\xC3\xA8gle dans les Variables IHM). Vide-la si elle ne sert plus.");
             if (plc && prop.value.find_first_not_of(" \t") != std::string::npos)
                 help += (help.empty() ? "" : "\n") + std::string("Adresse automate : ") + plcAddressOf(plc, prop.value) + ".";
         }

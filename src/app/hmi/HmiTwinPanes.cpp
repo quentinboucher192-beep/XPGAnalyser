@@ -638,7 +638,8 @@ bool HmiCommPane::applyDetected(std::string* why) {
     if (!rep) return fail("aucune d\xC3\xA9tection termin\xC3\xA9" "e");
     if (rep->failed) return fail("d\xC3\xA9tection en \xC3\xA9" "chec : " + rep->why);
     const auto* e = equipmentOf(detectEquip_);
-    if (!e) return fail("les zones de l'automate du projet viennent de sa configuration (.XHW)");
+    if (!e) return fail(core::hasApi() ? std::string("les zones de l'automate du projet viennent de sa configuration (.XHW)")
+                                       : "pas d'\xC3\xA9quipement " + detectEquip_);   // 1.12.2 : XPGAnalyser IHM n'a pas d'automate
     const hmi::MemZones z = rep->zones("d\xC3\xA9tect\xC3\xA9" "es " + clockNow());
     const std::string name = e->name;
     if (!changeProject(name + " : zones d\xC3\xA9tect\xC3\xA9" "es", [&](hmi::Project& x) {
@@ -691,8 +692,12 @@ void HmiCommPane::refreshMapTargets() {
     const auto& p = doc_->project;
     mapTargets_.clear();
     std::vector<ui::DropDown::Item> items;
-    mapTargets_.push_back({kPlcKey, false});
-    items.push_back({p.comm.modbus() ? "Automate du projet \xC2\xB7 " + p.comm.host : std::string("Automate du projet (le simulateur)"), kPlcKey, {}, true});
+    // 1.12.2 : l'automate du projet, XPGAnalyser API seulement - XPGAnalyser IHM n'a que ses equipements.
+    const bool plc = core::hasApi();
+    if (plc) {
+        mapTargets_.push_back({kPlcKey, false});
+        items.push_back({p.comm.modbus() ? "Automate du projet \xC2\xB7 " + p.comm.host : std::string("Automate du projet (le simulateur)"), kPlcKey, {}, true});
+    }
     for (const auto& e : p.equipments) {
         if (!e.modbus()) continue;
         if (!e.simulated) {
@@ -704,8 +709,9 @@ void HmiCommPane::refreshMapTargets() {
             items.push_back({e.simulated ? e.name + " \xC2\xB7 seulement simul\xC3\xA9" : e.twinLabel(), e.name + "|jumeau", {}, true});
         }
     }
+    if (mapTargets_.empty()) items.push_back({"Aucun \xC3\xA9quipement Modbus", "", {}, false});
     // La cible par defaut : l'equipement choisi (son jumeau si l'IHM lui parle), sinon le premier.
-    if (mapEquip_.empty() || (mapEquip_ != kPlcKey && !equipmentOf(mapEquip_))) {
+    if (mapEquip_.empty() || (mapEquip_ == kPlcKey && !plc) || (mapEquip_ != kPlcKey && !equipmentOf(mapEquip_))) {
         mapEquip_.clear();
         const std::string want = !equipment_.empty() ? equipment_ : std::string{};
         for (const auto& [name, twin] : mapTargets_)
@@ -713,11 +719,12 @@ void HmiCommPane::refreshMapTargets() {
                 mapEquip_ = name;
                 mapTwin_ = twin;
             }
-        if (mapEquip_.empty() && mapTargets_.size() > 1) {
-            mapEquip_ = mapTargets_[1].first;
-            mapTwin_ = mapTargets_[1].second;
+        const std::size_t first = plc ? 1 : 0;
+        if (mapEquip_.empty() && mapTargets_.size() > first) {
+            mapEquip_ = mapTargets_[first].first;
+            mapTwin_ = mapTargets_[first].second;
         }
-        if (mapEquip_.empty()) {
+        if (mapEquip_.empty() && plc) {
             mapEquip_ = kPlcKey;
             mapTwin_ = false;
         }
@@ -957,6 +964,9 @@ void HmiCommPane::refreshMap(bool structure) {
         banner = "Scan arr\xC3\xAAt\xC3\xA9 \xC2\xB7 " + std::to_string(sc->state().passes) + " passe(s) \xC2\xB7 " + std::to_string(sc->activeCells())
                  + " case(s) active(s) : ce qui a \xC3\xA9t\xC3\xA9 vu reste affich\xC3\xA9";
         tone = 4;
+    } else if (mapEquip_.empty() && !core::hasApi()) {
+        // 1.12.2 : XPGAnalyser IHM, sans equipement Modbus.
+        banner = "Aucun \xC3\xA9quipement Modbus : ajoutez-en un (onglet \xC3\x89quipements), sa m\xC3\xA9moire se voit ici";
     } else if (mapEquip_ == kPlcKey) {
         banner = doc_->project.comm.modbus() ? std::string("L'automate du projet : ses variables au plan d'adressage ; \xC2\xAB Scanner l'\xC3\xA9quipement \xC2\xBB lit sa m\xC3\xA9moire en boucle")
                                              : std::string("L'automate du projet (le simulateur) : ses variables au plan d'adressage, ses zones de sa configuration");
@@ -1054,7 +1064,9 @@ bool HmiCommPane::moveVariable(const std::string& variable, int delta, std::stri
         return false;
     };
     const auto* v = doc_->project.variable(variable);
-    if (!v || !v->bound()) return fail(variable + " n'est pas une variable IHM li\xC3\xA9" "e (les variables de l'automate se d\xC3\xA9placent dans son programme)");
+    if (!v || !v->bound())   // 1.12.2 : l'automate, XPGAnalyser API seulement
+        return fail(variable + (core::hasApi() ? " n'est pas une variable IHM li\xC3\xA9" "e (les variables de l'automate se d\xC3\xA9placent dans son programme)"
+                                               : " n'est pas une variable IHM li\xC3\xA9" "e \xC3\xA0 cet \xC3\xA9quipement"));
     if (delta == 0) return true;
     hmi::comm::Point pt;
     std::string reason;
@@ -1251,8 +1263,9 @@ void HmiCommPane::rebuildMapProperties(std::vector<PG::Category>& cats) {
             return [this, name, baddr, key](std::string_view v) { return setBehavior(name, baddr, key, std::string(v)); };
         };
         j.properties.push_back(prop("Comportement", b ? std::string(hmi::behaviorKindLabel(b->kind)) : std::string("aucun"), PG::ValueType::Enum, field("genre"),
-                                    "Ce que la case fait toute seule : constante, sinus, rampe, compteur, clignote, al\xC3\xA9" "atoire, recopie (d'une autre case, avec un retard), "
-                                    "suit l'automate (une variable du simulateur), \xC3\xA9tapes (une liste de valeurs rejou\xC3\xA9" "e).",
+                                    // 1.12.2 : « suit l'automate », XPGAnalyser API seulement (comme la valeur).
+                                    std::string("Ce que la case fait toute seule : constante, sinus, rampe, compteur, clignote, al\xC3\xA9" "atoire, recopie (d'une autre case, avec un retard), ")
+                                        + (core::hasApi() ? "suit l'automate (une variable du simulateur), " : "") + "\xC3\xA9tapes (une liste de valeurs rejou\xC3\xA9" "e).",
                                     kinds));
         if (b) {
             std::vector<std::string> types{"INT", "UINT", "WORD", "DINT", "UDINT", "DWORD", "REAL", "BOOL"};

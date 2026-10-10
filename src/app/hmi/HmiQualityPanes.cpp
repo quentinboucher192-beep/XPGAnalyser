@@ -1,5 +1,6 @@
 // IHM > Essais : les essais de reception (lot 13).
 #include "HmiQualityPanes.hpp"
+#include "../../core/Edition.hpp"   // 1.12.2 : XPGAnalyser IHM n'a pas d'automate
 #include "../ExportTarget.hpp"
 #include "HmiAssist.hpp"
 #include "HmiPaneKit.hpp"
@@ -70,7 +71,8 @@ HmiScenariosPane::HmiScenariosPane(std::string id, hmi::DocumentPtr doc, Apply a
     tools->add(TPlay, HmiGlyph::Play, "Lancer l'essai dans la simulation : l'IHM red\xC3\xA9marre et rejoue chaque pas \xC3\xA0 l'\xC3\xA9" "cran", "Lancer");
     tools->add(TStop, HmiGlyph::Stop, "Arr\xC3\xAAter l'essai en cours (les pas restants : non jou\xC3\xA9s)", "Arr\xC3\xAAter");
     tools->add(TRunAll, HmiGlyph::Check,
-               "Tout lancer, sans \xC3\xA9" "cran : chaque essai d'un coup, au temps simul\xC3\xA9 (reli\xC3\xA9 \xC3\xA0 l'automate simul\xC3\xA9 s'il tourne)",
+               core::hasApi() ? "Tout lancer, sans \xC3\xA9" "cran : chaque essai d'un coup, au temps simul\xC3\xA9 (reli\xC3\xA9 \xC3\xA0 l'automate simul\xC3\xA9 s'il tourne)"
+                              : "Tout lancer, sans \xC3\xA9" "cran : chaque essai d'un coup, au temps simul\xC3\xA9",   // 1.12.2
                "Tout lancer");
     tools->separator();
     tools->add(TPdf, HmiGlyph::Export, "Rapport PDF : l'essai choisi, sinon toute la campagne (dossier exports/)", "Rapport PDF");

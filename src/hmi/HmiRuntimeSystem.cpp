@@ -13,6 +13,7 @@
 //  Chaque reglage change est ecrit au journal ("Luminosite : 70 %").
 // =============================================================================
 #include "HmiRuntime.hpp"
+#include "../core/Edition.hpp"   // 1.12.2 : XPGAnalyser IHM n'a pas d'automate
 
 #include "HmiPublicVars.hpp"
 
@@ -314,6 +315,7 @@ std::vector<DiagGroup> Runtime::diagnostics() const {
     row(ihm, "Derni\xC3\xA8re erreur", lastError.empty() ? std::string("aucune") : lastError, "LastError", lastError.empty() ? 3 : 2);
     out.push_back(std::move(ihm));
 
+    if (core::hasApi()) {      // 1.12.2 : XPGAnalyser IHM n'a pas d'automate
     DiagGroup plc{"Automate", {}};
     const std::string status = str("PlcStatus");
     row(plc, "\xC3\x89tat", status, "PlcStatus", status == "En marche" ? 3 : status == "En d\xC3\xA9" "faut" ? 2 : status == "Absent" ? 0 : 1);
@@ -327,6 +329,7 @@ std::vector<DiagGroup> Runtime::diagnostics() const {
     const std::string plcError = str("PlcError");
     row(plc, "D\xC3\xA9" "faut", plcError.empty() ? std::string("aucun") : plcError, "PlcError", plcError.empty() ? 0 : 2);
     out.push_back(std::move(plc));
+    }
 
     DiagGroup usr{"Utilisateur", {}};
     const std::string login = str("UserName"), full = str("UserFullName"), group = str("UserGroup");

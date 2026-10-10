@@ -736,7 +736,8 @@ private:
             y += 30.f;
             r.drawText({x, y}, fit(r, "Le filtre Type attendu ne montre que ce qui convient ;", kSmall, w), kSmall, c.textMuted);
             y += 20.f;
-            r.drawText({x, y}, fit(r, "\xC2\xAB Tout montrer \xC2\xBB : API, SYS., les variables IHM\xE2\x80\xA6", kSmall, w), kSmall, c.textMuted);
+            r.drawText({x, y}, fit(r, core::hasApi() ? "\xC2\xAB Tout montrer \xC2\xBB : API, SYS., les variables IHM\xE2\x80\xA6"
+                                                     : "\xC2\xAB Tout montrer \xC2\xBB : SYS., les variables IHM\xE2\x80\xA6", kSmall, w), kSmall, c.textMuted);   // 1.12.2
             return;
         }
         ui::paintLegend(ctx, {x, y, 20.f, 20.f}, valuekind::legendOf(nd->zone));

@@ -1,4 +1,5 @@
 #include "HmiFunctionPanes.hpp"
+#include "../../core/Edition.hpp"   // 1.12.2 : XPGAnalyser IHM n'a pas d'automate
 #include "../../hmi/HmiOverload.hpp"   // 1.11.20 : les surcharges (leur forme)
 
 #include "HmiAssetPanes.hpp"
@@ -274,7 +275,8 @@ HmiFunctionsPane::HmiFunctionsPane(std::string id, hmi::DocumentPtr doc, Apply a
         ed->setCommandKeys(true);            // 1.12.2 : les raccourcis de Visual Studio (accords Ctrl+K...)
         editor_ = &static_cast<ui::MultiLineText&>(area->addChild(std::move(ed)));
         auto bar = std::make_unique<ui::StatusBar>(base + ".symbol");
-        bar->setTooltip("Le nom o\xC3\xB9 est le curseur : param\xC3\xA8tre, locale, variable IHM ou de l'automate, fonction.");
+        bar->setTooltip(core::hasApi() ? "Le nom o\xC3\xB9 est le curseur : param\xC3\xA8tre, locale, variable IHM ou de l'automate, fonction."
+                                       : "Le nom o\xC3\xB9 est le curseur : param\xC3\xA8tre, locale, variable IHM, fonction.");   // 1.12.2
         symbolBar_ = &static_cast<ui::StatusBar&>(area->addChild(std::move(bar)));
         // 1.11.18 (refonte, lot 5) : Code, Parametres, Locales, Constantes ; le bandeau de l'ancien format.
         banner_ = &static_cast<HmiDeclBanner&>(area->addChild(std::make_unique<HmiDeclBanner>(base + ".declBanner")));
@@ -621,6 +623,7 @@ std::vector<std::pair<hmi::pipeline::Severity, std::string>> HmiFunctionsPane::t
     for (const auto& j : trial_.journal) out.emplace_back(S::Information, "Journal : " + j);
     for (const auto& v : trial_.changed) out.emplace_back(S::Warning, "Variable IHM : " + v);
     // 1.11.21 : la simulation de l'API est lue des qu'elle est chargee, meme arretee - son etat est dit.
+    if (core::hasApi())   // 1.12.2 : XPGAnalyser IHM n'a pas d'automate a lire
     out.emplace_back(S::Information, trial_.livePlc ? "Automate : lu dans la simulation de l'API ("
                                                           + (trial_.plcState.empty() ? std::string{} : trial_.plcState + ", ")
                                                           + "sans y \xC3\xA9" "crire)"

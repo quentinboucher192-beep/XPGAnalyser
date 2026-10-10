@@ -1130,12 +1130,14 @@ void HmiCommPane::refreshPlan() {
                        + " variable" + (bound.size() > 1 ? "s" : "") + " IHM li\xC3\xA9" "e" + (bound.size() > 1 ? "s" : "") + " (" + std::to_string(ep.points().size())
                        + " case" + (ep.points().size() > 1 ? "s" : "") + ", " + std::to_string(words) + " mot" + (words > 1 ? "s" : "") + ")  \xC2\xB7  " + lowered,
                    "eq"};
-        g.tip = "Les variables IHM que l'IHM lit et \xC3\xA9" "crit dans l'\xC3\xA9quipement \xC2\xAB " + e.name + " \xC2\xBB (Configuration \xE2\x80\xBA \xC3\x89quipements). "
-                "Ce ne sont pas des variables de l'automate du projet.";
+        g.tip = "Les variables IHM que l'IHM lit et \xC3\xA9" "crit dans l'\xC3\xA9quipement \xC2\xAB " + e.name + " \xC2\xBB (Configuration \xE2\x80\xBA \xC3\x89quipements)."
+                + std::string(core::hasApi() ? " Ce ne sont pas des variables de l'automate du projet." : "");   // 1.12.2 : API seulement
         lines.push_back(std::move(g));
         planRows_.push_back({PlanRow::Kind::Group, e.name, e.name, {}, {}});
         planNames_.push_back({});
         if (!open) continue;
+        // 1.12.2 : XPGAnalyser IHM n'a pas d'automate du projet : rien a distinguer.
+        const std::string notPlc = core::hasApi() ? "Ce n'est pas une variable de l'automate du projet. " : "";
         const auto leafQuality = [&](const std::string& name, int& tone) {
             tone = 0;
             if (!lk) return std::string("\xE2\x80\x94");
@@ -1166,7 +1168,7 @@ void HmiCommPane::refreshPlan() {
                            pt ? pt->functionsText() : std::string{}, quality};
                 l.tip = v->name + " \xE2\x80\x94 variable IHM (" + where + "), " + v->type + ".\nElle est lue" + (v->readOnly ? std::string{} : std::string(" et \xC3\xA9" "crite"))
                       + " sur l'\xC3\xA9quipement \xC2\xAB " + e.name + " \xC2\xBB (" + linkText + ")" + (pt ? ", " + hmi::equip::modiconText(*pt) : std::string{}) + ".\n"
-                      + (tone == 3 ? quality + "\n" : std::string{}) + "Ce n'est pas une variable de l'automate du projet. Double-clic : l'ouvrir dans Variables IHM.";
+                      + (tone == 3 ? quality + "\n" : std::string{}) + notPlc + "Double-clic : l'ouvrir dans Variables IHM.";
                 {
                     int clashTone = 0;
                     const std::string c = clash(v->name, clashTone);
@@ -1206,7 +1208,7 @@ void HmiCommPane::refreshPlan() {
             l.cells = {v->name, v->address, v->type, origin, e.name, hmi::types::spanText(p, *v), "", quality};
             l.tip = v->name + " \xE2\x80\x94 variable IHM (" + where + "), " + hmi::types::summary(p, v->type, v->packBools) + ".\nSes " + std::to_string(leaves.size())
                   + " cases sont lues" + (v->readOnly ? std::string{} : std::string(" et \xC3\xA9" "crites")) + " sur l'\xC3\xA9quipement \xC2\xAB " + e.name + " \xC2\xBB ("
-                  + linkText + "), " + hmi::types::spanText(p, *v) + ".\nCe n'est pas une variable de l'automate du projet. Double-clic : l'ouvrir dans Variables IHM.";
+                  + linkText + "), " + hmi::types::spanText(p, *v) + ".\n" + notPlc + "Double-clic : l'ouvrir dans Variables IHM.";
             lines.push_back(std::move(l));
             planRows_.push_back({PlanRow::Kind::Ihm, e.name, v->name, v->name, {}});
             planNames_.push_back(v->name);
@@ -1335,28 +1337,32 @@ void HmiCommPane::refreshState() {
     const auto rowsOf = hmi::comm::diagnosticRows(comm, link, simulator, host && host->running(), host ? host->demoPort() : 0);
     std::vector<std::vector<std::string>> rows;
     std::vector<int> tones;
-    // Lot 15 : l'automate d'abord (son titre), puis chaque equipement.
-    rows.push_back({"AUTOMATE DU PROJET", comm.modbus() ? comm.host + ":" + std::to_string(comm.port) : std::string("simulateur de l'application")});
-    tones.push_back(4);
-    for (const auto& r : rowsOf) {
-        rows.push_back({r.label, r.value});
-        tones.push_back(r.tone);
-    }
-    if (host && !host->demoError().empty()) {
-        rows.push_back({"Serveur de d\xC3\xA9monstration", "impossible : " + host->demoError()});
-        tones.push_back(3);
-    } else if (host && host->running()) {
-        const auto st = host->demoStats();
-        rows.push_back({"Clients du serveur", std::to_string(st.clients) + " connect\xC3\xA9(s) \xC2\xB7 " + std::to_string(st.requests) + " requ\xC3\xAAte(s) servie(s)"
-                                                   + (st.lastClient.empty() ? std::string{} : " \xC2\xB7 dernier : " + st.lastClient)
-                                                   + (host->demoMute() ? " \xC2\xB7 COUP\xC3\x89 (ne r\xC3\xA9pond plus)" : std::string{})});
-        tones.push_back(host->demoMute() ? 3 : 0);
-    }
-    if (link)
-        for (const auto& [name, why] : link->diagnostics().badPoints) {
-            rows.push_back({"Variable en d\xC3\xA9" "faut", name + " \xE2\x80\x94 " + why});
-            tones.push_back(why.rfind("ancienne", 0) == 0 ? 2 : 3);
+    // Lot 15 : l'automate d'abord (son titre), puis chaque equipement. 1.12.2 : XPGAnalyser IHM
+    // n'a pas d'automate du projet (ni sa liaison, ni le serveur de demonstration) : ses
+    // equipements seulement.
+    if (core::hasApi()) {
+        rows.push_back({"AUTOMATE DU PROJET", comm.modbus() ? comm.host + ":" + std::to_string(comm.port) : std::string("simulateur de l'application")});
+        tones.push_back(4);
+        for (const auto& r : rowsOf) {
+            rows.push_back({r.label, r.value});
+            tones.push_back(r.tone);
         }
+        if (host && !host->demoError().empty()) {
+            rows.push_back({"Serveur de d\xC3\xA9monstration", "impossible : " + host->demoError()});
+            tones.push_back(3);
+        } else if (host && host->running()) {
+            const auto st = host->demoStats();
+            rows.push_back({"Clients du serveur", std::to_string(st.clients) + " connect\xC3\xA9(s) \xC2\xB7 " + std::to_string(st.requests) + " requ\xC3\xAAte(s) servie(s)"
+                                                       + (st.lastClient.empty() ? std::string{} : " \xC2\xB7 dernier : " + st.lastClient)
+                                                       + (host->demoMute() ? " \xC2\xB7 COUP\xC3\x89 (ne r\xC3\xA9pond plus)" : std::string{})});
+            tones.push_back(host->demoMute() ? 3 : 0);
+        }
+        if (link)
+            for (const auto& [name, why] : link->diagnostics().badPoints) {
+                rows.push_back({"Variable en d\xC3\xA9" "faut", name + " \xE2\x80\x94 " + why});
+                tones.push_back(why.rfind("ancienne", 0) == 0 ? 2 : 3);
+            }
+    }
     // Lot 15 : les equipements.
     std::size_t reachable = 0, tested = 0;
     if (auto* eh = this->host()) {
@@ -1407,6 +1413,10 @@ void HmiCommPane::refreshState() {
             }
         }
     }
+    if (rows.empty()) {   // 1.12.2 : XPGAnalyser IHM, sans equipement
+        rows.push_back({"Aucun \xC3\xA9quipement", "onglet \xC3\x89quipements : + \xC3\x89quipement"});
+        tones.push_back(0);
+    }
     stateModel_ = std::make_shared<Rows>(std::vector<std::string>{"Liaison", "Valeur"}, std::move(rows), [tones](ui::RowIndex r, std::size_t c) {
         ui::CellStyle st;
         if (r >= tones.size()) return st;
@@ -1428,7 +1438,7 @@ void HmiCommPane::refreshState() {
     }
     tabs_->setTabLive(TState, reachable > 0);
     if (tested == 0)
-        tabs_->setTabBadge(TState, "simulateur", ui::Tone::Accent);
+        tabs_->setTabBadge(TState, core::hasApi() ? "simulateur" : "", ui::Tone::Accent);   // 1.12.2 : le simulateur de l'automate
     else
         tabs_->setTabBadge(TState, std::to_string(reachable) + " / " + std::to_string(tested) + " joignable" + (reachable > 1 ? "s" : ""),
                            reachable == tested ? (worst >= 2 ? ui::Tone::Warning : ui::Tone::Ok) : reachable == 0 ? ui::Tone::Error : ui::Tone::Warning);

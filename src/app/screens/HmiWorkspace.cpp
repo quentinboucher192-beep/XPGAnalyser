@@ -1936,9 +1936,11 @@ void MainAnalysisScreen::askHmiForce(std::string variable) {
     fields.push_back({"Variable", variable, "Armoires[0].ana.PT1.mes", false, {}});
     fields.push_back({"Valeur", current, "TRUE, 42, 7.5, T#2s, 'texte' ou une expression", false, {}});
     auto dialog = std::make_unique<FormDialog>("dialog.hmiForce", "Forcer une variable",
-            "Tant qu'elle est forc\xC3\xA9" "e, le programme n'\xC3\xA9" "crit plus dans la variable : elle relit "
-            "toujours cette valeur, comme dans la table de for\xC3\xA7" "age de l'automate. \"Tout rel\xC3\xA2" "cher\" "
-            "la rend au programme.",
+            core::hasApi() ? "Tant qu'elle est forc\xC3\xA9" "e, le programme n'\xC3\xA9" "crit plus dans la variable : elle relit "
+                             "toujours cette valeur, comme dans la table de for\xC3\xA7" "age de l'automate. \"Tout rel\xC3\xA2" "cher\" "
+                             "la rend au programme."
+                           : "Tant qu'elle est forc\xC3\xA9" "e, rien n'\xC3\xA9" "crit plus dans la variable : elle relit "
+                             "toujours cette valeur. \"Tout rel\xC3\xA2" "cher\" la lib\xC3\xA8re.",   // 1.12.2
             std::move(fields), "Forcer");
     if (auto doc = app_.hmi()) {
         dialog->setFieldAssist(0, assist::fieldAssist(assist::sourcesFor(doc)));
@@ -3087,7 +3089,9 @@ void MainAnalysisScreen::askHmiNewFunction(std::uint64_t symbolView) {
         return;
     }
     auto dialog = std::make_unique<FormDialog>("dialog.hmiNewFunction", "Nouvelle fonction IHM",
-            "Une fonction IHM s'appelle par son nom, comme une fonction de l'automate : Moyenne(a, b) dans un script, "
+            std::string(core::hasApi() ? "Une fonction IHM s'appelle par son nom, comme une fonction de l'automate : "
+                                       : "Une fonction IHM s'appelle par son nom : ")   // 1.12.2
+                + "Moyenne(a, b) dans un script, "
             "une action ou - si elle rend une valeur - une expression de vue. Ses param\xC3\xA8tres, ses locales et ses constantes "
             "se d\xC3\xA9" "clarent dans ses onglets ; Aucun en retour : une proc\xC3\xA9" "dure, appel\xC3\xA9" "e seule sur sa ligne. "
             "Le corps part d'un mod\xC3\xA8le \xC3\xA0 compl\xC3\xA9ter. Le retour peut \xC3\xAAtre un tableau, une liste, un vecteur, un "
@@ -3311,8 +3315,10 @@ void MainAnalysisScreen::askHmiTryFunction(std::uint64_t functionId) {
                           false, {}});
     }
     auto dialog = std::make_unique<FormDialog>("dialog.hmiTryFunction", "Essayer " + hmi::functionSignature(*f),
-        "Les arguments en ST : 2.5, TRUE, 'texte', T#5s, ou une expression (variables IHM \xC3\xA0 leur valeur initiale ; "
-        "celles de l'automate lues dans la simulation si elle tourne). L'essai ne modifie ni le projet ni la simulation.",
+        core::hasApi() ? "Les arguments en ST : 2.5, TRUE, 'texte', T#5s, ou une expression (variables IHM \xC3\xA0 leur valeur initiale ; "
+                         "celles de l'automate lues dans la simulation si elle tourne). L'essai ne modifie ni le projet ni la simulation."
+                       : "Les arguments en ST : 2.5, TRUE, 'texte', T#5s, ou une expression (variables IHM \xC3\xA0 leur valeur initiale). "
+                         "L'essai ne modifie ni le projet ni la simulation.",   // 1.12.2
         std::move(fields), "Essayer");
     for (std::size_t i = 0; i < inputs.size(); ++i) dialog->setFieldAssist(i, assist::fieldAssist(assist::sourcesFor(doc)));
     app_.menus().ShowDialog(std::move(dialog), [this, functionId](const menu::DialogResult& r) {

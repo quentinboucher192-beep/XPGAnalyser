@@ -1,6 +1,7 @@
 #include "HmiGuide.hpp"
 
 #include <algorithm>
+#include <utility>
 #include <cctype>
 
 namespace hmi::guide {
@@ -57,6 +58,59 @@ std::string foldMapped(std::string_view s, std::vector<std::size_t>* map) {
 } // namespace
 
 std::string fold(std::string_view s) { return foldMapped(s, nullptr); }
+
+std::string ihmWords(std::string_view text) {
+    // Du plus precis au plus general (une regle ne defait pas la precedente).
+    static const std::pair<std::string_view, std::string_view> kRules[] = {
+        {" (IHM ou automate)", ""},
+        {" (automate ou IHM)", ""},
+        {" ou de l'automate", ""},
+        {" dans l'automate ou dans l'\xC3\xA9quipement", " dans l'\xC3\xA9quipement"},
+        {"variable IHM ou automate", "variable IHM"},
+        {"la relie \xC3\xA0 l'automate", "la relie \xC3\xA0 une variable"},
+        {"le relie \xC3\xA0 l'automate", "le relie \xC3\xA0 une variable"},
+        {"les relie \xC3\xA0 l'automate", "les relie \xC3\xA0 des variables"},
+        {"son adresse automate", "son adresse"},
+        {"Variable API", "Variable"},
+        {"L'automate", "L'\xC3\xA9quipement"},
+        {"l'automate", "l'\xC3\xA9quipement"},
+        {"d'automate", "d'\xC3\xA9quipement"},
+        {"Un automate", "Un \xC3\xA9quipement"},
+        {"un automate", "un \xC3\xA9quipement"},
+        {"automates", "\xC3\xA9quipements"},
+        {"Automates", "\xC3\x89quipements"},
+        {"automate", "\xC3\xA9quipement"},
+        {"Automate", "\xC3\x89quipement"},
+    };
+    std::string s(text);
+    for (const auto& [from, to] : kRules)
+        for (std::size_t at = s.find(from); at != std::string::npos; at = s.find(from, at + to.size()))
+            s.replace(at, from.size(), to);
+    return s;
+}
+
+std::vector<Topic> ihmWorded(const std::vector<Topic>& in) {
+    std::vector<Topic> out = in;
+    for (auto& t : out) {
+        t.title = ihmWords(t.title);
+        t.summary = ihmWords(t.summary);
+        for (auto& b : t.blocks) {
+            b.text = ihmWords(b.text);
+            b.label = ihmWords(b.label);
+        }
+        for (auto& p : t.params) {
+            p.label = ihmWords(p.label);
+            p.text = ihmWords(p.text);
+        }
+        for (auto& sh : t.shots) sh.caption = ihmWords(sh.caption);
+        t.example = ihmWords(t.example);
+        for (auto& st : t.tutorial) {
+            st.title = ihmWords(st.title);
+            st.text = ihmWords(st.text);
+        }
+    }
+    return out;
+}
 
 std::string plain(std::string_view s) {
     std::string out;

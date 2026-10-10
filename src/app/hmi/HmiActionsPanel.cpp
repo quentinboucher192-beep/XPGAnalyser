@@ -1,4 +1,5 @@
 #include "HmiActionsPanel.hpp"
+#include "../../core/Edition.hpp"   // 1.12.2 : XPGAnalyser IHM n'a pas d'automate
 #include "HmiActionDialogs.hpp"   // 1.11.9 : l'operation en arbre, le script, la formule de Maths
 #include "HmiParamPanes.hpp"   // 1.9 : les arguments types d'Ouvrir une popup
 #include "../../hmi/HmiActionKinds.hpp"
@@ -652,8 +653,9 @@ void HmiActionsPanel::rebuildGrid() {
     if (hmi::operationWritesVariable(a.operation)) {
         op.properties.push_back(prop("Variable", a.target, PG::ValueType::Text, {},
                                      commitWith([](Action& n, std::string_view v) { n.target = hmi::targetVariable(v); return true; }),
-                                     "Une variable IHM ou de l'automate : Compteur_Clics, Armoires[0].active. Dans un symbole ou une "
-                                     "popup, une r\xC3\xA9" "f\xC3\xA9rence et ses membres : Vanne.CMD_OUV."));
+                                     std::string(core::hasApi() ? "Une variable IHM ou de l'automate : " : "Une variable IHM : ")   // 1.12.2
+                                         + "Compteur_Clics, Armoires[0].active. Dans un symbole ou une "
+                                           "popup, une r\xC3\xA9" "f\xC3\xA9rence et ses membres : Vanne.CMD_OUV."));
         // 1.11.7 : la pastille fx et l'aide (les variables, les references du symbole), comme la Condition ;
         // le type attendu au bout du nom (BOOL pour Mettre a 1, Mettre a 0, Basculer).
         const auto expect = a.operation == Operation::Increment || a.operation == Operation::Decrement || a.operation == Operation::Maths
@@ -810,7 +812,7 @@ void HmiActionsPanel::rebuildGrid() {
                                      }),
                                      "Le menu natif Param\xC3\xA8tres syst\xC3\xA8me, par-dessus la vue : les r\xC3\xA9glages du poste "
                                      "(luminosit\xC3\xA9, veille, son, volume, d\xC3\xA9" "connexion, clavier, heure), le diagnostic "
-                                     "(IHM, automate, utilisateur, alarmes, poste) ou la page Simulation (les esclaves simul\xC3\xA9s, "
+                                     + std::string(core::hasApi() ? "(IHM, automate, " : "(IHM, \xC3\xA9quipements, ") + "utilisateur, alarmes, poste) ou la page Simulation (les esclaves simul\xC3\xA9s, "
                                      "permission Administrer). La croix, ou un clic dehors, le ferme."));
     } else if (a.operation == Operation::ShowLogin) {
         // Lot 12 : le menu natif de connexion, sur l'onglet choisi ("" : Connexion).

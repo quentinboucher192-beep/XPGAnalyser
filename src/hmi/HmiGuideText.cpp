@@ -6,6 +6,7 @@
 //      python3 tools/guide-ihm/generer_guide.py --cpp src/hmi/HmiGuideText.cpp
 // =============================================================================
 #include "HmiGuide.hpp"
+#include "../core/Edition.hpp"   // 1.12.2 : les mots de XPGAnalyser IHM
 
 namespace hmi::guide {
 
@@ -16236,7 +16237,10 @@ const std::vector<Topic>& topics() {
          "",
          {}, "1.10"},
     };
-    return all;
+    // 1.12.2 : XPGAnalyser IHM n'a pas d'automate - ses mots (HmiGuide.cpp, ihmWorded).
+    if (core::hasApi()) return all;
+    static const std::vector<Topic> ihm = ihmWorded(all);
+    return ihm;
 }
 
 } // namespace hmi::guide

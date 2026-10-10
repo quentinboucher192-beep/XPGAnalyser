@@ -216,7 +216,8 @@ HmiEditor::HmiEditor(std::string widgetId, hmi::DocumentPtr doc, Id view, Apply 
     tools->add(ActRedo, HmiGlyph::Redo, "R\xC3\xA9tablir (Ctrl+Y)");
     tools->separator();
     tools->add(ActCopy, HmiGlyph::Copy, "Copier (Ctrl+C)");
-    tools->add(ActPaste, HmiGlyph::Paste, "Coller (Ctrl+V) : les animations et les liaisons API suivent");
+    tools->add(ActPaste, HmiGlyph::Paste, core::hasApi() ? "Coller (Ctrl+V) : les animations et les liaisons API suivent"
+                                                         : "Coller (Ctrl+V) : les animations et les liaisons suivent");   // 1.12.2
     tools->add(ActDuplicate, HmiGlyph::Duplicate, "Dupliquer\xE2\x80\xA6 (Ctrl+D : rep\xC3\xA8res, indices, pose) ; tel quel : Ctrl+Maj+D ou Alt + glisser");
     tools->add(ActDelete, HmiGlyph::Delete, "Supprimer (Suppr)");
     tools->separator();

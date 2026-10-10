@@ -2205,7 +2205,7 @@ void checkComm(const Project& p, const NameExists& plc, const comm::Plan* plan, 
         if (cm.demoServer && cm.port == cm.demoPort && (cm.host == "127.0.0.1" || cm.host == "localhost"))
             add(out, S::Info, cat, kNoId, kNoId, "hote",
                 "l'IHM lit le serveur de d\xC3\xA9monstration (le simulateur en Modbus TCP) : un essai de la liaison, pas l'automate r\xC3\xA9" "el");
-    } else {
+    } else if (core::hasApi()) {      // 1.12.2 : XPGAnalyser IHM n'a pas d'automate (ni son simulateur)
         for (const auto& v : p.views)
             for (const auto& o : v.objects)
                 if (o.kind == Kind::CommStatus || o.kind == Kind::PlcDiagnostic) {

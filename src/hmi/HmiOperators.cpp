@@ -2,6 +2,7 @@
 //  hmi/HmiOperators.cpp - les operateurs des symboles et des types IHM (1.10)
 // =============================================================================
 #include "HmiOperators.hpp"
+#include "../core/Edition.hpp"   // 1.12.2 : XPGAnalyser IHM n'a pas d'automate
 
 #include "HmiDecl.hpp"       // 1.11.18 (refonte, lot 3) : les declarations du modele, reconstruites
 #include "HmiEnums.hpp"      // 1.10 (decision 15) : toString / fromString des enumerations
@@ -820,7 +821,8 @@ std::string operatorProblem(const Project& p, const OperatorOwner& owner, const 
         return plcType && plcType(trimmedOf(t));
     };
     const auto unknownType = [&](std::string_view t) {
-        return "type inconnu : " + trimmedOf(t) + " (ni un type de base, ni un type IHM, ni un symbole, ni un DDT de l'automate)";
+        return "type inconnu : " + trimmedOf(t) + (core::hasApi() ? " (ni un type de base, ni un type IHM, ni un symbole, ni un DDT de l'automate)"
+                                                                   : " (ni un type de base, ni un type IHM, ni un symbole)");   // 1.12.2
     };
     if (trimmedOf(o.left).empty()) return "l'op\xC3\xA9rande de gauche n'a pas de type";
     if (!known(o.left, true)) return unknownType(o.left);

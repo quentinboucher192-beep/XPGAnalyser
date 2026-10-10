@@ -2,6 +2,7 @@
 // equipements, les variables liees, le reseau du PC, le scanner IP ; la mise
 // en page du volet.
 #include "HmiCommPanes.hpp"
+#include "../../core/Edition.hpp"          // 1.12.2 : XPGAnalyser IHM n'a pas d'automate du projet
 #include "../../hmi/HmiTypes.hpp"
 
 #include "HmiCommHost.hpp"
@@ -103,23 +104,26 @@ std::optional<hmi::netinfo::Adapter> HmiCommPane::adapter(const std::string& nam
 }
 
 HmiCommPane::Side HmiCommPane::side() const {
+    // 1.12.2 : XPGAnalyser IHM n'a pas d'automate du projet - jamais sa fiche ; rien de choisi :
+    // la fiche d'un equipement, vide.
+    const Side plc = core::hasApi() ? Side::Plc : Side::Equipment;
     switch (static_cast<int>(tabs_->currentIndex())) {
         case TNetwork:
-            if (simView_) return portSide_ || equipment_.empty() ? Side::SimPort : equipment_ == kPlcKey ? Side::Plc : Side::Equipment;
-            return portSide_ || equipment_.empty() ? Side::Port : equipment_ == kPlcKey ? Side::Plc : Side::Equipment;
+            if (simView_) return portSide_ || equipment_.empty() ? Side::SimPort : equipment_ == kPlcKey ? plc : Side::Equipment;
+            return portSide_ || equipment_.empty() ? Side::Port : equipment_ == kPlcKey ? plc : Side::Equipment;
         case TMap: return Side::Map;
         case TValues: return Side::Values;
         case TScanner: return Side::Scan;
         case TEquipments:
-        case TState: return equipment_.empty() || equipment_ == kPlcKey ? Side::Plc : Side::Equipment;
+        case TState: return equipment_.empty() || equipment_ == kPlcKey ? plc : Side::Equipment;
         case TPlan: {
             // Lot 16 : la ligne choisie du plan - une variable IHM, un equipement, ou l'automate.
             const auto* r = selectedPlanRow();
             if (r && (r->kind == PlanRow::Kind::Ihm || r->kind == PlanRow::Kind::Member)) return Side::Bound;
             if (r && r->group != kPlcKey) return Side::Equipment;
-            return Side::Plc;
+            return plc;
         }
-        default: return Side::Plc;
+        default: return plc;
     }
 }
 
@@ -304,8 +308,9 @@ void HmiCommPane::refreshEquipments() {
     std::vector<EquipLine> lines;
     std::size_t reals = 0, reachable = 0, linked = 0, only = 0, readSim = 0;
     const std::string dash = "\xE2\x80\x94";
-    // L'automate du projet, en tete.
-    if (equipFilter_ == "tous" || equipFilter_ == "vrais") {
+    // L'automate du projet, en tete (1.12.2 : XPGAnalyser API seulement - XPGAnalyser IHM n'a que
+    // ses equipements).
+    if (core::hasApi() && (equipFilter_ == "tous" || equipFilter_ == "vrais")) {
         const auto& c = p.comm;
         auto* ch = hosts_.comm ? hosts_.comm() : nullptr;
         const hmi::comm::Link* lk = ch ? ch->link() : nullptr;
@@ -482,7 +487,7 @@ void HmiCommPane::refreshEquipments() {
             equipTable_->selectModelRows({static_cast<ui::RowIndex>(i)}, false);
     }
     refreshing_ = was;
-    tabs_->setTabBadge(TEquipments, std::to_string(p.equipments.size() + (p.comm.modbus() ? 1 : 0))
+    tabs_->setTabBadge(TEquipments, std::to_string(p.equipments.size() + (core::hasApi() && p.comm.modbus() ? 1 : 0))
                                         + (linked + only ? " \xC2\xB7 " + std::to_string(linked + only) + " simul\xC3\xA9" + (linked + only > 1 ? "s" : "") : std::string{}));
     if (simReads_) simReads_->setText(simulatedReadsText());
     // La case "Reperer les lectures simulees" suit le projet (Ctrl+Z).
@@ -893,7 +898,11 @@ void HmiCommPane::testAll() {
 
 void HmiCommPane::rebuildEquipmentProperties(std::vector<PG::Category>& cats) {
     const auto* e = doc_->project.equipmentByName(equipment_);
-    if (!e) return;
+    if (!e) {
+        // 1.12.2 : XPGAnalyser IHM, rien de choisi - plus de fiche de l'automate du projet.
+        if (!core::hasApi() && equipment_.empty()) sheetNote_ = "Choisissez un \xC3\xA9quipement (onglet \xC3\x89quipements) : sa fiche s'affiche ici.";
+        return;
+    }
     // 1.9 : la ligne de l'esclave simule lie - sa fiche a lui.
     if (slaveRow_ && e->linkedSlave()) {
         rebuildSlaveProperties(cats, *e);
@@ -1035,8 +1044,10 @@ void HmiCommPane::rebuildZoneProperties(std::vector<PG::Category>& cats, const h
                                         if (pr.label == v) return applyZonePreset(name, pr.key);
                                     return false;
                                 },
-                                "Pour aller vite : les plages de ses variables (\xC3\xA0 la centaine), la configuration de l'automate du projet, celles d'un autre "
-                                "\xC3\xA9quipement, tout (0-65535), les registres seulement... Ou D\xC3\xA9tecter les zones (barre du haut).",
+                                // 1.12.2 : la configuration de l'automate du projet, XPGAnalyser API seulement.
+                                std::string("Pour aller vite : les plages de ses variables (\xC3\xA0 la centaine), ")
+                                    + (core::hasApi() ? "la configuration de l'automate du projet, " : "") + "celles d'un autre "
+                                    "\xC3\xA9quipement, tout (0-65535), les registres seulement... Ou D\xC3\xA9tecter les zones (barre du haut).",
                                 labels));
     for (const auto t : {hmi::MemTable::Holding, hmi::MemTable::InputRegisters, hmi::MemTable::Coils, hmi::MemTable::DiscreteInputs}) {
         const std::string label = std::string(hmi::zones::tableLabel(t)) + " (" + std::string(hmi::zones::tableModicon(t)) + ")";
@@ -1233,7 +1244,7 @@ void HmiCommPane::rebuildBoundProperties(std::vector<PG::Category>& cats) {
         PG::Category c;
         c.name = "Variable choisie (plan d'adressage)";
         c.properties.push_back(prop(r->kind == PlanRow::Kind::Member ? "Case" : "Variable", r->name, PG::ValueType::ReadOnly));
-        c.properties.push_back(prop("Nature", "variable IHM (pas l'automate du projet)", PG::ValueType::ReadOnly, {},
+        c.properties.push_back(prop("Nature", "variable IHM li\xC3\xA9" "e \xC3\xA0 l'\xC3\xA9quipement", PG::ValueType::ReadOnly, {},
                                     "Elle vit dans l'IHM (Programmation g\xC3\xA9n\xC3\xA9rale \xE2\x80\xBA Variables IHM) ; sa valeur vient de l'\xC3\xA9quipement."));
         c.properties.push_back(prop("Dossier", v->folder.empty() ? std::string("(racine)") : v->folder, PG::ValueType::ReadOnly));
         c.properties.push_back(prop("Type", r->kind == PlanRow::Kind::Member ? hmi::types::typeOfPath(doc_->project, r->name) : v->type, PG::ValueType::ReadOnly));
@@ -1440,7 +1451,7 @@ void HmiCommPane::refreshDiagram() {
     std::vector<Placed> placed;
     {
         const auto& c = p.comm;
-        if (c.modbus()) {
+        if (core::hasApi() && c.modbus()) {     // 1.12.2 : XPGAnalyser IHM n'a pas d'automate du projet
             Placed pl;
             auto* ch = hosts_.comm ? hosts_.comm() : nullptr;
             const hmi::comm::Link* lk = ch ? ch->link() : nullptr;
@@ -1704,7 +1715,7 @@ std::vector<std::pair<int, std::string>> HmiCommPane::portChecks() const {
                 else if (before) leave.push_back(name);
                 else if (after) arrive.push_back(name);
             };
-            if (doc_->project.comm.modbus()) consider("l'automate du projet", doc_->project.comm.host);
+            if (core::hasApi() && doc_->project.comm.modbus()) consider("l'automate du projet", doc_->project.comm.host);   // 1.12.2 : API seulement
             for (const auto& e : doc_->project.equipments)
                 if (e.enabled && !(e.simulated && e.modbus())) consider(e.name, e.host);
             if (!stay.empty())
@@ -2019,7 +2030,7 @@ void HmiCommPane::refreshScan() {
     // Ce que le projet connait deja a chaque adresse.
     std::map<std::string, std::string> known;
     for (const auto& e : doc_->project.equipments) known[e.host] = e.name;
-    if (doc_->project.comm.modbus()) known[doc_->project.comm.host] = "automate du projet";
+    if (core::hasApi() && doc_->project.comm.modbus()) known[doc_->project.comm.host] = "automate du projet";   // 1.12.2 : API seulement
     if (h)
         for (const auto& ad : h->adapters())
             for (const auto& [ip, pre] : ad.addresses) known[eq::ipv4Text(ip)] = "ce PC (" + ad.name + ")";

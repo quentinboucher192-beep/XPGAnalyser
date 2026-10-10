@@ -1,4 +1,5 @@
 #include "HmiOperatorPanes.hpp"
+#include "../../core/Edition.hpp"   // 1.12.2 : XPGAnalyser IHM n'a pas d'automate
 
 #include "HmiAssetPanes.hpp"
 #include "HmiIcons.hpp"
@@ -303,7 +304,8 @@ HmiOperatorsPane::HmiOperatorsPane(std::string id, hmi::DocumentPtr doc, Apply a
         ed->setCommandKeys(true);            // 1.12.2 : les raccourcis de Visual Studio (accords Ctrl+K...)
         editor_ = &static_cast<ui::MultiLineText&>(area->addChild(std::move(ed)));
         auto bar = std::make_unique<ui::StatusBar>(base + ".symbol");
-        bar->setTooltip("Le nom o\xC3\xB9 est le curseur : a, b, Resultat, une locale, une variable IHM ou de l'automate.");
+        bar->setTooltip(core::hasApi() ? "Le nom o\xC3\xB9 est le curseur : a, b, Resultat, une locale, une variable IHM ou de l'automate."
+                                       : "Le nom o\xC3\xB9 est le curseur : a, b, Resultat, une locale, une variable IHM.");   // 1.12.2
         symbolBar_ = &static_cast<ui::StatusBar&>(area->addChild(std::move(bar)));
         // 1.11.18 (refonte, lot 5) : Code, Locales, Constantes ; le bandeau de l'ancien format.
         banner_ = &static_cast<HmiDeclBanner&>(area->addChild(std::make_unique<HmiDeclBanner>(base + ".declBanner")));
@@ -695,7 +697,8 @@ void HmiOperatorsPane::rebuildProperties() {
     if (fam == hmi::OperatorFamily::Conversion || fam == hmi::OperatorFamily::Arithmetic)
         c.properties.push_back(hmikit::prop(fam == hmi::OperatorFamily::Conversion ? "Cible" : "R\xC3\xA9sultat", cur.result, PG::ValueType::Enum,
             [this, id, cur](std::string_view v) { return changeSignature(id, cur.op, cur.left, cur.right, std::string(v)); },
-            fam == hmi::OperatorFamily::Conversion ? "Le type vis\xC3\xA9 : un type de base, un type IHM ou un DDT de l'automate. Le nom suit : TO_<cible>."
+            fam == hmi::OperatorFamily::Conversion ? (core::hasApi() ? "Le type vis\xC3\xA9 : un type de base, un type IHM ou un DDT de l'automate. Le nom suit : TO_<cible>."
+                                                                     : "Le type vis\xC3\xA9 : un type de base ou un type IHM. Le nom suit : TO_<cible>.")
                                                    : "Le type que rend l'op\xC3\xA9rateur.",
             typeChoices(false)));
     else
@@ -1323,7 +1326,8 @@ void HmiOperatorDialog::onPaintOverlay(const ui::PaintContext& ctx) {
     else label(choicesY_, "OP\xC3\x89RANDE DE DROITE", "(\xC3\xA0 gauche : " + owner_.name + ")");
     chips(choiceChips_, conversion ? target_ : operand_);
     const std::string hint = conversion
-        ? "Un type de base ou un type IHM (un DDT de l'automate : la Cible des propri\xC3\xA9t\xC3\xA9s) ; ailleurs on \xC3\xA9" "crit "
+        ? std::string(core::hasApi() ? "Un type de base ou un type IHM (un DDT de l'automate : la Cible des propri\xC3\xA9t\xC3\xA9s) ; ailleurs on \xC3\xA9" "crit "
+                                     : "Un type de base ou un type IHM ; ailleurs on \xC3\xA9" "crit ")   // 1.12.2
               + hmi::operatorFunctionName(draft_) + "(x)."
         : "Son propre type ou un type externe ; l'ordre compte : " + owner_.name + " * REAL et REAL * " + owner_.name
               + " sont deux op\xC3\xA9rateurs.";

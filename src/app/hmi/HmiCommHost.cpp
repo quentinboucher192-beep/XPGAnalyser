@@ -179,11 +179,11 @@ std::vector<CommHost::TestLine> CommHost::testLink(const hmi::comm::Plan& plan, 
     if (!c.ok) {
         out.push_back({"Connexion \xC3\xA0 " + where + " : " + c.why, 3});
         if (c.why.find("refus") != std::string::npos)
-            out.push_back({"Rien n'\xC3\xA9" "coute sur ce port : le serveur Modbus de l'automate est-il activ\xC3\xA9 ? le port est-il le bon (502) ?", 2});
+            out.push_back({"Rien n'\xC3\xA9" "coute sur ce port : le serveur Modbus de l'\xC3\xA9quipement est-il activ\xC3\xA9 ? le port est-il le bon (502) ?", 2});
         else if (c.why.find("inconnue") != std::string::npos)
-            out.push_back({"Le nom ne se r\xC3\xA9sout pas : donnez l'adresse IP de l'automate.", 2});
+            out.push_back({"Le nom ne se r\xC3\xA9sout pas : donnez l'adresse IP de l'\xC3\xA9quipement.", 2});
         else
-            out.push_back({"L'automate ne r\xC3\xA9pond pas : l'adresse IP, le c\xC3\xA2" "ble, le r\xC3\xA9seau (le m\xC3\xAAme sous-r\xC3\xA9seau), un pare-feu ?", 2});
+            out.push_back({"L'\xC3\xA9quipement ne r\xC3\xA9pond pas : l'adresse IP, le c\xC3\xA2" "ble, le r\xC3\xA9seau (le m\xC3\xAAme sous-r\xC3\xA9seau), un pare-feu ?", 2});
         out.push_back({"Essai termin\xC3\xA9 en " + std::to_string(msSince(t0)) + " ms", 0});
         return out;
     }

@@ -2,6 +2,7 @@
 //  app/hmi/HmiTypePicker.cpp - voir HmiTypePicker.hpp
 // =============================================================================
 #include "HmiTypePicker.hpp"
+#include "../../core/Edition.hpp"   // 1.12.2 : XPGAnalyser IHM n'a pas d'automate
 
 #include "../../menu/MenuManager.hpp"
 #include "../../ui/TextSearch.hpp"
@@ -88,7 +89,8 @@ public:
         open_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Ouvrir la d\xC3\xA9" "finition", "dialog.typePicker.definition")));
         ok_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Choisir", "dialog.typePicker.choisir")));
         ok_->setStyle(ui::Button::Style::Primary);
-        open_->setTooltip("Le type IHM dans l'onglet Types IHM, le DDT dans les types d\xC3\xA9riv\xC3\xA9s de l'API");
+        open_->setTooltip(core::hasApi() ? "Le type IHM dans l'onglet Types IHM, le DDT dans les types d\xC3\xA9riv\xC3\xA9s de l'API"
+                                         : "Le type IHM dans l'onglet Types IHM");   // 1.12.2
         links_ += cancel_->clicked->connect([this] { owner_.finish(false); });
         links_ += open_->clicked->connect([this] { owner_.openDefinition(); });
         links_ += ok_->clicked->connect([this] { owner_.choose(); });

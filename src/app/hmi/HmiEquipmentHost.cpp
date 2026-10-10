@@ -1,6 +1,7 @@
 // app/hmi/HmiEquipmentHost.cpp - les equipements du reseau : liaisons, simules,
 // pings, ports du PC (lot 15).
 #include "HmiEquipmentHost.hpp"
+#include "../../core/Edition.hpp"   // 1.12.2 : XPGAnalyser IHM n'a pas d'automate du projet
 
 #include "../../hmi/HmiEquipment.hpp"
 #include "../../hmi/HmiStore.hpp"
@@ -463,8 +464,9 @@ void EquipmentHost::tick(const hmi::Project* p, double dt) {
         }
     }
     running_ = std::move(keep);
-    // L'automate du projet : son ping, pour le schema du reseau.
-    plc_ = p ? p->comm : hmi::Communication{};
+    // L'automate du projet : son ping, pour le schema du reseau (1.12.2 : XPGAnalyser API seulement ;
+    // une IHM de la 1.11 migree garde l'ancien lien, que son equipement Automate reprend).
+    plc_ = p && core::hasApi() ? p->comm : hmi::Communication{};
     if (plc_.modbus() && now >= plcNextPing_) {
         plcNextPing_ = now + 10;
         Job j;

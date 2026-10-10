@@ -1,5 +1,6 @@
 // Configuration > Langues, Configuration > Unites et formats (lot 13).
 #include "HmiDisplayPanes.hpp"
+#include "../../core/Edition.hpp"   // 1.12.2 : XPGAnalyser IHM n'a pas d'automate
 #include "../ExportTarget.hpp"
 #include "HmiPaneKit.hpp"
 
@@ -772,8 +773,9 @@ void HmiUnitsPane::rebuildProperties() {
     PG::Category c;
     c.name = "Variable";
     c.properties.push_back(prop("Variable", d->path, PG::ValueType::Text, commit("variable"),
-                                "Une variable IHM ou de l'automate. Armoires[].ana.PT1.mes vaut pour chaque case du tableau ; "
-                                "un chemin exact (Armoires[2].ana.PT1.mes) l'emporte."));
+                                std::string(core::hasApi() ? "Une variable IHM ou de l'automate. " : "Une variable IHM. ")   // 1.12.2
+                                    + "Armoires[].ana.PT1.mes vaut pour chaque case du tableau ; "
+                                      "un chemin exact (Armoires[2].ana.PT1.mes) l'emporte."));
     c.properties.push_back(prop("Unit\xC3\xA9", d->unit, PG::ValueType::Text, commit("unite"),
                                 "bar, \xC2\xB0" "C, %, m\xC2\xB3/h... Vide : chaque objet garde la sienne."));
     c.properties.push_back(prop("Format", d->format, PG::ValueType::Enum, commit("format"),

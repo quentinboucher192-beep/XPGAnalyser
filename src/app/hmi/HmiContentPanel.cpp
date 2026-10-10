@@ -1,4 +1,5 @@
 #include "HmiContentPanel.hpp"
+#include "../../core/Edition.hpp"   // 1.12.2 : XPGAnalyser IHM n'a pas d'automate
 
 #include "HmiAssetPanes.hpp"
 #include "HmiAssist.hpp"
@@ -932,7 +933,8 @@ void HmiContentPanel::rebuildGrid() {
                 pen.properties.push_back(editable("Nom", p.names[i], PG::ValueType::Text, index, "name",
                                                   "Ce que dit la l\xC3\xA9gende ; vide : l'expression."));
                 auto expr = editable("Expression", p.exprs[i], PG::ValueType::Text, index, "expression",
-                                     "Une variable IHM ou de l'automate, ou une expression : Armoires[0].ana.PT1.mes * 10");
+                                     core::hasApi() ? "Une variable IHM ou de l'automate, ou une expression : Armoires[0].ana.PT1.mes * 10"
+                                                    : "Une variable IHM, ou une expression : Armoires[0].ana.PT1.mes * 10");   // 1.12.2
                 // 1.10 (chantier K) : la pastille, l'invite et l'aide des nombres ; "=" tape
                 // retire. Une plume ne se vide pas (\xC2\xAB Retirer \xC2\xBB l'enleve) : pas de X.
                 ui::exprfield::markWhole(expr, ui::exprfield::Expect::Number, false);

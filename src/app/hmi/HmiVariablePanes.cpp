@@ -1,6 +1,7 @@
 // app/hmi/HmiVariablePanes.cpp - les variables IHM (dossiers, structures, tableaux,
 // liaison) et les types IHM (lot 16).
 #include "HmiVariablePanes.hpp"
+#include "../../core/Edition.hpp"   // 1.12.2 : XPGAnalyser IHM n'a pas d'automate
 
 #include "HmiAssetPanes.hpp"
 #include "../RenameDialog.hpp"            // lot 7 : requestRename (en ligne : rien de plus a lier)
@@ -2739,7 +2740,8 @@ HmiTypesPane::HmiTypesPane(std::string id, hmi::DocumentPtr doc, Apply apply)
     : ui::Widget(std::move(id)), doc_(std::move(doc)), apply_(std::move(apply)) {
     const std::string base = this->id();
     auto tools = std::make_unique<HmiToolStrip>(base + ".tools");
-    tools->add(TAdd, HmiGlyph::Plus, "Nouveau type IHM : une structure (comme un DDT de l'automate) ou une \xC3\xA9num\xC3\xA9ration (T_MODE : Arret, Auto, Manu...)",
+    tools->add(TAdd, HmiGlyph::Plus, core::hasApi() ? "Nouveau type IHM : une structure (comme un DDT de l'automate) ou une \xC3\xA9num\xC3\xA9ration (T_MODE : Arret, Auto, Manu...)"
+                                                    : "Nouveau type IHM : une structure ou une \xC3\xA9num\xC3\xA9ration (T_MODE : Arret, Auto, Manu...)",   // 1.12.2
                "Nouveau type \xE2\x96\xBE");   // 1.10 (chantier U) : le menu Structure / Enumeration
     tools->add(TMember, HmiGlyph::Plus, "Nouveau membre du type choisi", "Membre");
     tools->add(TUp, HmiGlyph::Up, "Monter le membre (sa place Modbus change)", "Monter");
@@ -2984,8 +2986,10 @@ void HmiTypesPane::refresh() {
     syncing_ = false;
     refreshMembers();
     rebuildProperties();
-    status_->setMessage(message_.empty() ? std::to_string(p.programs.types.size()) + " type(s) IHM : des structures, comme les DDT de l'automate. "
-                                                                                   "Une variable de ce type a tous ses membres (Four1.Temperature)."
+    status_->setMessage(message_.empty() ? std::to_string(p.programs.types.size())
+                                               + (core::hasApi() ? " type(s) IHM : des structures, comme les DDT de l'automate. "
+                                                                 : " type(s) IHM : des structures et des \xC3\xA9num\xC3\xA9rations. ")   // 1.12.2
+                                               + "Une variable de ce type a tous ses membres (Four1.Temperature)."
                                          : message_);
 }
 

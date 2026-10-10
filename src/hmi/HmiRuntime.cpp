@@ -1,4 +1,5 @@
 #include "HmiRuntime.hpp"
+#include "../core/Edition.hpp"   // 1.12.2 : XPGAnalyser IHM n'a pas d'automate
 #include "HmiNatives.hpp"   // 1.12.0 : couleurs, aleatoire, enumerations natives
 #include "HmiActionKinds.hpp"   // 1.11.7 : Maths, le clavier virtuel
 #include "../core/CallTrail.hpp"   // 1.10.2 (CR) : les scripts de l'IHM, dans le journal interne
@@ -3489,7 +3490,7 @@ std::vector<std::pair<std::string, std::string>> Runtime::systemInfo() const {
         out.emplace_back("Utilisateur", user_.empty() ? std::string("personne") : user_ + "  (niveau " + std::to_string(level()) + ")");
     }
     out.emplace_back("Alarmes", count(alarms_.size(), "en cours", "en cours") + ", " + std::to_string(unacknowledged()) + " \xC3\xA0 acquitter");
-    out.emplace_back("Automate", plc_ ? "simulateur reli\xC3\xA9" : "aucun (variables IHM seules)");
+    if (core::hasApi()) out.emplace_back("Automate", plc_ ? "simulateur reli\xC3\xA9" : "aucun (variables IHM seules)");   // 1.12.2
     if (project_) {
         out.emplace_back("Contenu", count(project_->views.size(), "vue", "vues") + ", "
                                         + count(project_->programs.variables.size(), "variable IHM", "variables IHM") + ", "
