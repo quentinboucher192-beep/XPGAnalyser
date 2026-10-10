@@ -1,0 +1,1666 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>XPGAnalyser IHM 1.12.2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* La page : un en-tete, un sommaire a gauche (colle), puis les sept demandes, chacune
+   avec ce qui change et une maquette vivante de l'appli. L'appli est dessinee avec sa
+   police (Segoe UI sous Windows) ; la page autour, en IBM Plex. */
+:root{
+  --page:#eceef2; --page-2:#e2e5ea; --ink:#1b2027; --ink-2:#4b535e; --ink-3:#6a727e; --rule:#d3d8df;
+  --app:#f6f7f9; --app-2:#ffffff; --app-3:#eef1f5; --app-line:#dde1e7; --app-fg:#1d232b; --app-fg-2:#4d5662; --app-fg-3:#727a86;
+  --hover:#e8edf5; --sel:#d9e6fb; --sel-fg:#0f2a52; --accent:#1f6fe0; --accent-2:#e3edfb;
+  --ok:#1a8f4c; --mod:#d27503; --err:#d23434; --info:#2a6fd6;
+  --ok-bg:#e3f4ea; --mod-bg:#fcf0e0; --err-bg:#fbe9e9; --info-bg:#e3edfb; --old-bg:#f3f4f6;
+  --new:#7553db; --new-bg:#ece5fd;
+  --c-kw:#0b54c4; --c-type:#8a5a00; --c-fn:#7a3fc4; --c-enum:#0b7a6f; --c-str:#b2361f; --c-num:#2f7d32; --c-com:#6f7884;
+  --k-Rect:#596779; --k-Ell:#178f58; --k-Btn:#2f78e0; --k-Ind:#d27503; --k-Txt:#7553db;
+  --ui:"Segoe UI","Noto Sans","DejaVu Sans",system-ui,sans-serif;
+  --doc:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+  --mono:"IBM Plex Mono","Cascadia Mono",Consolas,"DejaVu Sans Mono",monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --page:#0f1114; --page-2:#15181c; --ink:#e6e8ec; --ink-2:#b2b8c2; --ink-3:#858c97; --rule:#272b31;
+    --app:#1a1d22; --app-2:#1f2227; --app-3:#252930; --app-line:#2f333b; --app-fg:#e3e6eb; --app-fg-2:#acb3bd; --app-fg-3:#7e8691;
+    --hover:#252a32; --sel:#1c3354; --sel-fg:#ffffff; --accent:#4a8dff; --accent-2:#1b2c45;
+    --ok:#4fcb85; --mod:#f2a23c; --err:#ff6b6b; --info:#6aa8ff;
+    --ok-bg:#163223; --mod-bg:#3a2a16; --err-bg:#3a1c1f; --info-bg:#1b2c45; --old-bg:#1c1f24;
+    --new:#b59cff; --new-bg:#2b2346;
+    --c-kw:#6aa8ff; --c-type:#e5b74b; --c-fn:#c49bff; --c-enum:#4fd1c1; --c-str:#f08a6c; --c-num:#8fd18f; --c-com:#7e8691;
+    --k-Rect:#9aaac2; --k-Ell:#3acb88; --k-Btn:#5ca3ff; --k-Ind:#f2a23c; --k-Txt:#b59cff;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --page:#0f1114; --page-2:#15181c; --ink:#e6e8ec; --ink-2:#b2b8c2; --ink-3:#858c97; --rule:#272b31;
+  --app:#1a1d22; --app-2:#1f2227; --app-3:#252930; --app-line:#2f333b; --app-fg:#e3e6eb; --app-fg-2:#acb3bd; --app-fg-3:#7e8691;
+  --hover:#252a32; --sel:#1c3354; --sel-fg:#ffffff; --accent:#4a8dff; --accent-2:#1b2c45;
+  --ok:#4fcb85; --mod:#f2a23c; --err:#ff6b6b; --info:#6aa8ff;
+  --ok-bg:#163223; --mod-bg:#3a2a16; --err-bg:#3a1c1f; --info-bg:#1b2c45; --old-bg:#1c1f24;
+  --new:#b59cff; --new-bg:#2b2346;
+  --c-kw:#6aa8ff; --c-type:#e5b74b; --c-fn:#c49bff; --c-enum:#4fd1c1; --c-str:#f08a6c; --c-num:#8fd18f; --c-com:#7e8691;
+  --k-Rect:#9aaac2; --k-Ell:#3acb88; --k-Btn:#5ca3ff; --k-Ind:#f2a23c; --k-Txt:#b59cff;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:12px}
+body{margin:0;background:var(--page);color:var(--ink);font:14px/1.5 var(--doc);padding:0 16px 48px}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+kbd{font:11px/1 var(--mono);padding:2px 5px 3px;border:1px solid var(--app-line);border-bottom-width:2px;border-radius:4px;background:var(--app-3);color:var(--app-fg-2);white-space:nowrap}
+code{font:12.5px/1.4 var(--mono);background:var(--page-2);padding:1px 4px;border-radius:4px}
+.num{font-variant-numeric:tabular-nums}
+[hidden]{display:none!important}
+.tag{display:inline-block;font:600 10.5px/1 var(--doc);letter-spacing:.04em;text-transform:uppercase;padding:3px 6px;border-radius:4px;background:var(--new-bg);color:var(--new);vertical-align:1px}
+.tag.ok{background:var(--ok-bg);color:var(--ok)} .tag.mod{background:var(--mod-bg);color:var(--mod)} .tag.err{background:var(--err-bg);color:var(--err)} .tag.info{background:var(--info-bg);color:var(--info)}
+.dim{color:var(--app-fg-3)}
+
+/* ---- l'en-tete ---- */
+.top{max-width:1440px;margin:0 auto;display:flex;flex-wrap:wrap;gap:12px 24px;align-items:flex-end;justify-content:space-between;padding:22px 0 14px}
+.top h1{font:600 22px/1.2 var(--doc);margin:0;letter-spacing:-.01em;text-wrap:balance}
+.top p{margin:4px 0 0;color:var(--ink-2);max-width:78ch}
+.ctl{display:flex;gap:8px;align-items:center}
+.ctl label{font-size:12px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.06em}
+.seg{display:inline-flex;border:1px solid var(--rule);border-radius:7px;overflow:hidden;background:var(--page-2);flex:none}
+.seg button{border:0;background:transparent;padding:5px 11px;font-size:12.5px;color:var(--ink-2)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--page)}
+
+/* ---- le sommaire et les sections ---- */
+.stage{max-width:1440px;margin:0 auto;display:grid;grid-template-columns:220px minmax(0,1fr);gap:24px;align-items:start}
+nav.toc{position:sticky;top:12px;display:flex;flex-direction:column;gap:2px;font-size:13px}
+nav.toc a{display:flex;gap:8px;align-items:baseline;padding:6px 8px;border-radius:6px;color:var(--ink-2);text-decoration:none}
+nav.toc a b{font:600 11px/1 var(--mono);color:var(--ink-3);min-width:16px}
+nav.toc a:hover{background:var(--page-2);color:var(--ink)}
+nav.toc a.on{background:var(--ink);color:var(--page)} nav.toc a.on b{color:var(--page)}
+nav.toc .foot{margin-top:10px;padding:8px;border-top:1px solid var(--rule);font-size:12px;color:var(--ink-3)}
+@media (max-width:980px){.stage{grid-template-columns:1fr} nav.toc{position:static;flex-direction:row;flex-wrap:wrap} nav.toc .foot{display:none}}
+main{display:flex;flex-direction:column;gap:28px;min-width:0}
+section.sec{background:var(--page-2);border:1px solid var(--rule);border-radius:12px;padding:18px 18px 20px;min-width:0}
+.sec > header{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:baseline;justify-content:space-between;margin-bottom:8px}
+.sec h2{font:600 18px/1.25 var(--doc);margin:0;display:flex;gap:10px;align-items:baseline}
+.sec h2 .n{font:600 12px/1 var(--mono);background:var(--ink);color:var(--page);border-radius:5px;padding:4px 6px}
+.ask{margin:0 0 4px;color:var(--ink-3);font-style:italic;font-size:13px}
+.why{margin:6px 0 14px;color:var(--ink-2);max-width:96ch}
+.why b{color:var(--ink)}
+.changes{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(260px,100%),1fr));gap:8px 18px;margin:14px 0 0;padding:0;list-style:none;font-size:13px;color:var(--ink-2)}
+.changes li{padding-left:16px;position:relative}
+.changes li::before{content:"";position:absolute;left:2px;top:.6em;width:6px;height:6px;border-radius:50%;background:var(--accent)}
+.changes li b{color:var(--ink)}
+.code-ref{font:11.5px/1.4 var(--mono);color:var(--ink-3)}
+
+/* ---- la fenetre de l'appli ---- */
+.app{background:var(--app);color:var(--app-fg);font:13px/1.35 var(--ui);border:1px solid var(--app-line);border-radius:8px;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.06),0 8px 24px -12px rgba(0,0,0,.18);position:relative;min-width:0}
+.app .bar{display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--app-3);border-bottom:1px solid var(--app-line);font-size:12.5px;color:var(--app-fg-2);min-height:34px;flex-wrap:wrap}
+.app .bar .t{font-weight:600;color:var(--app-fg)}
+.app .bar .sp{flex:1}
+.app select,.app input[type=text],.app input[type=number]{background:var(--app-2);border:1px solid var(--app-line);border-radius:4px;padding:3px 6px;font:12.5px var(--ui);color:var(--app-fg);min-width:0}
+.app button.b{background:var(--app-2);border:1px solid var(--app-line);border-radius:4px;padding:3px 9px;font:12.5px var(--ui);color:var(--app-fg)}
+.app button.b:hover{background:var(--hover)}
+.app button.b.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+.app button.b:disabled{opacity:.45;cursor:default}
+
+/* =================== 1. l'editeur de scripts =================== */
+.ed-grid{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(300px,1fr);gap:16px;align-items:start}
+@media (max-width:1180px){.ed-grid{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:640px){.ed-bottom{grid-template-columns:minmax(0,1fr)} .ed-bottom > div + div{border-left:0;border-top:1px solid var(--app-line)}}
+.ed-tools{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.ed-tools .b{font-size:12px!important;padding:2px 7px!important}
+.ed-box{position:relative;height:440px;background:var(--app-2);overflow:hidden;font:13px/20px var(--mono)}
+#ed-gutter{position:absolute;left:0;top:0;width:40px;padding:8px 0;text-align:right;color:var(--app-fg-3);font:12px/20px var(--mono);user-select:none;border-right:1px solid var(--app-line);background:var(--app-3);min-height:100%}
+#ed-gutter div{padding-right:7px;position:relative}
+#ed-gutter div.bm::before{content:"";position:absolute;left:5px;top:6px;width:8px;height:8px;border-radius:2px;background:var(--accent)}
+.ed-view{position:absolute;left:46px;right:0;top:0;bottom:0;overflow:hidden}
+#ed-hl,#ed-code{margin:0;padding:8px 10px 8px 0;font:13px/20px var(--mono);white-space:pre;tab-size:4;letter-spacing:0}
+#ed-hl{position:absolute;left:0;top:0;pointer-events:none;color:var(--app-fg);min-width:100%}
+#ed-code{position:absolute;inset:0;width:100%;height:100%;border:0;outline:0;resize:none;background:transparent;color:transparent;caret-color:var(--app-fg);overflow:auto}
+#ed-code::selection{background:color-mix(in srgb,var(--accent) 30%,transparent);color:transparent}
+.ed-line{min-height:20px}
+.t-kw{color:var(--c-kw);font-weight:500} .t-type{color:var(--c-type)} .t-fn{color:var(--c-fn)} .t-enum{color:var(--c-enum)} .t-str{color:var(--c-str)} .t-num{color:var(--c-num)} .t-com{color:var(--c-com);font-style:italic}
+.ed-line.sq-err{background:linear-gradient(transparent 17px,transparent 17px),repeating-linear-gradient(135deg,transparent 0 2px,color-mix(in srgb,var(--err) 18%,transparent) 2px 3px)}
+.ed-line.sq-err,.ed-line.sq-warn,.ed-line.sq-info{text-decoration:underline wavy;text-decoration-thickness:1px;text-underline-offset:4px}
+.ed-line.sq-err{text-decoration-color:var(--err);background:none} .ed-line.sq-warn{text-decoration-color:var(--mod)} .ed-line.sq-info{text-decoration-color:var(--info)}
+#ed-find{position:absolute;right:14px;top:6px;z-index:3;background:var(--app-3);border:1px solid var(--app-line);border-radius:6px;padding:6px;display:flex;flex-direction:column;gap:5px;box-shadow:0 6px 18px -8px rgba(0,0,0,.35);font:12.5px var(--ui)}
+#ed-find .r{display:flex;gap:4px;align-items:center}
+#ed-find input{width:180px}
+#ed-find button{border:1px solid var(--app-line);background:var(--app-2);border-radius:4px;padding:1px 7px;font-size:12px}
+#ed-compl{position:absolute;z-index:4;min-width:300px;max-width:420px;background:var(--app-2);border:1px solid var(--app-line);border-radius:6px;box-shadow:0 8px 22px -8px rgba(0,0,0,.4);font:12.5px/1.2 var(--ui);padding:3px}
+#ed-compl div{display:flex;gap:7px;align-items:center;padding:4px 6px;border-radius:4px;white-space:nowrap;cursor:default}
+#ed-compl div.on{background:var(--sel);color:var(--sel-fg)}
+#ed-compl div span{margin-left:auto;color:var(--app-fg-3);font-size:11.5px;overflow:hidden;text-overflow:ellipsis;max-width:220px}
+#ed-compl i{width:9px;height:9px;border-radius:2px;flex:none;background:var(--c-fn)} #ed-compl i.k-var{background:var(--k-Btn);border-radius:50%} #ed-compl i.k-enum{background:var(--c-enum)}
+#ed-tip{position:absolute;z-index:4;max-width:460px;background:var(--app-fg);color:var(--app-2);font:12px/1.35 var(--mono);padding:6px 9px;border-radius:5px;box-shadow:0 6px 16px -6px rgba(0,0,0,.4)}
+.ed-foot{display:flex;align-items:center;gap:10px;padding:4px 10px;background:var(--accent);color:#fff;font:12px/1.4 var(--ui);min-height:26px}
+.ed-foot #ed-status{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ed-foot #ed-chord{background:rgba(0,0,0,.25);padding:1px 7px;border-radius:3px;white-space:nowrap}
+.ed-foot #ed-pos{white-space:nowrap;opacity:.9}
+.ed-status.warn::before{content:"⚠ "} .ed-status.err::before{content:"✖ "} .ed-status.ok::before{content:"✓ "}
+.ed-bottom{display:grid;grid-template-columns:1fr 1fr;border-top:1px solid var(--app-line);min-height:96px;max-height:150px}
+.ed-bottom > div{overflow:auto;padding:6px 8px;font-size:12.5px}
+.ed-bottom > div + div{border-left:1px solid var(--app-line)}
+.ed-bottom h4{margin:0 0 4px;font:600 11px/1.2 var(--ui);text-transform:uppercase;letter-spacing:.05em;color:var(--app-fg-3)}
+#ed-diags{list-style:none;margin:0;padding:0}
+#ed-diags li{padding:2px 4px;border-radius:3px;cursor:pointer;display:flex;gap:6px}
+#ed-diags li:hover,#ed-diags li.on{background:var(--hover)}
+#ed-diags li b{font:11.5px var(--mono);color:var(--app-fg-3);min-width:18px}
+#ed-diags li.err::before{content:"✖";color:var(--err)} #ed-diags li.warn::before{content:"⚠";color:var(--mod)} #ed-diags li.info::before{content:"ℹ";color:var(--info)}
+#ed-results div[data-l]{cursor:pointer;padding:1px 4px;border-radius:3px;font:12px var(--mono)} #ed-results div[data-l]:hover{background:var(--hover)}
+#ed-results mark{background:color-mix(in srgb,var(--mod) 35%,transparent);color:inherit}
+.keys{display:flex;flex-direction:column;max-height:560px}
+.keys > .bar{flex:none}
+.keys .bar input{flex:1;min-width:120px}
+.keys .tbl{overflow:auto;flex:1;min-height:0}
+#ed-table{width:100%;border-collapse:collapse;font-size:12.5px}
+#ed-table th{position:sticky;top:0;background:var(--app-3);text-align:left;font:600 11px/1.2 var(--ui);text-transform:uppercase;letter-spacing:.05em;color:var(--app-fg-3);padding:7px 8px 5px;border-bottom:1px solid var(--app-line);z-index:1}
+#ed-table td{padding:4px 8px;border-bottom:1px solid var(--app-line);vertical-align:middle}
+#ed-table tr[data-k]{cursor:pointer}
+#ed-table tr[data-k]:hover td{background:var(--hover)}
+#ed-table tr.cat td{background:var(--app-3);font:600 11.5px var(--ui);color:var(--app-fg-2);padding-top:8px}
+#ed-table tr.hit td{background:var(--ok-bg);transition:background .1s}
+#ed-table td.k{white-space:nowrap}
+#ed-table td.k kbd + kbd{margin-left:3px}
+.keynote{font-size:12px;color:var(--app-fg-3);padding:6px 10px;border-top:1px solid var(--app-line);background:var(--app-3)}
+
+/* =================== 2. disposition =================== */
+.lay-app{display:flex;flex-direction:column;height:520px}
+.menubar{display:flex;align-items:center;gap:2px;padding:3px 6px;background:var(--app-3);border-bottom:1px solid var(--app-line);font-size:12.5px;position:relative;z-index:6}
+.menubar > .mi{padding:3px 9px;border-radius:4px;border:0;background:transparent;color:var(--app-fg)}
+.menubar > .mi:hover,.menubar > .mi[aria-expanded="true"]{background:var(--hover)}
+.menubar .sp{flex:1}
+.menubar .mode{font-size:11.5px;color:var(--app-fg-3)}
+.dd{position:absolute;top:30px;min-width:250px;background:var(--app-2);border:1px solid var(--app-line);border-radius:6px;box-shadow:0 10px 26px -10px rgba(0,0,0,.45);padding:4px;z-index:7}
+.dd button{display:flex;width:100%;gap:10px;align-items:center;border:0;background:transparent;padding:5px 10px;border-radius:4px;text-align:left;font:12.5px var(--ui);color:var(--app-fg)}
+.dd button:hover{background:var(--sel);color:var(--sel-fg)}
+.dd button kbd{margin-left:auto}
+.dd hr{border:0;border-top:1px solid var(--app-line);margin:4px 2px}
+.dd button.new{font-weight:600}
+.dd button.new::after{content:"nouveau";font:600 9.5px/1 var(--doc);text-transform:uppercase;letter-spacing:.04em;padding:2px 5px;border-radius:3px;background:var(--new-bg);color:var(--new);margin-left:6px}
+.dd button.new kbd{margin-left:auto}
+.lay-body{flex:1;display:grid;min-height:0;position:relative}
+.zone{background:var(--app-2);border:1px solid var(--app-line);border-radius:4px;margin:3px;display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden}
+.zone .zt{display:flex;gap:2px;background:var(--app-3);border-bottom:1px solid var(--app-line);padding:2px 3px 0;flex-wrap:wrap}
+.zone .zt span{font-size:11.5px;padding:3px 8px;border-radius:4px 4px 0 0;color:var(--app-fg-2);white-space:nowrap}
+.zone .zt span.on{background:var(--app-2);color:var(--app-fg);font-weight:600}
+.zone .zt span.fold{opacity:.6;font-style:italic}
+.zone .zb{flex:1;padding:8px;font-size:12px;color:var(--app-fg-3);overflow:hidden}
+.zone.center .zb{background:repeating-linear-gradient(0deg,transparent 0 19px,var(--app-3) 19px 20px),repeating-linear-gradient(90deg,transparent 0 19px,var(--app-3) 19px 20px)}
+.zone.folded{flex:0 0 auto}
+.floatwin{position:absolute;right:18px;bottom:18px;width:230px;height:120px;background:var(--app-2);border:1px solid var(--accent);border-radius:6px;box-shadow:0 10px 26px -10px rgba(0,0,0,.45);display:flex;flex-direction:column;z-index:3}
+.floatwin .zt{background:var(--accent);color:#fff;font-size:11.5px;padding:3px 8px;border-radius:5px 5px 0 0}
+.dlg-back{position:absolute;inset:0;background:rgba(10,14,20,.38);display:flex;align-items:center;justify-content:center;z-index:8;padding:12px}
+.dlg{background:var(--app);border:1px solid var(--app-line);border-radius:8px;box-shadow:0 18px 50px -14px rgba(0,0,0,.55);width:min(1120px,100%);max-height:100%;display:flex;flex-direction:column;overflow:hidden}
+.dlg > .bar{justify-content:space-between}
+.dlg .body{display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:0;min-height:0;flex:1;overflow:hidden}
+.dlg .body > div{overflow:auto;min-height:0}
+.dlg .foot{display:flex;gap:8px;align-items:center;padding:8px 10px;border-top:1px solid var(--app-line);background:var(--app-3);flex-wrap:wrap}
+.dlg .foot .sp{flex:1}
+.lay-presets{display:flex;gap:6px;flex-wrap:wrap;padding:8px 10px;border-bottom:1px solid var(--app-line);align-items:center;font-size:12px}
+.lay-presets button{border:1px solid var(--app-line);background:var(--app-2);border-radius:14px;padding:2px 10px;font-size:12px}
+.lay-presets button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+table.lay{width:100%;border-collapse:collapse;font-size:12.5px}
+table.lay th{position:sticky;top:0;background:var(--app-3);text-align:left;font:600 10.5px/1.2 var(--ui);text-transform:uppercase;letter-spacing:.05em;color:var(--app-fg-3);padding:6px 6px 5px;border-bottom:1px solid var(--app-line);z-index:1;white-space:nowrap}
+table.lay td{padding:3px 6px;border-bottom:1px solid var(--app-line);white-space:nowrap}
+table.lay tr.grp td{background:var(--app-3);font-weight:600;color:var(--app-fg-2);padding-top:7px}
+table.lay tr.sub td:nth-child(2){padding-left:22px}
+table.lay tr.off td:not(:first-child){opacity:.45}
+table.lay tr.chg td:nth-child(2)::after{content:" •";color:var(--mod);font-weight:700}
+table.lay select{font-size:12px!important;padding:1px 3px!important}
+table.lay .ord{display:inline-flex;gap:2px}
+table.lay .ord button{border:1px solid var(--app-line);background:var(--app-2);border-radius:3px;width:20px;height:20px;padding:0;font-size:10px;line-height:1}
+.lay-prev{padding:10px;border-left:1px solid var(--app-line);background:var(--app-3)}
+.lay-prev h4{margin:0 0 6px;font:600 11px/1.2 var(--ui);text-transform:uppercase;letter-spacing:.05em;color:var(--app-fg-3)}
+.mini{height:210px;background:var(--app-2);border:1px solid var(--app-line);border-radius:5px;position:relative;overflow:hidden}
+.mini-in{position:absolute;left:0;top:0;width:250%;height:250%;transform:scale(.4);transform-origin:0 0;display:grid;pointer-events:none}
+.lay-prev .ctx{margin-top:10px}
+.lay-prev p{font-size:12px;color:var(--app-fg-2);margin:8px 0 0}
+.lay-saved{font-size:12px;color:var(--ok)}
+@media (max-width:800px){.dlg .body{grid-template-columns:minmax(0,1fr)} .lay-prev{display:none}}
+
+/* =================== 3. formules multi-etats =================== */
+.ms3{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.5fr);gap:16px;align-items:start}
+@media (max-width:1180px){.ms3{grid-template-columns:minmax(0,1fr)}}
+.st-wrap{overflow-x:auto}
+.before{border:1px dashed var(--rule);border-radius:8px;padding:10px;background:var(--old-bg)}
+.before h4,.after h4{margin:0 0 8px;font:600 12px/1.2 var(--doc);text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3)}
+.oneline{display:flex;gap:6px;align-items:center;font:12.5px var(--ui);color:var(--app-fg)}
+.oneline label{min-width:110px;color:var(--app-fg-2)}
+.oneline input{flex:1;font:12px var(--mono)!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st-tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.st-tbl th{text-align:left;font:600 10.5px/1.2 var(--ui);text-transform:uppercase;letter-spacing:.05em;color:var(--app-fg-3);padding:6px;border-bottom:1px solid var(--app-line);background:var(--app-3);white-space:nowrap}
+.st-tbl td{padding:3px 5px;border-bottom:1px solid var(--app-line);vertical-align:middle}
+.st-tbl td input[type=text]{width:100%}
+.st-tbl td.cond input{font:12px var(--mono)!important}
+.st-tbl td.sw input{width:30px;height:22px;padding:0;border:1px solid var(--app-line);border-radius:3px;background:none}
+.st-tbl tr.hit td{background:var(--ok-bg)}
+.st-tbl tr.else td{background:var(--app-3)}
+.st-tbl tr.bad td.cond input{border-color:var(--err);background:var(--err-bg)}
+.st-tbl .del{border:0;background:transparent;color:var(--app-fg-3);font-size:14px;padding:0 4px}
+.st-tbl .del:hover{color:var(--err)}
+.st-tbl .mv{border:0;background:transparent;color:var(--app-fg-3);font-size:11px;padding:0 2px}
+.st-side{display:grid;grid-template-columns:auto 1fr;gap:12px;padding:10px;border-top:1px solid var(--app-line);align-items:center}
+.st-prev{width:150px;height:56px;border-radius:6px;display:flex;align-items:center;justify-content:center;font:600 15px var(--ui);border:1px solid var(--app-line);gap:8px}
+.st-prev.lamp{width:56px;height:56px;border-radius:50%}
+@keyframes stblink{50%{opacity:.25}}
+.st-prev.blink{animation:stblink 1s steps(1) infinite}
+.st-test{display:flex;flex-direction:column;gap:6px;font-size:12.5px}
+.st-test input[type=range]{width:100%}
+.st-gen{font:12px/1.5 var(--mono);background:var(--app-2);border-top:1px solid var(--app-line);padding:8px 10px;white-space:pre-wrap;word-break:break-word;color:var(--app-fg-2);max-height:120px;overflow:auto}
+.fx-dlg{border-top:1px solid var(--app-line)}
+.fx-ed{display:grid;grid-template-columns:34px 1fr;font:12.5px/20px var(--mono);background:var(--app-2);min-height:160px;max-height:240px;overflow:auto}
+.fx-ed .g{color:var(--app-fg-3);text-align:right;padding:6px 6px 6px 0;background:var(--app-3);border-right:1px solid var(--app-line);user-select:none}
+.fx-ed .w{position:relative}
+.fx-ed pre,.fx-ed textarea{margin:0;padding:6px 8px;font:12.5px/20px var(--mono);white-space:pre;tab-size:4}
+.fx-ed pre{pointer-events:none;color:var(--app-fg)}
+.fx-ed textarea{position:absolute;inset:0;width:100%;height:100%;border:0;outline:0;resize:none;background:transparent;color:transparent;caret-color:var(--app-fg);overflow:hidden}
+.fx-msg{padding:6px 10px;font-size:12.5px;border-top:1px solid var(--app-line)}
+.fx-msg.ok{color:var(--ok)} .fx-msg.err{color:var(--err)}
+
+/* =================== 4. selection multiple =================== */
+.ms-grid{display:grid;grid-template-columns:230px minmax(0,1fr) 300px;min-height:420px}
+@media (max-width:1180px){.ms-grid{grid-template-columns:minmax(0,1fr)}}
+.ms-grid > div{min-width:0;border-right:1px solid var(--app-line)}
+.ms-grid > div:last-child{border-right:0}
+.ms-pane-t{display:flex;gap:6px;align-items:center;padding:6px 8px;background:var(--app-3);border-bottom:1px solid var(--app-line);font:600 11.5px var(--ui);color:var(--app-fg-2)}
+.ms-pane-t .sp{flex:1}
+.ms-pane-t button{font-weight:400}
+#ms-list{padding:4px;user-select:none}
+.ms-row{display:flex;gap:7px;align-items:center;padding:3px 6px;border-radius:4px;cursor:default;font-size:12.5px;white-space:nowrap}
+.ms-row:hover{background:var(--hover)}
+.ms-row.on{background:var(--sel);color:var(--sel-fg)}
+.ms-row span{margin-left:auto;color:var(--app-fg-3);font-size:11.5px}
+.ms-row.on span{color:inherit;opacity:.75}
+.kd{width:10px;height:10px;border-radius:2px;flex:none;display:inline-block}
+.kd-Rect{background:var(--k-Rect)} .kd-Ell{background:var(--k-Ell);border-radius:50%} .kd-Btn{background:var(--k-Btn)} .kd-Ind{background:var(--k-Ind);border-radius:50%} .kd-Txt{background:var(--k-Txt)}
+#ms-canvas{position:relative;height:340px;margin:10px;background:#141820;border-radius:6px;overflow:hidden}
+.ms-obj{position:absolute;display:flex;align-items:center;justify-content:center;font:12px var(--ui);color:#fff;cursor:default;box-sizing:border-box}
+.ms-obj.on{outline:2px dashed #4a8dff;outline-offset:2px}
+@keyframes msblink{50%{opacity:.35}}
+.ms-obj.blink{animation:msblink 1s steps(1) infinite}
+#ms-info{padding:0 12px 10px;font-size:12px;color:var(--app-fg-2)}
+#ms-insp{font-size:12.5px;overflow:auto;max-height:420px}
+.ms-head{padding:8px 10px;border-bottom:1px solid var(--app-line);font-weight:600}
+.ms-head small{display:block;font-weight:400;color:var(--app-fg-3);font-size:11.5px;margin-top:2px}
+.ms-sect{padding:6px 10px 3px;font:600 11px/1.2 var(--ui);text-transform:uppercase;letter-spacing:.05em;color:var(--app-fg-3);background:var(--app-3);border-bottom:1px solid var(--app-line)}
+.ms-prop{display:grid;grid-template-columns:110px minmax(0,1fr);gap:6px;align-items:center;padding:3px 10px;border-bottom:1px solid var(--app-line)}
+.ms-prop label{color:var(--app-fg-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ms-prop.mixed label{font-style:italic}
+.ms-prop input[type=text],.ms-prop select{width:100%}
+.ms-prop input::placeholder{color:var(--mod);font-style:italic;opacity:1}
+.ms-val{display:flex;gap:5px;align-items:center;min-width:0}
+.ms-val input{min-width:0;flex:1}
+.sw{width:18px;height:18px;border-radius:3px;border:1px solid var(--app-line);flex:none}
+.sw.mix{background:repeating-linear-gradient(45deg,#e74c3c 0 4px,#2ecc71 4px 8px,#3498db 8px 12px)}
+.ms-check{width:16px;height:16px}
+.ms-note{padding:8px 10px;font-size:12px;color:var(--app-fg-3)}
+.ms-empty{padding:16px 10px;color:var(--app-fg-3);font-size:12.5px}
+#ms-hist{font-size:12px;padding:6px 10px;border-top:1px solid var(--app-line);max-height:110px;overflow:auto;color:var(--app-fg-2)}
+.ms-tools{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+
+/* =================== 5. courbes =================== */
+.tr-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+@media (max-width:1100px){.tr-grid{grid-template-columns:minmax(0,1fr)}}
+.tr-ctl{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;font-size:13px}
+.tr-ctl .clock{font:600 13px var(--mono);padding:3px 8px;border-radius:5px;background:var(--app-3);border:1px solid var(--app-line)}
+.views{display:flex;gap:2px;padding:4px 6px 0;background:var(--app-3);border-bottom:1px solid var(--app-line)}
+.views button{border:0;background:transparent;padding:4px 10px;font:12px var(--ui);border-radius:4px 4px 0 0;color:var(--app-fg-2)}
+.views button.on{background:var(--app-2);color:var(--app-fg);font-weight:600}
+.tr-box{height:210px;background:var(--app-2);position:relative}
+.tr-box svg{width:100%;height:100%;display:block}
+.tr-box .hole{position:absolute;top:10px;bottom:26px;left:44px;background:repeating-linear-gradient(135deg,transparent 0 6px,color-mix(in srgb,var(--err) 12%,transparent) 6px 7px);border-right:1px dashed var(--err);display:flex;align-items:flex-start;justify-content:center;font-size:11.5px;color:var(--err);padding-top:8px;text-align:center}
+.tr-box .other{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--app-fg-3);font-size:12.5px;padding:10px;text-align:center}
+.tr-cap{padding:6px 10px;font-size:12px;border-top:1px solid var(--app-line);color:var(--app-fg-2)}
+
+/* =================== 6. simulation et poste =================== */
+.sim-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(380px,100%),1fr));gap:16px}
+.card-h{display:flex;gap:8px;align-items:center;justify-content:space-between}
+.vs{display:inline-flex;border:1px solid var(--app-line);border-radius:5px;overflow:hidden;flex:none}
+.vs button{border:0;background:var(--app-2);font:11.5px var(--ui);padding:2px 8px;color:var(--app-fg-2)}
+.vs button[aria-pressed="true"]{background:var(--app-fg);color:var(--app-2)}
+.console{font:12px/1.55 var(--mono);background:var(--app-2);padding:6px 8px;height:150px;overflow:auto}
+.console div{white-space:pre-wrap;word-break:break-word}
+.console .w{color:var(--mod)} .console .e{color:var(--err)} .console .i{color:var(--app-fg-2)} .console .n{color:var(--ok)}
+.console mark{background:var(--new-bg);color:var(--new);border-radius:3px;padding:0 2px}
+.sim-pad{padding:10px;display:flex;flex-direction:column;gap:8px;font-size:12.5px}
+.sim-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.forced{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:1px 6px;border-radius:9px;background:var(--mod-bg);color:var(--mod);font-weight:600}
+.snd{display:flex;gap:6px;align-items:flex-end;height:40px}
+.snd i{width:6px;background:var(--accent);border-radius:2px;transition:height .12s}
+.snd.b i{background:var(--mod)}
+.alrow{display:flex;gap:8px;align-items:center;padding:4px 6px;border-radius:4px;font-size:12.5px}
+.alrow.on{background:var(--err-bg)}
+.alrow .dot{width:8px;height:8px;border-radius:50%;background:var(--app-fg-3)}
+.alrow.on .dot{background:var(--err);animation:stblink 1s steps(1) infinite}
+.station{display:grid;grid-template-columns:150px 1fr;height:190px}
+.station .nav{background:var(--app-3);border-right:1px solid var(--app-line);padding:4px;font-size:12px;overflow:auto}
+.station .nav div{padding:2px 6px;border-radius:3px;white-space:nowrap}
+.station .nav div.grp{font-weight:600;cursor:pointer}
+.station .nav div.grp::before{content:"▾ ";color:var(--app-fg-3)}
+.station .nav div.grp.closed::before{content:"▸ "}
+.station .nav div.on{background:var(--sel);color:var(--sel-fg)}
+.station .pg{display:flex;flex-direction:column;min-width:0}
+.station .tabs{display:flex;gap:2px;padding:3px 4px 0;background:var(--app-3);border-bottom:1px solid var(--app-line)}
+.station .tabs span{font-size:11.5px;padding:3px 9px;border-radius:4px 4px 0 0;color:var(--app-fg-2);cursor:pointer}
+.station .tabs span.on{background:var(--app-2);color:var(--app-fg);font-weight:600}
+.station .content{flex:1;overflow:auto;padding:8px;font-size:12px;color:var(--app-fg-2);background:var(--app-2)}
+.restart-msg{font-size:12px;padding:6px 10px;border-top:1px solid var(--app-line);min-height:30px}
+.faceplate{position:relative;border:1px solid var(--app-line);border-radius:6px;background:var(--app-2);width:250px;box-shadow:0 8px 22px -10px rgba(0,0,0,.45)}
+.faceplate .ft{background:var(--app-3);padding:4px 8px;font-weight:600;font-size:12px;border-bottom:1px solid var(--app-line);display:flex;justify-content:space-between}
+.faceplate .fb{padding:8px;font-size:12px;display:flex;flex-direction:column;gap:4px}
+.audit{font:12px/1.5 var(--mono);background:var(--app-2);height:130px;overflow:auto;padding:4px 0}
+.audit div{display:grid;grid-template-columns:62px 92px 1fr;gap:6px;padding:1px 8px}
+.audit div.s{color:var(--new)}
+.audit div.h{font:600 10.5px var(--ui);text-transform:uppercase;letter-spacing:.05em;color:var(--app-fg-3);border-bottom:1px solid var(--app-line)}
+
+/* =================== 7. pieges de l'editeur =================== */
+.trap-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(330px,100%),1fr));gap:16px}
+.trap .tb{padding:10px;font-size:12.5px;display:flex;flex-direction:column;gap:6px;min-height:150px}
+.trap .row{display:flex;gap:8px;align-items:center}
+.trap .row label{min-width:120px;color:var(--app-fg-2)}
+.trap .row select,.trap .row input{flex:1}
+.trap .row.dis{opacity:.5}
+.trap .hint{font-size:12px;color:var(--app-fg-3);padding:6px 8px;background:var(--app-3);border-radius:4px;border-left:3px solid var(--accent)}
+.trap .warnline{font-size:12px;color:var(--mod);padding:5px 8px;background:var(--mod-bg);border-radius:4px}
+.trap .strike{text-decoration:line-through;color:var(--err)}
+.pal{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;max-height:120px;overflow:auto;padding-right:4px;border:1px solid var(--app-line);border-radius:4px;padding:4px}
+.pal.clip{overflow:hidden}
+.pal div{font-size:11.5px;padding:4px;border:1px solid var(--app-line);border-radius:3px;background:var(--app-2);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.expl{font-size:12.5px;border:1px solid var(--app-line);border-radius:4px;background:var(--app-2)}
+.expl div{display:flex;gap:6px;align-items:center;padding:3px 6px;white-space:nowrap}
+.expl div span{margin-left:auto;color:var(--app-fg-3);font-size:11.5px;overflow:hidden;text-overflow:ellipsis;max-width:40%}
+.expl.full div span{max-width:none;flex:none}
+
+/* =================== le pied =================== */
+.plan{width:100%;border-collapse:collapse;font-size:13px;background:var(--app-2);border:1px solid var(--rule);border-radius:8px;overflow:hidden}
+.plan th,.plan td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--rule);vertical-align:top}
+.plan th{background:var(--page-2);font:600 11px/1.2 var(--doc);text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3)}
+.plan td:first-child{font-weight:600;min-width:110px}
+.tr-ctl .seg{flex-wrap:wrap;flex:0 1 auto;max-width:100%}
+.plan code{word-break:break-word}
+
+</style>
+</head>
+<body>
+<header class="top">
+  <div>
+    <h1>XPGAnalyser IHM 1.12.2 - la maquette</h1>
+    <p>Les sept demandes du 10/10, chacune avec ce qui change et une maquette vivante : on tape, on clique, on compare avec la 1.12.1. Les noms, les menus et les onglets sont ceux de l'appli ; le code suit cette maquette.</p>
+  </div>
+  <div class="ctl"><label>Thème</label><div class="seg" id="theme"><button data-t="auto" aria-pressed="true">Auto</button><button data-t="light" aria-pressed="false">Clair</button><button data-t="dark" aria-pressed="false">Sombre</button></div></div>
+</header>
+<div class="stage">
+  <nav class="toc" aria-label="Sommaire">
+    <a href="#s1"><b>1</b>Raccourcis Visual Studio</a>
+    <a href="#s2"><b>2</b>Projet › Disposition…</a>
+    <a href="#s3"><b>3</b>États multi-états</a>
+    <a href="#s4"><b>4</b>Sélection multiple</a>
+    <a href="#s5"><b>5</b>Courbes dès le départ</a>
+    <a href="#s6"><b>6</b>Simulation et poste</a>
+    <a href="#s7"><b>7</b>Pièges de l'éditeur</a>
+    <a href="#plan"><b>›</b>Le code, où</a>
+    <div class="foot">Rien n'est envoyé : ce que tu choisis ici (thème, profil, disposition) reste dans ce navigateur.</div>
+  </nav>
+  <main>
+<section class="sec" id="s1">
+  <header>
+    <h2><span class="n">1</span>Les raccourcis de Visual Studio dans les éditeurs de scripts</h2>
+    <span class="tag">profil par défaut</span>
+  </header>
+  <p class="ask">« dans les éditeurs scripts j'ai pas les raccourcis claviers comme visual studio »</p>
+  <p class="why">Aujourd'hui, l'éditeur ne connaît que <kbd>Ctrl+Espace</kbd>, le presse-papiers et les flèches. <kbd>Ctrl+K</kbd> est pris par <b>Aller à…</b> avant même que l'éditeur ne le voie, <kbd>Ctrl+F</kbd> ne cherche pas dans le script et <kbd>Tab</kbd> sur plusieurs lignes <b>efface</b> la sélection. En 1.12.2, les éditeurs (scripts, fonctions, opérateurs, script d'une action, sections ST de l'API en mode Modifier) prennent le <b>profil Visual Studio</b>, accords compris (<kbd>Ctrl+K</kbd>, <kbd>Ctrl+C</kbd>), et la barre d'état dit « (Ctrl+K) a été appuyé. Attente de la seconde touche de l'accord… ». <b>Essaie directement dans l'éditeur ci-dessous</b>, ou clique une ligne de la table.</p>
+  <div class="ed-grid">
+    <div class="app">
+      <div class="bar"><span class="t">Surveillance_Fours</span><span class="dim">· script cyclique, 500 ms</span><span class="sp"></span>
+        <div class="ed-tools">
+          <button class="b" onclick="edRun('commenter')" title="Ctrl+K, Ctrl+C">// Commenter</button>
+          <button class="b" onclick="edRun('formater')" title="Ctrl+K, Ctrl+D">Mettre en forme</button>
+          <button class="b" onclick="edRun('rechercher')" title="Ctrl+F">Rechercher</button>
+          <button class="b" onclick="edRun('diagSuivant')" title="F8">Faute suivante</button>
+        </div>
+      </div>
+      <div class="ed-box">
+        <div id="ed-gutter"></div>
+        <div class="ed-view">
+          <pre id="ed-hl" aria-hidden="true"></pre>
+          <textarea id="ed-code" spellcheck="false" aria-label="Le script Surveillance_Fours" autocomplete="off" autocapitalize="off"></textarea>
+        </div>
+        <div id="ed-find" hidden>
+          <div class="r"><input id="ed-find-in" type="text" placeholder="Rechercher (F3 : suivant)"><button id="ed-find-prev" title="Maj+F3">↑</button><button id="ed-find-next" title="F3">↓</button><button id="ed-find-close" title="Échap">✕</button></div>
+          <div class="r" id="ed-repl-row" hidden><input id="ed-repl-in" type="text" placeholder="Remplacer par"><button id="ed-repl-one" title="Alt+R">Remplacer</button><button id="ed-repl-all" title="Alt+A">Tout</button></div>
+        </div>
+        <div id="ed-compl" hidden></div>
+        <div id="ed-tip" hidden></div>
+      </div>
+      <div class="ed-foot"><span id="ed-status" class="ed-status">Prêt - essaie Ctrl+K puis Ctrl+C, Ctrl+D, Alt+↑, F8, Ctrl+.</span><span id="ed-chord" hidden></span><span id="ed-pos">Ln 1, Col 1</span></div>
+      <div class="ed-bottom">
+        <div><h4>Diagnostics du script (F8 / Maj+F8, Ctrl+. corrige)</h4><ul id="ed-diags"></ul></div>
+        <div><h4>Résultats (Maj+F12, Ctrl+Maj+F)</h4><div id="ed-results"><span class="dim">Maj+F12 sur un nom : toutes ses références.</span></div></div>
+      </div>
+    </div>
+    <div class="app keys">
+      <div class="bar"><span class="t">Aide › Raccourcis › Éditeurs</span><span class="sp"></span>
+        <label class="dim" for="ed-prof">Profil</label>
+        <select id="ed-prof"><option value="vs">Visual Studio (défaut)</option><option value="classique">Classique (1.12.1, sans accords)</option></select>
+      </div>
+      <div class="bar"><input id="ed-q" type="text" placeholder="Chercher une touche ou une commande (ex. comment, F12, ligne)"><label class="dim"><input type="checkbox" id="ed-onlynew"> nouveautés</label></div>
+      <div class="tbl"><table id="ed-table"><thead><tr><th>Touches</th><th>Commande</th><th>En 1.12.1</th></tr></thead><tbody></tbody></table></div>
+      <div class="keynote">Le profil se garde (réglages de l'édition). Il se change ici ou par <b>Aller à › Raccourcis : profil Visual Studio / classique</b>. Sur un clavier AZERTY, la touche française est donnée à côté (<kbd>Ctrl+:</kbd> pour <kbd>Ctrl+/</kbd>, <kbd>Ctrl+$</kbd> pour <kbd>Ctrl+]</kbd>).</div>
+    </div>
+  </div>
+  <ul class="changes">
+    <li><b>Accords</b> <kbd>Ctrl+K</kbd> / <kbd>Ctrl+M</kbd> / <kbd>Ctrl+R</kbd> dans les éditeurs ; ailleurs, <kbd>Ctrl+K</kbd> reste Aller à…, et depuis un éditeur on y va par <kbd>Ctrl+T</kbd> ou <kbd>Ctrl+,</kbd> (comme dans VS).</li>
+    <li><b>Une commande = une annulation</b> : commenter, dupliquer ou mettre en forme ne se fond plus dans la frappe des 2,5 s.</li>
+    <li><b>Rechercher / Remplacer dans le script</b> (barre en haut à droite), <kbd>F3</kbd>, <kbd>Ctrl+F3</kbd> ; <kbd>Ctrl+G</kbd> : aller à la ligne.</li>
+    <li><b>F12 et F8 changent de sens dans l'éditeur seulement</b> : la définition et la faute suivante ; hors éditeur, F12 fait toujours la capture et F8 démarre la simulation.</li>
+    <li><b>Les pièges réparés</b> : Tab / Maj+Tab indentent un bloc, <kbd>Ctrl+C</kbd> sans sélection copie la ligne (et plus tout le script), double-clic choisit le mot, <kbd>Début</kbd> va au texte, Pg.Suiv fait une page.</li>
+    <li><b>Aide › Raccourcis</b> : la table lit les accords (« Ctrl+K, Ctrl+C »), et la bande du bas ne promet plus un <kbd>Ctrl+F</kbd> qui ne cherchait pas.</li>
+  </ul>
+</section>
+<section class="sec" id="s2">
+  <header>
+    <h2><span class="n">2</span>Projet › Disposition… : quoi, quand, où, comment - et ça se garde</h2>
+    <span class="tag">nouveau</span>
+  </header>
+  <p class="ask">« ajouter dans le menu déroulant du haut, là où y'a Enregistrer, “Disposition” : un menu de configuration où je choisis quels sous-onglets afficher, quand, comment, où ; en persisté »</p>
+  <p class="why">Aujourd'hui, seule la page <b>Affichage › Panneaux à afficher…</b> existe : des cases pour les grands panneaux, rien pour les sous-onglets, rien pour « quand ». En 1.12.2, le menu du <b>projet</b> (celui d'Enregistrer) gagne <b>Disposition…</b> : une fenêtre qui liste les panneaux de la fenêtre, les sous-onglets de chaque page et les pages du centre. Pour chacun : <b>l'afficher</b>, <b>quand</b> (toujours, en édition, en simulation), <b>où</b> (à gauche ou à droite, sous l'éditeur ou à côté, dans un onglet, côte à côte, dans une fenêtre détachée) et <b>comment au départ</b> (ouvert ou replié, le sous-onglet choisi à l'ouverture). Tout se garde dans les réglages de l'édition (<code>disposition.*</code>), avec des dispositions toutes faites. <b>Clique sur « Armoire_Gaz ▾ » puis « Disposition… »</b> ; passe la simulation en marche pour voir les éléments « en simulation ».</p>
+  <div class="app lay-app" id="lay-app">
+    <div class="menubar">
+      <button class="mi" id="lay-chip" aria-expanded="false">▣ Armoire_Gaz ▾</button>
+      <button class="mi" title="Ctrl+S">💾 Enregistrer</button>
+      <button class="mi" id="lay-affichage" aria-expanded="false">Affichage ▾</button>
+      <span class="sp"></span>
+      <span class="mode">Simulation :</span>
+      <div class="vs" id="lay-mode"><button aria-pressed="true" data-m="edition">arrêtée</button><button aria-pressed="false" data-m="simulation">en marche</button></div>
+    </div>
+    <div class="dd" id="lay-dd" hidden style="left:6px">
+      <button>Projets récents ▸</button><button>Nouveau ▸</button><hr>
+      <button>Ouvrir…<kbd>Ctrl+O</kbd></button><button>Enregistrer<kbd>Ctrl+S</kbd></button><button>Enregistrer sous…</button><hr>
+      <button>Icône du projet…</button><button>État du projet…</button><button>Déverrouiller…</button><hr>
+      <button>Fermer le projet</button><button>Dossiers de l'application…</button>
+      <button class="new" id="lay-open">Disposition…<kbd>Ctrl+Maj+D</kbd></button>
+      <button>Revenir au menu principal<kbd>Ctrl+Maj+H</kbd></button>
+    </div>
+    <div class="dd" id="lay-dd2" hidden style="left:190px">
+      <button>Disposition : onglets</button><button>Disposition : côte à côte</button><button>Disposition : mosaïque</button><hr>
+      <button>Détacher l'onglet…</button><button id="lay-open2">Panneaux à afficher… <span class="dim">(ouvre Disposition…)</span></button><button>Thème…</button>
+    </div>
+    <div class="lay-body" id="lay-body"></div>
+    <div class="dlg-back" id="lay-dlg" hidden>
+      <div class="dlg" role="dialog" aria-label="Disposition">
+        <div class="bar"><span class="t">Disposition - XPGAnalyser IHM</span><span class="dim">gardée dans les réglages de l'édition IHM</span></div>
+        <div class="lay-presets"><span class="dim">Toute faite :</span>
+          <button data-p="defaut">Par défaut</button><button data-p="vues">Dessin des vues</button><button data-p="miseaupoint">Mise au point</button><button data-p="large">Écran large</button><button data-p="mienne">Ma disposition</button>
+          <span class="sp" style="flex:1"></span><button id="lay-save-mine" title="Garder la disposition actuelle sous « Ma disposition »">Garder comme « Ma disposition »</button>
+        </div>
+        <div class="body">
+          <div><table class="lay"><thead><tr><th></th><th>Élément</th><th>Quand</th><th>Où</th><th>Au départ</th></tr></thead><tbody id="lay-rows"></tbody></table></div>
+          <div class="lay-prev">
+            <h4>Aperçu</h4>
+            <div class="vs" id="lay-prev-mode"><button aria-pressed="true" data-m="edition">en édition</button><button aria-pressed="false" data-m="simulation">en simulation</button></div>
+            <div class="mini" id="lay-mini" style="margin-top:8px"><div class="mini-in lay-body" id="lay-mini-in"></div></div>
+            <p id="lay-sum"></p>
+          </div>
+        </div>
+        <div class="foot"><button class="b" id="lay-reset">Rétablir la disposition d'origine</button><span class="lay-saved" id="lay-saved"></span><span class="sp"></span><button class="b" id="lay-cancel">Annuler</button><button class="b" id="lay-apply">Appliquer</button><button class="b pri" id="lay-ok">OK</button></div>
+      </div>
+    </div>
+  </div>
+  <ul class="changes">
+    <li><b>Projet › Disposition…</b> (et <kbd>Ctrl+Maj+D</kbd>, et Aller à › « disposition ») ; <b>Affichage › Panneaux à afficher…</b> ouvre la même fenêtre.</li>
+    <li><b>Quand</b> : un élément « en simulation » apparaît au démarrage de la simulation et repart à l'arrêt ; une page « au démarrage de la simulation » s'ouvre toute seule.</li>
+    <li><b>Où</b> : l'explorateur à gauche ou à droite, le panneau du bas sous l'éditeur ou à sa droite, une page dans un onglet, côte à côte ou détachée.</li>
+    <li><b>Les sous-onglets</b> cachés le restent partout (Ctrl+Tab, Aller à, l'arbre) : aller vers un sous-onglet caché le montre le temps d'y être, au lieu d'ouvrir une page vide.</li>
+    <li><b>Gardé</b> : dans les réglages de l'édition (API et IHM ont chacune la leur), relu au lancement ; « Rétablir » efface les clés <code>disposition.*</code>.</li>
+    <li><b>Dans XPGAnalyser API</b>, la même fenêtre liste ses panneaux (Configuration de l'automate, Diagnostics, Résumé, État du projet) et ses sous-onglets.</li>
+  </ul>
+</section>
+<section class="sec" id="s3">
+  <header>
+    <h2><span class="n">3</span>Texte et voyant multi-états : une table des états au lieu d'une ligne</h2>
+    <span class="tag">nouveau</span>
+  </header>
+  <p class="ask">« dans les formules y'a des variantes bizarres, texte multi-états ou voyant multi-états, les formules sont difficiles à rentrer dans une seule ligne, proposer une variante utile et pratique pour modifier »</p>
+  <p class="why">Aujourd'hui, les états d'un <b>voyant multi-états</b>, d'un <b>texte multi-états</b> ou d'un <b>chronogramme</b> s'écrivent dans une seule case : <code>0 = Arrêt | #4A5261; 1 = Marche | #2ECC71; 2 = Défaut | #E5534B | clignote</code>. Pas de couleur à choisir, pas d'aide, et les fautes n'apparaissent qu'à la compilation. Et pour dire « Défaut s'il y a défaut, sinon Marche… », il faut d'abord fabriquer un code avec <code>SEL(Defaut, SEL(Marche, 0, 1), 2)</code>. En 1.12.2, ces objets ont un onglet <b>Contenu › États</b> (et le bouton <b>…</b> de la ligne États l'ouvre) : <b>une ligne par état</b>, la couleur à la palette, ↑↓ pour l'ordre, la ligne « sinon », et deux façons de choisir l'état : <b>selon la valeur</b> (0, 1, 2, 10..20, 'Auto') ou <b>selon des conditions</b> (Defaut, Marche… : la première vraie gagne, le code est écrit pour toi). Toute formule longue s'ouvre aussi <b>sur plusieurs lignes</b> (en bas).</p>
+  <div class="ms3">
+    <div class="before">
+      <h4>En 1.12.1 : l'inspecteur, une case par liste</h4>
+      <div class="app" style="padding:8px;display:flex;flex-direction:column;gap:6px">
+        <div class="oneline"><label>Valeur</label><input type="text" readonly value="=SEL(Defaut, SEL(Marche, 0, 1), 2)"></div>
+        <div class="oneline"><label>États (valeur = texte | couleur)</label><input type="text" readonly value="0 = Arrêt | #4A5261; 1 = Marche | #2ECC71; 2 = Défaut | #E5534B | clignote"></div>
+        <div class="oneline"><label>Texte inconnu</label><input type="text" readonly value="État inconnu"></div>
+        <p class="dim" style="margin:4px 0 0;font-size:12px">La case fait la moitié de l'inspecteur : la fin de la liste ne se voit pas. Une couleur mal tapée devient grise sans rien dire ; un « ; » dans un texte coupe l'état en deux.</p>
+      </div>
+    </div>
+    <div class="after">
+      <h4>En 1.12.2 : Contenu › États</h4>
+      <div class="app">
+        <div class="bar"><span class="t">Etat_Pompe</span>
+          <div class="vs" id="st-kind"><button aria-pressed="true" data-k="lamp">Voyant multi-états</button><button aria-pressed="false" data-k="text">Texte multi-états</button></div>
+          <span class="sp"></span><span class="dim">Propriétés · Actions ·</span> <b>Contenu</b>
+        </div>
+        <div class="bar">
+          <span>Choisir l'état</span>
+          <div class="vs" id="st-mode"><button aria-pressed="true" data-m="valeur">selon la valeur</button><button aria-pressed="false" data-m="cond">selon des conditions</button></div>
+          <span id="st-src" class="dim">de <code>Etat_Pompe</code> (la case Valeur)</span>
+          <span class="sp"></span>
+          <button class="b" id="st-add">+ Ajouter</button>
+        </div>
+        <div class="st-wrap"><table class="st-tbl"><thead><tr><th style="width:26px">#</th><th id="st-qh">Quand la valeur vaut</th><th>Texte</th><th>Couleur</th><th>Clignote</th><th style="width:66px"></th></tr></thead><tbody id="st-rows"></tbody></table></div>
+        <div class="st-side">
+          <div class="st-prev" id="st-prev">Arrêt</div>
+          <div class="st-test" id="st-test"></div>
+        </div>
+        <div class="st-gen" id="st-gen"></div>
+      </div>
+    </div>
+  </div>
+  <div class="app fx-dlg" style="margin-top:16px">
+    <div class="bar"><span class="t">Formule de « Couleur du texte » - Texte_Etat</span><span class="dim">bouton … de la ligne, ou clic droit › Modifier sur plusieurs lignes…</span><span class="sp"></span>
+      <button class="b" id="fx-fmt" title="Une branche par ligne">Mettre en forme</button><button class="b" id="fx-sel">SEL → ? :</button></div>
+    <div class="fx-ed"><div class="g" id="fx-g"></div><div class="w"><pre id="fx-hl" aria-hidden="true"></pre><textarea id="fx-in" spellcheck="false" aria-label="La formule"></textarea></div></div>
+    <div class="fx-msg ok" id="fx-msg"></div>
+    <div class="foot" style="display:flex;gap:8px;padding:8px 10px;border-top:1px solid var(--app-line);background:var(--app-3);align-items:center;flex-wrap:wrap">
+      <span class="dim" style="font-size:12px">Ctrl+Espace : aide à la saisie · Ctrl+Entrée : OK · Échap : Annuler · la formule garde ses retours à la ligne</span><span class="sp" style="flex:1"></span>
+      <label style="font-size:12px"><input type="checkbox" id="fx-defaut"> Defaut</label><label style="font-size:12px"><input type="checkbox" id="fx-marche" checked> Marche</label>
+      <span id="fx-val" style="font-size:12.5px"></span>
+    </div>
+  </div>
+  <ul class="changes">
+    <li><b>Contenu › États</b> pour le voyant multi-états, le texte multi-états et le chronogramme : Ajouter, Retirer, Monter, Descendre ; le « sinon » en dernière ligne.</li>
+    <li><b>Selon des conditions</b> : tu écris <code>Defaut</code>, <code>Marche AND NOT Defaut</code>… ; l'appli écrit la Valeur (<code>Defaut ? 1 : Marche ? 2 : 0</code>) et la liste ; à la réouverture, elle relit ce qu'elle a écrit.</li>
+    <li><b>L'essai en direct</b> : une valeur ou des cases à cocher, la ligne qui gagne s'allume, l'objet se dessine.</li>
+    <li><b>Les fautes tout de suite</b> : un « ; » ou un « | » dans un texte, une valeur illisible, une couleur inconnue, en rouge sur la ligne fautive.</li>
+    <li><b>La case États</b> de Propriétés montre « 3 états » et son bouton … ouvre l'onglet ; on peut toujours y taper la liste à la main.</li>
+    <li><b>Toute formule (fx) longue</b> : bouton … → un éditeur sur plusieurs lignes, avec la coloration, l'aide à la saisie, la vérification en direct et la valeur qu'elle donne.</li>
+  </ul>
+</section>
+<section class="sec" id="s4">
+  <header>
+    <h2><span class="n">4</span>Plusieurs objets choisis : leurs paramètres communs, d'un coup</h2>
+    <span class="tag">nouveau</span>
+  </header>
+  <p class="ask">« sélectionner plusieurs objets en même temps dans l'explorateur d'objets des vues et modifier les paramètres en commun en même temps s'ils en ont »</p>
+  <p class="why">L'explorateur d'objets accepte déjà <kbd>Ctrl</kbd>+clic et <kbd>Maj</kbd>+clic, et une modification part déjà sur tous les objets choisis. Mais l'inspecteur ne montre que <b>le premier</b> : ses propriétés à lui, ses valeurs à lui, sans dire que les autres diffèrent. En 1.12.2, l'inspecteur montre <b>les propriétés communes</b> à tous les objets choisis (de genres différents compris), <b>« (plusieurs valeurs) »</b> là où ils ne sont pas d'accord, et une modification part sur tous <b>en une seule annulation</b>. <kbd>Ctrl+A</kbd> dans l'explorateur choisit tout. <b>Essaie : Ctrl+clic sur les trois voyants, puis change « Forme » ou « Clignote ».</b></p>
+  <div class="app">
+    <div class="bar"><span class="t">Vue_Pompes</span><span class="dim">· éditeur de vue</span><span class="sp"></span>
+      <div class="ms-tools"><button class="b" id="ms-preset-ind">Les 3 voyants</button><button class="b" id="ms-preset-mix">Voyants + boutons + texte</button><button class="b" id="ms-all">Tout (Ctrl+A)</button><button class="b" id="ms-undo">Annuler (Ctrl+Z)</button></div>
+    </div>
+    <div class="ms-grid">
+      <div><div class="ms-pane-t">EXPLORATEUR D'OBJETS<span class="sp"></span><span class="dim" style="font-weight:400">Ctrl / Maj + clic</span></div><div id="ms-list" tabindex="0" aria-label="Les objets de la vue"></div></div>
+      <div><div class="ms-pane-t">LA VUE</div><div id="ms-canvas"></div><div id="ms-info"></div></div>
+      <div><div class="ms-pane-t">INSPECTEUR · Propriétés</div><div id="ms-insp"></div><div id="ms-hist"></div></div>
+    </div>
+  </div>
+  <ul class="changes">
+    <li><b>Les propriétés communes</b> : celles que tous les objets choisis ont, dans les sections de l'inspecteur ; une section « Propriétés communes (N objets) » en tête.</li>
+    <li><b>« (plusieurs valeurs) »</b> en italique ; la case à cocher en « – » ; une liste qui ne choisit rien. Laisser la case vide ne change rien.</li>
+    <li><b>Une seule annulation</b> : « Forme : carré (3 objets) » dans l'historique, Ctrl+Z remet chaque objet comme il était.</li>
+    <li><b>Une formule (fx)</b> se pose aussi sur tous ; si leurs formules diffèrent, la case le dit au lieu de montrer celle du premier.</li>
+    <li><b>Actions et Raccourcis</b> : ils restent ceux d'un objet ; avec plusieurs objets, l'onglet le dit et propose de choisir un seul objet.</li>
+    <li><b>Ctrl+A</b> dans l'explorateur d'objets, et <b>Maj+clic</b> qui étend depuis le dernier objet cliqué (et non depuis le premier de la liste).</li>
+  </ul>
+</section>
+<section class="sec" id="s5">
+  <header>
+    <h2><span class="n">5</span>Les courbes enregistrent dès le démarrage, sans aller sur la page</h2>
+    <span class="tag err">bogue</span>
+  </header>
+  <p class="ask">« y'avait un bug dans les courbes, j'étais obligé d'aller au moins une fois sur la page pour que ça commence à enregistrer »</p>
+  <p class="why">La cause : une courbe en temps réel ne s'échantillonnait que si sa vue était <b>affichée</b> (la vue en cours et les popups ouvertes). Une vue jamais vue n'avait rien ; une vue quittée se figeait, puis montrait un trou au retour. Même chose pour les graphiques en mémoire (XY, chronogramme, histogramme). En 1.12.2, l'appli tient <b>un plan d'échantillonnage</b> : toutes les vues où l'on peut naviguer, les popups sans paramètres, les écrans secondaires du poste et ce qui est ouvert. Il est recalculé au plus une fois par seconde. <b>Démarre la simulation, attends un peu, puis va sur « Courbes_Fours »</b> : à gauche la 1.12.1, à droite la 1.12.2.</p>
+  <div class="tr-ctl">
+    <button class="b" id="tr-run" style="font:13px var(--doc);padding:4px 12px;border-radius:6px;border:1px solid var(--rule);background:var(--page)">▶ Démarrer la simulation</button>
+    <span class="clock" id="tr-clock">arrêtée</span>
+    <span class="dim">la vue affichée :</span>
+    <div class="seg" id="tr-views"><button aria-pressed="true" data-v="principale">Vue_Principale</button><button aria-pressed="false" data-v="courbes">Courbes_Fours</button><button aria-pressed="false" data-v="popup">Popup_Cuve (Cuves[2])</button></div>
+  </div>
+  <div class="tr-grid">
+    <div class="app"><div class="bar"><span class="t">En 1.12.1</span><span class="dim">· Courbes_Fours › Tendance_Four1</span></div><div class="tr-box" id="tr-old"></div><div class="tr-cap" id="tr-old-cap"></div></div>
+    <div class="app"><div class="bar"><span class="t">En 1.12.2</span><span class="dim">· Courbes_Fours › Tendance_Four1</span></div><div class="tr-box" id="tr-new"></div><div class="tr-cap" id="tr-new-cap"></div></div>
+  </div>
+  <ul class="changes">
+    <li><b>Toutes les vues</b> où l'on peut naviguer s'échantillonnent depuis le démarrage ; les vues de symbole, de modèle, d'en-tête et de pied ne comptent pas à part.</li>
+    <li><b>Les écrans secondaires du poste</b> enregistrent aussi leurs courbes, même s'ils ne montrent pas la vue en cours.</li>
+    <li><b>Une plume qui cite un paramètre</b> de la popup ou de la vue (<code>Cuve.Niveau</code>) s'enregistre ; avant, elle ne lisait rien.</li>
+    <li><b>Une popup à paramètres</b> garde une série par jeu d'arguments : Cuves[2] et Cuves[3] ne se mélangent plus quand on rouvre la popup avec d'autres arguments.</li>
+    <li><b>XY, chronogramme et histogramme</b> suivent le même plan.</li>
+    <li><b>Le coût</b> reste celui d'une lecture par plume et par cycle, avec une fenêtre de 1,2 × la durée affichée, comme aujourd'hui.</li>
+  </ul>
+</section>
+<section class="sec" id="s6">
+  <header>
+    <h2><span class="n">6</span>Simulation et poste d'exploitation : ce qui se taisait, se coupait ou s'oubliait</h2>
+    <span class="tag err">bogues</span>
+  </header>
+  <p class="ask">« règle la partie simulation et poste d'exploitation »</p>
+  <p class="why">Ce sont les points relevés dans la liste d'hier, vérifiés dans le code : une écriture sur une variable forcée <b>disparaît sans rien dire</b> (l'action se dit même réussie), la Console écrit <code>Cuves[Idx]</code> au lieu de la vraie case, <b>un son coupe le précédent</b>, le poste <b>oublie</b> ses onglets et panneaux repliés à chaque redémarrage, et l'audit ignore les écritures des scripts. Chaque carte a son bouton <b>1.12.1 / 1.12.2</b>.</p>
+  <div class="sim-grid">
+    <div class="app">
+      <div class="bar card-h"><span class="t">Console - écritures forcées et vraies cases</span><div class="vs" data-vs="con"><button aria-pressed="false" data-v="old">1.12.1</button><button aria-pressed="true" data-v="new">1.12.2</button></div></div>
+      <div class="sim-pad">
+        <div class="sim-row"><label><input type="checkbox" id="con-force" checked> Forcer <code>Niveau_Cuve</code> à 80</label><span class="forced" id="con-badge">forcée</span></div>
+        <div class="sim-row"><button class="b" id="con-btn">Clic sur « Remplir » (Niveau_Cuve := 45)</button><button class="b" id="con-cuve">Clic sur Cuve 2 (Cuves[Idx].Consigne := 75)</button><button class="b" id="con-clear">Vider</button></div>
+      </div>
+      <div class="console" id="con-out"></div>
+    </div>
+    <div class="app">
+      <div class="bar card-h"><span class="t">Sons - deux alarmes en même temps</span><div class="vs" data-vs="snd"><button aria-pressed="false" data-v="old">1.12.1</button><button aria-pressed="true" data-v="new">1.12.2</button></div></div>
+      <div class="sim-pad">
+        <div class="sim-row"><button class="b" id="snd-go">Faire apparaître 2 alarmes</button><button class="b" id="snd-sil">Silence (acquitter le son)</button></div>
+        <div class="alrow" id="snd-a1"><span class="dot"></span><b>Gaz_Fuite</b><span class="dim">groupe Sécurité · son sirene.wav</span></div>
+        <div class="alrow" id="snd-a2"><span class="dot"></span><b>Pompe2_Defaut</b><span class="dim">priorité Haute · son bip_alarme.wav</span></div>
+        <div class="sim-row" style="gap:18px"><div><div class="dim" style="font-size:11.5px">sirene.wav</div><div class="snd" id="snd-v1"><i></i><i></i><i></i><i></i><i></i><i></i></div></div><div><div class="dim" style="font-size:11.5px">bip_alarme.wav</div><div class="snd b" id="snd-v2"><i></i><i></i><i></i><i></i><i></i><i></i></div></div></div>
+        <div class="dim" id="snd-cap" style="font-size:12px"></div>
+      </div>
+    </div>
+    <div class="app">
+      <div class="bar card-h"><span class="t">Poste d'exploitation - redémarrer</span><div class="vs" data-vs="sta"><button aria-pressed="false" data-v="old">1.12.1</button><button aria-pressed="true" data-v="new">1.12.2</button></div></div>
+      <div class="station">
+        <div class="nav" id="sta-nav"></div>
+        <div class="pg"><div class="tabs" id="sta-tabs"></div><div class="content" id="sta-content"></div></div>
+      </div>
+      <div class="restart-msg"><button class="b" id="sta-restart">⟳ Redémarrer le poste</button> <span id="sta-msg" class="dim">Change d'onglet, replie « Pompes », puis redémarre.</span></div>
+    </div>
+    <div class="app">
+      <div class="bar card-h"><span class="t">Historiques › Audit, et la mémoire du journal</span><div class="vs" data-vs="aud"><button aria-pressed="false" data-v="old">1.12.1</button><button aria-pressed="true" data-v="new">1.12.2</button></div></div>
+      <div class="sim-pad">
+        <label id="aud-opt"><input type="checkbox" id="aud-scripts" checked> Tracer aussi les écritures des scripts <span class="dim">(un script cyclique peut écrire beaucoup : seules les valeurs qui changent)</span></label>
+        <div class="sim-row"><button class="b" id="aud-op">Un opérateur tape Consigne = 75</button><button class="b" id="aud-sc">Le script Regulation écrit Vanne_Ouverture</button></div>
+      </div>
+      <div class="audit" id="aud-out"></div>
+      <div class="sim-pad" style="border-top:1px solid var(--app-line)">
+        <div class="sim-row"><span>Lignes gardées en mémoire (journal, événements, alarmes closes) :</span><b id="mem-val">500</b><span class="dim" id="mem-note">fixe</span></div>
+      </div>
+    </div>
+  </div>
+  <ul class="changes">
+    <li><b>Écriture sur une variable forcée</b> : un avertissement par variable dans la Console (« Niveau_Cuve est forcée : écriture ignorée (45) »), avec le script et la ligne ; l'action dit « ignorée : forcée ». On peut le redire après Défaire le forçage.</li>
+    <li><b>La vraie case</b> dans la Console : <code>Cuves[2].Consigne := 75 (Cuves[Idx].Consigne)</code>, pour les actions, les saisies, les commandes, la table de variables et le planning.</li>
+    <li><b>Les sons se mélangent</b> au lieu de se couper ; la répétition reprend le son du groupe ; Silence et l'arrêt coupent ce qui joue.</li>
+    <li><b>Le poste garde</b> l'onglet choisi, les panneaux repliés et le défilement (option du poste, cochée), y compris dans un symbole, où ces clics ne prenaient pas.</li>
+    <li><b>Audit</b> : l'option « Tracer aussi les écritures des scripts » (Historiques), avec le script comme source ; sans elle, rien ne change.</li>
+    <li><b>La mémoire</b> : 500 lignes devient un réglage des Historiques (2 000 par défaut) ; SYS.ErrorCount ne redescend plus quand les vieilles lignes partent.</li>
+    <li><b>Les popups de symbole</b> ne fabriquent plus d'alarmes d'objets dont la condition cite un paramètre du symbole (« condition illisible » au démarrage).</li>
+  </ul>
+</section>
+<section class="sec" id="s7">
+  <header>
+    <h2><span class="n">7</span>Les pièges de l'éditeur : ce qu'il propose et qui ne fait rien</h2>
+    <span class="tag err">bogues</span>
+  </header>
+  <p class="ask">« règle les problèmes de l'éditeur »</p>
+  <p class="why">Ce sont les endroits où l'éditeur laisse choisir quelque chose qui <b>n'agit pas</b>, ou propose ce qui n'existe pas dans XPGAnalyser IHM. Chaque carte montre la 1.12.1 puis la 1.12.2 (bouton en haut à droite).</p>
+  <div class="trap-grid" id="traps"></div>
+  <ul class="changes">
+    <li><b>Une action de vue</b> ne propose plus Clic, Double clic ni Appui long (un clic se fait sur un objet) ; une ancienne action ainsi réglée le dit dans l'inspecteur, avec « Mettre sur un objet… ».</li>
+    <li><b>Rémanente</b> d'une variable liée à un équipement : la case est grisée et dit pourquoi (l'équipement garde sa valeur), au lieu d'accepter « oui (liée : sans effet) ».</li>
+    <li><b>Public / Privé</b> agit : une déclaration privée n'est vue que de son code ; Compiler signale son usage ailleurs.</li>
+    <li><b>Profil utilisateur</b>, que rien ne lisait, quitte l'inspecteur (la valeur reste dans le fichier) ; « Accès » fait ce travail.</li>
+    <li><b>Projet › Nouveau</b> ne liste plus, dans XPGAnalyser IHM, les créations de l'automate (Section, DFB, DDT, Rack, Module…) mais celles de l'IHM.</li>
+    <li><b>Aller à…</b> ne propose plus un sous-onglet caché (Table des adresses en IHM) ; et le chronogramme n'a plus de case « Couleur » sans effet dans Contenu.</li>
+  </ul>
+</section>
+
+    <section class="sec" id="plan">
+      <header><h2><span class="n">›</span>Le code, où</h2></header>
+      <p class="why">Ce que touche chaque demande, et comment c'est vérifié. Les tests existants restent verts ; chaque point a ses tests, puis une session sous Wine sur l'exe Windows avant la livraison 1.12.2.</p>
+      <div style="overflow-x:auto"><table class="plan">
+        <thead><tr><th>Demande</th><th>Où dans le code</th><th>Vérifié par</th></tr></thead>
+        <tbody>
+          <tr><td>1. Raccourcis VS</td><td><code>ui/KeyMap</code> (accords, profils, notation « Ctrl+K, Ctrl+C »), <code>MultiLineText</code> (commandes de lignes, recherche, Ctrl+G, plis au clavier, une commande = une annulation), nouvelles touches <code>/ ] . , -</code>, routage Ctrl+K / F12 / F8 quand un éditeur a la main, Aide › Raccourcis</td><td>tests du clavier (chaque commande, accords, AZERTY), table de l'aide, session Wine</td></tr>
+          <tr><td>2. Disposition…</td><td>entrée du menu Projet, <code>DispositionDialog</code> (modèle pur + réglages <code>disposition.*</code>), application aux panneaux, aux sous-onglets (<code>setTabHidden</code>), aux pages du centre, « quand » suivi au démarrage et à l'arrêt de la simulation</td><td>tests du modèle (lecture, écriture, rétablir), du menu (48 entrées), session Wine</td></tr>
+          <tr><td>3. Multi-états</td><td><code>formatStateList</code> (l'écriture qui manquait), onglet Contenu › États, mode « selon des conditions » (Valeur écrite et relue), bouton … de la ligne États, éditeur de formule sur plusieurs lignes</td><td>aller-retour liste ↔ table, conditions ↔ Valeur, inspecteur</td></tr>
+          <tr><td>4. Sélection multiple</td><td>inspecteur des propriétés communes (intersection, « (plusieurs valeurs) », case en « – »), Ctrl+A, Maj+clic depuis le dernier objet cliqué</td><td>test de l'éditeur : 3 voyants + 2 boutons, une annulation</td></tr>
+          <tr><td>5. Courbes</td><td>plan d'échantillonnage (toutes les vues, écrans du poste), portée des paramètres, séries par jeu d'arguments ; graphiques XY, chronogramme, histogramme</td><td>une vue jamais affichée enregistre ; trace de référence</td></tr>
+          <tr><td>6. Simulation et poste</td><td>écriture forcée dite une fois, vraie case dans la Console, sons mélangés (une voix par son), état des structures du poste gardé, audit des scripts en option, mémoire réglable</td><td>tests du moteur (forçage, audit, structures), trace de référence régénérée si besoin</td></tr>
+          <tr><td>7. Pièges</td><td>déclencheurs d'une action de vue, Rémanente liée, Public / Privé dans Compiler, Profil retiré, Nouveau ▸ par édition, Aller à sans onglet caché</td><td>tests de l'inspecteur, de Compiler, du menu</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+  </main>
+</div>
+<script>
+/* Les deux profils de raccourcis des editeurs de scripts (scripts, fonctions,
+   operateurs, script d'une action, sections ST de l'API en mode Modifier).
+   "vs" : celui de Visual Studio, le defaut de la 1.12.2 ; "classique" : sans accords
+   (Ctrl+K reste Aller a…, F8 demarre la simulation, F12 fait une capture).
+   cat : la famille dans la table ; nouveau : absent de la 1.12.1 ; avant : ce que la
+   touche faisait dans l'editeur en 1.12.1 ; azerty : la touche sur un clavier francais. */
+window.edKeymaps = (function () {
+  const vs = {
+    'Ctrl+K Ctrl+C': {cmd: 'commenter', label: 'Commenter les lignes (//)', cat: 'Édition', nouveau: true, avant: 'Ctrl+K ouvrait Aller à…'},
+    'Ctrl+K Ctrl+U': {cmd: 'decommenter', label: 'Décommenter les lignes', cat: 'Édition', nouveau: true},
+    'Ctrl+/': {cmd: 'basculerCommentaire', label: 'Basculer le commentaire', cat: 'Édition', nouveau: true, azerty: 'Ctrl+:'},
+    'Ctrl+D': {cmd: 'dupliquer', label: 'Dupliquer la ligne ou la sélection', cat: 'Édition', nouveau: true},
+    'Alt+Haut': {cmd: 'monterLignes', label: 'Monter les lignes', cat: 'Édition', nouveau: true},
+    'Alt+Bas': {cmd: 'descendreLignes', label: 'Descendre les lignes', cat: 'Édition', nouveau: true},
+    'Ctrl+L': {cmd: 'couperLigne', label: 'Couper la ligne', cat: 'Édition', nouveau: true},
+    'Ctrl+Maj+L': {cmd: 'supprimerLigne', label: 'Supprimer la ligne', cat: 'Édition', nouveau: true},
+    'Ctrl+C': {cmd: 'copierLigne', label: 'Copier ; rien de choisi : la ligne', cat: 'Édition', nouveau: true, natif: true, avant: 'rien de choisi : copiait TOUT le script'},
+    'Ctrl+X': {cmd: 'couperLigne', label: 'Couper ; rien de choisi : la ligne', cat: 'Édition', nouveau: true, natif: true, avant: 'rien de choisi : ne faisait rien'},
+    'Ctrl+Entrée': {cmd: 'ouvrirAuDessus', label: 'Insérer une ligne au-dessus', cat: 'Édition', nouveau: true},
+    'Ctrl+Maj+Entrée': {cmd: 'ouvrirAuDessous', label: 'Insérer une ligne au-dessous', cat: 'Édition', nouveau: true},
+    'Ctrl+Maj+U': {cmd: 'majuscules', label: 'Mettre en MAJUSCULES', cat: 'Édition', nouveau: true},
+    'Ctrl+U': {cmd: 'minuscules', label: 'Mettre en minuscules', cat: 'Édition', nouveau: true},
+    'Tab': {cmd: 'indenter', label: 'Indenter les lignes choisies', cat: 'Édition', avant: 'remplaçait la sélection par 4 espaces'},
+    'Maj+Tab': {cmd: 'desindenter', label: 'Désindenter', cat: 'Édition', avant: 'insérait 4 espaces'},
+    'Ctrl+Retour': {natif: true, cmd: 'effacerMotAvant', label: 'Effacer le mot d\'avant', cat: 'Édition', nouveau: true, avant: 'un seul caractère'},
+    'Ctrl+Suppr': {natif: true, cmd: 'effacerMotApres', label: 'Effacer le mot d\'après', cat: 'Édition', nouveau: true, avant: 'un seul caractère'},
+    'Ctrl+K Ctrl+D': {cmd: 'formater', label: 'Mettre en forme le document', cat: 'Édition', nouveau: true},
+    'Ctrl+K Ctrl+F': {cmd: 'formater', label: 'Mettre en forme la sélection', cat: 'Édition', nouveau: true},
+    'Ctrl+K Ctrl+S': {cmd: 'entourer', label: 'Entourer de… (IF, FOR, WHILE, CASE, TRY)', cat: 'Édition', nouveau: true},
+    'Ctrl+K Ctrl+X': {cmd: 'extrait', label: 'Insérer un extrait', cat: 'Édition', nouveau: true},
+    'Ctrl+Z': {cmd: 'annuler', label: 'Annuler (chaque commande est un pas)', cat: 'Édition'},
+    'Ctrl+Y': {cmd: 'retablir', label: 'Rétablir', cat: 'Édition'},
+    'Ctrl+Maj+Z': {cmd: 'retablir', label: 'Rétablir', cat: 'Édition'},
+    'Ctrl+A': {cmd: 'toutChoisir', label: 'Tout choisir', cat: 'Sélection et déplacement'},
+    'Ctrl+W': {cmd: 'choisirMot', label: 'Choisir le mot (hors éditeur : fermer l\'onglet)', cat: 'Sélection et déplacement', nouveau: true, avant: 'fermait l\'onglet'},
+    'Ctrl+Gauche': {natif: true, cmd: 'motPrecedent', label: 'Mot précédent (Maj : en choisissant)', cat: 'Sélection et déplacement', nouveau: true, avant: 'un caractère'},
+    'Ctrl+Droite': {natif: true, cmd: 'motSuivant', label: 'Mot suivant (Maj : en choisissant)', cat: 'Sélection et déplacement', nouveau: true, avant: 'un caractère'},
+    'Début': {cmd: 'debutIntelligent', label: 'Début du texte, puis colonne 1', cat: 'Sélection et déplacement', nouveau: true, avant: 'colonne 1'},
+    'Ctrl+]': {cmd: 'accolade', label: 'Aller au bout du bloc (IF ↔ END_IF)', cat: 'Sélection et déplacement', nouveau: true, azerty: 'Ctrl+$'},
+    'Ctrl+Maj+]': {cmd: 'choisirBloc', label: 'Choisir jusqu\'au bout du bloc', cat: 'Sélection et déplacement', nouveau: true, azerty: 'Ctrl+Maj+$'},
+    'Ctrl+F': {cmd: 'rechercher', label: 'Rechercher dans le script', cat: 'Rechercher', nouveau: true, avant: 'pas de recherche dans l\'éditeur'},
+    'Ctrl+H': {cmd: 'remplacer', label: 'Remplacer', cat: 'Rechercher', nouveau: true, avant: 'ouvrait l\'Historique'},
+    'F3': {cmd: 'suivant', label: 'Suivant', cat: 'Rechercher', nouveau: true},
+    'Maj+F3': {cmd: 'precedent', label: 'Précédent', cat: 'Rechercher', nouveau: true},
+    'Ctrl+F3': {cmd: 'rechercherMot', label: 'Rechercher le mot sous le curseur', cat: 'Rechercher', nouveau: true},
+    'Ctrl+Maj+F': {cmd: 'rechercherPartout', label: 'Rechercher dans tout le projet', cat: 'Rechercher', avant: 'filtrait l\'arbre'},
+    'Ctrl+G': {cmd: 'allerLigne', label: 'Aller à la ligne', cat: 'Naviguer', nouveau: true},
+    'F12': {cmd: 'allerDefinition', label: 'Aller à la définition', cat: 'Naviguer', nouveau: true, avant: 'capture d\'écran (hors éditeur : inchangé)'},
+    'Maj+F12': {cmd: 'references', label: 'Toutes les références', cat: 'Naviguer', nouveau: true},
+    'Ctrl+-': {cmd: 'revenir', label: 'Revenir où j\'étais (après F12)', cat: 'Naviguer', nouveau: true},
+    'Ctrl+R Ctrl+R': {cmd: 'renommer', label: 'Renommer partout', cat: 'Naviguer', nouveau: true},
+    'F2': {cmd: 'renommer', label: 'Renommer partout', cat: 'Naviguer', nouveau: true},
+    'F8': {cmd: 'diagSuivant', label: 'Faute suivante', cat: 'Naviguer', nouveau: true, avant: 'démarrait la simulation (hors éditeur : inchangé)'},
+    'Maj+F8': {cmd: 'diagPrecedent', label: 'Faute précédente', cat: 'Naviguer', nouveau: true, avant: 'arrêtait la simulation'},
+    'Ctrl+.': {cmd: 'actionsRapides', label: 'Corriger (le nom proposé par la faute)', cat: 'Naviguer', nouveau: true, azerty: 'Alt+Entrée'},
+    'Alt+Entrée': {cmd: 'actionsRapides', label: 'Corriger (comme Ctrl+.)', cat: 'Naviguer', nouveau: true},
+    'Ctrl+K Ctrl+K': {cmd: 'signet', label: 'Poser / retirer un signet', cat: 'Naviguer', nouveau: true},
+    'Ctrl+K Ctrl+N': {cmd: 'signetSuivant', label: 'Signet suivant', cat: 'Naviguer', nouveau: true},
+    'Ctrl+K Ctrl+P': {cmd: 'signetPrecedent', label: 'Signet précédent', cat: 'Naviguer', nouveau: true},
+    'Ctrl+T': {cmd: 'allerA', label: 'Aller à / Faire… (Ctrl+K hors des éditeurs)', cat: 'Naviguer', nouveau: true},
+    'Ctrl+,': {cmd: 'allerA', label: 'Aller à / Faire…', cat: 'Naviguer', nouveau: true},
+    'Ctrl+Espace': {cmd: 'completer', label: 'Compléter le mot', cat: 'Aide à la saisie'},
+    'Ctrl+Maj+Espace': {cmd: 'infoParametres', label: 'Les paramètres de l\'appel', cat: 'Aide à la saisie', nouveau: true, avant: 'comme Ctrl+Espace'},
+    'Ctrl+K Ctrl+I': {cmd: 'infoRapide', label: 'Info rapide (le type, la signature)', cat: 'Aide à la saisie', nouveau: true},
+    'F1': {cmd: 'fiche', label: 'La fiche du mot (natives, fonctions)', cat: 'Aide à la saisie'},
+    'Ctrl+M Ctrl+M': {cmd: 'plier', label: 'Replier / déplier le bloc', cat: 'Plis', nouveau: true},
+    'Ctrl+M Ctrl+L': {cmd: 'plierTout', label: 'Tout replier / tout déplier', cat: 'Plis', nouveau: true},
+    'Ctrl+M Ctrl+O': {cmd: 'plierNiveau', label: 'Replier les blocs du premier niveau', cat: 'Plis', nouveau: true},
+    'Ctrl+S': {cmd: 'enregistrer', label: 'Enregistrer', cat: 'Projet'},
+    'F7': {cmd: 'compiler', label: 'Compiler le document', cat: 'Projet'},
+    'Ctrl+F7': {cmd: 'compiler', label: 'Compiler le document', cat: 'Projet', nouveau: true},
+    'Ctrl+Maj+B': {cmd: 'generer', label: 'Générer', cat: 'Projet', nouveau: true},
+    'F5': {cmd: 'simuler', label: 'Démarrer la simulation de l\'IHM', cat: 'Projet', nouveau: true, avant: 'rien dans l\'éditeur'},
+    'Maj+F5': {cmd: 'arreter', label: 'Arrêter la simulation', cat: 'Projet', nouveau: true},
+    'Ctrl+F4': {cmd: 'fermer', label: 'Fermer l\'onglet', cat: 'Projet', nouveau: true}
+  };
+  // Le profil classique : celui de la 1.12.1, sans accords, plus les commandes a une
+  // touche qui ne prennent rien a personne.
+  const classique = {};
+  for (const [k, v] of Object.entries(vs)) {
+    if (k.includes(' ')) continue;
+    if (['F12', 'Maj+F12', 'F8', 'Maj+F8', 'F5', 'Maj+F5', 'Ctrl+W', 'Ctrl+H', 'Ctrl+Maj+F', 'F2'].includes(k)) continue;
+    classique[k] = v;
+  }
+  classique['Ctrl+K'] = {cmd: 'allerA', label: 'Aller à / Faire… (comme partout)', cat: 'Naviguer'};
+  classique['F8'] = {cmd: 'simuler', label: 'Démarrer la simulation de l\'IHM', cat: 'Projet'};
+  classique['Maj+F8'] = {cmd: 'arreter', label: 'Arrêter la simulation', cat: 'Projet'};
+  return {vs, classique};
+})();
+
+/* ===========================================================================
+   1. L'EDITEUR DE SCRIPT ET SES RACCOURCIS (profil Visual Studio)
+   Un <textarea> transparent sur un <pre> colore ; chaque commande travaille sur
+   le texte et la selection, avec sa propre pile d'annulation (Ctrl+Z, Ctrl+Y).
+   Les accords (Ctrl+K puis Ctrl+C) passent par un etat "en attente", dit dans
+   la barre d'etat comme dans Visual Studio.
+   ======================================================================== */
+(function () {
+  const $ = (s, r = document) => r.querySelector(s);
+  const ta = $('#ed-code'), hl = $('#ed-hl'), gut = $('#ed-gutter'), status = $('#ed-status'),
+        chordBox = $('#ed-chord'), pos = $('#ed-pos'), findBar = $('#ed-find'), fIn = $('#ed-find-in'),
+        rIn = $('#ed-repl-in'), replRow = $('#ed-repl-row'), compl = $('#ed-compl'), tip = $('#ed-tip'),
+        results = $('#ed-results'), diagList = $('#ed-diags');
+  if (!ta) return;
+
+  const KW = ['IF','THEN','ELSIF','ELSE','END_IF','CASE','OF','END_CASE','FOR','TO','BY','DO','END_FOR','WHILE','END_WHILE',
+              'REPEAT','UNTIL','END_REPEAT','EXIT','CONTINUE','RETURN','VAR','VAR_TEMP','END_VAR','TRY','CATCH','END_TRY',
+              'AND','OR','XOR','NOT','MOD','TRUE','FALSE','ENTRE','ET','IN','FUNCTION','END_FUNCTION'];
+  const TYPES = ['BOOL','INT','DINT','UINT','UDINT','REAL','LREAL','STRING','TIME','DATE','TOD','DT','WORD','DWORD','BYTE'];
+  const NATIVES = {
+    'ABS': 'ABS(IN : ANY_NUM) : comme IN', 'LIMIT': 'LIMIT(MN, IN, MX) : comme IN', 'SEL': 'SEL(G : BOOL, IN0, IN1)',
+    'IHM_LOG': "IHM_LOG(niveau : NIVEAU_LOG, message : STRING) : BOOL", 'INT_TO_STRING': 'INT_TO_STRING(IN : INT) : STRING',
+    'MAINTENANT': 'MAINTENANT() : DATE_AND_TIME', 'MIN': 'MIN(IN1, IN2, …) : ANY_NUM', 'MAX': 'MAX(IN1, IN2, …) : ANY_NUM',
+    'IHM_NAVIGUER': "IHM_NAVIGUER(vue : STRING, transition : TRANSITION) : BOOL", 'CONCAT': 'CONCAT(IN1, IN2, …) : STRING'
+  };
+  const SAMPLE = [
+    "(* Surveillance des fours - toutes les 500 ms *)",
+    "VAR",
+    "    i : INT;",
+    "    Ecart : REAL;",
+    "    Alarme : BOOL;",
+    "END_VAR",
+    "",
+    "FOR i := 0 TO 3 DO",
+    "    Ecart := ABS(Fours[i].Consigne - Fours[i].Mesure);",
+    "    IF Ecart > 15.0 THEN",
+    "        Alarme := TRUE;",
+    "        IHM_LOG(NIVEAU_LOG#WARNING, 'Four ' + INT_TO_STRING(i) + ' : ecart');",
+    "    ELSIF Ecart ENTRE 5.0 ET 15.0 THEN",
+    "        Fours[i].Etat := ETAT_MOTEUR#Marche;",
+    "    END_IF",
+    "END_FOR",
+    "",
+    "TRY",
+    "    Rendement := Production / Energie;",
+    "CATCH Message",
+    "    Rendement := 0.0;",
+    "END_TRY"
+  ].join('\n');
+  const DIAGS = [
+    {at: 'Rendement := Production', col: 5, sev: 'warn', msg: "Rendement : REAL attendu, la division d'entiers rend un entier"},
+    {at: 'IHM_LOG(NIVEAU_LOG', col: 9, sev: 'info', msg: "IHM_LOG : le message dépasse 60 caractères dans la Console"},
+    {at: 'Fours[i].Etat :=', col: 9, sev: 'err', msg: "Fours[i].Etat : membre inconnu (veux-tu dire Fours[i].EtatMoteur ?)", fix: ['Fours[i].Etat ', 'Fours[i].EtatMoteur ']}
+  ];
+
+  // une faute tient a son texte : elle suit les lignes qu'on deplace ou duplique
+  function lineOfDiag(d) { const k = ta.value.split('\n').findIndex(l => l.includes(d.at)); return k < 0 ? 0 : k + 1; }
+  let undo = [], redo = [], chord = null, chordTimer = 0, diagIdx = -1, bookmarks = new Set(), folded = [], back = [];
+  const mark = () => { back.push(ta.selectionStart); if (back.length > 50) back.shift(); };
+  ta.value = SAMPLE;
+
+  // ---------------------------------------------------------------- rendu ---
+  const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  function colorLine(l) {
+    let out = '', i = 0;
+    const ci = l.indexOf('//');
+    while (i < l.length) {
+      if (l.startsWith('(*', i)) { const e = l.indexOf('*)', i + 2); const j = e < 0 ? l.length : e + 2; out += '<span class="t-com">' + esc(l.slice(i, j)) + '</span>'; i = j; continue; }
+      if (ci === i) { out += '<span class="t-com">' + esc(l.slice(i)) + '</span>'; break; }
+      const c = l[i];
+      if (c === "'") { const e = l.indexOf("'", i + 1); const j = e < 0 ? l.length : e + 1; out += '<span class="t-str">' + esc(l.slice(i, j)) + '</span>'; i = j; continue; }
+      if (/[0-9]/.test(c)) { let j = i; while (j < l.length && /[0-9._#]/.test(l[j])) j++; out += '<span class="t-num">' + esc(l.slice(i, j)) + '</span>'; i = j; continue; }
+      if (/[A-Za-z_]/.test(c)) {
+        let j = i; while (j < l.length && /[A-Za-z0-9_]/.test(l[j])) j++;
+        let w = l.slice(i, j);
+        if (l[j] === '#') { let k = j + 1; while (k < l.length && /[A-Za-z0-9_]/.test(l[k])) k++; out += '<span class="t-enum">' + esc(l.slice(i, k)) + '</span>'; i = k; continue; }
+        const U = w.toUpperCase();
+        const cls = KW.includes(U) ? 't-kw' : TYPES.includes(U) ? 't-type' : NATIVES[U] ? 't-fn' : '';
+        out += cls ? '<span class="' + cls + '">' + esc(w) + '</span>' : esc(w);
+        i = j; continue;
+      }
+      out += esc(c); i++;
+    }
+    return out;
+  }
+  function render() {
+    const lines = ta.value.split('\n');
+    const dl = new Map(DIAGS.map(d => [lineOfDiag(d), d]));
+    drawDiags();
+    hl.innerHTML = lines.map((l, k) => {
+      const d = dl.get(k + 1);
+      return '<div class="ed-line' + (d ? ' sq-' + d.sev : '') + '">' + (colorLine(l) || '&#8203;') + '</div>';
+    }).join('');
+    gut.innerHTML = lines.map((_, k) => '<div class="' + (bookmarks.has(k) ? 'bm' : '') + '">' + (k + 1) + '</div>').join('');
+    syncScroll(); caretInfo();
+  }
+  function syncScroll() { hl.style.transform = 'translate(' + (-ta.scrollLeft) + 'px,' + (-ta.scrollTop) + 'px)'; gut.style.transform = 'translateY(' + (-ta.scrollTop) + 'px)'; }
+  function caretInfo() {
+    const before = ta.value.slice(0, ta.selectionStart).split('\n');
+    pos.textContent = 'Ln ' + before.length + ', Col ' + (before[before.length - 1].length + 1) +
+      (ta.selectionEnd > ta.selectionStart ? '  ·  ' + (ta.selectionEnd - ta.selectionStart) + ' car. choisis' : '');
+  }
+  ta.addEventListener('input', () => { render(); hideCompl(); });
+  ta.addEventListener('scroll', syncScroll);
+  ta.addEventListener('click', caretInfo);
+  ta.addEventListener('keyup', caretInfo);
+
+  // ------------------------------------------------------------ outils texte ---
+  function snap() { undo.push({v: ta.value, s: ta.selectionStart, e: ta.selectionEnd}); if (undo.length > 200) undo.shift(); redo = []; }
+  function setText(v, s, e) { ta.value = v; ta.selectionStart = s; ta.selectionEnd = e === undefined ? s : e; render(); }
+  function lineRange() {
+    const v = ta.value, s = ta.selectionStart, e = ta.selectionEnd;
+    const a = v.lastIndexOf('\n', s - 1) + 1;
+    let endPos = e > s && v[e - 1] === '\n' ? e - 1 : e;
+    let b = v.indexOf('\n', endPos); if (b < 0) b = v.length;
+    return {a, b};
+  }
+  function lineOf(p) { return ta.value.slice(0, p).split('\n').length; }
+  function posOfLine(n) { const ls = ta.value.split('\n'); let p = 0; for (let k = 0; k < n - 1 && k < ls.length; k++) p += ls[k].length + 1; return p; }
+  function say(t, kind) { status.textContent = t; status.className = 'ed-status ' + (kind || ''); }
+  function wordAt(p) {
+    const v = ta.value; let a = p, b = p;
+    while (a > 0 && /[A-Za-z0-9_]/.test(v[a - 1])) a--;
+    while (b < v.length && /[A-Za-z0-9_]/.test(v[b])) b++;
+    return {a, b, w: v.slice(a, b)};
+  }
+
+  // ---------------------------------------------------------------- commandes ---
+  const CMD = {
+    commenter() { snap(); const {a, b} = lineRange(); const blk = ta.value.slice(a, b).split('\n');
+      const out = blk.map(l => l.trim() ? l.replace(/^(\s*)/, '$1// ') : l).join('\n');
+      setText(ta.value.slice(0, a) + out + ta.value.slice(b), a, a + out.length); say('Lignes commentées (//)'); },
+    decommenter() { snap(); const {a, b} = lineRange(); const blk = ta.value.slice(a, b).split('\n');
+      const out = blk.map(l => l.replace(/^(\s*)\/\/ ?/, '$1')).join('\n');
+      setText(ta.value.slice(0, a) + out + ta.value.slice(b), a, a + out.length); say('Commentaire retiré'); },
+    basculerCommentaire() { const {a, b} = lineRange(); const blk = ta.value.slice(a, b).split('\n');
+      blk.filter(l => l.trim()).every(l => /^\s*\/\//.test(l)) ? CMD.decommenter() : CMD.commenter(); },
+    dupliquer() { snap(); const s = ta.selectionStart, e = ta.selectionEnd;
+      if (e > s) { const t = ta.value.slice(s, e); setText(ta.value.slice(0, e) + t + ta.value.slice(e), e, e + t.length); }
+      else { const {a, b} = lineRange(); const t = ta.value.slice(a, b); setText(ta.value.slice(0, b) + '\n' + t + ta.value.slice(b), s + t.length + 1); }
+      say('Dupliqué (Ctrl+D)'); },
+    monterLignes() { moveLines(-1); }, descendreLignes() { moveLines(1); },
+    couperLigne() { snap(); const {a, b} = lineRange(); const t = ta.value.slice(a, b) + '\n'; clip(t);
+      const end = Math.min(b + 1, ta.value.length); setText(ta.value.slice(0, a) + ta.value.slice(end), a); say('Ligne coupée dans le presse-papiers'); },
+    supprimerLigne() { snap(); const {a, b} = lineRange(); const end = Math.min(b + 1, ta.value.length); setText(ta.value.slice(0, a) + ta.value.slice(end), a); say('Ligne supprimée'); },
+    copierLigne() { const {a, b} = lineRange(); clip(ta.value.slice(a, b) + '\n'); say('Ligne copiée (rien de choisi : toute la ligne)'); },
+    ouvrirAuDessus() { snap(); const {a} = lineRange(); const ind = (ta.value.slice(a).match(/^\s*/) || [''])[0]; setText(ta.value.slice(0, a) + ind + '\n' + ta.value.slice(a), a + ind.length); },
+    ouvrirAuDessous() { snap(); const {b} = lineRange(); const ind = (ta.value.slice(ta.value.lastIndexOf('\n', b - 1) + 1).match(/^\s*/) || [''])[0]; setText(ta.value.slice(0, b) + '\n' + ind + ta.value.slice(b), b + 1 + ind.length); },
+    majuscules() { caseSel(true); }, minuscules() { caseSel(false); },
+    indenter() { snap(); const {a, b} = lineRange(); const out = ta.value.slice(a, b).split('\n').map(l => '    ' + l).join('\n'); setText(ta.value.slice(0, a) + out + ta.value.slice(b), a, a + out.length); },
+    desindenter() { snap(); const {a, b} = lineRange(); const out = ta.value.slice(a, b).split('\n').map(l => l.replace(/^ {1,4}/, '')).join('\n'); setText(ta.value.slice(0, a) + out + ta.value.slice(b), a, a + out.length); },
+    choisirMot() { const w = wordAt(ta.selectionStart); ta.selectionStart = w.a; ta.selectionEnd = w.b; caretInfo(); say('Mot choisi : ' + w.w); },
+    allerLigne() { mark(); const n = prompt('Aller à la ligne (1 - ' + ta.value.split('\n').length + ')', String(lineOf(ta.selectionStart))); if (!n) return;
+      const p = posOfLine(Math.max(1, parseInt(n, 10) || 1)); ta.focus(); ta.selectionStart = ta.selectionEnd = p; scrollToCaret(); caretInfo(); say('Ligne ' + n); },
+    rechercher() { openFind(false); }, remplacer() { openFind(true); },
+    suivant() { findNext(1); }, precedent() { findNext(-1); },
+    rechercherMot() { const w = wordAt(ta.selectionStart).w; if (!w) return; openFind(false); fIn.value = w; findNext(1); },
+    rechercherPartout() { results.innerHTML = '<b>Rechercher dans tous les scripts : « Ecart »</b><div>Surveillance_Fours, ligne 9 · Ecart := ABS(…)</div><div>Surveillance_Fours, ligne 10 · IF Ecart &gt; 15.0</div><div>Regulation_Four, ligne 4 · Ecart_Max := 20.0</div>'; results.hidden = false; say('3 résultats dans 2 scripts (Ctrl+Maj+F)'); },
+    completer() { showCompl(); }, infoParametres() { paramInfo(); }, infoRapide() { quickInfo(); },
+    allerDefinition() { mark(); const w = wordAt(ta.selectionStart).w; const m = new RegExp('^\\s*' + w + '\\s*:', 'm').exec(ta.value);
+      if (m) { ta.selectionStart = m.index + m[0].indexOf(w); ta.selectionEnd = ta.selectionStart + w.length; scrollToCaret(); caretInfo(); say('Définition de ' + w + ' : ligne ' + lineOf(m.index + 1)); }
+      else if (NATIVES[w.toUpperCase()]) say(w + ' : native - sa fiche s\'ouvre (IHM › Natives)', 'info');
+      else say('Définition de « ' + w + ' » : Variables IHM › Fours (onglet ouvert)', 'info'); },
+    references() { const w = wordAt(ta.selectionStart).w; if (!w) return; const ls = ta.value.split('\n'); const hits = [];
+      ls.forEach((l, k) => { if (new RegExp('\\b' + w + '\\b').test(l)) hits.push('<div data-l="' + (k + 1) + '">ligne ' + (k + 1) + ' · ' + esc(l.trim()) + '</div>'); });
+      results.innerHTML = '<b>' + hits.length + ' référence(s) de ' + esc(w) + ' (Maj+F12)</b>' + hits.join(''); results.hidden = false; say(hits.length + ' références'); },
+    renommer() { const w = wordAt(ta.selectionStart).w; if (!w) return; const n = prompt('Renommer « ' + w + ' » en', w); if (!n || n === w) return;
+      snap(); const re = new RegExp('\\b' + w + '\\b', 'g'); let c = 0; const v = ta.value.replace(re, () => { c++; return n; }); setText(v, ta.selectionStart); say(c + ' occurrence(s) renommée(s) : ' + w + ' → ' + n); },
+    formater() { snap(); let lvl = 0; const out = ta.value.split('\n').map(l => { const t = l.trim(); const U = t.toUpperCase();
+      if (/^(END_IF|END_FOR|END_WHILE|END_CASE|END_VAR|END_TRY|UNTIL|ELSE|ELSIF|CATCH)\b/.test(U)) lvl = Math.max(0, lvl - 1);
+      const r = t ? '    '.repeat(lvl) + t : '';
+      if (/^(IF|FOR|WHILE|CASE|VAR|TRY|REPEAT|ELSE|ELSIF|CATCH)\b/.test(U) && !/END_IF;?$/.test(U)) lvl++;
+      return r; }).join('\n'); setText(out, ta.selectionStart); say('Document mis en forme (Ctrl+K, Ctrl+D)'); },
+    entourer() { const s = ta.selectionStart, e = ta.selectionEnd; const {a, b} = lineRange(); snap();
+      const blk = ta.value.slice(a, b).split('\n').map(l => '    ' + l).join('\n'); const t = 'IF condition THEN\n' + blk + '\nEND_IF';
+      setText(ta.value.slice(0, a) + t + ta.value.slice(b), a + 3, a + 12); say('Entouré de IF … END_IF (Ctrl+K, Ctrl+S) - TRY, FOR, WHILE au choix'); },
+    extrait() { snap(); const p = ta.selectionStart; const t = 'TRY\n    \nCATCH Erreur\n    \nEND_TRY'; setText(ta.value.slice(0, p) + t + ta.value.slice(p), p + 8); say('Extrait inséré : TRY (Ctrl+K, Ctrl+X)'); },
+    plier() { const n = lineOf(ta.selectionStart); say('Bloc de la ligne ' + n + ' replié / déplié (Ctrl+M, Ctrl+M)'); },
+    plierTout() { say('Tous les blocs repliés / dépliés (Ctrl+M, Ctrl+L)'); },
+    accolade() { mark(); matchBlock(false); }, choisirBloc() { matchBlock(true); },
+    signet() { const n = lineOf(ta.selectionStart) - 1; bookmarks.has(n) ? bookmarks.delete(n) : bookmarks.add(n); render(); say('Signet ligne ' + (n + 1)); },
+    signetSuivant() { const n = lineOf(ta.selectionStart) - 1; const all = [...bookmarks].sort((x, y) => x - y); const nx = all.find(x => x > n) ?? all[0];
+      if (nx === undefined) { say('Aucun signet'); return; } ta.selectionStart = ta.selectionEnd = posOfLine(nx + 1); scrollToCaret(); caretInfo(); },
+    diagSuivant() { mark(); stepDiag(1); }, diagPrecedent() { stepDiag(-1); },
+    actionsRapides() { const n = lineOf(ta.selectionStart); const d = DIAGS.find(x => lineOfDiag(x) === n);
+      if (!d) { say('Ctrl+. : aucune faute sur cette ligne (F8 : la suivante)', 'info'); return; }
+      if (!d.fix) { say('Ctrl+. : pas de correction toute faite pour « ' + d.msg + ' »', 'warn'); return; }
+      const a = posOfLine(n), line = ta.value.slice(a).split('\n')[0], k = line.indexOf(d.fix[0]); if (k < 0) return;
+      snap(); setText(ta.value.slice(0, a + k) + d.fix[1] + ta.value.slice(a + k + d.fix[0].length), a + k + d.fix[1].length);
+      DIAGS.splice(DIAGS.indexOf(d), 1); render(); say('Corrigé : ' + d.fix[0].trim() + ' → ' + d.fix[1].trim() + ' (Ctrl+.)', 'ok'); },
+    effacerMotAvant() {}, effacerMotApres() {}, motPrecedent() {}, motSuivant() {},
+    debutIntelligent() { const {a} = lineRange(); const ind = (ta.value.slice(a).match(/^\s*/) || [''])[0].length;
+      const p = ta.selectionStart === a + ind ? a : a + ind; ta.selectionStart = ta.selectionEnd = p; caretInfo(); },
+    revenir() { if (!back.length) { say('Ctrl+- : rien à revenir'); return; } const p = back.pop(); ta.selectionStart = ta.selectionEnd = Math.min(p, ta.value.length); scrollToCaret(); caretInfo(); say('Revenu à la ligne ' + lineOf(p) + ' (Ctrl+-)'); },
+    signetPrecedent() { const n = lineOf(ta.selectionStart) - 1; const all = [...bookmarks].sort((x, y) => y - x); const nx = all.find(x => x < n) ?? all[0];
+      if (nx === undefined) { say('Aucun signet'); return; } ta.selectionStart = ta.selectionEnd = posOfLine(nx + 1); scrollToCaret(); caretInfo(); },
+    fiche() { const w = wordAt(ta.selectionStart).w; say(NATIVES[w.toUpperCase()] ? 'F1 : la fiche de ' + w.toUpperCase() + ' s\'ouvre (IHM › Natives)' : 'F1 : la page des scripts de l\'aide', 'info'); },
+    plierNiveau() { say('Blocs du premier niveau repliés (Ctrl+M, Ctrl+O)'); },
+    fermer() { say('Ctrl+F4 : l\'onglet du script se ferme (Ctrl+W hors de l\'éditeur)', 'info'); },
+    annuler() { if (!undo.length) return; redo.push({v: ta.value, s: ta.selectionStart, e: ta.selectionEnd}); const u = undo.pop(); setText(u.v, u.s, u.e); say('Annulé'); },
+    retablir() { if (!redo.length) return; undo.push({v: ta.value, s: ta.selectionStart, e: ta.selectionEnd}); const r = redo.pop(); setText(r.v, r.s, r.e); say('Rétabli'); },
+    enregistrer() { say('Enregistré (Ctrl+S)', 'ok'); },
+    compiler() { say('Compiler le document : 1 erreur, 1 avertissement, 1 info (Ctrl+F7)', 'warn'); },
+    generer() { say('Générer : 350 éléments à jour (Ctrl+Maj+B)', 'ok'); },
+    simuler() { say('Simulation démarrée (F5)', 'ok'); }, arreter() { say('Simulation arrêtée (Maj+F5)'); },
+    allerA() { say('Aller à / Faire… s\'ouvre (Ctrl+T ou Ctrl+,)', 'info'); },
+    toutChoisir() { ta.select(); caretInfo(); }
+  };
+  function clip(t) { try { navigator.clipboard.writeText(t); } catch (e) { /* hors https */ } }
+  function moveLines(dir) {
+    const {a, b} = lineRange(); const v = ta.value;
+    if (dir < 0 && a === 0) return; if (dir > 0 && b >= v.length) return;
+    snap(); const blk = v.slice(a, b);
+    if (dir < 0) { const pa = v.lastIndexOf('\n', a - 2) + 1; const prev = v.slice(pa, a - 1);
+      const nv = v.slice(0, pa) + blk + '\n' + prev + v.slice(b); setText(nv, pa + (ta.selectionStart - a), pa + (ta.selectionEnd - a)); }
+    else { let nb = v.indexOf('\n', b + 1); if (nb < 0) nb = v.length; const next = v.slice(b + 1, nb);
+      const nv = v.slice(0, a) + next + '\n' + blk + v.slice(nb); const d = next.length + 1; setText(nv, ta.selectionStart + d, ta.selectionEnd + d); }
+    say(dir < 0 ? 'Ligne montée (Alt+Haut)' : 'Ligne descendue (Alt+Bas)');
+  }
+  function caseSel(up) { const s = ta.selectionStart, e = ta.selectionEnd; if (e <= s) { say('Choisis le texte à changer'); return; } snap();
+    const t = ta.value.slice(s, e); setText(ta.value.slice(0, s) + (up ? t.toUpperCase() : t.toLowerCase()) + ta.value.slice(e), s, e); say(up ? 'MAJUSCULES (Ctrl+Maj+U)' : 'minuscules (Ctrl+U)'); }
+  function scrollToCaret() { const n = lineOf(ta.selectionStart); ta.scrollTop = Math.max(0, (n - 5) * 20); syncScroll(); }
+  function matchBlock(select) {
+    const ls = ta.value.split('\n'); const n = lineOf(ta.selectionStart) - 1; const U = ls[n].trim().toUpperCase();
+    const pairs = [['IF', 'END_IF'], ['FOR', 'END_FOR'], ['WHILE', 'END_WHILE'], ['CASE', 'END_CASE'], ['VAR', 'END_VAR'], ['TRY', 'END_TRY'], ['REPEAT', 'END_REPEAT']];
+    for (const [o, c] of pairs) {
+      const reO = new RegExp('^' + o + '\\b'), reC = new RegExp('^' + c + '\\b');
+      if (reO.test(U)) { let d = 0; for (let k = n; k < ls.length; k++) { const T = ls[k].trim().toUpperCase(); if (reO.test(T)) d++; if (reC.test(T) && --d === 0) { go(k, n); return; } } }
+      if (reC.test(U)) { let d = 0; for (let k = n; k >= 0; k--) { const T = ls[k].trim().toUpperCase(); if (reC.test(T)) d++; if (reO.test(T) && --d === 0) { go(k, n); return; } } }
+    }
+    say('Ctrl+] : place le curseur sur IF, FOR, CASE, VAR, TRY… ou leur fin');
+    function go(k, from) { const p = posOfLine(k + 1) + (ls[k].length - ls[k].trimStart().length);
+      if (select) { const p0 = posOfLine(Math.min(k, from) + 1), p1 = posOfLine(Math.max(k, from) + 1) + ls[Math.max(k, from)].length; ta.selectionStart = p0; ta.selectionEnd = p1; }
+      else { ta.selectionStart = ta.selectionEnd = p; }
+      scrollToCaret(); caretInfo(); say((select ? 'Bloc choisi' : 'Fin du bloc') + ' : ligne ' + (k + 1)); }
+  }
+  function stepDiag(d) { const live = DIAGS.filter(x => lineOfDiag(x)); if (!live.length) { say('Plus aucune faute', 'ok'); return; } const sorted = live.sort((x, y) => lineOfDiag(x) - lineOfDiag(y));
+    const cur = lineOf(ta.selectionStart); let g = d > 0 ? sorted.find(x => lineOfDiag(x) > cur) || sorted[0] : [...sorted].reverse().find(x => lineOfDiag(x) < cur) || sorted[sorted.length - 1];
+    const ln = lineOfDiag(g); ta.focus(); ta.selectionStart = ta.selectionEnd = posOfLine(ln) + g.col - 1; scrollToCaret(); caretInfo();
+    say((d > 0 ? 'F8' : 'Maj+F8') + ' · ligne ' + ln + ' : ' + g.msg, g.sev === 'err' ? 'err' : g.sev === 'warn' ? 'warn' : 'info');
+    [...diagList.children].forEach(li => li.classList.toggle('on', +li.dataset.l === ln)); }
+
+  // ---------------------------------------------------------- rechercher ---
+  function openFind(withRepl) { findBar.hidden = false; replRow.hidden = !withRepl; const s = ta.value.slice(ta.selectionStart, ta.selectionEnd);
+    if (s && !s.includes('\n')) fIn.value = s; fIn.focus(); fIn.select(); say(withRepl ? 'Remplacer (Ctrl+H) - Entrée : suivant, Alt+R : remplacer, Alt+A : tout' : 'Rechercher (Ctrl+F) - F3 : suivant, Maj+F3 : précédent'); }
+  function findNext(dir) { const q = fIn.value; if (!q) { openFind(false); return; } const v = ta.value.toLowerCase(), ql = q.toLowerCase();
+    let p = dir > 0 ? v.indexOf(ql, ta.selectionEnd) : v.lastIndexOf(ql, Math.max(0, ta.selectionStart - 1));
+    if (p < 0) p = dir > 0 ? v.indexOf(ql) : v.lastIndexOf(ql);
+    if (p < 0) { say('« ' + q + ' » introuvable', 'warn'); return; }
+    ta.focus(); ta.selectionStart = p; ta.selectionEnd = p + q.length; scrollToCaret(); caretInfo();
+    const count = v.split(ql).length - 1; say('« ' + q + ' » : ' + count + ' fois - F3 / Maj+F3'); }
+  $('#ed-find-next').onclick = () => findNext(1); $('#ed-find-prev').onclick = () => findNext(-1);
+  $('#ed-find-close').onclick = () => { findBar.hidden = true; ta.focus(); };
+  $('#ed-repl-one').onclick = () => { const q = fIn.value; if (ta.value.slice(ta.selectionStart, ta.selectionEnd).toLowerCase() === q.toLowerCase() && q) { snap();
+      const s = ta.selectionStart; setText(ta.value.slice(0, s) + rIn.value + ta.value.slice(ta.selectionEnd), s + rIn.value.length); } findNext(1); };
+  $('#ed-repl-all').onclick = () => { const q = fIn.value; if (!q) return; snap(); let c = 0; const re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+      setText(ta.value.replace(re, () => { c++; return rIn.value; }), ta.selectionStart); say(c + ' remplacement(s)'); };
+  fIn.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); findNext(e.shiftKey ? -1 : 1); } if (e.key === 'Escape') { findBar.hidden = true; ta.focus(); } if (e.key === 'F3') { e.preventDefault(); findNext(e.shiftKey ? -1 : 1); } });
+
+  // ------------------------------------------------- completion, infobulles ---
+  let complItems = [], complSel = 0, complFrom = 0;
+  function caretXY() { const before = ta.value.slice(0, ta.selectionStart).split('\n'); const ln = before.length, col = before[before.length - 1].length;
+    return {x: 46 + col * 7.82 - ta.scrollLeft, y: 8 + ln * 20 - ta.scrollTop}; }
+  function showCompl() { const w = wordAt(ta.selectionStart); complFrom = w.a; const pre = ta.value.slice(w.a, ta.selectionStart).toUpperCase();
+    const pool = [...Object.keys(NATIVES).map(n => ({t: n, d: NATIVES[n], k: 'fn'})), ...['i', 'Ecart', 'Alarme', 'Rendement', 'Production', 'Energie', 'Fours'].map(n => ({t: n, d: 'variable', k: 'var'})),
+      ...['NIVEAU_LOG#', 'ETAT_MOTEUR#', 'ALIGNEMENT#'].map(n => ({t: n, d: 'énumération native', k: 'enum'}))];
+    complItems = pool.filter(x => x.t.toUpperCase().startsWith(pre)).slice(0, 8); if (!complItems.length) complItems = pool.slice(0, 8); complSel = 0; drawCompl(); }
+  function drawCompl() { const p = caretXY(); compl.style.left = Math.max(40, p.x) + 'px'; compl.style.top = p.y + 'px';
+    compl.innerHTML = complItems.map((x, k) => '<div class="' + (k === complSel ? 'on' : '') + '"><i class="k-' + x.k + '"></i>' + esc(x.t) + '<span>' + esc(x.d) + '</span></div>').join(''); compl.hidden = false;
+    [...compl.children].forEach((el, k) => el.onmousedown = ev => { ev.preventDefault(); complSel = k; acceptCompl(); }); }
+  function hideCompl() { compl.hidden = true; complItems = []; }
+  function acceptCompl() { const x = complItems[complSel]; if (!x) return; snap(); const t = x.k === 'fn' ? x.t + '()' : x.t;
+    setText(ta.value.slice(0, complFrom) + t + ta.value.slice(ta.selectionStart), complFrom + t.length - (x.k === 'fn' ? 1 : 0)); hideCompl(); }
+  function paramInfo() { const v = ta.value.slice(0, ta.selectionStart); const m = /([A-Za-z_][A-Za-z0-9_]*)\s*\([^()]*$/.exec(v);
+    const n = m && NATIVES[m[1].toUpperCase()]; if (!n) { say('Ctrl+Maj+Espace : place le curseur dans les parenthèses d\'un appel'); return; } showTip(n); }
+  function quickInfo() { const w = wordAt(ta.selectionStart).w; const n = NATIVES[w.toUpperCase()];
+    showTip(n ? n + '  ·  F1 : sa fiche' : w ? w + ' : ' + ({Ecart: 'REAL (locale)', i: 'INT (locale)', Alarme: 'BOOL (locale)'}[w] || 'variable IHM') : '…'); }
+  function showTip(t) { const p = caretXY(); tip.style.left = Math.max(40, p.x) + 'px'; tip.style.top = (p.y - 46) + 'px'; tip.textContent = t; tip.hidden = false; clearTimeout(tip._t); tip._t = setTimeout(() => tip.hidden = true, 4000); }
+
+  // ------------------------------------------------------------- touches ---
+  const KEYN = {ArrowUp: 'Haut', ArrowDown: 'Bas', ArrowLeft: 'Gauche', ArrowRight: 'Droite', Enter: 'Entrée', Escape: 'Échap', ' ': 'Espace', Backspace: 'Retour', Delete: 'Suppr', Home: 'Début', End: 'Fin', PageUp: 'Pg.Préc', PageDown: 'Pg.Suiv'};
+  function keyName(e) { if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return '';
+    let k = KEYN[e.key] || (e.key.length === 1 ? e.key.toUpperCase() : e.key);
+    if (e.code === 'Slash' || e.key === '/' || e.key === ':') k = '/';
+    if (e.code === 'BracketRight' || e.key === '$' || e.key === '£') k = ']'; if (e.code === 'Period') k = '.'; if (e.code === 'Comma' || e.key === ',') k = ',';
+    if (e.key === '-' || e.code === 'Minus' && !e.shiftKey) k = '-';
+    return (e.ctrlKey || e.metaKey ? 'Ctrl+' : '') + (e.shiftKey && (k.length > 1 || /[A-Z\]]/.test(k)) ? 'Maj+' : '') + (e.altKey ? 'Alt+' : '') + k; }
+  window.edKeymaps = window.edKeymaps || {};
+  function keymap() { return window.edKeymaps[window.edProfile || 'vs'] || {}; }
+  const CHORD_FIRST = () => new Set(Object.keys(keymap()).filter(k => k.includes(' ')).map(k => k.split(' ')[0]));
+  ta.addEventListener('keydown', e => {
+    if (!compl.hidden) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); complSel = (complSel + 1) % complItems.length; drawCompl(); return; }
+      if (e.key === 'ArrowUp') { e.preventDefault(); complSel = (complSel - 1 + complItems.length) % complItems.length; drawCompl(); return; }
+      if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); acceptCompl(); return; }
+      if (e.key === 'Escape') { e.preventDefault(); hideCompl(); return; }
+    }
+    const k = keyName(e); if (!k) return;
+    const map = keymap();
+    if (chord) { e.preventDefault(); const full = chord + ' ' + k; clearTimeout(chordTimer); chordBox.hidden = true; chord = null;
+      const c = map[full]; if (c && CMD[c.cmd]) { CMD[c.cmd](); flash(full); } else say('La combinaison (' + full.replace(' ', ', ') + ') n\'est pas une commande.', 'warn'); return; }
+    if (CHORD_FIRST().has(k)) { e.preventDefault(); chord = k; chordBox.textContent = '(' + k + ') a été appuyé. Attente de la seconde touche de l\'accord…'; chordBox.hidden = false;
+      chordTimer = setTimeout(() => { chord = null; chordBox.hidden = true; }, 4000); return; }
+    // copier / couper sans selection : la ligne (Visual Studio)
+    if ((k === 'Ctrl+C' || k === 'Ctrl+X') && ta.selectionEnd === ta.selectionStart) { e.preventDefault(); k === 'Ctrl+C' ? CMD.copierLigne() : CMD.couperLigne(); flash(k); return; }
+    if (k === 'Tab' && ta.selectionEnd === ta.selectionStart) { e.preventDefault(); snap(); const p = ta.selectionStart; setText(ta.value.slice(0, p) + '    ' + ta.value.slice(p), p + 4); return; }
+    if (k === 'Tab') { e.preventDefault(); CMD.indenter(); return; } if (k === 'Maj+Tab') { e.preventDefault(); CMD.desindenter(); return; }
+    if (k === 'Début' && !e.shiftKey) { e.preventDefault(); const {a} = lineRange(); const ind = (ta.value.slice(a).match(/^\s*/) || [''])[0].length;
+      const p = ta.selectionStart === a + ind ? a : a + ind; ta.selectionStart = ta.selectionEnd = p; caretInfo(); return; }
+    if (k === 'Entrée' && !e.ctrlKey) { e.preventDefault(); snap(); const {a} = lineRange(); const ind = (ta.value.slice(a).match(/^\s*/) || [''])[0];
+      const line = ta.value.slice(a, ta.selectionStart).trim().toUpperCase(); const more = /^(IF|FOR|WHILE|CASE|VAR|TRY|REPEAT|ELSE|ELSIF|CATCH)\b/.test(line) && !/END_IF/.test(line) ? '    ' : '';
+      const p = ta.selectionStart; setText(ta.value.slice(0, p) + '\n' + ind + more + ta.value.slice(ta.selectionEnd), p + 1 + ind.length + more.length); return; }
+    const c = map[k]; if (c && c.natif) { flash(k); return; }   // le geste du textarea suffit (Ctrl+fleches, Ctrl+Retour)
+    if (c && CMD[c.cmd]) { e.preventDefault(); CMD[c.cmd](); flash(k); }
+  });
+  function flash(k) { const row = document.querySelector('#ed-table tr[data-k="' + CSS.escape(k) + '"]'); if (!row) return; row.classList.add('hit'); setTimeout(() => row.classList.remove('hit'), 900); }
+  results.addEventListener('click', e => { const l = e.target.closest('[data-l]'); if (!l) return; ta.focus(); ta.selectionStart = ta.selectionEnd = posOfLine(+l.dataset.l); scrollToCaret(); caretInfo(); });
+  function drawDiags() { const live = DIAGS.filter(d => lineOfDiag(d)).sort((x, y) => lineOfDiag(x) - lineOfDiag(y));
+    diagList.innerHTML = live.length ? live.map(d => '<li data-l="' + lineOfDiag(d) + '" class="' + d.sev + '"><b>' + lineOfDiag(d) + '</b> ' + esc(d.msg) + '</li>').join('') : '<li class="none">Aucune faute</li>'; }
+  drawDiags();
+  diagList.addEventListener('click', e => { const li = e.target.closest('li'); if (!li) return; ta.focus(); ta.selectionStart = ta.selectionEnd = posOfLine(+li.dataset.l); scrollToCaret(); caretInfo(); });
+  window.edRun = (cmd) => { ta.focus(); if (CMD[cmd]) CMD[cmd](); };
+  window.edRender = render;
+  render();
+})();
+
+/* ===========================================================================
+   2. PROJET › DISPOSITION… : la fenetre, ses dispositions toutes faites, l'apercu,
+   et la fenetre de l'appli qui suit (Appliquer / OK). Gardee dans le navigateur
+   comme l'appli la garde dans ses reglages (disposition.*).
+   ======================================================================== */
+(function () {
+  const $ = (s, r = document) => r.querySelector(s);
+  const app = $('#lay-app'); if (!app) return;
+  const QP = [['toujours', 'Toujours'], ['edition', 'En édition'], ['simulation', 'En simulation']];
+  const QG = [['demande', 'À la demande'], ['projet', 'À l\'ouverture du projet'], ['simulation', 'Au démarrage de la simulation']];
+  const GROUPS = [
+    {t: 'La fenêtre', rows: [
+      {id: 'explorateur', l: 'Explorateur du projet', q: QP, ou: [['gauche', 'À gauche'], ['droite', 'À droite']]},
+      {id: 'documents', l: 'Documents ouverts', q: QP, ou: [['sous', 'Sous l\'explorateur']]},
+      {id: 'bas', l: 'Panneau du bas (Sorties, Console, Diagnostics)', q: QP, ou: [['dessous', 'Sous l\'éditeur'], ['droite', 'À droite de l\'éditeur']], dep: [['ouvert', 'Ouvert'], ['replie', 'Replié (Ctrl+J)']]},
+      {id: 'etat', l: 'Bande d\'état (en bas)', q: QP},
+      {id: 'alternees', l: 'Lignes alternées dans les listes'}]},
+    {t: 'Panneau du bas', radio: 'bas', rows: [
+      {id: 'bas.sorties', l: 'Sorties', q: QP, tab: 1}, {id: 'bas.console', l: 'Console', q: QP, tab: 1}, {id: 'bas.diagnostics', l: 'Diagnostics', q: QP, tab: 1}]},
+    {t: 'Éditeur de vue', radio: 'insp', rows: [
+      {id: 'vue.explorateur', l: 'Explorateur d\'objets', q: QP}, {id: 'vue.calques', l: 'Calques', q: QP}, {id: 'vue.bibliotheque', l: 'Bibliothèque', q: QP},
+      {id: 'vue.proprietes', l: 'Inspecteur › Propriétés', q: QP, tab: 1}, {id: 'vue.actions', l: 'Inspecteur › Actions', q: QP, tab: 1},
+      {id: 'vue.contenu', l: 'Inspecteur › Contenu (selon l\'objet)', q: QP, tab: 1}, {id: 'vue.raccourcis', l: 'Inspecteur › Raccourcis (selon l\'objet)', q: QP, tab: 1}]},
+    {t: 'Simulation · IHM (panneau de droite)', radio: 'sim', rows: [
+      {id: 'sim.expressions', l: 'Expressions', q: QP, tab: 1}, {id: 'sim.variables', l: 'Variables IHM', q: QP, tab: 1}, {id: 'sim.performances', l: 'Performances', q: QP, tab: 1},
+      {id: 'sim.esclaves', l: 'Esclaves simulés', q: QP, tab: 1}, {id: 'sim.popups', l: 'Popups', q: QP, tab: 1}]},
+    {t: 'Programmation générale', radio: 'prog', rows: [
+      {id: 'prog.scripts', l: 'Scripts généraux', q: QP, tab: 1}, {id: 'prog.variables', l: 'Variables IHM', q: QP, tab: 1}, {id: 'prog.types', l: 'Types IHM', q: QP, tab: 1}]},
+    {t: 'Équipements', radio: 'eq', rows: [
+      {id: 'eq.reseau', l: 'Réseau du PC', q: QP, tab: 1}, {id: 'eq.scanner', l: 'Scanner IP', q: QP, tab: 1}, {id: 'eq.equipements', l: 'Équipements', q: QP, tab: 1},
+      {id: 'eq.plan', l: 'Plan d\'adressage', q: QP, tab: 1}, {id: 'eq.carte', l: 'Carte mémoire', q: QP, tab: 1}, {id: 'eq.valeurs', l: 'Valeurs simulées', q: QP, tab: 1},
+      {id: 'eq.essai', l: 'Essai', q: QP, tab: 1}, {id: 'eq.liaisons', l: 'État des liaisons', q: QP, tab: 1}]},
+    {t: 'Les pages du centre', rows: [
+      {id: 'page.vue', l: 'Vue_Principale (les vues)', q: QG, ou: [['onglet', 'Dans un onglet'], ['cote', 'Côte à côte'], ['detache', 'Fenêtre détachée']]},
+      {id: 'page.simulation', l: 'Simulation · IHM', q: QG, ou: [['onglet', 'Dans un onglet'], ['cote', 'Côte à côte'], ['detache', 'Fenêtre détachée']]},
+      {id: 'page.programmation', l: 'Programmation générale', q: QG, ou: [['onglet', 'Dans un onglet'], ['cote', 'Côte à côte'], ['detache', 'Fenêtre détachée']]},
+      {id: 'page.poste', l: 'Poste d\'exploitation', q: QG, ou: [['onglet', 'Dans un onglet'], ['cote', 'Côte à côte'], ['detache', 'Fenêtre détachée']]}]}
+  ];
+  const ROWS = GROUPS.flatMap(g => g.rows.map(r => Object.assign(r, {g})));
+  function base() {
+    const s = {};
+    ROWS.forEach(r => { s[r.id] = {v: true, q: r.q ? r.q[0][0] : '', ou: r.ou ? r.ou[0][0] : '', dep: r.dep ? r.dep[0][0] : ''}; });
+    GROUPS.forEach(g => { if (g.radio) s['depart.' + g.radio] = g.rows.find(r => r.tab).id; });
+    s['page.vue'].q = 'projet'; s['page.simulation'].q = 'demande';
+    return s;
+  }
+  const PRESETS = {
+    defaut: () => base(),
+    vues: () => { const s = base(); s['documents'].v = false; s['bas'].dep = 'replie'; s['bas'].q = 'simulation'; s['vue.calques'].v = true; s['page.simulation'].ou = 'detache'; return s; },
+    miseaupoint: () => { const s = base(); s['page.simulation'].ou = 'cote'; s['page.simulation'].q = 'simulation'; s['bas.console'].q = 'simulation'; s['depart.bas'] = 'bas.console';
+      s['sim.performances'].q = 'simulation'; s['documents'].v = false; s['depart.sim'] = 'sim.variables'; return s; },
+    large: () => { const s = base(); s['bas'].ou = 'droite'; s['page.simulation'].ou = 'cote'; s['explorateur'].ou = 'gauche'; return s; },
+    mienne: () => load('xpg.disposition.mienne') || base()
+  };
+  function load(k) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch (e) { return null; } }
+  function store(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } }
+  let applied = Object.assign(base(), load('xpg.disposition') || {}), draft = null, mode = 'edition', prevMode = 'edition';
+  const clone = o => JSON.parse(JSON.stringify(o));
+  const shown = (s, id, m) => { const e = s[id]; return !!e && e.v && (e.q === 'toujours' || e.q === '' || e.q === m); };
+
+  // ------------------------------------------------ la fenetre de l'appli ---
+  function tabsOf(s, ids, m, dep) { const vis = ids.filter(i => shown(s, i, m)); if (!vis.length) return '';
+    const cur = vis.includes(s['depart.' + dep]) ? s['depart.' + dep] : vis[0];
+    return vis.map(i => '<span class="' + (i === cur ? 'on' : '') + '">' + ROWS.find(r => r.id === i).l.replace('Inspecteur › ', '').replace(/ \(.*\)$/, '') + '</span>').join(''); }
+  function zone(cls, tabs, body, extra) { return '<div class="zone ' + (cls || '') + '"' + (extra || '') + '>' + (tabs ? '<div class="zt">' + tabs + '</div>' : '') + '<div class="zb">' + (body || '') + '</div></div>'; }
+  function pagesWhere(s, m, where) { return ['page.vue', 'page.simulation', 'page.programmation', 'page.poste'].filter(id => { const e = s[id];
+      const open = e.q === 'projet' || (e.q === 'simulation' && m === 'simulation') || id === 'page.programmation';
+      return open && e.ou === where; }); }
+  const short = id => ROWS.find(r => r.id === id).l.replace(/ \(.*\)$/, '');
+  function drawApp(s, m, host) {
+    const expl = shown(s, 'explorateur', m), docs = shown(s, 'documents', m), bas = shown(s, 'bas', m), etat = shown(s, 'etat', m);
+    const left = s['explorateur'].ou === 'gauche';
+    const onglets = pagesWhere(s, m, 'onglet'), cote = pagesWhere(s, m, 'cote'), det = pagesWhere(s, m, 'detache');
+    const cur = onglets.includes('page.simulation') && m === 'simulation' ? 'page.simulation' : onglets[0];
+    const pageBody = id => id === 'page.simulation' ? '<div class="zt" style="margin:-8px -8px 6px">' + tabsOf(s, ['sim.expressions', 'sim.variables', 'sim.performances', 'sim.esclaves', 'sim.popups'], m, 'sim') + '</div>La vue qui tourne, et ses expressions.'
+      : id === 'page.programmation' ? '<div class="zt" style="margin:-8px -8px 6px">' + tabsOf(s, ['prog.scripts', 'prog.variables', 'prog.types'], m, 'prog') + '</div>Scripts généraux…'
+      : id === 'page.vue' ? '<div class="zt" style="margin:-8px -8px 6px">' + tabsOf(s, ['vue.explorateur', 'vue.calques', 'vue.bibliotheque'], m, 'x') + '<span style="margin-left:auto"></span>' + tabsOf(s, ['vue.proprietes', 'vue.actions', 'vue.contenu', 'vue.raccourcis'], m, 'insp') + '</div>Le dessin de la vue.'
+      : 'Le poste d\'exploitation.';
+    const exCol = expl || docs ? '<div style="display:flex;flex-direction:column;min-height:0;grid-row:1 / span ' + (bas && s['bas'].ou === 'dessous' ? 2 : 1) + '">' +
+      (expl ? zone('', '<span class="on">Explorateur du projet</span>', '▾ IHM<br>&nbsp;&nbsp;▸ Vues<br>&nbsp;&nbsp;▸ Programmation générale<br>&nbsp;&nbsp;▸ Équipements<br>▾ Simulation', ' style="flex:2"') : '') +
+      (docs ? zone('', '<span class="on">Documents ouverts</span>', onglets.concat(cote).map(short).join('<br>'), ' style="flex:1"') : '') + '</div>' : '';
+    const centre = zone('center', onglets.map(id => '<span class="' + (id === cur ? 'on' : '') + '">' + short(id) + '</span>').join('') || '<span class="fold">aucune page</span>', cur ? pageBody(cur) : '');
+    const side = cote.length ? zone('center', cote.map((id, k) => '<span class="' + (k === 0 ? 'on' : '') + '">' + short(id) + '</span>').join(''), pageBody(cote[0])) : '';
+    const bottomZone = bas ? (s['bas'].dep === 'replie' ? zone('folded', '<span class="fold">▸ Sorties · Console · Diagnostics (Ctrl+J)</span>', '', ' style="grid-column:' + 'X' + '"') : zone('', tabsOf(s, ['bas.sorties', 'bas.console', 'bas.diagnostics'], m, 'bas'), m === 'simulation' ? '[12:04:31] Simulation en marche - Init : 0 erreur' : 'Générer : 350 éléments à jour', ' style="grid-column:X"')) : '';
+    const mid = [centre, side].filter(Boolean);
+    let cols = [], cells = [];
+    if (exCol && left) { cols.push('minmax(150px,22%)'); cells.push(exCol); }
+    mid.forEach(m2 => { cols.push('minmax(0,1fr)'); cells.push(m2); });
+    if (bas && s['bas'].ou === 'droite') { cols.push('minmax(160px,26%)'); cells.push(bottomZone.replace('grid-column:X', 'grid-row:1')); }
+    if (exCol && !left) { cols.push('minmax(150px,22%)'); cells.push(exCol); }
+    const under = bas && s['bas'].ou === 'dessous';
+    host.style.gridTemplateColumns = cols.join(' ');
+    host.style.gridTemplateRows = '1fr' + (under ? (s['bas'].dep === 'replie' ? ' auto' : ' 30%') : '') + (etat ? ' auto' : '');
+    let html = cells.join('');
+    if (under) { const start = exCol && left ? 2 : 1; html += bottomZone.replace('grid-column:X', 'grid-column:' + start + ' / span ' + mid.length); }
+    if (etat) html += '<div style="grid-column:1 / -1;font-size:11.5px;color:var(--app-fg-3);padding:2px 8px;border-top:1px solid var(--app-line)">' + (m === 'simulation' ? '● Simulation en marche · 3 vues · 0 défaut' : 'Prêt · Armoire_Gaz · 1.12.2') + '</div>';
+    if (det.length) html += '<div class="floatwin"><div class="zt">' + det.map(short).join(' · ') + ' - fenêtre détachée</div><div class="zb" style="padding:8px;font-size:12px;color:var(--app-fg-3)">' + pageBody(det[0]) + '</div></div>';
+    host.innerHTML = html;
+  }
+
+  // ------------------------------------------------------- la fenetre ---
+  function rowsHtml() {
+    return GROUPS.map(g => '<tr class="grp"><td></td><td colspan="4">' + g.t + '</td></tr>' + g.rows.map(r => {
+      const e = draft[r.id], chg = JSON.stringify(e) !== JSON.stringify(applied[r.id]) || (r.tab && g.radio && (draft['depart.' + g.radio] === r.id) !== (applied['depart.' + g.radio] === r.id));
+      const sel = (key, opts, val) => opts ? (opts.length === 1 ? '<span class="dim">' + opts[0][1] + '</span>' : '<select data-id="' + r.id + '" data-f="' + key + '">' + opts.map(o => '<option value="' + o[0] + '"' + (o[0] === val ? ' selected' : '') + '>' + o[1] + '</option>').join('') + '</select>') : '<span class="dim">-</span>';
+      const dep = r.tab && g.radio ? '<label><input type="radio" name="dep-' + g.radio + '" data-radio="' + g.radio + '" value="' + r.id + '"' + (draft['depart.' + g.radio] === r.id ? ' checked' : '') + '> choisi</label>' : sel('dep', r.dep, e.dep);
+      const isPage = r.id.startsWith('page.');
+      return '<tr class="' + (g.radio ? 'sub' : '') + (isPage || e.v ? '' : ' off') + (chg ? ' chg' : '') + '"><td>' + (isPage ? '' : '<input type="checkbox" data-id="' + r.id + '"' + (e.v ? ' checked' : '') + ' aria-label="Afficher ' + r.l + '">') + '</td><td>' + r.l + '</td><td>' + sel('q', r.q, e.q) + '</td><td>' + sel('ou', r.ou, e.ou) + '</td><td>' + dep + '</td></tr>';
+    }).join('')).join('');
+  }
+  function drawDialog() { $('#lay-rows').innerHTML = rowsHtml(); drawApp(draft, prevMode, $('#lay-mini-in'));
+    const hidden = ROWS.filter(r => !r.id.startsWith('page.') && !draft[r.id].v).length, when = ROWS.filter(r => draft[r.id].v && draft[r.id].q === 'simulation').length;
+    const n = ROWS.filter(r => JSON.stringify(draft[r.id]) !== JSON.stringify(applied[r.id])).length + GROUPS.filter(g => g.radio && draft['depart.' + g.radio] !== applied['depart.' + g.radio]).length;
+    $('#lay-sum').innerHTML = hidden + ' élément(s) caché(s), ' + when + ' seulement en simulation. ' + (n ? '<b>' + n + ' changement(s)</b> pas encore appliqué(s).' : 'Rien à appliquer.'); }
+  $('#lay-rows').addEventListener('change', e => { const t = e.target;
+    if (t.dataset.radio) draft['depart.' + t.dataset.radio] = t.value;
+    else if (t.type === 'checkbox') draft[t.dataset.id].v = t.checked;
+    else if (t.dataset.f) draft[t.dataset.id][t.dataset.f] = t.value;
+    document.querySelectorAll('.lay-presets button[data-p]').forEach(b => b.classList.remove('on')); drawDialog(); });
+  document.querySelectorAll('.lay-presets button[data-p]').forEach(b => b.onclick = () => { draft = clone(PRESETS[b.dataset.p]()); document.querySelectorAll('.lay-presets button[data-p]').forEach(x => x.classList.toggle('on', x === b)); drawDialog(); });
+  $('#lay-save-mine').onclick = () => { store('xpg.disposition.mienne', draft); $('#lay-saved').textContent = '« Ma disposition » gardée'; setTimeout(() => $('#lay-saved').textContent = '', 2500); };
+  function apply(close) { applied = clone(draft); const ok = store('xpg.disposition', applied); drawApp(applied, mode, $('#lay-body'));
+    $('#lay-saved').textContent = ok ? 'Appliquée et gardée (disposition.* dans les réglages IHM)' : 'Appliquée'; setTimeout(() => $('#lay-saved').textContent = '', 2500);
+    if (close) $('#lay-dlg').hidden = true; else drawDialog(); }
+  $('#lay-apply').onclick = () => apply(false); $('#lay-ok').onclick = () => apply(true);
+  $('#lay-cancel').onclick = () => { $('#lay-dlg').hidden = true; };
+  $('#lay-reset').onclick = () => { draft = base(); drawDialog(); };
+  function openDlg() { $('#lay-dd').hidden = $('#lay-dd2').hidden = true; $('#lay-chip').setAttribute('aria-expanded', 'false'); $('#lay-affichage').setAttribute('aria-expanded', 'false');
+    draft = clone(applied); prevMode = mode; setSeg('#lay-prev-mode', mode); $('#lay-dlg').hidden = false; drawDialog(); }
+  $('#lay-open').onclick = openDlg; $('#lay-open2').onclick = openDlg;
+  function toggleDd(btn, dd, other, otherBtn) { const open = dd.hidden; dd.hidden = !open; other.hidden = true; btn.setAttribute('aria-expanded', String(open)); otherBtn.setAttribute('aria-expanded', 'false'); }
+  $('#lay-chip').onclick = e => { e.stopPropagation(); toggleDd($('#lay-chip'), $('#lay-dd'), $('#lay-dd2'), $('#lay-affichage')); };
+  $('#lay-affichage').onclick = e => { e.stopPropagation(); toggleDd($('#lay-affichage'), $('#lay-dd2'), $('#lay-dd'), $('#lay-chip')); };
+  document.addEventListener('click', e => { if (!e.target.closest('.dd') && !e.target.closest('.menubar')) { $('#lay-dd').hidden = $('#lay-dd2').hidden = true; } });
+  app.addEventListener('keydown', e => { if (e.ctrlKey && e.shiftKey && (e.key === 'D' || e.key === 'd')) { e.preventDefault(); openDlg(); } if (e.key === 'Escape') $('#lay-dlg').hidden = true; });
+  function setSeg(sel, m) { document.querySelectorAll(sel + ' button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.m === m))); }
+  document.querySelectorAll('#lay-mode button').forEach(b => b.onclick = () => { mode = b.dataset.m; setSeg('#lay-mode', mode); drawApp(applied, mode, $('#lay-body')); });
+  document.querySelectorAll('#lay-prev-mode button').forEach(b => b.onclick = () => { prevMode = b.dataset.m; setSeg('#lay-prev-mode', prevMode); drawDialog(); });
+  drawApp(applied, mode, $('#lay-body'));
+})();
+
+/* ===========================================================================
+   3. LES ETATS D'UN OBJET MULTI-ETATS : la table (selon la valeur ou selon des
+   conditions), l'essai en direct, ce qui est ecrit dans le projet ; puis
+   l'editeur de formule sur plusieurs lignes.
+   ======================================================================== */
+(function () {
+  const $ = (s, r = document) => r.querySelector(s);
+  const rowsEl = $('#st-rows'); if (!rowsEl) return;
+  const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  let kind = 'lamp', mode = 'valeur', testValue = '1', testVars = {Defaut: false, Marche: true};
+  const ST = {
+    valeur: [{q: '0', t: 'Arrêt', c: '#4A5261', b: false}, {q: '1', t: 'Marche', c: '#2ECC71', b: false}, {q: '2', t: 'Défaut', c: '#E5534B', b: true}, {q: '10..20', t: 'Maintenance', c: '#F2C94C', b: false}],
+    cond: [{q: 'Defaut', t: 'Défaut', c: '#E5534B', b: true}, {q: 'Marche AND NOT Defaut', t: 'Marche', c: '#2ECC71', b: false}]
+  };
+  const ELSE = {valeur: {t: 'État inconnu', c: '#8A94A3', b: false}, cond: {t: 'Arrêt', c: '#4A5261', b: false}};
+  // --- la valeur : nombre, a..b, TRUE/FALSE, 'texte', * (comme parseStateList) ---
+  function badValue(q) { q = q.trim(); if (!q) return 'valeur vide';
+    if (/^-?\d+(\.\d+)?$/.test(q) || /^-?\d+(\.\d+)?\s*\.\.\s*-?\d+(\.\d+)?$/.test(q) || /^(TRUE|FALSE|VRAI|FAUX)$/i.test(q) || /^'[^']*'$/.test(q) || q === '*') return '';
+    if (/^[A-Za-z_]\w*$/.test(q)) return 'une valeur, pas un nom : passe « selon des conditions » ou écris \'' + q + '\'';
+    return 'valeur illisible (un nombre, 10..20, TRUE, \'Auto\' ou *)'; }
+  function badCond(q) { q = q.trim(); if (!q) return 'condition vide'; const names = q.replace(/\b(AND|OR|NOT|XOR|TRUE|FALSE)\b/g, '').match(/[A-Za-z_]\w*/g) || [];
+    const unknown = names.filter(n => !(n in testVars)); return unknown.length ? 'nom inconnu : ' + unknown[0] + ' (veux-tu dire Defaut ?)' : ''; }
+  function badText(t) { return /[;|]/.test(t) ? 'un texte ne peut pas contenir « ; » ni « | »' : ''; }
+  function matchValue(q, v) { q = q.trim(); const n = parseFloat(v), isN = !isNaN(n) && /^-?\d/.test(String(v).trim());
+    const r = /^(-?\d+(?:\.\d+)?)\s*\.\.\s*(-?\d+(?:\.\d+)?)$/.exec(q);
+    if (r) { const a = +r[1], b = +r[2]; return isN && n >= Math.min(a, b) && n <= Math.max(a, b); }
+    if (/^-?\d/.test(q)) return isN && n === parseFloat(q);
+    if (/^(TRUE|VRAI)$/i.test(q)) return isN ? n === 1 : /^(TRUE|VRAI)$/i.test(v); if (/^(FALSE|FAUX)$/i.test(q)) return isN ? n === 0 : /^(FALSE|FAUX)$/i.test(v);
+    return q.replace(/'/g, '').toLowerCase() === String(v).replace(/'/g, '').trim().toLowerCase(); }
+  function evalCond(q) { let e = q.replace(/\bAND\b/g, '&&').replace(/\bOR\b/g, '||').replace(/\bNOT\b/g, '!').replace(/\bXOR\b/g, '!=').replace(/\bTRUE\b/g, 'true').replace(/\bFALSE\b/g, 'false');
+    e = e.replace(/[A-Za-z_]\w*/g, n => n in testVars ? String(testVars[n]) : (n === 'true' || n === 'false' ? n : 'false'));
+    try { return !!Function('return (' + e + ')')(); } catch (x) { return false; } }
+  function winner() { const L = ST[mode];
+    if (mode === 'valeur') { let k = L.findIndex(s => s.q.trim() !== '*' && !badValue(s.q) && matchValue(s.q, testValue)); if (k < 0) k = L.findIndex(s => s.q.trim() === '*'); return k; }
+    return L.findIndex(s => !badCond(s.q) && evalCond(s.q)); }
+  function draw() {
+    const L = ST[mode], w = winner();
+    $('#st-qh').textContent = mode === 'valeur' ? 'Quand la valeur vaut' : 'Quand (la première vraie gagne)';
+    $('#st-src').innerHTML = mode === 'valeur' ? 'de <code>Etat_Pompe</code> (la case Valeur)' : 'la Valeur est écrite par l\'appli';
+    rowsEl.innerHTML = L.map((s, k) => { const err = (mode === 'valeur' ? badValue(s.q) : badCond(s.q)) || badText(s.t);
+      return '<tr class="' + (k === w ? 'hit' : '') + (err ? ' bad' : '') + '" data-k="' + k + '"><td class="dim">' + (k + 1) + '</td>' +
+        '<td class="cond"><input type="text" data-f="q" value="' + esc(s.q) + '" title="' + esc(err) + '"></td>' +
+        '<td><input type="text" data-f="t" value="' + esc(s.t) + '"></td>' +
+        '<td class="sw"><input type="color" data-f="c" value="' + s.c + '" aria-label="Couleur de l\'état ' + (k + 1) + '"></td>' +
+        '<td><input type="checkbox" data-f="b"' + (s.b ? ' checked' : '') + '></td>' +
+        '<td><button class="mv" data-a="up" title="Monter">▲</button><button class="mv" data-a="down" title="Descendre">▼</button><button class="del" data-a="del" title="Retirer">×</button></td></tr>' +
+        (err ? '<tr class="bad"><td></td><td colspan="5" style="color:var(--err);font-size:11.5px;padding-top:0">' + esc(err) + '</td></tr>' : ''); }).join('') +
+      '<tr class="else' + (w < 0 ? ' hit' : '') + '"><td class="dim">↳</td><td class="dim">sinon</td><td><input type="text" data-else="t" value="' + esc(ELSE[mode].t) + '"></td><td class="sw"><input type="color" data-else="c" value="' + ELSE[mode].c + '"></td><td><input type="checkbox" data-else="b"' + (ELSE[mode].b ? ' checked' : '') + '></td><td></td></tr>';
+    const st = w >= 0 ? L[w] : ELSE[mode], prev = $('#st-prev');
+    prev.className = 'st-prev' + (kind === 'lamp' ? ' lamp' : '') + (st.b ? ' blink' : '');
+    if (kind === 'lamp') { prev.style.background = st.c; prev.style.color = '#fff'; prev.textContent = ''; prev.title = st.t; }
+    else { prev.style.background = 'transparent'; prev.style.color = st.c; prev.textContent = st.t; prev.title = ''; }
+    const test = $('#st-test');
+    if (mode === 'valeur') test.innerHTML = '<label>Valeur d\'essai : <input type="text" id="st-tv" value="' + esc(testValue) + '" style="width:80px"></label><input type="range" id="st-range" min="0" max="20" value="' + (parseFloat(testValue) || 0) + '"><span class="dim">' + (w >= 0 ? 'la ligne ' + (w + 1) + ' gagne : ' + esc(L[w].t) : 'aucune ligne : « sinon » (' + esc(ELSE[mode].t) + ')') + '</span>';
+    else test.innerHTML = '<div>' + Object.keys(testVars).map(n => '<label style="margin-right:10px"><input type="checkbox" data-v="' + n + '"' + (testVars[n] ? ' checked' : '') + '> ' + n + '</label>').join('') + '</div><span class="dim">' + (w >= 0 ? 'la ligne ' + (w + 1) + ' gagne : ' + esc(L[w].t) : 'aucune vraie : « sinon » (' + esc(ELSE[mode].t) + ')') + '</span>';
+    gen();
+  }
+  function part(s) { return s.t + (s.c ? ' | ' + s.c.toUpperCase() : '') + (s.b ? ' | clignote' : ''); }
+  function gen() { const L = ST[mode]; let out;
+    if (mode === 'valeur') out = 'Valeur  = Etat_Pompe   (inchangée)\nÉtats   = ' + L.map(s => s.q.trim() + ' = ' + part(s)).join('; ') + '; * = ' + part(ELSE.valeur);
+    else out = 'Valeur  = ' + (L.length ? L.map((s, k) => '(' + s.q.trim() + ') ? ' + (k + 1)).join(' : ') + ' : 0' : '0') + '\nÉtats   = ' + L.map((s, k) => (k + 1) + ' = ' + part(s)).join('; ') + '; 0 = ' + part(ELSE.cond);
+    $('#st-gen').textContent = 'Ce qui est écrit dans le projet (toujours lisible par la 1.12.1) :\n' + out; }
+  rowsEl.addEventListener('input', e => { const t = e.target, tr = t.closest('tr'); if (t.dataset.else) { ELSE[mode][t.dataset.else] = t.type === 'checkbox' ? t.checked : t.value; if (t.type !== 'text') draw(); else gen(); return; }
+    if (!tr || !t.dataset.f) return; const s = ST[mode][+tr.dataset.k]; s[t.dataset.f] = t.type === 'checkbox' ? t.checked : t.value; if (t.type === 'text') { drawSoft(t); } else draw(); });
+  function drawSoft(t) { const id = t.dataset.f, k = t.closest('tr').dataset.k, pos = t.selectionStart; draw(); const n = rowsEl.querySelector('tr[data-k="' + k + '"] input[data-f="' + id + '"]'); if (n) { n.focus(); n.selectionStart = n.selectionEnd = pos; } }
+  rowsEl.addEventListener('change', e => { if (e.target.type === 'checkbox') draw(); });
+  rowsEl.addEventListener('click', e => { const b = e.target.closest('button[data-a]'); if (!b) return; const k = +b.closest('tr').dataset.k, L = ST[mode];
+    if (b.dataset.a === 'del') L.splice(k, 1); if (b.dataset.a === 'up' && k > 0) [L[k - 1], L[k]] = [L[k], L[k - 1]]; if (b.dataset.a === 'down' && k < L.length - 1) [L[k + 1], L[k]] = [L[k], L[k + 1]]; draw(); });
+  $('#st-add').onclick = () => { ST[mode].push(mode === 'valeur' ? {q: String(ST.valeur.length), t: 'Nouvel état', c: '#5B8DEF', b: false} : {q: 'Marche', t: 'Nouvel état', c: '#5B8DEF', b: false}); draw(); };
+  $('#st-test').addEventListener('input', e => { if (e.target.id === 'st-tv') { testValue = e.target.value; const p = e.target.selectionStart; draw(); const n = $('#st-tv'); n.focus(); n.selectionStart = n.selectionEnd = p; }
+    if (e.target.id === 'st-range') { testValue = e.target.value; draw(); $('#st-range').focus(); } if (e.target.dataset.v) { testVars[e.target.dataset.v] = e.target.checked; draw(); } });
+  document.querySelectorAll('#st-kind button').forEach(b => b.onclick = () => { kind = b.dataset.k; document.querySelectorAll('#st-kind button').forEach(x => x.setAttribute('aria-pressed', String(x === b))); draw(); });
+  document.querySelectorAll('#st-mode button').forEach(b => b.onclick = () => { mode = b.dataset.m; document.querySelectorAll('#st-mode button').forEach(x => x.setAttribute('aria-pressed', String(x === b))); draw(); });
+  draw();
+
+  // -------------------------------------------- la formule sur plusieurs lignes ---
+  const fx = $('#fx-in'), fxh = $('#fx-hl'), fxg = $('#fx-g'), msg = $('#fx-msg');
+  fx.value = "SEL(Defaut, SEL(Marche, '#8A94A3', '#2ECC71'), '#E5534B')";
+  const KW = /\b(AND|OR|NOT|XOR|MOD|TRUE|FALSE)\b/;
+  function hl(l) { return l.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/('[^']*'?)|(\b\d+(?:\.\d+)?\b)|(\b[A-Z_]{2,}\b(?=\s*\())|(\b(?:AND|OR|NOT|XOR|MOD|TRUE|FALSE)\b)|(\?|:(?!=))/g,
+      (m, s, n, f, k, op) => s ? '<span class="t-str">' + s + '</span>' : n ? '<span class="t-num">' + n + '</span>' : f ? '<span class="t-fn">' + f + '</span>' : k ? '<span class="t-kw">' + k + '</span>' : '<span class="t-kw">' + op + '</span>'); }
+  function check(v) { let d = 0; for (const c of v.replace(/'[^']*'/g, '')) { if (c === '(') d++; if (c === ')') d--; if (d < 0) return 'parenthèse fermée de trop'; }
+    if (d) return d + ' parenthèse(s) à fermer'; const names = (v.replace(/'[^']*'/g, '').match(/\b[A-Za-z_]\w*\b(?!\s*\()/g) || []).filter(n => !KW.test(n));
+    const bad = names.filter(n => !['Defaut', 'Marche'].includes(n)); return bad.length ? 'nom inconnu : ' + bad[0] : ''; }
+  function value(v) { let e = v.replace(/SEL\(/g, '__SEL(').replace(/\bAND\b/g, '&&').replace(/\bOR\b/g, '||').replace(/\bNOT\b/g, '!').replace(/\bDefaut\b/g, String($('#fx-defaut').checked)).replace(/\bMarche\b/g, String($('#fx-marche').checked));
+    try { return Function('__SEL', 'return (' + e.replace(/\n/g, ' ') + ')')((g, a, b) => g ? b : a); } catch (x) { return null; } }
+  function fxDraw() { const ls = fx.value.split('\n'); fxh.innerHTML = ls.map(hl).join('\n') + '\n'; fxg.innerHTML = ls.map((_, k) => k + 1).join('<br>');
+    fx.style.height = (ls.length * 20 + 14) + 'px'; const err = check(fx.value); msg.className = 'fx-msg ' + (err ? 'err' : 'ok');
+    msg.textContent = err ? '✖ ' + err : '✓ La formule se lit - ' + ls.length + ' ligne(s)'; const v = err ? null : value(fx.value);
+    $('#fx-val').innerHTML = v ? 'Elle donne : <span style="display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-1px;background:' + v + '"></span> <code>\'' + v + '\'</code>' : ''; }
+  fx.addEventListener('input', fxDraw);
+  $('#fx-defaut').onchange = fxDraw; $('#fx-marche').onchange = fxDraw;
+  // SEL(G, a, b) -> G ? b : a, les SEL imbriques a la suite, une branche par ligne
+  function toCases(v) { const t = v.trim(); const m = /^SEL\(/.exec(t); if (!m) return null; const args = splitArgs(t.slice(4, t.lastIndexOf(')'))); if (args.length !== 3) return null;
+    const [g, a, b] = args.map(s => s.trim()); const tailA = toCases(a); return g + ' ? ' + b + ' :\n' + (tailA || a); }
+  function splitArgs(s) { const out = []; let d = 0, q = false, cur = ''; for (const c of s) { if (c === "'") q = !q; if (!q && c === '(') d++; if (!q && c === ')') d--; if (!q && d === 0 && c === ',') { out.push(cur); cur = ''; continue; } cur += c; } out.push(cur); return out; }
+  $('#fx-sel').onclick = () => { const r = toCases(fx.value.replace(/\n/g, ' ')); if (r) { fx.value = r; fxDraw(); msg.textContent = '✓ SEL réécrit en cas (? :), une branche par ligne - même résultat'; } };
+  $('#fx-fmt').onclick = () => { fx.value = fx.value.replace(/\s*\n\s*/g, ' ').replace(/\s*:\s*(?=[^']*(?:'[^']*'[^']*)*$)/g, ' :\n').replace(/\n\s*$/, ''); fxDraw(); };
+  fxDraw();
+})();
+
+/* ===========================================================================
+   4. LA SELECTION MULTIPLE : l'explorateur d'objets (Ctrl+clic, Maj+clic,
+   Ctrl+A) et l'inspecteur des proprietes COMMUNES - une valeur differente
+   s'ecrit « (plusieurs valeurs) », une modification part sur tous les objets,
+   une seule annulation.
+   ======================================================================== */
+(function () {
+  const $ = (s, r = document) => r.querySelector(s);
+  const list = $('#ms-list'), canvas = $('#ms-canvas'), insp = $('#ms-insp'), hist = $('#ms-hist'), info = $('#ms-info');
+  if (!list) return;
+  const KIND = {Rect: 'Rectangle', Ell: 'Ellipse', Btn: 'Bouton', Ind: 'Voyant', Txt: 'Texte'};
+  // Les proprietes de chaque genre (cle, libelle, type, section) - comme l'inspecteur.
+  const COMMON = [['x', 'X', 'num', 'Position'], ['y', 'Y', 'num', 'Position'], ['w', 'Largeur', 'num', 'Position'], ['h', 'Hauteur', 'num', 'Position'],
+                  ['visible', 'Visible', 'bool', 'Apparence'], ['opacity', 'Opacité (%)', 'num', 'Apparence']];
+  const PER = {
+    Rect: [['fill', 'Remplissage', 'color', 'Apparence'], ['stroke', 'Contour', 'color', 'Apparence'], ['radius', 'Arrondi', 'num', 'Rectangle']],
+    Ell: [['fill', 'Remplissage', 'color', 'Apparence'], ['stroke', 'Contour', 'color', 'Apparence']],
+    Btn: [['fill', 'Remplissage', 'color', 'Apparence'], ['text', 'Texte', 'text', 'Bouton'], ['font', 'Police', 'enum:Sans|Mono', 'Texte'], ['align', 'Alignement', 'enum:gauche|centre|droite', 'Texte'], ['confirmMode', 'Confirmation', 'enum:aucune|second clic|maintien', 'Bouton']],
+    Ind: [['colorOn', 'Couleur allumé', 'color', 'Voyant'], ['colorOff', 'Couleur éteint', 'color', 'Voyant'], ['shape', 'Forme', 'enum:rond|carré', 'Voyant'], ['blink', 'Clignote', 'bool', 'Voyant']],
+    Txt: [['text', 'Texte', 'text', 'Texte'], ['font', 'Police', 'enum:Sans|Mono', 'Texte'], ['align', 'Alignement', 'enum:gauche|centre|droite', 'Texte'], ['textColor', 'Couleur du texte', 'color', 'Texte']]
+  };
+  let objs = [
+    {id: 1, name: 'Voyant_Pompe1', k: 'Ind', x: 40, y: 40, w: 36, h: 36, visible: 'TRUE', opacity: 100, colorOn: '#2ECC71', colorOff: '#5A6270', shape: 'rond', blink: 'FALSE'},
+    {id: 2, name: 'Voyant_Pompe2', k: 'Ind', x: 100, y: 40, w: 36, h: 36, visible: 'TRUE', opacity: 100, colorOn: '#2ECC71', colorOff: '#5A6270', shape: 'carré', blink: 'TRUE'},
+    {id: 3, name: 'Voyant_Pompe3', k: 'Ind', x: 160, y: 40, w: 36, h: 36, visible: 'TRUE', opacity: 80, colorOn: '#F39C12', colorOff: '#5A6270', shape: 'rond', blink: 'FALSE'},
+    {id: 4, name: 'Titre_Pompes', k: 'Txt', x: 40, y: 100, w: 180, h: 28, visible: 'TRUE', opacity: 100, text: 'Pompes', font: 'Sans', align: 'gauche', textColor: '#E3E6EB'},
+    {id: 5, name: 'Bt_Marche', k: 'Btn', x: 40, y: 150, w: 90, h: 34, visible: 'TRUE', opacity: 100, fill: '#2B6CD6', text: 'Marche', font: 'Sans', align: 'centre', confirmMode: 'aucune'},
+    {id: 6, name: 'Bt_Arret', k: 'Btn', x: 140, y: 150, w: 90, h: 34, visible: 'TRUE', opacity: 100, fill: '#C0392B', text: 'Arrêt', font: 'Sans', align: 'centre', confirmMode: 'second clic'},
+    {id: 7, name: 'Cadre', k: 'Rect', x: 20, y: 20, w: 240, h: 190, visible: 'TRUE', opacity: 100, fill: '#20252C', stroke: '#3A4556', radius: 6}
+  ];
+  let sel = [1, 2, 3], anchor = 1, undo = [], focusCell = null;
+
+  function propsOf(o) { return [...COMMON, ...PER[o.k]]; }
+  function common() {
+    const chosen = objs.filter(o => sel.includes(o.id)); if (!chosen.length) return [];
+    let keys = propsOf(chosen[0]);
+    for (const o of chosen.slice(1)) { const ks = propsOf(o).map(p => p[0] + '|' + p[2]); keys = keys.filter(p => ks.includes(p[0] + '|' + p[2])); }
+    return keys.map(p => { const vals = [...new Set(chosen.map(o => String(o[p[0]])))]; return {key: p[0], label: p[1], type: p[2], sect: p[3], mixed: vals.length > 1, value: vals.length === 1 ? vals[0] : '', vals}; });
+  }
+  function draw() {
+    list.innerHTML = objs.map(o => '<div class="ms-row' + (sel.includes(o.id) ? ' on' : '') + '" data-id="' + o.id + '"><i class="kd kd-' + o.k + '"></i>' + o.name + '<span>' + KIND[o.k] + '</span></div>').join('');
+    canvas.innerHTML = objs.slice().reverse().map(o => {
+      const st = 'left:' + o.x + 'px;top:' + o.y + 'px;width:' + o.w + 'px;height:' + o.h + 'px;opacity:' + (o.opacity / 100) + ';';
+      let inner = '', look = '';
+      if (o.k === 'Ind') look = 'background:' + o.colorOn + ';border-radius:' + (o.shape === 'rond' ? '50%' : '4px') + ';' + (o.blink === 'TRUE' ? 'animation:msblink 1s infinite;' : '');
+      if (o.k === 'Rect') look = 'background:' + o.fill + ';border:1px solid ' + o.stroke + ';border-radius:' + o.radius + 'px;';
+      if (o.k === 'Btn') { look = 'background:' + o.fill + ';border-radius:4px;justify-content:' + ({gauche: 'flex-start', centre: 'center', droite: 'flex-end'}[o.align]) + ';font-family:' + (o.font === 'Mono' ? 'var(--mono)' : 'var(--ui)') + ';'; inner = o.text; }
+      if (o.k === 'Txt') { look = 'color:' + o.textColor + ';justify-content:' + ({gauche: 'flex-start', centre: 'center', droite: 'flex-end'}[o.align]) + ';font-family:' + (o.font === 'Mono' ? 'var(--mono)' : 'var(--ui)') + ';'; inner = o.text; }
+      return '<div class="ms-obj' + (sel.includes(o.id) ? ' on' : '') + '" data-id="' + o.id + '" style="' + st + look + '">' + inner + '</div>';
+    }).join('');
+    const chosen = objs.filter(o => sel.includes(o.id)); const kinds = [...new Set(chosen.map(o => KIND[o.k]))];
+    const props = common(); const sects = [...new Set(props.map(p => p.sect))];
+    const head = !chosen.length ? '<div class="ms-empty">Rien de choisi : les propriétés de la vue.</div>'
+      : '<div class="ms-head">' + (chosen.length === 1 ? chosen[0].name + ' · ' + KIND[chosen[0].k]
+        : chosen.length + ' objets · ' + (kinds.length === 1 ? kinds[0] + (chosen.length > 1 ? 's' : '') : kinds.join(', ')) + '<small>' + (kinds.length > 1 ? 'Propriétés communes : seules celles que tous ont' : 'Même genre : toutes ses propriétés') + '</small>') + '</div>';
+    insp.innerHTML = head + sects.map(s => '<div class="ms-sect">' + s + '</div>' + props.filter(p => p.sect === s).map(cell).join('')).join('') +
+      (chosen.length > 1 ? '<div class="ms-note">Onglet Actions : « ' + chosen.length + ' objets choisis : leurs actions se règlent une par une » (avant : « Rien n\'est choisi »).</div>' : '');
+    info.textContent = chosen.length ? chosen.length + ' choisi(s)' + (chosen.length > 1 ? ' · Ctrl+clic ajoute ou retire · Maj+clic : la plage · Ctrl+A : tout' : '') : 'Clique un objet (Ctrl, Maj pour plusieurs)';
+    hist.innerHTML = undo.length ? undo.slice().reverse().map((u, k) => '<div>' + (k === 0 ? '<b>' : '') + u.label + (k === 0 ? '</b>' : '') + '</div>').join('') : '<div class="dim">Rien à annuler</div>';
+    bindCells();
+  }
+  function cell(p) {
+    const ph = p.mixed ? '(plusieurs valeurs)' : '';
+    let ed;
+    if (p.type === 'bool') ed = '<span class="ms-check' + (p.mixed ? ' mixed' : p.value === 'TRUE' ? ' on' : '') + '" data-k="' + p.key + '">' + (p.mixed ? '–' : p.value === 'TRUE' ? '✓' : '') + '</span>' + (p.mixed ? '<em>' + p.vals.length + ' valeurs</em>' : '');
+    else if (p.type.startsWith('enum:')) ed = '<select data-k="' + p.key + '">' + (p.mixed ? '<option selected value="">(plusieurs valeurs)</option>' : '') + p.type.slice(5).split('|').map(c => '<option' + (c === p.value ? ' selected' : '') + '>' + c + '</option>').join('') + '</select>';
+    else if (p.type === 'color') ed = '<span class="sw" style="background:' + (p.mixed ? 'repeating-linear-gradient(45deg,#888 0 3px,transparent 3px 6px)' : p.value) + '"></span><input data-k="' + p.key + '" value="' + (p.mixed ? '' : p.value) + '" placeholder="' + ph + '">';
+    else ed = '<input data-k="' + p.key + '" value="' + (p.mixed ? '' : p.value) + '" placeholder="' + ph + '">';
+    return '<div class="ms-prop' + (p.mixed ? ' mixed' : '') + '" title="' + (p.mixed ? p.vals.join(' · ') : '') + '"><label>' + p.label + '</label><div class="ms-val">' + ed + '</div></div>';
+  }
+  function bindCells() {
+    insp.querySelectorAll('input[data-k]').forEach(inp => {
+      inp.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); inp.blur(); } if (e.key === 'Escape') { inp.dataset.cancel = '1'; inp.blur(); } };
+      inp.onblur = () => { if (inp.dataset.cancel) { draw(); return; } const p = common().find(q => q.key === inp.dataset.k);
+        // une case « (plusieurs valeurs) » quittee sans rien taper ne change rien
+        if (p.mixed && inp.value === '') return; if (!p.mixed && inp.value === p.value) return; apply(p, inp.value); };
+    });
+    insp.querySelectorAll('select[data-k]').forEach(s => s.onchange = () => { const p = common().find(q => q.key === s.dataset.k); if (s.value) apply(p, s.value); });
+    insp.querySelectorAll('.ms-check').forEach(c => c.onclick = () => { const p = common().find(q => q.key === c.dataset.k); apply(p, p.mixed ? 'TRUE' : p.value === 'TRUE' ? 'FALSE' : 'TRUE'); });
+  }
+  function apply(p, v) {
+    const before = objs.map(o => ({...o})); const n = objs.filter(o => sel.includes(o.id)).length;
+    objs.forEach(o => { if (sel.includes(o.id)) o[p.key] = p.type === 'num' ? (parseFloat(v) || 0) : v; });
+    undo.push({label: p.label + ' : ' + v + ' (' + n + ' objet' + (n > 1 ? 's' : '') + ')', before}); draw();
+  }
+  list.addEventListener('mousedown', e => { const r = e.target.closest('.ms-row'); if (!r) return; e.preventDefault(); pick(+r.dataset.id, e); });
+  canvas.addEventListener('mousedown', e => { const r = e.target.closest('.ms-obj'); if (!r) { sel = []; draw(); return; } pick(+r.dataset.id, e); });
+  function pick(id, e) {
+    if (e.ctrlKey || e.metaKey) { sel = sel.includes(id) ? sel.filter(x => x !== id) : [...sel, id]; anchor = id; }
+    else if (e.shiftKey && anchor) { const ids = objs.map(o => o.id); const a = ids.indexOf(anchor), b = ids.indexOf(id); sel = ids.slice(Math.min(a, b), Math.max(a, b) + 1); }
+    else { sel = [id]; anchor = id; }
+    draw();
+  }
+  $('#ms-all').onclick = () => { sel = objs.map(o => o.id); draw(); };
+  $('#ms-undo').onclick = () => { const u = undo.pop(); if (!u) return; objs = u.before; draw(); };
+  $('#ms-preset-ind').onclick = () => { sel = [1, 2, 3]; anchor = 1; draw(); };
+  $('#ms-preset-mix').onclick = () => { sel = [3, 4, 5]; anchor = 3; draw(); };
+  draw();
+})();
+
+/* ===========================================================================
+   5. LES COURBES : la meme simulation, deux moteurs. 1.12.1 n'echantillonne que la
+   vue affichee ; 1.12.2 suit son plan (toutes les vues) depuis le demarrage.
+   ======================================================================== */
+(function () {
+  const $ = (s, r = document) => r.querySelector(s);
+  if (!$('#tr-old')) return;
+  let running = false, t = 0, timer = 0, view = 'principale', firstVisit = null;
+  const W = 600, H = 210, L = 44, R = 10, T = 10, B = 26, SPAN = 120;
+  let oldPts = [], newPts = [];
+  const sig = x => 62 + 14 * Math.sin(x / 9) + 5 * Math.sin(x / 2.3) + (Math.sin(x * 12.9898) * 43758.5453 % 1) * 1.5;
+  function tick() { t += 1; const v = sig(t); newPts.push([t, v]); if (view === 'courbes') { oldPts.push([t, v]); if (firstVisit === null) firstVisit = t; }
+    const cut = t - SPAN * 1.2; newPts = newPts.filter(p => p[0] >= cut); oldPts = oldPts.filter(p => p[0] >= cut); draw(); }
+  function path(pts, x0) { let d = '', prev = null; for (const [pt, v] of pts) { const x = L + (pt - x0) / SPAN * (W - L - R), y = T + (1 - (v - 30) / 60) * (H - T - B);
+      d += (prev !== null && pt - prev <= 1.5 ? 'L' : 'M') + x.toFixed(1) + ',' + y.toFixed(1); prev = pt; } return d; }
+  function svg(pts, label) {
+    const x0 = Math.max(0, t - SPAN); let g = '';
+    for (let v = 30; v <= 90; v += 15) { const y = T + (1 - (v - 30) / 60) * (H - T - B); g += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y + '" y2="' + y + '" stroke="var(--app-line)"/><text x="' + (L - 6) + '" y="' + (y + 4) + '" text-anchor="end" font-size="10" fill="var(--app-fg-3)">' + v + '</text>'; }
+    for (let s = Math.ceil(x0 / 20) * 20; s <= x0 + SPAN; s += 20) { const x = L + (s - x0) / SPAN * (W - L - R); g += '<text x="' + x + '" y="' + (H - 8) + '" text-anchor="middle" font-size="10" fill="var(--app-fg-3)">' + s + ' s</text>'; }
+    return '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" role="img" aria-label="' + label + '">' + g +
+      '<path d="' + path(pts, x0) + '" fill="none" stroke="var(--accent)" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>'; }
+  function draw() {
+    const shown = view === 'courbes';
+    const other = v => '<div class="other">' + (v === 'popup' ? 'Popup_Cuve est ouverte : la courbe de Courbes_Fours ' : 'Vue_Principale est affichée : la courbe de Courbes_Fours ') + '<br>' + '</div>';
+    if (!shown) {
+      $('#tr-old').innerHTML = '<div class="other">Courbes_Fours n\'est pas affichée.<br>' + (running ? (oldPts.length ? 'Sa courbe est figée depuis ' + Math.round(t - oldPts[oldPts.length - 1][0]) + ' s : rien ne s\'enregistre.' : '<b style="color:var(--err)">Rien ne s\'enregistre : la vue n\'a jamais été affichée.</b>') : 'Démarre la simulation.') + '</div>';
+      $('#tr-new').innerHTML = '<div class="other">Courbes_Fours n\'est pas affichée.<br>' + (running ? '<b style="color:var(--ok)">Elle s\'enregistre quand même : ' + newPts.length + ' point(s).</b>' : 'Démarre la simulation.') + '</div>';
+    } else {
+      $('#tr-old').innerHTML = svg(oldPts, 'La courbe en 1.12.1');
+      $('#tr-new').innerHTML = svg(newPts, 'La courbe en 1.12.2');
+      const x0 = Math.max(0, t - SPAN), first = oldPts.length ? oldPts[0][0] : t;
+      if (first > x0 + 1) { const box = $('#tr-old'), w = box.clientWidth, frac = (first - x0) / SPAN * (W - L - R) / W;
+        const hole = document.createElement('div'); hole.className = 'hole'; hole.style.left = (L / W * 100) + '%'; hole.style.width = (frac * 100) + '%'; hole.textContent = 'pas enregistré'; box.appendChild(hole); }
+    }
+    $('#tr-clock').textContent = running ? 't = ' + t + ' s' : (t ? 'arrêtée à ' + t + ' s' : 'arrêtée');
+    $('#tr-old-cap').innerHTML = running || t ? (oldPts.length ? oldPts.length + ' point(s) sur ' + t + ' s de simulation' + (firstVisit !== null ? ', depuis la première visite (t = ' + firstVisit + ' s)' : '') : '0 point : la page n\'a pas encore été visitée') : 'L\'échantillonnage ne suit que la vue affichée.';
+    $('#tr-new-cap').innerHTML = running || t ? newPts.length + ' point(s) : tout depuis le démarrage (fenêtre ' + Math.round(SPAN * 1.2) + ' s)' : 'L\'échantillonnage suit toutes les vues depuis le démarrage.';
+  }
+  $('#tr-run').onclick = () => { running = !running; if (running) { t = 0; oldPts = []; newPts = []; firstVisit = null; timer = setInterval(tick, 250); } else clearInterval(timer);
+    $('#tr-run').textContent = running ? '■ Arrêter' : '▶ Démarrer la simulation'; draw(); };
+  document.querySelectorAll('#tr-views button').forEach(b => b.onclick = () => { view = b.dataset.v; document.querySelectorAll('#tr-views button').forEach(x => x.setAttribute('aria-pressed', String(x === b))); draw(); });
+  draw();
+})();
+
+/* ===========================================================================
+   6. SIMULATION ET POSTE : quatre cartes, chacune avec son 1.12.1 / 1.12.2.
+   ======================================================================== */
+(function () {
+  const $ = (s, r = document) => r.querySelector(s);
+  if (!$('#con-out')) return;
+  const V = {con: 'new', snd: 'new', sta: 'new', aud: 'new'};
+  document.querySelectorAll('[data-vs]').forEach(g => g.querySelectorAll('button').forEach(b => b.onclick = () => {
+    V[g.dataset.vs] = b.dataset.v; g.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x === b))); redraw[g.dataset.vs](); }));
+  const clock = () => { const d = new Date(); return '[' + d.toTimeString().slice(0, 8) + ']'; };
+  const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+
+  // ---- Console ----
+  let lines = [], said = new Set();
+  function out(cls, t) { lines.push({cls, t: clock() + ' ' + t}); if (lines.length > 40) lines.shift(); drawCon(); }
+  function drawCon() { $('#con-out').innerHTML = lines.length ? lines.map(l => '<div class="' + l.cls + '">' + l.t + '</div>').join('') : '<div class="i">La Console de la simulation.</div>'; $('#con-out').scrollTop = 1e6; }
+  $('#con-force').onchange = e => { $('#con-badge').hidden = !e.target.checked; if (!e.target.checked) { said.delete('Niveau_Cuve'); out('i', 'Forçage : Niveau_Cuve défaite'); } else out('i', 'Forçage : Niveau_Cuve = 80'); };
+  $('#con-btn').onclick = () => { const forced = $('#con-force').checked;
+    if (V.con === 'old') { out('i', 'action : Niveau_Cuve := 45   (Vue_Principale › Bt_Remplir)'); return; }
+    if (!forced) { out('i', 'action : Niveau_Cuve := 45   (Vue_Principale › Bt_Remplir)'); return; }
+    out('i', 'action : Niveau_Cuve := 45 <mark>ignorée : forcée</mark>   (Vue_Principale › Bt_Remplir)');
+    if (!said.has('Niveau_Cuve')) { said.add('Niveau_Cuve'); out('w', '⚠ AVERTISSEMENT · Forçage · Niveau_Cuve est forcée (80) : écriture ignorée (45) - Vue_Principale › Bt_Remplir. Défais le forçage pour qu\'elle passe.'); } };
+  $('#con-cuve').onclick = () => { out('i', V.con === 'old' ? 'action : Cuves[Idx].Consigne := 75   (Popup_Cuve › Saisie)' : 'action : <mark>Cuves[2].Consigne</mark> := 75 (Cuves[Idx].Consigne)   (Popup_Cuve › Saisie)'); };
+  $('#con-clear').onclick = () => { lines = []; said.clear(); drawCon(); };
+
+  // ---- Sons ----
+  let voices = [], sndTimer = 0;
+  function drawSnd() { [1, 2].forEach(k => { const on = voices.includes(k); $('#snd-a' + k).classList.toggle('on', on || (sndAlarms.has(k))); });
+    $('#snd-cap').innerHTML = !sndAlarms.size ? 'Aucune alarme.' : V.snd === 'old' ? 'bip_alarme.wav (priorité Haute, apparue au même cycle) <b>coupe</b> sirene.wav : on n\'entend que le bip, une fois par cycle au plus.'
+      : voices.length ? 'Les deux sons jouent <b>ensemble</b> (deux voix mélangées). Silence les coupe tous les deux.' : 'Silence : les sons se sont arrêtés ; ils repartiront si une nouvelle alarme apparaît.'; }
+  let sndAlarms = new Set();
+  function anim() { [1, 2].forEach(k => $('#snd-v' + k).querySelectorAll('i').forEach(i => { i.style.height = voices.includes(k) ? (6 + Math.random() * 30) + 'px' : '3px'; })); }
+  $('#snd-go').onclick = () => { sndAlarms = new Set([1, 2]); voices = V.snd === 'old' ? [2] : [1, 2]; clearInterval(sndTimer); sndTimer = setInterval(anim, 120); drawSnd(); };
+  $('#snd-sil').onclick = () => { if (V.snd === 'old') { $('#snd-cap').innerHTML = 'Silence : le son déjà lancé <b>continue</b> jusqu\'à sa fin (aucun arrêt) ; seules les répétitions cessent.'; setTimeout(() => { voices = []; anim(); }, 1500); return; }
+    voices = []; anim(); drawSnd(); };
+
+  // ---- Poste ----
+  const PAGES = {Synoptique: 'Le synoptique général : 3 cuves, 2 pompes, la vanne V12.', Alarmes: 'Les 4 alarmes en cours, la plus grave en tête.', Courbes: 'Tendance des fours, 10 min.', Recettes: 'Recette « Été » chargée.'};
+  let tab = 'Synoptique', closed = new Set(), scroll = 0, saved = null;
+  function drawSta() { $('#sta-nav').innerHTML = '<div class="grp' + (closed.has('Pompes') ? ' closed' : '') + '" data-g="Pompes">Pompes</div>' + (closed.has('Pompes') ? '' : '<div>&nbsp;&nbsp;Pompe 1</div><div class="on">&nbsp;&nbsp;Pompe 2</div>') +
+      '<div class="grp' + (closed.has('Cuves') ? ' closed' : '') + '" data-g="Cuves">Cuves</div>' + (closed.has('Cuves') ? '' : '<div>&nbsp;&nbsp;Cuve 1</div><div>&nbsp;&nbsp;Cuve 2</div><div>&nbsp;&nbsp;Cuve 3</div>');
+    $('#sta-tabs').innerHTML = Object.keys(PAGES).map(p => '<span class="' + (p === tab ? 'on' : '') + '" data-t="' + p + '">' + p + '</span>').join('');
+    $('#sta-content').textContent = PAGES[tab]; }
+  $('#sta-nav').onclick = e => { const g = e.target.closest('[data-g]'); if (!g) return; const n = g.dataset.g; closed.has(n) ? closed.delete(n) : closed.add(n); drawSta(); };
+  $('#sta-tabs').onclick = e => { const t = e.target.closest('[data-t]'); if (!t) return; tab = t.dataset.t; drawSta(); };
+  $('#sta-restart').onclick = () => { const before = tab + (closed.size ? ', ' + [...closed].join(', ') + ' replié' : '');
+    if (V.sta === 'old') { tab = 'Synoptique'; closed = new Set(); $('#sta-msg').innerHTML = 'Redémarré : <b style="color:var(--err)">retour au premier onglet, tout déplié</b> (avant : ' + esc(before) + ').'; }
+    else $('#sta-msg').innerHTML = 'Redémarré : <b style="color:var(--ok)">' + esc(before) + '</b> - repris au démarrage avec les variables rémanentes du poste.';
+    drawSta(); };
+
+  // ---- Audit et memoire ----
+  let audit = [];
+  function drawAud() { $('#aud-opt').hidden = V.aud === 'old';
+    $('#aud-out').innerHTML = '<div class="h"><span>Heure</span><span>Qui</span><span>Quoi</span></div>' + (audit.length ? audit.map(a => '<div class="' + (a.s ? 's' : '') + '"><span>' + a.h + '</span><span>' + a.w + '</span><span>' + a.q + '</span></div>').join('') : '<div><span></span><span class="dim">vide</span><span></span></div>');
+    $('#mem-val').textContent = V.aud === 'old' ? '500' : '2 000'; $('#mem-note').textContent = V.aud === 'old' ? '(fixe)' : '(réglable dans Historiques : 500 à 100 000)'; }
+  const hm = () => new Date().toTimeString().slice(0, 8);
+  $('#aud-op').onclick = () => { audit.push({h: hm(), w: 'opérateur', q: 'Consigne : 70 → 75 (Popup_Cuve › Saisie)'}); drawAud(); };
+  let vo = 40;
+  $('#aud-sc').onclick = () => { vo += 5; if (V.aud === 'new' && $('#aud-scripts').checked) audit.push({h: hm(), w: 'script Regulation', q: 'Vanne_Ouverture : ' + (vo - 5) + ' → ' + vo + ' (ligne 18)', s: true});
+    else { const n = $('#aud-out'); n.animate([{background: 'var(--err-bg)'}, {background: 'transparent'}], 600); } drawAud(); };
+  const redraw = {con: drawCon, snd: () => { voices = []; anim(); drawSnd(); }, sta: drawSta, aud: drawAud};
+  drawCon(); drawSnd(); drawSta(); drawAud();
+})();
+
+/* ===========================================================================
+   7. LES PIEGES DE L'EDITEUR : chaque carte, avant / apres.
+   ======================================================================== */
+(function () {
+  const host = document.getElementById('traps'); if (!host) return;
+  const T = [
+    {t: 'Action de la vue : le déclencheur',
+     old: '<div class="row"><label>Action de</label><span class="dim">la vue Vue_Principale · n° 2</span></div><div class="row"><label>Déclencheur</label><select><option>Ouverture de la vue</option><option>Fermeture</option><option selected>Clic</option><option>Double clic</option><option>Appui long</option><option>Timer</option><option>Front montant</option></select></div><div class="dim">Compiler : « un clic se fait sur un objet : cette action de vue ne partira jamais ».</div>',
+     neu: '<div class="row"><label>Action de</label><span class="dim">la vue Vue_Principale · n° 2</span></div><div class="row"><label>Déclencheur</label><select><option>Ouverture de la vue</option><option>Fermeture</option><option selected>Timer</option><option>Front montant</option><option>Front descendant</option><option>Changement</option><option>Touche</option></select></div><div class="warnline">⚠ Une ancienne action « Clic » de vue : elle ne partira jamais. <button class="b">Mettre sur un objet…</button></div><div class="hint">Clic, Double clic et Appui long ne sont proposés que pour un objet choisi.</div>'},
+    {t: 'Variables IHM : « Rémanente » d\'une variable liée',
+     old: '<div class="row"><label>Niveau_Cuve</label><span class="dim">REAL · Automate · %MW120</span></div><div class="row"><label>Rémanente</label><select><option>non</option><option selected>oui (liée : sans effet)</option></select></div><div class="dim">On peut cocher « oui », la case l\'accepte… et rien ne se garde : c\'est l\'équipement qui donne la valeur.</div>',
+     neu: '<div class="row"><label>Niveau_Cuve</label><span class="dim">REAL · Automate · %MW120</span></div><div class="row dis"><label>Rémanente</label><input type="text" disabled value="- (liée)"></div><div class="hint">Une variable liée à un équipement reprend sa valeur de l\'équipement : la case est grisée. Délie-la pour la rendre rémanente.</div>'},
+    {t: 'Déclarations : Public / Privé',
+     old: '<div class="row"><label>Compteur (Script_Cycle)</label><select><option>Public</option><option selected>Privé</option></select></div><div class="dim">Privé ou Public, la variable se lit et s\'écrit partout pareil : la colonne ne fait rien.</div>',
+     neu: '<div class="row"><label>Compteur (Script_Cycle)</label><select><option>Public</option><option selected>Privé</option></select></div><div class="hint">Privé : seul le code de Script_Cycle la voit.</div><div class="warnline">✖ Compiler · Vue_Principale › Txt_Compteur : « Compteur est privée à Script_Cycle » - passe-la en Public ou lis-la dans son script.</div>'},
+    {t: 'Inspecteur › Sécurité : « Profil utilisateur »',
+     old: '<div class="row"><label>Accès</label><select><option>opérateur et plus</option></select></div><div class="row"><label>Profil utilisateur</label><select><option>maintenance</option></select></div><div class="dim">Le profil est gardé dans le fichier, mais rien ne le lit : l\'objet reste ouvert à tous.</div>',
+     neu: '<div class="row"><label>Accès</label><select><option>maintenance et plus</option></select></div><div class="hint">« Accès » dit qui peut agir. L\'ancien « Profil » n\'est plus proposé (il reste dans le fichier, sans effet, comme avant).</div>'},
+    {t: 'Projet › Nouveau ▸ dans XPGAnalyser IHM',
+     old: '<div class="expl"><div>Section</div><div>Unité de programme</div><div>Bloc DFB</div><div>Type dérivé (DDT)</div><div>Variable</div><div>Rack</div><div>Module</div><div>Macro…</div></div><div class="dim">Ce sont les créations de l\'automate (XPGAnalyser API) : en IHM, elles mènent nulle part.</div>',
+     neu: '<div class="expl"><div>Vue</div><div>Popup</div><div>Symbole</div><div>Script</div><div>Fonction</div><div>Variable IHM</div><div>Type IHM</div><div>Équipement</div></div><div class="hint">Chaque édition a sa liste ; celle de l\'API ne change pas.</div>'},
+    {t: 'Aller à… vers un sous-onglet caché',
+     old: '<div class="expl"><div>⌕ table des adr<span></span></div><div><b>Équipements › Table des adresses</b><span>sous-onglet</span></div></div><div class="dim">En IHM, ce sous-onglet est caché : Aller à ouvre Équipements sur une page vide.</div>',
+     neu: '<div class="expl"><div>⌕ table des adr<span></span></div><div><b>Équipements › Plan d\'adressage</b><span>sous-onglet</span></div></div><div class="hint">Les sous-onglets cachés (par l\'édition ou par Disposition…) ne sont plus proposés ; y aller par un lien les montre le temps d\'y être.</div>'}
+  ];
+  host.innerHTML = T.map((c, k) => '<div class="app trap"><div class="bar card-h"><span class="t">' + c.t + '</span><div class="vs" data-k="' + k + '"><button aria-pressed="false" data-v="old">1.12.1</button><button aria-pressed="true" data-v="neu">1.12.2</button></div></div><div class="tb" id="trap-' + k + '">' + c.neu + '</div></div>').join('');
+  host.addEventListener('click', e => { const b = e.target.closest('.vs button'); if (!b) return; const g = b.parentElement, k = +g.dataset.k;
+    g.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x === b))); document.getElementById('trap-' + k).innerHTML = T[k][b.dataset.v]; });
+})();
+
+/* ===========================================================================
+   La page : le theme, le sommaire qui suit la lecture, et la table des raccourcis
+   (le profil choisi, la recherche, « nouveautes » ; un clic lance la commande).
+   ======================================================================== */
+(function () {
+  const $ = (s, r = document) => r.querySelector(s);
+  const root = document.documentElement;
+  function setTheme(t) { if (t === 'auto') root.removeAttribute('data-theme'); else root.setAttribute('data-theme', t);
+    document.querySelectorAll('#theme button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.t === t))); try { localStorage.setItem('xpg.maquette.theme', t); } catch (e) { /* stockage bloque */ } }
+  document.querySelectorAll('#theme button').forEach(b => b.onclick = () => setTheme(b.dataset.t));
+  let t0 = 'auto'; try { t0 = localStorage.getItem('xpg.maquette.theme') || 'auto'; } catch (e) { /* stockage bloque */ } setTheme(t0);
+
+  const links = [...document.querySelectorAll('nav.toc a[href^="#s"]')];
+  const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) links.forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + e.target.id)); }), {rootMargin: '-30% 0px -60% 0px'});
+  document.querySelectorAll('section.sec').forEach(s => io.observe(s));
+
+  // ---- la table des raccourcis ----
+  const body = $('#ed-table tbody'); if (!body) return;
+  const CATS = ['Édition', 'Sélection et déplacement', 'Rechercher', 'Naviguer', 'Aide à la saisie', 'Plis', 'Projet'];
+  const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const caps = k => k.split(' ').map(stroke => stroke.split('+').map(p => '<kbd>' + esc(p) + '</kbd>').join('<span class="dim">+</span>')).join('<span class="dim">, </span>');
+  function draw() {
+    const prof = window.edProfile || 'vs', map = window.edKeymaps[prof] || {}, q = ($('#ed-q').value || '').trim().toLowerCase(), onlyNew = $('#ed-onlynew').checked;
+    let html = '';
+    for (const c of CATS) {
+      const rows = Object.entries(map).filter(([k, v]) => v.cat === c && (!onlyNew || v.nouveau) && (!q || (k + ' ' + v.label + ' ' + (v.avant || '') + ' ' + (v.azerty || '')).toLowerCase().includes(q)));
+      if (!rows.length) continue;
+      html += '<tr class="cat"><td colspan="3">' + c + ' <span class="dim">(' + rows.length + ')</span></td></tr>';
+      html += rows.map(([k, v]) => '<tr data-k="' + esc(k) + '" data-cmd="' + v.cmd + '" title="Clic : lancer la commande dans l\'éditeur"><td class="k">' + caps(k) + (v.azerty ? '<div class="dim" style="font-size:11px;margin-top:2px">AZERTY : ' + caps(v.azerty) + '</div>' : '') + '</td><td>' + esc(v.label) + (v.nouveau ? ' <span class="tag">nouveau</span>' : '') + '</td><td class="dim">' + (v.avant ? esc(v.avant) : (v.nouveau ? 'rien' : 'pareil')) + '</td></tr>').join('');
+    }
+    body.innerHTML = html || '<tr><td colspan="3" class="dim">Aucune touche ne correspond.</td></tr>';
+  }
+  body.addEventListener('click', e => { const tr = e.target.closest('tr[data-cmd]'); if (!tr) return; window.edRun(tr.dataset.cmd); tr.classList.add('hit'); setTimeout(() => tr.classList.remove('hit'), 900); });
+  $('#ed-q').addEventListener('input', draw); $('#ed-onlynew').addEventListener('change', draw);
+  $('#ed-prof').addEventListener('change', e => { window.edProfile = e.target.value; try { localStorage.setItem('xpg.maquette.profil', e.target.value); } catch (x) { /* stockage bloque */ } draw();
+    const st = $('#ed-status'); if (st) st.textContent = e.target.value === 'vs' ? 'Profil Visual Studio : Ctrl+K est un accord dans l\'éditeur (Ctrl+T : Aller à…)' : 'Profil classique : Ctrl+K ouvre Aller à… même dans l\'éditeur, F8 démarre la simulation'; });
+  try { const p = localStorage.getItem('xpg.maquette.profil'); if (p && window.edKeymaps[p]) { window.edProfile = p; $('#ed-prof').value = p; } } catch (e) { /* stockage bloque */ }
+  draw();
+  if (window.edRender) window.edRender();
+})();
+
+</script>
+</body>
+</html>
