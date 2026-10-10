@@ -1052,7 +1052,8 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             return g ? hmitree::usersOf(hmi_->project, g->id).size() : 0;
         }
         case NodeKind::HmiRoles:      return hmi_ ? hmi_->project.security.roles.size() : 0;
-        case NodeKind::HmiScripts:    return hmi_ ? 8 : 0;   // lot 9 : + variables systeme, d'instances ; lot 16 : + types IHM ; 1.12.0 : + Natives
+        // lot 9 : + variables systeme, d'instances ; lot 16 : + types IHM ; 1.12.0 : + Natives ; 1.12.2 : - Variables employees
+        case NodeKind::HmiScripts:    return hmi_ ? 7 : 0;
         // ---- 1.12.0 : les natives (hmi::natives::tree) ----
         case NodeKind::NativesFolder:       return hmi_ ? 5 : 0;
         case NodeKind::NativesFunctions:    return hmi::natives::tree().categories.size() + 1;
@@ -1535,9 +1536,11 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         case NodeKind::HmiScripts: {
             // Lot 7 : les fonctions a cote des scripts.
             // Lot 9 : les variables systeme et les variables d'instances apres.
-            // Lot 16 : les types IHM avant les variables.
+            // Lot 16 : les types IHM avant les variables. 1.12.2 : « Variables employees » n'y est plus
+            // (demande du 10/10 : les variables IHM, systeme et d'instances suffisent ; ce qu'une
+            // variable sert se voit par ses Utilisations).
             static constexpr NodeKind folders[] = {NodeKind::HmiScriptsFolder, NodeKind::HmiFunctionsFolder, NodeKind::HmiTypesFolder,
-                                                   NodeKind::HmiVariablesFolder, NodeKind::HmiUsedFolder,
+                                                   NodeKind::HmiVariablesFolder,
                                                    NodeKind::HmiSysFolder, NodeKind::HmiInstFolder, NodeKind::NativesFolder};
             return k < std::size(folders) ? pack(folders[k], 0) : ui::kInvalidNode;
         }

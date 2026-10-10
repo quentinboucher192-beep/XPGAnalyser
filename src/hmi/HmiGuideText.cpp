@@ -11846,12 +11846,12 @@ const std::vector<Topic>& topics() {
                          "familles s'y ajoutent sans rien d\xC3\xA9" "clarer : les **variables "
                          "syst\xC3\xA8me** (`SYS.UserName`, `SYS.CurrentView`...) et les **variables "
                          "d'instances** (`Vue_Commandes.Inter_Pompe.Visible`) ; voir leurs pages.", {}},
-             {K::Heading, "Les variables employ\xC3\xA9" "es", {}},
-             {K::Paragraph, "Programmation g\xC3\xA9n\xC3\xA9rale \xE2\x80\xBA **Variables "
-                         "employ\xC3\xA9" "es** liste tout ce que l'IHM lit ou \xC3\xA9" "crit, IHM ou "
-                         "automate, avec le nombre d'endroits qui le citent. Les variables locales et les "
-                         "param\xC3\xA8tres des fonctions n'y figurent pas : ils n'existent que dans leur "
-                         "script.", {}},
+             {K::Heading, "O\xC3\xB9 une variable sert", {}},
+             {K::Paragraph, "IHM \xE2\x80\xBA **Rechercher** (Ctrl+Maj+F) trouve chaque endroit qui la "
+                         "cite : les scripts, les fonctions, les vues, les alarmes, les textes \xC3\xA0 trous ; "
+                         "dans un \xC3\xA9" "diteur de code, **Maj+F12** sur son nom fait la m\xC3\xAAme "
+                         "recherche, mot entier. Les variables locales et les param\xC3\xA8tres des fonctions "
+                         "n'existent que dans leur code.", {}},
          },
          {"types-ihm", "tableaux-ihm", "variables-liees", "scripts", "variables-locales", "proprietes", "configuration", "excel", "variables-api"},
          {"dossier", "dossiers", "Variables IHM", "ranger", "glisser", "Lier \xC3\xA0 un \xC3\xA9quipement", "Place Modbus", "Qualit\xC3\xA9"},
@@ -11993,10 +11993,7 @@ const std::vector<Topic>& topics() {
                          "recherche trouve un nom, un type ou une r\xC3\xA9" "f\xC3\xA9rence. Le filtre et "
                          "la recherche voient tout l'arbre, m\xC3\xAAme ce qui n'est pas encore "
                          "d\xC3\xA9pli\xC3\xA9, et d\xC3\xA9plient ce qui m\xC3\xA8ne \xC3\xA0 ce qu'ils "
-                         "gardent. Dans l'arbre du projet, Programmation g\xC3\xA9n\xC3\xA9rale \xE2\x80\xBA "
-                         "**Variables employ\xC3\xA9" "es** ouvre cet arbre sur le filtre "
-                         "Employ\xC3\xA9" "es par l'IHM ; une variable de l'automate qu'il liste y est "
-                         "choisie.", {}},
+                         "gardent.", {}},
              {K::Heading, "Dans un script ou une case : l'aide \xC3\xA0 la saisie, Compiler et "
                          "G\xC3\xA9n\xC3\xA9rer", {}},
              {K::Bullet, "L'aide \xC3\xA0 la saisie propose **`API`** d\xC3\xA8s `A` ou `AP`, en t\xC3\xAAte "

@@ -2787,28 +2787,34 @@ void arbre_deballe() {
     // Lot 7 : Fonctions entre Scripts et Variables IHM.
     // Lot 9 : + Variables systeme, Variables d'instances.
     // Lot 16 : + Types IHM, avant Variables IHM.
-    check(tree.childCount(prog) == 8, "Programmation g\xC3\xA9n\xC3\xA9rale : Scripts, Fonctions, Types IHM, Variables IHM, Variables employ\xC3\xA9" "es, "
-                                      "Variables syst\xC3\xA8me, Variables d'instances, Natives (1.12.0)");
+    // 1.12.2 : sans « Variables employees » (demande du 10/10).
+    check(tree.childCount(prog) == 7, "Programmation g\xC3\xA9n\xC3\xA9rale : Scripts, Fonctions, Types IHM, Variables IHM, "
+                                      "Variables syst\xC3\xA8me, Variables d'instances, Natives (1.12.2 : sans Variables employ\xC3\xA9" "es)");
+    for (std::size_t k = 0; k < tree.childCount(prog); ++k)
+        check(tree.text(tree.childAt(prog, k)).rfind("Variables employ", 0) != 0, "plus de branche Variables employ\xC3\xA9" "es");
     same_text(tree.text(tree.childAt(tree.childAt(prog, 0), 0)), "Init   ST   D\xC3\xA9marrage", "un script g\xC3\xA9n\xC3\xA9ral");
     same_text(tree.text(tree.childAt(tree.childAt(prog, 3), 0)), "Compteur : INT = 0", "une variable IHM");
-    const auto used = tree.childAt(prog, 4);   // lot 16 : apres Types IHM
-    std::string paths;
-    for (std::size_t k = 0; k < tree.childCount(used); ++k) paths += tree.hmiUsedPathOf(tree.childAt(used, k)) + ";";
+    // Les variables employees se calculent toujours (le filtre Employees de la Configuration).
+    const auto usedPaths = [&] {
+        std::string out;
+        for (const auto& u : app::hmitree::usedVariables(doc->project)) out += u.path + ";";
+        return out;
+    };
+    const std::string paths = usedPaths();
     for (const char* want : {"Armoires[0].active", "Armoires[0].ana.PT1.mes", "Armoires[1].bouteille_vide",
                              "Armoires[0].seuil_poids_saisi", "Compteur", "Mode_Maintenance"})
         check(paths.find(std::string(want) + ";") != std::string::npos, std::string("employ\xC3\xA9" "e : ") + want);
     check(paths.find("Mode_Cache") == std::string::npos && paths.find("IHM_JOURNAL") == std::string::npos
           && paths.find("THEN") == std::string::npos, "ni commentaire, ni fonction, ni mot-cl\xC3\xA9 : " + paths);
-    const auto compteur = find(used, "Compteur");
+    bool compteurOk = false;
+    for (const auto& u : app::hmitree::usedVariables(doc->project))
+        if (u.path == "Compteur") compteurOk = u.hmi && u.uses == 3;
     // Le script de vue, Init (le code ET le texte a trous : un seul emploi), l'alarme Libre.
-    check(tree.text(compteur).find("IHM") != std::string::npos && tree.text(compteur).find("3 emplois") != std::string::npos,
-          "Compteur : IHM, 3 emplois (" + tree.text(compteur) + ")");
+    check(compteurOk, "Compteur : IHM, 3 emplois");
     // Le document change : la liste suit.
     doc->project.alarms.back().condition = "Nouvelle_Variable > 1";
     doc->touched(hmi::kNoId);
-    std::string after;
-    for (std::size_t k = 0; k < tree.childCount(used); ++k) after += tree.hmiUsedPathOf(tree.childAt(used, k)) + ";";
-    check(after.find("Nouvelle_Variable;") != std::string::npos, "une modification du projet : la liste est refaite");
+    check(usedPaths().find("Nouvelle_Variable;") != std::string::npos, "une modification du projet : la liste est refaite");
 }
 
 void arbre_supervision() {
@@ -4383,10 +4389,9 @@ void lot6_arbre() {
     check(lines.find("Case [2,2] = =Debit_Total * 2") != std::string::npos, "... une case =expression aussi");
     check(lines.find("\xC3\x89tat 1 : Mode_Maintenance \xE2\x86\x92 a.png, b.png") != std::string::npos, "l'\xC3\xA9tat d'une image anim\xC3\xA9" "e");
     check(lines.find("Recette : Gaz") != std::string::npos, "la recette du gestionnaire");
-    const auto prog = tree.childAt(tree.hmiFolderNode(), 8);   // Lot API 8 : Simulation est partie dans le dossier Simulation
-    const auto used = tree.childAt(prog, 4);   // lot 16 : apres Types IHM
+    // 1.12.2 : les variables employees (sans branche dans l'arbre) se calculent toujours.
     std::string paths;
-    for (std::size_t k = 0; k < tree.childCount(used); ++k) paths += tree.hmiUsedPathOf(tree.childAt(used, k)) + ";";
+    for (const auto& u : app::hmitree::usedVariables(doc->project)) paths += u.path + ";";
     for (const char* want : {"Armoires[0].ana.PT1.mes", "Debit_Total", "Mode_Maintenance"})
         check(paths.find(std::string(want) + ";") != std::string::npos, std::string("employ\xC3\xA9" "e (lot 6) : ") + want);
 }
@@ -4770,8 +4775,8 @@ void lot7_arbre() {
     const auto prog = tree.childAt(tree.hmiFolderNode(), 8);   // Lot API 8 : Simulation est partie dans le dossier Simulation
     // Lot 9 : + Variables systeme, Variables d'instances.
     // Lot 16 : + Types IHM, avant Variables IHM.
-    check(tree.childCount(prog) == 8, "Programmation g\xC3\xA9n\xC3\xA9rale : Scripts, Fonctions, Types IHM, Variables IHM, Variables employ\xC3\xA9" "es, "
-                                      "Variables syst\xC3\xA8me, Variables d'instances, Natives (1.12.0)");
+    check(tree.childCount(prog) == 7, "Programmation g\xC3\xA9n\xC3\xA9rale : Scripts, Fonctions, Types IHM, Variables IHM, "
+                                      "Variables syst\xC3\xA8me, Variables d'instances, Natives (1.12.2 : sans Variables employ\xC3\xA9" "es)");
     const auto fonctions = tree.childAt(prog, 1);
     check(app::ProjectTreeModel::kindOf(fonctions) == app::ProjectTreeModel::NodeKind::HmiFunctionsFolder, "le 2e dossier : Fonctions");
     check(tree.text(fonctions).rfind("Fonctions", 0) == 0 && tree.counterOf(fonctions) == "2",   // Lot API 8 : la pastille
@@ -4780,9 +4785,9 @@ void lot7_arbre() {
     same_text(tree.text(tree.childAt(fonctions, 0)), "Moyenne(a : REAL, b : REAL) : REAL   // la moyenne", "une fonction : sa signature, sa description");
     same_text(tree.text(tree.childAt(fonctions, 1)), "Tracer(Message : STRING)", "une proc\xC3\xA9" "dure : sans retour");
     check(tree.hmiIdOf(tree.childAt(fonctions, 0)) == p.programs.functions[0].id, "le n\xC5\x93ud d\xC3\xA9signe la fonction");
-    const auto used = tree.childAt(prog, 4);   // lot 16 : apres Types IHM
+    // 1.12.2 : les variables employees (sans branche dans l'arbre) se calculent toujours.
     std::string paths;
-    for (std::size_t k = 0; k < tree.childCount(used); ++k) paths += tree.hmiUsedPathOf(tree.childAt(used, k)) + ";";
+    for (const auto& u : app::hmitree::usedVariables(doc->project)) paths += u.path + ";";
     for (const char* want : {"Offset_Global", "Total_Global", "Mesure_Automate"})
         check(paths.find(std::string(want) + ";") != std::string::npos, std::string("employ\xC3\xA9" "e : ") + want);
     for (const char* not_ : {"Fois;", "a;", "b;", "Message;", "Moyenne;"})
@@ -5744,11 +5749,11 @@ void lot9_variables_publiques() {
 
     // ---- l'arbre : deux dossiers de plus sous Programmation generale
     const auto prog = tree.childAt(tree.hmiFolderNode(), 8);   // Lot API 8 : Simulation est partie dans le dossier Simulation
-    check(tree.childCount(prog) == 8, "Programmation g\xC3\xA9n\xC3\xA9rale : huit dossiers (lot 16 : Types IHM ; 1.12.0 : Natives)");
-    const auto sys = tree.childAt(prog, 5);
-    const auto inst = tree.childAt(prog, 6);
-    check(app::ProjectTreeModel::kindOf(sys) == NK::HmiSysFolder, "le 6e : Variables syst\xC3\xA8me");
-    check(app::ProjectTreeModel::kindOf(inst) == NK::HmiInstFolder, "le 7e : Variables d'instances");
+    check(tree.childCount(prog) == 7, "Programmation g\xC3\xA9n\xC3\xA9rale : sept dossiers (lot 16 : Types IHM ; 1.12.0 : Natives ; 1.12.2 : sans Variables employ\xC3\xA9" "es)");
+    const auto sys = tree.childAt(prog, 4);
+    const auto inst = tree.childAt(prog, 5);
+    check(app::ProjectTreeModel::kindOf(sys) == NK::HmiSysFolder, "le 5e : Variables syst\xC3\xA8me");
+    check(app::ProjectTreeModel::kindOf(inst) == NK::HmiInstFolder, "le 6e : Variables d'instances");
     check(tree.text(sys).rfind("Variables syst\xC3\xA8me", 0) == 0 && tree.counterOf(sys) == std::to_string(pub::kSysVarCount),   // Lot API 8 : la pastille
           "Variables syst\xC3\xA8me et leur nombre : " + tree.text(sys) + " [" + tree.counterOf(sys) + "]");
     check(tree.childCount(sys) == pub::kSysDomainCount, "un dossier par domaine (" + std::to_string(pub::kSysDomainCount) + ")");
@@ -5787,10 +5792,9 @@ void lot9_variables_publiques() {
     same_text(visible, "Visible : BOOL  = = Montrer [R/W]", "Visible : BOOL, son expression, R/W");
     same_text(pressed, "Pressed : BOOL [R]", "Pressed : une information du moteur, R");
     same_text(access, "Access : INT  = 0 [R]", "Access : la s\xC3\xA9" "curit\xC3\xA9, R");
-    // Les variables employees : ni SYS., ni Vue.Objet.Propriete.
-    const auto used = tree.childAt(prog, 4);   // lot 16 : apres Types IHM
+    // Les variables employees : ni SYS., ni Vue.Objet.Propriete (1.12.2 : calculees, sans branche dans l'arbre).
     std::string paths;
-    for (std::size_t k = 0; k < tree.childCount(used); ++k) paths += tree.hmiUsedPathOf(tree.childAt(used, k)) + ";";
+    for (const auto& u : app::hmitree::usedVariables(doc->project)) paths += u.path + ";";
     check(paths.find("Autre_Automate;") != std::string::npos && paths.find("Vitesse;") != std::string::npos, "employ\xC3\xA9" "es : " + paths);
     check(paths.find("SYS") == std::string::npos && paths.find("Vue_A") == std::string::npos,
           "ni les variables syst\xC3\xA8me ni les variables d'instances parmi les employ\xC3\xA9" "es");
@@ -25956,7 +25960,7 @@ void vi1111() {
         TM tree(plc);
         tree.setHmi(doc);
         const auto prog = tree.childAt(tree.hmiFolderNode(), 8);
-        const auto inst = tree.childAt(prog, 6);
+        const auto inst = tree.childAt(prog, 5);   // 1.12.2 : sans Variables employees
         check(TM::kindOf(inst) == NK::HmiInstFolder, "l'arbre : Variables d'instances");
         const auto vue = tree.childAt(inst, 0);
         ui::NodeId pompeNode = ui::kInvalidNode, texteNode = ui::kInvalidNode;
@@ -26023,7 +26027,7 @@ void vi1111() {
         auto plc = std::make_shared<domain::Project>();
         TM tree(plc);
         tree.setHmi(d2);
-        const auto inst = tree.childAt(tree.childAt(tree.hmiFolderNode(), 8), 6);
+        const auto inst = tree.childAt(tree.childAt(tree.hmiFolderNode(), 8), 5);   // 1.12.2 : sans Variables employees
         ui::NodeId obj = ui::kInvalidNode;
         for (std::size_t a = 0; a < tree.childCount(inst); ++a) {
             const auto vn = tree.childAt(inst, a);
@@ -28158,8 +28162,8 @@ void natives1200() {
     tree.setHmi(doc);
     const auto prog = tree.childAt(tree.hmiFolderNode(), 8);
     check(app::ProjectTreeModel::kindOf(prog) == NK::HmiScripts, "natives : Programmation g\xC3\xA9n\xC3\xA9rale");
-    const auto root = tree.childAt(prog, 7);
-    check(app::ProjectTreeModel::kindOf(root) == NK::NativesFolder, "natives : le 8e dossier de Programmation g\xC3\xA9n\xC3\xA9rale");
+    const auto root = tree.childAt(prog, 6);   // 1.12.2 : sans Variables employees
+    check(app::ProjectTreeModel::kindOf(root) == NK::NativesFolder, "natives : le 7e dossier de Programmation g\xC3\xA9n\xC3\xA9rale");
     same_text(tree.text(root), "Natives", "natives : son nom");
     check(tree.style(root).icon == ui::Icon::Lock, "natives : le cadenas");
     check(tree.childCount(root) == 5, "natives : Fonctions, Types, Op\xC3\xA9rateurs, Instructions, \xC3\x89num\xC3\xA9rations");
