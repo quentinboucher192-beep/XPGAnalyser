@@ -30,6 +30,7 @@
 #include "../src/app/hmi/HmiMemoryMap.hpp"          // lot 17
 #include "../src/app/hmi/HmiNetDiagram.hpp"         // lot 17 (correctif)
 #include "../src/app/hmi/HmiAssetPanes.hpp"
+#include "../src/app/hmi/HmiSound.hpp"
 #include "../src/app/hmi/HmiApiVarsPane.hpp"     // 1.11.1 (API-V)
 #include "../src/app/hmi/HmiAssist.hpp"
 #include "../src/app/hmi/HmiValueKind.hpp"           // 1.11.3 : le carre de legende
@@ -3656,6 +3657,38 @@ void etats1123() {
 
 // 1.12.3 : PLUSIEURS OBJETS CHOISIS - l'inspecteur montre leurs proprietes communes, « (plusieurs
 // valeurs) » la ou ils different, et une saisie part sur tous (une seule annulation) ; Ctrl+A.
+// 1.12.3 : LES VOIX DES SONS - plusieurs a la fois ; le meme son repart du debut ;
+// au-dela de kMax, la plus ancienne se tait ; les finies s'en vont.
+void voixDesSons1123() {
+    std::printf("1.12.3 : les voix des sons de l'IHM en marche\n");
+    app::SoundVoices v;
+    const int a = 0, b = 0;
+    const void* sirene = &a;
+    const void* bip = &b;
+    std::vector<int> off;
+    const int s1 = v.start(sirene, 3.0, 0.0, off);
+    const int b1 = v.start(bip, 0.5, 0.1, off);
+    check(off.empty() && v.count(0.2) == 2, "deux sons \xC3\xA0 la fois : deux voix, rien ne se tait");
+    off.clear();
+    const int s2 = v.start(sirene, 3.0, 1.0, off);
+    check(off.size() == 2 && std::count(off.begin(), off.end(), s1) == 1 && std::count(off.begin(), off.end(), b1) == 1 && s2 != s1
+              && v.count(1.0) == 1,
+          "la sir\xC3\xA8ne relanc\xC3\xA9" "e repart du d\xC3\xA9" "but (l'ancienne voix se tait) ; le bip fini s'en va");
+    off.clear();
+    static const int others[app::SoundVoices::kMax] = {};
+    for (const int& o : others) (void)v.start(&o, 10.0, 2.0, off);
+    check(v.voices().size() == app::SoundVoices::kMax && std::count(off.begin(), off.end(), s2) == 1,
+          "au-del\xC3\xA0 de " + std::to_string(app::SoundVoices::kMax) + " voix, la plus ancienne se tait");
+    off.clear();
+    v.finished(20.0, off);
+    check(off.size() == app::SoundVoices::kMax && v.count(20.0) == 0 && v.voices().empty(), "toutes finies : elles s'en vont");
+    app::HmiSoundPlayer& player = app::HmiSoundPlayer::instance();
+    hmi::Resource notSound;
+    std::string why;
+    check(!player.mix(notSound, &why) && !why.empty() && player.mixing() == 0, "un son vide : refus\xC3\xA9, dit (" + why + ")");
+    player.stopMix();
+}
+
 void communes1123() {
     std::printf("1.12.3 : plusieurs objets choisis - leurs proprietes communes\n");
     Bench b;
@@ -28698,6 +28731,7 @@ int main(int argc, char** argv) {
     lot6_contenu();
     etats1123();                       // 1.12.3 : les etats des objets multi-etats en table
     communes1123();                    // 1.12.3 : plusieurs objets choisis, leurs proprietes communes
+    voixDesSons1123();                 // 1.12.3 : les voix des sons (melange)
     lot6_actions_ressources();
     lot6_simulation();
     cycle1115();                 // 1.11.15 : le cycle de la simulation, la remanence

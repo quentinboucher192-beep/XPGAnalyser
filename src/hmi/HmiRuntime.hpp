@@ -430,6 +430,8 @@ class Runtime {
 public:
     struct Hooks {
         std::function<void(const std::string& resource)> playSound;          // IHM_SON
+        // 1.12.3 : Silence (Faire taire) et l'arret : les sons qui jouent se taisent.
+        std::function<void()>                            stopSounds;
         std::function<void(const JournalEntry&)>         journaled;          // chaque entree
         // "Changer d'utilisateur" : l'ecran demande le mot de passe (ou le code),
         // puis appelle login(). Vide : seule l'autorisation par expression passe.
@@ -1000,6 +1002,7 @@ public:
     [[nodiscard]] const std::string& selectedZone() const noexcept { return selectedZone_; }
     // Faire taire : plus de son d'alarme (ni de repetition) jusqu'a la prochaine apparition.
     void silenceAlarms(double now, const std::string& source = {});
+    [[nodiscard]] std::string alarmSound(const LiveAlarm&) const;   // 1.12.3 : du groupe, sinon de la priorite
     [[nodiscard]] bool alarmsSilenced() const noexcept { return silenced_; }
     // Le bandeau : l'indice dans alarms() de l'alarme qu'il montre (-1 : aucune).
     [[nodiscard]] int bannerAlarm(const Object&) const;
@@ -1553,7 +1556,7 @@ private:
     bool                                            silenced_{false};
     double                                          nextAlarmSound_{-1};
     long long                                       soundCycle_{-1};   // le cycle du dernier son d'apparition...
-    int                                             soundPriority_{0}; // ... et sa priorite (un seul son par cycle)
+    std::set<std::string>                           soundsThisCycle_;  // ... 1.12.3 : et ceux deja partis (chacun une fois)
     std::set<std::string>                           soundMissing_;  // un son d'alarme introuvable : dit une fois
     std::map<Id, int>                               bannerSteps_;   // bandeau : les "suivante"
     struct ProductionState {

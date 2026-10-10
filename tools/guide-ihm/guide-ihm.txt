@@ -6791,6 +6791,7 @@ La catégorie **Sons et mise de côté (toutes les alarmes)** de Configuration �
 | Son des alarmes critiques, hautes, moyennes, basses | le son (une ressource) joué quand une alarme de cette priorité apparaît ; vide : aucun |
 | Répéter le son (s) | tant qu'une alarme attend son acquittement, le son revient toutes les N secondes ; 0 : une fois |
 | Mise de côté : au plus (min) | la plus longue mise de côté permise (480 : 8 heures) |
+Les sons se mélangent (1.12.3) : deux alarmes qui apparaissent ensemble s'entendent ensemble, le son du groupe de l'une et celui de la priorité de l'autre ; un même son ne part qu'une fois par cycle. La répétition reprend le son de l'alarme la plus grave à acquitter (celui de son groupe, s'il en a un). **Silence** (Faire taire) et l'arrêt de l'IHM coupent ce qui joue.
 ### En marche
 - une alarme reste listée tant qu'elle est **active** ou **non acquittée** ;
 - **acquitter** : toutes, un groupe (le groupe d'un objet aussi : `groupe:Vue_Pompes.Pompe_3`) ou une alarme (permission Acquitter sous sécurité) ; action « Acquitter une alarme » ;

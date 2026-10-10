@@ -2859,6 +2859,7 @@ void Runtime::stop(double now, const std::string& why) {
     focused_ = kNoId;
     log("Syst\xC3\xA8me", {}, "IHM arr\xC3\xAAt\xC3\xA9" "e" + (why.empty() ? std::string{} : " (" + why + ")"));
     running_ = false;
+    if (hooks_.stopSounds) hooks_.stopSounds();          // 1.12.3 : l'arret coupe les sons qui jouent
     keysDown_.clear();                  // 1.11.23 : l'arret ne relache rien (aucune action ne part)
     animation_.reset();
     unfollowAll();                      // 1.9 : les liaisons ne suivent plus rien pour l'IHM

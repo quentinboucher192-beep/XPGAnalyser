@@ -17457,6 +17457,65 @@ void auditScripts1123() {
     check(back && back->history.auditScripts && back->history.audit, "relu : l'option tient");
 }
 
+// 1.12.3 : LES SONS SE MELANGENT - deux alarmes au meme cycle, la repetition du son
+// du groupe, Silence et l'arret qui coupent ce qui joue.
+void sonsMelanges1123() {
+    std::printf("1.12.3 : les sons des alarmes se melangent ; Silence et l'arret les coupent\n");
+    Supervision s;
+    s.alarm("Gaz_Fuite", "Pression < 5.0", 1, "Securite");
+    s.alarm("Pompe2_Defaut", "Bouteille_Vide", 2, "Armoire A");
+    s.alarm("Porte", "Porte_Ouverte", 2, "Armoire B");
+    s.alarm("Cle_Tournee", "Cle", 2, "Armoire B");
+    for (const char* n : {"sirene.wav", "bip.wav", "critique.wav"}) {
+        Resource r;
+        r.id = s.p.allocate();
+        r.name = n;
+        r.format = "WAV";
+        s.p.assets.resources.push_back(r);
+    }
+    AlarmGroupDef g;
+    g.id = s.p.allocate();
+    g.name = "Securite";
+    g.sound = "sirene.wav";
+    s.p.alarmGroups.push_back(g);
+    s.p.alarmSettings.sounds[0] = "critique.wav";
+    s.p.alarmSettings.sounds[1] = "bip.wav";
+    s.p.alarmSettings.repeatS = 2;
+    std::vector<std::string> sounds;
+    int stops = 0;
+    Runtime::Hooks hooks;
+    hooks.playSound = [&](const std::string& name) { sounds.push_back(name); };
+    hooks.stopSounds = [&] { ++stops; };
+    s.rt.setHooks(hooks);
+    s.start();
+    s.run(0.3);
+    s.plc.values["Pression"] = sim::Value::real(4.0);
+    s.plc.values["Bouteille_Vide"] = sim::Value::boolean(true);
+    s.run(0.5);
+    auto sorted = sounds;
+    std::sort(sorted.begin(), sorted.end());
+    check(sorted == std::vector<std::string>{"bip.wav", "sirene.wav"},
+          "deux alarmes au m\xC3\xAA" "me cycle : les deux sons partent ensemble (sirene.wav du groupe, bip.wav de la priorit\xC3\xA9 2)");
+    sounds.clear();
+    s.plc.values["Porte_Ouverte"] = sim::Value::boolean(true);
+    s.plc.values["Cle"] = sim::Value::boolean(true);
+    s.run(0.5);
+    check(sounds == std::vector<std::string>{"bip.wav"}, "deux alarmes au m\xC3\xAA" "me son, au m\xC3\xAA" "me cycle : il part une fois");
+    sounds.clear();
+    s.run(2.2);
+    check(!sounds.empty() && sounds.front() == "sirene.wav",
+          "la r\xC3\xA9p\xC3\xA9tition reprend le son du groupe de la plus grave : sirene.wav, pas critique.wav ("
+              + (sounds.empty() ? std::string("rien") : sounds.front()) + ")");
+    const int before = stops;
+    s.rt.silenceAlarms(s.t);
+    check(stops == before + 1, "Silence : les sons qui jouent se taisent");
+    sounds.clear();
+    s.run(2.5);
+    check(sounds.empty(), "... et ne se r\xC3\xA9p\xC3\xA8tent plus");
+    s.rt.stop(s.t);
+    check(stops == before + 2, "l'arr\xC3\xAAt aussi coupe les sons");
+}
+
 void scriptsCollections1122() {
     std::printf("1.12.2 : les collections des scripts (LIST, VECTOR, TUPLE, litteraux, fonctions)\n");
     Project p;
@@ -22122,6 +22181,7 @@ int main(int argc, char** argv) {
     vraieCase1123();                  // 1.12.3 : la Console ecrit la vraie case
     memoireJournal1123();             // 1.12.3 : la memoire du journal, SYS.ErrorCount
     auditScripts1123();               // 1.12.3 : l'audit des ecritures des scripts
+    sonsMelanges1123();               // 1.12.3 : les sons se melangent ; Silence, l'arret
     enumerationsLangage110();         // 1.10 (S1, decision 15) : les enumerations dans les scripts
     operateurs110();                  // 1.10 (chantier S2) : les operateurs des symboles et des types IHM
     operateurs1101();                 // 1.10.1 (chantier U2) : a, b et Resultat (types, legende, exemple, Compiler)

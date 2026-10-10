@@ -2749,9 +2749,12 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
             std::string why;
             // Lot 10 : au volume regle dans Parametres systeme.
             const float gain = static_cast<float>(std::clamp(runtime_.settings().volume, 0, 100)) / 100.f;
-            if (!HmiSoundPlayer::instance().play(*r, &why, gain)) status_->setTransientMessage("Son " + name + " : " + why, 6.0);
+            // 1.12.3 : mele aux sons qui jouent deja (deux alarmes s'entendent ensemble).
+            if (!HmiSoundPlayer::instance().mix(*r, &why, gain)) status_->setTransientMessage("Son " + name + " : " + why, 6.0);
         }
     };
+    // 1.12.3 : Silence (Faire taire) et l'arret coupent ce qui joue.
+    hooks.stopSounds = [] { HmiSoundPlayer::instance().stopMix(); };
     // Lot 10 : "Redemarrer l'IHM" du menu Parametres systeme - comme le bouton.
     hooks.restart = [this] { restart(); };
     hooks.recipeRequest = [this](const hmi::RecipeRequest& rq) {
@@ -3162,6 +3165,7 @@ HmiSimulationPane::~HmiSimulationPane() {
         runtime_.bind(&doc_->project, nullptr);
         runtime_.setHooks({});
         runtime_.stop(now_);
+        HmiSoundPlayer::instance().stopMix();           // 1.12.3 : ses sons se taisent avec elle
     }
 }
 

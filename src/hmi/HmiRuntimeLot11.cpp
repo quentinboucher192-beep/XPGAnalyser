@@ -134,7 +134,7 @@ void Runtime::resetLot11() {
     silenced_ = false;
     nextAlarmSound_ = -1;
     soundCycle_ = -1;
-    soundPriority_ = 0;
+    soundsThisCycle_.clear();
     soundMissing_.clear();
     bannerSteps_.clear();
     production_.clear();
@@ -333,28 +333,38 @@ void Runtime::silenceAlarms(double now, const std::string& source) {
     now_ = std::max(now_, now);
     silenced_ = true;
     nextAlarmSound_ = -1;
+    if (hooks_.stopSounds) hooks_.stopSounds();          // 1.12.3 : ce qui joue se tait
     event("Silence", source.empty() ? std::string("alarmes") : source, "alarme sonore coup\xC3\xA9" "e jusqu'\xC3\xA0 la prochaine apparition");
     audit("Silence", source, "alarmes sonores", "son", "coup\xC3\xA9");       // lot 13
+}
+
+// 1.10.2 (AL) : le son d'une alarme - celui de son groupe, sinon celui de sa priorite.
+std::string Runtime::alarmSound(const LiveAlarm& a) const {
+    if (!project_) return {};
+    const std::string groupSound = a.group.empty() ? std::string{} : alarmGroupSettings(*project_, a.group).sound;
+    if (!groupSound.empty()) return groupSound;
+    return project_->alarmSettings.sounds[static_cast<std::size_t>(std::clamp(a.priority, 1, kAlarmPriorities) - 1)];
 }
 
 void Runtime::alarmAppeared(const LiveAlarm& a, double now) {
     silenced_ = false;
     if (!project_) return;
     const auto& as = project_->alarmSettings;
-    const int p = std::clamp(a.priority, 1, kAlarmPriorities);
-    // 1.10.2 (AL) : le son du groupe d'alarmes, sinon celui de la priorite.
-    const std::string groupSound = a.group.empty() ? std::string{} : alarmGroupSettings(*project_, a.group).sound;
-    const std::string& name = groupSound.empty() ? as.sounds[static_cast<std::size_t>(p - 1)] : groupSound;
+    const std::string name = alarmSound(a);
     if (as.repeatS > 0) nextAlarmSound_ = now + as.repeatS;
     if (name.empty()) return;
-    // Plusieurs alarmes dans le meme cycle : un seul son, celui de la plus grave.
-    if (soundCycle_ == cycles_ && soundPriority_ > 0 && soundPriority_ <= p) return;
+    // 1.12.3 : plusieurs alarmes dans le meme cycle - leurs sons jouent ensemble (ils
+    // se melangent) ; un meme son ne part qu'une fois.
+    if (soundCycle_ != cycles_) {
+        soundCycle_ = cycles_;
+        soundsThisCycle_.clear();
+    }
+    if (soundsThisCycle_.count(name)) return;
     if (!project_->resourceByName(name)) {
         if (soundMissing_.insert(name).second) log("Erreur", "alarme " + a.name, "son d'alarme '" + name + "' introuvable (Configuration > Alarmes)");
         return;
     }
-    soundCycle_ = cycles_;
-    soundPriority_ = p;
+    soundsThisCycle_.insert(name);
     (void)playSound(name, "alarme " + a.name);
 }
 
@@ -376,7 +386,12 @@ void Runtime::alarmsCycle(double now) {
     if (nextAlarmSound_ < 0) nextAlarmSound_ = now + as.repeatS;
     if (now + 1e-9 < nextAlarmSound_) return;
     nextAlarmSound_ = now + as.repeatS;
-    const std::string& name = as.sounds[static_cast<std::size_t>(std::clamp(p, 1, kAlarmPriorities) - 1)];
+    // 1.12.3 : la repetition reprend le son de l'alarme la plus grave a acquitter - celui
+    // de son groupe s'il en a un (la plus recente a priorite egale).
+    const LiveAlarm* worst = nullptr;
+    for (const auto& a : alarms_)
+        if (!a.acked && a.priority == p) worst = &a;
+    const std::string name = worst ? alarmSound(*worst) : as.sounds[static_cast<std::size_t>(std::clamp(p, 1, kAlarmPriorities) - 1)];
     if (!name.empty() && project_->resourceByName(name)) (void)playSound(name, "alarmes (r\xC3\xA9p\xC3\xA9tition)");
 }
 

@@ -14250,6 +14250,11 @@ const std::vector<Topic>& topics() {
                          "alarme attend son acquittement, le son revient toutes les N secondes ; 0 : une "
                          "fois\nMise de c\xC3\xB4t\xC3\xA9 : au plus (min)\tla plus longue mise de "
                          "c\xC3\xB4t\xC3\xA9 permise (480 : 8 heures)", {}},
+             {K::Paragraph, "Les sons se m\xC3\xA9langent (1.12.3) : deux alarmes qui apparaissent ensemble "
+                         "s'entendent ensemble, le son du groupe de l'une et celui de la priorit\xC3\xA9 de "
+                         "l'autre ; un m\xC3\xAA" "me son ne part qu'une fois par cycle. La r\xC3\xA9p\xC3\xA9tition "
+                         "reprend le son de l'alarme la plus grave \xC3\xA0 acquitter (celui de son groupe, s'il en "
+                         "a un). **Silence** (Faire taire) et l'arr\xC3\xAAt de l'IHM coupent ce qui joue.", {}},
              {K::Heading, "En marche", {}},
              {K::Bullet, "une alarme reste list\xC3\xA9" "e tant qu'elle est **active** ou **non "
                          "acquitt\xC3\xA9" "e** ;", {}},
