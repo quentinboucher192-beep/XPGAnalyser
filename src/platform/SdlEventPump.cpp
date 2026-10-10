@@ -92,6 +92,16 @@ ui::Key keyFrom(SDL_Keycode k) {
         case SDLK_9: case SDLK_KP_9: return ui::Key::Num9;
         case SDLK_F4:        return ui::Key::F4;
         case SDLK_F6:        return ui::Key::F6;
+        // 1.12.2 : les signes des raccourcis des editeurs (la touche telle que le clavier
+        // l'ecrit sans Maj : Ctrl+: et Ctrl+$ sur un AZERTY, Ctrl+/ et Ctrl+] sur un QWERTY).
+        case SDLK_SLASH:     case SDLK_KP_DIVIDE: return ui::Key::Slash;
+        case SDLK_PERIOD:    return ui::Key::Period;
+        case SDLK_COMMA:     return ui::Key::Comma;
+        case SDLK_MINUS:     case SDLK_KP_MINUS: return ui::Key::Minus;
+        case SDLK_RIGHTBRACKET: return ui::Key::RightBracket;
+        case SDLK_COLON:     return ui::Key::Colon;
+        case SDLK_DOLLAR:    return ui::Key::Dollar;
+        case SDLK_SEMICOLON: return ui::Key::Semicolon;
         default:             return ui::Key::Unknown;
     }
 }

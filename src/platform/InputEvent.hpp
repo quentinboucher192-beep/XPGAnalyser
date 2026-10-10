@@ -38,6 +38,9 @@ enum class Key : std::uint16_t {
     // 1.11.23 : les raccourcis des vues (toutes les lettres, tous les chiffres, F4 et F6) -
     // ajoutes a la fin : les valeurs d'avant ne bougent pas.
     B, E, G, I, M, R, T, U, Num0, Num2, Num3, Num4, Num6, Num7, Num8, Num9, F4, F6,
+    // 1.12.2 : les signes des raccourcis de Visual Studio dans les editeurs de code -
+    // Ctrl+/ (Ctrl+: sur un clavier AZERTY), Ctrl+] (Ctrl+$), Ctrl+. , Ctrl+, , Ctrl+-.
+    Slash, Period, Comma, Minus, RightBracket, Colon, Dollar, Semicolon,
 };
 
 struct KeyMods {

@@ -526,7 +526,13 @@ void MainAnalysisScreen::tickStatusStrip(double now) {
         std::string k;
         if (f && dynamic_cast<const TreeView*>(f)) k = "F2 renommer \xC2\xB7 Suppr supprimer \xC2\xB7 Ctrl+F chercher";
         else if (f && dynamic_cast<const TableView*>(f)) k = "Ctrl+F chercher \xC2\xB7 Ctrl+C copier \xC2\xB7 F2 renommer";
-        else if (f && dynamic_cast<const MultiLineText*>(f)) k = "Ctrl+F chercher \xC2\xB7 Ctrl+Z annuler \xC2\xB7 Ctrl+molette zoom";
+        else if (const auto* code = dynamic_cast<const MultiLineText*>(f); code && code->commandKeys()) {
+            // 1.12.2 : les raccourcis de Visual Studio (ou ceux de la 1.12.1, profil classique).
+            k = ui::keymap::current() == ui::keymap::Profile::VisualStudio
+                    ? "Ctrl+K, Ctrl+C commenter \xC2\xB7 Ctrl+D dupliquer \xC2\xB7 F12 d\xC3\xA9" "finition \xC2\xB7 F8 faute \xC2\xB7 Ctrl+T aller \xC3\xA0"
+                    : "Ctrl+F chercher \xC2\xB7 Ctrl+D dupliquer \xC2\xB7 Ctrl+G ligne \xC2\xB7 Ctrl+K aller \xC3\xA0";
+        }
+        else if (f && dynamic_cast<const MultiLineText*>(f)) k = "Ctrl+Z annuler \xC2\xB7 Ctrl+molette zoom";
         else if (f && dynamic_cast<const InputText*>(f)) k = "Entr\xC3\xA9" "e valider \xC2\xB7 \xC3\x89" "chap annuler";
         else k = "Ctrl+K aller \xC3\xA0 \xC2\xB7 F9 simulation \xC2\xB7 Ctrl+S enregistrer";
         st.keys->setText(k);

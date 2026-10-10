@@ -5,6 +5,7 @@
 
 #include "../../core/Command.hpp"
 #include "../Icons.hpp"
+#include "../KeyMap.hpp"     // 1.12.2 : les raccourcis de Visual Studio dans les editeurs de code
 #include "../Syntax.hpp"
 #include "../Widget.hpp"
 #include "KindBadge.hpp"   // 1.11.2 (API-V, decision 161) : la pastille d'une proposition
@@ -330,6 +331,9 @@ namespace ui {
             std::uint32_t length{ 1 };
             Tone          tone{ Tone::Error };
             std::string   message;
+            // 1.12.2 : ce qui remplace ses caracteres a Ctrl+. (le nom propose : "veux-tu
+            // dire Fours[i].EtatMoteur ?") ; vide : pas de correction toute faite.
+            std::string   fix{};
         };
         void setSquiggles(std::vector<Squiggle> squiggles);
         [[nodiscard]] const std::vector<Squiggle>& squiggles() const noexcept { return squiggles_; }
@@ -366,6 +370,60 @@ namespace ui {
             return completionOpen() || signatureActive_;
         }
         [[nodiscard]] gfx::Rect eventBounds() const override;
+
+        // ---- 1.12.2 : les raccourcis de Visual Studio (ui/KeyMap.hpp, CodeCommands.cpp) ----
+        //  setCommandKeys(true) : un editeur de code (scripts, fonctions, operateurs, script
+        //  d'une action, sections ST). Ses touches passent par le profil de l'appli
+        //  (keymap::current()) : les accords (Ctrl+K puis Ctrl+C), les commandes de ligne,
+        //  la recherche dans le document (Ctrl+F, Ctrl+H), Aller a la ligne (Ctrl+G), les
+        //  signets, les fautes (F8, Ctrl+.). Sans (le defaut), rien ne change.
+        void setCommandKeys(bool on) noexcept { commandKeys_ = on; }
+        [[nodiscard]] bool commandKeys() const noexcept { return commandKeys_; }
+        // Une commande du catalogue (keymap::commands()), comme si sa touche etait
+        // appuyee ; faux : inconnue, ou rien a faire ici (lecture seule, aucune faute...).
+        bool runCommand(std::string_view id);
+        // Cette touche, l'editeur la prendrait-il ? (un accord commence ou attend sa
+        // seconde touche, une commande du profil.) L'ecran lui laisse alors Ctrl+K, F12...
+        [[nodiscard]] bool claimsKey(const KeyDown& k) const;
+        [[nodiscard]] bool chordPending() const noexcept { return resolver_.pending(); }
+        // L'editeur de code (setCommandKeys) qui a le focus ; nullptr : aucun.
+        [[nodiscard]] static MultiLineText* focusedCodeEditor() noexcept;
+        // Les commandes que l'editeur ne fait pas seul (keymap::Command::host : aller a la
+        // definition, compiler, demarrer la simulation...). D'abord le gestionnaire de
+        // l'editeur (son volet), puis celui de l'appli ; personne : la touche n'est pas
+        // prise et suit son chemin (le volet qui compile a F7 la recoit).
+        using CommandHandler = std::function<bool(MultiLineText&, std::string_view command)>;
+        void setCommandHandler(CommandHandler h) { commandHandler_ = std::move(h); }
+        static void setHostCommandHandler(CommandHandler h);
+        // Ce que la barre d'etat doit dire (l'attente d'un accord, "Ligne copiee") ; l'appli
+        // le route vers la barre de l'ecran. Vide : rien a dire.
+        using NoticeSink = std::function<void(const std::string& text, Tone tone)>;
+        static void setNoticeSink(NoticeSink sink);
+        [[nodiscard]] const std::string& lastNotice() const noexcept { return lastNotice_; }
+        // Le commentaire d'une ligne : "//" (l'IHM) ou "(* ... *)" (les sections de l'API).
+        enum class CommentStyle : std::uint8_t { Slashes, ParenStar };
+        void setCommentStyle(CommentStyle s) noexcept { commentStyle_ = s; }
+        // Les signets (0 = la premiere ligne), tries ; ils suivent les lignes qu'on insere.
+        [[nodiscard]] const std::vector<std::size_t>& bookmarks() const noexcept { return bookmarks_; }
+        // La barre en haut a droite : chercher (Ctrl+F), remplacer (Ctrl+H), aller a la
+        // ligne (Ctrl+G). Elle prend le clavier a l'ouverture ; un clic dans le texte le
+        // lui rend (la barre reste, F3 cherche encore).
+        enum class BarMode : std::uint8_t { None, Find, Replace, GoToLine };
+        [[nodiscard]] BarMode barMode() const noexcept { return barMode_; }
+        [[nodiscard]] bool barHasKeyboard() const noexcept { return barMode_ != BarMode::None && barFocus_; }
+        void openBar(BarMode mode);
+        void closeBar();
+        void setFindText(std::string text);
+        [[nodiscard]] const std::string& findText() const noexcept { return findText_; }
+        void setReplaceText(std::string text);
+        void setFindOptions(bool matchCase, bool wholeWord);
+        bool findNext(bool backwards = false);   // depuis le curseur, en boucle ; faux : aucune
+        bool replaceCurrent();                    // la trouvaille choisie, puis la suivante
+        std::size_t replaceAll();                 // une seule modification ; le nombre
+        [[nodiscard]] std::size_t matchCount() const;
+        // Le MEME document dans un autre etat (annuler, retablir) : le curseur au premier
+        // changement, la vue, les plis et les signets gardes. setText ouvre un autre document.
+        void reloadText(std::string t);
 
         // Font scale for this view only, so one section can be enlarged without
         // changing the whole application's theme. Ctrl+wheel drives it.
@@ -409,6 +467,10 @@ namespace ui {
         void        onPaint(const PaintContext&) override;        // visible lines only
         void        onPaintOverlay(const PaintContext&) override;  // the completion list
         EventResult onEvent(const InputEvent&) override;
+        void        onFocusChanged(bool focused) override;        // 1.12.2 : l'editeur de code qui a le focus
+
+    public:
+        ~MultiLineText() override;
 
     private:
         // `inBlockComment` records whether a block comment is open when the line
@@ -505,6 +567,74 @@ namespace ui {
         // ---- Lot API 8 : la marge des points d'arret ----
         [[nodiscard]] bool inBreakColumn(gfx::Point global) const;
         bool                       breakGutter_{ false };
+        // ---- 1.12.2 : les raccourcis de Visual Studio (CodeCommands.cpp) ----
+        bool  handleCommandKey(const KeyDown& k);        // le profil ; vrai : la touche est prise
+        bool  handleBarKey(const KeyDown& k);            // la barre a le clavier
+        bool  handleBarText(const TextInput& t);
+        bool  handleBarMouse(const MouseDown& d);
+        void  drawBar(const PaintContext& ctx) const;
+        void  drawMatches(const PaintContext& ctx, std::size_t line, float y, float x0, gfx::FontId f) const;
+        void  say(std::string text, Tone tone = Tone::None);
+        bool  requestHost(std::string_view id);
+        void  beginStep();                               // une commande = un pas d'annulation
+        void  endStep();
+        struct LineSpan { std::size_t first{ 0 }, last{ 0 }; };
+        [[nodiscard]] LineSpan selectedLines() const;
+        void  replaceSpan(std::size_t from, std::size_t to, std::string_view text, std::size_t anchorAt, std::size_t caretAt);
+        [[nodiscard]] std::string indentUnit() const;
+        [[nodiscard]] std::pair<std::size_t, std::size_t> wordAround(std::size_t offset) const;
+        [[nodiscard]] std::size_t wordBoundary(std::size_t offset, bool forward) const;
+        void  moveWord(bool forward, bool extend);
+        void  deleteWord(bool forward);
+        void  smartHome(bool extend);
+        void  pageMove(int dir, bool extend);
+        bool  commentLines(int mode);                    // 1 commenter, -1 decommenter, 0 basculer
+        bool  duplicate();
+        bool  moveLines(int dir);
+        bool  removeLines(bool toClipboard);
+        bool  copyOrCut(bool cut);
+        bool  pasteText();
+        bool  openLine(bool above);
+        bool  changeCase(bool upper);
+        bool  indentLines(bool outdent);
+        bool  formatLines(bool selectionOnly);
+        bool  matchBlock(bool select);
+        bool  showPicker(int kind);                      // 1 Entourer de, 2 un extrait
+        void  applyPicked(std::size_t index);
+        bool  stepSquiggle(bool backwards);
+        bool  applyFix();
+        bool  toggleBookmark();
+        bool  stepBookmark(bool backwards);
+        bool  foldAtCaret();
+        void  pushBack();
+        bool  popBack();
+        bool  quickInfo();
+        bool  parameterInfo();
+        bool  selectWordAtCaret();
+        bool  gotoLineFromBar();
+        void  shiftMarks(std::size_t fromLine, std::size_t removedBreaks, std::size_t addedBreaks);
+        [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> matches() const;   // [debut, fin) dans le texte
+
+        bool                       commandKeys_{ false };
+        keymap::Resolver           resolver_;
+        bool                       swallowText_{ false };   // la lettre d'un accord ne s'ecrit pas
+        CommandHandler             commandHandler_;
+        std::string                lastNotice_;
+        CommentStyle               commentStyle_{ CommentStyle::Slashes };
+        std::vector<std::size_t>   bookmarks_;
+        std::vector<Caret>         back_;                   // Ctrl+- : ou l'on etait
+        BarMode                    barMode_{ BarMode::None };
+        bool                       barFocus_{ false };
+        bool                       barSelectAll_{ false };  // la prochaine frappe remplace le champ
+        int                        barField_{ 0 };          // 0 : chercher (ou la ligne), 1 : remplacer
+        std::string                findText_, replaceText_, gotoText_;
+        bool                       matchCase_{ false }, wholeWord_{ false };
+        mutable gfx::Rect          barBox_{}, barField0_{}, barField1_{}, barPrev_{}, barNext_{}, barClose_{},
+                                   barCase_{}, barWord_{}, barOne_{}, barAll_{};
+        int                        pickKind_{ 0 };          // la liste ouverte : 0 la completion, 1 Entourer de, 2 un extrait
+        std::string                lineClip_;               // ce que Ctrl+C sans selection a copie (la ligne entiere)
+        gfx::Point                 barMouse_{};             // la souris, pour les boutons de la barre
+        // ---- fin 1.12.2 ----
         std::vector<BreakMark>     breaks_;
         std::size_t                execLine_{ std::string::npos };
         std::vector<LineNote>      notes_;

@@ -181,6 +181,9 @@
     <ClCompile Include="src\menu\MenuManager.cpp">
       <Filter>menu</Filter>
     </ClCompile>
+    <ClCompile Include="src\ui\widgets\CodeCommands.cpp">
+      <Filter>ui\widgets</Filter>
+    </ClCompile>
     <ClCompile Include="src\ui\widgets\ColorPalette.cpp">
       <Filter>ui\widgets</Filter>
     </ClCompile>
@@ -751,6 +754,9 @@
     <ClCompile Include="src\app\screens\ApiWorkspace.cpp">
       <Filter>app\screens</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\screens\CodeKeysWorkspace.cpp">
+      <Filter>app\screens</Filter>
+    </ClCompile>
     <ClCompile Include="src\project\ApiChecks.cpp">
       <Filter>project</Filter>
     </ClCompile>
@@ -965,6 +971,9 @@
       <Filter>ui</Filter>
     </ClCompile>
     <ClCompile Include="src\ui\FileKinds.cpp">
+      <Filter>ui</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\KeyMap.cpp">
       <Filter>ui</Filter>
     </ClCompile>
     <ClCompile Include="src\ui\ThemeFile.cpp">
@@ -2144,6 +2153,9 @@
       <Filter>ui</Filter>
     </ClInclude>
     <ClInclude Include="src\ui\FileKinds.hpp">
+      <Filter>ui</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\KeyMap.hpp">
       <Filter>ui</Filter>
     </ClInclude>
     <ClInclude Include="src\ui\ThemeFile.hpp">

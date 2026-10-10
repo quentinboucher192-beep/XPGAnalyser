@@ -294,6 +294,7 @@ private:
     int               selectedRow_{-1};
     std::string       message_;
     bool              syncing_{false};
+    hmi::Id            shownId_{hmi::kNoId};   // 1.12.2 : le document montre (annuler : le meme, la vue gardee)
     core::ConnectionScope links_;
     std::shared_ptr<char> alive_ = std::make_shared<char>(0);   // 1.11.3 : les reponses de l'explorateur et des dialogues
 };

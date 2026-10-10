@@ -179,6 +179,10 @@ public:
         view->setReadOnly(true);
         view->setShowLineNumbers(true);
         view->setLanguage(language);
+        // 1.12.2 : les raccourcis de Visual Studio (lecture : chercher, aller a la ligne, F12 ;
+        // Edit : commenter en (* *), dupliquer, deplacer des lignes...).
+        view->setCommandKeys(true);
+        view->setCommentStyle(MultiLineText::CommentStyle::ParenStar);
         view_ = &static_cast<MultiLineText&>(addChild(std::move(view)));
 
         // The bar under the code. Everything about the name being read, on one
@@ -3304,6 +3308,7 @@ void MainAnalysisScreen::onEnter() {
         links_.clear();
     }
     entered_ = true;
+    installCodeEditorHooks();   // 1.12.2 : F12, Ctrl+T, la barre d'etat des editeurs de code
     // OnEnter runs every time this screen comes back to the top of the stack -
     // including when a modal dialog closes. bindProject tears down every open
     // tab, so an unconditional call here meant that cancelling a dialog closed
@@ -3505,6 +3510,7 @@ void MainAnalysisScreen::onEnter() {
 void MainAnalysisScreen::onExit() {
     saveWorkspace();    // ratios may have been dragged since the last toggle
     links_.clear();     // every callback above dies here: no dangling `this`
+    removeCodeEditorHooks();   // 1.12.2 : idem pour les editeurs de code
     entered_ = false;
 }
 

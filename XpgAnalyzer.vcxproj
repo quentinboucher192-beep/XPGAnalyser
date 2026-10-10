@@ -347,6 +347,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\ui\Syntax.cpp" />
     <ClCompile Include="src\ui\Theme.cpp" />
     <ClCompile Include="src\ui\Widget.cpp" />
+    <ClCompile Include="src\ui\widgets\CodeCommands.cpp" />
     <ClCompile Include="src\ui\widgets\ColorPalette.cpp" />
     <ClCompile Include="src\ui\widgets\Containers.cpp" />
     <ClCompile Include="src\ui\widgets\Controls.cpp" />
@@ -372,6 +373,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\ApiPanes.cpp" />
     <ClCompile Include="src\app\TopBar.cpp" />
     <ClCompile Include="src\app\screens\ApiWorkspace.cpp" />
+    <ClCompile Include="src\app\screens\CodeKeysWorkspace.cpp" />
     <ClCompile Include="src\project\ApiChecks.cpp" />
     <ClCompile Include="src\app\AnimationTablesPane.cpp" />
     <ClCompile Include="src\app\ConfigurationPane.cpp" />
@@ -444,6 +446,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\sim\RuntimeDebug.cpp" />
     <ClCompile Include="src\ui\FileExplorerModel.cpp" />
     <ClCompile Include="src\ui\FileKinds.cpp" />
+    <ClCompile Include="src\ui\KeyMap.cpp" />
     <ClCompile Include="src\ui\ThemeFile.cpp" />
     <ClCompile Include="src\ui\widgets\FileExplorer.cpp" />
     <ClCompile Include="src\ui\widgets\FilterMemory.cpp" />
@@ -843,6 +846,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\hmi\HmiRenameRefs.hpp" />
     <ClInclude Include="src\ui\FileExplorerModel.hpp" />
     <ClInclude Include="src\ui\FileKinds.hpp" />
+    <ClInclude Include="src\ui\KeyMap.hpp" />
     <ClInclude Include="src\ui\ThemeFile.hpp" />
     <ClInclude Include="src\ui\widgets\FileExplorer.hpp" />
     <ClInclude Include="src\ui\widgets\FilterMemory.hpp" />

@@ -183,7 +183,11 @@ std::string joinCaps(const std::vector<std::vector<std::string>>& caps) {
     std::string out;
     for (const auto& v : caps) {
         if (!out.empty()) out += "  ou  ";
-        for (std::size_t i = 0; i < v.size(); ++i) out += (i ? "+" : "") + ("[" + v[i] + "]");
+        // 1.12.2 : un accord - la touche "," entre ses deux appuis s'ecrit en texte.
+        for (std::size_t i = 0; i < v.size(); ++i) {
+            if (v[i] == ",") { out += ", "; continue; }
+            out += (i && v[i - 1] != "," ? "+" : "") + ("[" + v[i] + "]");
+        }
     }
     return out;
 }

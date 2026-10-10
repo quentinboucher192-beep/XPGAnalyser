@@ -16588,7 +16588,10 @@ void centreAide111() {
     namespace hr = help::report;
 
     // ---- la table des raccourcis ----
-    check(hk::all().size() == 63, "raccourcis : les 60 lignes de la maquette validee, plus Ctrl+Maj+O (1.11), Ctrl+J (1.11.14) et F7 hors d'un \xC3\xA9" "diteur (1.11.17)");
+    // 1.12.2 : les editeurs de code au profil Visual Studio - 31 lignes de plus (36 en tout).
+    check(hk::all().size() == 94 && hk::ofContext(hk::Context::Scripts).size() == 36,
+          "raccourcis : les 60 lignes de la maquette validee, plus Ctrl+Maj+O (1.11), Ctrl+J (1.11.14), F7 hors d'un \xC3\xA9" "diteur (1.11.17) "
+          "et les 31 des \xC3\xA9" "diteurs de code (1.12.2)");
     check(hk::ofContext(hk::Context::General).size() == 25 && hk::ofContext(hk::Context::Help).size() == 7,
           "raccourcis : General 25 (1.11.14 : Ctrl+J ; 1.11.17 : F7), Aide 7");
     // La table contre le registre d'App.cpp : chaque action qu'elle nomme a la touche que la table lui donne,

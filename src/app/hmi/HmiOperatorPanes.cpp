@@ -300,6 +300,7 @@ HmiOperatorsPane::HmiOperatorsPane(std::string id, hmi::DocumentPtr doc, Apply a
         ed->setShowLineNumbers(true);
         ed->setReadOnly(true);
         ed->setTabInsertsSpaces(4);
+        ed->setCommandKeys(true);            // 1.12.2 : les raccourcis de Visual Studio (accords Ctrl+K...)
         editor_ = &static_cast<ui::MultiLineText&>(area->addChild(std::move(ed)));
         auto bar = std::make_unique<ui::StatusBar>(base + ".symbol");
         bar->setTooltip("Le nom o\xC3\xB9 est le curseur : a, b, Resultat, une locale, une variable IHM ou de l'automate.");
@@ -557,7 +558,11 @@ void HmiOperatorsPane::showSelected() {
     const auto* o = current();
     syncing_ = true;
     const std::string body = o ? o->body : std::string{};
-    if (editor_->text() != body) editor_->setText(body);
+    if (editor_->text() != body) {      // 1.12.2 : le meme operateur (annuler) garde la vue
+        if (o && o->id == shownId_) editor_->reloadText(body);
+        else editor_->setText(body);
+    }
+    shownId_ = o ? o->id : hmi::kNoId;
     editor_->setReadOnly(o == nullptr);
     syncing_ = false;
     editorPanel_->setTitle(editorTitle());
@@ -733,7 +738,7 @@ std::size_t HmiOperatorsPane::compileCurrent() {
 }
 
 ui::EventResult HmiOperatorsPane::onEvent(const ui::InputEvent& ev) {
-    if (const auto* k = std::get_if<ui::KeyDown>(&ev); k && k->key == ui::Key::F7 && k->mods.none() && !k->repeat) {
+    if (const auto* k = std::get_if<ui::KeyDown>(&ev); k && k->key == ui::Key::F7 && (k->mods.none() || (k->mods.ctrl && !k->mods.shift && !k->mods.alt)) && !k->repeat) {
         (void)compileCurrent();
         return ui::EventResult::Consumed;
     }

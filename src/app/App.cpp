@@ -7,6 +7,7 @@
 #include "screens/StationScreen.hpp"
 #include "hmi/HmiSimulation.hpp"
 #include "../ui/widgets/Containers.hpp"
+#include "../ui/widgets/Controls.hpp"   // 1.12.2 : l'editeur de code qui a le focus (F12)
 #include "Brand.hpp"
 #include "HistoryPanel.hpp"
 #include "ThemeGallery.hpp"
@@ -214,6 +215,9 @@ core::Result<std::unique_ptr<App>> App::create(AppOptions options) {
     // 1.10 (chantier P) : des reglages existaient deja (un profil d'une version d'avant).
     const bool hadSettings = a->settings_.load(Settings::defaultPath());
     a->recent_ = a->settings_.getList("recent.projects");
+    // 1.12.2 : le profil des raccourcis des editeurs de code (Visual Studio par defaut).
+    if (const auto profile = ui::keymap::profileFromKey(a->settings_.getString("editeur.raccourcis", "vs")))
+        ui::keymap::setCurrent(*profile);
     // 1.12.0 : au premier lancement de chaque application, ses projets de la 1.11
     // (projets\<Nom>, l'automate et l'IHM ensemble) recopies dans son rangement -
     // sa moitie ; les originaux restent ; les projets recents suivent les copies.
@@ -2499,10 +2503,15 @@ void App::pumpEvents(bool& running) {
         if (auto ev = translate(e)) {
             // F12 : une capture de la fenetre, dans captures/. Avant les ecrans :
             // aucun ne s'en sert, et elle doit marcher dans un dialogue aussi.
+            // 1.12.2 : sauf dans un editeur de code au profil Visual Studio : F12 y va a la
+            // definition (Maj+F12 aux references).
             if (const auto* k = std::get_if<ui::KeyDown>(&*ev);
                 k != nullptr && k->key == ui::Key::F12 && k->mods.none() && !k->repeat) {
-                requestCapture(defaultCapturePath());
-                continue;
+                auto* code = ui::MultiLineText::focusedCodeEditor();
+                if (!(code && code->claimsKey(*k))) {
+                    requestCapture(defaultCapturePath());
+                    continue;
+                }
             }
             // Lot 8 : F11, le plein ecran sans bordure (et retour).
             // Lot API 8 : sauf quand Simulation > Debogage est a l'ecran : F11 y fait un cycle.

@@ -315,6 +315,11 @@ void MainAnalysisScreen::cycleCentreTab(int step) {
 }
 
 bool MainAnalysisScreen::handleShortcut(const KeyDown& k, bool beforeWidgets) {
+    // 1.12.2 : un editeur de code (profil Visual Studio) garde les touches de son profil :
+    // Ctrl+K y commence un accord (Ctrl+T : Aller a), Ctrl+Maj+F y cherche dans tout le
+    // projet. Apres les widgets, ce qu'il a laisse passer revient a l'ecran.
+    if (beforeWidgets)
+        if (auto* code = ui::MultiLineText::focusedCodeEditor(); code && code->claimsKey(k)) return false;
     // Lot 21 : Ctrl+Alt+S - creer une version.
     if (k.mods.ctrl && k.mods.alt && !k.mods.shift && k.key == Key::S && !beforeWidgets && !k.repeat) {
         askCreateVersion();
@@ -395,6 +400,12 @@ bool MainAnalysisScreen::handleShortcut(const KeyDown& k, bool beforeWidgets) {
         // Lot 7 : Ctrl+W ferme l'onglet ouvert (une question s'il a du pas
         // enregistre) ; apres les widgets : un menu ouvert garde la touche.
         case Key::W:
+            if (k.mods.shift) return false;
+            (void)closeCurrentTab();
+            return true;
+        // 1.12.2 : Ctrl+F4 aussi, comme Visual Studio (dans un editeur de code, Ctrl+W y
+        // choisit le mot).
+        case Key::F4:
             if (k.mods.shift) return false;
             (void)closeCurrentTab();
             return true;

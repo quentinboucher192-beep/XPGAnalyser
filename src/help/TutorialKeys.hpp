@@ -51,6 +51,8 @@ inline std::string keyLabel(std::string_view combo, bool* known = nullptr) {
                 if (mod == modifier) return {std::string(label), true};
             }
         if (modifier) return {std::string(p), false};
+        // 1.12.2 : les signes des raccourcis des editeurs (Ctrl+/, Ctrl+], Ctrl+., Ctrl+,, Ctrl+-).
+        if (low.size() == 1 && std::string_view("/.,-]:$;").find(low[0]) != std::string_view::npos) return {low, true};
         if (low.size() == 1 && ((low[0] >= 'a' && low[0] <= 'z') || (low[0] >= '0' && low[0] <= '9'))) {
             std::string up = low;
             if (up[0] >= 'a' && up[0] <= 'z') up[0] = static_cast<char>(up[0] - 'a' + 'A');

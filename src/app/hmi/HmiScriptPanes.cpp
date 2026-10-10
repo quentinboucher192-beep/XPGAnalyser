@@ -288,6 +288,15 @@ std::vector<ui::MultiLineText::Squiggle> squigglesOf(const std::vector<hmi::Scri
         w.length = static_cast<std::uint32_t>(std::max(1, d.length));
         w.tone = d.severity == hmi::ScriptDiagnostic::Severity::Error ? ui::Tone::Error : ui::Tone::Warning;
         w.message = d.message;
+        // 1.12.2 : Ctrl+. remplace le nom souligne par celui que la faute propose.
+        if (const auto at = d.message.find("veux-tu dire "); at != std::string::npos) {
+            const auto from = at + 13;
+            const auto end = d.message.find(" ?", from);
+            if (end != std::string::npos && end > from) {
+                auto fix = d.message.substr(from, end - from);
+                if (fix.find(' ') == std::string::npos) w.fix = std::move(fix);
+            }
+        }
         waves.push_back(std::move(w));
     }
     return waves;
@@ -441,6 +450,7 @@ HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply
         ed->setShowLineNumbers(true);
         ed->setReadOnly(false);
         ed->setTabInsertsSpaces(4);
+        ed->setCommandKeys(true);            // 1.12.2 : les raccourcis de Visual Studio (accords Ctrl+K...)
         editor_ = &static_cast<ui::MultiLineText&>(area->addChild(std::move(ed)));
         auto bar = std::make_unique<ui::StatusBar>(base + ".symbol");
         bar->setTooltip("Le nom o\xC3\xB9 est le curseur : ce qu'il est, son type, son commentaire.");
@@ -754,7 +764,13 @@ void HmiScriptsPane::showSelected() {
     const auto* sc = current();
     syncing_ = true;
     const std::string body = sc ? sc->body : std::string{};
-    if (editor_->text() != body) editor_->setText(body);
+    // 1.12.2 : le meme script dans un autre etat (annuler, retablir) garde la vue et met le
+    // curseur au changement ; un autre script s'ouvre en haut.
+    if (editor_->text() != body) {
+        if (sc && sc->id == shownId_) editor_->reloadText(body);
+        else editor_->setText(body);
+    }
+    shownId_ = sc ? sc->id : hmi::kNoId;
     editor_->setLanguage(languageOf(sc ? sc->lang : ScriptLang::ST));
     const bool editable = sc || !selectedEvent().empty();
     editor_->setReadOnly(!editable);
@@ -1105,7 +1121,7 @@ bool HmiScriptsPane::applyResultFix(std::size_t row) {
 ui::EventResult HmiScriptsPane::onEvent(const ui::InputEvent& ev) {
     // 1.10 : F7 dans l'editeur de scripts - Compiler ici (ailleurs, l'ecran
     // ouvre IHM > Compiler). 1.11.17 : le script actuel, comme le bouton.
-    if (const auto* k = std::get_if<ui::KeyDown>(&ev); k && k->key == ui::Key::F7 && k->mods.none() && !k->repeat) {
+    if (const auto* k = std::get_if<ui::KeyDown>(&ev); k && k->key == ui::Key::F7 && (k->mods.none() || (k->mods.ctrl && !k->mods.shift && !k->mods.alt)) && !k->repeat) {
         compileCurrent();
         return ui::EventResult::Consumed;
     }

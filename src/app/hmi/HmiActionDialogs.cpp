@@ -123,6 +123,7 @@ public:
         editor_->setShowLineNumbers(true);
         editor_->setReadOnly(false);
         editor_->setTabInsertsSpaces(4);
+        editor_->setCommandKeys(true);       // 1.12.2 : les raccourcis de Visual Studio (accords Ctrl+K...)
         editor_->setText(spec_.code);
         if (spec_.doc) {
             sources_ = assist::sourcesFor(spec_.doc);

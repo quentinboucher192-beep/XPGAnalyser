@@ -569,6 +569,9 @@ std::string HmiLiveCanvas::keyToken(ui::Key k) {
         case K::Backspace: return "Backspace"; case K::Delete: return "Delete"; case K::Insert: return "Insert";
         case K::Home: return "Home"; case K::End: return "End"; case K::PageUp: return "PageUp"; case K::PageDown: return "PageDown";
         case K::Up: return "Up"; case K::Down: return "Down"; case K::Left: return "Left"; case K::Right: return "Right";
+        // 1.12.2 : les signes (les raccourcis des editeurs) ne sont pas des touches de vue.
+        case K::Slash: case K::Period: case K::Comma: case K::Minus: case K::RightBracket:
+        case K::Colon: case K::Dollar: case K::Semicolon:
         case K::Unknown: break;
     }
     return {};

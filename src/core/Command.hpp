@@ -240,6 +240,10 @@ public:
     // depart laisse canUndo() a faux alors que le fichier est intact, et
     // enregistrer ne le remet pas a faux alors que plus rien n'est en attente.
     void markSaved() noexcept { savedDepth_ = static_cast<std::ptrdiff_t>(done_.size()); sealed_ = true; ++revision_; }
+    // 1.12.2 : la prochaine commande ne fusionne pas avec la precedente - une commande
+    // de l'editeur (commenter, dupliquer, mettre en forme) est son propre pas d'annulation,
+    // pas la fin de la rafale de frappe d'avant.
+    void seal() noexcept { sealed_ = true; }
     // Lot 15 : le document ne correspond a aucun enregistrement (des
     // modifications rechargees apres un arret brutal) - a enregistrer.
     void markUnsaved() noexcept { savedDepth_ = -1; sealed_ = true; ++revision_; }

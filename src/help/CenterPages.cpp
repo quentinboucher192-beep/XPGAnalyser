@@ -172,7 +172,9 @@ std::string keysSheetHtml(std::string_view version, std::string_view term, std::
             for (std::size_t a = 0; a < r.caps.size(); ++a) {
                 if (a) h += " <span class=\"ou\">ou</span> ";
                 for (std::size_t i = 0; i < r.caps[a].size(); ++i) {
-                    if (i) h += "<span class=\"plus\">+</span>";
+                    // 1.12.2 : un accord (Ctrl+K, Ctrl+C) : la virgule entre ses deux appuis.
+                    if (r.caps[a][i] == ",") { h += "<span class=\"plus\">, </span>"; continue; }
+                    if (i && r.caps[a][i - 1] != ",") h += "<span class=\"plus\">+</span>";
                     h += "<kbd>" + escapeHtml(r.caps[a][i]) + "</kbd>";
                 }
             }

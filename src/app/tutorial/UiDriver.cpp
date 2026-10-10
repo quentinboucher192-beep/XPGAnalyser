@@ -154,7 +154,10 @@ bool UiDriver::parseKey(const std::string& combo, Key& key, KeyMods& mods) {
         // 1.11.23 : les raccourcis des vues - les autres lettres, chiffres, F4, F6
         {"b", Key::B}, {"e", Key::E}, {"g", Key::G}, {"i", Key::I}, {"m", Key::M}, {"r", Key::R}, {"t", Key::T},
         {"u", Key::U}, {"0", Key::Num0}, {"2", Key::Num2}, {"3", Key::Num3}, {"4", Key::Num4}, {"6", Key::Num6},
-        {"7", Key::Num7}, {"8", Key::Num8}, {"9", Key::Num9}, {"f4", Key::F4}, {"f6", Key::F6}};
+        {"7", Key::Num7}, {"8", Key::Num8}, {"9", Key::Num9}, {"f4", Key::F4}, {"f6", Key::F6},
+        // 1.12.2 : les raccourcis des editeurs de code (Ctrl+L, Ctrl+/, Ctrl+], Ctrl+., Ctrl+,, Ctrl+-)
+        {"l", Key::L}, {"/", Key::Slash}, {".", Key::Period}, {",", Key::Comma}, {"-", Key::Minus},
+        {"]", Key::RightBracket}, {":", Key::Colon}, {"$", Key::Dollar}, {";", Key::Semicolon}};
     mods = {};
     std::string rest = lower(combo);
     for (;;) {

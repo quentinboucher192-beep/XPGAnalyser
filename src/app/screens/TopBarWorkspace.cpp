@@ -316,6 +316,7 @@ bool MainAnalysisScreen::topBarLot8Action(std::string_view id) {
     if (id == "cmd:compiler") { openHmiPane("compiler"); return true; }
     if (id == "cmd:generer") { openHmiPane("generer"); return true; }
     if (id.rfind("cmd:theme:", 0) == 0) { app_.setTheme(id.substr(10)); return true; }
+    if (id.rfind("cmd:raccourcis:", 0) == 0) { setEditorKeyProfile(id.substr(15)); return true; }   // 1.12.2
     // Deposer un fichier... : l'explorateur, puis la meme question qu'un depot.
     if (id == "files.drop") {
         ui::FilePick pick;

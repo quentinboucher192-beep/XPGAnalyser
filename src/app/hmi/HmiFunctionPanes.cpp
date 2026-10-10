@@ -177,7 +177,7 @@ std::size_t HmiFunctionsPane::compileCurrent() {
 }
 
 ui::EventResult HmiFunctionsPane::onEvent(const ui::InputEvent& ev) {
-    if (const auto* k = std::get_if<ui::KeyDown>(&ev); k && k->key == ui::Key::F7 && k->mods.none() && !k->repeat) {
+    if (const auto* k = std::get_if<ui::KeyDown>(&ev); k && k->key == ui::Key::F7 && (k->mods.none() || (k->mods.ctrl && !k->mods.shift && !k->mods.alt)) && !k->repeat) {
         (void)compileCurrent();
         return ui::EventResult::Consumed;
     }
@@ -271,6 +271,7 @@ HmiFunctionsPane::HmiFunctionsPane(std::string id, hmi::DocumentPtr doc, Apply a
         ed->setShowLineNumbers(true);
         ed->setReadOnly(true);
         ed->setTabInsertsSpaces(4);
+        ed->setCommandKeys(true);            // 1.12.2 : les raccourcis de Visual Studio (accords Ctrl+K...)
         editor_ = &static_cast<ui::MultiLineText&>(area->addChild(std::move(ed)));
         auto bar = std::make_unique<ui::StatusBar>(base + ".symbol");
         bar->setTooltip("Le nom o\xC3\xB9 est le curseur : param\xC3\xA8tre, locale, variable IHM ou de l'automate, fonction.");
@@ -490,7 +491,11 @@ void HmiFunctionsPane::showSelected() {
     const auto* f = current();
     syncing_ = true;
     const std::string body = f ? f->body : std::string{};
-    if (editor_->text() != body) editor_->setText(body);
+    if (editor_->text() != body) {      // 1.12.2 : la meme fonction (annuler) garde la vue
+        if (f && f->id == shownId_) editor_->reloadText(body);
+        else editor_->setText(body);
+    }
+    shownId_ = f ? f->id : hmi::kNoId;
     editor_->setReadOnly(f == nullptr);
     syncing_ = false;
     std::string title = "\xC3\x89" "DITEUR";

@@ -218,6 +218,7 @@ private:
     int                selectedRow_{-1};
     std::string        message_;
     bool               syncing_{false};
+    hmi::Id            shownId_{hmi::kNoId};   // 1.12.2 : le document montre (annuler : le meme, la vue gardee)
     std::shared_ptr<int>  alive_{std::make_shared<int>(0)};   // 1.11.19 : le selecteur de types repond apres coup
     core::ConnectionScope links_;
 };

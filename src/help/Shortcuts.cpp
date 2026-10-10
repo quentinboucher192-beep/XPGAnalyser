@@ -28,7 +28,7 @@ const std::vector<Shortcut> kTable = {
      "L'aide de l'endroit : le volet, l'objet, le nom sous le curseur",
      "", "help.open"},
     {Context::General, "Ctrl+K",
-     "Aller \xC3\xA0\xE2\x80\xA6 : une variable, une vue, une alarme, un volet, une action",
+     "Aller \xC3\xA0\xE2\x80\xA6 : une variable, une vue, une alarme, un volet, une action (dans un \xC3\xA9" "diteur de code : Ctrl+T, Ctrl+K y commence un accord)",
      "", ""},
     {Context::General, "Ctrl+S",
      "Enregistrer le projet",
@@ -50,13 +50,13 @@ const std::vector<Shortcut> kTable = {
      "R\xC3\xA9tablir",
      "", "edit.redo"},
     {Context::General, "Ctrl+H",
-     "L'historique",
+     "L'historique (dans un \xC3\xA9" "diteur de code : remplacer)",
      "", "edit.history"},
     {Context::General, "Ctrl+J",
      "Le panneau du bas : Sorties, Console, Diagnostics (le montrer, le replier)",
      "1.11.14", ""},
-    {Context::General, "Ctrl+W",
-     "Fermer l'onglet ouvert",
+    {Context::General, "Ctrl+W / Ctrl+F4",
+     "Fermer l'onglet ouvert (dans un \xC3\xA9" "diteur de code, Ctrl+W choisit le mot : Ctrl+F4)",
      "", ""},
     {Context::General, "Ctrl+Tab / Ctrl+Maj+Tab",
      "Le sous-onglet suivant, pr\xC3\xA9" "c\xC3\xA9" "dent du volet",
@@ -65,10 +65,10 @@ const std::vector<Shortcut> kTable = {
      "L'onglet suivant, pr\xC3\xA9" "c\xC3\xA9" "dent",
      "", ""},
     {Context::General, "Ctrl+F",
-     "Le champ de recherche du volet (retenu d'une s\xC3\xA9" "ance \xC3\xA0 l'autre)",
+     "Le champ de recherche du volet (retenu d'une s\xC3\xA9" "ance \xC3\xA0 l'autre) ; dans un \xC3\xA9" "diteur de code : chercher dans le document",
      "", ""},
     {Context::General, "Ctrl+Maj+F",
-     "Filtrer l'arbre du projet (cherche aussi dans le contenu)",
+     "Filtrer l'arbre du projet (cherche aussi dans le contenu) ; dans un \xC3\xA9" "diteur de code : chercher dans tout le projet",
      "", ""},
     {Context::General, "F2",
      "Renommer ce qui est choisi",
@@ -77,7 +77,7 @@ const std::vector<Shortcut> kTable = {
      "Plein \xC3\xA9" "cran, et retour",
      "", ""},
     {Context::General, "F12",
-     "Une capture de la fen\xC3\xAAtre (dossier captures)",
+     "Une capture de la fen\xC3\xAAtre (dossier captures) ; dans un \xC3\xA9" "diteur de code : aller \xC3\xA0 la d\xC3\xA9" "finition",
      "", ""},
     {Context::General, "F7",
      "Compiler le projet IHM : le rapport complet (IHM \xE2\x80\xBA Compiler) ; dans un \xC3\xA9" "diteur, le document affich\xC3\xA9",
@@ -128,22 +128,116 @@ const std::vector<Shortcut> kTable = {
     {Context::HmiEditor, "I",
      "La pipette de la palette des couleurs",
      "1.10", ""},
-    // ---- Scripts
-    {Context::Scripts, "F7",
+    // ---- Scripts (1.12.2 : les editeurs de code, profil Visual Studio ; ui/KeyMap.cpp en
+    // est la table, keymap_test verifie que chaque touche ecrite ici y est)
+    {Context::Scripts, "F7 / Ctrl+F7",
      "Compiler le document affich\xC3\xA9 : ce script, cette fonction ou ces op\xC3\xA9rateurs, chaque erreur avec sa ligne et sa colonne",
      "1.11.17", ""},
     {Context::Scripts, "Ctrl+Espace",
      "L'aide \xC3\xA0 la saisie : fonctions du script, membres, MAP, mod\xC3\xA8les",
      "1.10", ""},
     {Context::Scripts, "Tab / Entr\xC3\xA9" "e",
-     "Ins\xC3\xA9rer la proposition choisie",
+     "Ins\xC3\xA9rer la proposition choisie ; Tab sur plusieurs lignes choisies : les indenter",
      "", ""},
     {Context::Scripts, "\xE2\x86\x91 / \xE2\x86\x93",
      "Choisir dans l'aide \xC3\xA0 la saisie",
      "", ""},
     {Context::Scripts, "Ctrl+Z",
-     "Annuler (une saisie continue est une seule annulation)",
+     "Annuler (une saisie continue est une seule annulation ; une commande, une seule)",
      "", ""},
+    {Context::Scripts, "Ctrl+K, Ctrl+C / Ctrl+K, Ctrl+U",
+     "Commenter, d\xC3\xA9" "commenter les lignes (// ; (* *) dans une section de l'API) - un accord : Ctrl+K, puis Ctrl+C",
+     "1.12.2", ""},
+    {Context::Scripts, "Ctrl+/ / Ctrl+:",
+     "Basculer le commentaire (Ctrl+: sur un clavier AZERTY)",
+     "1.12.2", ""},
+    {Context::Scripts, "Ctrl+D",
+     "Dupliquer la ligne ou la s\xC3\xA9lection",
+     "1.12.2", ""},
+    {Context::Scripts, "Alt+\xE2\x86\x91 / Alt+\xE2\x86\x93",
+     "Monter, descendre les lignes",
+     "1.12.2", ""},
+    {Context::Scripts, "Ctrl+L / Ctrl+Maj+L",
+     "Couper la ligne, la supprimer",
+     "1.12.2", ""},
+    {Context::Scripts, "Ctrl+C / Ctrl+X",
+     "Rien de choisi : copier, couper la ligne enti\xC3\xA8re (Ctrl+V la colle au-dessus)",
+     "1.12.2", ""},
+    {Context::Scripts, "Ctrl+Entr\xC3\xA9" "e / Ctrl+Maj+Entr\xC3\xA9" "e",
+     "Ins\xC3\xA9rer une ligne au-dessus, au-dessous",
+     "1.12.2", ""},
+    {Context::Scripts, "Ctrl+Maj+U / Ctrl+U",
+     "MAJUSCULES, minuscules (la s\xC3\xA9lection, sinon le mot)",
+     "1.12.2", ""},
+    {Context::Scripts, "Maj+Tab",
+     "D\xC3\xA9sindenter les lignes",
+     "1.12.2", ""},
+    {Context::Scripts, "Ctrl+Retour / Ctrl+Suppr",
+     "Effacer le mot d'avant, d'apr\xC3\xA8s",
+     "1.12.2", ""},
+    {Context::Scripts, "Ctrl+\xE2\x86\x90 / Ctrl+\xE2\x86\x92",
+     "Mot pr\xC3\xA9" "c\xC3\xA9" "dent, suivant (Maj : en choisissant) ; D\xC3\xA9" "but va au texte, puis \xC3\xA0 la colonne 1",
+     "1.12.2", ""},
+    {Context::Scripts, "Ctrl+W",
+     "Choisir le mot (deux clics aussi ; trois : la ligne)",
+     "1.12.2", ""},
+    {Context::Scripts, "Ctrl+] / Ctrl+$",
+     "Aller au bout du bloc : IF \xE2\x86\x94 END_IF, FOR \xE2\x86\x94 END_FOR, une parenth\xC3\xA8se (Ctrl+$ en AZERTY ; Maj : choisir le bloc)",
+     "1.12.2", ""},
+    {Context::Scripts, "Ctrl+K, Ctrl+D / Ctrl+K, Ctrl+F",
+     "Mettre en forme le document, la s\xC3\xA9lection (la profondeur des blocs)",
+     "1.12.2", ""},
+    {Context::Scripts, "Ctrl+K, Ctrl+S / Ctrl+K, Ctrl+X",
+     "Entourer de IF, FOR, WHILE, CASE, TRY ; ins\xC3\xA9rer un extrait",
+     "1.12.2", ""},
+    {Context::Scripts, "Ctrl+F / Ctrl+H",
+     "Rechercher, remplacer dans le document (Alt+C la casse, Alt+W le mot entier)",
+     "1.12.2", ""},
+    {Context::Scripts, "F3 / Maj+F3 / Ctrl+F3",
+     "La trouvaille suivante, pr\xC3\xA9" "c\xC3\xA9" "dente ; chercher le mot sous le curseur",
+     "1.12.2", ""},
+    {Context::Scripts, "Ctrl+Maj+F",
+     "Rechercher dans tout le projet",
+     "1.12.2", ""},
+    {Context::Scripts, "Ctrl+G",
+     "Aller \xC3\xA0 la ligne",
+     "1.12.2", ""},
+    {Context::Scripts, "F12 / Maj+F12",
+     "Aller \xC3\xA0 la d\xC3\xA9" "finition ; toutes les r\xC3\xA9" "f\xC3\xA9rences",
+     "1.12.2", ""},
+    {Context::Scripts, "Ctrl+-",
+     "Revenir o\xC3\xB9 l'on \xC3\xA9tait (apr\xC3\xA8s F12, Ctrl+G, F8, Ctrl+])",
+     "1.12.2", ""},
+    {Context::Scripts, "F2 / Ctrl+R, Ctrl+R",
+     "Renommer partout (une variable IHM, une vue)",
+     "1.12.2", ""},
+    {Context::Scripts, "F8",
+     "La faute suivante (hors d'un \xC3\xA9" "diteur : d\xC3\xA9marrer l'IHM)",
+     "1.12.2", ""},
+    {Context::Scripts, "Maj+F8",
+     "La faute pr\xC3\xA9" "c\xC3\xA9" "dente",
+     "1.12.2", ""},
+    {Context::Scripts, "Ctrl+. / Alt+Entr\xC3\xA9" "e",
+     "Corriger : le nom que propose la faute (\xC2\xAB veux-tu dire \xE2\x80\xA6 \xC2\xBB)",
+     "1.12.2", ""},
+    {Context::Scripts, "Ctrl+K, Ctrl+K / Ctrl+K, Ctrl+N / Ctrl+K, Ctrl+P",
+     "Poser ou retirer un signet ; le suivant, le pr\xC3\xA9" "c\xC3\xA9" "dent",
+     "1.12.2", ""},
+    {Context::Scripts, "Ctrl+T / Ctrl+,",
+     "Aller \xC3\xA0 / Faire\xE2\x80\xA6 (Ctrl+K hors d'un \xC3\xA9" "diteur)",
+     "1.12.2", ""},
+    {Context::Scripts, "Ctrl+Maj+Espace / Ctrl+K, Ctrl+I",
+     "Les param\xC3\xA8tres de l'appel ; info rapide (la signature, la valeur)",
+     "1.12.2", ""},
+    {Context::Scripts, "Ctrl+M, Ctrl+M / Ctrl+M, Ctrl+L / Ctrl+M, Ctrl+O",
+     "Replier le bloc ; tout replier ou d\xC3\xA9plier ; replier le premier niveau",
+     "1.12.2", ""},
+    {Context::Scripts, "Ctrl+Maj+B",
+     "G\xC3\xA9n\xC3\xA9rer",
+     "1.12.2", ""},
+    {Context::Scripts, "F5 / Maj+F5",
+     "D\xC3\xA9marrer, arr\xC3\xAAter la simulation",
+     "1.12.2", ""},
     // ---- Simulation
     {Context::Simulation, "F5",
      "Simuler l'API ; en pause : Continuer",
@@ -293,7 +387,8 @@ const std::vector<Context>& contexts() {
                                            Context::Simulation, Context::Grafcet, Context::Help};
     // 1.12.0 : chaque application ses raccourcis - XPGAnalyser API sans l'editeur ni les
     // scripts de l'IHM, XPGAnalyser IHM sans le Grafcet de l'automate.
-    static const std::vector<Context> api = {Context::General, Context::Simulation, Context::Grafcet, Context::Help};
+    // 1.12.2 : les editeurs de code dans les deux (les sections ST de l'API ont le meme profil).
+    static const std::vector<Context> api = {Context::General, Context::Scripts, Context::Simulation, Context::Grafcet, Context::Help};
     static const std::vector<Context> ihm = {Context::General, Context::HmiEditor, Context::Scripts, Context::Simulation, Context::Help};
     switch (core::edition()) {
         case core::Edition::Api: return api;
@@ -307,7 +402,7 @@ std::string_view contextLabel(Context c) {
     switch (c) {
         case Context::General:    return "G\xC3\xA9n\xC3\xA9ral";
         case Context::HmiEditor:  return "\xC3\x89" "diteur IHM";
-        case Context::Scripts:    return "Scripts";
+        case Context::Scripts:    return "\xC3\x89" "diteurs de code";   // 1.12.2 : scripts, fonctions, sections ST
         case Context::Simulation: return "Simulation";
         case Context::Grafcet:    return "Grafcet";
         case Context::Help:       return "Aide";
@@ -326,7 +421,22 @@ std::vector<std::string> actionsOf(const Shortcut& s) { return split(s.actions, 
 
 std::vector<std::string> alternatives(std::string_view keys) { return split(keys, " / "); }
 
-std::vector<std::string> keyCaps(std::string_view oneAlternative) { return split(oneAlternative, "+"); }
+// 1.12.2 : un accord ("Ctrl+K, Ctrl+C") : ses deux appuis, separes par une touche "," que
+// les pages dessinent en texte.
+std::vector<std::string> keyCaps(std::string_view oneAlternative) {
+    std::vector<std::string> out;
+    std::size_t from = 0;
+    for (;;) {
+        const auto sep = oneAlternative.find(", ", from);
+        const auto stroke = oneAlternative.substr(from, sep == std::string_view::npos ? std::string_view::npos : sep - from);
+        // "Ctrl++" n'existe pas ; "Ctrl+," : la virgule est la touche.
+        for (auto& cap : split(stroke, "+")) out.push_back(std::move(cap));
+        if (sep == std::string_view::npos) break;
+        out.emplace_back(",");
+        from = sep + 2;
+    }
+    return out;
+}
 
 std::string toBinding(std::string_view keys) {
     std::string out;

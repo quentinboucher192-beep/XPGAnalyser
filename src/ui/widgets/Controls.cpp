@@ -25,6 +25,23 @@ namespace ui {
         // UTF-8 aware caret movement: never land inside a multi-byte sequence.
         bool isContinuation(char c) { return (static_cast<unsigned char>(c) & 0xC0) == 0x80; }
 
+        // 1.12.2 : une touche qui ecrit un caractere (son TextInput suit le KeyDown).
+        bool keyWritesText(Key k) noexcept {
+            switch (k) {
+            case Key::A: case Key::B: case Key::C: case Key::D: case Key::E: case Key::F: case Key::G: case Key::H:
+            case Key::I: case Key::J: case Key::K: case Key::L: case Key::M: case Key::N: case Key::O: case Key::P:
+            case Key::Q: case Key::R: case Key::S: case Key::T: case Key::U: case Key::V: case Key::W: case Key::X:
+            case Key::Y: case Key::Z:
+            case Key::Num0: case Key::Num1: case Key::Num2: case Key::Num3: case Key::Num4: case Key::Num5:
+            case Key::Num6: case Key::Num7: case Key::Num8: case Key::Num9: case Key::Space:
+            case Key::Slash: case Key::Period: case Key::Comma: case Key::Minus: case Key::RightBracket:
+            case Key::Colon: case Key::Dollar: case Key::Semicolon:
+                return true;
+            default:
+                return false;
+            }
+        }
+
         std::size_t prevCodepoint(const std::string& s, std::size_t i) {
             if (i == 0) return 0;
             --i;
@@ -925,6 +942,19 @@ namespace ui {
         from = std::min(from, buffer_.size());
         to = std::clamp(to, from, buffer_.size());
 
+        // 1.12.2 : la vue ne saute plus a chaque frappe (rebuildLines remettait le haut du
+        // texte en vue, puis le curseur se retrouvait en bas de l'editeur), et les plis
+        // et les signets suivent les lignes qu'on insere ou qu'on retire.
+        const auto keepFirst = firstVisible_;
+        const float keepScrollX = scrollX_;
+        const std::size_t fromLine = lines_.empty() ? 0 : caretFromOffset(from).line;
+        const auto removedBreaks = static_cast<std::size_t>(std::count(buffer_.begin() + static_cast<std::ptrdiff_t>(from),
+                                                                       buffer_.begin() + static_cast<std::ptrdiff_t>(to), '\n'));
+        const auto addedBreaks = static_cast<std::size_t>(std::count(replacement.begin(), replacement.end(), '\n'));
+        std::vector<std::size_t> keptFolds;
+        for (std::size_t i = 0; i < folded_.size(); ++i)
+            if (folded_[i]) keptFolds.push_back(i);
+
         buffer_.replace(from, to - from, replacement);
         const auto caretOffset = from + replacement.size();
 
@@ -932,6 +962,17 @@ namespace ui {
         // Measured well under a millisecond on the largest section in the reference
         // project, which is the only reason this is not a piece table.
         rebuildLines();
+        if (!keptFolds.empty()) {
+            for (auto line : keptFolds) {
+                if (line > fromLine + removedBreaks) line = line + addedBreaks - removedBreaks;
+                else if (line > fromLine) continue;            // dans ce qui a ete retire
+                if (line < folded_.size() && isFoldable(line)) folded_[line] = true;
+            }
+            rebuildVisible();
+        }
+        shiftMarks(fromLine, removedBreaks, addedBreaks);
+        firstVisible_ = visible_.empty() ? 0 : std::min(keepFirst, visible_.size() - 1);
+        scrollX_ = keepScrollX;
         caret_ = anchor_ = caretFromOffset(caretOffset);
         ensureCaretVisible();
         modified_ = true;
@@ -1012,6 +1053,7 @@ namespace ui {
     }
 
     void MultiLineText::dismissCompletion() {
+        pickKind_ = 0;                       // 1.12.2 : Entourer de, un extrait
         if (completions_.empty()) return;
         completions_.clear();
         completionIndex_ = 0;
@@ -1042,6 +1084,7 @@ namespace ui {
     }
 
     void MultiLineText::requestCompletion() {
+        pickKind_ = 0;                       // 1.12.2 : la frappe remplace la liste d'Entourer de
         if (!completionProvider_ || readOnly_) return;
 
         const auto prefix = completionPrefix();
@@ -1064,6 +1107,7 @@ namespace ui {
 
     void MultiLineText::acceptCompletion() {
         if (completions_.empty()) return;
+        if (pickKind_ != 0) { applyPicked(std::min(completionIndex_, completions_.size() - 1)); return; }   // 1.12.2
         const auto& chosen = completions_[std::min(completionIndex_, completions_.size() - 1)];
         const auto  at = offsetOf(caret_);
 
@@ -1406,6 +1450,7 @@ namespace ui {
     float MultiLineText::gutterWidth(const gfx::IRenderer& r, gfx::FontId f) const {
         const float numbers = lineNumbers_
             ? r.measure(std::to_string(std::max<std::size_t>(1, lines_.size())), f).width + 12.f
+                  + (bookmarks_.empty() ? 0.f : 10.f)          // 1.12.2 : la place des signets
             : 0.f;
         return numbers + 18.f             // + the fold-marker column
             + (breakGutter_ ? 18.f : 0.f);   // Lot API 8 : + la colonne des points d'arret
@@ -1718,6 +1763,7 @@ namespace ui {
 
         const float numbers = lineNumbers_
             ? ctx.r.measure(std::to_string(std::max<std::size_t>(1, lines_.size())), f).width + 12.f
+                  + (bookmarks_.empty() ? 0.f : 10.f)          // 1.12.2 : la place des signets
             : 0.f;
         const float markers = 18.f;                 // the +/- column
         const float breakW = breakGutter_ ? 18.f : 0.f;   // Lot API 8 : les points d'arret, a gauche
@@ -1787,6 +1833,8 @@ namespace ui {
             else if (i == caret_.line && focused()) {
                 ctx.r.fillRect({ inner.x + gutter, y, inner.w - gutter, lh }, c.rowAltBg);
             }
+            // 1.12.2 : les trouvailles de la barre de recherche (Ctrl+F), sous le texte.
+            drawMatches(ctx, i, y, inner.x + gutter - scrollX_, f);
 
             // --- the text -----------------------------------------------------
             float x = inner.x + gutter - scrollX_;
@@ -1914,6 +1962,9 @@ namespace ui {
             if (faulty && lineNumbers_)
                 ctx.r.fillRect({ inner.x + breakW, y, numbers, lh }, ctx.theme.tone(worst, c.error).withAlpha(110));
 
+            // 1.12.2 : un signet (Ctrl+K, Ctrl+K) - un carre bleu devant le numero.
+            if (lineNumbers_ && !bookmarks_.empty() && std::binary_search(bookmarks_.begin(), bookmarks_.end(), static_cast<std::size_t>(i)))
+                ctx.r.fillRoundedRect({ inner.x + breakW + 3.f, y + lh * 0.5f - 4.f, 8.f, 8.f }, c.accent, 2.f);
             if (lineNumbers_) {
                 const auto num = std::to_string(i + 1);
                 const auto m = ctx.r.measure(num, f);
@@ -1958,7 +2009,7 @@ namespace ui {
         // haut a droite quand les lignes du haut lui laissent la place ; sinon en
         // bas a droite ; sinon dans la barre de defilement du bas (le code n'y est
         // pas lisible) ; sans elle (un editeur etroit et plein), il n'est pas ecrit.
-        if (readOnly_ || modified_) {
+        if ((readOnly_ || modified_) && barMode_ == BarMode::None && !resolver_.pending()) {
             const std::string_view tag = readOnly_ ? std::string_view("lecture seule") : std::string_view("modifi\xC3\xA9");
             const auto& tagFont = ctx.theme.font.smallUi;
             const auto m = ctx.r.measure(tag, tagFont);
@@ -1987,6 +2038,18 @@ namespace ui {
             if (inBar) ctx.r.fillRect({ tagX - 4.f, r.bottom() - 12.f, m.width + 8.f, 12.f }, c.panelBg);
             if (shown) ctx.r.drawText({ tagX, top }, tag, tagFont, readOnly_ ? c.textDisabled : c.warning);
         }
+
+        // 1.12.2 : l'accord en attente (Ctrl+K...) - aussi dans la barre d'etat de l'ecran,
+        // mais un editeur dans une fenetre (le script d'une action) n'en a pas.
+        if (resolver_.pending()) {
+            const std::string tag = resolver_.pendingLabel() + ", \xE2\x80\xA6";
+            const auto& tf = ctx.theme.font.smallUi;
+            const auto m = ctx.r.measure(tag, tf);
+            const gfx::Rect box{ r.right() - m.width - 34.f, r.y + 5.f, m.width + 14.f, m.height + 6.f };
+            ctx.r.fillRoundedRect(box, c.accent, 4.f);
+            ctx.r.drawText({ box.x + 7.f, box.y + 3.f }, tag, tf, gfx::Color{ 255, 255, 255, 255 });
+        }
+        drawBar(ctx);
 
         if (zoom_ != 1.f) {
             char badge[24];
@@ -2178,8 +2241,13 @@ namespace ui {
                 return EventResult::Consumed;
             }
             if (!bounds().contains(d->pos)) { dismissCompletion(); return EventResult::Ignored; }
+            // 1.12.2 : la barre de recherche (Ctrl+F) prend son clic ; un clic dans le texte
+            // lui reprend le clavier (elle reste ouverte, F3 cherche encore).
+            if (handleBarMouse(*d)) return EventResult::Consumed;
             grabFocus();
             dismissCompletion();
+            barFocus_ = false;
+            if (resolver_.pending()) { resolver_.cancel(); say({}); }
 
             // Lot API 8 : un clic dans la colonne des points d'arret les demande
             // (Maj : activer / desactiver) ; le curseur ne bouge pas.
@@ -2205,7 +2273,17 @@ namespace ui {
             if (!d->mods.shift) anchor_ = caret_;
             selecting_ = true;
             updateSignature();
-            if (d->clickCount >= 2 && isFoldable(caret_.line)) toggleFold(caret_.line);
+            // 1.12.2 : un editeur de code fait comme Visual Studio - deux clics choisissent le
+            // mot, trois la ligne (le pli se fait dans sa colonne, a gauche).
+            if (commandKeys_ && d->clickCount == 2 && d->button == MouseButton::Left) {
+                (void)selectWordAtCaret();
+                selecting_ = false;
+            } else if (commandKeys_ && d->clickCount >= 3 && d->button == MouseButton::Left && caret_.line < lines_.size()) {
+                anchor_ = Caret{ caret_.line, 0 };
+                caret_ = caret_.line + 1 < lines_.size() ? Caret{ caret_.line + 1, 0 }
+                                                         : Caret{ caret_.line, lines_[caret_.line].end - lines_[caret_.line].begin };
+                selecting_ = false;
+            } else if (d->clickCount >= 2 && isFoldable(caret_.line)) toggleFold(caret_.line);
             invalidate();
             return EventResult::Consumed;
         }
@@ -2225,6 +2303,13 @@ namespace ui {
                 }
                 return EventResult::Ignored;
             }
+        }
+
+        // 1.12.2 : la souris au-dessus des boutons de la barre de recherche.
+        if (const auto* m = std::get_if<MouseMove>(&ev); m && barMode_ != BarMode::None) {
+            const bool was = barBox_.contains(barMouse_), now = barBox_.contains(m->pos);
+            barMouse_ = m->pos;
+            if (was || now) invalidate();
         }
 
         // Hovering asks the provider what the symbol holds. Only when the symbol
@@ -2266,12 +2351,31 @@ namespace ui {
         }
 
         // Typed characters, once the widget is editable.
-        if (const auto* t = std::get_if<TextInput>(&ev); t && focused() && !readOnly_) {
+        if (const auto* t = std::get_if<TextInput>(&ev); t && focused()) {
+            // 1.12.2 : la seconde touche d'un accord (Ctrl+K, C) ne s'ecrit pas ; la barre
+            // de recherche prend ce qu'on tape quand elle a le clavier.
+            if (swallowText_) { swallowText_ = false; return EventResult::Consumed; }
+            if (handleBarText(*t)) return EventResult::Consumed;
+            if (readOnly_) return EventResult::Ignored;
             insertText(t->utf8);
             return EventResult::Consumed;
         }
 
         if (const auto* k = std::get_if<KeyDown>(&ev); k && focused() && !lines_.empty()) {
+            // 1.12.2 : la barre de recherche (Ctrl+F, Ctrl+H, Ctrl+G) a le clavier ; puis les
+            // raccourcis du profil (Visual Studio : les accords Ctrl+K, Ctrl+C...). La lettre
+            // d'un appui pris ne s'ecrit pas (son TextInput suit le KeyDown).
+            swallowText_ = false;
+            const auto printable = [](const KeyDown& kd) { return !kd.mods.ctrl && !kd.mods.alt && keyWritesText(kd.key); };
+            if (barHasKeyboard() && !completionOpen() && handleBarKey(*k)) {
+                swallowText_ = printable(*k);
+                return EventResult::Consumed;
+            }
+            if (commandKeys_ && !(completionOpen() && pickKind_ != 0) && !(completionOpen() && !k->mods.ctrl && !k->mods.alt)
+                && handleCommandKey(*k)) {
+                swallowText_ = printable(*k);
+                return EventResult::Consumed;
+            }
             // The completion list owns the keys that drive it, and only those.
             if (completionOpen()) {
                 switch (k->key) {
@@ -2316,6 +2420,20 @@ namespace ui {
             }
 
             if (!readOnly_) {
+                // 1.12.2 : un editeur de code - Tab sur plusieurs lignes les indente (avant :
+                // la selection etait remplacee par 4 espaces), Maj+Tab desindente,
+                // Ctrl+Retour / Ctrl+Suppr effacent un mot.
+                if (commandKeys_ && k->key == Key::Tab && !k->mods.ctrl && !k->mods.alt) {
+                    const auto [a, b] = orderedSelection();
+                    if (k->mods.shift || (hasSelection() && a.line != b.line)) {
+                        (void)indentLines(k->mods.shift);
+                        return EventResult::Consumed;
+                    }
+                }
+                if (commandKeys_ && k->mods.ctrl && !k->mods.alt && (k->key == Key::Backspace || k->key == Key::Delete)) {
+                    deleteWord(k->key == Key::Delete);
+                    return EventResult::Consumed;
+                }
                 switch (k->key) {
                 case Key::Backspace: deleteBefore();  return EventResult::Consumed;
                 case Key::Delete:    deleteAfter();   return EventResult::Consumed;
@@ -2323,6 +2441,30 @@ namespace ui {
                 case Key::Tab:
                     insertText(tabSpaces_ > 0 ? std::string(static_cast<std::size_t>(tabSpaces_), ' ')
                         : std::string("\t"));
+                    return EventResult::Consumed;
+                default: break;
+                }
+            }
+            if (commandKeys_ && !k->mods.alt) {
+                switch (k->key) {
+                case Key::Left: case Key::Right:
+                    if (!k->mods.ctrl) break;
+                    moveWord(k->key == Key::Right, k->mods.shift);
+                    return EventResult::Consumed;
+                case Key::Home:
+                    if (k->mods.ctrl) break;
+                    smartHome(k->mods.shift);
+                    return EventResult::Consumed;
+                case Key::PageUp: case Key::PageDown:
+                    if (k->mods.ctrl) break;
+                    pageMove(k->key == Key::PageDown ? 1 : -1, k->mods.shift);
+                    return EventResult::Consumed;
+                case Key::Up: case Key::Down:
+                    if (!k->mods.ctrl || k->mods.shift) break;
+                    // Ctrl+fleche : le texte defile d'une ligne, le curseur ne bouge pas.
+                    if (k->key == Key::Up && firstVisible_ > 0) --firstVisible_;
+                    else if (k->key == Key::Down && firstVisible_ + 1 < visible_.size()) ++firstVisible_;
+                    invalidate();
                     return EventResult::Consumed;
                 default: break;
                 }
@@ -2344,6 +2486,10 @@ namespace ui {
 
             if (k->mods.ctrl && k->key == Key::A) { selectAll(); return EventResult::Consumed; }
             if (k->mods.ctrl && k->key == Key::C) { copySelection(); return EventResult::Consumed; }
+            if (commandKeys_ && k->mods.ctrl && !k->mods.alt && !k->mods.shift && k->key == Key::V) {
+                (void)pasteText();                 // 1.12.2 : une ligne copiee entiere se colle au-dessus
+                return EventResult::Consumed;
+            }
             if (k->mods.ctrl && k->key == Key::V && !readOnly_) {
                 auto paste = clipboardText();
                 std::erase(paste, '\r');
@@ -2405,10 +2551,9 @@ namespace ui {
                 invalidate();
                 return EventResult::Consumed;
             }
-            case Key::Space:
-                if (k->mods.ctrl) { toggleFold(caret_.line); return EventResult::Consumed; }
-                break;
             case Key::Escape:
+                // 1.12.2 : Echap ferme d'abord la barre de recherche de l'editeur.
+                if (barMode_ != BarMode::None) { closeBar(); say({}); return EventResult::Consumed; }
                 if (hasSelection()) { clearSelection(); return EventResult::Consumed; }
                 break;
             default: break;

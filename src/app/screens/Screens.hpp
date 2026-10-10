@@ -897,6 +897,13 @@ private:
     void askDeliverVersion();
     // Lot API 6 : l'icone du projet et son editeur en pixel art (IconWorkspace.cpp).
     void showIconEditor();
+    // 1.12.2 : les raccourcis de Visual Studio des editeurs de code (CodeKeysWorkspace.cpp) -
+    // ce que l'editeur demande (Aller a, F12, Maj+F12, F2, Ctrl+Maj+F, F5, Ctrl+F4), ce
+    // qu'il dit (l'attente d'un accord) dans la barre d'etat, le profil (Aller a).
+    void installCodeEditorHooks();
+    void removeCodeEditorHooks();
+    bool codeEditorCommand(ui::MultiLineText& editor, std::string_view command);
+    void setEditorKeyProfile(std::string_view key);
     void askRestoreVersion(int number);
     void askDeleteVersion(int number);
     void exportVersion(int number);

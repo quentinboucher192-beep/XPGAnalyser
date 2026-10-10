@@ -464,6 +464,10 @@ void MainAnalysisScreen::refreshGoToIndex() {
             push(ix.entries, GPane, pe.title, "Volet de l'IHM", std::string("pane:") + pe.key + ":" + std::to_string(pe.tab), ui::Icon::Folder);
     if (core::hasIhm())
         for (const auto& ae : kActions) push(ix.entries, GAction, ae.title, "Action", ae.key, ui::Icon::Play, {}, ae.shortcut);
+    // 1.12.2 : le profil des raccourcis des editeurs de code (Visual Studio ou classique).
+    push(ix.entries, GAction, "Raccourcis des \xC3\xA9" "diteurs : Visual Studio (accords Ctrl+K)", "Commande", "cmd:raccourcis:vs", ui::Icon::Code);
+    push(ix.entries, GAction, "Raccourcis des \xC3\xA9" "diteurs : classique (1.12.1, sans accords)", "Commande", "cmd:raccourcis:classique",
+         ui::Icon::Code);
     std::vector<std::string> seen;
     for (const auto& bp : kBarParts) {
         if (!core::hasApi()) break;          // 1.12.0 : la simulation de l'automate, Vers Control Expert
@@ -765,6 +769,9 @@ std::optional<GoToPanel::Outcome> MainAnalysisScreen::topBarPalette(const std::s
     add("T\xC3\xA2" "ches de fond", "cmd:taches", ui::Icon::History);
     add("D\xC3\xA9poser un fichier\xE2\x80\xA6", "bar:files.drop", ui::Icon::Open);
     for (const auto& t : ui::Theme::all()) add("Th\xC3\xA8me " + t.label, "cmd:theme:" + t.key, ui::Icon::Layers);
+    // 1.12.2 : le profil des raccourcis des editeurs de code.
+    add("Raccourcis des \xC3\xA9" "diteurs : Visual Studio (accords Ctrl+K)", "cmd:raccourcis:vs", ui::Icon::Code);
+    add("Raccourcis des \xC3\xA9" "diteurs : classique (1.12.1, sans accords)", "cmd:raccourcis:classique", ui::Icon::Code);
     std::size_t from = 1;
     while (from < text.size() && text[from] == ' ') ++from;
     const std::string rest = text.substr(from);

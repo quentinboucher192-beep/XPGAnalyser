@@ -370,6 +370,10 @@ if(XPG_BUILD_TESTS)
     xpg_add_test_executable(libhelp_test         tests/libhelp_test.cpp)
     xpg_add_test_executable(macrohelp_parse_test tests/macrohelp_parse_test.cpp)
     xpg_add_test_executable(helparticle_test     tests/helparticle_test.cpp)
+    # 1.12.2 : les raccourcis de Visual Studio des editeurs de code (ui/KeyMap, CodeCommands)
+    # et la page d'aide qui les liste (help/Shortcuts).
+    xpg_add_test_executable(keymap_test tests/keymap_test.cpp)
+    xpg_target_link_libraries(keymap_test PRIVATE xpg_help xpg_ui)
     xpg_target_link_libraries(libcatalog_test      PRIVATE xpg_import)
     xpg_target_link_libraries(libhelp_test         PRIVATE xpg_import)
     xpg_target_link_libraries(macrohelp_parse_test PRIVATE xpg_import)
@@ -650,6 +654,7 @@ if(XPG_BUILD_TESTS)
 
     xpg_add_test(NAME libhelp     COMMAND libhelp_test)
     xpg_add_test(NAME helparticle COMMAND helparticle_test)
+    xpg_add_test(NAME keymap      COMMAND keymap_test)       # 1.12.2
     xpg_add_test(NAME execorder   COMMAND executionorder_test)
     xpg_add_test(NAME simorder    COMMAND simorder_test)
     xpg_add_test(NAME treednd     COMMAND treednd_test)
