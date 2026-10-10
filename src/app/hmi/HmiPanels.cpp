@@ -2640,6 +2640,9 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
         const auto& prop = allProps[propIndex];
         if (prop.key == "auth" || prop.key == "access") continue;   // montrees plus bas (Securite)
         if (prop.key == "refresh") continue;              // 1.10.4 (K3) : jamais lue (gardee dans le fichier)
+        // 1.12.2 : le « Profil utilisateur » d'un objet n'etait lu par rien (l'objet restait ouvert a
+        // tous) ; « Acces » fait ce travail. Gardee dans le fichier, comme la cadence ci-dessus.
+        if (prop.key == "profile") continue;
         // 1.10.4 (K3) : la variable d'un objet qui n'en fait rien de plus que sa Valeur
         // (=expression) ne se montre que si elle est deja reglee (un projet d'avant).
         if (prop.key == "variable" && !hmiObjectNeedsVariable(o->kind) && prop.expr.empty()

@@ -226,6 +226,7 @@ TopBar::TopBar(std::string id) : ui::Widget(std::move(id)) {
     e(project_, "Dossiers de l'application\xE2\x80\xA6", "", ui::Icon::Folder, "app.folders");
     e(project_, "Revenir au menu principal", "Ctrl+Maj+H", ui::Icon::Project, "app.home");
 
+    if (core::hasApi()) {      // 1.12.2 : les creations de l'automate dans XPGAnalyser API seulement
     e(create_, "Section", "", ui::Icon::Section, "create.section");
     e(create_, "Unit\xC3\xA9 de programme", "", ui::Icon::Program, "create.unit");
     e(create_, "Bloc DFB", "", ui::Icon::FunctionBlock, "create.dfb");
@@ -236,6 +237,17 @@ TopBar::TopBar(std::string id) : ui::Widget(std::move(id)) {
     e(create_, "Module", "", ui::Icon::Module, "create.module");
     sep(create_);
     e(create_, "Macro\xE2\x80\xA6", "", ui::Icon::Code, "macros.new");
+    } else {
+    // 1.12.2 : XPGAnalyser IHM - Projet > Nouveau listait les creations de l'automate (Section,
+    // DFB, Rack...), qui ne menaient nulle part ici.
+    e(create_, "Vue\xE2\x80\xA6", "", ui::Icon::Screen, "hmi.new.view");
+    e(create_, "Popup\xE2\x80\xA6", "", ui::Icon::Layers, "hmi.new.popup");
+    e(create_, "Symbole\xE2\x80\xA6", "", ui::Icon::Layers, "hmi.new.symbol");
+    sep(create_);
+    e(create_, "Script\xE2\x80\xA6", "", ui::Icon::Code, "hmi.new.script");
+    e(create_, "Fonction IHM\xE2\x80\xA6", "", ui::Icon::Code, "hmi.new.function");
+    e(create_, "Variable IHM\xE2\x80\xA6", "", ui::Icon::Variable, "hmi.new.variable");
+    }
 
     // Lot API 7 : l'ecran de simulation (F9), l'explorateur de variables
     // (Ctrl+1) et les statistiques (Ctrl+5) ont quitte ce menu : ce sont des

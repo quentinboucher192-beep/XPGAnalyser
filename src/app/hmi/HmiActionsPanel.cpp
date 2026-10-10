@@ -588,7 +588,13 @@ void HmiActionsPanel::rebuildGrid() {
                                    owner_ == kNoId ? "Une action de la vue : ouverture, fermeture, timer, fronts, changement."
                                                    : "Une action de l'objet choisi. Rien de choisi : celles de la vue."));
     std::vector<std::string> triggerNames;
-    for (auto t : hmi::kTriggers) triggerNames.emplace_back(hmi::triggerLabel(t));
+    // 1.12.2 : une action de la VUE ne propose plus Clic, Double clic ni Appui long - un clic se
+    // fait sur un objet, elle ne partirait jamais (Compiler le disait apres coup). Une ancienne
+    // action ainsi reglee garde son declencheur dans la liste, et le dit juste dessous.
+    const bool viewAction = owner_ == kNoId;
+    const auto pointer = [](Trigger t) { return t == Trigger::Click || t == Trigger::DoubleClick || t == Trigger::LongPress; };
+    for (auto t : hmi::kTriggers)
+        if (!(viewAction && pointer(t) && t != a.trigger)) triggerNames.emplace_back(hmi::triggerLabel(t));
     trig.properties.push_back(prop("D\xC3\xA9" "clencheur", std::string(hmi::triggerLabel(a.trigger)), PG::ValueType::Enum, triggerNames,
                                    commitWith([](Action& n, std::string_view v) {
                                        const auto t = hmi::triggerFromLabel(v);
@@ -600,6 +606,12 @@ void HmiActionsPanel::rebuildGrid() {
                                    }),
                                    "Ce qui lance l'action. Clic, double clic, appui long : sur l'objet. Ouverture, fermeture, "
                                    "timer : avec la vue. Fronts et changement : une expression surveill\xC3\xA9" "e \xC3\xA0 chaque cycle IHM."));
+    if (viewAction && pointer(a.trigger))
+        trig.properties.push_back(prop("\xE2\x9A\xA0 Ne partira jamais",
+                                       "un clic se fait sur un objet : choisis un autre d\xC3\xA9" "clencheur, ou refais l'action sur l'objet",
+                                       PG::ValueType::ReadOnly, {}, nullptr,
+                                       "Une action de la vue ne re\xC3\xA7oit pas de clic : Clic, Double clic et Appui long ne sont plus "
+                                       "propos\xC3\xA9s ici (choisis un objet pour lui en donner un)."));
     if (hmi::triggerWatches(a.trigger))
         trig.properties.push_back(prop("Expression surveill\xC3\xA9" "e", a.watch, PG::ValueType::Text, {},
                                        commitWith([](Action& n, std::string_view v) { n.watch = std::string(v); return true; }),

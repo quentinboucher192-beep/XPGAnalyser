@@ -157,6 +157,11 @@ const PaneEntry kPanes[] = {
     {"versions", "IHM \xE2\x80\xBA Versions", -1},
     {"aide", "IHM \xE2\x80\xBA Aide", -1},
 };
+// 1.12.2 : un sous-onglet cache par l'application (Table des adresses : celle de l'automate,
+// cachee dans XPGAnalyser IHM) n'est plus propose - Aller a ouvrait une page vide.
+bool paneShown(const PaneEntry& pe) {
+    return !(pe.tab == HmiCommPane::TTable && std::string_view(pe.key) == "communication" && !core::hasApi());
+}
 
 // Les onglets de l'API (openApiPane).
 const PaneEntry kApiPanes[] = {
@@ -461,6 +466,7 @@ void MainAnalysisScreen::refreshGoToIndex() {
         for (const auto& pe : kApiPanes) push(ix.entries, GPane, pe.title, "Onglet de l'API", std::string("apipane:") + pe.key, ui::Icon::Cpu);
     if (doc)
         for (const auto& pe : kPanes)
+            if (paneShown(pe))
             push(ix.entries, GPane, pe.title, "Volet de l'IHM", std::string("pane:") + pe.key + ":" + std::to_string(pe.tab), ui::Icon::Folder);
     if (core::hasIhm())
         for (const auto& ae : kActions) push(ix.entries, GAction, ae.title, "Action", ae.key, ui::Icon::Play, {}, ae.shortcut);
@@ -558,6 +564,7 @@ std::vector<GoToPanel::Result> MainAnalysisScreen::goToSearch(const std::string&
         }
     }
     for (const auto& pe : kPanes) {
+        if (!paneShown(pe)) continue;   // 1.12.2
         const int s = scoreOf(pe.title, text);
         if (s >= 0) add(GPane, {0, {}, pe.title, "Volet", {}, std::string("pane:") + pe.key + ":" + std::to_string(pe.tab), ui::Icon::Folder, s});
     }

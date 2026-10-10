@@ -1506,12 +1506,16 @@ bool HmiVariablesPane::setEquipment(Id id, const std::string& raw, std::string* 
         address = eq::nextFreeAddress(doc_->project, *e, bits ? sim::Type::Bool : ty::isComposite(v->type) ? sim::Type::Int : eq::typeOfName(v->type));
     }
     const std::string equipmentName = e->name;
+    const bool wasRetained = v->retain;
+    const std::string variableName = v->name;
     change(id, "Lier " + v->name + " \xC3\xA0 " + equipmentName, [&](hmi::Variable& x) {
         x.equipment = equipmentName;
         x.address = address;
+        x.retain = false;   // 1.12.2 : l'equipement garde sa valeur (la case restait a « oui, sans effet »)
     });
     selectVariable(id);
-    say(v->name + " est li\xC3\xA9" "e \xC3\xA0 " + equipmentName + " (" + address + ") : la m\xC3\xAAme ligne est dans \xC3\x89quipements \xE2\x80\xBA Plan d'adressage");
+    say(variableName + " est li\xC3\xA9" "e \xC3\xA0 " + equipmentName + " (" + address + ") : la m\xC3\xAAme ligne est dans \xC3\x89quipements \xE2\x80\xBA Plan d'adressage"
+        + (wasRetained ? std::string(" \xC2\xB7 R\xC3\xA9manente retir\xC3\xA9" "e (l'\xC3\xA9quipement garde sa valeur)") : std::string{}));
     return true;
 }
 

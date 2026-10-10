@@ -144,6 +144,13 @@ void MainAnalysisScreen::onBarAction(std::string_view id) {
         return;
     }
     if (id == "api.dashboard") { openApiPane("api"); return; }
+    // 1.12.2 : Projet > Nouveau dans XPGAnalyser IHM - les creations de l'IHM.
+    if (id == "hmi.new.view") { askNewHmiView("vue"); return; }
+    if (id == "hmi.new.popup") { askNewHmiView("popup"); return; }
+    if (id == "hmi.new.symbol") { askNewHmiView("symbole"); return; }
+    if (id == "hmi.new.script") { askHmiNewScript(hmi::ScriptLang::ST); return; }
+    if (id == "hmi.new.function") { askHmiNewFunction(); return; }
+    if (id == "hmi.new.variable") { askHmiVariable(0); return; }
     // 1.11 (R111, decision 15) : le bouton de l'avis des conditions d'activation
     // manquantes - le dossier du projet dans les reglages de l'utilisateur.
     if (id == conditions::kSilenceAction) {

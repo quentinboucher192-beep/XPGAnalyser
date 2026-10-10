@@ -304,12 +304,14 @@ std::vector<std::size_t> rowsOf(const std::vector<Declaration>& decls, Tab t) {
 
 std::vector<Column> columnsOf(Tab t, decl::Role role) {
     const bool script = role == decl::Role::Script;
+    // 1.12.2 : plus de colonne Public / Prive - elle ne faisait rien (une declaration n'est vue
+    // que de son code tant que les noms qualifies Script.Variable n'existent pas) et laissait
+    // croire le contraire. La visibilite reste dans le modele et le fichier, pour ce jour-la.
     switch (t) {
         case Tab::Constants:
-            if (script) return {Column::Name, Column::Type, Column::Value, Column::Visibility, Column::Description};
             return {Column::Name, Column::Type, Column::Value, Column::Description};
         case Tab::Variables:
-            if (script) return {Column::Name, Column::Type, Column::Value, Column::Storage, Column::Visibility, Column::Description};
+            if (script) return {Column::Name, Column::Type, Column::Value, Column::Storage, Column::Description};
             return {Column::Name, Column::Type, Column::Value, Column::Description};
         case Tab::Parameters:
             return {Column::Name, Column::Type, Column::Mode, Column::Value, Column::Description};

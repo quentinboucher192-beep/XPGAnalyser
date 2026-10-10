@@ -937,8 +937,11 @@ void HmiContentPanel::rebuildGrid() {
                 // retire. Une plume ne se vide pas (\xC2\xAB Retirer \xC2\xBB l'enleve) : pas de X.
                 ui::exprfield::markWhole(expr, ui::exprfield::Expect::Number, false);
                 pen.properties.push_back(std::move(expr));
-                pen.properties.push_back(editable("Couleur", i < p.colors.size() ? p.colors[i] : std::string{}, PG::ValueType::Color, index,
-                                                  "color"));
+                // 1.12.2 : le chronogramme colore ses lignes par leurs etats (sa liste d'etats) : la
+                // case Couleur d'une de ses lignes ne faisait rien.
+                if (o->kind != hmi::Kind::StateChart)
+                    pen.properties.push_back(editable("Couleur", i < p.colors.size() ? p.colors[i] : std::string{}, PG::ValueType::Color, index,
+                                                      "color"));
             } else {
                 pen.name = penWord(o) + "s";
                 pen.properties.push_back(readOnly(penWord(o) + "s", std::to_string(p.exprs.size()),
