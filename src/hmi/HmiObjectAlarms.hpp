@@ -113,6 +113,8 @@ struct ObjectAlarm {
 [[nodiscard]] std::string objectGroupOf(const View&, const Object&);
 // La vue genere-t-elle les alarmes de ses objets ? Pas un symbole (ses instances
 // le font), pas une popup a parametres (ses arguments viennent a l'ouverture).
+// 1.12.3 : dans une popup de symbole, une alarme dont la condition cite un
+// parametre du symbole n'est pas fabriquee non plus (les autres le sont).
 [[nodiscard]] bool viewGeneratesAlarms(const View&) noexcept;
 
 // ---- les filtres des objets d'alarmes -----------------------------------------------------

@@ -255,6 +255,18 @@ std::optional<AlarmOverride> developedOverride(const AlarmOverride* ov, const Sy
     return d;
 }
 
+// 1.12.3 : une popup de symbole s'ouvre pour une instance, avec ses arguments : une
+// condition qui cite un parametre du symbole (Moteur.Defaut) ne se lit pas a part.
+bool citesSymbolParams(const Project& p, const View& v, std::string_view condition) {
+    if (v.ownerSymbol == kNoId || condition.empty()) return false;
+    const View* sym = p.view(v.ownerSymbol);
+    if (!sym || sym->params.empty()) return false;
+    static constexpr std::string_view kProbe = "XPG_PARAMETRE_DU_SYMBOLE";
+    SymbolArguments probe;
+    for (const auto& prm : sym->params) probe.emplace_back(prm.name, std::string(kProbe));
+    return substituteParams(condition, probe).find(kProbe) != std::string::npos;
+}
+
 struct Generator {
     const Project&            p;
     std::vector<ObjectAlarm>& out;
@@ -294,6 +306,9 @@ struct Generator {
             if (gs.ack == AlarmAckMode::Auto) linked.ackRequired = false;
         }
         oa.def = applyOverride(linked, dov ? &*dov : nullptr, &active);
+        // 1.12.3 : une popup de symbole ne fabrique pas l'alarme d'un objet dont la condition
+        // cite un parametre du symbole (avant : "condition illisible" au demarrage).
+        if (citesSymbolParams(p, v, oa.def.condition)) return;
         oa.active = active;
         if (ov) oa.overridden = overriddenFields(*ov);
         out.push_back(std::move(oa));

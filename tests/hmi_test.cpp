@@ -17516,6 +17516,52 @@ void sonsMelanges1123() {
     check(stops == before + 2, "l'arr\xC3\xAAt aussi coupe les sons");
 }
 
+// 1.12.3 : LES POPUPS DE SYMBOLE - pas d'alarme d'objet dont la condition cite un
+// parametre du symbole (avant : « condition illisible » au demarrage).
+void popupSymboleAlarmes1123() {
+    std::printf("1.12.3 : les popups de symbole et les alarmes de leurs objets\n");
+    Project p;
+    p.programs.variables.push_back(hmiVar(p, "Defaut_General", "BOOL", "FALSE"));
+    View sym = makeView(p, "S_Pompe");
+    sym.role = "symbole";
+    sym.params.push_back({"Moteur", "", "", "", ParamMode::Reference});
+    const Id symId = sym.id;
+    p.views.push_back(sym);
+    View pop = makeView(p, "Pop_Pompe");
+    pop.role = "popup";
+    pop.ownerSymbol = symId;
+    {
+        Object a = makeObject(Kind::Pump, p.allocate(), "Pompe_Param", 0, 0, pop.activeLayer);
+        a.setExpr("fault", "Moteur.Defaut");
+        pop.objects.push_back(std::move(a));
+        Object b = makeObject(Kind::Pump, p.allocate(), "Pompe_Globale", 0, 100, pop.activeLayer);
+        b.setExpr("fault", "Defaut_General");
+        pop.objects.push_back(std::move(b));
+    }
+    p.views.push_back(pop);
+    View v = makeView(p, "Vue");
+    p.views.push_back(v);
+    p.config.startView = v.id;
+    std::string names;
+    bool param = false, global = false;
+    for (const auto& a : objectAlarms(p)) {
+        names += a.def.name + " ";
+        if (a.def.name.find("Pompe_Param") != std::string::npos) param = true;
+        if (a.def.name.find("Pompe_Globale") != std::string::npos) global = true;
+    }
+    check(!param, "l'alarme qui cite Moteur (param\xC3\xA8tre du symbole) n'est pas fabriqu\xC3\xA9" "e : " + names);
+    check(global, "celle d'une variable globale l'est toujours : " + names);
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    rt.tick(0.1);
+    bool unreadable = false;
+    for (const auto& e : rt.journal())
+        if (e.message.find("condition illisible") != std::string::npos) unreadable = true;
+    check(!unreadable, "au d\xC3\xA9marrage : plus de \xC2\xAB condition illisible \xC2\xBB");
+    rt.stop(1.0);
+}
+
 void scriptsCollections1122() {
     std::printf("1.12.2 : les collections des scripts (LIST, VECTOR, TUPLE, litteraux, fonctions)\n");
     Project p;
@@ -22182,6 +22228,7 @@ int main(int argc, char** argv) {
     memoireJournal1123();             // 1.12.3 : la memoire du journal, SYS.ErrorCount
     auditScripts1123();               // 1.12.3 : l'audit des ecritures des scripts
     sonsMelanges1123();               // 1.12.3 : les sons se melangent ; Silence, l'arret
+    popupSymboleAlarmes1123();        // 1.12.3 : les popups de symbole, les alarmes de leurs objets
     enumerationsLangage110();         // 1.10 (S1, decision 15) : les enumerations dans les scripts
     operateurs110();                  // 1.10 (chantier S2) : les operateurs des symboles et des types IHM
     operateurs1101();                 // 1.10.1 (chantier U2) : a, b et Resultat (types, legende, exemple, Compiler)
