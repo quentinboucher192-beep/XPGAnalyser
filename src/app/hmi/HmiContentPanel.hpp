@@ -21,6 +21,10 @@
 //    navigation
 //    Groupe, conteneur (1.10.4) les OBJETS qu'il tient, en lecture.
 //    cadre, panneaux
+//    Voyant, texte     (1.12.3) les ETATS : une ligne par etat (quand, texte, couleur,
+//    multi-etats       clignote), le « sinon » ; choisis SELON LA VALEUR (0, 1, 10..20,
+//                      'Auto') ou SELON DES CONDITIONS (Defaut, Marche... : la premiere
+//                      vraie gagne, la Valeur est ecrite pour elles).
 //  Un objet qui ne peut rien contenir (une vanne, un bouton) : pas d'onglet.
 //
 //  Tout passe par des commandes de vue : Ctrl+Z reprend une ligne ajoutee, une
@@ -48,7 +52,8 @@ public:
     // 1.10.4 (K3) : Members - les objets d'un groupe, d'un conteneur, d'un cadre,
     // d'un panneau (en lecture : on les regle en les choisissant). None : l'objet ne
     // peut pas avoir de contenu, l'editeur cache l'onglet.
-    enum class Mode : std::uint8_t { None, Table, Trend, AnimatedImage, RecipeManager, Zones, Tabs, NavItems, Members };
+    // 1.12.3 : States - les etats d'un voyant multi-etats, d'un texte multi-etats.
+    enum class Mode : std::uint8_t { None, Table, Trend, AnimatedImage, RecipeManager, Zones, Tabs, NavItems, Members, States };
 
     HmiContentPanel(std::string id, hmi::DocumentPtr doc, hmi::Id view, Apply apply);
 

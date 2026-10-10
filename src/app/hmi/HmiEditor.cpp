@@ -502,6 +502,8 @@ HmiEditor::HmiEditor(std::string widgetId, hmi::DocumentPtr doc, Id view, Apply 
             case ui::Key::Y: if (k.mods.ctrl) run(ActRedo); break;
             case ui::Key::C: if (k.mods.ctrl) run(ActCopy); break;
             case ui::Key::V: if (k.mods.ctrl) run(ActPaste); break;
+            // 1.12.3 : Ctrl+A choisit tous les objets de la vue (l'inspecteur montre leurs proprietes communes).
+            case ui::Key::A: if (k.mods.ctrl) canvas_->selectAll(); break;
             default: break;
         }
     });

@@ -6983,6 +6983,13 @@ const std::vector<Topic>& topics() {
                          "clignote`, s\xC3\xA9par\xC3\xA9s par ;. La valeur peut \xC3\xAAtre un nombre, un "
                          "intervalle `10..20`, TRUE / FALSE, un texte (`'Auto'`), ou `*` (tout le reste) ; "
                          "le premier qui correspond l'emporte.", {}},
+             {K::Paragraph, "**Contenu \xE2\x80\xBA \xC3\x89tats** (1.12.3) : une ligne par \xC3\xA9tat - quand, texte, couleur "
+                         "\xC3\xA0 la palette, clignote -, Ajouter, Retirer, \xE2\x86\x91\xE2\x86\x93 pour l'ordre, et la "
+                         "ligne \xC2\xAB sinon \xC2\xBB. L'\xC3\xA9tat se choisit **selon la valeur** (0, 1, `10..20`, "
+                         "`'Auto'`) ou **selon des conditions** (`Defaut`, `Marche AND NOT Defaut`) : la premi\xC3\xA8re "
+                         "vraie gagne, et la Valeur est \xC3\xA9" "crite pour elles (`(Defaut) ? 1 : (Marche) ? 2 : 0`), "
+                         "puis relue \xC3\xA0 la r\xC3\xA9ouverture. Un \xC2\xAB ; \xC2\xBB ou un \xC2\xAB | \xC2\xBB dans un "
+                         "texte est refus\xC3\xA9 tout de suite.", {}},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nVariable "
                          "montr\xC3\xA9" "e\t(vide)\tLa variable dont l'\xC3\xA9tat est montr\xC3\xA9. "
@@ -7042,6 +7049,13 @@ const std::vector<Topic>& topics() {
                          "de d\xC3\xA9" "faut. M\xC3\xAAme liste d'\xC3\xA9tats que le voyant "
                          "multi-\xC3\xA9tats ; une valeur sans \xC3\xA9tat montre le texte par "
                          "d\xC3\xA9" "faut.", {}},
+             {K::Paragraph, "**Contenu \xE2\x80\xBA \xC3\x89tats** (1.12.3) : une ligne par \xC3\xA9tat - quand, texte, couleur "
+                         "\xC3\xA0 la palette, clignote -, Ajouter, Retirer, \xE2\x86\x91\xE2\x86\x93 pour l'ordre, et la "
+                         "ligne \xC2\xAB sinon \xC2\xBB. L'\xC3\xA9tat se choisit **selon la valeur** (0, 1, `10..20`, "
+                         "`'Auto'`) ou **selon des conditions** (`Defaut`, `Marche AND NOT Defaut`) : la premi\xC3\xA8re "
+                         "vraie gagne, et la Valeur est \xC3\xA9" "crite pour elles (`(Defaut) ? 1 : (Marche) ? 2 : 0`), "
+                         "puis relue \xC3\xA0 la r\xC3\xA9ouverture. Un \xC2\xAB ; \xC2\xBB ou un \xC2\xAB | \xC2\xBB dans un "
+                         "texte est refus\xC3\xA9 tout de suite.", {}},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nVariable "
                          "montr\xC3\xA9" "e\t(vide)\tLa variable dont la valeur est traduite. Depuis la "

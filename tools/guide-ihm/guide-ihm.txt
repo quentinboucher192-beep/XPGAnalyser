@@ -3056,6 +3056,7 @@ Lire une **mesure** d'un coup d'œil. Il montre sa variable (ou l'expression de 
 @capture PNG_246_sim_essai_surpression_defaut.png | En simulation : l'essai de surpression met la pompe en défaut - le voyant passe au rouge et clignote, l'aiguille entre dans la zone rouge.
 ### À quoi il sert
 Montrer l'**état** d'un équipement quand il en a plus de deux. Les états se décrivent dans une liste : `valeur = texte | couleur | clignote`, séparés par ;. La valeur peut être un nombre, un intervalle `10..20`, TRUE / FALSE, un texte (`'Auto'`), ou `*` (tout le reste) ; le premier qui correspond l'emporte.
+**Contenu › États** (1.12.3) : une ligne par état - quand, texte, couleur à la palette, clignote -, Ajouter, Retirer, ↑↓ pour l'ordre, et la ligne « sinon ». L'état se choisit **selon la valeur** (0, 1, `10..20`, `'Auto'`) ou **selon des conditions** (`Defaut`, `Marche AND NOT Defaut`) : la première vraie gagne, et la Valeur est écrite pour elles (`(Defaut) ? 1 : (Marche) ? 2 : 0`), puis relue à la réouverture. Un « ; » ou un « | » dans un texte est refusé tout de suite.
 ### Ses paramètres
 @param variable | Variable montrée | (vide) | La variable dont l'état est montré. Depuis la 1.10.4 : tape plutôt =la variable dans Valeur ; une variable déjà réglée reste montrée et relue.
 @param value | Valeur | 0 | Une expression à la place de la variable.
@@ -3077,6 +3078,7 @@ Montrer l'**état** d'un équipement quand il en a plus de deux. Les états se d
 @capture EX_MultiStateText.png | L'exemple animé : un texte par état, et le texte par défaut.
 ### À quoi il sert
 Traduire un **code** en mots : un numéro d'étape, un mode, un code de défaut. Même liste d'états que le voyant multi-états ; une valeur sans état montre le texte par défaut.
+**Contenu › États** (1.12.3) : une ligne par état - quand, texte, couleur à la palette, clignote -, Ajouter, Retirer, ↑↓ pour l'ordre, et la ligne « sinon ». L'état se choisit **selon la valeur** (0, 1, `10..20`, `'Auto'`) ou **selon des conditions** (`Defaut`, `Marche AND NOT Defaut`) : la première vraie gagne, et la Valeur est écrite pour elles (`(Defaut) ? 1 : (Marche) ? 2 : 0`), puis relue à la réouverture. Un « ; » ou un « | » dans un texte est refusé tout de suite.
 ### Ses paramètres
 @param variable | Variable montrée | (vide) | La variable dont la valeur est traduite. Depuis la 1.10.4 : tape plutôt =la variable dans Valeur ; une variable déjà réglée reste montrée et relue.
 @param value | Valeur | 0 | Une expression à la place de la variable.

@@ -71,6 +71,16 @@ struct StateEntry {
 };
 [[nodiscard]] std::vector<StateEntry> parseStateList(std::string_view text, std::string* error = nullptr);
 [[nodiscard]] int stateIndexOf(const std::vector<StateEntry>&, std::string_view shown);
+// 1.12.3 : L'ECRITURE QUI MANQUAIT - "0 = Arret | #4A5261; 1 = Marche | #2ECC71 | clignote". Un
+// texte, une valeur ou une couleur ne peut pas contenir ';' ni '|' (la liste ne se relirait pas) :
+// stateFieldFits le dit avant (faux, `why` en francais).
+[[nodiscard]] std::string formatStateList(const std::vector<StateEntry>&);
+[[nodiscard]] bool stateFieldFits(std::string_view text, std::string* why = nullptr);
+// 1.12.3 : LES ETATS SELON DES CONDITIONS - la Valeur qu'ils ecrivent : "(C1) ? 1 : (C2) ? 2 : 0"
+// (la premiere vraie gagne ; aucune : 0, l'etat « sinon »). parseConditionChain relit ce qu'elle a
+// ecrit ; faux : la Valeur n'a pas cette forme (une variable, une autre expression).
+[[nodiscard]] std::string conditionChain(const std::vector<std::string>& conditions);
+bool parseConditionChain(std::string_view expr, std::vector<std::string>& conditions);
 
 // ---- les zones colorees (bargraphe, cadran) : "de-a = couleur" ------------------------
 struct Zone {

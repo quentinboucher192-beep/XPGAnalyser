@@ -2607,14 +2607,27 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
     const std::initializer_list<const char*> kLookKeys{"visible", "opacity", "blink", "blinkColor", "namedStyle", "fill", "background",
                                                      "stroke", "strokeWidth", "radius", "font", "fontSize", "textColor", "align", "wrap"};
     const std::initializer_list<const char*> kSecurityKeys{"access", "profile", "auth", "signature", "signatureReasons", "signatureLevel"};
-    // Le nom de la section du genre ; plusieurs objets de genres differents : celle du premier.
+    // Le nom de la section du genre. 1.12.3 : plusieurs objets de genres differents - leurs
+    // proprietes COMMUNES (celles que chacun a, ou que son genre pose), dans une section a leur nom.
     std::string typeName(hmi::kindLabel(o->kind));
-    if (many)
+    std::vector<const hmi::Object*> others;            // les autres objets choisis
+    std::map<hmi::Kind, hmi::Object> freshOf;          // un objet neuf de chaque genre (ses valeurs par defaut)
+    if (many) {
+        bool mixed = false;
         for (Id id : selection)
-            if (const auto* other = view.object(id); other && other->kind != o->kind) {
-                typeName += " (le premier objet)";
-                break;
+            if (const auto* other = view.object(id); other && other != o) {
+                others.push_back(other);
+                mixed = mixed || other->kind != o->kind;
+                if (!freshOf.count(other->kind)) freshOf.emplace(other->kind, hmi::makeObject(other->kind, hmi::kNoId, {}, 0, 0, hmi::kNoId));
             }
+        if (mixed) typeName = "Propri\xC3\xA9t\xC3\xA9s communes (" + std::to_string(selection.size()) + " objets)";
+    }
+    // La valeur d'une propriete chez un autre objet choisi : la sienne, sinon celle de son genre ; nul : il ne l'a pas.
+    const auto propOf = [&](const hmi::Object& x, std::string_view key) -> const hmi::Prop* {
+        if (const auto* xp = x.find(key)) return xp;
+        const auto f = freshOf.find(x.kind);
+        return f == freshOf.end() ? nullptr : f->second.find(key);
+    };
 
     // Lot 9 : les proprietes du genre qu'un objet plus ancien n'a pas encore (un
     // bouton d'avant la confirmation) : montrees a leur valeur par defaut,
@@ -2664,6 +2677,18 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
         if (prop.key == "variable" && !hmiObjectNeedsVariable(o->kind) && prop.expr.empty()
             && prop.value.find_first_not_of(" \t") == std::string::npos)
             continue;
+        // 1.12.3 : plusieurs objets choisis - une propriete qu'un autre n'a pas ne se montre pas ;
+        // une valeur qui differe se dit « (plusieurs valeurs) », et la saisie part sur tous (une annulation).
+        bool differs = false;
+        if (many) {
+            bool common = true;
+            for (const auto* x : others) {
+                const auto* xp = propOf(*x, prop.key);
+                if (!xp) { common = false; break; }
+                differs = differs || xp->value != prop.value || xp->expr != prop.expr;
+            }
+            if (!common) continue;
+        }
         const auto* info = infoOf(prop.key);
         PG::Property p;
         p.name = info ? info->label : prop.key;
@@ -2870,6 +2895,14 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
         }
         // 1.10 (chantier K) : toute propriete modifiable de l'inspecteur accepte "=expression".
         if (p.commit && p.type != PG::ValueType::ReadOnly) ui::exprfield::mark(p, expectedOf(prop.key, p.type), true);
+        if (differs) {
+            p.value.clear();
+            p.expression.clear();
+            p.exprError.clear();
+            p.placeholder = "(plusieurs valeurs)";
+            p.description = "Les objets choisis n'ont pas la m\xC3\xAAme valeur. Une saisie la donne \xC3\xA0 tous (Ctrl+Z la reprend)."
+                          + (p.description.empty() ? std::string{} : "\n" + p.description);
+        }
         // La section, et la place dans la section.
         Section section = SecType;
         double rank = 0;

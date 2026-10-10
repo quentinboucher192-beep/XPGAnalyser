@@ -16,6 +16,7 @@
 #include "../../ui/widgets/ExprField.hpp"   // 1.10 (chantier K) : les champs a expression, partout pareils
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 
 namespace app {
@@ -154,6 +155,75 @@ std::string penWord(const hmi::Object* o) {
     }
 }
 
+// ------------------------------------------------ 1.12.3 : les etats -------
+// Les etats d'un voyant ou d'un texte multi-etats, et comment l'etat se choisit : selon la
+// valeur (la case Valeur), ou selon des conditions - la Valeur est alors leur chaine
+// "(C1) ? 1 : (C2) ? 2 : 0", relue ici, et les etats 1..N (plus le « sinon », *).
+struct StateTable {
+    std::vector<hmi::StateEntry> states;
+    bool                         conditions{false};
+    std::vector<std::string>     conds;       // une par etat numerote, dans l'ordre de la liste
+};
+
+StateTable readStates(const hmi::Object& o) {
+    StateTable t;
+    t.states = hmi::parseStateList(o.text("stateList"));
+    const auto* v = o.find("value");
+    std::vector<std::string> conds;
+    if (v && !v->expr.empty() && hmi::parseConditionChain(v->expr, conds)) {
+        std::size_t numbered = 0;
+        bool ordered = true;
+        for (const auto& st : t.states) {
+            if (st.match == "*") continue;
+            if (st.match != std::to_string(++numbered)) { ordered = false; break; }
+        }
+        if (ordered && numbered == conds.size()) {
+            t.conditions = true;
+            t.conds = std::move(conds);
+        }
+    }
+    return t;
+}
+
+void writeStates(hmi::Object& o, StateTable t) {
+    if (t.conditions) {
+        std::size_t k = 0;
+        for (auto& st : t.states)
+            if (st.match != "*") st.match = std::to_string(++k);
+        t.conds.resize(k, "FALSE");
+        o.setExpr("value", hmi::conditionChain(t.conds));
+    }
+    o.set("stateList", hmi::formatStateList(t.states));
+}
+
+// La condition d'une ligne (les etats numerotes, dans l'ordre) ; -1 : le « sinon ».
+int conditionIndexOf(const StateTable& t, std::size_t row) {
+    if (row >= t.states.size() || t.states[row].match == "*") return -1;
+    int k = 0;
+    for (std::size_t r = 0; r < row; ++r) k += t.states[r].match != "*";
+    return k;
+}
+
+// Une valeur libre pour un etat de plus : le plus grand nombre + 1.
+std::string nextStateValue(const StateTable& t) {
+    double top = -1;
+    for (const auto& st : t.states) {
+        double x = 0;
+        // Une plage (10..20) compte par sa borne haute.
+        const auto dots = st.match.find("..");
+        const std::string last = dots == std::string::npos ? st.match : st.match.substr(dots + 2);
+        if (hmi::parseNumber(last, x)) top = std::max(top, x);
+    }
+    return hmi::formatNumber(std::floor(top) + 1);
+}
+
+std::string stateDetail(const hmi::StateEntry& st) {
+    std::string d = st.text;
+    if (!st.color.empty()) d += "  \xC2\xB7  " + st.color;
+    if (st.blink) d += "  \xC2\xB7  clignote";
+    return d;
+}
+
 // --------------------------------------------------------- lot 12 : la barre -
 struct NavList {
     std::vector<std::string> views, labels;
@@ -192,7 +262,8 @@ HmiContentPanel::HmiContentPanel(std::string id, hmi::DocumentPtr doc, Id view, 
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
     const auto editable = [this] {
         const auto m = mode();
-        return m == Mode::Table || m == Mode::Trend || m == Mode::AnimatedImage || m == Mode::Zones || m == Mode::Tabs || m == Mode::NavItems;
+        return m == Mode::Table || m == Mode::Trend || m == Mode::AnimatedImage || m == Mode::Zones || m == Mode::Tabs || m == Mode::NavItems
+            || m == Mode::States;
     };
     tools_->setEnabledWhen(AAdd, editable);
     tools_->setEnabledWhen(ARemove, [this, editable] { return editable() && selectedIndex() >= 0; });
@@ -268,6 +339,9 @@ HmiContentPanel::Mode HmiContentPanel::mode() const {
         case hmi::Kind::ZoneMap:       return Mode::Zones;
         case hmi::Kind::TabContainer:  return Mode::Tabs;
         case hmi::Kind::NavBar:        return Mode::NavItems;
+        // 1.12.3 : les etats, une ligne chacun.
+        case hmi::Kind::MultiStateIndicator: case hmi::Kind::MultiStateText:
+            return Mode::States;
         // 1.10.4 (K3) : ce qui tient d'autres objets - ses objets.
         case hmi::Kind::Group: case hmi::Kind::Container: case hmi::Kind::Frame: case hmi::Kind::ScrollPanel:
         case hmi::Kind::CollapsiblePanel:
@@ -288,6 +362,7 @@ std::size_t HmiContentPanel::count() const {
             return r ? r->records.size() : 0;
         }
         case Mode::Zones:    return hmi::parseMapZones(o->text("mapZones")).size();
+        case Mode::States:   return hmi::parseStateList(o->text("stateList")).size();
         case Mode::Tabs:     return hmi::tabLabels(*o).size();
         case Mode::NavItems: return hmi::navItems(&doc_->project, *o).size();
         case Mode::Members: {
@@ -395,6 +470,18 @@ void HmiContentPanel::refresh() {
                 for (const auto& it : hmi::navItems(&doc_->project, *o)) rows.push_back({it.view, it.label});
                 break;
             }
+            case Mode::States: {
+                const auto t = readStates(*o);
+                headers = {"#", t.conditions ? "Quand (la premi\xC3\xA8re vraie gagne)" : "Quand la valeur vaut", "Texte  \xC2\xB7  couleur"};
+                icon = ui::Icon::Info;
+                for (std::size_t r = 0; r < t.states.size(); ++r) {
+                    const auto& st = t.states[r];
+                    const int k = conditionIndexOf(t, r);
+                    std::string when = st.match == "*" ? std::string("sinon") : t.conditions && k >= 0 ? t.conds[static_cast<std::size_t>(k)] : st.match;
+                    rows.push_back({std::move(when), stateDetail(st)});
+                }
+                break;
+            }
             case Mode::Members: {
                 headers = {"#", "Objet", "Type"};
                 icon = ui::Icon::Folder;
@@ -452,6 +539,20 @@ bool HmiContentPanel::changeInView(const std::string& label, const std::function
 
 bool HmiContentPanel::addItem() {
     switch (mode()) {
+        case Mode::States:
+            return change("Ajouter un \xC3\xA9tat", [](hmi::Object& o) {
+                auto t = readStates(o);
+                hmi::StateEntry st;
+                st.match = t.conditions ? std::string("0") : nextStateValue(t);
+                st.text = "\xC3\x89tat " + std::to_string(t.states.size() + 1);
+                st.color = hmiTrendPalette()[t.states.size() % hmiTrendPalette().size()];
+                // Avant le « sinon » (il reste le dernier) ; selon des conditions, une condition de plus.
+                auto at = std::find_if(t.states.begin(), t.states.end(), [](const hmi::StateEntry& e) { return e.match == "*"; });
+                if (t.conditions) t.conds.push_back("FALSE");
+                t.states.insert(at, std::move(st));
+                writeStates(o, std::move(t));
+                return true;
+            });
         case Mode::Table:
             return change("Ajouter une ligne", [](hmi::Object& o) {
                 auto t = readTable(o);
@@ -519,6 +620,16 @@ bool HmiContentPanel::removeItem(int index) {
     const auto i = static_cast<std::size_t>(index);
     bool ok = false;
     switch (mode()) {
+        case Mode::States:
+            ok = change("Retirer un \xC3\xA9tat", [i](hmi::Object& o) {
+                auto t = readStates(o);
+                if (i >= t.states.size()) return false;
+                if (const int k = conditionIndexOf(t, i); t.conditions && k >= 0) t.conds.erase(t.conds.begin() + k);
+                t.states.erase(t.states.begin() + static_cast<std::ptrdiff_t>(i));
+                writeStates(o, std::move(t));
+                return true;
+            });
+            break;
         case Mode::Table:
             ok = change("Retirer une ligne", [i](hmi::Object& o) {
                 auto t = readTable(o);
@@ -598,6 +709,16 @@ bool HmiContentPanel::moveItem(int index, int delta) {
     if (index < 0 || to < 0 || index >= static_cast<int>(count()) || to >= static_cast<int>(count())) return false;
     const auto a = static_cast<std::size_t>(index), b = static_cast<std::size_t>(to);
     switch (mode()) {
+        case Mode::States:
+            return change("Ordonner les \xC3\xA9tats", [a, b](hmi::Object& o) {
+                auto t = readStates(o);
+                if (a >= t.states.size() || b >= t.states.size()) return false;
+                const int ka = conditionIndexOf(t, a), kb = conditionIndexOf(t, b);
+                if (t.conditions && ka >= 0 && kb >= 0) std::swap(t.conds[static_cast<std::size_t>(ka)], t.conds[static_cast<std::size_t>(kb)]);
+                std::swap(t.states[a], t.states[b]);
+                writeStates(o, std::move(t));
+                return true;
+            });
         case Mode::Table:
             return change("Ordonner les lignes", [a, b](hmi::Object& o) {
                 auto t = readTable(o);
@@ -694,6 +815,77 @@ bool HmiContentPanel::setField(int index, const std::string& field, const std::s
     const auto i = static_cast<std::size_t>(std::max(0, index));
     const auto colOf = [&](std::string_view prefix) { return static_cast<std::size_t>(std::max(0, std::atoi(field.c_str() + prefix.size()))); };
     switch (mode()) {
+        case Mode::States: {
+            if (field == "mode") {
+                const bool wantConditions = value.find("condition") != std::string::npos;
+                return change(wantConditions ? "\xC3\x89tats selon des conditions" : "\xC3\x89tats selon la valeur", [wantConditions](hmi::Object& o) {
+                    auto t = readStates(o);
+                    if (t.conditions == wantConditions) return false;
+                    if (wantConditions) {
+                        // Chaque etat devient « la valeur d'avant vaut sa valeur » : rien ne change en marche.
+                        const auto* v = o.find("value");
+                        const std::string source = v ? (!v->expr.empty() ? v->expr : v->value) : std::string("0");
+                        t.conds.clear();
+                        for (const auto& st : t.states)
+                            if (st.match != "*")
+                                t.conds.push_back(st.match.find("..") != std::string::npos
+                                                      ? "(" + source + ") ENTRE " + st.match.substr(0, st.match.find(".."))
+                                                            + " ET " + st.match.substr(st.match.find("..") + 2)
+                                                      : "(" + source + ") = " + st.match);
+                        t.conditions = true;
+                    } else {
+                        // Les etats gardent leurs nombres (1, 2...) ; la Valeur attend sa variable.
+                        o.setExpr("value", "");
+                        o.set("value", "0");
+                        t.conditions = false;
+                    }
+                    writeStates(o, std::move(t));
+                    return true;
+                });
+            }
+            std::string why;
+            if ((field == "match" || field == "text" || field == "color") && !hmi::stateFieldFits(value, &why)) return false;
+            return change("R\xC3\xA9gler un \xC3\xA9tat", [i, field, value](hmi::Object& o) {
+                auto t = readStates(o);
+                if (i >= t.states.size()) return false;
+                auto& st = t.states[i];
+                std::string v = value;
+                while (!v.empty() && (v.front() == ' ' || v.front() == '\t')) v.erase(v.begin());
+                while (!v.empty() && (v.back() == ' ' || v.back() == '\t')) v.pop_back();
+                if (field == "match") {
+                    if (v.empty() || t.conditions) return false;
+                    st.match = v;
+                } else if (field == "condition") {
+                    const int k = conditionIndexOf(t, i);
+                    if (!t.conditions || k < 0) return false;
+                    t.conds[static_cast<std::size_t>(k)] = v.empty() ? std::string("FALSE") : v;
+                } else if (field == "text") {
+                    st.text = v;
+                } else if (field == "color") {
+                    st.color = v;
+                } else if (field == "blink") {
+                    st.blink = hmi::parseBool(v, false);
+                } else if (field == "otherwise") {
+                    // Le « sinon » : present (le dernier) ou absent.
+                    const bool on = hmi::parseBool(v, false);
+                    const auto at = std::find_if(t.states.begin(), t.states.end(), [](const hmi::StateEntry& e) { return e.match == "*"; });
+                    if (on == (at != t.states.end())) return false;
+                    if (on) {
+                        hmi::StateEntry e;
+                        e.match = "*";
+                        e.text = "?";
+                        e.color = "#4A5261";
+                        t.states.push_back(std::move(e));
+                    } else {
+                        t.states.erase(at);
+                    }
+                } else {
+                    return false;
+                }
+                writeStates(o, std::move(t));
+                return true;
+            });
+        }
         case Mode::Table: {
             if (field.rfind("cell:", 0) == 0) {
                 const auto k = colOf("cell:");
@@ -985,6 +1177,54 @@ void HmiContentPanel::rebuildGrid() {
                                               PG::ValueType::Integer, -1, "objectPeriod"));
             def.properties.push_back(readOnly("\xC3\x89tats", std::to_string(states.size())));
             cats.push_back(std::move(def));
+            break;
+        }
+        case Mode::States: {
+            const auto t = readStates(*o);
+            PG::Category how;
+            how.name = "Choisir l'\xC3\xA9tat";
+            how.properties.push_back(editable("Choisir l'\xC3\xA9tat", t.conditions ? "selon des conditions" : "selon la valeur",
+                                              PG::ValueType::Enum, -1, "mode",
+                                              "Selon la valeur : la case Valeur (Propri\xC3\xA9t\xC3\xA9s) donne un nombre, un texte, TRUE ; "
+                                              "l'\xC3\xA9tat qui vaut l'emporte (0, 1, 10..20, 'Auto' ; * : tout le reste). Selon des "
+                                              "conditions : une condition par \xC3\xA9tat (Defaut, Marche AND NOT Defaut) - la premi\xC3\xA8re "
+                                              "vraie gagne ; la Valeur est \xC3\xA9" "crite pour toi.",
+                                              {"selon la valeur", "selon des conditions"}));
+            const auto* v = o->find("value");
+            const std::string shown = v ? (!v->expr.empty() ? "=" + v->expr : v->value) : std::string{};
+            how.properties.push_back(readOnly(t.conditions ? "Valeur \xC3\xA9" "crite" : "Valeur", shown,
+                                              t.conditions ? "La cha\xC3\xAEne des conditions, \xC3\xA9" "crite et relue par l'onglet : la modifier "
+                                                             "\xC3\xA0 la main la rend \xC3\xA0 la valeur."
+                                                           : "La variable ou l'expression qui choisit l'\xC3\xA9tat : elle se r\xC3\xA8gle dans "
+                                                             "Propri\xC3\xA9t\xC3\xA9s (Valeur, =Etat_Pompe)."));
+            const bool otherwise = std::any_of(t.states.begin(), t.states.end(), [](const hmi::StateEntry& e) { return e.match == "*"; });
+            how.properties.push_back(editable("Un \xC3\xA9tat \xC2\xAB sinon \xC2\xBB", otherwise ? "TRUE" : "FALSE", PG::ValueType::Boolean, -1,
+                                              "otherwise", "Montr\xC3\xA9 quand aucun autre ne vaut (la ligne * ou \xC2\xAB sinon \xC2\xBB)."));
+            cats.push_back(std::move(how));
+            if (index >= 0 && i < t.states.size()) {
+                const auto& st = t.states[i];
+                PG::Category state;
+                state.name = "\xC3\x89tat " + std::to_string(index + 1);
+                const int k = conditionIndexOf(t, i);
+                if (st.match == "*") {
+                    state.properties.push_back(readOnly("Quand", "sinon", "Quand aucun autre \xC3\xA9tat ne vaut."));
+                } else if (t.conditions && k >= 0) {
+                    auto cond = editable("Condition", t.conds[static_cast<std::size_t>(k)], PG::ValueType::Text, index, "condition",
+                                         "Une expression vraie ou fausse : Defaut, Marche AND NOT Defaut, Niveau > 80. La "
+                                         "premi\xC3\xA8re vraie gagne (\xE2\x86\x91\xE2\x86\x93 : l'ordre).");
+                    ui::exprfield::markWhole(cond, ui::exprfield::Expect::Bool, false);
+                    state.properties.push_back(std::move(cond));
+                } else {
+                    state.properties.push_back(editable("Quand la valeur vaut", st.match, PG::ValueType::Text, index, "match",
+                                                        "Un nombre (2), un intervalle (10..20), TRUE / FALSE, un texte ('Auto'), "
+                                                        "ou * : tout le reste."));
+                }
+                state.properties.push_back(editable("Texte", st.text, PG::ValueType::Text, index, "text",
+                                                    "Ce que l'objet \xC3\xA9" "crit ; sans \xC2\xAB ; \xC2\xBB ni \xC2\xAB | \xC2\xBB."));
+                state.properties.push_back(editable("Couleur", st.color, PG::ValueType::Color, index, "color", "Vide : la couleur de l'objet."));
+                state.properties.push_back(editable("Clignote", st.blink ? "TRUE" : "FALSE", PG::ValueType::Boolean, index, "blink"));
+                cats.push_back(std::move(state));
+            }
             break;
         }
         case Mode::RecipeManager: {

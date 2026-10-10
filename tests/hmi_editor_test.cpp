@@ -3565,6 +3565,140 @@ void lot6_contenu() {
     check(content.object() == rect && content.mode() == app::HmiContentPanel::Mode::None, "un rectangle : rien \xC3\xA0 r\xC3\xA9gler");
 }
 
+// 1.12.3 : LES ETATS EN TABLE - l'onglet Contenu d'un voyant multi-etats et d'un texte
+// multi-etats : une ligne par etat, selon la valeur ou selon des conditions (la Valeur ecrite
+// pour elles, et relue), le « sinon », l'ordre, les fautes refusees, Ctrl+Z.
+void etats1123() {
+    std::printf("1.12.3 : les etats des objets multi-etats en table (Contenu)\n");
+    // ---- l'ecriture et la relecture
+    {
+        std::string why;
+        const auto st = hmi::parseStateList("0 = Arr\xC3\xAAt | #4A5261; 1 = Marche | #2ECC71; 2 = D\xC3\xA9" "faut | #E5534B | clignote; * = ?");
+        same_text(hmi::formatStateList(st), "0 = Arr\xC3\xAAt | #4A5261; 1 = Marche | #2ECC71; 2 = D\xC3\xA9" "faut | #E5534B | clignote; * = ?",
+                  "formatStateList : la liste relue telle quelle");
+        check(!hmi::stateFieldFits("a;b", &why) && !why.empty() && !hmi::stateFieldFits("a|b") && hmi::stateFieldFits("Marche (local)"),
+              "un texte avec ; ou | est refus\xC3\xA9");
+        std::vector<std::string> c;
+        same_text(hmi::conditionChain({"Defaut", "Marche AND NOT Defaut"}), "(Defaut) ? 1 : (Marche AND NOT Defaut) ? 2 : 0", "la cha\xC3\xAEne des conditions");
+        check(hmi::parseConditionChain("(Defaut) ? 1 : (Marche AND NOT Defaut) ? 2 : 0", c) && c.size() == 2 && c[1] == "Marche AND NOT Defaut",
+              "... relue");
+        check(hmi::parseConditionChain("(A ?? FALSE) ? 1 : (B) ? 2 : 0", c) && c[0] == "A ?? FALSE", "... un ?? dans une condition reste entier");
+        check(!hmi::parseConditionChain("Etat_Pompe", c) && !hmi::parseConditionChain("(A) ? 2 : 0", c) && !hmi::parseConditionChain("A ? 1 : B", c),
+              "... une Valeur ordinaire n'est pas une cha\xC3\xAEne");
+    }
+    Bench b;
+    auto& content = b.editor->content();
+    const Id lamp = b.place(Kind::MultiStateIndicator, 100, 100);
+    b.editor->layout();
+    check(content.object() == lamp && content.mode() == app::HmiContentPanel::Mode::States && content.count() == 3,
+          "un voyant multi-\xC3\xA9tats : ses 3 \xC3\xA9tats dans Contenu");
+    // ---- selon la valeur
+    check(content.setField(1, "text", "En marche") && content.setField(1, "color", "#27AE60") && content.setField(1, "blink", "TRUE"),
+          "un \xC3\xA9tat : texte, couleur, clignote");
+    same_text(b.v().object(lamp)->text("stateList"), "0 = Arr\xC3\xAAt | #4A5261; 1 = En marche | #27AE60 | clignote; 2 = D\xC3\xA9" "faut | #E5534B | clignote",
+              "stateList r\xC3\xA9" "crite");
+    check(!content.setField(1, "text", "A; B") && hmi::parseStateList(b.v().object(lamp)->text("stateList"))[1].text == "En marche",
+          "un ; dans un texte : refus\xC3\xA9, rien ne change");
+    check(content.setField(0, "match", "10..20") && hmi::parseStateList(b.v().object(lamp)->text("stateList"))[0].match == "10..20",
+          "une plage de valeurs");
+    check(content.addItem() && content.count() == 4 && hmi::parseStateList(b.v().object(lamp)->text("stateList"))[3].match == "21",
+          "Ajouter : la valeur suivante (21)");
+    check(content.setField(-1, "otherwise", "TRUE") && content.count() == 5 && hmi::parseStateList(b.v().object(lamp)->text("stateList"))[4].match == "*",
+          "le \xC2\xAB sinon \xC2\xBB, en dernier");
+    check(content.addItem() && hmi::parseStateList(b.v().object(lamp)->text("stateList"))[5].match == "*",
+          "un \xC3\xA9tat ajout\xC3\xA9 passe avant le \xC2\xAB sinon \xC2\xBB");
+    check(content.removeItem(4) && content.count() == 5, "retirer un \xC3\xA9tat");
+    // ---- selon des conditions
+    b.v().object(lamp)->setExpr("value", "Etat_Pompe");
+    check(content.setField(-1, "mode", "selon des conditions"), "passer aux conditions");
+    {
+        const auto* v = b.v().object(lamp)->find("value");
+        std::vector<std::string> c;
+        check(v && hmi::parseConditionChain(v->expr, c) && c.size() == 4 && c[0] == "(Etat_Pompe) ENTRE 10 ET 20" && c[1] == "(Etat_Pompe) = 1",
+              "... chaque \xC3\xA9tat devient \xC2\xAB la valeur d'avant vaut sa valeur \xC2\xBB (" + (v ? v->expr : std::string("?")) + ")");
+        const auto st = hmi::parseStateList(b.v().object(lamp)->text("stateList"));
+        check(st.size() == 5 && st[0].match == "1" && st[3].match == "4" && st[4].match == "*", "... les \xC3\xA9tats num\xC3\xA9rot\xC3\xA9s 1..4, le sinon");
+    }
+    check(content.setField(0, "condition", "Defaut") && content.setField(1, "condition", "Marche AND NOT Defaut"), "deux conditions \xC3\xA9" "crites");
+    check(content.moveItem(1, -1), "monter Marche avant Defaut");
+    {
+        std::vector<std::string> c;
+        const auto* v = b.v().object(lamp)->find("value");
+        check(v && hmi::parseConditionChain(v->expr, c) && c[0] == "Marche AND NOT Defaut" && c[1] == "Defaut",
+              "l'ordre des conditions suit les lignes (" + (v ? v->expr : std::string("?")) + ")");
+        const auto st = hmi::parseStateList(b.v().object(lamp)->text("stateList"));
+        check(st[0].text == "En marche" && st[0].match == "1" && st[1].match == "2", "... et les \xC3\xA9tats, renum\xC3\xA9rot\xC3\xA9s");
+    }
+    check(content.addItem() && content.setField(4, "condition", "Maintenance"), "une condition de plus, avant le sinon");
+    {
+        std::vector<std::string> c;
+        const auto* v = b.v().object(lamp)->find("value");
+        check(v && hmi::parseConditionChain(v->expr, c) && c.size() == 5 && c[4] == "Maintenance", "... cinq conditions");
+    }
+    check(!content.setField(0, "match", "7"), "selon des conditions, la valeur d'un \xC3\xA9tat ne se tape pas");
+    // ---- Ctrl+Z
+    const std::string before = b.v().object(lamp)->text("stateList");
+    check(content.removeItem(0), "retirer la 1re condition");
+    (void)b.stack.undo();
+    content.refresh();
+    same_text(b.v().object(lamp)->text("stateList"), before, "Ctrl+Z la remet");
+    // ---- retour selon la valeur
+    check(content.setField(-1, "mode", "selon la valeur"), "revenir selon la valeur");
+    {
+        const auto* v = b.v().object(lamp)->find("value");
+        check(v && v->expr.empty() && content.count() == 6, "la Valeur attend sa variable ; les \xC3\xA9tats restent");
+    }
+    // ---- un texte multi-etats
+    const Id txt = b.place(Kind::MultiStateText, 400, 100);
+    b.editor->layout();
+    check(content.object() == txt && content.mode() == app::HmiContentPanel::Mode::States && content.count() == 4, "un texte multi-\xC3\xA9tats : 4 \xC3\xA9tats");
+}
+
+// 1.12.3 : PLUSIEURS OBJETS CHOISIS - l'inspecteur montre leurs proprietes communes, « (plusieurs
+// valeurs) » la ou ils different, et une saisie part sur tous (une seule annulation) ; Ctrl+A.
+void communes1123() {
+    std::printf("1.12.3 : plusieurs objets choisis - leurs proprietes communes\n");
+    Bench b;
+    const Id l1 = b.place(Kind::Indicator, 100, 100);
+    const Id l2 = b.place(Kind::Indicator, 220, 100);
+    const Id t = b.place(Kind::Text, 360, 100);
+    b.v().object(l2)->set("shape", "carr\xC3\xA9");
+    const auto find = [&](const std::string& name) -> const ui::PropertyGrid::Property* {
+        for (const auto& c : b.editor->properties().categories())
+            for (const auto& p : c.properties)
+                if (p.name == name) return &p;
+        return nullptr;
+    };
+    const auto section = [&](const std::string& prefix) {
+        for (const auto& c : b.editor->properties().categories())
+            if (c.name.rfind(prefix, 0) == 0) return true;
+        return false;
+    };
+    b.editor->canvas().setSelection({l1, l2});
+    b.editor->layout();
+    {
+        const auto* forme = find("Forme");
+        check(forme && forme->value.empty() && forme->placeholder == "(plusieurs valeurs)", "deux voyants, deux formes : \xC2\xAB (plusieurs valeurs) \xC2\xBB");
+    }
+    check(commitIn(b.editor->properties(), "Forme", "rond") && b.v().object(l1)->text("shape") == "rond" && b.v().object(l2)->text("shape") == "rond",
+          "une saisie part sur les deux");
+    b.editor->layout();
+    {
+        const auto* forme = find("Forme");
+        check(forme && forme->value == "rond" && forme->placeholder != "(plusieurs valeurs)", "... ils ont la m\xC3\xAAme forme");
+    }
+    (void)b.stack.undo();
+    check(b.v().object(l2)->text("shape") == "carr\xC3\xA9" && b.v().object(l1)->text("shape") == "rond", "une seule annulation les remet");
+    // Deux genres : seulement ce qu'ils ont en commun.
+    b.editor->canvas().setSelection({l1, t});
+    b.editor->layout();
+    check(section("Objet (2 s\xC3\xA9lectionn\xC3\xA9s)"), "un voyant et un texte : l'inspecteur dit les deux objets");
+    check(!find("Forme") && find("Visible") && find("Opacit\xC3\xA9 (%)"), "... sans la Forme du voyant, avec Visible et l'Opacit\xC3\xA9");
+    // Ctrl+A dans l'explorateur : tous les objets.
+    b.editor->objects().keyPressed->emit(ui::KeyDown{ui::Key::A, ui::KeyMods{true, false, false, false}, false});
+    check(b.editor->canvas().selection().size() == 3, "Ctrl+A dans l'explorateur choisit les trois objets");
+}
+
 void lot6_actions_ressources() {
     std::printf("lot 6 : les actions sur les ressources dans l'onglet Actions\n");
     auto doc = std::make_shared<Document>();
@@ -28562,6 +28696,8 @@ int main(int argc, char** argv) {
     simulation_supervision();
     lot6_modeles_editeur();
     lot6_contenu();
+    etats1123();                       // 1.12.3 : les etats des objets multi-etats en table
+    communes1123();                    // 1.12.3 : plusieurs objets choisis, leurs proprietes communes
     lot6_actions_ressources();
     lot6_simulation();
     cycle1115();                 // 1.11.15 : le cycle de la simulation, la remanence

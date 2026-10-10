@@ -180,6 +180,88 @@ std::vector<StateEntry> parseStateList(std::string_view text, std::string* error
     return out;
 }
 
+bool stateFieldFits(std::string_view text, std::string* why) {
+    if (text.find(';') == std::string_view::npos && text.find('|') == std::string_view::npos) return true;
+    if (why) *why = "\xC2\xAB ; \xC2\xBB et \xC2\xAB | \xC2\xBB s\xC3\xA9parent les \xC3\xA9tats : ils ne peuvent pas \xC3\xAAtre dans un texte";
+    return false;
+}
+
+std::string formatStateList(const std::vector<StateEntry>& states) {
+    std::string out;
+    for (const auto& e : states) {
+        if (!out.empty()) out += "; ";
+        out += trim(e.match) + " = " + trim(e.text);
+        if (!trim(e.color).empty()) out += " | " + trim(e.color);
+        if (e.blink) out += " | clignote";
+    }
+    return out;
+}
+
+namespace {
+// Le texte sans ses parentheses exterieures, quand elles l'enveloppent entier : "(A AND B)" -> "A AND B".
+std::string unwrapped(std::string t) {
+    t = trim(t);
+    while (t.size() >= 2 && t.front() == '(' && t.back() == ')') {
+        int depth = 0;
+        bool whole = true;
+        char quote = 0;
+        for (std::size_t i = 0; i < t.size(); ++i) {
+            const char c = t[i];
+            if (quote) { if (c == quote) quote = 0; continue; }
+            if (c == '\'' || c == '"') { quote = c; continue; }
+            if (c == '(') ++depth;
+            else if (c == ')' && --depth == 0 && i + 1 < t.size()) { whole = false; break; }
+        }
+        if (!whole) break;
+        t = trim(std::string_view(t).substr(1, t.size() - 2));
+    }
+    return t;
+}
+// La premiere position, hors parentheses et hors textes, de `c` seul (pas "??" ni ":=") ; npos : aucune.
+std::size_t topLevel(std::string_view s, char c, std::size_t from = 0) {
+    int depth = 0;
+    char quote = 0;
+    for (std::size_t i = from; i < s.size(); ++i) {
+        const char ch = s[i];
+        if (quote) { if (ch == quote) quote = 0; continue; }
+        if (ch == '\'' || ch == '"') { quote = ch; continue; }
+        if (ch == '(' || ch == '[') ++depth;
+        else if ((ch == ')' || ch == ']') && depth > 0) --depth;
+        else if (depth == 0 && ch == c) {
+            if (c == '?' && ((i + 1 < s.size() && s[i + 1] == '?') || (i > 0 && s[i - 1] == '?'))) continue;
+            if (c == ':' && i + 1 < s.size() && s[i + 1] == '=') continue;
+            return i;
+        }
+    }
+    return std::string_view::npos;
+}
+} // namespace
+
+std::string conditionChain(const std::vector<std::string>& conditions) {
+    std::string out;
+    for (std::size_t k = 0; k < conditions.size(); ++k)
+        out += "(" + unwrapped(conditions[k].empty() ? std::string("FALSE") : conditions[k]) + ") ? " + std::to_string(k + 1) + " : ";
+    return out + "0";
+}
+
+bool parseConditionChain(std::string_view expr, std::vector<std::string>& conditions) {
+    conditions.clear();
+    std::string rest = trim(expr);
+    if (!rest.empty() && rest.front() == '=') rest = trim(std::string_view(rest).substr(1));
+    for (int k = 1;; ++k) {
+        if (unwrapped(rest) == "0") return !conditions.empty();
+        const auto q = topLevel(rest, '?');
+        if (q == std::string::npos) return false;
+        const auto c = topLevel(rest, ':', q + 1);
+        if (c == std::string::npos) return false;
+        const std::string cond = unwrapped(rest.substr(0, q));
+        const std::string num = trim(std::string_view(rest).substr(q + 1, c - q - 1));
+        if (cond.empty() || num != std::to_string(k)) return false;
+        conditions.push_back(cond);
+        rest = trim(std::string_view(rest).substr(c + 1));
+    }
+}
+
 int stateIndexOf(const std::vector<StateEntry>& states, std::string_view shown) {
     double sv = 0;
     const bool sNum = numeric(shown, sv);
