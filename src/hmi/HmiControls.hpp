@@ -21,6 +21,7 @@
 
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -41,6 +42,19 @@ struct Choice {
     bool        index{false};    // vrai : pas de valeur donnee, c'est le rang
 };
 [[nodiscard]] std::vector<Choice> choicesOf(const Object&);
+// 1.12.2 : LES ELEMENTS VENUS D'AILLEURS - la propriete itemsFrom (Liste, Liste deroulante, Groupe
+//  d'options, Selecteur) remplace "items" : une enumeration du projet (ses textes ; la valeur ecrite :
+//  son nombre), une variable LIST, VECTOR ou un tableau (ses elements, ecrits tels quels), une MAP
+//  (ses cles), ou une expression qui rend un texte "a;b;c". Le moteur qui tourne les donne
+//  (setChoiceResolver) ; sans moteur (l'editeur), une seule ligne montre la source : << Recettes.
+//  Plusieurs moteurs peuvent tourner (la simulation, le poste, les essais) : le dernier pose, encore
+//  la, repond - sur le fil qui l'a pose (ailleurs : la ligne de la source) ; chacun retire le sien
+//  en s'arretant (et en mourant).
+using ChoiceResolver = std::function<bool(std::string_view source, std::vector<Choice>& out)>;
+void registerChoiceResolver(const void* owner, ChoiceResolver resolver);
+void unregisterChoiceResolver(const void* owner) noexcept;
+[[nodiscard]] std::string itemsSourceOf(const Object&);       // itemsFrom, sans blancs ni $ ; vide : "items"
+[[nodiscard]] bool hasChoiceResolver() noexcept;
 // Le choix que montre une valeur lue (nombre compare en nombre, texte avec ou
 // sans apostrophes, TRUE = 1) ; -1 : aucun.
 [[nodiscard]] int choiceIndexOf(const std::vector<Choice>&, std::string_view shown);
@@ -111,6 +125,24 @@ struct ComboLayout {
     double rowH{28};
 };
 [[nodiscard]] ComboLayout comboLayout(const Object&, double w, double h, std::size_t count, std::size_t first);
+// 1.12.2 : LA LISTE (Kind::List) - les lignes dans l'objet (sa hauteur), les bandes de defilement
+// en haut et en bas quand tout ne tient pas. listHit : "choix:3", "defiler:-1" / "defiler:1", "".
+[[nodiscard]] ComboLayout listLayout(const Object&, double w, double h, std::size_t count, std::size_t first);
+[[nodiscard]] std::string listHit(const Object&, double w, double h, double x, double y, std::size_t count, std::size_t first);
+// 1.12.2 : LE TABLEAU DYNAMIQUE (rowsFrom) - l'en-tete, les lignes qui tiennent (la taille du texte
+// donne leur hauteur), la barre de defilement a droite quand toutes ne tiennent pas (la poignee : la
+// part montree). tableHit : "defiler:-N" / "defiler:N" (une page, au-dessus ou au-dessous de la
+// poignee), "" ailleurs. Le premier rang montre se borne a count - fit.
+struct TableLayout {
+    double      headerH{26};
+    double      rowH{22};
+    std::size_t fit{0};          // les lignes qui tiennent
+    std::size_t first{0};        // la premiere montree
+    Box         bar{};           // la barre (w = 0 : tout tient)
+    Box         thumb{};
+};
+[[nodiscard]] TableLayout tableLayout(const Object&, double w, double h, std::size_t count, std::size_t first);
+[[nodiscard]] std::string tableHit(const Object&, double w, double h, double x, double y, std::size_t count, std::size_t first);
 // "ouvrir" (la boite), "choix:3", "defiler:-1" / "defiler:1", "" (rien).
 [[nodiscard]] std::string comboHit(const Object&, double w, double h, double x, double y, std::size_t count, bool open,
                                    std::size_t first);

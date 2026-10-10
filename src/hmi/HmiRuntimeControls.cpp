@@ -25,6 +25,8 @@
 #include "HmiControls.hpp"
 #include "HmiExpr.hpp"
 #include "HmiMarkers.hpp"   // 1.11 (REP) : les reperes $...$
+#include "HmiEnums.hpp"     // 1.12.2 : une enumeration, source d'elements
+#include "HmiTypes.hpp"     // 1.12.2 : un tableau IHM, source d'elements ou de lignes
 
 #include <algorithm>
 #include <cctype>
@@ -262,6 +264,36 @@ void Runtime::controlPart(const View& v, const Object& o, std::string_view part,
         case Kind::RadioGroup:
             choose(choicesOf(o), indexAfter(part, "option:"));
             return;
+        case Kind::List: {
+            // 1.12.2 : une vraie liste - un clic choisit (la variable ecrite), les bandes la font defiler.
+            // Sans variable, elle se lit seulement (un clic ne dit rien).
+            const auto choices = choicesOf(o);
+            if (part == "defiler:-1" || part == "defiler:1") {
+                const auto box = o.box();
+                const std::size_t shown = listLayout(o, box.w, box.h, choices.size(), 0).rows.size();
+                const long step = part == "defiler:1" ? 1 : -1;
+                const long last = static_cast<long>(choices.size() > shown ? choices.size() - shown : 0);
+                st.comboFirst = static_cast<std::size_t>(std::clamp(static_cast<long>(st.comboFirst) + step, 0L, last));
+                return;
+            }
+            if (trimmedText(markers::strip(o.text("variable"))).empty()) return;
+            if (const int i = indexAfter(part, "choix:"); i >= 0) choose(choices, i);
+            return;
+        }
+        case Kind::Table: {
+            // 1.12.2 : un tableau dynamique (rowsFrom) defile - "defiler:-N" / "defiler:N" (la molette,
+            // un clic sur sa barre), borne a ses lignes.
+            if (part.rfind("defiler:", 0) != 0) return;
+            const long step = std::atol(std::string(part.substr(8)).c_str());
+            std::vector<std::string> headers;
+            std::vector<std::vector<std::string>> rows;
+            if (step == 0 || !tableRows(o, headers, rows)) return;
+            const auto box = o.box();
+            const std::size_t fit = tableLayout(o, box.w, box.h, rows.size(), 0).fit;
+            const long last = static_cast<long>(rows.size() > fit ? rows.size() - fit : 0);
+            st.comboFirst = static_cast<std::size_t>(std::clamp(static_cast<long>(st.comboFirst) + step, 0L, last));
+            return;
+        }
         case Kind::ComboBox: {
             const auto choices = choicesOf(o);
             const auto maxVisible = static_cast<std::size_t>(std::clamp(o.number("maxVisible", 6), 1.0, 40.0));
@@ -421,6 +453,130 @@ std::optional<double> Runtime::dragPreview(Id object) const {
 }
 
 // ============================================================== lectures ===
+std::size_t Runtime::listFirst(Id object) const {
+    const auto it = controls_.find(object);
+    return it == controls_.end() ? 0 : it->second.comboFirst;
+}
+
+namespace {
+// Une valeur simple, telle qu'on la lit : un texte sans apostrophes, un nombre, TRUE.
+std::string shownOf(const sim::Value& v) { return v.type() == sim::Type::String ? v.asString() : v.display(); }
+std::string shownOf(const sim::Obj& o) {
+    if (o.type && o.type->kind == sim::TypeDesc::Kind::Scalar) return shownOf(o.value);
+    return sim::display(o);
+}
+std::string literalOf(const sim::Obj& o) {
+    std::string t;
+    return sim::literalText(o, t) ? t : sim::display(o);
+}
+std::string quotedText(const std::string& t) {
+    std::string out = "'";
+    for (const char c : t) out += c == '\'' ? std::string("$'") : std::string(1, c);
+    return out + "'";
+}
+} // namespace
+
+bool Runtime::resolveChoices(std::string_view source, std::vector<Choice>& out) {
+    if (!project_) return false;
+    const std::string src = trimmedText(source);
+    if (src.empty()) return false;
+    // Une enumeration du projet : ses textes ; la valeur ecrite, son nombre.
+    if (const auto* e = findEnumeration(*project_, src)) {
+        for (const auto& v : e->values) out.push_back({v.text.empty() ? v.name : v.text, std::to_string(v.value), false});
+        return true;
+    }
+    // Une variable objet : une liste, un vecteur, un tableau (ses elements), une MAP (ses cles).
+    if (auto o = richVariable(src); o && o->type) {
+        if (o->type->kind == sim::TypeDesc::Kind::Map) {
+            for (const auto& [k, v] : o->textKeys) out.push_back({k, quotedText(k), false});
+            for (const auto& [k, v] : o->intKeys) out.push_back({std::to_string(k), std::to_string(k), false});
+            return true;
+        }
+        for (const auto& item : o->items)
+            if (item) out.push_back({shownOf(*item), literalOf(*item), false});
+        return true;
+    }
+    // Un tableau IHM (deplie en cases) : ses cases, dans l'ordre.
+    if (const auto* a = aggregate(src); a && a->array && types::isElementary(a->spec.element)) {
+        const auto& sp = a->spec;
+        const auto add = [&](const std::string& path) {
+            if (const auto* v = variable(path))
+                out.push_back({shownOf(*v), v->type() == sim::Type::String ? quotedText(v->asString()) : v->display(), false});
+        };
+        for (long long i = sp.low[0]; i <= sp.high[0]; ++i) {
+            if (sp.dims == 1) add(src + "[" + std::to_string(i) + "]");
+            else
+                for (long long j = sp.low[1]; j <= sp.high[1]; ++j) add(src + "[" + std::to_string(i) + "," + std::to_string(j) + "]");
+        }
+        return true;
+    }
+    // Une expression qui rend un texte a;b;c (une STRING de l'IHM, JOIN(L, ';')...) : ses morceaux, leur rang.
+    bool ok = false;
+    const std::string text = evalText(src, &ok);
+    if (!ok) return false;
+    std::size_t k = 0;
+    for (auto& item : listItems(text)) out.push_back({std::move(item), std::to_string(k++), true});
+    return true;
+}
+
+bool Runtime::tableRows(const Object& o, std::vector<std::string>& headers, std::vector<std::vector<std::string>>& rows) const {
+    std::string src = trimmedText(markers::strip(o.text("rowsFrom")));
+    if (src.empty() || !project_) return false;
+    // Les cellules d'un element : une valeur seule, ou les membres d'un tuple, d'une structure.
+    const auto cellsOf = [&](const sim::Obj& item, bool first) {
+        std::vector<std::string> row;
+        const bool composite = item.type && (item.type->kind == sim::TypeDesc::Kind::Tuple || item.type->kind == sim::TypeDesc::Kind::Struct);
+        if (composite) {
+            for (std::size_t m = 0; m < item.items.size(); ++m) {
+                row.push_back(item.items[m] ? shownOf(*item.items[m]) : std::string{});
+                if (first && m < item.type->members.size()) headers.push_back(item.type->members[m].first);
+            }
+        } else {
+            row.push_back(shownOf(item));
+            if (first) headers.push_back("Valeur");
+        }
+        return row;
+    };
+    if (auto obj = richVariable(src); obj && obj->type) {
+        if (obj->type->kind == sim::TypeDesc::Kind::Map) {
+            headers = {"Cl\xC3\xA9", "Valeur"};
+            for (const auto& [k, v] : obj->textKeys) rows.push_back({k, v ? shownOf(*v) : std::string{}});
+            for (const auto& [k, v] : obj->intKeys) rows.push_back({std::to_string(k), v ? shownOf(*v) : std::string{}});
+            return true;
+        }
+        bool first = true;
+        for (const auto& item : obj->items) {
+            if (!item) continue;
+            rows.push_back(cellsOf(*item, first));
+            first = false;
+        }
+        if (headers.empty()) headers.push_back("Valeur");
+        return true;
+    }
+    // Un tableau IHM (deplie en cases) : une ligne par case ; une structure : une colonne par membre.
+    const auto* a = aggregate(src);
+    if (!a || !a->array) return false;
+    const auto& sp = a->spec;
+    const auto members = types::isElementary(sp.element) ? std::vector<TypeMember>{} : types::membersOf(*project_, sp.element);
+    if (members.empty()) headers.push_back("Valeur");
+    for (const auto& m : members) headers.push_back(m.name);
+    for (long long i = sp.low[0]; i <= sp.high[0]; ++i) {
+        const std::string cell = src + "[" + std::to_string(i) + "]";
+        std::vector<std::string> row;
+        if (members.empty()) {
+            const auto* v = variable(cell);
+            row.push_back(v ? shownOf(*v) : std::string{});
+        } else {
+            for (const auto& m : members) {
+                const auto* v = variable(cell + "." + m.name);
+                row.push_back(v ? shownOf(*v) : std::string{});
+            }
+        }
+        rows.push_back(std::move(row));
+    }
+    return true;
+}
+
 bool Runtime::comboOpen(Id object, std::size_t* first) const {
     const auto it = controls_.find(object);
     if (it == controls_.end() || !it->second.comboOpen) return false;

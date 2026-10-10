@@ -502,11 +502,17 @@ Example trend() {
 
 Example list() {
     Maker m;
+    m.var("Gaz", "STRING", "'Argon Ar'");
     auto& l = m.add(Kind::List, "Liste_Gaz", 40, 30, 240, 170);
     l.set("items", "Azote N2;Argon Ar;H\xC3\xA9lium He;Oxyg\xC3\xA8ne O2;M\xC3\xA9lange N2/Ar;Dioxyde de carbone");
-    m.note("Explication", 320, 30, 250, 240,
-           "Une liste de textes, s\xC3\xA9par\xC3\xA9s par un point-virgule. Elle montre des choix ou des consignes ; "
-           "pour agir, associe des actions \xC3\xA0 des boutons, ou utilise une Gestion de recettes.");
+    l.set("variable", "Gaz");
+    m.title("Choisi", 320, 30, 250, "Gaz : {Gaz}", 18);
+    m.note("Explication", 320, 80, 250, 190,
+           "1.12.2 : un clic choisit une ligne ; elle se surligne et s'\xC3\xA9" "crit dans la variable (son libell\xC3\xA9 pour une "
+           "STRING). Au-del\xC3\xA0 de ce qui tient, la liste d\xC3\xA9" "file. \xC2\xAB \xC3\x89l\xC3\xA9ments depuis \xC2\xBB : "
+           "une \xC3\xA9num\xC3\xA9ration, une variable LIST, une MAP, un tableau.");
+    m.step(1.0, "partie", "Liste_Gaz", "choix:3");
+    m.step(3.0, "partie", "Liste_Gaz", "choix:0");
     return m.done(10);
 }
 

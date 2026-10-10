@@ -964,7 +964,7 @@ std::shared_ptr<void> Runtime::viewAliases(Id view) {
     env->aliases = keep.get();
     return std::shared_ptr<void>(nullptr, [env, saved, keep](void*) { env->aliases = saved; });
 }
-Runtime::~Runtime() = default;
+Runtime::~Runtime() { unregisterChoiceResolver(this); }   // 1.12.2 : ses sources d'elements partent avec lui
 
 void Runtime::bind(const Project* project, sim::Environment* plc) {
     project_ = project;
@@ -2412,6 +2412,8 @@ void Runtime::start(double now) {
     // l'application (un onglet Simulation referme puis rouvert ne repart pas a 1).
     static int sessions = 0;
     session_ = ++sessions;
+    // 1.12.2 : les sources d'elements (itemsFrom) se lisent dans ce moteur tant qu'il tourne.
+    registerChoiceResolver(this, [this](std::string_view source, std::vector<Choice>& out) { return resolveChoices(source, out); });
     composed_.clear(); boundCalls_.clear();
     slaveReads_.clear();                // 1.9 : les bascules d'avant ne comptent plus
     forcedIhm_.clear();                 // 1.11.5 : les variables repartent de leur valeur initiale
@@ -2758,6 +2760,7 @@ bool Runtime::runFunction(Id id, const std::vector<std::pair<std::string, sim::V
 }
 
 void Runtime::stop(double now, const std::string& why) {
+    unregisterChoiceResolver(this);                  // 1.12.2
     if (!running_) return;
     now_ = std::max(now_, now);
     while (!slots_.empty()) {

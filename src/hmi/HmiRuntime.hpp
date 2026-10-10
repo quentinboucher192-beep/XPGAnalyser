@@ -951,6 +951,18 @@ public:
     [[nodiscard]] double holdProgress(Id object, double now) const;
     // La liste deroulante ouverte, et sa premiere ligne montree.
     [[nodiscard]] bool comboOpen(Id object, std::size_t* first = nullptr) const;
+    // 1.12.2 : LES ELEMENTS D'UNE SOURCE (itemsFrom d'une liste, d'une liste deroulante...) : une
+    // enumeration du projet (ses textes ; la valeur : son nombre), une variable LIST, VECTOR, MAP,
+    // un tableau IHM (ses elements, ses cles), une expression qui rend "a;b;c". Faux : illisible.
+    bool resolveChoices(std::string_view source, std::vector<Choice>& out);
+    // 1.12.2 : la liste (Kind::List), le tableau dynamique (rowsFrom) - le rang de leur premiere
+    // ligne montree (ils defilent).
+    [[nodiscard]] std::size_t listFirst(Id object) const;
+    // 1.12.2 : LES LIGNES D'UN TABLEAU DYNAMIQUE (rowsFrom) : une variable LIST, VECTOR, un tableau
+    // IHM (de valeurs, de structures, de tuples) ou une MAP - une ligne par element, autant qu'il en a ;
+    // `headers` : les colonnes trouvees (les membres, Item1..., Valeur ; Cle et Valeur pour une MAP).
+    // Faux : pas de source, ou elle ne se lit pas.
+    bool tableRows(const Object& o, std::vector<std::string>& headers, std::vector<std::vector<std::string>>& rows) const;
     // Le programmateur horaire : ses plages (celles de sa variable, ou de l'objet).
     [[nodiscard]] const WeekSchedule* schedule(Id object) const;
     // La date et l'heure : celle en cours de reglage, sinon celle de la variable

@@ -817,6 +817,24 @@ void checkLot6(const Project& p, const NameExists& plc, std::vector<Issue>& out)
                                 add(out, S::Error, "Variable", v.id, o.id, "cells", "case : " + std::string(unknownVariablePrefix()) + r);
                     }
             }
+            // 1.12.2 : les lignes venues d'une variable (rowsFrom) - une LIST, un VECTOR, une MAP ou un
+            // tableau de l'IHM : une ligne par element, autant qu'il en a.
+            if (o.kind == Kind::Table) {
+                const std::string from = trimmedCopy(o.text("rowsFrom"));
+                if (!from.empty() && from.find('$') == std::string::npos) {
+                    if (const auto* var = p.variable(from)) {
+                        const std::string t = types::normalized(var->type);
+                        const auto starts = [&](std::string_view w) { return t.size() >= w.size() && t.compare(0, w.size(), w) == 0; };
+                        if (!starts("ARRAY") && !starts("LIST") && !starts("VECTOR") && !starts("MAP"))
+                            add(out, S::Error, "Variable", v.id, o.id, "rowsFrom",
+                                "lignes depuis : " + var->name + " (" + var->type + ") n'est ni une LIST, ni un VECTOR, ni une MAP, ni un tableau");
+                    } else {
+                        for (const auto& r : scanRoots(from))
+                            if (!known(p, plc, r, &v))
+                                add(out, S::Error, "Variable", v.id, o.id, "rowsFrom", "lignes depuis : " + std::string(unknownVariablePrefix()) + r);
+                    }
+                }
+            }
         }
         // ---- les actions sur les ressources
         const View composed = inherits(p, v) ? compose(p, v) : v;
@@ -1201,16 +1219,26 @@ void checkLot9(const Project& p, const NameExists& plc, std::vector<Issue>& out)
                     if (!out1.empty())
                         for (const auto& r : scanRoots(out1))
                             if (!known(p, plc, r, &v)) issue(S::Error, "output", "sortie : " + std::string(unknownVariablePrefix()) + r);
-                } else if (noVar) {
+                } else if (noVar && o.kind != Kind::List) {   // 1.12.2 : une liste sans variable se lit
                     issue(S::Warning, "variable", "commande sans variable : elle n'\xC3\xA9" "crira rien");
                 }
             }
             double lo = 0, hi = 0;
             const bool bounds = parseNumber(o.text("min"), lo) && parseNumber(o.text("max"), hi);
             switch (o.kind) {
-                case Kind::Selector: case Kind::ComboBox: case Kind::RadioGroup: {
+                case Kind::Selector: case Kind::ComboBox: case Kind::RadioGroup: case Kind::List: {
+                    // 1.12.2 : les elements venus d'ailleurs - une enumeration du projet, une variable
+                    // (LIST, VECTOR, MAP, un tableau) ou une expression qui rend un texte a;b;c.
+                    if (const std::string from = itemsSourceOf(o); !from.empty()) {
+                        if (!findEnumeration(p, from))
+                            for (const auto& r : scanRoots(from))
+                                if (!known(p, plc, r, &v))
+                                    issue(S::Error, "itemsFrom", "\xC3\xA9l\xC3\xA9ments depuis : " + std::string(unknownVariablePrefix()) + r);
+                        break;
+                    }
                     const char* key = o.kind == Kind::Selector ? "positions" : "items";
                     const auto choices = choicesOf(o);
+                    if (choices.empty() && o.kind == Kind::List) break;    // une liste vide se lit (vide)
                     if (choices.empty()) { issue(S::Error, key, "aucun choix : rien \xC3\xA0 s\xC3\xA9lectionner"); break; }
                     const auto values = listItems(o.text("values"));
                     if (!values.empty() && values.size() != choices.size())

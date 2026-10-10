@@ -82,4 +82,9 @@ bool literalItems(std::string_view text, std::vector<std::string>& out);
 // L'inverse : "[1, 2, 3]" ; `tuple` : "(1, 'x')".
 [[nodiscard]] std::string literalOf(const std::vector<std::string>& items, bool tuple = false);
 
+// 1.12.2 : LES COLONNES D'UN TABLEAU DYNAMIQUE (rowsFrom) relie a une variable de ce type : une MAP,
+// Cle et Valeur ; une liste (un vecteur, un tableau) de tuples, Item1, Item2... ; de structures, leurs
+// membres ; de valeurs, Valeur. Les memes que le moteur (Runtime::tableRows), sans le faire tourner.
+[[nodiscard]] std::vector<std::string> columnsOf(const Project&, std::string_view type);
+
 } // namespace hmi::typeform

@@ -995,6 +995,8 @@ bool Runtime::exportTable(std::string_view sourceText, ExportTable& t, std::stri
             return true;
         }
         case Kind::Table: {
+            // 1.12.2 : un tableau dynamique (rowsFrom) s'exporte entier - toutes ses lignes, pas seulement les montrees.
+            if (trimmedText(obj.text("rowsFrom")).size() > 0 && tableRows(obj, t.headers, t.rows)) return true;
             t.headers = splitSemicolons(obj.text("columns"));
             for (const auto& row : parseCells(obj.text("cells"))) {
                 std::vector<std::string> out;

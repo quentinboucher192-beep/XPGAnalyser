@@ -315,6 +315,37 @@ void drawComboBox(const Ctx& c) {
     drawFormMessage(c, {0, h + 2, std::max(w, 200.0), fs * 1.3}, c.opt.runtime ? c.opt.runtime->formState(c.o.id) : nullptr, fs * 0.9);
 }
 
+// 1.12.2 : LA LISTE - ses lignes (items, ou celles d'une source : itemsFrom), la ligne choisie
+// surlignee (la valeur lue : son retour d'etat, sinon sa variable), les bandes de defilement en
+// haut et en bas quand tout ne tient pas (hmi::listLayout, le meme que listHit).
+void drawList(const Ctx& c) {
+    const double w = c.w(), h = c.h();
+    const auto shape = rectLocal(w, h, c.src.number(c.o, "radius", 0));
+    fillLocal(c, shape, colorOf(c, "fill", 0x262C36));
+    const auto choices = hmi::choicesOf(c.o);
+    const std::size_t first = c.opt.runtime && !c.opt.editor ? c.opt.runtime->listFirst(c.o.id) : 0;
+    const auto l = hmi::listLayout(c.o, w, h, choices.size(), first);
+    const int idx = hmi::choiceIndexOf(choices, value(c));
+    const double fs = fsOf(c, 14);
+    const gfx::Color tc = colorOf(c, "textColor", 0xDDE3EA);
+    for (std::size_t i = 0; i < l.rows.size(); ++i) {
+        const std::size_t k = l.first + i;
+        if (k >= choices.size()) break;
+        const auto& b = l.rows[i];
+        if (static_cast<int>(k) == idx) fillLocal(c, boxLocal({b.x + 2, b.y + 1, b.w - 4, b.h - 2}, 2), withAlpha(accentOf(c), 0.55f));
+        text(c, fitted(c, choices[k].label, b.w - 14, fs), b.x + 6, b.y, b.w - 10, b.h, tc, fs, "gauche");
+    }
+    if (l.up.w > 0) {
+        const gfx::Color arrow = c.fixed(0xC8D0DC);
+        const double s = l.up.h * 0.32;
+        triangle(c, l.up.cx() - s, l.up.cy() + s * 0.5, l.up.cx() + s, l.up.cy() + s * 0.5, l.up.cx(), l.up.cy() - s * 0.6,
+                 l.first > 0 ? arrow : withAlpha(arrow, 0.3f));
+        triangle(c, l.down.cx() - s, l.down.cy() - s * 0.5, l.down.cx() + s, l.down.cy() - s * 0.5, l.down.cx(), l.down.cy() + s * 0.6,
+                 l.first + l.rows.size() < choices.size() ? arrow : withAlpha(arrow, 0.3f));
+    }
+    strokeLocal(c, shape, true, colorOf(c, "stroke", 0x3A4556), std::max(1.0, c.src.number(c.o, "strokeWidth", 1)));
+}
+
 void drawCheckBox(const Ctx& c) {
     const double w = c.w(), h = c.h();
     const bool on = valueTruthy(c);
@@ -943,6 +974,7 @@ bool drawLot9(const Ctx& c) {
         case Kind::Slider:              drawSlider(c); return true;
         case Kind::Knob:                drawKnob(c); return true;
         case Kind::ComboBox:            drawComboBox(c); return true;
+        case Kind::List:                drawList(c); return true;           // 1.12.2
         case Kind::CheckBox:            drawCheckBox(c); return true;
         case Kind::RadioGroup:          drawRadioGroup(c); return true;
         case Kind::DateTimePicker:      drawDateTimePicker(c); return true;

@@ -13,6 +13,7 @@
 #include "../src/hmi/HmiCheck.hpp"
 #include "../src/hmi/HmiCommands.hpp"
 #include "../src/hmi/HmiControls.hpp"
+#include "../src/hmi/HmiTypeForms.hpp"   // 1.12.2 : les colonnes d'un tableau dynamique
 #include "../src/hmi/HmiCrypto.hpp"
 #include "../src/hmi/HmiEdit.hpp"
 #include "../src/hmi/HmiExamples.hpp"
@@ -17104,6 +17105,160 @@ void scriptsLangage110() {
 
 // 1.12.2 : les collections du dialecte - LIST OF T, VECTOR OF T, TUPLE(T1, T2...), les litteraux
 // [1, 2], ['a' := 1], (1, 'x'), les constantes qui bornent un tableau, les fonctions LIST_ et VECTOR_.
+// 1.12.2 : LA LISTE (un clic ecrit sa variable, elle defile), LES ELEMENTS VENUS D'AILLEURS (itemsFrom :
+// une enumeration, une variable LIST, une MAP, un tableau, une expression a;b;c), LE TABLEAU DYNAMIQUE
+// (rowsFrom : une ligne par element, il defile, l'export les prend toutes) et leurs controles.
+void objetsListes1122() {
+    std::printf("1.12.2 : la liste, les elements depuis une source, le tableau dynamique\n");
+    Project p;
+    View v = makeView(p, "Listes");
+    HmiType mode;
+    mode.id = p.allocate();
+    mode.name = "T_Mode";
+    mode.kind = HmiTypeKind::Enumeration;
+    mode.values = {{"Arret", 0, "", ""}, {"Auto", 1, "Automatique", ""}, {"Manu", 2, "", ""}};
+    p.programs.types.push_back(mode);
+    p.programs.variables.push_back(hmiVar(p, "Mode", "INT", "0"));
+    p.programs.variables.push_back(hmiVar(p, "Recette", "STRING", "''"));
+    p.programs.variables.push_back(hmiVar(p, "Choix", "REAL", "0.0"));
+    p.programs.variables.push_back(hmiVar(p, "Rang", "INT", "0"));
+    p.programs.variables.push_back(hmiVar(p, "Texte", "STRING", "'x;y;z'"));
+    p.programs.variables.push_back(hmiVar(p, "Recettes", "LIST OF STRING"));
+    p.programs.variables.back().initial = "['Pain', 'Brioche', 'Baguette']";
+    p.programs.variables.push_back(hmiVar(p, "Stock", "MAP[STRING] OF INT"));
+    p.programs.variables.back().initial = "['vis' := 3, 'ecrou' := 5]";
+    p.programs.variables.push_back(hmiVar(p, "Courbe", "ARRAY[0..2] OF REAL"));
+    p.programs.variables.back().initial = "[1.5, 2.5, 3.5]";
+    p.programs.variables.push_back(hmiVar(p, "Lots", "LIST OF TUPLE(STRING, INT)"));
+    p.programs.variables.back().initial = "[('A12', 4), ('B07', 9), ('C33', 1), ('D01', 2), ('E55', 8), ('F02', 6), ('G11', 3), ('H09', 5)]";
+    const auto put = [&](Kind k, const char* name, const char* var, const char* from, double x, double y) {
+        const Id id = edit::add(p, v, k, x, y);
+        v.object(id)->name = name;
+        v.object(id)->set("variable", var);
+        v.object(id)->set(k == Kind::Table ? "rowsFrom" : "itemsFrom", from);
+        return id;
+    };
+    const Id combo = put(Kind::ComboBox, "Combo_Mode", "Mode", "T_Mode", 10, 10);
+    const Id liste = put(Kind::List, "Liste_Recettes", "Recette", "Recettes", 10, 60);
+    const Id radio = put(Kind::RadioGroup, "Radio_Stock", "Recette", "Stock", 10, 240);
+    const Id selecteur = put(Kind::Selector, "Sel_Courbe", "Choix", "Courbe", 300, 10);
+    const Id morceaux = put(Kind::List, "Liste_Texte", "Rang", "Texte", 300, 150);
+    const Id lecture = put(Kind::List, "Lecture", "", "", 300, 330);
+    v.object(lecture)->set("items", "a;b;c");
+    const Id longue = put(Kind::List, "Liste_Longue", "Rang", "", 600, 10);
+    v.object(longue)->set("items", "1;2;3;4;5;6;7;8;9;10;11;12;13;14;15;16;17;18;19;20");
+    v.object(longue)->setNumber("h", 100);
+    const Id table = put(Kind::Table, "Table_Lots", "", "Lots", 600, 200);
+    v.object(table)->setNumber("h", 180);
+    p.views = {v};
+    p.config.startView = v.id;
+
+    // ---- l'editeur : sans moteur, une seule ligne montre la source
+    {
+        const auto c = hmi::choicesOf(*v.object(combo));
+        check(c.size() == 1 && c[0].label.find("T_Mode") != std::string::npos,
+              "\xC3\xA9" "diteur : une liste d\xC3\xA9roulante dont les \xC3\xA9l\xC3\xA9ments viennent de T_Mode montre la source");
+        const auto cols = hmi::typeform::columnsOf(p, "LIST OF TUPLE(STRING, INT)");
+        check(cols == std::vector<std::string>{"Item1", "Item2"}, "\xC3\xA9" "diteur : les colonnes d'un tableau de tuples (Item1, Item2)");
+        check(hmi::typeform::columnsOf(p, "MAP[STRING] OF INT") == std::vector<std::string>{"Cl\xC3\xA9", "Valeur"}, "... d'une MAP : Cl\xC3\xA9, Valeur");
+        check(hmi::typeform::columnsOf(p, "VECTOR OF REAL") == std::vector<std::string>{"Valeur"}, "... d'un vecteur de valeurs : Valeur");
+    }
+
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    const auto num = [&](const char* n) { return rt.variable(n) ? rt.variable(n)->asReal() : -1.0; };
+    const auto txt = [&](const char* n) { return rt.variable(n) ? rt.variable(n)->asString() : std::string("?"); };
+    const auto labels = [&](Id id) {
+        std::vector<std::string> out;
+        for (const auto& c : hmi::choicesOf(*p.views[0].object(id))) out.push_back(c.label);
+        return out;
+    };
+
+    // ---- une enumeration : ses textes ; la valeur ecrite, son nombre
+    check(labels(combo) == std::vector<std::string>{"Arret", "Automatique", "Manu"}, "\xC3\xA9num\xC3\xA9ration : ses textes (Automatique pour Auto)");
+    rt.objectPart(combo, "ouvrir", 0.1);
+    rt.objectPart(combo, "choix:2", 0.2);
+    near(num("Mode"), 2, "... un choix \xC3\xA9" "crit son nombre (Manu = 2)");
+    // ---- une variable LIST : ses elements, ecrits tels quels ; la liste les suit
+    check(labels(liste) == std::vector<std::string>{"Pain", "Brioche", "Baguette"}, "variable LIST : ses \xC3\xA9l\xC3\xA9ments");
+    rt.objectPart(liste, "choix:2", 0.3);
+    same(txt("Recette"), "Baguette", "... un clic sur la liste \xC3\xA9" "crit l'\xC3\xA9l\xC3\xA9ment (une STRING)");
+    check(rt.setRichVariable("Recettes", "['Pain', 'Brioche', 'Baguette', 'Fougasse']"), "la variable LIST change");
+    check(labels(liste).size() == 4 && labels(liste).back() == "Fougasse", "... la liste montre son nouvel \xC3\xA9l\xC3\xA9ment");
+    // ---- une MAP : ses cles
+    {
+        const auto l = labels(radio);
+        check(l.size() == 2 && std::find(l.begin(), l.end(), "vis") != l.end() && std::find(l.begin(), l.end(), "ecrou") != l.end(),
+              "MAP : ses cl\xC3\xA9s (boutons radio)");
+        const auto at = static_cast<int>(std::find(l.begin(), l.end(), "vis") - l.begin());
+        rt.objectPart(radio, "option:" + std::to_string(at), 0.4);
+        same(txt("Recette"), "vis", "... un choix \xC3\xA9" "crit la cl\xC3\xA9");
+    }
+    // ---- un tableau IHM (deplie en cases) : ses cases
+    check(labels(selecteur) == std::vector<std::string>{"1.5", "2.5", "3.5"}, "tableau IHM : ses cases (s\xC3\xA9lecteur)");
+    rt.objectPart(selecteur, "position:2", 0.5);
+    near(num("Choix"), 3.5, "... une position \xC3\xA9" "crit la valeur de la case");
+    // ---- une expression qui rend a;b;c : ses morceaux, leur rang
+    check(labels(morceaux) == std::vector<std::string>{"x", "y", "z"}, "expression a;b;c : ses morceaux");
+    rt.objectPart(morceaux, "choix:1", 0.6);
+    near(num("Rang"), 1, "... un clic \xC3\xA9" "crit le rang");
+    // ---- une liste sans variable : elle se lit, un clic ne dit rien
+    rt.objectPart(lecture, "choix:1", 0.7);
+    check(!journalHas(rt, "Erreur", "sans variable"), "une liste sans variable se lit : un clic ne fait pas d'erreur");
+    // ---- elle defile, bornee a ses lignes (20 elements, 3 montres)
+    for (int i = 0; i < 30; ++i) rt.objectPart(longue, "defiler:1", 0.8);
+    {
+        const auto* o = p.views[0].object(longue);
+        const auto l = hmi::listLayout(*o, o->box().w, o->box().h, 20, rt.listFirst(longue));
+        check(l.rows.size() == 3 && rt.listFirst(longue) == 17, "la liste d\xC3\xA9" "file jusqu'aux 3 derni\xC3\xA8res lignes (17)");
+        check(hmi::listHit(*o, o->box().w, o->box().h, 10, o->box().h - 4, 20, 17) == "defiler:1"
+                  && hmi::listHit(*o, o->box().w, o->box().h, 10, 4, 20, 17) == "defiler:-1"
+                  && hmi::listHit(*o, o->box().w, o->box().h, 10, 20, 20, 17) == "choix:17",
+              "... ses bandes font d\xC3\xA9" "filer, une ligne se choisit (choix:17)");
+    }
+    rt.objectPart(longue, "choix:18", 0.9);
+    near(num("Rang"), 18, "... un clic sur une ligne d\xC3\xA9" "fil\xC3\xA9" "e \xC3\xA9" "crit son rang");
+    // ---- le tableau dynamique : une ligne par element, il defile, l'export les prend toutes
+    {
+        std::vector<std::string> headers;
+        std::vector<std::vector<std::string>> rows;
+        check(rt.tableRows(*p.views[0].object(table), headers, rows) && headers == std::vector<std::string>{"Item1", "Item2"} && rows.size() == 8
+                  && rows[0] == std::vector<std::string>{"A12", "4"} && rows[7] == std::vector<std::string>{"H09", "5"},
+              "tableau dynamique : une ligne par tuple de la LIST (8), les colonnes Item1, Item2");
+        rt.objectPart(table, "defiler:3", 1.0);
+        rt.objectPart(table, "defiler:3", 1.1);
+        const auto* o = p.views[0].object(table);
+        const auto l = hmi::tableLayout(*o, o->box().w, o->box().h, rows.size(), rt.listFirst(table));
+        check(l.fit == 5 && rt.listFirst(table) == 3 && l.bar.w > 0, "... il d\xC3\xA9" "file (5 lignes montr\xC3\xA9" "es, la premi\xC3\xA8re : 3), sa barre \xC3\xA0 droite");
+        check(hmi::tableHit(*o, o->box().w, o->box().h, o->box().w - 4, l.bar.bottom() - 2, rows.size(), 0) == "defiler:5",
+              "... un clic sous la poign\xC3\xA9" "e : une page plus bas");
+        ExportTable t;
+        check(rt.exportTable("objet:Table_Lots", t) && t.rows.size() == 8 && t.headers.size() == 2, "... l'export prend les 8 lignes");
+    }
+    rt.stop(2.0);
+
+    // ---- les controles : une source inconnue, une source qui n'a pas de lignes
+    {
+        Project q = p;
+        q.views[0].object(combo)->set("itemsFrom", "Inconnue");
+        q.views[0].object(table)->set("rowsFrom", "Mode");
+        const auto issues = generate(q, [](std::string_view) { return false; });   // sans automate : un nom inconnu l'est
+        const auto has = [&](std::string_view text) {
+            return std::any_of(issues.begin(), issues.end(), [&](const Issue& i) { return i.severity == Issue::Severity::Error && i.message.find(text) != std::string::npos; });
+        };
+        check(has("\xC3\xA9l\xC3\xA9ments depuis : ") && has("Inconnue"), "Compiler : des \xC3\xA9l\xC3\xA9ments depuis une variable inconnue");
+        check(has("lignes depuis : Mode (INT) n'est ni une LIST"), "Compiler : des lignes depuis une variable qui n'en a pas");
+        const auto clean = generate(p, [](std::string_view) { return false; });
+        check(std::none_of(clean.begin(), clean.end(), [](const Issue& i) {
+                  return i.severity == Issue::Severity::Error && (i.property == "itemsFrom" || i.property == "rowsFrom");
+              }),
+              "Compiler : les sources bien r\xC3\xA9gl\xC3\xA9" "es ne disent rien");
+        check(std::none_of(clean.begin(), clean.end(), [](const Issue& i) { return i.message.find("commande sans variable") != std::string::npos; }),
+              "... ni la liste sans variable (elle se lit)");
+    }
+}
+
 void scriptsCollections1122() {
     std::printf("1.12.2 : les collections des scripts (LIST, VECTOR, TUPLE, litteraux, fonctions)\n");
     Project p;
@@ -21763,6 +21918,7 @@ int main(int argc, char** argv) {
     scriptsCompiles110();             // 1.10 : Compiler trouve les erreurs des scripts
     scriptsLangage110();              // 1.10 (S1) : le langage des scripts
     scriptsCollections1122();         // 1.12.2 : LIST, VECTOR, TUPLE, les litteraux
+    objetsListes1122();               // 1.12.2 : la liste, les elements depuis une source, le tableau dynamique
     enumerationsLangage110();         // 1.10 (S1, decision 15) : les enumerations dans les scripts
     operateurs110();                  // 1.10 (chantier S2) : les operateurs des symboles et des types IHM
     operateurs1101();                 // 1.10.1 (chantier U2) : a, b et Resultat (types, legende, exemple, Compiler)

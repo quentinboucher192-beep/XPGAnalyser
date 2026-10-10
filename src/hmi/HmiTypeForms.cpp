@@ -320,6 +320,25 @@ Shape decompose(std::string_view type) {
     return s;
 }
 
+std::vector<std::string> columnsOf(const Project& p, std::string_view type) {
+    const Shape s = decompose(type);
+    if (s.form == Form::Map) return {"Cl\xC3\xA9", "Valeur"};
+    if (s.form == Form::Simple || s.form == Form::Tuple) return {"Valeur"};
+    const Shape e = decompose(s.element);
+    if (e.form == Form::Tuple) {
+        std::vector<std::string> out;
+        const std::size_t n = 1 + (trimmed(e.parameter).empty() ? 0 : splitTop(e.parameter).size());
+        for (std::size_t i = 1; i <= n; ++i) out.push_back("Item" + std::to_string(i));
+        return out;
+    }
+    if (e.form == Form::Simple && !e.reference) {
+        std::vector<std::string> out;
+        for (const auto& m : types::membersOf(p, e.element)) out.push_back(m.name);
+        if (!out.empty()) return out;
+    }
+    return {"Valeur"};
+}
+
 bool valueFits(const Project& p, std::string_view type, std::string_view value, std::string* why) {
     if (trimmed(value).empty()) return true;
     TypingEnv env(p);

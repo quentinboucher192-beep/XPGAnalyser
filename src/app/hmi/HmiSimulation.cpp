@@ -1398,6 +1398,17 @@ bool HmiLiveCanvas::partRect(std::string_view name, std::string_view part, gfx::
                         else if (part == "defiler:1" && l.down.w > 0) { local = l.down; found = true; }
                         break;
                     }
+                    case hmi::Kind::List: {
+                        // 1.12.2 : la liste - ses lignes montrees, ses bandes de defilement.
+                        const auto l = hmi::listLayout(o, box.w, box.h, hmi::choicesOf(o).size(), runtime_ ? runtime_->listFirst(o.id) : 0);
+                        const int i = index("choix:");
+                        if (i >= static_cast<int>(l.first) && static_cast<std::size_t>(i) < l.first + l.rows.size()) {
+                            local = l.rows[static_cast<std::size_t>(i) - l.first];
+                            found = true;
+                        } else if (part == "defiler:-1" && l.up.w > 0) { local = l.up; found = true; }
+                        else if (part == "defiler:1" && l.down.w > 0) { local = l.down; found = true; }
+                        break;
+                    }
                     case hmi::Kind::DateTimePicker: {
                         const auto l = hmi::pickerLayout(o, box.w, box.h);
                         if (part == "maintenant") { local = l.now; found = true; }
@@ -1714,6 +1725,17 @@ void HmiLiveCanvas::pressObject(std::size_t layer, gfx::Point p, int clickCount)
                 swipeLayer_ = layer;
             }
         }
+        // 1.12.2 : la barre d'un tableau dynamique (rowsFrom) - une page plus haut, plus bas ; ailleurs,
+        // le tableau garde ses actions.
+        if (o->kind == hmi::Kind::Table && runtime_ && o->text("rowsFrom").find_first_not_of(" \t") != std::string::npos) {
+            std::vector<std::string> headers;
+            std::vector<std::vector<std::string>> rows;
+            if (runtime_->tableRows(*o, headers, rows))
+                if (const std::string part = hmi::tableHit(*o, box.w, box.h, lx, ly, rows.size(), runtime_->listFirst(o->id)); !part.empty()) {
+                    partClicked->emit(id, part);
+                    return;
+                }
+        }
         // Lot 9 : les commandes a parties (selecteur, boutons radio, liste deroulante,
         // date et heure, programmateur) ; le curseur et le potentiometre se tirent.
         if (o->kind == hmi::Kind::Slider || o->kind == hmi::Kind::Knob) {
@@ -1724,12 +1746,15 @@ void HmiLiveCanvas::pressObject(std::size_t layer, gfx::Point p, int clickCount)
             return;
         }
         if (o->kind == hmi::Kind::Selector || o->kind == hmi::Kind::RadioGroup || o->kind == hmi::Kind::ComboBox
-            || o->kind == hmi::Kind::DateTimePicker || o->kind == hmi::Kind::WeeklySchedule) {
+            || o->kind == hmi::Kind::DateTimePicker || o->kind == hmi::Kind::WeeklySchedule || o->kind == hmi::Kind::List) {
             std::string part;
             switch (o->kind) {
                 case hmi::Kind::Selector: part = hmi::selectorHit(*o, box.w, box.h, lx, ly, hmi::choicesOf(*o).size()); break;
                 case hmi::Kind::RadioGroup: part = hmi::radioHit(*o, box.w, box.h, lx, ly, hmi::choicesOf(*o).size()); break;
                 case hmi::Kind::ComboBox: part = "ouvrir"; break;
+                case hmi::Kind::List:        // 1.12.2 : une ligne (choisie), une bande (defiler)
+                    part = hmi::listHit(*o, box.w, box.h, lx, ly, hmi::choicesOf(*o).size(), runtime_ ? runtime_->listFirst(o->id) : 0);
+                    break;
                 case hmi::Kind::DateTimePicker: part = hmi::pickerHit(*o, box.w, box.h, lx, ly); break;
                 default: {
                     const auto* ws = runtime_ ? runtime_->schedule(o->id) : nullptr;
@@ -1982,8 +2007,16 @@ ui::EventResult HmiLiveCanvas::onEvent(const ui::InputEvent& ev) {
             const auto order = layers_[li].view.paintOrder();
             for (auto it = order.rbegin(); it != order.rend(); ++it) {
                 const auto* o = *it;
-                if (o->kind != hmi::Kind::ScrollPanel || !o->flag("visible", true)) continue;
+                // 1.12.2 : la liste, le tableau dynamique (rowsFrom) - la molette fait defiler leurs lignes.
+                const bool rows = o->kind == hmi::Kind::List
+                               || (o->kind == hmi::Kind::Table && o->text("rowsFrom").find_first_not_of(" \t") != std::string::npos);
+                if ((o->kind != hmi::Kind::ScrollPanel && !rows) || !o->flag("visible", true)) continue;
                 if (!o->box().contains(x, y) || hmi::clippedAt(layers_[li].view, *o, x, y)) continue;
+                if (rows) {
+                    const int notch = o->kind == hmi::Kind::Table ? 3 : 1;
+                    partClicked->emit(o->id, "defiler:" + std::to_string(w->dy > 0 ? -notch : notch));
+                    return ui::EventResult::Consumed;
+                }
                 const double step = std::max(4.0, o->number("wheelStep", 40));
                 const auto l = hmi::scrollLayout(layers_[li].view, *o);
                 const std::string axis = l.maxY > 0 ? "defiler:" : "defilerx:";

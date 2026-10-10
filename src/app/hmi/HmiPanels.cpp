@@ -26,6 +26,8 @@
 #include "../../hmi/HmiApiVars.hpp"     // 1.11.1 (API-M) : les variables de l'automate sous API.
 #include "HmiApiVarsPane.hpp"            // 1.11.1 (API-V, R1111-6) : l'arbre dans la bibliotheque
 #include "HmiValueKind.hpp"              // 1.11.3 : le carre de legende de chaque case
+#include "../../hmi/HmiTypeForms.hpp"   // 1.12.2 : les variables qui ont des elements (Elements depuis)
+#include "../../hmi/HmiEnums.hpp"       // 1.12.2 : les enumerations, sources d'elements
 #include "../../ui/Shapes.hpp"
 #include "../../ui/Theme.hpp"
 #include "../../ui/widgets/Controls.hpp"
@@ -1784,6 +1786,15 @@ const std::vector<KeyInfo>& keyInfos() {
         {"columns", "Colonnes (a;b;c)", PG::ValueType::Text, {}, ""},
         {"rows", "Lignes", PG::ValueType::Integer, {}, ""},
         {"items", "\xC3\x89l\xC3\xA9ments (a;b;c)", PG::ValueType::Text, {}, ""},
+        // 1.12.2 : les elements et les lignes venus d'ailleurs.
+        {"itemsFrom", "\xC3\x89l\xC3\xA9ments depuis", PG::ValueType::Text, {},
+         "Remplace la liste \xC3\xA9" "crite (\xC3\x89l\xC3\xA9ments, Positions) : une \xC3\xA9num\xC3\xA9ration du projet (ses textes ; la valeur "
+         "\xC3\xA9" "crite : son nombre), une variable LIST, VECTOR ou un tableau (ses \xC3\xA9l\xC3\xA9ments, \xC3\xA9" "crits tels quels), "
+         "une MAP (ses cl\xC3\xA9s), ou une expression qui rend un texte a;b;c. Les lignes suivent la variable en marche."},
+        {"rowsFrom", "Lignes depuis", PG::ValueType::Text, {},
+         "Une variable LIST, VECTOR, MAP ou un tableau de l'IHM : une ligne par \xC3\xA9l\xC3\xA9ment, autant qu'elle en a (le tableau "
+         "d\xC3\xA9" "file \xC3\xA0 la molette, ou par sa barre). Les colonnes : les membres d'une structure, Item1, Item2... d'un tuple, "
+         "Cl\xC3\xA9 et Valeur d'une MAP, sinon Valeur. L'export du tableau les prend toutes."},
         {"image", "Image (ressource)", PG::ValueType::Text, {}, "Une image du gestionnaire de ressources. Une expression la choisit en marche (\xC3\xA9tat graphique) : SEL(Ouvert, 'vanne_fermee.png', 'vanne_ouverte.png')."},
         {"poster", "Image d'attente", PG::ValueType::Text, {}, "L'image montr\xC3\xA9" "e \xC3\xA0 la place de la vid\xC3\xA9o (qui n'est pas d\xC3\xA9" "cod\xC3\xA9" "e)."},
         {"stretch", "\xC3\x89tirement", PG::ValueType::Enum, {"ajuster", "\xC3\xA9tirer", "aucun"}, ""},
@@ -2721,6 +2732,17 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
                 p.enumValues.clear();
                 for (const auto& t : hmi::kLoginTabs) p.enumValues.emplace_back(t.label);
                 p.name = "Onglet ouvert";
+            } else if ((prop.key == "itemsFrom" || prop.key == "rowsFrom") && project) {
+                // 1.12.2 : les sources - les enumerations du projet (des elements), les variables IHM
+                // qui ont des elements (LIST, VECTOR, MAP, tableaux).
+                p.type = PG::ValueType::Enum;
+                p.enumValues = {""};
+                if (prop.key == "itemsFrom")
+                    for (const auto* e : hmi::enumerations(*project)) p.enumValues.push_back(e->name);
+                for (const auto& var : project->programs.variables) {
+                    const auto form = hmi::typeform::decompose(var.type).form;
+                    if (form != hmi::typeform::Form::Simple && form != hmi::typeform::Form::Tuple) p.enumValues.push_back(var.name);
+                }
             } else if (prop.key == "namedStyle" && project) {
                 // Lot 12 : les styles nommes du projet.
                 p.type = PG::ValueType::Enum;

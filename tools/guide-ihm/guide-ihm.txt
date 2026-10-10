@@ -2415,6 +2415,7 @@ Rassembler des mesures, des consignes, des états. Le contenu se règle dans l'o
 @param cells | Cases | (onglet Contenu) | Le contenu des cases, réglé dans l'onglet Contenu.
 @param widths | Largeurs des colonnes (a;b) | égales | Relatives : 2;1;1 fait la première colonne deux fois plus large.
 @param source | Source | (vide) | Un fichier externe du projet (Excel, CSV, JSON, SQLite...) : le tableau montre ses lignes à la place des cases.
+@param rowsFrom | Lignes depuis | (vide) | Une variable LIST, VECTOR, MAP ou un tableau de l'IHM : une ligne par élément, autant qu'elle en a ; le tableau défile (la molette, sa barre). Les colonnes : les membres d'une structure, Item1, Item2... d'un tuple, Clé et Valeur d'une MAP, sinon Valeur.
 @param fontSize | Taille du texte | 14 | La taille du texte des cases (et la hauteur des lignes).
 @param fill | Remplissage | #262C36 | Le fond du tableau.
 @param stroke | Contour | #3A4556 | Les traits du tableau.
@@ -2458,15 +2459,26 @@ Un clic sur une ligne **choisit** son alarme (surlignée) : la consigne d'alarme
 @param stroke | Contour | #3A4556 | Le cadre et la grille.
 
 == objet-liste | Liste
-: Une liste de textes, séparés par des points-virgules : des choix, des consignes, une légende.
+: Une liste de lignes toujours dépliée : un clic choisit une ligne et écrit sa valeur ; ses lignes viennent d'un texte a;b;c, d'une énumération, d'une variable LIST, MAP ou d'un tableau.
 @objet List
-@voir objet-communs, objet-gestion-de-recettes
-@exemple Une liste de gaz, telle qu'elle s'affiche.
+@voir objet-communs, objet-liste-deroulante, objet-gestion-de-recettes
+@exemple Une liste de gaz : un clic en choisit un, la ligne choisie se surligne.
 @capture EX_List.png | L'exemple de la liste.
+### À quoi il sert
+Choisir parmi des éléments **tous visibles** (une recette, un lot, un gaz), ou simplement les lire. La ligne choisie est surlignée ; quand tout ne tient pas, deux bandes fléchées et la molette la font défiler. Sans variable, elle se lit seulement.
+**Éléments depuis** la relie à une source qui change en marche : une variable `LIST OF STRING` (ses éléments, écrits tels quels), une MAP (ses clés), un tableau IHM (ses cases), une énumération (ses textes ; la valeur écrite : son nombre), une expression qui rend `a;b;c`.
 ### Ses paramètres
-@param items | Éléments (a;b;c) | Élément 1;Élément 2;Élément 3 | Les lignes, séparées par des points-virgules. Une expression peut les donner.
+@param variable | Variable écrite | (vide) | La variable qui reçoit la ligne choisie : son libellé si c'est une STRING, sinon son rang (ou sa valeur) ; vide : la liste se lit seulement.
+@param items | Éléments (a;b;c) | Élément 1;Élément 2;Élément 3 | Les lignes, séparées par des points-virgules.
+@param values | Valeurs écrites (a;b;c) | (vide) | Une valeur par ligne ; vide : le rang (ou le libellé pour une STRING).
+@param itemsFrom | Éléments depuis | (vide) | Remplace la liste écrite : une énumération du projet (ses textes ; la valeur écrite : son nombre), une variable LIST, VECTOR ou un tableau (ses éléments), une MAP (ses clés), ou une expression qui rend un texte a;b;c.
+@param state | Retour d'état (expression) | (vide) | La ligne surlignée ; vide : la variable.
+@param font | Police | Sans | La police.
+@param fontSize | Taille du texte | 14 | En pixels (et la hauteur des lignes).
+@param textColor | Couleur du texte | #DDE3EA | Les lignes.
 @param fill | Remplissage | #262C36 | Le fond de la liste.
 @param stroke | Contour | #3A4556 | Le cadre.
+@param accent | Couleur du bouton | #2F6FD6 | La ligne choisie.
 > Pour que l'opérateur choisisse un jeu de valeurs, la **Gestion de recettes** fait tout (choisir, appliquer, lire).
 
 == objet-video | Vidéo
@@ -2822,6 +2834,7 @@ Choisir un **mode** parmi quelques-uns. Chaque position écrit une valeur : son 
 @param variable | Variable écrite | (vide) | La variable qui reçoit la valeur de la position.
 @param positions | Positions (a;b;c) | Manu;Arrêt;Auto | Les libellés, séparés par ;.
 @param values | Valeurs écrites (a;b;c) | (vide) | Une valeur par position (une expression : 2, 'Auto', TRUE) ; vide : le rang.
+@param itemsFrom | Éléments depuis | (vide) | Remplace la liste écrite : une énumération du projet (ses textes ; la valeur écrite : son nombre), une variable LIST, VECTOR ou un tableau (ses éléments), une MAP (ses clés), ou une expression qui rend un texte a;b;c.
 @param style | Style | rotatif | rotatif : un bouton et ses repères (un clic sur le bouton passe à la position suivante) ; boutons : les positions alignées.
 @param state | Retour d'état (expression) | (vide) | Ce que le sélecteur montre ; vide : la variable écrite.
 @param font | Police | Sans | La police des libellés.
@@ -2901,6 +2914,7 @@ Choisir parmi **beaucoup** d'éléments sans prendre la place : un gaz, une rece
 @param variable | Variable écrite | (vide) | La variable qui reçoit le choix : son libellé si c'est une STRING, sinon son rang (ou sa valeur).
 @param items | Éléments (a;b;c) | Azote;Argon;Hélium | Les libellés.
 @param values | Valeurs écrites (a;b;c) | (vide) | Une valeur par élément ; vide : le rang (ou le libellé pour une STRING).
+@param itemsFrom | Éléments depuis | (vide) | Remplace la liste écrite : une énumération du projet (ses textes ; la valeur écrite : son nombre), une variable LIST, VECTOR ou un tableau (ses éléments), une MAP (ses clés), ou une expression qui rend un texte a;b;c.
 @param placeholder | Texte d'invite | (choisir) | Montré quand la variable ne correspond à aucun élément.
 @param maxVisible | Lignes visibles | 6 | Au-delà, deux bandes fléchées font défiler la liste.
 @param state | Retour d'état (expression) | (vide) | Ce que la liste montre ; vide : la variable.
@@ -2944,6 +2958,7 @@ Comme un sélecteur, quand les options doivent **toutes se lire** : trois ou qua
 @param variable | Variable écrite | (vide) | La variable qui reçoit la valeur de l'option.
 @param items | Éléments (a;b;c) | Petite vitesse;Grande vitesse;Arrêt | Les options.
 @param values | Valeurs écrites (a;b;c) | (vide) | Une valeur par option ; vide : le rang.
+@param itemsFrom | Éléments depuis | (vide) | Remplace la liste écrite : une énumération du projet (ses textes ; la valeur écrite : son nombre), une variable LIST, VECTOR ou un tableau (ses éléments), une MAP (ses clés), ou une expression qui rend un texte a;b;c.
 @param orientation | Orientation | verticale | Les options l'une sous l'autre, ou côte à côte.
 @param state | Retour d'état (expression) | (vide) | Ce que le groupe montre ; vide : la variable.
 @param font | Police | Sans | La police.

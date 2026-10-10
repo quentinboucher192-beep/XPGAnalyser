@@ -36,6 +36,7 @@ bool kindWritesVariable(Kind k) noexcept {
         case Kind::PushButton: case Kind::Switch: case Kind::IlluminatedButton: case Kind::Selector: case Kind::Slider:
         case Kind::Knob: case Kind::ComboBox: case Kind::CheckBox: case Kind::RadioGroup: case Kind::DateTimePicker:
         case Kind::WeeklySchedule:
+        case Kind::List:            // 1.12.2 : un clic sur une ligne l'ecrit (sans variable : une liste a lire)
             return true;
         default:
             return false;
@@ -611,6 +612,7 @@ Object makeObject(Kind kind, Id id, std::string name, double x, double y, Id lay
             o.set("columns", "Nom;Valeur;Unit\xC3\xA9");
             o.setNumber("rows", 4);
             o.set("source", "");      // un fichier externe : le tableau montre ses lignes
+            o.set("rowsFrom", "");    // 1.12.2 : une variable LIST, VECTOR, MAP ou un tableau : une ligne par element
             o.setNumber("fontSize", 14); // lot 6 : la taille du texte des cases (et la hauteur des lignes)
             o.set("fill", "#262C36");
             o.set("stroke", "#3A4556");
@@ -639,10 +641,19 @@ Object makeObject(Kind kind, Id id, std::string name, double x, double y, Id lay
             o.set("stroke", "#3A4556");
             break;
         case Kind::List:
+            // 1.12.2 : une vraie liste - ses lignes (items, ou itemsFrom : une enumeration, une variable
+            // LIST, VECTOR, MAP ou un tableau), la ligne choisie surlignee, un clic l'ecrit dans la variable.
             common(o, x, y, 200, 160);
             o.set("items", "\xC3\x89l\xC3\xA9ment 1;\xC3\x89l\xC3\xA9ment 2;\xC3\x89l\xC3\xA9ment 3");
+            o.set("values", "");
+            o.set("itemsFrom", "");
+            o.set("state", "");
+            o.set("font", "Sans");
+            o.setNumber("fontSize", 14);
+            o.set("textColor", "#DDE3EA");
             o.set("fill", "#262C36");
             o.set("stroke", "#3A4556");
+            o.set("accent", "#2F6FD6");
             break;
         case Kind::Video:
             common(o, x, y, 320, 180);
@@ -1403,6 +1414,7 @@ Object makeObject(Kind kind, Id id, std::string name, double x, double y, Id lay
             common(o, x, y, 240, 120);
             o.set("positions", "Manu;Arr\xC3\xAAt;Auto");
             o.set("values", "");
+            o.set("itemsFrom", "");      // 1.12.2 : les positions venues d'une enumeration, d'une liste...
             o.set("style", "rotatif");
             o.set("state", "");
             o.set("font", "Sans");
@@ -1456,6 +1468,7 @@ Object makeObject(Kind kind, Id id, std::string name, double x, double y, Id lay
             o.set("align", "gauche");
             o.set("items", "Azote;Argon;H\xC3\xA9lium");
             o.set("values", "");
+            o.set("itemsFrom", "");      // 1.12.2 : les elements venus d'une enumeration, d'une liste, d'une MAP...
             o.set("placeholder", "(choisir)");
             o.setNumber("maxVisible", 6);
             o.set("state", "");
@@ -1477,6 +1490,7 @@ Object makeObject(Kind kind, Id id, std::string name, double x, double y, Id lay
             common(o, x, y, 220, 100);
             o.set("items", "Petite vitesse;Grande vitesse;Arr\xC3\xAAt");
             o.set("values", "");
+            o.set("itemsFrom", "");      // 1.12.2
             o.set("orientation", "verticale");
             o.set("state", "");
             o.set("font", "Sans");

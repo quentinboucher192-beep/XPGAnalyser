@@ -5381,7 +5381,7 @@ const std::vector<Topic>& topics() {
                          "l'onglet Contenu.\nLargeurs des colonnes (a;b)\t\xC3\xA9gales\tRelatives : 2;1;1 "
                          "fait la premi\xC3\xA8re colonne deux fois plus large.\nSource\t(vide)\tUn fichier "
                          "externe du projet (Excel, CSV, JSON, SQLite...) : le tableau montre ses lignes "
-                         "\xC3\xA0 la place des cases.\nTaille du texte\t14\tLa taille du texte des cases "
+                         "\xC3\xA0 la place des cases.\nLignes depuis\t(vide)\tUne variable LIST, VECTOR, MAP ou un tableau de l'IHM : une ligne par \xC3\xA9l\xC3\xA9ment, autant qu'elle en a ; le tableau d\xC3\xA9file (la molette, sa barre). Les colonnes : les membres d'une structure, Item1, Item2... d'un tuple, ClÃ© et Valeur d'une MAP, sinon Valeur.\nTaille du texte\t14\tLa taille du texte des cases "
                          "(et la hauteur des lignes).\nRemplissage\t#262C36\tLe fond du "
                          "tableau.\nContour\t#3A4556\tLes traits du tableau.", {}},
              {K::Tip, "L'action \xC2\xAB Lier un tableau \xC2\xBB change son fichier en marche.", {}},
@@ -5402,6 +5402,10 @@ const std::vector<Topic>& topics() {
            {"source", "Source", "(vide)",
             "Un fichier externe du projet (Excel, CSV, JSON, SQLite...) : le tableau montre ses lignes "
             "\xC3\xA0 la place des cases."},
+           {"rowsFrom", "Lignes depuis", "(vide)",
+            "Une variable LIST, VECTOR, MAP ou un tableau de l'IHM : une ligne par \xC3\xA9l\xC3\xA9ment, autant qu'elle en a ; "
+            "le tableau d\xC3\xA9" "file (la molette, sa barre). Les colonnes : les membres d'une structure, Item1, Item2... "
+            "d'un tuple, Cl\xC3\xA9 et Valeur d'une MAP, sinon Valeur."},
            {"fontSize", "Taille du texte", "14",
             "La taille du texte des cases (et la hauteur des lignes)."},
            {"fill", "Remplissage", "#262C36",
@@ -5530,30 +5534,62 @@ const std::vector<Topic>& topics() {
          {}},
         // ---- La bibliotheque d'objets / objet-liste
         {"objet-liste", "Liste", "La biblioth\xC3\xA8que d'objets",
-         "Une liste de textes, s\xC3\xA9par\xC3\xA9s par des points-virgules : des choix, des consignes, une "
-         "l\xC3\xA9gende.",
+         "Une liste de lignes toujours d\xC3\xA9pli\xC3\xA9" "e : un clic choisit une ligne et \xC3\xA9" "crit sa valeur ; ses "
+         "lignes viennent d'un texte a;b;c, d'une \xC3\xA9num\xC3\xA9ration, d'une variable LIST, MAP ou d'un tableau.",
          {
+             {K::Heading, "\xC3\x80 quoi il sert", {}},
+             {K::Paragraph, "Choisir parmi des \xC3\xA9l\xC3\xA9ments **tous visibles** (une recette, un lot, un gaz), ou "
+                         "simplement les lire. La ligne choisie est surlign\xC3\xA9" "e ; quand tout ne tient pas, deux "
+                         "bandes fl\xC3\xA9" "ch\xC3\xA9" "es et la molette la font d\xC3\xA9" "filer. Sans variable, elle se lit "
+                         "seulement.", {}},
+             {K::Paragraph, "**\xC3\x89l\xC3\xA9ments depuis** la relie \xC3\xA0 une source qui change en marche : une "
+                         "variable `LIST OF STRING` (ses \xC3\xA9l\xC3\xA9ments, \xC3\xA9" "crits tels quels), une MAP (ses "
+                         "cl\xC3\xA9s), un tableau IHM (ses cases), une \xC3\xA9num\xC3\xA9ration (ses textes ; la valeur "
+                         "\xC3\xA9" "crite : son nombre), une expression qui rend `a;b;c`.", {}},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
-             {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il "
-                         "r\xC3\xA8gle\n\xC3\x89l\xC3\xA9ments (a;b;c)\t\xC3\x89l\xC3\xA9ment "
-                         "1;\xC3\x89l\xC3\xA9ment 2;\xC3\x89l\xC3\xA9ment 3\tLes lignes, "
-                         "s\xC3\xA9par\xC3\xA9" "es par des points-virgules. Une expression peut les "
-                         "donner.\nRemplissage\t#262C36\tLe fond de la liste.\nContour\t#3A4556\tLe cadre.", {}},
+             {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nVariable \xC3\xA9" "crite\t(vide)\tLa "
+                         "variable qui re\xC3\xA7oit la ligne choisie : son libell\xC3\xA9 si c'est une STRING, sinon son rang "
+                         "(ou sa valeur) ; vide : la liste se lit seulement.\n\xC3\x89l\xC3\xA9ments (a;b;c)\t\xC3\x89l\xC3\xA9ment "
+                         "1;\xC3\x89l\xC3\xA9ment 2;\xC3\x89l\xC3\xA9ment 3\tLes lignes, s\xC3\xA9par\xC3\xA9" "es par des "
+                         "points-virgules.\nValeurs \xC3\xA9" "crites (a;b;c)\t(vide)\tUne valeur par ligne ; vide : le rang (ou le "
+                         "libell\xC3\xA9 pour une STRING).\n\xC3\x89l\xC3\xA9ments depuis\t(vide)\tRemplace la liste \xC3\xA9" "crite : une \xC3\xA9num\xC3\xA9ration du projet (ses textes ; la valeur \xC3\xA9" "crite : son nombre), une variable LIST, VECTOR ou un tableau (ses \xC3\xA9l\xC3\xA9ments), une MAP (ses cl\xC3\xA9s), ou une expression qui rend un texte a;b;c.\nRetour d'\xC3\xA9tat (expression)\t(vide)\tLa ligne "
+                         "surlign\xC3\xA9" "e ; vide : la variable.\nPolice\tSans\tLa police.\nTaille du texte\t14\tEn pixels (et la "
+                         "hauteur des lignes).\nCouleur du texte\t#DDE3EA\tLes lignes.\nRemplissage\t#262C36\tLe fond de la "
+                         "liste.\nContour\t#3A4556\tLe cadre.\nCouleur du bouton\t#2F6FD6\tLa ligne choisie.", {}},
              {K::Tip, "Pour que l'op\xC3\xA9rateur choisisse un jeu de valeurs, la **Gestion de "
                          "recettes** fait tout (choisir, appliquer, lire).", {}},
          },
-         {"objet-communs", "objet-gestion-de-recettes"},
+         {"objet-communs", "objet-liste-deroulante", "objet-gestion-de-recettes"},
          {},
          {},
          {{"EX_List.png", "L'exemple de la liste."}},
          "List",
-         {{"items", "\xC3\x89l\xC3\xA9ments (a;b;c)", "\xC3\x89l\xC3\xA9ment 1;\xC3\x89l\xC3\xA9ment 2;\xC3\x89l\xC3\xA9ment 3",
-            "Les lignes, s\xC3\xA9par\xC3\xA9" "es par des points-virgules. Une expression peut les donner."},
+         {{"variable", "Variable \xC3\xA9" "crite", "(vide)",
+            "La variable qui re\xC3\xA7oit la ligne choisie : son libell\xC3\xA9 si c'est une STRING, sinon son rang (ou sa "
+            "valeur) ; vide : la liste se lit seulement."},
+           {"items", "\xC3\x89l\xC3\xA9ments (a;b;c)", "\xC3\x89l\xC3\xA9ment 1;\xC3\x89l\xC3\xA9ment 2;\xC3\x89l\xC3\xA9ment 3",
+            "Les lignes, s\xC3\xA9par\xC3\xA9" "es par des points-virgules."},
+           {"values", "Valeurs \xC3\xA9" "crites (a;b;c)", "(vide)",
+            "Une valeur par ligne ; vide : le rang (ou le libell\xC3\xA9 pour une STRING)."},
+           {"itemsFrom", "\xC3\x89l\xC3\xA9ments depuis", "(vide)",
+            "Remplace la liste \xC3\xA9" "crite : une \xC3\xA9num\xC3\xA9ration du projet (ses textes ; la valeur \xC3\xA9" "crite : son "
+            "nombre), une variable LIST, VECTOR ou un tableau (ses \xC3\xA9l\xC3\xA9ments), une MAP (ses cl\xC3\xA9s), ou une "
+            "expression qui rend un texte a;b;c."},
+           {"state", "Retour d'\xC3\xA9tat (expression)", "(vide)",
+            "La ligne surlign\xC3\xA9" "e ; vide : la variable."},
+           {"font", "Police", "Sans",
+            "La police."},
+           {"fontSize", "Taille du texte", "14",
+            "En pixels (et la hauteur des lignes)."},
+           {"textColor", "Couleur du texte", "#DDE3EA",
+            "Les lignes."},
            {"fill", "Remplissage", "#262C36",
             "Le fond de la liste."},
            {"stroke", "Contour", "#3A4556",
-            "Le cadre."}},
-         "Une liste de gaz, telle qu'elle s'affiche.",
+            "Le cadre."},
+           {"accent", "Couleur du bouton", "#2F6FD6",
+            "La ligne choisie."}},
+         "Une liste de gaz : un clic en choisit un, la ligne choisie se surligne.",
          {}},
         // ---- La bibliotheque d'objets / objet-video
         {"objet-video", "Vid\xC3\xA9o", "La biblioth\xC3\xA8que d'objets",
@@ -6401,7 +6437,7 @@ const std::vector<Topic>& topics() {
                          "position.\nPositions (a;b;c)\tManu;Arr\xC3\xAAt;Auto\tLes libell\xC3\xA9s, "
                          "s\xC3\xA9par\xC3\xA9s par ;.\nValeurs \xC3\xA9" "crites (a;b;c)\t(vide)\tUne "
                          "valeur par position (une expression : 2, 'Auto', TRUE) ; vide : le "
-                         "rang.\nStyle\trotatif\trotatif : un bouton et ses rep\xC3\xA8res (un clic sur le "
+                         "rang.\n\xC3\x89l\xC3\xA9ments depuis\t(vide)\tRemplace la liste \xC3\xA9" "crite : une \xC3\xA9num\xC3\xA9ration du projet (ses textes ; la valeur \xC3\xA9" "crite : son nombre), une variable LIST, VECTOR ou un tableau (ses \xC3\xA9l\xC3\xA9ments), une MAP (ses cl\xC3\xA9s), ou une expression qui rend un texte a;b;c.\nStyle\trotatif\trotatif : un bouton et ses rep\xC3\xA8res (un clic sur le "
                          "bouton passe \xC3\xA0 la position suivante) ; boutons : les positions "
                          "align\xC3\xA9" "es.\nRetour d'\xC3\xA9tat (expression)\t(vide)\tCe que le "
                          "s\xC3\xA9lecteur montre ; vide : la variable \xC3\xA9" "crite.\nPolice\tSans\tLa "
@@ -6423,6 +6459,10 @@ const std::vector<Topic>& topics() {
             "Les libell\xC3\xA9s, s\xC3\xA9par\xC3\xA9s par ;."},
            {"values", "Valeurs \xC3\xA9" "crites (a;b;c)", "(vide)",
             "Une valeur par position (une expression : 2, 'Auto', TRUE) ; vide : le rang."},
+           {"itemsFrom", "\xC3\x89l\xC3\xA9ments depuis", "(vide)",
+            "Remplace la liste \xC3\xA9" "crite : une \xC3\xA9num\xC3\xA9ration du projet (ses textes ; la valeur \xC3\xA9" "crite : son "
+            "nombre), une variable LIST, VECTOR ou un tableau (ses \xC3\xA9l\xC3\xA9ments), une MAP (ses cl\xC3\xA9s), ou une "
+            "expression qui rend un texte a;b;c."},
            {"style", "Style", "rotatif",
             "rotatif : un bouton et ses rep\xC3\xA8res (un clic sur le bouton passe \xC3\xA0 la position "
             "suivante) ; boutons : les positions align\xC3\xA9" "es."},
@@ -6601,7 +6641,7 @@ const std::vector<Topic>& topics() {
                          "valeur).\n\xC3\x89l\xC3\xA9ments (a;b;c)\tAzote;Argon;H\xC3\xA9lium\tLes "
                          "libell\xC3\xA9s.\nValeurs \xC3\xA9" "crites (a;b;c)\t(vide)\tUne valeur par "
                          "\xC3\xA9l\xC3\xA9ment ; vide : le rang (ou le libell\xC3\xA9 pour une "
-                         "STRING).\nTexte d'invite\t(choisir)\tMontr\xC3\xA9 quand la variable ne correspond "
+                         "STRING).\n\xC3\x89l\xC3\xA9ments depuis\t(vide)\tRemplace la liste \xC3\xA9" "crite : une \xC3\xA9num\xC3\xA9ration du projet (ses textes ; la valeur \xC3\xA9" "crite : son nombre), une variable LIST, VECTOR ou un tableau (ses \xC3\xA9l\xC3\xA9ments), une MAP (ses cl\xC3\xA9s), ou une expression qui rend un texte a;b;c.\nTexte d'invite\t(choisir)\tMontr\xC3\xA9 quand la variable ne correspond "
                          "\xC3\xA0 aucun \xC3\xA9l\xC3\xA9ment.\nLignes visibles\t6\tAu-del\xC3\xA0, deux "
                          "bandes fl\xC3\xA9" "ch\xC3\xA9" "es font d\xC3\xA9" "filer la liste.\nRetour "
                          "d'\xC3\xA9tat (expression)\t(vide)\tCe que la liste montre ; vide : la "
@@ -6624,6 +6664,10 @@ const std::vector<Topic>& topics() {
             "Les libell\xC3\xA9s."},
            {"values", "Valeurs \xC3\xA9" "crites (a;b;c)", "(vide)",
             "Une valeur par \xC3\xA9l\xC3\xA9ment ; vide : le rang (ou le libell\xC3\xA9 pour une STRING)."},
+           {"itemsFrom", "\xC3\x89l\xC3\xA9ments depuis", "(vide)",
+            "Remplace la liste \xC3\xA9" "crite : une \xC3\xA9num\xC3\xA9ration du projet (ses textes ; la valeur \xC3\xA9" "crite : son "
+            "nombre), une variable LIST, VECTOR ou un tableau (ses \xC3\xA9l\xC3\xA9ments), une MAP (ses cl\xC3\xA9s), ou une "
+            "expression qui rend un texte a;b;c."},
            {"placeholder", "Texte d'invite", "(choisir)",
             "Montr\xC3\xA9 quand la variable ne correspond \xC3\xA0 aucun \xC3\xA9l\xC3\xA9ment."},
            {"maxVisible", "Lignes visibles", "6",
@@ -6702,7 +6746,7 @@ const std::vector<Topic>& topics() {
                          "\xC3\xA9" "crite\t(vide)\tLa variable qui re\xC3\xA7oit la valeur de "
                          "l'option.\n\xC3\x89l\xC3\xA9ments (a;b;c)\tPetite vitesse;Grande "
                          "vitesse;Arr\xC3\xAAt\tLes options.\nValeurs \xC3\xA9" "crites (a;b;c)\t(vide)\tUne "
-                         "valeur par option ; vide : le rang.\nOrientation\tverticale\tLes options l'une "
+                         "valeur par option ; vide : le rang.\n\xC3\x89l\xC3\xA9ments depuis\t(vide)\tRemplace la liste \xC3\xA9" "crite : une \xC3\xA9num\xC3\xA9ration du projet (ses textes ; la valeur \xC3\xA9" "crite : son nombre), une variable LIST, VECTOR ou un tableau (ses \xC3\xA9l\xC3\xA9ments), une MAP (ses cl\xC3\xA9s), ou une expression qui rend un texte a;b;c.\nOrientation\tverticale\tLes options l'une "
                          "sous l'autre, ou c\xC3\xB4te \xC3\xA0 c\xC3\xB4te.\nRetour d'\xC3\xA9tat "
                          "(expression)\t(vide)\tCe que le groupe montre ; vide : la "
                          "variable.\nPolice\tSans\tLa police.\nTaille du texte\t15\tEn pixels.\nCouleur du "
@@ -6720,6 +6764,10 @@ const std::vector<Topic>& topics() {
             "Les options."},
            {"values", "Valeurs \xC3\xA9" "crites (a;b;c)", "(vide)",
             "Une valeur par option ; vide : le rang."},
+           {"itemsFrom", "\xC3\x89l\xC3\xA9ments depuis", "(vide)",
+            "Remplace la liste \xC3\xA9" "crite : une \xC3\xA9num\xC3\xA9ration du projet (ses textes ; la valeur \xC3\xA9" "crite : son "
+            "nombre), une variable LIST, VECTOR ou un tableau (ses \xC3\xA9l\xC3\xA9ments), une MAP (ses cl\xC3\xA9s), ou une "
+            "expression qui rend un texte a;b;c."},
            {"orientation", "Orientation", "verticale",
             "Les options l'une sous l'autre, ou c\xC3\xB4te \xC3\xA0 c\xC3\xB4te."},
            {"state", "Retour d'\xC3\xA9tat (expression)", "(vide)",

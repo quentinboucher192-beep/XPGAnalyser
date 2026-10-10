@@ -1,6 +1,9 @@
 #include "HmiControls.hpp"
 
 #include <algorithm>
+#include <mutex>
+#include <thread>
+#include <utility>
 #include <cctype>
 #include <cmath>
 #include <cstdio>
@@ -56,7 +59,66 @@ std::vector<std::string> listItems(std::string_view text) {
     return out;
 }
 
+namespace {
+// Un moteur repond sur SON fil (celui qui l'a pose) : un controle lance ailleurs (la generation
+// en arriere-plan) voit la source, comme l'editeur, sans toucher au moteur qui tourne.
+struct ResolverEntry {
+    const void*     owner{nullptr};
+    std::thread::id thread{};
+    ChoiceResolver  resolve;
+};
+std::mutex& resolversLock() {
+    static std::mutex m;
+    return m;
+}
+std::vector<ResolverEntry>& choiceResolvers() {
+    static std::vector<ResolverEntry> r;
+    return r;
+}
+ChoiceResolver choiceResolver() {
+    std::lock_guard<std::mutex> lock(resolversLock());
+    const auto& r = choiceResolvers();
+    const auto here = std::this_thread::get_id();
+    for (auto it = r.rbegin(); it != r.rend(); ++it)
+        if (it->thread == here) return it->resolve;
+    return {};
+}
+} // namespace
+
+void registerChoiceResolver(const void* owner, ChoiceResolver resolver) {
+    unregisterChoiceResolver(owner);
+    if (!resolver) return;
+    std::lock_guard<std::mutex> lock(resolversLock());
+    choiceResolvers().push_back({owner, std::this_thread::get_id(), std::move(resolver)});
+}
+
+void unregisterChoiceResolver(const void* owner) noexcept {
+    std::lock_guard<std::mutex> lock(resolversLock());
+    std::erase_if(choiceResolvers(), [owner](const ResolverEntry& e) { return e.owner == owner; });
+}
+
+bool hasChoiceResolver() noexcept { return static_cast<bool>(choiceResolver()); }
+
+std::string itemsSourceOf(const Object& o) {
+    std::string t = trim(o.text("itemsFrom"));
+    std::erase(t, '$');                        // un repere : $Liste$ -> Liste (resolu avant par la vue)
+    return trim(t);
+}
+
 std::vector<Choice> choicesOf(const Object& o) {
+    // 1.12.2 : les elements venus d'ailleurs (une enumeration, une liste, un tableau, une MAP).
+    if (const std::string from = itemsSourceOf(o); !from.empty()) {
+        std::vector<Choice> out;
+        if (const auto resolve = choiceResolver()) {
+            if (!resolve(from, out)) out.clear();
+            return out;
+        }
+        Choice c;
+        c.label = "\xE2\x86\x90 " + from;
+        c.value = "0";
+        c.index = true;
+        return {c};
+    }
     const auto labels = listItems(o.text(o.kind == Kind::Selector ? "positions" : "items"));
     const std::string rawValues = o.text("values");
     const auto values = rawValues.empty() ? std::vector<std::string>{} : splitKeep(rawValues, ';');
@@ -328,6 +390,61 @@ ComboLayout comboLayout(const Object& o, double w, double h, std::size_t count, 
     }
     for (std::size_t i = 0; i < shown; ++i) l.rows.push_back({0, l.list.y + band + l.rowH * static_cast<double>(i), w, l.rowH});
     return l;
+}
+
+ComboLayout listLayout(const Object& o, double w, double h, std::size_t count, std::size_t first) {
+    ComboLayout l;
+    l.rowH = std::max(18.0, fontSizeOf(o, 14) * 1.7);
+    l.list = {0, 0, w, h};
+    const auto fits = static_cast<std::size_t>(std::max(1.0, std::floor(h / l.rowH)));
+    const bool scroll = count > fits;
+    const double band = scroll ? 14.0 : 0.0;
+    const auto shown = scroll ? static_cast<std::size_t>(std::max(1.0, std::floor((h - band * 2) / l.rowH))) : count;
+    l.first = count > shown ? std::min(first, count - shown) : 0;
+    if (scroll) {
+        l.up = {0, 0, w, band};
+        l.down = {0, h - band, w, band};
+    }
+    for (std::size_t i = 0; i < shown && l.first + i < count; ++i) l.rows.push_back({0, band + l.rowH * static_cast<double>(i), w, l.rowH});
+    return l;
+}
+
+std::string listHit(const Object& o, double w, double h, double x, double y, std::size_t count, std::size_t first) {
+    const auto l = listLayout(o, w, h, count, first);
+    if (l.up.w > 0 && l.up.contains(x, y)) return "defiler:-1";
+    if (l.down.w > 0 && l.down.contains(x, y)) return "defiler:1";
+    for (std::size_t i = 0; i < l.rows.size(); ++i)
+        if (l.rows[i].contains(x, y)) return "choix:" + std::to_string(l.first + i);
+    return {};
+}
+
+TableLayout tableLayout(const Object& o, double w, double h, std::size_t count, std::size_t first) {
+    TableLayout l;
+    // Comme les cases d'un tableau (lot 6) : la taille du texte donne la hauteur des lignes.
+    const double fs = std::clamp(o.number("fontSize", 14), 8.0, 40.0);
+    l.rowH = std::max(22.0, fs + 12);
+    l.headerH = l.rowH + 4;
+    l.fit = static_cast<std::size_t>(std::max(0.0, std::floor((h - l.headerH) / l.rowH)));
+    l.first = count > l.fit ? std::min(first, count - l.fit) : 0;
+    if (count > l.fit && l.fit > 0) {
+        const double bw = 12;
+        l.bar = {w - bw, l.headerH, bw, std::max(0.0, h - l.headerH)};
+        const double part = static_cast<double>(l.fit) / static_cast<double>(count);
+        const double th = std::max(16.0, l.bar.h * part);
+        const double room = std::max(0.0, l.bar.h - th);
+        const double at = count > l.fit ? static_cast<double>(l.first) / static_cast<double>(count - l.fit) : 0.0;
+        l.thumb = {l.bar.x + 2, l.bar.y + room * at, bw - 4, th};
+    }
+    return l;
+}
+
+std::string tableHit(const Object& o, double w, double h, double x, double y, std::size_t count, std::size_t first) {
+    const auto l = tableLayout(o, w, h, count, first);
+    if (l.bar.w <= 0 || !l.bar.contains(x, y)) return {};
+    const std::string page = std::to_string(std::max<std::size_t>(1, l.fit));
+    if (y < l.thumb.y) return "defiler:-" + page;
+    if (y > l.thumb.bottom()) return "defiler:" + page;
+    return {};
 }
 
 std::string comboHit(const Object& o, double w, double h, double x, double y, std::size_t count, bool open, std::size_t first) {

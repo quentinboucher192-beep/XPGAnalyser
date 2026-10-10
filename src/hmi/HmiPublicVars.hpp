@@ -568,6 +568,7 @@ inline constexpr PropType kPropTypes[] = {
     switch (k) {
         case Kind::InputField: case Kind::PushButton: case Kind::Switch: case Kind::IlluminatedButton: case Kind::Selector:
         case Kind::Slider: case Kind::Knob: case Kind::ComboBox: case Kind::CheckBox: case Kind::RadioGroup:
+        case Kind::List:            // 1.12.2 : la ligne choisie (sa variable, ou son retour d'etat)
         case Kind::NumericDisplay: case Kind::MultiStateIndicator: case Kind::MultiStateText: case Kind::Bargraph:
         case Kind::Thermometer: case Kind::Dial: case Kind::SevenSegment: case Kind::TrendArrow:
             return true;
