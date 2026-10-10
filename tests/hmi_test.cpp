@@ -17112,8 +17112,20 @@ void scriptsCollections1122() {
     p.programs.variables.push_back(hmiVar(p, "Texte", "STRING"));
     p.programs.variables.push_back(hmiVar(p, "Ok", "BOOL"));
     p.programs.variables.push_back(hmiVar(p, "Courbe", "ARRAY[0..4] OF REAL"));
+    // 1.12.2 : des variables IHM objets (dans la memoire de l'IHM).
+    p.programs.variables.push_back(hmiVar(p, "Mesures", "LIST OF REAL"));
+    p.programs.variables.back().initial = "[1.5, 2]";
+    p.programs.variables.push_back(hmiVar(p, "Stock", "MAP[STRING] OF INT"));
+    p.programs.variables.back().initial = "['vis' := 3, 'ecrou' := 5]";
+    p.programs.variables.push_back(hmiVar(p, "Point", "TUPLE(INT, STRING)"));
+    p.programs.variables.back().initial = "(1, 'a')";
     struct Case { const char* name; const char* code; };
     const Case cases[] = {
+        {"Globales", "LIST_ADD(Mesures, 4.0); R1 := LIST_SUM(Mesures); R2 := Mesures.Count; R3 := Stock['ecrou'] + Point.Item1;\n"
+                     "Texte := Point.Item2; Stock['boulon'] := 7;"},
+        // 1.12.2 : une fonction IHM du projet rend une LIST, une autre un TUPLE
+        {"FonctionListe", "VAR L : LIST OF INT; t : TUPLE(STRING, REAL); END_VAR\nL := Dizaines(3); R1 := L.Count; R2 := L[2]; t := Mesure('four');\n"
+                          "Texte := t.Item1; R3 := t.Item2;"},
         {"Liste", "VAR L : LIST OF INT; END_VAR\nLIST_ADD(L, 3); LIST_ADD(L, 1); LIST_ADD(L, 2); R1 := L.Count; R2 := L[0];\n"
                   "LIST_SORT(L); R3 := L[0] * 100 + L[1] * 10 + L[2];"},
         {"Litteral", "VAR L : LIST OF REAL := [1, 2.5, 3]; END_VAR\nR1 := LIST_SUM(L); R2 := L.Count; Ok := L = [1.0, 2.5, 3.0];"},
@@ -17142,6 +17154,9 @@ void scriptsCollections1122() {
         {"ListeDeTuples", "VAR L : LIST OF TUPLE(STRING, REAL); END_VAR\nLIST_ADD(L, ('four', 850.0)); LIST_ADD(L, ('cuve', 20.5));\n"
                           "Texte := L[1].Item1; R1 := L[0].Item2 + L[1].Item2; Ok := LIST_CONTAINS(L, ('cuve', 20.5));"},
     };
+    p.programs.functions.push_back(hmiFunction(p, "Dizaines", "LIST OF INT",
+                                               "VAR_INPUT\n  n : INT;\nEND_VAR\nVAR\n  i : INT;\nEND_VAR\nFOR i := 1 TO n DO LIST_ADD(Dizaines, i * 10); END_FOR"));
+    p.programs.functions.push_back(hmiFunction(p, "Mesure", "TUPLE(STRING, REAL)", "VAR_INPUT\n  nom : STRING;\nEND_VAR\nMesure := (nom, 850.5);"));
     for (const auto& c : cases) p.programs.scripts.push_back(generalScript(p, c.name, c.code));
     p.views = {a};
     p.config.startView = a.id;
@@ -17158,6 +17173,8 @@ void scriptsCollections1122() {
     };
     const auto r = [&](const char* n) { return rt.variable(n) ? rt.variable(n)->asReal() : -999.0; };
     const auto txt = [&]() { return rt.variable("Texte") ? rt.variable("Texte")->asString() : std::string("?"); };
+    check(run("FonctionListe") && r("R1") == 3.0 && r("R2") == 30.0 && txt() == "four" && r("R3") == 850.5,
+          "fonctions IHM : Dizaines(3) rend une LIST OF INT, Mesure('four') un TUPLE(STRING, REAL) (" + why + ")");
     const auto ok = [&]() { return rt.variable("Ok") && rt.variable("Ok")->isTruthy(); };
     check(run("Liste") && r("R1") == 3.0 && r("R2") == 3.0 && r("R3") == 123.0, "LIST OF INT : LIST_ADD, L.Count, L[0], LIST_SORT (" + why + ")");
     check(run("Litteral") && r("R1") == 6.5 && r("R2") == 3.0 && ok(), "litt\xC3\xA9ral [1, 2.5, 3] converti en LIST OF REAL ; L = [1.0, 2.5, 3.0] (" + why + ")");
@@ -17179,6 +17196,22 @@ void scriptsCollections1122() {
     check(run("RetourListe") && r("R1") == 4.0 && r("R2") == 6.0 && r("R3") == 3.0, "une fonction rend une LIST OF INT ; LIST_MAX, LIST_AVG (" + why + ")");
     check(run("Retirer") && ok() && r("R1") == 3.0 && txt() == "cxb/b?", "LIST_REMOVE, REMOVE_AT, INSERT, REVERSE, FIRST, GET : " + txt() + " (" + why + ")");
     check(run("ListeDeTuples") && txt() == "cuve" && r("R1") == 870.5 && ok(), "LIST OF TUPLE(STRING, REAL) : L[1].Item1, LIST_CONTAINS d'un tuple (" + why + ")");
+    // Les variables IHM objets : un script les ecrit en place ; une expression de vue les lit (une
+    // copie : elle n'ecrit rien) ; la simulation les montre et les ecrit (un litteral).
+    check(rt.richText("Mesures") == "[1.5, 2.0]" && rt.richText("Point") == "(1, 'a')", "valeurs initiales : " + rt.richText("Mesures") + ", " + rt.richText("Point"));
+    check(run("Globales") && r("R1") == 7.5 && r("R2") == 3.0 && r("R3") == 6.0 && txt() == "a",
+          "un script : LIST_ADD(Mesures, 4.0), Mesures.Count, Stock['ecrou'], Point.Item1 (" + why + ")");
+    check(rt.richText("Stock") == "['boulon' := 7, 'ecrou' := 5, 'vis' := 3]", "la MAP gard\xC3\xA9" "e : " + rt.richText("Stock"));
+    const auto count = Expression::compile("Mesures.Count").evaluate(rt.environment());
+    check(count && count->asInteger() == 3, "une expression de vue : Mesures.Count = 3");
+    const auto added = Expression::compile("LIST_ADD(Mesures, 9.0)").evaluate(rt.environment());
+    check(added && added->asInteger() == 4 && rt.richText("Mesures") == "[1.5, 2.0, 4.0]",
+          "LIST_ADD dans une expression : sur une copie, la variable ne change pas (" + rt.richText("Mesures") + ")");
+    const auto joined = TextTemplate::compile("{JOIN(Mesures, ' ; ')}").render(rt.environment());
+    check(joined == "1.5 ; 2 ; 4", "un texte \xC3\xA0 trous : {JOIN(Mesures, ' ; ')} = " + joined);
+    std::string w;
+    check(rt.setRichVariable("Mesures", "[9]", &w) && rt.richText("Mesures") == "[9.0]", "la simulation \xC3\xA9" "crit [9] (" + w + ")");
+    check(!rt.setRichVariable("Mesures", "[1, 'a']", &w) && rt.richText("Mesures") == "[9.0]", "[1, 'a'] pour une LIST OF REAL : refus\xC3\xA9 (" + w + ")");
 }
 
 // 1.10 (chantier S2) : les operateurs des symboles et des types IHM (decision 14)

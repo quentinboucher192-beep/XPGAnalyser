@@ -33,7 +33,8 @@ namespace {
 
 enum VarAction : int { VAdd = 1, VFolder, VType, VRename, VDuplicate, VDelete, VLink, VUnlink, VShow,
                        VTrend,                // 1.10 (chantier O) : la visualisation graphique
-                       VRecalc };             // 1.11.8 : Recalculer la place memoire
+                       VRecalc,               // 1.11.8 : Recalculer la place memoire
+                       VItems };              // 1.12.2 : les elements de la valeur initiale (une liste, un tableau...)
 enum TypeAction : int { TAdd = 1, TMember, TUp, TDown, TRemoveMember, TDuplicate, TDelete,
                         TFolder,               // lot 21 : un dossier de types
                         TCopy, TPaste,         // 1.10 (chantier O) : les membres <-> Excel
@@ -500,6 +501,8 @@ HmiVariablesPane::HmiVariablesPane(std::string id, hmi::DocumentPtr doc, Apply a
     tools->add(VRename, HmiGlyph::Text, "Renommer (F2, ou double-clic sur le nom) : ce qui la cite suit, montr\xC3\xA9 avant ; un dossier se renomme sur place", "Renommer");
     tools->add(VDuplicate, HmiGlyph::Duplicate, "Dupliquer la variable", "Dupliquer");
     tools->add(VDelete, HmiGlyph::Delete, "Supprimer la variable ou le dossier (ses variables montent d'un cran) - Ctrl+Z le rend", "Supprimer");
+    tools->add(VItems, HmiGlyph::List, "\xC3\x89" "diter les \xC3\xA9l\xC3\xA9ments de la valeur initiale (une liste, un vecteur, un tableau, un dictionnaire, "
+               "un tuple) : un par ligne", "\xC3\x89l\xC3\xA9ments\xE2\x80\xA6");
     tools->separator();
     // 1.10 (chantier O) : les variables choisies dans une fenetre graphique temporaire.
     tools->add(VTrend, HmiGlyph::Trend, "Ouvrir une visualisation graphique des variables choisies (aussi au clic droit) : "
@@ -516,6 +519,12 @@ HmiVariablesPane::HmiVariablesPane(std::string id, hmi::DocumentPtr doc, Apply a
     const auto variableChosen = [this] { return selectedVariable() != kNoId && selectedPath().empty(); };
     tools_->setEnabledWhen(VRename, [this] { return selectedVariable() != kNoId || !selectedFolder().empty(); });
     tools_->setEnabledWhen(VDuplicate, variableChosen);
+    tools_->setEnabledWhen(VItems, [this, variableChosen] {   // 1.12.2
+        const auto* v = doc_->project.variableById(selectedVariable());
+        ty::Spec s;
+        return variableChosen() && v && app::itemseditor::available()
+            && (ty::isRich(v->type) || (ty::parseSpec(v->type, s) && s.array() && ty::isElementary(s.element)));
+    });
     tools_->setEnabledWhen(VDelete, [this] { return (selectedVariable() != kNoId && selectedPath().empty()) || !selectedFolder().empty(); });
     tools_->setEnabledWhen(VTrend, [this] { return table_ && !table_->selectedModelRows().empty(); });   // 1.10 (le clic dit s'il n'y a rien a tracer)
     tools_->setEnabledWhen(VLink, [this] {
@@ -647,6 +656,16 @@ HmiVariablesPane::HmiVariablesPane(std::string id, hmi::DocumentPtr doc, Apply a
             }
             case VDuplicate:
                 if (sel) (void)duplicateVariable(sel);
+                break;
+            case VItems:   // 1.12.2 : la valeur initiale, un element par ligne
+                if (const auto* v = doc_->project.variableById(sel)) {
+                    const std::weak_ptr<int> alive = alive_;
+                    app::itemseditor::ask({"\xC3\x89l\xC3\xA9ments de " + v->name, v->type, v->initial}, [this, alive, sel](const std::string& text) {
+                        if (alive.expired()) return;
+                        std::string why;
+                        if (!setInitial(sel, text, &why)) say("Valeur initiale refus\xC3\xA9" "e : " + why, true);
+                    });
+                }
                 break;
             case VDelete:
                 if (!selectedFolder().empty()) (void)deleteFolder(selectedFolder());
@@ -3046,6 +3065,7 @@ bool HmiTypesPane::commitMemberCell(std::size_t row, std::size_t col, const std:
         spec.field = "Type de " + t->name + "." + m.name;
         spec.current = m.type;
         spec.use = hmi::typereg::UseVariable;
+        spec.fixedOnly = true;                    // 1.12.2 : un membre a une place fixe
         spec.doc = doc_;
         const std::size_t index = row;
         const std::weak_ptr<int> alive = alive_;

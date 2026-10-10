@@ -3233,6 +3233,19 @@ private:
             else out.push_back(i);
         }
     }
+    // Un element d'un litteral dans une case simple : un texte ne devient pas un nombre en cachette
+    // ([1, 'a'] pour une LIST OF REAL : refuse) ; le reste se convertit comme une affectation.
+    static bool itemFits(const Obj& into, const RV& v, std::string* why) {
+        if (!into.type || into.type->kind != TypeDesc::Kind::Scalar || v.o) return true;
+        const Type want = into.type->scalar, got = v.v.type();
+        if (got == Type::String && want != Type::String && want != Type::Unknown) {
+            if (why) *why = "'" + v.v.asString() + "' (un texte) ne va pas dans un " + into.type->text();
+            return false;
+        }
+        return true;
+    }
+    bool storeItem(Obj& into, const RV& v, std::string* why) { return itemFits(into, v, why) && store(into, v, why); }
+
     bool fromSequence(Obj& into, const Obj& from, std::string* why) {
         const auto& t = *into.type;
         const auto& ft = *from.type;
@@ -3251,7 +3264,7 @@ private:
                 if (!isText) return fail(isText.error().message());
                 auto made = instantiate(t.element);
                 if (!made) return fail(made.error().message());
-                if (!store(**made, itemValue(value), why)) return false;
+                if (!storeItem(**made, itemValue(value), why)) return false;
                 if (*isText) texts[text] = *made;
                 else ints[integer] = *made;
                 return true;
@@ -3279,7 +3292,7 @@ private:
                 for (const auto& i : from.items) {
                     auto made = instantiate(t.element);
                     if (!made) return fail(made.error().message());
-                    if (!store(**made, itemValue(i), why)) return false;
+                    if (!storeItem(**made, itemValue(i), why)) return false;
                     items.push_back(*made);
                 }
                 into.items = std::move(items);
@@ -3293,7 +3306,7 @@ private:
                                 + " cases d'un " + t.text());
                 for (std::size_t k = 0; k < into.items.size(); ++k) {
                     if (k < flat.size()) {
-                        if (!store(*into.items[k], itemValue(flat[k]), why)) return false;
+                        if (!storeItem(*into.items[k], itemValue(flat[k]), why)) return false;
                     } else {
                         auto made = instantiate(t.element);                 // les cases suivantes : leur valeur par defaut
                         if (!made) return fail(made.error().message());
@@ -3307,7 +3320,7 @@ private:
                     return fail(std::to_string(from.items.size()) + " valeur(s) pour un " + t.text() + " (" + std::to_string(into.items.size())
                                 + " attendue(s))");
                 for (std::size_t k = 0; k < into.items.size(); ++k)
-                    if (!store(*into.items[k], itemValue(from.items[k]), why)) return false;
+                    if (!storeItem(*into.items[k], itemValue(from.items[k]), why)) return false;
                 return true;
             case TypeDesc::Kind::Scalar:
                 return fail("une liste de valeurs ne va pas dans un " + t.text() + " (une valeur simple)");

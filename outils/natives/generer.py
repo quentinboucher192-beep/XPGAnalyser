@@ -94,7 +94,7 @@ def main():
             ex = "{%s, %s, %s, %s}" % (cstr(e[0]), cstr(e[1]), cstr(e[2]), cstr(e[3] if len(e) > 3 else ""))
         ihm = name.startswith("IHM_")
         ro = bool(f.get("ro", False))
-        dialect = f["cat"] in ("map", "ref")
+        dialect = f["cat"] in ("map", "ref", "liste")   # 1.12.2 : les listes, comme les MAP
         expression = not dialect and (not ihm or ro)
         notes = ", ".join(cstr(n) for n in f.get("notes", []))
         w("        {%s, %s, {%s}, %s, %s," % (cstr(name), cstr(f["cat"]), params, cstr(f["ret"]), cstr(f["short"])))

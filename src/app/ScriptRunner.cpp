@@ -3858,6 +3858,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     // 1.11.19 (refonte, lot 6) : le selecteur de types ouvert ("Choisir un type..." d'une liste).
     //   choix-type-chercher "four" | choix-type-categorie "Structures IHM" | choix-type-choisir "T_Four"
     //   choix-type-tableau "1..4" (vide : decoche) | choix-type-reference oui|non | choix-type-map oui|non
+    //   choix-type-forme "Liste" (1.12.2 : Simple, Tableau, Tableau 2D, Liste, Vecteur, Dictionnaire (MAP), Tuple)
     //   choix-type-etat "ARRAY[1..4] OF T_Four" (le type qu'on choisirait ; echoue s'il differe)
     //   choix-type-valider | choix-type-definition | choix-type-annuler
     if (cmd.rfind("choix-type-", 0) == 0) {
@@ -3869,6 +3870,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         else if (cmd == "choix-type-tableau") picker->setArray(!arg(1).empty(), arg(1));
         else if (cmd == "choix-type-reference") picker->setReference(arg(1) != "non");
         else if (cmd == "choix-type-map") picker->setMap(arg(1) != "non");
+        else if (cmd == "choix-type-forme") { if (!picker->setForm(arg(1))) fail("forme inconnue ou pas permise ici : " + arg(1)); }   // 1.12.2
         else if (cmd == "choix-type-etat") {
             std::printf("[script] choix de type : %s%s\n", picker->result().c_str(),
                         picker->resultProblem().empty() ? "" : (" (" + picker->resultProblem() + ")").c_str());

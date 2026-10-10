@@ -23,6 +23,7 @@ CATS = [
     ("conv", "Conversions", "Passer d'un type à l'autre : TO_xxx et X_TO_Y.", "Fonctions standard"),
     ("tab", "Tableaux", "Taille et bornes d'un tableau.", "Le dialecte de l'IHM"),
     ("map", "MAP et itérateurs", "Les tables associatives (clé → valeur) et leur parcours.", "Le dialecte de l'IHM"),
+    ("liste", "Listes, vecteurs et tuples", "Les collections de taille variable (LIST OF T, VECTOR OF T) : ajouter, retirer, chercher, trier.", "Le dialecte de l'IHM"),
     ("ref", "Références et pointeurs", "Désigner une variable sans la copier.", "Le dialecte de l'IHM"),
     ("nav", "Navigation et vues", "Changer de vue, revenir, l'accueil.", "Fonctions IHM_"),
     ("popup", "Popups", "Ouvrir, remplacer, centrer, fermer une popup.", "Fonctions IHM_"),
@@ -235,6 +236,89 @@ fn(name="MAP_NEXT", cat="map", params=[("IT", "MAP_ITERATOR", "l'itérateur", Fa
    st="MAP_NEXT(it);", c="/* pas de MAP en C */", cpp="++it;", essai=None, plc="—")
 fn(name="MAP_END", cat="map", params=[("IT", "MAP_ITERATOR", "l'itérateur", False)], ret="BOOL", short="Vrai quand l'itérateur a passé la dernière clé.",
    st="WHILE NOT MAP_END(it) DO ... END_WHILE", c="/* pas de MAP en C */", cpp="it != stock.end()", essai=None, plc="—")
+
+# ------------------------------------------------------- 1.12.2 : listes et vecteurs --
+LDECL = "VAR L : LIST OF INT := [3, 1, 2]; END_VAR"
+VDECL = "VAR V : VECTOR OF STRING := ['a', 'b', 'c']; END_VAR"
+NOC = "/* pas de liste en C : un tableau et un compteur */"
+fn(name="LIST_ADD", cat="liste", params=[("L", "LIST OF T", "la liste", False), ("X", "T", "la valeur ajoutée", False)], ret="DINT",
+   short="Ajoute la valeur à la fin ; rend le nombre d'éléments.", st="LIST_ADD(Mesures, Niveau);", c=NOC,
+   cpp="mesures.push_back(niveau);", essai=("DINT", "LIST_ADD(L, 4)", "4", LDECL), plc="—")
+fn(name="LIST_INSERT", cat="liste", params=[("L", "LIST OF T", "la liste", False), ("I", "DINT", "l'indice (0 : en tête)", False), ("X", "T", "la valeur", False)],
+   ret="DINT", short="Insère la valeur à l'indice ; rend le nombre d'éléments.", notes=["Un indice hors de 0..L.Count est une erreur."],
+   st="LIST_INSERT(Alarmes, 0, 'Defaut pompe');", c=NOC, cpp="alarmes.insert(alarmes.begin(), \"Defaut pompe\");",
+   essai=("DINT", "LIST_INSERT(L, 0, 9)", "4", LDECL), plc="—")
+fn(name="LIST_REMOVE_AT", cat="liste", params=[("L", "LIST OF T", "la liste", False), ("I", "DINT", "l'indice", False)], ret="BOOL",
+   short="Retire l'élément de cet indice ; faux s'il est hors de la liste.", st="LIST_REMOVE_AT(Alarmes, 0);", c=NOC,
+   cpp="if (i < l.size()) l.erase(l.begin() + i);", essai=("BOOL", "LIST_REMOVE_AT(L, 1)", "TRUE", LDECL), plc="—")
+fn(name="LIST_REMOVE", cat="liste", params=[("L", "LIST OF T", "la liste", False), ("X", "T", "la valeur à retirer", False)], ret="BOOL",
+   short="Retire la première valeur égale ; faux si elle n'y est pas.", st="LIST_REMOVE(Alarmes, 'Defaut pompe');", c=NOC,
+   cpp="if (auto it = std::find(l.begin(), l.end(), x); it != l.end()) l.erase(it);", essai=("BOOL", "LIST_REMOVE(L, 2)", "TRUE", LDECL), plc="—")
+fn(name="LIST_CLEAR", cat="liste", params=[("L", "LIST OF T", "la liste", False)], ret="BOOL", short="Vide la liste.",
+   st="LIST_CLEAR(Mesures);", c=NOC, cpp="mesures.clear();", essai=("BOOL", "LIST_CLEAR(L)", "TRUE", LDECL), plc="—")
+fn(name="LIST_COUNT", cat="liste", params=[("L", "LIST OF T", "la liste", False)], ret="DINT",
+   short="Le nombre d'éléments (comme L.Count).", st="Nb := LIST_COUNT(Mesures);", c=NOC, cpp="nb = mesures.size();",
+   essai=("DINT", "LIST_COUNT(L)", "3", LDECL), plc="—")
+fn(name="LIST_CONTAINS", cat="liste", params=[("L", "LIST OF T", "la liste", False), ("X", "T", "la valeur cherchée", False)], ret="BOOL",
+   short="Vrai si la valeur est dans la liste.", st="IF LIST_CONTAINS(Actifs, 'Four') THEN ... END_IF", c=NOC,
+   cpp="std::find(l.begin(), l.end(), x) != l.end()", essai=("BOOL", "LIST_CONTAINS(L, 2)", "TRUE", LDECL), plc="—")
+fn(name="LIST_INDEX_OF", cat="liste", params=[("L", "LIST OF T", "la liste", False), ("X", "T", "la valeur cherchée", False)], ret="DINT",
+   short="L'indice de la première valeur égale ; -1 si elle n'y est pas.", st="i := LIST_INDEX_OF(Recettes, 'Pain');", c=NOC,
+   cpp="auto it = std::find(l.begin(), l.end(), x);\ni = it == l.end() ? -1 : it - l.begin();", essai=("DINT", "LIST_INDEX_OF(L, 2)", "2", LDECL), plc="—")
+fn(name="LIST_FIRST", cat="liste", params=[("L", "LIST OF T", "la liste", False)], ret="T", short="Le premier élément (comme L.First) ; une liste vide : une erreur.",
+   st="Premier := LIST_FIRST(File);", c=NOC, cpp="premier = file.front();", essai=("INT", "LIST_FIRST(L)", "3", LDECL), plc="—")
+fn(name="LIST_LAST", cat="liste", params=[("L", "LIST OF T", "la liste", False)], ret="T", short="Le dernier élément (comme L.Last) ; une liste vide : une erreur.",
+   st="Dernier := LIST_LAST(Mesures);", c=NOC, cpp="dernier = mesures.back();", essai=("INT", "LIST_LAST(L)", "2", LDECL), plc="—")
+fn(name="LIST_GET", cat="liste", params=[("L", "LIST OF T", "la liste", False), ("I", "DINT", "l'indice", False), ("DEFAUT", "T", "la valeur hors de la liste", False)],
+   ret="T", short="L'élément de l'indice, ou DEFAUT hors de la liste (sans erreur).", st="V := LIST_GET(Mesures, 5, 0.0);", c=NOC,
+   cpp="v = i < mesures.size() ? mesures[i] : 0.0f;", essai=("INT", "LIST_GET(L, 9, -1)", "-1", LDECL), plc="—")
+fn(name="LIST_SORT", cat="liste", params=[("L", "LIST OF T", "une liste de valeurs simples", False), ("DECROISSANT", "BOOL", "TRUE : du plus grand au plus petit", True)],
+   ret="BOOL", short="Trie la liste (des nombres, des textes, des durées).", st="LIST_SORT(Mesures);   (* LIST_SORT(Mesures, TRUE) : décroissant *)",
+   c="qsort(t, n, sizeof t[0], comparer);", cpp="std::sort(mesures.begin(), mesures.end());", essai=("BOOL", "LIST_SORT(L)", "TRUE", LDECL), plc="—")
+fn(name="LIST_REVERSE", cat="liste", params=[("L", "LIST OF T", "la liste", False)], ret="BOOL", short="Renverse l'ordre des éléments.",
+   st="LIST_REVERSE(Historique);", c=NOC, cpp="std::reverse(l.begin(), l.end());", essai=("BOOL", "LIST_REVERSE(L)", "TRUE", LDECL), plc="—")
+fn(name="LIST_SUM", cat="liste", params=[("L", "LIST OF T", "une liste de nombres", False)], ret="comme les éléments",
+   short="La somme des nombres de la liste.", st="Total := LIST_SUM(Pesees);", c="for (i = 0; i < n; ++i) total += t[i];",
+   cpp="total = std::accumulate(l.begin(), l.end(), 0.0);", essai=("DINT", "LIST_SUM(L)", "6", LDECL), plc="—")
+fn(name="LIST_MIN", cat="liste", params=[("L", "LIST OF T", "une liste de valeurs simples", False)], ret="T",
+   short="La plus petite valeur ; une liste vide : une erreur.", st="Mini := LIST_MIN(Mesures);", c=NOC,
+   cpp="mini = *std::min_element(l.begin(), l.end());", essai=("INT", "LIST_MIN(L)", "1", LDECL), plc="—")
+fn(name="LIST_MAX", cat="liste", params=[("L", "LIST OF T", "une liste de valeurs simples", False)], ret="T",
+   short="La plus grande valeur ; une liste vide : une erreur.", st="Maxi := LIST_MAX(Mesures);", c=NOC,
+   cpp="maxi = *std::max_element(l.begin(), l.end());", essai=("INT", "LIST_MAX(L)", "3", LDECL), plc="—")
+fn(name="LIST_AVG", cat="liste", params=[("L", "LIST OF T", "une liste de nombres", False)], ret="REAL",
+   short="La moyenne des nombres ; une liste vide : une erreur.", st="Moyenne := LIST_AVG(Mesures);", c=NOC,
+   cpp="moyenne = std::accumulate(l.begin(), l.end(), 0.0) / l.size();", essai=("REAL", "LIST_AVG(L)", "2", LDECL), plc="—")
+fn(name="VECTOR_PUSH", cat="liste", params=[("V", "VECTOR OF T", "le vecteur", False), ("X", "T", "la valeur ajoutée", False)], ret="DINT",
+   short="Ajoute la valeur à la fin (comme LIST_ADD) ; rend la taille.", st="VECTOR_PUSH(Pile, Code);", c=NOC, cpp="pile.push_back(code);",
+   essai=("DINT", "VECTOR_PUSH(V, 'd')", "4", VDECL), plc="—")
+fn(name="VECTOR_POP", cat="liste", params=[("V", "VECTOR OF T", "le vecteur", False)], ret="T",
+   short="Retire le dernier élément et le rend ; un vecteur vide : une erreur.", st="Code := VECTOR_POP(Pile);", c=NOC,
+   cpp="code = pile.back();\npile.pop_back();", essai=("STRING", "VECTOR_POP(V)", "c", VDECL), plc="—")
+fn(name="VECTOR_INSERT", cat="liste", params=[("V", "VECTOR OF T", "le vecteur", False), ("I", "DINT", "l'indice", False), ("X", "T", "la valeur", False)],
+   ret="DINT", short="Insère la valeur à l'indice (comme LIST_INSERT).", st="VECTOR_INSERT(Etapes, 1, 'Rincage');", c=NOC,
+   cpp="etapes.insert(etapes.begin() + 1, \"Rincage\");", essai=("DINT", "VECTOR_INSERT(V, 1, 'x')", "4", VDECL), plc="—")
+fn(name="VECTOR_ERASE", cat="liste", params=[("V", "VECTOR OF T", "le vecteur", False), ("I", "DINT", "l'indice", False)], ret="BOOL",
+   short="Retire l'élément de cet indice (comme LIST_REMOVE_AT).", st="VECTOR_ERASE(Etapes, 0);", c=NOC, cpp="etapes.erase(etapes.begin());",
+   essai=("BOOL", "VECTOR_ERASE(V, 0)", "TRUE", VDECL), plc="—")
+fn(name="VECTOR_CLEAR", cat="liste", params=[("V", "VECTOR OF T", "le vecteur", False)], ret="BOOL", short="Vide le vecteur.",
+   st="VECTOR_CLEAR(Pile);", c=NOC, cpp="pile.clear();", essai=("BOOL", "VECTOR_CLEAR(V)", "TRUE", VDECL), plc="—")
+fn(name="VECTOR_SIZE", cat="liste", params=[("V", "VECTOR OF T", "le vecteur", False)], ret="DINT", short="Le nombre d'éléments (comme V.Count).",
+   st="n := VECTOR_SIZE(Pile);", c=NOC, cpp="n = pile.size();", essai=("DINT", "VECTOR_SIZE(V)", "3", VDECL), plc="—")
+fn(name="VECTOR_RESIZE", cat="liste", params=[("V", "VECTOR OF T", "le vecteur", False), ("N", "DINT", "la nouvelle taille", False), ("X", "T", "la valeur des nouveaux éléments", True)],
+   ret="DINT", short="Change la taille : coupe, ou ajoute des éléments (X, sinon la valeur du type).", st="VECTOR_RESIZE(Courbe, 100, 0.0);", c=NOC,
+   cpp="courbe.resize(100, 0.0f);", essai=("DINT", "VECTOR_RESIZE(V, 5, 'z')", "5", VDECL), plc="—")
+fn(name="VECTOR_FRONT", cat="liste", params=[("V", "VECTOR OF T", "le vecteur", False)], ret="T", short="Le premier élément.",
+   st="Premier := VECTOR_FRONT(Etapes);", c=NOC, cpp="premier = etapes.front();", essai=("STRING", "VECTOR_FRONT(V)", "a", VDECL), plc="—")
+fn(name="VECTOR_BACK", cat="liste", params=[("V", "VECTOR OF T", "le vecteur", False)], ret="T", short="Le dernier élément.",
+   st="Dernier := VECTOR_BACK(Etapes);", c=NOC, cpp="dernier = etapes.back();", essai=("STRING", "VECTOR_BACK(V)", "c", VDECL), plc="—")
+fn(name="JOIN", cat="liste", params=[("L", "LIST OF T", "une liste de valeurs simples", False), ("SEP", "STRING", "le séparateur (', ' sans lui)", True)],
+   ret="STRING", short="Les éléments en un seul texte, séparés.", st="Texte := JOIN(Actifs, ', ');", c="/* strcat en boucle */",
+   cpp="for (const auto& x : l) texte += (texte.empty() ? \"\" : \", \") + x;", essai=("STRING", "JOIN(V, '-')", "a-b-c", VDECL), plc="—")
+fn(name="SPLIT", cat="liste", params=[("TEXTE", "STRING", "le texte à couper", False), ("SEP", "STRING", "le séparateur", False)],
+   ret="LIST OF STRING", short="Le texte coupé à chaque séparateur : une liste de textes.", st="Mots := SPLIT('a;b;c', ';');",
+   c="strtok(texte, \";\");", cpp="std::getline(flux, mot, ';');   // en boucle",
+   essai=("DINT", "LIST_COUNT(SPLIT('a;b;c', ';'))", "3", "VAR Mots : LIST OF STRING; END_VAR"), plc="—")
 
 # ---------------------------------------------------------------------- references --
 fn(name="REF", cat="ref", params=[("X", "une variable", "pas une valeur calculée", False)], ret="REF_TO type de X",
@@ -747,4 +831,13 @@ CONSTRUCTED = [
      "auto it = m.begin();", "VAR it : MAP_ITERATOR; END_VAR"),
     ("STRING[n]", "STRING[20]", "Une chaîne bornée à n caractères (STRING seule : sans borne dans l'IHM, 32 caractères sur Modbus).",
      "char texte[21];", "std::string texte;   // borne à vérifier", "VAR Nom : STRING[20]; END_VAR"),
+    # 1.12.2
+    ("LIST OF", "LIST OF REAL", "Une liste de taille variable, indices à partir de 0 : L[0], L.Count, L.First, L.Last ; LIST_ADD, LIST_REMOVE, FOR EACH x IN L. "
+     "Un littéral : [1.5, 2, 3]. Une variable IHM de ce type vit dans la mémoire de l'IHM (ni équipement, ni adresse).",
+     "/* pas de liste en C */", "std::list<REAL> l;   // ou std::vector", "VAR Mesures : LIST OF REAL := [1.5, 2.0]; END_VAR"),
+    ("VECTOR OF", "VECTOR OF INT", "Un vecteur de taille variable : V[0], V.Count ; VECTOR_PUSH, VECTOR_POP, VECTOR_RESIZE. Comme une liste, dans la mémoire de l'IHM.",
+     "/* un tableau alloué : malloc, realloc */", "std::vector<INT> v;", "VAR Pile : VECTOR OF INT; END_VAR"),
+    ("TUPLE", "TUPLE(STRING, REAL)", "Des valeurs de types fixes, dans l'ordre : t.Item1, t.Item2... Un littéral : ('four', 850.0). Sans plan mémoire : "
+     "une variable IHM de ce type vit dans l'IHM (pour un équipement, une structure IHM).",
+     "struct { char nom[33]; float valeur; } t;", "std::tuple<STRING, REAL> t;", "VAR Mesure : TUPLE(STRING, REAL) := ('four', 850.0); END_VAR"),
 ]

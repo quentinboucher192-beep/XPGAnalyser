@@ -9,6 +9,8 @@
 #include "../../ui/widgets/Controls.hpp"
 
 #include <algorithm>
+#include <array>
+#include <iterator>
 #include <cctype>
 #include <cmath>
 
@@ -26,7 +28,8 @@ constexpr float       kRow = 26.f;
 constexpr char        kSep = '\x1F';
 constexpr int         kAll = -2, kRecents = -1;
 // Les libelles de la ligne Construire (kSmall) : leur place, fixe comme la mise en page.
-constexpr float       kArrayLabel = 104.f, kOfLabel = 30.f, kRefLabel = 150.f, kMapLabel = 112.f;
+constexpr float       kRefLabel = 150.f;
+namespace tf = hmi::typeform;
 
 std::string fit(gfx::IRenderer& r, const std::string& s, gfx::FontId f, float w) {
     if (w <= 0.f) return {};
@@ -45,8 +48,7 @@ std::string useLabel(unsigned use) {
     return "un type";
 }
 
-bool canArray(unsigned use) { return (use & (tr::UseVariable | tr::UseDeclaration | tr::UseParameter | tr::UseReturn)) != 0; }
-bool canReference(unsigned use) { return (use & (tr::UseDeclaration | tr::UseReturn)) != 0; }
+bool canReference(unsigned use) { return tf::referenceAllowed(use); }
 
 void paintCheck(const ui::PaintContext& ctx, const gfx::Rect& box, bool on, bool enabled) {
     auto& r = ctx.r;
@@ -73,11 +75,13 @@ public:
             scroll_ = 0.f;
             filter();
         });
+        // 1.12.2 : le parametre de la forme (les bornes d'un tableau, la cle d'un dictionnaire, les
+        // types suivants d'un tuple) : un champ, garde par forme.
+        for (const auto f : tf::kForms) params_[static_cast<std::size_t>(f)] = tf::defaultParameter(f);
         bounds_ = &static_cast<ui::InputText&>(addChild(std::make_unique<ui::InputText>("dialog.typePicker.bornes")));
-        bounds_->setText("0..9");
-        bounds_->setTooltip("0..9 : 10 cases ; 1..4 ; -5..5 ; 0..3, 0..9 : deux dimensions");
-        links_ += bounds_->textChanged->connect([this](const std::string&) {
-            array_ = true;                                // ecrire des bornes coche le tableau
+        bounds_->setText(params_[static_cast<std::size_t>(tf::Form::Array)]);
+        links_ += bounds_->textChanged->connect([this](const std::string& t) {
+            params_[static_cast<std::size_t>(form_)] = t;
             invalidate();
         });
         cancel_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Annuler", "dialog.typePicker.annuler")));
@@ -103,16 +107,18 @@ public:
     [[nodiscard]] const tr::Entry* selected() const {
         return sel_ >= 0 && static_cast<std::size_t>(sel_) < shown_.size() ? shown_[static_cast<std::size_t>(sel_)] : nullptr;
     }
-    // Le type qu'on choisirait : l'entree, puis REF_TO, ARRAY, MAP (comme la maquette).
+    // Le type qu'on choisirait : l'entree, une reference (REF_TO), puis la forme (1.12.2 : Tableau,
+    // Tableau 2D, Liste, Vecteur, Dictionnaire, Tuple).
     [[nodiscard]] std::string result() const {
         const auto* e = selected();
         if (!e) return {};
-        std::string n = e->name;
-        if (!constructible(e)) return n;
-        if (ref_ && canReference(spec_.use)) n = "REF_TO " + n;
-        if (array_ && canArray(spec_.use)) n = "ARRAY[" + trimmed(bounds_->text()) + "] OF " + n;
-        if (map_ && canReference(spec_.use)) n = "MAP[STRING] OF " + n;
-        return n;
+        if (!constructible(e)) return e->name;
+        tf::Shape sh;
+        sh.form = formAllowed(form_) ? form_ : tf::Form::Simple;
+        sh.element = e->name;
+        sh.parameter = trimmed(bounds_->text());
+        sh.reference = ref_ && canReference(spec_.use);
+        return tf::compose(sh);
     }
     [[nodiscard]] std::string problem() const {
         const auto* e = selected();
@@ -175,12 +181,34 @@ public:
         invalidate();
     }
     void setArray(bool on, const std::string& bounds) {
+        if (!on) {
+            if (form_ == tf::Form::Array || form_ == tf::Form::Array2D) setForm(tf::Form::Simple);
+            return;
+        }
+        const bool two = bounds.find(',') != std::string::npos;
+        setForm(two ? tf::Form::Array2D : tf::Form::Array);
         if (!bounds.empty()) bounds_->setText(bounds);
-        array_ = on;
         invalidate();
     }
     void setReference(bool on) { ref_ = on; invalidate(); }
-    void setMap(bool on) { map_ = on; invalidate(); }
+    void setMap(bool on) {
+        if (on) setForm(tf::Form::Map);
+        else if (form_ == tf::Form::Map) setForm(tf::Form::Simple);
+    }
+    // 1.12.2 : la forme (Simple, Tableau, Tableau 2D, Liste, Vecteur, Dictionnaire, Tuple) ; son
+    // parametre revient a celui qu'elle avait. Faux : une forme que l'usage ne permet pas.
+    bool setForm(tf::Form f) {
+        if (!formAllowed(f)) return false;
+        params_[static_cast<std::size_t>(form_)] = bounds_->text();
+        form_ = f;
+        bounds_->setText(params_[static_cast<std::size_t>(f)]);
+        bounds_->setPlaceholder(std::string(tf::parameterHint(f)));
+        bounds_->setTooltip(std::string(tf::parameterHint(f)));
+        relayout();
+        invalidate();
+        return true;
+    }
+    [[nodiscard]] tf::Form form() const noexcept { return form_; }
 
 protected:
     void onLayout() override {
@@ -189,24 +217,13 @@ protected:
         panel_ = {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h};
         search_->setBounds({panel_.x + 16.f, panel_.y + 54.f, panel_.w - 32.f, 28.f});
         bottom_ = panel_.bottom() - 52.f;
-        constructY_ = bottom_ - 74.f;
+        // 1.12.2 : trois lignes - Forme : [Simple] [Tableau] ... [Tuple] ; le parametre et [x] REF_TO ;
+        // le resultat. Sans forme ni reference (un operande) : le resultat seul.
+        const bool construct = shownForms().size() > 1 || canReference(spec_.use);
+        constructY_ = bottom_ - (construct ? 110.f : 40.f);
         detailY_ = constructY_ - 64.f;
         list_ = {panel_.x + 16.f, panel_.y + 150.f, panel_.w - 32.f, detailY_ - 8.f - (panel_.y + 150.f)};
-        // La ligne Construire : [x] Tableau ARRAY[ [bornes] ] OF   [x] REF_TO (une reference)   [x] MAP[STRING] OF
-        float x = panel_.x + 16.f + 96.f;
-        arrayBox_ = refBox_ = mapBox_ = {};
-        if (canArray(spec_.use)) {
-            arrayBox_ = {x, constructY_ + 5.f, 24.f + kArrayLabel, 16.f};
-            bounds_->setBounds({x + 24.f + kArrayLabel + 2.f, constructY_, 110.f, 26.f});
-            x = bounds_->bounds().right() + 6.f + kOfLabel + 26.f;
-        } else {
-            bounds_->setBounds({});
-        }
-        if (canReference(spec_.use)) {
-            refBox_ = {x, constructY_ + 5.f, 24.f + kRefLabel, 16.f};
-            x += refBox_.w + 26.f;
-            mapBox_ = {x, constructY_ + 5.f, 24.f + kMapLabel, 16.f};
-        }
+        relayout();
         const float bw = 120.f;
         ok_->setBounds({panel_.right() - 16.f - bw, bottom_ + 10.f, bw, 32.f});
         open_->setBounds({ok_->bounds().x - 10.f - 190.f, bottom_ + 10.f, 190.f, 32.f});
@@ -217,6 +234,32 @@ protected:
             reveal();
         }
         scroll_ = std::clamp(scroll_, 0.f, maxScroll());
+    }
+
+    // Les cases de la forme : les puces (mesurees au dessin), le champ du parametre, la case REF_TO.
+    void relayout() {
+        refBox_ = {};
+        const float x0 = panel_.x + 16.f + 96.f;
+        const float y = constructY_ + 34.f;
+        const auto label = tf::parameterLabel(form_);
+        float x = x0;
+        if (!label.empty() && formAllowed(form_)) {
+            bounds_->setBounds({x, y, 200.f, 26.f});
+            x += 200.f + 26.f;
+        } else {
+            bounds_->setBounds({});
+        }
+        if (canReference(spec_.use)) refBox_ = {x, y + 5.f, 24.f + kRefLabel, 16.f};
+    }
+    [[nodiscard]] bool formAllowed(tf::Form f) const {
+        if (spec_.fixedOnly && tf::memoryOnly(f)) return false;
+        return tf::allowed(f, spec_.use);
+    }
+    [[nodiscard]] std::vector<tf::Form> shownForms() const {
+        std::vector<tf::Form> out;
+        for (const auto f : tf::kForms)
+            if (formAllowed(f)) out.push_back(f);
+        return out;
     }
 
     void onPaint(const ui::PaintContext& ctx) override {
@@ -358,18 +401,13 @@ protected:
                     filter();
                     return ui::EventResult::Consumed;
                 }
-            if (arrayBox_.w > 0.f && arrayBox_.contains(d->pos)) {
-                array_ = !array_;
-                invalidate();
-                return ui::EventResult::Consumed;
-            }
+            for (const auto& [rect, f] : formChips_)
+                if (rect.contains(d->pos)) {
+                    (void)setForm(f);
+                    return ui::EventResult::Consumed;
+                }
             if (refBox_.w > 0.f && refBox_.contains(d->pos)) {
                 ref_ = !ref_;
-                invalidate();
-                return ui::EventResult::Consumed;
-            }
-            if (mapBox_.w > 0.f && mapBox_.contains(d->pos)) {
-                map_ = !map_;
                 invalidate();
                 return ui::EventResult::Consumed;
             }
@@ -428,24 +466,14 @@ private:
             sel_ = shown_.empty() ? -1 : 0;
             return;
         }
-        // un tableau : ses bornes (une dimension) ; une reference, une MAP : cochees
-        std::string text = r.text;
-        if (text.rfind("MAP[STRING] OF ", 0) == 0) {
-            map_ = true;
-            text = text.substr(15);
+        // 1.12.2 : sa forme (un tableau : ses bornes ; un dictionnaire : sa cle ; un tuple : les types
+        // suivants) et sa reference.
+        const auto sh = tf::decompose(r.text);
+        if (sh.form != tf::Form::Simple && formAllowed(sh.form)) {
+            params_[static_cast<std::size_t>(sh.form)] = sh.parameter.empty() ? tf::defaultParameter(sh.form) : sh.parameter;
+            (void)setForm(sh.form);
         }
-        if (text.rfind("ARRAY[", 0) == 0) {
-            const auto close = text.find(']');
-            if (close != std::string::npos && text.compare(close, 5, "] OF ") == 0) {
-                bounds_->setText(text.substr(6, close - 6));   // "0..9", "0..3, 0..9"
-                array_ = true;
-                text = text.substr(close + 5);
-            }
-        }
-        if (text.rfind("REF_TO ", 0) == 0) {
-            ref_ = true;
-            text = text.substr(7);
-        }
+        ref_ = sh.reference || tf::decompose(sh.element).reference;
         if (r.entry && !select(r.entry->name)) {
             // hors de la puce montree : tout montrer
             chip_ = kAll;
@@ -539,18 +567,37 @@ private:
         const float x0 = panel_.x + 16.f;
         float y = constructY_;
         const bool on = constructible(selected());
-        if (arrayBox_.w > 0.f || refBox_.w > 0.f) {
-            r.drawText({x0, y + 4.f}, "Construire :", kSmall, c.textMuted);
-            const auto box = [&](const gfx::Rect& area, bool checked, const std::string& label) {
-                paintCheck(ctx, {area.x, area.y, 16.f, 16.f}, checked, on);
-                r.drawText({area.x + 24.f, y + 4.f}, label, kSmall, on ? c.text : c.textDisabled);
-            };
-            if (arrayBox_.w > 0.f) {
-                box(arrayBox_, array_, "Tableau ARRAY[");
-                r.drawText({bounds_->bounds().right() + 6.f, y + 4.f}, "] OF", kSmall, on ? c.text : c.textDisabled);
+        formChips_.clear();
+        const auto forms = shownForms();
+        if (forms.size() > 1 || refBox_.w > 0.f) {
+            // 1.12.2 : la forme, une puce par forme permise ici.
+            r.drawText({x0, y + 4.f}, "Forme :", kSmall, c.textMuted);
+            float x = x0 + 96.f;
+            for (const auto f : forms) {
+                const std::string text(tf::label(f));
+                const float w = r.measure(text, kSmall).width + 20.f;
+                if (x + w > panel_.right() - 16.f) break;
+                const gfx::Rect b{x, y, w, 24.f};
+                const bool chosen = form_ == f;
+                r.fillRoundedRect(b, chosen ? c.accent.withAlpha(on ? 70 : 30) : c.headerBg, 6.f);
+                if (chosen) r.strokeRect(b, on ? c.accent : c.border, 1.f);
+                r.drawText({b.x + 10.f, b.y + (b.h - r.lineHeight(kSmall)) * 0.5f}, text, kSmall,
+                           on ? (chosen ? c.text : c.textMuted) : c.textDisabled);
+                formChips_.push_back({b, f});
+                x += w + 6.f;
             }
-            if (refBox_.w > 0.f) box(refBox_, ref_, "REF_TO (une r\xC3\xA9" "f\xC3\xA9rence)");
-            if (mapBox_.w > 0.f) box(mapBox_, map_, "MAP[STRING] OF");
+            y += 34.f;
+            const auto label = tf::parameterLabel(form_);
+            if (!label.empty() && bounds_->bounds().w > 0.f)
+                r.drawText({x0, y + 5.f}, std::string(label) + " :", kSmall, on ? c.text : c.textDisabled);
+            if (refBox_.w > 0.f) {
+                paintCheck(ctx, {refBox_.x, refBox_.y, 16.f, 16.f}, ref_, on);
+                r.drawText({refBox_.x + 24.f, y + 5.f}, "REF_TO (une r\xC3\xA9" "f\xC3\xA9rence)", kSmall, on ? c.text : c.textDisabled);
+            }
+            // Ce que la forme est (une liste vit dans la memoire de l'IHM...).
+            const float sx = (refBox_.w > 0.f ? refBox_.right() : (bounds_->bounds().w > 0.f ? bounds_->bounds().right() : x0 + 96.f)) + 18.f;
+            if (form_ != tf::Form::Simple)
+                r.drawText({sx, y + 5.f}, fit(r, std::string(tf::summary(form_)), kSmall, panel_.right() - 16.f - sx), kSmall, c.textMuted);
             y += 36.f;
         }
         // ---- le resultat ----
@@ -573,7 +620,10 @@ private:
     int                                    sel_{-1};
     int                                    hover_{-1};
     bool                                   hoverClose_{false};
-    bool                                   array_{false}, ref_{false}, map_{false};
+    bool                                   ref_{false};
+    tf::Form                               form_{tf::Form::Simple};                 // 1.12.2 : la forme
+    std::array<std::string, std::size(tf::kForms)> params_{};                       // son parametre, par forme
+    std::vector<std::pair<gfx::Rect, tf::Form>> formChips_;
     std::string                            notice_;
     float                                  scroll_{0.f}, bottom_{0.f}, constructY_{0.f}, detailY_{0.f};
     bool                                   revealPending_{false};   // la ligne choisie, a montrer des la mise en page
@@ -582,7 +632,7 @@ private:
     ui::Button*                            cancel_{nullptr};
     ui::Button*                            open_{nullptr};
     ui::Button*                            ok_{nullptr};
-    gfx::Rect                              panel_{}, list_{}, rowsArea_{}, close_{}, arrayBox_{}, refBox_{}, mapBox_{};
+    gfx::Rect                              panel_{}, list_{}, rowsArea_{}, close_{}, refBox_{};
     ui::PaintedScrollBar                   sbar_;
     std::vector<std::pair<gfx::Rect, int>> chips_;
     std::vector<std::pair<gfx::Rect, int>> rowRects_;
@@ -644,6 +694,10 @@ bool HmiTypePicker::select(std::string_view name) { return body_ && body_->selec
 void HmiTypePicker::setArray(bool on, const std::string& bounds) { if (body_) body_->setArray(on, bounds); }
 void HmiTypePicker::setReference(bool on) { if (body_) body_->setReference(on); }
 void HmiTypePicker::setMap(bool on) { if (body_) body_->setMap(on); }
+bool HmiTypePicker::setForm(std::string_view labelOrKey) {
+    const auto f = tf::fromText(labelOrKey);
+    return body_ && f && body_->setForm(*f);
+}
 std::vector<std::string> HmiTypePicker::shownNames() const { return body_ ? body_->shownNames() : std::vector<std::string>{}; }
 std::string HmiTypePicker::result() const { return body_ ? body_->result() : std::string{}; }
 std::string HmiTypePicker::resultProblem() const { return body_ ? body_->problem() : std::string("pas de s\xC3\xA9lecteur"); }
@@ -697,6 +751,56 @@ void ask(HmiTypePicker::Spec spec, Done done) {
     if (host()) host()(std::move(spec), std::move(done));
 }
 } // namespace typepicker
+
+namespace itemseditor {
+namespace {
+Host& host() {
+    static Host h;
+    return h;
+}
+} // namespace
+void setHost(Host h) { host() = std::move(h); }
+bool available() { return static_cast<bool>(host()); }
+void ask(Spec spec, Done done) {
+    if (host()) host()(std::move(spec), std::move(done));
+}
+bool editable(std::string_view type) {
+    const auto f = tf::decompose(type).form;
+    return f != tf::Form::Simple;
+}
+std::string linesOf(std::string_view value) {
+    std::vector<std::string> items;
+    if (!tf::literalItems(value, items)) {
+        std::string v(value);
+        while (!v.empty() && std::isspace(static_cast<unsigned char>(v.back()))) v.pop_back();
+        return v;                                  // une valeur seule (0 : toutes les cases) : telle quelle
+    }
+    std::string out;
+    for (const auto& i : items) out += (out.empty() ? "" : "\n") + i;
+    return out;
+}
+std::string literalOf(std::string_view type, std::string_view lines) {
+    std::vector<std::string> items;
+    std::string cur;
+    for (const char c : lines) {
+        if (c == '\n' || c == '\r') {
+            items.push_back(cur);
+            cur.clear();
+        } else {
+            cur += c;
+        }
+    }
+    items.push_back(cur);
+    // Une ligne terminee par une virgule (collee depuis un texte) : sans elle.
+    for (auto& i : items) {
+        while (!i.empty() && (std::isspace(static_cast<unsigned char>(i.back())) || i.back() == ',')) i.pop_back();
+        std::size_t a = 0;
+        while (a < i.size() && std::isspace(static_cast<unsigned char>(i[a]))) ++a;
+        i.erase(0, a);
+    }
+    return tf::literalOf(items, tf::decompose(type).form == tf::Form::Tuple);
+}
+} // namespace itemseditor
 
 void HmiTypePicker::remember(std::vector<std::string>& recents, const std::string& name) {
     if (name.empty()) return;

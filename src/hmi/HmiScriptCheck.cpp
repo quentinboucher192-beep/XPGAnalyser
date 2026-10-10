@@ -166,7 +166,13 @@ const std::set<std::string>& statementWords() {
 const std::set<std::string>& dialectFunctions() {
     static const std::set<std::string> k = {"MAP_HAS",  "MAP_REMOVE", "MAP_SIZE", "MAP_CLEAR", "MAP_KEYS",    "MAP_GET",
                                             "MAP_BEGIN", "MAP_END",   "MAP_NEXT", "REF",       "ADR",         "SIZEOF",
-                                            "LOWER_BOUND", "UPPER_BOUND", "ASSERT"};   // ASSERT : 1.12.1
+                                            "LOWER_BOUND", "UPPER_BOUND", "ASSERT",    // ASSERT : 1.12.1
+                                            // 1.12.2 : les listes et les vecteurs
+                                            "LIST_ADD", "LIST_INSERT", "LIST_REMOVE_AT", "LIST_REMOVE", "LIST_CLEAR", "LIST_COUNT",
+                                            "LIST_CONTAINS", "LIST_INDEX_OF", "LIST_FIRST", "LIST_LAST", "LIST_GET", "LIST_SORT",
+                                            "LIST_REVERSE", "LIST_SUM", "LIST_MIN", "LIST_MAX", "LIST_AVG", "VECTOR_PUSH", "VECTOR_POP",
+                                            "VECTOR_INSERT", "VECTOR_ERASE", "VECTOR_CLEAR", "VECTOR_SIZE", "VECTOR_RESIZE",
+                                            "VECTOR_FRONT", "VECTOR_BACK", "JOIN", "SPLIT"};
     return k;
 }
 // Un bloc de declarations (VAR, VAR_TEMP, VAR_INPUT : blanchis par
@@ -197,6 +203,16 @@ std::size_t typeEnd(const std::vector<Tok>& t, std::size_t k) {
         ++k;
         if (op(k, "[")) k = closeOf(k);
         return word(k, "OF") ? typeEnd(t, k + 1) : k;
+    }
+    // 1.12.2 : LIST OF T, VECTOR OF T, TUPLE(T1, T2...).
+    if ((word(k, "LIST") || word(k, "VECTOR")) && word(k + 1, "OF")) return typeEnd(t, k + 2);
+    if (word(k, "TUPLE") && op(k + 1, "(")) {
+        int depth = 0;
+        for (std::size_t m = k + 1; m < t.size() && t[m].k != Tok::K::End; ++m) {
+            if (op(m, "(")) ++depth;
+            else if (op(m, ")") && --depth == 0) return m + 1;
+        }
+        return t.size();
     }
     if (k < t.size() && t[k].k == Tok::K::Ident) {
         const bool text = word(k, "STRING") || word(k, "WSTRING");
@@ -693,6 +709,9 @@ private:
         }
         // Une variable IHM : ses membres, ses indices (les structures, les tableaux).
         if (const Variable* var = p ? p->variable(root.text) : nullptr) {
+            // 1.12.2 : une variable objet (LIST, VECTOR, MAP, TUPLE) : L[0], L.Count, M['a'], t.Item1 -
+            // le moteur les lit dans l'objet (son type : celui de la variable).
+            if (types::isRich(var->type)) return segs.empty() ? types::normalized(var->type) : std::string{};
             const std::string text = textOf(i, j);
             types::Spec spec;
             if (!segs.empty() && segs.front().index && (!types::parseSpec(var->type, spec) || !spec.array())) {

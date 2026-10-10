@@ -453,6 +453,27 @@ void MainAnalysisScreen::bindHmi() {
     });
     // 1.11.19 (refonte, lot 6) : le selecteur de types, demande par une grille ou un volet.
     typepicker::setHost([this](HmiTypePicker::Spec spec, typepicker::Done done) { askHmiType(std::move(spec), std::move(done)); });
+    // 1.12.2 : les elements d'une valeur (une liste, un tableau, un dictionnaire, un tuple), un par ligne.
+    itemseditor::setHost([this](itemseditor::Spec spec, itemseditor::Done done) {
+        const auto form = hmi::typeform::decompose(spec.type).form;
+        const bool map = form == hmi::typeform::Form::Map;
+        std::vector<FormDialog::Field> fields;
+        fields.push_back({"\xC3\x89l\xC3\xA9ments, un par ligne", itemseditor::linesOf(spec.value), {}, false, {}});
+        auto dialog = std::make_unique<FormDialog>("dialog.hmiItems", spec.title,
+            "Le type : " + spec.type + ". Un \xC3\xA9l\xC3\xA9ment par ligne : " + std::string(map ? "'cl\xC3\xA9' := valeur ('vis' := 120)" : "12.5, 'Pompe 1', TRUE")
+                + (form == hmi::typeform::Form::Tuple ? " - dans l'ordre des types du tuple" : "")
+                + (form == hmi::typeform::Form::Array || form == hmi::typeform::Form::Array2D
+                       ? " - case par case (deux dimensions : ligne par ligne) ; les cases suivantes gardent la valeur de leur type"
+                       : "")
+                + ". Aucune ligne : vide. La valeur est v\xC3\xA9rifi\xC3\xA9" "e en validant ; Ctrl+Z la reprend.",
+            std::move(fields), "Appliquer");
+        dialog->setCodeFields({0});
+        app_.menus().ShowDialog(std::move(dialog), [type = spec.type, done = std::move(done)](const menu::DialogResult& r) {
+            if (!r.accepted() || !done) return;
+            const auto v = FormDialog::split(r.payload);   // le champ de code rend ses lignes telles quelles
+            done(itemseditor::literalOf(type, v.empty() ? std::string{} : v.front()));
+        });
+    });
     // Les chemins relatifs des fichiers externes partent du dossier du projet.
     setHmiProjectFolder(app_.projectFolder());
 

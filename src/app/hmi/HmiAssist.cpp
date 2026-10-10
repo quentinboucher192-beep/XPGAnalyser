@@ -483,7 +483,8 @@ const std::string kEllipsis{"\xE2\x80\xA6"};
 
 // Le genre d'un modele de S1 : un type (ARRAY, MAP...), un mot (NULL), sinon une structure.
 Kind snippetKind(std::string_view name) {
-    static constexpr std::string_view kTypes[] = {"ARRAY", "MAP", "REF_TO", "POINTER TO", "MAP_ITERATOR"};
+    static constexpr std::string_view kTypes[] = {"ARRAY", "MAP", "REF_TO", "POINTER TO", "MAP_ITERATOR",
+                                                  "LIST OF", "VECTOR OF", "TUPLE"};   // 1.12.2
     if (name == "NULL") return Kind::Keyword;
     for (const auto t : kTypes)
         if (name == t) return Kind::Type;

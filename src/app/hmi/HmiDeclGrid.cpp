@@ -22,7 +22,7 @@ namespace de = hmi::decledit;
 
 namespace {
 
-enum GridAction : int { GAdd = 1, GRemove, GDuplicate, GUp, GDown, GUses };
+enum GridAction : int { GAdd = 1, GRemove, GDuplicate, GUp, GDown, GUses, GItems /* 1.12.2 */ };
 constexpr int kUses = -1;                                   // la colonne calculee Utilisations
 const std::string& kPickType = typepicker::kChoose;            // 1.11.19 (lot 6) : le selecteur de types
 const std::string kOtherType = "Autre type\xE2\x80\xA6";    // ouvre un champ libre (ARRAY, REF_TO...)
@@ -184,6 +184,9 @@ HmiDeclGrid::HmiDeclGrid(std::string id, hmi::DocumentPtr doc, Apply apply, de::
     tools->separator();
     tools->add(GUses, HmiGlyph::Search, "Aller \xC3\xA0 ses utilisations dans le code (l'onglet Code, la suivante \xC3\xA0 chaque clic)",
                "Utilisations");
+    // 1.12.2 : la valeur d'une liste, d'un tableau, d'un dictionnaire, d'un tuple - un element par ligne.
+    tools->add(GItems, HmiGlyph::List, "\xC3\x89" "diter les \xC3\xA9l\xC3\xA9ments de la valeur (une liste, un vecteur, un tableau, un dictionnaire, "
+               "un tuple) : un par ligne", "\xC3\x89l\xC3\xA9ments\xE2\x80\xA6");
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
     const auto one = [this] { return usable() && selectedRows().size() == 1; };
     tools_->setEnabledWhen(GAdd, [this] { return usable(); });
@@ -192,6 +195,11 @@ HmiDeclGrid::HmiDeclGrid(std::string id, hmi::DocumentPtr doc, Apply apply, de::
     tools_->setEnabledWhen(GUp, [this, one] { return one() && selectedRows().front() > 0; });
     tools_->setEnabledWhen(GDown, [this, one] { return one() && selectedRows().front() + 1 < count(); });
     tools_->setEnabledWhen(GUses, one);
+    tools_->setEnabledWhen(GItems, [this, one] {
+        if (!one() || !itemseditor::available() || tableColumnOf(de::Column::Value) < 0) return false;
+        const auto r = selectedRows().front();
+        return r < rows_->rows.size() && itemseditor::editable(rows_->rows[r].d.type);
+    });
     search_ = &static_cast<ui::SearchField&>(addChild(std::make_unique<ui::SearchField>(
         base + ".search", "Rechercher\xE2\x80\xA6",
         "Filtrer les lignes : chaque mot dans l'une des colonnes (tous les mots), sans casse ni accents ; \"une phrase\" ; -mot : l'exclure.")));
@@ -222,6 +230,9 @@ HmiDeclGrid::HmiDeclGrid(std::string id, hmi::DocumentPtr doc, Apply apply, de::
             case GUses:
                 if (const auto sel = selectedRows(); sel.size() == 1 && sel.front() < rows_->rows.size())
                     usesRequested->emit(rows_->rows[sel.front()].d.name);
+                break;
+            case GItems:
+                if (const auto sel = selectedRows(); sel.size() == 1) editItems(sel.front());
                 break;
             default: break;
         }
@@ -578,6 +589,27 @@ bool HmiDeclGrid::setCell(std::size_t row, de::Column column, const std::string&
                 + (uses ? " - le code suit (" + plural(uses, "utilisation", "utilisations") + ")" : std::string{}),
             false);
     }
+    return true;
+}
+
+// 1.12.2 : l'editeur des elements de la valeur (une liste, un tableau, un dictionnaire, un tuple).
+bool HmiDeclGrid::editItems(std::size_t row) {
+    if (row >= rows_->rows.size() || !usable() || !itemseditor::available()) return false;
+    const auto& d = rows_->rows[row].d;
+    if (!itemseditor::editable(d.type)) {
+        say(d.name + " : " + d.type + " n'a pas d'\xC3\xA9l\xC3\xA9ments (une valeur simple)", true);
+        return false;
+    }
+    const hmi::Id id = d.id;
+    const std::weak_ptr<Rows> alive = rows_;
+    itemseditor::ask({"\xC3\x89l\xC3\xA9ments de " + d.name, d.type, d.value}, [this, alive, id](const std::string& text) {
+        if (alive.expired()) return;
+        for (std::size_t i = 0; i < rows_->rows.size(); ++i)
+            if (rows_->rows[i].d.id == id) {
+                (void)setCell(i, de::Column::Value, text);
+                return;
+            }
+    });
     return true;
 }
 

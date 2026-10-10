@@ -83,6 +83,9 @@ public:
     bool moveSelected(int delta);
     // Ecrire la case `column` de la ligne `row` (une ligne du modele, dans l'ordre du code).
     bool setCell(std::size_t row, hmi::decledit::Column column, const std::string& text);
+    // 1.12.2 : « Elements... » - la valeur d'une liste, d'un tableau, d'un dictionnaire, d'un tuple,
+    // un element par ligne (l'hote ouvre la fenetre). Faux : pas une telle ligne, pas d'hote.
+    bool editItems(std::size_t row);
     // 1.11.19 (lot 6) : "Choisir un type..." dans la case Type - le selecteur de types (par son
     // hote, app::typepicker) ; le type choisi va a la declaration (retrouvee par son identifiant :
     // la grille a pu changer entre-temps). Sans hote : la barre le dit.

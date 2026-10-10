@@ -13,7 +13,8 @@
 //    | REAL          Elementaires        IEC 61131-3           base:REAL          |
 //    | T_Four        Structures IHM      Projet - Types IHM    ihm:615            |
 //    | T_Four : un four. Membres : Temperature : REAL, Consigne : REAL            |
-//    | Construire : [x] Tableau ARRAY[0..9] OF   [ ] REF_TO   [ ] MAP[STRING] OF  |
+//    | Forme : [Simple] [Tableau] [Tableau 2D] [Liste] [Vecteur] [Dictionnaire]...|
+//    |         Bornes : [0..9______]   [ ] REF_TO (une reference)                 |
 //    | Resultat : ARRAY[0..9] OF T_Four                                           |
 //    |                          [Annuler] [Ouvrir la definition] [Choisir]        |
 //    +----------------------------------------------------------------------------+
@@ -26,15 +27,17 @@
 //    ouvert y apparait aussitot (le projet est relu a chaque changement).
 //  - LE TYPE ACTUEL est choisi d'office (un tableau : ses bornes cochees) ; s'il
 //    n'existe plus (un type supprime), le selecteur le dit.
-//  - CONSTRUIRE un tableau (ARRAY[a..b] OF), une reference (REF_TO), une MAP :
-//    seulement la ou l'usage les permet ; le resultat est verifie (une borne
-//    illisible : Choisir est grise et la raison est dite).
+//  - LA FORME (1.12.2) : Simple, Tableau, Tableau 2D, Liste, Vecteur, Dictionnaire
+//    (MAP), Tuple (hmi::typeform) - et une reference (REF_TO) - seulement la ou
+//    l'usage les permet ; le resultat est verifie (une borne illisible : Choisir
+//    est grise et la raison est dite).
 //  - "OUVRIR LA DEFINITION" d'un type IHM ou d'un DDT : l'hote y mene.
 // =============================================================================
 #pragma once
 
 #include "../../hmi/HmiCommands.hpp"
 #include "../../hmi/HmiPopupParams.hpp"
+#include "../../hmi/HmiTypeForms.hpp"
 #include "../../hmi/HmiTypeRegistry.hpp"
 #include "../../menu/IMenu.hpp"
 
@@ -55,6 +58,7 @@ public:
         hmi::DocumentPtr         doc;                                      // le projet (ses types IHM, relus a chaque changement)
         hmi::params::PlcTypes    plc{};                                    // les DDT du programme (vides : inconnus)
         std::vector<std::string> recents{};                                // les derniers types choisis (les plus recents d'abord)
+        bool                     fixedOnly{false};                         // 1.12.2 : un membre de type IHM (ni liste, ni MAP, ni tuple)
     };
     struct Answer {
         std::string type;                                                  // le type choisi (ecrit : "ARRAY[0..9] OF REAL")
@@ -79,6 +83,7 @@ public:
     void setArray(bool on, const std::string& bounds = {});   // "0..9", "0..3, 0..9"
     void setReference(bool on);
     void setMap(bool on);
+    bool setForm(std::string_view labelOrKey);         // 1.12.2 : "Liste", "vecteur", "Dictionnaire (MAP)"...
     [[nodiscard]] std::vector<std::string> shownNames() const;
     [[nodiscard]] std::string result() const;          // le type qu'on choisirait
     [[nodiscard]] std::string resultProblem() const;   // vide : il est bon
@@ -113,5 +118,28 @@ void setHost(Host host);
 [[nodiscard]] bool available();
 void ask(HmiTypePicker::Spec spec, Done done);    // rien sans hote
 } // namespace typepicker
+
+// ---- 1.12.2 : L'EDITEUR DES ELEMENTS D'UNE VALEUR --------------------------------------
+//  La valeur d'une liste, d'un vecteur, d'un tableau, d'un dictionnaire ou d'un tuple (une
+//  constante, une valeur initiale) : un element par ligne ('Pompe 1', 12.5, TRUE ; un
+//  dictionnaire : 'cle' := valeur), rendu en litteral ([..], (..)). Comme le selecteur :
+//  la grille demande, l'hote (l'ecran) ouvre la fenetre ; `done` recoit le litteral.
+namespace itemseditor {
+struct Spec {
+    std::string title;      // « Elements de Noms »
+    std::string type;       // LIST OF STRING, MAP[STRING] OF INT, TUPLE(INT, STRING), ARRAY[1..4] OF REAL
+    std::string value;      // la valeur actuelle ([..], (..), ou vide)
+};
+using Done = std::function<void(const std::string&)>;
+using Host = std::function<void(Spec, Done)>;
+void setHost(Host host);
+[[nodiscard]] bool available();
+void ask(Spec spec, Done done);                   // rien sans hote
+// Le type a-t-il des elements a editer ainsi ? (un tableau, une liste, un vecteur, une MAP, un tuple)
+[[nodiscard]] bool editable(std::string_view type);
+// Les lignes de l'editeur pour une valeur, et le litteral pour des lignes (le type dit [..] ou (..)).
+[[nodiscard]] std::string linesOf(std::string_view value);
+[[nodiscard]] std::string literalOf(std::string_view type, std::string_view lines);
+} // namespace itemseditor
 
 } // namespace app

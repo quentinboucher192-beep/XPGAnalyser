@@ -23217,6 +23217,69 @@ void variableFx1117() {
 //  interne dans Variables IHM ; chaque membre peut choisir s'il est interne ou attribue a
 //  l'equipement de la structure ») : V : ARRAY[0..63] OF Vanne a %MW17 (la capture).
 // =============================================================================
+// 1.12.2 : les variables IHM d'un type objet (LIST, VECTOR, MAP, TUPLE) - deliees quand leur type le
+// devient, jamais liees a un equipement, leur valeur initiale (un litteral ; l'editeur des elements).
+void objetsVariables1122() {
+    std::printf("== 1.12.2 : les variables IHM de type LIST, VECTOR, MAP, TUPLE ==\n");
+    const auto npos = std::string::npos;
+    auto doc = std::make_shared<Document>();
+    core::CommandStack stack;
+    auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+    auto& p = doc->project;
+    {
+        hmi::Equipment e;
+        e.id = p.allocate();
+        e.name = "Balance";
+        e.host = "127.0.0.1";
+        p.equipments.push_back(e);
+        Variable v;
+        v.id = p.allocate();
+        v.name = "Poids";
+        v.type = "REAL";
+        v.equipment = "Balance";
+        v.address = "%MW10";
+        p.programs.variables.push_back(v);
+    }
+    const Id vid = p.programs.variables[0].id;
+    app::HmiVariablesPane vars("vars1122", doc, apply);
+    vars.setBounds({0, 0, 1600, 900});
+    vars.layout();
+    std::string why;
+    check(vars.setType(vid, "list of real", &why), "REAL -> LIST OF REAL (" + why + ")");
+    const auto* x = doc->project.variableById(vid);
+    check(x && x->type == "LIST OF REAL" && !x->bound() && x->address.empty(), "LIST OF REAL : la variable est d\xC3\xA9li\xC3\xA9" "e (ni \xC3\xA9quipement, ni adresse)");
+    check(vars.lastMessage().find("d\xC3\xA9li\xC3\xA9" "e de Balance (%MW10)") != npos && vars.lastMessage().find("taille variable") != npos,
+          "le message le dit : " + vars.lastMessage());
+    check(!vars.setEquipment(vid, "Balance", &why) && why.find("taille variable") != npos, "la lier \xC3\xA0 Balance : refus\xC3\xA9 (" + why + ")");
+    check(!vars.setAddress(vid, "%MW20", &why) && why.find("taille variable") != npos, "une adresse : refus\xC3\xA9" "e (" + why + ")");
+    check(!vars.setRetain(vid, true, &why) && why.find("objet de l'IHM") != npos, "R\xC3\xA9manente : refus\xC3\xA9" "e (" + why + ")");
+    check(vars.setInitial(vid, "[1.5, 2, 3]", &why) && doc->project.variableById(vid)->initial == "[1.5, 2, 3]", "valeur initiale [1.5, 2, 3] (" + why + ")");
+    check(!vars.setInitial(vid, "[1.5, 2", &why) && why.find("illisible") != npos, "[1.5, 2 : refus\xC3\xA9" "e (" + why + ")");
+    check(vars.setType(vid, "TUPLE(INT, STRING)", &why) && doc->project.variableById(vid)->initial.empty(),
+          "TUPLE(INT, STRING) : la valeur [1.5, 2, 3] ne va plus, elle est vid\xC3\xA9" "e");
+    check(!vars.setEquipment(vid, "Balance", &why) && why.find("plan m\xC3\xA9moire") != npos, "un TUPLE : pas d'\xC3\xA9quipement non plus (" + why + ")");
+    // Ctrl+Z : le TUPLE, puis la valeur, puis le type - la liaison revient avec REAL.
+    (void)stack.undo();
+    (void)stack.undo();
+    (void)stack.undo();
+    x = doc->project.variableById(vid);
+    check(x && x->type == "REAL" && x->equipment == "Balance" && x->address == "%MW10", "Ctrl+Z : REAL, li\xC3\xA9" "e \xC3\xA0 Balance (%MW10)");
+    // Un membre de type IHM : une place fixe.
+    HmiType t;
+    t.id = p.allocate();
+    t.name = "T_Lot";
+    t.members = {{"Poids", "REAL", "", ""}};
+    p.programs.types.push_back(t);
+    check(!hmi::types::validMemberType(p, "LIST OF REAL", &why) && why.find("place fixe") != npos, "un membre LIST OF REAL : refus\xC3\xA9 (" + why + ")");
+    // L'editeur des elements : les lignes et le litteral.
+    check(app::itemseditor::linesOf("[1.5, 'a, b', 3]") == "1.5\n'a, b'\n3" && app::itemseditor::linesOf("0") == "0", "les lignes d'une valeur");
+    check(app::itemseditor::literalOf("LIST OF REAL", "1.5\n\n 2,\n3") == "[1.5, 2, 3]" && app::itemseditor::literalOf("TUPLE(INT, STRING)", "1\n'x'") == "(1, 'x')"
+              && app::itemseditor::literalOf("MAP[STRING] OF INT", "'vis' := 3\n'ecrou' := 5") == "['vis' := 3, 'ecrou' := 5]",
+          "le litt\xC3\xA9ral des lignes : [..] (lignes vides et virgules finales oubli\xC3\xA9" "es), (..) pour un tuple, une MAP");
+    check(app::itemseditor::editable("ARRAY[1..4] OF REAL") && app::itemseditor::editable("VECTOR OF INT") && !app::itemseditor::editable("REAL"),
+          "des \xC3\xA9l\xC3\xA9ments : un tableau, un vecteur ; pas un REAL");
+}
+
 void variablesInternes1118() {
     std::printf("== 1.11.8 : Variables IHM - un membre interne ou attribu\xC3\xA9 \xC3\xA0 l'\xC3\xA9quipement, Recalculer la place m\xC3\xA9moire ==\n");
     auto doc = std::make_shared<Document>();
@@ -27924,6 +27987,15 @@ void selecteurTypes1119() {
     check(picker->result() == "MAP[STRING] OF REF_TO T_Four", "MAP[STRING] OF : " + picker->result());
     picker->setReference(false);
     picker->setMap(false);
+    // 1.12.2 : la forme - Liste, Vecteur, Tuple, Dictionnaire, et le retour a Simple
+    check(picker->setForm("Liste") && picker->result() == "LIST OF T_Four" && picker->resultProblem().empty(), "Liste : " + picker->result());
+    check(picker->setForm("vecteur") && picker->result() == "VECTOR OF T_Four", "Vecteur : " + picker->result());
+    check(picker->setForm("Tuple") && picker->result() == "TUPLE(T_Four, STRING)" && picker->resultProblem().empty(), "Tuple : " + picker->result());
+    check(picker->setForm("Dictionnaire (MAP)") && picker->result() == "MAP[STRING] OF T_Four", "Dictionnaire : " + picker->result());
+    picker->setArray(true, "1..2");
+    check(picker->result() == "ARRAY[1..2] OF T_Four", "les bornes d'un tableau reviennent avec lui : " + picker->result());
+    check(picker->setForm("Dictionnaire (MAP)") && picker->result() == "MAP[STRING] OF T_Four", "la cl\xC3\xA9 du dictionnaire aussi : " + picker->result());
+    check(!picker->setForm("Matrice") && picker->setForm("Simple") && picker->result() == "T_Four", "une forme inconnue : refus\xC3\xA9" "e ; Simple : T_Four");
     // rafraichi : un type cree pendant que le selecteur est ouvert
     HmiType vanne;
     vanne.id = doc->project.allocate();
@@ -28584,7 +28656,8 @@ int main(int argc, char** argv) {
     forcageCommun1117();                    // 1.11.7 : le forcage commun, prioritaire sur les scripts
     variableFx1117();                       // 1.11.7 : la case Variable d'une action, la pastille fx
     blocageDelier1117();                    // 1.11.7 : Delier pendant la simulation ne bloque plus
-    variablesInternes1118();                // 1.11.8 : membres internes, Recalculer la place memoire
+    variablesInternes1118();
+    objetsVariables1122();             // 1.12.2 : LIST, VECTOR, MAP, TUPLE en variables IHM                // 1.11.8 : membres internes, Recalculer la place memoire
     actionsFenetres1119();                  // 1.11.9 : l'operation en arbre, le script, Maths, le clavier
     ecrituresContinues11110();              // 1.11.10 : un script qui ecrit sans cesse n'empeche plus les lectures
     parametresInstances11110();             // 1.11.10 : les instances et les appelants suivent les parametres
