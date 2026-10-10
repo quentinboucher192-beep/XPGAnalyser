@@ -1,0 +1,73 @@
+# =============================================================================
+#  Session 1122 IHM : XPGAnalyser IHM (1.12.2), XpgAnalyzer-IHM.exe - les types
+#  objets (LIST, MAP, TUPLE), la liste, la liste deroulante, les boutons radio et
+#  le tableau qui suivent des variables, les raccourcis de Visual Studio.
+#  Armoire_Gaz (migre par la 1.12.1) a une vue de plus, Vue_Listes : Recettes
+#  (LIST OF STRING), Stock (MAP[STRING] OF INT), Lots (LIST OF TUPLE), T_Mode_Four.
+#    1. les variables IHM objets ;
+#    2. les natives des listes (LIST_ADD, JOIN) ;
+#    3. Vue_Listes dans l'editeur ;
+#    4. la simulation : un clic sur la liste, la liste deroulante de
+#       l'enumeration, les boutons radio de la MAP, le tableau qui defile ;
+#    5. la page des raccourcis (les accords de Visual Studio).
+# =============================================================================
+attendre 3
+theme Dark
+attendre 8
+ouvrir "${PROJETS}/ihm/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- 1. Les variables objets ----
+arbre "IHM/Programmation générale/Variables IHM"
+attendre 6
+capture 1122_ihm_01_variables_objets.png
+
+# ---- 2. Les natives des listes ----
+arbre "IHM/Programmation générale/Natives"
+attendre 6
+natives "fonction:LIST_ADD"
+attendre 4
+natives-attendre "LIST_ADD"
+capture 1122_ihm_02_list_add.png
+natives "fonction:JOIN"
+attendre 4
+capture 1122_ihm_03_join.png
+
+# ---- 3. La vue des listes dans l'editeur ----
+arbre "IHM/Vues/Vue_Listes"
+attendre 8
+capture 1122_ihm_04_vue_listes.png
+
+# ---- 4. La simulation ----
+arbre "Simulation/IHM"
+attendre 2
+ihm-build-attendre 600
+attendre 60
+ihm-sim-etat "en marche"
+attendre 3
+sim-vue "Vue_Listes"
+attendre 4
+capture 1122_ihm_05_sim_vue_listes.png
+sim-partie "Liste_Recettes" "choix:2"
+attendre 2
+sim-partie "Radio_Stock" "option:1"
+attendre 2
+sim-partie "Combo_Mode" "ouvrir"
+attendre 2
+capture 1122_ihm_06_sim_choix.png
+sim-partie "Combo_Mode" "choix:2"
+attendre 2
+sim-molette "Table_Lots" 3
+attendre 2
+capture 1122_ihm_07_sim_tableau_defile.png
+ihm-variable "Recette_Choisie"
+ihm-variable "Mode_Four" "2"
+ihm-variable "Ingredient"
+ihm-diagnostics
+
+# ---- 5. Les raccourcis de Visual Studio ----
+aide-raccourcis
+attendre 4
+capture 1122_ihm_08_raccourcis.png
+quitter
