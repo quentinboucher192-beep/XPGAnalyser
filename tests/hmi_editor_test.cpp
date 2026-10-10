@@ -3730,6 +3730,51 @@ void communes1123() {
     // Ctrl+A dans l'explorateur : tous les objets.
     b.editor->objects().keyPressed->emit(ui::KeyDown{ui::Key::A, ui::KeyMods{true, false, false, false}, false});
     check(b.editor->canvas().selection().size() == 3, "Ctrl+A dans l'explorateur choisit les trois objets");
+    // La case a cocher en « - », des formules differentes, l'onglet Actions.
+    const auto findKey = [&](const std::string& key) -> const ui::PropertyGrid::Property* {
+        for (const auto& c : b.editor->properties().categories())
+            for (const auto& p : c.properties)
+                if (p.key == key) return &p;
+        return nullptr;
+    };
+    b.v().object(l2)->setFlag("flipH", true);
+    b.v().object(l1)->setExpr("value", "Marche");
+    b.v().object(l2)->setExpr("value", "Defaut");
+    {
+        Action toggle;
+        toggle.trigger = Trigger::Click;
+        toggle.operation = Operation::Toggle;
+        toggle.target = "Marche";
+        b.v().object(l1)->actions.push_back(toggle);
+    }
+    b.editor->canvas().setSelection({l1, l2});
+    b.editor->layout();
+    {
+        const auto* flip = findKey("flipH");
+        check(flip && flip->type == ui::PropertyGrid::ValueType::Boolean && flip->mixed && flip->value.empty(),
+              "une case \xC3\xA0 cocher qui diff\xC3\xA8re : en \xC2\xAB - \xC2\xBB");
+        const auto* value = findKey("value");
+        check(value && value->placeholder == "(plusieurs formules)" && value->expression.empty(),
+              "deux formules diff\xC3\xA9rentes : \xC2\xAB (plusieurs formules) \xC2\xBB, pas celle du premier");
+    }
+    check(b.editor->actions().several().size() == 2, "l'onglet Actions : les deux objets (" + std::to_string(b.editor->actions().several().size()) + ")");
+    check(b.editor->actions().table().model() && b.editor->actions().table().model()->rowCount() == 2
+              && b.editor->actions().table().model()->cellText(0, 1).find("1 action") != std::string::npos,
+          "... une ligne chacun, ses actions (" + (b.editor->actions().table().model() ? b.editor->actions().table().model()->cellText(0, 1) : std::string("?")) + ")");
+    check(!b.editor->actions().tools().isEnabled(1), "... Ajouter gris\xC3\xA9");
+    b.editor->actions().chooseObject->emit(l2);
+    b.editor->layout();
+    check(b.editor->canvas().selection() == std::vector<Id>{l2} && b.editor->actions().several().empty() && b.editor->actions().owner() == l2,
+          "une ligne choisie : cet objet seul, ses actions");
+    // Maj+clic dans l'explorateur : depuis le dernier objet clique (ici, dans la vue : l2).
+    gfx::Rect rowT;
+    check(b.editor->objects().rowRect(t, rowT), "la ligne du texte dans l'explorateur");
+    b.editor->objects().dispatch(ui::MouseDown{{rowT.x + 10, rowT.y + rowT.h / 2}, ui::MouseButton::Left, 1, ui::KeyMods{false, true, false, false}});
+    auto sel = b.editor->canvas().selection();
+    std::sort(sel.begin(), sel.end());
+    std::vector<Id> want{l2, t};
+    std::sort(want.begin(), want.end());
+    check(sel == want, "Maj+clic sur le texte : de l2 (le dernier clique) au texte, sans l1 (" + std::to_string(sel.size()) + " objets)");
 }
 
 void lot6_actions_ressources() {

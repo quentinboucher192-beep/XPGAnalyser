@@ -142,6 +142,7 @@ HmiActionsPanel::HmiActionsPanel(std::string id, hmi::DocumentPtr doc, Id view, 
     tools->add(AUp, HmiGlyph::Up, "Monter l'action (elles s'ex\xC3\xA9" "cutent dans l'ordre)");
     tools->add(ADown, HmiGlyph::Down, "Descendre l'action");
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
+    tools_->setEnabledWhen(AAdd, [this] { return several_.empty(); });      // 1.12.3 : une action est a un objet
     tools_->setEnabledWhen(ADuplicate, [this] { return selectedIndex() >= 0; });
     tools_->setEnabledWhen(ARemove, [this] { return selectedIndex() >= 0; });
     tools_->setEnabledWhen(AUp, [this] { return rowOf(selectedIndex()) > 0; });
@@ -212,6 +213,11 @@ HmiActionsPanel::HmiActionsPanel(std::string id, hmi::DocumentPtr doc, Id view, 
         }
     });
     links_ += table_->selectionChanged->connect([this](const std::vector<ui::RowIndex>& rows) {
+        // 1.12.3 : plusieurs objets choisis - une ligne choisit son objet, seul.
+        if (!several_.empty()) {
+            if (!rows.empty() && rows.front() < several_.size()) chooseObject->emit(several_[rows.front()]);
+            return;
+        }
         selected_ = rows.empty() || rows.front() >= rows_.size() ? -1 : rows_[rows.front()];
         rebuildGrid();
     });
@@ -336,7 +342,9 @@ std::string HmiActionsPanel::ownerName() const {
 
 void HmiActionsPanel::setOwner(Id object) {
     if (scope_ == Scope::Shortcuts) object = kNoId;          // 1.11.23 : les raccourcis sont a la vue
-    if (object == owner_) { refresh(); return; }
+    const bool wasSeveral = !several_.empty();
+    several_.clear();                                        // 1.12.3 : un seul objet (ou la vue)
+    if (object == owner_ && !wasSeveral) { refresh(); return; }
     owner_ = object;
     selected_ = -1;
     refresh();
@@ -360,10 +368,42 @@ void HmiActionsPanel::selectIndex(int index) {
     rebuildGrid();
 }
 
+void HmiActionsPanel::setSeveral(std::vector<Id> objects) {
+    if (scope_ == Scope::Shortcuts || objects.size() < 2) objects.clear();
+    if (objects == several_) return;
+    if (objects.empty()) { setOwner(kNoId); return; }
+    several_ = std::move(objects);
+    owner_ = kNoId;
+    selected_ = -1;
+    refresh();
+}
+
 void HmiActionsPanel::refresh() {
     std::vector<std::vector<std::string>> rows;
     rows_.clear();
     const bool keys = scope_ == Scope::Shortcuts;
+    // 1.12.3 : plusieurs objets choisis - une ligne par objet ; un clic en choisit un.
+    if (!several_.empty()) {
+        const auto* v = doc_->project.view(view_);
+        for (const Id id : several_) {
+            const auto* o = v ? v->object(id) : nullptr;
+            const std::size_t n = o ? static_cast<std::size_t>(std::count_if(o->actions.begin(), o->actions.end(),
+                                                                              [this](const Action& a) { return shows(a); }))
+                                    : 0;
+            rows.push_back({(o ? o->name : std::string("?")) + " : "
+                            + (n == 0 ? std::string("aucune action") : std::to_string(n) + (n == 1 ? " action" : " actions"))});
+        }
+        model_ = std::make_shared<ActionRows>(std::vector<std::string>{"Objet choisi"}, std::move(rows));
+        selected_ = -1;
+        table_->setModel(model_);
+        rebuildGrid();
+        if (lastCount_ != 0) {
+            lastCount_ = 0;
+            countChanged->emit(0);
+        }
+        invalidate();
+        return;
+    }
     if (const auto* list = actions())
         for (std::size_t i = 0; i < list->size(); ++i) {
             const auto& a = (*list)[i];
@@ -468,6 +508,20 @@ bool HmiActionsPanel::move(int index, int delta) {
 
 void HmiActionsPanel::rebuildGrid() {
     using PG = ui::PropertyGrid;
+    if (!several_.empty()) {                 // 1.12.3 : plusieurs objets choisis
+        PG::Category info;
+        info.name = std::to_string(several_.size()) + " objets choisis";
+        PG::Property p;
+        p.name = "Actions";
+        p.value = "celles d'un objet : choisis-en un";
+        p.type = PG::ValueType::ReadOnly;
+        p.description = "Une action est \xC3\xA0 un objet (son clic, son appui long...). Clique un objet de la liste "
+                        "(ou dans la vue) pour voir et r\xC3\xA9gler les siennes ; les propri\xC3\xA9t\xC3\xA9s communes, "
+                        "elles, se r\xC3\xA8glent sur tous dans l'onglet Propri\xC3\xA9t\xC3\xA9s.";
+        info.properties.push_back(std::move(p));
+        grid_->setCategories({std::move(info)});
+        return;
+    }
     const auto* list = actions();
     const int index = selectedIndex();
     if (!list || index < 0) {

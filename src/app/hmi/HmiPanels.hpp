@@ -198,6 +198,7 @@ private:
     ui::EdgeScrollBar         vbar_;                 // 1.11.4 : la barre de l'explorateur d'objets
     int                       hover_{-1};
     int                       anchor_{-1};
+    hmi::Id                   anchorId_{hmi::kNoId};   // 1.12.3 : le dernier objet clique (ici ou dans la vue)
     float                     rowH_{24};
     // ---- Lot API 8 : les expressions impossibles ----
     void refreshExpressionBadges();

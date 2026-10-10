@@ -471,6 +471,11 @@ HmiEditor::HmiEditor(std::string widgetId, hmi::DocumentPtr doc, Id view, Apply 
                       [&](hmi::Project&, hmi::View& vv) { hmi::edit::setLocked(vv, {id}, on); });
     });
     links_ += objects_->activated->connect([this](Id id) { objects_->beginRename(id); });
+    // 1.12.3 : l'onglet Actions avec plusieurs objets - une ligne choisit cet objet, seul.
+    links_ += actions_->chooseObject->connect([this](Id id) {
+        canvas_->setSelection({id});
+        objects_->revealSelection();
+    });
     // 1.10 (chantier O) : une alarme sous un objet (l'explorateur) - l'objet est
     // deja choisi ; l'inspecteur s'ouvre sur elle (section Alarmes de l'objet).
     links_ += objects_->alarmActivated->connect([this](Id, const std::string& alarm, const std::string& path) {
@@ -1690,7 +1695,9 @@ void HmiEditor::onLayout() {
     // de la vue ; plusieurs, celles de la vue aussi (une action est a un objet).
     const auto sel = canvas_->selection();
     const Id owner = sel.size() == 1 ? sel.front() : kNoId;
-    if (owner != actions_->owner()) actions_->setOwner(owner);
+    // 1.12.3 : plusieurs objets - l'onglet Actions le dit, et propose d'en choisir un.
+    if (sel.size() > 1) actions_->setSeveral(sel);
+    else if (owner != actions_->owner() || !actions_->several().empty()) actions_->setOwner(owner);
     if (owner != content_->object()) content_->setObject(owner);
     // 1.10.4 (K3) : l'onglet Contenu, seulement pour un objet qui peut avoir un contenu
     // (un tableau, une courbe, un groupe...) ; une vanne, un bouton, la vue : pas d'onglet.

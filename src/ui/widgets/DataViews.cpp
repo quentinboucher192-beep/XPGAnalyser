@@ -3608,7 +3608,9 @@ void PropertyGrid::onPaint(const PaintContext& ctx) {
                 const bool on = isTrueText(vr.prop->value);
                 ctx.r.fillRect(box, on ? c.accent : c.inputBg);
                 ctx.r.strokeRect(box, on ? c.accent : c.border, 1.f);
-                if (on) {
+                if (vr.prop->mixed && !on) {          // 1.12.3 : « - » : les objets choisis different
+                    ctx.r.line({box.x + 3.f, box.y + 7.f}, {box.x + 11.f, box.y + 7.f}, c.text, 2.f);
+                } else if (on) {
                     ctx.r.line({box.x + 3.f, box.y + 7.f}, {box.x + 6.f, box.y + 10.f}, c.selectionText, 2.f);
                     ctx.r.line({box.x + 6.f, box.y + 10.f}, {box.x + 11.f, box.y + 4.f}, c.selectionText, 2.f);
                 }

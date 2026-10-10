@@ -521,6 +521,8 @@ N'importe quelle vue peut s'ouvrir par-dessus (une popup) par l'action « Ouvrir
 - l'onglet **Variables** de la bibliothèque pose une variable d'un geste (voir « Concevoir plus vite »).
 ### Sélectionner, grouper, aligner
 - un cadre tiré dans la vue choisit plusieurs objets ; Ctrl + clic en ajoute un ;
+- dans l'explorateur d'objets (1.12.3) : **Ctrl+A** les prend tous, **Maj+clic** étend depuis le dernier objet cliqué (ici ou dans la vue) ;
+- plusieurs objets choisis (1.12.3) : l'inspecteur montre leurs propriétés communes ; une valeur qui diffère se lit « (plusieurs valeurs) » (une case à cocher en « – », des formules différentes : « (plusieurs formules) ») ; une saisie part sur tous, en une annulation. L'onglet **Actions** liste les objets choisis : une action est à un objet, un clic en choisit un ;
 - **Grouper** fait un groupe (double-clic pour l'éditer de l'intérieur, Échap pour en sortir) ;
 - **Aligner** (gauche, centre, droite, haut, milieu, bas), **Distribuer**, ordre de superposition ;
 - **Rotation** −90°, +90°, +45°, 180° et **miroirs** horizontal / vertical ;

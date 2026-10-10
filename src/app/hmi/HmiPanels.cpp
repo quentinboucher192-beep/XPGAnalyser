@@ -408,6 +408,8 @@ void HmiObjectList::refreshExpressionBadges() {
 // ---- fin Lot API 8 ----
 
 void HmiObjectList::setSelection(const std::vector<Id>& ids) {
+    // 1.12.3 : choisi dans la vue - Maj+clic etendra depuis le dernier objet clique la-bas.
+    if (ids != selection_) anchorId_ = ids.empty() ? kNoId : ids.back();
     selection_ = ids;
     invalidate();
 }
@@ -947,17 +949,24 @@ ui::EventResult HmiObjectList::onEvent(const ui::InputEvent& ev) {
             return ui::EventResult::Consumed;
         }
         if (m->clickCount >= 2) { activated->emit(row.id); return ui::EventResult::Consumed; }
+        // 1.12.3 : l'ancre est le dernier objet clique (une ligne d'avant une reconstruction,
+        // ou un objet choisi dans la vue), pas un indice de ligne qui a pu changer.
+        int from = -1;
+        for (std::size_t k = 0; anchorId_ != kNoId && k < rows_.size(); ++k)
+            if (rows_[k].id == anchorId_ && rows_[k].object()) { from = static_cast<int>(k); break; }
         if (m->mods.ctrl) {
             auto it = std::find(selection_.begin(), selection_.end(), row.id);
             if (it != selection_.end()) selection_.erase(it); else selection_.push_back(row.id);
             anchor_ = i;
-        } else if (m->mods.shift && anchor_ >= 0 && anchor_ < static_cast<int>(rows_.size())) {
+            anchorId_ = row.id;
+        } else if (m->mods.shift && from >= 0) {
             selection_.clear();
-            for (int k = std::min(anchor_, i); k <= std::max(anchor_, i); ++k)
+            for (int k = std::min(from, i); k <= std::max(from, i); ++k)
                 if (rows_[static_cast<std::size_t>(k)].object()) selection_.push_back(rows_[static_cast<std::size_t>(k)].id);
         } else {
             selection_ = {row.id};
             anchor_ = i;
+            anchorId_ = row.id;
         }
         invalidate();
         selectionChanged->emit(selection_);
@@ -2679,13 +2688,14 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
             continue;
         // 1.12.3 : plusieurs objets choisis - une propriete qu'un autre n'a pas ne se montre pas ;
         // une valeur qui differe se dit « (plusieurs valeurs) », et la saisie part sur tous (une annulation).
-        bool differs = false;
+        bool differs = false, formulas = false;
         if (many) {
             bool common = true;
             for (const auto* x : others) {
                 const auto* xp = propOf(*x, prop.key);
                 if (!xp) { common = false; break; }
                 differs = differs || xp->value != prop.value || xp->expr != prop.expr;
+                formulas = formulas || (xp->expr != prop.expr && (!xp->expr.empty() || !prop.expr.empty()));
             }
             if (!common) continue;
         }
@@ -2899,8 +2909,12 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
             p.value.clear();
             p.expression.clear();
             p.exprError.clear();
-            p.placeholder = "(plusieurs valeurs)";
-            p.description = "Les objets choisis n'ont pas la m\xC3\xAAme valeur. Une saisie la donne \xC3\xA0 tous (Ctrl+Z la reprend)."
+            p.mixed = true;                           // 1.12.3 : une case a cocher en « - »
+            // 1.12.3 : des formules (fx) differentes se disent, au lieu de montrer celle du premier.
+            p.placeholder = formulas ? "(plusieurs formules)" : "(plusieurs valeurs)";
+            p.description = std::string(formulas ? "Les objets choisis n'ont pas la m\xC3\xAAme formule (fx). Une saisie (une valeur ou =une "
+                                                   "formule) la donne \xC3\xA0 tous (Ctrl+Z la reprend)."
+                                                 : "Les objets choisis n'ont pas la m\xC3\xAAme valeur. Une saisie la donne \xC3\xA0 tous (Ctrl+Z la reprend).")
                           + (p.description.empty() ? std::string{} : "\n" + p.description);
         }
         // La section, et la place dans la section.

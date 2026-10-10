@@ -52,6 +52,12 @@ public:
     // L'objet dont on montre les actions ; kNoId : celles de la vue.
     void setOwner(hmi::Id object);
     [[nodiscard]] hmi::Id owner() const noexcept { return owner_; }
+    // 1.12.3 : PLUSIEURS OBJETS CHOISIS - une action est a un objet : la liste montre les
+    // objets choisis (et combien d'actions chacun a), un clic en choisit un seul
+    // (chooseObject). Moins de deux : le volet redevient celui d'un objet (setOwner).
+    void setSeveral(std::vector<hmi::Id> objects);
+    [[nodiscard]] const std::vector<hmi::Id>& several() const noexcept { return several_; }
+    const core::SignalPtr<hmi::Id> chooseObject = core::Signal<hmi::Id>::create();
     void refresh();
     [[nodiscard]] int  selectedIndex() const;
     void selectIndex(int index);
@@ -94,6 +100,7 @@ private:
     hmi::DocumentPtr doc_;
     hmi::Id          view_;
     hmi::Id          owner_{hmi::kNoId};
+    std::vector<hmi::Id> several_;                        // 1.12.3 : plusieurs objets choisis
     Apply            apply_;
     HmiToolStrip*    tools_{nullptr};
     ui::TableView*   table_{nullptr};

@@ -1124,6 +1124,14 @@ const std::vector<Topic>& topics() {
              {K::Heading, "S\xC3\xA9lectionner, grouper, aligner", {}},
              {K::Bullet, "un cadre tir\xC3\xA9 dans la vue choisit plusieurs objets ; Ctrl + clic en ajoute "
                          "un ;", {}},
+             {K::Bullet, "dans l'explorateur d'objets (1.12.3) : **Ctrl+A** les prend tous, **Maj+clic** \xC3\xA9tend "
+                         "depuis le dernier objet cliqu\xC3\xA9 (ici ou dans la vue) ;", {}},
+             {K::Bullet, "plusieurs objets choisis (1.12.3) : l'inspecteur montre leurs propri\xC3\xA9t\xC3\xA9s "
+                         "communes ; une valeur qui diff\xC3\xA8re se lit \xC2\xAB (plusieurs valeurs) \xC2\xBB (une "
+                         "case \xC3\xA0 cocher en \xC2\xAB \xE2\x80\x93 \xC2\xBB, des formules diff\xC3\xA9rentes : "
+                         "\xC2\xAB (plusieurs formules) \xC2\xBB) ; une saisie part sur tous, en une annulation. "
+                         "L'onglet **Actions** liste les objets choisis : une action est \xC3\xA0 un objet, un clic "
+                         "en choisit un ;", {}},
              {K::Bullet, "**Grouper** fait un groupe (double-clic pour l'\xC3\xA9" "diter de "
                          "l'int\xC3\xA9rieur, \xC3\x89" "chap pour en sortir) ;", {}},
              {K::Bullet, "**Aligner** (gauche, centre, droite, haut, milieu, bas), **Distribuer**, ordre de "

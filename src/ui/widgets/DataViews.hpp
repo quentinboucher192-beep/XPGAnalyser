@@ -903,6 +903,9 @@ public:
         // 1.9 (chantier U) : le texte d'attente d'une case vide, en gris (la valeur
         // par defaut d'un argument pas donne) ; il ne se tape pas.
         std::string               placeholder{};
+        // 1.12.3 : PLUSIEURS OBJETS CHOISIS NE S'ACCORDENT PAS - une case a cocher montre
+        // « - » (un clic la coche pour tous) ; une case de texte, son texte d'attente.
+        bool                      mixed{false};
         // 1.11.3 : LE CARRE DE LEGENDE au bout de la case - d'ou vient la valeur
         // (C constante, fx formule, $ reperes, A API, I IHM, S systeme, V symbole
         // ou vue, ! erreur). Un clic : legendClicked (l'hote ouvre la liste des
