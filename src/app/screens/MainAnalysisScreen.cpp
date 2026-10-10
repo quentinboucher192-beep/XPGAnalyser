@@ -18,6 +18,7 @@
 //    entry. A workspace the user arranged should survive closing the program.
 // =============================================================================
 #include "Screens.hpp"
+#include "../Disposition.hpp"
 #include "../../core/Edition.hpp"   // 1.12.0 : l'ecran de chaque application
 #include "../../project/CodeIconKeys.hpp"   // 1.8.0 : l'icone des onglets de section
 #include "LibraryHelpScreen.hpp"   // lot macros 1 : helpMenuFor
@@ -3316,6 +3317,10 @@ void MainAnalysisScreen::onEnter() {
     // chart editor is simply the first thing to make it obvious.
     //
     // Rebinding is for a DIFFERENT project, not for a return to the screen.
+    if (!dispositionLoaded_) {     // 1.12.3 : Projet > Disposition - avant d'ouvrir les pages du projet
+        loadDisposition();
+        dispositionLoaded_ = true;
+    }
     if (auto p = app_.project(); p && p != boundProject_) bindProject(p, app_.report());
     takePendingApiTutorial();      // lot API 7 : l'accueil a demande le didacticiel de l'API
 
@@ -3505,6 +3510,13 @@ void MainAnalysisScreen::onEnter() {
 
     wireHistory();      // lot 19 : l'historique, l'endroit de chaque commande
     loadWorkspace();
+    // 1.12.3 : Projet > Disposition - au lancement, ce qu'elle regle ; ensuite, elle suit la
+    // simulation (les elements « en edition » / « en simulation »).
+    if (!dispositionStarted_) {
+        applyDisposition(DispositionMode::Startup);
+        dispositionStarted_ = true;
+    }
+    links_ += disposition::changed()->connect([this] { applyDisposition(DispositionMode::Simulation); });
 }
 
 void MainAnalysisScreen::onExit() {
@@ -3658,10 +3670,15 @@ void MainAnalysisScreen::bindProject(ProjectRef project,
     if (centre_ && centre_->tabCount() == 0) {
         // 1.12.0 : XPGAnalyser IHM - la vue de demarrage de l'IHM (pas de tableau de bord de l'API).
         if (!core::hasApi()) {
-            if (const auto doc = app_.hmi(); doc && doc->project.view(doc->project.config.startView))
+            // 1.12.3 : Projet > Disposition - la vue de demarrage « a l'ouverture du projet »
+            // (d'origine), les autres pages qui s'ouvrent avec lui.
+            const bool startView = disposition::current().item("page.vue").when == "projet";
+            const auto doc = app_.hmi();
+            if (startView && doc && doc->project.view(doc->project.config.startView))
                 openHmiView(doc->project.config.startView);
             else
                 openHmiPane("config");
+            openDispositionPages("projet", /*startView=*/false);
         } else {
             openApiPane("api");
         }

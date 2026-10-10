@@ -113,7 +113,9 @@ void testTopBar() {
     // programme, Reperes des nouveautes, A propos d'XPGAnalyser (Aide).
     // 1.10.2 (CR) : + Journal interne (Aide). 1.11 (T3) : + Les expressions (Aide).
     // 1.11 (T2, decision 22) : Projet 14, Nouveau 8, Affichage 9, Aide 16 (dont 4 titres).
-    check(entries == 47, "les quatre menus : " + std::to_string(entries) + " entrees");
+    // 1.12.3 : + Disposition... (Projet).
+    check(entries == 48, "les quatre menus : " + std::to_string(entries) + " entrees");
+    check(bar.reaches("project.disposition"), "1.12.3 : Projet > Disposition...");
     check(bar.reaches("layout.tabs") && bar.reaches("layout.groups") && bar.reaches("layout.mosaic") && bar.reaches("layout.detach")
               && bar.reaches("help.apiTutorial") && bar.reaches("file.importMast"),
           "lot API 7 : Disposition (3), Detacher, Didacticiel de l'API, Importer un .XPG dans les menus");

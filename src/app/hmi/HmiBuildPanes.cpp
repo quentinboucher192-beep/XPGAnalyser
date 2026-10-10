@@ -2,6 +2,7 @@
 //  app/hmi/HmiBuildPanes.cpp - 1.11.13 : voir HmiBuildPanes.hpp
 // =============================================================================
 #include "HmiBuildPanes.hpp"
+#include "../Disposition.hpp"
 
 #include "../../core/AtomicFile.hpp"
 #include "../../menu/MenuManager.hpp"
@@ -647,6 +648,7 @@ HmiBuildOutputPane::HmiBuildOutputPane(std::string id) : ui::Widget(std::move(id
     tabs->addTab({"Console", ui::Icon::Code, false, false}, std::move(console));
     tabs->addTab({"Diagnostics", ui::Icon::Warning, false, false}, std::move(diag));
     tabs_ = &static_cast<ui::TabControl&>(addChild(std::move(tabs)));
+    disposition::applyTabs(*tabs_, "bas", true);       // 1.12.3 : Projet > Disposition
     status_ = &static_cast<ui::StatusBar&>(addChild(std::make_unique<ui::StatusBar>(this->id() + ".status")));
     auto rows = std::make_shared<ConsoleRows>(console_);
     consoleModel_ = rows;

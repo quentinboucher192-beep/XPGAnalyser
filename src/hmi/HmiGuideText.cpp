@@ -626,13 +626,30 @@ const std::vector<Topic>& topics() {
                          "droite de la bande** (trois traits et le nombre d'onglets) ouvre la **liste de "
                          "tous les onglets**, avec leur pastille enti\xC3\xA8re : un clic y va. Au survol "
                          "d'un onglet r\xC3\xA9" "duit, une infobulle donne son nom et sa pastille.", {}},
+             {K::Heading, "La disposition (1.12.3)", {}},
+             {K::Paragraph, "**Projet \xE2\x80\xBA Disposition\xE2\x80\xA6** (Ctrl+Maj+K ; Affichage \xE2\x80\xBA "
+                         "Panneaux \xC3\xA0 afficher\xE2\x80\xA6 ouvre la m\xC3\xAAme fen\xC3\xAAtre) : les panneaux de "
+                         "la fen\xC3\xAAtre, les sous-onglets de chaque page et les pages du centre. Pour chacun : "
+                         "**quand** le montrer (toujours, en \xC3\xA9" "dition, en simulation, cach\xC3\xA9 ; une page : "
+                         "\xC3\xA0 la demande, \xC3\xA0 l'ouverture du projet, au d\xC3\xA9marrage de la simulation), "
+                         "**o\xC3\xB9** (l'explorateur \xC3\xA0 gauche ou \xC3\xA0 droite, le panneau du bas sous "
+                         "l'\xC3\xA9" "diteur ou \xC3\xA0 sa droite, une page dans un onglet, c\xC3\xB4te \xC3\xA0 "
+                         "c\xC3\xB4te ou d\xC3\xA9tach\xC3\xA9" "e) et **au d\xC3\xA9part** (le panneau du bas ouvert "
+                         "ou repli\xC3\xA9, le sous-onglet choisi). Des dispositions toutes faites : Par "
+                         "d\xC3\xA9" "faut, Dessin des vues, Mise au point, \xC3\x89" "cran large, et **Ma "
+                         "disposition** (\xC2\xAB Garder comme Ma disposition \xC2\xBB). **Appliquer** montre tout de "
+                         "suite ; tout se garde dans les r\xC3\xA9glages de l'\xC3\xA9" "dition (disposition.*) ; "
+                         "\xC2\xAB R\xC3\xA9tablir la disposition d'origine \xC2\xBB les efface. Un \xC3\xA9l\xC3\xA9ment "
+                         "\xC2\xAB en simulation \xC2\xBB appara\xC3\xAEt au d\xC3\xA9marrage de la simulation et repart "
+                         "\xC3\xA0 l'arr\xC3\xAAt.", {}},
              {K::Heading, "Les raccourcis", {}},
              {K::Table, "Touche\tCe qu'elle fait\nCtrl+Z\tAnnuler (dans un champ en cours de saisie : sa "
                          "saisie d'abord)\nCtrl+Y, "
                          "Ctrl+Maj+Z\tR\xC3\xA9tablir\nCtrl+H\tL'historique\nCtrl+K\tAller "
                          "\xC3\xA0\xE2\x80\xA6 : une variable, une vue, une alarme, un volet, une "
                          "action\nCtrl+C, Ctrl+V (un tableau)\tCopier vers Excel, coller depuis Excel "
-                         "(Ctrl+Maj+V : en nouvelles lignes)\nCtrl+S\tEnregistrer le projet\nCtrl+Tab, "
+                         "(Ctrl+Maj+V : en nouvelles lignes)\nCtrl+S\tEnregistrer le projet\nCtrl+Maj+K\tProjet "
+                         "\xE2\x80\xBA Disposition\xE2\x80\xA6 (les panneaux, les sous-onglets, les pages)\nCtrl+Tab, "
                          "Ctrl+Maj+Tab\tLe sous-onglet suivant, pr\xC3\xA9" "c\xC3\xA9" "dent du "
                          "volet\nCtrl+PgSuiv, Ctrl+PgPr\xC3\xA9" "c\tL'onglet suivant, "
                          "pr\xC3\xA9" "c\xC3\xA9" "dent (la bande du haut)\nF1\tL'aide de l'endroit (le "
@@ -647,7 +664,7 @@ const std::vector<Topic>& topics() {
                          "capture de la fen\xC3\xAAtre (dossier captures/)", {}},
          },
          {"historique", "ihm", "equipements", "aller-a", "excel"},
-         {"sous-onglets", "sous-onglet", "onglets", "Ctrl+Tab", "Ctrl+PgSuiv", "liste des onglets", "Tous les onglets", "raccourcis", "raccourci"},
+         {"sous-onglets", "sous-onglet", "onglets", "Ctrl+Tab", "Ctrl+PgSuiv", "liste des onglets", "Tous les onglets", "raccourcis", "raccourci", "disposition", "Disposition", "panneaux", "Ctrl+Maj+K"},
          {},
          {{"PNG_503_onglets_reduits.png", "Les dix sous-onglets des \xC3\x89quipements dans un volet \xC3\xA9troit : les inactifs r\xC3\xA9" "duits \xC3\xA0 leur ic\xC3\xB4ne et leur nombre, l'onglet ouvert en entier ; au survol, le nom et la pastille enti\xC3\xA8re."}, {"PNG_504_onglets_liste.png", "Le bouton \xC3\xA0 droite de la bande : la liste de tous les onglets, leurs pastilles enti\xC3\xA8res, l'onglet ouvert marqu\xC3\xA9 d'un point."}},
          "",

@@ -514,6 +514,20 @@ private:
     void          loadWorkspace();
     void          saveWorkspace();
 
+    // ---- 1.12.3 : PROJET > DISPOSITION... (DispositionWorkspace.cpp) ----
+    // Startup : au lancement (les choix « au depart ») ; All : la fenetre Disposition
+    // vient d'appliquer ; Simulation : la simulation demarre ou s'arrete (les elements
+    // « en edition » / « en simulation » seulement).
+    enum class DispositionMode : unsigned char { Startup, All, Simulation };
+    void openDisposition();
+    void loadDisposition();
+    void applyDisposition(DispositionMode mode);
+    void saveDisposition();
+    void placeDispositionPage(const char* row, std::size_t tab);   // une page qui s'ouvre : sa place
+    void openDispositionPages(const std::string& when, bool startView = true);   // "projet", "simulation"
+    bool dispositionLoaded_{false};
+    bool dispositionStarted_{false};
+
     // ---- right-click ------------------------------------------------------
     // What a node offers depends on what it is. The ids are stable and explicit
     // rather than row numbers: adding a separator must not renumber the actions.

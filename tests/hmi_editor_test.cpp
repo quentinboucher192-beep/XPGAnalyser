@@ -31,6 +31,8 @@
 #include "../src/app/hmi/HmiNetDiagram.hpp"         // lot 17 (correctif)
 #include "../src/app/hmi/HmiAssetPanes.hpp"
 #include "../src/app/hmi/HmiSound.hpp"
+#include "../src/app/Disposition.hpp"         // 1.12.3 : Projet > Disposition
+#include "../src/app/DispositionDialog.hpp"
 #include "../src/app/hmi/HmiApiVarsPane.hpp"     // 1.11.1 (API-V)
 #include "../src/app/hmi/HmiAssist.hpp"
 #include "../src/app/hmi/HmiValueKind.hpp"           // 1.11.3 : le carre de legende
@@ -3700,6 +3702,111 @@ void voixDesSons1123() {
     std::string why;
     check(!player.mix(notSound, &why) && !why.empty() && player.mixing() == 0, "un son vide : refus\xC3\xA9, dit (" + why + ")");
     player.stopMix();
+}
+
+// 1.12.3 : PROJET > DISPOSITION... - le modele (quoi, quand, ou, au depart), les reglages
+// disposition.*, les dispositions toutes faites, les sous-onglets, la fenetre.
+void disposition1123() {
+    std::printf("1.12.3 : Projet > Disposition (quoi, quand, ou, au depart ; garde)\n");
+    namespace dp = app::disposition;
+    const dp::Layout base = dp::defaults();
+    check(dp::row("explorateur") && dp::row("bas.console") && dp::row("page.simulation") && dp::row("vue.actions"),
+          "le catalogue : la fen\xC3\xAAtre, le panneau du bas, l'inspecteur, les pages du centre");
+    check(dp::shown(base, "bas", false) && dp::shown(base, "bas", true) && base.item("page.vue").when == "projet"
+              && base.item("explorateur").where == "gauche",
+          "d'origine : tout se montre ; la vue de d\xC3\xA9marrage s'ouvre avec le projet ; l'explorateur \xC3\xA0 gauche");
+    // ---- une disposition toute faite
+    const dp::Layout vues = dp::preset("vues");
+    check(!dp::shown(vues, "documents", false) && !dp::shown(vues, "bas", false) && dp::shown(vues, "bas", true)
+              && vues.item("bas").start == "replie" && vues.item("page.simulation").where == "detache",
+          "Dessin des vues : sans documents ; le panneau du bas en simulation seulement, repli\xC3\xA9 ; la simulation d\xC3\xA9tach\xC3\xA9" "e");
+    check(dp::differences(base, vues) == 3, "trois changements (" + std::to_string(dp::differences(base, vues)) + ")");
+    const dp::Layout point = dp::preset("miseaupoint");
+    check(dp::startTitle(point, "bas") == "Console" && point.item("page.simulation").where == "cote", "Mise au point : la Console au d\xC3\xA9part, la simulation c\xC3\xB4te \xC3\xA0 c\xC3\xB4te");
+    // ---- les reglages : seules les lignes changees ; relues
+    std::map<std::string, std::string> settings;
+    std::set<std::string> cleared;
+    dp::toSettings(point, [&](const std::string& k, const std::string& v) { settings[k] = v; }, [&](const std::string& k) { cleared.insert(k); });
+    check(settings.count("disposition.page.simulation") && settings.count("disposition.depart.bas") && !settings.count("disposition.explorateur")
+              && cleared.count("disposition.explorateur"),
+          "disposition.* : seules les lignes chang\xC3\xA9" "es s'\xC3\xA9" "crivent (les autres s'effacent)");
+    const dp::Layout back = dp::fromSettings([&](const std::string& k) { const auto it = settings.find(k); return it == settings.end() ? std::string{} : it->second; });
+    check(back == point, "relue telle quelle");
+    settings["disposition.bas"] = "v=1;q=jamais;ou=nulle-part";
+    const dp::Layout odd = dp::fromSettings([&](const std::string& k) { const auto it = settings.find(k); return it == settings.end() ? std::string{} : it->second; });
+    check(odd.item("bas").when == "toujours" && odd.item("bas").where == "dessous", "une valeur inconnue : celle d'origine (un r\xC3\xA9glage ab\xC3\xAEm\xC3\xA9 ne casse rien)");
+    check(dp::parse(dp::serialize(vues)) == vues, "\xC2\xAB Ma disposition \xC2\xBB : d'un bloc, relue");
+    // ---- les sous-onglets
+    ui::TabControl tabs("essai.tabs");
+    tabs.addTab({"Sorties", ui::Icon::Document}, std::make_unique<ui::Widget>("p1"));
+    tabs.addTab({"Console", ui::Icon::Code}, std::make_unique<ui::Widget>("p2"));
+    tabs.addTab({"Diagnostics", ui::Icon::Warning}, std::make_unique<ui::Widget>("p3"));
+    const dp::Layout before = dp::current();
+    dp::Layout hide = base;
+    hide.items["bas.diagnostics"].shown = false;
+    hide.items["bas.console"].when = "simulation";
+    hide.startTab["bas"] = "bas.sorties";
+    dp::setCurrent(hide);
+    dp::setSimulating(false);
+    dp::applyTabs(tabs, "bas", true);
+    check(tabs.tabHidden(2) && tabs.tabHidden(1) && !tabs.tabHidden(0) && tabs.currentIndex() == 0,
+          "Diagnostics cach\xC3\xA9 ; la Console (en simulation) cach\xC3\xA9" "e en \xC3\xA9" "dition");
+    int changes = 0;
+    {
+        core::ConnectionScope links;
+        links += dp::changed()->connect([&] { ++changes; });
+        dp::setSimulating(true);
+    }
+    dp::applyTabs(tabs, "bas");
+    check(changes == 1 && !tabs.tabHidden(1) && tabs.tabHidden(2), "la simulation d\xC3\xA9marre : la Console para\xC3\xAEt (changed le dit)");
+    dp::Layout start = hide;
+    start.startTab["bas"] = "bas.console";
+    dp::setCurrent(start);
+    dp::applyTabs(tabs, "bas", true);
+    check(tabs.currentIndex() == 1, "le sous-onglet choisi au d\xC3\xA9part : Console");
+    dp::setSimulating(false);
+    dp::setCurrent(before);
+    // ---- la fenetre : un choix, une disposition toute faite, Appliquer, Ma disposition, Retablir
+    dp::Layout applied;
+    int resets = 0;
+    std::string mine;
+    app::DispositionDialog::Spec spec;
+    spec.applied = base;
+    spec.mine = base;
+    spec.edition = "XPGAnalyser IHM";
+    spec.apply = [&](const dp::Layout& l) { applied = l; };
+    spec.keepMine = [&](const dp::Layout& l) { mine = dp::serialize(l); };
+    spec.reset = [&] { ++resets; };
+    app::DispositionDialog d(std::move(spec));
+    check(d.set("explorateur", "ou", "droite") && d.set("vue.actions", "quand", "cache") && d.set("insp", "choisi", "vue.actions")
+              && !d.set("explorateur", "ou", "dessus") && !d.set("page.vue", "quand", "cache"),
+          "la fen\xC3\xAAtre : l'explorateur \xC3\xA0 droite, Actions cach\xC3\xA9, choisi au d\xC3\xA9part ; un choix inconnu refus\xC3\xA9");
+    check(d.summary().find("3 changement(s)") != std::string::npos && d.summary().find("1 \xC3\xA9l\xC3\xA9ment(s) cach\xC3\xA9(s)") != std::string::npos,
+          "le r\xC3\xA9sum\xC3\xA9 : " + d.summary());
+    d.applyNow();
+    check(applied.item("explorateur").where == "droite" && !applied.item("vue.actions").shown && d.summary().find("Rien \xC3\xA0 appliquer") != std::string::npos,
+          "Appliquer : l'h\xC3\xB4te la re\xC3\xA7oit ; plus rien \xC3\xA0 appliquer");
+    d.keepMine();
+    check(dp::parse(mine) == applied, "Garder comme \xC2\xAB Ma disposition \xC2\xBB");
+    d.choosePreset("large");
+    check(d.draft().item("bas").where == "droite", "\xC3\x89" "cran large : le panneau du bas \xC3\xA0 droite de l'\xC3\xA9" "diteur");
+    d.choosePreset("mienne");
+    check(d.draft() == applied, "Ma disposition : celle gard\xC3\xA9" "e");
+    d.resetOrigin();
+    check(resets == 1 && applied == base, "R\xC3\xA9tablir : les cl\xC3\xA9s effac\xC3\xA9" "es, la disposition d'origine appliqu\xC3\xA9" "e");
+    // ---- le separateur : l'ordre a l'ecran et l'orientation
+    ui::Splitter sp(ui::Orientation::Horizontal, "essai.split");
+    auto& a = sp.addPane(std::make_unique<ui::Widget>("a"), 0.3f, 10.f);
+    auto& c = sp.addPane(std::make_unique<ui::Widget>("c"), 0.7f, 10.f);
+    sp.setBounds({0, 0, 1000, 400});
+    sp.layout();
+    check(a.bounds().x < c.bounds().x, "d'origine : l'explorateur \xC3\xA0 gauche");
+    sp.setOrder({1, 0});
+    sp.layout();
+    check(a.bounds().x > c.bounds().x && std::fabs(a.bounds().w - 300.f) < 5.f, "setOrder : \xC3\xA0 droite, sa largeur gard\xC3\xA9" "e");
+    sp.setOrientation(ui::Orientation::Vertical);
+    sp.layout();
+    check(a.bounds().y > c.bounds().y && a.bounds().w == 1000.f, "setOrientation : l'un sous l'autre");
 }
 
 void communes1123() {
@@ -16818,11 +16925,12 @@ void centreAide111() {
 
     // ---- la table des raccourcis ----
     // 1.12.2 : les editeurs de code au profil Visual Studio - 31 lignes de plus (36 en tout).
-    check(hk::all().size() == 94 && hk::ofContext(hk::Context::Scripts).size() == 36,
-          "raccourcis : les 60 lignes de la maquette validee, plus Ctrl+Maj+O (1.11), Ctrl+J (1.11.14), F7 hors d'un \xC3\xA9" "diteur (1.11.17) "
-          "et les 31 des \xC3\xA9" "diteurs de code (1.12.2)");
-    check(hk::ofContext(hk::Context::General).size() == 25 && hk::ofContext(hk::Context::Help).size() == 7,
-          "raccourcis : General 25 (1.11.14 : Ctrl+J ; 1.11.17 : F7), Aide 7");
+    // 1.12.3 : + Ctrl+Maj+K (Projet > Disposition...).
+    check(hk::all().size() == 95 && hk::ofContext(hk::Context::Scripts).size() == 36,
+          "raccourcis : les 60 lignes de la maquette validee, plus Ctrl+Maj+O (1.11), Ctrl+J (1.11.14), F7 hors d'un \xC3\xA9" "diteur (1.11.17), "
+          "les 31 des \xC3\xA9" "diteurs de code (1.12.2) et Ctrl+Maj+K (1.12.3)");
+    check(hk::ofContext(hk::Context::General).size() == 26 && hk::ofContext(hk::Context::Help).size() == 7,
+          "raccourcis : General 26 (1.11.14 : Ctrl+J ; 1.11.17 : F7 ; 1.12.3 : Ctrl+Maj+K), Aide 7");
     // La table contre le registre d'App.cpp : chaque action qu'elle nomme a la touche que la table lui donne,
     // dans l'ecriture du registre (Alt+Left, Shift+F5). Le registre lui-meme est lu juste apres.
     const std::pair<const char*, const char*> attendu[] = {
@@ -28790,6 +28898,7 @@ int main(int argc, char** argv) {
     etats1123();                       // 1.12.3 : les etats des objets multi-etats en table
     communes1123();                    // 1.12.3 : plusieurs objets choisis, leurs proprietes communes
     voixDesSons1123();                 // 1.12.3 : les voix des sons (melange)
+    disposition1123();                 // 1.12.3 : Projet > Disposition
     lot6_actions_ressources();
     lot6_simulation();
     cycle1115();                 // 1.11.15 : le cycle de la simulation, la remanence

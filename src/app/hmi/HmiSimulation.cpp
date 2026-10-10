@@ -1,4 +1,5 @@
 #include "HmiSimulation.hpp"
+#include "../Disposition.hpp"
 #include "../../core/Edition.hpp"   // 1.12.0 : XPGAnalyser IHM - la simulation de l'IHM seule
 #include "../../core/AtomicFile.hpp"   // 1.11.15 : l'instantane de la simulation, ecrit d'un bloc
 #include "../../hmi/HmiSimData.hpp"
@@ -2724,6 +2725,7 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
     tabs->addTab(ui::TabControl::Tab{"Popups", ui::Icon::Document, false, false}, hmiparams::makePopupsTab(base + ".popups"));
     tabs->setCurrentIndex(0);
     tabs_ = &static_cast<ui::TabControl&>(split->addPane(std::move(tabs), 0.44f, 220.f));
+    disposition::applyTabs(*tabs_, "sim", true);       // 1.12.3 : Projet > Disposition
     split_ = &static_cast<ui::Splitter&>(addChild(std::move(split)));
     status_ = &static_cast<ui::StatusBar&>(addChild(std::make_unique<ui::StatusBar>(base + ".status")));
     // 1.9 : a droite, "Variateur ATV320 et Balance B lus en simule" (violet, la fiole).

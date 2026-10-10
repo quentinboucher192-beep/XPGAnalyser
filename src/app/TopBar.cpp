@@ -224,6 +224,8 @@ TopBar::TopBar(std::string id) : ui::Widget(std::move(id)) {
     e(project_, "Fermer le projet", "", ui::Icon::Close, "file.close");    // Lot API 8 : bandeau haut
     // 1.8.0 : les dossiers de l'application (XPGAnalyser.ini) : voir, ouvrir, changer.
     e(project_, "Dossiers de l'application\xE2\x80\xA6", "", ui::Icon::Folder, "app.folders");
+    // 1.12.3 : quoi, quand, ou, comment - les panneaux, les sous-onglets, les pages du centre.
+    e(project_, "Disposition\xE2\x80\xA6", "Ctrl+Maj+K", ui::Icon::Layers, "project.disposition");
     e(project_, "Revenir au menu principal", "Ctrl+Maj+H", ui::Icon::Project, "app.home");
 
     if (core::hasApi()) {      // 1.12.2 : les creations de l'automate dans XPGAnalyser API seulement

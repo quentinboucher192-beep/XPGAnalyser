@@ -295,7 +295,7 @@ Dans le volet Versions : choisis une version et **Comparer** (avec la précéden
 
 == onglets | Les onglets et les raccourcis
 : Quand les sous-onglets d'un volet ne tiennent pas, ils se réduisent : les pastilles d'abord, puis les onglets inactifs à leur icône. Le bouton à droite de la bande les liste tous, Ctrl+Tab passe de l'un à l'autre ; et les raccourcis qui marchent partout.
-@mots sous-onglets, sous-onglet, onglets, Ctrl+Tab, Ctrl+PgSuiv, liste des onglets, Tous les onglets, raccourcis, raccourci
+@mots sous-onglets, sous-onglet, onglets, Ctrl+Tab, Ctrl+PgSuiv, liste des onglets, Tous les onglets, raccourcis, raccourci, disposition, Disposition, panneaux, Ctrl+Maj+K
 @voir historique, ihm, equipements, aller-a, excel
 @capture PNG_503_onglets_reduits.png | Les dix sous-onglets des Équipements dans un volet étroit : les inactifs réduits à leur icône et leur nombre, l'onglet ouvert en entier ; au survol, le nom et la pastille entière.
 @capture PNG_504_onglets_liste.png | Le bouton à droite de la bande : la liste de tous les onglets, leurs pastilles entières, l'onglet ouvert marqué d'un point.
@@ -305,6 +305,8 @@ Un volet à sous-onglets (Équipements, Simulation, Outil Modbus, Historiques, E
 2. puis les **onglets inactifs ne gardent que leur icône** et leur nombre ; l'onglet ouvert garde son nom et sa pastille entière ;
 3. s'ils ne tiennent toujours pas, des **flèches** (et la molette) les font défiler ; un dégradé au bord dit qu'il y en a d'autres.
 Dès qu'un onglet est réduit ou caché, un **bouton à droite de la bande** (trois traits et le nombre d'onglets) ouvre la **liste de tous les onglets**, avec leur pastille entière : un clic y va. Au survol d'un onglet réduit, une infobulle donne son nom et sa pastille.
+### La disposition (1.12.3)
+**Projet › Disposition…** (Ctrl+Maj+K ; Affichage › Panneaux à afficher… ouvre la même fenêtre) : les panneaux de la fenêtre, les sous-onglets de chaque page et les pages du centre. Pour chacun : **quand** le montrer (toujours, en édition, en simulation, caché ; une page : à la demande, à l'ouverture du projet, au démarrage de la simulation), **où** (l'explorateur à gauche ou à droite, le panneau du bas sous l'éditeur ou à sa droite, une page dans un onglet, côte à côte ou détachée) et **au départ** (le panneau du bas ouvert ou replié, le sous-onglet choisi). Des dispositions toutes faites : Par défaut, Dessin des vues, Mise au point, Écran large, et **Ma disposition** (« Garder comme Ma disposition »). **Appliquer** montre tout de suite ; tout se garde dans les réglages de l'édition (disposition.*) ; « Rétablir la disposition d'origine » les efface. Un élément « en simulation » apparaît au démarrage de la simulation et repart à l'arrêt.
 ### Les raccourcis
 | Touche | Ce qu'elle fait |
 | Ctrl+Z | Annuler (dans un champ en cours de saisie : sa saisie d'abord) |
@@ -313,6 +315,7 @@ Dès qu'un onglet est réduit ou caché, un **bouton à droite de la bande** (tr
 | Ctrl+K | Aller à… : une variable, une vue, une alarme, un volet, une action |
 | Ctrl+C, Ctrl+V (un tableau) | Copier vers Excel, coller depuis Excel (Ctrl+Maj+V : en nouvelles lignes) |
 | Ctrl+S | Enregistrer le projet |
+| Ctrl+Maj+K | Projet › Disposition… (les panneaux, les sous-onglets, les pages) |
 | Ctrl+Tab, Ctrl+Maj+Tab | Le sous-onglet suivant, précédent du volet |
 | Ctrl+PgSuiv, Ctrl+PgPréc | L'onglet suivant, précédent (la bande du haut) |
 | F1 | L'aide de l'endroit (le volet, l'objet, le nom sous le curseur) |

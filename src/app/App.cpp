@@ -682,6 +682,9 @@ void App::registerActions() {
     // lien, le menu Projet l'entree.
     actions_.add(Action{"app.folders", "Dossiers de l'application...", {}, {}, {}, nullptr,
                         [this] { showFoldersDialog(*this); }});
+    // 1.12.3 : Projet > Disposition... - l'ecran d'analyse ouvre la fenetre.
+    actions_.add(Action{"project.disposition", "Disposition\xE2\x80\xA6", help::keys::bindingOf("project.disposition"), {}, {}, nullptr,
+                        [this] { bus_.publish(OpenApiTab{"disposition"}); }});
 
     // F1, LA TOUCHE QUE TOUT LE MONDE ESSAIE. L'aide existait - le document,
     // son widget, ses formats - sans qu'aucun chemin n'y mene. Un ensemble dont

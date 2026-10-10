@@ -2,6 +2,7 @@
 // onglets et sa barre (lot 15). Les equipements, les variables liees, le
 // reseau du PC et le scanner : HmiEquipmentPanes.cpp.
 #include "HmiCommPanes.hpp"
+#include "../Disposition.hpp"
 #include "../../core/Edition.hpp"   // 1.12.0 : XPGAnalyser IHM - ses equipements, pas d'automate du projet
 #include "../ExportTarget.hpp"
 
@@ -562,6 +563,7 @@ HmiCommPane::HmiCommPane(std::string id, hmi::DocumentPtr doc, Apply apply)
     tabs->addTab({"Essai", ui::Icon::Ok}, std::move(report));
     tabs->addTab({"\xC3\x89tat des liaisons", ui::Icon::Info}, std::move(state));
     tabs_ = &static_cast<ui::TabControl&>(addChild(std::move(tabs)));
+    disposition::applyTabs(*tabs_, "eq", true);        // 1.12.3 : Projet > Disposition
     grid_ = &static_cast<ui::PropertyGrid&>(addChild(std::make_unique<ui::PropertyGrid>(base + ".grid")));
     checks_ = &static_cast<HmiCheckList&>(addChild(std::make_unique<HmiCheckList>(base + ".checks")));
     applyButton_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Appliquer", base + ".apply")));

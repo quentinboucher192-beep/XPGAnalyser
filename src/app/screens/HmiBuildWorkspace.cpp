@@ -16,6 +16,7 @@
 #include "Screens.hpp"
 
 #include "../App.hpp"
+#include "../Disposition.hpp"
 #include "../hmi/HmiBuild.hpp"
 #include "../hmi/HmiBuildPanes.hpp"
 #include "../hmi/HmiCommHost.hpp"
@@ -367,6 +368,10 @@ void MainAnalysisScreen::applyFromSimulation(core::CommandPtr cmd) {
 
 // La simulation demarre : les empreintes de son build ; elle s'arrete : plus rien a surveiller.
 void MainAnalysisScreen::hmiSimulationLifecycle(bool started) {
+    // 1.12.3 : Projet > Disposition - les elements « en simulation » paraissent, les pages
+    // « au demarrage de la simulation » s'ouvrent.
+    disposition::setSimulating(started);
+    if (started) openDispositionPages("simulation");
     hmiEditSeen_ = hmiLiveSeen_ = false;
     hmiRunPrints_.clear();
     hmiRunPaths_.clear();

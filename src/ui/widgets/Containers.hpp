@@ -45,6 +45,14 @@ public:
     void    setRatios(const std::vector<float>& r);
     [[nodiscard]] std::vector<float> ratios() const;
     void    collapsePane(std::size_t index, bool collapsed);
+    // 1.12.3 (Projet > Disposition) : L'ORDRE A L'ECRAN des volets - l'explorateur a
+    // droite du centre - et l'ORIENTATION - le panneau du bas a droite de l'editeur. Les
+    // indices des volets ne changent pas (collapsePane, setRatios, les reglages).
+    // Un ordre vide (ou incomplet) : celui de l'ajout.
+    void    setOrder(std::vector<std::size_t> order);
+    void    setOrientation(Orientation o);
+    [[nodiscard]] Orientation orientation() const noexcept { return orientation_; }
+    [[nodiscard]] std::size_t paneCount() const noexcept { return panes_.size(); }
 protected:
     void        onLayout() override;
     void        onPaint(const PaintContext&) override;
@@ -52,9 +60,13 @@ protected:
 private:
     struct Pane { Widget* w; float ratio; float minExtent; bool collapsed; };
     [[nodiscard]] int handleAt(gfx::Point local) const;
+    [[nodiscard]] std::size_t at(std::size_t shown) const noexcept {   // la place a l'ecran -> le volet
+        return order_.size() == panes_.size() ? order_[shown] : shown;
+    }
 
     Orientation       orientation_;
     std::vector<Pane> panes_;
+    std::vector<std::size_t> order_;      // 1.12.3
     int               dragHandle_{-1};
     float             dragOrigin_{0.f};
 };

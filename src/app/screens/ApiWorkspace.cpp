@@ -169,7 +169,12 @@ void MainAnalysisScreen::onBarAction(std::string_view id) {
         if (centre_ && centre_->tabCount() > 0) (void)detachTab(centre_->currentIndex());
         return;
     }
-    if (id == "view.layout") {
+    // 1.12.3 : Projet > Disposition... ; Affichage > Panneaux a afficher... ouvre la meme fenetre.
+    if (id == "view.layout" || id == "project.disposition") {
+        openDisposition();
+        return;
+    }
+    if (id == "view.panels") {
         // Le centre doit etre a l'ecran, sinon l'onglet s'ouvre dans un panneau cache.
         if (panels_.size() > 2 && !panels_[2].box->isChecked()) panels_[2].box->setState(Checkbox::State::Checked);
         openKeptPage("panneaux");
@@ -1135,6 +1140,7 @@ bool MainAnalysisScreen::routeApiNode(ui::NodeId node) {
 // F9, Ctrl+1, Ctrl+5 (OpenApiTab). Sans projet, l'onglet n'aurait rien a
 // montrer : le dire, comme l'icone du projet.
 void MainAnalysisScreen::openApiTabFromAction(const std::string& key) {
+    if (key == "disposition") { openDisposition(); return; }      // 1.12.3 : Ctrl+Maj+K
     // ---- Lot API 8 : Centre de simulation (F9 : "sim:ensemble") ----
     if (key.rfind("sim:", 0) == 0) {
         (void)openSimCenter(key.substr(4));

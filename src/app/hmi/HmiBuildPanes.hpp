@@ -159,6 +159,7 @@ public:
     std::string exportCurrent(bool csv, std::string* why = nullptr);
     // La croix du panneau : l'ecran le replie.
     void setOnClose(std::function<void()> f) { onClose_ = std::move(f); }
+    [[nodiscard]] ui::TabControl* tabs() noexcept { return tabs_; }      // 1.12.3 : Projet > Disposition
     // Double-clic (ou Aller a la source) sur une ligne de la Console.
     const core::SignalPtr<ConsoleEntry> consoleActivated = core::Signal<ConsoleEntry>::create();
 

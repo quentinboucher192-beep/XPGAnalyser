@@ -757,6 +757,9 @@
     <ClCompile Include="src\app\screens\CodeKeysWorkspace.cpp">
       <Filter>app\screens</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\screens\DispositionWorkspace.cpp">
+      <Filter>app\screens</Filter>
+    </ClCompile>
     <ClCompile Include="src\project\ApiChecks.cpp">
       <Filter>project</Filter>
     </ClCompile>
@@ -1046,6 +1049,12 @@
       <Filter>app</Filter>
     </ClCompile>
     <ClCompile Include="src\app\CrashDialogs.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\Disposition.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\DispositionDialog.cpp">
       <Filter>app</Filter>
     </ClCompile>
     <ClCompile Include="src\app\EditionMigration.cpp">
@@ -2219,6 +2228,12 @@
       <Filter>app</Filter>
     </ClInclude>
     <ClInclude Include="src\app\CrashDialogs.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\Disposition.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\DispositionDialog.hpp">
       <Filter>app</Filter>
     </ClInclude>
     <ClInclude Include="src\app\EditionMigration.hpp">

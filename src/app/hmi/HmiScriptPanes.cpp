@@ -1,4 +1,5 @@
 #include "HmiScriptPanes.hpp"
+#include "../Disposition.hpp"
 #include "HmiAssist.hpp"
 
 #include "HmiAssetPanes.hpp"
@@ -479,6 +480,7 @@ HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply
         typesPane_ = types.get();
         tabs->addTab({"Types IHM", ui::Icon::DerivedType}, std::move(types));
         tabs_ = &static_cast<ui::TabControl&>(addChild(std::move(tabs)));
+        disposition::applyTabs(*tabs_, "prog", true);  // 1.12.3 : Projet > Disposition
     }
 
     links_ += tools_->triggered->connect([this](int a) {

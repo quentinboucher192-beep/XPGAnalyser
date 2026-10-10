@@ -1816,6 +1816,9 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
     const auto tab = centre_->addTab(TabControl::Tab{title, icon, /*closable=*/true, false}, std::move(page));
     hmiTabs_[key] = raw;
     centre_->setCurrentIndex(tab);
+    // 1.12.3 : Projet > Disposition - une page du centre va ou elle doit (cote a cote, detachee).
+    if (const char* row = key == "simulation" ? "page.simulation" : key == "scripts" ? "page.programmation" : key == "poste" ? "page.poste" : nullptr)
+        placeDispositionPage(row, tab);
 }
 
 void MainAnalysisScreen::openHmiView(std::uint64_t viewId, int part, std::uint64_t objectId) {
@@ -1895,6 +1898,7 @@ void MainAnalysisScreen::openHmiView(std::uint64_t viewId, int part, std::uint64
         hmiTabs_[key] = editor;
         centre_->setCurrentIndex(tab);
         editor->canvas().zoomToFit();
+        placeDispositionPage("page.vue", tab);          // 1.12.3 : Projet > Disposition
     } else {
         centre_->setCurrentIndex(static_cast<std::size_t>(centre_->indexOf(editor)));
     }

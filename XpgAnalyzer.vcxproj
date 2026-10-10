@@ -374,6 +374,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\TopBar.cpp" />
     <ClCompile Include="src\app\screens\ApiWorkspace.cpp" />
     <ClCompile Include="src\app\screens\CodeKeysWorkspace.cpp" />
+    <ClCompile Include="src\app\screens\DispositionWorkspace.cpp" />
     <ClCompile Include="src\project\ApiChecks.cpp" />
     <ClCompile Include="src\app\AnimationTablesPane.cpp" />
     <ClCompile Include="src\app\ConfigurationPane.cpp" />
@@ -471,6 +472,8 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\AboutDialog.cpp" />
     <ClCompile Include="src\app\ConditionsNotice.cpp" />
     <ClCompile Include="src\app\CrashDialogs.cpp" />
+    <ClCompile Include="src\app\Disposition.cpp" />
+    <ClCompile Include="src\app\DispositionDialog.cpp" />
     <ClCompile Include="src\app\EditionMigration.cpp" />
     <ClCompile Include="src\app\GrafcetCodePanel.cpp" />
     <ClCompile Include="src\app\NoveltyCenter.cpp" />
@@ -868,6 +871,8 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\AboutDialog.hpp" />
     <ClInclude Include="src\app\ConditionsNotice.hpp" />
     <ClInclude Include="src\app\CrashDialogs.hpp" />
+    <ClInclude Include="src\app\Disposition.hpp" />
+    <ClInclude Include="src\app\DispositionDialog.hpp" />
     <ClInclude Include="src\app\EditionMigration.hpp" />
     <ClInclude Include="src\app\GrafcetCodePanel.hpp" />
     <ClInclude Include="src\app\NoveltyCenter.hpp" />

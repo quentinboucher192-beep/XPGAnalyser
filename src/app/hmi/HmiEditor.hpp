@@ -87,6 +87,7 @@ public:
     // Lot 6 : l'onglet Contenu (lignes d'un tableau, plumes, etats, recette).
     [[nodiscard]] HmiContentPanel&  content() noexcept { return *content_; }
     bool openStatesTable();                     // 1.12.3 : Contenu > Etats de l'objet choisi
+    void applyDisposition();                    // 1.12.3 : Projet > Disposition (les onglets de l'inspecteur)
     // Aller a une action (Generer / Compiler) : l'objet choisi (kNoId : la vue),
     // l'onglet Actions ouvert, l'action `index` (0 = la premiere) choisie.
     void showAction(hmi::Id object, int index);

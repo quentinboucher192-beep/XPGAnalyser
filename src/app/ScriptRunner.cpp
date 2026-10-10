@@ -2131,7 +2131,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             TopBar* bar = nullptr;
             walk(*root, [&](ui::Widget& x) { if (!bar) bar = dynamic_cast<TopBar*>(&x); });
             if (bar) {
-                bar->trigger("view.layout");
+                bar->trigger("view.panels");      // 1.12.3 : la page des cases (view.layout ouvre Disposition...)
                 return Step::Yield;
             }
         }

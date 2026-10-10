@@ -1,4 +1,5 @@
 #include "HmiEditor.hpp"
+#include "../Disposition.hpp"
 #include "../../core/Edition.hpp"   // 1.12.0 : XPGAnalyser IHM - pas de zone API
 #include "../RenameDialog.hpp"            // lot 7 : requestRename (en ligne : rien de plus a lier)
 #include "../../hmi/HmiSymbols.hpp"
@@ -347,6 +348,7 @@ HmiEditor::HmiEditor(std::string widgetId, hmi::DocumentPtr doc, Id view, Apply 
         shortcutsPage_ = std::move(keys);
         tabs->setCurrentIndex(0);
         inspector_ = &static_cast<ui::TabControl&>(right->addPane(std::move(tabs), 0.58f, 140.f));
+        disposition::applyTabs(*inspector_, "insp", true);   // 1.12.3 : Projet > Disposition
     }
     {
         auto panel = std::make_unique<Panel>(base + ".libraryPanel", "BIBLIOTH\xC3\x88QUE");
@@ -1748,6 +1750,13 @@ void HmiEditor::onLayout() {
     } else if (!wantKeys && keysTab >= 0) {
         shortcutsPage_ = inspector_->takeTab(static_cast<std::size_t>(keysTab));
     }
+    disposition::applyTabs(*inspector_, "insp");       // 1.12.3 : un onglet que la disposition cache le reste
+}
+
+// 1.12.3 : la disposition en vigueur a change - les onglets de l'inspecteur la suivent.
+void HmiEditor::applyDisposition() {
+    if (inspector_) disposition::applyTabs(*inspector_, "insp");
+    invalidateLayout();
 }
 
 void HmiEditor::onPaint(const ui::PaintContext& ctx) {

@@ -131,7 +131,8 @@ void Splitter::onLayout() {
     if (ratioSum <= 0.f) ratioSum = 1.f;
 
     float cursor = horizontal ? area.x : area.y;
-    for (auto& p : panes_) {
+    for (std::size_t k = 0; k < panes_.size(); ++k) {
+        auto& p = panes_[at(k)];                  // 1.12.3 : dans l'ordre a l'ecran
         float extent = p.collapsed ? 0.f
                                    : std::max(p.minExtent, total * (p.ratio / ratioSum));
         extent = std::min(extent, std::max(0.f, (horizontal ? area.right() : area.bottom()) - cursor));
@@ -141,10 +142,30 @@ void Splitter::onLayout() {
     }
 }
 
+void Splitter::setOrder(std::vector<std::size_t> order) {
+    // Une permutation des volets, sinon l'ordre de l'ajout.
+    std::vector<bool> seen(panes_.size(), false);
+    bool ok = order.size() == panes_.size();
+    for (const auto k : order) {
+        if (!ok || k >= panes_.size() || seen[k]) { ok = false; break; }
+        seen[k] = true;
+    }
+    if (!ok) order.clear();
+    if (order == order_) return;
+    order_ = std::move(order);
+    invalidateLayout();
+}
+
+void Splitter::setOrientation(Orientation o) {
+    if (o == orientation_) return;
+    orientation_ = o;
+    invalidateLayout();
+}
+
 int Splitter::handleAt(gfx::Point p) const {
     const bool horizontal = orientation_ == Orientation::Horizontal;
     for (std::size_t i = 0; i + 1 < panes_.size(); ++i) {
-        const auto b = panes_[i].w->bounds();
+        const auto b = panes_[at(i)].w->bounds();
         const gfx::Rect handle = horizontal ? gfx::Rect{b.right(), b.y, 5.f, b.h}
                                             : gfx::Rect{b.x, b.bottom(), b.w, 5.f};
         if (handle.contains(p)) return static_cast<int>(i);
@@ -157,7 +178,7 @@ void Splitter::onPaint(const PaintContext& ctx) {
     ctx.r.fillRect(bounds(), c.windowBg);
     const bool horizontal = orientation_ == Orientation::Horizontal;
     for (std::size_t i = 0; i + 1 < panes_.size(); ++i) {
-        const auto b = panes_[i].w->bounds();
+        const auto b = panes_[at(i)].w->bounds();
         const gfx::Rect handle = horizontal ? gfx::Rect{b.right(), b.y, 5.f, b.h}
                                             : gfx::Rect{b.x, b.bottom(), b.w, 5.f};
         ctx.r.fillRect(handle, dragHandle_ == static_cast<int>(i) ? c.accent : c.windowBg);
@@ -182,10 +203,11 @@ EventResult Splitter::onEvent(const InputEvent& ev) {
         }
     }
     if (const auto* m = std::get_if<MouseMove>(&ev); m && dragHandle_ >= 0) {
-        const auto i = static_cast<std::size_t>(dragHandle_);
+        const auto h = static_cast<std::size_t>(dragHandle_);
         const float delta = (horizontal ? m->pos.x : m->pos.y) - dragOrigin_;
         const float total = horizontal ? contentRect().w : contentRect().h;
-        if (total > 0.f && i + 1 < panes_.size()) {
+        if (total > 0.f && h + 1 < panes_.size()) {
+            const std::size_t i = at(h), j = at(h + 1);   // 1.12.3 : les voisins a l'ecran
             // Ratios move as a pair, so the panes on either side of the handle
             // trade space and everything else stays where the user put it.
             //
@@ -198,10 +220,10 @@ EventResult Splitter::onEvent(const InputEvent& ev) {
             if (shown <= 0.f) shown = 1.f;
             const float step = delta / total * shown;
             const float a = panes_[i].ratio + step;
-            const float b = panes_[i + 1].ratio - step;
+            const float b = panes_[j].ratio - step;
             if (a > 0.03f && b > 0.03f) {
                 panes_[i].ratio = a;
-                panes_[i + 1].ratio = b;
+                panes_[j].ratio = b;
                 dragOrigin_ = horizontal ? m->pos.x : m->pos.y;
                 invalidateLayout();
             }
