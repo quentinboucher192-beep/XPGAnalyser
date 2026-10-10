@@ -61,7 +61,7 @@ L'état se choisit **selon la valeur** (`0`, `1`, `10..20`, `'Auto'`) ou **selon
 ## 4. Plusieurs objets choisis
 
 Choisissez plusieurs objets (un cadre dans la vue, Ctrl+clic, **Ctrl+A** dans l'explorateur d'objets, **Maj+clic** depuis le dernier objet cliqué). L'inspecteur montre ce qu'ils ont **en commun** :
-- une valeur qui diffère se lit « (plusieurs valeurs) » ; une case à cocher qui diffère est en « – » ; des formules (fx) différentes se lisent « (plusieurs formules) » ;
+- le Type dit leurs genres ; une valeur qui diffère (le calque, Verrouillé aussi) se lit « (plusieurs valeurs) » ; une case à cocher qui diffère est en « – » ; des formules (fx) différentes se lisent « (plusieurs formules) » ;
 - une saisie part sur **tous**, en une seule annulation (Ctrl+Z les remet tous) ;
 - l'onglet **Actions** liste les objets choisis et leurs actions : une action est à un objet, un clic sur une ligne le choisit seul.
 

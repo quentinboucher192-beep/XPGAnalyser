@@ -2559,8 +2559,19 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
 
     PG::Category general;
     general.name = many ? "Objet (" + std::to_string(selection.size()) + " s\xC3\xA9lectionn\xC3\xA9s)" : "Objet";
+    // 1.12.3 : plusieurs objets choisis - le genre de chacun, et une valeur qui differe se dit
+    // « (plusieurs valeurs) » (une case a cocher en « - ») au lieu de montrer celle du premier.
+    std::vector<const hmi::Object*> chosen{o};
+    if (many)
+        for (Id id : selection)
+            if (const auto* x = view.object(id); x && x != o) chosen.push_back(x);
+    const auto differ = [&](auto get) {
+        for (const auto* x : chosen)
+            if (get(*x) != get(*o)) return true;
+        return false;
+    };
     auto meta = [&](std::string name, std::string value, PG::ValueType t, std::string field, std::string help = {},
-                    std::vector<std::string> choices = {}) {
+                    std::vector<std::string> choices = {}, bool differs = false) {
         PG::Property p;
         p.name = std::move(name);
         p.value = std::move(value);
@@ -2569,10 +2580,23 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
         p.enumValues = std::move(choices);
         if (t != PG::ValueType::ReadOnly)
             p.commit = [commit, field](std::string_view s) { return commit.meta && commit.meta(field, std::string(s)); };
+        if (differs) {
+            p.value.clear();
+            p.mixed = true;
+            p.placeholder = "(plusieurs valeurs)";
+            p.description = "Les objets choisis n'ont pas la m\xC3\xAAme valeur. Une saisie la donne \xC3\xA0 tous (Ctrl+Z la reprend).\n"
+                            + p.description;
+        }
         general.properties.push_back(std::move(p));
     };
     if (!many) meta("Nom", o->name, PG::ValueType::Text, "nom", "Lettres, chiffres et _ ; unique dans la vue.");
-    meta("Type", std::string(hmi::kindLabel(o->kind)), PG::ValueType::ReadOnly, "type",
+    std::vector<std::string> kinds;                     // leurs genres, chacun une fois, dans l'ordre du choix
+    for (const auto* x : chosen)
+        if (std::string label(hmi::kindLabel(x->kind)); std::find(kinds.begin(), kinds.end(), label) == kinds.end())
+            kinds.push_back(std::move(label));
+    std::string kindText;
+    for (const auto& k : kinds) kindText += (kindText.empty() ? "" : ", ") + k;
+    meta("Type", kindText, PG::ValueType::ReadOnly, "type",
          "Le genre de l'objet, choisi dans la biblioth\xC3\xA8que ; il ne change pas (F1 ouvre sa page d'aide).");
     std::vector<std::string> layers;
     std::string layerName;
@@ -2581,11 +2605,14 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
         if (l.id == o->layer) layerName = l.name;
     }
     meta("Calque", layerName, PG::ValueType::Enum, "calque",
-         "Le calque de la vue qui porte l'objet : un calque cach\xC3\xA9 ou verrouill\xC3\xA9 le cache ou le verrouille avec lui.", layers);
+         "Le calque de la vue qui porte l'objet : un calque cach\xC3\xA9 ou verrouill\xC3\xA9 le cache ou le verrouille avec lui.", layers,
+         differ([](const hmi::Object& x) { return x.layer; }));
     meta("Verrouill\xC3\xA9", o->locked ? "TRUE" : "FALSE", PG::ValueType::Boolean, "verrou",
-         "Ni pris \xC3\xA0 la souris, ni d\xC3\xA9plac\xC3\xA9. L'explorateur le prend quand m\xC3\xAAme.");
+         "Ni pris \xC3\xA0 la souris, ni d\xC3\xA9plac\xC3\xA9. L'explorateur le prend quand m\xC3\xAAme.", {},
+         differ([](const hmi::Object& x) { return x.locked; }));
     meta("Cach\xC3\xA9 dans l'\xC3\xA9" "diteur", o->hidden ? "TRUE" : "FALSE", PG::ValueType::Boolean, "cache",
-         "Seulement dans l'\xC3\xA9" "diteur. En marche, c'est la propri\xC3\xA9t\xC3\xA9 Visible qui compte.");
+         "Seulement dans l'\xC3\xA9" "diteur. En marche, c'est la propri\xC3\xA9t\xC3\xA9 Visible qui compte.", {},
+         differ([](const hmi::Object& x) { return x.hidden; }));
     out.push_back(std::move(general));
 
     // ---- 1.10.4 (K3) : l'inspecteur range ----

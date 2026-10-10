@@ -1242,7 +1242,8 @@ void volet_fichiers(const std::string& dir) {
     pane.selectFile(doc->project.externalByName("logo_site")->id);
     check(pane.preview().data() && pane.preview().data()->ok() && pane.preview().data()->headers.empty()
               && pane.preview().documentShown(),
-          "un document : son r\xC3\xA9sum\xC3\xA9, pas de lignes, le bouton Ouvrir");
+          "un document : son r\xC3\xA9sum\xC3\xA9, pas de lignes, le bouton Ouvrir ("
+              + (pane.preview().data() ? pane.preview().data()->summary + " / " + pane.preview().data()->error : std::string("?")) + ")");
     check(pane.link(ExternalKind::Database, "Driver={SQL Server};Server=srv;Database=Prod;Uid=ihm;Pwd=secret;", "Production"),
           "lier une base externe");
     same_text(cellOf(pane.table(), "Production", 5), "non v\xC3\xA9rifiable", "base externe : non v\xC3\xA9rifiable");
@@ -3847,6 +3848,29 @@ void communes1123() {
     b.editor->layout();
     check(section("Objet (2 s\xC3\xA9lectionn\xC3\xA9s)"), "un voyant et un texte : l'inspecteur dit les deux objets");
     check(!find("Forme") && find("Visible") && find("Opacit\xC3\xA9 (%)"), "... sans la Forme du voyant, avec Visible et l'Opacit\xC3\xA9");
+    {
+        // Le Type dit les deux genres, pas celui du premier.
+        const auto* type = find("Type");
+        const std::string shown = type ? type->value : std::string("?");
+        check(shown.find(std::string(kindLabel(Kind::Indicator))) != std::string::npos
+                  && shown.find(std::string(kindLabel(Kind::Text))) != std::string::npos,
+              "... le Type dit les deux genres (" + shown + ")");
+    }
+    // Verrouille : l'un oui, l'autre non - en « - », et une saisie les verrouille tous les deux.
+    b.v().object(l1)->locked = true;
+    b.editor->refresh();
+    b.editor->layout();
+    {
+        const auto* lock = find("Verrouill\xC3\xA9");
+        check(lock && lock->mixed && lock->value.empty(), "Verrouill\xC3\xA9 qui diff\xC3\xA8re : en \xC2\xAB - \xC2\xBB, pas la case du premier");
+        const auto* layer = find("Calque");
+        check(layer && !layer->mixed && !layer->value.empty(), "... le Calque, le m\xC3\xAAme : montr\xC3\xA9");
+    }
+    check(commitIn(b.editor->properties(), "Verrouill\xC3\xA9", "TRUE") && b.v().object(l1)->locked && b.v().object(t)->locked,
+          "... coch\xC3\xA9 : les deux sont verrouill\xC3\xA9s");
+    (void)b.stack.undo();
+    check(b.v().object(l1)->locked && !b.v().object(t)->locked, "... une annulation les remet");
+    b.v().object(l1)->locked = false;
     // Ctrl+A dans l'explorateur : tous les objets.
     b.editor->objects().keyPressed->emit(ui::KeyDown{ui::Key::A, ui::KeyMods{true, false, false, false}, false});
     check(b.editor->canvas().selection().size() == 3, "Ctrl+A dans l'explorateur choisit les trois objets");

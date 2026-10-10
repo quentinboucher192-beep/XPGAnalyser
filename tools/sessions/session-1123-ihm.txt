@@ -43,6 +43,9 @@ ihm-sim-etat "en marche"
 attendre 3
 sim-vue "Vue_Listes"
 attendre 4
+# la souris hors de l'arbre : pas de bulle sur la capture
+survol 800 545
+attendre 2
 capture 1123_ihm_04_simulation.png
 ihm-diagnostics
 quitter

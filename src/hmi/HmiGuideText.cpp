@@ -1144,7 +1144,7 @@ const std::vector<Topic>& topics() {
              {K::Bullet, "dans l'explorateur d'objets (1.12.3) : **Ctrl+A** les prend tous, **Maj+clic** \xC3\xA9tend "
                          "depuis le dernier objet cliqu\xC3\xA9 (ici ou dans la vue) ;", {}, "1.12.3"},
              {K::Bullet, "plusieurs objets choisis (1.12.3) : l'inspecteur montre leurs propri\xC3\xA9t\xC3\xA9s "
-                         "communes ; une valeur qui diff\xC3\xA8re se lit \xC2\xAB (plusieurs valeurs) \xC2\xBB (une "
+                         "communes (le Type dit leurs genres) ; une valeur qui diff\xC3\xA8re se lit \xC2\xAB (plusieurs valeurs) \xC2\xBB (une "
                          "case \xC3\xA0 cocher en \xC2\xAB \xE2\x80\x93 \xC2\xBB, des formules diff\xC3\xA9rentes : "
                          "\xC2\xAB (plusieurs formules) \xC2\xBB) ; une saisie part sur tous, en une annulation. "
                          "L'onglet **Actions** liste les objets choisis : une action est \xC3\xA0 un objet, un clic "
