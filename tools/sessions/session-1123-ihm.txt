@@ -1,0 +1,48 @@
+# =============================================================================
+#  Session 1123 IHM : XPGAnalyser IHM (1.12.3), XpgAnalyzer-IHM.exe - Projet >
+#  Disposition..., plusieurs objets choisis, la simulation.
+#  Armoire_Gaz (migre par la 1.12.1), avec Vue_Listes (la session 1122) :
+#    1. Projet > Disposition... (la fenetre, ses groupes) ;
+#    2. plusieurs objets choisis : les proprietes communes, l'onglet Actions ;
+#    3. la simulation (les courbes enregistrent des le demarrage), les diagnostics.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 8
+ouvrir "${PROJETS}/ihm/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- 1. Projet > Disposition... ----
+action "project.disposition"
+attendre 4
+capture 1123_ihm_01_disposition.png
+bouton "Annuler"
+attendre 2
+
+# ---- 2. Plusieurs objets choisis ----
+arbre "IHM/Vues/Vue_Listes"
+attendre 8
+objet "Liste_Recettes"
+attendre 2
+objet "Table_Lots" "maj"
+attendre 3
+capture 1123_ihm_02_proprietes_communes.png
+sous-onglet "Actions"
+attendre 2
+capture 1123_ihm_03_actions_plusieurs.png
+sous-onglet "Propriétés"
+attendre 1
+
+# ---- 3. La simulation ----
+arbre "Simulation/IHM"
+attendre 2
+ihm-build-attendre 600
+attendre 60
+ihm-sim-etat "en marche"
+attendre 3
+sim-vue "Vue_Listes"
+attendre 4
+capture 1123_ihm_04_simulation.png
+ihm-diagnostics
+quitter

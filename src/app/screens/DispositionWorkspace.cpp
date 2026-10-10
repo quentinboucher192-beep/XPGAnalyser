@@ -104,8 +104,9 @@ void MainAnalysisScreen::applyDisposition(DispositionMode mode) {
     if (upper_ && upper_->paneCount() > 1) {
         std::vector<std::size_t> order;
         if (l.item("explorateur").where == "droite") {
-            for (std::size_t k = 1; k < upper_->paneCount(); ++k) order.push_back(k);
-            order.push_back(0);
+            // Le centre, puis l'explorateur ; ce qui suivait (la colonne repliee) reste au bout.
+            order = {1, 0};
+            for (std::size_t k = 2; k < upper_->paneCount(); ++k) order.push_back(k);
         }
         upper_->setOrder(std::move(order));
     }
