@@ -109,13 +109,15 @@ bool Runtime::writeCommand(const View& v, const Object& o, const sim::Value& val
         formMessage(o.id, "variable inconnue : " + var, true, now);
         return false;
     }
+    // 1.12.3 : la vraie case (Cuves[2].Consigne), et ce qui est ecrit s'il differe.
+    const std::string cell = journal ? concretePath(var) : var;
     if (journal && lastWriteForced_) {
         // 1.12.3 : la variable est forcee - l'ecriture n'a rien fait, le journal le dit.
-        log("Action", source, var + " = " + formatValue(value) + " : ignor\xC3\xA9" "e (forc\xC3\xA9" "e)");
+        log("Action", source, cell + " = " + formatValue(value) + " : ignor\xC3\xA9" "e (forc\xC3\xA9" "e)" + writtenAs(var, cell));
     } else if (journal) {
         sim::Value after;
         const std::string text = environment().read(var, after) ? formatValue(after) : formatValue(value);
-        log("Action", source, var + " = " + text + (shown.empty() || shown == text ? std::string{} : " (" + shown + ")"));
+        log("Action", source, cell + " = " + text + (shown.empty() || shown == text ? std::string{} : " (" + shown + ")") + writtenAs(var, cell));
     }
     auto& f = forms_[o.id];
     if (f.error) {

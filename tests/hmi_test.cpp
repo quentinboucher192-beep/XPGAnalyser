@@ -17329,6 +17329,43 @@ void ecritureForcee1123() {
     rt.stop(1.0);
 }
 
+// 1.12.3 : LA VRAIE CASE DANS LA CONSOLE - Cuves[2].Consigne := 75 (Cuves[Idx].Consigne).
+void vraieCase1123() {
+    std::printf("1.12.3 : la Console ecrit la vraie case\n");
+    Project p;
+    View v = makeView(p, "Vue");
+    HmiType cuve;
+    cuve.id = p.allocate();
+    cuve.name = "T_Cuve";
+    cuve.members = {{"Consigne", "REAL", "", ""}};
+    p.programs.types.push_back(cuve);
+    p.programs.variables.push_back(hmiVar(p, "Cuves", "ARRAY[1..3] OF T_Cuve"));
+    p.programs.variables.push_back(hmiVar(p, "Idx", "INT", "2"));
+    auto& bt = addButton(p, v, "Regler", 10, 10);
+    bt.actions.push_back(act(Trigger::Click, Operation::Assign, "Cuves[Idx].Consigne", "75"));
+    const Id btId = bt.id;                 // avant d'ajouter l'autre bouton (le vecteur peut bouger)
+    auto& plus = addButton(p, v, "Plus", 10, 80);
+    plus.actions.push_back(act(Trigger::Click, Operation::Increment, "Cuves[Idx + 1].Consigne", "5"));
+    const Id plusId = plus.id;
+    p.views = {v};
+    p.config.startView = v.id;
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    check(rt.concretePath("Cuves[Idx].Consigne") == "Cuves[2].Consigne" && rt.concretePath("Cuves[Idx + 1].Consigne") == "Cuves[3].Consigne"
+              && rt.concretePath("Niveau") == "Niveau" && rt.concretePath("Cuves[Inconnu].Consigne") == "Cuves[Inconnu].Consigne",
+          "concretePath : chaque indice calcul\xC3\xA9 ; illisible, il reste");
+    rt.press(btId, 0.1);
+    rt.release(btId, 0.15, true);
+    rt.tick(0.16);
+    check(journalHas(rt, "Action", "Cuves[2].Consigne := 75 (Cuves[Idx].Consigne)"), "Affecter : la vraie case, puis ce qui est \xC3\xA9" "crit");
+    rt.press(plusId, 0.2);
+    rt.release(plusId, 0.25, true);
+    rt.tick(0.26);
+    check(journalHas(rt, "Action", "Cuves[3].Consigne : 0") && journalHas(rt, "Action", "(Cuves[Idx + 1].Consigne)"), "Incr\xC3\xA9menter aussi");
+    rt.stop(1.0);
+}
+
 void scriptsCollections1122() {
     std::printf("1.12.2 : les collections des scripts (LIST, VECTOR, TUPLE, litteraux, fonctions)\n");
     Project p;
@@ -21991,6 +22028,7 @@ int main(int argc, char** argv) {
     objetsListes1122();               // 1.12.2 : la liste, les elements depuis une source, le tableau dynamique
     courbesDemarrage1123();           // 1.12.3 : les courbes enregistrent des le demarrage
     ecritureForcee1123();             // 1.12.3 : une ecriture sur une variable forcee se dit
+    vraieCase1123();                  // 1.12.3 : la Console ecrit la vraie case
     enumerationsLangage110();         // 1.10 (S1, decision 15) : les enumerations dans les scripts
     operateurs110();                  // 1.10 (chantier S2) : les operateurs des symboles et des types IHM
     operateurs1101();                 // 1.10.1 (chantier U2) : a, b et Resultat (types, legende, exemple, Compiler)

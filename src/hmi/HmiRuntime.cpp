@@ -1310,6 +1310,48 @@ bool Runtime::writeDirect(const std::string& path, const sim::Value& v, const st
     return write(path, v, source);
 }
 
+std::string Runtime::concretePath(std::string_view path) {
+    if (path.find('[') == std::string_view::npos) return std::string(path);
+    std::string out;
+    std::size_t i = 0;
+    while (i < path.size()) {
+        if (path[i] != '[') { out += path[i++]; continue; }
+        int depth = 0;
+        std::size_t j = i;
+        for (; j < path.size(); ++j) {
+            if (path[j] == '[') ++depth;
+            else if (path[j] == ']' && --depth == 0) break;
+        }
+        if (j >= path.size()) { out.append(path.substr(i)); break; }
+        const std::string_view inner = path.substr(i + 1, j - i - 1);
+        out += '[';
+        std::size_t from = 0;
+        int d = 0;
+        for (std::size_t k = 0; k <= inner.size(); ++k) {
+            const bool end = k == inner.size();
+            if (!end && (inner[k] == '[' || inner[k] == '(')) ++d;
+            else if (!end && (inner[k] == ']' || inner[k] == ')')) --d;
+            if (!end && !(inner[k] == ',' && d == 0)) continue;
+            std::string e(inner.substr(from, k - from));
+            while (!e.empty() && e.front() == ' ') e.erase(e.begin());
+            while (!e.empty() && e.back() == ' ') e.pop_back();
+            bool ok = false;
+            const std::string v = evalText(concretePath(e), &ok);
+            double x = 0;
+            out += ok && parseNumber(v, x) && x == std::floor(x) ? formatNumber(x) : e;
+            if (!end) out += ',';
+            from = k + 1;
+        }
+        out += ']';
+        i = j + 1;
+    }
+    return out;
+}
+
+std::string Runtime::writtenAs(std::string_view path, std::string_view concrete) const {
+    return path == concrete ? std::string{} : " (" + std::string(path) + ")";
+}
+
 bool Runtime::write(const std::string& name, const sim::Value& v, const std::string& source) {
     publicWhy_.clear();
     lastWriteForced_ = false;
@@ -1697,7 +1739,10 @@ void Runtime::fire(const View& v, const Object* o, const Action& a, double now, 
                             : a.operation == Operation::Reset ? false
                             : !(known && cur.isTruthy());
             if (write(a.target, sim::Value::boolean(next), source))
-                log("Action", source, std::string(operationLabel(a.operation)) + " " + a.target + " = " + (next ? "TRUE" : "FALSE") + (lastWriteForced_ ? std::string(" : ignor\xC3\xA9" "e (forc\xC3\xA9" "e)") : std::string{}));
+                {
+                    const std::string cell = concretePath(a.target);
+                    log("Action", source, std::string(operationLabel(a.operation)) + " " + cell + " = " + (next ? "TRUE" : "FALSE") + (lastWriteForced_ ? std::string(" : ignor\xC3\xA9" "e (forc\xC3\xA9" "e)") : std::string{}) + writtenAs(a.target, cell));
+                }
             break;
         }
         case Operation::Increment:
@@ -1718,7 +1763,8 @@ void Runtime::fire(const View& v, const Object* o, const Action& a, double now, 
             if (write(a.target, next, source)) {
                 sim::Value after;
                 (void)env_->read(a.target, after);
-                log("Action", source, a.target + " : " + formatValue(cur) + " \xE2\x86\x92 " + formatValue(after) + (lastWriteForced_ ? std::string(" : ignor\xC3\xA9" "e (forc\xC3\xA9" "e)") : std::string{}));
+                const std::string cell = concretePath(a.target);
+                log("Action", source, cell + " : " + formatValue(cur) + " \xE2\x86\x92 " + formatValue(after) + (lastWriteForced_ ? std::string(" : ignor\xC3\xA9" "e (forc\xC3\xA9" "e)") : std::string{}) + writtenAs(a.target, cell));
             }
             break;
         }
@@ -1727,7 +1773,10 @@ void Runtime::fire(const View& v, const Object* o, const Action& a, double now, 
             if (it == expressions_.end()) it = expressions_.emplace(a.value, Expression::compile(a.value)).first;
             auto val = it->second.evaluate(*env_);
             if (!val) { log("Erreur", source, a.target + " := " + a.value + " : " + val.error().message()); break; }
-            if (write(a.target, *val, source)) log("Action", source, a.target + " := " + formatValue(*val) + (lastWriteForced_ ? std::string(" : ignor\xC3\xA9" "e (forc\xC3\xA9" "e)") : std::string{}));
+            if (write(a.target, *val, source)) {
+                const std::string cell = concretePath(a.target);
+                log("Action", source, cell + " := " + formatValue(*val) + (lastWriteForced_ ? std::string(" : ignor\xC3\xA9" "e (forc\xC3\xA9" "e)") : std::string{}) + writtenAs(a.target, cell));
+            }
             break;
         }
         case Operation::Navigate: {

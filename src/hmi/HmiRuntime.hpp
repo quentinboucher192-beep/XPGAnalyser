@@ -955,6 +955,11 @@ public:
     // enumeration du projet (ses textes ; la valeur : son nombre), une variable LIST, VECTOR, MAP,
     // un tableau IHM (ses elements, ses cles), une expression qui rend "a;b;c". Faux : illisible.
     bool resolveChoices(std::string_view source, std::vector<Choice>& out);
+    // 1.12.3 : LA VRAIE CASE - "Cuves[Idx].Consigne" -> "Cuves[2].Consigne" (chaque indice calcule) ;
+    // un indice illisible reste tel quel. writtenAs : la vraie case, puis ce qui est ecrit s'il differe
+    // ("Cuves[2].Consigne := 75 (Cuves[Idx].Consigne)" dans la Console).
+    [[nodiscard]] std::string concretePath(std::string_view path);
+    [[nodiscard]] std::string writtenAs(std::string_view path, std::string_view concrete) const;
     // 1.12.2 : la liste (Kind::List), le tableau dynamique (rowsFrom) - le rang de leur premiere
     // ligne montree (ils defilent).
     [[nodiscard]] std::size_t listFirst(Id object) const;
