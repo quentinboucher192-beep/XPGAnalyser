@@ -198,11 +198,11 @@ bool Runtime::overridden(const View& v) const {
     return it != overrides_.end() && it->first.first == v.id;
 }
 
-void Runtime::applyOverrides(View& c, const View& v) const {
+void Runtime::applyOverrides(View& c, const View& v, const View* only) const {
     if (!project_ || (overrides_.empty() && backgrounds_.empty())) return;
     const auto from = [&](Id owner, double dy) {
         for (auto it = overrides_.lower_bound({owner, 0}); it != overrides_.end() && it->first.first == owner; ++it)
-            if (Object* o = c.object(it->first.second))
+            if (Object* o = c.object(it->first.second); o && !(only && only->object(it->first.second)))
                 for (const auto& [key, value] : it->second) putOverride(*o, key, value, dy);
     };
     for (const View* t : templateChain(*project_, v)) from(t->id, 0);

@@ -44,10 +44,18 @@ struct Entry {
     simdata::Cell cell;
     std::string   date;          // la derniere sauvegarde de cette valeur ("2026-10-08 21:10:05")
 };
+// 1.12.3 : l'etat des structures du poste - l'onglet choisi, un panneau replie, le
+// defilement (Station::keepLayout). Lignes "etat", ignorees par une version d'avant.
+struct LayoutEntry {
+    Id          view{kNoId}, object{kNoId};
+    std::string key, value;                  // page, collapsed, scrollX, scrollY
+    bool operator==(const LayoutEntry&) const = default;
+};
 struct Store {
-    std::string        project;  // le nom du projet (pour le dire)
-    std::string        date;     // la derniere ecriture du fichier
-    std::vector<Entry> entries;
+    std::string              project;  // le nom du projet (pour le dire)
+    std::string              date;     // la derniere ecriture du fichier
+    std::vector<Entry>       entries;
+    std::vector<LayoutEntry> layout;   // 1.12.3
     [[nodiscard]] const Entry* find(Id variable, std::string_view path) const;
 };
 

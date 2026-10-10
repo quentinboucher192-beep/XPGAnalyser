@@ -15634,6 +15634,11 @@ const std::vector<Topic>& topics() {
                          "arr\xC3\xAAt brutal, il propose de le recharger, et le recharge d'office au bout "
                          "de 30 s si personne ne r\xC3\xA9pond (voir \xC2\xAB La reprise apr\xC3\xA8s un "
                          "arr\xC3\xAAt brutal \xC2\xBB).", {}},
+             {K::Paragraph, "**Garder les onglets, les panneaux repli\xC3\xA9s et le d\xC3\xA9" "filement** (1.12.3, "
+                         "coch\xC3\xA9" "e) : l'onglet choisi d'un conteneur \xC3\xA0 onglets, un panneau repli\xC3\xA9, "
+                         "le d\xC3\xA9" "filement d'un panneau d\xC3\xA9" "filant - y compris dans un symbole - "
+                         "reviennent au lancement suivant, avec les variables r\xC3\xA9manentes du poste. "
+                         "D\xC3\xA9" "coch\xC3\xA9" "e : tout repart comme dans l'\xC3\xA9" "diteur.", {}},
              {K::Tip, "Sur le poste, l'IHM est la m\xC3\xAAme que dans la simulation : ce qu'on a "
                          "essay\xC3\xA9 dans l'\xC3\xA9" "diteur (et les essais de r\xC3\xA9" "ception) "
                          "tourne tel quel \xC3\xA0 l'atelier.", {}},

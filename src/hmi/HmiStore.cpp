@@ -1046,7 +1046,8 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
             index += "poste" + fieldBool("plein_ecran", st.fullScreen) + fieldBool("kiosque", st.kiosk) + field("sel_sortie", st.exitSalt)
                    + field("sortie", st.exitHash) + fieldBool("coin", st.cornerExit) + fieldBool("sans_curseur", st.hideCursor)
                    + fieldBool("simulateur", st.runSimulator) + (st.simPage ? std::string{} : fieldBool("page_simulation", false))
-                   + (st.simMarks ? std::string{} : fieldBool("reperes_simules", false)) + "\n";
+                   + (st.simMarks ? std::string{} : fieldBool("reperes_simules", false))
+                   + (st.keepLayout ? std::string{} : fieldBool("garder_disposition", false)) + "\n";   // 1.12.3
             for (const auto& e : st.screens) index += "poste_ecran" + fieldInt("ecran", e.display) + field("vue", e.view) + "\n";
         }
     }
@@ -1557,6 +1558,7 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
             st.runSimulator = toBool(r.get("simulateur"), true);
             st.simPage = toBool(r.get("page_simulation"), true);          // 1.9
             st.simMarks = toBool(r.get("reperes_simules"), true);
+            st.keepLayout = toBool(r.get("garder_disposition"), true);  // 1.12.3
         } else if (r.word == "poste_ecran") {
             StationScreen e;
             e.display = static_cast<int>(std::clamp<long long>(toInt(r.get("ecran"), 2), 1, 16));

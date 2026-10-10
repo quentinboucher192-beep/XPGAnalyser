@@ -319,6 +319,8 @@ bool HmiStationPane::setSetting(const std::string& key, const std::string& raw, 
         // 1.9 : la page Simulation (Ctrl+Alt+S), les reperes des lectures simulees.
         {"page_simulation", &hmi::Station::simPage, "Page Simulation"},
         {"reperes_simules", &hmi::Station::simMarks, "Rep\xC3\xA9rer les lectures simul\xC3\xA9" "es"},
+        // 1.12.3 : l'onglet choisi, les panneaux replies, le defilement - d'un lancement a l'autre.
+        {"garder_disposition", &hmi::Station::keepLayout, "Garder les onglets, les panneaux repli\xC3\xA9s et le d\xC3\xA9" "filement"},
     };
     for (const auto& f : kFlags)
         if (key == f.key) {
@@ -520,6 +522,11 @@ void HmiStationPane::rebuildProperties() {
     post.properties.push_back(prop("Rep\xC3\xA9rer les lectures simul\xC3\xA9" "es", tf(st.simMarks), PG::ValueType::Boolean, commit("reperes_simules"),
                                    "Un cadre violet en tirets et une pastille sur les objets lus sur un esclave simul\xC3\xA9, et le bandeau "
                                    "LECTURES SIMUL\xC3\x89" "ES. D\xC3\xA9" "coch\xC3\xA9 : un poste de formation, tout simul\xC3\xA9, sans rep\xC3\xA8res."));
+    post.properties.push_back(prop("Garder les onglets, les panneaux repli\xC3\xA9s et le d\xC3\xA9" "filement", tf(st.keepLayout),
+                                   PG::ValueType::Boolean, commit("garder_disposition"),
+                                   "L'onglet choisi d'un conteneur \xC3\xA0 onglets, un panneau repli\xC3\xA9, le d\xC3\xA9" "filement d'un panneau "
+                                   "d\xC3\xA9" "filant (y compris dans un symbole) : le poste les reprend au lancement suivant, avec ses "
+                                   "variables r\xC3\xA9manentes. D\xC3\xA9" "coch\xC3\xA9 : tout repart comme dans l'\xC3\xA9" "diteur."));
     post.properties.push_back(prop("Mot de passe de sortie",
                                    st.exitHash.empty() ? std::string("aucun : outil \xC2\xAB Mot de passe de sortie \xC2\xBB")
                                                        : "d\xC3\xA9" "fini (empreinte " + st.exitHash.substr(0, 12) + "...)",

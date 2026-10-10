@@ -637,6 +637,17 @@ public:
         startData_ = std::move(cells);
         startLabel_ = std::move(label);
     }
+    // 1.12.3 : L'ETAT DES STRUCTURES DU POSTE - l'onglet choisi d'un conteneur a onglets,
+    // un panneau replie, le defilement d'un panneau defilant (y compris dans un symbole).
+    // uiState : ce que l'operateur a change en marche ; setStartUiState : a rendre au
+    // prochain start() (le poste le garde avec ses variables remanentes).
+    struct UiState {
+        Id          view{kNoId}, object{kNoId};
+        std::string key, value;                     // page, collapsed, scrollX, scrollY
+        bool operator==(const UiState&) const = default;
+    };
+    [[nodiscard]] std::vector<UiState> uiState() const;
+    void setStartUiState(std::vector<UiState> s) { startUi_ = std::move(s); }
     [[nodiscard]] const std::optional<simdata::Report>& lastRestore() const noexcept { return lastRestore_; }
     // 1.11.16 : des cases rendues EN MARCHE (le poste, apres la reprise d'un arret brutal :
     // ses variables remanentes, plus recentes que l'etat de reprise, l'emportent) - les
@@ -1379,7 +1390,9 @@ private:
     int  alarmMemberWrite(std::string_view path, std::string_view alarm, std::string_view member, const sim::Value& value,
                           std::string* why);
     [[nodiscard]] bool overridden(const View&) const;
-    void applyOverrides(View& composed, const View& original) const;
+    // 1.12.3 : `only` - seulement les objets absents de cette vue (ceux des instances,
+    // qui n'existent qu'une fois developpees).
+    void applyOverrides(View& composed, const View& original, const View* only = nullptr) const;
     [[nodiscard]] bool viewOpen(Id view) const;
     std::map<std::pair<Id, Id>, std::map<std::string, std::string>> overrides_;   // (vue, objet) -> cle -> valeur
     std::map<Id, std::string> backgrounds_;          // vue -> fond ecrit en marche
@@ -1428,6 +1441,7 @@ private:
     sim::ExecTrace           trace_;
     int                      session_{0};
     std::optional<std::vector<simdata::Cell>> startData_;    // 1.11.15 : a rendre au prochain start()
+    std::vector<UiState>                      startUi_;      // 1.12.3 : l'etat des structures, au prochain start()
     std::map<Id, simdata::Cell>               persistPending_;   // 1.11.18 (lot 5) : par declaration, avant la 1re execution
     std::string                               startLabel_;   // 1.11.16 : ce qu'en dit le journal
     std::optional<simdata::Report>            lastRestore_;  // ... et ce que le dernier en a fait

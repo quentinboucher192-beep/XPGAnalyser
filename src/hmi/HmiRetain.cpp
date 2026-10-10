@@ -144,6 +144,8 @@ std::string serialize(const Store& s) {
         out += "valeur variable=" + std::to_string(e.cell.variable) + " nom=" + quote(e.cell.name) + " declare=" + quote(e.cell.declared)
              + " chemin=" + quote(e.cell.path) + " type=" + std::string(sim::toString(e.cell.value.type())) + " valeur=" + quote(simdata::valueText(e.cell.value))
              + " date=" + quote(e.date) + "\n";
+    for (const auto& l : s.layout)          // 1.12.3 : l'etat des structures du poste
+        out += "etat vue=" + std::to_string(l.view) + " objet=" + std::to_string(l.object) + " cle=" + quote(l.key) + " valeur=" + quote(l.value) + "\n";
     out += "fin valeurs=" + std::to_string(s.entries.size()) + "\n";
     return out;
 }
@@ -187,6 +189,13 @@ bool parse(std::string_view text, Store& out, std::string* why) {
             e.cell.value = std::move(*v);
             e.date = str(r, "date");
             out.entries.push_back(std::move(e));
+        } else if (r.word == "etat") {                     // 1.12.3
+            LayoutEntry l;
+            l.view = static_cast<Id>(num(r, "vue", static_cast<long long>(kNoId)));
+            l.object = static_cast<Id>(num(r, "objet", static_cast<long long>(kNoId)));
+            l.key = str(r, "cle");
+            l.value = str(r, "valeur");
+            if (l.view != kNoId && !l.key.empty()) out.layout.push_back(std::move(l));
         } else if (r.word == "fin") {
             if (num(r, "valeurs", -1) != static_cast<long long>(out.entries.size()))
                 return fail("fichier incomplet : la fin ne compte pas les m\xC3\xAAmes valeurs");

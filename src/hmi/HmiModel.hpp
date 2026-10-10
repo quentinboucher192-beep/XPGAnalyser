@@ -1604,6 +1604,9 @@ struct Station {
     // pastille sur les objets, le bandeau LECTURES SIMULEES) - sur le poste et
     // dans Simuler l'IHM. Faux : un poste de formation, tout simule, sans reperes.
     bool        simMarks{true};
+    // 1.12.3 : le poste garde l'onglet choisi, les panneaux replies et le defilement
+    // d'un lancement a l'autre (avec ses variables remanentes). Faux : tout repart de l'editeur.
+    bool        keepLayout{true};
     bool operator==(const Station&) const = default;
 };
 

@@ -85,6 +85,7 @@
 #include "../src/hmi/HmiTypes.hpp"    // lot 16
 #include "../src/hmi/HmiPackage.hpp"  // lot 20
 #include "../src/hmi/HmiSymbols.hpp"
+#include "../src/hmi/HmiRetain.hpp"   // 1.12.3 : l'etat des structures du poste
 #include "../src/import/ProjectImporter.hpp"
 #include "../src/import/ProjectParser.hpp"   // 1.11.1 (API-M) : un petit XPG lu dans l'essai
 #include "../src/project/ProjectStore.hpp"
@@ -17562,6 +17563,114 @@ void popupSymboleAlarmes1123() {
     rt.stop(1.0);
 }
 
+// 1.12.3 : L'ETAT DES STRUCTURES DU POSTE - l'onglet choisi, un panneau replie, le
+// defilement (et un onglet dans un symbole, ou le clic ne prenait pas) : repris au
+// redemarrage ; le stockage du poste les garde (lignes "etat").
+void etatPoste1123() {
+    std::printf("1.12.3 : le poste garde l'onglet choisi, les panneaux replies, le defilement\n");
+    Project p;
+    View sym = makeView(p, "S_Onglets");
+    sym.role = "symbole";
+    sym.width = 300;
+    sym.height = 200;
+    const Id innerTab = p.allocate();
+    {
+        Object t = makeObject(Kind::TabContainer, innerTab, "Pages", 0, 0, sym.activeLayer);
+        t.setNumber("w", 300);
+        t.setNumber("h", 200);
+        t.set("tabs", "Un;Deux;Trois");
+        sym.objects.push_back(t);
+    }
+    p.views.push_back(sym);
+    View v = makeView(p, "Vue");
+    v.width = 1200;
+    v.height = 900;
+    const Id tabs = p.allocate(), fold = p.allocate(), scroll = p.allocate(), inst = p.allocate();
+    {
+        Object t = makeObject(Kind::TabContainer, tabs, "Onglets", 10, 10, v.activeLayer);
+        t.setNumber("w", 400);
+        t.setNumber("h", 200);
+        t.set("tabs", "Synoptique;Alarmes;Courbes");
+        v.objects.push_back(t);
+        Object c = makeObject(Kind::CollapsiblePanel, fold, "Pompes", 450, 10, v.activeLayer);
+        c.setNumber("w", 200);
+        c.setNumber("h", 150);
+        v.objects.push_back(c);
+        Object s = makeObject(Kind::ScrollPanel, scroll, "Liste", 10, 300, v.activeLayer);
+        s.setNumber("w", 300);
+        s.setNumber("h", 200);
+        s.setNumber("contentHeight", 1000);
+        v.objects.push_back(s);
+        Object in = makeObject(Kind::SymbolInstance, inst, "Inst", 700, 300, v.activeLayer);
+        in.setNumber("w", 300);
+        in.setNumber("h", 200);
+        in.set("symbol", "S_Onglets");
+        v.objects.push_back(in);
+    }
+    const Id vid = v.id;
+    p.views.push_back(v);
+    p.config.startView = vid;
+    const Id inner = expandedId(inst, innerTab);
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    rt.objectPart(tabs, "onglet:2", 0.1);
+    rt.objectPart(fold, "entete", 0.2);
+    rt.objectPart(scroll, "defiler:40", 0.3);
+    rt.objectPart(inner, "onglet:3", 0.4);
+    const auto shown = [&](Id object, const char* key) {
+        const View* c = rt.composedView(vid);
+        const Object* o = c ? c->object(object) : nullptr;
+        return o ? o->text(key) : std::string("?");
+    };
+    check(shown(tabs, "page") == "2" && shown(fold, "collapsed") == "TRUE" && shown(scroll, "scrollY") == "40",
+          "en marche : l'onglet 2, le panneau repli\xC3\xA9, d\xC3\xA9" "fil\xC3\xA9 de 40");
+    check(shown(inner, "page") == "3", "un onglet dans un symbole : le clic prend (" + shown(inner, "page") + ")");
+    const auto state = rt.uiState();
+    check(state.size() == 4, "l'\xC3\xA9tat des structures : 4 lignes (" + std::to_string(state.size()) + ")");
+    rt.stop(1.0);
+    // Le stockage du poste : les lignes "etat", relues.
+    retain::Store store;
+    store.project = "Essai";
+    for (const auto& s : state) store.layout.push_back({s.view, s.object, s.key, s.value});
+    const std::string text = retain::serialize(store);
+    retain::Store back;
+    std::string why;
+    check(text.find("etat vue=") != std::string::npos && retain::parse(text, back, &why) && back.layout == store.layout,
+          "le stockage : les lignes \xC2\xAB etat \xC2\xBB, relues telles quelles " + why);
+    // Le redemarrage : repris.
+    Runtime rt2;
+    rt2.bind(&p, nullptr);
+    std::vector<Runtime::UiState> again;
+    for (const auto& l : back.layout) again.push_back({l.view, l.object, l.key, l.value});
+    rt2.setStartUiState(again);
+    rt2.start(2.0);
+    const auto shown2 = [&](Id object, const char* key) {
+        const View* c = rt2.composedView(vid);
+        const Object* o = c ? c->object(object) : nullptr;
+        return o ? o->text(key) : std::string("?");
+    };
+    check(shown2(tabs, "page") == "2" && shown2(fold, "collapsed") == "TRUE" && shown2(scroll, "scrollY") == "40" && shown2(inner, "page") == "3",
+          "red\xC3\xA9marr\xC3\xA9 : l'onglet, le panneau repli\xC3\xA9, le d\xC3\xA9" "filement et l'onglet du symbole repris");
+    rt2.stop(3.0);
+    Runtime rt3;
+    rt3.bind(&p, nullptr);
+    rt3.start(4.0);
+    const View* c3 = rt3.composedView(vid);
+    check(c3 && c3->object(tabs) && c3->object(tabs)->text("page") != "2", "sans \xC3\xA9tat donn\xC3\xA9 : tout repart de l'\xC3\xA9" "diteur");
+    rt3.stop(5.0);
+    // L'option du poste : enregistree seulement decochee.
+    p.station.keepLayout = false;
+    const auto files = serializeProject(p);
+    const FileReader reader = [&](const std::string& path, std::string& content) {
+        for (const auto& f : files)
+            if (f.path == path) { content.assign(f.data->begin(), f.data->end()); return true; }
+        return false;
+    };
+    const auto relu = parseProject(reader);
+    check(relu && !relu->station.keepLayout, "l'option d\xC3\xA9" "coch\xC3\xA9" "e : enregistr\xC3\xA9" "e, relue");
+}
+
 void scriptsCollections1122() {
     std::printf("1.12.2 : les collections des scripts (LIST, VECTOR, TUPLE, litteraux, fonctions)\n");
     Project p;
@@ -22229,6 +22338,7 @@ int main(int argc, char** argv) {
     auditScripts1123();               // 1.12.3 : l'audit des ecritures des scripts
     sonsMelanges1123();               // 1.12.3 : les sons se melangent ; Silence, l'arret
     popupSymboleAlarmes1123();        // 1.12.3 : les popups de symbole, les alarmes de leurs objets
+    etatPoste1123();                  // 1.12.3 : le poste garde onglets, panneaux replies, defilement
     enumerationsLangage110();         // 1.10 (S1, decision 15) : les enumerations dans les scripts
     operateurs110();                  // 1.10 (chantier S2) : les operateurs des symboles et des types IHM
     operateurs1101();                 // 1.10.1 (chantier U2) : a, b et Resultat (types, legende, exemple, Compiler)

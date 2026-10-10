@@ -3588,6 +3588,32 @@ void HmiSimulationPane::loadData() {
 //  En marche : toutes les 0,25 s, les variables remanentes capturees ; une valeur
 //  qui change prend sa date ; au plus une ecriture par seconde ; une ecriture qui
 //  echoue est dite au journal et reessayee 5 s plus tard. A l'arret : tout de suite.
+namespace {
+// 1.12.3 : l'etat des structures du poste, du moteur au stockage et retour.
+std::vector<hmi::retain::LayoutEntry> layoutOf(const std::vector<hmi::Runtime::UiState>& ui) {
+    std::vector<hmi::retain::LayoutEntry> out;
+    out.reserve(ui.size());
+    for (const auto& s : ui) out.push_back({s.view, s.object, s.key, s.value});
+    return out;
+}
+std::vector<hmi::Runtime::UiState> uiStateOf(const std::vector<hmi::retain::LayoutEntry>& layout) {
+    std::vector<hmi::Runtime::UiState> out;
+    out.reserve(layout.size());
+    for (const auto& l : layout) out.push_back({l.view, l.object, l.key, l.value});
+    return out;
+}
+} // namespace
+
+// 1.12.3 : l'onglet choisi, les panneaux replies, le defilement - gardes avec les
+// variables remanentes (option du poste, cochee) ; faux s'il n'y a rien de nouveau.
+bool HmiSimulationPane::captureLayout() {
+    std::vector<hmi::retain::LayoutEntry> now = doc_->project.station.keepLayout ? layoutOf(runtime_.uiState())
+                                                                                   : std::vector<hmi::retain::LayoutEntry>{};
+    if (now == retainStore_.layout) return false;
+    retainStore_.layout = std::move(now);
+    return true;
+}
+
 void HmiSimulationPane::loadRetained() {
     retainStore_ = {};
     retainNote_.clear();
@@ -3626,6 +3652,7 @@ void HmiSimulationPane::loadRetained() {
                       + ") \xE2\x80\x94 sa copie de secours est reprise.";
     auto cells = hmi::retain::retainedCells(doc_->project, retainStore_, &retainIgnored_);
     runtime_.setStartData(std::move(cells), "Variables r\xC3\xA9manentes restaur\xC3\xA9" "es");
+    if (doc_->project.station.keepLayout) runtime_.setStartUiState(uiStateOf(retainStore_.layout));   // 1.12.3
     retainState_ = std::to_string(retainStore_.entries.size()) + " valeur(s) gard\xC3\xA9" "e(s)"
                    + (retainStore_.date.empty() ? std::string{} : " (\xC3\xA9" "crites le " + retainStore_.date + ")") + readOnly;
 }
@@ -3671,6 +3698,7 @@ void HmiSimulationPane::retainTick() {
     }
     auto cells = runtime_.captureData([](const hmi::Variable& v) { return v.retain; });
     if (hmi::retain::merge(retainStore_, doc_->project, cells, hmi::simdata::nowStamp())) retainPending_ = true;
+    if (captureLayout()) retainPending_ = true;                            // 1.12.3
     if (!retainPending_) return;
     if (retainRetryAt_ >= 0.0 && now_ < retainRetryAt_) return;            // apres un echec : 5 s
     if (retainLastWrite_ >= 0.0 && now_ - retainLastWrite_ < 1.0) return;  // au plus une ecriture par seconde
@@ -3683,6 +3711,7 @@ bool HmiSimulationPane::saveRetained(bool force) {
     if (force && started_) {
         auto cells = runtime_.captureData([](const hmi::Variable& v) { return v.retain; });
         if (hmi::retain::merge(retainStore_, doc_->project, cells, hmi::simdata::nowStamp())) retainPending_ = true;
+        if (captureLayout()) retainPending_ = true;                        // 1.12.3
     }
     if (!retainPending_) return true;
     retainStore_.project = doc_->project.config.name;

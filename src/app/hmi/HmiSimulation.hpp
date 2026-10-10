@@ -741,6 +741,7 @@ private:
     void                  reportRetained();
     void                  retainTick();
     void                  finishRetained();                  // a l'arret : ecrire, rendre le verrou
+    bool                  captureLayout();                   // 1.12.3 : onglets, panneaux replies, defilement
     void                  loadData();
     void                  reportRestore();
     void                  output(int severity, const std::string& text);

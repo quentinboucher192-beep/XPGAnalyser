@@ -1177,7 +1177,14 @@ const View* Runtime::viewOf(Id id) const {
     if (it == composed_.end()) {
         View c = inherited ? compose(*project_, *v) : *v;
         applyOverrides(c, *v);
-        if (symbols) c = expandInstances(*project_, c);
+        if (symbols) {
+            View e = expandInstances(*project_, c);
+            // 1.12.3 : les objets d'une instance n'existent qu'une fois developpes - leurs
+            // proprietes ecrites en marche (l'onglet choisi, le panneau replie, le
+            // defilement) se posent apres. Avant : ces clics dans un symbole ne prenaient pas.
+            if (!overrides_.empty()) applyOverrides(e, *v, &c);
+            c = std::move(e);
+        }
         if (owned) c = qualifiedOwnedPopup(*project_, c);        // 1.11.10 : Ouvrir() vise l'instance qui l'ouvre
         it = composed_.emplace(id, std::move(c)).first;
     }
@@ -2613,6 +2620,13 @@ void Runtime::start(double now) {
         const std::string kind = startLabel_.empty() ? std::string("Simulation") : std::string("R\xC3\xA9manence");
         logAt(LogLevel::Info, kind, {}, label + " : " + lastRestore_->summary());
         for (const auto& w : lastRestore_->warnings) logAt(LogLevel::Warning, kind, {}, w);
+    }
+    // 1.12.3 : le poste reprend l'onglet choisi, les panneaux replies, le defilement.
+    if (!startUi_.empty()) {
+        for (const auto& s : startUi_)
+            if (project_->view(s.view) && !s.key.empty()) overrides_[{s.view, s.object}][s.key] = s.value;
+        startUi_.clear();
+        composed_.clear(); boundCalls_.clear();
     }
     log("Syst\xC3\xA8me", {}, "IHM d\xC3\xA9marr\xC3\xA9" "e : " + std::to_string(project_->programs.variables.size())
                                  + " variable(s) IHM, " + std::to_string(project_->programs.scripts.size())

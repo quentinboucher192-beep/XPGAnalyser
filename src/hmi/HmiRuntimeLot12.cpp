@@ -229,6 +229,22 @@ void Runtime::setOverride(const View& v, const Object& o, const std::string& key
     composed_.clear(); boundCalls_.clear();
 }
 
+// 1.12.3 : l'etat des structures que l'operateur a change (le poste le garde).
+std::vector<Runtime::UiState> Runtime::uiState() const {
+    std::vector<UiState> out;
+    for (const auto& [at, props] : overrides_) {
+        const View* v = viewOf(at.first);
+        const Object* o = v ? v->object(at.second) : nullptr;
+        if (!o) continue;
+        for (const auto& [key, value] : props) {
+            const bool kept = (o->kind == Kind::TabContainer && key == "page") || (o->kind == Kind::CollapsiblePanel && key == "collapsed")
+                           || (o->kind == Kind::ScrollPanel && (key == "scrollX" || key == "scrollY"));
+            if (kept) out.push_back({at.first, at.second, key, value});
+        }
+    }
+    return out;
+}
+
 void Runtime::lot12Part(const View& v, const Object& o, std::string_view part, double now) {
     const std::string source = where(v, &o);
     switch (o.kind) {

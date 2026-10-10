@@ -7440,6 +7440,7 @@ Le poste démarre à l'ouverture de la session ; pour qu'un PC qui redémarre (u
 ! Une session qui s'ouvre seule donne le PC à qui s'assoit devant : le kiosque et le mot de passe de sortie gardent l'éditeur et le système.
 ### Après une coupure
 Le poste garde son état toutes les 10 s ; relancé après un arrêt brutal, il propose de le recharger, et le recharge d'office au bout de 30 s si personne ne répond (voir « La reprise après un arrêt brutal »).
+**Garder les onglets, les panneaux repliés et le défilement** (1.12.3, cochée) : l'onglet choisi d'un conteneur à onglets, un panneau replié, le défilement d'un panneau défilant - y compris dans un symbole - reviennent au lancement suivant, avec les variables rémanentes du poste. Décochée : tout repart comme dans l'éditeur.
 > Sur le poste, l'IHM est la même que dans la simulation : ce qu'on a essayé dans l'éditeur (et les essais de réception) tourne tel quel à l'atelier.
 > 1.9 : **Ctrl+Alt+S** ouvre la page Simulation de Paramètres système (permission Administrer) ; la fiche du poste a les cases **Page Simulation** et, dans Configuration › Équipements, **Repérer les lectures simulées** (voir « La page Simulation » et « Les lectures simulées et leurs repères »).
 
