@@ -93,18 +93,40 @@ Une courbe en temps réel ne s'échantillonnait que si sa vue était affichée :
 1. Lancez `XPGAnalyser-Setup-1.12.3.exe`. Il met à jour la version installée : même identité d'installation, données reprises sans être déplacées. Il pose les deux applications et leurs deux raccourcis. Vos projets s'ouvrent tels quels.
 2. Windows SmartScreen peut avertir, parce que l'installateur n'est pas signé. Choisissez « Informations complémentaires », puis « Exécuter quand même ».
 
-Empreinte SHA-256 de `XPGAnalyser-Setup-1.12.3.exe` (@TAILLE_SETUP@) :
-`@SHA_SETUP@`
+Empreinte SHA-256 de `XPGAnalyser-Setup-1.12.3.exe` (28,2 Mo, 29 549 470 octets) :
+`CB58BEF655E52FB62B2AC5E0B90CCA0E4BC0C1E2F209D0F01F430C1AF66F44EA`
 
 **Les zips portables.** Chacun contient une application et ce qu'il lui faut, dans un dossier `XPGAnalyser-API-1.12.3` ou `XPGAnalyser-IHM-1.12.3`. Décompressez, puis lancez l'exe.
-- `XPGAnalyser-API-1.12.3-portable.zip` (@TAILLE_API@) :
-  `@SHA_API@`
-- `XPGAnalyser-IHM-1.12.3-portable.zip` (@TAILLE_IHM@) :
-  `@SHA_IHM@`
+- `XPGAnalyser-API-1.12.3-portable.zip` (21,1 Mo) :
+  `77FBE3D033BDF5E6E1F143F51AEE54480A735F12B502CEAA23D5B20BE4738107`
+- `XPGAnalyser-IHM-1.12.3-portable.zip` (21,1 Mo) :
+  `2C9DF477A06C53A6082A4B76AAD0E6EFAD173E217B99DFE6CAD91B5B73989DA8`
 
 ## Vérifications
 
-@VERIFICATIONS@
+**Tests Linux** (GCC 13) : la suite CTest complète passe, 70 sur 70. Elle comprend les 6 785 contrôles de `hmieditor`, les 4 851 de `hmi`, les 1 842 de `hminatives` et les 258 de `hmireperes`. Chaque nouveauté a ses essais :
+- la fenêtre Disposition (`disposition1123` : le modèle, l'écriture dans les réglages, les dispositions toutes faites, un sous-onglet caché puis rendu, « en simulation ») ;
+- les états en table (`etats1123` : selon la valeur, selon des conditions, la Valeur écrite puis relue, « ; » refusé) ;
+- plusieurs objets choisis (`communes1123` : « (plusieurs valeurs) », la case en « – », « (plusieurs formules) », le Type qui dit les genres, une saisie sur tous en une annulation, l'onglet Actions, Ctrl+A, Maj+clic) ;
+- les courbes dès le démarrage (`courbesDemarrage1123`) et une série par jeu d'arguments (`courbesParArguments1123`) ;
+- l'écriture sur une variable forcée (`ecritureForcee1123`), la vraie case dans la Console (`vraieCase1123`), la mémoire de la marche (`memoireJournal1123`), l'audit des scripts (`auditScripts1123`) ;
+- les sons mélangés, Silence et l'arrêt (`sonsMelanges1123`, `voixDesSons1123`) ;
+- le poste qui garde ses onglets, ses panneaux repliés et son défilement, symboles compris (`etatPoste1123`) ;
+- les popups de symbole sans alarme illisible (`popupSymboleAlarmes1123`).
+
+Les essais des popups de symbole et des clics dans un symbole échouent sans leur correction : ils ont été lancés avant elle.
+
+**Les deux exe Windows**, compilés sous Linux avec MinGW-w64 et lancés sous Wine :
+- `--version` répond `XPGAnalyser API 1.12.3` et `XPGAnalyser IHM 1.12.3` ;
+- `XpgAnalyzer-API.exe --cli MAST.XPG` analyse le projet d'essai (891 variables, 29 POU), comme avant ;
+- une session sous Wine avec l'exe livré, sur Armoire_Gaz et sa vue Vue_Listes : Projet › Disposition… s'ouvre (capture `1123_ihm_01`) ; dans l'explorateur d'objets, un clic sur Liste_Recettes puis Maj+clic sur Table_Lots choisit les quatre objets, l'inspecteur montre leurs propriétés communes (`02`) et l'onglet Actions les liste (`03`) ; la simulation démarre (build réussi, 360 éléments générés, 0 erreur) et montre Vue_Listes en marche (`04`). Chaque ligne de la session a réussi.
+
+**L'installateur**, compilé par Inno Setup 6.4.1 sous Wine, puis installé en silencieux pour tous les comptes, par-dessus la 1.12.2 :
+- « Installation process succeeded » ; il a repris l'installation de la 1.12.2 (même dossier, son journal de désinstallation complété) ;
+- avant comme après : `XpgAnalyzer-API.exe`, `XpgAnalyzer-IHM.exe`, et les raccourcis « XPGAnalyser API » et « XPGAnalyser IHM » ;
+- les deux exe installés sont identiques à ceux qui ont été testés ; installés, ils répondent `XPGAnalyser API 1.12.3` et `XPGAnalyser IHM 1.12.3`.
+
+**Pas encore fait :** ni les exe ni l'installateur n'ont été lancés sur un vrai Windows, et le projet Visual Studio n'a pas été compilé (pas de MSVC ici). La section « Tester vous-même » donne le parcours à refaire chez vous.
 
 ## La suite
 
