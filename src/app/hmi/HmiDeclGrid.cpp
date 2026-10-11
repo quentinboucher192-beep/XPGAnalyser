@@ -6,13 +6,17 @@
 
 #include "HmiIcons.hpp"
 #include "HmiTypePicker.hpp"
+#include "../../hmi/HmiCalc.hpp"       // 1.12.7 : les valeurs calculees au demarrage
 #include "../../hmi/HmiMigrate.hpp"
+#include "../../hmi/HmiRuntime.hpp"    // 1.12.7 : leur apercu et leur deballage (Runtime::computedObjects)
+#include "../../hmi/HmiTypes.hpp"      // 1.12.7 : une structure se deballe aussi
 #include "../../hmi/HmiOperators.hpp"
 #include "../../ui/Theme.hpp"
 #include "../../ui/widgets/SearchField.hpp"
 
 #include <algorithm>
 #include <cctype>
+#include <set>
 
 namespace app {
 
@@ -22,7 +26,7 @@ namespace de = hmi::decledit;
 
 namespace {
 
-enum GridAction : int { GAdd = 1, GRemove, GDuplicate, GUp, GDown, GUses, GItems /* 1.12.2 */ };
+enum GridAction : int { GAdd = 1, GRemove, GDuplicate, GUp, GDown, GUses, GItems /* 1.12.2 */, GCalc /* 1.12.7 */ };
 constexpr int kUses = -1;                                   // la colonne calculee Utilisations
 const std::string& kPickType = typepicker::kChoose;            // 1.11.19 (lot 6) : le selecteur de types
 const std::string kOtherType = "Autre type\xE2\x80\xA6";    // ouvre un champ libre (ARRAY, REF_TO...)
@@ -55,6 +59,9 @@ public:
         hmi::Declaration d;
         std::string      fault;
         std::size_t      uses{0};
+        std::string      preview;       // 1.12.7 : sa valeur calculee ([1, 2]...), ou pourquoi elle ne l'est pas
+        bool             previewError{false};
+        sim::ObjRef      object;        // 1.12.7 : sa valeur calculee (le deballage)
     };
     std::vector<Row>         rows;
     std::vector<int>         columns;           // par colonne de la table : la de::Column, ou kUses
@@ -76,6 +83,9 @@ public:
     [[nodiscard]] std::string cellText(ui::RowIndex r, std::size_t c) const override {
         if (r >= rows.size() || c >= columns.size()) return {};
         if (columns[c] == kUses) return std::to_string(rows[r].uses);
+        // 1.12.7 : une valeur calculee au demarrage - ce qu'elle vaut (l'apercu), sinon qu'elle l'est.
+        if (static_cast<de::Column>(columns[c]) == de::Column::Value && rows[r].d.computed && !rows[r].preview.empty())
+            return "\xC6\x92x " + (rows[r].previewError ? "erreur : " : std::string("= ")) + rows[r].preview;
         return de::cellText(rows[r].d, static_cast<de::Column>(columns[c]));
     }
     [[nodiscard]] ui::CellStyle cellStyle(ui::RowIndex r, std::size_t c) const override {
@@ -96,8 +106,11 @@ public:
                 }
                 break;
             case de::Column::Type:
+                s.monospace = true;
+                break;
             case de::Column::Value:
                 s.monospace = true;
+                if (row.d.computed) s.fgTone = row.previewError ? ui::Tone::Error : ui::Tone::Accent;   // 1.12.7
                 break;
             case de::Column::Storage:
                 if (row.d.storage == hmi::Storage::Persistent) s.fgTone = ui::Tone::Accent;
@@ -111,6 +124,10 @@ public:
         return cellText(a, c) < cellText(b, c);
     }
     [[nodiscard]] bool editable(ui::RowIndex r, std::size_t c) const override {
+        // 1.12.7 : la valeur calculee se change par « \xC6\x92x Calcul\xE2\x80\xA6 » (pas dans la case).
+        if (r < rows.size() && c < columns.size() && columns[c] != kUses && rows[r].d.computed
+            && static_cast<de::Column>(columns[c]) == de::Column::Value)
+            return false;
         return editableAll && r < rows.size() && c < columns.size() && columns[c] != kUses;
     }
     [[nodiscard]] std::vector<std::string> cellChoices(ui::RowIndex r, std::size_t c) const override {
@@ -160,7 +177,15 @@ public:
         if (r >= rows.size()) return {};
         const auto& row = rows[r];
         std::string tip = row.d.name + " : " + row.d.type;
-        if (!row.d.value.empty()) tip += " := " + row.d.value;
+        if (row.d.computed) {
+            // 1.12.7 : calculee au demarrage - son code, ses locales, ce qu'elle vaut.
+            tip += "  (\xC6\x92x calcul\xC3\xA9" "e au d\xC3\xA9marrage)\n" + row.d.calc;
+            if (!row.d.locals.empty()) tip += "Locales :\n" + de::localsText(row.d.locals);
+            if (!row.preview.empty()) tip += (row.previewError ? "Erreur : " : "= ") + row.preview + "\n";
+            tip += "\xC2\xAB \xC6\x92x Calcul\xE2\x80\xA6 \xC2\xBB pour le changer.";
+        } else if (!row.d.value.empty()) {
+            tip += " := " + row.d.value;
+        }
         if (row.d.kind == hmi::DeclKind::Variable && role == hmi::decl::Role::Script)
             tip += "\n" + std::string(de::storageLabel(row.d.storage)) + " : " + std::string(de::storageHelp(row.d.storage));
         if (!row.d.description.empty()) tip += "\n" + row.d.description;
@@ -168,6 +193,107 @@ public:
         if (!row.fault.empty()) tip = "Faute : " + row.fault + "\n" + tip;
         return tip;
     }
+};
+
+// ------------------------------------------------------------ 1.12.7 : le deballage ----
+//  La valeur a taille de la ligne choisie : la racine (son nom), puis ses elements - un indice
+//  ([0], [1, 2] pour un tableau a deux dimensions), une cle ('bas', 3), un membre (Temp, Item1) -
+//  chacun avec son type et sa valeur ; un element a taille se deplie a son tour (la fleche).
+class HmiDeclGrid::Unfold final : public ui::ITableModel {
+public:
+    struct Line {
+        std::string label, type, value, path;
+        int         depth{0};
+        bool        children{false};
+    };
+    std::vector<Line>     lines;
+    std::set<std::string> open{""};          // les chemins deplies (la racine : d'emblee)
+    sim::ObjRef           root;
+    std::string           rootName;
+    std::string           why;                // la valeur illisible : pourquoi
+
+    static bool sized(const sim::ObjRef& o) { return o && o->type && o->type->kind != sim::TypeDesc::Kind::Scalar; }
+    static std::string typeOf(const sim::ObjRef& o) {
+        if (!o || !o->type) return {};
+        return o->type->kind == sim::TypeDesc::Kind::Struct ? o->type->name : o->type->text();
+    }
+    static std::string valueOf(const sim::ObjRef& o) {
+        if (!o) return {};
+        if (!sized(o)) return o->value.display();
+        const std::size_t n = o->type->kind == sim::TypeDesc::Kind::Map ? o->textKeys.size() + o->intKeys.size() : o->items.size();
+        std::string text = sim::display(*o);
+        if (text.size() > 80) text = text.substr(0, 77) + "...";
+        return std::to_string(n) + (n > 1 ? " \xC3\xA9l\xC3\xA9ments  " : " \xC3\xA9l\xC3\xA9ment  ") + text;
+    }
+    void add(const sim::ObjRef& o, const std::string& label, const std::string& path, int depth) {
+        if (lines.size() > 2000) return;                         // une tres grande valeur : le debut
+        lines.push_back({label, typeOf(o), valueOf(o), path, depth, sized(o)});
+        if (!sized(o) || !open.count(path)) return;
+        const auto& t = *o->type;
+        switch (t.kind) {
+            case sim::TypeDesc::Kind::Map:
+                for (const auto& [k, v] : o->textKeys) add(v, "'" + k + "'", path + "/'" + k + "'", depth + 1);
+                for (const auto& [k, v] : o->intKeys) add(v, std::to_string(k), path + "/" + std::to_string(k), depth + 1);
+                break;
+            case sim::TypeDesc::Kind::Struct:
+            case sim::TypeDesc::Kind::Tuple:
+                for (std::size_t k = 0; k < o->items.size(); ++k) {
+                    const std::string m = k < t.members.size() ? t.members[k].first : "Item" + std::to_string(k + 1);
+                    add(o->items[k], m, path + "/" + m, depth + 1);
+                }
+                break;
+            case sim::TypeDesc::Kind::Array: {
+                // L'indice ecrit : les bornes de chaque dimension (la derniere varie le plus vite).
+                for (std::size_t flat = 0; flat < o->items.size(); ++flat) {
+                    std::vector<std::int64_t> idx(t.bounds.size(), 0);
+                    std::size_t rest = flat;
+                    for (std::size_t d = t.bounds.size(); d-- > 0;) {
+                        const auto span = static_cast<std::size_t>(t.bounds[d].second - t.bounds[d].first + 1);
+                        idx[d] = t.bounds[d].first + static_cast<std::int64_t>(span ? rest % span : 0);
+                        rest = span ? rest / span : 0;
+                    }
+                    std::string label = "[";
+                    for (std::size_t d = 0; d < idx.size(); ++d) label += (d ? ", " : "") + std::to_string(idx[d]);
+                    label += "]";
+                    add(o->items[flat], label, path + "/" + label, depth + 1);
+                }
+                break;
+            }
+            default:
+                for (std::size_t k = 0; k < o->items.size(); ++k)
+                    add(o->items[k], "[" + std::to_string(k) + "]", path + "/[" + std::to_string(k) + "]", depth + 1);
+                break;
+        }
+    }
+    void rebuild() {
+        lines.clear();
+        if (root) add(root, rootName, "", 0);
+        else if (!why.empty()) lines.push_back({rootName, {}, "illisible : " + why, "", 0, false});
+    }
+
+    [[nodiscard]] std::size_t rowCount() const override { return lines.size(); }
+    [[nodiscard]] std::size_t columnCount() const override { return 3; }
+    [[nodiscard]] std::string headerText(std::size_t c) const override {
+        return c == 0 ? std::string("\xC3\x89l\xC3\xA9ment") : c == 1 ? std::string("Type") : std::string("Valeur");
+    }
+    [[nodiscard]] std::string cellText(ui::RowIndex r, std::size_t c) const override {
+        if (r >= lines.size()) return {};
+        const auto& l = lines[r];
+        return c == 0 ? l.label : c == 1 ? l.type : l.value;
+    }
+    [[nodiscard]] ui::CellStyle cellStyle(ui::RowIndex r, std::size_t c) const override {
+        ui::CellStyle s;
+        if (r >= lines.size()) return s;
+        const auto& l = lines[r];
+        s.monospace = true;
+        if (c == 0) {
+            s.indent = 16.f * static_cast<float>(l.depth);
+            s.expander = l.children ? (open.count(l.path) ? 1 : 0) : -1;
+        }
+        if (c == 1) s.fgTone = ui::Tone::Muted;
+        return s;
+    }
+    [[nodiscard]] bool less(ui::RowIndex a, ui::RowIndex b, std::size_t) const override { return a < b; }
 };
 
 // ------------------------------------------------------------------- la grille ----
@@ -187,8 +313,15 @@ HmiDeclGrid::HmiDeclGrid(std::string id, hmi::DocumentPtr doc, Apply apply, de::
     // 1.12.2 : la valeur d'une liste, d'un tableau, d'un dictionnaire, d'un tuple - un element par ligne.
     tools->add(GItems, HmiGlyph::List, "\xC3\x89" "diter les \xC3\xA9l\xC3\xA9ments de la valeur (une liste, un vecteur, un tableau, un dictionnaire, "
                "un tuple) : un par ligne", "\xC3\x89l\xC3\xA9ments\xE2\x80\xA6");
+    // 1.12.7 : la valeur calculee au demarrage (un script : une constante, la valeur initiale d'une variable).
+    tools->add(GCalc, HmiGlyph::Code, "Calculer la valeur au d\xC3\xA9marrage : un code ST qui l'\xC3\xA9" "crit une fois, comme un final de Java "
+               "(il lit les constantes du script, Reglages.X des autres scripts, les variables IHM et les natives)",
+               "\xC6\x92x Calcul\xE2\x80\xA6");
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
     const auto one = [this] { return usable() && selectedRows().size() == 1; };
+    tools_->setEnabledWhen(GCalc, [this, one] {
+        return one() && role_ == hmi::decl::Role::Script && tab_ != de::Tab::Parameters && calceditor::available();
+    });
     tools_->setEnabledWhen(GAdd, [this] { return usable(); });
     tools_->setEnabledWhen(GRemove, [this] { return usable() && !selectedRows().empty(); });
     tools_->setEnabledWhen(GDuplicate, [this] { return usable() && !selectedRows().empty(); });
@@ -207,6 +340,11 @@ HmiDeclGrid::HmiDeclGrid(std::string id, hmi::DocumentPtr doc, Apply apply, de::
     table->setSelectionMode(ui::SelectionMode::Extended);
     table_ = &static_cast<ui::TableView&>(addChild(std::move(table)));
     hint_ = &static_cast<ui::StatusBar&>(addChild(std::make_unique<ui::StatusBar>(base + ".hint")));
+    // 1.12.7 : le deballage de la valeur choisie (cache tant qu'aucune valeur a taille n'est choisie).
+    unfoldModel_ = std::make_shared<Unfold>();
+    unfold_ = &static_cast<ui::TableView&>(addChild(std::make_unique<ui::TableView>(base + ".unfold")));
+    unfold_->setModel(unfoldModel_);
+    unfold_->setVisibility(ui::Visibility::Collapsed);
 
     rows_ = std::make_shared<Rows>();
     rows_->tab = tab_;
@@ -234,10 +372,22 @@ HmiDeclGrid::HmiDeclGrid(std::string id, hmi::DocumentPtr doc, Apply apply, de::
             case GItems:
                 if (const auto sel = selectedRows(); sel.size() == 1) editItems(sel.front());
                 break;
+            case GCalc:
+                if (const auto sel = selectedRows(); sel.size() == 1) editCalculation(sel.front());
+                break;
             default: break;
         }
     });
     links_ += search_->changed->connect([this] { applySearch(); });
+    // 1.12.7 : le deballage suit la ligne choisie ; la fleche deplie un element.
+    links_ += table_->selectionChanged->connect([this](const std::vector<ui::RowIndex>&) { refreshUnfold(); });
+    links_ += unfold_->expanderClicked->connect([this](ui::RowIndex r) {
+        if (r >= unfoldModel_->lines.size()) return;
+        const std::string path = unfoldModel_->lines[r].path;
+        if (!unfoldModel_->open.erase(path)) unfoldModel_->open.insert(path);
+        unfoldModel_->rebuild();
+        unfoldModel_->modelReset->emit();
+    });
 
     // EXCEL : le collage (Ctrl+V, Ctrl+Maj+V) - le nom dit quelle ligne.
     paste_.table = table_;
@@ -338,6 +488,7 @@ void HmiDeclGrid::refresh() {
             rows_->rows.push_back(std::move(row));
         }
         rows_->types = de::typeChoices(doc_->project);
+        fillPreviews(code);
     }
     rows_->modelReset->emit();
     table_->setScrollOffset(scroll);
@@ -346,6 +497,7 @@ void HmiDeclGrid::refresh() {
         if (std::find(keep.begin(), keep.end(), rows_->rows[i].d.id) != keep.end()) sel.push_back(static_cast<ui::RowIndex>(i));
     table_->selectModelRows(sel, false);
     applySearch();
+    refreshUnfold();
     // La barre du bas : pourquoi la grille est vide, ou ce que veulent dire ses colonnes.
     std::string hint;
     if (!place_) hint = placeWhy_.empty() ? std::string("Aucun code choisi.") : placeWhy_;
@@ -613,6 +765,137 @@ bool HmiDeclGrid::editItems(std::size_t row) {
     return true;
 }
 
+void HmiDeclGrid::refreshUnfold() {
+    if (!unfold_ || !unfoldModel_) return;
+    const auto sel = selectedRows();
+    sim::ObjRef root;
+    std::string name, why;
+    if (sel.size() == 1 && sel.front() < rows_->rows.size() && doc_) {
+        const auto& row = rows_->rows[sel.front()];
+        name = row.d.name;
+        if (row.d.computed) {
+            root = row.object;
+            if (!root && row.previewError) why = row.preview;
+        } else if (itemseditor::editable(row.d.type) || !hmi::types::membersOf(doc_->project, row.d.type).empty()) {
+            // Une valeur ecrite : lue dans son type (vide : la valeur de son type).
+            root = hmi::Runtime::valueObject(doc_->project, row.d.type, row.d.value, &why);
+        }
+        if (root && !Unfold::sized(root)) root.reset();
+    }
+    const bool show = root != nullptr || !why.empty();
+    if (name != unfoldModel_->rootName) unfoldModel_->open = {""};   // une autre declaration : repliee sous la racine
+    unfoldModel_->root = root;
+    unfoldModel_->rootName = name;
+    unfoldModel_->why = show ? why : std::string{};
+    unfoldModel_->rebuild();
+    unfoldModel_->modelReset->emit();
+    if (show != unfoldShown_) {
+        unfoldShown_ = show;
+        unfold_->setVisibility(show ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+        onLayout();
+    }
+}
+
+// 1.12.7 : le script (et sa vue) qui porte les declarations montrees ; nul : pas un script.
+const hmi::Script* HmiDeclGrid::ownerScript(const de::Code& code, const hmi::View** view) const {
+    if (!doc_ || !code.valid()) return nullptr;
+    for (const auto& sc : doc_->project.programs.scripts)
+        if (&sc.decls == code.decls) return &sc;
+    for (const auto& v : doc_->project.views)
+        for (const auto& sc : v.scripts)
+            if (&sc.decls == code.decls) {
+                if (view) *view = &v;
+                return &sc;
+            }
+    return nullptr;
+}
+
+void HmiDeclGrid::fillPreviews(const de::Code& code) {
+    if (std::none_of(rows_->rows.begin(), rows_->rows.end(), [](const Rows::Row& r) { return r.d.computed; })) return;
+    const hmi::Script* sc = ownerScript(code);
+    if (!sc) return;
+    // L'apercu se recalcule quand une declaration calculee, une constante ou une valeur de depart change.
+    std::string key;
+    const auto addScript = [&](const hmi::Script& s) {
+        for (const auto& d : s.decls) {
+            key += std::to_string(s.id) + "|" + d.name + "|" + d.type + "|" + d.value + "|" + (d.computed ? d.calc : std::string{}) + "|"
+                 + de::localsText(d.locals) + "\n";
+        }
+    };
+    for (const auto& s : doc_->project.programs.scripts) addScript(s);
+    for (const auto& v : doc_->project.views)
+        for (const auto& s : v.scripts) addScript(s);
+    for (const auto& v : doc_->project.programs.variables) key += v.name + "=" + v.initial + "\n";
+    if (key != previewKey_) {
+        previewKey_ = key;
+        previewError_.clear();
+        preview_ = hmi::Runtime::computedObjects(doc_->project, &previewError_);
+    }
+    for (auto& row : rows_->rows) {
+        if (!row.d.computed) continue;
+        std::string u = row.d.name;
+        for (auto& ch : u) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+        if (const auto it = preview_.find(std::to_string(sc->id) + ":" + u); it != preview_.end() && it->second) {
+            row.object = it->second;
+            row.preview = sim::display(*it->second);
+            row.previewError = false;
+        } else if (!previewError_.empty()) {
+            row.preview = previewError_;
+            row.previewError = true;
+        }
+    }
+}
+
+bool HmiDeclGrid::editCalculation(std::size_t row) {
+    if (row >= rows_->rows.size() || !usable() || !calceditor::available()) return false;
+    if (role_ != hmi::decl::Role::Script || tab_ == de::Tab::Parameters) {
+        say("Seule une constante ou une variable d'un script se calcule au d\xC3\xA9marrage.", true);
+        return false;
+    }
+    const auto code = place_ && doc_ ? de::locate(doc_->project, *place_) : de::Code{};
+    const hmi::View* view = nullptr;
+    const hmi::Script* sc = ownerScript(code, &view);
+    const auto& r = rows_->rows[row];
+    const auto& d = r.d;
+    calceditor::Spec spec;
+    spec.title = "Valeur calcul\xC3\xA9" "e de " + d.name;
+    spec.name = d.name;
+    spec.type = d.type;
+    spec.constant = d.kind == hmi::DeclKind::Constant;
+    spec.calc = d.computed || !d.calc.empty() ? d.calc : calceditor::starter(d.name, d.type);
+    spec.locals = de::localsText(d.locals);
+    // Ce que le calcul donne et ses fautes (le code enregistre ; Appliquer refait le tout).
+    if (d.computed && !r.preview.empty()) spec.info += (r.previewError ? "Erreur : " : "Valeur au d\xC3\xA9marrage : ") + r.preview + "\n";
+    const hmi::Declaration* inModel = nullptr;
+    if (sc)
+        for (const auto& x : sc->decls)
+            if (x.id == d.id) inModel = &x;
+    if (sc && inModel && d.computed)
+        for (const auto& is : hmi::calc::analyse(doc_->project, *sc, *inModel, view).issues)
+            spec.info += std::string(is.error ? "Faute" : "Attention") + (is.line > 0 ? " ligne " + std::to_string(is.line) : std::string{}) + " : "
+                       + is.message + "\n";
+    const hmi::Id id = d.id;
+    const std::weak_ptr<Rows> alive = rows_;
+    calceditor::ask(std::move(spec), [this, alive, id](const std::string& calc, const std::string& locals) {
+        if (alive.expired()) return;
+        for (std::size_t i = 0; i < rows_->rows.size(); ++i)
+            if (rows_->rows[i].d.id == id) {
+                const std::string name = rows_->rows[i].d.name;
+                const auto t = tab_;
+                const auto at = place_;
+                if (!at) return;
+                if (change((calc.find_first_not_of(" \t\r\n") == std::string::npos ? "Valeur \xC3\xA9" "crite de " : "Calcul de ") + name,
+                           [=](hmi::Project& p, std::string* why) { return de::setCalculation(p, *at, t, i, calc, locals, why); }))
+                    say(calc.find_first_not_of(" \t\r\n") == std::string::npos
+                            ? name + " : la valeur redevient \xC3\xA9" "crite."
+                            : name + " : calcul\xC3\xA9" "e au d\xC3\xA9marrage (Compiler dit ses fautes ; la case Valeur, ce qu'elle vaut).",
+                        false);
+                return;
+            }
+    });
+    return true;
+}
+
 void HmiDeclGrid::pickType(std::size_t row) {
     if (row >= rows_->rows.size() || !usable()) return;
     if (!typepicker::available()) {
@@ -733,7 +1016,10 @@ void HmiDeclGrid::onLayout() {
     const float searchW = std::min(kSearch, std::max(0.f, b.w * 0.4f));
     tools_->setBounds({b.x, b.y, std::max(0.f, b.w - searchW - 4.f), kTools});
     search_->setBounds({b.right() - searchW, b.y + 4.f, searchW, kTools - 8.f});
-    table_->setBounds({b.x, b.y + kTools, b.w, std::max(0.f, b.h - kTools - kHint)});
+    // 1.12.7 : le deballage sous la table (un tiers de la hauteur, 110 a 220 px), quand il montre une valeur.
+    const float unfoldH = unfoldShown_ ? std::clamp((b.h - kTools - kHint) * 0.38f, 110.f, 220.f) : 0.f;
+    table_->setBounds({b.x, b.y + kTools, b.w, std::max(0.f, b.h - kTools - kHint - unfoldH)});
+    if (unfold_) unfold_->setBounds({b.x, b.bottom() - kHint - unfoldH, b.w, unfoldH});
     hint_->setBounds({b.x, b.bottom() - kHint, b.w, kHint});
 }
 

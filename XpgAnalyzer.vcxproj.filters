@@ -520,6 +520,9 @@
     <ClCompile Include="src\app\hmi\HmiImportDialog.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiItemsDialog.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\hmi\HmiLoginPainter.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
@@ -1240,6 +1243,9 @@
     <ClCompile Include="src\hmi\HmiCallCheck.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\hmi\HmiCalc.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\hmi\HmiDecl.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
@@ -1808,6 +1814,9 @@
       <Filter>app\hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\app\hmi\HmiImportDialog.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiItemsDialog.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\app\hmi\HmiLoginPainter.hpp">
@@ -2429,6 +2438,9 @@
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiCallCheck.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiCalc.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiDecl.hpp">

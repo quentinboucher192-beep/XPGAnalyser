@@ -144,4 +144,16 @@ bool set(Project&, const Place&, Tab, std::size_t row, Column, std::string_view 
 //     de base : son element (une valeur seule remplit toutes les cases).
 [[nodiscard]] std::string valueMisfit(const Project&, std::string_view type, std::string_view value);
 
+// ---- 1.12.7 : LA VALEUR CALCULEE AU DEMARRAGE (HmiCalc.hpp) ------------------------------------
+//  Une constante, ou la valeur initiale d'une variable, d'un script : son code (`calc` ; vide : la
+//  valeur redevient ecrite - une constante sans valeur prend la valeur nulle de son type) et ses
+//  locales, en texte - une par ligne, comme une ligne de declaration, sans VAR ni END_VAR :
+//      Noms : ARRAY[0..2] OF STRING := ['bas', 'moyen', 'haut'];   // les cles
+//  Faux et `why` : refuse (pas un script, un parametre, une locale illisible, en double, d'un type
+//  inconnu, du nom de la declaration) - le projet n'a pas bouge.
+bool setCalculation(Project&, const Place&, Tab, std::size_t row, std::string_view calc, std::string_view locals, std::string* why);
+// Les locales en texte (une ligne chacune) et l'inverse (faux et `why` : illisible).
+[[nodiscard]] std::string localsText(const std::vector<Declaration>& locals);
+bool parseLocals(const Project&, std::string_view text, std::vector<Declaration>& out, std::string* why);
+
 } // namespace hmi::decledit

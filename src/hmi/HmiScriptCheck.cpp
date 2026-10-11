@@ -6,6 +6,7 @@
 //  qui est appele. Les types et les divisions passent par exprcheck.
 // =============================================================================
 #include "HmiScriptCheck.hpp"
+#include "HmiCalc.hpp"   // 1.12.7 : les constantes qualifiees (Reglages.Seuils)
 #include "../core/Edition.hpp"   // 1.12.0 : XPGAnalyser IHM - pas d'espace API.
 #include "HmiNatives.hpp"   // 1.12.0 : les couleurs, l'aleatoire
 #include "HmiSymbols.hpp"   // 1.11.10 : les fonctions des symboles
@@ -757,6 +758,27 @@ private:
                                                     + ") : un script ne peut pas l'\xC3\xA9" "crire");
             }
             return r.type;
+        }
+        // 1.12.7 : Reglages.Seuils - la constante publique d'un script general (lue seulement).
+        if (p && p->generalScript(root.text)) {
+            if (segs.empty() || segs.front().index) {
+                reportTok(i, i + 1, S::Error, root.text + " est un script g\xC3\xA9n\xC3\xA9ral : \xC3\xA9" "cris " + root.text
+                                                + ".Constante (une de ses constantes publiques)");
+                return {};
+            }
+            std::string why;
+            const Script* gs = nullptr;
+            const Declaration* q = calc::qualified(*p, root.text + "." + segs.front().member, &gs, &why);
+            const std::size_t cut = segs.front().tok + 1;
+            if (!q) {
+                reportTok(i, cut, S::Error, why);
+                return {};
+            }
+            if (write) {
+                reportTok(i, cut, S::Error, gs->name + "." + q->name + " est une constante : elle ne s'\xC3\xA9" "crit pas");
+                return {};
+            }
+            return segs.size() == 1 ? q->type : std::string{};
         }
         // Une fonction IHM_ nommee sans parentheses : un appel mal ecrit, dit ailleurs.
         if (isHmiFunction(root.text)) return {};

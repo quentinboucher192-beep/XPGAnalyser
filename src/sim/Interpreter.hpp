@@ -139,6 +139,13 @@ public:
         (void)name;
         return nullptr;
     }
+    // 1.12.7 : UN NOM DE L'ENVIRONNEMENT QUI NE S'ECRIT PAS - la constante publique d'un autre
+    // script (Reglages.Seuils, Reglages.Seuils['bas']) : le dialecte la lit en place, une
+    // ecriture (une case, un membre, LIST_ADD...) est refusee comme pour une constante locale.
+    virtual bool constantVariable(std::string_view name) {
+        (void)name;
+        return false;
+    }
     // 1.12.4 : UN NOM DONT UN MEMBRE (OU UNE CASE) EST UN OBJET de l'environnement - une structure
     // IHM qui contient une liste (Recette.Etapes), un tableau de telles structures : le dialecte
     // passe par ses emplacements (Recette.Etapes[0], LIST_ADD(Recette.Etapes, x)).
@@ -320,6 +327,11 @@ struct RunLimits {
     // niveau), gardees par l'appelant d'une execution a l'autre ; nul : celles
     // de cette execution seulement.
     Locals*        locals{nullptr};
+    // 1.12.7 : LES VALEURS CALCULEES AU DEMARRAGE (les constantes et les valeurs initiales
+    // calculees d'un script) : une declaration du premier niveau qui a la sienne ici part d'une
+    // copie de cette valeur, et non de sa valeur ecrite (une VAR gardee : a sa premiere
+    // execution ; une VAR_TEMP : a chaque execution). Nul : aucune.
+    const Locals*  initials{nullptr};
     // 1.10 : la profondeur d'appel des fonctions du dialecte, au plus.
     std::uint32_t  maxCallDepth{64};
 };

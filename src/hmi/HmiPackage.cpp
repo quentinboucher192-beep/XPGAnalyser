@@ -41,7 +41,8 @@ std::string declarationsText(const std::vector<Declaration>& decls) {
     std::string s;
     for (const auto& d : decls)
         s += "  D " + std::string(declKindKey(d.kind)) + " " + d.name + " : " + d.type + " := " + d.value + " " + std::string(storageKey(d.storage))
-           + " " + std::string(passModeKey(d.mode)) + " " + std::string(visibilityKey(d.visibility)) + " " + d.description + "\n";
+           + " " + std::string(passModeKey(d.mode)) + " " + std::string(visibilityKey(d.visibility)) + " " + d.description + "\n"
+           + (d.computed ? "    calcul " + d.calc + "\n" + declarationsText(d.locals) : std::string{});   // 1.12.7
     return s;
 }
 

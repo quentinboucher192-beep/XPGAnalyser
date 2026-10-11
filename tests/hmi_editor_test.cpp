@@ -26,6 +26,8 @@
 #include "../src/ui/widgets/ColorPalette.hpp"      // 1.10 : la palette (plus incluse par DataViews.hpp)
 #include "../src/app/Brand.hpp"
 #include "../src/core/CallTrail.hpp"           // 1.10.4 (K1) : le diagnostic qui echoue, dans le journal interne
+#include "../src/app/hmi/HmiItemsDialog.hpp"   // 1.12.7 : le tableau des elements
+#include "../src/app/hmi/HmiDeclGrid.hpp"
 #include "../src/app/hmi/HmiActionsPanel.hpp"
 #include "../src/app/hmi/HmiMemoryMap.hpp"          // lot 17
 #include "../src/app/hmi/HmiNetDiagram.hpp"         // lot 17 (correctif)
@@ -28920,6 +28922,92 @@ void lotA1125_contenuTableauVariables() {
     same_text(b.v().object(tab)->text("formats"), "0;0.00", "D11 : ... et son format");
 }
 
+// ---- 1.12.7 : les valeurs calculees dans la grille, le deballage, le tableau des elements ----
+void calculees_grille() {
+    std::printf("1.12.7 : la grille (\xC6\x92x), le d\xC3\xA9" "ballage, le tableau des \xC3\xA9l\xC3\xA9ments\n");
+    namespace de = hmi::decledit;
+    auto doc = std::make_shared<Document>();
+    core::CommandStack stack;
+    auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+    Script r;
+    r.id = doc->project.allocate();
+    r.name = "Reglages";
+    r.event = "Appel";
+    r.lang = ScriptLang::ST;
+    r.body = "x := Base;\n";
+    Declaration base;
+    base.kind = DeclKind::Constant;
+    base.name = "Base";
+    base.type = "REAL";
+    base.value = "10.0";
+    Declaration seuils = base;
+    seuils.name = "Seuils";
+    seuils.type = "MAP[STRING] OF REAL";
+    seuils.value.clear();
+    seuils.computed = true;
+    seuils.calc = "Seuils['bas'] := Base;\nSeuils['haut'] := Base * 3.0;\n";
+    Declaration noms = base;
+    noms.name = "Noms";
+    noms.type = "ARRAY[1..3] OF STRING";
+    noms.value = "['a', 'b']";
+    r.decls = {base, seuils, noms};
+    doc->project.programs.scripts.push_back(r);
+    uniqueDeclarationIds(doc->project);
+    app::HmiDeclGrid grid("calc", doc, apply, de::Tab::Constants);
+    grid.setBounds({0, 0, 1000, 600});
+    de::Place at;
+    at.kind = de::Place::Kind::Script;
+    at.id = r.id;
+    grid.setPlace(at);
+    grid.layout();
+    const int vc = grid.tableColumnOf(de::Column::Value);
+    const auto& m = grid.table().model();
+    check(vc >= 0 && m && m->cellText(1, static_cast<std::size_t>(vc)) == "\xC6\x92x = {'bas': 10, 'haut': 30}",
+          "la case Valeur d'une constante calcul\xC3\xA9" "e : \xC6\x92x et sa valeur - " + (m && vc >= 0 ? m->cellText(1, static_cast<std::size_t>(vc)) : std::string("?")));
+    check(m && !m->editable(1, static_cast<std::size_t>(vc)) && m->editable(0, static_cast<std::size_t>(vc)),
+          "la case d'une valeur calcul\xC3\xA9" "e ne s'\xC3\xA9" "crit pas (\xC6\x92x Calcul\xE2\x80\xA6) ; celle d'une valeur \xC3\xA9" "crite, oui");
+    check(grid.tools().actionByTip("Calculer la valeur au d\xC3\xA9marrage") >= 0, "l'outil \xC6\x92x Calcul\xE2\x80\xA6");
+    // Le deballage : Seuils (calculee), puis Noms (ecrite, ses vrais indices), rien pour Base.
+    grid.selectRows({1});
+    auto* u = grid.unfoldTable();
+    check(u && u->model() && u->model()->rowCount() == 3 && u->model()->cellText(1, 0) == "'bas'" && u->model()->cellText(2, 2) == "30",
+          "Seuils d\xC3\xA9" "ball\xC3\xA9" "e : la racine, 'bas', 'haut' = 30");
+    grid.selectRows({2});
+    u = grid.unfoldTable();
+    check(u && u->model() && u->model()->rowCount() == 4 && u->model()->cellText(1, 0) == "[1]" && u->model()->cellText(3, 0) == "[3]"
+              && u->model()->cellText(1, 2) == "a",
+          "Noms d\xC3\xA9" "ball\xC3\xA9" ": [1] = a ... [3] (ses bornes)");
+    grid.selectRows({0});
+    check(grid.unfoldTable() == nullptr, "une valeur simple : pas de d\xC3\xA9" "ballage");
+    // Le tableau des elements : lu d'une valeur, rendu en litteral.
+    {
+        auto l = app::HmiItemsDialog::modelOf("LIST OF REAL", "[1.5, 2, 3]");
+        check(l->mode == app::HmiItemsDialog::Model::Mode::List && l->rowCount() == 3 && l->cellText(1, 1) == "2", "une liste : trois lignes");
+        l->values.push_back("");
+        l->values[0] = "4.5";
+        check(app::HmiItemsDialog::literalOf(*l) == "[4.5, 2, 3]", "une ligne vide ne compte pas : " + app::HmiItemsDialog::literalOf(*l));
+        auto mp = app::HmiItemsDialog::modelOf("MAP[STRING] OF INT", "['vis' := 120, 'pas' := 5]");
+        check(mp->mode == app::HmiItemsDialog::Model::Mode::Map && mp->rowCount() == 2 && mp->cellText(0, 0) == "vis" && mp->cellText(0, 1) == "120",
+              "une MAP : cl\xC3\xA9 sans apostrophes, valeur");
+        (void)mp->setCellText(1, 0, "'avance'");
+        check(app::HmiItemsDialog::literalOf(*mp) == "['vis' := 120, 'avance' := 5]", "la cl\xC3\xA9 r\xC3\xA9" "\xC3\xA9" "crite : " + app::HmiItemsDialog::literalOf(*mp));
+        auto a = app::HmiItemsDialog::modelOf("ARRAY[1..4] OF REAL", "[1.0, 2.0]");
+        check(a->mode == app::HmiItemsDialog::Model::Mode::Array && a->rowCount() == 4 && a->cellText(3, 0) == "[4]" && !a->resizable(),
+              "un tableau : ses quatre cases, sa taille fixe");
+        a->values[3] = "7.5";
+        check(app::HmiItemsDialog::literalOf(*a) == "[1.0, 2.0, 0.0, 7.5]", "une case vide avant une \xC3\xA9" "crite : 0.0 - " + app::HmiItemsDialog::literalOf(*a));
+        auto mx = app::HmiItemsDialog::modelOf("ARRAY[0..1, 1..3] OF INT", "[1, 2, 3, 4, 5, 6]");
+        check(mx->mode == app::HmiItemsDialog::Model::Mode::Matrix && mx->rowCount() == 2 && mx->columnCount() == 4 && mx->cellText(1, 3) == "6"
+                  && mx->headerText(1) == "[.., 1]",
+              "deux dimensions : une ligne par premi\xC3\xA8re dimension");
+        auto t = app::HmiItemsDialog::modelOf("TUPLE(INT, STRING)", "(3, 'x')");
+        check(t->mode == app::HmiItemsDialog::Model::Mode::Tuple && t->cellText(1, 0) == "Item2 : STRING" && app::HmiItemsDialog::literalOf(*t) == "(3, 'x')",
+              "un tuple : Item1 : INT, Item2 : STRING");
+        t->values[1].clear();
+        check(app::HmiItemsDialog::literalOf(*t) == "(3, '')", "un \xC3\xA9l\xC3\xA9ment de tuple vide : la valeur nulle de son type");
+    }
+}
+
 int main(int argc, char** argv) {
     // 1.11.1 (API-V) : HMI_TEST_APIV=1 - la vue des variables de l'automate et API dans l'aide a la saisie, seules.
     if (const char* only = std::getenv("HMI_TEST_APIV"); only && *only == '1') {
@@ -29133,6 +29221,7 @@ int main(int argc, char** argv) {
     volet_historiques();
     volet_echange();
     simulation_supervision();
+    calculees_grille();       // 1.12.7
     lot6_modeles_editeur();
     lot6_contenu();
     lotA1125_contenuTableauVariables();   // 1.12.5 (lot A, D11)

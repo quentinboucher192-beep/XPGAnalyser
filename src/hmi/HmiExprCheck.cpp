@@ -5,6 +5,7 @@
 //  les types, et ne s'arrete jamais sur ce qu'elle ne comprend pas.
 // =============================================================================
 #include "HmiExprCheck.hpp"
+#include "HmiCalc.hpp"   // 1.12.7 : les constantes qualifiees (Reglages.Seuils)
 #include "../core/Edition.hpp"   // 1.12.0 : XPGAnalyser IHM - pas d'espace API.
 #include "HmiNatives.hpp"   // 1.12.0 : les couleurs, l'aleatoire
 #include "HmiCallCheck.hpp"     // 1.11.20 : les appels, controles comme le moteur les fait
@@ -642,6 +643,19 @@ private:
             if (!ctx_.plc.api) return v;
             Problem pb;
             pb.message = "API : chemin incomplet \xE2\x80\x94 \xC3\xA9" "cris API.<globale> ou API.<Unit\xC3\xA9>.<variable>";
+            for (const auto& q : problems) if (q.message == pb.message) return v;
+            problems.push_back(std::move(pb));
+            return v;
+        }
+        // 1.12.7 : Reglages.Seuil - la constante publique d'un script general (une variable IHM passe avant).
+        if (p && p->generalScript(root) && !segs.empty() && !segs.front().index) {
+            std::string why;
+            if (const Declaration* q = calc::qualified(*p, root + "." + segs.front().member, nullptr, &why)) {
+                if (segs.size() == 1) v.type = typeOfName(q->type);
+                return v;
+            }
+            Problem pb;
+            pb.message = why;
             for (const auto& q : problems) if (q.message == pb.message) return v;
             problems.push_back(std::move(pb));
             return v;

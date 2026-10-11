@@ -1509,6 +1509,18 @@ bool publicMembers(const hmi::Project& hp, const std::string& path, const std::s
             return true;
         }
     }
+    // 1.12.7 : "Reglages." - les constantes publiques d'un script general (une variable IHM du meme nom passe avant).
+    if (path.find('.') == std::string::npos && !hp.variable(path))
+        if (const hmi::Script* gs = hp.generalScript(path)) {
+            for (const auto& d : gs->decls)
+                if (d.kind == hmi::DeclKind::Constant && d.visibility == hmi::Visibility::Public)
+                    add(d.name, d.type + "  \xC2\xB7  constante de " + gs->name
+                                    + (d.computed ? std::string("  \xC2\xB7  \xC6\x92x calcul\xC3\xA9" "e au d\xC3\xA9marrage")
+                                                  : d.value.empty() ? std::string{} : "  \xC2\xB7  " + d.value)
+                                    + (d.description.empty() ? std::string{} : "  \xC2\xB7  " + d.description),
+                        Kind::Member);
+            return true;
+        }
     const auto dot = path.find('.');
     const hmi::View* v = hmi::pub::viewNamed(hp, std::string_view(path).substr(0, dot));
     if (!v) return false;

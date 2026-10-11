@@ -13,6 +13,7 @@
 #include "HmiNavigation.hpp"
 #include "HmiScript.hpp"
 #include "HmiDecl.hpp"         // 1.11.18 (refonte, lot 3) : les declarations du modele, reconstruites
+#include "HmiCalc.hpp"         // 1.12.7 : les valeurs calculees au demarrage, les constantes qualifiees
 
 #include "HmiEdit.hpp"
 #include "HmiExpr.hpp"
@@ -81,6 +82,25 @@ Issue::Severity severityOf(ScriptDiagnostic::Severity s) {
         case ScriptDiagnostic::Severity::Error:   return Issue::Severity::Error;
     }
     return Issue::Severity::Error;
+}
+
+// 1.12.7 : le code des valeurs calculees au demarrage d'un script, lu comme un script (sa syntaxe,
+// ses declarations : la sienne, ses locales, les constantes du script) ; le message dit lequel et sa ligne.
+std::vector<ScriptDiagnostic> checkCalculations(const Script& sc, const TypeKnown& knownType) {
+    std::vector<ScriptDiagnostic> out;
+    if (sc.lang != ScriptLang::ST) return out;
+    for (const auto& d : sc.decls) {
+        if (!d.computed || d.calc.find_first_not_of(" \t\r\n") == std::string::npos) continue;
+        Script cs = sc;
+        cs.body = d.calc;
+        cs.decls = calc::declarationsFor(sc, d);
+        for (auto x : checkScript(cs, knownType)) {
+            x.message = "calcul de " + d.name + (x.line > 0 ? ", ligne " + std::to_string(x.line) : std::string{}) + " : " + x.message;
+            x.line = 0;
+            out.push_back(std::move(x));
+        }
+    }
+    return out;
 }
 
 // "action 2 (Clic)" : ou est l'action, dans le rapport.
@@ -184,7 +204,10 @@ bool known(const Project& p, const NameExists& plc, std::string_view name, const
     // 1.11.1 (API-M) : API est l'espace des variables de l'automate (API.<globale>,
     // API.<Unite>.<variable>) ; le chemin entier est verifie par le modele (HmiApiVars).
     // 1.12.0 : XPGAnalyser IHM n'a pas d'automate - API n'y est qu'un nom comme un autre.
+    // 1.12.7 : un script general ouvre ses constantes publiques (Reglages.Seuils) ; le chemin entier
+    // est verifie a part (qualifiedUses : publique, existante, lue seulement).
     return p.variable(name) || isHmiFunction(name) || pub::isSysRoot(name) || pub::viewNamed(p, name) || enumValue() || !plc
+        || p.generalScript(name) != nullptr
         || plc(name) || (core::hasApi() && upperText(name) == "API");
 }
 
@@ -363,6 +386,22 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
         if (const auto cycle = types::cycleOf(p, ty.name); !cycle.empty())
             add(out, S::Error, cat, kNoId, kNoId, ty.name, ty.name + " se contient lui-m\xC3\xAAme : " + cycle);
     }
+    // 1.12.7 : Reglages.Seuils - la constante d'un script general, lue d'ailleurs : publique, existante,
+    // jamais ecrite. `report` recoit le message et sa ligne.
+    const auto qualifiedUses = [&](const std::string& code, Id from, const std::function<void(const std::string&, int)>& report) {
+        const auto locals = decl::extract(code);
+        for (const auto& pu : scriptPaths(code)) {
+            const auto dot = pu.path.find('.');
+            if (dot == std::string::npos) continue;
+            const std::string root = pu.path.substr(0, dot);
+            if (p.variable(root) || !p.generalScript(root) || locals.find(root)) continue;
+            std::string why;
+            const Script* gs = nullptr;
+            const Declaration* q = calc::qualified(p, pu.path, &gs, &why, from);
+            if (!q) report(why, pu.line);
+            else if (pu.assigned) report(gs->name + "." + q->name + " est une constante : elle ne s'\xC3\xA9" "crit pas", pu.line);
+        }
+    };
     // Les scripts : les noms qu'ils lisent et ecrivent doivent exister.
     const auto names = [&](const Script& sc, Id view) {
         if (sc.lang != ScriptLang::ST) return;
@@ -375,6 +414,29 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
         // Lot 16 : les structures et tableaux IHM - membres, indices constants, proprietes.
         for (const auto& pp : types::pathProblems(p, code))
             add(out, S::Error, "Script", view, kNoId, sc.name, pp.message, sc.id, pp.line);
+        qualifiedUses(code, sc.id, [&](const std::string& message, int line) {
+            add(out, S::Error, "Script", view, kNoId, sc.name, message, sc.id, line);
+        });
+        // 1.12.7 : les valeurs calculees au demarrage - leur code se verifie comme celui du script (ses
+        // noms, ses chemins), avec les fautes qui lui sont propres (HmiCalc). La ligne : celle du calcul.
+        for (const auto& d : sc.decls) {
+            if (!d.computed) continue;
+            Script cs = sc;
+            cs.body = d.calc;
+            cs.decls = calc::declarationsFor(sc, d);
+            const std::string ccode = decl::codeOf(cs);
+            const auto where = [&](int line) {
+                return "calcul de " + d.name + (line > 0 ? ", ligne " + std::to_string(line) : std::string{}) + " : ";
+            };
+            const auto cdialect = scriptcheck::dialectDeclared(ccode);
+            for (const auto& u : scriptNames(ccode))
+                if (!known(p, plc, u.name, owner) && !cdialect.count(upperText(u.name)))
+                    add(out, S::Error, "Script", view, kNoId, sc.name, where(u.line) + "variable inexistante : " + u.name, sc.id);
+            for (const auto& pp : types::pathProblems(p, ccode))
+                add(out, S::Error, "Script", view, kNoId, sc.name, where(pp.line) + pp.message, sc.id);
+            for (const auto& is : calc::analyse(p, sc, d, owner).issues)
+                add(out, is.error ? S::Error : S::Warning, "Script", view, kNoId, sc.name, where(is.line) + is.message, sc.id);
+        }
         for (const auto& called : scriptCalls(sc.body))
             if (!p.generalScript(called))
                 add(out, S::Error, "Script", view, kNoId, sc.name, "IHM_APPELER : script '" + called + "' introuvable", sc.id);
@@ -410,6 +472,11 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
             if (!o.actions.empty()) checkActions(p, plc, v, &o, o.actions, out);
     }
 
+    // 1.12.7 : les calculs au demarrage qui s'attendent l'un l'autre.
+    if (calc::hasComputed(p))
+        if (const auto pl = calc::plan(p); !pl.cycle.empty())
+            add(out, S::Error, "Script", kNoId, kNoId, "calcul", "calculs en boucle : " + pl.cycle + " (chacun attend l'autre)");
+
     // ---- lot 7 : les fonctions IHM (nom, retour, variables, appels en boucle)
     const auto fnClashes = overload::clashes(p.programs.functions);   // 1.11.20 : les surcharges mal distinguees
     std::map<std::string, std::vector<std::string>> fnCalls;
@@ -442,6 +509,7 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
         for (const auto& u : scriptNames(code))
             if (upperOf(u.name) != key && !known(p, plc, u.name) && !dialect.count(upperOf(u.name)))
                 issue(S::Error, "variable inexistante : " + u.name, u.line);
+        qualifiedUses(code, kNoId, [&](const std::string& message, int line) { issue(S::Error, message, line); });   // 1.12.7
         auto& to = fnCalls[f.name];
         for (const auto& c : scriptCallees(code))
             if (const auto* g = p.functionByName(c.name)) to.push_back(g->name);
@@ -3975,6 +4043,8 @@ std::vector<Issue> compileFocused(const Project& p, const CompileFocus* f) {
             ++scripts;
             for (const auto& d : checkScript(sc, knownType))      // 1.11.18 (lot 3) : avec ses declarations du modele
                 add(out, severityOf(d.severity), "Script", v.id, kNoId, sc.name, d.message, sc.id, d.line);
+            for (const auto& d : checkCalculations(sc, knownType))     // 1.12.7
+                add(out, severityOf(d.severity), "Script", v.id, kNoId, sc.name, d.message, sc.id);
         }
         // Lot 8 : le titre a trous d'une popup, la valeur par defaut des
         // parametres, les bornes d'un champ de saisie.
@@ -4044,6 +4114,8 @@ std::vector<Issue> compileFocused(const Project& p, const CompileFocus* f) {
         ++scripts;
         for (const auto& d : checkScript(sc, knownType))      // 1.11.18 (lot 3) : avec ses declarations du modele
             add(out, severityOf(d.severity), "Script", kNoId, kNoId, sc.name, d.message, sc.id, d.line);
+        for (const auto& d : checkCalculations(sc, knownType))     // 1.12.7
+            add(out, severityOf(d.severity), "Script", kNoId, kNoId, sc.name, d.message, sc.id);
         if (sc.event == "Changement" && !sc.watch.empty()) {
             const auto e = Expression::compile(sc.watch);
             if (!e.valid()) add(out, S::Error, "Script", kNoId, kNoId, sc.name, "expression surveill\xC3\xA9" "e " + sc.watch + " : " + e.error(), sc.id);

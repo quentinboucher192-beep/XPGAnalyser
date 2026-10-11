@@ -723,7 +723,9 @@ Composed composeCode(std::string_view body, const std::vector<Declaration>& decl
         span.id = d->id;
         span.begin = c.text.size();
         c.text += onOneLine(d->name) + " : " + onOneLine(d->type);
-        if (!d->value.empty()) c.text += " := " + onOneLine(d->value);
+        // 1.12.7 : une valeur calculee au demarrage n'est pas ecrite (le moteur la donne :
+        // sim::RunLimits::initials) ; la valeur ecrite d'avant reste en reserve, sans effet.
+        if (!d->value.empty() && !d->computed) c.text += " := " + onOneLine(d->value);
         c.text += "; ";
         span.end = c.text.size();
         c.spans.push_back(span);
@@ -818,7 +820,11 @@ std::vector<std::vector<std::string>> declarationFaults(const std::vector<Declar
         if (d.type.find_first_not_of(" \t") == std::string::npos) why.push_back("type manquant");
         else if (!localTypeSupported(d.type) && !richLocalType(d.type, knownType))
             why.push_back("type non pris en charge : " + d.type + " (BOOL, INT, DINT, REAL, TIME, STRING, un tableau, un type IHM...)");
-        if (d.kind == DeclKind::Constant && d.value.find_first_not_of(" \t") == std::string::npos) why.push_back("une constante sans valeur");
+        if (d.kind == DeclKind::Constant && !d.computed && d.value.find_first_not_of(" \t") == std::string::npos)
+            why.push_back("une constante sans valeur");
+        // 1.12.7 : une valeur calculee au demarrage : celle d'un script (une fonction repart a chaque appel).
+        if (d.computed && role != Role::Script) why.push_back("une valeur calcul\xC3\xA9" "e au d\xC3\xA9marrage n'est permise qu'\xC3\xA0 un script");
+        if (d.computed && d.kind == DeclKind::Parameter) why.push_back("un param\xC3\xA8tre ne se calcule pas au d\xC3\xA9marrage");
         if (d.kind == DeclKind::Parameter && role == Role::Script) why.push_back("un param\xC3\xA8tre dans un script (seule une fonction en a)");
         if (d.kind == DeclKind::Parameter && role == Role::Operator)
             why.push_back("un param\xC3\xA8tre dans un op\xC3\xA9rateur (ses op\xC3\xA9randes sont A et B)");

@@ -286,7 +286,8 @@ std::string declarationsCanon(const std::vector<Declaration>& decls) {
     std::string s;
     for (const auto& d : decls)
         s += "\ndecl " + std::string(declKindKey(d.kind)) + " " + d.name + " : " + d.type + " := " + d.value + " "
-           + std::string(storageKey(d.storage)) + " " + std::string(passModeKey(d.mode)) + " " + std::string(visibilityKey(d.visibility));
+           + std::string(storageKey(d.storage)) + " " + std::string(passModeKey(d.mode)) + " " + std::string(visibilityKey(d.visibility))
+           + (d.computed ? "\ncalcul " + d.calc + declarationsCanon(d.locals) : std::string{});   // 1.12.7 : le calcul relance aussi
     return s;
 }
 std::string scriptText(const Script& s) {

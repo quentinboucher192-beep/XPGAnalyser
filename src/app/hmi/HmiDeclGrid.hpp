@@ -39,12 +39,14 @@
 #include "../../core/Command.hpp"
 #include "../../hmi/HmiCommands.hpp"
 #include "../../hmi/HmiDeclEdit.hpp"
+#include "../../sim/Rich.hpp"   // 1.12.7 : sim::ObjRef (le deballage)
 #include "../../ui/widgets/Containers.hpp"
 #include "../../ui/widgets/Controls.hpp"
 #include "../../ui/widgets/DataViews.hpp"
 
 #include <cstddef>
 #include <functional>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -86,6 +88,9 @@ public:
     // 1.12.2 : « Elements... » - la valeur d'une liste, d'un tableau, d'un dictionnaire, d'un tuple,
     // un element par ligne (l'hote ouvre la fenetre). Faux : pas une telle ligne, pas d'hote.
     bool editItems(std::size_t row);
+    // 1.12.7 : « \xC6\x92x Calcul\xE2\x80\xA6 » - la valeur calculee au demarrage de la ligne `row` (son code, ses
+    // locales ; l'hote ouvre la fenetre, calceditor). Faux : pas un script, pas d'hote.
+    bool editCalculation(std::size_t row);
     // 1.11.19 (lot 6) : "Choisir un type..." dans la case Type - le selecteur de types (par son
     // hote, app::typepicker) ; le type choisi va a la declaration (retrouvee par son identifiant :
     // la grille a pu changer entre-temps). Sans hote : la barre le dit.
@@ -101,6 +106,8 @@ public:
     [[nodiscard]] int usesColumn() const noexcept { return usesColumn_; }
 
     [[nodiscard]] ui::TableView&     table() noexcept { return *table_; }
+    // 1.12.7 : le deballage de la valeur choisie (nul : cache - aucune valeur a taille choisie).
+    [[nodiscard]] ui::TableView*     unfoldTable() const noexcept { return unfoldShown_ ? unfold_ : nullptr; }
     [[nodiscard]] HmiToolStrip&      tools() noexcept { return *tools_; }
     [[nodiscard]] ui::StatusBar&     hintBar() noexcept { return *hint_; }
     [[nodiscard]] const std::string& lastMessage() const noexcept { return message_; }
@@ -126,6 +133,19 @@ private:
     [[nodiscard]] bool feminine() const noexcept { return tab_ != hmi::decledit::Tab::Parameters; }   // ajoutee / ajoute
     [[nodiscard]] std::string ownerLabel() const;               // "Compter", "Vanne.Ouvrir"...
     [[nodiscard]] paste::Target pasteTarget(const ui::TableView::PasteRequest&);
+    // 1.12.7 : le script des declarations montrees (sa vue), et l'apercu des valeurs calculees.
+    [[nodiscard]] const hmi::Script* ownerScript(const hmi::decledit::Code& code, const hmi::View** view = nullptr) const;
+    void fillPreviews(const hmi::decledit::Code& code);
+    std::string                        previewKey_;
+    std::map<std::string, sim::ObjRef> preview_;
+    std::string                        previewError_;
+    // 1.12.7 : LE DEBALLAGE - sous la table, la valeur a taille de la ligne choisie (LIST, VECTOR, MAP,
+    // ARRAY, TUPLE, structure), un element par ligne, en arbre, en lecture.
+    class Unfold;
+    std::shared_ptr<Unfold> unfoldModel_;
+    ui::TableView*          unfold_{nullptr};
+    bool                    unfoldShown_{false};
+    void refreshUnfold();
 
     hmi::DocumentPtr       doc_;
     Apply                  apply_;

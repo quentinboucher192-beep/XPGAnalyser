@@ -212,9 +212,27 @@ std::string serializeDeclarations(const std::vector<Declaration>& decls) {
         if (d.kind == DeclKind::Parameter) s += fieldBare("mode", passModeKey(d.mode));
         s += fieldBare("visibilite", visibilityKey(d.visibility));
         if (!d.description.empty()) s += field("description", d.description);
+        // 1.12.7 : calculee au demarrage - son code, puis ses locales sur les lignes "locale" qui suivent.
+        if (d.computed) s += fieldBare("calculee", "oui") + field("calcul", d.calc);
         s += "\n";
+        if (d.computed)
+            for (const auto& l : d.locals) {
+                s += "locale" + field("nom", l.name) + field("type", l.type);
+                if (!l.value.empty()) s += field("valeur", l.value);
+                if (!l.description.empty()) s += field("description", l.description);
+                s += "\n";
+            }
     }
     return s;
+}
+// 1.12.7 : une ligne "locale" (la locale d'un calcul) ; faux : sans nom.
+bool parseLocal(const Record& r, Declaration& l) {
+    l.kind = DeclKind::Variable;
+    l.name = toStr(r.get("nom"));
+    l.type = toStr(r.get("type"));
+    l.value = toStr(r.get("valeur"));
+    l.description = toStr(r.get("description"));
+    return !l.name.empty();
 }
 // Faux : sans nom, ou d'un genre inconnu (la ligne est ignoree, avec un avertissement).
 bool parseDeclaration(const Record& r, Declaration& d) {
@@ -230,6 +248,8 @@ bool parseDeclaration(const Record& r, Declaration& d) {
     d.storage = storageFromKey(toStr(r.get("stockage"))).value_or(Storage::Execution);
     d.mode = passModeFromKey(toStr(r.get("mode"))).value_or(PassMode::In);
     d.visibility = visibilityFromKey(toStr(r.get("visibilite"))).value_or(Visibility::Public);
+    d.computed = toStr(r.get("calculee")) == "oui";               // 1.12.7
+    d.calc = toStr(r.get("calcul"));
     return !d.name.empty();
 }
 // Le message d'une ligne "declaration" ignoree.
@@ -523,11 +543,15 @@ core::Result<View> parseView(std::string_view text, LoadReport* report) {
         if (!parseRecord(line, r, error))
             return core::fail(core::ErrorCode::XmlMalformed,
                               "ligne " + std::to_string(lineNo) + " : " + error);
-        if (r.word != "declaration") holder = nullptr;
+        if (r.word != "declaration" && r.word != "locale") holder = nullptr;
         if (r.word == "declaration") {                                // 1.11.18 (lot 3)
             Declaration d;
             if (!holder || !parseDeclaration(r, d)) { warn("ligne " + std::to_string(lineNo) + " : " + declarationIgnored(holder)); continue; }
             holder->push_back(std::move(d));
+        } else if (r.word == "locale") {                              // 1.12.7 : la locale d'un calcul
+            Declaration l;
+            if (!holder || holder->empty() || !parseLocal(r, l)) { warn("ligne " + std::to_string(lineNo) + " : locale hors d'un calcul : ignor\xC3\xA9" "e"); continue; }
+            holder->back().locals.push_back(std::move(l));
         } else if (r.word == "vue") {
             sawView = true;
             v.id = static_cast<Id>(toInt(r.get("id"), 0));
@@ -1252,7 +1276,7 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
         std::string error;
         if (!parseRecord(line, r, error))
             return core::fail(core::ErrorCode::XmlMalformed, "ihm.txt ligne " + std::to_string(lineNo) + " : " + error);
-        if (r.word != "declaration") holder = nullptr;
+        if (r.word != "declaration" && r.word != "locale") holder = nullptr;
         if (r.word == "declaration") {                                 // 1.11.18 (lot 3)
             Declaration d;
             if (!holder || !parseDeclaration(r, d)) {
@@ -1260,6 +1284,13 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
                 continue;
             }
             holder->push_back(std::move(d));
+        } else if (r.word == "locale") {                               // 1.12.7 : la locale d'un calcul
+            Declaration l;
+            if (!holder || holder->empty() || !parseLocal(r, l)) {
+                if (report) report->warnings.push_back("ihm.txt ligne " + std::to_string(lineNo) + " : locale hors d'un calcul : ignor\xC3\xA9" "e");
+                continue;
+            }
+            holder->back().locals.push_back(std::move(l));
         } else if (r.word == "ihm") {
             const auto format = toInt(r.get("format"), kFormatVersion);
             if (format > kFormatVersion)

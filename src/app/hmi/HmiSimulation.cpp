@@ -3195,6 +3195,9 @@ void HmiSimulationPane::ensureStarted(double now) {
         if (station_) loadRetained();                                        // 1.11.16 : le poste, ses variables remanentes
         else loadData();                                                     // 1.11.15 : la remanence de simulation
         runtime_.start(now);
+        // 1.12.7 : une valeur calculee au demarrage en erreur arrete le demarrage - la barre le dit (la Console, ou).
+        if (!runtime_.running() && !runtime_.startError().empty())
+            status_->setTransientMessage("D\xC3\xA9marrage arr\xC3\xAAt\xC3\xA9 : " + runtime_.startError(), 12.0, ui::StatusBar::Severity::Error);
         modifiedStop_ = false;
         if (host_.lifecycle) host_.lifecycle(true, runtime_.session());     // 1.11.14 : les Sorties
         if (station_) reportRetained(); else reportRestore();

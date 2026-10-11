@@ -14,6 +14,7 @@
 
 #include "HmiScript.hpp"
 #include "HmiDecl.hpp"        // 1.11.18 (refonte, lot 3) : les declarations du modele, reconstruites
+#include "HmiCalc.hpp"        // 1.12.7 : les valeurs calculees au demarrage
 #include "HmiOperators.hpp"   // 1.10 (integration) : les operateurs du projet (S2) a l'execution (S1)
 #include "HmiRoles.hpp"       // 1.12.6 (lot B) : le lecteur du role, l'ecriture vers le type
 #include "HmiEnums.hpp"       // 1.10 (decision 15) : les enumerations IHM dans les scripts (S1)
@@ -355,6 +356,8 @@ public:
         // Lot 16 : Consignes.Length, Four1.Words ; un indice hors des bornes d'un
         // tableau IHM rend la valeur par defaut (et le journal le dit).
         if (!rt_.aggregates_.empty() && rt_.aggregateRead(r, out)) return true;
+        // 1.12.7 : Reglages.Seuil - la constante publique d'un script general (une variable IHM passe avant).
+        if (!rt_.qualified_.empty() && r.find('.') != std::string::npos && rt_.qualifiedRead(r, out)) return true;
         // Lot 9 : SYS.UserName, Vue.Objet.Propriete, Vue.Open.
         if (r.find('.') != std::string::npos && rt_.publicRead(r, out)) return true;
         if (rt_.plc_ && rt_.plc_->read(plcOf(r), out)) return true;
@@ -442,6 +445,11 @@ public:
                 return false;
             }
         }
+        // 1.12.7 : une constante qualifiee (Reglages.Seuil, Reglages.Table[2]) ne s'ecrit pas.
+        if (!rt_.qualified_.empty() && r.find('.') != std::string::npos && rt_.qualifiedRoot(r)) {
+            diagnostics.push_back({sim::Diagnostic::Severity::Error, r + " est une constante : elle ne s'\xC3\xA9" "crit pas", 0, {}});
+            return false;
+        }
         // Lot 9 : une propriete d'objet (figee a cette valeur), la place d'une
         // popup ; une variable systeme, en lecture seule, est refusee.
         if (r.find('.') != std::string::npos) {
@@ -479,6 +487,11 @@ public:
         }
         if (vars.count(upper(r)) != 0) return true;
         if (rt_.rich_.count(upper(r)) != 0) return true;           // 1.12.2 : une variable objet
+        if (!rt_.qualified_.empty() && r.find('.') != std::string::npos) {   // 1.12.7 : une constante qualifiee
+            sim::Value probe;
+            std::string rest;
+            if (rt_.qualifiedRoot(r, &rest) && (rest.empty() || rt_.qualifiedRead(r, probe))) return true;
+        }
         // Lot 16 : une propriete (Consignes.Length) existe ; une structure ou un
         // tableau entier (Four1) non - l'interpreteur tente alors la copie en bloc.
         if (!rt_.aggregates_.empty()) {
@@ -577,6 +590,12 @@ public:
             if (auto copy = rt_.copyObject(r); copy && copy->type) return copy->type->text();
         std::string t = types::typeOfPath(*rt_.project_, r);
         if (!t.empty()) return t;
+        // 1.12.7 : une constante qualifiee (Reglages.Seuils) : le type de son objet.
+        if (!rt_.qualified_.empty() && r.find('.') != std::string::npos) {
+            std::string rest;
+            if (auto o = rt_.qualifiedRoot(r, &rest); o && rest.empty() && o->type)
+                return o->type->kind == sim::TypeDesc::Kind::Struct ? o->type->name : o->type->text();
+        }
         // 1.10 (S2) : Vue_A.Pompe1, une instance de symbole : le nom de son symbole
         // (l'operande d'un operateur du symbole).
         if (const auto dot = r.find('.'); dot != std::string::npos && r.find('.', dot + 1) == std::string::npos) {
@@ -603,14 +622,33 @@ public:
             if (auto own = aliases->object(n)) return own;                // 1.12.4 : un parametre objet recu en valeur
         const std::string r = resolved(n);
         if (!r.empty() && r[0] == '$') return rt_.copyObject(r);            // 1.12.4 : la copie d'un parametre objet
+        // 1.12.7 : la constante qualifiee d'un type objet (Reglages.Seuils) : en place, en lecture seule
+        // (constantVariable) ; une valeur simple se lit par read().
+        if (!rt_.qualified_.empty() && r.find('.') != std::string::npos) {
+            std::string rest;
+            if (auto o = rt_.qualifiedRoot(r, &rest); o && rest.empty() && o->type && o->type->kind != sim::TypeDesc::Kind::Scalar) return o;
+        }
         if (rt_.rich_.empty()) return nullptr;
         const auto it = rt_.rich_.find(upper(r.empty() ? std::string(n) : r));
         return it == rt_.rich_.end() ? nullptr : it->second;
+    }
+    // 1.12.7 : une constante qualifiee d'un autre script : lue en place, jamais ecrite.
+    bool constantVariable(std::string_view n) override {
+        if (rt_.qualified_.empty()) return false;
+        const std::string r = resolved(n);
+        return r.find('.') != std::string::npos && rt_.qualifiedRoot(r) != nullptr;
     }
     // 1.12.4 : une structure IHM (ou un tableau de structures) qui porte des membres objets ; la copie
     // d'un parametre (une structure en Copie) aussi.
     bool hasRichMembers(std::string_view n) override {
         if (!frames.empty() && frames.back()->count(upper(n)) != 0) return false;
+        // 1.12.7 : un script general dont une constante publique est un objet (Reglages.Seuils['bas']) :
+        // le dialecte passe par ses emplacements (une cle de texte reste un texte).
+        if (!rt_.qualified_.empty() && n.find('.') == std::string_view::npos && !(aliases && (aliases->object(n) || aliases->value(n)))) {
+            const std::string pre = upper(n) + ".";
+            for (auto it = rt_.qualified_.lower_bound(pre); it != rt_.qualified_.end() && it->first.compare(0, pre.size(), pre) == 0; ++it)
+                if (it->second && it->second->type && it->second->type->kind != sim::TypeDesc::Kind::Scalar) return true;
+        }
         if (aliases && (aliases->object(n) || aliases->value(n))) return false;
         const std::string r = resolved(n);
         if (!r.empty() && r[0] == '$') return rt_.copyHasObjects(r);
@@ -1552,6 +1590,9 @@ bool Runtime::runStatements(const std::string& code, const std::string& source, 
     limits.maxIterationsPerLoop = 100000;
     limits.maxStatementsPerScan = 200000;
     limits.locals = kept;
+    // 1.12.7 : ses valeurs calculees au demarrage (ses constantes, les valeurs initiales calculees).
+    if (scriptId)
+        if (const auto it = initials_.find(scriptId); it != initials_.end()) limits.initials = &it->second;
     // 1.11.14 : la ligne en cours (IHM_LOG la dit) ; celle de l'appelant revient apres.
     const sim::ExecTrace callerTrace = trace_;
     trace_ = {};
@@ -1757,6 +1798,263 @@ bool Runtime::callScript(std::string_view name, double now, std::string* error) 
     }
     AliasGuard guard(env_->aliases, nullptr);
     return runScript(*sc, "script " + sc->name, now, error);
+}
+
+// ---- 1.12.7 : LES VALEURS CALCULEES AU DEMARRAGE (HmiCalc.hpp) ----------------------------
+namespace {
+// Un pas d'un chemin dans un objet : .Membre, [3], [2, 1], ['cle'].
+bool stepInto(const sim::ObjRef& from, std::string_view& rest, sim::ObjRef& to) {
+    if (!from || !from->type || rest.empty()) return false;
+    const auto& type = *from->type;
+    if (rest.front() == '.') {
+        std::size_t end = 1;
+        while (end < rest.size() && rest[end] != '.' && rest[end] != '[') ++end;
+        const std::string member = upper(rest.substr(1, end - 1));
+        rest.remove_prefix(end);
+        if (type.kind == sim::TypeDesc::Kind::List && (member == "FIRST" || member == "LAST")) {
+            if (from->items.empty()) return false;
+            to = member == "FIRST" ? from->items.front() : from->items.back();
+            return true;
+        }
+        for (std::size_t k = 0; k < type.members.size() && k < from->items.size(); ++k)
+            if (upper(type.members[k].first) == member) {
+                to = from->items[k];
+                return true;
+            }
+        return false;
+    }
+    if (rest.front() != '[') return false;
+    const auto close = rest.find(']');
+    if (close == std::string_view::npos) return false;
+    const std::string inside = trimmedView(rest.substr(1, close - 1));
+    rest.remove_prefix(close + 1);
+    if (type.kind == sim::TypeDesc::Kind::Map) {
+        if (inside.size() >= 2 && (inside.front() == '\'' || inside.front() == '"')) {
+            const auto it = from->textKeys.find(inside.substr(1, inside.size() - 2));
+            if (it == from->textKeys.end()) return false;
+            to = it->second;
+            return true;
+        }
+        char* stop = nullptr;
+        const long long k = std::strtoll(inside.c_str(), &stop, 10);
+        if (!stop || *stop) return false;
+        const auto it = from->intKeys.find(k);
+        if (it == from->intKeys.end()) return false;
+        to = it->second;
+        return true;
+    }
+    std::vector<std::int64_t> indices;
+    std::size_t from0 = 0;
+    for (;;) {
+        const auto comma = inside.find(',', from0);
+        const std::string piece = trimmedView(std::string_view(inside).substr(from0, comma == std::string::npos ? std::string::npos : comma - from0));
+        char* stop = nullptr;
+        const long long v = std::strtoll(piece.c_str(), &stop, 10);
+        if (piece.empty() || !stop || *stop) return false;
+        indices.push_back(v);
+        if (comma == std::string::npos) break;
+        from0 = comma + 1;
+    }
+    if (type.kind == sim::TypeDesc::Kind::Array) {
+        std::size_t flat = 0;
+        if (!sim::flatIndex(type, indices, flat, nullptr) || flat >= from->items.size()) return false;
+        to = from->items[flat];
+        return true;
+    }
+    if (type.kind == sim::TypeDesc::Kind::List && indices.size() == 1 && indices[0] >= 0
+        && static_cast<std::size_t>(indices[0]) < from->items.size()) {
+        to = from->items[static_cast<std::size_t>(indices[0])];
+        return true;
+    }
+    return false;
+}
+} // namespace
+
+sim::ObjRef Runtime::qualifiedRoot(std::string_view path, std::string* rest) const {
+    if (qualified_.empty()) return nullptr;
+    const auto dot = path.find('.');
+    if (dot == std::string_view::npos) return nullptr;
+    std::size_t end = dot + 1;
+    while (end < path.size() && path[end] != '.' && path[end] != '[') ++end;
+    const auto it = qualified_.find(upper(path.substr(0, end)));
+    if (it == qualified_.end()) return nullptr;
+    if (rest) *rest = std::string(path.substr(end));
+    return it->second;
+}
+
+bool Runtime::qualifiedRead(std::string_view path, sim::Value& out) const {
+    std::string restText;
+    sim::ObjRef at = qualifiedRoot(path, &restText);
+    if (!at) return false;
+    std::string_view rest = restText;
+    while (!rest.empty()) {
+        sim::ObjRef next;
+        if (!stepInto(at, rest, next) || !next) return false;
+        at = next;
+    }
+    if (!at->type || at->type->kind != sim::TypeDesc::Kind::Scalar) return false;   // un objet : richVariable
+    out = at->value;
+    return true;
+}
+
+sim::ObjRef Runtime::computedValue(Id script, std::string_view name) const {
+    const auto it = initials_.find(script);
+    return it == initials_.end() ? nullptr : it->second.find(name);
+}
+
+std::map<std::string, sim::ObjRef> Runtime::computedObjects(const Project& p, std::string* error) {
+    std::map<std::string, sim::ObjRef> out;
+    if (error) error->clear();
+    if (!calc::hasComputed(p)) return out;
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.prime(0.0);
+    for (const auto& [script, values] : rt.initials_)
+        for (const auto& [name, obj] : values.all())
+            if (obj) out[std::to_string(script) + ":" + name] = obj;
+    if (error) *error = rt.startError_;
+    return out;
+}
+
+sim::ObjRef Runtime::valueObject(const Project& p, std::string_view type, std::string_view value, std::string* why) {
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    return sim::makeRichValue(type, value, *rt.env_, why);
+}
+
+bool Runtime::computeOne(const Script& sc, const Declaration& d, Id view, sim::ObjRef& out, std::string& why) {
+    const View* v = view != kNoId && project_ ? project_->view(view) : nullptr;
+    const std::string source = "calcul " + calc::pathOf(sc, d, v);
+    const Prepared& prep = prepare(calc::runnableCode(sc, d), source, false);
+    if (!prep.program) {
+        why = prep.error;
+        return false;
+    }
+    // Les valeurs deja calculees de son script qu'il lit (une locale du meme nom passe avant).
+    sim::Locals given;
+    if (const auto it = initials_.find(sc.id); it != initials_.end())
+        for (const auto& x : calc::declarationsFor(sc, d)) {
+            const bool local = upper(x.name) == upper(d.name)
+                            || std::any_of(d.locals.begin(), d.locals.end(), [&](const Declaration& l) { return upper(l.name) == upper(x.name); });
+            if (!local)
+                if (auto o = it->second.find(x.name)) given.set(x.name, o);
+        }
+    AliasGuard aliasGuard(env_->aliases, nullptr);           // ni vue ni parametres : le demarrage
+    Env::Frame frame;
+    env_->frames.push_back(&frame);
+    sim::Locals mine;                                         // ses declarations, le temps du calcul
+    env_->diagnostics.clear();
+    const std::string previous = source_;
+    source_ = source;
+    const CodeOrigin callerOrigin = origin_;
+    origin_ = CodeOrigin{};
+    origin_.script = sc.id;
+    origin_.view = view;
+    origin_.name = source;
+    sim::RunLimits limits;
+    limits.maxIterationsPerLoop = 1000000;
+    limits.maxStatementsPerScan = 5000000;
+    std::uint64_t spent = 0;                                  // 2 s au plus par calcul (l'heure limite suit ce compte)
+    limits.scanStatements = &spent;
+    limits.maxScanStatements = 50000000;
+    limits.hasDeadline = true;
+    limits.deadlineMicros = sim::monotonicMicros() + 2000000;
+    limits.locals = &mine;
+    limits.initials = &given;
+    const sim::ExecTrace callerTrace = trace_;
+    trace_ = {};
+    limits.trace = &trace_;
+    ++depth_;
+    const auto result = sim::execute(*prep.program, *env_, limits);
+    --depth_;
+    trace_ = callerTrace;
+    origin_ = callerOrigin;
+    source_ = previous;
+    env_->frames.pop_back();
+    for (const auto& dg : env_->diagnostics)
+        if (dg.severity == sim::Diagnostic::Severity::Error) {
+            why = (dg.line ? "ligne " + std::to_string(dg.line) + " : " : std::string{}) + frenchSimMessage(dg.message);
+            break;
+        }
+    if (!abort_.empty()) {
+        if (why.empty()) why = abort_;
+        abort_.clear();
+    }
+    if (why.empty() && !result.completed)
+        why = "arr\xC3\xAAt\xC3\xA9 : trop long (plus de 2 s, ou budget d'instructions d\xC3\xA9pass\xC3\xA9 : boucle sans fin ?)";
+    if (!why.empty()) return false;
+    const sim::ObjRef got = mine.find(d.name);
+    if (!got) {
+        why = d.name + " : aucune valeur";
+        return false;
+    }
+    out = sim::deepCopy(*got);
+    return true;
+}
+
+bool Runtime::computeDeclarations() {
+    initials_.clear();
+    qualified_.clear();
+    startError_.clear();
+    if (!project_) return true;
+    // Les constantes publiques ecrites des scripts generaux : lues d'ailleurs par leur nom qualifie. Une
+    // valeur qui n'est pas un litteral (Max * 2, une autre constante) : calculee dans son script, plus bas.
+    std::vector<std::pair<const Script*, const Declaration*>> written;
+    for (const auto& sc : project_->programs.scripts) {
+        if (sc.lang != ScriptLang::ST) continue;
+        for (const auto& d : sc.decls) {
+            if (d.kind != DeclKind::Constant || d.computed || d.visibility != Visibility::Public) continue;
+            std::string why;
+            if (auto o = sim::makeRichValue(d.type, d.value, *env_, &why)) qualified_[upper(sc.name + "." + d.name)] = std::move(o);
+            else written.emplace_back(&sc, &d);
+        }
+    }
+    const auto writtenByCode = [&] {
+        for (const auto& [sc, d] : written) {
+            Declaration tmp = *d;
+            tmp.computed = true;
+            tmp.calc = d->name + " := " + d->value + ";\n";
+            sim::ObjRef value;
+            std::string why;
+            if (computeOne(*sc, tmp, kNoId, value, why)) qualified_[upper(sc->name + "." + d->name)] = std::move(value);
+        }
+    };
+    if (!calc::hasComputed(*project_)) {
+        writtenByCode();
+        return true;
+    }
+    const auto stop = [&](const std::string& source, const std::string& why) {
+        startError_ = source + " : " + why;
+        logAt(LogLevel::Error, "Erreur", source, why, announcedLine(why));
+        log("Syst\xC3\xA8me", {}, "d\xC3\xA9marrage arr\xC3\xAAt\xC3\xA9 : " + startError_);
+        return false;
+    };
+    const auto pl = calc::plan(*project_);
+    if (!pl.cycle.empty()) return stop("calcul", "calculs en boucle : " + pl.cycle + " (chacun attend l'autre)");
+    for (const auto& step : pl.order) {
+        const Script* sc = nullptr;
+        if (step.view == kNoId) {
+            for (const auto& g : project_->programs.scripts)
+                if (g.id == step.script) sc = &g;
+        } else if (const View* v = project_->view(step.view)) {
+            for (const auto& vs : v->scripts)
+                if (vs.id == step.script) sc = &vs;
+        }
+        if (!sc) continue;
+        const Declaration* d = nullptr;
+        for (const auto& x : sc->decls)
+            if (upper(x.name) == upper(step.name)) d = &x;
+        if (!d) continue;
+        sim::ObjRef value;
+        std::string why;
+        if (!computeOne(*sc, *d, step.view, value, why)) return stop("calcul " + step.path, why);
+        initials_[sc->id].set(d->name, value);
+        if (step.view == kNoId && d->kind == DeclKind::Constant && d->visibility == Visibility::Public)
+            qualified_[upper(sc->name + "." + d->name)] = value;
+        log("Calcul", step.path, "= " + sim::display(*value));
+    }
+    writtenByCode();
+    return true;
 }
 
 void Runtime::runViewScript(const View& v, std::string_view event, double now) {
@@ -2685,6 +2983,9 @@ void Runtime::start(double now) {
     tableSources_.clear();
     retained_.clear();
     scriptLocals_.clear();                       // 1.10
+    initials_.clear();                           // 1.12.7 : recalculees ci-dessous
+    qualified_.clear();
+    startError_.clear();
     functionErrors_.clear();
     systemShown_ = false;
     systemTab_ = 0;              // lot 10 : le menu repart ferme, sur Reglages...
@@ -2750,6 +3051,13 @@ void Runtime::start(double now) {
             if (project_->view(s.view) && !s.key.empty()) overrides_[{s.view, s.object}][s.key] = s.value;
         startUi_.clear();
         composed_.clear(); boundCalls_.clear();
+    }
+    // 1.12.7 : les valeurs calculees au demarrage - apres les valeurs de depart (et la remanence), avant
+    // les scripts de Demarrage et la premiere vue. Une erreur arrete le demarrage : la Console dit
+    // laquelle (startError).
+    if (!computeDeclarations()) {
+        running_ = false;
+        return;
     }
     log("Syst\xC3\xA8me", {}, "IHM d\xC3\xA9marr\xC3\xA9" "e : " + std::to_string(project_->programs.variables.size())
                                  + " variable(s) IHM, " + std::to_string(project_->programs.scripts.size())
@@ -2979,6 +3287,8 @@ void Runtime::prime(double now) {
     backgrounds_.clear();
     gifs_.clear();                      // lot 16
     initVariables();
+    // 1.12.7 : l'essai d'une fonction, le banc des expressions lisent aussi les constantes calculees.
+    (void)computeDeclarations();
 }
 
 bool Runtime::runFunction(std::string_view name, const std::vector<std::pair<std::string, sim::Value>>& args,

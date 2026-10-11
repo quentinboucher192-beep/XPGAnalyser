@@ -187,6 +187,43 @@ void renameUses(Project& p, const Place& at, Code& c, std::size_t self, const st
     *c.body = renamedCode(*c.body, from, to);
     for (std::size_t j = 0; j < c.decls->size(); ++j)
         if (j != self && !(*c.decls)[j].value.empty()) (*c.decls)[j].value = replacePath((*c.decls)[j].value, from, to, false);
+    // 1.12.7 : les calculs au demarrage du code (le sien aussi : il s'ecrit par son nom), sauf ou une
+    // locale du meme nom le cache ; et Script.Nom, la constante d'un script general, partout ailleurs.
+    for (auto& d : *c.decls) {
+        if (!d.computed && d.calc.empty()) continue;
+        if (std::any_of(d.locals.begin(), d.locals.end(), [&](const Declaration& l) { return same(l.name, from); })) continue;
+        d.calc = renamedCode(d.calc, from, to);
+    }
+    if (at.kind == Place::Kind::Script && (*c.decls)[self].kind == DeclKind::Constant) {
+        const Script* owner = nullptr;
+        for (const auto& s : p.programs.scripts)
+            if (s.id == at.id) owner = &s;
+        if (owner) {
+            const std::string qFrom = owner->name + "." + from, qTo = owner->name + "." + to;
+            const auto inCode = [&](std::string& code) {
+                if (code.find('.') != std::string::npos) code = replacePath(code, qFrom, qTo, true);
+            };
+            const auto inDecls = [&](std::vector<Declaration>& list) {
+                for (auto& d : list) {
+                    if (!d.calc.empty()) inCode(d.calc);
+                    if (!d.value.empty() && d.value.find('.') != std::string::npos) d.value = replacePath(d.value, qFrom, qTo, false);
+                }
+            };
+            for (auto& s : p.programs.scripts) {
+                inCode(s.body);
+                inDecls(s.decls);
+            }
+            for (auto& v : p.views)
+                for (auto& s : v.scripts) {
+                    inCode(s.body);
+                    inDecls(s.decls);
+                }
+            for (auto& f : p.programs.functions) {
+                inCode(f.body);
+                inDecls(f.decls);
+            }
+        }
+    }
     // Un parametre d'une fonction de symbole : ses redefinitions le lisent aussi.
     if (at.kind != Place::Kind::SymbolFunction || (*c.decls)[self].kind != DeclKind::Parameter) return;
     const View* symbol = p.view(at.view);
@@ -337,7 +374,7 @@ std::string cellText(const Declaration& d, Column c) {
     switch (c) {
         case Column::Name:        return d.name;
         case Column::Type:        return d.type;
-        case Column::Value:       return d.value;
+        case Column::Value:       return d.computed ? "\xC6\x92x calcul\xC3\xA9" "e au d\xC3\xA9marrage" : d.value;   // 1.12.7
         case Column::Storage:     return std::string(storageLabel(d.storage));
         case Column::Mode:        return std::string(modeLabel(d.mode));
         case Column::Visibility:  return std::string(visibilityLabel(d.visibility));
@@ -682,6 +719,9 @@ std::string literalTypeOf(std::string_view text, bool& integer, long long& value
 
 // La valeur nulle d'un type de base (une constante qui change de type) ; vide : aucune.
 std::string zeroOf(std::string_view type) {
+    // 1.12.7 : une MAP, une liste, un vecteur - vides.
+    const std::string u = upperOf(trimmed(type));
+    if (u.rfind("MAP", 0) == 0 || u.rfind("LIST", 0) == 0 || u.rfind("VECTOR", 0) == 0) return "[]";
     const auto n = typereg::numericOf(type);
     switch (n.family) {
         case typereg::Family::Bool:    return "FALSE";
@@ -707,8 +747,17 @@ std::string valueMisfit(const Project& p, std::string_view type, std::string_vie
     std::string target = r.text;
     const bool array = category == typereg::Category::Collection;
     if (array) {
-        // Un tableau : son element (une valeur seule remplit toutes les cases) ; une MAP : rien.
-        if (!r.entry || upperOf(r.text).rfind("ARRAY", 0) != 0) return {};
+        // Un tableau : son element (une valeur seule remplit toutes les cases). 1.12.7 : une MAP, une
+        // liste, un vecteur, un tuple - pas une valeur simple (avant : une constante MAP gardait le 0.0
+        // de la constante neuve) ; leurs elements entre crochets (un nom, une expression : on ne sait pas).
+        if (!r.entry || upperOf(r.text).rfind("ARRAY", 0) != 0) {
+            bool integer = false;
+            long long n = 0;
+            if (value.front() != '[' && value.front() != '(' && !literalTypeOf(value, integer, n).empty())
+                return "un " + r.text + " prend ses \xC3\xA9l\xC3\xA9ments entre crochets ([1, 2] ; une MAP : ['cl\xC3\xA9' := 1] ; vide : [])"
+                     + ", pas " + value;
+            return {};
+        }
         category = r.entry->category;
         target = r.entry->name;
     }
@@ -797,6 +846,9 @@ bool set(Project& p, const Place& at, Tab t, std::size_t row, Column col, std::s
                 return fail(why, "valeur " + quoted(v) + " illisible pour un " + d.type + (bad.empty() ? std::string{} : " : " + bad));
             if (const std::string misfit = valueMisfit(p, d.type, value); !misfit.empty())   // 1.11.21
                 return fail(why, "valeur " + quoted(v) + " : " + misfit);
+            // 1.12.7 : une valeur ecrite remplace la valeur calculee (le calcul reste, inactif : \xC6\x92x le reprend).
+            if (d.computed && note) *note = d.name + " : la valeur \xC3\xA9" "crite remplace le calcul (\xC2\xAB \xC6\x92x Calcul\xE2\x80\xA6 \xC2\xBB le reprend)";
+            d.computed = false;
             d.value = value;
             return true;
         }
@@ -833,6 +885,107 @@ bool set(Project& p, const Place& at, Tab t, std::size_t row, Column col, std::s
         }
     }
     return fail(why, "colonne inconnue");
+}
+
+// ---- 1.12.7 : la valeur calculee au demarrage ----------------------------------------------
+std::string localsText(const std::vector<Declaration>& locals) {
+    std::string out;
+    for (const auto& l : locals) {
+        out += l.name + " : " + l.type;
+        if (!l.value.empty()) out += " := " + l.value;
+        out += ';';
+        if (!l.description.empty()) out += "   // " + l.description;
+        out += '\n';
+    }
+    return out;
+}
+
+bool parseLocals(const Project& p, std::string_view text, std::vector<Declaration>& out, std::string* why) {
+    out.clear();
+    const std::string blank = trimmed(text);
+    if (blank.empty()) return true;
+    for (const auto& t : decl::lex(text))
+        if (t.kind == decl::TokenKind::Word) {
+            const std::string u = upperOf(t.text(text));
+            if (u == "VAR" || u == "END_VAR" || u == "VAR_TEMP" || u == "VAR_INPUT" || u == "VAR_OUTPUT" || u == "VAR_IN_OUT")
+                return fail(why, "ligne " + std::to_string(t.line) + " : pas de " + u + " - une locale par ligne, Nom : TYPE := valeur;");
+        }
+    const std::string wrapped = "VAR\n" + std::string(text) + "\nEND_VAR\n";
+    const auto x = decl::extract(wrapped);
+    if (!x.errors.empty()) {
+        const auto& e = x.errors.front();
+        return fail(why, (e.line > 1 ? "ligne " + std::to_string(e.line - 1) + " : " : std::string{}) + e.message);
+    }
+    for (const auto& d : x.decls) {
+        Declaration l;
+        l.kind = DeclKind::Variable;
+        l.storage = Storage::Execution;
+        l.visibility = Visibility::Private;
+        l.name = d.name;
+        l.type = d.type;
+        l.value = d.initial;
+        l.description = d.comment;
+        if (isReservedWord(l.name)) return fail(why, quoted(l.name) + " : nom r\xC3\xA9serv\xC3\xA9 du langage");
+        for (const auto& o : out)
+            if (same(o.name, l.name)) return fail(why, quoted(l.name) + " : d\xC3\xA9" "clar\xC3\xA9" "e deux fois");
+        if (!typeAllowed(p, l.type)) return fail(why, quoted(l.name) + " : type " + quoted(l.type) + " non pris en charge");
+        out.push_back(std::move(l));
+    }
+    return true;
+}
+
+bool setCalculation(Project& p, const Place& at, Tab t, std::size_t row, std::string_view calc, std::string_view locals,
+                    std::string* why) {
+    Code c = locate(p, at);
+    if (!ready(c, t, why)) return false;
+    if (c.role != decl::Role::Script) return fail(why, "une valeur calcul\xC3\xA9" "e au d\xC3\xA9marrage n'est permise qu'\xC3\xA0 un script");
+    const std::size_t i = indexOf(c, t, row);
+    if (i == npos) return fail(why, "ligne " + std::to_string(row + 1) + " introuvable");
+    Declaration& d = (*c.decls)[i];
+    if (d.kind == DeclKind::Parameter) return fail(why, "un param\xC3\xA8tre ne se calcule pas au d\xC3\xA9marrage");
+    std::vector<Declaration> parsed;
+    if (!parseLocals(p, locals, parsed, why)) return false;
+    // Un bloc VAR ... END_VAR colle dans le code : ses declarations vont dans les locales (le code
+    // garde ses lignes, le bloc blanchi) - « Deplacer dans Locales », fait au passage.
+    std::string body(calc);
+    if (const auto x = decl::extract(body); !x.blocks.empty() && x.errors.empty() && x.functions.empty()) {
+        for (const auto& b : x.decls) {
+            if (b.section != decl::Section::Var && b.section != decl::Section::Temp) continue;
+            if (std::any_of(parsed.begin(), parsed.end(), [&](const Declaration& l) { return same(l.name, b.name); }))
+                return fail(why, quoted(b.name) + " : d\xC3\xA9" "clar\xC3\xA9" "e deux fois (dans les locales et dans un bloc VAR du code)");
+            Declaration l;
+            l.kind = DeclKind::Variable;
+            l.storage = Storage::Execution;
+            l.visibility = Visibility::Private;
+            l.name = b.name;
+            l.type = b.type;
+            l.value = b.initial;
+            l.description = b.comment;
+            if (!typeAllowed(p, l.type)) return fail(why, quoted(l.name) + " : type " + quoted(l.type) + " non pris en charge");
+            parsed.push_back(std::move(l));
+        }
+        if (std::all_of(x.decls.begin(), x.decls.end(), [](const decl::Decl& b) {
+                return b.section == decl::Section::Var || b.section == decl::Section::Temp;
+            })) {
+            // Les lignes vides laissees en tete par le bloc : retirees (le calcul commence a son code).
+            body = x.body;
+            const auto first = body.find_first_not_of(" \t\r\n");
+            body = first == std::string::npos ? std::string{} : body.substr(body.rfind('\n', first) == std::string::npos ? 0 : body.rfind('\n', first) + 1);
+        }
+    }
+    calc = body;
+    for (const auto& l : parsed)
+        if (same(l.name, d.name)) return fail(why, quoted(l.name) + " : c'est le nom de la d\xC3\xA9" "claration calcul\xC3\xA9" "e");
+    std::string code(calc);
+    while (!code.empty() && (code.back() == ' ' || code.back() == '\t' || code.back() == '\n' || code.back() == '\r')) code.pop_back();
+    if (!code.empty()) code += '\n';
+    // Une locale n'a pas d'identifiant : elle n'est vue que de son calcul (ni remanence, ni reference).
+    d.computed = !code.empty();
+    d.calc = code;
+    d.locals = std::move(parsed);
+    // Une constante redevenue ecrite sans valeur : la valeur nulle de son type.
+    if (!d.computed && d.kind == DeclKind::Constant && trimmed(d.value).empty()) d.value = zeroOf(d.type);
+    return true;
 }
 
 } // namespace hmi::decledit

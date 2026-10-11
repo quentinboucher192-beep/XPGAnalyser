@@ -515,6 +515,18 @@ public:
     void start(double now);
     void stop(double now, const std::string& why = {});   // 1.11.14 : why - la raison, dans la meme ligne du journal
     [[nodiscard]] bool running() const noexcept { return running_; }
+    // 1.12.7 : pourquoi le dernier demarrage s'est arrete (le calcul d'une valeur en erreur, une
+    // boucle de calculs) ; "" : il a demarre.
+    [[nodiscard]] const std::string& startError() const noexcept { return startError_; }
+    // 1.12.7 : la valeur calculee au demarrage d'une declaration d'un script (nulle : pas calculee).
+    [[nodiscard]] sim::ObjRef computedValue(Id script, std::string_view name) const;
+    // 1.12.7 : LES VALEURS CALCULEES SANS DEMARRER L'IHM (l'apercu et le deballage des grilles de
+    // declarations) : par declaration ("<id du script>:<NOM EN MAJUSCULES>"), son objet ; `error` : la
+    // premiere erreur (le calcul qui s'arrete et pourquoi, une boucle) ; "" : aucune.
+    [[nodiscard]] static std::map<std::string, sim::ObjRef> computedObjects(const Project&, std::string* error = nullptr);
+    // 1.12.7 : une valeur ecrite lue dans son type (le deballage d'une constante, d'une valeur initiale) ;
+    // nulle et `why` : illisible.
+    [[nodiscard]] static sim::ObjRef valueObject(const Project&, std::string_view type, std::string_view value, std::string* why = nullptr);
     void tick(double now);
 
     // La souris sur un objet de la vue du dessus (la popup, s'il y en a une).
@@ -1546,6 +1558,19 @@ private:
     // 1.10 (dialecte IHM) : les variables d'un script, tenues par le simulateur
     // (simples et riches : tableaux, MAP, references...), gardees comme retained_.
     std::map<std::string, sim::Locals> scriptLocals_;
+    // 1.12.7 : LES VALEURS CALCULEES AU DEMARRAGE (HmiCalc.hpp) - par script, celles de ses
+    // declarations (sim::RunLimits::initials : la premiere execution d'une VAR, chaque execution
+    // d'une VAR_TEMP) ; les constantes publiques des scripts generaux, ecrites ou calculees, lues
+    // d'ailleurs par leur nom qualifie (cle : "REGLAGES.SEUILS"), jamais ecrites.
+    std::map<Id, sim::Locals>                       initials_;
+    std::map<std::string, sim::ObjRef, std::less<>> qualified_;
+    std::string                                     startError_;
+    bool computeDeclarations();
+    bool computeOne(const Script&, const Declaration&, Id view, sim::ObjRef& out, std::string& why);
+    // La constante qualifiee qui commence le chemin (Reglages.Seuils, Reglages.Seuils['bas']) : son
+    // objet, et le reste du chemin (`rest`) ; nul : aucune.
+    [[nodiscard]] sim::ObjRef qualifiedRoot(std::string_view path, std::string* rest = nullptr) const;
+    [[nodiscard]] bool qualifiedRead(std::string_view path, sim::Value& out) const;
     std::set<std::string>    functionErrors_;            // une erreur de fonction dite une fois (expressions de vue)
     mutable std::map<std::string, Expression, std::less<>> expressions_;   // 1.12.5 : mutable (shownText)
     // lot 4

@@ -21,6 +21,8 @@
 #include "../src/app/hmi/HmiTreeData.hpp"     // hmitree::withoutDeclarations : relu par hmi::decl
 #include "../src/hmi/HmiCommands.hpp"
 #include "../src/hmi/HmiDecl.hpp"
+#include "../src/hmi/HmiCalc.hpp"        // 1.12.7 : les valeurs calculees au demarrage
+#include "../src/hmi/HmiCheck.hpp"
 #include "../src/hmi/HmiDeclEdit.hpp"     // 1.11.18 (lot 5) : editer les declarations
 #include "../src/hmi/HmiDesign.hpp"
 #include "../src/hmi/HmiEnums.hpp"
@@ -1703,6 +1705,293 @@ void persistante() {
           "le fichier du poste garde la case - " + why);
 }
 
+
+// ------------------------------------------------ 1.12.7 : les valeurs calculees ----
+Declaration computedDecl(DeclKind kind, std::string name, std::string type, std::string calc,
+                         std::vector<Declaration> locals = {}, Storage storage = Storage::Execution) {
+    Declaration d = declared(kind, std::move(name), std::move(type), {}, storage);
+    d.computed = true;
+    d.calc = std::move(calc);
+    d.locals = std::move(locals);
+    return d;
+}
+
+// Reglages : Base (ecrite, publique), Seuils (MAP calculee avec une locale et une boucle FOR sans
+// declaration), Total (lit Seuils), Echelle (lit une variable IHM), Secret (privee), Compteur (une
+// variable Conservee a la valeur initiale calculee). Usage : lit Reglages.X par leur nom qualifie.
+Project calcProject() {
+    Project p;
+    p.programs.variables.push_back(hmiVariable(p, "Pleine_Echelle", "REAL"));
+    p.programs.variables.back().initial = "250.0";
+    for (const char* n : {"Lu", "Bas", "Vu", "Ech"}) p.programs.variables.push_back(hmiVariable(p, n, "REAL"));
+    for (const char* n : {"N", "C2"}) p.programs.variables.push_back(hmiVariable(p, n, "DINT"));
+    Script r;
+    r.id = p.allocate();
+    r.name = "Reglages";
+    r.event = "Appel";
+    r.body = "Vu := Total + Base;\nC2 := Compteur;\nCompteur := Compteur + 1;\nEch := Echelle;\n";
+    Declaration noms = declared(DeclKind::Variable, "Noms", "ARRAY[0..2] OF STRING", "['bas', 'moyen', 'haut']");
+    r.decls = {declared(DeclKind::Constant, "Base", "REAL", "10.0"),
+               computedDecl(DeclKind::Constant, "Seuils", "MAP[STRING] OF REAL",
+                            "(* un seuil par nom *)\nFOR i := 0 TO 2 DO\n    Seuils[Noms[i]] := Base * (i + 1);\nEND_FOR;\n", {noms}),
+               computedDecl(DeclKind::Constant, "Total", "REAL", "Total := Seuils['bas'] + Seuils['haut'];\n"),
+               computedDecl(DeclKind::Constant, "Echelle", "REAL", "Echelle := Pleine_Echelle / 100.0;\n"),
+               declared(DeclKind::Constant, "Secret", "INT", "3"),
+               computedDecl(DeclKind::Variable, "Compteur", "DINT", "Compteur := REAL_TO_DINT(Total);\n", {}, Storage::Kept)};
+    r.decls[4].visibility = Visibility::Private;
+    p.programs.scripts.push_back(r);
+    Script u;
+    u.id = p.allocate();
+    u.name = "Usage";
+    u.event = "Appel";
+    u.body = "Lu := Reglages.Total;\nBas := Reglages.Seuils['bas'];\nN := MAP_SIZE(Reglages.Seuils);\n";
+    p.programs.scripts.push_back(u);
+    uniqueDeclarationIds(p);
+    return p;
+}
+
+void calculees() {
+    std::printf("-- 1.12.7 : les valeurs calculees au demarrage\n");
+    const Project p = calcProject();
+    // Le disque : calculee=oui, le calcul, ses locales - relus a l'identique.
+    {
+        const auto files = serializeProject(p);
+        const std::string index = fileText(files, "ihm.txt");
+        check(index.find("calculee=oui") != std::string::npos && index.find("calcul=") != std::string::npos
+                  && index.find("locale nom=\"Noms\" type=\"ARRAY[0..2] OF STRING\"") != std::string::npos,
+              "sur disque : calculee=oui, le calcul, la ligne de sa locale");
+        const auto back = parseProject(readerOf(files));
+        check(back.has_value() && back.value().programs.scripts.size() == 2
+                  && back.value().programs.scripts[0].decls == p.programs.scripts[0].decls,
+              "relu : les memes declarations (calculees, leur code, leurs locales)");
+        Project plain = p;
+        for (auto& d : plain.programs.scripts[0].decls) d.computed = false;
+        check(!(plain.programs.scripts[0].decls == p.programs.scripts[0].decls), "calculee ou non : deux declarations differentes");
+    }
+    // Le texte qui tourne : la declaration (a ecrire), ses locales, le DINT de la boucle, les constantes du script.
+    {
+        const Script& r = p.programs.scripts[0];
+        const std::string code = calc::runnableCode(r, r.decls[1]);
+        check(code.find("VAR_TEMP Seuils : MAP[STRING] OF REAL; Noms : ARRAY[0..2] OF STRING := ['bas', 'moyen', 'haut']; i : DINT;") == 0
+                  && code.find("VAR CONSTANT Base : REAL := 10.0; Total : REAL; Echelle : REAL; Secret : INT := 3; END_VAR") != std::string::npos
+                  && code.find("Compteur") == std::string::npos,
+              "le calcul d'une constante : elle, ses locales, i (DINT), les constantes du script, pas ses variables\n" + code);
+        check(std::count(code.begin(), code.end(), '\n') == std::count(r.decls[1].calc.begin(), r.decls[1].calc.end(), '\n'),
+              "les lignes du calcul ne bougent pas");
+        const std::string var = calc::runnableCode(r, r.decls[5]);
+        check(var.find("Compteur : DINT;") != std::string::npos && var.find("VAR CONSTANT") != std::string::npos,
+              "le calcul d'une variable : les constantes aussi\n" + var);
+        check(dc::codeOf(r).find("Seuils : MAP[STRING] OF REAL; Total : REAL;") != std::string::npos,
+              "le script : ses constantes calculees sans valeur ecrite (le moteur la donne)\n" + dc::codeOf(r));
+    }
+    // L'ordre : Seuils avant Total, les constantes avant la variable.
+    {
+        const auto pl = calc::plan(p);
+        std::string order;
+        for (const auto& s : pl.order) order += s.path + " ";
+        check(pl.cycle.empty() && order == "Reglages.Seuils Reglages.Total Reglages.Echelle Reglages.Compteur ",
+              "le plan : Seuils, Total (qui la lit), Echelle, puis la variable - " + order);
+    }
+    // Le moteur : calcule au demarrage, lu dans le script, par nom qualifie ailleurs, jamais ecrit.
+    {
+        Runtime rt;
+        rt.bind(&p, nullptr);              // sans automate : les fonctions standard de l'IHM (REAL_TO_DINT)
+        rt.start(0.0);
+        std::string journal;
+        for (const auto& e : rt.journal()) journal += e.source + " " + e.message + "\n";
+        check(rt.running() && rt.startError().empty(), "demarre (" + rt.startError() + ")\n" + journal);
+        const auto seuils = rt.computedValue(p.programs.scripts[0].id, "Seuils");
+        check(seuils && sim::display(*seuils) == "{'bas': 10, 'haut': 30, 'moyen': 20}",
+              "Seuils calculee : " + (seuils ? sim::display(*seuils) : std::string("rien")));
+        std::string why;
+        const bool a = rt.callScript("Reglages", 0.1, &why);
+        const bool b = rt.callScript("Usage", 0.2, &why);
+        const auto v = [&](const char* n) { return rt.variable(n)->display(); };
+        check(a && b && v("Vu") == "50" && v("C2") == "40" && v("Ech") == "2.5" && v("Lu") == "40" && v("Bas") == "10" && v("N") == "3",
+              "lues : Total + Base = " + v("Vu") + ", Compteur = " + v("C2") + ", Echelle = " + v("Ech") + " ; Reglages.Total = " + v("Lu")
+                  + ", Reglages.Seuils['bas'] = " + v("Bas") + ", MAP_SIZE = " + v("N") + " " + why);
+        (void)rt.callScript("Reglages", 0.3, &why);
+        check(v("C2") == "41", "la variable a valeur initiale calculee reste Conservee : 41 au 2e appel - " + v("C2"));
+        check(journal.find("Reglages.Total = 40") != std::string::npos && journal.find("Reglages.Seuils = {'bas': 10") != std::string::npos,
+              "la Console dit chaque valeur calculee\n" + journal);
+    }
+    // Ecrire une constante qualifiee : refuse.
+    for (const char* body : {"Reglages.Total := 1.0;\n", "MAP_REMOVE(Reglages.Seuils, 'bas');\n", "Reglages.Seuils['x'] := 1.0;\n"}) {
+        Project q = calcProject();
+        q.programs.scripts[1].body = body;
+        Runtime rt;
+        rt.bind(&q, nullptr);
+        rt.start(0.0);
+        std::string why;
+        const bool ok = rt.callScript("Usage", 0.1, &why);
+        const auto seuils = rt.computedValue(q.programs.scripts[0].id, "Seuils");
+        check(!ok && why.find("constante") != std::string::npos && seuils && seuils->textKeys.size() == 3,
+              std::string("une constante qualifiee ne s'ecrit pas : ") + body + " -> " + why);
+    }
+    // Une erreur de calcul arrete le demarrage ; une boucle aussi.
+    {
+        Project q = calcProject();
+        q.programs.scripts[0].decls[2].calc = "Total := Seuils['absent'];\n";
+        Runtime rt;
+        rt.bind(&q, nullptr);
+        rt.start(0.0);
+        check(!rt.running() && rt.startError().find("calcul Reglages.Total") != std::string::npos,
+              "une cle absente : le demarrage s'arrete et dit ou - " + rt.startError());
+        Project c = calcProject();
+        c.programs.scripts[0].decls[1].calc = "Seuils['a'] := Total;\n";
+        const auto pl = calc::plan(c);
+        check(!pl.cycle.empty() && pl.cycle.find("Reglages.Seuils") != std::string::npos && pl.cycle.find("Reglages.Total") != std::string::npos,
+              "Seuils lit Total qui lit Seuils : la boucle - " + pl.cycle);
+        Runtime rc;
+        rc.bind(&c, nullptr);
+        rc.start(0.0);
+        check(!rc.running() && rc.startError().find("boucle") != std::string::npos, "une boucle : le demarrage s'arrete - " + rc.startError());
+    }
+    // Les fautes propres a un calcul.
+    {
+        Project q = calcProject();
+        auto& r = q.programs.scripts[0];
+        const auto says = [&](const Declaration& d, std::string_view what) {
+            const auto a = calc::analyse(q, r, d);
+            std::string all;
+            for (const auto& i : a.issues) all += (i.error ? "E " : "A ") + i.message + "\n";
+            return std::make_pair(all.find(what) != std::string::npos, all);
+        };
+        const auto t1 = says(computedDecl(DeclKind::Constant, "K", "INT", "VAR\n  x : INT;\nEND_VAR\nK := 1;\n"), "VAR \xE2\x80\xA6 END_VAR");
+        check(t1.first, "un bloc VAR dans le code : refuse (onglet Locales)\n" + t1.second);
+        const auto t2 = says(computedDecl(DeclKind::Constant, "K", "INT", "Base := 2.0;\nK := 1;\n"), "Base est une constante : elle ne s'\xC3\xA9" "crit pas");
+        check(t2.first, "une constante du script ecrite : refusee\n" + t2.second);
+        const auto t3 = says(computedDecl(DeclKind::Constant, "K", "DINT", "K := Compteur;\n"), "Compteur est une variable du script");
+        check(t3.first, "une constante qui lit une variable du script : refusee\n" + t3.second);
+        const auto t4 = says(computedDecl(DeclKind::Constant, "K", "INT", "x := 1;\n"), "K ne re\xC3\xA7oit aucune valeur");
+        check(t4.first, "un calcul qui n'ecrit pas sa constante : averti\n" + t4.second);
+        Script& u = q.programs.scripts[1];
+        u.decls = {computedDecl(DeclKind::Constant, "K", "INT", "K := Reglages.Secret + Reglages.Absent + Reglages.Compteur;\n")};
+        const auto a = calc::analyse(q, u, u.decls[0]);
+        std::string all;
+        for (const auto& i : a.issues) all += i.message + "\n";
+        check(all.find("Reglages.Secret est priv\xC3\xA9" "e : seul Reglages la lit") != std::string::npos
+                  && all.find("Reglages.Absent n'existe pas") != std::string::npos
+                  && all.find("Reglages.Compteur est une variable de Reglages") != std::string::npos,
+              "les constantes d'un autre script : privee, inconnue, une variable - refusees\n" + all);
+        const auto good = calc::analyse(q, r, r.decls[2]);
+        check(!good.hasError() && good.assigns && good.reads == std::vector<std::string>{"Seuils"},
+              "Total : juste, ecrit, lit Seuils");
+    }
+    // Les controles du projet : un script qui lit une constante privee d'un autre, un calcul fautif.
+    {
+        Project q = calcProject();
+        q.programs.scripts[1].body += "Lu := Reglages.Secret;\nReglages.Total := 2.0;\n";
+        q.programs.scripts[0].decls[3].calc = "Echelle := Inconnue_X / 100.0;\n";
+        const auto issues = generate(q, [](std::string_view) { return false; });
+        std::string all;
+        for (const auto& i : issues)
+            if (i.category == "Script") all += i.property + " : " + i.message + "\n";
+        check(all.find("Usage : Reglages.Secret est priv\xC3\xA9" "e") != std::string::npos
+                  && all.find("Usage : Reglages.Total est une constante : elle ne s'\xC3\xA9" "crit pas") != std::string::npos
+                  && all.find("Reglages : calcul de Echelle, ligne 1 : variable inexistante : Inconnue_X") != std::string::npos
+                  && all.find("Reglages.Total") != std::string::npos,
+              "Generer : la constante privee lue, la constante ecrite, le nom inconnu du calcul\n" + all);
+        check(all.find("Lu := Reglages.Seuils") == std::string::npos && all.find("variable inexistante : Reglages") == std::string::npos,
+              "Reglages.X n'est pas une variable inexistante\n" + all);
+        Project ok = calcProject();
+        std::string clean;
+        for (const auto& i : generate(ok, [](std::string_view) { return false; }))
+            if (i.category == "Script" && i.severity == Issue::Severity::Error) clean += i.property + " : " + i.message + "\n";
+        for (const auto& i : compile(ok))
+            if (i.category == "Script" && i.severity == Issue::Severity::Error) clean += i.property + " : " + i.message + "\n";
+        check(clean.empty(), "le projet juste : aucune erreur de script\n" + clean);
+        Project syn = calcProject();
+        syn.programs.scripts[0].decls[2].calc = "Total := (Seuils['bas'];\n";
+        std::string bad;
+        for (const auto& i : compile(syn))
+            if (i.category == "Script") bad += i.property + " : " + i.message + "\n";
+        check(bad.find("Reglages : calcul de Total, ligne 1") != std::string::npos, "Compiler : la syntaxe d'un calcul, sa ligne\n" + bad);
+    }
+    // L'edition : le calcul et ses locales (une par ligne, sans VAR), le renommage dans les calculs et
+    // dans Reglages.X, une valeur ecrite qui remplace le calcul, le defaut d'une MAP (plus de 0.0).
+    {
+        using K = de::Place::Kind;
+        Project q = calcProject();
+        const de::Place at{K::Script, kNoId, kNoId, kNoId, q.programs.scripts[0].id, {}, {}};
+        std::string why, note;
+        // La ligne 0 de l'onglet Constantes : Base ; 1 : Seuils ; 2 : Total ; 3 : Echelle ; 4 : Secret.
+        check(de::setCalculation(q, at, de::Tab::Constants, 4, "Secret := 2 + 2;", "k : INT := 1;   // un compteur\nm : REAL;", &why),
+              "Secret devient calculee, deux locales : " + why);
+        const auto& sec = q.programs.scripts[0].decls[4];
+        check(sec.computed && sec.calc == "Secret := 2 + 2;\n" && sec.locals.size() == 2 && sec.locals[0].name == "k"
+                  && sec.locals[0].value == "1" && sec.locals[0].description == "un compteur" && sec.locals[1].type == "REAL",
+              "le calcul et ses locales (nom, type, valeur, documentation)\n" + de::localsText(sec.locals));
+        check(de::localsText(sec.locals) == "k : INT := 1;   // un compteur\nm : REAL;\n", "les locales en texte : " + de::localsText(sec.locals));
+        check(!de::setCalculation(q, at, de::Tab::Constants, 4, "Secret := 1;", "VAR\nk : INT;\nEND_VAR", &why) && why.find("pas de VAR") != std::string::npos,
+              "des locales avec VAR : refusees - " + why);
+        check(!de::setCalculation(q, at, de::Tab::Constants, 4, "Secret := 1;", "k : INT;\nK : REAL;", &why) && why.find("deux fois") != std::string::npos,
+              "une locale en double : refusee - " + why);
+        check(!de::setCalculation(q, at, de::Tab::Constants, 4, "Secret := 1;", "Secret : INT;", &why) && why.find("nom de la d") != std::string::npos,
+              "une locale du nom de la declaration : refusee - " + why);
+        check(de::setCalculation(q, at, de::Tab::Constants, 4, "VAR\n  j : INT := 2;   // un pas\nEND_VAR\nSecret := j * 2;\n", "k : INT;", &why)
+                  && q.programs.scripts[0].decls[4].locals.size() == 2 && q.programs.scripts[0].decls[4].locals[1].name == "j"
+                  && q.programs.scripts[0].decls[4].locals[1].value == "2" && q.programs.scripts[0].decls[4].calc == "Secret := j * 2;\n",
+              "un bloc VAR colle dans le code : range dans les locales - " + why + "\n" + q.programs.scripts[0].decls[4].calc);
+        check(de::setCalculation(q, at, de::Tab::Constants, 4, "  \n", "", &why) && !q.programs.scripts[0].decls[4].computed
+                  && q.programs.scripts[0].decls[4].value == "3",
+              "un code vide : la valeur redevient ecrite (3) - " + why);
+        // Renommer Base : le calcul de Seuils le lit ; renommer Total (publique) : Usage lit Reglages.Total.
+        check(de::set(q, at, de::Tab::Constants, 0, de::Column::Name, "Base2", &why), "renommer Base : " + why);
+        check(q.programs.scripts[0].decls[1].calc.find("Base2 * (i + 1)") != std::string::npos, "le calcul de Seuils suit : " + q.programs.scripts[0].decls[1].calc);
+        check(de::set(q, at, de::Tab::Constants, 2, de::Column::Name, "Somme", &why), "renommer Total : " + why);
+        check(q.programs.scripts[0].decls[2].calc.rfind("Somme := ", 0) == 0 && q.programs.scripts[1].body.find("Lu := Reglages.Somme;") != std::string::npos
+                  && q.programs.scripts[0].body.find("Vu := Somme + Base2;") != std::string::npos,
+              "son propre calcul, Reglages.Somme dans Usage, le corps du script\n" + q.programs.scripts[0].decls[2].calc + q.programs.scripts[1].body);
+        // Une valeur ecrite dans la case : le calcul s'arrete (Ctrl+Z le rend).
+        check(de::set(q, at, de::Tab::Constants, 3, de::Column::Value, "2.5", &why, &note) && !q.programs.scripts[0].decls[3].computed
+                  && q.programs.scripts[0].decls[3].value == "2.5" && note.find("remplace le calcul") != std::string::npos,
+              "une valeur ecrite remplace le calcul - " + note);
+        // Le defaut de la MAP : une constante neuve (0.0) passee en MAP prend [] (avant : 0.0).
+        Id made = kNoId;
+        check(de::add(q, at, de::Tab::Constants, -1, "Table", &made, &why), "une constante neuve : " + why);
+        const std::size_t last = de::rowsOf(q.programs.scripts[0].decls, de::Tab::Constants).size() - 1;
+        note.clear();
+        const bool typed = de::set(q, at, de::Tab::Constants, last, de::Column::Type, "MAP[STRING] OF INT", &why, &note);
+        std::string tableValue = "?";
+        for (const auto& d : q.programs.scripts[0].decls)
+            if (d.name == "Table") tableValue = d.value;
+        check(typed && tableValue == "[]", "passee en MAP : [] - " + tableValue + " " + note + " " + why);
+        check(!de::valueMisfit(q, "MAP[STRING] OF INT", "0.0").empty() && de::valueMisfit(q, "MAP[STRING] OF INT", "['a' := 1]").empty()
+                  && de::valueMisfit(q, "ARRAY[1..3] OF REAL", "0.0").empty(),
+              "0.0 ne va pas dans une MAP ; ['a' := 1] oui ; un tableau prend toujours une valeur seule");
+    }
+    // Le fichier des scripts de vue (.xpgst) : le calcul et ses locales vont et reviennent.
+    {
+        View v;
+        v.name = "Vue_Calcul";
+        Script sc;
+        sc.event = "OnOpen";
+        sc.lang = ScriptLang::ST;
+        sc.body = "x := Grille[1];\n";
+        Declaration loc = declared(DeclKind::Variable, "k", "INT", "2");
+        loc.description = "un pas";
+        sc.decls = {computedDecl(DeclKind::Constant, "Grille", "ARRAY[1..3] OF INT", "FOR i := 1 TO 3 DO\n    Grille[i] := i * k;\nEND_FOR;\n", {loc})};
+        v.scripts.push_back(sc);
+        const auto f = hmi::scriptfile::fromView(v);
+        const std::string text = hmi::scriptfile::write(f);
+        hmi::scriptfile::File back;
+        std::string why;
+        const bool ok = hmi::scriptfile::read(text, back, &why);
+        check(ok && back.entries.size() == 1 && back.entries[0].decls.size() == 1 && back.entries[0].decls[0].computed
+                  && back.entries[0].decls[0].calc == sc.decls[0].calc && back.entries[0].decls[0].locals.size() == 1
+                  && back.entries[0].decls[0].locals[0].name == "k" && back.entries[0].decls[0].locals[0].value == "2"
+                  && back.entries[0].decls[0].locals[0].description == "un pas",
+              "le .xpgst : le calcul et sa locale relus - " + why + "\n" + text);
+    }
+    // Une constante calculee n'est pas « une constante sans valeur » ; une fonction n'en a pas.
+    {
+        const auto f = dc::declarationFaults({computedDecl(DeclKind::Constant, "K", "INT", "K := 1;")}, dc::Role::Script, "");
+        const auto g = dc::declarationFaults({computedDecl(DeclKind::Constant, "K", "INT", "K := 1;")}, dc::Role::Function, "");
+        check(f[0].empty() && g[0].size() == 1 && g[0][0].find("qu'\xC3\xA0 un script") != std::string::npos,
+              "une constante calculee : juste dans un script ; refusee dans une fonction");
+    }
+}
 } // namespace
 
 
@@ -1724,6 +2013,7 @@ int main(int argc, char** argv) {
     suivi();
     edition();
     persistante();
+    calculees();
     Tally t;
     std::printf("-- le corpus : %s\n", argv[1]);
     corpusFile(argv[1], t);

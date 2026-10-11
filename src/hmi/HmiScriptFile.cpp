@@ -209,7 +209,15 @@ std::string write(const File& f) {
             if (d.kind == DeclKind::Parameter) out += " mode=" + std::string(passModeKey(d.mode));
             out += " visibilite=" + std::string(visibilityKey(d.visibility));
             if (!d.description.empty()) out += " description=" + quote(d.description);
+            if (d.computed) out += " calculee=oui calcul=" + quote(d.calc);        // 1.12.7
             out += " *)\n";
+            if (d.computed)
+                for (const auto& l : d.locals) {
+                    out += "(*# locale nom=" + quote(l.name) + " type=" + quote(l.type);
+                    if (!l.value.empty()) out += " valeur=" + quote(l.value);
+                    if (!l.description.empty()) out += " description=" + quote(l.description);
+                    out += " *)\n";
+                }
         }
         const std::string body = normalBody(e.body);
         if (!body.empty()) out += body + "\n";
@@ -277,8 +285,21 @@ bool read(std::string_view text, File& out, std::string* why) {
             d.storage = storageFromKey(at(kv, "stockage")).value_or(Storage::Execution);
             d.mode = passModeFromKey(at(kv, "mode")).value_or(PassMode::In);
             d.visibility = visibilityFromKey(at(kv, "visibilite")).value_or(Visibility::Public);
+            d.computed = at(kv, "calculee") == "oui";                  // 1.12.7
+            d.calc = at(kv, "calcul");
             if (d.name.empty()) return fail("Une d\xC3\xA9" "claration sans nom" + where + ".");
             open->decls.push_back(std::move(d));
+            continue;
+        }
+        if (word == "locale") {                             // 1.12.7 : la locale d'un calcul
+            if (!open || open->decls.empty()) return fail("Une locale hors d'un calcul" + where + ".");
+            Declaration l;
+            l.name = at(kv, "nom");
+            l.type = at(kv, "type");
+            l.value = at(kv, "valeur");
+            l.description = at(kv, "description");
+            if (l.name.empty()) return fail("Une locale sans nom" + where + ".");
+            open->decls.back().locals.push_back(std::move(l));
             continue;
         }
         if (word == "script") {

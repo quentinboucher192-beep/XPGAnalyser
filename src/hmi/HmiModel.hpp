@@ -569,10 +569,20 @@ struct Declaration {
     // du chargement - un type renomme hors de l'application y est retrouve, puis elle est videe
     // (l'enregistrement la recalcule du texte du type). Vide en memoire.
     std::string typeKey{};
+    // 1.12.7 : UNE VALEUR CALCULEE AU DEMARRAGE, comme un final de Java. `computed` : la valeur
+    // (d'une constante) ou la valeur initiale (d'une variable) vient d'un code ST (`calc`), qui
+    // ecrit la declaration sous son nom, une fois, au demarrage, avant le premier cycle - les
+    // constantes d'abord, chacune apres celles qu'elle lit, puis les variables. Ses locales sont
+    // a part (`locals` : nom, type, valeur initiale ou expression, documentation) : jamais de
+    // VAR ... END_VAR dans le code. Faux : la valeur ecrite (`value`), comme avant.
+    bool                     computed{false};
+    std::string              calc{};
+    std::vector<Declaration> locals{};
     // La cle lue n'est pas la declaration : deux declarations egales le restent sans elle.
     bool operator==(const Declaration& o) const {
         return id == o.id && kind == o.kind && name == o.name && type == o.type && value == o.value && description == o.description
-            && storage == o.storage && mode == o.mode && visibility == o.visibility;
+            && storage == o.storage && mode == o.mode && visibility == o.visibility && computed == o.computed && calc == o.calc
+            && locals == o.locals;
     }
 };
 [[nodiscard]] std::string_view           declKindKey(DeclKind) noexcept;       // "constante", "variable", "parametre"

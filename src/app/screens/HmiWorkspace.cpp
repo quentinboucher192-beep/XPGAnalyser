@@ -40,6 +40,7 @@
 #include "../../hmi/HmiBuildState.hpp"  // 1.11 (chantier T3, C4) : les icones compilable / generable
 #include "../../hmi/HmiDecl.hpp"   // 1.11.18 (refonte, lot 3) : les declarations du modele
 #include "../hmi/HmiDesignPanes.hpp"
+#include "../hmi/HmiItemsDialog.hpp"   // 1.12.7 : le tableau des elements
 #include "../hmi/HmiAssetPanes.hpp"
 #include "../hmi/HmiAssist.hpp"
 #include "../hmi/HmiEditor.hpp"
@@ -454,24 +455,35 @@ void MainAnalysisScreen::bindHmi() {
     // 1.11.19 (refonte, lot 6) : le selecteur de types, demande par une grille ou un volet.
     typepicker::setHost([this](HmiTypePicker::Spec spec, typepicker::Done done) { askHmiType(std::move(spec), std::move(done)); });
     // 1.12.2 : les elements d'une valeur (une liste, un tableau, un dictionnaire, un tuple), un par ligne.
+    // 1.12.2 : les elements d'une valeur (une liste, un tableau, un dictionnaire, un tuple). 1.12.7 : un
+    // tableau, une ligne par element (HmiItemsDialog), a la place du texte « un par ligne ».
     itemseditor::setHost([this](itemseditor::Spec spec, itemseditor::Done done) {
-        const auto form = hmi::typeform::decompose(spec.type).form;
-        const bool map = form == hmi::typeform::Form::Map;
-        std::vector<FormDialog::Field> fields;
-        fields.push_back({"\xC3\x89l\xC3\xA9ments, un par ligne", itemseditor::linesOf(spec.value), {}, false, {}});
-        auto dialog = std::make_unique<FormDialog>("dialog.hmiItems", spec.title,
-            "Le type : " + spec.type + ". Un \xC3\xA9l\xC3\xA9ment par ligne : " + std::string(map ? "'cl\xC3\xA9' := valeur ('vis' := 120)" : "12.5, 'Pompe 1', TRUE")
-                + (form == hmi::typeform::Form::Tuple ? " - dans l'ordre des types du tuple" : "")
-                + (form == hmi::typeform::Form::Array || form == hmi::typeform::Form::Array2D
-                       ? " - case par case (deux dimensions : ligne par ligne) ; les cases suivantes gardent la valeur de leur type"
-                       : "")
-                + ". Aucune ligne : vide. La valeur est v\xC3\xA9rifi\xC3\xA9" "e en validant ; Ctrl+Z la reprend.",
-            std::move(fields), "Appliquer");
-        dialog->setCodeFields({0});
-        app_.menus().ShowDialog(std::move(dialog), [type = spec.type, done = std::move(done)](const menu::DialogResult& r) {
+        HmiItemsDialog::Spec s;
+        s.title = spec.title;
+        s.type = spec.type;
+        s.value = spec.value;
+        app_.menus().ShowDialog(std::make_unique<HmiItemsDialog>(std::move(s)), [done = std::move(done)](const menu::DialogResult& r) {
             if (!r.accepted() || !done) return;
-            const auto v = FormDialog::split(r.payload);   // le champ de code rend ses lignes telles quelles
-            done(itemseditor::literalOf(type, v.empty() ? std::string{} : v.front()));
+            done(r.payload);
+        });
+    });
+    // 1.12.7 : la valeur calculee au demarrage d'une constante ou d'une variable - son code et ses locales.
+    calceditor::setHost([this](calceditor::Spec spec, calceditor::Done done) {
+        std::vector<FormDialog::Field> fields;
+        fields.push_back({"Code du calcul (il \xC3\xA9" "crit " + spec.name + " ; vide : la valeur redevient \xC3\xA9" "crite)", spec.calc, {}, false, {}});
+        fields.push_back({"Locales, une par ligne (sans VAR ni END_VAR) : Nom : TYPE := valeur;   // documentation", spec.locals, {}, false, {}});
+        std::string explain = std::string(spec.constant ? "La constante " : "La valeur initiale de ") + spec.name + " (" + spec.type
+                            + ") est calcul\xC3\xA9" "e une fois au d\xC3\xA9marrage, avant les scripts de D\xC3\xA9marrage, comme un final de Java : "
+                              "le code lit les constantes du script, celles des autres scripts par leur nom (Reglages.Seuils), "
+                              "les valeurs de d\xC3\xA9part des variables IHM et les natives ; une erreur arr\xC3\xAAte le d\xC3\xA9marrage. "
+                              "Une boucle FOR sans variable d\xC3\xA9" "clar\xC3\xA9" "e : un DINT.";
+        if (!spec.info.empty()) explain += "\n" + spec.info;
+        auto dialog = std::make_unique<FormDialog>("dialog.hmiCalc", spec.title, explain, std::move(fields), "Appliquer");
+        dialog->setCodeFields({0, 1});
+        app_.menus().ShowDialog(std::move(dialog), [done = std::move(done)](const menu::DialogResult& r) {
+            if (!r.accepted() || !done) return;
+            const auto v = FormDialog::split(r.payload);
+            done(v.empty() ? std::string{} : v[0], v.size() > 1 ? v[1] : std::string{});
         });
     });
     // Les chemins relatifs des fichiers externes partent du dossier du projet.

@@ -829,6 +829,46 @@ std::string literalOf(std::string_view type, std::string_view lines) {
 }
 } // namespace itemseditor
 
+namespace calceditor {
+namespace {
+Host& host() {
+    static Host h;
+    return h;
+}
+} // namespace
+void setHost(Host h) { host() = std::move(h); }
+bool available() { return static_cast<bool>(host()); }
+void ask(Spec spec, Done done) {
+    if (host()) host()(std::move(spec), std::move(done));
+}
+std::string starter(std::string_view name, std::string_view type) {
+    const std::string n(name);
+    std::string u(type);
+    for (auto& c : u) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    if (u.rfind("MAP", 0) == 0)
+        return "(* " + n + " : une entr\xC3\xA9" "e par cl\xC3\xA9 *)\n" + n + "['exemple'] := 0;\n";
+    if (u.rfind("LIST", 0) == 0 || u.rfind("VECTOR", 0) == 0)
+        return "(* " + n + " : ses \xC3\xA9l\xC3\xA9ments, dans l'ordre *)\nFOR i := 1 TO 3 DO\n    LIST_ADD(" + n + ", i);\nEND_FOR;\n";
+    if (u.rfind("ARRAY", 0) == 0) {
+        // Les bornes de sa premiere dimension : ARRAY[1..4] OF REAL -> FOR i := 1 TO 4.
+        std::string lo = "0", hi = "2";
+        const auto open = u.find('['), dots = u.find("..");
+        const auto close = dots == std::string::npos ? std::string::npos : u.find_first_of(",]", dots);
+        const auto trim = [](std::string t) {
+            while (!t.empty() && t.front() == ' ') t.erase(t.begin());
+            while (!t.empty() && t.back() == ' ') t.pop_back();
+            return t;
+        };
+        if (open != std::string::npos && close != std::string::npos && open < dots) {
+            lo = trim(u.substr(open + 1, dots - open - 1));
+            hi = trim(u.substr(dots + 2, close - dots - 2));
+        }
+        return "(* " + n + " : case par case *)\nFOR i := " + lo + " TO " + hi + " DO\n    " + n + "[i] := i;\nEND_FOR;\n";
+    }
+    return n + " := 0;\n";
+}
+} // namespace calceditor
+
 void HmiTypePicker::remember(std::vector<std::string>& recents, const std::string& name) {
     if (name.empty()) return;
     recents.erase(std::remove(recents.begin(), recents.end(), name), recents.end());

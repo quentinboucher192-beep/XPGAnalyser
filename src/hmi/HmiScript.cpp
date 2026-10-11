@@ -176,6 +176,8 @@ std::string frenchSimMessage(std::string_view english) {
         const auto from = m.find("exceeded ") + 9;
         const std::string count = m.substr(from, m.find(' ', from) - from);
         out = "plus de " + count + " instructions : arr\xC3\xAAt\xC3\xA9 (une boucle ne se termine sans doute pas)";
+    } else if (startsWith(m, "the scan ran for more than its time limit")) {     // 1.12.7 : un calcul au demarrage (2 s)
+        out = "trop long : arr\xC3\xAAt\xC3\xA9 \xC3\xA0 son heure limite (une boucle ne se termine sans doute pas)";
     } else if (m == "division by zero") {
         out = "division par z\xC3\xA9ro";
     } else if (m == "modulo by zero") {

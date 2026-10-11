@@ -149,4 +149,27 @@ void ask(Spec spec, Done done);                   // rien sans hote
 [[nodiscard]] std::string literalOf(std::string_view type, std::string_view lines);
 } // namespace itemseditor
 
+// ---- 1.12.7 : LA VALEUR CALCULEE AU DEMARRAGE d'une constante ou d'une variable ----------------
+//  Son code ST (qui ecrit la declaration : Seuils := ...;) et ses locales (une par ligne, sans VAR ni
+//  END_VAR) ; `info` : ce que le calcul donne et ses fautes. Comme l'editeur des elements : la
+//  grille demande, l'hote ouvre la fenetre ; `done` recoit le code et les locales.
+namespace calceditor {
+struct Spec {
+    std::string title;      // « Valeur calculee de Seuils »
+    std::string name;       // Seuils
+    std::string type;       // MAP[STRING] OF REAL
+    bool        constant{true};
+    std::string calc;       // le code actuel (vide : un modele)
+    std::string locals;     // les locales, une par ligne
+    std::string info;       // la valeur calculee, les fautes
+};
+using Done = std::function<void(const std::string& calc, const std::string& locals)>;
+using Host = std::function<void(Spec, Done)>;
+void setHost(Host host);
+[[nodiscard]] bool available();
+void ask(Spec spec, Done done);                   // rien sans hote
+// Le code propose a une declaration sans calcul : "Seuils := ...;" avec un exemple selon son type.
+[[nodiscard]] std::string starter(std::string_view name, std::string_view type);
+} // namespace calceditor
+
 } // namespace app

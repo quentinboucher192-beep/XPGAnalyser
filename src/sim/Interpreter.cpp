@@ -3146,7 +3146,16 @@ private:
             const bool keep = obj && d.mode == VarDecl::Mode::Local && obj->type && sameType(*obj->type, **t);
             if (!keep) {
                 obj = makeObj(*t);
-                if (d.initial && !initialize(*obj, *d.initial, d.line)) return false;
+                // 1.12.7 : une valeur calculee au demarrage passe avant la valeur ecrite.
+                if (ObjRef given = limits_.initials ? limits_.initials->find(d.name) : nullptr) {
+                    std::string why;
+                    if (!assignObj(*obj, *given, &why)) {
+                        fail(d.line, d.name + " : " + why);
+                        return false;
+                    }
+                } else if (d.initial && !initialize(*obj, *d.initial, d.line)) {
+                    return false;
+                }
                 store->set(d.name, obj);
             }
             names[upperOf(d.name)] = Place{obj, {}, d.constant, false};
@@ -3587,7 +3596,7 @@ private:
             case Expr::Kind::Reference: {
                 if (auto* p = findLocal(e.name)) return *p;
                 if (dialect_)                                   // 1.12.2 : une variable du projet a taille variable
-                    if (auto o = env_.richVariable(e.name)) return Place{o, {}, false, false};
+                    if (auto o = env_.richVariable(e.name)) return Place{o, {}, env_.constantVariable(e.name), false};
                 return Place{nullptr, e.name, false, false};
             }
             case Expr::Kind::Deref: {
@@ -3614,7 +3623,7 @@ private:
                     // 1.12.4 : un membre objet d'une structure de l'environnement (Recette.Etapes) : son objet.
                     std::string name = p.name + "." + e.name;
                     if (dialect_)
-                        if (auto o = env_.richVariable(name)) return Place{o, {}, p.constant, false};
+                        if (auto o = env_.richVariable(name)) return Place{o, {}, p.constant || env_.constantVariable(name), false};
                     return Place{nullptr, std::move(name), p.constant, false};
                 }
                 // Une reference ou un pointeur se suit tout seul : r.Membre = r^.Membre.
