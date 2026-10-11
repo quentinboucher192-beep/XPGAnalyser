@@ -752,6 +752,31 @@ bool available() { return static_cast<bool>(host()); }
 void ask(HmiTypePicker::Spec spec, Done done) {
     if (host()) host()(std::move(spec), std::move(done));
 }
+const std::vector<std::string>& formChoices() {
+    static const std::vector<std::string> v{"Tableau\xE2\x80\xA6", "Liste\xE2\x80\xA6", "Vecteur\xE2\x80\xA6",
+                                            "Dictionnaire (MAP)\xE2\x80\xA6", "Tuple\xE2\x80\xA6"};
+    return v;
+}
+std::string formOfChoice(std::string_view text) {
+    static const char* const keys[] = {"tableau", "liste", "vecteur", "map", "tuple"};
+    const auto& v = formChoices();
+    for (std::size_t i = 0; i < v.size(); ++i)
+        if (text == v[i]) return keys[i];
+    return {};
+}
+std::string inForm(std::string_view current, std::string_view form) {
+    auto sh = tf::decompose(current);
+    const auto f = tf::fromText(form);
+    if (!f) return std::string(current);
+    if (sh.form != *f) {
+        sh.form = *f;
+        sh.parameter.clear();
+        sh.reference = false;
+    }
+    const std::string e = sh.element;
+    if (e.empty() || e == "ANY" || e == "any") sh.element = "INT";
+    return tf::compose(sh);
+}
 } // namespace typepicker
 
 namespace itemseditor {

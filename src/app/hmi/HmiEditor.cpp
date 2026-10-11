@@ -1261,8 +1261,10 @@ bool HmiEditor::commitView(const std::string& field, const std::string& value) {
             }
             return true;
         }
-        // 1.11.19 (lot 6) : "Choisir un type..." - le selecteur, puis le type entier (tableau compris).
-        if (value == typepicker::kChoose && field.size() > 5 && field.compare(field.size() - 5, 5, ":type") == 0) {
+        // 1.11.19 (lot 6) : "Choisir un type..." - le selecteur, puis le type entier (tableau compris) ;
+        // 1.12.4 : Tableau..., Liste..., Vecteur..., Dictionnaire (MAP)..., Tuple... - ouvert sur la forme.
+        const std::string form = typepicker::formOfChoice(value);
+        if ((value == typepicker::kChoose || !form.empty()) && field.size() > 5 && field.compare(field.size() - 5, 5, ":type") == 0) {
             const auto* cur = doc_->project.view(viewId_);
             const std::string rest = field.substr(hmiparams::kFieldPrefix.size());
             const std::size_t index = static_cast<std::size_t>(std::strtoul(rest.c_str(), nullptr, 10));
@@ -1270,6 +1272,7 @@ bool HmiEditor::commitView(const std::string& field, const std::string& value) {
             HmiTypePicker::Spec spec;
             spec.field = "Type de " + cur->params[index].name;
             spec.current = cur->params[index].type.empty() ? std::string("ANY") : cur->params[index].type;
+            if (!form.empty()) spec.current = typepicker::inForm(spec.current, form);
             spec.use = hmi::typereg::UseParameter;
             spec.doc = doc_;
             spec.plc = hmiparams::plcTypesOf(hmiparams::program().get());

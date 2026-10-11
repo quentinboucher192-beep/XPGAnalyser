@@ -12617,16 +12617,20 @@ void v19_parametres_popups() {
     check(deepCommit(ed.properties(), "Seuil", "Type", "REAL") && deepCommit(ed.properties(), "Nom", "Type", "STRING"), "Seuil : REAL, Nom : STRING");
     ed.layout();
     check(p.view(popId)->param("Moteur")->type == "T_Moteur" && p.view(popId)->param("Seuil")->type == "REAL", "les types enregistr\xC3\xA9s");
-    check(deepCommit(ed.properties(), "Nom", "Tableau", "1..10") && p.view(popId)->param("Nom")->type == "ARRAY[1..10] OF STRING",
-          "Tableau : ARRAY[1..10] OF STRING");
+    // 1.12.4 : une seule ligne Type - le type entier dit s'il est un tableau (plus de ligne Tableau).
+    check(!deepProp(ed.properties().categories(), "Nom", "Tableau"), "plus de ligne Tableau : le Type dit tout");
+    check(deepCommit(ed.properties(), "Nom", "Type", "ARRAY[1..10] OF STRING") && p.view(popId)->param("Nom")->type == "ARRAY[1..10] OF STRING",
+          "Type : ARRAY[1..10] OF STRING");
     ed.layout();
-    check(deepCommit(ed.properties(), "Nom", "Type", "INT") && p.view(popId)->param("Nom")->type == "ARRAY[1..10] OF INT",
-          "... changer le type garde les bornes");
+    {
+        const auto* nomType = deepProp(ed.properties().categories(), "Nom", "Type");
+        check(nomType && nomType->value == "ARRAY[1..10] OF STRING", "... la ligne Type le montre entier (" + (nomType ? nomType->value : std::string("?")) + ")");
+    }
+    check(deepCommit(ed.properties(), "Nom", "Type", "list of real") && p.view(popId)->param("Nom")->type == "LIST OF REAL",
+          "Type : LIST OF REAL (remis en forme)");
     ed.layout();
-    check(!deepCommit(ed.properties(), "Nom", "Tableau", "10"), "des bornes a..b");
-    check(deepCommit(ed.properties(), "Nom", "Tableau", "") && deepCommit(ed.properties(), "Nom", "Type", "STRING")
-              && p.view(popId)->param("Nom")->type == "STRING",
-          "vide : plus un tableau");
+    check(deepCommit(ed.properties(), "Nom", "Type", "STRING") && p.view(popId)->param("Nom")->type == "STRING",
+          "un type de la liste le remplace : STRING");
     ed.layout();
     check(deepCommit(ed.properties(), "Moteur", "Mode", "Les deux") && p.view(popId)->param("Moteur")->mode == ParamMode::Both, "Moteur : Les deux");
     ed.layout();

@@ -117,6 +117,13 @@ using Host = std::function<void(HmiTypePicker::Spec, Done)>;
 void setHost(Host host);
 [[nodiscard]] bool available();
 void ask(HmiTypePicker::Spec spec, Done done);    // rien sans hote
+// 1.12.4 : LES FORMES dans une liste de types (une seule ligne Type) - Tableau..., Liste...,
+// Vecteur..., Dictionnaire (MAP)..., Tuple... : le selecteur s'ouvre sur cette forme. La cle de la
+// forme d'une entree ("tableau", "liste", "vecteur", "map", "tuple") ; vide : pas une telle entree.
+[[nodiscard]] const std::vector<std::string>& formChoices();
+[[nodiscard]] std::string formOfChoice(std::string_view text);
+// Le type `current` mis dans la forme `form` (sa cle) : LIST OF REAL depuis REAL ; ANY : INT.
+[[nodiscard]] std::string inForm(std::string_view current, std::string_view form);
 } // namespace typepicker
 
 // ---- 1.12.2 : L'EDITEUR DES ELEMENTS D'UNE VALEUR --------------------------------------

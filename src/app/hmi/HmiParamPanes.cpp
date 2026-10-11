@@ -56,6 +56,8 @@ std::function<void(const std::string&, const std::string&)>& openHost() {
 // Le groupe d'un type ("type de base", "type IHM", "DDT de l'API", "tableau").
 std::string typeGroup(const hmi::Project& p, const std::string& type, const hmi::params::PlcTypes& plc) {
     if (trim(type).empty()) return "type de base (ANY)";
+    // 1.12.4 : une liste, un vecteur, un dictionnaire, un tuple - dans la memoire de l'IHM.
+    if (hmi::types::isRich(type)) return "type objet (dans la m\xC3\xA9moire de l'IHM)";
     const std::string u = upper(type);
     if (u.rfind("ARRAY", 0) == 0) return "tableau";
     for (const auto& b : hmi::params::baseTypes())
@@ -245,10 +247,14 @@ std::vector<PG::Category> paramCategories(const hmi::Project& p, const hmi::View
                                       "Tape le nom du nouveau param\xC3\xA8tre (Moteur, Consigne) : il s'ajoute en fin de liste, "
                                       "en R\xC3\xA9" "f\xC3\xA9rence, type ANY.",
                                       {}, field("param19:ajouter")));
-        // Les types proposes : base, types IHM, DDT de l'API (dans cet ordre).
+        // Les types proposes : base, types IHM, DDT de l'API (dans cet ordre) ; 1.12.4 : puis les formes
+        // (Tableau..., Liste..., Vecteur..., Dictionnaire (MAP)..., Tuple...) et le selecteur.
         std::vector<std::string> typeChoices;
         for (const auto& c : hmi::params::proposedTypes(p, plc)) typeChoices.push_back(c.name);
-        if (typepicker::available()) typeChoices.push_back(typepicker::kChoose);   // 1.11.19 : le selecteur de types
+        if (typepicker::available()) {                                  // 1.11.19 : le selecteur de types
+            for (const auto& f : typepicker::formChoices()) typeChoices.push_back(f);
+            typeChoices.push_back(typepicker::kChoose);
+        }
         std::vector<std::string> modeChoices;
         for (const auto m : hmi::params::kParamModes) modeChoices.emplace_back(hmi::params::paramModeLabel(m));
         for (std::size_t i = 0; i < v.params.size(); ++i) {
@@ -263,18 +269,18 @@ std::vector<PG::Category> paramCategories(const hmi::Project& p, const hmi::View
                                           "titre), et pour un symbole son code (fonctions, alarmes, popups, red\xC3\xA9" "finitions) ; "
                                           "l'argument de chaque instance et de chaque action qui l'ouvre. Un seul Ctrl+Z.",
                                           {}, field(key + "nom")));
-            auto [bounds, element] = splitArray(prm.type);
+            // 1.12.4 : UNE SEULE LIGNE Type - le type entier dit s'il est un tableau (ARRAY[1..10] OF REAL),
+            // une liste, un dictionnaire, un tuple (plus de ligne Tableau a cote).
             std::vector<std::string> choices = typeChoices;
-            if (!trim(element).empty() && std::find(choices.begin(), choices.end(), element) == choices.end())
-                choices.insert(choices.begin(), element);
-            row.properties.push_back(prop("Type", shownType(element), PG::ValueType::Enum,
-                                          typeGroup(p, element, plc) + ". Types de base, types IHM du projet (structures, "
-                                          "tableaux), DDT de l'API" + (plc.names ? std::string(" (import\xC3\xA9s du programme)")
-                                                                                  : std::string(" (aucun programme charg\xC3\xA9)")) + ".",
+            const std::string shown = shownType(prm.type);
+            if (std::find(choices.begin(), choices.end(), shown) == choices.end()) choices.insert(choices.begin(), shown);
+            row.properties.push_back(prop("Type", shown, PG::ValueType::Enum,
+                                          typeGroup(p, prm.type, plc) + ". Types de base, types IHM du projet (structures, "
+                                          "\xC3\xA9num\xC3\xA9rations), DDT de l'API" + (plc.names ? std::string(" (import\xC3\xA9s du programme)")
+                                                                                  : std::string(" (aucun programme charg\xC3\xA9)"))
+                                              + ". Tableau\xE2\x80\xA6 (ARRAY[1..10] OF REAL), Liste\xE2\x80\xA6, Vecteur\xE2\x80\xA6, "
+                                                "Dictionnaire (MAP)\xE2\x80\xA6, Tuple\xE2\x80\xA6 : la forme, au s\xC3\xA9lecteur de types.",
                                           choices, field(key + "type")));
-            row.properties.push_back(prop("Tableau", bounds, PG::ValueType::Text,
-                                          "ARRAY[ a .. b ] OF le type : \xC3\xA9" "cris les bornes (1..10) ; vide : pas un tableau.",
-                                          {}, field(key + "tableau")));
             if (symbol)
                 row.properties.push_back(prop("Mode", "R\xC3\xA9" "f\xC3\xA9rence (REF)", PG::ValueType::ReadOnly,
                                               "Un symbole n'a que le mode R\xC3\xA9" "f\xC3\xA9rence : l'instance est d\xC3\xA9velopp\xC3\xA9" "e en texte."));
@@ -434,12 +440,16 @@ FieldResult applyParamField(hmi::Project& p, hmi::Id viewId, std::string_view fi
         return r;
     }
     if (what == "type") {
-        if (value == typepicker::kChoose) { r.ok = false; r.why = "le s\xC3\xA9lecteur de types n'est pas ouvert ici"; return r; }
-        const auto [bounds, element] = splitArray(prm.type);
+        if (value == typepicker::kChoose || !typepicker::formOfChoice(value).empty()) {
+            r.ok = false;
+            r.why = "le s\xC3\xA9lecteur de types n'est pas ouvert ici";
+            return r;
+        }
+        // 1.12.4 : une seule ligne Type - le type entier ; un type de la liste le remplace (REAL apres
+        // ARRAY[1..10] OF REAL : un REAL ; Tableau... remet un tableau).
         std::string t = trim(value);
         if (upper(t) == "ANY") t.clear();
-        if (!bounds.empty() && !t.empty()) t = "ARRAY[" + bounds + "] OF " + t;
-        prm.type = t;
+        prm.type = t.empty() ? t : hmi::types::normalized(t);
         return r;
     }
     if (what == "tableau") {
@@ -701,6 +711,13 @@ bool copyModified(const hmi::Runtime& rt, hmi::Id view, std::string_view path) {
         const auto cap = c->captured.find(k);
         if (cap == c->captured.end() || !cap->second.equals(value)) return true;
     }
+    // 1.12.4 : un objet (le parametre entier, un membre objet) change depuis l'ouverture.
+    for (const auto& [k, obj] : c->objects) {
+        if (!(k == key || (k.size() > key.size() && k.compare(0, key.size(), key) == 0 && (k[key.size()] == '.' || k[key.size()] == '['))))
+            continue;
+        const auto cap = c->capturedObjects.find(k);
+        if (obj && (cap == c->capturedObjects.end() || !cap->second || !sim::deepEquals(*cap->second, *obj))) return true;
+    }
     return false;
 }
 
@@ -788,9 +805,28 @@ std::vector<std::vector<std::string>> popupRows(hmi::Runtime& rt, const hmi::Pro
                         ref += (ref.empty() ? "" : " ; ") + c->source + rel + " = " + now.display() + " (pas encore \xC3\xA9" "crit)";
                 }
             }
+            // 1.12.4 : les objets (une liste, une MAP...) - leur valeur ecrite, s'ils ont change.
+            for (const auto& [key, obj] : c->objects) {
+                if (!obj) continue;
+                const auto cap = c->capturedObjects.find(key);
+                if (cap != c->capturedObjects.end() && cap->second && sim::deepEquals(*cap->second, *obj)) continue;
+                ++changed;
+                const auto path = c->paths.find(key);
+                const std::string rel = path == c->paths.end() ? key : path->second;
+                std::string text;
+                if (!sim::literalText(*obj, text)) text = sim::display(*obj);
+                copy += (copy.empty() ? "" : " ; ") + (rel.empty() ? std::string("copie") : "copie" + rel) + " = " + text;
+                if (!c->source.empty()) ref += (ref.empty() ? "" : " ; ") + c->source + rel + " (pas encore \xC3\xA9" "crit)";
+            }
             if (!changed) {
                 const auto whole = c->values.find(std::string{});
-                copy = whole != c->values.end() ? whole->second.display() : "captur\xC3\xA9" "e \xC3\xA0 l'ouverture";
+                const auto wholeObj = c->objects.find(std::string{});
+                std::string objText;
+                if (wholeObj != c->objects.end() && wholeObj->second && !sim::literalText(*wholeObj->second, objText))
+                    objText = sim::display(*wholeObj->second);
+                copy = whole != c->values.end() ? whole->second.display()
+                     : !objText.empty()          ? objText
+                                                 : "captur\xC3\xA9" "e \xC3\xA0 l'ouverture";
                 ref = c->source.empty() ? std::string("une valeur") : c->source;
             }
             row[4] = copy;
@@ -804,11 +840,19 @@ std::vector<std::vector<std::string>> popupRows(hmi::Runtime& rt, const hmi::Pro
 std::size_t modifiedCopies(const hmi::Runtime& rt) {
     std::size_t n = 0;
     for (const auto& slot : rt.popupSlots())
-        for (const auto& c : slot.copies)
+        for (const auto& c : slot.copies) {
+            bool changed = false;
             for (const auto& [key, value] : c.values) {
                 const auto cap = c.captured.find(key);
-                if (cap == c.captured.end() || !cap->second.equals(value)) { ++n; break; }
+                if (cap == c.captured.end() || !cap->second.equals(value)) { changed = true; break; }
             }
+            for (const auto& [key, obj] : c.objects) {          // 1.12.4 : un objet change aussi
+                if (changed || !obj) break;
+                const auto cap = c.capturedObjects.find(key);
+                changed = cap == c.capturedObjects.end() || !cap->second || !sim::deepEquals(*cap->second, *obj);
+            }
+            if (changed) ++n;
+        }
     return n;
 }
 
