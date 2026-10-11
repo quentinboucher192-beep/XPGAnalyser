@@ -1,0 +1,1920 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Constantes calculées et std::numeric</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Une colonne de lecture, un sommaire collé à gauche sur grand écran. Les fenêtres de
+   l'appli sont dessinées avec sa police (Segoe UI sous Windows) ; la page autour en IBM Plex,
+   comme les maquettes précédentes du projet (docs/maquettes). */
+:root{
+  --page:#eef0f3; --page-2:#e3e7ec; --ink:#1a1f26; --ink-2:#47505b; --ink-3:#69717c; --rule:#d3d8de;
+  --app:#eceeef; --app-2:#fbfbfc; --app-3:#e3e7ea; --app-head:#e6e9ec; --app-line:#cfd5db;
+  --app-fg:#1d232b; --app-fg-2:#4d5662; --app-fg-3:#747c87;
+  --hover:#e0e8f2; --sel:#c8dbf3; --sel-fg:#0c2547; --accent:#1f66d1; --accent-2:#e0eafa; --accent-fg:#ffffff;
+  --ok:#17834a; --ok-bg:#dff2e7; --warn:#a35c00; --warn-bg:#fbeedb; --err:#c42b2b; --err-bg:#fae5e5;
+  --calc:#0a7466; --calc-bg:#dbf1ed; --new:#6a4bd0; --new-bg:#ebe5fc;
+  --c-kw:#0b54c4; --c-type:#8a5a00; --c-fn:#7a3fc4; --c-str:#b2361f; --c-num:#2f7d32; --c-com:#6f7884; --c-const:#0a7466; --c-ext:#a0437a;
+  --shadow:0 1px 0 rgba(20,30,40,.05), 0 14px 34px -22px rgba(20,30,40,.5);
+  --ui:"Segoe UI","Noto Sans","DejaVu Sans",system-ui,sans-serif;
+  --doc:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+  --mono:"IBM Plex Mono","Cascadia Mono",Consolas,"DejaVu Sans Mono",monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --page:#0f1215; --page-2:#171b20; --ink:#e5e8ec; --ink-2:#afb6c0; --ink-3:#848c97; --rule:#272c33;
+    --app:#1b1f24; --app-2:#20252b; --app-3:#282e35; --app-head:#232930; --app-line:#333a42;
+    --app-fg:#e2e6eb; --app-fg-2:#aeb5bf; --app-fg-3:#808892;
+    --hover:#262d36; --sel:#1d3556; --sel-fg:#ffffff; --accent:#5b9bff; --accent-2:#1b2c45; --accent-fg:#0b1220;
+    --ok:#4fcb85; --ok-bg:#16301f; --warn:#f2a23c; --warn-bg:#382915; --err:#ff6d6d; --err-bg:#3a1c1f;
+    --calc:#4fd1c1; --calc-bg:#12312d; --new:#b8a1ff; --new-bg:#2a2346;
+    --c-kw:#6aa8ff; --c-type:#e5b74b; --c-fn:#c49bff; --c-str:#f08a6c; --c-num:#8fd18f; --c-com:#7e8691; --c-const:#4fd1c1; --c-ext:#f08ac0;
+    --shadow:0 1px 0 rgba(0,0,0,.3), 0 16px 38px -20px rgba(0,0,0,.85);
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --page:#0f1215; --page-2:#171b20; --ink:#e5e8ec; --ink-2:#afb6c0; --ink-3:#848c97; --rule:#272c33;
+  --app:#1b1f24; --app-2:#20252b; --app-3:#282e35; --app-head:#232930; --app-line:#333a42;
+  --app-fg:#e2e6eb; --app-fg-2:#aeb5bf; --app-fg-3:#808892;
+  --hover:#262d36; --sel:#1d3556; --sel-fg:#ffffff; --accent:#5b9bff; --accent-2:#1b2c45; --accent-fg:#0b1220;
+  --ok:#4fcb85; --ok-bg:#16301f; --warn:#f2a23c; --warn-bg:#382915; --err:#ff6d6d; --err-bg:#3a1c1f;
+  --calc:#4fd1c1; --calc-bg:#12312d; --new:#b8a1ff; --new-bg:#2a2346;
+  --c-kw:#6aa8ff; --c-type:#e5b74b; --c-fn:#c49bff; --c-str:#f08a6c; --c-num:#8fd18f; --c-com:#7e8691; --c-const:#4fd1c1; --c-ext:#f08ac0;
+  --shadow:0 1px 0 rgba(0,0,0,.3), 0 16px 38px -20px rgba(0,0,0,.85);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}*{transition:none!important;animation:none!important}}
+body{margin:0;background:var(--page);color:var(--ink);font:15px/1.6 var(--doc);padding-inline:16px;padding-block:28px 80px}
+.wrap{max-width:1280px;margin:0 auto;display:grid;grid-template-columns:196px minmax(0,1fr);gap:44px}
+@media (max-width:1020px){.wrap{grid-template-columns:minmax(0,1fr)}.toc{display:none}}
+.toc{position:sticky;top:calc(env(safe-area-inset-top,0px) + 20px);align-self:start;font-size:13px}
+.toc .ver{font:500 11px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);padding:0 10px 10px}
+.toc ol{list-style:none;margin:0;padding:0;display:grid;gap:2px}
+.toc a{display:block;padding:5px 10px;border-radius:6px;color:var(--ink-2);text-decoration:none}
+.toc a:hover,.toc a.on{background:var(--page-2);color:var(--ink)}
+.toc a.on{font-weight:600}
+main{min-width:0}
+.eyebrow{font:500 12px/1.4 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);margin:0 0 10px}
+h1{font-size:clamp(28px,3.6vw,40px);line-height:1.12;letter-spacing:-.01em;margin:0 0 14px;text-wrap:balance;font-weight:600}
+h2{font-size:clamp(21px,2.4vw,26px);line-height:1.2;margin:2px 0 8px;text-wrap:balance;font-weight:600}
+h3{font-size:16px;margin:24px 0 6px;font-weight:600;text-wrap:balance}
+p{margin:0 0 12px;max-width:76ch}
+.lead{font-size:17px;color:var(--ink-2);max-width:70ch}
+.quotes{display:grid;gap:6px;margin:18px 0 0;padding:0;list-style:none;max-width:90ch}
+.quotes li{font-size:14px;color:var(--ink-2);padding:7px 12px;border-left:3px solid var(--rule);background:var(--page-2);border-radius:0 6px 6px 0}
+section{padding-block:30px 10px;border-top:1px solid var(--rule)}
+header.hero{padding-block:2px 26px}
+.secno{font:500 12px var(--mono);color:var(--ink-3);letter-spacing:.06em;text-transform:uppercase}
+.sub{color:var(--ink-2)}
+code,kbd{font-family:var(--mono);font-size:.88em}
+code{background:var(--page-2);padding:1px 5px;border-radius:4px}
+kbd{border:1px solid var(--rule);border-bottom-width:2px;border-radius:4px;padding:0 5px;background:var(--page)}
+ul.plain{margin:6px 0 12px;padding-left:20px;max-width:76ch}
+ul.plain li{margin:3px 0}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin:10px 0 4px}
+.card{background:var(--page-2);border-radius:8px;padding:14px 16px;min-width:0}
+.card .k{font:500 11px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--calc);margin:0 0 4px}
+.card h4{margin:0 0 6px;font-size:15px}
+.card p{font-size:13.5px;color:var(--ink-2);margin:0}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px 28px;margin:8px 0}
+.note{font-size:13.5px;color:var(--ink-2);background:var(--page-2);border-radius:8px;padding:10px 14px;margin:12px 0;max-width:90ch}
+.note b{color:var(--ink)}
+.types{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0 4px}
+.tchip{appearance:none;border:1px solid var(--rule);background:var(--page-2);color:var(--ink);font:13px var(--doc);padding:4px 11px;border-radius:14px;cursor:pointer;display:inline-flex;gap:7px;align-items:baseline}
+.tchip .t{font:11.5px var(--mono);color:var(--ink-3)}
+.tchip:hover{border-color:var(--accent)}
+.tchip.on{border-color:var(--accent);background:var(--accent-2)}
+.go{appearance:none;border:0;background:none;padding:0;color:var(--accent);font:inherit;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ---------------------------------------------------------------- la fenetre de l'appli */
+.app{background:var(--app);border:1px solid var(--app-line);border-radius:8px;font:13px/1.45 var(--ui);color:var(--app-fg);box-shadow:var(--shadow);overflow:hidden;margin:14px 0 8px}
+.app-bar{display:flex;align-items:center;gap:8px;padding:7px 12px;background:var(--app-head);border-bottom:1px solid var(--app-line);font-size:12px;color:var(--app-fg-2);flex-wrap:wrap}
+.app-bar b{color:var(--app-fg);font-weight:600}
+.lang{font:600 10.5px var(--mono);padding:1px 6px;border-radius:4px;background:var(--accent-2);color:var(--accent)}
+.tabs{display:flex;gap:2px;padding:4px 10px 0;border-bottom:1px solid var(--app-line);overflow-x:auto}
+.tab{appearance:none;border:0;background:transparent;font:inherit;color:var(--app-fg-2);padding:7px 14px;border-bottom:2px solid transparent;cursor:pointer;display:flex;gap:6px;align-items:center;white-space:nowrap}
+.tab:hover{color:var(--app-fg)}
+.tab.on{color:var(--app-fg);border-bottom-color:var(--accent);font-weight:600}
+.count{font-size:11px;min-width:18px;padding:0 5px;border-radius:9px;background:var(--app-3);color:var(--app-fg-2);text-align:center;font-weight:400}
+.tools{display:flex;gap:2px;align-items:center;padding:5px 8px;border-bottom:1px solid var(--app-line);flex-wrap:wrap}
+.tbtn{appearance:none;border:1px solid transparent;background:transparent;font:inherit;font-size:12px;color:var(--app-fg);padding:4px 8px;border-radius:4px;cursor:pointer;display:inline-flex;gap:5px;align-items:center;white-space:nowrap}
+.tbtn:hover{background:var(--hover);border-color:var(--app-line)}
+.tbtn[disabled]{color:var(--app-fg-3);cursor:default;background:transparent;border-color:transparent}
+.tbtn.new{color:var(--new)}
+.tsep{width:1px;height:18px;background:var(--app-line);margin:0 4px}
+.search{margin-left:auto;border:1px solid var(--app-line);background:var(--app-2);color:var(--app-fg-3);padding:3px 8px;border-radius:4px;font-size:12px;min-width:150px}
+.gridwrap{overflow:auto;max-height:440px;background:var(--app-2)}
+table.grid{border-collapse:collapse;width:100%;min-width:1000px;font-variant-numeric:tabular-nums}
+.grid th{position:sticky;top:0;z-index:2;background:var(--app-head);color:var(--app-fg-2);font-weight:500;text-align:left;padding:5px 8px;border-bottom:1px solid var(--app-line);border-right:1px solid var(--app-line);font-size:12px;white-space:nowrap}
+.grid td{padding:2px 8px;border-bottom:1px solid var(--app-3);white-space:nowrap;vertical-align:middle;height:26px}
+.grid tbody tr:hover td{background:var(--hover)}
+.grid tr.sel td{background:var(--sel);color:var(--sel-fg)}
+.grid tr.child td{color:var(--app-fg-2)}
+.grid tr.child.sel td{color:var(--sel-fg)}
+.grid tr.addrow:hover td{background:transparent}
+.namecell{display:flex;align-items:center;gap:4px}
+.tw{appearance:none;border:0;background:transparent;width:18px;height:18px;padding:0;color:var(--app-fg-2);cursor:pointer;font-size:11px;line-height:18px;flex:none;border-radius:3px}
+.tw:hover{background:var(--app-3)}
+.tw[disabled]{visibility:hidden}
+.ico{width:16px;text-align:center;color:var(--app-fg-3);font:12px var(--mono);flex:none}
+.key{font-family:var(--mono);font-size:12px}
+.fx{font:italic 600 11px var(--mono);color:var(--calc);background:var(--calc-bg);padding:0 5px;border-radius:3px;margin-right:6px}
+.el{font:600 10.5px var(--ui);color:var(--accent);background:var(--accent-2);padding:0 5px;border-radius:3px;margin-right:6px}
+.vcalc{color:var(--calc);margin-right:6px}
+.prev{font-family:var(--mono);font-size:12px}
+.ro{font-style:italic;color:var(--app-fg-3)}
+tr.sel .ro{color:var(--sel-fg)}
+.size{color:var(--app-fg-3);font-size:12px}
+.vis-pub{color:var(--ok)}
+.vis-priv{color:var(--app-fg-3)}
+.editable{cursor:text;border-bottom:1px dashed var(--app-line)}
+.cell-edit{width:min(280px,100%);font:12px var(--mono);border:1px solid var(--accent);background:var(--app-2);color:var(--app-fg);padding:1px 4px;border-radius:2px}
+.cell-err{color:var(--err);font-size:11.5px;margin-left:8px;white-space:normal}
+.del{visibility:hidden;margin-left:6px;border:0;background:transparent;color:var(--err);cursor:pointer;font-size:12px;padding:0 4px;border-radius:3px}
+tr:hover .del,.del:focus-visible{visibility:visible}
+.del:hover{background:var(--err-bg)}
+.addbtn{appearance:none;border:0;background:transparent;color:var(--accent);font:inherit;font-size:12px;cursor:pointer;padding:2px 4px;border-radius:3px}
+.addbtn:hover{background:var(--accent-2)}
+
+/* ------------------------------------------------------------- l'editeur de la valeur */
+.ed{border-top:1px solid var(--app-line);background:var(--app)}
+.ed-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:8px 12px;border-bottom:1px solid var(--app-line)}
+.ed-title{font-weight:600}
+.ed-type{font:12px var(--mono);color:var(--app-fg-2)}
+.seg{display:inline-flex;border:1px solid var(--app-line);border-radius:6px;overflow:hidden;margin-left:auto;flex-wrap:wrap}
+.seg button{appearance:none;border:0;background:var(--app-2);font:inherit;font-size:12px;padding:5px 12px;color:var(--app-fg-2);cursor:pointer;border-right:1px solid var(--app-line)}
+.seg button:last-child{border-right:0}
+.seg button.on{background:var(--accent);color:var(--accent-fg)}
+.seg button[disabled]{opacity:.45;cursor:not-allowed}
+.ed-body{padding:12px;display:grid;gap:10px}
+.ed-split{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:12px}
+@media (max-width:860px){.ed-split{grid-template-columns:minmax(0,1fr)}}
+.help{font-size:12px;color:var(--app-fg-2)}
+.help code{background:var(--app-3)}
+.field{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.inp{font:12.5px var(--mono);padding:4px 7px;border:1px solid var(--app-line);border-radius:4px;background:var(--app-2);color:var(--app-fg);min-width:0}
+.inp.bad{border-color:var(--err);background:var(--err-bg)}
+textarea.inp{width:100%;min-height:64px;resize:vertical}
+.msg{font-size:12px}
+.msg.err{color:var(--err)} .msg.ok{color:var(--ok)} .msg.warn{color:var(--warn)}
+.btn{appearance:none;border:1px solid var(--app-line);background:var(--app-2);color:var(--app-fg);font:inherit;font-size:12px;padding:4px 10px;border-radius:4px;cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.rowbtns{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.etwrap{overflow-x:auto}
+table.etab{border-collapse:collapse;width:100%;font-size:12.5px;background:var(--app-2);border:1px solid var(--app-line)}
+.etab th{background:var(--app-head);font-weight:500;color:var(--app-fg-2);text-align:left;padding:4px 8px;border-bottom:1px solid var(--app-line);white-space:nowrap}
+.etab td{padding:2px 6px;border-bottom:1px solid var(--app-3);vertical-align:middle}
+.etab input{width:100%;min-width:70px;font:12.5px var(--mono);border:1px solid transparent;background:transparent;color:var(--app-fg);padding:2px 4px;border-radius:3px}
+.etab input:hover{border-color:var(--app-line)}
+.etab input:focus{border-color:var(--accent);background:var(--app-2);outline:none}
+.etab input.bad{border-color:var(--err);background:var(--err-bg)}
+.etab .idx{font:12px var(--mono);color:var(--app-fg-3);white-space:nowrap}
+.etab .acts{white-space:nowrap;text-align:right}
+.mini{appearance:none;border:0;background:transparent;color:var(--app-fg-2);cursor:pointer;font-size:12px;padding:1px 5px;border-radius:3px}
+.mini:hover{background:var(--app-3);color:var(--app-fg)}
+.mini.x:hover{background:var(--err-bg);color:var(--err)}
+.mat input{text-align:right}
+
+/* ------------------------------------------------------------------ l'editeur de code */
+.code{display:grid;grid-template-columns:38px minmax(0,1fr);border:1px solid var(--app-line);border-radius:4px;background:var(--app-2);font:13px/20px var(--mono);height:236px}
+.gut{background:var(--app-3);color:var(--app-fg-3);text-align:right;padding:8px 6px 8px 0;user-select:none;overflow:hidden;white-space:pre;font-size:12px}
+.carea{position:relative;min-width:0;overflow:hidden}
+.carea pre,.carea textarea{margin:0;padding:8px 10px;font:13px/20px var(--mono);white-space:pre;tab-size:4;-moz-tab-size:4;border:0;letter-spacing:0;word-spacing:0;overflow-wrap:normal;word-break:normal}
+.carea pre{position:absolute;inset:0;color:var(--app-fg);pointer-events:none;overflow:hidden}
+.carea textarea{position:absolute;inset:0;width:100%;height:100%;resize:none;background:transparent;color:transparent;caret-color:var(--app-fg);outline:none;overflow:auto}
+.carea textarea::selection{background:var(--sel);color:transparent}
+.meas{position:absolute;visibility:hidden;white-space:pre;font:13px/20px var(--mono)}
+.squigs{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.sq{position:absolute;height:2px;border-bottom:2px dotted var(--err)}
+.sq.warn{border-bottom-color:var(--warn)}
+.t-kw{color:var(--c-kw)} .t-fn{color:var(--c-fn)} .t-str{color:var(--c-str)} .t-num{color:var(--c-num)}
+.t-com{color:var(--c-com);font-style:italic} .t-const{color:var(--c-const)} .t-ext{color:var(--c-ext)} .t-type{color:var(--c-type)} .t-hmi{color:var(--warn)}
+.codebar{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;font-size:12px;color:var(--app-fg-2)}
+.side{display:grid;gap:10px;align-content:start;min-width:0}
+.box{border:1px solid var(--app-line);border-radius:6px;background:var(--app-2);padding:8px 10px;min-width:0}
+.box h5{margin:0 0 6px;font:600 11px var(--ui);letter-spacing:.05em;text-transform:uppercase;color:var(--app-fg-3)}
+.chips{display:flex;flex-wrap:wrap;gap:4px}
+.chip{appearance:none;font:12px var(--mono);padding:1px 7px;border-radius:10px;background:var(--app-3);color:var(--app-fg);border:0;cursor:pointer}
+.chip.ext{background:var(--accent-2);color:var(--accent);cursor:default}
+.chip.hmi{background:var(--warn-bg);color:var(--warn);cursor:default}
+.diag{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 8px;font-size:12.5px;margin:0}
+.diag button{appearance:none;border:0;background:none;padding:0;text-align:left;font:inherit;color:inherit;cursor:pointer}
+.diag button:hover{text-decoration:underline}
+.sev{font:600 10.5px var(--ui);padding:0 6px;border-radius:3px;align-self:start;margin-top:2px;white-space:nowrap}
+.sev.err{background:var(--err-bg);color:var(--err)} .sev.warn{background:var(--warn-bg);color:var(--warn)} .sev.ok{background:var(--ok-bg);color:var(--ok)}
+.tree{font:12px/1.65 var(--mono);margin:0;padding:0;list-style:none}
+.tree ul{list-style:none;margin:0;padding-left:14px;border-left:1px dotted var(--app-line)}
+.tree .tk{color:var(--app-fg-3)}
+.tree .tsz{color:var(--app-fg-3);font-family:var(--ui);font-size:11px}
+.small{font-size:12px;color:var(--app-fg-2)}
+
+/* ------------------------------------------------------------ l'aide a la saisie */
+.ac{position:fixed;z-index:50;display:grid;grid-template-columns:minmax(240px,300px) minmax(0,250px);background:var(--app-2);border:1px solid var(--app-line);border-radius:6px;box-shadow:var(--shadow);font:12.5px/1.35 var(--ui);color:var(--app-fg);overflow:hidden;max-width:calc(100vw - 24px)}
+@media (max-width:640px){.ac{grid-template-columns:minmax(220px,1fr)}.ac .ac-doc{display:none}}
+.ac-list{max-height:250px;overflow:auto;padding:3px 0;border-right:1px solid var(--app-line)}
+.ac-item{display:grid;grid-template-columns:20px minmax(0,1fr) auto;gap:6px;align-items:center;padding:3px 8px;cursor:pointer;white-space:nowrap}
+.ac-item.on{background:var(--sel);color:var(--sel-fg)}
+.ac-item.off{color:var(--app-fg-3)}
+.ac-item .lbl{overflow:hidden;text-overflow:ellipsis;font-family:var(--mono);font-size:12px}
+.ac-k{font:600 10px var(--mono);text-align:center;border-radius:3px;padding:1px 0}
+.k-const{background:var(--calc-bg);color:var(--calc)} .k-fn{background:var(--new-bg);color:var(--new)} .k-kw{background:var(--app-3);color:var(--c-kw)}
+.k-script{background:var(--accent-2);color:var(--accent)} .k-hmi{background:var(--warn-bg);color:var(--warn)} .k-local{background:var(--app-3);color:var(--app-fg-2)}
+.k-type{background:var(--app-3);color:var(--c-type)} .k-var{background:var(--err-bg);color:var(--err)}
+.ac-d{color:var(--app-fg-3);font-size:11px;overflow:hidden;text-overflow:ellipsis;max-width:130px}
+.ac-item.on .ac-d{color:var(--sel-fg)}
+.ac-doc{padding:8px 10px;font-size:12px;color:var(--app-fg-2);white-space:normal;max-height:250px;overflow:auto}
+.ac-doc b{color:var(--app-fg)}
+.ac-doc code{background:var(--app-3);font-size:11.5px}
+.ac-foot{grid-column:1/-1;border-top:1px solid var(--app-line);padding:3px 8px;font-size:11px;color:var(--app-fg-3)}
+.sig{position:fixed;z-index:49;background:var(--app-2);color:var(--app-fg);border:1px solid var(--app-line);border-radius:5px;padding:4px 9px;font:12px/1.4 var(--mono);box-shadow:var(--shadow);max-width:min(560px,calc(100vw - 24px));white-space:normal}
+.sig b{color:var(--accent)}
+.sig .sd{display:block;font:11.5px var(--ui);color:var(--app-fg-2)}
+
+/* -------------------------------------------------------------------- le demarrage */
+.boot{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:0}
+@media (max-width:900px){.boot{grid-template-columns:minmax(0,1fr)}}
+.boot>div{min-width:0}
+.steps{list-style:none;margin:0;padding:0;font-size:12.5px;max-height:470px;overflow:auto;background:var(--app-2)}
+.steps .grp{padding:6px 10px;font:600 11px var(--ui);letter-spacing:.05em;text-transform:uppercase;color:var(--app-fg-3);background:var(--app-head);border-bottom:1px solid var(--app-line);position:sticky;top:0}
+.steps li.st{display:grid;grid-template-columns:24px minmax(0,1fr) auto;gap:8px;padding:4px 10px;border-bottom:1px solid var(--app-3);align-items:baseline}
+.steps li.bad{background:var(--err-bg)}
+.stepno{font:11.5px var(--mono);color:var(--app-fg-3);text-align:right}
+.stn{font-family:var(--mono);font-size:12px}
+.stv{color:var(--app-fg-2);font-size:12px;overflow:hidden;text-overflow:ellipsis}
+.ms{font:11.5px var(--mono);color:var(--app-fg-3);white-space:nowrap}
+.badge{font:600 10px var(--ui);padding:0 5px;border-radius:3px;margin:0 4px;vertical-align:1px}
+.b-valeur{background:var(--app-3);color:var(--app-fg-2)} .b-elements{background:var(--accent-2);color:var(--accent)} .b-calcul{background:var(--calc-bg);color:var(--calc)}
+.bootside{border-left:1px solid var(--app-line);padding:10px 12px;display:grid;gap:10px;align-content:start;background:var(--app)}
+@media (max-width:900px){.bootside{border-left:0;border-top:1px solid var(--app-line)}}
+.scen{display:flex;flex-wrap:wrap;gap:5px}
+.scen button{appearance:none;border:1px solid var(--app-line);background:var(--app-2);color:var(--app-fg);font:inherit;font-size:12px;padding:3px 9px;border-radius:12px;cursor:pointer}
+.scen button.on{border-color:var(--accent);background:var(--accent-2);color:var(--accent)}
+.console{font:11.5px/1.6 var(--mono);background:var(--app-2);border:1px solid var(--app-line);border-radius:6px;padding:8px 10px;white-space:pre-wrap;overflow-wrap:anywhere}
+.console .e{color:var(--err)} .console .w{color:var(--warn)} .console .i{color:var(--app-fg-3)} .console .o{color:var(--ok)}
+.state{display:inline-flex;gap:6px;align-items:center;font:600 12px var(--ui);padding:3px 10px;border-radius:12px;justify-self:start}
+.state.ok{background:var(--ok-bg);color:var(--ok)} .state.err{background:var(--err-bg);color:var(--err)} .state.warn{background:var(--warn-bg);color:var(--warn)}
+
+/* --------------------------------------------------------------------- std::numeric */
+.nat{display:grid;grid-template-columns:236px minmax(0,1fr);min-height:440px}
+@media (max-width:780px){.nat{grid-template-columns:minmax(0,1fr)}}
+.nat-tree{border-right:1px solid var(--app-line);background:var(--app);padding:6px 0;overflow:auto;max-height:620px}
+@media (max-width:780px){.nat-tree{border-right:0;border-bottom:1px solid var(--app-line);max-height:260px}}
+.nt-sec{padding:7px 12px 3px;font:600 11px var(--ui);color:var(--app-fg-3);text-transform:uppercase;letter-spacing:.05em}
+.nt-old{padding:3px 12px 3px 20px;color:var(--app-fg-3);font-size:12.5px}
+.nt-lib{padding:5px 12px 3px 20px;font-weight:600;font-size:12.5px;display:flex;gap:6px;align-items:center}
+.nt-g{padding:5px 12px 1px 30px;font-size:11.5px;color:var(--app-fg-3)}
+.nt-item{appearance:none;border:0;background:transparent;width:100%;display:flex;justify-content:space-between;gap:8px;padding:3px 12px 3px 38px;cursor:pointer;font:12.5px var(--mono);color:var(--app-fg);text-align:left}
+.nt-item:hover{background:var(--hover)}
+.nt-item.on{background:var(--sel);color:var(--sel-fg)}
+.nt-item .v{font:10.5px var(--ui);color:var(--app-fg-3)}
+.nt-item.on .v{color:var(--sel-fg)}
+.newb{font:600 10px var(--ui);padding:0 6px;border-radius:3px;background:var(--new-bg);color:var(--new)}
+.nat-card{padding:14px 18px 18px;background:var(--app-2);min-width:0}
+.nat-card h4{margin:0;font:600 18px var(--mono)}
+.nc-sub{color:var(--app-fg-2);font-size:12.5px;margin:2px 0 10px}
+.nc-sig{font:13px var(--mono);background:var(--app);border:1px solid var(--app-line);border-radius:5px;padding:6px 10px;overflow-x:auto;white-space:nowrap}
+table.pt{border-collapse:collapse;width:100%;font-size:12.5px;margin:10px 0}
+.pt th{text-align:left;font-weight:500;color:var(--app-fg-3);padding:3px 8px;border-bottom:1px solid var(--app-line)}
+.pt td{padding:4px 8px;border-bottom:1px solid var(--app-3);vertical-align:top}
+.pt td:first-child{font-family:var(--mono);white-space:nowrap}
+.lt{display:flex;gap:2px;border-bottom:1px solid var(--app-line);margin-top:12px;flex-wrap:wrap;align-items:flex-end}
+.lt button{appearance:none;border:0;border-bottom:2px solid transparent;background:transparent;font:inherit;font-size:12.5px;padding:5px 12px;color:var(--app-fg-2);cursor:pointer}
+.lt button.on{color:var(--app-fg);border-bottom-color:var(--accent);font-weight:600}
+.lt .avail{margin-left:auto;font-size:11.5px;color:var(--app-fg-3);padding:4px 0}
+pre.ex{margin:0;padding:10px 12px;background:var(--app);border:1px solid var(--app-line);border-top:0;font:12.5px/1.6 var(--mono);overflow:auto;white-space:pre;color:var(--app-fg)}
+.ess{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;font-size:12.5px}
+.play{margin-top:14px;border-top:1px solid var(--app-line);padding-top:10px}
+.play h5{margin:0 0 6px;font:600 11px var(--ui);letter-spacing:.05em;text-transform:uppercase;color:var(--app-fg-3)}
+.pfields{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.pfields label{display:grid;gap:2px;font-size:11.5px;color:var(--app-fg-3)}
+.res{margin-top:10px;font:13px var(--mono);padding:8px 10px;border-radius:6px;background:var(--calc-bg);color:var(--app-fg);overflow-wrap:anywhere}
+.res .why{display:block;font:12px var(--ui);color:var(--app-fg-2);margin-top:2px}
+.stswitch{display:inline-flex;border:1px solid var(--app-line);border-radius:5px;overflow:hidden;font-size:11.5px;margin-left:8px;vertical-align:middle}
+.stswitch button{appearance:none;border:0;background:var(--app-2);color:var(--app-fg-2);font:11.5px var(--mono);padding:2px 8px;cursor:pointer}
+.stswitch button.on{background:var(--accent);color:var(--accent-fg)}
+
+/* ----------------------------------------------------------- les tableaux du texte */
+.tablewrap{overflow-x:auto;margin:10px 0}
+table.doc{border-collapse:collapse;width:100%;min-width:760px;font-size:13.5px}
+table.doc th{text-align:left;font-weight:600;padding:7px 10px;border-bottom:2px solid var(--rule);color:var(--ink-2);font-size:12.5px;white-space:nowrap}
+table.doc td{padding:7px 10px;border-bottom:1px solid var(--rule);vertical-align:top}
+table.doc td.m{font-family:var(--mono);font-size:12.5px}
+.g-err{color:var(--err);font-weight:600;white-space:nowrap} .g-warn{color:var(--warn);font-weight:600;white-space:nowrap} .g-no{color:var(--ink-2);font-weight:600;white-space:nowrap}
+.decisions{display:grid;gap:10px;margin:10px 0}
+.dec{background:var(--page-2);border-radius:8px;padding:12px 14px}
+.dec h4{margin:0 0 8px;font-size:14.5px}
+.opts{display:flex;flex-wrap:wrap;gap:6px}
+.opt{font-size:13px;padding:4px 11px;border-radius:14px;border:1px solid var(--rule);background:var(--page);color:var(--ink-2)}
+.opt.pro{border-color:var(--accent);color:var(--accent);background:var(--accent-2)}
+ol.plan{margin:6px 0 12px;padding-left:22px;max-width:86ch}
+ol.plan li{margin:6px 0}
+</style>
+
+</head>
+<body>
+<div class="wrap">
+<nav class="toc" aria-label="Sommaire">
+  <div class="ver">Proposition 1.12.7</div>
+  <ol>
+    <li><a href="#bref">En bref</a></li>
+    <li><a href="#onglets">Déballer les objets</a></li>
+    <li><a href="#calcul">Calculer au démarrage</a></li>
+    <li><a href="#publiques">Les autres scripts</a></li>
+    <li><a href="#demarrage">L'ordre du démarrage</a></li>
+    <li><a href="#numeric">std::numeric</a></li>
+    <li><a href="#generer">Compiler et Générer</a></li>
+    <li><a href="#plan">Le plan, vos choix</a></li>
+  </ol>
+</nav>
+
+<main>
+<header class="hero">
+  <p class="eyebrow">XPGAnalyser IHM · maquette interactive · à valider avant les lots D et E</p>
+  <h1>Constantes calculées, objets déballés, std::numeric</h1>
+  <p class="lead">Vos demandes du 11/10 au soir, dans l'éditeur d'un script : ce que montrent les onglets Constantes et Variables, comment une valeur s'écrit ou se calcule au démarrage, et la bibliothèque <code>std::numeric</code> en ST, C et C++. Tout ce qui ressemble à un bouton se clique.</p>
+  <ul class="quotes">
+    <li>« revoir cette option car c'est pas pratique, pouvoir faire un script dans cette partie, avoir accès aux autres constantes du projet si elles sont en public, en gros ça fonctionnerait comme le final du JAVA […] ajouter aide à la saisie »</li>
+    <li>« et aussi dans les constantes et variables pouvoir déballer le contenu des objets avec taille »</li>
+    <li>« ajouter STD::NUMERICS avec toutes les fonctions natives aussi dans ST, C, C++ […] mettre à jour biblio »</li>
+    <li>« faut pas le faire que pour les MAP mais pour les autres types aussi »</li>
+  </ul>
+</header>
+
+<section id="bref">
+  <p class="secno">En bref</p>
+  <h2>Quatre changements, pour tous les types</h2>
+  <div class="cards">
+    <div class="card"><p class="k">Onglets</p><h4>Tout ce qui a une taille se déplie</h4><p>Les éléments d'une LIST, d'un VECTOR ou d'une MAP, les cases d'un ARRAY (une ligne par premier indice en 2D), les membres d'une structure, les champs d'un TUPLE. La colonne Taille dit combien.</p></div>
+    <div class="card"><p class="k">Éléments</p><h4>Un tableau à la place du « un par ligne »</h4><p>Une ligne par élément, une colonne par partie : clé, valeur, membre. Chaque case est vérifiée à la frappe. On ajoute, retire, déplace, colle depuis Excel.</p></div>
+    <div class="card"><p class="k">Calcul</p><h4>Calculée au démarrage, comme un final</h4><p>Un petit code ST donne la valeur, une fois, au démarrage. Ensuite personne ne l'écrit. Il lit les constantes de son script, les constantes publiques des autres, les valeurs de départ des variables IHM et les natives.</p></div>
+    <div class="card"><p class="k">Bibliothèque</p><h4>std::numeric dans les natives</h4><p>17 fonctions de <code>&lt;numeric&gt;</code> : ACCUMULATE, PARTIAL_SUM, IOTA, GCD, LCM, MIDPOINT, ADD_SAT… Une fiche chacune, l'écriture en ST, en C et en C++, un essai, et l'aide à la saisie dans les trois langages.</p></div>
+  </div>
+</section>
+
+<section id="onglets">
+  <p class="secno">1 · Les onglets Constantes et Variables</p>
+  <h2>Déballer les objets qui ont une taille</h2>
+  <p class="sub">Voici l'éditeur du script <code>Visserie</code> : 17 constantes, un exemple par type. <b>▸</b> déplie une ligne ; un clic sur une ligne l'ouvre en bas. Un double-clic sur la valeur d'un élément la change (dans <code>Facteurs</code>, <code>Seuils</code>, <code>Recette_Std</code>…). Une constante calculée (<span class="fx">ƒx</span>) se déplie aussi : ses éléments, en italique, sont ceux du dernier calcul.</p>
+  <div class="types" id="typechips" aria-label="Un exemple par type"></div>
+
+  <div class="app" id="app">
+    <div class="app-bar">Programmation générale › Scripts › <b>Visserie</b> <span class="lang">ST</span> <span>· script général</span></div>
+    <div class="tabs" role="tablist">
+      <button class="tab" data-tab="code" role="tab">⟨/⟩ Code</button>
+      <button class="tab on" data-tab="consts" role="tab">≡ Constantes <span class="count" id="nconsts">17</span></button>
+      <button class="tab" data-tab="vars" role="tab">ƒ Variables <span class="count" id="nvars">5</span></button>
+    </div>
+    <div class="tools" id="tools">
+      <button class="tbtn" type="button" disabled>＋ Ajouter</button>
+      <button class="tbtn" type="button" disabled>🗑 Supprimer</button>
+      <button class="tbtn" type="button" disabled>⧉ Dupliquer</button>
+      <span class="tsep"></span>
+      <button class="tbtn" type="button" disabled>⌕ Utilisations</button>
+      <span class="tsep"></span>
+      <button class="tbtn new" type="button" id="openall">▾ Tout déplier</button>
+      <button class="tbtn new" type="button" id="closeall">▸ Tout replier</button>
+      <span class="search">Rechercher…</span>
+    </div>
+    <div id="codeview" hidden></div>
+    <div class="gridwrap" id="gridwrap"><table class="grid" id="grid"></table></div>
+    <div class="ed" id="editor"></div>
+  </div>
+
+  <div class="two">
+    <div>
+      <h3>Ce que montre une ligne</h3>
+      <ul class="plain">
+        <li><b>Valeur</b> : la valeur écrite ; <span class="el">éléments</span> quand elle vient du tableau ; <span class="fx">ƒx</span> quand elle est calculée, suivie de ce que le dernier calcul a donné.</li>
+        <li><b>Taille</b> : <i>3 éléments</i>, <i>10 cases</i>, <i>3 × 3</i>, <i>4 membres</i>, <i>2 champs</i>, <i>vide</i>.</li>
+        <li><b>Déplier</b> marche à tous les niveaux : une LIST de structures montre ses éléments, puis les membres de chacun.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Ce qui ne change pas</h3>
+      <ul class="plain">
+        <li>Un BOOL, un nombre, un texte, une durée, une énumération gardent une seule case Valeur.</li>
+        <li>« Modifier en texte… » garde l'ancienne fenêtre, pour coller une liste toute faite (<code>['vis' := 1.0, …]</code>).</li>
+        <li>Le déballage des variables en simulation (1.11.22) reste tel quel ; il lit maintenant les mêmes lignes.</li>
+      </ul>
+    </div>
+  </div>
+  <p class="note"><b>Le défaut de votre capture.</b> <code>Constante : MAP[STRING] OF REAL</code> valait <code>0.0</code>. C'est accepté aujourd'hui, parce que la vérification ne sait rien dire d'une MAP. Avec ce lot, <code>0.0</code> est refusé (« 0.0 n'est pas une MAP[STRING] OF REAL : écris ['clé' := valeur] ou laisse vide »), et changer le type d'une constante vide sa valeur pour tous les types à taille.</p>
+</section>
+
+<section id="calcul">
+  <p class="secno">2 · La valeur d'une constante</p>
+  <h2>Calculer au démarrage, comme un final en Java</h2>
+  <p>En bas de la fenêtre, trois façons de donner une valeur : <b>Valeur</b> (écrite), <b>Éléments</b> (le tableau) et <b>Calcul au démarrage</b>. Le calcul est un code ST qui écrit sa constante sous son nom : <code>Couples[piece] := …</code>. Il tourne une fois, au démarrage de la simulation ou du poste, avant le premier cycle des scripts. Ensuite la constante est figée : un script qui l'écrit est refusé par Compiler.</p>
+  <div class="two">
+    <div>
+      <h3>Ce qu'un calcul lit</h3>
+      <ul class="plain">
+        <li>Les constantes de son script, et celles des autres scripts quand elles sont <b>publiques</b> : <code>Reglages.Coef_Ligne</code>.</li>
+        <li>Les variables IHM du projet, avec leur valeur de départ : l'initiale, ou celle que la rémanence a rendue.</li>
+        <li>Les natives : <code>NOW()</code> donne l'instant du démarrage, <code>SPLIT</code>, <code>LIST_ADD</code>, <code>std::numeric</code>…</li>
+        <li>Ses propres variables locales (<code>VAR … END_VAR</code>), ses boucles <code>FOR</code> et <code>FOR EACH</code>.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Ce qu'il ne lit pas</h3>
+      <ul class="plain">
+        <li>Les variables des scripts : elles se calculent après les constantes.</li>
+        <li>Les équipements et l'automate : au démarrage, ils ne sont pas encore lus (Générer prévient : la valeur serait 0).</li>
+        <li>Une constante privée d'un autre script.</li>
+        <li>Lui-même à travers une autre constante : une boucle de calculs est refusée.</li>
+      </ul>
+    </div>
+  </div>
+  <p class="note"><b>À essayer dans la fenêtre ci-dessus.</b> <button class="go" data-pick="Couples">Ouvrez Couples</button> : son calcul lit <code>Facteurs</code>, <code>Couple_Base</code> et <code>Reglages.Coef_Ligne</code>. Tapez <code>Reglages.</code> : l'aide à la saisie liste ses constantes publiques, la privée est grisée. <kbd>Ctrl</kbd>+<kbd>Espace</kbd> ouvre la liste n'importe où. Écrivez <code>Couple_Base := 3;</code> : la ligne est refusée. Écrivez <code>Compteurs</code> : refusé, c'est une variable. Les autres exemples : <button class="go" data-pick="Recettes_Jour">une LIST de structures</button>, <button class="go" data-pick="Matrice">un ARRAY 2D</button>, <button class="go" data-pick="Pas_Mesure">IOTA de std::numeric</button>, <button class="go" data-pick="Heure_Demarrage">l'heure du démarrage</button>.</p>
+  <p class="note"><b>Les variables aussi.</b> Dans l'onglet Variables, la valeur initiale peut se calculer de la même façon (<code>Compteurs</code> : un compteur par poste). Une variable calculée au départ reste une variable : les scripts l'écrivent ensuite.</p>
+</section>
+
+<section id="publiques">
+  <p class="secno">3 · Public et Privé</p>
+  <h2>Les constantes des autres scripts</h2>
+  <p>La colonne Visibilité existe depuis la 1.11.18, sans effet. Elle en prend un pour les constantes : une constante <b>publique</b> se lit partout sous son nom qualifié, dans un calcul, un script, une fonction ou une formule <span class="fx">ƒx</span> de vue (<code>=Visserie.Couples['vis']</code>). Une constante <b>privée</b> ne se lit que dans son script. C'est la première marche du lot 7 de la refonte, les noms qualifiés, limitée aux constantes et en lecture.</p>
+  <div class="tablewrap"><table class="doc" id="pubtable"></table></div>
+</section>
+
+<section id="demarrage">
+  <p class="secno">4 · Au démarrage</p>
+  <h2>L'ordre des calculs, et ce qui arrête le démarrage</h2>
+  <p>Au démarrage, chaque constante est calculée après celles qu'elle lit, sans qu'on ait à les ranger. L'ordre ci-dessous vient des calculs de la fenêtre : si vous en changez un, il suit. Les scénarios à droite montrent ce que disent la Console et le démarrage.</p>
+  <div class="app">
+    <div class="app-bar">Simulation · IHM › <b>Démarrer</b> <span>· les constantes, puis les variables, puis le premier cycle</span></div>
+    <div class="boot">
+      <div><ol class="steps" id="steps"></ol></div>
+      <div class="bootside">
+        <div class="scen" id="scen" role="group" aria-label="Scénarios">
+          <button type="button" class="on" data-s="ok">Tout va bien</button>
+          <button type="button" data-s="cycle">Deux calculs se lisent</button>
+          <button type="button" data-s="run">Erreur pendant le calcul</button>
+          <button type="button" data-s="write">Un script écrit une constante</button>
+          <button type="button" data-s="equip">Un équipement lu au démarrage</button>
+        </div>
+        <span class="state ok" id="bootstate">Démarrée</span>
+        <div class="console" id="bootcons"></div>
+        <p class="small" id="bootnote"></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="numeric">
+  <p class="secno">5 · La bibliothèque des natives</p>
+  <h2>std::numeric, en ST, en C et en C++</h2>
+  <p>Un nouveau groupe <b>Bibliothèques</b> dans la branche Natives (IHM › Programmation générale), avec <code>std::numeric</code> : 17 fonctions, une fiche chacune comme les natives d'aujourd'hui. Le ST s'exécute en simulation et l'essai natives rejoue chaque exemple ; les scripts C et C++ sont édités et vérifiés, comme aujourd'hui. L'aide à la saisie les propose dans les trois langages : <code>ACCUMULATE(</code> en ST, <code>std::accumulate(</code> en C++. Le C n'a pas de <code>&lt;numeric&gt;</code> : sa fiche donne la boucle équivalente.</p>
+  <div class="app">
+    <div class="app-bar">IHM › Programmation générale › <b>Natives</b> <span>· verrouillées</span></div>
+    <div class="nat">
+      <div class="nat-tree" id="nattree"></div>
+      <div class="nat-card" id="natcard"></div>
+    </div>
+  </div>
+</section>
+
+<section id="generer">
+  <p class="secno">6 · Les vérifications</p>
+  <h2>Ce que Compiler et Générer diront</h2>
+  <p>Comme pour la 1.12.6 : ce qui démarrait démarre toujours. Les nouvelles erreurs bloquantes ne touchent que les nouveautés (un calcul, une constante qualifiée) ; ce que la 1.12.6 acceptait reste accepté.</p>
+  <div class="tablewrap"><table class="doc">
+    <thead><tr><th>La situation</th><th>Qui le dit</th><th>Gravité</th><th>Le message</th></tr></thead>
+    <tbody>
+      <tr><td>Un script écrit une constante</td><td>Compiler</td><td class="g-err">Erreur</td><td class="m">Couples est une constante (calculée au démarrage) : elle ne s'écrit pas — fais-en une variable si elle doit changer</td></tr>
+      <tr><td>Deux calculs se lisent l'un l'autre</td><td>Compiler</td><td class="g-err">Erreur</td><td class="m">boucle de calculs : Couples → Couples_Cumules → Couples</td></tr>
+      <tr><td>Un calcul lit une constante privée d'un autre script</td><td>Compiler</td><td class="g-err">Erreur</td><td class="m">Reglages.Code_Usine est privée : seul Reglages la lit (rends-la publique)</td></tr>
+      <tr><td>Un calcul de constante lit une variable de script</td><td>Compiler</td><td class="g-err">Erreur</td><td class="m">Compteurs est une variable du script : elle se calcule après les constantes</td></tr>
+      <tr><td>Un nom inconnu, une faute de frappe</td><td>Compiler</td><td class="g-err">Erreur</td><td class="m">Facteur n'existe pas — veux-tu dire Facteurs ?</td></tr>
+      <tr><td>Un calcul lit un équipement ou l'automate</td><td>Générer</td><td class="g-warn">Avertissement</td><td class="m">au démarrage, ATV320 n'est pas encore lu : ATV320.Vitesse vaudra 0</td></tr>
+      <tr><td>Un calcul n'écrit jamais sa constante</td><td>Générer</td><td class="g-warn">Avertissement</td><td class="m">Couples ne reçoit aucune valeur : elle garde la valeur vide de son type</td></tr>
+      <tr><td>Une erreur pendant le calcul (clé absente, division par zéro)</td><td>Le démarrage</td><td class="g-err">Démarrage arrêté</td><td class="m">Visserie.Couples, ligne 3 : clé 'rondelle' absente de Facteurs — double-clic : la ligne</td></tr>
+      <tr><td>Un calcul qui ne finit pas</td><td>Le démarrage</td><td class="g-err">Démarrage arrêté</td><td class="m">Visserie.Matrice : plus de 2 s de calcul — une boucle sans fin ?</td></tr>
+      <tr><td>Une MAP qui vaut 0.0 (votre capture)</td><td>À la saisie</td><td class="g-no">Refusé</td><td class="m">0.0 n'est pas une MAP[STRING] OF REAL : écris ['clé' := valeur] ou laisse vide</td></tr>
+      <tr><td>Un élément qui ne va pas dans son type</td><td>À la saisie</td><td class="g-no">Refusé</td><td class="m">'abc' n'est pas un REAL</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="plan">
+  <p class="secno">7 · La suite</p>
+  <h2>Le plan, et quatre choix à faire</h2>
+  <ol class="plan">
+    <li><b>1.12.7</b>, cette maquette :
+      <ul class="plain">
+        <li>le déballage dans les onglets Constantes et Variables, pour tous les types à taille ;</li>
+        <li>le tableau Éléments, qui remplace la fenêtre « un élément par ligne » ;</li>
+        <li>le calcul au démarrage des constantes et des valeurs initiales, avec son ordre, ses erreurs, <kbd>F5</kbd> dans l'éditeur et l'aide à la saisie ;</li>
+        <li>les constantes publiques lisibles sous leur nom qualifié <code>Script.Constante</code> ;</li>
+        <li><code>std::numeric</code> : fiches, essais, aide à la saisie en ST, C et C++ ;</li>
+        <li>le défaut de la MAP qui vaut <code>0.0</code>.</li>
+      </ul>
+    </li>
+    <li><b>1.12.8</b> : le lot D de l'audit, les listes en tableau et les choix au lieu de la saisie.</li>
+    <li><b>1.12.9</b> : le lot E, les tailles dynamiques (« 8 cuves, 8 pompes »).</li>
+  </ol>
+  <div class="decisions">
+    <div class="dec"><h4>1. Une erreur pendant un calcul au démarrage</h4><div class="opts"><span class="opt pro">Arrêter le démarrage, la ligne en double-clic (proposé)</span><span class="opt">Démarrer avec la valeur vide, l'erreur dans la Console</span></div></div>
+    <div class="dec"><h4>2. Lire une constante d'un autre script</h4><div class="opts"><span class="opt pro">Toujours le nom qualifié, Reglages.Coef_Ligne (proposé)</span><span class="opt">Le nom court quand il est unique dans le projet</span></div></div>
+    <div class="dec"><h4>3. L'écriture de std::numeric en ST</h4><div class="opts"><span class="opt pro">ACCUMULATE, comme LIST_SUM (proposé)</span><span class="opt">STD::ACCUMULATE</span><span class="opt">Les deux</span></div></div>
+    <div class="dec"><h4>4. Les variables</h4><div class="opts"><span class="opt pro">Une valeur initiale calculée, comme les constantes (proposé)</span><span class="opt">Seulement les constantes</span></div></div>
+  </div>
+  <p>Dites-moi ce qui vous va, et ce qu'il faut changer dans la maquette ; je code ensuite la 1.12.7, puis les lots D et E.</p>
+</section>
+</main>
+</div>
+
+<div class="ac" id="ac" hidden></div>
+<div class="sig" id="sig" hidden></div>
+
+<script>
+(function () {
+'use strict';
+var $ = function (s, r) { return (r || document).querySelector(s); };
+var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]; }); }
+function eq(a, b) { return String(a).toUpperCase() === String(b).toUpperCase(); }
+function frNum(x, d) { return x.toFixed(d).replace('.', ','); }
+
+// =============================================================== le projet d'exemple
+var ENUMS = {T_MODE: ['Arret', 'Auto', 'Manu'], OPERATION: ['Somme', 'Produit', 'Min', 'Max', 'Et', 'Ou']};
+var STRUCTS = {T_Recette: [['Nom', 'STRING'], ['Consigne', 'REAL'], ['Duree', 'TIME'], ['Etapes', 'LIST OF STRING']]};
+var BOUNDS = {SINT: [-128, 127], INT: [-32768, 32767], DINT: [-2147483648, 2147483647], USINT: [0, 255], UINT: [0, 65535], UDINT: [0, 4294967295]};
+
+function S(type, text) { return {k: 's', type: type, text: text}; }
+function LST(type, elem, items, low) { return {k: 'l', type: type, elem: elem, items: items, low: low || 0}; }
+function MP(type, keyT, valT, entries) { return {k: 'm', type: type, keyT: keyT, valT: valT, entries: entries}; }
+function A2(type, elem, rows) { return {k: 'a2', type: type, elem: elem, rows: rows, low: [0, 0]}; }
+function REC(type, members) { return {k: 'r', type: type, members: members}; }
+function TUP(type, fields) { return {k: 't', type: type, fields: fields}; }
+function real(x) { var s = String(Math.round(x * 1e6) / 1e6); return /[.eE]/.test(s) ? s : s + '.0'; }
+function str(s) { return "'" + String(s).replace(/'/g, "$'") + "'"; }
+function reals(arr) { return arr.map(function (x) { return S('REAL', real(x)); }); }
+function recette(nom, consigne, duree, etapes) {
+  return REC('T_Recette', [['Nom', S('STRING', str(nom))], ['Consigne', S('REAL', real(consigne))], ['Duree', S('TIME', duree)],
+    ['Etapes', LST('LIST OF STRING', 'STRING', etapes.map(function (e) { return S('STRING', str(e)); }))]]);
+}
+var ETAPES = ['Remplir', 'Chauffer', 'Vider'];
+
+var OTHER = {
+  Reglages: [
+    {name: 'Coef_Ligne', type: 'REAL', vis: 'Public', value: '1.1', doc: 'Le coefficient de la ligne 2'},
+    {name: 'Debut', type: 'REAL', vis: 'Public', value: '0.0', doc: 'La première mesure'},
+    {name: 'Pas', type: 'REAL', vis: 'Public', value: '2.5', doc: "L'écart entre deux mesures"},
+    {name: 'Liste_Postes', type: 'STRING', vis: 'Public', value: "'P1;P2;P3'", doc: 'Les postes, séparés par ;'},
+    {name: 'Cadence_A', type: 'DINT', vis: 'Public', value: '120', doc: 'Pièces par heure, poste A'},
+    {name: 'Cadence_B', type: 'DINT', vis: 'Public', value: '84', doc: 'Pièces par heure, poste B'},
+    {name: 'Code_Usine', type: 'STRING', vis: 'Privé', value: "'XK-7'", doc: 'Ne sort pas de Reglages'}
+  ],
+  Recettes: [
+    {name: 'Recette_Base', type: 'T_Recette', vis: 'Public', value: "(Nom := 'Base', Consigne := 70.0, Duree := T#3m, …)", doc: 'La recette de départ'},
+    {name: 'Temps_Max', type: 'TIME', vis: 'Public', value: 'T#5m', doc: "La durée maximale d'une recette"},
+    {name: 'Brouillon', type: 'STRING', vis: 'Privé', value: "''", doc: 'Privée à Recettes'}
+  ]
+};
+var HMI = [
+  {name: 'Ligne_Active', type: 'INT', start: '2', note: 'sa valeur initiale'},
+  {name: 'Vitesse_Consigne', type: 'REAL', start: '1500.0', note: 'rendue par la rémanence'},
+  {name: 'ATV320', type: 'équipement Modbus', start: '—', note: "pas encore lu au démarrage", equipment: true, members: [['Vitesse', 'REAL'], ['Etat', 'INT']]}
+];
+
+var CONSTS = [
+  {name: 'Couple_Base', type: 'REAL', vis: 'Public', mode: 'valeur', node: S('REAL', '12.5'), uses: 3, doc: "Le couple d'une vis M8, en N·m"},
+  {name: 'Facteurs', type: 'MAP[STRING] OF REAL', vis: 'Public', mode: 'elements', uses: 1, doc: 'Le facteur de chaque pièce',
+    node: MP('MAP[STRING] OF REAL', 'STRING', 'REAL', [["'ecrou'", S('REAL', '0.8')], ["'goujon'", S('REAL', '1.4')], ["'vis'", S('REAL', '1.0')]])},
+  {name: 'Couples', type: 'MAP[STRING] OF REAL', vis: 'Public', mode: 'calcul', uses: 4, doc: 'Le couple de chaque pièce',
+    code: "(* Le couple de chaque pièce : la base, par son facteur\n   et le coefficient de la ligne *)\nFOR EACH piece, f IN Facteurs DO\n    Couples[piece] := Couple_Base * f * Reglages.Coef_Ligne;\nEND_FOR;",
+    node: MP('MAP[STRING] OF REAL', 'STRING', 'REAL', [["'ecrou'", S('REAL', '11.0')], ["'goujon'", S('REAL', '19.25')], ["'vis'", S('REAL', '13.75')]])},
+  {name: 'Couples_Cumules', type: 'LIST OF REAL', vis: 'Privé', mode: 'calcul', uses: 1, doc: 'Les couples cumulés, pièce après pièce',
+    code: "VAR v : LIST OF REAL; END_VAR\nFOR EACH piece, c IN Couples DO\n    LIST_ADD(v, c);\nEND_FOR;\nCouples_Cumules := PARTIAL_SUM(v);   (* std::numeric *)",
+    node: LST('LIST OF REAL', 'REAL', reals([11.0, 30.25, 44.0]))},
+  {name: 'Postes', type: 'LIST OF STRING', vis: 'Public', mode: 'calcul', uses: 5, doc: 'Les postes de la ligne',
+    code: "Postes := SPLIT(Reglages.Liste_Postes, ';');",
+    node: LST('LIST OF STRING', 'STRING', ['P1', 'P2', 'P3'].map(function (p) { return S('STRING', str(p)); }))},
+  {name: 'Seuils', type: 'VECTOR OF REAL', vis: 'Public', mode: 'elements', uses: 2, doc: 'Les seuils de couple, croissants',
+    node: LST('VECTOR OF REAL', 'REAL', reals([10.0, 20.0, 50.0]))},
+  {name: 'Pas_Mesure', type: 'ARRAY[0..9] OF REAL', vis: 'Public', mode: 'calcul', uses: 2, doc: 'Les points de mesure',
+    code: "(* 0, 2.5, 5... : le début et le pas viennent de Reglages *)\nIOTA(Pas_Mesure, Reglages.Debut, Reglages.Pas);   (* std::numeric *)",
+    node: LST('ARRAY[0..9] OF REAL', 'REAL', reals([0, 2.5, 5, 7.5, 10, 12.5, 15, 17.5, 20, 22.5]))},
+  {name: 'Matrice', type: 'ARRAY[0..2, 0..2] OF INT', vis: 'Public', mode: 'calcul', uses: 1, doc: 'Les gains croisés, 10 sur la diagonale',
+    code: "FOR i := 0 TO 2 DO\n    FOR j := 0 TO 2 DO\n        Matrice[i, j] := SEL(i = j, 0, 10);\n    END_FOR;\nEND_FOR;",
+    node: A2('ARRAY[0..2, 0..2] OF INT', 'INT', [[S('INT', '10'), S('INT', '0'), S('INT', '0')], [S('INT', '0'), S('INT', '10'), S('INT', '0')], [S('INT', '0'), S('INT', '0'), S('INT', '10')]])},
+  {name: 'Point_Ref', type: 'TUPLE(INT, STRING)', vis: 'Privé', mode: 'valeur', uses: 1, doc: 'Le point de référence et son côté',
+    node: TUP('TUPLE(INT, STRING)', [S('INT', '12'), S('STRING', "'Nord'")])},
+  {name: 'Recette_Std', type: 'T_Recette', vis: 'Public', mode: 'elements', uses: 3, doc: 'La recette standard',
+    node: recette('Standard', 75, 'T#4m', ETAPES)},
+  {name: 'Recettes_Jour', type: 'LIST OF T_Recette', vis: 'Public', mode: 'calcul', uses: 2, doc: 'Une recette par poste, à partir de la base',
+    code: "VAR r : T_Recette; END_VAR\nr := Recettes.Recette_Base;\nFOR EACH p IN Postes DO\n    r.Nom := CONCAT('Recette ', p);\n    LIST_ADD(Recettes_Jour, r);\nEND_FOR;",
+    node: LST('LIST OF T_Recette', 'T_Recette', ['P1', 'P2', 'P3'].map(function (p) { return recette('Recette ' + p, 70, 'T#3m', ETAPES); }))},
+  {name: 'Mode_Depart', type: 'T_MODE', vis: 'Public', mode: 'valeur', uses: 2, doc: 'Le mode au démarrage', node: S('T_MODE', 'Auto')},
+  {name: 'Actif', type: 'BOOL', vis: 'Public', mode: 'calcul', uses: 1, doc: 'La ligne a des postes et une cadence',
+    code: "Actif := Reglages.Cadence_A > 0 AND LIST_COUNT(Postes) > 0;", node: S('BOOL', 'TRUE')},
+  {name: 'Nom_Ligne', type: 'STRING', vis: 'Public', mode: 'calcul', uses: 2, doc: 'Le nom affiché de la ligne',
+    code: "Nom_Ligne := CONCAT('Ligne ', INT_TO_STRING(Ligne_Active));", node: S('STRING', "'Ligne 2'")},
+  {name: 'Duree_Cycle', type: 'TIME', vis: 'Public', mode: 'calcul', uses: 1, doc: '30 s par poste',
+    code: "Duree_Cycle := T#30s * LIST_COUNT(Postes);", node: S('TIME', 'T#1m30s')},
+  {name: 'Heure_Demarrage', type: 'DT', vis: 'Public', mode: 'calcul', uses: 1, doc: "L'instant du démarrage, figé",
+    code: "Heure_Demarrage := NOW();   (* l'instant du démarrage *)", node: S('DT', 'DT#2026-10-11-21:46:05')},
+  {name: 'Cadence_Commune', type: 'DINT', vis: 'Public', mode: 'calcul', uses: 1, doc: 'Le cycle commun aux deux postes',
+    code: "Cadence_Commune := LCM(Reglages.Cadence_A, Reglages.Cadence_B);   (* std::numeric *)", node: S('DINT', '840')}
+];
+var VARS = [
+  {name: 'Compteurs', type: 'MAP[STRING] OF DINT', vis: 'Privé', storage: 'Conservée', mode: 'calcul', doc: 'Les pièces de chaque poste',
+    code: "(* un compteur par poste, à zéro *)\nFOR EACH p IN Postes DO\n    Compteurs[p] := 0;\nEND_FOR;",
+    node: MP('MAP[STRING] OF DINT', 'STRING', 'DINT', [["'P1'", S('DINT', '0')], ["'P2'", S('DINT', '0')], ["'P3'", S('DINT', '0')]])},
+  {name: 'Historique', type: 'VECTOR OF REAL', vis: 'Privé', storage: 'Exécution', mode: 'elements', doc: 'Les dernières mesures, vide au départ',
+    node: LST('VECTOR OF REAL', 'REAL', [])},
+  {name: 'Etat', type: 'T_MODE', vis: 'Public', storage: 'Exécution', mode: 'calcul', doc: 'Le mode, au départ Mode_Depart',
+    code: "Etat := Mode_Depart;", node: S('T_MODE', 'Auto')},
+  {name: 'Mesures', type: 'ARRAY[0..9] OF REAL', vis: 'Privé', storage: 'Exécution', mode: 'valeur', doc: 'Les dix dernières mesures',
+    node: LST('ARRAY[0..9] OF REAL', 'REAL', reals([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]))},
+  {name: 'Recette_En_Cours', type: 'T_Recette', vis: 'Public', storage: 'Persistante', mode: 'calcul', doc: 'La recette en cours, au départ la standard',
+    code: "Recette_En_Cours := Recette_Std;", node: recette('Standard', 75, 'T#4m', ETAPES)}
+];
+[CONSTS, VARS].forEach(function (list) { list.forEach(function (c) { if (c.code) c.origCode = c.code; }); });
+
+// ======================================================= les natives (pour l'aide)
+var NUM = [
+  {g: 'Plier', name: 'ACCUMULATE', cpp: 'std::accumulate', ver: 'C++98', sig: 'ACCUMULATE(T, init [, op])', ret: 'comme init',
+    sum: "Plie les éléments de T dans init, du premier au dernier : la somme, ou avec op le produit, le minimum, le maximum.",
+    params: [['T', 'ARRAY, LIST, VECTOR de nombres', 'les éléments'], ['init', 'un nombre', 'le départ : 0.0 pour une somme, 1 pour un produit'], ['op', 'OPERATION', 'facultatif : #Somme (par défaut), #Produit, #Min, #Max, #Et, #Ou']],
+    st: 'Total_Pas := ACCUMULATE(Pas_Mesure, 0.0);', res: '112.5',
+    c: "/* C n'a pas <numeric> : la boucle */\ndouble total = 0.0;\nfor (size_t i = 0; i < 10; ++i)\n    total += Pas_Mesure[i];",
+    cc: "#include <numeric>\ndouble total = std::accumulate(std::begin(Pas_Mesure),\n                               std::end(Pas_Mesure), 0.0);",
+    uses: ['T', 'init', 'op'], run: function (I) { return fold(I.T, I.init, I.op); }},
+  {g: 'Plier', name: 'REDUCE', cpp: 'std::reduce', ver: 'C++17', sig: 'REDUCE(T [, init [, op]])', ret: 'comme les éléments',
+    sum: "Comme ACCUMULATE, sans ordre imposé (C++ peut le paralléliser). En ST, le même résultat ; init vaut 0 s'il manque.",
+    params: [['T', 'ARRAY, LIST, VECTOR de nombres', 'les éléments'], ['init', 'un nombre', 'facultatif : 0'], ['op', 'OPERATION', 'facultatif : #Somme']],
+    st: 'Somme_Seuils := REDUCE(Seuils);', res: '80.0',
+    c: "double somme = 0.0;\nfor (size_t i = 0; i < n; ++i)\n    somme += Seuils[i];",
+    cc: "double somme = std::reduce(Seuils.begin(), Seuils.end());",
+    uses: ['T', 'init', 'op'], run: function (I) { return fold(I.T, I.init, I.op); }},
+  {g: 'Plier', name: 'INNER_PRODUCT', cpp: 'std::inner_product', ver: 'C++98', sig: 'INNER_PRODUCT(A, B, init)', ret: 'comme init',
+    sum: "Le produit scalaire : init plus la somme des A[i] × B[i]. Une moyenne pondérée, une énergie (puissances × durées).",
+    params: [['A', 'ARRAY, LIST, VECTOR', 'les valeurs'], ['B', 'idem, au moins aussi long', 'les poids'], ['init', 'un nombre', 'le départ, 0.0']],
+    st: 'Note := INNER_PRODUCT(Seuils, Poids, 0.0);   (* Poids : [0.5, 0.3, 0.2] *)', res: '21.0',
+    c: "double note = 0.0;\nfor (size_t i = 0; i < n; ++i)\n    note += Seuils[i] * Poids[i];",
+    cc: "double note = std::inner_product(Seuils.begin(), Seuils.end(),\n                                 Poids.begin(), 0.0);",
+    uses: ['T', 'B', 'init'], run: function (I) { var s = I.init; for (var i = 0; i < I.T.length; i++) { if (i >= I.B.length) return {err: 'B est plus court que A : B[' + i + '] manque'}; s += I.T[i] * I.B[i]; } return s; }},
+  {g: 'Plier', name: 'TRANSFORM_REDUCE', cpp: 'std::transform_reduce', ver: 'C++17', sig: 'TRANSFORM_REDUCE(A, B, init)', ret: 'comme init',
+    sum: "La forme C++17 de INNER_PRODUCT, sans ordre imposé. En ST, le même résultat.",
+    params: [['A', 'ARRAY, LIST, VECTOR', 'les valeurs'], ['B', 'idem', 'les poids'], ['init', 'un nombre', 'le départ']],
+    st: 'Note := TRANSFORM_REDUCE(Seuils, Poids, 0.0);', res: '21.0',
+    c: "double note = 0.0;\nfor (size_t i = 0; i < n; ++i)\n    note += Seuils[i] * Poids[i];",
+    cc: "double note = std::transform_reduce(Seuils.begin(), Seuils.end(),\n                                    Poids.begin(), 0.0);",
+    uses: ['T', 'B', 'init'], run: function (I) { var s = I.init; for (var i = 0; i < I.T.length; i++) { if (i >= I.B.length) return {err: 'B est plus court que A'}; s += I.T[i] * I.B[i]; } return s; }},
+  {g: 'Cumuler', name: 'PARTIAL_SUM', cpp: 'std::partial_sum', ver: 'C++98', sig: 'PARTIAL_SUM(T)', ret: 'comme T',
+    sum: "Les sommes cumulées : [a, a+b, a+b+c…]. Une LIST rend une LIST, un ARRAY un ARRAY aux mêmes bornes.",
+    params: [['T', 'ARRAY, LIST, VECTOR de nombres', 'les éléments']],
+    st: 'Couples_Cumules := PARTIAL_SUM(v);', res: '[11.0, 30.25, 44.0]',
+    c: "double cumul = 0.0;\nfor (size_t i = 0; i < n; ++i) {\n    cumul += v[i];\n    cumules[i] = cumul;\n}",
+    cc: "std::partial_sum(v.begin(), v.end(), cumules.begin());",
+    uses: ['T'], run: function (I) { var s = 0; return I.T.map(function (x) { s += x; return s; }); }},
+  {g: 'Cumuler', name: 'INCLUSIVE_SCAN', cpp: 'std::inclusive_scan', ver: 'C++17', sig: 'INCLUSIVE_SCAN(T [, op])', ret: 'comme T',
+    sum: "Comme PARTIAL_SUM, avec une opération : le maximum atteint jusque-là, le minimum…",
+    params: [['T', 'ARRAY, LIST, VECTOR', 'les éléments'], ['op', 'OPERATION', 'facultatif : #Somme']],
+    st: 'Pics := INCLUSIVE_SCAN(Mesures, OPERATION#Max);', res: '[3, 3, 4, 4, 5] pour [3, 1, 4, 1, 5]',
+    c: "double pic = m[0];\nfor (size_t i = 0; i < n; ++i) {\n    if (m[i] > pic) pic = m[i];\n    pics[i] = pic;\n}",
+    cc: "std::inclusive_scan(m.begin(), m.end(), pics.begin(),\n    [](double a, double b) { return std::max(a, b); });",
+    uses: ['T', 'op'], run: function (I) { var acc = null; return I.T.map(function (x) { acc = acc === null ? x : apply(I.op, acc, x); return acc; }); }},
+  {g: 'Cumuler', name: 'EXCLUSIVE_SCAN', cpp: 'std::exclusive_scan', ver: 'C++17', sig: 'EXCLUSIVE_SCAN(T, init [, op])', ret: 'comme T',
+    sum: "Le cumul de ce qui précède : [init, init+a, init+a+b…]. Des positions de départ à partir de longueurs.",
+    params: [['T', 'ARRAY, LIST, VECTOR', 'les éléments'], ['init', 'un nombre', 'la première valeur'], ['op', 'OPERATION', 'facultatif : #Somme']],
+    st: 'Debuts := EXCLUSIVE_SCAN(Longueurs, 0);', res: '[0, 3, 4, 8, 9] pour [3, 1, 4, 1, 5]',
+    c: "long pos = 0;\nfor (size_t i = 0; i < n; ++i) {\n    debuts[i] = pos;\n    pos += longueurs[i];\n}",
+    cc: "std::exclusive_scan(l.begin(), l.end(), debuts.begin(), 0L);",
+    uses: ['T', 'init', 'op'], run: function (I) { var acc = I.init; return I.T.map(function (x) { var r = acc; acc = apply(I.op, acc, x); return r; }); }},
+  {g: 'Cumuler', name: 'ADJACENT_DIFFERENCE', cpp: 'std::adjacent_difference', ver: 'C++98', sig: 'ADJACENT_DIFFERENCE(T)', ret: 'comme T',
+    sum: "Les écarts entre voisins : [a, b−a, c−b…]. Des pas, des vitesses à partir de positions.",
+    params: [['T', 'ARRAY, LIST, VECTOR de nombres', 'les éléments']],
+    st: 'Ecarts := ADJACENT_DIFFERENCE(Seuils);', res: '[10.0, 10.0, 30.0]',
+    c: "ecarts[0] = s[0];\nfor (size_t i = 1; i < n; ++i)\n    ecarts[i] = s[i] - s[i - 1];",
+    cc: "std::adjacent_difference(s.begin(), s.end(), ecarts.begin());",
+    uses: ['T'], run: function (I) { return I.T.map(function (x, i) { return i ? x - I.T[i - 1] : x; }); }},
+  {g: 'Remplir', name: 'IOTA', cpp: 'std::iota', ver: 'C++11', sig: 'IOTA(T, depart [, pas])', ret: '(remplit T)',
+    sum: "Remplit T de depart, depart + pas, depart + 2 pas… Le pas vaut 1 s'il manque ; le pas est un ajout de l'IHM (C++ n'a que 1).",
+    params: [['T', 'ARRAY, LIST, VECTOR', 'à remplir, en place'], ['depart', 'un nombre', 'la première valeur'], ['pas', 'un nombre', 'facultatif : 1']],
+    st: 'IOTA(Pas_Mesure, 0.0, 2.5);', res: '[0.0, 2.5, 5.0, … 22.5]',
+    c: "for (size_t i = 0; i < 10; ++i)\n    Pas_Mesure[i] = 0.0 + i * 2.5;",
+    cc: "std::iota(std::begin(Rangs), std::end(Rangs), 1);   // le pas 1\n// un autre pas : std::generate",
+    uses: ['T', 'a', 'b'], run: function (I) { var st = isNaN(I.b) ? 1 : I.b; return I.T.map(function (x, i) { return I.a + i * st; }); }},
+  {g: 'Entiers', name: 'GCD', cpp: 'std::gcd', ver: 'C++17', sig: 'GCD(a, b)', ret: 'un entier',
+    sum: "Le plus grand diviseur commun de deux entiers ; 0 si les deux sont nuls.",
+    params: [['a', 'un entier', ''], ['b', 'un entier', '']],
+    st: 'Pgcd := GCD(Reglages.Cadence_A, Reglages.Cadence_B);', res: '12',
+    c: "long a = 120, b = 84;\nwhile (b != 0) { long t = a % b; a = b; b = t; }",
+    cc: "auto pgcd = std::gcd(120, 84);",
+    uses: ['a', 'b'], run: function (I) { if (!isInt(I.a) || !isInt(I.b)) return {err: 'GCD attend deux entiers'}; return gcd(I.a, I.b); }},
+  {g: 'Entiers', name: 'LCM', cpp: 'std::lcm', ver: 'C++17', sig: 'LCM(a, b)', ret: 'un entier',
+    sum: "Le plus petit multiple commun de deux entiers ; 0 si l'un est nul.",
+    params: [['a', 'un entier', ''], ['b', 'un entier', '']],
+    st: 'Cadence_Commune := LCM(Reglages.Cadence_A, Reglages.Cadence_B);', res: '840',
+    c: "/* a / pgcd(a, b) * b, avec la boucle de GCD */",
+    cc: "auto ppcm = std::lcm(120, 84);",
+    uses: ['a', 'b'], run: function (I) { if (!isInt(I.a) || !isInt(I.b)) return {err: 'LCM attend deux entiers'}; if (!I.a || !I.b) return 0; return Math.abs(I.a / gcd(I.a, I.b) * I.b); }},
+  {g: 'Entiers', name: 'MIDPOINT', cpp: 'std::midpoint', ver: 'C++20', sig: 'MIDPOINT(a, b)', ret: 'comme a',
+    sum: "Le milieu de a et b sans débordement : en INT, 32000 et 32002 donnent 32001, là où (a + b) / 2 déborde. Entre deux entiers, arrondi vers a.",
+    params: [['a', 'un nombre', ''], ['b', 'un nombre', '']],
+    st: 'Milieu := MIDPOINT(INT#32000, INT#32002);', res: '32001',
+    c: "int16_t m = a + (b - a) / 2;",
+    cc: "auto m = std::midpoint(a, b);",
+    uses: ['a', 'b'], run: function (I) { if (isInt(I.a) && isInt(I.b)) { var d = I.b - I.a; return I.a + (d < 0 ? Math.ceil(d / 2) : Math.floor(d / 2)); } return (I.a + I.b) / 2; }},
+  {g: 'Saturé (C++26)', name: 'ADD_SAT', cpp: 'std::add_sat', ver: 'C++26', sig: 'ADD_SAT(a, b)', ret: 'le type de a',
+    sum: "a + b, bloqué aux bornes du type au lieu de boucler : en INT, 32000 + 1000 donne 32767 (et non −32536).",
+    params: [['a', 'un entier', 'son type fixe les bornes'], ['b', 'un entier', '']],
+    st: 'Total := ADD_SAT(INT#32000, INT#1000);', res: '32767',
+    c: "int32_t s = (int32_t)a + b;\nint16_t r = s > 32767 ? 32767 : s < -32768 ? -32768 : (int16_t)s;",
+    cc: "int16_t r = std::add_sat<int16_t>(32000, 1000);",
+    uses: ['a', 'b'], run: function (I) { return satInt(I.a + I.b); }},
+  {g: 'Saturé (C++26)', name: 'SUB_SAT', cpp: 'std::sub_sat', ver: 'C++26', sig: 'SUB_SAT(a, b)', ret: 'le type de a',
+    sum: "a − b, bloqué aux bornes : en INT, −32000 − 1000 donne −32768.",
+    params: [['a', 'un entier', ''], ['b', 'un entier', '']],
+    st: 'Ecart := SUB_SAT(INT#-32000, INT#1000);', res: '-32768',
+    c: "int32_t s = (int32_t)a - b;   /* puis bornée */", cc: "int16_t r = std::sub_sat<int16_t>(-32000, 1000);",
+    uses: ['a', 'b'], run: function (I) { return satInt(I.a - I.b); }},
+  {g: 'Saturé (C++26)', name: 'MUL_SAT', cpp: 'std::mul_sat', ver: 'C++26', sig: 'MUL_SAT(a, b)', ret: 'le type de a',
+    sum: "a × b, bloqué aux bornes : en INT, 300 × 200 donne 32767.",
+    params: [['a', 'un entier', ''], ['b', 'un entier', '']],
+    st: 'Produit := MUL_SAT(INT#300, INT#200);', res: '32767',
+    c: "int32_t p = (int32_t)a * b;   /* puis bornée */", cc: "int16_t r = std::mul_sat<int16_t>(300, 200);",
+    uses: ['a', 'b'], run: function (I) { return satInt(I.a * I.b); }},
+  {g: 'Saturé (C++26)', name: 'DIV_SAT', cpp: 'std::div_sat', ver: 'C++26', sig: 'DIV_SAT(a, b)', ret: 'le type de a',
+    sum: "a / b, bloqué : en INT, −32768 / −1 donne 32767, le seul cas qui déborde. b = 0 reste une erreur.",
+    params: [['a', 'un entier', ''], ['b', 'un entier non nul', '']],
+    st: 'Q := DIV_SAT(INT#-32768, INT#-1);', res: '32767',
+    c: "int16_t q = (a == -32768 && b == -1) ? 32767 : a / b;", cc: "int16_t q = std::div_sat<int16_t>(-32768, -1);",
+    uses: ['a', 'b'], run: function (I) { if (!I.b) return {err: 'division par zéro'}; return satInt(Math.trunc(I.a / I.b)); }},
+  {g: 'Saturé (C++26)', name: 'SATURATE_TO_INT', cpp: 'std::saturate_cast', ver: 'C++26', sig: 'SATURATE_TO_INT(x)', ret: 'INT',
+    sum: "Convertit en bloquant aux bornes : 40000 donne 32767, là où TO_INT boucle. La famille : SATURATE_TO_SINT, _DINT, _USINT, _UINT, _UDINT.",
+    params: [['x', 'un nombre', 'arrondi, puis borné']],
+    st: 'Consigne := SATURATE_TO_INT(Mesure_Brute);   (* 40000 *)', res: '32767',
+    c: "int16_t c = x > 32767 ? 32767 : x < -32768 ? -32768 : (int16_t)x;", cc: "auto c = std::saturate_cast<int16_t>(40000);",
+    uses: ['a'], run: function (I) { return satInt(Math.round(I.a)); }}
+];
+var FUNCS = [
+  {name: 'LIST_ADD', sig: 'LIST_ADD(L, x)', ret: '', sum: "Ajoute x à la fin de la liste L.", mut: true},
+  {name: 'LIST_COUNT', sig: 'LIST_COUNT(L)', ret: 'DINT', sum: "Le nombre d'éléments de L."},
+  {name: 'LIST_SORT', sig: 'LIST_SORT(L)', ret: '', sum: 'Trie la liste L, en place.', mut: true},
+  {name: 'LIST_SUM', sig: 'LIST_SUM(L)', ret: 'comme les éléments', sum: 'La somme des éléments.'},
+  {name: 'LIST_CONTAINS', sig: 'LIST_CONTAINS(L, x)', ret: 'BOOL', sum: 'Vrai si x est dans L.'},
+  {name: 'VECTOR_PUSH', sig: 'VECTOR_PUSH(V, x)', ret: '', sum: 'Ajoute x à la fin du vecteur V.', mut: true},
+  {name: 'VECTOR_SIZE', sig: 'VECTOR_SIZE(V)', ret: 'DINT', sum: 'Le nombre d\'éléments de V.'},
+  {name: 'MAP_GET', sig: 'MAP_GET(m, cle, defaut)', ret: 'comme les valeurs', sum: 'La valeur de cle, ou defaut si elle manque.'},
+  {name: 'MAP_HAS', sig: 'MAP_HAS(m, cle)', ret: 'BOOL', sum: 'Vrai si m a la clé.'},
+  {name: 'MAP_KEYS', sig: 'MAP_KEYS(m)', ret: 'ARRAY de clés', sum: 'Les clés, dans leur ordre.'},
+  {name: 'MAP_SIZE', sig: 'MAP_SIZE(m)', ret: 'DINT', sum: 'Le nombre de clés.'},
+  {name: 'SPLIT', sig: 'SPLIT(texte, sep)', ret: 'LIST OF STRING', sum: 'Coupe le texte à chaque séparateur.'},
+  {name: 'JOIN', sig: 'JOIN(L, sep)', ret: 'STRING', sum: 'Assemble les éléments, séparés par sep.'},
+  {name: 'CONCAT', sig: 'CONCAT(a, b, …)', ret: 'STRING', sum: 'Met les textes bout à bout.'},
+  {name: 'LEN', sig: 'LEN(s)', ret: 'INT', sum: 'La longueur du texte.'},
+  {name: 'INT_TO_STRING', sig: 'INT_TO_STRING(x)', ret: 'STRING', sum: 'Le texte de l\'entier.'},
+  {name: 'REAL_TO_STRING', sig: 'REAL_TO_STRING(x)', ret: 'STRING', sum: 'Le texte du réel.'},
+  {name: 'STRING_TO_REAL', sig: 'STRING_TO_REAL(s)', ret: 'REAL', sum: 'Le réel écrit dans s.'},
+  {name: 'SEL', sig: 'SEL(G, IN0, IN1)', ret: 'comme IN0', sum: 'IN1 si G est vrai, sinon IN0.'},
+  {name: 'MIN', sig: 'MIN(a, b, …)', ret: 'comme a', sum: 'Le plus petit.'},
+  {name: 'MAX', sig: 'MAX(a, b, …)', ret: 'comme a', sum: 'Le plus grand.'},
+  {name: 'LIMIT', sig: 'LIMIT(mn, x, mx)', ret: 'comme x', sum: 'x borné entre mn et mx.'},
+  {name: 'ABS', sig: 'ABS(x)', ret: 'comme x', sum: 'La valeur absolue.'},
+  {name: 'SQRT', sig: 'SQRT(x)', ret: 'REAL', sum: 'La racine carrée.'},
+  {name: 'NOW', sig: 'NOW()', ret: 'DT', sum: "La date et l'heure ; dans un calcul de démarrage, l'instant du démarrage."},
+  {name: 'SIZEOF', sig: 'SIZEOF(x)', ret: 'DINT', sum: 'La taille de x : éléments d\'une liste, cases d\'un tableau.'}
+];
+NUM.forEach(function (f) { FUNCS.push({name: f.name, sig: f.sig, ret: f.ret, sum: f.sum, num: true, mut: f.name === 'IOTA'}); });
+var FN = {}; FUNCS.forEach(function (f) { FN[f.name] = f; });
+var KW = ('FOR TO BY DO END_FOR EACH IN IF THEN ELSIF ELSE END_IF CASE OF END_CASE WHILE END_WHILE REPEAT UNTIL END_REPEAT ' +
+  'VAR END_VAR RETURN EXIT CONTINUE AND OR XOR NOT MOD TRUE FALSE VRAI FAUX AND_THEN OR_ELSE').split(' ');
+var KWS = {}; KW.forEach(function (k) { KWS[k] = 1; });
+var TYPES = {}; ('REAL LREAL INT DINT SINT LINT UINT UDINT USINT ULINT BOOL BYTE WORD DWORD LWORD STRING WSTRING CHAR TIME DATE DT TOD ' +
+  'ARRAY LIST VECTOR MAP TUPLE').split(' ').forEach(function (t) { TYPES[t] = 1; });
+Object.keys(STRUCTS).concat(Object.keys(ENUMS)).forEach(function (t) { TYPES[t.toUpperCase()] = 1; });
+
+// ================================================================== les valeurs
+function elemOf(type) { var m = /\bOF\s+(.+)$/i.exec(type); return m ? m[1].trim() : ''; }
+function isArray(n) { return n.k === 'l' && /^ARRAY/i.test(n.type); }
+function growable(n) { return n.k === 'm' || (n.k === 'l' && !isArray(n)); }
+function lit(n, max) {
+  var out;
+  switch (n.k) {
+    case 's': out = n.text; break;
+    case 'l': out = '[' + n.items.map(function (x) { return lit(x); }).join(', ') + ']'; break;
+    case 'm': out = '[' + n.entries.map(function (e) { return e[0] + ' := ' + lit(e[1]); }).join(', ') + ']'; break;
+    case 'a2': out = '[' + n.rows.map(function (r) { return '[' + r.map(function (x) { return lit(x); }).join(', ') + ']'; }).join(', ') + ']'; break;
+    case 'r': out = '(' + n.members.map(function (e) { return e[0] + ' := ' + lit(e[1]); }).join(', ') + ')'; break;
+    case 't': out = '(' + n.fields.map(function (x) { return lit(x); }).join(', ') + ')'; break;
+    default: out = '';
+  }
+  if (max && out.length > max) out = out.slice(0, max - 1) + '…';
+  return out;
+}
+function plural(k, one, many) { return k + ' ' + (k === 1 ? one : many); }
+function sizeOf(n) {
+  switch (n.k) {
+    case 'l': return isArray(n) ? plural(n.items.length, 'case', 'cases') : (n.items.length ? plural(n.items.length, 'élément', 'éléments') : 'vide');
+    case 'm': return n.entries.length ? plural(n.entries.length, 'élément', 'éléments') : 'vide';
+    case 'a2': return n.rows.length + ' × ' + (n.rows[0] ? n.rows[0].length : 0);
+    case 'r': return plural(n.members.length, 'membre', 'membres');
+    case 't': return plural(n.fields.length, 'champ', 'champs');
+  }
+  return '';
+}
+function kids(n) {
+  switch (n.k) {
+    case 'l': return n.items.map(function (x, i) { return {lab: '[' + (n.pre || '') + (n.low + i) + ']', node: x, key: i, typ: n.elem}; });
+    case 'm': return n.entries.map(function (e, i) { return {lab: '[' + e[0] + ']', node: e[1], key: i, typ: n.valT, mkey: true}; });
+    case 'a2': return n.rows.map(function (r, i) {
+      var row = {k: 'l', type: 'ARRAY[' + n.low[1] + '..' + (n.low[1] + r.length - 1) + '] OF ' + n.elem, elem: n.elem, items: r, low: n.low[1], pre: (n.low[0] + i) + ', '};
+      return {lab: '[' + (n.low[0] + i) + ', ·]', node: row, key: i, typ: 'ligne ' + (n.low[0] + i)};
+    });
+    case 'r': return n.members.map(function (e, i) { var st = STRUCTS[n.type]; return {lab: '.' + e[0], node: e[1], key: i, typ: st && st[i] ? st[i][1] : ''}; });
+    case 't': return n.fields.map(function (x, i) { return {lab: '.Item' + (i + 1), node: x, key: i, typ: x.type}; });
+  }
+  return [];
+}
+function defaultNode(type) {
+  var t = type.trim(), u = t.toUpperCase(), m;
+  if (STRUCTS[t]) return REC(t, STRUCTS[t].map(function (e) { return [e[0], defaultNode(e[1])]; }));
+  if (/^(LIST|VECTOR)\s+OF\s+/i.test(t)) return LST(t, elemOf(t), []);
+  if ((m = /^MAP\[(.+?)\]\s+OF\s+(.+)$/i.exec(t))) return MP(t, m[1], m[2], []);
+  if (u === 'REAL' || u === 'LREAL') return S(t, '0.0');
+  if (BOUNDS[u]) return S(t, '0');
+  if (u === 'BOOL') return S(t, 'FALSE');
+  if (u === 'STRING') return S(t, "''");
+  if (u === 'TIME') return S(t, 'T#0s');
+  if (ENUMS[t]) return S(t, ENUMS[t][0]);
+  return S(t, '0');
+}
+function checkScalar(type, raw) {
+  var t = String(type).toUpperCase(), s = String(raw).trim(), x;
+  if (t === 'REAL' || t === 'LREAL') {
+    x = Number(s.replace(',', '.'));
+    if (s === '' || !isFinite(x)) return {ok: false, why: "'" + s + "' n'est pas un " + t};
+    return {ok: true, text: real(x)};
+  }
+  if (BOUNDS[t]) {
+    if (!/^[-+]?\d+$/.test(s)) return {ok: false, why: "'" + s + "' n'est pas un entier (" + t + ')'};
+    x = Number(s);
+    if (x < BOUNDS[t][0] || x > BOUNDS[t][1]) return {ok: false, why: s + " est hors des bornes d'un " + t + ' (' + BOUNDS[t][0] + '..' + BOUNDS[t][1] + ')'};
+    return {ok: true, text: String(x)};
+  }
+  if (t === 'BOOL') {
+    if (/^(TRUE|VRAI|1)$/i.test(s)) return {ok: true, text: 'TRUE'};
+    if (/^(FALSE|FAUX|0)$/i.test(s)) return {ok: true, text: 'FALSE'};
+    return {ok: false, why: "'" + s + "' : vrai ou faux attendu"};
+  }
+  if (t === 'STRING') return {ok: true, text: /^'.*'$/.test(s) ? s : str(s)};
+  if (t === 'TIME') {
+    if (/^(T|TIME)#[0-9a-z_.]+$/i.test(s)) return {ok: true, text: 'T#' + s.split('#')[1]};
+    return {ok: false, why: "'" + s + "' n'est pas une durée : écris T#5s, T#1m30s"};
+  }
+  if (ENUMS[type]) {
+    var v = ENUMS[type].filter(function (e) { return eq(e, s.replace(/^.*#/, '')); })[0];
+    return v ? {ok: true, text: v} : {ok: false, why: "'" + s + "' n'est pas une valeur de " + type + ' (' + ENUMS[type].join(', ') + ')'};
+  }
+  return {ok: true, text: s};
+}
+function checkKey(n, raw, self) {
+  var r = checkScalar(n.keyT, raw);
+  if (!r.ok) return r;
+  for (var i = 0; i < n.entries.length; i++) if (i !== self && n.entries[i][0] === r.text) return {ok: false, why: 'la clé ' + r.text + ' est déjà là'};
+  return r;
+}
+// Une liste ou une MAP de valeurs simples, écrite en texte : [a, b] ou ['k' := v].
+function splitTop(s) {
+  var out = [], d = 0, q = false, cur = '';
+  for (var i = 0; i < s.length; i++) {
+    var ch = s[i];
+    if (q) { cur += ch; if (ch === '$') { cur += s[++i] || ''; } else if (ch === "'") q = false; continue; }
+    if (ch === "'") { q = true; cur += ch; continue; }
+    if (ch === '[' || ch === '(') d++;
+    if (ch === ']' || ch === ')') d--;
+    if (ch === ',' && d === 0) { out.push(cur.trim()); cur = ''; continue; }
+    cur += ch;
+  }
+  if (cur.trim()) out.push(cur.trim());
+  return out;
+}
+function parseText(n, text) {
+  var s = text.trim(), inner, parts, i, r;
+  if (n.k === 's') { r = checkScalar(n.type, s); return r.ok ? {ok: true, node: S(n.type, r.text)} : r; }
+  if (s === '') return {ok: true, node: defaultNode(n.type)};
+  if (n.k === 'l' || n.k === 'm') {
+    if (!/^\[[\s\S]*\]$/.test(s)) return {ok: false, why: s + " n'est pas un " + n.type + ' : écris [' + (n.k === 'm' ? "'clé' := valeur, …" : 'a, b, …') + '] ou laisse vide'};
+    inner = s.slice(1, -1).trim(); parts = inner ? splitTop(inner) : [];
+    if (n.k === 'l') {
+      if (isArray(n) && parts.length > n.items.length) return {ok: false, why: n.type + ' a ' + n.items.length + ' cases : ' + parts.length + ' valeurs données'};
+      if (!/^(REAL|LREAL|INT|DINT|SINT|BOOL|STRING|TIME)$/i.test(n.elem)) return {ok: false, why: 'des ' + n.elem + ' : écris-les dans Éléments'};
+      var items = [];
+      for (i = 0; i < parts.length; i++) { r = checkScalar(n.elem, parts[i]); if (!r.ok) return {ok: false, why: 'élément ' + (i + 1) + ' : ' + r.why}; items.push(S(n.elem, r.text)); }
+      if (isArray(n)) while (items.length < n.items.length) items.push(defaultNode(n.elem));
+      return {ok: true, node: LST(n.type, n.elem, items, n.low)};
+    }
+    var entries = [];
+    for (i = 0; i < parts.length; i++) {
+      var m = /^(.+?)\s*:=\s*(.+)$/.exec(parts[i]);
+      if (!m) return {ok: false, why: 'élément ' + (i + 1) + " : écris 'clé' := valeur"};
+      var k = checkScalar(n.keyT, m[1]); if (!k.ok) return {ok: false, why: 'clé ' + (i + 1) + ' : ' + k.why};
+      var v = checkScalar(n.valT, m[2]); if (!v.ok) return {ok: false, why: k.text + ' : ' + v.why};
+      entries.push([k.text, S(n.valT, v.text)]);
+    }
+    return {ok: true, node: MP(n.type, n.keyT, n.valT, entries)};
+  }
+  if (n.k === 't') {
+    if (!/^\([\s\S]*\)$/.test(s)) return {ok: false, why: 'un TUPLE s\'écrit (a, b)'};
+    parts = splitTop(s.slice(1, -1));
+    if (parts.length !== n.fields.length) return {ok: false, why: n.type + ' a ' + n.fields.length + ' champs'};
+    var f = [];
+    for (i = 0; i < parts.length; i++) { r = checkScalar(n.fields[i].type, parts[i]); if (!r.ok) return {ok: false, why: 'champ ' + (i + 1) + ' : ' + r.why}; f.push(S(n.fields[i].type, r.text)); }
+    return {ok: true, node: TUP(n.type, f)};
+  }
+  return {ok: false, why: 'une ' + (n.k === 'r' ? 'structure' : 'valeur à deux dimensions') + ' s\'écrit dans Éléments'};
+}
+
+// ===================================================== l'analyse d'un calcul (ST)
+function blank(code) {
+  var out = '', i = 0, N = code.length, j, e;
+  while (i < N) {
+    if (code.substr(i, 2) === '(*') { j = code.indexOf('*)', i + 2); e = j < 0 ? N : j + 2; out += code.slice(i, e).replace(/[^\n]/g, ' '); i = e; continue; }
+    if (code.substr(i, 2) === '//') { j = code.indexOf('\n', i); e = j < 0 ? N : j; out += new Array(e - i + 1).join(' '); i = e; continue; }
+    if (code[i] === "'") {
+      j = i + 1; while (j < N && code[j] !== "'" && code[j] !== '\n') { if (code[j] === '$') j++; j++; }
+      e = Math.min(N, j + 1); out += new Array(e - i + 1).join(' '); i = e; continue;
+    }
+    out += code[i]; i++;
+  }
+  return out;
+}
+function spaces(s) { return s.replace(/[^\n]/g, ' '); }
+function localsOf(code) {
+  var b = blank(code), out = {}, m, re;
+  re = /\bVAR\b([\s\S]*?)\bEND_VAR\b/gi;
+  while ((m = re.exec(b))) m[1].split(';').forEach(function (d) {
+    var p = d.split(':'); if (p.length < 2) return;
+    var t = p.slice(1).join(':').replace(/:=.*$/, '').trim();
+    p[0].split(',').forEach(function (n) { n = n.trim(); if (/^[A-Za-z_]\w*$/.test(n)) out[n.toUpperCase()] = {name: n, type: t}; });
+  });
+  re = /\bFOR\s+([A-Za-z_]\w*)\s*:=/gi;
+  while ((m = re.exec(b))) out[m[1].toUpperCase()] = {name: m[1], type: 'DINT'};
+  re = /\bFOR\s+EACH\s+([A-Za-z_]\w*)(?:\s*,\s*([A-Za-z_]\w*))?\s+IN\b/gi;
+  while ((m = re.exec(b))) { out[m[1].toUpperCase()] = {name: m[1], type: ''}; if (m[2]) out[m[2].toUpperCase()] = {name: m[2], type: ''}; }
+  return out;
+}
+function lev(a, b) {
+  a = a.toUpperCase(); b = b.toUpperCase();
+  var d = [], i, j;
+  for (i = 0; i <= a.length; i++) { d[i] = [i]; }
+  for (j = 1; j <= b.length; j++) d[0][j] = j;
+  for (i = 1; i <= a.length; i++) for (j = 1; j <= b.length; j++)
+    d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+  return d[a.length][b.length];
+}
+function closest(name, pool) {
+  var best = '', bd = name.length <= 3 ? 2 : 3;
+  pool.forEach(function (p) { var x = lev(name, p); if (x < bd && x > 0) { bd = x; best = p; } });
+  return best ? ' — veux-tu dire ' + best + ' ?' : '';
+}
+function isWrite(after) {
+  var i = 0, s = after, d;
+  var ws = function () { while (i < s.length && /[ \t]/.test(s[i])) i++; };
+  ws();
+  while (s[i] === '[' || s[i] === '.') {
+    if (s[i] === '[') { d = 0; for (; i < s.length; i++) { if (s[i] === '[') d++; else if (s[i] === ']') { d--; if (d === 0) { i++; break; } } } }
+    else { i++; while (i < s.length && /\w/.test(s[i])) i++; }
+    ws();
+  }
+  return s.substr(i, 2) === ':=';
+}
+function findIn(list, name) { for (var i = 0; i < list.length; i++) if (eq(list[i].name, name)) return list[i]; return null; }
+function scriptOf(name) { var ks = Object.keys(OTHER); for (var i = 0; i < ks.length; i++) if (eq(ks[i], name)) return ks[i]; return eq(name, 'Visserie') ? 'Visserie' : null; }
+function allNames() { return CONSTS.map(function (c) { return c.name; }).concat(VARS.map(function (v) { return v.name; }), Object.keys(OTHER), HMI.map(function (h) { return h.name; }), FUNCS.map(function (f) { return f.name; })); }
+
+function analyse(owner, code, isConst) {
+  var diags = [], deps = [], depAt = {}, assigned = false, b = blank(code), m;
+  function add(at, len, sev, msg) { diags.push({at: at, len: Math.max(1, len), sev: sev, msg: msg}); }
+  b = b.replace(/\b([A-Za-z_]\w*)#([A-Za-z_]\w*)\b/g, function (all, t, v, off) {
+    var T = Object.keys(ENUMS).filter(function (k) { return eq(k, t); })[0];
+    if (!T) { if (!/^(T|TIME|D|DATE|DT|TOD|LT|LTIME|INT|DINT|SINT|REAL|LREAL)$/i.test(t)) add(off, all.length, 'err', t + " n'est pas une énumération"); }
+    else if (!ENUMS[T].some(function (x) { return eq(x, v); })) add(off, all.length, 'err', v + " n'est pas une valeur de " + T + ' (' + ENUMS[T].join(', ') + ')');
+    return spaces(all);
+  });
+  b = b.replace(/\b(?:T|TIME|D|DATE|DT|DATE_AND_TIME|TOD|TIME_OF_DAY|LT|LTIME|INT|DINT|SINT|REAL|LREAL)#[-+]?[0-9A-Za-z_:.\-]+/gi, spaces);
+  b = b.replace(/\b\d+#[0-9A-Fa-f_]+/g, spaces);
+  var locals = localsOf(code);
+  var re = /[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*/g;
+  while ((m = re.exec(b))) {
+    var text = m[0], at = m.index;
+    if (at > 0 && /[\w.#]/.test(b[at - 1])) continue;
+    if (/^\d/.test(text)) continue;
+    var parts = text.split('.'), head = parts[0], H = head.toUpperCase(), after = b.slice(at + text.length);
+    var call = /^\s*\(/.test(after);
+    if (KWS[H] || TYPES[H]) continue;
+    if (call) {
+      if (!FN[H]) { add(at, head.length, 'err', head + ' : fonction inconnue' + closest(head, FUNCS.map(function (f) { return f.name; }))); continue; }
+      if (FN[H].mut) {
+        var a = /^\s*\(\s*([A-Za-z_]\w*)/.exec(after);
+        if (a) {
+          if (eq(a[1], owner.name)) assigned = true;
+          else if (findIn(CONSTS, a[1]) && !locals[a[1].toUpperCase()]) add(at + text.length + after.indexOf(a[1]), a[1].length, 'err', a[1] + ' est une constante : ' + head + ' ne peut pas la changer');
+        }
+      }
+      continue;
+    }
+    if (FN[H]) continue;
+    if (locals[H]) continue;
+    var writes = isWrite(after);
+    if (eq(head, owner.name)) { if (writes) assigned = true; continue; }
+    var c = findIn(CONSTS, head);
+    if (c) {
+      if (writes) add(at, head.length, 'err', c.name + ' est une constante : elle ne s\'écrit pas' + (c.mode === 'calcul' ? ' (elle est calculée au démarrage)' : ''));
+      else if (deps.indexOf(c.name) < 0) { deps.push(c.name); depAt[c.name] = {at: at, len: head.length}; }
+      continue;
+    }
+    var v = findIn(VARS, head);
+    if (v) {
+      if (isConst) add(at, head.length, 'err', v.name + ' est une variable du script : elle se calcule après les constantes');
+      else if (deps.indexOf(v.name) < 0) { deps.push(v.name); depAt[v.name] = {at: at, len: head.length}; }
+      continue;
+    }
+    var sc = scriptOf(head);
+    if (sc) {
+      if (parts.length < 2) { add(at, text.length, 'err', sc + ' est un script : choisis une de ses constantes (' + sc + '.)'); continue; }
+      var pool = sc === 'Visserie' ? CONSTS : OTHER[sc];
+      var oc = findIn(pool, parts[1]);
+      var qual = sc + '.' + parts[1];
+      if (!oc) { add(at, sc.length + 1 + parts[1].length, 'err', sc + " n'a pas de constante " + parts[1] + closest(parts[1], pool.map(function (x) { return x.name; }))); continue; }
+      if (oc.vis !== 'Public' && sc !== 'Visserie') { add(at, sc.length + 1 + parts[1].length, 'err', sc + '.' + oc.name + ' est privée : seul ' + sc + ' la lit (rends-la publique)'); continue; }
+      qual = sc + '.' + oc.name;
+      if (writes) add(at, qual.length, 'err', qual + ' est une constante : elle ne s\'écrit pas');
+      else if (deps.indexOf(qual) < 0) { deps.push(qual); depAt[qual] = {at: at, len: qual.length}; }
+      continue;
+    }
+    var h = findIn(HMI, head);
+    if (h) {
+      if (h.equipment) add(at, text.length, 'warn', 'au démarrage, ' + h.name + " n'est pas encore lu : " + text + ' vaudra 0');
+      else if (deps.indexOf(h.name) < 0) { deps.push(h.name); depAt[h.name] = {at: at, len: head.length}; }
+      continue;
+    }
+    add(at, head.length, 'err', head + " n'existe pas" + closest(head, allNames()));
+  }
+  if (!assigned && !diags.some(function (d) { return d.sev === 'err'; }))
+    add(0, 0, 'warn', owner.name + ' ne reçoit aucune valeur : elle garde la valeur vide de son type');
+  var cyc = findCycle(owner.name, deps);
+  if (cyc) { var p = depAt[cyc[1]] || {at: 0, len: 1}; add(p.at, p.len, 'err', 'boucle de calculs : ' + cyc.join(' → ')); }
+  diags.forEach(function (d) { var pre = code.slice(0, d.at); d.line = (pre.match(/\n/g) || []).length; d.col = d.at - (pre.lastIndexOf('\n') + 1); });
+  diags.sort(function (x, y) { return x.at - y.at; });
+  return {diags: diags, deps: deps};
+}
+function graph() {
+  var g = {};
+  CONSTS.concat(VARS).forEach(function (x) { g[x.name] = x.mode === 'calcul' ? (x.deps || []) : []; });
+  return g;
+}
+function findCycle(start, first) {
+  var g = graph(), path = [], seen = {};
+  g[start] = first;
+  function dfs(n) {
+    if (n === start) return true;
+    if (seen[n]) return false;
+    seen[n] = 1;
+    var ds = g[n] || [];
+    for (var i = 0; i < ds.length; i++) { path.push(ds[i]); if (dfs(ds[i])) return true; path.pop(); }
+    return false;
+  }
+  for (var i = 0; i < first.length; i++) { path = [first[i]]; seen = {}; if (dfs(first[i])) return [start].concat(path); }
+  return null;
+}
+function refreshDeps() {
+  [CONSTS, VARS].forEach(function (list) {
+    list.forEach(function (x) { if (x.mode === 'calcul') x.deps = analyse(x, x.code, list === CONSTS).deps; else x.deps = []; });
+  });
+}
+
+// ================================================================= la grille
+var tabNow = 'consts', selName = 'Couples', selPath = 'Couples';
+var open = {'Couples': 1, 'Recettes_Jour': 1, 'Recettes_Jour/0': 1};
+var grid = $('#grid'), gridwrap = $('#gridwrap'), editor = $('#editor');
+function listNow() { return tabNow === 'vars' ? VARS : CONSTS; }
+function itemNow() { return findIn(listNow(), selName) || listNow()[0]; }
+function visCell(c) { return '<span class="' + (c.vis === 'Public' ? 'vis-pub' : 'vis-priv') + '">' + (c.vis === 'Public' ? '● Public' : '○ Privé') + '</span>'; }
+function valueCell(c) {
+  var n = c.node;
+  if (c.mode === 'calcul') return '<span class="fx">ƒx</span><span class="vcalc">calculée</span><span class="prev ro">→ ' + esc(lit(n, 44)) + '</span>';
+  if (c.mode === 'elements') return '<span class="el">éléments</span><span class="prev">' + esc(lit(n, 50)) + '</span>';
+  return '<span class="prev">' + esc(lit(n, 58)) + '</span>';
+}
+function renderGrid() {
+  var vars = tabNow === 'vars';
+  var head = ['Nom', 'Type', vars ? 'Initiale' : 'Valeur', 'Taille', vars ? 'Stockage' : 'Utilisations', 'Visibilité', 'Documentation'];
+  var h = '<thead><tr>' + head.map(function (x) { return '<th scope="col">' + x + '</th>'; }).join('') + '</tr></thead><tbody>';
+  listNow().forEach(function (c) {
+    var big = c.node.k !== 's', on = !!open[c.name];
+    h += '<tr data-path="' + esc(c.name) + '"' + (selPath === c.name ? ' class="sel"' : '') + '><td><div class="namecell">' +
+      '<button class="tw" type="button" data-tw="' + esc(c.name) + '"' + (big ? '' : ' disabled') + ' aria-expanded="' + on + '" aria-label="' + (on ? 'Replier ' : 'Déplier ') + esc(c.name) + '">' + (on ? '▾' : '▸') + '</button>' +
+      '<span class="ico">' + (c.mode === 'calcul' ? 'ƒ' : '≡') + '</span>' + esc(c.name) + '</div></td>' +
+      '<td class="key">' + esc(c.type) + '</td><td>' + valueCell(c) + '</td><td class="size">' + esc(sizeOf(c.node)) + '</td>' +
+      '<td>' + (vars ? esc(c.storage) : '<span class="size">' + c.uses + '</span>') + '</td><td>' + visCell(c) + '</td><td>' + esc(c.doc || '') + '</td></tr>';
+    if (on && big) h += rowKids(c, c.node, c.name, 1);
+  });
+  grid.innerHTML = h + '</tbody>';
+}
+function rowKids(c, node, path, depth) {
+  var h = '', calc = c.mode === 'calcul';
+  kids(node).forEach(function (k) {
+    var p = path + '/' + k.key, big = k.node.k !== 's', on = !!open[p];
+    var canDel = !calc && growable(node);
+    var val;
+    if (big) val = '<span class="prev' + (calc ? ' ro' : '') + '">' + esc(lit(k.node, 50)) + '</span>';
+    else if (calc) val = '<span class="prev ro" title="Calculé au démarrage : modifiez le calcul">' + esc(k.node.text) + '</span>';
+    else val = '<span class="prev editable" data-edit="' + esc(p) + '" tabindex="0" title="Double-clic ou Entrée : modifier">' + esc(k.node.text) + '</span>';
+    var lab = k.mkey && !calc ? '<span class="key editable" data-editkey="' + esc(p) + '" tabindex="0" title="Double-clic : changer la clé">' + esc(k.lab) + '</span>' : '<span class="key">' + esc(k.lab) + '</span>';
+    h += '<tr class="child' + (selPath === p ? ' sel' : '') + '" data-path="' + esc(p) + '"><td><div class="namecell" style="padding-left:' + (depth * 18) + 'px">' +
+      '<button class="tw" type="button" data-tw="' + esc(p) + '"' + (big ? '' : ' disabled') + ' aria-expanded="' + on + '" aria-label="' + (on ? 'Replier' : 'Déplier') + '">' + (on ? '▾' : '▸') + '</button>' + lab +
+      (canDel ? '<button class="del" type="button" data-del="' + esc(p) + '" title="Retirer cet élément" aria-label="Retirer ' + esc(k.lab) + '">✕</button>' : '') +
+      '</div></td><td class="key">' + esc(k.typ || '') + '</td><td>' + val + '</td><td class="size">' + esc(sizeOf(k.node)) + '</td><td></td><td></td><td></td></tr>';
+    if (big && on) h += rowKids(c, k.node, p, depth + 1);
+  });
+  if (!calc && growable(node)) h += '<tr class="child addrow"><td colspan="7"><div class="namecell" style="padding-left:' + (depth * 18 + 22) + 'px"><button class="addbtn" type="button" data-add="' + esc(path) + '">＋ Ajouter un élément</button></div></td></tr>';
+  return h;
+}
+function resolve(path) {
+  var parts = path.split('/'), c = findIn(listNow(), parts[0]);
+  if (!c) return null;
+  var node = c.node, parent = null, key = null, i, ks, k;
+  for (i = 1; i < parts.length; i++) {
+    ks = kids(node); k = null;
+    for (var j = 0; j < ks.length; j++) if (String(ks[j].key) === parts[i]) k = ks[j];
+    if (!k) return null;
+    parent = node; key = k.key; node = k.node;
+  }
+  return {c: c, node: node, parent: parent, key: key};
+}
+function setChild(parent, key, nn) {
+  if (parent.k === 'l') parent.items[key] = nn;
+  else if (parent.k === 'm') parent.entries[key][1] = nn;
+  else if (parent.k === 'r') parent.members[key][1] = nn;
+  else if (parent.k === 't') parent.fields[key] = nn;
+}
+function addTo(node) {
+  if (node.k === 'm') {
+    var base = node.keyT.toUpperCase() === 'STRING' ? "'nouveau'" : '0', k = base, i = 2;
+    while (node.entries.some(function (e) { return e[0] === k; })) k = node.keyT.toUpperCase() === 'STRING' ? "'nouveau" + i++ + "'" : String(i++);
+    node.entries.push([k, defaultNode(node.valT)]);
+    return node.entries.length - 1;
+  }
+  node.items.push(defaultNode(node.elem));
+  return node.items.length - 1;
+}
+function removeAt(node, key) { if (node.k === 'm') node.entries.splice(key, 1); else node.items.splice(key, 1); }
+
+function startEdit(span, path, isKey) {
+  var r = resolve(path); if (!r) return;
+  var old = isKey ? r.parent.entries[r.key][0] : r.node.text;
+  var inp = document.createElement('input');
+  inp.className = 'cell-edit'; inp.value = old; inp.setAttribute('aria-label', isKey ? 'Clé' : 'Valeur');
+  var msg = document.createElement('span'); msg.className = 'cell-err';
+  span.replaceWith(inp); inp.after(msg); inp.focus(); inp.select();
+  var done = false;
+  function commit() {
+    if (done) return;
+    var res = isKey ? checkKey(r.parent, inp.value, r.key) : checkScalar(r.node.type, inp.value);
+    if (!res.ok) { msg.textContent = res.why; inp.focus(); return false; }
+    done = true;
+    if (isKey) r.parent.entries[r.key][0] = res.text; else r.node.text = res.text;
+    redraw(); return true;
+  }
+  inp.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); commit(); }
+    else if (e.key === 'Escape') { e.preventDefault(); done = true; redraw(); }
+  });
+  inp.addEventListener('blur', function () { if (!done && commit() === false) { done = true; redraw(); } });
+}
+
+grid.addEventListener('click', function (e) {
+  var t = e.target.closest('[data-tw]');
+  if (t) { var p = t.getAttribute('data-tw'); if (open[p]) delete open[p]; else open[p] = 1; renderGrid(); return; }
+  t = e.target.closest('[data-del]');
+  if (t) { var r = resolve(t.getAttribute('data-del')); if (r && r.parent) { removeAt(r.parent, r.key); redraw(); } return; }
+  t = e.target.closest('[data-add]');
+  if (t) {
+    var path = t.getAttribute('data-add'), rr = resolve(path); if (!rr) return;
+    var key = addTo(rr.node); open[path] = 1; selPath = path + '/' + key; redraw();
+    var nsp = grid.querySelector(rr.node.k === 'm' ? '[data-editkey="' + selPath + '"]' : '[data-edit="' + selPath + '"]');
+    if (nsp) startEdit(nsp, selPath, rr.node.k === 'm');
+    return;
+  }
+  var tr = e.target.closest('tr[data-path]');
+  if (tr) {
+    // Choisir une ligne ne redessine pas la grille : un double-clic garde sa cible.
+    var path = tr.getAttribute('data-path');
+    if (path === selPath) return;
+    selPath = path;
+    $$('tr.sel', grid).forEach(function (x) { x.classList.remove('sel'); });
+    tr.classList.add('sel');
+    var top = selPath.split('/')[0];
+    if (top !== selName) { selName = top; renderEditor(); }
+  }
+});
+grid.addEventListener('dblclick', function (e) {
+  var s = e.target.closest('[data-edit]'); if (s) { startEdit(s, s.getAttribute('data-edit'), false); return; }
+  s = e.target.closest('[data-editkey]'); if (s) startEdit(s, s.getAttribute('data-editkey'), true);
+});
+grid.addEventListener('keydown', function (e) {
+  if (e.key !== 'Enter') return;
+  var s = e.target.closest('[data-edit]'); if (s) { e.preventDefault(); startEdit(s, s.getAttribute('data-edit'), false); return; }
+  s = e.target.closest('[data-editkey]'); if (s) { e.preventDefault(); startEdit(s, s.getAttribute('data-editkey'), true); }
+});
+
+// ============================================================ l'éditeur de la valeur
+var HELP = {
+  s: function (c) {
+    var t = c.type.toUpperCase();
+    if (ENUMS[c.type]) return 'Une valeur de ' + c.type + ' : ' + ENUMS[c.type].join(', ') + '.';
+    if (t === 'STRING') return "Un texte entre apostrophes : <code>'Ligne 2'</code>.";
+    if (t === 'TIME') return 'Une durée : <code>T#5s</code>, <code>T#1m30s</code>.';
+    if (t === 'DT') return 'Une date et heure : <code>DT#2026-10-11-08:00:00</code>.';
+    if (t === 'BOOL') return '<code>TRUE</code> ou <code>FALSE</code> (vrai, faux).';
+    return 'Un nombre' + (BOUNDS[t] ? ' entier, de ' + BOUNDS[t][0] + ' à ' + BOUNDS[t][1] : '') + '.';
+  },
+  l: function (c) { return isArray(c.node) ? 'Un ARRAY s\'écrit <code>[a, b, …]</code> : ' + c.node.items.length + ' cases, les manquantes valent 0.' : 'Une liste s\'écrit <code>[a, b, …]</code> ; vide : <code>[]</code> ou rien.'; },
+  m: function () { return "Une MAP s'écrit <code>['clé' := valeur, …]</code> ; vide : rien. <b>0.0 est refusé</b> (le défaut de votre capture)."; },
+  t: function () { return 'Un TUPLE s\'écrit <code>(a, b)</code>, un champ par type.'; },
+  r: function () { return 'Une structure se règle membre par membre : passez en Éléments.'; },
+  a2: function () { return 'Un tableau à deux dimensions se règle case par case : passez en Éléments.'; }
+};
+function codeFrom(c) {
+  var n = c.node, name = c.name, L = ['(* ' + name + ' : écrit à partir de sa valeur actuelle *)'];
+  switch (n.k) {
+    case 's': L.push(name + ' := ' + n.text + ';'); break;
+    case 'm': n.entries.forEach(function (e) { L.push(name + '[' + e[0] + '] := ' + lit(e[1]) + ';'); }); break;
+    case 'l':
+      if (isArray(n)) n.items.forEach(function (x, i) { L.push(name + '[' + (n.low + i) + '] := ' + lit(x) + ';'); });
+      else n.items.forEach(function (x) { L.push((/^VECTOR/i.test(n.type) ? 'VECTOR_PUSH(' : 'LIST_ADD(') + name + ', ' + lit(x) + ');'); });
+      break;
+    case 'a2': n.rows.forEach(function (r, i) { r.forEach(function (x, j) { L.push(name + '[' + i + ', ' + j + '] := ' + lit(x) + ';'); }); }); break;
+    case 'r': n.members.forEach(function (e) { L.push(name + '.' + e[0] + ' := ' + lit(e[1]) + ';'); }); break;
+    case 't': L.push(name + ' := ' + lit(n) + ';'); break;
+  }
+  return L.join('\n');
+}
+function renderEditor() {
+  hideAc(); hideSig();
+  var c = itemNow(), n = c.node, scalar = n.k === 's';
+  var modes = [['valeur', scalar ? 'Valeur' : 'Valeur (texte)'], ['elements', 'Éléments'], ['calcul', 'ƒx Calcul au démarrage']];
+  var h = '<div class="ed-head"><span class="ed-title">' + esc(c.name) + '</span><span class="ed-type">' + esc(c.type) + '</span>' + visCell(c) +
+    '<span class="size">' + esc(sizeOf(n)) + '</span><div class="seg" role="group" aria-label="La valeur">' +
+    modes.map(function (m) {
+      var off = m[0] === 'elements' && scalar;
+      return '<button type="button" data-mode="' + m[0] + '"' + (c.mode === m[0] ? ' class="on"' : '') + (off ? ' disabled title="Un ' + esc(c.type) + ' n\'a pas d\'éléments"' : '') + '>' + m[1] + '</button>';
+    }).join('') + '</div></div><div class="ed-body" id="edbody"></div>';
+  editor.innerHTML = h;
+  var body = $('#edbody');
+  if (c.mode === 'valeur') renderValeur(body, c);
+  else if (c.mode === 'elements') renderElements(body, c);
+  else renderCalcul(body, c);
+}
+editor.addEventListener('click', function (e) {
+  var b = e.target.closest('[data-mode]'); if (!b || b.disabled) return;
+  var c = itemNow(), m = b.getAttribute('data-mode');
+  if (m === c.mode) return;
+  if (m === 'calcul' && !c.code) { c.code = codeFrom(c); c.origCode = c.code; }
+  if (c.mode === 'calcul' && m !== 'calcul') c.note = 'La valeur du dernier calcul devient la valeur écrite ; le calcul se retrouve avec Ctrl+Z.';
+  c.mode = m; refreshDeps(); redraw();
+});
+
+function renderValeur(body, c) {
+  var n = c.node, scalar = n.k === 's', simple = scalar || n.k === 'l' || n.k === 'm' || n.k === 't';
+  var h = '<div class="help">' + HELP[n.k](c) + (c.note ? ' <span class="msg warn">' + esc(c.note) + '</span>' : '') + '</div>';
+  if (scalar) h += '<div class="field"><input class="inp" id="valin" value="' + esc(n.text) + '" aria-label="Valeur de ' + esc(c.name) + '" style="width:min(320px,100%)"><span class="msg" id="valmsg"></span></div>';
+  else if (simple) h += '<textarea class="inp" id="valin" spellcheck="false" aria-label="Valeur de ' + esc(c.name) + '">' + esc(lit(n)) + '</textarea><span class="msg" id="valmsg"></span>';
+  else h += '<pre class="ex" style="border-top:1px solid var(--app-line)">' + esc(lit(n)) + '</pre>';
+  h += '<div class="rowbtns"><button class="btn" type="button" data-try="0.0">Essayer 0.0</button><button class="btn" type="button" data-try="abc">Essayer \'abc\'</button></div>';
+  body.innerHTML = h;
+  var inp = $('#valin', body), msg = $('#valmsg', body);
+  function apply(text) {
+    var r = parseText(c.node, text);
+    if (!r.ok) { if (inp) inp.classList.add('bad'); msg.className = 'msg err'; msg.textContent = r.why; return; }
+    if (inp) inp.classList.remove('bad');
+    c.node = r.node; c.note = ''; msg.className = 'msg ok'; msg.textContent = 'Juste : ' + lit(r.node, 70); renderGrid();
+  }
+  if (inp) inp.addEventListener('change', function () { apply(inp.value); });
+  $$('[data-try]', body).forEach(function (b) {
+    b.addEventListener('click', function () { var v = b.getAttribute('data-try'); if (inp) inp.value = v; if (msg) apply(v); });
+  });
+}
+
+function renderElements(body, c) {
+  var n = c.node, h = '<div class="help">Une ligne par élément. Chaque case est vérifiée quand on la quitte ; la grille au-dessus suit.' +
+    (growable(n) ? ' <kbd>Entrée</kbd> sur la dernière ligne en ajoute une.' : '') + '</div><div class="etwrap"><table class="etab' + (n.k === 'a2' ? ' mat' : '') + '">';
+  if (n.k === 'm') {
+    h += '<thead><tr><th>Clé (' + esc(n.keyT) + ')</th><th>Valeur (' + esc(n.valT) + ')</th><th></th></tr></thead><tbody>';
+    n.entries.forEach(function (e, i) {
+      h += '<tr><td><input data-k="' + i + '" value="' + esc(e[0]) + '" aria-label="Clé ' + (i + 1) + '"></td><td>' + cellIn(e[1], 'v' + i, 'Valeur ' + (i + 1)) +
+        '</td><td class="acts"><button class="mini x" type="button" data-rm="' + i + '" aria-label="Retirer">✕</button></td></tr>';
+    });
+  } else if (n.k === 'l' && n.elem && STRUCTS[n.elem]) {
+    var mem = STRUCTS[n.elem];
+    h += '<thead><tr><th>#</th>' + mem.map(function (m) { return '<th>' + esc(m[0]) + ' <span class="size">' + esc(m[1]) + '</span></th>'; }).join('') + '<th></th></tr></thead><tbody>';
+    n.items.forEach(function (it, i) {
+      h += '<tr><td class="idx">[' + (n.low + i) + ']</td>' + it.members.map(function (m, j) { return '<td>' + cellIn(m[1], 'r' + i + '_' + j, m[0] + ' ' + (i + 1)) + '</td>'; }).join('') +
+        '<td class="acts"><button class="mini" type="button" data-up="' + i + '" aria-label="Monter">↑</button><button class="mini x" type="button" data-rm="' + i + '" aria-label="Retirer">✕</button></td></tr>';
+    });
+  } else if (n.k === 'l') {
+    h += '<thead><tr><th>Indice</th><th>Valeur (' + esc(n.elem) + ')</th><th></th></tr></thead><tbody>';
+    n.items.forEach(function (x, i) {
+      h += '<tr><td class="idx">[' + (n.low + i) + ']</td><td>' + cellIn(x, 'i' + i, 'Élément ' + (n.low + i)) + '</td><td class="acts">' +
+        (isArray(n) ? '' : '<button class="mini" type="button" data-up="' + i + '" aria-label="Monter">↑</button><button class="mini x" type="button" data-rm="' + i + '" aria-label="Retirer">✕</button>') + '</td></tr>';
+    });
+    if (!n.items.length) h += '<tr><td colspan="3" class="small">Vide : ' + esc(c.name) + ' commence sans élément.</td></tr>';
+  } else if (n.k === 'a2') {
+    h += '<thead><tr><th></th>' + n.rows[0].map(function (x, j) { return '<th>[·, ' + (n.low[1] + j) + ']</th>'; }).join('') + '</tr></thead><tbody>';
+    n.rows.forEach(function (r, i) {
+      h += '<tr><td class="idx">[' + (n.low[0] + i) + ', ·]</td>' + r.map(function (x, j) { return '<td>' + cellIn(x, 'a' + i + '_' + j, '[' + i + ', ' + j + ']') + '</td>'; }).join('') + '</tr>';
+    });
+  } else if (n.k === 'r' || n.k === 't') {
+    var rows = n.k === 'r' ? n.members.map(function (m, i) { return [m[0], (STRUCTS[n.type][i] || [])[1], m[1]]; }) : n.fields.map(function (x, i) { return ['Item' + (i + 1), x.type, x]; });
+    h += '<thead><tr><th>' + (n.k === 'r' ? 'Membre' : 'Champ') + '</th><th>Type</th><th>Valeur</th></tr></thead><tbody>';
+    rows.forEach(function (r, i) {
+      h += '<tr><td class="idx">.' + esc(r[0]) + '</td><td class="idx">' + esc(r[1]) + '</td><td>' + cellIn(r[2], 'f' + i, r[0]) + '</td></tr>';
+    });
+  }
+  h += '</tbody></table></div><div class="rowbtns">' + (growable(n) ? '<button class="btn" type="button" data-addel>＋ Ajouter</button>' : '') +
+    (n.k === 'm' ? '<button class="btn" type="button" data-sort>Trier par clé</button>' : '') +
+    (growable(n) ? '<button class="btn" type="button" data-paste>Coller depuis Excel…</button>' : '') +
+    '<span class="msg" id="elmsg"></span></div><div id="pastebox" hidden><textarea class="inp" id="pastein" spellcheck="false" aria-label="Lignes à coller" placeholder="' +
+    (n.k === 'm' ? "rondelle&#9;0.5&#10;cheville&#9;1.2" : '42&#10;43') + '"></textarea><div class="rowbtns"><button class="btn primary" type="button" data-pasteok>Ajouter ces lignes</button><span class="small">Une ligne par élément' + (n.k === 'm' ? ', la clé puis la valeur, séparées par une tabulation (ce que copie Excel)' : '') + '.</span></div></div>';
+  body.innerHTML = h;
+  var msg = $('#elmsg', body);
+  function say(t, cls) { msg.className = 'msg ' + (cls || 'err'); msg.textContent = t; }
+  $$('input[data-cell]', body).forEach(function (inp) {
+    inp.addEventListener('change', function () {
+      var tgt = cellTarget(n, inp.getAttribute('data-cell'));
+      if (!tgt) return;
+      if (tgt.k !== 's') { var pr = parseText(tgt, inp.value); if (!pr.ok) { inp.classList.add('bad'); say(pr.why); return; } replaceCell(n, inp.getAttribute('data-cell'), pr.node); }
+      else { var r = checkScalar(tgt.type, inp.value); if (!r.ok) { inp.classList.add('bad'); say(r.why); return; } tgt.text = r.text; inp.value = r.text; }
+      inp.classList.remove('bad'); say('', 'ok'); renderGrid();
+    });
+    inp.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && growable(n)) {
+        var all = $$('input[data-cell]', body);
+        if (all[all.length - 1] === inp) { e.preventDefault(); inp.dispatchEvent(new Event('change')); addTo(n); redrawKeep(); }
+      }
+    });
+  });
+  $$('input[data-k]', body).forEach(function (inp) {
+    inp.addEventListener('change', function () {
+      var i = +inp.getAttribute('data-k'), r = checkKey(n, inp.value, i);
+      if (!r.ok) { inp.classList.add('bad'); say(r.why); return; }
+      n.entries[i][0] = r.text; inp.value = r.text; inp.classList.remove('bad'); say('', 'ok'); renderGrid();
+    });
+  });
+  body.addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    if (b.hasAttribute('data-rm')) { removeAt(n, +b.getAttribute('data-rm')); redrawKeep(); }
+    else if (b.hasAttribute('data-up')) { var i = +b.getAttribute('data-up'); if (i > 0) { var a = n.items; var t = a[i - 1]; a[i - 1] = a[i]; a[i] = t; redrawKeep(); } }
+    else if (b.hasAttribute('data-addel')) { addTo(n); redrawKeep(); }
+    else if (b.hasAttribute('data-sort')) { n.entries.sort(function (x, y) { return x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : 0; }); redrawKeep(); }
+    else if (b.hasAttribute('data-paste')) { $('#pastebox', body).hidden = false; $('#pastein', body).focus(); }
+    else if (b.hasAttribute('data-pasteok')) {
+      var lines = $('#pastein', body).value.split(/\r?\n/).filter(function (l) { return l.trim(); }), added = 0;
+      for (var k = 0; k < lines.length; k++) {
+        if (n.k === 'm') {
+          var p = lines[k].split('\t'); if (p.length < 2) p = lines[k].split(/;|\s{2,}/);
+          var kk = checkKey(n, p[0], -1), vv = checkScalar(n.valT, (p[1] || '').trim());
+          if (!kk.ok || !vv.ok) { say('ligne ' + (k + 1) + ' : ' + (kk.ok ? vv.why : kk.why)); break; }
+          n.entries.push([kk.text, S(n.valT, vv.text)]); added++;
+        } else {
+          var r2 = checkScalar(n.elem, lines[k]); if (!r2.ok) { say('ligne ' + (k + 1) + ' : ' + r2.why); break; }
+          n.items.push(S(n.elem, r2.text)); added++;
+        }
+      }
+      if (added) { redrawKeep(); say(added + (added > 1 ? ' éléments ajoutés' : ' élément ajouté'), 'ok'); }
+    }
+  });
+}
+function cellIn(node, id, label) {
+  return '<input data-cell="' + id + '" value="' + esc(node.k === 's' ? node.text : lit(node)) + '" aria-label="' + esc(label) + '"' + (node.k !== 's' ? ' title="' + esc(node.type) + '"' : '') + '>';
+}
+function cellTarget(n, id) {
+  var m;
+  if ((m = /^v(\d+)$/.exec(id))) return n.entries[+m[1]][1];
+  if ((m = /^i(\d+)$/.exec(id))) return n.items[+m[1]];
+  if ((m = /^a(\d+)_(\d+)$/.exec(id))) return n.rows[+m[1]][+m[2]];
+  if ((m = /^r(\d+)_(\d+)$/.exec(id))) return n.items[+m[1]].members[+m[2]][1];
+  if ((m = /^f(\d+)$/.exec(id))) return n.k === 'r' ? n.members[+m[1]][1] : n.fields[+m[1]];
+  return null;
+}
+function replaceCell(n, id, nn) {
+  var m;
+  if ((m = /^v(\d+)$/.exec(id))) n.entries[+m[1]][1] = nn;
+  else if ((m = /^i(\d+)$/.exec(id))) n.items[+m[1]] = nn;
+  else if ((m = /^r(\d+)_(\d+)$/.exec(id))) n.items[+m[1]].members[+m[2]][1] = nn;
+  else if ((m = /^f(\d+)$/.exec(id))) { if (n.k === 'r') n.members[+m[1]][1] = nn; else n.fields[+m[1]] = nn; }
+}
+
+// ================================================================ le calcul (code)
+var E = null;   // l'éditeur de code ouvert
+function renderCalcul(body, c) {
+  body.innerHTML = '<div class="ed-split"><div style="min-width:0;display:grid;gap:8px">' +
+    '<div class="help">Le code écrit <b>' + esc(c.name) + '</b> sous son nom ; il tourne une fois au démarrage' + (tabNow === 'vars' ? ', après les constantes ; ensuite les scripts écrivent la variable comme toute autre.' : ', puis la constante est figée.') +
+    ' <kbd>Ctrl</kbd>+<kbd>Espace</kbd> : l\'aide à la saisie ; <kbd>F5</kbd> : calculer ici.' + (c.note ? ' <span class="msg warn">' + esc(c.note) + '</span>' : '') + '</div>' +
+    '<div class="code"><div class="gut" aria-hidden="true"></div><div class="carea"><pre aria-hidden="true"></pre><div class="squigs" aria-hidden="true"></div>' +
+    '<span class="meas" aria-hidden="true">MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM</span>' +
+    '<textarea spellcheck="false" autocapitalize="off" autocomplete="off" id="codeta" aria-label="Le calcul de ' + esc(c.name) + '"></textarea></div></div>' +
+    '<div class="codebar"><button class="btn primary" type="button" id="runbtn">▶ Calculer (F5)</button><button class="btn" type="button" id="resetbtn">Revenir au calcul d\'origine</button><span id="codestate"></span></div></div>' +
+    '<div class="side"><div class="box"><h5>Aperçu</h5><div id="preview"></div></div><div class="box"><h5>Lit</h5><div class="chips" id="reads"></div></div>' +
+    '<div class="box"><h5>Lu par</h5><div class="chips" id="readby"></div></div><div class="box"><h5>Problèmes</h5><div id="probs"></div></div></div></div>';
+  var ta = $('#codeta', body);
+  E = {c: c, ta: ta, pre: $('pre', body), gut: $('.gut', body), sq: $('.squigs', body), meas: $('.meas', body), diags: [], ran: false};
+  ta.value = c.code;
+  E.cw = E.meas.getBoundingClientRect().width / 50 || 7.8;
+  ta.addEventListener('input', function () { codeChanged(); suggest(false); updateSig(); });
+  ta.addEventListener('scroll', syncScroll);
+  ta.addEventListener('keydown', codeKeys);
+  ta.addEventListener('click', function () { hideAc(); updateSig(); });
+  ta.addEventListener('blur', function () { setTimeout(function () { if (document.activeElement !== ta) { hideAc(); hideSig(); runDiag(); } }, 120); });
+  $('#runbtn', body).addEventListener('click', function () { compute(); ta.focus(); });
+  $('#resetbtn', body).addEventListener('click', function () { ta.value = c.origCode || c.code; codeChanged(); compute(); });
+  $('#reads', body).addEventListener('click', pickChip);
+  $('#readby', body).addEventListener('click', pickChip);
+  $('#probs', body).addEventListener('click', function (e) {
+    var b = e.target.closest('[data-at]'); if (!b) return;
+    var at = +b.getAttribute('data-at'); ta.focus(); ta.setSelectionRange(at, at + (+b.getAttribute('data-len') || 0));
+  });
+  codeChanged(true);
+}
+function pickChip(e) { var b = e.target.closest('[data-goto]'); if (b) pick(b.getAttribute('data-goto')); }
+function norm(s) { return blank(s).replace(/\s+/g, ' ').trim(); }
+var diagTimer = 0;
+function codeChanged(first) {
+  var c = E.c, v = E.ta.value;
+  c.code = v;
+  E.pre.innerHTML = highlight(v);
+  var lines = v.split('\n').length, g = '';
+  for (var i = 1; i <= lines; i++) g += i + '\n';
+  E.gut.textContent = g;
+  syncScroll();
+  clearTimeout(diagTimer);
+  if (first) runDiag(); else diagTimer = setTimeout(runDiag, 160);
+}
+function runDiag() {
+  if (!E) return;
+  var c = E.c, isConst = tabNow !== 'vars';
+  var r = analyse(c, c.code, isConst), car = E.ta.selectionStart, typing = document.activeElement === E.ta && /[\w.]/.test(E.ta.value[car - 1] || '');
+  if (typing) r.diags = r.diags.filter(function (d) { return !(d.sev === 'err' && d.len && d.at <= car && car <= d.at + d.len + 1); });
+  c.deps = r.deps; E.diags = r.diags;
+  drawSquigs(); renderSide(r);
+}
+function compute() {
+  if (!E) return;
+  runDiag(); E.ran = true; renderSide({diags: E.diags, deps: E.c.deps}, true);
+}
+function renderSide(r, ran) {
+  var c = E.c, errs = r.diags.filter(function (d) { return d.sev === 'err'; }), warns = r.diags.filter(function (d) { return d.sev === 'warn'; });
+  var same = norm(c.code) === norm(c.origCode || ''), pv = $('#preview');
+  var st = $('#codestate');
+  st.innerHTML = errs.length ? '<span class="sev err">' + plural(errs.length, 'erreur', 'erreurs') + '</span>' :
+    warns.length ? '<span class="sev warn">' + plural(warns.length, 'avertissement', 'avertissements') + '</span>' : '<span class="sev ok">Juste</span>';
+  if (errs.length) pv.innerHTML = '<p class="small">Pas de valeur tant que le calcul a une erreur.</p>';
+  else if (same) pv.innerHTML = '<p class="small">' + (ran ? 'Calculé à l\'instant, avec les valeurs de départ, en 0,3 ms :' : 'Le dernier calcul (au démarrage, ou <kbd>F5</kbd> ici) :') + '</p>' + treeHtml(c.node, c.name);
+  else pv.innerHTML = '<p class="small">Le calcul a changé. Dans XPGAnalyser, <kbd>F5</kbd> le refait ici avec les valeurs de départ et montre son résultat, déplié comme dans la grille. La maquette, elle, ne l\'exécute pas : <button class="go" type="button" id="backorig">revenir au calcul d\'origine</button> pour revoir son aperçu.</p>';
+  var back = $('#backorig'); if (back) back.addEventListener('click', function () { E.ta.value = c.origCode; codeChanged(); compute(); });
+  $('#reads').innerHTML = r.deps.length ? r.deps.map(chipFor).join('') : '<span class="small">rien d\'autre que les natives</span>';
+  var by = CONSTS.concat(VARS).filter(function (x) { return x !== c && x.mode === 'calcul' && (x.deps || []).indexOf(c.name) >= 0; });
+  $('#readby').innerHTML = by.length ? by.map(function (x) { return '<button class="chip" type="button" data-goto="' + esc(x.name) + '">' + esc(x.name) + '</button>'; }).join('') : '<span class="small">aucun calcul</span>';
+  $('#probs').innerHTML = r.diags.length ? '<div class="diag">' + r.diags.map(function (d) {
+    return '<span class="sev ' + d.sev + '">' + (d.sev === 'err' ? 'Erreur' : 'Avert.') + '</span><button type="button" data-at="' + d.at + '" data-len="' + d.len + '">ligne ' + (d.line + 1) + ' : ' + esc(d.msg) + '</button>';
+  }).join('') + '</div>' : '<span class="small">Aucun.</span>';
+}
+function chipFor(d) {
+  if (d.indexOf('.') > 0) {
+    var p = d.split('.'), oc = findIn(OTHER[p[0]] || [], p[1]);
+    return '<span class="chip ext" title="' + esc(oc ? oc.type + ' = ' + oc.value : '') + '">' + esc(d) + (oc ? ' = ' + esc(oc.value.length > 18 ? oc.value.slice(0, 17) + '…' : oc.value) : '') + '</span>';
+  }
+  var h = findIn(HMI, d);
+  if (h) return '<span class="chip hmi" title="Variable IHM, ' + esc(h.note) + '">' + esc(d) + ' = ' + esc(h.start) + '</span>';
+  return '<button class="chip" type="button" data-goto="' + esc(d) + '">' + esc(d) + '</button>';
+}
+function treeHtml(n, name) {
+  function li(label, node) {
+    if (node.k === 's') return '<li><span class="tk">' + esc(label) + '</span> = ' + esc(node.text) + '</li>';
+    return '<li><span class="tk">' + esc(label) + '</span> <span class="tsz">' + esc(sizeOf(node)) + '</span><ul>' + kids(node).map(function (k) { return li(k.lab, k.node); }).join('') + '</ul></li>';
+  }
+  return '<ul class="tree">' + li(name, n) + '</ul>';
+}
+function syncScroll() {
+  if (!E) return;
+  E.pre.scrollTop = E.ta.scrollTop; E.pre.scrollLeft = E.ta.scrollLeft; E.gut.scrollTop = E.ta.scrollTop;
+  drawSquigs(); hideAc();
+}
+function lineCol(text, pos) {
+  var before = text.slice(0, pos), line = (before.match(/\n/g) || []).length, last = before.slice(before.lastIndexOf('\n') + 1), col = 0;
+  for (var i = 0; i < last.length; i++) col = last[i] === '\t' ? col + 4 - (col % 4) : col + 1;
+  return {line: line, col: col};
+}
+function drawSquigs() {
+  if (!E) return;
+  var h = '';
+  E.diags.forEach(function (d) {
+    if (!d.len && !d.at) return;
+    var lc = lineCol(E.ta.value, d.at);
+    var x = 10 + lc.col * E.cw - E.ta.scrollLeft, y = 8 + lc.line * 20 + 17 - E.ta.scrollTop;
+    h += '<span class="sq' + (d.sev === 'warn' ? ' warn' : '') + '" style="left:' + x + 'px;top:' + y + 'px;width:' + Math.max(6, d.len * E.cw) + 'px"></span>';
+  });
+  E.sq.innerHTML = h;
+}
+function highlight(code) {
+  var out = '', i = 0, N = code.length, m, j, e;
+  var locals = localsOf(code);
+  while (i < N) {
+    if (code.substr(i, 2) === '(*') { j = code.indexOf('*)', i + 2); e = j < 0 ? N : j + 2; out += '<span class="t-com">' + esc(code.slice(i, e)) + '</span>'; i = e; continue; }
+    if (code.substr(i, 2) === '//') { e = code.indexOf('\n', i); if (e < 0) e = N; out += '<span class="t-com">' + esc(code.slice(i, e)) + '</span>'; i = e; continue; }
+    if (code[i] === "'") {
+      j = i + 1; while (j < N && code[j] !== "'" && code[j] !== '\n') { if (code[j] === '$') j++; j++; }
+      e = Math.min(N, j + 1); out += '<span class="t-str">' + esc(code.slice(i, e)) + '</span>'; i = e; continue;
+    }
+    var rest = code.slice(i, i + 120), prevW = i > 0 && /[\w.]/.test(code[i - 1]);
+    if (!prevW && (m = /^(?:T|TIME|DT|D|DATE|TOD|LT|LTIME|INT|DINT|SINT|REAL|LREAL)#[-+]?[0-9][0-9A-Za-z_:.\-]*/i.exec(rest))) { out += '<span class="t-num">' + esc(m[0]) + '</span>'; i += m[0].length; continue; }
+    if (!prevW && (m = /^\d+(?:\.\d+)?(?:[eE][-+]?\d+)?/.exec(rest))) { out += '<span class="t-num">' + esc(m[0]) + '</span>'; i += m[0].length; continue; }
+    if (!prevW && (m = /^[A-Za-z_]\w*(?:#[A-Za-z_]\w*)?(?:\.[A-Za-z_]\w*)*/.exec(rest))) {
+      out += word(m[0], code.slice(i + m[0].length, i + m[0].length + 3), locals); i += m[0].length; continue;
+    }
+    out += esc(code[i]); i++;
+  }
+  return out + '\n';
+}
+function word(w, after, locals) {
+  if (w.indexOf('#') > 0) return '<span class="t-type">' + esc(w) + '</span>';
+  var head = w.split('.')[0], H = head.toUpperCase(), cls = '';
+  if (KWS[H]) cls = 't-kw';
+  else if (TYPES[H]) cls = 't-type';
+  else if (FN[H] && /^\s*\(/.test(after)) cls = 't-fn';
+  else if (locals[H]) cls = '';
+  else if (findIn(CONSTS, head)) cls = 't-const';
+  else if (scriptOf(head)) cls = 't-ext';
+  else if (findIn(HMI, head)) cls = 't-hmi';
+  return cls ? '<span class="' + cls + '">' + esc(w) + '</span>' : esc(w);
+}
+
+// ===================================================== l'aide à la saisie, la signature
+var AC = {open: false, items: [], idx: 0, from: 0, to: 0};
+var acEl = $('#ac'), sigEl = $('#sig');
+function kindLabel(k) { return {'const': 'C', 'fn': 'ƒ', 'kw': 'K', 'script': 'S', 'hmi': 'V', 'local': 'L', 'type': 'T', 'var': 'V'}[k] || '?'; }
+function constDoc(script, x, self) {
+  var val = x.value || (x.node ? lit(x.node, 60) : '');
+  return '<b>' + esc(script + '.' + x.name) + '</b> : ' + esc(x.type) + '<br>' + (x.vis === 'Public' ? 'Publique' : 'Privée') + (x.mode === 'calcul' ? ', calculée au démarrage' : '') +
+    (self ? ' — <i>la constante que ce calcul écrit</i>' : '') + '<br><code>' + esc(val) + '</code>' + (x.doc ? '<br>' + esc(x.doc) : '');
+}
+function fnDoc(f) {
+  return '<b>' + esc(f.sig) + '</b>' + (f.ret ? ' → ' + esc(f.ret) : '') + '<br>' + esc(f.sum) + (f.num ? '<br><span class="newb">std::numeric</span>' : '');
+}
+function structOfName(name, code) {
+  var loc = localsOf(code)[name.toUpperCase()];
+  if (loc && STRUCTS[loc.type]) return loc.type;
+  var x = findIn(CONSTS, name) || findIn(VARS, name);
+  if (x && STRUCTS[x.type]) return x.type;
+  if (/^Recettes\.Recette_Base$/i.test(name)) return 'T_Recette';
+  return '';
+}
+function generalItems() {
+  var c = E.c, isConst = tabNow !== 'vars', it = [], locals = localsOf(E.ta.value);
+  Object.keys(locals).forEach(function (k) { var l = locals[k]; it.push({label: l.name, kind: 'local', det: l.type || 'locale', rank: 0, doc: '<b>' + esc(l.name) + '</b> : locale de ce calcul' + (l.type ? ', ' + esc(l.type) : '') + '.'}); });
+  CONSTS.forEach(function (x) { it.push({label: x.name, kind: 'const', det: x.type, rank: 1, doc: constDoc('Visserie', x, x === c)}); });
+  VARS.forEach(function (x) { it.push({label: x.name, kind: 'var', det: x.type, rank: 6, off: isConst, why: 'variable : calculée après les constantes', doc: '<b>Visserie.' + esc(x.name) + '</b> : ' + esc(x.type) + '<br>' + (isConst ? 'Une variable du script se calcule après les constantes : un calcul de constante ne la lit pas.' : 'Une variable du script : lisible ici, elle est calculée avant si besoin.')}); });
+  Object.keys(OTHER).forEach(function (s) { it.push({label: s, kind: 'script', det: 'script', rank: 2, insert: s + '.', reopen: true, doc: '<b>' + s + '</b> : script général.<br>Publiques : ' + OTHER[s].filter(function (x) { return x.vis === 'Public'; }).map(function (x) { return esc(x.name); }).join(', ') + '.'}); });
+  HMI.forEach(function (x) { it.push({label: x.name, kind: 'hmi', det: x.type, rank: 3, insert: x.equipment ? x.name + '.' : x.name, reopen: !!x.equipment, doc: '<b>' + esc(x.name) + '</b> : ' + esc(x.type) + (x.equipment ? '<br>Au démarrage, l\'équipement n\'est pas encore lu : ses valeurs valent 0.' : '<br>Au démarrage : <code>' + esc(x.start) + '</code>, ' + esc(x.note) + '.')}); });
+  FUNCS.forEach(function (f) { it.push({label: f.name, kind: 'fn', det: f.num ? 'std::numeric' : (f.ret || ''), rank: 4, insert: f.name + '(', sig: true, doc: fnDoc(f)}); });
+  ['FOR', 'FOR EACH', 'IF', 'THEN', 'ELSE', 'END_IF', 'END_FOR', 'DO', 'IN', 'TO', 'VAR', 'END_VAR', 'AND', 'OR', 'NOT', 'TRUE', 'FALSE', 'CASE', 'WHILE', 'RETURN'].forEach(function (k) {
+    it.push({label: k, kind: 'kw', det: 'mot clé', rank: 5, insert: k === 'FOR EACH' ? 'FOR EACH ' : k, doc: '<b>' + k + '</b>' + (k === 'FOR EACH' ? ' : <code>FOR EACH cle, valeur IN m DO … END_FOR;</code> parcourt une MAP, une liste, un tableau, une énumération.' : '')});
+  });
+  Object.keys(ENUMS).forEach(function (t) { ENUMS[t].forEach(function (v) { it.push({label: t + '#' + v, kind: 'type', det: 'énumération', rank: 5, doc: '<b>' + t + '#' + v + '</b>' + (t === 'OPERATION' ? ' : l\'opération des fonctions de std::numeric.' : '')}); }); });
+  ['T_Recette', 'REAL', 'INT', 'DINT', 'STRING', 'BOOL', 'TIME', 'LIST OF', 'VECTOR OF', 'MAP[STRING] OF', 'ARRAY[0..9] OF'].forEach(function (t) { it.push({label: t, kind: 'type', det: 'type', rank: 7, insert: /OF$/.test(t) ? t + ' ' : t, doc: '<b>' + esc(t) + '</b> : un type, pour une locale (<code>VAR x : ' + esc(t) + ' …; END_VAR</code>).'}); });
+  return it;
+}
+function membersOf(owner) {
+  var sc = scriptOf(owner), pool;
+  if (sc) {
+    pool = sc === 'Visserie' ? CONSTS : OTHER[sc];
+    return pool.map(function (x) {
+      var off = x.vis !== 'Public' && sc !== 'Visserie';
+      return {label: x.name, kind: 'const', det: x.type, rank: 1, off: off, why: off ? 'privée : seul ' + sc + ' la lit' : '', doc: constDoc(sc, x, false) + (off ? '<br><b>Privée</b> : invisible hors de ' + sc + '.' : '')};
+    });
+  }
+  var h = findIn(HMI, owner);
+  if (h && h.members) return h.members.map(function (m) { return {label: m[0], kind: 'hmi', det: m[1], rank: 1, doc: '<b>' + esc(h.name + '.' + m[0]) + '</b> : ' + m[1] + '<br>Au démarrage : 0 (pas encore lu).'}; });
+  var st = structOfName(owner, E.ta.value);
+  if (st) return STRUCTS[st].map(function (m) { return {label: m[0], kind: 'local', det: m[1], rank: 1, doc: '<b>' + esc(owner + '.' + m[0]) + '</b> : ' + esc(m[1]) + ' (membre de ' + st + ')'}; });
+  return [];
+}
+function suggest(force) {
+  if (!E) return;
+  var ta = E.ta, text = ta.value, caret = ta.selectionStart;
+  if (ta.selectionEnd !== caret) return hideAc();
+  var before = text.slice(0, caret), bl = blank(before);
+  if (bl.length && bl[bl.length - 1] !== before[before.length - 1]) return hideAc();
+  if (/#\w*$/.test(before) && !/[A-Za-z_]\w*#\w*$/.test(before)) return hideAc();
+  var m = /([A-Za-z_]\w*(?:#\w*)?(?:\.\w*)*)$/.exec(before), token = m ? m[1] : '';
+  if (m && m.index > 0 && /[\d]/.test(before[m.index - 1])) return hideAc();
+  if (!token && !force) return hideAc();
+  var parts = token.split('.'), prefix = parts[parts.length - 1], items;
+  items = parts.length > 1 ? membersOf(parts.slice(0, -1).join('.')) : generalItems();
+  var P = prefix.toUpperCase();
+  var starts = items.filter(function (x) { return x.label.toUpperCase().indexOf(P) === 0; });
+  var inside = P.length >= 2 ? items.filter(function (x) { return x.label.toUpperCase().indexOf(P) > 0; }) : [];
+  var sortf = function (a, b) { return ((a.off ? 1 : 0) - (b.off ? 1 : 0)) || (a.rank - b.rank) || (a.label < b.label ? -1 : 1); };
+  var list = starts.sort(sortf).concat(inside.sort(sortf)).slice(0, 60);
+  if (!list.length || (!force && list.length === 1 && list[0].label === prefix)) return hideAc();
+  AC.items = list; AC.idx = 0; for (var i = 0; i < list.length; i++) if (!list[i].off) { AC.idx = i; break; }
+  AC.from = caret - prefix.length; AC.to = caret; AC.open = true;
+  drawAc();
+}
+function drawAc() {
+  var it = AC.items, cur = it[AC.idx];
+  acEl.innerHTML = '<div class="ac-list" role="listbox" aria-label="Aide à la saisie">' + it.map(function (x, i) {
+    return '<div class="ac-item' + (i === AC.idx ? ' on' : '') + (x.off ? ' off' : '') + '" role="option" aria-selected="' + (i === AC.idx) + '" data-i="' + i + '">' +
+      '<span class="ac-k k-' + x.kind + '">' + kindLabel(x.kind) + '</span><span class="lbl">' + esc(x.label) + '</span><span class="ac-d">' + esc(x.off ? x.why : x.det) + '</span></div>';
+  }).join('') + '</div><div class="ac-doc">' + (cur ? cur.doc : '') + '</div><div class="ac-foot">↑ ↓ choisir · Entrée ou Tab insérer · Échap fermer · ' + it.length + ' propositions</div>';
+  acEl.hidden = false;
+  var pos = caretScreen(AC.from);
+  var w = acEl.offsetWidth, hgt = acEl.offsetHeight;
+  var x = Math.min(pos.x, window.innerWidth - w - 12), y = pos.y + 22;
+  if (y + hgt > window.innerHeight - 8) y = pos.y - hgt - 4;
+  acEl.style.left = Math.max(8, x) + 'px'; acEl.style.top = Math.max(8, y) + 'px';
+  var on = acEl.querySelector('.ac-item.on'); if (on && on.scrollIntoView) on.scrollIntoView({block: 'nearest'});
+}
+function caretScreen(pos) {
+  var r = E.ta.getBoundingClientRect(), lc = lineCol(E.ta.value, pos);
+  return {x: r.left + 10 + lc.col * E.cw - E.ta.scrollLeft, y: r.top + 8 + lc.line * 20 - E.ta.scrollTop};
+}
+function hideAc() { AC.open = false; if (acEl) acEl.hidden = true; }
+function hideSig() { if (sigEl) sigEl.hidden = true; }
+function accept(i) {
+  var x = AC.items[i]; if (!x || x.off) return;
+  var ta = E.ta, v = ta.value, ins = x.insert || x.label;
+  ta.value = v.slice(0, AC.from) + ins + v.slice(AC.to);
+  var pos = AC.from + ins.length; ta.setSelectionRange(pos, pos);
+  hideAc(); codeChanged();
+  if (x.reopen) suggest(true);
+  updateSig(); ta.focus();
+}
+acEl.addEventListener('mousedown', function (e) {
+  var it = e.target.closest('.ac-item'); if (!it) return;
+  e.preventDefault(); accept(+it.getAttribute('data-i'));
+});
+function codeKeys(e) {
+  if (AC.open) {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      var d = e.key === 'ArrowDown' ? 1 : -1, n = AC.items.length, i = AC.idx;
+      for (var k = 0; k < n; k++) { i = (i + d + n) % n; if (!AC.items[i].off) break; }
+      AC.idx = i; drawAc(); return;
+    }
+    if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); accept(AC.idx); return; }
+    if (e.key === 'Escape') { e.preventDefault(); hideAc(); return; }
+  }
+  if ((e.ctrlKey || e.metaKey) && (e.key === ' ' || e.code === 'Space')) { e.preventDefault(); suggest(true); return; }
+  if (e.key === 'F5') { e.preventDefault(); compute(); return; }
+  if (e.key === 'Escape') { hideSig(); return; }
+  if (e.key === 'Tab' && !e.shiftKey) {
+    e.preventDefault();
+    var ta = E.ta, s = ta.selectionStart;
+    ta.value = ta.value.slice(0, s) + '    ' + ta.value.slice(ta.selectionEnd); ta.setSelectionRange(s + 4, s + 4); codeChanged();
+  }
+}
+function updateSig() {
+  if (!E) return;
+  var before = E.ta.value.slice(0, E.ta.selectionStart), d = 0, i;
+  for (i = before.length - 1; i >= 0; i--) {
+    var ch = before[i];
+    if (ch === ')') d++;
+    else if (ch === '(') { if (d === 0) break; d--; }
+    else if (ch === ';' || ch === '\n' && d === 0 && i < before.length - 200) { i = -1; break; }
+  }
+  if (i < 0) return hideSig();
+  var m = /([A-Za-z_]\w*)\s*$/.exec(before.slice(0, i)), f = m && FN[m[1].toUpperCase()];
+  if (!f) return hideSig();
+  var args = before.slice(i + 1), depth = 0, idx = 0;
+  for (var k = 0; k < args.length; k++) { var c2 = args[k]; if (c2 === '(' || c2 === '[') depth++; else if (c2 === ')' || c2 === ']') depth--; else if (c2 === ',' && depth === 0) idx++; }
+  var inner = f.sig.slice(f.sig.indexOf('(') + 1, f.sig.lastIndexOf(')')).replace(/\s*\[\s*,/g, ', ['), ps = [], deep = 0;
+  inner.split(',').forEach(function (p) { deep += (p.match(/\[/g) || []).length; var nm = p.replace(/[\[\]]/g, '').trim(); if (nm) ps.push({n: nm, opt: deep > 0}); });
+  var req = [], opts = '', closeN = 0;
+  ps.forEach(function (p, j) { var t = j === idx ? '<b>' + esc(p.n) + '</b>' : esc(p.n); if (p.opt) { opts += ' [, ' + t; closeN++; } else req.push(t); });
+  var shown = f.sig.slice(0, f.sig.indexOf('(') + 1) + req.join(', ') + opts + new Array(closeN + 1).join(']') + ')';
+  sigEl.innerHTML = shown + (f.ret ? ' → ' + esc(f.ret) : '') + '<span class="sd">' + esc(f.sum) + '</span>';
+  sigEl.hidden = false;
+  var pos = caretScreen(i), w = sigEl.offsetWidth;
+  sigEl.style.left = Math.max(8, Math.min(pos.x - 40, window.innerWidth - w - 12)) + 'px';
+  sigEl.style.top = Math.max(8, pos.y - sigEl.offsetHeight - 4) + 'px';
+}
+window.addEventListener('scroll', function () { hideAc(); hideSig(); }, {passive: true});
+window.addEventListener('resize', function () { hideAc(); hideSig(); });
+
+// ============================================================ les onglets, la vue Code
+var CODEVIEW = "(* Visserie : le serrage d'une pièce *)\n" +
+  "Couple := MAP_GET(Couples, Piece, Couple_Base);\n" +
+  "IF Couple > LIST_SUM(Seuils) THEN\n" +
+  "    IHM_JOURNAL(CONCAT('Couple élevé : ', REAL_TO_STRING(Couple)));\n" +
+  "END_IF;\n" +
+  "Couples['vis'] := 5.0;";
+function renderCodeView() {
+  var lines = CODEVIEW.split('\n');
+  $('#codeview').innerHTML = '<div style="padding:10px 12px;display:grid;gap:8px"><div class="code" style="height:auto"><div class="gut" style="overflow:visible">' +
+    lines.map(function (x, i) { return i + 1; }).join('\n') + '</div><div class="carea" style="overflow:auto"><pre style="position:static">' + highlight(CODEVIEW) + '</pre></div></div>' +
+    '<div class="diag"><span class="sev err">Erreur</span><span>ligne 6 : Couples est une constante (calculée au démarrage) : elle ne s\'écrit pas — fais-en une variable si elle doit changer</span>' +
+    '<span class="sev ok">Juste</span><span>lignes 2 à 3 : un script lit les constantes comme avant, <code>Couples</code> et <code>Seuils</code> ont leur valeur du démarrage.</span></div></div>';
+}
+$$('.tab').forEach(function (t) {
+  t.addEventListener('click', function () {
+    $$('.tab').forEach(function (x) { x.classList.toggle('on', x === t); });
+    var w = t.getAttribute('data-tab');
+    $('#codeview').hidden = w !== 'code'; gridwrap.hidden = w === 'code'; editor.hidden = w === 'code'; $('#tools').hidden = w === 'code';
+    if (w === 'code') { renderCodeView(); hideAc(); hideSig(); return; }
+    tabNow = w; selName = listNow()[0].name; selPath = selName; redraw();
+  });
+});
+$('#openall').addEventListener('click', function () {
+  function walk(node, path) { if (node.k === 's') return; open[path] = 1; kids(node).forEach(function (k) { walk(k.node, path + '/' + k.key); }); }
+  listNow().forEach(function (c) { walk(c.node, c.name); }); renderGrid();
+});
+$('#closeall').addEventListener('click', function () { open = {}; renderGrid(); });
+function redraw() { refreshDeps(); renderGrid(); renderEditor(); renderBoot(); }
+function redrawKeep() { renderGrid(); renderEditor(); }
+function pick(name) {
+  var inV = findIn(VARS, name) && !findIn(CONSTS, name);
+  if ((inV && tabNow !== 'vars') || (!inV && tabNow !== 'consts')) {
+    var b = $('.tab[data-tab="' + (inV ? 'vars' : 'consts') + '"]'); if (b) b.click();
+  }
+  if (!findIn(listNow(), name)) return;
+  selName = name; selPath = name; open[name] = 1;
+  renderGrid(); renderEditor();
+  var row = grid.querySelector('tr[data-path="' + name + '"]');
+  if (row) row.scrollIntoView({block: 'nearest'});
+  $('#app').scrollIntoView({block: 'start', behavior: 'smooth'});
+  $$('.tchip').forEach(function (x) { x.classList.toggle('on', x.getAttribute('data-pick') === name); });
+}
+document.addEventListener('click', function (e) { var b = e.target.closest('[data-pick]'); if (b) { e.preventDefault(); pick(b.getAttribute('data-pick')); } });
+var CHIPS = [['REAL', 'Couple_Base'], ['BOOL', 'Actif'], ['Énumération', 'Mode_Depart'], ['STRING', 'Nom_Ligne'], ['TIME', 'Duree_Cycle'], ['DT', 'Heure_Demarrage'],
+  ['DINT', 'Cadence_Commune'], ['ARRAY', 'Pas_Mesure'], ['ARRAY 2D', 'Matrice'], ['LIST', 'Postes'], ['VECTOR', 'Seuils'], ['MAP', 'Facteurs'], ['MAP calculée', 'Couples'],
+  ['TUPLE', 'Point_Ref'], ['Structure', 'Recette_Std'], ['LIST de structures', 'Recettes_Jour']];
+$('#typechips').innerHTML = CHIPS.map(function (x) { return '<button class="tchip" type="button" data-pick="' + x[1] + '">' + esc(x[0]) + ' <span class="t">' + x[1] + '</span></button>'; }).join('');
+
+// =========================================================== les autres scripts
+(function () {
+  var h = '<thead><tr><th>Script</th><th>Constante</th><th>Type</th><th>Visibilité</th><th>Depuis Visserie</th></tr></thead><tbody>';
+  Object.keys(OTHER).forEach(function (s) {
+    OTHER[s].forEach(function (x) {
+      var pub = x.vis === 'Public';
+      h += '<tr><td>' + s + '</td><td class="m">' + x.name + '</td><td class="m">' + esc(x.type) + '</td><td>' + (pub ? '<span class="vis-pub">● Public</span>' : '<span class="vis-priv">○ Privé</span>') + '</td><td class="m">' +
+        (pub ? esc(s + '.' + x.name) : '<span class="g-err">refusé</span> : privée à ' + s) + '</td></tr>';
+    });
+  });
+  $('#pubtable').innerHTML = h + '</tbody>';
+})();
+
+// ================================================================== le démarrage
+var SCEN = {
+  ok: {state: ['ok', 'Démarrée'], cons: [['i', '21:46:05.112  Démarrage : 9 constantes de Reglages et Recettes, 17 de Visserie'], ['o', '21:46:05.114  Constantes calculées : 11 en 3,4 ms'], ['o', '21:46:05.115  Valeurs initiales : 5 variables, dont 3 calculées'], ['i', '21:46:05.116  Premier cycle des scripts']], note: 'Chaque constante voit les valeurs de celles qu\'elle lit. Le calcul de Heure_Demarrage donne l\'instant du démarrage, et ne bouge plus.'},
+  cycle: {state: ['err', 'Pas démarrée'], cons: [['e', 'Compiler · Visserie.Couples, ligne 4 : boucle de calculs : Couples → Couples_Cumules → Couples'], ['i', 'Démarrage bloqué : 1 erreur bloquante — double-clic : la ligne']], bad: ['Couples', 'Couples_Cumules'], note: 'Ici, le calcul de Couples lirait Couples_Cumules, qui lit Couples. Compiler le dit avant le démarrage. Essayez-le dans la fenêtre : ouvrez Couples et ajoutez « + Couples_Cumules[0] ».'},
+  run: {state: ['err', 'Arrêté au démarrage'], cons: [['i', '21:46:05.112  Démarrage : constantes'], ['e', '21:46:05.113  Visserie.Couples, ligne 3 : clé \'rondelle\' absente de Facteurs'], ['i', '21:46:05.113  Démarrage arrêté : les constantes calculées avant restent visibles dans Simulation › Variables']], bad: ['Couples'], note: 'Une erreur qui n\'apparaît qu\'en calculant (une clé absente, une division par zéro, plus de 2 s de calcul) arrête le démarrage. C\'est le choix 1 du plan : l\'autre option démarre avec la valeur vide.'},
+  write: {state: ['err', 'Pas démarrée'], cons: [['e', 'Compiler · Visserie (code), ligne 6 : Couples est une constante (calculée au démarrage) : elle ne s\'écrit pas'], ['i', 'Démarrage bloqué : 1 erreur bloquante']], note: 'Le « final » : une fois calculée, la constante ne s\'écrit plus. Voyez l\'onglet Code de la fenêtre.'},
+  equip: {state: ['warn', 'Démarrée, 1 avertissement'], cons: [['w', 'Générer · Visserie.Vitesse_Init, ligne 1 : au démarrage, ATV320 n\'est pas encore lu : ATV320.Vitesse vaudra 0'], ['o', '21:46:05.114  Constantes calculées : 12 en 3,5 ms'], ['i', '21:46:05.116  Premier cycle des scripts']], note: 'Les équipements se lisent après le démarrage : une constante qui en dépend aurait 0. Mieux vaut une variable, mise à jour par un script.'}
+};
+var scenNow = 'ok';
+function topo() {
+  var items = [], seen = {}, order = [];
+  Object.keys(OTHER).forEach(function (s) { OTHER[s].forEach(function (x) { order.push({name: s + '.' + x.name, mode: 'valeur', text: x.value, deps: []}); }); });
+  CONSTS.forEach(function (c) { items.push(c); });
+  function visit(c, stack) {
+    if (seen[c.name]) return; if (stack[c.name]) return;
+    stack[c.name] = 1;
+    (c.deps || []).forEach(function (d) { var x = findIn(CONSTS, d); if (x) visit(x, stack); });
+    seen[c.name] = 1; order.push({name: 'Visserie.' + c.name, mode: c.mode, text: lit(c.node, 34), deps: c.deps || [], code: c.code, short: c.name});
+  }
+  items.filter(function (c) { return c.mode !== 'calcul'; }).forEach(function (c) { visit(c, {}); });
+  items.filter(function (c) { return c.mode === 'calcul'; }).forEach(function (c) { visit(c, {}); });
+  return order;
+}
+function renderBoot() {
+  var order = topo(), s = SCEN[scenNow], n = 0, h = '';
+  var groups = [['Les constantes écrites (valeurs, éléments)', function (x) { return x.mode !== 'calcul'; }], ['Les constantes calculées, après ce qu\'elles lisent', function (x) { return x.mode === 'calcul'; }]];
+  groups.forEach(function (g) {
+    h += '<li class="grp">' + g[0] + '</li>';
+    order.filter(g[1]).forEach(function (x) {
+      n++;
+      var bad = s.bad && x.short && s.bad.indexOf(x.short) >= 0;
+      var ms = x.mode === 'calcul' ? frNum(0.1 + (x.code || '').split('\n').length * 0.06, 1) + ' ms' : '';
+      h += '<li class="st' + (bad ? ' bad' : '') + '"><span class="stepno">' + n + '</span><span><span class="stn">' + esc(x.name) + '</span><span class="badge b-' + x.mode + '">' + (x.mode === 'elements' ? 'éléments' : x.mode) + '</span>' +
+        (x.deps.length ? '<span class="stv"> lit ' + esc(x.deps.join(', ')) + '</span>' : '') + '<br><span class="stv">→ ' + esc(x.text) + '</span></span><span class="ms">' + ms + '</span></li>';
+    });
+  });
+  h += '<li class="grp">Puis les valeurs initiales des variables</li>';
+  VARS.forEach(function (v) { n++; h += '<li class="st"><span class="stepno">' + n + '</span><span><span class="stn">Visserie.' + esc(v.name) + '</span><span class="badge b-' + v.mode + '">' + (v.mode === 'elements' ? 'éléments' : v.mode) + '</span>' + ((v.deps || []).length ? '<span class="stv"> lit ' + esc(v.deps.join(', ')) + '</span>' : '') + '<br><span class="stv">→ ' + esc(lit(v.node, 34)) + '</span></span><span class="ms"></span></li>'; });
+  h += '<li class="grp">Puis le premier cycle des scripts</li>';
+  $('#steps').innerHTML = h;
+  var st = $('#bootstate'); st.className = 'state ' + s.state[0]; st.textContent = s.state[1];
+  $('#bootcons').innerHTML = s.cons.map(function (l) { return '<span class="' + l[0] + '">' + esc(l[1]) + '</span>'; }).join('\n');
+  $('#bootnote').textContent = s.note;
+}
+$('#scen').addEventListener('click', function (e) {
+  var b = e.target.closest('[data-s]'); if (!b) return;
+  scenNow = b.getAttribute('data-s');
+  $$('#scen button').forEach(function (x) { x.classList.toggle('on', x === b); });
+  renderBoot();
+});
+
+// =============================================================== std::numeric
+function apply(op, a, b) { switch (op) { case 'Produit': return a * b; case 'Min': return Math.min(a, b); case 'Max': return Math.max(a, b); case 'Et': return a & b; case 'Ou': return a | b; default: return a + b; } }
+function fold(T, init, op) { var s = init; T.forEach(function (x) { s = apply(op, s, x); }); return s; }
+function isInt(x) { return Math.floor(x) === x; }
+function gcd(a, b) { a = Math.abs(a); b = Math.abs(b); while (b) { var t = a % b; a = b; b = t; } return a; }
+function satInt(x) { return Math.max(-32768, Math.min(32767, x)); }
+var natSel = 'ACCUMULATE', natLang = 'st', stForm = 'court';
+var natIn = {T: '3, 1, 4, 1, 5', B: '0.5, 0.3, 0.2, 0.4, 0.1', init: '0', a: '120', b: '84', op: 'Somme'};
+function renderNatTree() {
+  var h = '<div class="nt-sec">Fonctions standard</div>' + ['Mathématiques', 'Sélection et bornes', 'Chaînes de caractères', 'Bits et décalages', 'Conversions'].map(function (x) { return '<div class="nt-old">' + x + '</div>'; }).join('') +
+    '<div class="nt-sec">Le dialecte de l\'IHM</div>' + ['Tableaux', 'MAP et itérateurs', 'Listes, vecteurs et tuples', 'Références et pointeurs'].map(function (x) { return '<div class="nt-old">' + x + '</div>'; }).join('') +
+    '<div class="nt-sec">Fonctions IHM_, couleurs, le langage</div><div class="nt-old">… (inchangés)</div>' +
+    '<div class="nt-sec">Bibliothèques</div><div class="nt-lib">std::numeric <span class="newb">Nouveau · ' + NUM.length + '</span></div>';
+  var g = '';
+  NUM.forEach(function (f) {
+    if (f.g !== g) { g = f.g; h += '<div class="nt-g">' + esc(g) + '</div>'; }
+    h += '<button class="nt-item' + (f.name === natSel ? ' on' : '') + '" type="button" data-nat="' + f.name + '"><span class="n">' + f.name + '</span><span class="v">' + f.ver + '</span></button>';
+  });
+  $('#nattree').innerHTML = h;
+}
+function stName(s) { return stForm === 'std' ? s.replace(new RegExp('\\b(' + NUM.map(function (f) { return f.name; }).join('|') + ')\\(', 'g'), 'STD::$1(') : s; }
+function renderNatCard() {
+  var f = NUM.filter(function (x) { return x.name === natSel; })[0];
+  var code = natLang === 'st' ? stName(f.st) : natLang === 'c' ? f.c : f.cc;
+  var avail = natLang === 'st' ? 'exécuté en simulation · essai natives' : natLang === 'c' ? 'équivalent : C n\'a pas <numeric>' : 'le même : ' + f.cpp + ' (' + f.ver + ')';
+  var h = '<h4>' + esc(stName(f.name + '(').slice(0, -1)) + '</h4><div class="nc-sub">' + esc(f.cpp) + ' · ' + f.ver + ' · ' + esc(f.g) +
+    '<span class="stswitch" role="group" aria-label="Écriture en ST"><button type="button" data-stf="court"' + (stForm === 'court' ? ' class="on"' : '') + '>ACCUMULATE</button><button type="button" data-stf="std"' + (stForm === 'std' ? ' class="on"' : '') + '>STD::ACCUMULATE</button></span></div>' +
+    '<p style="margin:0 0 8px;font-size:13px">' + esc(f.sum) + '</p><div class="nc-sig">' + esc(stName(f.sig.replace(/^(\w+)\(/, '$1('))).replace(/^STD::/, 'STD::') + ' → ' + esc(f.ret) + '</div>' +
+    '<table class="pt"><thead><tr><th>Paramètre</th><th>Type</th><th>Rôle</th></tr></thead><tbody>' + f.params.map(function (p) { return '<tr><td>' + esc(p[0]) + '</td><td>' + esc(p[1]) + '</td><td>' + esc(p[2]) + '</td></tr>'; }).join('') + '</tbody></table>' +
+    '<div class="lt" role="tablist">' + [['st', 'ST'], ['c', 'C'], ['cpp', 'C++']].map(function (l) { return '<button type="button" role="tab" data-lang="' + l[0] + '"' + (natLang === l[0] ? ' class="on"' : '') + '>' + l[1] + '</button>'; }).join('') + '<span class="avail">' + esc(avail) + '</span></div>' +
+    '<pre class="ex">' + esc(code) + '</pre>' + (natLang === 'st' ? '<div class="ess"><span class="sev ok">Essai</span><span>donne <code>' + esc(f.res) + '</code></span></div>' : '') +
+    '<div class="play"><h5>Essayer</h5><div class="pfields">' + playFields(f) + '</div><div class="res" id="natres"></div></div>';
+  $('#natcard').innerHTML = h;
+  runPlay();
+}
+function playFields(f) {
+  var L = {T: 'T (A) : nombres, séparés par des virgules', B: 'B : nombres', init: f.name === 'EXCLUSIVE_SCAN' ? 'init' : 'init', a: f.name === 'IOTA' ? 'depart' : (f.uses.length === 1 ? 'x' : 'a'), b: f.name === 'IOTA' ? 'pas' : 'b', op: 'op'};
+  return f.uses.map(function (u) {
+    if (u === 'op') return '<label>op<select class="inp" data-pin="op">' + ENUMS.OPERATION.map(function (o) { return '<option' + (natIn.op === o ? ' selected' : '') + '>' + o + '</option>'; }).join('') + '</select></label>';
+    return '<label>' + esc(L[u]) + '<input class="inp" data-pin="' + u + '" value="' + esc(natIn[u]) + '"></label>';
+  }).join('');
+}
+function nums(s) { return String(s).split(/[;,\s]+/).filter(function (x) { return x !== ''; }).map(function (x) { return Number(x); }); }
+function fmt(x) { if (Array.isArray(x)) return '[' + x.map(fmt).join(', ') + ']'; return isInt(x) ? String(x) : String(Math.round(x * 1e6) / 1e6); }
+function runPlay() {
+  var f = NUM.filter(function (x) { return x.name === natSel; })[0], out = $('#natres');
+  if (!out) return;
+  var I = {T: nums(natIn.T), B: nums(natIn.B), init: Number(natIn.init), a: Number(natIn.a), b: natIn.b === '' ? NaN : Number(natIn.b), op: natIn.op};
+  if (I.T.some(isNaN) || I.B.some(isNaN)) { out.innerHTML = '<span class="msg err">Des nombres seulement, séparés par des virgules.</span>'; return; }
+  var r = f.run(I);
+  if (r && r.err) { out.innerHTML = '<span class="msg err">' + esc(r.err) + '</span>'; return; }
+  var call = stName(f.name + '(').slice(0, -1) + '(' + f.uses.map(function (u) { return u === 'T' ? '[' + I.T.join(', ') + ']' : u === 'B' ? '[' + I.B.join(', ') + ']' : u === 'op' ? 'OPERATION#' + I.op : String(natIn[u]); }).join(', ') + ')';
+  out.innerHTML = esc(call) + ' = <b>' + esc(fmt(r)) + '</b>' + (/_SAT$|SATURATE/.test(f.name) ? '<span class="why">en INT, sans blocage : ' + esc(String(f.name === 'SATURATE_TO_INT' ? wrapInt(Math.round(I.a)) : wrapInt(f.name === 'ADD_SAT' ? I.a + I.b : f.name === 'SUB_SAT' ? I.a - I.b : f.name === 'MUL_SAT' ? I.a * I.b : Math.trunc(I.a / (I.b || 1))))) + '</span>' : '');
+}
+function wrapInt(x) { x = ((x + 32768) % 65536 + 65536) % 65536 - 32768; return x; }
+$('#nattree').addEventListener('click', function (e) {
+  var b = e.target.closest('[data-nat]'); if (!b) return;
+  natSel = b.getAttribute('data-nat');
+  var f = NUM.filter(function (x) { return x.name === natSel; })[0];
+  if (/_SAT$/.test(natSel)) { natIn.a = natSel === 'MUL_SAT' ? '300' : natSel === 'DIV_SAT' ? '-32768' : natSel === 'SUB_SAT' ? '-32000' : '32000'; natIn.b = natSel === 'MUL_SAT' ? '200' : natSel === 'DIV_SAT' ? '-1' : '1000'; }
+  else if (natSel === 'SATURATE_TO_INT') natIn.a = '40000';
+  else if (natSel === 'MIDPOINT') { natIn.a = '32000'; natIn.b = '32002'; }
+  else if (natSel === 'IOTA') { natIn.a = '0'; natIn.b = '2.5'; natIn.T = '0, 0, 0, 0, 0'; }
+  else if (natSel === 'GCD' || natSel === 'LCM') { natIn.a = '120'; natIn.b = '84'; }
+  else if (natSel === 'INCLUSIVE_SCAN') { natIn.op = 'Max'; natIn.T = '3, 1, 4, 1, 5'; }
+  else if (natSel === 'INNER_PRODUCT' || natSel === 'TRANSFORM_REDUCE') { natIn.T = '10, 20, 50'; natIn.B = '0.5, 0.3, 0.2'; natIn.init = '0'; }
+  else { natIn.T = '3, 1, 4, 1, 5'; natIn.op = 'Somme'; natIn.init = '0'; }
+  if (f && f.uses.indexOf('op') < 0) natIn.op = 'Somme';
+  renderNatTree(); renderNatCard();
+});
+$('#natcard').addEventListener('click', function (e) {
+  var b = e.target.closest('[data-lang]'); if (b) { natLang = b.getAttribute('data-lang'); renderNatCard(); return; }
+  b = e.target.closest('[data-stf]'); if (b) { stForm = b.getAttribute('data-stf'); renderNatCard(); }
+});
+$('#natcard').addEventListener('input', function (e) { var t = e.target.closest('[data-pin]'); if (!t) return; natIn[t.getAttribute('data-pin')] = t.value; runPlay(); });
+
+// ========================================================= le sommaire, le départ
+var links = $$('.toc a'), secs = links.map(function (a) { return $(a.getAttribute('href')); });
+function spy() {
+  var y = window.scrollY + 120, cur = 0;
+  secs.forEach(function (s, i) { if (s && s.offsetTop <= y) cur = i; });
+  links.forEach(function (a, i) { a.classList.toggle('on', i === cur); });
+}
+window.addEventListener('scroll', spy, {passive: true});
+refreshDeps(); renderGrid(); renderEditor(); renderBoot(); renderNatTree(); renderNatCard(); spy();
+})();
+</script>
+
+</body>
+</html>
