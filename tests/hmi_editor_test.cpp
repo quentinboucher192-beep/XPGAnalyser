@@ -29316,6 +29316,71 @@ void lotE1127_editeur() {
         check(repeat->commit("$Cuves$"), "lot E : un rep\xC3\xA8re $Cuves$ tap\xC3\xA9");
         same_text(b.v().object(inst)->text("repeatFrom"), "$Cuves$", "lot E : ... gard\xC3\xA9 tel quel (Dupliquer le remplacera)");
     }
+    bool perRow = false;
+    for (const auto& c : b.editor->properties().categories())
+        for (const auto& pr : c.properties) perRow = perRow || pr.key == "repeatPerRow";
+    check(perRow, "lot E : \xC2\xAB R\xC3\xA9p\xC3\xA9ter : par rang\xC3\xA9" "e \xC2\xBB (8 cuves, 4 par rang\xC3\xA9" "e)");
+    // ---- un tableau de variables : « Ajouter depuis une source », et ce que deviendra la ligne
+    const Id vt = b.place(Kind::VariableTable, 100, 700);
+    b.editor->layout();
+    check(content.object() == vt && content.mode() == Mode::Trend, "lot E : un tableau de variables, ses lignes dans Contenu");
+    const ui::PropertyGrid::Property* fromSource = nullptr;
+    for (const auto& c : content.grid().categories())
+        for (const auto& pr : c.properties)
+            if (pr.name == "Ajouter depuis une source") fromSource = &pr;
+    check(fromSource && fromSource->typeIn && std::find(fromSource->enumValues.begin(), fromSource->enumValues.end(), "Cuves[*]") != fromSource->enumValues.end(),
+          "lot E : Contenu propose \xC2\xAB Ajouter depuis une source \xC2\xBB (Cuves[*]), un chemin tap\xC3\xA9 aussi");
+    const std::size_t rowsBefore = content.count();
+    check(content.setField(-1, "addSource", "Cuves[*]") && content.count() == rowsBefore + 1, "lot E : ajouter Cuves[*] - une ligne");
+    const std::string vars = b.v().object(vt)->text("variables");
+    check(vars.size() >= 8 && vars.compare(vars.size() - 8, 8, "Cuves[*]") == 0, "lot E : ... a la fin de la liste (" + vars + ")");
+    b.editor->layout();
+    bool told = false;
+    if (const auto m = content.table().model())
+        for (std::size_t r = 0; r < m->rowCount(); ++r)
+            for (std::size_t c = 0; c < m->columnCount(); ++c) told = told || m->cellText(r, c).find("[*] : 8 \xC3\xA9l\xC3\xA9ments de Cuves") != std::string::npos;
+    check(told, "lot E : la ligne dit ce qu'elle deviendra : 8 \xC3\xA9l\xC3\xA9ments de Cuves");
+    check(!content.setField(-1, "addSource", "a;b"), "lot E : un \xC2\xAB ; \xC2\xBB nu est refus\xC3\xA9 (il couperait la liste)");
+    // ---- l'apercu de l'editeur : un graphique Cuves[*] dessine une barre par cuve
+    {
+        const Id bars = b.place(Kind::BarChart, 100, 1000);
+        b.v().object(bars)->setBox({100, 1000, 1000, 300});
+        b.v().object(bars)->set("variables", "Cuves[*]");
+        b.v().object(bars)->set("names", "Cuve");
+        Recorder rec;
+        const auto theme = ui::Theme::dark();
+        app::HmiPaintOptions opt;
+        opt.project = &b.doc->project;
+        app::paintHmiObject(rec, b.v(), *b.v().object(bars), {}, app::HmiPropertySource{}, theme, opt);
+        check(rec.wrote("Cuve 1") && rec.wrote("Cuve 8") && !rec.wrote("Cuves[*]"),
+              "lot E : l'aper\xC3\xA7u de l'\xC3\xA9" "diteur : une barre par cuve, Cuve 1 \xC3\xA0 Cuve 8 (avant : une barre Cuves[*])");
+    }
+    // ---- une barre de navigation : ses vues depuis une source (une LIST OF STRING, un dossier de vues)
+    {
+        hmi::Variable vues;
+        vues.id = b.doc->project.allocate();
+        vues.name = "Vues_E";
+        vues.type = "LIST OF STRING";
+        b.doc->project.programs.variables.push_back(vues);
+        const Id navId = b.place(Kind::NavBar, 1000, 40);
+        b.editor->layout();
+        check(content.object() == navId && content.mode() == Mode::NavItems, "lot E : une barre de navigation, ses vues dans Contenu");
+        const ui::PropertyGrid::Property* navSource = nullptr;
+        for (const auto& c : content.grid().categories())
+            for (const auto& pr : c.properties)
+                if (pr.name == "Ajouter depuis une source") navSource = &pr;
+        check(navSource && navSource->typeIn && std::find(navSource->enumValues.begin(), navSource->enumValues.end(), "Vues_E[*]") != navSource->enumValues.end(),
+              "lot E : Contenu propose les vues d'une LIST OF STRING (Vues_E[*])");
+        check(!content.setField(-1, "addSource", "Vue_Seule"), "lot E : un nom sans joker n'est pas une source (\xC2\xAB Ajouter \xC2\xBB pose une vue)");
+        check(content.setField(-1, "addSource", "Vues_E[*]"), "lot E : les vues depuis Vues_E[*]");
+        same_text(b.v().object(navId)->text("views"), "Vues_E[*]", "lot E : une barre automatique ne garde que la source");
+        b.editor->layout();
+        bool said = false;
+        if (const auto m = content.table().model())
+            for (std::size_t r = 0; r < m->rowCount(); ++r)
+                for (std::size_t c = 0; c < m->columnCount(); ++c) said = said || m->cellText(r, c).find("les \xC3\xA9l\xC3\xA9ments de Vues_E") != std::string::npos;
+        check(said, "lot E : la ligne dit ce qu'elle deviendra (les \xC3\xA9l\xC3\xA9ments de Vues_E, en marche)");
+    }
 }
 
 int main(int argc, char** argv) {

@@ -129,6 +129,7 @@ par construction.
 - Les listes à choix acceptent un nom tapé par le dernier choix de la liste ; elles ne filtrent pas pendant qu'on
   tape dans la liste elle-même (le champ, une fois ouvert, propose les choix qui commencent comme ce qui est tapé).
 
+
 ## Lot E : les tailles dynamiques
 
 ### Ce qui change pour vous (notes de version)
@@ -137,14 +138,34 @@ par construction.
   `Cuves` - une plume de courbe, une barre, une part, un axe de radar (et sa consigne), une courbe Y, une ligne
   de chronogramme, une ligne de tableau de variables. La source : un tableau de l'IHM (`ARRAY[1..8]` : 1 à 8 ;
   à deux dimensions, toutes ses cases), une `LIST` ou un `VECTOR` (le nombre suit la liste en marche : une plume
-  de plus au cycle suivant), une `MAP` (ses clés), une énumération du projet (ses valeurs). Les listes
-  parallèles suivent : un nom à joker (`Cuves[*].Nom`) se calcule pour chaque élément, un nom simple prend le
-  numéro de l'élément (« Cuve 1 »), la couleur tourne dans la palette, l'unité et le format se répètent.
-  Avant : pour 8 cuves, 8 plumes, 8 noms, 8 couleurs à taper.
+  de plus au cycle suivant), une `MAP` (ses clés : une barre ou une part par clé, nommée par sa clé), une
+  énumération du projet (ses valeurs), un membre objet (`Recette.Durees[*]`), le paramètre d'une popup
+  (`Cuve.Mesures[*]` dans une popup ouverte pour `Cuves[2]`). Les listes parallèles suivent : un nom à joker
+  (`Cuves[*].Nom`) se calcule pour chaque élément, un nom simple prend le numéro de l'élément (« Cuve 1 »), la
+  couleur tourne dans la palette, l'unité et le format se répètent. Avant : pour 8 cuves, 8 plumes, 8 noms,
+  8 couleurs à taper.
+- **Toute une structure, tout un dossier** (Graphiques, Production) : `Pompe.*` donne un élément par membre simple
+  de la structure (`Pompe.Marche`, `Pompe.Debit`, `Pompe.Moteur.Courant`, `Pompe.Mesures[0]`…), nommé par son
+  membre ; `Moteurs[*].*` chaque membre de chaque moteur d'un tableau de structures (« 1 Marche, 1 Debit, 2
+  Marche… ») ; `Ligne/Convoyeur/*` un élément par variable simple rangée dans ce dossier de variables ou dessous,
+  dans l'ordre du projet (sans casse ; les structures et les tableaux n'y sont pas). Pour « toutes les variables de
+  la pompe » ou « toutes celles du convoyeur » dans un tableau de variables, une ligne suffit.
+- **Contenu propose les sources** (Graphiques, Production) : la courbe, les graphiques et le tableau de variables ont
+  dans Contenu « Ajouter depuis une source » : les jokers que le projet offre (`Cuves[*].Niveau` pour chaque membre
+  simple d'un tableau de structures, `Bacs[*]`, `Stock[*]`, `Pompe.*`, `Ligne/Convoyeur/*`, `Cuve.*` pour le
+  paramètre structure d'une popup) ; un chemin ou un repère `$Cuves$[*].Niveau` se tape aussi. Chaque ligne à
+  joker dit ce qu'elle deviendra : « [*] : 8 éléments de Cuves », « .* : 2 membres de Pompe », « [*] : les
+  éléments de Bacs (leur nombre suit la source en marche) », ou ce qui ne va pas avec sa source. La barre de
+  navigation a le sien : les `LIST OF STRING` du projet (`Vues[*]`) et ses dossiers de vues (`Process/*`).
+- **L'éditeur montre le dépliage** (Graphiques, Symboles) : un objet à joker se dessine comme il démarrera - une
+  barre par cuve d'un `ARRAY`, une plume par élément de la valeur initiale d'une `LIST`, un bouton par vue d'une
+  `LIST OF STRING`, une part par clé initiale d'une `MAP` ; une instance répétée montre ses copies à la suite,
+  estompées (seule la première se choisit). Avant : une seule barre au nom de la formule.
 - **Les vues, les zones, les onglets depuis une source** (Navigation) : la barre de navigation lit ses vues dans
-  une liste (`Vues[*]` : une `LIST OF STRING` ou un `ARRAY OF STRING`), le résumé par zone ses zones
-  (`Zones[*].Nom`), le conteneur à onglets ses onglets (`T_MODE[*]` : un onglet par valeur de l'énumération, son
-  texte). Le clic suit ce qui est montré.
+  une liste (`Vues[*]` : une `LIST OF STRING` ou un `ARRAY OF STRING`) ou dans un dossier de vues (`Process/*` :
+  les vues ordinaires du dossier et de ses sous-dossiers), le résumé par zone ses zones (`Zones[*].Nom`), le
+  conteneur à onglets ses onglets (`T_MODE[*]` : un onglet par valeur de l'énumération, son texte). Le clic suit
+  ce qui est montré.
 - **Les états depuis une énumération** (Objets) : Contenu › « Depuis une énumération » remplit les états d'un
   voyant ou d'un texte multi-états (un état par valeur, reconnu par son nom, son texte, une couleur de la
   palette ; choisie par une variable de ce type, elle devient la Valeur), d'un chronogramme (par numéro), d'une
@@ -152,15 +173,21 @@ par construction.
   d'un conteneur (un onglet par valeur, la variable de ce type : sans décalage). Ctrl+Z rend ce qu'il y avait.
 - **« Répéter depuis »** (Symboles) : une instance de symbole se pose une fois par élément d'un tableau ou d'une
   `LIST` (`Cuves`) ; ses arguments qui citent `[*]` (`Cuve := Cuves[*]`) reçoivent l'élément ; les copies se
-  suivent (horizontal ou vertical, à l'écart donné). La première garde son nom et son identifiant, les autres
-  s'appellent `Cuve_2`, `Cuve_3`… Les alarmes du symbole sont générées pour chaque copie (d'un tableau de l'IHM).
-  « 8 cuves, 8 pompes » : une instance et une ligne d'argument.
+  suivent (horizontal ou vertical, à l'écart donné ; « par rangée » : 8 cuves, 4 par rangée, deux rangées). La
+  première garde son nom et son identifiant, les autres s'appellent `Cuve_2`, `Cuve_3`… Les alarmes du symbole
+  sont générées pour chaque copie (d'un tableau de l'IHM). « 8 cuves, 8 pompes » : une instance et une ligne
+  d'argument.
 - **Une liste depuis un tableau de structures** (Commandes) : « Éléments depuis » `Pompes[*].Nom` montre le
   membre choisi de chaque élément et écrit son indice (avant : un `ARRAY OF STRUCT` donnait une liste vide, sans
   un mot ; Générer le dit maintenant et propose `Pompes[*].Nom`).
 - **Les colonnes d'un tableau de structures imbriquées** (Affichage) : « Lignes depuis » un `ARRAY OF STRUCT` dont
   un membre est une structure ou un tableau montre une colonne par membre simple (`Pompe.Debit`, `Mesures[0]`) ;
-  avant : une colonne `Pompe` aux cases vides.
+  avant : une colonne `Pompe` aux cases vides. Le parcours des membres est celui de `Pompe.*`, et l'aperçu de
+  l'éditeur, Contenu (les colonnes à choisir) et Générer voient les mêmes colonnes que la marche.
+- **Un tableau depuis une énumération ou une structure** (Affichage) : « Lignes depuis » `T_MODE` donne une ligne par
+  valeur (Nom, Valeur, Texte) ; « Lignes depuis » `Pompe` (une structure seule) une ligne par membre simple
+  (Membre, Valeur). Avant : Générer refusait l'un et l'autre. Leurs colonnes se choisissent dans Contenu comme
+  celles d'une liste.
 - **Repères** : `$Cuves$[*].Niveau` - le repère varie à la duplication (Dupliquer remplace `$Cuves$` par
   `$Ballons$`), le joker parcourt la variable (3 barres pour les cuves, 2 pour les ballons).
 
@@ -168,16 +195,22 @@ par construction.
 
 - *Courbe, graphiques, tableau de variables* : « 1.12.7 : le joker `[*]` - `Cuves[*].Niveau` donne une plume (une
   barre, une ligne) par cuve ; `Cuves[*].Nom` en Noms les nomme. Un tableau de l'IHM, une LIST (le nombre suit la
-  liste en marche), une MAP (ses clés) ou une énumération. Une source inconnue ne donne rien (Générer le dit). »
-- *Barre de navigation* : « 1.12.7 : Vues `Vues[*]` : les vues d'une LIST OF STRING, dans son ordre. »
+  liste en marche), une MAP (ses clés) ou une énumération. `Pompe.*` : un élément par membre de la structure ;
+  `Ligne/Convoyeur/*` : un par variable du dossier. Contenu › Ajouter depuis une source les propose, et chaque
+  ligne dit ce qu'elle deviendra. Une source inconnue ne donne rien (Générer le dit). »
+- *Barre de navigation* : « 1.12.7 : Vues `Vues[*]` : les vues d'une LIST OF STRING, dans son ordre ; `Process/*` :
+  les vues ordinaires du dossier de vues Process. »
 - *Conteneur à onglets* : « 1.12.7 : Onglets `T_MODE[*]` : un onglet par valeur de l'énumération ; Contenu ›
   Depuis une énumération fait de même et relie la variable de ce type. »
 - *Résumé par zone* : « 1.12.7 : Zones `Zones[*].Nom` : les zones lues dans un tableau de structures. »
+- *Tableau* : « 1.12.7 : Lignes depuis une énumération (une ligne par valeur : Nom, Valeur, Texte) ou une
+  structure (une ligne par membre : Membre, Valeur) ; un tableau de structures imbriquées : une colonne par
+  membre simple (Pompe.Debit). »
 - *Voyant et texte multi-états, image animée, chronogramme* : « 1.12.7 : Contenu › Depuis une énumération : un
   état par valeur (son texte, une couleur), la variable choisie devient la Valeur. »
 - *Instance de symbole* : « 1.12.7 : Répéter depuis `Cuves` - une instance par élément ; dans les Arguments,
-  `[*]` désigne l'élément (`Cuve := Cuves[*]`). Les copies se suivent (sens, écart) ; la première garde le nom de
-  l'instance, les autres Nom_2, Nom_3… »
+  `[*]` désigne l'élément (`Cuve := Cuves[*]`). Les copies se suivent (sens, écart, combien par rangée) ; la
+  première garde le nom de l'instance, les autres Nom_2, Nom_3… L'éditeur les montre estompées. »
 - *Liste, liste déroulante, boutons radio, sélecteur* : « 1.12.7 : Éléments depuis `Pompes[*].Nom` : le membre
   montré d'un tableau de structures ; le choix écrit l'indice. »
 - *Repères* : « 1.12.7 : `$Cuves$[*].Niveau` - Dupliquer remplace le repère, le joker parcourt la variable. »
@@ -185,46 +218,79 @@ par construction.
 ### Ce que Générer vérifie de plus (lot E)
 
 Des avertissements :
-- la source d'un joker inconnue, ou sans éléments (`Niveau[*]` sur un REAL) : « la liste sera vide » ;
+- la source d'un joker inconnue, ou sans éléments (`Niveau[*]` sur un REAL) : « la liste sera vide » (dans une
+  courbe aussi) ;
+- `X.*` sur ce qui n'est pas une structure, un dossier de variables sans variable simple, un dossier de vues sans
+  vue ordinaire : « aucun élément » ;
 - une instance répétée dont la source est inconnue, ou dont aucun argument ne cite `[*]` (toutes les copies
   montreraient la même chose) ;
 - « Éléments depuis » un tableau ou une liste de structures sans membre choisi (avec la proposition
   `Pompes[*].Nom`).
-Et un élément à joker se vérifie sur son premier élément (`Cuves[1].Niveau` : un membre inconnu reste dit) ;
-avant, `Cuves[*].Niveau` était une expression illisible.
+« Lignes depuis » une structure seule ou une énumération est accepté (avant : une erreur) ; une colonne choisie se
+vérifie sur les colonnes que la marche montrera (`Pompe.Debit` n'est plus dite absente).
+Et un élément à joker se vérifie sur son premier élément (`Cuves[1].Niveau`, `Pompe.Marche` : un membre inconnu
+reste dit) ; avant, `Cuves[*].Niveau` était une expression illisible (une erreur bloquante). Le paramètre
+structure d'une popup (`Cuve.*`) se vérifie sur son type ; un paramètre sans type, en marche.
 
 ### Les essais (lot E)
 
 - `hmi_test` : `lotE1127` (le joker sans moteur ; en marche, un graphique en barres sur un `ARRAY[1..3]` de
   structures et ses noms, ses valeurs ; un tableau de variables `$Cuves$[*].Niveau` et son unité ; une courbe sur
   une `LIST` qui grandit en marche, la plume de plus tracée ; une barre de navigation sur une `LIST OF STRING` et
-  son clic ; des onglets depuis une énumération ; une liste depuis `Cuves[*].Nom` ; Générer sans erreur, une
-  source inconnue dite), `repeterDepuis1127` (trois instances, leurs noms, leurs arguments, leur place, leurs
-  valeurs, l'alarme du symbole par copie, l'avertissement sans `[*]`) et `colonnesImbriquees1127`.
-  `HMI_TEST_1127=1` les lance avec ceux du lot D.
+  son clic ; des onglets depuis une énumération ; une liste depuis `Cuves[*].Nom` ; un camembert sur une `MAP` ;
+  ce que Contenu dit et propose ; l'aperçu de l'éditeur ; Générer sans erreur, une source inconnue dite),
+  `repeterDepuis1127` (trois instances, leurs noms, leurs arguments, leur place, leurs valeurs, l'alarme du
+  symbole par copie, l'aperçu de l'éditeur, deux par rangée, l'avertissement sans `[*]`),
+  `colonnesImbriquees1127` (et les mêmes colonnes dans l'aperçu, Contenu et Générer ; un chemin
+  `Lignes[2].Mesures` et ses bornes), `membresStruct1127` (`Pompe.*` dans un tableau de variables, un graphique,
+  une courbe ; `Moteurs_M[*].*` ; `ligne/convoyeur/*` ; `Niveau.*` et un dossier vide dits), `sourcesObjets1127` (`Cuve.Mesures[*]` et
+  `Cuve.*` dans une popup ouverte pour `Cuves[2]`, `Recette.Durees[*]`), `vuesDossier1127` (`Process/*` dans
+  une barre de navigation, son clic, son aperçu, un dossier vide dit) et `lignesDepuis1127` (un tableau depuis une
+  énumération et depuis une structure seule, ses colonnes choisies, Générer sans erreur). `HMI_TEST_1127=1` les lance avec ceux du
+  lot D.
 - `hmi_editor_test` : `lotE1127_editeur` (les états d'un texte multi-états, d'un chronogramme, d'une image animée
-  et les onglets depuis une énumération ; « Répéter depuis » dans l'inspecteur d'une instance, un repère tapé).
+  et les onglets depuis une énumération ; « Répéter depuis » et « par rangée » dans l'inspecteur d'une instance,
+  un repère tapé ; « Ajouter depuis une source » et le détail d'une ligne à joker dans Contenu ; l'aperçu d'un
+  graphique `Cuves[*]` dessiné avec ses 8 barres ; les vues d'une barre de navigation depuis une `LIST OF STRING`).
 - `hmi_reperes_test` : `repereEtJoker1127` (`$Cuves$[*].Niveau` dupliqué en `$Ballons$[*].Niveau`, chacun déplié
   sur sa variable en marche).
 
 ### Ce qui n'est pas fait (lot E)
 
-- **Dans l'éditeur**, un joker n'est pas déplié (pas de moteur) : la courbe, le graphique, la barre montrent une
-  seule plume ou un seul bouton au nom de la formule ; une instance répétée se voit une fois. Le dépliage se voit
-  en simulation.
-- **Les sources « … depuis » choisies dans une liste** (une case « Séries depuis ») : le joker se tape dans la
-  formule ; il n'y a pas de case à choix dédiée pour les graphiques.
-- **Une STRUCT seule comme source** (« une barre par membre ») et **un dossier de variables** (« toutes les
-  variables du dossier » d'un tableau de variables) : non faits.
-- **Une MAP dans un graphique** : les clés deviennent des éléments (`Stock[*]` : une barre par clé, nommée par sa
-  clé si le nom le demande) ; pas de libellé automatique depuis la clé sans nom.
+- **Dans l'éditeur**, l'aperçu suit le projet, pas la marche : une `LIST` montre sa valeur initiale, un nom calculé
+  (`Cuves[*].Nom`) le numéro de l'élément ; une copie d'instance répétée ne se choisit pas (la première seule).
+  Contenu montre les lignes telles qu'écrites (une ligne `Cuves[*].Niveau`, avec ce qu'elle deviendra).
+- **« Ajouter depuis une source »** existe pour la courbe, les graphiques, le tableau de variables et la barre de
+  navigation ; le résumé par zone et le conteneur à onglets prennent leur joker tapé (ou « Depuis une
+  énumération » pour les onglets).
+- **Lignes depuis un paramètre de popup structure** (`Cuve`) : une structure seule se lit sur une variable du projet
+  ou un chemin (`Lignes[2].Pompe`), pas à travers un paramètre.
+- **Un joker et des membres ensemble** (`Moteurs[*].*`) : sur un tableau de l'IHM ; pas sur une `LIST` de
+  structures (les membres d'un élément de LIST ne se connaissent qu'en marche : la ligne ne donne rien).
 - **Un tableau à deux dimensions** se déplie case par case (`M[*]` : toutes les cases), pas « une série par
-  ligne ».
+  ligne » ; un `TUPLE` n'est pas une source de joker.
+- **Une MAP comme états d'un multi-états** (« clé = valeur de l'état, valeur = texte ») : non ; « Depuis une
+  énumération » seulement.
 - **« Répéter depuis » une LIST** : les copies suivent la liste en marche, mais les alarmes du symbole ne sont
-  générées que pour un tableau de l'IHM (la taille d'une LIST n'est connue qu'en marche). Pas de grille (lignes et
-  colonnes) : un seul axe. La ligne d'un paramètre de l'inspecteur peut prendre `Cuves[*]` pour une constante :
-  écrire l'argument dans la case Arguments, ou `=Cuves[*]`.
-- **Les jokers à travers un paramètre de popup** (`Cuve.Mesures[*]` dans une popup ouverte pour `Cuves[2]`) sont
-  résolus par la portée de la vue ; non essayé au-delà d'un niveau.
+  générées que pour un tableau de l'IHM (la taille d'une LIST n'est connue qu'en marche). Dans la ligne d'un
+  paramètre de l'inspecteur, `Cuves[*]` sur une variable du projet reste une formule ; un repère (`$Cuves$[*]`)
+  tapé sans fx pour un paramètre simple (STRING, INT…) peut être pris pour une constante : le taper avec fx
+  (`=$Cuves$[*]`) ou dans la case Arguments.
+- **Les jokers à travers un paramètre de popup** (`Cuve.Mesures[*]`, `Cuve.*`) sont résolus par la portée de la
+  vue ; essayés sur un niveau.
 - **Les vues, les zones, les onglets d'une source** : un texte calculé qui contient « ; » est remplacé par « , »
   (il couperait la liste).
+
+### Les risques pour les projets existants (lots D et E)
+
+Aucun format ne change : les propriétés nouvelles (`sourceColumns`, `repeatFrom`, `repeatAxis`, `repeatGap`,
+`repeatPerRow`, le champ `postes` de la configuration) sont absentes tant qu'elles ne servent pas, et un fichier
+1.12.6 se relit tel quel. Les seuls changements de comportement visibles :
+- une valeur qui ressemble à un joker est maintenant dépliée : un nom de vue, d'onglet ou de groupe écrit
+  `Chemin[*]`, `Chemin.*` ou `Dossier/*` (aucun n'était valable avant : Générer les refusait ou ils ne
+  menaient nulle part) ; un libellé « Toutes [*] » ou un calcul `SEL(...)` ne le sont pas ;
+- un tableau « Lignes depuis » un `ARRAY OF STRUCT` à membres imbriqués montre plus de colonnes (une par membre
+  simple, au lieu d'une colonne vide) ;
+- l'onglet Contenu apparaît pour plus d'objets (sélecteur, liste déroulante, boutons radio, liste, bargraphe,
+  cadran, programmateur, sélecteur de langue, gestion des utilisateurs, résumé par zone, tableau à source) ;
+- Générer dit plus de choses, toujours en avertissements ou en informations.

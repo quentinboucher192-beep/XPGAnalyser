@@ -17,6 +17,7 @@
 #include "../../hmi/HmiNavigation.hpp"
 #include "../../hmi/HmiControls.hpp"
 #include "../../hmi/HmiEnums.hpp"     // 1.12.7 (lot E) : les etats, les onglets depuis une enumeration
+#include "../../hmi/HmiSources.hpp"   // 1.12.7 (lot E) : le joker [*], .* et /* dans Contenu
 #include "../../hmi/HmiWidgets.hpp"
 #include "../../ui/Theme.hpp"
 #include "../../ui/widgets/ExprField.hpp"   // 1.10 (chantier K) : les champs a expression, partout pareils
@@ -270,6 +271,42 @@ NavList readNav(const hmi::Project& p, const hmi::Object& o) {
     return n;
 }
 
+// 1.12.7 (lot E) : ce que deviendra une ligne a joker d'une barre de navigation - Vues[*] (une LIST OF STRING),
+// Process/* (un dossier de vues) ; vide : une vue.
+std::string navSourceSummary(const hmi::Project& p, const hmi::View* view, const std::string& item) {
+    if (const auto folder = hmi::sources::folderOf(item)) {
+        const auto n = hmi::sources::viewsInFolder(p, *folder).size();
+        if (n == 0) return "le dossier de vues " + *folder + " n'a aucune vue ordinaire";
+        return "/* : " + std::to_string(n) + (n == 1 ? " vue" : " vues") + " du dossier " + *folder;
+    }
+    return hmi::sources::jokerSummary(p, view, item);
+}
+
+// Les sources qu'une barre de navigation peut lire : une LIST, un VECTOR, un ARRAY OF STRING (Vues[*]), un
+// dossier de vues ordinaires (Process/*, et ceux qui le contiennent).
+std::vector<std::string> navSources(const hmi::Project& p) {
+    std::vector<std::string> out;
+    for (const auto& v : p.programs.variables) {
+        const auto shape = hmi::typeform::decompose(v.type);
+        const bool many = shape.form == hmi::typeform::Form::List || shape.form == hmi::typeform::Form::Vector
+                       || shape.form == hmi::typeform::Form::Array;
+        if (many && (shape.element == "STRING" || shape.element.rfind("STRING[", 0) == 0)) out.push_back(v.name + "[*]");
+    }
+    std::vector<std::string> folders;
+    for (const auto& v : p.views) {
+        if (v.role != "vue") continue;
+        for (std::string f = v.folder; !f.empty();) {
+            if (std::find(folders.begin(), folders.end(), f) == folders.end()) folders.push_back(f);
+            const auto slash = f.rfind('/');
+            if (slash == std::string::npos) break;
+            f.erase(slash);
+        }
+    }
+    std::sort(folders.begin(), folders.end());
+    for (const auto& f : folders) out.push_back(f + "/*");
+    return out;
+}
+
 void writeNav(hmi::Object& o, const NavList& n) {
     o.set("views", hmi::joinSemicolons(n.views));
     const bool named = std::any_of(n.labels.begin(), n.labels.end(), [](const std::string& l) { return !l.empty(); });
@@ -448,7 +485,7 @@ std::string rowsSourceOf(const hmi::Object& o) { return trimmed(hmi::markers::st
 
 SourceCols readSourceCols(const hmi::Project& p, const hmi::Object& o) {
     SourceCols c;
-    if (const auto* var = p.variable(rowsSourceOf(o))) c.available = hmi::typeform::columnsOf(p, var->type);
+    c.available = hmi::choices::rowsFromColumns(p, rowsSourceOf(o));   // 1.12.7 (lot E) : une enumeration, une structure aussi
     c.chosen = hmi::choices::parseSourceColumns(o.text(hmi::choices::kSourceColumnsKey));
     return c;
 }
@@ -745,8 +782,12 @@ void HmiContentPanel::refresh() {
                 const auto p = readPens(*o);
                 headers = {"#", penWord(o), "Expression"};
                 icon = ui::Icon::Chart;
+                const auto* view = doc_->project.view(view_);
                 for (std::size_t i = 0; i < p.exprs.size(); ++i) {
                     std::string detail = p.exprs[i];
+                    // 1.12.7 (lot E) : une ligne a joker dit ce qu'elle deviendra (8 elements de Cuves).
+                    if (const auto said = hmi::sources::jokerSummary(doc_->project, view, p.exprs[i]); !said.empty())
+                        detail += "  \xC2\xB7  " + said;
                     // 1.12.7 (lot D) : un tableau de variables montre l'unite et le format de chaque ligne.
                     if (o->kind == hmi::Kind::VariableTable) {
                         if (i < p.units.size() && !p.units[i].empty()) detail += "  \xC2\xB7  " + p.units[i];
@@ -800,7 +841,12 @@ void HmiContentPanel::refresh() {
             case Mode::NavItems: {
                 headers = {"#", "Vue", "Libell\xC3\xA9"};
                 icon = ui::Icon::Screen;
-                for (const auto& it : hmi::navItems(&doc_->project, *o)) rows.push_back({it.view, it.label});
+                const auto* view = doc_->project.view(view_);
+                for (const auto& it : hmi::navItems(&doc_->project, *o)) {
+                    // 1.12.7 (lot E) : Vues[*], Process/* - ce que la ligne deviendra, a la place du libelle.
+                    const std::string said = navSourceSummary(doc_->project, view, it.view);
+                    rows.push_back({it.view, said.empty() ? it.label : said});
+                }
                 break;
             }
             case Mode::States: {
@@ -1297,6 +1343,31 @@ bool HmiContentPanel::removeColumn(int column) {
 bool HmiContentPanel::setField(int index, const std::string& field, const std::string& value) {
     const auto i = static_cast<std::size_t>(std::max(0, index));
     const auto colOf = [&](std::string_view prefix) { return static_cast<std::size_t>(std::max(0, std::atoi(field.c_str() + prefix.size()))); };
+    // 1.12.7 (lot E, § 2.3) : « Ajouter depuis une source » - une ligne a joker (Cuves[*].Niveau, Pompe.*,
+    // Ligne/Convoyeur/*), ajoutee a la fin ; le moteur en fait un element par element de la source.
+    if (field == "addSource" && mode() == Mode::NavItems) {
+        const std::string v = trimmed(value);
+        if (v.empty() || !fitsInList(v) || (!hmi::sources::hasJoker(v) && !hmi::sources::folderOf(v))) return false;
+        return change("Vues depuis une source", [this, v](hmi::Object& o) {
+            auto n = readNav(doc_->project, o);
+            if (n.automatic) n = NavList{};   // automatique : la source seule (sinon chaque vue deux fois)
+            n.views.push_back(v);
+            n.labels.emplace_back();
+            writeNav(o, n);
+            return true;
+        });
+    }
+    if (field == "addSource") {
+        const std::string v = trimmed(value);
+        if (mode() != Mode::Trend || v.empty() || !fitsInList(v)) return false;
+        return change("Ajouter depuis une source", [v](hmi::Object& o) {
+            auto p = readPens(o);
+            p.exprs.push_back(v);
+            p.names.emplace_back();   // les noms : ceux des elements (le membre, la cle, Cuves[*].Nom)
+            writePens(o, std::move(p));
+            return true;
+        });
+    }
     // 1.12.7 (lot E, § 2.3) : « depuis l'enumeration » - un etat, une image, un onglet par valeur.
     if (field == "fromEnum") {
         std::string variable;
@@ -1844,6 +1915,21 @@ void HmiContentPanel::rebuildGrid() {
                                                   "Plusieurs plumes dans la m\xC3\xAAme courbe : \xC2\xAB Ajouter \xC2\xBB, puis leur expression."));
             }
             cats.push_back(std::move(pen));
+            // 1.12.7 (lot E, § 2.3) : un element par element d'une source - choisi parmi celles du projet, ou tape.
+            {
+                PG::Category from;
+                from.name = "Depuis une source";
+                auto choices = hmi::sources::jokerSuggestions(doc_->project, doc_->project.view(view_));
+                choices.insert(choices.begin(), std::string{});
+                auto cell = editable("Ajouter depuis une source", "", PG::ValueType::Enum, -1, "addSource",
+                                     "Cuves[*].Niveau : un \xC3\xA9l\xC3\xA9ment par cuve (une LIST : leur nombre suit la liste en "
+                                     "marche) ; Pompe.* : un par membre de la structure ; Ligne/Convoyeur/* : un par variable du "
+                                     "dossier. Les noms : Cuves[*].Nom, calcul\xC3\xA9 pour chacun.",
+                                     std::move(choices));
+                cell.typeIn = true;   // un chemin, un repere $Cuves$[*].Niveau se tapent aussi
+                from.properties.push_back(std::move(cell));
+                cats.push_back(std::move(from));
+            }
             break;
         }
         case Mode::AnimatedImage: {
@@ -2069,6 +2155,21 @@ void HmiContentPanel::rebuildGrid() {
                                              "Automatique : toutes les vues ordinaires du projet, dans leur ordre. \xC2\xAB Ajouter \xC2\xBB "
                                              "fixe la liste."));
             cats.push_back(std::move(nc));
+            // 1.12.7 (lot E, § 2.3) : les vues d'une source - une LIST OF STRING (Vues[*]), un dossier de vues.
+            {
+                PG::Category from;
+                from.name = "Depuis une source";
+                auto choices = navSources(doc_->project);
+                choices.insert(choices.begin(), std::string{});
+                auto cell = editable("Ajouter depuis une source", "", PG::ValueType::Enum, -1, "addSource",
+                                     "Vues[*] : les vues nomm\xC3\xA9" "es dans une LIST OF STRING, dans son ordre (elle peut changer en "
+                                     "marche) ; Process/* : les vues ordinaires du dossier Process. Une barre automatique ne "
+                                     "garde que cette source.",
+                                     std::move(choices));
+                cell.typeIn = true;
+                from.properties.push_back(std::move(cell));
+                cats.push_back(std::move(from));
+            }
             break;
         }
         // 1.12.7 (lot D) : les choix - le libelle et la valeur ecrite, une ligne par choix.

@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
+#include <functional>
 #include <set>
 
 namespace hmi::sources {
@@ -47,9 +48,17 @@ bool chartLike(Kind k) noexcept {
 
 std::string at(const std::vector<std::string>& v, std::size_t i) { return i < v.size() ? v[i] : std::string{}; }
 
-bool anyJoker(std::string_view value) {
-    for (const auto& item : roles::splitList(value, ';'))
+// Une valeur de cette cle a-t-elle un joker ? [*] partout ; .* et /* dans une liste de formules (les membres,
+// les variables d'un dossier) ; /* dans les vues d'une barre de navigation (un dossier de vues). Un onglet
+// « Pompe.* », un groupe « A/* » restent des textes.
+bool anyJoker(Kind k, std::string_view key, std::string_view value) {
+    const bool formulas = expandsFormulas(k, key);
+    const bool navViews = k == Kind::NavBar && key == "views";
+    for (const auto& item : roles::splitList(value, ';')) {
         if (hasJoker(item)) return true;
+        if (formulas && (memberBase(item) || folderOf(item))) return true;
+        if (navViews && folderOf(item)) return true;
+    }
     return false;
 }
 
@@ -86,6 +95,95 @@ std::optional<Joker> jokerOf(std::string_view text) {
 
 std::string sourceName(const Joker& j) { return trimmedOf(markers::strip(j.before, markers::Mode::Expression)); }
 
+std::optional<std::string> memberBase(std::string_view text) {
+    const std::string t = trimmedOf(text);
+    if (t.size() < 3 || t.compare(t.size() - 2, 2, ".*") != 0) return std::nullopt;
+    const std::string base = t.substr(0, t.size() - 2);
+    if (!pathBefore(base)) return std::nullopt;
+    return base;
+}
+
+std::vector<TypeMember> leafMembers(const Project& p, std::string_view type) {
+    std::vector<TypeMember> members;
+    std::function<void(const std::string&, const std::string&, int)> walk = [&](const std::string& t, const std::string& prefix, int depth) {
+        for (const auto& m : types::membersOf(p, t)) {
+            const std::string path = prefix + m.name;
+            types::Spec ms;
+            if (types::parseSpec(m.type, ms) && ms.dims == 1 && ms.count(0) <= 16) {
+                for (long long k = ms.low[0]; k <= ms.high[0]; ++k) {
+                    const std::string at = path + "[" + std::to_string(k) + "]";
+                    if (types::isElementary(ms.element) || depth >= 3 || types::membersOf(p, ms.element).empty())
+                        members.push_back(TypeMember{at, ms.element});
+                    else
+                        walk(ms.element, at + ".", depth + 1);
+                }
+            } else if (!types::isElementary(m.type) && depth < 3 && !types::membersOf(p, m.type).empty()) {
+                walk(m.type, path + ".", depth + 1);
+            } else {
+                members.push_back(TypeMember{path, m.type});
+            }
+        }
+    };
+    const std::string t = trimmedOf(type);
+    if (!t.empty() && !types::isElementary(t)) walk(t, "", 0);
+    return members;
+}
+
+std::optional<std::string> folderOf(std::string_view text) {
+    const std::string t = trimmedOf(text);
+    if (t.size() < 3 || t.compare(t.size() - 2, 2, "/*") != 0) return std::nullopt;
+    std::string folder = trimmedOf(std::string_view(t).substr(0, t.size() - 2));
+    if (folder.empty() || folder.front() == '/' || folder.back() == '/') return std::nullopt;
+    for (const char c : folder)
+        if (c == '\'' || c == '"' || c == '(' || c == ')' || c == '[' || c == ']' || c == ':' || c == '=' || c == '*') return std::nullopt;
+    return folder;
+}
+
+std::vector<std::string> variablesInFolder(const Project& p, std::string_view folder) {
+    std::vector<std::string> out;
+    const std::string f = trimmedOf(folder);
+    if (f.empty()) return out;
+    const auto lower = [](std::string s) {
+        for (auto& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        return s;
+    };
+    const std::string lf = lower(f);
+    for (const auto& v : p.programs.variables) {
+        const std::string vf = lower(v.folder);
+        if (vf != lf && vf.rfind(lf + "/", 0) != 0) continue;
+        if (!types::isElementary(v.type) && !findEnumeration(p, v.type)) continue;   // une structure, un tableau : non
+        out.push_back(v.name);
+    }
+    return out;
+}
+
+namespace {
+bool inFolder(std::string_view folder, std::string_view wanted) {
+    const auto lower = [](std::string_view s) {
+        std::string out(s);
+        for (auto& c : out) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        return out;
+    };
+    const std::string f = lower(folder), w = lower(wanted);
+    return !w.empty() && (f == w || f.rfind(w + "/", 0) == 0);
+}
+} // namespace
+
+std::vector<std::string> viewsInFolder(const Project& p, std::string_view folder) {
+    std::vector<std::string> out;
+    const std::string f = trimmedOf(folder);
+    for (const auto& v : p.views)
+        if (v.role == "vue" && inFolder(v.folder, f)) out.push_back(v.name);
+    return out;
+}
+
+std::vector<std::string> membersOfPath(const Project& p, std::string_view path) {
+    std::vector<std::string> out;
+    const std::string plain = trimmedOf(markers::strip(path, markers::Mode::Expression));
+    for (const auto& m : leafMembers(p, types::typeOfPath(p, plain))) out.push_back(m.name);
+    return out;
+}
+
 std::string itemAt(const Joker& j, std::string_view index, bool enumValue) {
     if (enumValue) return std::string(index) + j.after;
     return j.before + "[" + std::string(index) + "]" + j.after;
@@ -106,8 +204,8 @@ bool repeats(const Object& o) {
 bool objectHasJoker(const Object& o) {
     if (repeats(o)) return true;
     for (const auto& p : o.props) {
-        if (!p.expr.empty() || p.value.find("[*]") == std::string::npos) continue;
-        if ((expandsFormulas(o.kind, p.key) || expandsTexts(o.kind, p.key)) && anyJoker(p.value)) return true;
+        if (!p.expr.empty() || (p.value.find("[*]") == std::string::npos && p.value.find('*') == std::string::npos)) continue;
+        if ((expandsFormulas(o.kind, p.key) || expandsTexts(o.kind, p.key)) && anyJoker(o.kind, p.key, p.value)) return true;
     }
     return false;
 }
@@ -123,10 +221,13 @@ std::vector<std::string> sourcesOf(const Object& o) {
     };
     if (repeats(o)) add(roles::nameOf(o.text(kRepeatFromKey)));
     for (const auto& p : o.props) {
-        if (!p.expr.empty() || p.value.find("[*]") == std::string::npos) continue;
+        if (!p.expr.empty() || p.value.find('*') == std::string::npos) continue;
         if (!expandsFormulas(o.kind, p.key) && !expandsTexts(o.kind, p.key) && p.key != "names" && p.key != "labels") continue;
-        for (const auto& item : roles::splitList(p.value, ';'))
+        for (const auto& item : roles::splitList(p.value, ';')) {
             if (const auto j = jokerOf(item)) add(sourceName(*j));
+            else if (const auto base = memberBase(item)) add(trimmedOf(markers::strip(*base, markers::Mode::Expression)) + ".*");
+            else if (const auto folder = folderOf(item)) add(o.kind == Kind::NavBar && p.key == "views" ? std::string(kViewFolderPrefix) + *folder : *folder + "/*");
+        }
     }
     return out;
 }
@@ -134,72 +235,111 @@ std::vector<std::string> sourcesOf(const Object& o) {
 bool expandObject(Object& o, const SourceFn& source, const TextFn& text) {
     bool changed = false;
     // ---- les listes de formules, et leurs listes paralleles
-    for (const char* key : {"variables", "references"}) {
-        if (!expandsFormulas(o.kind, key)) continue;
-        Prop* p = o.find(key);
-        if (!p || !p->expr.empty() || !anyJoker(p->value)) continue;
-        const bool main = std::string_view(key) == "variables";
-        const auto items = roles::splitList(p->value, ';');
-        const auto names = main ? roles::splitList(o.text("names"), ';') : std::vector<std::string>{};
-        const auto colors = main ? roles::splitList(o.text("colors"), ';') : std::vector<std::string>{};
-        const auto units = main ? roles::splitList(o.text("units"), ';') : std::vector<std::string>{};
-        const auto formats = main ? roles::splitList(o.text("formats"), ';') : std::vector<std::string>{};
-        std::vector<std::string> outE, outN, outC, outU, outF;
-        for (std::size_t i = 0; i < items.size(); ++i) {
-            const auto j = jokerOf(items[i]);
-            if (!j) {
-                outE.push_back(items[i]);
-                outN.push_back(at(names, i));
-                outC.push_back(at(colors, i));
-                outU.push_back(at(units, i));
-                outF.push_back(at(formats, i));
-                continue;
-            }
-            const auto src = source ? source(sourceName(*j)) : std::nullopt;
-            if (!src) continue;   // une source inconnue : aucun element (Generer le dit)
-            const std::string name = at(names, i);
-            const auto nameJoker = jokerOf(name);
-            for (std::size_t k = 0; k < src->indices.size(); ++k) {
-                const std::string& index = src->indices[k];
-                const std::string label = k < src->labels.size() ? src->labels[k] : index;
-                outE.push_back(itemAt(*j, index, src->enumeration));
-                std::string shown;
-                if (nameJoker) {
-                    const auto t = text ? text(itemAt(*nameJoker, index, src->enumeration)) : std::nullopt;
-                    shown = t ? *t : label;
-                } else if (!name.empty()) {
-                    shown = roles::nameOf(name) + " " + label;
-                } else if (!index.empty() && index.front() == '\'') {
-                    shown = label;   // une MAP : la cle nomme sa barre, sa part (cle = libelle, valeur = barre)
+    // 1.12.7 (lot E) : Moteurs[*].* - le joker donne Moteurs[1].*, Moteurs[2].*..., que le second passage
+    // deplie en membres (Moteurs[1].Marche, Moteurs[1].Debit...).
+    const auto formulasPass = [&]() {
+        bool any = false;
+        for (const char* key : {"variables", "references"}) {
+            if (!expandsFormulas(o.kind, key)) continue;
+            Prop* p = o.find(key);
+            if (!p || !p->expr.empty() || !anyJoker(o.kind, key, p->value)) continue;
+            const bool main = std::string_view(key) == "variables";
+            const auto items = roles::splitList(p->value, ';');
+            const auto names = main ? roles::splitList(o.text("names"), ';') : std::vector<std::string>{};
+            const auto colors = main ? roles::splitList(o.text("colors"), ';') : std::vector<std::string>{};
+            const auto units = main ? roles::splitList(o.text("units"), ';') : std::vector<std::string>{};
+            const auto formats = main ? roles::splitList(o.text("formats"), ';') : std::vector<std::string>{};
+            std::vector<std::string> outE, outN, outC, outU, outF;
+            for (std::size_t i = 0; i < items.size(); ++i) {
+                // 1.12.7 (lot E) : Pompe.* - un element par membre de la structure ; Ligne/Convoyeur/* - un element
+                // par variable du dossier (leur source : le projet).
+                const auto base = memberBase(items[i]);
+                const auto folder = base ? std::nullopt : folderOf(items[i]);
+                if (base || folder) {
+                    const auto src = source ? source(base ? *base + ".*" : *folder + "/*") : std::nullopt;
+                    if (!src) continue;
+                    const std::string name = at(names, i);
+                    for (std::size_t k = 0; k < src->indices.size(); ++k) {
+                        outE.push_back(base ? *base + "." + src->indices[k] : src->indices[k]);
+                        outN.push_back(name.empty() ? src->indices[k] : roles::nameOf(name) + " " + src->indices[k]);
+                        outC.emplace_back();
+                        outU.push_back(at(units, i));
+                        outF.push_back(at(formats, i));
+                    }
+                    continue;
                 }
-                outN.push_back(std::move(shown));
-                outC.emplace_back();          // la palette tourne
-                outU.push_back(at(units, i));  // l'unite et le format se repetent
-                outF.push_back(at(formats, i));
+                const auto j = jokerOf(items[i]);
+                if (!j) {
+                    outE.push_back(items[i]);
+                    outN.push_back(at(names, i));
+                    outC.push_back(at(colors, i));
+                    outU.push_back(at(units, i));
+                    outF.push_back(at(formats, i));
+                    continue;
+                }
+                const auto src = source ? source(sourceName(*j)) : std::nullopt;
+                if (!src) continue;   // une source inconnue : aucun element (Generer le dit)
+                const std::string name = at(names, i);
+                const auto nameJoker = jokerOf(name);
+                for (std::size_t k = 0; k < src->indices.size(); ++k) {
+                    const std::string& index = src->indices[k];
+                    const std::string label = k < src->labels.size() ? src->labels[k] : index;
+                    outE.push_back(itemAt(*j, index, src->enumeration));
+                    std::string shown;
+                    if (nameJoker) {
+                        const auto t = text ? text(itemAt(*nameJoker, index, src->enumeration)) : std::nullopt;
+                        shown = t ? *t : label;
+                    } else if (!name.empty()) {
+                        shown = roles::nameOf(name) + " " + label;
+                    } else if ((!index.empty() && index.front() == '\'') || trimmedOf(j->after) == ".*") {
+                        // une MAP : la cle nomme sa barre, sa part (cle = libelle, valeur = barre) ; Moteurs[*].* : le
+                        // numero de l'element precede ses membres (1 Marche, 1 Debit, 2 Marche...)
+                        shown = label;
+                    }
+                    outN.push_back(std::move(shown));
+                    outC.emplace_back();          // la palette tourne
+                    outU.push_back(at(units, i));  // l'unite et le format se repetent
+                    outF.push_back(at(formats, i));
+                }
             }
+            p->value = joinSemicolons(outE);
+            if (main) {
+                const auto anyOf = [](const std::vector<std::string>& v) {
+                    return std::any_of(v.begin(), v.end(), [](const std::string& s) { return !s.empty(); });
+                };
+                if (anyOf(outN) || o.find("names")) o.set("names", anyOf(outN) ? joinSemicolons(outN) : std::string{});
+                if (!colors.empty()) o.set("colors", anyOf(outC) ? joinSemicolons(outC) : std::string{});
+                if (!units.empty()) o.set("units", anyOf(outU) ? joinSemicolons(outU) : std::string{});
+                if (!formats.empty()) o.set("formats", anyOf(outF) ? joinSemicolons(outF) : std::string{});
+            }
+            any = true;
         }
-        p->value = joinSemicolons(outE);
-        if (main) {
-            const auto anyOf = [](const std::vector<std::string>& v) {
-                return std::any_of(v.begin(), v.end(), [](const std::string& s) { return !s.empty(); });
-            };
-            if (anyOf(outN) || o.find("names")) o.set("names", anyOf(outN) ? joinSemicolons(outN) : std::string{});
-            if (!colors.empty()) o.set("colors", anyOf(outC) ? joinSemicolons(outC) : std::string{});
-            if (!units.empty()) o.set("units", anyOf(outU) ? joinSemicolons(outU) : std::string{});
-            if (!formats.empty()) o.set("formats", anyOf(outF) ? joinSemicolons(outF) : std::string{});
-        }
+        return any;
+    };
+    if (formulasPass()) {
         changed = true;
+        (void)formulasPass();
     }
     // ---- les listes de noms et de textes (vues, zones, onglets)
     for (const char* key : {"views", "groups", "tabs"}) {
         if (!expandsTexts(o.kind, key)) continue;
         Prop* p = o.find(key);
-        if (!p || !p->expr.empty() || !anyJoker(p->value)) continue;
+        if (!p || !p->expr.empty() || !anyJoker(o.kind, key, p->value)) continue;
         const auto items = roles::splitList(p->value, ';');
         const bool nav = o.kind == Kind::NavBar;
         const auto labels = nav ? roles::splitList(o.text("labels"), ';') : std::vector<std::string>{};
         std::vector<std::string> out, outL;
         for (std::size_t i = 0; i < items.size(); ++i) {
+            // 1.12.7 (lot E) : Process/* - les vues ordinaires d'un dossier de vues (une barre de navigation).
+            if (const auto folder = nav ? folderOf(items[i]) : std::nullopt) {
+                const auto src = source ? source(std::string(kViewFolderPrefix) + *folder) : std::nullopt;
+                if (!src) continue;
+                for (const auto& name : src->indices) {
+                    out.push_back(name);
+                    outL.emplace_back();   // le libelle : le nom de la vue (Vue_Ligne_1 : Ligne 1)
+                }
+                continue;
+            }
             const auto j = jokerOf(items[i]);
             if (!j) {
                 out.push_back(items[i]);
@@ -252,6 +392,25 @@ SourceFn projectSources(const Project& p) {
     return [&p](std::string_view name) -> std::optional<Source> {
         const std::string n = trimmedOf(name);
         Source s;
+        if (n.size() > 2 && n.compare(n.size() - 2, 2, ".*") == 0) {
+            const auto members = membersOfPath(p, n.substr(0, n.size() - 2));
+            if (members.empty()) return std::nullopt;
+            s.indices = members;
+            s.labels = members;
+            return s;
+        }
+        if (const auto folder = folderOf(n)) {
+            const auto vars = variablesInFolder(p, *folder);
+            if (vars.empty()) return std::nullopt;
+            s.indices = vars;
+            s.labels = vars;
+            return s;
+        }
+        if (n.rfind(kViewFolderPrefix, 0) == 0) {
+            s.indices = viewsInFolder(p, std::string_view(n).substr(kViewFolderPrefix.size()));
+            s.labels = s.indices;
+            return s;
+        }
         if (const auto* e = findEnumeration(p, n)) {
             s.enumeration = true;
             for (const auto& v : e->values) {
@@ -260,10 +419,12 @@ SourceFn projectSources(const Project& p) {
             }
             return s;
         }
+        // Une variable IHM, ou un chemin dans l'une d'elles (Lignes[2].Mesures, Four1.Vannes) : le type ecrit.
         const auto* var = p.variable(n);
-        if (!var) return std::nullopt;
+        const std::string type = var ? var->type : types::typeOfPath(p, n);
+        if (type.empty()) return std::nullopt;
         types::Spec sp;
-        if (!types::parseSpec(var->type, sp) || !sp.array()) return std::nullopt;
+        if (!types::parseSpec(type, sp) || !sp.array()) return std::nullopt;
         for (long long i = sp.low[0]; i <= sp.high[0]; ++i) {
             if (sp.dims == 1) {
                 s.indices.push_back(std::to_string(i));
@@ -277,6 +438,61 @@ SourceFn projectSources(const Project& p) {
         }
         return s;
     };
+}
+
+SourceFn previewSources(const Project& p) {
+    return [&p](std::string_view name) -> std::optional<Source> {
+        if (auto s = projectSources(p)(name)) return s;
+        const std::string n = trimmedOf(name);
+        const auto* var = p.variable(n);
+        if (!var) return std::nullopt;
+        const auto shape = typeform::decompose(var->type);
+        if (shape.form != typeform::Form::List && shape.form != typeform::Form::Vector && shape.form != typeform::Form::Map) return std::nullopt;
+        std::vector<std::string> items;
+        if (!trimmedOf(var->initial).empty() && !typeform::literalItems(var->initial, items)) return std::nullopt;
+        const auto unquoted = [](std::string t) {
+            t = trimmedOf(t);
+            if (t.size() >= 2 && (t.front() == '\'' || t.front() == '"') && t.back() == t.front()) t = t.substr(1, t.size() - 2);
+            return t;
+        };
+        Source s;
+        if (shape.form == typeform::Form::Map) {
+            std::vector<std::string> keys;
+            for (const auto& it : items) {
+                const auto at = it.find(":=");
+                if (at != std::string::npos) keys.push_back(trimmedOf(std::string_view(it).substr(0, at)));
+            }
+            std::sort(keys.begin(), keys.end(), [&](const std::string& a, const std::string& b) { return unquoted(a) < unquoted(b); });
+            for (const auto& k : keys) {
+                s.indices.push_back(k);   // 'vis' (une cle texte, entre apostrophes) ou 3
+                s.labels.push_back(unquoted(k));
+            }
+            return s;
+        }
+        const bool texts = trimmedOf(shape.element) == "STRING" || trimmedOf(shape.element) == "WSTRING";
+        for (std::size_t i = 0; i < items.size(); ++i) {
+            s.indices.push_back(std::to_string(i));
+            s.labels.push_back(texts ? unquoted(items[i]) : std::to_string(i + 1));
+        }
+        return s;
+    };
+}
+
+bool previewObject(const Project& p, Object& o) {
+    if (o.kind == Kind::SymbolInstance || !objectHasJoker(o)) return false;
+    // Une source que l'editeur ne connait pas (le parametre d'un symbole, d'une popup : connu en marche) : l'objet
+    // reste tel quel (sinon l'apercu perdrait la ligne).
+    bool missing = false;
+    const SourceFn known = previewSources(p);
+    const SourceFn source = [&](std::string_view name) {
+        auto s = known(name);
+        if (!s) missing = true;
+        return s;
+    };
+    Object shown = o;
+    if (!expandObject(shown, source, nullptr) || missing) return false;
+    o = std::move(shown);
+    return true;
 }
 
 std::string sourceProblem(const Project& p, const View* view, std::string_view name, std::string& first) {
@@ -305,6 +521,128 @@ std::string sourceProblem(const Project& p, const View* view, std::string_view n
     return "source inconnue : " + n + " (le joker [*] ne donnera aucun \xC3\xA9l\xC3\xA9ment)";
 }
 
+namespace {
+// Les membres que `base.*` parcourt : ceux d'un chemin du projet ; un parametre de la vue (une popup qui
+// recoit une structure : Cuve.*), ceux de son type. `later` : un parametre sans type connu, ou un chemin
+// dans un parametre (Cuve.Pompe.*) - ses membres se connaissent en marche.
+std::vector<std::string> membersFor(const Project& p, const View* view, std::string_view base, bool& later) {
+    later = false;
+    auto members = membersOfPath(p, base);
+    if (members.empty() && view) {
+        const std::string plain = trimmedOf(markers::strip(base, markers::Mode::Expression));
+        const auto dot = plain.find_first_of(".[");
+        if (const auto* prm = view->param(plain.substr(0, dot))) {
+            if (dot == std::string::npos)
+                for (const auto& m : leafMembers(p, prm->type)) members.push_back(m.name);
+            later = members.empty();
+        }
+    }
+    return members;
+}
+
+std::string counted(std::size_t n, const char* one, const char* many) {
+    return std::to_string(n) + " " + (n == 1 ? one : many);
+}
+} // namespace
+
+std::optional<std::string> sampleOf(const Project& p, const View* view, std::string_view item, std::string* problem) {
+    if (problem) problem->clear();
+    if (const auto base = memberBase(item)) {
+        bool later = false;
+        const auto members = membersFor(p, view, *base, later);
+        if (later) return std::string(*base);   // en marche
+        if (members.empty()) {
+            if (problem) *problem = trimmedOf(markers::strip(*base, markers::Mode::Expression))
+                                  + " n'est pas une structure : le joker .* parcourt les membres d'une structure";
+            return std::string(*base);
+        }
+        return *base + "." + members.front();
+    }
+    if (const auto folder = folderOf(item)) {
+        const auto vars = variablesInFolder(p, *folder);
+        if (vars.empty()) {
+            if (problem) *problem = "le dossier " + *folder + " n'a aucune variable simple : le joker /* ne donnera aucun \xC3\xA9l\xC3\xA9ment";
+            return std::string{};
+        }
+        return vars.front();
+    }
+    const auto j = jokerOf(item);
+    if (!j) return std::nullopt;
+    std::string first;
+    const std::string why = sourceProblem(p, view, sourceName(*j), first);
+    if (problem) *problem = why;
+    std::string sample = itemAt(*j, first, first.find('#') != std::string::npos);
+    if (why.empty() && memberBase(sample)) return sampleOf(p, view, sample, problem);   // Moteurs[*].* : un membre du premier
+    return sample;
+}
+
+std::string jokerSummary(const Project& p, const View* view, std::string_view item) {
+    if (const auto base = memberBase(item)) {
+        const std::string plain = trimmedOf(markers::strip(*base, markers::Mode::Expression));
+        bool later = false;
+        const auto members = membersFor(p, view, *base, later);
+        if (later) return ".* : les membres de " + plain + " (connus en marche)";
+        if (members.empty()) return plain + " n'est pas une structure : le joker .* ne donnera aucun \xC3\xA9l\xC3\xA9ment";
+        return ".* : " + counted(members.size(), "membre", "membres") + " de " + plain;
+    }
+    if (const auto folder = folderOf(item)) {
+        const auto vars = variablesInFolder(p, *folder);
+        if (vars.empty()) return "le dossier " + *folder + " n'a aucune variable simple : le joker /* ne donnera aucun \xC3\xA9l\xC3\xA9ment";
+        return "/* : " + counted(vars.size(), "variable", "variables") + " du dossier " + *folder;
+    }
+    const auto j = jokerOf(item);
+    if (!j) return {};
+    const std::string name = sourceName(*j);
+    std::string first;
+    if (auto why = sourceProblem(p, view, name, first); !why.empty()) return why;
+    if (const auto s = projectSources(p)(name))
+        return "[*] : " + counted(s->indices.size(), "\xC3\xA9l\xC3\xA9ment", "\xC3\xA9l\xC3\xA9ments") + " de " + name;
+    return "[*] : les \xC3\xA9l\xC3\xA9ments de " + name + " (leur nombre suit la source en marche)";
+}
+
+std::vector<std::string> jokerSuggestions(const Project& p, const View* view) {
+    std::vector<std::string> out;
+    std::set<std::string> seen;
+    const auto add = [&](std::string s) {
+        if (out.size() < 400 && seen.insert(s).second) out.push_back(std::move(s));
+    };
+    // Les elements d'un conteneur : ses valeurs simples, ou chaque membre simple de ses structures.
+    const auto elements = [&](const std::string& base, const std::string& element) {
+        const auto leaves = leafMembers(p, element);
+        if (leaves.empty()) add(base + "[*]");
+        for (const auto& m : leaves) add(base + "[*]." + m.name);
+    };
+    if (view)
+        for (const auto& prm : view->params)
+            if (!leafMembers(p, prm.type).empty()) add(prm.name + ".*");
+    std::set<std::string> folders;
+    for (const auto& v : p.programs.variables) {
+        const auto shape = typeform::decompose(v.type);
+        switch (shape.form) {
+            case typeform::Form::Array: case typeform::Form::Array2D: case typeform::Form::List: case typeform::Form::Vector:
+                elements(v.name, shape.element);
+                break;
+            case typeform::Form::Map:
+                add(v.name + "[*]");
+                break;
+            case typeform::Form::Simple:
+                if (!leafMembers(p, v.type).empty()) add(v.name + ".*");
+                break;
+            default:
+                break;
+        }
+        if (!v.folder.empty() && (types::isElementary(v.type) || findEnumeration(p, v.type)))
+            for (std::string f = v.folder; !f.empty();) {   // le dossier, et ceux qui le contiennent
+                folders.insert(f);
+                const auto slash = f.rfind('/');
+                if (slash == std::string::npos) break;
+                f.erase(slash);
+            }
+    }
+    for (const auto& f : folders) add(f + "/*");
+    return out;
+}
+
 std::string replaceJokers(std::string_view text, std::string_view index) {
     std::string out;
     std::size_t from = 0;
@@ -320,6 +658,14 @@ std::string replaceJokers(std::string_view text, std::string_view index) {
 std::string sampleFormula(std::string_view text, std::string_view index) {
     const auto j = jokerOf(text);
     return j ? itemAt(*j, index) : std::string(text);
+}
+
+std::vector<Object> previewRepeat(const Project& p, const Object& o) {
+    if (!repeats(o)) return {};
+    View one;
+    one.objects.push_back(o);
+    if (!repeatInstances(one, previewSources(p))) return {};
+    return std::move(one.objects);
 }
 
 bool repeatInstances(View& v, const SourceFn& source) {
@@ -338,6 +684,8 @@ bool repeatInstances(View& v, const SourceFn& source) {
         if (!src || src->indices.empty() || src->enumeration) continue;   // rien a poser (Generer le dit)
         const bool vertical = o.text(kRepeatAxisKey, "horizontal").rfind("vert", 0) == 0;
         const double gap = std::max(0.0, o.number(kRepeatGapKey, 10));
+        const double perRowAsked = o.number(kRepeatPerRowKey, 0);
+        const std::size_t perRow = perRowAsked >= 1 ? static_cast<std::size_t>(perRowAsked) : 0;   // 0 : une seule rangee
         const Box b = o.box();
         for (std::size_t k = 0; k < src->indices.size(); ++k) {
             Object c = o;
@@ -349,9 +697,13 @@ bool repeatInstances(View& v, const SourceFn& source) {
                 used.insert(id);
                 c.id = id;
                 c.name = o.name + "_" + std::to_string(k + 1);
-                const double step = static_cast<double>(k) * ((vertical ? b.h : b.w) + gap);
-                if (vertical) c.setNumber("y", b.y + step);
-                else c.setNumber("x", b.x + step);
+                // Le rang dans la rangee, et la rangee (perRow : apres tant de copies, la suivante).
+                const std::size_t along = perRow ? k % perRow : k;
+                const std::size_t across = perRow ? k / perRow : 0;
+                const double step = static_cast<double>(along) * ((vertical ? b.h : b.w) + gap);
+                const double shift = static_cast<double>(across) * ((vertical ? b.w : b.h) + gap);
+                c.setNumber("x", b.x + (vertical ? shift : step));
+                c.setNumber("y", b.y + (vertical ? step : shift));
             }
             out.push_back(std::move(c));
         }

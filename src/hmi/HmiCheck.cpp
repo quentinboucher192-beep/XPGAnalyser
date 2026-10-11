@@ -514,13 +514,12 @@ std::vector<std::string> splitPens(const std::string& list) {
 // 1.12.7 (lot E) : les plumes telles que Generer les verifie - une plume a joker (Cuves[*].Niveau), sur son
 // premier element (Cuves[1].Niveau : le moteur en fera une par cuve).
 std::vector<std::string> checkedPens(const Project& p, const View* v, const std::string& list) {
-    auto pens = splitPens(list);
-    for (auto& pen : pens)
-        if (const auto j = sources::jokerOf(pen)) {
-            std::string first;
-            (void)sources::sourceProblem(p, v, sources::sourceName(*j), first);
-            pen = sources::itemAt(*j, first, first.find('#') != std::string::npos);
-        }
+    std::vector<std::string> pens;
+    for (auto& pen : splitPens(list)) {
+        const auto sample = sources::sampleOf(p, v, pen, nullptr);   // [*], .* et /* : un element type
+        if (!sample) pens.push_back(std::move(pen));
+        else if (!sample->empty()) pens.push_back(*sample);           // un dossier vide : aucune plume
+    }
     return pens;
 }
 
@@ -702,6 +701,10 @@ void checkSupervision(const Project& p, const NameExists& plc, std::vector<Issue
                 const bool history = o.text("mode").rfind("historique", 0) == 0;
                 const auto source = o.text("source");
                 if (pens.empty()) add(out, S::Warning, "Courbe", v.id, o.id, "variables", "aucune plume : la courbe restera vide");
+                for (const auto& pen : splitPens(o.text("variables"))) {   // 1.12.7 (lot E) : la source d'un joker
+                    std::string why;
+                    if (sources::sampleOf(p, &v, pen, &why) && !why.empty()) add(out, S::Warning, "Courbe", v.id, o.id, "variables", why);
+                }
                 if (!history || source.empty())
                     for (const auto& pen : pens)
                         for (const auto& r : unknownRoots(pen, &v))
@@ -853,20 +856,28 @@ void checkLot6(const Project& p, const NameExists& plc, std::vector<Issue>& out)
                 // 1.12.5 (lot A) : verifiee aussi avec un repere ($Lignes$ : Lignes) - avant, sautee.
                 const std::string from = trimmedCopy(markers::strip(o.text("rowsFrom"), markers::Mode::Expression));
                 if (!from.empty()) {
-                    if (const auto* var = p.variable(from)) {
-                        const std::string t = types::normalized(var->type);
-                        const auto starts = [&](std::string_view w) { return t.size() >= w.size() && t.compare(0, w.size(), w) == 0; };
-                        // 1.12.5 (lot A, D17) : un TUPLE aussi (une ligne par element, le moteur le montrait deja).
-                        if (!starts("ARRAY") && !starts("LIST") && !starts("VECTOR") && !starts("MAP") && !starts("TUPLE"))
-                            add(out, S::Error, "Variable", v.id, o.id, "rowsFrom",
-                                "lignes depuis : " + var->name + " (" + var->type + ") n'est ni une LIST, ni un VECTOR, ni une MAP, ni un TUPLE, ni un tableau");
-                        // 1.12.7 (lot D) : une colonne choisie que la source n'a pas (elle ne se montrera pas).
-                        auto columns = typeform::columnsOf(p, var->type);
+                    // 1.12.7 (lot D) : une colonne choisie que la source n'a pas (elle ne se montrera pas) - sur les
+                    // colonnes que le moteur montrera (choices::rowsFromColumns).
+                    const auto missingColumns = [&](const std::string& source) {
+                        auto columns = choices::rowsFromColumns(p, from);
                         std::vector<std::string> missing;
                         choices::applySourceColumns(o.text(choices::kSourceColumnsKey), columns, nullptr, &missing);
                         for (const auto& m : missing)
                             add(out, S::Warning, "Objet", v.id, o.id, std::string(choices::kSourceColumnsKey),
-                                "colonne " + m + " : " + var->name + " n'a pas ce membre, elle ne se montrera pas");
+                                "colonne " + m + " : " + source + " n'a pas ce membre, elle ne se montrera pas");
+                    };
+                    if (const auto* var = p.variable(from)) {
+                        const std::string t = types::normalized(var->type);
+                        const auto starts = [&](std::string_view w) { return t.size() >= w.size() && t.compare(0, w.size(), w) == 0; };
+                        // 1.12.7 (lot E, § 2.3) : une structure seule - une ligne par membre.
+                        const bool structure = typeform::decompose(var->type).form == typeform::Form::Simple && !sources::leafMembers(p, var->type).empty();
+                        // 1.12.5 (lot A, D17) : un TUPLE aussi (une ligne par element, le moteur le montrait deja).
+                        if (!structure && !starts("ARRAY") && !starts("LIST") && !starts("VECTOR") && !starts("MAP") && !starts("TUPLE"))
+                            add(out, S::Error, "Variable", v.id, o.id, "rowsFrom",
+                                "lignes depuis : " + var->name + " (" + var->type + ") n'est ni une LIST, ni un VECTOR, ni une MAP, ni un TUPLE, ni un tableau, ni une structure");
+                        missingColumns(var->name);
+                    } else if (const auto* e = findEnumeration(p, from)) {
+                        missingColumns(e->name);   // 1.12.7 (lot E) : une enumeration - une ligne par valeur
                     } else {
                         for (const auto& r : scanRoots(from))
                             if (!known(p, plc, r, &v))
@@ -1816,12 +1827,10 @@ void checkLot11(const Project& p, const NameExists& plc, std::vector<Issue>& out
                 for (const auto& it : items) {
                     // 1.12.7 (lot E) : un element a joker (Cuves[*].Niveau) - sa source (un avertissement : une
                     // source inconnue donne une liste vide en marche), puis son premier element.
-                    if (const auto j = sources::jokerOf(it.expression)) {
-                        std::string first;
-                        if (const auto why = sources::sourceProblem(p, &v, sources::sourceName(*j), first); !why.empty())
-                            issue(S::Warning, key, why);
-                        else
-                            exprCheck(key, sources::itemAt(*j, first, first.find('#') != std::string::npos), "\xC3\xA9l\xC3\xA9ment");
+                    std::string why;
+                    if (const auto sample = sources::sampleOf(p, &v, it.expression, &why)) {
+                        if (!why.empty()) issue(S::Warning, key, why);
+                        else exprCheck(key, *sample, "\xC3\xA9l\xC3\xA9ment");
                         continue;
                     }
                     exprCheck(key, it.expression, "\xC3\xA9l\xC3\xA9ment");
@@ -2144,6 +2153,12 @@ void checkLot12(const Project& p, const NameExists& plc, std::vector<Issue>& out
                 case Kind::NavBar: {
                     std::vector<std::string> names;
                     for (const auto& n : listItems(o.text("views"))) {
+                        // 1.12.7 (lot E) : Process/* - les vues d'un dossier de vues.
+                        if (const auto folder = sources::folderOf(n)) {
+                            if (sources::viewsInFolder(p, *folder).empty())
+                                issue(S::Warning, "views", "le dossier de vues " + *folder + " n'a aucune vue ordinaire : la barre n'en montrera aucune");
+                            continue;
+                        }
                         // 1.12.7 (lot E) : Vues[*] - les vues viennent d'une source, verifiee comme telle.
                         if (const auto j = sources::jokerOf(n)) {
                             std::string first;
@@ -3297,7 +3312,8 @@ struct ExprWalker {
         if (kindWritesVariable(o.kind)) s.push_back(Site{"Expression", "variable", o.text("variable"), W::Any, false, true, "variable \xC3\xA9" "crite "});
         if (o.kind == Kind::Trend)
             for (const auto& pen : splitPens(o.text("variables")))
-                s.push_back(Site{"Courbe", "variables", sources::sampleFormula(pen), W::Any, false, false, "plume "});   // 1.12.7 : le joker
+                if (!sources::memberBase(pen) && !sources::folderOf(pen))   // Pompe.*, Ligne/* : verifies avec le projet (checkedPens)
+                    s.push_back(Site{"Courbe", "variables", sources::sampleFormula(pen), W::Any, false, false, "plume "});   // 1.12.7 : le joker
         for (std::size_t i = 0; i < o.actions.size(); ++i) {
             const auto& a = o.actions[i];
             const std::string label = actionLabel(i, a);

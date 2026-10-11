@@ -1983,6 +1983,9 @@ const std::vector<KeyInfo>& keyInfos() {
          "Vide : une seule instance."},
         {"repeatAxis", "R\xC3\xA9p\xC3\xA9ter : sens", PG::ValueType::Enum, {"horizontal", "vertical"}, "Les copies c\xC3\xB4te \xC3\xA0 c\xC3\xB4te, ou l'une sous l'autre."},
         {"repeatGap", "R\xC3\xA9p\xC3\xA9ter : \xC3\xA9" "cart (px)", PG::ValueType::Real, {}, "L'espace entre deux copies."},
+        {"repeatPerRow", "R\xC3\xA9p\xC3\xA9ter : par rang\xC3\xA9" "e", PG::ValueType::Integer, {},
+         "Combien de copies avant de passer \xC3\xA0 la rang\xC3\xA9" "e suivante (8 cuves, 4 par rang\xC3\xA9" "e : deux rang\xC3\xA9" "es). "
+         "0 : toutes sur une rang\xC3\xA9" "e."},
         // 1.12.7 (lot D) : les colonnes choisies d'une source de tableau
         {"sourceColumns", "Colonnes de la source", PG::ValueType::Text, {},
          "Celles qui se montrent, dans l'ordre : Nom; Debit = D\xC3\xA9" "bit | 0.0 (un titre apr\xC3\xA8s =, un format "
@@ -2725,6 +2728,7 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
             if (!o->find("repeatFrom")) allProps.push_back({"repeatFrom", "", ""});
             if (!o->find("repeatAxis")) allProps.push_back({"repeatAxis", "horizontal", ""});
             if (!o->find("repeatGap")) allProps.push_back({"repeatGap", "10", ""});
+            if (!o->find("repeatPerRow")) allProps.push_back({"repeatPerRow", "0", ""});
         }
         // 1.12.7 (lot D) : les colonnes choisies d'un tableau qui a une source.
         if (o->kind == hmi::Kind::Table && !o->find("sourceColumns") && o->text("rowsFrom").find_first_not_of(" \t") != std::string::npos)

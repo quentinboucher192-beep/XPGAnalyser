@@ -22,6 +22,10 @@
 #include "HmiExpr.hpp"    // formatValue : le format d'une colonne
 #include "HmiModel.hpp"   // parseNumber
 #include "HmiRoles.hpp"   // le decoupeur unique, les textes sans leurs reperes
+#include "HmiEnums.hpp"   // 1.12.7 (lot E) : une enumeration, source de lignes
+#include "HmiMarkers.hpp"
+#include "HmiSources.hpp" // 1.12.7 (lot E) : les membres simples d'une structure
+#include "HmiTypeForms.hpp"
 
 #include <cctype>
 #include <string>
@@ -187,6 +191,23 @@ inline void applySourceColumns(std::string_view spec, std::vector<std::string>& 
             row = std::move(next);
         }
     headers = std::move(titles);
+}
+
+// 1.12.7 (lot E, § 2.3) : LES COLONNES QUE DONNE « LIGNES DEPUIS » - une variable IHM : celles de son type
+// (typeform::columnsOf : les membres simples d'un tableau de structures, Cle / Valeur d'une MAP...) ; une
+// structure seule : Membre, Valeur (une ligne par membre simple) ; une enumeration du projet : Nom, Valeur,
+// Texte (une ligne par valeur). Vide : ni l'une ni l'autre (un parametre, un membre : connus en marche).
+// Le moteur (Runtime::tableRows), l'apercu de l'editeur, Contenu et Generer lisent celles-ci.
+[[nodiscard]] inline std::vector<std::string> rowsFromColumns(const Project& p, std::string_view from) {
+    const std::string name = detail::trimmed(markers::strip(from, markers::Mode::Expression));
+    if (name.empty()) return {};
+    if (const auto* var = p.variable(name)) {
+        if (typeform::decompose(var->type).form == typeform::Form::Simple && !sources::leafMembers(p, var->type).empty())
+            return {"Membre", "Valeur"};
+        return typeform::columnsOf(p, var->type);
+    }
+    if (findEnumeration(p, name)) return {"Nom", "Valeur", "Texte"};
+    return {};
 }
 
 } // namespace hmi::choices

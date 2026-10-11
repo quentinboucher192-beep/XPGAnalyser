@@ -628,12 +628,23 @@ std::optional<sources::Source> Runtime::jokerSource(std::string_view name, Id vi
     if (!project_) return std::nullopt;
     std::string src = trimmedText(name);
     if (src.empty()) return std::nullopt;
+    if (sources::folderOf(src) || src.rfind(sources::kViewFolderPrefix, 0) == 0)   // Ligne/Convoyeur/* : ses variables ;
+        return sources::projectSources(*project_)(src);                            // vues:Process : ses vues
     // Un parametre de la vue (une popup ouverte pour Cuves[2] : Cuve.Mesures) : le chemin qu'il designe.
+    const bool members = src.size() > 2 && src.compare(src.size() - 2, 2, ".*") == 0;   // Pompe.* : ses membres
+    if (members) src.erase(src.size() - 2);
     if (view != kNoId)
         if (const auto scope = scopePtr(view)) {
             const std::string r = scope->resolve(src);
             if (!r.empty() && r[0] != '$') src = r;
         }
+    if (members) {
+        sources::Source s;
+        s.indices = sources::membersOfPath(*project_, src);
+        if (s.indices.empty()) return std::nullopt;
+        s.labels = s.indices;
+        return s;
+    }
     sources::Source s;
     // Une enumeration du projet : ses valeurs (T_MODE#Auto), leur texte.
     if (const auto* e = findEnumeration(*project_, src)) {
@@ -778,32 +789,31 @@ bool Runtime::tableRows(const Object& o, std::vector<std::string>& headers, std:
         }
         // Un tableau IHM (deplie en cases) : une ligne par case ; une structure : une colonne par membre.
         const auto* a = aggregate(src);
+        // 1.12.7 (lot E, § 2.3) : une structure seule - une ligne par membre simple (Membre, Valeur).
+        if (a && !a->array) {
+            const auto leaves = sources::leafMembers(*project_, a->typeName);
+            if (leaves.empty()) return false;
+            headers = {"Membre", "Valeur"};
+            for (const auto& m : leaves) {
+                const auto* v = variable(src + "." + m.name);
+                rows.push_back({m.name, v ? shownOf(*v) : std::string{}});
+            }
+            return true;
+        }
+        // 1.12.7 (lot E, § 2.3) : une enumeration du projet - une ligne par valeur (Nom, Valeur, Texte).
+        if (!a)
+            if (const auto* e = findEnumeration(*project_, src)) {
+                headers = {"Nom", "Valeur", "Texte"};
+                for (const auto& ev : e->values) rows.push_back({ev.name, std::to_string(ev.value), ev.text});
+                return true;
+            }
         if (!a || !a->array) return false;
         const auto& sp = a->spec;
         // 1.12.7 (lot E, § 2.3) : les membres imbriques se deplient - une colonne par membre simple, a son
         // chemin (Pompe.Debit, Mesures[0]) ; avant : une colonne Pompe aux cases vides (Lignes[1].Pompe n'est
         // pas une valeur). Trois niveaux au plus, un tableau de membres jusqu'a 16 cases.
-        std::vector<TypeMember> members;
-        std::function<void(const std::string&, const std::string&, int)> walk = [&](const std::string& type, const std::string& prefix, int depth) {
-            for (const auto& m : types::membersOf(*project_, type)) {
-                const std::string path = prefix + m.name;
-                types::Spec ms;
-                if (types::parseSpec(m.type, ms) && ms.dims == 1 && ms.count(0) <= 16) {
-                    for (long long k = ms.low[0]; k <= ms.high[0]; ++k) {
-                        const std::string at = path + "[" + std::to_string(k) + "]";
-                        if (types::isElementary(ms.element) || depth >= 3 || types::membersOf(*project_, ms.element).empty())
-                            members.push_back(TypeMember{at, ms.element});
-                        else
-                            walk(ms.element, at + ".", depth + 1);
-                    }
-                } else if (!types::isElementary(m.type) && depth < 3 && !types::membersOf(*project_, m.type).empty()) {
-                    walk(m.type, path + ".", depth + 1);
-                } else {
-                    members.push_back(TypeMember{path, m.type});
-                }
-            }
-        };
-        if (!types::isElementary(sp.element)) walk(sp.element, "", 0);
+        // Le parcours est celui du joker des membres (Pompe.*) : sources::leafMembers.
+        const std::vector<TypeMember> members = sources::leafMembers(*project_, sp.element);
         // 1.12.5 (lot A) : un tableau a deux dimensions - une ligne par premier indice, une colonne par
         // second (Tab[i,j]) ; avant : des lignes de cases vides (Tab[i] n'existe pas).
         if (sp.dims == 2) {
