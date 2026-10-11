@@ -1976,6 +1976,17 @@ const std::vector<KeyInfo>& keyInfos() {
         {"params", "Arguments", PG::ValueType::Text, {},
          "Ce que re\xC3\xA7oit chaque param\xC3\xA8tre du symbole : Armoire := Armoires[1]; Nom := 'B'. "
          "Un param\xC3\xA8tre absent garde sa valeur par d\xC3\xA9" "faut (celle du symbole)."},
+        // 1.12.7 (lot E) : « Repeter depuis » - une instance par element (8 cuves, 8 instances)
+        {"repeatFrom", "R\xC3\xA9p\xC3\xA9ter depuis", PG::ValueType::Text, {},
+         "Une instance par \xC3\xA9l\xC3\xA9ment d'un tableau ou d'une LIST (Cuves) : les arguments qui citent [*] re\xC3\xA7oivent "
+         "l'\xC3\xA9l\xC3\xA9ment (Cuve := Cuves[*]). En marche, les copies se suivent ; une LIST qui grandit en ajoute. "
+         "Vide : une seule instance."},
+        {"repeatAxis", "R\xC3\xA9p\xC3\xA9ter : sens", PG::ValueType::Enum, {"horizontal", "vertical"}, "Les copies c\xC3\xB4te \xC3\xA0 c\xC3\xB4te, ou l'une sous l'autre."},
+        {"repeatGap", "R\xC3\xA9p\xC3\xA9ter : \xC3\xA9" "cart (px)", PG::ValueType::Real, {}, "L'espace entre deux copies."},
+        // 1.12.7 (lot D) : les colonnes choisies d'une source de tableau
+        {"sourceColumns", "Colonnes de la source", PG::ValueType::Text, {},
+         "Celles qui se montrent, dans l'ordre : Nom; Debit = D\xC3\xA9" "bit | 0.0 (un titre apr\xC3\xA8s =, un format "
+         "apr\xC3\xA8s |). Vide : toutes, sous leur nom. Elles se r\xC3\xA8glent aussi dans Contenu."},
         // ---- lot 11 : les graphiques
         {"xVariable", "Variable X (expression)", PG::ValueType::Text, {}, "L'abscisse : D\xC3\xA9" "bit_m3h. \xC3\x80 chaque cycle, un point (X, Y) par courbe."},
         {"xmin", "Axe X min", PG::ValueType::Real, {}, ""},
@@ -2709,6 +2720,15 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
                          || o->kind == hmi::Kind::PieChart || o->kind == hmi::Kind::RadarChart || o->kind == hmi::Kind::Histogram;
         if (!charts && (o->find("unit") || o->find("format")) && !o->find("varFormat")) allProps.push_back({"varFormat", "TRUE", ""});
         if (o->kind == hmi::Kind::VariableTable && !o->find("formats")) allProps.push_back({"formats", "", ""});
+        // 1.12.7 (lot E) : « Repeter depuis » d'une instance (absent d'un objet neuf : rien ne change dans son fichier).
+        if (o->kind == hmi::Kind::SymbolInstance && !many) {
+            if (!o->find("repeatFrom")) allProps.push_back({"repeatFrom", "", ""});
+            if (!o->find("repeatAxis")) allProps.push_back({"repeatAxis", "horizontal", ""});
+            if (!o->find("repeatGap")) allProps.push_back({"repeatGap", "10", ""});
+        }
+        // 1.12.7 (lot D) : les colonnes choisies d'un tableau qui a une source.
+        if (o->kind == hmi::Kind::Table && !o->find("sourceColumns") && o->text("rowsFrom").find_first_not_of(" \t") != std::string::npos)
+            allProps.push_back({"sourceColumns", "", ""});
     }
     // Lot 13 : la signature electronique des commandes (absente : aucune).
     if (hmi::kindSignable(o->kind)) {
@@ -2829,6 +2849,16 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
                 p.enumValues.clear();
                 for (const auto& t : hmi::kLoginTabs) p.enumValues.emplace_back(t.label);
                 p.name = "Onglet ouvert";
+            } else if (prop.key == "repeatFrom" && project) {
+                // 1.12.7 (lot E) : les sources d'une repetition - les variables IHM a elements (tableaux, LIST, VECTOR).
+                p.type = PG::ValueType::Enum;
+                p.enumValues = {""};
+                for (const auto& var : project->programs.variables) {
+                    const auto form = hmi::typeform::decompose(var.type).form;
+                    if (form == hmi::typeform::Form::Array || form == hmi::typeform::Form::Array2D || form == hmi::typeform::Form::List
+                        || form == hmi::typeform::Form::Vector)
+                        p.enumValues.push_back(var.name);
+                }
             } else if ((prop.key == "itemsFrom" || prop.key == "rowsFrom") && project) {
                 // 1.12.2 : les sources - les enumerations du projet (des elements), les variables IHM
                 // qui ont des elements (LIST, VECTOR, MAP, tableaux).

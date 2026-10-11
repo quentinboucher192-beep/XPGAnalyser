@@ -29235,6 +29235,89 @@ void lotD1127_choix() {
           "lot D : les d\xC3\xA9" "buts de poste d'un compteur peuvent suivre le calendrier du projet");
 }
 
+// 1.12.7 (lot E de l'audit des objets, § 2.3) : « DEPUIS UNE ENUMERATION » dans Contenu (un etat, une
+// image, un onglet par valeur) et « Repeter depuis » dans l'inspecteur d'une instance.
+void lotE1127_editeur() {
+    std::printf("1.12.7 (lot E) : les etats et les onglets depuis une enumeration, Repeter depuis\n");
+    using Mode = app::HmiContentPanel::Mode;
+    Bench b;
+    auto& content = b.editor->content();
+    hmi::HmiType etat;
+    etat.id = b.doc->project.allocate();
+    etat.name = "T_Etat_E";
+    etat.kind = hmi::HmiTypeKind::Enumeration;
+    etat.values = {{"Arret", 0, "Arr\xC3\xAAt", ""}, {"Marche", 1, "En marche", ""}, {"Defaut", 2, "En d\xC3\xA9" "faut", ""}};
+    b.doc->project.programs.types.push_back(etat);
+    hmi::Variable ev;
+    ev.id = b.doc->project.allocate();
+    ev.name = "Etat_Pompe";
+    ev.type = "T_Etat_E";
+    b.doc->project.programs.variables.push_back(ev);
+    // ---- un texte multi-etats : un etat par valeur, la variable choisie devient la Valeur
+    const Id multi = b.place(Kind::MultiStateText, 100, 100);
+    b.editor->layout();
+    check(content.mode() == Mode::States, "lot E : un texte multi-\xC3\xA9tats, ses \xC3\xA9tats dans Contenu");
+    bool offered = false;
+    for (const auto& c : content.grid().categories())
+        for (const auto& pr : c.properties)
+            if (pr.name == "Depuis une \xC3\xA9num\xC3\xA9ration")
+                offered = std::find(pr.enumValues.begin(), pr.enumValues.end(), "T_Etat_E") != pr.enumValues.end()
+                       && std::find(pr.enumValues.begin(), pr.enumValues.end(), "Etat_Pompe") != pr.enumValues.end();
+    check(offered, "lot E : \xC2\xAB Depuis une \xC3\xA9num\xC3\xA9ration \xC2\xBB propose T_Etat_E et la variable Etat_Pompe");
+    check(content.setField(-1, "fromEnum", "Etat_Pompe"), "lot E : les \xC3\xA9tats depuis Etat_Pompe (T_Etat_E)");
+    const auto states = hmi::parseStateList(b.v().object(multi)->text("stateList"));
+    check(states.size() == 3 && states[0].match == "Arret" && states[1].text == "En marche" && states[2].match == "Defaut",
+          "lot E : un \xC3\xA9tat par valeur, reconnue par son nom, son texte (avant : \xC3\xA0 taper, et seulement par num\xC3\xA9ro)");
+    same_text(b.v().object(multi)->expr("value"), "Etat_Pompe", "lot E : la variable choisie devient la Valeur");
+    (void)b.stack.undo();
+    check(hmi::parseStateList(b.v().object(multi)->text("stateList")).size() != 3 || b.v().object(multi)->expr("value").empty(),
+          "lot E : Ctrl+Z rend les \xC3\xA9tats d'avant");
+    // ---- un chronogramme : les etats par numero (il trace des nombres)
+    const Id chrono = b.place(Kind::StateChart, 500, 100);
+    b.editor->layout();
+    check(content.setField(-1, "show", "les \xC3\xA9tats") && content.setField(-1, "fromEnum", "T_Etat_E"), "lot E : les \xC3\xA9tats d'un chronogramme depuis T_Etat_E");
+    const auto cs = hmi::parseStateList(b.v().object(chrono)->text("stateList"));
+    check(cs.size() >= 3 && cs[0].match == "0" && cs[2].match == "2" && cs[2].text == "En d\xC3\xA9" "faut",
+          "lot E : ... par num\xC3\xA9ro (le chronogramme trace des nombres), avec leur texte");
+    // ---- une image animee : une condition par valeur
+    const Id anim = b.place(Kind::AnimatedImage, 100, 400);
+    b.editor->layout();
+    check(!content.setField(-1, "fromEnum", "T_Etat_E"), "lot E : une image anim\xC3\xA9" "e veut une variable (sa condition la compare)");
+    check(content.setField(-1, "fromEnum", "Etat_Pompe"), "lot E : les \xC3\xA9tats d'une image anim\xC3\xA9" "e depuis Etat_Pompe");
+    const auto imgs = hmi::parseImageStates(b.v().object(anim)->text("states"));
+    check(imgs.size() == 3 && imgs[1].condition == "Etat_Pompe = T_Etat_E#Marche",
+          "lot E : une condition par valeur (Etat_Pompe = T_Etat_E#Marche ; avant : une ligne \xC3\xA0 \xC3\xA9" "crire par valeur)");
+    // ---- un conteneur a onglets : un onglet par valeur, la variable de ce type
+    const Id tabs = b.place(Kind::TabContainer, 500, 400);
+    b.editor->layout();
+    check(content.mode() == Mode::Tabs && content.setField(-1, "fromEnum", "Etat_Pompe"), "lot E : les onglets depuis Etat_Pompe");
+    same_text(b.v().object(tabs)->text("tabs"), "Arr\xC3\xAAt;En marche;En d\xC3\xA9" "faut", "lot E : un onglet par valeur (son texte)");
+    same_text(b.v().object(tabs)->text("variable"), "Etat_Pompe", "lot E : ... la variable de l'onglet est celle de ce type (sans d\xC3\xA9" "calage, 1.12.5)");
+    // ---- « Repeter depuis » : l'inspecteur d'une instance seule
+    hmi::Variable cuves;
+    cuves.id = b.doc->project.allocate();
+    cuves.name = "Cuves";
+    cuves.type = "ARRAY[1..8] OF REAL";
+    b.doc->project.programs.variables.push_back(cuves);
+    hmi::View sym = hmi::makeView(b.doc->project, "Sym_E");
+    sym.role = "symbole";
+    b.doc->project.views.push_back(sym);
+    const Id inst = hmi::placeSymbol(b.doc->project, b.v(), "Sym_E", 700, 300);
+    b.editor->canvas().setSelection({inst});
+    b.editor->layout();
+    const ui::PropertyGrid::Property* repeat = nullptr;
+    for (const auto& c : b.editor->properties().categories())
+        for (const auto& pr : c.properties)
+            if (pr.key == "repeatFrom") repeat = &pr;
+    check(repeat && repeat->type == ui::PropertyGrid::ValueType::Enum && repeat->typeIn
+              && std::find(repeat->enumValues.begin(), repeat->enumValues.end(), "Cuves") != repeat->enumValues.end(),
+          "lot E : une instance propose \xC2\xAB R\xC3\xA9p\xC3\xA9ter depuis \xC2\xBB (les tableaux et les LIST du projet, un rep\xC3\xA8re tap\xC3\xA9 accept\xC3\xA9)");
+    if (repeat && repeat->commit) {
+        check(repeat->commit("$Cuves$"), "lot E : un rep\xC3\xA8re $Cuves$ tap\xC3\xA9");
+        same_text(b.v().object(inst)->text("repeatFrom"), "$Cuves$", "lot E : ... gard\xC3\xA9 tel quel (Dupliquer le remplacera)");
+    }
+}
+
 int main(int argc, char** argv) {
     // 1.11.1 (API-V) : HMI_TEST_APIV=1 - la vue des variables de l'automate et API dans l'aide a la saisie, seules.
     if (const char* only = std::getenv("HMI_TEST_APIV"); only && *only == '1') {
@@ -29255,6 +29338,7 @@ int main(int argc, char** argv) {
     if (const char* only = std::getenv("HMI_TEST_1127"); only && *only == '1') {
         lotD1127_contenu();
         lotD1127_choix();
+        lotE1127_editeur();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -29460,6 +29544,7 @@ int main(int argc, char** argv) {
     lotA1125_contenuTableauVariables();   // 1.12.5 (lot A, D11)
     lotD1127_contenu();                   // 1.12.7 (lot D) : les listes en tableau dans Contenu
     lotD1127_choix();                     // 1.12.7 (lot D) : les listes a choix de l'inspecteur
+    lotE1127_editeur();                   // 1.12.7 (lot E) : depuis une enumeration, Repeter depuis
     etats1123();                       // 1.12.3 : les etats des objets multi-etats en table
     communes1123();                    // 1.12.3 : plusieurs objets choisis, leurs proprietes communes
     voixDesSons1123();                 // 1.12.3 : les voix des sons (melange)

@@ -11,6 +11,7 @@
 //  HMI_REPERES_OBS=1 : chaque observation est ecrite (pas seulement les echecs).
 // =============================================================================
 #include "../src/hmi/HmiActionKinds.hpp"
+#include "../src/hmi/HmiCharts.hpp"
 #include "../src/hmi/HmiCheck.hpp"
 #include "../src/hmi/HmiDuplicate.hpp"
 #include "../src/hmi/HmiEdit.hpp"
@@ -1375,6 +1376,63 @@ void popupAvecSymboleEtRedefinition() {
     }
     check(journalErrors(rt, from, "popup a symbole") == 0, "symbole dans une popup, redefinition : aucune erreur au journal");
 }
+// 1.12.7 (lot E) : LE REPERE ET LE JOKER ENSEMBLE - $Cuves$[*].Niveau : le repere varie a la duplication
+// (la copie lit $Ballons$[*].Niveau), le joker parcourt la variable (une barre par cuve, puis par ballon).
+void repereEtJoker1127() {
+    std::printf("-- 1.12.7 (lot E) : le repere et le joker ensemble ($Cuves$[*].Niveau)\n");
+    Project p;
+    HmiType t;
+    t.id = p.allocate();
+    t.name = "T_Bac_J";
+    t.members = {{"Niveau", "REAL", "", ""}, {"Nom", "STRING", "", ""}};
+    p.programs.types.push_back(t);
+    Variable cuves;
+    cuves.id = p.allocate();
+    cuves.name = "Cuves";
+    cuves.type = "ARRAY[1..3] OF T_Bac_J";
+    p.programs.variables.push_back(cuves);
+    Variable ballons;
+    ballons.id = p.allocate();
+    ballons.name = "Ballons";
+    ballons.type = "ARRAY[1..2] OF T_Bac_J";
+    p.programs.variables.push_back(ballons);
+    View v = makeView(p, "Vue_J");
+    const Id bar = edit::add(p, v, Kind::BarChart, 10, 10);
+    v.object(bar)->name = "Barres";
+    v.object(bar)->set("variables", "$Cuves$[*].Niveau");
+    v.object(bar)->set("names", "$Cuves$[*].Nom");
+    const auto sc = dup::scan(v, {bar}, dup::projectBounds(p));
+    check(sc.marker("Cuves") != nullptr, "repere et joker : Dupliquer trouve le repere $Cuves$ devant le joker");
+    auto plan = dup::defaultPlan(v, sc, 1);
+    if (plan.rows.size() == 2) plan.rows[1].markers[dup::markerKey("Cuves")] = "Ballons";
+    const auto r = dup::apply(p, v, plan);
+    check(r.created.size() == 1, "repere et joker : une copie");
+    const Id copyId = r.created.empty() ? kNoId : r.created.front();
+    const Object* copy = v.object(copyId);
+    check(copy && copy->text("variables") == "$Ballons$[*].Niveau" && copy->text("names") == "$Ballons$[*].Nom",
+          "repere et joker : la copie lit $Ballons$[*].Niveau, le joker garde (" + (copy ? copy->text("variables") : std::string("?")) + ")");
+    p.views = {v};
+    p.config.startView = v.id;
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    for (int i = 1; i <= 3; ++i) rt.environment().write("Cuves[" + std::to_string(i) + "].Niveau", sim::Value::real(i));
+    for (int i = 1; i <= 2; ++i) rt.environment().write("Ballons[" + std::to_string(i) + "].Niveau", sim::Value::real(10.0 * i));
+    rt.tick(0.1);
+    const View* shown = rt.composedView(v.id);
+    const Object* a = shown ? shown->object(bar) : nullptr;
+    const Object* c = shown ? shown->object(copyId) : nullptr;
+    check(a && a->text("variables") == "$Cuves$[1].Niveau;$Cuves$[2].Niveau;$Cuves$[3].Niveau",
+          "repere et joker : l'original, une barre par cuve (3)");
+    check(c && c->text("variables") == "$Ballons$[1].Niveau;$Ballons$[2].Niveau", "repere et joker : la copie, une barre par ballon (2)");
+    LiveView live;
+    live.bind(*shown);
+    const View values = live.evaluate(rt.environment());
+    check(values.object(copyId) && values.object(copyId)->text("liveValues") == joinLiveValues({"10", "20"}),
+          "repere et joker : la copie montre les niveaux des ballons (10, 20)");
+    rt.stop(1.0);
+}
+
 } // namespace
 
 int main() {
@@ -1395,6 +1453,7 @@ int main() {
     bibliothequeDifferentielle(false);
     bibliothequeDifferentielle(true);
     chaqueProprieteParSonRole();       // 1.12.6 (lot C)
+    repereEtJoker1127();               // 1.12.7 (lot E) : $Cuves$[*].Niveau
     popupsEtActions();
     dupliquerDansLeSymbole();
     popupAvecSymboleEtRedefinition();

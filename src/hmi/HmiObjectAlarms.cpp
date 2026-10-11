@@ -7,6 +7,7 @@
 #include "HmiAlarmGroups.hpp"
 #include "HmiSymbols.hpp"
 #include "HmiMarkers.hpp"   // 1.11 (REP) : markers::strip
+#include "HmiSources.hpp"   // 1.12.7 (lot E) : « Repeter depuis »
 
 #include <algorithm>
 #include <optional>
@@ -413,7 +414,20 @@ struct Generator {
 
     void object(const View& v, const Object& o) {
         if (kindIsSynoptic(o.kind)) posedSynoptic(v, o);
-        else if (o.kind == Kind::SymbolInstance) posedInstance(v, o);
+        else if (o.kind == Kind::SymbolInstance) {
+            // 1.12.7 (lot E) : une instance repetee - les alarmes de chaque copie, comme le moteur les pose
+            // (Cuve, Cuve_2...). Une LIST n'a de taille qu'en marche : ses copies n'ont pas d'alarme generee.
+            if (sources::repeats(o)) {
+                View one;
+                one.id = v.id;
+                one.name = v.name;
+                one.objects = {o};
+                (void)sources::repeatInstances(one, sources::projectSources(p));
+                for (const auto& c : one.objects) posedInstance(v, c);
+                return;
+            }
+            posedInstance(v, o);
+        }
     }
 };
 

@@ -16,6 +16,7 @@
 #include "../../hmi/HmiModel.hpp"
 #include "../../hmi/HmiNavigation.hpp"
 #include "../../hmi/HmiControls.hpp"
+#include "../../hmi/HmiEnums.hpp"     // 1.12.7 (lot E) : les etats, les onglets depuis une enumeration
 #include "../../hmi/HmiWidgets.hpp"
 #include "../../ui/Theme.hpp"
 #include "../../ui/widgets/ExprField.hpp"   // 1.10 (chantier K) : les champs a expression, partout pareils
@@ -528,6 +529,30 @@ bool toggleCheck(hmi::Object& o, const CheckRows& c, const std::string& item, bo
     if (next.empty() && c.emptyIsAll) return false;   // vide voudrait dire « toutes »
     o.set(c.key, hmi::joinSemicolons(next));
     return true;
+}
+
+// ------------------------------- 1.12.7 (lot E) : depuis une enumeration ---
+// Ce que propose « Depuis une enumeration » : les enumerations du projet, puis les variables IHM d'un type
+// enumere (choisie, la variable pilote aussi l'objet). `variablesOnly` : une image animee, dont les
+// conditions comparent une variable.
+std::vector<std::string> enumSources(const hmi::Project& p, bool variablesOnly) {
+    std::vector<std::string> out{""};
+    if (!variablesOnly)
+        for (const auto* e : hmi::enumerations(p)) out.push_back(e->name);
+    for (const auto& var : p.programs.variables)
+        if (hmi::findEnumeration(p, var.type)) out.push_back(var.name);
+    return out;
+}
+// L'enumeration d'un choix (son nom, ou le type de la variable choisie ; `variable` : la variable).
+const hmi::HmiType* enumOf(const hmi::Project& p, std::string_view chosen, std::string* variable) {
+    if (variable) variable->clear();
+    if (const auto* e = hmi::findEnumeration(p, chosen)) return e;
+    if (const auto* var = p.variable(chosen))
+        if (const auto* e = hmi::findEnumeration(p, var->type)) {
+            if (variable) *variable = var->name;
+            return e;
+        }
+    return nullptr;
 }
 
 } // namespace
@@ -1272,6 +1297,68 @@ bool HmiContentPanel::removeColumn(int column) {
 bool HmiContentPanel::setField(int index, const std::string& field, const std::string& value) {
     const auto i = static_cast<std::size_t>(std::max(0, index));
     const auto colOf = [&](std::string_view prefix) { return static_cast<std::size_t>(std::max(0, std::atoi(field.c_str() + prefix.size()))); };
+    // 1.12.7 (lot E, § 2.3) : « depuis l'enumeration » - un etat, une image, un onglet par valeur.
+    if (field == "fromEnum") {
+        std::string variable;
+        const auto* e = enumOf(doc_->project, value, &variable);
+        if (!e || e->values.empty()) return false;
+        const auto m = mode();
+        const auto& palette = hmiTrendPalette();
+        if (m == Mode::States) {
+            return change("\xC3\x89tats depuis " + e->name, [e, variable, &palette](hmi::Object& o) {
+                auto t = readStates(o);
+                if (t.conditions) return false;          // selon des conditions : chaque etat a la sienne
+                const bool chart = o.kind == hmi::Kind::StateChart;
+                std::vector<hmi::StateEntry> states;
+                for (std::size_t k = 0; k < e->values.size(); ++k) {
+                    const auto& v = e->values[k];
+                    hmi::StateEntry st;
+                    // un multi-etats reconnait la valeur par son nom (Auto) ; un chronogramme trace des nombres
+                    st.match = chart ? std::to_string(v.value) : v.name;
+                    st.text = v.text.empty() ? v.name : v.text;
+                    std::replace(st.text.begin(), st.text.end(), ';', ',');
+                    std::replace(st.text.begin(), st.text.end(), '|', '/');
+                    st.color = palette[k % palette.size()];
+                    states.push_back(std::move(st));
+                }
+                for (const auto& old : t.states)
+                    if (old.match == "*") states.push_back(old);   // le « sinon » reste le dernier
+                t.states = std::move(states);
+                writeStates(o, std::move(t));
+                if (!variable.empty() && !chart)
+                    if (const auto* val = o.find("value"); !val || (val->expr.empty() && trimmed(val->value).empty()) || (val->expr.empty() && val->value == "0"))
+                        o.setExpr("value", variable);
+                return true;
+            });
+        }
+        if (m == Mode::AnimatedImage) {
+            if (variable.empty()) return false;          // une condition compare une variable
+            return change("\xC3\x89tats depuis " + e->name, [e, variable](hmi::Object& o) {
+                std::vector<hmi::ImageState> states;
+                for (const auto& v : e->values) {
+                    hmi::ImageState st;
+                    st.condition = variable + " = " + e->name + "#" + v.name;
+                    states.push_back(std::move(st));
+                }
+                o.set("states", hmi::formatImageStates(states));
+                return true;
+            });
+        }
+        if (m == Mode::Tabs) {
+            return change("Onglets depuis " + e->name, [e, variable](hmi::Object& o) {
+                std::vector<std::string> labels;
+                for (const auto& v : e->values) {
+                    std::string l = v.text.empty() ? v.name : v.text;
+                    std::replace(l.begin(), l.end(), ';', ',');
+                    labels.push_back(std::move(l));
+                }
+                o.set("tabs", hmi::joinSemicolons(labels));
+                if (!variable.empty()) o.set("variable", variable);   // la page suit la valeur (sans decalage)
+                return true;
+            });
+        }
+        return false;
+    }
     // 1.12.7 (lot D) : un chronogramme montre ses lignes ou ses etats (rien ne change dans l'objet).
     if (field == "show") {
         const auto* o = current();
@@ -1653,6 +1740,17 @@ void HmiContentPanel::rebuildGrid() {
                                            {"les lignes", "les \xC3\xA9tats"}));
         return show;
     };
+    // 1.12.7 (lot E) : « Depuis une enumeration » - un etat (une image, un onglet) par valeur.
+    const auto fromEnumCell = [&](bool variablesOnly) {
+        auto choices = enumSources(doc_->project, variablesOnly);
+        return editable("Depuis une \xC3\xA9num\xC3\xA9ration", "", PG::ValueType::Enum, -1, "fromEnum",
+                        variablesOnly ? std::string("Une variable d'un type \xC3\xA9num\xC3\xA9r\xC3\xA9 : un \xC3\xA9tat par valeur, sa condition "
+                                                    "\xC3\xA9" "crite (Etat = T_ETAT#Marche) ; les images se choisissent ensuite.")
+                                      : std::string("Une \xC3\xA9num\xC3\xA9ration du projet (ou une variable de ce type, qui devient la "
+                                                    "Valeur) : un \xC3\xA9tat par valeur, son texte, une couleur \xC3\xA0 changer. Remplace "
+                                                    "les \xC3\xA9tats (Ctrl+Z les rend)."),
+                        std::move(choices));
+    };
     std::vector<PG::Category> cats;
     const Mode m = mode();
     if (!o || m == Mode::None) {
@@ -1780,6 +1878,7 @@ void HmiContentPanel::rebuildGrid() {
             def.properties.push_back(editable("P\xC3\xA9riode de l'objet (ms)", hmi::formatNumber(o->number("period", 500)),
                                               PG::ValueType::Integer, -1, "objectPeriod"));
             def.properties.push_back(readOnly("\xC3\x89tats", std::to_string(states.size())));
+            def.properties.push_back(fromEnumCell(true));   // 1.12.7 (lot E)
             cats.push_back(std::move(def));
             break;
         }
@@ -1794,6 +1893,7 @@ void HmiContentPanel::rebuildGrid() {
                 const bool otherwise = std::any_of(t.states.begin(), t.states.end(), [](const hmi::StateEntry& e) { return e.match == "*"; });
                 how.properties.push_back(editable("Un \xC3\xA9tat \xC2\xAB sinon \xC2\xBB", otherwise ? "TRUE" : "FALSE", PG::ValueType::Boolean, -1,
                                                   "otherwise", "Montr\xC3\xA9 quand aucun autre ne vaut (la ligne * ou \xC2\xAB sinon \xC2\xBB)."));
+                how.properties.push_back(fromEnumCell(false));   // 1.12.7 (lot E)
                 cats.push_back(std::move(how));
                 if (index >= 0 && i < t.states.size()) {
                     const auto& st = t.states[i];
@@ -1830,6 +1930,7 @@ void HmiContentPanel::rebuildGrid() {
             const bool otherwise = std::any_of(t.states.begin(), t.states.end(), [](const hmi::StateEntry& e) { return e.match == "*"; });
             how.properties.push_back(editable("Un \xC3\xA9tat \xC2\xAB sinon \xC2\xBB", otherwise ? "TRUE" : "FALSE", PG::ValueType::Boolean, -1,
                                               "otherwise", "Montr\xC3\xA9 quand aucun autre ne vaut (la ligne * ou \xC2\xAB sinon \xC2\xBB)."));
+            if (!t.conditions) how.properties.push_back(fromEnumCell(false));   // 1.12.7 (lot E)
             cats.push_back(std::move(how));
             if (index >= 0 && i < t.states.size()) {
                 const auto& st = t.states[i];
@@ -1944,6 +2045,7 @@ void HmiContentPanel::rebuildGrid() {
             pc.properties.push_back(readOnly("Pages", std::to_string(labels.size()),
                                              "Un objet pos\xC3\xA9 sur le conteneur va dans la page montr\xC3\xA9" "e ; retirer ou "
                                              "d\xC3\xA9placer une page emm\xC3\xA8ne ses objets."));
+            pc.properties.push_back(fromEnumCell(false));   // 1.12.7 (lot E) : un onglet par valeur, la variable de ce type
             cats.push_back(std::move(pc));
             break;
         }

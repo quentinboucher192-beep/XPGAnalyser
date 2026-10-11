@@ -511,6 +511,19 @@ std::vector<std::string> splitPens(const std::string& list) {
     return out;
 }
 
+// 1.12.7 (lot E) : les plumes telles que Generer les verifie - une plume a joker (Cuves[*].Niveau), sur son
+// premier element (Cuves[1].Niveau : le moteur en fera une par cuve).
+std::vector<std::string> checkedPens(const Project& p, const View* v, const std::string& list) {
+    auto pens = splitPens(list);
+    for (auto& pen : pens)
+        if (const auto j = sources::jokerOf(pen)) {
+            std::string first;
+            (void)sources::sourceProblem(p, v, sources::sourceName(*j), first);
+            pen = sources::itemAt(*j, first, first.find('#') != std::string::npos);
+        }
+    return pens;
+}
+
 } // namespace
 
 // Lot 4 : alarmes, recettes, securite, courbes, historiques - et les actions
@@ -685,7 +698,7 @@ void checkSupervision(const Project& p, const NameExists& plc, std::vector<Issue
                     add(out, S::Error, "S\xC3\xA9" "curit\xC3\xA9", v.id, o.id, "auth", "variable inexistante dans l'autorisation : " + r);
             }
             if (o.kind == Kind::Trend) {
-                const auto pens = splitPens(o.text("variables"));
+                const auto pens = checkedPens(p, &v, o.text("variables"));   // 1.12.7 (lot E) : le joker [*]
                 const bool history = o.text("mode").rfind("historique", 0) == 0;
                 const auto source = o.text("source");
                 if (pens.empty()) add(out, S::Warning, "Courbe", v.id, o.id, "variables", "aucune plume : la courbe restera vide");
@@ -1271,6 +1284,18 @@ void checkLot9(const Project& p, const NameExists& plc, std::vector<Issue>& out)
                             for (const auto& r : scanRoots(from))
                                 if (!known(p, plc, r, &v))
                                     issue(S::Error, "itemsFrom", "\xC3\xA9l\xC3\xA9ments depuis : " + std::string(unknownVariablePrefix()) + r);
+                        // 1.12.7 (lot E) : un tableau ou une liste de structures, sans membre choisi - la liste
+                        // resterait vide (avant : sans un mot) ; le joker choisit le membre montre (Pompes[*].Nom).
+                        if (!sources::hasJoker(from))
+                            if (const auto* var = p.variable(from)) {
+                                const auto shape = typeform::decompose(var->type);
+                                const bool many = shape.form == typeform::Form::Array || shape.form == typeform::Form::List
+                                               || shape.form == typeform::Form::Vector;
+                                const auto* st = many ? p.hmiTypeByName(shape.element) : nullptr;
+                                if (st && st->kind != HmiTypeKind::Enumeration && !st->members.empty())
+                                    issue(S::Warning, "itemsFrom", from + " est un tableau de structures : choisis le membre montr\xC3\xA9 ("
+                                                                       + from + "[*]." + st->members.front().name + ")");
+                            }
                         break;
                     }
                     const char* key = o.kind == Kind::Selector ? "positions" : "items";
@@ -1573,6 +1598,15 @@ void checkSymbols(const Project& p, const NameExists& plc, std::vector<Issue>& o
             }
             if (o.number("w") <= 0 || o.number("h") <= 0)
                 add(out, S::Error, "Symbole", v.id, o.id, "w", "instance de taille nulle : elle ne se voit pas");
+            // 1.12.7 (lot E) : « Repeter depuis » - une source a elements, et des arguments qui citent [*].
+            if (sources::repeats(o)) {
+                std::string first;
+                if (const auto why = sources::sourceProblem(p, &v, roles::nameOf(o.text(sources::kRepeatFromKey)), first); !why.empty())
+                    add(out, S::Warning, "Symbole", v.id, o.id, std::string(sources::kRepeatFromKey), "r\xC3\xA9p\xC3\xA9ter depuis : " + why);
+                if (o.text("params").find("[*]") == std::string::npos)
+                    add(out, S::Warning, "Symbole", v.id, o.id, "params",
+                        "r\xC3\xA9p\xC3\xA9ter depuis : aucun argument ne cite [*] (Cuve := Cuves[*]) - toutes les copies montreront la m\xC3\xAAme chose");
+            }
             const auto given = parseArguments(o.text("params"));
             for (const auto& [argName, value] : given) {
                 if (!sv->param(argName)) {
@@ -1779,7 +1813,19 @@ void checkLot11(const Project& p, const NameExists& plc, std::vector<Issue>& out
             const auto listCheck = [&](const char* key, const char* empty) {
                 const auto items = chartItems(o, key);
                 if (items.empty() && empty) issue(S::Warning, key, empty);
-                for (const auto& it : items) exprCheck(key, it.expression, "\xC3\xA9l\xC3\xA9ment");
+                for (const auto& it : items) {
+                    // 1.12.7 (lot E) : un element a joker (Cuves[*].Niveau) - sa source (un avertissement : une
+                    // source inconnue donne une liste vide en marche), puis son premier element.
+                    if (const auto j = sources::jokerOf(it.expression)) {
+                        std::string first;
+                        if (const auto why = sources::sourceProblem(p, &v, sources::sourceName(*j), first); !why.empty())
+                            issue(S::Warning, key, why);
+                        else
+                            exprCheck(key, sources::itemAt(*j, first, first.find('#') != std::string::npos), "\xC3\xA9l\xC3\xA9ment");
+                        continue;
+                    }
+                    exprCheck(key, it.expression, "\xC3\xA9l\xC3\xA9ment");
+                }
                 return items.size();
             };
             double lo = 0, hi = 0;
@@ -1860,6 +1906,13 @@ void checkLot11(const Project& p, const NameExists& plc, std::vector<Issue>& out
                     if (o.kind == Kind::AlarmSummary) {
                         for (const auto& z : splitSemicolons(markers::strip(o.text("groups"), markers::Mode::Text))) {   // 1.12.5
                             const std::string zone = trimmedCopy(z);
+                            // 1.12.7 (lot E) : Zones[*].Nom - les zones viennent d'une source.
+                            if (const auto j = sources::jokerOf(zone)) {
+                                std::string first;
+                                if (const auto why = sources::sourceProblem(p, &v, sources::sourceName(*j), first); !why.empty())
+                                    issue(S::Warning, "groups", why);
+                                continue;
+                            }
                             if (!zone.empty() && !filterTakes(zone)) issue(S::Warning, "groups", "zone \xC2\xAB " + zone + " \xC2\xBB : aucune alarme de ce groupe");
                         }
                         if (zonesOf(p, o.text("groups")).empty())
@@ -2077,7 +2130,8 @@ void checkLot12(const Project& p, const NameExists& plc, std::vector<Issue>& out
             const std::string label = std::string(kindLabel(o.kind));
             const auto issue = [&](S sev, const char* key, std::string msg) { add(out, sev, label, v.id, o.id, key, std::move(msg)); };
             // Un enfant d'un conteneur a onglets sur une page qui n'existe pas.
-            if (const auto* parent = o.parent != kNoId ? v.object(o.parent) : nullptr; parent && parent->kind == Kind::TabContainer) {
+            if (const auto* parent = o.parent != kNoId ? v.object(o.parent) : nullptr;
+                parent && parent->kind == Kind::TabContainer && !sources::objectHasJoker(*parent)) {   // 1.12.7 : des onglets dynamiques
                 const auto pages = tabLabels(*parent).size();
                 if (tabPageOf(o) > static_cast<int>(pages))
                     issue(S::Warning, "tabPage", "page " + std::to_string(tabPageOf(o)) + " : le conteneur " + parent->name + " n'en a que "
@@ -2089,13 +2143,22 @@ void checkLot12(const Project& p, const NameExists& plc, std::vector<Issue>& out
             switch (o.kind) {
                 case Kind::NavBar: {
                     std::vector<std::string> names;
-                    for (const auto& n : listItems(o.text("views"))) names.push_back(roles::nameOf(n));   // 1.12.6 (lot C)
+                    for (const auto& n : listItems(o.text("views"))) {
+                        // 1.12.7 (lot E) : Vues[*] - les vues viennent d'une source, verifiee comme telle.
+                        if (const auto j = sources::jokerOf(n)) {
+                            std::string first;
+                            if (const auto why = sources::sourceProblem(p, &v, sources::sourceName(*j), first); !why.empty())
+                                issue(S::Warning, "views", why);
+                            continue;
+                        }
+                        names.push_back(roles::nameOf(n));   // 1.12.6 (lot C)
+                    }
                     for (const auto& n : names) {
                         const View* target = p.viewByName(n);
                         if (!target) issue(S::Error, "views", "vue '" + n + "' introuvable");
                         else if (target->role != "vue") issue(S::Warning, "views", n + " n'est pas une vue ordinaire (" + std::string(viewRoleLabel(target->role)) + ")");
                     }
-                    if (navItems(&p, o).empty()) issue(S::Warning, "views", "aucune vue : la barre restera vide");
+                    if (navItems(&p, o).empty() && !sources::objectHasJoker(o)) issue(S::Warning, "views", "aucune vue : la barre restera vide");
                     const auto labels = splitSemicolons(o.text("labels"));
                     if (!names.empty() && labels.size() > names.size())
                         issue(S::Info, "labels", "plus de libell\xC3\xA9s que de vues : les derniers ne servent pas");
@@ -2109,7 +2172,15 @@ void checkLot12(const Project& p, const NameExists& plc, std::vector<Issue>& out
                     const auto pages = static_cast<int>(tabLabels(o).size());
                     const auto* pg = o.find("page");
                     double n = 1;
-                    if (pg && pg->expr.empty() && (!parseNumber(pg->value, n) || n < 1 || n > pages))
+                    // 1.12.7 (lot E) : des onglets depuis une source (Etats[*], T_MODE[*]) : leur nombre en marche.
+                    const bool dynamicTabs = sources::objectHasJoker(o);
+                    for (const auto& t : splitSemicolons(o.text("tabs")))
+                        if (const auto j = sources::jokerOf(t)) {
+                            std::string first;
+                            if (const auto why = sources::sourceProblem(p, &v, sources::sourceName(*j), first); !why.empty())
+                                issue(S::Warning, "tabs", why);
+                        }
+                    if (!dynamicTabs && pg && pg->expr.empty() && (!parseNumber(pg->value, n) || n < 1 || n > pages))
                         issue(S::Warning, "page", "onglet montr\xC3\xA9 hors de 1 \xC3\xA0 " + std::to_string(pages));
                     const std::string var = trimmedCopy(markers::strip(o.text("variable")));   // 1.11.24 : $Reels[2]$
                     if (!var.empty() && !known(p, plc, rootOf(var), &v)) issue(S::Error, "variable", "variable inexistante : " + var);
@@ -3182,7 +3253,7 @@ struct ExprWalker {
             for (const auto& o : v.objects) {
                 if (o.kind != Kind::Trend || !animOn(v.id)) continue;
                 if (o.text("mode").rfind("historique", 0) == 0 && !o.text("source").empty()) continue;
-                for (const auto& pen : splitPens(o.text("variables"))) expr(Where{&v, o.id, "Courbe", "variables"}, pen, W::Any, "plume ");
+                for (const auto& pen : checkedPens(p, &v, o.text("variables"))) expr(Where{&v, o.id, "Courbe", "variables"}, pen, W::Any, "plume ");
             }
         finitions();     // ---- Lot API 8 : finitions (les formats d'unites, les symboles hors des vues) ----
     }
@@ -3225,7 +3296,8 @@ struct ExprWalker {
                 s.push_back(Site{"Expression", key, prop->value, W::Any, false, false, {}});
         if (kindWritesVariable(o.kind)) s.push_back(Site{"Expression", "variable", o.text("variable"), W::Any, false, true, "variable \xC3\xA9" "crite "});
         if (o.kind == Kind::Trend)
-            for (const auto& pen : splitPens(o.text("variables"))) s.push_back(Site{"Courbe", "variables", pen, W::Any, false, false, "plume "});
+            for (const auto& pen : splitPens(o.text("variables")))
+                s.push_back(Site{"Courbe", "variables", sources::sampleFormula(pen), W::Any, false, false, "plume "});   // 1.12.7 : le joker
         for (std::size_t i = 0; i < o.actions.size(); ++i) {
             const auto& a = o.actions[i];
             const std::string label = actionLabel(i, a);
@@ -3292,7 +3364,12 @@ struct ExprWalker {
                 if (o.kind != Kind::SymbolInstance || !animOn(v.id)) continue;
                 const View* sv = symbolOf(p, o);
                 if (!sv) continue;                                           // checkSymbols le dit
-                for (const auto& [name, value] : parseArguments(o.text("params"))) {
+                // 1.12.7 (lot E) : « Repeter depuis » - Cuves[*] se lit sur le premier element de la source (le
+                // moteur en pose un par cuve) : la borne basse d'un tableau, 0 d'une LIST.
+                std::string first = "0";
+                if (sources::repeats(o)) (void)sources::sourceProblem(p, &v, roles::nameOf(o.text(sources::kRepeatFromKey)), first);
+                for (const auto& [name, raw] : parseArguments(o.text("params"))) {
+                    const std::string value = sources::repeats(o) ? sources::replaceJokers(raw, first) : raw;
                     const ViewParam* declared = sv->param(name);
                     // 1.12.4 : un parametre objet d'un symbole (LIST, MAP...) - l'instance est developpee en texte,
                     // ses parametres passent par reference : une variable (Recettes, Recette.Etapes), pas un litteral.

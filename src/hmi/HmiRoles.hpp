@@ -162,6 +162,10 @@ inline constexpr KeyRole kKeyRoles[] = {
     {"positionMode", Role::Choice}, {"positionA", Role::Formula, Role::Boolean}, {"positionB", Role::Formula, Role::Boolean},
     {"showPorts", Role::Boolean, Role::Text, Unit::None, "BOOL"},
     {"symbol", Role::Name}, {"params", Role::Mini},
+    // 1.12.7 (lot E) : « Repeter depuis » - une instance par element d'une source
+    {"repeatFrom", Role::Name}, {"repeatAxis", Role::Choice}, {"repeatGap", Role::Number, Role::Text, Unit::None, "REAL"},
+    // 1.12.7 (lot D) : les colonnes choisies d'une source de tableau (Nom; Debit = Debit | 0.0)
+    {"sourceColumns", Role::Mini},
     // ---- les graphiques
     {"xVariable", Role::Formula, Role::Number}, {"xLabel", Role::Text}, {"yLabel", Role::Text},
     {"reference", Role::Mini}, {"referenceColor", Role::Color},

@@ -53,6 +53,7 @@
 #include "HmiMedia.hpp"                // lot 16 : les GIF animes
 #include "HmiLog.hpp"                  // 1.11.14 : les niveaux de IHM_LOG
 #include "HmiSimData.hpp"              // 1.11.15 : la remanence de simulation
+#include "HmiSources.hpp"              // 1.12.7 (lot E) : le joker [*], « Repeter depuis »
 
 #include <cstdint>
 #include <deque>
@@ -868,6 +869,13 @@ public:
     //  Le dessin et l'evaluation prennent celle-ci, pas celle du projet : les
     //  objets du modele y sont, ses scripts passent avant ceux de la vue.
     [[nodiscard]] const View* composedView(Id view) const { return viewOf(view); }
+    // 1.12.7 (lot E) : LES SOURCES DES TAILLES DYNAMIQUES - les indices d'un tableau de l'IHM, d'une LIST,
+    // d'un VECTOR, les cles d'une MAP, les valeurs d'une enumeration (nullopt : pas une source) ; le texte
+    // d'une formule (le nom d'un element, Cuves[2].Nom). La vue composee deplie le joker [*] des listes et
+    // « Repeter depuis » des instances avec elles, a chaque entree du moteur : une LIST qui grandit en marche
+    // donne une plume de plus au tick suivant.
+    [[nodiscard]] std::optional<sources::Source> jokerSource(std::string_view name, Id view = kNoId) const;
+    [[nodiscard]] std::optional<std::string>     jokerText(std::string_view formula, Id view) const;
 
     // ---- lot 6 : le gestionnaire de recettes ----------------------------------------
     //  Le jeu choisi, par objet (un clic sur une ligne). Un clic sur une partie de
@@ -1596,6 +1604,7 @@ private:
     // entree du moteur (tick, clics) - jamais pendant un cycle : un script qui
     // navigue garde la vue qu'il est en train d'executer.
     mutable std::map<Id, View>       composed_;
+    mutable std::map<Id, bool>       jokerViews_;   // 1.12.7 (lot E) : la vue a-t-elle un joker ? (refait a chaque tick)
     // 1.11.10 : les fonctions de symbole appelees ("Vue.Instance.Fonction", en majuscules),
     // pretes a tourner (nul : pas une fonction d'instance) ; refaites avec composed_.
     std::map<std::string, std::shared_ptr<const HmiFunction>> boundCalls_;

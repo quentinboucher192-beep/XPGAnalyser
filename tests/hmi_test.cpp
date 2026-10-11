@@ -53,6 +53,7 @@
 #include "../src/hmi/HmiCharts.hpp"
 #include "../src/hmi/HmiExport.hpp"
 #include "../src/hmi/HmiProduction.hpp"
+#include "../src/hmi/HmiSources.hpp"
 #include "../src/hmi/HmiNavigation.hpp"
 #include "../src/hmi/HmiLoginMenu.hpp"
 #include "../src/hmi/HmiDesign.hpp"
@@ -23878,6 +23879,272 @@ void lotD1127() {
     }
 }
 
+// 1.12.7 (lot E de l'audit des objets) : les tailles dynamiques - le joker [*] et « Repeter depuis ».
+// Chaque controle dit, dans son libelle, ce que faisait la 1.12.6.
+void lotE1127() {
+    std::printf("1.12.7 (lot E) : les tailles dynamiques, le joker [*], Repeter depuis\n");
+    // ---- le joker, sans moteur
+    {
+        const auto j = sources::jokerOf("$Cuves$[*].Niveau");
+        check(j && sources::sourceName(*j) == "Cuves" && sources::itemAt(*j, "2") == "$Cuves$[2].Niveau",
+              "E : $Cuves$[*].Niveau - la source Cuves (sans ses $), l'\xC3\xA9l\xC3\xA9ment 2 garde son rep\xC3\xA8re");
+        check(!sources::jokerOf("Toutes [*]") && !sources::jokerOf("SEL(Mode, Cuves[*].Niveau, 0)") && sources::jokerOf("Lignes[2].Cuves[*].Niveau"),
+              "E : un libell\xC3\xA9 \xC2\xAB Toutes [*] \xC2\xBB ou un calcul ne sont pas des jokers (ils restent tels quels) ; un chemin, si");
+        check(!sources::jokerOf("'a[*]b'") && sources::sampleFormula("Cuves[*].Niveau", "1") == "Cuves[1].Niveau",
+              "E : un [*] dans une cha\xC3\xAEne n'est pas un joker ; l'\xC3\xA9l\xC3\xA9ment type d'une formule");
+        Object bar = makeObject(Kind::BarChart, 1, "B", 0, 0, kNoId);
+        bar.set("variables", "Cuves[*].Niveau;Autre");
+        bar.set("names", "Cuves[*].Nom;Seule");
+        bar.set("colors", "#111111;#222222");
+        const sources::SourceFn src = [](std::string_view n) -> std::optional<sources::Source> {
+            if (n != "Cuves") return std::nullopt;
+            sources::Source s;
+            s.indices = {"1", "2"};
+            s.labels = {"1", "2"};
+            return s;
+        };
+        const sources::TextFn txt = [](std::string_view f) -> std::optional<std::string> { return "N" + std::string(f.substr(6, 1)); };
+        check(sources::expandObject(bar, src, txt), "E : un graphique \xC3\xA0 joker se d\xC3\xA9plie");
+        same(bar.text("variables"), "Cuves[1].Niveau;Cuves[2].Niveau;Autre", "E : une barre par cuve, puis les autres");
+        same(bar.text("names"), "N1;N2;Seule", "E : les noms Cuves[*].Nom calcul\xC3\xA9s pour chaque cuve, align\xC3\xA9s");
+        same(bar.text("colors"), ";;#222222", "E : la palette tourne pour les cuves, la couleur de Autre reste \xC3\xA0 sa place");
+    }
+    // ---- en marche : graphique, courbe, tableau de variables, barre de navigation, onglets
+    Project p;
+    View v = makeView(p, "Vue_E");
+    View c1 = makeView(p, "Vue_Cuve_1");
+    View c2 = makeView(p, "Vue_Cuve_2");
+    HmiType cuve;
+    cuve.id = p.allocate();
+    cuve.name = "T_Cuve_E";
+    cuve.members = {{"Niveau", "REAL", "", ""}, {"Nom", "STRING", "", ""}};
+    p.programs.types.push_back(cuve);
+    HmiType mode;
+    mode.id = p.allocate();
+    mode.name = "T_Mode_E7";
+    mode.kind = HmiTypeKind::Enumeration;
+    mode.values = {{"Arret", 0, "Arr\xC3\xAAt", ""}, {"Auto", 1, "Automatique", ""}, {"Manu", 2, "", ""}};
+    p.programs.types.push_back(mode);
+    p.programs.variables.push_back(hmiVar(p, "Cuves", "ARRAY[1..3] OF T_Cuve_E"));
+    p.programs.variables.push_back(hmiVar(p, "Bacs", "LIST OF REAL"));
+    p.programs.variables.back().initial = "[1.5, 2.5]";
+    p.programs.variables.push_back(hmiVar(p, "Vues", "LIST OF STRING"));
+    p.programs.variables.back().initial = "['Vue_Cuve_1', 'Vue_Cuve_2']";
+    p.programs.variables.push_back(hmiVar(p, "Stock", "MAP[STRING] OF INT"));
+    p.programs.variables.back().initial = "['vis' := 3, 'ecrou' := 5]";
+    const auto put = [&](Kind k, const char* name, double y) {
+        const Id id = edit::add(p, v, k, 10, y);
+        v.object(id)->name = name;
+        return id;
+    };
+    const Id barres = put(Kind::BarChart, "Barres", 10);
+    v.object(barres)->set("variables", "Cuves[*].Niveau");
+    v.object(barres)->set("names", "Cuves[*].Nom");
+    const Id courbe = put(Kind::Trend, "Courbe", 300);
+    v.object(courbe)->set("variables", "Bacs[*]");
+    const Id table = put(Kind::VariableTable, "Table", 600);
+    v.object(table)->set("variables", "$Cuves$[*].Niveau");
+    v.object(table)->set("units", "m");
+    const Id nav = put(Kind::NavBar, "Barre", 900);
+    v.object(nav)->set("views", "Vues[*]");
+    const Id tabs = put(Kind::TabContainer, "Onglets", 1000);
+    v.object(tabs)->set("tabs", "T_Mode_E7[*]");
+    const Id liste = put(Kind::List, "Liste_Cuves", 1300);
+    v.object(liste)->set("itemsFrom", "Cuves[*].Nom");
+    const Id parts = put(Kind::PieChart, "Parts_Stock", 1500);
+    v.object(parts)->set("variables", "Stock[*]");
+    p.views = {v, c1, c2};
+    p.config.startView = p.views[0].id;
+    {
+        const auto issues = generate(p, [](std::string_view) { return false; });
+        bool blocked = false;
+        for (const auto& i : issues)
+            if (i.severity == Issue::Severity::Error) {
+                blocked = true;
+                std::printf("  erreur : %s\n", i.message.c_str());
+            }
+        check(!blocked, "E : G\xC3\xA9n\xC3\xA9rer accepte les jokers (avant : Cuves[*].Niveau, une expression illisible, bloquait)");
+    }
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    for (int i = 1; i <= 3; ++i) {
+        rt.environment().write("Cuves[" + std::to_string(i) + "].Niveau", sim::Value::real(10.0 * i));
+        rt.environment().write("Cuves[" + std::to_string(i) + "].Nom", sim::Value::text("C" + std::to_string(i)));
+    }
+    rt.tick(0.1);
+    const auto composed = [&](Id id) { return rt.composedView(p.views[0].id)->object(id); };
+    same(composed(barres)->text("variables"), "Cuves[1].Niveau;Cuves[2].Niveau;Cuves[3].Niveau",
+         "E : un graphique en barres, une barre par cuve d'un ARRAY[1..3] (avant : une expression illisible)");
+    same(composed(barres)->text("names"), "C1;C2;C3", "E : ... nomm\xC3\xA9" "es par Cuves[*].Nom");
+    {
+        LiveView live;
+        live.bind(*rt.composedView(rt.currentView()));
+        const View shown = live.evaluate(rt.environment(), nullptr, nullptr, 0.1);
+        same(shown.object(barres)->text("liveValues"), joinLiveValues({"10", "20", "30"}), "E : ... et leurs valeurs (10, 20, 30)");
+        same(shown.object(table)->text("variables"), "$Cuves$[1].Niveau;$Cuves$[2].Niveau;$Cuves$[3].Niveau",
+             "E : un tableau de variables $Cuves$[*].Niveau : une ligne par cuve, le rep\xC3\xA8re gard\xC3\xA9");
+        same(shown.object(table)->text("units"), "m;m;m", "E : ... l'unit\xC3\xA9 r\xC3\xA9p\xC3\xA9t\xC3\xA9" "e");
+        same(shown.object(tabs)->text("tabs"), "Arr\xC3\xAAt;Automatique;Manu", "E : un onglet par valeur d'une \xC3\xA9num\xC3\xA9ration (son texte)");
+    }
+    same(composed(courbe)->text("variables"), "Bacs[0];Bacs[1]", "E : une courbe, une plume par \xC3\xA9l\xC3\xA9ment d'une LIST");
+    same(composed(parts)->text("variables"), "Stock['ecrou'];Stock['vis']", "E : un camembert depuis une MAP, une part par cl\xC3\xA9");
+    same(composed(parts)->text("names"), "ecrou;vis", "E : ... nomm\xC3\xA9" "e par sa cl\xC3\xA9 (cl\xC3\xA9 = libell\xC3\xA9, valeur = part)");
+    check(rt.setRichVariable("Bacs", "[1.5, 2.5, 3.5]"), "la LIST grandit en marche");
+    rt.tick(0.2);
+    same(composed(courbe)->text("variables"), "Bacs[0];Bacs[1];Bacs[2]", "E : ... la plume de plus vient au tick suivant (le nombre suit la liste)");
+    rt.tick(0.3);
+    const auto* series = rt.trend(p.views[0].id, courbe);
+    check(series && series->size() == 3 && !(*series)[2].points.empty() && (*series)[2].points.back().second == 3.5,
+          "E : ... et elle se trace (3,5)");
+    same(composed(nav)->text("views"), "Vue_Cuve_1;Vue_Cuve_2", "E : une barre de navigation depuis une LIST OF STRING (Vues[*])");
+    rt.objectPart(nav, "vue:1", 0.4);
+    rt.tick(0.5);
+    check(rt.currentView() == p.views[2].id, "E : ... son 2e bouton m\xC3\xA8ne \xC3\xA0 Vue_Cuve_2");
+    (void)rt.navigate(p.views[0].id, Transition{}, 0.6, {});
+    rt.tick(0.7);
+    {
+        std::vector<std::string> labels;
+        for (const auto& c : hmi::choicesOf(*rt.composedView(p.views[0].id)->object(liste))) labels.push_back(c.label);
+        check(labels == std::vector<std::string>{"C1", "C2", "C3"},
+              "E : une liste depuis un ARRAY OF STRUCT, le membre choisi par le joker (Cuves[*].Nom ; avant : une liste vide sans message)");
+    }
+    rt.stop(1.0);
+    // ---- une source inconnue : un avertissement, une liste vide en marche (jamais une erreur)
+    {
+        Project q = p;
+        q.views[0].object(barres)->set("variables", "Inconnu[*].Niveau");
+        const auto issues = generate(q, [](std::string_view) { return false; });
+        bool warned = false, blocked = false;
+        for (const auto& i : issues) {
+            warned = warned || (i.message.find("source inconnue : Inconnu") != std::string::npos && i.severity == Issue::Severity::Warning);
+            blocked = blocked || (i.severity == Issue::Severity::Error && i.object == barres);
+        }
+        check(warned && !blocked, "E : une source inconnue : un avertissement (la liste sera vide), pas une erreur");
+    }
+}
+
+// 1.12.7 (lot E) : LES COLONNES D'UN ARRAY OF STRUCT - les membres imbriques se deplient.
+void colonnesImbriquees1127() {
+    std::printf("1.12.7 (lot E) : les colonnes d'un tableau de structures imbriquees\n");
+    Project p;
+    View v = makeView(p, "Vue_N");
+    HmiType pompe;
+    pompe.id = p.allocate();
+    pompe.name = "T_Pompe_N";
+    pompe.members = {{"Marche", "BOOL", "", ""}, {"Debit", "REAL", "", ""}};
+    p.programs.types.push_back(pompe);
+    HmiType ligne;
+    ligne.id = p.allocate();
+    ligne.name = "T_Ligne_N";
+    ligne.members = {{"Nom", "STRING", "", ""}, {"Pompe", "T_Pompe_N", "", ""}, {"Mesures", "ARRAY[0..1] OF REAL", "", ""}};
+    p.programs.types.push_back(ligne);
+    p.programs.variables.push_back(hmiVar(p, "Lignes", "ARRAY[1..2] OF T_Ligne_N"));
+    const Id t = edit::add(p, v, Kind::Table, 10, 10);
+    v.object(t)->set("rowsFrom", "Lignes");
+    p.views = {v};
+    p.config.startView = v.id;
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    rt.environment().write("Lignes[1].Pompe.Debit", sim::Value::real(7.5));
+    rt.environment().write("Lignes[2].Mesures[1]", sim::Value::real(3.25));
+    rt.tick(0.1);
+    std::vector<std::string> headers;
+    std::vector<std::vector<std::string>> rows;
+    const bool got = rt.tableRows(*p.views[0].object(t), headers, rows);
+    std::string shown;
+    for (const auto& h : headers) shown += (shown.empty() ? "" : ", ") + h;
+    check(got && headers == std::vector<std::string>{"Nom", "Pompe.Marche", "Pompe.Debit", "Mesures[0]", "Mesures[1]"},
+          "E : les membres imbriqu\xC3\xA9s d'un tableau de structures, une colonne chacun (avant : une colonne Pompe vide) - " + shown);
+    check(rows.size() == 2 && rows[0].size() == 5 && rows[0][2] == "7.5" && rows[1][4] == "3.25",
+          "E : ... avec leurs valeurs (Lignes[1].Pompe.Debit = 7,5 ; Lignes[2].Mesures[1] = 3,25)");
+    rt.stop(1.0);
+}
+
+// 1.12.7 (lot E) : « REPETER DEPUIS » - une instance de symbole par element d'un tableau ou d'une LIST.
+void repeterDepuis1127() {
+    std::printf("1.12.7 (lot E) : Repeter depuis - une instance par element\n");
+    Project p;
+    HmiType cuve;
+    cuve.id = p.allocate();
+    cuve.name = "T_Cuve_R";
+    cuve.members = {{"Niveau", "REAL", "", ""}};
+    p.programs.types.push_back(cuve);
+    p.programs.variables.push_back(hmiVar(p, "Cuves", "ARRAY[1..3] OF T_Cuve_R"));
+    View sym = makeView(p, "Sym_Cuve");
+    sym.role = "symbole";
+    sym.width = 100;
+    sym.height = 60;
+    ViewParam prm;
+    prm.name = "Cuve";
+    prm.type = "T_Cuve_R";
+    sym.params.push_back(prm);
+    const Id aff = edit::add(p, sym, Kind::NumericDisplay, 10, 10);
+    sym.object(aff)->name = "Aff";
+    sym.object(aff)->setExpr("value", "Cuve.Niveau");
+    AlarmDef haute;
+    haute.name = "Haute";
+    haute.condition = "Cuve.Niveau > 90";
+    haute.message = "Cuve haute";
+    sym.alarms.push_back(haute);
+    p.views.push_back(sym);
+    View v = makeView(p, "Vue_R");
+    const Id inst = placeSymbol(p, v, "Sym_Cuve", 100, 100);
+    v.object(inst)->name = "Cuve";
+    v.object(inst)->setBox({100, 100, 100, 60});
+    v.object(inst)->set("params", "Cuve := Cuves[*]");
+    v.object(inst)->set("repeatFrom", "Cuves");
+    v.object(inst)->set("repeatGap", "5");
+    p.views.push_back(v);
+    p.config.startView = p.views[1].id;
+    {
+        const auto issues = generate(p, [](std::string_view) { return false; });
+        bool blocked = false;
+        for (const auto& i : issues)
+            if (i.severity == Issue::Severity::Error) {
+                blocked = true;
+                std::printf("  erreur : %s\n", i.message.c_str());
+            }
+        check(!blocked, "E : G\xC3\xA9n\xC3\xA9rer accepte une instance r\xC3\xA9p\xC3\xA9t\xC3\xA9" "e (Cuve := Cuves[*])");
+        std::size_t generated = 0;
+        for (const auto& oa : objectAlarms(p))
+            if (oa.localName == "Haute") ++generated;
+        check(generated == 3, "E : l'alarme du symbole, une par copie (" + std::to_string(generated) + ")");
+    }
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    for (int i = 1; i <= 3; ++i) rt.environment().write("Cuves[" + std::to_string(i) + "].Niveau", sim::Value::real(10.0 * i));
+    rt.tick(0.1);
+    const View* shown = rt.composedView(p.views[1].id);
+    std::vector<const Object*> copies;
+    for (const auto& o : shown->objects)
+        if (o.kind == Kind::SymbolInstance) copies.push_back(&o);
+    check(copies.size() == 3, "E : trois cuves, trois instances (avant : une seule, \xC3\xA0 poser trois fois) - " + std::to_string(copies.size()));
+    if (copies.size() == 3) {
+        check(copies[0]->name == "Cuve" && copies[0]->id == inst && copies[1]->name == "Cuve_2" && copies[2]->name == "Cuve_3",
+              "E : la premi\xC3\xA8re garde son nom et son identifiant, les autres Cuve_2, Cuve_3");
+        check(copies[0]->text("params") == "Cuve := Cuves[1]" && copies[2]->text("params") == "Cuve := Cuves[3]",
+              "E : chaque copie re\xC3\xA7oit son \xC3\xA9l\xC3\xA9ment (Cuves[1]... Cuves[3])");
+        near(copies[1]->box().x, 205, "E : les copies se suivent, \xC3\xA0 l'\xC3\xA9" "cart donn\xC3\xA9 (100 + 5)");
+    }
+    LiveView live;
+    live.bind(*shown);
+    const View evaluated = live.evaluate(rt.environment(), nullptr, rt.viewScope(p.views[1].id), 0.1);
+    std::vector<std::string> values;
+    for (const auto& o : evaluated.objects)
+        if (o.kind == Kind::NumericDisplay) values.push_back(o.text("value"));
+    check(values == std::vector<std::string>{"10", "20", "30"}, "E : chaque copie montre sa cuve (10, 20, 30)");
+    rt.stop(1.0);
+    // Sans [*] dans les arguments : dit.
+    p.views[1].object(inst)->set("params", "Cuve := Cuves[1]");
+    bool said = false;
+    for (const auto& i : generate(p, [](std::string_view) { return false; }))
+        said = said || (i.message.find("aucun argument ne cite [*]") != std::string::npos && i.severity == Issue::Severity::Warning);
+    check(said, "E : r\xC3\xA9p\xC3\xA9ter sans [*] dans les arguments : un avertissement");
+}
+
 int main(int argc, char** argv) {
     // 1.11.10 : HMI_TEST_1110=1 - les fonctions et les popups des symboles, seules.
     if (const char* only = std::getenv("HMI_TEST_1110"); only && *only == '1') {
@@ -23888,6 +24155,9 @@ int main(int argc, char** argv) {
     // 1.12.7 : HMI_TEST_1127=1 - les lots D et E de l'audit des objets, seuls.
     if (const char* only = std::getenv("HMI_TEST_1127"); only && *only == '1') {
         lotD1127();
+        lotE1127();
+        repeterDepuis1127();
+        colonnesImbriquees1127();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -24029,6 +24299,9 @@ int main(int argc, char** argv) {
     lotA1125();                       // 1.12.5 (lot A) : les defauts de l'audit des objets
     lotBC1126();                      // 1.12.6 (lots B et C) : le role de chaque propriete, les reperes partout
     lotD1127();                       // 1.12.7 (lot D) : les listes en tableau et les choix
+    lotE1127();                       // 1.12.7 (lot E) : les tailles dynamiques, le joker [*]
+    repeterDepuis1127();              // 1.12.7 (lot E) : Repeter depuis
+    colonnesImbriquees1127();         // 1.12.7 (lot E) : les colonnes d'un ARRAY OF STRUCT
     enumerationsLangage110();         // 1.10 (S1, decision 15) : les enumerations dans les scripts
     operateurs110();                  // 1.10 (chantier S2) : les operateurs des symboles et des types IHM
     operateurs1101();                 // 1.10.1 (chantier U2) : a, b et Resultat (types, legende, exemple, Compiler)

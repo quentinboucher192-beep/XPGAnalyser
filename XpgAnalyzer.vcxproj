@@ -565,6 +565,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\hmi\HmiScriptCheck110.cpp" />
     <ClCompile Include="src\hmi\HmiScriptFile.cpp" />
     <ClCompile Include="src\hmi\HmiSimData.cpp" />
+    <ClCompile Include="src\hmi\HmiSources.cpp" />
     <ClCompile Include="src\hmi\HmiStandalone.cpp" />
     <ClCompile Include="src\hmi\HmiTutorialDeduce.cpp" />
     <ClCompile Include="src\hmi\HmiTypeForms.cpp" />
@@ -964,6 +965,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\hmi\HmiScriptCheck110.hpp" />
     <ClInclude Include="src\hmi\HmiScriptFile.hpp" />
     <ClInclude Include="src\hmi\HmiSimData.hpp" />
+    <ClInclude Include="src\hmi\HmiSources.hpp" />
     <ClInclude Include="src\hmi\HmiStandalone.hpp" />
     <ClInclude Include="src\hmi\HmiTutorialDeduce.hpp" />
     <ClInclude Include="src\hmi\HmiTypeForms.hpp" />

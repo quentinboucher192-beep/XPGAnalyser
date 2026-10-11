@@ -623,10 +623,82 @@ sim::ObjRef Runtime::richOfSource(std::string_view source, const Object* owner) 
     return nullptr;
 }
 
+// 1.12.7 (lot E, § 2.3) : la source d'un joker [*] ou de « Repeter depuis ».
+std::optional<sources::Source> Runtime::jokerSource(std::string_view name, Id view) const {
+    if (!project_) return std::nullopt;
+    std::string src = trimmedText(name);
+    if (src.empty()) return std::nullopt;
+    // Un parametre de la vue (une popup ouverte pour Cuves[2] : Cuve.Mesures) : le chemin qu'il designe.
+    if (view != kNoId)
+        if (const auto scope = scopePtr(view)) {
+            const std::string r = scope->resolve(src);
+            if (!r.empty() && r[0] != '$') src = r;
+        }
+    sources::Source s;
+    // Une enumeration du projet : ses valeurs (T_MODE#Auto), leur texte.
+    if (const auto* e = findEnumeration(*project_, src)) {
+        s.enumeration = true;
+        for (const auto& v : e->values) {
+            s.indices.push_back(e->name + "#" + v.name);
+            s.labels.push_back(v.text.empty() ? v.name : v.text);
+        }
+        return s;
+    }
+    // Une LIST, un VECTOR (0 a n-1 ; le libelle : le rang, 1 a n), une MAP (ses cles).
+    if (auto o = richOfSource(src, nullptr); o && o->type) {
+        if (o->type->kind == sim::TypeDesc::Kind::Map) {
+            for (const auto& [k, v] : o->textKeys) {
+                s.indices.push_back(quotedText(k));
+                s.labels.push_back(k);
+            }
+            for (const auto& [k, v] : o->intKeys) {
+                s.indices.push_back(std::to_string(k));
+                s.labels.push_back(std::to_string(k));
+            }
+            return s;
+        }
+        if (o->type->kind == sim::TypeDesc::Kind::Tuple || o->type->kind == sim::TypeDesc::Kind::Struct) return std::nullopt;
+        for (std::size_t i = 0; i < o->items.size(); ++i) {
+            s.indices.push_back(std::to_string(i));
+            s.labels.push_back(std::to_string(i + 1));
+        }
+        return s;
+    }
+    // Un tableau de l'IHM (deplie en cases) : ses indices ; a deux dimensions, toutes ses cases.
+    if (const auto* a = aggregate(src); a && a->array) {
+        const auto& sp = a->spec;
+        for (long long i = sp.low[0]; i <= sp.high[0]; ++i) {
+            if (sp.dims == 1) {
+                s.indices.push_back(std::to_string(i));
+                s.labels.push_back(std::to_string(i));
+            } else {
+                for (long long j = sp.low[1]; j <= sp.high[1]; ++j) {
+                    s.indices.push_back(std::to_string(i) + "," + std::to_string(j));
+                    s.labels.push_back(std::to_string(i) + "," + std::to_string(j));
+                }
+            }
+        }
+        return s;
+    }
+    return std::nullopt;
+}
+
 bool Runtime::resolveChoices(std::string_view source, std::vector<Choice>& out, const Object* owner) {
     if (!project_) return false;
     const std::string src = trimmedText(source);
     if (src.empty()) return false;
+    // 1.12.7 (lot E) : une source a joker (Pompes[*].Nom) - le libelle : le membre choisi de chaque element ;
+    // la valeur ecrite : son indice (avant : un ARRAY OF STRUCT donnait une liste vide, sans un mot).
+    if (const auto j = sources::jokerOf(src)) {
+        const auto s = jokerSource(sources::sourceName(*j), current_);
+        if (!s) return false;
+        for (std::size_t k = 0; k < s->indices.size(); ++k) {
+            const auto text = jokerText(sources::itemAt(*j, s->indices[k], s->enumeration), current_);
+            const std::string label = text ? *text : (k < s->labels.size() ? s->labels[k] : s->indices[k]);
+            out.push_back({label, s->enumeration ? s->indices[k] : s->indices[k], false});
+        }
+        return true;
+    }
     // Une enumeration du projet : ses textes ; la valeur ecrite, son nombre.
     if (const auto* e = findEnumeration(*project_, src)) {
         for (const auto& v : e->values) out.push_back({v.text.empty() ? v.name : v.text, std::to_string(v.value), false});
@@ -708,7 +780,30 @@ bool Runtime::tableRows(const Object& o, std::vector<std::string>& headers, std:
         const auto* a = aggregate(src);
         if (!a || !a->array) return false;
         const auto& sp = a->spec;
-        const auto members = types::isElementary(sp.element) ? std::vector<TypeMember>{} : types::membersOf(*project_, sp.element);
+        // 1.12.7 (lot E, § 2.3) : les membres imbriques se deplient - une colonne par membre simple, a son
+        // chemin (Pompe.Debit, Mesures[0]) ; avant : une colonne Pompe aux cases vides (Lignes[1].Pompe n'est
+        // pas une valeur). Trois niveaux au plus, un tableau de membres jusqu'a 16 cases.
+        std::vector<TypeMember> members;
+        std::function<void(const std::string&, const std::string&, int)> walk = [&](const std::string& type, const std::string& prefix, int depth) {
+            for (const auto& m : types::membersOf(*project_, type)) {
+                const std::string path = prefix + m.name;
+                types::Spec ms;
+                if (types::parseSpec(m.type, ms) && ms.dims == 1 && ms.count(0) <= 16) {
+                    for (long long k = ms.low[0]; k <= ms.high[0]; ++k) {
+                        const std::string at = path + "[" + std::to_string(k) + "]";
+                        if (types::isElementary(ms.element) || depth >= 3 || types::membersOf(*project_, ms.element).empty())
+                            members.push_back(TypeMember{at, ms.element});
+                        else
+                            walk(ms.element, at + ".", depth + 1);
+                    }
+                } else if (!types::isElementary(m.type) && depth < 3 && !types::membersOf(*project_, m.type).empty()) {
+                    walk(m.type, path + ".", depth + 1);
+                } else {
+                    members.push_back(TypeMember{path, m.type});
+                }
+            }
+        };
+        if (!types::isElementary(sp.element)) walk(sp.element, "", 0);
         // 1.12.5 (lot A) : un tableau a deux dimensions - une ligne par premier indice, une colonne par
         // second (Tab[i,j]) ; avant : des lignes de cases vides (Tab[i] n'existe pas).
         if (sp.dims == 2) {
