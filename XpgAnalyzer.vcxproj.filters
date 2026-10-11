@@ -169,6 +169,9 @@
     <ClCompile Include="src\xls\Workbook.cpp">
       <Filter>xls</Filter>
     </ClCompile>
+    <ClCompile Include="src\sim\DialectLib.cpp">
+      <Filter>sim</Filter>
+    </ClCompile>
     <ClCompile Include="src\sim\Interpreter.cpp">
       <Filter>sim</Filter>
     </ClCompile>
@@ -1482,6 +1485,9 @@
     </ClInclude>
     <ClInclude Include="src\xls\XlsmSource.hpp">
       <Filter>xls</Filter>
+    </ClInclude>
+    <ClInclude Include="src\sim\DialectLib.hpp">
+      <Filter>sim</Filter>
     </ClInclude>
     <ClInclude Include="src\sim\Interpreter.hpp">
       <Filter>sim</Filter>

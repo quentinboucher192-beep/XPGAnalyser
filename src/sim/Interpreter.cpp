@@ -1,4 +1,5 @@
 #include "Interpreter.hpp"
+#include "DialectLib.hpp"   // 1.12.7 : templates, enumerations natives, natives des conteneurs
 
 #include <algorithm>
 #include <cctype>
@@ -639,6 +640,10 @@ private:
         return here;
     }
 
+    // 1.12.7 : une faute dite en francais, sans le mot trouve (les templates).
+    core::Err<core::Error> errorHere(std::string what) const {
+        return core::fail(core::ErrorCode::InvalidArgument, "line " + std::to_string(peek().line) + ": " + std::move(what), section_);
+    }
     core::Err<core::Error> error(std::string what) const {
         const auto line = errorLine(what);
         return core::fail(core::ErrorCode::InvalidArgument,
@@ -1216,6 +1221,44 @@ private:
             node->kind = Expr::Kind::Null;
             node->line = t.line;
             advance();
+            return node;
+        }
+        // 1.12.7 (dialecte IHM) : un template - NUMERIC_LIMITS<UINT>.MAX(), NUMBERS<REAL>.PI, SATURATE_CAST<INT>(x),
+        // ADD_SAT<INT>(a, b). Seulement pour ces noms, et seulement NOM < TYPE > : a < b ne change pas.
+        if (dialect_ && t.kind == Tok::Identifier && lib::templateInfo(t.text) && peek(1).kind == Tok::Punct && peek(1).text == "<"
+            && peek(2).kind == Tok::Identifier && peek(3).kind == Tok::Punct && peek(3).text == ">") {
+            const auto* info = lib::templateInfo(t.text);
+            const std::string type = upperOf(peek(2).text);
+            const std::string head = std::string(info->name) + "<" + type + ">";
+            const auto exampleFor = [&] {
+                std::string x(info->example);
+                const auto a = x.find('<'), b = x.find('>');
+                return a == std::string::npos || b == std::string::npos ? x : x.substr(0, a + 1) + type + x.substr(b);
+            };
+            advance();
+            if (!lib::templateAccepts(*info, type)) return errorHere(head + " : " + std::string(info->want));
+            advance();
+            advance();
+            advance();
+            auto node = std::make_shared<Expr>();
+            node->kind = Expr::Kind::Reference;
+            node->name = head;
+            node->line = t.line;
+            if (info->isClass) {
+                if (!(atPunct(".") && peek(1).kind == Tok::Identifier)) return errorHere(head + " : choisis un membre \xE2\x80\x94 " + exampleFor());
+                const std::string member = peek(1).raw.empty() ? peek(1).text : peek(1).raw;
+                const auto* m = lib::templateMember(info->name, member);
+                const bool called = peek(2).kind == Tok::Punct && peek(2).text == "(";
+                if (!m) {
+                    std::vector<std::string> pool;
+                    for (const auto& x : info->name == "NUMBERS" ? lib::numbersMembers() : lib::limitsMembers()) pool.emplace_back(x.name);
+                    return errorHere(head + " n'a pas de membre " + member + lib::closest(member, pool));
+                }
+                if (m->function && !called) return errorHere(std::string(m->name) + " est une fonction : " + head + "." + std::string(m->name) + "()");
+                if (!m->function && called) return errorHere(std::string(m->name) + " est une constante : sans parenth\xC3\xA8ses");
+            } else if (!atPunct("(")) {
+                return errorHere(head + " s'appelle : " + exampleFor());
+            }
             return node;
         }
         if (t.kind == Tok::Identifier) {
@@ -3873,6 +3916,9 @@ private:
             case Expr::Kind::Member:
             case Expr::Kind::Index:
             case Expr::Kind::Deref: {
+                // 1.12.7 : NUMERIC_LIMITS<UINT>.DIGITS, NUMBERS<REAL>.PI, NUMBERS.PI (une constante).
+                if (e.kind == Expr::Kind::Member)
+                    if (auto c = templateMemberValue(e, false)) return std::move(*c);
                 if (needsLocate(e)) {
                     auto p = locate(e, false);
                     if (!p) return core::Err<core::Error>(p.error());
@@ -3885,6 +3931,10 @@ private:
                 Value out;
                 if (env_.read(*name, out)) return RV{out, nullptr};
                 if (auto o = env_.richVariable(*name)) return RV{{}, o};      // 1.12.4 : un membre objet
+                // 1.12.7 : COMPARAISON#Superieur, OPERATION#Somme, TRANSFORMATION#Carre (si l'environnement ne
+                // les a pas lues : le rang de la valeur, un DINT).
+                if (std::int64_t n = 0; e.kind == Expr::Kind::Reference && lib::dialectEnumValue(*name, n))
+                    return RV{Value::integer(Type::DInt, n), nullptr};
                 if (!env_.exists(*name)) {
                     auto obj = materialize(*name);
                     if (obj) return RV{{}, *obj};
@@ -4025,6 +4075,9 @@ private:
     // ---- les appels --------------------------------------------------------
     // Un argument : par valeur (sa valeur), ou par reference (son emplacement).
     core::Result<RV> callRich(const Expr& e) {
+        // 1.12.7 : NUMERIC_LIMITS<UINT>.MAX() - une fonction d'un template de classe.
+        if (e.lhs && e.lhs->kind == Expr::Kind::Member && e.arguments.empty() && e.outputs.empty())
+            if (auto c = templateMemberValue(*e.lhs, true)) return std::move(*c);
         std::string callee;
         if (e.lhs && e.lhs->kind == Expr::Kind::Reference) callee = e.lhs->name;
         const std::string u = upperOf(callee);
@@ -4056,6 +4109,7 @@ private:
                 return callDeclared(*inner[static_cast<std::size_t>(k)], e, false);
             }
             if (inner.size() == 1) return callDeclared(*inner.front(), e, false);
+            if (auto mine = natives1127(callee, e)) return std::move(*mine);          // 1.12.7
             if (auto builtin = dialectBuiltin(u, e)) return std::move(*builtin);
             if (auto r = chosen(callee)) return std::move(*r);
             if (auto f = env_.dialectFunction(callee)) return callDeclared(*f, e, true);
@@ -4622,35 +4676,36 @@ private:
         bool writes = false;
         for (const char* n : kWrites)
             if (u == n) writes = true;
-        // La liste, designee (sans copie : on ecrit dedans).
-        const Expr& a = *e.arguments[0].second;
-        Place p;
-        if (isDesignator(a)) {
-            auto where = locate(a, false);
-            if (!where) return core::Err<core::Error>(where.error());
-            p = *where;
-        } else {
-            auto v = rich(a);
-            if (!v) return v;
-            if (!v->o) return dialectError(u + " : une liste ou un vecteur est attendu, pas un " + typeNameOf(*v));
-            p.obj = v->o;
-            p.temp = true;
-        }
-        while (p.obj && isIndirect(p.obj)) {
-            auto t = follow(p.obj);
-            if (!t) return core::Err<core::Error>(t.error());
-            p = *t;
-        }
-        if (!p.obj) {
-            auto m = materialize(p.name);
-            if (!m) return core::Err<core::Error>(m.error());
-            p.obj = *m;
-        }
-        Obj& list = *p.obj;
-        if (!list.type || list.type->kind != TypeDesc::Kind::List)
+        // La liste, designee (sans copie : on ecrit dedans). 1.12.7 : un ARRAY aussi, pour les 10 fonctions
+        // qui ne changent pas sa taille (LIST_GET, LIST_SORT, JOIN...) ; un tableau de l'environnement est
+        // copie, puis recopie apres une ecriture (LIST_SORT, LIST_REVERSE).
+        auto designated = objArg(*e.arguments[0].second);
+        if (!designated) return core::Err<core::Error>(designated.error());
+        const ObjArg held = *designated;
+        if (held.isScalar || !held.obj)
+            return dialectError(u + " : une liste ou un vecteur est attendu, pas un " + std::string(toString(held.scalar.type())));
+        Obj& list = *held.obj;
+        const bool array = list.type && list.type->kind == TypeDesc::Kind::Array;
+        if (!list.type || (list.type->kind != TypeDesc::Kind::List && !(array && lib::oldListAcceptsArray(u)))) {
+            if (array && lib::oldListResizes(u))
+                return dialectError(u + " : un ARRAY a une taille fixe (" + std::to_string(list.items.size())
+                                    + " cases) \xE2\x80\x94 une LIST ou un VECTOR est attendu");
             return dialectError(u + " : une liste ou un vecteur est attendu (LIST OF T, VECTOR OF T), pas un "
                                 + (list.type ? list.type->text() : std::string("?")));
-        if (writes && p.constant) return dialectError(u + " : une constante ne s'\xC3\xA9" "crit pas");
+        }
+        if (writes && held.constant) return dialectError(u + " : une constante ne s'\xC3\xA9" "crit pas");
+        // 1.12.7 : un ARRAY se lit a ses indices (Tab.Low a Tab.High).
+        std::int64_t low = 0;
+        if (array && (u == "LIST_GET" || u == "LIST_INDEX_OF")) {
+            auto l = lowOf(u, list);
+            if (!l) return core::Err<core::Error>(l.error());
+            low = *l;
+        }
+        const auto commit = [&]() -> core::Result<RV> {
+            auto c = commitArg(u, held);
+            if (!c) return core::Err<core::Error>(c.error());
+            return RV{Value::boolean(true), nullptr};
+        };
         const auto n = static_cast<std::int64_t>(list.items.size());
         const auto value = [&](std::size_t k) -> core::Result<RV> {
             auto v = rich(*e.arguments[k].second);
@@ -4716,7 +4771,7 @@ private:
             std::int64_t found = -1;
             for (std::int64_t k = 0; k < n && found < 0; ++k)
                 if (sameItem(list.items[static_cast<std::size_t>(k)], *v)) found = k;
-            if (u == "LIST_INDEX_OF") return integer(found);
+            if (u == "LIST_INDEX_OF") return integer(found < 0 ? -1 : found + low);
             if (u == "LIST_CONTAINS") return boolean(found >= 0);
             if (found >= 0) list.items.erase(list.items.begin() + static_cast<std::ptrdiff_t>(found));
             return boolean(found >= 0);
@@ -4733,7 +4788,7 @@ private:
             if (argc != 3) return bad("LIST_GET(liste, indice, d\xC3\xA9" "faut)");
             auto i = index(1);
             if (!i) return core::Err<core::Error>(i.error());
-            if (*i >= 0 && *i < n) return readPlace(Place{list.items[static_cast<std::size_t>(*i)], {}, false, false});
+            if (*i - low >= 0 && *i - low < n) return readPlace(Place{list.items[static_cast<std::size_t>(*i - low)], {}, false, false});
             return value(2);
         }
         if (u == "VECTOR_RESIZE") {
@@ -4762,7 +4817,7 @@ private:
         if (u == "LIST_REVERSE") {
             if (argc != 1) return bad("LIST_REVERSE(liste)");
             std::reverse(list.items.begin(), list.items.end());
-            return boolean(true);
+            return commit();
         }
         // Les fonctions sur des valeurs simples : trier, sommer, le plus petit...
         for (const auto& i : list.items)
@@ -4780,7 +4835,7 @@ private:
                 const int c = x->value.compare(y->value);
                 return descending ? c > 0 : c < 0;
             });
-            return boolean(true);
+            return commit();
         }
         if (u == "JOIN") {
             if (argc != 1 && argc != 2) return bad("JOIN(liste, s\xC3\xA9parateur)");
@@ -5018,8 +5073,8 @@ private:
             return core::Result<RV>(RV{{}, it});
         }
         // MAP_HAS(m, k), MAP_REMOVE(m, k), MAP_GET(m, k, defaut)
-        if (u == "MAP_GET" ? !want(3, 3) : !want(2, 2))
-            return bad(u == "MAP_GET" ? "MAP_GET(m, cl\xC3\xA9, d\xC3\xA9" "faut)" : u + "(m, cl\xC3\xA9)");
+        if (u == "MAP_GET" ? !want(2, 3) : !want(2, 2))
+            return bad(u == "MAP_GET" ? "MAP_GET(m, cl\xC3\xA9 [, d\xC3\xA9" "faut])" : u + "(m, cl\xC3\xA9)");
         auto k = rich(*e.arguments[1].second);
         if (!k) return core::Result<RV>(core::Err<core::Error>(k.error()));
         std::string text;
@@ -5038,9 +5093,1294 @@ private:
             else o->intKeys.erase(integer);
             return core::Result<RV>(RV{Value::boolean(entry != nullptr), nullptr});
         }
-        // MAP_GET
+        // MAP_GET ; 1.12.7 : sans defaut, une cle absente est une erreur.
         if (entry) return core::Result<RV>(readPlace(Place{entry, {}, false, false}));
+        if (argc < 3) return core::Result<RV>(dialectError("MAP_GET : cl\xC3\xA9 absente : " + keyText(*isText, text, integer)));
         return core::Result<RV>(rich(*e.arguments[2].second));
+    }
+
+    // =====================================================================================
+    // 1.12.7 : LES NATIVES DE LA 1.12.7 - les conteneurs (43 de plus), std::numeric, les
+    // templates (NUMERIC_LIMITS<T>, NUMBERS<T>, SATURATE_CAST<T>, ADD_SAT<T>...) et <bit>.
+    // Leur nombre d'arguments, leur signature : sim::lib::natives() (DialectLib).
+    // =====================================================================================
+    // Un argument objet : l'objet lui-meme quand l'interpreteur le garde (on ecrit dedans) ;
+    // une variable de l'environnement (un tableau IHM) est copiee, puis recopiee apres une
+    // ecriture (commitArg). Une valeur simple : `isScalar`.
+    struct ObjArg {
+        ObjRef      obj;
+        std::string envName;
+        bool        constant{false};
+        bool        temp{false};
+        bool        isScalar{false};
+        Value       scalar;
+    };
+    core::Result<ObjArg> objArg(const Expr& a) {
+        Place p;
+        ObjArg out;
+        if (isDesignator(a)) {
+            auto where = locate(a, false);
+            if (!where) return core::Err<core::Error>(where.error());
+            p = *where;
+        } else {
+            auto v = rich(a);
+            if (!v) return core::Err<core::Error>(v.error());
+            if (!v->o) {
+                out.isScalar = true;
+                out.scalar = v->v;
+                return out;
+            }
+            p.obj = v->o;
+            p.temp = true;
+        }
+        while (p.obj && isIndirect(p.obj)) {
+            auto t = follow(p.obj);
+            if (!t) return core::Err<core::Error>(t.error());
+            p = *t;
+        }
+        out.constant = p.constant;
+        out.temp = p.temp;
+        if (!p.obj) {
+            Value v;
+            if (env_.read(p.name, v)) {
+                out.isScalar = true;
+                out.scalar = v;
+                return out;
+            }
+            auto m = materialize(p.name);
+            if (!m) return core::Err<core::Error>(m.error());
+            out.obj = *m;
+            out.envName = p.name;
+        } else {
+            out.obj = p.obj;
+        }
+        if (out.obj && out.obj->type && out.obj->type->kind == TypeDesc::Kind::Scalar) {
+            out.isScalar = true;
+            out.scalar = out.obj->value;
+        }
+        return out;
+    }
+    static std::string kindName(const ObjArg& a) {
+        if (a.isScalar || !a.obj || !a.obj->type) {
+            const Type t = a.scalar.type();
+            if (t == Type::String) return "une STRING";
+            if (t == Type::Bool) return "un BOOL";
+            if (isNumeric(t)) return "un nombre";
+            return "une valeur";
+        }
+        const auto& t = *a.obj->type;
+        switch (t.kind) {
+            case TypeDesc::Kind::List: return upperOf(t.name) == "VECTOR" ? "un VECTOR" : "une LIST";
+            case TypeDesc::Kind::Array: return "un ARRAY";
+            case TypeDesc::Kind::Map: return "une MAP";
+            case TypeDesc::Kind::Tuple: return "un TUPLE";
+            case TypeDesc::Kind::Struct: return "une structure " + t.name;
+            default: return "un " + t.text();
+        }
+    }
+    core::Result<ObjArg> seqArg(const std::string& u, const Expr& a, bool arrOk) {
+        auto s = objArg(a);
+        if (!s) return s;
+        const TypeDesc* t = s->obj && !s->isScalar ? s->obj->type.get() : nullptr;
+        if (t && (t->kind == TypeDesc::Kind::List || (arrOk && t->kind == TypeDesc::Kind::Array))) return s;
+        if (t && t->kind == TypeDesc::Kind::Array)
+            return dialectError(u + " : un ARRAY a une taille fixe (" + std::to_string(s->obj->items.size())
+                                + " cases) \xE2\x80\x94 une LIST ou un VECTOR est attendu");
+        return dialectError(u + " : " + std::string(arrOk ? "une LIST, un VECTOR ou un ARRAY" : "une LIST ou un VECTOR") + " est attendu, pas "
+                            + kindName(*s));
+    }
+    core::Result<ObjArg> mapArg(const std::string& u, const Expr& a) {
+        auto s = objArg(a);
+        if (!s) return s;
+        if (s->obj && !s->isScalar && s->obj->type && s->obj->type->kind == TypeDesc::Kind::Map) return s;
+        return dialectError(u + " : une MAP est attendue, pas " + kindName(*s));
+    }
+    core::Result<ObjArg> tupleArg(const std::string& u, const Expr& a) {
+        auto s = objArg(a);
+        if (!s) return s;
+        if (s->obj && !s->isScalar && s->obj->type && s->obj->type->kind == TypeDesc::Kind::Tuple) return s;
+        return dialectError(u + " : un TUPLE est attendu, pas " + kindName(*s));
+    }
+    core::Err<core::Error> constantRefused(const std::string& u) const { return dialectError(u + " : une constante ne s'\xC3\xA9" "crit pas"); }
+    // Apres une ecriture : une variable de l'environnement copiee est recopiee.
+    core::Result<bool> commitArg(const std::string& u, const ObjArg& a) {
+        if (a.envName.empty()) return true;
+        std::string why;
+        if (!storeToEnv(a.envName, *a.obj, &why)) return dialectError(u + " : " + why);
+        return true;
+    }
+    // Le premier indice : 0 pour une liste ; la borne basse d'un ARRAY (a une dimension).
+    core::Result<std::int64_t> lowOf(const std::string& u, const Obj& L) {
+        if (!L.type || L.type->kind != TypeDesc::Kind::Array) return std::int64_t{0};
+        if (L.type->bounds.size() != 1)
+            return dialectError(u + " : un ARRAY \xC3\xA0 une dimension est attendu (celui-ci en a " + std::to_string(L.type->bounds.size()) + ")");
+        return L.type->bounds[0].first;
+    }
+    core::Result<std::int64_t> intArg(const std::string& u, const Expr& a, const std::string& what) {
+        auto v = rich(a);
+        if (!v) return core::Err<core::Error>(v.error());
+        if (v->o || !(isInteger(v->v.type()) && v->v.type() != Type::Time && !isDateType(v->v.type())))
+            return dialectError(u + " : " + what + " est un entier");
+        return v->v.asInteger();
+    }
+    core::Result<bool> boolArg(const std::string& u, const Expr& a) {
+        auto v = rich(a);
+        if (!v) return core::Err<core::Error>(v.error());
+        if (v->o || v->v.type() != Type::Bool) return dialectError(u + " : TRUE ou FALSE est attendu, pas " + (v->o ? typeNameOf(*v) : v->v.display()));
+        return v->v.isTruthy();
+    }
+    static std::string scalarTypeName(const TypeDesc& t) {
+        if (!t.name.empty() && t.kind == TypeDesc::Kind::Scalar) return upperOf(t.name);
+        if (t.kind == TypeDesc::Kind::Scalar) return std::string(toString(t.scalar));
+        return t.text();
+    }
+    // Une valeur vers le type d'un element : refusee comme l'IHM la refuserait (un texte n'est pas
+    // un nombre, un reel a decimales n'est pas un entier, un entier hors des bornes de son type).
+    core::Result<ObjRef> fitTo(const std::string& u, const TypeRef& elem, const RV& v) {
+        if (!elem) return dialectError(u + " : le type des \xC3\xA9l\xC3\xA9ments est inconnu");
+        auto made = instantiate(elem);
+        if (!made) return made;
+        if (elem->kind == TypeDesc::Kind::Scalar && !v.o) {
+            const Type want = elem->scalar, got = v.v.type();
+            const std::string tn = scalarTypeName(*elem);
+            const std::string shown = v.v.display();
+            if (got == Type::String && want != Type::String && want != Type::Unknown)
+                return dialectError(u + " : " + shown + " n'est pas un " + tn);
+            if (want == Type::String && got != Type::String)
+                return dialectError(u + " : " + shown + " n'est pas une STRING : \xC3\xA9" "cris '" + shown + "'");
+            if (want == Type::Bool && got != Type::Bool) return dialectError(u + " : " + shown + " n'est pas un BOOL");
+            lib::IntType it;
+            if (lib::intType(tn, it)) {
+                if (got == Type::Real && v.v.asReal() != std::floor(v.v.asReal()))
+                    return dialectError(u + " : " + shown + " n'est pas un entier (" + tn + ")");
+                if (got == Type::Bool) return dialectError(u + " : " + shown + " n'est pas un entier (" + tn + ")");
+                const Value whole = got == Type::Real ? Value::integer(Type::LInt, static_cast<std::int64_t>(v.v.asReal())) : v.v;
+                if (!lib::fits(lib::wideOf(whole), it)) {
+                    const Value hi = Value::integer(it.type, static_cast<std::int64_t>(it.hiBits));
+                    return dialectError(u + " : " + whole.display() + " est hors des bornes d'un " + tn + " (" + std::to_string(it.lo) + ".."
+                                        + hi.display() + ")");
+                }
+            }
+        }
+        std::string why;
+        if (!storeItem(**made, v, &why)) return dialectError(u + " : " + why);
+        return made;
+    }
+    // La valeur d'un element (une copie pour un objet : ce qui est rendu ne touche pas la liste).
+    static RV valueOfItem(const ObjRef& o) {
+        if (o && o->type && o->type->kind == TypeDesc::Kind::Scalar) return RV{o->value, nullptr};
+        return RV{{}, o ? deepCopy(*o) : nullptr};
+    }
+    // COMPARAISON#... : son rang (0 Egal ... 5 SuperieurOuEgal).
+    core::Result<int> comparisonArg(const std::string& u, const Expr& a) {
+        const std::string want = u + " : une COMPARAISON est attendue (COMPARAISON#Superieur\xE2\x80\xA6), pas ";
+        if (a.kind == Expr::Kind::Reference && a.name.find('#') != std::string::npos
+            && upperOf(a.name.substr(0, a.name.find('#'))) != "COMPARAISON")
+            return dialectError(want + a.name);
+        auto v = rich(a);
+        if (!v) return core::Err<core::Error>(v.error());
+        if (v->o || !isInteger(v->v.type()) || v->v.type() == Type::Bool || v->v.asInteger() < 0 || v->v.asInteger() > 5)
+            return dialectError(want + (v->o ? typeNameOf(*v) : v->v.display()));
+        return static_cast<int>(v->v.asInteger());
+    }
+    static bool compares(int op, int c) {
+        switch (op) {
+            case 0: return c == 0;
+            case 1: return c != 0;
+            case 2: return c < 0;
+            case 3: return c <= 0;
+            case 4: return c > 0;
+            default: return c >= 0;
+        }
+    }
+    // L'element vu par une comparaison ou un tri : lui-meme (-1), ou un de ses membres (une
+    // structure : 'Poids' ; un TUPLE : 'Item2'). `membre` nul : absent.
+    core::Result<int> projection(const std::string& u, const Obj& L, const RV* membre) {
+        TypeRef el = L.type ? L.type->element : nullptr;
+        if (!L.items.empty() && L.items.front() && L.items.front()->type) el = L.items.front()->type;
+        const bool structured = el && (el->kind == TypeDesc::Kind::Struct || el->kind == TypeDesc::Kind::Tuple);
+        if (!membre) {
+            if (el && el->kind == TypeDesc::Kind::Struct && !el->members.empty())
+                return dialectError(u + " : des " + el->name + " \xE2\x80\x94 dis quel membre comparer : '"
+                                    + el->members[el->members.size() > 1 ? 1 : 0].first + "'");
+            if (el && el->kind == TypeDesc::Kind::Tuple)
+                return dialectError(u + " : des " + el->text() + " \xE2\x80\x94 dis quel champ comparer : 'Item1'");
+            return -1;
+        }
+        if (membre->o || membre->v.type() != Type::String) return dialectError(u + " : le membre s'\xC3\xA9" "crit entre apostrophes : 'Poids'");
+        const std::string name = membre->v.asString();
+        if (!structured) return dialectError(u + " : des " + (el ? el->text() : std::string("valeurs")) + " n'ont pas de membres");
+        std::vector<std::string> pool;
+        for (std::size_t k = 0; k < el->members.size(); ++k) {
+            if (upperOf(el->members[k].first) == upperOf(name)) return static_cast<int>(k);
+            pool.push_back(el->members[k].first);
+        }
+        if (el->kind == TypeDesc::Kind::Tuple)
+            return dialectError(u + " : un " + el->text() + " a Item1 \xC3\xA0 Item" + std::to_string(el->members.size()) + ", pas '" + name + "'");
+        return dialectError(el->name + " n'a pas de membre " + name + lib::closest(name, pool));
+    }
+    static const ObjRef& projected(const ObjRef& item, int member) {
+        if (member < 0 || !item || static_cast<std::size_t>(member) >= item->items.size()) return item;
+        return item->items[static_cast<std::size_t>(member)];
+    }
+    // Comparer un element (ou son membre) a une valeur simple ; deux objets : = et <> seulement.
+    core::Result<int> compareItem(const std::string& u, const ObjRef& x, const RV& v) {
+        if (x && x->type && x->type->kind == TypeDesc::Kind::Scalar && !v.o) return x->value.compare(v.v);
+        if (sameItem(x, v)) return 0;
+        if (x && x->type && x->type->kind != TypeDesc::Kind::Scalar)
+            return dialectError(u + " : un " + x->type->text() + " ne se compare pas \xC3\xA0 une valeur (MEMBRE : lequel comparer)");
+        return 1;
+    }
+    static std::string sigOf(const lib::NativeInfo& n) {
+        const std::string s(n.signature);
+        const auto at = s.find(" : ");
+        return at == std::string::npos ? s : s.substr(0, at);
+    }
+    // Le type ecrit d'un argument designe ("SINT", "WORD"...) ; vide : inconnu.
+    std::string writtenType(const Expr& a) {
+        if (a.kind != Expr::Kind::Reference) return {};
+        if (auto* p = findLocal(a.name)) {
+            if (p->obj && p->obj->type && p->obj->type->kind == TypeDesc::Kind::Scalar) return scalarTypeName(*p->obj->type);
+            if (!p->name.empty()) return upperOf(env_.declaredType(p->name));
+            return {};
+        }
+        return upperOf(env_.declaredType(a.name));
+    }
+    static std::string valueTypeText(Type t) {
+        switch (t) {
+            case Type::Int: return "INT";
+            case Type::DInt: return "DINT";
+            case Type::LInt: return "LINT";
+            case Type::UInt: return "UINT";
+            case Type::UDInt: return "UDINT";
+            case Type::ULInt: return "ULINT";
+            case Type::Byte: return "BYTE";
+            case Type::Word: return "WORD";
+            case Type::DWord: return "DWORD";
+            case Type::LWord: return "LWORD";
+            case Type::Real: return "REAL";
+            default: return std::string(toString(t));
+        }
+    }
+
+    // ---- l'aiguillage : nul, pas une native de la 1.12.7 ---------------------------------
+    std::optional<core::Result<RV>> natives1127(const std::string& callee, const Expr& e) {
+        std::string u = upperOf(callee), tmpl;
+        if (const auto lt = u.find('<'); lt != std::string::npos && u.back() == '>') {
+            tmpl = u.substr(lt + 1, u.size() - lt - 2);
+            u.resize(lt);
+        }
+        const auto* info = lib::native(u);
+        if (!info) return std::nullopt;
+        // Une fonction du projet du meme nom passe avant (ce qui tournait en 1.12.6 tourne pareil).
+        if (tmpl.empty() && (env_.overloads(callee) > 0 || env_.dialectFunction(callee))) return std::nullopt;
+        const auto argc = static_cast<int>(e.arguments.size());
+        if (!e.outputs.empty() || argc < info->min || (info->max >= 0 && argc > info->max))
+            return core::Result<RV>(dialectError("mauvais nombre d'arguments : " + sigOf(*info)));
+        for (const auto& a : e.arguments)
+            if (!a.first.empty()) return core::Result<RV>(dialectError(u + " : ses arguments se donnent dans l'ordre, sans nom (" + sigOf(*info) + ")"));
+        const auto* t = lib::templateInfo(u);
+        if (t && t->required && tmpl.empty()) return core::Result<RV>(dialectError(std::string(t->hint)));
+        if (info->group == "numeric") return std::optional<core::Result<RV>>(numericNative(u, tmpl, e));
+        if (info->group == "bits") return std::optional<core::Result<RV>>(bitNative(u, e));
+        if (info->group == "map") return std::optional<core::Result<RV>>(mapNative(u, e));
+        if (info->group == "tuple") return std::optional<core::Result<RV>>(tupleNative(u, e));
+        return std::optional<core::Result<RV>>(listNative(u, *info, e));
+    }
+
+    // ---- les listes, les vecteurs, les tableaux ------------------------------------------
+    core::Result<RV> listNative(const std::string& u, const lib::NativeInfo& info, const Expr& e) {
+        const auto argc = e.arguments.size();
+        const auto arg = [&](std::size_t k) -> const Expr& { return *e.arguments[k].second; };
+        const auto integer = [](std::int64_t v) { return core::Result<RV>(RV{Value::integer(Type::DInt, v), nullptr}); };
+        const auto boolean = [](bool v) { return core::Result<RV>(RV{Value::boolean(v), nullptr}); };
+        // LIST_COPY ecrit son second argument, pas le premier.
+        if (u == "LIST_COPY") {
+            auto src = seqArg(u, arg(0), true);
+            if (!src) return core::Err<core::Error>(src.error());
+            auto dst = seqArg(u, arg(1), true);
+            if (!dst) return core::Err<core::Error>(dst.error());
+            if (dst->constant) return constantRefused(u);
+            const std::vector<ObjRef> from = src->obj->items;      // une copie des pointeurs : source et destination peuvent etre la meme
+            const std::size_t n = std::min(from.size(), dst->obj->items.size());
+            std::vector<ObjRef> made;
+            for (std::size_t k = 0; k < n; ++k) {
+                auto m = fitTo(u, dst->obj->type->element, valueOfItem(from[k]));
+                if (!m) return core::Err<core::Error>(m.error());
+                made.push_back(*m);
+            }
+            for (std::size_t k = 0; k < n; ++k) dst->obj->items[k] = made[k];
+            auto c = commitArg(u, *dst);
+            if (!c) return core::Err<core::Error>(c.error());
+            return integer(static_cast<std::int64_t>(n));
+        }
+        auto L0 = seqArg(u, arg(0), info.arrayOk);
+        if (!L0) return core::Err<core::Error>(L0.error());
+        ObjArg La = *L0;
+        Obj& L = *La.obj;
+        if (info.writes && La.constant) return constantRefused(u);
+        const TypeRef elem = L.type->element;
+        const auto n = static_cast<std::int64_t>(L.items.size());
+        const auto commit = [&]() -> core::Result<RV> {
+            auto c = commitArg(u, La);
+            if (!c) return core::Err<core::Error>(c.error());
+            return RV{};
+        };
+        const auto scalarsOnly = [&]() -> std::optional<core::Err<core::Error>> {
+            for (const auto& i : L.items)
+                if (!i || !i->type || i->type->kind != TypeDesc::Kind::Scalar)
+                    return dialectError(u + " : une liste de valeurs simples est attendue, pas un " + L.type->text());
+            if (n == 0 && elem && elem->kind != TypeDesc::Kind::Scalar)
+                return dialectError(u + " : une liste de valeurs simples est attendue, pas un " + L.type->text());
+            return std::nullopt;
+        };
+        // La comparaison et le membre des fonctions LIST_..._IF, LIST_ALL, LIST_ANY, LIST_NONE.
+        struct Condition { int op{0}; RV value; int member{-1}; };
+        const auto condition = [&]() -> core::Result<Condition> {
+            Condition c;
+            auto op = comparisonArg(u, arg(1));
+            if (!op) return core::Err<core::Error>(op.error());
+            c.op = *op;
+            auto v = rich(arg(2));
+            if (!v) return core::Err<core::Error>(v.error());
+            c.value = *v;
+            std::optional<RV> membre;
+            if (argc > 3) {
+                auto m = rich(arg(3));
+                if (!m) return core::Err<core::Error>(m.error());
+                membre = *m;
+            }
+            auto p = projection(u, L, membre ? &*membre : nullptr);
+            if (!p) return core::Err<core::Error>(p.error());
+            c.member = *p;
+            return c;
+        };
+        const auto holds = [&](const Condition& c, const ObjRef& item) -> core::Result<bool> {
+            auto r = compareItem(u, projected(item, c.member), c.value);
+            if (!r) return core::Err<core::Error>(r.error());
+            return compares(c.op, *r);
+        };
+        auto lowR = lowOf(u, L);
+        // Les fonctions qui ne prennent pas d'indice lisent aussi un ARRAY a deux dimensions.
+        const bool indexed = u == "LIST_SET" || u == "LIST_LAST_INDEX_OF" || u == "LIST_FIND_IF" || u == "LIST_MIN_INDEX" || u == "LIST_MAX_INDEX"
+                          || u == "LIST_SWAP" || u == "LIST_MOVE" || u == "LIST_SLICE";
+        if (!lowR && indexed) return core::Err<core::Error>(lowR.error());
+        const std::int64_t low = lowR ? *lowR : 0;
+
+        if (u == "LIST_SET") {
+            auto i = intArg(u, arg(1), "un indice");
+            if (!i) return core::Err<core::Error>(i.error());
+            auto v = rich(arg(2));
+            if (!v) return v;
+            auto made = fitTo(u, elem, *v);
+            if (!made) return core::Err<core::Error>(made.error());
+            const std::int64_t at = *i - low;
+            if (at < 0 || at >= n) return boolean(false);
+            std::string why;
+            if (!assignObj(*L.items[static_cast<std::size_t>(at)], **made, &why)) return dialectError(u + " : " + why);
+            auto c = commit();
+            if (!c) return c;
+            return boolean(true);
+        }
+        if (u == "LIST_FILL") {
+            auto v = rich(arg(1));
+            if (!v) return v;
+            auto made = fitTo(u, elem, *v);
+            if (!made) return core::Err<core::Error>(made.error());
+            for (auto& item : L.items) item = deepCopy(**made);
+            auto c = commit();
+            if (!c) return c;
+            return integer(n);
+        }
+        if (u == "LIST_INSERT_SORTED") {
+            if (auto bad = scalarsOnly()) return *bad;
+            auto v = rich(arg(1));
+            if (!v) return v;
+            auto made = fitTo(u, elem, *v);
+            if (!made) return core::Err<core::Error>(made.error());
+            bool descending = false;
+            if (argc > 2) {
+                auto d = boolArg(u, arg(2));
+                if (!d) return core::Err<core::Error>(d.error());
+                descending = *d;
+            }
+            std::size_t i = 0;
+            while (i < L.items.size()) {
+                const int c = L.items[i]->value.compare((*made)->value);
+                if (descending ? c < 0 : c > 0) break;
+                ++i;
+            }
+            L.items.insert(L.items.begin() + static_cast<std::ptrdiff_t>(i), *made);
+            return integer(static_cast<std::int64_t>(i));
+        }
+        if (u == "LIST_POP_FIRST") {
+            if (n == 0) return dialectError(u + " : la liste est vide");
+            const ObjRef first = L.items.front();
+            L.items.erase(L.items.begin());
+            return valueOfItem(first);
+        }
+        if (u == "LIST_REMOVE_ALL" || u == "LIST_LAST_INDEX_OF" || u == "LIST_COUNT_OF") {
+            auto v = rich(arg(1));
+            if (!v) return v;
+            if (u == "LIST_REMOVE_ALL") {
+                const auto before = L.items.size();
+                L.items.erase(std::remove_if(L.items.begin(), L.items.end(), [&](const ObjRef& x) { return sameItem(x, *v); }), L.items.end());
+                return integer(static_cast<std::int64_t>(before - L.items.size()));
+            }
+            std::int64_t count = 0, last = -1;
+            for (std::int64_t k = 0; k < n; ++k)
+                if (sameItem(L.items[static_cast<std::size_t>(k)], *v)) {
+                    ++count;
+                    last = k;
+                }
+            if (u == "LIST_COUNT_OF") return integer(count);
+            return integer(last < 0 ? -1 : last + low);
+        }
+        if (u == "LIST_REMOVE_IF" || u == "LIST_FIND_IF" || u == "LIST_COUNT_IF" || u == "LIST_ALL" || u == "LIST_ANY" || u == "LIST_NONE") {
+            auto c = condition();
+            if (!c) return core::Err<core::Error>(c.error());
+            if (u == "LIST_REMOVE_IF") {
+                std::vector<ObjRef> kept;
+                for (const auto& item : L.items) {
+                    auto h = holds(*c, item);
+                    if (!h) return core::Err<core::Error>(h.error());
+                    if (!*h) kept.push_back(item);
+                }
+                const auto removed = static_cast<std::int64_t>(L.items.size() - kept.size());
+                L.items = std::move(kept);
+                return integer(removed);
+            }
+            std::int64_t count = 0, first = -1;
+            for (std::int64_t k = 0; k < n; ++k) {
+                auto h = holds(*c, L.items[static_cast<std::size_t>(k)]);
+                if (!h) return core::Err<core::Error>(h.error());
+                if (!*h) continue;
+                ++count;
+                if (first < 0) first = k;
+                if (u == "LIST_FIND_IF" || u == "LIST_ANY" || u == "LIST_NONE") break;
+            }
+            if (u == "LIST_FIND_IF") return integer(first < 0 ? -1 : first + low);
+            if (u == "LIST_COUNT_IF") return integer(count);
+            if (u == "LIST_ANY") return boolean(count > 0);
+            if (u == "LIST_NONE") return boolean(count == 0);
+            return boolean(count == n);                                   // LIST_ALL
+        }
+        if (u == "LIST_DISTINCT") {
+            std::vector<ObjRef> kept;
+            for (const auto& item : L.items) {
+                bool seen = false;
+                for (const auto& k : kept) seen = seen || deepEquals(*k, *item);
+                if (!seen) kept.push_back(item);
+            }
+            const auto removed = static_cast<std::int64_t>(L.items.size() - kept.size());
+            L.items = std::move(kept);
+            return integer(removed);
+        }
+        if (u == "LIST_APPEND") {
+            auto other = seqArg(u, arg(1), true);
+            if (!other) return core::Err<core::Error>(other.error());
+            const std::vector<ObjRef> from = other->obj->items;
+            std::vector<ObjRef> made;
+            for (const auto& x : from) {
+                auto m = fitTo(u, elem, valueOfItem(x));
+                if (!m) return core::Err<core::Error>(m.error());
+                made.push_back(*m);
+            }
+            for (auto& m : made) L.items.push_back(m);
+            return integer(static_cast<std::int64_t>(L.items.size()));
+        }
+        if (u == "LIST_MIN_INDEX" || u == "LIST_MAX_INDEX") {
+            std::optional<RV> membre;
+            if (argc > 1) {
+                auto m = rich(arg(1));
+                if (!m) return m;
+                membre = *m;
+            }
+            auto p = projection(u, L, membre ? &*membre : nullptr);
+            if (!p) return core::Err<core::Error>(p.error());
+            std::int64_t best = -1;
+            for (std::int64_t k = 0; k < n; ++k) {
+                const ObjRef& x = projected(L.items[static_cast<std::size_t>(k)], *p);
+                if (!x || !x->type || x->type->kind != TypeDesc::Kind::Scalar)
+                    return dialectError(u + " : des valeurs simples sont attendues (MEMBRE : lequel comparer)");
+                if (best < 0) { best = k; continue; }
+                const int c = x->value.compare(projected(L.items[static_cast<std::size_t>(best)], *p)->value);
+                if (u == "LIST_MIN_INDEX" ? c < 0 : c > 0) best = k;
+            }
+            return integer(best < 0 ? -1 : best + low);
+        }
+        if (u == "LIST_SORT_BY") {
+            auto m = rich(arg(1));
+            if (!m) return m;
+            auto p = projection(u, L, &*m);
+            if (!p) return core::Err<core::Error>(p.error());
+            bool descending = false;
+            if (argc > 2) {
+                auto d = boolArg(u, arg(2));
+                if (!d) return core::Err<core::Error>(d.error());
+                descending = *d;
+            }
+            const int member = *p;
+            for (const auto& item : L.items) {
+                const ObjRef& x = projected(item, member);
+                if (!x || !x->type || x->type->kind != TypeDesc::Kind::Scalar)
+                    return dialectError(u + " : le membre tri\xC3\xA9 est une valeur simple (un nombre, un texte, une dur\xC3\xA9" "e)");
+            }
+            std::stable_sort(L.items.begin(), L.items.end(), [&](const ObjRef& a, const ObjRef& b) {
+                const int c = projected(a, member)->value.compare(projected(b, member)->value);
+                return descending ? c > 0 : c < 0;
+            });
+            auto c = commit();
+            if (!c) return c;
+            return boolean(true);
+        }
+        if (u == "LIST_IS_SORTED") {
+            if (auto bad = scalarsOnly()) return *bad;
+            bool descending = false;
+            if (argc > 1) {
+                auto d = boolArg(u, arg(1));
+                if (!d) return core::Err<core::Error>(d.error());
+                descending = *d;
+            }
+            for (std::size_t k = 1; k < L.items.size(); ++k) {
+                const int c = L.items[k]->value.compare(L.items[k - 1]->value);
+                if (descending ? c > 0 : c < 0) return boolean(false);
+            }
+            return boolean(true);
+        }
+        if (u == "LIST_SWAP" || u == "LIST_MOVE") {
+            auto i = intArg(u, arg(1), "un indice");
+            if (!i) return core::Err<core::Error>(i.error());
+            auto j = intArg(u, arg(2), "un indice");
+            if (!j) return core::Err<core::Error>(j.error());
+            const std::int64_t a = *i - low, b = *j - low;
+            if (a < 0 || b < 0 || a >= n || b >= n) return boolean(false);
+            if (u == "LIST_SWAP") {
+                std::swap(L.items[static_cast<std::size_t>(a)], L.items[static_cast<std::size_t>(b)]);
+            } else {
+                const ObjRef x = L.items[static_cast<std::size_t>(a)];
+                L.items.erase(L.items.begin() + static_cast<std::ptrdiff_t>(a));
+                L.items.insert(L.items.begin() + static_cast<std::ptrdiff_t>(b), x);
+            }
+            auto c = commit();
+            if (!c) return c;
+            return boolean(true);
+        }
+        if (u == "LIST_ROTATE") {
+            auto k = intArg(u, arg(1), "le nombre de places");
+            if (!k) return core::Err<core::Error>(k.error());
+            if (n > 0) {
+                const std::int64_t s = ((*k % n) + n) % n;
+                std::rotate(L.items.begin(), L.items.begin() + static_cast<std::ptrdiff_t>(s), L.items.end());
+                auto c = commit();
+                if (!c) return c;
+            }
+            return boolean(true);
+        }
+        if (u == "LIST_SLICE" || u == "LIST_CONCAT" || u == "TO_LIST") {
+            auto out = makeObj(listType(elem));
+            if (u == "LIST_SLICE") {
+                auto d = intArg(u, arg(1), "le d\xC3\xA9" "but");
+                if (!d) return core::Err<core::Error>(d.error());
+                auto count = intArg(u, arg(2), "le nombre");
+                if (!count) return core::Err<core::Error>(count.error());
+                const std::int64_t from = std::max<std::int64_t>(0, *d - low);
+                const std::int64_t to = *count <= 0 ? from : std::min<std::int64_t>(n, std::max<std::int64_t>(0, *d - low + *count));
+                for (std::int64_t k = from; k < to; ++k) out->items.push_back(deepCopy(*L.items[static_cast<std::size_t>(k)]));
+                return RV{{}, out};
+            }
+            for (const auto& x : L.items) out->items.push_back(deepCopy(*x));
+            if (u == "LIST_CONCAT") {
+                auto b = seqArg(u, arg(1), true);
+                if (!b) return core::Err<core::Error>(b.error());
+                const TypeRef eb = b->obj->type->element;
+                if (elem && eb && upperOf(elem->text()) != upperOf(eb->text()))
+                    return dialectError(u + " : des " + eb->text() + " ne vont pas apr\xC3\xA8s des " + elem->text());
+                for (const auto& x : b->obj->items) out->items.push_back(deepCopy(*x));
+            }
+            return RV{{}, out};
+        }
+        return dialectError(u + " : pas encore prise en charge");
+    }
+
+    // ---- les MAP --------------------------------------------------------------------------
+    core::Result<RV> mapNative(const std::string& u, const Expr& e) {
+        const auto argc = e.arguments.size();
+        const auto arg = [&](std::size_t k) -> const Expr& { return *e.arguments[k].second; };
+        const auto* info = lib::native(u);
+        auto M0 = mapArg(u, arg(0));
+        if (!M0) return core::Err<core::Error>(M0.error());
+        ObjArg Ma = *M0;
+        Obj& m = *Ma.obj;
+        if (info && info->writes && Ma.constant) return constantRefused(u);
+        const bool textual = !isInteger(m.type->key);
+        const Type keyType = textual ? Type::String : m.type->key;
+        const auto keyValue = [&](bool isText, const std::string& t, std::int64_t i) {
+            return RV{isText ? Value::text(t) : Value::integer(keyType, i), nullptr};
+        };
+        const auto keyOf = [&](std::size_t k, std::string& text, std::int64_t& integer) -> core::Result<bool> {
+            auto key = rich(arg(k));
+            if (!key) return core::Err<core::Error>(key.error());
+            auto isText = mapKey(m, *key, text, integer);
+            if (!isText) return core::Err<core::Error>(core::fail(core::ErrorCode::InvalidArgument, u + " : " + isText.error().message()));
+            return *isText;
+        };
+        const auto find = [&](bool isText, const std::string& text, std::int64_t integer) -> ObjRef {
+            if (isText) {
+                const auto it = m.textKeys.find(text);
+                return it == m.textKeys.end() ? nullptr : it->second;
+            }
+            const auto it = m.intKeys.find(integer);
+            return it == m.intKeys.end() ? nullptr : it->second;
+        };
+        const auto put = [&](bool isText, const std::string& text, std::int64_t integer, const ObjRef& v) {
+            if (isText) m.textKeys[text] = v;
+            else m.intKeys[integer] = v;
+        };
+        const std::size_t size = m.textKeys.size() + m.intKeys.size();
+        // Les cles, dans l'ordre (une MAP n'a que des cles textes ou que des cles entieres).
+        std::vector<std::pair<RV, ObjRef>> entries;
+        for (const auto& [k, v] : m.textKeys) entries.push_back({keyValue(true, k, 0), v});
+        for (const auto& [k, v] : m.intKeys) entries.push_back({keyValue(false, {}, k), v});
+
+        if (u == "MAP_SET" || u == "MAP_INSERT") {
+            std::string text;
+            std::int64_t integer = 0;
+            auto isText = keyOf(1, text, integer);
+            if (!isText) return core::Err<core::Error>(isText.error());
+            auto v = rich(arg(2));
+            if (!v) return v;
+            auto made = fitTo(u, m.type->element, *v);
+            if (!made) return core::Err<core::Error>(made.error());
+            const ObjRef old = find(*isText, text, integer);
+            if (u == "MAP_INSERT" && old) return RV{Value::boolean(false), nullptr};
+            if (old) {
+                std::string why;
+                if (!assignObj(*old, **made, &why)) return dialectError(u + " : " + why);
+            } else {
+                put(*isText, text, integer, *made);
+            }
+            return RV{Value::boolean(old == nullptr), nullptr};
+        }
+        if (u == "MAP_INCREMENT") {
+            const TypeRef& vt = m.type->element;
+            if (!vt || vt->kind != TypeDesc::Kind::Scalar || !isNumeric(vt->scalar) || vt->scalar == Type::Bool || vt->scalar == Type::Time)
+                return dialectError(u + " : une MAP de nombres est attendue, pas un " + m.type->text());
+            std::string text;
+            std::int64_t integer = 0;
+            auto isText = keyOf(1, text, integer);
+            if (!isText) return core::Err<core::Error>(isText.error());
+            RV step{Value::integer(Type::DInt, 1), nullptr};
+            if (argc > 2) {
+                auto x = rich(arg(2));
+                if (!x) return x;
+                auto fitted = fitTo(u, vt, *x);
+                if (!fitted) return core::Err<core::Error>(fitted.error());
+                step = RV{(*fitted)->value, nullptr};
+            }
+            ObjRef entry = find(*isText, text, integer);
+            if (!entry) {
+                auto made = instantiate(vt);
+                if (!made) return core::Err<core::Error>(made.error());
+                entry = *made;
+                put(*isText, text, integer, entry);
+            }
+            Expr plus;
+            plus.kind = Expr::Kind::Binary;
+            plus.op = "+";
+            plus.line = e.line;
+            auto sum = combine(plus, entry->value, step.v);
+            if (!sum) return core::Err<core::Error>(sum.error());
+            entry->value.assignFrom(*sum);
+            return RV{entry->value, nullptr};
+        }
+        if (u == "MAP_FIRST_KEY" || u == "MAP_LAST_KEY") {
+            if (size == 0) {
+                if (argc > 1) return rich(arg(1));
+                return dialectError(u + " : la MAP est vide");
+            }
+            return u == "MAP_FIRST_KEY" ? entries.front().first : entries.back().first;
+        }
+        if (u == "MAP_FLOOR_KEY" || u == "MAP_CEIL_KEY") {
+            std::string text;
+            std::int64_t integer = 0;
+            auto isText = keyOf(1, text, integer);
+            if (!isText) return core::Err<core::Error>(isText.error());
+            if (*isText) {
+                if (u == "MAP_FLOOR_KEY") {
+                    auto it = m.textKeys.upper_bound(text);
+                    if (it != m.textKeys.begin()) return keyValue(true, std::prev(it)->first, 0);
+                } else if (auto it = m.textKeys.lower_bound(text); it != m.textKeys.end()) {
+                    return keyValue(true, it->first, 0);
+                }
+            } else if (u == "MAP_FLOOR_KEY") {
+                auto it = m.intKeys.upper_bound(integer);
+                if (it != m.intKeys.begin()) return keyValue(false, {}, std::prev(it)->first);
+            } else if (auto it = m.intKeys.lower_bound(integer); it != m.intKeys.end()) {
+                return keyValue(false, {}, it->first);
+            }
+            return rich(arg(2));
+        }
+        if (u == "MAP_KEY_OF") {
+            auto v = rich(arg(1));
+            if (!v) return v;
+            for (const auto& [k, x] : entries)
+                if (sameItem(x, *v)) return k;
+            return rich(arg(2));
+        }
+        if (u == "MAP_REMOVE_IF") {
+            auto op = comparisonArg(u, arg(1));
+            if (!op) return core::Err<core::Error>(op.error());
+            auto v = rich(arg(2));
+            if (!v) return v;
+            std::int64_t removed = 0;
+            for (const auto& [k, x] : entries) {
+                auto c = compareItem(u, x, *v);
+                if (!c) return core::Err<core::Error>(c.error());
+                if (!compares(*op, *c)) continue;
+                if (textual) m.textKeys.erase(k.v.asString());
+                else m.intKeys.erase(k.v.asInteger());
+                ++removed;
+            }
+            return RV{Value::integer(Type::DInt, removed), nullptr};
+        }
+        if (u == "MAP_MERGE") {
+            auto other = objArg(arg(1));
+            if (!other) return core::Err<core::Error>(other.error());
+            if (!other->obj || other->isScalar || !other->obj->type || other->obj->type->kind != TypeDesc::Kind::Map)
+                return dialectError(u + " : une MAP est attendue, pas " + kindName(*other));
+            ObjRef src = other->obj;
+            if (src->type->literal) {                       // ['a' := 1] : dans le type de m
+                src = makeObj(m.type);
+                std::string why;
+                if (!store(*src, RV{{}, other->obj}, &why)) return dialectError(u + " : " + why);
+            } else if (!sameType(*src->type, *m.type)) {
+                return dialectError(u + " : " + src->type->text() + " n'est pas un " + m.type->text());
+            }
+            bool replace = false;
+            if (argc > 2) {
+                auto r = boolArg(u, arg(2));
+                if (!r) return core::Err<core::Error>(r.error());
+                replace = *r;
+            }
+            std::int64_t added = 0;
+            const auto mergeOne = [&](bool isText, const std::string& t, std::int64_t i, const ObjRef& v) -> core::Result<bool> {
+                const ObjRef old = find(isText, t, i);
+                if (!old) {
+                    put(isText, t, i, deepCopy(*v));
+                    ++added;
+                } else if (replace) {
+                    std::string why;
+                    if (!assignObj(*old, *v, &why)) return dialectError(u + " : " + why);
+                }
+                return true;
+            };
+            const auto texts = src->textKeys;
+            const auto ints = src->intKeys;
+            for (const auto& [k, v] : texts) {
+                auto r = mergeOne(true, k, 0, v);
+                if (!r) return core::Err<core::Error>(r.error());
+            }
+            for (const auto& [k, v] : ints) {
+                auto r = mergeOne(false, {}, k, v);
+                if (!r) return core::Err<core::Error>(r.error());
+            }
+            return RV{Value::integer(Type::DInt, added), nullptr};
+        }
+        if (u == "MAP_VALUES") {
+            auto out = makeObj(listType(m.type->element));
+            for (const auto& [k, v] : entries) out->items.push_back(deepCopy(*v));
+            return RV{{}, out};
+        }
+        if (u == "MAP_ITEMS") {
+            const TypeRef pair = tupleType({scalarType(keyType), m.type->element});
+            auto out = makeObj(listType(pair));
+            for (const auto& [k, v] : entries) {
+                auto t = makeObj(pair);
+                if (t->items.size() == 2) {
+                    t->items[0]->value.assignFrom(k.v);
+                    t->items[1] = deepCopy(*v);
+                }
+                out->items.push_back(t);
+            }
+            return RV{{}, out};
+        }
+        return dialectError(u + " : pas encore prise en charge");
+    }
+
+    // ---- les TUPLE ------------------------------------------------------------------------
+    core::Result<RV> tupleNative(const std::string& u, const Expr& e) {
+        const auto arg = [&](std::size_t k) -> const Expr& { return *e.arguments[k].second; };
+        auto T0 = tupleArg(u, arg(0));
+        if (!T0) return core::Err<core::Error>(T0.error());
+        ObjArg Ta = *T0;
+        Obj& t = *Ta.obj;
+        const auto fields = static_cast<std::int64_t>(t.items.size());
+        if (u == "TUPLE_SIZE") return RV{Value::integer(Type::DInt, fields), nullptr};
+        if (u == "TUPLE_TO_STRING") {
+            std::string text;
+            if (!literalText(t, text)) text = display(t);
+            return RV{Value::text(text), nullptr};
+        }
+        if (u == "TUPLE_GET" || u == "TUPLE_SET") {
+            auto k = intArg(u, arg(1), "le num\xC3\xA9ro");
+            if (!k) return core::Err<core::Error>(k.error());
+            if (*k < 1 || *k > fields)
+                return dialectError(u + " : " + t.type->text() + " a " + std::to_string(fields) + " champs, pas " + std::to_string(*k));
+            const ObjRef& field = t.items[static_cast<std::size_t>(*k - 1)];
+            if (u == "TUPLE_GET") return valueOfItem(field);
+            if (Ta.constant) return constantRefused(u);
+            auto v = rich(arg(2));
+            if (!v) return v;
+            auto made = fitTo(u, t.type->members[static_cast<std::size_t>(*k - 1)].second, *v);
+            if (!made) return core::Err<core::Error>(made.error());
+            std::string why;
+            if (!assignObj(*field, **made, &why)) return dialectError(u + " : " + why);
+            auto c = commitArg(u, Ta);
+            if (!c) return core::Err<core::Error>(c.error());
+            return RV{Value::boolean(true), nullptr};
+        }
+        if (u == "TUPLE_UNPACK") {
+            const auto given = static_cast<std::int64_t>(e.arguments.size()) - 1;
+            if (given != fields)
+                return dialectError(u + " : " + t.type->text() + " a " + std::to_string(fields) + " champs, " + std::to_string(given)
+                                    + (given > 1 ? " variables donn\xC3\xA9" "es" : " variable donn\xC3\xA9" "e"));
+            std::vector<Place> places;
+            for (std::int64_t k = 0; k < fields; ++k) {
+                const Expr& a = arg(static_cast<std::size_t>(k + 1));
+                if (!isDesignator(a)) return dialectError(u + " : une variable est attendue en " + std::to_string(k + 2) + "e argument");
+                auto p = locate(a, true);
+                if (!p) return core::Err<core::Error>(p.error());
+                if (p->temp) return dialectError(u + " : une variable est attendue en " + std::to_string(k + 2) + "e argument");
+                if (p->constant) return constantRefused(u);
+                // Le type de la variable et celui du champ : le meme.
+                const TypeRef& ft = t.type->members[static_cast<std::size_t>(k)].second;
+                std::string vt;
+                if (p->obj && p->obj->type) vt = p->obj->type->kind == TypeDesc::Kind::Scalar ? scalarTypeName(*p->obj->type) : p->obj->type->text();
+                else vt = upperOf(env_.declaredType(p->name));
+                if (vt.empty()) {
+                    Value probe;
+                    if (env_.read(p->name, probe)) vt = valueTypeText(probe.type());
+                }
+                const std::string fname = ft ? (ft->kind == TypeDesc::Kind::Scalar ? scalarTypeName(*ft) : ft->text()) : std::string("?");
+                const auto base = [](const std::string& s) {
+                    const Type ty = typeFromName(s);
+                    if (ty == Type::String) return std::string("STRING");
+                    if (s == "LREAL") return std::string("REAL");
+                    return s;
+                };
+                if (!vt.empty() && base(upperOf(vt)) != base(upperOf(fname)))
+                    return dialectError(u + " : le champ " + std::to_string(k + 1) + " est un " + fname + ", " + exprText(a) + " un " + vt);
+                places.push_back(*p);
+            }
+            for (std::int64_t k = 0; k < fields; ++k) {
+                std::string why;
+                if (!writePlace(places[static_cast<std::size_t>(k)], valueOfItem(t.items[static_cast<std::size_t>(k)]), &why))
+                    return dialectError(u + " : " + why);
+            }
+            return RV{Value::boolean(true), nullptr};
+        }
+        return dialectError(u + " : pas encore prise en charge");
+    }
+
+    // ---- std::numeric ---------------------------------------------------------------------
+    // OPERATION#... : son rang (0 Somme ... 5 Ou) ; TRANSFORMATION#... (0 Identite ... 5 Inverse).
+    core::Result<int> enumArg(const std::string& u, const Expr& a, const char* enumName) {
+        const std::string want = u + " : " + (std::string(enumName) == "OPERATION" ? "une OPERATION est attendue (OPERATION#Somme\xE2\x80\xA6)"
+                                                                                   : "une TRANSFORMATION est attendue (TRANSFORMATION#Carre\xE2\x80\xA6)")
+                               + ", pas ";
+        if (a.kind == Expr::Kind::Reference && a.name.find('#') != std::string::npos && upperOf(a.name.substr(0, a.name.find('#'))) != enumName)
+            return dialectError(want + a.name);
+        auto v = rich(a);
+        if (!v) return core::Err<core::Error>(v.error());
+        if (v->o || !isInteger(v->v.type()) || v->v.type() == Type::Bool || v->v.asInteger() < 0 || v->v.asInteger() > 5)
+            return dialectError(want + (v->o ? typeNameOf(*v) : v->v.display()));
+        return static_cast<int>(v->v.asInteger());
+    }
+    core::Result<Value> applyOp(int op, const Value& a, const Value& b, std::uint32_t line) {
+        Expr x;
+        x.kind = Expr::Kind::Binary;
+        x.line = line;
+        switch (op) {
+            case 1: x.op = "*"; break;
+            case 2: return a.compare(b) <= 0 ? a : b;
+            case 3: return a.compare(b) >= 0 ? a : b;
+            case 4: x.op = "AND"; break;
+            case 5: x.op = "OR"; break;
+            default: x.op = "+"; break;
+        }
+        if ((op == 4 || op == 5) && (a.type() == Type::Real || b.type() == Type::Real))
+            return dialectError("OPERATION#" + std::string(op == 4 ? "Et" : "Ou") + " : des entiers ou des BOOL sont attendus, pas des r\xC3\xA9" "els");
+        return combine(x, a, b);
+    }
+    static Value transform(int tr, const Value& x) {
+        switch (tr) {
+            case 1: return x.type() == Type::Real ? Value::real(std::fabs(x.asReal())) : Value::integer(x.type(), x.asInteger() < 0 ? -x.asInteger() : x.asInteger());
+            case 2: return x.type() == Type::Real ? Value::real(x.asReal() * x.asReal()) : Value::integer(x.type(), x.asInteger() * x.asInteger());
+            case 3: return Value::real(std::sqrt(x.asReal()));
+            case 4: return x.type() == Type::Real ? Value::real(-x.asReal()) : Value::integer(x.type(), -x.asInteger());
+            case 5: return Value::real(1.0 / x.asReal());
+            default: return x;
+        }
+    }
+    // La valeur dans le type d'une autre (ACCUMULATE plie dans le type de init, comme le C++).
+    static Value asTypeOf(const Value& like, const Value& v) {
+        Value out = Value::defaultOf(like.type());
+        out.assignFrom(v);
+        return out;
+    }
+    core::Result<RV> numericNative(const std::string& u, const std::string& tmpl, const Expr& e) {
+        const auto argc = e.arguments.size();
+        const auto arg = [&](std::size_t k) -> const Expr& { return *e.arguments[k].second; };
+        const auto value = [&](std::size_t k) -> core::Result<Value> {
+            auto v = rich(arg(k));
+            if (!v) return core::Err<core::Error>(v.error());
+            if (v->o) return dialectError(u + " : un nombre est attendu, pas un " + typeNameOf(*v));
+            if (!isNumeric(v->v.type()) || v->v.type() == Type::Time) return dialectError(u + " : un nombre est attendu, pas " + v->v.display());
+            return v->v;
+        };
+        // Les nombres d'une suite (LIST, VECTOR, ARRAY).
+        const auto numbers = [&](std::size_t k, ObjArg* keep) -> core::Result<std::vector<Value>> {
+            auto s = seqArg(u, arg(k), true);
+            if (!s) return core::Err<core::Error>(s.error());
+            std::vector<Value> out;
+            for (const auto& i : s->obj->items) {
+                if (!i || !i->type || i->type->kind != TypeDesc::Kind::Scalar || !isNumeric(i->value.type()) || i->value.type() == Type::Time)
+                    return dialectError(u + " : des nombres sont attendus, pas un " + s->obj->type->text());
+                out.push_back(i->value);
+            }
+            if (keep) *keep = *s;
+            return out;
+        };
+        const auto opAt = [&](std::size_t k) -> core::Result<int> { return k < argc ? enumArg(u, arg(k), "OPERATION") : core::Result<int>(0); };
+        // Une suite rendue : du type de T (une LIST rend une LIST, un ARRAY un ARRAY aux memes bornes).
+        const auto sequenceOf = [&](const ObjArg& like, const std::vector<Value>& vals) -> RV {
+            auto out = makeObj(like.obj->type);
+            for (std::size_t k = 0; k < out->items.size() && k < vals.size(); ++k) out->items[k]->value.assignFrom(vals[k]);
+            if (like.obj->type->kind == TypeDesc::Kind::List) {
+                out->items.clear();
+                for (const auto& v : vals) {
+                    auto item = makeObj(like.obj->type->element);
+                    item->value.assignFrom(v);
+                    out->items.push_back(item);
+                }
+            }
+            return RV{{}, out};
+        };
+        if (u == "ACCUMULATE" || u == "REDUCE" || u == "TRANSFORM_REDUCE") {
+            ObjArg seq;
+            auto xs = numbers(0, &seq);
+            if (!xs) return core::Err<core::Error>(xs.error());
+            Value init;
+            if (argc > 1) {
+                auto i = value(1);
+                if (!i) return core::Err<core::Error>(i.error());
+                init = *i;
+            } else {
+                const TypeRef& el = seq.obj->type->element;
+                init = el && el->kind == TypeDesc::Kind::Scalar && el->scalar == Type::Real ? Value::real(0.0) : Value::integer(Type::DInt, 0);
+            }
+            auto op = opAt(2);
+            if (!op) return core::Err<core::Error>(op.error());
+            int tr = 0;
+            if (u == "TRANSFORM_REDUCE") {
+                auto t = enumArg(u, arg(3), "TRANSFORMATION");
+                if (!t) return core::Err<core::Error>(t.error());
+                tr = *t;
+            }
+            Value acc = init;
+            for (const auto& x : *xs) {
+                auto r = applyOp(*op, acc, transform(tr, x), e.line);
+                if (!r) return core::Err<core::Error>(r.error());
+                acc = asTypeOf(init, *r);
+            }
+            return RV{acc, nullptr};
+        }
+        if (u == "INNER_PRODUCT") {
+            auto a = numbers(0, nullptr);
+            if (!a) return core::Err<core::Error>(a.error());
+            auto b = numbers(1, nullptr);
+            if (!b) return core::Err<core::Error>(b.error());
+            auto init = value(2);
+            if (!init) return core::Err<core::Error>(init.error());
+            Value acc = *init;
+            for (std::size_t k = 0; k < a->size(); ++k) {
+                if (k >= b->size()) return dialectError(u + " : B est plus court que A : B[" + std::to_string(k) + "] manque");
+                auto p = applyOp(1, (*a)[k], (*b)[k], e.line);
+                if (!p) return core::Err<core::Error>(p.error());
+                auto s = applyOp(0, acc, *p, e.line);
+                if (!s) return core::Err<core::Error>(s.error());
+                acc = asTypeOf(*init, *s);
+            }
+            return RV{acc, nullptr};
+        }
+        if (u == "PARTIAL_SUM" || u == "INCLUSIVE_SCAN" || u == "TRANSFORM_INCLUSIVE_SCAN") {
+            ObjArg seq;
+            auto xs = numbers(0, &seq);
+            if (!xs) return core::Err<core::Error>(xs.error());
+            auto op = opAt(1);
+            if (!op) return core::Err<core::Error>(op.error());
+            int tr = 0;
+            if (u == "TRANSFORM_INCLUSIVE_SCAN") {
+                auto t = enumArg(u, arg(2), "TRANSFORMATION");
+                if (!t) return core::Err<core::Error>(t.error());
+                tr = *t;
+            }
+            std::vector<Value> out;
+            for (std::size_t k = 0; k < xs->size(); ++k) {
+                const Value x = transform(tr, (*xs)[k]);
+                if (k == 0) {
+                    out.push_back(x);
+                    continue;
+                }
+                auto r = applyOp(*op, out.back(), x, e.line);
+                if (!r) return core::Err<core::Error>(r.error());
+                out.push_back(*r);
+            }
+            return sequenceOf(seq, out);
+        }
+        if (u == "EXCLUSIVE_SCAN" || u == "TRANSFORM_EXCLUSIVE_SCAN") {
+            ObjArg seq;
+            auto xs = numbers(0, &seq);
+            if (!xs) return core::Err<core::Error>(xs.error());
+            auto init = value(1);
+            if (!init) return core::Err<core::Error>(init.error());
+            auto op = opAt(2);
+            if (!op) return core::Err<core::Error>(op.error());
+            int tr = 0;
+            if (u == "TRANSFORM_EXCLUSIVE_SCAN") {
+                auto t = enumArg(u, arg(3), "TRANSFORMATION");
+                if (!t) return core::Err<core::Error>(t.error());
+                tr = *t;
+            }
+            std::vector<Value> out;
+            Value acc = *init;
+            for (const auto& x : *xs) {
+                out.push_back(acc);
+                auto r = applyOp(*op, acc, transform(tr, x), e.line);
+                if (!r) return core::Err<core::Error>(r.error());
+                acc = *r;
+            }
+            return sequenceOf(seq, out);
+        }
+        if (u == "ADJACENT_DIFFERENCE") {
+            ObjArg seq;
+            auto xs = numbers(0, &seq);
+            if (!xs) return core::Err<core::Error>(xs.error());
+            std::vector<Value> out;
+            Expr minus;
+            minus.kind = Expr::Kind::Binary;
+            minus.op = "-";
+            minus.line = e.line;
+            for (std::size_t k = 0; k < xs->size(); ++k) {
+                if (k == 0) {
+                    out.push_back((*xs)[0]);
+                    continue;
+                }
+                auto d = combine(minus, (*xs)[k], (*xs)[k - 1]);
+                if (!d) return core::Err<core::Error>(d.error());
+                out.push_back(*d);
+            }
+            return sequenceOf(seq, out);
+        }
+        if (u == "IOTA") {
+            auto s = seqArg(u, arg(0), true);
+            if (!s) return core::Err<core::Error>(s.error());
+            if (s->constant) return constantRefused(u);
+            const TypeRef& el = s->obj->type->element;
+            if (!el || el->kind != TypeDesc::Kind::Scalar || !isNumeric(el->scalar) || el->scalar == Type::Time)
+                return dialectError(u + " : des nombres sont attendus, pas un " + s->obj->type->text());
+            auto start = value(1);
+            if (!start) return core::Err<core::Error>(start.error());
+            Value step = Value::integer(Type::DInt, 1);
+            if (argc > 2) {
+                auto p = value(2);
+                if (!p) return core::Err<core::Error>(p.error());
+                step = *p;
+            }
+            Expr times, plus;
+            times.kind = plus.kind = Expr::Kind::Binary;
+            times.op = "*";
+            plus.op = "+";
+            times.line = plus.line = e.line;
+            for (std::size_t k = 0; k < s->obj->items.size(); ++k) {
+                auto off = combine(times, Value::integer(Type::DInt, static_cast<std::int64_t>(k)), step);
+                if (!off) return core::Err<core::Error>(off.error());
+                auto v = combine(plus, *start, *off);
+                if (!v) return core::Err<core::Error>(v.error());
+                s->obj->items[k]->value.assignFrom(*v);
+            }
+            auto c = commitArg(u, *s);
+            if (!c) return core::Err<core::Error>(c.error());
+            return RV{Value::integer(Type::DInt, static_cast<std::int64_t>(s->obj->items.size())), nullptr};
+        }
+        // ---- les entiers : GCD, LCM ; MIDPOINT et les saturations (un <T>, ou le type de a)
+        const auto integerValue = [&](std::size_t k) -> core::Result<Value> {
+            auto v = value(k);
+            if (!v) return v;
+            if (!isInteger(v->type()) || v->type() == Type::Bool) return dialectError(u + " attend deux entiers");
+            return v;
+        };
+        if (u == "GCD" || u == "LCM") {
+            auto a = integerValue(0);
+            if (!a) return core::Err<core::Error>(a.error());
+            auto b = integerValue(1);
+            if (!b) return core::Err<core::Error>(b.error());
+            const Type rt = bitWidth(a->type()) >= bitWidth(b->type()) ? a->type() : b->type();
+            const lib::Wide wa = lib::wideOf(*a), wb = lib::wideOf(*b);
+            std::uint64_t x = wa.mag, y = wb.mag;
+            while (y != 0) {
+                const std::uint64_t r = x % y;
+                x = y;
+                y = r;
+            }
+            lib::Wide g;
+            g.mag = x;
+            lib::Wide r = g;
+            if (u == "LCM") {
+                if (wa.mag == 0 || wb.mag == 0) return RV{Value::integer(rt, 0), nullptr};
+                lib::Wide q = lib::wideDiv(lib::Wide{false, wa.mag, false}, g);
+                r = lib::wideMul(q, lib::Wide{false, wb.mag, false});
+            }
+            lib::IntType it;
+            if (!lib::intType(valueTypeText(rt), it)) lib::intType("DINT", it);
+            if (!lib::fits(r, it)) return dialectError(u + " : le r\xC3\xA9sultat d\xC3\xA9passe un " + valueTypeText(rt));
+            return RV{lib::saturate(r, it), nullptr};
+        }
+        // Le type T : donne entre < >, sinon celui de a (son type ecrit, sinon celui de sa valeur).
+        auto first = value(0);
+        if (!first) return core::Err<core::Error>(first.error());
+        std::string type = tmpl;
+        if (type.empty()) {
+            lib::IntType probe;
+            type = writtenType(arg(0));
+            if (type.empty() || (!lib::intType(type, probe) && type != "REAL" && type != "LREAL")) type = valueTypeText(first->type());
+        }
+        lib::IntType it;
+        const bool integral = lib::intType(type, it);
+        if (u == "MIDPOINT") {
+            auto b = value(1);
+            if (!b) return core::Err<core::Error>(b.error());
+            if (!integral) return RV{Value::real((first->asReal() + b->asReal()) / 2.0), nullptr};
+            const auto whole = [](const Value& v) {
+                return v.type() == Type::Real ? Value::integer(Type::LInt, static_cast<std::int64_t>(std::llround(v.asReal()))) : v;
+            };
+            const lib::Wide wa = lib::wideOf(whole(*first)), wb = lib::wideOf(whole(*b));
+            const lib::Wide mid = lib::wideAdd(wa, lib::wideHalf(lib::wideSub(wb, wa)));
+            return RV{lib::saturate(mid, it), nullptr};
+        }
+        if (!integral)
+            return dialectError(u + " : un type entier est attendu (SINT \xE2\x80\xA6 ULINT, BYTE \xE2\x80\xA6 LWORD), pas " + type
+                                + (tmpl.empty() ? " \xE2\x80\x94 " + u + "<INT>(a, b)" : std::string{}));
+        if (u == "SATURATE_CAST") {
+            Value x = *first;
+            if (x.type() == Type::Real) {
+                if (std::isnan(x.asReal())) return dialectError(u + " : NaN n'est pas un nombre");
+                const double r = std::round(x.asReal());
+                if (r >= 18446744073709551615.0) return RV{lib::saturate(lib::Wide{false, 0, true}, it), nullptr};
+                if (r <= -9223372036854775808.0) return RV{lib::saturate(lib::Wide{true, 0, true}, it), nullptr};
+                if (r >= 9223372036854775807.0) {
+                    lib::Wide w;
+                    w.mag = static_cast<std::uint64_t>(r);
+                    return RV{lib::saturate(w, it), nullptr};
+                }
+                x = Value::integer(Type::LInt, static_cast<std::int64_t>(r));
+            }
+            return RV{lib::saturate(lib::wideOf(x), it), nullptr};
+        }
+        auto b = value(1);
+        if (!b) return core::Err<core::Error>(b.error());
+        if (first->type() == Type::Real || b->type() == Type::Real || first->type() == Type::Bool || b->type() == Type::Bool)
+            return dialectError(u + " : deux entiers sont attendus");
+        const lib::Wide wa = lib::wideOf(*first), wb = lib::wideOf(*b);
+        lib::Wide r;
+        if (u == "ADD_SAT") r = lib::wideAdd(wa, wb);
+        else if (u == "SUB_SAT") r = lib::wideSub(wa, wb);
+        else if (u == "MUL_SAT") r = lib::wideMul(wa, wb);
+        else {
+            if (wb.mag == 0 && !wb.huge) return dialectError(u + " : division par z\xC3\xA9ro");
+            r = lib::wideDiv(wa, wb);
+        }
+        return RV{lib::saturate(r, it), nullptr};
+    }
+
+    // ---- <bit> : BIT_COUNT, BIT_FIRST, BIT_TEST, BIT_SET, BIT_RESET ----------------------
+    core::Result<RV> bitNative(const std::string& u, const Expr& e) {
+        const auto arg = [&](std::size_t k) -> const Expr& { return *e.arguments[k].second; };
+        auto w = rich(arg(0));
+        if (!w) return w;
+        if (w->o || !isInteger(w->v.type()) || w->v.type() == Type::Bool || w->v.type() == Type::Time || isDateType(w->v.type()))
+            return dialectError(u + " : un mot ou un entier est attendu (BYTE, WORD, DWORD, LWORD, INT\xE2\x80\xA6), pas "
+                                + (w->o ? typeNameOf(*w) : w->v.type() == Type::String ? w->v.display() : std::string(toString(w->v.type()))));
+        const std::string written = writtenType(arg(0));
+        lib::IntType it;
+        int width = bitWidth(w->v.type());
+        std::string typeName = valueTypeText(w->v.type());
+        bool isSigned = w->v.type() == Type::Int || w->v.type() == Type::DInt || w->v.type() == Type::LInt;
+        if (!written.empty() && lib::intType(written, it)) {
+            width = it.bits;
+            typeName = written;
+            isSigned = it.isSigned;
+        }
+        const std::uint64_t mask = width >= 64 ? ~std::uint64_t{0} : (std::uint64_t{1} << width) - 1;
+        const std::uint64_t bits = static_cast<std::uint64_t>(w->v.asInteger()) & mask;
+        if (u == "BIT_COUNT") {
+            int c = 0;
+            for (std::uint64_t x = bits; x != 0; x &= x - 1) ++c;
+            return RV{Value::integer(Type::DInt, c), nullptr};
+        }
+        if (u == "BIT_FIRST") {
+            if (bits == 0) return RV{Value::integer(Type::DInt, -1), nullptr};
+            int k = 0;
+            while (((bits >> k) & 1u) == 0) ++k;
+            return RV{Value::integer(Type::DInt, k), nullptr};
+        }
+        auto n = intArg(u, arg(1), "le num\xC3\xA9ro du bit");
+        if (!n) return core::Err<core::Error>(n.error());
+        if (*n < 0 || *n >= width)
+            return dialectError(u + " : le bit " + std::to_string(*n) + " n'existe pas dans un " + typeName + " (0.." + std::to_string(width - 1) + ")");
+        const std::uint64_t one = std::uint64_t{1} << *n;
+        if (u == "BIT_TEST") return RV{Value::boolean((bits & one) != 0), nullptr};
+        const std::uint64_t r = u == "BIT_SET" ? (bits | one) : (bits & ~one);
+        std::int64_t out = static_cast<std::int64_t>(r);
+        if (isSigned && width < 64 && ((r >> (width - 1)) & 1u) != 0) out = static_cast<std::int64_t>(r | ~mask);     // le signe
+        return RV{Value::integer(w->v.type(), truncateTo(w->v.type(), out)), nullptr};
+    }
+
+    // ---- les templates de classe : NUMERIC_LIMITS<T>.MEMBRE, NUMBERS[<T>].CONSTANTE ------
+    // Vrai : le nom (avec son type) est celui d'un template de classe, sans variable du meme nom.
+    bool templateClassName(const std::string& name, std::string& base, std::string& type) {
+        const std::string u = upperOf(name);
+        const auto lt = u.find('<');
+        base = lt == std::string::npos ? u : u.substr(0, lt);
+        type = lt == std::string::npos || u.back() != '>' ? std::string{} : u.substr(lt + 1, u.size() - lt - 2);
+        if (base != "NUMERIC_LIMITS" && base != "NUMBERS") return false;
+        if (lt != std::string::npos) return true;
+        // NUMBERS seul : seulement s'il n'est pas une variable (ce qui tournait en 1.12.6 tourne pareil).
+        return !findLocal(name) && !env_.exists(name) && env_.declaredType(name).empty() && !env_.richVariable(name);
+    }
+    std::optional<core::Result<RV>> templateMemberValue(const Expr& e, bool called) {
+        if (e.kind != Expr::Kind::Member || !e.lhs || e.lhs->kind != Expr::Kind::Reference) return std::nullopt;
+        std::string base, type;
+        if (!templateClassName(e.lhs->name, base, type)) return std::nullopt;
+        const auto* t = lib::templateInfo(base);
+        if (!t) return std::nullopt;
+        if (type.empty() && t->required) return core::Result<RV>(dialectError(std::string(t->hint)));
+        if (type.empty()) type = std::string(t->dflt);
+        const std::string head = base + (type.empty() ? std::string{} : "<" + type + ">");
+        const auto* m = lib::templateMember(base, e.name);
+        if (!m) {
+            std::vector<std::string> pool;
+            for (const auto& x : base == "NUMBERS" ? lib::numbersMembers() : lib::limitsMembers()) pool.emplace_back(x.name);
+            return core::Result<RV>(dialectError((base == "NUMBERS" && e.lhs->name.find('<') == std::string::npos ? base : head) + " n'a pas de membre "
+                                                 + e.name + lib::closest(e.name, pool)));
+        }
+        if (m->function && !called) return core::Result<RV>(dialectError(std::string(m->name) + " est une fonction : " + head + "." + std::string(m->name) + "()"));
+        if (!m->function && called) return core::Result<RV>(dialectError(std::string(m->name) + " est une constante : sans parenth\xC3\xA8ses"));
+        Value out;
+        const bool ok = base == "NUMBERS" ? lib::numbersValue(type, m->name, out) : lib::limitsValue(type, m->name, out);
+        if (!ok) return core::Result<RV>(dialectError(head + " : " + std::string(t->want)));
+        return core::Result<RV>(RV{out, nullptr});
     }
 
     bool                                    dialect_{false};

@@ -337,6 +337,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\project\Security.cpp" />
     <ClCompile Include="src\project\SharedLibrary.cpp" />
     <ClCompile Include="src\project\Table.cpp" />
+    <ClCompile Include="src\sim\DialectLib.cpp" />
     <ClCompile Include="src\sim\Interpreter.cpp" />
     <ClCompile Include="src\sim\Runtime.cpp" />
     <ClCompile Include="src\sim\Value.cpp" />
@@ -766,6 +767,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\project\Security.hpp" />
     <ClInclude Include="src\project\SharedLibrary.hpp" />
     <ClInclude Include="src\project\Table.hpp" />
+    <ClInclude Include="src\sim\DialectLib.hpp" />
     <ClInclude Include="src\sim\Interpreter.hpp" />
     <ClInclude Include="src\sim\Runtime.hpp" />
     <ClInclude Include="src\sim\Value.hpp" />
