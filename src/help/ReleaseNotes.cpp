@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.12.4", "11/10/2026", "livr\xC3\xA9" "e le 11/10 dans la matin\xC3\xA9" "e"},
     {"1.12.3", "10/10/2026", "livr\xC3\xA9" "e le 10/10 au soir"},
     {"1.12.2", "10/10/2026", "livr\xC3\xA9" "e le 10/10 dans l'apr\xC3\xA8s-midi"},
     {"1.12.1", "10/10/2026", "livr\xC3\xA9" "e le 10/10 en fin de nuit"},
@@ -109,6 +110,20 @@ const std::vector<Note>& table() {
     static const std::vector<Note> t = {
         // 1.11.16 (09/10/2026 dans la nuit) : la remanence d'exploitation par variable, la robustesse
         // (lot 4 de la specification du 08/10).
+        // 1.12.4 (11/10/2026 dans la matinee) : les types objets pour les membres des types IHM et les
+        // parametres des popups et des symboles, une seule ligne Type, l'apercu de la Disposition.
+        note("1.12.4", "Types", Kind::New,
+         "LES MEMBRES OBJETS : un membre d'un type IHM peut \xC3\xAA" "tre une liste, un vecteur, un dictionnaire (MAP) ou un tuple (Recette.Etapes : LIST OF STRING) - Liste\xE2\x80\xA6, Vecteur\xE2\x80\xA6, Dictionnaire (MAP)\xE2\x80\xA6, Tuple\xE2\x80\xA6 dans l'\xC3\xA9" "cran des types. Il vit dans la m\xC3\xA9moire de l'IHM (sans place Modbus : les autres membres gardent la leur, liaison comprise) ; Recette.Etapes[0], LIST_ADD(Recette.Etapes, x), Recettes[i].Etapes, FOR EACH, R2 := Recette (copie enti\xC3\xA8re) marchent dans les scripts et les expressions. Un type qui se contiendrait par une liste est refus\xC3\xA9.",
+         "types-ihm", ""),
+        note("1.12.4", "Popups", Kind::New,
+         "LES PARAM\xC3\x88TRES OBJETS des popups et des symboles : LIST, VECTOR, MAP, TUPLE (ou une structure qui en porte). En r\xC3\xA9" "f\xC3\xA9rence (une variable, un membre objet), en valeur ([1, 2], ['a' := 1], (7, 'sept'), un calcul), en copie et \xC2\xAB les deux \xC2\xBB (Appliquer copie sur r\xC3\xA9" "f\xC3\xA9rence remet l'objet entier) ; une liste, une liste d\xC3\xA9roulante ou un tableau de la popup li\xC3\xA9s au param\xC3\xA8tre (\xE2\x86\x90 L). Un symbole re\xC3\xA7oit son param\xC3\xA8tre objet par une variable ; G\xC3\xA9n\xC3\xA9rer v\xC3\xA9rifie un litt\xC3\xA9ral dans son type.",
+         "parametres-popups", ""),
+        note("1.12.4", "\xC3\x89" "diteur", Kind::Changed,
+         "UNE SEULE LIGNE TYPE pour un param\xC3\xA8tre de popup ou de symbole : le type entier dit s'il est un tableau (ARRAY[1..10] OF REAL), une liste, un dictionnaire ; plus de ligne Tableau \xC3\xA0 c\xC3\xB4t\xC3\xA9. Tableau\xE2\x80\xA6, Liste\xE2\x80\xA6, Vecteur\xE2\x80\xA6, Dictionnaire (MAP)\xE2\x80\xA6, Tuple\xE2\x80\xA6 ouvrent le s\xC3\xA9lecteur de types sur cette forme.",
+         "parametres-popups", ""),
+        note("1.12.4", "Application", Kind::New,
+         "L'APER\xC3\x87U DE LA DISPOSITION : Projet \xE2\x80\xBA Disposition\xE2\x80\xA6 dessine la fen\xC3\xAAtre avec le brouillon, avant Appliquer - l'explorateur \xC3\xA0 gauche ou \xC3\xA0 droite, le panneau du bas dessous, \xC3\xA0 droite ou repli\xC3\xA9, les pages qui s'ouvrent seules (c\xC3\xB4te \xC3\xA0 c\xC3\xB4te, d\xC3\xA9tach\xC3\xA9" "es), les sous-onglets montr\xC3\xA9s ; en \xC3\xA9" "dition ou en simulation (vert : seulement en simulation).",
+         "onglets", ""),
         // 1.12.3 (10/10/2026 au soir) : Projet > Disposition, les etats en table, plusieurs objets
         // choisis, la simulation et le poste (courbes, forcage, Console, sons, onglets), l'audit.
         note("1.12.3", "Application", Kind::New,

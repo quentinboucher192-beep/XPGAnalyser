@@ -642,6 +642,13 @@ const std::vector<Topic>& topics() {
                          "\xC2\xAB R\xC3\xA9tablir la disposition d'origine \xC2\xBB les efface. Un \xC3\xA9l\xC3\xA9ment "
                          "\xC2\xAB en simulation \xC2\xBB appara\xC3\xAEt au d\xC3\xA9marrage de la simulation et repart "
                          "\xC3\xA0 l'arr\xC3\xAAt.", {}, "1.12.3"},
+             {K::Paragraph, "**L'aper\xC3\xA7u** (1.12.4) : \xC3\xA0 droite de la fen\xC3\xAAtre Disposition, la "
+                         "fen\xC3\xAAtre dessin\xC3\xA9" "e avec le brouillon, avant Appliquer - l'explorateur \xC3\xA0 "
+                         "gauche ou \xC3\xA0 droite, le panneau du bas dessous, \xC3\xA0 droite ou repli\xC3\xA9 (une "
+                         "barre), les pages qui s'ouvrent seules (c\xC3\xB4te \xC3\xA0 c\xC3\xB4te ; d\xC3\xA9tach\xC3\xA9" "es, "
+                         "par-dessus) et celle de devant avec ses sous-onglets. **En \xC3\xA9" "dition** / **En "
+                         "simulation** : ce qui n'est montr\xC3\xA9 qu'en simulation est liser\xC3\xA9 de vert, "
+                         "qu'en \xC3\xA9" "dition de bleu ; le sous-onglet choisi au d\xC3\xA9part est en couleur.", {}, "1.12.4"},
              {K::Heading, "Les raccourcis", {}},
              {K::Table, "Touche\tCe qu'elle fait\nCtrl+Z\tAnnuler (dans un champ en cours de saisie : sa "
                          "saisie d'abord)\nCtrl+Y, "
@@ -1764,8 +1771,11 @@ const std::vector<Topic>& topics() {
                          "sous-section **Param\xC3\xA8tres** montre en haut **Montrer : Param\xC3\xA8tres "
                          "(4) | Infos (3 appels)**, puis une ligne par param\xC3\xA8tre, titr\xC3\xA9" "e "
                          "par son nom, son type et sa pastille (`Moteur \xC2\xB7 T_POMPE \xC2\xB7 LES "
-                         "DEUX`). Chaque ligne se d\xC3\xA9plie : **Nom**, **Type**, **Tableau** (les bornes "
-                         "d'un `ARRAY[a..b] OF`), **Mode**, **Valeur par d\xC3\xA9" "faut** (ce qu'il vaut "
+                         "DEUX`). Chaque ligne se d\xC3\xA9plie : **Nom**, **Type** (le type entier, 1.12.4 : un "
+                         "tableau s'y \xC3\xA9" "crit `ARRAY[1..4] OF T_Moteur` - plus de ligne Tableau ; "
+                         "Tableau\xE2\x80\xA6, Liste\xE2\x80\xA6, Vecteur\xE2\x80\xA6, Dictionnaire (MAP)\xE2\x80\xA6, "
+                         "Tuple\xE2\x80\xA6 ouvrent le s\xC3\xA9lecteur de types sur cette forme), **Mode**, **Valeur par "
+                         "d\xC3\xA9" "faut** (ce qu'il vaut "
                          "quand l'appelant ne le donne pas, et dans l'\xC3\xA9" "diteur), **Description**, "
                          "**Ordre** (Monter, Descendre, Supprimer).", {}},
              {K::Bullet, "**Ajouter** : tape le nom du nouveau param\xC3\xA8tre ; il arrive en fin de liste, "
@@ -1804,6 +1814,16 @@ const std::vector<Topic>& topics() {
              {K::Bullet, "**Les DDT de l'API** : les types d\xC3\xA9riv\xC3\xA9s du programme de l'automate, "
                          "quand il est charg\xC3\xA9.", {}},
              {K::Bullet, "**Un tableau** : `ARRAY[1..4] OF T_Moteur`.", {}},
+             {K::Bullet, "**Un objet** (1.12.4) : une liste `LIST OF STRING`, un vecteur, un dictionnaire "
+                         "`MAP[STRING] OF INT`, un tuple `TUPLE(INT, STRING)`. En R\xC3\xA9" "f\xC3\xA9rence, la popup "
+                         "re\xC3\xA7oit la variable de l'appelant (`L := Recettes`, un membre objet `Recette.Etapes`) "
+                         "et l'\xC3\xA9" "crit en place (`LIST_ADD(L, 'x')`) ; un litt\xC3\xA9ral ou un calcul "
+                         "(`L := ['a', 'b']`, `M := ['k' := 5]`, `T := (7, 'sept')`, `L := SPLIT(Texte, ';')`) "
+                         "devient un objet \xC3\xA0 elle ; en Copie et Les deux, une copie enti\xC3\xA8re, "
+                         "qu'Appliquer copie sur r\xC3\xA9" "f\xC3\xA9rence remet enti\xC3\xA8re. Une liste, une liste "
+                         "d\xC3\xA9roulante ou un tableau de la popup se lient au param\xC3\xA8tre (\xE2\x86\x90 L). Un "
+                         "symbole re\xC3\xA7oit son param\xC3\xA8tre objet par une variable (son instance est "
+                         "d\xC3\xA9velopp\xC3\xA9" "e en texte).", {}, "1.12.4"},
              {K::Paragraph, "Le type sert \xC3\xA0 trois choses : v\xC3\xA9rifier l'argument donn\xC3\xA9 "
                          "(G\xC3\xA9n\xC3\xA9rer le signale s'il ne convient pas), proposer les membres dans "
                          "l'aide \xC3\xA0 la saisie (`Moteur.` propose Marche, Vitesse...), et capturer tous "
@@ -12196,6 +12216,27 @@ const std::vector<Topic>& topics() {
                          "  }\n}", "C++"},
              {K::Paragraph, "Une structure se copie d'un coup entre deux variables du m\xC3\xAAme type : `Four2 "
                          ":= Four1;`.", {}},
+             {K::Heading, "Un membre objet (1.12.4)", {}, "1.12.4"},
+             {K::Paragraph, "Un membre peut \xC3\xAAtre une **liste**, un **vecteur**, un **dictionnaire** ou un "
+                         "**tuple** (Liste\xE2\x80\xA6, Vecteur\xE2\x80\xA6, Dictionnaire (MAP)\xE2\x80\xA6, Tuple\xE2\x80\xA6 "
+                         "dans la case Type) : `Etapes : LIST OF STRING`, valeur initiale `['P\xC3\xA9trir', "
+                         "'Cuire']`. Il vit dans la m\xC3\xA9moire de l'IHM : ni place Modbus ni mot "
+                         "(D\xC3\xA9" "calage \xC2\xAB \xE2\x80\x94 \xC2\xBB, Taille \xC2\xAB objet (IHM) \xC2\xBB) ; les autres "
+                         "membres gardent la leur, la liaison comprise. `R2 := Recette` copie aussi ses objets ; "
+                         "R\xC3\xA9manente ne les garde pas ; la simulation les montre et les \xC3\xA9" "crit (un "
+                         "litt\xC3\xA9ral). Un type ne se contient pas, m\xC3\xAAme dans une liste (`T_Noeud.Enfants : "
+                         "LIST OF T_Noeud` est refus\xC3\xA9).", {}, "1.12.4"},
+             {K::Code, "LIST_ADD(Recette.Etapes, 'Servir');\nRecette.Etapes[0] := 'Peser';\nFOR i := 0 TO "
+                         "Recettes.High DO\n    IHM_JOURNAL('{Recettes[i].Nom} : {Recettes[i].Etapes.Count} "
+                         "\xC3\xA9tapes');\nEND_FOR;\nFOR EACH e IN Recette.Etapes DO\n    Texte := Texte + e + "
+                         "' / ';\nEND_FOR;", "ST", "1.12.4"},
+             {K::Code, "LIST_ADD(&Recette.Etapes, \"Servir\");     /* une liste de l'IHM : ses fonctions */\n"
+                         "Recette.Etapes.items[0] = \"Peser\";\nfor (int i = 0; i <= Recettes_High; ++i)\n    "
+                         "IHM_JOURNAL(\"{Recettes[i].Nom} : {Recettes[i].Etapes.Count} \xC3\xA9tapes\");\nfor (int k = 0; k < "
+                         "Recette.Etapes.count; ++k)\n    strcat(Texte, Recette.Etapes.items[k]);", "C"},
+             {K::Code, "Recette.Etapes.push_back(\"Servir\");      // std::vector<std::string>\nRecette.Etapes[0] = "
+                         "\"Peser\";\nfor (auto& r : Recettes)\n    IHM_JOURNAL(\"{r.Nom} : {r.Etapes.size()} "
+                         "\xC3\xA9tapes\");\nfor (const auto& e : Recette.Etapes)\n    Texte += e + \" / \";", "C++"},
              {K::Heading, "Ce qu'il faut savoir", {}},
              {K::Bullet, "un type ne se contient pas lui-m\xC3\xAAme, m\xC3\xAAme par un d\xC3\xA9tour "
                          "(`T_A` \xE2\x86\x92 `T_B` \xE2\x86\x92 `T_A`) : refus\xC3\xA9, avec le chemin du "

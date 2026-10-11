@@ -308,6 +308,8 @@ Dès qu'un onglet est réduit ou caché, un **bouton à droite de la bande** (tr
 @nouveau 1.12.3
 ### La disposition (1.12.3)
 **Projet › Disposition…** (Ctrl+Maj+K ; Affichage › Panneaux à afficher… ouvre la même fenêtre) : les panneaux de la fenêtre, les sous-onglets de chaque page et les pages du centre. Pour chacun : **quand** le montrer (toujours, en édition, en simulation, caché ; une page : à la demande, à l'ouverture du projet, au démarrage de la simulation), **où** (l'explorateur à gauche ou à droite, le panneau du bas sous l'éditeur ou à sa droite, une page dans un onglet, côte à côte ou détachée) et **au départ** (le panneau du bas ouvert ou replié, le sous-onglet choisi). Des dispositions toutes faites : Par défaut, Dessin des vues, Mise au point, Écran large, et **Ma disposition** (« Garder comme Ma disposition »). **Appliquer** montre tout de suite ; tout se garde dans les réglages de l'édition (disposition.*) ; « Rétablir la disposition d'origine » les efface. Un élément « en simulation » apparaît au démarrage de la simulation et repart à l'arrêt.
+@nouveau 1.12.4
+**L'aperçu** (1.12.4) : à droite de la fenêtre Disposition, la fenêtre dessinée avec le brouillon, avant Appliquer - l'explorateur à gauche ou à droite, le panneau du bas dessous, à droite ou replié (une barre), les pages qui s'ouvrent seules (côte à côte ; détachées, par-dessus) et celle de devant avec ses sous-onglets. **En édition** / **En simulation** : ce qui n'est montré qu'en simulation est liseré de vert, qu'en édition de bleu ; le sous-onglet choisi au départ est en couleur.
 ### Les raccourcis
 | Touche | Ce qu'elle fait |
 | Ctrl+Z | Annuler (dans un champ en cours de saisie : sa saisie d'abord) |
@@ -829,7 +831,7 @@ IHM_FERMER_POPUPS();
 @capture PNG_944_scripts_parametres.png | Un script de la popup : ses paramètres s'emploient par leur nom et leurs membres ; l'aide à la saisie les propose.
 @capture PNG_945_popup_copie_modifiee.png | En marche : le seuil changé dans la copie porte le repère « modifié, pas encore appliqué ».
 ### La liste des paramètres
-Dans la fiche de la popup (rien de choisi, onglet Propriétés), la sous-section **Paramètres** montre en haut **Montrer : Paramètres (4) | Infos (3 appels)**, puis une ligne par paramètre, titrée par son nom, son type et sa pastille (`Moteur · T_POMPE · LES DEUX`). Chaque ligne se déplie : **Nom**, **Type**, **Tableau** (les bornes d'un `ARRAY[a..b] OF`), **Mode**, **Valeur par défaut** (ce qu'il vaut quand l'appelant ne le donne pas, et dans l'éditeur), **Description**, **Ordre** (Monter, Descendre, Supprimer).
+Dans la fiche de la popup (rien de choisi, onglet Propriétés), la sous-section **Paramètres** montre en haut **Montrer : Paramètres (4) | Infos (3 appels)**, puis une ligne par paramètre, titrée par son nom, son type et sa pastille (`Moteur · T_POMPE · LES DEUX`). Chaque ligne se déplie : **Nom**, **Type** (le type entier, 1.12.4 : un tableau s'y écrit `ARRAY[1..4] OF T_Moteur` - plus de ligne Tableau ; Tableau…, Liste…, Vecteur…, Dictionnaire (MAP)…, Tuple… ouvrent le sélecteur de types sur cette forme), **Mode**, **Valeur par défaut** (ce qu'il vaut quand l'appelant ne le donne pas, et dans l'éditeur), **Description**, **Ordre** (Monter, Descendre, Supprimer).
 - **Ajouter** : tape le nom du nouveau paramètre ; il arrive en fin de liste, en Référence, type ANY.
 - **Renommer** un paramètre le renomme partout (ses emplois dans la popup, Appliquer copie, et le nom de l'argument dans chaque action qui l'ouvre), en une seule commande.
 - Sous la liste, les trois modes sont expliqués en une ligne chacun.
@@ -841,6 +843,8 @@ Dans la fiche de la popup (rien de choisi, onglet Propriétés), la sous-section
 - **Les types IHM** du projet : tes structures (T_Moteur) et leurs tableaux (voir « Les types IHM »).
 - **Les DDT de l'API** : les types dérivés du programme de l'automate, quand il est chargé.
 - **Un tableau** : `ARRAY[1..4] OF T_Moteur`.
+@nouveau 1.12.4
+- **Un objet** (1.12.4) : une liste `LIST OF STRING`, un vecteur, un dictionnaire `MAP[STRING] OF INT`, un tuple `TUPLE(INT, STRING)`. En Référence, la popup reçoit la variable de l'appelant (`L := Recettes`, un membre objet `Recette.Etapes`) et l'écrit en place (`LIST_ADD(L, 'x')`) ; un littéral ou un calcul (`L := ['a', 'b']`, `M := ['k' := 5]`, `T := (7, 'sept')`, `L := SPLIT(Texte, ';')`) devient un objet à elle ; en Copie et Les deux, une copie entière, qu'Appliquer copie sur référence remet entière. Une liste, une liste déroulante ou un tableau de la popup se lient au paramètre (← L). Un symbole reçoit son paramètre objet par une variable (son instance est développée en texte).
 Le type sert à trois choses : vérifier l'argument donné (Générer le signale s'il ne convient pas), proposer les membres dans l'aide à la saisie (`Moteur.` propose Marche, Vitesse...), et capturer tous les membres d'une copie.
 ### La règle des types : elle dépend du mode
 - En **Référence** et en **Les deux**, la popup écrit la variable de l'appelant : la variable donnée doit avoir **exactement** le type du paramètre (ANY accepte tout ; STRING[20] compte pour STRING).
@@ -5183,6 +5187,35 @@ for (std::size_t f = 0; f < Fours.size(); ++f) {   // std::array<T_Four, 4>
 }
 ```
 Une structure se copie d'un coup entre deux variables du même type : `Four2 := Four1;`.
+@nouveau 1.12.4
+### Un membre objet (1.12.4)
+Un membre peut être une **liste**, un **vecteur**, un **dictionnaire** ou un **tuple** (Liste…, Vecteur…, Dictionnaire (MAP)…, Tuple… dans la case Type) : `Etapes : LIST OF STRING`, valeur initiale `['Pétrir', 'Cuire']`. Il vit dans la mémoire de l'IHM : ni place Modbus ni mot (Décalage « — », Taille « objet (IHM) ») ; les autres membres gardent la leur, la liaison comprise. `R2 := Recette` copie aussi ses objets ; Rémanente ne les garde pas ; la simulation les montre et les écrit (un littéral). Un type ne se contient pas, même dans une liste (`T_Noeud.Enfants : LIST OF T_Noeud` est refusé).
+```ST
+LIST_ADD(Recette.Etapes, 'Servir');
+Recette.Etapes[0] := 'Peser';
+FOR i := 0 TO Recettes.High DO
+    IHM_JOURNAL('{Recettes[i].Nom} : {Recettes[i].Etapes.Count} étapes');
+END_FOR;
+FOR EACH e IN Recette.Etapes DO
+    Texte := Texte + e + ' / ';
+END_FOR;
+```
+```C
+LIST_ADD(&Recette.Etapes, "Servir");     /* une liste de l'IHM : ses fonctions */
+Recette.Etapes.items[0] = "Peser";
+for (int i = 0; i <= Recettes_High; ++i)
+    IHM_JOURNAL("{Recettes[i].Nom} : {Recettes[i].Etapes.Count} étapes");
+for (int k = 0; k < Recette.Etapes.count; ++k)
+    strcat(Texte, Recette.Etapes.items[k]);
+```
+```C++
+Recette.Etapes.push_back("Servir");      // std::vector<std::string>
+Recette.Etapes[0] = "Peser";
+for (auto& r : Recettes)
+    IHM_JOURNAL("{r.Nom} : {r.Etapes.size()} étapes");
+for (const auto& e : Recette.Etapes)
+    Texte += e + " / ";
+```
 ### Ce qu'il faut savoir
 - un type ne se contient pas lui-même, même par un détour (`T_A` → `T_B` → `T_A`) : refusé, avec le chemin du cycle ;
 - **renommer** un type renomme ses emplois (variables, autres types) ; un type employé ne se supprime pas ;
