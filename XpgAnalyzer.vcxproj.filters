@@ -517,6 +517,9 @@
     <ClCompile Include="src\app\hmi\HmiImages.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiCalcDialog.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\hmi\HmiImportDialog.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
@@ -1811,6 +1814,9 @@
       <Filter>app\hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\app\hmi\HmiImages.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiCalcDialog.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\app\hmi\HmiImportDialog.hpp">

@@ -875,6 +875,49 @@ bool HmiDeclGrid::editCalculation(std::size_t row) {
             spec.info += std::string(is.error ? "Faute" : "Attention") + (is.line > 0 ? " ligne " + std::to_string(is.line) : std::string{}) + " : "
                        + is.message + "\n";
     const hmi::Id id = d.id;
+    // En direct : le projet copie, ce code et ces locales poses, le calcul fait comme au demarrage.
+    if (place_)
+        spec.preview = [doc = doc_, at = *place_, t = tab_, id](const std::string& calc, const std::string& locals) -> std::string {
+            if (!doc) return {};
+            hmi::Project copy = doc->project;
+            const auto code = de::locate(copy, at);
+            if (!code.valid()) return "Ce code n'existe plus.";
+            std::size_t row = static_cast<std::size_t>(-1);
+            const auto rows = de::rowsOf(*code.decls, t);
+            for (std::size_t r = 0; r < rows.size(); ++r)
+                if ((*code.decls)[rows[r]].id == id) row = r;
+            if (row == static_cast<std::size_t>(-1)) return "Cette d\xC3\xA9" "claration n'est plus dans l'onglet.";
+            std::string why;
+            if (!de::setCalculation(copy, at, t, row, calc, locals, &why)) return "Faute : " + why;
+            const hmi::Script* sc = nullptr;
+            const hmi::View* view = nullptr;
+            if (at.kind == de::Place::Kind::Script) {
+                for (const auto& g : copy.programs.scripts)
+                    if (g.id == at.id) sc = &g;
+            } else if (const hmi::View* v = copy.view(at.view)) {
+                view = v;
+                for (const auto& g : v->scripts)
+                    if (g.id == at.id) sc = &g;
+            }
+            const hmi::Declaration* decl = nullptr;
+            if (sc)
+                for (const auto& x : sc->decls)
+                    if (x.id == id) decl = &x;
+            if (!sc || !decl) return {};
+            if (!decl->computed) return "Pas de code : la valeur redevient \xC3\xA9" "crite (" + (decl->value.empty() ? std::string("vide") : decl->value) + ").";
+            std::string out, error;
+            const auto values = hmi::Runtime::computedObjects(copy, &error);
+            std::string u = decl->name;
+            for (auto& ch : u) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+            if (const auto it = values.find(std::to_string(sc->id) + ":" + u); it != values.end() && it->second)
+                out = "Valeur au d\xC3\xA9marrage : " + sim::display(*it->second) + "\n";
+            else if (!error.empty())
+                out = "Erreur : " + error + " (le d\xC3\xA9marrage s'arr\xC3\xAAterait)\n";
+            for (const auto& is : hmi::calc::analyse(copy, *sc, *decl, view).issues)
+                out += std::string(is.error ? "Faute" : "Attention") + (is.line > 0 ? " ligne " + std::to_string(is.line) : std::string{}) + " : "
+                     + is.message + "\n";
+            return out;
+        };
     const std::weak_ptr<Rows> alive = rows_;
     calceditor::ask(std::move(spec), [this, alive, id](const std::string& calc, const std::string& locals) {
         if (alive.expired()) return;

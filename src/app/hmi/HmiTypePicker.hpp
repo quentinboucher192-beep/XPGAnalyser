@@ -162,6 +162,8 @@ struct Spec {
     std::string calc;       // le code actuel (vide : un modele)
     std::string locals;     // les locales, une par ligne
     std::string info;       // la valeur calculee, les fautes
+    // En direct : ce que donnent ce code et ces locales (la valeur au demarrage, l'erreur, les fautes).
+    std::function<std::string(const std::string& calc, const std::string& locals)> preview{};
 };
 using Done = std::function<void(const std::string& calc, const std::string& locals)>;
 using Host = std::function<void(Spec, Done)>;

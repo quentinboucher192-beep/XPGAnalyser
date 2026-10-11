@@ -28982,6 +28982,25 @@ void calculees_grille() {
                                                                 : std::string("pas de d\xC3\xA9" "ballage")));
     grid.selectRows({0});
     check(grid.unfoldTable() == nullptr, "une valeur simple : pas de d\xC3\xA9" "ballage");
+    // La fenetre du calcul : son apercu en direct (le projet copie, le code pose, le calcul fait).
+    {
+        app::calceditor::Spec seen;
+        bool asked = false;
+        app::calceditor::setHost([&](app::calceditor::Spec spec, app::calceditor::Done) {
+            seen = std::move(spec);
+            asked = true;
+        });
+        check(grid.editCalculation(1) && asked && seen.name == "Seuils" && seen.calc == seuils.calc && static_cast<bool>(seen.preview),
+              "\xC6\x92x Calcul\xE2\x80\xA6 : la fen\xC3\xAAtre re\xC3\xA7oit le code, les locales et l'aper\xC3\xA7u");
+        const std::string ok = seen.preview ? seen.preview("Seuils['x'] := Base / 4.0;\n", "") : std::string{};
+        const std::string bad = seen.preview ? seen.preview("Seuils['x'] := Seuils2;\n", "") : std::string{};
+        const std::string loop = seen.preview ? seen.preview("Seuils['x'] := 1.0 / k;\n", "k : REAL := 0.0;") : std::string{};
+        check(ok.rfind("Valeur au d\xC3\xA9marrage : {'x': 2.5}", 0) == 0, "l'aper\xC3\xA7u : la valeur - " + ok);
+        check(bad.find("Faute") != std::string::npos || bad.find("Erreur") != std::string::npos, "l'aper\xC3\xA7u : la faute - " + bad);
+        check(loop.find("Erreur") != std::string::npos, "l'aper\xC3\xA7u : l'erreur qui arr\xC3\xAAterait le d\xC3\xA9marrage - " + loop);
+        check(doc->project.programs.scripts[0].decls[1].calc == seuils.calc, "l'aper\xC3\xA7u ne touche pas au projet");
+        app::calceditor::setHost({});
+    }
     // Le tableau des elements : lu d'une valeur, rendu en litteral.
     {
         auto l = app::HmiItemsDialog::modelOf("LIST OF REAL", "[1.5, 2, 3]");

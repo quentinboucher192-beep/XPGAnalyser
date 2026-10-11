@@ -41,6 +41,8 @@
 #include "../../hmi/HmiDecl.hpp"   // 1.11.18 (refonte, lot 3) : les declarations du modele
 #include "../hmi/HmiDesignPanes.hpp"
 #include "../hmi/HmiItemsDialog.hpp"   // 1.12.7 : le tableau des elements
+#include "../../core/FieldCodec.hpp"
+#include "../hmi/HmiCalcDialog.hpp"    // 1.12.7 : la fenetre d'une valeur calculee
 #include "../hmi/HmiAssetPanes.hpp"
 #include "../hmi/HmiAssist.hpp"
 #include "../hmi/HmiEditor.hpp"
@@ -467,22 +469,21 @@ void MainAnalysisScreen::bindHmi() {
             done(r.payload);
         });
     });
-    // 1.12.7 : la valeur calculee au demarrage d'une constante ou d'une variable - son code et ses locales.
+    // 1.12.7 : la valeur calculee au demarrage d'une constante ou d'une variable - son code, ses locales, et
+    // en direct ce que le calcul donne (HmiCalcDialog).
     calceditor::setHost([this](calceditor::Spec spec, calceditor::Done done) {
-        std::vector<FormDialog::Field> fields;
-        fields.push_back({"Code du calcul (il \xC3\xA9" "crit " + spec.name + " ; vide : la valeur redevient \xC3\xA9" "crite)", spec.calc, {}, false, {}});
-        fields.push_back({"Locales, une par ligne (sans VAR ni END_VAR) : Nom : TYPE := valeur;   // documentation", spec.locals, {}, false, {}});
-        std::string explain = std::string(spec.constant ? "La constante " : "La valeur initiale de ") + spec.name + " (" + spec.type
-                            + ") est calcul\xC3\xA9" "e une fois au d\xC3\xA9marrage, avant les scripts de D\xC3\xA9marrage, comme un final de Java : "
-                              "le code lit les constantes du script, celles des autres scripts par leur nom (Reglages.Seuils), "
-                              "les valeurs de d\xC3\xA9part des variables IHM et les natives ; une erreur arr\xC3\xAAte le d\xC3\xA9marrage. "
-                              "Une boucle FOR sans variable d\xC3\xA9" "clar\xC3\xA9" "e : un DINT.";
-        if (!spec.info.empty()) explain += "\n" + spec.info;
-        auto dialog = std::make_unique<FormDialog>("dialog.hmiCalc", spec.title, explain, std::move(fields), "Appliquer");
-        dialog->setCodeFields({0, 1});
-        app_.menus().ShowDialog(std::move(dialog), [done = std::move(done)](const menu::DialogResult& r) {
+        HmiCalcDialog::Spec s;
+        s.title = spec.title;
+        s.name = spec.name;
+        s.type = spec.type;
+        s.constant = spec.constant;
+        s.calc = spec.calc;
+        s.locals = spec.locals;
+        s.preview = spec.preview;
+        if (!s.preview) s.preview = [info = spec.info](const std::string&, const std::string&) { return info; };
+        app_.menus().ShowDialog(std::make_unique<HmiCalcDialog>(std::move(s)), [done = std::move(done)](const menu::DialogResult& r) {
             if (!r.accepted() || !done) return;
-            const auto v = FormDialog::split(r.payload);
+            const auto v = core::splitFields(r.payload);
             done(v.empty() ? std::string{} : v[0], v.size() > 1 ? v[1] : std::string{});
         });
     });
