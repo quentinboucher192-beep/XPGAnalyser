@@ -4924,6 +4924,9 @@ private:
             return core::Result<RV>(dialectError("ASSERT : " + why));
         }
         // Le premier argument designe (sans copie) : une MAP, un tableau, un iterateur.
+        // 1.12.7 : `subjectConstant` - il designe une constante (VAR CONSTANT, une constante lue en
+        // place) : MAP_REMOVE et MAP_CLEAR la refusent, comme listBuiltin (avant : ecrite sans un mot).
+        bool subjectConstant = false;
         const auto subject = [&]() -> core::Result<ObjRef> {
             const Expr& a = *e.arguments[0].second;
             Place p;
@@ -4942,6 +4945,7 @@ private:
                 if (!t) return core::Err<core::Error>(t.error());
                 p = *t;
             }
+            subjectConstant = p.constant;
             if (!p.obj) {
                 auto m = materialize(p.name);
                 if (!m) return m;
@@ -5040,6 +5044,7 @@ private:
         }
         if (u == "MAP_CLEAR") {
             if (!want(1, 1)) return bad("MAP_CLEAR(m)");
+            if (subjectConstant) return core::Result<RV>(dialectError(u + " : une constante ne s'\xC3\xA9" "crit pas"));
             o->textKeys.clear();
             o->intKeys.clear();
             return core::Result<RV>(RV{Value::boolean(true), nullptr});
@@ -5089,6 +5094,7 @@ private:
         }
         if (u == "MAP_HAS") return core::Result<RV>(RV{Value::boolean(entry != nullptr), nullptr});
         if (u == "MAP_REMOVE") {
+            if (subjectConstant) return core::Result<RV>(dialectError(u + " : une constante ne s'\xC3\xA9" "crit pas"));
             if (*isText) o->textKeys.erase(text);
             else o->intKeys.erase(integer);
             return core::Result<RV>(RV{Value::boolean(entry != nullptr), nullptr});
