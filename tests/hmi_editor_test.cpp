@@ -28741,6 +28741,12 @@ void saisieNatives1127() {
     check(find(bits, "BIT_TEST") != nullptr, "BIT_T : BIT_TEST propos\xC3\xA9" "e");
     const auto cmp = as::suggest(hp, nullptr, "IF Compteur <", "");
     check(!find(cmp, "SINT"), "IF Compteur < : une comparaison, pas un template");
+    // Les enumerations des natives : COMPARAISON#, OPERATION#.
+    const auto cmpEnum = as::suggest(hp, nullptr, "i := LIST_FIND_IF(Mesures, COMPARAISON#", "");
+    check(cmpEnum.size() == 6 && cmpEnum[4].text == "COMPARAISON#Superieur" && cmpEnum[4].insert == "Superieur",
+          "COMPARAISON# : les six comparaisons (" + std::to_string(cmpEnum.size()) + ")");
+    const auto opEnum = as::suggest(hp, nullptr, "x := ACCUMULATE(Tab, 1, OPERATION#", "Pro");
+    check(!opEnum.empty() && opEnum.front().text == "OPERATION#Produit", "OPERATION#Pro : Produit");
     // Un script C++ : std::numeric_limits< (UINT pose UINT>::), puis les membres sous leur nom C++.
     const auto cppTypes = as::suggest(hp, nullptr, "auto x = std::numeric_limits<", "UI");
     const auto* cppUint = find(cppTypes, "UINT");

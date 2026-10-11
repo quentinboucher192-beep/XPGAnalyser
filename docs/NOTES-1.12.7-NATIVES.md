@@ -76,7 +76,10 @@ aux grilles de déclaration (un autre chantier de la 1.12.7).
     constante ne s'écrit pas ». **MAP_REMOVE et MAP_CLEAR** aussi : avant, leur premier argument
     perdait le drapeau « constante » de son emplacement, et `MAP_REMOVE(m, 'k')` changeait une
     `VAR CONSTANT m : MAP…` sans un mot. Une constante qu'un environnement donnera en place (un
-    emplacement constant) sera refusée de même.
+    emplacement constant) sera refusée de même : le point de branchement est `Runner::locate`
+    (`src/sim/Interpreter.cpp`, cas `Expr::Kind::Reference`), qui construit le `Place` d'un nom de
+    l'environnement avec `constant = false` — y lire `Environment::constantVariable(nom)` suffit,
+    toutes les natives qui écrivent lisent ce drapeau.
 
 Toutes ces natives marchent aussi dans une expression de vue (fx) et un texte à trous (`{GCD(a,
 b)}`, `{NUMBERS.PI}`) : une expression lit une copie des objets, une native qui écrit n'y change
@@ -136,7 +139,8 @@ rien (Compiler le dit).
   défaut aussi.
 - **Une constante ne s'écrit plus par une native** : MAP_REMOVE et MAP_CLEAR changeaient une MAP
   déclarée VAR CONSTANT ; elles la refusent, comme LIST_ADD et toutes les nouvelles natives qui
-  écrivent.
+  écrivent. Compiler le dit avant la marche (« Seuils est une constante : LIST_SET ne peut pas la
+  changer »).
 - La branche Natives a un groupe « Bibliothèques » (std::numeric, std::numeric_limits,
   std::numbers) et une fiche par nouvelle fonction (ST, C, C++, un essai).
 
@@ -156,6 +160,7 @@ template, une **erreur**.
 | Le `>` oublié devant un nom de type (« NUMERIC_LIMITS : le type, puis > — NUMERIC_LIMITS<UINT>.MAX() », « SATURATE_CAST : le type, puis > — SATURATE_CAST<INT>(x) ») ; une variable nommée comme un template (`Midpoint < 5`) reste une comparaison | erreur | — |
 | Le type oublié (« SATURATE_CAST attend son type : SATURATE_CAST<INT>(x) », « NUMERIC_LIMITS attend son type : NUMERIC_LIMITS<UINT>.MAX() »), une constante inconnue de NUMBERS | erreur | — |
 | Une valeur d'énumération inconnue (« COMPARAISON#Plus n'existe pas ») | erreur | — |
+| Une constante (VAR CONSTANT) qu'une native écrirait — son premier argument, la destination de LIST_COPY, les variables de TUPLE_UNPACK (« Seuils est une constante : LIST_SET ne peut pas la changer », la maquette) ; en marche, le moteur s'arrête (« LIST_SET : une constante ne s'écrit pas ») | erreur | avertissement (LIST_ADD, LIST_INSERT, LIST_REMOVE…, LIST_SORT, LIST_REVERSE, VECTOR_…, MAP_REMOVE, MAP_CLEAR) |
 
 Dans une expression fx, une nouvelle native qui écrit son argument est signalée (« change son
 objet : une expression en lit une copie… »), comme LIST_ADD avant. Les templates et
@@ -170,12 +175,12 @@ d'une expression).
   écrit en place ; std::numeric ; les templates et leurs fautes ; `<bit>` ; les énumérations ; une
   fonction du projet nommée GCD passe avant la native ; Compiler (erreurs et avertissements) ; un
   projet entier (`compileWith`) avec une structure T_Lot, LIST_SORT_BY par 'Poids' en marche ;
-  les constantes refusées par les 25 natives qui écrivent. 268 contrôles.
+  les constantes refusées par les 25 natives qui écrivent (en marche et par Compiler). 269 contrôles.
 - `tests/hmi_natives_test.cpp` : chaque essai des 69 nouvelles fiches s'exécute (script, et pour
   les fonctions pures : expression fx et texte à trous) — 2150 contrôles.
 - `tests/hmi_editor_test.cpp` (`saisieNatives1127`, aussi par `HMI_TEST_NATIVES=1`) : l'aide à la
   saisie des templates et des nouvelles natives, les formes C++ `std::numeric_limits<T>::` et
-  `std::numbers::`.
+  `std::numbers::`, les valeurs de `COMPARAISON#` et `OPERATION#`.
 
 ## Limites connues, écarts avec la maquette
 

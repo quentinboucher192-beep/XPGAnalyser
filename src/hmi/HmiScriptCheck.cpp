@@ -1161,10 +1161,31 @@ private:
     }
     // Les controles d'une native : une nouvelle (1.12.7) - des erreurs ; une d'avant - des avertissements
     // (ce qui demarrait en 1.12.6 demarre toujours ; le moteur, lui, s'arrete sur la faute).
+    // Une native qui ecrirait une constante (VAR CONSTANT) : « Seuils est une constante : LIST_ADD ne peut pas
+    // la changer » (la maquette ; le moteur, lui, s'arrete : « LIST_ADD : une constante ne s'ecrit pas »).
+    // Son premier argument (LIST_SET, MAP_REMOVE...), la destination de LIST_COPY, les variables de
+    // TUPLE_UNPACK. Une nouvelle native : une erreur ; une d'avant (LIST_ADD, MAP_CLEAR...) : un avertissement.
+    void constantWritten(std::size_t i, std::size_t close, const std::string& U, const sim::lib::NativeInfo* info) {
+        static const std::set<std::string> kOldWrites = {"LIST_ADD", "LIST_INSERT", "LIST_REMOVE_AT", "LIST_REMOVE", "LIST_CLEAR", "LIST_SORT",
+                                                         "LIST_REVERSE", "VECTOR_PUSH", "VECTOR_POP", "VECTOR_INSERT", "VECTOR_ERASE",
+                                                         "VECTOR_CLEAR", "VECTOR_RESIZE", "MAP_REMOVE", "MAP_CLEAR"};
+        const auto args = argsOf(i + 1, close);
+        std::size_t from = 0, to = 0;                          // les arguments ecrits [from, to)
+        if (U == "LIST_COPY") from = 1, to = 2;
+        else if (U == "TUPLE_UNPACK") from = 1, to = args.size();
+        else if (info ? info->writes : kOldWrites.count(U) > 0) from = 0, to = 1;
+        for (std::size_t k = from; k < to && k < args.size(); ++k) {
+            const auto [a, b] = args[k];
+            if (b != a + 1 || !isIdent(a) || !local(toks_[a].text) || !constants_.count(up(toks_[a].text))) continue;
+            reportTok(a, b, info ? Finding::Severity::Error : Finding::Severity::Warning,
+                      toks_[a].text + " est une constante : " + U + " ne peut pas la changer");
+        }
+    }
     void nativeChecks(std::size_t i, std::size_t close, int n) {
         using S = Finding::Severity;
         const std::string U = up(toks_[i].text);
         const auto* info = sim::lib::native(U);
+        constantWritten(i, close, U, info);
         const OldArity* old = info ? nullptr : oldArity(U);
         if (!info && !old && !sim::lib::oldListResizes(U)) return;
         const S sev = info ? S::Error : S::Warning;

@@ -557,6 +557,20 @@ void compiler() {
         const auto old = walk("VAR\n  Midpoint : INT;\nEND_VAR\nb := Midpoint < 5 AND Midpoint > i;");
         check(!says(old, "le type, puis", S::Error) && !says(old, "MIDPOINT", S::Error), "Midpoint < 5 (une variable) : pas un template" + all(old));
     }
+    {
+        // Une native qui ecrirait une constante (VAR CONSTANT) : la maquette - une erreur pour une nouvelle
+        // native, un avertissement pour une d'avant ; une native qui la lit, rien.
+        const auto fs = walk("VAR CONSTANT\n  Seuils : LIST OF REAL := [10.0, 20.0];\n  Limite : REAL := 5.0;\nEND_VAR\n"
+                             "LIST_SET(Seuils, 0, 1.0);\nLIST_ADD(Seuils, 3.0);\nLIST_COPY(Mesures, Seuils);\nTUPLE_UNPACK(Point, Nom, Limite);\n"
+                             "i := LIST_COUNT_OF(Seuils, 1.0);\nx := LIST_SUM(Seuils);");
+        check(says(fs, "Seuils est une constante : LIST_SET ne peut pas la changer", S::Error)
+                  && says(fs, "Seuils est une constante : LIST_ADD ne peut pas la changer", S::Warning)
+                  && !says(fs, "LIST_ADD ne peut pas", S::Error)
+                  && says(fs, "Seuils est une constante : LIST_COPY ne peut pas la changer", S::Error)
+                  && says(fs, "Limite est une constante : TUPLE_UNPACK ne peut pas la changer", S::Error)
+                  && !says(fs, "LIST_COUNT_OF ne peut pas", S::Error) && !says(fs, "LIST_SUM ne peut pas", S::Error),
+              "une constante ecrite par une native : dite par Compiler" + all(fs));
+    }
 }
 
 // Compiler sur un projet entier (compileWith) : les templates, les natives et les enumerations ne sont
