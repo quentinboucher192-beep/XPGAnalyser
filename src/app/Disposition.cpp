@@ -389,4 +389,164 @@ void applyTabs(ui::TabControl& tabs, std::string_view group, bool first) {
         }
 }
 
+// ---- 1.12.4 : l'apercu ---------------------------------------------------------
+std::vector<SketchBox> sketch(const Layout& l, bool simulating) {
+    std::vector<SketchBox> out;
+    const auto has = [](std::string_view id) { return row(id) != nullptr; };
+    const auto on = [&](std::string_view id) { return has(id) && shown(l, id, simulating); };
+    // Montre seulement dans ce mode : « en simulation » (ou « en edition ») et montre maintenant.
+    const auto modeOnly = [&](std::string_view id) {
+        const Item& it = l.item(id);
+        return on(id) && (it.when == "simulation" || it.when == "edition");
+    };
+    // Les sous-onglets montres d'un groupe ; celui du depart (s'il est cache : le premier montre).
+    const auto tabsOf = [&](std::string_view group) {
+        std::vector<SketchTab> tabs;
+        for (const auto& r : rows())
+            if (r.group == group && r.kind == Kind::Tab && on(r.id)) tabs.push_back({r.tabTitle, false, modeOnly(r.id)});
+        const std::string want = startTitle(l, group);
+        bool found = false;
+        for (auto& t : tabs)
+            if (!found && t.title == want) found = t.active = true;
+        if (!found && !tabs.empty()) tabs.front().active = true;
+        return tabs;
+    };
+    const auto box = [&out](std::string id, std::string label, float x, float y, float w, float h) -> SketchBox& {
+        SketchBox b;
+        b.id = std::move(id);
+        b.label = std::move(label);
+        b.x = x;
+        b.y = y;
+        b.w = w;
+        b.h = h;
+        out.push_back(std::move(b));
+        return out.back();
+    };
+
+    constexpr float kBar = 0.075f, kStatus = 0.045f;
+    box("barre", "Barre du haut", 0.f, 0.f, 1.f, kBar);
+    const float top = kBar;
+    float bottom = 1.f;
+    if (on("etat")) {
+        box("etat", "Bande d'\xC3\xA9tat", 0.f, 1.f - kStatus, 1.f, kStatus).modeOnly = modeOnly("etat");
+        bottom -= kStatus;
+    }
+    // XPGAnalyser API : la rangee du bas (Diagnostics, Resume de l'analyse, Etat du projet).
+    if (on("rangee")) {
+        struct Part { const char* id; const char* label; float weight; };
+        std::vector<Part> parts;
+        for (const Part& p : {Part{"diagnostics", "Diagnostics", 0.5f}, Part{"resume", "R\xC3\xA9sum\xC3\xA9 de l'analyse", 0.25f},
+                             Part{"etatProjet", "\xC3\x89tat du projet", 0.25f}})
+            if (on(p.id)) parts.push_back(p);
+        if (!parts.empty()) {
+            const float h = (bottom - top) * 0.22f;
+            float sum = 0.f, x = 0.f;
+            for (const auto& p : parts) sum += p.weight;
+            for (const auto& p : parts) {
+                const float w = p.weight / sum;
+                box(std::string("rangee.") + p.id, p.label, x, bottom - h, w, h).modeOnly = modeOnly(p.id);
+                x += w;
+            }
+            bottom -= h;
+        }
+    }
+    // La colonne de l'explorateur (et des documents ouverts), a gauche ou a droite du centre.
+    const bool explorer = on("explorateur"), docs = on("documents");
+    const bool centre = !has("configuration") || on("configuration");     // API : le centre se cache aussi
+    const float colW = explorer || docs ? (centre ? 0.22f : 1.f) : 0.f;
+    const bool right = l.item("explorateur").where == "droite";
+    if (colW > 0.f) {
+        const float colX = right ? 1.f - colW : 0.f;
+        float y = top;
+        if (explorer) {
+            const float h = docs ? (bottom - top) * 0.68f : bottom - top;
+            box("explorateur", "Explorateur", colX, y, colW, h).modeOnly = modeOnly("explorateur");
+            y += h;
+        }
+        if (docs) box("documents", "Documents ouverts", colX, y, colW, bottom - y).modeOnly = modeOnly("documents");
+    }
+    if (!centre) return out;
+    const float cx = right || colW >= 1.f ? 0.f : colW, cw = 1.f - colW;
+    // Le panneau du bas : sous l'editeur ou a sa droite ; replie au depart, une barre (Ctrl+J).
+    float px = cx, pw = cw, ph = bottom - top;
+    if (on("bas")) {
+        const Item& b = l.item("bas");
+        const bool folded = b.start == "replie";
+        const bool beside = b.where == "droite";
+        const float w = beside ? (folded ? 0.03f : cw * 0.36f) : cw;
+        const float h = beside ? bottom - top : (folded ? 0.045f : (bottom - top) * 0.32f);
+        auto& panel = box("bas", folded ? std::string("Panneau du bas repli\xC3\xA9 (Ctrl+J)") : std::string("Panneau du bas"),
+                          beside ? cx + cw - w : cx, beside ? top : bottom - h, w, h);
+        panel.collapsed = folded;
+        panel.modeOnly = modeOnly("bas");
+        if (!folded) panel.tabs = tabsOf("bas");
+        if (beside) pw -= w;
+        else ph -= h;
+    }
+    // Les pages du centre qui s'ouvrent seules, dans l'ordre ou l'application les ouvre (la
+    // simulation en dernier : devant). En edition : a l'ouverture du projet ; en simulation,
+    // aussi celles du demarrage de la simulation, et la page de la simulation (on y est).
+    struct Page { const char* id; const char* title; std::string where; };
+    std::vector<Page> main, side, detached;
+    // Ouverte seulement en simulation : liseree.
+    const auto pageOnlyInSimulation = [&](std::string_view id) { return simulating && l.item(id).when != "projet"; };
+    for (const Page& p : {Page{"page.vue", "Vue de d\xC3\xA9marrage", {}}, Page{"page.programmation", "Programmation g\xC3\xA9n\xC3\xA9rale", {}},
+                          Page{"page.poste", "Poste d'exploitation", {}}, Page{"page.simulation", "Simulation \xC2\xB7 IHM", {}}}) {
+        if (!has(p.id)) continue;
+        const Item& it = l.item(p.id);
+        const bool simPage = std::string_view(p.id) == "page.simulation";
+        if (!(it.when == "projet" || (simulating && (it.when == "simulation" || simPage)))) continue;
+        Page q = p;
+        q.where = it.where.empty() ? std::string("onglet") : it.where;
+        (q.where == "cote" ? side : q.where == "detache" ? detached : main).push_back(std::move(q));
+    }
+    if (main.empty()) std::swap(main, side);       // seule, une page « cote a cote » reste dans son onglet
+    // Le contenu de la page de devant : la vue et son inspecteur, la simulation et son panneau de
+    // droite, la programmation generale et ses onglets, le poste.
+    const auto content = [&](const Page& p, float x, float y, float w, float h) {
+        const std::string id = p.id;
+        if (id == "page.vue" || id == "page.simulation") {
+            const bool sim = id == "page.simulation";
+            const float rw = w * (sim ? 0.36f : 0.32f);
+            box(id, sim ? "Vue en marche" : "La vue (dessin)", x, y, w - rw, h);
+            auto& panel = box(sim ? "sim" : "insp", sim ? "Expressions, variables\xE2\x80\xA6" : "Inspecteur", x + w - rw, y, rw, h);
+            panel.tabs = tabsOf(sim ? "sim" : "insp");
+        } else if (id == "page.programmation") {
+            box(id, "Scripts, variables et types IHM", x, y, w, h).tabs = tabsOf("prog");
+        } else {
+            box(id, p.title, x, y, w, h);
+        }
+    };
+    const auto group = [&](const char* id, const std::vector<Page>& pages, float x, float w) {
+        auto& g = box(id, pages.empty() ? std::string("Les pages s'ouvrent \xC3\xA0 la demande") : std::string{}, x, top, w, ph);
+        for (std::size_t i = 0; i < pages.size(); ++i) g.tabs.push_back({pages[i].title, i + 1 == pages.size(), false});
+        for (std::size_t i = 0; i < pages.size(); ++i) g.tabs[i].modeOnly = pageOnlyInSimulation(pages[i].id);
+        if (!pages.empty()) content(pages.back(), x, top + 0.06f, w, ph - 0.06f);
+    };
+    if (side.empty()) {
+        group("centre", main, px, pw);
+    } else {
+        group("centre", main, px, pw * 0.5f);
+        group("cote", side, px + pw * 0.5f, pw * 0.5f);
+    }
+    // Les fenetres detachees : par-dessus, en cascade.
+    for (std::size_t k = 0; k < detached.size(); ++k) {
+        const float off = static_cast<float>(k) * 0.04f;
+        auto& win = box(std::string("detache.") + detached[k].id, std::string(detached[k].title) + " (fen\xC3\xAAtre d\xC3\xA9tach\xC3\xA9" "e)",
+                        0.50f + off, 0.40f + off, 0.44f, 0.44f);
+        win.floating = true;
+        win.modeOnly = pageOnlyInSimulation(detached[k].id);
+        if (std::string_view(detached[k].id) == "page.simulation") win.tabs = tabsOf("sim");
+        else if (std::string_view(detached[k].id) == "page.vue") win.tabs = tabsOf("insp");
+        else if (std::string_view(detached[k].id) == "page.programmation") win.tabs = tabsOf("prog");
+    }
+    return out;
+}
+
+const SketchBox* sketchBox(const std::vector<SketchBox>& boxes, std::string_view id) {
+    for (const auto& b : boxes)
+        if (b.id == id) return &b;
+    return nullptr;
+}
+
 } // namespace app::disposition

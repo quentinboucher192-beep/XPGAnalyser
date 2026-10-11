@@ -1057,6 +1057,9 @@
     <ClCompile Include="src\app\DispositionDialog.cpp">
       <Filter>app</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\DispositionPreview.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\EditionMigration.cpp">
       <Filter>app</Filter>
     </ClCompile>
@@ -2234,6 +2237,9 @@
       <Filter>app</Filter>
     </ClInclude>
     <ClInclude Include="src\app\DispositionDialog.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\DispositionPreview.hpp">
       <Filter>app</Filter>
     </ClInclude>
     <ClInclude Include="src\app\EditionMigration.hpp">

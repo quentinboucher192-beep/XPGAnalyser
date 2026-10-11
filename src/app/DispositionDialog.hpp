@@ -12,6 +12,8 @@
 //  sous-onglet choisi). En bas, ce que la disposition cache, ce qui n'est pas
 //  encore applique, et « Retablir la disposition d'origine », Annuler, Appliquer,
 //  OK. Appliquer montre tout de suite ; OK applique et ferme ; Echap annule.
+//  1.12.4 : a droite, l'APERCU de la fenetre avec le brouillon (DispositionPreview),
+//  en edition ou en simulation - chaque choix s'y voit avant Appliquer.
 //
 //  L'hote (la fenetre de l'application) applique et garde (les reglages de
 //  l'edition : disposition.*) ; la fenetre ne fait que proposer.
@@ -25,9 +27,11 @@
 #include <functional>
 #include <string>
 
-namespace ui { class PropertyGrid; class DropDown; class Button; }
+namespace ui { class PropertyGrid; class DropDown; class Button; class ToggleButton; }
 
 namespace app {
+
+class DispositionPreview;
 
 class DispositionDialog final : public menu::WidgetMenu {
 public:
@@ -59,6 +63,9 @@ public:
     void resetOrigin();
     [[nodiscard]] std::string summary() const;
     [[nodiscard]] ui::PropertyGrid* grid() const noexcept { return grid_; }
+    // 1.12.4 : l'apercu, et son mode (les boutons « En edition » / « En simulation »).
+    [[nodiscard]] DispositionPreview* preview() const noexcept { return preview_; }
+    void previewSimulation(bool on);
 
 protected:
     core::Status buildUi() override;
@@ -77,7 +84,11 @@ private:
     ui::Button*         cancel_{nullptr};
     ui::Button*         apply_{nullptr};
     ui::Button*         ok_{nullptr};
+    DispositionPreview* preview_{nullptr};
+    ui::ToggleButton*   editMode_{nullptr};
+    ui::ToggleButton*   simMode_{nullptr};
     bool                done_{false};
+    bool                syncingMode_{false};
     core::ConnectionScope links_;
 };
 

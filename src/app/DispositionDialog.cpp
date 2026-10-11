@@ -3,6 +3,7 @@
 // =============================================================================
 #include "DispositionDialog.hpp"
 
+#include "DispositionPreview.hpp"
 #include "../menu/MenuManager.hpp"
 #include "../ui/widgets/Controls.hpp"
 #include "../ui/widgets/DataViews.hpp"
@@ -18,7 +19,8 @@ namespace {
 
 const gfx::FontId kTitleFont{20};
 const gfx::FontId kSmall{13};
-constexpr float kW = 880.f;
+constexpr float kW = 1180.f;
+constexpr float kWide = 1000.f;     // 1.12.4 : plus large, l'apercu a droite de la grille ; sinon au-dessus
 
 const char* const kHidden = "Cach\xC3\xA9";
 const std::string kSep = " \xE2\x80\xBA ";      // ›
@@ -58,7 +60,31 @@ protected:
         if (d_.mine_) d_.mine_->setBounds({x + 362.f, y, 250.f, 28.f});
         y += 40.f;
         const float bottom = panel_.bottom() - 52.f - 26.f;
-        if (d_.grid_) d_.grid_->setBounds({x, y, right - x, std::max(80.f, bottom - y)});
+        // 1.12.4 : l'apercu - a droite de la grille (une fenetre large), sinon au-dessus d'elle.
+        float gridRight = right;
+        previewCaption_ = {};
+        legendAt_ = {};
+        if (w >= kWide) {
+            const float pw = std::clamp(w * 0.40f, 340.f, 480.f);
+            const float px = right - pw;
+            gridRight = px - 16.f;
+            previewCaption_ = {px, y};
+            const float bw = (pw - 8.f) * 0.5f;
+            if (d_.editMode_) d_.editMode_->setBounds({px, y + 20.f, bw, 26.f});
+            if (d_.simMode_) d_.simMode_->setBounds({px + bw + 8.f, y + 20.f, bw, 26.f});
+            const float ph = std::min(pw * 0.625f, std::max(120.f, bottom - (y + 54.f) - 52.f));
+            if (d_.preview_) d_.preview_->setBounds({px, y + 54.f, pw, ph});
+            legendAt_ = {px, y + 54.f + ph + 8.f};
+            legendW_ = pw;
+        } else {
+            const float ph = 150.f, bw = 140.f;
+            previewCaption_ = {x, y};
+            if (d_.editMode_) d_.editMode_->setBounds({x, y + 20.f, bw, 26.f});
+            if (d_.simMode_) d_.simMode_->setBounds({x, y + 52.f, bw, 26.f});
+            if (d_.preview_) d_.preview_->setBounds({x + bw + 12.f, y, right - x - bw - 12.f, ph});
+            y += ph + 10.f;
+        }
+        if (d_.grid_) d_.grid_->setBounds({x, y, gridRight - x, std::max(80.f, bottom - y)});
         summaryAt_ = bottom + 6.f;
         float bx = right;
         for (ui::Button* b : {d_.ok_, d_.apply_, d_.cancel_}) {
@@ -84,12 +110,35 @@ protected:
                        "gard\xC3\xA9" "e dans les r\xC3\xA9glages de l'\xC3\xA9" "dition", kSmall, c.textMuted);
         ctx.r.drawText({x, panel_.y + 62.f}, "Toute faite :", kSmall, c.text);
         ctx.r.drawText({x, summaryAt_}, d_.summary(), kSmall, c.textMuted);
+        // 1.12.4 : l'apercu - son titre, et ce que disent ses couleurs.
+        if (d_.preview_) {
+            ctx.r.drawText(previewCaption_, "Aper\xC3\xA7u de la fen\xC3\xAAtre (le brouillon, avant Appliquer)", kSmall, c.text);
+            if (legendW_ > 0.f && legendAt_.y > 0.f) {
+                const float lh = ctx.r.lineHeight(kSmall) + 3.f;
+                float y = legendAt_.y;
+                const auto mark = [&](gfx::Color tint, const char* text) {
+                    ctx.r.strokeRect({legendAt_.x, y + 3.f, 12.f, 10.f}, tint, 2.f);
+                    ctx.r.drawText({legendAt_.x + 18.f, y}, text, kSmall, c.textMuted);
+                    y += lh;
+                };
+                mark(c.ok, "vert : montr\xC3\xA9 seulement en simulation");
+                mark(c.info, "bleu : montr\xC3\xA9 seulement en \xC3\xA9" "dition");
+                ctx.r.fillRoundedRect({legendAt_.x, y + 3.f, 12.f, 10.f}, c.accent, 2.f);
+                ctx.r.drawText({legendAt_.x + 18.f, y}, "le sous-onglet choisi au d\xC3\xA9part", kSmall, c.textMuted);
+                y += lh;
+                ctx.r.drawText({legendAt_.x, y}, "Une fen\xC3\xAAtre d\xC3\xA9tach\xC3\xA9" "e flotte par-dessus ;", kSmall, c.textMuted);
+                ctx.r.drawText({legendAt_.x, y + lh}, "un panneau repli\xC3\xA9 au d\xC3\xA9part est une barre (Ctrl+J).", kSmall, c.textMuted);
+            }
+        }
     }
 
 private:
     DispositionDialog& d_;
     gfx::Rect          panel_{};
     float              summaryAt_{0.f};
+    gfx::Point         previewCaption_{};
+    gfx::Point         legendAt_{};
+    float              legendW_{0.f};
 };
 
 DispositionDialog::DispositionDialog(Spec spec)
@@ -121,6 +170,14 @@ core::Status DispositionDialog::buildUi() {
     });
     mine_ = &static_cast<ui::Button&>(b->addChild(std::make_unique<ui::Button>("Garder comme \xC2\xAB Ma disposition \xC2\xBB", base + ".mine")));
     links_ += mine_->clicked->connect([this] { keepMine(); });
+    // 1.12.4 : l'apercu du brouillon, en edition ou en simulation.
+    preview_ = &static_cast<DispositionPreview&>(b->addChild(std::make_unique<DispositionPreview>(draft_, base + ".preview")));
+    editMode_ = &static_cast<ui::ToggleButton&>(b->addChild(std::make_unique<ui::ToggleButton>("En \xC3\xA9" "dition", base + ".edition")));
+    simMode_ = &static_cast<ui::ToggleButton&>(b->addChild(std::make_unique<ui::ToggleButton>("En simulation", base + ".simulation")));
+    editMode_->setChecked(true);
+    // Un clic choisit le mode de son bouton (meme celui deja enfonce : il le reste).
+    links_ += editMode_->toggled->connect([this](bool) { previewSimulation(false); });
+    links_ += simMode_->toggled->connect([this](bool) { previewSimulation(true); });
     auto grid = std::make_unique<ui::PropertyGrid>(base + ".grid");
     grid->setShowDescriptionPane(true);
     grid->setNameColumnRatio(0.52f);
@@ -196,6 +253,16 @@ bool DispositionDialog::set(const std::string& id, const std::string& field, con
     }
     rebuild();
     return true;
+}
+
+void DispositionDialog::previewSimulation(bool on) {
+    // Les deux boutons vont ensemble : un seul enfonce (un clic sur celui qui l'est le garde).
+    if (syncingMode_) return;
+    syncingMode_ = true;
+    if (preview_) preview_->setSimulating(on);
+    if (editMode_) editMode_->setChecked(!on);
+    if (simMode_) simMode_->setChecked(on);
+    syncingMode_ = false;
 }
 
 void DispositionDialog::choosePreset(const std::string& key) {

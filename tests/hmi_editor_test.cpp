@@ -33,6 +33,7 @@
 #include "../src/app/hmi/HmiSound.hpp"
 #include "../src/app/Disposition.hpp"         // 1.12.3 : Projet > Disposition
 #include "../src/app/DispositionDialog.hpp"
+#include "../src/app/DispositionPreview.hpp"   // 1.12.4 : l'apercu
 #include "../src/app/hmi/HmiApiVarsPane.hpp"     // 1.11.1 (API-V)
 #include "../src/app/hmi/HmiAssist.hpp"
 #include "../src/app/hmi/HmiValueKind.hpp"           // 1.11.3 : le carre de legende
@@ -3808,6 +3809,117 @@ void disposition1123() {
     sp.setOrientation(ui::Orientation::Vertical);
     sp.layout();
     check(a.bounds().y > c.bounds().y && a.bounds().w == 1000.f, "setOrientation : l'un sous l'autre");
+}
+
+// 1.12.4 : l'apercu de la fenetre Disposition - la fenetre dessinee en boites (le brouillon).
+void apercuDisposition1124() {
+    std::printf("1.12.4 : l'aper\xC3\xA7u de la fen\xC3\xAAtre Disposition\n");
+    namespace dp = app::disposition;
+    const auto edition = core::edition();
+    core::setEdition(core::Edition::Ihm);
+    const dp::Layout base = dp::defaults();
+    const auto titles = [](const dp::SketchBox* b) {
+        std::string t;
+        if (b)
+            for (const auto& x : b->tabs) t += (t.empty() ? "" : ",") + x.title + (x.active ? "*" : "") + (x.modeOnly ? "+" : "");
+        return t;
+    };
+    {
+        const auto s = dp::sketch(base, false);
+        const auto* bar = dp::sketchBox(s, "barre");
+        const auto* ex = dp::sketchBox(s, "explorateur");
+        const auto* centre = dp::sketchBox(s, "centre");
+        const auto* bas = dp::sketchBox(s, "bas");
+        const auto* etat = dp::sketchBox(s, "etat");
+        check(bar && ex && centre && bas && etat && !dp::sketchBox(s, "rangee.diagnostics"),
+              "d'origine : la barre, l'explorateur, le centre, le panneau du bas, la bande d'\xC3\xA9tat (pas de rang\xC3\xA9" "e : c'est l'IHM)");
+        check(ex && centre && bas && ex->x < centre->x && bas->y > centre->y && std::fabs(bas->x - centre->x) < 1e-4f,
+              "l'explorateur \xC3\xA0 gauche, le panneau du bas sous le centre");
+        check(titles(bas) == "Sorties*,Console,Diagnostics", "les sous-onglets du bas, Sorties devant (" + titles(bas) + ")");
+        check(titles(centre) == "Vue de d\xC3\xA9marrage*" && dp::sketchBox(s, "page.vue") && dp::sketchBox(s, "insp"),
+              "le centre : la vue de d\xC3\xA9marrage (\xC3\xA0 l'ouverture du projet), son inspecteur (" + titles(centre) + ")");
+        check(titles(dp::sketchBox(s, "insp")) == "Propri\xC3\xA9t\xC3\xA9s*,Actions,Contenu,Raccourcis",
+              "l'inspecteur : ses quatre onglets (" + titles(dp::sketchBox(s, "insp")) + ")");
+    }
+    {
+        // L'explorateur a droite ; le panneau du bas a droite de l'editeur ; la bande d'etat cachee.
+        dp::Layout l = base;
+        l.items["explorateur"].where = "droite";
+        l.items["bas"].where = "droite";
+        l.items["etat"].shown = false;
+        const auto s = dp::sketch(l, false);
+        const auto* ex = dp::sketchBox(s, "explorateur");
+        const auto* centre = dp::sketchBox(s, "centre");
+        const auto* bas = dp::sketchBox(s, "bas");
+        check(ex && centre && ex->x > centre->x, "l'explorateur \xC3\xA0 droite : apr\xC3\xA8s le centre");
+        check(bas && centre && bas->x > centre->x && bas->x < (ex ? ex->x : 1.f) && bas->h > 0.8f,
+              "le panneau du bas \xC3\xA0 droite de l'\xC3\xA9" "diteur, sur toute la hauteur");
+        check(!dp::sketchBox(s, "etat"), "la bande d'\xC3\xA9tat cach\xC3\xA9" "e : absente");
+        l.items["bas"].start = "replie";
+        const auto s2 = dp::sketch(l, false);
+        const auto* folded = dp::sketchBox(s2, "bas");
+        check(folded && folded->collapsed && folded->tabs.empty() && folded->w < 0.05f, "repli\xC3\xA9 au d\xC3\xA9part : une barre");
+    }
+    {
+        // Mise au point : la Console en simulation seulement, la simulation cote a cote a son demarrage.
+        const dp::Layout point = dp::preset("miseaupoint");
+        const auto ed = dp::sketch(point, false);
+        check(titles(dp::sketchBox(ed, "bas")) == "Sorties*,Diagnostics" && !dp::sketchBox(ed, "cote") && !dp::sketchBox(ed, "page.simulation"),
+              "en \xC3\xA9" "dition : pas de Console, pas de simulation (" + titles(dp::sketchBox(ed, "bas")) + ")");
+        const auto sim = dp::sketch(point, true);
+        const auto* bas = dp::sketchBox(sim, "bas");
+        const auto* cote = dp::sketchBox(sim, "cote");
+        const auto* centre = dp::sketchBox(sim, "centre");
+        check(titles(bas) == "Sorties,Console*+,Diagnostics", "en simulation : la Console, devant, li\xC3\xA9r\xC3\xA9" "e (" + titles(bas) + ")");
+        check(cote && centre && cote->x > centre->x && titles(cote) == "Simulation \xC2\xB7 IHM*+" && dp::sketchBox(sim, "sim"),
+              "la simulation c\xC3\xB4te \xC3\xA0 c\xC3\xB4te, avec son panneau de droite (" + titles(cote) + ")");
+        check(titles(dp::sketchBox(sim, "sim")) == "Expressions,Variables IHM*,Performances+,Esclaves simul\xC3\xA9s,Popups",
+              "... ses onglets : Variables IHM devant, Performances seulement en simulation (" + titles(dp::sketchBox(sim, "sim")) + ")");
+    }
+    {
+        // Dessin des vues : la simulation dans une fenetre detachee.
+        const auto s = dp::sketch(dp::preset("vues"), true);
+        const auto* win = dp::sketchBox(s, "detache.page.simulation");
+        check(win && win->floating && win->label.find("d\xC3\xA9tach\xC3\xA9" "e") != std::string::npos && !win->tabs.empty(),
+              "Dessin des vues : la simulation flotte dans sa fen\xC3\xAAtre");
+        check(!dp::sketchBox(dp::sketch(dp::preset("vues"), false), "bas"), "... le panneau du bas, seulement en simulation : absent en \xC3\xA9" "dition");
+    }
+    {
+        // La fenetre : l'apercu suit le brouillon ; En edition / En simulation.
+        app::DispositionDialog::Spec spec;
+        spec.applied = base;
+        spec.mine = base;
+        spec.edition = "XPGAnalyser IHM";
+        app::DispositionDialog d(std::move(spec));
+        check(static_cast<bool>(d.Initialize()) && d.preview() && !d.preview()->simulating(), "la fen\xC3\xAAtre a son aper\xC3\xA7u (en \xC3\xA9" "dition)");
+        if (auto* root = d.widgetRoot(); root && d.preview() && d.grid()) {
+            root->setBounds({0.f, 0.f, 1600.f, 900.f});
+            root->layout();
+            const auto pv = d.preview()->bounds(), gr = d.grid()->bounds();
+            check(pv.w > 300.f && pv.x > gr.right() && d.preview()->frame().w > 300.f, "une fen\xC3\xAAtre large : l'aper\xC3\xA7u \xC3\xA0 droite de la grille");
+            (void)d.set("explorateur", "ou", "droite");
+            const auto boxes = d.preview()->boxes();
+            const auto* ex = dp::sketchBox(boxes, "explorateur");
+            const auto* centre = dp::sketchBox(boxes, "centre");
+            check(ex && centre && ex->x > centre->x && d.preview()->rectOf(*ex).x > d.preview()->rectOf(*centre).x,
+                  "un choix dans la grille : l'aper\xC3\xA7u le montre aussit\xC3\xB4t (avant Appliquer)");
+            auto* sim = dynamic_cast<ui::ToggleButton*>(root->findById("dialog.disposition.simulation"));
+            auto* ed = dynamic_cast<ui::ToggleButton*>(root->findById("dialog.disposition.edition"));
+            check(sim && ed && ed->checked() && !sim->checked(), "deux boutons : En \xC3\xA9" "dition (enfonc\xC3\xA9), En simulation");
+            if (sim && ed) {
+                sim->setChecked(true);
+                check(d.preview()->simulating() && !ed->checked(), "En simulation : l'aper\xC3\xA7u de la simulation");
+                sim->setChecked(false);       // un clic sur le bouton deja enfonce : il le reste
+                check(d.preview()->simulating() && sim->checked(), "... un second clic le garde");
+                ed->setChecked(true);
+                check(!d.preview()->simulating() && !sim->checked(), "En \xC3\xA9" "dition : retour");
+            }
+            root->setBounds({0.f, 0.f, 960.f, 760.f});
+            root->layout();
+            check(d.preview()->bounds().bottom() <= d.grid()->bounds().y + 1.f, "une fen\xC3\xAAtre \xC3\xA9troite : l'aper\xC3\xA7u au-dessus de la grille");
+        }
+    }
+    core::setEdition(edition);
 }
 
 void communes1123() {
@@ -28923,6 +29035,7 @@ int main(int argc, char** argv) {
     communes1123();                    // 1.12.3 : plusieurs objets choisis, leurs proprietes communes
     voixDesSons1123();                 // 1.12.3 : les voix des sons (melange)
     disposition1123();                 // 1.12.3 : Projet > Disposition
+    apercuDisposition1124();           // 1.12.4 : l'apercu de la fenetre Disposition
     lot6_actions_ressources();
     lot6_simulation();
     cycle1115();                 // 1.11.15 : le cycle de la simulation, la remanence

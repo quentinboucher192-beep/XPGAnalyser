@@ -123,6 +123,35 @@ void setSimulating(bool);
 [[nodiscard]] bool shownNow(std::string_view id);
 [[nodiscard]] std::string startTitleNow(std::string_view group);
 
+// ---- 1.12.4 : L'APERCU - la fenetre dessinee en boites ------------------------
+//  Ce que la fenetre montrera avec une disposition, en edition ou en simulation :
+//  la barre du haut ; l'explorateur (a gauche ou a droite) et les documents
+//  ouverts ; les pages du centre qui s'ouvrent seules (dans un onglet, cote a cote,
+//  dans une fenetre detachee), celle de devant avec ses sous-onglets (l'
+//  inspecteur d'une vue, le panneau de droite de la simulation, les onglets de la
+//  programmation generale) ; le panneau du bas (dessous ou a droite de l'editeur,
+//  ouvert ou replie) et ses sous-onglets ; la bande d'etat ; dans XPGAnalyser API,
+//  la rangee du bas. Les coordonnees vont de 0 a 1 (la fenetre) : le widget de la
+//  fenetre Disposition les met a sa taille. Sans widget : les essais le lisent.
+struct SketchTab {
+    std::string title;
+    bool        active{false};
+    bool        modeOnly{false};     // montre seulement dans ce mode (en simulation ou en edition)
+};
+struct SketchBox {
+    std::string            id;         // "barre", "explorateur", "documents", "centre", "cote", "page.vue",
+                                       // "insp", "sim", "prog", "bas", "etat", "rangee.diagnostics", "detache.page.poste"...
+    std::string            label;
+    float                  x{0.f}, y{0.f}, w{0.f}, h{0.f};
+    std::vector<SketchTab> tabs;       // ses onglets montres (le centre : ses pages ; un panneau : ses sous-onglets)
+    bool                   collapsed{false};   // le panneau du bas replie (Ctrl+J) : une barre
+    bool                   modeOnly{false};    // montre seulement dans ce mode
+    bool                   floating{false};    // une fenetre detachee, par-dessus le reste
+};
+[[nodiscard]] std::vector<SketchBox> sketch(const Layout&, bool simulating);
+// La boite d'un identifiant (nul : aucune) - pour les essais.
+[[nodiscard]] const SketchBox* sketchBox(const std::vector<SketchBox>&, std::string_view id);
+
 } // namespace app::disposition
 
 namespace ui { class TabControl; }
