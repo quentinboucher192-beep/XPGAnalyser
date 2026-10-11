@@ -223,7 +223,9 @@ public:
         const std::size_t n = o->type->kind == sim::TypeDesc::Kind::Map ? o->textKeys.size() + o->intKeys.size() : o->items.size();
         std::string text = sim::display(*o);
         if (text.size() > 80) text = text.substr(0, 77) + "...";
-        return std::to_string(n) + (n > 1 ? " \xC3\xA9l\xC3\xA9ments  " : " \xC3\xA9l\xC3\xA9ment  ") + text;
+        // 1.12.7 : un RING dit sa capacite (« 3 elements sur 5 »).
+        const std::string of = sim::isRingType(*o->type) ? " sur " + std::to_string(o->type->capacity) : std::string{};
+        return std::to_string(n) + (n > 1 ? " \xC3\xA9l\xC3\xA9ments" : " \xC3\xA9l\xC3\xA9ment") + of + "  " + text;
     }
     void add(const sim::ObjRef& o, const std::string& label, const std::string& path, int depth) {
         if (lines.size() > 2000) return;                         // une tres grande valeur : le debut

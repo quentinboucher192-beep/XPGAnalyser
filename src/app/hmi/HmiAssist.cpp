@@ -485,7 +485,7 @@ const std::string kEllipsis{"\xE2\x80\xA6"};
 // Le genre d'un modele de S1 : un type (ARRAY, MAP...), un mot (NULL), sinon une structure.
 Kind snippetKind(std::string_view name) {
     static constexpr std::string_view kTypes[] = {"ARRAY", "MAP", "REF_TO", "POINTER TO", "MAP_ITERATOR",
-                                                  "LIST OF", "VECTOR OF", "TUPLE"};   // 1.12.2
+                                                  "LIST OF", "VECTOR OF", "TUPLE", "SET OF", "RING"};   // 1.12.2 ; 1.12.7 : SET, RING
     if (name == "NULL") return Kind::Keyword;
     for (const auto t : kTypes)
         if (name == t) return Kind::Type;
@@ -1054,6 +1054,30 @@ bool dialectMembers(const Scope& sc, const domain::Project* plc, const std::stri
             it.rank = r;
             push(std::move(it));
         }
+        return true;
+    }
+    // 1.12.7 : un SET, un RING - .Count, .First, .Last ; un RING aussi .Capacity (N) et .Full.
+    if (const std::string u = upper(trimmed(type)); (u.rfind("SET ", 0) == 0 || u.rfind("RING", 0) == 0) && u.find(" OF ") != std::string::npos) {
+        const bool ring = u[0] == 'R';
+        const std::string element = trimmed(std::string_view(type).substr(u.find(" OF ") + 4));
+        int order = 0;
+        const auto add = [&](const char* name, const std::string& t, const std::string& what) {
+            const int r = matchRank(name, needle);
+            if (r < 0) return;
+            Item it;
+            it.text = name;
+            it.detail = t + kDot + what;
+            it.kind = Kind::Member;
+            it.rank = r * 100 + order++;
+            push(std::move(it));
+        };
+        add("Count", "DINT", ring ? "le nombre de valeurs gard\xC3\xA9" "es (au plus la capacit\xC3\xA9)" : "le nombre de valeurs");
+        if (ring) {
+            add("Capacity", "DINT", "N : le nombre de valeurs que le RING garde");
+            add("Full", "BOOL", "plein : la prochaine valeur fera partir la plus ancienne");
+        }
+        add("First", element, ring ? "la plus ancienne" : "la plus petite");
+        add("Last", element, ring ? "la plus r\xC3\xA9" "cente" : "la plus grande");
         return true;
     }
     std::string k, v;

@@ -849,6 +849,12 @@ std::string starter(std::string_view name, std::string_view type) {
         return "(* " + n + " : une entr\xC3\xA9" "e par cl\xC3\xA9 *)\n" + n + "['exemple'] := 0;\n";
     if (u.rfind("LIST", 0) == 0 || u.rfind("VECTOR", 0) == 0)
         return "(* " + n + " : ses \xC3\xA9l\xC3\xA9ments, dans l'ordre *)\nFOR i := 1 TO 3 DO\n    LIST_ADD(" + n + ", i);\nEND_FOR;\n";
+    // 1.12.7 : un SET (chaque valeur une fois, rangee), un RING (les N dernieres valeurs).
+    const std::string sample = u.find("STRING") != std::string::npos ? "'exemple'" : "0";
+    if (u.rfind("SET ", 0) == 0)
+        return "(* " + n + " : chaque valeur une fois, rang\xC3\xA9" "e *)\nIF SET_ADD(" + n + ", " + sample + ") THEN\n    (* nouvelle *)\nEND_IF;\n";
+    if (u.rfind("RING", 0) == 0)
+        return "(* " + n + " : les derni\xC3\xA8res valeurs ; plein, la plus ancienne part *)\nRING_ADD(" + n + ", " + sample + ");\n";
     if (u.rfind("ARRAY", 0) == 0) {
         // Les bornes de sa premiere dimension : ARRAY[1..4] OF REAL -> FOR i := 1 TO 4.
         std::string lo = "0", hi = "2";

@@ -701,6 +701,9 @@ const std::vector<Builtin>& snippets() {
         {"LIST OF", "LIST OF REAL", "Une liste de taille variable : L[0], L.Count, LIST_ADD(L, x) ; [1, 2, 3]."},
         {"VECTOR OF", "VECTOR OF REAL", "Un vecteur de taille variable : V[0], VECTOR_PUSH(V, x), VECTOR_RESIZE."},
         {"TUPLE", "TUPLE(INT, STRING)", "Des valeurs de types fixes : t.Item1, t.Item2 ; (1, 'texte')."},
+        // 1.12.7 : SET et RING
+        {"SET OF", "SET OF STRING", "Un ensemble : chaque valeur une fois, rang\xC3\xA9" "e (std::set) : SET_ADD, SET_REMOVE, SET_HAS, S.Count."},
+        {"RING", "RING[100] OF REAL", "Un tampon circulaire : les N derni\xC3\xA8res valeurs ; plein, la plus ancienne part (RING_ADD, R.Count, R.Capacity, R.Full)."},
         {"REF_TO", "REF_TO REAL", "Une r\xC3\xA9" "f\xC3\xA9rence : r := REF(x); r^ := 1.0;"},
         {"POINTER TO", "POINTER TO REAL", "Un pointeur : p := ADR(x); IF p <> NULL THEN p^ := 1.0; END_IF"},
         {"VAR_IN_OUT", "VAR_IN_OUT x : REAL", "Un param\xC3\xA8tre par r\xC3\xA9" "f\xC3\xA9rence : la fonction \xC3\xA9" "crit dans la variable donn\xC3\xA9" "e."},

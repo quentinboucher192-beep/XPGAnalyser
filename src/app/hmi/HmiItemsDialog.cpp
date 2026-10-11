@@ -42,7 +42,9 @@ std::string zeroOf(const std::string& type) {
     if (u == "BOOL") return "FALSE";
     if (u == "TIME") return "T#0s";
     if (u == "REAL" || u == "LREAL") return "0.0";
-    if (u.rfind("LIST", 0) == 0 || u.rfind("VECTOR", 0) == 0 || u.rfind("MAP", 0) == 0 || u.rfind("ARRAY", 0) == 0) return "[]";
+    if (u.rfind("LIST", 0) == 0 || u.rfind("VECTOR", 0) == 0 || u.rfind("MAP", 0) == 0 || u.rfind("ARRAY", 0) == 0 || u.rfind("SET ", 0) == 0
+        || u.rfind("RING", 0) == 0)      // 1.12.7 : SET, RING
+        return "[]";
     return "0";
 }
 
@@ -176,7 +178,9 @@ std::size_t HmiItemsDialog::Model::columnCount() const { return mode == Mode::Ma
 
 std::string HmiItemsDialog::Model::headerText(std::size_t c) const {
     switch (mode) {
-        case Mode::List:   return c == 0 ? "#" : "Valeur (" + element + ")";
+        case Mode::List:
+            if (flavor == "RING") return c == 0 ? "#" : "Valeur (" + element + ", " + std::to_string(capacity) + " au plus)";     // 1.12.7
+            return c == 0 ? "#" : "Valeur (" + element + ")";
         case Mode::Array:  return c == 0 ? "Indice" : "Valeur (" + element + ")";
         case Mode::Map:    return c == 0 ? std::string(textKeys ? "Cl\xC3\xA9 (texte)" : "Cl\xC3\xA9 (nombre)") : "Valeur (" + element + ")";
         case Mode::Tuple:  return c == 0 ? std::string("\xC3\x89l\xC3\xA9ment") : std::string("Valeur");
@@ -238,6 +242,38 @@ bool HmiItemsDialog::Model::setCellText(ui::RowIndex r, std::size_t c, std::stri
     values[r] = t;
     return true;
 }
+
+// 1.12.7 : un SET se range et perd ses doublons, un RING garde ses N dernieres valeurs - comme le moteur
+// les lira. Les valeurs ecrites se comparent comme des nombres (12 < 100), sinon comme des textes ('P1').
+namespace {
+bool numberText(const std::string& t, double& out) {
+    if (t.empty()) return false;
+    char* end = nullptr;
+    out = std::strtod(t.c_str(), &end);
+    return end && *end == '\0';
+}
+std::string unquoted(const std::string& t) {
+    return t.size() >= 2 && (t.front() == '\'' || t.front() == '"') && t.back() == t.front() ? t.substr(1, t.size() - 2) : t;
+}
+void shapeItems(std::vector<std::string>& items, const std::string& flavor, std::size_t capacity) {
+    if (flavor == "RING" && capacity > 0 && items.size() > capacity) items.erase(items.begin(), items.end() - static_cast<std::ptrdiff_t>(capacity));
+    if (flavor != "SET") return;
+    std::stable_sort(items.begin(), items.end(), [](const std::string& a, const std::string& b) {
+        double x = 0, y = 0;
+        const bool na = numberText(a, x), nb = numberText(b, y);
+        if (na && nb) return x < y;
+        if (na != nb) return na;
+        return unquoted(a) < unquoted(b);
+    });
+    std::vector<std::string> kept;
+    for (auto& i : items) {
+        double x = 0, y = 0;
+        const bool same = !kept.empty() && (numberText(kept.back(), x) && numberText(i, y) ? x == y : unquoted(kept.back()) == unquoted(i));
+        if (!same) kept.push_back(std::move(i));
+    }
+    items = std::move(kept);
+}
+} // namespace
 
 std::shared_ptr<HmiItemsDialog::Model> HmiItemsDialog::modelOf(const std::string& type, const std::string& value) {
     auto m = std::make_shared<Model>();
@@ -301,6 +337,17 @@ std::shared_ptr<HmiItemsDialog::Model> HmiItemsDialog::modelOf(const std::string
             m->mode = Model::Mode::List;
             m->values = items;
             if (!literal && !single.empty()) m->values.push_back(single);
+            // 1.12.7 : un SET (range, sans doublon), un RING (ses N dernieres).
+            if (shape.form == tf::Form::Set || shape.form == tf::Form::Ring) {
+                m->flavor = shape.form == tf::Form::Set ? "SET" : "RING";
+                long long n = 0;
+                if (shape.form == tf::Form::Ring) {
+                    char* end = nullptr;
+                    n = std::strtoll(shape.parameter.c_str(), &end, 10);
+                    m->capacity = n > 0 ? static_cast<std::size_t>(n) : 0;
+                }
+                shapeItems(m->values, m->flavor, m->capacity);
+            }
             break;
     }
     return m;
@@ -312,6 +359,7 @@ std::string HmiItemsDialog::literalOf(const Model& m) {
         case Model::Mode::List:
             for (const auto& v : m.values)
                 if (!trim(v).empty()) items.push_back(trim(v));
+            shapeItems(items, m.flavor, m.capacity);       // 1.12.7 : SET, RING
             break;
         case Model::Mode::Map:
             for (std::size_t k = 0; k < m.values.size() && k < m.keys.size(); ++k) {
@@ -386,6 +434,7 @@ bool HmiItemsDialog::removeRow(std::size_t row) {
 
 bool HmiItemsDialog::moveRow(std::size_t row, int delta) {
     if (!model_->resizable() || row >= model_->values.size()) return false;
+    if (model_->flavor == "SET") return false;          // 1.12.7 : un SET se range tout seul
     const auto to = static_cast<long long>(row) + delta;
     if (to < 0 || to >= static_cast<long long>(model_->values.size())) return false;
     std::swap(model_->values[row], model_->values[static_cast<std::size_t>(to)]);

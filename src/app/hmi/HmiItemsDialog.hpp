@@ -10,6 +10,8 @@
 //    ARRAY[1..2, 1..3] Ligne | [.., 1] | [.., 2] | [.., 3]   (une ligne par premiere dimension)
 //    MAP[STRING] OF T  Cle | Valeur               (une cle STRING s'ecrit sans apostrophes)
 //    TUPLE(INT, STRING) Element | Valeur          (Item1 : INT, Item2 : STRING)
+//    SET OF STRING     #  | Valeur               (1.12.7 : rangee, sans doublon - ni Monter, ni Descendre)
+//    RING[5] OF REAL   #  | Valeur (5 au plus)   (1.12.7 : les 5 dernieres, de la plus ancienne a la plus recente)
 //
 //  Une case vide : une liste, une MAP - la ligne ne compte pas ; un tableau - les cases
 //  qui suivent la derniere ecrite gardent la valeur de leur type, une case vide avant
@@ -82,6 +84,8 @@ public:
     std::vector<std::string> keys;                     // Map
     std::vector<std::string> values;                   // une case par ligne (Matrix : ligne par ligne)
     std::size_t              columns2{0};              // Matrix : les cases d'une ligne
+    std::string              flavor;                   // 1.12.7 : List - "SET" (rangee, sans doublon), "RING" (les `capacity` dernieres)
+    std::size_t              capacity{0};              // RING[N] : N
 
     [[nodiscard]] bool resizable() const noexcept { return mode == Mode::List || mode == Mode::Map; }
     [[nodiscard]] std::size_t rowCount() const override;
