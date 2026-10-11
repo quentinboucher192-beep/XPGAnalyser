@@ -239,6 +239,11 @@ void chercher() {
     same("STRING", "R := MAP_KEY_OF(Stock, 45.0, '');", "goujon", "MAP_KEY_OF");
     same("STRING", "R := MAP_KEY_OF(Stock, 1.0, '?');", "?", "MAP_KEY_OF absente : le defaut");
     same("DINT", "R := LIST_COUNT_OF(Mesures, 8.0) * 10 + LIST_COUNT_OF(Tab, 9);", "22", "LIST_COUNT_OF");
+    same("DINT", "R := LIST_COUNT_OF(Mesures, 8);", "2", "LIST_COUNT_OF : un entier compare a des REAL");
+    fails("i := LIST_COUNT_OF(Mesures, 'abc');", "LIST_COUNT_OF : 'abc' n'est pas un REAL", "LIST_COUNT_OF d'un texte dans des REAL");
+    fails("i := LIST_LAST_INDEX_OF(Tab, 9.5);", "LIST_LAST_INDEX_OF : 9.5 n'est pas un entier (INT)", "LIST_LAST_INDEX_OF de 9.5 dans des INT");
+    fails("s := MAP_KEY_OF(Stock, 'x', '');", "MAP_KEY_OF : 'x' n'est pas un REAL", "MAP_KEY_OF d'un texte dans une MAP de REAL");
+    fails("i := MAP_REMOVE_IF(Stock, COMPARAISON#Egal, 'x');", "MAP_REMOVE_IF : 'x' n'est pas un REAL", "MAP_REMOVE_IF d'un texte");
     same("DINT", "R := LIST_FIND_IF(Mesures, COMPARAISON#Superieur, 13.0);", "2", "LIST_FIND_IF > 13");
     same("DINT", "R := LIST_FIND_IF(TabIhm, COMPARAISON#Egal, 9);", "2", "LIST_FIND_IF dans un ARRAY[1..5]");
     same("DINT", "R := LIST_FIND_IF(Mesures, COMPARAISON#Superieur, 99.0);", "-1", "LIST_FIND_IF : aucun");
@@ -607,6 +612,23 @@ void compilerProjet() {
     sim::Value out;
     check(rt.environment().read("Compte", out) && out.asInteger() == 20,
           "une LIST OF T_Lot triee par 'Poids' (decroissant) : C03 au rang 2, le plus lourd au rang 0 (" + shown(out) + ") " + err);
+    // LIST_SORT d'une liste de structures : LIST_SORT_BY (la maquette) ; LIST_FIND_IF sans membre : lequel.
+    p.programs.scripts.back().body = "LIST_SORT(Lots);";
+    Runtime rt2;
+    rt2.bind(&p, nullptr);
+    rt2.start(0.0);
+    rt2.tick(0.1);
+    (void)rt2.callScript("Essai", 0.2, &err);
+    check(err.find("LIST_SORT : des T_Lot \xE2\x80\x94 LIST_SORT_BY(L, 'Poids') trie par un membre") != std::string::npos,
+          "LIST_SORT d'une LIST OF T_Lot : LIST_SORT_BY (" + err + ")");
+    p.programs.scripts.back().body = "VAR i : DINT; l : T_Lot; END_VAR\nLIST_ADD(Lots, l);\ni := LIST_FIND_IF(Lots, COMPARAISON#Egal, 'A07');";
+    Runtime rt3;
+    rt3.bind(&p, nullptr);
+    rt3.start(0.0);
+    rt3.tick(0.1);
+    (void)rt3.callScript("Essai", 0.2, &err);
+    check(err.find("LIST_FIND_IF : des T_Lot \xE2\x80\x94 dis quel membre comparer : 'Poids'") != std::string::npos,
+          "LIST_FIND_IF d'une LIST OF T_Lot sans membre : lequel comparer (" + err + ")");
 }
 
 // Une expression de vue (fx) : les templates et les natives pures s'y lisent ; une native qui ecrit

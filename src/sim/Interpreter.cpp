@@ -4820,6 +4820,10 @@ private:
             return commit();
         }
         // Les fonctions sur des valeurs simples : trier, sommer, le plus petit...
+        // 1.12.7 : LIST_SORT d'une liste de structures dit LIST_SORT_BY (la maquette).
+        if (u == "LIST_SORT" && list.type->element && list.type->element->kind == TypeDesc::Kind::Struct && !list.type->element->members.empty())
+            return dialectError(u + " : des " + list.type->element->name + " \xE2\x80\x94 LIST_SORT_BY(L, '"
+                                + list.type->element->members[list.type->element->members.size() > 1 ? 1 : 0].first + "') trie par un membre");
         for (const auto& i : list.items)
             if (!i || !i->type || i->type->kind != TypeDesc::Kind::Scalar)
                 return dialectError(u + " : une liste de valeurs simples est attendue, pas un " + list.type->text());
@@ -5526,8 +5530,11 @@ private:
             return valueOfItem(first);
         }
         if (u == "LIST_REMOVE_ALL" || u == "LIST_LAST_INDEX_OF" || u == "LIST_COUNT_OF") {
-            auto v = rich(arg(1));
-            if (!v) return v;
+            auto given = rich(arg(1));
+            if (!given) return given;
+            auto fitted = fitTo(u, elem, *given);            // 'abc' dans une liste de REAL : refuse
+            if (!fitted) return core::Err<core::Error>(fitted.error());
+            const core::Result<RV> v = valueOfItem(*fitted);
             if (u == "LIST_REMOVE_ALL") {
                 const auto before = L.items.size();
                 L.items.erase(std::remove_if(L.items.begin(), L.items.end(), [&](const ObjRef& x) { return sameItem(x, *v); }), L.items.end());
@@ -5828,8 +5835,11 @@ private:
             return rich(arg(2));
         }
         if (u == "MAP_KEY_OF") {
-            auto v = rich(arg(1));
-            if (!v) return v;
+            auto given = rich(arg(1));
+            if (!given) return given;
+            auto fitted = fitTo(u, m.type->element, *given);
+            if (!fitted) return core::Err<core::Error>(fitted.error());
+            const core::Result<RV> v = valueOfItem(*fitted);
             for (const auto& [k, x] : entries)
                 if (sameItem(x, *v)) return k;
             return rich(arg(2));
@@ -5837,8 +5847,11 @@ private:
         if (u == "MAP_REMOVE_IF") {
             auto op = comparisonArg(u, arg(1));
             if (!op) return core::Err<core::Error>(op.error());
-            auto v = rich(arg(2));
-            if (!v) return v;
+            auto given = rich(arg(2));
+            if (!given) return given;
+            auto fitted = fitTo(u, m.type->element, *given);
+            if (!fitted) return core::Err<core::Error>(fitted.error());
+            const core::Result<RV> v = valueOfItem(*fitted);
             std::int64_t removed = 0;
             for (const auto& [k, x] : entries) {
                 auto c = compareItem(u, x, *v);
