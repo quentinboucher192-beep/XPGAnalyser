@@ -24,6 +24,7 @@
 #include "HmiTypes.hpp"
 #include "../project/MemberTree.hpp"
 #include "HmiCallCheck.hpp"     // 1.11.20 : les appels, controles comme le moteur les fait
+#include "../sim/DialectLib.hpp"   // 1.12.7 : les natives des conteneurs, std::numeric, <bit>, les templates
 #include "HmiOverload.hpp"      // 1.11.20 : les signatures (E/S, sorties) et les surcharges
 
 // 1.10 (decisions 13 et 13 bis) : le dialecte IHM du chantier S1 - ses
@@ -164,16 +165,112 @@ const std::set<std::string>& statementWords() {
 // 1.10 (decisions 13 et 13 bis) : les fonctions du dialecte IHM - reconnues
 // ici, leurs arguments controles par S1 (dialectFindings).
 const std::set<std::string>& dialectFunctions() {
-    static const std::set<std::string> k = {"MAP_HAS",  "MAP_REMOVE", "MAP_SIZE", "MAP_CLEAR", "MAP_KEYS",    "MAP_GET",
-                                            "MAP_BEGIN", "MAP_END",   "MAP_NEXT", "REF",       "ADR",         "SIZEOF",
-                                            "LOWER_BOUND", "UPPER_BOUND", "ASSERT",    // ASSERT : 1.12.1
-                                            // 1.12.2 : les listes et les vecteurs
-                                            "LIST_ADD", "LIST_INSERT", "LIST_REMOVE_AT", "LIST_REMOVE", "LIST_CLEAR", "LIST_COUNT",
-                                            "LIST_CONTAINS", "LIST_INDEX_OF", "LIST_FIRST", "LIST_LAST", "LIST_GET", "LIST_SORT",
-                                            "LIST_REVERSE", "LIST_SUM", "LIST_MIN", "LIST_MAX", "LIST_AVG", "VECTOR_PUSH", "VECTOR_POP",
-                                            "VECTOR_INSERT", "VECTOR_ERASE", "VECTOR_CLEAR", "VECTOR_SIZE", "VECTOR_RESIZE",
-                                            "VECTOR_FRONT", "VECTOR_BACK", "JOIN", "SPLIT"};
+    static const std::set<std::string> k = [] {
+        std::set<std::string> s = {"MAP_HAS",  "MAP_REMOVE", "MAP_SIZE", "MAP_CLEAR", "MAP_KEYS",    "MAP_GET",
+                                   "MAP_BEGIN", "MAP_END",   "MAP_NEXT", "REF",       "ADR",         "SIZEOF",
+                                   "LOWER_BOUND", "UPPER_BOUND", "ASSERT",    // ASSERT : 1.12.1
+                                   // 1.12.2 : les listes et les vecteurs
+                                   "LIST_ADD", "LIST_INSERT", "LIST_REMOVE_AT", "LIST_REMOVE", "LIST_CLEAR", "LIST_COUNT",
+                                   "LIST_CONTAINS", "LIST_INDEX_OF", "LIST_FIRST", "LIST_LAST", "LIST_GET", "LIST_SORT",
+                                   "LIST_REVERSE", "LIST_SUM", "LIST_MIN", "LIST_MAX", "LIST_AVG", "VECTOR_PUSH", "VECTOR_POP",
+                                   "VECTOR_INSERT", "VECTOR_ERASE", "VECTOR_CLEAR", "VECTOR_SIZE", "VECTOR_RESIZE",
+                                   "VECTOR_FRONT", "VECTOR_BACK", "JOIN", "SPLIT"};
+        // 1.12.7 : les conteneurs (43 de plus), std::numeric, <bit>
+        for (const auto& n : sim::lib::natives()) s.insert(std::string(n.name));
+        return s;
+    }();
     return k;
+}
+// 1.12.7 : le nombre d'arguments des natives LIST_ et VECTOR_ d'avant (Compiler ne le comptait pas :
+// un ecart est un avertissement - ce qui demarrait en 1.12.6 demarre toujours).
+struct OldArity { const char* name; int min; int max; };
+constexpr OldArity kOldLists[] = {
+    {"LIST_ADD", 2, 2}, {"LIST_INSERT", 3, 3}, {"LIST_REMOVE_AT", 2, 2}, {"LIST_REMOVE", 2, 2}, {"LIST_CLEAR", 1, 1},
+    {"LIST_COUNT", 1, 1}, {"LIST_CONTAINS", 2, 2}, {"LIST_INDEX_OF", 2, 2}, {"LIST_FIRST", 1, 1}, {"LIST_LAST", 1, 1},
+    {"LIST_GET", 3, 3}, {"LIST_SORT", 1, 2}, {"LIST_REVERSE", 1, 1}, {"LIST_SUM", 1, 1}, {"LIST_MIN", 1, 1}, {"LIST_MAX", 1, 1},
+    {"LIST_AVG", 1, 1}, {"VECTOR_PUSH", 2, 2}, {"VECTOR_POP", 1, 1}, {"VECTOR_INSERT", 3, 3}, {"VECTOR_ERASE", 2, 2},
+    {"VECTOR_CLEAR", 1, 1}, {"VECTOR_SIZE", 1, 1}, {"VECTOR_RESIZE", 2, 3}, {"VECTOR_FRONT", 1, 1}, {"VECTOR_BACK", 1, 1},
+    {"JOIN", 1, 2}, {"SPLIT", 2, 2}, {"MAP_GET", 2, 3},
+};
+const OldArity* oldArity(std::string_view upper) {
+    for (const auto& a : kOldLists)
+        if (upper == a.name) return &a;
+    return nullptr;
+}
+// 1.12.7 : ce qu'un type ecrit dit d'un conteneur (Compiler) - un ARRAY et ses cases, l'element d'une
+// LIST, d'un VECTOR ou d'un ARRAY, les champs d'un TUPLE. Le texte tel qu'ecrit (les noms gardent leur casse).
+struct ContainerType {
+    enum class K : std::uint8_t { Other, Array, List, Map, Tuple } kind{K::Other};
+    long long                cells{-1};
+    std::string              element;
+    std::vector<std::string> fields;
+    std::string              text;      // TUPLE(STRING, REAL)
+};
+std::string trimmedText(std::string_view s) {
+    std::size_t a = 0, b = s.size();
+    while (a < b && std::isspace(static_cast<unsigned char>(s[a]))) ++a;
+    while (b > a && std::isspace(static_cast<unsigned char>(s[b - 1]))) --b;
+    return std::string(s.substr(a, b - a));
+}
+ContainerType containerOf(std::string_view written) {
+    ContainerType out;
+    const std::string t = trimmedText(written), U = up(t);
+    const auto afterOf = [&](std::size_t from) {
+        const auto of = U.find(" OF ", from);
+        return of == std::string::npos ? std::string{} : trimmedText(std::string_view(t).substr(of + 4));
+    };
+    if (U.rfind("ARRAY", 0) == 0) {
+        out.kind = ContainerType::K::Array;
+        const auto open = U.find('['), close = U.find(']');
+        if (open != std::string::npos && close != std::string::npos && close > open) {
+            long long cells = 1;
+            std::size_t from = open + 1;
+            while (from < close) {
+                const auto comma = std::min(U.find(',', from), close);
+                const std::string range = U.substr(from, comma - from);
+                const auto dots = range.find("..");
+                if (dots == std::string::npos) { cells = -1; break; }
+                char* e1 = nullptr;
+                char* e2 = nullptr;
+                const std::string lo = trimmedText(range.substr(0, dots)), hi = trimmedText(range.substr(dots + 2));
+                const long long a = std::strtoll(lo.c_str(), &e1, 10), b = std::strtoll(hi.c_str(), &e2, 10);
+                if (lo.empty() || hi.empty() || *e1 != '\0' || *e2 != '\0' || b < a) { cells = -1; break; }
+                cells *= b - a + 1;
+                from = comma + 1;
+            }
+            out.cells = cells;
+            out.element = afterOf(close);
+        }
+        return out;
+    }
+    if (U.rfind("LIST OF ", 0) == 0 || U.rfind("VECTOR OF ", 0) == 0) {
+        out.kind = ContainerType::K::List;
+        out.element = afterOf(0);
+        return out;
+    }
+    if (U.rfind("MAP", 0) == 0) {
+        out.kind = ContainerType::K::Map;
+        return out;
+    }
+    if (U.rfind("TUPLE", 0) == 0) {
+        const auto open = t.find('('), close = t.rfind(')');
+        if (open == std::string::npos || close == std::string::npos || close < open) return out;
+        out.kind = ContainerType::K::Tuple;
+        int depth = 0;
+        std::size_t from = open + 1;
+        for (std::size_t k = open + 1; k <= close; ++k) {
+            if (t[k] == '(' || t[k] == '[') ++depth;
+            else if ((t[k] == ')' || t[k] == ']') && depth > 0) --depth;
+            else if ((t[k] == ',' && depth == 0) || k == close) {
+                out.fields.push_back(trimmedText(std::string_view(t).substr(from, k - from)));
+                from = k + 1;
+            }
+        }
+        out.text = "TUPLE(";
+        for (std::size_t k = 0; k < out.fields.size(); ++k) out.text += (k ? ", " : "") + up(out.fields[k]);
+        out.text += ")";
+    }
+    return out;
 }
 // Un bloc de declarations (VAR, VAR_TEMP, VAR_INPUT : blanchis par
 // splitDeclarations ; VAR_IN_OUT, VAR_OUTPUT... : restes dans le corps).
@@ -960,8 +1057,11 @@ private:
         bool found = false;
         // 1.12.0 : une fonction du projet nommee comme une native de l'IHM (Random, RGB) passe avant.
         const bool nativeShadowed = natives::isOwnFunction(U) && (pendingSymbolFn_ || (sc_.project && !sc_.project->functionsNamed(name.text).empty()));
-        if (internalFunction(name.text) || dialectFunctions().count(U)) {
+        // 1.12.7 : une fonction du projet nommee comme une nouvelle native passe avant (le moteur fait de meme).
+        const bool newShadowed = sim::lib::native(U) && (pendingSymbolFn_ || (sc_.project && !sc_.project->functionsNamed(name.text).empty()));
+        if (internalFunction(name.text) || (dialectFunctions().count(U) && !newShadowed)) {
             found = true;      // 1.10 (13) : une fonction interne du script, une fonction du dialecte : S1 les controle
+            if (!internalFunction(name.text) && !named) nativeChecks(i, close, n);     // 1.12.7
         } else if (conversion(U)) {
             found = true;      // 1.10 (integration I2, S2) : TO_STRING(v), TO_T_RESUME(v), TO_T_MODE('auto') - un argument
             arity(1, 1);
@@ -1042,6 +1142,141 @@ private:
         return atEnd(close) ? close : close + 1;
     }
 
+    // ---- 1.12.7 : les natives des conteneurs, de std::numeric, de <bit> et les templates ----
+    // Les arguments [debut, fin) d'un appel dont la '(' est a l'index `open` et la ')' a `close`.
+    [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> argsOf(std::size_t open, std::size_t close) const {
+        std::vector<std::pair<std::size_t, std::size_t>> out;
+        std::size_t from = open + 1;
+        int depth = 0;
+        for (std::size_t k = open + 1; k < close && !atEnd(k); ++k) {
+            if (isOp(k, "(") || isOp(k, "[")) ++depth;
+            else if (isOp(k, ")") || isOp(k, "]")) --depth;
+            else if (depth == 0 && isOp(k, ",")) {
+                out.emplace_back(from, k);
+                from = k + 1;
+            }
+        }
+        if (from < close) out.emplace_back(from, close);
+        return out;
+    }
+    // Les controles d'une native : une nouvelle (1.12.7) - des erreurs ; une d'avant - des avertissements
+    // (ce qui demarrait en 1.12.6 demarre toujours ; le moteur, lui, s'arrete sur la faute).
+    void nativeChecks(std::size_t i, std::size_t close, int n) {
+        using S = Finding::Severity;
+        const std::string U = up(toks_[i].text);
+        const auto* info = sim::lib::native(U);
+        const OldArity* old = info ? nullptr : oldArity(U);
+        if (!info && !old && !sim::lib::oldListResizes(U)) return;
+        const S sev = info ? S::Error : S::Warning;
+        const int mn = info ? info->min : old ? old->min : -1, mx = info ? info->max : old ? old->max : -1;
+        if (mn >= 0 && (n < mn || (mx >= 0 && n > mx)))
+            reportTok(i, i + 1, sev, toks_[i].text + " prend " + arityText(mn, mx) + ", pas " + std::to_string(n));
+        const auto args = argsOf(i + 1, close);
+        if (args.empty()) return;
+        // Le premier argument : un nom dont le type est connu.
+        const auto [a0, b0] = args.front();
+        const bool designated = isIdent(a0) && pathEnd(a0) == b0;
+        const ContainerType ct = containerOf(designated ? typeOfName(textOf(a0, b0)) : std::string{});
+        const bool resizes = info ? info->resizes : sim::lib::oldListResizes(U);
+        if (ct.kind == ContainerType::K::Array && resizes)
+            reportTok(a0, b0, sev, U + " : un ARRAY a une taille fixe (" + (ct.cells >= 0 ? std::to_string(ct.cells) : std::string("?"))
+                                       + " cases) \xE2\x80\x94 une LIST ou un VECTOR est attendu");
+        if (!info) return;
+        // TUPLE_GET, TUPLE_SET : le numero du champ, une constante, dans le TUPLE.
+        if ((U == "TUPLE_GET" || U == "TUPLE_SET") && ct.kind == ContainerType::K::Tuple && args.size() >= 2) {
+            const auto [a1, b1] = args[1];
+            if (b1 == a1 + 1 && toks_[a1].k == Tok::K::Num) {
+                const long long k = std::atoll(toks_[a1].text.c_str());
+                if (k < 1 || k > static_cast<long long>(ct.fields.size()))
+                    reportTok(a1, b1, S::Error, U + " : " + ct.text + " a " + std::to_string(ct.fields.size()) + " champs, pas " + std::to_string(k));
+            }
+        }
+        // Le membre ('Poids', 'Item2') d'une liste de structures ou de TUPLE, quand le type est connu.
+        std::pair<std::size_t, std::size_t> member{0, 0};
+        if (U == "LIST_SORT_BY" && args.size() >= 2) member = args[1];
+        else if (info->member && info->max > 0 && args.size() == static_cast<std::size_t>(info->max)) member = args.back();
+        const auto [am, bm] = member;
+        if (bm == am + 1 && toks_[am].k == Tok::K::Str && (ct.kind == ContainerType::K::List || ct.kind == ContainerType::K::Array)) {
+            const std::string& q = toks_[am].text;
+            const std::string name = q.size() >= 2 ? q.substr(1, q.size() - 2) : std::string{};
+            const ContainerType el = containerOf(ct.element);
+            if (el.kind == ContainerType::K::Tuple) {
+                const std::string N = up(name);
+                const long long k = N.rfind("ITEM", 0) == 0 ? std::atoll(N.c_str() + 4) : 0;
+                if (k < 1 || k > static_cast<long long>(el.fields.size()))
+                    reportTok(am, bm, S::Error, U + " : un " + el.text + " a Item1 \xC3\xA0 Item" + std::to_string(el.fields.size()) + ", pas '" + name + "'");
+            } else if (const auto ms = sc_.project ? types::membersOf(*sc_.project, ct.element) : std::vector<TypeMember>{}; !ms.empty()) {
+                std::vector<std::string> pool;
+                bool found = false;
+                for (const auto& m : ms) {
+                    pool.push_back(m.name);
+                    found = found || up(m.name) == up(name);
+                }
+                if (!found) reportTok(am, bm, S::Error, ct.element + " n'a pas de membre " + name + sim::lib::closest(name, pool));
+            } else if (elementary(ct.element)) {
+                reportTok(am, bm, S::Error, U + " : des " + up(ct.element) + " n'ont pas de membres");
+            }
+        }
+    }
+    // Un template a l'index k : NUMERIC_LIMITS<UINT>.MAX(), NUMBERS<REAL>.PI, NUMBERS.PI, SATURATE_CAST<INT>(x),
+    // ADD_SAT<INT>(a, b). Rend l'index qui le suit (ses arguments lus), ou k : pas un template (une variable
+    // du meme nom garde son sens). Le type et le membre d'un NOM<T> sont dits par la lecture du script.
+    std::size_t templateUse(std::size_t k) {
+        if (!isIdent(k) || (k > 0 && isOp(k - 1, "."))) return k;
+        const auto* info = sim::lib::templateInfo(toks_[k].text);
+        if (!info) return k;
+        const std::string& name = toks_[k].text;
+        if (local(name) || dialectName(name, toks_[k].at) || (sc_.project && sc_.project->variable(name))) return k;
+        using S = Finding::Severity;
+        const bool angled = isOp(k + 1, "<") && isIdent(k + 2) && isOp(k + 3, ">");
+        std::size_t next = angled ? k + 4 : k + 1;
+        const auto closeOf = [&](std::size_t open) {
+            int depth = 0;
+            std::size_t m = open;
+            for (; !atEnd(m); ++m) {
+                if (isOp(m, "(")) ++depth;
+                else if (isOp(m, ")") && --depth == 0) break;
+            }
+            return m;
+        };
+        if (info->isClass) {
+            if (!angled && info->required) reportTok(k, k + 1, S::Error, std::string(info->hint));
+            else if (!angled && !isOp(next, "."))                  // NUMBERS seul : une constante est attendue
+                reportTok(k, k + 1, S::Error, std::string(info->name) + " : choisis une constante \xE2\x80\x94 " + std::string(info->name) + ".PI (en "
+                                                  + std::string(info->dflt) + ")");
+            if (isOp(next, ".") && isIdent(next + 1)) {
+                const std::string member = toks_[next + 1].text;
+                const bool called = isOp(next + 2, "(");
+                if (!angled && !info->required) {                  // NUMBERS.PI : la lecture du script ne le controle pas
+                    if (const auto* m = sim::lib::templateMember(info->name, member); !m) {
+                        std::vector<std::string> pool;
+                        for (const auto& x : sim::lib::numbersMembers()) pool.emplace_back(x.name);
+                        reportTok(next + 1, next + 2, S::Error, std::string(info->name) + " n'a pas de membre " + member + sim::lib::closest(member, pool));
+                    } else if (called) {
+                        reportTok(next + 1, next + 2, S::Error, std::string(m->name) + " est une constante : sans parenth\xC3\xA8ses");
+                    }
+                }
+                next += 2;
+                if (called) {
+                    const std::size_t c = closeOf(next);
+                    next = atEnd(c) ? c : c + 1;
+                }
+            }
+            return next;
+        }
+        if (!angled) {
+            if (info->required && isOp(k + 1, "(")) reportTok(k, k + 1, S::Error, std::string(info->hint));
+            return k;                                              // MIDPOINT(a, b), ADD_SAT(a, b) : un appel ordinaire
+        }
+        if (!isOp(next, "(")) return next;
+        const std::size_t close = closeOf(next);
+        const int n = static_cast<int>(argsOf(next, close).size());
+        if (const auto* nat = sim::lib::native(info->name); nat && (n < nat->min || (nat->max >= 0 && n > nat->max)))
+            reportTok(k, k + 1, S::Error, std::string(info->name) + " prend " + arityText(nat->min, nat->max) + ", pas " + std::to_string(n));
+        walkNames(next + 1, close);
+        return atEnd(close) ? close : close + 1;
+    }
+
     // 1.11.14 : IHM_LOG(INFO, 'Pompe {Numero} demarree') : le niveau, le message.
     void logCall(std::size_t i, std::size_t close) {
         using S = Finding::Severity;
@@ -1105,6 +1340,10 @@ private:
             if (operatorWords().count(U) || statementWords().count(U)) { ++k; continue; }
             if (isOp(k + 1, ":=") || isOp(k + 1, "=>")) {                             // un argument nomme
                 if (k > 0 && (isOp(k - 1, "(") || isOp(k - 1, ","))) { ++k; continue; }
+            }
+            if (const std::size_t past = templateUse(k); past != k) {                  // 1.12.7 : NUMERIC_LIMITS<UINT>.MAX()
+                k = std::max(past, k + 1);
+                continue;
             }
             if (isOp(k + 1, "(")) {
                 const std::size_t after = call(k, false);

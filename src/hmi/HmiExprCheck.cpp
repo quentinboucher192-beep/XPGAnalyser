@@ -5,6 +5,7 @@
 //  les types, et ne s'arrete jamais sur ce qu'elle ne comprend pas.
 // =============================================================================
 #include "HmiExprCheck.hpp"
+#include "../sim/DialectLib.hpp"   // 1.12.7 : les natives de std::numeric, de <bit>, les templates
 #include "../core/Edition.hpp"   // 1.12.0 : XPGAnalyser IHM - pas d'espace API.
 #include "HmiNatives.hpp"   // 1.12.0 : les couleurs, l'aleatoire
 #include "HmiCallCheck.hpp"     // 1.11.20 : les appels, controles comme le moteur les fait
@@ -786,6 +787,24 @@ private:
             r.type = f && f->returns == "STRING" ? T::Text : f && f->returns == "BOOL" ? T::Bool : T::Num;
             return r;
         }
+        // 1.12.7 : les natives des conteneurs, de std::numeric et de <bit> : le dialecte les sert dans une
+        // expression (une copie des objets). Une fonction du projet du meme nom passe avant.
+        if (const auto* nat = sim::lib::native(u); nat && !(ctx_.project && !ctx_.project->functionsNamed(name).empty())) {
+            if (nat->writes || u == "TUPLE_UNPACK" || u == "LIST_COPY")
+                problem(u + " change son objet : une expression en lit une copie et ne change rien ; "
+                            "fais-le dans un script (une action \xC2\xAB Ex\xC3\xA9" "cuter un script \xC2\xBB)");
+            if (n < nat->min || (nat->max >= 0 && n > nat->max))
+                problem(u + " prend " + (nat->max < 0 ? "au moins " + plural(nat->min, "argument")
+                                          : nat->min == nat->max ? plural(nat->min, "argument")
+                                                                 : std::to_string(nat->min) + " \xC3\xA0 " + plural(nat->max, "argument"))
+                        + ", pas " + std::to_string(n));
+            const std::string_view sig = nat->signature;
+            const auto colon = sig.rfind(" : ");
+            const std::string_view ret = colon == std::string_view::npos ? std::string_view{} : sig.substr(colon + 3);
+            r.type = ret == "BOOL" ? T::Bool : ret == "STRING" ? T::Text : ret == "DINT" || nat->group == "numeric" ? T::Num : T::Unknown;
+            if (u == "MIDPOINT" || u.find("_SAT") != std::string::npos || u == "SATURATE_CAST" || u == "BIT_SET" || u == "BIT_RESET") r.type = T::Num;
+            return r;
+        }
         // 1.12.4 : les fonctions des listes, des vecteurs, des MAP et des tableaux (JOIN, LIST_COUNT,
         // MAP_HAS, SIZEOF...), TO_UPPER et TO_LOWER : le dialecte les sert dans une expression, qui
         // lit une copie de l'objet (avant : « fonction inconnue : JOIN » a Generer). Celles qui
@@ -966,10 +985,84 @@ bool strictType(Kind kind, std::string_view key) {
     return now == Want::Any || wantIn1125(key) == now;
 }
 
+// 1.12.7 : les templates se lisent ici comme une valeur (NUMERIC_LIMITS<UINT>.MAX() : un nombre,
+// NUMERIC_LIMITS<REAL>.IS_SIGNED : un BOOL, NUMBERS.PI : un reel) ou un appel (ADD_SAT<INT>(a, b) :
+// ADD_SAT(a, b)) ; leur type et leur membre, c'est la lecture de l'expression qui les dit.
+std::string templatesAsValues(const Context& ctx, std::string_view s) {
+    std::string out;
+    std::size_t i = 0;
+    const auto ident = [&](std::size_t k) { return k < s.size() && (std::isalpha(static_cast<unsigned char>(s[k])) || s[k] == '_'); };
+    const auto identEnd = [&](std::size_t k) {
+        while (k < s.size() && (std::isalnum(static_cast<unsigned char>(s[k])) || s[k] == '_')) ++k;
+        return k;
+    };
+    const auto spaces = [&](std::size_t k) {
+        while (k < s.size() && std::isspace(static_cast<unsigned char>(s[k]))) ++k;
+        return k;
+    };
+    while (i < s.size()) {
+        const char c = s[i];
+        if (c == '\'' || c == '"') {
+            const auto end = s.find(c, i + 1);
+            const std::size_t stop = end == std::string_view::npos ? s.size() : end + 1;
+            out.append(s.substr(i, stop - i));
+            i = stop;
+            continue;
+        }
+        if (!ident(i) || (i > 0 && (std::isalnum(static_cast<unsigned char>(s[i - 1])) || s[i - 1] == '_' || s[i - 1] == '.' || s[i - 1] == '#'))) {
+            out.push_back(c);
+            ++i;
+            continue;
+        }
+        const std::size_t e = identEnd(i);
+        const std::string word(s.substr(i, e - i));
+        const auto* t = sim::lib::templateInfo(word);
+        if (!t || (ctx.project && ctx.project->variable(word))) {
+            out.append(word);
+            i = e;
+            continue;
+        }
+        std::size_t k = spaces(e);
+        bool angled = false;
+        if (k < s.size() && s[k] == '<') {
+            const std::size_t a = spaces(k + 1);
+            if (ident(a)) {
+                const std::size_t b = spaces(identEnd(a));
+                if (b < s.size() && s[b] == '>') {
+                    angled = true;
+                    k = spaces(b + 1);
+                }
+            }
+        }
+        if (t->isClass) {
+            if (k < s.size() && s[k] == '.' && ident(spaces(k + 1))) {
+                const std::size_t m0 = spaces(k + 1), m1 = identEnd(m0);
+                const std::string member(s.substr(m0, m1 - m0));
+                std::size_t next = spaces(m1);
+                if (next + 1 < s.size() && s[next] == '(' && s[spaces(next + 1)] == ')') next = spaces(next + 1) + 1;
+                else next = m1;
+                const auto* mi = sim::lib::templateMember(t->name, member);
+                const std::string u = [&] { std::string x = member; for (auto& ch : x) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch))); return x; }();
+                const bool boolean = mi && !mi->function && (u.rfind("IS_", 0) == 0 || u.rfind("HAS_", 0) == 0 || u == "TRAPS" || u == "TINYNESS_BEFORE") && u != "HAS_DENORM";
+                out.append(boolean ? "TRUE" : t->name == "NUMBERS" ? "1.0" : "1");
+                i = next;
+                continue;
+            }
+            out.append(word);
+            i = e;
+            continue;
+        }
+        out.append(word);
+        i = angled ? k : e;
+    }
+    return out;
+}
+
 std::vector<Problem> check(const Context& ctx, std::string_view written, Want want, bool strict) {
     std::vector<Problem> out;
     // 1.11 (REP) : les `$` des reperes sont transparents ($V[1].Ouv$ se verifie comme V[1].Ouv).
-    const std::string plain = markers::strip(written, markers::Mode::Expression);
+    // 1.12.7 : les templates, comme des valeurs (templatesAsValues).
+    const std::string plain = templatesAsValues(ctx, markers::strip(written, markers::Mode::Expression));
     const std::string_view source = plain;
     if (trimmed(source).empty()) return out;
     // 1.11.20 : les appels des fonctions de l'utilisateur, lus par le simulateur et juges par la

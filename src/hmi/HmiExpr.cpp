@@ -1,4 +1,5 @@
 #include "HmiExpr.hpp"
+#include "../sim/DialectLib.hpp"   // 1.12.7 : les templates ne sont pas des racines
 #include "HmiNatives.hpp"   // 1.12.0 : les couleurs et l'aleatoire
 #include "HmiMarkers.hpp"
 #include "HmiRoles.hpp"     // 1.12.6 (lot B) : les proprietes du role Texte, le lecteur
@@ -288,6 +289,18 @@ std::vector<std::string> scanRoots(std::string_view s) {
             if (typed) {
                 ++i;
                 while (i < s.size() && (isIdentChar(s[i]) || s[i] == '.')) ++i;
+                continue;
+            }
+            // 1.12.7 : un template (NUMERIC_LIMITS<UINT>.MAX(), NUMBERS.PI) n'est pas une racine, ni son type.
+            if (!member && sim::lib::templateInfo(word)) {
+                if (k < s.size() && s[k] == '<') {
+                    std::size_t a = k + 1;
+                    while (a < s.size() && std::isspace(static_cast<unsigned char>(s[a]))) ++a;
+                    std::size_t b = a;
+                    while (b < s.size() && isIdentChar(s[b])) ++b;
+                    while (b < s.size() && std::isspace(static_cast<unsigned char>(s[b]))) ++b;
+                    if (b > a && b < s.size() && s[b] == '>') i = b + 1;
+                }
                 continue;
             }
             if (member || call || kKeywords.count(upper(word))) continue;

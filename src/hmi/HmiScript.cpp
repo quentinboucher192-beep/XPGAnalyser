@@ -1,4 +1,5 @@
 #include "HmiScript.hpp"
+#include "../sim/DialectLib.hpp"   // 1.12.7 : les templates (NUMERIC_LIMITS<T>, NUMBERS) ne sont pas des variables
 
 #include "../sim/Interpreter.hpp"
 #include "HmiScriptCheck110.hpp"   // 1.10 : les noms du dialecte (fonctions internes, FOR EACH)
@@ -320,6 +321,19 @@ std::vector<NameUse> scriptNamesRaw(std::string_view s) {
             if (typed) {
                 ++i;
                 while (i < s.size() && (identChar(s[i]) || s[i] == '.')) ++i;
+                continue;
+            }
+            // 1.12.7 : un template (NUMERIC_LIMITS<UINT>.MAX(), NUMBERS.PI, ADD_SAT<INT>(a, b)) n'est pas
+            // une variable, ni son type entre < >.
+            if (!member && sim::lib::templateInfo(word)) {
+                if (k < s.size() && s[k] == '<') {
+                    std::size_t a = k + 1;
+                    while (a < s.size() && (s[a] == ' ' || s[a] == '\t')) ++a;
+                    std::size_t b = a;
+                    while (b < s.size() && identChar(s[b])) ++b;
+                    while (b < s.size() && (s[b] == ' ' || s[b] == '\t')) ++b;
+                    if (b > a && b < s.size() && s[b] == '>') advanceTo(b + 1);
+                }
                 continue;
             }
             // 1.11.14 : IHM_LOG(INFO, ...) - le premier argument est un niveau (NIVEAU_LOG),
