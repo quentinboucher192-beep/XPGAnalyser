@@ -175,12 +175,27 @@ const TypeExtra* typeExtra(std::string_view name) noexcept {
     return nullptr;
 }
 
+// 1.12.7 : un template - son type entre < > (le parametre "<T>", obligatoire ou entre [ ]), puis ses
+// arguments ; NUMERIC_LIMITS<T>.MEMBRE et NUMBERS[<T>].CONSTANTE ne sont pas des appels.
+namespace {
+bool templateParam(const Param& p) noexcept { return !p.name.empty() && p.name.front() == '<'; }
+std::string templateHead(const Function& f) {
+    for (const auto& p : f.params)
+        if (templateParam(p)) return std::string(f.name) + (p.optional ? "[<T>]" : "<T>");
+    return std::string(f.name);
+}
+} // namespace
+
 std::string signature(const Function& f) {
-    std::string s(f.name);
+    if (f.category == "limits") return std::string(f.name) + "<T>.MEMBRE : " + std::string(f.returns);
+    if (f.category == "numbers") return std::string(f.name) + "[<T>].CONSTANTE : " + std::string(f.returns);
+    std::string s = templateHead(f);
     s += '(';
-    for (std::size_t i = 0; i < f.params.size(); ++i) {
-        const auto& p = f.params[i];
-        if (i) s += "; ";
+    bool first = true;
+    for (const auto& p : f.params) {
+        if (templateParam(p)) continue;
+        if (!first) s += "; ";
+        first = false;
         if (p.optional) s += '[';
         s += std::string(p.name) + " : " + std::string(p.type);
         if (p.optional) s += ']';
@@ -188,10 +203,15 @@ std::string signature(const Function& f) {
     return s + ") : " + std::string(f.returns);
 }
 std::string shortSignature(const Function& f) {
-    std::string s = "(";
-    for (std::size_t i = 0; i < f.params.size(); ++i) {
-        if (i) s += ", ";
-        s += f.params[i].optional ? "[" + std::string(f.params[i].name) + "]" : std::string(f.params[i].name);
+    if (f.category == "limits") return "<T>.MEMBRE : " + std::string(f.returns);
+    if (f.category == "numbers") return "[<T>].CONSTANTE : " + std::string(f.returns);
+    std::string s = templateHead(f).substr(f.name.size()) + "(";
+    bool first = true;
+    for (const auto& p : f.params) {
+        if (templateParam(p)) continue;
+        if (!first) s += ", ";
+        first = false;
+        s += p.optional ? "[" + std::string(p.name) + "]" : std::string(p.name);
     }
     return s + ") : " + std::string(f.returns);
 }
@@ -202,6 +222,7 @@ bool arity(std::string_view name, int& min, int& max) noexcept {
         max = 0;
         bool open = false;
         for (const auto& p : f->params) {
+            if (templateParam(p)) continue;               // 1.12.7 : <T> n'est pas un argument
             if (variadic(p)) {
                 open = true;
                 min += p.name.rfind("IN0", 0) == 0 ? 1 : 2;   // MUX(K, IN0...) : 1 de plus ; MIN, MAX, CONCAT : 2

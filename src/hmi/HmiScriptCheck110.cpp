@@ -1,4 +1,5 @@
 #include "HmiScriptCheck110.hpp"
+#include "../sim/DialectLib.hpp"   // 1.12.7 : les natives des conteneurs, de std::numeric, de <bit>
 #include "HmiNatives.hpp"   // 1.12.0 : les enumerations natives
 
 #include "HmiEnums.hpp"
@@ -633,7 +634,8 @@ Analysis analyze(std::string_view code, const std::function<bool(std::string_vie
 }
 
 const std::vector<Builtin>& builtins() {
-    static const std::vector<Builtin> b = {
+    static const std::vector<Builtin> b = [] {
+    std::vector<Builtin> v = {
         {"MAP_HAS", "MAP_HAS(m, cl\xC3\xA9) : BOOL", "Vrai si la cl\xC3\xA9 existe dans la MAP."},
         {"MAP_GET", "MAP_GET(m, cl\xC3\xA9, d\xC3\xA9" "faut) : T", "La valeur de la cl\xC3\xA9, ou d\xC3\xA9" "faut si elle manque."},
         {"MAP_REMOVE", "MAP_REMOVE(m, cl\xC3\xA9) : BOOL", "Retire la cl\xC3\xA9 (vrai si elle existait)."},
@@ -681,6 +683,10 @@ const std::vector<Builtin>& builtins() {
         {"JOIN", "JOIN(liste, s\xC3\xA9parateur) : STRING", "Les \xC3\xA9l\xC3\xA9ments en un texte : JOIN(L, ', ')."},
         {"SPLIT", "SPLIT(texte, s\xC3\xA9parateur) : LIST OF STRING", "Le texte coup\xC3\xA9 : SPLIT('a;b;c', ';')."},
     };
+    // 1.12.7 : les conteneurs (43 de plus), std::numeric et <bit> - leur signature et leur phrase (DialectLib).
+    for (const auto& n : sim::lib::natives()) v.push_back({n.name, n.signature, n.summary});
+    return v;
+    }();
     return b;
 }
 
