@@ -336,13 +336,73 @@ table.pt.lim tbody tr.on td{background:var(--sel);color:var(--sel-fg)}
 .acdemo .r .lbl{font-family:var(--mono)}
 .acdemo .r .d{color:var(--app-fg-3);font-family:var(--mono);font-size:11.5px}
 .acdemo .r.on .d{color:var(--sel-fg)}
+.legend{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
+.cmx-wrap{overflow:auto;max-height:520px;border-bottom:1px solid var(--app-line);background:var(--app-2)}
+table.cmx{border-collapse:collapse;width:100%;min-width:880px;font-size:12px}
+.cmx thead th{position:sticky;top:0;z-index:1;background:var(--app-head);color:var(--app-fg-2);font-weight:500;text-align:left;padding:5px 8px;border-bottom:1px solid var(--app-line);white-space:nowrap}
+.cmx tbody th{text-align:left;font-weight:500;color:var(--app-fg);padding:4px 8px;border-bottom:1px solid var(--app-3);width:160px;vertical-align:top}
+.cmx td{padding:3px 6px;border-bottom:1px solid var(--app-3);vertical-align:top}
+.cmx tr.cg td{background:var(--app);font:600 11px var(--ui);letter-spacing:.05em;text-transform:uppercase;color:var(--app-fg-3);padding:8px 8px 4px}
+.cx{appearance:none;display:inline-block;margin:1px 3px 1px 0;font:11.5px var(--mono);padding:1px 6px;border-radius:4px;border:1px solid transparent;text-align:left;white-space:nowrap;cursor:pointer}
+button.cx:hover{border-color:var(--accent)}
+.cx.e{background:var(--app-3);color:var(--app-fg-2)}
+.cx.n{background:var(--new-bg);color:var(--new)}
+.cx.on{outline:2px solid var(--accent);outline-offset:1px}
+.legend .cx{cursor:default}
+.cna{color:var(--app-fg-3)}
+.cbody{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr)}
+@media (max-width:900px){.cbody{grid-template-columns:minmax(0,1fr)}}
+.ccard{border-right:1px solid var(--app-line)}
+@media (max-width:900px){.ccard{border-right:0;border-bottom:1px solid var(--app-line)}}
+.cb{font:600 10.5px var(--ui);padding:1px 6px;border-radius:3px;margin-right:4px}
+.cb.n{background:var(--new-bg);color:var(--new)} .cb.e{background:var(--app-3);color:var(--app-fg-2)}
+.cnote{font-size:12.5px;background:var(--warn-bg);color:var(--app-fg);border-radius:5px;padding:6px 9px;margin:0 0 8px}
+.ctries{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin-top:10px}
+.cplay{padding:12px 14px;background:var(--app);display:grid;gap:8px;align-content:start;min-width:0}
+.cplay h5{margin:0;font:600 11px var(--ui);letter-spacing:.05em;text-transform:uppercase;color:var(--app-fg-3)}
+.cvars{display:grid;gap:1px;font-size:12px;max-height:310px;overflow:auto}
+.cvr{display:grid;grid-template-columns:78px 132px minmax(0,1fr);gap:6px;padding:2px 4px;border-radius:3px;align-items:baseline}
+@media (max-width:640px){.cvr{grid-template-columns:76px minmax(0,1fr)}.cvr .vt{display:none}}
+.cvr .vn{font:600 12px var(--mono)}
+.cvr .vt{color:var(--app-fg-3);font:11px var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cvr .vv{font:12px var(--mono);overflow-wrap:anywhere;background:none;padding:0}
+.cvr.chg{background:var(--new-bg)}
+.crun{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.crun .inp{flex:1 1 220px;min-width:0}
+.res.bad{background:var(--err-bg)}
+.res .why.err{color:var(--err)}
+.res .ok{color:var(--ok);font-weight:600}
+.tgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,290px),1fr));gap:10px;margin:12px 0}
+.tcard{background:var(--page-2);border-radius:8px;padding:12px 14px;display:grid;gap:7px;align-content:start;min-width:0}
+.tc-head{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.tcard h4{margin:0;font:600 14px var(--mono)}
+.tcard p{margin:0;font-size:13.5px}
+.tcard dl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:3px 10px;margin:0;font-size:12.5px}
+.tcard dt{color:var(--ink-3)}
+.tcard dd{margin:0;overflow-wrap:anywhere}
+.tc-why{color:var(--ink-2)}
+.vd{font:600 11px var(--ui);padding:2px 8px;border-radius:10px;white-space:nowrap}
+.vd.oui{background:var(--ok-bg);color:var(--ok)} .vd.tard{background:var(--warn-bg);color:var(--warn)} .vd.autre{background:var(--accent-2);color:var(--accent)} .vd.non{background:var(--page);color:var(--ink-3);border:1px solid var(--rule)}
+.tdemo{background:var(--app-2)}
+.tdbody{padding:12px 14px;display:grid;gap:8px}
+.tdrow{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;font-size:12.5px}
+.tdrow .vn{font:600 12px var(--mono)}
+.ring{display:flex;gap:4px;flex-wrap:wrap}
+.ring .rc{font:12px var(--mono);min-width:54px;text-align:center;padding:6px 4px;border-radius:5px;background:var(--app-3);color:var(--app-fg)}
+.ring .rc.empty{color:var(--app-fg-3)}
+.ring .rc.last{background:var(--new-bg);color:var(--new);font-weight:600}
+.bits{display:grid;grid-template-columns:repeat(16,minmax(0,1fr));gap:3px;max-width:640px}
+@media (max-width:640px){.bits{grid-template-columns:repeat(8,minmax(0,1fr))}}
+.bit{appearance:none;border:1px solid var(--app-line);background:var(--app);color:var(--app-fg);border-radius:4px;font:600 12px var(--mono);padding:3px 0 4px;cursor:pointer;display:grid;gap:1px}
+.bit span{font:10px var(--ui);color:var(--app-fg-3)}
+.bit.on{background:var(--err-bg);color:var(--err);border-color:var(--err)}
 </style>
 
 </head>
 <body>
 <div class="wrap">
 <nav class="toc" aria-label="Sommaire">
-  <div class="ver">Proposition 1.12.7 · v2</div>
+  <div class="ver">Proposition 1.12.7 · v3</div>
   <ol>
     <li><a href="#bref">En bref</a></li>
     <li><a href="#onglets">Déballer les objets</a></li>
@@ -350,6 +410,8 @@ table.pt.lim tbody tr.on td{background:var(--sel);color:var(--sel-fg)}
     <li><a href="#publiques">Les autres scripts</a></li>
     <li><a href="#demarrage">L'ordre du démarrage</a></li>
     <li><a href="#numeric">Les bibliothèques</a></li>
+    <li><a href="#conteneurs">Les conteneurs</a></li>
+    <li><a href="#types">D'autres types</a></li>
     <li><a href="#generer">Compiler et Générer</a></li>
     <li><a href="#plan">Le plan, vos choix</a></li>
   </ol>
@@ -357,9 +419,9 @@ table.pt.lim tbody tr.on td{background:var(--sel);color:var(--sel-fg)}
 
 <main>
 <header class="hero">
-  <p class="eyebrow">XPGAnalyser IHM · maquette interactive · version 2 · vos choix validés</p>
+  <p class="eyebrow">XPGAnalyser IHM · maquette interactive · version 3 · conteneurs et types</p>
   <h1>Constantes calculées, objets déballés, bibliothèques du C++</h1>
-  <p class="lead">Vos demandes du 11/10 au soir, dans l'éditeur d'un script : ce que montrent les onglets Constantes et Variables, comment une valeur s'écrit ou se calcule au démarrage, et les bibliothèques du C++ en ST, C et C++. <b>Version 2</b> : les templates <code>&lt;T&gt;</code> (<code>NUMERIC_LIMITS&lt;UINT&gt;.MAX()</code>), <code>&lt;numeric&gt;</code>, <code>&lt;limits&gt;</code> et <code>&lt;numbers&gt;</code> refaits en entier, les fiches Natives dans les trois langages, et l'onglet Locales à la place des <code>VAR … END_VAR</code>. Tout ce qui ressemble à un bouton se clique.</p>
+  <p class="lead">Vos demandes du 11/10 au soir, dans l'éditeur d'un script : ce que montrent les onglets Constantes et Variables, comment une valeur s'écrit ou se calcule au démarrage, et les bibliothèques du C++ en ST, C et C++. <b>Version 2</b> : les templates <code>&lt;T&gt;</code> (<code>NUMERIC_LIMITS&lt;UINT&gt;.MAX()</code>), <code>&lt;numeric&gt;</code>, <code>&lt;limits&gt;</code> et <code>&lt;numbers&gt;</code> refaits en entier, les fiches Natives dans les trois langages, et l'onglet Locales à la place des <code>VAR … END_VAR</code>. <b>Version 3</b> : les conteneurs LIST, VECTOR, MAP et TUPLE, avec 43 fonctions de plus, et les types que je propose d'ajouter. Tout ce qui ressemble à un bouton se clique.</p>
   <ul class="quotes">
     <li>« revoir cette option car c'est pas pratique, pouvoir faire un script dans cette partie, avoir accès aux autres constantes du projet si elles sont en public, en gros ça fonctionnerait comme le final du JAVA […] ajouter aide à la saisie »</li>
     <li>« et aussi dans les constantes et variables pouvoir déballer le contenu des objets avec taille »</li>
@@ -367,17 +429,19 @@ table.pt.lim tbody tr.on td{background:var(--sel);color:var(--sel-fg)}
     <li>« faut pas le faire que pour les MAP mais pour les autres types aussi »</li>
     <li>« ok pour tout mais ajoute les 'templates' pour avoir std::numeric&lt;UINT&gt;::max(), regarde la lib native dans le C++ avec toutes les fonctions et refait […] mettre à jour la doc dans Programmation générale → Natives […] à adapter dans les 3 langages »</li>
     <li>« dans les scripts toujours enlever les VAR, END_VAR, faire un sous onglet avec déballage »</li>
+    <li>« ajoute des fonctions de manipulations de LIST, VECTOR, MAP, TUPLE, getters setters et autres si c'est pas déjà faits […] quels types ajouter à part LIST, VECTOR, MAP, TUPLE ? »</li>
   </ul>
 </header>
 
 <section id="bref">
   <p class="secno">En bref</p>
-  <h2>Quatre changements, pour tous les types</h2>
+  <h2>Cinq changements, pour tous les types</h2>
   <div class="cards">
     <div class="card"><p class="k">Onglets</p><h4>Tout ce qui a une taille se déplie</h4><p>Les éléments d'une LIST, d'un VECTOR ou d'une MAP, les cases d'un ARRAY (une ligne par premier indice en 2D), les membres d'une structure, les champs d'un TUPLE. La colonne Taille dit combien.</p></div>
     <div class="card"><p class="k">Éléments</p><h4>Un tableau à la place du « un par ligne »</h4><p>Une ligne par élément, une colonne par partie : clé, valeur, membre. Chaque case est vérifiée à la frappe. On ajoute, retire, déplace, colle depuis Excel.</p></div>
     <div class="card"><p class="k">Calcul</p><h4>Calculée au démarrage, comme un final</h4><p>Un petit code ST donne la valeur, une fois, au démarrage. Ensuite personne ne l'écrit. Il lit les constantes de son script, les constantes publiques des autres, les valeurs de départ des variables IHM et les natives. Ses locales sont dans un sous-onglet <b>Locales</b>, déballé comme les autres : plus de <code>VAR … END_VAR</code>.</p></div>
     <div class="card"><p class="k">Bibliothèques</p><h4>Le C++ complet, et les templates</h4><p><code>&lt;numeric&gt;</code> (19 fonctions), <code>&lt;limits&gt;</code> (32 membres de <code>NUMERIC_LIMITS&lt;T&gt;</code>) et <code>&lt;numbers&gt;</code> (13 constantes). Le type entre <code>&lt; &gt;</code> : <code>NUMERIC_LIMITS&lt;UINT&gt;.MAX()</code> en ST, <code>std::numeric_limits&lt;UINT&gt;::max()</code> en C++, <code>UINT16_MAX</code> en C. Une fiche chacun dans les trois langages.</p></div>
+    <div class="card"><p class="k">Conteneurs</p><h4>43 fonctions de plus, et deux types</h4><p>Lire et écrire sans erreur (LIST_SET, MAP_SET, TUPLE_GET), chercher, compter et retirer sous condition (LIST_COUNT_IF, LIST_REMOVE_IF), trier une liste de structures par un membre, déplacer, extraire, déballer un TUPLE. Et deux types à ajouter : SET et RING.</p></div>
   </div>
 </section>
 
@@ -506,8 +570,37 @@ table.pt.lim tbody tr.on td{background:var(--sel);color:var(--sel-fg)}
   </div>
 </section>
 
+<section id="conteneurs">
+  <p class="secno">6 · Les conteneurs</p>
+  <h2>LIST, VECTOR, MAP, TUPLE : lire, écrire, chercher, ranger</h2>
+  <p><b>Ce qui existe déjà</b> dans l'IHM : <code>L[i]</code>, <code>m[k]</code> et <code>t.Item1</code> en lecture et en écriture, les propriétés <code>.Count</code>, <code>.First</code>, <code>.Last</code>, <code>.Low</code>, <code>.High</code>, <code>.Empty</code>, et 36 natives LIST_, VECTOR_ et MAP_ (les LIST_ acceptent déjà un VECTOR). <b>Ce qui manquait</b> : rien pour un TUPLE, pas d'écriture en fonction (LIST_SET, MAP_SET), rien pour chercher, compter ou retirer sous condition, ni pour trier une liste de structures, déplacer un élément, extraire une partie.</p>
+  <p><b>La proposition</b> : <span class="cnews">43</span> natives de plus, et <span class="cexts">10</span> natives LIST_ qui acceptent aussi un ARRAY tant que sa taille ne change pas (<code>LIST_SORT(Tab)</code>, <code>LIST_SUM(Tab)</code>…). Ce sont les mêmes noms : pas d'ARRAY_SORT en double. Une condition s'écrit avec une nouvelle énumération, <code>COMPARAISON</code> : <code>LIST_COUNT_IF(Mesures, COMPARAISON#Superieur, Seuil)</code>. Dans une liste de structures, le membre se nomme : <code>LIST_SORT_BY(Lots, 'Poids')</code>.</p>
+  <div class="legend"><span class="cx n">nouveau</span><span class="cx e">existe</span><span class="small">Un clic : sa fiche en ST, C et C++, et ses essais. À droite, des variables d'essai : tapez un appel, la maquette l'exécute, erreurs comprises.</span></div>
+  <div class="app">
+    <div class="app-bar">IHM › Programmation générale › Natives › <b>Le dialecte de l'IHM</b> <span>· les conteneurs</span></div>
+    <div class="cmx-wrap"><table class="cmx" id="cmx"></table></div>
+    <div class="cbody">
+      <div class="nat-card ccard" id="ccard"></div>
+      <div class="cplay">
+        <h5>Les variables de l'essai</h5>
+        <div class="cvars" id="cvars"></div>
+        <div class="crun"><input class="inp" id="cin" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="Un appel à essayer"><button class="btn primary" type="button" id="cgo">▶ Exécuter</button><button class="btn" type="button" id="creset">Valeurs de départ</button></div>
+        <div class="res" id="cout"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="types">
+  <p class="secno">7 · D'autres types</p>
+  <h2>Quels types ajouter, à part LIST, VECTOR, MAP et TUPLE ?</h2>
+  <p>Le C++ a d'autres conteneurs. Voici ce que chacun apporterait à une IHM. Je propose deux types, <b>SET</b> et <b>RING</b>, puis <b>OPTIONAL</b> plus tard. Pour les mots de bits, plutôt des fonctions sur les WORD et DWORD qu'un nouveau type. Pour le reste, une LIST ou une MAP le fait déjà.</p>
+  <div class="tgrid" id="tgrid"></div>
+  <div class="app"><div class="app-bar">Essayer <b>SET</b>, <b>RING</b> et les bits d'un <b>WORD</b> <span>· une maquette : ces types ne sont pas encore dans l'IHM</span></div><div class="tdemo" id="tdemo"></div></div>
+</section>
+
 <section id="generer">
-  <p class="secno">6 · Les vérifications</p>
+  <p class="secno">8 · Les vérifications</p>
   <h2>Ce que Compiler et Générer diront</h2>
   <p>Comme pour la 1.12.6 : ce qui démarrait démarre toujours. Les nouvelles erreurs bloquantes ne touchent que les nouveautés (un calcul, une constante qualifiée) ; ce que la 1.12.6 acceptait reste accepté.</p>
   <div class="tablewrap"><table class="doc">
@@ -526,6 +619,9 @@ table.pt.lim tbody tr.on td{background:var(--sel);color:var(--sel-fg)}
       <tr><td>Un template sans son type</td><td>Compiler</td><td class="g-err">Erreur</td><td class="m">SATURATE_CAST attend son type : SATURATE_CAST&lt;INT&gt;(x)</td></tr>
       <tr><td>Un type qui ne va pas au template</td><td>Compiler</td><td class="g-err">Erreur</td><td class="m">NUMERIC_LIMITS&lt;STRING&gt; : un type numérique est attendu (SINT … ULINT, BYTE … LWORD, REAL, LREAL, BOOL)</td></tr>
       <tr><td>Un membre inconnu, des parenthèses en trop</td><td>Compiler</td><td class="g-err">Erreur</td><td class="m">NUMERIC_LIMITS&lt;UINT&gt; n'a pas de membre MAXX — veux-tu dire MAX ? · DIGITS est une constante : sans parenthèses</td></tr>
+      <tr><td>Un membre inconnu (LIST_SORT_BY, LIST_FIND_IF…)</td><td>Compiler</td><td class="g-err">Erreur</td><td class="m">T_Lot n'a pas de membre Poid — veux-tu dire Poids ?</td></tr>
+      <tr><td>Une fonction qui change la taille, sur un ARRAY</td><td>Compiler</td><td class="g-err">Erreur</td><td class="m">LIST_ADD : un ARRAY a une taille fixe (5 cases) — une LIST ou un VECTOR est attendu</td></tr>
+      <tr><td>TUPLE_GET, TUPLE_SET hors du TUPLE</td><td>Compiler</td><td class="g-err">Erreur</td><td class="m">TUPLE_GET : TUPLE(STRING, REAL) a 2 champs, pas 3</td></tr>
       <tr><td>Une MAP qui vaut 0.0 (votre capture)</td><td>À la saisie</td><td class="g-no">Refusé</td><td class="m">0.0 n'est pas une MAP[STRING] OF REAL : écris ['clé' := valeur] ou laisse vide</td></tr>
       <tr><td>Un élément qui ne va pas dans son type</td><td>À la saisie</td><td class="g-no">Refusé</td><td class="m">'abc' n'est pas un REAL</td></tr>
     </tbody>
@@ -533,7 +629,7 @@ table.pt.lim tbody tr.on td{background:var(--sel);color:var(--sel-fg)}
 </section>
 
 <section id="plan">
-  <p class="secno">7 · La suite</p>
+  <p class="secno">9 · La suite</p>
   <h2>Le plan, et vos choix</h2>
   <ol class="plan">
     <li><b>1.12.7</b>, cette maquette :
@@ -544,11 +640,13 @@ table.pt.lim tbody tr.on td{background:var(--sel);color:var(--sel-fg)}
         <li>le sous-onglet Locales des calculs, déballé comme les autres ; plus de <code>VAR … END_VAR</code> dans un code ;</li>
         <li>les constantes publiques lisibles sous leur nom qualifié <code>Script.Constante</code> ;</li>
         <li>les templates <code>&lt;T&gt;</code> et les trois bibliothèques (std::numeric, std::numeric_limits, std::numbers) : fiches en ST, C et C++, essais, aide à la saisie dans les trois éditeurs ;</li>
+        <li>les conteneurs : 43 natives de plus pour LIST, VECTOR, MAP et TUPLE, les LIST_ qui acceptent un ARRAY, l'énumération COMPARAISON ; la fiche MAP_GET corrigée ;</li>
         <li>le défaut de la MAP qui vaut <code>0.0</code>.</li>
       </ul>
     </li>
     <li><b>1.12.8</b> : le lot D de l'audit, les listes en tableau et les choix au lieu de la saisie.</li>
     <li><b>1.12.9</b> : le lot E, les tailles dynamiques (« 8 cuves, 8 pompes »).</li>
+    <li><b>Ensuite</b>, selon vos choix 5 et 6 : les types SET et RING, les fonctions de &lt;bit&gt; sur les WORD et DWORD.</li>
   </ol>
   <h3>Vos choix, validés le 11/10</h3>
   <div class="decisions">
@@ -557,7 +655,13 @@ table.pt.lim tbody tr.on td{background:var(--sel);color:var(--sel-fg)}
     <div class="dec"><h4>3. L'écriture des natives en ST</h4><div class="opts"><span class="opt pro">✓ ACCUMULATE, comme LIST_SUM ; le type d'un template entre &lt; &gt; : NUMERIC_LIMITS&lt;UINT&gt;.MAX()</span></div></div>
     <div class="dec"><h4>4. Les variables</h4><div class="opts"><span class="opt pro">✓ Une valeur initiale calculée, comme les constantes</span></div></div>
   </div>
-  <p>Dites-moi si cette version vous va ; je code ensuite la 1.12.7, puis les lots D et E.</p>
+  <h3>Trois nouveaux choix</h3>
+  <div class="decisions">
+    <div class="dec"><h4>5. Les types à ajouter</h4><div class="opts"><span class="opt pro">SET et RING (proposé)</span><span class="opt">SET, RING et OPTIONAL</span><span class="opt">Aucun pour l'instant</span></div></div>
+    <div class="dec"><h4>6. Les mots de bits</h4><div class="opts"><span class="opt pro">Les fonctions de &lt;bit&gt; sur WORD et DWORD (proposé)</span><span class="opt">Un type BITSET[N]</span></div></div>
+    <div class="dec"><h4>7. Un ARRAY dans les fonctions des listes</h4><div class="opts"><span class="opt pro">Les LIST_ l'acceptent tant que sa taille ne change pas (proposé)</span><span class="opt">Des fonctions ARRAY_ à part</span></div></div>
+  </div>
+  <p>Dites-moi si cette version et ces trois choix vous vont ; je code ensuite la 1.12.7, puis les lots D et E.</p>
 </section>
 </main>
 </div>
@@ -575,7 +679,7 @@ function eq(a, b) { return String(a).toUpperCase() === String(b).toUpperCase(); 
 function frNum(x, d) { return x.toFixed(d).replace('.', ','); }
 
 // =============================================================== le projet d'exemple
-var ENUMS = {T_MODE: ['Arret', 'Auto', 'Manu'], OPERATION: ['Somme', 'Produit', 'Min', 'Max', 'Et', 'Ou'], TRANSFORMATION: ['Identite', 'Abs', 'Carre', 'Racine', 'Neg', 'Inverse']};
+var ENUMS = {T_MODE: ['Arret', 'Auto', 'Manu'], OPERATION: ['Somme', 'Produit', 'Min', 'Max', 'Et', 'Ou'], TRANSFORMATION: ['Identite', 'Abs', 'Carre', 'Racine', 'Neg', 'Inverse'], COMPARAISON: ['Egal', 'Different', 'Inferieur', 'InferieurOuEgal', 'Superieur', 'SuperieurOuEgal']};
 var STRUCTS = {T_Recette: [['Nom', 'STRING'], ['Consigne', 'REAL'], ['Duree', 'TIME'], ['Etapes', 'LIST OF STRING']]};
 var BOUNDS = {SINT: [-128, 127], INT: [-32768, 32767], DINT: [-2147483648, 2147483647], USINT: [0, 255], UINT: [0, 65535], UDINT: [0, 4294967295]};
 
@@ -1024,6 +1128,421 @@ function templMembers(N, t) {
   });
 }
 
+
+
+// ============================================ les conteneurs : les fiches (v3), existantes et nouvelles
+// kind : 'syn' (une écriture du langage) ou 'fn' (une native) ; old : elle existe aujourd'hui (1.12.6).
+var CT = {};
+[
+  // ---------------------------------------------------------------- lire et écrire
+  {id: '#tab_i', kind: 'syn', old: true, sig: 'Tab[i]   ·   Tab[i] := x', ret: 'T',
+    sum: "La case i, de Tab.Low à Tab.High (deux dimensions : Tab[i, j]). Hors des bornes : une erreur qui arrête le script.",
+    ex: 'Niveau := Niveaux[3];\nNiveaux[3] := 0.0;', c: 'niveau = niveaux[3];   /* le C ne vérifie pas les bornes */', cc: 'niveau = niveaux.at(3);   // at() vérifie, [] non',
+    tries: ['Tab[1]', 'Tab[1] := 5', 'Tab[7]']},
+  {id: '#list_i', kind: 'syn', old: true, sig: 'L[i]   ·   L[i] := x', ret: 'T',
+    sum: "L'élément i, de 0 à L.Count − 1 (une LIST, un VECTOR). Au-delà : une erreur ; LIST_GET et LIST_SET ne s'arrêtent pas.",
+    ex: 'Derniere := Mesures[Mesures.Count - 1];\nMesures[0] := 0.0;', c: '/* pas de liste en C : un tableau et un compteur */\nx = t[i];', cc: 'x = mesures[i];       // mesures.at(i) vérifie',
+    tries: ['Mesures[1]', 'Mesures[1] := 9.5', 'Mesures[5]', 'Lots[0].Poids']},
+  {id: '#map_k', kind: 'syn', old: true, sig: 'm[k]   ·   m[k] := v', ret: 'comme les valeurs',
+    sum: "La valeur de la clé k. Écrire crée la clé si elle manque ; lire une clé absente est une erreur (MAP_HAS pour tester, MAP_GET pour une valeur par défaut).",
+    note: "La fiche MAP_GET dit aujourd'hui que lire m['cle'] crée la clé : le moteur, lui, s'arrête sur « clé absente de la MAP ». C'est le comportement du C++ qui est décrit, pas celui de l'IHM : la fiche sera corrigée.",
+    ex: "Stock['vis'] := Stock['vis'] - 1.0;", c: '/* pas de MAP en C */', cc: 'stock.at("vis") -= 1.0;   // at() lit sans créer ; stock["vis"] crée la clé',
+    tries: ["Stock['vis']", "Stock['rondelle'] := 12.0", "Stock['clou']"]},
+  {id: '#item', kind: 'syn', old: true, sig: 't.Item1   ·   t.Item1 := x', ret: 'le type du champ',
+    sum: 'Le champ 1, 2… du TUPLE, dans l\'ordre de ses types : en lecture et en écriture.',
+    ex: "Four := Point.Item1;\nPoint.Item2 := 900.0;", c: 'four = point.nom;   /* un struct */', cc: 'four = std::get<0>(point);   // le C++ compte à partir de 0',
+    tries: ['Point.Item2', "Point.Item1 := 'etuve'", 'Point.Item3']},
+  {id: 'LIST_GET', kind: 'fn', old: true, sig: 'LIST_GET(L, i, defaut)', ret: 'T',
+    sum: "L'élément de l'indice, ou DEFAUT hors de la liste (sans erreur). Nouveau : il lit aussi un ARRAY, à ses indices (Tab.Low à Tab.High).",
+    p: [['L', 'LIST, VECTOR, ARRAY', 'la liste'], ['i', 'DINT', "l'indice"], ['defaut', 'T', 'la valeur hors de la liste']],
+    ex: 'V := LIST_GET(Mesures, 5, 0.0);', c: '/* pas de liste en C : un tableau et un compteur */\nv = i < n ? t[i] : 0.0f;', cc: 'v = i < mesures.size() ? mesures[i] : 0.0f;',
+    tries: ['LIST_GET(Mesures, 2, 0.0)', 'LIST_GET(Mesures, 9, -1.0)', 'LIST_GET(Tab, 4, 0)']},
+  {id: 'MAP_GET', kind: 'fn', old: true, sig: 'MAP_GET(m, cle [, defaut])', ret: 'comme les valeurs',
+    sum: "La valeur d'une clé, sans la créer (DEFAUT si elle manque).",
+    p: [['m', 'MAP', 'la MAP'], ['cle', 'comme les clés', 'la clé'], ['defaut', 'comme les valeurs', 'facultatif : la valeur si la clé manque']],
+    ex: "Qte := MAP_GET(Stock, 'vis', 0.0);", c: '/* pas de MAP en C */', cc: 'auto it = stock.find("vis");\nqte = it != stock.end() ? it->second : 0.0f;',
+    tries: ["MAP_GET(Stock, 'vis', 0.0)", "MAP_GET(Stock, 'clou', 0.0)"]},
+  {id: 'TUPLE_GET', kind: 'fn', mut: false, sig: 'TUPLE_GET(t, n)', ret: 'le type du champ n',
+    sum: "Le champ n du TUPLE (1 : le premier), comme t.Item1. n est une constante : le type du résultat se connaît à Compiler.",
+    p: [['t', 'TUPLE', 'le tuple'], ['n', 'une constante, 1 à la taille', 'le numéro du champ']],
+    ex: 'Valeur := TUPLE_GET(Point, 2);   (* = Point.Item2 *)', c: 'valeur = point.valeur;   /* un struct */', cc: 'valeur = std::get<1>(point);   // std::get compte à partir de 0',
+    tries: ['TUPLE_GET(Point, 2)', 'TUPLE_GET(Point, 3)']},
+  {id: 'LIST_SET', kind: 'fn', mut: true, sig: 'LIST_SET(L, i, x)', ret: 'BOOL',
+    sum: "Écrit x à l'indice i ; rend FALSE, sans erreur, hors de la liste (rien n'est écrit). Le pendant de LIST_GET ; marche sur une LIST, un VECTOR, un ARRAY.",
+    p: [['L', 'LIST, VECTOR, ARRAY', 'la liste'], ['i', 'DINT', "l'indice"], ['x', 'T', 'la valeur']],
+    ex: 'IF NOT LIST_SET(Mesures, Rang, Niveau) THEN\n    IHM_JOURNAL(\'Rang hors de la liste\');\nEND_IF', c: '/* pas de liste en C : un tableau et un compteur */\nif (i < n) t[i] = x;', cc: 'if (i < mesures.size()) mesures[i] = x;',
+    tries: ['LIST_SET(Mesures, 1, 9.5)', 'LIST_SET(Mesures, 9, 9.5)', 'LIST_SET(Tab, 0, 7)', "LIST_SET(Pile, 0, 'z')"]},
+  {id: 'MAP_SET', kind: 'fn', mut: true, sig: 'MAP_SET(m, cle, v)', ret: 'BOOL',
+    sum: "Écrit la valeur de la clé, en la créant si elle manque (comme m[cle] := v) ; rend TRUE si la clé est nouvelle.",
+    p: [['m', 'MAP', 'la MAP'], ['cle', 'comme les clés', 'la clé'], ['v', 'comme les valeurs', 'la valeur']],
+    ex: "IF MAP_SET(Stock, Piece, Qte) THEN\n    IHM_JOURNAL(CONCAT('Nouvelle pièce : ', Piece));\nEND_IF", c: '/* pas de MAP en C */', cc: 'bool nouvelle = stock.insert_or_assign(piece, qte).second;   // C++17',
+    tries: ["MAP_SET(Stock, 'rondelle', 12.0)", "MAP_SET(Stock, 'vis', 100.0)", "MAP_SET(Stock, 'vis', 'abc')"]},
+  {id: 'TUPLE_SET', kind: 'fn', mut: true, sig: 'TUPLE_SET(t, n, x)', ret: 'BOOL',
+    sum: 'Écrit le champ n (1 : le premier), comme t.Item1 := x ; n est une constante.',
+    p: [['t', 'TUPLE', 'le tuple'], ['n', 'une constante', 'le numéro du champ'], ['x', 'le type du champ', 'la valeur']],
+    ex: "TUPLE_SET(Point, 1, 'etuve');   (* = Point.Item1 := 'etuve' *)", c: 'strcpy(point.nom, "etuve");', cc: 'std::get<0>(point) = "etuve";',
+    tries: ["TUPLE_SET(Point, 1, 'etuve')", 'TUPLE_SET(Point, 2, 920.0)', "TUPLE_SET(Point, 2, 'abc')"]},
+  {id: '#first_last', kind: 'syn', old: true, sig: 'L.First   ·   L.Last', ret: 'T',
+    sum: 'Le premier, le dernier élément d\'une LIST ou d\'un VECTOR, en lecture et en écriture ; une liste vide : une erreur.',
+    ex: 'Premier := File.First;\nMesures.Last := 0.0;', c: 'premier = t[0];\ndernier = t[n - 1];', cc: 'premier = file.front();\ndernier = mesures.back();',
+    tries: ['Mesures.First', 'Mesures.Last := 0.0', 'Pile.Last']},
+  {id: '#low_high', kind: 'syn', old: true, sig: 'Tab.Low   ·   Tab.High', ret: 'DINT',
+    sum: 'Les bornes d\'un ARRAY (Low2, High2 : la deuxième dimension). Tab[Tab.Low] est la première case, Tab[Tab.High] la dernière.',
+    ex: 'Derniere := Tab[Tab.High];', c: 'derniere = tab[sizeof tab / sizeof tab[0] - 1];', cc: 'derniere = tab.back();',
+    tries: ['Tab.Low', 'Tab.High', 'Tab[Tab.High]']},
+  {id: 'MAP_FIRST_KEY', kind: 'fn', sig: 'MAP_FIRST_KEY(m [, defaut])', ret: 'comme les clés',
+    sum: 'La plus petite clé (les clés sont rangées) ; une MAP vide : DEFAUT, ou une erreur sans lui.',
+    p: [['m', 'MAP', 'la MAP'], ['defaut', 'comme les clés', 'facultatif : pour une MAP vide']],
+    ex: 'Premiere := MAP_FIRST_KEY(Stock);', c: '/* pas de MAP en C */', cc: 'premiere = stock.begin()->first;   // la MAP n\'est pas vide',
+    tries: ['MAP_FIRST_KEY(Stock)', 'MAP_FIRST_KEY(Paliers)']},
+  {id: 'MAP_LAST_KEY', kind: 'fn', sig: 'MAP_LAST_KEY(m [, defaut])', ret: 'comme les clés',
+    sum: 'La plus grande clé ; une MAP vide : DEFAUT, ou une erreur sans lui.',
+    p: [['m', 'MAP', 'la MAP'], ['defaut', 'comme les clés', 'facultatif : pour une MAP vide']],
+    ex: 'Derniere := MAP_LAST_KEY(Paliers);', c: '/* pas de MAP en C */', cc: 'derniere = paliers.rbegin()->first;',
+    tries: ['MAP_LAST_KEY(Stock)', 'MAP_LAST_KEY(Paliers)']},
+  {id: '#count', kind: 'syn', old: true, sig: 'Tab.Length   ·   L.Count   ·   m.Count', ret: 'DINT',
+    sum: "Le nombre de cases d'un ARRAY (SIZEOF(Tab) aussi), d'éléments d'une LIST ou d'un VECTOR (L.Empty : vide ?), de clés d'une MAP.",
+    ex: 'FOR i := 0 TO Mesures.Count - 1 DO\n    Somme := Somme + Mesures[i];\nEND_FOR;', c: 'n = sizeof tab / sizeof tab[0];', cc: 'n = mesures.size();   // std::size(tab) pour un tableau',
+    tries: ['Tab.Length', 'Mesures.Count', 'Stock.Count', 'Pile.Empty']},
+  {id: 'TUPLE_SIZE', kind: 'fn', sig: 'TUPLE_SIZE(t)', ret: 'DINT',
+    sum: 'Le nombre de champs du TUPLE (une constante : 2 pour un TUPLE(STRING, REAL)).',
+    p: [['t', 'TUPLE', 'le tuple']],
+    ex: 'n := TUPLE_SIZE(Point);', c: 'n = 2;   /* un struct : le nombre de ses membres */', cc: 'constexpr auto n = std::tuple_size_v<decltype(point)>;',
+    tries: ['TUPLE_SIZE(Point)']},
+  // ---------------------------------------------------------------- ajouter et retirer
+  {id: 'LIST_ADD', kind: 'fn', old: true, mut: true, sig: 'LIST_ADD(L, x)', ret: 'DINT',
+    sum: "Ajoute la valeur à la fin ; rend le nombre d'éléments. VECTOR_PUSH fait la même chose.",
+    p: [['L', 'LIST, VECTOR', 'la liste'], ['x', 'T', 'la valeur ajoutée']],
+    ex: 'LIST_ADD(Mesures, Niveau);', c: '/* pas de liste en C : un tableau et un compteur */\nt[n++] = niveau;', cc: 'mesures.push_back(niveau);',
+    tries: ['LIST_ADD(Mesures, 7.7)', 'LIST_ADD(Tab, 3)']},
+  {id: 'VECTOR_PUSH', kind: 'fn', old: true, mut: true, sig: 'VECTOR_PUSH(V, x)', ret: 'DINT',
+    sum: 'Ajoute la valeur à la fin (comme LIST_ADD) ; rend la taille.',
+    p: [['V', 'VECTOR, LIST', 'le vecteur'], ['x', 'T', 'la valeur ajoutée']],
+    ex: 'VECTOR_PUSH(Pile, Code);', c: '/* pas de liste en C : un tableau et un compteur */', cc: 'pile.push_back(code);',
+    tries: ["VECTOR_PUSH(Pile, 'd')"]},
+  {id: 'MAP_INSERT', kind: 'fn', mut: true, sig: 'MAP_INSERT(m, cle, v)', ret: 'BOOL',
+    sum: "Ajoute la clé seulement si elle manque : n'écrase jamais. Rend TRUE si elle a été ajoutée.",
+    p: [['m', 'MAP', 'la MAP'], ['cle', 'comme les clés', 'la clé'], ['v', 'comme les valeurs', 'sa valeur, si elle est nouvelle']],
+    ex: "MAP_INSERT(Stock, 'rondelle', 0.0);   (* un départ, sans écraser *)", c: '/* pas de MAP en C */', cc: 'bool ajoutee = stock.try_emplace("rondelle", 0.0f).second;   // C++17',
+    tries: ["MAP_INSERT(Stock, 'rondelle', 0.0)", "MAP_INSERT(Stock, 'vis', 0.0)"]},
+  {id: 'LIST_INSERT', kind: 'fn', old: true, mut: true, sig: 'LIST_INSERT(L, i, x)', ret: 'DINT',
+    sum: "Insère la valeur à l'indice (0 : en tête) ; rend le nombre d'éléments. Hors de 0..L.Count : une erreur.",
+    p: [['L', 'LIST, VECTOR', 'la liste'], ['i', 'DINT', "l'indice"], ['x', 'T', 'la valeur']],
+    ex: "LIST_INSERT(Alarmes, 0, 'Defaut pompe');", c: '/* pas de liste en C : memmove puis t[i] = x */', cc: 'alarmes.insert(alarmes.begin(), "Defaut pompe");',
+    tries: ['LIST_INSERT(Mesures, 0, 1.1)', 'LIST_INSERT(Mesures, 9, 1.1)']},
+  {id: 'LIST_INSERT_SORTED', kind: 'fn', mut: true, sig: 'LIST_INSERT_SORTED(L, x [, decroissant])', ret: 'DINT',
+    sum: "Insère la valeur à sa place dans une liste triée, après celles qui lui sont égales ; rend l'indice où elle est rangée. La liste reste triée sans LIST_SORT.",
+    p: [['L', 'LIST, VECTOR', 'une liste triée'], ['x', 'T', 'la valeur'], ['decroissant', 'BOOL', 'facultatif : TRUE pour une liste du plus grand au plus petit']],
+    ex: 'LIST_INSERT_SORTED(Echeances, Prochaine);', c: '/* pas de liste en C : chercher la place, memmove, écrire */', cc: 'auto it = std::upper_bound(l.begin(), l.end(), x);\nl.insert(it, x);',
+    tries: ['LIST_INSERT_SORTED(Triee, 4.5)', 'LIST_INSERT_SORTED(Triee, 0.5)']},
+  {id: 'LIST_POP_FIRST', kind: 'fn', mut: true, sig: 'LIST_POP_FIRST(L)', ret: 'T',
+    sum: "Retire le premier élément et le rend : une file d'attente (le premier entré sort le premier). Une liste vide : une erreur. VECTOR_POP retire le dernier (une pile).",
+    p: [['L', 'LIST, VECTOR', 'la liste']],
+    ex: "WHILE File.Count > 0 DO\n    Commande := LIST_POP_FIRST(File);\n    (* envoyer la commande *)\nEND_WHILE", c: '/* pas de liste en C : t[0], puis memmove */', cc: 'auto x = file.front();\nfile.erase(file.begin());   // std::deque : file.pop_front()',
+    tries: ['LIST_POP_FIRST(Pile)', 'LIST_POP_FIRST(Mesures)']},
+  {id: 'VECTOR_POP', kind: 'fn', old: true, mut: true, sig: 'VECTOR_POP(V)', ret: 'T',
+    sum: 'Retire le dernier élément et le rend ; un vecteur vide : une erreur.',
+    p: [['V', 'VECTOR, LIST', 'le vecteur']],
+    ex: 'Code := VECTOR_POP(Pile);', c: '/* pas de liste en C : t[--n] */', cc: 'code = pile.back();\npile.pop_back();',
+    tries: ['VECTOR_POP(Pile)']},
+  {id: 'LIST_REMOVE_AT', kind: 'fn', old: true, mut: true, sig: 'LIST_REMOVE_AT(L, i)', ret: 'BOOL',
+    sum: "Retire l'élément de cet indice ; FALSE s'il est hors de la liste. VECTOR_ERASE fait la même chose.",
+    p: [['L', 'LIST, VECTOR', 'la liste'], ['i', 'DINT', "l'indice"]],
+    ex: 'LIST_REMOVE_AT(Alarmes, 0);', c: '/* pas de liste en C : memmove */', cc: 'if (i < l.size()) l.erase(l.begin() + i);',
+    tries: ['LIST_REMOVE_AT(Mesures, 0)', 'LIST_REMOVE_AT(Mesures, 9)']},
+  {id: 'MAP_REMOVE', kind: 'fn', old: true, mut: true, sig: 'MAP_REMOVE(m, cle)', ret: 'BOOL',
+    sum: "Retire une clé ; TRUE si elle y était.",
+    p: [['m', 'MAP', 'la MAP'], ['cle', 'comme les clés', 'la clé à retirer']],
+    ex: "MAP_REMOVE(Stock, 'ecrou');", c: '/* pas de MAP en C */', cc: 'stock.erase("ecrou");',
+    tries: ["MAP_REMOVE(Stock, 'ecrou')", "MAP_REMOVE(Stock, 'clou')"]},
+  {id: 'LIST_REMOVE', kind: 'fn', old: true, mut: true, sig: 'LIST_REMOVE(L, x)', ret: 'BOOL',
+    sum: "Retire la première valeur égale ; FALSE si elle n'y est pas.",
+    p: [['L', 'LIST, VECTOR', 'la liste'], ['x', 'T', 'la valeur à retirer']],
+    ex: "LIST_REMOVE(Alarmes, 'Defaut pompe');", c: '/* pas de liste en C : chercher, puis memmove */', cc: 'if (auto it = std::find(l.begin(), l.end(), x); it != l.end()) l.erase(it);',
+    tries: ['LIST_REMOVE(Mesures, 8.0)']},
+  {id: 'LIST_REMOVE_ALL', kind: 'fn', mut: true, sig: 'LIST_REMOVE_ALL(L, x)', ret: 'DINT',
+    sum: 'Retire toutes les valeurs égales ; rend le nombre retiré (0 si aucune).',
+    p: [['L', 'LIST, VECTOR', 'la liste'], ['x', 'T', 'la valeur à retirer']],
+    ex: "n := LIST_REMOVE_ALL(Actifs, 'P2');", c: '/* pas de liste en C : une boucle qui recopie les autres */', cc: 'auto n = std::erase(l, x);   // C++20',
+    tries: ['LIST_REMOVE_ALL(Mesures, 8.0)', 'LIST_REMOVE_ALL(Tab, 9)']},
+  {id: 'LIST_REMOVE_IF', kind: 'fn', mut: true, sig: 'LIST_REMOVE_IF(L, comparaison, valeur [, membre])', ret: 'DINT',
+    sum: "Retire les éléments qui vérifient la comparaison avec valeur ; pour une liste de structures, MEMBRE dit lequel comparer. Rend le nombre retiré.",
+    p: [['L', 'LIST, VECTOR', 'la liste'], ['comparaison', 'COMPARAISON', '#Egal, #Different, #Inferieur, #InferieurOuEgal, #Superieur, #SuperieurOuEgal'], ['valeur', 'T, ou le type du membre', 'à quoi comparer'], ['membre', 'STRING', "facultatif : 'Poids' pour une liste de structures"]],
+    ex: "n := LIST_REMOVE_IF(Mesures, COMPARAISON#Inferieur, 0.0);   (* les mesures négatives *)", c: '/* pas de liste en C : une boucle qui recopie les autres */', cc: 'auto n = std::erase_if(mesures, [](REAL x) { return x < 0.0f; });   // C++20',
+    tries: ['LIST_REMOVE_IF(Mesures, COMPARAISON#Inferieur, 9.0)', "LIST_REMOVE_IF(Lots, COMPARAISON#Superieur, 2.0, 'Poids')"]},
+  {id: 'MAP_REMOVE_IF', kind: 'fn', mut: true, sig: 'MAP_REMOVE_IF(m, comparaison, valeur)', ret: 'DINT',
+    sum: 'Retire les clés dont la valeur vérifie la comparaison ; rend le nombre retiré.',
+    p: [['m', 'MAP', 'la MAP'], ['comparaison', 'COMPARAISON', '#Egal, #Inferieur…'], ['valeur', 'comme les valeurs', 'à quoi comparer']],
+    ex: 'MAP_REMOVE_IF(Stock, COMPARAISON#InferieurOuEgal, 0.0);   (* les pièces épuisées *)', c: '/* pas de MAP en C */', cc: 'std::erase_if(stock, [](const auto& kv) { return kv.second <= 0.0f; });   // C++20',
+    tries: ['MAP_REMOVE_IF(Stock, COMPARAISON#Inferieur, 100.0)']},
+  {id: 'LIST_DISTINCT', kind: 'fn', mut: true, sig: 'LIST_DISTINCT(L)', ret: 'DINT',
+    sum: "Retire les doublons : garde la première de chaque valeur, dans l'ordre ; rend le nombre retiré.",
+    p: [['L', 'LIST, VECTOR', 'la liste']],
+    ex: 'LIST_DISTINCT(Codes_Vus);', c: '/* pas de liste en C : deux boucles */', cc: 'std::set<REAL> vus;\nstd::erase_if(l, [&](REAL x) { return !vus.insert(x).second; });',
+    tries: ['LIST_DISTINCT(Mesures)', 'LIST_DISTINCT(Pile)']},
+  {id: 'LIST_CLEAR', kind: 'fn', old: true, mut: true, sig: 'LIST_CLEAR(L)', ret: 'BOOL',
+    sum: 'Vide la liste (VECTOR_CLEAR : le même).', p: [['L', 'LIST, VECTOR', 'la liste']],
+    ex: 'LIST_CLEAR(Mesures);', c: 'n = 0;', cc: 'mesures.clear();', tries: ['LIST_CLEAR(Mesures)']},
+  {id: 'MAP_CLEAR', kind: 'fn', old: true, mut: true, sig: 'MAP_CLEAR(m)', ret: 'BOOL',
+    sum: 'Retire toutes les clés.', p: [['m', 'MAP', 'la MAP']],
+    ex: 'MAP_CLEAR(Stock);', c: '/* pas de MAP en C */', cc: 'stock.clear();', tries: ['MAP_CLEAR(Stock)']},
+  {id: 'MAP_INCREMENT', kind: 'fn', mut: true, sig: 'MAP_INCREMENT(m, cle [, x])', ret: 'comme les valeurs',
+    sum: "Ajoute x (1 s'il manque) à la valeur de la clé, en partant de 0 si elle manque ; rend la nouvelle valeur. Le compteur par clé, sans tester MAP_HAS.",
+    p: [['m', 'MAP de nombres', 'la MAP'], ['cle', 'comme les clés', 'la clé'], ['x', 'comme les valeurs', 'facultatif : 1']],
+    ex: "MAP_INCREMENT(Pieces_Par_Poste, Poste);\n(* au lieu de : IF MAP_HAS(...) THEN m[k] := m[k] + 1 ELSE m[k] := 1 END_IF *)", c: '/* pas de MAP en C */', cc: 'auto v = (pieces[poste] += 1);   // [] crée la clé à 0',
+    tries: ["MAP_INCREMENT(Stock, 'clou')", "MAP_INCREMENT(Stock, 'vis', 10.0)"]},
+  {id: 'LIST_APPEND', kind: 'fn', mut: true, sig: 'LIST_APPEND(L, autre)', ret: 'DINT',
+    sum: "Ajoute à la fin tous les éléments d'une autre liste (ou d'un ARRAY) ; rend le nombre d'éléments.",
+    p: [['L', 'LIST, VECTOR', 'la liste'], ['autre', 'LIST, VECTOR, ARRAY', 'les éléments à ajouter']],
+    ex: 'LIST_APPEND(Historique, Lot_Courant);', c: '/* pas de liste en C : memcpy à la fin */', cc: 'l.insert(l.end(), autre.begin(), autre.end());   // C++23 : l.append_range(autre)',
+    tries: ['LIST_APPEND(Mesures, Autres)', 'LIST_APPEND(Mesures, Tab)']},
+  {id: 'MAP_MERGE', kind: 'fn', mut: true, sig: 'MAP_MERGE(m, autre [, remplacer])', ret: 'DINT',
+    sum: "Ajoute les clés d'une autre MAP ; une clé déjà là garde sa valeur, sauf avec REMPLACER à TRUE. Rend le nombre de clés ajoutées. AUTRE ne change pas.",
+    p: [['m', 'MAP', 'la MAP'], ['autre', 'MAP du même type', 'les clés à ajouter'], ['remplacer', 'BOOL', 'facultatif : FALSE']],
+    ex: 'MAP_MERGE(Stock, Livraison, TRUE);', c: '/* pas de MAP en C */', cc: 'stock.insert(autre.begin(), autre.end());          // sans remplacer\nfor (const auto& [k, v] : autre) stock.insert_or_assign(k, v);   // en remplaçant',
+    tries: ['MAP_MERGE(Stock, Livraison)', 'MAP_MERGE(Stock, Livraison, TRUE)']},
+  {id: 'VECTOR_RESIZE', kind: 'fn', old: true, mut: true, sig: 'VECTOR_RESIZE(V, n [, x])', ret: 'DINT',
+    sum: 'Change la taille : coupe, ou ajoute des éléments (X, sinon la valeur du type). Marche aussi sur une LIST.',
+    p: [['V', 'VECTOR, LIST', 'le vecteur'], ['n', 'DINT', 'la nouvelle taille'], ['x', 'T', 'facultatif : la valeur des nouveaux']],
+    ex: 'VECTOR_RESIZE(Courbe, 100, 0.0);', c: '/* realloc */', cc: 'courbe.resize(100, 0.0f);', tries: ["VECTOR_RESIZE(Pile, 5, 'z')"]},
+  {id: 'LIST_FILL', kind: 'fn', mut: true, sig: 'LIST_FILL(L, x)', ret: 'DINT',
+    sum: "Met x dans toutes les cases, sans changer la taille ; rend le nombre de cases. Remet un tableau à zéro d'un coup.",
+    p: [['L', 'ARRAY, LIST, VECTOR', 'le tableau ou la liste'], ['x', 'T', 'la valeur']],
+    ex: 'LIST_FILL(Niveaux, 0.0);', c: 'for (i = 0; i < n; ++i) t[i] = 0.0f;   /* memset pour 0 */', cc: 'std::ranges::fill(niveaux, 0.0f);   // tab.fill(0) pour un std::array',
+    tries: ['LIST_FILL(Tab, 0)', 'LIST_FILL(Mesures, 1.0)']},
+  // ---------------------------------------------------------------- chercher
+  {id: 'LIST_CONTAINS', kind: 'fn', old: true, sig: 'LIST_CONTAINS(L, x)', ret: 'BOOL',
+    sum: "Vrai si la valeur est dans la liste. Nouveau : il cherche aussi dans un ARRAY.",
+    p: [['L', 'LIST, VECTOR, ARRAY', 'la liste'], ['x', 'T', 'la valeur cherchée']],
+    ex: "IF LIST_CONTAINS(Actifs, 'Four') THEN ... END_IF", c: '/* une boucle */', cc: 'bool dedans = std::ranges::find(l, x) != l.end();   // C++23 : std::ranges::contains(l, x)',
+    tries: ['LIST_CONTAINS(Mesures, 8.0)', 'LIST_CONTAINS(Tab, 5)']},
+  {id: 'MAP_HAS', kind: 'fn', old: true, sig: 'MAP_HAS(m, cle)', ret: 'BOOL',
+    sum: 'Vrai si la clé est dans la MAP.', p: [['m', 'MAP', 'la MAP'], ['cle', 'comme les clés', 'la clé cherchée']],
+    ex: "IF MAP_HAS(Stock, 'vis') THEN ... END_IF", c: '/* pas de MAP en C */', cc: 'bool dedans = stock.contains("vis");   // C++20',
+    tries: ["MAP_HAS(Stock, 'vis')", "MAP_HAS(Stock, 'clou')"]},
+  {id: 'LIST_INDEX_OF', kind: 'fn', old: true, sig: 'LIST_INDEX_OF(L, x)', ret: 'DINT',
+    sum: "L'indice de la première valeur égale ; −1 si elle n'y est pas. Nouveau : dans un ARRAY, l'indice du tableau.",
+    p: [['L', 'LIST, VECTOR, ARRAY', 'la liste'], ['x', 'T', 'la valeur cherchée']],
+    ex: "i := LIST_INDEX_OF(Recettes, 'Pain');", c: '/* une boucle */', cc: 'auto it = std::find(l.begin(), l.end(), x);\ni = it == l.end() ? -1 : it - l.begin();',
+    tries: ['LIST_INDEX_OF(Mesures, 8.0)', 'LIST_INDEX_OF(Tab, 9)']},
+  {id: 'LIST_LAST_INDEX_OF', kind: 'fn', sig: 'LIST_LAST_INDEX_OF(L, x)', ret: 'DINT',
+    sum: "L'indice de la dernière valeur égale ; −1 si elle n'y est pas.",
+    p: [['L', 'LIST, VECTOR, ARRAY', 'la liste'], ['x', 'T', 'la valeur cherchée']],
+    ex: "i := LIST_LAST_INDEX_OF(Journal, 'Arret');", c: '/* une boucle à l\'envers */', cc: 'auto it = std::find(l.rbegin(), l.rend(), x);\ni = it == l.rend() ? -1 : l.rend() - it - 1;',
+    tries: ['LIST_LAST_INDEX_OF(Mesures, 8.0)', 'LIST_LAST_INDEX_OF(Tab, 9)']},
+  {id: 'MAP_KEY_OF', kind: 'fn', sig: 'MAP_KEY_OF(m, v, defaut)', ret: 'comme les clés',
+    sum: 'La première clé (dans leur ordre) dont la valeur est égale à v ; DEFAUT si aucune. La recherche à l\'envers d\'une MAP.',
+    p: [['m', 'MAP', 'la MAP'], ['v', 'comme les valeurs', 'la valeur cherchée'], ['defaut', 'comme les clés', 'si aucune']],
+    ex: "Piece := MAP_KEY_OF(Stock, 0.0, '');   (* une pièce épuisée *)", c: '/* pas de MAP en C */', cc: 'auto it = std::ranges::find_if(stock, [&](const auto& kv) { return kv.second == v; });\ncle = it != stock.end() ? it->first : "";',
+    tries: ["MAP_KEY_OF(Stock, 45.0, '')", "MAP_KEY_OF(Stock, 1.0, '?')"]},
+  {id: 'LIST_COUNT_OF', kind: 'fn', sig: 'LIST_COUNT_OF(L, x)', ret: 'DINT',
+    sum: 'Le nombre de fois où la valeur est dans la liste.',
+    p: [['L', 'LIST, VECTOR, ARRAY', 'la liste'], ['x', 'T', 'la valeur comptée']],
+    ex: "Arrets := LIST_COUNT_OF(Journal, 'Arret');", c: '/* une boucle et un compteur */', cc: 'auto n = std::ranges::count(l, x);',
+    tries: ['LIST_COUNT_OF(Mesures, 8.0)', 'LIST_COUNT_OF(Tab, 9)']},
+  {id: 'LIST_FIND_IF', kind: 'fn', sig: 'LIST_FIND_IF(L, comparaison, valeur [, membre])', ret: 'DINT',
+    sum: "L'indice du premier élément qui vérifie la comparaison ; −1 si aucun. Pour une liste de structures, MEMBRE dit lequel comparer.",
+    p: [['L', 'LIST, VECTOR, ARRAY', 'la liste'], ['comparaison', 'COMPARAISON', '#Egal, #Superieur…'], ['valeur', 'T, ou le type du membre', 'à quoi comparer'], ['membre', 'STRING', 'facultatif']],
+    ex: "i := LIST_FIND_IF(Recettes, COMPARAISON#Egal, 'Pain', 'Nom');\nIF i >= 0 THEN Recette := Recettes[i]; END_IF", c: '/* une boucle */', cc: 'auto it = std::ranges::find_if(recettes, [](const T_Recette& r) { return r.Nom == "Pain"; });\ni = it == recettes.end() ? -1 : it - recettes.begin();',
+    tries: ['LIST_FIND_IF(Mesures, COMPARAISON#Superieur, 13.0)', "LIST_FIND_IF(Lots, COMPARAISON#Egal, 'A07', 'Nom')", "LIST_FIND_IF(Lots, COMPARAISON#Egal, 'A07', 'Nm')"]},
+  {id: 'LIST_COUNT_IF', kind: 'fn', sig: 'LIST_COUNT_IF(L, comparaison, valeur [, membre])', ret: 'DINT',
+    sum: 'Le nombre d\'éléments qui vérifient la comparaison.',
+    p: [['L', 'LIST, VECTOR, ARRAY', 'la liste'], ['comparaison', 'COMPARAISON', '#Superieur…'], ['valeur', 'T, ou le type du membre', 'à quoi comparer'], ['membre', 'STRING', 'facultatif']],
+    ex: 'Hors_Tolerance := LIST_COUNT_IF(Mesures, COMPARAISON#Superieur, Seuil);', c: '/* une boucle et un compteur */', cc: 'auto n = std::ranges::count_if(mesures, [&](REAL x) { return x > seuil; });',
+    tries: ['LIST_COUNT_IF(Mesures, COMPARAISON#Superieur, 10.0)', 'LIST_COUNT_IF(Tab, COMPARAISON#Egal, 9)']},
+  {id: 'LIST_ALL', kind: 'fn', sig: 'LIST_ALL(L, comparaison, valeur [, membre])', ret: 'BOOL',
+    sum: 'Vrai si tous les éléments vérifient la comparaison (vrai pour une liste vide).',
+    p: [['L', 'LIST, VECTOR, ARRAY', 'la liste'], ['comparaison', 'COMPARAISON', ''], ['valeur', 'T', ''], ['membre', 'STRING', 'facultatif']],
+    ex: 'Tout_Ok := LIST_ALL(Pressions, COMPARAISON#Inferieur, P_Max);', c: '/* une boucle */', cc: 'bool tout_ok = std::ranges::all_of(pressions, [&](REAL p) { return p < p_max; });',
+    tries: ['LIST_ALL(Mesures, COMPARAISON#Superieur, 3.0)', 'LIST_ALL(Mesures, COMPARAISON#Superieur, 2.0)']},
+  {id: 'LIST_ANY', kind: 'fn', sig: 'LIST_ANY(L, comparaison, valeur [, membre])', ret: 'BOOL',
+    sum: 'Vrai si au moins un élément vérifie la comparaison.',
+    p: [['L', 'LIST, VECTOR, ARRAY', 'la liste'], ['comparaison', 'COMPARAISON', ''], ['valeur', 'T', ''], ['membre', 'STRING', 'facultatif']],
+    ex: 'Alerte := LIST_ANY(Temperatures, COMPARAISON#Superieur, 90.0);', c: '/* une boucle */', cc: 'bool alerte = std::ranges::any_of(temperatures, [](REAL t) { return t > 90.0f; });',
+    tries: ['LIST_ANY(Mesures, COMPARAISON#Superieur, 15.0)', 'LIST_ANY(Tab, COMPARAISON#Egal, 5)']},
+  {id: 'LIST_NONE', kind: 'fn', sig: 'LIST_NONE(L, comparaison, valeur [, membre])', ret: 'BOOL',
+    sum: "Vrai si aucun élément ne vérifie la comparaison.",
+    p: [['L', 'LIST, VECTOR, ARRAY', 'la liste'], ['comparaison', 'COMPARAISON', ''], ['valeur', 'T', ''], ['membre', 'STRING', 'facultatif']],
+    ex: 'Aucun_Defaut := LIST_NONE(Etats, COMPARAISON#Egal, ETAT#Defaut);', c: '/* une boucle */', cc: 'bool aucun = std::ranges::none_of(etats, [](Etat e) { return e == Etat::Defaut; });',
+    tries: ['LIST_NONE(Mesures, COMPARAISON#Inferieur, 0.0)']},
+  {id: 'LIST_MIN', kind: 'fn', old: true, sig: 'LIST_MIN(L)', ret: 'T',
+    sum: 'La plus petite valeur ; une liste vide : une erreur. Nouveau : un ARRAY aussi.', p: [['L', 'LIST, VECTOR, ARRAY', 'des valeurs simples']],
+    ex: 'Mini := LIST_MIN(Mesures);', c: '/* une boucle */', cc: 'mini = std::ranges::min(mesures);', tries: ['LIST_MIN(Mesures)', 'LIST_MIN(Tab)']},
+  {id: 'LIST_MAX', kind: 'fn', old: true, sig: 'LIST_MAX(L)', ret: 'T',
+    sum: 'La plus grande valeur ; une liste vide : une erreur. Nouveau : un ARRAY aussi.', p: [['L', 'LIST, VECTOR, ARRAY', 'des valeurs simples']],
+    ex: 'Maxi := LIST_MAX(Mesures);', c: '/* une boucle */', cc: 'maxi = std::ranges::max(mesures);', tries: ['LIST_MAX(Mesures)', 'LIST_MAX(Tab)']},
+  {id: 'LIST_MIN_INDEX', kind: 'fn', sig: 'LIST_MIN_INDEX(L [, membre])', ret: 'DINT',
+    sum: "L'indice de la plus petite valeur (la première, s'il y en a plusieurs) ; −1 pour une liste vide. Où est le minimum, pas seulement sa valeur.",
+    p: [['L', 'LIST, VECTOR, ARRAY', 'la liste'], ['membre', 'STRING', 'facultatif, pour une liste de structures']],
+    ex: "Poste_Lent := Postes[LIST_MIN_INDEX(Cadences)];", c: '/* une boucle */', cc: 'auto i = std::ranges::min_element(cadences) - cadences.begin();',
+    tries: ['LIST_MIN_INDEX(Mesures)', "LIST_MIN_INDEX(Lots, 'Poids')"]},
+  {id: 'LIST_MAX_INDEX', kind: 'fn', sig: 'LIST_MAX_INDEX(L [, membre])', ret: 'DINT',
+    sum: "L'indice de la plus grande valeur (la première, s'il y en a plusieurs) ; −1 pour une liste vide.",
+    p: [['L', 'LIST, VECTOR, ARRAY', 'la liste'], ['membre', 'STRING', 'facultatif, pour une liste de structures']],
+    ex: "Plus_Lourd := Lots[LIST_MAX_INDEX(Lots, 'Poids')].Nom;", c: '/* une boucle */', cc: 'auto i = std::ranges::max_element(lots, {}, &T_Lot::Poids) - lots.begin();',
+    tries: ['LIST_MAX_INDEX(Tab)', "LIST_MAX_INDEX(Lots, 'Poids')"]},
+  {id: 'LIST_SUM', kind: 'fn', old: true, sig: 'LIST_SUM(L)', ret: 'comme les éléments',
+    sum: 'La somme des nombres de la liste (ACCUMULATE de std::numeric fait de même, avec une opération). Nouveau : un ARRAY aussi.', p: [['L', 'LIST, VECTOR, ARRAY', 'des nombres']],
+    ex: 'Total := LIST_SUM(Pesees);', c: '/* une boucle */', cc: 'total = std::accumulate(l.begin(), l.end(), 0.0);', tries: ['LIST_SUM(Mesures)', 'LIST_SUM(Tab)']},
+  {id: 'LIST_AVG', kind: 'fn', old: true, sig: 'LIST_AVG(L)', ret: 'REAL',
+    sum: 'La moyenne des nombres ; une liste vide : une erreur. Nouveau : un ARRAY aussi.', p: [['L', 'LIST, VECTOR, ARRAY', 'des nombres']],
+    ex: 'Moyenne := LIST_AVG(Mesures);', c: '/* une boucle, puis / n */', cc: 'moyenne = std::accumulate(l.begin(), l.end(), 0.0) / l.size();', tries: ['LIST_AVG(Mesures)', 'LIST_AVG(Tab)']},
+  {id: 'MAP_FLOOR_KEY', kind: 'fn', sig: 'MAP_FLOOR_KEY(m, k, defaut)', ret: 'comme les clés',
+    sum: "La plus grande clé inférieure ou égale à k ; DEFAUT s'il n'y en a pas. Une table de paliers : 230 tombe sur le palier 100.",
+    p: [['m', 'MAP', 'les paliers'], ['k', 'comme les clés', 'la valeur cherchée'], ['defaut', 'comme les clés', "s'il n'y a pas de palier dessous"]],
+    ex: 'Coef := Paliers[MAP_FLOOR_KEY(Paliers, Debit, 0)];', c: '/* pas de MAP en C : une boucle sur un tableau trié */', cc: 'auto it = paliers.upper_bound(debit);\npalier = it == paliers.begin() ? 0 : std::prev(it)->first;',
+    tries: ['MAP_FLOOR_KEY(Paliers, 230, -1)', 'MAP_FLOOR_KEY(Paliers, 500, -1)', 'MAP_FLOOR_KEY(Paliers, -5, -1)']},
+  {id: 'MAP_CEIL_KEY', kind: 'fn', sig: 'MAP_CEIL_KEY(m, k, defaut)', ret: 'comme les clés',
+    sum: "La plus petite clé supérieure ou égale à k ; DEFAUT s'il n'y en a pas.",
+    p: [['m', 'MAP', 'la MAP'], ['k', 'comme les clés', 'la valeur cherchée'], ['defaut', 'comme les clés', "s'il n'y en a pas au-dessus"]],
+    ex: 'Prochain := MAP_CEIL_KEY(Paliers, Debit, -1);', c: '/* pas de MAP en C */', cc: 'auto it = paliers.lower_bound(debit);\nprochain = it == paliers.end() ? -1 : it->first;',
+    tries: ['MAP_CEIL_KEY(Paliers, 230, -1)', 'MAP_CEIL_KEY(Paliers, 900, -1)']},
+  // ---------------------------------------------------------------- ranger
+  {id: 'LIST_SORT', kind: 'fn', old: true, mut: true, sig: 'LIST_SORT(L [, decroissant])', ret: 'BOOL',
+    sum: 'Trie la liste (des nombres, des textes, des durées). Nouveau : un ARRAY aussi, en place.',
+    p: [['L', 'LIST, VECTOR, ARRAY', 'des valeurs simples'], ['decroissant', 'BOOL', 'facultatif : TRUE du plus grand au plus petit']],
+    ex: 'LIST_SORT(Mesures);   (* LIST_SORT(Mesures, TRUE) : décroissant *)', c: 'qsort(t, n, sizeof t[0], comparer);', cc: 'std::ranges::sort(mesures);   // std::ranges::sort(mesures, std::greater{})',
+    tries: ['LIST_SORT(Mesures)', 'LIST_SORT(Tab, TRUE)']},
+  {id: 'LIST_SORT_BY', kind: 'fn', mut: true, sig: 'LIST_SORT_BY(L, membre [, decroissant])', ret: 'BOOL',
+    sum: "Trie une liste de structures (ou de TUPLE : 'Item2') par un de ses membres. À valeur égale, l'ordre ne change pas (un tri stable : un tableau de l'IHM ne saute pas).",
+    p: [['L', 'LIST, VECTOR, ARRAY de structures', 'la liste'], ['membre', 'STRING', "'Poids', 'Nom', 'Item2'…"], ['decroissant', 'BOOL', 'facultatif']],
+    ex: "LIST_SORT_BY(Lots, 'Poids', TRUE);   (* le plus lourd d'abord *)", c: 'qsort(lots, n, sizeof lots[0], par_poids);', cc: 'std::ranges::stable_sort(lots, std::greater{}, &T_Lot::Poids);   // C++20',
+    tries: ["LIST_SORT_BY(Lots, 'Poids')", "LIST_SORT_BY(Lots, 'Nom', TRUE)", "LIST_SORT_BY(Lots, 'Poid')"]},
+  {id: 'LIST_IS_SORTED', kind: 'fn', sig: 'LIST_IS_SORTED(L [, decroissant])', ret: 'BOOL',
+    sum: 'Vrai si la liste est triée (dans le sens demandé).',
+    p: [['L', 'LIST, VECTOR, ARRAY', 'la liste'], ['decroissant', 'BOOL', 'facultatif']],
+    ex: "ASSERT(LIST_IS_SORTED(Seuils), 'les seuils doivent croître');", c: '/* une boucle */', cc: 'bool trie = std::ranges::is_sorted(seuils);',
+    tries: ['LIST_IS_SORTED(Triee)', 'LIST_IS_SORTED(Mesures)']},
+  {id: 'LIST_REVERSE', kind: 'fn', old: true, mut: true, sig: 'LIST_REVERSE(L)', ret: 'BOOL',
+    sum: "Renverse l'ordre des éléments. Nouveau : un ARRAY aussi.", p: [['L', 'LIST, VECTOR, ARRAY', 'la liste']],
+    ex: 'LIST_REVERSE(Historique);', c: '/* une boucle d\'échanges */', cc: 'std::ranges::reverse(historique);', tries: ['LIST_REVERSE(Tab)', 'LIST_REVERSE(Pile)']},
+  {id: 'LIST_SWAP', kind: 'fn', mut: true, sig: 'LIST_SWAP(L, i, j)', ret: 'BOOL',
+    sum: "Échange deux éléments ; FALSE si un indice est hors de la liste.",
+    p: [['L', 'LIST, VECTOR, ARRAY', 'la liste'], ['i', 'DINT', ''], ['j', 'DINT', '']],
+    ex: 'LIST_SWAP(Etapes, Rang, Rang - 1);   (* le bouton ↑ d\'un tableau *)', c: 'tmp = t[i]; t[i] = t[j]; t[j] = tmp;', cc: 'std::swap(etapes[i], etapes[j]);',
+    tries: ['LIST_SWAP(Pile, 0, 2)', 'LIST_SWAP(Tab, 0, 9)']},
+  {id: 'LIST_MOVE', kind: 'fn', mut: true, sig: 'LIST_MOVE(L, de, vers)', ret: 'BOOL',
+    sum: "Déplace un élément d'un indice à un autre ; ceux d'entre les deux glissent d'une place. Réordonner les étapes d'une recette.",
+    p: [['L', 'LIST, VECTOR, ARRAY', 'la liste'], ['de', 'DINT', "l'indice de l'élément"], ['vers', 'DINT', 'son nouvel indice']],
+    ex: 'LIST_MOVE(Etapes, 3, 0);   (* l\'étape 3 passe en premier *)', c: '/* memmove */', cc: 'if (de < vers) std::rotate(l.begin() + de, l.begin() + de + 1, l.begin() + vers + 1);\nelse std::rotate(l.begin() + vers, l.begin() + de, l.begin() + de + 1);',
+    tries: ['LIST_MOVE(Mesures, 4, 0)', 'LIST_MOVE(Mesures, 0, 2)']},
+  {id: 'LIST_ROTATE', kind: 'fn', mut: true, sig: 'LIST_ROTATE(L, n)', ret: 'BOOL',
+    sum: 'Fait tourner les éléments de n places vers le début (n négatif : vers la fin) ; ce qui sort revient de l\'autre côté.',
+    p: [['L', 'LIST, VECTOR, ARRAY', 'la liste'], ['n', 'DINT', 'le nombre de places']],
+    ex: 'LIST_ROTATE(Equipes, 1);   (* l\'équipe suivante prend le premier poste *)', c: '/* trois inversions */', cc: 'std::ranges::rotate(equipes, equipes.begin() + 1);',
+    tries: ['LIST_ROTATE(Tab, 1)', 'LIST_ROTATE(Pile, -1)']},
+  // ---------------------------------------------------------------- extraire et convertir
+  {id: 'LIST_SLICE', kind: 'fn', sig: 'LIST_SLICE(L, debut, nombre)', ret: 'LIST OF T',
+    sum: "Une copie d'une partie : NOMBRE éléments à partir de DEBUT (ce qui dépasse la fin est ignoré). D'un ARRAY aussi, à ses indices.",
+    p: [['L', 'LIST, VECTOR, ARRAY', 'la liste'], ['debut', 'DINT', "l'indice du premier"], ['nombre', 'DINT', 'combien']],
+    ex: 'Dernieres := LIST_SLICE(Mesures, Mesures.Count - 10, 10);   (* les 10 dernières *)', c: 'memcpy(part, t + debut, nombre * sizeof t[0]);', cc: 'std::vector<REAL> part(l.begin() + debut, l.begin() + debut + nombre);\n// sans copie : std::span(l).subspan(debut, nombre)   // C++20',
+    tries: ['LIST_SLICE(Mesures, 1, 3)', 'LIST_SLICE(Mesures, 3, 10)', 'LIST_SLICE(Tab, 2, 2)']},
+  {id: 'LIST_CONCAT', kind: 'fn', sig: 'LIST_CONCAT(A, B)', ret: 'LIST OF T',
+    sum: 'Une nouvelle liste : les éléments de A, puis ceux de B. A et B ne changent pas.',
+    p: [['A', 'LIST, VECTOR, ARRAY', ''], ['B', 'LIST, VECTOR, ARRAY du même type', '']],
+    ex: 'Tous := LIST_CONCAT(Ligne_1, Ligne_2);', c: '/* deux memcpy */', cc: 'auto tous = a;\ntous.insert(tous.end(), b.begin(), b.end());',
+    tries: ['LIST_CONCAT(Mesures, Autres)', 'LIST_CONCAT(Pile, Mesures)']},
+  {id: 'LIST_COPY', kind: 'fn', mut: true, sig: 'LIST_COPY(source, destination)', ret: 'DINT',
+    sum: "Copie SOURCE dans DESTINATION, case par case depuis le début ; DESTINATION garde sa taille (ce qui dépasse est ignoré, ce qui manque garde sa valeur). Rend le nombre copié. Une LIST vers un ARRAY d'équipement.",
+    p: [['source', 'ARRAY, LIST, VECTOR', ''], ['destination', 'ARRAY, LIST, VECTOR du même type d\'éléments', 'écrite en place']],
+    ex: 'LIST_COPY(Consignes, Automate.Consignes);   (* une LIST vers un ARRAY[0..9] *)', c: 'memcpy(dst, src, min(n_src, n_dst) * sizeof src[0]);', cc: 'auto n = std::min(src.size(), dst.size());\nstd::copy_n(src.begin(), n, dst.begin());',
+    tries: ['LIST_COPY(Autres, Mesures)', 'LIST_COPY(Mesures, Tab)']},
+  {id: 'TO_LIST', kind: 'fn', sig: 'TO_LIST(x)', ret: 'LIST OF T',
+    sum: "Les éléments d'un ARRAY (ligne par ligne s'il a deux dimensions), d'un VECTOR, d'une liste : une nouvelle LIST qu'on peut agrandir, trier, filtrer.",
+    p: [['x', 'ARRAY, VECTOR, LIST', '']],
+    ex: 'Valeurs := TO_LIST(Automate.Mesures);   (* un ARRAY[0..9] OF REAL *)', c: '/* memcpy */', cc: 'std::vector<INT> l(std::begin(tab), std::end(tab));   // C++23 : std::ranges::to<std::vector>(tab)',
+    tries: ['TO_LIST(Tab)', 'TO_LIST(Pile)']},
+  {id: 'MAP_KEYS', kind: 'fn', old: true, sig: 'MAP_KEYS(m)', ret: 'ARRAY OF clé',
+    sum: 'Les clés, dans l\'ordre (un tableau).', p: [['m', 'MAP', 'la MAP']],
+    ex: 'Cles := MAP_KEYS(Stock);', c: '/* pas de MAP en C */', cc: 'for (const auto& [cle, v] : stock) cles.push_back(cle);   // C++20 : stock | std::views::keys',
+    tries: ['MAP_KEYS(Stock)']},
+  {id: 'MAP_VALUES', kind: 'fn', sig: 'MAP_VALUES(m)', ret: 'LIST OF valeur',
+    sum: 'Les valeurs, dans l\'ordre des clés : une LIST (pour LIST_SUM, LIST_MAX…).',
+    p: [['m', 'MAP', 'la MAP']],
+    ex: 'Total := LIST_SUM(MAP_VALUES(Stock));', c: '/* pas de MAP en C */', cc: 'auto valeurs = std::ranges::to<std::vector>(stock | std::views::values);   // C++23',
+    tries: ['MAP_VALUES(Stock)', 'LIST_SUM(MAP_VALUES(Stock))']},
+  {id: 'MAP_ITEMS', kind: 'fn', sig: 'MAP_ITEMS(m)', ret: 'LIST OF TUPLE(clé, valeur)',
+    sum: "Les paires (clé, valeur), dans l'ordre des clés : une LIST de TUPLE. Triée par valeur avec LIST_SORT_BY(…, 'Item2'), elle donne un classement.",
+    p: [['m', 'MAP', 'la MAP']],
+    ex: "Classement := MAP_ITEMS(Stock);\nLIST_SORT_BY(Classement, 'Item2', TRUE);   (* la plus grande quantité d'abord *)", c: '/* pas de MAP en C */', cc: 'std::vector<std::pair<std::string, REAL>> items(stock.begin(), stock.end());',
+    tries: ['MAP_ITEMS(Stock)']},
+  {id: 'JOIN', kind: 'fn', old: true, sig: 'JOIN(L [, sep])', ret: 'STRING',
+    sum: "Les éléments en un seul texte, séparés (', ' sans SEP). Nouveau : un ARRAY aussi.",
+    p: [['L', 'LIST, VECTOR, ARRAY', 'des valeurs simples'], ['sep', 'STRING', "facultatif : ', '"]],
+    ex: "Texte := JOIN(Actifs, ', ');", c: '/* strcat en boucle */', cc: 'auto texte = std::format("{}", actifs);   // C++23 : ["P1", "P3"]',
+    tries: ["JOIN(Pile, '-')", 'JOIN(Tab)']},
+  {id: 'TUPLE_TO_STRING', kind: 'fn', sig: 'TUPLE_TO_STRING(t)', ret: 'STRING',
+    sum: "Le TUPLE écrit comme un littéral : ('four', 850.0). Pour un journal, une étiquette.",
+    p: [['t', 'TUPLE', 'le tuple']],
+    ex: 'IHM_JOURNAL(TUPLE_TO_STRING(Point));', c: 'snprintf(texte, sizeof texte, "(\'%s\', %.1f)", point.nom, point.valeur);', cc: 'auto texte = std::format("{}", point);   // C++23 : ("four", 850)',
+    tries: ['TUPLE_TO_STRING(Point)']},
+  {id: 'TUPLE_UNPACK', kind: 'fn', mut: true, sig: 'TUPLE_UNPACK(t, a, b, …)', ret: 'BOOL',
+    sum: 'Écrit chaque champ dans une variable, dans l\'ordre : autant de variables que de champs, chacune du bon type.',
+    p: [['t', 'TUPLE', 'le tuple'], ['a, b…', 'des variables', 'une par champ']],
+    ex: 'TUPLE_UNPACK(Point, Nom, Valeur);   (* Nom := Point.Item1 ; Valeur := Point.Item2 *)', c: 'strcpy(nom, point.nom);\nvaleur = point.valeur;', cc: 'std::tie(nom, valeur) = point;\n// C++17 : auto [nom, valeur] = point;',
+    tries: ['TUPLE_UNPACK(Point, Nom, Valeur)', 'TUPLE_UNPACK(Point, Valeur, Nom)', 'TUPLE_UNPACK(Point, Nom)']},
+  {id: '#foreach', kind: 'syn', old: true, sig: 'FOR EACH x IN L   ·   FOR EACH k, v IN m', ret: '',
+    sum: "Parcourt un ARRAY, une LIST, un VECTOR (x : chaque élément, dans l'ordre) ou une MAP (k, v : chaque clé et sa valeur, dans l'ordre des clés). MAP_BEGIN, MAP_NEXT et MAP_END font le même parcours pas à pas.",
+    ex: "FOR EACH piece, qte IN Stock DO\n    IF qte < 50.0 THEN LIST_ADD(A_Commander, piece); END_IF\nEND_FOR;", c: 'for (i = 0; i < n; ++i) { ... }', cc: 'for (const auto& [piece, qte] : stock) { ... }   // C++17',
+    tries: []}
+].forEach(function (e) { CT[e.id] = e; });
+
+// Le tableau : une ligne par opération, une colonne par conteneur ; 'e' existe, 'n' nouveau.
+var CCOLS = [['A', 'ARRAY'], ['L', 'LIST · VECTOR'], ['M', 'MAP'], ['T', 'TUPLE']];
+var CROWS = [
+  {g: 'Lire et écrire'},
+  {l: 'Lire un élément', A: [['#tab_i', 'e', 'Tab[i]']], L: [['#list_i', 'e', 'L[i]']], M: [['#map_k', 'e', 'm[k]']], T: [['#item', 'e', 't.Item1']]},
+  {l: 'Lire sans erreur', A: [['LIST_GET', 'n', 'LIST_GET(Tab, i, d)']], L: [['LIST_GET', 'e', 'LIST_GET(L, i, d)']], M: [['MAP_GET', 'e', 'MAP_GET(m, k, d)']], T: [['TUPLE_GET', 'n', 'TUPLE_GET(t, n)']]},
+  {l: 'Écrire un élément', A: [['#tab_i', 'e', 'Tab[i] := x']], L: [['#list_i', 'e', 'L[i] := x']], M: [['#map_k', 'e', 'm[k] := v']], T: [['#item', 'e', 't.Item1 := x']]},
+  {l: 'Écrire, en fonction', A: [['LIST_SET', 'n', 'LIST_SET(Tab, i, x)']], L: [['LIST_SET', 'n', 'LIST_SET(L, i, x)']], M: [['MAP_SET', 'n', 'MAP_SET(m, k, v)']], T: [['TUPLE_SET', 'n', 'TUPLE_SET(t, n, x)']]},
+  {l: 'Le premier, le dernier', A: [['#low_high', 'e', 'Tab.Low, Tab.High']], L: [['#first_last', 'e', 'L.First, L.Last']], M: [['MAP_FIRST_KEY', 'n', 'MAP_FIRST_KEY(m)'], ['MAP_LAST_KEY', 'n', 'MAP_LAST_KEY(m)']]},
+  {l: 'La taille', A: [['#count', 'e', 'Tab.Length']], L: [['#count', 'e', 'L.Count']], M: [['#count', 'e', 'm.Count']], T: [['TUPLE_SIZE', 'n', 'TUPLE_SIZE(t)']]},
+  {g: 'Ajouter et retirer'},
+  {l: 'Ajouter', L: [['LIST_ADD', 'e', 'LIST_ADD(L, x)'], ['VECTOR_PUSH', 'e', 'VECTOR_PUSH(V, x)']], M: [['MAP_INSERT', 'n', 'MAP_INSERT(m, k, v)']]},
+  {l: 'Insérer', L: [['LIST_INSERT', 'e', 'LIST_INSERT(L, i, x)'], ['LIST_INSERT_SORTED', 'n', 'LIST_INSERT_SORTED(L, x)']]},
+  {l: 'Retirer en tête, en queue', L: [['LIST_POP_FIRST', 'n', 'LIST_POP_FIRST(L)'], ['VECTOR_POP', 'e', 'VECTOR_POP(V)']]},
+  {l: 'Retirer un indice, une clé', L: [['LIST_REMOVE_AT', 'e', 'LIST_REMOVE_AT(L, i)']], M: [['MAP_REMOVE', 'e', 'MAP_REMOVE(m, k)']]},
+  {l: 'Retirer une valeur', L: [['LIST_REMOVE', 'e', 'LIST_REMOVE(L, x)'], ['LIST_REMOVE_ALL', 'n', 'LIST_REMOVE_ALL(L, x)']]},
+  {l: 'Retirer sous condition', L: [['LIST_REMOVE_IF', 'n', 'LIST_REMOVE_IF(L, c, v)']], M: [['MAP_REMOVE_IF', 'n', 'MAP_REMOVE_IF(m, c, v)']]},
+  {l: 'Retirer les doublons', L: [['LIST_DISTINCT', 'n', 'LIST_DISTINCT(L)']]},
+  {l: 'Vider', L: [['LIST_CLEAR', 'e', 'LIST_CLEAR(L)']], M: [['MAP_CLEAR', 'e', 'MAP_CLEAR(m)']]},
+  {l: 'Compter par clé', M: [['MAP_INCREMENT', 'n', 'MAP_INCREMENT(m, k)']]},
+  {l: 'Ajouter tout un autre', L: [['LIST_APPEND', 'n', 'LIST_APPEND(L, autre)']], M: [['MAP_MERGE', 'n', 'MAP_MERGE(m, autre)']]},
+  {l: 'Remplir, retailler', A: [['LIST_FILL', 'n', 'LIST_FILL(Tab, x)']], L: [['LIST_FILL', 'n', 'LIST_FILL(L, x)'], ['VECTOR_RESIZE', 'e', 'VECTOR_RESIZE(V, n)']]},
+  {g: 'Chercher'},
+  {l: 'Contient ?', A: [['LIST_CONTAINS', 'n', 'LIST_CONTAINS(Tab, x)']], L: [['LIST_CONTAINS', 'e', 'LIST_CONTAINS(L, x)']], M: [['MAP_HAS', 'e', 'MAP_HAS(m, k)']]},
+  {l: 'Où ?', A: [['LIST_INDEX_OF', 'n', 'LIST_INDEX_OF(Tab, x)']], L: [['LIST_INDEX_OF', 'e', 'LIST_INDEX_OF(L, x)'], ['LIST_LAST_INDEX_OF', 'n', 'LIST_LAST_INDEX_OF(L, x)']], M: [['MAP_KEY_OF', 'n', 'MAP_KEY_OF(m, v, d)']]},
+  {l: 'Combien de fois ?', A: [['LIST_COUNT_OF', 'n', 'LIST_COUNT_OF(Tab, x)']], L: [['LIST_COUNT_OF', 'n', 'LIST_COUNT_OF(L, x)']]},
+  {l: 'Le premier qui…', A: [['LIST_FIND_IF', 'n', 'LIST_FIND_IF(Tab, c, v)']], L: [['LIST_FIND_IF', 'n', 'LIST_FIND_IF(L, c, v)']]},
+  {l: 'Combien qui… ?', A: [['LIST_COUNT_IF', 'n', 'LIST_COUNT_IF(Tab, c, v)']], L: [['LIST_COUNT_IF', 'n', 'LIST_COUNT_IF(L, c, v)']]},
+  {l: 'Tous, un, aucun ?', A: [['LIST_ALL', 'n', 'LIST_ALL'], ['LIST_ANY', 'n', 'LIST_ANY'], ['LIST_NONE', 'n', 'LIST_NONE']], L: [['LIST_ALL', 'n', 'LIST_ALL(L, c, v)'], ['LIST_ANY', 'n', 'LIST_ANY(L, c, v)'], ['LIST_NONE', 'n', 'LIST_NONE(L, c, v)']]},
+  {l: 'Le plus petit, le plus grand', A: [['LIST_MIN', 'n', 'LIST_MIN(Tab)'], ['LIST_MAX', 'n', 'LIST_MAX(Tab)']], L: [['LIST_MIN', 'e', 'LIST_MIN(L)'], ['LIST_MAX', 'e', 'LIST_MAX(L)']]},
+  {l: '… et où il est', A: [['LIST_MIN_INDEX', 'n', 'LIST_MIN_INDEX(Tab)'], ['LIST_MAX_INDEX', 'n', 'LIST_MAX_INDEX(Tab)']], L: [['LIST_MIN_INDEX', 'n', 'LIST_MIN_INDEX(L)'], ['LIST_MAX_INDEX', 'n', 'LIST_MAX_INDEX(L)']]},
+  {l: 'Somme, moyenne', A: [['LIST_SUM', 'n', 'LIST_SUM(Tab)'], ['LIST_AVG', 'n', 'LIST_AVG(Tab)']], L: [['LIST_SUM', 'e', 'LIST_SUM(L)'], ['LIST_AVG', 'e', 'LIST_AVG(L)']]},
+  {l: 'La clé la plus proche', M: [['MAP_FLOOR_KEY', 'n', 'MAP_FLOOR_KEY(m, k, d)'], ['MAP_CEIL_KEY', 'n', 'MAP_CEIL_KEY(m, k, d)']]},
+  {g: 'Ranger'},
+  {l: 'Trier', A: [['LIST_SORT', 'n', 'LIST_SORT(Tab)']], L: [['LIST_SORT', 'e', 'LIST_SORT(L)']]},
+  {l: 'Trier par un membre', A: [['LIST_SORT_BY', 'n', 'LIST_SORT_BY(Tab, m)']], L: [['LIST_SORT_BY', 'n', "LIST_SORT_BY(L, 'Poids')"]]},
+  {l: 'Trié ?', A: [['LIST_IS_SORTED', 'n', 'LIST_IS_SORTED(Tab)']], L: [['LIST_IS_SORTED', 'n', 'LIST_IS_SORTED(L)']]},
+  {l: 'Renverser', A: [['LIST_REVERSE', 'n', 'LIST_REVERSE(Tab)']], L: [['LIST_REVERSE', 'e', 'LIST_REVERSE(L)']]},
+  {l: 'Échanger, déplacer', A: [['LIST_SWAP', 'n', 'LIST_SWAP(Tab, i, j)'], ['LIST_MOVE', 'n', 'LIST_MOVE(Tab, de, vers)']], L: [['LIST_SWAP', 'n', 'LIST_SWAP(L, i, j)'], ['LIST_MOVE', 'n', 'LIST_MOVE(L, de, vers)']]},
+  {l: 'Faire tourner', A: [['LIST_ROTATE', 'n', 'LIST_ROTATE(Tab, n)']], L: [['LIST_ROTATE', 'n', 'LIST_ROTATE(L, n)']]},
+  {g: 'Extraire et convertir'},
+  {l: 'Une partie', A: [['LIST_SLICE', 'n', 'LIST_SLICE(Tab, d, n)']], L: [['LIST_SLICE', 'n', 'LIST_SLICE(L, d, n)']]},
+  {l: 'Mettre bout à bout', L: [['LIST_CONCAT', 'n', 'LIST_CONCAT(A, B)']]},
+  {l: 'Copier, convertir', A: [['LIST_COPY', 'n', 'LIST_COPY(L, Tab)'], ['TO_LIST', 'n', 'TO_LIST(Tab)']], L: [['LIST_COPY', 'n', 'LIST_COPY(Tab, L)']]},
+  {l: 'Les clés, les valeurs', M: [['MAP_KEYS', 'e', 'MAP_KEYS(m)'], ['MAP_VALUES', 'n', 'MAP_VALUES(m)'], ['MAP_ITEMS', 'n', 'MAP_ITEMS(m)']]},
+  {l: 'En texte', A: [['JOIN', 'n', 'JOIN(Tab)']], L: [['JOIN', 'e', 'JOIN(L, sep)']], T: [['TUPLE_TO_STRING', 'n', 'TUPLE_TO_STRING(t)']]},
+  {l: 'Déballer', T: [['TUPLE_UNPACK', 'n', 'TUPLE_UNPACK(t, a, b)']]},
+  {l: 'Parcourir', A: [['#foreach', 'e', 'FOR EACH x IN Tab']], L: [['#foreach', 'e', 'FOR EACH x IN L']], M: [['#foreach', 'e', 'FOR EACH k, v IN m']]}
+];
+// Les nouvelles natives des conteneurs entrent dans l'aide à la saisie et l'analyse des calculs.
+Object.keys(CT).forEach(function (id) {
+  var e = CT[id];
+  if (e.kind !== 'fn' || FN[id]) { if (FN[id] && e.mut) FN[id].mut = true; return; }
+  var f = {name: id, sig: e.sig, ret: e.ret, sum: e.sum, cont: !e.old, mut: !!e.mut};
+  FUNCS.push(f); FN[id] = f;
+});
 
 // ================================================================== les valeurs
 function elemOf(type) { var m = /\bOF\s+(.+)$/i.exec(type); return m ? m[1].trim() : ''; }
@@ -2123,7 +2642,7 @@ function constDoc(script, x, self) {
     (self ? ' — <i>la constante que ce calcul écrit</i>' : '') + '<br><code>' + esc(val) + '</code>' + (x.doc ? '<br>' + esc(x.doc) : '');
 }
 function fnDoc(f) {
-  return '<b>' + esc(f.sig) + '</b>' + (f.ret ? ' → ' + esc(f.ret) : '') + '<br>' + esc(f.sum) + (f.num ? '<br><span class="newb">std::numeric</span>' : '');
+  return '<b>' + esc(f.sig) + '</b>' + (f.ret ? ' → ' + esc(f.ret) : '') + '<br>' + esc(f.sum) + (f.cont ? '<br><span class="newb">Nouveau · conteneurs</span>' : '') + (f.num ? '<br><span class="newb">std::numeric</span>' : '');
 }
 function structOfName(name, code) {
   var loc = localsOf(code)[name.toUpperCase()];
@@ -2605,6 +3124,575 @@ function natInput(e) {
 }
 $('#natcard').addEventListener('input', natInput);
 $('#natcard').addEventListener('change', natInput);
+
+// =============================================================== les conteneurs : l'essai (v3)
+// Des variables d'essai, un petit lecteur d'appels (LIST_SET(Mesures, 1, 9.5), Stock['vis'] := 5.0…)
+// et chaque fonction faite pour de vrai : la maquette montre ce que l'IHM rendrait, erreurs comprises.
+var CSTRUCTS = {T_Lot: [['Nom', 'STRING'], ['Poids', 'REAL']]};
+function cL(t, elem, items) { return {k: 'list', t: t, elem: elem, items: items.slice()}; }
+function cA(t, elem, items, low) { return {k: 'array', t: t, elem: elem, items: items.slice(), low: low}; }
+function cM(t, keyT, valT, e) { return {k: 'map', t: t, keyT: keyT, valT: valT, e: e.map(function (p) { return p.slice(); })}; }
+function cT(t, types, items) { return {k: 'tuple', t: t, types: types, items: items.slice()}; }
+function cS(t, v) { return {k: 'scalar', t: t, v: v}; }
+function lot(nom, poids) { return {k: 'struct', t: 'T_Lot', f: {Nom: nom, Poids: poids}}; }
+function cvarsInit() {
+  return {
+    Mesures: cL('LIST OF REAL', 'REAL', [12.5, 8.0, 15.2, 8.0, 3.1]),
+    Autres: cL('LIST OF REAL', 'REAL', [1.0, 2.0]),
+    Triee: cL('LIST OF REAL', 'REAL', [1.0, 3.0, 4.5, 7.0]),
+    Pile: cL('VECTOR OF STRING', 'STRING', ['a', 'b', 'c']),
+    Tab: cA('ARRAY[0..4] OF INT', 'INT', [4, 9, 1, 9, 6], 0),
+    Stock: cM('MAP[STRING] OF REAL', 'STRING', 'REAL', [['ecrou', 80.0], ['goujon', 45.0], ['vis', 120.0]]),
+    Livraison: cM('MAP[STRING] OF REAL', 'STRING', 'REAL', [['clou', 500.0], ['vis', 60.0]]),
+    Paliers: cM('MAP[INT] OF REAL', 'INT', 'REAL', [[0, 1.0], [100, 1.2], [500, 1.5]]),
+    Point: cT('TUPLE(STRING, REAL)', ['STRING', 'REAL'], ['four', 850.0]),
+    Lots: cL('LIST OF T_Lot', 'T_Lot', [lot('B12', 2.5), lot('A07', 4.0), lot('C03', 1.2)]),
+    Nom: cS('STRING', ''),
+    Valeur: cS('REAL', 0.0)
+  };
+}
+var CV = cvarsInit(), cSel = 'LIST_SET', cLang = 'st', cChanged = {};
+function cfail(msg) { throw {cmsg: msg}; }
+function isRealT(t) { return /^L?REAL$/i.test(t || ''); }
+function cclone(v) { return v && typeof v === 'object' ? JSON.parse(JSON.stringify(v)) : v; }
+function cshow(v, t, max) {
+  var s;
+  if (v && typeof v === 'object' && v.k) {
+    switch (v.k) {
+      case 'list': case 'array': s = '[' + v.items.map(function (x) { return cshow(x, v.elem); }).join(', ') + ']'; break;
+      case 'map': s = '[' + v.e.map(function (p) { return cshow(p[0], v.keyT) + ' := ' + cshow(p[1], v.valT); }).join(', ') + ']'; break;
+      case 'tuple': s = '(' + v.items.map(function (x, i) { return cshow(x, v.types[i]); }).join(', ') + ')'; break;
+      case 'scalar': s = cshow(v.v, v.t); break;
+      case 'struct': s = '(' + CSTRUCTS[v.t].map(function (m) { return m[0] + ' := ' + cshow(v.f[m[0]], m[1]); }).join(', ') + ')'; break;
+    }
+  } else if (typeof v === 'boolean') s = v ? 'TRUE' : 'FALSE';
+  else if (typeof v === 'string') s = "'" + v.replace(/\$/g, '$$$$').replace(/'/g, "$$'") + "'";
+  else if (typeof v === 'number') s = isRealT(t) ? real(v) : String(v);
+  else if (v && v.en) s = v.en + '#' + v.v;
+  else s = String(v);
+  if (max && s.length > max) s = s.slice(0, max - 1) + '…';
+  return s;
+}
+function kindName(x) {
+  if (x && x.k) return {list: 'une ' + (/^VECTOR/.test(x.t) ? 'VECTOR' : 'LIST'), array: 'un ARRAY', map: 'une MAP', tuple: 'un TUPLE', struct: 'une structure ' + x.t, scalar: 'un ' + x.t}[x.k];
+  return typeof x === 'string' ? 'une STRING' : typeof x === 'number' ? 'un nombre' : typeof x === 'boolean' ? 'un BOOL' : 'une valeur';
+}
+// Une valeur vers le type d'une case : refusée comme l'IHM la refuserait.
+function cconv(t, v, fn) {
+  var pre = fn ? fn + ' : ' : '', u = String(t).toUpperCase();
+  if (CSTRUCTS[t]) { if (v && v.k === 'struct' && v.t === t) return cclone(v); cfail(pre + cshow(v) + " n'est pas un " + t); }
+  if (isRealT(u)) { if (typeof v === 'number') return v; cfail(pre + cshow(v) + " n'est pas un " + u); }
+  if (BOUNDS[u] || /^(LINT|ULINT|BYTE|WORD|DWORD|LWORD)$/.test(u)) {
+    if (typeof v !== 'number' || Math.floor(v) !== v) cfail(pre + cshow(v) + " n'est pas un entier (" + u + ')');
+    if (BOUNDS[u] && (v < BOUNDS[u][0] || v > BOUNDS[u][1])) cfail(pre + v + " est hors des bornes d'un " + u + ' (' + BOUNDS[u][0] + '..' + BOUNDS[u][1] + ')');
+    return v;
+  }
+  if (u === 'STRING') { if (typeof v === 'string') return v; cfail(pre + cshow(v) + " n'est pas une STRING : écris '" + cshow(v) + "'"); }
+  if (u === 'BOOL') { if (typeof v === 'boolean') return v; cfail(pre + cshow(v) + " n'est pas un BOOL"); }
+  return v;
+}
+// ------------------------------------------------------------------ le lecteur d'un appel
+function ctoks(src) {
+  var re = /\s*(?:(\d+\.\d+(?:[eE][-+]?\d+)?|\d+(?:[eE][-+]?\d+)?)|('(?:\$.|[^'])*')|([A-Za-z_]\w*#[A-Za-z_]\w*)|([A-Za-z_]\w*)|(:=|[-\[\](),.;]))/y, out = [], m, i = 0;
+  src = src.replace(/\s+$/, '');
+  while (i < src.length) {
+    re.lastIndex = i; m = re.exec(src);
+    if (!m || m[0] === '') cfail("je ne lis pas « " + src.slice(i).trim().slice(0, 12) + ' »');
+    i = re.lastIndex;
+    if (m[1]) out.push({t: 'num', v: Number(m[1]), real: /[.eE]/.test(m[1])});
+    else if (m[2]) out.push({t: 'str', v: m[2].slice(1, -1).replace(/\$(.)/g, function (a, c) { return {N: '\n', T: '\t'}[c.toUpperCase()] || c; })});
+    else if (m[3]) out.push({t: 'enum', en: m[3].split('#')[0].toUpperCase(), v: m[3].split('#')[1]});
+    else if (m[4]) out.push({t: 'id', v: m[4]});
+    else out.push({t: 'op', v: m[5]});
+  }
+  return out;
+}
+function cparse(src) {
+  var T = ctoks(src), p = 0;
+  function peek(v) { return T[p] && T[p].t === 'op' && T[p].v === v; }
+  function need(v) { if (!peek(v)) cfail("« " + v + " » attendu" + (T[p] ? ' avant « ' + (T[p].v === undefined ? '' : T[p].v) + ' »' : ' à la fin')); p++; }
+  function primary() {
+    var t = T[p++];
+    if (!t) cfail('il manque une valeur à la fin');
+    if (t.t === 'num' || t.t === 'str' || t.t === 'enum') return t;
+    if (t.t === 'op' && t.v === '-') { var e = primary(); if (e.t !== 'num') cfail('« - » devant un nombre seulement'); return {t: 'num', v: -e.v, real: e.real}; }
+    if (t.t === 'op' && t.v === '[') { var items = []; if (!peek(']')) { items.push(expr()); while (peek(',')) { p++; items.push(expr()); } } need(']'); return {t: 'list', items: items}; }
+    if (t.t === 'op' && t.v === '(') { var xs = [expr()]; while (peek(',')) { p++; xs.push(expr()); } need(')'); return xs.length > 1 ? {t: 'tup', items: xs} : xs[0]; }
+    if (t.t === 'id') {
+      if (/^(TRUE|FALSE)$/i.test(t.v)) return {t: 'bool', v: /^TRUE$/i.test(t.v)};
+      if (peek('(')) { p++; var args = []; if (!peek(')')) { args.push(expr()); while (peek(',')) { p++; args.push(expr()); } } need(')'); return {t: 'call', n: t.v.toUpperCase(), args: args}; }
+      return {t: 'var', n: t.v};
+    }
+    cfail("je ne lis pas « " + t.v + ' »');
+  }
+  function expr() {
+    var e = primary();
+    for (;;) {
+      if (peek('[')) { p++; var i = expr(); need(']'); e = {t: 'idx', base: e, i: i}; continue; }
+      if (peek('.')) { p++; var m = T[p++]; if (!m || m.t !== 'id') cfail('un nom attendu après le point'); e = {t: 'mem', base: e, n: m.v}; continue; }
+      return e;
+    }
+  }
+  var lhs = expr(), out = lhs;
+  if (peek(':=')) { p++; out = {t: 'set', lhs: lhs, rhs: expr()}; }
+  if (peek(';')) p++;
+  if (p < T.length) cfail('« ' + (T[p].v === undefined ? '' : T[p].v) + " » en trop : un appel à la fois");
+  return out;
+}
+// Une place : ce qu'on lit et ce qu'on écrit (une case, une clé, un champ, une variable).
+function cplace(n) {
+  if (n.t !== 'var' && n.t !== 'idx' && n.t !== 'mem') {
+    var once, done = false;
+    return {get: function () { if (!done) { once = cval(n); done = true; } return once; }, set: function () { cfail('une valeur calculée ne se désigne pas : écris dans une variable'); }, t: n.t === 'num' ? (n.real ? 'REAL' : 'DINT') : n.t === 'str' ? 'STRING' : n.t === 'bool' ? 'BOOL' : '', root: null};
+  }
+  if (n.t === 'var') {
+    var key = Object.keys(CV).filter(function (k) { return eq(k, n.n); })[0];
+    if (!key) cfail(n.n + " n'existe pas" + closest(n.n, Object.keys(CV)));
+    var v = CV[key];
+    if (v.k === 'scalar') return {get: function () { return v.v; }, set: function (x) { v.v = cconv(v.t, x); cChanged[key] = 1; }, t: v.t, root: key};
+    return {get: function () { return v; }, set: function () { cfail(key + " : un " + v.t + " s'écrit élément par élément"); }, t: v.t, root: key};
+  }
+  if (n.t === 'idx') {
+    var bp = cplace(n.base), b = bp.get(), i = cval(n.i);
+    if (!b || !b.k) cfail("'[...]' : " + kindName(b) + " n'est ni un tableau, ni une liste, ni une MAP");
+    if (b.k === 'array' || b.k === 'list') {
+      if (typeof i !== 'number' || Math.floor(i) !== i) cfail("un indice est un entier");
+      var low = b.k === 'array' ? b.low : 0, n0 = b.items.length, at = i - low;
+      if (at < 0 || at >= n0) cfail(b.k === 'array' ? 'indice ' + i + ' hors des bornes [' + low + '..' + (low + n0 - 1) + ']' : 'indice ' + i + (n0 ? ' hors de la liste (0..' + (n0 - 1) + ')' : ' : la liste est vide'));
+      return {get: function () { return b.items[at]; }, set: function (x) { b.items[at] = cconv(b.elem, x); if (bp.root) cChanged[bp.root] = 1; }, t: b.elem, root: bp.root};
+    }
+    if (b.k === 'map') {
+      var key2 = cconv(b.keyT, i), j = mfind(b, key2);
+      return {get: function () {
+        if (j < 0) cfail("clé absente de la MAP : " + cshow(key2, b.keyT) + " (MAP_HAS(m, clé) pour tester, MAP_GET(m, clé, défaut) pour une valeur par défaut)");
+        return b.e[j][1];
+      }, set: function (x) { mput(b, key2, cconv(b.valT, x)); if (bp.root) cChanged[bp.root] = 1; }, t: b.valT, root: bp.root};
+    }
+    cfail("'[...]' : " + kindName(b) + " n'est ni un tableau, ni une liste, ni une MAP");
+  }
+  if (n.t === 'mem') {
+    var mp = cplace(n.base), o = mp.get(), m = n.n.toUpperCase();
+    if (o && o.k === 'tuple') {
+      var k = /^ITEM(\d+)$/.exec(m), at2 = k ? +k[1] - 1 : -1;
+      if (at2 < 0 || at2 >= o.items.length) cfail('un ' + o.t + ' a Item1 à Item' + o.items.length + ", pas '" + n.n + "'");
+      return {get: function () { return o.items[at2]; }, set: function (x) { o.items[at2] = cconv(o.types[at2], x); if (mp.root) cChanged[mp.root] = 1; }, t: o.types[at2], root: mp.root};
+    }
+    if (o && o.k === 'struct') {
+      var f = CSTRUCTS[o.t].filter(function (x) { return eq(x[0], n.n); })[0];
+      if (!f) cfail(o.t + " n'a pas de membre '" + n.n + "'" + closest(n.n, CSTRUCTS[o.t].map(function (x) { return x[0]; })));
+      return {get: function () { return o.f[f[0]]; }, set: function (x) { o.f[f[0]] = cconv(f[1], x); if (mp.root) cChanged[mp.root] = 1; }, t: f[1], root: mp.root};
+    }
+    if (o && o.k === 'list' && (m === 'FIRST' || m === 'LAST')) {
+      if (!o.items.length) cfail("'" + n.n + "' : la liste est vide (L.Count = 0)");
+      var at3 = m === 'FIRST' ? 0 : o.items.length - 1;
+      return {get: function () { return o.items[at3]; }, set: function (x) { o.items[at3] = cconv(o.elem, x); if (mp.root) cChanged[mp.root] = 1; }, t: o.elem, root: mp.root};
+    }
+    var val = null, vt = 'DINT';
+    if (o && o.k === 'array') {
+      if (/^(LENGTH|SIZE|COUNT|MAXSIZE)$/.test(m)) val = o.items.length;
+      else if (m === 'LOW') val = o.low; else if (m === 'HIGH') val = o.low + o.items.length - 1;
+    } else if (o && o.k === 'list') {
+      if (/^(LENGTH|SIZE|COUNT)$/.test(m)) val = o.items.length;
+      else if (m === 'LOW') val = 0; else if (m === 'HIGH') val = o.items.length - 1;
+      else if (m === 'EMPTY' || m === 'ISEMPTY') { val = !o.items.length; vt = 'BOOL'; }
+    } else if (o && o.k === 'map' && /^(LENGTH|SIZE|COUNT)$/.test(m)) val = o.e.length;
+    if (val === null) cfail("'" + n.n + "' : " + kindName(o) + " n'a pas ce membre");
+    return {get: function () { return val; }, set: function () { cfail("'" + n.n + "' se lit seulement"); }, t: vt, root: mp.root};
+  }
+  return null;
+}
+function cval(n) {
+  switch (n.t) {
+    case 'num': case 'str': return n.v;
+    case 'bool': return n.v;
+    case 'enum':
+      if (!ENUMS[n.en]) cfail(n.en + " n'est pas une énumération");
+      var v = ENUMS[n.en].filter(function (x) { return eq(x, n.v); })[0];
+      if (!v) cfail(n.v + " n'est pas une valeur de " + n.en + ' (' + ENUMS[n.en].join(', ') + ')');
+      return {en: n.en, v: v};
+    case 'list': return {k: 'list', t: 'LIST', elem: n.items.length && n.items[0].t === 'str' ? 'STRING' : 'REAL', items: n.items.map(cval)};
+    case 'tup': return {k: 'tuple', t: 'TUPLE', types: n.items.map(function (x) { return x.t === 'str' ? 'STRING' : 'REAL'; }), items: n.items.map(cval)};
+    case 'call': var r = ccall(n); return r[0];
+    default: return cplace(n).get();
+  }
+}
+// ------------------------------------------------------------- les fonctions, pour de vrai
+function mfind(m, key) { for (var i = 0; i < m.e.length; i++) if (m.e[i][0] === key) return i; return -1; }
+function mcmp(a, b) { return a < b ? -1 : a > b ? 1 : 0; }
+function mput(m, key, v) { var i = mfind(m, key); if (i >= 0) { m.e[i][1] = v; return false; } m.e.push([key, v]); m.e.sort(function (x, y) { return mcmp(x[0], y[0]); }); return true; }
+function ccmp(op, a, b) {
+  var c = mcmp(typeof a === 'string' || typeof b === 'string' ? String(a) : a, typeof a === 'string' || typeof b === 'string' ? String(b) : b);
+  return {Egal: c === 0, Different: c !== 0, Inferieur: c < 0, InferieurOuEgal: c <= 0, Superieur: c > 0, SuperieurOuEgal: c >= 0}[op.v];
+}
+function seq(fn, x, arrOk) {
+  if (x && (x.k === 'list' || (arrOk && x.k === 'array'))) return x;
+  if (x && x.k === 'array') cfail(fn + ' : un ARRAY a une taille fixe (' + x.items.length + ' cases) — une LIST ou un VECTOR est attendu');
+  cfail(fn + ' : ' + (arrOk ? 'une LIST, un VECTOR ou un ARRAY' : 'une LIST ou un VECTOR') + ' est attendu, pas ' + kindName(x));
+}
+function mapOf(fn, x) { if (x && x.k === 'map') return x; cfail(fn + ' : une MAP est attendue, pas ' + kindName(x)); }
+function tupOf(fn, x) { if (x && x.k === 'tuple') return x; cfail(fn + ' : un TUPLE est attendu, pas ' + kindName(x)); }
+function cmpOf(fn, x) { if (x && x.en === 'COMPARAISON') return x; cfail(fn + ' : une COMPARAISON est attendue (COMPARAISON#Superieur…), pas ' + cshow(x)); }
+function intOf(fn, x, what) { if (typeof x === 'number' && Math.floor(x) === x) return x; cfail(fn + ' : ' + (what || 'un indice') + ' est un entier'); }
+// L'élément vu par la comparaison : lui-même, ou un de ses membres.
+function proj(fn, L, membre) {
+  if (membre === undefined) {
+    if (CSTRUCTS[L.elem]) cfail(fn + ' : des ' + L.elem + " — dis quel membre comparer : '" + CSTRUCTS[L.elem][1][0] + "'");
+    return function (x) { return x; };
+  }
+  if (typeof membre !== 'string') cfail(fn + " : le membre s'écrit entre apostrophes : 'Poids'");
+  var st = CSTRUCTS[L.elem];
+  if (st) {
+    var f = st.filter(function (m) { return eq(m[0], membre); })[0];
+    if (!f) cfail(L.elem + " n'a pas de membre " + membre + closest(membre, st.map(function (m) { return m[0]; })));
+    return function (x) { return x.f[f[0]]; };
+  }
+  var it = /^ITEM(\d+)$/i.exec(membre);
+  if (it && L.items.length && L.items[0].k === 'tuple') return function (x) { return x.items[+it[1] - 1]; };
+  cfail(fn + " : des " + L.elem + " n'ont pas de membres");
+}
+function low(L) { return L.k === 'array' ? L.low : 0; }
+function changed(x) { Object.keys(CV).forEach(function (k) { if (CV[k] === x) cChanged[k] = 1; }); }
+function argc(fn, a, min, max) { if (a.length < min || a.length > max) cfail('mauvais nombre d\'arguments : ' + CT[fn].sig); }
+var IMPL = {
+  LIST_GET: function (a) { argc('LIST_GET', a, 3, 3); var L = seq('LIST_GET', a[0], true), i = intOf('LIST_GET', a[1]) - low(L); return [i >= 0 && i < L.items.length ? L.items[i] : cconv(L.elem, a[2], 'LIST_GET'), L.elem]; },
+  LIST_SET: function (a) {
+    argc('LIST_SET', a, 3, 3); var L = seq('LIST_SET', a[0], true), i = intOf('LIST_SET', a[1]) - low(L), x = cconv(L.elem, a[2], 'LIST_SET');
+    if (i < 0 || i >= L.items.length) return [false, 'BOOL'];
+    L.items[i] = x; changed(L); return [true, 'BOOL'];
+  },
+  MAP_GET: function (a) { argc('MAP_GET', a, 2, 3); var m = mapOf('MAP_GET', a[0]), k = cconv(m.keyT, a[1], 'MAP_GET'), j = mfind(m, k); if (j >= 0) return [m.e[j][1], m.valT]; if (a.length < 3) cfail("MAP_GET : clé absente : " + cshow(k, m.keyT)); return [cconv(m.valT, a[2], 'MAP_GET'), m.valT]; },
+  MAP_SET: function (a) { argc('MAP_SET', a, 3, 3); var m = mapOf('MAP_SET', a[0]), k = cconv(m.keyT, a[1], 'MAP_SET'), v = cconv(m.valT, a[2], 'MAP_SET'), n = mput(m, k, v); changed(m); return [n, 'BOOL']; },
+  MAP_INSERT: function (a) { argc('MAP_INSERT', a, 3, 3); var m = mapOf('MAP_INSERT', a[0]), k = cconv(m.keyT, a[1], 'MAP_INSERT'), v = cconv(m.valT, a[2], 'MAP_INSERT'); if (mfind(m, k) >= 0) return [false, 'BOOL']; mput(m, k, v); changed(m); return [true, 'BOOL']; },
+  MAP_INCREMENT: function (a) {
+    argc('MAP_INCREMENT', a, 2, 3); var m = mapOf('MAP_INCREMENT', a[0]), k = cconv(m.keyT, a[1], 'MAP_INCREMENT'), x = a.length > 2 ? cconv(m.valT, a[2], 'MAP_INCREMENT') : 1, j = mfind(m, k);
+    var v = (j >= 0 ? m.e[j][1] : 0) + x; mput(m, k, v); changed(m); return [v, m.valT];
+  },
+  MAP_FIRST_KEY: function (a) { argc('MAP_FIRST_KEY', a, 1, 2); var m = mapOf('MAP_FIRST_KEY', a[0]); if (!m.e.length) { if (a.length > 1) return [a[1], m.keyT]; cfail('MAP_FIRST_KEY : la MAP est vide'); } return [m.e[0][0], m.keyT]; },
+  MAP_LAST_KEY: function (a) { argc('MAP_LAST_KEY', a, 1, 2); var m = mapOf('MAP_LAST_KEY', a[0]); if (!m.e.length) { if (a.length > 1) return [a[1], m.keyT]; cfail('MAP_LAST_KEY : la MAP est vide'); } return [m.e[m.e.length - 1][0], m.keyT]; },
+  MAP_FLOOR_KEY: function (a) { argc('MAP_FLOOR_KEY', a, 3, 3); var m = mapOf('MAP_FLOOR_KEY', a[0]), k = cconv(m.keyT, a[1], 'MAP_FLOOR_KEY'), best = null; m.e.forEach(function (p) { if (p[0] <= k) best = p[0]; }); return [best === null ? a[2] : best, m.keyT]; },
+  MAP_CEIL_KEY: function (a) { argc('MAP_CEIL_KEY', a, 3, 3); var m = mapOf('MAP_CEIL_KEY', a[0]), k = cconv(m.keyT, a[1], 'MAP_CEIL_KEY'); for (var i = 0; i < m.e.length; i++) if (m.e[i][0] >= k) return [m.e[i][0], m.keyT]; return [a[2], m.keyT]; },
+  MAP_KEY_OF: function (a) { argc('MAP_KEY_OF', a, 3, 3); var m = mapOf('MAP_KEY_OF', a[0]), v = cconv(m.valT, a[1], 'MAP_KEY_OF'); for (var i = 0; i < m.e.length; i++) if (m.e[i][1] === v) return [m.e[i][0], m.keyT]; return [a[2], m.keyT]; },
+  MAP_REMOVE: function (a) { argc('MAP_REMOVE', a, 2, 2); var m = mapOf('MAP_REMOVE', a[0]), j = mfind(m, cconv(m.keyT, a[1], 'MAP_REMOVE')); if (j < 0) return [false, 'BOOL']; m.e.splice(j, 1); changed(m); return [true, 'BOOL']; },
+  MAP_REMOVE_IF: function (a) { argc('MAP_REMOVE_IF', a, 3, 3); var m = mapOf('MAP_REMOVE_IF', a[0]), op = cmpOf('MAP_REMOVE_IF', a[1]), v = cconv(m.valT, a[2], 'MAP_REMOVE_IF'), n0 = m.e.length; m.e = m.e.filter(function (p) { return !ccmp(op, p[1], v); }); if (m.e.length !== n0) changed(m); return [n0 - m.e.length, 'DINT']; },
+  MAP_CLEAR: function (a) { argc('MAP_CLEAR', a, 1, 1); var m = mapOf('MAP_CLEAR', a[0]); m.e = []; changed(m); return [true, 'BOOL']; },
+  MAP_MERGE: function (a) {
+    argc('MAP_MERGE', a, 2, 3); var m = mapOf('MAP_MERGE', a[0]), o = mapOf('MAP_MERGE', a[1]), rep = a.length > 2 && a[2] === true, n = 0;
+    if (o.t !== m.t) cfail('MAP_MERGE : ' + o.t + " n'est pas un " + m.t);
+    o.e.forEach(function (p) { var j = mfind(m, p[0]); if (j < 0) { mput(m, p[0], p[1]); n++; } else if (rep) m.e[j][1] = p[1]; });
+    changed(m); return [n, 'DINT'];
+  },
+  MAP_KEYS: function (a) { argc('MAP_KEYS', a, 1, 1); var m = mapOf('MAP_KEYS', a[0]); return [cA('ARRAY[0..' + (m.e.length - 1) + '] OF ' + m.keyT, m.keyT, m.e.map(function (p) { return p[0]; }), 0), '']; },
+  MAP_VALUES: function (a) { argc('MAP_VALUES', a, 1, 1); var m = mapOf('MAP_VALUES', a[0]); return [cL('LIST OF ' + m.valT, m.valT, m.e.map(function (p) { return p[1]; })), '']; },
+  MAP_ITEMS: function (a) {
+    argc('MAP_ITEMS', a, 1, 1); var m = mapOf('MAP_ITEMS', a[0]), tt = 'TUPLE(' + m.keyT + ', ' + m.valT + ')';
+    return [cL('LIST OF ' + tt, tt, m.e.map(function (p) { return cT(tt, [m.keyT, m.valT], [p[0], p[1]]); })), ''];
+  },
+  MAP_HAS: function (a) { argc('MAP_HAS', a, 2, 2); var m = mapOf('MAP_HAS', a[0]); return [mfind(m, cconv(m.keyT, a[1], 'MAP_HAS')) >= 0, 'BOOL']; },
+  TUPLE_GET: function (a) { argc('TUPLE_GET', a, 2, 2); var t = tupOf('TUPLE_GET', a[0]), n = intOf('TUPLE_GET', a[1], 'le numéro'); if (n < 1 || n > t.items.length) cfail('TUPLE_GET : ' + t.t + ' a ' + t.items.length + ' champs, pas ' + n); return [t.items[n - 1], t.types[n - 1]]; },
+  TUPLE_SET: function (a) { argc('TUPLE_SET', a, 3, 3); var t = tupOf('TUPLE_SET', a[0]), n = intOf('TUPLE_SET', a[1], 'le numéro'); if (n < 1 || n > t.items.length) cfail('TUPLE_SET : ' + t.t + ' a ' + t.items.length + ' champs, pas ' + n); t.items[n - 1] = cconv(t.types[n - 1], a[2], 'TUPLE_SET'); changed(t); return [true, 'BOOL']; },
+  TUPLE_SIZE: function (a) { argc('TUPLE_SIZE', a, 1, 1); return [tupOf('TUPLE_SIZE', a[0]).items.length, 'DINT']; },
+  TUPLE_TO_STRING: function (a) { argc('TUPLE_TO_STRING', a, 1, 1); return [cshow(tupOf('TUPLE_TO_STRING', a[0])), 'STRING']; },
+  LIST_ADD: function (a) { argc('LIST_ADD', a, 2, 2); var L = seq('LIST_ADD', a[0]); L.items.push(cconv(L.elem, a[1], 'LIST_ADD')); changed(L); return [L.items.length, 'DINT']; },
+  VECTOR_PUSH: function (a) { argc('VECTOR_PUSH', a, 2, 2); var L = seq('VECTOR_PUSH', a[0]); L.items.push(cconv(L.elem, a[1], 'VECTOR_PUSH')); changed(L); return [L.items.length, 'DINT']; },
+  LIST_INSERT: function (a) {
+    argc('LIST_INSERT', a, 3, 3); var L = seq('LIST_INSERT', a[0]), i = intOf('LIST_INSERT', a[1]);
+    if (i < 0 || i > L.items.length) cfail('LIST_INSERT : indice ' + i + ' hors de 0..' + L.items.length);
+    L.items.splice(i, 0, cconv(L.elem, a[2], 'LIST_INSERT')); changed(L); return [L.items.length, 'DINT'];
+  },
+  LIST_INSERT_SORTED: function (a) {
+    argc('LIST_INSERT_SORTED', a, 2, 3); var L = seq('LIST_INSERT_SORTED', a[0]), x = cconv(L.elem, a[1], 'LIST_INSERT_SORTED'), dec = a[2] === true, i = 0;
+    while (i < L.items.length && (dec ? L.items[i] >= x : L.items[i] <= x)) i++;
+    L.items.splice(i, 0, x); changed(L); return [i, 'DINT'];
+  },
+  LIST_POP_FIRST: function (a) { argc('LIST_POP_FIRST', a, 1, 1); var L = seq('LIST_POP_FIRST', a[0]); if (!L.items.length) cfail('LIST_POP_FIRST : la liste est vide'); changed(L); return [L.items.shift(), L.elem]; },
+  VECTOR_POP: function (a) { argc('VECTOR_POP', a, 1, 1); var L = seq('VECTOR_POP', a[0]); if (!L.items.length) cfail('VECTOR_POP : la liste est vide'); changed(L); return [L.items.pop(), L.elem]; },
+  LIST_REMOVE_AT: function (a) { argc('LIST_REMOVE_AT', a, 2, 2); var L = seq('LIST_REMOVE_AT', a[0]), i = intOf('LIST_REMOVE_AT', a[1]); if (i < 0 || i >= L.items.length) return [false, 'BOOL']; L.items.splice(i, 1); changed(L); return [true, 'BOOL']; },
+  LIST_REMOVE: function (a) { argc('LIST_REMOVE', a, 2, 2); var L = seq('LIST_REMOVE', a[0]), x = cconv(L.elem, a[1], 'LIST_REMOVE'), i = L.items.indexOf(x); if (i < 0) return [false, 'BOOL']; L.items.splice(i, 1); changed(L); return [true, 'BOOL']; },
+  LIST_REMOVE_ALL: function (a) { argc('LIST_REMOVE_ALL', a, 2, 2); var L = seq('LIST_REMOVE_ALL', a[0]), x = cconv(L.elem, a[1], 'LIST_REMOVE_ALL'), n0 = L.items.length; L.items = L.items.filter(function (y) { return y !== x; }); if (n0 !== L.items.length) changed(L); return [n0 - L.items.length, 'DINT']; },
+  LIST_REMOVE_IF: function (a) {
+    argc('LIST_REMOVE_IF', a, 3, 4); var L = seq('LIST_REMOVE_IF', a[0]), op = cmpOf('LIST_REMOVE_IF', a[1]), f = proj('LIST_REMOVE_IF', L, a[3]), n0 = L.items.length;
+    L.items = L.items.filter(function (x) { return !ccmp(op, f(x), a[2]); }); if (n0 !== L.items.length) changed(L); return [n0 - L.items.length, 'DINT'];
+  },
+  LIST_DISTINCT: function (a) { argc('LIST_DISTINCT', a, 1, 1); var L = seq('LIST_DISTINCT', a[0]), seen = {}, n0 = L.items.length; L.items = L.items.filter(function (x) { var k = typeof x + ':' + x; if (seen[k]) return false; seen[k] = 1; return true; }); if (n0 !== L.items.length) changed(L); return [n0 - L.items.length, 'DINT']; },
+  LIST_CLEAR: function (a) { argc('LIST_CLEAR', a, 1, 1); var L = seq('LIST_CLEAR', a[0]); L.items = []; changed(L); return [true, 'BOOL']; },
+  LIST_APPEND: function (a) { argc('LIST_APPEND', a, 2, 2); var L = seq('LIST_APPEND', a[0]), o = seq('LIST_APPEND', a[1], true); o.items.forEach(function (x) { L.items.push(cconv(L.elem, x, 'LIST_APPEND')); }); changed(L); return [L.items.length, 'DINT']; },
+  VECTOR_RESIZE: function (a) {
+    argc('VECTOR_RESIZE', a, 2, 3); var L = seq('VECTOR_RESIZE', a[0]), n = intOf('VECTOR_RESIZE', a[1], 'la taille'), x = a.length > 2 ? cconv(L.elem, a[2], 'VECTOR_RESIZE') : (L.elem === 'STRING' ? '' : 0);
+    if (n < 0) cfail('VECTOR_RESIZE : une taille négative'); while (L.items.length > n) L.items.pop(); while (L.items.length < n) L.items.push(x); changed(L); return [n, 'DINT'];
+  },
+  LIST_FILL: function (a) { argc('LIST_FILL', a, 2, 2); var L = seq('LIST_FILL', a[0], true), x = cconv(L.elem, a[1], 'LIST_FILL'); L.items = L.items.map(function () { return cclone(x); }); changed(L); return [L.items.length, 'DINT']; },
+  LIST_CONTAINS: function (a) { argc('LIST_CONTAINS', a, 2, 2); var L = seq('LIST_CONTAINS', a[0], true); return [L.items.indexOf(cconv(L.elem, a[1], 'LIST_CONTAINS')) >= 0, 'BOOL']; },
+  LIST_INDEX_OF: function (a) { argc('LIST_INDEX_OF', a, 2, 2); var L = seq('LIST_INDEX_OF', a[0], true), i = L.items.indexOf(cconv(L.elem, a[1], 'LIST_INDEX_OF')); return [i < 0 ? -1 : i + low(L), 'DINT']; },
+  LIST_LAST_INDEX_OF: function (a) { argc('LIST_LAST_INDEX_OF', a, 2, 2); var L = seq('LIST_LAST_INDEX_OF', a[0], true), i = L.items.lastIndexOf(cconv(L.elem, a[1], 'LIST_LAST_INDEX_OF')); return [i < 0 ? -1 : i + low(L), 'DINT']; },
+  LIST_COUNT_OF: function (a) { argc('LIST_COUNT_OF', a, 2, 2); var L = seq('LIST_COUNT_OF', a[0], true), x = cconv(L.elem, a[1], 'LIST_COUNT_OF'); return [L.items.filter(function (y) { return y === x; }).length, 'DINT']; },
+  LIST_FIND_IF: function (a) { argc('LIST_FIND_IF', a, 3, 4); var L = seq('LIST_FIND_IF', a[0], true), op = cmpOf('LIST_FIND_IF', a[1]), f = proj('LIST_FIND_IF', L, a[3]); for (var i = 0; i < L.items.length; i++) if (ccmp(op, f(L.items[i]), a[2])) return [i + low(L), 'DINT']; return [-1, 'DINT']; },
+  LIST_COUNT_IF: function (a) { argc('LIST_COUNT_IF', a, 3, 4); var L = seq('LIST_COUNT_IF', a[0], true), op = cmpOf('LIST_COUNT_IF', a[1]), f = proj('LIST_COUNT_IF', L, a[3]); return [L.items.filter(function (x) { return ccmp(op, f(x), a[2]); }).length, 'DINT']; },
+  LIST_ALL: function (a) { argc('LIST_ALL', a, 3, 4); var L = seq('LIST_ALL', a[0], true), op = cmpOf('LIST_ALL', a[1]), f = proj('LIST_ALL', L, a[3]); return [L.items.every(function (x) { return ccmp(op, f(x), a[2]); }), 'BOOL']; },
+  LIST_ANY: function (a) { argc('LIST_ANY', a, 3, 4); var L = seq('LIST_ANY', a[0], true), op = cmpOf('LIST_ANY', a[1]), f = proj('LIST_ANY', L, a[3]); return [L.items.some(function (x) { return ccmp(op, f(x), a[2]); }), 'BOOL']; },
+  LIST_NONE: function (a) { argc('LIST_NONE', a, 3, 4); var L = seq('LIST_NONE', a[0], true), op = cmpOf('LIST_NONE', a[1]), f = proj('LIST_NONE', L, a[3]); return [!L.items.some(function (x) { return ccmp(op, f(x), a[2]); }), 'BOOL']; },
+  LIST_MIN: function (a) { argc('LIST_MIN', a, 1, 1); var L = seq('LIST_MIN', a[0], true); if (!L.items.length) cfail('LIST_MIN : la liste est vide'); return [L.items.reduce(function (m, x) { return x < m ? x : m; }), L.elem]; },
+  LIST_MAX: function (a) { argc('LIST_MAX', a, 1, 1); var L = seq('LIST_MAX', a[0], true); if (!L.items.length) cfail('LIST_MAX : la liste est vide'); return [L.items.reduce(function (m, x) { return x > m ? x : m; }), L.elem]; },
+  LIST_MIN_INDEX: function (a) { argc('LIST_MIN_INDEX', a, 1, 2); return [extIndex('LIST_MIN_INDEX', a, -1), 'DINT']; },
+  LIST_MAX_INDEX: function (a) { argc('LIST_MAX_INDEX', a, 1, 2); return [extIndex('LIST_MAX_INDEX', a, 1), 'DINT']; },
+  LIST_SUM: function (a) { argc('LIST_SUM', a, 1, 1); var L = seq('LIST_SUM', a[0], true); return [L.items.reduce(function (s, x) { return s + x; }, 0), L.elem]; },
+  LIST_AVG: function (a) { argc('LIST_AVG', a, 1, 1); var L = seq('LIST_AVG', a[0], true); if (!L.items.length) cfail('LIST_AVG : la liste est vide'); return [L.items.reduce(function (s, x) { return s + x; }, 0) / L.items.length, 'REAL']; },
+  LIST_SORT: function (a) {
+    argc('LIST_SORT', a, 1, 2); var L = seq('LIST_SORT', a[0], true), dec = a[1] === true;
+    if (CSTRUCTS[L.elem]) cfail("LIST_SORT : des " + L.elem + " — LIST_SORT_BY(L, 'Poids') trie par un membre");
+    L.items.sort(function (x, y) { return dec ? mcmp(y, x) : mcmp(x, y); }); changed(L); return [true, 'BOOL'];
+  },
+  LIST_SORT_BY: function (a) {
+    argc('LIST_SORT_BY', a, 2, 3); var L = seq('LIST_SORT_BY', a[0], true), f = proj('LIST_SORT_BY', L, a[1]), dec = a[2] === true;
+    var idx = L.items.map(function (x, i) { return [x, i]; });
+    idx.sort(function (p, q) { var c = dec ? mcmp(f(q[0]), f(p[0])) : mcmp(f(p[0]), f(q[0])); return c || p[1] - q[1]; });
+    L.items = idx.map(function (p) { return p[0]; }); changed(L); return [true, 'BOOL'];
+  },
+  LIST_IS_SORTED: function (a) { argc('LIST_IS_SORTED', a, 1, 2); var L = seq('LIST_IS_SORTED', a[0], true), dec = a[1] === true; for (var i = 1; i < L.items.length; i++) if (dec ? L.items[i] > L.items[i - 1] : L.items[i] < L.items[i - 1]) return [false, 'BOOL']; return [true, 'BOOL']; },
+  LIST_REVERSE: function (a) { argc('LIST_REVERSE', a, 1, 1); var L = seq('LIST_REVERSE', a[0], true); L.items.reverse(); changed(L); return [true, 'BOOL']; },
+  LIST_SWAP: function (a) {
+    argc('LIST_SWAP', a, 3, 3); var L = seq('LIST_SWAP', a[0], true), i = intOf('LIST_SWAP', a[1]) - low(L), j = intOf('LIST_SWAP', a[2]) - low(L);
+    if (i < 0 || j < 0 || i >= L.items.length || j >= L.items.length) return [false, 'BOOL'];
+    var t = L.items[i]; L.items[i] = L.items[j]; L.items[j] = t; changed(L); return [true, 'BOOL'];
+  },
+  LIST_MOVE: function (a) {
+    argc('LIST_MOVE', a, 3, 3); var L = seq('LIST_MOVE', a[0], true), i = intOf('LIST_MOVE', a[1]) - low(L), j = intOf('LIST_MOVE', a[2]) - low(L);
+    if (i < 0 || j < 0 || i >= L.items.length || j >= L.items.length) return [false, 'BOOL'];
+    var x = L.items.splice(i, 1)[0]; L.items.splice(j, 0, x); changed(L); return [true, 'BOOL'];
+  },
+  LIST_ROTATE: function (a) {
+    argc('LIST_ROTATE', a, 2, 2); var L = seq('LIST_ROTATE', a[0], true), n = intOf('LIST_ROTATE', a[1], 'le nombre de places'), c = L.items.length;
+    if (!c) return [true, 'BOOL']; n = ((n % c) + c) % c; L.items = L.items.slice(n).concat(L.items.slice(0, n)); changed(L); return [true, 'BOOL'];
+  },
+  LIST_SLICE: function (a) {
+    argc('LIST_SLICE', a, 3, 3); var L = seq('LIST_SLICE', a[0], true), d = intOf('LIST_SLICE', a[1], 'le début') - low(L), n = intOf('LIST_SLICE', a[2], 'le nombre');
+    var part = n <= 0 ? [] : L.items.slice(Math.max(0, d), Math.max(0, d + n)); return [cL('LIST OF ' + L.elem, L.elem, part.map(cclone)), ''];
+  },
+  LIST_CONCAT: function (a) { argc('LIST_CONCAT', a, 2, 2); var A = seq('LIST_CONCAT', a[0], true), B = seq('LIST_CONCAT', a[1], true); if (A.elem !== B.elem) cfail('LIST_CONCAT : des ' + B.elem + ' ne vont pas après des ' + A.elem); return [cL('LIST OF ' + A.elem, A.elem, A.items.concat(B.items).map(cclone)), '']; },
+  LIST_COPY: function (a) {
+    argc('LIST_COPY', a, 2, 2); var S = seq('LIST_COPY', a[0], true), D = seq('LIST_COPY', a[1], true), n = Math.min(S.items.length, D.items.length);
+    for (var i = 0; i < n; i++) D.items[i] = cconv(D.elem, S.items[i], 'LIST_COPY'); changed(D); return [n, 'DINT'];
+  },
+  TO_LIST: function (a) { argc('TO_LIST', a, 1, 1); var L = seq('TO_LIST', a[0], true); return [cL('LIST OF ' + L.elem, L.elem, L.items.map(cclone)), '']; },
+  JOIN: function (a) { argc('JOIN', a, 1, 2); var L = seq('JOIN', a[0], true), sep = a.length > 1 ? a[1] : ', '; return [L.items.map(function (x) { return typeof x === 'string' ? x : cshow(x, L.elem); }).join(sep), 'STRING']; }
+};
+function extIndex(fn, a, sign) {
+  var L = seq(fn, a[0], true), f = a.length > 1 ? proj(fn, L, a[1]) : proj(fn, L, undefined), best = -1;
+  L.items.forEach(function (x, i) { if (best < 0 || mcmp(f(x), f(L.items[best])) * sign > 0) best = i; });
+  return best < 0 ? -1 : best + low(L);
+}
+// TUPLE_UNPACK écrit des variables : il reçoit les places, pas les valeurs.
+function unpack(n) {
+  if (n.args.length < 1) cfail('mauvais nombre d\'arguments : ' + CT.TUPLE_UNPACK.sig);
+  var t = tupOf('TUPLE_UNPACK', cval(n.args[0])), dst = n.args.slice(1);
+  if (dst.length !== t.items.length) cfail('TUPLE_UNPACK : ' + t.t + ' a ' + t.items.length + ' champs, ' + dst.length + (dst.length > 1 ? ' variables données' : ' variable donnée'));
+  var places = dst.map(function (d, i) { var p = cplace(d); if (!p) cfail('TUPLE_UNPACK : une variable est attendue en ' + (i + 2) + 'e argument'); return p; });
+  places.forEach(function (p, i) { if (String(p.t).toUpperCase() !== String(t.types[i]).toUpperCase()) cfail('TUPLE_UNPACK : le champ ' + (i + 1) + ' est un ' + t.types[i] + ', ' + (dst[i].n || 'la variable') + ' un ' + p.t); });
+  places.forEach(function (p, i) { p.set(t.items[i]); });
+  return [true, 'BOOL'];
+}
+function ccall(n) {
+  if (n.n === 'TUPLE_UNPACK') return unpack(n);
+  var f = IMPL[n.n];
+  if (!f) {
+    if (CT[n.n]) cfail(n.n + " : pas d'essai pour cette fonction dans la maquette");
+    cfail(n.n + ' : fonction inconnue' + closest(n.n, Object.keys(IMPL).concat(['TUPLE_UNPACK'])));
+  }
+  return f(n.args.map(cval));
+}
+function crun(src) {
+  cChanged = {};
+  var out = $('#cout');
+  try {
+    var ast = cparse(src), msg;
+    if (ast.t === 'set') {
+      var pl = cplace(ast.lhs);
+      if (!pl) cfail('à gauche de := : une variable, une case, une clé ou un champ');
+      pl.set(cval(ast.rhs));
+      msg = '<span class="ok">écrit</span>';
+    } else if (ast.t === 'call') {
+      var r = ccall(ast);
+      msg = '→ <b>' + esc(cshow(r[0], r[1])) + '</b>' + (r[1] && !/^LIST OF|^ARRAY/.test(r[1]) ? ' <span class="small">' + esc(r[1]) + '</span>' : '');
+    } else {
+      var pl2 = cplace(ast), v = pl2.get(), t = pl2.t;
+      msg = '→ <b>' + esc(cshow(v, t)) + '</b>' + (t ? ' <span class="small">' + esc(t) + '</span>' : '');
+    }
+    var ch = Object.keys(cChanged);
+    out.className = 'res';
+    out.innerHTML = '<code>' + esc(src.trim()) + '</code> ' + msg + (ch.length ? '<span class="why">' + esc(ch.join(', ')) + (ch.length > 1 ? ' ont changé' : ' a changé') + ' : surlignée' + (ch.length > 1 ? 's' : '') + ' dans les variables.</span>' : '');
+  } catch (e) {
+    if (!e || !e.cmsg) throw e;
+    out.className = 'res bad';
+    out.innerHTML = '<code>' + esc(src.trim()) + '</code><span class="why err">Erreur : ' + esc(e.cmsg) + '</span>';
+  }
+  renderCvars();
+}
+// ------------------------------------------------------------------------------- l'affichage
+function cstatus(id) {
+  var cols = {};
+  CROWS.forEach(function (r) { CCOLS.forEach(function (c) { (r[c[0]] || []).forEach(function (x) { if (x[0] === id) cols[c[0]] = (cols[c[0]] || '') + x[1]; }); }); });
+  var e = CT[id], news = Object.keys(cols).filter(function (k) { return /n/.test(cols[k]); }), name = {A: 'un ARRAY', L: 'LIST et VECTOR', M: 'une MAP', T: 'un TUPLE'};
+  if (!e.old) return '<span class="cb n">Nouveau</span>';
+  if (!news.length) return '<span class="cb e">Existe</span>';
+  return '<span class="cb e">Existe</span><span class="cb n">Nouveau pour ' + news.map(function (k) { return name[k]; }).join(', ') + '</span>';
+}
+function renderCmx() {
+  var h = '<thead><tr><th scope="col">Pour…</th>' + CCOLS.map(function (c) { return '<th scope="col">' + c[1] + '</th>'; }).join('') + '</tr></thead><tbody>';
+  CROWS.forEach(function (r) {
+    if (r.g) { h += '<tr class="cg"><td colspan="5">' + esc(r.g) + '</td></tr>'; return; }
+    h += '<tr><th scope="row">' + esc(r.l) + '</th>' + CCOLS.map(function (c) {
+      var xs = r[c[0]] || [];
+      return '<td>' + (xs.length ? xs.map(function (x) {
+        return '<button type="button" class="cx ' + x[1] + (x[0] === cSel ? ' on' : '') + '" data-cid="' + esc(x[0]) + '" title="' + (x[1] === 'n' ? 'Nouveau' : 'Existe') + '">' + esc(x[2]) + '</button>';
+      }).join('') : '<span class="cna">—</span>') + '</td>';
+    }).join('') + '</tr>';
+  });
+  $('#cmx').innerHTML = h + '</tbody>';
+}
+function renderCcard() {
+  var e = CT[cSel];
+  var code = {st: e.ex, c: e.c, cpp: e.cc}[cLang] || '';
+  var avail = {st: 'exécuté en simulation · rejoué par l\'essai natives', c: e.kind === 'syn' ? 'son équivalent en C' : /^MAP_/.test(e.id) ? 'le C n\'a pas de MAP' : /^TUPLE_/.test(e.id) ? 'le C : un struct' : 'le C n\'a pas de liste : un tableau et un compteur', cpp: 'la bibliothèque standard du C++'}[cLang];
+  var h = '<h4>' + esc(e.sig) + '</h4><div class="nc-sub">' + cstatus(e.id) + (e.ret ? ' <span>→ ' + esc(e.ret) + '</span>' : '') + ' <span>· ' + (e.kind === 'syn' ? 'une écriture du langage' : 'une native') + '</span></div>' +
+    '<p style="margin:0 0 8px;font-size:13px">' + esc(e.sum) + '</p>' + (e.note ? '<p class="cnote"><b>Trouvé en passant.</b> ' + esc(e.note) + '</p>' : '') +
+    (e.p ? '<table class="pt"><thead><tr><th>Paramètre</th><th>Type</th><th>Rôle</th></tr></thead><tbody>' + e.p.map(function (p) { return '<tr><td>' + esc(p[0]) + '</td><td>' + esc(p[1]) + '</td><td>' + esc(p[2]) + '</td></tr>'; }).join('') + '</tbody></table>' : '') +
+    '<div class="lt" role="tablist">' + [['st', 'ST'], ['c', 'C'], ['cpp', 'C++']].map(function (l) { return '<button type="button" role="tab" data-clang="' + l[0] + '"' + (cLang === l[0] ? ' class="on"' : '') + '>' + l[1] + '</button>'; }).join('') +
+    '<span class="avail">' + esc(avail) + '</span></div><pre class="ex">' + esc(code) + '</pre>' +
+    (e.tries && e.tries.length ? '<div class="ctries"><span class="small">Essayer :</span>' + e.tries.map(function (t) { return '<button type="button" class="chip" data-ctry="' + esc(t) + '">' + esc(t) + '</button>'; }).join('') + '</div>' : '<p class="small">Une instruction : elle s\'essaie dans un script.</p>');
+  $('#ccard').innerHTML = h;
+}
+function renderCvars() {
+  $('#cvars').innerHTML = Object.keys(CV).map(function (k) {
+    var v = CV[k];
+    return '<div class="cvr' + (cChanged[k] ? ' chg' : '') + '"><span class="vn">' + k + '</span><span class="vt">' + esc(v.t) + '</span><code class="vv">' + esc(cshow(v, v.t, 120)) + '</code></div>';
+  }).join('');
+}
+function cpick(id) { cSel = id; renderCmx(); renderCcard(); var e = CT[id]; if (e.tries && e.tries[0]) $('#cin').value = e.tries[0]; }
+(function () {
+  var news = Object.keys(CT).filter(function (id) { return CT[id].kind === 'fn' && !CT[id].old; }).length;
+  var ext = Object.keys(CT).filter(function (id) { return CT[id].old && /Nouveau pour/.test(cstatus(id)); }).length;
+  $$('.cnews').forEach(function (x) { x.textContent = news; });
+  $$('.cexts').forEach(function (x) { x.textContent = ext; });
+  $('#cmx').addEventListener('click', function (e) { var b = e.target.closest('[data-cid]'); if (b) cpick(b.getAttribute('data-cid')); });
+  $('#ccard').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-clang]'); if (b) { cLang = b.getAttribute('data-clang'); renderCcard(); return; }
+    b = e.target.closest('[data-ctry]'); if (b) { $('#cin').value = b.getAttribute('data-ctry'); crun($('#cin').value); }
+  });
+  $('#cgo').addEventListener('click', function () { crun($('#cin').value); });
+  $('#cin').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); crun($('#cin').value); } });
+  $('#creset').addEventListener('click', function () { CV = cvarsInit(); cChanged = {}; renderCvars(); $('#cout').className = 'res'; $('#cout').innerHTML = '<span class="small">Les variables ont repris leur valeur de départ.</span>'; });
+  renderCmx(); renderCcard(); renderCvars();
+  $('#cin').value = CT[cSel].tries[0];
+  $('#cout').innerHTML = '<span class="small">Un clic sur une fonction du tableau, puis « Essayer » ; ou tapez un appel et <kbd>Entrée</kbd>.</span>';
+})();
+
+// ================================================================ d'autres types ? (v3)
+var NTYPES = [
+  {name: 'SET OF T', cpp: 'std::set<T>', v: 'oui', decl: "Postes_Actifs : SET OF STRING := ['P1', 'P3'];",
+    what: "Un ensemble : chaque valeur une seule fois, rangée dans l'ordre. Ajouter une valeur déjà là ne fait rien.",
+    use: "Les postes choisis, les alarmes actives, les codes défaut déjà vus ; ce qu'ont deux choix en commun.",
+    fns: 'SET_ADD (TRUE si elle est nouvelle), SET_REMOVE, SET_HAS ; SET_UNION, SET_INTERSECTION, SET_DIFFERENCE ; .Count, FOR EACH',
+    why: "Aujourd'hui, une LIST et LIST_CONTAINS avant chaque LIST_ADD : on l'oublie une fois, et le doublon s'affiche. Le SET le garantit."},
+  {name: 'RING[N] OF T', cpp: "pas dans la bibliothèque standard : std::deque<T> qu'on borne, ou boost::circular_buffer<T>", v: 'oui', decl: 'Dernieres : RING[100] OF REAL;',
+    what: "Un tampon circulaire : les N dernières valeurs. Plein, il fait partir la plus ancienne quand on en ajoute une.",
+    use: "Les 100 dernières mesures d'une courbe, une moyenne glissante (LIST_AVG), les 20 derniers événements d'un équipement.",
+    fns: 'RING_ADD (ou LIST_ADD), .Count, .Capacity, .Full ; LIST_AVG, LIST_MIN, LIST_MAX, FOR EACH (de la plus ancienne à la plus récente)',
+    why: "Aujourd'hui, LIST_ADD puis LIST_REMOVE_AT(L, 0) dès que L.Count dépasse N, à la main, dans chaque script : c'est le type le plus utile à une IHM."},
+  {name: 'OPTIONAL OF T', cpp: 'std::optional<T>', v: 'tard', decl: 'Derniere_Pesee : OPTIONAL OF REAL;',
+    what: "Une valeur, ou rien. x.HasValue dit s'il y en a une ; x ?? 0.0 donne la valeur, ou 0.0 sinon (l'opérateur ?? existe déjà).",
+    use: "Une mesure pas encore lue, une recherche qui ne trouve rien (au lieu de −1), un réglage pas encore saisi.",
+    fns: 'x.HasValue, x.Value, x ?? défaut, RESET(x)',
+    why: "Utile, mais il touche tout : l'affichage des objets, les équipements, la rémanence. Après SET et RING."},
+  {name: 'BITSET[N]', cpp: 'std::bitset<N>', v: 'autre', decl: 'Defauts : WORD;   (* plutôt que BITSET[16] *)',
+    what: "N bits rangés par numéro, avec leurs opérations : compter, tester, mettre à 1, à 0.",
+    use: "Les mots d'alarme et d'état des équipements : un WORD, seize défauts.",
+    fns: "Plutôt la bibliothèque <bit> du C++20 sur les WORD et DWORD : BIT_COUNT (std::popcount : combien de défauts), BIT_FIRST (std::countr_zero : le premier), BIT_TEST, BIT_SET, BIT_RESET",
+    why: "Les WORD et DWORD existent et vont aux équipements tels quels : leur donner les fonctions de <bit> sert plus qu'un type de plus. Essayez-le ci-dessous."},
+  {name: 'QUEUE, STACK, DEQUE', cpp: 'std::queue, std::stack, std::deque', v: 'non', decl: "File : LIST OF STRING;   (* LIST_ADD, LIST_POP_FIRST *)",
+    what: "Une file (le premier entré sort le premier), une pile (le dernier entré sort le premier), les deux bouts à la fois.",
+    use: "Une file de commandes à envoyer, un historique de navigation, annuler et rétablir.",
+    fns: 'Une LIST : LIST_ADD et LIST_POP_FIRST font une file ; LIST_ADD et VECTOR_POP une pile',
+    why: "Une LIST le fait déjà, avec LIST_POP_FIRST (nouvelle) : un type de plus n'apporterait qu'un nom."},
+  {name: 'PRIORITY_QUEUE OF T', cpp: 'std::priority_queue<T>', v: 'non', decl: 'A_Traiter : LIST OF T_Ordre;   (* LIST_INSERT_SORTED *)',
+    what: 'Une file où sort d\'abord la plus prioritaire.', use: 'Des ordres à traiter par urgence.',
+    fns: 'LIST_INSERT_SORTED garde la liste rangée : la première est la plus prioritaire',
+    why: "LIST_INSERT_SORTED suffit, et la liste reste lisible en entier (une priority_queue ne montre que son sommet)."},
+  {name: 'PAIR(K, V)', cpp: 'std::pair<K, V>', v: 'non', decl: "Mesure : TUPLE(STRING, REAL);",
+    what: 'Deux valeurs ensemble : .First, .Second.', use: 'Une clé et sa valeur.', fns: 'TUPLE à deux champs : Item1, Item2',
+    why: "C'est un TUPLE à deux champs ; MAP_ITEMS rend déjà des TUPLE(clé, valeur)."},
+  {name: 'MULTIMAP, MULTISET', cpp: 'std::multimap, std::multiset', v: 'non', decl: 'Mesures_Par_Poste : MAP[STRING] OF LIST OF REAL;',
+    what: 'Plusieurs valeurs pour une même clé.', use: 'Toutes les mesures de chaque poste.', fns: 'Une MAP de LIST',
+    why: 'Une MAP de LIST fait la même chose, et se déplie mieux dans les onglets (une clé, puis ses valeurs).'},
+  {name: 'VARIANT(A, B)', cpp: 'std::variant<A, B>', v: 'non', decl: '—',
+    what: "Une valeur d'un type parmi plusieurs, qui change à l'exécution.", use: 'Un paramètre qui serait tantôt un nombre, tantôt un texte.', fns: '—',
+    why: "Difficile à afficher, à lier à un équipement, à vérifier dans Compiler. ANY suffit pour les paramètres de popup et de symbole."},
+  {name: 'UNORDERED_MAP, UNORDERED_SET', cpp: 'std::unordered_map, std::unordered_set', v: 'non', decl: '—',
+    what: 'Une MAP, un SET sans ordre, plus rapides sur des milliers de clés.', use: 'De très grosses tables.', fns: '—',
+    why: "Une IHM affiche ses listes rangées et compte rarement plus de quelques centaines de clés : MAP et SET suffisent."}
+];
+var VERDICT = {oui: ['oui', 'Proposé'], tard: ['tard', 'Plus tard'], autre: ['autre', 'Autrement'], non: ['non', 'Pas utile']};
+function renderTypesNew() {
+  $('#tgrid').innerHTML = NTYPES.map(function (t) {
+    var v = VERDICT[t.v];
+    return '<div class="tcard"><div class="tc-head"><h4>' + esc(t.name) + '</h4><span class="vd ' + v[0] + '">' + v[1] + '</span></div>' +
+      '<p>' + esc(t.what) + '</p><dl><dt>Pour</dt><dd>' + esc(t.use) + '</dd><dt>En ST</dt><dd><code>' + esc(t.decl) + '</code></dd><dt>Ses fonctions</dt><dd>' + esc(t.fns) + '</dd>' +
+      '<dt>En C++</dt><dd><code>' + esc(t.cpp) + '</code></dd></dl><p class="tc-why">' + esc(t.why) + '</p></div>';
+  }).join('');
+}
+// Les trois essais : un SET, un RING, les bits d'un WORD.
+var TD = {now: 'set', set: ['P1', 'P3'], other: ['P2', 'P3', 'P4'], ring: [], ringN: 5, ringSeq: [12.0, 12.4, 13.1, 12.8, 13.5, 14.2, 13.9, 14.6], ringAt: 0, word: 0x0012, msg: ''};
+function renderTdemo() {
+  var h = '<div class="subtabs" role="tablist" style="padding:0 12px">' + [['set', 'SET'], ['ring', 'RING'], ['word', 'Les bits d\'un WORD']].map(function (x) {
+    return '<button type="button" role="tab" data-td="' + x[0] + '"' + (TD.now === x[0] ? ' class="on"' : '') + '>' + x[1] + '</button>';
+  }).join('') + '</div><div class="tdbody">';
+  if (TD.now === 'set') {
+    h += '<p class="small">Postes_Actifs : SET OF STRING. Ajoutez un poste, deux fois le même : il n\'y est qu\'une fois, et l\'ensemble reste rangé.</p>' +
+      '<div class="crun"><input class="inp" id="tdin" value="P2" aria-label="Le poste à ajouter" style="flex:0 0 120px"><button class="btn primary" type="button" data-tda="add">SET_ADD</button><button class="btn" type="button" data-tda="rm">SET_REMOVE</button></div>' +
+      '<div class="tdrow"><span class="vn">Postes_Actifs</span><code>[' + TD.set.map(function (x) { return "'" + x + "'"; }).join(', ') + ']</code><span class="small">.Count = ' + TD.set.length + '</span></div>' +
+      '<div class="tdrow"><span class="vn">Autre_Choix</span><code>[' + TD.other.map(function (x) { return "'" + x + "'"; }).join(', ') + ']</code></div>' +
+      '<div class="crun"><button class="btn" type="button" data-tda="u">SET_UNION</button><button class="btn" type="button" data-tda="i">SET_INTERSECTION</button><button class="btn" type="button" data-tda="d">SET_DIFFERENCE</button></div>';
+  } else if (TD.now === 'ring') {
+    var avg = TD.ring.length ? TD.ring.reduce(function (s, x) { return s + x; }, 0) / TD.ring.length : 0;
+    h += '<p class="small">Dernieres : RING[5] OF REAL. Chaque clic ajoute une mesure ; plein, il fait partir la plus ancienne.</p>' +
+      '<div class="crun"><button class="btn primary" type="button" data-tda="push">RING_ADD(Dernieres, ' + real(TD.ringSeq[TD.ringAt % TD.ringSeq.length]) + ')</button><button class="btn" type="button" data-tda="rclear">Vider</button></div>' +
+      '<div class="ring">' + Array.apply(null, Array(TD.ringN)).map(function (_, i) { var x = TD.ring[i]; return '<span class="rc' + (x === undefined ? ' empty' : '') + (i === TD.ring.length - 1 ? ' last' : '') + '">' + (x === undefined ? '·' : real(x)) + '</span>'; }).join('') + '</div>' +
+      '<div class="tdrow"><span class="small">.Count = ' + TD.ring.length + ' · .Capacity = ' + TD.ringN + ' · .Full = ' + (TD.ring.length === TD.ringN ? 'TRUE' : 'FALSE') + ' · LIST_AVG(Dernieres) = ' + (TD.ring.length ? real(Math.round(avg * 100) / 100) : '—') + '</span></div>';
+  } else {
+    var w = TD.word, n = 0, first = -1;
+    for (var b = 0; b < 16; b++) if (w & (1 << b)) { n++; if (first < 0) first = b; }
+    h += '<p class="small">Defauts : WORD, lu d\'un équipement. Un clic change un bit ; les fonctions de &lt;bit&gt; le lisent.</p><div class="bits">';
+    for (var k = 15; k >= 0; k--) h += '<button type="button" class="bit' + (w & (1 << k) ? ' on' : '') + '" data-bit="' + k + '" aria-pressed="' + !!(w & (1 << k)) + '" aria-label="bit ' + k + '"><span>' + k + '</span>' + (w & (1 << k) ? 1 : 0) + '</button>';
+    h += '</div><div class="tdrow"><code>Defauts = 16#' + ('000' + w.toString(16).toUpperCase()).slice(-4) + '</code></div>' +
+      '<table class="pt" style="max-width:640px"><thead><tr><th>ST (proposé)</th><th>Valeur</th><th>C++20</th></tr></thead><tbody>' +
+      '<tr><td>BIT_COUNT(Defauts)</td><td class="m">' + n + '</td><td class="m">std::popcount(defauts)</td></tr>' +
+      '<tr><td>BIT_FIRST(Defauts)</td><td class="m">' + first + '</td><td class="m">std::countr_zero(defauts)   // 16 si aucun ; l\'IHM : −1</td></tr>' +
+      '<tr><td>BIT_TEST(Defauts, 4)</td><td class="m">' + ((w & 16) ? 'TRUE' : 'FALSE') + '</td><td class="m">(defauts &gt;&gt; 4) &amp; 1</td></tr>' +
+      '<tr><td>BIT_SET(Defauts, 0)</td><td class="m">16#' + ('000' + (w | 1).toString(16).toUpperCase()).slice(-4) + '</td><td class="m">defauts | (1u &lt;&lt; 0)</td></tr></tbody></table>';
+  }
+  h += (TD.msg ? '<div class="res" id="tdmsg">' + TD.msg + '</div>' : '') + '</div>';
+  $('#tdemo').innerHTML = h;
+}
+function sortedSet(xs) { var o = []; xs.forEach(function (x) { if (o.indexOf(x) < 0) o.push(x); }); return o.sort(); }
+$('#tdemo').addEventListener('click', function (e) {
+  var b = e.target.closest('[data-td]');
+  if (b) { TD.now = b.getAttribute('data-td'); TD.msg = ''; renderTdemo(); return; }
+  b = e.target.closest('[data-bit]');
+  if (b) { TD.word ^= 1 << +b.getAttribute('data-bit'); TD.msg = ''; renderTdemo(); return; }
+  b = e.target.closest('[data-tda]'); if (!b) return;
+  var a = b.getAttribute('data-tda'), inp = $('#tdin'), x = inp ? inp.value.trim().toUpperCase() : '';
+  if (a === 'add') { var nw = TD.set.indexOf(x) < 0 && x !== ''; if (nw) TD.set = sortedSet(TD.set.concat([x])); TD.msg = "SET_ADD(Postes_Actifs, '" + esc(x) + "') → <b>" + (nw ? 'TRUE' : 'FALSE') + '</b>' + (nw ? '' : '<span class="why">déjà là : rien ne change</span>'); }
+  else if (a === 'rm') { var was = TD.set.indexOf(x) >= 0; TD.set = TD.set.filter(function (y) { return y !== x; }); TD.msg = "SET_REMOVE(Postes_Actifs, '" + esc(x) + "') → <b>" + (was ? 'TRUE' : 'FALSE') + '</b>'; }
+  else if (a === 'u' || a === 'i' || a === 'd') {
+    var r = a === 'u' ? sortedSet(TD.set.concat(TD.other)) : TD.set.filter(function (y) { return a === 'i' ? TD.other.indexOf(y) >= 0 : TD.other.indexOf(y) < 0; });
+    TD.msg = {u: 'SET_UNION', i: 'SET_INTERSECTION', d: 'SET_DIFFERENCE'}[a] + '(Postes_Actifs, Autre_Choix) → <b>[' + r.map(function (y) { return "'" + esc(y) + "'"; }).join(', ') + ']</b>' +
+      '<span class="why">std::set_' + {u: 'union', i: 'intersection', d: 'difference'}[a] + ' en C++</span>';
+  } else if (a === 'push') {
+    var v = TD.ringSeq[TD.ringAt++ % TD.ringSeq.length], out = null;
+    TD.ring.push(v); if (TD.ring.length > TD.ringN) out = TD.ring.shift();
+    TD.msg = 'RING_ADD(Dernieres, ' + real(v) + ')' + (out !== null ? '<span class="why">plein : ' + real(out) + ', la plus ancienne, est partie</span>' : '');
+  } else if (a === 'rclear') { TD.ring = []; TD.msg = ''; }
+  renderTdemo();
+});
+renderTypesNew(); renderTdemo();
 
 // ========================================================= le sommaire, le départ
 var links = $$('.toc a'), secs = links.map(function (a) { return $(a.getAttribute('href')); });
