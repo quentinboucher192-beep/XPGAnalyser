@@ -1,4 +1,5 @@
 #include "HmiSignature.hpp"
+#include "HmiRoles.hpp"   // 1.12.6 (lot C) : le decoupeur unique des listes
 
 #include <algorithm>
 #include <cctype>
@@ -21,14 +22,10 @@ bool in(const Box& b, double x, double y) { return b.w > 0 && b.h > 0 && b.conta
 
 std::vector<std::string> signatureReasons(const Object& o) {
     std::vector<std::string> out;
-    const std::string list = o.text("signatureReasons");
-    std::size_t from = 0;
-    while (from <= list.size()) {
-        const auto at = list.find(';', from);
-        std::string item = trimmed(std::string_view(list).substr(from, at == std::string::npos ? std::string::npos : at - from));
+    // 1.12.6 (lot C) : le decoupeur unique ; chaque motif sans les $ de ses reperes (un texte montre).
+    for (auto& raw : roles::splitList(o.text("signatureReasons"))) {
+        std::string item = roles::nameOf(raw);
         if (!item.empty() && std::find(out.begin(), out.end(), item) == out.end()) out.push_back(std::move(item));
-        if (at == std::string::npos) break;
-        from = at + 1;
     }
     return out;
 }

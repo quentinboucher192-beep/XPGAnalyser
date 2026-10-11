@@ -1,4 +1,5 @@
 #include "HmiAlarmViews.hpp"
+#include "HmiRoles.hpp"   // 1.12.6 (lot C) : le decoupeur unique des listes
 #include "HmiMarkers.hpp"   // 1.12.5 : les zones sans les $ de leurs reperes
 #include "HmiAlarmGroups.hpp"   // 1.10.2 (AL) : la zone d'un groupe d'alarmes
 #include "HmiObjectAlarms.hpp"
@@ -186,8 +187,9 @@ std::vector<std::string> zonesOf(const Project& p, std::string_view groups) {
     std::vector<std::string> out;
     // 1.12.5 (lot A) : sans les $ de leurs reperes ($Zone_A$ : Zone_A) - le dessin, le clic,
     // le survol et Generer lisent les memes zones (avant : seul le clic... et pas meme lui).
-    for (const auto& g : splitSemicolons(markers::strip(groups, markers::Mode::Text))) {
-        const std::string t = trimmed(g);
+    // 1.12.6 (lot C) : coupees d'abord (un repere $A;B$ reste entier), puis chaque nom sans ses $.
+    for (const auto& g : roles::splitList(groups)) {
+        const std::string t = roles::nameOf(g);
         if (!t.empty() && std::find(out.begin(), out.end(), t) == out.end()) out.push_back(t);
     }
     if (!out.empty()) return out;

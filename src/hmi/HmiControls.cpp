@@ -1,4 +1,5 @@
 #include "HmiControls.hpp"
+#include "HmiRoles.hpp"   // 1.12.6 (lot C) : le decoupeur unique des listes
 #include "HmiMarkers.hpp"   // 1.12.5 : la source sans ses reperes
 
 #include <algorithm>
@@ -56,7 +57,7 @@ double fontSizeOf(const Object& o, double fallback) { return std::clamp(o.number
 // ================================================================== listes ===
 std::vector<std::string> listItems(std::string_view text) {
     std::vector<std::string> out;
-    for (auto& s : splitKeep(text, ';')) if (!s.empty()) out.push_back(std::move(s));
+    for (auto& s : roles::splitList(text, ';')) if (!s.empty()) out.push_back(std::move(s));   // 1.12.6 (lot C) : le decoupeur unique
     return out;
 }
 
@@ -122,7 +123,7 @@ std::vector<Choice> choicesOf(const Object& o) {
     }
     const auto labels = listItems(o.text(o.kind == Kind::Selector ? "positions" : "items"));
     const std::string rawValues = o.text("values");
-    const auto values = rawValues.empty() ? std::vector<std::string>{} : splitKeep(rawValues, ';');
+    const auto values = rawValues.empty() ? std::vector<std::string>{} : roles::splitList(rawValues, ';');   // 1.12.6 (lot C)
     std::vector<Choice> out;
     for (std::size_t i = 0; i < labels.size(); ++i) {
         Choice c;

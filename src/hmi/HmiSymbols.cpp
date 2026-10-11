@@ -2,6 +2,7 @@
 //  hmi/HmiSymbols.cpp - voir HmiSymbols.hpp
 // =============================================================================
 #include "HmiSymbols.hpp"
+#include "HmiRoles.hpp"   // 1.12.6 (lot C) : le decoupeur unique des listes
 #include "HmiDecl.hpp"   // 1.11.18 (refonte, lot 3) : les declarations du modele, reconstruites
 #include "HmiLiveGeometry.hpp"   // 1.11.4 : la geometrie en marche (les notes de l'expansion)
 #include "HmiMarkers.hpp"        // 1.11.4 : un repere dans une constante texte ('$Nom$')
@@ -925,18 +926,16 @@ void rewriteNames(Object& o, const std::function<std::string(std::string_view, b
             expr(p.value);
         } else if (p.key == "variables" || p.key == "references"
                    || p.key == "values") {   // les plumes d'une courbe, les elements d'un graphique : a;b;c ; 1.12.5 : les valeurs ecrites d'un selecteur
+            // 1.12.6 (lot C) : le decoupeur unique, morceaux tels qu'ecrits (une plume M['a;b'] reste entiere).
             std::string rebuilt;
-            std::size_t from = 0;
             bool changed = false;
-            while (from <= p.value.size()) {
-                const auto at = p.value.find(';', from);
-                const std::string pen = p.value.substr(from, at == std::string::npos ? std::string::npos : at - from);
+            bool first = true;
+            for (const auto& pen : roles::splitListRaw(p.value)) {
                 std::string next = pen;
                 expr(next);
                 changed = changed || next != pen;
-                rebuilt += (from ? ";" : "") + next;
-                if (at == std::string::npos) break;
-                from = at + 1;
+                rebuilt += (first ? "" : ";") + next;
+                first = false;
             }
             if (changed) p.value = rebuilt;
         } else if (p.key == "states" && o.kind == Kind::AnimatedImage && !p.value.empty()) {

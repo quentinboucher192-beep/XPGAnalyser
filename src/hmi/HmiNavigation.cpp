@@ -1,4 +1,5 @@
 #include "HmiNavigation.hpp"
+#include "HmiRoles.hpp"   // 1.12.6 (lot C) : le decoupeur unique des listes
 
 #include "HmiControls.hpp"
 #include "HmiWidgets.hpp"   // 1.12.5 : splitSemicolons
@@ -18,23 +19,10 @@ namespace hmi {
 namespace {
 
 // "a;;b" -> {"a", "", "b"} : les vides gardent leur rang (des libelles).
+// 1.12.6 (lot C) : le decoupeur unique (HmiRoles) - un repere $A;B$, une chaine 'a;b' restent entiers.
 std::vector<std::string> splitKeepEmpty(std::string_view text, char sep) {
-    std::vector<std::string> out;
-    std::string cur;
-    for (char ch : text) {
-        if (ch == sep) {
-            out.push_back(cur);
-            cur.clear();
-        } else {
-            cur += ch;
-        }
-    }
-    out.push_back(cur);
-    for (auto& s : out) {
-        const auto a = s.find_first_not_of(" \t\r\n");
-        const auto b = s.find_last_not_of(" \t\r\n");
-        s = a == std::string::npos ? std::string{} : s.substr(a, b - a + 1);
-    }
+    auto out = roles::splitList(text, sep);
+    if (out.empty()) out.emplace_back();
     return out;
 }
 

@@ -215,12 +215,23 @@ Read adapt(const KeyRole& r, const sim::Value& v, const Shape& shape) {
 std::vector<std::string> splitList(std::string_view text, char sep) {
     std::vector<std::string> out;
     if (trimView(text).empty()) return out;
+    for (auto& piece : splitListRaw(text, sep)) out.emplace_back(trimView(piece));
+    return out;
+}
+
+std::vector<std::string> splitListRaw(std::string_view text, char sep) {
+    std::vector<std::string> out;
     // Les reperes (mode Texte : un `$` entre apostrophes en ouvre un aussi).
     const auto spans = markers::find(text, markers::Mode::Text);
     std::size_t span = 0;
     int depth = 0;           // [ ( {
     char quote = 0;          // ' ou " : dans une chaine (seulement quand elle se referme : un apostrophe du francais n'en ouvre pas)
     std::string cur;
+    const auto glued = [&](std::size_t i) {
+        if (i == 0) return false;
+        const auto p = static_cast<unsigned char>(text[i - 1]);
+        return std::isalnum(p) || p == '_' || p == ')' || p == ']' || p == '\'' || p == '"' || p >= 0x80;
+    };
     for (std::size_t i = 0; i < text.size(); ++i) {
         while (span < spans.size() && spans[span].end() <= i) ++span;
         const bool inMarker = span < spans.size() && i >= spans[span].at && i < spans[span].end();
@@ -232,25 +243,24 @@ std::vector<std::string> splitList(std::string_view text, char sep) {
                     if (i + 1 < text.size() && text[i + 1] == quote) { cur += c; cur += c; ++i; continue; }
                     quote = 0;
                 }
-            } else if ((c == '\'' || c == '"') && text.find(c, i + 1) != std::string_view::npos
-                       && text.substr(i + 1, text.find(c, i + 1) - i - 1).find(sep) != std::string_view::npos
-                       && (i == 0 || !std::isalpha(static_cast<unsigned char>(text[i - 1])))) {
-                // Une chaine qui porte le separateur ('a;b') : entiere. Une apostrophe collee a une lettre
-                // (l'armoire, d'urgence) n'ouvre rien.
+            } else if ((c == '\'' || c == '"') && !glued(i) && text.find(c, i + 1) != std::string_view::npos
+                       && text.substr(i + 1, text.find(c, i + 1) - i - 1).find(sep) != std::string_view::npos) {
+                // Une chaine qui porte le separateur ('a;b') : entiere. Une apostrophe collee a une lettre,
+                // un chiffre ou une parenthese (l'armoire, d'urgence, la fin de 'N2') n'ouvre rien.
                 quote = c;
             } else if (c == '[' || c == '(' || c == '{') {
                 ++depth;
             } else if ((c == ']' || c == ')' || c == '}') && depth > 0) {
                 --depth;
             } else if (c == sep && depth == 0) {
-                out.emplace_back(trimView(cur));
+                out.push_back(cur);
                 cur.clear();
                 continue;
             }
         }
         cur += c;
     }
-    out.emplace_back(trimView(cur));
+    out.push_back(cur);
     return out;
 }
 

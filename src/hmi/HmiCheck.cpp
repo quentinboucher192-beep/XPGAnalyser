@@ -504,17 +504,9 @@ void addItem(std::vector<Issue>& out, Issue::Severity s, std::string cat, std::s
 }
 
 std::vector<std::string> splitPens(const std::string& list) {
+    // 1.12.6 (lot C) : le decoupeur unique - une plume M['a;b'] reste entiere.
     std::vector<std::string> out;
-    std::size_t from = 0;
-    while (from <= list.size()) {
-        const auto at = list.find(';', from);
-        std::string pen = list.substr(from, at == std::string::npos ? std::string::npos : at - from);
-        while (!pen.empty() && pen.front() == ' ') pen.erase(pen.begin());
-        while (!pen.empty() && pen.back() == ' ') pen.pop_back();
-        if (!pen.empty()) out.push_back(pen);
-        if (at == std::string::npos) break;
-        from = at + 1;
-    }
+    for (auto& pen : roles::splitList(list)) if (!pen.empty()) out.push_back(std::move(pen));
     return out;
 }
 

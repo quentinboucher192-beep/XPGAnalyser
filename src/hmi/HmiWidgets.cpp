@@ -1,4 +1,5 @@
 #include "HmiWidgets.hpp"
+#include "HmiRoles.hpp"   // 1.12.6 (lot C) : le decoupeur unique des listes
 
 #include <algorithm>
 #include <cmath>
@@ -102,7 +103,7 @@ bool cellIsTemplate(std::string_view cell) noexcept {
 std::vector<double> columnFractions(const Object& o, std::size_t n) {
     std::vector<double> w(n, 1.0);
     if (const auto* p = o.find("widths"); p && !p->value.empty()) {
-        const auto parts = splitOn(p->value, ';');
+        const auto parts = roles::splitList(p->value);   // 1.12.6 (lot C) : le decoupeur unique
         for (std::size_t i = 0; i < n && i < parts.size(); ++i) {
             double v = 0;
             if (parseNumber(trim(parts[i]), v) && v > 0) w[i] = v;
@@ -115,10 +116,9 @@ std::vector<double> columnFractions(const Object& o, std::size_t n) {
 }
 
 std::vector<std::string> splitSemicolons(std::string_view s) {
-    std::vector<std::string> out;
-    if (trim(s).empty()) return out;
-    for (const auto& part : splitOn(s, ';')) out.push_back(trim(part));
-    return out;
+    // 1.12.6 (lot C) : le decoupeur unique (HmiRoles) - une chaine 'a;b', une cle M['a;b'], un repere
+    // $A;B$ restent entiers (avant : coupes en deux, les noms et couleurs decales d'un cran).
+    return roles::splitList(s, ';');
 }
 
 std::string joinSemicolons(const std::vector<std::string>& v) {

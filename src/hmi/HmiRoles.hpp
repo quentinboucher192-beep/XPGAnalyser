@@ -350,6 +350,9 @@ struct Read {
 //  du bord ; les vides gardes (un rang reste un rang). Le moteur, le dessin, Generer,
 //  Dupliquer et Contenu coupent pareil.
 [[nodiscard]] std::vector<std::string> splitList(std::string_view text, char sep = ';');
+// Les memes morceaux, tels qu'ils sont ecrits (blancs compris) : pour reecrire une liste en place
+// (un renommage, Dupliquer) sans toucher a sa mise en forme. Un texte vide : un morceau vide.
+[[nodiscard]] std::vector<std::string> splitListRaw(std::string_view text, char sep = ';');
 // Les elements d'une liste lus dans le role de leurs elements : un texte ou un nom sans les $
 // de ses reperes ($$ : un $) ; une formule, un format telle quelle (son repere est transparent).
 [[nodiscard]] std::vector<std::string> listItems(const KeyRole& r, std::string_view text);
