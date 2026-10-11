@@ -31,6 +31,7 @@
 #include "HmiTypeRegistry.hpp"   // 1.12.5 : le type du total d'un compteur horaire
 #include "HmiExport.hpp"
 #include "HmiProduction.hpp"
+#include "HmiChoiceLists.hpp"  // 1.12.7 (lot D) : les colonnes choisies d'une source
 #include "HmiDisplay.hpp"      // lot 13
 #include "HmiTypes.hpp"        // lot 16
 #include "HmiTypeForms.hpp"    // 1.12.2 : la valeur initiale d'une variable objet
@@ -846,6 +847,13 @@ void checkLot6(const Project& p, const NameExists& plc, std::vector<Issue>& out)
                         if (!starts("ARRAY") && !starts("LIST") && !starts("VECTOR") && !starts("MAP") && !starts("TUPLE"))
                             add(out, S::Error, "Variable", v.id, o.id, "rowsFrom",
                                 "lignes depuis : " + var->name + " (" + var->type + ") n'est ni une LIST, ni un VECTOR, ni une MAP, ni un TUPLE, ni un tableau");
+                        // 1.12.7 (lot D) : une colonne choisie que la source n'a pas (elle ne se montrera pas).
+                        auto columns = typeform::columnsOf(p, var->type);
+                        std::vector<std::string> missing;
+                        choices::applySourceColumns(o.text(choices::kSourceColumnsKey), columns, nullptr, &missing);
+                        for (const auto& m : missing)
+                            add(out, S::Warning, "Objet", v.id, o.id, std::string(choices::kSourceColumnsKey),
+                                "colonne " + m + " : " + var->name + " n'a pas ce membre, elle ne se montrera pas");
                     } else {
                         for (const auto& r : scanRoots(from))
                             if (!known(p, plc, r, &v))
@@ -1286,13 +1294,23 @@ void checkLot9(const Project& p, const NameExists& plc, std::vector<Issue>& out)
                     if (bounds && lo >= hi) issue(S::Error, "min", "minimum au-dessus du maximum");
                     if (o.kind == Kind::Thermometer) break;
                     std::string why;
-                    const auto zones = parseZones(o.text("zones"), &why);
+                    const auto zones = parseZones(o.text("zones"), &why, lo, hi);   // 1.12.7 : une borne en % de l'echelle
                     if (!why.empty()) issue(S::Error, "zones", "zones illisibles : " + why);
                     else if (bounds)
                         for (const auto& z : zones)
                             if (z.to < lo || z.from > hi)
                                 issue(S::Warning, "zones", "zone " + formatNumber(z.from) + "-" + formatNumber(z.to) + " hors de l'\xC3\xA9" "chelle "
                                                                + formatNumber(lo) + "-" + formatNumber(hi));
+                    // 1.12.7 (lot D) : deux zones qui se chevauchent - la premiere l'emporte, l'autre ne se voit qu'en partie.
+                    for (std::size_t a = 0; a < zones.size(); ++a)
+                        for (std::size_t b2 = a + 1; b2 < zones.size(); ++b2)
+                            if (zones[b2].from < zones[a].to - 1e-9 && zones[a].from < zones[b2].to - 1e-9) {
+                                issue(S::Warning, "zones", "zones " + formatNumber(zones[a].from) + "-" + formatNumber(zones[a].to) + " et "
+                                                               + formatNumber(zones[b2].from) + "-" + formatNumber(zones[b2].to)
+                                                               + " : elles se chevauchent (la premi\xC3\xA8re l'emporte)");
+                                a = zones.size();
+                                break;
+                            }
                     break;
                 }
                 case Kind::MultiStateIndicator: case Kind::MultiStateText: {
@@ -1308,6 +1326,15 @@ void checkLot9(const Project& p, const NameExists& plc, std::vector<Issue>& out)
                     std::string why;
                     if (!trimmedCopy(o.text("schedule")).empty() && !parseSchedule(o.text("schedule"), res, ws, &why))
                         issue(S::Error, "schedule", "plages illisibles : " + why);
+                    // 1.12.7 (lot D) : l'arrondi a la resolution, dit (avant : en silence).
+                    else
+                        for (const auto& sr : scheduleRoundings(o.text("schedule"), res)) {
+                            const std::string grain = res == 60 ? std::string("1 h") : std::to_string(res) + " min";
+                            if (sr.gone)
+                                issue(S::Warning, "schedule", "plage " + sr.range + " : plus courte qu'une case (" + grain + "), elle dispara\xC3\xAEt");
+                            else
+                                issue(S::Info, "schedule", "plage " + sr.range + " arrondie \xC3\xA0 " + sr.becomes + " (r\xC3\xA9solution " + grain + ")");
+                        }
                     break;
                 }
                 case Kind::SevenSegment: {
@@ -1823,8 +1850,11 @@ void checkLot11(const Project& p, const NameExists& plc, std::vector<Issue>& out
                     if (p.alarms.empty() && generatedAlarms().empty())
                         issue(S::Info, "group", "aucune alarme d\xC3\xA9" "finie (Configuration > Alarmes) : l'objet restera vide");
                     const auto* g = o.find("group");
-                    if (g && g->expr.empty() && !trimmedCopy(g->value).empty() && trimmedCopy(g->value) != "*" && !filterTakes(trimmedCopy(g->value)))
-                        issue(S::Warning, "group", "aucune alarme du groupe \xC2\xAB " + trimmedCopy(g->value) + " \xC2\xBB");
+                    // 1.12.7 (lot D) : un groupe choisi ou tape avec un repere ($Zone_A$) se lit sans ses $
+                    // (avant : « aucune alarme du groupe $Zone_A$ », une fausse alerte).
+                    const std::string group = g ? roles::nameOf(g->value) : std::string{};
+                    if (g && g->expr.empty() && !group.empty() && group != "*" && !filterTakes(group))
+                        issue(S::Warning, "group", "aucune alarme du groupe \xC2\xAB " + group + " \xC2\xBB");
                     if (o.kind == Kind::AlarmBanner && o.text("show").find("filement") != std::string::npos && o.number("period", 4000) < 500)
                         issue(S::Warning, "period", "d\xC3\xA9" "filement de moins de 500 ms : illisible");
                     if (o.kind == Kind::AlarmSummary) {
@@ -1872,7 +1902,12 @@ void checkLot11(const Project& p, const NameExists& plc, std::vector<Issue>& out
                         issue(S::Warning, "idealRate", "sans cadence nominale, la performance (et le TRS) vaut 0");
                     std::vector<int> shifts;
                     std::string why;
-                    if (!parseShifts(o.text("shifts"), shifts, &why)) issue(S::Error, "shifts", "d\xC3\xA9" "buts de poste : " + why);
+                    if (!parseShifts(shiftsOf(o.text("shifts"), &p), shifts, &why))
+                        issue(S::Error, "shifts", std::string(usesShiftCalendar(o.text("shifts")) ? "calendrier des postes du projet : " : "d\xC3\xA9" "buts de poste : ") + why);
+                    // 1.12.7 (lot D) : un compteur qui suit le calendrier des postes, alors que le projet n'en a pas.
+                    else if (usesShiftCalendar(o.text("shifts")) && trimmedCopy(p.config.shifts).empty())
+                        issue(S::Warning, "shifts", "le compteur suit le calendrier des postes, mais le projet n'en a pas (Configuration > "
+                                                    "Calendrier des postes) : il compte sans poste");
                     break;
                 }
                 case Kind::VariableTable:
@@ -3599,6 +3634,21 @@ void roleChecks(const Project& p, std::vector<Issue>& out) {
             if (o.kind == Kind::Selector && countOf("itemsFrom") == 0) aligned("positions", "values", "valeurs \xC3\xA9" "crites", "positions");
             if ((o.kind == Kind::List || o.kind == Kind::ComboBox || o.kind == Kind::RadioGroup) && countOf("itemsFrom") == 0)
                 aligned("items", "values", "valeurs \xC3\xA9" "crites", "\xC3\xA9l\xC3\xA9ments");
+            // 1.12.7 (lot D) : deux choix qui ecrivent la meme valeur - l'objet ne sait plus lequel montrer.
+            if ((o.kind == Kind::Selector || o.kind == Kind::List || o.kind == Kind::ComboBox || o.kind == Kind::RadioGroup)
+                && countOf("itemsFrom") == 0 && countOf("values") > 0) {
+                std::vector<std::string> seen;
+                for (const auto& val : roles::splitList(o.text("values"))) {
+                    const std::string key = trimmedCopy(markers::strip(val));
+                    if (key.empty()) continue;
+                    if (std::find(seen.begin(), seen.end(), key) != seen.end()) {
+                        add(out, S::Warning, "Objet", v.id, o.id, "values",
+                            "valeur \xC3\xA9" "crite " + key + " : deux choix l'\xC3\xA9" "crivent, l'objet ne sait pas lequel montrer");
+                        break;
+                    }
+                    seen.push_back(key);
+                }
+            }
             if (o.kind == Kind::NavBar) aligned("views", "labels", "libell\xC3\xA9s", "vues");
             // ---- 3. les couleurs (fixes), y compris dans les etats et les zones ; 4. le format ;
             //      6. une valeur tapee sans = qui ressemble a une variable
@@ -3628,7 +3678,7 @@ void roleChecks(const Project& p, std::vector<Issue>& out) {
                             break;
                         }
                 if (pr.key == "zones")
-                    for (const auto& z : parseZones(pr.value))
+                    for (const auto& z : parseZones(pr.value, nullptr, o.number("min", 0), o.number("max", 100)))
                         if (!z.color.empty() && !roles::colorOk(z.color)) {
                             add(out, S::Warning, "Objet", v.id, o.id, pr.key,
                                 "zone " + formatNumber(z.from) + "-" + formatNumber(z.to) + " : '" + z.color + "' n'est pas une couleur (#RRGGBB)");

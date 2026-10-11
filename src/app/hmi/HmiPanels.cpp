@@ -30,6 +30,8 @@
 #include "HmiValueKind.hpp"              // 1.11.3 : le carre de legende de chaque case
 #include "../../hmi/HmiTypeForms.hpp"   // 1.12.2 : les variables qui ont des elements (Elements depuis)
 #include "../../hmi/HmiEnums.hpp"       // 1.12.2 : les enumerations, sources d'elements
+#include "../../hmi/HmiChoiceLists.hpp" // 1.12.7 (lot D) : les lettres ISA, les positions de la vanne 3 voies
+#include "../../hmi/HmiProduction.hpp"  // 1.12.7 (lot D) : le calendrier des postes
 #include "../../ui/Shapes.hpp"
 #include "../../ui/Theme.hpp"
 #include "../../ui/widgets/Controls.hpp"
@@ -2853,8 +2855,51 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
                 for (const auto& gc : objalarms::groupChoices(*project))
                     if (std::find(p.enumValues.begin(), p.enumValues.end(), gc.value) == p.enumValues.end()) p.enumValues.push_back(gc.value);
             }
-            if (p.type == PG::ValueType::Enum && std::find(p.enumValues.begin(), p.enumValues.end(), prop.value) == p.enumValues.end())
-                p.enumValues.push_back(prop.value);
+            // ---- 1.12.7 (lot D, § 2.5) : choisir au lieu de taper ----
+            if (prop.key == "afterLogin" && project) {
+                // La vue ouverte quand la connexion reussit : une vue ordinaire du projet.
+                p.type = PG::ValueType::Enum;
+                p.enumValues = {""};
+                for (const auto& vw : project->views)
+                    if (vw.role == "vue") p.enumValues.push_back(vw.name);
+            } else if (prop.key == "function" && o->kind == hmi::Kind::IsaInstrument) {
+                // Les lettres ISA (PT, TT, FT...) ; choisies, elles proposent leur unite (HmiEditor).
+                p.type = PG::ValueType::Enum;
+                p.enumValues = {""};
+                for (const auto& f : hmi::choices::kIsaFunctions) p.enumValues.emplace_back(f.letters);
+            } else if (prop.key == "value" && o->kind == hmi::Kind::ThreeWayValve && prop.expr.empty()) {
+                // Une position fixe : fermee, 1-2, 1-3, 2-3 (le code reste ecrit : 0, 1, 2, 3).
+                p.type = PG::ValueType::Enum;
+                p.enumValues.assign(std::begin(hmi::choices::kValve3Labels), std::end(hmi::choices::kValve3Labels));
+                if (const auto label = hmi::choices::valve3Label(prop.value); !label.empty()) p.value = std::string(label);
+            } else if (prop.key == "shifts" && o->kind == hmi::Kind::ProductionCounter && prop.expr.empty()) {
+                // Les debuts de poste : ceux du calendrier du projet (Configuration), ou une liste tapee.
+                p.type = PG::ValueType::Enum;
+                p.enumValues = {"", std::string(hmi::kShiftCalendar)};
+            } else if (prop.key == "page" && o->kind == hmi::Kind::TabContainer && prop.expr.empty()) {
+                // L'onglet montre, par son nom (le numero reste ecrit).
+                const auto labels = hmi::tabLabels(*o);
+                std::vector<std::string> names;
+                for (const auto& l : labels)
+                    if (!l.empty() && std::find(names.begin(), names.end(), l) == names.end()) names.push_back(l);
+                if (names.size() == labels.size() && !names.empty()) {
+                    p.type = PG::ValueType::Enum;
+                    p.enumValues = names;
+                    double n = 0;
+                    if (hmi::parseNumber(prop.value, n) && n >= 1 && n <= static_cast<double>(labels.size()))
+                        p.value = labels[static_cast<std::size_t>(n) - 1];
+                }
+            }
+            if (p.type == PG::ValueType::Enum && std::find(p.enumValues.begin(), p.enumValues.end(), p.value) == p.enumValues.end())
+                p.enumValues.push_back(p.value);
+            // 1.12.7 (lot D) : une liste de noms (vue, groupe, alarme, recette, ressource, style...) accepte
+            // aussi un nom tape - un repere $Zone$ (montre en ambre), un nom d'une autre version.
+            if (p.type == PG::ValueType::Enum && hmi::roles::keyRole(prop.key)) {
+                const auto role = hmi::roles::roleOf(o->kind, prop.key).role;
+                if (role == hmi::roles::Role::Name || prop.key == "function" || prop.key == "page" || prop.key == "shifts"
+                    || (prop.key == "value" && o->kind == hmi::Kind::ThreeWayValve))
+                    p.typeIn = true;
+            }
         }
         if (prop.key == "cells" && prop.expr.empty()) {
             std::size_t nrows = 0, cols = 0, driven = 0;
@@ -2920,6 +2965,17 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
         };
         if (const std::string special = labelForKind(o->kind, prop.key); !special.empty() && prop.key != "variable")
             p.name = special + (prop.expr.empty() ? std::string{} : std::string("  \xC6\x92"));
+        // 1.12.7 (lot D) : une position de vanne 3 voies, un onglet choisis par leur nom ecrivent leur code.
+        if (p.type == PG::ValueType::Enum && o->kind == hmi::Kind::ThreeWayValve && prop.key == "value")
+            p.commit = [inner = p.commit](std::string_view s) { return inner(hmi::choices::valve3Code(s)); };
+        if (p.type == PG::ValueType::Enum && o->kind == hmi::Kind::TabContainer && prop.key == "page") {
+            const auto labels = hmi::tabLabels(*o);
+            p.commit = [inner = p.commit, labels](std::string_view s) {
+                for (std::size_t k = 0; k < labels.size(); ++k)
+                    if (labels[k] == s) return inner(std::to_string(k + 1));
+                return inner(s);
+            };
+        }
         // Lot 16 : le GIF anime - sa lecture, son depart, sa fin ("count", "speed"
         // et "condition" n'y disent pas ce qu'ils disent ailleurs).
         if (o->kind == hmi::Kind::AnimatedGif) {

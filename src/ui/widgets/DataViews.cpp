@@ -2618,6 +2618,9 @@ namespace {
 // 1.10 (chantier K) : "Modifier l'expression..." sur une case sans expression :
 // beginEdit ouvre alors un champ "=" (pas la bascule, la liste ou la palette).
 bool gForceExprText = false;
+// 1.12.7 (lot D) : le choix « Taper un nom... » d'une liste typeIn : beginEdit ouvre un champ.
+bool gForceTyped = false;
+constexpr std::string_view kTypeInValue = "\x1B" "taper";
 // La place de la pastille fx devant la valeur (mesuree au dessin) et celle du X
 // au bout de la ligne : le champ ouvert les laisse voir (maquette 1.10, scene 1).
 float gFxSlot = 28.f;
@@ -2898,7 +2901,7 @@ void PropertyGrid::beginEdit(std::size_t row) {
         return;
     }
 
-    if (p.type == ValueType::Enum && !p.enumValues.empty() && !exprText) {
+    if (p.type == ValueType::Enum && !p.enumValues.empty() && !exprText && !gForceTyped) {
         auto list = std::make_unique<DropDown>(id() + ".edit");
         std::vector<DropDown::Item> items;
         int current = -1;
@@ -2906,6 +2909,8 @@ void PropertyGrid::beginEdit(std::size_t row) {
             items.push_back({p.enumValues[i].empty() ? std::string("(aucun)") : p.enumValues[i], p.enumValues[i]});
             if (p.enumValues[i] == p.value) current = static_cast<int>(i);
         }
+        // 1.12.7 (lot D) : une liste qui accepte aussi un nom tape - le dernier choix ouvre le champ.
+        if (p.typeIn) items.push_back({std::string(kTypeInLabel), std::string(kTypeInValue)});
         list->setItems(std::move(items));
         list->setSelectedIndex(current);
         auto* raw = list.get();
@@ -2915,6 +2920,16 @@ void PropertyGrid::beginEdit(std::size_t row) {
         raw->selectionChanged->connect([this, raw](int) {
             if (editor_ != raw) return;
             const auto* item = raw->selectedItem();
+            if (item && item->value == kTypeInValue) {
+                const std::string cat = editCategory_, name = editName_;
+                finishEdit(false, {});
+                if (const int at = rowOf(cat, name); at >= 0) {
+                    gForceTyped = true;
+                    beginEdit(static_cast<std::size_t>(at));
+                    gForceTyped = false;
+                }
+                return;
+            }
             finishEdit(item != nullptr, item ? item->value : std::string{});
         }).release();
         // Deroulee tout de suite : un clic de plus pour l'ouvrir serait un clic
@@ -2930,6 +2945,23 @@ void PropertyGrid::beginEdit(std::size_t row) {
         if (accepts) field->setPlaceholder(exprfield::shownInvite(p, true));   // 1.10.1 (U2) : sans "ou = expression"
         if (fieldAssist_)
             if (auto assist = fieldAssist_(rows_[row].cat->name, p)) field->setAssist(std::move(assist));
+        // 1.12.7 (lot D) : le nom tape d'une liste typeIn - ses choix en aide, filtres par le debut tape.
+        if (p.type == ValueType::Enum && p.typeIn && !exprText) {
+            field->setAssist([choices = p.enumValues](std::string_view before, std::size_t& from, std::vector<InputText::Suggestion>& out) {
+                from = 0;
+                for (const auto& c : choices) {
+                    if (c.empty() || c.size() < before.size()) continue;
+                    bool same = true;
+                    for (std::size_t k = 0; k < before.size() && same; ++k)
+                        same = std::tolower(static_cast<unsigned char>(c[k])) == std::tolower(static_cast<unsigned char>(before[k]));
+                    if (!same) continue;
+                    InputText::Suggestion sg;
+                    sg.text = c;
+                    sg.detail = "choix";
+                    out.push_back(std::move(sg));
+                }
+            });
+        }
         // 1.10 (chantier K) : Ctrl+Suppr retire l'expression (comme le X).
         if (hasClear(p)) {
             const std::string cat = rows_[row].cat->name, name = p.name;

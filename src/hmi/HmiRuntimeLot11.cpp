@@ -489,7 +489,7 @@ void Runtime::productionCycle(double now) {
             const bool running = runExpr.empty() ? true : evalBool(runExpr, false);
             // Le poste en cours (l'heure du poste).
             std::vector<int> shifts;
-            (void)parseShifts(o.text("shifts"), shifts);
+            (void)parseShifts(shiftsOf(o.text("shifts"), project_), shifts);   // 1.12.7 (lot D) : le calendrier du projet
             const std::string stamp = dateStampOf(now);
             const int minute = stamp.size() >= 16 ? std::atoi(stamp.substr(11, 2).c_str()) * 60 + std::atoi(stamp.substr(14, 2).c_str()) : 0;
             const int shift = currentShift(shifts, minute);

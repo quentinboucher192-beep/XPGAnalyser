@@ -28920,6 +28920,321 @@ void lotA1125_contenuTableauVariables() {
     same_text(b.v().object(tab)->text("formats"), "0;0.00", "D11 : ... et son format");
 }
 
+// 1.12.7 (lot D de l'audit des objets, § 2.4) : LES LISTES EN TABLEAU DANS CONTENU - une ligne par
+// element, au lieu de listes a;b;c tapees en parallele. Chaque case garde ses reperes. Chaque controle
+// dit, dans son libelle, ce que faisait la 1.12.6.
+void lotD1127_contenu() {
+    std::printf("1.12.7 (lot D) : Contenu - les choix, les lignes d'un tableau de variables, les etats d'un chronogramme, "
+                "les zones, les plages, les cases a cocher\n");
+    using Mode = app::HmiContentPanel::Mode;
+    // ---- un selecteur : un tableau Libelle / Valeur ecrite
+    {
+        Bench b;
+        auto& content = b.editor->content();
+        const Id sel = b.place(Kind::Selector, 100, 100);
+        b.editor->layout();
+        auto* o = b.v().object(sel);
+        o->set("positions", "Arr\xC3\xAAt;Auto;Manu");
+        o->set("values", "0;1;2");
+        b.editor->layout();
+        check(content.object() == sel && content.mode() == Mode::Choices && content.count() == 3,
+              "lot D : un s\xC3\xA9lecteur a ses choix dans Contenu, un par ligne (avant : pas d'onglet Contenu)");
+        check(content.removeItem(1), "lot D : retirer le choix Auto");
+        same_text(b.v().object(sel)->text("positions"), "Arr\xC3\xAAt;Manu", "lot D : il reste Arr\xC3\xAAt, Manu");
+        same_text(b.v().object(sel)->text("values"), "0;2", "lot D : sa valeur part avec lui (avant : les deux listes \xC3\xA0 aligner \xC3\xA0 la main)");
+        check(content.moveItem(0, 1), "lot D : descendre Arr\xC3\xAAt");
+        same_text(b.v().object(sel)->text("positions"), "Manu;Arr\xC3\xAAt", "lot D : l'ordre des libell\xC3\xA9s");
+        same_text(b.v().object(sel)->text("values"), "2;0", "lot D : ... et celui des valeurs, ensemble");
+        check(content.setField(0, "label", "$Mode$"), "lot D : un libell\xC3\xA9 rep\xC3\xA9r\xC3\xA9 ($Mode$)");
+        same_text(b.v().object(sel)->text("positions"), "$Mode$;Arr\xC3\xAAt", "lot D : la case garde son rep\xC3\xA8re tel quel");
+        check(content.setField(1, "value", "T_MODE#Auto"), "lot D : une valeur \xC3\xA9num\xC3\xA9r\xC3\xA9" "e");
+        check(!content.setField(1, "label", "a;b"), "lot D : un \xC2\xAB ; \xC2\xBB nu dans un libell\xC3\xA9 est refus\xC3\xA9 (il couperait la liste)");
+        check(!content.setField(1, "label", ""), "lot D : un libell\xC3\xA9 vide est refus\xC3\xA9 (le moteur ne le compterait pas, les rangs glisseraient)");
+        check(content.addItem() && content.count() == 3, "lot D : ajouter un choix");
+        same_text(b.v().object(sel)->text("positions"), "$Mode$;Arr\xC3\xAAt;Choix 3", "lot D : le choix ajout\xC3\xA9");
+        same_text(b.v().object(sel)->text("values"), "2;T_MODE#Auto", "lot D : sans valeur, il \xC3\xA9" "crit son rang (rien \xC3\xA0 ajouter)");
+        const auto choices = hmi::choicesOf(*b.v().object(sel));
+        check(choices.size() == 3 && choices[1].value == "T_MODE#Auto" && choices[2].index && choices[2].value == "2",
+              "lot D : le moteur lit les m\xC3\xAAmes choix (Choix 3 \xC3\xA9" "crit son rang, 2)");
+        (void)b.stack.undo();
+        check(content.count() == 2, "lot D : Ctrl+Z reprend le choix ajout\xC3\xA9");
+    }
+    // ---- une liste deroulante : la meme chose sur "items"
+    {
+        Bench b;
+        auto& content = b.editor->content();
+        const Id combo = b.place(Kind::ComboBox, 100, 100);
+        b.editor->layout();
+        b.v().object(combo)->set("items", "Azote;Argon");
+        b.v().object(combo)->set("values", "");
+        b.editor->layout();
+        check(content.mode() == Mode::Choices && content.count() == 2, "lot D : une liste d\xC3\xA9roulante, ses \xC3\xA9l\xC3\xA9ments dans Contenu");
+        check(content.setField(1, "value", "'Ar'"), "lot D : la valeur du 2e \xC3\xA9l\xC3\xA9ment");
+        same_text(b.v().object(combo)->text("values"), ";'Ar'", "lot D : la 1re garde son rang (vide), la 2e sa valeur");
+    }
+    // ---- un tableau de variables : l'unite et le format de chaque ligne
+    {
+        Bench b;
+        auto& content = b.editor->content();
+        const Id tab = b.place(Kind::VariableTable, 100, 100);
+        b.editor->layout();
+        b.v().object(tab)->set("variables", "Temp;Pression;Niveau");
+        b.v().object(tab)->set("units", "");
+        b.v().object(tab)->set("formats", "");
+        b.editor->layout();
+        check(content.setField(1, "unit", "bar") && content.setField(2, "format", "0.0"),
+              "lot D : l'unit\xC3\xA9 et le format d'une ligne se r\xC3\xA8glent dans Contenu (avant : listes de l'inspecteur)");
+        same_text(b.v().object(tab)->text("units"), ";bar", "lot D : l'unit\xC3\xA9 \xC3\xA0 son rang");
+        same_text(b.v().object(tab)->text("formats"), ";;0.0", "lot D : le format \xC3\xA0 son rang");
+        content.selectIndex(1);
+        bool unitShown = false;
+        for (const auto& c : content.grid().categories())
+            for (const auto& pr : c.properties) unitShown = unitShown || (pr.name == "Unit\xC3\xA9" && pr.value == "bar");
+        check(unitShown, "lot D : la ligne choisie montre son unit\xC3\xA9");
+        check(content.moveItem(1, 1), "lot D : descendre Pression");
+        same_text(b.v().object(tab)->text("units"), ";;bar", "lot D : son unit\xC3\xA9 la suit");
+    }
+    // ---- un chronogramme : ses lignes, ou ses etats (le tableau du multi-etats)
+    {
+        Bench b;
+        auto& content = b.editor->content();
+        const Id chrono = b.place(Kind::StateChart, 100, 100);
+        b.editor->layout();
+        b.v().object(chrono)->set("stateList", "0 = Arr\xC3\xAAt | #4A5261; 1 = Marche | #2ECC71");
+        b.editor->layout();
+        check(content.mode() == Mode::Trend, "lot D : un chronogramme montre d'abord ses lignes");
+        check(content.setField(-1, "show", "les \xC3\xA9tats") && content.mode() == Mode::States && content.count() == 2,
+              "lot D : ... puis ses \xC3\xA9tats, un par ligne (avant : la ligne stateList \xC3\xA0 taper)");
+        check(content.addItem() && content.count() == 3, "lot D : ajouter un \xC3\xA9tat au chronogramme");
+        check(content.setField(2, "text", "D\xC3\xA9" "faut $Pompe$") && content.setField(2, "color", "#E5534B"), "lot D : son texte (avec un rep\xC3\xA8re) et sa couleur");
+        const auto states = hmi::parseStateList(b.v().object(chrono)->text("stateList"));
+        check(states.size() == 3 && states[2].match == "2" && states[2].text == "D\xC3\xA9" "faut $Pompe$" && states[2].color == "#E5534B",
+              "lot D : stateList r\xC3\xA9\xC3\xA9" "crite, le rep\xC3\xA8re gard\xC3\xA9 (" + b.v().object(chrono)->text("stateList") + ")");
+        check(!content.setField(-1, "mode", "selon des conditions"), "lot D : un chronogramme n'a pas de Valeur : pas de mode \xC2\xAB conditions \xC2\xBB");
+        check(content.setField(-1, "show", "les lignes") && content.mode() == Mode::Trend, "lot D : retour aux lignes");
+    }
+    // ---- un bargraphe : les zones De / A / Couleur, une borne en % de l'echelle
+    {
+        Bench b;
+        auto& content = b.editor->content();
+        const Id bar = b.place(Kind::Bargraph, 100, 100);
+        b.editor->layout();
+        b.v().object(bar)->set("zones", "0-60 = #2ECC71; 60-80 = #F2C94C; 80-100 = #E5534B");
+        b.v().object(bar)->set("min", "0");
+        b.v().object(bar)->set("max", "100");
+        b.editor->layout();
+        check(content.mode() == Mode::Bands && content.count() == 3, "lot D : les zones d'un bargraphe dans Contenu, une par ligne (avant : un mini-langage)");
+        check(content.setField(0, "to", "60 %") && content.setField(1, "from", "60 %") && content.setField(1, "to", "80 %"),
+              "lot D : une borne en % de l'\xC3\xA9" "chelle");
+        b.v().object(bar)->set("max", "200");
+        const auto zones = hmi::parseZones(b.v().object(bar)->text("zones"), nullptr, 0, 200);
+        check(zones.size() == 3 && zones[0].to == 120 && zones[1].from == 120 && zones[1].to == 160 && zones[2].from == 80,
+              "lot D : max pass\xC3\xA9 \xC3\xA0 200, la borne \xC3\xA0 60 % suit (120) ; une valeur reste une valeur (80) - " + b.v().object(bar)->text("zones"));
+        check(!content.setField(0, "color", "#12;#34"), "lot D : une couleur ne coupe pas la liste");
+        check(content.removeItem(2) && content.count() == 2, "lot D : retirer une zone");
+    }
+    // ---- un programmateur : les plages Jours / De / A, l'arrondi montre
+    {
+        Bench b;
+        auto& content = b.editor->content();
+        const Id prog = b.place(Kind::WeeklySchedule, 100, 100);
+        b.editor->layout();
+        b.v().object(prog)->set("schedule", "Lu-Ve=07:00-12:00,13:30-17:00; Sa=08:00-12:00");
+        b.v().object(prog)->set("resolution", "1 h");
+        b.editor->layout();
+        check(content.mode() == Mode::Schedule && content.count() == 3, "lot D : les plages d'un programmateur, une par ligne (avant : le mini-langage)");
+        content.selectIndex(1);
+        std::string rounding;
+        for (const auto& c : content.grid().categories())
+            for (const auto& pr : c.properties)
+                if (pr.name == "En marche") rounding = pr.value;
+        check(rounding.find("arrondie \xC3\xA0 14:00-17:00") != std::string::npos,
+              "lot D : 13:30-17:00 en r\xC3\xA9solution 1 h : l'arrondi est montr\xC3\xA9 (avant : en silence) - " + rounding);
+        check(!content.setField(0, "days", "Lundi-Xx"), "lot D : des jours illisibles sont refus\xC3\xA9s");
+        check(!content.setField(0, "from", "7h70"), "lot D : une heure illisible est refus\xC3\xA9" "e");
+        check(content.setField(2, "to", "12:30"), "lot D : changer la fin d'une plage");
+        WeekSchedule ws;
+        check(hmi::parseSchedule(b.v().object(prog)->text("schedule"), 30, ws) && hmi::scheduleOn(ws, 5, 12 * 60 + 15)
+                  && hmi::scheduleOn(ws, 0, 13 * 60 + 45) && !hmi::scheduleOn(ws, 0, 12 * 60 + 30),
+              "lot D : le programme r\xC3\xA9\xC3\xA9" "crit se relit (samedi 12:15, lundi 13:45) - " + b.v().object(prog)->text("schedule"));
+    }
+    // ---- un tableau depuis une source : ses colonnes (lesquelles, leur ordre, leur titre, leur format)
+    {
+        Bench b;
+        auto& content = b.editor->content();
+        hmi::HmiType pompe;
+        pompe.id = b.doc->project.allocate();
+        pompe.name = "T_Pompe_CC";
+        pompe.members = {{"Nom", "STRING", "", ""}, {"Debit", "REAL", "", ""}, {"Etat", "INT", "", ""}};
+        b.doc->project.programs.types.push_back(pompe);
+        hmi::Variable pompes;
+        pompes.id = b.doc->project.allocate();
+        pompes.name = "Pompes";
+        pompes.type = "ARRAY[1..4] OF T_Pompe_CC";
+        b.doc->project.programs.variables.push_back(pompes);
+        const Id tab = b.place(Kind::Table, 100, 100);
+        b.editor->layout();
+        b.v().object(tab)->set("rowsFrom", "Pompes");
+        b.editor->refresh();
+        b.editor->layout();
+        check(content.mode() == Mode::SourceColumns && content.count() == 3,
+              "lot D : un tableau depuis une source montre ses colonnes dans Contenu (avant : des cases qui ne servaient pas)");
+        check(content.setField(1, "shown", "FALSE"), "lot D : cacher la colonne Debit");
+        same_text(b.v().object(tab)->text("sourceColumns"), "Nom; Etat", "lot D : les colonnes montr\xC3\xA9" "es, dans l'ordre");
+        check(content.setField(0, "title", "Pompe") && content.setField(1, "format", "0"), "lot D : un titre, un format");
+        same_text(b.v().object(tab)->text("sourceColumns"), "Nom = Pompe; Etat | 0", "lot D : le titre et le format \xC3\xA0 leur colonne");
+        check(content.moveItem(0, 1), "lot D : descendre Nom");
+        same_text(b.v().object(tab)->text("sourceColumns"), "Etat | 0; Nom = Pompe", "lot D : l'ordre des colonnes");
+        check(!content.setField(0, "title", "a;b"), "lot D : un titre ne coupe pas la liste");
+    }
+    // ---- les cases a cocher : langues, boutons, zones
+    {
+        Bench b;
+        auto& content = b.editor->content();
+        b.doc->project.languages.list = {{"fr", "Fran\xC3\xA7" "ais"}, {"en", "English"}, {"de", "Deutsch"}};
+        const Id lang = b.place(Kind::LanguageSelector, 100, 100);
+        b.editor->layout();
+        check(content.mode() == Mode::Checks && content.count() == 3, "lot D : un s\xC3\xA9lecteur de langue coche les langues du projet (avant : des codes \xC3\xA0 taper)");
+        check(content.setField(-1, "check:en", "FALSE"), "lot D : d\xC3\xA9" "cocher English");
+        same_text(b.v().object(lang)->text("languages"), "fr;de", "lot D : vide valait toutes ; d\xC3\xA9" "cocher l'une garde les autres");
+        check(content.setField(-1, "check:en", "TRUE"), "lot D : la recocher");
+        same_text(b.v().object(lang)->text("languages"), "fr;en;de", "lot D : dans l'ordre du projet");
+        b.v().object(lang)->set("languages", "fr;$Langue$");
+        b.editor->layout();
+        check(content.count() == 4, "lot D : un code tap\xC3\xA9 avec un rep\xC3\xA8re ($Langue$) reste une ligne, coch\xC3\xA9" "e");
+        check(content.setField(-1, "check:de", "TRUE"), "lot D : cocher Deutsch");
+        same_text(b.v().object(lang)->text("languages"), "fr;de;$Langue$", "lot D : le rep\xC3\xA8re tap\xC3\xA9 est gard\xC3\xA9");
+        const Id users = b.place(Kind::UserManager, 400, 300);
+        b.editor->layout();
+        check(content.object() == users && content.mode() == Mode::Checks && content.count() == 5, "lot D : la gestion des utilisateurs coche ses 5 boutons");
+        check(content.setField(-1, "check:Supprimer", "FALSE"), "lot D : retirer le bouton Supprimer");
+        same_text(b.v().object(users)->text("buttons"), "Ajouter;Modifier;Activer;Mot de passe", "lot D : les autres, dans leur ordre (avant : \xC3\xA0 taper exactement)");
+        hmi::AlarmDef a1;
+        a1.name = "A1";
+        a1.group = "Zone_A";
+        hmi::AlarmDef a2 = a1;
+        a2.name = "A2";
+        a2.group = "Zone_B";
+        b.doc->project.alarms = {a1, a2};
+        const Id summary = b.place(Kind::AlarmSummary, 100, 400);
+        b.editor->layout();
+        check(content.object() == summary && content.mode() == Mode::Checks && content.count() >= 2, "lot D : le r\xC3\xA9sum\xC3\xA9 par zone coche ses zones");
+        check(content.setField(-1, "check:Zone_A", "FALSE"), "lot D : d\xC3\xA9" "cocher Zone_A");
+        same_text(b.v().object(summary)->text("groups"), "Zone_B", "lot D : il reste Zone_B (avant : les zones \xC3\xA0 taper)");
+        check(!content.setField(-1, "check:Zone_B", "FALSE"), "lot D : la derni\xC3\xA8re zone ne se d\xC3\xA9" "coche pas (vide voudrait dire toutes)");
+    }
+}
+
+// 1.12.7 (lot D, § 2.5) : CHOISIR AU LIEU DE TAPER - les listes a choix de l'inspecteur, qui
+// acceptent aussi un nom tape (un repere $...$, montre en ambre).
+void lotD1127_choix() {
+    std::printf("1.12.7 (lot D) : les listes a choix de l'inspecteur, un repere tape accepte et montre en ambre\n");
+    Bench b;
+    auto& grid = b.editor->properties();
+    const auto findProp = [&](const char* key) -> const ui::PropertyGrid::Property* {
+        for (const auto& c : grid.categories())
+            for (const auto& pr : c.properties)
+                if (pr.key == key) return &pr;
+        return nullptr;
+    };
+    hmi::AlarmDef a1;
+    a1.name = "Haute_A";
+    a1.group = "Zone_A";
+    b.doc->project.alarms = {a1};
+    // ---- le groupe d'un bandeau d'alarme : une liste, et un repere tape par « Taper un nom... »
+    const Id banner = b.place(Kind::AlarmBanner, 100, 100);
+    b.editor->layout();
+    const auto* group = findProp("group");
+    check(group && group->type == ui::PropertyGrid::ValueType::Enum && group->typeIn
+              && std::find(group->enumValues.begin(), group->enumValues.end(), "Zone_A") != group->enumValues.end(),
+          "lot D : le groupe d'un bandeau est une liste (Zone_A) qui accepte un nom tap\xC3\xA9");
+    if (group) {
+        const std::string name = group->name;
+        gfx::Rect cell;
+        check(grid.revealValue(name) && (grid.layout(), grid.valueRect(name, cell)), "lot D : la case du groupe est montr\xC3\xA9" "e");
+        grid.dispatch(ui::MouseDown{{cell.x + 10, cell.y + cell.h / 2}, ui::MouseButton::Left, 1, {}});
+        check(grid.editing(), "lot D : un clic ouvre la liste");
+        b.editor->dispatch(ui::KeyDown{ui::Key::End, {}, false});
+        b.editor->dispatch(ui::KeyDown{ui::Key::Return, {}, false});
+        check(grid.activeField() != nullptr, "lot D : le dernier choix, \xC2\xAB Taper un nom ou un rep\xC3\xA8re \xC2\xBB, ouvre un champ");
+        if (grid.activeField()) {
+            b.editor->dispatch(ui::KeyDown{ui::Key::A, ui::KeyMods{true, false, false, false}, false});
+            b.editor->dispatch(ui::TextInput{"$Zone_A$"});
+            b.editor->dispatch(ui::KeyDown{ui::Key::Return, {}, false});
+        }
+        b.editor->layout();
+        same_text(b.v().object(banner)->text("group"), "$Zone_A$", "lot D : le rep\xC3\xA8re tap\xC3\xA9 est accept\xC3\xA9 tel quel (avant : une liste ferm\xC3\xA9" "e)");
+        const auto* after = findProp("group");
+        check(after && ui::exprfield::hasMarker(*after), "lot D : ... et montr\xC3\xA9 en ambre (la case a son rep\xC3\xA8re)");
+    }
+    // ---- la vue apres connexion : une liste des vues
+    b.doc->project.views.push_back(hmi::makeView(b.doc->project, "Vue_Accueil"));
+    const Id login = b.place(Kind::LoginPanel, 100, 300);
+    b.editor->layout();
+    (void)login;
+    const auto* after = findProp("afterLogin");
+    check(after && after->type == ui::PropertyGrid::ValueType::Enum && after->typeIn
+              && std::find(after->enumValues.begin(), after->enumValues.end(), "Vue_Accueil") != after->enumValues.end(),
+          "lot D : la vue apr\xC3\xA8s connexion se choisit dans les vues (avant : \xC3\xA0 taper)");
+    // ---- les lettres ISA proposent leur unite
+    const Id isa = b.place(Kind::IsaInstrument, 500, 100);
+    b.editor->layout();
+    b.v().object(isa)->set("unit", "");
+    b.editor->refresh();
+    b.editor->layout();
+    const auto commitKey = [&](const char* key, const std::string& value) {
+        const auto* pr = findProp(key);
+        const bool ok = pr && pr->commit && pr->commit(value);
+        b.editor->layout();
+        return ok;
+    };
+    const auto* fn = findProp("function");
+    check(fn && fn->type == ui::PropertyGrid::ValueType::Enum && std::find(fn->enumValues.begin(), fn->enumValues.end(), "TT") != fn->enumValues.end(),
+          "lot D : les lettres ISA se choisissent (PT, TT, FT... ; avant : un texte libre)");
+    check(commitKey("function", "TT"), "lot D : choisir TT");
+    same_text(b.v().object(isa)->text("unit"), "\xC2\xB0" "C", "lot D : TT propose son unit\xC3\xA9 (\xC2\xB0" "C)");
+    check(commitKey("function", "PT"), "lot D : choisir PT");
+    same_text(b.v().object(isa)->text("unit"), "bar", "lot D : PT remplace l'unit\xC3\xA9 que TT avait propos\xC3\xA9" "e (bar)");
+    b.v().object(isa)->set("unit", "kPa");
+    b.editor->refresh();
+    b.editor->layout();
+    check(commitKey("function", "FT"), "lot D : choisir FT");
+    same_text(b.v().object(isa)->text("unit"), "kPa", "lot D : une unit\xC3\xA9 tap\xC3\xA9" "e \xC3\xA0 la main reste");
+    // ---- la position fixe d'une vanne 3 voies
+    const Id v3 = b.place(Kind::ThreeWayValve, 500, 400);
+    b.editor->layout();
+    b.v().object(v3)->set("value", "2");
+    b.editor->refresh();
+    b.editor->layout();
+    const auto* pos = findProp("value");
+    check(pos && pos->type == ui::PropertyGrid::ValueType::Enum && pos->value == "1-3",
+          "lot D : la position 2 se montre \xC2\xAB 1-3 \xC2\xBB dans une liste (avant : un code \xC3\xA0 retenir)");
+    check(commitKey("value", "1-2"), "lot D : choisir 1-2");
+    same_text(b.v().object(v3)->text("value"), "1", "lot D : le code \xC3\xA9" "crit reste celui que le moteur lit (1)");
+    check(commitKey("value", "ferm\xC3\xA9" "e"), "lot D : choisir ferm\xC3\xA9" "e");
+    same_text(b.v().object(v3)->text("value"), "0", "lot D : ferm\xC3\xA9" "e \xC3\xA9" "crit 0");
+    // ---- l'onglet montre, par son nom
+    const Id tabs = b.place(Kind::TabContainer, 100, 450);
+    b.editor->layout();
+    b.v().object(tabs)->set("tabs", "Pompes;Vannes;R\xC3\xA9glages");
+    b.v().object(tabs)->set("page", "1");
+    b.editor->refresh();
+    b.editor->layout();
+    const auto* page = findProp("page");
+    check(page && page->type == ui::PropertyGrid::ValueType::Enum && page->value == "Pompes",
+          "lot D : l'onglet montr\xC3\xA9 se choisit par son nom (avant : un num\xC3\xA9ro)");
+    check(commitKey("page", "Vannes"), "lot D : choisir Vannes");
+    same_text(b.v().object(tabs)->text("page"), "2", "lot D : le num\xC3\xA9ro \xC3\xA9" "crit (2)");
+    // ---- le calendrier des postes : un choix des debuts de poste d'un compteur
+    const Id counter = b.place(Kind::ProductionCounter, 600, 300);
+    b.editor->layout();
+    (void)counter;
+    const auto* shifts = findProp("shifts");
+    check(shifts && shifts->type == ui::PropertyGrid::ValueType::Enum && shifts->typeIn
+              && std::find(shifts->enumValues.begin(), shifts->enumValues.end(), "calendrier") != shifts->enumValues.end(),
+          "lot D : les d\xC3\xA9" "buts de poste d'un compteur peuvent suivre le calendrier du projet");
+}
+
 int main(int argc, char** argv) {
     // 1.11.1 (API-V) : HMI_TEST_APIV=1 - la vue des variables de l'automate et API dans l'aide a la saisie, seules.
     if (const char* only = std::getenv("HMI_TEST_APIV"); only && *only == '1') {
@@ -28933,6 +29248,13 @@ int main(int argc, char** argv) {
         if (argc > 1) configuration_et_variables(argv[1]);
         if (argc > 1) apiVue1112_dupliquer(argv[1]);   // 1.11.2 (D13)
         if (argc > 1) valuePickerApi1113(argv[1]);     // 1.11.3 : le selecteur et les membres de l'automate
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
+    // 1.12.7 : HMI_TEST_1127=1 - les lots D et E de l'audit des objets, seuls.
+    if (const char* only = std::getenv("HMI_TEST_1127"); only && *only == '1') {
+        lotD1127_contenu();
+        lotD1127_choix();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -29136,6 +29458,8 @@ int main(int argc, char** argv) {
     lot6_modeles_editeur();
     lot6_contenu();
     lotA1125_contenuTableauVariables();   // 1.12.5 (lot A, D11)
+    lotD1127_contenu();                   // 1.12.7 (lot D) : les listes en tableau dans Contenu
+    lotD1127_choix();                     // 1.12.7 (lot D) : les listes a choix de l'inspecteur
     etats1123();                       // 1.12.3 : les etats des objets multi-etats en table
     communes1123();                    // 1.12.3 : plusieurs objets choisis, leurs proprietes communes
     voixDesSons1123();                 // 1.12.3 : les voix des sons (melange)

@@ -582,7 +582,7 @@ void drawBargraph(const Ctx& c) {
     const bool vertical = c.src.text(c.o, "orientation", "verticale") != "horizontale";
     const double fs = fsOf(c, 12);
     const bool showValue = c.src.flag(c.o, "showValue", true);
-    const auto zones = hmi::parseZones(c.src.text(c.o, "zones"));
+    const auto zones = hmi::parseZones(c.src.text(c.o, "zones"), nullptr, s.mn, s.mx);   // 1.12.7 : les bornes en % suivent l'echelle
     const auto* zone = known ? hmi::zoneOf(zones, v) : nullptr;
     const gfx::Color barCol = zone ? hexColor(c, zone->color, 0x2F6FD6) : colorOf(c, "fill", 0x2F6FD6);
     const gfx::Color txt = colorOf(c, "textColor", 0xC8D0DC);
@@ -683,7 +683,7 @@ void drawDial(const Ctx& c) {
     fillLocal(c, circleLocal(cx, cy, R, 64), colorOf(c, "fill", 0x1F252E));
     strokeLocal(c, circleLocal(cx, cy, R, 64), true, colorOf(c, "stroke", 0x3A4556), 1.5);
     constexpr double a0 = 135, sweep = 270;
-    for (const auto& z : hmi::parseZones(c.src.text(c.o, "zones")))
+    for (const auto& z : hmi::parseZones(c.src.text(c.o, "zones"), nullptr, s.mn, s.mx))
         arcBand(c, cx, cy, R * 0.80, R * 0.90, a0 + sweep * s.frac(z.from), a0 + sweep * s.frac(z.to), hexColor(c, z.color, 0x6B7686), 48);
     const int ticks = static_cast<int>(std::clamp(c.src.number(c.o, "ticks", 10), 0.0, 40.0));
     const double fs = fsOf(c, 13);

@@ -796,6 +796,16 @@ private:
                 if (auto* pz = b.find("mapZones")) pz->value = renameZoneViews(pz->value, r_.from, r_.to);
             if (b.kind == hmi::Kind::SymbolInstance)
                 if (auto* ps = b.find("symbol"); ps && ps->value == r_.from) ps->value = r_.to;
+            // 1.12.7 (lot D, § 2.5) : la vue apres connexion suit le renommage (avant : seulement la barre
+            // de navigation et le plan a zones) ; un repere $Vue_A$ garde ses $.
+            if (b.kind == hmi::Kind::LoginPanel)
+                if (auto* pa = b.find("afterLogin"); pa && pa->expr.empty()) {
+                    std::string v = pa->value;
+                    while (!v.empty() && (v.front() == ' ' || v.front() == '\t')) v.erase(v.begin());
+                    while (!v.empty() && (v.back() == ' ' || v.back() == '\t')) v.pop_back();
+                    if (v == r_.from) pa->value = r_.to;
+                    else if (v == "$" + r_.from + "$") pa->value = "$" + r_.to + "$";
+                }
         }
         if (b == o) return false;
         recordObject(s_, joined(path, o.name.empty() ? "objet " + std::to_string(o.id) : o.name), o, b);

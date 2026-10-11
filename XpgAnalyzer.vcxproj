@@ -938,6 +938,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\hmi\HmiApiVars.hpp" />
     <ClInclude Include="src\hmi\HmiBuildState.hpp" />
     <ClInclude Include="src\hmi\HmiCallCheck.hpp" />
+    <ClInclude Include="src\hmi\HmiChoiceLists.hpp" />
     <ClInclude Include="src\hmi\HmiDecl.hpp" />
     <ClInclude Include="src\hmi\HmiDeclEdit.hpp" />
     <ClInclude Include="src\hmi\HmiDuplicate.hpp" />

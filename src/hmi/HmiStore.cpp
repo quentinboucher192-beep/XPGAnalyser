@@ -809,7 +809,9 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
            + (cfg.textScale != 100 ? fieldInt("texte_pct", cfg.textScale) : std::string{})
            + (cfg.colorMode != "normal" ? field("couleurs", cfg.colorMode) : std::string{})
            + (cfg.statusSymbols ? fieldBool("symboles", true) : std::string{})
-           + (cfg.theme != "nuit" ? field("theme", cfg.theme) : std::string{}) + "\n";
+           + (cfg.theme != "nuit" ? field("theme", cfg.theme) : std::string{})
+           // 1.12.7 (lot D) : le calendrier des postes, ecrit seulement s'il existe.
+           + (!cfg.shifts.empty() ? field("postes", cfg.shifts) : std::string{}) + "\n";
     for (const auto& v : p.views) {
         const std::string name = viewFileName(v);
         std::string text = serializeView(v);
@@ -1291,6 +1293,7 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
             p.config.colorMode = r.get("couleurs") ? toStr(r.get("couleurs")) : std::string("normal");
             p.config.statusSymbols = toBool(r.get("symboles"), false);
             p.config.theme = r.get("theme") ? toStr(r.get("theme")) : std::string("nuit");
+            p.config.shifts = r.get("postes") ? toStr(r.get("postes")) : std::string{};   // 1.12.7 (lot D)
         } else if (r.word == "vue") {
             files.emplace_back(static_cast<Id>(toInt(r.get("id"), 0)), toStr(r.get("fichier")));
             if (const auto* d = r.get("dossier")) viewFolders[static_cast<Id>(toInt(r.get("id"), 0))] = *d;   // lot 21

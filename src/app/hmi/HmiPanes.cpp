@@ -11,6 +11,7 @@
 #include "../../domain/ProjectModel.hpp"
 #include "../../hmi/HmiExpr.hpp"
 #include "../../hmi/HmiOperators.hpp"   // 1.10
+#include "../../hmi/HmiProduction.hpp"  // 1.12.7 (lot D) : le calendrier des postes
 #include "../../import/ProjectAnalyzer.hpp"
 #include "../../ui/Theme.hpp"
 
@@ -388,6 +389,18 @@ void HmiConfigPane::rebuild() {
                                   "\xC3\x89" "cran tactile : un glisser horizontal ample sur le fond d'une vue passe \xC3\xA0 la vue suivante "
                                   "(vers la gauche) ou pr\xC3\xA9" "c\xC3\xA9" "dente, dans l'ordre de la barre de navigation de la vue, "
                                   "sinon de l'arbre."));
+    // 1.12.7 (lot D) : le calendrier des postes du projet - les compteurs de production dont les debuts
+    // de poste disent « calendrier » le suivent (avant : une liste a taper dans chaque compteur).
+    run.properties.push_back(prop("Calendrier des postes (hh:mm;...)", cfg.shifts, P::ValueType::Text,
+                                  [commitCfg](std::string_view s) {
+                                      std::vector<int> minutes;
+                                      if (!hmi::parseShifts(s, minutes)) return false;
+                                      return commitCfg("Calendrier des postes",
+                                                       [](hmi::Project& pp, const std::string& v) { pp.config.shifts = v; })(s);
+                                  },
+                                  "Les d\xC3\xA9" "buts de poste du site : 06:00;14:00;22:00 ; vide : aucun. Un compteur de production "
+                                  "dont les D\xC3\xA9" "buts de poste disent \xC2\xAB calendrier \xC2\xBB les suit : les changer ici les change "
+                                  "partout."));
     cats.push_back(std::move(run));
 
     // Lot 13 : Generer plus exigeant - la case, et les seuils (0 : pas de controle).

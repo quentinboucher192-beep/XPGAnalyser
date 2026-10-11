@@ -611,6 +611,43 @@ int main(int argc, char** argv) {
                                                 + std::to_string(vue.count(pr::Tab::Hmi)) + ")");
     }
 
+    // 1.12.7 (lot D, § 2.5) : la vue apres connexion suit le renommage d'une vue (avant : seule la barre
+    // de navigation et le plan a zones suivaient) ; un repere $Vue_A$ garde ses $.
+    {
+        std::printf("1.12.7 (lot D) : la vue apres connexion suit le renommage\n");
+        auto doc = std::make_shared<hmi::Document>();
+        auto& hp = doc->project;
+        hp.views.push_back(hmi::makeView(hp, "Vue_A"));
+        hmi::View b = hmi::makeView(hp, "Vue_B");
+        auto login = hmi::makeObject(hmi::Kind::LoginPanel, hp.allocate(), "Connexion_1", 10, 10, b.activeLayer);
+        login.set("afterLogin", "Vue_A");
+        b.objects.push_back(login);
+        auto marked = hmi::makeObject(hmi::Kind::LoginPanel, hp.allocate(), "Connexion_2", 10, 300, b.activeLayer);
+        marked.set("afterLogin", "$Vue_A$");
+        b.objects.push_back(marked);
+        auto other = hmi::makeObject(hmi::Kind::LoginPanel, hp.allocate(), "Connexion_3", 10, 600, b.activeLayer);
+        other.set("afterLogin", "Vue_AB");
+        b.objects.push_back(other);
+        hp.views.push_back(std::move(b));
+        auto p = std::make_shared<domain::Project>();
+        auto side = app::makeHmiRenameSide(doc);
+        const auto plan = pr::makePlan(p.get(), side.get(), pr::Kind::HmiView, "Vue_A", "Vue_Accueil", false);
+        check(plan.ok(), "Vue_A -> Vue_Accueil : libre (" + plan.problem + ")");
+        core::CommandStack stack;
+        auto cmd = pr::makeCommand(p, side.get(), plan);
+        check(cmd && static_cast<bool>(stack.push(std::move(cmd))), "la commande passe");
+        const auto* vb = doc->project.viewByName("Vue_B");
+        const auto after = [&](const char* name) {
+            if (vb)
+                for (const auto& o : vb->objects)
+                    if (o.name == name) return o.text("afterLogin");
+            return std::string("?");
+        };
+        check(after("Connexion_1") == "Vue_Accueil", "lot D : afterLogin Vue_A suit (avant : restait Vue_A) - " + after("Connexion_1"));
+        check(after("Connexion_2") == "$Vue_Accueil$", "lot D : un repere $Vue_A$ suit et garde ses $ - " + after("Connexion_2"));
+        check(after("Connexion_3") == "Vue_AB", "lot D : une autre vue (Vue_AB) ne bouge pas - " + after("Connexion_3"));
+    }
+
     std::printf("5. Lot API 8 : config_gaz.Nom_gaz sur le projet d'essai\n");
     if (argc < 2) {
         std::printf("       (sans MAST.XPG : rien d'essaye ici)\n");

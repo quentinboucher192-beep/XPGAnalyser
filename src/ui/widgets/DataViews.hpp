@@ -917,7 +917,14 @@ public:
         std::function<void()>     open{};
         std::string               openTip{};
         bool                      openOnClick{false};
+        // 1.12.7 (lot D) : UNE LISTE QUI ACCEPTE AUSSI UN NOM TAPE (Enum) - son dernier choix,
+        // kTypeInLabel, ouvre un champ : ce qu'on y tape part tel quel (un repere $Vue$, un nom
+        // d'une autre version), les choix proposes en aide a la saisie. Une valeur a repere se
+        // voit en ambre, comme partout.
+        bool                      typeIn{false};
     };
+    // Le dernier choix d'une liste typeIn.
+    static constexpr std::string_view kTypeInLabel = "Taper un nom ou un rep\xC3\xA8re $\xE2\x80\xA6$\xE2\x80\xA6";
 
     struct Category {
         std::string           name;

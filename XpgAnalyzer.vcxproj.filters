@@ -2431,6 +2431,9 @@
     <ClInclude Include="src\hmi\HmiCallCheck.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
+    <ClInclude Include="src\hmi\HmiChoiceLists.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
     <ClInclude Include="src\hmi\HmiDecl.hpp">
       <Filter>hmi</Filter>
     </ClInclude>

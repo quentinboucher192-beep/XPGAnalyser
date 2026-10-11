@@ -22,6 +22,7 @@
 #include "../../hmi/HmiMedia.hpp"
 #include "../../hmi/HmiControls.hpp"    // 1.12.2 : le tableau dynamique (tableLayout)
 #include "../../hmi/HmiTypeForms.hpp"   // 1.12.2 : ses colonnes, dans l'editeur
+#include "../../hmi/HmiChoiceLists.hpp" // 1.12.7 (lot D) : les colonnes choisies d'une source
 #include "../../ui/Shapes.hpp"
 
 #include <algorithm>
@@ -1666,6 +1667,8 @@ void paintHmiObject(gfx::IRenderer& r, const hmi::View& view, const Object& o, c
                 } else {
                     const auto* var = opt.project ? opt.project->variable(trimmedPen(from)) : nullptr;
                     headers = var ? hmi::typeform::columnsOf(*opt.project, var->type) : std::vector<std::string>{"\xE2\x86\x90 " + trimmedPen(from)};
+                    // 1.12.7 (lot D) : les colonnes choisies (sourceColumns), comme en marche.
+                    if (var) hmi::choices::applySourceColumns(src.text(o, std::string(hmi::choices::kSourceColumnsKey)), headers, nullptr);
                     drawTable(c, headers, static_cast<int>(src.number(o, "rows", 4)));
                 }
                 break;

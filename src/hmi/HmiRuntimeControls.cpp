@@ -29,6 +29,7 @@
 #include "HmiMarkers.hpp"   // 1.11 (REP) : les reperes $...$
 #include "HmiEnums.hpp"     // 1.12.2 : une enumeration, source d'elements
 #include "HmiTypes.hpp"     // 1.12.2 : un tableau IHM, source d'elements ou de lignes
+#include "HmiChoiceLists.hpp"   // 1.12.7 (lot D) : les colonnes choisies d'une source
 
 #include <algorithm>
 #include <cctype>
@@ -667,59 +668,80 @@ bool Runtime::resolveChoices(std::string_view source, std::vector<Choice>& out, 
 }
 
 bool Runtime::tableRows(const Object& o, std::vector<std::string>& headers, std::vector<std::vector<std::string>>& rows) const {
-    std::string src = trimmedText(markers::strip(o.text("rowsFrom")));
-    if (src.empty() || !project_) return false;
-    // Les cellules d'un element : une valeur seule, ou les membres d'un tuple, d'une structure.
-    const auto cellsOf = [&](const sim::Obj& item, bool first) {
-        std::vector<std::string> row;
-        const bool composite = item.type && (item.type->kind == sim::TypeDesc::Kind::Tuple || item.type->kind == sim::TypeDesc::Kind::Struct);
-        if (composite) {
-            for (std::size_t m = 0; m < item.items.size(); ++m) {
-                row.push_back(item.items[m] ? shownOf(*item.items[m]) : std::string{});
-                if (first && m < item.type->members.size()) headers.push_back(item.type->members[m].first);
+    // 1.12.7 (lot D, § 2.4) : les colonnes choisies de la source (sourceColumns : lesquelles, dans quel ordre,
+    // sous quel titre, a quel format) ; absentes, toutes les colonnes, comme avant.
+    const auto fill = [&]() -> bool {
+        std::string src = trimmedText(markers::strip(o.text("rowsFrom")));
+        if (src.empty() || !project_) return false;
+        // Les cellules d'un element : une valeur seule, ou les membres d'un tuple, d'une structure.
+        const auto cellsOf = [&](const sim::Obj& item, bool first) {
+            std::vector<std::string> row;
+            const bool composite = item.type && (item.type->kind == sim::TypeDesc::Kind::Tuple || item.type->kind == sim::TypeDesc::Kind::Struct);
+            if (composite) {
+                for (std::size_t m = 0; m < item.items.size(); ++m) {
+                    row.push_back(item.items[m] ? shownOf(*item.items[m]) : std::string{});
+                    if (first && m < item.type->members.size()) headers.push_back(item.type->members[m].first);
+                }
+            } else {
+                row.push_back(shownOf(item));
+                if (first) headers.push_back("Valeur");
             }
-        } else {
-            row.push_back(shownOf(item));
-            if (first) headers.push_back("Valeur");
-        }
-        return row;
-    };
-    if (auto obj = richOfSource(src, &o); obj && obj->type) {          // 1.12.4 : un parametre objet aussi
-        if (obj->type->kind == sim::TypeDesc::Kind::Map) {
-            headers = {"Cl\xC3\xA9", "Valeur"};
-            for (const auto& [k, v] : obj->textKeys) rows.push_back({k, v ? shownOf(*v) : std::string{}});
-            for (const auto& [k, v] : obj->intKeys) rows.push_back({std::to_string(k), v ? shownOf(*v) : std::string{}});
+            return row;
+        };
+        if (auto obj = richOfSource(src, &o); obj && obj->type) {          // 1.12.4 : un parametre objet aussi
+            if (obj->type->kind == sim::TypeDesc::Kind::Map) {
+                headers = {"Cl\xC3\xA9", "Valeur"};
+                for (const auto& [k, v] : obj->textKeys) rows.push_back({k, v ? shownOf(*v) : std::string{}});
+                for (const auto& [k, v] : obj->intKeys) rows.push_back({std::to_string(k), v ? shownOf(*v) : std::string{}});
+                return true;
+            }
+            bool first = true;
+            for (const auto& item : obj->items) {
+                if (!item) continue;
+                rows.push_back(cellsOf(*item, first));
+                first = false;
+            }
+            if (headers.empty()) headers.push_back("Valeur");
             return true;
         }
-        bool first = true;
-        for (const auto& item : obj->items) {
-            if (!item) continue;
-            rows.push_back(cellsOf(*item, first));
-            first = false;
-        }
-        if (headers.empty()) headers.push_back("Valeur");
-        return true;
-    }
-    // Un tableau IHM (deplie en cases) : une ligne par case ; une structure : une colonne par membre.
-    const auto* a = aggregate(src);
-    if (!a || !a->array) return false;
-    const auto& sp = a->spec;
-    const auto members = types::isElementary(sp.element) ? std::vector<TypeMember>{} : types::membersOf(*project_, sp.element);
-    // 1.12.5 (lot A) : un tableau a deux dimensions - une ligne par premier indice, une colonne par
-    // second (Tab[i,j]) ; avant : des lignes de cases vides (Tab[i] n'existe pas).
-    if (sp.dims == 2) {
-        for (long long j = sp.low[1]; j <= sp.high[1]; ++j) {
-            if (members.empty()) headers.push_back("[" + std::to_string(j) + "]");
-            for (const auto& m : members) headers.push_back("[" + std::to_string(j) + "]." + m.name);
-        }
-        for (long long i = sp.low[0]; i <= sp.high[0]; ++i) {
-            std::vector<std::string> row;
+        // Un tableau IHM (deplie en cases) : une ligne par case ; une structure : une colonne par membre.
+        const auto* a = aggregate(src);
+        if (!a || !a->array) return false;
+        const auto& sp = a->spec;
+        const auto members = types::isElementary(sp.element) ? std::vector<TypeMember>{} : types::membersOf(*project_, sp.element);
+        // 1.12.5 (lot A) : un tableau a deux dimensions - une ligne par premier indice, une colonne par
+        // second (Tab[i,j]) ; avant : des lignes de cases vides (Tab[i] n'existe pas).
+        if (sp.dims == 2) {
             for (long long j = sp.low[1]; j <= sp.high[1]; ++j) {
-                const std::string cell = src + "[" + std::to_string(i) + "," + std::to_string(j) + "]";
-                if (members.empty()) {
-                    const auto* v = variable(cell);
-                    row.push_back(v ? shownOf(*v) : std::string{});
+                if (members.empty()) headers.push_back("[" + std::to_string(j) + "]");
+                for (const auto& m : members) headers.push_back("[" + std::to_string(j) + "]." + m.name);
+            }
+            for (long long i = sp.low[0]; i <= sp.high[0]; ++i) {
+                std::vector<std::string> row;
+                for (long long j = sp.low[1]; j <= sp.high[1]; ++j) {
+                    const std::string cell = src + "[" + std::to_string(i) + "," + std::to_string(j) + "]";
+                    if (members.empty()) {
+                        const auto* v = variable(cell);
+                        row.push_back(v ? shownOf(*v) : std::string{});
+                    }
+                    for (const auto& m : members) {
+                        const auto* v = variable(cell + "." + m.name);
+                        row.push_back(v ? shownOf(*v) : std::string{});
+                    }
                 }
+                rows.push_back(std::move(row));
+            }
+            return true;
+        }
+        if (members.empty()) headers.push_back("Valeur");
+        for (const auto& m : members) headers.push_back(m.name);
+        for (long long i = sp.low[0]; i <= sp.high[0]; ++i) {
+            const std::string cell = src + "[" + std::to_string(i) + "]";
+            std::vector<std::string> row;
+            if (members.empty()) {
+                const auto* v = variable(cell);
+                row.push_back(v ? shownOf(*v) : std::string{});
+            } else {
                 for (const auto& m : members) {
                     const auto* v = variable(cell + "." + m.name);
                     row.push_back(v ? shownOf(*v) : std::string{});
@@ -728,23 +750,9 @@ bool Runtime::tableRows(const Object& o, std::vector<std::string>& headers, std:
             rows.push_back(std::move(row));
         }
         return true;
-    }
-    if (members.empty()) headers.push_back("Valeur");
-    for (const auto& m : members) headers.push_back(m.name);
-    for (long long i = sp.low[0]; i <= sp.high[0]; ++i) {
-        const std::string cell = src + "[" + std::to_string(i) + "]";
-        std::vector<std::string> row;
-        if (members.empty()) {
-            const auto* v = variable(cell);
-            row.push_back(v ? shownOf(*v) : std::string{});
-        } else {
-            for (const auto& m : members) {
-                const auto* v = variable(cell + "." + m.name);
-                row.push_back(v ? shownOf(*v) : std::string{});
-            }
-        }
-        rows.push_back(std::move(row));
-    }
+    };
+    if (!fill()) return false;
+    choices::applySourceColumns(o.text(choices::kSourceColumnsKey), headers, &rows);
     return true;
 }
 

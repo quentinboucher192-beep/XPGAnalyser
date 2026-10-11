@@ -1063,6 +1063,10 @@ struct Config {
     std::string colorMode{"normal"};
     bool        statusSymbols{false};
     std::string theme{"nuit"};
+    // 1.12.7 (lot D) : LE CALENDRIER DES POSTES du projet (« 06:00;14:00;22:00 » ; vide : aucun). Un
+    // compteur de production dont les debuts de poste disent « calendrier » le suit (avant : une liste
+    // a taper dans chaque compteur, et a changer partout).
+    std::string shifts;
     bool operator==(const Config&) const = default;
 };
 

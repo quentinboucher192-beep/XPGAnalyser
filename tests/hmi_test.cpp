@@ -23708,10 +23708,186 @@ void lotBC1126() {
     }
 }
 
+// 1.12.7 (lot D de l'audit des objets) : les listes en tableau et les choix - ce que le moteur et
+// Generer en lisent. Chaque controle dit, dans son libelle, ce que faisait la 1.12.6.
+void lotD1127() {
+    std::printf("1.12.7 (lot D) : les listes en tableau, les choix, le calendrier des postes\n");
+    // ---- les zones d'un bargraphe en % de l'echelle
+    {
+        const auto z = parseZones("0..50 % = #2ECC71; 50 %..100 % = #E5534B", nullptr, 0, 200);
+        check(z.size() == 2 && z[0].to == 100 && z[1].from == 100 && z[1].to == 200,
+              "D : une zone en % de l'\xC3\xA9" "chelle suit min et max (50 % de 0..200 : 100 ; avant : zone illisible)");
+        const auto plain = parseZones("10%-60% = #2ECC71");
+        check(plain.size() == 1 && plain[0].from == 10 && plain[0].to == 60, "D : sans \xC3\xA9" "chelle, 10 % se lit 10 (le tiret apr\xC3\xA8s un % s\xC3\xA9pare)");
+        const auto marked = parseZones("$Bas$-60 = #2ECC71");
+        check(marked.empty(), "D : un rep\xC3\xA8re qui n'est pas un nombre reste illisible (pas de z\xC3\xA9ro invent\xC3\xA9)");
+        std::string why;
+        const auto mixed = parseZones("$Bas$-60 = #2ECC71; 60-80 = #F2C94C", &why, 0, 100);
+        check(mixed.size() == 1 && mixed[0].from == 60 && why.find("$Bas$") == std::string::npos && why.find("Bas") != std::string::npos,
+              "D : une zone rep\xC3\xA9r\xC3\xA9" "e illisible est dite sans ses $ ; les autres se lisent - " + why);
+    }
+    // ---- l'arrondi d'un programmateur a sa resolution
+    {
+        const auto r = scheduleRoundings("Lu=07:00-07:20; Ma=07:10-12:00,13:00-17:00", 60);
+        check(r.size() == 2 && r[0].gone && r[0].range == "07:00-07:20" && !r[1].gone && r[1].becomes == "07:00-12:00",
+              "D : une plage plus courte qu'une case dispara\xC3\xAEt, une autre s'arrondit ; 13:00-17:00 tombe juste (avant : en silence)");
+    }
+    // ---- le calendrier des postes du projet
+    {
+        Project p;
+        p.config.shifts = "06:00;14:00;22:00";
+        check(usesShiftCalendar(" Calendrier ") && !usesShiftCalendar("06:00") && shiftsOf("calendrier", &p) == "06:00;14:00;22:00"
+                  && shiftsOf("07:00;19:00", &p) == "07:00;19:00",
+              "D : un compteur qui dit \xC2\xAB calendrier \xC2\xBB suit les postes du projet ; une liste tap\xC3\xA9" "e reste la sienne");
+        const auto files = serializeProject(p);
+        const FileReader reader = [&](const std::string& path, std::string& content) {
+            for (const auto& f : files)
+                if (f.path == path) { content.assign(f.data->begin(), f.data->end()); return true; }
+            return false;
+        };
+        const auto back = parseProject(reader);
+        check(static_cast<bool>(back) && back->config.shifts == "06:00;14:00;22:00", "D : le calendrier des postes s'enregistre et se relit");
+        Project old;
+        const auto oldFiles = serializeProject(old);
+        const std::string index(oldFiles.front().data->begin(), oldFiles.front().data->end());
+        check(index.find("postes") == std::string::npos, "D : sans calendrier, le fichier ne change pas (un projet d'avant se relit pareil)");
+    }
+    // ---- Generer : l'alignement, les couleurs, les reperes des choix
+    {
+        Project p;
+        View v = makeView(p, "Vue_Lot_D");
+        AlarmDef al;
+        al.name = "Haute_A";
+        al.group = "Zone_A";
+        al.condition = "FALSE";
+        p.alarms.push_back(al);
+        p.programs.variables.push_back(hmiVar(p, "Mode", "INT", "0"));
+        const auto put = [&](Kind k, const char* name, double y) {
+            const Id id = edit::add(p, v, k, 10, y);
+            v.object(id)->name = name;
+            return v.object(id);
+        };
+        auto* sel = put(Kind::Selector, "Sel_Double", 10);
+        sel->set("positions", "Arr\xC3\xAAt;Auto;Manu");
+        sel->set("values", "0;1;1");
+        auto* prog = put(Kind::WeeklySchedule, "Prog_Court", 100);
+        prog->set("resolution", "1 h");
+        prog->set("schedule", "Lu-Ve=07:00-07:20,08:00-12:00");
+        auto* barre = put(Kind::Bargraph, "Barre_Zones", 200);
+        barre->set("zones", "0-60 = #2ECC71; 50-80 = #F2C94C");
+        auto* bandeau = put(Kind::AlarmBanner, "Bandeau_Repere", 300);
+        bandeau->set("group", "$Zone_A$");
+        auto* compteur = put(Kind::ProductionCounter, "Compteur_Calendrier", 400);
+        compteur->set("good", "Mode");
+        compteur->set("shifts", "calendrier");
+        p.views = {v};
+        p.config.startView = v.id;
+        const auto issues = generate(p, [](std::string_view) { return false; });
+        const auto says = [&](const char* object, const char* text) {
+            const Object* o = p.views[0].objectByName(object);
+            for (const auto& i : issues)
+                if (o && i.object == o->id && i.message.find(text) != std::string::npos) return true;
+            return false;
+        };
+        const auto blocks = [&] {
+            bool any = false;
+            for (const auto& i : issues)
+                if (i.severity == Issue::Severity::Error) {
+                    any = true;
+                    std::printf("  erreur : %s (%s)\n", i.message.c_str(), i.property.c_str());
+                }
+            return any;
+        };
+        check(says("Sel_Double", "deux choix l'\xC3\xA9" "crivent"), "D : deux choix qui \xC3\xA9" "crivent la m\xC3\xAAme valeur (1) : G\xC3\xA9n\xC3\xA9rer le dit (avant : rien)");
+        check(says("Prog_Court", "07:00-07:20") && says("Prog_Court", "dispara"),
+              "D : une plage plus courte que la r\xC3\xA9solution : G\xC3\xA9n\xC3\xA9rer le dit (avant : arrondie en silence)");
+        check(says("Barre_Zones", "se chevauchent"), "D : deux zones qui se chevauchent (0-60 et 50-80) : G\xC3\xA9n\xC3\xA9rer le dit");
+        check(!says("Bandeau_Repere", "aucune alarme du groupe"),
+              "D : un groupe tap\xC3\xA9 avec un rep\xC3\xA8re ($Zone_A$) se lit sans ses $ (avant : \xC2\xAB aucune alarme du groupe $Zone_A$ \xC2\xBB)");
+        check(says("Compteur_Calendrier", "calendrier des postes"), "D : un compteur sur le calendrier d'un projet qui n'en a pas : dit");
+        check(!blocks(), "D : ce sont des avertissements - rien ne bloque la marche (ce qui d\xC3\xA9marrait d\xC3\xA9marre)");
+        p.config.shifts = "06:00;18:00";
+        const auto again = generate(p, [](std::string_view) { return false; });
+        bool calendarSaid = false;
+        for (const auto& i : again) calendarSaid = calendarSaid || i.message.find("calendrier des postes") != std::string::npos;
+        check(!calendarSaid, "D : avec un calendrier, le compteur le suit sans rien dire");
+    }
+    // ---- les colonnes choisies d'une source de tableau (Lignes depuis)
+    {
+        Project p;
+        View v = makeView(p, "Vue_Colonnes");
+        HmiType pompe;
+        pompe.id = p.allocate();
+        pompe.name = "T_Pompe_C";
+        pompe.members = {{"Nom", "STRING", "", ""}, {"Debit", "REAL", "", ""}, {"Etat", "INT", "", ""}};
+        p.programs.types.push_back(pompe);
+        p.programs.variables.push_back(hmiVar(p, "Pompes", "ARRAY[1..2] OF T_Pompe_C"));
+        const Id t = edit::add(p, v, Kind::Table, 10, 10);
+        v.object(t)->name = "Tableau_Pompes";
+        v.object(t)->set("rowsFrom", "Pompes");
+        const Id plain = edit::add(p, v, Kind::Table, 10, 300);
+        v.object(plain)->name = "Tableau_Tout";
+        v.object(plain)->set("rowsFrom", "Pompes");
+        v.object(t)->set("sourceColumns", "Debit = D\xC3\xA9" "bit (m\xC2\xB3/h) | 0.0; Nom");
+        p.views = {v};
+        p.config.startView = v.id;
+        Runtime rt;
+        rt.bind(&p, nullptr);
+        rt.start(0.0);
+        rt.environment().write("Pompes[1].Nom", sim::Value::text("P1"));
+        rt.environment().write("Pompes[1].Debit", sim::Value::real(12.345));
+        rt.tick(0.1);
+        std::vector<std::string> headers;
+        std::vector<std::vector<std::string>> rows;
+        check(rt.tableRows(*p.views[0].object(t), headers, rows)
+                  && headers == std::vector<std::string>{"D\xC3\xA9" "bit (m\xC2\xB3/h)", "Nom"} && !rows.empty() && rows[0].size() == 2
+                  && rows[0][0] == "12.3" && rows[0][1] == "P1",
+              "D : les colonnes d'une source se choisissent - leur ordre, leur titre, leur format (avant : toutes, sous leur nom) - "
+                  + (headers.empty() ? std::string("?") : headers[0]) + " / " + (rows.empty() || rows[0].empty() ? std::string("?") : rows[0][0]));
+        headers.clear();
+        rows.clear();
+        check(rt.tableRows(*p.views[0].object(plain), headers, rows) && headers == std::vector<std::string>{"Nom", "Debit", "Etat"},
+              "D : sans choix, toutes les colonnes, comme avant");
+        rt.stop(1.0);
+        p.views[0].object(t)->set("sourceColumns", "Debit; Pression");
+        bool said = false;
+        for (const auto& i : generate(p, [](std::string_view) { return false; }))
+            said = said || (i.message.find("colonne Pression") != std::string::npos && i.severity == Issue::Severity::Warning);
+        check(said, "D : une colonne que la source n'a pas (Pression) : G\xC3\xA9n\xC3\xA9rer le dit");
+    }
+    // ---- le compteur suit le calendrier en marche
+    {
+        Project p;
+        View v = makeView(p, "Vue_Postes");
+        p.config.shifts = "00:00";
+        p.programs.variables.push_back(hmiVar(p, "Bons", "DINT", "0"));
+        const Id c = edit::add(p, v, Kind::ProductionCounter, 10, 10);
+        v.object(c)->name = "Compteur";
+        v.object(c)->set("good", "Bons");
+        v.object(c)->set("shifts", "calendrier");
+        p.views = {v};
+        p.config.startView = v.id;
+        Runtime rt;
+        rt.bind(&p, nullptr);
+        rt.start(0.0);
+        rt.tick(0.1);
+        rt.tick(0.2);
+        const auto figures = rt.production(c);
+        check(figures.shift == "Poste de 00:00", "D : en marche, le compteur prend le poste du calendrier (Poste de 00:00 ; avant : "
+                                                 "\xC2\xAB calendrier \xC2\xBB illisible, sans poste) - " + figures.shift);
+    }
+}
+
 int main(int argc, char** argv) {
     // 1.11.10 : HMI_TEST_1110=1 - les fonctions et les popups des symboles, seules.
     if (const char* only = std::getenv("HMI_TEST_1110"); only && *only == '1') {
         fonctionsSymbole11110();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
+    // 1.12.7 : HMI_TEST_1127=1 - les lots D et E de l'audit des objets, seuls.
+    if (const char* only = std::getenv("HMI_TEST_1127"); only && *only == '1') {
+        lotD1127();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -23852,6 +24028,7 @@ int main(int argc, char** argv) {
     parametresObjets1124();           // 1.12.4 : les parametres objets des popups
     lotA1125();                       // 1.12.5 (lot A) : les defauts de l'audit des objets
     lotBC1126();                      // 1.12.6 (lots B et C) : le role de chaque propriete, les reperes partout
+    lotD1127();                       // 1.12.7 (lot D) : les listes en tableau et les choix
     enumerationsLangage110();         // 1.10 (S1, decision 15) : les enumerations dans les scripts
     operateurs110();                  // 1.10 (chantier S2) : les operateurs des symboles et des types IHM
     operateurs1101();                 // 1.10.1 (chantier U2) : a, b et Resultat (types, legende, exemple, Compiler)
