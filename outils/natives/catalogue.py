@@ -19,12 +19,16 @@ CATS = [
     ("math", "Mathématiques", "Valeur absolue, racine, puissances, logarithmes, trigonométrie, arrondis.", "Fonctions standard"),
     ("select", "Sélection et bornes", "Choisir une valeur, la plus petite, la plus grande, borner.", "Fonctions standard"),
     ("texte", "Chaînes de caractères", "Longueur, extraits, recherche, assemblage, majuscules.", "Fonctions standard"),
-    ("bits", "Bits et décalages", "Décaler et faire tourner les bits d'un mot.", "Fonctions standard"),
+    ("bits", "Bits et décalages", "Décaler et faire tourner les bits d'un mot ; compter, tester, mettre à 1 ou à 0 un bit (<bit>).", "Fonctions standard"),
     ("conv", "Conversions", "Passer d'un type à l'autre : TO_xxx et X_TO_Y.", "Fonctions standard"),
     ("tab", "Tableaux", "Taille et bornes d'un tableau.", "Le dialecte de l'IHM"),
     ("map", "MAP et itérateurs", "Les tables associatives (clé → valeur) et leur parcours.", "Le dialecte de l'IHM"),
-    ("liste", "Listes, vecteurs et tuples", "Les collections de taille variable (LIST OF T, VECTOR OF T) : ajouter, retirer, chercher, trier.", "Le dialecte de l'IHM"),
+    ("liste", "Listes, vecteurs et tuples", "Les collections de taille variable (LIST OF T, VECTOR OF T) : ajouter, retirer, chercher, trier ; les TUPLE. Ce qui ne change pas la taille lit aussi un ARRAY.", "Le dialecte de l'IHM"),
     ("ref", "Références et pointeurs", "Désigner une variable sans la copier.", "Le dialecte de l'IHM"),
+    # 1.12.7 : la bibliotheque standard du C++, en ST
+    ("numeric", "std::numeric", "Plier, cumuler, remplir une suite ; PGCD, PPCM, milieu ; le calcul saturé (C++26).", "Bibliothèques"),
+    ("limits", "std::numeric_limits", "Les bornes et les caractéristiques de chaque type numérique : NUMERIC_LIMITS<T>.MEMBRE.", "Bibliothèques"),
+    ("numbers", "std::numbers", "Les constantes mathématiques : NUMBERS.PI, NUMBERS<REAL>.E…", "Bibliothèques"),
     ("nav", "Navigation et vues", "Changer de vue, revenir, l'accueil.", "Fonctions IHM_"),
     ("popup", "Popups", "Ouvrir, remplacer, centrer, fermer une popup.", "Fonctions IHM_"),
     ("journal", "Journal et Console", "Écrire une ligne dans le journal ou la Console.", "Fonctions IHM_"),
@@ -45,6 +49,7 @@ CATS = [
 # Une fonction : dict(name, cat, params=[(nom, type, phrase, facultatif)], ret, short, notes=[...],
 #   st (exemple ST), c, cpp (la meme chose en C, en C++), essai=(type R, expression, attendu, prelude),
 #   ou : 'S F X T' (Script, Fonction, eXpression fx, Texte {}) ; plc : l'equivalent dans l'automate.
+#   1.12.7 : expr=False - pas dans une expression fx (elle ecrit son argument), quelle que soit la categorie.
 F = []
 def fn(**k):
     F.append(k)
@@ -217,7 +222,9 @@ fn(name="MAP_HAS", cat="map", params=[("M", "MAP", "la MAP", False), ("CLE", "co
    c="/* pas de MAP en C */", cpp="if (stock.count(\"vis\")) stock[\"vis\"] -= 1.0f;", essai=("BOOL", "MAP_HAS(m, 'vis')", "TRUE", MAPDECL), plc="—")
 fn(name="MAP_GET", cat="map", params=[("M", "MAP", "la MAP", False), ("CLE", "comme la clé", "la clé", False), ("DEFAUT", "comme les valeurs", "la valeur si la clé manque", True)],
    ret="comme les valeurs", short="La valeur d'une clé, sans la créer (DEFAUT si elle manque).",
-   notes=["m['cle'] en lecture crée la clé ; MAP_GET ne crée rien."], st="Qte := MAP_GET(Stock, 'vis', 0.0);",
+   notes=["Lire m['cle'] ne crée pas la clé : une clé absente arrête le script (« clé absente de la MAP ») ; MAP_HAS teste, MAP_GET rend DEFAUT. "
+          "Écrire m['cle'] := v crée la clé.",
+          "Sans DEFAUT, une clé absente est une erreur (« MAP_GET : clé absente : 'clou' »)."], st="Qte := MAP_GET(Stock, 'vis', 0.0);",
    c="/* pas de MAP en C */", cpp="auto it = stock.find(\"vis\");\nQte = it != stock.end() ? it->second : 0.0f;", essai=("REAL", "MAP_GET(m, 'ecrou', 0.0)", "80", MAPDECL), plc="—")
 fn(name="MAP_REMOVE", cat="map", params=[("M", "MAP", "la MAP", False), ("CLE", "comme la clé", "la clé à retirer", False)], ret="BOOL",
    short="Retire une clé ; vrai si elle y était.", st="MAP_REMOVE(Stock, 'ecrou');", c="/* pas de MAP en C */", cpp="stock.erase(\"ecrou\");",
@@ -242,7 +249,7 @@ LDECL = "VAR L : LIST OF INT := [3, 1, 2]; END_VAR"
 VDECL = "VAR V : VECTOR OF STRING := ['a', 'b', 'c']; END_VAR"
 NOC = "/* pas de liste en C : un tableau et un compteur */"
 fn(name="LIST_ADD", cat="liste", params=[("L", "LIST OF T", "la liste", False), ("X", "T", "la valeur ajoutée", False)], ret="DINT",
-   short="Ajoute la valeur à la fin ; rend le nombre d'éléments.", st="LIST_ADD(Mesures, Niveau);", c=NOC,
+   short="Ajoute la valeur à la fin ; rend le nombre d'éléments.", notes=["Un ARRAY a une taille fixe : LIST_ADD le refuse (Compiler l'avertit) — LIST_SET ou LIST_FILL l'écrivent."], st="LIST_ADD(Mesures, Niveau);", c=NOC,
    cpp="mesures.push_back(niveau);", essai=("DINT", "LIST_ADD(L, 4)", "4", LDECL), plc="—")
 fn(name="LIST_INSERT", cat="liste", params=[("L", "LIST OF T", "la liste", False), ("I", "DINT", "l'indice (0 : en tête)", False), ("X", "T", "la valeur", False)],
    ret="DINT", short="Insère la valeur à l'indice ; rend le nombre d'éléments.", notes=["Un indice hors de 0..L.Count est une erreur."],
@@ -259,35 +266,35 @@ fn(name="LIST_CLEAR", cat="liste", params=[("L", "LIST OF T", "la liste", False)
 fn(name="LIST_COUNT", cat="liste", params=[("L", "LIST OF T", "la liste", False)], ret="DINT",
    short="Le nombre d'éléments (comme L.Count).", st="Nb := LIST_COUNT(Mesures);", c=NOC, cpp="nb = mesures.size();",
    essai=("DINT", "LIST_COUNT(L)", "3", LDECL), plc="—")
-fn(name="LIST_CONTAINS", cat="liste", params=[("L", "LIST OF T", "la liste", False), ("X", "T", "la valeur cherchée", False)], ret="BOOL",
-   short="Vrai si la valeur est dans la liste.", st="IF LIST_CONTAINS(Actifs, 'Four') THEN ... END_IF", c=NOC,
+fn(name="LIST_CONTAINS", cat="liste", params=[("L", "LIST, VECTOR, ARRAY", "la liste", False), ("X", "T", "la valeur cherchée", False)], ret="BOOL",
+   short="Vrai si la valeur est dans la liste.", notes=["1.12.7 : il cherche aussi dans un ARRAY."], st="IF LIST_CONTAINS(Actifs, 'Four') THEN ... END_IF", c=NOC,
    cpp="std::find(l.begin(), l.end(), x) != l.end()", essai=("BOOL", "LIST_CONTAINS(L, 2)", "TRUE", LDECL), plc="—")
-fn(name="LIST_INDEX_OF", cat="liste", params=[("L", "LIST OF T", "la liste", False), ("X", "T", "la valeur cherchée", False)], ret="DINT",
-   short="L'indice de la première valeur égale ; -1 si elle n'y est pas.", st="i := LIST_INDEX_OF(Recettes, 'Pain');", c=NOC,
+fn(name="LIST_INDEX_OF", cat="liste", params=[("L", "LIST, VECTOR, ARRAY", "la liste", False), ("X", "T", "la valeur cherchée", False)], ret="DINT",
+   short="L'indice de la première valeur égale ; -1 si elle n'y est pas.", notes=["1.12.7 : dans un ARRAY, l'indice du tableau (Tab.Low à Tab.High)."], st="i := LIST_INDEX_OF(Recettes, 'Pain');", c=NOC,
    cpp="auto it = std::find(l.begin(), l.end(), x);\ni = it == l.end() ? -1 : it - l.begin();", essai=("DINT", "LIST_INDEX_OF(L, 2)", "2", LDECL), plc="—")
 fn(name="LIST_FIRST", cat="liste", params=[("L", "LIST OF T", "la liste", False)], ret="T", short="Le premier élément (comme L.First) ; une liste vide : une erreur.",
    st="Premier := LIST_FIRST(File);", c=NOC, cpp="premier = file.front();", essai=("INT", "LIST_FIRST(L)", "3", LDECL), plc="—")
 fn(name="LIST_LAST", cat="liste", params=[("L", "LIST OF T", "la liste", False)], ret="T", short="Le dernier élément (comme L.Last) ; une liste vide : une erreur.",
    st="Dernier := LIST_LAST(Mesures);", c=NOC, cpp="dernier = mesures.back();", essai=("INT", "LIST_LAST(L)", "2", LDECL), plc="—")
-fn(name="LIST_GET", cat="liste", params=[("L", "LIST OF T", "la liste", False), ("I", "DINT", "l'indice", False), ("DEFAUT", "T", "la valeur hors de la liste", False)],
-   ret="T", short="L'élément de l'indice, ou DEFAUT hors de la liste (sans erreur).", st="V := LIST_GET(Mesures, 5, 0.0);", c=NOC,
+fn(name="LIST_GET", cat="liste", params=[("L", "LIST, VECTOR, ARRAY", "la liste", False), ("I", "DINT", "l'indice", False), ("DEFAUT", "T", "la valeur hors de la liste", False)],
+   ret="T", short="L'élément de l'indice, ou DEFAUT hors de la liste (sans erreur).", notes=["1.12.7 : il lit aussi un ARRAY, à ses indices (Tab.Low à Tab.High) ; LIST_SET écrit de même."], st="V := LIST_GET(Mesures, 5, 0.0);", c=NOC,
    cpp="v = i < mesures.size() ? mesures[i] : 0.0f;", essai=("INT", "LIST_GET(L, 9, -1)", "-1", LDECL), plc="—")
-fn(name="LIST_SORT", cat="liste", params=[("L", "LIST OF T", "une liste de valeurs simples", False), ("DECROISSANT", "BOOL", "TRUE : du plus grand au plus petit", True)],
-   ret="BOOL", short="Trie la liste (des nombres, des textes, des durées).", st="LIST_SORT(Mesures);   (* LIST_SORT(Mesures, TRUE) : décroissant *)",
+fn(name="LIST_SORT", cat="liste", params=[("L", "LIST, VECTOR, ARRAY", "des valeurs simples", False), ("DECROISSANT", "BOOL", "TRUE : du plus grand au plus petit", True)],
+   ret="BOOL", short="Trie la liste (des nombres, des textes, des durées).", notes=["1.12.7 : un ARRAY aussi, en place (un tableau IHM est écrit).", "Une liste de structures : LIST_SORT_BY(L, 'Poids')."], st="LIST_SORT(Mesures);   (* LIST_SORT(Mesures, TRUE) : décroissant *)",
    c="qsort(t, n, sizeof t[0], comparer);", cpp="std::sort(mesures.begin(), mesures.end());", essai=("BOOL", "LIST_SORT(L)", "TRUE", LDECL), plc="—")
-fn(name="LIST_REVERSE", cat="liste", params=[("L", "LIST OF T", "la liste", False)], ret="BOOL", short="Renverse l'ordre des éléments.",
+fn(name="LIST_REVERSE", cat="liste", params=[("L", "LIST, VECTOR, ARRAY", "la liste", False)], ret="BOOL", short="Renverse l'ordre des éléments.", notes=["1.12.7 : un ARRAY aussi, en place."],
    st="LIST_REVERSE(Historique);", c=NOC, cpp="std::reverse(l.begin(), l.end());", essai=("BOOL", "LIST_REVERSE(L)", "TRUE", LDECL), plc="—")
-fn(name="LIST_SUM", cat="liste", params=[("L", "LIST OF T", "une liste de nombres", False)], ret="comme les éléments",
-   short="La somme des nombres de la liste.", st="Total := LIST_SUM(Pesees);", c="for (i = 0; i < n; ++i) total += t[i];",
+fn(name="LIST_SUM", cat="liste", params=[("L", "LIST, VECTOR, ARRAY", "des nombres", False)], ret="comme les éléments",
+   short="La somme des nombres de la liste.", notes=["1.12.7 : un ARRAY aussi.", "ACCUMULATE (std::numeric) fait de même, avec une opération."], st="Total := LIST_SUM(Pesees);", c="for (i = 0; i < n; ++i) total += t[i];",
    cpp="total = std::accumulate(l.begin(), l.end(), 0.0);", essai=("DINT", "LIST_SUM(L)", "6", LDECL), plc="—")
-fn(name="LIST_MIN", cat="liste", params=[("L", "LIST OF T", "une liste de valeurs simples", False)], ret="T",
-   short="La plus petite valeur ; une liste vide : une erreur.", st="Mini := LIST_MIN(Mesures);", c=NOC,
+fn(name="LIST_MIN", cat="liste", params=[("L", "LIST, VECTOR, ARRAY", "des valeurs simples", False)], ret="T",
+   short="La plus petite valeur ; une liste vide : une erreur.", notes=["1.12.7 : un ARRAY aussi ; LIST_MIN_INDEX dit où elle est."], st="Mini := LIST_MIN(Mesures);", c=NOC,
    cpp="mini = *std::min_element(l.begin(), l.end());", essai=("INT", "LIST_MIN(L)", "1", LDECL), plc="—")
-fn(name="LIST_MAX", cat="liste", params=[("L", "LIST OF T", "une liste de valeurs simples", False)], ret="T",
-   short="La plus grande valeur ; une liste vide : une erreur.", st="Maxi := LIST_MAX(Mesures);", c=NOC,
+fn(name="LIST_MAX", cat="liste", params=[("L", "LIST, VECTOR, ARRAY", "des valeurs simples", False)], ret="T",
+   short="La plus grande valeur ; une liste vide : une erreur.", notes=["1.12.7 : un ARRAY aussi ; LIST_MAX_INDEX dit où elle est."], st="Maxi := LIST_MAX(Mesures);", c=NOC,
    cpp="maxi = *std::max_element(l.begin(), l.end());", essai=("INT", "LIST_MAX(L)", "3", LDECL), plc="—")
-fn(name="LIST_AVG", cat="liste", params=[("L", "LIST OF T", "une liste de nombres", False)], ret="REAL",
-   short="La moyenne des nombres ; une liste vide : une erreur.", st="Moyenne := LIST_AVG(Mesures);", c=NOC,
+fn(name="LIST_AVG", cat="liste", params=[("L", "LIST, VECTOR, ARRAY", "des nombres", False)], ret="REAL",
+   short="La moyenne des nombres ; une liste vide : une erreur.", notes=["1.12.7 : un ARRAY aussi."], st="Moyenne := LIST_AVG(Mesures);", c=NOC,
    cpp="moyenne = std::accumulate(l.begin(), l.end(), 0.0) / l.size();", essai=("REAL", "LIST_AVG(L)", "2", LDECL), plc="—")
 fn(name="VECTOR_PUSH", cat="liste", params=[("V", "VECTOR OF T", "le vecteur", False), ("X", "T", "la valeur ajoutée", False)], ret="DINT",
    short="Ajoute la valeur à la fin (comme LIST_ADD) ; rend la taille.", st="VECTOR_PUSH(Pile, Code);", c=NOC, cpp="pile.push_back(code);",
@@ -312,8 +319,8 @@ fn(name="VECTOR_FRONT", cat="liste", params=[("V", "VECTOR OF T", "le vecteur", 
    st="Premier := VECTOR_FRONT(Etapes);", c=NOC, cpp="premier = etapes.front();", essai=("STRING", "VECTOR_FRONT(V)", "a", VDECL), plc="—")
 fn(name="VECTOR_BACK", cat="liste", params=[("V", "VECTOR OF T", "le vecteur", False)], ret="T", short="Le dernier élément.",
    st="Dernier := VECTOR_BACK(Etapes);", c=NOC, cpp="dernier = etapes.back();", essai=("STRING", "VECTOR_BACK(V)", "c", VDECL), plc="—")
-fn(name="JOIN", cat="liste", params=[("L", "LIST OF T", "une liste de valeurs simples", False), ("SEP", "STRING", "le séparateur (', ' sans lui)", True)],
-   ret="STRING", short="Les éléments en un seul texte, séparés.", st="Texte := JOIN(Actifs, ', ');", c="/* strcat en boucle */",
+fn(name="JOIN", cat="liste", params=[("L", "LIST, VECTOR, ARRAY", "des valeurs simples", False), ("SEP", "STRING", "le séparateur (', ' sans lui)", True)],
+   ret="STRING", short="Les éléments en un seul texte, séparés.", notes=["1.12.7 : un ARRAY aussi."], st="Texte := JOIN(Actifs, ', ');", c="/* strcat en boucle */",
    cpp="for (const auto& x : l) texte += (texte.empty() ? \"\" : \", \") + x;", essai=("STRING", "JOIN(V, '-')", "a-b-c", VDECL), plc="—")
 fn(name="SPLIT", cat="liste", params=[("TEXTE", "STRING", "le texte à couper", False), ("SEP", "STRING", "le séparateur", False)],
    ret="LIST OF STRING", short="Le texte coupé à chaque séparateur : une liste de textes.", st="Mots := SPLIT('a;b;c', ';');",
@@ -328,6 +335,420 @@ fn(name="REF", cat="ref", params=[("X", "une variable", "pas une valeur calculé
 fn(name="ADR", cat="ref", params=[("X", "une variable", "pas une valeur calculée", False)], ret="POINTER TO type de X",
    short="Un pointeur vers une variable (comme REF, pour POINTER TO).", st="VAR p : POINTER TO INT; END_VAR\np := ADR(Compteur);\np^ := p^ + 1;",
    c="int16_t* p = &Compteur;\n*p += 1;", cpp="auto* p = &Compteur;\n*p += 1;", essai=None, plc="ADR (EF)")
+
+# ------------------------------------------- 1.12.7 : les conteneurs (43 natives de plus) --
+#  La maquette 1.12.7 (v3) : lire et ecrire sans erreur, chercher, compter, retirer sous
+#  condition (l'enumeration COMPARAISON), trier une liste de structures par un membre,
+#  deplacer, faire tourner, extraire, copier vers un ARRAY ; MAP_INCREMENT, MAP_FLOOR_KEY,
+#  MAP_ITEMS ; TUPLE_GET, TUPLE_SET, TUPLE_UNPACK, TUPLE_TO_STRING. Celles qui ne changent pas
+#  la taille lisent aussi un ARRAY, a ses indices (Tab.Low a Tab.High) ; celles qui la changent
+#  le refusent (« un ARRAY a une taille fixe »). Les variables d'essai sont celles de la maquette.
+def decl(*lines):
+    return "VAR\n" + "\n".join("    " + l + ";" for l in lines) + "\nEND_VAR"
+D_MES = "Mesures : LIST OF REAL := [12.5, 8.0, 15.2, 8.0, 3.1]"
+D_AUT = "Autres : LIST OF REAL := [1.0, 2.0]"
+D_TRI = "Triee : LIST OF REAL := [1.0, 3.0, 4.5, 7.0]"
+D_PILE = "Pile : VECTOR OF STRING := ['a', 'b', 'c']"
+D_CASES = "Cases : ARRAY[0..4] OF INT := [4, 9, 1, 9, 6]"
+D_STOCK = "Stock : MAP[STRING] OF REAL := ['ecrou' := 80.0, 'goujon' := 45.0, 'vis' := 120.0]"
+D_LIVR = "Livraison : MAP[STRING] OF REAL := ['clou' := 500.0, 'vis' := 60.0]"
+D_PAL = "Paliers : MAP[INT] OF REAL := [0 := 1.0, 100 := 1.2, 500 := 1.5]"
+D_POINT = "Point : TUPLE(STRING, REAL) := ('four', 850.0)"
+D_LOTS = "Lots : LIST OF TUPLE(STRING, REAL) := [('B12', 2.5), ('A07', 4.0), ('C03', 1.2)]"
+NOC = "/* pas de liste en C : un tableau et un compteur */"
+NOMAP = "/* pas de MAP en C */"
+CMP = "#Egal, #Different, #Inferieur, #InferieurOuEgal, #Superieur, #SuperieurOuEgal"
+ARR_NOTE = "Un ARRAY se lit à ses indices : de Tab.Low à Tab.High."
+SIZE_NOTE = "Elle change la taille : un ARRAY (taille fixe) est refusé — une LIST ou un VECTOR est attendu."
+MEMBER_NOTE = "Une liste de structures : MEMBRE dit lequel comparer ('Poids') ; une liste de TUPLE : 'Item1', 'Item2'…"
+SCRIPT_NOTE = "Elle change son premier argument : dans un script ou une fonction (une expression fx n'en change qu'une copie)."
+
+# ---- lire et ecrire
+fn(name="LIST_SET", cat="liste", params=[("L", "LIST, VECTOR, ARRAY", "la liste", False), ("I", "DINT", "l'indice", False), ("X", "T", "la valeur", False)],
+   ret="BOOL", short="Écrit x à l'indice i ; FALSE, sans erreur, hors de la liste (rien n'est écrit).",
+   notes=["Le pendant de LIST_GET ; L[i] := x, lui, s'arrête hors de la liste.", ARR_NOTE, SCRIPT_NOTE],
+   st="IF NOT LIST_SET(Mesures, Rang, Niveau) THEN\n    IHM_JOURNAL('Rang hors de la liste');\nEND_IF",
+   c=NOC + "\nif (i < n) t[i] = x;", cpp="if (i < mesures.size()) mesures[i] = x;",
+   essai=("BOOL", "LIST_SET(Mesures, 1, 9.5) AND Mesures[1] = 9.5", "TRUE", decl(D_MES)), ou="S F")
+fn(name="MAP_SET", cat="map", params=[("M", "MAP", "la MAP", False), ("CLE", "comme les clés", "la clé", False), ("V", "comme les valeurs", "la valeur", False)],
+   ret="BOOL", short="Écrit la valeur de la clé, en la créant si elle manque (comme m[clé] := v) ; TRUE si la clé est nouvelle.",
+   notes=["Une valeur d'un autre type est refusée : MAP_SET(Stock, 'vis', 'abc') s'arrête sur « 'abc' n'est pas un REAL ».", SCRIPT_NOTE],
+   st="IF MAP_SET(Stock, Piece, Qte) THEN\n    IHM_JOURNAL(CONCAT('Nouvelle pièce : ', Piece));\nEND_IF",
+   c=NOMAP, cpp="bool nouvelle = stock.insert_or_assign(piece, qte).second;   // C++17",
+   essai=("BOOL", "MAP_SET(Stock, 'rondelle', 12.0)", "TRUE", decl(D_STOCK)), ou="S F")
+fn(name="TUPLE_GET", cat="liste", params=[("T", "TUPLE", "le tuple", False), ("N", "une constante, 1 à la taille", "le numéro du champ", False)],
+   ret="le type du champ N", short="Le champ n du TUPLE (1 : le premier), comme t.Item1.",
+   notes=["N est une constante : le type du résultat se connaît à Compiler, qui dit un numéro hors des champs."],
+   st="Valeur := TUPLE_GET(Point, 2);   (* = Point.Item2 *)", c="valeur = point.valeur;   /* un struct */",
+   cpp="valeur = std::get<1>(point);   // std::get compte à partir de 0",
+   essai=("REAL", "TUPLE_GET(Point, 2)", "850", decl(D_POINT)), ou="S F")
+fn(name="TUPLE_SET", cat="liste", params=[("T", "TUPLE", "le tuple", False), ("N", "une constante", "le numéro du champ", False), ("X", "le type du champ", "la valeur", False)],
+   ret="BOOL", short="Écrit le champ n (1 : le premier), comme t.Item1 := x.", notes=["N est une constante.", SCRIPT_NOTE],
+   st="TUPLE_SET(Point, 1, 'etuve');   (* = Point.Item1 := 'etuve' *)", c="strcpy(point.nom, \"etuve\");", cpp="std::get<0>(point) = \"etuve\";",
+   essai=("STRING", "TUPLE_GET(Point, 1)", "etuve", decl(D_POINT) + "\nTUPLE_SET(Point, 1, 'etuve');"), ou="S F")
+fn(name="MAP_FIRST_KEY", cat="map", params=[("M", "MAP", "la MAP", False), ("DEFAUT", "comme les clés", "pour une MAP vide", True)],
+   ret="comme les clés", short="La plus petite clé (les clés sont rangées) ; une MAP vide : DEFAUT, ou une erreur sans lui.",
+   st="Premiere := MAP_FIRST_KEY(Stock);", c=NOMAP, cpp="premiere = stock.begin()->first;   // la MAP n'est pas vide",
+   essai=("STRING", "MAP_FIRST_KEY(Stock)", "ecrou", decl(D_STOCK)), ou="S F")
+fn(name="MAP_LAST_KEY", cat="map", params=[("M", "MAP", "la MAP", False), ("DEFAUT", "comme les clés", "pour une MAP vide", True)],
+   ret="comme les clés", short="La plus grande clé ; une MAP vide : DEFAUT, ou une erreur sans lui.",
+   st="Derniere := MAP_LAST_KEY(Paliers);", c=NOMAP, cpp="derniere = paliers.rbegin()->first;",
+   essai=("INT", "MAP_LAST_KEY(Paliers)", "500", decl(D_PAL)), ou="S F")
+fn(name="TUPLE_SIZE", cat="liste", params=[("T", "TUPLE", "le tuple", False)], ret="DINT",
+   short="Le nombre de champs du TUPLE (une constante : 2 pour un TUPLE(STRING, REAL)).",
+   st="n := TUPLE_SIZE(Point);", c="n = 2;   /* un struct : le nombre de ses membres */", cpp="constexpr auto n = std::tuple_size_v<decltype(point)>;",
+   essai=("DINT", "TUPLE_SIZE(Point)", "2", decl(D_POINT)), ou="S F")
+# ---- ajouter et retirer
+fn(name="MAP_INSERT", cat="map", params=[("M", "MAP", "la MAP", False), ("CLE", "comme les clés", "la clé", False), ("V", "comme les valeurs", "sa valeur, si elle est nouvelle", False)],
+   ret="BOOL", short="Ajoute la clé seulement si elle manque : n'écrase jamais. TRUE si elle a été ajoutée.", notes=[SCRIPT_NOTE],
+   st="MAP_INSERT(Stock, 'rondelle', 0.0);   (* un départ, sans écraser *)", c=NOMAP,
+   cpp="bool ajoutee = stock.try_emplace(\"rondelle\", 0.0f).second;   // C++17",
+   essai=("REAL", "Stock['vis']", "120", decl(D_STOCK) + "\nMAP_INSERT(Stock, 'vis', 0.0);"), ou="S F")
+fn(name="LIST_INSERT_SORTED", cat="liste", params=[("L", "LIST, VECTOR", "une liste triée", False), ("X", "T", "la valeur", False), ("DECROISSANT", "BOOL", "TRUE pour une liste du plus grand au plus petit", True)],
+   ret="DINT", short="Insère la valeur à sa place dans une liste triée, après celles qui lui sont égales ; rend l'indice où elle est rangée.",
+   notes=["La liste reste triée sans LIST_SORT.", SIZE_NOTE],
+   st="LIST_INSERT_SORTED(Echeances, Prochaine);", c="/* pas de liste en C : chercher la place, memmove, écrire */",
+   cpp="auto it = std::upper_bound(l.begin(), l.end(), x);\nl.insert(it, x);",
+   essai=("DINT", "LIST_INSERT_SORTED(Triee, 4.5)", "3", decl(D_TRI)), ou="S F")
+fn(name="LIST_POP_FIRST", cat="liste", params=[("L", "LIST, VECTOR", "la liste", False)], ret="T",
+   short="Retire le premier élément et le rend : une file d'attente (le premier entré sort le premier). Une liste vide : une erreur.",
+   notes=["VECTOR_POP retire le dernier (une pile).", SIZE_NOTE],
+   st="WHILE File.Count > 0 DO\n    Commande := LIST_POP_FIRST(File);\n    (* envoyer la commande *)\nEND_WHILE",
+   c="/* pas de liste en C : t[0], puis memmove */", cpp="auto x = file.front();\nfile.erase(file.begin());   // std::deque : file.pop_front()",
+   essai=("STRING", "LIST_POP_FIRST(Pile) + JOIN(Pile, '')", "abc", decl(D_PILE)), ou="S F")
+fn(name="LIST_REMOVE_ALL", cat="liste", params=[("L", "LIST, VECTOR", "la liste", False), ("X", "T", "la valeur à retirer", False)], ret="DINT",
+   short="Retire toutes les valeurs égales ; rend le nombre retiré (0 si aucune).", notes=[SIZE_NOTE],
+   st="n := LIST_REMOVE_ALL(Actifs, 'P2');", c="/* pas de liste en C : une boucle qui recopie les autres */", cpp="auto n = std::erase(l, x);   // C++20",
+   essai=("DINT", "LIST_REMOVE_ALL(Mesures, 8.0)", "2", decl(D_MES)), ou="S F")
+fn(name="LIST_REMOVE_IF", cat="liste", params=[("L", "LIST, VECTOR", "la liste", False), ("COMPARAISON", "COMPARAISON", CMP, False),
+                                              ("VALEUR", "T, ou le type du membre", "à quoi comparer", False), ("MEMBRE", "STRING", "'Poids' pour une liste de structures", True)],
+   ret="DINT", short="Retire les éléments qui vérifient la comparaison avec VALEUR ; rend le nombre retiré.", notes=[MEMBER_NOTE, SIZE_NOTE],
+   st="n := LIST_REMOVE_IF(Mesures, COMPARAISON#Inferieur, 0.0);   (* les mesures négatives *)",
+   c="/* pas de liste en C : une boucle qui recopie les autres */", cpp="auto n = std::erase_if(mesures, [](REAL x) { return x < 0.0f; });   // C++20",
+   essai=("DINT", "LIST_REMOVE_IF(Mesures, COMPARAISON#Inferieur, 9.0)", "3", decl(D_MES)), ou="S F")
+fn(name="MAP_REMOVE_IF", cat="map", params=[("M", "MAP", "la MAP", False), ("COMPARAISON", "COMPARAISON", CMP, False), ("VALEUR", "comme les valeurs", "à quoi comparer", False)],
+   ret="DINT", short="Retire les clés dont la valeur vérifie la comparaison ; rend le nombre retiré.", notes=[SCRIPT_NOTE],
+   st="MAP_REMOVE_IF(Stock, COMPARAISON#InferieurOuEgal, 0.0);   (* les pièces épuisées *)", c=NOMAP,
+   cpp="std::erase_if(stock, [](const auto& kv) { return kv.second <= 0.0f; });   // C++20",
+   essai=("DINT", "MAP_REMOVE_IF(Stock, COMPARAISON#Inferieur, 100.0)", "2", decl(D_STOCK)), ou="S F")
+fn(name="LIST_DISTINCT", cat="liste", params=[("L", "LIST, VECTOR", "la liste", False)], ret="DINT",
+   short="Retire les doublons : garde la première de chaque valeur, dans l'ordre ; rend le nombre retiré.", notes=[SIZE_NOTE],
+   st="LIST_DISTINCT(Codes_Vus);", c="/* pas de liste en C : deux boucles */",
+   cpp="std::set<REAL> vus;\nstd::erase_if(l, [&](REAL x) { return !vus.insert(x).second; });",
+   essai=("DINT", "LIST_DISTINCT(Mesures)", "1", decl(D_MES)), ou="S F")
+fn(name="MAP_INCREMENT", cat="map", params=[("M", "MAP de nombres", "la MAP", False), ("CLE", "comme les clés", "la clé", False), ("X", "comme les valeurs", "ce qu'on ajoute : 1 sans lui", True)],
+   ret="comme les valeurs", short="Ajoute x (1 sans lui) à la valeur de la clé, en partant de 0 si elle manque ; rend la nouvelle valeur.",
+   notes=["Le compteur par clé, sans tester MAP_HAS.", SCRIPT_NOTE],
+   st="MAP_INCREMENT(Pieces_Par_Poste, Poste);\n(* au lieu de : IF MAP_HAS(...) THEN m[k] := m[k] + 1 ELSE m[k] := 1 END_IF *)", c=NOMAP,
+   cpp="auto v = (pieces[poste] += 1);   // [] crée la clé à 0",
+   essai=("REAL", "MAP_INCREMENT(Stock, 'vis', 10.0)", "130", decl(D_STOCK)), ou="S F")
+fn(name="LIST_APPEND", cat="liste", params=[("L", "LIST, VECTOR", "la liste", False), ("AUTRE", "LIST, VECTOR, ARRAY", "les éléments à ajouter", False)],
+   ret="DINT", short="Ajoute à la fin tous les éléments d'une autre liste (ou d'un ARRAY) ; rend le nombre d'éléments.", notes=[SIZE_NOTE],
+   st="LIST_APPEND(Historique, Lot_Courant);", c="/* pas de liste en C : memcpy à la fin */",
+   cpp="l.insert(l.end(), autre.begin(), autre.end());   // C++23 : l.append_range(autre)",
+   essai=("DINT", "LIST_APPEND(Mesures, Autres)", "7", decl(D_MES, D_AUT)), ou="S F")
+fn(name="MAP_MERGE", cat="map", params=[("M", "MAP", "la MAP", False), ("AUTRE", "MAP du même type", "les clés à ajouter", False), ("REMPLACER", "BOOL", "FALSE sans lui", True)],
+   ret="DINT", short="Ajoute les clés d'une autre MAP ; une clé déjà là garde sa valeur, sauf avec REMPLACER à TRUE. Rend le nombre de clés ajoutées.",
+   notes=["AUTRE ne change pas.", SCRIPT_NOTE],
+   st="MAP_MERGE(Stock, Livraison, TRUE);", c=NOMAP,
+   cpp="stock.insert(autre.begin(), autre.end());          // sans remplacer\nfor (const auto& [k, v] : autre) stock.insert_or_assign(k, v);   // en remplaçant",
+   essai=("REAL", "Stock['vis']", "60", decl(D_STOCK, D_LIVR) + "\nMAP_MERGE(Stock, Livraison, TRUE);"), ou="S F")
+fn(name="LIST_FILL", cat="liste", params=[("L", "ARRAY, LIST, VECTOR", "le tableau ou la liste", False), ("X", "T", "la valeur", False)], ret="DINT",
+   short="Met x dans toutes les cases, sans changer la taille ; rend le nombre de cases.",
+   notes=["Remet un tableau à zéro d'un coup ; un tableau IHM est écrit en place.", SCRIPT_NOTE],
+   st="LIST_FILL(Niveaux, 0.0);", c="for (i = 0; i < n; ++i) t[i] = 0.0f;   /* memset pour 0 */",
+   cpp="std::ranges::fill(niveaux, 0.0f);   // tab.fill(0) pour un std::array",
+   essai=("STRING", "JOIN(Cases, ',')", "0,0,0,0,0", decl(D_CASES) + "\nLIST_FILL(Cases, 0);"), ou="S F")
+# ---- chercher
+fn(name="LIST_LAST_INDEX_OF", cat="liste", params=[("L", "LIST, VECTOR, ARRAY", "la liste", False), ("X", "T", "la valeur cherchée", False)], ret="DINT",
+   short="L'indice de la dernière valeur égale ; −1 si elle n'y est pas.", notes=[ARR_NOTE],
+   st="i := LIST_LAST_INDEX_OF(Journal, 'Arret');", c="/* une boucle à l'envers */",
+   cpp="auto it = std::find(l.rbegin(), l.rend(), x);\ni = it == l.rend() ? -1 : l.rend() - it - 1;",
+   essai=("DINT", "LIST_LAST_INDEX_OF(Mesures, 8.0)", "3", decl(D_MES)), ou="S F X T")
+fn(name="MAP_KEY_OF", cat="map", params=[("M", "MAP", "la MAP", False), ("V", "comme les valeurs", "la valeur cherchée", False), ("DEFAUT", "comme les clés", "si aucune", False)],
+   ret="comme les clés", short="La première clé (dans leur ordre) dont la valeur est égale à v ; DEFAUT si aucune. La recherche à l'envers d'une MAP.",
+   st="Piece := MAP_KEY_OF(Stock, 0.0, '');   (* une pièce épuisée *)", c=NOMAP,
+   cpp="auto it = std::ranges::find_if(stock, [&](const auto& kv) { return kv.second == v; });\ncle = it != stock.end() ? it->first : \"\";",
+   essai=("STRING", "MAP_KEY_OF(Stock, 45.0, '')", "goujon", decl(D_STOCK)), ou="S F X T")
+fn(name="LIST_COUNT_OF", cat="liste", params=[("L", "LIST, VECTOR, ARRAY", "la liste", False), ("X", "T", "la valeur comptée", False)], ret="DINT",
+   short="Le nombre de fois où la valeur est dans la liste.", st="Arrets := LIST_COUNT_OF(Journal, 'Arret');", c="/* une boucle et un compteur */",
+   cpp="auto n = std::ranges::count(l, x);", essai=("DINT", "LIST_COUNT_OF(Cases, 9)", "2", decl(D_CASES)), ou="S F X T")
+fn(name="LIST_FIND_IF", cat="liste", params=[("L", "LIST, VECTOR, ARRAY", "la liste", False), ("COMPARAISON", "COMPARAISON", "#Egal, #Superieur…", False),
+                                            ("VALEUR", "T, ou le type du membre", "à quoi comparer", False), ("MEMBRE", "STRING", "le membre comparé", True)],
+   ret="DINT", short="L'indice du premier élément qui vérifie la comparaison ; −1 si aucun.", notes=[MEMBER_NOTE, ARR_NOTE],
+   st="i := LIST_FIND_IF(Recettes, COMPARAISON#Egal, 'Pain', 'Nom');\nIF i >= 0 THEN Recette := Recettes[i]; END_IF", c="/* une boucle */",
+   cpp="auto it = std::ranges::find_if(recettes, [](const T_Recette& r) { return r.Nom == \"Pain\"; });\ni = it == recettes.end() ? -1 : it - recettes.begin();",
+   essai=("DINT", "LIST_FIND_IF(Lots, COMPARAISON#Egal, 'A07', 'Item1')", "1", decl(D_LOTS)), ou="S F X T")
+fn(name="LIST_COUNT_IF", cat="liste", params=[("L", "LIST, VECTOR, ARRAY", "la liste", False), ("COMPARAISON", "COMPARAISON", "#Superieur…", False),
+                                             ("VALEUR", "T, ou le type du membre", "à quoi comparer", False), ("MEMBRE", "STRING", "le membre comparé", True)],
+   ret="DINT", short="Le nombre d'éléments qui vérifient la comparaison.", notes=[MEMBER_NOTE],
+   st="Hors_Tolerance := LIST_COUNT_IF(Mesures, COMPARAISON#Superieur, Seuil);", c="/* une boucle et un compteur */",
+   cpp="auto n = std::ranges::count_if(mesures, [&](REAL x) { return x > seuil; });",
+   essai=("DINT", "LIST_COUNT_IF(Mesures, COMPARAISON#Superieur, 10.0)", "2", decl(D_MES)), ou="S F X T")
+for nm, fr, ex, cc, es in [
+        ("LIST_ALL", "Vrai si tous les éléments vérifient la comparaison (vrai pour une liste vide).", "Tout_Ok := LIST_ALL(Pressions, COMPARAISON#Inferieur, P_Max);",
+         "bool tout_ok = std::ranges::all_of(pressions, [&](REAL p) { return p < p_max; });", ("BOOL", "LIST_ALL(Mesures, COMPARAISON#Superieur, 3.0)", "TRUE")),
+        ("LIST_ANY", "Vrai si au moins un élément vérifie la comparaison.", "Alerte := LIST_ANY(Temperatures, COMPARAISON#Superieur, 90.0);",
+         "bool alerte = std::ranges::any_of(temperatures, [](REAL t) { return t > 90.0f; });", ("BOOL", "LIST_ANY(Mesures, COMPARAISON#Superieur, 15.0)", "TRUE")),
+        ("LIST_NONE", "Vrai si aucun élément ne vérifie la comparaison.", "Aucun_Defaut := LIST_NONE(Etats, COMPARAISON#Egal, 2);",
+         "bool aucun = std::ranges::none_of(etats, [](Etat e) { return e == Etat::Defaut; });", ("BOOL", "LIST_NONE(Mesures, COMPARAISON#Inferieur, 0.0)", "TRUE"))]:
+    fn(name=nm, cat="liste", params=[("L", "LIST, VECTOR, ARRAY", "la liste", False), ("COMPARAISON", "COMPARAISON", CMP, False),
+                                    ("VALEUR", "T, ou le type du membre", "à quoi comparer", False), ("MEMBRE", "STRING", "le membre comparé", True)],
+       ret="BOOL", short=fr, notes=[MEMBER_NOTE], st=ex, c="/* une boucle */", cpp=cc, essai=es + (decl(D_MES),), ou="S F X T")
+fn(name="LIST_MIN_INDEX", cat="liste", params=[("L", "LIST, VECTOR, ARRAY", "la liste", False), ("MEMBRE", "STRING", "pour une liste de structures", True)], ret="DINT",
+   short="L'indice de la plus petite valeur (la première, s'il y en a plusieurs) ; −1 pour une liste vide.",
+   notes=["Où est le minimum, pas seulement sa valeur.", ARR_NOTE],
+   st="Poste_Lent := Postes[LIST_MIN_INDEX(Cadences)];", c="/* une boucle */", cpp="auto i = std::ranges::min_element(cadences) - cadences.begin();",
+   essai=("DINT", "LIST_MIN_INDEX(Mesures)", "4", decl(D_MES)), ou="S F X T")
+fn(name="LIST_MAX_INDEX", cat="liste", params=[("L", "LIST, VECTOR, ARRAY", "la liste", False), ("MEMBRE", "STRING", "pour une liste de structures", True)], ret="DINT",
+   short="L'indice de la plus grande valeur (la première, s'il y en a plusieurs) ; −1 pour une liste vide.", notes=[ARR_NOTE],
+   st="Plus_Lourd := Lots[LIST_MAX_INDEX(Lots, 'Poids')].Nom;", c="/* une boucle */",
+   cpp="auto i = std::ranges::max_element(lots, {}, &T_Lot::Poids) - lots.begin();",
+   essai=("DINT", "LIST_MAX_INDEX(Lots, 'Item2')", "1", decl(D_LOTS)), ou="S F X T")
+fn(name="MAP_FLOOR_KEY", cat="map", params=[("M", "MAP", "les paliers", False), ("K", "comme les clés", "la valeur cherchée", False), ("DEFAUT", "comme les clés", "s'il n'y a pas de palier dessous", False)],
+   ret="comme les clés", short="La plus grande clé inférieure ou égale à k ; DEFAUT s'il n'y en a pas.",
+   notes=["Une table de paliers : 230 tombe sur le palier 100."],
+   st="Coef := Paliers[MAP_FLOOR_KEY(Paliers, Debit, 0)];", c="/* pas de MAP en C : une boucle sur un tableau trié */",
+   cpp="auto it = paliers.upper_bound(debit);\npalier = it == paliers.begin() ? 0 : std::prev(it)->first;",
+   essai=("INT", "MAP_FLOOR_KEY(Paliers, 230, -1)", "100", decl(D_PAL)), ou="S F X T")
+fn(name="MAP_CEIL_KEY", cat="map", params=[("M", "MAP", "la MAP", False), ("K", "comme les clés", "la valeur cherchée", False), ("DEFAUT", "comme les clés", "s'il n'y en a pas au-dessus", False)],
+   ret="comme les clés", short="La plus petite clé supérieure ou égale à k ; DEFAUT s'il n'y en a pas.",
+   st="Prochain := MAP_CEIL_KEY(Paliers, Debit, -1);", c=NOMAP, cpp="auto it = paliers.lower_bound(debit);\nprochain = it == paliers.end() ? -1 : it->first;",
+   essai=("INT", "MAP_CEIL_KEY(Paliers, 230, -1)", "500", decl(D_PAL)), ou="S F X T")
+# ---- ranger
+fn(name="LIST_SORT_BY", cat="liste", params=[("L", "LIST, VECTOR, ARRAY de structures", "la liste", False), ("MEMBRE", "STRING", "'Poids', 'Nom', 'Item2'…", False),
+                                            ("DECROISSANT", "BOOL", "TRUE : du plus grand au plus petit", True)],
+   ret="BOOL", short="Trie une liste de structures (ou de TUPLE : 'Item2') par un de ses membres.",
+   notes=["À valeur égale, l'ordre ne change pas (un tri stable : un tableau de l'IHM ne saute pas).", "Un membre qui n'existe pas : Compiler le dit (« veux-tu dire Poids ? »).", SCRIPT_NOTE],
+   st="LIST_SORT_BY(Lots, 'Poids', TRUE);   (* le plus lourd d'abord *)", c="qsort(lots, n, sizeof lots[0], par_poids);",
+   cpp="std::ranges::stable_sort(lots, std::greater{}, &T_Lot::Poids);   // C++20",
+   essai=("STRING", "Lots[0].Item1", "C03", decl(D_LOTS) + "\nLIST_SORT_BY(Lots, 'Item2');"), ou="S F")
+fn(name="LIST_IS_SORTED", cat="liste", params=[("L", "LIST, VECTOR, ARRAY", "la liste", False), ("DECROISSANT", "BOOL", "TRUE : du plus grand au plus petit", True)], ret="BOOL",
+   short="Vrai si la liste est triée (dans le sens demandé).", st="ASSERT(LIST_IS_SORTED(Seuils), 'les seuils doivent croître');", c="/* une boucle */",
+   cpp="bool trie = std::ranges::is_sorted(seuils);", essai=("BOOL", "LIST_IS_SORTED(Triee)", "TRUE", decl(D_TRI)), ou="S F X T")
+fn(name="LIST_SWAP", cat="liste", params=[("L", "LIST, VECTOR, ARRAY", "la liste", False), ("I", "DINT", "un indice", False), ("J", "DINT", "l'autre", False)], ret="BOOL",
+   short="Échange deux éléments ; FALSE si un indice est hors de la liste.", notes=[ARR_NOTE, SCRIPT_NOTE],
+   st="LIST_SWAP(Etapes, Rang, Rang - 1);   (* le bouton ↑ d'un tableau *)", c="tmp = t[i]; t[i] = t[j]; t[j] = tmp;", cpp="std::swap(etapes[i], etapes[j]);",
+   essai=("STRING", "JOIN(Pile, '')", "cba", decl(D_PILE) + "\nLIST_SWAP(Pile, 0, 2);"), ou="S F")
+fn(name="LIST_MOVE", cat="liste", params=[("L", "LIST, VECTOR, ARRAY", "la liste", False), ("DE", "DINT", "l'indice de l'élément", False), ("VERS", "DINT", "son nouvel indice", False)],
+   ret="BOOL", short="Déplace un élément d'un indice à un autre ; ceux d'entre les deux glissent d'une place. FALSE hors de la liste.",
+   notes=["Réordonner les étapes d'une recette.", SCRIPT_NOTE],
+   st="LIST_MOVE(Etapes, 3, 0);   (* l'étape 3 passe en premier *)", c="/* memmove */",
+   cpp="if (de < vers) std::rotate(l.begin() + de, l.begin() + de + 1, l.begin() + vers + 1);\nelse std::rotate(l.begin() + vers, l.begin() + de, l.begin() + de + 1);",
+   essai=("STRING", "JOIN(Mesures, ';')", "3.1;12.5;8;15.2;8", decl(D_MES) + "\nLIST_MOVE(Mesures, 4, 0);"), ou="S F")
+fn(name="LIST_ROTATE", cat="liste", params=[("L", "LIST, VECTOR, ARRAY", "la liste", False), ("N", "DINT", "le nombre de places", False)], ret="BOOL",
+   short="Fait tourner les éléments de n places vers le début (n négatif : vers la fin) ; ce qui sort revient de l'autre côté.", notes=[SCRIPT_NOTE],
+   st="LIST_ROTATE(Equipes, 1);   (* l'équipe suivante prend le premier poste *)", c="/* trois inversions */",
+   cpp="std::ranges::rotate(equipes, equipes.begin() + 1);",
+   essai=("STRING", "JOIN(Cases, ',')", "9,1,9,6,4", decl(D_CASES) + "\nLIST_ROTATE(Cases, 1);"), ou="S F")
+# ---- extraire et convertir
+fn(name="LIST_SLICE", cat="liste", params=[("L", "LIST, VECTOR, ARRAY", "la liste", False), ("DEBUT", "DINT", "l'indice du premier", False), ("NOMBRE", "DINT", "combien", False)],
+   ret="LIST OF T", short="Une copie d'une partie : NOMBRE éléments à partir de DEBUT (ce qui dépasse la fin est ignoré).", notes=[ARR_NOTE],
+   st="Dernieres := LIST_SLICE(Mesures, Mesures.Count - 10, 10);   (* les 10 dernières *)", c="memcpy(part, t + debut, nombre * sizeof t[0]);",
+   cpp="std::vector<REAL> part(l.begin() + debut, l.begin() + debut + nombre);\n// sans copie : std::span(l).subspan(debut, nombre)   // C++20",
+   essai=("STRING", "JOIN(LIST_SLICE(Mesures, 1, 3), ';')", "8;15.2;8", decl(D_MES)), ou="S F X T")
+fn(name="LIST_CONCAT", cat="liste", params=[("A", "LIST, VECTOR, ARRAY", "les premiers", False), ("B", "LIST, VECTOR, ARRAY du même type", "les suivants", False)],
+   ret="LIST OF T", short="Une nouvelle liste : les éléments de A, puis ceux de B. A et B ne changent pas.",
+   st="Tous := LIST_CONCAT(Ligne_1, Ligne_2);", c="/* deux memcpy */", cpp="auto tous = a;\ntous.insert(tous.end(), b.begin(), b.end());",
+   essai=("DINT", "LIST_COUNT(LIST_CONCAT(Mesures, Autres))", "7", decl(D_MES, D_AUT)), ou="S F X T")
+fn(name="LIST_COPY", cat="liste", params=[("SOURCE", "ARRAY, LIST, VECTOR", "les valeurs", False), ("DESTINATION", "ARRAY, LIST, VECTOR du même type d'éléments", "écrite en place", False)],
+   ret="DINT", short="Copie SOURCE dans DESTINATION, case par case depuis le début ; DESTINATION garde sa taille. Rend le nombre copié.",
+   notes=["Ce qui dépasse est ignoré, ce qui manque garde sa valeur : une LIST vers un ARRAY d'équipement.",
+          "Une valeur qui ne va pas dans DESTINATION est refusée (12.5 dans un INT : « n'est pas un entier »)."],
+   st="LIST_COPY(Consignes, Automate.Consignes);   (* une LIST vers un ARRAY[0..9] *)", c="memcpy(dst, src, min(n_src, n_dst) * sizeof src[0]);",
+   cpp="auto n = std::min(src.size(), dst.size());\nstd::copy_n(src.begin(), n, dst.begin());",
+   essai=("STRING", "JOIN(Mesures, ';')", "1;2;15.2;8;3.1", decl(D_MES, D_AUT) + "\nLIST_COPY(Autres, Mesures);"), ou="S F")
+fn(name="TO_LIST", cat="liste", params=[("X", "ARRAY, VECTOR, LIST", "les éléments", False)], ret="LIST OF T",
+   short="Les éléments d'un ARRAY (ligne par ligne s'il a deux dimensions), d'un VECTOR, d'une liste : une nouvelle LIST.",
+   notes=["Une LIST qu'on peut agrandir, trier, filtrer."],
+   st="Valeurs := TO_LIST(Automate.Mesures);   (* un ARRAY[0..9] OF REAL *)", c="/* memcpy */",
+   cpp="std::vector<INT> l(std::begin(tab), std::end(tab));   // C++23 : std::ranges::to<std::vector>(tab)",
+   essai=("DINT", "LIST_COUNT(TO_LIST(Cases))", "5", decl(D_CASES)), ou="S F X T")
+fn(name="MAP_VALUES", cat="map", params=[("M", "MAP", "la MAP", False)], ret="LIST OF valeur",
+   short="Les valeurs, dans l'ordre des clés : une LIST (pour LIST_SUM, LIST_MAX…).",
+   st="Total := LIST_SUM(MAP_VALUES(Stock));", c=NOMAP, cpp="auto valeurs = std::ranges::to<std::vector>(stock | std::views::values);   // C++23",
+   essai=("REAL", "LIST_SUM(MAP_VALUES(Stock))", "245", decl(D_STOCK)), ou="S F X T")
+fn(name="MAP_ITEMS", cat="map", params=[("M", "MAP", "la MAP", False)], ret="LIST OF TUPLE(clé, valeur)",
+   short="Les paires (clé, valeur), dans l'ordre des clés : une LIST de TUPLE.",
+   notes=["Triée par valeur avec LIST_SORT_BY(…, 'Item2'), elle donne un classement."],
+   st="Classement := MAP_ITEMS(Stock);\nLIST_SORT_BY(Classement, 'Item2', TRUE);   (* la plus grande quantité d'abord *)", c=NOMAP,
+   cpp="std::vector<std::pair<std::string, REAL>> items(stock.begin(), stock.end());",
+   essai=("STRING", "Lots[0].Item1", "vis", decl(D_STOCK, D_LOTS) + "\nLots := MAP_ITEMS(Stock);\nLIST_SORT_BY(Lots, 'Item2', TRUE);"), ou="S F")
+fn(name="TUPLE_TO_STRING", cat="liste", params=[("T", "TUPLE", "le tuple", False)], ret="STRING",
+   short="Le TUPLE écrit comme un littéral : ('four', 850.0). Pour un journal, une étiquette.",
+   st="IHM_JOURNAL(TUPLE_TO_STRING(Point));", c="snprintf(texte, sizeof texte, \"('%s', %.1f)\", point.nom, point.valeur);",
+   cpp="auto texte = std::format(\"{}\", point);   // C++23 : (\"four\", 850)",
+   essai=("STRING", "TUPLE_TO_STRING(Point)", "('four', 850.0)", decl(D_POINT)), ou="S F X T")
+fn(name="TUPLE_UNPACK", cat="liste", params=[("T", "TUPLE", "le tuple", False), ("A, B…", "des variables", "une par champ, chacune du bon type", False)],
+   ret="BOOL", short="Écrit chaque champ dans une variable, dans l'ordre : autant de variables que de champs.",
+   notes=["Une variable d'un autre type que son champ est refusée (« le champ 1 est un STRING, Valeur un REAL »)."],
+   st="TUPLE_UNPACK(Point, Nom, Valeur);   (* Nom := Point.Item1 ; Valeur := Point.Item2 *)", c="strcpy(nom, point.nom);\nvaleur = point.valeur;",
+   cpp="std::tie(nom, valeur) = point;\n// C++17 : auto [nom, valeur] = point;",
+   essai=("STRING", "Nom", "four", decl(D_POINT, "Nom : STRING", "Valeur : REAL") + "\nTUPLE_UNPACK(Point, Nom, Valeur);"), ou="S F")
+
+# ------------------------------------------------ 1.12.7 : std::numeric (19 fonctions) --
+#  La bibliotheque <numeric> du C++ jusqu'au C++26 : plier (ACCUMULATE, REDUCE, INNER_PRODUCT,
+#  TRANSFORM_REDUCE), cumuler (PARTIAL_SUM, les SCAN, ADJACENT_DIFFERENCE), remplir (IOTA), les
+#  entiers (GCD, LCM, MIDPOINT) et le calcul sature (ADD_SAT... SATURATE_CAST<T>). OPERATION :
+#  Somme, Produit, Min, Max, Et, Ou ; TRANSFORMATION : Identite, Abs, Carre, Racine, Neg, Inverse.
+D_PAS = "Pas : ARRAY[0..4] OF REAL := [3.0, 1.0, 4.0, 1.0, 5.0]"
+D_DEP = "Deplacements : LIST OF REAL := [3.0, -1.0, 4.0, -1.0, 5.0]"
+D_SEUILS = "Seuils : LIST OF REAL := [10.0, 20.0, 50.0]"
+D_POIDS = "Poids : LIST OF REAL := [0.5, 0.3, 0.2]"
+OPN = "#Somme (par défaut), #Produit, #Min, #Max, #Et, #Ou"
+TRN = "#Identite, #Abs, #Carre, #Racine, #Neg, #Inverse"
+SEQ = "ARRAY, LIST, VECTOR de nombres"
+RET_SEQ = "Une LIST rend une LIST, un ARRAY un ARRAY aux mêmes bornes."
+fn(name="ACCUMULATE", cat="numeric", params=[("T", SEQ, "les éléments", False), ("INIT", "un nombre", "le départ : 0.0 pour une somme, 1 pour un produit", False),
+                                            ("OP", "OPERATION", OPN, True)], ret="comme INIT",
+   short="Plie les éléments de T dans INIT, du premier au dernier : la somme, ou avec OP le produit, le minimum, le maximum.",
+   notes=["Le type de INIT compte, comme en C++ : ACCUMULATE(Mesures, 0) plie en entiers ; 0.0 plie en réels.", "LIST_SUM fait la somme seule."],
+   st="Total_Pas := ACCUMULATE(Pas_Mesure, 0.0);", c="/* C n'a pas <numeric> : la boucle */\ndouble total = 0.0;\nfor (size_t i = 0; i < 10; ++i)\n    total += Pas_Mesure[i];",
+   cpp="#include <numeric>\ndouble total = std::accumulate(std::begin(Pas_Mesure), std::end(Pas_Mesure), 0.0);\n// avec op : std::accumulate(…, 1.0, std::multiplies<>{})",
+   essai=("REAL", "ACCUMULATE(Pas, 1.0, OPERATION#Produit)", "60", decl(D_PAS)), ou="S F X T")
+fn(name="REDUCE", cat="numeric", params=[("T", SEQ, "les éléments", False), ("INIT", "un nombre", "0 sans lui", True), ("OP", "OPERATION", "#Somme sans lui", True)],
+   ret="comme les éléments", short="Comme ACCUMULATE, sans ordre imposé (le C++ peut le paralléliser) ; en ST, le même résultat. INIT vaut 0 s'il manque.",
+   st="Somme_Seuils := REDUCE(Seuils);", c="double somme = 0.0;\nfor (size_t i = 0; i < n; ++i)\n    somme += Seuils[i];",
+   cpp="#include <numeric>\ndouble somme = std::reduce(Seuils.begin(), Seuils.end());\n// en parallèle : std::reduce(std::execution::par, Seuils.begin(), Seuils.end())",
+   essai=("REAL", "REDUCE(Seuils)", "80", decl(D_SEUILS)), ou="S F X T")
+fn(name="INNER_PRODUCT", cat="numeric", params=[("A", "ARRAY, LIST, VECTOR", "les valeurs", False), ("B", "idem, au moins aussi long", "les poids", False), ("INIT", "un nombre", "le départ, 0.0", False)],
+   ret="comme INIT", short="Le produit scalaire : INIT plus la somme des A[i] × B[i]. Une moyenne pondérée, une énergie (puissances × durées).",
+   notes=["B plus court que A : une erreur (« B est plus court que A : B[3] manque »)."],
+   st="Note := INNER_PRODUCT(Seuils, Poids, 0.0);   (* Poids : [0.5, 0.3, 0.2] *)", c="double note = 0.0;\nfor (size_t i = 0; i < n; ++i)\n    note += Seuils[i] * Poids[i];",
+   cpp="#include <numeric>\ndouble note = std::inner_product(Seuils.begin(), Seuils.end(),\n                                 Poids.begin(), 0.0);",
+   essai=("REAL", "INNER_PRODUCT(Seuils, Poids, 0.0)", "21", decl(D_SEUILS, D_POIDS)), ou="S F X T")
+fn(name="TRANSFORM_REDUCE", cat="numeric", params=[("T", SEQ, "les éléments", False), ("INIT", "un nombre", "le départ", False), ("OP", "OPERATION", "#Somme, #Produit, #Min, #Max…", False),
+                                                  ("TRANSFORMATION", "TRANSFORMATION", TRN, False)], ret="comme INIT",
+   short="Transforme chaque élément (Abs, Carre, Racine…), puis plie avec OP : la somme des carrés, la somme des valeurs absolues.",
+   notes=["Sans ordre imposé, comme REDUCE. La forme à deux suites, A et B, est INNER_PRODUCT."],
+   st="Energie := TRANSFORM_REDUCE(Ecarts, 0.0, OPERATION#Somme, TRANSFORMATION#Carre);", c="double energie = 0.0;\nfor (size_t i = 0; i < n; ++i)\n    energie += Ecarts[i] * Ecarts[i];",
+   cpp="#include <numeric>\ndouble energie = std::transform_reduce(Ecarts.begin(), Ecarts.end(), 0.0,\n    std::plus<>{}, [](double e) { return e * e; });",
+   essai=("REAL", "TRANSFORM_REDUCE(Seuils, 0.0, OPERATION#Somme, TRANSFORMATION#Carre)", "3000", decl(D_SEUILS)), ou="S F X T")
+fn(name="PARTIAL_SUM", cat="numeric", params=[("T", SEQ, "les éléments", False), ("OP", "OPERATION", "#Somme sans lui", True)], ret="comme T",
+   short="Les sommes cumulées : [a, a+b, a+b+c…] ; avec OP, le produit cumulé, le minimum atteint…", notes=[RET_SEQ],
+   st="Couples_Cumules := PARTIAL_SUM(Couples);", c="double cumul = 0.0;\nfor (size_t i = 0; i < n; ++i) {\n    cumul += v[i];\n    cumules[i] = cumul;\n}",
+   cpp="#include <numeric>\nstd::partial_sum(v.begin(), v.end(), cumules.begin());",
+   essai=("STRING", "JOIN(PARTIAL_SUM(Pas), ',')", "3, 4, 8, 9, 14".replace(" ", ""), decl(D_PAS)), ou="S F X T")
+fn(name="INCLUSIVE_SCAN", cat="numeric", params=[("T", "ARRAY, LIST, VECTOR", "les éléments", False), ("OP", "OPERATION", "#Somme sans lui", True)], ret="comme T",
+   short="Comme PARTIAL_SUM, sans ordre imposé : le maximum atteint jusque-là, le minimum…", notes=[RET_SEQ],
+   st="Pics := INCLUSIVE_SCAN(Mesures, OPERATION#Max);", c="double pic = m[0];\nfor (size_t i = 0; i < n; ++i) {\n    if (m[i] > pic) pic = m[i];\n    pics[i] = pic;\n}",
+   cpp="#include <numeric>\nstd::inclusive_scan(m.begin(), m.end(), pics.begin(),\n    [](double a, double b) { return std::max(a, b); });",
+   essai=("STRING", "JOIN(INCLUSIVE_SCAN(Pas, OPERATION#Max), ',')", "3,3,4,4,5", decl(D_PAS)), ou="S F X T")
+fn(name="EXCLUSIVE_SCAN", cat="numeric", params=[("T", "ARRAY, LIST, VECTOR", "les éléments", False), ("INIT", "un nombre", "la première valeur", False), ("OP", "OPERATION", "#Somme sans lui", True)],
+   ret="comme T", short="Le cumul de ce qui précède : [init, init+a, init+a+b…]. Des positions de départ à partir de longueurs.", notes=[RET_SEQ],
+   st="Debuts := EXCLUSIVE_SCAN(Longueurs, 0);", c="long pos = 0;\nfor (size_t i = 0; i < n; ++i) {\n    debuts[i] = pos;\n    pos += longueurs[i];\n}",
+   cpp="#include <numeric>\nstd::exclusive_scan(l.begin(), l.end(), debuts.begin(), 0L);",
+   essai=("STRING", "JOIN(EXCLUSIVE_SCAN(Pas, 0.0), ',')", "0,3,4,8,9", decl(D_PAS)), ou="S F X T")
+fn(name="TRANSFORM_INCLUSIVE_SCAN", cat="numeric", params=[("T", "ARRAY, LIST, VECTOR", "les éléments", False), ("OP", "OPERATION", "#Somme, #Max…", False),
+                                                          ("TRANSFORMATION", "TRANSFORMATION", "#Abs, #Carre…", False)], ret="comme T",
+   short="Transforme chaque élément, puis cumule : le chemin parcouru à partir de déplacements signés (Abs), l'énergie cumulée (Carre).", notes=[RET_SEQ],
+   st="Parcours := TRANSFORM_INCLUSIVE_SCAN(Deplacements, OPERATION#Somme, TRANSFORMATION#Abs);",
+   c="double cumul = 0.0;\nfor (size_t i = 0; i < n; ++i) {\n    cumul += fabs(d[i]);\n    parcours[i] = cumul;\n}",
+   cpp="#include <numeric>\nstd::transform_inclusive_scan(d.begin(), d.end(), parcours.begin(),\n    std::plus<>{}, [](double x) { return std::abs(x); });",
+   essai=("STRING", "JOIN(TRANSFORM_INCLUSIVE_SCAN(Deplacements, OPERATION#Somme, TRANSFORMATION#Abs), ',')", "3,4,8,9,14", decl(D_DEP)), ou="S F X T")
+fn(name="TRANSFORM_EXCLUSIVE_SCAN", cat="numeric", params=[("T", "ARRAY, LIST, VECTOR", "les éléments", False), ("INIT", "un nombre", "la première valeur", False),
+                                                          ("OP", "OPERATION", "#Somme…", False), ("TRANSFORMATION", "TRANSFORMATION", "#Abs, #Carre…", False)], ret="comme T",
+   short="Transforme chaque élément, puis cumule ce qui précède : la position où commence chaque déplacement.", notes=[RET_SEQ],
+   st="Departs := TRANSFORM_EXCLUSIVE_SCAN(Deplacements, 0.0, OPERATION#Somme, TRANSFORMATION#Abs);",
+   c="double pos = 0.0;\nfor (size_t i = 0; i < n; ++i) {\n    departs[i] = pos;\n    pos += fabs(d[i]);\n}",
+   cpp="#include <numeric>\nstd::transform_exclusive_scan(d.begin(), d.end(), departs.begin(), 0.0,\n    std::plus<>{}, [](double x) { return std::abs(x); });",
+   essai=("STRING", "JOIN(TRANSFORM_EXCLUSIVE_SCAN(Deplacements, 0.0, OPERATION#Somme, TRANSFORMATION#Abs), ',')", "0,3,4,8,9", decl(D_DEP)), ou="S F X T")
+fn(name="ADJACENT_DIFFERENCE", cat="numeric", params=[("T", SEQ, "les éléments", False)], ret="comme T",
+   short="Les écarts entre voisins : [a, b−a, c−b…]. Des pas, des vitesses à partir de positions.", notes=[RET_SEQ],
+   st="Ecarts := ADJACENT_DIFFERENCE(Seuils);", c="ecarts[0] = s[0];\nfor (size_t i = 1; i < n; ++i)\n    ecarts[i] = s[i] - s[i - 1];",
+   cpp="#include <numeric>\nstd::adjacent_difference(s.begin(), s.end(), ecarts.begin());",
+   essai=("STRING", "JOIN(ADJACENT_DIFFERENCE(Seuils), ',')", "10,10,30", decl(D_SEUILS)), ou="S F X T")
+fn(name="IOTA", cat="numeric", params=[("T", "ARRAY, LIST, VECTOR", "à remplir, en place", False), ("DEPART", "un nombre", "la première valeur", False), ("PAS", "un nombre", "1 sans lui", True)],
+   ret="DINT", short="Remplit T de départ, départ + pas, départ + 2 pas… ; rend le nombre de cases.",
+   notes=["Le pas vaut 1 s'il manque ; le pas est un ajout de l'IHM (le C++ n'a que 1).", "Un tableau IHM est écrit en place.", SCRIPT_NOTE],
+   st="IOTA(Pas_Mesure, 0.0, 2.5);", c="for (size_t i = 0; i < 10; ++i)\n    Pas_Mesure[i] = 0.0 + i * 2.5;",
+   cpp="#include <numeric>\nstd::iota(std::begin(Rangs), std::end(Rangs), 1);   // 1, 2, 3…\nstd::ranges::iota(Rangs, 1);                       // C++23, le même\n// un autre pas que 1 : std::generate",
+   essai=("STRING", "JOIN(Pas, ',')", "0,2.5,5,7.5,10", decl(D_PAS) + "\nIOTA(Pas, 0.0, 2.5);"), expr=False, ou="S F")
+fn(name="GCD", cat="numeric", params=[("A", "un entier", "", False), ("B", "un entier", "", False)], ret="un entier",
+   short="Le plus grand diviseur commun de deux entiers ; 0 si les deux sont nuls.",
+   st="Pgcd := GCD(Reglages.Cadence_A, Reglages.Cadence_B);", c="/* C n'a pas gcd : la boucle d'Euclide */\nlong a = 120, b = 84;\nwhile (b != 0) { long t = a % b; a = b; b = t; }",
+   cpp="#include <numeric>\nauto pgcd = std::gcd(120, 84);   // 12", essai=("DINT", "GCD(120, 84)", "12"), ou="S F X T")
+fn(name="LCM", cat="numeric", params=[("A", "un entier", "", False), ("B", "un entier", "", False)], ret="un entier",
+   short="Le plus petit multiple commun de deux entiers ; 0 si l'un est nul.",
+   st="Cadence_Commune := LCM(Reglages.Cadence_A, Reglages.Cadence_B);", c="/* C n'a pas lcm : avec le pgcd de la boucle de GCD */\nlong ppcm = a / pgcd(a, b) * b;",
+   cpp="#include <numeric>\nauto ppcm = std::lcm(120, 84);   // 840", essai=("DINT", "LCM(120, 84)", "840"), ou="S F X T")
+fn(name="MIDPOINT", cat="numeric", params=[("<T>", "un type numérique", "facultatif : INT, DINT, REAL…", True), ("A", "un nombre", "", False), ("B", "un nombre", "", False)],
+   ret="T, ou le type de A", short="Le milieu de a et b sans débordement : en INT, 32000 et 32002 donnent 32001, là où (a + b) / 2 déborde.",
+   notes=["Entre deux entiers, arrondi vers a. T se donne entre < > ou vient de a."],
+   st="Milieu := MIDPOINT<INT>(32000, 32002);", c="/* C n'a pas midpoint : a et b passent en int (32 bits), sans débordement */\nint16_t m = (int16_t)(a + (b - a) / 2);   /* arrondi vers a */",
+   cpp="#include <numeric>\nINT m = std::midpoint<INT>(32000, 32002);   // 32001 (INT : int16_t)\n// des réels : std::midpoint(0.5, 2.5) donne 1.5",
+   essai=("INT", "MIDPOINT<INT>(32000, 32002)", "32001"), ou="S F X T")
+for nm, sym, fr, ex, res, cline in [
+        ("ADD_SAT", "+", "a + b, bloqué aux bornes de T au lieu de boucler : en INT, 32000 + 1000 donne 32767 (et non −32536).", "ADD_SAT<INT>(32000, 1000)", "32767",
+         "/* C n'a pas add_sat : le calcul en 32 bits, puis borné */\nint32_t s = (int32_t)a + b;\nint16_t r = s > INT16_MAX ? INT16_MAX : s < INT16_MIN ? INT16_MIN : (int16_t)s;"),
+        ("SUB_SAT", "-", "a − b, bloqué aux bornes : en INT, −32000 − 1000 donne −32768 ; en UINT, 5 − 8 donne 0.", "SUB_SAT<INT>(-32000, 1000)", "-32768",
+         "int32_t s = (int32_t)a - b;   /* puis borné, comme ADD_SAT */"),
+        ("MUL_SAT", "*", "a × b, bloqué aux bornes : en INT, 300 × 200 donne 32767.", "MUL_SAT<INT>(300, 200)", "32767",
+         "int32_t p = (int32_t)a * b;   /* puis borné, comme ADD_SAT */"),
+        ("DIV_SAT", "/", "a / b, bloqué : en INT, −32768 / −1 donne 32767, le seul cas qui déborde. b = 0 reste une erreur.", "DIV_SAT<INT>(-32768, -1)", "32767",
+         "int16_t q = (a == INT16_MIN && b == -1) ? INT16_MAX : a / b;")]:
+    fn(name=nm, cat="numeric", params=[("<T>", "un type entier", "facultatif : il fixe les bornes", True), ("A", "un entier", "", False), ("B", "un entier" if nm != "DIV_SAT" else "un entier non nul", "", False)],
+       ret="T, ou le type de A", short=fr, notes=["T se donne entre < > ou vient de a (son type déclaré : une SINT garde ses bornes)."],
+       st=("Total := " if nm == "ADD_SAT" else "Ecart := " if nm == "SUB_SAT" else "Produit := " if nm == "MUL_SAT" else "Q := ") + ex + ";",
+       c=cline, cpp="#include <numeric>   // C++26\nINT r = std::" + nm.lower() + "<INT>" + ex[ex.index("("):] + ";   // " + res,
+       essai=("INT", ex, res), ou="S F X T")
+fn(name="SATURATE_CAST", cat="numeric", params=[("<T>", "un type entier", "obligatoire : SATURATE_CAST<INT>(x)", False), ("X", "un nombre", "arrondi, puis borné", False)],
+   ret="T", short="Convertit x vers T en bloquant aux bornes : 40000 donne 32767 en INT, −5 donne 0 en UINT, là où TO_INT et TO_UINT bouclent.",
+   notes=["Le type entre < > est obligatoire : SATURATE_CAST(x) seul est une erreur.", "En C++26, x est un entier ; en ST, un réel est d'abord arrondi."],
+   st="Consigne := SATURATE_CAST<INT>(Mesure_Brute);   (* 40000 *)", c="/* C n'a pas saturate_cast : borné à la main */\nint16_t c = x > INT16_MAX ? INT16_MAX : x < INT16_MIN ? INT16_MIN : (int16_t)x;",
+   cpp="#include <numeric>   // C++26\nINT c = std::saturate_cast<INT>(40000);   // 32767\n// un réel : std::saturate_cast<INT>(std::llround(x))",
+   essai=("INT", "SATURATE_CAST<INT>(40000)", "32767"), ou="S F X T")
+
+# ------------------------------------- 1.12.7 : std::numeric_limits et std::numbers --
+fn(name="NUMERIC_LIMITS", cat="limits", params=[("<T>", "SINT … ULINT, BYTE … LWORD, REAL, LREAL, BOOL", "obligatoire", False),
+                                               ("MEMBRE", "un des 32 membres", "MIN() … : une fonction (avec ()) ; DIGITS … : une constante (sans)", False)],
+   ret="T (une fonction), BOOL ou DINT (une constante)",
+   short="Les bornes et les caractéristiques d'un type numérique, comme std::numeric_limits : NUMERIC_LIMITS<UINT>.MAX() = 65535.",
+   notes=["9 fonctions, appelées avec () : MIN, MAX, LOWEST, EPSILON, ROUND_ERROR, INFINITY, QUIET_NAN, SIGNALING_NAN, DENORM_MIN.",
+          "23 constantes, sans parenthèses : IS_SPECIALIZED, IS_SIGNED, IS_INTEGER, IS_EXACT, HAS_INFINITY, HAS_QUIET_NAN, HAS_SIGNALING_NAN, HAS_DENORM, HAS_DENORM_LOSS, "
+          "ROUND_STYLE, IS_IEC559, IS_BOUNDED, IS_MODULO, DIGITS, DIGITS10, MAX_DIGITS10, RADIX, MIN_EXPONENT, MIN_EXPONENT10, MAX_EXPONENT, MAX_EXPONENT10, TRAPS, TINYNESS_BEFORE.",
+          "Pour REAL et LREAL, MIN() est le plus petit positif normalisé ; le plus négatif, c'est LOWEST().",
+          "L'aide à la saisie propose les types après NUMERIC_LIMITS<, puis les membres et leur valeur après NUMERIC_LIMITS<UINT>.",
+          "Compiler dit un type refusé (NUMERIC_LIMITS<STRING>), un membre inconnu (« veux-tu dire MAX ? ») et les parenthèses : « DIGITS est une constante : sans parenthèses », « MIN est une fonction : NUMERIC_LIMITS<UINT>.MIN() »."],
+   st="IF Compteur_Pieces = NUMERIC_LIMITS<UINT>.MAX() THEN\n    Compteur_Pieces := 0;   (* il bouclerait *)\nEND_IF",
+   c="if (compteur_pieces == UINT16_MAX)   /* <stdint.h> ; FLT_EPSILON : <float.h> */\n    compteur_pieces = 0;",
+   cpp="#include <limits>\nif (compteur_pieces == std::numeric_limits<UINT>::max())\n    compteur_pieces = 0;",
+   essai=("UDINT", "NUMERIC_LIMITS<UINT>.MAX()", "65535"), ou="S F X T")
+fn(name="NUMBERS", cat="numbers", params=[("<T>", "REAL ou LREAL", "facultatif : LREAL", True), ("CONSTANTE", "une des 13 constantes", "sans parenthèses", False)],
+   ret="T (LREAL sans <T>)",
+   short="Les constantes mathématiques de std::numbers : NUMBERS.PI (en LREAL), NUMBERS<REAL>.PI (arrondi au REAL).",
+   notes=["Les 13 constantes : E, LOG2E, LOG10E, PI, INV_PI, INV_SQRTPI, LN2, LN10, SQRT2, SQRT3, INV_SQRT3, EGAMMA (γ, la constante d'Euler-Mascheroni), PHI (φ, le nombre d'or).",
+          "Une variable du projet nommée NUMBERS garde son sens : NUMBERS.X est alors son membre.",
+          "L'aide à la saisie propose les constantes et leur valeur après NUMBERS. et NUMBERS<REAL>."],
+   st="Surface := NUMBERS.PI * Rayon * Rayon;", c="surface = M_PI * rayon * rayon;   /* <math.h> ; SQRT3, EGAMMA, PHI : la valeur */",
+   cpp="#include <numbers>\nsurface = std::numbers::pi * rayon * rayon;   // pi_v<float> pour un REAL",
+   essai=("BOOL", "NUMBERS.PI > 3.14159 AND NUMBERS.PI < 3.1416", "TRUE"), ou="S F X T")
+
+# ------------------------------------------------------------- 1.12.7 : <bit> --
+#  Les fonctions de <bit> du C++20 sur les mots (BYTE, WORD, DWORD, LWORD) et les entiers : un
+#  mot d'alarme d'un equipement, seize defauts. Elles ne changent pas le mot (BIT_SET rend la
+#  nouvelle valeur).
+fn(name="BIT_COUNT", cat="bits", params=[("W", "ANY_BIT ou un entier", "le mot", False)], ret="DINT",
+   short="Le nombre de bits à 1 : combien de défauts dans un mot d'alarme.", st="Nb_Defauts := BIT_COUNT(Defauts);",
+   c="n = __builtin_popcount(defauts);   /* GCC ; une boucle sinon */", cpp="#include <bit>\nauto n = std::popcount(defauts);   // C++20",
+   essai=("DINT", "BIT_COUNT(Mot)", "4"), ou="S F X T")
+fn(name="BIT_FIRST", cat="bits", params=[("W", "ANY_BIT ou un entier", "le mot", False)], ret="DINT",
+   short="Le numéro du plus bas bit à 1 (0 : le bit de poids faible) ; −1 si aucun.",
+   notes=["std::countr_zero rend la largeur du mot (16 pour un WORD) quand aucun bit n'est à 1 ; l'IHM rend −1."],
+   st="Premier_Defaut := BIT_FIRST(Defauts);", c="i = defauts ? __builtin_ctz(defauts) : -1;   /* GCC */",
+   cpp="#include <bit>\nint i = defauts ? std::countr_zero(defauts) : -1;   // C++20", essai=("DINT", "BIT_FIRST(Mot)", "4"), ou="S F X T")
+fn(name="BIT_TEST", cat="bits", params=[("W", "ANY_BIT ou un entier", "le mot", False), ("N", "INT", "le numéro du bit (0 : le plus bas)", False)], ret="BOOL",
+   short="Vrai si le bit n est à 1.", notes=["Un bit hors du mot est une erreur : « le bit 16 n'existe pas dans un WORD (0..15) »."],
+   st="Defaut_Pompe := BIT_TEST(Defauts, 4);", c="defaut_pompe = (defauts >> 4) & 1;", cpp="defaut_pompe = (defauts >> 4) & 1u;   // std::bitset : test(4)",
+   essai=("BOOL", "BIT_TEST(Mot, 4)", "TRUE"), ou="S F X T")
+fn(name="BIT_SET", cat="bits", params=[("W", "ANY_BIT ou un entier", "le mot", False), ("N", "INT", "le numéro du bit", False)], ret="comme W",
+   short="La valeur avec le bit n à 1 ; le mot ne change pas (écrire Mot := BIT_SET(Mot, n) pour le changer).",
+   st="Commande := BIT_SET(Commande, 0);", c="commande |= 1u << 0;", cpp="commande |= 1u << 0;   // std::bitset : set(0)",
+   essai=("WORD", "BIT_SET(Mot, 0)", "241"), ou="S F X T")
+fn(name="BIT_RESET", cat="bits", params=[("W", "ANY_BIT ou un entier", "le mot", False), ("N", "INT", "le numéro du bit", False)], ret="comme W",
+   short="La valeur avec le bit n à 0 ; le mot ne change pas.",
+   st="Commande := BIT_RESET(Commande, 0);", c="commande &= ~(1u << 0);", cpp="commande &= ~(1u << 0);   // std::bitset : reset(0)",
+   essai=("WORD", "BIT_RESET(Mot, 4)", "224"), ou="S F X T")
 
 # ------------------------------------------------------------------- fonctions IHM_ --
 IHM = [
@@ -680,6 +1101,17 @@ ENUMS = [
      [("Lundi", 1, "Lundi", "1"), ("Mardi", 2, "Mardi", "2"), ("Mercredi", 3, "Mercredi", "3"), ("Jeudi", 4, "Jeudi", "4"), ("Vendredi", 5, "Vendredi", "5"), ("Samedi", 6, "Samedi", "6"), ("Dimanche", 7, "Dimanche", "7")]),
     ("MOIS", "Le mois, comme SYS.Month (1 janvier ... 12 décembre).", "", -1,
      [("Janvier", 1, "Janvier", "1"), ("Fevrier", 2, "Février", "2"), ("Mars", 3, "Mars", "3"), ("Avril", 4, "Avril", "4"), ("Mai", 5, "Mai", "5"), ("Juin", 6, "Juin", "6"), ("Juillet", 7, "Juillet", "7"), ("Aout", 8, "Août", "8"), ("Septembre", 9, "Septembre", "9"), ("Octobre", 10, "Octobre", "10"), ("Novembre", 11, "Novembre", "11"), ("Decembre", 12, "Décembre", "12")]),
+    # 1.12.7 : les enumerations des natives des conteneurs et de std::numeric (le rang est le nombre)
+    ("COMPARAISON", "La comparaison des fonctions qui cherchent, comptent ou retirent sous condition (LIST_FIND_IF, LIST_COUNT_IF, LIST_REMOVE_IF, LIST_ALL…).", "", -1,
+     [("Egal", 0, "Égal (=)", "Egal"), ("Different", 1, "Différent (<>)", "Different"), ("Inferieur", 2, "Inférieur (<)", "Inferieur"),
+      ("InferieurOuEgal", 3, "Inférieur ou égal (<=)", "InferieurOuEgal"), ("Superieur", 4, "Supérieur (>)", "Superieur"),
+      ("SuperieurOuEgal", 5, "Supérieur ou égal (>=)", "SuperieurOuEgal")]),
+    ("OPERATION", "L'opération des fonctions de std::numeric (ACCUMULATE, REDUCE, PARTIAL_SUM, les SCAN…).", "", -1,
+     [("Somme", 0, "La somme (+)", "Somme"), ("Produit", 1, "Le produit (*)", "Produit"), ("Min", 2, "Le minimum", "Min"), ("Max", 3, "Le maximum", "Max"),
+      ("Et", 4, "Le ET bit à bit", "Et"), ("Ou", 5, "Le OU bit à bit", "Ou")]),
+    ("TRANSFORMATION", "La transformation de chaque élément (TRANSFORM_REDUCE, TRANSFORM_INCLUSIVE_SCAN, TRANSFORM_EXCLUSIVE_SCAN).", "", -1,
+     [("Identite", 0, "La valeur elle-même", "Identite"), ("Abs", 1, "La valeur absolue", "Abs"), ("Carre", 2, "Le carré", "Carre"),
+      ("Racine", 3, "La racine carrée", "Racine"), ("Neg", 4, "L'opposé", "Neg"), ("Inverse", 5, "L'inverse (1/x)", "Inverse")]),
     ("QUALITE", "La qualité d'une valeur lue sur un équipement.", "", -1,
      [("Bonne", 0, "Bonne", "0"), ("Ancienne", 1, "Ancienne : la dernière lue, trop vieille", "1"), ("Mauvaise", 2, "Mauvaise : illisible", "2")]),
     ("ETAT_MOTEUR", "L'état d'un moteur, d'une pompe, d'un convoyeur (à donner à ses variables).", "", -1,
