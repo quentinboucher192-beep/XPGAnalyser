@@ -125,10 +125,10 @@ Empreinte SHA-256 de `XPGAnalyser-Setup-1.12.6.exe` (@@TAILLE_SETUP@@) :
 
 ## Vérifications
 
-**Tests Linux** (GCC 13) : la suite CTest complète passe, 70 sur 70. Elle comprend les 6 846 contrôles de `hmieditor`, les 5 043 de `hmi`, les 1 842 de `hminatives`, les 262 de `hmireperes` et les 133 de `hmitypes`.
+**Tests Linux** (GCC 13) : la suite CTest complète passe, 70 sur 70. Elle comprend les 6 846 contrôles de `hmieditor`, les 5 045 de `hmi`, les 1 842 de `hminatives`, les 262 de `hmireperes` et les 133 de `hmitypes`.
 
 Les essais des lots B et C :
-- `lotBC1126` dans `hmi` (52 contrôles ; `HMI_TEST_1126=1` le lance seul) : la table, le lecteur par rôle à l'écran, l'écriture vers le type, la barre de navigation et les onglets qui suivent leur formule, Générer, le découpeur, les repères retirés, Dupliquer. Chaque contrôle dit, dans son libellé, ce que faisait la 1.12.5 ;
+- `lotBC1126` dans `hmi` (54 contrôles ; `HMI_TEST_1126=1` le lance seul) : la table, le lecteur par rôle à l'écran, l'écriture vers le type, la barre de navigation et les onglets qui suivent leur formule, Générer, le découpeur, les repères retirés, Dupliquer. Chaque contrôle dit, dans son libellé, ce que faisait la 1.12.5. Deux d'entre eux figent la règle « ce qui démarrait démarre » (voir plus bas) ;
 - `chaqueProprieteParSonRole` dans `hmireperes` : les 135 propriétés à repère, comme dit au § C4.
 
 Des essais existants ont changé, parce que le comportement qu'ils figeaient a changé exprès :

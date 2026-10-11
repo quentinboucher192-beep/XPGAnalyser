@@ -32,7 +32,8 @@ attendre 8
 capture 1126_ihm_01_vue_lotbc_editeur.png
 
 # ---- 2. Dupliquer sur un tableau a deux dimensions ----
-objet "Afficheur_Grille"
+# un clic sur l'afficheur dans le canevas (40..240 x 590..640) : choisi, le canevas a la main
+vue-clic 140 615
 attendre 2
 touche ctrl+d
 attendre 4
