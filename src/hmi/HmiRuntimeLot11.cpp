@@ -18,6 +18,7 @@
 #include "HmiObjectAlarms.hpp"
 #include "HmiAlarmGroups.hpp"   // 1.10.2 (AL) : le son du groupe
 #include "HmiRuntime.hpp"
+#include "HmiRoles.hpp"   // 1.12.6 (lot B) : l'ecriture vers le type
 
 #include "HmiAlarmViews.hpp"
 #include "HmiCharts.hpp"
@@ -159,15 +160,19 @@ void Runtime::sampleCharts(double now) {
         const auto* v = viewOf(id);
         if (!v) continue;
         const auto aliases = viewAliases(id);
-        for (const auto& o : v->objects) {
-            if (o.kind != Kind::StateChart && o.kind != Kind::XYChart && o.kind != Kind::Histogram) continue;
+        for (const auto& so : v->objects) {
+            if (so.kind != Kind::StateChart && so.kind != Kind::XYChart && so.kind != Kind::Histogram) continue;
+            // 1.12.6 (lot B, § 2.7) : le graphique tel que l'ecran le montre (ses mesures, sa fenetre,
+            // sa periode selon leurs formules).
+            Object o = so;
+            evaluateProps(id, o);
             const std::string key = keyOf(id, o.id) + argumentsKey(id);   // 1.12.3 : par jeu d'arguments
             auto& series = charts_[key];
+            // 1.12.6 (lot B) : une mesure lue en nombre par le lecteur du role - un TIME en secondes,
+            // une date en secondes depuis 1970 (une courbe XY dans le temps), un BOOL 1 / 0.
             const auto eval = [&](const std::string& expr, double& out) {
                 if (plcUnread(expr)) return false;   // lot 14 : pas encore lue, ou illisible
-                bool ok = false;
-                const std::string value = evalText(expr, &ok);
-                return ok && numberOf(value, out);
+                return sampleNumber(expr, out);
             };
             if (o.kind == Kind::Histogram) {
                 const std::string expr = sourceOf(o, "variable");
@@ -791,27 +796,13 @@ bool Runtime::lot11Submit(const View& v, const Object& o, double now) {
         if (project_ && project_->security.enabled && !permitted("Piloter")) return fail("permission Piloter requise");
         sim::Value cur;
         if (!environment().read(var, cur)) return fail("variable inconnue : " + var);
-        sim::Value next;
-        double x = 0;
-        switch (cur.type()) {
-            case sim::Type::String: next = sim::Value::text(text); break;
-            case sim::Type::Bool: {
-                const std::string t = plainWord(text);
-                if (t == "1" || t == "true" || t == "vrai" || t == "oui") next = sim::Value::boolean(true);
-                else if (t == "0" || t == "false" || t == "faux" || t == "non") next = sim::Value::boolean(false);
-                else return fail("vrai ou faux attendu (1, 0, TRUE, FALSE)");
-                break;
-            }
-            case sim::Type::Real:
-                if (!parseNumber(text, x)) return fail("un nombre est attendu");
-                next = sim::Value::real(x);
-                break;
-            default:
-                if (!parseNumber(text, x)) return fail("un nombre est attendu");
-                if (std::fabs(x - std::round(x)) > 1e-9) return fail("un entier est attendu");
-                next = sim::Value::integer(cur.type() == sim::Type::Unknown ? sim::Type::Int : cur.type(), static_cast<std::int64_t>(std::llround(x)));
-                break;
-        }
+        // 1.12.6 (lot B, § 2.2) : la saisie convertie vers le type de la variable, comme un champ de
+        // saisie - une enumeration par son nom, une duree tapee, un booleen (vrai, ON) ; hors des
+        // bornes du type : refusee et dite.
+        const auto w = roles::textToVariable(text, writeTarget(var, &o));
+        if (!w.ok) return fail(w.note);
+        if (!w.note.empty()) return fail("hors bornes : " + w.note);
+        const sim::Value next = w.value;
         if (!write(var, next, source)) return fail("\xC3\xA9" "criture refus\xC3\xA9" "e");
         sim::Value after;
         (void)environment().read(var, after);

@@ -42,6 +42,7 @@
 #include "HmiControls.hpp"
 #include "HmiLoginMenu.hpp"
 #include "HmiModel.hpp"
+#include "HmiRoles.hpp"     // 1.12.6 (lot B) : l'ecriture vers le type de la variable
 #include "HmiProduction.hpp"
 #include "HmiSystemMenu.hpp"
 #include "HmiScript.hpp"
@@ -1056,6 +1057,11 @@ public:
     // bornes... suivent leur formule ; avant : la valeur fixe, la formule ignoree).
     [[nodiscard]] std::optional<std::string> evaluatedProp(Id view, Kind kind, const Prop& p) const;
     void evaluateProps(Id view, Object& o) const;
+    // 1.12.6 (lot B) : UNE MESURE (une plume, un point, un echantillon archive) : l'expression lue
+    // en nombre par le lecteur du role - un BOOL 1 / 0, un TIME en secondes, une date en secondes
+    // depuis 1970, une STRING '12,5' ; faux : pas un nombre (rien n'est trace). Les parametres de
+    // la vue : ceux que l'appelant a poses.
+    bool sampleNumber(const std::string& expr, double& out) const;
 
     // ---- 1.9 : les alarmes des objets (HmiObjectAlarms.hpp, HmiRuntimeObjectAlarms.cpp) ----
     //  Generees depuis le projet (objets du synoptique, instances de symboles), les
@@ -1353,6 +1359,12 @@ private:
     // ne voit pas Env) : l'objet rendu les remet en place quand il meurt.
     [[nodiscard]] std::shared_ptr<void> viewAliases(Id view);
     // Ecrire la variable d'une commande : permission, parametres de la vue, journal.
+    // 1.12.6 (lot B, § 2.2) : CE QUE L'ON SAIT DE LA VARIABLE ECRITE - son type (celui de sa valeur, son
+    // type ecrit, ses valeurs d'enumeration), un agregat (une structure, un tableau, une liste), les
+    // bornes de l'objet qui ecrit (curseur, potentiometre), son format (un nombre vers une STRING).
+    [[nodiscard]] roles::Target writeTarget(const std::string& var, const Object* writer);
+    // Ecrire `value` dans `var` converti vers son type (la Console dit ce qui est ramene ou refuse).
+    bool writeConverted(const std::string& var, const sim::Value& value, const std::string& source, const Object* writer);
     bool writeCommand(const View&, const Object&, const sim::Value&, double now, const std::string& shown = {},
                       bool journal = true);
     [[nodiscard]] bool numberProp(const Object&, std::string_view key, double& out);   // valeur ou expression

@@ -97,8 +97,12 @@ void Runtime::gifStart(const Object& o, GifPlayback& g, double now, int loops) {
 }
 
 void Runtime::gifsOpenView(const View& v, double now) {
-    for (const auto& o : v.objects) {
-        if (o.kind != Kind::AnimatedGif) continue;
+    for (const auto& so : v.objects) {
+        if (so.kind != Kind::AnimatedGif) continue;
+        // 1.12.6 (lot B, § 2.7) : la lecture, le nombre de tours, la vitesse, le depart et l'image tels
+        // que l'ecran les montre (leurs formules evaluees ; avant : les valeurs fixes).
+        Object o = so;
+        evaluateProps(v.id, o);
         GifPlayback g;
         const std::string start = lowerOf(o.text("start", "\xC3\xA0 l'affichage"));
         if (start.find("affichage") != std::string::npos || start.empty()) gifStart(o, g, now, -1);
@@ -111,8 +115,10 @@ void Runtime::gifsCycle(double now) {
     const auto visit = [&](Id viewId) {
         const View* v = viewOf(viewId);
         if (!v) return;
-        for (const auto& o : v->objects) {
-            if (o.kind != Kind::AnimatedGif) continue;
+        for (const auto& so : v->objects) {
+            if (so.kind != Kind::AnimatedGif) continue;
+            Object o = so;
+            evaluateProps(viewId, o);      // 1.12.6 (lot B) : tel que l'ecran le montre
             auto& g = gifs_[o.id];
             // "sur condition" : joue tant qu'elle est vraie.
             if (lowerOf(o.text("start")).find("condition") != std::string::npos) {

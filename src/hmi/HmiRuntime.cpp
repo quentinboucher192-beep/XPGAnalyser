@@ -1359,6 +1359,17 @@ std::optional<std::string> Runtime::evaluatedProp(Id view, Kind kind, const Prop
     return std::move(read.text);
 }
 
+bool Runtime::sampleNumber(const std::string& expr, double& out) const {
+    if (!env_) return false;
+    auto it = expressions_.find(expr);
+    if (it == expressions_.end()) it = expressions_.emplace(expr, Expression::compile(expr)).first;
+    if (!it->second.valid()) return false;
+    auto v = it->second.evaluate(*env_);
+    if (!v) return false;
+    const auto read = roles::adapt(roles::KeyRole{"variables", roles::Role::Number}, *v);
+    return read.ok && roles::readNumber(read.text, out);
+}
+
 void Runtime::evaluateProps(Id view, Object& o) const {
     if (!env_) return;
     for (auto& p : o.props)
@@ -1879,6 +1890,14 @@ void Runtime::fire(const View& v, const Object* o, const Action& a, double now, 
             if (it == expressions_.end()) it = expressions_.emplace(a.value, Expression::compile(a.value)).first;
             auto val = it->second.evaluate(*env_);
             if (!val) { log("Erreur", source, a.target + " := " + a.value + " : " + val.error().message()); break; }
+            // 1.12.6 (lot B, § 2.2) : la valeur d'Affecter, convertie vers le type de la variable (une
+            // enumeration par son nom, un texte '5 s' dans un TIME, 40000 ramene au maximum d'un INT, dit).
+            if (o) {
+                const auto converted = roles::toVariable(*val, writeTarget(a.target, o));
+                if (!converted.ok) { log("Erreur", source, a.target + " := " + a.value + " : " + converted.note); break; }
+                if (!converted.note.empty()) log("Action", source, a.target + " : " + converted.note);
+                *val = converted.value;
+            }
             if (write(a.target, *val, source)) {
                 const std::string cell = concretePath(a.target);
                 log("Action", source, cell + " := " + formatValue(*val) + (lastWriteForced_ ? std::string(" : ignor\xC3\xA9" "e (forc\xC3\xA9" "e)") : std::string{}) + writtenAs(a.target, cell));
@@ -3951,24 +3970,18 @@ void Runtime::sampleTrends(double now) {
         const auto* v = viewOf(id);
         if (!v) continue;
         const auto aliases = viewAliases(id);   // 1.12.3 : une plume qui cite un parametre de la vue (Cuve.Niveau)
-        for (const auto& o : v->objects) {
-            if (o.kind != Kind::Trend) continue;
+        for (const auto& so : v->objects) {
+            if (so.kind != Kind::Trend) continue;
+            // 1.12.6 (lot B, § 2.7) : la courbe telle que l'ecran la montre - ses plumes, son mode, sa duree
+            // selon leurs formules (avant : les valeurs fixes).
+            Object o = so;
+            evaluateProps(id, o);
             const std::string mode = o.text("mode", "temps r\xC3\xA9" "el");
             if (mode.rfind("historique", 0) == 0) continue;
+            // 1.12.6 (lot C) : le decoupeur unique - une plume M['a;b'] ou $A;B$ reste entiere.
             std::vector<std::string> pens;
-            {
-                const std::string list = o.text("variables");
-                std::size_t from = 0;
-                while (from <= list.size()) {
-                    const auto at = list.find(';', from);
-                    std::string pen = list.substr(from, at == std::string::npos ? std::string::npos : at - from);
-                    while (!pen.empty() && pen.front() == ' ') pen.erase(pen.begin());
-                    while (!pen.empty() && pen.back() == ' ') pen.pop_back();
-                    if (!pen.empty()) pens.push_back(pen);
-                    if (at == std::string::npos) break;
-                    from = at + 1;
-                }
-            }
+            for (auto& pen : roles::splitList(o.text("variables")))
+                if (!pen.empty()) pens.push_back(std::move(pen));
             auto& series = trends_[std::to_string(id) + ":" + std::to_string(o.id) + argumentsKey(id)];   // 1.12.3 : par jeu d'arguments
             bool same = series.size() == pens.size();
             for (std::size_t i = 0; same && i < pens.size(); ++i) same = series[i].expression == pens[i];
@@ -3978,15 +3991,10 @@ void Runtime::sampleTrends(double now) {
             }
             const double keep = std::max(1.0, o.number("duration", 60)) * 1.2 + 1.0;
             for (auto& s : series) {
-                bool ok = false;
                 // Lot 14 : une valeur de l'automate pas encore lue ne se trace pas.
-                const std::string value = plcUnread(s.expression) ? std::string{} : evalText(s.expression, &ok);
+                // 1.12.6 (lot B) : lue en nombre par le lecteur du role (un TIME : des secondes).
                 double number = 0;
-                if (ok) {
-                    if (value == "TRUE") number = 1;
-                    else if (value == "FALSE") number = 0;
-                    else if (!parseNumber(value, number)) ok = false;
-                }
+                const bool ok = !plcUnread(s.expression) && sampleNumber(s.expression, number);
                 if (ok) s.points.emplace_back(now, number);
                 while (!s.points.empty() && s.points.front().first < now - keep) s.points.pop_front();
             }
@@ -4002,13 +4010,8 @@ void Runtime::sampleArchive(double now) {
     const double epoch = epochOf(now);
     for (const auto& expr : project_->history.archived) {
         if (plcUnread(expr)) continue;           // lot 14 : pas encore lue, ou illisible
-        bool ok = false;
-        const std::string value = evalText(expr, &ok);
         double number = 0;
-        if (!ok) continue;
-        if (value == "TRUE") number = 1;
-        else if (value == "FALSE") number = 0;
-        else if (!parseNumber(value, number)) continue;
+        if (!sampleNumber(expr, number)) continue;   // 1.12.6 (lot B) : le lecteur du role (un TIME : des secondes)
         history_->samples.push_back(HistorySample{stamp, epoch, expr, number});
     }
     const auto cap = static_cast<std::size_t>(std::max(10, project_->history.maxEntries)) * 8 + 512;
@@ -4767,9 +4770,20 @@ void Runtime::submitForm(const View& v, const Object& o, double now) {
             }
             const std::string text = trimmed(f.text["valeur"]);
             sim::Value next;
+            // 1.12.6 (lot B, § 2.2) : ce qui est tape, converti vers le type de la variable par la meme regle
+            // que les commandes (HmiRoles.cpp) - une enumeration par son nom (Auto) ou son numero, une duree
+            // (T#5s, 5 s, 00:05, 1 h 30), une date (09/10/2026), un booleen (vrai, ON, 1) ; un nombre hors
+            // des bornes du type (40000 dans un INT) est refuse et dit (avant : 0, ou -25536, sans un mot).
+            const auto target = writeTarget(var, &o);
+            const auto refusedOr = [&](const roles::Written& w) {
+                if (!w.ok) { fail(w.note); return false; }
+                if (!w.note.empty()) { fail("hors bornes : " + w.note); return false; }
+                next = w.value;
+                return true;
+            };
             if (inputMode(o) == "numerique") {
                 double x = 0;
-                if (!parseNumber(text, x)) { fail("un nombre est attendu"); return; }
+                if (!roles::readNumber(text, x)) { fail("un nombre est attendu"); return; }
                 const auto bound = [&](const char* key, double& out) {
                     const std::string b = trimmed(o.text(key));
                     if (b.empty()) return false;
@@ -4785,45 +4799,24 @@ void Runtime::submitForm(const View& v, const Object& o, double now) {
                          + (hasHi ? formatNumber(hi) : std::string("-")));
                     return;
                 }
-                switch (cur.type()) {
-                    case sim::Type::Real: next = sim::Value::real(x); break;
-                    case sim::Type::Bool: next = sim::Value::boolean(x != 0.0); break;
-                    case sim::Type::String: next = sim::Value::text(text); break;
-                    default:
-                        if (std::fabs(x - std::round(x)) > 1e-9) { fail("un entier est attendu"); return; }
-                        next = sim::Value::integer(cur.type() == sim::Type::Unknown ? sim::Type::Int : cur.type(),
-                                                   static_cast<std::int64_t>(std::llround(x)));
-                        break;
+                if (cur.type() == sim::Type::String) {
+                    next = sim::Value::text(text);
+                } else {
+                    if (sim::isInteger(cur.type()) && cur.type() != sim::Type::Time && target.enumValues.empty()
+                        && std::fabs(x - std::round(x)) > 1e-9) {
+                        fail("un entier est attendu");
+                        return;
+                    }
+                    if (!refusedOr(roles::toVariable(sim::Value::real(x), target))) return;
                 }
             } else {
                 const auto limit = static_cast<std::size_t>(std::max(1.0, o.number("maxLength", 32)));
                 if (codepoints(text) > limit) { fail(std::to_string(limit) + " caract\xC3\xA8res au plus"); return; }
                 next = sim::Value::text(text);
                 // 1.12.5 (lot A, D15) : le mode texte vers une variable qui n'est pas un texte : ce qui
-                // est tape, converti a son type (12.5 dans un REAL, vrai dans un BOOL, T#5s dans un
-                // TIME) ; illisible : refuse, et dit (avant : 0 ecrit sans un mot).
-                if (cur.type() != sim::Type::String && cur.type() != sim::Type::Unknown) {
-                    double x = 0;
-                    bool ok = false;
-                    if (cur.type() == sim::Type::Real) {
-                        if ((ok = parseNumber(text, x))) next = sim::Value::real(x);
-                    } else if (cur.type() == sim::Type::Bool) {
-                        if (parseNumber(text, x)) { ok = true; next = sim::Value::boolean(x != 0.0); }
-                        else if (parseBool(text, false) == parseBool(text, true)) { ok = true; next = sim::Value::boolean(parseBool(text, false)); }
-                    } else if (sim::isInteger(cur.type()) && cur.type() != sim::Type::Time) {
-                        if ((ok = parseNumber(text, x) && std::fabs(x - std::round(x)) <= 1e-9))
-                            next = sim::Value::integer(cur.type(), static_cast<std::int64_t>(std::llround(x)));
-                    } else {
-                        // TIME, DATE, TIME_OF_DAY, DATE_AND_TIME : un litteral (T#5s, D#2026-10-09).
-                        const auto e = Expression::compile(text);
-                        if (e.valid())
-                            if (auto val = e.evaluate(*env_); val && val->type() == cur.type()) { ok = true; next = *val; }
-                    }
-                    if (!ok) {
-                        fail("\xC2\xAB " + text + " \xC2\xBB ne convient pas \xC3\xA0 " + var + " (" + std::string(sim::toString(cur.type())) + ")");
-                        return;
-                    }
-                }
+                // est tape, converti a son type ; illisible : refuse, et dit (avant : 0 ecrit sans un mot).
+                if ((cur.type() != sim::Type::String && cur.type() != sim::Type::Unknown) || !target.enumValues.empty())
+                    if (!refusedOr(roles::textToVariable(text, target))) return;
             }
             // Lot 13 : une saisie a signature attend le panneau (la valeur tapee attend avec elle).
             if (signatureNeeded(v, o)) {

@@ -188,8 +188,10 @@ bool Runtime::swipe(int direction, double now, std::string* why) {
     // L'ordre : la barre de navigation de la vue qui porte la vue courante, sinon
     // les vues ordinaires du projet.
     std::vector<std::string> order;
-    for (const auto& o : cur->objects) {
-        if (o.kind != Kind::NavBar) continue;
+    for (const auto& so : cur->objects) {
+        if (so.kind != Kind::NavBar) continue;
+        Object o = so;
+        evaluateProps(cur->id, o);      // 1.12.6 (lot B) : ses vues telles que l'ecran les montre
         std::vector<std::string> names;
         for (const auto& it : navItems(project_, o)) names.push_back(it.view);
         for (const auto& n : names)
@@ -338,7 +340,7 @@ void Runtime::lot12Part(const View& v, const Object& o, std::string_view part, d
                 } else if (known && cur.type() == sim::Type::String) {
                     next = sim::Value::text(labels[static_cast<std::size_t>(k - 1)]);
                 }
-                (void)write(var, next, source);
+                (void)writeConverted(var, next, source, &o);   // 1.12.6 (lot B) : vers son type
             } else {
                 setOverride(v, o, "page", std::to_string(k));
             }
@@ -376,7 +378,7 @@ void Runtime::lot12Part(const View& v, const Object& o, std::string_view part, d
             if (!var.empty() && environment().read(var, cur)) collapsed = cur.type() == sim::Type::String ? valueOn(cur.asString()) : cur.isTruthy();
             else if (!o.expr("collapsed").empty()) collapsed = evalBool(o.expr("collapsed"), collapsed);
             const bool next = !collapsed;
-            if (!var.empty()) (void)write(var, sim::Value::boolean(next), source);
+            if (!var.empty()) (void)writeConverted(var, sim::Value::boolean(next), source, &o);   // 1.12.6 : une STRING : 'TRUE'
             else setOverride(v, o, "collapsed", next ? "TRUE" : "FALSE");
             log("Action", source, next ? std::string("panneau repli\xC3\xA9") : std::string("panneau d\xC3\xA9pli\xC3\xA9"));
             return;
@@ -388,7 +390,7 @@ void Runtime::lot12Part(const View& v, const Object& o, std::string_view part, d
             const auto& z = zones[static_cast<std::size_t>(k)];
             selectedZone_ = z.alarmGroup();
             const std::string var = trimmedText(markers::strip(o.text("variable")));
-            if (!var.empty()) (void)write(var, sim::Value::text(selectedZone_), source);
+            if (!var.empty()) (void)writeConverted(var, sim::Value::text(selectedZone_), source, &o);
             log("Action", source, "zone choisie : " + selectedZone_);
             if (!z.view.empty()) {
                 Transition t;

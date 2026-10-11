@@ -449,7 +449,7 @@ Written toVariable(const sim::Value& in, const Target& t) {
             if (in.type() == sim::Type::String) {
                 if (trueWord(in.asString())) w.value = sim::Value::boolean(true);
                 else if (falseWord(in.asString())) w.value = sim::Value::boolean(false);
-                else return refused("'" + in.asString() + "' n'est ni vrai ni faux (TRUE, VRAI, 1, OUI, ON ; FALSE, FAUX, 0, NON, OFF) - rien n'est \xC3\xA9" "crit");
+                else return refused("'" + in.asString() + "' : vrai ou faux attendu (TRUE, VRAI, 1, OUI, ON ; FALSE, FAUX, 0, NON, OFF) - rien n'est \xC3\xA9" "crit");
             } else {
                 w.value = sim::Value::boolean(in.isTruthy());
             }

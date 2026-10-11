@@ -21,6 +21,8 @@
 //  secondes contre celle de maintenant).
 // =============================================================================
 #include "HmiRuntime.hpp"
+#include "HmiDisplay.hpp"
+#include "HmiRoles.hpp"   // 1.12.6 (lot B) : le lecteur du role, l'ecriture vers le type
 
 #include "HmiControls.hpp"
 #include "HmiExpr.hpp"
@@ -111,11 +113,75 @@ bool Runtime::numberProp(const Object& o, std::string_view key, double& out) {
     const auto* p = o.find(key);
     if (!p) return false;
     if (!p->expr.empty()) {
-        bool ok = false;
-        const auto text = evalText(p->expr, &ok);
-        return ok && parseNumber(text, out);
+        // 1.12.6 (lot B) : lue dans son role (un TIME : des secondes ; un BOOL : 1 ; un texte '12,5' : 12,5) ;
+        // les parametres de la vue sont ceux que l'appelant a poses (AliasGuard).
+        auto it = expressions_.find(p->expr);
+        if (it == expressions_.end()) it = expressions_.emplace(p->expr, Expression::compile(p->expr)).first;
+        auto v = it->second.evaluate(environment());
+        if (!v) return false;
+        const auto read = roles::adapt(roles::roleOf(o.kind, key), *v);
+        return read.ok && roles::readNumber(read.text, out);
     }
-    return parseNumber(p->value, out);
+    return roles::readNumber(p->value, out);
+}
+
+roles::Target Runtime::writeTarget(const std::string& var, const Object* writer) {
+    roles::Target t;
+    t.path = var;
+    auto& env = environment();
+    sim::Value cur;
+    if (env.read(var, cur)) t.type = cur.type();
+    t.typeName = env.declaredType(var);
+    if (!t.typeName.empty()) {
+        std::vector<sim::Environment::EnumItem> items;
+        if (env.enumItems(t.typeName, items))
+            for (const auto& it : items) {
+                t.enumValues.emplace_back(it.name, it.value);
+                if (it.text != it.name) t.enumValues.emplace_back(it.text, it.value);   // le texte affiche aussi
+            }
+        // Un agregat : la vraie raison du refus (avant : « variable inconnue »).
+        if (t.type == sim::Type::Unknown) {
+            std::string up = t.typeName;
+            for (auto& c : up) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+            std::vector<std::pair<std::string, std::string>> members;
+            types::Spec spec;
+            if (up.rfind("LIST", 0) == 0 || up.rfind("VECTOR", 0) == 0) t.aggregate = "une liste (" + t.typeName + ")";
+            else if (up.rfind("MAP", 0) == 0) t.aggregate = "une MAP (" + t.typeName + ")";
+            else if (up.rfind("TUPLE", 0) == 0) t.aggregate = "un tuple (" + t.typeName + ")";
+            else if (env.structMembers(t.typeName, members) && !members.empty()) {
+                t.aggregate = "une structure (" + t.typeName + ")";
+                for (std::size_t k = 0; k < members.size() && k < 3; ++k) t.members += (k ? ", " : "") + var + "." + members[k].first;
+            } else if (types::parseSpec(t.typeName, spec) && spec.array()) {
+                t.aggregate = "un tableau (" + t.typeName + ")";
+                t.members = var + "[" + std::to_string(spec.low[0]) + "]";
+            }
+        }
+    }
+    if (writer) {
+        // Les bornes de l'objet qui ecrit (un curseur 0..100 n'ecrit pas 140).
+        if (writer->kind == Kind::Slider || writer->kind == Kind::Knob) {
+            double mn = 0, mx = 0;
+            if (numberProp(*writer, "min", mn)) t.min = mn;
+            if (numberProp(*writer, "max", mx)) t.max = mx;
+            if (!std::isnan(t.min) && !std::isnan(t.max) && t.min > t.max) std::swap(t.min, t.max);
+        }
+        // Un nombre nu ecrit dans un TIME suit l'unite de l'objet (ms ; sinon des secondes).
+        const std::string unit = trimmedText(writer->text("unit"));
+        if (unit == "ms") t.unit = roles::Unit::Milliseconds;
+        // Un nombre vers une STRING : le format de l'objet (ou de la variable, Unites et formats).
+        if (t.type == sim::Type::String && project_) t.format = effectiveFormat(*project_, *writer);
+    }
+    return t;
+}
+
+bool Runtime::writeConverted(const std::string& var, const sim::Value& value, const std::string& source, const Object* writer) {
+    const auto converted = roles::toVariable(value, writeTarget(var, writer));
+    if (!converted.ok) {
+        log("Erreur", source, converted.note);
+        return false;
+    }
+    if (!converted.note.empty()) log("Action", source, var + " : " + converted.note);
+    return write(var, converted.value, source);
 }
 
 bool Runtime::writeCommand(const View& v, const Object& o, const sim::Value& value, double now, const std::string& shown,
@@ -141,7 +207,18 @@ bool Runtime::writeCommand(const View& v, const Object& o, const sim::Value& val
         formMessage(o.id, "aucune variable reli\xC3\xA9" "e", true, now);
         return false;
     }
-    if (!write(var, value, source)) {
+    // 1.12.6 (lot B, § 2.2) : CONVERTI VERS LE TYPE DE LA VARIABLE - arrondi, ramene dans les bornes du type
+    // et de l'objet (la Console le dit), une enumeration par son nom, une duree tapee ; un refus dit la
+    // vraie raison (une structure : ecris un de ses membres).
+    const auto target = writeTarget(var, &o);
+    const auto converted = roles::toVariable(value, target);
+    if (!converted.ok) {
+        log("Erreur", source, std::string(kindLabel(o.kind)) + " : " + converted.note);
+        formMessage(o.id, converted.note, true, now);
+        return false;
+    }
+    if (!converted.note.empty()) log("Action", source, var + " : " + converted.note);
+    if (!write(var, converted.value, source)) {
         formMessage(o.id, "variable inconnue : " + var, true, now);
         return false;
     }
@@ -816,7 +893,7 @@ void Runtime::controlsCycle(double now) {
                     const bool on = scheduleOn(ws, weekday, clock.hour * 60 + clock.minute);
                     if (st.output == (on ? 1 : 0)) break;
                     st.output = on ? 1 : 0;
-                    if (write(out, sim::Value::boolean(on), where(view, &o)))
+                    if (writeConverted(out, sim::Value::boolean(on), where(view, &o), &o))   // 1.12.6 : vers son type
                         log("Action", where(view, &o), out + " = " + (on ? "TRUE" : "FALSE") + " (programmateur)");
                     break;
                 }
