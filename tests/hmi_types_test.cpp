@@ -433,14 +433,15 @@ void moteur() {
     std::printf("-- le type du moteur, et une fonction LINT qui ne tronque plus\n");
     struct Case { const char* name; sim::Type t; };
     const Case cases[] = {{"BOOL", sim::Type::Bool}, {"ebool", sim::Type::Bool}, {"SINT", sim::Type::Int}, {"INT", sim::Type::Int},
-                          {"DINT", sim::Type::DInt}, {"LINT", sim::Type::DInt}, {"USINT", sim::Type::UInt}, {"UINT", sim::Type::UInt},
-                          {"UDINT", sim::Type::UDInt}, {"ULINT", sim::Type::UDInt}, {"BYTE", sim::Type::Byte}, {"WORD", sim::Type::Word},
+                          // 1.12.5 (lot A, D16) : LINT, ULINT, LWORD sur 64 bits (avant : DINT, UDINT, DWORD).
+                          {"DINT", sim::Type::DInt}, {"LINT", sim::Type::LInt}, {"USINT", sim::Type::UInt}, {"UINT", sim::Type::UInt},
+                          {"UDINT", sim::Type::UDInt}, {"ULINT", sim::Type::ULInt}, {"lword", sim::Type::LWord}, {"BYTE", sim::Type::Byte}, {"WORD", sim::Type::Word},
                           {"DWORD", sim::Type::DWord}, {"REAL", sim::Type::Real}, {"lreal", sim::Type::Real}, {"STRING[8]", sim::Type::String},
                           {"TIME", sim::Type::Time}, {"T_Four", sim::Type::Unknown}, {"", sim::Type::Unknown}};
     std::string bad;
     for (const auto& c : cases)
         if (tr::simTypeOf(c.name) != c.t) bad += std::string(c.name) + " ";
-    check(bad.empty(), "simTypeOf : chaque type de base, sans casse (LINT -> DINT, USINT -> UINT, lreal -> REAL) ; mal : " + bad);
+    check(bad.empty(), "simTypeOf : chaque type de base, sans casse (LINT -> LINT 64 bits, USINT -> UINT, lreal -> REAL) ; mal : " + bad);
     // Avant le registre, une locale ou un parametre LINT d'une fonction etait un INT (16 bits) :
     // 100000 devenait -31072. Et "lreal" ecrit en minuscules, un INT aussi.
     Project p;

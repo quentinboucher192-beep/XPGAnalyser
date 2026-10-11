@@ -83,6 +83,7 @@
 #include "../src/hmi/HmiTwin.hpp"      // lot 17
 #include "../src/hmi/HmiZones.hpp"
 #include "../src/hmi/HmiTypes.hpp"    // lot 16
+#include "../src/hmi/HmiTypeRegistry.hpp"   // 1.12.5 (D16) : simTypeOf
 #include "../src/hmi/HmiPackage.hpp"  // lot 20
 #include "../src/hmi/HmiSymbols.hpp"
 #include "../src/hmi/HmiRetain.hpp"   // 1.12.3 : l'etat des structures du poste
@@ -22557,10 +22558,777 @@ void clavierSouris11123() {
     }
 }
 
+// ========================================================= 1.12.5 (lot A) ======
+//  Les defauts de l'audit des objets (docs/AUDIT-BIBLIOTHEQUE-OBJETS.md, lot A) :
+//  ce que le moteur fait au clic suit ce que l'ecran montre (la formule evaluee) ;
+//  chaque type en entree. Chaque essai echouait avant sa correction.
+void lotA1125() {
+    std::printf("1.12.5 (lot A) : les d\xC3\xA9" "fauts de l'audit des objets\n");
+    // ---- D1 : la date et l'heure dans un DATE, un TIME_OF_DAY, un DATE_AND_TIME (des millisecondes,
+    // a l'heure du mur) - des variables de l'automate ou d'un equipement, un parametre de popup
+    {
+        Supervision s;
+        constexpr std::int64_t kDay = 86'400'000;
+        const std::int64_t oct9 = sim::daysFromCivil(2026, 10, 9) * kDay;
+        s.plc.values["Jour"] = sim::Value::integer(sim::Type::Date, oct9);
+        s.plc.values["Heure_Jour"] = sim::Value::integer(sim::Type::Tod, (14 * 3600 + 30 * 60) * 1000LL);
+        s.plc.values["Moment"] = sim::Value::integer(sim::Type::Dt, oct9 + (14 * 3600 + 30 * 60) * 1000LL);
+        const auto put = [&](const char* name, const char* var, double y) {
+            const Id id = edit::add(s.p, s.v(), Kind::DateTimePicker, 10, y);
+            s.v().object(id)->name = name;
+            s.v().object(id)->set("variable", var);
+            return id;
+        };
+        const Id jour = put("Choix_Jour", "Jour", 10);
+        const Id heure = put("Choix_Heure", "Heure_Jour", 140);
+        const Id moment = put("Choix_Moment", "Moment", 270);
+        s.start();
+        s.run(0.5);
+        bool pending = true;
+        const DateTime dj = s.rt.pickerValue(jour, &pending);
+        check(dj.year == 2026 && dj.month == 10 && dj.day == 9 && !pending,
+              "D1 : le s\xC3\xA9lecteur montre le DATE (09/10/2026 ; avant : des millisecondes lues en secondes)");
+        const DateTime dh = s.rt.pickerValue(heure);
+        check(dh.hour == 14 && dh.minute == 30, "... le TIME_OF_DAY (14:30)");
+        check(s.rt.pickerValue(moment) == DateTime{2026, 10, 9, 14, 30, 0}, "... le DATE_AND_TIME (09/10/2026 14:30)");
+        s.rt.objectPart(jour, "plus:jour", s.t);
+        s.rt.objectPart(jour, "valider", s.t);
+        same(s.plc.values["Jour"].display(), "D#2026-10-10",
+             "D1 : Valider \xC3\xA9" "crit le DATE en millisecondes (avant : des secondes, une date de 1970)");
+        s.rt.objectPart(heure, "plus:heure", s.t);
+        s.rt.objectPart(heure, "valider", s.t);
+        same(s.plc.values["Heure_Jour"].display(), "TOD#15:30:00", "... le TIME_OF_DAY depuis minuit");
+        s.rt.objectPart(moment, "plus:minute", s.t);
+        s.rt.objectPart(moment, "valider", s.t);
+        same(s.plc.values["Moment"].display(), "DT#2026-10-09-14:31:00", "... le DATE_AND_TIME, \xC3\xA0 l'heure du mur (sans fuseau, comme DT#)");
+        s.run(0.3);
+        check(s.rt.pickerValue(moment) == DateTime{2026, 10, 9, 14, 31, 0} && s.rt.pickerValue(jour).day == 10,
+              "... et le s\xC3\xA9lecteur le relit tel quel");
+    }
+    // ---- D2 : le bandeau, la liste et le resume d'alarmes lisent leur groupe CALCULE
+    {
+        Supervision s;
+        s.alarm("Fuite_A", "Pression < 5.0", 2, "Armoire A");
+        s.alarm("Porte_B", "Porte_Ouverte", 2, "Armoire B");
+        s.p.programs.variables.push_back(hmiVar(s.p, "Zone", "STRING", "'Armoire B'"));
+        const auto add = [&](Kind k, const char* name, double x, double y) {
+            const Id id = edit::add(s.p, s.v(), k, x, y);
+            s.v().object(id)->name = name;
+            return id;
+        };
+        s.v().width = 1400;
+        s.v().height = 900;
+        const Id banner = add(Kind::AlarmBanner, "Bandeau", 0, 0);
+        s.v().object(banner)->set("group", "Armoire A");
+        s.v().object(banner)->setExpr("group", "Zone");
+        const Id list = add(Kind::History, "Liste", 0, 300);
+        s.v().object(list)->set("group", "Armoire A");
+        s.v().object(list)->setExpr("group", "Zone");
+        const Id summary = add(Kind::AlarmSummary, "Resume", 0, 60);
+        s.v().object(summary)->set("groups", "Armoire A");
+        s.v().object(summary)->setExpr("groups", "Zone + '; Armoire A'");
+        s.start();
+        s.plc.values["Pression"] = sim::Value::real(4.0);
+        s.plc.values["Porte_Ouverte"] = sim::Value::boolean(true);
+        s.run(0.5);
+        check(s.live("Fuite_A") && s.live("Porte_B"), "D2 : deux alarmes, une par armoire");
+        const int k = s.rt.bannerAlarm(s.view, *s.v().object(banner));
+        check(k >= 0 && s.rt.alarms()[static_cast<std::size_t>(k)].name == "Porte_B",
+              "D2 : le bandeau du groupe =Zone (Armoire B) vise Porte_B, comme l'\xC3\xA9" "cran");
+        s.rt.objectPart(banner, "acquitter", s.t);
+        check(s.live("Porte_B")->acked && !s.live("Fuite_A")->acked,
+              "... Acquitter acquitte Porte_B (avant : Fuite_A, l'alarme du groupe fixe Armoire A)");
+        s.rt.objectPart(list, "ligne:0", s.t);
+        same(s.rt.selectedAlarm(), "Porte_B", "D2 : la 1re ligne de la liste du groupe =Zone : Porte_B (avant : Fuite_A)");
+        s.rt.objectPart(summary, "zone:0", s.t);
+        same(s.rt.selectedZone(), "Armoire B", "D2 : la 1re tuile du r\xC3\xA9sum\xC3\xA9 (=Zone + '; Armoire A') : Armoire B (avant : Armoire A)");
+        s.v().object(summary)->setExpr("groups", "");
+        s.v().object(summary)->set("groups", "$Armoire B$; Armoire A");
+        check(zonesOf(s.p, s.v().object(summary)->text("groups")) == std::vector<std::string>{"Armoire B", "Armoire A"},
+              "... des zones rep\xC3\xA9r\xC3\xA9" "es ($Armoire B$) : le dessin, le clic et G\xC3\xA9n\xC3\xA9rer les lisent sans $");
+    }
+    // ---- D3 : le bouton d'export lit sa source, son nom et son format CALCULES
+    {
+        Project p;
+        View v = makeView(p, "Exports");
+        p.programs.variables.push_back(hmiVar(p, "Format_Choisi", "STRING", "'PDF'"));
+        p.programs.variables.push_back(hmiVar(p, "Ligne", "STRING", "'L2'"));
+        const Id exp = edit::add(p, v, Kind::ExportButton, 10, 10);
+        v.object(exp)->name = "Export";
+        v.object(exp)->set("exportSource", "alarmes");
+        v.object(exp)->setExpr("exportSource", "'\xC3\xA9v\xC3\xA9nements'");
+        v.object(exp)->set("fileFormat", "CSV");
+        v.object(exp)->setExpr("fileFormat", "Format_Choisi");
+        v.object(exp)->set("fileName", "export");
+        v.object(exp)->setExpr("fileName", "'rapport_' + Ligne");
+        p.views = {v};
+        p.config.startView = v.id;
+        std::vector<ExportRequest> written;
+        Runtime rt;
+        Runtime::Hooks hooks;
+        hooks.exportFile = [&](const ExportRequest& rq, std::string* where) {
+            written.push_back(rq);
+            if (where) *where = "exports/" + rq.fileName;
+            return true;
+        };
+        rt.setHooks(hooks);
+        rt.bind(&p, nullptr);
+        rt.start(0.0);
+        rt.tick(0.2);
+        rt.press(exp, 0.3);
+        rt.release(exp, 0.35, true);
+        check(written.size() == 1 && written[0].source == "\xC3\xA9v\xC3\xA9nements" && written[0].format == "PDF" && written[0].fileName == "rapport_L2.pdf",
+              "D3 : l'export suit ses formules : \xC3\xA9v\xC3\xA9nements, PDF, rapport_L2.pdf (avant : alarmes, CSV, export.csv)"
+                  + (written.empty() ? std::string{} : " (" + written[0].source + ", " + written[0].format + ", " + written[0].fileName + ")"));
+    }
+    // ---- D4 et D8 : un REAL sans perte, une date avec son prefixe (formules, recettes)
+    {
+        Supervision s;
+        s.p.programs.variables.push_back(hmiVar(s.p, "Grand", "REAL", "1234567.8"));
+        s.plc.values["Livraison"] = sim::Value::integer(sim::Type::Date, sim::daysFromCivil(2026, 10, 9) * 86'400'000LL);
+        s.plc.values["Debut"] = sim::Value::integer(sim::Type::Tod, (6 * 3600 + 15 * 60) * 1000LL);
+        s.p.programs.variables.push_back(hmiVar(s.p, "Total", "REAL", "0.0"));
+        auto& plusBtn = addButton(s.p, s.v(), "Btn_Plus", 10, 200);
+        plusBtn.actions.push_back(act(Trigger::Click, Operation::Increment, "Total", "Grand"));
+        const Id plus = plusBtn.id;
+        const Id bar = edit::add(s.p, s.v(), Kind::ProgressBar, 10, 10);
+        s.v().object(bar)->name = "Barre";
+        s.v().object(bar)->setExpr("max", "Grand");
+        const Id gm = edit::add(s.p, s.v(), Kind::RecipeManager, 10, 300);
+        s.v().object(gm)->name = "Gestion";
+        s.v().object(gm)->set("recipe", "Lot");
+        Recipe r;
+        r.id = s.p.allocate();
+        r.name = "Lot";
+        r.fields = {{"Quantit\xC3\xA9", "Grand", "", "", ""}, {"Livraison", "Livraison", "", "", ""}, {"D\xC3\xA9" "but", "Debut", "", "", ""}};
+        r.records = {RecipeRecord{s.p.allocate(), "Ancien", {"1.5", "D#2025-01-02", "TOD#22:00:00"}, "", ""}};
+        s.p.recipes.push_back(r);
+        std::vector<RecipeRequest> requests;
+        Runtime::Hooks hooks;
+        hooks.recipeRequest = [&](const RecipeRequest& rq) { requests.push_back(rq); };
+        s.rt.setHooks(hooks);
+        s.start();
+        s.run(0.2);
+        s.rt.press(plus, s.t);
+        s.rt.release(plus, s.t + 0.05, true);
+        near(s.rt.variable("Total") ? s.rt.variable("Total")->asReal() : -1.0, 1234567.8,
+             "D4 : IncrÃ©menter du pas =Grand ajoute 1234567.8 (avant : 1234570, le pas lu Ã  6 chiffres)", 1e-6);
+        LiveView live;
+        live.bind(*s.rt.composedView(s.rt.currentView()));
+        const View shownView = live.evaluate(s.rt.environment(), nullptr, nullptr, 0.2);
+        same(shownView.object(bar)->text("max"), "1234567.8", "D4 : le maximum calcul\xC3\xA9 d'une barre : 1234567.8 (avant : 1.23457e+06, 1234570)");
+        s.rt.recipeManagerClick(gm, "bouton:Ajouter", s.t);
+        check(requests.size() == 1 && requests[0].values.size() == 3 && requests[0].values[0] == "1234567.8",
+              "D4 : Ajouter range le REAL sans perte (1234567.8)" + (requests.empty() ? std::string{} : " (" + requests[0].values[0] + ")"));
+        check(requests.size() == 1 && requests[0].values.size() == 3 && requests[0].values[1] == "D#2026-10-09" && requests[0].values[2] == "TOD#06:15:00",
+              "D8 : ... la date avec son pr\xC3\xA9" "fixe (D#2026-10-09, TOD#06:15:00 ; avant : 2026-10-09, relu 2007)");
+        s.rt.recipeManagerClick(gm, "ligne:0", s.t);
+        s.rt.recipeManagerClick(gm, "bouton:Appliquer", s.t);
+        check(s.plc.values["Livraison"].display() == "D#2025-01-02" && s.plc.values["Debut"].display() == "TOD#22:00:00",
+              "D8 : un jeu aux dates pr\xC3\xA9" "fix\xC3\xA9" "es s'applique (D#2025-01-02, TOD#22:00:00)");
+    }
+    // ---- D6 : le titre, le libelle, le texte des etats : des textes a trous ; un repere sans trou
+    {
+        Supervision s;
+        s.p.programs.variables.push_back(hmiVar(s.p, "Nom_Pompe", "STRING", "'P1'"));
+        const Id cadre = edit::add(s.p, s.v(), Kind::Frame, 10, 10);
+        s.v().object(cadre)->name = "Cadre";
+        s.v().object(cadre)->set("title", "Pompe {Nom_Pompe} ({Pression:0.0} bar)");
+        const Id pompe = edit::add(s.p, s.v(), Kind::Pump, 420, 10);
+        s.v().object(pompe)->name = "P_1";
+        s.v().object(pompe)->set("label", "$Pompe$ {Nom_Pompe}");
+        const Id texte = edit::add(s.p, s.v(), Kind::Text, 10, 300);
+        s.v().object(texte)->name = "Etat";
+        s.v().object(texte)->set("text", "Mode : $Maintenance$");
+        const Id inter = edit::add(s.p, s.v(), Kind::Switch, 10, 400);
+        s.v().object(inter)->name = "Inter";
+        s.v().object(inter)->set("variable", "Cle");
+        s.v().object(inter)->set("textOn", "{Nom_Pompe} en marche");
+        const Id panneau = edit::add(s.p, s.v(), Kind::CollapsiblePanel, 420, 300);
+        s.v().object(panneau)->name = "Panneau";
+        s.v().object(panneau)->set("title", "R\xC3\xA9glages $Ligne_2$");
+        s.start();
+        s.run(0.2);
+        LiveView live;
+        live.bind(*s.rt.composedView(s.rt.currentView()));
+        const View shown = live.evaluate(s.rt.environment(), nullptr, nullptr, s.t);
+        same(shown.object(cadre)->text("title"), "Pompe P1 (6.0 bar)", "D6 : le titre d'un cadre est un texte \xC3\xA0 trous (avant : les accolades s'affichaient)");
+        same(shown.object(pompe)->text("label"), "Pompe P1", "D6 : ... le libell\xC3\xA9 d'un symbole de synoptique, son rep\xC3\xA8re retir\xC3\xA9");
+        same(shown.object(inter)->text("textOn"), "P1 en marche", "D6 : ... le texte d'un \xC3\xA9tat (interrupteur)");
+        same(shown.object(texte)->text("text"), "Mode : Maintenance", "D6 : un texte sans trou se montre sans les $ de son rep\xC3\xA8re (ce que Dupliquer \xC3\xA9" "crit)");
+        same(shown.object(panneau)->text("title"), "R\xC3\xA9glages Ligne_2", "D6 : ... le titre d'un panneau repliable aussi");
+        // Generer verifie les trous d'un titre comme ceux d'un texte.
+        s.v().object(cadre)->set("title", "Pompe {Nom_Inconnu}");
+        const auto issues = generate(s.p, [](std::string_view root) { return root == "Pression" || root == "Cle"; });
+        bool told = false;
+        for (const auto& i : issues) told = told || (i.object == cadre && i.property == "title" && i.message.find("Nom_Inconnu") != std::string::npos);
+        check(told, "D6 : G\xC3\xA9n\xC3\xA9rer v\xC3\xA9rifie les trous d'un titre (Nom_Inconnu)");
+    }
+    // ---- D7 : un conteneur ou un groupe cache, transparent ou qui clignote : ses enfants aussi
+    {
+        Project p;
+        View v = makeView(p, "Structure");
+        p.programs.variables.push_back(hmiVar(p, "Montrer", "BOOL", "FALSE"));
+        const Id boite = edit::add(p, v, Kind::Container, 10, 10);
+        v.object(boite)->name = "Boite";
+        v.object(boite)->setExpr("visible", "$Montrer$");
+        const Id dedans = edit::add(p, v, Kind::Button, 30, 30);
+        v.object(dedans)->name = "Btn_Dedans";
+        const Id boite2 = edit::add(p, v, Kind::Container, 10, 300);
+        v.object(boite2)->name = "Boite_Pale";
+        v.object(boite2)->setNumber("opacity", 50);
+        const Id pale = edit::add(p, v, Kind::Rectangle, 30, 320);
+        const bool adopted = adopt(v, dedans, boite) && adopt(v, pale, boite2);
+        const Id a = edit::add(p, v, Kind::Rectangle, 400, 10), b = edit::add(p, v, Kind::Ellipse, 500, 10);
+        v.object(a)->setNumber("opacity", 80);
+        const Id g = edit::group(p, v, {a, b});
+        v.object(g)->setNumber("opacity", 50);
+        v.object(g)->setFlag("blink", true);
+        p.views = {v};
+        p.config.startView = v.id;
+        Runtime rt;
+        rt.bind(&p, nullptr);
+        rt.start(0.0);
+        rt.tick(0.1);
+        const auto shownNow = [&](double t) {
+            LiveView live;
+            live.bind(*rt.composedView(rt.currentView()));
+            View shown = live.evaluate(rt.environment(), nullptr, nullptr, t);
+            layoutStructures(shown);
+            return shown;
+        };
+        View shown = shownNow(0.1);
+        check(adopted && !shown.object(dedans)->flag("visible", true),
+              "D7 : un conteneur cach\xC3\xA9 (Visible =$Montrer$, faux) cache ses enfants - ni vus ni cliquables (avant : ils restaient)");
+        near(shown.object(pale)->number("opacity", 100), 50, "D7 : un conteneur \xC3\xA0 50 % : son enfant aussi");
+        near(shown.object(a)->number("opacity", 100), 40, "D7 : un groupe \xC3\xA0 50 % : son rectangle \xC3\xA0 80 % passe \xC3\xA0 40 % (avant : rien)");
+        check(shown.object(b)->flag("blink", false) && shown.object(a)->flag("blink", false), "D7 : un groupe qui clignote : ses enfants clignotent");
+        rt.environment().write("Montrer", sim::Value::boolean(true));
+        rt.tick(0.2);
+        shown = shownNow(0.2);
+        check(shown.object(dedans)->flag("visible", true), "D7 : ... Montrer vrai : l'enfant revient");
+    }
+    // ---- D9 : le GIF anime, depart sur condition : =Marche (une formule) le fait jouer
+    {
+        Project p;
+        auto blob = std::make_shared<Bytes>(examples::fanGif(40, 8, 100));
+        p.assets.resources.push_back(makeResource(p, "ventilo.gif", blob, "essai"));
+        View v = makeView(p, "Vue_Gif");
+        p.config.cycleMs = 50;
+        p.programs.variables.push_back(hmiVar(p, "Marche", "BOOL", "FALSE"));
+        const Id g = edit::add(p, v, Kind::AnimatedGif, 10, 10);
+        auto* o = v.object(g);
+        o->name = "Ventilo";
+        o->set("image", "ventilo.gif");
+        o->set("play", "en boucle");
+        o->set("start", "sur condition");
+        o->set("condition", "");
+        o->setExpr("condition", "$Marche$");
+        p.views = {v};
+        p.config.startView = v.id;
+        const auto issues = generate(p, [](std::string_view) { return false; });
+        bool emptySaid = false;
+        for (const auto& i : issues) emptySaid = emptySaid || (i.object == g && i.message.find("condition est vide") != std::string::npos);
+        check(!emptySaid, "D9 : G\xC3\xA9n\xC3\xA9rer ne dit plus \xC2\xAB la condition est vide \xC2\xBB pour =$Marche$");
+        Runtime rt;
+        rt.bind(&p, nullptr);
+        rt.start(0.0);
+        rt.tick(0.1);
+        check(rt.gifPlayback(g) && !rt.gifPlayback(g)->playing, "D9 : Marche faux : le GIF attend");
+        rt.environment().write("Marche", sim::Value::boolean(true));
+        rt.tick(0.2);
+        rt.tick(0.55);
+        check(rt.gifPlayback(g) && rt.gifPlayback(g)->playing && rt.gifFrameAt(g, 0.55) > 0,
+              "D9 : =$Marche$ vrai : le GIF joue (avant : jamais, la condition lue vide)");
+    }
+    // ---- le compteur horaire : =Pompe (une formule) ; le depassement prevenu ; la fleche de tendance
+    {
+        Project p;
+        View v = makeView(p, "Vue_Heures");
+        p.programs.variables.push_back(hmiVar(p, "Pompe", "BOOL", "FALSE"));
+        p.programs.variables.push_back(hmiVar(p, "Total", "TIME", "T#0s"));
+        p.programs.variables.push_back(hmiVar(p, "Court", "INT", "32760"));
+        p.programs.variables.push_back(hmiVar(p, "Niveau", "REAL", "10.0"));
+        p.programs.variables.push_back(hmiVar(p, "Zone_Morte", "REAL", "5.0"));
+        const Id h1 = edit::add(p, v, Kind::HourMeter, 10, 10);
+        v.object(h1)->name = "Heures";
+        v.object(h1)->set("variable", "$Total$");
+        v.object(h1)->set("condition", "");
+        v.object(h1)->setExpr("condition", "$Pompe$");
+        const Id h2 = edit::add(p, v, Kind::HourMeter, 10, 100);
+        v.object(h2)->name = "Heures_Int";
+        v.object(h2)->set("variable", "Court");
+        const Id fl = edit::add(p, v, Kind::TrendArrow, 10, 200);
+        v.object(fl)->name = "Tendance";
+        v.object(fl)->set("variable", "Niveau");
+        v.object(fl)->setNumber("deadband", 0.5);
+        v.object(fl)->setExpr("deadband", "Zone_Morte");
+        v.object(fl)->setNumber("window", 2);
+        p.views = {v};
+        p.config.startView = v.id;
+        Runtime rt;
+        rt.bind(&p, nullptr);
+        rt.start(0.0);
+        double t = 0;
+        const auto runTo = [&](double end) { while (t < end - 1e-9) { t += 0.1; rt.tick(t); } };
+        runTo(3.0);
+        check(rt.variable("Total") && rt.variable("Total")->asInteger() == 0,
+              "compteur horaire : Compte quand =$Pompe$, Pompe faux : il ne compte pas (avant : il comptait toujours)");
+        rt.environment().write("Pompe", sim::Value::boolean(true));
+        runTo(5.0);
+        near(rt.variable("Total") ? rt.variable("Total")->asInteger() / 1000.0 : -1.0, 2.0, "... Pompe vrai : il compte (2 s)", 0.15);
+        runTo(10.0);
+        check(rt.variable("Court") && rt.variable("Court")->asInteger() == 32767 && journalHas(rt, "Erreur", "maximum d'un INT")
+                  && journalHas(rt, "Action", "approche du maximum"),
+              "compteur horaire en INT : annonc\xC3\xA9 \xC3\xA0 90 %, il s'arr\xC3\xAAte \xC3\xA0 32767 s (9,1 h) au lieu de repartir de z\xC3\xA9ro");
+        const auto issues = generate(p, [](std::string_view) { return false; });
+        bool intSaid = false, timeSaid = false;
+        for (const auto& i : issues) {
+            intSaid = intSaid || (i.object == h2 && i.property == "variable" && i.message.find("9,1 h") != std::string::npos);
+            timeSaid = timeSaid || (i.object == h1 && i.property == "variable" && i.message.find("49,7 jours") != std::string::npos);
+        }
+        check(intSaid && timeSaid, "G\xC3\xA9n\xC3\xA9rer pr\xC3\xA9vient : un INT tient 9,1 h, un TIME 49,7 jours (LREAL ou UDINT)");
+        // La fleche de tendance : sa zone morte calculee (=Zone_Morte, 5) - +3 en 1 s reste stable.
+        rt.environment().write("Niveau", sim::Value::real(13.0));
+        runTo(11.0);
+        check(rt.trendArrow(fl) == 0, "fl\xC3\xA8" "che de tendance : la zone morte =Zone_Morte (5) - +3 reste stable (avant : 0,5 fixe, en hausse)");
+        rt.environment().write("Zone_Morte", sim::Value::real(1.0));
+        rt.environment().write("Niveau", sim::Value::real(16.0));
+        runTo(11.5);
+        check(rt.trendArrow(fl) == 1, "... Zone_Morte = 1 : +3 monte");
+    }
+    // ---- D10 : le compteur de production - en fond, un INT qui deborde, un compte par jeu d'arguments
+    {
+        Project p;
+        for (const auto& [name, type, init] : std::vector<std::tuple<const char*, const char*, const char*>>{
+                 {"Bons", "INT", "32760"}, {"Marche", "BOOL", "TRUE"}, {"Bons_1", "DINT", "0"}, {"Bons_2", "DINT", "0"}})
+            p.programs.variables.push_back(hmiVar(p, name, type, init));
+        View accueil = makeView(p, "Accueil");
+        View ligne = makeView(p, "Vue_Ligne");
+        const Id pc = edit::add(p, ligne, Kind::ProductionCounter, 10, 10);
+        ligne.object(pc)->name = "Compteurs";
+        ligne.object(pc)->set("good", "$Bons$");
+        ligne.object(pc)->set("bad", "");
+        ligne.object(pc)->set("running", "Marche");
+        ligne.object(pc)->set("shifts", "");
+        View pop = makeView(p, "Pop_Ligne");
+        pop.role = "popup";
+        pop.params.push_back({"L", "", "", "DINT", ParamMode::Reference});
+        const Id pc2 = edit::add(p, pop, Kind::ProductionCounter, 10, 10);
+        pop.object(pc2)->name = "Compteurs_L";
+        pop.object(pc2)->set("good", "L");
+        pop.object(pc2)->set("bad", "");
+        pop.object(pc2)->set("running", "Marche");
+        pop.object(pc2)->set("shifts", "");
+        p.views = {accueil, ligne, pop};
+        p.config.startView = accueil.id;
+        Runtime rt;
+        rt.bind(&p, nullptr);
+        rt.start(0.0);
+        double t = 0;
+        int made = 0;
+        const auto run = [&](double seconds, const char* counter) {
+            const double end = t + seconds;
+            double next = std::floor(t) + 1.0;
+            while (t < end - 1e-9) {
+                t += 0.05;
+                if (counter && t >= next - 1e-9) {
+                    next += 1.0;
+                    ++made;
+                    sim::Value cur;
+                    (void)rt.environment().read(counter, cur);
+                    rt.environment().write(counter, sim::Value::integer(cur.type(), cur.asInteger() + 1));
+                }
+                rt.tick(t);
+            }
+        };
+        run(10.0, "Bons");
+        run(0.3, nullptr);   // le dernier cycle de production
+        const auto f = rt.production(ligne.id, pc);
+        check(f.good == 10 && f.total == 10,
+              "D10 : Vue_Ligne pas affich\xC3\xA9" "e, le compteur compte en fond (10 pi\xC3\xA8" "ces ; avant : rien tant que la vue est ferm\xC3\xA9" "e) (" + formatNumber(f.good) + ")");
+        check(rt.variable("Bons") && rt.variable("Bons")->asInteger() < 0 && f.good == 10,
+              "D10 : ... Bons (INT) a d\xC3\xA9" "bord\xC3\xA9 de 32767 \xC3\xA0 -32768 : le compte continue (avant : pris pour une remise \xC3\xA0 z\xC3\xA9ro)");
+        // Une popup ouverte pour L := Bons_1, puis pour L := Bons_2 : deux comptes.
+        check(rt.openPopup(pop.id, Transition{}, t, "L := Bons_1", {}, kNoId), "la popup Pop_Ligne pour Bons_1");
+        run(3.0, "Bons_1");
+        run(0.3, nullptr);
+        const double first = rt.production(pop.id, pc2).good;
+        rt.closePopup(Transition{}, t);
+        check(rt.openPopup(pop.id, Transition{}, t, "L := Bons_2", {}, kNoId), "... puis pour Bons_2");
+        run(2.0, "Bons_2");
+        run(0.3, nullptr);
+        const double second = rt.production(pop.id, pc2).good;
+        check(first == 3 && second == 2, "D10 : un compte par jeu d'arguments - Bons_1 : 3, Bons_2 : 2 (avant : un seul compte partag\xC3\xA9) ("
+                                             + formatNumber(first) + ", " + formatNumber(second) + ")");
+    }
+    // ---- D11 : le tableau de variables - une ligne a repere ($Cuve$.Consigne) reste ecrivable,
+    // garde son unite et son format
+    {
+        Project p;
+        View v = makeView(p, "Vue_Tableau");
+        HmiType cuve;
+        cuve.id = p.nextId++;
+        cuve.name = "T_Cuve";
+        cuve.members = {{"Consigne", "REAL", "", ""}};
+        p.programs.types.push_back(cuve);
+        p.programs.variables.push_back(hmiVar(p, "Cuve", "T_Cuve"));
+        VariableDisplay d;
+        d.path = "Cuve.Consigne";
+        d.unit = "bar";
+        d.format = "0.000";
+        p.displays.push_back(d);
+        const Id tab = edit::add(p, v, Kind::VariableTable, 10, 10);
+        v.object(tab)->name = "Tableau";
+        v.object(tab)->set("variables", "$Cuve$.Consigne");
+        p.views = {v};
+        p.config.startView = v.id;
+        const auto rows = variableRows(*p.views[0].object(tab));
+        check(rows.size() == 1 && rows[0].expression == "Cuve.Consigne", "D11 : la ligne $Cuve$.Consigne se lit Cuve.Consigne");
+        same(rowFormat(&p, *p.views[0].object(tab), 0), "0.000", "D11 : ... son format (Unit\xC3\xA9s et formats) se retrouve (avant : 0.00, celui de l'objet)");
+        const auto* found = displayOf(p, "$Cuve$.Consigne");
+        check(found && found->unit == "bar", "D11 : ... et son unit\xC3\xA9 (bar)");
+        Runtime rt;
+        rt.bind(&p, nullptr);
+        rt.start(0.0);
+        rt.tick(0.1);
+        rt.objectPart(tab, "ligne:0", 0.2);
+        const auto* fs = rt.formState(tab);
+        check(fs && !fs->error && fs->text.count("ligne:0"),
+              "D11 : un clic sur la ligne l'\xC3\xA9" "dite (avant : \xC2\xAB est un calcul : en lecture seule \xC2\xBB)");
+    }
+    // ---- D12 : la consigne d'alarme vise une alarme d'objet (Vue.Objet.Alarme)
+    {
+        Supervision s;
+        s.p.programs.variables.push_back(hmiVar(s.p, "P3_Defaut", "BOOL", "FALSE"));
+        const Id pompe = edit::add(s.p, s.v(), Kind::Pump, 400, 10);
+        s.v().object(pompe)->name = "Pompe_3";
+        s.v().object(pompe)->setExpr("fault", "P3_Defaut");
+        s.v().object(pompe)->set("label", "P3");
+        const auto generated = objectAlarms(s.p);
+        std::string name;
+        for (const auto& oa : generated) if (oa.objectId == pompe) name = oa.def.name;
+        check(!name.empty(), "D12 : la pompe porte une alarme d'objet (" + name + ")");
+        const Id consigne = edit::add(s.p, s.v(), Kind::AlarmInstruction, 10, 300);
+        s.v().object(consigne)->name = "Consigne";
+        s.v().object(consigne)->set("alarm", "$" + name + "$");
+        const auto issues = generate(s.p, [](std::string_view root) { return root == "Pression" || root == "Bouteille_Vide" || root == "Porte_Ouverte"; });
+        bool missing = false;
+        for (const auto& i : issues) missing = missing || (i.object == consigne && i.message.find("introuvable") != std::string::npos);
+        check(!name.empty() && !missing, "D12 : G\xC3\xA9n\xC3\xA9rer trouve l'alarme d'objet de la consigne, rep\xC3\xA9r\xC3\xA9" "e (avant : \xC2\xAB introuvable \xC2\xBB)");
+        s.start();
+        s.rt.environment().write("P3_Defaut", sim::Value::boolean(true));
+        s.run(0.5);
+        const auto* shown = instructionAlarm(s.rt.alarms(), s.v().object(consigne)->text("alarm"), "");
+        check(shown && shown->name == name, "D12 : en marche, la consigne montre cette alarme");
+    }
+    // ---- D13 : le Defaut d'un symbole du synoptique tape sans '=' (P1.Defaut) : le dessin le montre
+    // quand son alarme se declenche
+    {
+        Supervision s;
+        HmiType tp;
+        tp.id = s.p.nextId++;
+        tp.name = "T_Pompe";
+        tp.members = {{"Defaut", "BOOL", "", ""}, {"Marche", "BOOL", "", ""}};
+        s.p.programs.types.push_back(tp);
+        s.p.programs.variables.push_back(hmiVar(s.p, "P1", "T_Pompe"));
+        const Id pompe = edit::add(s.p, s.v(), Kind::Pump, 400, 10);
+        s.v().object(pompe)->name = "Pompe_1";
+        s.v().object(pompe)->set("fault", "$P1$.Defaut");
+        s.v().object(pompe)->set("value", "P1.Marche");
+        const Id vanne = edit::add(s.p, s.v(), Kind::Valve, 600, 10);
+        s.v().object(vanne)->name = "Vanne_1";
+        s.v().object(vanne)->set("fault", "vrai");
+        s.start();
+        s.rt.environment().write("P1.Defaut", sim::Value::boolean(true));
+        s.rt.environment().write("P1.Marche", sim::Value::boolean(true));
+        s.run(0.5);
+        bool alarmOn = false;
+        for (const auto& a : s.rt.alarms()) alarmOn = alarmOn || (a.name.find("Pompe_1") != std::string::npos && a.active);
+        LiveView live;
+        live.bind(*s.rt.composedView(s.rt.currentView()));
+        const View shown = live.evaluate(s.rt.environment(), nullptr, nullptr, s.t);
+        check(alarmOn && parseBool(shown.object(pompe)->text("fault"), false),
+              "D13 : D\xC3\xA9" "faut tap\xC3\xA9 sans = ($P1$.Defaut) : l'alarme se d\xC3\xA9" "clenche ET le dessin montre le d\xC3\xA9" "faut (avant : lu FAUX)");
+        check(parseBool(shown.object(pompe)->text("value"), false), "D13 : ... la Valeur P1.Marche aussi : en marche");
+        check(parseBool(shown.object(vanne)->text("fault"), false), "D13 : un D\xC3\xA9" "faut \xC2\xAB vrai \xC2\xBB reste une constante (vrai)");
+        s.v().object(pompe)->set("fault", "P1.Defot");
+        const auto issues = generate(s.p, [](std::string_view root) { return root == "Pression" || root == "Bouteille_Vide" || root == "Porte_Ouverte"; });
+        bool told = false;
+        for (const auto& i : issues) told = told || (i.object == pompe && i.property == "fault" && i.message.find("Defot") != std::string::npos);
+        check(told, "D13 : G\xC3\xA9n\xC3\xA9rer v\xC3\xA9rifie ce D\xC3\xA9" "faut comme une formule (P1.Defot inconnu)");
+    }
+    // ---- D14 : la courbe XY en escalier
+    {
+        const std::vector<std::pair<double, double>> pts{{0, 1}, {1, 3}, {2, 2}};
+        check(interpolatedPoints(pts, "escalier") == std::vector<std::pair<double, double>>{{0, 1}, {1, 1}, {1, 3}, {2, 3}, {2, 2}},
+              "D14 : l'escalier tient chaque valeur jusqu'au point suivant (avant : trac\xC3\xA9 en lin\xC3\xA9" "aire)");
+        check(interpolatedPoints(pts, "lin\xC3\xA9" "aire") == pts && interpolatedPoints(pts, "points") == pts, "... lin\xC3\xA9" "aire et points : tels quels");
+    }
+    // ---- D15 : incrementer un texte ; le mode texte d'un champ de saisie vers un nombre
+    {
+        Project p;
+        View v = makeView(p, "Saisies");
+        p.programs.variables.push_back(hmiVar(p, "Nom", "STRING", "'Lot 7'"));
+        p.programs.variables.push_back(hmiVar(p, "Reel", "REAL", "1.5"));
+        p.programs.variables.push_back(hmiVar(p, "Duree", "TIME", "T#1s"));
+        auto& plus = addButton(p, v, "Btn_Plus", 10, 10);
+        plus.actions.push_back(act(Trigger::Click, Operation::Increment, "$Nom$", "1"));
+        const Id plusId = plus.id;
+        const auto field = [&](const char* name, const char* var, double y) {
+            const Id id = edit::add(p, v, Kind::InputField, 200, y);
+            v.object(id)->name = name;
+            v.object(id)->set("variable", var);
+            v.object(id)->set("mode", "texte");
+            return id;
+        };
+        const Id fReel = field("F_Reel", "Reel", 10);
+        const Id fDuree = field("F_Duree", "Duree", 60);
+        p.views = {v};
+        p.config.startView = v.id;
+        const auto issues = generate(p, [](std::string_view) { return false; });
+        bool told = false;
+        for (const auto& i : issues) told = told || (i.object == plusId && i.message.find("est un texte (STRING)") != std::string::npos);
+        check(told, "D15 : G\xC3\xA9n\xC3\xA9rer dit qu'Incr\xC3\xA9menter ne s'applique pas \xC3\xA0 un texte ($Nom$)");
+        Runtime rt;
+        rt.bind(&p, nullptr);
+        rt.start(0.0);
+        rt.press(plusId, 0.1);
+        rt.release(plusId, 0.15, true);
+        same(rt.variable("Nom") ? rt.variable("Nom")->asString() : std::string("?"), "Lot 7", "D15 : Incr\xC3\xA9menter une STRING : elle garde 'Lot 7' (avant : vid\xC3\xA9" "e)");
+        check(journalHas(rt, "Erreur", "est un texte (STRING)"), "D15 : ... et le journal le dit");
+        rt.objectPart(fReel, "champ", 0.2);
+        rt.typeText("12.5", 0.21);
+        rt.typeKey(EditKey::Enter, 0.22);
+        near(rt.variable("Reel")->asReal(), 12.5, "D15 : un champ en mode texte sur un REAL : 12.5 \xC3\xA9" "crit (avant : 0)");
+        rt.objectPart(fReel, "champ", 0.3);
+        rt.typeText("abc", 0.31);
+        rt.typeKey(EditKey::Enter, 0.32);
+        check(rt.formState(fReel) && rt.formState(fReel)->error && std::fabs(rt.variable("Reel")->asReal() - 12.5) < 1e-9,
+              "D15 : ... \xC2\xAB abc \xC2\xBB est refus\xC3\xA9, la variable garde 12.5");
+        rt.typeKey(EditKey::Escape, 0.33);
+        rt.objectPart(fDuree, "champ", 0.4);
+        rt.typeText("T#5s", 0.41);
+        rt.typeKey(EditKey::Enter, 0.42);
+        check(rt.variable("Duree") && rt.variable("Duree")->asInteger() == 5000, "D15 : ... T#5s dans un TIME : 5 s");
+    }
+    // ---- D16 : LINT, ULINT, LWORD sur 64 bits (un script, une conversion, un litteral)
+    {
+        Project p;
+        View v = makeView(p, "Vue_64");
+        p.views = {v};
+        p.config.startView = v.id;
+        p.programs.variables.push_back(hmiVar(p, "Texte_64", "STRING", "''"));
+        p.programs.variables.push_back(hmiVar(p, "Haut", "STRING", "''"));
+        p.programs.scripts.push_back(generalScript(p, "Calcul_64",
+            "VAR\n  Grand : LINT;\n  Mot : ULINT;\nEND_VAR\n"
+            "Grand := 5000000000;\nGrand := Grand * 3;\nTexte_64 := TO_STRING(Grand);\n"
+            "Mot := TO_ULINT(16#FFFF_FFFF);\nMot := Mot + 1;\nHaut := TO_STRING(Mot);"));
+        Runtime rt;
+        rt.bind(&p, nullptr);
+        rt.start(0.0);
+        std::string why;
+        const bool ran = rt.callScript("Calcul_64", 0.1, &why);
+        same(rt.variable("Texte_64") ? rt.variable("Texte_64")->asString() : std::string("?"), "15000000000",
+             "D16 : un LINT tient 15 000 000 000 (avant : repli\xC3\xA9 sur 32 bits)" + (ran ? std::string{} : " - " + why));
+        same(rt.variable("Haut") ? rt.variable("Haut")->asString() : std::string("?"), "4294967296", "D16 : un ULINT passe 16#FFFF_FFFF + 1 = 4294967296");
+        const auto e = Expression::compile("LINT_TO_STRING(TO_LINT(3000000000) * 2)");
+        const auto r = e.valid() ? e.evaluate(rt.environment()) : core::Result<sim::Value>(core::fail(core::ErrorCode::InvalidArgument, e.error()));
+        same(r ? r->asString() : std::string("?"), "6000000000", "D16 : TO_LINT(3000000000) * 2 = 6000000000 dans une formule");
+        check(typereg::simTypeOf("LINT") == sim::Type::LInt && typereg::simTypeOf("ULINT") == sim::Type::ULInt && typereg::simTypeOf("LWORD") == sim::Type::LWord,
+              "D16 : le registre range LINT, ULINT, LWORD sur 64 bits");
+    }
+    // ---- D17 : « Lignes depuis » un TUPLE accepte par Generer ; un repere verifie ; un ARRAY 2 D
+    {
+        Project p;
+        View v = makeView(p, "Vue_Lignes");
+        p.programs.variables.push_back(hmiVar(p, "Paire", "TUPLE(STRING, INT)", "('Lot', 3)"));
+        p.programs.variables.push_back(hmiVar(p, "Grille", "ARRAY[1..2, 0..2] OF INT", ""));
+        const Id t1 = edit::add(p, v, Kind::Table, 10, 10);
+        v.object(t1)->name = "Tableau_Tuple";
+        v.object(t1)->set("rowsFrom", "Paire");
+        const Id t2 = edit::add(p, v, Kind::Table, 10, 300);
+        v.object(t2)->name = "Tableau_Inconnu";
+        v.object(t2)->set("rowsFrom", "$Absente$");
+        const Id t3 = edit::add(p, v, Kind::Table, 400, 10);
+        v.object(t3)->name = "Tableau_Grille";
+        v.object(t3)->set("rowsFrom", "Grille");
+        p.views = {v};
+        p.config.startView = v.id;
+        const auto issues = generate(p, [](std::string_view) { return false; });
+        bool tupleRefused = false, markerChecked = false;
+        for (const auto& i : issues) {
+            tupleRefused = tupleRefused || (i.object == t1 && i.property == "rowsFrom");
+            markerChecked = markerChecked || (i.object == t2 && i.property == "rowsFrom" && i.message.find("Absente") != std::string::npos);
+        }
+        check(!tupleRefused, "D17 : Lignes depuis un TUPLE - G\xC3\xA9n\xC3\xA9rer l'accepte (avant : \xC2\xAB ni une LIST, ni un VECTOR... \xC2\xBB)");
+        check(markerChecked, "D17 : ... $Absente$ est v\xC3\xA9rifi\xC3\xA9" "e malgr\xC3\xA9 son rep\xC3\xA8re (avant : saut\xC3\xA9" "e)");
+        Runtime rt;
+        rt.bind(&p, nullptr);
+        rt.start(0.0);
+        rt.environment().write("Grille[2,1]", sim::Value::integer(sim::Type::Int, 21));
+        rt.tick(0.1);
+        std::vector<std::string> headers;
+        std::vector<std::vector<std::string>> rows;
+        const bool got = rt.tableRows(*p.views[0].object(t3), headers, rows);
+        check(got && rows.size() == 2 && headers.size() == 3 && rows[1].size() == 3 && rows[1][1] == "21",
+              "un ARRAY[1..2, 0..2] : 2 lignes, 3 colonnes, Grille[2,1] = 21 \xC3\xA0 sa place (avant : des cases vides)");
+    }
+    // ---- D18 : Dupliquer lit la valeur d'Incrementer (et d'Affecter, de Calcul) comme une formule
+    {
+        Project p;
+        View v = makeView(p, "Vue_Dup");
+        auto& btn = addButton(p, v, "Btn_Pas", 10, 10);
+        btn.actions.push_back(act(Trigger::Click, Operation::Increment, "Compteur", "$Pas$"));
+        const Id bid = btn.id;
+        p.views = {v};
+        const auto sc = dup::scan(p.views[0], {bid});
+        const auto* m = sc.marker("Pas");
+        check(m && m->variable, "D18 : le $Pas$ d'Incr\xC3\xA9menter est un rep\xC3\xA8re de variable, comme le moteur le lit (avant : lu en texte)");
+    }
+    // ---- les defauts propres aux objets : voyant, barre, interrupteur, case, bouton lumineux, panneau, onglets
+    {
+        check(valueOn("2") && valueOn("TRUE") && valueOn("vrai") && valueOn("'TRUE'") && !valueOn("0") && !valueOn("FALSE") && !valueOn("abc"),
+              "un \xC3\xA9tat allum\xC3\xA9 : 2, TRUE, vrai, 'TRUE' ; \xC3\xA9teint : 0, FALSE, un texte (avant : le voyant restait \xC3\xA9teint pour 2)");
+        same(progressLabel(500, 0, 2000, true), "25 %", "barre de progression : 500 sur 0..2000 montre 25 % (avant : 500 %)");
+        same(progressLabel(50, 0, 100, true), "50 %", "... 50 sur 0..100 : 50 % comme avant");
+        Project p;
+        View v = makeView(p, "Vue_Etats");
+        HmiType mode;
+        mode.id = p.allocate();
+        mode.name = "T_Mode";
+        mode.kind = HmiTypeKind::Enumeration;
+        mode.values = {{"Arret", 0, "", ""}, {"Auto", 1, "", ""}, {"Manu", 2, "", ""}};
+        p.programs.types.push_back(mode);
+        for (const auto& [n, t, i] : std::vector<std::tuple<const char*, const char*, const char*>>{
+                 {"Etat_Texte", "STRING", "'FALSE'"}, {"Coche_Texte", "STRING", "''"}, {"Lampe_Texte", "STRING", "''"},
+                 {"Repli", "INT", "2"}, {"Repli_Texte", "STRING", "'TRUE'"}, {"Onglet_Bool", "BOOL", "TRUE"},
+                 {"Onglet_Mode", "T_Mode", "Auto"}, {"Onglet_Nom", "STRING", "'Reglages'"}})
+            p.programs.variables.push_back(hmiVar(p, n, t, i));
+        const auto put = [&](Kind k, const char* name, const char* var, double y) {
+            const Id id = edit::add(p, v, k, 10, y);
+            v.object(id)->name = name;
+            v.object(id)->set("variable", var);
+            return id;
+        };
+        const Id inter = put(Kind::Switch, "Inter", "Etat_Texte", 10);
+        const Id coche = put(Kind::CheckBox, "Coche", "Coche_Texte", 60);
+        const Id lampe = put(Kind::IlluminatedButton, "Lampe", "Lampe_Texte", 110);
+        const Id panneau = put(Kind::CollapsiblePanel, "Panneau", "Repli", 160);
+        const Id panneau2 = put(Kind::CollapsiblePanel, "Panneau_2", "Repli_Texte", 400);
+        const Id ongletsB = put(Kind::TabContainer, "Onglets_Bool", "Onglet_Bool", 640);
+        const Id ongletsE = put(Kind::TabContainer, "Onglets_Mode", "Onglet_Mode", 900);
+        v.object(ongletsE)->set("tabs", "Arret;Auto;Manu");
+        const Id ongletsS = put(Kind::TabContainer, "Onglets_Nom", "Onglet_Nom", 1160);
+        v.object(ongletsS)->set("tabs", "Accueil;Reglages;Alarmes");
+        v.height = 1500;
+        p.views = {v};
+        p.config.startView = v.id;
+        Runtime rt;
+        rt.bind(&p, nullptr);
+        rt.start(0.0);
+        rt.tick(0.1);
+        const auto txt = [&](const char* n) { return rt.variable(n) ? rt.variable(n)->asString() : std::string("?"); };
+        const auto clic = [&](Id id, double t) { rt.press(id, t); rt.release(id, t + 0.05, true); };
+        clic(inter, 0.2);
+        same(txt("Etat_Texte"), "TRUE", "interrupteur sur une STRING : un clic l'allume");
+        clic(inter, 0.4);
+        same(txt("Etat_Texte"), "FALSE", "... un second l'\xC3\xA9teint (avant : VRAI \xC3\xA0 chaque clic)");
+        clic(coche, 0.6);
+        clic(coche, 0.8);
+        same(txt("Coche_Texte"), "FALSE", "case \xC3\xA0 cocher sur une STRING : cocher puis d\xC3\xA9" "cocher");
+        clic(lampe, 1.0);
+        clic(lampe, 1.2);
+        same(txt("Lampe_Texte"), "FALSE", "bouton lumineux (basculer) sur une STRING : allum\xC3\xA9 puis \xC3\xA9teint");
+        // Le panneau repliable et les onglets : ce que l'ecran montre (LiveView) et ce que le clic ecrit.
+        const auto shown = [&]() {
+            LiveView live;
+            live.bind(*rt.composedView(rt.currentView()));
+            return live.evaluate(rt.environment(), nullptr, nullptr, 1.3);
+        };
+        View sv = shown();
+        check(parseBool(sv.object(panneau)->text("collapsed"), false), "panneau repliable, variable INT = 2 : dessin\xC3\xA9 repli\xC3\xA9 (avant : d\xC3\xA9pli\xC3\xA9, mais le clic le croyait repli\xC3\xA9)");
+        rt.objectPart(panneau, "entete", 1.4);
+        check(rt.variable("Repli") && rt.variable("Repli")->asInteger() == 0, "... un clic sur le bandeau le d\xC3\xA9plie (0)");
+        rt.objectPart(panneau2, "entete", 1.5);
+        same(txt("Repli_Texte"), "FALSE", "panneau sur une STRING 'TRUE' : un clic le d\xC3\xA9plie ('FALSE' ; avant : VRAI pour toujours)");
+        sv = shown();
+        check(sv.object(ongletsB)->number("page", 0) == 2, "onglets sur un BOOL vrai : la page 2 (avant : toujours la page 1)");
+        check(sv.object(ongletsE)->number("page", 0) == 2, "onglets sur une \xC3\xA9" "num\xC3\xA9ration (Auto = 1) : la page 2, Auto (avant : la page 1, d\xC3\xA9" "cal\xC3\xA9" "e)");
+        check(sv.object(ongletsS)->number("page", 0) == 2, "onglets sur une STRING 'Reglages' : la page de ce nom (2)");
+        rt.objectPart(ongletsB, "onglet:1", 1.6);
+        check(rt.variable("Onglet_Bool") && !rt.variable("Onglet_Bool")->isTruthy(), "... un clic sur l'onglet 1 \xC3\xA9" "crit FAUX dans le BOOL");
+        rt.objectPart(ongletsE, "onglet:3", 1.7);
+        check(rt.variable("Onglet_Mode") && rt.variable("Onglet_Mode")->asInteger() == 2, "... l'onglet 3 \xC3\xA9" "crit Manu (2) dans l'\xC3\xA9num\xC3\xA9ration (avant : 3)");
+        rt.objectPart(ongletsS, "onglet:3", 1.8);
+        same(txt("Onglet_Nom"), "Alarmes", "... l'onglet 3 \xC3\xA9" "crit son nom dans la STRING");
+    }
+    // ---- les reperes et les renommages : la source des elements, les valeurs ecrites, la sortie du programmateur
+    {
+        Object sel = makeObject(Kind::Selector, 1, "Choix", 0, 0, 1);
+        sel.set("itemsFrom", "$Liste_Modes$");
+        same(itemsSourceOf(sel), "Liste_Modes", "\xC3\x89l\xC3\xA9ments depuis $Liste_Modes$ : Liste_Modes (les rep\xC3\xA8res seuls sont retir\xC3\xA9s)");
+        sel.set("values", "Ancien; 2; Ancien + 1");
+        rewriteNames(sel, [](std::string_view t, bool) {
+            std::string out(t);
+            for (std::size_t at = out.find("Ancien"); at != std::string::npos; at = out.find("Ancien", at + 7)) out.replace(at, 6, "Nouveau");
+            return out;
+        });
+        check(sel.text("values").find("Nouveau") != std::string::npos && sel.text("values").find("Ancien") == std::string::npos,
+              "les valeurs \xC3\xA9" "crites d'un s\xC3\xA9lecteur suivent un renommage (" + sel.text("values") + ") ; avant : oubli\xC3\xA9" "es");
+        Project p;
+        View v = makeView(p, "Vue_Prog");
+        p.programs.variables.push_back(hmiVar(p, "Sortie", "BOOL", "FALSE"));
+        const Id prog = edit::add(p, v, Kind::WeeklySchedule, 10, 10);
+        v.object(prog)->name = "Prog";
+        v.object(prog)->set("schedule", "Lu-Di=00:00-24:00");
+        v.object(prog)->set("output", "$Sortie$");
+        p.views = {v};
+        p.config.startView = v.id;
+        Runtime rt;
+        rt.bind(&p, nullptr);
+        rt.start(0.0);
+        rt.tick(0.1);
+        rt.tick(1.2);
+        check(rt.variable("Sortie") && rt.variable("Sortie")->isTruthy(), "le programmateur \xC3\xA9" "crit sa sortie rep\xC3\xA9r\xC3\xA9" "e $Sortie$ (avant : \xC2\xAB $Sortie$ \xC2\xBB introuvable)");
+    }
+    // ---- D5 : le numero de boucle d'un instrument ISA est un texte (plus un BOOL)
+    {
+        Project q;
+        View w = makeView(q, "Vue_Isa");
+        q.programs.variables.push_back(hmiVar(q, "Repere_Boucle", "STRING", "'101'"));
+        const Id c = edit::add(q, w, Kind::IsaInstrument, 10, 10);
+        w.object(c)->name = "PT_101";
+        w.object(c)->setExpr("loop", "Repere_Boucle");
+        q.views = {w};
+        q.config.startView = w.id;
+        const auto issues = generate(q, [](std::string_view) { return false; });
+        bool wantsBool = false;
+        for (const auto& i : issues) wantsBool = wantsBool || (i.object == c && i.property == "loop");
+        check(!wantsBool, "D5 : la boucle ISA =Repere_Boucle (une STRING) : G\xC3\xA9n\xC3\xA9rer ne demande plus un bool\xC3\xA9" "en");
+        w.object(c)->setExpr("loop", "");
+        w.object(c)->set("loop", "101A");
+        q.views = {w};
+        Runtime rt;
+        rt.bind(&q, nullptr);
+        rt.start(0.0);
+        rt.tick(0.1);
+        sim::Value pv;
+        check(rt.publicRead("Vue_Isa.PT_101.Loop", pv) && pv.type() == sim::Type::String && pv.asString() == "101A",
+              "D5 : Vue_Isa.PT_101.Loop se lit '101A', un texte (avant : FAUX)");
+    }
+}
+
 int main(int argc, char** argv) {
     // 1.11.10 : HMI_TEST_1110=1 - les fonctions et les popups des symboles, seules.
     if (const char* only = std::getenv("HMI_TEST_1110"); only && *only == '1') {
         fonctionsSymbole11110();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
+    // 1.12.5 : HMI_TEST_1125=1 - les defauts de l'audit des objets (lot A), seuls.
+    if (const char* only = std::getenv("HMI_TEST_1125"); only && *only == '1') {
+        lotA1125();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -22687,6 +23455,7 @@ int main(int argc, char** argv) {
     courbesParArguments1123();        // 1.12.3 : une serie par jeu d'arguments d'une popup
     membresObjets1124();              // 1.12.4 : les membres objets des types IHM
     parametresObjets1124();           // 1.12.4 : les parametres objets des popups
+    lotA1125();                       // 1.12.5 (lot A) : les defauts de l'audit des objets
     enumerationsLangage110();         // 1.10 (S1, decision 15) : les enumerations dans les scripts
     operateurs110();                  // 1.10 (chantier S2) : les operateurs des symboles et des types IHM
     operateurs1101();                 // 1.10.1 (chantier U2) : a, b et Resultat (types, legende, exemple, Compiler)

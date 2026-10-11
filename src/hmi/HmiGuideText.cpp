@@ -5310,6 +5310,7 @@ const std::vector<Topic>& topics() {
              {K::Heading, "\xC3\x80 quoi il sert", {}},
              {K::Paragraph, "Montrer un \xC3\xA9tat en un coup d'\xC5\x93il. Sa **Valeur** est une expression "
                          "bool\xC3\xA9" "enne : `=Pompes[3].Marche`, `=Pression > 30.0`.", {}},
+             {K::Paragraph, "1.12.5 : un nombre diff\xC3\xA9rent de 0 l'allume (2 aussi, pas seulement 1), comme TRUE, VRAI ou une STRING 'TRUE'.", {}, "1.12.5"},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nValeur\tFALSE\tVrai "
                          ": allum\xC3\xA9 ; faux : \xC3\xA9teint. Une expression le relie \xC3\xA0 "
@@ -5348,6 +5349,7 @@ const std::vector<Topic>& topics() {
          "Une barre horizontale ou verticale, remplie entre un minimum et un maximum : un niveau, une "
          "avanc\xC3\xA9" "e, une charge.",
          {
+             {K::Paragraph, "1.12.5 : le texte est le pourcentage de la plage - 500 sur 0..2000 montre 25 % (avant : la valeur suivie de %).", {}, "1.12.5"},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nValeur\t40\tLa "
                          "valeur montr\xC3\xA9" "e ; une expression la relie \xC3\xA0 l'automate "
@@ -5419,6 +5421,7 @@ const std::vector<Topic>& topics() {
              {K::Paragraph, "Rassembler des mesures, des consignes, des \xC3\xA9tats. Le contenu se "
                          "r\xC3\xA8gle dans l'onglet **Contenu** : ajouter, retirer, d\xC3\xA9placer des "
                          "lignes et des colonnes ; une case contient `Pression A`, `{PA:0.0}` ou `=PA * 1.8`.", {}},
+             {K::Paragraph, "1.12.5 : \xC2\xAB Lignes depuis \xC2\xBB accepte un TUPLE (G\xC3\xA9n\xC3\xA9rer ne le refuse plus) et un tableau \xC3\xA0 deux dimensions (une colonne par second indice) ; un rep\xC3\xA8re ($Lignes$) est v\xC3\xA9rifi\xC3\xA9.", {}, "1.12.5"},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nColonnes "
                          "(a;b;c)\tNom;Valeur;Unit\xC3\xA9\tLes titres des colonnes, s\xC3\xA9par\xC3\xA9s "
@@ -5427,7 +5430,7 @@ const std::vector<Topic>& topics() {
                          "l'onglet Contenu.\nLargeurs des colonnes (a;b)\t\xC3\xA9gales\tRelatives : 2;1;1 "
                          "fait la premi\xC3\xA8re colonne deux fois plus large.\nSource\t(vide)\tUn fichier "
                          "externe du projet (Excel, CSV, JSON, SQLite...) : le tableau montre ses lignes "
-                         "\xC3\xA0 la place des cases.\nLignes depuis\t(vide)\tUne variable LIST, VECTOR, MAP ou un tableau de l'IHM : une ligne par \xC3\xA9l\xC3\xA9ment, autant qu'elle en a ; le tableau d\xC3\xA9file (la molette, sa barre). Les colonnes : les membres d'une structure, Item1, Item2... d'un tuple, ClÃ© et Valeur d'une MAP, sinon Valeur.\nTaille du texte\t14\tLa taille du texte des cases "
+                         "\xC3\xA0 la place des cases.\nLignes depuis\t(vide)\tUne variable LIST, VECTOR, MAP, TUPLE ou un tableau de l'IHM (\xC3\xA0 deux dimensions : une ligne par premier indice, une colonne par second) : une ligne par \xC3\xA9l\xC3\xA9ment, autant qu'elle en a ; le tableau d\xC3\xA9file (la molette, sa barre). Les colonnes : les membres d'une structure, Item1, Item2... d'un tuple, Cl\xC3\xA9" " et Valeur d'une MAP, sinon Valeur.\nTaille du texte\t14\tLa taille du texte des cases "
                          "(et la hauteur des lignes).\nRemplissage\t#262C36\tLe fond du "
                          "tableau.\nContour\t#3A4556\tLes traits du tableau.", {}},
              {K::Tip, "L'action \xC2\xAB Lier un tableau \xC2\xBB change son fichier en marche.", {}},
@@ -5674,6 +5677,7 @@ const std::vector<Topic>& topics() {
              {K::Paragraph, "Regrouper une zone (un panneau d'\xC3\xA9quipement), cacher d'un coup tout ce "
                          "qu'il contient (Visible), ou faire d\xC3\xA9" "filer un contenu qui ne doit pas "
                          "d\xC3\xA9" "border. Un objet pos\xC3\xA9 dedans lui appartient : il le suit.", {}},
+             {K::Paragraph, "1.12.5 : cach\xC3\xA9 (Visible faux), il cache ses enfants - ni vus ni cliquables ; transparent ou clignotant, ses enfants aussi (leur opacit\xC3\xA9 multipli\xC3\xA9" "e par la sienne).", {}, "1.12.5"},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il "
                          "r\xC3\xA8gle\nRemplissage\t#262C36\tLe fond du conteneur.\nContour\t#3A4556\tSon "
@@ -5798,6 +5802,7 @@ const std::vector<Topic>& topics() {
                          "garde **son propre rythme** (la dur\xC3\xA9" "e de chaque image est "
                          "\xC3\xA9" "crite dans le fichier). L'objet **Image** montre aussi un GIF, en "
                          "boucle, sans rien r\xC3\xA9gler ; le **GIF anim\xC3\xA9** se pilote.", {}},
+             {K::Paragraph, "1.12.5 : la condition du d\xC3\xA9part \xC2\xAB sur condition \xC2\xBB se tape sans = (Marche) ou en formule (=Marche, fx) : les deux font jouer le GIF ; G\xC3\xA9n\xC3\xA9rer ne dit plus \xC2\xAB la condition est vide \xC2\xBB.", {}, "1.12.5"},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nGIF "
                          "(ressource)\t(vide)\tUne ressource GIF du gestionnaire de ressources (la liste ne "
@@ -5917,6 +5922,7 @@ const std::vector<Topic>& topics() {
                          "de la vue, comme Entr\xC3\xA9" "e ; le clic sur ce bouton ne fait pas perdre la saisie au champ. "
                          "Refus\xC3\xA9" "e (hors bornes), les actions suivantes du bouton ne partent pas : un \xC2\xAB Fermer la popup \xC2\xBB "
                          "apr\xC3\xA8s elle attend une saisie juste. Le mod\xC3\xA8le \xC2\xAB Saisie d'une consigne \xC2\xBB l'utilise.", {}, "1.11.23"},
+             {K::Paragraph, "1.12.5 : en mode texte vers une variable qui n'est pas un texte, ce qui est tap\xC3\xA9 est converti \xC3\xA0 son type (12.5 dans un REAL, T#5s dans un TIME) ; illisible, la saisie est refus\xC3\xA9" "e et dite (avant : 0 \xC3\xA9" "crit).", {}, "1.12.5"},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nVariable "
                          "\xC3\xA9" "crite\t(vide)\tLa variable (IHM ou automate) que le champ montre et "
@@ -6355,6 +6361,7 @@ const std::vector<Topic>& topics() {
                          "Avec un **retour d'\xC3\xA9tat** (l'\xC3\xA9tat r\xC3\xA9" "el, lu dans "
                          "l'automate), l'interrupteur montre ce qui est, et signale la discordance tant que "
                          "l'installation n'a pas suivi la commande.", {}},
+             {K::Paragraph, "1.12.5 : li\xC3\xA9 \xC3\xA0 une STRING, il lit 'TRUE' ou 'VRAI' comme allum\xC3\xA9 : un clic l'\xC3\xA9teint ('FALSE'). Un INT de 2 n'est plus montr\xC3\xA9 en discordance.", {}, "1.12.5"},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nVariable "
                          "\xC3\xA9" "crite\t(vide)\tLa variable BOOL que chaque clic bascule.\nRetour "
@@ -6410,6 +6417,7 @@ const std::vector<Topic>& topics() {
              {K::Paragraph, "La commande et l'\xC3\xA9tat au **m\xC3\xAAme endroit**, comme un bouton lumineux "
                          "de pupitre : Marche s'allume en vert quand la pompe tourne, Arr\xC3\xAAt en rouge "
                          "quand elle est arr\xC3\xAAt\xC3\xA9" "e.", {}},
+             {K::Paragraph, "1.12.5 : en \xC2\xAB basculer \xC2\xBB sur une STRING, il s'allume puis s'\xC3\xA9teint ('TRUE', 'FALSE').", {}, "1.12.5"},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nVariable "
                          "\xC3\xA9" "crite\t(vide)\tLa variable BOOL que le bouton "
@@ -6747,6 +6755,7 @@ const std::vector<Topic>& topics() {
              {K::Heading, "\xC3\x80 quoi il sert", {}},
              {K::Paragraph, "Une option vraie ou fausse, dans une liste de r\xC3\xA9glages : purge automatique, "
                          "alarme sonore, mode \xC3\xA9" "conomie.", {}},
+             {K::Paragraph, "1.12.5 : li\xC3\xA9" "e \xC3\xA0 une STRING, elle lit 'TRUE' comme coch\xC3\xA9" "e : un second clic la d\xC3\xA9" "coche ('FALSE').", {}, "1.12.5"},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nVariable "
                          "\xC3\xA9" "crite\t(vide)\tLa variable BOOL que chaque clic bascule.\nRetour "
@@ -6840,6 +6849,7 @@ const std::vector<Topic>& topics() {
              {K::Paragraph, "Donner une **\xC3\xA9" "ch\xC3\xA9" "ance** : une date de maintenance, un "
                          "d\xC3\xA9part diff\xC3\xA9r\xC3\xA9, l'heure d'un changement de format. Le "
                          "r\xC3\xA9glage ne change la variable qu'\xC3\xA0 la validation.", {}},
+             {K::Paragraph, "1.12.5 : une variable DATE, TIME_OF_DAY ou DATE_AND_TIME est \xC3\xA9" "crite et relue en millisecondes, \xC3\xA0 l'heure du mur (comme D#, TOD#, DT#) - avant, des secondes : une date de 1970.", {}, "1.12.5"},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nVariable "
                          "\xC3\xA9" "crite\t(vide)\tUne STRING re\xC3\xA7oit `2026-09-23 14:30` ; un TIME, "
@@ -7335,6 +7345,7 @@ const std::vector<Topic>& topics() {
         {"objet-horloge", "Horloge", "La biblioth\xC3\xA8que d'objets",
          "L'heure du poste, analogique (trois aiguilles) ou num\xC3\xA9rique, avec la date.",
          {
+             {K::Paragraph, "1.12.5 : \xC2\xAB Couleur de la trotteuse \xC2\xBB (l'inspecteur disait \xC2\xAB Couleur du bouton \xC2\xBB).", {}, "1.12.5"},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il "
                          "r\xC3\xA8gle\nStyle\tanalogique\tanalogique ou "
@@ -7342,7 +7353,7 @@ const std::vector<Topic>& topics() {
                          "date\tTRUE\tLa date sous l'heure.\nPolice\tSans\tLa police de l'heure "
                          "num\xC3\xA9rique et de la date.\nTaille du texte\t20\tEn pixels.\nCouleur du "
                          "texte\t#E6EAF0\tLes chiffres et les aiguilles.\nRemplissage\t#1F252E\tLe "
-                         "fond.\nContour\t#3A4556\tLe bord.\nCouleur du bouton\t#E5534B\tLa trotteuse.", {}},
+                         "fond.\nContour\t#3A4556\tLe bord.\nCouleur de la trotteuse\t#E5534B\tLa trotteuse.", {}},
              {K::Tip, "Dans un texte \xC3\xA0 trous, `{SYS.Time}` ou `{SYS.DateTime}` donnent la "
                          "m\xC3\xAAme heure (voir les variables syst\xC3\xA8me).", {}},
          },
@@ -7367,7 +7378,7 @@ const std::vector<Topic>& topics() {
             "Le fond."},
            {"stroke", "Contour", "#3A4556",
             "Le bord."},
-           {"accent", "Couleur du bouton", "#E5534B",
+           {"accent", "Couleur de la trotteuse", "#E5534B",
             "La trotteuse."}},
          "Une horloge analogique et une num\xC3\xA9rique, \xC3\xA0 l'heure du poste.",
          {}},
@@ -7380,6 +7391,7 @@ const std::vector<Topic>& topics() {
              {K::Paragraph, "Suivre les **heures de marche** d'un \xC3\xA9quipement, pour la maintenance. La "
                          "variable garde le total d'un lancement \xC3\xA0 l'autre de l'IHM si elle vient de "
                          "l'automate.", {}},
+             {K::Paragraph, "1.12.5 : \xC2\xAB Compte quand \xC2\xBB se lit en formule (=Pompe) comme en texte (Pompe). Le total ne repart plus de z\xC3\xA9ro : \xC3\xA0 90 % de ce que son type tient, le journal le dit ; au maximum, il s'arr\xC3\xAAte (un INT tient 9,1 h, un TIME 49,7 jours) ; G\xC3\xA9n\xC3\xA9rer le pr\xC3\xA9vient - un LREAL (des heures) ou un UDINT (des secondes) tiennent des ann\xC3\xA9" "es.", {}, "1.12.5"},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nVariable du "
                          "total\t(vide)\tLe total : un TIME (en ms), un REAL (en heures) ou un entier (en "
@@ -7473,6 +7485,7 @@ const std::vector<Topic>& topics() {
          "Une fl\xC3\xA8" "che qui dit si la valeur monte, descend ou reste stable, en comparant maintenant "
          "\xC3\xA0 il y a N secondes.",
          {
+             {K::Paragraph, "1.12.5 : la fen\xC3\xAAtre et la zone morte peuvent \xC3\xAAtre des formules (=Zone_Morte) : le moteur les lit.", {}, "1.12.5"},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nVariable "
                          "montr\xC3\xA9" "e\t(vide)\tLa variable suivie. Depuis la 1.10.4 : tape "
@@ -7695,8 +7708,9 @@ const std::vector<Topic>& topics() {
              {K::Heading, "\xC3\x80 quoi il sert", {}},
              {K::Paragraph, "Donner acc\xC3\xA8s, d'un t\xC3\xA9l\xC3\xA9phone, \xC3\xA0 la **documentation** "
                          "d'une machine, \xC3\xA0 une fiche de maintenance, \xC3\xA0 l'adresse d'un tableau "
-                         "de bord. Le code est calcul\xC3\xA9 par l'application (versions 1 \xC3\xA0 40, "
+                         "de bord. Le code est calcul\xC3\xA9 par l'application (versions 1 \xC3\xA0 10, "
                          "correction L, M, Q ou H) : aucun service en ligne.", {}},
+             {K::Paragraph, "1.12.5 : les versions 1 \xC3\xA0 10 sont calcul\xC3\xA9" "es (271 octets en L, 213 en M, 151 en Q, 119 en H).", {}, "1.12.5"},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il "
                          "r\xC3\xA8gle\nTexte\thttps://example.com/armoire-a\tLe texte \xC3\xA0 coder ; "
@@ -7705,8 +7719,9 @@ const std::vector<Topic>& topics() {
                          "est dense.\nMarge (modules)\t2\tLa marge claire autour du code (4 est la norme, 2 "
                          "suffit souvent).\nRemplissage\t#FFFFFF\tLes modules clairs et la marge.\nCouleur "
                          "des modules\t#000000\tLes modules fonc\xC3\xA9s (garde un fort contraste).", {}},
-             {K::Warning, "Un texte trop long pour un code QR (plus de 2 331 octets en correction M) est "
-                         "refus\xC3\xA9 : G\xC3\xA9n\xC3\xA9rer le signale.", {}},
+             {K::Warning, "Un texte trop long pour un code QR est refus\xC3\xA9 : plus de 271 octets en correction L, "
+                         "213 en M, 151 en Q, 119 en H (la version 10, la plus grande calcul\xC3\xA9" "e ici). G\xC3\xA9n\xC3\xA9rer le "
+                         "signale pour un texte fixe.", {}},
          },
          {"objet-texte", "objet-image"},
          {},
@@ -8131,6 +8146,7 @@ const std::vector<Topic>& topics() {
              {K::Heading, "\xC3\x80 quoi il sert", {}},
              {K::Paragraph, "Le corps de pompe, sa roue \xC3\xA0 trois aubes, son refoulement et son socle. Le "
                          "refoulement part \xC3\xA0 droite : un miroir horizontal le met \xC3\xA0 gauche.", {}},
+             {K::Paragraph, "1.12.5 : la Valeur (P1.Marche), le D\xC3\xA9" "faut (P1.Defaut) ou le Mouvement tap\xC3\xA9s sans = sont lus comme des formules, par le dessin comme par l'alarme de l'objet ; G\xC3\xA9n\xC3\xA9rer les v\xC3\xA9rifie. TRUE, 0, vrai restent des constantes.", {}, "1.12.5"},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il "
                          "r\xC3\xA8gle\nValeur\tFALSE\tVraie : en marche ; fausse : \xC3\xA0 "
@@ -8898,6 +8914,7 @@ const std::vector<Topic>& topics() {
                          "trait ; tableau : un trait ; derri\xC3\xA8re le tableau : tiret\xC3\xA9). Dessous, "
                          "la mesure, format\xC3\xA9" "e, avec son unit\xC3\xA9 ; en d\xC3\xA9" "faut (un "
                          "seuil, par exemple : =Mesure > 8.2), elle passe au rouge.", {}},
+             {K::Paragraph, "1.12.5 : le num\xC3\xA9ro de boucle est un texte (101, 101A) : une formule texte est accept\xC3\xA9" "e, Vue.Objet.Loop se lit '101A' (avant : un BOOL, FAUX).", {}, "1.12.5"},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nValeur\t0\tLa "
                          "mesure \xC3\xA9" "crite sous la bulle ; sans expression, la "
@@ -9858,6 +9875,7 @@ const std::vector<Topic>& topics() {
                          "position d'un v\xC3\xA9rin sous une force. \xC3\x80 chaque cycle IHM, un point (X, "
                          "Y) par courbe s'ajoute \xC3\xA0 la trace ; le dernier est marqu\xC3\xA9 d'un rond "
                          "et de ses deux valeurs.", {}},
+             {K::Paragraph, "1.12.5 : l'interpolation \xC2\xAB escalier \xC2\xBB tient chaque valeur jusqu'au point suivant (avant : trac\xC3\xA9" "e en lin\xC3\xA9" "aire).", {}, "1.12.5"},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nVariable X "
                          "(expression)\t(vide)\tL'abscisse : `Debit_m3h`. Sans elle, aucun point.\nCourbes : "
@@ -10368,6 +10386,7 @@ const std::vector<Topic>& topics() {
                          "est celle de la priorit\xC3\xA9 ; il clignote tant que l'alarme attend son "
                          "acquittement. Un clic sur le bandeau choisit l'alarme (sa consigne se montre) et "
                          "lance ses actions (ouvrir la vue des alarmes).", {}},
+             {K::Paragraph, "1.12.5 : un groupe calcul\xC3\xA9 (=Zone) vaut pour le clic et Acquitter comme pour le dessin : on acquitte l'alarme montr\xC3\xA9" "e. La liste d'alarmes et le r\xC3\xA9sum\xC3\xA9 par zone aussi.", {}, "1.12.5"},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nZone (groupe "
                          "d'alarmes)\t(vide)\tSeulement les alarmes de ce groupe ; vide : toutes. Aussi le "
@@ -10531,6 +10550,7 @@ const std::vector<Topic>& topics() {
                          "sinon pour la plus grave \xC3\xA0 acquitter. Une consigne est un texte \xC3\xA0 "
                          "trous, rempli \xC3\xA0 l'apparition (`{Pression_A:0} bar`), et `\\n` passe "
                          "\xC3\xA0 la ligne.", {}},
+             {K::Paragraph, "1.12.5 : une alarme d'objet (Vue.Objet.Alarme) se choisit dans la liste, et G\xC3\xA9n\xC3\xA9rer la trouve.", {}, "1.12.5"},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nAlarme\t(vide)\tUne "
                          "alarme donn\xC3\xA9" "e ; vide : celle choisie d'un clic, sinon la plus "
@@ -10686,6 +10706,7 @@ const std::vector<Topic>& topics() {
                          "trois barres (disponibilit\xC3\xA9, performance, qualit\xC3\xA9), avec l'objectif "
                          "du poste. Le TRS est vert au-dessus du seuil \xC2\xAB bon \xC2\xBB, orange entre "
                          "les deux, rouge sous le seuil \xC2\xAB faible \xC2\xBB.", {}},
+             {K::Paragraph, "1.12.5 : il compte en fond, vue affich\xC3\xA9" "e ou non ; un INT qui d\xC3\xA9" "borde (32767 \xE2\x86\x92 -32768) n'est plus pris pour une remise \xC3\xA0 z\xC3\xA9ro ; une popup ouverte avec d'autres arguments a son propre compte.", {}, "1.12.5"},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nPi\xC3\xA8" "ces "
                          "bonnes (compteur)\t(vide)\tLe compteur des pi\xC3\xA8" "ces bonnes de l'automate "
@@ -10761,6 +10782,7 @@ const std::vector<Topic>& topics() {
                          "d'une machine, les temporisations, les param\xC3\xA8tres d'un poste. Une variable "
                          "(un chemin : `Pompes[0].Consigne`) se modifie ; un calcul (`Temp * 1.0`) reste en "
                          "lecture.", {}},
+             {K::Paragraph, "1.12.5 : une ligne rep\xC3\xA9r\xC3\xA9" "e ($Cuve$.Consigne) reste \xC3\xA9" "crivable et garde son unit\xC3\xA9 et son format ; retirer ou d\xC3\xA9placer une ligne dans Contenu emm\xC3\xA8ne son unit\xC3\xA9 et son format.", {}, "1.12.5"},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nVariables "
                          "(a;b)\t(vide)\tUne expression par ligne : `Consigne_Temp; Vitesse; Mode`.\nNoms "
@@ -10872,6 +10894,7 @@ const std::vector<Topic>& topics() {
              {K::Paragraph, "Remettre au client ou au service qualit\xC3\xA9 ce que l'IHM montre, sans passer "
                          "par l'atelier logiciel : la liste des alarmes de la nuit, une courbe d'essai, les "
                          "chiffres du poste. Le format est \xC3\xA9" "crit sur le bouton.", {}},
+             {K::Paragraph, "1.12.5 : une formule sur la source, le nom, le format ou \xC2\xAB Demander o\xC3\xB9 \xC2\xBB est lue au clic (avant : la valeur fixe).", {}, "1.12.5"},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nDonn\xC3\xA9" "es "
                          "export\xC3\xA9" "es\talarmes\talarmes, historique, \xC3\xA9v\xC3\xA9nements, "
@@ -11170,6 +11193,7 @@ const std::vector<Topic>& topics() {
                          "popup. Dans l'\xC3\xA9" "diteur, un clic sur un onglet montre sa page : ce qu'on y "
                          "pose y va. L'onglet **Contenu** ajoute, nomme, retire et ordonne les pages (un "
                          "objet suit sa page).", {}},
+             {K::Paragraph, "1.12.5 : la variable de l'onglet suit son type - une \xC3\xA9num\xC3\xA9ration montre et \xC3\xA9" "crit ses valeurs (sans d\xC3\xA9" "calage), un BOOL : FAUX la page 1, VRAI la page 2 ; une STRING : le nom de l'onglet.", {}, "1.12.5"},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nOnglets "
                          "(a;b;c)\tPage 1;Page 2;Page 3\tUne page par onglet.\nOnglet montr\xC3\xA9\t1\tLa "
@@ -11225,6 +11249,7 @@ const std::vector<Topic>& topics() {
              {K::Paragraph, "Lire une vue d'un coup d'\xC5\x93il : les objets d'un \xC3\xA9quipement dans un "
                          "m\xC3\xAAme cadre. Le titre est un texte \xC3\xA0 trous (`Pompe {Nom}`) : dans une "
                          "popup param\xC3\xA9tr\xC3\xA9" "e, il dit de quel \xC3\xA9quipement il s'agit.", {}},
+             {K::Paragraph, "1.12.5 : le titre est un texte \xC3\xA0 trous (Pompe {Nom}) rempli en marche ; un rep\xC3\xA8re s'y montre sans ses $ ; G\xC3\xA9n\xC3\xA9rer v\xC3\xA9rifie ses trous.", {}, "1.12.5"},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nTitre\tGroupe\tLe "
                          "titre ; un texte \xC3\xA0 trous.\nStyle du titre\tbordure\tbordure (il coupe la "
@@ -11330,6 +11355,7 @@ const std::vector<Topic>& topics() {
                          "secondaires. Plusieurs panneaux empil\xC3\xA9s font un **accord\xC3\xA9on** : "
                          "repli\xC3\xA9, un panneau lib\xC3\xA8re sa place et ceux du dessous (dans sa "
                          "largeur, m\xC3\xAAme parent) remontent.", {}},
+             {K::Paragraph, "1.12.5 : la variable du repli se lit comme un voyant (2 aussi, 'TRUE') : le dessin et le clic sont d'accord ; sur une STRING, un clic le d\xC3\xA9plie ('FALSE'). Son titre est un texte \xC3\xA0 trous.", {}, "1.12.5"},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il "
                          "r\xC3\xA8gle\nTitre\tD\xC3\xA9tails\tLe bandeau ; un texte \xC3\xA0 "

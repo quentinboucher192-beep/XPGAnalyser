@@ -627,6 +627,12 @@ struct Object {
     bool operator==(const Object&) const = default;
 };
 
+// 1.12.5 (lot A, D9) : CE QU'UNE PROPRIETE-FORMULE LIT (une condition, une source) : son
+// expression (« fx », tapee =Marche), sinon son texte, qui en est une (Marche), sans les blancs
+// du bord. Avant, des moteurs ne lisaient que le texte : =Marche laissait la condition vide (le
+// GIF ne jouait jamais, le compteur horaire comptait toujours).
+[[nodiscard]] std::string formulaOf(const Object&, std::string_view key);
+
 // ---------------------------------------------------------------- vues ------
 // Lot 8 : UN PARAMETRE DE VUE. Une popup (ou une vue) peut declarer des noms
 // que l'appelant relie : "Moteur", relie a Pompes[3] a l'ouverture, se lit
@@ -1902,5 +1908,8 @@ bool uniqueDeclarationIds(Project&, View& changed);
 [[nodiscard]] std::string formatNumber(double v);
 [[nodiscard]] bool        parseNumber(std::string_view s, double& out) noexcept;
 [[nodiscard]] bool        parseBool(std::string_view s, bool fallback) noexcept;
+// 1.12.5 (lot A) : UN ETAT ALLUME (voyant, interrupteur, case, panneau replie) : un nombre different
+// de 0 (2 aussi), ou TRUE / VRAI / OUI ; le reste, eteint. Le dessin et le clic le lisent pareil.
+[[nodiscard]] bool        valueOn(std::string_view s) noexcept;
 
 } // namespace hmi

@@ -420,14 +420,20 @@ void drawXYChart(const Ctx& c, const hmi::View& view) {
         for (const auto& [x, y] : reference) ref.push_back(P(X(x), Y(y)));
         for (std::size_t k = 1; k < ref.size(); ++k) dashLocal(c, ref[k - 1].x, ref[k - 1].y, ref[k].x, ref[k].y, rc, 1.5f);
     }
-    const bool dots = c.src.text(c.o, "interpolation", "lin\xC3\xA9" "aire") == "points";
+    const std::string interpolation = c.src.text(c.o, "interpolation", "lin\xC3\xA9" "aire");
+    const bool dots = interpolation == "points";
     for (std::size_t i = 0; i < series.size(); ++i) {
         if (series[i].empty()) continue;
         const gfx::Color col = colorOf(c, items[i].color);
         Pts pts;
         for (const auto& [x, y] : series[i]) pts.push_back(P(X(x), Y(y)));
         if (dots) for (const auto& p : pts) fillLocal(c, disc(p.x, p.y, 2.2, 10), col);
-        else polyLocal(c, pts, false, col, 1.8f);
+        else {
+            // 1.12.5 (lot A, D14) : l'escalier tient chaque valeur jusqu'au point suivant.
+            Pts line;
+            for (const auto& [x, y] : hmi::interpolatedPoints(series[i], interpolation)) line.push_back(P(X(x), Y(y)));
+            polyLocal(c, line, false, col, 1.8f);
+        }
         // Le point du moment : plus gros, entoure.
         const auto& last = pts.back();
         fillLocal(c, disc(last.x, last.y, 5, 16), col);

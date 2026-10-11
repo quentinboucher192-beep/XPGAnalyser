@@ -75,6 +75,28 @@ std::string objectCaption(const Object& o) {
     return label.empty() ? o.name : label;
 }
 
+bool linksVariable(std::string_view text) {
+    if (isConstant(text)) return false;
+    // Un booleen ecrit en francais (vrai, faux, oui, non) : une constante, pas un nom.
+    const std::string t = trimmed(text);
+    return parseBool(t, false) != parseBool(t, true);   // inconnu : le repli decide - un nom
+}
+
+bool synopticLinkedKey(const Object& o, std::string_view key) {
+    if (!kindIsSynoptic(o.kind)) return false;
+    const Prop* pr = o.find(key);
+    if (!pr || !trimmed(pr->expr).empty() || !linksVariable(pr->value)) return false;
+    if (key == "fault" || key == "moving") return true;
+    if (key != "value" || !trimmed(o.text("variable")).empty()) return false;   // sa variable passe avant
+    // Un chemin de variable : un nom, des membres, des indices.
+    const std::string t = trimmed(markers::strip(pr->value, markers::Mode::Expression));
+    if (t.empty() || !(std::isalpha(static_cast<unsigned char>(t[0])) || t[0] == '_')) return false;
+    for (const char c : t)
+        if (!(std::isalnum(static_cast<unsigned char>(c)) || c == '_' || c == '.' || c == '[' || c == ']' || c == ',' || c == ' '))
+            return false;
+    return t.find('#') == std::string::npos;
+}
+
 std::string linkedSource(const Object& o, std::string_view key) {
     const Prop* pr = o.find(key);
     if (pr && !trimmed(pr->expr).empty()) return isConstant(pr->expr) ? std::string{} : trimmed(pr->expr);
@@ -82,7 +104,7 @@ std::string linkedSource(const Object& o, std::string_view key) {
     if (key == "value") {
         if (const std::string var = trimmed(o.text("variable")); !var.empty()) return var;
     }
-    if (!pr || isConstant(pr->value)) return {};
+    if (!pr || !linksVariable(pr->value)) return {};   // 1.12.5 : vrai, oui... sont des constantes
     return trimmed(pr->value);
 }
 

@@ -923,7 +923,8 @@ void rewriteNames(Object& o, const std::function<std::string(std::string_view, b
                    // une variable renommee la suit).
                    || p.key == "itemsFrom" || p.key == "rowsFrom") {
             expr(p.value);
-        } else if (p.key == "variables" || p.key == "references") {   // les plumes d'une courbe, les elements d'un graphique : a;b;c
+        } else if (p.key == "variables" || p.key == "references"
+                   || p.key == "values") {   // les plumes d'une courbe, les elements d'un graphique : a;b;c ; 1.12.5 : les valeurs ecrites d'un selecteur
             std::string rebuilt;
             std::size_t from = 0;
             bool changed = false;

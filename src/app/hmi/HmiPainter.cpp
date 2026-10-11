@@ -1579,7 +1579,7 @@ void paintHmiObject(gfx::IRenderer& r, const hmi::View& view, const Object& o, c
             break;
         }
         case Kind::Indicator: {
-            const bool on = src.flag(o, "value", false);
+            const bool on = hmi::valueOn(src.text(o, "value"));   // 1.12.5 (lot A) : un INT 2 l'allume aussi
             const gfx::Color col = c.color(on ? "colorOn" : "colorOff", on ? gfx::Color::rgb(0x2ECC71)
                                                                            : gfx::Color::rgb(0x4A5261));
             const auto shape = src.text(o, "shape", "rond") == "rond"
@@ -1611,7 +1611,8 @@ void paintHmiObject(gfx::IRenderer& r, const hmi::View& view, const Object& o, c
                                                             static_cast<float>(h * f), 3)
                                       : shapes::roundedRect(0, 0, static_cast<float>(w * f), static_cast<float>(h), 3);
             if (f > 0) shapes::fillPolygon(r, c.map(bar), c.color("fill", gfx::Color::rgb(0x2F6FD6)));
-            text(c, hmi::formatNumber(std::round(v)) + (vertical ? "" : " %"), 0, 0, w, h,
+            // 1.12.5 (lot A) : le pourcentage de la plage (500 sur 0..2000 : 25 %) - avant, la valeur suivie de %.
+            text(c, hmi::progressLabel(v, mn, mx, !vertical), 0, 0, w, h,
                  fade(c.seen(gfx::Color::rgb(0xFFFFFF)), alpha), std::min(14.0, h * 0.6), "centre");
             break;
         }

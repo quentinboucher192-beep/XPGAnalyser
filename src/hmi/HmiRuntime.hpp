@@ -1031,7 +1031,22 @@ public:
     [[nodiscard]] std::string alarmSound(const LiveAlarm&) const;   // 1.12.3 : du groupe, sinon de la priorite
     [[nodiscard]] bool alarmsSilenced() const noexcept { return silenced_; }
     // Le bandeau : l'indice dans alarms() de l'alarme qu'il montre (-1 : aucune).
+    // 1.12.5 (lot A, D2) : `view` - la vue qui le montre ; son groupe, son mode et sa
+    // periode se lisent comme l'ecran (leur formule evaluee), pas leur valeur fixe.
+    [[nodiscard]] int bannerAlarm(Id view, const Object&) const;
+    // Sans vue : l'objet tel qu'il est (la copie dessinee porte deja ses valeurs evaluees).
     [[nodiscard]] int bannerAlarm(const Object&) const;
+    // 1.12.5 (lot A) : LA VALEUR MONTREE D'UNE PROPRIETE, hors du dessin - sa formule
+    // evaluee dans la vue `view` (ses parametres), comme la copie que l'ecran dessine (une
+    // enumeration native : son mot) ; sans formule, ou si elle echoue (l'ecran garde alors
+    // la valeur fixe), la valeur fixe ; absente : `fallback`. Les clics, les exports, les
+    // moteurs d'objets (GIF, compteur horaire, fleche de tendance) font ce que l'ecran montre.
+    [[nodiscard]] std::string shownText(Id view, const Object& o, std::string_view key, std::string_view fallback = {}) const;
+    [[nodiscard]] double shownNumber(Id view, const Object& o, std::string_view key, double fallback) const;
+    [[nodiscard]] bool shownFlag(Id view, const Object& o, std::string_view key, bool fallback) const;
+    // 1.12.5 (lot A, D9) : une condition d'objet (le depart d'un GIF...) : sa formule (=Marche)
+    // ou son texte (Marche), evaluee dans la vue (ses parametres). Vide ou illisible : fallback.
+    [[nodiscard]] bool objectCondition(Id view, const Object& o, std::string_view key, bool fallback) const;
 
     // ---- 1.9 : les alarmes des objets (HmiObjectAlarms.hpp, HmiRuntimeObjectAlarms.cpp) ----
     //  Generees depuis le projet (objets du synoptique, instances de symboles), les
@@ -1064,7 +1079,9 @@ public:
     [[nodiscard]] std::uint64_t         objectAlarmsGeneration() const noexcept { return objectAlarmsGen_; }
 
     // ---- lot 11 : la production ---------------------------------------------------------
-    [[nodiscard]] ProductionFigures production(Id object) const;
+    [[nodiscard]] ProductionFigures production(Id object) const;   // dans la vue ouverte qui le tient
+    // 1.12.5 (lot A, D10) : le compte d'un objet d'une vue, pour le jeu d'arguments en cours.
+    [[nodiscard]] ProductionFigures production(Id view, Id object) const;
     // ---- lot 11 : l'editeur de recette (nul : l'objet n'a pas encore tourne) --------------
     [[nodiscard]] const RecipeEditorState* recipeEditor(Id object) const;
     // ---- lot 11 : l'export ------------------------------------------------------------------
@@ -1317,6 +1334,7 @@ private:
         bool                    running{false};     // ... sa condition, au dernier cycle
         double                  lastTick{-1};
         double                  lastWritten{-1};    // ... ce qu'il a ecrit dans sa variable (secondes)
+        int                     overflowTold{0};    // ... 1.12.5 : 1 le depassement annonce, 2 le maximum atteint
         std::deque<std::pair<double, double>> samples;   // fleche de tendance : (instant, valeur)
         int                     trend{0};
         std::optional<DateTime> current;            // date et heure : la valeur de sa variable
@@ -1497,7 +1515,7 @@ private:
     // (simples et riches : tableaux, MAP, references...), gardees comme retained_.
     std::map<std::string, sim::Locals> scriptLocals_;
     std::set<std::string>    functionErrors_;            // une erreur de fonction dite une fois (expressions de vue)
-    std::map<std::string, Expression, std::less<>> expressions_;
+    mutable std::map<std::string, Expression, std::less<>> expressions_;   // 1.12.5 : mutable (shownText)
     // lot 4
     History*                         history_{nullptr};
     std::vector<LiveAlarm>           alarms_;
@@ -1589,6 +1607,8 @@ private:
     std::set<std::string>                           soundMissing_;  // un son d'alarme introuvable : dit une fois
     std::map<Id, int>                               bannerSteps_;   // bandeau : les "suivante"
     struct ProductionState {
+        Id          view{kNoId}, object{kNoId};   // 1.12.5 : ou il compte (le rapport le nomme)
+        std::string arguments;                    // ... et pour quel jeu d'arguments ("|L=Ligne1")
         bool   started{false};
         double shiftStart{0};
         int    shiftMinute{-1};
@@ -1599,7 +1619,9 @@ private:
         std::deque<std::pair<double, double>> totals;
         ProductionFigures figures;
     };
-    std::map<Id, ProductionState>                   production_;
+    // 1.12.5 (lot A, D10) : par vue, objet ET jeu d'arguments (keyOf + argumentsKey) - deux
+    // ouvertures d'une popup avec d'autres arguments ne partagent plus leurs compteurs.
+    std::map<std::string, ProductionState>          production_;
     std::map<Id, RecipeEditorState>                 editors_;
     std::string                                     lastExport_;
     long long                                       exports_{0};

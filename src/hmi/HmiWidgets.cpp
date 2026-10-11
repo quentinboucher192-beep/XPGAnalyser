@@ -166,4 +166,9 @@ std::string recipeManagerHit(const Object& o, double w, double h, double x, doub
     return {};
 }
 
+std::string progressLabel(double value, double min, double max, bool percentSign) {
+    const double f = max > min ? std::clamp((value - min) / (max - min), 0.0, 1.0) : 0.0;
+    return formatNumber(std::round(f * 100.0)) + (percentSign ? " %" : "");
+}
+
 } // namespace hmi

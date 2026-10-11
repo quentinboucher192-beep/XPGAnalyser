@@ -125,6 +125,17 @@ private:
 //   t           une duree (TIME, ou des secondes) : "2 min 05 s"
 //   Oui|Non     le texte d'un booleen : vrai, puis faux
 [[nodiscard]] std::string formatValue(const sim::Value&, std::string_view format = {});
+// 1.12.5 (lot A, D4) : UNE VALEUR EN TEXTE SANS PERTE, pour ce qui se relit en nombre (les
+// proprietes des objets, les mesures des courbes et graphiques, les recettes, les compteurs) :
+// un REAL au plus court qui se relit a l'identique (1234567.8, 0.1 ; formatValue sans format
+// donne %.6g : 1234570, 1.23457e+06) ; le reste comme formatValue sans format.
+[[nodiscard]] std::string exactValue(const sim::Value&);
+// 1.12.5 (lot A, D6) : LES PROPRIETES QUI SE MONTRENT COMME UN TEXTE (le texte, le libelle, le
+// titre, le texte des etats, l'invite, les titres des axes, le texte inconnu, le texte vide...) :
+// un texte a trous ({Var:0.0}) qui se remplit en marche, ses reperes retires ($Pompe$ : Pompe) ;
+// une formule y garde l'ecriture courte (6 chiffres). Une seule liste : le moteur (LiveView),
+// Generer et l'aide a la saisie de l'inspecteur (avant : seule « Texte » se remplissait).
+[[nodiscard]] bool displayedTextKey(std::string_view key) noexcept;
 // Ce qui ressemble a un format (et pas a la fin d'une expression).
 [[nodiscard]] bool looksLikeFormat(std::string_view) noexcept;
 // "\n" ecrit dans un texte : un retour a la ligne.

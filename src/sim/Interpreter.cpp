@@ -199,7 +199,9 @@ public:
                     if (negative) v = -v;
                     // 1.11.20 : INT#5 garde le nom de son type (16#FF : un nombre seul).
                     // 1.11.25 : 16#FFFF_FFFF (au-dela de DINT) est un UDINT, pas -1.
-                    const Type numberType = base != 10 && v > 2147483647LL && v <= 4294967295LL ? Type::UDInt : Type::DInt;
+                    // 1.12.5 (D16) : au-dela de 32 bits, un LINT (avant : replie sur 32 bits).
+                    const Type numberType = v > 4294967295LL || v < -2147483648LL ? Type::LInt
+                                          : base != 10 && v > 2147483647LL ? Type::UDInt : Type::DInt;
                     out.push_back(Token{Tok::Number, base == 10 ? upper : std::string{}, "", startLine, Value::integer(numberType, v)});
                     continue;
                 }
@@ -250,7 +252,7 @@ public:
                                           "line " + std::to_string(startLine) + ": bad literal");
                     // 1.11.25 : 16#FFFF_FFFF (au-dela de DINT) est un UDINT, pas -1.
                     out.push_back(Token{Tok::Number, "", "", startLine,
-                                        Value::integer(v > 2147483647LL && v <= 4294967295LL ? Type::UDInt : Type::DInt, v)});
+                                        Value::integer(v > 4294967295LL ? Type::LInt : v > 2147483647LL ? Type::UDInt : Type::DInt, v)});
                     continue;
                 }
                 // 1.11.25 : un entier au-dela de DINT (3000000000) est un UDINT ; avant, il
@@ -258,7 +260,7 @@ public:
                 if (!isReal) {
                     const long long v = std::stoll(digits);
                     out.push_back(Token{Tok::Number, "", digits, startLine,
-                                        Value::integer(v > 2147483647LL && v <= 4294967295LL ? Type::UDInt : Type::DInt, v)});
+                                        Value::integer(v > 4294967295LL ? Type::LInt : v > 2147483647LL ? Type::UDInt : Type::DInt, v)});
                     continue;
                 }
                 out.push_back(Token{Tok::Number, "", digits, startLine, Value::real(std::stod(digits))});
@@ -1443,8 +1445,8 @@ private:
         }
         Type scalar = typeFromName(up);
         if (up == "LREAL") scalar = Type::Real;
-        else if (up == "SINT" || up == "LINT") scalar = up == "SINT" ? Type::Int : Type::DInt;
-        else if (up == "USINT" || up == "ULINT") scalar = up == "USINT" ? Type::UInt : Type::UDInt;
+        else if (up == "SINT") scalar = Type::Int;     // 1.12.5 (D16) : LINT, ULINT, LWORD sur 64 bits (typeFromName)
+        else if (up == "USINT") scalar = Type::UInt;
         else if (up == "EBOOL") scalar = Type::Bool;
         if (scalar != Type::Unknown) return scalarType(scalar, up);
         auto t = std::make_shared<TypeDesc>();
@@ -1626,6 +1628,9 @@ std::string valueTypeName(Type t) {
         case Type::Date:   return "DATE";            // 1.12.1
         case Type::Tod:    return "TIME_OF_DAY";
         case Type::Dt:     return "DATE_AND_TIME";
+        case Type::LInt:   return "LINT";            // 1.12.5 (D16)
+        case Type::ULInt:  return "ULINT";
+        case Type::LWord:  return "LWORD";
         case Type::Unknown: break;
     }
     return {};
@@ -3030,9 +3035,8 @@ private:
             return true;
         }
         Type t = typeFromName(target);
-        if (target == "SINT" || target == "LINT") t = target == "SINT" ? Type::Int : Type::DInt;
-        if (target == "USINT" || target == "ULINT") t = target == "USINT" ? Type::UInt : Type::UDInt;
-        if (target == "LWORD") t = Type::DWord;                    // 1.11.25 : TO_LWORD (calcule sur 32 bits)
+        if (target == "SINT") t = Type::Int;
+        if (target == "USINT") t = Type::UInt;               // 1.12.5 (D16) : TO_LINT, TO_ULINT, TO_LWORD sur 64 bits
         if (t == Type::Unknown || t == Type::String) return false;
         std::int64_t n = 0;
         if (v.type() == Type::String) n = std::strtoll(v.asString().c_str(), nullptr, 10);

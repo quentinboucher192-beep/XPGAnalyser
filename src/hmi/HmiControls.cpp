@@ -1,4 +1,5 @@
 #include "HmiControls.hpp"
+#include "HmiMarkers.hpp"   // 1.12.5 : la source sans ses reperes
 
 #include <algorithm>
 #include <mutex>
@@ -100,9 +101,9 @@ void unregisterChoiceResolver(const void* owner) noexcept {
 bool hasChoiceResolver() noexcept { return static_cast<bool>(choiceResolver()); }
 
 std::string itemsSourceOf(const Object& o) {
-    std::string t = trim(o.text("itemsFrom"));
-    std::erase(t, '$');                        // un repere : $Liste$ -> Liste (resolu avant par la vue)
-    return trim(t);
+    // Un repere : $Liste$ -> Liste (resolu avant par la vue). 1.12.5 (lot A) : les reperes seuls
+    // (avant : tous les $ effaces - $$, le $ d'une chaine '5$$' aussi).
+    return trim(markers::strip(o.text("itemsFrom"), markers::Mode::Expression));
 }
 
 std::vector<Choice> choicesOf(const Object& o) {
@@ -926,6 +927,33 @@ std::string formatRunTime(double seconds, std::string_view format) {
     }
     std::snprintf(b, sizeof b, "%lld:%02lld:%02lld", total / 3600, (total / 60) % 60, total % 60);
     return b;
+}
+
+// 1.12.5 (lot A) : ce que le total d'un compteur horaire peut tenir dans son type, en
+// secondes : un INT 9,1 h, un UINT 18,2 h, un TIME 49,7 jours (des ms sur 32 bits) - au-dela,
+// l'automate (et le simulateur) repartent de zero. Un REAL (des heures) : sans limite utile.
+double hourMeterLimit(sim::Type t) {
+    switch (t) {
+        case sim::Type::Time:  return 4294967295.0 / 1000.0;
+        case sim::Type::Byte:  return 255.0;
+        case sim::Type::Int:   return 32767.0;
+        case sim::Type::Word:  case sim::Type::UInt: return 65535.0;
+        case sim::Type::DInt:  return 2147483647.0;
+        case sim::Type::DWord: case sim::Type::UDInt: return 4294967295.0;
+        default:               return 0.0;   // 0 : sans limite
+    }
+}
+
+// La duree en clair : "9,1 h", "49,7 jours", "68 ans".
+std::string hourMeterSpan(double seconds) {
+    const auto one = [](double x) {
+        std::string t = formatNumber(std::round(x * 10.0) / 10.0);
+        for (auto& c : t) if (c == '.') c = ',';
+        return t;
+    };
+    if (seconds < 2 * 86400.0) return one(seconds / 3600.0) + " h";
+    if (seconds < 2 * 365.25 * 86400.0) return one(seconds / 86400.0) + " jours";
+    return one(seconds / (365.25 * 86400.0)) + " ans";
 }
 
 } // namespace hmi

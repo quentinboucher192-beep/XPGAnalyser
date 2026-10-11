@@ -159,6 +159,14 @@ bool parseBool(std::string_view s, bool fallback) noexcept {
     return fallback;
 }
 
+bool valueOn(std::string_view s) noexcept {
+    while (!s.empty() && (s.front() == ' ' || s.front() == '\'')) s.remove_prefix(1);
+    while (!s.empty() && (s.back() == ' ' || s.back() == '\'')) s.remove_suffix(1);
+    double x = 0;
+    if (parseNumber(s, x)) return x != 0.0;
+    return parseBool(s, false);
+}
+
 // ------------------------------------------------------------- Box ---------
 Box Box::united(const Box& o) const noexcept {
     const double l = std::min(x, o.x), t = std::min(y, o.y);
@@ -202,6 +210,15 @@ void Object::setFlag(std::string_view key, bool v)     { set(key, v ? "TRUE" : "
 void Object::setExpr(std::string_view key, std::string expression) {
     if (auto* p = find(key)) { p->expr = std::move(expression); return; }
     props.push_back(Prop{std::string(key), {}, std::move(expression)});
+}
+
+std::string formulaOf(const Object& o, std::string_view key) {
+    const Prop* p = o.find(key);
+    if (!p) return {};
+    const std::string& s = p->expr.empty() ? p->value : p->expr;
+    const auto a = s.find_first_not_of(" \t\r\n");
+    if (a == std::string::npos) return {};
+    return s.substr(a, s.find_last_not_of(" \t\r\n") - a + 1);
 }
 
 Box Object::box() const {

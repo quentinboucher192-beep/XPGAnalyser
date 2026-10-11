@@ -1325,7 +1325,42 @@ std::string Runtime::evalText(const std::string& expr, bool* ok) {
     if (it == expressions_.end()) it = expressions_.emplace(expr, Expression::compile(expr)).first;
     auto v = it->second.evaluate(*env_);
     if (ok) *ok = static_cast<bool>(v);
-    return v ? formatValue(*v) : std::string{};
+    return v ? exactValue(*v) : std::string{};   // 1.12.5 (D4) : sans perte (avant : 6 chiffres)
+}
+
+std::string Runtime::shownText(Id view, const Object& o, std::string_view key, std::string_view fallback) const {
+    const Prop* p = o.find(key);
+    if (!p) return std::string(fallback);
+    if (p->expr.empty() || !env_) return p->value;
+    auto it = expressions_.find(p->expr);
+    if (it == expressions_.end()) it = expressions_.emplace(p->expr, Expression::compile(p->expr)).first;
+    if (!it->second.valid()) return p->value;
+    auto v = it->second.evaluate(*env_, viewScope(view));
+    if (!v) return p->value;
+    if (auto word = natives::propertyWord(kindKey(o.kind), key, *v)) return *word;   // comme LiveView
+    return formatValue(*v);
+}
+
+double Runtime::shownNumber(Id view, const Object& o, std::string_view key, double fallback) const {
+    double v = 0;
+    return parseNumber(shownText(view, o, key), v) ? v : fallback;
+}
+
+bool Runtime::objectCondition(Id view, const Object& o, std::string_view key, bool fallback) const {
+    const std::string src = formulaOf(o, key);
+    if (src.empty() || !env_) return fallback;
+    auto it = expressions_.find(src);
+    if (it == expressions_.end()) it = expressions_.emplace(src, Expression::compile(src)).first;
+    if (!it->second.valid()) return fallback;
+    auto v = it->second.evaluate(*env_, viewScope(view));
+    return v ? v->isTruthy() : fallback;
+}
+
+bool Runtime::shownFlag(Id view, const Object& o, std::string_view key, bool fallback) const {
+    const std::string s = shownText(view, o, key);
+    double v = 0;
+    if (parseNumber(s, v)) return v != 0.0;
+    return parseBool(s, fallback);
 }
 
 bool Runtime::evalBool(const std::string& expr, bool fallback) {
@@ -1785,6 +1820,12 @@ void Runtime::fire(const View& v, const Object* o, const Action& a, double now, 
         case Operation::Decrement: {
             sim::Value cur;
             if (!currentValue(cur)) { log("Erreur", source, a.target + " : variable inconnue"); break; }
+            // 1.12.5 (lot A, D15) : un texte ne s'incremente pas (avant : il se vidait).
+            if (cur.type() == sim::Type::String) {
+                log("Erreur", source, a.target + " est un texte (STRING) : " + std::string(a.operation == Operation::Increment ? "incr\xC3\xA9menter" : "d\xC3\xA9" "cr\xC3\xA9menter")
+                                          + " ne s'y applique pas - rien n'est \xC3\xA9" "crit");
+                break;
+            }
             double step = 1;
             if (!a.value.empty()) {
                 bool ok = false;
@@ -2546,6 +2587,20 @@ void Runtime::start(double now) {
     forms_.clear();
     controls_.clear();       // lot 9 : glisser, confirmations, compteurs, programmateurs
     overrides_.clear();      // lot 9 : les proprietes ecrites en marche repartent de l'editeur
+    // 1.12.5 (lot A) : un conteneur a onglets relie a une ENUMERATION : ses nombres, onglet par onglet
+    // (pageValues) - la page montre le rang de la valeur, un clic ecrit la k-ieme (avant : decale d'un cran).
+    if (project_)
+        for (const auto& pv : project_->views)
+            for (const auto& po : pv.objects) {
+                if (po.kind != Kind::TabContainer) continue;
+                const std::string var = trimText(markers::strip(po.text("variable")));
+                if (var.empty()) continue;
+                const auto* e = findEnumeration(*project_, params::expressionType(*project_, &pv, var));
+                if (!e || e->values.empty()) continue;
+                std::string numbers;
+                for (const auto& ev : e->values) numbers += (numbers.empty() ? "" : ";") + std::to_string(ev.value);
+                overrides_[{pv.id, po.id}]["pageValues"] = numbers;
+            }
     backgrounds_.clear();
     gifs_.clear();                      // lot 16
     openCounts_.clear();
@@ -2979,7 +3034,7 @@ void Runtime::release(Id object, double now, bool inside) {
             event("Acc\xC3\xA8s refus\xC3\xA9", where(snapshot, &so), why);
             return;
         }
-        openSystemMenu(systemTabFrom(plain(so.text("tab"))), now, where(snapshot, &so));   // 1.9 : et Simulation
+        openSystemMenu(systemTabFrom(plain(shownText(snapshot.id, so, "tab"))), now, where(snapshot, &so));   // 1.9 : et Simulation ; 1.12.5 : sa formule
     }
     // Lot 12 : l'objet Menu de connexion ouvre le menu natif, sur son onglet.
     if (o->kind == Kind::LoginMenuButton) {
@@ -2989,7 +3044,7 @@ void Runtime::release(Id object, double now, bool inside) {
             event("Acc\xC3\xA8s refus\xC3\xA9", where(snapshot, &lo), why);
             return;
         }
-        openLoginMenu(loginTabFrom(lo.text("tab", "Connexion")), now, where(snapshot, &lo));
+        openLoginMenu(loginTabFrom(shownText(snapshot.id, lo, "tab", "Connexion")), now, where(snapshot, &lo));   // 1.12.5 : sa formule
     }
     // Lot 11 : le bouton d'export ecrit son fichier ; un clic sur le bandeau choisit
     // l'alarme qu'il montre (la consigne la suit).
@@ -3002,11 +3057,14 @@ void Runtime::release(Id object, double now, bool inside) {
         }
         const auto aliases = viewAliases(snapshot.id);
         // Lot API 8 : "Demander ou enregistrer" (absent d'un bouton d'avant : oui).
-        (void)exportData(eo.text("exportSource", "alarmes"), eo.text("fileName", "export_{SYS.Date}"), eo.text("fileFormat", "CSV"), now,
-                         where(snapshot, &eo), &why, eo.flag("askWhere", true));
+        // 1.12.5 (lot A, D3) : la source, le nom, le format et la question tels que l'ecran
+        // les montre - leur formule evaluee (avant : la valeur fixe, la formule ignoree).
+        (void)exportData(shownText(snapshot.id, eo, "exportSource", "alarmes"), shownText(snapshot.id, eo, "fileName", "export_{SYS.Date}"),
+                         shownText(snapshot.id, eo, "fileFormat", "CSV"), now, where(snapshot, &eo), &why,
+                         shownFlag(snapshot.id, eo, "askWhere", true));
     }
     if (o->kind == Kind::AlarmBanner)
-        if (const int k = bannerAlarm(*snapshot.object(object)); k >= 0) selectAlarm(alarms_[static_cast<std::size_t>(k)].name);
+        if (const int k = bannerAlarm(snapshot.id, *snapshot.object(object)); k >= 0) selectAlarm(alarms_[static_cast<std::size_t>(k)].name);
     runActions(snapshot, snapshot.object(object), Trigger::Click, now);
 }
 
@@ -3557,8 +3615,10 @@ void Runtime::recipeManagerClick(Id object, std::string_view part, double now) {
                 std::string quoted = "'";
                 for (const char c : current.asString()) quoted += c == '\'' ? std::string("$'") : std::string(1, c);
                 rq.values[i] = quoted + "'";
+            } else if (sim::isDateType(current.type())) {
+                rq.values[i] = current.display();      // 1.12.5 (D8) : D#2026-10-09, TOD#, DT# - se relit
             } else {
-                rq.values[i] = formatValue(current);
+                rq.values[i] = exactValue(current);    // 1.12.5 (D4) : sans perte (avant : 6 chiffres)
             }
         }
         if (!all && rq.op == "lire") log("Action", source, "lire : certaines variables sont inconnues (valeurs vides gard\xC3\xA9" "es)");
@@ -3832,8 +3892,10 @@ std::vector<Id> Runtime::samplingPlan(double now) {
             // composee : son ecran modele, ses instances de symbole comptent.
             const View* c = viewOf(v.id);
             if (!c) continue;
+            // 1.12.5 (lot A, D10) : un compteur de production aussi (il compte en fond).
             const bool records = std::any_of(c->objects.begin(), c->objects.end(), [](const Object& o) {
-                return o.kind == Kind::Trend || o.kind == Kind::StateChart || o.kind == Kind::XYChart || o.kind == Kind::Histogram;
+                return o.kind == Kind::Trend || o.kind == Kind::StateChart || o.kind == Kind::XYChart || o.kind == Kind::Histogram
+                    || o.kind == Kind::ProductionCounter;
             });
             if (records) samplePlan_.push_back(v.id);
         }
@@ -4696,6 +4758,31 @@ void Runtime::submitForm(const View& v, const Object& o, double now) {
                 const auto limit = static_cast<std::size_t>(std::max(1.0, o.number("maxLength", 32)));
                 if (codepoints(text) > limit) { fail(std::to_string(limit) + " caract\xC3\xA8res au plus"); return; }
                 next = sim::Value::text(text);
+                // 1.12.5 (lot A, D15) : le mode texte vers une variable qui n'est pas un texte : ce qui
+                // est tape, converti a son type (12.5 dans un REAL, vrai dans un BOOL, T#5s dans un
+                // TIME) ; illisible : refuse, et dit (avant : 0 ecrit sans un mot).
+                if (cur.type() != sim::Type::String && cur.type() != sim::Type::Unknown) {
+                    double x = 0;
+                    bool ok = false;
+                    if (cur.type() == sim::Type::Real) {
+                        if ((ok = parseNumber(text, x))) next = sim::Value::real(x);
+                    } else if (cur.type() == sim::Type::Bool) {
+                        if (parseNumber(text, x)) { ok = true; next = sim::Value::boolean(x != 0.0); }
+                        else if (parseBool(text, false) == parseBool(text, true)) { ok = true; next = sim::Value::boolean(parseBool(text, false)); }
+                    } else if (sim::isInteger(cur.type()) && cur.type() != sim::Type::Time) {
+                        if ((ok = parseNumber(text, x) && std::fabs(x - std::round(x)) <= 1e-9))
+                            next = sim::Value::integer(cur.type(), static_cast<std::int64_t>(std::llround(x)));
+                    } else {
+                        // TIME, DATE, TIME_OF_DAY, DATE_AND_TIME : un litteral (T#5s, D#2026-10-09).
+                        const auto e = Expression::compile(text);
+                        if (e.valid())
+                            if (auto val = e.evaluate(*env_); val && val->type() == cur.type()) { ok = true; next = *val; }
+                    }
+                    if (!ok) {
+                        fail("\xC2\xAB " + text + " \xC2\xBB ne convient pas \xC3\xA0 " + var + " (" + std::string(sim::toString(cur.type())) + ")");
+                        return;
+                    }
+                }
             }
             // Lot 13 : une saisie a signature attend le panneau (la valeur tapee attend avec elle).
             if (signatureNeeded(v, o)) {

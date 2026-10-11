@@ -5,6 +5,7 @@
 #include "HmiScript.hpp"
 
 #include <algorithm>
+#include <charconv>   // 1.12.5 : exactValue (std::to_chars au plus court)
 #include <cctype>
 #include <cmath>
 #include <cstdio>
@@ -371,6 +372,22 @@ std::string elapsedText(double seconds) {
     return sign + b;
 }
 } // namespace
+
+std::string exactValue(const sim::Value& v) {
+    if (v.type() != sim::Type::Real) return formatValue(v);
+    char b[64];
+    const auto r = std::to_chars(b, b + sizeof b, v.asReal());
+    return r.ec == std::errc{} ? std::string(b, r.ptr) : formatValue(v);
+}
+
+bool displayedTextKey(std::string_view key) noexcept {
+    // Pas « display » (la ligne d'un utilisateur : {nom}, {groupe} sont les siens) ni les listes.
+    static constexpr std::string_view kKeys[] = {"text", "label", "title", "tooltip", "message", "empty", "textOn", "textOff",
+                                                 "placeholder", "unknownText", "buttonText", "xLabel", "yLabel"};
+    for (const auto k : kKeys)
+        if (key == k) return true;
+    return false;
+}
 
 std::string formatValue(const sim::Value& v, std::string_view format) {
     const bool numeric = sim::isNumeric(v.type()) || v.type() == sim::Type::Bool;

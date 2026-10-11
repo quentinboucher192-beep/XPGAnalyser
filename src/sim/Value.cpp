@@ -24,6 +24,9 @@ std::string_view toString(Type t) noexcept {
         case Type::Date:   return "DATE";
         case Type::Tod:    return "TIME_OF_DAY";
         case Type::Dt:     return "DATE_AND_TIME";
+        case Type::LInt:   return "LINT";            // 1.12.5 (D16)
+        case Type::ULInt:  return "ULINT";
+        case Type::LWord:  return "LWORD";
         case Type::Unknown: break;
     }
     return "?";
@@ -50,6 +53,9 @@ Type typeFromName(std::string_view name) noexcept {
     if (upper == "DATE") return Type::Date;
     if (upper == "TIME_OF_DAY" || upper == "TOD") return Type::Tod;
     if (upper == "DATE_AND_TIME" || upper == "DT") return Type::Dt;
+    if (upper == "LINT")   return Type::LInt;      // 1.12.5 (D16) : 64 bits
+    if (upper == "ULINT")  return Type::ULInt;
+    if (upper == "LWORD")  return Type::LWord;
     return Type::Unknown;
 }
 
@@ -167,6 +173,7 @@ bool isInteger(Type t) noexcept {
     switch (t) {
         case Type::Byte: case Type::Word: case Type::DWord:
         case Type::Int:  case Type::DInt: case Type::UInt: case Type::UDInt:
+        case Type::LInt: case Type::ULInt: case Type::LWord:   // 1.12.5 (D16)
         case Type::Time: return true;
         default: return false;
     }
@@ -250,6 +257,8 @@ std::int64_t Value::asInteger() const noexcept {
 
 double Value::asReal() const noexcept {
     if (type_ == Type::Real) return real_;
+    // 1.12.5 (D16) : ULINT et LWORD sont non signes (au-dela de 2^63 : pas un negatif).
+    if (type_ == Type::ULInt || type_ == Type::LWord) return static_cast<double>(static_cast<std::uint64_t>(integer_));
     return static_cast<double>(integer_);
 }
 
@@ -302,6 +311,9 @@ std::string Value::display() const {
         case Type::Tod:    return "TOD#" + dateText(type_, integer_);
         case Type::Dt:     return "DT#" + dateText(type_, integer_);
         case Type::Unknown: return "?";
+        case Type::ULInt: case Type::LWord:            // 1.12.5 (D16) : non signes
+            std::snprintf(buf, sizeof buf, "%llu", static_cast<unsigned long long>(integer_));
+            return buf;
         default:
             std::snprintf(buf, sizeof buf, "%lld", static_cast<long long>(integer_));
             return buf;

@@ -295,8 +295,29 @@ void Runtime::lot12Part(const View& v, const Object& o, std::string_view part, d
             const auto labels = tabLabels(o);
             if (k < 1 || static_cast<std::size_t>(k) > labels.size()) return;
             const std::string var = trimmedText(markers::strip(o.text("variable")));
-            if (!var.empty()) (void)write(var, sim::Value::integer(sim::Type::Int, k), source);
-            else setOverride(v, o, "page", std::to_string(k));
+            if (!var.empty()) {
+                // 1.12.5 (lot A) : ce qu'on ecrit suit le type de la variable - une enumeration sa
+                // k-ieme valeur (avant : k, decale d'un cran), un BOOL l'onglet 2 = VRAI, une STRING
+                // le nom de l'onglet ; un nombre, le rang (1, 2...).
+                sim::Value cur;
+                const bool known = environment().read(var, cur);
+                sim::Value next = sim::Value::integer(sim::Type::Int, k);
+                const auto values = splitSemicolons(o.text("pageValues"));
+                if (!values.empty()) {
+                    if (static_cast<std::size_t>(k) > values.size()) return;
+                    double n = 0;
+                    (void)parseNumber(values[static_cast<std::size_t>(k - 1)], n);
+                    next = sim::Value::integer(sim::Type::DInt, static_cast<std::int64_t>(std::llround(n)));
+                } else if (known && cur.type() == sim::Type::Bool) {
+                    if (k > 2) { log("Action", source, "onglet " + std::to_string(k) + " : la variable est un BOOL (onglets 1 et 2 seulement)"); return; }
+                    next = sim::Value::boolean(k == 2);
+                } else if (known && cur.type() == sim::Type::String) {
+                    next = sim::Value::text(labels[static_cast<std::size_t>(k - 1)]);
+                }
+                (void)write(var, next, source);
+            } else {
+                setOverride(v, o, "page", std::to_string(k));
+            }
             log("Action", source, "onglet " + std::to_string(k) + " : " + labels[static_cast<std::size_t>(k - 1)]);
             return;
         }
@@ -326,7 +347,9 @@ void Runtime::lot12Part(const View& v, const Object& o, std::string_view part, d
             const std::string var = trimmedText(markers::strip(o.text("variable")));
             bool collapsed = o.flag("collapsed");
             sim::Value cur;
-            if (!var.empty() && environment().read(var, cur)) collapsed = cur.isTruthy();
+            // 1.12.5 (lot A) : comme le dessin - un nombre different de 0 (2 aussi), TRUE, VRAI, une STRING
+            // 'TRUE' (avant : 2 dessine deplie mais lu replie ; une STRING ne se depliait plus).
+            if (!var.empty() && environment().read(var, cur)) collapsed = cur.type() == sim::Type::String ? valueOn(cur.asString()) : cur.isTruthy();
             else if (!o.expr("collapsed").empty()) collapsed = evalBool(o.expr("collapsed"), collapsed);
             const bool next = !collapsed;
             if (!var.empty()) (void)write(var, sim::Value::boolean(next), source);

@@ -18,6 +18,7 @@
 #pragma once
 
 #include "HmiModel.hpp"
+#include "../sim/Value.hpp"   // 1.12.5 : le type du total d'un compteur horaire
 
 #include <array>
 #include <cstdint>
@@ -230,5 +231,11 @@ struct SegmentDigit {
 // ---- le compteur horaire ----------------------------------------------------------------
 // "h:mm:ss" (125:03:45), "heures" (125.06 h), "jours" (5 j 05 h 03 min).
 [[nodiscard]] std::string formatRunTime(double seconds, std::string_view format);
+
+// 1.12.5 (lot A) : LE COMPTEUR HORAIRE. Ce que son total tient dans le type de sa variable,
+// en secondes (un INT 9,1 h, un UINT 18,2 h, un TIME 49,7 jours ; 0 : sans limite utile, un
+// REAL en heures) ; et cette duree en clair ("9,1 h", "49,7 jours", "68 ans").
+[[nodiscard]] double      hourMeterLimit(sim::Type);
+[[nodiscard]] std::string hourMeterSpan(double seconds);
 
 } // namespace hmi

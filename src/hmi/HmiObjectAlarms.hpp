@@ -85,6 +85,15 @@ bool resetOverride(Object&, std::string_view path, std::string_view alarm, std::
 std::size_t renameSymbolAlarmOverrides(Project&, std::string_view symbol, std::string_view from, std::string_view to);
 std::size_t renameOverridePaths(Project&, std::string_view symbol, std::string_view from, std::string_view to);
 
+// 1.12.5 (lot A, D13) : UN TEXTE DE PROPRIETE QUI EST UNE LIAISON (P1.Defaut, Niveau_1, A OR B)
+// et pas une constante (TRUE, 0, 'texte', vrai, oui). Tape sans '=' dans le Defaut, le Mouvement ou la
+// Valeur d'un symbole du synoptique, l'alarme de l'objet le lit en formule - et son dessin aussi
+// (avant : le dessin le lisait FAUX quand l'alarme se declenchait).
+[[nodiscard]] bool linksVariable(std::string_view text);
+// ... la Valeur, seulement un chemin de variable (Niveau_1, Cuves[2].Niveau) : "1-2" reste la
+// position ecrite d'une vanne 3 voies.
+[[nodiscard]] bool synopticLinkedKey(const Object&, std::string_view key);
+
 // ---- la generation --------------------------------------------------------------------
 struct ObjectAlarm {
     AlarmDef    def;              // effective : nom "<groupe>.<alarme>", textes developpes, surcharges appliquees

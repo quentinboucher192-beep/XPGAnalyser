@@ -105,7 +105,11 @@ std::string percent(double f) { return formatNumber(std::round(f * 1000.0) / 10.
 // Une valeur ecrite comme dans un jeu de recette (une expression) : une chaine
 // entre apostrophes ($' et $$ echappes), un nombre ou un booleen tel quel.
 std::string recipeLiteral(const sim::Value& v) {
-    if (v.type() != sim::Type::String) return formatValue(v);
+    // 1.12.5 (lot A, D4 et D8) : un litteral qui se relit A L'IDENTIQUE - un REAL sans perte
+    // (avant : 6 chiffres, et un faux « Ecart ») ; une date avec son prefixe (D#2026-10-09,
+    // TOD#14:30:00, DT#... ; avant : 2026-10-09, relu comme un calcul : 2007).
+    if (sim::isDateType(v.type())) return v.display();
+    if (v.type() != sim::Type::String) return exactValue(v);
     std::string out = "'";
     for (const char c : v.asString()) {
         if (c == '\'' || c == '$') out += '$';
@@ -397,15 +401,33 @@ void Runtime::alarmsCycle(double now) {
 
 int Runtime::bannerAlarm(const Object& o) const {
     const auto it = bannerSteps_.find(o.id);
-    // 1.11 (REP-1, decision 74) : le groupe se lit sans les $ de ses reperes ($Zone_A$ : Zone_A).
     return bannerPick(alarms_, markers::strip(o.text("group"), markers::Mode::Text), o.text("show", "la plus grave"), now_ - startNow_,
                       static_cast<int>(o.number("period", 4000)), it == bannerSteps_.end() ? 0 : it->second);
 }
 
+int Runtime::bannerAlarm(Id view, const Object& o) const {
+    const auto it = bannerSteps_.find(o.id);
+    // 1.11 (REP-1, decision 74) : le groupe se lit sans les $ de ses reperes ($Zone_A$ : Zone_A).
+    // 1.12.5 (lot A, D2) : le groupe, le mode et la periode tels que l'ecran les montre - leur
+    // formule evaluee (avant : la valeur fixe ; Acquitter pouvait viser une autre alarme).
+    return bannerPick(alarms_, markers::strip(shownText(view, o, "group"), markers::Mode::Text), shownText(view, o, "show", "la plus grave"),
+                      now_ - startNow_, static_cast<int>(shownNumber(view, o, "period", 4000)), it == bannerSteps_.end() ? 0 : it->second);
+}
+
 // ================================================================ production ===
-ProductionFigures Runtime::production(Id object) const {
-    const auto it = production_.find(object);
+ProductionFigures Runtime::production(Id view, Id object) const {
+    const auto it = production_.find(keyOf(view, object) + argumentsKey(view));
     return it == production_.end() ? ProductionFigures{} : it->second.figures;
+}
+
+ProductionFigures Runtime::production(Id object) const {
+    // La vue ouverte qui le tient (la popup du dessus d'abord), sinon son premier compte.
+    for (auto it = popups_.rbegin(); it != popups_.rend(); ++it)
+        if (const View* v = viewOf(*it); v && v->object(object)) return production(*it, object);
+    if (const View* v = viewOf(current_); v && v->object(object)) return production(current_, object);
+    for (const auto& [key, st] : production_)
+        if (st.object == object) return st.figures;
+    return {};
 }
 
 void Runtime::productionReset(const Object&, ProductionState& st, double now, const std::string&) {
@@ -417,27 +439,45 @@ void Runtime::productionReset(const Object&, ProductionState& st, double now, co
 }
 
 void Runtime::productionCycle(double now) {
-    std::vector<Id> shown{current_};
-    shown.insert(shown.end(), popups_.begin(), popups_.end());
-    for (const Id id : shown) {
+    // 1.12.5 (lot A, D10) : en fond, comme les courbes depuis la 1.12.3 - les vues ou il y a de
+    // quoi compter, affichees ou non, et les popups ouvertes (samplingPlan). Avant : la vue
+    // affichee seule ; au retour, toute l'absence s'ajoutait d'un bloc au temps de marche.
+    const double gap = std::max(2.0, 4.0 * (project_ ? project_->config.cycleMs : 100) / 1000.0);
+    for (const Id id : samplingPlan(now)) {
         const auto* v = viewOf(id);
         if (!v) continue;
         const auto aliases = viewAliases(id);
+        const std::string args = argumentsKey(id);
         for (const auto& o : v->objects) {
             if (o.kind != Kind::ProductionCounter) continue;
-            auto& st = production_[o.id];
-            const auto read = [&](const char* key, double fallback) {
+            auto& st = production_[keyOf(id, o.id) + args];   // 1.12.5 : par jeu d'arguments
+            st.view = id;
+            st.object = o.id;
+            st.arguments = args;
+            // Le nombre lu et son type (un entier qui deborde se reconnait a son type).
+            const auto read = [&](const char* key, double fallback, sim::Type& type) {
                 const std::string expr = sourceOf(o, key);
                 if (expr.empty()) return fallback;
-                bool ok = false;
-                const std::string value = evalText(expr, &ok);
+                auto it = expressions_.find(expr);
+                if (it == expressions_.end()) it = expressions_.emplace(expr, Expression::compile(expr)).first;
+                const auto value = it->second.evaluate(environment());
                 double x = fallback;
-                return ok && numberOf(value, x) ? x : fallback;
+                if (!value || !numberOf(exactValue(*value), x)) return fallback;   // 1.12.5 (D4) : sans perte
+                type = value->type();
+                return x;
             };
-            const double good = read("good", st.lastGood), bad = read("bad", st.lastBad);
+            sim::Type goodType = sim::Type::Unknown, badType = sim::Type::Unknown;
+            const double good = read("good", st.lastGood, goodType), bad = read("bad", st.lastBad, badType);
             // Un compteur qui redescend : l'automate l'a remis a zero ; on garde le compte.
-            if (st.started && good < st.lastGood - 1e-9) st.offsetGood += st.lastGood;
-            if (st.started && bad < st.lastBad - 1e-9) st.offsetBad += st.lastBad;
+            // 1.12.5 (lot A, D10) : sauf un entier signe qui deborde (INT 32767 -> -32768, DINT) :
+            // il continue (une remise a zero repart de 0, pas d'un negatif).
+            const auto dropped = [&](double value, double last, sim::Type type, double& offset) {
+                if (!st.started || value >= last - 1e-9) return;
+                const double span = type == sim::Type::Int ? 65536.0 : type == sim::Type::DInt ? 4294967296.0 : 0.0;
+                offset += span > 0 && value < 0 && last >= 0 ? span : last;
+            };
+            dropped(good, st.lastGood, goodType, st.offsetGood);
+            dropped(bad, st.lastBad, badType, st.offsetBad);
             st.lastGood = good;
             st.lastBad = bad;
             const std::string runExpr = sourceOf(o, "running");
@@ -459,7 +499,10 @@ void Runtime::productionCycle(double now) {
                 st.shift = "Poste de " + minutesText(shift);
                 event("Production", where(*v, &o), "nouveau poste : " + st.shift + ", compteurs \xC3\xA0 z\xC3\xA9ro");
             }
-            const double dt = st.lastTick >= 0 ? std::max(0.0, now - st.lastTick) : 0.0;
+            double dt = st.lastTick >= 0 ? std::max(0.0, now - st.lastTick) : 0.0;
+            // 1.12.5 (lot A, D10) : une popup rouverte - son absence ne compte pas (on ne sait pas
+            // si la ligne tournait).
+            if (dt > gap) dt = 0.0;
             st.lastTick = now;
             if (running) st.runSeconds += dt;
             st.running = running;
@@ -559,13 +602,14 @@ void Runtime::lot11Part(const View& v, const Object& o, std::string_view part, d
             // Une ligne d'une liste d'alarmes : l'alarme choisie (consigne, mise de cote).
             const int row = indexAfter(part, "ligne:");
             if (row < 0) return;
-            const std::string src = plainWord(o.text("source", "alarmes"));
+            // 1.12.5 (lot A, D2) : la source et le groupe tels que l'ecran les montre (leur formule).
+            const std::string src = plainWord(shownText(v.id, o, "source", "alarmes"));
+            const std::string group = markers::strip(shownText(v.id, o, "group"), markers::Mode::Text);   // 1.11 (REP-1)
             if (src.rfind("mise", 0) == 0) {
-                const auto rows = historyShelvedRows(shelved_, markers::strip(o.text("group"), markers::Mode::Text));   // 1.11 (REP-1)
+                const auto rows = historyShelvedRows(shelved_, group);
                 if (static_cast<std::size_t>(row) < rows.size()) selectAlarm(shelved_[rows[static_cast<std::size_t>(row)]].name);
             } else if (src == "alarmes" || src.rfind("acquitt", 0) == 0) {
-                const auto rows = historyAlarmRows(alarms_, src == "alarmes" ? "alarmes" : "acquitt\xC3\xA9" "es",
-                                                   markers::strip(o.text("group"), markers::Mode::Text));   // 1.11 (REP-1)
+                const auto rows = historyAlarmRows(alarms_, src == "alarmes" ? "alarmes" : "acquitt\xC3\xA9" "es", group);
                 if (static_cast<std::size_t>(row) < rows.size()) selectAlarm(alarms_[rows[static_cast<std::size_t>(row)]].name);
             }
             return;
@@ -573,7 +617,7 @@ void Runtime::lot11Part(const View& v, const Object& o, std::string_view part, d
         case Kind::AlarmBanner: {
             if (part == "suivante") { ++bannerSteps_[o.id]; return; }
             if (part != "acquitter") return;
-            const int k = bannerAlarm(o);
+            const int k = bannerAlarm(v.id, o);
             if (k < 0) { log("Action", source, "acquitter : aucune alarme dans le bandeau"); return; }
             const std::string name = alarms_[static_cast<std::size_t>(k)].name;
             selectAlarm(name);
@@ -583,7 +627,8 @@ void Runtime::lot11Part(const View& v, const Object& o, std::string_view part, d
         }
         case Kind::AlarmSummary: {
             const int k = indexAfter(part, "zone:");
-            const auto zones = zonesOf(*project_, o.text("groups"));
+            // 1.12.5 (lot A, D2) : les zones telles que l'ecran les montre (leur formule ; zonesOf retire les $).
+            const auto zones = zonesOf(*project_, shownText(v.id, o, "groups"));
             if (k < 0 || static_cast<std::size_t>(k) >= zones.size()) return;
             selectedZone_ = zones[static_cast<std::size_t>(k)];
             const std::string var = trimmedText(markers::strip(o.text("variable")));
@@ -593,7 +638,7 @@ void Runtime::lot11Part(const View& v, const Object& o, std::string_view part, d
         }
         case Kind::ProductionCounter: {
             if (part != "raz" || refusedWithout("Piloter")) return;
-            auto& st = production_[o.id];
+            auto& st = production_[keyOf(v.id, o.id) + argumentsKey(v.id)];   // 1.12.5 : son jeu d'arguments
             productionReset(o, st, now, "raz");
             st.shift = "Depuis " + clockOf(dateStampOf(now));
             event("Production", source, "compteurs remis \xC3\xA0 z\xC3\xA9ro" + (user_.empty() ? std::string{} : " par " + user_));

@@ -550,7 +550,10 @@ inline constexpr PropType kPropTypes[] = {
     {"visible", "BOOL"}, {"blink", "BOOL"}, {"flipH", "BOOL"}, {"flipV", "BOOL"}, {"wrap", "BOOL"}, {"showValue", "BOOL"},
     {"continuous", "BOOL"}, {"seconds", "BOOL"}, {"showText", "BOOL"}, {"showDate", "BOOL"}, {"leadingZeros", "BOOL"},
     {"legend", "BOOL"}, {"clip", "BOOL"}, {"inverted", "BOOL"}, {"userList", "BOOL"}, {"showUser", "BOOL"},
-    {"confirm", "BOOL"}, {"icon", "BOOL"}, {"requireDigit", "BOOL"}, {"validateOnExit", "BOOL"}, {"loop", "BOOL"},
+    {"confirm", "BOOL"}, {"icon", "BOOL"}, {"requireDigit", "BOOL"}, {"validateOnExit", "BOOL"},
+    // 1.12.5 (lot A, D5) : le numero de boucle d'un instrument ISA est un TEXTE (101, 101A) - avant
+    // un BOOL, reste d'une ancienne propriete de la video : Vue.Objet.Loop se lisait FAUX.
+    {"loop", "STRING"},
     {"autoplay", "BOOL"}, {"muted", "BOOL"}, {"bold", "BOOL"}, {"italic", "BOOL"},
     {"ticks", "INT"}, {"digits", "INT"}, {"decimals", "INT"}, {"maxVisible", "INT"}, {"holdMs", "INT"}, {"refresh", "INT"},
     {"access", "INT"}, {"rows", "INT"}, {"maxLength", "INT"}, {"minLength", "INT"}, {"margin", "INT"}, {"period", "INT"},

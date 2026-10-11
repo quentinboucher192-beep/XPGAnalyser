@@ -28,6 +28,7 @@
 #pragma once
 
 #include "HmiModel.hpp"
+#include "../sim/Value.hpp"   // 1.12.5 : la valeur de la variable des onglets
 
 #include <optional>
 #include <string>
@@ -82,6 +83,10 @@ struct CrumbLayout {
 [[nodiscard]] std::vector<std::string> tabLabels(const Object&);    // au moins un
 [[nodiscard]] int tabPageOf(const Object& child);                   // "tabPage", 1 par defaut
 [[nodiscard]] int shownTabPage(const Object& tabs);                 // "page", borne a 1..N
+// 1.12.5 (lot A) : la page (1..N) que montre la valeur de la variable d'un conteneur a onglets -
+// une enumeration (pageValues : ses nombres) le rang de sa valeur, un BOOL vrai la 2, une STRING
+// l'onglet de ce nom, un nombre lui-meme.
+[[nodiscard]] int tabPageFrom(const Object& tabs, const sim::Value& value);
 struct TabLayout {
     std::vector<Box> tabs;
     Box              content;

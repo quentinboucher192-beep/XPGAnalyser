@@ -37,6 +37,42 @@ namespace hmi {
 
 namespace {
 
+// 1.12.5 (lot A, D1) : DATE, TIME_OF_DAY, DATE_AND_TIME - des millisecondes a l'heure du
+// mur (sans fuseau, comme D#, TOD#, DT#) : DATE le jour a minuit, TOD depuis minuit, DT
+// depuis 1970. `seconds` faux : les secondes a zero (le selecteur sans secondes).
+std::int64_t wallMilliseconds(sim::Type type, const DateTime& d, bool seconds) {
+    constexpr std::int64_t kDay = 86'400'000;
+    const std::int64_t tod = (static_cast<std::int64_t>(d.hour) * 3600 + d.minute * 60 + (seconds ? d.second : 0)) * 1000;
+    const std::int64_t days = sim::daysFromCivil(d.year, static_cast<unsigned>(d.month), static_cast<unsigned>(d.day));
+    if (type == sim::Type::Tod) return tod;
+    if (type == sim::Type::Date) return days * kDay;
+    return days * kDay + tod;
+}
+
+// L'inverse : les champs que le type porte ; les autres gardent ceux de `keep`.
+DateTime wallDateTime(sim::Type type, std::int64_t ms, DateTime keep) {
+    constexpr std::int64_t kDay = 86'400'000;
+    std::int64_t days = ms / kDay, rest = ms % kDay;
+    if (rest < 0) { rest += kDay; --days; }
+    if (type != sim::Type::Tod) {
+        std::int64_t y = 0;
+        unsigned m = 1, dd = 1;
+        sim::civilFromDays(days, y, m, dd);
+        keep.year = static_cast<int>(y);
+        keep.month = static_cast<int>(m);
+        keep.day = static_cast<int>(dd);
+    }
+    if (type != sim::Type::Date) {
+        const std::int64_t s = rest / 1000;
+        keep.hour = static_cast<int>((s / 3600) % 24);
+        keep.minute = static_cast<int>((s / 60) % 60);
+        keep.second = static_cast<int>(s % 60);
+    } else {
+        keep.hour = keep.minute = keep.second = 0;
+    }
+    return keep;
+}
+
 std::string trimmedText(std::string_view s) {
     while (!s.empty() && std::isspace(static_cast<unsigned char>(s.front()))) s.remove_prefix(1);
     while (!s.empty() && std::isspace(static_cast<unsigned char>(s.back()))) s.remove_suffix(1);
@@ -160,7 +196,10 @@ void Runtime::controlRelease(const View& v, const Object& o, double now, bool cl
         const auto aliases = viewAliases(v.id);
         sim::Value cur;
         const std::string var = trimmedText(markers::strip(o.text("variable")));
-        const bool on = !var.empty() && environment().read(var, cur) && cur.isTruthy();
+        // 1.12.5 (lot A) : allume comme le dessin le montre - une STRING 'TRUE' ou 'VRAI' aussi
+        // (avant : chaque clic ecrivait VRAI, l'objet ne repassait jamais a faux).
+        const bool on = !var.empty() && environment().read(var, cur)
+                     && (cur.type() == sim::Type::String ? valueOn(cur.asString()) : cur.isTruthy());
         (void)writeCommand(v, o, sim::Value::boolean(!on), now);
     };
     switch (o.kind) {
@@ -350,6 +389,11 @@ void Runtime::controlPart(const View& v, const Object& o, std::string_view part,
                 next = sim::Value::time((static_cast<std::int64_t>(d.hour) * 3600 + d.minute * 60 + (seconds ? d.second : 0)) * 1000);
             } else if (cur.type() == sim::Type::Real) {
                 next = sim::Value::real(epochFromDateTime(d));
+            } else if (sim::isDateType(cur.type())) {
+                // 1.12.5 (lot A, D1) : DATE, TOD, DATE_AND_TIME comptent en MILLISECONDES, a
+                // l'heure du mur (sans fuseau) - avant : des secondes (heure locale), une date
+                // de 1970. DATE : le jour a minuit ; TOD : depuis minuit ; DT : les deux.
+                next = sim::Value::integer(cur.type(), wallMilliseconds(cur.type(), d, seconds));
             } else {
                 next = sim::Value::integer(cur.type(), static_cast<std::int64_t>(epochFromDateTime(d)));
             }
@@ -584,6 +628,30 @@ bool Runtime::tableRows(const Object& o, std::vector<std::string>& headers, std:
     if (!a || !a->array) return false;
     const auto& sp = a->spec;
     const auto members = types::isElementary(sp.element) ? std::vector<TypeMember>{} : types::membersOf(*project_, sp.element);
+    // 1.12.5 (lot A) : un tableau a deux dimensions - une ligne par premier indice, une colonne par
+    // second (Tab[i,j]) ; avant : des lignes de cases vides (Tab[i] n'existe pas).
+    if (sp.dims == 2) {
+        for (long long j = sp.low[1]; j <= sp.high[1]; ++j) {
+            if (members.empty()) headers.push_back("[" + std::to_string(j) + "]");
+            for (const auto& m : members) headers.push_back("[" + std::to_string(j) + "]." + m.name);
+        }
+        for (long long i = sp.low[0]; i <= sp.high[0]; ++i) {
+            std::vector<std::string> row;
+            for (long long j = sp.low[1]; j <= sp.high[1]; ++j) {
+                const std::string cell = src + "[" + std::to_string(i) + "," + std::to_string(j) + "]";
+                if (members.empty()) {
+                    const auto* v = variable(cell);
+                    row.push_back(v ? shownOf(*v) : std::string{});
+                }
+                for (const auto& m : members) {
+                    const auto* v = variable(cell + "." + m.name);
+                    row.push_back(v ? shownOf(*v) : std::string{});
+                }
+            }
+            rows.push_back(std::move(row));
+        }
+        return true;
+    }
     if (members.empty()) headers.push_back("Valeur");
     for (const auto& m : members) headers.push_back(m.name);
     for (long long i = sp.low[0]; i <= sp.high[0]; ++i) {
@@ -677,7 +745,9 @@ void Runtime::controlsCycle(double now) {
                     const double dt = st.lastTick < 0 ? 0.0 : std::max(0.0, now - st.lastTick);
                     st.lastTick = now;
                     const auto aliases = viewAliases(view.id);
-                    const std::string cond = trimmedText(o.text("condition"));
+                    // 1.12.5 (lot A) : « Compte quand » lu par sa formule (=Pompe) ou son texte
+                    // (Pompe) - avant : le texte seul ; =Pompe le laissait vide, il comptait toujours.
+                    const std::string cond = formulaOf(o, "condition");
                     const bool on = cond.empty() || evalBool(cond, false);
                     st.running = on;
                     const std::string var = trimmedText(markers::strip(o.text("variable")));
@@ -685,9 +755,28 @@ void Runtime::controlsCycle(double now) {
                     if (!var.empty() && environment().read(var, cur)) {
                         // Remise a zero (ou autre ecriture) par un script : on repart de la variable.
                         const double inVar = counterSeconds(cur);
-                        if (st.lastWritten < 0 || std::fabs(inVar - st.lastWritten) > 1.0) st.runSeconds = inVar;
+                        if (st.lastWritten < 0 || std::fabs(inVar - st.lastWritten) > 1.0) {
+                            st.runSeconds = inVar;
+                            if (inVar < hourMeterLimit(cur.type()) * 0.9) st.overflowTold = 0;   // remis a zero : on repart
+                        }
                         if (on && dt > 0) {
                             st.runSeconds += dt;
+                            // 1.12.5 (lot A) : le depassement prevenu. A 90 % de ce que le type tient,
+                            // le journal le dit (une fois) ; au maximum, le total s'y arrete au lieu
+                            // de repartir de zero en silence (un TIME au bout de 49,7 jours).
+                            if (const double limit = hourMeterLimit(cur.type()); limit > 0) {
+                                const std::string type(sim::toString(cur.type()));
+                                if (st.runSeconds >= limit && st.overflowTold < 2) {
+                                    st.overflowTold = 2;
+                                    log("Erreur", where(view, &o), var + " : le total atteint le maximum d'un " + type + " (" + hourMeterSpan(limit)
+                                        + ") ; il s'y arr\xC3\xAAte au lieu de repartir de z\xC3\xA9ro - prendre un LREAL (des heures) ou un UDINT (des secondes)");
+                                } else if (st.runSeconds >= limit * 0.9 && st.overflowTold < 1) {
+                                    st.overflowTold = 1;
+                                    log("Action", where(view, &o), var + " : le total approche du maximum d'un " + type + " (" + hourMeterSpan(limit)
+                                        + ") - prendre un LREAL (des heures) ou un UDINT (des secondes)");
+                                }
+                                st.runSeconds = std::min(st.runSeconds, limit);
+                            }
                             const sim::Value next = counterValue(cur.type(), st.runSeconds);
                             if (write(var, next, where(view, &o))) st.lastWritten = counterSeconds(next);
                         } else {
@@ -710,9 +799,11 @@ void Runtime::controlsCycle(double now) {
                     else ok = numberProp(o, "value", value);
                     if (!ok) break;
                     st.samples.emplace_back(now, value);
-                    const double window = std::clamp(o.number("window", 10), 0.5, 3600.0);
+                    // 1.12.5 (lot A) : la fenetre et la zone morte telles que l'ecran les montre
+                    // (leur formule ; avant : la valeur fixe, la formule ignoree).
+                    const double window = std::clamp(shownNumber(view.id, o, "window", 10), 0.5, 3600.0);
                     while (!st.samples.empty() && st.samples.front().first < now - window) st.samples.pop_front();
-                    const double dead = std::max(0.0, o.number("deadband", 0.5));
+                    const double dead = std::max(0.0, shownNumber(view.id, o, "deadband", 0.5));
                     const double diff = st.samples.size() < 2 ? 0.0 : st.samples.back().second - st.samples.front().second;
                     st.trend = diff > dead ? 1 : diff < -dead ? -1 : 0;
                     break;
@@ -720,7 +811,7 @@ void Runtime::controlsCycle(double now) {
                 case Kind::WeeklySchedule: {
                     auto& st = controls_[o.id];
                     const auto& ws = scheduleOf(o, st);
-                    const std::string out = trimmedText(o.text("output"));
+                    const std::string out = trimmedText(markers::strip(o.text("output")));   // 1.12.5 : sans ses reperes
                     if (out.empty()) break;
                     const bool on = scheduleOn(ws, weekday, clock.hour * 60 + clock.minute);
                     if (st.output == (on ? 1 : 0)) break;
@@ -745,6 +836,8 @@ void Runtime::controlsCycle(double now) {
                         d.second = static_cast<int>(s % 60);
                     } else if (cur.type() == sim::Type::Real) {
                         d = dateTimeFromEpoch(cur.asReal());
+                    } else if (sim::isDateType(cur.type())) {
+                        d = wallDateTime(cur.type(), cur.asInteger(), d);   // 1.12.5 (D1) : des millisecondes
                     } else {
                         if (cur.asInteger() <= 0) break;
                         d = dateTimeFromEpoch(static_cast<double>(cur.asInteger()));

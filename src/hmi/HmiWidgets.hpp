@@ -71,4 +71,8 @@ inline constexpr std::string_view kRecipeButtons[] = {"Ajouter", "Modifier", "Su
 // "ligne:2" (0 = le premier jeu), ou "".
 [[nodiscard]] std::string recipeManagerHit(const Object&, double w, double h, double x, double y, std::size_t records);
 
+// 1.12.5 (lot A) : LE TEXTE D'UNE BARRE DE PROGRESSION - le pourcentage de sa plage (500 sur
+// 0..2000 : "25 %") ; `percentSign` faux : le nombre seul (la barre verticale, etroite).
+[[nodiscard]] std::string progressLabel(double value, double min, double max, bool percentSign);
+
 } // namespace hmi

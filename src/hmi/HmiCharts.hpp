@@ -106,6 +106,11 @@ struct StateSegment {
 // ---- un axe ---------------------------------------------------------------------------------
 //  Des graduations rondes (1, 2, 2,5 ou 5 x 10^n) de lo a hi, environ `approx`.
 [[nodiscard]] std::vector<double> niceTicks(double lo, double hi, int approx);
+// 1.12.5 (lot A, D14) : les sommets du trace d'une serie selon l'interpolation : « linéaire » les
+// points tels quels ; « escalier » la valeur tenue jusqu'au point suivant (un palier, puis la marche) ;
+// « points » tels quels (le dessin n'en relie aucun). Avant, l'escalier se tracait en lineaire.
+[[nodiscard]] std::vector<std::pair<double, double>> interpolatedPoints(const std::vector<std::pair<double, double>>& points,
+                                                                     std::string_view interpolation);
 // Une echelle automatique : [lo ; hi] qui contient les valeurs, avec une marge,
 // arrondie aux graduations. Sans valeur : [fallbackLo ; fallbackHi].
 [[nodiscard]] std::pair<double, double> autoRange(const std::vector<double>& values, double fallbackLo, double fallbackHi,

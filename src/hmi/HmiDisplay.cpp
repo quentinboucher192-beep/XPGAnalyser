@@ -18,6 +18,7 @@
 //  displayRgb, la meme regle, appelee par le dessin en marche.
 // =============================================================================
 #include "HmiDisplay.hpp"
+#include "HmiMarkers.hpp"   // 1.12.5 : un chemin sans ses reperes
 
 #include "HmiExpr.hpp"
 #include "HmiLanguages.hpp"
@@ -253,7 +254,9 @@ bool plainDisplay(const Project& p, const DisplayOptions& o) {
 
 // ================================================================ unites =====
 const VariableDisplay* displayOf(const Project& p, std::string_view path, const View* in) {
-    const std::string wanted = trim(path);
+    // 1.12.5 (lot A, D11) : un chemin a reperes ($Cuve$.Consigne) trouve l'unite et le format de
+    // Cuve.Consigne (avant : rien - la ligne perdait son unite et son format).
+    const std::string wanted = trim(markers::strip(path, markers::Mode::Expression));
     if (wanted.empty() || p.displays.empty()) return nullptr;
     const std::string exact = lowerAscii(wanted);
     for (const auto& d : p.displays)

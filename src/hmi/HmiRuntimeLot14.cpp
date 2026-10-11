@@ -430,9 +430,11 @@ bool Runtime::writeReport(Id id, double now, bool current, std::string* where) {
         source = &merged;
     }
     std::vector<report::Production> figures;
-    for (const auto& [objectId, st] : production_) {
-        for (const auto& v : project_->views)
-            if (const auto* o = v.object(objectId)) figures.push_back({v.name + "/" + o->name, st.figures});
+    for (const auto& [key, st] : production_) {
+        // 1.12.5 : un compte par jeu d'arguments (une popup ouverte pour Ligne1, puis Ligne2).
+        const auto* v = project_->view(st.view);
+        const auto* o = v ? v->object(st.object) : nullptr;
+        if (o) figures.push_back({v->name + "/" + o->name + (st.arguments.empty() ? std::string{} : " (" + st.arguments.substr(1) + ")"), st.figures});
     }
     const auto content = report::build(*project_, *source, *r, from, to, figures, dateStampOf(now_));
     const auto format = r->format == "Excel" ? ExportFormat::Excel : ExportFormat::Pdf;

@@ -908,7 +908,7 @@ std::string closest(const Context& ctx, std::string_view name) {
 Want wantOf(std::string_view key) {
     // Les cles dont le type est connu d'abord (visible : BOOL, x : REAL...).
     for (const auto& p : pub::kPropTypes)
-        if (p.key == key) return p.type == "BOOL" ? Want::Bool : Want::Number;
+        if (p.key == key) return p.type == "BOOL" ? Want::Bool : p.type == "STRING" ? Want::Any : Want::Number;   // 1.12.5 : un texte
     const std::string k(key);
     if (k == "fill" || k == "stroke" || k == "color"
         || (k.size() > 5 && (k.compare(k.size() - 5, 5, "Color") == 0 || k.compare(k.size() - 5, 5, "color") == 0)))

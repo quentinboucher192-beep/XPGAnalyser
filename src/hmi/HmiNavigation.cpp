@@ -1,6 +1,7 @@
 #include "HmiNavigation.hpp"
 
 #include "HmiControls.hpp"
+#include "HmiWidgets.hpp"   // 1.12.5 : splitSemicolons
 
 #include <algorithm>
 #include <cctype>
@@ -580,18 +581,44 @@ Id holderAt(const View& v, double x, double y, Id exclude) {
     return kNoId;
 }
 
+int tabPageFrom(const Object& tabs, const sim::Value& value) {
+    const auto labels = tabLabels(tabs);
+    const int n = static_cast<int>(labels.size());
+    int page = 1;
+    if (const auto values = splitSemicolons(tabs.text("pageValues")); !values.empty()) {
+        for (std::size_t k = 0; k < values.size(); ++k) {
+            double x = 0;
+            if (parseNumber(values[k], x) && static_cast<std::int64_t>(std::llround(x)) == value.asInteger()) { page = static_cast<int>(k) + 1; break; }
+        }
+    } else if (value.type() == sim::Type::Bool) {
+        page = value.isTruthy() ? 2 : 1;
+    } else if (value.type() == sim::Type::String) {
+        const std::string t = trimmed(value.asString());
+        double x = 0;
+        if (parseNumber(t, x)) page = static_cast<int>(std::lround(x));
+        else
+            for (int k = 0; k < n; ++k)
+                if (trimmed(labels[static_cast<std::size_t>(k)]) == t) { page = k + 1; break; }
+    } else {
+        page = static_cast<int>(std::lround(value.asReal()));
+    }
+    return std::clamp(page, 1, std::max(1, n));
+}
+
 void layoutStructures(View& shown) {
     bool any = false;
     for (const auto& o : shown.objects)
         if (o.kind == Kind::TabContainer || o.kind == Kind::ScrollPanel || o.kind == Kind::CollapsiblePanel
-            || o.kind == Kind::Frame) {
+            || o.kind == Kind::Frame || o.kind == Kind::Container || o.kind == Kind::Group) {   // 1.12.5 (D7)
             any = true;
             break;
         }
     if (!any) return;
 
     // 1. Les pages des onglets, les panneaux replies, les structures invisibles :
-    //    leurs enfants se cachent.
+    //    leurs enfants se cachent. 1.12.5 (lot A, D7) : un conteneur ou un groupe
+    //    invisible aussi - ses enfants ne se voient plus et ne se cliquent plus (le
+    //    guide le promettait ; avant, ils restaient la).
     std::vector<Id> hide;
     for (const auto& o : shown.objects) {
         const Object* child = &o;
@@ -600,7 +627,8 @@ void layoutStructures(View& shown) {
             const auto* g = shown.object(p);
             if (!g) break;
             const bool structure = g->kind == Kind::TabContainer || g->kind == Kind::ScrollPanel
-                                || g->kind == Kind::CollapsiblePanel || g->kind == Kind::Frame;
+                                || g->kind == Kind::CollapsiblePanel || g->kind == Kind::Frame
+                                || g->kind == Kind::Container || g->kind == Kind::Group;
             if ((g->kind == Kind::TabContainer && tabPageOf(*child) != shownTabPage(*g))
                 || (g->kind == Kind::CollapsiblePanel && g->flag("collapsed"))
                 || (structure && !g->flag("visible", true))) {
@@ -613,6 +641,31 @@ void layoutStructures(View& shown) {
     }
     for (Id id : hide)
         if (auto* o = shown.object(id)) o->setFlag("visible", false);
+    // 1 bis. 1.12.5 (lot A, D7) : un conteneur ou un groupe transparent, ou qui clignote :
+    //    ses enfants aussi, comme ceux d'une instance de symbole - leur opacite multipliee
+    //    par la sienne (avant : seul le fond du conteneur palissait ; le groupe, rien).
+    std::vector<std::pair<Id, double>> faded;
+    std::vector<Id> blinking;
+    for (const auto& o : shown.objects) {
+        double factor = 1.0;
+        bool blink = false;
+        Id p = o.parent;
+        for (int guard = 0; p != kNoId && guard < 64; ++guard) {
+            const auto* g = shown.object(p);
+            if (!g) break;
+            if (g->kind == Kind::Container || g->kind == Kind::Group) {
+                factor *= std::clamp(g->number("opacity", 100), 0.0, 100.0) / 100.0;
+                blink = blink || g->flag("blink", false);
+            }
+            p = g->parent;
+        }
+        if (factor < 1.0 - 1e-9) faded.emplace_back(o.id, factor);
+        if (blink && !o.flag("blink", false)) blinking.push_back(o.id);
+    }
+    for (const auto& [id, f] : faded)
+        if (auto* o = shown.object(id)) o->setNumber("opacity", o->number("opacity", 100) * f);
+    for (Id id : blinking)
+        if (auto* o = shown.object(id)) o->setFlag("blink", true);
 
     // 2. Les panneaux replies prennent la hauteur de leur bandeau ; ceux qui
     //    poussent font remonter les objets du dessous (meme parent, chevauchement

@@ -95,13 +95,27 @@ std::string rowSummary(const std::vector<std::string>& cells) {
 // --------------------------------------------------------------- des plumes -
 struct Pens {
     std::vector<std::string> exprs, names, colors;
+    // 1.12.5 (lot A, D11) : les listes paralleles du tableau de variables - elles suivent leurs
+    // lignes (avant : retirer ou deplacer une ligne laissait son unite et son format a la place).
+    std::vector<std::string> units, formats;
 };
+
+void eraseAt(std::vector<std::string>& v, std::size_t i) {
+    if (i < v.size()) v.erase(v.begin() + static_cast<std::ptrdiff_t>(i));
+}
+void swapAt(std::vector<std::string>& v, std::size_t a, std::size_t b) {
+    if (v.empty()) return;
+    if (std::max(a, b) >= v.size()) v.resize(std::max(a, b) + 1);
+    std::swap(v[a], v[b]);
+}
 
 Pens readPens(const hmi::Object& o) {
     Pens p;
     p.exprs = hmi::splitSemicolons(o.text("variables"));
     p.names = hmi::splitSemicolons(o.text("names"));
     p.colors = hmi::splitSemicolons(o.text("colors"));
+    p.units = hmi::splitSemicolons(o.text("units"));
+    p.formats = hmi::splitSemicolons(o.text("formats"));
     p.names.resize(p.exprs.size());
     const auto& palette = hmiTrendPalette();
     while (p.colors.size() < p.exprs.size()) p.colors.push_back(palette[p.colors.size() % palette.size()]);
@@ -116,6 +130,15 @@ void writePens(hmi::Object& o, Pens p) {
     const auto& palette = hmiTrendPalette();
     if (p.colors.size() < p.exprs.size() + 1) p.colors.push_back(palette[p.exprs.size() % palette.size()]);
     o.set("colors", hmi::joinSemicolons(p.colors));
+    // 1.12.5 (D11) : les unites et les formats d'un tableau de variables, ligne par ligne.
+    if (o.find("units") || !p.units.empty()) {
+        if (p.units.size() > p.exprs.size()) p.units.resize(p.exprs.size());
+        o.set("units", hmi::joinSemicolons(p.units));
+    }
+    if (o.find("formats") || !p.formats.empty()) {
+        if (p.formats.size() > p.exprs.size()) p.formats.resize(p.exprs.size());
+        o.set("formats", hmi::joinSemicolons(p.formats));
+    }
 }
 
 std::string imagesText(const std::vector<std::string>& images) {
@@ -644,6 +667,8 @@ bool HmiContentPanel::removeItem(int index) {
                 p.exprs.erase(p.exprs.begin() + static_cast<std::ptrdiff_t>(i));
                 p.names.erase(p.names.begin() + static_cast<std::ptrdiff_t>(i));
                 if (i < p.colors.size()) p.colors.erase(p.colors.begin() + static_cast<std::ptrdiff_t>(i));
+                eraseAt(p.units, i);      // 1.12.5 (D11)
+                eraseAt(p.formats, i);
                 writePens(o, std::move(p));
                 return true;
             });
@@ -732,6 +757,8 @@ bool HmiContentPanel::moveItem(int index, int delta) {
                 std::swap(p.exprs[a], p.exprs[b]);
                 std::swap(p.names[a], p.names[b]);
                 if (b < p.colors.size() && a < p.colors.size()) std::swap(p.colors[a], p.colors[b]);
+                swapAt(p.units, a, b);    // 1.12.5 (D11)
+                swapAt(p.formats, a, b);
                 writePens(o, std::move(p));
                 return true;
             });

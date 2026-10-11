@@ -205,6 +205,18 @@ std::vector<StateSegment> stateSegments(const std::deque<std::pair<double, doubl
     return out;
 }
 
+std::vector<std::pair<double, double>> interpolatedPoints(const std::vector<std::pair<double, double>>& points,
+                                                         std::string_view interpolation) {
+    if (interpolation != "escalier" || points.size() < 2) return points;
+    std::vector<std::pair<double, double>> out;
+    out.reserve(points.size() * 2);
+    for (std::size_t k = 0; k < points.size(); ++k) {
+        if (k > 0) out.emplace_back(points[k].first, points[k - 1].second);   // le palier, jusqu'au point suivant
+        out.push_back(points[k]);                                             // la marche
+    }
+    return out;
+}
+
 std::vector<double> niceTicks(double lo, double hi, int approx) {
     std::vector<double> out;
     if (!(hi > lo) || approx < 1) return out;

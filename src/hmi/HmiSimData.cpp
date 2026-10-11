@@ -38,6 +38,7 @@ bool plainInteger(sim::Type t) {
     switch (t) {
         case sim::Type::Byte: case sim::Type::Word: case sim::Type::DWord:
         case sim::Type::Int:  case sim::Type::DInt: case sim::Type::UInt: case sim::Type::UDInt: return true;
+        case sim::Type::LInt: case sim::Type::ULInt: case sim::Type::LWord: return true;   // 1.12.5 (D16)
         default: return false;
     }
 }
@@ -48,6 +49,7 @@ std::pair<long long, long long> rangeOf(sim::Type t) {
         case sim::Type::DWord: case sim::Type::UDInt: return {0, 4294967295LL};
         case sim::Type::Int:   return {-32768, 32767};
         case sim::Type::DInt:  return {-2147483648LL, 2147483647LL};
+        case sim::Type::ULInt: case sim::Type::LWord: return {0, std::numeric_limits<long long>::max()};   // 1.12.5 (D16)
         default:               return {std::numeric_limits<long long>::min(), std::numeric_limits<long long>::max()};
     }
 }

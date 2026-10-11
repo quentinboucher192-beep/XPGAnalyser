@@ -32,6 +32,7 @@
 #include "../ui/widgets/Controls.hpp"
 #include "../ui/widgets/DataViews.hpp"
 
+#include <limits>
 #include <algorithm>
 #include <cctype>
 #include <climits>
@@ -277,6 +278,10 @@ bool integerBounds(sim::Type t, long long& lo, long long& hi) {
         case sim::Type::DInt:  lo = -2147483648LL; hi = 2147483647LL; return true;
         case sim::Type::DWord:
         case sim::Type::UDInt: lo = 0; hi = 4294967295LL; return true;
+        // 1.12.5 (D16) : 64 bits.
+        case sim::Type::LInt:  lo = std::numeric_limits<long long>::min(); hi = std::numeric_limits<long long>::max(); return true;
+        case sim::Type::ULInt:
+        case sim::Type::LWord: lo = 0; hi = std::numeric_limits<long long>::max(); return true;
         default: return false;
     }
 }

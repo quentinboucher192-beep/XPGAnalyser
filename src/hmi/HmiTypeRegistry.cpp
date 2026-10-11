@@ -65,7 +65,7 @@ const Base kBase[] = {
     {"DINT", Category::Elementary, {Family::Integer, 32, true, false, -kI32, kI32 - 1}, V | D | P | R | O, V | D | P | R | O,
      "Entier sign\xC3\xA9 32 bits."},
     {"LINT", Category::Elementary, {Family::Integer, 64, true, false, -kI64, kI64 - 1}, D | P | R | O, O,
-     "Entier sign\xC3\xA9 64 bits ; l'IHM le calcule sur 32 bits, comme un DINT."},
+     "Entier sign\xC3\xA9 64 bits (1.12.5 : calcul\xC3\xA9 sur 64 bits)."},
     {"USINT", Category::Elementary, {Family::Integer, 8, false, false, 0, 255}, D | P | R | O, D | R | O,
      "Entier non sign\xC3\xA9 8 bits (0 \xC3\xA0 255)."},
     {"UINT", Category::Elementary, {Family::Integer, 16, false, false, 0, 65535}, V | D | P | R | O, V | D | P | R | O,
@@ -73,7 +73,7 @@ const Base kBase[] = {
     {"UDINT", Category::Elementary, {Family::Integer, 32, false, false, 0, 4294967295.0L}, V | D | P | R | O, V | D | P | R | O,
      "Entier non sign\xC3\xA9 32 bits."},
     {"ULINT", Category::Elementary, {Family::Integer, 64, false, false, 0, 18446744073709551615.0L}, D | P | R | O, O,
-     "Entier non sign\xC3\xA9 64 bits ; l'IHM le calcule sur 32 bits, comme un UDINT."},
+     "Entier non sign\xC3\xA9 64 bits (1.12.5 : calcul\xC3\xA9 sur 64 bits)."},
     {"BYTE", Category::Elementary, {Family::Integer, 8, false, true, 0, 255}, D | P | R | O, D | R | O,
      "Mot de 8 bits (0 \xC3\xA0 255)."},
     {"WORD", Category::Elementary, {Family::Integer, 16, false, true, 0, 65535}, V | D | P | R | O, V | D | P | R | O,
@@ -647,9 +647,10 @@ sim::Type simTypeOf(std::string_view type) noexcept {
         case Family::Date:                                   // 1.12.1 : low dit lequel
             return n.low == 1 ? sim::Type::Date : n.low == 2 ? sim::Type::Tod : sim::Type::Dt;
         case Family::Integer:
-            if (n.bitString) return n.bits <= 8 ? sim::Type::Byte : n.bits <= 16 ? sim::Type::Word : sim::Type::DWord;
-            if (n.isSigned) return n.bits <= 16 ? sim::Type::Int : sim::Type::DInt;
-            return n.bits <= 16 ? sim::Type::UInt : sim::Type::UDInt;
+            // 1.12.5 (lot A, D16) : 64 bits - LINT, ULINT, LWORD (avant : ranges sur 32 bits).
+            if (n.bitString) return n.bits <= 8 ? sim::Type::Byte : n.bits <= 16 ? sim::Type::Word : n.bits <= 32 ? sim::Type::DWord : sim::Type::LWord;
+            if (n.isSigned) return n.bits <= 16 ? sim::Type::Int : n.bits <= 32 ? sim::Type::DInt : sim::Type::LInt;
+            return n.bits <= 16 ? sim::Type::UInt : n.bits <= 32 ? sim::Type::UDInt : sim::Type::ULInt;
         case Family::None: break;
     }
     return sim::Type::Unknown;

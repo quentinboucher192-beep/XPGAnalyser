@@ -26,6 +26,9 @@ enum class Type : std::uint8_t {
     // 1970-01-01 00:00 (l'heure du mur, sans fuseau). D#2026-10-09, TOD#14:30:00,
     // DT#2026-10-09-14:30:00.
     Date, Tod, Dt,
+    // 1.12.5 (lot A, D16) : les entiers sur 64 bits - LINT signe, ULINT et LWORD non signes
+    // (avant : ranges sur 32 bits, comme DINT, UDINT et DWORD : 5000000000 se repliait).
+    LInt, ULInt, LWord,
 };
 
 [[nodiscard]] std::string_view toString(Type) noexcept;

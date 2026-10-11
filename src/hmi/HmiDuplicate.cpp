@@ -327,8 +327,11 @@ void fields(O& o, F&& fn) {
         fn(a.target, an + "(cible)", writes);
         // 1.11.1 (REP) : le script d'une action (Executer un script) est du ST : il se lit comme
         // une expression (ses chaines '$N', '5$$' et ses commentaires ne portent pas de repere).
+        // 1.12.5 (lot A, D18) : la valeur d'Affecter, d'Incrementer, de Decrementer et de Calcul est
+        // une formule, lue comme le moteur la lit (avant : Operation::Set, dont la valeur ne sert pas).
         fn(a.value, an + "(valeur)",
-           a.operation == Operation::Set || operationTakesArguments(a.operation) || a.operation == Operation::RunScript);
+           a.operation == Operation::Assign || a.operation == Operation::Increment || a.operation == Operation::Decrement
+               || a.operation == Operation::Maths || operationTakesArguments(a.operation) || a.operation == Operation::RunScript);
         fn(a.guard, an + "(condition)", true);
         fn(a.watch, an + "(surveill\xC3\xA9" "e)", true);
         fn(a.params, an + "(param\xC3\xA8tres)", true);       // 1.11.6

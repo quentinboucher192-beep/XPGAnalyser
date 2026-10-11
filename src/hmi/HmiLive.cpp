@@ -5,6 +5,9 @@
 #include "HmiDuplicate.hpp"   // 1.11 (REP) : l'ancien $Vanne$ inconnu, la phrase de Dupliquer
 #include "HmiLiveGeometry.hpp"  // 1.11.4 : une instance, un groupe dont la geometrie vient d'une formule
 #include "HmiNatives.hpp"        // 1.12.1 : les enumerations natives des proprietes
+#include "HmiMarkers.hpp"        // 1.12.5 : un texte montre sans ses reperes
+#include "HmiObjectAlarms.hpp"   // 1.12.5 (D13) : une liaison tapee sans =
+#include "HmiNavigation.hpp"      // 1.12.5 : la page d'un conteneur a onglets selon sa variable
 
 #include <algorithm>
 #include <map>
@@ -12,6 +15,7 @@
 
 namespace hmi {
 namespace {
+
 // 1.10.3 : le message d'un calcul qui echoue, en francais. Une erreur sans detail
 // disait « invalid argument » (vu dans l'onglet Expressions de la simulation) :
 // « argument invalide » ; « invalid argument: detail » : le detail seul, comme le
@@ -79,14 +83,26 @@ void LiveView::bind(const View& view) {
                 b.key = p.key;
                 b.expr = Expression::compile(p.expr);
                 bound_.push_back(std::move(b));
-            } else if (p.key == "text" && p.value.find('{') != std::string::npos) {
+            } else if (synopticLinkedKey(o, p.key)) {
+                // 1.12.5 (lot A, D13) : le Defaut, le Mouvement ou la Valeur d'un symbole du
+                // synoptique tape sans '=' (P1.Defaut) : une formule, comme pour son alarme.
+                Bound b;
+                b.object = o.id;
+                b.key = p.key;
+                b.expr = Expression::compile(p.value);
+                bound_.push_back(std::move(b));
+            } else if (displayedTextKey(p.key) && (p.value.find('{') != std::string::npos || p.value.find('$') != std::string::npos)) {
                 // Un texte a trous se remplit en marche, sans '=' : c'est ce
                 // qu'on attend d'un libelle "Pression : {PT1:0.0} bar".
+                // 1.12.5 (lot A, D6) : chaque texte montre (libelle, titre, texte des etats,
+                // invite...), plus seulement « Texte » ; et un texte sans trou mais avec un
+                // repere ("Mode : $Maintenance$", ce que Dupliquer ecrit) se montre sans ses $.
                 auto tpl = TextTemplate::compile(p.value);
                 // Sans trou mais avec {{ ou }} (des accolades ecrites) : rendu
                 // quand meme, pour que l'accolade s'affiche seule.
                 const bool escaped = p.value.find("{{") != std::string::npos || p.value.find("}}") != std::string::npos;
-                if (!tpl.dynamic() && !escaped) continue;
+                const bool marked = markers::strip(p.value, markers::Mode::Text) != p.value;
+                if (!tpl.dynamic() && !escaped && !marked) continue;
                 Bound b;
                 b.object = o.id;
                 b.key = p.key;
@@ -212,9 +228,10 @@ View LiveView::evaluate(sim::Environment& plc, std::vector<LiveValue>* values, c
             else if (auto v = b.expr.evaluate(plc, scope))
                 // Le tableau de variables montre ses reels a son format (0.00 : 60.00).
                 // Lot 13 : le format de la ligne ("formats", sinon celui de l'objet).
+                // 1.12.5 (lot A, D4) : les autres sans perte (une barre, une part : 1234567.8).
                 lv.value = o->kind == Kind::VariableTable && v->type() == sim::Type::Real
                                ? formatValue(*v, rowFormat(nullptr, *o, static_cast<std::size_t>(b.item)))
-                               : formatValue(*v);
+                               : exactValue(*v);
             else { lv.error = true; lv.value = liveError(lv.expression, v.error().message()); }
             auto& list = lists[{b.object, b.key}];
             if (list.size() <= static_cast<std::size_t>(b.item)) list.resize(static_cast<std::size_t>(b.item) + 1);
@@ -269,10 +286,19 @@ View LiveView::evaluate(sim::Environment& plc, std::vector<LiveValue>* values, c
                 lv.error = true;
                 lv.value = b.expr.error();
             } else if (auto v = b.expr.evaluate(plc, scope)) {
-                lv.value = formatValue(*v);
+                // 1.12.5 (lot A, D4) : une valeur que l'objet relit en nombre (Valeur, min, max,
+                // seuils, consigne, ouverture...) passe sans perte ; un texte montre tel quel
+                // (libelle, titre...) garde l'ecriture courte d'avant.
+                lv.value = displayedTextKey(b.key) ? formatValue(*v) : exactValue(*v);
                 // 1.12.1 : une enumeration native (ALIGNEMENT#Centre vaut 1, un DINT) :
                 // la propriete recoit le mot de l'inspecteur ("centre").
                 if (auto word = natives::propertyWord(kindKey(o->kind), b.key, *v)) lv.value = std::move(*word);
+                // 1.12.5 (lot A) : la page d'un conteneur a onglets selon le type de sa variable - une
+                // enumeration le rang de sa valeur (pageValues), un BOOL vrai la page 2, une STRING le nom
+                // de l'onglet ; le repli d'un panneau, allume comme un voyant (2 aussi, 'TRUE').
+                if (o->kind == Kind::TabContainer && b.key == "page") lv.value = std::to_string(tabPageFrom(*o, *v));
+                if (o->kind == Kind::CollapsiblePanel && b.key == "collapsed")
+                    lv.value = (v->type() == sim::Type::String ? valueOn(v->asString()) : valueOn(lv.value)) ? "TRUE" : "FALSE";
                 // Une rotation, une position, une couleur : la valeur REMPLACE
                 // la statique. L'expression reste (l'objet est toujours pilote).
                 if (b.key == "rot") {

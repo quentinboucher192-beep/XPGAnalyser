@@ -1,4 +1,5 @@
 #include "HmiProduction.hpp"
+#include "HmiMarkers.hpp"   // 1.12.5 : les lignes sans leurs reperes
 #include "HmiWidgets.hpp"
 
 #include <algorithm>
@@ -122,7 +123,9 @@ std::vector<VariableRow> variableRows(const Object& o) {
     const auto units = splitSemicolons(o.text("units"));
     for (std::size_t k = 0; k < exprs.size(); ++k) {
         VariableRow r;
-        r.expression = trimmed(exprs[k]);
+        // 1.12.5 (lot A, D11) : sans les $ de ses reperes ($Cuve$.Consigne : Cuve.Consigne) - la
+        // ligne reste une variable (ecrivable), son unite et son format se retrouvent.
+        r.expression = trimmed(markers::strip(exprs[k], markers::Mode::Expression));
         if (r.expression.empty()) continue;
         r.name = k < names.size() ? trimmed(names[k]) : std::string{};
         r.unit = k < units.size() ? trimmed(units[k]) : std::string{};

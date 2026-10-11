@@ -18,6 +18,7 @@
 #include "../../domain/ProjectModel.hpp"
 #include "../../hmi/HmiEdit.hpp"
 #include "../../hmi/HmiExpr.hpp"          // ---- Lot API 8 : les expressions impossibles ----
+#include "../../hmi/HmiObjectAlarms.hpp"  // 1.12.5 (D12) : les alarmes des objets, dans la consigne
 #include "../../ui/widgets/ExprField.hpp"  // 1.10 (chantier K) : les champs a expression, partout pareils
 #include "../../hmi/HmiExprCheck.hpp"     // ---- Lot API 8 : les expressions impossibles ----
 #include "../../hmi/HmiPublicVars.hpp"    // ---- Lot API 8 : les expressions impossibles ----
@@ -2183,6 +2184,7 @@ std::string labelForKind(hmi::Kind kind, std::string_view key) {
         }
     }
     const bool chart = hmi::kindIsChart(kind);
+    if (key == "accent" && kind == K::Clock) return "Couleur de la trotteuse";   // 1.12.5 (lot A) : avant, « Couleur du bouton »
     if (key == "names" && (chart || kind == K::VariableTable)) return "Noms (a;b)";
     if (key == "colors" && chart && kind != K::Histogram) return "Couleurs (a;b)";
     if (key == "colors" && (kind == K::Histogram || kind == K::AlarmStats)) return "Couleur des barres";
@@ -2245,8 +2247,7 @@ static ui::exprfield::Expect expectedOf(std::string_view key, ui::PropertyGrid::
         case VT::Enum: return E::List;
         default: break;
     }
-    for (const char* k : {"text", "label", "tooltip", "title", "message", "empty"})
-        if (key == k) return E::Template;
+    if (hmi::displayedTextKey(key)) return E::Template;   // 1.12.5 (lot A, D6) : la liste du moteur
     for (const char* k : {"condition", "state", "lamp", "fault", "running", "moving", "reset", "visible", "blink", "auth"})
         if (key == k) return E::Bool;
     for (const char* k : {"view", "targetView", "popup"})
@@ -2779,9 +2780,13 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
                 for (const auto* sv : hmi::symbolsOf(*project)) p.enumValues.push_back(sv->name);
             } else if (prop.key == "alarm" && o->kind == hmi::Kind::AlarmInstruction && project) {
                 // Lot 11 : les alarmes du projet (vide : celle qu'on choisit d'un clic).
+                // 1.12.5 (lot A, D12) : et celles des objets (Vue.Objet.Alarme).
                 p.type = PG::ValueType::Enum;
                 p.enumValues = {""};
                 for (const auto& a : project->alarms) p.enumValues.push_back(a.name);
+                for (const auto& oa : hmi::objectAlarms(*project))
+                    if (oa.active && std::find(p.enumValues.begin(), p.enumValues.end(), oa.def.name) == p.enumValues.end())
+                        p.enumValues.push_back(oa.def.name);
             } else if (prop.key == "exportSource" && o->kind == hmi::Kind::ExportButton) {
                 // Lot 11 : ce qui s'exporte - les listes, les recettes, les objets de la vue qui ont des donnees.
                 p.type = PG::ValueType::Enum;

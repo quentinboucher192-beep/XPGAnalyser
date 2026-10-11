@@ -116,8 +116,9 @@ void Runtime::gifsCycle(double now) {
             auto& g = gifs_[o.id];
             // "sur condition" : joue tant qu'elle est vraie.
             if (lowerOf(o.text("start")).find("condition") != std::string::npos) {
-                const std::string cond = o.text("condition");
-                const bool on = !cond.empty() && evalBool(cond, false);
+                // 1.12.5 (lot A, D9) : sa formule (=Marche) ou son texte (Marche), dans la vue
+                // (avant : le texte seul - =Marche laissait la condition vide, le GIF ne jouait pas).
+                const bool on = objectCondition(viewId, o, "condition", false);
                 if (on && !g.conditionWas) gifStart(o, g, now, -1);
                 if (!on && g.conditionWas) {
                     g.playing = false;

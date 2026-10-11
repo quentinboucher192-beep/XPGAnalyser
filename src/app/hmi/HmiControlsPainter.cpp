@@ -142,7 +142,7 @@ void drawSwitch(const Ctx& c) {
     fillLocal(c, circleLocal(kx, h / 2, kr), colorOf(c, "knobColor", 0xF4F6FA));
     // La commande differe du retour d'etat : une discordance, en orange.
     const std::string command = c.src.text(c.o, "command");
-    if (!c.opt.editor && !command.empty() && hmi::parseBool(command, false) != on) {
+    if (!c.opt.editor && !command.empty() && hmi::valueOn(command) != on) {   // 1.12.5 : un INT 2 n'est pas une discordance
         const auto ring = boxLocal({-3, ty - 3, tw + 6, th + 6}, th / 2 + 3);
         strokeLocal(c, ring, true, blinkOff(c) ? fade(gfx::Color{242, 153, 74, 90}, c.alpha) : c.fixed(0xF2994A), 2);
     }

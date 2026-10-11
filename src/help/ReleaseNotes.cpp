@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.12.5", "11/10/2026", "livr\xC3\xA9" "e le 11/10 dans l'apr\xC3\xA8s-midi"},
     {"1.12.4", "11/10/2026", "livr\xC3\xA9" "e le 11/10 dans la matin\xC3\xA9" "e"},
     {"1.12.3", "10/10/2026", "livr\xC3\xA9" "e le 10/10 au soir"},
     {"1.12.2", "10/10/2026", "livr\xC3\xA9" "e le 10/10 dans l'apr\xC3\xA8s-midi"},
@@ -110,6 +111,29 @@ const std::vector<Note>& table() {
     static const std::vector<Note> t = {
         // 1.11.16 (09/10/2026 dans la nuit) : la remanence d'exploitation par variable, la robustesse
         // (lot 4 de la specification du 08/10).
+        // 1.12.5 (11/10/2026 dans l'apres-midi) : le lot A de l'audit de la bibliotheque d'objets -
+        // les defauts D1 a D18 et ceux propres aux objets (docs/AUDIT-BIBLIOTHEQUE-OBJETS.md).
+        note("1.12.5", "Alarmes", Kind::Fixed,
+         "LE BANDEAU, LA LISTE ET LE R\xC3\x89SUM\xC3\x89 D'ALARMES suivent leur groupe calcul\xC3\xA9 (=Zone) au clic comme au dessin : Acquitter vise l'alarme montr\xC3\xA9" "e (avant : celle du groupe fixe). La consigne d'alarme propose et trouve les alarmes des objets (Vue.Objet.Alarme ; avant : \xC2\xAB introuvable \xC2\xBB).",
+         "objet-bandeau-d-alarme", ""),
+        note("1.12.5", "Objets", Kind::Fixed,
+         "CE QUE L'\xC3\x89" "CRAN MONTRE, LE CLIC LE FAIT : le bouton d'export lit sa source, son nom et son format calcul\xC3\xA9s ; le titre d'un cadre ou d'un panneau, le libell\xC3\xA9 d'un symbole, le texte des \xC3\xA9tats, l'invite... sont des textes \xC3\xA0 trous remplis en marche, sans les $ de leurs rep\xC3\xA8res ; un conteneur ou un groupe cach\xC3\xA9, transparent ou clignotant entra\xC3\xAEne ses enfants ; le D\xC3\xA9" "faut, le Mouvement ou la Valeur d'un symbole tap\xC3\xA9s sans = (P1.Defaut) sont lus en formule par le dessin comme par l'alarme.",
+         "objet-conteneur", ""),
+        note("1.12.5", "Commandes", Kind::Fixed,
+         "LES TYPES EN ENTR\xC3\x89" "E : le s\xC3\xA9lecteur de date \xC3\xA9" "crit une DATE, une TIME_OF_DAY ou une DATE_AND_TIME en millisecondes (avant : une date de 1970) ; l'interrupteur, la case \xC3\xA0 cocher et le bouton lumineux sur une STRING s'\xC3\xA9teignent ('FALSE') ; le voyant s'allume pour 2 ; le panneau repliable se lit comme un voyant ; le conteneur \xC3\xA0 onglets montre et \xC3\xA9" "crit une \xC3\xA9num\xC3\xA9ration sans d\xC3\xA9" "calage, un BOOL (page 1 / 2), une STRING (le nom de l'onglet) ; Incr\xC3\xA9menter une STRING est refus\xC3\xA9 et dit ; le mode texte d'un champ de saisie convertit vers un REAL, un TIME... (avant : 0).",
+         "objet-date-et-heure", ""),
+        note("1.12.5", "Production", Kind::Fixed,
+         "LES CHIFFRES EXACTS : un REAL passe sans perte par un objet, une formule et une recette (1234567.8 ; avant : 6 chiffres, et un faux \xC2\xAB \xC3\x89" "cart \xC2\xBB) ; une date de recette garde son pr\xC3\xA9" "fixe (D#2026-10-09) ; le compteur de production compte en fond, ne prend plus un INT qui d\xC3\xA9" "borde pour une remise \xC3\xA0 z\xC3\xA9ro, et tient un compte par jeu d'arguments ; le tableau de variables garde l'unit\xC3\xA9, le format et l'\xC3\xA9" "criture d'une ligne rep\xC3\xA9r\xC3\xA9" "e ($Cuve$.Consigne), et Contenu d\xC3\xA9place unit\xC3\xA9s et formats avec leurs lignes.",
+         "objet-compteurs-de-production", ""),
+        note("1.12.5", "Affichage", Kind::Fixed,
+         "LE GIF d\xC3\xA9marre sur une condition en formule (=Marche) ; LE COMPTEUR HORAIRE lit \xC2\xAB Compte quand \xC2\xBB en formule et ne repart plus de z\xC3\xA9ro (pr\xC3\xA9venu \xC3\xA0 90 %, arr\xC3\xAAt\xC3\xA9 au maximum de son type ; G\xC3\xA9n\xC3\xA9rer le dit) ; la fl\xC3\xA8" "che de tendance lit sa fen\xC3\xAAtre et sa zone morte calcul\xC3\xA9" "es ; la barre de progression montre le pourcentage de sa plage ; la courbe XY trace l'escalier ; le guide du code QR dit les versions 1 \xC3\xA0 10 ; \xC2\xAB Couleur de la trotteuse \xC2\xBB pour l'horloge.",
+         "objet-compteur-horaire", ""),
+        note("1.12.5", "Types", Kind::Fixed,
+         "LINT, ULINT ET LWORD SUR 64 BITS dans les scripts, les fonctions et les formules (5000000000 * 3 ; avant : repli\xC3\xA9s sur 32 bits) ; le num\xC3\xA9ro de boucle d'un instrument ISA est un texte (Vue.Objet.Loop : '101A' ; avant : un BOOL).",
+         "types-ihm", ""),
+        note("1.12.5", "G\xC3\xA9n\xC3\xA9rer", Kind::Fixed,
+         "\xC2\xAB Lignes depuis \xC2\xBB un TUPLE est accept\xC3\xA9 et un tableau \xC3\xA0 deux dimensions montre une colonne par second indice ; une source rep\xC3\xA9r\xC3\xA9" "e ($Lignes$) est v\xC3\xA9rifi\xC3\xA9" "e ; Dupliquer lit la valeur d'Affecter, d'Incr\xC3\xA9menter et de Calcul comme une formule ; les valeurs \xC3\xA9" "crites d'un s\xC3\xA9lecteur suivent un renommage ; la sortie rep\xC3\xA9r\xC3\xA9" "e d'un programmateur ($Sortie$) s'\xC3\xA9" "crit.",
+         "objet-tableau", ""),
         // 1.12.4 (11/10/2026 dans la matinee) : les types objets pour les membres des types IHM et les
         // parametres des popups et des symboles, une seule ligne Type, l'apercu de la Disposition.
         note("1.12.4", "Types", Kind::New,

@@ -27,6 +27,7 @@
 #include "HmiAlarmViews.hpp"
 #include "HmiCharts.hpp"
 #include "HmiControls.hpp"
+#include "HmiTypeRegistry.hpp"   // 1.12.5 : le type du total d'un compteur horaire
 #include "HmiExport.hpp"
 #include "HmiProduction.hpp"
 #include "HmiDisplay.hpp"      // lot 13
@@ -64,7 +65,8 @@ std::string_view unknownVariablePrefix() noexcept {
 namespace {
 
 // Les proprietes dont la valeur est un texte a trous plutot qu'une constante.
-bool isTemplateKey(std::string_view key) { return key == "text"; }
+// 1.12.5 (lot A, D6) : chaque texte montre (libelle, titre...), comme le moteur.
+bool isTemplateKey(std::string_view key) { return displayedTextKey(key); }
 
 void add(std::vector<Issue>& out, Issue::Severity s, std::string cat, Id view, Id object, std::string prop,
          std::string msg, Id script = kNoId, int line = 0) {
@@ -256,6 +258,12 @@ void checkActions(const Project& p, const NameExists& plc, const View& v, const 
                 add(out, S::Error, "Action", v.id, obj, where,
                     "variable inexistante : " + target
                         + dup::markerHint(a.target, scanRoots(target).empty() ? target : scanRoots(target).front()));
+            // 1.12.5 (lot A, D15) : incrementer un texte - le moteur le refuse ; le dire avant.
+            else if ((a.operation == Operation::Increment || a.operation == Operation::Decrement)
+                     && typereg::simTypeOf(params::expressionType(p, &v, target)) == sim::Type::String)
+                add(out, S::Error, "Action", v.id, obj, where,
+                    target + " est un texte (STRING) : " + std::string(a.operation == Operation::Increment ? "Incr\xC3\xA9menter" : "D\xC3\xA9" "cr\xC3\xA9menter")
+                        + " ne s'y applique pas - Affecter, ou une variable num\xC3\xA9rique");
         }
         if (operationOpensView(a.operation)) {
             const auto* opened = p.viewByName(target);
@@ -835,14 +843,16 @@ void checkLot6(const Project& p, const NameExists& plc, std::vector<Issue>& out)
             // 1.12.2 : les lignes venues d'une variable (rowsFrom) - une LIST, un VECTOR, une MAP ou un
             // tableau de l'IHM : une ligne par element, autant qu'il en a.
             if (o.kind == Kind::Table) {
-                const std::string from = trimmedCopy(o.text("rowsFrom"));
-                if (!from.empty() && from.find('$') == std::string::npos) {
+                // 1.12.5 (lot A) : verifiee aussi avec un repere ($Lignes$ : Lignes) - avant, sautee.
+                const std::string from = trimmedCopy(markers::strip(o.text("rowsFrom"), markers::Mode::Expression));
+                if (!from.empty()) {
                     if (const auto* var = p.variable(from)) {
                         const std::string t = types::normalized(var->type);
                         const auto starts = [&](std::string_view w) { return t.size() >= w.size() && t.compare(0, w.size(), w) == 0; };
-                        if (!starts("ARRAY") && !starts("LIST") && !starts("VECTOR") && !starts("MAP"))
+                        // 1.12.5 (lot A, D17) : un TUPLE aussi (une ligne par element, le moteur le montrait deja).
+                        if (!starts("ARRAY") && !starts("LIST") && !starts("VECTOR") && !starts("MAP") && !starts("TUPLE"))
                             add(out, S::Error, "Variable", v.id, o.id, "rowsFrom",
-                                "lignes depuis : " + var->name + " (" + var->type + ") n'est ni une LIST, ni un VECTOR, ni une MAP, ni un tableau");
+                                "lignes depuis : " + var->name + " (" + var->type + ") n'est ni une LIST, ni un VECTOR, ni une MAP, ni un TUPLE, ni un tableau");
                     } else {
                         for (const auto& r : scanRoots(from))
                             if (!known(p, plc, r, &v))
@@ -1825,7 +1835,7 @@ void checkLot11(const Project& p, const NameExists& plc, std::vector<Issue>& out
                     if (o.kind == Kind::AlarmBanner && o.text("show").find("filement") != std::string::npos && o.number("period", 4000) < 500)
                         issue(S::Warning, "period", "d\xC3\xA9" "filement de moins de 500 ms : illisible");
                     if (o.kind == Kind::AlarmSummary) {
-                        for (const auto& z : splitSemicolons(o.text("groups"))) {
+                        for (const auto& z : splitSemicolons(markers::strip(o.text("groups"), markers::Mode::Text))) {   // 1.12.5
                             const std::string zone = trimmedCopy(z);
                             if (!zone.empty() && !filterTakes(zone)) issue(S::Warning, "groups", "zone \xC2\xAB " + zone + " \xC2\xBB : aucune alarme de ce groupe");
                         }
@@ -1833,8 +1843,13 @@ void checkLot11(const Project& p, const NameExists& plc, std::vector<Issue>& out
                             issue(S::Warning, "groups", "aucune zone : les alarmes n'ont pas de groupe (Configuration > Alarmes)");
                     }
                     if (o.kind == Kind::AlarmInstruction) {
-                        const std::string name = trimmedCopy(o.text("alarm"));
-                        const auto* a = name.empty() ? nullptr : p.alarmByName(name);
+                        // 1.12.5 (lot A, D12) : une alarme d'objet (Vue.Objet.Alarme) se vise aussi
+                        // (avant : « introuvable ») ; le nom se lit sans les $ de ses reperes.
+                        const std::string name = trimmedCopy(markers::strip(o.text("alarm"), markers::Mode::Text));
+                        const AlarmDef* a = name.empty() ? nullptr : p.alarmByName(name);
+                        if (!a && !name.empty())
+                            for (const auto& oa : generatedAlarms())
+                                if (oa.def.name == name) { a = &oa.def; break; }
                         if (!name.empty() && !a) issue(S::Error, "alarm", "alarme '" + name + "' introuvable");
                         else if (a && a->instruction.empty()) issue(S::Info, "alarm", "l'alarme " + name + " n'a pas de consigne");
                         else if (name.empty() && std::none_of(p.alarms.begin(), p.alarms.end(), [](const AlarmDef& d) { return !d.instruction.empty(); }))
@@ -3062,6 +3077,9 @@ struct ExprWalker {
                     const Where w{&v, o.id, "Expression", prop.key};
                     if (!prop.expr.empty()) expr(w, prop.expr, exprcheck::wantOf(prop.key));
                     if (!prop.expr.empty()) enumFamily(w, o.kind, prop.key, prop.expr);
+                    // 1.12.5 (lot A, D13) : un Defaut, un Mouvement, une Valeur de synoptique tapes
+                    // sans '=' (P1.Defaut) sont des formules (le dessin et l'alarme) : verifies comme elles.
+                    if (synopticLinkedKey(o, prop.key)) expr(w, prop.value, exprcheck::wantOf(prop.key));
                     if (isTemplateKey(prop.key)) text(Where{&v, o.id, "Texte", prop.key}, prop.value);
                     if (prop.key == "cells" && prop.expr.empty()) {
                         const auto rows = parseCells(prop.value);
@@ -3562,7 +3580,7 @@ std::vector<Issue> generateWith(const Project& p, const NameExists& plcHasName, 
                     add(out, S::Error, "Objet", v.id, o.id, "speed", "vitesse hors de 1 \xC3\xA0 2000 % : " + formatNumber(speed));
                 const std::string start = o.text("start", "\xC3\xA0 l'affichage");
                 if (start == "sur condition") {
-                    const std::string cond = o.text("condition");
+                    const std::string cond = formulaOf(o, "condition");   // 1.12.5 (D9) : =Marche aussi
                     if (trimmedCopy(cond).empty())
                         add(out, S::Error, "Objet", v.id, o.id, "condition", "d\xC3\xA9part sur condition : la condition est vide");
                     else if (!Expression::compile(cond).valid())
@@ -3676,6 +3694,22 @@ std::vector<Issue> generateWith(const Project& p, const NameExists& plcHasName, 
                                          return at != std::string::npos && inScripts.count(i.message.substr(0, at)) != 0;
                                      }),
                       out.end());
+    }
+    // 1.12.5 (lot A) : un compteur horaire dont le total ne tient pas longtemps dans son type
+    // (un INT 9,1 h, un TIME 49,7 jours) : il s'y arrete - le dire avant.
+    for (const auto& v : p.views) {
+        for (const auto& o : v.objects) {
+            if (o.kind != Kind::HourMeter) continue;
+            const std::string var = trimmedCopy(markers::strip(o.text("variable")));
+            if (var.empty()) continue;
+            const std::string type = params::expressionType(p, &v, var);
+            if (type.empty()) continue;
+            const double limit = hourMeterLimit(typereg::simTypeOf(type));
+            if (limit > 0 && limit < 10.0 * 365.25 * 86400.0)
+                add(out, S::Warning, "Objet", v.id, o.id, "variable",
+                    var + " (" + type + ") : le total ne tient que " + hourMeterSpan(limit)
+                        + " (il s'y arr\xC3\xAAte) - prendre un LREAL (des heures) ou un UDINT (des secondes)");
+        }
     }
     dropTemplateHints(p, out);
     return out;

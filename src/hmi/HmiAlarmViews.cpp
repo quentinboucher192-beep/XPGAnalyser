@@ -1,4 +1,5 @@
 #include "HmiAlarmViews.hpp"
+#include "HmiMarkers.hpp"   // 1.12.5 : les zones sans les $ de leurs reperes
 #include "HmiAlarmGroups.hpp"   // 1.10.2 (AL) : la zone d'un groupe d'alarmes
 #include "HmiObjectAlarms.hpp"
 #include "HmiWidgets.hpp"
@@ -183,7 +184,9 @@ const LiveAlarm* strongestZoneAlarm(const Project& p, const std::vector<LiveAlar
 // ================================================================ resume =====
 std::vector<std::string> zonesOf(const Project& p, std::string_view groups) {
     std::vector<std::string> out;
-    for (const auto& g : splitSemicolons(groups)) {
+    // 1.12.5 (lot A) : sans les $ de leurs reperes ($Zone_A$ : Zone_A) - le dessin, le clic,
+    // le survol et Generer lisent les memes zones (avant : seul le clic... et pas meme lui).
+    for (const auto& g : splitSemicolons(markers::strip(groups, markers::Mode::Text))) {
         const std::string t = trimmed(g);
         if (!t.empty() && std::find(out.begin(), out.end(), t) == out.end()) out.push_back(t);
     }
@@ -268,7 +271,7 @@ std::string historyHit(double w, double h, double x, double y, std::size_t rows)
 
 // ================================================================ consigne ===
 const LiveAlarm* instructionAlarm(const std::vector<LiveAlarm>& alarms, std::string_view alarmProp, std::string_view selected) {
-    const std::string wanted = trimmed(alarmProp);
+    const std::string wanted = trimmed(markers::strip(alarmProp, markers::Mode::Text));   // 1.12.5 : sans ses $
     if (!wanted.empty()) {
         for (const auto& a : alarms) if (a.name == wanted) return &a;
         return nullptr;
