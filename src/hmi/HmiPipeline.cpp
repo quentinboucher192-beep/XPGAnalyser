@@ -340,6 +340,9 @@ void resolveCode(const Names& n, const View* here, std::string_view code, std::v
         }
         if (auto it = n.types.find(lroot); it != n.types.end()) { add(root, it->second, DepMode::Interface, "type"); continue; }
         if (auto it = n.apiVars.find(lroot); it != n.apiVars.end()) { add(root, it->second, DepMode::Interface, "API"); continue; }
+        // 1.12.7 : Reglages.Seuils - une constante publique d'un script general (son interface les dit).
+        if (id.find('.') != std::string::npos)
+            if (auto it = n.scripts.find(lroot); it != n.scripts.end()) { add(root, it->second, DepMode::Interface, "constante"); continue; }
         // Vue.Instance.Fonction (partout) ou Instance.Fonction (dans la vue qui pose l'instance)
         const auto parts = [&id] {
             std::vector<std::string> v;
@@ -653,6 +656,13 @@ std::vector<Element> collect(const Project& p, const ApiInfo& api) {
                        "IHM/Programmation g\xC3\xA9n\xC3\xA9rale/Scripts/" + (s.folder.empty() ? std::string{} : s.folder + "/") + s.name, s.id, kNoId);
         e.content = scriptText(s);
         e.iface = s.name + " (" + s.event + ")";
+        // 1.12.7 : ses constantes publiques, lues ailleurs par leur nom qualifie (Reglages.Seuils) - leur type,
+        // leur valeur ou leur calcul change : ceux qui les lisent se recompilent.
+        std::string publics;
+        for (const auto& d : s.decls)
+            if (d.kind == DeclKind::Constant && d.visibility == Visibility::Public)
+                publics += " " + d.name + " : " + d.type + (d.computed ? " = calcul " + hash(d.calc + declarationsCanon(d.locals)) : " = " + d.value) + ";";
+        if (!publics.empty()) e.iface += " {" + publics + " }";
         std::set<std::string> seen;
         resolveCode(n, nullptr, decl::codeOf(s) + "\n" + s.watch, e.deps, seen);
     }

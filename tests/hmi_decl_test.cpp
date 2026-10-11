@@ -1990,6 +1990,29 @@ void calculees() {
                   && back.entries[0].decls[0].locals[0].description == "un pas",
               "le .xpgst : le calcul et sa locale relus - " + why + "\n" + text);
     }
+    // Le build incremental : Usage depend de Reglages (ses constantes publiques sont son interface).
+    {
+        Project q = calcProject();
+        const auto els = hmi::pipeline::collect(q);
+        const hmi::pipeline::Element* usage = nullptr;
+        const hmi::pipeline::Element* reg = nullptr;
+        for (const auto& e : els) {
+            if (e.name == "Usage") usage = &e;
+            if (e.name == "Reglages" && e.kind == hmi::pipeline::ElementKind::Script) reg = &e;
+        }
+        const bool dep = usage && reg && std::any_of(usage->deps.begin(), usage->deps.end(), [&](const hmi::pipeline::Dependency& d) {
+                             return d.key == reg->key && d.mode == hmi::pipeline::DepMode::Interface;
+                         });
+        check(dep && reg->iface.find("Seuils : MAP[STRING] OF REAL = calcul ") != std::string::npos && reg->iface.find("Secret") == std::string::npos,
+              "le build : Usage depend de l'interface de Reglages, qui dit ses constantes publiques (pas Secret) - " + (reg ? reg->iface : std::string("?")));
+        Project r2 = calcProject();
+        r2.programs.scripts[0].decls[2].calc = "Total := Seuils['bas'];\n";
+        const auto els2 = hmi::pipeline::collect(r2);
+        std::string iface2;
+        for (const auto& e : els2)
+            if (e.name == "Reglages" && e.kind == hmi::pipeline::ElementKind::Script) iface2 = e.iface;
+        check(reg && iface2 != reg->iface, "un calcul change : l'interface de Reglages aussi (ceux qui la lisent se recompilent)");
+    }
     // Une constante calculee n'est pas « une constante sans valeur » ; une fonction n'en a pas.
     {
         const auto f = dc::declarationFaults({computedDecl(DeclKind::Constant, "K", "INT", "K := 1;")}, dc::Role::Script, "");

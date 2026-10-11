@@ -33,7 +33,10 @@
 - **Le déballage** : sous la grille, la valeur à taille de la ligne choisie (LIST, VECTOR, MAP,
   ARRAY 1D/2D avec ses vrais indices, TUPLE, structure ; écrite ou calculée), un élément par ligne, en
   arbre (élément, type, valeur), chaque élément à taille se déplie.
-- **Le renommage** suit les calculs (le sien aussi) et `Reglages.X` partout.
+- **Le renommage** suit les calculs (le sien aussi) et `Reglages.X` partout ; **dupliquer** une valeur
+  calculée : la copie écrit son propre nom.
+- **Le build incrémental** : les constantes publiques d'un script général sont son interface ; un
+  script qui lit `Reglages.X` en dépend et se recompile quand elles changent.
 - **Le défaut de la MAP** : une constante neuve (`0.0`) passée en MAP, LIST ou VECTOR prend `[]` ;
   une valeur simple n'y va plus (« un MAP[STRING] OF INT prend ses éléments entre crochets »).
 - **Le fichier** : `calculee=oui calcul="…"` et une ligne `locale` par locale (index, vues, scripts
@@ -41,10 +44,5 @@
 
 ## Ce qui reste (dit honnêtement)
 
-- Le tableau « Éléments » (une ligne par élément, colonnes selon le type) n'a pas remplacé le texte
-  « un par ligne » de l'éditeur des éléments.
 - L'onglet Locales est un champ de code (une ligne par locale) dans la fenêtre du calcul, pas une
-  grille dépliée.
-- L'aide à la saisie ne propose pas encore `Reglages.` → ses constantes publiques.
-- Une constante qualifiée renommée n'invalide pas d'elle-même les scripts qui la lisent dans le
-  build incrémental (un « Tout régénérer » les reprend).
+  grille ; la fenêtre ne recalcule pas en direct (Appliquer, puis la case Valeur montre le résultat).
