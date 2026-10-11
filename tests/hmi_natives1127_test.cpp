@@ -406,6 +406,12 @@ void templates() {
     fails("x := NUMBERS<INT>.PI;", "NUMBERS<INT> : REAL ou LREAL est attendu", "NUMBERS<INT>");
     fails("x := NUMBERS.PII;", "NUMBERS n'a pas de membre PII \xE2\x80\x94 veux-tu dire PI ?", "NUMBERS.PII");
     fails("i := ADD_SAT<STRING>(1, 2);", "ADD_SAT<STRING> : un type entier est attendu", "ADD_SAT<STRING>");
+    // Un nom qui n'est pas un type, proche d'un type accepte : la maquette (« UNIT n'est pas un type »).
+    // (UNIT : INT et UINT a deux lettres, le premier des types acceptes, comme la maquette)
+    fails("i := NUMERIC_LIMITS<UNIT>.MAX();", "UNIT n'est pas un type \xE2\x80\x94 veux-tu dire INT ?", "NUMERIC_LIMITS<UNIT>");
+    fails("i := NUMERIC_LIMITS<UINTT>.MAX();", "UINTT n'est pas un type \xE2\x80\x94 veux-tu dire UINT ?", "NUMERIC_LIMITS<UINTT>");
+    fails("x := NUMBERS<LREEL>.PI;", "LREEL n'est pas un type \xE2\x80\x94 veux-tu dire LREAL ?", "NUMBERS<LREEL>");
+    fails("i := SATURATE_CAST<T_LOT>(x);", "SATURATE_CAST<T_LOT> : un type entier est attendu", "SATURATE_CAST<T_LOT> : un type du projet");
     // Ce qui tournait en 1.12.6 : a < b, et une variable NUMBERS (une structure) garde son sens.
     same("BOOL", "i := 3;\nR := i < 5 AND 5 > i;", "TRUE", "a < b et b > a ne sont pas des templates");
     same("BOOL", "R := Compteur<10;", "TRUE", "Compteur<10 : une comparaison");
@@ -540,6 +546,16 @@ void compiler() {
     {
         const auto fs = walk("i := LIST_COUNT_IF(Mesures, COMPARAISON#Plus, 1.0);");
         check(says(fs, "COMPARAISON#Plus n'existe pas", S::Error), "COMPARAISON#Plus : une erreur" + all(fs));
+    }
+    {
+        // NOM<TYPE sans son > : la maquette - « le type, puis > ».
+        const auto fs = walk("i := NUMERIC_LIMITS<UINT.MAX();\ni := SATURATE_CAST<INT(x);");
+        check(says(fs, "NUMERIC_LIMITS : le type, puis > \xE2\x80\x94 NUMERIC_LIMITS<UINT>.MAX()", S::Error)
+                  && says(fs, "SATURATE_CAST : le type, puis > \xE2\x80\x94 SATURATE_CAST<INT>(x)", S::Error),
+              "NUMERIC_LIMITS<UINT.MAX(), SATURATE_CAST<INT(x) : le type, puis >" + all(fs));
+        // Une variable nommee comme un template garde son sens (a < b).
+        const auto old = walk("VAR\n  Midpoint : INT;\nEND_VAR\nb := Midpoint < 5 AND Midpoint > i;");
+        check(!says(old, "le type, puis", S::Error) && !says(old, "MIDPOINT", S::Error), "Midpoint < 5 (une variable) : pas un template" + all(old));
     }
 }
 

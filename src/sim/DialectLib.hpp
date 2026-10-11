@@ -54,6 +54,9 @@ struct TemplateInfo {
 // Ce qu'un type est : "entier non signe, 16 bits", et son nom en C ("uint16_t").
 [[nodiscard]] std::string_view typeSummary(std::string_view type) noexcept;
 [[nodiscard]] std::string_view cTypeName(std::string_view type) noexcept;
+// Un nom de type du langage (REAL, STRING, TIME, LIST...), sans casse : NUMERIC_LIMITS<STRING> dit le type
+// attendu ; NUMERIC_LIMITS<UNIT>, un nom qui n'en est pas un, « UNIT n'est pas un type » (la maquette).
+[[nodiscard]] bool elementaryTypeName(std::string_view name) noexcept;
 
 struct MemberInfo {
     std::string_view name;      // MAX

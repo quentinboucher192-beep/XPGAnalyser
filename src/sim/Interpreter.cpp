@@ -1236,7 +1236,15 @@ private:
                 return a == std::string::npos || b == std::string::npos ? x : x.substr(0, a + 1) + type + x.substr(b);
             };
             advance();
-            if (!lib::templateAccepts(*info, type)) return errorHere(head + " : " + std::string(info->want));
+            if (!lib::templateAccepts(*info, type)) {
+                // Un nom qui n'est pas un type, proche d'un type accepte (UNIT) : « UNIT n'est pas un type -
+                // veux-tu dire UINT ? » (la maquette) ; un type du langage ou du projet : le type attendu.
+                if (!lib::elementaryTypeName(type)) {
+                    const std::string near = lib::closest(type, std::vector<std::string>(info->types.begin(), info->types.end()));
+                    if (!near.empty()) return errorHere((peek(1).raw.empty() ? peek(1).text : peek(1).raw) + " n'est pas un type" + near);
+                }
+                return errorHere(head + " : " + std::string(info->want));
+            }
             advance();
             advance();
             advance();

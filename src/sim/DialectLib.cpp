@@ -157,6 +157,16 @@ std::string_view cTypeName(std::string_view type) noexcept {
     return r ? r->c : std::string_view{};
 }
 
+bool elementaryTypeName(std::string_view name) noexcept {
+    static constexpr std::string_view kOthers[] = {"STRING", "WSTRING", "CHAR", "WCHAR", "TIME", "LTIME", "DATE", "LDATE", "DT", "LDT",
+                                                   "TOD", "LTOD", "DATE_AND_TIME", "TIME_OF_DAY", "ARRAY", "LIST", "VECTOR", "MAP", "TUPLE"};
+    if (typeRow(name)) return true;
+    const std::string u = upper(trimmed(name));
+    for (const auto o : kOthers)
+        if (o == u) return true;
+    return false;
+}
+
 const std::vector<MemberInfo>& limitsMembers() {
     static const std::vector<MemberInfo> k = {
         {"MIN", "min", true, "La plus petite valeur finie ; pour REAL et LREAL, le plus petit positif normalis\xC3\xA9 (le plus n\xC3\xA9gatif, c'est LOWEST).", "", 0},

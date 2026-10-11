@@ -1229,6 +1229,12 @@ private:
         if (local(name) || dialectName(name, toks_[k].at) || (sc_.project && sc_.project->variable(name))) return k;
         using S = Finding::Severity;
         const bool angled = isOp(k + 1, "<") && isIdent(k + 2) && isOp(k + 3, ">");
+        // NOM<TYPE sans son > (NUMERIC_LIMITS<UINT.MAX(), SATURATE_CAST<INT(x)) : « le type, puis > » (la maquette).
+        // Seulement devant un nom de type : NOM < x reste une comparaison.
+        if (!angled && isOp(k + 1, "<") && isIdent(k + 2) && !isOp(k + 3, "#") && sim::lib::elementaryTypeName(toks_[k + 2].text)) {
+            reportTok(k, k + 3, S::Error, std::string(info->name) + " : le type, puis > \xE2\x80\x94 " + std::string(info->example));
+            return k + 3;
+        }
         std::size_t next = angled ? k + 4 : k + 1;
         const auto closeOf = [&](std::size_t open) {
             int depth = 0;

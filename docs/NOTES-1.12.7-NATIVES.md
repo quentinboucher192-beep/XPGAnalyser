@@ -152,7 +152,8 @@ template, une **erreur**.
 | Un ARRAY donné à une native qui change la taille (« … un ARRAY a une taille fixe (5 cases) — une LIST ou un VECTOR est attendu ») | erreur (LIST_INSERT_SORTED, LIST_POP_FIRST, LIST_REMOVE_ALL, LIST_REMOVE_IF, LIST_DISTINCT, LIST_APPEND) | avertissement (LIST_ADD, LIST_INSERT, LIST_REMOVE…, VECTOR_…) |
 | Le membre d'un tri ou d'une comparaison, le type de la liste connu (« T_Lot n'a pas de membre Poid — veux-tu dire Poids ? », « un TUPLE(STRING, REAL) a Item1 à Item2, pas 'Item3' », « des REAL n'ont pas de membres ») | erreur | — |
 | TUPLE_GET / TUPLE_SET, un numéro constant hors des champs (« TUPLE_GET : TUPLE(STRING, REAL) a 2 champs, pas 3 ») | erreur | — |
-| Le type d'un template (« NUMERIC_LIMITS<STRING> : un type numérique est attendu (SINT … ULINT, BYTE … LWORD, REAL, LREAL, BOOL) »), un membre inconnu (« NUMERIC_LIMITS<UINT> n'a pas de membre MAXX — veux-tu dire MAX ? »), les parenthèses (« DIGITS est une constante : sans parenthèses », « MIN est une fonction : NUMERIC_LIMITS<UINT>.MIN() ») | erreur (à la lecture du script) | — |
+| Le type d'un template (« NUMERIC_LIMITS<STRING> : un type numérique est attendu (SINT … ULINT, BYTE … LWORD, REAL, LREAL, BOOL) » ; un nom qui n'est pas un type, `NUMERIC_LIMITS<UINTT>` : « UINTT n'est pas un type — veux-tu dire UINT ? »), un membre inconnu (« NUMERIC_LIMITS<UINT> n'a pas de membre MAXX — veux-tu dire MAX ? »), les parenthèses (« DIGITS est une constante : sans parenthèses », « MIN est une fonction : NUMERIC_LIMITS<UINT>.MIN() ») | erreur (à la lecture du script) | — |
+| Le `>` oublié devant un nom de type (« NUMERIC_LIMITS : le type, puis > — NUMERIC_LIMITS<UINT>.MAX() », « SATURATE_CAST : le type, puis > — SATURATE_CAST<INT>(x) ») ; une variable nommée comme un template (`Midpoint < 5`) reste une comparaison | erreur | — |
 | Le type oublié (« SATURATE_CAST attend son type : SATURATE_CAST<INT>(x) », « NUMERIC_LIMITS attend son type : NUMERIC_LIMITS<UINT>.MAX() »), une constante inconnue de NUMBERS | erreur | — |
 | Une valeur d'énumération inconnue (« COMPARAISON#Plus n'existe pas ») | erreur | — |
 
@@ -169,7 +170,7 @@ d'une expression).
   écrit en place ; std::numeric ; les templates et leurs fautes ; `<bit>` ; les énumérations ; une
   fonction du projet nommée GCD passe avant la native ; Compiler (erreurs et avertissements) ; un
   projet entier (`compileWith`) avec une structure T_Lot, LIST_SORT_BY par 'Poids' en marche ;
-  les constantes refusées par les 25 natives qui écrivent. 262 contrôles.
+  les constantes refusées par les 25 natives qui écrivent. 268 contrôles.
 - `tests/hmi_natives_test.cpp` : chaque essai des 69 nouvelles fiches s'exécute (script, et pour
   les fonctions pures : expression fx et texte à trous) — 2150 contrôles.
 - `tests/hmi_editor_test.cpp` (`saisieNatives1127`, aussi par `HMI_TEST_NATIVES=1`) : l'aide à la
@@ -190,6 +191,15 @@ d'une expression).
 - **Les messages d'un objet** disent « un VECTOR » là où la maquette écrit « une VECTOR ».
 - **Les types refusés d'un template** ne sont pas proposés (grisés dans la maquette) : la liste
   ne montre que les types acceptés.
+- **Un nom qui n'est pas un type dans `<…>`** : « X n'est pas un type — veux-tu dire Y ? » quand un
+  type accepté en est proche (la même distance que la maquette : `UNIT` propose INT, le premier à
+  deux lettres) ; sans type proche, le type attendu est dit (« NUMERIC_LIMITS<FOO> : un type
+  numérique est attendu… ») — la lecture du script ne connaît pas les types du projet, et
+  `SATURATE_CAST<T_LOT>` est bien un type, refusé.
+- **Les essais de la maquette** (les 153 appels du bac d'essai des conteneurs, `tries` de
+  `v3_data.js`) ont été passés dans le moteur et comparés : mêmes résultats, mêmes variables
+  changées, mêmes erreurs, sauf `Tab[7]` (un message d'avant la 1.12.7 : « hors des bornes 0..4 »,
+  la maquette écrit « [0..4] »).
 - **Un ARRAY à deux dimensions** : les fonctions qui prennent ou rendent un indice (LIST_SET,
   LIST_FIND_IF, LIST_SWAP, LIST_SLICE…) le refusent (« un ARRAY à une dimension est attendu ») ;
   celles qui lisent les valeurs (LIST_SUM, LIST_CONTAINS, TO_LIST — ligne par ligne —, LIST_FILL)
