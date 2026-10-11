@@ -576,6 +576,8 @@ if(XPG_BUILD_TESTS)
     xpg_target_link_libraries(hmi_natives_test PRIVATE xpg_hmi)
     xpg_add_test_executable(hmi_natives1127_test tests/hmi_natives1127_test.cpp)   # 1.12.7 : conteneurs, std::numeric, templates, <bit>
     xpg_target_link_libraries(hmi_natives1127_test PRIVATE xpg_hmi)
+    xpg_add_test_executable(hmi_setring_test tests/hmi_setring_test.cpp)      # 1.12.7 : SET OF T et RING[N] OF T
+    xpg_target_link_libraries(hmi_setring_test PRIVATE xpg_hmi)
     # 1.12.0 : deux applications, deux rangements (la recopie des projets de la 1.11,
     # ProjectStore et les versions dans chaque application).
     xpg_add_test_executable(edition_test tests/edition_test.cpp src/app/EditionMigration.cpp)
@@ -705,6 +707,7 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME hmireperes   COMMAND hmi_reperes_test)                 # ---- 1.11.24 : les reperes dans les symboles ----
     xpg_add_test(NAME hminatives   COMMAND hmi_natives_test)                 # ---- 1.12.0 : les natives de l'IHM ----
     xpg_add_test(NAME hminatives1127 COMMAND hmi_natives1127_test)           # ---- 1.12.7 : les natives des conteneurs, std::numeric, templates, <bit> ----
+    xpg_add_test(NAME hmisetring   COMMAND hmi_setring_test)                 # ---- 1.12.7 : SET OF T et RING[N] OF T ----
     xpg_add_test(NAME edition      COMMAND edition_test ${CMAKE_CURRENT_SOURCE_DIR}/bac/Armoire_Gaz)   # ---- 1.12.0 : deux applications ----
     xpg_add_test(NAME hmioverload  COMMAND hmi_overload_test)                # ---- 1.11.20 : les signatures et les surcharges ----
     xpg_add_test(NAME hmidecl      COMMAND hmi_decl_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/decl/corpus.txt   # ---- 1.11.18 : les declarations (lot 2) ----

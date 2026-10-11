@@ -1470,6 +1470,35 @@ private:
             if (!e) return e;
             return listType(*e, vector);
         }
+        // 1.12.7 : SET OF T (std::set : rangee, chaque valeur une fois) ; RING[N] OF T (les N
+        // dernieres valeurs, N une constante entiere de 1 a kRingMax). Un nom seul (SET, RING) reste
+        // un nom de type ; une variable nommee Set ou Ring ne change pas (ce sont des types ici).
+        if (atWord("SET") && atWord("OF", 1)) {
+            advance();
+            advance();
+            auto e = typeSpec();
+            if (!e) return e;
+            return setType(*e);
+        }
+        if (atWord("RING") && ((peek(1).kind == Tok::Punct && peek(1).text == "[") || atWord("OF", 1))) {
+            advance();
+            if (!accept("["))
+                return errorHere("RING : sa capacit\xC3\xA9 est attendue, le nombre de valeurs gard\xC3\xA9" "es \xE2\x80\x94 RING[100] OF REAL");
+            auto n = addExpr();
+            if (!n) return core::Err<core::Error>(n.error());
+            std::int64_t capacity = 0;
+            if (!constantValue(**n, capacity))
+                return errorHere("RING[N] : N est une constante enti\xC3\xA8re"
+                             + ((*n)->kind == Expr::Kind::Reference ? " ('" + (*n)->name + "' n'est pas une constante enti\xC3\xA8re d\xC3\xA9" "clar\xC3\xA9" "e plus haut)"
+                                                                   : std::string(" (RING[100] OF REAL)")));
+            if (capacity < 1 || capacity > kRingMax)
+                return errorHere("RING[" + std::to_string(capacity) + "] : la capacit\xC3\xA9 va de 1 \xC3\xA0 " + std::to_string(kRingMax));
+            if (!accept("]")) return errorHere("RING[N] : ']' attendu apr\xC3\xA8s la capacit\xC3\xA9");
+            if (!acceptKeyword("OF")) return errorHere("RING[N] : OF attendu apr\xC3\xA8s la capacit\xC3\xA9 (RING[100] OF REAL)");
+            auto e = typeSpec();
+            if (!e) return e;
+            return ringType(*e, capacity);
+        }
         if (atWord("TUPLE") && peek(1).kind == Tok::Punct && peek(1).text == "(") {
             advance();
             advance();
@@ -1777,6 +1806,8 @@ public:
                             return "DINT";
                         if ((*t)->kind == TypeDesc::Kind::List && (m == "FIRST" || m == "LAST") && (*t)->element) return (*t)->element->text();
                         if ((*t)->kind == TypeDesc::Kind::List && m == "EMPTY") return "BOOL";
+                        if (isRingType(**t) && m == "CAPACITY") return "DINT";      // 1.12.7
+                        if (isRingType(**t) && m == "FULL") return "BOOL";
                     }
                 }
                 if (const std::string dotted = dottedName(e); !dotted.empty()) return env_.declaredType(dotted);
@@ -2876,6 +2907,7 @@ public:
         std::string name;
         bool        constant{false};
         bool        temp{false};          // une valeur calculee (le retour d'un appel...)
+        bool        setItem{false};       // 1.12.7 : un element d'un SET (S[0], FOR EACH x IN S) : il se lit, ne s'ecrit pas
     };
 
     // Appeler une fonction du dialecte (une fonction IHM du projet, un operateur)
@@ -2907,6 +2939,18 @@ private:
 
     core::Err<core::Error> dialectError(std::string message) const {
         return core::fail(core::ErrorCode::InvalidArgument, std::move(message));
+    }
+    // 1.12.7 : SET OF T_Lot - une structure, une liste, un TUPLE ne se rangent pas dans un SET.
+    static std::string setElementRefused(const TypeDesc& t) {
+        return t.text() + " : un SET range des valeurs simples (des nombres, des textes, des dur\xC3\xA9" "es, une \xC3\xA9num\xC3\xA9ration)"
+               " \xE2\x80\x94 pour des structures, une LIST et LIST_SORT_BY";
+    }
+    static constexpr const char* kSetItemRefused =
+        "un \xC3\xA9l\xC3\xA9ment d'un SET ne s'\xC3\xA9" "crit pas en place \xE2\x80\x94 SET_REMOVE(S, ancienne) puis SET_ADD(S, nouvelle) :"
+        " le SET reste rang\xC3\xA9, chaque valeur une fois";
+    // Ce qu'un SET refuse : l'ecrire a une place (il se range tout seul, chaque valeur une fois).
+    core::Err<core::Error> setRefused(const std::string& u) const {
+        return dialectError(u + " : un SET se range tout seul (chaque valeur une fois, dans l'ordre) \xE2\x80\x94 SET_ADD et SET_REMOVE l'\xC3\xA9" "crivent");
     }
 
     // ---- les types ---------------------------------------------------------
@@ -2950,6 +2994,8 @@ private:
                 if (!t->element) return t;           // un litteral sans type commun ([1, 'a'])
                 auto e = resolve(t->element, depth + 1);
                 if (!e) return e;
+                // 1.12.7 : un SET range des valeurs simples (std::set les compare par '<').
+                if (isSetType(*t) && (*e)->kind != TypeDesc::Kind::Scalar) return dialectError(setElementRefused(*t));
                 if (*e == t->element) return t;
                 auto d = std::make_shared<TypeDesc>(*t);
                 d->element = *e;
@@ -3362,6 +3408,7 @@ private:
                     items.push_back(*made);
                 }
                 into.items = std::move(items);
+                normalizeList(into);         // 1.12.7 : un SET se range (sans doublon), un RING garde les N dernieres
                 return true;
             }
             case TypeDesc::Kind::Array: {
@@ -3578,6 +3625,10 @@ private:
     }
 
     bool writePlace(const Place& p, const RV& v, std::string* why) {
+        if (p.setItem) {
+            if (why) *why = kSetItemRefused;
+            return false;
+        }
         if (p.constant) {
             if (why) *why = "une constante ne s'\xC3\xA9" "crit pas";
             return false;
@@ -3696,7 +3747,8 @@ private:
                 // 1.12.2 : une liste, un vecteur - L.First, L.Last (le premier, le dernier element).
                 if (type.kind == TypeDesc::Kind::List && (m == "FIRST" || m == "LAST")) {
                     if (p.obj->items.empty()) return dialectError("'" + e.name + "' : la liste est vide (L.Count = 0)");
-                    return Place{m == "FIRST" ? p.obj->items.front() : p.obj->items.back(), {}, p.constant, p.temp};
+                    if (create && isSetType(type)) return dialectError(kSetItemRefused);       // 1.12.7 : S.First se lit
+                    return Place{m == "FIRST" ? p.obj->items.front() : p.obj->items.back(), {}, p.constant, p.temp, isSetType(type)};
                 }
                 if (type.kind == TypeDesc::Kind::Iterator) {
                     auto map = p.obj->map.lock();
@@ -3738,9 +3790,10 @@ private:
                     if (m == "LENGTH" || m == "SIZE" || m == "COUNT") { value = static_cast<std::int64_t>(p.obj->items.size()); known = true; }
                     else if (m == "LOW") { value = 0; known = true; }
                     else if (m == "HIGH") { value = static_cast<std::int64_t>(p.obj->items.size()) - 1; known = true; }
-                    else if (m == "EMPTY" || m == "ISEMPTY") {
+                    else if (m == "CAPACITY" && isRingType(type)) { value = type.capacity; known = true; }     // 1.12.7 : RING[N] : N
+                    else if (m == "EMPTY" || m == "ISEMPTY" || (m == "FULL" && isRingType(type))) {
                         auto tmp = makeObj(scalarType(Type::Bool));
-                        tmp->value = Value::boolean(p.obj->items.empty());
+                        tmp->value = Value::boolean(m == "FULL" ? static_cast<std::int64_t>(p.obj->items.size()) >= type.capacity : p.obj->items.empty());
                         return Place{tmp, {}, true, true};
                     }
                 }
@@ -3837,10 +3890,13 @@ private:
                         return dialectError("un indice de liste est un entier");
                     const std::int64_t i = indices[0].v.asInteger();
                     const auto n = static_cast<std::int64_t>(p.obj->items.size());
+                    // 1.12.7 : S[i] d'un SET se lit (la i-eme plus petite valeur), ne s'ecrit pas.
+                    const bool setItem = isSetType(type);
+                    if (setItem && create) return dialectError(kSetItemRefused);
                     if (i < 0 || i >= n)
                         return dialectError("indice " + std::to_string(i) + (n == 0 ? std::string(" : la liste est vide")
                                                                                    : " hors de la liste (0.." + std::to_string(n - 1) + ")"));
-                    return Place{p.obj->items[static_cast<std::size_t>(i)], {}, p.constant, p.temp};
+                    return Place{p.obj->items[static_cast<std::size_t>(i)], {}, p.constant, p.temp, setItem};
                 }
                 return dialectError("'[...]' : un " + type.text() + " n'est ni un tableau, ni une liste, ni une MAP");
             }
@@ -4058,6 +4114,7 @@ private:
             auto tail = makeObj(a.o->type);
             if (!store(*tail, b, &why)) return dialectError(why);
             for (auto& i : tail->items) out->items.push_back(i);
+            normalizeList(*out);             // 1.12.7 : S + [x] reste un SET, R + [x] un RING
             return RV{{}, out};
         }
         // = et <> entre deux tableaux, structures, MAP, references (meme cible), NULL.
@@ -4613,9 +4670,11 @@ private:
         if (type.kind == TypeDesc::Kind::List) {
             // 1.12.2 : FOR EACH x IN L (les elements) ; FOR EACH i, x IN L (l'indice, a partir de 0).
             // Les elements d'abord : le corps peut ajouter ou retirer.
+            // 1.12.7 : un SET, dans l'ordre (chaque valeur se lit, ne s'ecrit pas) ; un RING, de la plus ancienne a la plus recente.
             const auto items = p.obj->items;
+            const bool setItems = isSetType(type);
             for (std::size_t k = 0; k < items.size(); ++k) {
-                const int r = runBody(scalar(Value::integer(Type::DInt, static_cast<std::int64_t>(k))), Place{items[k], {}, p.constant, false});
+                const int r = runBody(scalar(Value::integer(Type::DInt, static_cast<std::int64_t>(k))), Place{items[k], {}, p.constant, false, setItems});
                 if (r == 1) break;
                 if (r == 2) return lastFlow_.kind == Flow::Kind::Normal ? Flow{Flow::Kind::Aborted} : lastFlow_;
             }
@@ -4658,6 +4717,28 @@ private:
             return store(*tmp, x, &why) && deepEquals(*tmp, *item);
         }
         return deepEquals(*item, *x.o);
+    }
+    // 1.12.7 : LE RANG D'UNE VALEUR DANS UN SET (ses valeurs sont rangees) : la premiere place ou elle irait,
+    // et si elle y est deja.
+    static std::size_t setPlace(const Obj& set, const Value& v, bool& present) {
+        const auto at = std::lower_bound(set.items.begin(), set.items.end(), v, [](const ObjRef& a, const Value& b) {
+            return a && a->value.compare(b) < 0;
+        });
+        present = at != set.items.end() && *at && (*at)->value.compare(v) == 0;
+        return static_cast<std::size_t>(at - set.items.begin());
+    }
+    // Ajouter a un SET (a sa place, si elle n'y est pas : vrai) ou a un RING (a la fin ; plein, la plus
+    // ancienne part : vrai si une valeur est partie).
+    static bool ringOrSetAdd(Obj& list, const ObjRef& item) {
+        if (isSetType(*list.type)) {
+            bool present = false;
+            const auto at = setPlace(list, item->value, present);
+            if (present) return false;
+            list.items.insert(list.items.begin() + static_cast<std::ptrdiff_t>(at), item);
+            return true;
+        }
+        list.items.push_back(item);
+        return normalizeList(list) > 0;
     }
     core::Result<RV> listBuiltin(const std::string& u, const Expr& e) {
         const auto argc = e.arguments.size();
@@ -4711,6 +4792,32 @@ private:
                                 + (list.type ? list.type->text() : std::string("?")));
         }
         if (writes && held.constant) return dialectError(u + " : une constante ne s'\xC3\xA9" "crit pas");
+        // 1.12.7 : UN SET se range tout seul - il refuse ce qui ecrit a une place (LIST_INSERT, LIST_SORT...) ;
+        // LIST_ADD (VECTOR_PUSH) y range la valeur, une seule fois. UN RING : LIST_ADD ajoute a la fin, et la
+        // plus ancienne part quand il est plein. Apres une ecriture, la liste reprend sa forme (normalizeList).
+        const bool isSet = list.type && isSetType(*list.type), isRing = list.type && isRingType(*list.type);
+        if (isSet && (u == "LIST_INSERT" || u == "VECTOR_INSERT" || u == "LIST_SORT" || u == "LIST_REVERSE" || u == "VECTOR_RESIZE"))
+            return setRefused(u);
+        if ((isSet || isRing) && (u == "LIST_ADD" || u == "VECTOR_PUSH")) {
+            if (argc != 2) return bad(u + "(liste, valeur)");
+            auto v = rich(*e.arguments[1].second);
+            if (!v) return v;
+            auto made = fitTo(u, list.type->element, *v);
+            if (!made) return core::Err<core::Error>(made.error());
+            ringOrSetAdd(list, *made);
+            return integer(static_cast<std::int64_t>(list.items.size()));
+        }
+        if (isRing && u == "VECTOR_RESIZE" && argc >= 2) {
+            auto size = evaluate(*e.arguments[1].second);
+            if (!size) return core::Err<core::Error>(size.error());
+            if (isInteger(size->type()) && size->asInteger() > list.type->capacity)
+                return dialectError(u + " : un " + list.type->text() + " garde au plus " + std::to_string(list.type->capacity) + " valeurs");
+        }
+        struct Reshape {
+            Obj& o;
+            bool on;
+            ~Reshape() { if (on) normalizeList(o); }
+        } reshape{list, writes && (isSet || isRing)};
         // 1.12.7 : un ARRAY se lit a ses indices (Tab.Low a Tab.High).
         std::int64_t low = 0;
         if (array && (u == "LIST_GET" || u == "LIST_INDEX_OF")) {
@@ -4771,7 +4878,8 @@ private:
             auto made = element(*v);
             if (!made) return core::Err<core::Error>(made.error());
             list.items.insert(list.items.begin() + static_cast<std::ptrdiff_t>(*i), *made);
-            return integer(n + 1);
+            normalizeList(list);                     // 1.12.7 : un RING plein : la plus ancienne part
+            return integer(static_cast<std::int64_t>(list.items.size()));
         }
         if (u == "LIST_REMOVE_AT" || u == "VECTOR_ERASE") {
             if (argc != 2) return bad(u + "(liste, indice)");
@@ -4984,6 +5092,7 @@ private:
             if (!where) return core::Result<RV>(core::Err<core::Error>(where.error()));
             if (where->temp)
                 return core::Result<RV>(dialectError(u + " : r\xC3\xA9" "f\xC3\xA9rence vers un temporaire (une valeur calcul\xC3\xA9" "e)"));
+            if (where->setItem) return core::Result<RV>(dialectError(u + " : " + kSetItemRefused));     // 1.12.7
             auto t = std::make_shared<TypeDesc>();
             t->kind = u == "REF" ? TypeDesc::Kind::Ref : TypeDesc::Kind::Pointer;
             auto o = std::make_shared<Obj>();
@@ -5197,7 +5306,10 @@ private:
         }
         const auto& t = *a.obj->type;
         switch (t.kind) {
-            case TypeDesc::Kind::List: return upperOf(t.name) == "VECTOR" ? "un VECTOR" : "une LIST";
+            case TypeDesc::Kind::List:
+                if (isSetType(t)) return "un SET";              // 1.12.7
+                if (isRingType(t)) return "un RING";
+                return upperOf(t.name) == "VECTOR" ? "un VECTOR" : "une LIST";
             case TypeDesc::Kind::Array: return "un ARRAY";
             case TypeDesc::Kind::Map: return "une MAP";
             case TypeDesc::Kind::Tuple: return "un TUPLE";
@@ -5412,7 +5524,96 @@ private:
         if (info->group == "bits") return std::optional<core::Result<RV>>(bitNative(u, e));
         if (info->group == "map") return std::optional<core::Result<RV>>(mapNative(u, e));
         if (info->group == "tuple") return std::optional<core::Result<RV>>(tupleNative(u, e));
+        if (info->group == "set" || info->group == "ring") return std::optional<core::Result<RV>>(setNative(u, e));    // 1.12.7
         return std::optional<core::Result<RV>>(listNative(u, *info, e));
+    }
+
+    // ---- 1.12.7 : SET OF T (std::set) et RING[N] OF T (un tampon circulaire) ----------------
+    core::Result<RV> setNative(const std::string& u, const Expr& e) {
+        const auto arg = [&](std::size_t k) -> const Expr& { return *e.arguments[k].second; };
+        // Un SET (SET_ADD, SET_REMOVE, SET_HAS), un RING (RING_ADD) : designe, ecrit en place.
+        const auto holder = [&](bool ring) -> core::Result<ObjArg> {
+            auto s = objArg(arg(0));
+            if (!s) return s;
+            const TypeDesc* t = s->obj && !s->isScalar ? s->obj->type.get() : nullptr;
+            if (t && (ring ? isRingType(*t) : isSetType(*t))) return s;
+            if (ring)
+                return dialectError(u + " : un RING est attendu (RING[N] OF T), pas " + kindName(*s)
+                                    + (t && t->kind == TypeDesc::Kind::List ? std::string(" \xE2\x80\x94 LIST_ADD ajoute \xC3\xA0 une liste") : std::string{}));
+            return dialectError(u + " : un SET est attendu (SET OF T), pas " + kindName(*s)
+                                + (t && t->kind == TypeDesc::Kind::List ? std::string(" \xE2\x80\x94 LIST_CONTAINS, LIST_ADD, LIST_REMOVE pour une liste")
+                                                                        : std::string{}));
+        };
+        if (u == "SET_ADD" || u == "SET_REMOVE" || u == "SET_HAS" || u == "RING_ADD") {
+            const bool ring = u == "RING_ADD";
+            auto h = holder(ring);
+            if (!h) return core::Err<core::Error>(h.error());
+            Obj& S = *h->obj;
+            if (u != "SET_HAS" && h->constant) return constantRefused(u);
+            auto v = rich(arg(1));
+            if (!v) return v;
+            auto made = fitTo(u, S.type->element, *v);          // 'abc' dans un SET OF REAL : refuse
+            if (!made) return core::Err<core::Error>(made.error());
+            if (ring || u == "SET_ADD") {
+                const bool changed = ringOrSetAdd(S, *made);
+                auto c = commitArg(u, *h);
+                if (!c) return core::Err<core::Error>(c.error());
+                if (ring) return RV{Value::integer(Type::DInt, static_cast<std::int64_t>(S.items.size())), nullptr};
+                return RV{Value::boolean(changed), nullptr};
+            }
+            bool present = false;
+            const auto at = setPlace(S, (*made)->value, present);
+            if (u == "SET_REMOVE" && present) {
+                S.items.erase(S.items.begin() + static_cast<std::ptrdiff_t>(at));
+                auto c = commitArg(u, *h);
+                if (!c) return core::Err<core::Error>(c.error());
+            }
+            return RV{Value::boolean(present), nullptr};
+        }
+        // SET_UNION, SET_INTERSECTION, SET_DIFFERENCE (std::set_union...) : un SET neuf, du type de A. A et B :
+        // des SET, ou toute suite de valeurs simples (une LIST, un RING, un ARRAY : rangee, sans doublon).
+        const auto anySequence = [&](std::size_t k) -> core::Result<ObjArg> {
+            auto s = objArg(arg(k));
+            if (!s) return s;
+            const TypeDesc* t = s->obj && !s->isScalar ? s->obj->type.get() : nullptr;
+            if (t && (t->kind == TypeDesc::Kind::List || t->kind == TypeDesc::Kind::Array)) return s;
+            return dialectError(u + " : un SET est attendu (ou une LIST, un ARRAY), pas " + kindName(*s));
+        };
+        auto A = anySequence(0);
+        if (!A) return core::Err<core::Error>(A.error());
+        auto B = anySequence(1);
+        if (!B) return core::Err<core::Error>(B.error());
+        const TypeRef elem = A->obj->type->element;
+        if (!elem || elem->kind != TypeDesc::Kind::Scalar)
+            return dialectError(u + " : un SET range des valeurs simples, pas des " + (elem ? elem->text() : std::string("valeurs sans type")));
+        const auto asSet = [&](const Obj& from) -> core::Result<ObjRef> {
+            auto out = makeObj(setType(elem));
+            for (const auto& x : from.items) {
+                auto m = fitTo(u, elem, valueOfItem(x));          // les valeurs de B dans le type de A
+                if (!m) return core::Err<core::Error>(m.error());
+                out->items.push_back(*m);
+            }
+            normalizeList(*out);
+            return out;
+        };
+        auto sa = asSet(*A->obj);
+        if (!sa) return core::Err<core::Error>(sa.error());
+        auto sb = asSet(*B->obj);
+        if (!sb) return core::Err<core::Error>(sb.error());
+        auto out = makeObj(setType(elem));
+        if (u == "SET_UNION") {
+            out->items = (*sa)->items;
+            for (const auto& x : (*sb)->items) out->items.push_back(x);
+            normalizeList(*out);
+        } else {
+            const bool keepCommon = u == "SET_INTERSECTION";
+            for (const auto& x : (*sa)->items) {
+                bool present = false;
+                (void)setPlace(**sb, x->value, present);
+                if (present == keepCommon) out->items.push_back(x);
+            }
+        }
+        return RV{{}, out};
     }
 
     // ---- les listes, les vecteurs, les tableaux ------------------------------------------
@@ -5428,6 +5629,7 @@ private:
             auto dst = seqArg(u, arg(1), true);
             if (!dst) return core::Err<core::Error>(dst.error());
             if (dst->constant) return constantRefused(u);
+            if (isSetType(*dst->obj->type)) return setRefused(u);         // 1.12.7 : case par case, non
             const std::vector<ObjRef> from = src->obj->items;      // une copie des pointeurs : source et destination peuvent etre la meme
             const std::size_t n = std::min(from.size(), dst->obj->items.size());
             std::vector<ObjRef> made;
@@ -5446,6 +5648,16 @@ private:
         ObjArg La = *L0;
         Obj& L = *La.obj;
         if (info.writes && La.constant) return constantRefused(u);
+        // 1.12.7 : un SET refuse ce qui ecrit a une place ; apres une ecriture, un SET ou un RING reprend sa forme.
+        const bool flavored = L.type->kind == TypeDesc::Kind::List && (isSetType(*L.type) || isRingType(*L.type));
+        if (isSetType(*L.type) && (u == "LIST_SET" || u == "LIST_FILL" || u == "LIST_INSERT_SORTED" || u == "LIST_SORT_BY" || u == "LIST_SWAP"
+                                   || u == "LIST_MOVE" || u == "LIST_ROTATE"))
+            return setRefused(u);
+        struct Reshape {
+            Obj& o;
+            bool on;
+            ~Reshape() { if (on) normalizeList(o); }
+        } reshape{L, info.writes && flavored};
         const TypeRef elem = L.type->element;
         const auto n = static_cast<std::int64_t>(L.items.size());
         const auto commit = [&]() -> core::Result<RV> {
@@ -5538,7 +5750,8 @@ private:
                 ++i;
             }
             L.items.insert(L.items.begin() + static_cast<std::ptrdiff_t>(i), *made);
-            return integer(static_cast<std::int64_t>(i));
+            const auto gone = static_cast<std::int64_t>(normalizeList(L));        // 1.12.7 : un RING plein
+            return integer(static_cast<std::int64_t>(i) < gone ? -1 : static_cast<std::int64_t>(i) - gone);
         }
         if (u == "LIST_POP_FIRST") {
             if (n == 0) return dialectError(u + " : la liste est vide");
@@ -5617,6 +5830,7 @@ private:
                 made.push_back(*m);
             }
             for (auto& m : made) L.items.push_back(m);
+            normalizeList(L);                        // 1.12.7 : un SET (l'union), un RING (les N dernieres)
             return integer(static_cast<std::int64_t>(L.items.size()));
         }
         if (u == "LIST_MIN_INDEX" || u == "LIST_MAX_INDEX") {
@@ -6091,7 +6305,8 @@ private:
         const auto opAt = [&](std::size_t k) -> core::Result<int> { return k < argc ? enumArg(u, arg(k), "OPERATION") : core::Result<int>(0); };
         // Une suite rendue : du type de T (une LIST rend une LIST, un ARRAY un ARRAY aux memes bornes).
         const auto sequenceOf = [&](const ObjArg& like, const std::vector<Value>& vals) -> RV {
-            auto out = makeObj(like.obj->type);
+            // 1.12.7 : d'un SET, une LIST (les sommes cumulees ne sont pas rangees, ni uniques).
+            auto out = makeObj(isSetType(*like.obj->type) ? listType(like.obj->type->element) : like.obj->type);
             for (std::size_t k = 0; k < out->items.size() && k < vals.size(); ++k) out->items[k]->value.assignFrom(vals[k]);
             if (like.obj->type->kind == TypeDesc::Kind::List) {
                 out->items.clear();
@@ -6223,6 +6438,7 @@ private:
             auto s = seqArg(u, arg(0), true);
             if (!s) return core::Err<core::Error>(s.error());
             if (s->constant) return constantRefused(u);
+            if (isSetType(*s->obj->type)) return setRefused(u);           // 1.12.7
             const TypeRef& el = s->obj->type->element;
             if (!el || el->kind != TypeDesc::Kind::Scalar || !isNumeric(el->scalar) || el->scalar == Type::Time)
                 return dialectError(u + " : des nombres sont attendus, pas un " + s->obj->type->text());

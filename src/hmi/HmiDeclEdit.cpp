@@ -724,7 +724,7 @@ std::string literalTypeOf(std::string_view text, bool& integer, long long& value
 std::string zeroOf(std::string_view type) {
     // 1.12.7 : une MAP, une liste, un vecteur - vides.
     const std::string u = upperOf(trimmed(type));
-    if (u.rfind("MAP", 0) == 0 || u.rfind("LIST", 0) == 0 || u.rfind("VECTOR", 0) == 0) return "[]";
+    if (u.rfind("MAP", 0) == 0 || u.rfind("LIST", 0) == 0 || u.rfind("VECTOR", 0) == 0 || u.rfind("SET ", 0) == 0 || u.rfind("RING", 0) == 0) return "[]";
     const auto n = typereg::numericOf(type);
     switch (n.family) {
         case typereg::Family::Bool:    return "FALSE";

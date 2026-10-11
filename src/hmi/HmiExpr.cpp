@@ -419,7 +419,7 @@ roles::Shape Expression::shapeOf(sim::Environment& plc, const Scope* scope, cons
     const std::string up = [&] { std::string u = type; for (auto& c : u) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c))); return u; }();
     if (auto rich = env.richVariable(path)) {
         out.aggregate = sim::display(*rich);
-        const bool list = up.rfind("LIST", 0) == 0 || up.rfind("VECTOR", 0) == 0;
+        const bool list = up.rfind("LIST", 0) == 0 || up.rfind("VECTOR", 0) == 0 || up.rfind("SET ", 0) == 0 || up.rfind("RING", 0) == 0;   // 1.12.7
         out.aggregateWhy = path + (up.rfind("MAP", 0) == 0 ? " est une MAP : choisis une valeur (" + path + "['cle']) ou son nombre (" + path + ".Count)"
                                    : list ? " est une liste : choisis un \xC3\xA9l\xC3\xA9ment (" + path + "[0]) ou son nombre (" + path + ".Count)"
                                           : " est un objet (" + type + ") : choisis un de ses membres");

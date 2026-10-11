@@ -94,7 +94,7 @@ def main():
             ex = "{%s, %s, %s, %s}" % (cstr(e[0]), cstr(e[1]), cstr(e[2]), cstr(e[3] if len(e) > 3 else ""))
         ihm = name.startswith("IHM_")
         ro = bool(f.get("ro", False))
-        dialect = f["cat"] in ("map", "ref", "liste")   # 1.12.2 : les listes, comme les MAP
+        dialect = f["cat"] in ("map", "ref", "liste", "ensembles")   # 1.12.2 : les listes, comme les MAP ; 1.12.7 : SET, RING
         expression = f.get("expr", not dialect and (not ihm or ro))   # 1.12.7 : expr=False (IOTA ecrit son argument)
         notes = ", ".join(cstr(n) for n in f.get("notes", []))
         w("        {%s, %s, {%s}, %s, %s," % (cstr(name), cstr(f["cat"]), params, cstr(f["ret"]), cstr(f["short"])))

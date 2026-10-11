@@ -206,6 +206,7 @@ struct ContainerType {
     std::string              element;
     std::vector<std::string> fields;
     std::string              text;      // TUPLE(STRING, REAL)
+    std::string              flavor;    // 1.12.7 : une liste "SET" ou "RING" (vide : LIST, VECTOR)
 };
 std::string trimmedText(std::string_view s) {
     std::size_t a = 0, b = s.size();
@@ -246,6 +247,13 @@ ContainerType containerOf(std::string_view written) {
     }
     if (U.rfind("LIST OF ", 0) == 0 || U.rfind("VECTOR OF ", 0) == 0) {
         out.kind = ContainerType::K::List;
+        out.element = afterOf(0);
+        return out;
+    }
+    // 1.12.7 : SET OF T, RING[N] OF T - des listes (leur forme : `flavor`).
+    if (U.rfind("SET OF ", 0) == 0 || (U.rfind("RING", 0) == 0 && U.find(" OF ") != std::string::npos && U.size() > 4 && (U[4] == '[' || U[4] == ' '))) {
+        out.kind = ContainerType::K::List;
+        out.flavor = U[0] == 'S' ? "SET" : "RING";
         out.element = afterOf(0);
         return out;
     }
@@ -302,8 +310,12 @@ std::size_t typeEnd(const std::vector<Tok>& t, std::size_t k) {
         if (op(k, "[")) k = closeOf(k);
         return word(k, "OF") ? typeEnd(t, k + 1) : k;
     }
-    // 1.12.2 : LIST OF T, VECTOR OF T, TUPLE(T1, T2...).
-    if ((word(k, "LIST") || word(k, "VECTOR")) && word(k + 1, "OF")) return typeEnd(t, k + 2);
+    // 1.12.2 : LIST OF T, VECTOR OF T, TUPLE(T1, T2...) ; 1.12.7 : SET OF T, RING[N] OF T.
+    if ((word(k, "LIST") || word(k, "VECTOR") || word(k, "SET")) && word(k + 1, "OF")) return typeEnd(t, k + 2);
+    if (word(k, "RING") && op(k + 1, "[")) {
+        const std::size_t m = closeOf(k + 1);
+        return word(m, "OF") ? typeEnd(t, m + 1) : m;
+    }
     if (word(k, "TUPLE") && op(k + 1, "(")) {
         int depth = 0;
         for (std::size_t m = k + 1; m < t.size() && t[m].k != Tok::K::End; ++m) {
@@ -361,6 +373,56 @@ Kind kindOf(std::string_view type) {
 }
 bool elementary(std::string_view type) { return kindOf(type) != Kind::Other; }
 
+// 1.12.7 : SET OF T, RING[N] OF T - un type ecrit (sans casse) ; ce qu'un SET refuse (la maquette v3).
+bool setText(std::string_view type) {
+    const std::string u = up(trimmedText(type));
+    return u.rfind("SET", 0) == 0 && u.size() > 3 && (u[3] == ' ' || u[3] == '\t') && u.find(" OF ") != std::string::npos;
+}
+bool ringText(std::string_view type) {
+    const std::string u = up(trimmedText(type));
+    return u.rfind("RING", 0) == 0 && u.size() > 4 && (u[4] == '[' || u[4] == ' ') && u.find(" OF ") != std::string::npos;
+}
+const char* const kSetRefusedText =
+    " : un SET se range tout seul (chaque valeur une fois, dans l'ordre) \xE2\x80\x94 SET_ADD et SET_REMOVE l'\xC3\xA9" "crivent";
+const char* const kSetItemText =
+    "un \xC3\xA9l\xC3\xA9ment d'un SET ne s'\xC3\xA9" "crit pas en place \xE2\x80\x94 SET_REMOVE(S, ancienne) puis SET_ADD(S, nouvelle) :"
+    " le SET reste rang\xC3\xA9, chaque valeur une fois";
+// RING[N] OF T : N, un entier de 1 a 100000 ou une constante entiere declaree plus haut (le moteur le dit
+// aussi, a la lecture du script) ; vide : bon. `constants` : les VAR CONSTANT (en majuscules).
+std::string ringProblem(std::string_view type, const std::set<std::string>& constants) {
+    const std::string t = trimmedText(type), U = up(t);
+    const auto of = U.find(" OF "), open = t.find('[');
+    if (open == std::string::npos || open > of)
+        return "RING : sa capacit\xC3\xA9 est attendue, le nombre de valeurs gard\xC3\xA9" "es \xE2\x80\x94 RING[100] OF REAL";
+    const auto close = t.find(']', open);
+    if (close == std::string::npos || close > of) return "RING[N] : ']' attendu apr\xC3\xA8s la capacit\xC3\xA9";
+    const std::string n = trimmedText(std::string_view(t).substr(open + 1, close - open - 1));
+    const bool digits = !n.empty() && std::all_of(n.begin(), n.end(), [](char c) { return std::isdigit(static_cast<unsigned char>(c)) != 0; });
+    if (digits) {
+        const long long v = n.size() > 9 ? 1000000000LL : std::atoll(n.c_str());
+        if (v < 1 || v > 100000) return "RING[" + n + "] : la capacit\xC3\xA9 va de 1 \xC3\xA0 100000";
+        return {};
+    }
+    const bool ident = !n.empty() && (std::isalpha(static_cast<unsigned char>(n[0])) || n[0] == '_')
+                       && std::all_of(n.begin(), n.end(), [](char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; });
+    if (ident && !constants.count(up(n)))
+        return "RING[N] : N est une constante enti\xC3\xA8re ('" + n + "' n'est pas une constante enti\xC3\xA8re d\xC3\xA9" "clar\xC3\xA9" "e plus haut)";
+    return {};
+}
+// Les natives qui ecrivent une liste a une place (ou la reordonnent) : refusees sur un SET.
+bool setRefusedNative(std::string_view U) {
+    for (const char* n : {"LIST_INSERT", "VECTOR_INSERT", "LIST_SORT", "LIST_REVERSE", "VECTOR_RESIZE", "LIST_SET", "LIST_FILL", "LIST_INSERT_SORTED",
+                          "LIST_SORT_BY", "LIST_SWAP", "LIST_MOVE", "LIST_ROTATE", "IOTA"})
+        if (U == n) return true;
+    return false;
+}
+// "une LIST OF STRING", "un RING[5] OF REAL", "un INT" : un type ecrit avec son article.
+std::string withArticle(const std::string& type) {
+    const std::string u = up(type);
+    const bool feminine = u.rfind("LIST", 0) == 0 || u.rfind("MAP", 0) == 0 || u.rfind("STRING", 0) == 0 || u.rfind("STRUCT", 0) == 0;
+    return (feminine ? "une " : "un ") + type;
+}
+
 // Les constantes locales (VAR CONSTANT ... END_VAR) : un script ne les ecrit pas.
 // Les noms avant le ':' de chaque declaration (a, b : INT := 1;).
 std::set<std::string> constantNames(std::string_view code) {
@@ -414,6 +476,25 @@ public:
     std::set<std::string> markerRoots;
 
     std::vector<Finding> run() {
+        // 1.12.7 : SET OF T_Lot - un SET range des valeurs simples (une structure, une liste ne se rangent pas) ;
+        // RING[N] OF T - sa capacite (le moteur le dit aussi au demarrage).
+        for (const auto& l : parts_.locals) {
+            if (ringText(l.type)) {
+                const std::string why = ringProblem(l.type, constants_);
+                const auto at = static_cast<std::size_t>(std::max(0, l.line - 1));
+                if (!why.empty() && at < lineStarts_.size()) report(lineStarts_[at], lineStarts_[at], Finding::Severity::Error, why);
+                continue;
+            }
+            if (!setText(l.type)) continue;
+            const std::string el = trimmedText(std::string_view(l.type).substr(up(l.type).find(" OF ") + 4));
+            const bool structure = sc_.project && !types::membersOf(*sc_.project, el).empty();
+            if (containerOf(el).kind == ContainerType::K::Other && !structure) continue;
+            const auto at = static_cast<std::size_t>(std::max(0, l.line - 1));
+            if (at < lineStarts_.size())
+                report(lineStarts_[at], lineStarts_[at], Finding::Severity::Error,
+                       trimmedText(l.type) + " : un SET range des valeurs simples (des nombres, des textes, des dur\xC3\xA9" "es, une \xC3\xA9num\xC3\xA9ration)"
+                       " \xE2\x80\x94 pour des structures, une LIST et LIST_SORT_BY");
+        }
         // 1.10.4 (le plantage de la 1.10.3) : un FOR, un IF, un CASE en fin de
         // texte menaient i apres le jeton de fin - toks_[i] lisait hors du
         // tableau (un jeton de hasard, puis bad_alloc). i reste dans le tableau.
@@ -775,6 +856,15 @@ private:
         // Une variable locale, un compteur, le nom de la fonction : elementaires.
         std::string type;
         std::string what;
+        // 1.12.7 : S[0] := x, S.First := x - un element d'un SET ne s'ecrit pas en place.
+        if (write && !segs.empty()) {
+            const auto* l = local(root.text);
+            const Variable* v = !l && p ? p->variable(root.text) : nullptr;
+            if (setText(l ? l->type : v ? v->type : std::string{})) {
+                reportTok(i, j, S::Error, kSetItemText);
+                return {};
+            }
+        }
         // 1.10 : une locale d'un type riche du dialecte (ARRAY, MAP, REF_TO...) : S1.
         if (const auto* l = local(root.text); l && !elementary(l->type)) return {};
         if (const auto* l = local(root.text)) { type = l->type; what = "variable locale"; }
@@ -1224,7 +1314,29 @@ private:
         if (ct.kind == ContainerType::K::Array && resizes)
             reportTok(a0, b0, sev, U + " : un ARRAY a une taille fixe (" + (ct.cells >= 0 ? std::to_string(ct.cells) : std::string("?"))
                                        + " cases) \xE2\x80\x94 une LIST ou un VECTOR est attendu");
+        // 1.12.7 : un SET se range tout seul - ce qui ecrit a une place lui est refuse (une erreur : SET est nouveau).
+        const std::string t0 = designated ? typeOfName(textOf(a0, b0)) : std::string{};
+        if (setText(t0) && setRefusedNative(U)) reportTok(i, i + 1, S::Error, U + kSetRefusedText);
+        if (U == "LIST_COPY" && args.size() >= 2) {
+            const auto [a1, b1] = args[1];
+            if (isIdent(a1) && pathEnd(a1) == b1 && setText(typeOfName(textOf(a1, b1)))) reportTok(i, i + 1, S::Error, U + kSetRefusedText);
+        }
         if (!info) return;
+        // SET_ADD, SET_REMOVE, SET_HAS : un SET ; RING_ADD : un RING (quand le type est connu) ; la valeur
+        // ecrite, un litteral, dans le type des elements ('abc' dans un SET OF INT).
+        if (info->group == "set" && (U == "SET_ADD" || U == "SET_REMOVE" || U == "SET_HAS") && !t0.empty() && !setText(t0))
+            reportTok(a0, b0, S::Error, U + " : un SET est attendu (SET OF T), pas " + withArticle(t0));
+        if (info->group == "ring" && !t0.empty() && !ringText(t0))
+            reportTok(a0, b0, S::Error, U + " : un RING est attendu (RING[N] OF T), pas " + withArticle(t0));
+        if ((info->group == "ring" || (info->group == "set" && (U == "SET_ADD" || U == "SET_REMOVE" || U == "SET_HAS"))) && args.size() >= 2
+            && (setText(t0) || ringText(t0)) && ct.kind == ContainerType::K::List) {
+            const auto [a1, b1] = args[1];
+            const Kind want = kindOf(ct.element);
+            if (b1 == a1 + 1 && toks_[a1].k == Tok::K::Str && (want == Kind::Num || want == Kind::Bool || want == Kind::Time))
+                reportTok(a1, b1, S::Error, U + " : " + toks_[a1].text + " n'est pas un " + up(ct.element));
+            else if (b1 == a1 + 1 && toks_[a1].k == Tok::K::Num && want == Kind::Text)
+                reportTok(a1, b1, S::Error, U + " : " + toks_[a1].text + " n'est pas une STRING : \xC3\xA9" "cris '" + toks_[a1].text + "'");
+        }
         // TUPLE_GET, TUPLE_SET : le numero du champ, une constante, dans le TUPLE.
         if ((U == "TUPLE_GET" || U == "TUPLE_SET") && ct.kind == ContainerType::K::Tuple && args.size() >= 2) {
             const auto [a1, b1] = args[1];

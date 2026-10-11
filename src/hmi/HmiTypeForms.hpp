@@ -12,6 +12,8 @@
 //      Vecteur       VECTOR OF REAL                 (taille variable, V[0], VECTOR_PUSH)
 //      Dictionnaire  MAP[STRING] OF REAL            (parametre : le type des cles)
 //      Tuple         TUPLE(REAL, STRING, BOOL)      (parametre : les types qui suivent)
+//      Ensemble      SET OF STRING                  (1.12.7 : rangee, chaque valeur une fois)
+//      Tampon        RING[100] OF REAL              (1.12.7 : parametre : la capacite, les N dernieres)
 //
 //  et, la ou l'usage le permet (une declaration, un retour), une REFERENCE vers
 //  l'element (REF_TO REAL). Les dialogues (Nouvelle variable IHM, Creer la
@@ -34,8 +36,8 @@
 
 namespace hmi::typeform {
 
-enum class Form : std::uint8_t { Simple, Array, Array2D, List, Vector, Map, Tuple };
-inline constexpr Form kForms[] = {Form::Simple, Form::Array, Form::Array2D, Form::List, Form::Vector, Form::Map, Form::Tuple};
+enum class Form : std::uint8_t { Simple, Array, Array2D, List, Vector, Map, Tuple, Set, Ring };     // 1.12.7 : Set, Ring
+inline constexpr Form kForms[] = {Form::Simple, Form::Array, Form::Array2D, Form::List, Form::Vector, Form::Map, Form::Tuple, Form::Set, Form::Ring};
 
 [[nodiscard]] std::string_view label(Form) noexcept;          // "Simple", "Tableau", "Tableau 2D", "Liste", "Vecteur", "Dictionnaire (MAP)", "Tuple"
 [[nodiscard]] std::string_view key(Form) noexcept;            // "simple", "tableau", "tableau2d", "liste", "vecteur", "map", "tuple"

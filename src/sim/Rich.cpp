@@ -30,7 +30,9 @@ std::string TypeDesc::text() const {
         case Kind::Ref: return "REF_TO " + (element ? element->text() : std::string("?"));
         case Kind::Pointer: return "POINTER TO " + (element ? element->text() : std::string("?"));
         case Kind::Iterator: return "MAP_ITERATOR";
-        case Kind::List: return (name.empty() ? std::string("LIST") : name) + " OF " + (element ? element->text() : std::string("?"));
+        case Kind::List:
+            if (name == "RING") return "RING[" + std::to_string(capacity) + "] OF " + (element ? element->text() : std::string("?"));
+            return (name.empty() ? std::string("LIST") : name) + " OF " + (element ? element->text() : std::string("?"));
         case Kind::Tuple: {
             std::string s = "TUPLE(";
             for (std::size_t i = 0; i < members.size(); ++i)
@@ -61,6 +63,53 @@ TypeRef listType(TypeRef element, bool vector) {
     d->name = vector ? "VECTOR" : "LIST";
     d->element = std::move(element);
     return d;
+}
+
+TypeRef setType(TypeRef element) {
+    auto d = std::make_shared<TypeDesc>();
+    d->kind = TypeDesc::Kind::List;
+    d->name = "SET";
+    d->element = std::move(element);
+    return d;
+}
+
+TypeRef ringType(TypeRef element, std::int64_t capacity) {
+    auto d = std::make_shared<TypeDesc>();
+    d->kind = TypeDesc::Kind::List;
+    d->name = "RING";
+    d->capacity = capacity;
+    d->element = std::move(element);
+    return d;
+}
+
+bool isSetType(const TypeDesc& t) noexcept { return t.kind == TypeDesc::Kind::List && t.name == "SET"; }
+bool isRingType(const TypeDesc& t) noexcept { return t.kind == TypeDesc::Kind::List && t.name == "RING"; }
+
+std::size_t normalizeList(Obj& o) {
+    if (!o.type || o.type->kind != TypeDesc::Kind::List) return 0;
+    const std::size_t before = o.items.size();
+    if (isRingType(*o.type)) {
+        // Les plus anciennes (au debut) partent : restent les `capacity` dernieres.
+        const auto keep = static_cast<std::size_t>(std::max<std::int64_t>(0, o.type->capacity));
+        if (o.items.size() > keep) o.items.erase(o.items.begin(), o.items.begin() + static_cast<std::ptrdiff_t>(o.items.size() - keep));
+        return before - o.items.size();
+    }
+    if (!isSetType(*o.type)) return 0;
+    // Rangee (comme std::set : l'ordre des valeurs simples, celui de '<'), chaque valeur une fois.
+    const auto less = [](const ObjRef& a, const ObjRef& b) {
+        if (!a || !b || !a->type || !b->type) return static_cast<bool>(b) && !a;
+        if (a->type->kind == TypeDesc::Kind::Scalar && b->type->kind == TypeDesc::Kind::Scalar) return a->value.compare(b->value) < 0;
+        return false;
+    };
+    std::stable_sort(o.items.begin(), o.items.end(), less);
+    std::vector<ObjRef> kept;
+    kept.reserve(o.items.size());
+    for (auto& i : o.items) {
+        if (!kept.empty() && kept.back() && i && !less(kept.back(), i) && deepEquals(*kept.back(), *i)) continue;
+        kept.push_back(std::move(i));
+    }
+    o.items = std::move(kept);
+    return before - o.items.size();
 }
 
 TypeRef tupleType(std::vector<TypeRef> items) {
@@ -183,6 +232,7 @@ bool assignObj(Obj& into, const Obj& from, std::string* why) {
             copy.reserve(from.items.size());
             for (const auto& i : from.items) copy.push_back(i ? deepCopy(*i) : makeObj(t.element));
             into.items = std::move(copy);
+            normalizeList(into);                 // 1.12.7 : une LIST dans un SET (rangee, sans doublon), dans un RING (les N dernieres)
             return true;
         }
         case TypeDesc::Kind::Map:
