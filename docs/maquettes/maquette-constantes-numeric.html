@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Constantes calculées et std::numeric</title>
+<title>Constantes et bibliothèques C++</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
@@ -264,7 +264,7 @@ table.etab{border-collapse:collapse;width:100%;font-size:12.5px;background:var(-
 .state.ok{background:var(--ok-bg);color:var(--ok)} .state.err{background:var(--err-bg);color:var(--err)} .state.warn{background:var(--warn-bg);color:var(--warn)}
 
 /* --------------------------------------------------------------------- std::numeric */
-.nat{display:grid;grid-template-columns:236px minmax(0,1fr);min-height:440px}
+.nat{display:grid;grid-template-columns:272px minmax(0,1fr);min-height:440px}
 @media (max-width:780px){.nat{grid-template-columns:minmax(0,1fr)}}
 .nat-tree{border-right:1px solid var(--app-line);background:var(--app);padding:6px 0;overflow:auto;max-height:620px}
 @media (max-width:780px){.nat-tree{border-right:0;border-bottom:1px solid var(--app-line);max-height:260px}}
@@ -275,8 +275,10 @@ table.etab{border-collapse:collapse;width:100%;font-size:12.5px;background:var(-
 .nt-item{appearance:none;border:0;background:transparent;width:100%;display:flex;justify-content:space-between;gap:8px;padding:3px 12px 3px 38px;cursor:pointer;font:12.5px var(--mono);color:var(--app-fg);text-align:left}
 .nt-item:hover{background:var(--hover)}
 .nt-item.on{background:var(--sel);color:var(--sel-fg)}
-.nt-item .v{font:10.5px var(--ui);color:var(--app-fg-3)}
+.nt-item .n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.nt-item .v{font:10.5px var(--ui);color:var(--app-fg-3);flex:none}
 .nt-item.on .v{color:var(--sel-fg)}
+.nt-lib .v{font:400 10.5px var(--ui);color:var(--app-fg-3)}
 .newb{font:600 10px var(--ui);padding:0 6px;border-radius:3px;background:var(--new-bg);color:var(--new)}
 .nat-card{padding:14px 18px 18px;background:var(--app-2);min-width:0}
 .nat-card h4{margin:0;font:600 18px var(--mono)}
@@ -317,20 +319,37 @@ table.doc td.m{font-family:var(--mono);font-size:12.5px}
 .opt.pro{border-color:var(--accent);color:var(--accent);background:var(--accent-2)}
 ol.plan{margin:6px 0 12px;padding-left:22px;max-width:86ch}
 ol.plan li{margin:6px 0}
+[hidden]{display:none!important}
+.subtabs{display:flex;gap:2px;border-bottom:1px solid var(--app-line);flex-wrap:wrap}
+.subtabs button{appearance:none;border:0;border-bottom:2px solid transparent;background:transparent;font:inherit;font-size:12.5px;padding:5px 12px;color:var(--app-fg-2);cursor:pointer;display:inline-flex;gap:6px;align-items:center}
+.subtabs button.on{color:var(--app-fg);border-bottom-color:var(--accent);font-weight:600}
+.subpane{display:grid;gap:8px}
+table.pt.lim tbody tr{cursor:pointer}
+table.pt.lim tbody tr:hover td{background:var(--hover)}
+table.pt.lim tbody tr.on td{background:var(--sel);color:var(--sel-fg)}
+.pt td.m{font-family:var(--mono);font-size:12px;white-space:nowrap}
+.acdemo{margin-top:12px;border:1px solid var(--app-line);border-radius:6px;overflow:hidden;font-size:12px;max-width:520px;background:var(--app-2)}
+.acdemo .q{font:12.5px var(--mono);padding:6px 10px;background:var(--app);border-bottom:1px solid var(--app-line)}
+.acdemo .q .cur{display:inline-block;width:2px;height:14px;background:var(--accent);vertical-align:-2px;margin-left:1px}
+.acdemo .r{display:grid;grid-template-columns:20px minmax(0,1fr) auto;gap:6px;padding:3px 10px;align-items:center}
+.acdemo .r.on{background:var(--sel);color:var(--sel-fg)}
+.acdemo .r .lbl{font-family:var(--mono)}
+.acdemo .r .d{color:var(--app-fg-3);font-family:var(--mono);font-size:11.5px}
+.acdemo .r.on .d{color:var(--sel-fg)}
 </style>
 
 </head>
 <body>
 <div class="wrap">
 <nav class="toc" aria-label="Sommaire">
-  <div class="ver">Proposition 1.12.7</div>
+  <div class="ver">Proposition 1.12.7 · v2</div>
   <ol>
     <li><a href="#bref">En bref</a></li>
     <li><a href="#onglets">Déballer les objets</a></li>
     <li><a href="#calcul">Calculer au démarrage</a></li>
     <li><a href="#publiques">Les autres scripts</a></li>
     <li><a href="#demarrage">L'ordre du démarrage</a></li>
-    <li><a href="#numeric">std::numeric</a></li>
+    <li><a href="#numeric">Les bibliothèques</a></li>
     <li><a href="#generer">Compiler et Générer</a></li>
     <li><a href="#plan">Le plan, vos choix</a></li>
   </ol>
@@ -338,14 +357,16 @@ ol.plan li{margin:6px 0}
 
 <main>
 <header class="hero">
-  <p class="eyebrow">XPGAnalyser IHM · maquette interactive · à valider avant les lots D et E</p>
-  <h1>Constantes calculées, objets déballés, std::numeric</h1>
-  <p class="lead">Vos demandes du 11/10 au soir, dans l'éditeur d'un script : ce que montrent les onglets Constantes et Variables, comment une valeur s'écrit ou se calcule au démarrage, et la bibliothèque <code>std::numeric</code> en ST, C et C++. Tout ce qui ressemble à un bouton se clique.</p>
+  <p class="eyebrow">XPGAnalyser IHM · maquette interactive · version 2 · vos choix validés</p>
+  <h1>Constantes calculées, objets déballés, bibliothèques du C++</h1>
+  <p class="lead">Vos demandes du 11/10 au soir, dans l'éditeur d'un script : ce que montrent les onglets Constantes et Variables, comment une valeur s'écrit ou se calcule au démarrage, et les bibliothèques du C++ en ST, C et C++. <b>Version 2</b> : les templates <code>&lt;T&gt;</code> (<code>NUMERIC_LIMITS&lt;UINT&gt;.MAX()</code>), <code>&lt;numeric&gt;</code>, <code>&lt;limits&gt;</code> et <code>&lt;numbers&gt;</code> refaits en entier, les fiches Natives dans les trois langages, et l'onglet Locales à la place des <code>VAR … END_VAR</code>. Tout ce qui ressemble à un bouton se clique.</p>
   <ul class="quotes">
     <li>« revoir cette option car c'est pas pratique, pouvoir faire un script dans cette partie, avoir accès aux autres constantes du projet si elles sont en public, en gros ça fonctionnerait comme le final du JAVA […] ajouter aide à la saisie »</li>
     <li>« et aussi dans les constantes et variables pouvoir déballer le contenu des objets avec taille »</li>
     <li>« ajouter STD::NUMERICS avec toutes les fonctions natives aussi dans ST, C, C++ […] mettre à jour biblio »</li>
     <li>« faut pas le faire que pour les MAP mais pour les autres types aussi »</li>
+    <li>« ok pour tout mais ajoute les 'templates' pour avoir std::numeric&lt;UINT&gt;::max(), regarde la lib native dans le C++ avec toutes les fonctions et refait […] mettre à jour la doc dans Programmation générale → Natives […] à adapter dans les 3 langages »</li>
+    <li>« dans les scripts toujours enlever les VAR, END_VAR, faire un sous onglet avec déballage »</li>
   </ul>
 </header>
 
@@ -355,22 +376,22 @@ ol.plan li{margin:6px 0}
   <div class="cards">
     <div class="card"><p class="k">Onglets</p><h4>Tout ce qui a une taille se déplie</h4><p>Les éléments d'une LIST, d'un VECTOR ou d'une MAP, les cases d'un ARRAY (une ligne par premier indice en 2D), les membres d'une structure, les champs d'un TUPLE. La colonne Taille dit combien.</p></div>
     <div class="card"><p class="k">Éléments</p><h4>Un tableau à la place du « un par ligne »</h4><p>Une ligne par élément, une colonne par partie : clé, valeur, membre. Chaque case est vérifiée à la frappe. On ajoute, retire, déplace, colle depuis Excel.</p></div>
-    <div class="card"><p class="k">Calcul</p><h4>Calculée au démarrage, comme un final</h4><p>Un petit code ST donne la valeur, une fois, au démarrage. Ensuite personne ne l'écrit. Il lit les constantes de son script, les constantes publiques des autres, les valeurs de départ des variables IHM et les natives.</p></div>
-    <div class="card"><p class="k">Bibliothèque</p><h4>std::numeric dans les natives</h4><p>17 fonctions de <code>&lt;numeric&gt;</code> : ACCUMULATE, PARTIAL_SUM, IOTA, GCD, LCM, MIDPOINT, ADD_SAT… Une fiche chacune, l'écriture en ST, en C et en C++, un essai, et l'aide à la saisie dans les trois langages.</p></div>
+    <div class="card"><p class="k">Calcul</p><h4>Calculée au démarrage, comme un final</h4><p>Un petit code ST donne la valeur, une fois, au démarrage. Ensuite personne ne l'écrit. Il lit les constantes de son script, les constantes publiques des autres, les valeurs de départ des variables IHM et les natives. Ses locales sont dans un sous-onglet <b>Locales</b>, déballé comme les autres : plus de <code>VAR … END_VAR</code>.</p></div>
+    <div class="card"><p class="k">Bibliothèques</p><h4>Le C++ complet, et les templates</h4><p><code>&lt;numeric&gt;</code> (19 fonctions), <code>&lt;limits&gt;</code> (32 membres de <code>NUMERIC_LIMITS&lt;T&gt;</code>) et <code>&lt;numbers&gt;</code> (13 constantes). Le type entre <code>&lt; &gt;</code> : <code>NUMERIC_LIMITS&lt;UINT&gt;.MAX()</code> en ST, <code>std::numeric_limits&lt;UINT&gt;::max()</code> en C++, <code>UINT16_MAX</code> en C. Une fiche chacun dans les trois langages.</p></div>
   </div>
 </section>
 
 <section id="onglets">
   <p class="secno">1 · Les onglets Constantes et Variables</p>
   <h2>Déballer les objets qui ont une taille</h2>
-  <p class="sub">Voici l'éditeur du script <code>Visserie</code> : 17 constantes, un exemple par type. <b>▸</b> déplie une ligne ; un clic sur une ligne l'ouvre en bas. Un double-clic sur la valeur d'un élément la change (dans <code>Facteurs</code>, <code>Seuils</code>, <code>Recette_Std</code>…). Une constante calculée (<span class="fx">ƒx</span>) se déplie aussi : ses éléments, en italique, sont ceux du dernier calcul.</p>
+  <p class="sub">Voici l'éditeur du script <code>Visserie</code> : 20 constantes, un exemple par type. <b>▸</b> déplie une ligne ; un clic sur une ligne l'ouvre en bas. Un double-clic sur la valeur d'un élément la change (dans <code>Facteurs</code>, <code>Seuils</code>, <code>Recette_Std</code>…). Une constante calculée (<span class="fx">ƒx</span>) se déplie aussi : ses éléments, en italique, sont ceux du dernier calcul.</p>
   <div class="types" id="typechips" aria-label="Un exemple par type"></div>
 
   <div class="app" id="app">
     <div class="app-bar">Programmation générale › Scripts › <b>Visserie</b> <span class="lang">ST</span> <span>· script général</span></div>
     <div class="tabs" role="tablist">
       <button class="tab" data-tab="code" role="tab">⟨/⟩ Code</button>
-      <button class="tab on" data-tab="consts" role="tab">≡ Constantes <span class="count" id="nconsts">17</span></button>
+      <button class="tab on" data-tab="consts" role="tab">≡ Constantes <span class="count" id="nconsts">20</span></button>
       <button class="tab" data-tab="vars" role="tab">ƒ Variables <span class="count" id="nvars">5</span></button>
     </div>
     <div class="tools" id="tools">
@@ -421,7 +442,7 @@ ol.plan li{margin:6px 0}
         <li>Les constantes de son script, et celles des autres scripts quand elles sont <b>publiques</b> : <code>Reglages.Coef_Ligne</code>.</li>
         <li>Les variables IHM du projet, avec leur valeur de départ : l'initiale, ou celle que la rémanence a rendue.</li>
         <li>Les natives : <code>NOW()</code> donne l'instant du démarrage, <code>SPLIT</code>, <code>LIST_ADD</code>, <code>std::numeric</code>…</li>
-        <li>Ses propres variables locales (<code>VAR … END_VAR</code>), ses boucles <code>FOR</code> et <code>FOR EACH</code>.</li>
+        <li>Ses locales, déclarées dans son onglet <b>Locales</b>, et ses boucles <code>FOR</code> et <code>FOR EACH</code>.</li>
       </ul>
     </div>
     <div>
@@ -434,7 +455,8 @@ ol.plan li{margin:6px 0}
       </ul>
     </div>
   </div>
-  <p class="note"><b>À essayer dans la fenêtre ci-dessus.</b> <button class="go" data-pick="Couples">Ouvrez Couples</button> : son calcul lit <code>Facteurs</code>, <code>Couple_Base</code> et <code>Reglages.Coef_Ligne</code>. Tapez <code>Reglages.</code> : l'aide à la saisie liste ses constantes publiques, la privée est grisée. <kbd>Ctrl</kbd>+<kbd>Espace</kbd> ouvre la liste n'importe où. Écrivez <code>Couple_Base := 3;</code> : la ligne est refusée. Écrivez <code>Compteurs</code> : refusé, c'est une variable. Les autres exemples : <button class="go" data-pick="Recettes_Jour">une LIST de structures</button>, <button class="go" data-pick="Matrice">un ARRAY 2D</button>, <button class="go" data-pick="Pas_Mesure">IOTA de std::numeric</button>, <button class="go" data-pick="Heure_Demarrage">l'heure du démarrage</button>.</p>
+  <p class="note"><b>À essayer dans la fenêtre ci-dessus.</b> <button class="go" data-pick="Couples">Ouvrez Couples</button> : son calcul lit <code>Facteurs</code>, <code>Couple_Base</code> et <code>Reglages.Coef_Ligne</code>. Tapez <code>Reglages.</code> : l'aide à la saisie liste ses constantes publiques, la privée est grisée. <kbd>Ctrl</kbd>+<kbd>Espace</kbd> ouvre la liste n'importe où. Écrivez <code>Couple_Base := 3;</code> : la ligne est refusée. Écrivez <code>Compteurs</code> : refusé, c'est une variable. Les autres exemples : <button class="go" data-pick="Recettes_Jour">une LIST de structures</button>, <button class="go" data-pick="Matrice">un ARRAY 2D</button>, <button class="go" data-pick="Pas_Mesure">IOTA de std::numeric</button>, <button class="go" data-pick="Heure_Demarrage">l'heure du démarrage</button>. Les templates : <button class="go" data-pick="Pleine_Echelle">Pleine_Echelle</button> (<code>NUMERIC_LIMITS&lt;UINT&gt;.MAX()</code>) et <button class="go" data-pick="Consignes_INT">Consignes_INT</button> (<code>SATURATE_CAST&lt;INT&gt;</code>) ; tapez <code>NUMERIC_LIMITS&lt;</code> : l'aide propose les types, puis les membres avec leur valeur.</p>
+  <p class="note"><b>Plus de VAR … END_VAR.</b> Comme les scripts depuis la refonte, un calcul n'écrit pas ses déclarations dans son code : son sous-onglet <b>Locales</b> les tient (nom, type, initiale, documentation) et se déballe comme les onglets du script. Un <code>VAR … END_VAR</code> collé dans le code est refusé, et « Déplacer dans Locales » le range d'un clic. Voyez <button class="go" data-pick="Couples_Cumules">Couples_Cumules</button> et <button class="go" data-pick="Recettes_Jour">Recettes_Jour</button> : sa locale <code>r</code> part de <code>Recettes.Recette_Base</code>.</p>
   <p class="note"><b>Les variables aussi.</b> Dans l'onglet Variables, la valeur initiale peut se calculer de la même façon (<code>Compteurs</code> : un compteur par poste). Une variable calculée au départ reste une variable : les scripts l'écrivent ensuite.</p>
 </section>
 
@@ -470,9 +492,11 @@ ol.plan li{margin:6px 0}
 </section>
 
 <section id="numeric">
-  <p class="secno">5 · La bibliothèque des natives</p>
-  <h2>std::numeric, en ST, en C et en C++</h2>
-  <p>Un nouveau groupe <b>Bibliothèques</b> dans la branche Natives (IHM › Programmation générale), avec <code>std::numeric</code> : 17 fonctions, une fiche chacune comme les natives d'aujourd'hui. Le ST s'exécute en simulation et l'essai natives rejoue chaque exemple ; les scripts C et C++ sont édités et vérifiés, comme aujourd'hui. L'aide à la saisie les propose dans les trois langages : <code>ACCUMULATE(</code> en ST, <code>std::accumulate(</code> en C++. Le C n'a pas de <code>&lt;numeric&gt;</code> : sa fiche donne la boucle équivalente.</p>
+  <p class="secno">5 · Les bibliothèques des natives</p>
+  <h2>Les bibliothèques du C++, en ST, en C et en C++</h2>
+  <p>Refaites d'après la bibliothèque standard du C++ : <b>std::numeric</b> (<code>&lt;numeric&gt;</code>, ses 19 fonctions jusqu'au C++26), <b>std::numeric_limits&lt;T&gt;</b> (<code>&lt;limits&gt;</code>, ses 32 membres) et <b>std::numbers</b> (<code>&lt;numbers&gt;</code>, ses 13 constantes). Elles arrivent dans un groupe <b>Bibliothèques</b> de la branche Natives (IHM › Programmation générale), avec une fiche par fonction, par membre et par constante. Les natives d'aujourd'hui restent ; leur fiche dira aussi leur équivalent C++ (<code>LIST_SUM</code> : <code>std::accumulate</code>, <code>LIMIT</code> : <code>std::clamp</code>).</p>
+  <p><b>Les templates.</b> Le type se donne entre <code>&lt; &gt;</code>, comme en C++ : <code>NUMERIC_LIMITS&lt;UINT&gt;.MAX()</code> en ST, <code>std::numeric_limits&lt;UINT&gt;::max()</code> en C++ (l'API de l'IHM déclare <code>UINT</code> : un <code>uint16_t</code>), <code>UINT16_MAX</code> en C. De même <code>SATURATE_CAST&lt;INT&gt;(x)</code>, <code>ADD_SAT&lt;INT&gt;(a, b)</code>, <code>MIDPOINT&lt;INT&gt;(a, b)</code> et <code>NUMBERS&lt;REAL&gt;.PI</code>. Après <code>&lt;</code>, l'aide à la saisie propose les types ; après <code>&gt;.</code>, les membres avec leur valeur.</p>
+  <p><b>La documentation dans les trois langages.</b> Chaque fiche donne l'écriture en ST (exécutée en simulation, rejouée par l'essai natives), en C et en C++ (édités et vérifiés), et ce que chaque langage a vraiment : le C n'a ni <code>&lt;numeric&gt;</code> ni templates, sa fiche donne la boucle ou la macro. L'aide F1, le guide et l'aide à la saisie des trois éditeurs suivent.</p>
   <div class="app">
     <div class="app-bar">IHM › Programmation générale › <b>Natives</b> <span>· verrouillées</span></div>
     <div class="nat">
@@ -498,6 +522,10 @@ ol.plan li{margin:6px 0}
       <tr><td>Un calcul n'écrit jamais sa constante</td><td>Générer</td><td class="g-warn">Avertissement</td><td class="m">Couples ne reçoit aucune valeur : elle garde la valeur vide de son type</td></tr>
       <tr><td>Une erreur pendant le calcul (clé absente, division par zéro)</td><td>Le démarrage</td><td class="g-err">Démarrage arrêté</td><td class="m">Visserie.Couples, ligne 3 : clé 'rondelle' absente de Facteurs — double-clic : la ligne</td></tr>
       <tr><td>Un calcul qui ne finit pas</td><td>Le démarrage</td><td class="g-err">Démarrage arrêté</td><td class="m">Visserie.Matrice : plus de 2 s de calcul — une boucle sans fin ?</td></tr>
+      <tr><td><code>VAR … END_VAR</code> écrit dans un code</td><td>Compiler</td><td class="g-err">Erreur</td><td class="m">VAR … END_VAR : les locales ne s'écrivent plus dans le code, elles vont dans l'onglet Locales — « Déplacer dans Locales » le fait</td></tr>
+      <tr><td>Un template sans son type</td><td>Compiler</td><td class="g-err">Erreur</td><td class="m">SATURATE_CAST attend son type : SATURATE_CAST&lt;INT&gt;(x)</td></tr>
+      <tr><td>Un type qui ne va pas au template</td><td>Compiler</td><td class="g-err">Erreur</td><td class="m">NUMERIC_LIMITS&lt;STRING&gt; : un type numérique est attendu (SINT … ULINT, BYTE … LWORD, REAL, LREAL, BOOL)</td></tr>
+      <tr><td>Un membre inconnu, des parenthèses en trop</td><td>Compiler</td><td class="g-err">Erreur</td><td class="m">NUMERIC_LIMITS&lt;UINT&gt; n'a pas de membre MAXX — veux-tu dire MAX ? · DIGITS est une constante : sans parenthèses</td></tr>
       <tr><td>Une MAP qui vaut 0.0 (votre capture)</td><td>À la saisie</td><td class="g-no">Refusé</td><td class="m">0.0 n'est pas une MAP[STRING] OF REAL : écris ['clé' := valeur] ou laisse vide</td></tr>
       <tr><td>Un élément qui ne va pas dans son type</td><td>À la saisie</td><td class="g-no">Refusé</td><td class="m">'abc' n'est pas un REAL</td></tr>
     </tbody>
@@ -506,28 +534,30 @@ ol.plan li{margin:6px 0}
 
 <section id="plan">
   <p class="secno">7 · La suite</p>
-  <h2>Le plan, et quatre choix à faire</h2>
+  <h2>Le plan, et vos choix</h2>
   <ol class="plan">
     <li><b>1.12.7</b>, cette maquette :
       <ul class="plain">
         <li>le déballage dans les onglets Constantes et Variables, pour tous les types à taille ;</li>
         <li>le tableau Éléments, qui remplace la fenêtre « un élément par ligne » ;</li>
         <li>le calcul au démarrage des constantes et des valeurs initiales, avec son ordre, ses erreurs, <kbd>F5</kbd> dans l'éditeur et l'aide à la saisie ;</li>
+        <li>le sous-onglet Locales des calculs, déballé comme les autres ; plus de <code>VAR … END_VAR</code> dans un code ;</li>
         <li>les constantes publiques lisibles sous leur nom qualifié <code>Script.Constante</code> ;</li>
-        <li><code>std::numeric</code> : fiches, essais, aide à la saisie en ST, C et C++ ;</li>
+        <li>les templates <code>&lt;T&gt;</code> et les trois bibliothèques (std::numeric, std::numeric_limits, std::numbers) : fiches en ST, C et C++, essais, aide à la saisie dans les trois éditeurs ;</li>
         <li>le défaut de la MAP qui vaut <code>0.0</code>.</li>
       </ul>
     </li>
     <li><b>1.12.8</b> : le lot D de l'audit, les listes en tableau et les choix au lieu de la saisie.</li>
     <li><b>1.12.9</b> : le lot E, les tailles dynamiques (« 8 cuves, 8 pompes »).</li>
   </ol>
+  <h3>Vos choix, validés le 11/10</h3>
   <div class="decisions">
-    <div class="dec"><h4>1. Une erreur pendant un calcul au démarrage</h4><div class="opts"><span class="opt pro">Arrêter le démarrage, la ligne en double-clic (proposé)</span><span class="opt">Démarrer avec la valeur vide, l'erreur dans la Console</span></div></div>
-    <div class="dec"><h4>2. Lire une constante d'un autre script</h4><div class="opts"><span class="opt pro">Toujours le nom qualifié, Reglages.Coef_Ligne (proposé)</span><span class="opt">Le nom court quand il est unique dans le projet</span></div></div>
-    <div class="dec"><h4>3. L'écriture de std::numeric en ST</h4><div class="opts"><span class="opt pro">ACCUMULATE, comme LIST_SUM (proposé)</span><span class="opt">STD::ACCUMULATE</span><span class="opt">Les deux</span></div></div>
-    <div class="dec"><h4>4. Les variables</h4><div class="opts"><span class="opt pro">Une valeur initiale calculée, comme les constantes (proposé)</span><span class="opt">Seulement les constantes</span></div></div>
+    <div class="dec"><h4>1. Une erreur pendant un calcul au démarrage</h4><div class="opts"><span class="opt pro">✓ Arrêter le démarrage, la ligne en double-clic</span></div></div>
+    <div class="dec"><h4>2. Lire une constante d'un autre script</h4><div class="opts"><span class="opt pro">✓ Toujours le nom qualifié, Reglages.Coef_Ligne</span></div></div>
+    <div class="dec"><h4>3. L'écriture des natives en ST</h4><div class="opts"><span class="opt pro">✓ ACCUMULATE, comme LIST_SUM ; le type d'un template entre &lt; &gt; : NUMERIC_LIMITS&lt;UINT&gt;.MAX()</span></div></div>
+    <div class="dec"><h4>4. Les variables</h4><div class="opts"><span class="opt pro">✓ Une valeur initiale calculée, comme les constantes</span></div></div>
   </div>
-  <p>Dites-moi ce qui vous va, et ce qu'il faut changer dans la maquette ; je code ensuite la 1.12.7, puis les lots D et E.</p>
+  <p>Dites-moi si cette version vous va ; je code ensuite la 1.12.7, puis les lots D et E.</p>
 </section>
 </main>
 </div>
@@ -545,7 +575,7 @@ function eq(a, b) { return String(a).toUpperCase() === String(b).toUpperCase(); 
 function frNum(x, d) { return x.toFixed(d).replace('.', ','); }
 
 // =============================================================== le projet d'exemple
-var ENUMS = {T_MODE: ['Arret', 'Auto', 'Manu'], OPERATION: ['Somme', 'Produit', 'Min', 'Max', 'Et', 'Ou']};
+var ENUMS = {T_MODE: ['Arret', 'Auto', 'Manu'], OPERATION: ['Somme', 'Produit', 'Min', 'Max', 'Et', 'Ou'], TRANSFORMATION: ['Identite', 'Abs', 'Carre', 'Racine', 'Neg', 'Inverse']};
 var STRUCTS = {T_Recette: [['Nom', 'STRING'], ['Consigne', 'REAL'], ['Duree', 'TIME'], ['Etapes', 'LIST OF STRING']]};
 var BOUNDS = {SINT: [-128, 127], INT: [-32768, 32767], DINT: [-2147483648, 2147483647], USINT: [0, 255], UINT: [0, 65535], UDINT: [0, 4294967295]};
 
@@ -575,7 +605,7 @@ var OTHER = {
     {name: 'Code_Usine', type: 'STRING', vis: 'Privé', value: "'XK-7'", doc: 'Ne sort pas de Reglages'}
   ],
   Recettes: [
-    {name: 'Recette_Base', type: 'T_Recette', vis: 'Public', value: "(Nom := 'Base', Consigne := 70.0, Duree := T#3m, …)", doc: 'La recette de départ'},
+    {name: 'Recette_Base', type: 'T_Recette', vis: 'Public', value: "(Nom := 'Base', Consigne := 70.0, Duree := T#3m, …)", doc: 'La recette de départ', node: recette('Base', 70, 'T#3m', ETAPES)},
     {name: 'Temps_Max', type: 'TIME', vis: 'Public', value: 'T#5m', doc: "La durée maximale d'une recette"},
     {name: 'Brouillon', type: 'STRING', vis: 'Privé', value: "''", doc: 'Privée à Recettes'}
   ]
@@ -594,7 +624,8 @@ var CONSTS = [
     code: "(* Le couple de chaque pièce : la base, par son facteur\n   et le coefficient de la ligne *)\nFOR EACH piece, f IN Facteurs DO\n    Couples[piece] := Couple_Base * f * Reglages.Coef_Ligne;\nEND_FOR;",
     node: MP('MAP[STRING] OF REAL', 'STRING', 'REAL', [["'ecrou'", S('REAL', '11.0')], ["'goujon'", S('REAL', '19.25')], ["'vis'", S('REAL', '13.75')]])},
   {name: 'Couples_Cumules', type: 'LIST OF REAL', vis: 'Privé', mode: 'calcul', uses: 1, doc: 'Les couples cumulés, pièce après pièce',
-    code: "VAR v : LIST OF REAL; END_VAR\nFOR EACH piece, c IN Couples DO\n    LIST_ADD(v, c);\nEND_FOR;\nCouples_Cumules := PARTIAL_SUM(v);   (* std::numeric *)",
+    code: "FOR EACH piece, c IN Couples DO\n    LIST_ADD(v, c);\nEND_FOR;\nCouples_Cumules := PARTIAL_SUM(v);   (* std::numeric *)",
+    locals: [{name: 'v', type: 'LIST OF REAL', init: '', doc: "Les couples, dans l'ordre des pièces"}],
     node: LST('LIST OF REAL', 'REAL', reals([11.0, 30.25, 44.0]))},
   {name: 'Postes', type: 'LIST OF STRING', vis: 'Public', mode: 'calcul', uses: 5, doc: 'Les postes de la ligne',
     code: "Postes := SPLIT(Reglages.Liste_Postes, ';');",
@@ -612,7 +643,8 @@ var CONSTS = [
   {name: 'Recette_Std', type: 'T_Recette', vis: 'Public', mode: 'elements', uses: 3, doc: 'La recette standard',
     node: recette('Standard', 75, 'T#4m', ETAPES)},
   {name: 'Recettes_Jour', type: 'LIST OF T_Recette', vis: 'Public', mode: 'calcul', uses: 2, doc: 'Une recette par poste, à partir de la base',
-    code: "VAR r : T_Recette; END_VAR\nr := Recettes.Recette_Base;\nFOR EACH p IN Postes DO\n    r.Nom := CONCAT('Recette ', p);\n    LIST_ADD(Recettes_Jour, r);\nEND_FOR;",
+    code: "FOR EACH p IN Postes DO\n    r.Nom := CONCAT('Recette ', p);\n    LIST_ADD(Recettes_Jour, r);\nEND_FOR;",
+    locals: [{name: 'r', type: 'T_Recette', init: 'Recettes.Recette_Base', doc: 'La recette de base, renommée pour chaque poste'}],
     node: LST('LIST OF T_Recette', 'T_Recette', ['P1', 'P2', 'P3'].map(function (p) { return recette('Recette ' + p, 70, 'T#3m', ETAPES); }))},
   {name: 'Mode_Depart', type: 'T_MODE', vis: 'Public', mode: 'valeur', uses: 2, doc: 'Le mode au démarrage', node: S('T_MODE', 'Auto')},
   {name: 'Actif', type: 'BOOL', vis: 'Public', mode: 'calcul', uses: 1, doc: 'La ligne a des postes et une cadence',
@@ -624,7 +656,14 @@ var CONSTS = [
   {name: 'Heure_Demarrage', type: 'DT', vis: 'Public', mode: 'calcul', uses: 1, doc: "L'instant du démarrage, figé",
     code: "Heure_Demarrage := NOW();   (* l'instant du démarrage *)", node: S('DT', 'DT#2026-10-11-21:46:05')},
   {name: 'Cadence_Commune', type: 'DINT', vis: 'Public', mode: 'calcul', uses: 1, doc: 'Le cycle commun aux deux postes',
-    code: "Cadence_Commune := LCM(Reglages.Cadence_A, Reglages.Cadence_B);   (* std::numeric *)", node: S('DINT', '840')}
+    code: "Cadence_Commune := LCM(Reglages.Cadence_A, Reglages.Cadence_B);   (* std::numeric *)", node: S('DINT', '840')},
+  {name: 'Pleine_Echelle', type: 'UINT', vis: 'Public', mode: 'calcul', uses: 2, doc: "La pleine échelle d'une entrée analogique 16 bits",
+    code: "Pleine_Echelle := NUMERIC_LIMITS<UINT>.MAX();   (* un template : 65535 *)", node: S('UINT', '65535')},
+  {name: 'Tolerance', type: 'LREAL', vis: 'Public', mode: 'calcul', uses: 1, doc: 'La tolérance des comparaisons de réels',
+    code: "Tolerance := NUMERIC_LIMITS<LREAL>.EPSILON() * 1000.0;", node: S('LREAL', '2.220446049250313E-13')},
+  {name: 'Consignes_INT', type: 'ARRAY[0..2] OF INT', vis: 'Public', mode: 'calcul', uses: 1, doc: 'Les seuils en millièmes, bornés à un INT',
+    code: "FOR i := 0 TO 2 DO\n    Consignes_INT[i] := SATURATE_CAST<INT>(Seuils[i] * 1000.0);\nEND_FOR;",
+    node: LST('ARRAY[0..2] OF INT', 'INT', [S('INT', '10000'), S('INT', '20000'), S('INT', '32767')])}
 ];
 var VARS = [
   {name: 'Compteurs', type: 'MAP[STRING] OF DINT', vis: 'Privé', storage: 'Conservée', mode: 'calcul', doc: 'Les pièces de chaque poste',
@@ -639,7 +678,7 @@ var VARS = [
   {name: 'Recette_En_Cours', type: 'T_Recette', vis: 'Public', storage: 'Persistante', mode: 'calcul', doc: 'La recette en cours, au départ la standard',
     code: "Recette_En_Cours := Recette_Std;", node: recette('Standard', 75, 'T#4m', ETAPES)}
 ];
-[CONSTS, VARS].forEach(function (list) { list.forEach(function (c) { if (c.code) c.origCode = c.code; }); });
+[CONSTS, VARS].forEach(function (list) { list.forEach(function (c) { if (c.code) c.origCode = c.code; if (c.locals) c.origLocals = JSON.parse(JSON.stringify(c.locals)); }); });
 
 // ======================================================= les natives (pour l'aide)
 var NUM = [
@@ -648,116 +687,136 @@ var NUM = [
     params: [['T', 'ARRAY, LIST, VECTOR de nombres', 'les éléments'], ['init', 'un nombre', 'le départ : 0.0 pour une somme, 1 pour un produit'], ['op', 'OPERATION', 'facultatif : #Somme (par défaut), #Produit, #Min, #Max, #Et, #Ou']],
     st: 'Total_Pas := ACCUMULATE(Pas_Mesure, 0.0);', res: '112.5',
     c: "/* C n'a pas <numeric> : la boucle */\ndouble total = 0.0;\nfor (size_t i = 0; i < 10; ++i)\n    total += Pas_Mesure[i];",
-    cc: "#include <numeric>\ndouble total = std::accumulate(std::begin(Pas_Mesure),\n                               std::end(Pas_Mesure), 0.0);",
+    cc: "#include <numeric>\ndouble total = std::accumulate(std::begin(Pas_Mesure), std::end(Pas_Mesure), 0.0);\n// avec op : std::accumulate(…, 1.0, std::multiplies<>{})",
     uses: ['T', 'init', 'op'], run: function (I) { return fold(I.T, I.init, I.op); }},
   {g: 'Plier', name: 'REDUCE', cpp: 'std::reduce', ver: 'C++17', sig: 'REDUCE(T [, init [, op]])', ret: 'comme les éléments',
-    sum: "Comme ACCUMULATE, sans ordre imposé (C++ peut le paralléliser). En ST, le même résultat ; init vaut 0 s'il manque.",
+    sum: "Comme ACCUMULATE, sans ordre imposé (le C++ peut le paralléliser). En ST, le même résultat ; init vaut 0 s'il manque.",
     params: [['T', 'ARRAY, LIST, VECTOR de nombres', 'les éléments'], ['init', 'un nombre', 'facultatif : 0'], ['op', 'OPERATION', 'facultatif : #Somme']],
     st: 'Somme_Seuils := REDUCE(Seuils);', res: '80.0',
     c: "double somme = 0.0;\nfor (size_t i = 0; i < n; ++i)\n    somme += Seuils[i];",
-    cc: "double somme = std::reduce(Seuils.begin(), Seuils.end());",
+    cc: "#include <numeric>\ndouble somme = std::reduce(Seuils.begin(), Seuils.end());\n// en parallèle : std::reduce(std::execution::par, Seuils.begin(), Seuils.end())",
     uses: ['T', 'init', 'op'], run: function (I) { return fold(I.T, I.init, I.op); }},
   {g: 'Plier', name: 'INNER_PRODUCT', cpp: 'std::inner_product', ver: 'C++98', sig: 'INNER_PRODUCT(A, B, init)', ret: 'comme init',
     sum: "Le produit scalaire : init plus la somme des A[i] × B[i]. Une moyenne pondérée, une énergie (puissances × durées).",
     params: [['A', 'ARRAY, LIST, VECTOR', 'les valeurs'], ['B', 'idem, au moins aussi long', 'les poids'], ['init', 'un nombre', 'le départ, 0.0']],
     st: 'Note := INNER_PRODUCT(Seuils, Poids, 0.0);   (* Poids : [0.5, 0.3, 0.2] *)', res: '21.0',
     c: "double note = 0.0;\nfor (size_t i = 0; i < n; ++i)\n    note += Seuils[i] * Poids[i];",
-    cc: "double note = std::inner_product(Seuils.begin(), Seuils.end(),\n                                 Poids.begin(), 0.0);",
+    cc: "#include <numeric>\ndouble note = std::inner_product(Seuils.begin(), Seuils.end(),\n                                 Poids.begin(), 0.0);",
     uses: ['T', 'B', 'init'], run: function (I) { var s = I.init; for (var i = 0; i < I.T.length; i++) { if (i >= I.B.length) return {err: 'B est plus court que A : B[' + i + '] manque'}; s += I.T[i] * I.B[i]; } return s; }},
-  {g: 'Plier', name: 'TRANSFORM_REDUCE', cpp: 'std::transform_reduce', ver: 'C++17', sig: 'TRANSFORM_REDUCE(A, B, init)', ret: 'comme init',
-    sum: "La forme C++17 de INNER_PRODUCT, sans ordre imposé. En ST, le même résultat.",
-    params: [['A', 'ARRAY, LIST, VECTOR', 'les valeurs'], ['B', 'idem', 'les poids'], ['init', 'un nombre', 'le départ']],
-    st: 'Note := TRANSFORM_REDUCE(Seuils, Poids, 0.0);', res: '21.0',
-    c: "double note = 0.0;\nfor (size_t i = 0; i < n; ++i)\n    note += Seuils[i] * Poids[i];",
-    cc: "double note = std::transform_reduce(Seuils.begin(), Seuils.end(),\n                                    Poids.begin(), 0.0);",
-    uses: ['T', 'B', 'init'], run: function (I) { var s = I.init; for (var i = 0; i < I.T.length; i++) { if (i >= I.B.length) return {err: 'B est plus court que A'}; s += I.T[i] * I.B[i]; } return s; }},
-  {g: 'Cumuler', name: 'PARTIAL_SUM', cpp: 'std::partial_sum', ver: 'C++98', sig: 'PARTIAL_SUM(T)', ret: 'comme T',
-    sum: "Les sommes cumulées : [a, a+b, a+b+c…]. Une LIST rend une LIST, un ARRAY un ARRAY aux mêmes bornes.",
-    params: [['T', 'ARRAY, LIST, VECTOR de nombres', 'les éléments']],
+  {g: 'Plier', name: 'TRANSFORM_REDUCE', cpp: 'std::transform_reduce', ver: 'C++17', sig: 'TRANSFORM_REDUCE(T, init, op, transformation)', ret: 'comme init',
+    sum: "Transforme chaque élément (Abs, Carre, Racine…), puis plie avec op : la somme des carrés, la somme des valeurs absolues. Sans ordre imposé, comme REDUCE. La forme à deux suites, A et B, est INNER_PRODUCT.",
+    params: [['T', 'ARRAY, LIST, VECTOR de nombres', 'les éléments'], ['init', 'un nombre', 'le départ'], ['op', 'OPERATION', '#Somme, #Produit, #Min, #Max…'], ['transformation', 'TRANSFORMATION', '#Identite, #Abs, #Carre, #Racine, #Neg, #Inverse']],
+    st: 'Energie := TRANSFORM_REDUCE(Ecarts, 0.0, OPERATION#Somme, TRANSFORMATION#Carre);   (* Ecarts : [10.0, 10.0, 30.0] *)', res: '1100.0',
+    c: "double energie = 0.0;\nfor (size_t i = 0; i < n; ++i)\n    energie += Ecarts[i] * Ecarts[i];",
+    cc: "#include <numeric>\ndouble energie = std::transform_reduce(Ecarts.begin(), Ecarts.end(), 0.0,\n    std::plus<>{}, [](double e) { return e * e; });\n// à deux suites, c'est INNER_PRODUCT : std::transform_reduce(a.begin(), a.end(), b.begin(), 0.0)",
+    uses: ['T', 'init', 'op', 'tr'], run: function (I) { return fold(I.T.map(function (x) { return trans(I.tr, x); }), I.init, I.op); }},
+  {g: 'Cumuler', name: 'PARTIAL_SUM', cpp: 'std::partial_sum', ver: 'C++98', sig: 'PARTIAL_SUM(T [, op])', ret: 'comme T',
+    sum: "Les sommes cumulées : [a, a+b, a+b+c…] ; avec op, le produit cumulé, le minimum atteint… Une LIST rend une LIST, un ARRAY un ARRAY aux mêmes bornes.",
+    params: [['T', 'ARRAY, LIST, VECTOR de nombres', 'les éléments'], ['op', 'OPERATION', 'facultatif : #Somme']],
     st: 'Couples_Cumules := PARTIAL_SUM(v);', res: '[11.0, 30.25, 44.0]',
     c: "double cumul = 0.0;\nfor (size_t i = 0; i < n; ++i) {\n    cumul += v[i];\n    cumules[i] = cumul;\n}",
-    cc: "std::partial_sum(v.begin(), v.end(), cumules.begin());",
-    uses: ['T'], run: function (I) { var s = 0; return I.T.map(function (x) { s += x; return s; }); }},
+    cc: "#include <numeric>\nstd::partial_sum(v.begin(), v.end(), cumules.begin());",
+    uses: ['T', 'op'], run: function (I) { var acc = null; return I.T.map(function (x) { acc = acc === null ? x : apply(I.op, acc, x); return acc; }); }},
   {g: 'Cumuler', name: 'INCLUSIVE_SCAN', cpp: 'std::inclusive_scan', ver: 'C++17', sig: 'INCLUSIVE_SCAN(T [, op])', ret: 'comme T',
-    sum: "Comme PARTIAL_SUM, avec une opération : le maximum atteint jusque-là, le minimum…",
+    sum: "Comme PARTIAL_SUM, sans ordre imposé : le maximum atteint jusque-là, le minimum…",
     params: [['T', 'ARRAY, LIST, VECTOR', 'les éléments'], ['op', 'OPERATION', 'facultatif : #Somme']],
     st: 'Pics := INCLUSIVE_SCAN(Mesures, OPERATION#Max);', res: '[3, 3, 4, 4, 5] pour [3, 1, 4, 1, 5]',
     c: "double pic = m[0];\nfor (size_t i = 0; i < n; ++i) {\n    if (m[i] > pic) pic = m[i];\n    pics[i] = pic;\n}",
-    cc: "std::inclusive_scan(m.begin(), m.end(), pics.begin(),\n    [](double a, double b) { return std::max(a, b); });",
+    cc: "#include <numeric>\nstd::inclusive_scan(m.begin(), m.end(), pics.begin(),\n    [](double a, double b) { return std::max(a, b); });",
     uses: ['T', 'op'], run: function (I) { var acc = null; return I.T.map(function (x) { acc = acc === null ? x : apply(I.op, acc, x); return acc; }); }},
   {g: 'Cumuler', name: 'EXCLUSIVE_SCAN', cpp: 'std::exclusive_scan', ver: 'C++17', sig: 'EXCLUSIVE_SCAN(T, init [, op])', ret: 'comme T',
     sum: "Le cumul de ce qui précède : [init, init+a, init+a+b…]. Des positions de départ à partir de longueurs.",
     params: [['T', 'ARRAY, LIST, VECTOR', 'les éléments'], ['init', 'un nombre', 'la première valeur'], ['op', 'OPERATION', 'facultatif : #Somme']],
     st: 'Debuts := EXCLUSIVE_SCAN(Longueurs, 0);', res: '[0, 3, 4, 8, 9] pour [3, 1, 4, 1, 5]',
     c: "long pos = 0;\nfor (size_t i = 0; i < n; ++i) {\n    debuts[i] = pos;\n    pos += longueurs[i];\n}",
-    cc: "std::exclusive_scan(l.begin(), l.end(), debuts.begin(), 0L);",
+    cc: "#include <numeric>\nstd::exclusive_scan(l.begin(), l.end(), debuts.begin(), 0L);",
     uses: ['T', 'init', 'op'], run: function (I) { var acc = I.init; return I.T.map(function (x) { var r = acc; acc = apply(I.op, acc, x); return r; }); }},
+  {g: 'Cumuler', name: 'TRANSFORM_INCLUSIVE_SCAN', cpp: 'std::transform_inclusive_scan', ver: 'C++17', sig: 'TRANSFORM_INCLUSIVE_SCAN(T, op, transformation)', ret: 'comme T',
+    sum: "Transforme chaque élément, puis cumule : le chemin parcouru à partir de déplacements signés (Abs), l'énergie cumulée (Carre).",
+    params: [['T', 'ARRAY, LIST, VECTOR', 'les éléments'], ['op', 'OPERATION', '#Somme, #Max…'], ['transformation', 'TRANSFORMATION', '#Abs, #Carre…']],
+    st: 'Parcours := TRANSFORM_INCLUSIVE_SCAN(Deplacements, OPERATION#Somme, TRANSFORMATION#Abs);   (* [3, -1, 4, -1, 5] *)', res: '[3, 4, 8, 9, 14]',
+    c: "double cumul = 0.0;\nfor (size_t i = 0; i < n; ++i) {\n    cumul += fabs(d[i]);\n    parcours[i] = cumul;\n}",
+    cc: "#include <numeric>\nstd::transform_inclusive_scan(d.begin(), d.end(), parcours.begin(),\n    std::plus<>{}, [](double x) { return std::abs(x); });",
+    uses: ['T', 'op', 'tr'], run: function (I) { var acc = null; return I.T.map(function (x) { x = trans(I.tr, x); acc = acc === null ? x : apply(I.op, acc, x); return acc; }); }},
+  {g: 'Cumuler', name: 'TRANSFORM_EXCLUSIVE_SCAN', cpp: 'std::transform_exclusive_scan', ver: 'C++17', sig: 'TRANSFORM_EXCLUSIVE_SCAN(T, init, op, transformation)', ret: 'comme T',
+    sum: "Transforme chaque élément, puis cumule ce qui précède : la position où commence chaque déplacement.",
+    params: [['T', 'ARRAY, LIST, VECTOR', 'les éléments'], ['init', 'un nombre', 'la première valeur'], ['op', 'OPERATION', '#Somme…'], ['transformation', 'TRANSFORMATION', '#Abs, #Carre…']],
+    st: 'Departs := TRANSFORM_EXCLUSIVE_SCAN(Deplacements, 0.0, OPERATION#Somme, TRANSFORMATION#Abs);', res: '[0, 3, 4, 8, 9]',
+    c: "double pos = 0.0;\nfor (size_t i = 0; i < n; ++i) {\n    departs[i] = pos;\n    pos += fabs(d[i]);\n}",
+    cc: "#include <numeric>\nstd::transform_exclusive_scan(d.begin(), d.end(), departs.begin(), 0.0,\n    std::plus<>{}, [](double x) { return std::abs(x); });",
+    uses: ['T', 'init', 'op', 'tr'], run: function (I) { var acc = I.init; return I.T.map(function (x) { var r = acc; acc = apply(I.op, acc, trans(I.tr, x)); return r; }); }},
   {g: 'Cumuler', name: 'ADJACENT_DIFFERENCE', cpp: 'std::adjacent_difference', ver: 'C++98', sig: 'ADJACENT_DIFFERENCE(T)', ret: 'comme T',
     sum: "Les écarts entre voisins : [a, b−a, c−b…]. Des pas, des vitesses à partir de positions.",
     params: [['T', 'ARRAY, LIST, VECTOR de nombres', 'les éléments']],
     st: 'Ecarts := ADJACENT_DIFFERENCE(Seuils);', res: '[10.0, 10.0, 30.0]',
     c: "ecarts[0] = s[0];\nfor (size_t i = 1; i < n; ++i)\n    ecarts[i] = s[i] - s[i - 1];",
-    cc: "std::adjacent_difference(s.begin(), s.end(), ecarts.begin());",
+    cc: "#include <numeric>\nstd::adjacent_difference(s.begin(), s.end(), ecarts.begin());",
     uses: ['T'], run: function (I) { return I.T.map(function (x, i) { return i ? x - I.T[i - 1] : x; }); }},
   {g: 'Remplir', name: 'IOTA', cpp: 'std::iota', ver: 'C++11', sig: 'IOTA(T, depart [, pas])', ret: '(remplit T)',
-    sum: "Remplit T de depart, depart + pas, depart + 2 pas… Le pas vaut 1 s'il manque ; le pas est un ajout de l'IHM (C++ n'a que 1).",
+    sum: "Remplit T de depart, depart + pas, depart + 2 pas… Le pas vaut 1 s'il manque ; le pas est un ajout de l'IHM (le C++ n'a que 1).",
     params: [['T', 'ARRAY, LIST, VECTOR', 'à remplir, en place'], ['depart', 'un nombre', 'la première valeur'], ['pas', 'un nombre', 'facultatif : 1']],
     st: 'IOTA(Pas_Mesure, 0.0, 2.5);', res: '[0.0, 2.5, 5.0, … 22.5]',
     c: "for (size_t i = 0; i < 10; ++i)\n    Pas_Mesure[i] = 0.0 + i * 2.5;",
-    cc: "std::iota(std::begin(Rangs), std::end(Rangs), 1);   // le pas 1\n// un autre pas : std::generate",
+    cc: "#include <numeric>\nstd::iota(std::begin(Rangs), std::end(Rangs), 1);   // 1, 2, 3…\nstd::ranges::iota(Rangs, 1);                       // C++23, le même\n// un autre pas que 1 : std::generate",
     uses: ['T', 'a', 'b'], run: function (I) { var st = isNaN(I.b) ? 1 : I.b; return I.T.map(function (x, i) { return I.a + i * st; }); }},
   {g: 'Entiers', name: 'GCD', cpp: 'std::gcd', ver: 'C++17', sig: 'GCD(a, b)', ret: 'un entier',
     sum: "Le plus grand diviseur commun de deux entiers ; 0 si les deux sont nuls.",
     params: [['a', 'un entier', ''], ['b', 'un entier', '']],
     st: 'Pgcd := GCD(Reglages.Cadence_A, Reglages.Cadence_B);', res: '12',
-    c: "long a = 120, b = 84;\nwhile (b != 0) { long t = a % b; a = b; b = t; }",
-    cc: "auto pgcd = std::gcd(120, 84);",
+    c: "/* C n'a pas gcd : la boucle d'Euclide */\nlong a = 120, b = 84;\nwhile (b != 0) { long t = a % b; a = b; b = t; }",
+    cc: "#include <numeric>\nauto pgcd = std::gcd(120, 84);   // 12",
     uses: ['a', 'b'], run: function (I) { if (!isInt(I.a) || !isInt(I.b)) return {err: 'GCD attend deux entiers'}; return gcd(I.a, I.b); }},
   {g: 'Entiers', name: 'LCM', cpp: 'std::lcm', ver: 'C++17', sig: 'LCM(a, b)', ret: 'un entier',
     sum: "Le plus petit multiple commun de deux entiers ; 0 si l'un est nul.",
     params: [['a', 'un entier', ''], ['b', 'un entier', '']],
     st: 'Cadence_Commune := LCM(Reglages.Cadence_A, Reglages.Cadence_B);', res: '840',
-    c: "/* a / pgcd(a, b) * b, avec la boucle de GCD */",
-    cc: "auto ppcm = std::lcm(120, 84);",
+    c: "/* C n'a pas lcm : avec le pgcd de la boucle de GCD */\nlong ppcm = a / pgcd(a, b) * b;",
+    cc: "#include <numeric>\nauto ppcm = std::lcm(120, 84);   // 840",
     uses: ['a', 'b'], run: function (I) { if (!isInt(I.a) || !isInt(I.b)) return {err: 'LCM attend deux entiers'}; if (!I.a || !I.b) return 0; return Math.abs(I.a / gcd(I.a, I.b) * I.b); }},
-  {g: 'Entiers', name: 'MIDPOINT', cpp: 'std::midpoint', ver: 'C++20', sig: 'MIDPOINT(a, b)', ret: 'comme a',
-    sum: "Le milieu de a et b sans débordement : en INT, 32000 et 32002 donnent 32001, là où (a + b) / 2 déborde. Entre deux entiers, arrondi vers a.",
-    params: [['a', 'un nombre', ''], ['b', 'un nombre', '']],
-    st: 'Milieu := MIDPOINT(INT#32000, INT#32002);', res: '32001',
-    c: "int16_t m = a + (b - a) / 2;",
-    cc: "auto m = std::midpoint(a, b);",
-    uses: ['a', 'b'], run: function (I) { if (isInt(I.a) && isInt(I.b)) { var d = I.b - I.a; return I.a + (d < 0 ? Math.ceil(d / 2) : Math.floor(d / 2)); } return (I.a + I.b) / 2; }},
-  {g: 'Saturé (C++26)', name: 'ADD_SAT', cpp: 'std::add_sat', ver: 'C++26', sig: 'ADD_SAT(a, b)', ret: 'le type de a',
-    sum: "a + b, bloqué aux bornes du type au lieu de boucler : en INT, 32000 + 1000 donne 32767 (et non −32536).",
-    params: [['a', 'un entier', 'son type fixe les bornes'], ['b', 'un entier', '']],
-    st: 'Total := ADD_SAT(INT#32000, INT#1000);', res: '32767',
-    c: "int32_t s = (int32_t)a + b;\nint16_t r = s > 32767 ? 32767 : s < -32768 ? -32768 : (int16_t)s;",
-    cc: "int16_t r = std::add_sat<int16_t>(32000, 1000);",
-    uses: ['a', 'b'], run: function (I) { return satInt(I.a + I.b); }},
-  {g: 'Saturé (C++26)', name: 'SUB_SAT', cpp: 'std::sub_sat', ver: 'C++26', sig: 'SUB_SAT(a, b)', ret: 'le type de a',
-    sum: "a − b, bloqué aux bornes : en INT, −32000 − 1000 donne −32768.",
-    params: [['a', 'un entier', ''], ['b', 'un entier', '']],
-    st: 'Ecart := SUB_SAT(INT#-32000, INT#1000);', res: '-32768',
-    c: "int32_t s = (int32_t)a - b;   /* puis bornée */", cc: "int16_t r = std::sub_sat<int16_t>(-32000, 1000);",
-    uses: ['a', 'b'], run: function (I) { return satInt(I.a - I.b); }},
-  {g: 'Saturé (C++26)', name: 'MUL_SAT', cpp: 'std::mul_sat', ver: 'C++26', sig: 'MUL_SAT(a, b)', ret: 'le type de a',
+  {g: 'Entiers', name: 'MIDPOINT', cpp: 'std::midpoint', ver: 'C++20', sig: 'MIDPOINT[<T>](a, b)', ret: 'T, ou le type de a',
+    sum: "Le milieu de a et b sans débordement : en INT, 32000 et 32002 donnent 32001, là où (a + b) / 2 déborde. Entre deux entiers, arrondi vers a. T se donne entre < > ou vient de a.",
+    params: [['<T>', 'un type numérique', 'facultatif : INT, DINT, REAL…'], ['a', 'un nombre', ''], ['b', 'un nombre', '']],
+    st: 'Milieu := MIDPOINT<INT>(32000, 32002);', res: '32001',
+    c: "/* C n'a pas midpoint : a et b passent en int (32 bits), sans débordement */\nint16_t m = (int16_t)(a + (b - a) / 2);   /* arrondi vers a */",
+    cc: "#include <numeric>\nINT m = std::midpoint<INT>(32000, 32002);   // 32001 (INT : int16_t)\n// des réels : std::midpoint(0.5, 2.5) donne 1.5",
+    uses: ['ty', 'a', 'b'], tys: 'mid',
+    run: function (I) { if (TYPEINFO[I.ty].float) return (I.a + I.b) / 2; var d = I.b - I.a; return I.a + (d < 0 ? Math.ceil(d / 2) : Math.floor(d / 2)); },
+    wrapf: function (I) { if (TYPEINFO[I.ty].float) return ''; var s = wrap(I.ty, I.a + I.b); return s === I.a + I.b ? '' : '(a + b) / 2 en ' + I.ty + ' : ' + Math.trunc(s / 2) + ' — a + b déborde (' + s + ')'; }},
+  {g: 'Saturé (C++26)', name: 'ADD_SAT', cpp: 'std::add_sat', ver: 'C++26', sig: 'ADD_SAT[<T>](a, b)', ret: 'T, ou le type de a',
+    sum: "a + b, bloqué aux bornes de T au lieu de boucler : en INT, 32000 + 1000 donne 32767 (et non −32536). T se donne entre < > ou vient de a.",
+    params: [['<T>', 'un type entier', 'facultatif : il fixe les bornes'], ['a', 'un entier', ''], ['b', 'un entier', '']],
+    st: 'Total := ADD_SAT<INT>(32000, 1000);', res: '32767',
+    c: "/* C n'a pas add_sat : le calcul en 32 bits, puis borné */\nint32_t s = (int32_t)a + b;\nint16_t r = s > INT16_MAX ? INT16_MAX : s < INT16_MIN ? INT16_MIN : (int16_t)s;",
+    cc: "#include <numeric>   // C++26\nINT r = std::add_sat<INT>(32000, 1000);   // 32767",
+    uses: ['ty', 'a', 'b'], run: function (I) { return sat(I.ty, I.a + I.b); }, wrapf: function (I) { return 'en ' + I.ty + ', sans blocage : ' + wrap(I.ty, I.a + I.b); }},
+  {g: 'Saturé (C++26)', name: 'SUB_SAT', cpp: 'std::sub_sat', ver: 'C++26', sig: 'SUB_SAT[<T>](a, b)', ret: 'T, ou le type de a',
+    sum: "a − b, bloqué aux bornes : en INT, −32000 − 1000 donne −32768 ; en UINT, 5 − 8 donne 0.",
+    params: [['<T>', 'un type entier', 'facultatif'], ['a', 'un entier', ''], ['b', 'un entier', '']],
+    st: 'Ecart := SUB_SAT<INT>(-32000, 1000);', res: '-32768',
+    c: "int32_t s = (int32_t)a - b;   /* puis borné, comme ADD_SAT */",
+    cc: "#include <numeric>   // C++26\nINT r = std::sub_sat<INT>(-32000, 1000);   // -32768",
+    uses: ['ty', 'a', 'b'], run: function (I) { return sat(I.ty, I.a - I.b); }, wrapf: function (I) { return 'en ' + I.ty + ', sans blocage : ' + wrap(I.ty, I.a - I.b); }},
+  {g: 'Saturé (C++26)', name: 'MUL_SAT', cpp: 'std::mul_sat', ver: 'C++26', sig: 'MUL_SAT[<T>](a, b)', ret: 'T, ou le type de a',
     sum: "a × b, bloqué aux bornes : en INT, 300 × 200 donne 32767.",
-    params: [['a', 'un entier', ''], ['b', 'un entier', '']],
-    st: 'Produit := MUL_SAT(INT#300, INT#200);', res: '32767',
-    c: "int32_t p = (int32_t)a * b;   /* puis bornée */", cc: "int16_t r = std::mul_sat<int16_t>(300, 200);",
-    uses: ['a', 'b'], run: function (I) { return satInt(I.a * I.b); }},
-  {g: 'Saturé (C++26)', name: 'DIV_SAT', cpp: 'std::div_sat', ver: 'C++26', sig: 'DIV_SAT(a, b)', ret: 'le type de a',
+    params: [['<T>', 'un type entier', 'facultatif'], ['a', 'un entier', ''], ['b', 'un entier', '']],
+    st: 'Produit := MUL_SAT<INT>(300, 200);', res: '32767',
+    c: "int32_t p = (int32_t)a * b;   /* puis borné, comme ADD_SAT */",
+    cc: "#include <numeric>   // C++26\nINT r = std::mul_sat<INT>(300, 200);   // 32767",
+    uses: ['ty', 'a', 'b'], run: function (I) { return sat(I.ty, I.a * I.b); }, wrapf: function (I) { return 'en ' + I.ty + ', sans blocage : ' + wrap(I.ty, I.a * I.b); }},
+  {g: 'Saturé (C++26)', name: 'DIV_SAT', cpp: 'std::div_sat', ver: 'C++26', sig: 'DIV_SAT[<T>](a, b)', ret: 'T, ou le type de a',
     sum: "a / b, bloqué : en INT, −32768 / −1 donne 32767, le seul cas qui déborde. b = 0 reste une erreur.",
-    params: [['a', 'un entier', ''], ['b', 'un entier non nul', '']],
-    st: 'Q := DIV_SAT(INT#-32768, INT#-1);', res: '32767',
-    c: "int16_t q = (a == -32768 && b == -1) ? 32767 : a / b;", cc: "int16_t q = std::div_sat<int16_t>(-32768, -1);",
-    uses: ['a', 'b'], run: function (I) { if (!I.b) return {err: 'division par zéro'}; return satInt(Math.trunc(I.a / I.b)); }},
-  {g: 'Saturé (C++26)', name: 'SATURATE_TO_INT', cpp: 'std::saturate_cast', ver: 'C++26', sig: 'SATURATE_TO_INT(x)', ret: 'INT',
-    sum: "Convertit en bloquant aux bornes : 40000 donne 32767, là où TO_INT boucle. La famille : SATURATE_TO_SINT, _DINT, _USINT, _UINT, _UDINT.",
-    params: [['x', 'un nombre', 'arrondi, puis borné']],
-    st: 'Consigne := SATURATE_TO_INT(Mesure_Brute);   (* 40000 *)', res: '32767',
-    c: "int16_t c = x > 32767 ? 32767 : x < -32768 ? -32768 : (int16_t)x;", cc: "auto c = std::saturate_cast<int16_t>(40000);",
-    uses: ['a'], run: function (I) { return satInt(Math.round(I.a)); }}
+    params: [['<T>', 'un type entier', 'facultatif'], ['a', 'un entier', ''], ['b', 'un entier non nul', '']],
+    st: 'Q := DIV_SAT<INT>(-32768, -1);', res: '32767',
+    c: "int16_t q = (a == INT16_MIN && b == -1) ? INT16_MAX : a / b;",
+    cc: "#include <numeric>   // C++26\nINT q = std::div_sat<INT>(-32768, -1);   // 32767",
+    uses: ['ty', 'a', 'b'], run: function (I) { if (!I.b) return {err: 'division par zéro'}; return sat(I.ty, Math.trunc(I.a / I.b)); }, wrapf: function (I) { return I.b ? 'en ' + I.ty + ', sans blocage : ' + wrap(I.ty, Math.trunc(I.a / I.b)) : ''; }},
+  {g: 'Saturé (C++26)', name: 'SATURATE_CAST', cpp: 'std::saturate_cast', ver: 'C++26', sig: 'SATURATE_CAST<T>(x)', ret: 'T',
+    sum: "Convertit x vers T en bloquant aux bornes : 40000 donne 32767 en INT, −5 donne 0 en UINT, là où TO_INT et TO_UINT bouclent. Le type entre < > est obligatoire. En C++26, x est un entier ; en ST, un réel est d'abord arrondi.",
+    params: [['<T>', 'un type entier', 'obligatoire : SATURATE_CAST<INT>(x)'], ['x', 'un nombre', 'arrondi, puis borné']],
+    st: 'Consigne := SATURATE_CAST<INT>(Mesure_Brute);   (* 40000 *)', res: '32767',
+    c: "/* C n'a pas saturate_cast : borné à la main */\nint16_t c = x > INT16_MAX ? INT16_MAX : x < INT16_MIN ? INT16_MIN : (int16_t)x;",
+    cc: "#include <numeric>   // C++26\nINT c = std::saturate_cast<INT>(40000);   // 32767\n// un réel : std::saturate_cast<INT>(std::llround(x))",
+    uses: ['ty', 'a'], run: function (I) { return sat(I.ty, Math.round(I.a)); }, wrapf: function (I) { return 'TO_' + I.ty + ' boucle : ' + wrap(I.ty, Math.round(I.a)); }}
 ];
 var FUNCS = [
   {name: 'LIST_ADD', sig: 'LIST_ADD(L, x)', ret: '', sum: "Ajoute x à la fin de la liste L.", mut: true},
@@ -795,6 +854,176 @@ var KWS = {}; KW.forEach(function (k) { KWS[k] = 1; });
 var TYPES = {}; ('REAL LREAL INT DINT SINT LINT UINT UDINT USINT ULINT BOOL BYTE WORD DWORD LWORD STRING WSTRING CHAR TIME DATE DT TOD ' +
   'ARRAY LIST VECTOR MAP TUPLE').split(' ').forEach(function (t) { TYPES[t] = 1; });
 Object.keys(STRUCTS).concat(Object.keys(ENUMS)).forEach(function (t) { TYPES[t.toUpperCase()] = 1; });
+
+// ================================================ les templates : <limits>, <numbers>, les types
+// Ce que vaut chaque type numérique en C et en C++ (l'API de l'IHM déclare UINT : un uint16_t).
+var TYPEINFO = {
+  SINT: {c: 'int8_t', m: 'INT8', min: '-128', max: '127', bits: 8, signed: true, d: 'entier signé, 8 bits'},
+  INT: {c: 'int16_t', m: 'INT16', min: '-32768', max: '32767', bits: 16, signed: true, d: 'entier signé, 16 bits'},
+  DINT: {c: 'int32_t', m: 'INT32', min: '-2147483648', max: '2147483647', bits: 32, signed: true, d: 'entier signé, 32 bits'},
+  LINT: {c: 'int64_t', m: 'INT64', min: '-9223372036854775808', max: '9223372036854775807', bits: 64, signed: true, d: 'entier signé, 64 bits'},
+  USINT: {c: 'uint8_t', m: 'UINT8', min: '0', max: '255', bits: 8, d: 'entier non signé, 8 bits'},
+  UINT: {c: 'uint16_t', m: 'UINT16', min: '0', max: '65535', bits: 16, d: 'entier non signé, 16 bits'},
+  UDINT: {c: 'uint32_t', m: 'UINT32', min: '0', max: '4294967295', bits: 32, d: 'entier non signé, 32 bits'},
+  ULINT: {c: 'uint64_t', m: 'UINT64', min: '0', max: '18446744073709551615', bits: 64, d: 'entier non signé, 64 bits'},
+  BYTE: {c: 'uint8_t', m: 'UINT8', min: '0', max: '255', bits: 8, d: 'chaîne de 8 bits'},
+  WORD: {c: 'uint16_t', m: 'UINT16', min: '0', max: '65535', bits: 16, d: 'chaîne de 16 bits'},
+  DWORD: {c: 'uint32_t', m: 'UINT32', min: '0', max: '4294967295', bits: 32, d: 'chaîne de 32 bits'},
+  LWORD: {c: 'uint64_t', m: 'UINT64', min: '0', max: '18446744073709551615', bits: 64, d: 'chaîne de 64 bits'},
+  REAL: {c: 'float', f: 'FLT', min: '1.17549435E-38', max: '3.40282347E+38', eps: '1.1920929E-07', dmin: '1.40129846E-45', dig: 24, d10: 6, md10: 9,
+    minE: -125, maxE: 128, minE10: -37, maxE10: 38, float: true, d: 'réel IEEE 754, 32 bits'},
+  LREAL: {c: 'double', f: 'DBL', min: '2.2250738585072014E-308', max: '1.7976931348623157E+308', eps: '2.220446049250313E-16', dmin: '4.9406564584124654E-324', dig: 53, d10: 15, md10: 17,
+    minE: -1021, maxE: 1024, minE10: -307, maxE10: 308, float: true, d: 'réel IEEE 754, 64 bits'},
+  BOOL: {c: 'bool', min: 'FALSE', max: 'TRUE', bits: 1, bool: true, d: 'booléen'}
+};
+var LIM_T = ['SINT', 'INT', 'DINT', 'LINT', 'USINT', 'UINT', 'UDINT', 'ULINT', 'BYTE', 'WORD', 'DWORD', 'LWORD', 'REAL', 'LREAL', 'BOOL'];
+var INT_T = LIM_T.slice(0, 12);
+// std::numeric_limits<T> : ses 9 fonctions et ses 23 constantes (C++23).
+var LIMIT_MEMBERS = [
+  ['MIN', 'min', 1, "La plus petite valeur finie ; pour REAL et LREAL, le plus petit positif normalisé (le plus négatif, c'est LOWEST)."],
+  ['MAX', 'max', 1, 'La plus grande valeur finie.'],
+  ['LOWEST', 'lowest', 1, 'La plus petite valeur finie : −MAX() pour REAL et LREAL, MIN() pour un entier. (C++11)'],
+  ['EPSILON', 'epsilon', 1, "L'écart entre 1 et le réel suivant ; 0 pour un entier."],
+  ['ROUND_ERROR', 'round_error', 1, "L'erreur d'arrondi maximale : 0.5 pour REAL et LREAL, 0 pour un entier."],
+  ['INFINITY', 'infinity', 1, "L'infini positif, si HAS_INFINITY ; sinon 0."],
+  ['QUIET_NAN', 'quiet_NaN', 1, 'Un « pas un nombre » silencieux, si HAS_QUIET_NAN ; sinon 0.'],
+  ['SIGNALING_NAN', 'signaling_NaN', 1, 'Un « pas un nombre » qui signale, si HAS_SIGNALING_NAN ; sinon 0.'],
+  ['DENORM_MIN', 'denorm_min', 1, 'Le plus petit positif, dénormalisé ; 0 pour un entier.'],
+  ['IS_SPECIALIZED', 'is_specialized', 0, 'Vrai : NUMERIC_LIMITS connaît ce type.'],
+  ['IS_SIGNED', 'is_signed', 0, 'Vrai si le type a des négatifs.'],
+  ['IS_INTEGER', 'is_integer', 0, 'Vrai pour un entier (et BOOL).'],
+  ['IS_EXACT', 'is_exact', 0, 'Vrai si les calculs sont exacts : les entiers.'],
+  ['HAS_INFINITY', 'has_infinity', 0, "Vrai si le type a l'infini : REAL, LREAL."],
+  ['HAS_QUIET_NAN', 'has_quiet_NaN', 0, 'Vrai si le type a un « pas un nombre » silencieux.'],
+  ['HAS_SIGNALING_NAN', 'has_signaling_NaN', 0, 'Vrai si le type a un « pas un nombre » qui signale.'],
+  ['HAS_DENORM', 'has_denorm', 0, '1 si le type a des dénormalisés (REAL, LREAL), 0 sinon. Déprécié en C++23.', true],
+  ['HAS_DENORM_LOSS', 'has_denorm_loss', 0, 'Vrai si une perte de précision est vue comme une perte de dénormalisation. Déprécié en C++23.', true],
+  ['ROUND_STYLE', 'round_style', 0, "L'arrondi : 0 vers zéro (les entiers), 1 au plus près (REAL, LREAL)."],
+  ['IS_IEC559', 'is_iec559', 0, "Vrai si le type suit l'IEEE 754 (IEC 559) : REAL, LREAL."],
+  ['IS_BOUNDED', 'is_bounded', 0, 'Vrai si les valeurs sont en nombre fini : tous ces types.'],
+  ['IS_MODULO', 'is_modulo', 0, 'Vrai si un débordement boucle : les non signés. Faux pour les signés (en C++, leur débordement est indéfini).'],
+  ['DIGITS', 'digits', 0, 'Les chiffres en base RADIX, sans le signe : 15 pour INT, 24 pour REAL (sa mantisse).'],
+  ['DIGITS10', 'digits10', 0, 'Les chiffres décimaux qui passent sans perte : 4 pour INT, 6 pour REAL.'],
+  ['MAX_DIGITS10', 'max_digits10', 0, 'Les chiffres décimaux pour écrire un réel et le relire à l\'identique : 9 pour REAL, 17 pour LREAL ; 0 pour un entier. (C++11)'],
+  ['RADIX', 'radix', 0, 'La base : 2.'],
+  ['MIN_EXPONENT', 'min_exponent', 0, 'Le plus petit e tel que 2^(e−1) soit un réel normalisé : −125 pour REAL ; 0 pour un entier.'],
+  ['MIN_EXPONENT10', 'min_exponent10', 0, 'Le plus petit e tel que 10^e soit un réel normalisé : −37 pour REAL.'],
+  ['MAX_EXPONENT', 'max_exponent', 0, 'Le plus grand e tel que 2^(e−1) soit fini : 128 pour REAL.'],
+  ['MAX_EXPONENT10', 'max_exponent10', 0, 'Le plus grand e tel que 10^e soit fini : 38 pour REAL, 308 pour LREAL.'],
+  ['TRAPS', 'traps', 0, 'Vrai si un calcul peut lever une exception matérielle : la division entière par zéro, sur x86.'],
+  ['TINYNESS_BEFORE', 'tinyness_before', 0, 'Vrai si un résultat trop petit est vu avant l\'arrondi.']
+].map(function (x) { return {name: x[0], cpp: x[1], fn: !!x[2], doc: x[3], dep: !!x[4]}; });
+// std::numbers (C++20) : ses 13 constantes, en LREAL (le double du C++) et en REAL (float).
+var NUMBERS_M = [
+  ['E', 'e', 'M_E', 2.718281828459045, 'e, la base des logarithmes naturels.'],
+  ['LOG2E', 'log2e', 'M_LOG2E', 1.4426950408889634, 'log₂ e.'],
+  ['LOG10E', 'log10e', 'M_LOG10E', 0.4342944819032518, 'log₁₀ e.'],
+  ['PI', 'pi', 'M_PI', 3.141592653589793, 'π.'],
+  ['INV_PI', 'inv_pi', 'M_1_PI', 0.3183098861837907, '1/π.'],
+  ['INV_SQRTPI', 'inv_sqrtpi', '(M_2_SQRTPI / 2)', 0.5641895835477563, '1/√π.'],
+  ['LN2', 'ln2', 'M_LN2', 0.6931471805599453, 'ln 2.'],
+  ['LN10', 'ln10', 'M_LN10', 2.302585092994046, 'ln 10.'],
+  ['SQRT2', 'sqrt2', 'M_SQRT2', 1.4142135623730951, '√2.'],
+  ['SQRT3', 'sqrt3', '', 1.7320508075688772, '√3.'],
+  ['INV_SQRT3', 'inv_sqrt3', '', 0.5773502691896257, '1/√3.'],
+  ['EGAMMA', 'egamma', '', 0.5772156649015329, "γ, la constante d'Euler-Mascheroni."],
+  ['PHI', 'phi', '', 1.618033988749895, 'φ, le nombre d\'or.']
+].map(function (x) { return {name: x[0], cpp: x[1], c: x[2], v: x[3], doc: x[4], fn: false}; });
+var TEMPL = {
+  NUMERIC_LIMITS: {kind: 'class', required: true, lib: 'std::numeric_limits', head: '<limits>', types: LIM_T, members: LIMIT_MEMBERS,
+    want: 'un type numérique est attendu (SINT … ULINT, BYTE … LWORD, REAL, LREAL, BOOL)', example: 'NUMERIC_LIMITS<UINT>.MAX()', hint: 'NUMERIC_LIMITS attend son type : NUMERIC_LIMITS<UINT>.MAX()'},
+  NUMBERS: {kind: 'class', required: false, dflt: 'LREAL', lib: 'std::numbers', head: '<numbers>', types: ['REAL', 'LREAL'], members: NUMBERS_M,
+    want: 'REAL ou LREAL est attendu', example: 'NUMBERS<REAL>.PI', hint: ''},
+  SATURATE_CAST: {kind: 'fn', required: true, types: INT_T, want: 'un type entier est attendu (SINT … ULINT, BYTE … LWORD)', why: 'pas un entier', example: 'SATURATE_CAST<INT>(x)', hint: 'SATURATE_CAST attend son type : SATURATE_CAST<INT>(x)'},
+  MIDPOINT: {kind: 'fn', required: false, types: INT_T.concat(['REAL', 'LREAL']), want: 'un type numérique est attendu (SINT … LWORD, REAL, LREAL)', why: 'pas un nombre', example: 'MIDPOINT<INT>(a, b)'}
+};
+['ADD_SAT', 'SUB_SAT', 'MUL_SAT', 'DIV_SAT'].forEach(function (n) {
+  TEMPL[n] = {kind: 'fn', required: false, types: INT_T, want: 'un type entier est attendu (SINT … ULINT, BYTE … LWORD)', why: 'pas un entier', example: n + '<INT>(a, b)'};
+});
+function templMember(N, name) { var T = TEMPL[N]; return T && T.members ? T.members.filter(function (m) { return eq(m.name, name); })[0] || null : null; }
+// La valeur d'un membre de NUMERIC_LIMITS<t>, comme le C++ la donne (libstdc++, x86).
+function limVal(t, name) {
+  var ti = TYPEINFO[t]; if (!ti) return '';
+  var F = !!ti.float, B = !!ti.bool, Y = 'TRUE', N = 'FALSE', zero = F ? '0.0' : B ? 'FALSE' : '0';
+  var digits = F ? ti.dig : B ? 1 : ti.signed ? ti.bits - 1 : ti.bits;
+  switch (name) {
+    case 'MIN': return ti.min;
+    case 'MAX': return ti.max;
+    case 'LOWEST': return F ? '-' + ti.max : ti.min;
+    case 'EPSILON': return F ? ti.eps : zero;
+    case 'ROUND_ERROR': return F ? '0.5' : zero;
+    case 'INFINITY': return F ? '+INF' : zero;
+    case 'QUIET_NAN': return F ? 'NAN' : zero;
+    case 'SIGNALING_NAN': return F ? 'SNAN' : zero;
+    case 'DENORM_MIN': return F ? ti.dmin : zero;
+    case 'IS_SPECIALIZED': case 'IS_BOUNDED': return Y;
+    case 'IS_SIGNED': return F || ti.signed ? Y : N;
+    case 'IS_INTEGER': case 'IS_EXACT': return F ? N : Y;
+    case 'HAS_INFINITY': case 'HAS_QUIET_NAN': case 'HAS_SIGNALING_NAN': case 'IS_IEC559': return F ? Y : N;
+    case 'HAS_DENORM': return F ? '1' : '0';
+    case 'HAS_DENORM_LOSS': case 'TINYNESS_BEFORE': return N;
+    case 'ROUND_STYLE': return F ? '1' : '0';
+    case 'IS_MODULO': return !F && !B && !ti.signed ? Y : N;
+    case 'DIGITS': return String(digits);
+    case 'DIGITS10': return String(F ? ti.d10 : Math.floor(digits * 0.30102999566398));
+    case 'MAX_DIGITS10': return String(F ? ti.md10 : 0);
+    case 'RADIX': return '2';
+    case 'MIN_EXPONENT': return String(F ? ti.minE : 0);
+    case 'MIN_EXPONENT10': return String(F ? ti.minE10 : 0);
+    case 'MAX_EXPONENT': return String(F ? ti.maxE : 0);
+    case 'MAX_EXPONENT10': return String(F ? ti.maxE10 : 0);
+    case 'TRAPS': return F ? N : Y;
+  }
+  return '';
+}
+// Ce que le C a pour le même membre : une macro de <stdint.h>, <float.h> ou <math.h>, ou rien.
+function limC(t, name) {
+  var ti = TYPEINFO[t]; if (!ti) return '';
+  if (ti.float) {
+    var P = ti.f;
+    return {MIN: P + '_MIN', MAX: P + '_MAX', LOWEST: '-' + P + '_MAX', EPSILON: P + '_EPSILON', DENORM_MIN: P + '_TRUE_MIN', INFINITY: 'INFINITY', QUIET_NAN: 'NAN',
+      SIGNALING_NAN: P + '_SNAN', HAS_DENORM: P + '_HAS_SUBNORM', ROUND_STYLE: 'FLT_ROUNDS', IS_IEC559: '__STDC_IEC_559__', DIGITS: P + '_MANT_DIG', DIGITS10: P + '_DIG',
+      MAX_DIGITS10: P + '_DECIMAL_DIG', RADIX: 'FLT_RADIX', MIN_EXPONENT: P + '_MIN_EXP', MIN_EXPONENT10: P + '_MIN_10_EXP', MAX_EXPONENT: P + '_MAX_EXP', MAX_EXPONENT10: P + '_MAX_10_EXP'}[name] || '';
+  }
+  if (ti.bool) return {MIN: 'false', MAX: 'true', LOWEST: 'false'}[name] || '';
+  return {MIN: ti.signed ? ti.m + '_MIN' : '', MAX: ti.m + '_MAX', LOWEST: ti.signed ? ti.m + '_MIN' : '', DIGITS: ti.signed ? ti.m + '_WIDTH - 1' : ti.m + '_WIDTH'}[name] || '';
+}
+var C_VER = {DENORM_MIN: 'C11', HAS_DENORM: 'C11', MAX_DIGITS10: 'C11', SIGNALING_NAN: 'C23'};
+function limCver(t, name) { return name === 'DIGITS' && !TYPEINFO[t].float ? 'C23' : C_VER[name] || ''; }
+function limType(t, name) {
+  var m = templMember('NUMERIC_LIMITS', name); if (!m) return '';
+  if (m.fn) return t;
+  return /^(IS_|HAS_DENORM_LOSS|HAS_INF|HAS_QUIET|HAS_SIG|TRAPS|TINYNESS)/.test(name) ? 'BOOL' : 'DINT';
+}
+function numVal(t, m) { return t === 'REAL' ? Math.fround(m.v).toPrecision(9) : String(m.v); }
+function cppMember(N, t, m) {
+  if (N === 'NUMBERS') return t === 'LREAL' ? 'std::numbers::' + m.cpp : 'std::numbers::' + m.cpp + '_v<' + t + '>';
+  return 'std::numeric_limits<' + t + '>::' + m.cpp + (m.fn ? '()' : '');
+}
+function rangeTxt(t) { var ti = TYPEINFO[t]; return ti.float ? '±' + ti.max : ti.bool ? 'FALSE, TRUE' : ti.min + ' … ' + ti.max; }
+function typeDoc(t) {
+  var ti = TYPEINFO[t];
+  return '<b>' + t + '</b> : ' + esc(ti.d) + (ti.bool ? '' : ', ' + esc(rangeTxt(t))) + '<br>C : <code>' + ti.c + '</code> · C++ : <code>' + t + '</code> (' + ti.c + ' dans l\'API de l\'IHM)';
+}
+// L'aide à la saisie : après NOM< les types, après NOM<T>. les membres et leur valeur.
+function templTypes(N) {
+  var T = TEMPL[N], pool = N === 'NUMBERS' ? T.types : LIM_T;
+  return pool.map(function (t, i) {
+    var ok = T.types.indexOf(t) >= 0;
+    return {label: t, kind: 'type', det: TYPEINFO[t].c, rank: i, off: !ok, why: ok ? '' : T.why, insert: t + '>' + (T.kind === 'class' ? '.' : '('),
+      reopen: T.kind === 'class', doc: typeDoc(t) + (ok ? '' : '<br><b>' + esc(N) + '</b> : ' + esc(T.want) + '.')};
+  });
+}
+function templMembers(N, t) {
+  var T = TEMPL[N], ok = T.types.indexOf(t) >= 0;
+  return T.members.map(function (m, i) {
+    var v = !ok ? '' : N === 'NUMBERS' ? numVal(t, m) : limVal(t, m.name), cc = N === 'NUMBERS' ? m.c : limC(t, m.name);
+    return {label: m.name, kind: m.fn ? 'fn' : 'const', det: v ? '= ' + v : '', rank: i, insert: m.name + (m.fn ? '()' : ''),
+      doc: '<b>' + esc(N + '<' + t + '>.' + m.name + (m.fn ? '()' : '')) + '</b>' + (v ? ' = <code>' + esc(v) + '</code>' : '') + '<br>' + esc(m.doc) +
+        '<br>C++ : <code>' + esc(cppMember(N, t, m)) + '</code>' + (cc ? ' · C : <code>' + esc(cc) + '</code>' : ' · C : la valeur') + '<br><span class="newb">' + T.lib + '</span>'};
+  });
+}
+
 
 // ================================================================== les valeurs
 function elemOf(type) { var m = /\bOF\s+(.+)$/i.exec(type); return m ? m[1].trim() : ''; }
@@ -977,7 +1206,7 @@ function lev(a, b) {
 }
 function closest(name, pool) {
   var best = '', bd = name.length <= 3 ? 2 : 3;
-  pool.forEach(function (p) { var x = lev(name, p); if (x < bd && x > 0) { bd = x; best = p; } });
+  pool.forEach(function (p) { var x = lev(name, p); if (x < bd && x > 0 && x < Math.min(name.length, p.length)) { bd = x; best = p; } });
   return best ? ' — veux-tu dire ' + best + ' ?' : '';
 }
 function isWrite(after) {
@@ -996,79 +1225,145 @@ function scriptOf(name) { var ks = Object.keys(OTHER); for (var i = 0; i < ks.le
 function allNames() { return CONSTS.map(function (c) { return c.name; }).concat(VARS.map(function (v) { return v.name; }), Object.keys(OTHER), HMI.map(function (h) { return h.name; }), FUNCS.map(function (f) { return f.name; })); }
 
 function analyse(owner, code, isConst) {
-  var diags = [], deps = [], depAt = {}, assigned = false, b = blank(code), m;
-  function add(at, len, sev, msg) { diags.push({at: at, len: Math.max(1, len), sev: sev, msg: msg}); }
-  b = b.replace(/\b([A-Za-z_]\w*)#([A-Za-z_]\w*)\b/g, function (all, t, v, off) {
-    var T = Object.keys(ENUMS).filter(function (k) { return eq(k, t); })[0];
-    if (!T) { if (!/^(T|TIME|D|DATE|DT|TOD|LT|LTIME|INT|DINT|SINT|REAL|LREAL)$/i.test(t)) add(off, all.length, 'err', t + " n'est pas une énumération"); }
-    else if (!ENUMS[T].some(function (x) { return eq(x, v); })) add(off, all.length, 'err', v + " n'est pas une valeur de " + T + ' (' + ENUMS[T].join(', ') + ')');
-    return spaces(all);
-  });
-  b = b.replace(/\b(?:T|TIME|D|DATE|DT|DATE_AND_TIME|TOD|TIME_OF_DAY|LT|LTIME|INT|DINT|SINT|REAL|LREAL)#[-+]?[0-9A-Za-z_:.\-]+/gi, spaces);
-  b = b.replace(/\b\d+#[0-9A-Fa-f_]+/g, spaces);
-  var locals = localsOf(code);
-  var re = /[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*/g;
-  while ((m = re.exec(b))) {
-    var text = m[0], at = m.index;
-    if (at > 0 && /[\w.#]/.test(b[at - 1])) continue;
-    if (/^\d/.test(text)) continue;
-    var parts = text.split('.'), head = parts[0], H = head.toUpperCase(), after = b.slice(at + text.length);
-    var call = /^\s*\(/.test(after);
-    if (KWS[H] || TYPES[H]) continue;
-    if (call) {
-      if (!FN[H]) { add(at, head.length, 'err', head + ' : fonction inconnue' + closest(head, FUNCS.map(function (f) { return f.name; }))); continue; }
-      if (FN[H].mut) {
-        var a = /^\s*\(\s*([A-Za-z_]\w*)/.exec(after);
-        if (a) {
-          if (eq(a[1], owner.name)) assigned = true;
-          else if (findIn(CONSTS, a[1]) && !locals[a[1].toUpperCase()]) add(at + text.length + after.indexOf(a[1]), a[1].length, 'err', a[1] + ' est une constante : ' + head + ' ne peut pas la changer');
-        }
-      }
-      continue;
-    }
-    if (FN[H]) continue;
-    if (locals[H]) continue;
-    var writes = isWrite(after);
-    if (eq(head, owner.name)) { if (writes) assigned = true; continue; }
-    var c = findIn(CONSTS, head);
-    if (c) {
-      if (writes) add(at, head.length, 'err', c.name + ' est une constante : elle ne s\'écrit pas' + (c.mode === 'calcul' ? ' (elle est calculée au démarrage)' : ''));
-      else if (deps.indexOf(c.name) < 0) { deps.push(c.name); depAt[c.name] = {at: at, len: head.length}; }
-      continue;
-    }
-    var v = findIn(VARS, head);
-    if (v) {
-      if (isConst) add(at, head.length, 'err', v.name + ' est une variable du script : elle se calcule après les constantes');
-      else if (deps.indexOf(v.name) < 0) { deps.push(v.name); depAt[v.name] = {at: at, len: head.length}; }
-      continue;
-    }
-    var sc = scriptOf(head);
-    if (sc) {
-      if (parts.length < 2) { add(at, text.length, 'err', sc + ' est un script : choisis une de ses constantes (' + sc + '.)'); continue; }
-      var pool = sc === 'Visserie' ? CONSTS : OTHER[sc];
-      var oc = findIn(pool, parts[1]);
-      var qual = sc + '.' + parts[1];
-      if (!oc) { add(at, sc.length + 1 + parts[1].length, 'err', sc + " n'a pas de constante " + parts[1] + closest(parts[1], pool.map(function (x) { return x.name; }))); continue; }
-      if (oc.vis !== 'Public' && sc !== 'Visserie') { add(at, sc.length + 1 + parts[1].length, 'err', sc + '.' + oc.name + ' est privée : seul ' + sc + ' la lit (rends-la publique)'); continue; }
-      qual = sc + '.' + oc.name;
-      if (writes) add(at, qual.length, 'err', qual + ' est une constante : elle ne s\'écrit pas');
-      else if (deps.indexOf(qual) < 0) { deps.push(qual); depAt[qual] = {at: at, len: qual.length}; }
-      continue;
-    }
-    var h = findIn(HMI, head);
-    if (h) {
-      if (h.equipment) add(at, text.length, 'warn', 'au démarrage, ' + h.name + " n'est pas encore lu : " + text + ' vaudra 0');
-      else if (deps.indexOf(h.name) < 0) { deps.push(h.name); depAt[h.name] = {at: at, len: head.length}; }
-      continue;
-    }
-    add(at, head.length, 'err', head + " n'existe pas" + closest(head, allNames()));
+  var diags = [], deps = [], depAt = {}, assigned = false, tmplAt = {};
+  // Les locales : celles de l'onglet Locales, puis les boucles FOR et FOR EACH du code.
+  var locs = localsOf(code);
+  (owner.locals || []).forEach(function (l) { locs[l.name.toUpperCase()] = {name: l.name, type: l.type, tab: true}; });
+  function add(at, len, sev, msg, where, fix) {
+    var d = {at: where ? -1 : at, len: where ? 0 : Math.max(1, len), sev: sev, msg: msg};
+    if (where) d.where = where;
+    if (fix) d.fix = fix;
+    diags.push(d);
   }
+  function dep(name, at, len, where) { if (deps.indexOf(name) < 0) { deps.push(name); depAt[name] = {at: at, len: len, where: where}; } }
+  // Un texte ST : le code (where vide) ou l'initiale d'une locale (where : « Locales · r »).
+  function scan(src, where) {
+    var b = blank(src), m;
+    if (!where) b = b.replace(/\bVAR\b[\s\S]*?(?:\bEND_VAR\b|$)/gi, function (all, off) {
+      add(off, 3, 'err', "VAR … END_VAR : les locales ne s'écrivent plus dans le code, elles vont dans l'onglet Locales — « Déplacer dans Locales » le fait", null, 'var');
+      return spaces(all);
+    });
+    b = b.replace(/\b([A-Za-z_]\w*)#([A-Za-z_]\w*)\b/g, function (all, t, v, off) {
+      var T = Object.keys(ENUMS).filter(function (k) { return eq(k, t); })[0];
+      if (!T) { if (!/^(T|TIME|D|DATE|DT|TOD|LT|LTIME|INT|DINT|SINT|REAL|LREAL)$/i.test(t)) add(off, all.length, 'err', t + " n'est pas une énumération", where); }
+      else if (!ENUMS[T].some(function (x) { return eq(x, v); })) add(off, all.length, 'err', v + " n'est pas une valeur de " + T + ' (' + ENUMS[T].join(', ') + ')', where);
+      return spaces(all);
+    });
+    b = b.replace(/\b(?:T|TIME|D|DATE|DT|DATE_AND_TIME|TOD|TIME_OF_DAY|LT|LTIME|INT|DINT|SINT|REAL|LREAL)#[-+]?[0-9A-Za-z_:.\-]+/gi, spaces);
+    b = b.replace(/\b\d+#[0-9A-Fa-f_]+/g, spaces);
+    // Les templates : NUMERIC_LIMITS<UINT>.MAX(), NUMBERS<REAL>.PI, SATURATE_CAST<INT>(x).
+    b = b.replace(/\b([A-Za-z_]\w*)(\s*<\s*)([A-Za-z_]\w*)(\s*>)(?:(\s*\.\s*)([A-Za-z_]\w*))?(\s*\()?/g, function (all, name, lt, type, gt, dot, member, paren, off, whole) {
+      var N = name.toUpperCase(), T = TEMPL[N];
+      if (!T || (off > 0 && /[\w.]/.test(whole[off - 1]))) return all;
+      var U = type.toUpperCase(), tAt = off + name.length + lt.length, head = N + '<' + U + '>';
+      if (T.types.indexOf(U) < 0) add(tAt, type.length, 'err', TYPEINFO[U] || TYPES[U] ? head + ' : ' + T.want : type + " n'est pas un type" + closest(type, T.types), where);
+      if (T.kind === 'class') {
+        if (!member) add(off, all.length, 'err', head + ' : choisis un membre — ' + T.example.replace(/<\w+>/, '<' + U + '>'), where);
+        else {
+          var mm = templMember(N, member), mAt = tAt + type.length + gt.length + dot.length;
+          if (!mm) add(mAt, member.length, 'err', head + " n'a pas de membre " + member + closest(member, T.members.map(function (x) { return x.name; })), where);
+          else if (mm.fn && !paren) add(mAt, member.length, 'err', mm.name + ' est une fonction : ' + head + '.' + mm.name + '()', where);
+          else if (!mm.fn && paren) add(mAt, member.length, 'err', mm.name + ' est une constante : sans parenthèses', where);
+        }
+        return spaces(all);
+      }
+      tmplAt[(where || '') + '@' + off] = 1;
+      if (!paren) add(off, name.length, 'err', head + " s'appelle : " + T.example.replace(/<\w+>/, '<' + U + '>'), where);
+      return name + spaces(lt + type + gt) + (dot || '') + (member || '') + (paren || '');
+    });
+    var re = /[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*/g;
+    while ((m = re.exec(b))) {
+      var text = m[0], at = m.index;
+      if (at > 0 && /[\w.#]/.test(b[at - 1])) continue;
+      var parts = text.split('.'), head = parts[0], H = head.toUpperCase(), after = b.slice(at + text.length);
+      var call = /^\s*\(/.test(after), T = TEMPL[H];
+      if (KWS[H] || TYPES[H]) continue;
+      if (T) {
+        var opening = parts.length === 1 && /^\s*<\s*\w*/.exec(after);
+        if (opening) { add(at, text.length + opening[0].length, 'err', H + ' : le type, puis > — ' + T.example, where); re.lastIndex = at + text.length + opening[0].length; continue; }
+        if (T.kind === 'class') {
+          if (T.required) { add(at, head.length, 'err', T.hint, where); continue; }
+          if (parts.length < 2) { add(at, head.length, 'err', H + ' : choisis une constante — ' + H + '.PI (en ' + T.dflt + ')', where); continue; }
+          var nm = templMember(H, parts[1]);
+          if (!nm) add(at + head.length + 1, parts[1].length, 'err', H + " n'a pas de membre " + parts[1] + closest(parts[1], T.members.map(function (x) { return x.name; })), where);
+          else if (call) add(at + head.length + 1, parts[1].length, 'err', nm.name + ' est une constante : sans parenthèses', where);
+          continue;
+        }
+        if (call && T.required && !tmplAt[(where || '') + '@' + at]) { add(at, head.length, 'err', T.hint, where); continue; }
+      }
+      if (call) {
+        if (!FN[H]) { add(at, head.length, 'err', head + ' : fonction inconnue' + closest(head, FUNCS.map(function (f) { return f.name; })), where); continue; }
+        if (FN[H].mut && !where) {
+          var a = /^\s*\(\s*([A-Za-z_]\w*)/.exec(after);
+          if (a) {
+            if (eq(a[1], owner.name)) assigned = true;
+            else if (findIn(CONSTS, a[1]) && !locs[a[1].toUpperCase()]) add(at + text.length + after.indexOf(a[1]), a[1].length, 'err', a[1] + ' est une constante : ' + head + ' ne peut pas la changer');
+          }
+        }
+        continue;
+      }
+      if (FN[H]) continue;
+      if (locs[H]) continue;
+      var writes = !where && isWrite(after);
+      if (eq(head, owner.name)) {
+        if (where) add(at, head.length, 'warn', owner.name + ' est encore vide quand la locale part', where);
+        else if (writes) assigned = true;
+        continue;
+      }
+      var c = findIn(CONSTS, head);
+      if (c) {
+        if (writes) add(at, head.length, 'err', c.name + ' est une constante : elle ne s\'écrit pas' + (c.mode === 'calcul' ? ' (elle est calculée au démarrage)' : ''));
+        else dep(c.name, at, head.length, where);
+        continue;
+      }
+      var v = findIn(VARS, head);
+      if (v) {
+        if (isConst) add(at, head.length, 'err', v.name + ' est une variable du script : elle se calcule après les constantes', where);
+        else dep(v.name, at, head.length, where);
+        continue;
+      }
+      var sc = scriptOf(head);
+      if (sc) {
+        if (parts.length < 2) { add(at, text.length, 'err', sc + ' est un script : choisis une de ses constantes (' + sc + '.)', where); continue; }
+        var pool = sc === 'Visserie' ? CONSTS : OTHER[sc];
+        var oc = findIn(pool, parts[1]);
+        if (!oc) { add(at, sc.length + 1 + parts[1].length, 'err', sc + " n'a pas de constante " + parts[1] + closest(parts[1], pool.map(function (x) { return x.name; })), where); continue; }
+        if (oc.vis !== 'Public' && sc !== 'Visserie') { add(at, sc.length + 1 + parts[1].length, 'err', sc + '.' + oc.name + ' est privée : seul ' + sc + ' la lit (rends-la publique)', where); continue; }
+        var qual = sc + '.' + oc.name;
+        if (writes) add(at, qual.length, 'err', qual + ' est une constante : elle ne s\'écrit pas');
+        else dep(qual, at, qual.length, where);
+        continue;
+      }
+      var h = findIn(HMI, head);
+      if (h) {
+        if (h.equipment) add(at, text.length, 'warn', 'au démarrage, ' + h.name + " n'est pas encore lu : " + text + ' vaudra 0', where);
+        else dep(h.name, at, head.length, where);
+        continue;
+      }
+      var pool2 = allNames().concat(Object.keys(TEMPL), Object.keys(locs).map(function (k) { return locs[k].name; }));
+      add(at, head.length, 'err', head + " n'existe pas" + closest(head, pool2), where);
+    }
+  }
+  scan(code, '');
+  // L'initiale de chaque locale : une valeur écrite, ou une expression qui lit comme le code.
+  (owner.locals || []).forEach(function (l) {
+    var w = 'Locales · ' + l.name, init = String(l.init || '').trim();
+    if (!typeOk(l.type)) { add(-1, 0, 'err', l.type + " n'est pas un type", w); return; }
+    if (!init) return;
+    var r = parseText(defaultLocal(l.type), init);
+    if (r.ok) return;
+    if (/^([-+]?\d|'|\[|T#|TIME#)/i.test(init)) { add(-1, 0, 'err', r.why, w); return; }
+    scan(init, w);
+  });
   if (!assigned && !diags.some(function (d) { return d.sev === 'err'; }))
     add(0, 0, 'warn', owner.name + ' ne reçoit aucune valeur : elle garde la valeur vide de son type');
   var cyc = findCycle(owner.name, deps);
-  if (cyc) { var p = depAt[cyc[1]] || {at: 0, len: 1}; add(p.at, p.len, 'err', 'boucle de calculs : ' + cyc.join(' → ')); }
-  diags.forEach(function (d) { var pre = code.slice(0, d.at); d.line = (pre.match(/\n/g) || []).length; d.col = d.at - (pre.lastIndexOf('\n') + 1); });
-  diags.sort(function (x, y) { return x.at - y.at; });
+  if (cyc) { var p = depAt[cyc[1]] || {at: 0, len: 1}; add(p.at, p.len, 'err', 'boucle de calculs : ' + cyc.join(' → '), p.where); }
+  diags.forEach(function (d) {
+    if (d.at < 0) { d.line = -1; d.col = 0; return; }
+    var pre = code.slice(0, d.at); d.line = (pre.match(/\n/g) || []).length; d.col = d.at - (pre.lastIndexOf('\n') + 1);
+  });
+  diags.sort(function (x, y) { return ((x.at < 0) - (y.at < 0)) || x.at - y.at; });
   return {diags: diags, deps: deps};
 }
 function graph() {
@@ -1420,35 +1715,287 @@ function replaceCell(n, id, nn) {
 
 // ================================================================ le calcul (code)
 var E = null;   // l'éditeur de code ouvert
+var lsel = null, ltw = {}, lmsg = '';   // la locale choisie, les initiales dépliées, la note de « Déplacer »
 function renderCalcul(body, c) {
-  body.innerHTML = '<div class="ed-split"><div style="min-width:0;display:grid;gap:8px">' +
+  if (!E || E.c !== c) { lsel = c.locals && c.locals[0] ? c.locals[0].name : null; ltw = {}; lmsg = ''; }
+  var sub = c.sub || 'code';
+  body.innerHTML = '<div class="ed-split"><div style="min-width:0;display:grid;gap:8px;align-content:start">' +
     '<div class="help">Le code écrit <b>' + esc(c.name) + '</b> sous son nom ; il tourne une fois au démarrage' + (tabNow === 'vars' ? ', après les constantes ; ensuite les scripts écrivent la variable comme toute autre.' : ', puis la constante est figée.') +
-    ' <kbd>Ctrl</kbd>+<kbd>Espace</kbd> : l\'aide à la saisie ; <kbd>F5</kbd> : calculer ici.' + (c.note ? ' <span class="msg warn">' + esc(c.note) + '</span>' : '') + '</div>' +
+    ' Ses locales sont dans l\'onglet <b>Locales</b>, pas dans le code. <kbd>Ctrl</kbd>+<kbd>Espace</kbd> : l\'aide à la saisie ; <kbd>F5</kbd> : calculer ici.' + (c.note ? ' <span class="msg warn">' + esc(c.note) + '</span>' : '') + '</div>' +
+    '<div class="subtabs" role="tablist" aria-label="Le calcul de ' + esc(c.name) + '">' +
+    '<button type="button" role="tab" data-sub="code"' + (sub === 'code' ? ' class="on"' : '') + '>⟨/⟩ Code</button>' +
+    '<button type="button" role="tab" data-sub="loc"' + (sub === 'loc' ? ' class="on"' : '') + '>≡ Locales <span class="count" id="nloc">' + (c.locals || []).length + '</span></button></div>' +
+    '<div class="subpane" id="subcode"' + (sub === 'code' ? '' : ' hidden') + '>' +
     '<div class="code"><div class="gut" aria-hidden="true"></div><div class="carea"><pre aria-hidden="true"></pre><div class="squigs" aria-hidden="true"></div>' +
     '<span class="meas" aria-hidden="true">MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM</span>' +
     '<textarea spellcheck="false" autocapitalize="off" autocomplete="off" id="codeta" aria-label="Le calcul de ' + esc(c.name) + '"></textarea></div></div>' +
     '<div class="codebar"><button class="btn primary" type="button" id="runbtn">▶ Calculer (F5)</button><button class="btn" type="button" id="resetbtn">Revenir au calcul d\'origine</button><span id="codestate"></span></div></div>' +
+    '<div class="subpane" id="subloc"' + (sub === 'loc' ? '' : ' hidden') + '></div></div>' +
     '<div class="side"><div class="box"><h5>Aperçu</h5><div id="preview"></div></div><div class="box"><h5>Lit</h5><div class="chips" id="reads"></div></div>' +
     '<div class="box"><h5>Lu par</h5><div class="chips" id="readby"></div></div><div class="box"><h5>Problèmes</h5><div id="probs"></div></div></div></div>';
   var ta = $('#codeta', body);
-  E = {c: c, ta: ta, pre: $('pre', body), gut: $('.gut', body), sq: $('.squigs', body), meas: $('.meas', body), diags: [], ran: false};
+  E = {c: c, ta: ta, pre: $('pre', body), gut: $('.gut', body), sq: $('.squigs', body), meas: $('.meas', body), diags: [], ran: false, cw: 7.8};
   ta.value = c.code;
-  E.cw = E.meas.getBoundingClientRect().width / 50 || 7.8;
+  measure();
   ta.addEventListener('input', function () { codeChanged(); suggest(false); updateSig(); });
   ta.addEventListener('scroll', syncScroll);
   ta.addEventListener('keydown', codeKeys);
   ta.addEventListener('click', function () { hideAc(); updateSig(); });
   ta.addEventListener('blur', function () { setTimeout(function () { if (document.activeElement !== ta) { hideAc(); hideSig(); runDiag(); } }, 120); });
+  $('.subtabs', body).addEventListener('click', function (e) { var b = e.target.closest('[data-sub]'); if (b) showSub(b.getAttribute('data-sub')); });
   $('#runbtn', body).addEventListener('click', function () { compute(); ta.focus(); });
-  $('#resetbtn', body).addEventListener('click', function () { ta.value = c.origCode || c.code; codeChanged(); compute(); });
+  $('#resetbtn', body).addEventListener('click', resetCalc);
   $('#reads', body).addEventListener('click', pickChip);
   $('#readby', body).addEventListener('click', pickChip);
   $('#probs', body).addEventListener('click', function (e) {
+    if (e.target.closest('[data-fix]')) { moveVar(); return; }
+    var w = e.target.closest('[data-wl]');
+    if (w) { lsel = w.getAttribute('data-wl'); showSub('loc'); renderLocals(); return; }
     var b = e.target.closest('[data-at]'); if (!b) return;
+    showSub('code');
     var at = +b.getAttribute('data-at'); ta.focus(); ta.setSelectionRange(at, at + (+b.getAttribute('data-len') || 0));
   });
+  var lp = $('#subloc', body);
+  lp.addEventListener('click', localClick);
+  lp.addEventListener('dblclick', function (e) { var s = e.target.closest('[data-ledit]'); if (s) editLocal(s, +s.getAttribute('data-li'), s.getAttribute('data-ledit')); });
+  lp.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter') return;
+    var s = e.target.closest('[data-ledit]'); if (s) { e.preventDefault(); editLocal(s, +s.getAttribute('data-li'), s.getAttribute('data-ledit')); }
+  });
+  renderLocals();
   codeChanged(true);
 }
+function measure() { if (E && E.meas) E.cw = E.meas.getBoundingClientRect().width / 50 || E.cw || 7.8; }
+function showSub(w) {
+  if (!E) return;
+  E.c.sub = w;
+  $$('.subtabs [data-sub]', editor).forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-sub') === w); });
+  $('#subcode').hidden = w !== 'code'; $('#subloc').hidden = w !== 'loc';
+  if (w === 'code') { measure(); syncScroll(); } else { hideAc(); hideSig(); }
+}
+function resetCalc() {
+  var c = E.c;
+  E.ta.value = c.origCode || c.code;
+  c.locals = c.origLocals ? JSON.parse(JSON.stringify(c.origLocals)) : (c.locals ? [] : c.locals);
+  lmsg = ''; renderLocals(); codeChanged(); compute();
+}
+
+// ----------------------------------------------------- l'onglet Locales : déballé comme la grille
+// Le type d'une locale, écrit comme le reste du projet (REAL, LIST OF REAL, MAP[STRING] OF DINT…), ou '' s'il n'existe pas.
+function normType(t) {
+  t = String(t || '').trim().replace(/\s+/g, ' ');
+  var u = t.toUpperCase(), m, k;
+  if (!t) return '';
+  if (TYPEINFO[u] || /^(STRING|WSTRING|CHAR|TIME|DATE|DT|TOD)$/.test(u)) return u;
+  k = Object.keys(STRUCTS).concat(Object.keys(ENUMS)).filter(function (x) { return eq(x, t); })[0];
+  if (k) return k;
+  if ((m = /^(LIST|VECTOR) OF (.+)$/i.exec(t))) { k = normType(m[2]); return k ? m[1].toUpperCase() + ' OF ' + k : ''; }
+  if ((m = /^MAP ?\[(.+?)\] ?OF (.+)$/i.exec(t))) { var ka = normType(m[1]), kb = normType(m[2]); return ka && kb ? 'MAP[' + ka + '] OF ' + kb : ''; }
+  if ((m = /^ARRAY ?\[([-\d\s.,]+)\] ?OF (.+)$/i.exec(t)) && /^\s*-?\d+\s*\.\.\s*-?\d+\s*(,\s*-?\d+\s*\.\.\s*-?\d+\s*)?$/.test(m[1])) {
+    k = normType(m[2]); return k ? 'ARRAY[' + m[1].replace(/\s+/g, '').replace(',', ', ') + '] OF ' + k : '';
+  }
+  if ((m = /^TUPLE ?\((.+)\)$/i.exec(t))) { var ps = splitTop(m[1]).map(normType); return ps.every(Boolean) ? 'TUPLE(' + ps.join(', ') + ')' : ''; }
+  return '';
+}
+function typeOk(t) { return !!normType(t); }
+// La valeur vide d'un type de locale (les ARRAY ont leurs cases).
+function defaultLocal(type) {
+  var t = normType(type) || String(type), m, i;
+  if ((m = /^ARRAY\[(-?\d+)\.\.(-?\d+)\] OF (.+)$/.exec(t))) {
+    var items = []; for (i = +m[1]; i <= +m[2] && items.length < 64; i++) items.push(defaultLocal(m[3]));
+    return LST(t, m[3], items, +m[1]);
+  }
+  if ((m = /^ARRAY\[(-?\d+)\.\.(-?\d+), (-?\d+)\.\.(-?\d+)\] OF (.+)$/.exec(t))) {
+    var rows = [];
+    for (i = +m[1]; i <= +m[2] && rows.length < 16; i++) { var row = []; for (var j = +m[3]; j <= +m[4] && row.length < 16; j++) row.push(defaultLocal(m[5])); rows.push(row); }
+    var a2 = A2(t, m[5], rows); a2.low = [+m[1], +m[3]]; return a2;
+  }
+  if ((m = /^TUPLE\((.+)\)$/.exec(t))) return TUP(t, splitTop(m[1]).map(defaultLocal));
+  if (STRUCTS[t]) return REC(t, STRUCTS[t].map(function (e) { return [e[0], defaultLocal(e[1])]; }));
+  return defaultNode(t);
+}
+// La valeur de départ d'une locale : écrite, ou lue (une constante, Script.Constante).
+function localNode(c, l) {
+  var init = String(l.init || '').trim(), m, r;
+  if (!typeOk(l.type)) return S(l.type, '?');
+  if (init) {
+    if ((m = /^([A-Za-z_]\w*)\.([A-Za-z_]\w*)$/.exec(init))) {
+      var sc = scriptOf(m[1]), pool = sc === 'Visserie' ? CONSTS : sc ? OTHER[sc] : null, oc = pool && findIn(pool, m[2]);
+      if (oc && oc.node) return oc.node;
+    }
+    var x = findIn(CONSTS, init); if (x) return x.node;
+    r = parseText(defaultLocal(l.type), init); if (r.ok) return r.node;
+  }
+  return defaultLocal(l.type);
+}
+function literalInit(l) { var init = String(l.init || '').trim(); return !init || parseText(defaultLocal(l.type), init).ok; }
+function initCell(c, l, i, n) {
+  var init = String(l.init || '').trim(), inner;
+  if (!init) inner = '<span class="small">vide : </span><span class="prev">' + esc(lit(n, 30)) + '</span>';
+  else if (literalInit(l)) inner = '<span class="prev">' + esc(init) + '</span>';
+  else inner = '<span class="fx">ƒx</span><span class="prev">' + esc(init) + '</span> <span class="prev ro">→ ' + esc(lit(n, 34)) + '</span>';
+  return '<span class="editable" data-ledit="init" data-li="' + i + '" tabindex="0" title="Double-clic : changer l\'initiale (une valeur, ou ce qu\'elle lit : Recettes.Recette_Base)">' + inner + '</span>';
+}
+function renderLocals() {
+  if (!E) return;
+  var c = E.c, box = $('#subloc'), L = c.locals || [];
+  if (!box) return;
+  var h = '<div class="tools" style="border:1px solid var(--app-line);border-bottom:0;border-radius:4px 4px 0 0">' +
+    '<button class="tbtn new" type="button" data-lact="add">＋ Ajouter une locale</button>' +
+    '<button class="tbtn" type="button" data-lact="del"' + (lsel && findIn(L, lsel) ? '' : ' disabled') + '>🗑 Supprimer</button>' +
+    '<span class="tsep"></span><span class="small">Double-clic : changer une case · ▸ : déplier l\'initiale</span></div>' +
+    '<div class="gridwrap" style="max-height:236px;border:1px solid var(--app-line);border-radius:0 0 4px 4px"><table class="grid" id="ltab" style="min-width:680px"><thead><tr>' +
+    ['Nom', 'Type', 'Initiale', 'Taille', 'Documentation'].map(function (x) { return '<th scope="col">' + x + '</th>'; }).join('') + '</tr></thead><tbody>';
+  if (!L.length) h += '<tr><td colspan="5" class="small" style="white-space:normal">Aucune locale. Les boucles <code>FOR i</code> et <code>FOR EACH cle, valeur</code> déclarent les leurs ; « Ajouter une locale » en crée une.</td></tr>';
+  L.forEach(function (l, i) {
+    var n = localNode(c, l), big = n.k !== 's', on = !!ltw[l.name];
+    h += '<tr data-lrow="' + esc(l.name) + '"' + (eq(lsel || '', l.name) ? ' class="sel"' : '') + '><td><div class="namecell">' +
+      '<button class="tw" type="button" data-ltw="' + esc(l.name) + '"' + (big ? '' : ' disabled') + ' aria-expanded="' + on + '" aria-label="' + (on ? 'Replier ' : 'Déplier ') + esc(l.name) + '">' + (on ? '▾' : '▸') + '</button>' +
+      '<span class="ico">L</span><span class="editable" data-ledit="name" data-li="' + i + '" tabindex="0">' + esc(l.name) + '</span></div></td>' +
+      '<td class="key"><span class="editable" data-ledit="type" data-li="' + i + '" tabindex="0">' + esc(l.type) + '</span></td>' +
+      '<td>' + initCell(c, l, i, n) + '</td><td class="size">' + esc(sizeOf(n)) + '</td>' +
+      '<td><span class="editable" data-ledit="doc" data-li="' + i + '" tabindex="0">' + (l.doc ? esc(l.doc) : '<span class="small">—</span>') + '</span></td></tr>';
+    if (big && on) h += localKids(n, l.name, 1);
+  });
+  h += '</tbody></table></div><span class="msg ok" id="locmsg">' + esc(lmsg) + '</span>';
+  box.innerHTML = h;
+  var cnt = $('#nloc'); if (cnt) cnt.textContent = L.length;
+}
+function localKids(n, path, depth) {
+  var h = '';
+  kids(n).forEach(function (k) {
+    var p = path + '/' + k.key, big = k.node.k !== 's', on = !!ltw[p];
+    h += '<tr class="child"><td><div class="namecell" style="padding-left:' + (depth * 18) + 'px">' +
+      '<button class="tw" type="button" data-ltw="' + esc(p) + '"' + (big ? '' : ' disabled') + ' aria-expanded="' + on + '" aria-label="' + (on ? 'Replier ' : 'Déplier ') + esc(k.lab) + '">' + (on ? '▾' : '▸') + '</button>' +
+      '<span class="key">' + esc(k.lab) + '</span></div></td><td class="key">' + esc(k.typ || '') + '</td>' +
+      '<td><span class="prev ro">' + esc(big ? lit(k.node, 40) : k.node.text) + '</span></td><td class="size">' + esc(sizeOf(k.node)) + '</td><td></td></tr>';
+    if (big && on) h += localKids(k.node, p, depth + 1);
+  });
+  return h;
+}
+function localClick(e) {
+  var c = E.c, t = e.target.closest('[data-ltw]');
+  if (t) { var p = t.getAttribute('data-ltw'); if (ltw[p]) delete ltw[p]; else ltw[p] = 1; renderLocals(); return; }
+  t = e.target.closest('[data-lact]');
+  if (t) {
+    c.locals = c.locals || [];
+    if (t.getAttribute('data-lact') === 'add') {
+      var k = 1; while (findIn(c.locals, 'Locale' + k)) k++;
+      c.locals.push({name: 'Locale' + k, type: 'REAL', init: '', doc: ''});
+      lsel = 'Locale' + k; lmsg = ''; renderLocals(); runDiag();
+      var sp = $('#subloc [data-ledit="name"][data-li="' + (c.locals.length - 1) + '"]');
+      if (sp) editLocal(sp, c.locals.length - 1, 'name');
+    } else if (lsel) {
+      var i = c.locals.indexOf(findIn(c.locals, lsel));
+      if (i >= 0) { c.locals.splice(i, 1); lsel = c.locals[Math.min(i, c.locals.length - 1)] ? c.locals[Math.min(i, c.locals.length - 1)].name : null; lmsg = ''; renderLocals(); runDiag(); }
+    }
+    return;
+  }
+  var tr = e.target.closest('tr[data-lrow]');
+  if (tr) {
+    // Choisir une ligne ne redessine pas : un double-clic garde sa cible.
+    lsel = tr.getAttribute('data-lrow');
+    $$('#ltab tr.sel').forEach(function (x) { x.classList.remove('sel'); });
+    tr.classList.add('sel');
+    var del = $('#subloc [data-lact="del"]'); if (del) del.disabled = false;
+  }
+}
+function localNameWhy(c, v, i) {
+  if (!/^[A-Za-z_]\w*$/.test(v)) return "'" + v + "' n'est pas un nom : une lettre, puis des lettres, des chiffres ou _";
+  var U = v.toUpperCase();
+  if (KWS[U] || TYPES[U]) return v + ' est un mot réservé';
+  if (FN[U] || TEMPL[U]) return v + ' est une native';
+  if ((c.locals || []).some(function (l, j) { return j !== i && eq(l.name, v); })) return 'la locale ' + v + ' existe déjà';
+  if (eq(v, c.name) || findIn(CONSTS, v) || findIn(VARS, v) || scriptOf(v) || findIn(HMI, v)) return v + ' est déjà un nom du script ou du projet : la locale le cacherait';
+  return '';
+}
+// Renommer une locale renomme ses emplois dans le code (pas dans les textes ni les commentaires).
+function renameIn(code, old, nw) {
+  var b = blank(code), re = /[A-Za-z_]\w*/g, m, out = '', last = 0;
+  while ((m = re.exec(b))) {
+    if (!eq(m[0], old) || (m.index > 0 && /[.#]/.test(b[m.index - 1]))) continue;
+    out += code.slice(last, m.index) + nw; last = m.index + m[0].length;
+  }
+  return out + code.slice(last);
+}
+function editLocal(span, i, field) {
+  var c = E.c, l = (c.locals || [])[i]; if (!l) return;
+  var inp = document.createElement('input');
+  inp.className = 'cell-edit'; inp.value = l[field] || '';
+  inp.setAttribute('aria-label', {name: 'Nom', type: 'Type', init: 'Initiale', doc: 'Documentation'}[field] + ' de la locale ' + l.name);
+  var msg = document.createElement('span'); msg.className = 'cell-err';
+  span.replaceWith(inp); inp.after(msg); inp.focus(); inp.select();
+  var done = false;
+  function commit() {
+    if (done) return true;
+    var v = inp.value.trim(), why = '';
+    if (field === 'name') why = localNameWhy(c, v, i);
+    else if (field === 'type') {
+      var nt = normType(v);
+      if (!nt) why = "'" + v + "' n'est pas un type" + closest(v, Object.keys(TYPEINFO).concat(['STRING', 'TIME', 'LIST OF REAL'], Object.keys(STRUCTS), Object.keys(ENUMS)));
+      else v = nt;
+    } else if (field === 'init' && v) {
+      var r = parseText(defaultLocal(l.type), v);
+      if (r.ok) v = lit(r.node);
+      else if (/^([-+]?\d|'|\[|T#|TIME#)/i.test(v)) why = r.why;
+    }
+    if (why) { msg.textContent = why; inp.classList.add('bad'); inp.focus(); return false; }
+    done = true;
+    if (field === 'name' && v !== l.name) {
+      E.ta.value = renameIn(E.ta.value, l.name, v);
+      if (eq(lsel || '', l.name)) lsel = v;
+      l.name = v; codeChanged(true);
+    } else l[field] = v;
+    lmsg = ''; renderLocals(); runDiag();
+    return true;
+  }
+  inp.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); commit(); }
+    else if (e.key === 'Escape') { e.preventDefault(); done = true; renderLocals(); }
+  });
+  inp.addEventListener('blur', function () { if (!done && commit() === false) { done = true; renderLocals(); } });
+}
+// « Déplacer dans Locales » : chaque déclaration d'un VAR … END_VAR devient une ligne de l'onglet, le bloc quitte le code.
+function moveVar() {
+  var c = E.c, code = E.ta.value, b = blank(code), re = /\bVAR\b([\s\S]*?)(\bEND_VAR\b[ \t]*;?|$)/gi, m, out = '', last = 0, moved = [];
+  c.locals = c.locals || [];
+  while ((m = re.exec(b))) {
+    var s0 = m.index + 3, bl = m[1], src = code.slice(s0, s0 + bl.length), from = 0, prev = [];
+    for (var k = 0; k <= bl.length; k++) {
+      if (k < bl.length && bl[k] !== ';') continue;
+      var dB = bl.slice(from, k), dS = src.slice(from, k); from = k + 1;
+      // « n : DINT := 0;   (* le compteur *) » : le commentaire qui suit le ; documente n
+      var lead = /^[ \t]*\(\*\s*([\s\S]*?)\s*\*\)/.exec(dS);
+      if (lead) {
+        prev.forEach(function (l) { if (!l.doc) l.doc = lead[1].replace(/\s+/g, ' '); });
+        dB = spaces(dS.slice(0, lead[0].length)) + dB.slice(lead[0].length); dS = spaces(dS.slice(0, lead[0].length)) + dS.slice(lead[0].length);
+      }
+      prev = [];
+      var ci = dB.search(/:(?!=)/); if (ci < 0) continue;
+      var ai = dB.indexOf(':=', ci + 1);
+      var type = dB.slice(ci + 1, ai < 0 ? dB.length : ai).trim().replace(/\s+/g, ' ');
+      var init = ai < 0 ? '' : dS.slice(ai + 2).replace(/\(\*[\s\S]*?\*\)/g, '').trim();
+      var cm = /\(\*\s*([\s\S]*?)\s*\*\)/.exec(dS), doc = cm ? cm[1].replace(/\s+/g, ' ') : '';
+      dB.slice(0, ci).split(',').forEach(function (nm) {
+        nm = nm.trim();
+        if (!/^[A-Za-z_]\w*$/.test(nm) || findIn(c.locals, nm)) return;
+        var l = {name: nm, type: normType(type) || type, init: init, doc: doc};
+        c.locals.push(l); prev.push(l); moved.push(nm);
+      });
+    }
+    var a = m.index, z = m.index + m[0].length, ls = code.lastIndexOf('\n', a - 1) + 1, le = code.indexOf('\n', z);
+    if (le < 0) le = code.length;
+    if (/^\s*$/.test(code.slice(ls, a)) && /^\s*$/.test(code.slice(z, le))) { a = ls; z = le < code.length ? le + 1 : le; }
+    out += code.slice(last, a); last = z;
+    if (!m[0].length) re.lastIndex++;
+  }
+  c.code = out + code.slice(last);
+  c.sub = 'loc';
+  lsel = moved[0] || lsel;
+  lmsg = moved.length ? plural(moved.length, 'locale rangée', 'locales rangées') + ' : ' + moved.join(', ') + '. Le code n\'a plus de VAR … END_VAR.' : '';
+  renderEditor();
+}
+
 function pickChip(e) { var b = e.target.closest('[data-goto]'); if (b) pick(b.getAttribute('data-goto')); }
 function norm(s) { return blank(s).replace(/\s+/g, ' ').trim(); }
 var diagTimer = 0;
@@ -1466,8 +2013,8 @@ function codeChanged(first) {
 function runDiag() {
   if (!E) return;
   var c = E.c, isConst = tabNow !== 'vars';
-  var r = analyse(c, c.code, isConst), car = E.ta.selectionStart, typing = document.activeElement === E.ta && /[\w.]/.test(E.ta.value[car - 1] || '');
-  if (typing) r.diags = r.diags.filter(function (d) { return !(d.sev === 'err' && d.len && d.at <= car && car <= d.at + d.len + 1); });
+  var r = analyse(c, c.code, isConst), car = E.ta.selectionStart, typing = document.activeElement === E.ta && /[\w.<]/.test(E.ta.value[car - 1] || '');
+  if (typing) r.diags = r.diags.filter(function (d) { return !(d.sev === 'err' && d.at >= 0 && d.len && d.at <= car && car <= d.at + d.len + 1); });
   c.deps = r.deps; E.diags = r.diags;
   drawSquigs(); renderSide(r);
 }
@@ -1477,19 +2024,21 @@ function compute() {
 }
 function renderSide(r, ran) {
   var c = E.c, errs = r.diags.filter(function (d) { return d.sev === 'err'; }), warns = r.diags.filter(function (d) { return d.sev === 'warn'; });
-  var same = norm(c.code) === norm(c.origCode || ''), pv = $('#preview');
+  var same = norm(c.code) === norm(c.origCode || '') && JSON.stringify(c.locals || []) === JSON.stringify(c.origLocals || []), pv = $('#preview');
   var st = $('#codestate');
   st.innerHTML = errs.length ? '<span class="sev err">' + plural(errs.length, 'erreur', 'erreurs') + '</span>' :
     warns.length ? '<span class="sev warn">' + plural(warns.length, 'avertissement', 'avertissements') + '</span>' : '<span class="sev ok">Juste</span>';
   if (errs.length) pv.innerHTML = '<p class="small">Pas de valeur tant que le calcul a une erreur.</p>';
   else if (same) pv.innerHTML = '<p class="small">' + (ran ? 'Calculé à l\'instant, avec les valeurs de départ, en 0,3 ms :' : 'Le dernier calcul (au démarrage, ou <kbd>F5</kbd> ici) :') + '</p>' + treeHtml(c.node, c.name);
   else pv.innerHTML = '<p class="small">Le calcul a changé. Dans XPGAnalyser, <kbd>F5</kbd> le refait ici avec les valeurs de départ et montre son résultat, déplié comme dans la grille. La maquette, elle, ne l\'exécute pas : <button class="go" type="button" id="backorig">revenir au calcul d\'origine</button> pour revoir son aperçu.</p>';
-  var back = $('#backorig'); if (back) back.addEventListener('click', function () { E.ta.value = c.origCode; codeChanged(); compute(); });
+  var back = $('#backorig'); if (back) back.addEventListener('click', resetCalc);
   $('#reads').innerHTML = r.deps.length ? r.deps.map(chipFor).join('') : '<span class="small">rien d\'autre que les natives</span>';
   var by = CONSTS.concat(VARS).filter(function (x) { return x !== c && x.mode === 'calcul' && (x.deps || []).indexOf(c.name) >= 0; });
   $('#readby').innerHTML = by.length ? by.map(function (x) { return '<button class="chip" type="button" data-goto="' + esc(x.name) + '">' + esc(x.name) + '</button>'; }).join('') : '<span class="small">aucun calcul</span>';
   $('#probs').innerHTML = r.diags.length ? '<div class="diag">' + r.diags.map(function (d) {
-    return '<span class="sev ' + d.sev + '">' + (d.sev === 'err' ? 'Erreur' : 'Avert.') + '</span><button type="button" data-at="' + d.at + '" data-len="' + d.len + '">ligne ' + (d.line + 1) + ' : ' + esc(d.msg) + '</button>';
+    var lead = d.where ? '<button type="button" data-wl="' + esc(d.where.replace(/^Locales · /, '')) + '">' + esc(d.where) : '<button type="button" data-at="' + d.at + '" data-len="' + d.len + '">ligne ' + (d.line + 1);
+    return '<span class="sev ' + d.sev + '">' + (d.sev === 'err' ? 'Erreur' : 'Avert.') + '</span><span>' + lead + ' : ' + esc(d.msg) + '</button>' +
+      (d.fix === 'var' ? ' <button type="button" data-fix="var" style="color:var(--accent);text-decoration:underline">Déplacer dans Locales</button>' : '') + '</span>';
   }).join('') + '</div>' : '<span class="small">Aucun.</span>';
 }
 function chipFor(d) {
@@ -1522,7 +2071,7 @@ function drawSquigs() {
   if (!E) return;
   var h = '';
   E.diags.forEach(function (d) {
-    if (!d.len && !d.at) return;
+    if (d.where || d.at < 0 || (!d.len && !d.at)) return;
     var lc = lineCol(E.ta.value, d.at);
     var x = 10 + lc.col * E.cw - E.ta.scrollLeft, y = 8 + lc.line * 20 + 17 - E.ta.scrollTop;
     h += '<span class="sq' + (d.sev === 'warn' ? ' warn' : '') + '" style="left:' + x + 'px;top:' + y + 'px;width:' + Math.max(6, d.len * E.cw) + 'px"></span>';
@@ -1543,6 +2092,8 @@ function highlight(code) {
     if (!prevW && (m = /^(?:T|TIME|DT|D|DATE|TOD|LT|LTIME|INT|DINT|SINT|REAL|LREAL)#[-+]?[0-9][0-9A-Za-z_:.\-]*/i.exec(rest))) { out += '<span class="t-num">' + esc(m[0]) + '</span>'; i += m[0].length; continue; }
     if (!prevW && (m = /^\d+(?:\.\d+)?(?:[eE][-+]?\d+)?/.exec(rest))) { out += '<span class="t-num">' + esc(m[0]) + '</span>'; i += m[0].length; continue; }
     if (!prevW && (m = /^[A-Za-z_]\w*(?:#[A-Za-z_]\w*)?(?:\.[A-Za-z_]\w*)*/.exec(rest))) {
+      var tq = TEMPL[m[0].toUpperCase()] && /^(\s*<\s*)([A-Za-z_]\w*)(\s*>)/.exec(code.slice(i + m[0].length, i + m[0].length + 40));
+      if (tq) { out += '<span class="t-fn">' + esc(m[0]) + '</span>' + esc(tq[1]) + '<span class="t-type">' + esc(tq[2]) + '</span>' + esc(tq[3]); i += m[0].length + tq[0].length; continue; }
       out += word(m[0], code.slice(i + m[0].length, i + m[0].length + 3), locals); i += m[0].length; continue;
     }
     out += esc(code[i]); i++;
@@ -1554,7 +2105,7 @@ function word(w, after, locals) {
   var head = w.split('.')[0], H = head.toUpperCase(), cls = '';
   if (KWS[H]) cls = 't-kw';
   else if (TYPES[H]) cls = 't-type';
-  else if (FN[H] && /^\s*\(/.test(after)) cls = 't-fn';
+  else if ((FN[H] && /^\s*\(/.test(after)) || (TEMPL[H] && TEMPL[H].kind === 'class')) cls = 't-fn';
   else if (locals[H]) cls = '';
   else if (findIn(CONSTS, head)) cls = 't-const';
   else if (scriptOf(head)) cls = 't-ext';
@@ -1577,6 +2128,8 @@ function fnDoc(f) {
 function structOfName(name, code) {
   var loc = localsOf(code)[name.toUpperCase()];
   if (loc && STRUCTS[loc.type]) return loc.type;
+  var cl = E && (E.c.locals || []).filter(function (l) { return eq(l.name, name); })[0];
+  if (cl && STRUCTS[cl.type]) return cl.type;
   var x = findIn(CONSTS, name) || findIn(VARS, name);
   if (x && STRUCTS[x.type]) return x.type;
   if (/^Recettes\.Recette_Base$/i.test(name)) return 'T_Recette';
@@ -1584,17 +2137,19 @@ function structOfName(name, code) {
 }
 function generalItems() {
   var c = E.c, isConst = tabNow !== 'vars', it = [], locals = localsOf(E.ta.value);
+  (c.locals || []).forEach(function (l) { delete locals[l.name.toUpperCase()]; it.push({label: l.name, kind: 'local', det: l.type, rank: 0, doc: '<b>' + esc(l.name) + '</b> : locale (onglet Locales), ' + esc(l.type) + (l.init ? ', au départ <code>' + esc(l.init) + '</code>' : '') + '.'}); });
   Object.keys(locals).forEach(function (k) { var l = locals[k]; it.push({label: l.name, kind: 'local', det: l.type || 'locale', rank: 0, doc: '<b>' + esc(l.name) + '</b> : locale de ce calcul' + (l.type ? ', ' + esc(l.type) : '') + '.'}); });
   CONSTS.forEach(function (x) { it.push({label: x.name, kind: 'const', det: x.type, rank: 1, doc: constDoc('Visserie', x, x === c)}); });
   VARS.forEach(function (x) { it.push({label: x.name, kind: 'var', det: x.type, rank: 6, off: isConst, why: 'variable : calculée après les constantes', doc: '<b>Visserie.' + esc(x.name) + '</b> : ' + esc(x.type) + '<br>' + (isConst ? 'Une variable du script se calcule après les constantes : un calcul de constante ne la lit pas.' : 'Une variable du script : lisible ici, elle est calculée avant si besoin.')}); });
   Object.keys(OTHER).forEach(function (s) { it.push({label: s, kind: 'script', det: 'script', rank: 2, insert: s + '.', reopen: true, doc: '<b>' + s + '</b> : script général.<br>Publiques : ' + OTHER[s].filter(function (x) { return x.vis === 'Public'; }).map(function (x) { return esc(x.name); }).join(', ') + '.'}); });
   HMI.forEach(function (x) { it.push({label: x.name, kind: 'hmi', det: x.type, rank: 3, insert: x.equipment ? x.name + '.' : x.name, reopen: !!x.equipment, doc: '<b>' + esc(x.name) + '</b> : ' + esc(x.type) + (x.equipment ? '<br>Au démarrage, l\'équipement n\'est pas encore lu : ses valeurs valent 0.' : '<br>Au démarrage : <code>' + esc(x.start) + '</code>, ' + esc(x.note) + '.')}); });
-  FUNCS.forEach(function (f) { it.push({label: f.name, kind: 'fn', det: f.num ? 'std::numeric' : (f.ret || ''), rank: 4, insert: f.name + '(', sig: true, doc: fnDoc(f)}); });
-  ['FOR', 'FOR EACH', 'IF', 'THEN', 'ELSE', 'END_IF', 'END_FOR', 'DO', 'IN', 'TO', 'VAR', 'END_VAR', 'AND', 'OR', 'NOT', 'TRUE', 'FALSE', 'CASE', 'WHILE', 'RETURN'].forEach(function (k) {
+  FUNCS.forEach(function (f) { var T = TEMPL[f.name], req = T && T.required; it.push({label: f.name, kind: 'fn', det: f.num ? 'std::numeric' : (f.ret || ''), rank: 4, insert: f.name + (req ? '<' : '('), reopen: !!req, sig: !req, doc: fnDoc(f)}); });
+  ['NUMERIC_LIMITS', 'NUMBERS'].forEach(function (n) { it.push({label: n, kind: 'fn', det: 'template <T>', rank: 4, insert: n + '<', reopen: true, doc: '<b>' + n + '&lt;T&gt;</b> : ' + (n === 'NUMBERS' ? 'les constantes mathématiques (π, e, √2…) en REAL ou LREAL ; sans &lt;T&gt; : LREAL.' : 'les limites et les propriétés du type T : <code>NUMERIC_LIMITS&lt;UINT&gt;.MAX()</code> = 65535.') + '<br><span class="newb">' + (n === 'NUMBERS' ? 'std::numbers' : 'std::numeric_limits') + '</span>'}); });
+  ['FOR', 'FOR EACH', 'IF', 'THEN', 'ELSE', 'END_IF', 'END_FOR', 'DO', 'IN', 'TO', 'AND', 'OR', 'NOT', 'TRUE', 'FALSE', 'CASE', 'WHILE', 'RETURN'].forEach(function (k) {
     it.push({label: k, kind: 'kw', det: 'mot clé', rank: 5, insert: k === 'FOR EACH' ? 'FOR EACH ' : k, doc: '<b>' + k + '</b>' + (k === 'FOR EACH' ? ' : <code>FOR EACH cle, valeur IN m DO … END_FOR;</code> parcourt une MAP, une liste, un tableau, une énumération.' : '')});
   });
   Object.keys(ENUMS).forEach(function (t) { ENUMS[t].forEach(function (v) { it.push({label: t + '#' + v, kind: 'type', det: 'énumération', rank: 5, doc: '<b>' + t + '#' + v + '</b>' + (t === 'OPERATION' ? ' : l\'opération des fonctions de std::numeric.' : '')}); }); });
-  ['T_Recette', 'REAL', 'INT', 'DINT', 'STRING', 'BOOL', 'TIME', 'LIST OF', 'VECTOR OF', 'MAP[STRING] OF', 'ARRAY[0..9] OF'].forEach(function (t) { it.push({label: t, kind: 'type', det: 'type', rank: 7, insert: /OF$/.test(t) ? t + ' ' : t, doc: '<b>' + esc(t) + '</b> : un type, pour une locale (<code>VAR x : ' + esc(t) + ' …; END_VAR</code>).'}); });
+  ['T_Recette', 'REAL', 'INT', 'DINT', 'STRING', 'BOOL', 'TIME', 'LIST OF', 'VECTOR OF', 'MAP[STRING] OF', 'ARRAY[0..9] OF'].forEach(function (t) { it.push({label: t, kind: 'type', det: 'type', rank: 7, insert: /OF$/.test(t) ? t + ' ' : t, doc: '<b>' + esc(t) + '</b> : un type ; une locale se déclare dans l\'onglet Locales, pas dans le code.'}); });
   return it;
 }
 function membersOf(owner) {
@@ -1616,14 +2171,27 @@ function suggest(force) {
   if (!E) return;
   var ta = E.ta, text = ta.value, caret = ta.selectionStart;
   if (ta.selectionEnd !== caret) return hideAc();
-  var before = text.slice(0, caret), bl = blank(before);
+  var before = text.slice(0, caret), bl = blank(before), items, prefix, m;
   if (bl.length && bl[bl.length - 1] !== before[before.length - 1]) return hideAc();
-  if (/#\w*$/.test(before) && !/[A-Za-z_]\w*#\w*$/.test(before)) return hideAc();
-  var m = /([A-Za-z_]\w*(?:#\w*)?(?:\.\w*)*)$/.exec(before), token = m ? m[1] : '';
-  if (m && m.index > 0 && /[\d]/.test(before[m.index - 1])) return hideAc();
-  if (!token && !force) return hideAc();
-  var parts = token.split('.'), prefix = parts[parts.length - 1], items;
-  items = parts.length > 1 ? membersOf(parts.slice(0, -1).join('.')) : generalItems();
+  if ((m = /\b([A-Za-z_]\w*)\s*<\s*([A-Za-z_]\w*)\s*>\s*\.\s*(\w*)$/.exec(bl)) && TEMPL[m[1].toUpperCase()] && TEMPL[m[1].toUpperCase()].kind === 'class') {
+    // NUMERIC_LIMITS<UINT>.MA : les membres, avec leur valeur pour ce type
+    prefix = m[3]; items = templMembers(m[1].toUpperCase(), m[2].toUpperCase()); force = true;
+  } else if ((m = /\b([A-Za-z_]\w*)\s*<\s*(\w*)$/.exec(bl)) && TEMPL[m[1].toUpperCase()]) {
+    // NUMERIC_LIMITS<U : les types, ceux qui ne vont pas grisés
+    prefix = m[2]; items = templTypes(m[1].toUpperCase()); force = true;
+  } else if ((m = /(?:^|[^\w.])NUMBERS\s*\.\s*(\w*)$/i.exec(bl))) {
+    // NUMBERS.P : les constantes de std::numbers, en LREAL
+    prefix = m[1]; items = templMembers('NUMBERS', 'LREAL'); force = true;
+  } else {
+    if (/#\w*$/.test(before) && !/[A-Za-z_]\w*#\w*$/.test(before)) return hideAc();
+    m = /([A-Za-z_]\w*(?:#\w*)?(?:\.\w*)*)$/.exec(before);
+    var token = m ? m[1] : '';
+    if (m && m.index > 0 && /[\d]/.test(before[m.index - 1])) return hideAc();
+    if (!token && !force) return hideAc();
+    var parts = token.split('.');
+    prefix = parts[parts.length - 1];
+    items = parts.length > 1 ? membersOf(parts.slice(0, -1).join('.')) : generalItems();
+  }
   var P = prefix.toUpperCase();
   var starts = items.filter(function (x) { return x.label.toUpperCase().indexOf(P) === 0; });
   var inside = P.length >= 2 ? items.filter(function (x) { return x.label.toUpperCase().indexOf(P) > 0; }) : [];
@@ -1697,7 +2265,7 @@ function updateSig() {
     else if (ch === ';' || ch === '\n' && d === 0 && i < before.length - 200) { i = -1; break; }
   }
   if (i < 0) return hideSig();
-  var m = /([A-Za-z_]\w*)\s*$/.exec(before.slice(0, i)), f = m && FN[m[1].toUpperCase()];
+  var m = /([A-Za-z_]\w*)\s*(?:<\s*\w+\s*>)?\s*$/.exec(before.slice(0, i)), f = m && FN[m[1].toUpperCase()];
   if (!f) return hideSig();
   var args = before.slice(i + 1), depth = 0, idx = 0;
   for (var k = 0; k < args.length; k++) { var c2 = args[k]; if (c2 === '(' || c2 === '[') depth++; else if (c2 === ')' || c2 === ']') depth--; else if (c2 === ',' && depth === 0) idx++; }
@@ -1705,7 +2273,7 @@ function updateSig() {
   inner.split(',').forEach(function (p) { deep += (p.match(/\[/g) || []).length; var nm = p.replace(/[\[\]]/g, '').trim(); if (nm) ps.push({n: nm, opt: deep > 0}); });
   var req = [], opts = '', closeN = 0;
   ps.forEach(function (p, j) { var t = j === idx ? '<b>' + esc(p.n) + '</b>' : esc(p.n); if (p.opt) { opts += ' [, ' + t; closeN++; } else req.push(t); });
-  var shown = f.sig.slice(0, f.sig.indexOf('(') + 1) + req.join(', ') + opts + new Array(closeN + 1).join(']') + ')';
+  var shown = esc(f.sig.slice(0, f.sig.indexOf('(') + 1)) + req.join(', ') + opts + new Array(closeN + 1).join(']') + ')';
   sigEl.innerHTML = shown + (f.ret ? ' → ' + esc(f.ret) : '') + '<span class="sd">' + esc(f.sum) + '</span>';
   sigEl.hidden = false;
   var pos = caretScreen(i), w = sigEl.offsetWidth;
@@ -1727,7 +2295,8 @@ function renderCodeView() {
   $('#codeview').innerHTML = '<div style="padding:10px 12px;display:grid;gap:8px"><div class="code" style="height:auto"><div class="gut" style="overflow:visible">' +
     lines.map(function (x, i) { return i + 1; }).join('\n') + '</div><div class="carea" style="overflow:auto"><pre style="position:static">' + highlight(CODEVIEW) + '</pre></div></div>' +
     '<div class="diag"><span class="sev err">Erreur</span><span>ligne 6 : Couples est une constante (calculée au démarrage) : elle ne s\'écrit pas — fais-en une variable si elle doit changer</span>' +
-    '<span class="sev ok">Juste</span><span>lignes 2 à 3 : un script lit les constantes comme avant, <code>Couples</code> et <code>Seuils</code> ont leur valeur du démarrage.</span></div></div>';
+    '<span class="sev ok">Juste</span><span>lignes 2 à 3 : un script lit les constantes comme avant, <code>Couples</code> et <code>Seuils</code> ont leur valeur du démarrage.</span>' +
+    '<span class="sev ok">Juste</span><span>pas de <code>VAR … END_VAR</code> : les déclarations du script sont dans Constantes et Variables, celles d\'un calcul dans son onglet Locales.</span></div></div>';
 }
 $$('.tab').forEach(function (t) {
   t.addEventListener('click', function () {
@@ -1761,7 +2330,7 @@ function pick(name) {
 document.addEventListener('click', function (e) { var b = e.target.closest('[data-pick]'); if (b) { e.preventDefault(); pick(b.getAttribute('data-pick')); } });
 var CHIPS = [['REAL', 'Couple_Base'], ['BOOL', 'Actif'], ['Énumération', 'Mode_Depart'], ['STRING', 'Nom_Ligne'], ['TIME', 'Duree_Cycle'], ['DT', 'Heure_Demarrage'],
   ['DINT', 'Cadence_Commune'], ['ARRAY', 'Pas_Mesure'], ['ARRAY 2D', 'Matrice'], ['LIST', 'Postes'], ['VECTOR', 'Seuils'], ['MAP', 'Facteurs'], ['MAP calculée', 'Couples'],
-  ['TUPLE', 'Point_Ref'], ['Structure', 'Recette_Std'], ['LIST de structures', 'Recettes_Jour']];
+  ['TUPLE', 'Point_Ref'], ['Structure', 'Recette_Std'], ['LIST de structures', 'Recettes_Jour'], ['UINT · template', 'Pleine_Echelle'], ['LREAL', 'Tolerance'], ['ARRAY OF INT', 'Consignes_INT']];
 $('#typechips').innerHTML = CHIPS.map(function (x) { return '<button class="tchip" type="button" data-pick="' + x[1] + '">' + esc(x[0]) + ' <span class="t">' + x[1] + '</span></button>'; }).join('');
 
 // =========================================================== les autres scripts
@@ -1779,11 +2348,11 @@ $('#typechips').innerHTML = CHIPS.map(function (x) { return '<button class="tchi
 
 // ================================================================== le démarrage
 var SCEN = {
-  ok: {state: ['ok', 'Démarrée'], cons: [['i', '21:46:05.112  Démarrage : 9 constantes de Reglages et Recettes, 17 de Visserie'], ['o', '21:46:05.114  Constantes calculées : 11 en 3,4 ms'], ['o', '21:46:05.115  Valeurs initiales : 5 variables, dont 3 calculées'], ['i', '21:46:05.116  Premier cycle des scripts']], note: 'Chaque constante voit les valeurs de celles qu\'elle lit. Le calcul de Heure_Demarrage donne l\'instant du démarrage, et ne bouge plus.'},
+  ok: {state: ['ok', 'Démarrée'], cons: [['i', '21:46:05.112  Démarrage : 10 constantes de Reglages et Recettes, 20 de Visserie'], ['o', '21:46:05.114  Constantes calculées : 14 en 3,9 ms'], ['o', '21:46:05.115  Valeurs initiales : 5 variables, dont 3 calculées'], ['i', '21:46:05.116  Premier cycle des scripts']], note: 'Chaque constante voit les valeurs de celles qu\'elle lit. Le calcul de Heure_Demarrage donne l\'instant du démarrage, et ne bouge plus.'},
   cycle: {state: ['err', 'Pas démarrée'], cons: [['e', 'Compiler · Visserie.Couples, ligne 4 : boucle de calculs : Couples → Couples_Cumules → Couples'], ['i', 'Démarrage bloqué : 1 erreur bloquante — double-clic : la ligne']], bad: ['Couples', 'Couples_Cumules'], note: 'Ici, le calcul de Couples lirait Couples_Cumules, qui lit Couples. Compiler le dit avant le démarrage. Essayez-le dans la fenêtre : ouvrez Couples et ajoutez « + Couples_Cumules[0] ».'},
   run: {state: ['err', 'Arrêté au démarrage'], cons: [['i', '21:46:05.112  Démarrage : constantes'], ['e', '21:46:05.113  Visserie.Couples, ligne 3 : clé \'rondelle\' absente de Facteurs'], ['i', '21:46:05.113  Démarrage arrêté : les constantes calculées avant restent visibles dans Simulation › Variables']], bad: ['Couples'], note: 'Une erreur qui n\'apparaît qu\'en calculant (une clé absente, une division par zéro, plus de 2 s de calcul) arrête le démarrage. C\'est le choix 1 du plan : l\'autre option démarre avec la valeur vide.'},
   write: {state: ['err', 'Pas démarrée'], cons: [['e', 'Compiler · Visserie (code), ligne 6 : Couples est une constante (calculée au démarrage) : elle ne s\'écrit pas'], ['i', 'Démarrage bloqué : 1 erreur bloquante']], note: 'Le « final » : une fois calculée, la constante ne s\'écrit plus. Voyez l\'onglet Code de la fenêtre.'},
-  equip: {state: ['warn', 'Démarrée, 1 avertissement'], cons: [['w', 'Générer · Visserie.Vitesse_Init, ligne 1 : au démarrage, ATV320 n\'est pas encore lu : ATV320.Vitesse vaudra 0'], ['o', '21:46:05.114  Constantes calculées : 12 en 3,5 ms'], ['i', '21:46:05.116  Premier cycle des scripts']], note: 'Les équipements se lisent après le démarrage : une constante qui en dépend aurait 0. Mieux vaut une variable, mise à jour par un script.'}
+  equip: {state: ['warn', 'Démarrée, 1 avertissement'], cons: [['w', 'Générer · Visserie.Vitesse_Init, ligne 1 : au démarrage, ATV320 n\'est pas encore lu : ATV320.Vitesse vaudra 0'], ['o', '21:46:05.114  Constantes calculées : 15 en 4,0 ms'], ['i', '21:46:05.116  Premier cycle des scripts']], note: 'Les équipements se lisent après le démarrage : une constante qui en dépend aurait 0. Mieux vaut une variable, mise à jour par un script.'}
 };
 var scenNow = 'ok';
 function topo() {
@@ -1828,45 +2397,169 @@ $('#scen').addEventListener('click', function (e) {
   renderBoot();
 });
 
-// =============================================================== std::numeric
+// =============================================================== les bibliothèques (Natives)
 function apply(op, a, b) { switch (op) { case 'Produit': return a * b; case 'Min': return Math.min(a, b); case 'Max': return Math.max(a, b); case 'Et': return a & b; case 'Ou': return a | b; default: return a + b; } }
+function trans(tr, x) { switch (tr) { case 'Abs': return Math.abs(x); case 'Carre': return x * x; case 'Racine': return Math.sqrt(x); case 'Neg': return -x; case 'Inverse': return 1 / x; default: return x; } }
 function fold(T, init, op) { var s = init; T.forEach(function (x) { s = apply(op, s, x); }); return s; }
 function isInt(x) { return Math.floor(x) === x; }
 function gcd(a, b) { a = Math.abs(a); b = Math.abs(b); while (b) { var t = a % b; a = b; b = t; } return a; }
-function satInt(x) { return Math.max(-32768, Math.min(32767, x)); }
-var natSel = 'ACCUMULATE', natLang = 'st', stForm = 'court';
-var natIn = {T: '3, 1, 4, 1, 5', B: '0.5, 0.3, 0.2, 0.4, 0.1', init: '0', a: '120', b: '84', op: 'Somme'};
+function bnds(t) { var ti = TYPEINFO[t]; return [Number(ti.min), Number(ti.max)]; }
+function sat(t, x) { var b = bnds(t); return Math.max(b[0], Math.min(b[1], x)); }
+function wrap(t, x) { var b = bnds(t), n = b[1] - b[0] + 1; return ((x - b[0]) % n + n) % n + b[0]; }
+var SAT_TYPES = ['SINT', 'INT', 'DINT', 'USINT', 'UINT', 'UDINT'];
+var natSel = 'ACCUMULATE', natLang = 'st', limT = 'UINT', limM = 'MAX', numT = 'LREAL', numM = 'PI';
+var natIn = {T: '3, 1, 4, 1, 5', B: '0.5, 0.3, 0.2, 0.4, 0.1', init: '0', a: '120', b: '84', op: 'Somme', tr: 'Abs', ty: 'INT'};
+// Les valeurs d'essai de chaque fiche.
+var NAT_DEF = {
+  ACCUMULATE: {T: '3, 1, 4, 1, 5', init: '0', op: 'Somme'}, REDUCE: {T: '3, 1, 4, 1, 5', init: '0', op: 'Somme'},
+  INNER_PRODUCT: {T: '10, 20, 50', B: '0.5, 0.3, 0.2', init: '0'}, TRANSFORM_REDUCE: {T: '10, 10, 30', init: '0', op: 'Somme', tr: 'Carre'},
+  PARTIAL_SUM: {T: '3, 1, 4, 1, 5', op: 'Somme'}, INCLUSIVE_SCAN: {T: '3, 1, 4, 1, 5', op: 'Max'}, EXCLUSIVE_SCAN: {T: '3, 1, 4, 1, 5', init: '0', op: 'Somme'},
+  TRANSFORM_INCLUSIVE_SCAN: {T: '3, -1, 4, -1, 5', op: 'Somme', tr: 'Abs'}, TRANSFORM_EXCLUSIVE_SCAN: {T: '3, -1, 4, -1, 5', init: '0', op: 'Somme', tr: 'Abs'},
+  ADJACENT_DIFFERENCE: {T: '10, 20, 50'}, IOTA: {T: '0, 0, 0, 0, 0', a: '0', b: '2.5'}, GCD: {a: '120', b: '84'}, LCM: {a: '120', b: '84'},
+  MIDPOINT: {ty: 'INT', a: '32000', b: '32002'}, ADD_SAT: {ty: 'INT', a: '32000', b: '1000'}, SUB_SAT: {ty: 'INT', a: '-32000', b: '1000'},
+  MUL_SAT: {ty: 'INT', a: '300', b: '200'}, DIV_SAT: {ty: 'INT', a: '-32768', b: '-1'}, SATURATE_CAST: {ty: 'INT', a: '40000'}
+};
 function renderNatTree() {
   var h = '<div class="nt-sec">Fonctions standard</div>' + ['Mathématiques', 'Sélection et bornes', 'Chaînes de caractères', 'Bits et décalages', 'Conversions'].map(function (x) { return '<div class="nt-old">' + x + '</div>'; }).join('') +
     '<div class="nt-sec">Le dialecte de l\'IHM</div>' + ['Tableaux', 'MAP et itérateurs', 'Listes, vecteurs et tuples', 'Références et pointeurs'].map(function (x) { return '<div class="nt-old">' + x + '</div>'; }).join('') +
     '<div class="nt-sec">Fonctions IHM_, couleurs, le langage</div><div class="nt-old">… (inchangés)</div>' +
-    '<div class="nt-sec">Bibliothèques</div><div class="nt-lib">std::numeric <span class="newb">Nouveau · ' + NUM.length + '</span></div>';
+    '<div class="nt-sec">Bibliothèques <span class="newb">Nouveau</span></div>' +
+    '<div class="nt-lib">std::numeric <span class="v">&lt;numeric&gt; · ' + NUM.length + '</span></div>';
   var g = '';
   NUM.forEach(function (f) {
     if (f.g !== g) { g = f.g; h += '<div class="nt-g">' + esc(g) + '</div>'; }
-    h += '<button class="nt-item' + (f.name === natSel ? ' on' : '') + '" type="button" data-nat="' + f.name + '"><span class="n">' + f.name + '</span><span class="v">' + f.ver + '</span></button>';
+    h += item(f.name, f.name + (TEMPL[f.name] && TEMPL[f.name].required ? '<T>' : ''), f.ver);
   });
+  h += '<div class="nt-lib">std::numeric_limits <span class="v">&lt;limits&gt; · ' + LIMIT_MEMBERS.length + '</span></div>' + item('#LIMITS', 'NUMERIC_LIMITS<T>', 'C++98') +
+    '<div class="nt-lib">std::numbers <span class="v">&lt;numbers&gt; · ' + NUMBERS_M.length + '</span></div>' + item('#NUMBERS', 'NUMBERS<T>', 'C++20') +
+    '<div class="nt-lib">Les types</div>' + item('#TYPES', 'ST · C · C++', '');
   $('#nattree').innerHTML = h;
+  function item(id, label, ver) {
+    return '<button class="nt-item' + (id === natSel ? ' on' : '') + '" type="button" data-nat="' + esc(id) + '"><span class="n">' + esc(label) + '</span><span class="v">' + esc(ver) + '</span></button>';
+  }
 }
-function stName(s) { return stForm === 'std' ? s.replace(new RegExp('\\b(' + NUM.map(function (f) { return f.name; }).join('|') + ')\\(', 'g'), 'STD::$1(') : s; }
+function langBlock(codes, avail) {
+  return '<div class="lt" role="tablist">' + [['st', 'ST'], ['c', 'C'], ['cpp', 'C++']].map(function (l) {
+    return '<button type="button" role="tab" data-lang="' + l[0] + '"' + (natLang === l[0] ? ' class="on"' : '') + '>' + l[1] + '</button>';
+  }).join('') + '<span class="avail">' + esc(avail[natLang] || '') + '</span></div><pre class="ex">' + esc(codes[natLang] || '') + '</pre>';
+}
+function essai(txt) { return natLang === 'st' ? '<div class="ess"><span class="sev ok">Essai</span><span>' + txt + '</span></div>' : ''; }
 function renderNatCard() {
-  var f = NUM.filter(function (x) { return x.name === natSel; })[0];
-  var code = natLang === 'st' ? stName(f.st) : natLang === 'c' ? f.c : f.cc;
-  var avail = natLang === 'st' ? 'exécuté en simulation · essai natives' : natLang === 'c' ? 'équivalent : C n\'a pas <numeric>' : 'le même : ' + f.cpp + ' (' + f.ver + ')';
-  var h = '<h4>' + esc(stName(f.name + '(').slice(0, -1)) + '</h4><div class="nc-sub">' + esc(f.cpp) + ' · ' + f.ver + ' · ' + esc(f.g) +
-    '<span class="stswitch" role="group" aria-label="Écriture en ST"><button type="button" data-stf="court"' + (stForm === 'court' ? ' class="on"' : '') + '>ACCUMULATE</button><button type="button" data-stf="std"' + (stForm === 'std' ? ' class="on"' : '') + '>STD::ACCUMULATE</button></span></div>' +
-    '<p style="margin:0 0 8px;font-size:13px">' + esc(f.sum) + '</p><div class="nc-sig">' + esc(stName(f.sig.replace(/^(\w+)\(/, '$1('))).replace(/^STD::/, 'STD::') + ' → ' + esc(f.ret) + '</div>' +
-    '<table class="pt"><thead><tr><th>Paramètre</th><th>Type</th><th>Rôle</th></tr></thead><tbody>' + f.params.map(function (p) { return '<tr><td>' + esc(p[0]) + '</td><td>' + esc(p[1]) + '</td><td>' + esc(p[2]) + '</td></tr>'; }).join('') + '</tbody></table>' +
-    '<div class="lt" role="tablist">' + [['st', 'ST'], ['c', 'C'], ['cpp', 'C++']].map(function (l) { return '<button type="button" role="tab" data-lang="' + l[0] + '"' + (natLang === l[0] ? ' class="on"' : '') + '>' + l[1] + '</button>'; }).join('') + '<span class="avail">' + esc(avail) + '</span></div>' +
-    '<pre class="ex">' + esc(code) + '</pre>' + (natLang === 'st' ? '<div class="ess"><span class="sev ok">Essai</span><span>donne <code>' + esc(f.res) + '</code></span></div>' : '') +
+  if (natSel === '#LIMITS') return renderLimits();
+  if (natSel === '#NUMBERS') return renderNumbers();
+  if (natSel === '#TYPES') return renderTypes();
+  var f = NUM.filter(function (x) { return x.name === natSel; })[0], T = TEMPL[f.name];
+  var h = '<h4>' + esc(f.name + (T ? (T.required ? '<T>' : '[<T>]') : '')) + '</h4><div class="nc-sub">' + esc(f.cpp) + ' · &lt;numeric&gt; · ' + f.ver + ' · ' + esc(f.g) + '</div>' +
+    '<p style="margin:0 0 8px;font-size:13px">' + esc(f.sum) + '</p><div class="nc-sig">' + esc(f.sig) + ' → ' + esc(f.ret) + '</div>' +
+    '<table class="pt"><thead><tr><th>Paramètre</th><th>Type</th><th>Rôle</th></tr></thead><tbody>' +
+    f.params.map(function (p) { return '<tr><td>' + esc(p[0]) + '</td><td>' + esc(p[1]) + '</td><td>' + esc(p[2]) + '</td></tr>'; }).join('') + '</tbody></table>' +
+    langBlock({st: f.st, c: f.c, cpp: f.cc}, {st: 'exécuté en simulation · rejoué par l\'essai natives', c: 'le C n\'a pas <numeric> : la boucle',
+      cpp: 'le même : ' + f.cpp + ' (' + f.ver + (f.ver === 'C++26' ? ', -std=c++26' : '') + ')'}) +
+    essai('donne <code>' + esc(f.res) + '</code>') +
     '<div class="play"><h5>Essayer</h5><div class="pfields">' + playFields(f) + '</div><div class="res" id="natres"></div></div>';
   $('#natcard').innerHTML = h;
   runPlay();
 }
+function typeSelect(id, pool, cur, label) {
+  return '<label>' + esc(label) + '<select class="inp" id="' + id + '">' + pool.map(function (x) { return '<option' + (x === cur ? ' selected' : '') + '>' + x + '</option>'; }).join('') + '</select></label>';
+}
+function cLit(v) { return v === 'TRUE' ? 'true' : v === 'FALSE' ? 'false' : v === '+INF' ? 'INFINITY' : v === 'NAN' || v === 'SNAN' ? 'NAN' : v; }
+// La fiche NUMERIC_LIMITS<T> : un type, ses 32 membres, l'écriture dans les trois langages.
+function renderLimits() {
+  var t = limT, ti = TYPEINFO[t], m = templMember('NUMERIC_LIMITS', limM) || LIMIT_MEMBERS[1], v = limVal(t, m.name), cc = limC(t, m.name), cv = limCver(t, m.name);
+  var call = 'NUMERIC_LIMITS<' + t + '>.' + m.name + (m.fn ? '()' : ''), lt = limType(t, m.name), ct = m.fn ? ti.c : lt === 'BOOL' ? 'bool' : 'int';
+  var inc = ti.float ? '#include <float.h>' + (/^(INFINITY|NAN)$/.test(cc) ? '\n#include <math.h>' : '') : ti.bool ? '#include <stdbool.h>' : '#include <stdint.h>';
+  var h = '<h4>NUMERIC_LIMITS&lt;T&gt;</h4><div class="nc-sub">std::numeric_limits · &lt;limits&gt; · C++98 (LOWEST, MAX_DIGITS10 : C++11) · ' + LIMIT_MEMBERS.length + ' membres</div>' +
+    '<p style="margin:0 0 8px;font-size:13px">Les limites et les propriétés d\'un type numérique, le type entre &lt; &gt; (obligatoire) : <code>NUMERIC_LIMITS&lt;UINT&gt;.MAX()</code> vaut 65535. Les 9 fonctions s\'appellent avec <code>()</code>, les 23 constantes sans. HAS_DENORM et HAS_DENORM_LOSS, dépréciées en C++23, sont gardées pour suivre le C++.</p>' +
+    '<div class="nc-sig">NUMERIC_LIMITS&lt;T&gt;.MEMBRE → T pour les fonctions, BOOL ou DINT pour les constantes</div>' +
+    '<div class="pfields" style="margin-top:10px">' + typeSelect('limt', LIM_T, t, 'T, le type') +
+    '<div class="small" style="align-self:end">' + esc(t) + ' : ' + esc(ti.d) + ' · C : <code>' + ti.c + '</code> · C++ : <code>' + t + '</code></div></div>' +
+    '<div style="max-height:280px;overflow:auto;margin-top:8px;border:1px solid var(--app-line);border-radius:4px"><table class="pt lim" style="margin:0"><thead><tr><th>Membre (ST)</th><th>' + esc(t) + '</th><th>C++</th><th>C</th></tr></thead><tbody>' +
+    LIMIT_MEMBERS.map(function (x) {
+      var c = limC(t, x.name), ver = limCver(t, x.name);
+      return '<tr data-limm="' + x.name + '" title="' + esc(x.doc) + '"' + (x.name === m.name ? ' class="on"' : '') + '><td>' + x.name + (x.fn ? '()' : '') + (x.dep ? ' <span class="small">déprécié</span>' : '') + '</td>' +
+        '<td class="m">' + esc(limVal(t, x.name)) + '</td><td class="m">' + esc(x.cpp + (x.fn ? '()' : '')) + '</td><td class="m">' + (c ? esc(c) + (ver ? ' <span class="small">' + ver + '</span>' : '') : '<span class="small">la valeur</span>') + '</td></tr>';
+    }).join('') + '</tbody></table></div>' +
+    '<p style="margin:8px 0 0;font-size:13px"><b class="m">' + esc(m.name + (m.fn ? '()' : '')) + '</b> : ' + esc(m.doc) + '</p>' +
+    langBlock({
+      st: 'X := ' + call + ';   (* ' + v + ' *)',
+      c: cc ? inc + '\n' + ct + ' x = ' + cc + ';   /* ' + v + ' */' : '/* le C n\'a pas de ' + m.cpp + ' : la valeur */\n' + (ti.bool || lt === 'BOOL' ? '#include <stdbool.h>\n' : '') + ct + ' x = ' + cLit(v) + ';',
+      cpp: '#include <limits>\n' + (m.fn ? t : 'auto') + ' x = ' + cppMember('NUMERIC_LIMITS', t, m) + ';   // ' + v + ' (' + t + ' : ' + ti.c + ')'
+    }, {st: 'exécuté en simulation · rejoué par l\'essai natives', c: cc ? 'une macro du C : ' + cc.split(' ')[0] + (cv ? ' (' + cv + ')' : '') : 'pas de macro : la valeur',
+      cpp: 'le même : std::numeric_limits<' + t + '>::' + m.cpp + (m.fn ? '()' : '')}) +
+    essai('<code id="limres">' + esc(call) + ' = ' + esc(v) + '</code> (' + esc(lt) + ')') + acDemo(t);
+  $('#natcard').innerHTML = h;
+}
+// Ce que propose l'aide à la saisie de chaque éditeur, pour ce type.
+function acDemo(t) {
+  var ti = TYPEINFO[t], q, rows, lang = {st: 'ST', c: 'C', cpp: 'C++'}[natLang];
+  if (natLang === 'st') {
+    q = 'X := NUMERIC_LIMITS<' + t + '>.MA';
+    rows = LIMIT_MEMBERS.filter(function (m) { return m.name.indexOf('MA') === 0; }).map(function (m) { return [m.fn ? 'fn' : 'const', m.name + (m.fn ? '()' : ''), '= ' + limVal(t, m.name)]; });
+  } else if (natLang === 'cpp') {
+    q = 'auto x = std::numeric_limits<' + t + '>::ma';
+    rows = LIMIT_MEMBERS.filter(function (m) { return m.cpp.indexOf('ma') === 0; }).map(function (m) { return [m.fn ? 'fn' : 'const', m.cpp + (m.fn ? '()' : ''), limVal(t, m.name)]; });
+  } else if (ti.float) {
+    q = ti.c + ' x = ' + ti.f + '_MA';
+    rows = [[ti.f + '_MANT_DIG', ti.dig], [ti.f + '_MAX', ti.max], [ti.f + '_MAX_10_EXP', ti.maxE10], [ti.f + '_MAX_EXP', ti.maxE]].map(function (r) { return ['const', r[0], String(r[1])]; });
+  } else if (ti.bool) {
+    q = 'bool x = '; rows = [['const', 'true', '1'], ['const', 'false', '0']];
+  } else {
+    q = ti.c + ' x = ' + ti.m + '_';
+    rows = [[ti.m + '_C(n)', 'une constante ' + ti.c], [ti.m + '_MAX', ti.max]].concat(ti.signed ? [[ti.m + '_MIN', ti.min]] : [], [[ti.m + '_WIDTH', ti.bits + ' (C23)']]).map(function (r) { return ['const', r[0], r[1]]; });
+  }
+  return '<div class="acdemo" role="img" aria-label="L\'aide à la saisie en ' + lang + '"><div class="q">' + esc(q) + '<span class="cur"></span></div>' + rows.map(function (r, i) {
+    return '<div class="r' + (i ? '' : ' on') + '"><span class="ac-k k-' + r[0] + '">' + (r[0] === 'fn' ? 'ƒ' : 'C') + '</span><span class="lbl">' + esc(r[1]) + '</span><span class="d">' + esc(r[2]) + '</span></div>';
+  }).join('') + '</div><p class="small" style="margin:6px 0 0">L\'aide à la saisie de l\'éditeur ' + lang + ', après ce qui est tapé : les membres et leur valeur pour ' + esc(t) + '.</p>';
+}
+// La fiche NUMBERS<T> : les 13 constantes de std::numbers, en REAL ou en LREAL.
+function renderNumbers() {
+  var t = numT, ti = TYPEINFO[t], m = templMember('NUMBERS', numM) || NUMBERS_M[3], v = numVal(t, m);
+  var call = t === 'LREAL' ? 'NUMBERS.' + m.name : 'NUMBERS<' + t + '>.' + m.name;
+  var h = '<h4>NUMBERS&lt;T&gt;</h4><div class="nc-sub">std::numbers · &lt;numbers&gt; · C++20 · ' + NUMBERS_M.length + ' constantes</div>' +
+    '<p style="margin:0 0 8px;font-size:13px">Les constantes mathématiques, en REAL ou en LREAL. Sans &lt;T&gt;, en LREAL (le <code>double</code> du C++) : <code>NUMBERS.PI</code> vaut <code>NUMBERS&lt;LREAL&gt;.PI</code>. Ce sont des constantes : sans parenthèses. Un calcul au démarrage les lit comme les autres natives.</p>' +
+    '<div class="nc-sig">NUMBERS[&lt;T&gt;].CONSTANTE → T (LREAL sans &lt;T&gt;)</div>' +
+    '<div class="pfields" style="margin-top:10px">' + typeSelect('numt', ['REAL', 'LREAL'], t, 'T, le type') + '<div class="small" style="align-self:end">' + esc(t) + ' : ' + esc(ti.d) + ' (' + ti.c + '), ' + (t === 'REAL' ? '9' : '17') + ' chiffres pour relire à l\'identique</div></div>' +
+    '<div style="max-height:280px;overflow:auto;margin-top:8px;border:1px solid var(--app-line);border-radius:4px"><table class="pt lim" style="margin:0"><thead><tr><th>Constante (ST)</th><th>' + t + '</th><th>C++</th><th>C</th></tr></thead><tbody>' +
+    NUMBERS_M.map(function (x) {
+      return '<tr data-numm="' + x.name + '" title="' + esc(x.doc) + '"' + (x.name === m.name ? ' class="on"' : '') + '><td>' + x.name + '</td><td class="m">' + esc(numVal(t, x)) + '</td><td class="m">' + esc(cppMember('NUMBERS', t, x)) + '</td>' +
+        '<td class="m">' + (x.c ? esc(x.c) : '<span class="small">la valeur</span>') + '</td></tr>';
+    }).join('') + '</tbody></table></div>' +
+    '<p style="margin:8px 0 0;font-size:13px"><b>' + esc(m.name) + '</b> : ' + esc(m.doc) + '</p>' +
+    langBlock({
+      st: 'Aire := ' + call + ' * Rayon * Rayon;   (* ' + call + ' = ' + v + ' *)',
+      c: '#define _USE_MATH_DEFINES   /* sous MSVC, avant l\'include */\n#include <math.h>\n' + ti.c + ' aire = ' + (m.c ? (t === 'REAL' ? '(float)' : '') + m.c : v + (t === 'REAL' ? 'f' : '')) + ' * r * r;' + (m.c ? '' : '   /* pas de macro pour ' + m.cpp + ' : la valeur */'),
+      cpp: '#include <numbers>\n' + t + ' aire = ' + cppMember('NUMBERS', t, m) + ' * r * r;   // ' + v + (t === 'REAL' ? ' (REAL : float)' : '')
+    }, {st: 'exécuté en simulation · rejoué par l\'essai natives', c: m.c ? 'une macro POSIX de <math.h> : ' + m.c : 'le C n\'a pas de macro : la valeur', cpp: 'le même : ' + cppMember('NUMBERS', t, m)}) +
+    essai('<code id="numres">' + esc(call) + ' = ' + esc(v) + '</code> (' + t + ')');
+  $('#natcard').innerHTML = h;
+}
+// Les types : le même nom dans les trois langages, grâce à l'API de l'IHM.
+function renderTypes() {
+  var h = '<h4>Les types, en ST, en C et en C++</h4><div class="nc-sub">L\'API de l\'IHM déclare les types du ST pour les scripts C et C++</div>' +
+    '<p style="margin:0 0 8px;font-size:13px">Un template prend le nom du type du ST dans les deux langages qui en ont : <code>NUMERIC_LIMITS&lt;UINT&gt;</code> en ST, <code>std::numeric_limits&lt;UINT&gt;</code> en C++, où l\'API déclare <code>UINT</code> comme un <code>uint16_t</code>. Le C n\'a pas de templates : ses macros portent la taille, <code>UINT16_MAX</code>.</p>' +
+    '<div style="overflow:auto"><table class="pt" style="min-width:520px"><thead><tr><th>ST</th><th>C, et sa macro</th><th>C++ (API de l\'IHM)</th><th>Les valeurs</th></tr></thead><tbody>' +
+    LIM_T.map(function (t) {
+      var ti = TYPEINFO[t], mx = limC(t, 'MAX');
+      return '<tr><td>' + t + '</td><td class="m">' + ti.c + (mx ? ' <span class="small">' + esc(mx) + '</span>' : '') + '</td><td class="m">' + t + ' = ' + (ti.float || ti.bool ? '' : 'std::') + ti.c + '</td>' +
+        '<td class="m" style="white-space:normal;overflow-wrap:anywhere">' + esc(rangeTxt(t)) + '</td></tr>';
+    }).join('') +
+    '<tr><td>TIME</td><td class="m">uint32_t <span class="small">en ms</span></td><td class="m">TIME = std::chrono::milliseconds</td><td class="m">T#0s …</td></tr></tbody></table></div>' +
+    langBlock({
+      st: '(* les déclarations sont dans les onglets Constantes, Variables et Locales *)\nPleine_Echelle := NUMERIC_LIMITS<UINT>.MAX();   (* 65535 *)',
+      c: '#include <stdint.h>\nuint16_t pleine_echelle = UINT16_MAX;   /* 65535 */',
+      cpp: '// l\'API de l\'IHM : using UINT = std::uint16_t; …\n#include <limits>\nUINT pleine_echelle = std::numeric_limits<UINT>::max();   // 65535'
+    }, {st: 'le nom du type, entre < >', c: 'le nom C, et les macros de <stdint.h>', cpp: 'le nom du ST, déclaré par l\'API'});
+  $('#natcard').innerHTML = h;
+}
 function playFields(f) {
-  var L = {T: 'T (A) : nombres, séparés par des virgules', B: 'B : nombres', init: f.name === 'EXCLUSIVE_SCAN' ? 'init' : 'init', a: f.name === 'IOTA' ? 'depart' : (f.uses.length === 1 ? 'x' : 'a'), b: f.name === 'IOTA' ? 'pas' : 'b', op: 'op'};
+  var L = {T: f.uses.indexOf('B') >= 0 ? 'A : nombres, séparés par des virgules' : 'T : nombres, séparés par des virgules', B: 'B : nombres', init: 'init',
+    a: f.name === 'IOTA' ? 'depart' : f.name === 'SATURATE_CAST' ? 'x' : 'a', b: f.name === 'IOTA' ? 'pas' : 'b'};
+  function sel(k, lab, opts) { return '<label>' + esc(lab) + '<select class="inp" data-pin="' + k + '">' + opts.map(function (o) { return '<option' + (natIn[k] === o ? ' selected' : '') + '>' + o + '</option>'; }).join('') + '</select></label>'; }
   return f.uses.map(function (u) {
-    if (u === 'op') return '<label>op<select class="inp" data-pin="op">' + ENUMS.OPERATION.map(function (o) { return '<option' + (natIn.op === o ? ' selected' : '') + '>' + o + '</option>'; }).join('') + '</select></label>';
+    if (u === 'op') return sel('op', 'op', ENUMS.OPERATION);
+    if (u === 'tr') return sel('tr', 'transformation', ENUMS.TRANSFORMATION);
+    if (u === 'ty') return sel('ty', '<T>', f.tys === 'mid' ? SAT_TYPES.concat(['REAL', 'LREAL']) : SAT_TYPES);
     return '<label>' + esc(L[u]) + '<input class="inp" data-pin="' + u + '" value="' + esc(natIn[u]) + '"></label>';
   }).join('');
 }
@@ -1874,35 +2567,44 @@ function nums(s) { return String(s).split(/[;,\s]+/).filter(function (x) { retur
 function fmt(x) { if (Array.isArray(x)) return '[' + x.map(fmt).join(', ') + ']'; return isInt(x) ? String(x) : String(Math.round(x * 1e6) / 1e6); }
 function runPlay() {
   var f = NUM.filter(function (x) { return x.name === natSel; })[0], out = $('#natres');
-  if (!out) return;
-  var I = {T: nums(natIn.T), B: nums(natIn.B), init: Number(natIn.init), a: Number(natIn.a), b: natIn.b === '' ? NaN : Number(natIn.b), op: natIn.op};
-  if (I.T.some(isNaN) || I.B.some(isNaN)) { out.innerHTML = '<span class="msg err">Des nombres seulement, séparés par des virgules.</span>'; return; }
+  if (!f || !out) return;
+  function err(t) { out.innerHTML = '<span class="msg err">' + esc(t) + '</span>'; }
+  var I = {T: nums(natIn.T), B: nums(natIn.B), init: Number(natIn.init), a: Number(natIn.a), b: natIn.b === '' ? NaN : Number(natIn.b), op: natIn.op, tr: natIn.tr, ty: natIn.ty};
+  if (I.T.some(isNaN) || I.B.some(isNaN)) return err('Des nombres seulement, séparés par des virgules.');
+  if (f.uses.indexOf('a') >= 0 && isNaN(I.a)) return err(natIn.a + " n'est pas un nombre");
+  if (f.uses.indexOf('ty') >= 0 && !TYPEINFO[I.ty].float && f.name !== 'SATURATE_CAST') {
+    var bad = ['a', 'b'].filter(function (k) { var x = I[k]; return f.uses.indexOf(k) >= 0 && (!isInt(x) || x < bnds(I.ty)[0] || x > bnds(I.ty)[1]); })[0];
+    if (bad) return err(natIn[bad] + " n'est pas un " + I.ty + ' (' + rangeTxt(I.ty) + ')');
+  }
   var r = f.run(I);
-  if (r && r.err) { out.innerHTML = '<span class="msg err">' + esc(r.err) + '</span>'; return; }
-  var call = stName(f.name + '(').slice(0, -1) + '(' + f.uses.map(function (u) { return u === 'T' ? '[' + I.T.join(', ') + ']' : u === 'B' ? '[' + I.B.join(', ') + ']' : u === 'op' ? 'OPERATION#' + I.op : String(natIn[u]); }).join(', ') + ')';
-  out.innerHTML = esc(call) + ' = <b>' + esc(fmt(r)) + '</b>' + (/_SAT$|SATURATE/.test(f.name) ? '<span class="why">en INT, sans blocage : ' + esc(String(f.name === 'SATURATE_TO_INT' ? wrapInt(Math.round(I.a)) : wrapInt(f.name === 'ADD_SAT' ? I.a + I.b : f.name === 'SUB_SAT' ? I.a - I.b : f.name === 'MUL_SAT' ? I.a * I.b : Math.trunc(I.a / (I.b || 1))))) + '</span>' : '');
+  if (r && r.err) return err(r.err);
+  var call = f.name + (f.uses.indexOf('ty') >= 0 ? '<' + I.ty + '>' : '') + '(' + f.uses.filter(function (u) { return u !== 'ty'; }).map(function (u) {
+    return u === 'T' ? '[' + I.T.join(', ') + ']' : u === 'B' ? '[' + I.B.join(', ') + ']' : u === 'op' ? 'OPERATION#' + I.op : u === 'tr' ? 'TRANSFORMATION#' + I.tr : String(natIn[u]);
+  }).join(', ') + ')';
+  var why = f.wrapf ? f.wrapf(I) : '';
+  out.innerHTML = esc(call) + ' = <b>' + esc(fmt(r)) + '</b>' + (why ? '<span class="why">' + esc(why) + '</span>' : '');
 }
-function wrapInt(x) { x = ((x + 32768) % 65536 + 65536) % 65536 - 32768; return x; }
 $('#nattree').addEventListener('click', function (e) {
   var b = e.target.closest('[data-nat]'); if (!b) return;
   natSel = b.getAttribute('data-nat');
-  var f = NUM.filter(function (x) { return x.name === natSel; })[0];
-  if (/_SAT$/.test(natSel)) { natIn.a = natSel === 'MUL_SAT' ? '300' : natSel === 'DIV_SAT' ? '-32768' : natSel === 'SUB_SAT' ? '-32000' : '32000'; natIn.b = natSel === 'MUL_SAT' ? '200' : natSel === 'DIV_SAT' ? '-1' : '1000'; }
-  else if (natSel === 'SATURATE_TO_INT') natIn.a = '40000';
-  else if (natSel === 'MIDPOINT') { natIn.a = '32000'; natIn.b = '32002'; }
-  else if (natSel === 'IOTA') { natIn.a = '0'; natIn.b = '2.5'; natIn.T = '0, 0, 0, 0, 0'; }
-  else if (natSel === 'GCD' || natSel === 'LCM') { natIn.a = '120'; natIn.b = '84'; }
-  else if (natSel === 'INCLUSIVE_SCAN') { natIn.op = 'Max'; natIn.T = '3, 1, 4, 1, 5'; }
-  else if (natSel === 'INNER_PRODUCT' || natSel === 'TRANSFORM_REDUCE') { natIn.T = '10, 20, 50'; natIn.B = '0.5, 0.3, 0.2'; natIn.init = '0'; }
-  else { natIn.T = '3, 1, 4, 1, 5'; natIn.op = 'Somme'; natIn.init = '0'; }
-  if (f && f.uses.indexOf('op') < 0) natIn.op = 'Somme';
+  var D = NAT_DEF[natSel] || {};
+  Object.keys(D).forEach(function (k) { natIn[k] = D[k]; });
   renderNatTree(); renderNatCard();
 });
 $('#natcard').addEventListener('click', function (e) {
   var b = e.target.closest('[data-lang]'); if (b) { natLang = b.getAttribute('data-lang'); renderNatCard(); return; }
-  b = e.target.closest('[data-stf]'); if (b) { stForm = b.getAttribute('data-stf'); renderNatCard(); }
+  b = e.target.closest('[data-limm]'); if (b) { limM = b.getAttribute('data-limm'); renderLimits(); return; }
+  b = e.target.closest('[data-numm]'); if (b) { numM = b.getAttribute('data-numm'); renderNumbers(); }
 });
-$('#natcard').addEventListener('input', function (e) { var t = e.target.closest('[data-pin]'); if (!t) return; natIn[t.getAttribute('data-pin')] = t.value; runPlay(); });
+function natInput(e) {
+  var t = e.target;
+  if (t.id === 'limt') { limT = t.value; renderLimits(); return; }
+  if (t.id === 'numt') { numT = t.value; renderNumbers(); return; }
+  t = t.closest('[data-pin]'); if (!t) return;
+  natIn[t.getAttribute('data-pin')] = t.value; runPlay();
+}
+$('#natcard').addEventListener('input', natInput);
+$('#natcard').addEventListener('change', natInput);
 
 // ========================================================= le sommaire, le départ
 var links = $$('.toc a'), secs = links.map(function (a) { return $(a.getAttribute('href')); });
