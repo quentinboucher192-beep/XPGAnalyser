@@ -625,7 +625,10 @@ bool duplicate(Project& p, const Place& at, Tab t, const std::vector<std::size_t
     for (auto it = idx.rbegin(); it != idx.rend(); ++it) {
         Declaration copy = (*c.decls)[*it];
         copy.id = p.allocate();
+        const std::string original = copy.name;
         copy.name = freeName(c, copy.name + "_copie");
+        // 1.12.7 : une valeur calculee - la copie ecrit son propre nom (Seuils_copie := ...), pas l'original.
+        if (copy.computed && !copy.calc.empty()) copy.calc = renamedCode(copy.calc, original, copy.name);
         ids.insert(ids.begin(), copy.id);
         c.decls->insert(c.decls->begin() + static_cast<std::ptrdiff_t>(*it + 1), std::move(copy));
     }

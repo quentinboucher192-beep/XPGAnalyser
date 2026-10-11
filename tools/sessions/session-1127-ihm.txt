@@ -1,0 +1,83 @@
+# =============================================================================
+#  Session 1127 IHM : XPGAnalyser IHM (1.12.7), XpgAnalyzer-IHM.exe - les
+#  valeurs calculees au demarrage (comme un final de Java), les constantes des
+#  autres scripts par leur nom qualifie, le deballage et le tableau des elements.
+#  Armoire_Gaz (migre par la 1.12.1), avec les vues des sessions 1122 a 1126 et,
+#  par demo1127, le script general Reglages (Base ecrite ; Seuils, une MAP
+#  calculee avec une locale et une boucle FOR ; Total qui la lit ; Echelle qui
+#  lit une variable IHM ; Grille, un tableau ecrit ; Secret, privee ; Compteur,
+#  une variable Conservee a la valeur initiale calculee) et la vue Vue_Calcul :
+#    1. Reglages, onglet Constantes : « ƒx = valeur » dans la case Valeur ;
+#    2. Seuils choisie : son deballage sous la grille ;
+#    3. ƒx Calcul... : le code et les locales, ce que le calcul donne ;
+#    4. Grille choisie, Elements... : le tableau, une ligne par case ;
+#    5. la simulation : Vue_Calcul lit Reglages.Total, Reglages.Seuils['bas']... ;
+#    6. la Console : chaque valeur calculee au demarrage.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 8
+ouvrir "${PROJETS}/ihm/Armoire_Gaz"
+attendre-projet
+attendre 10
+# le panneau du bas replie (Ctrl+J) : les ecrans ont toute la hauteur
+touche ctrl+j
+attendre 2
+
+# ---- 1. Reglages, onglet Constantes : les valeurs calculees ----
+arbre "IHM/Programmation générale/Scripts" double
+attendre 8
+ligne "Reglages" exact
+attendre 4
+sous-onglet "Constantes"
+attendre 4
+capture 1127_ihm_01_constantes_calculees.png
+
+# ---- 2. Seuils : le deballage ----
+ligne "Seuils" exact
+attendre 3
+capture 1127_ihm_02_deballage_map.png
+
+# ---- 3. ƒx Calcul... : le code et les locales ----
+outil "Calculer la valeur au démarrage"
+attendre 4
+capture 1127_ihm_03_fenetre_calcul.png
+touche escape
+attendre 2
+
+# ---- 4. Grille : le tableau des elements ----
+ligne "Grille" exact
+attendre 3
+outil "Éditer les éléments"
+attendre 4
+capture 1127_ihm_04_tableau_elements.png
+touche escape
+attendre 2
+
+# ---- 5. La simulation : Vue_Calcul lit Reglages.X ----
+arbre "Simulation/IHM"
+attendre 2
+ihm-build-attendre 600
+attendre 60
+ihm-sim-etat "en marche"
+attendre 3
+sim-utilisateur "admin" "admin2026"
+attendre 2
+sim-vue "Vue_Calcul"
+attendre 4
+sim-clic "Btn_Appeler"
+attendre 3
+ihm-variable "Total_Lu" "40"
+survol 1350 760
+attendre 2
+capture 1127_ihm_05_simulation_noms_qualifies.png
+
+# ---- 6. La Console : chaque valeur calculee ----
+touche ctrl+j
+attendre 2
+ihm-sorties console
+attendre 3
+ihm-console-etat
+capture 1127_ihm_06_console_calculs.png
+ihm-diagnostics
+quitter

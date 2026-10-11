@@ -1943,6 +1943,12 @@ void calculees() {
         check(q.programs.scripts[0].decls[2].calc.rfind("Somme := ", 0) == 0 && q.programs.scripts[1].body.find("Lu := Reglages.Somme;") != std::string::npos
                   && q.programs.scripts[0].body.find("Vu := Somme + Base2;") != std::string::npos,
               "son propre calcul, Reglages.Somme dans Usage, le corps du script\n" + q.programs.scripts[0].decls[2].calc + q.programs.scripts[1].body);
+        // Dupliquer une valeur calculee : la copie ecrit son propre nom.
+        std::vector<Id> copies;
+        check(de::duplicate(q, at, de::Tab::Constants, {2}, &copies, &why) && q.programs.scripts[0].decls[3].name == "Somme_copie"
+                  && q.programs.scripts[0].decls[3].computed && q.programs.scripts[0].decls[3].calc.rfind("Somme_copie := ", 0) == 0,
+              "dupliquer Somme : Somme_copie ecrit Somme_copie - " + q.programs.scripts[0].decls[3].calc);
+        check(de::remove(q, at, de::Tab::Constants, {3}, &why), "la copie retiree");
         // Une valeur ecrite dans la case : le calcul s'arrete (Ctrl+Z le rend).
         check(de::set(q, at, de::Tab::Constants, 3, de::Column::Value, "2.5", &why, &note) && !q.programs.scripts[0].decls[3].computed
                   && q.programs.scripts[0].decls[3].value == "2.5" && note.find("remplace le calcul") != std::string::npos,
