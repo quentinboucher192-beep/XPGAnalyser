@@ -59,6 +59,10 @@ attendre 2
 survol 1350 760
 attendre 2
 capture 1126_ihm_03_simulation_lecture_par_role.png
+# la colonne de droite (l'ecriture, les onglets) : la vue glisse a gauche, sinon le panneau
+# Expressions la cache (un glisser qui finirait dessous ne lacherait pas le curseur)
+simulation-deplacer -280 0
+attendre 2
 
 # ---- 4. Le curseur au bout : l'INT recoit son maximum ----
 sim-glisser "Curseur_BC" "fraction:0.1" "fraction:1"
