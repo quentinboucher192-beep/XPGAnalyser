@@ -1,4 +1,5 @@
 #include "HmiAssist.hpp"
+#include "../../sim/DialectLib.hpp"   // 1.12.7 : les templates (NUMERIC_LIMITS<T>, NUMBERS), les natives
 #include "../../hmi/HmiNatives.hpp"   // 1.12.0 : les natives de l'IHM (completion, signature, survol)
 #include "../../core/Edition.hpp"     // 1.12.0 : XPGAnalyser IHM - ni API, ni bibliotheque de l'automate
 #include "../../ui/widgets/ExprField.hpp"   // 1.10 (chantier K) : l'aide a la saisie selon le type du champ
@@ -503,6 +504,12 @@ Item builtinItem(const lang::Builtin& b, int rank) {
     const auto open = b.signature.find('(');
     const bool args = open != std::string_view::npos && open + 1 < b.signature.size() && b.signature[open + 1] != ')';
     it.caret = args ? it.text.size() + 1 : it.insert.size();
+    // 1.12.7 : SATURATE_CAST<T>(x) - le type d'abord : la liste se rouvre sur les types.
+    if (const auto* t = sim::lib::templateInfo(b.name); t && t->required) {
+        it.insert = it.text + "<";
+        it.caret = std::string::npos;
+        it.chain = true;
+    }
     return it;
 }
 
@@ -516,6 +523,13 @@ Item nativeItem(const hmi::natives::Function& f, int rank) {
     it.rank = rank;
     it.insert = it.text + "()";
     it.caret = f.params.empty() ? it.insert.size() : it.text.size() + 1;
+    // 1.12.7 : NUMERIC_LIMITS< (puis les types), NUMBERS. (puis les constantes) - des templates, pas des appels.
+    if (f.category == "limits" || f.category == "numbers") {
+        it.insert = it.text + (f.category == "limits" ? "<" : ".");
+        it.caret = std::string::npos;
+        it.chain = true;
+        it.kind = Kind::Type;
+    }
     return it;
 }
 
@@ -1596,6 +1610,76 @@ bool publicMembers(const hmi::Project& hp, const std::string& path, const std::s
 
 // 1.11.2 (API-V) : le corps d'avant ; suggest() (plus bas) range ensuite chaque
 // proposition (sa nature, sa provenance) - ce corps a plusieurs sorties.
+// 1.12.7 : LES TEMPLATES. Apres NUMERIC_LIMITS< (NUMBERS<, SATURATE_CAST<, ADD_SAT<, MIDPOINT<...) : les
+// types qu'il accepte, avec leur nom en C ; le choix pose NOM<T>. (la liste se rouvre sur les membres)
+// ou NOM<T>( (les arguments). Apres NUMERIC_LIMITS<UINT>., NUMBERS<REAL>. ou NUMBERS. : les membres,
+// leur valeur pour ce type (= 65535), ce qu'ils disent ; une fonction se pose avec ses ().
+bool templateItems(std::string_view before, const std::string& needle, const std::function<void(Item)>& push) {
+    const auto blankBack = [&](std::size_t k) {
+        while (k > 0 && (before[k - 1] == ' ' || before[k - 1] == '\t')) --k;
+        return k;
+    };
+    const auto wordBack = [&](std::size_t k) {
+        while (k > 0 && identChar(before[k - 1])) --k;
+        return k;
+    };
+    std::size_t e = blankBack(before.size());
+    if (e == 0) return false;
+    if (before[e - 1] == '<') {
+        const std::size_t nameEnd = blankBack(e - 1), nameStart = wordBack(nameEnd);
+        if (nameStart == nameEnd || (nameStart > 0 && (before[nameStart - 1] == '.' || before[nameStart - 1] == '#'))) return false;
+        const auto* info = sim::lib::templateInfo(before.substr(nameStart, nameEnd - nameStart));
+        if (!info) return false;
+        int k = 0;
+        for (const auto t : info->name == "NUMBERS" ? info->types : sim::lib::limitsTypes()) {
+            if (!sim::lib::templateAccepts(*info, t)) continue;
+            const int r = matchRank(t, needle);
+            if (r < 0) continue;
+            Item it;
+            it.text = std::string(t);
+            it.detail = std::string(sim::lib::cTypeName(t)) + kDot + std::string(sim::lib::typeSummary(t)) + kDot + std::string(info->library);
+            it.kind = Kind::Type;
+            it.rank = r * 100 + k++;
+            it.insert = std::string(t) + (info->isClass ? ">." : ">(");
+            it.chain = info->isClass;
+            push(std::move(it));
+        }
+        return true;
+    }
+    if (before[e - 1] != '.') return false;
+    std::size_t k = blankBack(e - 1);
+    std::string type;
+    if (k > 0 && before[k - 1] == '>') {
+        const std::size_t typeEnd = blankBack(k - 1), typeStart = wordBack(typeEnd);
+        if (typeStart == typeEnd) return false;
+        type = upper(before.substr(typeStart, typeEnd - typeStart));
+        k = blankBack(typeStart);
+        if (k == 0 || before[k - 1] != '<') return false;
+        k = blankBack(k - 1);
+    }
+    const std::size_t nameStart = wordBack(k);
+    if (nameStart == k || (nameStart > 0 && (before[nameStart - 1] == '.' || before[nameStart - 1] == '#'))) return false;
+    const auto* info = sim::lib::templateInfo(before.substr(nameStart, k - nameStart));
+    if (!info || !info->isClass || (type.empty() && info->required)) return false;
+    const bool numbers = info->name == "NUMBERS";
+    if (type.empty()) type = std::string(info->dflt);
+    if (!sim::lib::templateAccepts(*info, type)) return true;          // NUMERIC_LIMITS<STRING>. : rien (Compiler le dit)
+    int rank = 0;
+    for (const auto& m : numbers ? sim::lib::numbersMembers() : sim::lib::limitsMembers()) {
+        const int r = matchRank(m.name, needle);
+        if (r < 0) { ++rank; continue; }
+        const std::string value = numbers ? sim::lib::numbersText(type, m.name) : sim::lib::limitsText(type, m.name);
+        Item it;
+        it.text = std::string(m.name);
+        it.detail = (value.empty() ? std::string{} : "= " + value + kDot) + std::string(m.summary) + kDot + sim::lib::cppMember(info->name, type, m);
+        it.kind = m.function ? Kind::Function : Kind::Member;
+        it.rank = r * 100 + rank++;
+        it.insert = std::string(m.name) + (m.function ? "()" : "");
+        push(std::move(it));
+    }
+    return true;
+}
+
 static std::vector<Item> suggestItems(const hmi::Project& hp, const domain::Project* plc, std::string_view before,
                                       std::string_view prefix, bool code, bool templateText, hmi::Id op) {
     std::vector<Item> out;
@@ -1608,6 +1692,11 @@ static std::vector<Item> suggestItems(const hmi::Project& hp, const domain::Proj
     if (!code) op = hmi::kNoId;
 
     auto push = [&](Item it) { out.push_back(std::move(it)); };
+
+    // 1.12.7 : NUMERIC_LIMITS< (les types), NUMERIC_LIMITS<UINT>. et NUMBERS. (les membres et leur valeur).
+    if ((where.context == Context::Code || where.context == Context::Member || where.context == Context::Placeholder)
+        && templateItems(before, needle, push))
+        return out;
 
     // Les noms dans une chaine : filtres sur tout ce qui est tape depuis le
     // guillemet, qui est aussi ce que le choix remplace.
@@ -2048,7 +2137,10 @@ static std::vector<Item> suggestItems(const hmi::Project& hp, const domain::Proj
             // (au-dessus) et hors dialecte (MAP_, REF : dialectCode) ; dans un champ, celles
             // qui s'ecrivent dans une expression.
             for (const auto& f : hmi::natives::functions()) {
-                if (f.name.rfind("IHM_", 0) == 0 || f.category == "map" || f.category == "ref" || lang::isBuiltin(f.name)) continue;   // le dialecte les propose (dialectCode)
+                // 1.12.7 : dans un champ, les nouvelles natives qui s'ecrivent dans une expression (GCD, BIT_TEST...) viennent d'ici.
+                if (f.name.rfind("IHM_", 0) == 0 || f.category == "map" || f.category == "ref"
+                    || (lang::isBuiltin(f.name) && (full || !sim::lib::native(f.name))))
+                    continue;   // le dialecte les propose (dialectCode)
                 if (!full && !f.expression) continue;
                 const int r = matchRank(f.name, needle);
                 if (r < 0) continue;

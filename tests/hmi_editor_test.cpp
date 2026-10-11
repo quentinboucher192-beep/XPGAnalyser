@@ -28701,6 +28701,48 @@ void selecteurTypes1119() {
 // 1.12.0 : LES NATIVES - la branche de l'arbre (IHM > Programmation generale > Natives),
 // ses fiches (app::natives), le volet. Chaque noeud a sa fiche, chaque fiche se compose
 // et se met en page dans les trois notations, la cle revient a son noeud.
+// 1.12.7 : l'aide a la saisie des natives de la 1.12.7 - les templates (apres NUMERIC_LIMITS< les
+// types, apres NUMERIC_LIMITS<UINT>. les membres et leur valeur, NUMBERS.), les nouvelles fonctions.
+void saisieNatives1127() {
+    std::printf("1.12.7 : l'aide a la saisie des templates et des nouvelles natives\n");
+    namespace as = app::assist;
+    hmi::Project hp;
+    const auto find = [](const std::vector<as::Item>& items, std::string_view text) -> const as::Item* {
+        for (const auto& it : items)
+            if (it.text == text) return &it;
+        return nullptr;
+    };
+    const auto types = as::suggest(hp, nullptr, "x := NUMERIC_LIMITS<", "");
+    const auto* uint = find(types, "UINT");
+    check(types.size() == 15 && types.front().text == "SINT" && uint && uint->insert == "UINT>." && uint->chain
+              && uint->detail.find("uint16_t") != std::string::npos,
+          "NUMERIC_LIMITS< : les 15 types, UINT pose UINT>. et rouvre la liste (" + std::to_string(types.size()) + ")");
+    const auto members = as::suggest(hp, nullptr, "x := NUMERIC_LIMITS<UINT>.", "");
+    const auto* mx = find(members, "MAX");
+    const auto* digits = find(members, "DIGITS");
+    check(members.size() == 32 && mx && mx->insert == "MAX()" && mx->detail.rfind("= 65535", 0) == 0 && digits && digits->insert == "DIGITS"
+              && digits->detail.rfind("= 16", 0) == 0,
+          "NUMERIC_LIMITS<UINT>. : les 32 membres, MAX() = 65535, DIGITS = 16 (" + std::to_string(members.size()) + ")");
+    const auto pi = as::suggest(hp, nullptr, "x := NUMBERS.", "P");
+    check(!pi.empty() && pi.front().text == "PI" && pi.front().detail.rfind("= 3.14159265358979", 0) == 0, "NUMBERS.P : PI d'abord, sa valeur en LREAL");
+    const auto piReal = as::suggest(hp, nullptr, "x := NUMBERS<REAL>.", "PI");
+    check(!piReal.empty() && piReal.front().detail.rfind("= 3.14159274", 0) == 0, "NUMBERS<REAL>.PI : sa valeur en REAL");
+    const auto real = as::suggest(hp, nullptr, "x := NUMBERS<", "");
+    check(real.size() == 2 && real.front().text == "REAL" && real.back().text == "LREAL", "NUMBERS< : REAL et LREAL");
+    const auto ints = as::suggest(hp, nullptr, "x := SATURATE_CAST<", "");
+    const auto* i16 = find(ints, "INT");
+    check(ints.size() == 12 && i16 && i16->insert == "INT>(" && !find(ints, "REAL"), "SATURATE_CAST< : les 12 entiers, INT pose INT>(");
+    const auto fns = as::suggest(hp, nullptr, "i := ", "LIST_FIN");
+    check(find(fns, "LIST_FIND_IF") != nullptr, "LIST_FIN : LIST_FIND_IF propos\xC3\xA9" "e");
+    const auto lim = as::suggest(hp, nullptr, "i := ", "NUMERIC_LIM");
+    const auto* nl = find(lim, "NUMERIC_LIMITS");
+    check(nl && nl->insert == "NUMERIC_LIMITS<" && nl->chain, "NUMERIC_LIM : NUMERIC_LIMITS pose NUMERIC_LIMITS< (puis les types)");
+    const auto bits = as::suggest(hp, nullptr, "b := ", "BIT_T");
+    check(find(bits, "BIT_TEST") != nullptr, "BIT_T : BIT_TEST propos\xC3\xA9" "e");
+    const auto cmp = as::suggest(hp, nullptr, "IF Compteur <", "");
+    check(!find(cmp, "SINT"), "IF Compteur < : une comparaison, pas un template");
+}
+
 void natives1200() {
     std::printf("1.12.0 : les natives - l'arbre, les fiches, le volet\n");
     using NK = app::ProjectTreeModel::NodeKind;
@@ -28939,6 +28981,7 @@ int main(int argc, char** argv) {
     // 1.12.0 : HMI_TEST_NATIVES=1 - les natives, seules.
     if (const char* only = std::getenv("HMI_TEST_NATIVES"); only && *only == '1') {
         natives1200();
+        saisieNatives1127();                     // 1.12.7
         enumsInspecteur1121();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
@@ -29308,6 +29351,7 @@ int main(int argc, char** argv) {
     raccourcis1123();                       // 1.11.23 : l'onglet Raccourcis d'une vue
     explorateur1123();                      // 1.11.23 : l'explorateur - puces, titres de domaine
     natives1200();                          // 1.12.0 : les natives - l'arbre, les fiches, le volet
+    saisieNatives1127();                    // 1.12.7 : l'aide a la saisie des templates et des nouvelles natives
     enumsInspecteur1121();                  // 1.12.1 : les enumerations natives des proprietes et l'inspecteur
     if (argc > 1) configuration_et_variables(argv[1]);
     if (argc > 1) aide_saisie_scripts(argv[1]);
