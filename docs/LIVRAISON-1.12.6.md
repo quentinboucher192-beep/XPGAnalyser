@@ -72,7 +72,7 @@ Une valeur refusée ne se dessine plus comme si elle était vraie : l'objet se h
 **B4 — Le moteur lit la même copie que le dessin.** Appuyer, relâcher, double-cliquer, viser une partie d'objet lisent les propriétés calculées. La barre de navigation suit donc ses vues en formule. Un geste (changer d'onglet, déplier un panneau repliable, faire défiler un panneau défilant) ne remplace plus la formule de la propriété : il vaut à côté d'elle, et la formule reprend la main dès que sa valeur change.
 
 **B5 — Générer vérifie le type contre le rôle.** Il signale, en avertissement :
-- une structure ou un tableau là où une valeur seule est attendue, dans une jauge ou une pompe (une erreur, avec ses membres proposés) ;
+- une structure ou un tableau là où une valeur seule est attendue, dans une jauge ou une pompe (avec ses membres proposés) ;
 - une `STRING` lue comme un nombre (un afficheur, une jauge) ;
 - une énumération lue comme un booléen (le voyant s'allumerait hors de la première valeur) ;
 - un sélecteur de date sur un `BOOL`, un programmateur dont la sortie n'est pas une `STRING` ;
@@ -100,7 +100,7 @@ Ce sont des **avertissements**, et c'est voulu : un projet qui démarrait en 1.1
 ## Tester vous-même
 
 1. Posez une **jauge** liée à un `BOOL` vrai : elle montre 1. Liée à un `TIME` de `T#90s`, sur 0..120 : 90.
-2. Liez une jauge à une `STRING` qui vaut `'abc'` : Générer le signale ; en simulation, la jauge se hachure avec `###`.
+2. Liez une jauge à une `STRING` qui vaut `'abc'` : Générer le signale (un avertissement) ; la simulation démarre, et la jauge se hachure avec `###`.
 3. Mettez dans un **texte** `Mode : {Mode}`, où `Mode` est une énumération : il montre le texte de la valeur (Automatique).
 4. Posez un **curseur** de 0 à 50000 lié à un `INT`, et poussez-le au bout : l'INT reçoit 32767, et la Console du panneau du bas le dit.
 5. Posez un **champ de saisie** en mode texte lié à un `TIME` et tapez `1 h 30` : 90 minutes. Lié à l'énumération, tapez `Auto`.
@@ -114,14 +114,14 @@ Ce sont des **avertissements**, et c'est voulu : un projet qui démarrait en 1.1
 1. Lancez `XPGAnalyser-Setup-1.12.6.exe`. Il met à jour la version installée : même identité d'installation, données reprises sans être déplacées. Il pose les deux applications et leurs deux raccourcis. Vos projets s'ouvrent tels quels.
 2. Windows SmartScreen peut avertir, parce que l'installateur n'est pas signé. Choisissez « Informations complémentaires », puis « Exécuter quand même ».
 
-Empreinte SHA-256 de `XPGAnalyser-Setup-1.12.6.exe` (@@TAILLE_SETUP@@) :
-`@@SHA_SETUP@@`
+Empreinte SHA-256 de `XPGAnalyser-Setup-1.12.6.exe` (28,3 Mo, 29 694 518 octets) :
+`E14DEFAD2394780FB06CF513FCF6B726335F1EBF08C943AC8FA4123C5C5C8277`
 
 **Les zips portables.** Chacun contient une application et ce qu'il lui faut, dans un dossier `XPGAnalyser-API-1.12.6` ou `XPGAnalyser-IHM-1.12.6`. Décompressez, puis lancez l'exe.
-- `XPGAnalyser-API-1.12.6-portable.zip` (@@TAILLE_API@@) :
-  `@@SHA_API@@`
-- `XPGAnalyser-IHM-1.12.6-portable.zip` (@@TAILLE_IHM@@) :
-  `@@SHA_IHM@@`
+- `XPGAnalyser-API-1.12.6-portable.zip` (21,2 Mo) :
+  `B96FE97ECA3706D8AACFCD047B6DD8B038E5FB62CEB4CC8A85A337ACFAE747F`
+- `XPGAnalyser-IHM-1.12.6-portable.zip` (21,2 Mo) :
+  `6AFD7168B8CB462E92BE5EC864C03DDACD2C7A6F930F55F7A030FBEB8E3C0B26`
 
 ## Vérifications
 
@@ -132,23 +132,39 @@ Les essais des lots B et C :
 - `chaqueProprieteParSonRole` dans `hmireperes` : les 135 propriétés à repère, comme dit au § C4.
 
 Des essais existants ont changé, parce que le comportement qu'ils figeaient a changé exprès :
-- les textes montrent `Vrai`, `Faux`, `1,5 s`, `09/10/2026` (avant : `TRUE`, `T#1500ms`, des millisecondes) ;
+- les textes montrent `Vrai`, `Faux`, `1,5 s`, `09/10/2026` (avant : `TRUE`, `FALSE`, `T#1500ms`, `2026-10-09`) ;
 - le refus d'un booléen dit « vrai ou faux attendu » ;
 - Dupliquer trouve 4 indices dans un texte qui porte `M[1, 2]` (avant : 2, `M[1, 2]` n'était pas suivi) ;
 - les compteurs des notes de version (39 versions, 283 lignes).
 
-Générer, sur le projet de démonstration Armoire_Gaz, donne les mêmes 3 erreurs qu'avec la 1.12.5 (des fautes voulues du projet) et aucune fausse alerte nouvelle. Vue_LotBC en ajoute une, voulue : la jauge liée à la `STRING` `'abc'`.
+Générer, sur le projet de démonstration Armoire_Gaz, donne les mêmes 3 erreurs qu'avec la 1.12.5 (des fautes voulues du projet, qui ne bloquent pas la simulation) et aucune fausse alerte nouvelle. Vue_LotBC n'ajoute aucune erreur ; la jauge liée à la `STRING` `'abc'` y donne l'avertissement voulu.
 
 **Les deux exe Windows**, compilés sous Linux avec MinGW-w64 et lancés sous Wine :
-@@EXE@@
+- `--version` répond `XPGAnalyser API 1.12.6` et `XPGAnalyser IHM 1.12.6` ;
+- `XpgAnalyzer-API.exe --cli MAST.XPG` analyse le projet d'essai (891 variables, 29 POU), comme avant.
 
-**La session sous Wine** a tourné avec l'exe livré, sur Armoire_Gaz. Un petit outil y a ajouté la vue `Vue_LotBC` et ses huit variables :
-@@SESSION@@
+**La session sous Wine** a tourné avec l'exe livré, sur Armoire_Gaz. Un petit outil y a ajouté la vue `Vue_LotBC` et ses huit variables. Chaque ligne de la session a réussi :
+- Vue_LotBC dans l'éditeur (capture `1126_ihm_01`). On y voit ce qui est tapé : les formules, les textes à trous, les repères `$Vanne$` et `$Arret$` ;
+- Ctrl+D sur l'afficheur `=Grille_BC[1, 2]` (`02`) : la fenêtre propose « Suivre Grille_BC[1, ·] » et « Suivre Grille_BC[·, 2] » ;
+- la simulation : le build réussit (386 éléments générés, 312 compilés, 0 erreur, 54 avertissements dont celui de la jauge sur la STRING). La vue montre (`03`) :
+  - la jauge sur le BOOL à 1, celle sur le TIME à 90 s, celle sur la STRING `'abc'` hachurée avec `###`, la raison dans le panneau Expressions (« 'abc' n'est pas un nombre ») ;
+  - « Marche : Vrai », « Durée du cycle : 1 min 30 s », « Mode : Automatique », « Mise en service : 09/10/2026 » ;
+  - « Vanne ouverte, P1 en marche » et la liste sur « Auto », sans leurs `$` ;
+  - les onglets sur la page 2, celle de leur formule ;
+- le curseur poussé au bout : `Compte_BC` vaut 32767 (`04`), et la Console dit « Compte_BC : 50000 ramené à 32767 (le maximum d'un INT) » (`08`) ;
+- « Mode := 'Manuel' » : `Mode_BC` vaut 2 (Manu), et le texte montre « Manuel » (`05`) ;
+- un clic sur l'onglet 3 : la page 3 se montre et `Page_BC` reste 2 (`06`). Puis « Page_BC := 1 » : la formule reprend la main, l'onglet 1 se montre (`07`).
+
+**Ce que la session a trouvé, corrigé dans cette livraison.** La première session s'est arrêtée au démarrage de la simulation : « Démarrage bloqué : 1 erreur bloquante ». La jauge liée à la STRING bloquait tout le projet. La table des rôles typait désormais environ 70 propriétés que la 1.12.5 laissait passer : la Valeur des jauges, des voyants et des pompes, les seuils, les couleurs des états… Un projet qui démarrait en 1.12.5 aurait donc pu ne plus démarrer. Ces contrôles sont maintenant des avertissements (§ B5), et deux contrôles de `lotBC1126` figent la règle.
 
 **L'installateur**, compilé par Inno Setup 6.4.1 sous Wine, puis installé en silencieux pour tous les comptes, par-dessus la 1.12.5 :
-@@INSTALL@@
+- « Installation process succeeded ». Il a repris l'installation de la 1.12.5 : même dossier, et son journal de désinstallation complété ;
+- avant comme après : `XpgAnalyzer-API.exe`, `XpgAnalyzer-IHM.exe`, et les raccourcis « XPGAnalyser API » et « XPGAnalyser IHM » ;
+- les deux exe installés sont identiques à ceux qui ont été testés. Installés, ils répondent `XPGAnalyser API 1.12.6` et `XPGAnalyser IHM 1.12.6`.
 
 **Pas encore fait :** ni les exe ni l'installateur n'ont été lancés sur un vrai Windows, et le projet Visual Studio n'a pas été compilé (pas de MSVC ici). La section « Tester vous-même » donne le parcours à refaire chez vous.
+
+**Une limite connue.** Sur un tableau à deux dimensions, Dupliquer propose chaque dimension mais n'en lit pas encore les bornes : la fenêtre dit « bornes inconnues » (capture `02`), et elle ne signale donc pas une copie qui sortirait du tableau. Pour un tableau à une dimension, rien ne change : les bornes sont lues comme avant.
 
 ## La suite
 
