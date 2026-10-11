@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.12.7", "12/10/2026", "livr\xC3\xA9" "e le 12/10 au matin"},
     {"1.12.6", "11/10/2026", "livr\xC3\xA9" "e le 11/10 au soir"},
     {"1.12.5", "11/10/2026", "livr\xC3\xA9" "e le 11/10 dans l'apr\xC3\xA8s-midi"},
     {"1.12.4", "11/10/2026", "livr\xC3\xA9" "e le 11/10 dans la matin\xC3\xA9" "e"},
@@ -112,6 +113,16 @@ const std::vector<Note>& table() {
     static const std::vector<Note> t = {
         // 1.11.16 (09/10/2026 dans la nuit) : la remanence d'exploitation par variable, la robustesse
         // (lot 4 de la specification du 08/10).
+        // 1.12.7 (12/10/2026) : voir docs/LIVRAISON-1.12.7.md.
+        note("1.12.7", "Scripts", Kind::New,
+         "LES VALEURS CALCUL\xC3\x89" "ES AU D\xC3\x89MARRAGE, comme un final de Java : une constante d'un script, ou la valeur initiale d'une variable, peut venir d'un code ST (\xC2\xAB \xC6\x92x Calcul\xE2\x80\xA6 \xC2\xBB dans la grille) qui l'\xC3\xA9" "crit une fois, apr\xC3\xA8s les valeurs de d\xC3\xA9part des variables IHM et la r\xC3\xA9manence, avant les scripts de D\xC3\xA9marrage. Ses locales sont \xC3\xA0 part, une par ligne (jamais de VAR \xE2\x80\xA6 END_VAR : un bloc coll\xC3\xA9 y est rang\xC3\xA9) ; une boucle FOR sans variable d\xC3\xA9" "clar\xC3\xA9" "e re\xC3\xA7oit un DINT. Les constantes sont calcul\xC3\xA9" "es d'abord, chacune apr\xC3\xA8s celles qu'elle lit, puis les variables ; une boucle est refus\xC3\xA9" "e. Une erreur de calcul arr\xC3\xAAte le d\xC3\xA9marrage, et la Console dit le calcul et sa ligne ; chaque valeur calcul\xC3\xA9" "e y est \xC3\xA9" "crite. La case Valeur montre \xC2\xAB \xC6\x92x = [valeur] \xC2\xBB (en rouge avec la raison).",
+         "variables-locales", ""),
+        note("1.12.7", "Scripts", Kind::New,
+         "LES CONSTANTES DES AUTRES SCRIPTS PAR LEUR NOM QUALIFI\xC3\x89 : Reglages.Seuils, Reglages.Seuils['bas'], MAP_SIZE(Reglages.Seuils) se lisent dans les scripts, les fonctions, les calculs et les expressions des vues. Seules les constantes publiques d'un script g\xC3\xA9n\xC3\xA9ral se lisent ainsi (\xC2\xAB Reglages.Secret est priv\xC3\xA9" "e : seul Reglages la lit \xC2\xBB) ; aucune ne s'\xC3\xA9" "crit (Compiler et le moteur le refusent). Apr\xC3\xA8s \xC2\xAB Reglages. \xC2\xBB, l'aide \xC3\xA0 la saisie propose ses constantes ; renommer une constante renomme Reglages.X partout.",
+         "variables-locales", ""),
+        note("1.12.7", "Scripts", Kind::New,
+         "LE D\xC3\x89" "BALLAGE ET LE TABLEAU DES \xC3\x89L\xC3\x89MENTS : sous les grilles Constantes et Variables, la valeur \xC3\xA0 taille de la ligne choisie (LIST, VECTOR, MAP, ARRAY \xC3\xA0 une ou deux dimensions avec ses vrais indices, TUPLE, structure ; \xC3\xA9" "crite ou calcul\xC3\xA9" "e) se lit \xC3\xA9l\xC3\xA9ment par \xC3\xA9l\xC3\xA9ment, en arbre. \xC2\xAB \xC3\x89l\xC3\xA9ments\xE2\x80\xA6 \xC2\xBB ouvre un tableau, une ligne par \xC3\xA9l\xC3\xA9ment (indice et valeur, cl\xC3\xA9 et valeur, une ligne par premi\xC3\xA8re dimension pour deux dimensions, un \xC3\xA9l\xC3\xA9ment par type pour un tuple), \xC3\xA0 la place du texte \xC2\xAB un par ligne \xC2\xBB. Une constante neuve pass\xC3\xA9" "e en MAP, LIST ou VECTOR prend [] (avant : elle gardait 0.0).",
+         "variables-locales", ""),
         // 1.12.6 (11/10/2026 au soir) : les lots B et C de l'audit de la bibliotheque d'objets - un role
         // par propriete (lecture, ecriture, Generer), le decoupeur unique et les reperes partout.
         note("1.12.6", "Objets", Kind::Changed,

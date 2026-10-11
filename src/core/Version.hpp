@@ -12,5 +12,5 @@
 // =============================================================================
 #pragma once
 
-#define XPG_ANALYZER_VERSION "1.12.6"
+#define XPG_ANALYZER_VERSION "1.12.7"
 #define XPG_ANALYZER_NAME    "XPGAnalyser"
