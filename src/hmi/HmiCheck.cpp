@@ -27,6 +27,7 @@
 #include "HmiAlarmViews.hpp"
 #include "HmiCharts.hpp"
 #include "HmiControls.hpp"
+#include "HmiRoles.hpp"         // 1.12.6 (lot B) : le role de chaque propriete
 #include "HmiTypeRegistry.hpp"   // 1.12.5 : le type du total d'un compteur horaire
 #include "HmiExport.hpp"
 #include "HmiProduction.hpp"
@@ -3484,6 +3485,199 @@ std::vector<Issue> generate(const Project& p, const NameExists& plcHasName, cons
     return generateWith(p, plcHasName, opt);
 }
 
+namespace {
+// =============================================================================
+//  1.12.6 (lot B, § 2.9) : CE QUE GENERER VERIFIE AVEC LE ROLE DE CHAQUE PROPRIETE
+//  (HmiRoles.hpp) - la variable contre le role de sa valeur (une STRING sur une jauge,
+//  une structure sur une pompe, une enumeration lue en booleen, un selecteur de date
+//  sur un BOOL) ; les listes paralleles alignees ; les couleurs, y compris dans les
+//  etats et les zones ; le format (0,0) ; l'ordre des seuils et leur plage ; une
+//  valeur tapee sans = qui ressemble a une variable.
+// =============================================================================
+std::string upperOfName(std::string_view s) {
+    std::string u(s);
+    for (auto& c : u) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    return u;
+}
+
+void roleChecks(const Project& p, std::vector<Issue>& out) {
+    using S = Issue::Severity;
+    using R = roles::Role;
+    const auto isDate = [](sim::Type t) { return t == sim::Type::Date || t == sim::Type::Tod || t == sim::Type::Dt; };
+    for (const auto& v : p.views)
+        for (const auto& o : v.objects) {
+            // ---- 1. la variable (et le retour d'etat, le voyant, la sortie) contre le role de la valeur
+            const auto checkVariable = [&](const std::string& key, const std::string& var, R role) {
+                const std::string type = params::expressionType(p, &v, var);
+                if (type.empty()) return;                     // un calcul, un nom inconnu (deja dit ailleurs)
+                const std::string up = upperOfName(type);
+                const sim::Type st = typereg::simTypeOf(type);
+                const HmiType* en = findEnumeration(p, type);
+                const auto members = types::membersOf(p, type);
+                types::Spec spec;
+                std::string aggregate, choose;
+                if (up.rfind("LIST", 0) == 0 || up.rfind("VECTOR", 0) == 0) { aggregate = "une liste"; choose = var + "[0] ou " + var + ".Count"; }
+                else if (up.rfind("MAP", 0) == 0) { aggregate = "une MAP"; choose = var + "['cl\xC3\xA9'] ou " + var + ".Count"; }
+                else if (up.rfind("TUPLE", 0) == 0) { aggregate = "un tuple"; choose = var + ".Item1"; }
+                else if (!members.empty()) {
+                    aggregate = "une structure";
+                    for (std::size_t k = 0; k < members.size() && k < 3; ++k) choose += (k ? ", " : "") + var + "." + members[k].name;
+                } else if (types::parseSpec(type, spec) && spec.array()) {
+                    aggregate = "un tableau";
+                    choose = var + "[" + std::to_string(spec.low[0]) + "]";
+                }
+                if (!aggregate.empty()) {
+                    if (role != R::Text)
+                        add(out, S::Error, "Objet", v.id, o.id, key,
+                            var + " (" + type + ") est " + aggregate + " : l'objet attend une valeur seule - choisis " + choose);
+                    return;
+                }
+                switch (role) {
+                    case R::Number: case R::Duration:
+                        if (st == sim::Type::String)
+                            add(out, S::Warning, "Objet", v.id, o.id, key,
+                                var + " est une STRING et l'objet attend un nombre : un texte qui n'en est pas un s'y montrera ### (convertis-le : STRING_TO_REAL)");
+                        else if (isDate(st) && o.kind != Kind::XYChart)
+                            add(out, S::Warning, "Objet", v.id, o.id, key,
+                                var + " (" + type + ") est une date : l'objet la lira en secondes depuis 1970 (ou depuis minuit pour une heure)");
+                        break;
+                    case R::Boolean:
+                        if (isDate(st))
+                            add(out, S::Error, "Objet", v.id, o.id, key, var + " (" + type + ") est une date : elle n'est ni vraie ni fausse - compare-la");
+                        else if (en && !en->values.empty())
+                            add(out, S::Warning, "Objet", v.id, o.id, key,
+                                var + " est une \xC3\xA9num\xC3\xA9ration (" + type + ") : lue en bool\xC3\xA9" "en, toute valeur sauf " + en->values.front().name
+                                    + " vaut vrai (un d\xC3\xA9" "faut se dessine en marche) - compare-la : " + var + " = " + type + "#"
+                                    + (en->values.size() > 1 ? en->values[1].name : en->values.front().name));
+                        else if (st == sim::Type::String && !kindWritesVariable(o.kind))   // une commande y ecrit TRUE / FALSE et les relit
+                            add(out, S::Warning, "Objet", v.id, o.id, key,
+                                var + " est une STRING lue en bool\xC3\xA9" "en : seuls TRUE, VRAI, 1, OUI et ON y sont vrais");
+                        break;
+                    case R::State:
+                        if (isDate(st)) add(out, S::Error, "Objet", v.id, o.id, key, var + " (" + type + ") est une date : elle n'est pas un \xC3\xA9tat");
+                        break;
+                    case R::Date:
+                        // il ecrit une DATE, une TOD, une DT, un TIME, un REAL ou un entier (secondes depuis 1970), une STRING (2026-10-09 14:30)
+                        if (st == sim::Type::Bool)
+                            add(out, S::Error, "Objet", v.id, o.id, key,
+                                var + " (" + type + ") : un s\xC3\xA9lecteur de date n'\xC3\xA9" "crit pas dans un BOOL - une DATE, une TIME_OF_DAY, une DATE_AND_TIME ou une STRING");
+                        break;
+                    case R::Text:
+                        if (o.kind == Kind::WeeklySchedule && key == "variable" && st != sim::Type::String)
+                            add(out, S::Error, "Objet", v.id, o.id, key, var + " (" + type + ") : le programme d'un programmateur se garde dans une STRING");
+                        break;
+                    default: break;
+                }
+            };
+            for (const char* key : {"variable", "state", "lamp", "output"}) {
+                const Prop* pr = o.find(key);
+                if (!pr || !pr->expr.empty()) continue;
+                const std::string var = trimmedCopy(markers::strip(pr->value));
+                if (var.empty()) continue;
+                // la variable d'un objet qui ne montre rien (un texte, un rectangle) : quelconque
+                if (std::string_view(key) == "variable" && roles::valueRole(o.kind) == R::Text && o.kind != Kind::WeeklySchedule) continue;
+                if (o.kind == Kind::InputField && std::string_view(key) == "variable") continue;     // il convertit ce qui est tape
+                checkVariable(key, var, roles::valueRoleOf(o.kind, key));
+            }
+            // ---- 2. les listes paralleles : un nom, une couleur, une unite, un format par element
+            const auto countOf = [&](const char* key) -> std::size_t {
+                const Prop* pr = o.find(key);
+                if (!pr || !pr->expr.empty() || trimmedCopy(pr->value).empty()) return 0;
+                return roles::splitList(pr->value).size();
+            };
+            const auto aligned = [&](const char* base, const char* key, const char* what, const char* per) {
+                const std::size_t n = countOf(base), m = countOf(key);
+                if (n == 0 || m == 0 || n == m) return;
+                add(out, S::Warning, "Objet", v.id, o.id, key,
+                    std::string(what) + " : " + std::to_string(m) + " pour " + std::to_string(n) + " " + per
+                        + " - un par \xC3\xA9l\xC3\xA9ment, dans l'ordre (sinon ils se d\xC3\xA9" "calent)");
+            };
+            if (kindIsChart(o.kind) || o.kind == Kind::Trend || o.kind == Kind::VariableTable) {
+                aligned("variables", "names", "noms", o.kind == Kind::VariableTable ? "lignes" : "mesures");
+                aligned("variables", "units", "unit\xC3\xA9s", "lignes");
+                aligned("variables", "formats", "formats", "lignes");
+                if (o.kind == Kind::RadarChart) aligned("variables", "references", "consignes", "axes");
+                // (les couleurs forment une palette : en avoir plus ou moins que de mesures ne decale rien)
+            }
+            if (o.kind == Kind::Selector && countOf("itemsFrom") == 0) aligned("positions", "values", "valeurs \xC3\xA9" "crites", "positions");
+            if ((o.kind == Kind::List || o.kind == Kind::ComboBox || o.kind == Kind::RadioGroup) && countOf("itemsFrom") == 0)
+                aligned("items", "values", "valeurs \xC3\xA9" "crites", "\xC3\xA9l\xC3\xA9ments");
+            if (o.kind == Kind::NavBar) aligned("views", "labels", "libell\xC3\xA9s", "vues");
+            // ---- 3. les couleurs (fixes), y compris dans les etats et les zones ; 4. le format ;
+            //      6. une valeur tapee sans = qui ressemble a une variable
+            for (const auto& pr : o.props) {
+                if (!pr.expr.empty()) continue;
+                const auto r = roles::roleOf(o.kind, pr.key);
+                if (r.role == R::Color && !roles::colorOk(markers::strip(pr.value, markers::Mode::Text)))
+                    add(out, S::Warning, "Objet", v.id, o.id, pr.key, "'" + pr.value + "' n'est pas une couleur : \xC3\xA9" "cris #RRGGBB (par exemple #2ECC71)");
+                if (r.role == R::List && r.item == R::Color)
+                    for (const auto& c : roles::listItems(r, pr.value))
+                        if (!c.empty() && !roles::colorOk(c)) {
+                            add(out, S::Warning, "Objet", v.id, o.id, pr.key, "'" + c + "' n'est pas une couleur : \xC3\xA9" "cris #RRGGBB");
+                            break;
+                        }
+                if (r.role == R::Format)
+                    if (const auto trap = roles::formatTrap(pr.value); !trap.empty()) add(out, S::Warning, "Objet", v.id, o.id, pr.key, trap);
+                if (r.role == R::List && r.item == R::Format)
+                    for (const auto& f : roles::listItems(r, pr.value))
+                        if (const auto trap = roles::formatTrap(f); !trap.empty()) {
+                            add(out, S::Warning, "Objet", v.id, o.id, pr.key, trap);
+                            break;
+                        }
+                if (pr.key == "stateList")
+                    for (const auto& st : parseStateList(pr.value))
+                        if (!st.color.empty() && !roles::colorOk(st.color)) {
+                            add(out, S::Warning, "Objet", v.id, o.id, pr.key, "\xC3\xA9tat " + st.match + " : '" + st.color + "' n'est pas une couleur (#RRGGBB)");
+                            break;
+                        }
+                if (pr.key == "zones")
+                    for (const auto& z : parseZones(pr.value))
+                        if (!z.color.empty() && !roles::colorOk(z.color)) {
+                            add(out, S::Warning, "Objet", v.id, o.id, pr.key,
+                                "zone " + formatNumber(z.from) + "-" + formatNumber(z.to) + " : '" + z.color + "' n'est pas une couleur (#RRGGBB)");
+                            break;
+                        }
+                if ((r.role == R::Boolean || r.role == R::Number || r.role == R::Duration) && !synopticLinkedKey(o, pr.key)) {
+                    const std::string t = trimmedCopy(pr.value);
+                    double x = 0;
+                    const bool literal = t.empty() || (r.role == R::Boolean ? roles::readBool(t, false) == roles::readBool(t, true) : roles::readNumber(t, x));
+                    if (!literal && !params::expressionType(p, &v, markers::strip(t)).empty())
+                        add(out, S::Warning, "Objet", v.id, o.id, pr.key,
+                            "'" + t + "' est tap\xC3\xA9 sans = : c'est une constante, pas la variable - voulais-tu =" + t + " ?");
+                }
+            }
+            // ---- 5. les seuils : dans l'ordre, et dans la plage
+            {
+                double val[4] = {0, 0, 0, 0};
+                bool has[4] = {false, false, false, false};
+                const char* keys[4] = {"lowAlarm", "low", "high", "highAlarm"};
+                for (int k = 0; k < 4; ++k) {
+                    const Prop* pr = o.find(keys[k]);
+                    has[k] = pr && pr->expr.empty() && roles::readNumber(pr->value, val[k]);
+                }
+                bool told = false;
+                for (int a = 0; a < 4 && !told; ++a)
+                    for (int b = a + 1; b < 4 && !told; ++b)
+                        if (has[a] && has[b] && val[a] > val[b]) {
+                            add(out, S::Warning, "Objet", v.id, o.id, keys[b],
+                                std::string("les seuils ne sont pas dans l'ordre : alarme basse \xE2\x89\xA4 seuil bas \xE2\x89\xA4 seuil haut \xE2\x89\xA4 alarme haute (")
+                                    + keys[a] + " " + formatNumber(val[a]) + ", " + keys[b] + " " + formatNumber(val[b]) + ")");
+                            told = true;
+                        }
+                double mn = 0, mx = 0;
+                const Prop* pmin = o.find("min");
+                const Prop* pmax = o.find("max");
+                if (pmin && pmax && pmin->expr.empty() && pmax->expr.empty() && roles::readNumber(pmin->value, mn) && roles::readNumber(pmax->value, mx) && mn < mx)
+                    for (int k = 0; k < 4; ++k)
+                        if (has[k] && (val[k] < mn || val[k] > mx))
+                            add(out, S::Warning, "Objet", v.id, o.id, keys[k],
+                                std::string(keys[k]) + " " + formatNumber(val[k]) + " est hors de la plage " + formatNumber(mn) + ".." + formatNumber(mx)
+                                    + " : il ne se verra pas");
+            }
+        }
+}
+} // namespace
+
 std::vector<Issue> generateWith(const Project& p, const NameExists& plcHasName, const GenerateOptions& optionsIn) {
     // 1.11.1 (API-M) : l'acces des variables de l'automate suit la liaison de ce projet.
     GenerateOptions options = optionsIn;
@@ -3711,6 +3905,7 @@ std::vector<Issue> generateWith(const Project& p, const NameExists& plcHasName, 
                         + " (il s'y arr\xC3\xAAte) - prendre un LREAL (des heures) ou un UDINT (des secondes)");
         }
     }
+    roleChecks(p, out);   // 1.12.6 (lot B, § 2.9) : le type contre le role, les listes, les couleurs, les seuils
     dropTemplateHints(p, out);
     return out;
 }

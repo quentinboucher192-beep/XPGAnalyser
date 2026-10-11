@@ -353,6 +353,11 @@ struct Read {
 // Les elements d'une liste lus dans le role de leurs elements : un texte ou un nom sans les $
 // de ses reperes ($$ : un $) ; une formule, un format telle quelle (son repere est transparent).
 [[nodiscard]] std::vector<std::string> listItems(const KeyRole& r, std::string_view text);
+// Une couleur ecrite : #RRGGBB, #RRGGBBAA, 16#RRGGBB, transparent, aucun (vide : aucune).
+[[nodiscard]] bool colorOk(std::string_view text) noexcept;
+// Un format qui ne dit pas ce qu'on croit : « 0,0 » (a la francaise) donne un entier sur deux chiffres ;
+// vide : le format est sur. Sinon, la phrase pour Generer.
+[[nodiscard]] std::string formatTrap(std::string_view format);
 // Un NOM cherche dans le projet (vue, ressource, groupe, recette, alarme, symbole, style,
 // fichier) : sans les $ de ses reperes, sans les blancs du bord.
 [[nodiscard]] std::string nameOf(std::string_view text);

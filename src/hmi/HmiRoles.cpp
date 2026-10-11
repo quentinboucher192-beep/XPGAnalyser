@@ -254,6 +254,26 @@ std::vector<std::string> splitList(std::string_view text, char sep) {
     return out;
 }
 
+bool colorOk(std::string_view text) noexcept {
+    const std::string_view s = trimView(text);
+    if (s.empty() || s == "transparent" || s == "aucun") return true;
+    std::string_view h = s;
+    if (h.front() == '#') h.remove_prefix(1);
+    else if (h.size() > 3 && h.substr(0, 3) == "16#") h.remove_prefix(3);
+    else return false;
+    if (h.size() != 6 && h.size() != 8) return false;
+    return std::all_of(h.begin(), h.end(), [](char c) { return std::isxdigit(static_cast<unsigned char>(c)) != 0; });
+}
+
+std::string formatTrap(std::string_view format) {
+    const std::string_view f = trimView(format);
+    if (f.find(',') == std::string_view::npos || f.find('.') != std::string_view::npos || f.find('|') != std::string_view::npos) return {};
+    if (!std::all_of(f.begin(), f.end(), [](char c) { return c == '0' || c == '#' || c == ',' || c == '+' || c == '%'; })) return {};
+    std::string fixed(f);
+    std::replace(fixed.begin(), fixed.end(), ',', '.');
+    return "le format " + std::string(f) + " donne un entier (la virgule n'y est pas une d\xC3\xA9" "cimale) : pour des d\xC3\xA9" "cimales, \xC3\xA9" "cris " + fixed;
+}
+
 std::string nameOf(std::string_view text) { return std::string(trimView(markers::strip(text, markers::Mode::Text))); }
 
 std::string plainText(std::string_view text) { return markers::strip(text, markers::Mode::Text); }
