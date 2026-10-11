@@ -366,6 +366,13 @@ struct Read {
 [[nodiscard]] std::string nameOf(std::string_view text);
 // Un texte montre tel quel (sans trou) : sans les $ de ses reperes ($$ : un $).
 [[nodiscard]] std::string plainText(std::string_view text);
+// 1.12.6 (lot C, § 2.8) : L'OBJET TEL QUE LE MOTEUR ET L'ECRAN LE LISENT - chaque propriete fixe sans les
+// $ de ses reperes, selon son role : un nom (une vue, une ressource, un groupe, un symbole...) ; une
+// liste de textes, de noms ou de couleurs, element par element (coupee d'abord : $A;B$ reste entier) ;
+// un petit langage (les etats, le programme, les zones d'un plan). Une formule, une liste de formules,
+// les cases d'un tableau, les etats d'une image animee et les arguments d'une instance gardent leurs
+// reperes (ils y sont transparents). Le texte enregistre, lui, les garde tous (Dupliquer les y trouve).
+void plainProps(Object& o);
 
 // ---- L'ECRITURE (lot B, § 2.2) ---------------------------------------------------------------
 //  Ce qu'un objet ecrit (une commande, un champ de saisie, un onglet, une ligne de tableau)

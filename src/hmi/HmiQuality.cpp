@@ -1,4 +1,5 @@
 #include "HmiQuality.hpp"
+#include "HmiRoles.hpp"   // 1.12.6 (lot C) : les noms sans les $ de leurs reperes
 
 #include "HmiControls.hpp"
 #include "HmiExpr.hpp"
@@ -287,7 +288,7 @@ struct Reach {
                     }
                     break;
                 case Kind::LoginPanel:
-                    name(o.text("afterLogin"));
+                    name(roles::nameOf(o.text("afterLogin")));   // 1.12.6 (lot C) : sans ses $
                     break;
                 case Kind::SymbolInstance:
                     if (depth < kMaxSymbolDepth)

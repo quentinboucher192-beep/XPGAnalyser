@@ -1079,7 +1079,7 @@ void checkLot8(const Project& p, const NameExists& plc, std::vector<Issue>& out)
                 }
                 case Kind::LoginPanel: {
                     ++userObjects;
-                    const auto after = o.text("afterLogin");
+                    const auto after = roles::nameOf(o.text("afterLogin"));   // 1.12.6 (lot C) : sans ses $
                     if (!after.empty()) {
                         const auto* t = p.viewByName(after);
                         if (!t) add(out, S::Error, "Utilisateurs", v.id, o.id, "afterLogin", "vue '" + after + "' introuvable");
@@ -2049,11 +2049,12 @@ void checkLot12(const Project& p, const NameExists& plc, std::vector<Issue>& out
                                                      + std::to_string(pages) + " (l'objet ne se verra jamais)");
             }
             // Un style nomme inconnu.
-            if (const auto* st = o.find("namedStyle"); st && !trimmedCopy(st->value).empty() && !p.styleByName(trimmedCopy(st->value)))
-                issue(S::Warning, "namedStyle", "style '" + trimmedCopy(st->value) + "' introuvable (IHM > Styles)");
+            if (const auto* st = o.find("namedStyle"); st && !roles::nameOf(st->value).empty() && !p.styleByName(roles::nameOf(st->value)))
+                issue(S::Warning, "namedStyle", "style '" + roles::nameOf(st->value) + "' introuvable (IHM > Styles)");
             switch (o.kind) {
                 case Kind::NavBar: {
-                    const auto names = listItems(o.text("views"));
+                    std::vector<std::string> names;
+                    for (const auto& n : listItems(o.text("views"))) names.push_back(roles::nameOf(n));   // 1.12.6 (lot C)
                     for (const auto& n : names) {
                         const View* target = p.viewByName(n);
                         if (!target) issue(S::Error, "views", "vue '" + n + "' introuvable");

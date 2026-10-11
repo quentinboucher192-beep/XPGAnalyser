@@ -481,7 +481,7 @@ HmiDuplicateDialog::HmiDuplicateDialog(Spec spec) : menu::WidgetMenu("dialog.hmi
     // repere ne porte d'indice (comme en 1.10.x), decochee des qu'un repere en porte un ; sans
     // copie ("Remplacer..."), le meme reglage, garde pour quand on en ajoute.
     for (const auto& k : scan_.indices)
-        followed_.push_back(plan_.rows.size() > 1 ? plan_.rows[1].indices.count(dup::indexKey(k.path, k.value)) > 0
+        followed_.push_back(plan_.rows.size() > 1 ? plan_.rows[1].indices.count(k.key()) > 0
                                                   : dup::followByDefault(scan_) && dup::followFits(k, 1));
     for (const auto& var : spec_.doc->project.programs.variables) candidates_.push_back(var.name);
     for (const auto& o : v->objects) candidates_.push_back(o.name);
@@ -773,7 +773,7 @@ void HmiDuplicateDialog::setCopies(int copies) {
         if (row.name.empty() && r < fresh.rows.size()) row.name = fresh.rows[r].name;
         row.indices.clear();
         for (std::size_t i = 0; i < scan_.indices.size(); ++i)
-            if (i < following.size() && following[i]) row.indices[dup::indexKey(scan_.indices[i].path, scan_.indices[i].value)] = scan_.indices[i].value + static_cast<long long>(r);
+            if (i < following.size() && following[i]) row.indices[scan_.indices[i].key()] = scan_.indices[i].value + static_cast<long long>(r);
         // 1.10.4 : la colonne preremplie (ou remplie par Tableau...) suit le nombre de copies.
         if (prefilled_) {
             auto& cellValue = row.markers[dup::markerKey(prefilled_->marker)];
@@ -909,7 +909,7 @@ void HmiDuplicateDialog::setKeep(std::string_view marker, bool keep) {
 void HmiDuplicateDialog::setFollow(std::size_t index, bool follow) {
     if (index >= scan_.indices.size()) return;
     const auto& k = scan_.indices[index];
-    const std::string key = dup::indexKey(k.path, k.value);
+    const std::string key = k.key();
     if (index < followed_.size()) followed_[index] = follow;   // 1.11 (REP-4)
     for (std::size_t r = 1; r < plan_.rows.size(); ++r) {
         if (follow) plan_.rows[r].indices[key] = k.value + static_cast<long long>(r);

@@ -62,11 +62,14 @@ std::string viewCaption(std::string_view name) {
 }
 
 std::vector<NavItem> navItems(const Project* project, const Object& bar) {
-    std::vector<std::string> names = listItems(bar.text("views"));
+    // 1.12.6 (lot C) : chaque vue sans les $ de son repere ($Vue_Ligne$ : Vue_Ligne), chaque libelle aussi.
+    std::vector<std::string> names;
+    for (const auto& n : listItems(bar.text("views"))) names.push_back(roles::nameOf(n));
     if (names.empty() && project)
         for (const auto& v : project->views)
             if (ordinaryView(v)) names.push_back(v.name);
-    const auto labels = splitKeepEmpty(bar.text("labels"), ';');
+    auto labels = splitKeepEmpty(bar.text("labels"), ';');
+    for (auto& l : labels) l = roles::plainText(l);
     std::vector<NavItem> out;
     for (std::size_t i = 0; i < names.size(); ++i) {
         NavItem it;

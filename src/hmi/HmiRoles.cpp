@@ -288,6 +288,46 @@ std::string nameOf(std::string_view text) { return std::string(trimView(markers:
 
 std::string plainText(std::string_view text) { return markers::strip(text, markers::Mode::Text); }
 
+void plainProps(Object& o) {
+    for (auto& p : o.props) {
+        if (!p.expr.empty() || p.value.find('$') == std::string::npos) continue;
+        const KeyRole* row = keyRole(p.key);
+        if (!row) continue;
+        const KeyRole r = roleOf(o.kind, p.key);
+        switch (r.role) {
+            case Role::Name:
+                p.value = nameOf(p.value);
+                break;
+            case Role::List:
+                if (r.item == Role::Text || r.item == Role::Name || r.item == Role::Color || r.item == Role::Number) {
+                    std::string joined;
+                    bool first = true;
+                    for (const auto& item : listItems(r, p.value)) {
+                        joined += (first ? "" : ";") + item;
+                        first = false;
+                    }
+                    p.value = std::move(joined);
+                }
+                break;
+            case Role::Mini:
+                if (p.key == "stateList" || p.key == "schedule" || p.key == "mapZones" || p.key == "zones" || p.key == "points" || p.key == "reference")
+                    p.value = plainText(p.value);
+                break;
+            case Role::Choice:
+            case Role::Color:
+            case Role::Format:
+                p.value = plainText(p.value);
+                break;
+            case Role::Text:
+                // un texte sans trou ; un texte a trous se remplit (ses reperes y sont lus par le moteur des textes)
+                if (p.value.find('{') == std::string::npos) p.value = plainText(p.value);
+                break;
+            default:
+                break;
+        }
+    }
+}
+
 std::vector<std::string> listItems(const KeyRole& r, std::string_view text) {
     auto items = splitList(text);
     if (r.item == Role::Formula || r.item == Role::Format || r.item == Role::Mini) return items;

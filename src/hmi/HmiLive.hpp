@@ -82,6 +82,9 @@ private:
         mutable std::vector<sim::Environment::EnumItem> enumItems;
     };
     View               source_;
+    // 1.12.6 (lot C) : la vue telle qu'on la montre avant tout calcul - ses noms, ses listes et ses
+    // etats sans les $ de leurs reperes (roles::plainProps) ; evaluate() part de cette copie.
+    View               shown_;
     std::vector<Bound> bound_;
 };
 

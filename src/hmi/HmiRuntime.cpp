@@ -1375,6 +1375,7 @@ void Runtime::evaluateProps(Id view, Object& o) const {
     for (auto& p : o.props)
         if (!p.expr.empty())
             if (auto text = evaluatedProp(view, o.kind, p)) p.value = std::move(*text);
+    roles::plainProps(o);   // 1.12.6 (lot C) : ses noms, ses listes, ses etats sans les $ de leurs reperes
 }
 
 std::string Runtime::shownText(Id view, const Object& o, std::string_view key, std::string_view fallback) const {
@@ -4851,7 +4852,7 @@ void Runtime::submitForm(const View& v, const Object& o, double now) {
             const auto* u = user();
             formMessage(o.id, "Bienvenue, " + (u && !u->fullName.empty() ? u->fullName : loginName), false, now);
             done();
-            const std::string after = o.text("afterLogin");
+            const std::string after = roles::nameOf(o.text("afterLogin"));   // 1.12.6 (lot C) : sans ses $
             if (!after.empty()) {
                 if (const auto* target = project_ ? project_->viewByName(after) : nullptr)
                     (void)navigate(target->id, Transition{}, now, {});

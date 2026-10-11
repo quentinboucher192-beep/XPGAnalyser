@@ -354,7 +354,7 @@ bool containsImpl(const Project& p, const View& s, std::string_view other, std::
 bool isSymbolView(const View& v) noexcept { return v.role == kSymbolRole; }
 
 const View* symbolOf(const Project& p, const Object& instance) {
-    const std::string name = trimmedCopy(instance.text("symbol"));
+    const std::string name = roles::nameOf(instance.text("symbol"));   // 1.12.6 (lot C) : sans ses $
     if (name.empty()) return nullptr;
     const View* v = p.viewByName(name);
     return v && isSymbolView(*v) ? v : nullptr;

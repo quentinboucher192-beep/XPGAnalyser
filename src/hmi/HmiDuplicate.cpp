@@ -6,6 +6,8 @@
 #include "HmiMarkers.hpp"   // 1.11 (REP) : hmi::markers, le lecteur de reperes
 #include "HmiSymbols.hpp"   // 1.11.2 (SYM) : isSymbolView - les parametres d'un symbole sont des chemins
 #include "HmiTypes.hpp"
+#include "HmiRoles.hpp"          // 1.12.6 (lot C) : le mode de lecture de chaque propriete
+#include "HmiObjectAlarms.hpp"   // 1.12.6 : une liaison de synoptique tapee sans =
 
 #include <algorithm>
 #include <cctype>
@@ -93,28 +95,66 @@ std::vector<IndexUse> indicesIn(std::string_view t, bool expression) {
         if (t[i] != '[') continue;
         while (sp < spans.size() && spans[sp].end() <= i) ++sp;
         if (sp < spans.size() && spans[sp].at < i) continue;
+        // Le chemin : des noms, des points et (1.12.6, lot C) les indices d'avant - A[0].B[2] : "A[0].B".
         std::size_t s = i;
-        while (s > 0 && (identChar(t[s - 1]) || t[s - 1] == '.')) --s;
+        while (s > 0) {
+            const char c = t[s - 1];
+            if (identChar(c) || c == '.') { --s; continue; }
+            if (c == ']') {
+                std::size_t k = s - 1;
+                int depth = 0;
+                bool found = false;
+                while (true) {
+                    if (t[k] == ']') ++depth;
+                    else if (t[k] == '[' && --depth == 0) { found = true; break; }
+                    if (k == 0) break;
+                    --k;
+                }
+                if (!found || k == 0 || !(identChar(t[k - 1]))) break;
+                s = k;
+                continue;
+            }
+            break;
+        }
         const std::string_view path = t.substr(s, i - s);
-        // `.B[2]` (apres un autre indice), `$Tab$[0]`, `12[3]`, `A.[0]` : non.
+        // `$Tab$[0]`, `12[3]`, `A.[0]` : non.
         if (path.empty() || !identStart(path[0]) || path.back() == '.') continue;
         if (s > 0 && t[s - 1] == '$') continue;
+        // Les composantes : des entiers separes par des virgules (M[1, 2]) ; une seule qui n'en est pas
+        // un (`Tab[k]`, `M[i, 2]`, `ARRAY[0..7]`) : l'indice n'est pas suivi.
+        struct Part { std::size_t at, length; long long value; };
+        std::vector<Part> parts;
         std::size_t j = i + 1;
-        while (j < t.size() && t[j] == ' ') ++j;
-        const std::size_t a = j;
-        if (j < t.size() && t[j] == '-') ++j;
-        const std::size_t d = j;
-        while (j < t.size() && digit(t[j])) ++j;
-        if (j == d || j - d > 15) continue;
-        const std::size_t e = j;
-        while (j < t.size() && t[j] == ' ') ++j;
-        if (j >= t.size() || t[j] != ']') continue;   // `Tab[k]`, `M[1, 2]`, `ARRAY[0..7]` : non
-        out.push_back({std::string(path), std::stoll(std::string(t.substr(a, e - a))), a, e - a});
+        bool literal = true;
+        while (true) {
+            while (j < t.size() && t[j] == ' ') ++j;
+            const std::size_t a = j;
+            if (j < t.size() && t[j] == '-') ++j;
+            const std::size_t d = j;
+            while (j < t.size() && digit(t[j])) ++j;
+            if (j == d || j - d > 15) { literal = false; break; }
+            const std::size_t e = j;
+            parts.push_back({a, e - a, std::stoll(std::string(t.substr(a, e - a)))});
+            while (j < t.size() && t[j] == ' ') ++j;
+            if (j < t.size() && t[j] == ',') { ++j; continue; }
+            if (j >= t.size() || t[j] != ']') literal = false;
+            break;
+        }
+        if (!literal || parts.empty()) continue;
+        const int dims = static_cast<int>(parts.size());
+        for (int k = 0; k < dims; ++k)
+            out.push_back({std::string(path), parts[static_cast<std::size_t>(k)].value, parts[static_cast<std::size_t>(k)].at,
+                           parts[static_cast<std::size_t>(k)].length, k, dims});
     }
     return out;
 }
 
-std::string indexKey(std::string_view path, long long value) { return upper(path) + "[" + std::to_string(value) + "]"; }
+std::string indexKey(std::string_view path, long long value, int dim, int dims) {
+    if (dims <= 1) return upper(path) + "[" + std::to_string(value) + "]";
+    std::string inside;
+    for (int k = 0; k < dims; ++k) inside += (k ? "," : "") + (k == dim ? std::to_string(value) : std::string("*"));
+    return upper(path) + "[" + inside + "]";
+}
 
 std::string followIndices(std::string_view text, const std::map<std::string, long long>& values, std::size_t* count) {
     std::size_t n = 0;
@@ -122,7 +162,7 @@ std::string followIndices(std::string_view text, const std::map<std::string, lon
     std::size_t from = 0;
     if (!values.empty())
         for (const auto& u : indicesIn(text)) {
-            const auto it = values.find(indexKey(u.path, u.value));
+            const auto it = values.find(indexKey(u.path, u.value, u.dim, u.dims));
             if (it == values.end()) continue;
             out.append(text.substr(from, u.at - from));
             out.append(std::to_string(it->second));
@@ -136,7 +176,7 @@ std::string followIndices(std::string_view text, const std::map<std::string, lon
 
 std::string shiftIndices(std::string_view piece, long long by) {
     std::map<std::string, long long> to;
-    for (const auto& u : indicesIn(piece)) to[indexKey(u.path, u.value)] = u.value + by;
+    for (const auto& u : indicesIn(piece)) to[indexKey(u.path, u.value, u.dim, u.dims)] = u.value + by;
     return followIndices(piece, to);
 }
 
@@ -317,7 +357,11 @@ void fields(O& o, F&& fn) {
         // geometrique (x, y, w, h, rot) est faite par la pose ; son EXPRESSION (une animation :
         // rot = $Vanne$.OUV * 2) se lit et se remplace comme les autres (avant : sautee, la copie
         // gardait $Vanne$ sans que Compiler le dise).
-        if (!geometric(prop.key)) fn(prop.value, prop.key, false);
+        // 1.12.6 (lot C, § 2.8) : la valeur se lit dans le mode de son role, comme le moteur la lit -
+        // une formule (variable, retour d'etat, condition, valeurs ecrites, plumes, bornes d'un champ,
+        // une liaison de synoptique tapee sans =) en mode Expression : un `$` entre apostrophes y reste
+        // litteral ; un texte, un nom, une liste de textes en mode Texte (avant : tout en mode Texte).
+        if (!geometric(prop.key)) fn(prop.value, prop.key, roles::readsAsFormula(o.kind, prop.key) || synopticLinkedKey(o, prop.key));
         fn(prop.expr, prop.key + " (expression)", true);
     }
     for (std::size_t i = 0; i < o.actions.size(); ++i) {
@@ -385,13 +429,15 @@ void collect(const Object& o, std::vector<MarkerInfo>& markers, std::vector<Inde
         if (!indices) return;
         std::set<std::string> idxHere;
         for (const auto& u : indicesIn(field, expression)) {
-            const std::string key = indexKey(u.path, u.value);
-            auto it = std::find_if(indices->begin(), indices->end(), [&](const IndexInfo& x) { return indexKey(x.path, x.value) == key; });
+            const std::string key = indexKey(u.path, u.value, u.dim, u.dims);
+            auto it = std::find_if(indices->begin(), indices->end(), [&](const IndexInfo& x) { return x.key() == key; });
             if (it == indices->end()) {
                 IndexInfo info;
                 info.path = u.path;
                 info.value = u.value;
-                if (bounds) info.bounds = bounds(u.path);
+                info.dim = u.dim;
+                info.dims = u.dims;
+                if (bounds && u.dims == 1) info.bounds = bounds(u.path);
                 indices->push_back(std::move(info));
                 it = indices->end() - 1;
             }
@@ -736,7 +782,7 @@ Plan defaultPlan(const View& v, const Scan& s, int copies) {
     if (followByDefault(s))
         for (const auto& idx : s.indices) {
             if (!followFits(idx, copies)) continue;   // garder
-            for (int k = 1; k <= copies; ++k) p.rows[static_cast<std::size_t>(k)].indices[indexKey(idx.path, idx.value)] = idx.value + k;
+            for (int k = 1; k <= copies; ++k) p.rows[static_cast<std::size_t>(k)].indices[idx.key()] = idx.value + k;
         }
     // 1.11 (REP) : un repere a indices litteraux se preremplit : le morceau, ses
     // indices decales du numero de la copie ($V[1].Ouv$ : V[2].Ouv, V[3].Ouv...).
@@ -768,7 +814,7 @@ std::optional<Prefill> prefill(const Scan& s, const Plan& plan) {
     // (1.11, REP-4 : par defaut des qu'aucun repere ne porte d'indice, le cas du client).
     for (const auto& idx : s.indices) {
         // Suivi par les copies ; sans copie ("Remplacer..." de Compiler), l'indice de l'original.
-        const bool followed = plan.rows.size() < 2 || plan.rows[1].indices.count(indexKey(idx.path, idx.value)) > 0;
+        const bool followed = plan.rows.size() < 2 || plan.rows[1].indices.count(idx.key()) > 0;
         if (!idx.bounds || !followed) continue;
         if (idx.path.find('.') != std::string::npos) continue;          // V[0], pas Four1.Vannes[0]
         return Prefill{only->name, idx.path, idx.value};
@@ -891,7 +937,7 @@ Validation validate(const View& v, const Scan& s, const Plan& plan, const Valida
         }
         if (r == 0) continue;
         for (const auto& idx : s.indices) {
-            const auto it = row.indices.find(indexKey(idx.path, idx.value));
+            const auto it = row.indices.find(idx.key());
             if (it == row.indices.end() || !idx.bounds) continue;
             if (it->second < idx.bounds->first || it->second > idx.bounds->second)
                 out.cells.push_back({rowNo, idx.label(), CellState::OutOfBounds,

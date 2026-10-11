@@ -19230,8 +19230,10 @@ void dupliquerReperes1102() {
     // Les indices.
     {
         const auto u = indicesIn("V[0].Pos + Armoires[1].sorties.V2 + Tab[k] + M[1, 2] + ARRAY[0..7] + $Vanne$.T[3]");
-        check(u.size() == 2 && u[0].path == "V" && u[0].value == 0 && u[1].path == "Armoires" && u[1].value == 1,
-              "indices litteraux seulement (Tab[k], M[1, 2], ARRAY[0..7] et un chemin qui part d'un repere : non)");
+        // 1.12.6 (lot C) : M[1, 2] est suivi, une dimension a la fois (M[1, .] et M[., 2]).
+        check(u.size() == 4 && u[0].path == "V" && u[0].value == 0 && u[1].path == "Armoires" && u[1].value == 1
+                  && u[2].path == "M" && u[2].value == 1 && u[2].dim == 0 && u[2].dims == 2 && u[3].path == "M" && u[3].value == 2 && u[3].dim == 1,
+              "indices litteraux seulement (Tab[k], ARRAY[0..7] et un chemin qui part d'un repere : non ; 1.12.6 : M[1, 2] dimension par dimension)");
         same(followIndices("V[0].Pos + V[ 0 ].Cons + W[0]", {{indexKey("v", 0), 3}}), "V[3].Pos + V[ 3 ].Cons + W[0]",
              "suivre un indice (sans la casse, espaces gardes)");
         IndexInfo in;

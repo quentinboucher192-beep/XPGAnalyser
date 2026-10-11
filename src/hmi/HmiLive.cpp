@@ -74,6 +74,8 @@ std::string autoValueSource(const Object& o) {
 
 void LiveView::bind(const View& view) {
     source_ = view;
+    shown_ = view;
+    for (auto& o : shown_.objects) roles::plainProps(o);   // 1.12.6 (lot C) : les reperes, retires selon le role
     bound_.clear();
     for (const auto& o : view.objects) {
         for (const auto& p : o.props) {
@@ -221,7 +223,7 @@ void LiveView::bind(const View& view) {
 }
 
 View LiveView::evaluate(sim::Environment& plc, std::vector<LiveValue>* values, const Scope* scope, double seconds) const {
-    View out = source_;
+    View out = shown_;
     if (values) values->clear();
     // Les tableaux : leurs cases evaluees, reecrites d'un bloc a la fin.
     std::map<Id, std::vector<std::vector<std::string>>> tables;

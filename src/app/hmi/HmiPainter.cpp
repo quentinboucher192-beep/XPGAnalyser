@@ -221,7 +221,8 @@ std::vector<gfx::Point> parsePoints(const Ctx& c) {
     return out;
 }
 
-const hmi::Resource* resourceNamed(const Ctx& c, std::string_view name) {
+const hmi::Resource* resourceNamed(const Ctx& c, std::string_view raw) {
+    const std::string name = hmi::roles::nameOf(raw);   // 1.12.6 (lot C) : sans les $ de ses reperes
     if (!c.opt.assets || name.empty()) return nullptr;
     for (const auto& r : c.opt.assets->resources)
         if (r.name == name) return &r;

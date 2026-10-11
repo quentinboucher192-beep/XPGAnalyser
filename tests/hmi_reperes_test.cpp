@@ -18,6 +18,7 @@
 #include "../src/hmi/HmiLive.hpp"
 #include "../src/hmi/HmiMarkers.hpp"
 #include "../src/hmi/HmiModel.hpp"
+#include "../src/hmi/HmiRoles.hpp"
 #include "../src/hmi/HmiRuntime.hpp"
 #include "../src/hmi/HmiSymbols.hpp"
 
@@ -934,6 +935,134 @@ void bibliothequeDifferentielle(bool inSymbol) {
     obs(label + " : sans repere, " + std::to_string(a.size()) + " remarques, " + std::to_string(ea.size()) + " erreurs d'animation");
 }
 
+// ============ 8 bis. 1.12.6 (lot C, § 2.8 point 4) : chaque propriete de chaque objet, par son role ==
+//  Chaque objet posable, chaque propriete qui porte un repere selon son role (HmiRoles.hpp) : un
+//  texte (« Mot $Mot$ »), un nom ($Vue_Cible$), une liste de textes ou de noms (A;$Mot$;C), une
+//  liste de formules ($Reels[1]$;$Reels[2]$), une formule ($Reels[2]$, $Flags[2]$), les etats
+//  (0 = $Mot$ | ...), une couleur, un nombre ou un booleen par sa formule. Puis :
+//   - Compiler et Generer n'en disent pas plus qu'avec le meme projet sans repere ;
+//   - la copie que l'ecran dessine (LiveView) et l'objet que lit le clic (le moteur) les montrent
+//     sans leurs $ (un texte, un nom, une liste, des etats) ;
+//   - Dupliquer trouve chaque repere, dans la propriete ou il est, lu dans le mode de son role.
+std::string markedFor(Kind k, const std::string& key, const Prop& prop, bool markers, bool* formulaMode) {
+    using R = roles::Role;
+    const auto r = roles::roleOf(k, key);
+    const auto mk = [&](const std::string& name) { return markers ? "$" + name + "$" : name; };
+    *formulaMode = false;
+    switch (r.role) {
+        case R::Text:
+            if (prop.value.find('{') != std::string::npos) return {};
+            return "Mot " + mk("Mot");
+        case R::Name:
+            return key == "afterLogin" ? mk("Vue_Cible") : mk("Nom_" + key);
+        case R::List:
+            if (r.item == R::Formula) { *formulaMode = true; return mk("Reels[1]") + ";" + mk("Reels[2]"); }
+            if (r.item == R::Name) return key == "views" ? "Vue_Biblio;" + mk("Vue_Cible") : "A;" + mk("Nom_B");
+            if (r.item == R::Text) return "A;" + mk("Mot") + ";C";
+            return {};
+        case R::Mini:
+            if (key == "stateList") return "0 = " + mk("Mot") + " | #4A5261; 1 = B | #2ECC71";
+            return {};
+        default:
+            return {};
+    }
+}
+Project bibliothequeParRole(bool markers, std::size_t* props, std::vector<std::tuple<std::string, std::string, std::string, bool>>* marked) {
+    Project p;
+    p.programs.variables.push_back(hmiVar(p, "Reels", "ARRAY[0..9] OF REAL"));
+    p.programs.variables.push_back(hmiVar(p, "Flags", "ARRAY[0..9] OF BOOL"));
+    p.programs.variables.push_back(hmiVar(p, "Mot", "STRING", "'Mot'"));
+    View cible = makeView(p, "Vue_Cible");
+    p.views.push_back(cible);
+    View host = makeView(p, "Vue_Biblio");
+    host.width = 4000;
+    host.height = 4000;
+    double x = 0, y = 0;
+    std::size_t n = 0;
+    for (const Kind k : kPlaceableKinds) {
+        const Id id = edit::add(p, host, k, x, y);
+        Object* o = host.object(id);
+        o->name = "R_" + std::to_string(static_cast<int>(k));
+        x += 200;
+        if (x > 3600) { x = 0; y += 200; }
+        for (auto& prop : o->props) {
+            if (prop.key == "x" || prop.key == "y" || prop.key == "w" || prop.key == "h" || prop.key == "variable" || prop.key == "state"
+                || prop.key == "lamp")
+                continue;   // la pose ; la variable et le retour d'etat : l'essai de la bibliotheque (8)
+            bool formulaMode = false;
+            const std::string v = markedFor(k, prop.key, prop, markers, &formulaMode);
+            if (v.empty()) continue;
+            prop.value = v;
+            ++n;
+            if (marked) marked->emplace_back(o->name, prop.key, v, formulaMode);
+        }
+    }
+    if (props) *props = n;
+    p.views.push_back(host);
+    p.config.startView = p.viewByName("Vue_Biblio")->id;
+    return p;
+}
+void chaqueProprieteParSonRole() {
+    std::printf("-- 1.12.6 (lot C) : chaque propriete de chaque objet, par son role (texte, nom, liste, etats)\n");
+    std::size_t props = 0;
+    std::vector<std::tuple<std::string, std::string, std::string, bool>> marked;
+    const Project plain = bibliothequeParRole(false, &props, nullptr);
+    const Project withMarkers = bibliothequeParRole(true, nullptr, &marked);
+    // 1. Compiler et Generer : rien de plus avec les reperes.
+    const auto a = issuesOf(plain), b = issuesOf(withMarkers);
+    std::size_t extra = 0;
+    for (const auto& i : b)
+        if (!a.count(i)) {
+            ++extra;
+            std::printf("  en plus avec reperes : %s\n", i.c_str());
+        }
+    check(extra == 0, "par role : " + std::to_string(props) + " proprietes, rien de plus a Compiler et Generer avec les reperes");
+    // 2. L'ecran (LiveView) et le moteur (l'objet que lit le clic) : sans leurs $.
+    const View& host = *withMarkers.viewByName("Vue_Biblio");
+    Runtime rt;
+    rt.bind(&withMarkers, nullptr);
+    rt.start(0.0);
+    rt.tick(0.0);
+    LiveView live;
+    live.bind(host);
+    const View shown = live.evaluate(rt.environment());
+    std::size_t dollarsShown = 0, dollarsEngine = 0, checked = 0;
+    for (const auto& [objName, key, value, formula] : marked) {
+        if (formula) continue;   // une formule garde ses reperes (ils y sont transparents)
+        ++checked;
+        const Object* so = shown.objectByName(objName);
+        const std::string s = so ? so->text(key) : std::string("?$?");
+        if (s.find('$') != std::string::npos) {
+            ++dollarsShown;
+            std::printf("  a l'ecran avec ses $ : %s.%s = %s\n", objName.c_str(), key.c_str(), s.c_str());
+        }
+        Object eo = *host.objectByName(objName);
+        rt.evaluateProps(host.id, eo);
+        if (eo.text(key).find('$') != std::string::npos) {
+            ++dollarsEngine;
+            std::printf("  au moteur avec ses $ : %s.%s = %s\n", objName.c_str(), key.c_str(), eo.text(key).c_str());
+        }
+    }
+    check(dollarsShown == 0, "par role : " + std::to_string(checked) + " textes, noms, listes et etats montres sans leurs $ (LiveView)");
+    check(dollarsEngine == 0, "par role : ... et lus sans leurs $ par le moteur (le clic)");
+    // 3. Dupliquer trouve chaque repere, dans sa propriete, lu dans le mode de son role.
+    std::vector<Id> all;
+    for (const auto& o : host.objects) all.push_back(o.id);
+    const auto sc = dup::scan(host, all);
+    std::size_t missed = 0;
+    for (const auto& [objName, key, value, formula] : marked) {
+        bool found = false;
+        for (const auto& m : sc.markers)
+            for (const auto& spot : m.spots)
+                if (spot.objectName == objName && spot.where == key && spot.expression == formula) found = true;
+        if (!found) {
+            ++missed;
+            std::printf("  Dupliquer ne le trouve pas (mode %s) : %s.%s = %s\n", formula ? "formule" : "texte", objName.c_str(), key.c_str(), value.c_str());
+        }
+    }
+    check(missed == 0, "par role : Dupliquer trouve les " + std::to_string(marked.size()) + " reperes, chacun dans le mode de son role");
+}
+
 // ====================== 9. popups Copie / Les deux, Naviguer, clavier, Maths, courbes ==
 void popupsEtActions() {
     std::printf("-- popups Copie / Les deux, Naviguer, clavier virtuel, Maths, courbes, tableaux\n");
@@ -1265,6 +1394,7 @@ int main() {
     dupliquer();
     bibliothequeDifferentielle(false);
     bibliothequeDifferentielle(true);
+    chaqueProprieteParSonRole();       // 1.12.6 (lot C)
     popupsEtActions();
     dupliquerDansLeSymbole();
     popupAvecSymboleEtRedefinition();

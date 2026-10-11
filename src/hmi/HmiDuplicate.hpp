@@ -63,15 +63,21 @@ struct MarkerUse {
 // `Nom[entier]` hors repere : `Armoires[0]`, `V[0].Pos`, `Four1.Vannes[2]`. Un
 // indice non litteral (`Tab[k]`) n'en est pas un ; `M[1, 2]` non plus (a faire).
 // 1.11 : ceux d'un repere ($V[0]$, $V[1].Ouv$) n'en sont pas (le repere varie seul).
+// 1.12.6 (lot C, § 2.8) : TOUS LES INDICES D'UN CHEMIN - `A[0].B[2]` donne A[0] et A[0].B[2] (avant :
+// A[0] seul) ; `M[1, 2]`, chaque dimension (M[1, ·] et M[·, 2]). Un indice non litteral (`Tab[k]`,
+// `M[i, 2]`) n'en est toujours pas un.
 struct IndexUse {
-    std::string path;            // ce qui precede `[` : "Armoires", "Four1.Vannes"
+    std::string path;            // ce qui precede `[` : "Armoires", "Four1.Vannes", "A[0].B"
     long long   value{0};
     std::size_t at{0};           // l'entier (son signe compris), dans le texte
     std::size_t length{0};
+    int         dim{0};          // 1.12.6 : la dimension (M[1, 2] : 0 pour 1, 1 pour 2)
+    int         dims{1};         //          et leur nombre
 };
 [[nodiscard]] std::vector<IndexUse> indicesIn(std::string_view text, bool expression = true);
-// La cle d'un indice : "ARMOIRES[0]" (chemin en majuscules).
-[[nodiscard]] std::string indexKey(std::string_view path, long long value);
+// La cle d'un indice : "ARMOIRES[0]" (chemin en majuscules) ; 1.12.6 : une dimension d'un indice a
+// plusieurs : "M[1,*]", "M[*,2]".
+[[nodiscard]] std::string indexKey(std::string_view path, long long value, int dim = 0, int dims = 1);
 // Le texte, chaque indice dont la cle a une nouvelle valeur la recoit.
 [[nodiscard]] std::string followIndices(std::string_view text, const std::map<std::string, long long>& values,
                                         std::size_t* count = nullptr);
@@ -146,7 +152,15 @@ struct IndexInfo {
     std::size_t           uses{0};
     std::optional<Bounds> bounds;
     std::vector<Spot>     spots;
-    [[nodiscard]] std::string label() const { return path + "[" + std::to_string(value) + "]"; }
+    int                   dim{0};    // 1.12.6 : la dimension d'un indice a plusieurs (M[1, 2])
+    int                   dims{1};
+    [[nodiscard]] std::string label() const {
+        if (dims <= 1) return path + "[" + std::to_string(value) + "]";
+        std::string inside;
+        for (int k = 0; k < dims; ++k) inside += (k ? ", " : "") + (k == dim ? std::to_string(value) : std::string("\xC2\xB7"));
+        return path + "[" + inside + "]";
+    }
+    [[nodiscard]] std::string key() const { return indexKey(path, value, dim, dims); }
 };
 // Suivre par defaut : les `copies` copies (value + 1 ... value + copies*step)
 // tiennent dans les bornes connues.
