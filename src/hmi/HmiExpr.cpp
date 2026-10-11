@@ -70,7 +70,7 @@ public:
     bool exists(std::string_view name) override {
         if (name == kResult) return true;
         if (scope_) {
-            if (scope_->value(name)) return true;
+            if (scope_->value(name) || scope_->object(name)) return true;    // 1.12.4 : un parametre objet
             return plc_.exists(scope_->resolve(name));
         }
         return plc_.exists(name);
@@ -116,6 +116,8 @@ public:
     // l'hote, TO_STRING(Mode) rendait le nombre et TO_T_MODE(2) etait refuse.
     std::string declaredType(std::string_view name) override {
         if (scope_ && scope_->value(name)) return {};
+        if (scope_)
+            if (auto own = scope_->object(name); own && own->type) return own->type->text();   // 1.12.4
         return plc_.declaredType(scope_ ? scope_->resolve(name) : std::string(name));
     }
     bool structMembers(std::string_view typeName, std::vector<std::pair<std::string, std::string>>& out) override {
@@ -125,12 +127,14 @@ public:
     // (LIST_ADD(L, 1) dans une expression ajoute a la copie, pas a la variable).
     sim::ObjRef richVariable(std::string_view name) override {
         if (scope_ && scope_->value(name)) return nullptr;
+        if (scope_)
+            if (auto own = scope_->object(name)) return sim::deepCopy(*own);    // 1.12.4 : un parametre objet recu en valeur
         auto o = plc_.richVariable(scope_ ? scope_->resolve(name) : std::string(name));
         return o ? sim::deepCopy(*o) : nullptr;
     }
     // 1.12.4 : une structure qui porte des membres objets (Recette.Etapes.Count).
     bool hasRichMembers(std::string_view name) override {
-        if (scope_ && scope_->value(name)) return false;
+        if (scope_ && (scope_->value(name) || scope_->object(name))) return false;
         return plc_.hasRichMembers(scope_ ? scope_->resolve(name) : std::string(name));
     }
     bool findOperator(std::string_view op, std::string_view l, std::string_view r, sim::OperatorSource& out) override {
@@ -175,6 +179,7 @@ bool isStandardFunction(std::string_view name) { return isPureFunction(name); }
 // Lot 8 : sans casse, comme le ST (Moteur, MOTEUR et moteur sont le meme nom).
 void Scope::setValue(std::string name, sim::Value v) { values_[upper(name)] = std::move(v); }
 void Scope::setAlias(std::string name, std::string path) { aliases_[upper(name)] = std::move(path); }
+void Scope::setObject(std::string name, sim::ObjRef o) { objects_[upper(name)] = std::move(o); }
 
 const sim::Value* Scope::value(std::string_view name) const {
     if (const auto it = values_.find(upper(name)); it != values_.end()) return &it->second;
@@ -186,12 +191,20 @@ const std::string* Scope::alias(std::string_view name) const {
     return parent_ ? parent_->alias(name) : nullptr;
 }
 
-bool Scope::empty() const noexcept { return values_.empty() && aliases_.empty() && (!parent_ || parent_->empty()); }
+sim::ObjRef Scope::object(std::string_view name) const {
+    if (const auto it = objects_.find(upper(name)); it != objects_.end()) return it->second;
+    return parent_ ? parent_->object(name) : nullptr;
+}
+
+bool Scope::empty() const noexcept {
+    return values_.empty() && aliases_.empty() && objects_.empty() && (!parent_ || parent_->empty());
+}
 
 std::vector<std::string> Scope::names() const {
     std::vector<std::string> out;
     for (const auto& [k, v] : aliases_) out.push_back(k);
     for (const auto& [k, v] : values_) out.push_back(k);
+    for (const auto& [k, v] : objects_) out.push_back(k);
     return out;
 }
 

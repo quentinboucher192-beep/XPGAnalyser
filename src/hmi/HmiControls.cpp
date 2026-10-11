@@ -110,7 +110,7 @@ std::vector<Choice> choicesOf(const Object& o) {
     if (const std::string from = itemsSourceOf(o); !from.empty()) {
         std::vector<Choice> out;
         if (const auto resolve = choiceResolver()) {
-            if (!resolve(from, out)) out.clear();
+            if (!resolve(o, from, out)) out.clear();
             return out;
         }
         Choice c;

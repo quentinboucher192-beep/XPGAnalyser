@@ -481,7 +481,27 @@ std::string quotedText(const std::string& t) {
 }
 } // namespace
 
-bool Runtime::resolveChoices(std::string_view source, std::vector<Choice>& out) {
+sim::ObjRef Runtime::richOfSource(std::string_view source, const Object* owner) const {
+    if (auto direct = richVariable(source)) return direct;
+    if (!owner || !project_) return nullptr;
+    // Un parametre de la vue de l'objet (la vue courante, une popup ouverte) : par sa portee.
+    const auto viaView = [&](Id view) -> sim::ObjRef {
+        const View* v = project_->view(view);
+        if (!v || !v->object(owner->id)) return nullptr;
+        const auto scope = scopePtr(view);
+        if (!scope) return nullptr;
+        if (auto own = scope->object(source)) return own;
+        const std::string r = scope->resolve(source);
+        if (!r.empty() && r[0] == '$') return copyObject(r);
+        return r == source ? nullptr : richVariable(r);
+    };
+    if (auto x = viaView(current_)) return x;
+    for (const auto& s : slots_)
+        if (auto x = viaView(s.view)) return x;
+    return nullptr;
+}
+
+bool Runtime::resolveChoices(std::string_view source, std::vector<Choice>& out, const Object* owner) {
     if (!project_) return false;
     const std::string src = trimmedText(source);
     if (src.empty()) return false;
@@ -490,8 +510,9 @@ bool Runtime::resolveChoices(std::string_view source, std::vector<Choice>& out) 
         for (const auto& v : e->values) out.push_back({v.text.empty() ? v.name : v.text, std::to_string(v.value), false});
         return true;
     }
-    // Une variable objet : une liste, un vecteur, un tableau (ses elements), une MAP (ses cles).
-    if (auto o = richVariable(src); o && o->type) {
+    // Une variable objet : une liste, un vecteur, un tableau (ses elements), une MAP (ses cles) ;
+    // 1.12.4 : un membre objet, un parametre objet de la popup.
+    if (auto o = richOfSource(src, owner); o && o->type) {
         if (o->type->kind == sim::TypeDesc::Kind::Map) {
             for (const auto& [k, v] : o->textKeys) out.push_back({k, quotedText(k), false});
             for (const auto& [k, v] : o->intKeys) out.push_back({std::to_string(k), std::to_string(k), false});
@@ -542,7 +563,7 @@ bool Runtime::tableRows(const Object& o, std::vector<std::string>& headers, std:
         }
         return row;
     };
-    if (auto obj = richVariable(src); obj && obj->type) {
+    if (auto obj = richOfSource(src, &o); obj && obj->type) {          // 1.12.4 : un parametre objet aussi
         if (obj->type->kind == sim::TypeDesc::Kind::Map) {
             headers = {"Cl\xC3\xA9", "Valeur"};
             for (const auto& [k, v] : obj->textKeys) rows.push_back({k, v ? shownOf(*v) : std::string{}});

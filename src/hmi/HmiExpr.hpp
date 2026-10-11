@@ -41,8 +41,12 @@ public:
     explicit Scope(const Scope* parent = nullptr) : parent_(parent) {}
     void setValue(std::string name, sim::Value v);
     void setAlias(std::string name, std::string path);
+    // 1.12.4 : un parametre d'un type objet (LIST, VECTOR, MAP, TUPLE) recu en valeur ([1, 2],
+    // ['a' := 1], (1, 'x')) : son objet, que la popup lit et ecrit en place.
+    void setObject(std::string name, sim::ObjRef o);
     [[nodiscard]] const sim::Value*  value(std::string_view name) const;
     [[nodiscard]] const std::string* alias(std::string_view name) const;
+    [[nodiscard]] sim::ObjRef        object(std::string_view name) const;
     // "Moteur.Active" -> "Pompes[3].Active" ; un nom sans alias revient tel quel.
     [[nodiscard]] std::string resolve(std::string_view path) const;
     // Lot 8 : les noms sont sans casse ; ceux que porte la portee (en majuscules).
@@ -52,6 +56,7 @@ private:
     const Scope* parent_;
     std::map<std::string, sim::Value, std::less<>>  values_;
     std::map<std::string, std::string, std::less<>> aliases_;
+    std::map<std::string, sim::ObjRef, std::less<>> objects_;    // 1.12.4
 };
 
 // Lot 7 : LES FONCTIONS IHM DU PROJET dans une expression de vue. Un

@@ -470,11 +470,11 @@ public:
             if (const std::string c = concretePath(n); c != n && !needsConcretePath(c)) return exists(c);
         if (!frames.empty() && frames.back()->count(upper(n)) != 0) return true;
         if (sim::Value probe; callerLocals > 0 && sim::readCallerLocal(n, probe)) return true;     // 1.11.17
-        if (aliases && aliases->value(n)) return true;
+        if (aliases && (aliases->value(n) || aliases->object(n))) return true;     // 1.12.4 : un parametre objet
         const std::string r = resolved(n);
         if (!r.empty() && r[0] == '$') {   // 1.9 : la copie d'un parametre
             sim::Value probe;
-            return rt_.copyRead(r, probe);
+            return rt_.copyRead(r, probe) || rt_.copyObject(r) != nullptr;      // 1.12.4 : ou son objet
         }
         if (vars.count(upper(r)) != 0) return true;
         if (rt_.rich_.count(upper(r)) != 0) return true;           // 1.12.2 : une variable objet
@@ -568,7 +568,12 @@ public:
     // fonction interne la recoit en entier (copie) ; FOR EACH la parcourt.
     std::string declaredType(std::string_view n) override {
         if (!rt_.project_) return {};
+        // 1.12.4 : un parametre objet (recu en valeur, ou sa copie) : le type de son objet.
+        if (aliases)
+            if (auto own = aliases->object(n); own && own->type) return own->type->text();
         const std::string r = resolved(n);
+        if (!r.empty() && r[0] == '$')
+            if (auto copy = rt_.copyObject(r); copy && copy->type) return copy->type->text();
         std::string t = types::typeOfPath(*rt_.project_, r);
         if (!t.empty()) return t;
         // 1.10 (S2) : Vue_A.Pompe1, une instance de symbole : le nom de son symbole
@@ -582,17 +587,23 @@ public:
     }
     // 1.12.2 : une variable IHM d'un type objet (LIST, VECTOR, MAP, TUPLE) : son objet, en place.
     sim::ObjRef richVariable(std::string_view n) override {
-        if (rt_.rich_.empty()) return nullptr;
         if (!frames.empty() && frames.back()->count(upper(n)) != 0) return nullptr;    // une locale du meme nom
+        if (aliases)
+            if (auto own = aliases->object(n)) return own;                // 1.12.4 : un parametre objet recu en valeur
         const std::string r = resolved(n);
+        if (!r.empty() && r[0] == '$') return rt_.copyObject(r);            // 1.12.4 : la copie d'un parametre objet
+        if (rt_.rich_.empty()) return nullptr;
         const auto it = rt_.rich_.find(upper(r.empty() ? std::string(n) : r));
         return it == rt_.rich_.end() ? nullptr : it->second;
     }
-    // 1.12.4 : une structure IHM (ou un tableau de structures) qui porte des membres objets.
+    // 1.12.4 : une structure IHM (ou un tableau de structures) qui porte des membres objets ; la copie
+    // d'un parametre (une structure en Copie) aussi.
     bool hasRichMembers(std::string_view n) override {
-        if (rt_.rich_.empty()) return false;
         if (!frames.empty() && frames.back()->count(upper(n)) != 0) return false;
+        if (aliases && (aliases->object(n) || aliases->value(n))) return false;
         const std::string r = resolved(n);
+        if (!r.empty() && r[0] == '$') return rt_.copyHasObjects(r);
+        if (rt_.rich_.empty()) return false;
         return rt_.hasRichUnder(r.empty() ? std::string(n) : r);
     }
     bool structMembers(std::string_view typeName, std::vector<std::pair<std::string, std::string>>& out) override {
@@ -2509,7 +2520,7 @@ void Runtime::start(double now) {
     static int sessions = 0;
     session_ = ++sessions;
     // 1.12.2 : les sources d'elements (itemsFrom) se lisent dans ce moteur tant qu'il tourne.
-    registerChoiceResolver(this, [this](std::string_view source, std::vector<Choice>& out) { return resolveChoices(source, out); });
+    registerChoiceResolver(this, [this](const Object& o, std::string_view source, std::vector<Choice>& out) { return resolveChoices(source, out, &o); });
     composed_.clear(); boundCalls_.clear();
     slaveReads_.clear();                // 1.9 : les bascules d'avant ne comptent plus
     forcedIhm_.clear();                 // 1.11.5 : les variables repartent de leur valeur initiale
@@ -4012,11 +4023,17 @@ std::shared_ptr<const Scope> Runtime::buildScope(const View& v, std::string_view
     const auto given = parseArguments(arguments);
     if (v.params.empty() && given.empty()) return nullptr;
     auto scope = std::make_shared<Scope>();
-    const auto bind = [&](const std::string& name, const std::string& text) {
+    const auto bind = [&](const std::string& name, const std::string& text, const std::string& type) {
         // 1.11.7 : un repere dans un argument (IN_V := $V[0]$, pose par Dupliquer...) : ses $ sont
         // transparents - V[0] est une variable, la popup la recoit en reference (avant : evaluee, rien ne passait).
         const std::string t = trimmed(markers::strip(text));
-        if (t.empty()) return;
+        // 1.12.4 : un parametre d'un type objet (LIST, VECTOR, MAP, TUPLE) - sans argument, un objet vide.
+        const bool rich = !type.empty() && types::isRich(type);
+        if (t.empty()) {
+            if (rich)
+                if (auto o = sim::makeRichValue(type, {}, *env_)) scope->setObject(name, std::move(o));
+            return;
+        }
         if (isVariablePath(t)) {
             // Les index calcules maintenant (Pompes[i + 1] -> Pompes[3]) ; les
             // parametres de l'appelant deroules (Moteur := Moteur).
@@ -4036,7 +4053,9 @@ std::shared_ptr<const Scope> Runtime::buildScope(const View& v, std::string_view
                 });
                 if (!literal) {
                     auto value = Expression::compile(inner).evaluate(*env_);
-                    if (value) index = std::to_string(value->asInteger());
+                    // 1.12.4 : la cle d'une MAP (Stock['vis']) reste un texte.
+                    if (value && value->type() == sim::Type::String) index = "'" + value->asString() + "'";
+                    else if (value) index = std::to_string(value->asInteger());
                     else log("Erreur", source_, "param\xC3\xA8tre " + name + " : index illisible (" + inner + ")");
                 }
                 path += "[" + index + "]";
@@ -4044,9 +4063,19 @@ std::shared_ptr<const Scope> Runtime::buildScope(const View& v, std::string_view
             }
             if (env_->aliases) {
                 if (const auto* val = env_->aliases->value(path)) { scope->setValue(name, *val); return; }
+                // 1.12.4 : un parametre objet de l'appelant, passe tel quel (le meme objet).
+                if (auto own = env_->aliases->object(path)) { scope->setObject(name, std::move(own)); return; }
                 path = env_->aliases->resolve(path);
             }
             scope->setAlias(name, path);
+            return;
+        }
+        if (rich) {
+            // 1.12.4 : un litteral ([1, 2], ['a' := 1], (1, 'x')) ou un calcul (SPLIT(...), une fonction) :
+            // un objet du type du parametre - la popup le lit et l'ecrit en place.
+            std::string why;
+            if (auto o = sim::makeRichValue(type, t, *env_, &why)) scope->setObject(name, std::move(o));
+            else log("Erreur", source_, "param\xC3\xA8tre " + name + " := " + t + " : " + frenchSimMessage(why));
             return;
         }
         auto value = Expression::compile(t).evaluate(*env_);
@@ -4055,18 +4084,23 @@ std::shared_ptr<const Scope> Runtime::buildScope(const View& v, std::string_view
     };
     for (const auto& prm : v.params) {
         const auto it = std::find_if(given.begin(), given.end(), [&](const auto& g) { return upper(g.first) == upper(prm.name); });
-        bind(prm.name, it != given.end() ? it->second : prm.defaultValue);
+        bind(prm.name, it != given.end() ? it->second : prm.defaultValue, prm.type);
     }
     // 1.11.10 : une popup d'un symbole - les parametres du symbole que l'ouverture ne donne pas
     // (ouverte hors d'une instance) prennent la valeur par defaut du symbole.
     if (const View* owner = project_ ? popupOwner(*project_, v) : nullptr)
         for (const auto& prm : owner->params) {
             const bool there = v.param(prm.name) || std::any_of(given.begin(), given.end(), [&](const auto& g) { return upper(g.first) == upper(prm.name); });
-            if (!there) bind(prm.name, prm.defaultValue);
+            if (!there) bind(prm.name, prm.defaultValue, prm.type);
         }
-    // Un argument que la vue ne declare pas : accepte (Generer le signale).
+    // Un argument que la vue ne declare pas : accepte (Generer le signale). 1.12.4 : celui d'un
+    // parametre du symbole qui porte la popup prend son type (un objet).
+    const View* owner = project_ ? popupOwner(*project_, v) : nullptr;
     for (const auto& [name, text] : given)
-        if (!v.param(name)) bind(name, text);
+        if (!v.param(name)) {
+            const ViewParam* own = owner ? owner->param(name) : nullptr;
+            bind(name, text, own ? own->type : std::string{});
+        }
     if (scope->empty()) return nullptr;
     return scope;
 }

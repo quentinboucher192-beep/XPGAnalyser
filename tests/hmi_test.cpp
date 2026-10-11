@@ -17673,6 +17673,151 @@ void etatPoste1123() {
 
 // 1.12.3 : UNE POPUP A PARAMETRES GARDE UNE SERIE PAR JEU D'ARGUMENTS - Cuves[2] et
 // Cuves[3] ne se melangent plus quand on la rouvre avec d'autres arguments.
+// 1.12.4 : LES PARAMETRES OBJETS DES POPUPS - une LIST, une MAP, un TUPLE, une structure qui en porte :
+// en reference (la variable de l'appelant), en valeur ([...], un calcul), en copie, « les deux ».
+void parametresObjets1124() {
+    std::printf("1.12.4 : les param\xC3\xA8tres objets des popups (r\xC3\xA9" "f\xC3\xA9rence, valeur, copie, les deux)\n");
+    Project p;
+    HmiType rec;
+    rec.id = p.allocate();
+    rec.name = "T_Recette";
+    rec.members = {{"Nom", "STRING", "'Pain'"}, {"Etapes", "LIST OF STRING", "['a', 'b']"}};
+    p.programs.types.push_back(rec);
+    p.programs.variables.push_back(hmiVar(p, "Recettes", "LIST OF STRING"));
+    p.programs.variables.back().initial = "['Pain', 'Brioche']";
+    p.programs.variables.push_back(hmiVar(p, "Recette", "T_Recette"));
+    for (const char* n : {"N1", "N2", "N3"}) p.programs.variables.push_back(hmiVar(p, n, "DINT"));
+    p.programs.variables.push_back(hmiVar(p, "Texte", "STRING"));
+    View base = makeView(p, "Base");
+    View pop = makeView(p, "Pop_Liste");
+    pop.role = "popup";
+    pop.width = 300;
+    pop.height = 200;
+    pop.params = {{"L", "", "", "LIST OF STRING", ParamMode::Reference},
+                  {"C", "", "", "LIST OF STRING", ParamMode::Copy},
+                  {"B", "", "", "LIST OF STRING", ParamMode::Both},
+                  {"M", "['x' := 1]", "", "MAP[STRING] OF INT", ParamMode::Reference},
+                  {"R", "", "", "T_Recette", ParamMode::Both}};
+    View vals = makeView(p, "Pop_Valeurs");
+    vals.role = "popup";
+    vals.width = 300;
+    vals.height = 200;
+    vals.params = {{"L", "", "", "LIST OF STRING", ParamMode::Reference},
+                   {"C", "", "", "LIST OF STRING", ParamMode::Copy},
+                   {"M", "", "", "MAP[STRING] OF INT", ParamMode::Reference},
+                   {"T", "", "", "TUPLE(INT, STRING)", ParamMode::Reference}};
+    auto& ouvrir = addButton(p, base, "Btn_Ouvrir", 10, 10);
+    ouvrir.actions.push_back(act(Trigger::Click, Operation::Popup, "Pop_Liste", "L := Recettes; C := Recettes; B := Recettes; R := Recette"));
+    const Id btnOuvrir = ouvrir.id;
+    auto& ouvrir2 = addButton(p, base, "Btn_Valeurs", 10, 60);
+    ouvrir2.actions.push_back(act(Trigger::Click, Operation::Popup, "Pop_Valeurs", "L := ['x', 'y', 'z']; C := SPLIT('a;b', ';'); M := ['k' := 5]; T := (7, 'sept')"));
+    const Id btnValeurs = ouvrir2.id;
+    auto& script = addButton(p, pop, "Btn_Script", 10, 10);
+    script.actions.push_back(act(Trigger::Click, Operation::RunScript, {}, {}));
+    script.actions.back().value = "LIST_ADD(L, 'Tarte'); LIST_ADD(C, 'Copie'); LIST_ADD(B, 'Both'); N1 := L.Count; N2 := C.Count; N3 := M['x'];\n"
+                                  "LIST_ADD(R.Etapes, 'c'); R.Nom := 'Pizza'; Texte := R.Etapes[2];";
+    const Id btnScript = script.id;
+    auto& appliquer = addButton(p, pop, "Btn_Appliquer", 10, 60);
+    appliquer.actions.push_back(act(Trigger::Click, Operation::ApplyCopy, "*"));
+    const Id btnAppliquer = appliquer.id;
+    auto& script2 = addButton(p, vals, "Btn_Script2", 10, 10);
+    script2.actions.push_back(act(Trigger::Click, Operation::RunScript, {}, {}));
+    script2.actions.back().value = "LIST_ADD(L, 'w'); N1 := L.Count; N2 := C.Count + M['k']; Texte := T.Item2;";
+    const Id btnScript2 = script2.id;
+    const Id liste = edit::add(p, vals, Kind::List, 10, 100);
+    vals.object(liste)->set("itemsFrom", "L");
+    const Id table = edit::add(p, vals, Kind::Table, 150, 100);
+    vals.object(table)->set("rowsFrom", "M");
+    p.views = {base, pop, vals};
+    p.config.startView = base.id;
+    const Id popId = pop.id, valsId = vals.id;
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    double t = 0.1;
+    const auto click = [&](Id id) {
+        rt.press(id, t);
+        rt.release(id, t + 0.05, true);
+        t += 0.1;
+    };
+    const auto n = [&](const char* name) { return rt.variable(name) ? rt.variable(name)->asInteger() : -999; };
+    const auto txt = [&]() { return rt.variable("Texte") ? rt.variable("Texte")->asString() : std::string("?"); };
+    click(btnOuvrir);
+    check(rt.topView() == popId, "Pop_Liste ouverte");
+    const auto* b = rt.paramCopy(popId, "B");
+    check(b && b->objects.count("") && b->source == "Recettes", "B (les deux) : une copie de Recettes, l'objet entier");
+    const auto* r = rt.paramCopy(popId, "R");
+    check(r && r->objects.count(".ETAPES") && r->values.count(".NOM"), "R (les deux, T_Recette) : Nom en case, Etapes en objet");
+    click(btnScript);
+    check(n("N1") == 3 && n("N2") == 3 && n("N3") == 1 && txt() == "c",
+          "la popup : L (r\xC3\xA9" "f\xC3\xA9rence) 3, C (copie) 3, M par d\xC3\xA9" "faut ['x' := 1], R.Etapes[2] = 'c' (" + std::to_string(n("N1")) + ", "
+              + std::to_string(n("N2")) + ", " + std::to_string(n("N3")) + ", " + txt() + ")");
+    check(rt.richText("Recettes") == "['Pain', 'Brioche', 'Tarte']", "L en r\xC3\xA9" "f\xC3\xA9rence : Recettes change (" + rt.richText("Recettes") + ")");
+    check(rt.richText("Recette.Etapes") == "['a', 'b']" && rt.variable("Recette.Nom") && rt.variable("Recette.Nom")->asString() == "Pain",
+          "R en copie : Recette intacte avant Appliquer");
+    click(btnAppliquer);
+    check(rt.richText("Recettes") == "['Pain', 'Brioche', 'Both']", "Appliquer : B remplace Recettes, entier (" + rt.richText("Recettes") + ")");
+    check(rt.richText("Recette.Etapes") == "['a', 'b', 'c']" && rt.variable("Recette.Nom") && rt.variable("Recette.Nom")->asString() == "Pizza",
+          "... R : Recette.Nom et Recette.Etapes \xC3\xA9" "crits (" + rt.richText("Recette.Etapes") + ")");
+    std::string why;
+    check(rt.applyCopy("*", popId, t, &why) == 0, "appliquer encore : rien de modifi\xC3\xA9");
+    (void)rt.closePopup(Transition{}, t);
+    click(btnValeurs);
+    check(rt.topView() == valsId, "Pop_Valeurs ouverte");
+    click(btnScript2);
+    check(n("N1") == 4 && n("N2") == 7 && txt() == "sept",
+          "en valeur : L := ['x', 'y', 'z'] (4 apr\xC3\xA8s LIST_ADD), SPLIT, ['k' := 5], (7, 'sept') (" + std::to_string(n("N1")) + ", " + std::to_string(n("N2")) + ")");
+    const auto* listObj = rt.composedView(valsId) ? rt.composedView(valsId)->object(liste) : nullptr;
+    const auto choices = listObj ? choicesOf(*listObj) : std::vector<Choice>{};
+    check(choices.size() == 4 && choices[3].label == "w", "une liste de la popup, \xC2\xAB \xE2\x86\x90 L \xC2\xBB : les 4 \xC3\xA9l\xC3\xA9ments du param\xC3\xA8tre (" + std::to_string(choices.size()) + ")");
+    std::vector<std::string> headers;
+    std::vector<std::vector<std::string>> rows;
+    const auto* tableObj = rt.composedView(valsId) ? rt.composedView(valsId)->object(table) : nullptr;
+    check(tableObj && rt.tableRows(*tableObj, headers, rows) && rows.size() == 1 && rows[0].size() == 2 && rows[0][0] == "k",
+          "un tableau de la popup, \xC2\xAB \xE2\x86\x90 M \xC2\xBB : la ligne de la MAP");
+    // Generer : les litteraux objets passent (une MAP a des :=) ; un litteral qui ne va pas dans le type, non ;
+    // un parametre objet de symbole se donne par une variable.
+    const auto all = [](std::string_view) { return false; };
+    const auto mentions = [](const std::vector<Issue>& issues, std::string_view what) {
+        for (const auto& i : issues)
+            if (i.message.find(what) != std::string::npos) return i.message;
+        return std::string{};
+    };
+    {
+        const auto issues = generate(p, all);
+        const auto compiled = compileWith(p, all);
+        const std::string bad = mentions(issues, "Pop_Valeurs") + mentions(issues, "n'affecte rien") + mentions(compiled, "n'affecte rien");
+        check(bad.empty(), "Generer, Compiler : ['k' := 5], (7, 'sept'), le d\xC3\xA9" "faut ['x' := 1] passent (" + bad + ")");
+    }
+    p.views[1].params[3].defaultValue = "['x' := 'a']";
+    {
+        const auto issues = generate(p, all);
+        const std::string said = mentions(issues, "ne va pas dans un MAP[STRING] OF INT");
+        check(!said.empty(), "un d\xC3\xA9" "faut ['x' := 'a'] pour une MAP[STRING] OF INT : dit (" + said + ")");
+    }
+    p.views[1].params[3].defaultValue = "['x' := 1]";
+    View sym = makeView(p, "Sym_Liste");
+    sym.role = kSymbolRole;
+    sym.params = {{"Elements", "", "", "LIST OF STRING", ParamMode::Reference}};
+    Object inst = makeObject(Kind::SymbolInstance, p.allocate(), "Inst_1", 400, 10, p.views[0].activeLayer);
+    inst.set("symbol", "Sym_Liste");
+    inst.set("params", "Elements := ['a', 'b']");
+    p.views[0].objects.push_back(inst);
+    Object inst2 = makeObject(Kind::SymbolInstance, p.allocate(), "Inst_2", 400, 200, p.views[0].activeLayer);
+    inst2.set("symbol", "Sym_Liste");
+    inst2.set("params", "Elements := Recettes");
+    p.views[0].objects.push_back(inst2);
+    p.views.push_back(sym);
+    {
+        const auto issues = generate(p, all);
+        const std::string said = mentions(issues, "se donne par une variable");
+        check(!said.empty() && said.find("Elements") != std::string::npos, "un symbole : Elements := ['a', 'b'] - une variable, dit (" + said + ")");
+        int count = 0;
+        for (const auto& i : issues) count += i.message.find("se donne par une variable") != std::string::npos ? 1 : 0;
+        check(count == 1, "... Elements := Recettes passe (" + std::to_string(count) + ")");
+    }
+}
+
 // 1.12.4 : LES MEMBRES OBJETS - une liste, une MAP, un tuple dans un type IHM : sans place Modbus, un
 // objet chacun dans la memoire de l'IHM ; Recette.Etapes[0], LIST_ADD(Recette.Etapes, x), R2 := Recette.
 void membresObjets1124() {
@@ -22488,6 +22633,7 @@ int main(int argc, char** argv) {
     etatPoste1123();                  // 1.12.3 : le poste garde onglets, panneaux replies, defilement
     courbesParArguments1123();        // 1.12.3 : une serie par jeu d'arguments d'une popup
     membresObjets1124();              // 1.12.4 : les membres objets des types IHM
+    parametresObjets1124();           // 1.12.4 : les parametres objets des popups
     enumerationsLangage110();         // 1.10 (S1, decision 15) : les enumerations dans les scripts
     operateurs110();                  // 1.10 (chantier S2) : les operateurs des symboles et des types IHM
     operateurs1101();                 // 1.10.1 (chantier U2) : a, b et Resultat (types, legende, exemple, Compiler)

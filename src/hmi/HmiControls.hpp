@@ -50,7 +50,8 @@ struct Choice {
 //  Plusieurs moteurs peuvent tourner (la simulation, le poste, les essais) : le dernier pose, encore
 //  la, repond - sur le fil qui l'a pose (ailleurs : la ligne de la source) ; chacun retire le sien
 //  en s'arretant (et en mourant).
-using ChoiceResolver = std::function<bool(std::string_view source, std::vector<Choice>& out)>;
+// 1.12.4 : avec l'objet (sa vue : une popup qui recoit la liste en parametre, « <- L »).
+using ChoiceResolver = std::function<bool(const Object& owner, std::string_view source, std::vector<Choice>& out)>;
 void registerChoiceResolver(const void* owner, ChoiceResolver resolver);
 void unregisterChoiceResolver(const void* owner) noexcept;
 [[nodiscard]] std::string itemsSourceOf(const Object&);       // itemsFrom, sans blancs ni $ ; vide : "items"

@@ -222,7 +222,8 @@ bool allowed(Form f, unsigned use) noexcept {
         case Form::Simple: return true;
         case Form::Array:
         case Form::Array2D: return (use & (tr::UseVariable | tr::UseDeclaration | tr::UseParameter | tr::UseReturn)) != 0;
-        default: return (use & (tr::UseVariable | tr::UseDeclaration | tr::UseReturn)) != 0;
+        // 1.12.4 : une liste, un vecteur, une MAP, un tuple - un parametre de popup ou de symbole aussi.
+        default: return (use & (tr::UseVariable | tr::UseDeclaration | tr::UseParameter | tr::UseReturn)) != 0;
     }
 }
 

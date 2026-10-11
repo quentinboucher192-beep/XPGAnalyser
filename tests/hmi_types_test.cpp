@@ -324,8 +324,8 @@ void lecture() {
         {"T_Inconnu", tr::UseDeclaration, "type \xC2\xAB T_Inconnu \xC2\xBB inconnu", true},
         {"ARRAY[0..9] OF T_Inconnu", tr::UseVariable, "type \xC2\xAB T_Inconnu \xC2\xBB inconnu", true},
         {"T_ANA", tr::UseDeclaration, "T_ANA ne convient pas \xC3\xA0 une d\xC3\xA9" "claration", false},
-        {"MAP[STRING] OF REAL", tr::UseParameter, "une MAP ne convient pas \xC3\xA0 un param\xC3\xA8tre de popup", false},
-        {"LIST OF REAL", tr::UseParameter, "une LIST ne convient pas \xC3\xA0 un param\xC3\xA8tre de popup", false},
+        {"MAP[STRING] OF REAL", tr::UseOperand, "une MAP ne convient pas", false},       // 1.12.4 : un parametre, oui
+        {"LIST OF REAL", tr::UseOperand, "une LIST ne convient pas", false},
         {"TUPLE()", tr::UseDeclaration, "TUPLE : au moins un type", false},
         {"LIST OF T_Inconnu", tr::UseVariable, "type \xC2\xAB T_Inconnu \xC2\xBB inconnu", true},
         {"MAP[REAL] OF INT", tr::UseDeclaration, "MAP : une cl\xC3\xA9 est un STRING, un entier ou une \xC3\xA9num\xC3\xA9ration", false},
@@ -610,9 +610,12 @@ void objets1122() {
     sh.form = tf::Form::Array;
     sh.parameter = "[1..4]";
     check(tf::compose(sh) == "ARRAY[1..4] OF REAL", "des bornes \xC3\xA9" "crites [1..4] : sans leurs crochets");
-    check(tf::forms(tr::UseParameter).size() == 3 && tf::forms(tr::UseVariable).size() == 7 && tf::forms(tr::UseOperand).size() == 1
+    check(tf::forms(tr::UseParameter).size() == 7 && tf::forms(tr::UseVariable).size() == 7 && tf::forms(tr::UseOperand).size() == 1
               && tf::referenceAllowed(tr::UseReturn) && !tf::referenceAllowed(tr::UseVariable),
-          "les formes : 3 pour un param\xC3\xA8tre, 7 pour une variable, 1 pour un op\xC3\xA9rande ; REF_TO pour un retour");
+          "les formes : 7 pour un param\xC3\xA8tre (1.12.4) et une variable, 1 pour un op\xC3\xA9rande ; REF_TO pour un retour");
+    // 1.12.4 : un parametre de popup ou de symbole peut etre une liste, un vecteur, une MAP, un tuple.
+    for (const char* t : {"LIST OF REAL", "VECTOR OF STRING", "MAP[STRING] OF INT", "TUPLE(INT, STRING)", "ARRAY[0..2] OF LIST OF INT"})
+        check(typereg::Registry::build(p)->resolve(t, tr::UseParameter).ok, std::string("un param\xC3\xA8tre ") + t + " : accept\xC3\xA9");
     check(tf::fromText("dictionnaire (map)") == tf::Form::Map && tf::fromText("vecteur") == tf::Form::Vector && !tf::fromText("Matrice"),
           "fromText : le libell\xC3\xA9 ou la cl\xC3\xA9, sans casse");
     // la valeur d'un type objet

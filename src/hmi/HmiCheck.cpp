@@ -85,6 +85,16 @@ std::string actionLabel(std::size_t index, const Action& a) {
     return "action " + std::to_string(index + 1) + " (" + std::string(triggerLabel(a.trigger)) + ")";
 }
 
+// 1.12.4 : un litteral d'un type objet ([1, 2], ['a' := 1], (1, 'x')) donne a un parametre objet (une
+// valeur par defaut, un argument) : il ne se compile pas en expression (une MAP a des :=) - il se
+// verifie dans son type (typeform::valueFits).
+bool richLiteral(std::string_view type, std::string_view text) {
+    if (type.empty() || !types::isRich(type)) return false;
+    std::string t(markers::strip(text));
+    const auto a = t.find_first_not_of(" \t\r\n");
+    return a != std::string::npos && (t[a] == '[' || t[a] == '(');
+}
+
 } // namespace
 
 std::string_view toString(Issue::Severity s) noexcept {
@@ -1031,6 +1041,13 @@ void checkLot8(const Project& p, const NameExists& plc, std::vector<Issue>& out)
                         for (const auto& r : scanRoots(markers::strip(value)))   // 1.11.7 : $V[0]$ -> V
                             if (!known(p, plc, r, &v))
                                 add(out, S::Error, "Variable", v.id, obj, where, name + " := " + value + " : variable inexistante : " + r);
+                        // 1.12.4 : un litteral pour un parametre objet ([1, 2], ['a' := 1], (1, 'x')) : dans son type.
+                        if (const ViewParam* prm = target->param(name); prm && richLiteral(prm->type, value)) {
+                            std::string why;
+                            if (!typeform::valueFits(p, prm->type, trimmedCopy(markers::strip(value)), &why))
+                                add(out, S::Error, "Action", v.id, obj, where,
+                                    name + " := " + value + " : ne va pas dans un " + types::normalized(prm->type) + " (" + why + ")");
+                        }
                     }
                 }
             }
@@ -1126,6 +1143,10 @@ void checkParams19(const Project& p, const exprcheck::PlcPaths& paths, std::vect
                     add(out, S::Error, "Param\xC3\xA8tre", v.id, kNoId, "parametres",
                         "la valeur par d\xC3\xA9" "faut de " + prm.name + " (" + def + ", " + params::normalizedType(given)
                             + ") ne convient pas au type " + params::normalizedType(prm.type));
+                std::string why;
+                if (richLiteral(prm.type, def) && !typeform::valueFits(p, prm.type, trimmedCopy(markers::strip(def)), &why))
+                    add(out, S::Error, "Param\xC3\xA8tre", v.id, kNoId, "parametres",
+                        "la valeur par d\xC3\xA9" "faut de " + prm.name + " (" + def + ") ne va pas dans un " + types::normalized(prm.type) + " : " + why);
             }
             if (isSymbolView(v) && prm.mode != ParamMode::Reference)
                 add(out, S::Warning, "Param\xC3\xA8tre", v.id, kNoId, "parametres",
@@ -3012,7 +3033,9 @@ struct ExprWalker {
             if (operationTakesArguments(a.operation)) {
                 const View* opened = p.viewByName(trimmedCopy(a.target));
                 for (const auto& [name, value] : parseArguments(a.value)) {
-                    expr(w, value, W::Any, "param\xC3\xA8tre " + name + " : ");
+                    const ViewParam* declared = opened ? opened->param(name) : nullptr;
+                    if (!(declared && richLiteral(declared->type, value)))     // 1.12.4 : un litteral objet, verifie dans son type
+                        expr(w, value, W::Any, "param\xC3\xA8tre " + name + " : ");
                     if (opened && !opened->param(name))           // 1.11.22 : un parametre retire du popup casse l'appel
                         push(w, "param\xC3\xA8tre " + name + " : " + opened->name + " n'a pas (ou plus) ce param\xC3\xA8tre - corrigez l'appel, "
                                 "ou d\xC3\xA9" "clarez-le dans " + opened->name);
@@ -3080,7 +3103,8 @@ struct ExprWalker {
             if (v.role == "popup" && !v.popup.title.empty()) text(Where{&v, kNoId, "Popup", "popup_libelle"}, v.popup.title, "titre ");
             for (const auto& prm : v.params) {
                 const std::string def = trimmedCopy(prm.defaultValue);
-                if (!def.empty()) expr(Where{&v, kNoId, "Param\xC3\xA8tre", "parametres"}, def, W::Any, prm.name + " := ");
+                if (!def.empty() && !richLiteral(prm.type, def))      // 1.12.4 : un litteral objet, verifie dans son type
+                    expr(Where{&v, kNoId, "Param\xC3\xA8tre", "parametres"}, def, W::Any, prm.name + " := ");
             }
         }
         for (const auto& sc : p.programs.scripts)
@@ -3221,7 +3245,14 @@ struct ExprWalker {
                 const View* sv = symbolOf(p, o);
                 if (!sv) continue;                                           // checkSymbols le dit
                 for (const auto& [name, value] : parseArguments(o.text("params"))) {
-                    if (sv->param(name)) expr(Where{&v, o.id, "Symbole", "params"}, value, W::Any, "argument " + name + " := ");
+                    const ViewParam* declared = sv->param(name);
+                    // 1.12.4 : un parametre objet d'un symbole (LIST, MAP...) - l'instance est developpee en texte,
+                    // ses parametres passent par reference : une variable (Recettes, Recette.Etapes), pas un litteral.
+                    if (declared && types::isRich(declared->type) && !isVariablePath(markers::strip(value)))
+                        push(Where{&v, o.id, "Symbole", "params"},
+                             "argument " + name + " := " + value + " : un " + types::normalized(declared->type)
+                                 + " se donne par une variable (un symbole re\xC3\xA7oit ses param\xC3\xA8tres par r\xC3\xA9" "f\xC3\xA9rence)");
+                    else if (declared) expr(Where{&v, o.id, "Symbole", "params"}, value, W::Any, "argument " + name + " := ");
                     else push(Where{&v, o.id, "Symbole", "params"},     // 1.11.22 : un parametre retire du symbole casse l'instance
                               unknownSymbolArgument(*sv, name));
                 }
@@ -3728,7 +3759,7 @@ std::vector<Issue> compileFocused(const Project& p, const CompileFocus* f) {
         }
         for (const auto& prm : v.params) {
             const std::string def = trimmedCopy(prm.defaultValue);
-            if (!anim || def.empty() || isVariablePath(def)) continue;
+            if (!anim || def.empty() || isVariablePath(def) || richLiteral(prm.type, def)) continue;   // 1.12.4
             ++expressions;
             const auto e = Expression::compile(def);
             if (!e.valid()) add(out, S::Error, "Param\xC3\xA8tre", v.id, kNoId, "parametres", prm.name + " := " + def + " : " + e.error());
@@ -3766,9 +3797,14 @@ std::vector<Issue> compileFocused(const Project& p, const CompileFocus* f) {
                         add(out, severityOf(d.severity), "Action", v.id, obj, where,
                             (d.line ? "ligne " + std::to_string(d.line) + " : " : std::string{}) + d.message);
                 // Lot 8 : les parametres passes a la vue ouverte (un chemin, ou un calcul).
-                if (operationTakesArguments(a.operation))
-                    for (const auto& [name, value] : parseArguments(a.value))
+                if (operationTakesArguments(a.operation)) {
+                    const View* opened = p.viewByName(trimmedCopy(a.target));
+                    for (const auto& [name, value] : parseArguments(a.value)) {
+                        const ViewParam* declared = opened ? opened->param(name) : nullptr;
+                        if (declared && richLiteral(declared->type, value)) continue;    // 1.12.4 : verifie dans son type
                         if (!isVariablePath(markers::strip(value))) expr(value, ("param\xC3\xA8tre " + name + " :").c_str());
+                    }
+                }
             }
         };
         if (act) {

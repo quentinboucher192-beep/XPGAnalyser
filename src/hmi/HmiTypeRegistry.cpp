@@ -379,8 +379,9 @@ private:
             r.why = key.why;
             return r;
         }
-        // 1.12.2 : une variable IHM aussi (dans la memoire de l'IHM) ; pas un parametre de popup.
-        r.ok = e.ok && (use & (UseVariable | UseDeclaration | UseReturn)) != 0;
+        // 1.12.2 : une variable IHM aussi (dans la memoire de l'IHM) ; 1.12.4 : un parametre de popup ou
+        // de symbole aussi (un membre objet de type IHM : UseVariable).
+        r.ok = e.ok && (use & (UseVariable | UseDeclaration | UseParameter | UseReturn)) != 0;
         r.why = e.ok ? (r.ok ? std::string{} : "une MAP ne convient pas \xC3\xA0 " + useText(use)) : e.why;
         return r;
     }
@@ -398,7 +399,7 @@ private:
         r.unknown = e.unknown;
         r.dynamic = true;
         r.rich = true;
-        r.ok = e.ok && (use & (UseVariable | UseDeclaration | UseReturn)) != 0;
+        r.ok = e.ok && (use & (UseVariable | UseDeclaration | UseParameter | UseReturn)) != 0;    // 1.12.4 : un parametre aussi
         r.why = e.ok ? (r.ok ? std::string{} : "une " + head + " ne convient pas \xC3\xA0 " + useText(use)) : e.why;
         return r;
     }
@@ -434,7 +435,7 @@ private:
         if (count > 16) return fail("TUPLE : 16 valeurs au plus");
         r.text = "TUPLE(" + text + ")";
         r.key = "tuple(" + key + ")";
-        if (r.ok && (use & (UseVariable | UseDeclaration | UseReturn)) == 0) {
+        if (r.ok && (use & (UseVariable | UseDeclaration | UseParameter | UseReturn)) == 0) {    // 1.12.4 : un parametre aussi
             r.ok = false;
             r.why = "un TUPLE ne convient pas \xC3\xA0 " + useText(use);
         }

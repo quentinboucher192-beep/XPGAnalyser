@@ -58,6 +58,7 @@ void Runtime::captureCopies(PopupSlot& slot, const View& v, std::string_view /*a
             if (prm && prm->mode != ParamMode::Reference) continue;
             if (const auto* a = slot.scope->alias(n)) scope->setAlias(n, *a);
             else if (const auto* val = slot.scope->value(n)) scope->setValue(n, *val);
+            else if (auto o = slot.scope->object(n)) scope->setObject(n, std::move(o));     // 1.12.4
         }
     for (const auto& prm : v.params) {
         if (prm.mode == ParamMode::Reference) continue;
@@ -67,7 +68,14 @@ void Runtime::captureCopies(PopupSlot& slot, const View& v, std::string_view /*a
         c.root = "$COPIE" + std::to_string(++copySeq_);
         const std::string* alias = slot.scope ? slot.scope->alias(prm.name) : nullptr;
         const sim::Value* value = slot.scope ? slot.scope->value(prm.name) : nullptr;
-        if (alias) {
+        const sim::ObjRef given = slot.scope ? slot.scope->object(prm.name) : nullptr;   // 1.12.4 : un objet recu en valeur
+        // 1.12.4 : un objet entier (une variable LIST, un membre objet Recette.Etapes) : sa copie profonde.
+        const sim::ObjRef whole = alias ? richVariable(*alias) : nullptr;
+        if (alias && whole) {
+            c.source = *alias;
+            c.objects[std::string{}] = sim::deepCopy(*whole);
+            c.capturedObjects[std::string{}] = sim::deepCopy(*whole);
+        } else if (alias) {
             c.source = *alias;
             std::string type = trimText(prm.type);
             if (type.empty() || upperText(type) == "ANY")
@@ -76,6 +84,17 @@ void Runtime::captureCopies(PopupSlot& slot, const View& v, std::string_view /*a
             // Chaque feuille : lue maintenant, gardee sous son chemin relatif.
             const auto collect = [&](auto&& self, const std::string& t, const std::string& rel, int depth) -> void {
                 if (leaves >= kMaxCopyLeaves || depth > 16) return;
+                // 1.12.4 : un membre objet de la structure (Recette.Etapes) : sa copie profonde.
+                if (!rel.empty() && types::isRich(t)) {
+                    if (auto src = richVariable(c.source + rel)) {
+                        const std::string key = upperText(rel);
+                        c.objects[key] = sim::deepCopy(*src);
+                        c.capturedObjects[key] = sim::deepCopy(*src);
+                        c.paths[key] = rel;
+                        ++leaves;
+                    }
+                    return;
+                }
                 if (project_ && !t.empty()) {
                     const auto members = params::typeMembers(*project_, t, plcTypes_);
                     if (!members.empty()) {
@@ -104,9 +123,12 @@ void Runtime::captureCopies(PopupSlot& slot, const View& v, std::string_view /*a
                 }
             };
             collect(collect, type, std::string{}, 0);
-            if (c.values.empty())
+            if (c.values.empty() && c.objects.empty())
                 log("Erreur", source_, "param\xC3\xA8tre " + prm.name + " : copie de " + c.source
                                            + " impossible (variable ou type inconnu)");
+        } else if (given) {
+            c.objects[std::string{}] = given;                       // un litteral, un calcul : deja neuf
+            c.capturedObjects[std::string{}] = sim::deepCopy(*given);
         } else if (value) {
             c.values[std::string{}] = *value;   // une valeur donnee ('P3', 3) : la copie la garde
         }
@@ -153,6 +175,32 @@ int Runtime::copyWrite(std::string_view path, const sim::Value& v, std::string* 
         }
     if (why) *why = "la copie du param\xC3\xA8tre n'existe plus (la popup est ferm\xC3\xA9" "e)";
     return -1;
+}
+
+sim::ObjRef Runtime::copyObject(std::string_view path) const {
+    const auto [root, key] = splitCopyPath(path);
+    const auto look = [&](const std::vector<ParamCopy>& copies) -> sim::ObjRef {
+        for (const auto& c : copies) {
+            if (c.root != root) continue;
+            const auto it = c.objects.find(key);
+            return it == c.objects.end() ? nullptr : it->second;
+        }
+        return nullptr;
+    };
+    for (const auto& s : slots_) {
+        if (auto o = look(s.copies)) return o;
+        for (const auto& b : s.history)
+            if (auto o = look(b.copies)) return o;
+    }
+    return nullptr;
+}
+
+bool Runtime::copyHasObjects(std::string_view root) const {
+    const std::string r = splitCopyPath(root).first;
+    for (const auto& s : slots_)
+        for (const auto& c : s.copies)
+            if (c.root == r) return std::any_of(c.objects.begin(), c.objects.end(), [](const auto& o) { return !o.first.empty(); });
+    return false;
 }
 
 const ParamCopy* Runtime::paramCopy(Id view, std::string_view name) const {
@@ -204,6 +252,18 @@ int Runtime::applyCopy(std::string_view name, Id view, double now, std::string* 
             if (!writeDirect(c.source + (declared != c.paths.end() ? declared->second : key), value, popupName)) continue;
             if (cap != c.captured.end()) cap->second = value;
             else c.captured[key] = value;
+            ++members;
+        }
+        // 1.12.4 : les objets (le parametre entier, ou les membres objets d'une structure), entiers.
+        for (auto& [key, obj] : c.objects) {
+            if (!obj) continue;
+            const auto cap = c.capturedObjects.find(key);
+            if (cap != c.capturedObjects.end() && cap->second && sim::deepEquals(*cap->second, *obj)) continue;
+            const auto declared = c.paths.find(key);
+            auto target = richVariable(c.source + (declared != c.paths.end() ? declared->second : key));
+            std::string w;
+            if (!target || !sim::assignObj(*target, *obj, &w)) continue;
+            c.capturedObjects[key] = sim::deepCopy(*obj);
             ++members;
         }
         written += members;

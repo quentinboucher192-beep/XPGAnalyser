@@ -52,8 +52,8 @@ inline constexpr Form kForms[] = {Form::Simple, Form::Array, Form::Array2D, Form
 [[nodiscard]] bool dynamic(Form) noexcept;
 [[nodiscard]] bool memoryOnly(Form) noexcept;
 
-// Les formes permises pour un usage (typereg::Use) : un parametre de popup a Simple et les
-// tableaux ; un operande, Simple seulement ; une variable IHM, une declaration et un retour, toutes.
+// Les formes permises pour un usage (typereg::Use) : un operande, Simple seulement ; une variable
+// IHM, une declaration, un retour et (1.12.4) un parametre de popup ou de symbole, toutes.
 [[nodiscard]] bool allowed(Form, unsigned use) noexcept;
 [[nodiscard]] std::vector<Form> forms(unsigned use);
 [[nodiscard]] std::vector<std::string> labels(unsigned use);

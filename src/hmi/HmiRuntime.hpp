@@ -354,6 +354,9 @@ struct ParamCopy {
     std::string root;                // le nom interne qui la designe ("$COPIE1")
     std::map<std::string, sim::Value, std::less<>> captured, values;
     std::map<std::string, std::string, std::less<>> paths;   // le membre tel que declare (".Vitesse"), pour ecrire
+    // 1.12.4 : un objet (le parametre entier : "" ; un membre objet d'une structure : ".ETAPES") -
+    // sa copie a l'ouverture (capturedObjects) et maintenant (objects, que la popup lit et ecrit).
+    std::map<std::string, sim::ObjRef, std::less<>> capturedObjects, objects;
 };
 struct PopupSlot {
     Id          view{kNoId};
@@ -775,6 +778,9 @@ public:
     [[nodiscard]] sim::ObjRef richVariable(std::string_view name) const;
     // 1.12.4 : un chemin (Recette, Recettes[2]) qui porte des membres objets (Recette.Etapes).
     [[nodiscard]] bool hasRichUnder(std::string_view path) const;
+    // 1.12.4 : l'objet de la copie d'un parametre ("$COPIE3", "$COPIE3.Etapes") ; nul : aucun.
+    [[nodiscard]] sim::ObjRef copyObject(std::string_view path) const;
+    [[nodiscard]] bool        copyHasObjects(std::string_view root) const;
     [[nodiscard]] std::string richText(std::string_view name) const;
     // Lui donner la valeur d'un litteral (la simulation : « forcer ») ; faux et `why` sinon.
     bool setRichVariable(std::string_view name, std::string_view literal, std::string* why = nullptr);
@@ -972,7 +978,11 @@ public:
     // 1.12.2 : LES ELEMENTS D'UNE SOURCE (itemsFrom d'une liste, d'une liste deroulante...) : une
     // enumeration du projet (ses textes ; la valeur : son nombre), une variable LIST, VECTOR, MAP,
     // un tableau IHM (ses elements, ses cles), une expression qui rend "a;b;c". Faux : illisible.
-    bool resolveChoices(std::string_view source, std::vector<Choice>& out);
+    bool resolveChoices(std::string_view source, std::vector<Choice>& out, const Object* owner = nullptr);
+    // 1.12.4 : l'objet que designe la source d'une liste ou d'un tableau (itemsFrom, rowsFrom) : une
+    // variable objet, un membre objet, ou un parametre de la vue de `owner` (une popup qui recoit la
+    // liste : « <- L », en valeur, en reference ou sa copie). Nul : aucun.
+    [[nodiscard]] sim::ObjRef richOfSource(std::string_view source, const Object* owner) const;
     // 1.12.3 : LA VRAIE CASE - "Cuves[Idx].Consigne" -> "Cuves[2].Consigne" (chaque indice calcule) ;
     // un indice illisible reste tel quel. writtenAs : la vraie case, puis ce qui est ecrit s'il differe
     // ("Cuves[2].Consigne := 75 (Cuves[Idx].Consigne)" dans la Console).
