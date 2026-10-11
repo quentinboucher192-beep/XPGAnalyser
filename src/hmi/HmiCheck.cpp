@@ -3075,11 +3075,11 @@ struct ExprWalker {
                 if (!anim) { if (!o.actions.empty()) actions(v, &o, o.actions); continue; }
                 for (const auto& prop : o.props) {
                     const Where w{&v, o.id, "Expression", prop.key};
-                    if (!prop.expr.empty()) expr(w, prop.expr, exprcheck::wantOf(prop.key));
+                    if (!prop.expr.empty()) expr(w, prop.expr, exprcheck::wantOf(o.kind, prop.key));   // 1.12.6 (lot B) : le role
                     if (!prop.expr.empty()) enumFamily(w, o.kind, prop.key, prop.expr);
                     // 1.12.5 (lot A, D13) : un Defaut, un Mouvement, une Valeur de synoptique tapes
                     // sans '=' (P1.Defaut) sont des formules (le dessin et l'alarme) : verifies comme elles.
-                    if (synopticLinkedKey(o, prop.key)) expr(w, prop.value, exprcheck::wantOf(prop.key));
+                    if (synopticLinkedKey(o, prop.key)) expr(w, prop.value, exprcheck::wantOf(o.kind, prop.key));
                     if (isTemplateKey(prop.key)) text(Where{&v, o.id, "Texte", prop.key}, prop.value);
                     if (prop.key == "cells" && prop.expr.empty()) {
                         const auto rows = parseCells(prop.value);
@@ -3101,7 +3101,7 @@ struct ExprWalker {
                 if (kindWritesVariable(o.kind) || o.kind == Kind::HourMeter)
                     for (const char* key : {"state", "lamp", "condition"})
                         if (const auto* prop = o.find(key); prop && prop->expr.empty())
-                            expr(Where{&v, o.id, "Expression", key}, prop->value, W::Any);
+                            expr(Where{&v, o.id, "Expression", key}, prop->value, exprcheck::wantOf(o.kind, key));   // 1.12.6 : son role
                 // ---- Lot API 8 : corrections des captures ---- le texte-expression du lot 11.
                 for (const char* key : valueExpressionKeys(o.kind))
                     if (const auto* prop = o.find(key); prop && prop->expr.empty())
@@ -3182,13 +3182,13 @@ struct ExprWalker {
         using W = exprcheck::Want;
         std::vector<Site> s;
         for (const auto& prop : o.props) {
-            if (!prop.expr.empty()) s.push_back(Site{"Expression", prop.key, prop.expr, exprcheck::wantOf(prop.key), false, false, {}});
+            if (!prop.expr.empty()) s.push_back(Site{"Expression", prop.key, prop.expr, exprcheck::wantOf(o.kind, prop.key), false, false, {}});
             if (isTemplateKey(prop.key)) s.push_back(Site{"Texte", prop.key, prop.value, W::Any, true, false, {}});
         }
         if (kindWritesVariable(o.kind) || o.kind == Kind::HourMeter)
             for (const char* key : {"state", "lamp", "condition"})
                 if (const auto* prop = o.find(key); prop && prop->expr.empty())
-                    s.push_back(Site{"Expression", key, prop->value, W::Any, false, false, {}});
+                    s.push_back(Site{"Expression", key, prop->value, exprcheck::wantOf(o.kind, key), false, false, {}});
         // ---- Lot API 8 : corrections des captures ---- le texte-expression du lot 11.
         for (const char* key : valueExpressionKeys(o.kind))
             if (const auto* prop = o.find(key); prop && prop->expr.empty())

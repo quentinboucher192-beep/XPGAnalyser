@@ -12,6 +12,7 @@
 #include "HmiDecl.hpp"   // 1.11.18 (refonte, lot 3) : les declarations du modele, reconstruites
 #include "HmiApiVars.hpp"   // 1.11.1 (API-M) : API.<globale>, API.<Unite>.<variable>
 #include "HmiPopupParams.hpp"
+#include "HmiRoles.hpp"      // 1.12.6 (lot B) : le role de chaque propriete
 
 #include "HmiExpr.hpp"
 #include "HmiMarkers.hpp"   // 1.11 (REP) : les reperes $...$, transparents pour la verification
@@ -905,15 +906,35 @@ std::string closest(const Context& ctx, std::string_view name) {
     return closestAmong(name, pool);
 }
 
+namespace {
+// 1.12.6 (lot B) : le role d'une propriete (HmiRoles.hpp), en ce qu'attend la verification.
+Want wantOfRole(roles::Role role) {
+    switch (role) {
+        case roles::Role::Number: case roles::Role::Duration: return Want::Number;
+        case roles::Role::Boolean: return Want::Bool;
+        case roles::Role::Color: return Want::Color;
+        default: return Want::Any;
+    }
+}
+} // namespace
+
 Want wantOf(std::string_view key) {
-    // Les cles dont le type est connu d'abord (visible : BOOL, x : REAL...).
-    for (const auto& p : pub::kPropTypes)
-        if (p.key == key) return p.type == "BOOL" ? Want::Bool : p.type == "STRING" ? Want::Any : Want::Number;   // 1.12.5 : un texte
+    // 1.12.6 (lot B) : la table des roles (avant : kPropTypes et le suffixe « Color », sans le genre).
+    if (const auto* r = roles::keyRole(key)) {
+        if (r->role == roles::Role::Formula) return wantOfRole(r->item);
+        return wantOfRole(r->role);
+    }
     const std::string k(key);
-    if (k == "fill" || k == "stroke" || k == "color"
-        || (k.size() > 5 && (k.compare(k.size() - 5, 5, "Color") == 0 || k.compare(k.size() - 5, 5, "color") == 0)))
+    if (k == "color" || (k.size() > 5 && (k.compare(k.size() - 5, 5, "Color") == 0 || k.compare(k.size() - 5, 5, "color") == 0)))
         return Want::Color;
     return Want::Any;
+}
+
+Want wantOf(Kind kind, std::string_view key) {
+    if (!roles::keyRole(key)) return wantOf(key);
+    const auto r = roles::roleOf(kind, key);
+    if (r.role == roles::Role::List) return Want::Any;      // une formule qui rend la liste (a;b;c) : un texte
+    return wantOfRole(r.role == roles::Role::Formula ? r.item : r.role);
 }
 
 std::vector<Problem> check(const Context& ctx, std::string_view written, Want want) {

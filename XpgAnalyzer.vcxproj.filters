@@ -1300,6 +1300,9 @@
     <ClCompile Include="src\hmi\HmiRetain.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\hmi\HmiRoles.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\hmi\HmiRuntimeInput.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
@@ -2486,6 +2489,9 @@
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiRetain.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiRoles.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiScriptCheck.hpp">

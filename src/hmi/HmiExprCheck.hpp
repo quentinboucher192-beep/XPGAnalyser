@@ -83,6 +83,10 @@ struct Problem {
 [[nodiscard]] std::vector<std::string> templateExpressions(std::string_view text);
 // Ce que la propriete `key` attend (visible : Bool, fill : Color, x : Number).
 [[nodiscard]] Want wantOf(std::string_view key);
+// 1.12.6 (lot B) : ce qu'attend la propriete `key` d'un objet de ce genre, lu dans la table des
+// roles (HmiRoles.hpp) - la valeur d'une jauge un nombre, celle d'un voyant un booleen, colorOn
+// une couleur, le retour d'etat d'un interrupteur un booleen, celui d'un selecteur un etat.
+[[nodiscard]] Want wantOf(Kind kind, std::string_view key);
 // Le nom connu le plus proche de `name` (variables IHM, fonctions, parametres,
 // candidats) ; vide : aucun d'assez proche.
 [[nodiscard]] std::string closest(const Context&, std::string_view name);

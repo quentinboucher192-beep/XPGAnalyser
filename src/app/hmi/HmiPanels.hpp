@@ -351,7 +351,8 @@ hmiPropertyCategories(const hmi::View&, const std::vector<hmi::Id>& selection, c
 [[nodiscard]] std::string hmiExpressionError(const hmi::View&, std::string_view key, const std::string& expr,
                                              const domain::Project* plc, const hmi::Project* project,
                                              const std::set<std::string, std::less<>>* plcUpperNames = nullptr,
-                                             const hmi::exprcheck::PlcPaths* plcPaths = nullptr);
+                                             const hmi::exprcheck::PlcPaths* plcPaths = nullptr,
+                                             const hmi::Object* object = nullptr);   // 1.12.6 : son genre (le role de la cle)
 // Les chemins de l'automate (le type d'une globale, d'un membre ; les DDT) pour
 // hmiExpressionError, Compiler et Generer ; vides sans automate.
 [[nodiscard]] hmi::exprcheck::PlcPaths hmiPlcPaths(const domain::Project* plc);

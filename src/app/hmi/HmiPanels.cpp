@@ -1,4 +1,5 @@
 #include "HmiPanels.hpp"
+#include "../../hmi/HmiRoles.hpp"   // 1.12.6 (lot B) : le role de chaque propriete
 #include "../../hmi/HmiNatives.hpp"   // 1.12.1 : les enumerations natives des proprietes
 #include "../../core/Edition.hpp"   // 1.12.0 : XPGAnalyser IHM - pas d'automate
 #include "HmiParamPanes.hpp"   // 1.9 : les parametres des popups
@@ -390,7 +391,7 @@ void HmiObjectList::refreshExpressionBadges() {
             if (pr.expr.empty()) continue;
             int& state = exprBadges_[o.id];
             if (state == 2) break;
-            const bool bad = !hmiExpressionError(*view_, pr.key, pr.expr, exprPlc_, exprProject_, exprPlcNames_.get(), &exprPaths_).empty();
+            const bool bad = !hmiExpressionError(*view_, pr.key, pr.expr, exprPlc_, exprProject_, exprPlcNames_.get(), &exprPaths_, &o).empty();
             state = worse(state, bad ? 2 : hmi::dup::hasMarker(pr.expr) ? 3 : 1);
         }
         // Un repere ailleurs (un texte, une action, une alarme de l'objet) se voit aussi.
@@ -2237,9 +2238,30 @@ bool hmiPropertyInfo(std::string_view key, std::string& label, std::string& help
 // ---- 1.10 (chantier K) : les champs a expression, partout pareils ----
 // Ce qu'attend une propriete de l'inspecteur (l'invite de la case vide, l'aide
 // a la saisie) : d'apres son type, et pour un texte d'apres sa cle.
-static ui::exprfield::Expect expectedOf(std::string_view key, ui::PropertyGrid::ValueType type) {
+static ui::exprfield::Expect expectedOf(hmi::Kind kind, std::string_view key, ui::PropertyGrid::ValueType type) {
     using E = ui::exprfield::Expect;
     using VT = ui::PropertyGrid::ValueType;
+    using R = hmi::roles::Role;
+    // 1.12.6 (lot B) : LE ROLE de la propriete (HmiRoles.hpp), la table de Generer et du moteur -
+    // la valeur d'une jauge un nombre, celle d'un voyant un booleen, le retour d'etat d'un
+    // selecteur un etat (avant : un booleen pour tout retour d'etat), une couleur de defaut une couleur.
+    if (hmi::roles::keyRole(key)) {
+        const auto r = hmi::roles::roleOf(kind, key);
+        switch (r.role) {
+            case R::Number: case R::Duration: return E::Number;
+            case R::Boolean: return E::Bool;
+            case R::Color: return E::Color;
+            case R::Text: return E::Template;
+            case R::Choice: return E::List;
+            case R::Name:
+                if (key == "afterLogin") return E::View;
+                return type == VT::Enum ? E::List : E::Text;
+            case R::Formula:
+                return r.item == R::Boolean ? E::Bool : r.item == R::Number || r.item == R::Duration ? E::Number : E::Value;
+            case R::State: case R::Date: return E::Value;
+            case R::List: case R::Mini: case R::Format: return type == VT::Enum ? E::List : E::Text;
+        }
+    }
     switch (type) {
         case VT::Boolean: return E::Bool;
         case VT::Integer: case VT::Real: return E::Number;
@@ -2247,9 +2269,7 @@ static ui::exprfield::Expect expectedOf(std::string_view key, ui::PropertyGrid::
         case VT::Enum: return E::List;
         default: break;
     }
-    if (hmi::displayedTextKey(key)) return E::Template;   // 1.12.5 (lot A, D6) : la liste du moteur
-    for (const char* k : {"condition", "state", "lamp", "fault", "running", "moving", "reset", "visible", "blink", "auth"})
-        if (key == k) return E::Bool;
+    if (hmi::displayedTextKey(key)) return E::Template;
     for (const char* k : {"view", "targetView", "popup"})
         if (key == k) return E::View;
     return E::Value;
@@ -2264,7 +2284,7 @@ static ui::exprfield::Expect expectedOf(std::string_view key, ui::PropertyGrid::
 std::string hmiExpressionError(const hmi::View& view, std::string_view key, const std::string& expr,
                                const domain::Project* plc, const hmi::Project* project,
                                const std::set<std::string, std::less<>>* plcUpperNames,
-                               const hmi::exprcheck::PlcPaths* plcPaths) {
+                               const hmi::exprcheck::PlcPaths* plcPaths, const hmi::Object* object) {
     // 1.11 (REP) : un champ a repere s'analyse comme les autres (ses $ sont
     // transparents : Expression::compile et exprcheck les lisent sans eux) ; l'ancien
     // $Vanne$ qui n'est pas une variable : l'erreur, et la phrase de Dupliquer.
@@ -2298,7 +2318,8 @@ std::string hmiExpressionError(const hmi::View& view, std::string_view key, cons
         return e.error();
     }
     // 1.11.21 : un avertissement (exprcheck::Problem::warning) ne la rend pas fautive : Compiler le dit.
-    for (const auto& pb : hmi::exprcheck::check(ctx, expr, hmi::exprcheck::wantOf(key)))
+    // 1.12.6 (lot B) : ce qu'attend la propriete selon son role (la valeur d'une jauge, d'un voyant...).
+    for (const auto& pb : hmi::exprcheck::check(ctx, expr, object ? hmi::exprcheck::wantOf(object->kind, key) : hmi::exprcheck::wantOf(key)))
         if (!pb.warning) return pb.message + hmi::dup::markerHint(expr, pb.unknownName);
     return {};
 }
@@ -2736,7 +2757,7 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
         if (!prop.expr.empty()) {
             p.expression = prop.expr;
             if (!exprPaths) exprPaths = std::make_shared<const hmi::exprcheck::PlcPaths>(hmiPlcPaths(plc));
-            p.exprError = hmiExpressionError(view, prop.key, prop.expr, plc, project, nullptr, exprPaths.get());
+            p.exprError = hmiExpressionError(view, prop.key, prop.expr, plc, project, nullptr, exprPaths.get(), o);
             // 1.12.1 : une enumeration native d'une autre famille, un nombre hors de la sienne.
             if (p.exprError.empty()) p.exprError = hmi::natives::propertyProblem(hmi::kindKey(o->kind), prop.key, prop.expr);
         }
@@ -2936,7 +2957,7 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
             }
         }
         // 1.10 (chantier K) : toute propriete modifiable de l'inspecteur accepte "=expression".
-        if (p.commit && p.type != PG::ValueType::ReadOnly) ui::exprfield::mark(p, expectedOf(prop.key, p.type), true);
+        if (p.commit && p.type != PG::ValueType::ReadOnly) ui::exprfield::mark(p, expectedOf(o->kind, prop.key, p.type), true);
         if (differs) {
             p.value.clear();
             p.expression.clear();
@@ -3034,7 +3055,7 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
                     // Une saisie = une commande (un seul Ctrl+Z) : le texte entier de l'instance, en forme nommee.
                     return commit.prop("params", hmi::withArgument(shape, current, i, v), false);
                 };
-                ui::exprfield::mark(a, expectedOf(prop.key, PG::ValueType::Text), true);
+                ui::exprfield::mark(a, ui::exprfield::Expect::Value, true);   // un argument : une valeur ou une formule
                 rows[SecParams].push_back({static_cast<double>(i), std::move(a)});
             }
         }

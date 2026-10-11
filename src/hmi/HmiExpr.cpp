@@ -1,6 +1,7 @@
 #include "HmiExpr.hpp"
 #include "HmiNatives.hpp"   // 1.12.0 : les couleurs et l'aleatoire
 #include "HmiMarkers.hpp"
+#include "HmiRoles.hpp"     // 1.12.6 (lot B) : les proprietes du role Texte
 #include "HmiMedia.hpp"
 #include "HmiScript.hpp"
 
@@ -381,12 +382,11 @@ std::string exactValue(const sim::Value& v) {
 }
 
 bool displayedTextKey(std::string_view key) noexcept {
+    // 1.12.6 (lot B) : le role Texte de la table des roles (HmiRoles.hpp) - le texte, les libelles,
+    // les titres, l'unite, le separateur, les lettres et la boucle d'un instrument, le nom d'un export...
     // Pas « display » (la ligne d'un utilisateur : {nom}, {groupe} sont les siens) ni les listes.
-    static constexpr std::string_view kKeys[] = {"text", "label", "title", "tooltip", "message", "empty", "textOn", "textOff",
-                                                 "placeholder", "unknownText", "buttonText", "xLabel", "yLabel"};
-    for (const auto k : kKeys)
-        if (key == k) return true;
-    return false;
+    if (const auto* r = roles::keyRole(key)) return r->role == roles::Role::Text;
+    return key == "tooltip" || key == "message";
 }
 
 std::string formatValue(const sim::Value& v, std::string_view format) {

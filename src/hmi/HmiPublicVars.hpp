@@ -27,6 +27,7 @@
 #pragma once
 
 #include "HmiModel.hpp"
+#include "HmiRoles.hpp"           // 1.12.6 (lot B) : le role (et le type) de chaque propriete
 #include "../core/Edition.hpp"   // 1.12.0 : les domaines de XPGAnalyser IHM
 #include "HmiKeys.hpp"            // 1.11.23 : SYS.Key.<touche>
 #include "HmiObjectAlarms.hpp"   // 1.11.1 (decision 108) : les alarmes d'un objet (Vue.Objet.Alarmes.<alarme>)
@@ -541,28 +542,8 @@ inline constexpr PropAlias kPropAliases[] = {
 // niveau d'acces, son profil, son autorisation), la variable qu'il represente
 // ou qu'il ecrit, et les contenus structures (cases, etats d'image).
 inline constexpr std::string_view kReadOnlyKeys[] = {"access", "profile", "auth", "variable", "output", "cells", "states"};
-struct PropType { std::string_view key, type; };
-inline constexpr PropType kPropTypes[] = {
-    {"x", "REAL"}, {"y", "REAL"}, {"w", "REAL"}, {"h", "REAL"}, {"rot", "REAL"}, {"pivotX", "REAL"}, {"pivotY", "REAL"},
-    {"opacity", "REAL"}, {"strokeWidth", "REAL"}, {"fontSize", "REAL"}, {"radius", "REAL"}, {"min", "REAL"}, {"max", "REAL"},
-    {"step", "REAL"}, {"ymin", "REAL"}, {"ymax", "REAL"}, {"duration", "REAL"}, {"window", "REAL"}, {"deadband", "REAL"},
-    {"speed", "REAL"},
-    {"visible", "BOOL"}, {"blink", "BOOL"}, {"flipH", "BOOL"}, {"flipV", "BOOL"}, {"wrap", "BOOL"}, {"showValue", "BOOL"},
-    {"continuous", "BOOL"}, {"seconds", "BOOL"}, {"showText", "BOOL"}, {"showDate", "BOOL"}, {"leadingZeros", "BOOL"},
-    {"legend", "BOOL"}, {"clip", "BOOL"}, {"inverted", "BOOL"}, {"userList", "BOOL"}, {"showUser", "BOOL"},
-    {"confirm", "BOOL"}, {"icon", "BOOL"}, {"requireDigit", "BOOL"}, {"validateOnExit", "BOOL"},
-    // 1.12.5 (lot A, D5) : le numero de boucle d'un instrument ISA est un TEXTE (101, 101A) - avant
-    // un BOOL, reste d'une ancienne propriete de la video : Vue.Objet.Loop se lisait FAUX.
-    {"loop", "STRING"},
-    {"autoplay", "BOOL"}, {"muted", "BOOL"}, {"bold", "BOOL"}, {"italic", "BOOL"},
-    {"ticks", "INT"}, {"digits", "INT"}, {"decimals", "INT"}, {"maxVisible", "INT"}, {"holdMs", "INT"}, {"refresh", "INT"},
-    {"access", "INT"}, {"rows", "INT"}, {"maxLength", "INT"}, {"minLength", "INT"}, {"margin", "INT"}, {"period", "INT"},
-    // lot 12 : la navigation et la structure
-    {"page", "INT"}, {"tabPage", "INT"}, {"maxItems", "INT"}, {"collapsed", "BOOL"}, {"pushBelow", "BOOL"},
-    {"backForward", "BOOL"}, {"showScrollbar", "BOOL"}, {"showNames", "BOOL"}, {"showCounts", "BOOL"}, {"home", "BOOL"},
-    {"scrollX", "REAL"}, {"scrollY", "REAL"}, {"contentWidth", "REAL"}, {"contentHeight", "REAL"}, {"headerHeight", "REAL"},
-    {"tabHeight", "REAL"}, {"wheelStep", "REAL"}, {"gap", "REAL"},
-};
+// 1.12.6 (lot B) : le type d'une propriete vient de la table des roles (HmiRoles.hpp, kKeyRoles) -
+// une seule table pour l'inspecteur, Generer, le moteur et ces variables (avant : kPropTypes ici).
 
 // Les objets dont la valeur montre une variable, sans propriete "value" a
 // eux : le champ de saisie (lot 8), les commandes et les afficheurs (lot 9).
@@ -594,7 +575,7 @@ inline constexpr std::string_view kLinkedValueText = "Ce que montre l'objet : sa
 // Le type d'une propriete : connu par sa cle, sinon lu dans sa valeur (TRUE /
 // FALSE : BOOL ; un nombre : REAL ; le reste : STRING).
 [[nodiscard]] inline std::string keyType(std::string_view key, std::string_view value = {}) {
-    for (const auto& p : kPropTypes) if (p.key == key) return std::string(p.type);
+    if (const auto* r = roles::keyRole(key); r && !r->type.empty()) return std::string(r->type);
     if (same(value, "TRUE") || same(value, "FALSE")) return "BOOL";
     if (!value.empty()) {
         std::string tmp(value);
