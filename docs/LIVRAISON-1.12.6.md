@@ -90,7 +90,10 @@ Une valeur refusée ne se dessine plus comme si elle était vraie : l'objet se h
 
 **C3 — Dupliquer.** Chaque propriété est lue dans le mode de son rôle : une formule (même tapée sans `=`) comme une expression, un texte comme un texte. Tous les indices d'un chemin se suivent : `A[0].B[2]` propose `A[0]` et `A[0].B[2]` ; `M[1, 2]` propose chaque dimension.
 
-**C4 — L'essai des repères.** `hmi_reperes_test` couvre maintenant chaque propriété de chaque objet qui peut porter un repère (135 propriétés) : Générer n'en dit pas plus qu'avec la propriété sans repère, l'écran et le moteur la montrent sans `$`, et Dupliquer la trouve.
+**C4 — L'essai des repères.** `hmi_reperes_test` couvre maintenant chaque propriété de chaque objet qui peut porter un repère, 135 propriétés :
+- Compiler et Générer n'en disent pas plus qu'avec les mêmes propriétés sans repère ;
+- les 123 qui se montrent (textes, noms, listes, états) s'affichent sans leurs `$`, et le moteur les lit sans eux au clic ;
+- Dupliquer trouve les 135 repères, chacun dans le mode de son rôle.
 
 ## Tester vous-même
 
