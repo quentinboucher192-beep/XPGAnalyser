@@ -17775,6 +17775,36 @@ void parametresObjets1124() {
     const auto* tableObj = rt.composedView(valsId) ? rt.composedView(valsId)->object(table) : nullptr;
     check(tableObj && rt.tableRows(*tableObj, headers, rows) && rows.size() == 1 && rows[0].size() == 2 && rows[0][0] == "k",
           "un tableau de la popup, \xC2\xAB \xE2\x86\x90 M \xC2\xBB : la ligne de la MAP");
+    // Un membre objet en reference (L := Recette.Etapes) : la popup l'ecrit en place.
+    (void)rt.closePopup(Transition{}, t);
+    {
+        View membre = makeView(p, "Pop_Membre");
+        membre.role = "popup";
+        membre.params = {{"L", "", "", "LIST OF STRING", ParamMode::Reference}};
+        auto& ajout = addButton(p, membre, "Btn_Ajout", 10, 10);
+        ajout.actions.push_back(act(Trigger::Click, Operation::RunScript, {}, {}));
+        ajout.actions.back().value = "LIST_ADD(L, 'm');";
+        const Id btnAjout = ajout.id, membreId = membre.id;
+        auto& ouvrir3 = addButton(p, p.views[0], "Btn_Membre", 10, 110);
+        ouvrir3.actions.push_back(act(Trigger::Click, Operation::Popup, "Pop_Membre", "L := Recette.Etapes"));
+        const Id btnMembre = ouvrir3.id;
+        p.views.push_back(membre);
+        Runtime r2;
+        r2.bind(&p, nullptr);
+        r2.start(0.0);
+        const std::string before = r2.richText("Recette.Etapes");
+        r2.press(btnMembre, 0.1);
+        r2.release(btnMembre, 0.15, true);
+        check(r2.topView() == membreId, "Pop_Membre ouverte");
+        r2.press(btnAjout, 0.2);
+        r2.release(btnAjout, 0.25, true);
+        std::string log;
+        for (const auto& j : r2.journal()) log += j.kind + ":" + j.message + " | ";
+        check(r2.richText("Recette.Etapes") == "['a', 'b', 'm']", "L := Recette.Etapes (un membre objet) : LIST_ADD(L, 'm') l'\xC3\xA9" "crit en place ("
+                                                                    + before + " -> " + r2.richText("Recette.Etapes") + " ; " + log + ")");
+        p.views.pop_back();
+        p.views[0].objects.pop_back();
+    }
     // Generer : les litteraux objets passent (une MAP a des :=) ; un litteral qui ne va pas dans le type, non ;
     // un parametre objet de symbole se donne par une variable.
     const auto all = [](std::string_view) { return false; };
@@ -17917,6 +17947,29 @@ void membresObjets1124() {
     const auto problems = ty::pathProblems(p, "Texte := Recette.Etapes[0]; N1 := Recette.Stock['sel']; N2 := Recettes[1].Etapes.Count; Recette.Nom := 'a';");
     check(problems.empty(), "Recette.Etapes[0], Recette.Stock['sel'] : pas de \xC2\xAB n'est pas un tableau \xC2\xBB (" + (problems.empty() ? std::string{} : problems.front().message) + ")");
     check(ty::typeOfPath(p, "Recettes[1].Etapes") == "LIST OF STRING", "typeOfPath(Recettes[1].Etapes) = " + ty::typeOfPath(p, "Recettes[1].Etapes"));
+    // Generer, l'inspecteur : JOIN, LIST_COUNT, MAP_HAS, SIZEOF dans une expression - pas des fonctions
+    // inconnues ; LIST_ADD n'y changerait qu'une copie : dit ; le nombre d'arguments compte.
+    exprcheck::Context ctx;
+    ctx.project = &p;
+    for (const char* source : {"JOIN(Recette.Etapes, ' / ')", "LIST_COUNT(Recette.Etapes) + 1", "MAP_HAS(Recette.Stock, 'sel')",
+                               "SIZEOF(Recettes)", "TO_UPPER(Recette.Nom)", "LIST_CONTAINS(Recette.Etapes, 'Cuire') AND N1 > 0"}) {
+        std::string seen;
+        for (const auto& pb : exprcheck::check(ctx, source)) seen += " | " + pb.message;
+        check(seen.empty(), std::string("V\xC3\xA9rifier : ") + source + " est connue" + seen);
+    }
+    std::string said;
+    for (const auto& pb : exprcheck::check(ctx, "LIST_ADD(Recette.Etapes, 'x')")) said += pb.message;
+    check(said.find("une copie") != std::string::npos, "LIST_ADD dans une expression : elle ne changerait qu'une copie, dit (" + said + ")");
+    said.clear();
+    for (const auto& pb : exprcheck::check(ctx, "JOIN(Recette.Etapes, ',', 3)")) said += pb.message;
+    check(said.find("JOIN prend 1 \xC3\xA0 2 arguments, pas 3") != std::string::npos, "JOIN(L, ',', 3) : un argument de trop (" + said + ")");
+    Object info = makeObject(Kind::Text, p.allocate(), "Info_Recette", 10, 300, p.views[0].activeLayer);
+    info.set("text", "{JOIN(Recette.Etapes, ' / ')} \xC2\xB7 {LIST_COUNT(Recette.Etapes)} \xC3\xA9tapes");
+    p.views[0].objects.push_back(info);
+    std::string unknown;
+    for (const auto& i : generate(p, [](std::string_view) { return false; }))
+        if (i.message.find("inconnue") != std::string::npos) unknown += " | " + i.message;
+    check(unknown.empty(), "Generer : {JOIN(Recette.Etapes, ' / ')} dans un texte \xC3\xA0 trous passe" + unknown);
 }
 
 void courbesParArguments1123() {

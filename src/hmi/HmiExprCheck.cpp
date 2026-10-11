@@ -785,6 +785,30 @@ private:
             r.type = f && f->returns == "STRING" ? T::Text : f && f->returns == "BOOL" ? T::Bool : T::Num;
             return r;
         }
+        // 1.12.4 : les fonctions des listes, des vecteurs, des MAP et des tableaux (JOIN, LIST_COUNT,
+        // MAP_HAS, SIZEOF...), TO_UPPER et TO_LOWER : le dialecte les sert dans une expression, qui
+        // lit une copie de l'objet (avant : « fonction inconnue : JOIN » a Generer). Celles qui
+        // changent l'objet n'y changeraient que la copie ; un iterateur se parcourt dans un script.
+        if (const auto* f = natives::function(u);
+            f && (f->category == "liste" || f->category == "map" || f->category == "tab" || u == "TO_UPPER" || u == "TO_LOWER")) {
+            static const std::set<std::string> kChanges = {"LIST_ADD",     "LIST_INSERT",  "LIST_REMOVE_AT", "LIST_REMOVE",  "LIST_CLEAR",
+                                                           "LIST_SORT",    "LIST_REVERSE", "VECTOR_PUSH",    "VECTOR_POP",   "VECTOR_INSERT",
+                                                           "VECTOR_ERASE", "VECTOR_CLEAR", "VECTOR_RESIZE",  "MAP_REMOVE",   "MAP_CLEAR"};
+            if (kChanges.count(u))
+                problem(u + " change son objet : une expression en lit une copie et ne change rien ; "
+                            "fais-le dans un script (une action \xC2\xAB Ex\xC3\xA9" "cuter un script \xC2\xBB)");
+            else if (u == "MAP_BEGIN" || u == "MAP_NEXT" || u == "MAP_END")
+                problem(u + " : un it\xC3\xA9rateur se parcourt dans un script (FOR EACH), pas dans une expression");
+            int mn = 0, mx = 0;
+            if (natives::arity(u, mn, mx) && (n < mn || (mx >= 0 && n > mx)))
+                problem(u + " prend " + (mn == mx ? plural(mn, "argument") : std::to_string(mn) + " \xC3\xA0 " + plural(mx, "argument"))
+                        + ", pas " + std::to_string(n));
+            r.type = f->returns == "STRING"                                               ? T::Text
+                   : f->returns == "BOOL"                                                 ? T::Bool
+                   : f->returns == "DINT" || f->returns == "INT" || f->returns == "REAL" ? T::Num
+                                                                                          : T::Unknown;
+            return r;
+        }
         if (isStandardFunction(u)) {
             const auto to = u.find("_TO_");
             if (to != std::string::npos && to > 0) {
