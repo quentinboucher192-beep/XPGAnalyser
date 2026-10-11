@@ -11198,7 +11198,7 @@ const std::vector<Topic>& topics() {
                          "pose y va. L'onglet **Contenu** ajoute, nomme, retire et ordonne les pages (un "
                          "objet suit sa page).", {}},
              {K::Paragraph, "1.12.5 : la variable de l'onglet suit son type - une \xC3\xA9num\xC3\xA9ration montre et \xC3\xA9" "crit ses valeurs (sans d\xC3\xA9" "calage), un BOOL : FAUX la page 1, VRAI la page 2 ; une STRING : le nom de l'onglet.", {}, "1.12.5"},
-             {K::Paragraph, "1.12.6 : un onglet pilot\xC3\xA9 par une formule (Onglet montr\xC3\xA9 `=Page_Voulue`) reste cliquable : le clic montre la page choisie \xC3\xA0 c\xC3\xB4t\xC3\xA9 de la formule, sans l'effacer ; d\xC3\xA8s que la valeur de la formule change, elle reprend la main. Le repli d'un panneau repliable et le d\xC3\xA9" "filement d'un conteneur font de m\xC3\xAAme.", {}, "1.12.6"},
+             {K::Paragraph, "1.12.6 : un onglet pilot\xC3\xA9 par une formule (Onglet montr\xC3\xA9 `=Page_Voulue`) reste cliquable : le clic montre la page choisie \xC3\xA0 c\xC3\xB4t\xC3\xA9 de la formule, sans l'effacer ; d\xC3\xA8s que la valeur de la formule change, elle reprend la main. Le repli d'un panneau repliable et le d\xC3\xA9" "filement d'un panneau d\xC3\xA9" "filant font de m\xC3\xAAme.", {}, "1.12.6"},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nOnglets "
                          "(a;b;c)\tPage 1;Page 2;Page 3\tUne page par onglet.\nOnglet montr\xC3\xA9\t1\tLa "

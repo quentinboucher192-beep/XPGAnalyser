@@ -1,0 +1,101 @@
+# =============================================================================
+#  Session 1126 IHM : XPGAnalyser IHM (1.12.6), XpgAnalyzer-IHM.exe - les lots
+#  B et C de l'audit de la bibliotheque d'objets (un role par propriete,
+#  l'ecriture au type, le geste a cote d'une formule, les reperes partout).
+#  Armoire_Gaz (migre par la 1.12.1), avec Vue_Listes, Pop_Etapes, Vue_LotA
+#  (sessions 1122 a 1125) et Vue_LotBC (demo1126) :
+#    1. Vue_LotBC dans l'editeur : ce qui est tape - les formules, les textes a
+#       trous, les reperes ($Vanne$, $Arret$) ;
+#    2. Dupliquer sur Grille_BC[1, 2] : chaque dimension se suit ;
+#    3. la simulation : une jauge sur un BOOL (1), sur un TIME (90 s), sur une
+#       STRING 'abc' (### : Generer le dit) ; Vrai, 1 min 30 s, Automatique,
+#       09/10/2026 dans les textes ; le texte et la liste sans leurs $ ;
+#    4. le curseur 0..50000 au bout : l'INT recoit 32767 (son maximum) ;
+#    5. Affecter 'Manuel' (le texte) a l'enumeration : Manuel ;
+#    6. un clic sur l'onglet 3 : la page 3, a cote de la formule (Page_BC = 2) ;
+#    7. Page_BC := 1 : la formule reprend la main (la page 1) ;
+#    8. la Console du panneau du bas : la note du curseur.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 8
+ouvrir "${PROJETS}/ihm/Armoire_Gaz"
+attendre-projet
+attendre 10
+# le panneau du bas replie (Ctrl+J) : les ecrans ont toute la hauteur
+touche ctrl+j
+attendre 2
+
+# ---- 1. Vue_LotBC dans l'editeur ----
+arbre "IHM/Vues/Vue_LotBC"
+attendre 8
+capture 1126_ihm_01_vue_lotbc_editeur.png
+
+# ---- 2. Dupliquer sur un tableau a deux dimensions ----
+objet "Afficheur_Grille"
+attendre 2
+touche ctrl+d
+attendre 4
+capture 1126_ihm_02_dupliquer_deux_dimensions.png
+touche escape
+attendre 2
+
+# ---- 3. La simulation : la lecture par role ----
+arbre "Simulation/IHM"
+attendre 2
+ihm-build-attendre 600
+attendre 60
+ihm-sim-etat "en marche"
+attendre 3
+sim-utilisateur "admin" "admin2026"
+attendre 2
+sim-vue "Vue_LotBC"
+attendre 4
+simulation-zoom 70
+attendre 2
+simulation-deplacer 140 0
+attendre 2
+survol 1350 760
+attendre 2
+capture 1126_ihm_03_simulation_lecture_par_role.png
+
+# ---- 4. Le curseur au bout : l'INT recoit son maximum ----
+sim-glisser "Curseur_BC" "fraction:0.1" "fraction:1"
+attendre 3
+ihm-variable "Compte_BC" "32767"
+survol 1350 760
+attendre 2
+capture 1126_ihm_04_curseur_ramene_32767.png
+
+# ---- 5. Affecter 'Manuel' (le texte affiche) a l'enumeration ----
+sim-clic "Btn_Manuel"
+attendre 3
+ihm-variable "Mode_BC"
+survol 1350 760
+attendre 2
+capture 1126_ihm_05_affecter_manuel.png
+
+# ---- 6. Un clic sur l'onglet 3 : a cote de la formule ----
+sim-partie "Onglets_BC" "onglet:3"
+attendre 3
+survol 1350 760
+attendre 2
+capture 1126_ihm_06_onglet_3_a_cote.png
+
+# ---- 7. La formule change : elle reprend la main ----
+sim-clic "Btn_Page1"
+attendre 3
+ihm-variable "Page_BC" "1"
+survol 1350 760
+attendre 2
+capture 1126_ihm_07_formule_reprend.png
+
+# ---- 8. La Console : la note du curseur ----
+touche ctrl+j
+attendre 2
+ihm-sorties console
+attendre 3
+ihm-console-etat
+capture 1126_ihm_08_console_note.png
+ihm-diagnostics
+quitter
