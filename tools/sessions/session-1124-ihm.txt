@@ -1,0 +1,101 @@
+# =============================================================================
+#  Session 1124 IHM : XPGAnalyser IHM (1.12.4), XpgAnalyzer-IHM.exe - l'apercu de
+#  la Disposition, les membres objets des types IHM, les parametres objets.
+#  Armoire_Gaz (migre par la 1.12.1), avec Vue_Listes (la session 1122) et
+#  T_Recette, Recette, Pop_Etapes (demo1124) :
+#    1. Projet > Disposition... : l'apercu, en edition puis en simulation ;
+#    2. les types IHM : T_Recette et ses membres objets (Etapes, Stock) ;
+#    3. Pop_Etapes : son parametre L (LIST OF STRING) sur une seule ligne Type,
+#       et la liste des formes (Tableau..., Liste..., Vecteur..., MAP..., Tuple...) ;
+#    4. la simulation : Btn_Etapes ouvre Pop_Etapes (L := Recette.Etapes),
+#       + Servir y ajoute une etape, ecrite dans Recette.Etapes (le texte de
+#       la vue, {JOIN(Recette.Etapes, ' / ')}, la montre).
+# =============================================================================
+attendre 3
+theme Dark
+attendre 8
+ouvrir "${PROJETS}/ihm/Armoire_Gaz"
+attendre-projet
+attendre 10
+
+# ---- 1. Projet > Disposition... : l'apercu ----
+action "project.disposition"
+attendre 4
+capture 1124_ihm_01_disposition_apercu_edition.png
+bouton "En simulation"
+attendre 2
+capture 1124_ihm_02_disposition_apercu_simulation.png
+bouton "Annuler"
+attendre 2
+# le panneau du bas replie (Ctrl+J) : les ecrans ont toute la hauteur
+touche ctrl+j
+attendre 2
+
+# ---- 2. Les types IHM : T_Recette ----
+arbre "IHM/Programmation générale/Types IHM"
+attendre 6
+arbre "IHM/Programmation générale/Types IHM/T_Recette"
+attendre 4
+capture 1124_ihm_03_type_recette_membres_objets.png
+
+# ---- 3. Pop_Etapes : une seule ligne Type ----
+arbre "IHM/Popups/Pop_Etapes" double
+attendre 8
+# l'inspecteur defile jusqu'au parametre L (la liste ouverte puis refermee)
+propriete-clic "Type"
+attendre 2
+touche Escape
+attendre 2
+# deux crans plus bas : les lignes sous Type (Mode, Valeur par defaut...) - plus de ligne Tableau
+molette 1450 450 -2
+attendre 2
+capture 1124_ihm_04_parametre_une_ligne_type.png
+# la liste du Type : en bas, les formes (Tableau..., Liste..., Vecteur..., MAP..., Tuple...)
+propriete-clic "Type"
+attendre 2
+touche end
+attendre 1
+touche up
+touche up
+touche up
+touche up
+attendre 2
+capture 1124_ihm_05_type_liste_des_formes.png
+touche Escape
+attendre 2
+
+# ---- 4. La simulation ----
+arbre "Simulation/IHM"
+attendre 2
+ihm-build-attendre 600
+attendre 60
+ihm-sim-etat "en marche"
+attendre 3
+sim-utilisateur "admin" "admin2026"
+attendre 2
+sim-vue "Vue_Listes"
+attendre 4
+# 70 % : la vue, son bouton Etapes... et la popup tiennent dans la largeur
+simulation-zoom 70
+attendre 2
+# le zoom garde le centre : la vue ramenee a gauche (son bord gauche au bord du cadre)
+simulation-deplacer 140 0
+attendre 2
+# la souris hors de la vue et de l'arbre : pas de bulle sur la capture
+survol 1350 760
+attendre 2
+capture 1124_ihm_06_simulation_recette.png
+sim-clic "Btn_Etapes"
+attendre 4
+capture 1124_ihm_07_popup_etapes.png
+sim-clic "Btn_Servir"
+attendre 4
+capture 1124_ihm_08_popup_servir.png
+# la popup fermee : Recette.Etapes a bien sa quatrieme etape (le texte de la vue)
+sim-popup "Pop_Etapes" croix
+attendre 3
+survol 1350 760
+attendre 2
+capture 1124_ihm_09_recette_quatre_etapes.png
+ihm-diagnostics
+quitter

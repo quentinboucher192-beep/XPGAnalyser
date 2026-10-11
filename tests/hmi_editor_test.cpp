@@ -12612,8 +12612,23 @@ void v19_parametres_popups() {
     check(typeProp && has(typeProp->enumValues, "T_Moteur") && has(typeProp->enumValues, "REAL") && has(typeProp->enumValues, "ANY")
               && has(typeProp->enumValues, "TIME"),
           "le choix du type : les types de base et les types IHM du projet");
+    // 1.12.4 : avec le selecteur de types (l'application en a un), les formes au bout de la liste -
+    // elles l'ouvrent sur elles - puis Choisir un type... (la liste se refait au choix suivant).
+    app::typepicker::setHost([](app::HmiTypePicker::Spec, app::typepicker::Done) {});
     check(deepCommit(ed.properties(), "Moteur", "Type", "T_Moteur"), "Moteur : T_Moteur");
     ed.layout();
+    {
+        const auto* withPicker = deepProp(ed.properties().categories(), "Moteur", "Type");
+        const std::vector<std::string> none;
+        const auto& values = withPicker ? withPicker->enumValues : none;
+        const auto at = [&](const char* x) { return std::find(values.begin(), values.end(), x) - values.begin(); };
+        const auto n = static_cast<std::ptrdiff_t>(values.size());
+        check(n >= 6 && at("Tableau\xE2\x80\xA6") == n - 6 && at("Liste\xE2\x80\xA6") == n - 5 && at("Vecteur\xE2\x80\xA6") == n - 4
+                  && at("Dictionnaire (MAP)\xE2\x80\xA6") == n - 3 && at("Tuple\xE2\x80\xA6") == n - 2,
+              "le choix du type d'un param\xC3\xA8tre : Tableau\xE2\x80\xA6, Liste\xE2\x80\xA6, Vecteur\xE2\x80\xA6, Dictionnaire (MAP)\xE2\x80\xA6, Tuple\xE2\x80\xA6, "
+              "puis Choisir un type\xE2\x80\xA6 (" + [&] { std::string s; for (const auto& x : values) s += x + "|"; return s; }() + ")");
+    }
+    app::typepicker::setHost({});
     check(deepCommit(ed.properties(), "Seuil", "Type", "REAL") && deepCommit(ed.properties(), "Nom", "Type", "STRING"), "Seuil : REAL, Nom : STRING");
     ed.layout();
     check(p.view(popId)->param("Moteur")->type == "T_Moteur" && p.view(popId)->param("Seuil")->type == "REAL", "les types enregistr\xC3\xA9s");
