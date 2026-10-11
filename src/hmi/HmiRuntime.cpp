@@ -15,6 +15,7 @@
 #include "HmiScript.hpp"
 #include "HmiDecl.hpp"        // 1.11.18 (refonte, lot 3) : les declarations du modele, reconstruites
 #include "HmiOperators.hpp"   // 1.10 (integration) : les operateurs du projet (S2) a l'execution (S1)
+#include "HmiRoles.hpp"       // 1.12.6 (lot B) : le lecteur du role, l'ecriture vers le type
 #include "HmiEnums.hpp"       // 1.10 (decision 15) : les enumerations IHM dans les scripts (S1)
 #include "HmiMarkers.hpp"     // 1.11 (REP) : les reperes $...$, transparents pour le calcul
 #include "HmiApiVars.hpp"     // 1.11.1 (API-M) : API.<...> est le nom que l'automate connait
@@ -584,6 +585,16 @@ public:
                     if (const auto* sym = symbolOf(*rt_.project_, *o)) return sym->name;
         }
         return {};
+    }
+    // 1.12.6 (lot B) : les valeurs d'une enumeration du projet (le lecteur montre leur texte, une
+    // commande ecrit par leur nom).
+    bool enumItems(std::string_view typeName, std::vector<EnumItem>& out) override {
+        if (!rt_.project_) return false;
+        const HmiType* e = findEnumeration(*rt_.project_, typeName);
+        if (!e) return false;
+        out.clear();
+        for (const auto& v : e->values) out.push_back(EnumItem{v.name, v.text.empty() ? v.name : v.text, v.value});
+        return true;
     }
     // 1.12.2 : une variable IHM d'un type objet (LIST, VECTOR, MAP, TUPLE) : son objet, en place.
     sim::ObjRef richVariable(std::string_view n) override {
@@ -1328,22 +1339,43 @@ std::string Runtime::evalText(const std::string& expr, bool* ok) {
     return v ? exactValue(*v) : std::string{};   // 1.12.5 (D4) : sans perte (avant : 6 chiffres)
 }
 
+std::optional<std::string> Runtime::evaluatedProp(Id view, Kind kind, const Prop& p) const {
+    if (p.expr.empty() || !env_) return std::nullopt;
+    auto it = expressions_.find(p.expr);
+    if (it == expressions_.end()) it = expressions_.emplace(p.expr, Expression::compile(p.expr)).first;
+    if (!it->second.valid()) return std::nullopt;
+    const Scope* scope = viewScope(view);
+    auto v = it->second.evaluate(*env_, scope);
+    if (!v) return std::nullopt;
+    if (auto word = natives::propertyWord(kindKey(kind), p.key, *v)) return *word;   // comme LiveView
+    if (!roles::keyRole(p.key)) return exactValue(*v);
+    // 1.12.6 (lot B) : le lecteur du role, comme LiveView (une enumeration : son texte dans un texte).
+    const auto role = roles::roleOf(kind, p.key);
+    roles::Shape shape;
+    const auto r = role.role == roles::Role::Formula ? role.item : role.role;
+    if (r == roles::Role::Text || r == roles::Role::State) shape.enumText = it->second.shapeOf(*env_, scope, &*v).enumText;
+    auto read = roles::adapt(role, *v, shape);
+    if (!read.ok) return std::nullopt;
+    return std::move(read.text);
+}
+
+void Runtime::evaluateProps(Id view, Object& o) const {
+    if (!env_) return;
+    for (auto& p : o.props)
+        if (!p.expr.empty())
+            if (auto text = evaluatedProp(view, o.kind, p)) p.value = std::move(*text);
+}
+
 std::string Runtime::shownText(Id view, const Object& o, std::string_view key, std::string_view fallback) const {
     const Prop* p = o.find(key);
     if (!p) return std::string(fallback);
-    if (p->expr.empty() || !env_) return p->value;
-    auto it = expressions_.find(p->expr);
-    if (it == expressions_.end()) it = expressions_.emplace(p->expr, Expression::compile(p->expr)).first;
-    if (!it->second.valid()) return p->value;
-    auto v = it->second.evaluate(*env_, viewScope(view));
-    if (!v) return p->value;
-    if (auto word = natives::propertyWord(kindKey(o.kind), key, *v)) return *word;   // comme LiveView
-    return formatValue(*v);
+    if (auto text = evaluatedProp(view, o.kind, *p)) return std::move(*text);
+    return p->value;
 }
 
 double Runtime::shownNumber(Id view, const Object& o, std::string_view key, double fallback) const {
     double v = 0;
-    return parseNumber(shownText(view, o, key), v) ? v : fallback;
+    return roles::readNumber(shownText(view, o, key), v) ? v : fallback;
 }
 
 bool Runtime::objectCondition(Id view, const Object& o, std::string_view key, bool fallback) const {
@@ -1357,10 +1389,7 @@ bool Runtime::objectCondition(Id view, const Object& o, std::string_view key, bo
 }
 
 bool Runtime::shownFlag(Id view, const Object& o, std::string_view key, bool fallback) const {
-    const std::string s = shownText(view, o, key);
-    double v = 0;
-    if (parseNumber(s, v)) return v != 0.0;
-    return parseBool(s, fallback);
+    return roles::readBool(shownText(view, o, key), fallback);   // 1.12.6 : le lecteur du role (2, ON, 'TRUE')
 }
 
 bool Runtime::evalBool(const std::string& expr, bool fallback) {
@@ -2587,6 +2616,7 @@ void Runtime::start(double now) {
     forms_.clear();
     controls_.clear();       // lot 9 : glisser, confirmations, compteurs, programmateurs
     overrides_.clear();      // lot 9 : les proprietes ecrites en marche repartent de l'editeur
+    gestureFormulas_.clear();
     // 1.12.5 (lot A) : un conteneur a onglets relie a une ENUMERATION : ses nombres, onglet par onglet
     // (pageValues) - la page montre le rang de la valeur, un clic ecrit la k-ieme (avant : decale d'un cran).
     if (project_)
@@ -2925,6 +2955,7 @@ void Runtime::prime(double now) {
     functionErrors_.clear();
     controls_.clear();       // lot 9
     overrides_.clear();
+    gestureFormulas_.clear();
     backgrounds_.clear();
     gifs_.clear();                      // lot 16
     initVariables();
@@ -2993,7 +3024,8 @@ void Runtime::press(Id object, double now) {
     // Lot 9 : une impulsion ecrit des l'appui.
     if (running_ && object != kNoId)
         if (const auto* v = shownViewOf(object); v && v->object(object)) {
-            const View snapshot = *v;
+            View snapshot = *v;
+            evaluateProps(snapshot.id, *snapshot.object(object));   // 1.12.6 (lot B) : tel que l'ecran le montre
             GestureGuard gesture(*this, where(snapshot, snapshot.object(object)));     // lot 13 : l'audit
             controlPress(snapshot, *snapshot.object(object), now);
         }
@@ -3006,9 +3038,12 @@ void Runtime::release(Id object, double now, bool inside) {
     const bool click = wasPressed && inside && !longFired_;
     pressed_ = kNoId;
     const auto* v = wasPressed ? shownViewOf(object) : nullptr;
-    const auto* o = v ? v->object(object) : nullptr;
-    if (!o) return;
-    const View snapshot = *v;
+    if (!(v ? v->object(object) : nullptr)) return;
+    // 1.12.6 (lot B, § 2.7) : l'objet tel que l'ecran le montre - ses proprietes pilotees y portent
+    // leur valeur (l'operation, l'impulsion inversee, la confirmation... suivent leur formule).
+    View snapshot = *v;
+    evaluateProps(snapshot.id, *snapshot.object(object));
+    const Object* o = snapshot.object(object);
     GestureGuard gesture(*this, where(snapshot, snapshot.object(object)));         // lot 13 : l'audit
     // Lot 13 : une commande a signature attend le panneau - la bascule avant de
     // basculer, le bouton apres sa confirmation.
@@ -3074,7 +3109,8 @@ void Runtime::doubleClick(Id object, double now) {
     const auto* v = shownViewOf(object);
     const auto* o = v ? v->object(object) : nullptr;
     if (!running_ || !o) return;
-    const View snapshot = *v;
+    View snapshot = *v;
+    evaluateProps(snapshot.id, *snapshot.object(object));   // 1.12.6 (lot B) : tel que l'ecran le montre
     GestureGuard gesture(*this, where(snapshot, snapshot.object(object)));         // lot 13 : l'audit
     runActions(snapshot, snapshot.object(object), Trigger::DoubleClick, now);
 }
@@ -3188,6 +3224,8 @@ void Runtime::tick(double now) {
     followWatched(now, false);          // 1.9 : les variables des alarmes, suivies en permanence
     slaveWatch(now);                    // 1.9 : les bascules vers les esclaves simules
     if (animation_ && now - animation_->start >= std::max(1, animation_->spec.durationMs) / 1000.0) animation_.reset();
+    // 1.12.6 (lot B) : une formule qui change reprend la main sur le geste fait a cote d'elle.
+    if (!gestureFormulas_.empty()) releaseGestures();
     // Lot 9 : le bouton a confirmation par appui maintenu.
     holdTick(now);
     keysTick(now);                      // 1.11.23 : les raccourcis maintenus et repetes
@@ -4426,7 +4464,10 @@ void Runtime::objectPart(Id object, std::string_view part, double now) {
         recipeManagerClick(object, part, now);
         return;
     }
-    const View snapshot = *v;
+    // 1.12.6 (lot B, § 2.7) : l'objet tel que l'ecran le montre (ses positions, ses valeurs, ses
+    // onglets, ses vues, ses bornes... selon leur formule).
+    View snapshot = *v;
+    evaluateProps(snapshot.id, *snapshot.object(object));
     const Object& o = *snapshot.object(object);
     const std::string source = where(snapshot, &o);
     GestureGuard gesture(*this, source);                // lot 13 : l'audit

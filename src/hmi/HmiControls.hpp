@@ -73,6 +73,9 @@ struct StateEntry {
 };
 [[nodiscard]] std::vector<StateEntry> parseStateList(std::string_view text, std::string* error = nullptr);
 [[nodiscard]] int stateIndexOf(const std::vector<StateEntry>&, std::string_view shown);
+// 1.12.6 (lot B) : PAR SON NUMERO OU PAR SON NOM - une enumeration (Mode vaut 1, Auto) trouve
+// « 1 = ... » comme « Auto = ... » ; `name` vide : par la valeur seule.
+[[nodiscard]] int stateIndexOf(const std::vector<StateEntry>&, std::string_view shown, std::string_view name);
 // 1.12.3 : L'ECRITURE QUI MANQUAIT - "0 = Arret | #4A5261; 1 = Marche | #2ECC71 | clignote". Un
 // texte, une valeur ou une couleur ne peut pas contenir ';' ni '|' (la liste ne se relirait pas) :
 // stateFieldFits le dit avant (faux, `why` en francais).

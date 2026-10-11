@@ -11,6 +11,7 @@
 //
 //  NATIVES_OBS=1 : chaque observation est ecrite (pas seulement les echecs).
 // =============================================================================
+#include "../src/hmi/HmiRoles.hpp"
 #include "../src/hmi/HmiExpr.hpp"
 #include "../src/hmi/HmiModel.hpp"
 #include "../src/hmi/HmiNatives.hpp"
@@ -136,9 +137,18 @@ void runExample(const std::string& label, const nt::Example& ex) {
         else err = r.error().message();
         check(err.empty() && sameValue(got, ex.expected),
               label + " (expression) : " + std::string(ex.expression) + " = " + got + (err.empty() ? "" : " [" + err + "]"));
-        // 3. dans un texte a trous
+        // 3. dans un texte a trous - 1.12.6 (lot B) : lu dans le role Texte (un BOOL Vrai / Faux, un
+        // TIME « 1,5 s », une date a la francaise) : l'attendu, lu de meme.
         const std::string text = TextTemplate::compile("{" + std::string(ex.expression) + "}").render(b.rt.environment());
-        check(sameValue(text, ex.expected), label + " (texte a trous) : {" + std::string(ex.expression) + "} = " + text);
+        std::string expected(ex.expected);
+        std::string up = expected;
+        for (auto& ch : up) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+        const bool literal = up == "TRUE" || up == "FALSE" || up.rfind("T#", 0) == 0 || up.rfind("TIME#", 0) == 0 || up.rfind("D#", 0) == 0
+                          || up.rfind("DATE#", 0) == 0 || up.rfind("TOD#", 0) == 0 || up.rfind("DT#", 0) == 0;
+        if (const auto e2 = Expression::compile(literal ? ex.expected : std::string_view("?")); literal && e2.valid())
+            if (auto r2 = e2.evaluate(b.rt.environment()); r2 && r2->type() != sim::Type::String && r2->type() != sim::Type::Real)
+                expected = roles::displayText(*r2);
+        check(sameValue(text, expected), label + " (texte a trous) : {" + std::string(ex.expression) + "} = " + text + ", attendu " + expected);
     }
 }
 
@@ -447,7 +457,8 @@ void types1121() {
         const auto v = e.evaluate(b.rt.environment());
         check(v && formatValue(*v) == "2026-10-09 14:30:00", "une case fx : 2026-10-09 14:30:00 (" + (v ? formatValue(*v) : e.error()) + ")");
         const auto t = TextTemplate::compile("Le {DT_TO_DATE(DT#2026-10-09-14:30:00)} a {TOD#14:30:00}");
-        check(t.render(b.rt.environment()) == "Le 2026-10-09 a 14:30:00", "un texte a trous : " + t.render(b.rt.environment()));
+        // 1.12.6 (lot B) : le role Texte - une date a la francaise.
+        check(t.render(b.rt.environment()) == "Le 09/10/2026 a 14:30:00", "un texte a trous (a la francaise) : " + t.render(b.rt.environment()));
     }
     // Compiler : un script qui les emploie se lit sans faute.
     {

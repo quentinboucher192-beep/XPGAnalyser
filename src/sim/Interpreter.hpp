@@ -120,6 +120,18 @@ public:
         (void)typeName; (void)out;
         return false;
     }
+    // 1.12.6 (lot B) : LES VALEURS D'UN TYPE ENUMERE de l'IHM (T_MODE : Arret 0, Auto 1...) - le nom ST,
+    // le texte affiche, le numero ; faux : pas une enumeration. Le lecteur d'un objet montre le texte
+    // d'une valeur (Auto, pas 1) ; une commande ecrit une valeur par son nom.
+    struct EnumItem {
+        std::string  name;
+        std::string  text;
+        std::int64_t value{0};
+    };
+    virtual bool enumItems(std::string_view typeName, std::vector<EnumItem>& out) {
+        (void)typeName; (void)out;
+        return false;
+    }
     // 1.12.2 : UNE VARIABLE DU PROJET A TAILLE VARIABLE (LIST OF T, VECTOR OF T, MAP[K] OF V, ou
     // un type qui en contient) : son objet, garde par l'environnement - le dialecte la lit et
     // l'ecrit en place (L[0], L.Count, LIST_ADD(L, x)). Nul : pas une telle variable.

@@ -522,7 +522,7 @@ void drawNumericDisplay(const Ctx& c) {
 void drawMultiStateIndicator(const Ctx& c) {
     const double w = c.w(), h = c.h();
     const auto states = hmi::parseStateList(c.src.text(c.o, "stateList"));
-    const int idx = hmi::stateIndexOf(states, value(c));
+    const int idx = hmi::stateIndexOf(states, value(c), c.src.text(c.o, "valueName"));   // 1.12.6 : ou par son nom
     const hmi::StateEntry* st = idx >= 0 ? &states[static_cast<std::size_t>(idx)] : nullptr;
     gfx::Color col = st && !st->color.empty() ? hexColor(c, st->color, 0x4A5261) : colorOf(c, "colorOff", 0x4A5261);
     // Le clignotement : la phase eteinte garde la teinte, assombrie (on la reconnait
@@ -558,7 +558,7 @@ void drawMultiStateText(const Ctx& c) {
     if (!c.src.text(c.o, "fill").empty()) fillLocal(c, shape, fill);
     if (!c.src.text(c.o, "stroke").empty()) strokeLocal(c, shape, true, stroke);
     const auto states = hmi::parseStateList(c.src.text(c.o, "stateList"));
-    const int idx = hmi::stateIndexOf(states, value(c));
+    const int idx = hmi::stateIndexOf(states, value(c), c.src.text(c.o, "valueName"));   // 1.12.6 : ou par son nom
     const hmi::StateEntry* st = idx >= 0 ? &states[static_cast<std::size_t>(idx)] : nullptr;
     const std::string label = st ? st->text : c.src.text(c.o, "unknownText");
     gfx::Color col = st && !st->color.empty() ? hexColor(c, st->color, 0xE6EAF0) : colorOf(c, "textColor", 0xE6EAF0);

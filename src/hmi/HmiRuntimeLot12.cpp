@@ -226,7 +226,31 @@ bool Runtime::swipe(int direction, double now, std::string* why) {
 // ================================================================== clics ====
 void Runtime::setOverride(const View& v, const Object& o, const std::string& key, const std::string& value) {
     overrides_[{v.id, o.id}][key] = value;
+    // 1.12.6 (lot B, § 2.7) : une propriete pilotee par une formule - le geste vaut a cote d'elle, tant
+    // qu'elle garde sa valeur d'ici (releaseGestures, a chaque appel du moteur).
+    if (const Prop* p = o.find(key); p && !p->expr.empty()) {
+        const Prop formula{key, {}, p->expr};
+        gestureFormulas_[{v.id, o.id, key}] = GestureFormula{o.kind, p->expr, evaluatedProp(v.id, o.kind, formula).value_or(std::string{})};
+    } else {
+        gestureFormulas_.erase({v.id, o.id, key});
+    }
     composed_.clear(); boundCalls_.clear();
+}
+
+void Runtime::releaseGestures() {
+    for (auto it = gestureFormulas_.begin(); it != gestureFormulas_.end();) {
+        const auto& [view, object, key] = it->first;
+        const Prop formula{key, {}, it->second.expr};
+        const std::string now = evaluatedProp(view, it->second.kind, formula).value_or(std::string{});
+        if (now == it->second.seen) { ++it; continue; }
+        // La formule a change : elle reprend la main, le geste tombe.
+        if (auto ov = overrides_.find({view, object}); ov != overrides_.end()) {
+            ov->second.erase(key);
+            if (ov->second.empty()) overrides_.erase(ov);
+        }
+        it = gestureFormulas_.erase(it);
+        composed_.clear(); boundCalls_.clear();
+    }
 }
 
 // 1.12.3 : l'etat des structures que l'operateur a change (le poste le garde).

@@ -36,6 +36,8 @@
 
 namespace hmi {
 
+namespace roles { struct Shape; }   // 1.12.6 (lot B) : HmiRoles.hpp
+
 class Scope {
 public:
     explicit Scope(const Scope* parent = nullptr) : parent_(parent) {}
@@ -85,6 +87,15 @@ public:
     [[nodiscard]] const std::vector<std::string>& roots() const noexcept { return roots_; }
 
     [[nodiscard]] core::Result<sim::Value> evaluate(sim::Environment& plc, const Scope* scope = nullptr) const;
+
+    // 1.12.6 (lot B) : CE QUE L'EXPRESSION DESIGNE, en plus de sa valeur. Un chemin (Mode,
+    // Pompes[2], Cuve.Niveau) : son type declare (T_MODE, Pompe_T, ARRAY[0..9] OF REAL) ; vide :
+    // un calcul, ou un nom inconnu.
+    [[nodiscard]] std::string pathType(sim::Environment& plc, const Scope* scope = nullptr) const;
+    // Le texte de la valeur d'une enumeration (Mode vaut 1 : « Auto »), et, quand la valeur ne s'est
+    // pas calculee (`value` nul), l'agregat que le chemin designe (une structure, un tableau, une
+    // liste : leur affichage, et pourquoi ils ne se lisent pas comme un nombre).
+    [[nodiscard]] roles::Shape shapeOf(sim::Environment& plc, const Scope* scope, const sim::Value* value) const;
 
 private:
     std::string                   source_;

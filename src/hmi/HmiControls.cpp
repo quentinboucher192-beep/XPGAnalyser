@@ -291,6 +291,13 @@ int stateIndexOf(const std::vector<StateEntry>& states, std::string_view shown) 
     return fallback;
 }
 
+int stateIndexOf(const std::vector<StateEntry>& states, std::string_view shown, std::string_view name) {
+    const int byValue = stateIndexOf(states, shown);
+    if (name.empty() || (byValue >= 0 && states[static_cast<std::size_t>(byValue)].match != "*")) return byValue;
+    const int byName = stateIndexOf(states, name);
+    return byName >= 0 && states[static_cast<std::size_t>(byName)].match != "*" ? byName : byValue;
+}
+
 // =================================================================== zones ===
 std::vector<Zone> parseZones(std::string_view text, std::string* error) {
     std::vector<Zone> out;

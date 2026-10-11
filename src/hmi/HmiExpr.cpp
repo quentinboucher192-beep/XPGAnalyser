@@ -1,7 +1,8 @@
 #include "HmiExpr.hpp"
 #include "HmiNatives.hpp"   // 1.12.0 : les couleurs et l'aleatoire
 #include "HmiMarkers.hpp"
-#include "HmiRoles.hpp"     // 1.12.6 (lot B) : les proprietes du role Texte
+#include "HmiRoles.hpp"     // 1.12.6 (lot B) : les proprietes du role Texte, le lecteur
+#include "HmiTypes.hpp"     // 1.12.6 : les bornes d'un tableau (parseSpec)
 #include "HmiMedia.hpp"
 #include "HmiScript.hpp"
 
@@ -125,6 +126,7 @@ public:
     bool structMembers(std::string_view typeName, std::vector<std::pair<std::string, std::string>>& out) override {
         return plc_.structMembers(typeName, out);
     }
+    bool enumItems(std::string_view typeName, std::vector<EnumItem>& out) override { return plc_.enumItems(typeName, out); }   // 1.12.6
     // 1.12.2 : une variable objet (LIST, MAP...) : une copie - une expression ne modifie rien
     // (LIST_ADD(L, 1) dans une expression ajoute a la copie, pas a la variable).
     sim::ObjRef richVariable(std::string_view name) override {
@@ -351,6 +353,89 @@ core::Result<sim::Value> Expression::evaluate(sim::Environment& plc, const Scope
         return core::fail(core::ErrorCode::InvalidArgument,
                           env.message().empty() ? "l'expression n'a rien produit" : env.message());
     return env.result();
+}
+
+// ------------------------------------------------- 1.12.6 : ce qu'elle designe -
+namespace {
+// Un chemin de variable : des noms, des points, des indices entre crochets (Cuves[i + 1].Niveau).
+bool pathLike(std::string_view t) noexcept {
+    if (t.empty() || !(std::isalpha(static_cast<unsigned char>(t[0])) || t[0] == '_')) return false;
+    int depth = 0;
+    for (const char c : t) {
+        if (c == '[') { ++depth; continue; }
+        if (c == ']') { if (--depth < 0) return false; continue; }
+        if (depth > 0) continue;
+        if (!(std::isalnum(static_cast<unsigned char>(c)) || c == '_' || c == '.')) return false;
+    }
+    return depth == 0;
+}
+std::string trimmedSource(std::string_view s) {
+    std::string t = markers::strip(s, markers::Mode::Expression);
+    const auto a = t.find_first_not_of(" \t\r\n");
+    if (a == std::string::npos) return {};
+    return t.substr(a, t.find_last_not_of(" \t\r\n") - a + 1);
+}
+} // namespace
+
+std::string Expression::pathType(sim::Environment& plc, const Scope* scope) const {
+    const std::string t = trimmedSource(source_);
+    if (!pathLike(t)) return {};
+    ReadOnlyEnv env(plc, scope);
+    return env.declaredType(t);
+}
+
+roles::Shape Expression::shapeOf(sim::Environment& plc, const Scope* scope, const sim::Value* value) const {
+    roles::Shape out;
+    const std::string path = trimmedSource(source_);
+    if (!pathLike(path)) return out;
+    ReadOnlyEnv env(plc, scope);
+    const std::string type = env.declaredType(path);
+    if (type.empty()) return out;
+    if (value) {
+        std::vector<sim::Environment::EnumItem> items;
+        if (sim::isInteger(value->type()) && env.enumItems(type, items))
+            for (const auto& it : items)
+                if (it.value == value->asInteger()) { out.enumText = it.text.empty() ? it.name : it.text; break; }
+        return out;
+    }
+    // La valeur ne s'est pas calculee : un agregat ?
+    const auto shown = [&](const std::string& p) -> std::string {
+        auto v = Expression::compile(p).evaluate(plc, scope);
+        return v ? roles::displayText(*v) : std::string("?");
+    };
+    const std::string up = [&] { std::string u = type; for (auto& c : u) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c))); return u; }();
+    if (auto rich = env.richVariable(path)) {
+        out.aggregate = sim::display(*rich);
+        const bool list = up.rfind("LIST", 0) == 0 || up.rfind("VECTOR", 0) == 0;
+        out.aggregateWhy = path + (up.rfind("MAP", 0) == 0 ? " est une MAP : choisis une valeur (" + path + "['cle']) ou son nombre (" + path + ".Count)"
+                                   : list ? " est une liste : choisis un \xC3\xA9l\xC3\xA9ment (" + path + "[0]) ou son nombre (" + path + ".Count)"
+                                          : " est un objet (" + type + ") : choisis un de ses membres");
+        return out;
+    }
+    std::vector<std::pair<std::string, std::string>> members;
+    if (env.structMembers(type, members) && !members.empty()) {
+        std::string shownMembers, proposed;
+        for (std::size_t k = 0; k < members.size(); ++k) {
+            if (k < 8) shownMembers += (shownMembers.empty() ? "" : ", ") + members[k].first + ": " + shown(path + "." + members[k].first);
+            if (k < 3) proposed += (proposed.empty() ? "" : ", ") + path + "." + members[k].first;
+        }
+        out.aggregate = "{" + shownMembers + (members.size() > 8 ? ", ...}" : "}");
+        out.aggregateWhy = path + " est une structure (" + type + ") : choisis un de ses membres (" + proposed + (members.size() > 3 ? "..." : "") + ")";
+        return out;
+    }
+    types::Spec spec;
+    if (types::parseSpec(type, spec) && spec.array()) {
+        std::string items;
+        const long long n = std::min<long long>(spec.count(0), 12);
+        for (long long k = 0; k < n; ++k) {
+            const std::string cell = path + "[" + std::to_string(spec.low[0] + k) + (spec.dims > 1 ? "," + std::to_string(spec.low[1]) : std::string{}) + "]";
+            items += (items.empty() ? "" : " ; ") + shown(cell);
+        }
+        out.aggregate = items + (spec.count(0) > 12 ? " ; ..." : "");
+        out.aggregateWhy = path + " est un tableau (" + type + ") : choisis une case (" + path + "[" + std::to_string(spec.low[0])
+                         + (spec.dims > 1 ? "," + std::to_string(spec.low[1]) : std::string{}) + "])";
+    }
+    return out;
 }
 
 // ------------------------------------------------------------ formats ------
@@ -585,7 +670,16 @@ std::string TextTemplate::render(sim::Environment& plc, const Scope* scope) cons
     for (const auto& p : pieces_) {
         if (!p.isExpr) { out += p.literal; continue; }
         auto v = p.expr.evaluate(plc, scope);
-        out += v ? formatValue(*v, p.format) : std::string("###");
+        if (!v) { out += "###"; continue; }
+        // 1.12.6 (lot B) : un trou sans format se lit dans le role Texte - un BOOL Vrai / Faux, un TIME
+        // « 1,5 s », une date a la francaise, une enumeration son texte (avant : TRUE, T#1500ms, 1).
+        if (p.format.empty()) {
+            if (sim::isInteger(v->type()) && v->type() != sim::Type::Time)
+                if (const auto shape = p.expr.shapeOf(plc, scope, &*v); !shape.enumText.empty()) { out += shape.enumText; continue; }
+            out += roles::displayText(*v);
+            continue;
+        }
+        out += formatValue(*v, p.format);
     }
     return out;
 }

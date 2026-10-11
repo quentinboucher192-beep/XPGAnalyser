@@ -18,6 +18,7 @@
 
 #include "HmiExpr.hpp"
 #include "HmiModel.hpp"
+#include "HmiRoles.hpp"   // 1.12.6 (lot B) : le role de chaque propriete
 
 #include <cstdint>
 #include <string>
@@ -71,6 +72,14 @@ private:
         // d'un tableau de variables) : son rang ; la valeur va dans "liveValues"
         // (ou "liveReferences" pour la consigne d'un radar).
         int          item{-1};
+        // 1.12.6 (lot B) : LE ROLE de la propriete (HmiRoles.hpp) - son lecteur : un BOOL vaut 1 dans
+        // une jauge, Vrai dans un texte ; un TIME des secondes ; une enumeration son texte. `typed` :
+        // la cle est dans la table (sinon, l'ecriture d'avant).
+        roles::KeyRole role{};
+        bool         typed{false};
+        // Le type du chemin lu, demande une fois : une enumeration (ses valeurs), ou rien.
+        mutable int  enumAsked{-1};              // -1 : pas encore ; 0 : pas une enumeration ; 1 : oui
+        mutable std::vector<sim::Environment::EnumItem> enumItems;
     };
     View               source_;
     std::vector<Bound> bound_;

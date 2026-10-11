@@ -596,7 +596,7 @@ void expressions() {
     check(t.dynamic() && t.errors().empty(), "texte dynamique sans erreur");
     same(t.render(plc, &scope), "Temperature : 62.5 degC, etat 5, {brut}", "texte rendu");
     auto t2 = TextTemplate::compile("P = {Pression:0.00} bar ({Pression > Consigne})");
-    same(t2.render(plc, &scope), "P = 7.50 bar (TRUE)", "format et booleen");
+    same(t2.render(plc, &scope), "P = 7.50 bar (Vrai)", "format et booleen (1.12.6 : un BOOL se lit Vrai / Faux dans un texte)");
     auto t3 = TextTemplate::compile("{Inconnue}");
     same(t3.render(plc, &scope), "###", "une valeur illisible s'affiche ###");
     check(TextTemplate::compile("{Etat := 2}").errors().size() == 1, "un trou qui ecrit est une erreur");
@@ -7434,8 +7434,8 @@ void productionLot11() {
         near(lot11Number(rt, "Consigne"), 75.0, "75, Entr\xC3\xA9" "e : la consigne est \xC3\xA9" "crite");
         check(rt.focusedObject() == kNoId && journalHas(rt, "Action", "saisie : Consigne = 75"), "... la saisie se ferme, le journal le dit");
         const auto shownValues = splitLiveValues(lot11Live(rt, tab, t).text("liveValues"));
-        check(shownValues.size() == 4 && shownValues[0] == "75.00" && shownValues[1] == "20.00" && shownValues[2] == "FALSE",
-              "le tableau montre ses r\xC3\xA9" "els \xC3\xA0 son format (75.00, 20.00), le reste tel quel");
+        check(shownValues.size() == 4 && shownValues[0] == "75.00" && shownValues[1] == "20.00" && shownValues[2] == "Faux",
+              "le tableau montre ses r\xC3\xA9" "els \xC3\xA0 son format (75.00, 20.00), un BOOL Faux (1.12.6 : le role Texte)");
         rt.objectPart(tab, "ligne:1", t);
         check(rt.formState(tab) && rt.formState(tab)->error && rt.formState(tab)->message.find("calcul") != std::string::npos && rt.focusedObject() == kNoId,
               "un calcul (Temp * 1.0) : en lecture seule, dit");

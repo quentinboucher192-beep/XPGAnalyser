@@ -59,6 +59,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <tuple>
 #include <set>
 #include <string>
 #include <string_view>
@@ -1047,6 +1048,14 @@ public:
     // 1.12.5 (lot A, D9) : une condition d'objet (le depart d'un GIF...) : sa formule (=Marche)
     // ou son texte (Marche), evaluee dans la vue (ses parametres). Vide ou illisible : fallback.
     [[nodiscard]] bool objectCondition(Id view, const Object& o, std::string_view key, bool fallback) const;
+    // 1.12.6 (lot B, § 2.7) : LA VALEUR D'UNE PROPRIETE PILOTEE, lue dans son role (HmiRoles.hpp) comme
+    // la copie que l'ecran dessine (LiveView) : vide si elle n'a pas de formule, si la formule echoue
+    // ou si sa valeur ne convient pas au role. Et L'OBJET TEL QUE L'ECRAN LE MONTRE : chaque
+    // propriete pilotee y porte cette valeur - l'appui, le clic, le double-clic et les clics des
+    // parties d'un objet lisent cette copie (les onglets, les vues, les positions, l'operation, les
+    // bornes... suivent leur formule ; avant : la valeur fixe, la formule ignoree).
+    [[nodiscard]] std::optional<std::string> evaluatedProp(Id view, Kind kind, const Prop& p) const;
+    void evaluateProps(Id view, Object& o) const;
 
     // ---- 1.9 : les alarmes des objets (HmiObjectAlarms.hpp, HmiRuntimeObjectAlarms.cpp) ----
     //  Generees depuis le projet (objets du synoptique, instances de symboles), les
@@ -1428,6 +1437,17 @@ private:
     void applyOverrides(View& composed, const View& original, const View* only = nullptr) const;
     [[nodiscard]] bool viewOpen(Id view) const;
     std::map<std::pair<Id, Id>, std::map<std::string, std::string>> overrides_;   // (vue, objet) -> cle -> valeur
+    // 1.12.6 (lot B, § 2.7) : UN GESTE A COTE D'UNE FORMULE - un onglet choisi, un panneau replie, un
+    // defilement, sur une propriete pilotee par une formule et sans variable liee : la valeur du geste
+    // vaut tant que la formule garde la valeur qu'elle avait au geste ; quand elle change, la formule
+    // reprend la main (avant : le geste l'effacait jusqu'a la fin de la marche).
+    struct GestureFormula {
+        Kind        kind{Kind::Rectangle};
+        std::string expr;
+        std::string seen;      // sa valeur au moment du geste
+    };
+    std::map<std::tuple<Id, Id, std::string>, GestureFormula> gestureFormulas_;
+    void releaseGestures();
     std::map<Id, std::string> backgrounds_;          // vue -> fond ecrit en marche
     std::map<Id, long long>   openCounts_;           // vue -> ouvertures
     Id                        previousView_{kNoId};

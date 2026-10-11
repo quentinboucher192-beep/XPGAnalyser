@@ -201,6 +201,23 @@ void LiveView::bind(const View& view) {
                 }
             }
     }
+    // 1.12.6 (lot B) : le role de chaque propriete liee - son lecteur (HmiRoles.hpp). Un element
+    // d'une liste (une barre, une part, une ligne) : le role de ses valeurs ; la commande relue d'un
+    // interrupteur : un booleen.
+    for (auto& b : bound_) {
+        const Object* o = source_.object(b.object);
+        if (!o || b.isText || b.row >= 0 || b.state >= 0) continue;
+        if (b.item >= 0) {
+            b.role = roles::KeyRole{b.key, roles::valueRoleOf(o->kind, b.key)};
+            b.typed = true;
+        } else if (b.key == "command") {
+            b.role = roles::KeyRole{b.key, roles::Role::Boolean};
+            b.typed = true;
+        } else if (roles::keyRole(b.key)) {
+            b.role = roles::roleOf(o->kind, b.key);
+            b.typed = true;
+        }
+    }
 }
 
 View LiveView::evaluate(sim::Environment& plc, std::vector<LiveValue>* values, const Scope* scope, double seconds) const {
@@ -214,6 +231,30 @@ View LiveView::evaluate(sim::Environment& plc, std::vector<LiveValue>* values, c
     std::map<std::pair<Id, std::string>, std::vector<std::string>> lists;
     // 1.11.4 : les (objet, cle) dont la formule a donne une position, une taille, une rotation.
     std::set<std::pair<Id, std::string>> geometry;
+    // 1.12.6 (lot B) : la valeur d'une enumeration du projet (Mode vaut 1) : son texte (« Auto ») ;
+    // le type du chemin est demande une fois par liaison.
+    const auto enumText = [&](const Bound& b, const sim::Value& v) -> std::string {
+        if (!sim::isInteger(v.type()) || v.type() == sim::Type::Time) return {};
+        if (b.enumAsked < 0) {
+            const std::string type = b.expr.pathType(plc, scope);
+            b.enumAsked = !type.empty() && plc.enumItems(type, b.enumItems) ? 1 : 0;
+        }
+        if (b.enumAsked != 1) return {};
+        for (const auto& it : b.enumItems)
+            if (it.value == v.asInteger()) return it.text;
+        return {};
+    };
+    // La valeur lue dans le role de la liaison ; faux (et `why`) : elle ne convient pas.
+    const auto readAs = [&](const Bound& b, const sim::Value& v, std::string& text, std::string& why, std::string* name) {
+        roles::Shape shape;
+        const auto role = b.role.role == roles::Role::Formula ? b.role.item : b.role.role;
+        if (role == roles::Role::Text || role == roles::Role::State) shape.enumText = enumText(b, v);
+        auto read = roles::adapt(b.role, v, shape);
+        if (!read.ok) { why = std::move(read.why); return false; }
+        text = std::move(read.text);
+        if (name) *name = std::move(read.name);
+        return true;
+    };
     for (const auto& b : bound_) {
         Object* o = out.object(b.object);
         if (!o) continue;
@@ -225,14 +266,18 @@ View LiveView::evaluate(sim::Environment& plc, std::vector<LiveValue>* values, c
             lv.key = b.key + "[" + std::to_string(b.item + 1) + "]";
             lv.expression = b.expr.source();
             if (!b.expr.valid()) { lv.error = true; lv.value = b.expr.error(); }
-            else if (auto v = b.expr.evaluate(plc, scope))
+            else if (auto v = b.expr.evaluate(plc, scope)) {
                 // Le tableau de variables montre ses reels a son format (0.00 : 60.00).
                 // Lot 13 : le format de la ligne ("formats", sinon celui de l'objet).
                 // 1.12.5 (lot A, D4) : les autres sans perte (une barre, une part : 1234567.8).
-                lv.value = o->kind == Kind::VariableTable && v->type() == sim::Type::Real
-                               ? formatValue(*v, rowFormat(nullptr, *o, static_cast<std::size_t>(b.item)))
-                               : exactValue(*v);
-            else { lv.error = true; lv.value = liveError(lv.expression, v.error().message()); }
+                // 1.12.6 (lot B) : lus dans le role de leurs valeurs - une barre d'un BOOL vaut 1, d'un
+                // TIME des secondes ; une ligne d'un tableau, le texte d'une enumeration ; un texte
+                // 'abc' dans une barre : ### (avant : 0, sans rien dire).
+                std::string why;
+                if (o->kind == Kind::VariableTable && v->type() == sim::Type::Real)
+                    lv.value = formatValue(*v, rowFormat(nullptr, *o, static_cast<std::size_t>(b.item)));
+                else if (!readAs(b, *v, lv.value, why, nullptr)) { lv.error = true; lv.value = why; }
+            } else { lv.error = true; lv.value = liveError(lv.expression, v.error().message()); }
             auto& list = lists[{b.object, b.key}];
             if (list.size() <= static_cast<std::size_t>(b.item)) list.resize(static_cast<std::size_t>(b.item) + 1);
             list[static_cast<std::size_t>(b.item)] = lv.error ? std::string("###") : lv.value;
@@ -254,7 +299,7 @@ View LiveView::evaluate(sim::Environment& plc, std::vector<LiveValue>* values, c
             } else {
                 lv.expression = "=" + b.expr.source();
                 if (!b.expr.valid()) { lv.error = true; lv.value = b.expr.error(); }
-                else if (auto v = b.expr.evaluate(plc, scope)) lv.value = formatValue(*v);
+                else if (auto v = b.expr.evaluate(plc, scope)) lv.value = roles::displayText(*v);   // 1.12.6 : le role Texte
                 else { lv.error = true; lv.value = liveError(b.expr.source(), v.error().message()); }
             }
             auto& rows = it->second;
@@ -269,7 +314,9 @@ View LiveView::evaluate(sim::Environment& plc, std::vector<LiveValue>* values, c
             if (!b.expr.valid()) { lv.error = true; lv.value = b.expr.error(); }
             else if (auto v = b.expr.evaluate(plc, scope)) {
                 lv.value = formatValue(*v);
-                if (v->isTruthy() && !chosen.count(b.object)) chosen[b.object] = b.state;
+                // 1.12.6 (lot B) : une condition lue en booleen (une STRING 'TRUE', 'ON' aussi)
+                const bool on = v->type() == sim::Type::String ? roles::trueWord(v->asString()) : v->isTruthy();
+                if (on && !chosen.count(b.object)) chosen[b.object] = b.state;
             } else { lv.error = true; lv.value = liveError(lv.expression, v.error().message()); }
             if (values) values->push_back(std::move(lv));
             continue;
@@ -286,31 +333,56 @@ View LiveView::evaluate(sim::Environment& plc, std::vector<LiveValue>* values, c
                 lv.error = true;
                 lv.value = b.expr.error();
             } else if (auto v = b.expr.evaluate(plc, scope)) {
-                // 1.12.5 (lot A, D4) : une valeur que l'objet relit en nombre (Valeur, min, max,
-                // seuils, consigne, ouverture...) passe sans perte ; un texte montre tel quel
-                // (libelle, titre...) garde l'ecriture courte d'avant.
-                lv.value = displayedTextKey(b.key) ? formatValue(*v) : exactValue(*v);
-                // 1.12.1 : une enumeration native (ALIGNEMENT#Centre vaut 1, un DINT) :
-                // la propriete recoit le mot de l'inspecteur ("centre").
-                if (auto word = natives::propertyWord(kindKey(o->kind), b.key, *v)) lv.value = std::move(*word);
-                // 1.12.5 (lot A) : la page d'un conteneur a onglets selon le type de sa variable - une
-                // enumeration le rang de sa valeur (pageValues), un BOOL vrai la page 2, une STRING le nom
-                // de l'onglet ; le repli d'un panneau, allume comme un voyant (2 aussi, 'TRUE').
-                if (o->kind == Kind::TabContainer && b.key == "page") lv.value = std::to_string(tabPageFrom(*o, *v));
-                if (o->kind == Kind::CollapsiblePanel && b.key == "collapsed")
-                    lv.value = (v->type() == sim::Type::String ? valueOn(v->asString()) : valueOn(lv.value)) ? "TRUE" : "FALSE";
-                // Une rotation, une position, une couleur : la valeur REMPLACE
-                // la statique. L'expression reste (l'objet est toujours pilote).
-                if (b.key == "rot") {
-                    double a = 0;
-                    if (parseNumber(lv.value, a)) o->setNumber("rot", a);
+                // 1.12.6 (lot B) : LE LECTEUR DU ROLE (HmiRoles.cpp) - la valeur d'une jauge d'un BOOL vaut 1,
+                // d'un TIME des secondes ; un texte montre une enumeration par son texte, un BOOL Vrai / Faux ;
+                // un etat garde aussi le nom de sa valeur (le multi-etats Auto = ...). Une valeur qui ne
+                // convient pas (un texte 'abc' dans une jauge) : l'erreur, et l'objet le montre (###).
+                // 1.12.5 (lot A, D4) : une valeur relue en nombre passe sans perte.
+                bool usable = true;
+                std::string why, name;
+                if (b.typed) usable = readAs(b, *v, lv.value, why, &name);
+                else lv.value = displayedTextKey(b.key) ? formatValue(*v) : exactValue(*v);
+                if (!usable) {
+                    lv.error = true;
+                    lv.value = why;
                 } else {
-                    o->set(b.key, lv.value);
+                    if (b.key == "value" && !name.empty()) o->set("valueName", name);
+                    // 1.12.1 : une enumeration native (ALIGNEMENT#Centre vaut 1, un DINT) :
+                    // la propriete recoit le mot de l'inspecteur ("centre").
+                    if (auto word = natives::propertyWord(kindKey(o->kind), b.key, *v)) lv.value = std::move(*word);
+                    // 1.12.5 (lot A) : la page d'un conteneur a onglets selon le type de sa variable - une
+                    // enumeration le rang de sa valeur (pageValues), un BOOL vrai la page 2, une STRING le nom
+                    // de l'onglet ; le repli d'un panneau, allume comme un voyant (2 aussi, 'TRUE').
+                    if (o->kind == Kind::TabContainer && b.key == "page") lv.value = std::to_string(tabPageFrom(*o, *v));
+                    if (o->kind == Kind::CollapsiblePanel && b.key == "collapsed")
+                        lv.value = (v->type() == sim::Type::String ? valueOn(v->asString()) : v->isTruthy()) ? "TRUE" : "FALSE";
+                    // Une rotation, une position, une couleur : la valeur REMPLACE
+                    // la statique. L'expression reste (l'objet est toujours pilote).
+                    if (b.key == "rot") {
+                        double a = 0;
+                        if (parseNumber(lv.value, a)) o->setNumber("rot", a);
+                    } else {
+                        o->set(b.key, lv.value);
+                    }
+                    if (isLiveGeometryKey(b.key)) geometry.insert({b.object, b.key});   // 1.11.4
                 }
-                if (isLiveGeometryKey(b.key)) geometry.insert({b.object, b.key});   // 1.11.4
             } else {
-                lv.error = true;
-                lv.value = liveError(lv.expression, v.error().message());
+                // 1.12.6 (lot B) : une structure, un tableau, une liste entiers - un texte les montre
+                // ({Marche: Vrai, Vitesse: 50}, 1 ; 2 ; 3) ; ailleurs, l'erreur dit quoi choisir.
+                const auto shape = b.typed ? b.expr.shapeOf(plc, scope, nullptr) : roles::Shape{};
+                if (!shape.aggregate.empty()) {
+                    const auto read = roles::adapt(b.role, sim::Value{}, shape);
+                    if (read.ok) {
+                        lv.value = read.text;
+                        o->set(b.key, lv.value);
+                    } else {
+                        lv.error = true;
+                        lv.value = read.why;
+                    }
+                } else {
+                    lv.error = true;
+                    lv.value = liveError(lv.expression, v.error().message());
+                }
             }
             // Lot 9 : une valeur illisible, l'afficheur le montre (qualite mauvaise).
             if (lv.error && b.key == "value") o->setFlag("quality_bad", true);

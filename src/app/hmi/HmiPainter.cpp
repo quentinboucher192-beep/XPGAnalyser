@@ -1,3 +1,4 @@
+#include "../../hmi/HmiRoles.hpp"   // 1.12.6 (lot B) : les lecteurs du role
 #include "../../hmi/HmiWidgets.hpp"
 #include "../../hmi/HmiForms.hpp"
 #include "HmiPainter.hpp"
@@ -36,15 +37,17 @@ using hmi::Object;
 using hmi::edit::Pt;
 namespace shapes = ui::shapes;
 
+// 1.12.6 (lot B) : les lecteurs du role (HmiRoles.hpp), les memes que le moteur - un nombre lit
+// aussi TRUE / FALSE (1 / 0) ; un booleen, un nombre non nul, ON / OFF, une STRING 'TRUE'.
 double HmiPropertySource::number(const Object& o, std::string_view key, double fallback) const {
     double v = fallback;
     const auto t = text(o, key);
-    if (!t.empty() && hmi::parseNumber(t, v)) return v;
+    if (!t.empty() && hmi::roles::readNumber(t, v)) return v;
     return fallback;
 }
 bool HmiPropertySource::flag(const Object& o, std::string_view key, bool fallback) const {
     const auto t = text(o, key);
-    return t.empty() ? fallback : hmi::parseBool(t, fallback);
+    return t.empty() ? fallback : hmi::roles::readBool(t, fallback);
 }
 
 bool tryParseColor(std::string_view t, gfx::Color& out) {
@@ -1482,6 +1485,21 @@ void paintHmiObject(gfx::IRenderer& r, const hmi::View& view, const Object& o, c
     }
     const Ctx c{r, view, o, vp, src, theme, opt, alpha};
     const double w = c.w(), h = c.h();
+    // 1.12.6 (lot B) : UNE VALEUR QUI NE CONVIENT PAS a l'objet (un texte 'abc' dans une jauge, une
+    // structure entiere dans un voyant, une date dans un booleen) : des hachures et ###, comme
+    // l'afficheur numerique - plus une valeur par defaut dessinee comme si elle etait vraie.
+    if (!opt.editor && o.kind != Kind::NumericDisplay && src.flag(o, "quality_bad", false)) {
+        const auto box = c.map(rectLocal(w, h, 3));
+        shapes::fillPolygon(r, box, fade(gfx::Color{20, 24, 30, 230}, alpha));
+        for (double x = -h; x < w; x += 10) {
+            const double x0 = std::max(0.0, x), y0 = x < 0 ? -x : 0.0, x1 = std::min(w, x + h), y1 = x + h > w ? h - (x + h - w) : h;
+            shapes::strokePolyline(r, c.map({{static_cast<float>(x0), static_cast<float>(h - y0)}, {static_cast<float>(x1), static_cast<float>(h - y1)}}),
+                                   false, fade(gfx::Color{120, 130, 145, 70}, alpha), 1.f);
+        }
+        shapes::strokePolyline(r, box, true, fade(gfx::Color{120, 130, 145, 160}, alpha), 1.f);
+        text(c, "###", 0, 0, w, h, fade(gfx::Color{0x8A, 0x94, 0xA3, 255}, alpha), std::clamp(h * 0.45, 9.0, 22.0), "centre");
+        return;
+    }
     // Lot 10 : une instance de symbole. En marche, la vue qui tourne porte deja
     // ses objets (developpes apres elle) : elle ne dessine rien d'elle-meme.
     if (o.kind == Kind::SymbolInstance) {
