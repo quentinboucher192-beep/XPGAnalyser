@@ -28713,9 +28713,9 @@ void saisieNatives1127() {
         return nullptr;
     };
     const auto types = as::suggest(hp, nullptr, "x := NUMERIC_LIMITS<", "");
-    const auto* uint = find(types, "UINT");
-    check(types.size() == 15 && types.front().text == "SINT" && uint && uint->insert == "UINT>." && uint->chain
-              && uint->detail.find("uint16_t") != std::string::npos,
+    const auto* uintItem = find(types, "UINT");
+    check(types.size() == 15 && types.front().text == "SINT" && uintItem && uintItem->insert == "UINT>." && uintItem->chain
+              && uintItem->detail.find("uint16_t") != std::string::npos,
           "NUMERIC_LIMITS< : les 15 types, UINT pose UINT>. et rouvre la liste (" + std::to_string(types.size()) + ")");
     const auto members = as::suggest(hp, nullptr, "x := NUMERIC_LIMITS<UINT>.", "");
     const auto* mx = find(members, "MAX");
@@ -28741,6 +28741,20 @@ void saisieNatives1127() {
     check(find(bits, "BIT_TEST") != nullptr, "BIT_T : BIT_TEST propos\xC3\xA9" "e");
     const auto cmp = as::suggest(hp, nullptr, "IF Compteur <", "");
     check(!find(cmp, "SINT"), "IF Compteur < : une comparaison, pas un template");
+    // Un script C++ : std::numeric_limits< (UINT pose UINT>::), puis les membres sous leur nom C++.
+    const auto cppTypes = as::suggest(hp, nullptr, "auto x = std::numeric_limits<", "UI");
+    const auto* cppUint = find(cppTypes, "UINT");
+    check(cppUint && cppUint->insert == "UINT>::" && cppUint->chain, "std::numeric_limits<UI : UINT pose UINT>::");
+    const auto cppMax = as::suggest(hp, nullptr, "auto x = std::numeric_limits<UINT>::", "ma");
+    const auto* cmx = find(cppMax, "max");
+    check(cmx && cmx->insert == "max()" && cmx->detail.rfind("= 65535", 0) == 0 && !find(cppMax, "MAX"),
+          "std::numeric_limits<UINT>::ma : max() = 65535, le nom C++");
+    const auto cppC = as::suggest(hp, nullptr, "auto x = std::numeric_limits<int16_t>::", "max");
+    check(find(cppC, "max") && find(cppC, "max")->detail.rfind("= 32767", 0) == 0, "std::numeric_limits<int16_t>::max : comme INT, 32767");
+    const auto cppPi = as::suggest(hp, nullptr, "double d = std::numbers::", "pi");
+    check(!cppPi.empty() && cppPi.front().text == "pi" && cppPi.front().insert == "pi" && cppPi.front().detail.rfind("= 3.14159265358979", 0) == 0,
+          "std::numbers::pi : pi, sa valeur en double");
+    check(!find(as::suggest(hp, nullptr, "auto y = Moteur::", "ma"), "max"), "Moteur:: : pas les membres de numeric_limits");
 }
 
 void natives1200() {

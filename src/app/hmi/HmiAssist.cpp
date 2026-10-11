@@ -1614,6 +1614,8 @@ bool publicMembers(const hmi::Project& hp, const std::string& path, const std::s
 // types qu'il accepte, avec leur nom en C ; le choix pose NOM<T>. (la liste se rouvre sur les membres)
 // ou NOM<T>( (les arguments). Apres NUMERIC_LIMITS<UINT>., NUMBERS<REAL>. ou NUMBERS. : les membres,
 // leur valeur pour ce type (= 65535), ce qu'ils disent ; une fonction se pose avec ses ().
+// Dans un script C++ (la meme aide) : std::numeric_limits< (les types, le choix pose UINT>::), puis
+// std::numeric_limits<UINT>:: et std::numbers:: (les membres sous leur nom C++ : max(), pi).
 bool templateItems(std::string_view before, const std::string& needle, const std::function<void(Item)>& push) {
     const auto blankBack = [&](std::size_t k) {
         while (k > 0 && (before[k - 1] == ' ' || before[k - 1] == '\t')) --k;
@@ -1625,11 +1627,49 @@ bool templateItems(std::string_view before, const std::string& needle, const std
     };
     std::size_t e = blankBack(before.size());
     if (e == 0) return false;
+    const auto stdBefore = [&](std::size_t at) { return at >= 5 && before.substr(at - 5, 5) == "std::"; };
+    // C++ : std::numeric_limits<UINT>:: ou std::numbers:: - les membres, leur nom C++ et leur valeur.
+    if (e >= 2 && before[e - 1] == ':' && before[e - 2] == ':') {
+        std::size_t k = blankBack(e - 2);
+        std::string type;
+        if (k > 0 && before[k - 1] == '>') {
+            const std::size_t typeEnd = blankBack(k - 1), typeStart = wordBack(typeEnd);
+            if (typeStart == typeEnd) return false;
+            type = upper(before.substr(typeStart, typeEnd - typeStart));
+            k = blankBack(typeStart);
+            if (k == 0 || before[k - 1] != '<') return false;
+            k = blankBack(k - 1);
+        }
+        const std::size_t nameStart = wordBack(k);
+        const std::string name = lower(before.substr(nameStart, k - nameStart));
+        if (!stdBefore(nameStart) || (name != "numeric_limits" && name != "numbers")) return false;
+        const bool numbers = name == "numbers";
+        if (numbers) type = "LREAL";
+        if (!numbers && !type.empty() && !sim::lib::templateAccepts(*sim::lib::templateInfo("NUMERIC_LIMITS"), type))
+            for (const auto t : sim::lib::limitsTypes())          // std::numeric_limits<uint16_t>:: : comme UINT
+                if (lower(sim::lib::cTypeName(t)) == lower(type)) { type = std::string(t); break; }
+        if (type.empty() || !sim::lib::templateAccepts(*sim::lib::templateInfo(numbers ? "NUMBERS" : "NUMERIC_LIMITS"), type)) return true;
+        int rank = 0;
+        for (const auto& m : numbers ? sim::lib::numbersMembers() : sim::lib::limitsMembers()) {
+            const int r = matchRank(m.cpp, needle);
+            if (r < 0) { ++rank; continue; }
+            const std::string value = numbers ? sim::lib::numbersText(type, m.name) : sim::lib::limitsText(type, m.name);
+            Item it;
+            it.text = std::string(m.cpp);
+            it.detail = (value.empty() ? std::string{} : "= " + value + kDot) + std::string(m.summary);
+            it.kind = m.function ? Kind::Function : Kind::Member;
+            it.rank = r * 100 + rank++;
+            it.insert = std::string(m.cpp) + (m.function ? "()" : "");
+            push(std::move(it));
+        }
+        return true;
+    }
     if (before[e - 1] == '<') {
         const std::size_t nameEnd = blankBack(e - 1), nameStart = wordBack(nameEnd);
         if (nameStart == nameEnd || (nameStart > 0 && (before[nameStart - 1] == '.' || before[nameStart - 1] == '#'))) return false;
         const auto* info = sim::lib::templateInfo(before.substr(nameStart, nameEnd - nameStart));
         if (!info) return false;
+        const bool cpp = stdBefore(nameStart);           // std::numeric_limits< : le C++
         int k = 0;
         for (const auto t : info->name == "NUMBERS" ? info->types : sim::lib::limitsTypes()) {
             if (!sim::lib::templateAccepts(*info, t)) continue;
@@ -1640,7 +1680,7 @@ bool templateItems(std::string_view before, const std::string& needle, const std
             it.detail = std::string(sim::lib::cTypeName(t)) + kDot + std::string(sim::lib::typeSummary(t)) + kDot + std::string(info->library);
             it.kind = Kind::Type;
             it.rank = r * 100 + k++;
-            it.insert = std::string(t) + (info->isClass ? ">." : ">(");
+            it.insert = std::string(t) + (info->isClass ? (cpp ? ">::" : ">.") : ">(");
             it.chain = info->isClass;
             push(std::move(it));
         }
