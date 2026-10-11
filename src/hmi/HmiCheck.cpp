@@ -2992,7 +2992,7 @@ struct ExprWalker {
         return {};
     }
 
-    void expr(const Where& w, const std::string& source, exprcheck::Want want, const std::string& prefix = {}) {
+    void expr(const Where& w, const std::string& source, exprcheck::Want want, const std::string& prefix = {}, bool strict = true) {
         const std::string s = trimmedCopy(source);
         if (s.empty()) return;   // 1.11 (REP) : un repere se verifie comme le reste (ses $ sont transparents)
         const auto e = Expression::compile(s);
@@ -3012,7 +3012,7 @@ struct ExprWalker {
             if (syntax || !hint.empty()) push(w, prefix + s + " : " + e.error() + hint, {}, {}, s);
             return;
         }
-        for (auto& pb : exprcheck::check(context(w.view), s, want))
+        for (auto& pb : exprcheck::check(context(w.view), s, want, strict))
             push(w, prefix + s + " : " + pb.message + dup::markerHint(s, pb.unknownName), pb.unknownName, pb.suggestion, {},
                  pb.warning ? Issue::Severity::Warning : Issue::Severity::Error);
     }
@@ -3069,11 +3069,11 @@ struct ExprWalker {
                 if (!anim) { if (!o.actions.empty()) actions(v, &o, o.actions); continue; }
                 for (const auto& prop : o.props) {
                     const Where w{&v, o.id, "Expression", prop.key};
-                    if (!prop.expr.empty()) expr(w, prop.expr, exprcheck::wantOf(o.kind, prop.key));   // 1.12.6 (lot B) : le role
+                    if (!prop.expr.empty()) expr(w, prop.expr, exprcheck::wantOf(o.kind, prop.key), {}, exprcheck::strictType(o.kind, prop.key));   // 1.12.6 (lot B) : le role
                     if (!prop.expr.empty()) enumFamily(w, o.kind, prop.key, prop.expr);
                     // 1.12.5 (lot A, D13) : un Defaut, un Mouvement, une Valeur de synoptique tapes
                     // sans '=' (P1.Defaut) sont des formules (le dessin et l'alarme) : verifies comme elles.
-                    if (synopticLinkedKey(o, prop.key)) expr(w, prop.value, exprcheck::wantOf(o.kind, prop.key));
+                    if (synopticLinkedKey(o, prop.key)) expr(w, prop.value, exprcheck::wantOf(o.kind, prop.key), {}, exprcheck::strictType(o.kind, prop.key));
                     if (isTemplateKey(prop.key)) text(Where{&v, o.id, "Texte", prop.key}, prop.value);
                     if (prop.key == "cells" && prop.expr.empty()) {
                         const auto rows = parseCells(prop.value);
@@ -3095,7 +3095,7 @@ struct ExprWalker {
                 if (kindWritesVariable(o.kind) || o.kind == Kind::HourMeter)
                     for (const char* key : {"state", "lamp", "condition"})
                         if (const auto* prop = o.find(key); prop && prop->expr.empty())
-                            expr(Where{&v, o.id, "Expression", key}, prop->value, exprcheck::wantOf(o.kind, key));   // 1.12.6 : son role
+                            expr(Where{&v, o.id, "Expression", key}, prop->value, exprcheck::wantOf(o.kind, key), {}, exprcheck::strictType(o.kind, key));   // 1.12.6 : son role
                 // ---- Lot API 8 : corrections des captures ---- le texte-expression du lot 11.
                 for (const char* key : valueExpressionKeys(o.kind))
                     if (const auto* prop = o.find(key); prop && prop->expr.empty())
@@ -3170,19 +3170,20 @@ struct ExprWalker {
         bool            templ{false};    // un texte a trous : chaque trou
         bool            write{false};    // la cible d'une ecriture
         std::string     prefix;
+        bool            strict{true};    // 1.12.6 : un type qui ne convient pas est une erreur (sinon un avertissement)
     };
 
     static std::vector<Site> sitesOf(const Object& o) {
         using W = exprcheck::Want;
         std::vector<Site> s;
         for (const auto& prop : o.props) {
-            if (!prop.expr.empty()) s.push_back(Site{"Expression", prop.key, prop.expr, exprcheck::wantOf(o.kind, prop.key), false, false, {}});
+            if (!prop.expr.empty()) s.push_back(Site{"Expression", prop.key, prop.expr, exprcheck::wantOf(o.kind, prop.key), false, false, {}, exprcheck::strictType(o.kind, prop.key)});
             if (isTemplateKey(prop.key)) s.push_back(Site{"Texte", prop.key, prop.value, W::Any, true, false, {}});
         }
         if (kindWritesVariable(o.kind) || o.kind == Kind::HourMeter)
             for (const char* key : {"state", "lamp", "condition"})
                 if (const auto* prop = o.find(key); prop && prop->expr.empty())
-                    s.push_back(Site{"Expression", key, prop->value, exprcheck::wantOf(o.kind, key), false, false, {}});
+                    s.push_back(Site{"Expression", key, prop->value, exprcheck::wantOf(o.kind, key), false, false, {}, exprcheck::strictType(o.kind, key)});
         // ---- Lot API 8 : corrections des captures ---- le texte-expression du lot 11.
         for (const char* key : valueExpressionKeys(o.kind))
             if (const auto* prop = o.find(key); prop && prop->expr.empty())
@@ -3210,7 +3211,7 @@ struct ExprWalker {
         const auto one = [&](const std::string& source, exprcheck::Want want, const std::string& shown) {
             const std::string t = trimmedCopy(source);
             if (t.empty() || !Expression::compile(t).valid()) return;
-            for (auto& pb : s.write ? exprcheck::checkTarget(context(&in), t) : exprcheck::check(context(&in), t, want))
+            for (auto& pb : s.write ? exprcheck::checkTarget(context(&in), t) : exprcheck::check(context(&in), t, want, s.strict))
                 found.emplace_back(shown.empty() ? t : shown, std::move(pb));
         };
         if (s.templ) {
@@ -3486,6 +3487,9 @@ namespace {
 //  sur un BOOL) ; les listes paralleles alignees ; les couleurs, y compris dans les
 //  etats et les zones ; le format (0,0) ; l'ordre des seuils et leur plage ; une
 //  valeur tapee sans = qui ressemble a une variable.
+//  TOUT EST AVERTISSEMENT : ces constats sont nouveaux, et un projet qui demarrait en
+//  1.12.5 demarre toujours. En marche, la valeur qui ne se lit pas montre ### et dit
+//  pourquoi (roles::adapt) ; Generer l'a dit avant.
 // =============================================================================
 std::string upperOfName(std::string_view s) {
     std::string u(s);
@@ -3521,7 +3525,7 @@ void roleChecks(const Project& p, std::vector<Issue>& out) {
                 }
                 if (!aggregate.empty()) {
                     if (role != R::Text)
-                        add(out, S::Error, "Objet", v.id, o.id, key,
+                        add(out, S::Warning, "Objet", v.id, o.id, key,
                             var + " (" + type + ") est " + aggregate + " : l'objet attend une valeur seule - choisis " + choose);
                     return;
                 }
@@ -3536,7 +3540,7 @@ void roleChecks(const Project& p, std::vector<Issue>& out) {
                         break;
                     case R::Boolean:
                         if (isDate(st))
-                            add(out, S::Error, "Objet", v.id, o.id, key, var + " (" + type + ") est une date : elle n'est ni vraie ni fausse - compare-la");
+                            add(out, S::Warning, "Objet", v.id, o.id, key, var + " (" + type + ") est une date : elle n'est ni vraie ni fausse - compare-la");
                         else if (en && !en->values.empty())
                             add(out, S::Warning, "Objet", v.id, o.id, key,
                                 var + " est une \xC3\xA9num\xC3\xA9ration (" + type + ") : lue en bool\xC3\xA9" "en, toute valeur sauf " + en->values.front().name
@@ -3547,17 +3551,17 @@ void roleChecks(const Project& p, std::vector<Issue>& out) {
                                 var + " est une STRING lue en bool\xC3\xA9" "en : seuls TRUE, VRAI, 1, OUI et ON y sont vrais");
                         break;
                     case R::State:
-                        if (isDate(st)) add(out, S::Error, "Objet", v.id, o.id, key, var + " (" + type + ") est une date : elle n'est pas un \xC3\xA9tat");
+                        if (isDate(st)) add(out, S::Warning, "Objet", v.id, o.id, key, var + " (" + type + ") est une date : elle n'est pas un \xC3\xA9tat");
                         break;
                     case R::Date:
                         // il ecrit une DATE, une TOD, une DT, un TIME, un REAL ou un entier (secondes depuis 1970), une STRING (2026-10-09 14:30)
                         if (st == sim::Type::Bool)
-                            add(out, S::Error, "Objet", v.id, o.id, key,
+                            add(out, S::Warning, "Objet", v.id, o.id, key,
                                 var + " (" + type + ") : un s\xC3\xA9lecteur de date n'\xC3\xA9" "crit pas dans un BOOL - une DATE, une TIME_OF_DAY, une DATE_AND_TIME ou une STRING");
                         break;
                     case R::Text:
                         if (o.kind == Kind::WeeklySchedule && key == "variable" && st != sim::Type::String)
-                            add(out, S::Error, "Objet", v.id, o.id, key, var + " (" + type + ") : le programme d'un programmateur se garde dans une STRING");
+                            add(out, S::Warning, "Objet", v.id, o.id, key, var + " (" + type + ") : le programme d'un programmateur se garde dans une STRING");
                         break;
                     default: break;
                 }

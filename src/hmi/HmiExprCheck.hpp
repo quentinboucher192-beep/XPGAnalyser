@@ -75,8 +75,9 @@ struct Problem {
 };
 
 // Les problemes d'une expression qui se lit (sinon : rien, la syntaxe est
-// signalee par Expression::compile).
-[[nodiscard]] std::vector<Problem> check(const Context&, std::string_view source, Want want = Want::Any);
+// signalee par Expression::compile). `strict` faux (1.12.6) : un type qui ne convient pas a
+// `want` est un avertissement, pas une erreur (voir strictType).
+[[nodiscard]] std::vector<Problem> check(const Context&, std::string_view source, Want want = Want::Any, bool strict = true);
 // La cible d'une ecriture : une variable qu'on peut ecrire.
 [[nodiscard]] std::vector<Problem> checkTarget(const Context&, std::string_view target);
 // Les expressions d'un texte a trous ("Vitesse : {Vitesse:0.0} km/h" -> Vitesse).
@@ -87,6 +88,12 @@ struct Problem {
 // roles (HmiRoles.hpp) - la valeur d'une jauge un nombre, celle d'un voyant un booleen, colorOn
 // une couleur, le retour d'etat d'un interrupteur un booleen, celui d'un selecteur un etat.
 [[nodiscard]] Want wantOf(Kind kind, std::string_view key);
+// 1.12.6 : LA GRAVITE D'UN TYPE QUI NE CONVIENT PAS a cette propriete. Ce que Compiler exigeait deja
+// en 1.12.5 (x un nombre, visible un booleen, fill une couleur...) reste une erreur, qui bloque le
+// demarrage ; ce que la table des roles exige de plus (la Valeur d'une jauge ou d'un voyant, les
+// seuils, les couleurs des etats, le retour d'etat...) est un avertissement : un projet qui demarrait
+// demarre toujours - l'objet montre ### quand la valeur ne se lit pas, et Generer le dit avant.
+[[nodiscard]] bool strictType(Kind kind, std::string_view key);
 // Le nom connu le plus proche de `name` (variables IHM, fonctions, parametres,
 // candidats) ; vide : aucun d'assez proche.
 [[nodiscard]] std::string closest(const Context&, std::string_view name);

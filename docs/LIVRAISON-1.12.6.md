@@ -71,7 +71,7 @@ Une valeur refusée ne se dessine plus comme si elle était vraie : l'objet se h
 
 **B4 — Le moteur lit la même copie que le dessin.** Appuyer, relâcher, double-cliquer, viser une partie d'objet lisent les propriétés calculées. La barre de navigation suit donc ses vues en formule. Un geste (changer d'onglet, déplier un panneau repliable, faire défiler un panneau défilant) ne remplace plus la formule de la propriété : il vaut à côté d'elle, et la formule reprend la main dès que sa valeur change.
 
-**B5 — Générer vérifie le type contre le rôle.** Il signale :
+**B5 — Générer vérifie le type contre le rôle.** Il signale, en avertissement :
 - une structure ou un tableau là où une valeur seule est attendue, dans une jauge ou une pompe (une erreur, avec ses membres proposés) ;
 - une `STRING` lue comme un nombre (un afficheur, une jauge) ;
 - une énumération lue comme un booléen (le voyant s'allumerait hors de la première valeur) ;
@@ -81,6 +81,8 @@ Une valeur refusée ne se dessine plus comme si elle était vraie : l'objet se h
 - le format `0,0` (la virgule n'y est pas une décimale : il donne un entier ; écris `0.0`) ;
 - une valeur fixe qui ressemble à une formule sans `=` (Visible tapé `Ok` : voulais-tu `=Ok` ?) ;
 - des seuils dans le désordre (seuil bas 80 > seuil haut 20) ou hors de la plage (alarme haute 150 sur 0..100).
+
+Ce sont des **avertissements**, et c'est voulu : un projet qui démarrait en 1.12.5 démarre toujours. En marche, la valeur qui ne se lit pas montre `###` et dit pourquoi. Ce que Compiler exigeait déjà reste une erreur bloquante, comme avant : `Visible` doit être un booléen, `X` un nombre, `Remplissage` une couleur.
 
 ## 3. Le lot C : les repères partout
 

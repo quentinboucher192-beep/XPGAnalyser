@@ -23613,6 +23613,38 @@ void lotBC1126() {
         check(says("Cuve_Seuil", "hors de la plage 0..100"), "B5 : ... une alarme haute (150) hors de la plage 0..100");
         check(says("Cuve_Seuil", "'#12' n'est pas une couleur"), "B5 : ... une couleur de d\xC3\xA9" "faut illisible (#12)");
     }
+    // ---- B5 : ce qui demarrait en 1.12.5 demarre toujours. Un type que seule la table des roles
+    // exige est un avertissement (Generer le dit, la simulation demarre, l'objet montre ###) ; ce que
+    // Compiler exigeait deja (Visible un booleen) reste une erreur.
+    {
+        Project p;
+        View v = makeView(p, "Vue_Demarre");
+        p.programs.variables.push_back(hmiVar(p, "Texte", "STRING", "'TRUE'"));
+        const auto put = [&](Kind k, const char* name, double y) {
+            const Id id = edit::add(p, v, k, 10, y);
+            v.object(id)->name = name;
+            return v.object(id);
+        };
+        put(Kind::Gauge, "Jauge_Texte", 10)->setExpr("value", "Texte");
+        put(Kind::Indicator, "Voyant_Texte", 100)->setExpr("value", "Texte");
+        put(Kind::Indicator, "Voyant_Couleur", 200)->setExpr("colorOn", "12");
+        put(Kind::Rectangle, "Rect_Visible", 300)->setExpr("visible", "Texte");
+        p.views = {v};
+        p.config.startView = v.id;
+        const auto issues = generate(p, [](std::string_view) { return false; });
+        const auto gravity = [&](const char* object, const char* text) {   // 0 : rien ; 1 : avertissement ; 2 : erreur
+            const Object* o = p.views[0].objectByName(object);
+            int g = 0;
+            for (const auto& i : issues)
+                if (o && i.object == o->id && i.message.find(text) != std::string::npos)
+                    g = std::max(g, i.severity == Issue::Severity::Error ? 2 : 1);
+            return g;
+        };
+        check(gravity("Jauge_Texte", "un nombre est attendu") == 1 && gravity("Voyant_Texte", "(vrai ou faux)") == 1
+                  && gravity("Voyant_Couleur", "une couleur est attendue") == 1,
+              "B5 : une jauge et un voyant sur une STRING, une couleur d'\xC3\xA9tat en nombre : des avertissements - la 1.12.5 les laissait d\xC3\xA9marrer (avant ce correctif : une erreur bloquante)");
+        check(gravity("Rect_Visible", "(vrai ou faux)") == 2, "B5 : ... Visible sur une STRING reste une erreur, comme en 1.12.5");
+    }
     // ---- C1 : le decoupeur unique
     {
         const auto a = roles::splitList("M['a;b']; $A;B$; 'x;y'; l'armoire; d'urgence");

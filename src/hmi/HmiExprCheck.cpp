@@ -937,7 +937,36 @@ Want wantOf(Kind kind, std::string_view key) {
     return wantOfRole(r.role == roles::Role::Formula ? r.item : r.role);
 }
 
-std::vector<Problem> check(const Context& ctx, std::string_view written, Want want) {
+namespace {
+// 1.12.6 : CE QUE COMPILER EXIGEAIT EN 1.12.5 - le type public des proprietes (l'ancienne table
+// kPropTypes : un REAL ou un INT, un nombre ; un BOOL, un booleen ; une STRING, rien) et les
+// couleurs (fill, stroke, color, ...Color). Un ecart y reste une erreur ; ailleurs, un avertissement.
+Want wantIn1125(std::string_view key) {
+    static constexpr std::string_view kNumber[] = {
+        "x", "y", "w", "h", "rot", "pivotX", "pivotY", "opacity", "strokeWidth", "fontSize", "radius", "min", "max", "step",
+        "ymin", "ymax", "duration", "window", "deadband", "speed", "ticks", "digits", "decimals", "maxVisible", "holdMs",
+        "refresh", "access", "rows", "maxLength", "minLength", "margin", "period", "page", "tabPage", "maxItems", "scrollX",
+        "scrollY", "contentWidth", "contentHeight", "headerHeight", "tabHeight", "wheelStep", "gap"};
+    static constexpr std::string_view kBool[] = {
+        "visible", "blink", "flipH", "flipV", "wrap", "showValue", "continuous", "seconds", "showText", "showDate",
+        "leadingZeros", "legend", "clip", "inverted", "userList", "showUser", "confirm", "icon", "requireDigit",
+        "validateOnExit", "autoplay", "muted", "bold", "italic", "collapsed", "pushBelow", "backForward", "showScrollbar",
+        "showNames", "showCounts", "home"};
+    for (const auto k : kNumber) if (k == key) return Want::Number;
+    for (const auto k : kBool) if (k == key) return Want::Bool;
+    if (key == "fill" || key == "stroke" || key == "color"
+        || (key.size() > 5 && (key.substr(key.size() - 5) == "Color" || key.substr(key.size() - 5) == "color")))
+        return Want::Color;
+    return Want::Any;
+}
+} // namespace
+
+bool strictType(Kind kind, std::string_view key) {
+    const Want now = wantOf(kind, key);
+    return now == Want::Any || wantIn1125(key) == now;
+}
+
+std::vector<Problem> check(const Context& ctx, std::string_view written, Want want, bool strict) {
     std::vector<Problem> out;
     // 1.11 (REP) : les `$` des reperes sont transparents ($V[1].Ouv$ se verifie comme V[1].Ouv).
     const std::string plain = markers::strip(written, markers::Mode::Expression);
@@ -963,26 +992,32 @@ std::vector<Problem> check(const Context& ctx, std::string_view written, Want wa
         for (const auto& p : out) if (p.message == m) return;
         out.push_back(Problem{std::move(m), {}, {}});
     };
+    // 1.12.6 : le type qui ne convient pas - une erreur la ou la 1.12.5 l'exigeait deja, sinon un
+    // avertissement (strictType : un projet qui demarrait demarre toujours).
+    const auto addType = [&out, strict](std::string m) {
+        for (const auto& p : out) if (p.message == m) return;
+        out.push_back(Problem{std::move(m), {}, {}, !strict});
+    };
     switch (want) {
         case Want::Bool:
             if (v.type == T::Text)
-                add("un bool\xC3\xA9" "en est attendu (vrai ou faux) et l'expression donne un texte (" + v.show + ") : compare-le, par exemple "
+                addType("un bool\xC3\xA9" "en est attendu (vrai ou faux) et l'expression donne un texte (" + v.show + ") : compare-le, par exemple "
                     + v.show + " = 'Marche'");
             else if (v.type == T::Time)
-                add("un bool\xC3\xA9" "en est attendu (vrai ou faux) et l'expression donne une dur\xC3\xA9" "e (" + v.show + ") : compare-la (" + v.show + " > T#5s)");
+                addType("un bool\xC3\xA9" "en est attendu (vrai ou faux) et l'expression donne une dur\xC3\xA9" "e (" + v.show + ") : compare-la (" + v.show + " > T#5s)");
             break;
         case Want::Number:
             if (v.type == T::Text)
-                add("un nombre est attendu et l'expression donne un texte (" + v.show + ") : convertis-le (STRING_TO_REAL) ou choisis une variable num\xC3\xA9rique");
+                addType("un nombre est attendu et l'expression donne un texte (" + v.show + ") : convertis-le (STRING_TO_REAL) ou choisis une variable num\xC3\xA9rique");
             break;
         case Want::Color:
             if (v.type == T::Bool || v.type == T::Num || v.type == T::Time)
-                add("une couleur est attendue (un texte '#RRGGBB') et l'expression donne " + typeWord(v.type) + " (" + v.show
+                addType("une couleur est attendue (un texte '#RRGGBB') et l'expression donne " + typeWord(v.type) + " (" + v.show
                     + ") : choisis la couleur avec SEL(" + (v.type == T::Bool ? v.show : v.show + " > 0") + ", '#808080', '#00A000')");
             else
                 for (const auto& s : v.choices)
                     if (!colorText(s)) {
-                        add("'" + s + "' n'est pas une couleur : \xC3\xA9" "cris '#RRGGBB' (par exemple '#FF0000')");
+                        addType("'" + s + "' n'est pas une couleur : \xC3\xA9" "cris '#RRGGBB' (par exemple '#FF0000')");
                         break;
                     }
             break;

@@ -2319,7 +2319,9 @@ std::string hmiExpressionError(const hmi::View& view, std::string_view key, cons
     }
     // 1.11.21 : un avertissement (exprcheck::Problem::warning) ne la rend pas fautive : Compiler le dit.
     // 1.12.6 (lot B) : ce qu'attend la propriete selon son role (la valeur d'une jauge, d'un voyant...).
-    for (const auto& pb : hmi::exprcheck::check(ctx, expr, object ? hmi::exprcheck::wantOf(object->kind, key) : hmi::exprcheck::wantOf(key)))
+    // 1.12.6 : un type que seule la table des roles exige (la Valeur d'un voyant...) : un avertissement (strictType).
+    for (const auto& pb : hmi::exprcheck::check(ctx, expr, object ? hmi::exprcheck::wantOf(object->kind, key) : hmi::exprcheck::wantOf(key),
+                                                object ? hmi::exprcheck::strictType(object->kind, key) : true))
         if (!pb.warning) return pb.message + hmi::dup::markerHint(expr, pb.unknownName);
     return {};
 }
