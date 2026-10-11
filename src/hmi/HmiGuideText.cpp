@@ -2824,6 +2824,7 @@ const std::vector<Topic>& topics() {
                          "tableau (`ARRAY[0..7]`) : il est alors gard\xC3\xA9.", {}},
              {K::Paragraph, "Tu peux la changer : l'**Avant / apr\xC3\xA8s** montre tout de suite l'effet. Un "
                          "indice non litt\xC3\xA9ral (`V[k]`) est toujours gard\xC3\xA9.", {}},
+             {K::Paragraph, "1.12.6 : tous les indices d'un chemin se suivent, chacun pour lui : `A[0].B[2]` propose `A[0]` et `A[0].B[2]` ; `M[1, 2]` propose chaque dimension (`M[1, \xC2\xB7]` et `M[\xC2\xB7, 2]`). Chaque propri\xC3\xA9t\xC3\xA9 est lue dans le mode de son r\xC3\xB4le : une formule tap\xC3\xA9" "e sans = (la valeur d'Affecter, la Valeur d'un symbole) comme une expression, un texte comme un texte.", {}, "1.12.6"},
              {K::Heading, "Un ancien rep\xC3\xA8re `$Vanne$`", {}, "1.10.4"},
              {K::Paragraph, "Un rep\xC3\xA8re fait d'un seul nom (`$Vanne$`, l'\xC3\xA9" "criture de la 1.10) "
                          "se lit lui aussi sans ses `$`. Si `Vanne` n'est pas une variable, Compiler le dit "
@@ -5392,6 +5393,7 @@ const std::vector<Topic>& topics() {
                          "bar, par exemple).\nUnit\xC3\xA9\t(vide)\t\xC3\x89" "crite apr\xC3\xA8s la valeur "
                          ": bar, \xC2\xB0" "C, %.\nRemplissage\t#2F6FD6\tLa couleur de l'arc "
                          "rempli.\nFond\t#2A313C\tLa couleur de l'arc vide.", {}},
+             {K::Paragraph, "1.12.6 : la Valeur se lit comme un nombre, quel que soit le type de sa variable : un BOOL vaut 1 ou 0, un TIME des secondes, une DATE des secondes depuis 1970. Une STRING qui n'est pas un nombre ('abc') ou une structure enti\xC3\xA8re ne donnent plus 0 : la jauge se hachure avec ###, la simulation dit pourquoi, et G\xC3\xA9n\xC3\xA9rer le signale avant.", {}, "1.12.6"},
          },
          {"objet-communs", "objet-barre-de-progression", "objet-ligne"},
          {},
@@ -5923,6 +5925,7 @@ const std::vector<Topic>& topics() {
                          "Refus\xC3\xA9" "e (hors bornes), les actions suivantes du bouton ne partent pas : un \xC2\xAB Fermer la popup \xC2\xBB "
                          "apr\xC3\xA8s elle attend une saisie juste. Le mod\xC3\xA8le \xC2\xAB Saisie d'une consigne \xC2\xBB l'utilise.", {}, "1.11.23"},
              {K::Paragraph, "1.12.5 : en mode texte vers une variable qui n'est pas un texte, ce qui est tap\xC3\xA9 est converti \xC3\xA0 son type (12.5 dans un REAL, T#5s dans un TIME) ; illisible, la saisie est refus\xC3\xA9" "e et dite (avant : 0 \xC3\xA9" "crit).", {}, "1.12.5"},
+             {K::Paragraph, "1.12.6 : la valeur valid\xC3\xA9" "e est convertie au type de la variable : un INT re\xC3\xA7oit un entier ; une \xC3\xA9num\xC3\xA9ration accepte son nom ou son texte (Auto, Manuel) ; un TIME accepte \xC2\xAB 1 h 30 \xC2\xBB, 90 min ou T#90m ; une date 09/10/2026 ; un BOOL vrai ou faux. Une valeur qui ne tient pas dans le type (40000 dans un INT) ou hors des bornes du champ est refus\xC3\xA9" "e et dite ; une structure est refus\xC3\xA9" "e avec la liste de ses membres.", {}, "1.12.6"},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nVariable "
                          "\xC3\xA9" "crite\t(vide)\tLa variable (IHM ou automate) que le champ montre et "
@@ -11072,6 +11075,7 @@ const std::vector<Topic>& topics() {
                          "en-t\xC3\xAAte commun), elle montre o\xC3\xB9 l'on est et m\xC3\xA8ne partout d'un "
                          "clic. Sans liste de vues, elle prend toutes les vues ordinaires du projet, dans "
                          "leur ordre ; l'onglet **Contenu** fixe la liste et les libell\xC3\xA9s.", {}},
+             {K::Paragraph, "1.12.6 : le clic suit ce que la barre montre : des Vues en formule, calcul\xC3\xA9" "es en marche, m\xC3\xA8nent \xC3\xA0 la vue calcul\xC3\xA9" "e (avant : la valeur fixe) ; une vue rep\xC3\xA9r\xC3\xA9" "e ($Vue_Pompe$) s'y lit sans ses $.", {}, "1.12.6"},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nVues "
                          "(a;b;c)\t(vide)\tLes vues de la barre, dans l'ordre ; vide : toutes les vues "
@@ -11194,6 +11198,7 @@ const std::vector<Topic>& topics() {
                          "pose y va. L'onglet **Contenu** ajoute, nomme, retire et ordonne les pages (un "
                          "objet suit sa page).", {}},
              {K::Paragraph, "1.12.5 : la variable de l'onglet suit son type - une \xC3\xA9num\xC3\xA9ration montre et \xC3\xA9" "crit ses valeurs (sans d\xC3\xA9" "calage), un BOOL : FAUX la page 1, VRAI la page 2 ; une STRING : le nom de l'onglet.", {}, "1.12.5"},
+             {K::Paragraph, "1.12.6 : un onglet pilot\xC3\xA9 par une formule (Onglet montr\xC3\xA9 `=Page_Voulue`) reste cliquable : le clic montre la page choisie \xC3\xA0 c\xC3\xB4t\xC3\xA9 de la formule, sans l'effacer ; d\xC3\xA8s que la valeur de la formule change, elle reprend la main. Le repli d'un panneau repliable et le d\xC3\xA9" "filement d'un conteneur font de m\xC3\xAAme.", {}, "1.12.6"},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nOnglets "
                          "(a;b;c)\tPage 1;Page 2;Page 3\tUne page par onglet.\nOnglet montr\xC3\xA9\t1\tLa "
@@ -15508,6 +15513,7 @@ const std::vector<Topic>& topics() {
                          "op\xC3\xA9randes impossibles, retour du mauvais type, cible inconnue, leur script "
                          "(voir \xC2\xAB Les op\xC3\xA9rateurs des symboles et des types IHM \xC2\xBB). "
                          "**F7** lance Compiler.", {}, "1.10"},
+             {K::Paragraph, "1.12.6 : **le type contre le r\xC3\xB4le**. Chaque propri\xC3\xA9t\xC3\xA9 a un r\xC3\xB4le (un nombre, un bool\xC3\xA9" "en, un \xC3\xA9tat, un texte, une dur\xC3\xA9" "e, une date, une couleur, un nom, une liste) ; G\xC3\xA9n\xC3\xA9rer v\xC3\xA9rifie que la variable ou la formule qui la pilote s'y lit : une structure ou un tableau dans une jauge (une erreur, avec ses membres), une STRING lue comme un nombre, une \xC3\xA9num\xC3\xA9ration lue comme un bool\xC3\xA9" "en, un s\xC3\xA9lecteur de date sur un BOOL, un programmateur dont la sortie n'est pas une STRING. Il signale aussi des listes qui ne s'alignent pas (noms, unit\xC3\xA9s, formats, valeurs, libell\xC3\xA9s), une couleur inconnue, un format 0,0 (la virgule n'y est pas une d\xC3\xA9" "cimale : 0.0), une valeur fixe qui ressemble \xC3\xA0 une formule sans =, des seuils dans le d\xC3\xA9sordre ou hors de la plage.", {}, "1.12.6"},
          },
          {"simulation", "scripts", "fonctions", "essais", "performances", "parametres-popups", "alarmes-symboles", "erreurs-scripts", "operateurs"},
          {"gravit\xC3\xA9", "erreur", "avertissement", "information", "qualit\xC3\xA9", "contraste", "cible tactile", "vue jamais atteinte"},

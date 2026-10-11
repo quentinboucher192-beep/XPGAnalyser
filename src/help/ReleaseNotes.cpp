@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.12.6", "11/10/2026", "livr\xC3\xA9" "e le 11/10 au soir"},
     {"1.12.5", "11/10/2026", "livr\xC3\xA9" "e le 11/10 dans l'apr\xC3\xA8s-midi"},
     {"1.12.4", "11/10/2026", "livr\xC3\xA9" "e le 11/10 dans la matin\xC3\xA9" "e"},
     {"1.12.3", "10/10/2026", "livr\xC3\xA9" "e le 10/10 au soir"},
@@ -111,6 +112,23 @@ const std::vector<Note>& table() {
     static const std::vector<Note> t = {
         // 1.11.16 (09/10/2026 dans la nuit) : la remanence d'exploitation par variable, la robustesse
         // (lot 4 de la specification du 08/10).
+        // 1.12.6 (11/10/2026 au soir) : les lots B et C de l'audit de la bibliotheque d'objets - un role
+        // par propriete (lecture, ecriture, Generer), le decoupeur unique et les reperes partout.
+        note("1.12.6", "Objets", Kind::Changed,
+         "UN R\xC3\x94LE PAR PROPRI\xC3\x89T\xC3\x89 : chaque propri\xC3\xA9t\xC3\xA9 de chaque objet a son r\xC3\xB4le (un nombre, un bool\xC3\xA9" "en, un \xC3\xA9tat, un texte, une dur\xC3\xA9" "e, une date, une couleur, un nom, une formule, une liste) et le lecteur qui va avec, le m\xC3\xAAme pour le dessin, le clic et G\xC3\xA9n\xC3\xA9rer. Un BOOL vaut 1 dans une jauge et \xC2\xAB Vrai \xC2\xBB dans un texte ; un TIME se lit en secondes dans une jauge et \xC2\xAB 1,5 s \xC2\xBB dans un afficheur ; une DATE s'\xC3\xA9" "crit 09/10/2026 ; une \xC3\xA9num\xC3\xA9ration montre son texte et un \xC3\xA9tat multiple se reconna\xC3\xAEt \xC3\xA0 son nom (Auto) ; une STRING 'abc' ou une structure dans une jauge montrent ### et la raison (avant : 0 sans rien dire).",
+         "objet-jauge", ""),
+        note("1.12.6", "Commandes", Kind::Changed,
+         "L'\xC3\x89" "CRITURE AU TYPE DE LA VARIABLE : le curseur, le champ de saisie, Affecter, les boutons, le programmateur et les onglets \xC3\xA9" "crivent la valeur convertie au type de leur variable. Un INT re\xC3\xA7oit un entier ramen\xC3\xA9 \xC3\xA0 ses bornes, et le journal le dit (\xC2\xAB 40000 ramen\xC3\xA9 \xC3\xA0 32767 (le maximum d'un INT) \xC2\xBB) ; le champ de saisie refuse une valeur hors bornes ; une \xC3\xA9num\xC3\xA9ration accepte son nom ou son texte (Auto, 'Manuel') ; un TIME accepte \xC2\xAB 1 h 30 \xC2\xBB ; une date 09/10/2026 ; un BOOL vrai ou faux. Ce qui ne se convertit pas est refus\xC3\xA9 et dit pourquoi (une structure : la liste de ses membres).",
+         "objet-champ-de-saisie", ""),
+        note("1.12.6", "Objets", Kind::Fixed,
+         "LE CLIC LIT L'OBJET CALCUL\xC3\x89 : appuyer, rel\xC3\xA2" "cher, double-cliquer et viser une partie d'un objet lisent ses propri\xC3\xA9t\xC3\xA9s calcul\xC3\xA9" "es, comme le dessin (avant : ses valeurs statiques). Un geste (changer d'onglet, d\xC3\xA9plier un panneau, choisir une zone) n'efface plus la formule de la propri\xC3\xA9t\xC3\xA9 : il vaut \xC3\xA0 c\xC3\xB4t\xC3\xA9 d'elle, et la formule reprend la main d\xC3\xA8s que sa valeur change.",
+         "objet-conteneur-a-onglets", ""),
+        note("1.12.6", "G\xC3\xA9n\xC3\xA9rer", Kind::New,
+         "LE TYPE CONTRE LE R\xC3\x94LE : G\xC3\xA9n\xC3\xA9rer signale une structure ou un tableau dans une jauge, une STRING lue comme un nombre, une \xC3\xA9num\xC3\xA9ration lue comme un bool\xC3\xA9" "en, un s\xC3\xA9lecteur de date sur un BOOL, un programmateur dont la sortie n'est pas une STRING ; des listes qui ne s'alignent pas (noms, unit\xC3\xA9s, formats, valeurs, libell\xC3\xA9s) ; une couleur inconnue ; un format pi\xC3\xA8ge ; une valeur statique qui ressemble \xC3\xA0 une formule sans = ; des seuils dans le d\xC3\xA9sordre ou hors de la plage.",
+         "verifier", ""),
+        note("1.12.6", "Rep\xC3\xA8res", Kind::Fixed,
+         "UN SEUL D\xC3\x89" "COUPEUR, DES REP\xC3\x88RES PARTOUT : le moteur, le dessin, G\xC3\xA9n\xC3\xA9rer et le renommage coupent les listes de la m\xC3\xAAme fa\xC3\xA7on (une cha\xC3\xAEne 'a;b', une cl\xC3\xA9 M['a;b'], un rep\xC3\xA8re $A;B$ restent entiers ; une apostrophe du fran\xC3\xA7" "ais n'ouvre rien) ; les noms (ressource, symbole, vue apr\xC3\xA8s connexion, style, vues d'une barre de navigation), les listes et les \xC3\xA9tats se lisent sans les $ de leurs rep\xC3\xA8res, \xC3\xA0 l'\xC3\xA9" "cran comme au clic ; Dupliquer lit chaque propri\xC3\xA9t\xC3\xA9 dans le mode de son r\xC3\xB4le et suit tous les indices d'un chemin (A[0].B[2] : les deux ; M[1, 2] : chaque dimension).",
+         "dupliquer-reperes", ""),
         // 1.12.5 (11/10/2026 dans l'apres-midi) : le lot A de l'audit de la bibliotheque d'objets -
         // les defauts D1 a D18 et ceux propres aux objets (docs/AUDIT-BIBLIOTHEQUE-OBJETS.md).
         note("1.12.5", "Alarmes", Kind::Fixed,
