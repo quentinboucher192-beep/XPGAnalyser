@@ -235,22 +235,26 @@ View LiveView::evaluate(sim::Environment& plc, std::vector<LiveValue>* values, c
     std::set<std::pair<Id, std::string>> geometry;
     // 1.12.6 (lot B) : la valeur d'une enumeration du projet (Mode vaut 1) : son texte (« Auto ») ;
     // le type du chemin est demande une fois par liaison.
-    const auto enumText = [&](const Bound& b, const sim::Value& v) -> std::string {
-        if (!sim::isInteger(v.type()) || v.type() == sim::Type::Time) return {};
+    const auto enumItem = [&](const Bound& b, const sim::Value& v) -> const sim::Environment::EnumItem* {
+        if (!sim::isInteger(v.type()) || v.type() == sim::Type::Time) return nullptr;
         if (b.enumAsked < 0) {
             const std::string type = b.expr.pathType(plc, scope);
             b.enumAsked = !type.empty() && plc.enumItems(type, b.enumItems) ? 1 : 0;
         }
-        if (b.enumAsked != 1) return {};
+        if (b.enumAsked != 1) return nullptr;
         for (const auto& it : b.enumItems)
-            if (it.value == v.asInteger()) return it.text;
-        return {};
+            if (it.value == v.asInteger()) return &it;
+        return nullptr;
     };
     // La valeur lue dans le role de la liaison ; faux (et `why`) : elle ne convient pas.
     const auto readAs = [&](const Bound& b, const sim::Value& v, std::string& text, std::string& why, std::string* name) {
         roles::Shape shape;
         const auto role = b.role.role == roles::Role::Formula ? b.role.item : b.role.role;
-        if (role == roles::Role::Text || role == roles::Role::State) shape.enumText = enumText(b, v);
+        if (role == roles::Role::Text || role == roles::Role::State)
+            if (const auto* it = enumItem(b, v)) {
+                shape.enumText = it->text;
+                shape.enumName = it->name;
+            }
         auto read = roles::adapt(b.role, v, shape);
         if (!read.ok) { why = std::move(read.why); return false; }
         text = std::move(read.text);

@@ -317,7 +317,8 @@ namespace hmi::roles {
 
 // Ce que l'adaptateur sait du type de la valeur, en plus d'elle.
 struct Shape {
-    std::string enumText;       // une enumeration du projet : le texte de la valeur (Auto) ; vide : pas une enumeration
+    std::string enumText;       // une enumeration du projet : le texte affiche de la valeur (Automatique) ; vide : pas une enumeration
+    std::string enumName;       // ... et son nom ST (Auto) : un etat le compare (« Auto = ... »)
     std::string aggregate;      // une structure, un tableau, une liste : son affichage ; vide : un scalaire
     std::string aggregateWhy;   // pourquoi l'agregat ne se lit pas comme un nombre ("Pompe est une structure : ...")
 };
@@ -326,7 +327,7 @@ struct Read {
     std::string text;           // ce que porte la copie evaluee (ce que lit le dessin)
     bool        ok{true};       // faux : la valeur ne convient pas au role (### a l'ecran)
     std::string why;            // pourquoi, en francais
-    std::string name;           // role Etat : le nom de la valeur (le texte d'une enumeration, la STRING lue)
+    std::string name;           // role Etat : le nom de la valeur (le nom ST d'une enumeration, la STRING lue)
 };
 
 // La valeur `v` lue dans le role `r` (un BOOL : 1 dans une jauge, Vrai dans un texte ; un TIME : des

@@ -185,7 +185,8 @@ Read adapt(const KeyRole& r, const sim::Value& v, const Shape& shape) {
             if (isDate(v.type())) return refuse("une date n'est pas un \xC3\xA9tat : compare-la");
             if (v.type() == sim::Type::Unknown) return refuse("aucune valeur");
             out.text = v.type() == sim::Type::Bool ? (v.isTruthy() ? "1" : "0") : v.type() == sim::Type::String ? v.asString() : exactValue(v);
-            out.name = !shape.enumText.empty() ? shape.enumText : v.type() == sim::Type::String ? v.asString() : std::string{};
+            out.name = !shape.enumName.empty() ? shape.enumName : !shape.enumText.empty() ? shape.enumText
+                     : v.type() == sim::Type::String ? v.asString() : std::string{};
             return out;
         case Role::Text:
             out.text = !shape.enumText.empty() ? shape.enumText : displayText(v);

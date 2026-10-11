@@ -84,6 +84,7 @@
 #include "../src/hmi/HmiZones.hpp"
 #include "../src/hmi/HmiTypes.hpp"    // lot 16
 #include "../src/hmi/HmiTypeRegistry.hpp"   // 1.12.5 (D16) : simTypeOf
+#include "../src/hmi/HmiRoles.hpp"          // 1.12.6 (lots B et C) : le role de chaque propriete
 #include "../src/hmi/HmiPackage.hpp"  // lot 20
 #include "../src/hmi/HmiSymbols.hpp"
 #include "../src/hmi/HmiRetain.hpp"   // 1.12.3 : l'etat des structures du poste
@@ -23321,10 +23322,370 @@ void lotA1125() {
     }
 }
 
+// =============================================================================
+//  1.12.6 (lots B et C de l'audit des objets) : le role de chaque propriete (une seule table), le
+//  lecteur par role, l'ecriture vers le type, le moteur qui lit la copie evaluee, Generer, le
+//  decoupeur unique, les reperes partout, Dupliquer.
+// =============================================================================
+void lotBC1126() {
+    std::printf("1.12.6 (lots B et C) : le role de chaque propriete, l'ecriture vers le type, les reperes partout\n");
+    using R = roles::Role;
+    // ---- B1 : la table unique des roles
+    {
+        check(roles::roleOf(Kind::Gauge, "value").role == R::Number && roles::roleOf(Kind::Indicator, "value").role == R::Boolean
+                  && roles::roleOf(Kind::MultiStateText, "value").role == R::State && roles::roleOf(Kind::Valve, "colorFault").role == R::Color,
+              "B1 : la valeur d'une jauge est un nombre, celle d'un voyant un bool\xC3\xA9" "en, d'un multi-\xC3\xA9tats un \xC3\xA9tat ; colorFault une couleur");
+        check(exprcheck::wantOf(Kind::Switch, "state") == exprcheck::Want::Bool && exprcheck::wantOf(Kind::Selector, "state") == exprcheck::Want::Any
+                  && exprcheck::wantOf(Kind::Gauge, "value") == exprcheck::Want::Number && exprcheck::wantOf(Kind::Valve, "colorOn") == exprcheck::Want::Color,
+              "B1 : G\xC3\xA9n\xC3\xA9rer attend un bool\xC3\xA9" "en pour le retour d'\xC3\xA9tat d'un interrupteur, un \xC3\xA9tat pour un s\xC3\xA9lecteur (avant : un bool\xC3\xA9" "en), "
+              "un nombre pour une jauge, une couleur pour colorOn (avant : rien)");
+        check(pub::keyType("loop") == "STRING" && pub::keyType("visible") == "BOOL" && pub::keyType("ticks") == "INT",
+              "B1 : Vue.Objet.Cle a le type de la table (loop STRING, visible BOOL, ticks INT)");
+        check(displayedTextKey("unit") && displayedTextKey("separator") && displayedTextKey("loop") && !displayedTextKey("value"),
+              "B1 : l'unit\xC3\xA9, le s\xC3\xA9parateur, la boucle sont des textes \xC3\xA0 trous (le r\xC3\xB4le Texte)");
+    }
+    // ---- B2 : le lecteur par role, dans la copie que l'ecran dessine
+    {
+        Project p;
+        View v = makeView(p, "Vue_Roles");
+        HmiType mode;
+        mode.id = p.allocate();
+        mode.name = "T_Mode_B";
+        mode.kind = HmiTypeKind::Enumeration;
+        mode.values = {{"Arret", 0, "Arr\xC3\xAAt", ""}, {"Auto", 1, "Automatique", ""}, {"Manu", 2, "Manuel", ""}};
+        p.programs.types.push_back(mode);
+        HmiType pompe;
+        pompe.id = p.allocate();
+        pompe.name = "T_Pompe_B";
+        pompe.members = {{"Marche", "BOOL", "TRUE", ""}, {"Vitesse", "INT", "50", ""}};
+        p.programs.types.push_back(pompe);
+        p.programs.variables.push_back(hmiVar(p, "Marche", "BOOL", "TRUE"));
+        p.programs.variables.push_back(hmiVar(p, "Duree", "TIME", "T#1500ms"));
+        p.programs.variables.push_back(hmiVar(p, "Mode", "T_Mode_B", "T_Mode_B#Auto"));
+        p.programs.variables.push_back(hmiVar(p, "Texte", "STRING", "'abc'"));
+        p.programs.variables.push_back(hmiVar(p, "Chiffre", "STRING", "'12,5'"));
+        p.programs.variables.push_back(hmiVar(p, "Pompe", "T_Pompe_B"));
+        const auto put = [&](Kind k, const char* name, double y) {
+            const Id id = edit::add(p, v, k, 10, y);
+            v.object(id)->name = name;
+            return id;
+        };
+        const Id jBool = put(Kind::Gauge, "Jauge_Bool", 10), jTemps = put(Kind::Gauge, "Jauge_Temps", 200), jTexte = put(Kind::Gauge, "Jauge_Texte", 400);
+        const Id jChiffre = put(Kind::Gauge, "Jauge_Chiffre", 600), jPompe = put(Kind::Gauge, "Jauge_Pompe", 800);
+        v.object(jBool)->setExpr("value", "Marche");
+        v.object(jTemps)->setExpr("value", "Duree");
+        v.object(jTexte)->setExpr("value", "Texte");
+        v.object(jChiffre)->setExpr("value", "Chiffre");
+        v.object(jPompe)->setExpr("value", "Pompe");
+        const Id tMode = put(Kind::Text, "Texte_Mode", 1000), tBool = put(Kind::Text, "Texte_Bool", 1040), tDuree = put(Kind::Text, "Texte_Duree", 1080);
+        const Id tJour = put(Kind::Text, "Texte_Jour", 1120), tPompe = put(Kind::Text, "Texte_Pompe", 1160);
+        v.object(tMode)->set("text", "Mode : {Mode}");
+        v.object(tBool)->setExpr("text", "Marche");
+        v.object(tDuree)->set("text", "{Duree}");
+        v.object(tJour)->set("text", "{D#2026-10-09}");   // (une variable IHM n'est pas une DATE : un litteral)
+        v.object(tPompe)->setExpr("text", "Pompe");
+        const Id etat = put(Kind::MultiStateText, "Etat_Nom", 1200);
+        v.object(etat)->setExpr("value", "Mode");
+        v.object(etat)->set("stateList", "Arret = A l'arr\xC3\xAAt; Auto = En automatique | #2ECC71; Manu = En manuel");
+        const Id voyant = put(Kind::Indicator, "Voyant_Mode", 1300);
+        v.object(voyant)->setExpr("value", "Mode");
+        p.views = {v};
+        p.config.startView = v.id;
+        Runtime rt;
+        rt.bind(&p, nullptr);
+        rt.start(0.0);
+        rt.tick(0.1);
+        LiveView live;
+        live.bind(*rt.composedView(rt.currentView()));
+        std::vector<LiveValue> values;
+        const View shown = live.evaluate(rt.environment(), &values, nullptr, 0.1);
+        const auto valueOf = [&](Id id, const char* key) { return shown.object(id)->text(key); };
+        const auto errorOf = [&](Id id) {
+            for (const auto& lv : values) if (lv.object == id && lv.error) return lv.value;
+            return std::string{};
+        };
+        same(valueOf(jBool, "value"), "1", "B2 : une jauge sur un BOOL vrai vaut 1 (avant : 0, TRUE ne se lisait pas en nombre)");
+        same(valueOf(jTemps, "value"), "1.5", "B2 : une jauge sur un TIME de 1 500 ms : 1,5 seconde (avant : rien de lisible)");
+        check(shown.object(jTexte)->flag("quality_bad", false) && errorOf(jTexte).find("n'est pas un nombre") != std::string::npos,
+              "B2 : une jauge sur une STRING 'abc' : qualit\xC3\xA9 mauvaise (hachures et ###) et la raison (avant : 0, sans rien dire) - " + errorOf(jTexte));
+        same(valueOf(jChiffre, "value"), "12.5", "B2 : ... une STRING '12,5' se lit 12,5");
+        check(shown.object(jPompe)->flag("quality_bad", false) && errorOf(jPompe).find("est une structure") != std::string::npos
+                  && errorOf(jPompe).find("Pompe.Marche") != std::string::npos,
+              "B2 : une jauge sur une structure : ### et la raison, avec ses membres propos\xC3\xA9s - " + errorOf(jPompe));
+        same(valueOf(tMode, "text"), "Mode : Automatique", "B2 : une \xC3\xA9num\xC3\xA9ration dans un texte \xC3\xA0 trous : son texte (avant : 1)");
+        same(valueOf(tBool, "text"), "Vrai", "B2 : un BOOL dans un texte : Vrai (avant : TRUE)");
+        same(valueOf(tDuree, "text"), "1,5 s", "B2 : un TIME dans un texte : 1,5 s (avant : T#1500ms)");
+        same(valueOf(tJour, "text"), "09/10/2026", "B2 : une DATE dans un texte : \xC3\xA0 la fran\xC3\xA7" "aise (avant : 2026-10-09)");
+        same(valueOf(tPompe, "text"), "{Marche: Vrai, Vitesse: 50}", "B2 : une structure enti\xC3\xA8re dans un texte : ses membres (avant : une erreur)");
+        same(valueOf(etat, "valueName"), "Auto", "B2 : un multi-\xC3\xA9tats sur une \xC3\xA9num\xC3\xA9ration garde aussi le nom de sa valeur");
+        const auto states = parseStateList(shown.object(etat)->text("stateList"));
+        const int idx = stateIndexOf(states, valueOf(etat, "value"), valueOf(etat, "valueName"));
+        check(idx == 1 && states[1].text == "En automatique", "B2 : ... et trouve l'\xC3\xA9tat \xC2\xAB Auto = \xC2\xBB par son nom (avant : par son num\xC3\xA9ro seulement)");
+        same(valueOf(voyant, "value"), "TRUE", "B2 : un voyant sur une \xC3\xA9num\xC3\xA9ration : allum\xC3\xA9 hors de la premi\xC3\xA8re valeur (G\xC3\xA9n\xC3\xA9rer pr\xC3\xA9vient)");
+        check(roles::readBool("ON", false) && roles::readBool("2", false) && !roles::readBool("OFF", true) && roles::readBool("'VRAI'", false),
+              "B2 : un bool\xC3\xA9" "en lit ON, 2, 'VRAI' (et OFF)");
+        double x = 0;
+        check(roles::readNumber("TRUE", x) && x == 1 && roles::readNumber("12,5", x) && x == 12.5, "B2 : un nombre lit TRUE (1) et 12,5");
+    }
+    // ---- B3 : l'ecriture vers le type de la variable
+    {
+        Project p;
+        View v = makeView(p, "Vue_Ecrire");
+        HmiType mode;
+        mode.id = p.allocate();
+        mode.name = "T_Mode_E";
+        mode.kind = HmiTypeKind::Enumeration;
+        mode.values = {{"Arret", 0, "", ""}, {"Auto", 1, "", ""}, {"Manu", 2, "Manuel", ""}};
+        p.programs.types.push_back(mode);
+        HmiType st;
+        st.id = p.allocate();
+        st.name = "T_Struct_E";
+        st.members = {{"A", "INT", "", ""}, {"B", "INT", "", ""}};
+        p.programs.types.push_back(st);
+        p.programs.variables.push_back(hmiVar(p, "Petit", "INT", "0"));
+        p.programs.variables.push_back(hmiVar(p, "Mode", "T_Mode_E", "0"));
+        p.programs.variables.push_back(hmiVar(p, "Tempo", "TIME", "T#0s"));
+        p.programs.variables.push_back(hmiVar(p, "Bloc", "T_Struct_E"));
+        p.programs.variables.push_back(hmiVar(p, "Libre", "STRING", "''"));
+        const auto put = [&](Kind k, const char* name, const char* var, double y) {
+            const Id id = edit::add(p, v, k, 10, y);
+            v.object(id)->name = name;
+            v.object(id)->set("variable", var);
+            return id;
+        };
+        const Id curseur = put(Kind::Slider, "Curseur", "Petit", 10);
+        v.object(curseur)->setNumber("min", 0);
+        v.object(curseur)->setNumber("max", 50000);
+        const Id champMode = put(Kind::InputField, "Champ_Mode", "Mode", 100);
+        v.object(champMode)->set("mode", "texte");
+        const Id champTempo = put(Kind::InputField, "Champ_Tempo", "Tempo", 160);
+        v.object(champTempo)->set("mode", "texte");
+        const Id champPetit = put(Kind::InputField, "Champ_Petit", "Petit", 220);
+        const Id inter = put(Kind::Switch, "Inter_Bloc", "Bloc", 280);
+        const Id bouton = edit::add(p, v, Kind::Button, 10, 340);
+        v.object(bouton)->name = "Btn_Manu";
+        Action a;
+        a.trigger = Trigger::Click;
+        a.operation = Operation::Assign;
+        a.target = "Mode";
+        a.value = "'Manuel'";
+        v.object(bouton)->actions.push_back(a);
+        p.views = {v};
+        p.config.startView = v.id;
+        Runtime rt;
+        rt.bind(&p, nullptr);
+        rt.start(0.0);
+        rt.tick(0.1);
+        rt.dragValue(curseur, 1.0, true, 0.2);
+        check(rt.variable("Petit") && rt.variable("Petit")->asInteger() == 32767 && journalHas(rt, "Action", "maximum d'un INT"),
+              "B3 : un curseur 0..50000 sur un INT : 32767, et la Console le dit (avant : -15536, repli\xC3\xA9 en silence)");
+        rt.objectPart(champMode, "champ", 0.3);
+        rt.typeText("Auto", 0.31);
+        rt.typeKey(EditKey::Enter, 0.32);
+        check(rt.variable("Mode") && rt.variable("Mode")->asInteger() == 1, "B3 : Auto tap\xC3\xA9 dans une \xC3\xA9num\xC3\xA9ration : sa valeur, 1 (avant : 0 \xC3\xA9" "crit)");
+        rt.objectPart(champMode, "champ", 0.4);
+        rt.typeText("Rapide", 0.41);
+        rt.typeKey(EditKey::Enter, 0.42);
+        check(rt.variable("Mode")->asInteger() == 1 && rt.formState(champMode) && rt.formState(champMode)->error
+                  && rt.formState(champMode)->message.find("n'est pas une valeur de T_Mode_E") != std::string::npos,
+              "B3 : une valeur inconnue est refus\xC3\xA9" "e, et dite - " + (rt.formState(champMode) ? rt.formState(champMode)->message : std::string()));
+        rt.objectPart(champTempo, "champ", 0.5);
+        rt.typeText("1 h 30", 0.51);
+        rt.typeKey(EditKey::Enter, 0.52);
+        check(rt.variable("Tempo") && rt.variable("Tempo")->asInteger() == 90 * 60 * 1000, "B3 : 1 h 30 tap\xC3\xA9 dans un TIME : 90 minutes (avant : refus\xC3\xA9)");
+        rt.objectPart(champTempo, "champ", 0.6);
+        rt.typeText("00:05", 0.61);
+        rt.typeKey(EditKey::Enter, 0.62);
+        check(rt.variable("Tempo")->asInteger() == 5000, "B3 : 00:05 : 5 secondes");
+        rt.objectPart(champPetit, "champ", 0.7);
+        rt.typeText("40000", 0.71);
+        rt.typeKey(EditKey::Enter, 0.72);
+        check(rt.variable("Petit")->asInteger() == 32767 && rt.formState(champPetit) && rt.formState(champPetit)->error
+                  && rt.formState(champPetit)->message.find("hors bornes") != std::string::npos,
+              "B3 : 40000 tap\xC3\xA9 dans un INT : refus\xC3\xA9 hors bornes (avant : -25536)");
+        rt.press(inter, 0.8);
+        rt.release(inter, 0.85, true);
+        check(journalHas(rt, "Erreur", "Bloc est une structure") && journalHas(rt, "Erreur", "Bloc.A"),
+              "B3 : un interrupteur sur une structure : refus\xC3\xA9 avec la vraie raison et ses membres (avant : \xC2\xAB variable inconnue \xC2\xBB)");
+        rt.press(bouton, 0.9);
+        rt.release(bouton, 0.95, true);
+        check(rt.variable("Mode")->asInteger() == 2, "B3 : Affecter 'Manuel' (le texte affich\xC3\xA9) \xC3\xA0 l'\xC3\xA9num\xC3\xA9ration : Manu (2)");
+        std::int64_t ms = 0;
+        check(roles::parseDuration("T#1m30s", ms) && ms == 90000 && roles::parseDuration("1,5 s", ms) && ms == 1500
+                  && roles::parseDuration("250 ms", ms) && ms == 250 && roles::parseDuration("01:30:00", ms) && ms == 5400000,
+              "B3 : les dur\xC3\xA9" "es lues : T#1m30s, 1,5 s, 250 ms, 01:30:00");
+    }
+    // ---- B4 : le moteur lit la copie evaluee ; un geste vaut a cote d'une formule
+    {
+        Project p;
+        View a = makeView(p, "Vue_A");
+        View b = makeView(p, "Vue_B");
+        View c = makeView(p, "Vue_C");
+        p.programs.variables.push_back(hmiVar(p, "Cible", "STRING", "'Vue_C'"));
+        p.programs.variables.push_back(hmiVar(p, "Page_Voulue", "INT", "2"));
+        const Id barre = edit::add(p, a, Kind::NavBar, 0, 0);
+        a.object(barre)->name = "Barre";
+        a.object(barre)->set("views", "Vue_A;Vue_B");
+        a.object(barre)->setExpr("views", "'Vue_A;' + Cible");
+        const Id onglets = edit::add(p, a, Kind::TabContainer, 0, 100);
+        a.object(onglets)->name = "Onglets";
+        a.object(onglets)->setExpr("page", "Page_Voulue");
+        p.views = {a, b, c};
+        p.config.startView = p.views[0].id;
+        Runtime rt;
+        rt.bind(&p, nullptr);
+        rt.start(0.0);
+        rt.tick(0.1);
+        rt.objectPart(barre, "vue:1", 0.2);
+        rt.tick(0.3);
+        check(rt.currentView() == p.views[2].id, "B4 : la barre de navigation suit la formule de ses vues : la 2e m\xC3\xA8ne \xC3\xA0 Vue_C (avant : Vue_B, la valeur fixe)");
+        (void)rt.navigate(p.views[0].id, Transition{}, 0.4, {});
+        rt.tick(0.5);
+        const auto pageNow = [&] {
+            LiveView live;
+            live.bind(*rt.composedView(rt.currentView()));
+            return live.evaluate(rt.environment(), nullptr, nullptr, 0.5).object(onglets)->number("page", 0);
+        };
+        near(pageNow(), 2, "B4 : les onglets montrent la page de leur formule (2)");
+        rt.objectPart(onglets, "onglet:3", 0.6);
+        rt.tick(0.7);
+        near(pageNow(), 3, "B4 : un clic sur l'onglet 3 : la page 3, \xC3\xA0 c\xC3\xB4t\xC3\xA9 de la formule");
+        rt.environment().write("Page_Voulue", sim::Value::integer(sim::Type::Int, 1));
+        rt.tick(0.8);
+        near(pageNow(), 1, "B4 : la formule change (1) : elle reprend la main (avant : le clic l'avait effac\xC3\xA9" "e jusqu'\xC3\xA0 la fin de la marche)");
+    }
+    // ---- B5 : Generer verifie avec le role
+    {
+        Project p;
+        View v = makeView(p, "Vue_Generer");
+        HmiType mode;
+        mode.id = p.allocate();
+        mode.name = "T_Etat_G";
+        mode.kind = HmiTypeKind::Enumeration;
+        mode.values = {{"Arret", 0, "", ""}, {"Marche", 1, "", ""}, {"Defaut", 2, "", ""}};
+        p.programs.types.push_back(mode);
+        HmiType st;
+        st.id = p.allocate();
+        st.name = "T_Pompe_G";
+        st.members = {{"Marche", "BOOL", "", ""}, {"Debit", "REAL", "", ""}};
+        p.programs.types.push_back(st);
+        p.programs.variables.push_back(hmiVar(p, "Nom", "STRING", "''"));
+        p.programs.variables.push_back(hmiVar(p, "Etat", "T_Etat_G", "0"));
+        p.programs.variables.push_back(hmiVar(p, "Pompe", "T_Pompe_G"));
+        p.programs.variables.push_back(hmiVar(p, "Ok", "BOOL", "FALSE"));
+        const auto put = [&](Kind k, const char* name, double y) {
+            const Id id = edit::add(p, v, k, 10, y);
+            v.object(id)->name = name;
+            return id;
+        };
+        v.object(put(Kind::NumericDisplay, "Aff_Texte", 10))->set("variable", "Nom");
+        v.object(put(Kind::Pump, "Pompe_1", 100))->set("variable", "Pompe");
+        v.object(put(Kind::Indicator, "Voyant_Etat", 200))->set("variable", "Etat");
+        v.object(put(Kind::DateTimePicker, "Date_Ok", 300))->set("variable", "Ok");
+        const Id seuils = put(Kind::NumericDisplay, "Aff_Seuils", 400);
+        v.object(seuils)->set("low", "80");
+        v.object(seuils)->set("high", "20");
+        v.object(seuils)->set("format", "0,0");
+        v.object(put(Kind::Rectangle, "Rect_Sans_Egal", 500))->set("visible", "Ok");
+        const Id barres = put(Kind::BarChart, "Barres", 600);
+        v.object(barres)->set("variables", "Ok;Ok;Ok");
+        v.object(barres)->set("names", "a;b");
+        const Id cuve = put(Kind::Tank, "Cuve_Seuil", 700);
+        v.object(cuve)->set("highAlarm", "150");
+        v.object(cuve)->set("colorFault", "#12");
+        p.views = {v};
+        p.config.startView = v.id;
+        const auto issues = generate(p, [](std::string_view) { return false; });
+        const auto says = [&](const char* object, const char* text) {
+            const Object* o = p.views[0].objectByName(object);
+            for (const auto& i : issues)
+                if (o && i.object == o->id && i.message.find(text) != std::string::npos) return true;
+            return false;
+        };
+        check(says("Aff_Texte", "est une STRING et l'objet attend un nombre"), "B5 : G\xC3\xA9n\xC3\xA9rer : une STRING sur un afficheur num\xC3\xA9rique");
+        check(says("Pompe_1", "est une structure") && says("Pompe_1", "Pompe.Marche"), "B5 : ... une structure sur une pompe, avec ses membres propos\xC3\xA9s");
+        check(says("Voyant_Etat", "T_Etat_G#Marche"), "B5 : ... une \xC3\xA9num\xC3\xA9ration lue en bool\xC3\xA9" "en : compare-la (Etat = T_Etat_G#Marche)");
+        check(says("Date_Ok", "un s\xC3\xA9lecteur de date n'\xC3\xA9" "crit pas dans un BOOL"), "B5 : ... un s\xC3\xA9lecteur de date sur un BOOL");
+        check(says("Aff_Seuils", "les seuils ne sont pas dans l'ordre"), "B5 : ... les seuils dans le d\xC3\xA9sordre (seuil bas 80 > seuil haut 20)");
+        check(says("Aff_Seuils", "la virgule n'y est pas une d\xC3\xA9" "cimale"), "B5 : ... le format 0,0 (un entier) : \xC3\xA9" "cris 0.0");
+        check(says("Rect_Sans_Egal", "voulais-tu =Ok"), "B5 : ... Visible tap\xC3\xA9 Ok sans = : une constante, voulais-tu =Ok ?");
+        check(says("Barres", "noms : 2 pour 3"), "B5 : ... 2 noms pour 3 barres (ils se d\xC3\xA9" "caleraient)");
+        check(says("Cuve_Seuil", "hors de la plage 0..100"), "B5 : ... une alarme haute (150) hors de la plage 0..100");
+        check(says("Cuve_Seuil", "'#12' n'est pas une couleur"), "B5 : ... une couleur de d\xC3\xA9" "faut illisible (#12)");
+    }
+    // ---- C1 : le decoupeur unique
+    {
+        const auto a = roles::splitList("M['a;b']; $A;B$; 'x;y'; l'armoire; d'urgence");
+        check(a.size() == 5 && a[0] == "M['a;b']" && a[1] == "$A;B$" && a[2] == "'x;y'" && a[3] == "l'armoire" && a[4] == "d'urgence",
+              "C1 : le d\xC3\xA9" "coupeur garde M['a;b'], $A;B$, 'x;y' entiers ; l'apostrophe du fran\xC3\xA7" "ais n'ouvre rien");
+        const auto b = roles::splitList("'N2';'AR';;fin");
+        check(b.size() == 4 && b[0] == "'N2'" && b[1] == "'AR'" && b[2].empty() && b[3] == "fin", "C1 : ... les vides gardent leur rang");
+        check(splitSemicolons("A;$B;C$;D").size() == 3, "C1 : splitSemicolons (le dessin, le moteur) coupe comme lui");
+    }
+    // ---- C2 : les reperes retires selon le role, au moteur comme a l'ecran
+    {
+        Project p;
+        View a = makeView(p, "Vue_A");
+        View b = makeView(p, "Vue_B");
+        const Id barre = edit::add(p, a, Kind::NavBar, 0, 0);
+        a.object(barre)->name = "Barre";
+        a.object(barre)->set("views", "Vue_A;$Vue_B$");
+        a.object(barre)->set("labels", "Accueil;$Ligne$ 2");
+        const Id sel = edit::add(p, a, Kind::Selector, 0, 100);
+        a.object(sel)->name = "Sel";
+        a.object(sel)->set("positions", "Arr\xC3\xAAt;$Auto$;Manu");
+        p.views = {a, b};
+        p.config.startView = p.views[0].id;
+        Runtime rt;
+        rt.bind(&p, nullptr);
+        rt.start(0.0);
+        rt.tick(0.1);
+        LiveView live;
+        live.bind(*rt.composedView(rt.currentView()));
+        const View shown = live.evaluate(rt.environment(), nullptr, nullptr, 0.1);
+        same(shown.object(barre)->text("labels"), "Accueil;Ligne 2", "C2 : les libell\xC3\xA9s d'une barre se montrent sans les $ de leurs rep\xC3\xA8res");
+        same(shown.object(sel)->text("positions"), "Arr\xC3\xAAt;Auto;Manu", "C2 : ... les positions d'un s\xC3\xA9lecteur aussi (avant : $Auto$ \xC3\xA0 l'\xC3\xA9" "cran)");
+        rt.objectPart(barre, "vue:1", 0.2);
+        rt.tick(0.3);
+        check(rt.currentView() == p.views[1].id, "C2 : la vue $Vue_B$ d'une barre se trouve (avant : vue '$Vue_B$' introuvable)");
+        const auto issues = generate(p, [](std::string_view) { return false; });
+        bool introuvable = false;
+        for (const auto& i : issues) introuvable = introuvable || i.message.find("introuvable") != std::string::npos;
+        check(!introuvable, "C2 : ... et G\xC3\xA9n\xC3\xA9rer la trouve");
+    }
+    // ---- C3 : Dupliquer - le mode du role, tous les indices
+    {
+        const auto u = dup::indicesIn("Cuves[1].Pompes[2].Debit + M[3, 4]");
+        bool both = false, dims = false;
+        for (const auto& x : u) {
+            both = both || (x.path == "Cuves[1].Pompes" && x.value == 2);
+            dims = dims || (x.path == "M" && x.dims == 2 && x.dim == 1 && x.value == 4);
+        }
+        check(u.size() == 4 && both && dims, "C3 : Cuves[1].Pompes[2] : les deux indices ; M[3, 4] : chaque dimension (avant : Cuves[1] seul)");
+        same(dup::followIndices("Cuves[1].Pompes[2].Debit", {{dup::indexKey("Cuves", 1), 5}, {dup::indexKey("Cuves[1].Pompes", 2), 7}}), "Cuves[5].Pompes[7].Debit",
+             "C3 : ... et les deux se suivent dans la copie");
+        Project p;
+        View v = makeView(p, "Vue_D");
+        const Id sel = edit::add(p, v, Kind::Selector, 0, 0);
+        v.object(sel)->set("values", "'1 $A$ 2';$B$");
+        v.object(sel)->set("positions", "Un $C$;Deux");
+        const auto sc = dup::scan(v, {sel});
+        check(sc.marker("B") && !sc.marker("A") && sc.marker("C"),
+              "C3 : les valeurs \xC3\xA9" "crites se lisent en formule : '1 $A$ 2' reste litt\xC3\xA9ral (une cha\xC3\xAEne ST), $B$ est un rep\xC3\xA8re ; "
+              "les positions en texte : $C$ en est un (avant : tout en mode texte, $A$ remplac\xC3\xA9 dans la cha\xC3\xAEne)");
+    }
+}
+
 int main(int argc, char** argv) {
     // 1.11.10 : HMI_TEST_1110=1 - les fonctions et les popups des symboles, seules.
     if (const char* only = std::getenv("HMI_TEST_1110"); only && *only == '1') {
         fonctionsSymbole11110();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
+    // 1.12.6 : HMI_TEST_1126=1 - les lots B et C de l'audit des objets, seuls.
+    if (const char* only = std::getenv("HMI_TEST_1126"); only && *only == '1') {
+        lotBC1126();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -23458,6 +23819,7 @@ int main(int argc, char** argv) {
     membresObjets1124();              // 1.12.4 : les membres objets des types IHM
     parametresObjets1124();           // 1.12.4 : les parametres objets des popups
     lotA1125();                       // 1.12.5 (lot A) : les defauts de l'audit des objets
+    lotBC1126();                      // 1.12.6 (lots B et C) : le role de chaque propriete, les reperes partout
     enumerationsLangage110();         // 1.10 (S1, decision 15) : les enumerations dans les scripts
     operateurs110();                  // 1.10 (chantier S2) : les operateurs des symboles et des types IHM
     operateurs1101();                 // 1.10.1 (chantier U2) : a, b et Resultat (types, legende, exemple, Compiler)

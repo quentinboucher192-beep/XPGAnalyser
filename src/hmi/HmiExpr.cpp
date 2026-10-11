@@ -395,7 +395,7 @@ roles::Shape Expression::shapeOf(sim::Environment& plc, const Scope* scope, cons
         std::vector<sim::Environment::EnumItem> items;
         if (sim::isInteger(value->type()) && env.enumItems(type, items))
             for (const auto& it : items)
-                if (it.value == value->asInteger()) { out.enumText = it.text.empty() ? it.name : it.text; break; }
+                if (it.value == value->asInteger()) { out.enumText = it.text.empty() ? it.name : it.text; out.enumName = it.name; break; }
         return out;
     }
     // La valeur ne s'est pas calculee : un agregat ?

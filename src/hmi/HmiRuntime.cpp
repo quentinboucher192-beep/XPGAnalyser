@@ -1353,7 +1353,7 @@ std::optional<std::string> Runtime::evaluatedProp(Id view, Kind kind, const Prop
     const auto role = roles::roleOf(kind, p.key);
     roles::Shape shape;
     const auto r = role.role == roles::Role::Formula ? role.item : role.role;
-    if (r == roles::Role::Text || r == roles::Role::State) shape.enumText = it->second.shapeOf(*env_, scope, &*v).enumText;
+    if (r == roles::Role::Text || r == roles::Role::State) shape = it->second.shapeOf(*env_, scope, &*v);
     auto read = roles::adapt(role, *v, shape);
     if (!read.ok) return std::nullopt;
     return std::move(read.text);
