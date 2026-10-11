@@ -1,0 +1,67 @@
+# =============================================================================
+#  Session 1125 IHM : XPGAnalyser IHM (1.12.5), XpgAnalyzer-IHM.exe - le lot A
+#  de l'audit de la bibliotheque d'objets (les defauts corriges).
+#  Armoire_Gaz (migre par la 1.12.1), avec Vue_Listes, Pop_Etapes (sessions
+#  1122, 1124) et Vue_LotA (demo1125) :
+#    1. Vue_LotA dans l'editeur : ce qui est tape - le titre a trous du cadre
+#       (Pompe {Nom_Pompe}...), le texte repere (Mode : $Maintenance$) ;
+#    2. la simulation : le titre rempli, le repere sans ses $, la barre a 25 %
+#       (500 sur 0..2000), le voyant allume par un INT 2, l'interrupteur sur une
+#       STRING, les onglets sur une enumeration (Auto : la page 2) ;
+#    3. un clic sur l'interrupteur : la STRING passe a TRUE ; un second : FALSE ;
+#    4. Cacher / montrer : le conteneur cache son texte.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 8
+ouvrir "${PROJETS}/ihm/Armoire_Gaz"
+attendre-projet
+attendre 10
+# le panneau du bas replie (Ctrl+J) : les ecrans ont toute la hauteur
+touche ctrl+j
+attendre 2
+
+# ---- 1. Vue_LotA dans l'editeur ----
+arbre "IHM/Vues/Vue_LotA"
+attendre 8
+capture 1125_ihm_01_vue_lota_editeur.png
+
+# ---- 2. La simulation ----
+arbre "Simulation/IHM"
+attendre 2
+ihm-build-attendre 600
+attendre 60
+ihm-sim-etat "en marche"
+attendre 3
+sim-utilisateur "admin" "admin2026"
+attendre 2
+sim-vue "Vue_LotA"
+attendre 4
+simulation-zoom 70
+attendre 2
+simulation-deplacer 140 0
+attendre 2
+survol 1350 760
+attendre 2
+capture 1125_ihm_02_simulation_lota.png
+
+# ---- 3. L'interrupteur sur une STRING ----
+sim-clic "Inter_Texte"
+attendre 3
+survol 1350 760
+attendre 2
+capture 1125_ihm_03_interrupteur_true.png
+sim-clic "Inter_Texte"
+attendre 3
+survol 1350 760
+attendre 2
+capture 1125_ihm_04_interrupteur_false.png
+
+# ---- 4. Le conteneur cache ----
+sim-clic "Btn_Cacher"
+attendre 3
+survol 1350 760
+attendre 2
+capture 1125_ihm_05_conteneur_cache.png
+ihm-diagnostics
+quitter
