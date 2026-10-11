@@ -4,6 +4,7 @@
 // =============================================================================
 #include "HmiDeclGrid.hpp"
 
+#include "HmiAssist.hpp"       // 1.12.7 : l'aide a la saisie du code d'un calcul
 #include "HmiIcons.hpp"
 #include "HmiTypePicker.hpp"
 #include "../../hmi/HmiCalc.hpp"       // 1.12.7 : les valeurs calculees au demarrage
@@ -28,6 +29,22 @@ namespace {
 
 enum GridAction : int { GAdd = 1, GRemove, GDuplicate, GUp, GDown, GUses, GItems /* 1.12.2 */, GCalc /* 1.12.7 */ };
 constexpr int kUses = -1;                                   // la colonne calculee Utilisations
+
+// 1.12.7 : le script d'un endroit (et sa vue) ; nul : parti.
+const hmi::Script* scriptAt(const hmi::Project& p, const de::Place& at, const hmi::View** view) {
+    if (at.kind == de::Place::Kind::Script) {
+        for (const auto& g : p.programs.scripts)
+            if (g.id == at.id) return &g;
+        return nullptr;
+    }
+    if (const hmi::View* v = p.view(at.view))
+        for (const auto& g : v->scripts)
+            if (g.id == at.id) {
+                if (view) *view = v;
+                return &g;
+            }
+    return nullptr;
+}
 const std::string& kPickType = typepicker::kChoose;            // 1.11.19 (lot 6) : le selecteur de types
 const std::string kOtherType = "Autre type\xE2\x80\xA6";    // ouvre un champ libre (ARRAY, REF_TO...)
 
@@ -344,6 +361,10 @@ HmiDeclGrid::HmiDeclGrid(std::string id, hmi::DocumentPtr doc, Apply apply, de::
     unfoldModel_ = std::make_shared<Unfold>();
     unfold_ = &static_cast<ui::TableView&>(addChild(std::make_unique<ui::TableView>(base + ".unfold")));
     unfold_->setModel(unfoldModel_);
+    // Ses colonnes (une table sans colonnes ne montre rien) ; l'ordre est celui de la valeur : pas de tri.
+    unfold_->setColumns({{"\xC3\x89l\xC3\xA9ment", 240.f, 60.f, true, false, true, ui::Align::Start, 0, false},
+                         {"Type", 190.f, 50.f, true, false, true, ui::Align::Start, 0, false},
+                         {"Valeur", 560.f, 60.f, true, false, true, ui::Align::Start, 0, false}});
     unfold_->setVisibility(ui::Visibility::Collapsed);
 
     rows_ = std::make_shared<Rows>();
@@ -913,10 +934,39 @@ bool HmiDeclGrid::editCalculation(std::size_t row) {
                 out = "Valeur au d\xC3\xA9marrage : " + sim::display(*it->second) + "\n";
             else if (!error.empty())
                 out = "Erreur : " + error + " (le d\xC3\xA9marrage s'arr\xC3\xAAterait)\n";
-            for (const auto& is : hmi::calc::analyse(copy, *sc, *decl, view).issues)
+            const auto a = hmi::calc::analyse(copy, *sc, *decl, view);
+            for (const auto& is : a.issues)
                 out += std::string(is.error ? "Faute" : "Attention") + (is.line > 0 ? " ligne " + std::to_string(is.line) : std::string{}) + " : "
                      + is.message + "\n";
+            // Ce qu'il lit, et qui le lit (la colonne de droite de la fenetre).
+            const auto list = [](const std::vector<std::string>& v) {
+                std::string s;
+                for (const auto& x : v) s += (s.empty() ? "" : ", ") + x;
+                return s;
+            };
+            if (!a.uses.empty()) out += "Lit : " + list(a.uses) + "\n";
+            if (const auto by = hmi::calc::readers(copy, *sc, *decl, view); !by.empty()) out += "Lu par : " + list(by) + "\n";
             return out;
+        };
+    // L'aide a la saisie du code : les noms du projet, ceux du script et les locales du moment.
+    if (place_)
+        spec.assist = [doc = doc_, at = *place_, id](ui::MultiLineText& editor, std::function<std::string()> locals) {
+            auto src = assist::sourcesFor(doc);
+            src.declarations = [doc, at, id, locals]() -> std::string {
+                if (!doc) return {};
+                const hmi::View* view = nullptr;
+                const hmi::Script* sc = scriptAt(doc->project, at, &view);
+                if (!sc) return {};
+                for (const auto& x : sc->decls)
+                    if (x.id == id) {
+                        hmi::Declaration d = x;
+                        std::vector<hmi::Declaration> parsed;
+                        if (locals && de::parseLocals(doc->project, locals(), parsed, nullptr)) d.locals = std::move(parsed);
+                        return assist::declarationsPrefix(hmi::calc::declarationsFor(*sc, d), hmi::decl::Role::Script);
+                    }
+                return {};
+            };
+            assist::attach(editor, std::move(src));
         };
     const std::weak_ptr<Rows> alive = rows_;
     calceditor::ask(std::move(spec), [this, alive, id](const std::string& calc, const std::string& locals) {

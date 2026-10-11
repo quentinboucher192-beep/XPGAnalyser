@@ -48,6 +48,7 @@ public:
     [[nodiscard]] static std::string literalOf(const Model&);
     [[nodiscard]] std::string literal() const;
     [[nodiscard]] Model& model() noexcept { return *model_; }
+    [[nodiscard]] const ui::TableView* table() const noexcept { return table_; }   // les essais : ses colonnes
     // Les gestes (les boutons ; publics pour les essais). Faux : refuse (une taille fixe...).
     bool addRow();
     bool removeRow(std::size_t row);

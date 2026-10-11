@@ -4,6 +4,7 @@
 #include "HmiCalc.hpp"
 
 #include "HmiDecl.hpp"
+#include "HmiDeclEdit.hpp"   // usesIn : le code qui lit une declaration
 #include "HmiScript.hpp"
 
 #include <algorithm>
@@ -323,6 +324,7 @@ Analysis analyse(const Project& p, const Script& owner, const Declaration& d, co
             if (s.kind == DeclKind::Constant) {
                 if (written) issue(true, i, s.name + " est une constante : elle ne s'\xC3\xA9" "crit pas");
                 else if (s.computed) a.reads.push_back(s.name);
+                if (!written) a.uses.push_back(s.name);
             } else if (s.kind == DeclKind::Variable) {
                 if (d.kind == DeclKind::Constant)
                     issue(true, i, s.name + " est une variable du script : elle se calcule apr\xC3\xA8s les constantes (une constante ne la lit pas)");
@@ -330,6 +332,7 @@ Analysis analyse(const Project& p, const Script& owner, const Declaration& d, co
                     issue(false, i, s.name + " : seule " + d.name + " s'\xC3\xA9" "crit ici (l'\xC3\xA9" "criture de " + s.name + " serait perdue)");
                 else if (s.computed)
                     a.reads.push_back(s.name);
+                if (!written) a.uses.push_back(s.name);
             }
             i = j;
             continue;
@@ -343,9 +346,11 @@ Analysis analyse(const Project& p, const Script& owner, const Declaration& d, co
             else if (written) issue(true, i, gs->name + "." + q->name + " est une constante : elle ne s'\xC3\xA9" "crit pas");
             else if (gs->id == owner.id && sameWord(q->name, d.name)) a.assigns = a.assigns || assigned;
             else if (q->computed) a.reads.push_back(gs->name + "." + q->name);
+            if (q && !written && !(gs->id == owner.id && sameWord(q->name, d.name))) a.uses.push_back(gs->name + "." + q->name);
             i = j;
             continue;
         }
+        if (p.variable(w)) a.uses.push_back(w);
         if (view && view->param(w))
             issue(true, i, w + " est un param\xC3\xA8tre de la vue : il n'existe pas encore au d\xC3\xA9marrage");
         if (const Variable* v = p.variable(w); v && !v->equipment.empty())
@@ -360,7 +365,58 @@ Analysis analyse(const Project& p, const Script& owner, const Declaration& d, co
     // Une meme lecture : une fois.
     std::sort(a.reads.begin(), a.reads.end());
     a.reads.erase(std::unique(a.reads.begin(), a.reads.end()), a.reads.end());
+    std::vector<std::string> once;
+    for (auto& u : a.uses)
+        if (std::none_of(once.begin(), once.end(), [&](const std::string& o) { return sameWord(o, u); })) once.push_back(std::move(u));
+    a.uses = std::move(once);
     return a;
+}
+
+namespace {
+// Le nom qualifie `upath` (en majuscules : REGLAGES.SEUILS) ecrit dans un code, entre deux
+// non-identifiants (sans casse ; un commentaire compte aussi : une lecture de plus a montrer).
+bool mentions(std::string_view code, const std::string& upath) {
+    const std::string u = upper(code);
+    const auto ident = [](char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; };
+    for (std::size_t at = u.find(upath); at != std::string::npos; at = u.find(upath, at + 1)) {
+        const std::size_t end = at + upath.size();
+        if ((at == 0 || (!ident(u[at - 1]) && u[at - 1] != '.')) && (end >= u.size() || !ident(u[end]))) return true;
+    }
+    return false;
+}
+} // namespace
+
+std::vector<std::string> readers(const Project& p, const Script& owner, const Declaration& d, const View* view) {
+    std::vector<std::string> out;
+    const auto add = [&](std::string s) {
+        if (std::find(out.begin(), out.end(), s) == out.end()) out.push_back(std::move(s));
+    };
+    const std::string qualifiedName = owner.name + "." + d.name;
+    const auto calcs = [&](const Script& sc, const View* v) {
+        for (const auto& x : sc.decls) {
+            if (!x.computed || x.id == d.id) continue;
+            for (const auto& r : analyse(p, sc, x, v).uses)
+                if ((&sc == &owner && sameWord(r, d.name)) || (!view && sameWord(r, qualifiedName))) {
+                    add("calcul de " + pathOf(sc, x, v));
+                    break;
+                }
+        }
+    };
+    for (const auto& sc : p.programs.scripts) calcs(sc, nullptr);
+    for (const auto& v : p.views)
+        for (const auto& sc : v.scripts) calcs(sc, &v);
+    if (!decledit::usesIn(owner.body, d.name).empty()) add("le code de " + (view ? view->name + "." : std::string{}) + owner.name);
+    if (!view && d.kind == DeclKind::Constant && d.visibility == Visibility::Public) {
+        const std::string u = upper(qualifiedName);
+        for (const auto& sc : p.programs.scripts)
+            if (sc.id != owner.id && mentions(sc.body, u)) add("le script " + sc.name);
+        for (const auto& f : p.programs.functions)
+            if (mentions(f.body, u)) add("la fonction " + f.name);
+        for (const auto& v : p.views)
+            for (const auto& sc : v.scripts)
+                if (mentions(sc.body, u)) add("le script " + v.name + "." + sc.name);
+    }
+    return out;
 }
 
 bool hasComputed(const Project& p) noexcept {

@@ -39,6 +39,7 @@ struct Issue {
 struct Analysis {
     std::vector<Issue>       issues;
     std::vector<std::string> reads;            // les valeurs calculees qu'il lit : "Nom" (son script), "Script.Nom"
+    std::vector<std::string> uses;             // tout ce qu'il lit (calcule ou ecrit) : ses constantes, Reglages.X, les variables IHM
     bool                     assigns{false};   // il ecrit sa declaration (:=, ou en premier argument d'un appel)
     [[nodiscard]] bool hasError() const noexcept;
 };
@@ -77,6 +78,12 @@ struct Plan {
 [[nodiscard]] bool hasComputed(const Project&) noexcept;
 // Le nom affiche d'une declaration calculee : "Reglages.Seuils" (general), "Vue_A.Ouverture.Max".
 [[nodiscard]] std::string pathOf(const Script&, const Declaration&, const View* view = nullptr);
+
+// Qui lit la declaration `d` de `owner` (la fenetre du calcul, « Lu par ») : les calculs (le sien
+// excepte), le code de son script et, pour une constante publique d'un script general, les scripts et
+// les fonctions qui la lisent par son nom qualifie. Des libelles : « calcul de Reglages.Total »,
+// « le code de Reglages », « le script Vue_Calcul.Init », « la fonction Calcul_Debit ».
+[[nodiscard]] std::vector<std::string> readers(const Project&, const Script& owner, const Declaration& d, const View* view = nullptr);
 
 // Le nom le plus proche parmi `names` (sans casse, a deux fautes de frappe au plus) ; "" : aucun.
 [[nodiscard]] std::string closest(std::string_view name, const std::vector<std::string>& names);

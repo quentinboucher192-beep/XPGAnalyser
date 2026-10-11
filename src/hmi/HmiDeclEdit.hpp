@@ -155,5 +155,9 @@ bool setCalculation(Project&, const Place&, Tab, std::size_t row, std::string_vi
 // Les locales en texte (une ligne chacune) et l'inverse (faux et `why` : illisible).
 [[nodiscard]] std::string localsText(const std::vector<Declaration>& locals);
 bool parseLocals(const Project&, std::string_view text, std::vector<Declaration>& out, std::string* why);
+// « Deplacer dans Locales » (la fenetre du calcul) : les declarations des blocs VAR ... END_VAR du code
+// vont au bout des locales, une par ligne ; le code garde le reste. Faux (why) : pas de bloc, un bloc
+// qui ne se lit pas, ou d'autres declarations que des locales (VAR, VAR_TEMP).
+bool moveVarBlocks(std::string& calc, std::string& locals, std::string* why);
 
 } // namespace hmi::decledit

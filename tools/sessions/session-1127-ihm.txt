@@ -9,10 +9,11 @@
 #  une variable Conservee a la valeur initiale calculee) et la vue Vue_Calcul :
 #    1. Reglages, onglet Constantes : « ƒx = valeur » dans la case Valeur ;
 #    2. Seuils choisie : son deballage sous la grille ;
-#    3. ƒx Calcul... : le code et les locales, ce que le calcul donne ;
-#    4. Grille choisie, Elements... : le tableau, une ligne par case ;
-#    5. la simulation : Vue_Calcul lit Reglages.Total, Reglages.Seuils['bas']... ;
-#    6. la Console : chaque valeur calculee au demarrage.
+#    3. ƒx Calcul... : l'onglet Code, et a droite l'apercu, Lit, Lu par, Problemes ;
+#    4. son onglet Locales : la grille (nom, type, valeur initiale, documentation) ;
+#    5. Grille choisie, Elements... : le tableau, une ligne par case ;
+#    6. la simulation : Vue_Calcul lit Reglages.Total, Reglages.Seuils['bas']... ;
+#    7. la Console : chaque valeur calculee au demarrage.
 # =============================================================================
 attendre 3
 theme Dark
@@ -38,10 +39,14 @@ ligne "Seuils" exact
 attendre 3
 capture 1127_ihm_02_deballage_map.png
 
-# ---- 3. ƒx Calcul... : le code et les locales ----
+# ---- 3. ƒx Calcul... : l'onglet Code, et a droite l'apercu, Lit, Lu par, Problemes ----
 outil "Calculer la valeur au démarrage"
 attendre 4
 capture 1127_ihm_03_fenetre_calcul.png
+# l'onglet Locales : la grille (nom, type, valeur initiale, documentation)
+bouton "≡ Locales*"
+attendre 3
+capture 1127_ihm_04_calcul_locales.png
 touche escape
 attendre 2
 
@@ -50,7 +55,7 @@ ligne "Grille" exact
 attendre 3
 outil "Éditer les éléments"
 attendre 4
-capture 1127_ihm_04_tableau_elements.png
+capture 1127_ihm_05_tableau_elements.png
 touche escape
 attendre 2
 
@@ -70,7 +75,7 @@ attendre 3
 ihm-variable "Total_Lu" "40"
 survol 1350 760
 attendre 2
-capture 1127_ihm_05_simulation_noms_qualifies.png
+capture 1127_ihm_06_simulation_noms_qualifies.png
 
 # ---- 6. La Console : chaque valeur calculee ----
 touche ctrl+j
@@ -78,6 +83,9 @@ attendre 2
 ihm-sorties console
 attendre 3
 ihm-console-etat
-capture 1127_ihm_06_console_calculs.png
+# les lignes des calculs seulement (la recherche du panneau du bas)
+champ "hmi.sorties.search" "Calcul"
+attendre 3
+capture 1127_ihm_07_console_calculs.png
 ihm-diagnostics
 quitter

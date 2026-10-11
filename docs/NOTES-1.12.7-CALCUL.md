@@ -26,10 +26,18 @@
   écrite, variable du script lue par une constante, constante d'un autre script inconnue, privée ou
   écrite, paramètre de vue (il n'existe pas au démarrage), variable IHM liée à un équipement
   (avertissement : elle vaut sa valeur initiale), aucune valeur écrite (avertissement).
-- **L'écran** : la grille Constantes / Variables a un bouton « ƒx Calcul… » (le code et les locales,
-  ce que le calcul donne et ses fautes) ; la case Valeur montre `ƒx = [valeur]` en couleur (en rouge
-  avec la raison quand le calcul échoue) ; une valeur écrite dans la case remplace le calcul
-  (Ctrl+Z le rend) ; l'infobulle montre le code, les locales et la valeur.
+- **L'écran** : la grille Constantes / Variables a un bouton « ƒx Calcul… » ; la case Valeur montre
+  `ƒx = [valeur]` en couleur (en rouge avec la raison quand le calcul échoue) ; une valeur écrite
+  dans la case remplace le calcul (Ctrl+Z le rend) ; l'infobulle montre le code, les locales et la
+  valeur.
+- **La fenêtre du calcul**, comme la maquette : deux onglets, **Code** (l'éditeur ST, avec l'aide à
+  la saisie Ctrl+Espace : les noms du projet, du script et des locales) et **Locales** (une grille :
+  nom, type, valeur initiale, documentation ; Ajouter, Supprimer, Monter, Descendre) ; à droite, en
+  direct (une demi-seconde après la dernière frappe, F5 tout de suite) : l'**Aperçu** (la valeur au
+  démarrage, ou l'erreur qui arrêterait le démarrage), ce qu'il **Lit**, qui le lit (**Lu par** :
+  les autres calculs, le code de son script, les scripts et fonctions qui lisent `Reglages.X`) et
+  ses **Problèmes** (un clic : la ligne dans le code). « ▶ Calculer (F5) », « Revenir au calcul
+  d'origine », et « Déplacer dans Locales » quand un bloc `VAR … END_VAR` est collé dans le code.
 - **Le déballage** : sous la grille, la valeur à taille de la ligne choisie (LIST, VECTOR, MAP,
   ARRAY 1D/2D avec ses vrais indices, TUPLE, structure ; écrite ou calculée), un élément par ligne, en
   arbre (élément, type, valeur), chaque élément à taille se déplie.
@@ -44,5 +52,7 @@
 
 ## Ce qui reste (dit honnêtement)
 
-- L'onglet Locales est un champ de code (une ligne par locale) dans la fenêtre du calcul, pas une
-  grille ; la fenêtre ne recalcule pas en direct (Appliquer, puis la case Valeur montre le résultat).
+- Le type d'une locale s'écrit dans sa case (pas encore le sélecteur de types) ; une faute de
+  type est dite par l'aperçu et par Compiler.
+- « Lu par » ne cherche pas dans les expressions des vues (fx) : les scripts, les fonctions et les
+  calculs seulement.

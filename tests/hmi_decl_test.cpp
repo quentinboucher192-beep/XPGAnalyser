@@ -1877,6 +1877,37 @@ void calculees() {
         const auto good = calc::analyse(q, r, r.decls[2]);
         check(!good.hasError() && good.assigns && good.reads == std::vector<std::string>{"Seuils"},
               "Total : juste, ecrit, lit Seuils");
+        // La fenetre du calcul, « Lit » : tout ce qu'il lit (ecrit ou calcule, une variable IHM aussi).
+        const auto seuils = calc::analyse(q, r, r.decls[1]);
+        const auto echelle = calc::analyse(q, r, r.decls[3]);
+        check(seuils.reads.empty() && seuils.uses == std::vector<std::string>{"Base"} && echelle.uses == std::vector<std::string>{"Pleine_Echelle"},
+              "Lit : Seuils lit Base (ecrite), Echelle lit la variable IHM Pleine_Echelle");
+    }
+    // « Lu par » : les calculs, le code du script, les scripts qui lisent Reglages.X.
+    {
+        Project q = calcProject();
+        const auto& r = q.programs.scripts[0];
+        const auto join = [](const std::vector<std::string>& v) {
+            std::string s;
+            for (const auto& x : v) s += (s.empty() ? "" : " | ") + x;
+            return s;
+        };
+        const auto base = calc::readers(q, r, r.decls[0]);
+        check(join(base) == "calcul de Reglages.Seuils | le code de Reglages", "Base : lue par le calcul de Seuils et le code de Reglages - " + join(base));
+        const auto total = calc::readers(q, r, r.decls[2]);
+        check(join(total) == "calcul de Reglages.Compteur | le code de Reglages | le script Usage",
+              "Total : lue par le calcul de Compteur, le code de Reglages, le script Usage (Reglages.Total) - " + join(total));
+        const auto secret = calc::readers(q, r, r.decls[4]);
+        check(secret.empty(), "Secret : lue par personne - " + join(secret));
+    }
+    // « Deplacer dans Locales » : un bloc VAR du code va au bout des locales.
+    {
+        std::string code = "VAR\n    k : REAL := 2.0;   // un facteur\nEND_VAR\nK := k * 3.0;\n", locals = "a : INT := 1;";
+        std::string why;
+        check(decledit::moveVarBlocks(code, locals, &why) && code == "K := k * 3.0;\n" && locals == "a : INT := 1;\nk : REAL := 2.0;   // un facteur\n",
+              "Deplacer dans Locales : le bloc quitte le code, sa locale suit les autres - [" + code + "] [" + locals + "] " + why);
+        std::string none = "K := 1;\n", l2;
+        check(!decledit::moveVarBlocks(none, l2, &why) && why.find("pas de bloc") != std::string::npos, "pas de bloc : rien a deplacer - " + why);
     }
     // Les controles du projet : un script qui lit une constante privee d'un autre, un calcul fautif.
     {

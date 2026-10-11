@@ -937,6 +937,35 @@ bool parseLocals(const Project& p, std::string_view text, std::vector<Declaratio
     return true;
 }
 
+bool moveVarBlocks(std::string& calc, std::string& locals, std::string* why) {
+    const auto x = decl::extract(calc);
+    if (x.blocks.empty()) return fail(why, "pas de bloc VAR \xE2\x80\xA6 END_VAR dans le code");
+    if (!x.errors.empty()) {
+        const auto& e = x.errors.front();
+        return fail(why, (e.line > 0 ? "ligne " + std::to_string(e.line) + " : " : std::string{}) + e.message);
+    }
+    if (!x.functions.empty()) return fail(why, "une FUNCTION ne va pas dans un calcul");
+    std::vector<Declaration> moved;
+    for (const auto& b : x.decls) {
+        if (b.section != decl::Section::Var && b.section != decl::Section::Temp)
+            return fail(why, quoted(b.name) + " : seules les locales (VAR, VAR_TEMP) vont dans l'onglet Locales");
+        Declaration l;
+        l.name = b.name;
+        l.type = b.type;
+        l.value = b.initial;
+        l.description = b.comment;
+        moved.push_back(std::move(l));
+    }
+    // Le code sans ses blocs ; les lignes vides laissees en tete, retirees.
+    std::string body = x.body;
+    const auto first = body.find_first_not_of(" \t\r\n");
+    body = first == std::string::npos ? std::string{} : body.substr(body.rfind('\n', first) == std::string::npos ? 0 : body.rfind('\n', first) + 1);
+    calc = body;
+    if (!locals.empty() && locals.back() != '\n') locals += '\n';
+    locals += localsText(moved);
+    return true;
+}
+
 bool setCalculation(Project& p, const Place& at, Tab t, std::size_t row, std::string_view calc, std::string_view locals,
                     std::string* why) {
     Code c = locate(p, at);

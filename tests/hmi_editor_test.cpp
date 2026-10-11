@@ -26,6 +26,7 @@
 #include "../src/ui/widgets/ColorPalette.hpp"      // 1.10 : la palette (plus incluse par DataViews.hpp)
 #include "../src/app/Brand.hpp"
 #include "../src/core/CallTrail.hpp"           // 1.10.4 (K1) : le diagnostic qui echoue, dans le journal interne
+#include "../src/app/hmi/HmiCalcDialog.hpp"    // 1.12.7 : la fenetre du calcul
 #include "../src/app/hmi/HmiItemsDialog.hpp"   // 1.12.7 : le tableau des elements
 #include "../src/app/hmi/HmiDeclGrid.hpp"
 #include "../src/app/hmi/HmiActionsPanel.hpp"
@@ -29034,6 +29035,9 @@ void calculees_grille() {
     auto* u = grid.unfoldTable();
     check(u && u->model() && u->model()->rowCount() == 3 && u->model()->cellText(1, 0) == "'bas'" && u->model()->cellText(2, 2) == "30",
           "Seuils d\xC3\xA9" "ball\xC3\xA9" "e : la racine, 'bas', 'haut' = 30");
+    // La session Wine 1127 l'a vu : une table sans colonnes ne montre rien (ses lignes, vides).
+    check(u && u->columns().size() == 3 && u->columns()[0].title == "\xC3\x89l\xC3\xA9ment" && u->columns()[2].title == "Valeur",
+          "le d\xC3\xA9" "ballage a ses trois colonnes (\xC3\x89l\xC3\xA9ment, Type, Valeur)");
     grid.selectRows({2});
     u = grid.unfoldTable();
     check(u && u->model() && u->model()->rowCount() == 4 && u->model()->cellText(1, 0) == "[1]" && u->model()->cellText(3, 0) == "[3]"
@@ -29061,6 +29065,46 @@ void calculees_grille() {
         check(bad.find("Faute") != std::string::npos || bad.find("Erreur") != std::string::npos, "l'aper\xC3\xA7u : la faute - " + bad);
         check(loop.find("Erreur") != std::string::npos, "l'aper\xC3\xA7u : l'erreur qui arr\xC3\xAAterait le d\xC3\xA9marrage - " + loop);
         check(doc->project.programs.scripts[0].decls[1].calc == seuils.calc, "l'aper\xC3\xA7u ne touche pas au projet");
+        check(static_cast<bool>(seen.assist), "la fen\xC3\xAAtre re\xC3\xA7oit l'aide \xC3\xA0 la saisie du code");
+        // La fenetre elle-meme, comme la maquette : les onglets Code et Locales (une grille), la colonne de
+        // droite (Apercu, Lit, Lu par, Problemes), « Deplacer dans Locales », « Revenir au calcul d'origine ».
+        {
+            app::HmiCalcDialog::Spec s;
+            s.title = seen.title;
+            s.name = seen.name;
+            s.type = seen.type;
+            s.constant = seen.constant;
+            s.calc = "VAR\n    k : REAL := 3.0;   // le facteur du haut\nEND_VAR\nSeuils['bas'] := Base;\nSeuils['haut'] := Base * k;\n";
+            s.preview = seen.preview;
+            s.assist = seen.assist;
+            app::HmiCalcDialog dlg(s);
+            const bool built = static_cast<bool>(dlg.Initialize());
+            check(built && !dlg.localsShown() && dlg.locals().empty(), "la fen\xC3\xAAtre du calcul : l'onglet Code d'abord, aucune locale");
+            std::string why;
+            check(dlg.moveVarBlocks(&why) && dlg.localsShown() && dlg.locals().size() == 1 && dlg.locals()[0].name == "k"
+                      && dlg.locals()[0].type == "REAL" && dlg.locals()[0].value == "3.0" && dlg.locals()[0].doc == "le facteur du haut"
+                      && dlg.calcText().rfind("Seuils['bas']", 0) == 0,
+                  "D\xC3\xA9placer dans Locales : k dans la grille, le code sans son bloc - " + why + " | " + dlg.calcText());
+            check(dlg.facts().value == "{'bas': 10, 'haut': 30}" && dlg.facts().error.empty(), "l'aper\xC3\xA7u : la valeur - " + dlg.previewText());
+            check(dlg.facts().reads == std::vector<std::string>{"Base"}, "Lit : Base (k est une locale) - " + dlg.previewText());
+            check(dlg.setLocal(0, 2, "4.0"), "une case de la grille des locales s'\xC3\xA9" "crit");
+            dlg.recompute();
+            check(dlg.facts().value == "{'bas': 10, 'haut': 40}", "la locale chang\xC3\xA9" "e : l'aper\xC3\xA7u suit - " + dlg.previewText());
+            check(dlg.addLocal() && dlg.locals().size() == 2 && dlg.removeLocal(1) && dlg.locals().size() == 1, "ajouter, supprimer une locale");
+            check(dlg.localsText() == "k : REAL := 4.0;   // le facteur du haut\n", "le texte des locales - " + dlg.localsText());
+            check(dlg.localsTable() && dlg.localsTable()->columns().size() == 4 && dlg.localsTable()->columns()[2].title == "Valeur initiale",
+                  "la grille des locales : Nom, Type, Valeur initiale, Documentation");
+            dlg.setTexts("Base := 2.0;\nSeuils['bas'] := 1.0;\n", "");
+            check(!dlg.facts().problems.empty() && dlg.facts().problems[0].error && dlg.facts().problems[0].line == 1,
+                  "Probl\xC3\xA8mes : une constante du script \xC3\xA9" "crite, ligne 1 - " + dlg.previewText());
+            check(dlg.goToProblem(0) && !dlg.localsShown(), "un clic sur un probl\xC3\xA8me : sa ligne, dans l'onglet Code");
+            dlg.revert();
+            check(dlg.calcText() == s.calc && dlg.locals().empty(), "Revenir au calcul d'origine : le code et les locales d'avant");
+            const auto f = app::HmiCalcDialog::factsOf("Valeur au d\xC3\xA9marrage : 3\nAttention ligne 2 : x\nLit : A, Reglages.B\nLu par : calcul de C\nPas de code");
+            check(f.value == "3" && f.problems.size() == 1 && !f.problems[0].error && f.problems[0].line == 2 && f.reads.size() == 2
+                      && f.reads[1] == "Reglages.B" && f.readBy == std::vector<std::string>{"calcul de C"} && f.note == "Pas de code",
+                  "les faits d'un aper\xC3\xA7u, rang\xC3\xA9s par bo\xC3\xAEte");
+        }
         app::calceditor::setHost({});
     }
     // Le tableau des elements : lu d'une valeur, rendu en litteral.
@@ -29080,6 +29124,16 @@ void calculees_grille() {
               "un tableau : ses quatre cases, sa taille fixe");
         a->values[3] = "7.5";
         check(app::HmiItemsDialog::literalOf(*a) == "[1.0, 2.0, 0.0, 7.5]", "une case vide avant une \xC3\xA9" "crite : 0.0 - " + app::HmiItemsDialog::literalOf(*a));
+        // La fenetre elle-meme : une colonne par colonne du modele (la session Wine 1127 : sans elles, des lignes vides).
+        {
+            app::HmiItemsDialog dlg(app::HmiItemsDialog::Spec{"dialog.hmiItems", "\xC3\x89l\xC3\xA9ments de Grille", "ARRAY[1..3] OF INT", "[4, 8, 15]"});
+            const bool built = static_cast<bool>(dlg.Initialize());
+            const auto* tv = dlg.table();
+            check(built && tv && tv->columns().size() == 2 && tv->columns()[0].title == "Indice" && tv->columns()[1].title == "Valeur (INT)"
+                      && tv->model() && tv->model()->cellText(2, 1) == "15",
+                  "la fen\xC3\xAAtre \xC3\x89l\xC3\xA9ments : ses colonnes Indice et Valeur (INT), [3] = 15 - "
+                      + (tv ? std::to_string(tv->columns().size()) + " colonne(s)" : std::string("pas de table")));
+        }
         auto mx = app::HmiItemsDialog::modelOf("ARRAY[0..1, 1..3] OF INT", "[1, 2, 3, 4, 5, 6]");
         check(mx->mode == app::HmiItemsDialog::Model::Mode::Matrix && mx->rowCount() == 2 && mx->columnCount() == 4 && mx->cellText(1, 3) == "6"
                   && mx->headerText(1) == "[.., 1]",

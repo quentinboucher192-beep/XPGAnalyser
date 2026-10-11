@@ -417,6 +417,14 @@ core::Status HmiItemsDialog::buildUi() {
     const std::string base = spec_.id;
     auto table = std::make_unique<ui::TableView>(base + ".table");
     table->setModel(model_);
+    // Les colonnes du modele (une table sans colonnes ne montre rien) ; l'ordre des lignes est celui
+    // de la valeur : pas de tri.
+    std::vector<ui::TableView::Column> cols;
+    for (std::size_t c = 0; c < model_->columnCount(); ++c) {
+        const float w = c == 0 ? (model_->mode == Model::Mode::List ? 70.f : 160.f) : model_->mode == Model::Mode::Matrix ? 110.f : 460.f;
+        cols.push_back({model_->headerText(c), w, 40.f, true, false, true, ui::Align::Start, 0, false});
+    }
+    table->setColumns(std::move(cols));
     table_ = &static_cast<ui::TableView&>(body->addChild(std::move(table)));
     body->table = table_;
     if (model_->resizable()) {
