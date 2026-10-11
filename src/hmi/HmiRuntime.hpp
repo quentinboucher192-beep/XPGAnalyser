@@ -773,6 +773,8 @@ public:
     // l'ecrivent en place) ; nul : pas une telle variable. `richText` : sa valeur ecrite comme un
     // litteral ([1, 2, 3], ['a' := 1]) ; vide : pas une telle variable.
     [[nodiscard]] sim::ObjRef richVariable(std::string_view name) const;
+    // 1.12.4 : un chemin (Recette, Recettes[2]) qui porte des membres objets (Recette.Etapes).
+    [[nodiscard]] bool hasRichUnder(std::string_view path) const;
     [[nodiscard]] std::string richText(std::string_view name) const;
     // Lui donner la valeur d'un litteral (la simulation : « forcer ») ; faux et `why` sinon.
     bool setRichVariable(std::string_view name, std::string_view literal, std::string* why = nullptr);

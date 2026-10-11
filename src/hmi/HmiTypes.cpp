@@ -48,6 +48,38 @@ bool identifier(std::string_view s) {
     return std::all_of(s.begin(), s.end(), [](char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; });
 }
 
+// 1.12.4 : les types IHM que nomme un texte de type (T_Four dans LIST OF T_Four, TUPLE(INT, T_Four),
+// MAP[STRING] OF T_Four, ARRAY[0..2] OF T_Four), chacun une fois, dans l'ordre.
+std::vector<const HmiType*> namedTypesOf(const Project& p, std::string_view type) {
+    std::vector<const HmiType*> out;
+    for (std::size_t i = 0; i < type.size();) {
+        const auto c = static_cast<unsigned char>(type[i]);
+        if (!(std::isalpha(c) || type[i] == '_')) {
+            ++i;
+            continue;
+        }
+        std::size_t j = i;
+        while (j < type.size() && (std::isalnum(static_cast<unsigned char>(type[j])) || type[j] == '_')) ++j;
+        if (const HmiType* t = p.hmiTypeByName(type.substr(i, j - i)); t && std::find(out.begin(), out.end(), t) == out.end())
+            out.push_back(t);
+        i = j;
+    }
+    return out;
+}
+
+// 1.12.4 : le type `from` contient-il `owner` (un de ses membres, ou plus bas, objets compris) ?
+bool reaches(const Project& p, const HmiType& from, std::string_view owner) {
+    std::set<std::string> seen;
+    std::function<bool(const HmiType&)> go = [&](const HmiType& t) {
+        if (!seen.insert(upperOf(t.name)).second) return false;
+        for (const auto& m : t.members)
+            for (const HmiType* sub : namedTypesOf(p, m.type))
+                if (sameText(sub->name, owner) || go(*sub)) return true;
+        return false;
+    };
+    return go(from);
+}
+
 // Un entier signe : "0", "-5", "12".
 bool integerOf(std::string_view s, long long& out) {
     const std::string t = trimmed(s);
@@ -179,6 +211,12 @@ struct Walker {
     void walk(const std::string& path, const std::string& rel, std::string_view type, std::string_view initial,
               const std::string& description) {
         if (!out.error.empty()) return;
+        // 1.12.4 : un membre objet (une liste, un vecteur, une MAP, un tuple, ou un tableau de l'un
+        // d'eux) : ni case ni mot ; un objet entier dans la memoire de l'IHM.
+        if (!rel.empty() && isRich(type)) {
+            out.objects.push_back({path, rel, normalized(type), trimmed(initial), description});
+            return;
+        }
         Spec s;
         std::string why;
         if (!parseSpec(type, s, &why)) {
@@ -404,12 +442,17 @@ bool validType(const Project& p, std::string_view type, std::string* why) {
     return true;
 }
 
-bool validMemberType(const Project& p, std::string_view type, std::string* why) {
-    if (isRich(type))
-        return fail(why, "un membre d'un type IHM a une place fixe : " + normalized(type)
-                             + (isDynamic(type) ? " (taille variable)" : " (sans plan m\xC3\xA9moire)")
-                             + " se d\xC3\xA9" "clare en variable IHM, ou dans un script");
-    return validType(p, type, why);
+bool validMemberType(const Project& p, std::string_view type, std::string* why, std::string_view owner) {
+    if (!validType(p, type, why)) return false;
+    // 1.12.4 : un membre objet peut tout contenir, sauf le type qui le porte (T_Noeud.Enfants :
+    // LIST OF T_Noeud) - ni directement, ni par un autre type.
+    if (!owner.empty() && isRich(type))
+        for (const HmiType* t : namedTypesOf(p, type))
+            if (sameText(t->name, owner) || reaches(p, *t, owner))
+                return fail(why, "un type IHM ne se contient pas lui-m\xC3\xAAme, m\xC3\xAAme dans une liste : " + std::string(owner)
+                                     + " \xE2\x86\x92 " + normalized(type)
+                                     + (sameText(t->name, owner) ? std::string{} : " \xE2\x86\x92 " + t->name + " \xE2\x86\x92 \xE2\x80\xA6 \xE2\x86\x92 " + std::string(owner)));
+    return true;
 }
 
 bool isRich(std::string_view type) {
@@ -452,9 +495,8 @@ std::string cycleOf(const Project& p, std::string_view typeName) {
         if (path.size() > 64) return;
         path.push_back(ty.name);
         for (const auto& m : ty.members) {
-            Spec s;
-            if (!parseSpec(m.type, s) || isElementary(s.element)) continue;
-            if (const auto* sub = p.hmiTypeByName(s.element)) visit(*sub);
+            // 1.12.4 : un membre objet (LIST OF T_Noeud) : les types qu'il nomme.
+            for (const HmiType* sub : namedTypesOf(p, m.type)) visit(*sub);
         }
         path.pop_back();
     };
@@ -521,6 +563,7 @@ Flat flatten(const Project& p, std::string_view root, std::string_view type, std
     if (!out.ok()) {
         out.leaves.clear();
         out.aggregates.clear();
+        out.objects.clear();
     }
     return out;
 }
@@ -611,7 +654,7 @@ std::string internalEntryOf(const Variable& v, std::string_view rel) {
 bool isInternalMember(const Variable& v, std::string_view rel) { return !internalEntryOf(v, rel).empty(); }
 
 std::vector<Variable> leafVariables(const Project& p, const Variable& v, std::vector<Aggregate>* aggregates,
-                                    std::vector<std::string>* why, std::string* error) {
+                                    std::vector<std::string>* why, std::string* error, std::vector<ObjectMember>* objects) {
     std::vector<Variable> out;
     if (!isComposite(v.type)) {
         out.push_back(v);
@@ -625,6 +668,7 @@ std::vector<Variable> leafVariables(const Project& p, const Variable& v, std::ve
         return out;
     }
     if (aggregates) aggregates->insert(aggregates->end(), f.aggregates.begin(), f.aggregates.end());
+    if (objects) objects->insert(objects->end(), f.objects.begin(), f.objects.end());    // 1.12.4
     const bool bits = v.bound() && !v.address.empty() && bitArea(v.address);
     const std::size_t n = f.leaves.size();
     // 1.11.8 : les membres internes (gardes dans l'IHM).
@@ -724,6 +768,12 @@ std::vector<Variable> leafVariables(const Project& p, const Variable& v, std::ve
         out.push_back(std::move(x));
     }
     return out;
+}
+
+std::vector<ObjectMember> objectMembers(const Project& p, const Variable& v) {
+    if (!isComposite(v.type) || isRich(v.type)) return {};
+    Flat f = flatten(p, v.name, v.type, v.initial, v.packBools);
+    return f.ok() ? std::move(f.objects) : std::vector<ObjectMember>{};
 }
 
 std::vector<Variable> flatVariables(const Project& p) {
@@ -980,6 +1030,9 @@ std::vector<PathProblem> pathProblems(const Project& p, std::string_view source)
         std::string path(name);
         const int at = line;
         while (true) {
+            // 1.12.2/1.12.4 : un objet (une variable LIST, un membre MAP...) : ses indices et ses
+            // membres (L[0], M['cle'], T.Item1, L.Count) se verifient en marche, pas ici.
+            if (isRich(type)) break;
             std::size_t k = i;
             while (k < n && (code[k] == ' ' || code[k] == '\t')) ++k;
             if (k < n && code[k] == '[') {

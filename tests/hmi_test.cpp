@@ -17673,6 +17673,107 @@ void etatPoste1123() {
 
 // 1.12.3 : UNE POPUP A PARAMETRES GARDE UNE SERIE PAR JEU D'ARGUMENTS - Cuves[2] et
 // Cuves[3] ne se melangent plus quand on la rouvre avec d'autres arguments.
+// 1.12.4 : LES MEMBRES OBJETS - une liste, une MAP, un tuple dans un type IHM : sans place Modbus, un
+// objet chacun dans la memoire de l'IHM ; Recette.Etapes[0], LIST_ADD(Recette.Etapes, x), R2 := Recette.
+void membresObjets1124() {
+    std::printf("1.12.4 : les membres objets des types IHM (LIST, MAP, TUPLE dans une structure)\n");
+    namespace ty = hmi::types;
+    Project p;
+    View a = makeView(p, "Vue_A");
+    HmiType recette;
+    recette.id = p.allocate();
+    recette.name = "T_Recette";
+    recette.members = {{"Nom", "STRING", "'Pain'"},
+                       {"Duree", "INT", "45"},
+                       {"Etapes", "LIST OF STRING", "['P\xC3\xA9trir', 'Cuire']"},
+                       {"Stock", "MAP[STRING] OF INT", "['farine' := 3]"},
+                       {"Repere", "TUPLE(INT, STRING)", "(1, 'a')"}};
+    HmiType noeud;
+    noeud.id = p.allocate();
+    noeud.name = "T_Noeud";
+    noeud.members = {{"Nom", "STRING"}};
+    p.programs.types = {recette, noeud};
+    std::string why;
+    check(ty::validMemberType(p, "LIST OF STRING", &why, "T_Recette") && ty::validMemberType(p, "MAP[STRING] OF T_Noeud", &why, "T_Recette"),
+          "un membre LIST OF STRING, MAP[STRING] OF T_Noeud : accept\xC3\xA9s (" + why + ")");
+    check(!ty::validMemberType(p, "LIST OF T_Noeud", &why, "T_Noeud") && why.find("lui-m\xC3\xAAme") != std::string::npos,
+          "T_Noeud.Enfants : LIST OF T_Noeud - refus\xC3\xA9 (" + why + ")");
+    const auto flat = ty::flatten(p, "R", "T_Recette");
+    check(flat.ok() && flat.leaves.size() == 2 && flat.objects.size() == 3 && flat.objects[0].path == "R.Etapes"
+              && flat.objects[0].type == "LIST OF STRING",
+          "aplatie : deux cases (Nom, Duree), trois objets (" + std::to_string(flat.leaves.size()) + ", " + std::to_string(flat.objects.size()) + ")");
+    check(ty::weightOf(p, "T_Recette").words == 17, "le poids : 17 mots (STRING 16 + INT) - les objets n'en prennent pas (" + std::to_string(ty::weightOf(p, "T_Recette").words) + ")");
+    Equipment e;
+    e.id = p.allocate();
+    e.name = "Esclave virtuel 1";
+    e.host = "127.0.0.1";
+    e.port = 502;
+    p.equipments.push_back(e);
+    Variable rv = hmiVar(p, "Recette", "T_Recette");
+    rv.equipment = "Esclave virtuel 1";
+    rv.address = "%MW100";
+    p.programs.variables.push_back(rv);
+    p.programs.variables.push_back(hmiVar(p, "Recettes", "ARRAY[0..1] OF T_Recette"));
+    p.programs.variables.push_back(hmiVar(p, "R2", "T_Recette"));
+    for (const char* n : {"N1", "N2", "N3"}) p.programs.variables.push_back(hmiVar(p, n, "DINT"));
+    p.programs.variables.push_back(hmiVar(p, "Texte", "STRING"));
+    {
+        std::string error;
+        std::vector<ty::ObjectMember> objects;
+        const auto leaves = ty::leafVariables(p, p.programs.variables[0], nullptr, nullptr, &error, &objects);
+        check(error.empty() && leaves.size() == 2 && leaves[0].address == "%MW100" && leaves[1].address == "%MW116" && objects.size() == 3,
+              "li\xC3\xA9" "e : Nom en %MW100, Duree en %MW116 ; les objets restent dans l'IHM (" + error + ")");
+        check(hmi::equip::buildPlan(p, p.equipments[0]).points().size() == 2, "le plan d'adressage : deux cases");
+        const auto many = ty::objectMembers(p, p.programs.variables[1]);
+        check(many.size() == 6 && many[3].path == "Recettes[1].Etapes", "un tableau de structures : un objet par case (" + std::to_string(many.size()) + ")");
+    }
+    const struct { const char* name; const char* code; } cases[] = {
+        {"Lire", "N1 := Recette.Etapes.Count; Texte := Recette.Etapes[1]; N2 := Recette.Stock['farine']; N3 := Recette.Repere.Item1;"},
+        {"Ecrire", "Recette.Etapes[0] := 'Peser'; LIST_ADD(Recette.Etapes, 'Servir'); Recette.Stock['sel'] := 2; N1 := Recette.Etapes.Count;"},
+        {"Case", "VAR i : INT := 1; END_VAR\nLIST_ADD(Recettes[i].Etapes, 'Refroidir'); N1 := Recettes[1].Etapes.Count; N2 := Recettes[0].Etapes.Count;"},
+        {"Copie", "R2 := Recette; LIST_ADD(R2.Etapes, 'Emballer'); N1 := R2.Etapes.Count; N2 := Recette.Etapes.Count; Texte := R2.Nom;"},
+        {"Boucle", "VAR s : STRING; END_VAR\nFOR EACH x IN Recette.Etapes DO s := s + x + '/'; END_FOR\nTexte := s;"},
+        {"Locale", "VAR r : T_Recette; END_VAR\nLIST_ADD(r.Etapes, 'x'); r.Nom := 'Local'; N1 := r.Etapes.Count; Texte := r.Nom;"},
+    };
+    for (const auto& c : cases) p.programs.scripts.push_back(generalScript(p, c.name, c.code));
+    p.views = {a};
+    p.config.startView = a.id;
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    double t = 0.1;
+    const auto run = [&](const char* name) {
+        why.clear();
+        t += 0.1;
+        return rt.callScript(name, t, &why);
+    };
+    const auto n = [&](const char* name) { return rt.variable(name) ? rt.variable(name)->asInteger() : -999; };
+    const auto txt = [&]() { return rt.variable("Texte") ? rt.variable("Texte")->asString() : std::string("?"); };
+    check(rt.richText("Recette.Etapes") == "['P\xC3\xA9trir', 'Cuire']" && rt.richText("Recettes[1].Stock") == "['farine' := 3]",
+          "au d\xC3\xA9marrage : un objet par membre, \xC3\xA0 sa valeur initiale (" + rt.richText("Recette.Etapes") + ")");
+    check(rt.variable("Recette.Duree") && rt.variable("Recette.Duree")->asInteger() == 45, "les cases simples : comme avant");
+    check(run("Lire") && n("N1") == 2 && txt() == "Cuire" && n("N2") == 3 && n("N3") == 1,
+          "lire : Recette.Etapes.Count, Recette.Etapes[1], Recette.Stock['farine'], Recette.Repere.Item1 (" + why + ")");
+    check(run("Ecrire") && n("N1") == 3 && rt.richText("Recette.Etapes") == "['Peser', 'Cuire', 'Servir']"
+              && rt.richText("Recette.Stock") == "['farine' := 3, 'sel' := 2]",
+          "\xC3\xA9" "crire en place : Etapes[0], LIST_ADD, Stock['sel'] (" + why + " / " + rt.richText("Recette.Etapes") + ")");
+    check(run("Case") && n("N1") == 3 && n("N2") == 2, "Recettes[i].Etapes : la bonne case (" + why + ")");
+    check(run("Copie") && n("N1") == 4 && n("N2") == 3 && txt() == "Pain",
+          "R2 := Recette : une copie enti\xC3\xA8re (ses objets aussi), qui ne touche pas l'original (" + why + ")");
+    check(run("Boucle") && txt() == "Peser/Cuire/Servir/", "FOR EACH x IN Recette.Etapes (" + why + " / " + txt() + ")");
+    check(run("Locale") && n("N1") == 1 && txt() == "Local", "une locale de type T_Recette (" + why + ")");
+    const auto count = Expression::compile("Recette.Etapes.Count + Recettes[1].Etapes.Count").evaluate(rt.environment());
+    check(count && count->asInteger() == 6, "une expression de vue : Recette.Etapes.Count + Recettes[1].Etapes.Count = 6");
+    const auto joined = TextTemplate::compile("{JOIN(Recette.Etapes, ', ')}").render(rt.environment());
+    check(joined == "Peser, Cuire, Servir", "un texte \xC3\xA0 trous : {JOIN(Recette.Etapes, ', ')} = " + joined);
+    std::string w;
+    check(rt.setRichVariable("Recette.Etapes", "['A']", &w) && rt.richText("Recette.Etapes") == "['A']", "la simulation \xC3\xA9" "crit un membre objet (" + w + ")");
+    // Les verifications de Generer : pas de fausse erreur sur les indices d'un objet.
+    const auto problems = ty::pathProblems(p, "Texte := Recette.Etapes[0]; N1 := Recette.Stock['sel']; N2 := Recettes[1].Etapes.Count; Recette.Nom := 'a';");
+    check(problems.empty(), "Recette.Etapes[0], Recette.Stock['sel'] : pas de \xC2\xAB n'est pas un tableau \xC2\xBB (" + (problems.empty() ? std::string{} : problems.front().message) + ")");
+    check(ty::typeOfPath(p, "Recettes[1].Etapes") == "LIST OF STRING", "typeOfPath(Recettes[1].Etapes) = " + ty::typeOfPath(p, "Recettes[1].Etapes"));
+}
+
 void courbesParArguments1123() {
     std::printf("1.12.3 : une popup a parametres garde une serie par jeu d'arguments\n");
     Project p;
@@ -22386,6 +22487,7 @@ int main(int argc, char** argv) {
     popupSymboleAlarmes1123();        // 1.12.3 : les popups de symbole, les alarmes de leurs objets
     etatPoste1123();                  // 1.12.3 : le poste garde onglets, panneaux replies, defilement
     courbesParArguments1123();        // 1.12.3 : une serie par jeu d'arguments d'une popup
+    membresObjets1124();              // 1.12.4 : les membres objets des types IHM
     enumerationsLangage110();         // 1.10 (S1, decision 15) : les enumerations dans les scripts
     operateurs110();                  // 1.10 (chantier S2) : les operateurs des symboles et des types IHM
     operateurs1101();                 // 1.10.1 (chantier U2) : a, b et Resultat (types, legende, exemple, Compiler)

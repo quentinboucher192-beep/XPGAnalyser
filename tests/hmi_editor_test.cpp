@@ -3922,6 +3922,64 @@ void apercuDisposition1124() {
     core::setEdition(edition);
 }
 
+// 1.12.4 : les membres objets dans l'ecran des types IHM et des variables IHM.
+void membresObjetsEcran1124() {
+    std::printf("1.12.4 : les membres objets dans les \xC3\xA9" "crans des types et des variables\n");
+    auto doc = std::make_shared<Document>();
+    core::CommandStack stack;
+    auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+    app::HmiTypesPane types("ty1124", doc, apply);
+    types.setBounds({0, 0, 1400, 800});
+    types.layout();
+    std::string why;
+    const Id rec = types.addType("T_Recette", &why);
+    check(rec != kNoId && types.addMember(rec, "Etapes", "LIST OF STRING", &why) && types.addMember(rec, "Stock", "MAP[STRING] OF INT", &why),
+          "T_Recette : + Etapes (LIST OF STRING), Stock (MAP[STRING] OF INT) (" + why + ")");
+    check(!types.addMember(rec, "Sous", "LIST OF T_Recette", &why) && why.find("lui-m\xC3\xAAme") != std::string::npos,
+          "un membre LIST OF T_Recette dans T_Recette : refus\xC3\xA9 (" + why + ")");
+    types.selectType(rec);
+    auto model = types.memberTable().model();
+    const auto rowOf = [&](const std::string& name) {
+        for (std::size_t r = 0; model && r < model->rowCount(); ++r)
+            if (model->cellText(static_cast<ui::RowIndex>(r), 0) == name) return static_cast<int>(r);
+        return -1;
+    };
+    const int etapes = rowOf("Etapes");
+    check(etapes >= 0 && model->cellText(static_cast<ui::RowIndex>(etapes), 3) == "\xE2\x80\x94" && model->cellText(static_cast<ui::RowIndex>(etapes), 4) == "objet (IHM)",
+          "Etapes : ni d\xC3\xA9" "calage ni mots, \xC2\xAB objet (IHM) \xC2\xBB");
+    const auto choices = etapes >= 0 ? model->cellChoices(static_cast<ui::RowIndex>(etapes), 1) : std::vector<std::string>{};
+    const auto has = [&](const std::string& c) { return std::find(choices.begin(), choices.end(), c) != choices.end(); };
+    check(has("Liste\xE2\x80\xA6") && has("Vecteur\xE2\x80\xA6") && has("Dictionnaire (MAP)\xE2\x80\xA6") && has("Tuple\xE2\x80\xA6") && has("Tableau\xE2\x80\xA6"),
+          "le choix du type d'un membre : Tableau\xE2\x80\xA6, Liste\xE2\x80\xA6, Vecteur\xE2\x80\xA6, Dictionnaire (MAP)\xE2\x80\xA6, Tuple\xE2\x80\xA6");
+    const int marche = rowOf("Marche");
+    check(marche >= 0 && model->setCellText(static_cast<ui::RowIndex>(marche), 1, "Liste\xE2\x80\xA6"), "Liste\xE2\x80\xA6 sur Marche (BOOL)");
+    const auto* t = doc->project.hmiType(rec);
+    const auto memberType = [&](const std::string& name) {
+        for (const auto& m : t->members)
+            if (m.name == name) return m.type;
+        return std::string("?");
+    };
+    t = doc->project.hmiType(rec);
+    check(t && memberType("Marche") == "LIST OF BOOL", "sans fen\xC3\xAAtre : la forme sur le type actuel - LIST OF BOOL (" + (t ? memberType("Marche") : std::string("?")) + ")");
+    model = types.memberTable().model();
+    check(model && model->setCellText(static_cast<ui::RowIndex>(rowOf("Etapes")), 2, "['P\xC3\xA9trir', 'Cuire']"), "la valeur initiale d'Etapes : un litt\xC3\xA9ral");
+    model = types.memberTable().model();
+    check(model && !model->setCellText(static_cast<ui::RowIndex>(rowOf("Stock")), 2, "['vis' := "), "un litt\xC3\xA9ral illisible : refus\xC3\xA9");
+    // L'ecran des variables : une variable T_Recette, depliee - ses membres objets, une ligne chacun.
+    app::HmiVariablesPane vars("vars1124", doc, apply);
+    vars.setBounds({0, 0, 1600, 900});
+    vars.layout();
+    const Id recette = vars.addVariable("Recette", "T_Recette", {}, &why);
+    check(recette != kNoId, "une variable Recette : T_Recette (" + why + ")");
+    vars.setExpanded("Recette", true);
+    const int row = vars.rowOf("Recette.Etapes");
+    check(row >= 0 && vars.table().model()->cellText(static_cast<ui::RowIndex>(row), 1) == "LIST OF STRING"
+              && vars.table().model()->cellText(static_cast<ui::RowIndex>(row), 2) == "['P\xC3\xA9trir', 'Cuire']",
+          "Recette d\xC3\xA9pli\xC3\xA9" "e : Recette.Etapes, LIST OF STRING, sa valeur initiale");
+    vars.setExpanded("Recette.Etapes", true);
+    check(vars.rowOf("Recette.Stock") == vars.rowOf("Recette.Etapes") + 1, "un membre objet ne se d\xC3\xA9plie pas en cases");
+}
+
 void communes1123() {
     std::printf("1.12.3 : plusieurs objets choisis - leurs proprietes communes\n");
     Bench b;
@@ -23738,13 +23796,15 @@ void objetsVariables1122() {
     (void)stack.undo();
     x = doc->project.variableById(vid);
     check(x && x->type == "REAL" && x->equipment == "Balance" && x->address == "%MW10", "Ctrl+Z : REAL, li\xC3\xA9" "e \xC3\xA0 Balance (%MW10)");
-    // Un membre de type IHM : une place fixe.
+    // Un membre de type IHM : 1.12.4, un membre objet (une liste dans la structure) ; pas le type lui-meme.
     HmiType t;
     t.id = p.allocate();
     t.name = "T_Lot";
     t.members = {{"Poids", "REAL", "", ""}};
     p.programs.types.push_back(t);
-    check(!hmi::types::validMemberType(p, "LIST OF REAL", &why) && why.find("place fixe") != npos, "un membre LIST OF REAL : refus\xC3\xA9 (" + why + ")");
+    check(hmi::types::validMemberType(p, "LIST OF REAL", &why, "T_Lot"), "un membre LIST OF REAL : accept\xC3\xA9 (" + why + ")");
+    check(!hmi::types::validMemberType(p, "LIST OF T_Lot", &why, "T_Lot") && why.find("lui-m\xC3\xAAme") != npos,
+          "un membre LIST OF T_Lot de T_Lot : refus\xC3\xA9 (" + why + ")");
     // L'editeur des elements : les lignes et le litteral.
     check(app::itemseditor::linesOf("[1.5, 'a, b', 3]") == "1.5\n'a, b'\n3" && app::itemseditor::linesOf("0") == "0", "les lignes d'une valeur");
     check(app::itemseditor::literalOf("LIST OF REAL", "1.5\n\n 2,\n3") == "[1.5, 2, 3]" && app::itemseditor::literalOf("TUPLE(INT, STRING)", "1\n'x'") == "(1, 'x')"
@@ -29036,6 +29096,7 @@ int main(int argc, char** argv) {
     voixDesSons1123();                 // 1.12.3 : les voix des sons (melange)
     disposition1123();                 // 1.12.3 : Projet > Disposition
     apercuDisposition1124();           // 1.12.4 : l'apercu de la fenetre Disposition
+    membresObjetsEcran1124();          // 1.12.4 : les membres objets, ecrans des types et des variables
     lot6_actions_ressources();
     lot6_simulation();
     cycle1115();                 // 1.11.15 : le cycle de la simulation, la remanence

@@ -4647,7 +4647,10 @@ void HmiSimulationPane::updateTables() {
     if (ihmVars_) {
         std::string sig;
         for (const auto& var : doc_->project.programs.variables) sig += var.name + ':' + var.type + ';';
-        for (const auto& t : doc_->project.programs.types) sig += t.name + '#' + std::to_string(t.members.size()) + ';';
+        for (const auto& t : doc_->project.programs.types) {
+            sig += t.name + '#' + std::to_string(t.members.size()) + ';';
+            for (const auto& m : t.members) sig += m.type + ',';     // 1.12.4 : un membre qui devient une liste
+        }
         if (sig != ihmVarsSig_) {
             ihmVarsSig_ = sig;
             std::vector<HmiSimVarTree::Leaf> leaves;
@@ -4656,7 +4659,10 @@ void HmiSimulationPane::updateTables() {
                     leaves.push_back({var.name, var.type});
                     continue;
                 }
-                for (const auto& l : hmi::types::leafVariables(doc_->project, var)) leaves.push_back({l.name, l.type});
+                std::vector<hmi::types::ObjectMember> objects;
+                for (const auto& l : hmi::types::leafVariables(doc_->project, var, nullptr, nullptr, nullptr, &objects))
+                    leaves.push_back({l.name, l.type});
+                for (const auto& o : objects) leaves.push_back({o.path, o.type});    // 1.12.4 : ses membres objets, une ligne chacun
             }
             ihmVars_->setLeaves(std::move(leaves));
             tabs_->setTabBadge(TabVariables, std::to_string(ihmVars_->leafCount()), ui::Tone::Accent);

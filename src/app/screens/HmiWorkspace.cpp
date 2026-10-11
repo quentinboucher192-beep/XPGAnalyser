@@ -1375,6 +1375,9 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         if (auto* types = pane->typesPane()) {
             HmiTypesPane::Hosts th;
             th.arrayType = [this](const std::string& current, std::function<void(const std::string&)> done) { askHmiArrayType(current, std::move(done)); };
+            th.shapedType = [this](const std::string& current, const std::string& form, std::function<void(const std::string&)> done) {   // 1.12.4
+                askHmiShapedType(current, form, /*fixedOnly*/ false, std::move(done));
+            };
             th.exportItems = [this](hmi::Id t) { askHmiExportPrograms(0, t); };   // 1.11.2 (decision 174)
             th.importAny = [this] { askHmiImport(); };
             types->setHosts(std::move(th));

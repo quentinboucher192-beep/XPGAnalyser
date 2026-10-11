@@ -127,6 +127,13 @@ public:
         (void)name;
         return nullptr;
     }
+    // 1.12.4 : UN NOM DONT UN MEMBRE (OU UNE CASE) EST UN OBJET de l'environnement - une structure
+    // IHM qui contient une liste (Recette.Etapes), un tableau de telles structures : le dialecte
+    // passe par ses emplacements (Recette.Etapes[0], LIST_ADD(Recette.Etapes, x)).
+    virtual bool hasRichMembers(std::string_view name) {
+        (void)name;
+        return false;
+    }
     // Une fonction IHM du projet, lue dans le dialecte (nul : pas une fonction
     // du projet ; l'appel passe alors par call()).
     virtual std::shared_ptr<const Function> dialectFunction(std::string_view name) {

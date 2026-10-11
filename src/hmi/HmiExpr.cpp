@@ -128,6 +128,11 @@ public:
         auto o = plc_.richVariable(scope_ ? scope_->resolve(name) : std::string(name));
         return o ? sim::deepCopy(*o) : nullptr;
     }
+    // 1.12.4 : une structure qui porte des membres objets (Recette.Etapes.Count).
+    bool hasRichMembers(std::string_view name) override {
+        if (scope_ && scope_->value(name)) return false;
+        return plc_.hasRichMembers(scope_ ? scope_->resolve(name) : std::string(name));
+    }
     bool findOperator(std::string_view op, std::string_view l, std::string_view r, sim::OperatorSource& out) override {
         return plc_.findOperator(op, l, r, out);
     }

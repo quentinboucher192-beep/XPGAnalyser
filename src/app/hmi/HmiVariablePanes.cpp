@@ -140,15 +140,15 @@ std::string placeOf(const std::string& address, const std::string& type) {
     return address.front() == '%' ? pt.placeText() : eq::modiconText(pt);
 }
 
-// `members` : la liste d'un membre de type IHM (une place fixe : ni liste, ni MAP, ni tuple).
-std::vector<std::string> typeChoices(const hmi::Project& p, std::string_view except = {}, bool members = false) {
+// `except` : un type IHM a ne pas proposer (celui du membre). 1.12.2 : un membre avait une place fixe ;
+// 1.12.4 : un membre peut aussi etre une liste, un vecteur, une MAP, un tuple (un membre objet).
+std::vector<std::string> typeChoices(const hmi::Project& p, std::string_view except = {}) {
     std::vector<std::string> out;
     for (const auto& t : hmi::typereg::baseRegistry().names(hmi::typereg::UseVariable)) out.push_back(t);   // 1.11.19 : le registre
     for (const auto& t : p.programs.types)
         if (except.empty() || !sameText(t.name, except)) out.push_back(t.name);
     out.push_back(kArray);
-    if (!members)
-        for (const auto* k : {&kList, &kVector, &kMap, &kTuple}) out.push_back(*k);    // 1.12.2
+    for (const auto* k : {&kList, &kVector, &kMap, &kTuple}) out.push_back(*k);    // 1.12.2
     if (app::typepicker::available()) out.push_back(kPickType);
     return out;
 }
@@ -929,7 +929,7 @@ void HmiVariablesPane::emitMembers(const hmi::Variable& v, const Leaves& leaves,
     ty::Spec s;
     if (!ty::parseSpec(type, s)) return;
     struct Child {
-        std::string path, rel, type, description;
+        std::string path, rel, type, description, initial;
     };
     std::vector<Child> kids;
     long long hidden = 0;
@@ -949,7 +949,7 @@ void HmiVariablesPane::emitMembers(const hmi::Variable& v, const Leaves& leaves,
                 for (long long j = s.low[1]; j <= s.high[1]; ++j) push("[" + std::to_string(i) + "," + std::to_string(j) + "]");
     } else if (!ty::isElementary(s.element)) {
         for (const auto& m : ty::membersOf(p, s.element))
-            kids.push_back({path + "." + m.name, rel.empty() ? m.name : rel + "." + m.name, ty::normalized(m.type), m.description});
+            kids.push_back({path + "." + m.name, rel.empty() ? m.name : rel + "." + m.name, ty::normalized(m.type), m.description, m.initial});
     }
     for (const auto& k : kids) {
         Row r;
@@ -959,7 +959,9 @@ void HmiVariablesPane::emitMembers(const hmi::Variable& v, const Leaves& leaves,
         r.rel = k.rel;
         r.type = k.type;
         r.depth = depth;
-        const bool composite = ty::isComposite(k.type);
+        // 1.12.4 : un membre objet (une liste, une MAP... dans la structure) : une ligne, sans cases dessous.
+        const bool object = ty::isRich(k.type);
+        const bool composite = !object && ty::isComposite(k.type);
         const bool isOpen = composite && (expandAllOn_ || open_.count(upper(k.path)));
         r.expander = composite ? (isOpen ? 1 : 0) : -1;
         std::string initial, address, place;
@@ -1010,6 +1012,16 @@ void HmiVariablesPane::emitMembers(const hmi::Variable& v, const Leaves& leaves,
             if (ty::parseSpec(k.type, ks)) place = ks.array() ? std::to_string(ks.length()) + " cases" : std::to_string(ty::weightOf(p, k.type, v.packBools).words) + " mots";
         }
         std::string quality;
+        if (object) {
+            // Ni equipement, ni adresse : dans la memoire de l'IHM (la simulation montre sa valeur).
+            initial = k.initial;
+            place = "objet (IHM)";
+            r.editableAddress = false;
+            r.cells = {k.path, k.type, initial, std::string{}, v.bound() ? std::string("dans l'IHM") : std::string{}, std::string{},
+                       v.bound() ? std::string("IHM") : std::string{}, place, std::string{}};
+            rows_.push_back(std::move(r));
+            continue;
+        }
         qualityOf(v, k.path, !composite, quality, r.tone);
         // 1.11.8 : l'adresse d'un membre compose (son depart) se change aussi ; pas celle d'un membre interne.
         r.editableAddress = v.bound() && !internal;
@@ -3030,6 +3042,10 @@ void HmiTypesPane::refreshMembers() {
                     offset = "mot " + std::to_string(first) + (bit >= 0 ? ", bit " + std::to_string(bit) : std::string{});
                     size = ty::isComposite(m.type) ? std::to_string(ty::weightOf(p, m.type).words) + " mots"
                          : bit >= 0 ? std::string("1 bit") : std::to_string(ty::wordsOf(m.type)) + (ty::wordsOf(m.type) > 1 ? " mots" : " mot");
+                } else if (std::any_of(flat.objects.begin(), flat.objects.end(), [&](const ty::ObjectMember& o) { return o.path == path; })) {
+                    // 1.12.4 : un membre objet - ni place Modbus ni mot : dans la memoire de l'IHM.
+                    offset = "\xE2\x80\x94";
+                    size = "objet (IHM)";
                 }
             }
             rows.push_back({m.name, m.type, m.initial, offset, size, m.description});
@@ -3048,7 +3064,7 @@ void HmiTypesPane::refreshMembers() {
         [this, tid](std::size_t, std::size_t c) {
             if (c != 1) return std::vector<std::string>{};
             const auto* t2 = doc_->project.hmiType(tid);
-            return typeChoices(doc_->project, t2 ? t2->name : std::string_view{}, /*members*/ true);   // 1.12.2 : une place fixe
+            return typeChoices(doc_->project, t2 ? t2->name : std::string_view{});   // 1.12.4 : les membres objets aussi
         },
         [this](std::size_t r, std::size_t c, const std::string& text) { return commitMemberCell(r, c, text); });
     syncing_ = true;
@@ -3068,8 +3084,7 @@ bool HmiTypesPane::commitMemberCell(std::size_t row, std::size_t col, const std:
         app::HmiTypePicker::Spec spec;
         spec.field = "Type de " + t->name + "." + m.name;
         spec.current = m.type;
-        spec.use = hmi::typereg::UseVariable;
-        spec.fixedOnly = true;                    // 1.12.2 : un membre a une place fixe
+        spec.use = hmi::typereg::UseVariable;     // 1.12.4 : toutes les formes (un membre objet : sans place Modbus)
         spec.doc = doc_;
         const std::size_t index = row;
         const std::weak_ptr<int> alive = alive_;
@@ -3083,6 +3098,32 @@ bool HmiTypesPane::commitMemberCell(std::size_t row, std::size_t col, const std:
             if (!setMember(tid, index, m2, &why)) say("Refus\xC3\xA9 : " + why, true);
         });
         return false;
+    }
+    if (const std::string shape = col == 1 ? shapeOfChoice(text) : std::string{}; !shape.empty()) {
+        // 1.12.4 : Liste..., Vecteur..., Dictionnaire (MAP)..., Tuple... - un membre objet (dans la memoire
+        // de l'IHM) : la forme et le type des elements dans une fenetre ; sans hote, la forme sur le type actuel.
+        const std::size_t index = row;
+        const auto apply = [this, tid, index](const std::string& type) {
+            const auto* t2 = doc_->project.hmiType(tid);
+            if (!t2 || index >= t2->members.size()) return false;
+            hmi::TypeMember m2 = t2->members[index];
+            m2.type = type;
+            std::string why;
+            if (!setMember(tid, index, m2, &why)) {
+                say("Refus\xC3\xA9 : " + why, true);
+                return false;
+            }
+            return true;
+        };
+        if (hosts_.shapedType) {
+            hosts_.shapedType(m.type, shape, [apply](const std::string& type) { (void)apply(type); });
+            return true;
+        }
+        auto sh = hmi::typeform::decompose(m.type);
+        sh.form = hmi::typeform::fromText(shape).value_or(hmi::typeform::Form::List);
+        sh.parameter.clear();
+        sh.reference = false;
+        return apply(hmi::typeform::compose(sh));
     }
     if (col == 1 && text == kArray) {
         const std::size_t index = row;
@@ -3134,7 +3175,7 @@ bool HmiTypesPane::change(Id id, std::string label, const std::function<bool(hmi
     if (!edit(*tt, why)) return false;
     if (const auto cycle = ty::cycleOf(trial, tt->name); !cycle.empty()) return fail(why, "le type se contiendrait lui-m\xC3\xAAme : " + cycle);
     for (const auto& m : tt->members)
-        if (!ty::validMemberType(trial, m.type, why)) return false;
+        if (!ty::validMemberType(trial, m.type, why, tt->name)) return false;
     bool ok = true;
     apply_(hmi::changeProject(doc_, std::move(label), [&](hmi::Project& p) {
         if (auto* x = p.hmiType(id)) ok = edit(*x, nullptr);
@@ -3180,9 +3221,28 @@ bool HmiTypesPane::renameType(Id id, const std::string& raw, std::string* why) {
     // Les variables et les membres qui l'emploient suivent.
     const auto rename = [&](std::string& type) {
         ty::Spec s;
-        if (!ty::parseSpec(type, s) || !sameText(s.element, before)) return;
-        s.element = name;
-        type = ty::specText(s);
+        if (ty::parseSpec(type, s)) {
+            if (!sameText(s.element, before)) return;
+            s.element = name;
+            type = ty::specText(s);
+            return;
+        }
+        // 1.12.4 : un type objet (LIST OF T_Four, MAP[STRING] OF T_Four, TUPLE(INT, T_Four)) : le nom
+        // parmi ses mots (un membre objet, une variable objet, une declaration).
+        if (!ty::isRich(type)) return;
+        std::string out;
+        for (std::size_t i = 0; i < type.size();) {
+            if (std::isalpha(static_cast<unsigned char>(type[i])) || type[i] == '_') {
+                std::size_t j = i;
+                while (j < type.size() && (std::isalnum(static_cast<unsigned char>(type[j])) || type[j] == '_')) ++j;
+                const std::string word = type.substr(i, j - i);
+                out += sameText(word, before) ? name : word;
+                i = j;
+            } else {
+                out += type[i++];
+            }
+        }
+        type = out;
     };
     apply_(hmi::changeProject(doc_, "Renommer le type " + before + " en " + name, [&](hmi::Project& p) {
         for (auto& x : p.programs.types) {
@@ -3260,14 +3320,18 @@ bool HmiTypesPane::addMember(Id id, const std::string& raw, const std::string& t
 bool HmiTypesPane::setMember(Id id, std::size_t index, const hmi::TypeMember& m, std::string* why) {
     if (!hmi::isIdentifier(m.name)) return fail(why, "nom de membre invalide : lettres, chiffres et _");
     if (!m.initial.empty()) {
-        const auto e = hmi::Expression::compile(m.initial);
-        if (!e.valid()) return fail(why, "valeur initiale illisible : " + e.error());
+        if (ty::isRich(m.type)) {
+            // 1.12.4 : un membre objet - un litteral que le moteur range dans son type ([1, 2], ['a' := 1]).
+            if (!validInitial(doc_->project, m.type, m.initial, why)) return false;
+        } else if (const auto e = hmi::Expression::compile(m.initial); !e.valid()) {
+            return fail(why, "valeur initiale illisible : " + e.error());
+        }
     }
     return change(id, "Membre " + m.name, [&](hmi::HmiType& t, std::string* w) {
         if (index >= t.members.size()) return fail(w, "membre introuvable");
         for (std::size_t i = 0; i < t.members.size(); ++i)
             if (i != index && sameText(t.members[i].name, m.name)) return fail(w, "le membre " + m.name + " existe d\xC3\xA9j\xC3\xA0");
-        if (!ty::validMemberType(doc_->project, m.type, w)) return false;
+        if (!ty::validMemberType(doc_->project, m.type, w, t.name)) return false;
         t.members[index] = m;
         return true;
     }, why);
@@ -3570,7 +3634,12 @@ HmiTypesPane::MemberPaste HmiTypesPane::planMemberPaste(Id typeId, std::string_v
         if (hasType) {
             const std::string norm = ty::normalized(type);
             std::string why;
-            if (!ty::validMemberType(trial, norm, &why)) {
+            if (!ty::validMemberType(trial, norm, &why, tt->name)) {
+                // 1.12.4 : un type connu mais refuse (un membre objet qui contiendrait son type) : la raison.
+                if (ty::validType(trial, norm)) {
+                    plan.refused.push_back({line, name, why});
+                    continue;
+                }
                 const std::string near = nearestType(trial, type);    // 1.10 : comme la maquette (BOOOL -> BOOL)
                 plan.refused.push_back({line, name, "type inconnu : " + type + (near.empty() ? std::string{} : " \xE2\x80\x94 veux-tu dire " + near + " ?")});
                 continue;

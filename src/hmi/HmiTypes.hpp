@@ -59,8 +59,11 @@ bool parseSpec(std::string_view text, Spec& out, std::string* why = nullptr);
 // Connu : elementaire, type IHM du projet, ou tableau de l'un d'eux, bornes lisibles ;
 // 1.12.2 : ou un type objet (isRich) que le registre lit pour une variable IHM.
 [[nodiscard]] bool validType(const Project&, std::string_view type, std::string* why = nullptr);
-// 1.12.2 : un MEMBRE d'un type IHM a une place fixe : validType, sans type objet.
-[[nodiscard]] bool validMemberType(const Project&, std::string_view type, std::string* why = nullptr);
+// Le type d'un MEMBRE d'un type IHM : validType. 1.12.2 : sans type objet ; 1.12.4 : un type objet
+// (une liste, un vecteur, une MAP, un tuple) est un MEMBRE OBJET (ObjectMember) - sans place Modbus,
+// dans la memoire de l'IHM ; un type qui s'y contiendrait (T_Noeud.Enfants : LIST OF T_Noeud) est refuse.
+// `owner` : le type IHM du membre (vide : pas de controle du cycle).
+[[nodiscard]] bool validMemberType(const Project&, std::string_view type, std::string* why = nullptr, std::string_view owner = {});
 
 // 1.12.2 : LES TYPES OBJETS DE L'IHM - une MAP (MAP[STRING] OF REAL), une liste (LIST OF T), un
 // vecteur (VECTOR OF T), un tuple (TUPLE(INT, STRING)), ou un tableau de l'un d'eux. Une variable
@@ -107,10 +110,22 @@ struct Aggregate {
     Weight      weight;
     long long   elementBytes{0};   // un tableau : le poids d'une case
 };
+// 1.12.4 : UN MEMBRE OBJET - une liste, un vecteur, une MAP, un tuple (ou un tableau de l'un d'eux)
+// dans une structure : ni case, ni mot, ni place Modbus ; il vit ENTIER dans la memoire de l'IHM, comme
+// une variable IHM objet (Recette.Etapes, Recettes[2].Etapes : un objet chacun). Les cases simples de la
+// structure gardent leur place ; ses objets ne sont ni lies, ni gardes (Remanente).
+struct ObjectMember {
+    std::string path;              // "Recette.Etapes", "Recettes[2].Etapes"
+    std::string rel;               // relatif a la variable : "Etapes", "[2].Etapes"
+    std::string type;              // "LIST OF STRING"
+    std::string initial;           // un litteral ([1, 2], ['a' := 1], (1, 'x')) ; vide : vide
+    std::string description;
+};
 struct Flat {
-    std::vector<Leaf>      leaves;
-    std::vector<Aggregate> aggregates;
-    std::string            error;  // type inconnu, circulaire, trop de cases ; vide : bon
+    std::vector<Leaf>         leaves;
+    std::vector<Aggregate>    aggregates;
+    std::vector<ObjectMember> objects;   // 1.12.4 : les membres objets
+    std::string               error;     // type inconnu, circulaire, trop de cases ; vide : bon
     [[nodiscard]] bool ok() const noexcept { return error.empty(); }
 };
 // Deplie `type` sous le nom `root`. `initial` : pour un tableau de cases
@@ -130,7 +145,11 @@ struct Flat {
 // d'un membre compose ("Vannes[2]" -> "%MW3050" : ses cases le suivent) ;
 // Variable::compact rend les mots que n'occupent que des membres internes.
 [[nodiscard]] std::vector<Variable> leafVariables(const Project&, const Variable&, std::vector<Aggregate>* aggregates = nullptr,
-                                                  std::vector<std::string>* why = nullptr, std::string* error = nullptr);
+                                                  std::vector<std::string>* why = nullptr, std::string* error = nullptr,
+                                                  std::vector<ObjectMember>* objects = nullptr);
+// 1.12.4 : les membres objets d'une variable IHM (une structure, un tableau de structures) ; une
+// variable simple, une variable objet entiere, un type qui ne se deplie pas : aucun.
+[[nodiscard]] std::vector<ObjectMember> objectMembers(const Project&, const Variable&);
 [[nodiscard]] std::vector<Variable> flatVariables(const Project&);
 
 // 1.11.8 : un chemin de membre (relatif a la variable) en couvre-t-il un autre ? Lui-meme,

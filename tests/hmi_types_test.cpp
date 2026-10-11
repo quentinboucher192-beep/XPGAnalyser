@@ -584,7 +584,8 @@ void objets1122() {
     std::string why;
     check(ty::validType(p, "list of t_four", &why), "validType : LIST OF T_Four (" + why + ")");
     check(!ty::validType(p, "LIST OF T_Inconnu", &why) && why.find("T_Inconnu") != npos, "validType : LIST OF T_Inconnu refus\xC3\xA9 (" + why + ")");
-    check(!ty::validMemberType(p, "VECTOR OF REAL", &why) && why.find("place fixe") != npos, "un membre de type IHM : pas de VECTOR (" + why + ")");
+    // 1.12.4 : un membre objet (dans la memoire de l'IHM, sans place Modbus) - plus refuse.
+    check(ty::validMemberType(p, "VECTOR OF REAL", &why), "un membre de type IHM : un VECTOR, oui (un membre objet) (" + why + ")");
     check(ty::validMemberType(p, "ARRAY[0..3] OF REAL", &why), "un membre : un tableau, oui");
     check(ty::normalized("list of real") == "LIST OF REAL" && ty::normalized("tuple( int ,string )") == "TUPLE(INT, STRING)",
           "remis en forme : " + ty::normalized("tuple( int ,string )"));

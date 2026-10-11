@@ -3109,7 +3109,9 @@ private:
         const Expr* x = &e;
         while (x) {
             switch (x->kind) {
-                case Expr::Kind::Reference: return findLocal(x->name) != nullptr || (dialect_ && env_.richVariable(x->name));
+                case Expr::Kind::Reference:
+                    // 1.12.4 : ou un nom qui porte des membres objets (Recette.Etapes).
+                    return findLocal(x->name) != nullptr || (dialect_ && (env_.richVariable(x->name) || env_.hasRichMembers(x->name)));
                 case Expr::Kind::Member:
                 case Expr::Kind::Index: x = x->lhs.get(); continue;
                 case Expr::Kind::Deref:
@@ -3447,6 +3449,12 @@ private:
 
     bool loadFromEnv(Obj& o, const std::string& name) {
         if (!o.type) return false;
+        // 1.12.4 : un membre objet de l'environnement (une liste dans une structure IHM) : sa copie.
+        if (dialect_ && o.type->kind != TypeDesc::Kind::Scalar)
+            if (auto src = env_.richVariable(name)) {
+                std::string why;
+                return assignObj(o, *src, &why);
+            }
         switch (o.type->kind) {
             case TypeDesc::Kind::Scalar: {
                 Value v;
@@ -3469,6 +3477,9 @@ private:
 
     bool storeToEnv(const std::string& name, const Obj& o, std::string* why) {
         if (!o.type) return false;
+        // 1.12.4 : un membre objet de l'environnement : ecrit en place, entier.
+        if (dialect_ && o.type->kind != TypeDesc::Kind::Scalar)
+            if (auto dst = env_.richVariable(name)) return assignObj(*dst, o, why);
         switch (o.type->kind) {
             case TypeDesc::Kind::Scalar:
                 if (env_.write(name, o.value)) return true;
@@ -3595,7 +3606,13 @@ private:
                 auto base = locate(*e.lhs, create);
                 if (!base) return base;
                 Place p = *base;
-                if (!p.obj) return Place{nullptr, p.name + "." + e.name, p.constant, false};
+                if (!p.obj) {
+                    // 1.12.4 : un membre objet d'une structure de l'environnement (Recette.Etapes) : son objet.
+                    std::string name = p.name + "." + e.name;
+                    if (dialect_)
+                        if (auto o = env_.richVariable(name)) return Place{o, {}, p.constant, false};
+                    return Place{nullptr, std::move(name), p.constant, false};
+                }
                 // Une reference ou un pointeur se suit tout seul : r.Membre = r^.Membre.
                 while (isIndirect(p.obj)) {
                     auto t = follow(p.obj);
@@ -3694,7 +3711,11 @@ private:
                         if (indices[i].o) return dialectError("un indice est une valeur simple");
                         cell += (i ? "," : "") + std::to_string(indices[i].v.asInteger());
                     }
-                    return Place{nullptr, cell + "]", p.constant, false};
+                    cell += "]";
+                    // 1.12.4 : la case d'un tableau de l'environnement qui est un objet (un membre objet).
+                    if (dialect_)
+                        if (auto o = env_.richVariable(cell)) return Place{o, {}, p.constant, false};
+                    return Place{nullptr, std::move(cell), p.constant, false};
                 }
                 while (isIndirect(p.obj)) {
                     auto t = follow(p.obj);
@@ -3859,6 +3880,7 @@ private:
                 if (!name) return core::Err<core::Error>(name.error());
                 Value out;
                 if (env_.read(*name, out)) return RV{out, nullptr};
+                if (auto o = env_.richVariable(*name)) return RV{{}, o};      // 1.12.4 : un membre objet
                 if (!env_.exists(*name)) {
                     auto obj = materialize(*name);
                     if (obj) return RV{{}, *obj};

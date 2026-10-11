@@ -304,6 +304,8 @@ public:
 
     struct Hosts {
         std::function<void(const std::string&, std::function<void(const std::string&)>)> arrayType;   // Tableau...
+        // 1.12.4 : Liste..., Vecteur..., Dictionnaire (MAP)..., Tuple... - un membre objet (type actuel, forme, rappel).
+        std::function<void(const std::string&, const std::string&, std::function<void(const std::string&)>)> shapedType;
         std::function<void(const std::string&)> showVariable;                                         // Utilise par : la variable
         // 1.11.2 (decision 174) : Exporter (les elements coches, celui-ci d'avance) et Importer... (tout paquet).
         std::function<void(hmi::Id)>            exportItems;

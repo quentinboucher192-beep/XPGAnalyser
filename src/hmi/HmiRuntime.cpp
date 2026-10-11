@@ -588,6 +588,13 @@ public:
         const auto it = rt_.rich_.find(upper(r.empty() ? std::string(n) : r));
         return it == rt_.rich_.end() ? nullptr : it->second;
     }
+    // 1.12.4 : une structure IHM (ou un tableau de structures) qui porte des membres objets.
+    bool hasRichMembers(std::string_view n) override {
+        if (rt_.rich_.empty()) return false;
+        if (!frames.empty() && frames.back()->count(upper(n)) != 0) return false;
+        const std::string r = resolved(n);
+        return rt_.hasRichUnder(r.empty() ? std::string(n) : r);
+    }
     bool structMembers(std::string_view typeName, std::vector<std::pair<std::string, std::string>>& out) override {
         if (!rt_.project_) return false;
         // 1.10 (decision 15) : une enumeration repond par ses valeurs, (nom, "#nombre"), dans l'ordre.
@@ -2698,13 +2705,26 @@ void Runtime::initVariables() {
             continue;
         }
         std::vector<types::Aggregate> aggs;
+        std::vector<types::ObjectMember> objects;
         std::string error;
-        const auto leaves = types::leafVariables(*project_, var, &aggs, nullptr, &error);
+        const auto leaves = types::leafVariables(*project_, var, &aggs, nullptr, &error, &objects);
         if (!error.empty()) {
             log("Erreur", "variable " + var.name, error);
             continue;
         }
         for (const auto& leaf : leaves) slot(leaf.name, leaf.type, leaf.initial, var.name);
+        // 1.12.4 : ses membres objets (Recette.Etapes : LIST OF STRING) - un objet chacun, a sa valeur
+        // initiale (le litteral du type IHM) ; illisible : vide, et le journal le dit.
+        for (const auto& m : objects) {
+            std::string why;
+            auto o = sim::makeRichValue(m.type, m.initial, *env_, &why);
+            if (!o && !m.initial.empty()) {
+                log("Erreur", "variable " + var.name, m.path + " : valeur initiale illisible : " + m.initial + " (" + frenchSimMessage(why) + ")");
+                o = sim::makeRichValue(m.type, {}, *env_, &why);
+            }
+            if (o) rich_[upper(m.path)] = std::move(o);
+            else log("Erreur", "variable " + var.name, m.path + " : " + frenchSimMessage(why));
+        }
         for (auto& a : aggs) {
             std::string key = upper(a.path);
             aggregates_[std::move(key)] = std::move(a);
@@ -2797,7 +2817,25 @@ bool Runtime::aggregateAssign(const std::string& target, const std::string& sour
         copies.emplace_back(to + it->first.substr(from.size()), it->second);
     }
     for (const auto& [name, value] : copies) (void)env_->write(name, value);
+    // 1.12.4 : et ses membres objets (Four2.Etapes := Four1.Etapes), entiers.
+    for (auto it = rich_.lower_bound(from); it != rich_.end() && it->first.compare(0, from.size(), from) == 0; ++it) {
+        if (it->first.size() == from.size() || !it->second) continue;
+        const char next = it->first[from.size()];
+        if (next != '.' && next != '[') continue;
+        if (const auto t2 = rich_.find(to + it->first.substr(from.size())); t2 != rich_.end() && t2->second) {
+            std::string why;
+            if (!sim::assignObj(*t2->second, *it->second, &why))
+                env_->diagnostics.push_back({sim::Diagnostic::Severity::Error, target + " := " + source + " : " + frenchSimMessage(why), 0, {}});
+        }
+    }
     return true;
+}
+
+bool Runtime::hasRichUnder(std::string_view path) const {
+    const std::string from = upper(path);
+    for (auto it = rich_.lower_bound(from); it != rich_.end() && it->first.compare(0, from.size(), from) == 0; ++it)
+        if (it->first.size() > from.size() && (it->first[from.size()] == '.' || it->first[from.size()] == '[')) return true;
+    return false;
 }
 
 void Runtime::prime(double now) {

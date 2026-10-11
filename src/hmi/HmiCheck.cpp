@@ -327,11 +327,16 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
             std::string why;
             if (!isIdentifier(m.name)) add(out, S::Error, cat, kNoId, kNoId, ty.name, ty.name + " : nom de membre invalide '" + m.name + "'");
             else if (!members.insert(upperText(m.name)).second) add(out, S::Error, cat, kNoId, kNoId, ty.name, ty.name + " : membre en double " + m.name);
-            if (!types::validMemberType(p, m.type, &why)) add(out, S::Error, cat, kNoId, kNoId, ty.name, ty.name + "." + m.name + " : " + why);
+            const bool memberOk = types::validMemberType(p, m.type, &why, ty.name);
+            if (!memberOk) add(out, S::Error, cat, kNoId, kNoId, ty.name, ty.name + "." + m.name + " : " + why);
             if (types::property(m.name))
                 add(out, S::Info, cat, kNoId, kNoId, ty.name,
                     ty.name + "." + m.name + " : un membre de ce nom passe avant la propri\xC3\xA9t\xC3\xA9 " + m.name);
-            if (!m.initial.empty()) {
+            if (memberOk && types::isRich(m.type)) {
+                // 1.12.4 : un membre objet - sa valeur initiale, un litteral ([1, 2], ['a' := 1], (1, 'x')).
+                if (!typeform::valueFits(p, m.type, m.initial, &why))
+                    add(out, S::Error, cat, kNoId, kNoId, ty.name, ty.name + "." + m.name + " : valeur initiale illisible (" + why + ")");
+            } else if (!m.initial.empty()) {
                 const auto e = Expression::compile(m.initial);
                 if (!e.valid()) add(out, S::Error, cat, kNoId, kNoId, ty.name, ty.name + "." + m.name + " : valeur initiale " + m.initial + " : " + e.error());
             }
