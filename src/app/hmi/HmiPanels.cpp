@@ -32,6 +32,7 @@
 #include "../../hmi/HmiEnums.hpp"       // 1.12.2 : les enumerations, sources d'elements
 #include "../../hmi/HmiChoiceLists.hpp" // 1.12.7 (lot D) : les lettres ISA, les positions de la vanne 3 voies
 #include "../../hmi/HmiProduction.hpp"  // 1.12.7 (lot D) : le calendrier des postes
+#include "../../hmi/HmiRanges.hpp"      // 1.12.10 (lot F) : la plage et les seuils de la variable
 #include "../../ui/Shapes.hpp"
 #include "../../ui/Theme.hpp"
 #include "../../ui/widgets/Controls.hpp"
@@ -2064,8 +2065,15 @@ const std::vector<KeyInfo>& keyInfos() {
          "D\xC3\xA9" "coch\xC3\xA9 : toujours dans exports/, sans question."},
         // ---- lot 11 : la vanne reglante
         {"opening", "Ouverture (%)", PG::ValueType::Text, {},
-         "Vanne r\xC3\xA9glante : de 0 \xC3\xA0 100 % (une expression : =Vanne_Position). Vide : tout ou rien."},
+         "Vanne r\xC3\xA9glante : de 0 \xC3\xA0 100 % (une expression : =Vanne_Position). Vide : tout ou rien. "
+         "Un signal 0..27648 ou 0..1 : r\xC3\xA9glez Ouverture : min et max (ou la plage de sa variable, Unit\xC3\xA9s et formats) - il se montre en %."},
         {"moving", "En mouvement (expression)", PG::ValueType::Text, {}, "Vraie : la tige clignote (la vanne bouge)."},
+        // 1.12.10 (lot F) : la plage de l'ouverture (un signal 0..27648 ou 0..1 montre 0..100 %, sans formule)
+        {"openingMin", "Ouverture : min", PG::ValueType::Text, {},
+         "La valeur de l'ouverture qui vaut 0 % (un nombre, ou une variable tap\xC3\xA9" "e sans =). Vide : le Min de sa variable "
+         "(Configuration > Unit\xC3\xA9s et formats), sinon 0."},
+        {"openingMax", "Ouverture : max", PG::ValueType::Text, {},
+         "La valeur de l'ouverture qui vaut 100 % (27648, 1...). Vide : le Max de sa variable (Configuration > Unit\xC3\xA9s et formats), sinon 100."},
         // ---- 1.10.4 : la vanne 3 voies
         {"valve3Function", "Variante", PG::ValueType::Enum, {"m\xC3\xA9langeuse", "r\xC3\xA9partitrice"},
          "M\xC3\xA9langeuse : les voies 1 et 2 entrent, la voie 3 sort. R\xC3\xA9partitrice : la voie 3 entre, les voies 1 et 2 sortent. "
@@ -2131,8 +2139,10 @@ const std::vector<KeyInfo>& keyInfos() {
         // ---- lot 13 : le selecteur de theme, les unites des variables
         {"themeLabels", "Libell\xC3\xA9s (jour;nuit)", PG::ValueType::Text, {},
          "Les libell\xC3\xA9s des deux boutons : Jour;Nuit (ils se traduisent, Configuration > Langues)."},
-        {"varFormat", "Format de la variable", PG::ValueType::Boolean, {},
-         "Coch\xC3\xA9 : l'unit\xC3\xA9 et le format de la variable montr\xC3\xA9" "e (Configuration > Unit\xC3\xA9s et formats) remplacent ceux de l'objet. "
+        {"varFormat", "Unit\xC3\xA9, format et plage de la variable", PG::ValueType::Boolean, {},
+         "Coch\xC3\xA9 : l'unit\xC3\xA9 et le format de la variable montr\xC3\xA9" "e (Configuration > Unit\xC3\xA9s et formats) remplacent ceux de l'objet ; "
+         "son Min, son Max et ses seuils (ou sa mise \xC3\xA0 l'\xC3\xA9" "chelle) remplissent ceux que l'objet laisse vides - ce qui est "
+         "r\xC3\xA9gl\xC3\xA9 sur l'objet l'emporte. "
          "D\xC3\xA9" "coch\xC3\xA9 : l'objet garde les siens."},
         {"formats", "Formats (a;b;c)", PG::ValueType::Text, {},
          "Un format par ligne (0.0;0;0.00) ; vide : celui de la variable (Configuration > Unit\xC3\xA9s et formats), sinon Format."},
@@ -2726,7 +2736,17 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
     {
         const bool charts = o->kind == hmi::Kind::BarChart || o->kind == hmi::Kind::XYChart || o->kind == hmi::Kind::StateChart
                          || o->kind == hmi::Kind::PieChart || o->kind == hmi::Kind::RadarChart || o->kind == hmi::Kind::Histogram;
-        if (!charts && (o->find("unit") || o->find("format")) && !o->find("varFormat")) allProps.push_back({"varFormat", "TRUE", ""});
+        if (!charts && (o->find("unit") || o->find("format") || hmi::ranges::inherits(o->kind)) && !o->find("varFormat"))   // 1.12.10 : et la plage
+            allProps.push_back({"varFormat", "TRUE", ""});
+        // 1.12.10 (lot F) : la plage de l'ouverture d'une vanne, les seuils d'un instrument ISA (absents d'un objet
+        // neuf : rien ne change dans son fichier ; vides, ceux de la variable).
+        if (o->kind == hmi::Kind::Valve && !many)
+            for (const char* key : {"openingMin", "openingMax"})
+                if (!o->find(key)) allProps.push_back({key, "", ""});
+        if (o->kind == hmi::Kind::IsaInstrument && !many)
+            for (const char* key : {"lowAlarm", "low", "high", "highAlarm", "colorWarning", "colorAlarm"})
+                if (!o->find(key))
+                    allProps.push_back({key, std::string_view(key) == "colorWarning" ? "#F2C94C" : std::string_view(key) == "colorAlarm" ? "#E5534B" : "", ""});
         if (o->kind == hmi::Kind::VariableTable && !o->find("formats")) allProps.push_back({"formats", "", ""});
         // 1.12.7 (lot E) : « Repeter depuis » d'une instance (absent d'un objet neuf : rien ne change dans son fichier).
         if (o->kind == hmi::Kind::SymbolInstance && !many) {
@@ -2800,6 +2820,12 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
         }
         p.value = prop.value;
         p.type = info ? info->type : PG::ValueType::Text;
+        // 1.12.10 (lot F) : une borne, un seuil laisses vides - en gris, ce que l'objet en fera : « 10 (de Pression_Ligne) »,
+        // « 0 (mise a l'echelle de Debit) », « 100 (par defaut) ». Min et Max acceptent aussi un nom de variable sans =.
+        if (project && !many && prop.expr.empty() && hmi::ranges::takesName(o->kind, prop.key)) {
+            p.placeholder = hmi::ranges::hint(*project, view, *o, prop.key);
+            if (p.type == PG::ValueType::Real) p.type = PG::ValueType::Text;
+        }
         if (info) p.enumValues = info->choices;
         // Les ressources du projet, en liste : on choisit une image parmi les
         // images, une police parmi les polices ; la source d'un Tableau parmi

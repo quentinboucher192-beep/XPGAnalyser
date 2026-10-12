@@ -87,6 +87,7 @@
 #include "../src/hmi/HmiTypes.hpp"    // lot 16
 #include "../src/hmi/HmiTypeRegistry.hpp"   // 1.12.5 (D16) : simTypeOf
 #include "../src/hmi/HmiRoles.hpp"          // 1.12.6 (lots B et C) : le role de chaque propriete
+#include "../src/hmi/HmiRanges.hpp"         // 1.12.10 (lot F) : la plage et les seuils de la variable
 #include "../src/hmi/HmiPackage.hpp"  // lot 20
 #include "../src/hmi/HmiSymbols.hpp"
 #include "../src/hmi/HmiRetain.hpp"   // 1.12.3 : l'etat des structures du poste
@@ -5111,7 +5112,7 @@ void verificationsLot9() {
     inverse.setNumber("max", 10);
     put(Kind::Knob, "Pas_Negatif", "Niveau").setNumber("step", -1);
     put(Kind::Slider, "Pas_Enorme", "Niveau").setNumber("step", 500);
-    put(Kind::Slider, "Min_Texte", "Niveau").set("min", "abc");
+    put(Kind::Slider, "Min_Texte", "Niveau").set("min", "12 bar");   // 1.12.10 : "abc" est un nom de variable (lot F)
     auto& expr = put(Kind::Slider, "Max_Expression", "Niveau");
     expr.setExpr("max", "Niveau * 2");
     put(Kind::Bargraph, "Zones_Illisibles").set("zones", "0-60 #2ECC71");
@@ -7695,7 +7696,7 @@ void productionLot11() {
         const Id tank = edit::add(g, w, Kind::Tank, 1000, 10);
         w.object(tank)->set("low", "80");
         w.object(tank)->set("high", "20");
-        w.object(tank)->set("highAlarm", "x");
+        w.object(tank)->set("highAlarm", "8 %");   // 1.12.10 : "x" est un nom de variable (lot F)
         g.views = {w};
         g.config.startView = w.id;
         const auto issues = generate(g, [](std::string_view) { return false; });
@@ -24728,10 +24729,389 @@ void enregistre1127() {
           "un objet qui ne s'en sert pas ne les porte pas (le fichier ne change pas)");
 }
 
+// =============================================================================
+//  1.12.10 (lot F de l'audit des objets) : la plage et les seuils de la variable
+// =============================================================================
+void lotF11210() {
+    std::printf("1.12.10 (lot F) : la plage et les seuils de la variable\n");
+    // ---- Unites et formats : la plage et les seuils, enregistres seulement s'ils sont regles
+    {
+        Project p;
+        View v = makeView(p, "Vue_F");
+        p.views = {v};
+        p.config.startView = p.views[0].id;
+        p.displays.push_back({"Pression_Ligne", "bar", "0.0"});
+        VariableDisplay d{"Debit", "m3/h", "0.0"};
+        d.min = "0";
+        d.max = "Consigne_Max";
+        d.low = "2";
+        d.high = "8";
+        d.lowAlarm = "1";
+        d.highAlarm = "9";
+        p.displays.push_back(d);
+        const auto files = serializeProject(p);
+        std::string index;
+        for (const auto& f : files)
+            if (f.path == "ihm.txt") index.assign(f.data->begin(), f.data->end());
+        check(index.find("affichage variable=\"Pression_Ligne\" unite=\"bar\" format=\"0.0\"\n") != std::string::npos,
+              "F : une ligne sans plage s'\xC3\xA9" "crit comme en 1.12.9 (aucun champ de plus)");
+        check(index.find("affichage variable=\"Debit\" unite=\"m3/h\" format=\"0.0\" min=\"0\" max=\"Consigne_Max\" seuil_bas=\"2\" "
+                         "seuil_haut=\"8\" alarme_basse=\"1\" alarme_haute=\"9\"\n") != std::string::npos,
+              "F : une ligne r\xC3\xA9gl\xC3\xA9" "e : ses six champs \xC3\xA0 la suite");
+        const FileReader reader = [&](const std::string& path, std::string& content) {
+            for (const auto& f : files)
+                if (f.path == path) {
+                    content.assign(f.data->begin(), f.data->end());
+                    return true;
+                }
+            return false;
+        };
+        const auto back = parseProject(reader);
+        check(back && back->displays.size() == 2 && back->displays[0] == p.displays[0] && back->displays[1] == d,
+              "F : Min, Max (un nom : Consigne_Max), les quatre seuils enregistr\xC3\xA9s et relus");
+        check(back && back->displays[0].min.empty() && back->displays[0].highAlarm.empty(), "F : ... absents, ils restent vides");
+    }
+    // ---- l'heritage : les objets prennent la plage et les seuils de leur variable
+    Project p;
+    View v = makeView(p, "Vue_Plages");
+    p.programs.variables.push_back(hmiVar(p, "Pression_Ligne", "REAL", "5"));
+    p.programs.variables.push_back(hmiVar(p, "Consigne_Max", "REAL", "8"));
+    p.programs.variables.push_back(hmiVar(p, "Autre", "REAL", "1"));
+    p.programs.variables.push_back(hmiVar(p, "Libre", "REAL", "1"));
+    Variable debit = hmiVar(p, "Debit_Lie", "REAL", "0");
+    debit.equipment = "Automate_1";
+    debit.address = "%MW10";
+    debit.rawMin = 0;
+    debit.rawMax = 27648;
+    debit.engMin = 0;
+    debit.engMax = 10;
+    p.programs.variables.push_back(debit);
+    VariableDisplay line{"Pression_Ligne", "bar", "0.0"};
+    line.min = "0";
+    line.max = "10";
+    line.lowAlarm = "1";
+    line.low = "2";
+    line.high = "8";
+    line.highAlarm = "9";
+    p.displays.push_back(line);
+    VariableDisplay other{"Autre", "", ""};
+    other.min = "-5";
+    other.max = "50";
+    p.displays.push_back(other);
+    const auto put = [&](Kind k, const char* name, double y, bool fresh) {
+        const Id id = edit::add(p, v, k, 10, y);
+        Object* o = v.object(id);
+        o->name = name;
+        if (fresh) ranges::followVariable(*o);   // pose depuis la palette : Min et Max vides
+        return id;
+    };
+    const Id jaugeNeuve = put(Kind::Gauge, "Jauge_Neuve", 10, true);
+    v.object(jaugeNeuve)->setExpr("value", "Pression_Ligne");
+    const Id jaugeAncienne = put(Kind::Gauge, "Jauge_Ancienne", 200, false);
+    v.object(jaugeAncienne)->setExpr("value", "Pression_Ligne");
+    const Id jaugeLibre = put(Kind::Gauge, "Jauge_Libre", 400, true);
+    v.object(jaugeLibre)->setExpr("value", "Libre");
+    const Id jaugeLiee = put(Kind::Gauge, "Jauge_Liee", 600, true);
+    v.object(jaugeLiee)->setExpr("value", "Debit_Lie");
+    const Id jaugeSienne = put(Kind::Gauge, "Jauge_Sienne", 800, true);
+    v.object(jaugeSienne)->setExpr("value", "Pression_Ligne");
+    v.object(jaugeSienne)->setFlag("varFormat", false);
+    const Id cuve = put(Kind::Tank, "Cuve", 1000, true);
+    v.object(cuve)->setExpr("value", "Pression_Ligne");
+    const Id cuveMain = put(Kind::Tank, "Cuve_Main", 1200, true);
+    v.object(cuveMain)->setExpr("value", "Pression_Ligne");
+    v.object(cuveMain)->set("high", "7");
+    const Id afficheur = put(Kind::NumericDisplay, "Afficheur", 1400, true);
+    v.object(afficheur)->setExpr("value", "Pression_Ligne");
+    const Id curseur = put(Kind::Slider, "Curseur", 1500, true);
+    v.object(curseur)->set("variable", "Pression_Ligne");
+    v.object(curseur)->set("step", "0");
+    const Id curseurNom = put(Kind::Slider, "Curseur_Nom", 1600, false);
+    v.object(curseurNom)->set("variable", "Autre");
+    v.object(curseurNom)->set("max", "Consigne_Max");
+    v.object(curseurNom)->set("step", "0");
+    const Id champ = put(Kind::InputField, "Champ", 1700, true);
+    v.object(champ)->set("variable", "Pression_Ligne");
+    const Id barre = put(Kind::Bargraph, "Bargraphe", 1800, true);
+    v.object(barre)->setExpr("value", "Pression_Ligne");
+    v.object(barre)->set("setpoint", "Consigne_Max");
+    const Id courbe = put(Kind::Trend, "Courbe", 2000, true);
+    v.object(courbe)->set("variables", "Pression_Ligne;Autre");
+    const Id bouteille = put(Kind::GasBottle, "Bouteille", 2200, true);
+    v.object(bouteille)->setExpr("value", "Libre");
+    p.views = {v};
+    p.config.startView = p.views[0].id;
+    {
+        View shown = p.views[0];
+        check(ranges::needed(p, shown) && ranges::apply(shown, p), "F : la vue a des plages \xC3\xA0 prendre \xC3\xA0 la variable");
+        const auto at = [&](Id id, const char* key) { return shown.object(id)->text(key); };
+        same(at(jaugeNeuve, "min") + ".." + at(jaugeNeuve, "max"), "0..10",
+             "F : une jauge neuve (Min, Max vides) prend la plage de sa variable, 0..10 (avant : 0..100 retap\xC3\xA9 \xC3\xA0 la main)");
+        same(at(jaugeAncienne, "min") + ".." + at(jaugeAncienne, "max"), "0..100",
+             "F : une jauge d'un projet existant garde ses valeurs \xC3\xA9" "crites (0..100) : elle ne change pas");
+        same(at(jaugeLibre, "min") + ".." + at(jaugeLibre, "max"), "0..100", "F : une variable sans plage : celle d'un objet neuf");
+        same(at(jaugeLiee, "min") + ".." + at(jaugeLiee, "max"), "0..10", "F : une variable li\xC3\xA9" "e : sa mise \xC3\xA0 l'\xC3\xA9" "chelle (0..27648 -> 0..10)");
+        same(at(jaugeSienne, "min") + ".." + at(jaugeSienne, "max"), "0..100",
+             "F : la case \xC2\xAB Unit\xC3\xA9, format et plage de la variable \xC2\xBB d\xC3\xA9" "coch\xC3\xA9" "e : l'objet garde les siens");
+        same(at(cuve, "lowAlarm") + ";" + at(cuve, "low") + ";" + at(cuve, "high") + ";" + at(cuve, "highAlarm"), "1;2;8;9",
+             "F : une cuve prend les quatre seuils de sa variable");
+        same(at(cuveMain, "high"), "7", "F : ... un seuil r\xC3\xA9gl\xC3\xA9 sur l'objet l'emporte");
+        same(at(afficheur, "low") + ";" + at(afficheur, "highAlarm"), "2;9", "F : un afficheur num\xC3\xA9rique aussi");
+        same(at(courbe, "ymin") + ".." + at(courbe, "ymax"), "-5..50", "F : une courbe : l'union des plages de ses plumes (0..10 et -5..50)");
+        same(at(bouteille, "max"), "200", "F : une bouteille neuve sans plage de variable : 0..200, comme avant");
+        same(shown.object(curseurNom)->expr("max"), "Consigne_Max", "F : Max tap\xC3\xA9 Consigne_Max (sans =) : la variable, lue comme une formule");
+        same(shown.object(barre)->expr("setpoint"), "Consigne_Max", "F : ... la consigne d'un bargraphe aussi");
+        check(!ranges::needed(p, shown), "F : une fois pr\xC3\xA9par\xC3\xA9" "e, plus rien \xC3\xA0 prendre");
+    }
+    {
+        bool high = false;
+        for (const auto& oa : objectAlarms(p))
+            if (oa.def.name.find("Niveau_Tres_Haut") != std::string::npos && oa.def.condition.find(">= 9") != std::string::npos) high = true;
+        check(high, "F : l'alarme \xC2\xAB niveau tr\xC3\xA8s haut \xC2\xBB d'une cuve prend l'alarme haute de sa variable (9) - avant : \xC2\xAB seuil vide \xC2\xBB");
+    }
+    check(ranges::hint(p, p.views[0], *p.views[0].object(jaugeNeuve), "max") == "10 (de Pression_Ligne)"
+              && ranges::hint(p, p.views[0], *p.views[0].object(jaugeLiee), "max") == "10 (mise \xC3\xA0 l'\xC3\xA9" "chelle de Debit_Lie)"
+              && ranges::hint(p, p.views[0], *p.views[0].object(jaugeLibre), "max") == "100 (par d\xC3\xA9" "faut)"
+              && ranges::hint(p, p.views[0], *p.views[0].object(jaugeAncienne), "max").empty(),
+          "F : l'inspecteur montre la valeur h\xC3\xA9rit\xC3\xA9" "e en gris, et d'o\xC3\xB9 elle vient");
+    {
+        // En marche : le dessin, le clic et le moteur lisent les memes bornes.
+        Runtime rt;
+        rt.bind(&p, nullptr);
+        rt.start(0.0);
+        rt.tick(0.1);
+        LiveView live;
+        live.bind(*rt.composedView(p.views[0].id));
+        const View shown = live.evaluate(rt.environment(), nullptr, nullptr, 0.1);
+        same(shown.object(jaugeNeuve)->text("max"), "10", "F : en marche, la jauge dessin\xC3\xA9" "e sur 0..10");
+        same(shown.object(barre)->text("setpoint"), "8", "F : ... la consigne Consigne_Max dessin\xC3\xA9" "e \xC3\xA0 8");
+        rt.dragValue(curseur, 1.0, true, 0.2);
+        check(rt.variable("Pression_Ligne") && std::fabs(rt.variable("Pression_Ligne")->asReal() - 10.0) < 1e-9,
+              "F : un curseur neuf pouss\xC3\xA9 au bout \xC3\xA9" "crit 10, le Max de sa variable (avant : 100)");
+        rt.dragValue(curseurNom, 1.0, true, 0.3);
+        check(rt.variable("Autre") && std::fabs(rt.variable("Autre")->asReal() - 8.0) < 1e-9,
+              "F : un curseur dont le Max est Consigne_Max (sans =) : 8 (avant : un nom tap\xC3\xA9 refus\xC3\xA9 par G\xC3\xA9n\xC3\xA9rer)");
+        rt.objectPart(champ, "champ", 0.4);
+        rt.typeText("12", 0.41);
+        rt.typeKey(EditKey::Enter, 0.42);
+        check(rt.formState(champ) && rt.formState(champ)->error && rt.formState(champ)->message.find("hors bornes") != std::string::npos,
+              "F : un champ de saisie aux bornes vides prend celles de sa variable : 12 refus\xC3\xA9 (0..10)");
+    }
+    // ---- la vanne : l'ouverture dans sa plage ; l'instrument ISA : ses seuils (decision 6)
+    {
+        Project q;
+        View w = makeView(q, "Vue_Vannes");
+        q.programs.variables.push_back(hmiVar(q, "Position_Brute", "INT", "13824"));
+        q.programs.variables.push_back(hmiVar(q, "Position_Unite", "REAL", "0.25"));
+        q.programs.variables.push_back(hmiVar(q, "Mesure", "REAL", "9.5"));
+        VariableDisplay unite{"Position_Unite", "", ""};
+        unite.min = "0";
+        unite.max = "1";
+        q.displays.push_back(unite);
+        VariableDisplay mesure{"Mesure", "bar", "0.0"};
+        mesure.high = "8";
+        mesure.highAlarm = "9";
+        q.displays.push_back(mesure);
+        const Id brute = edit::add(q, w, Kind::Valve, 10, 10);
+        w.object(brute)->set("opening", "Position_Brute");
+        w.object(brute)->set("openingMin", "0");
+        w.object(brute)->set("openingMax", "27648");
+        const Id unitaire = edit::add(q, w, Kind::Valve, 10, 200);
+        w.object(unitaire)->setExpr("opening", "Position_Unite");
+        const Id ancienne = edit::add(q, w, Kind::Valve, 10, 400);
+        w.object(ancienne)->setExpr("opening", "Position_Brute / 276.48");
+        const Id isa = edit::add(q, w, Kind::IsaInstrument, 300, 10);
+        w.object(isa)->setExpr("value", "Mesure");
+        q.views = {w};
+        q.config.startView = q.views[0].id;
+        Runtime rt;
+        rt.bind(&q, nullptr);
+        rt.start(0.0);
+        rt.tick(0.1);
+        LiveView live;
+        live.bind(*rt.composedView(q.views[0].id));
+        const View shown = live.evaluate(rt.environment(), nullptr, nullptr, 0.1);
+        double a = -1, b = -1, c = -1;
+        (void)parseNumber(shown.object(brute)->text("opening"), a);
+        (void)parseNumber(shown.object(unitaire)->text("opening"), b);
+        (void)parseNumber(shown.object(ancienne)->text("opening"), c);
+        check(std::fabs(a - 50) < 1e-6, "F : une vanne 0..27648 (Ouverture : min, max) \xC3\xA0 13824 s'ouvre \xC3\xA0 50 % (avant : 13824 %, born\xC3\xA9 \xC3\xA0 100)");
+        check(std::fabs(b - 25) < 1e-6, "F : une vanne sur une variable 0..1 (Unit\xC3\xA9s et formats) : 0,25 -> 25 %, sans formule");
+        check(std::fabs(c - 50) < 1e-6, "F : une vanne sans plage : son ouverture comme avant (une formule en %)");
+        same(shown.object(isa)->text("high") + ";" + shown.object(isa)->text("highAlarm"), "8;9",
+             "F : un instrument ISA prend les seuils de sa variable (avant : il n'en avait pas)");
+    }
+    // ---- Generer : les plages et les seuils (des avertissements, rien ne bloque)
+    {
+        Project g = p;
+        for (auto& var : g.programs.variables)
+            if (var.name == "Debit_Lie") var.equipment.clear();   // (l'equipement de l'essai n'existe pas : Generer le dirait)
+        VariableDisplay bad{"Libre", "", ""};
+        bad.min = "10";
+        bad.max = "5";
+        bad.high = "Consigne_Mx";
+        g.displays.push_back(bad);
+        VariableDisplay order{"Consigne_Max", "", ""};
+        order.min = "0";
+        order.max = "100";
+        order.low = "60";
+        order.high = "40";
+        order.highAlarm = "120";
+        g.displays.push_back(order);
+        View& gv = g.views[0];
+        const Id seuilNom = edit::add(g, gv, Kind::Tank, 10, 3000);
+        gv.object(seuilNom)->name = "Cuve_Nom";
+        gv.object(seuilNom)->setExpr("value", "Pression_Ligne");
+        gv.object(seuilNom)->set("highAlarm", "Consigne_Max");
+        const Id inconnu = edit::add(g, gv, Kind::Slider, 10, 3100);
+        gv.object(inconnu)->name = "Curseur_Inconnu";
+        gv.object(inconnu)->set("variable", "Autre");
+        gv.object(inconnu)->set("max", "Consigne_Mx");
+        const Id vide = edit::add(g, gv, Kind::Gauge, 10, 3200);
+        gv.object(vide)->name = "Jauge_Vide";
+        gv.object(vide)->set("min", "10");
+        gv.object(vide)->set("max", "5");
+        const Id hors = edit::add(g, gv, Kind::Tank, 10, 3300);
+        gv.object(hors)->name = "Cuve_Hors";
+        gv.object(hors)->setExpr("value", "Pression_Ligne");
+        gv.object(hors)->set("min", "");
+        gv.object(hors)->set("max", "");
+        gv.object(hors)->set("highAlarm", "15");
+        const auto issues = generate(g, [](std::string_view) { return false; });
+        const auto says = [&](const char* object, const char* text, Issue::Severity sev = Issue::Severity::Warning) {
+            const Object* o = object[0] ? g.views[0].objectByName(object) : nullptr;
+            for (const auto& i : issues)
+                if ((object[0] ? (o && i.object == o->id) : i.object == kNoId) && i.severity == sev && i.message.find(text) != std::string::npos)
+                    return true;
+            return false;
+        };
+        bool blocked = false;
+        for (const auto& i : issues)
+            if (i.severity == Issue::Severity::Error) {
+                blocked = true;
+                std::printf("  erreur : %s\n", i.message.c_str());
+            }
+        check(!blocked, "F : G\xC3\xA9n\xC3\xA9rer ne bloque rien (avant : Max tap\xC3\xA9 Consigne_Max, \xC2\xAB n'est pas un nombre \xC2\xBB, une erreur)");
+        check(says("", "Libre : Min 10 \xE2\x89\xA5 Max 5"), "F : Unit\xC3\xA9s et formats : Min \xE2\x89\xA5 Max");
+        check(says("", "\xC2\xAB Consigne_Mx \xC2\xBB : variable inconnue"), "F : ... un nom inconnu dans un seuil");
+        check(says("", "Consigne_Max : les seuils ne sont pas dans l'ordre"), "F : ... des seuils dans le d\xC3\xA9sordre (seuil bas 60 > seuil haut 40)");
+        check(says("", "Alarme haute 120 hors de la plage 0..100"), "F : ... une alarme haute hors de la plage");
+        check(!says("Cuve_Nom", "n'est pas un nombre", Issue::Severity::Error), "F : une alarme haute tap\xC3\xA9" "e Consigne_Max : accept\xC3\xA9" "e (la variable)");
+        check(says("Curseur_Inconnu", "Max \xC2\xAB Consigne_Mx \xC2\xBB : variable inconnue"), "F : un Max tap\xC3\xA9 Consigne_Mx : variable inconnue, dite");
+        check(says("Jauge_Vide", "la plage est vide"), "F : une jauge 10..5 : la plage est vide (avant : rien)");
+        check(says("Cuve_Hors", "Alarme haute 15 hors de la plage 0..10"), "F : un seuil hors de la plage h\xC3\xA9rit\xC3\xA9" "e (0..10 de Pression_Ligne) : dit");
+    }
+}
+
+// La valeur initiale d'une structure et d'un tableau de structures.
+void structuresF11210() {
+    std::printf("1.12.10 (lot F) : la valeur initiale d'une structure, d'un tableau de structures\n");
+    Project p;
+    View v = makeView(p, "Vue_Cuves");
+    HmiType cuve;
+    cuve.id = p.allocate();
+    cuve.name = "T_Cuve";
+    cuve.members = {{"Nom", "STRING", "", ""}, {"Niveau", "REAL", "", ""}};
+    p.programs.types.push_back(cuve);
+    HmiType pompe;
+    pompe.id = p.allocate();
+    pompe.name = "T_Pompe";
+    pompe.members = {{"Marche", "BOOL", "", ""}, {"Consigne", "REAL", "5", ""}, {"Mode", "INT", "3", ""}};
+    p.programs.types.push_back(pompe);
+    p.programs.variables.push_back(hmiVar(p, "Cuves", "ARRAY[1..3] OF T_Cuve",
+                                          "[(Nom := 'Cuve A', Niveau := 4.2), (Nom := 'Cuve B', Niveau := 7.5), (Nom := 'Cuve C', Niveau := 2.8)]"));
+    p.programs.variables.push_back(hmiVar(p, "Pompe", "T_Pompe", "(Marche := TRUE, Consigne := 12.5)"));
+    p.programs.variables.push_back(hmiVar(p, "Bacs", "ARRAY[1..3] OF T_Cuve", "[(Niveau := 1)]"));
+    p.programs.variables.push_back(hmiVar(p, "Faute", "T_Cuve", "(Volume := 3, Niveau := 'abc', Nom := 'F')"));
+    p.programs.variables.push_back(hmiVar(p, "Trop", "ARRAY[1..2] OF T_Cuve", "[(Niveau := 1), (Niveau := 2), (Niveau := 3)]"));
+    const Id barres = edit::add(p, v, Kind::BarChart, 10, 10);
+    v.object(barres)->name = "Barres_Cuves";
+    v.object(barres)->set("variables", "Cuves[*].Niveau");
+    v.object(barres)->set("names", "Cuves[*].Nom");
+    p.views = {v};
+    p.config.startView = p.views[0].id;
+    {
+        const auto f = types::flatten(p, "Pompe", "T_Pompe", "(Marche := TRUE, Consigne := 12.5)");
+        std::string got;
+        for (const auto& l : f.leaves) got += l.rel + "=" + l.initial + ";";
+        same(got, "Marche=TRUE;Consigne=12.5;Mode=3;",
+             "F : une structure (Marche := TRUE, Consigne := 12.5) : les membres nomm\xC3\xA9s, Mode garde celle du type (3)");
+        std::vector<std::pair<std::string, std::string>> pairs;
+        check(types::structLiteral("(Nom := 'a, b', Niveau := 4.2)", pairs) && pairs.size() == 2 && pairs[0].second == "'a, b'",
+              "F : le litt\xC3\xA9ral se lit membre par membre (une virgule dans une cha\xC3\xAEne ne coupe pas)");
+        check(!types::structLiteral("4.2", pairs) && !types::structLiteral("(4.2)", pairs), "F : ... ce qui n'en est pas un est refus\xC3\xA9");
+    }
+    {
+        Runtime rt;
+        rt.bind(&p, nullptr);
+        rt.start(0.0);
+        rt.tick(0.1);
+        const auto real = [&](const char* name) { return rt.variable(name) ? rt.variable(name)->asReal() : -1.0; };
+        const auto text = [&](const char* name) { return rt.variable(name) ? rt.variable(name)->asString() : std::string("?"); };
+        check(std::fabs(real("Cuves[1].Niveau") - 4.2) < 1e-9 && std::fabs(real("Cuves[2].Niveau") - 7.5) < 1e-9
+                  && std::fabs(real("Cuves[3].Niveau") - 2.8) < 1e-9 && text("Cuves[2].Nom") == "Cuve B",
+              "F : Cuves : ARRAY[1..3] OF T_Cuve := [(Nom := 'Cuve A', Niveau := 4.2), ...] - chaque cuve d\xC3\xA9marre \xC3\xA0 sa valeur (avant : ignor\xC3\xA9)");
+        check(rt.variable("Pompe.Marche") && rt.variable("Pompe.Marche")->isTruthy() && std::fabs(real("Pompe.Consigne") - 12.5) < 1e-9
+                  && std::fabs(real("Pompe.Mode") - 3) < 1e-9,
+              "F : Pompe : T_Pompe := (Marche := TRUE, Consigne := 12.5) - Mode garde la valeur du type");
+        check(std::fabs(real("Bacs[1].Niveau") - 1) < 1e-9 && std::fabs(real("Bacs[2].Niveau")) < 1e-9,
+              "F : moins de valeurs que d'\xC3\xA9l\xC3\xA9ments : les autres gardent les valeurs du type");
+        check(std::fabs(real("Faute.Niveau")) < 1e-9 && text("Faute.Nom") == "F",
+              "F : un texte pour un REAL ne s'applique pas (la valeur du type reste) ; le reste, si");
+        check(journalHas(rt, "Variables", "membre inconnu") && journalHas(rt, "Variables", "un texte pour un REAL")
+                  && journalHas(rt, "Variables", "3 valeurs initiales pour 2"),
+              "F : la Console le dit : un membre inconnu, un texte pour un REAL, trop d'\xC3\xA9l\xC3\xA9ments");
+        LiveView live;
+        live.bind(*rt.composedView(p.views[0].id));
+        const View shown = live.evaluate(rt.environment(), nullptr, nullptr, 0.1);
+        same(shown.object(barres)->text("liveValues"), joinLiveValues({"4.2", "7.5", "2.8"}),
+             "F : un graphique en barres Cuves[*].Niveau montre 4.2, 7.5, 2.8 d\xC3\xA8s le d\xC3\xA9marrage (sans script)");
+        same(rt.composedView(p.views[0].id)->object(barres)->text("names"), "Cuve A;Cuve B;Cuve C", "F : ... nomm\xC3\xA9" "es par Cuves[*].Nom");
+    }
+    {
+        const auto issues = generate(p, [](std::string_view) { return false; });
+        bool blocked = false, unknown = false, typed = false, many = false;
+        for (const auto& i : issues) {
+            if (i.severity == Issue::Severity::Error) {
+                blocked = true;
+                std::printf("  erreur : %s\n", i.message.c_str());
+            }
+            if (i.severity != Issue::Severity::Warning) continue;
+            unknown = unknown || i.message.find("Faute : membre inconnu \xC2\xAB Volume \xC2\xBB") != std::string::npos;
+            typed = typed || i.message.find("Faute.Niveau : \xC2\xAB 'abc' \xC2\xBB : un texte pour un REAL") != std::string::npos;
+            many = many || i.message.find("Trop : 3 valeurs initiales pour 2") != std::string::npos;
+        }
+        check(!blocked && unknown && typed && many,
+              "F : G\xC3\xA9n\xC3\xA9rer pr\xC3\xA9vient (avant : rien) - un membre inconnu, un texte pour un REAL, trop d'\xC3\xA9l\xC3\xA9ments ; rien ne bloque");
+    }
+    {
+        // Le fichier : la valeur initiale ecrite telle quelle, relue telle quelle.
+        const auto files = serializeProject(p);
+        const FileReader reader = [&](const std::string& path, std::string& content) {
+            for (const auto& f : files)
+                if (f.path == path) {
+                    content.assign(f.data->begin(), f.data->end());
+                    return true;
+                }
+            return false;
+        };
+        const auto back = parseProject(reader);
+        check(back && back->variable("Cuves") && back->variable("Cuves")->initial == p.variable("Cuves")->initial,
+              "F : le litt\xC3\xA9ral enregistr\xC3\xA9 et relu tel quel");
+    }
+}
+
 int main(int argc, char** argv) {
     // 1.11.10 : HMI_TEST_1110=1 - les fonctions et les popups des symboles, seules.
     if (const char* only = std::getenv("HMI_TEST_1110"); only && *only == '1') {
         fonctionsSymbole11110();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
+    // 1.12.10 : HMI_TEST_11210=1 - le lot F de l'audit des objets, seul.
+    if (const char* only = std::getenv("HMI_TEST_11210"); only && *only == '1') {
+        lotF11210();
+        structuresF11210();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -24899,6 +25279,8 @@ int main(int argc, char** argv) {
     xyProfil1127();                   // 1.12.7 (lot E) : la courbe XY en profil
     etatsDepuis1127();                // 1.12.7 (lot E) : Etats depuis une source
     enregistre1127();                 // 1.12.7 (lots D et E) : enregistre et relu
+    lotF11210();                      // 1.12.10 (lot F) : la plage et les seuils de la variable
+    structuresF11210();               // 1.12.10 (lot F) : la valeur initiale d'une structure, d'un tableau de structures
     enumerationsLangage110();         // 1.10 (S1, decision 15) : les enumerations dans les scripts
     operateurs110();                  // 1.10 (chantier S2) : les operateurs des symboles et des types IHM
     operateurs1101();                 // 1.10.1 (chantier U2) : a, b et Resultat (types, legende, exemple, Compiler)

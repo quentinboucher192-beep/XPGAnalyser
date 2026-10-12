@@ -5,6 +5,7 @@
 #include "../../hmi/HmiSymbols.hpp"
 #include "../../hmi/HmiTemplates.hpp"
 #include "../../hmi/HmiDuplicate.hpp"   // 1.10.2 (D) : les modeles d'objets
+#include "../../hmi/HmiRanges.hpp"   // 1.12.10 (lot F) : un objet pose suit la plage de sa variable
 
 #include "../../ui/Shapes.hpp"
 #include "../../ui/Theme.hpp"
@@ -954,6 +955,8 @@ void HmiCanvas::placeAt(gfx::Point screen, bool keep) {
     edit(symbol.empty() ? "Poser " + std::string(hmi::kindLabel(kind)) : "Poser le symbole " + symbol,
          [&](hmi::Project& p, hmi::View& vv) {
         made = symbol.empty() ? hmi::edit::add(p, vv, kind, x, y) : hmi::placeSymbol(p, vv, symbol, x, y);
+        // 1.12.10 (lot F) : un objet a echelle pose ici suit la plage de sa variable (Min, Max vides).
+        if (auto* fresh = symbol.empty() ? vv.object(made) : nullptr) hmi::ranges::followVariable(*fresh);
         adoptIn(vv);
     });
     if (!keep) { placeKind_.reset(); placeSymbol_.clear(); }

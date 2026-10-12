@@ -6,6 +6,7 @@
 #include "HmiEquipment.hpp"
 #include "HmiMarkers.hpp"   // 1.11.1 (REP) : pathProblems lit un script sans les $ de ses reperes
 #include "HmiTypeRegistry.hpp"   // 1.11.19 (refonte, lot 6) : les types elementaires d'une variable
+#include "HmiExpr.hpp"           // 1.12.10 (lot F) : la valeur d'un membre, lue comme le moteur la lira
 
 #include <algorithm>
 #include <cctype>
@@ -166,6 +167,34 @@ std::vector<std::string> arrayInitials(std::string_view initial, bool& bracketed
     return splitList(t);
 }
 
+// 1.12.10 (lot F) : la valeur `lit` peut-elle aller dans un membre de type `type` ? Faux (et `why`) : elle ne
+// s'appliquera pas (le membre garde la valeur de son type). Une structure, un tableau, une liste : leur
+// forme seulement (leurs elements se verifient en les depliant).
+bool literalFits(const Project& p, std::string_view type, std::string_view lit, std::string* why) {
+    const std::string t = trimmed(lit);
+    if (t.empty() || isRich(type)) return true;
+    Spec s;
+    if (!parseSpec(type, s)) return true;                       // un type illisible : dit ailleurs
+    if (s.array()) return true;                                 // [1, 2, 3], une valeur pour toutes
+    if (!isElementary(s.element)) {
+        const HmiType* ty = p.hmiTypeByName(s.element);
+        if (!ty) return true;
+        if (ty->kind == HmiTypeKind::Enumeration) {
+            std::int64_t n = 0;
+            if (enumNumberOf(*ty, t, n)) return true;
+            return fail(why, "pas une valeur de " + ty->name);
+        }
+        if (t.front() == '(' && t.back() == ')') return true;
+        return fail(why, "une structure s'\xC3\xA9" "crit (Membre := valeur, ...)");
+    }
+    const auto e = Expression::compile(t);
+    if (!e.valid()) return fail(why, "illisible (" + e.error() + ")");
+    const std::string up = upperOf(s.element);
+    const bool text = up == "STRING" || up == "WSTRING" || up == "CHAR" || up == "WCHAR";
+    if (!text && (t.front() == '\'' || t.front() == '"')) return fail(why, "un texte pour un " + up);
+    return true;
+}
+
 // La tete d'ecriture de la place Modbus.
 struct Cursor {
     long long word{0};             // le prochain mot libre
@@ -182,6 +211,10 @@ struct Walker {
     Cursor         cur;
 
     bool full() const noexcept { return static_cast<long long>(out.leaves.size()) > kMaxElements; }
+    // 1.12.10 (lot F) : ce qu'une valeur initiale ne peut pas donner, dit une fois.
+    void note(std::string text) {
+        if (std::find(out.notes.begin(), out.notes.end(), text) == out.notes.end()) out.notes.push_back(std::move(text));
+    }
 
     void leaf(const std::string& path, const std::string& rel, const std::string& type, const std::string& initial,
               const std::string& description) {
@@ -240,12 +273,16 @@ struct Walker {
             const HmiType* elementType = isElementary(s.element) ? nullptr : p.hmiTypeByName(s.element);
             const bool enumElement = elementType && elementType->kind == HmiTypeKind::Enumeration;
             const bool simple = isElementary(s.element) || enumElement;
+            // 1.12.10 (lot F) : un tableau de structures prend aussi un litteral par element,
+            // [(Nom := 'Cuve A', Niveau := 4.2), (...)] - avant, chacun les valeurs de son type, en silence.
             bool bracketed = false;
-            const auto list = simple ? arrayInitials(initial, bracketed) : std::vector<std::string>{};
+            const auto list = arrayInitials(initial, bracketed);
             const bool perElement = list.size() > 1 || bracketed;   // 1.12.2 : [5] : la premiere case seule
+            if (perElement && static_cast<long long>(list.size()) > s.length() && (!simple || !rel.empty()))
+                note(path + " : " + std::to_string(list.size()) + " valeurs initiales pour " + std::to_string(s.length())
+                     + " \xC3\xA9l\xC3\xA9ments (les derni\xC3\xA8res sont ignor\xC3\xA9" "es)");
             long long k = 0;
             const auto elementInit = [&]() -> std::string {
-                if (!simple) return {};
                 if (!perElement) return trimmed(initial);
                 return k < static_cast<long long>(list.size()) ? list[static_cast<std::size_t>(k)] : std::string{};
             };
@@ -297,9 +334,34 @@ struct Walker {
         a.path = path;
         a.spec = s;
         a.typeName = ty->name;
+        // 1.12.10 (lot F) : LA VALEUR INITIALE D'UNE STRUCTURE, (Marche := TRUE, Consigne := 12.5) - les membres
+        // nommes la prennent, les autres gardent celle du type. Ce qui ne s'applique pas (un membre inconnu, un
+        // texte pour un REAL) se dit (notes) et garde la valeur du type. "0" (la valeur d'une variable neuve) : rien.
+        std::vector<std::pair<std::string, std::string>> given;
+        if (const std::string lit = trimmed(initial); !lit.empty() && lit != "0") {
+            std::string form;
+            if (!structLiteral(lit, given, &form)) {
+                note(path + " : valeur initiale \xC2\xAB " + lit + " \xC2\xBB : " + form + " - les valeurs du type " + ty->name + " restent");
+                given.clear();
+            }
+            for (const auto& [name, value] : given) {
+                const bool member = std::any_of(ty->members.begin(), ty->members.end(), [&](const TypeMember& m) { return sameText(m.name, name); });
+                if (member) continue;
+                std::string names;
+                for (std::size_t i = 0; i < ty->members.size() && i < 6; ++i) names += (i ? ", " : "") + ty->members[i].name;
+                note(path + " : membre inconnu \xC2\xAB " + name + " \xC2\xBB (" + ty->name + " : " + names + ")");
+            }
+        }
         for (const auto& m : ty->members) {
             if (!out.error.empty()) break;
-            walk(path + "." + m.name, rel.empty() ? m.name : rel + "." + m.name, m.type, m.initial,
+            std::string init = m.initial;
+            for (const auto& [name, value] : given) {
+                if (!sameText(name, m.name)) continue;
+                std::string unfit;
+                if (literalFits(p, m.type, value, &unfit)) init = value;
+                else note(path + "." + m.name + " : \xC2\xAB " + value + " \xC2\xBB : " + unfit + " - la valeur du type reste");
+            }
+            walk(path + "." + m.name, rel.empty() ? m.name : rel + "." + m.name, m.type, init,
                  m.description.empty() ? description : m.description);
         }
         cur.close();
@@ -566,6 +628,45 @@ Flat flatten(const Project& p, std::string_view root, std::string_view type, std
         out.objects.clear();
     }
     return out;
+}
+
+std::vector<std::string> initialNotes(const Project& p, const Variable& v) {
+    if (!isComposite(v.type) || isRich(v.type) || trimmed(v.initial).empty()) return {};
+    return flatten(p, v.name, v.type, v.initial, v.packBools).notes;
+}
+
+bool structLiteral(std::string_view text, std::vector<std::pair<std::string, std::string>>& out, std::string* why) {
+    out.clear();
+    const std::string t = trimmed(text);
+    const auto form = [&] { return fail(why, "une structure s'\xC3\xA9" "crit (Membre := valeur, ...)"); };
+    if (t.size() < 2 || t.front() != '(' || t.back() != ')') return form();
+    // La parenthese du debut ferme a la fin : (a := 1) + (b := 2) n'en est pas un.
+    int depth = 0;
+    bool quoted = false;
+    for (std::size_t i = 0; i < t.size(); ++i) {
+        const char c = t[i];
+        if (c == '\'') quoted = !quoted;
+        if (quoted) continue;
+        if (c == '(' || c == '[') ++depth;
+        else if ((c == ')' || c == ']') && --depth == 0 && i + 1 < t.size()) return form();
+    }
+    if (depth != 0 || quoted) return form();
+    const std::string inner = trimmed(std::string_view(t).substr(1, t.size() - 2));
+    if (inner.empty()) return true;
+    for (const auto& item : splitList(inner)) {
+        // Le := de premier niveau (pas dans une chaine).
+        std::size_t at = std::string::npos;
+        bool q = false;
+        for (std::size_t i = 0; i + 1 < item.size(); ++i) {
+            if (item[i] == '\'') q = !q;
+            if (!q && item[i] == ':' && item[i + 1] == '=') { at = i; break; }
+        }
+        if (at == std::string::npos) return fail(why, "\xC2\xAB " + item + " \xC2\xBB : \xC3\xA9" "cris Membre := valeur");
+        const std::string name = trimmed(std::string_view(item).substr(0, at));
+        if (!identifier(name)) return fail(why, "\xC2\xAB " + name + " \xC2\xBB n'est pas un nom de membre");
+        out.emplace_back(name, trimmed(std::string_view(item).substr(at + 2)));
+    }
+    return true;
 }
 
 bool bitArea(std::string_view start) noexcept {

@@ -8774,8 +8774,9 @@ void lot13_affichage() {
     std::string why;
     check(pane.table().model()->rowCount() == 0 && pane.addDisplay("Pression", "bar", "0.00", &why) && p.displays.size() == 1,
           "Ajouter : Pression, bar, 0.00");
-    check(pane.table().model()->cellText(0, 3) == "1234.57 bar" && pane.table().model()->cellText(0, 4).rfind("2 : ", 0) == 0,
-          "la ligne : l'exemple (1234.57 bar), montr\xC3\xA9" "e par l'afficheur et le texte (" + pane.table().model()->cellText(0, 4) + ")");
+    // (1.12.10 : l'exemple et « montree par » viennent apres les six colonnes de la plage et des seuils.)
+    check(pane.table().model()->cellText(0, 9) == "1234.57 bar" && pane.table().model()->cellText(0, 10).rfind("2 : ", 0) == 0,
+          "la ligne : l'exemple (1234.57 bar), montr\xC3\xA9" "e par l'afficheur et le texte (" + pane.table().model()->cellText(0, 10) + ")");
     check(!pane.addDisplay("pression", "Pa", "", &why) && why.find("d\xC3\xA9j\xC3\xA0") != std::string::npos && !pane.addDisplay("1abc", "", "", &why)
               && !pane.addDisplay("Debit", "", "0,0x", &why),
           "refus\xC3\xA9s : une variable qui a sa ligne, un chemin mal \xC3\xA9" "crit, un format illisible");
@@ -25593,7 +25594,9 @@ void inspecteur_range_1104() {
         std::vector<std::string> own;
         if (vanne) for (const auto& pr : vanne->properties) own.push_back(k3Plain(pr.name));
         same_text(k3Join(own), "Valeur, D\xC3\xA9" "faut (expression), Couleur allum\xC3\xA9, Couleur \xC3\xA9teint, Couleur de d\xC3\xA9" "faut, "
-                               "Libell\xC3\xA9, Place du libell\xC3\xA9, Commande de la vanne, Ouverture (%), En mouvement (expression)",
+                               "Libell\xC3\xA9, Place du libell\xC3\xA9, Commande de la vanne, Ouverture (%), En mouvement (expression), "
+                               // 1.12.10 (lot F) : la plage de l'ouverture, et la case qui la prend a la variable
+                               "Unit\xC3\xA9, format et plage de la variable, Ouverture : min, Ouverture : max",
                   "la section Vanne : ses propri\xC3\xA9t\xC3\xA9s propres, dans l'ordre d'une vanne neuve");
         int values = 0;
         for (const auto& c : cats) for (const auto& pr : c.properties) values += k3Plain(pr.name).rfind("Valeur", 0) == 0 ? 1 : 0;
@@ -29793,6 +29796,153 @@ void lotE1127_editeur() {
     }
 }
 
+// =============================================================================
+//  1.12.10 (lot F) : la plage et les seuils de la variable - Unites et formats, l'inspecteur,
+//  la valeur initiale d'une structure dans l'ecran des variables
+// =============================================================================
+void lotF11210_editeur() {
+    std::printf("1.12.10 (lot F) : Unites et formats (plage, seuils), l'inspecteur (la valeur heritee en gris), les structures\n");
+    {
+        auto doc = std::make_shared<Document>();
+        core::CommandStack stack;
+        auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+        auto& p = doc->project;
+        Variable lie;
+        lie.id = p.allocate();
+        lie.name = "Debit_Lie";
+        lie.type = "REAL";
+        lie.equipment = "Automate_1";
+        lie.address = "%MW10";
+        lie.rawMax = 27648;
+        lie.engMax = 10;
+        p.programs.variables.push_back(lie);
+        app::HmiUnitsPane pane("unitesF", doc, apply);
+        pane.setBounds({0, 0, 1600, 700});
+        pane.layout();
+        std::string why;
+        check(pane.addDisplay("Pression_Ligne", "bar", "0.0", &why) && pane.setField("Pression_Ligne", "min", "0") && pane.setField("Pression_Ligne", "max", "10")
+                  && pane.setField("Pression_Ligne", "high", "8") && pane.setField("Pression_Ligne", "highAlarm", "Consigne_Max"),
+              "F : Unit\xC3\xA9s et formats : Min, Max, un seuil, une alarme tap\xC3\xA9" "e en nom de variable");
+        check(!pane.setField("Pression_Ligne", "low", "deux bars", &why) && why.find("un nombre") != std::string::npos,
+              "F : ... ni un nombre ni une variable : refus\xC3\xA9 (" + why + ")");
+        const auto& d = p.displays.front();
+        check(d.min == "0" && d.max == "10" && d.high == "8" && d.highAlarm == "Consigne_Max" && d.low.empty(), "F : la ligne garde ce qui est tap\xC3\xA9");
+        const auto* m = pane.table().model().get();
+        check(m && m->columnCount() == 11 && m->cellText(0, 3) == "0" && m->cellText(0, 4) == "10" && m->cellText(0, 6) == "8"
+                  && m->cellText(0, 8) == "Consigne_Max",
+              "F : six colonnes de plus - Min, Max, Seuil bas, Seuil haut, Alarme basse, Alarme haute");
+        check(pane.addDisplay("Debit_Lie", "m3/h", "", &why), "F : une variable li\xC3\xA9" "e \xC3\xA0 un \xC3\xA9quipement, mise \xC3\xA0 l'\xC3\xA9" "chelle 0..10");
+        m = pane.table().model().get();
+        check(m && m->cellText(1, 3) == "0 (mise \xC3\xA0 l'\xC3\xA9" "chelle)" && m->cellText(1, 4) == "10 (mise \xC3\xA0 l'\xC3\xA9" "chelle)",
+              "F : ... son Min et son Max viennent de la mise \xC3\xA0 l'\xC3\xA9" "chelle, en gris, tant qu'on n'a rien tap\xC3\xA9");
+        check(pane.setField("Debit_Lie", "max", "8") && pane.table().model()->cellText(1, 4) == "8", "F : ... une valeur tap\xC3\xA9" "e l'emporte");
+        (void)stack.undo();
+        check(p.displays[1].max.empty(), "F : Ctrl+Z la reprend");
+    }
+    {
+        Bench b;
+        auto& grid = b.editor->properties();
+        const auto findProp = [&](const char* key) -> const ui::PropertyGrid::Property* {
+            for (const auto& c : grid.categories())
+                for (const auto& pr : c.properties)
+                    if (pr.key == key) return &pr;
+            return nullptr;
+        };
+        Variable pl;
+        pl.id = b.doc->project.allocate();
+        pl.name = "Pression_Ligne";
+        pl.type = "REAL";
+        b.doc->project.programs.variables.push_back(pl);
+        VariableDisplay line{"Pression_Ligne", "bar", "0.0"};
+        line.min = "0";
+        line.max = "10";
+        b.doc->project.displays.push_back(line);
+        const Id jauge = b.place(Kind::Gauge, 100, 100);
+        check(jauge != kNoId && b.v().object(jauge)->text("min").empty() && b.v().object(jauge)->text("max").empty(),
+              "F : une jauge pos\xC3\xA9" "e depuis la palette na\xC3\xAEt avec Min et Max vides (elle suit sa variable)");
+        b.v().object(jauge)->setExpr("value", "Pression_Ligne");
+        b.editor->refresh();
+        b.editor->layout();
+        const auto* mx = findProp("max");
+        check(mx && mx->value.empty() && mx->placeholder.rfind("10 (de Pression_Ligne)", 0) == 0,
+              "F : l'inspecteur montre Max en gris : \xC2\xAB 10 (de Pression_Ligne) \xC2\xBB (" + (mx ? mx->placeholder : std::string("?")) + ")");
+        const auto* vf = findProp("varFormat");
+        check(vf && vf->name.find("Unit\xC3\xA9, format et plage de la variable") != std::string::npos,
+              "F : la case \xC2\xAB Format de la variable \xC2\xBB devient \xC2\xAB Unit\xC3\xA9, format et plage de la variable \xC2\xBB");
+        const auto commitKey = [&](const char* key, const std::string& value) {
+            const auto* pr = findProp(key);
+            const auto commit = pr ? pr->commit : nullptr;
+            const bool ok = commit && commit(value);
+            b.editor->layout();
+            return ok;
+        };
+        check(commitKey("max", "Consigne_Max") && b.v().object(jauge)->text("max") == "Consigne_Max",
+              "F : Max tap\xC3\xA9 Consigne_Max (sans =) est accept\xC3\xA9 (avant : \xC2\xAB n'est pas un nombre \xC2\xBB)");
+        check(commitKey("max", "") && b.v().object(jauge)->text("max").empty(),
+              "F : vider Max le rend \xC3\xA0 la variable (avant : la valeur d'un objet neuf, 100)");
+        check(!commitKey("max", "deux cents") && b.v().object(jauge)->text("max").empty(), "F : un texte qui n'est ni un nombre ni un nom est refus\xC3\xA9");
+        check(commitKey("max", "50") && b.v().object(jauge)->text("max") == "50", "F : un nombre tap\xC3\xA9 sur l'objet l'emporte");
+    }
+    {
+        // Le dessin : un seuil hors de la plage d'une cuve se dessine au bord, son etiquette marquee (avant : il disparaissait).
+        hmi::Project dp;
+        hmi::View dv = hmi::makeView(dp, "Vue_Dessin");
+        const Id t = hmi::edit::add(dp, dv, Kind::Tank, 10, 10);
+        dv.object(t)->set("value", "50");
+        dv.object(t)->set("high", "80");
+        Recorder before;
+        const auto theme = ui::Theme::dark();
+        app::HmiPaintOptions opt;
+        app::paintHmiObject(before, dv, *dv.object(t), {}, app::HmiPropertySource{}, theme, opt);
+        dv.object(t)->set("highAlarm", "150");
+        Recorder rec;
+        app::paintHmiObject(rec, dv, *dv.object(t), {}, app::HmiPropertySource{}, theme, opt);
+        check(before.wrote("H") && !before.wrote("HH") && rec.wrote("HH"),
+              "F : une alarme haute 150 sur une cuve 0..100 : son \xC3\xA9tiquette HH se dessine au bord (avant : rien)");
+    }
+    {
+        // L'ecran des variables : la valeur initiale d'une structure, d'un tableau de structures.
+        auto doc = std::make_shared<Document>();
+        core::CommandStack stack;
+        auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+        auto& p = doc->project;
+        HmiType cuve;
+        cuve.id = p.allocate();
+        cuve.name = "T_Cuve";
+        cuve.members = {{"Nom", "STRING", "", ""}, {"Niveau", "REAL", "", ""}};
+        p.programs.types.push_back(cuve);
+        app::HmiVariablesPane vars("varsF", doc, apply);
+        vars.setBounds({0, 0, 1600, 900});
+        vars.layout();
+        std::string why;
+        const Id cuves = vars.addVariable("Cuves", "ARRAY[1..3] OF T_Cuve", {}, &why);
+        const Id une = vars.addVariable("Une_Cuve", "T_Cuve", {}, &why);
+        check(cuves != kNoId && une != kNoId, "F : Cuves : ARRAY[1..3] OF T_Cuve, Une_Cuve : T_Cuve (" + why + ")");
+        check(vars.setInitial(cuves, "[(Nom := 'Cuve A', Niveau := 4.2), (Nom := 'Cuve B', Niveau := 7.5), (Nom := 'Cuve C', Niveau := 2.8)]", &why)
+                  && p.variable("Cuves")->initial.find("Cuve C") != std::string::npos,
+              "F : un litt\xC3\xA9ral par \xC3\xA9l\xC3\xA9ment accept\xC3\xA9 (avant : \xC2\xAB une structure prend les valeurs initiales de son type \xC2\xBB) - " + why);
+        check(vars.setInitial(une, "(Niveau := 3.5)", &why) && p.variable("Une_Cuve")->initial == "(Niveau := 3.5)",
+              "F : une structure : (Niveau := 3.5), Nom garde celle du type");
+        check(!vars.setInitial(une, "(Volume := 3)", &why) && why.find("membre inconnu") != std::string::npos,
+              "F : un membre inconnu est refus\xC3\xA9, avec la raison (" + why + ")");
+        check(!vars.setInitial(une, "(Niveau := 'abc')", &why) && why.find("un texte pour un REAL") != std::string::npos,
+              "F : un texte pour un REAL est refus\xC3\xA9 (" + why + ")");
+        check(!vars.setInitial(cuves, "[(Niveau := 1), (Niveau := 2), (Niveau := 3), (Niveau := 4)]", &why)
+                  && why.find("4 valeurs initiales pour 3") != std::string::npos,
+              "F : trop d'\xC3\xA9l\xC3\xA9ments : refus\xC3\xA9 (" + why + ")");
+        // Le tableau des elements : une ligne par cuve, son litteral entier ; rendu tel quel.
+        auto items = app::HmiItemsDialog::modelOf("ARRAY[1..3] OF T_Cuve", "[(Nom := 'Cuve A', Niveau := 4.2), (Nom := 'Cuve B, la grande')]");
+        check(items && items->rowCount() == 3 && items->values[0] == "(Nom := 'Cuve A', Niveau := 4.2)"
+                  && items->values[1] == "(Nom := 'Cuve B, la grande')" && items->values[2].empty(),
+              "F : \xC3\x89l\xC3\xA9ments d'un tableau de structures : une ligne par \xC3\xA9l\xC3\xA9ment, son litt\xC3\xA9ral (une virgule dans une cha\xC3\xAEne ne coupe pas)");
+        if (items) {
+            items->values[2] = "(Nom := 'Cuve C')";
+            same_text(app::HmiItemsDialog::literalOf(*items), "[(Nom := 'Cuve A', Niveau := 4.2), (Nom := 'Cuve B, la grande'), (Nom := 'Cuve C')]",
+                      "F : ... rendu en un litt\xC3\xA9ral que l'\xC3\xA9" "cran des variables accepte");
+        }
+    }
+}
+
 int main(int argc, char** argv) {
     // 1.11.1 (API-V) : HMI_TEST_APIV=1 - la vue des variables de l'automate et API dans l'aide a la saisie, seules.
     if (const char* only = std::getenv("HMI_TEST_APIV"); only && *only == '1') {
@@ -29806,6 +29956,12 @@ int main(int argc, char** argv) {
         if (argc > 1) configuration_et_variables(argv[1]);
         if (argc > 1) apiVue1112_dupliquer(argv[1]);   // 1.11.2 (D13)
         if (argc > 1) valuePickerApi1113(argv[1]);     // 1.11.3 : le selecteur et les membres de l'automate
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
+    // 1.12.10 : HMI_TEST_11210=1 - le lot F de l'audit des objets, seul.
+    if (const char* only = std::getenv("HMI_TEST_11210"); only && *only == '1') {
+        lotF11210_editeur();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -30023,6 +30179,7 @@ int main(int argc, char** argv) {
     lotD1127_contenu();                   // 1.12.7 (lot D) : les listes en tableau dans Contenu
     lotD1127_choix();                     // 1.12.7 (lot D) : les listes a choix de l'inspecteur
     lotE1127_editeur();                   // 1.12.7 (lot E) : depuis une enumeration, Repeter depuis
+    lotF11210_editeur();                  // 1.12.10 (lot F) : Unites et formats (plage, seuils), l'inspecteur, les structures
     etats1123();                       // 1.12.3 : les etats des objets multi-etats en table
     communes1123();                    // 1.12.3 : plusieurs objets choisis, leurs proprietes communes
     voixDesSons1123();                 // 1.12.3 : les voix des sons (melange)

@@ -957,6 +957,13 @@ private:
                 const std::string v = expr(d.path);
                 s_.change({"Unit\xC3\xA9s et formats"}, "variable", d.path, v, true);
                 d.path = v;
+                // 1.12.10 (lot F) : Min, Max, un seuil tapes en nom de variable (Consigne_Max).
+                for (std::string* range : {&d.min, &d.max, &d.low, &d.high, &d.lowAlarm, &d.highAlarm}) {
+                    if (range->empty()) continue;
+                    const std::string r = expr(*range);
+                    s_.change({"Unit\xC3\xA9s et formats", d.path}, "plage", *range, r, true);
+                    *range = r;
+                }
             }
         if (r_.what != What::Plc && !field_) return;
         const auto plc = [this](const std::string& t) {

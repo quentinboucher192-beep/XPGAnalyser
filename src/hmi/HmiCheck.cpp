@@ -36,6 +36,7 @@
 #include "HmiDisplay.hpp"      // lot 13
 #include "HmiTypes.hpp"        // lot 16
 #include "HmiTypeForms.hpp"    // 1.12.2 : la valeur initiale d'une variable objet
+#include "HmiRanges.hpp"       // 1.12.10 (lot F) : la plage et les seuils de la variable
 #include "HmiEnums.hpp"        // 1.10 (S1) : knownType connait les enumerations
 #include "HmiOperators.hpp"    // 1.10 (integration I2) : les constats des operateurs (S2) dans Compiler
 #include "HmiNatives.hpp"      // 1.12.1 : les enumerations natives des proprietes
@@ -351,6 +352,10 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
         } else if (types::isComposite(var.type)) {
             const auto f = types::flatten(p, var.name, var.type, var.initial, var.packBools);
             if (!f.ok()) add(out, S::Error, "Variable IHM", kNoId, kNoId, var.name, f.error);
+            // 1.12.10 (lot F) : le litteral d'une structure, d'un tableau (Marche := TRUE ; [(...), (...)]) - ce qui ne
+            // s'applique pas est dit (avant : ignore sans un mot) ; un avertissement : la case garde la valeur de son type.
+            else
+                for (const auto& n : f.notes) add(out, S::Warning, "Variable IHM", kNoId, kNoId, var.name, n + " (valeur initiale)");
         }
         if (!var.folder.empty() && !types::validFolder(var.folder, &why))
             add(out, S::Error, "Variable IHM", kNoId, kNoId, var.name, var.name + " : " + why);
@@ -380,8 +385,17 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
                 if (!typeform::valueFits(p, m.type, m.initial, &why))
                     add(out, S::Error, cat, kNoId, kNoId, ty.name, ty.name + "." + m.name + " : valeur initiale illisible (" + why + ")");
             } else if (!m.initial.empty()) {
-                const auto e = Expression::compile(m.initial);
-                if (!e.valid()) add(out, S::Error, cat, kNoId, kNoId, ty.name, ty.name + "." + m.name + " : valeur initiale " + m.initial + " : " + e.error());
+                // 1.12.10 (lot F) : un membre structure (ou tableau de structures) prend un litteral (Courant := 5) -
+                // verifie en le depliant ; ce qui ne s'applique pas est un avertissement (la valeur du type reste).
+                types::Spec ms;
+                const HmiType* mt = memberOk && types::parseSpec(m.type, ms) && !types::isElementary(ms.element) ? p.hmiTypeByName(ms.element) : nullptr;
+                if (mt && mt->kind != HmiTypeKind::Enumeration) {
+                    for (const auto& n : types::flatten(p, ty.name + "." + m.name, m.type, m.initial).notes)
+                        add(out, S::Warning, cat, kNoId, kNoId, ty.name, n + " (valeur initiale)");
+                } else {
+                    const auto e = Expression::compile(m.initial);
+                    if (!e.valid()) add(out, S::Error, cat, kNoId, kNoId, ty.name, ty.name + "." + m.name + " : valeur initiale " + m.initial + " : " + e.error());
+                }
             }
         }
         if (const auto cycle = types::cycleOf(p, ty.name); !cycle.empty())
@@ -1340,6 +1354,8 @@ void checkLot9(const Project& p, const NameExists& plc, std::vector<Issue>& out)
             if (kindWritesVariable(o.kind) || kindShowsValue(o.kind))
                 for (const char* key : {"min", "max", "step", "setpoint", "lowAlarm", "low", "high", "highAlarm"}) {
                     const auto* prop = o.find(key);
+                    // 1.12.10 (lot F) : un nom de variable tape sans = (Consigne_Max) est la variable (HmiRanges, verifie la-bas).
+                    if (prop && prop->expr.empty() && roles::rangeNameKey(o.kind, key) && ranges::isName(prop->value)) continue;
                     if (prop && prop->expr.empty() && numberOrExpr(trimmedCopy(prop->value)))
                         issue(S::Error, key, std::string(key) + " : '" + prop->value + "' n'est pas un nombre (une expression s'\xC3\xA9" "crit avec =)");
                 }
@@ -2143,6 +2159,7 @@ void checkLot11(const Project& p, const NameExists& plc, std::vector<Issue>& out
                     double a = 0, b = 0;
                     for (const char* key : {"lowAlarm", "low", "high", "highAlarm"}) {
                         const auto* pr = o.find(key);
+                        if (pr && pr->expr.empty() && ranges::isName(pr->value)) continue;   // 1.12.10 (lot F) : la variable
                         if (pr && pr->expr.empty() && !trimmedCopy(pr->value).empty() && !parseNumber(trimmedCopy(pr->value), a))
                             issue(S::Error, key, std::string(key) + " : '" + pr->value + "' n'est pas un nombre");
                     }
@@ -3927,7 +3944,7 @@ void roleChecks(const Project& p, std::vector<Issue>& out) {
                         if (has[k] && (val[k] < mn || val[k] > mx))
                             add(out, S::Warning, "Objet", v.id, o.id, keys[k],
                                 std::string(keys[k]) + " " + formatNumber(val[k]) + " est hors de la plage " + formatNumber(mn) + ".." + formatNumber(mx)
-                                    + " : il ne se verra pas");
+                                    + " : il se dessine au bord, marqu\xC3\xA9 d'une fl\xC3\xA8" "che");   // 1.12.10 (lot F) : avant, il disparaissait
             }
         }
 }
@@ -4094,6 +4111,7 @@ std::vector<Issue> generateWith(const Project& p, const NameExists& plcHasName, 
     checkLot13(p, out);                 // lot 13 : la signature, la politique
     checkLanguages(p, out);             // lot 13 : les langues
     checkDisplay(p, plcHasName, out);   // lot 13 : les unites, l'affichage
+    for (auto& i : ranges::check(p, plcHasName)) out.push_back(std::move(i));   // 1.12.10 (lot F) : les plages et les seuils
     checkScenarios(p, out);             // lot 13 : les essais de reception
     checkComm(p, plcHasName, options.plan, options.plcScalar, options.plcPaths.api.get(), out);   // lot 14 : la communication
     checkStation(p, out);                                             // lot 14 : le poste d'exploitation
@@ -4339,7 +4357,7 @@ std::vector<Issue> compileFocused(const Project& p, const CompileFocus* f) {
             if (types::isRich(var.type)) continue;
             types::Spec spec;
             if (types::isComposite(var.type) && types::parseSpec(var.type, spec) && !(spec.array() && types::isElementary(spec.element)))
-                continue;
+                continue;   // 1.12.10 (lot F) : leur litteral se verifie avec Generer (checkPrograms)
             const auto f = types::isComposite(var.type) ? types::flatten(p, var.name, var.type, var.initial, var.packBools) : types::Flat{};
             std::set<std::string> seen;
             const auto test = [&](const std::string& text) {

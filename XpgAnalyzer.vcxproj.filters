@@ -1312,6 +1312,9 @@
     <ClCompile Include="src\hmi\HmiRetain.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\hmi\HmiRanges.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\hmi\HmiRoles.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
@@ -2522,6 +2525,9 @@
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiRetain.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiRanges.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiRoles.hpp">

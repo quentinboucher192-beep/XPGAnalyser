@@ -33,6 +33,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace hmi::types {
@@ -126,13 +127,25 @@ struct Flat {
     std::vector<Aggregate>    aggregates;
     std::vector<ObjectMember> objects;   // 1.12.4 : les membres objets
     std::string               error;     // type inconnu, circulaire, trop de cases ; vide : bon
+    // 1.12.10 (lot F) : ce qu'une valeur initiale ne peut pas donner (un membre inconnu, un texte pour un
+    // REAL, trop d'elements) - la case garde la valeur de son type ; Generer et la Console le disent.
+    std::vector<std::string>  notes;
     [[nodiscard]] bool ok() const noexcept { return error.empty(); }
 };
 // Deplie `type` sous le nom `root`. `initial` : pour un tableau de cases
 // simples, une valeur pour toutes ("0") ou une liste ("1.5, 2, 3") ; pour une
-// structure, ce sont les valeurs du type.
+// structure, ce sont les valeurs du type - 1.12.10 (lot F) : sauf celles que donne
+// un litteral (Marche := TRUE, Consigne := 12.5) ; pour un tableau de structures,
+// un litteral par element [(Nom := 'Cuve A', Niveau := 4.2), (...)] (les elements
+// en moins gardent les valeurs du type ; un seul litteral sans crochets : tous).
 [[nodiscard]] Flat flatten(const Project&, std::string_view root, std::string_view type, std::string_view initial = {},
                            bool packBools = true);
+// 1.12.10 (lot F) : ce que la valeur initiale de cette variable ne peut pas donner (Flat::notes) ; vide : tout
+// s'applique (ou rien a dire).
+[[nodiscard]] std::vector<std::string> initialNotes(const Project&, const Variable&);
+// Un litteral de structure (Marche := TRUE, Consigne := 12.5) : ses paires (membre, valeur), dans l'ordre ;
+// faux : ce n'est pas un litteral de structure (`why` : pourquoi, s'il ressemble a un).
+bool structLiteral(std::string_view text, std::vector<std::pair<std::string, std::string>>& out, std::string* why = nullptr);
 
 // LES VARIABLES IHM, DEPLIEES : une variable simple reste elle-meme ; une
 // structure ou un tableau donne une variable par case, sous son chemin, avec

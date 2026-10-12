@@ -1373,6 +1373,16 @@ struct VariableDisplay {
     std::string path;          // "Pression_Reseau", "Armoires[].ana.PT1.mes"
     std::string unit;          // "bar", "\xC2\xB0" "C", "%" ; vide : celle de l'objet
     std::string format;        // "0.0", "0", "0.00" ; vide : celui de l'objet
+    // 1.12.10 (lot F) : LA PLAGE ET LES SEUILS DE LA VARIABLE - un nombre (10), ou le nom d'une
+    // variable tape sans = (Consigne_Max) ; vide : pas regle (Min et Max : la mise a l'echelle d'une
+    // variable liee, s'il y en a une). Repris par les objets qui laissent les leurs vides
+    // (HmiRanges.hpp). Dans le fichier : absents tant qu'ils sont vides.
+    std::string min{};
+    std::string max{};
+    std::string low{};         // seuil bas
+    std::string high{};        // seuil haut
+    std::string lowAlarm{};    // alarme basse
+    std::string highAlarm{};   // alarme haute
     bool operator==(const VariableDisplay&) const = default;
 };
 

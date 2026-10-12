@@ -19,6 +19,7 @@
 #include "../../hmi/HmiEnums.hpp"     // 1.12.7 (lot E) : les etats, les onglets depuis une enumeration
 #include "../../hmi/HmiSources.hpp"   // 1.12.7 (lot E) : le joker [*], .* et /* dans Contenu
 #include "../../hmi/HmiWidgets.hpp"
+#include "../../hmi/HmiRanges.hpp"   // 1.12.10 (lot F) : l'echelle des zones, Min et Max herites
 #include "../../ui/Theme.hpp"
 #include "../../ui/widgets/ExprField.hpp"   // 1.10 (chantier K) : les champs a expression, partout pareils
 
@@ -2247,9 +2248,12 @@ void HmiContentPanel::rebuildGrid() {
             }
             PG::Category info;
             info.name = "Zones";
-            info.properties.push_back(readOnly("\xC3\x89" "chelle", hmi::formatNumber(o->number("min", 0)) + " \xE2\x80\xA6 "
-                                                                    + hmi::formatNumber(o->number("max", 100)),
-                                               "Min et Max (Propri\xC3\xA9t\xC3\xA9s). Une zone en % les suit quand ils changent."));
+            // 1.12.10 (lot F) : Min et Max tels que l'objet les lira (laisses vides : ceux de sa variable).
+            hmi::Object scaled = *o;
+            if (const auto* sv = doc_->project.view(view_)) (void)hmi::ranges::preview(doc_->project, *sv, *o, scaled);
+            info.properties.push_back(readOnly("\xC3\x89" "chelle", hmi::formatNumber(scaled.number("min", 0)) + " \xE2\x80\xA6 "
+                                                                    + hmi::formatNumber(scaled.number("max", 100)),
+                                               "Min et Max (Propri\xC3\xA9t\xC3\xA9s ; vides : ceux de la variable). Une zone en % les suit quand ils changent."));
             info.properties.push_back(readOnly("Zones", std::to_string(bands.size())));
             cats.push_back(std::move(info));
             break;

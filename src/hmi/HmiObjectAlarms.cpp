@@ -8,6 +8,7 @@
 #include "HmiSymbols.hpp"
 #include "HmiMarkers.hpp"   // 1.11 (REP) : markers::strip
 #include "HmiSources.hpp"   // 1.12.7 (lot E) : « Repeter depuis »
+#include "HmiRanges.hpp"   // 1.12.10 (lot F) : les seuils pris a la variable
 
 #include <algorithm>
 #include <optional>
@@ -353,7 +354,10 @@ struct Generator {
 
     void posedSynoptic(const View& v, const Object& o) {
         const std::string group = objectGroupOf(v, o);
-        for (const auto& la : libraryAlarms(o))
+        // 1.12.10 (lot F) : les seuils laisses vides sont ceux de la variable (Unites et formats), comme au dessin.
+        Object ranged = o;
+        (void)ranges::apply(ranged, p, &v);
+        for (const auto& la : libraryAlarms(ranged))
             if (la.applicable) emit(v, o, group, {}, {}, {}, ObjectAlarmSource::Library, o.kind, la.def, true);
     }
 
@@ -402,7 +406,9 @@ struct Generator {
                          &args2);
                 }
             } else if (kindIsSynoptic(c.kind)) {
-                for (const auto& la : libraryAlarms(c)) {
+                Object ranged = c;                                   // 1.12.10 (lot F) : les seuils de la variable
+                (void)ranges::apply(ranged, p, &v);
+                for (const auto& la : libraryAlarms(ranged)) {
                     if (!la.applicable) continue;
                     bool active = true;
                     const AlarmDef base = layered(la.def, c, outer, &active, parentArgs);

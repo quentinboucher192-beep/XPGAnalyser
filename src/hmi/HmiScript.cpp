@@ -8,6 +8,7 @@
 #include "HmiOperators.hpp"        // 1.11.17 : la signature d'un operateur (le lieu d'un appel)
 #include "HmiSymbols.hpp"          // 1.11.17 : la portee d'un symbole, rewriteNames (les textes d'un objet)
 #include "HmiTypeRegistry.hpp"     // 1.11.19 (refonte, lot 6) : les types d'une locale
+#include "HmiRoles.hpp"            // 1.12.10 (lot F) : les bornes et les seuils tapes en nom de variable
 
 #include <algorithm>
 #include <cctype>
@@ -823,7 +824,8 @@ void visitObject(const Project& p, O& o, const View* view, const View* scope, Vi
         if (visitPieces(holder, site, visit)) {
             if constexpr (kWrite) pr = std::move(holder.props.front());
         }
-        if (o.kind == Kind::InputField && (pr.key == "min" || pr.key == "max")) visit(pr.value, CodeForm::Expression, site);
+        // 1.12.10 (lot F) : une borne, un seuil tapes en nom de variable (Consigne_Max) - plus seulement le champ de saisie.
+        if (roles::rangeNameKey(o.kind, pr.key)) visit(pr.value, CodeForm::Expression, site);
         visit(pr.value, CodeForm::Template, site);       // un texte a trous ailleurs que dans "text" (un nom de fichier...)
     }
     if (!o.actions.empty()) {

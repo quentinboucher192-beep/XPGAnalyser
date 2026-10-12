@@ -1045,8 +1045,16 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
         }
     }
     // Lot 13 : les unites et les formats des variables.
-    for (const auto& d : p.displays)
-        index += "affichage" + field("variable", d.path) + field("unite", d.unit) + field("format", d.format) + "\n";
+    for (const auto& d : p.displays) {
+        index += "affichage" + field("variable", d.path) + field("unite", d.unit) + field("format", d.format);
+        // 1.12.10 (lot F) : la plage et les seuils, seulement s'ils sont regles (un fichier 1.12.9 ne change pas).
+        const std::pair<const char*, const std::string*> range[] = {{"min", &d.min}, {"max", &d.max}, {"seuil_bas", &d.low},
+                                                                     {"seuil_haut", &d.high}, {"alarme_basse", &d.lowAlarm},
+                                                                     {"alarme_haute", &d.highAlarm}};
+        for (const auto& [name, value] : range)
+            if (!value->empty()) index += field(name, *value);
+        index += "\n";
+    }
     // Lot 14 : la communication avec l'automate reel - seulement si elle change
     // (un projet qui reste sur le simulateur n'ecrit rien).
     {
@@ -1560,6 +1568,12 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
             d.path = toStr(r.get("variable"));
             d.unit = toStr(r.get("unite"));
             d.format = toStr(r.get("format"));
+            d.min = toStr(r.get("min"));                                  // 1.12.10 (lot F) : absents, vides
+            d.max = toStr(r.get("max"));
+            d.low = toStr(r.get("seuil_bas"));
+            d.high = toStr(r.get("seuil_haut"));
+            d.lowAlarm = toStr(r.get("alarme_basse"));
+            d.highAlarm = toStr(r.get("alarme_haute"));
             if (!d.path.empty()) p.displays.push_back(std::move(d));
         } else if (r.word == "communication") {                           // lot 14
             auto& c = p.comm;

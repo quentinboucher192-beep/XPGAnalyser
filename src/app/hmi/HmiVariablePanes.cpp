@@ -170,10 +170,20 @@ bool validInitial(const hmi::Project& p, const std::string& type, const std::str
         for (std::size_t i = 0; i < e->values.size() && i < 6; ++i) names += (names.empty() ? "" : ", ") + e->values[i].name;
         return fail(why, "valeur inconnue de " + e->name + " : " + names);
     }
-    ty::Spec s;
-    if (ty::isComposite(type) && ty::parseSpec(type, s) && !(s.array() && ty::isElementary(s.element)))
-        return fail(why, "une structure prend les valeurs initiales de son type (Types IHM)");
     const auto f = ty::isComposite(type) ? ty::flatten(p, "x", type, initial) : ty::Flat{};
+    // 1.12.10 (lot F) : une structure prend un litteral (Marche := TRUE, Consigne := 12.5) - les membres nommes,
+    // les autres gardent la valeur de leur type ; un tableau de structures, un litteral par element
+    // [(Nom := 'Cuve A', Niveau := 4.2), (...)]. Avant : refuse (« une structure prend les valeurs initiales de
+    // son type »). Ce que le moteur ne pourrait pas appliquer est refuse, avec la raison.
+    if (!f.notes.empty()) {
+        std::string note = f.notes.front();
+        if (note.rfind("x : ", 0) == 0) note.erase(0, 4);
+        else if (note.rfind("x.", 0) == 0) note.erase(0, 2);
+        else if (note.rfind("x[", 0) == 0) note.erase(0, 1);
+        for (const char* tail : {" - la valeur du type reste", " - les valeurs du type "})
+            if (const auto at = note.find(tail); at != std::string::npos) note.erase(at);
+        return fail(why, note.rfind("valeur initiale", 0) == 0 ? note : "valeur initiale : " + note);
+    }
     std::vector<std::string> texts;
     if (ty::isComposite(type)) for (const auto& l : f.leaves) texts.push_back(l.initial);
     else texts.push_back(initial);
@@ -524,8 +534,8 @@ HmiVariablesPane::HmiVariablesPane(std::string id, hmi::DocumentPtr doc, Apply a
     tools_->setEnabledWhen(VItems, [this, variableChosen] {   // 1.12.2
         const auto* v = doc_->project.variableById(selectedVariable());
         ty::Spec s;
-        return variableChosen() && v && app::itemseditor::available()
-            && (ty::isRich(v->type) || (ty::parseSpec(v->type, s) && s.array() && ty::isElementary(s.element)));
+        // 1.12.10 (lot F) : un tableau de structures aussi - une ligne par element, son litteral (Nom := 'Cuve A', ...).
+        return variableChosen() && v && app::itemseditor::available() && (ty::isRich(v->type) || (ty::parseSpec(v->type, s) && s.array()));
     });
     tools_->setEnabledWhen(VDelete, [this] { return (selectedVariable() != kNoId && selectedPath().empty()) || !selectedFolder().empty(); });
     tools_->setEnabledWhen(VTrend, [this] { return table_ && !table_->selectedModelRows().empty(); });   // 1.10 (le clic dit s'il n'y a rien a tracer)
@@ -1131,8 +1141,7 @@ bool HmiVariablesPane::cellEditable(std::size_t row, std::size_t col) const {
             if (col == CInitial) {
                 if (rich) return true;
                 if (hmi::findEnumeration(doc_->project, v->type)) return true;   // 1.10 (chantier U) : la liste des valeurs
-                ty::Spec s;
-                return !ty::isComposite(v->type) || (ty::parseSpec(v->type, s) && s.array() && ty::isElementary(s.element));
+                return true;   // 1.12.10 (lot F) : une structure, un tableau de structures prennent un litteral
             }
             if (col == CAddress || col == CAccess) return v->bound() && !rich;
             if (col == CRetain) return !v->bound() && !rich;   // 1.11.16 : une variable de l'IHM
@@ -2364,8 +2373,17 @@ void HmiVariablesPane::rebuildProperties() {
                 if (!ok) say("Refus\xC3\xA9 : " + why, true);
                 return ok;
             }, {}, composite ? "Une valeur pour toutes les cases (0), ou une liste case par case (1.5, 2, 3)." : "0, TRUE, 2.5, 'texte', T#5s"));
-        else
-            c.properties.push_back(prop("Initiale", "celles du type " + spec.element));
+        else   // 1.12.10 (lot F) : une structure, un tableau de structures - un litteral (avant : « celles du type », fixe)
+            c.properties.push_back(prop("Initiale", v->initial, PG::ValueType::Text, [this, id](std::string_view text) {
+                std::string why;
+                const bool ok = setInitial(id, std::string(text), &why);
+                if (!ok) say("Refus\xC3\xA9 : " + why, true);
+                return ok;
+            }, {}, parsed && spec.array()
+                       ? "Un litt\xC3\xA9ral par \xC3\xA9l\xC3\xA9ment : [(Nom := 'Cuve A', Niveau := 4.2), (Nom := 'Cuve B')]. Les \xC3\xA9l\xC3\xA9ments "
+                         "en moins et les membres non nomm\xC3\xA9s gardent les valeurs du type " + spec.element + ". Vide : celles du type."
+                       : "(Marche := TRUE, Consigne := 12.5) : les membres nomm\xC3\xA9s ; les autres gardent les valeurs du type "
+                         + spec.element + ". Vide : celles du type."));
         c.properties.push_back(prop("Description", v->description, PG::ValueType::Text, [this, id](std::string_view text) {
             return setDescription(id, std::string(text));
         }));

@@ -23,6 +23,7 @@
 #include "../../hmi/HmiControls.hpp"    // 1.12.2 : le tableau dynamique (tableLayout)
 #include "../../hmi/HmiTypeForms.hpp"   // 1.12.2 : ses colonnes, dans l'editeur
 #include "../../hmi/HmiChoiceLists.hpp" // 1.12.7 (lot D) : les colonnes choisies d'une source
+#include "../../hmi/HmiRanges.hpp"      // 1.12.10 (lot F) : la plage et les seuils de la variable
 #include "../../ui/Shapes.hpp"
 
 #include <algorithm>
@@ -1470,6 +1471,15 @@ void paintHmiObject(gfx::IRenderer& r, const hmi::View& view, const Object& o, c
     if (opt.editor && opt.project && o.kind != Kind::SymbolInstance && hmi::sources::objectHasJoker(o)) {
         Object shown = o;
         if (hmi::sources::previewObject(*opt.project, shown) && !hmi::sources::objectHasJoker(shown)) {
+            paintHmiObject(r, view, shown, vp, src, theme, opt);
+            return;
+        }
+    }
+    // 1.12.10 (lot F) : dans l'editeur, une borne ou un seuil laisses vides se dessinent comme en marche - ceux de
+    // la variable (Unites et formats, la mise a l'echelle), sinon ceux d'un objet neuf.
+    if (opt.editor && opt.project && hmi::ranges::inherits(o.kind)) {
+        Object shown;
+        if (hmi::ranges::preview(*opt.project, view, o, shown)) {   // (rempli, il ne change plus : une fois)
             paintHmiObject(r, view, shown, vp, src, theme, opt);
             return;
         }

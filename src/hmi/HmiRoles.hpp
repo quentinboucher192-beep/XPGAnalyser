@@ -154,6 +154,7 @@ inline constexpr KeyRole kKeyRoles[] = {
     // ---- le synoptique
     {"fault", Role::Formula, Role::Boolean}, {"moving", Role::Formula, Role::Boolean},
     {"opening", Role::Number, Role::Text, Unit::None, "REAL"},
+    {"openingMin", Role::Number, Role::Text, Unit::None, "REAL"}, {"openingMax", Role::Number, Role::Text, Unit::None, "REAL"},   // 1.12.10
     {"labelPosition", Role::Choice}, {"animate", Role::Boolean, Role::Text, Unit::None, "BOOL"},
     {"valveType", Role::Choice}, {"pipeShape", Role::Choice}, {"thickness", Role::Number, Role::Text, Unit::None, "REAL"},
     {"fluidColor", Role::Color}, {"fillColor", Role::Color}, {"gasColor", Role::Color},
@@ -253,6 +254,26 @@ inline constexpr KeyRole kKeyRoles[] = {
     }
 }
 
+// 1.12.10 (lot F) : LES BORNES ET LES SEUILS qu'un objet peut prendre a sa variable (HmiRanges.hpp) - Min et
+// Max des objets a echelle, les seuils des afficheurs et des contenants, l'axe Y d'une courbe, la plage de
+// l'ouverture d'une vanne, la consigne d'un bargraphe. Ils se tapent aussi en nom de variable sans =
+// (Consigne_Max) : une formule qui rend un nombre (avant : seules les bornes du champ de saisie).
+[[nodiscard]] inline bool rangeNameKey(Kind k, std::string_view key) noexcept {
+    const bool bounds = key == "min" || key == "max";
+    const bool thresholds = key == "lowAlarm" || key == "low" || key == "high" || key == "highAlarm";
+    switch (k) {
+        case Kind::ProgressBar: case Kind::Gauge: case Kind::Thermometer: case Kind::Dial: case Kind::Slider: case Kind::Knob:
+        case Kind::InputField: case Kind::Cylinder:
+            return bounds;
+        case Kind::Bargraph: return bounds || key == "setpoint";
+        case Kind::NumericDisplay: case Kind::IsaInstrument: return thresholds;
+        case Kind::Tank: case Kind::GasBottle: case Kind::Silo: case Kind::Hopper: return bounds || thresholds;
+        case Kind::Trend: return key == "ymin" || key == "ymax";
+        case Kind::Valve: return key == "openingMin" || key == "openingMax";
+        default: return false;
+    }
+}
+
 // LE ROLE D'UNE PROPRIETE D'UN OBJET DE CE GENRE : la table, et ce qui depend du genre.
 [[nodiscard]] inline KeyRole roleOf(Kind k, std::string_view key) noexcept {
     const KeyRole* row = keyRole(key);
@@ -273,8 +294,9 @@ inline constexpr KeyRole kKeyRoles[] = {
         if (k == Kind::History) r.role = Role::Choice;
     } else if (key == "count") {
         if (k == Kind::AnimatedGif) { r.role = Role::Number; r.type = "INT"; }
-    } else if ((key == "min" || key == "max") && k == Kind::InputField) {
-        // une borne du champ de saisie se tape aussi en formule sans = (Consigne_Max)
+    } else if (rangeNameKey(k, key)) {
+        // une borne, un seuil se tapent aussi en formule sans = (Consigne_Max) ; 1.12.10 : plus seulement
+        // celles du champ de saisie
         r.role = Role::Formula;
         r.item = Role::Number;
     }

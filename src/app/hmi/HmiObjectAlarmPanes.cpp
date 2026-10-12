@@ -15,6 +15,7 @@
 #include "../../hmi/HmiPublicVars.hpp"
 #include "../../hmi/HmiAlarmGroupCommands.hpp"   // 1.10.2 (AL) : la case Groupe de l'IHM
 #include "../../hmi/HmiSymbols.hpp"
+#include "../../hmi/HmiRanges.hpp"   // 1.12.10 (lot F) : les seuils pris a la variable
 #include "../../ui/Theme.hpp"
 
 #include <algorithm>
@@ -425,9 +426,12 @@ ObjectSection objectSection(const hmi::Project& p, const hmi::View& v, const hmi
         }
         s.alarms.push_back(std::move(row));
     }
-    // A5 : les alarmes par defaut "sans objet" d'un objet du synoptique, grisees.
+    // A5 : les alarmes par defaut "sans objet" d'un objet du synoptique, grisees. 1.12.10 (lot F) : ses seuils
+    // laisses vides lus comme le moteur les lit (ceux de sa variable).
+    hmi::Object ranged = o;
+    (void)hmi::ranges::apply(ranged, p, &v);
     if (hmi::kindIsSynoptic(o.kind))
-        for (const auto& la : hmi::libraryAlarms(o)) {
+        for (const auto& la : hmi::libraryAlarms(ranged)) {
             if (la.applicable) continue;
             AlarmRow row;
             row.localName = la.def.name;

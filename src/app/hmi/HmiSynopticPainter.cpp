@@ -24,6 +24,7 @@
 #include "../../hmi/HmiWidgets.hpp"
 
 #include <algorithm>
+#include <optional>
 #include <cmath>
 #include <vector>
 
@@ -174,14 +175,18 @@ void drawVessel(const Ctx& c, const Sym& s, const Pts& shape, double top, double
         // Le trait de chaque seuil a son niveau ; les etiquettes ensuite, ecartees
         // si deux seuils sont trop proches pour qu'elles se lisent (80 et 88 sur
         // une tremie basse) - le trait, lui, reste a sa place.
-        struct Tag { double y, x; const char* text; gfx::Color col; bool crossed; };
+        struct Tag { double y, x; const char* text; gfx::Color col; bool crossed; int beyond; };
         std::vector<Tag> tags;
         const double fs = std::clamp(std::min(s.w * 0.14, 12.0), 7.0, 12.0), th = fs * 1.35;
         for (const auto& lim : limits) {
             double v = 0;
             const std::string t = c.src.text(c.o, lim.key);
-            if (t.empty() || !hmi::parseNumber(t, v) || v < lo || v > hi) continue;
-            const double y = bottom - (bottom - top) * (v - lo) / (hi - lo);
+            if (t.empty() || !hmi::parseNumber(t, v)) continue;
+            // 1.12.10 (lot F) : un seuil hors de [min, max] se dessine au bord, son etiquette marquee d'une fleche
+            // (vers le haut : au-dessus du max) - avant, il disparaissait en silence alors que son alarme marchait.
+            const int beyond = v > hi ? 1 : v < lo ? -1 : 0;
+            const double at = std::clamp(v, lo, hi);
+            const double y = bottom - (bottom - top) * (at - lo) / (hi - lo) + (beyond > 0 ? 1.5 : beyond < 0 ? -1.5 : 0.0);
             // La corde de la forme a ce niveau.
             const Pts cut = below(shape, y);
             double l = 1e9, r = -1e9;
@@ -191,7 +196,7 @@ void drawVessel(const Ctx& c, const Sym& s, const Pts& shape, double top, double
             const bool crossed = lim.high ? s.value >= v : s.value <= v;
             const gfx::Color col = lim.strong ? alarm : warn;
             for (double x = l + 2; x < r - 2; x += 7) seg(c, x, y, std::min(x + 4, r - 2), y, col, 1.3);
-            tags.push_back({y, r + 2, lim.tag, col, crossed});
+            tags.push_back({y, r + 2, lim.tag, col, crossed, beyond});
         }
         std::sort(tags.begin(), tags.end(), [](const Tag& a, const Tag& b) { return a.y < b.y; });
         for (std::size_t k = 1; k < tags.size(); ++k)
@@ -202,6 +207,13 @@ void drawVessel(const Ctx& c, const Sym& s, const Pts& shape, double top, double
             fill(c, tag, tg.crossed ? tg.col : c.fixed(0x1B2028));
             outline(c, tag, true, tg.col, 1);
             text(c, tg.text, tg.x, tg.y - th / 2, tw, th, tg.crossed ? c.fixedOn(0x111418) : tg.col, fs, "centre");
+            if (tg.beyond != 0) {
+                // La fleche du seuil hors de l'echelle, a droite de l'etiquette.
+                const double ax = tg.x + tw + 2, aw = th * 0.7, ay = tg.y;
+                const Pts arrow = tg.beyond > 0 ? Pts{P(ax, ay + aw * 0.4), P(ax + aw, ay + aw * 0.4), P(ax + aw / 2, ay - aw * 0.5)}
+                                                : Pts{P(ax, ay - aw * 0.4), P(ax + aw, ay - aw * 0.4), P(ax + aw / 2, ay + aw * 0.5)};
+                fill(c, arrow, tg.col);
+            }
         }
     }
     if (c.src.flag(c.o, "showValue", true)) {
@@ -726,8 +738,20 @@ void drawIsa(const Ctx& c, const Sym& s) {
     const double fs = std::clamp(std::min(s.w, s.h) * 0.18, 7.0, 22.0);
     const double valueH = showValue ? fs * 1.6 : 0;
     const double r = std::min(s.w, s.h - valueH) / 2 * 0.96, cx = s.cx(), cy = s.y + r + 1;
+    // 1.12.10 (lot F) : les seuils (les siens, sinon ceux de sa variable) - au-dela d'un seuil, la bulle et la valeur
+    // prennent la couleur des seuils ; au-dela d'une alarme, celle des alarmes.
+    std::optional<gfx::Color> beyond;
+    if (!s.fault && !c.opt.editor) {
+        const auto past = [&](const char* key, bool high) {
+            double t = 0;
+            const std::string text = c.src.text(c.o, key);
+            return !text.empty() && hmi::parseNumber(text, t) && (high ? s.value > t : s.value < t);
+        };
+        if (past("lowAlarm", false) || past("highAlarm", true)) beyond = c.color("colorAlarm", gfx::Color::rgb(0xE5534B));
+        else if (past("low", false) || past("high", true)) beyond = c.color("colorWarning", gfx::Color::rgb(0xF2C94C));
+    }
     fill(c, circle(cx, cy, r), c.color("fill", gfx::Color::rgb(0x1F252E)));
-    outline(c, circle(cx, cy, r), true, s.fault ? s.col : s.line, s.lw);
+    outline(c, circle(cx, cy, r), true, s.fault ? s.col : beyond ? *beyond : s.line, beyond ? s.lw * 1.8 : s.lw);
     // Le montage : terrain (rien), tableau (un trait), tableau arriere (tirete).
     const std::string mount = c.src.text(c.o, "mounting", "terrain");
     if (mount == "tableau") seg(c, cx - r, cy, cx + r, cy, s.line, s.lw * 0.8);
@@ -739,8 +763,8 @@ void drawIsa(const Ctx& c, const Sym& s) {
         const double by = cy + r + 2, bw2 = std::min(s.w, r * 2.6);
         const Pts badge = box(cx - bw2 / 2, by, bw2, valueH - 2, 3);
         fill(c, badge, c.fixed(0x141820));
-        outline(c, badge, true, s.fault ? s.col : c.fixed(0x3A4556), 1);
-        text(c, shownValue(c, s.value), cx - bw2 / 2, by, bw2, valueH - 2, s.fault ? s.col : c.fixedText(0x4FA3FF), fs,
+        outline(c, badge, true, s.fault ? s.col : beyond ? *beyond : c.fixed(0x3A4556), 1);
+        text(c, shownValue(c, s.value), cx - bw2 / 2, by, bw2, valueH - 2, s.fault ? s.col : beyond ? *beyond : c.fixedText(0x4FA3FF), fs,
              "centre");
     }
 }

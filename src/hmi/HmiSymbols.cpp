@@ -921,6 +921,8 @@ void rewriteNames(Object& o, const std::function<std::string(std::string_view, b
                    // 1.11.24 : les bornes d'un champ de saisie (une valeur ou un nom : max := Haut,
                    // un parametre du symbole - avant, la borne restait "Haut", illisible, ignoree).
                    || p.key == "min" || p.key == "max"
+                   // 1.12.10 (lot F) : les seuils, l'axe Y, la plage de l'ouverture, la consigne (un nom : Seuil_Haut)
+                   || roles::rangeNameKey(o.kind, p.key)
                    // 1.12.4 : la source d'une liste, d'un tableau (<- L, un parametre objet du symbole ;
                    // une variable renommee la suit).
                    || p.key == "itemsFrom" || p.key == "rowsFrom") {
