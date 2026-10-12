@@ -978,6 +978,8 @@ void rewriteNames(Object& o, const std::function<std::string(std::string_view, b
                 first = false;
             }
             if (changed) p.value = rebuilt;
+        } else if (p.key == "reference" && o.kind == Kind::XYChart && sources::xyReferenceSource(p.value)) {
+            expr(p.value);   // 1.12.7 (lot E) : la reference d'une courbe XY depuis une source (Ref[*].X,Ref[*].Y)
         } else if (p.key == sources::kRepeatFromKey || p.key == sources::kStatesFromKey) {
             expr(p.value);   // 1.12.7 (lot E) : la source d'une instance repetee (Cuves), des etats (Etats)
         }

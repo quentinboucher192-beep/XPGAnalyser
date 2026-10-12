@@ -167,7 +167,9 @@ par construction.
 - **La courbe XY en profil** (Graphiques) : une Variable X à joker (`Profil[*].X`) trace, à chaque échantillon,
   tous les points (`Profil[i].X`, `Profil[i].Y`) de la source - un profil de four, une courbe de pompe relevée,
   un tableau X / Y ; ses courbes Y citent la même source (`Profil[*].Y`, ou `Debits[*]` pour un second tableau
-  de même taille). Avant : seulement des points accumulés dans le temps. Sans joker en X : comme avant.
+  de même taille). Avant : seulement des points accumulés dans le temps. Sans joker en X : comme avant. La courbe
+  de référence se lit aussi dans une source : `Ref[*].X, Ref[*].Y` (une courbe nominale d'une recette, un tableau
+  X / Y), un point par élément, en marche ; écrite (x,y x,y…), comme avant.
 - **Les vues, les zones, les onglets depuis une source** (Navigation) : la barre de navigation lit ses vues dans
   une liste (`Vues[*]` : une `LIST OF STRING` ou un `ARRAY OF STRING`) ou dans un dossier de vues (`Process/*` :
   les vues ordinaires du dossier et de ses sous-dossiers), le résumé par zone ses zones (`Zones[*].Nom`), le
@@ -224,7 +226,8 @@ par construction.
   Depuis une énumération fait de même et relie la variable de ce type. »
 - *Résumé par zone* : « 1.12.7 : Zones `Zones[*].Nom` : les zones lues dans un tableau de structures. »
 - *Courbe XY* : « 1.12.7 : Variable X `Profil[*].X` et courbe Y `Profil[*].Y` : le profil entier, redessiné à chaque
-  échantillon (un tableau de points, une LIST qui change). »
+  échantillon (un tableau de points, une LIST qui change). Référence `Ref[*].X, Ref[*].Y` : la courbe de référence
+  lue dans une source. »
 - *Tableau* : « 1.12.7 : Lignes depuis une énumération (une ligne par valeur : Nom, Valeur, Texte) ou une
   structure (une ligne par membre : Membre, Valeur) ; un tableau de structures imbriquées : une colonne par
   membre simple (Pompe.Debit). »
@@ -252,7 +255,8 @@ Des avertissements :
   montreraient la même chose) ;
 - « Éléments depuis » un tableau ou une liste de structures sans membre choisi (avec la proposition
   `Pompes[*].Nom`).
-La Variable X d'un profil (`Profil[*].X`) se vérifie sur son premier élément ; un joker sur le paramètre d'un
+La Variable X d'un profil (`Profil[*].X`) et une référence depuis une source (`Ref[*].X, Ref[*].Y`) se vérifient
+sur leur premier élément (avant : « point illisible », une erreur) ; un joker sur le paramètre d'un
 symbole ou d'une popup se lit sur la borne basse que donne le type du paramètre (`Cuve.Mesures[*]`, Mesures en
 `ARRAY[1..3]` : `Mesures[1]` ; avant cette correction, la fausse erreur « l'indice 0 est hors des bornes »).
 « Lignes depuis » une structure seule ou une énumération est accepté (avant : une erreur) ; une colonne choisie se
@@ -281,8 +285,8 @@ structure d'une popup (`Cuve.*`) se vérifie sur son type ; un paramètre sans t
     dossier vide dit ;
   - `lignesDepuis1127` : un tableau depuis une énumération et depuis une structure seule, ses colonnes choisies,
     Générer sans erreur ;
-  - `xyProfil1127` : une courbe XY en profil, ses trois points refaits à chaque échantillon ; un joker dans un
-    symbole sur un tableau qui part de 1, sans fausse erreur de bornes ;
+  - `xyProfil1127` : une courbe XY en profil, ses trois points refaits à chaque échantillon ; sa référence lue
+    dans un tableau ; un joker dans un symbole sur un tableau qui part de 1, sans fausse erreur de bornes ;
   - `etatsDepuis1127` : un multi-états depuis une MAP qui grandit en marche, un chronogramme depuis une
     énumération, l'aperçu, la source inconnue dite, le renommage suivi.
 - `hmi_editor_test` : `lotE1127_editeur` (les états d'un texte multi-états, d'un chronogramme, d'une image animée
@@ -313,6 +317,7 @@ structure d'une popup (`Cuve.*`) se vérifie sur son type ; un paramètre sans t
   ses membres), pas essayé en marche avec des valeurs.
 - **Un tableau à deux dimensions** se déplie case par case (`M[*]` : toutes les cases), pas « une série par
   ligne » ; un `TUPLE` se parcourt par `Mesure.*` (pas par `[*]`).
+- **La référence d'une courbe XY depuis une source** ne se voit qu'en marche (l'éditeur n'a pas les valeurs).
 - **La courbe XY en profil** relit toute la source à chaque échantillon (100 ms) : pour des milliers de points,
   la période d'échantillonnage du graphique n'existe pas encore (§ 3.4, une autre demande). Le point « du
   moment » mis en avant est le dernier de la source.

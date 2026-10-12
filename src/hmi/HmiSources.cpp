@@ -310,6 +310,30 @@ bool repeats(const Object& o) {
     return o.kind == Kind::SymbolInstance && !roles::nameOf(o.text(kRepeatFromKey)).empty() && o.expr(kRepeatFromKey).empty();
 }
 
+std::optional<std::pair<std::string, std::string>> xyReferenceSource(std::string_view value) {
+    const std::string t = trimmedOf(value);
+    if (t.find("[*]") == std::string::npos) return std::nullopt;
+    // La virgule qui separe X et Y : hors crochets, parentheses et chaines.
+    int depth = 0;
+    char quote = 0;
+    for (std::size_t i = 0; i < t.size(); ++i) {
+        const char c = t[i];
+        if (quote) {
+            if (c == quote) quote = 0;
+            continue;
+        }
+        if (c == '\'' || c == '"') quote = c;
+        else if (c == '[' || c == '(') ++depth;
+        else if (c == ']' || c == ')') --depth;
+        else if (c == ',' && depth == 0) {
+            const std::string x = trimmedOf(std::string_view(t).substr(0, i)), y = trimmedOf(std::string_view(t).substr(i + 1));
+            if (x.empty() || y.empty() || !jokerOf(x)) return std::nullopt;
+            return std::make_pair(x, y);
+        }
+    }
+    return std::nullopt;
+}
+
 bool hasStatesFrom(const Object& o) {
     if (o.kind != Kind::MultiStateText && o.kind != Kind::MultiStateIndicator && o.kind != Kind::StateChart) return false;
     const Prop* p = o.find(kStatesFromKey);
@@ -318,6 +342,8 @@ bool hasStatesFrom(const Object& o) {
 
 bool objectHasJoker(const Object& o) {
     if (repeats(o) || hasStatesFrom(o)) return true;
+    if (o.kind == Kind::XYChart)
+        if (const Prop* r = o.find("reference"); r && r->expr.empty() && xyReferenceSource(r->value)) return true;
     for (const auto& p : o.props) {
         if (!p.expr.empty() || (p.value.find("[*]") == std::string::npos && p.value.find('*') == std::string::npos)) continue;
         if ((expandsFormulas(o.kind, p.key) || expandsTexts(o.kind, p.key)) && anyJoker(o.kind, p.key, p.value)) return true;
@@ -495,6 +521,26 @@ bool expandObject(Object& o, const SourceFn& source, const TextFn& text) {
         }
         changed = true;
     }
+    // ---- 1.12.7 (lot E, § 3.4) : la reference d'une courbe XY depuis une source - x,y x,y... en marche (il faut
+    // les valeurs : sans `text`, l'apercu, elle reste telle qu'ecrite).
+    if (o.kind == Kind::XYChart && text)
+        if (Prop* ref = o.find("reference"); ref && ref->expr.empty())
+            if (const auto xy = xyReferenceSource(ref->value)) {
+                const auto xj = jokerOf(xy->first);
+                const auto yj = jokerOf(xy->second);
+                const auto src = source && xj ? source(sourceName(*xj)) : std::nullopt;
+                std::string points;
+                for (std::size_t k = 0; src && k < src->indices.size(); ++k) {
+                    const std::string& index = src->indices[k];
+                    const auto tx = text(itemAt(*xj, index, src->enumeration));
+                    const auto ty = text(yj ? itemAt(*yj, index, src->enumeration) : xy->second);
+                    double x = 0, y = 0;
+                    if (tx && ty && parseNumber(*tx, x) && parseNumber(*ty, y))
+                        points += (points.empty() ? "" : " ") + formatNumber(x) + "," + formatNumber(y);
+                }
+                ref->value = points;
+                changed = true;
+            }
     // ---- 1.12.7 (lot E) : « Etats depuis » - la liste d'etats lue dans une source
     if (hasStatesFrom(o)) {
         const std::string name = roles::nameOf(o.text(kStatesFromKey));

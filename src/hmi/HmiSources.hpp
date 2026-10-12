@@ -86,6 +86,11 @@ bool previewObject(const Project& p, Object& o);
 // Les sources que l'objet cite (pour la signature : le moteur refait le depliage quand l'une change).
 [[nodiscard]] std::vector<std::string> sourcesOf(const Object& o);
 
+// LA REFERENCE D'UNE COURBE XY DEPUIS UNE SOURCE (§ 3.4) : `reference` = Ref[*].X,Ref[*].Y (la formule X et la
+// formule Y, separees par une virgule) - en marche, un point par element de la source (une courbe nominale
+// lue dans une recette, un tableau X / Y). nullopt : une reference ecrite (x,y x,y...), comme avant.
+[[nodiscard]] std::optional<std::pair<std::string, std::string>> xyReferenceSource(std::string_view value);
+
 // Deplie les jokers de l'objet ; faux : il n'y en avait pas (l'objet reste tel quel).
 bool expandObject(Object& o, const SourceFn& source, const TextFn& text);
 // Tous les objets d'une vue ; le nombre d'objets deplies.

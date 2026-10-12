@@ -24557,11 +24557,13 @@ void xyProfil1127() {
     cuve.members = {{"Mesures", "ARRAY[1..3] OF REAL", "", ""}};
     p.programs.types.push_back(cuve);
     p.programs.variables.push_back(hmiVar(p, "Profil", "ARRAY[0..2] OF T_Point_X"));
+    p.programs.variables.push_back(hmiVar(p, "Ref_X", "ARRAY[1..2] OF T_Point_X"));
     p.programs.variables.push_back(hmiVar(p, "Cuves_X", "ARRAY[1..2] OF T_Cuve_X"));
     View v = makeView(p, "Vue_X");
     const Id xy = edit::add(p, v, Kind::XYChart, 10, 10);
     v.object(xy)->setExpr("xVariable", "Profil[*].X");
     v.object(xy)->set("variables", "Profil[*].Y");
+    v.object(xy)->set("reference", "Ref_X[*].X, Ref_X[*].Y");   // la courbe de reference lue dans un tableau
     View sym = makeView(p, "Sym_X");
     sym.role = "symbole";
     ViewParam prm;
@@ -24596,6 +24598,13 @@ void xyProfil1127() {
     const auto* series = rt.chartSeries(p.views[0].id, xy);
     check(series && series->size() == 1 && (*series)[0].points.size() == 3 && (*series)[0].points[2].first == 20 && (*series)[0].points[2].second == 98,
           "E : le profil - les trois points (X[i], Y[i]) \xC3\xA0 chaque \xC3\xA9" "chantillon, pas un point accumul\xC3\xA9 (avant : impossible)");
+    rt.environment().write("Ref_X[1].X", sim::Value::real(5));
+    rt.environment().write("Ref_X[1].Y", sim::Value::real(1.5));
+    rt.environment().write("Ref_X[2].X", sim::Value::real(15));
+    rt.environment().write("Ref_X[2].Y", sim::Value::real(2.5));
+    rt.tick(0.25);
+    same(rt.composedView(p.views[0].id)->object(xy)->text("reference"), "5,1.5 15,2.5",
+         "E : la r\xC3\xA9" "f\xC3\xA9rence depuis un tableau (Ref_X[*].X, Ref_X[*].Y) : un point par \xC3\xA9l\xC3\xA9ment (avant : point illisible, une erreur)");
     rt.environment().write("Profil[1].Y", sim::Value::real(50));
     rt.tick(0.3);
     series = rt.chartSeries(p.views[0].id, xy);

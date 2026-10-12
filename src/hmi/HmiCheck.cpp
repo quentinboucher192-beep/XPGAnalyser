@@ -1880,7 +1880,19 @@ void checkLot11(const Project& p, const NameExists& plc, std::vector<Issue>& out
                     if (const std::string r = trimmedCopy(o.text("reset")); !r.empty()) exprCheck("reset", r, "remise \xC3\xA0 z\xC3\xA9ro");
                     std::vector<std::pair<double, double>> ref;
                     std::string why;
-                    if (!parseXYPoints(o.text("reference"), ref, &why)) issue(S::Error, "reference", "courbe de r\xC3\xA9" "f\xC3\xA9rence : " + why);
+                    // 1.12.7 (lot E) : une reference depuis une source (Ref[*].X,Ref[*].Y) - sa source, ses deux formules.
+                    if (const auto xy = sources::xyReferenceSource(o.text("reference"))) {
+                        for (const auto& f : {xy->first, xy->second}) {
+                            std::string problem;
+                            if (const auto sample = sources::sampleOf(p, &v, f, &problem)) {
+                                if (!problem.empty()) issue(S::Warning, "reference", "courbe de r\xC3\xA9" "f\xC3\xA9rence : " + problem);
+                                else exprCheck("reference", *sample, "courbe de r\xC3\xA9" "f\xC3\xA9rence");
+                            } else {
+                                exprCheck("reference", f, "courbe de r\xC3\xA9" "f\xC3\xA9rence");
+                            }
+                        }
+                    } else if (!parseXYPoints(o.text("reference"), ref, &why))
+                        issue(S::Error, "reference", "courbe de r\xC3\xA9" "f\xC3\xA9rence : " + why);
                     if (o.text("scale", "fixe") == "fixe") {
                         if (o.number("xmin", 0) >= o.number("xmax", 100)) issue(S::Error, "xmin", "axe X : le minimum doit \xC3\xAAtre sous le maximum");
                         if (o.number("ymin", 0) >= o.number("ymax", 100)) issue(S::Error, "ymin", "axe Y : le minimum doit \xC3\xAAtre sous le maximum");
