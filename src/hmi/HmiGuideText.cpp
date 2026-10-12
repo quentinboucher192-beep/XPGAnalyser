@@ -2923,6 +2923,7 @@ const std::vector<Topic>& topics() {
                          "tableau d'instances : `Vannes : ARRAY[1..8] OF T_VANNE;` et un objet par "
                          "\xC3\xA9l\xC3\xA9ment, `=$Vannes[1]$.OUV` d\xC3\xA9" "cal\xC3\xA9 d'indice en "
                          "indice.", {}},
+             {K::Paragraph, "1.12.9 : $Cuves$[*].Niveau - Dupliquer remplace le rep\xC3\xA8re ($Ballons$), le joker parcourt la variable (3 barres pour les cuves, 2 pour les ballons).", {}, "1.12.9"},
          },
          {"editeur", "rechercher-remplacer", "symboles", "verifier", "alarmes-dans-arbre", "proprietes", "simulation"},
          {"dupliquer", "Dupliquer\xE2\x80\xA6", "Ctrl+D", "Ctrl+Maj+D", "rep\xC3\xA8re", "rep\xC3\xA8res", "$\xE2\x80\xA6$", "$V[1].Ouv$", "$V[0]$", "$Vanne$", "$$", "placeholder", "morceau", "ce qui varie", "transparent", "calcul", "mod\xC3\xA8le d'objet", "Mod\xC3\xA8les d'objets", "s\xC3\xA9rie", "V1{n}", "V[{n}]", "Tableau\xE2\x80\xA6", "pr\xC3\xA9rempli", "d\xC3\xA9" "cal\xC3\xA9", "hors des bornes", "garde le rep\xC3\xA8re", "Remplacer\xE2\x80\xA6", "Excel", "coller", "indices", "suivre", "Suivre V[0]", "garder", "grille", "espacement", "Ajuster l'espacement", "chevauchement", "rep\xC3\xA8re non remplac\xC3\xA9", "veux-tu dire", "membre", "DDT", "Ctrl+Y", "r\xC3\xA9tablir", "s\xC3\xA9lection"},
@@ -4898,6 +4899,7 @@ const std::vector<Topic>& topics() {
              {K::Bullet, "**F1** sur un objet choisi, ou au survol d'une tuile de la biblioth\xC3\xA8que, "
                          "ouvre sa page d'aide, avec son exemple anim\xC3\xA9 et son **tutoriel** "
                          "(jou\xC3\xA9 par le vrai moteur, puis \xC2\xAB \xC3\x80 toi \xC2\xBB).", {}},
+             {K::Paragraph, "1.12.8 : une liste \xC3\xA0 choix de l'inspecteur ou de Contenu accepte aussi un nom tap\xC3\xA9 (son dernier choix, \xC2\xAB Taper un nom ou un rep\xC3\xA8re $\xE2\x80\xA6$ \xC2\xBB) ; un rep\xC3\xA8re y est gard\xC3\xA9 et montr\xC3\xA9 en ambre, comme dans toute case.", {}, "1.12.8"},
          },
          {"objets", "proprietes", "actions", "securite"},
          {},
@@ -5436,6 +5438,8 @@ const std::vector<Topic>& topics() {
                          "(et la hauteur des lignes).\nRemplissage\t#262C36\tLe fond du "
                          "tableau.\nContour\t#3A4556\tLes traits du tableau.", {}},
              {K::Tip, "L'action \xC2\xAB Lier un tableau \xC2\xBB change son fichier en marche.", {}},
+             {K::Paragraph, "1.12.8 : avec Lignes depuis, Contenu montre les colonnes de la source : cochez celles qui se montrent, ordonnez-les, donnez-leur un titre (D\xC3\xA9" "bit (m\xC2\xB3/h)) et un format (0.0). Rien de r\xC3\xA9gl\xC3\xA9 : toutes.", {}, "1.12.8"},
+             {K::Paragraph, "1.12.9 : Lignes depuis une \xC3\xA9num\xC3\xA9ration (une ligne par valeur : Nom, Valeur, Texte) ou une structure (une ligne par membre : Membre, Valeur) ; un tableau de structures imbriqu\xC3\xA9" "es : une colonne par membre simple (Pompe.Debit).", {}, "1.12.9"},
          },
          {"objet-communs", "contenu", "fichiers"},
          {},
@@ -5545,6 +5549,7 @@ const std::vector<Topic>& topics() {
                          "points : seuls.\nL\xC3\xA9gende\tTRUE\tLe nom et la derni\xC3\xA8re valeur de "
                          "chaque plume.\nRemplissage\t#1B2028\tLe fond du "
                          "trac\xC3\xA9.\nContour\t#3A4556\tLe cadre et la grille.", {}},
+             {K::Paragraph, "1.12.9 : le joker [*] - Cuves[*].Niveau donne une plume (une barre, une part, une ligne) par cuve ; Cuves[*].Nom en Noms les nomme. La source : un tableau de l'IHM, une LIST (le nombre suit la liste en marche), une MAP (ses cl\xC3\xA9s) ou une \xC3\xA9num\xC3\xA9ration. Pompe.* : un \xC3\xA9l\xC3\xA9ment par membre de la structure ; Ligne/Convoyeur/* : un par variable du dossier. Contenu \xE2\x80\xBA Ajouter depuis une source les propose, et chaque ligne dit ce qu'elle deviendra. Une source inconnue ne donne rien (G\xC3\xA9n\xC3\xA9rer le dit).", {}, "1.12.9"},
          },
          {"objet-communs", "historiques", "contenu"},
          {},
@@ -5609,6 +5614,8 @@ const std::vector<Topic>& topics() {
                          "liste.\nContour\t#3A4556\tLe cadre.\nCouleur du bouton\t#2F6FD6\tLa ligne choisie.", {}},
              {K::Tip, "Pour que l'op\xC3\xA9rateur choisisse un jeu de valeurs, la **Gestion de "
                          "recettes** fait tout (choisir, appliquer, lire).", {}},
+             {K::Paragraph, "1.12.8 : l'onglet Contenu montre une ligne par choix : son libell\xC3\xA9 et la valeur qu'il \xC3\xA9" "crit (vide : son rang, ou le libell\xC3\xA9 pour une STRING). Ajouter, retirer, monter et descendre emm\xC3\xA8nent les deux ensemble. Un rep\xC3\xA8re ($Mode$) se garde dans la case ; un \xC2\xAB ; \xC2\xBB nu dans un libell\xC3\xA9 est refus\xC3\xA9 (il couperait la liste).", {}, "1.12.8"},
+             {K::Paragraph, "1.12.9 : \xC3\x89l\xC3\xA9ments depuis Pompes[*].Nom : le membre montr\xC3\xA9 d'un tableau de structures ; le choix \xC3\xA9" "crit l'indice.", {}, "1.12.9"},
          },
          {"objet-communs", "objet-liste-deroulante", "objet-gestion-de-recettes"},
          {},
@@ -5767,6 +5774,7 @@ const std::vector<Topic>& topics() {
              {K::Step, "Onglet **Contenu** : \xC3\xA9tat 1 `Defaut` \xE2\x86\x92 l'image rouge ; "
                          "\xC3\xA9tat 2 `Marche` \xE2\x86\x92 les trois images, 120 ms.", "2"},
              {K::Step, "Image par d\xC3\xA9" "faut : la pompe \xC3\xA0 l'arr\xC3\xAAt.", "3"},
+             {K::Paragraph, "1.12.9 : Contenu \xE2\x80\xBA Depuis une \xC3\xA9num\xC3\xA9ration : un \xC3\xA9tat par valeur (son texte, une couleur), la variable choisie devient la Valeur. \xC3\x89tats depuis (Propri\xC3\xA9t\xC3\xA9s) : les \xC3\xA9tats lus en marche dans une MAP (cl\xC3\xA9 = valeur, valeur = texte), une LIST, un tableau ou une \xC3\xA9num\xC3\xA9ration ; un \xC3\xA9tat \xC3\xA9" "crit pour la m\xC3\xAAme valeur garde sa couleur.", {}, "1.12.9"},
          },
          {"objet-communs", "objet-image", "contenu", "ressources"},
          {},
@@ -6050,6 +6058,7 @@ const std::vector<Topic>& topics() {
                          "connect\xC3\xA9.", {}},
              {K::Tip, "Une vue de connexion comme vue de d\xC3\xA9marrage, avec Vue apr\xC3\xA8s "
                          "connexion : un poste qui s'ouvre sur la connexion.", {}},
+             {K::Paragraph, "1.12.8 : la vue apr\xC3\xA8s connexion se choisit dans les vues, et suit le renommage d'une vue (un rep\xC3\xA8re $Vue_A$ garde ses $).", {}, "1.12.8"},
          },
          {"objet-communs", "securite", "objet-deconnexion", "objet-utilisateur-connecte", "objet-changer-mot-de-passe"},
          {},
@@ -6267,6 +6276,7 @@ const std::vector<Topic>& topics() {
              {K::Bullet, "on ne se supprime pas soi-m\xC3\xAAme, on ne se d\xC3\xA9sactive pas ;", {}},
              {K::Bullet, "tout demande la permission **Administrer** : sans elle, les boutons sont gris et "
                          "le refus est dit.", {}},
+             {K::Paragraph, "1.12.8 : Contenu coche les boutons montr\xC3\xA9s. Rien de coch\xC3\xA9 : tous.", {}, "1.12.8"},
          },
          {"objet-communs", "securite", "objet-changer-mot-de-passe"},
          {},
@@ -6504,6 +6514,8 @@ const std::vector<Topic>& topics() {
                          "bouton\t#2F6FD6\tLa position choisie.", {}},
              {K::Tip, "Plus de 6 positions : le style \xC2\xAB boutons \xC2\xBB, ou une Liste "
                          "d\xC3\xA9roulante, se lit mieux (G\xC3\xA9n\xC3\xA9rer le rappelle).", {}},
+             {K::Paragraph, "1.12.8 : l'onglet Contenu montre une ligne par choix : son libell\xC3\xA9 et la valeur qu'il \xC3\xA9" "crit (vide : son rang, ou le libell\xC3\xA9 pour une STRING). Ajouter, retirer, monter et descendre emm\xC3\xA8nent les deux ensemble. Un rep\xC3\xA8re ($Mode$) se garde dans la case ; un \xC2\xAB ; \xC2\xBB nu dans un libell\xC3\xA9 est refus\xC3\xA9 (il couperait la liste).", {}, "1.12.8"},
+             {K::Paragraph, "1.12.9 : \xC3\x89l\xC3\xA9ments depuis Pompes[*].Nom : le membre montr\xC3\xA9 d'un tableau de structures ; le choix \xC3\xA9" "crit l'indice.", {}, "1.12.9"},
          },
          {"objet-boutons-radio", "objet-liste-deroulante", "objet-communs"},
          {},
@@ -6708,6 +6720,8 @@ const std::vector<Topic>& topics() {
                          "liste.\nContour\t#4A5568\tLe cadre (il s'allume liste ouverte).\n\xC3\x89paisseur "
                          "du contour\t1\tEn pixels.\nRayon des coins\t3\tDes coins arrondis.\nCouleur du "
                          "bouton\t#2F6FD6\tLa ligne choisie dans la liste.", {}},
+             {K::Paragraph, "1.12.8 : l'onglet Contenu montre une ligne par choix : son libell\xC3\xA9 et la valeur qu'il \xC3\xA9" "crit (vide : son rang, ou le libell\xC3\xA9 pour une STRING). Ajouter, retirer, monter et descendre emm\xC3\xA8nent les deux ensemble. Un rep\xC3\xA8re ($Mode$) se garde dans la case ; un \xC2\xAB ; \xC2\xBB nu dans un libell\xC3\xA9 est refus\xC3\xA9 (il couperait la liste).", {}, "1.12.8"},
+             {K::Paragraph, "1.12.9 : \xC3\x89l\xC3\xA9ments depuis Pompes[*].Nom : le membre montr\xC3\xA9 d'un tableau de structures ; le choix \xC3\xA9" "crit l'indice.", {}, "1.12.9"},
          },
          {"objet-selecteur", "objet-boutons-radio", "objet-liste"},
          {},
@@ -6810,6 +6824,8 @@ const std::vector<Topic>& topics() {
                          "variable.\nPolice\tSans\tLa police.\nTaille du texte\t15\tEn pixels.\nCouleur du "
                          "texte\t#E6EAF0\tLes libell\xC3\xA9s.\nCouleur du bouton\t#2F6FD6\tL'option "
                          "choisie.\nContour\t#8A9BB0\tLes cercles.", {}},
+             {K::Paragraph, "1.12.8 : l'onglet Contenu montre une ligne par choix : son libell\xC3\xA9 et la valeur qu'il \xC3\xA9" "crit (vide : son rang, ou le libell\xC3\xA9 pour une STRING). Ajouter, retirer, monter et descendre emm\xC3\xA8nent les deux ensemble. Un rep\xC3\xA8re ($Mode$) se garde dans la case ; un \xC2\xAB ; \xC2\xBB nu dans un libell\xC3\xA9 est refus\xC3\xA9 (il couperait la liste).", {}, "1.12.8"},
+             {K::Paragraph, "1.12.9 : \xC3\x89l\xC3\xA9ments depuis Pompes[*].Nom : le membre montr\xC3\xA9 d'un tableau de structures ; le choix \xC3\xA9" "crit l'indice.", {}, "1.12.9"},
          },
          {"objet-selecteur", "objet-liste-deroulante", "objet-case-a-cocher"},
          {},
@@ -6925,6 +6941,7 @@ const std::vector<Topic>& topics() {
                          "(en t\xC3\xAAte)\tallume cette heure tous les jours, ou l'\xC3\xA9teint", {}},
              {K::Paragraph, "Chaque changement \xC3\xA9" "crit la variable et va au journal ; un script qui "
                          "\xC3\xA9" "crit la variable change les plages montr\xC3\xA9" "es.", {}},
+             {K::Paragraph, "1.12.8 : les plages se r\xC3\xA8glent dans Contenu (Jours, De, \xC3\x80). La ligne dit ce que la r\xC3\xA9solution en fait (arrondie, ou disparue : plus courte qu'une case) ; G\xC3\xA9n\xC3\xA9rer le dit aussi.", {}, "1.12.8"},
          },
          {"objet-date-et-heure", "scripts", "variables-systeme"},
          {},
@@ -7063,6 +7080,7 @@ const std::vector<Topic>& topics() {
                          "du texte.\nTaille du texte\t15\tEn pixels.\nCouleur du texte\t#E6EAF0\tLe "
                          "texte.\nContour\t#1B1F26\tLe bord du voyant.\n\xC3\x89paisseur du contour\t1\tEn "
                          "pixels.", {}},
+             {K::Paragraph, "1.12.9 : Contenu \xE2\x80\xBA Depuis une \xC3\xA9num\xC3\xA9ration : un \xC3\xA9tat par valeur (son texte, une couleur), la variable choisie devient la Valeur. \xC3\x89tats depuis (Propri\xC3\xA9t\xC3\xA9s) : les \xC3\xA9tats lus en marche dans une MAP (cl\xC3\xA9 = valeur, valeur = texte), une LIST, un tableau ou une \xC3\xA9num\xC3\xA9ration ; un \xC3\xA9tat \xC3\xA9" "crit pour la m\xC3\xAAme valeur garde sa couleur.", {}, "1.12.9"},
          },
          {"objet-voyant", "objet-texte-multi-etats"},
          {},
@@ -7127,6 +7145,7 @@ const std::vector<Topic>& topics() {
                          "pixels.\nCouleur du texte\t#E6EAF0\tPour les \xC3\xA9tats sans "
                          "couleur.\nAlignement\tcentre\tLe texte dans l'objet.\nRemplissage\t(vide)\tUn fond "
                          "(vide : transparent).\nContour\t(vide)\tUn cadre (vide : aucun).", {}},
+             {K::Paragraph, "1.12.9 : Contenu \xE2\x80\xBA Depuis une \xC3\xA9num\xC3\xA9ration : un \xC3\xA9tat par valeur (son texte, une couleur), la variable choisie devient la Valeur. \xC3\x89tats depuis (Propri\xC3\xA9t\xC3\xA9s) : les \xC3\xA9tats lus en marche dans une MAP (cl\xC3\xA9 = valeur, valeur = texte), une LIST, un tableau ou une \xC3\xA9num\xC3\xA9ration ; un \xC3\xA9tat \xC3\xA9" "crit pour la m\xC3\xAAme valeur garde sa couleur.", {}, "1.12.9"},
          },
          {"objet-voyant-multi-etats", "objet-texte"},
          {},
@@ -7182,6 +7201,7 @@ const std::vector<Topic>& topics() {
                          "valeur.\nPolice\tSans\tLes graduations et la valeur.\nTaille du texte\t12\tEn "
                          "pixels.\nCouleur du texte\t#C8D0DC\tLes graduations.\nRemplissage\t#2F6FD6\tLa "
                          "barre.\nFond\t#2A313C\tLe fond de la barre.", {}},
+             {K::Paragraph, "1.12.8 : les zones se r\xC3\xA8glent dans Contenu (De, \xC3\x80, Couleur). Une borne en % de l'\xC3\xA9" "chelle (60 %) suit Min et Max quand ils changent ; une borne en valeur reste une valeur. G\xC3\xA9n\xC3\xA9rer signale deux zones qui se chevauchent.", {}, "1.12.8"},
          },
          {"objet-barre-de-progression", "objet-thermometre", "objet-cadran-a-zones"},
          {},
@@ -7305,6 +7325,7 @@ const std::vector<Topic>& topics() {
                          "graduations et la valeur.\nCouleur de "
                          "l'aiguille\t#F4F6FA\tL'aiguille.\nRemplissage\t#1F252E\tLe fond du "
                          "cadran.\nContour\t#3A4556\tLe bord.", {}},
+             {K::Paragraph, "1.12.8 : les zones se r\xC3\xA8glent dans Contenu (De, \xC3\x80, Couleur). Une borne en % de l'\xC3\xA9" "chelle (60 %) suit Min et Max quand ils changent ; une borne en valeur reste une valeur. G\xC3\xA9n\xC3\xA9rer signale deux zones qui se chevauchent.", {}, "1.12.8"},
          },
          {"objet-jauge", "objet-bargraphe"},
          {},
@@ -8031,6 +8052,7 @@ const std::vector<Topic>& topics() {
                          "sa place, sans planter. Si elle enregistre le projet, ce rectangle garde toutes "
                          "les propri\xC3\xA9t\xC3\xA9s de la vanne : la 1.10.4 le relit comme une vanne 3 "
                          "voies, et le dit. Le mieux reste d'ouvrir le projet avec la 1.10.4.", {}},
+             {K::Paragraph, "1.12.8 : une position fixe se choisit (ferm\xC3\xA9" "e, 1-2, 1-3, 2-3) ; le code 0, 1, 2, 3 reste \xC3\xA9" "crit, une variable garde ses codes.", {}, "1.12.8"},
          },
          {"objet-vanne", "synoptique", "objet-communs", "proprietes", "simulation"},
          {},
@@ -8944,6 +8966,7 @@ const std::vector<Topic>& topics() {
              {K::Bullet, "en d\xC3\xA9" "faut, il prend la couleur de d\xC3\xA9" "faut et clignote ; "
                          "G\xC3\xA9n\xC3\xA9rer signale une variable inconnue dans sa valeur ou son "
                          "d\xC3\xA9" "faut.", {}},
+             {K::Paragraph, "1.12.8 : Fonction se choisit dans la liste des lettres ISA (PT, TT, FT, LT, PIC, TIC\xE2\x80\xA6) ; choisie, elle propose son unit\xC3\xA9 (PT : bar, TT : \xC2\xB0" "C), sauf si l'unit\xC3\xA9 a \xC3\xA9t\xC3\xA9 tap\xC3\xA9" "e \xC3\xA0 la main.", {}, "1.12.8"},
          },
          {"synoptique", "objet-communs", "proprietes", "simulation"},
          {},
@@ -9715,6 +9738,7 @@ const std::vector<Topic>& topics() {
              {K::Bullet, "Elle publie ses variables d'alarmes, en lecture : `.AlarmActive`, `.AlarmUnacked`, "
                          "`.AlarmCount`, `.AlarmActiveCount`, `.AlarmUnackCount`, `.AlarmHighest`, "
                          "`.AlarmGroup` (voir \xC2\xAB Le groupe d'alarmes d'un objet \xC2\xBB).", {}},
+             {K::Paragraph, "1.12.9 : R\xC3\xA9p\xC3\xA9ter depuis Cuves - une instance par \xC3\xA9l\xC3\xA9ment ; dans les Arguments, [*] d\xC3\xA9signe l'\xC3\xA9l\xC3\xA9ment (Cuve := Cuves[*]). Les copies se suivent (sens, \xC3\xA9" "cart, combien par rang\xC3\xA9" "e) ; la premi\xC3\xA8re garde le nom de l'instance, les autres Nom_2, Nom_3\xE2\x80\xA6 L'\xC3\xA9" "diteur les montre estomp\xC3\xA9" "es ; les alarmes du symbole sont g\xC3\xA9n\xC3\xA9r\xC3\xA9" "es pour chacune.", {}, "1.12.9"},
          },
          {"symboles", "objet-communs", "actions", "popups", "alarmes-symboles", "groupes-objets", "surcharge-alarmes"},
          {},
@@ -9819,6 +9843,7 @@ const std::vector<Topic>& topics() {
                          "expression illisible \xC3\xA9" "crit ### \xC3\xA0 la place de sa barre (le tableau "
                          "des expressions de la simulation dit pourquoi). G\xC3\xA9n\xC3\xA9rer signale une "
                          "liste vide, une variable inconnue, une \xC3\xA9" "chelle invers\xC3\xA9" "e.", {}},
+             {K::Paragraph, "1.12.9 : le joker [*] - Cuves[*].Niveau donne une plume (une barre, une part, une ligne) par cuve ; Cuves[*].Nom en Noms les nomme. La source : un tableau de l'IHM, une LIST (le nombre suit la liste en marche), une MAP (ses cl\xC3\xA9s) ou une \xC3\xA9num\xC3\xA9ration. Pompe.* : un \xC3\xA9l\xC3\xA9ment par membre de la structure ; Ligne/Convoyeur/* : un par variable du dossier. Contenu \xE2\x80\xBA Ajouter depuis une source les propose, et chaque ligne dit ce qu'elle deviendra. Une source inconnue ne donne rien (G\xC3\xA9n\xC3\xA9rer le dit).", {}, "1.12.9"},
          },
          {"graphiques", "objet-communs", "contenu", "proprietes"},
          {},
@@ -9912,6 +9937,7 @@ const std::vector<Topic>& topics() {
                          "z\xC3\xA9ro** l'efface d'un coup ;", {}},
              {K::Bullet, "export\xC3\xA9" "e (bouton d'export, source objet:Nom), elle donne une ligne par "
                          "point : courbe, X, Y.", {}},
+             {K::Paragraph, "1.12.9 : Variable X Profil[*].X et courbe Y Profil[*].Y : le profil entier, redessin\xC3\xA9 \xC3\xA0 chaque \xC3\xA9" "chantillon (un tableau de points, une LIST qui change). R\xC3\xA9" "f\xC3\xA9rence Ref[*].X, Ref[*].Y : la courbe de r\xC3\xA9" "f\xC3\xA9rence lue dans une source.", {}, "1.12.9"},
          },
          {"graphiques", "objet-courbe", "objet-communs", "contenu"},
          {},
@@ -9998,6 +10024,8 @@ const std::vector<Topic>& topics() {
                          "fen\xC3\xAAtre) : une heure de marche ne co\xC3\xBBte rien. Export\xC3\xA9, le "
                          "chronogramme donne ses segments : ligne, d\xC3\xA9" "but, fin, dur\xC3\xA9" "e, "
                          "valeur.", {}},
+             {K::Paragraph, "1.12.8 : Contenu \xE2\x80\xBA Montrer : les lignes, ou les \xC3\xA9tats - une ligne par \xC3\xA9tat (la valeur, le texte, la couleur), comme le voyant multi-\xC3\xA9tats.", {}, "1.12.8"},
+             {K::Paragraph, "1.12.9 : le joker [*] - Cuves[*].Niveau donne une plume (une barre, une part, une ligne) par cuve ; Cuves[*].Nom en Noms les nomme. La source : un tableau de l'IHM, une LIST (le nombre suit la liste en marche), une MAP (ses cl\xC3\xA9s) ou une \xC3\xA9num\xC3\xA9ration. Pompe.* : un \xC3\xA9l\xC3\xA9ment par membre de la structure ; Ligne/Convoyeur/* : un par variable du dossier. Contenu \xE2\x80\xBA Ajouter depuis une source les propose, et chaque ligne dit ce qu'elle deviendra. Une source inconnue ne donne rien (G\xC3\xA9n\xC3\xA9rer le dit).", {}, "1.12.9"},
          },
          {"graphiques", "objet-texte-multi-etats", "objet-communs", "contenu"},
          {},
@@ -10056,6 +10084,7 @@ const std::vector<Topic>& topics() {
              {K::Heading, "En marche", {}},
              {K::Paragraph, "Les parts suivent leurs expressions \xC3\xA0 chaque image. Une somme nulle dessine "
                          "un disque gris \xC2\xAB aucune valeur \xC2\xBB.", {}},
+             {K::Paragraph, "1.12.9 : le joker [*] - Cuves[*].Niveau donne une plume (une barre, une part, une ligne) par cuve ; Cuves[*].Nom en Noms les nomme. La source : un tableau de l'IHM, une LIST (le nombre suit la liste en marche), une MAP (ses cl\xC3\xA9s) ou une \xC3\xA9num\xC3\xA9ration. Pompe.* : un \xC3\xA9l\xC3\xA9ment par membre de la structure ; Ligne/Convoyeur/* : un par variable du dossier. Contenu \xE2\x80\xBA Ajouter depuis une source les propose, et chaque ligne dit ce qu'elle deviendra. Une source inconnue ne donne rien (G\xC3\xA9n\xC3\xA9rer le dit).", {}, "1.12.9"},
          },
          {"graphiques", "objet-communs", "contenu"},
          {},
@@ -10117,6 +10146,7 @@ const std::vector<Topic>& topics() {
              {K::Paragraph, "Les points suivent leurs expressions \xC3\xA0 chaque image, born\xC3\xA9s au bord "
                          "de la toile. G\xC3\xA9n\xC3\xA9rer signale une consigne qui n'a pas autant de "
                          "valeurs que d'axes.", {}},
+             {K::Paragraph, "1.12.9 : le joker [*] - Cuves[*].Niveau donne une plume (une barre, une part, une ligne) par cuve ; Cuves[*].Nom en Noms les nomme. La source : un tableau de l'IHM, une LIST (le nombre suit la liste en marche), une MAP (ses cl\xC3\xA9s) ou une \xC3\xA9num\xC3\xA9ration. Pompe.* : un \xC3\xA9l\xC3\xA9ment par membre de la structure ; Ligne/Convoyeur/* : un par variable du dossier. Contenu \xE2\x80\xBA Ajouter depuis une source les propose, et chaque ligne dit ce qu'elle deviendra. Une source inconnue ne donne rien (G\xC3\xA9n\xC3\xA9rer le dit).", {}, "1.12.9"},
          },
          {"graphiques", "objet-communs", "contenu"},
          {},
@@ -10515,6 +10545,8 @@ const std::vector<Topic>& topics() {
                          "calme\t#2E6B45\tLa couleur d'une zone sans alarme.\nTaille du texte\t14\tLa taille "
                          "du nom de la zone.\nCouleur du texte\t#FFFFFF\tLa couleur des "
                          "textes.\nRemplissage\t#1B2028\tLe fond.\nContour\t#3A4556\tLe cadre.", {}},
+             {K::Paragraph, "1.12.8 : Contenu coche les zones - les groupes d'alarmes du projet et ceux des alarmes des objets (Vue.*, Vue.Objet, symbole:Nom). Rien de coch\xC3\xA9 : toutes.", {}, "1.12.8"},
+             {K::Paragraph, "1.12.9 : Zones Zones[*].Nom : les zones lues dans un tableau de structures.", {}, "1.12.9"},
          },
          {"alarmes-objets", "alarmes", "objet-historique", "objet-communs"},
          {},
@@ -10733,6 +10765,7 @@ const std::vector<Topic>& topics() {
              {K::Paragraph, "Le poste en cours (\xC2\xAB Poste de 14:00 \xC2\xBB) est \xC3\xA9" "crit en haut ; "
                          "au passage d'un d\xC3\xA9" "but de poste, le journal le dit et tout repart de "
                          "z\xC3\xA9ro. Export\xC3\xA9s, les compteurs donnent chaque indicateur et sa valeur.", {}},
+             {K::Paragraph, "1.12.8 : D\xC3\xA9" "buts de poste = \xC2\xAB calendrier \xC2\xBB : le compteur suit le calendrier des postes du projet (Configuration \xE2\x80\xBA Ex\xC3\xA9" "cution \xE2\x80\xBA Calendrier des postes). G\xC3\xA9n\xC3\xA9rer dit un compteur qui le suit dans un projet qui n'en a pas.", {}, "1.12.8"},
          },
          {"production", "objet-communs"},
          {},
@@ -10805,6 +10838,8 @@ const std::vector<Topic>& topics() {
                          "annule ;", {}},
              {K::Bullet, "chaque \xC3\xA9" "criture est journalis\xC3\xA9" "e ; une valeur illisible est "
                          "refus\xC3\xA9" "e, le tableau dit pourquoi.", {}},
+             {K::Paragraph, "1.12.8 : l'unit\xC3\xA9 et le format d'une ligne se r\xC3\xA8glent dans Contenu, avec sa variable ; vides, ce sont ceux de la variable.", {}, "1.12.8"},
+             {K::Paragraph, "1.12.9 : le joker [*] - Cuves[*].Niveau donne une plume (une barre, une part, une ligne) par cuve ; Cuves[*].Nom en Noms les nomme. La source : un tableau de l'IHM, une LIST (le nombre suit la liste en marche), une MAP (ses cl\xC3\xA9s) ou une \xC3\xA9num\xC3\xA9ration. Pompe.* : un \xC3\xA9l\xC3\xA9ment par membre de la structure ; Ligne/Convoyeur/* : un par variable du dossier. Contenu \xE2\x80\xBA Ajouter depuis une source les propose, et chaque ligne dit ce qu'elle deviendra. Une source inconnue ne donne rien (G\xC3\xA9n\xC3\xA9rer le dit).", {}, "1.12.9"},
          },
          {"production", "objet-champ-de-saisie", "objet-communs", "contenu"},
          {},
@@ -11097,6 +11132,7 @@ const std::vector<Topic>& topics() {
              {K::Paragraph, "Un clic navigue (permission Naviguer sous s\xC3\xA9" "curit\xC3\xA9) ; la vue "
                          "courante reste allum\xC3\xA9" "e m\xC3\xAAme sous une popup. Les fl\xC3\xA8" "ches "
                          "font Vue pr\xC3\xA9" "c\xC3\xA9" "dente et Vue suivante.", {}},
+             {K::Paragraph, "1.12.9 : Vues Vues[*] : les vues d'une LIST OF STRING, dans son ordre ; Process/* : les vues ordinaires du dossier de vues Process. Le clic suit ce qui est montr\xC3\xA9.", {}, "1.12.9"},
          },
          {"navigation", "navigation-marche", "objet-fil-d-ariane", "objet-communs", "contenu"},
          {},
@@ -11211,6 +11247,7 @@ const std::vector<Topic>& topics() {
                          "onglets\t#232A34\tLes onglets cach\xC3\xA9s.\nCouleur active\t#2F6FD6\tLe filet de "
                          "l'onglet montr\xC3\xA9.\nRemplissage\t#262C36\tLe fond des "
                          "pages.\nContour\t#3A4556\tLe cadre.", {}},
+             {K::Paragraph, "1.12.9 : Onglets T_MODE[*] : un onglet par valeur de l'\xC3\xA9num\xC3\xA9ration (son texte) ; Contenu \xE2\x80\xBA Depuis une \xC3\xA9num\xC3\xA9ration fait de m\xC3\xAAme et relie la variable de ce type.", {}, "1.12.9"},
          },
          {"navigation", "objet-panneau-repliable", "objet-conteneur", "objet-communs", "contenu"},
          {},
@@ -11493,6 +11530,7 @@ const std::vector<Topic>& topics() {
                          "s\xC3\xA9lecteur dans un projet en une seule langue.", {}},
              {K::Tip, "L'action \xC2\xAB Changer de langue \xC2\xBB fait la m\xC3\xAAme chose depuis "
                          "n'importe quel objet ; `IHM_LANGUE('en')` depuis un script.", {}},
+             {K::Paragraph, "1.12.8 : Contenu coche les langues du projet. Rien de coch\xC3\xA9 : toutes ; un rep\xC3\xA8re tap\xC3\xA9 ($Langue$) reste, coch\xC3\xA9.", {}, "1.12.8"},
          },
          {"langues", "objet-barre-de-navigation", "objet-communs", "variables-systeme"},
          {},

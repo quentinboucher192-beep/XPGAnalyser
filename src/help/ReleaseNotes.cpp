@@ -35,7 +35,9 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.12.7", "12/10/2026", "livr\xC3\xA9" "e le 12/10 au matin"},
+    {"1.12.9", "12/10/2026", "livr\xC3\xA9" "e le 12/10 au matin"},
+    {"1.12.8", "12/10/2026", "livr\xC3\xA9" "e le 12/10 au matin"},
+    {"1.12.7", "12/10/2026", "livr\xC3\xA9" "e le 12/10 dans la nuit"},
     {"1.12.6", "11/10/2026", "livr\xC3\xA9" "e le 11/10 au soir"},
     {"1.12.5", "11/10/2026", "livr\xC3\xA9" "e le 11/10 dans l'apr\xC3\xA8s-midi"},
     {"1.12.4", "11/10/2026", "livr\xC3\xA9" "e le 11/10 dans la matin\xC3\xA9" "e"},
@@ -113,6 +115,41 @@ const std::vector<Note>& table() {
     static const std::vector<Note> t = {
         // 1.11.16 (09/10/2026 dans la nuit) : la remanence d'exploitation par variable, la robustesse
         // (lot 4 de la specification du 08/10).
+        // 1.12.9 (12/10/2026) : voir docs/LIVRAISON-1.12.9.md.
+        note("1.12.9", "Graphiques", Kind::New,
+         "LE JOKER [*] : dans une liste de formules, Cuves[*].Niveau donne un \xC3\xA9l\xC3\xA9ment par indice de Cuves - une plume de courbe, une barre, une part, un axe de radar, une courbe Y, une ligne de chronogramme ou de tableau de variables. La source : un tableau de l'IHM (ARRAY[1..8] : 1 \xC3\xA0 8), une LIST ou un VECTOR (le nombre suit la liste en marche : une plume de plus au cycle suivant), une MAP (une barre ou une part par cl\xC3\xA9, nomm\xC3\xA9" "e par sa cl\xC3\xA9), une \xC3\xA9num\xC3\xA9ration, un membre, le param\xC3\xA8tre d'une popup. Les listes parall\xC3\xA8les suivent : Cuves[*].Nom nomme chaque \xC3\xA9l\xC3\xA9ment, la couleur tourne dans la palette, l'unit\xC3\xA9 et le format se r\xC3\xA9p\xC3\xA8tent. Avant : pour 8 cuves, 8 plumes, 8 noms, 8 couleurs \xC3\xA0 taper.",
+         "objet-courbe", ""),
+        note("1.12.9", "Graphiques", Kind::New,
+         "TOUTE UNE STRUCTURE, TOUT UN DOSSIER : Pompe.* donne un \xC3\xA9l\xC3\xA9ment par membre simple de la structure (Pompe.Marche, Pompe.Moteur.Courant\xE2\x80\xA6) ; Moteurs[*].* chaque membre de chaque moteur ; Mesure.* chaque \xC3\xA9l\xC3\xA9ment d'un TUPLE ; Ligne/Convoyeur/* chaque variable simple du dossier. Contenu \xE2\x80\xBA \xC2\xAB Ajouter depuis une source \xC2\xBB propose les jokers que le projet offre, et chaque ligne dit ce qu'elle deviendra (\xC2\xAB [*] : 8 \xC3\xA9l\xC3\xA9ments de Cuves \xC2\xBB) ; l'\xC3\xA9" "diteur dessine l'objet comme il d\xC3\xA9marrera (une barre par cuve). Renommer une variable, une \xC3\xA9num\xC3\xA9ration ou un dossier r\xC3\xA9\xC3\xA9" "crit ses jokers partout.",
+         "objet-tableau-de-variables", ""),
+        note("1.12.9", "Graphiques", Kind::New,
+         "LA COURBE XY EN PROFIL : une Variable X \xC3\xA0 joker (Profil[*].X) trace \xC3\xA0 chaque \xC3\xA9" "chantillon tous les points de la source - un profil de four, une courbe de pompe relev\xC3\xA9" "e ; ses courbes Y citent la m\xC3\xAAme source (Profil[*].Y). La courbe de r\xC3\xA9" "f\xC3\xA9rence se lit aussi dans une source (Ref[*].X, Ref[*].Y). Sans joker : comme avant.",
+         "objet-courbe-xy", ""),
+        note("1.12.9", "Navigation", Kind::New,
+         "LES VUES, LES ZONES, LES ONGLETS, LES \xC3\x89TATS DEPUIS UNE SOURCE : la barre de navigation lit ses vues dans une LIST OF STRING (Vues[*]) ou un dossier de vues (Process/*), le r\xC3\xA9sum\xC3\xA9 par zone ses zones (Zones[*].Nom), le conteneur \xC3\xA0 onglets un onglet par valeur d'une \xC3\xA9num\xC3\xA9ration (T_MODE[*]). \xC2\xAB \xC3\x89tats depuis \xC2\xBB : un voyant ou un texte multi-\xC3\xA9tats, un chronogramme lit ses \xC3\xA9tats en marche dans une MAP (cl\xC3\xA9 = valeur, valeur = texte), une LIST, un tableau ou une \xC3\xA9num\xC3\xA9ration ; Contenu \xE2\x80\xBA \xC2\xAB Depuis une \xC3\xA9num\xC3\xA9ration \xC2\xBB remplit les \xC3\xA9tats (un par valeur, son texte, une couleur).",
+         "objet-barre-de-navigation", ""),
+        note("1.12.9", "Symboles", Kind::New,
+         "\xC2\xAB R\xC3\x89P\xC3\x89TER DEPUIS \xC2\xBB : une instance de symbole se pose une fois par \xC3\xA9l\xC3\xA9ment d'un tableau ou d'une LIST (Cuves) ; ses arguments qui citent [*] (Cuve := Cuves[*]) re\xC3\xA7oivent l'\xC3\xA9l\xC3\xA9ment ; les copies se suivent (horizontal ou vertical, \xC3\xA0 l'\xC3\xA9" "cart donn\xC3\xA9, tant par rang\xC3\xA9" "e), la premi\xC3\xA8re garde son nom, les autres s'appellent Cuve_2, Cuve_3\xE2\x80\xA6 ; les alarmes du symbole sont g\xC3\xA9n\xC3\xA9r\xC3\xA9" "es pour chaque copie. \xC2\xAB 8 cuves, 8 pompes \xC2\xBB : une instance et une ligne d'argument.",
+         "objet-instance-de-symbole", ""),
+        note("1.12.9", "Objets", Kind::New,
+         "DES TABLEAUX ET DES LISTES DEPUIS DES STRUCTURES : \xC2\xAB \xC3\x89l\xC3\xA9ments depuis \xC2\xBB Pompes[*].Nom montre le membre choisi de chaque \xC3\xA9l\xC3\xA9ment et \xC3\xA9" "crit son indice (avant : une liste vide, sans un mot) ; \xC2\xAB Lignes depuis \xC2\xBB un tableau de structures imbriqu\xC3\xA9" "es montre une colonne par membre simple (Pompe.Debit), depuis une \xC3\xA9num\xC3\xA9ration une ligne par valeur, depuis une structure une ligne par membre. G\xC3\xA9n\xC3\xA9rer v\xC3\xA9rifie un joker sur son premier \xC3\xA9l\xC3\xA9ment (avant : Cuves[*].Niveau \xC3\xA9tait une erreur bloquante) et dit une source inconnue ou vide (des avertissements).",
+         "objet-tableau", ""),
+        // 1.12.8 (12/10/2026) : voir docs/LIVRAISON-1.12.8.md.
+        note("1.12.8", "Objets", Kind::Changed,
+         "CONTENU, UNE LIGNE PAR CHOIX : le s\xC3\xA9lecteur, la liste d\xC3\xA9roulante, les boutons radio et la liste ont leur onglet Contenu, une ligne par choix (son libell\xC3\xA9, la valeur qu'il \xC3\xA9" "crit ; vide : son rang). Ajouter, retirer, monter, descendre emm\xC3\xA8nent le libell\xC3\xA9 et sa valeur ensemble (avant : positions ou items et values \xC3\xA0 aligner \xC3\xA0 la main). Un \xC2\xAB ; \xC2\xBB nu dans un libell\xC3\xA9 est refus\xC3\xA9 tout de suite ; un rep\xC3\xA8re $Mode$ est gard\xC3\xA9 tel quel. Avec \xC2\xAB \xC3\x89l\xC3\xA9ments depuis \xC2\xBB, Contenu le dit : les lignes ne servent pas.",
+         "objet-selecteur", ""),
+        note("1.12.8", "Objets", Kind::Changed,
+         "LES ZONES, LES PLAGES, LES LIGNES DANS CONTENU : les zones d'un bargraphe et d'un cadran, une par ligne (De, \xC3\x80, Couleur) - une borne en % de l'\xC3\xA9" "chelle (60 %) suit Min et Max quand ils changent ; les plages du programmateur horaire (Jours, De, \xC3\x80), avec ce que la r\xC3\xA9solution en fait (\xC2\xAB arrondie \xC3\xA0 14:00-17:00 \xC2\xBB, \xC2\xAB dispara\xC3\xAEt : plus courte qu'une case \xC2\xBB) ; l'unit\xC3\xA9 et le format de chaque ligne d'un tableau de variables, \xC3\xA0 c\xC3\xB4t\xC3\xA9 de sa variable ; les lignes ou les \xC3\xA9tats d'un chronogramme, une ligne par \xC3\xA9tat comme un voyant multi-\xC3\xA9tats. Avant : des mini-langages \xC3\xA0 taper dans l'inspecteur.",
+         "objet-bargraphe", ""),
+        note("1.12.8", "Objets", Kind::Changed,
+         "DES CASES \xC3\x80 COCHER ET DES CHOIX AU LIEU DE CODES \xC3\x80 TAPER : le s\xC3\xA9lecteur de langue coche les langues du projet, la gestion des utilisateurs ses boutons, le r\xC3\xA9sum\xC3\xA9 par zone ses zones (les groupes du projet et ceux des alarmes des objets) ; rien de coch\xC3\xA9 vaut toujours \xC2\xAB toutes \xC2\xBB. Dans l'inspecteur : la vue apr\xC3\xA8s connexion se choisit dans les vues (et suit le renommage d'une vue), les lettres d'un instrument ISA dans une liste qui propose son unit\xC3\xA9 (TT : \xC2\xB0" "C), la position fixe d'une vanne 3 voies (ferm\xC3\xA9" "e, 1-2, 1-3, 2-3), l'onglet montr\xC3\xA9 d'un conteneur par son nom.",
+         "objet-instrument-isa", ""),
+        note("1.12.8", "Rep\xC3\xA8res", Kind::New,
+         "UNE LISTE \xC3\x80 CHOIX ACCEPTE AUSSI UN NOM TAP\xC3\x89 : chaque liste de noms de l'inspecteur et de Contenu (vue, groupe d'alarmes, alarme, recette, ressource, style, lettres ISA\xE2\x80\xA6) a un dernier choix \xC2\xAB Taper un nom ou un rep\xC3\xA8re $\xE2\x80\xA6$ \xC2\xBB : ce qu'on y tape est gard\xC3\xA9 tel quel, et un rep\xC3\xA8re se voit en ambre, comme dans toute case. La zone d'un plan propose aussi les groupes des alarmes des objets (Vue.*, Vue.Objet, symbole:Nom).",
+         "objet-communs", ""),
+        note("1.12.8", "Objets", Kind::New,
+         "LES COLONNES D'UN TABLEAU DEPUIS UNE SOURCE, LE CALENDRIER DES POSTES : un tableau dont les lignes viennent d'une variable montre dans Contenu les colonnes de la source - on choisit celles qui se montrent, leur ordre, leur titre et leur format (0.0) ; rien de choisi : toutes, comme avant. Configuration \xE2\x80\xBA Ex\xC3\xA9" "cution \xE2\x80\xBA \xC2\xAB Calendrier des postes \xC2\xBB : un compteur de production dont les d\xC3\xA9" "buts de poste disent \xC2\xAB calendrier \xC2\xBB le suit. G\xC3\xA9n\xC3\xA9rer signale deux choix qui \xC3\xA9" "crivent la m\xC3\xAAme valeur, une plage du programmateur qui dispara\xC3\xAEt, deux zones qui se chevauchent : des avertissements, rien ne bloque.",
+         "objet-tableau", ""),
         // 1.12.7 (12/10/2026) : voir docs/LIVRAISON-1.12.7.md.
         note("1.12.7", "Scripts", Kind::New,
          "LES VALEURS CALCUL\xC3\x89" "ES AU D\xC3\x89MARRAGE, comme un final de Java : une constante d'un script, ou la valeur initiale d'une variable, peut venir d'un code ST (\xC2\xAB \xC6\x92x Calcul\xE2\x80\xA6 \xC2\xBB dans la grille : une fen\xC3\xAAtre \xC3\xA0 deux onglets, le Code et les Locales, qui montre en direct sa valeur, ce qu'il lit, qui le lit et ses probl\xC3\xA8mes) qui l'\xC3\xA9" "crit une fois, apr\xC3\xA8s les valeurs de d\xC3\xA9part des variables IHM et la r\xC3\xA9manence, avant les scripts de D\xC3\xA9marrage. Ses locales sont \xC3\xA0 part, une par ligne (jamais de VAR \xE2\x80\xA6 END_VAR : un bloc coll\xC3\xA9 y est rang\xC3\xA9) ; une boucle FOR sans variable d\xC3\xA9" "clar\xC3\xA9" "e re\xC3\xA7oit un DINT. Les constantes sont calcul\xC3\xA9" "es d'abord, chacune apr\xC3\xA8s celles qu'elle lit, puis les variables ; une boucle est refus\xC3\xA9" "e. Une erreur de calcul arr\xC3\xAAte le d\xC3\xA9marrage, et la Console dit le calcul et sa ligne ; chaque valeur calcul\xC3\xA9" "e y est \xC3\xA9" "crite. La case Valeur montre \xC2\xAB \xC6\x92x = [valeur] \xC2\xBB (en rouge avec la raison).",

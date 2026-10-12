@@ -19,10 +19,10 @@ inline constexpr ByExtension kByExtension[] = {
     {".h", 0, 0},
     {".hpp", 401, 66785},
     {".c", 0, 0},
-    {".cpp", 530, 459849},
+    {".cpp", 530, 459924},
 };
 inline constexpr int        kTotalFiles = 931;
-inline constexpr long long  kTotalLines = 526634;
+inline constexpr long long  kTotalLines = 526709;
 inline constexpr const char* kCountedOn = "12/10/2026";
 
 } // namespace xpg::codestats
