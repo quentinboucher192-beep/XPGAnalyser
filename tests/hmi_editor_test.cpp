@@ -29922,6 +29922,21 @@ void lotF11210_editeur() {
         check(commitKey("max", "50") && b.v().object(jauge)->text("max") == "50", "F : un nombre tap\xC3\xA9 sur l'objet l'emporte");
         check(commitKey("max", std::string(ui::exprfield::kToDefault)) && b.v().object(jauge)->text("max").empty(),
               "F : \xC2\xAB Revenir \xC3\xA0 la valeur par d\xC3\xA9" "faut \xC2\xBB rend Max \xC3\xA0 la variable (vide), comme un objet neuf (avant : 100)");
+        // Un graphique en barres : son echelle reste la sienne (plusieurs variables : rien a heriter) ; ses seuils et ses
+        // bornes acceptent un nom sans = ; vider Min, ou « Revenir a la valeur par defaut », le rend a 0, 100 comme avant.
+        const Id barres = b.place(Kind::BarChart, 100, 450);
+        check(barres != kNoId && b.v().object(barres)->kind == Kind::BarChart && b.v().object(barres)->text("min") == "0"
+                  && b.v().object(barres)->text("max") == "100",
+              "F : un graphique en barres pos\xC3\xA9 depuis la palette garde son \xC3\xA9" "chelle 0..100");
+        b.editor->refresh();
+        b.editor->layout();
+        check(barres != kNoId && commitKey("high", "Pression_Ligne") && b.v().object(barres)->text("high") == "Pression_Ligne",
+              "F : le seuil haut d'un graphique en barres accepte un nom sans = (la variable)");
+        check(barres != kNoId && commitKey("min", "5") && commitKey("min", "") && b.v().object(barres)->text("min") == "0",
+              "F : ... vider son Min le rend \xC3\xA0 0, comme avant (il n'h\xC3\xA9rite de rien)");
+        check(barres != kNoId && commitKey("max", "50") && commitKey("max", std::string(ui::exprfield::kToDefault))
+                  && b.v().object(barres)->text("max") == "100",
+              "F : ... \xC2\xAB Revenir \xC3\xA0 la valeur par d\xC3\xA9" "faut \xC2\xBB sur son Max : 100, comme avant");
     }
     {
         // Le dessin : un seuil hors de la plage d'une cuve se dessine au bord, son etiquette marquee (avant : il disparaissait).

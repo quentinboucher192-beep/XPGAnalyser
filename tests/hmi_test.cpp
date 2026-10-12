@@ -24953,6 +24953,67 @@ void lotF11210() {
         same(shown.object(isa)->text("high") + ";" + shown.object(isa)->text("highAlarm"), "8;9",
              "F : un instrument ISA prend les seuils de sa variable (avant : il n'en avait pas)");
     }
+    // ---- le graphique en barres, l'histogramme : Min, Max, un seuil tapes en nom sans = (decision 5 ; avant : ignores par
+    //      le dessin, et Generer disait « voulais-tu =X ? »). Plusieurs variables, une tolerance : rien a heriter.
+    {
+        Project q;
+        View w = makeView(q, "Vue_Barres");
+        q.programs.variables.push_back(hmiVar(q, "Niveau_1", "REAL", "4"));
+        q.programs.variables.push_back(hmiVar(q, "Niveau_2", "REAL", "9"));
+        q.programs.variables.push_back(hmiVar(q, "Seuil_Haut", "REAL", "7.5"));
+        q.programs.variables.push_back(hmiVar(q, "Echelle_Max", "REAL", "12"));
+        const Id graphe = edit::add(q, w, Kind::BarChart, 10, 10);
+        w.object(graphe)->name = "Barres_Noms";
+        w.object(graphe)->set("variables", "Niveau_1;Niveau_2");
+        w.object(graphe)->set("high", "Seuil_Haut");
+        w.object(graphe)->set("max", "Echelle_Max");
+        const Id histo = edit::add(q, w, Kind::Histogram, 10, 400);
+        w.object(histo)->name = "Histo_Noms";
+        w.object(histo)->set("variable", "Niveau_1");
+        w.object(histo)->set("high", "Seuil_Haut");
+        View seul = makeView(q, "Vue_Seul");
+        const Id simple = edit::add(q, seul, Kind::BarChart, 10, 10);
+        seul.object(simple)->set("variables", "Niveau_1;Niveau_2");
+        Object neuf = makeObject(Kind::BarChart, kNoId, "", 0, 0, kNoId);
+        ranges::followVariable(neuf);
+        same(neuf.text("min") + ".." + neuf.text("max"), "0..100",
+             "F : un graphique en barres pos\xC3\xA9 depuis la palette garde son \xC3\xA9" "chelle 0..100 (plusieurs variables : rien \xC3\xA0 h\xC3\xA9riter)");
+        check(roles::roleOf(Kind::BarChart, "high").role == roles::Role::Formula && roles::roleOf(Kind::Histogram, "low").role == roles::Role::Formula
+                  && roles::roleOf(Kind::BarChart, "max").role == roles::Role::Formula,
+              "F : Min, Max et les seuils d'un graphique en barres, d'un histogramme se lisent en formule (un nom sans = est la variable)");
+        check(!ranges::needed(q, seul), "F : un graphique en barres sans nom dans ses bornes : rien \xC3\xA0 composer");
+        q.views = {w};
+        q.config.startView = q.views[0].id;
+        check(ranges::needed(q, q.views[0]), "F : ... avec un seuil tap\xC3\xA9 en nom : le moteur compose la vue");
+        Runtime rt;
+        rt.bind(&q, nullptr);
+        rt.start(0.0);
+        rt.tick(0.1);
+        LiveView live;
+        live.bind(*rt.composedView(q.views[0].id));
+        const View shown = live.evaluate(rt.environment(), nullptr, nullptr, 0.1);
+        same(shown.object(graphe)->text("high") + ";" + shown.object(graphe)->text("max"), "7.5;12",
+             "F : un graphique en barres : le seuil haut Seuil_Haut et le Max Echelle_Max tap\xC3\xA9s sans = sont leurs variables (avant : ignor\xC3\xA9s)");
+        same(shown.object(histo)->text("high"), "7.5", "F : ... la tol\xC3\xA9rance haute d'un histogramme aussi");
+        rt.stop(1.0);
+        Project g = q;
+        g.views[0].object(graphe)->set("low", "Seuil_Bs");
+        const auto issues = generate(g, [](std::string_view) { return false; });
+        bool blocked = false, told = false, asked = false;
+        for (const auto& i : issues) {
+            if (i.severity == Issue::Severity::Error) {
+                blocked = true;
+                std::printf("  erreur : %s\n", i.message.c_str());
+            }
+            if (i.object == graphe && i.severity == Issue::Severity::Warning
+                && i.message.find("Seuil bas \xC2\xAB Seuil_Bs \xC2\xBB : variable inconnue") != std::string::npos)
+                told = true;
+            if ((i.object == graphe || i.object == histo) && i.message.find("voulais-tu") != std::string::npos) asked = true;
+        }
+        check(!blocked, "F : G\xC3\xA9n\xC3\xA9rer ne bloque rien sur ces noms");
+        check(told, "F : un seuil bas tap\xC3\xA9 Seuil_Bs (inconnu) sur un graphique en barres : variable inconnue, dite");
+        check(!asked, "F : ... et plus de \xC2\xAB voulais-tu =Seuil_Haut ? \xC2\xBB : le nom est la variable");
+    }
     // ---- Generer : les plages et les seuils (des avertissements, rien ne bloque)
     {
         Project g = p;
@@ -24989,6 +25050,20 @@ void lotF11210() {
         gv.object(hors)->set("min", "");
         gv.object(hors)->set("max", "");
         gv.object(hors)->set("highAlarm", "15");
+        // Un seuil hors de la plage ecrite sur l'objet : le message dit ce que l'objet en dessine.
+        const auto horsEcrit = [&](Kind k, const char* name, double y) {
+            Object& o = *gv.object(edit::add(g, gv, k, 10, y));
+            o.name = name;
+            o.setFlag("varFormat", false);
+            if (k == Kind::BarChart) o.set("variables", "Pression_Ligne");
+            else o.setExpr("value", "Pression_Ligne");
+            o.set("min", "0");
+            o.set("max", "100");
+            o.set(k == Kind::BarChart ? "high" : "highAlarm", "150");
+        };
+        horsEcrit(Kind::Tank, "Cuve_Ecrite", 3400);
+        horsEcrit(Kind::Gauge, "Jauge_Ecrite", 3500);
+        horsEcrit(Kind::BarChart, "Barres_Ecrites", 3600);
         const auto issues = generate(g, [](std::string_view) { return false; });
         const auto says = [&](const char* object, const char* text, Issue::Severity sev = Issue::Severity::Warning) {
             const Object* o = object[0] ? g.views[0].objectByName(object) : nullptr;
@@ -25017,6 +25092,13 @@ void lotF11210() {
         check(!says("", "Autre : ni unit\xC3\xA9 ni format", Issue::Severity::Info),
               "F : une ligne qui ne donne qu'une plage n'est plus \xC2\xAB une ligne qui ne change rien \xC2\xBB");
         check(says("Cuve_Hors", "Alarme haute 15 hors de la plage 0..10"), "F : un seuil hors de la plage h\xC3\xA9rit\xC3\xA9" "e (0..10 de Pression_Ligne) : dit");
+        check(says("Cuve_Ecrite", "highAlarm 150 est hors de la plage 0..100 : il se dessine au bord, marqu\xC3\xA9 d'une fl\xC3\xA8" "che"),
+              "F : un seuil hors de la plage d'une cuve : \xC2\xAB il se dessine au bord, marqu\xC3\xA9 d'une fl\xC3\xA8" "che \xC2\xBB (avant : \xC2\xAB il ne se verra pas \xC2\xBB)");
+        check(says("Jauge_Ecrite", "highAlarm 150 est hors de la plage 0..100 : il se dessine au bout de l'\xC3\xA9" "chelle")
+                  && !says("Jauge_Ecrite", "fl\xC3\xA8" "che"),
+              "F : ... d'une jauge : un trait au bout de l'\xC3\xA9" "chelle (pas de fl\xC3\xA8" "che)");
+        check(says("Barres_Ecrites", "high 150 est hors de la plage 0..100 : il ne se verra pas"),
+              "F : ... d'un graphique en barres : \xC2\xAB il ne se verra pas \xC2\xBB, comme avant (sa ligne n'est pas dessin\xC3\xA9" "e)");
     }
 }
 

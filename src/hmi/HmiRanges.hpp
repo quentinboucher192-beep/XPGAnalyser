@@ -81,8 +81,10 @@ struct Inherited {
 [[nodiscard]] std::vector<std::string_view> inheritedKeys(Kind);
 // Le genre a-t-il une plage ou des seuils a prendre a sa variable ?
 [[nodiscard]] bool inherits(Kind);
-// Une cle de ce genre accepte-t-elle un nom de variable sans = ? (Les cles de inheritedKeys et la
-// consigne d'un bargraphe.)
+// Une cle de ce genre est-elle une de ses inheritedKeys (vide : celle de sa variable) ?
+[[nodiscard]] bool inheritedKey(Kind, std::string_view key);
+// Une cle de ce genre accepte-t-elle un nom de variable sans = ? (Les cles de inheritedKeys, la consigne
+// d'un bargraphe ; Min, Max et les seuils d'un graphique en barres, d'un histogramme, qui n'heritent de rien.)
 [[nodiscard]] bool takesName(Kind, std::string_view key);
 // La valeur d'un objet neuf de ce genre pour cette cle ("0", "100", "" : aucune).
 [[nodiscard]] std::string defaultOf(Kind, std::string_view key);

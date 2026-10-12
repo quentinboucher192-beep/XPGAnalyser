@@ -256,8 +256,9 @@ inline constexpr KeyRole kKeyRoles[] = {
 
 // 1.12.10 (lot F) : LES BORNES ET LES SEUILS qu'un objet peut prendre a sa variable (HmiRanges.hpp) - Min et
 // Max des objets a echelle, les seuils des afficheurs et des contenants, l'axe Y d'une courbe, la plage de
-// l'ouverture d'une vanne, la consigne d'un bargraphe. Ils se tapent aussi en nom de variable sans =
-// (Consigne_Max) : une formule qui rend un nombre (avant : seules les bornes du champ de saisie).
+// l'ouverture d'une vanne, la consigne d'un bargraphe ; Min, Max et les seuils d'un graphique en barres, d'un
+// histogramme (plusieurs variables, ou une tolerance : rien a heriter). Ils se tapent aussi en nom de variable
+// sans = (Consigne_Max) : une formule qui rend un nombre (avant : seules les bornes du champ de saisie).
 [[nodiscard]] inline bool rangeNameKey(Kind k, std::string_view key) noexcept {
     const bool bounds = key == "min" || key == "max";
     const bool thresholds = key == "lowAlarm" || key == "low" || key == "high" || key == "highAlarm";
@@ -266,6 +267,7 @@ inline constexpr KeyRole kKeyRoles[] = {
             return bounds;
         case Kind::Gauge: case Kind::Thermometer: return bounds || thresholds;   // 1.12.10 : leurs seuils (ceux de la variable)
         case Kind::Bargraph: return bounds || key == "setpoint";
+        case Kind::BarChart: case Kind::Histogram: return bounds || key == "low" || key == "high";
         case Kind::NumericDisplay: case Kind::IsaInstrument: return thresholds;
         case Kind::Tank: case Kind::GasBottle: case Kind::Silo: case Kind::Hopper: return bounds || thresholds;
         case Kind::Trend: return key == "ymin" || key == "ymax";

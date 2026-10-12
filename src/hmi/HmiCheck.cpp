@@ -3942,12 +3942,18 @@ void roleChecks(const Project& p, std::vector<Issue>& out) {
                 double mn = 0, mx = 0;
                 const Prop* pmin = o.find("min");
                 const Prop* pmax = o.find("max");
+                // 1.12.10 (lot F) : ce que l'objet en dessine - un contenant, au bord avec une fleche (avant : rien) ; une
+                // jauge, un thermometre, un trait au bout de l'echelle ; un graphique, rien (comme avant).
+                const bool vessel = o.kind == Kind::Tank || o.kind == Kind::GasBottle || o.kind == Kind::Silo || o.kind == Kind::Hopper;
+                const bool edge = o.kind == Kind::Gauge || o.kind == Kind::Thermometer;
+                const std::string drawn = vessel ? " : il se dessine au bord, marqu\xC3\xA9 d'une fl\xC3\xA8" "che"
+                                        : edge   ? " : il se dessine au bout de l'\xC3\xA9" "chelle"
+                                                 : " : il ne se verra pas";
                 if (pmin && pmax && pmin->expr.empty() && pmax->expr.empty() && roles::readNumber(pmin->value, mn) && roles::readNumber(pmax->value, mx) && mn < mx)
                     for (int k = 0; k < 4; ++k)
                         if (has[k] && (val[k] < mn || val[k] > mx))
                             add(out, S::Warning, "Objet", v.id, o.id, keys[k],
-                                std::string(keys[k]) + " " + formatNumber(val[k]) + " est hors de la plage " + formatNumber(mn) + ".." + formatNumber(mx)
-                                    + " : il se dessine au bord, marqu\xC3\xA9 d'une fl\xC3\xA8" "che");   // 1.12.10 (lot F) : avant, il disparaissait
+                                std::string(keys[k]) + " " + formatNumber(val[k]) + " est hors de la plage " + formatNumber(mn) + ".." + formatNumber(mx) + drawn);
             }
         }
 }

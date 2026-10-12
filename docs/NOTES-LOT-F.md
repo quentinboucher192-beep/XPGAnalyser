@@ -61,9 +61,17 @@ qu'on ne règle pas de plage ; un objet d'un projet existant garde son aspect (v
   comme la variable, comme l'axe X de la courbe XY. Avant : refusé par l'inspecteur, et une erreur bloquante de
   Générer (« n'est pas un nombre ») sur un curseur, un afficheur ou une cuve. Un repère s'y garde
   (`$Cuve$.Seuil`) : Dupliquer le remplace, le moteur le lit sans ses `$`. Renommer la variable suit.
+- **Le graphique en barres, l'histogramme : un nom dans un seuil** [objet-graphique-en-barres, objet-histogramme] :
+  Min, Max, le seuil bas et le seuil haut d'un graphique en barres, les tolérances d'un histogramme acceptent aussi
+  une variable tapée sans = (`Seuil_Haut`), lue comme la variable. Avant : ignorée par le dessin (pas de ligne de
+  seuil, pas de barre en rouge), et Générer disait « voulais-tu =Seuil_Haut ? ». Leur échelle reste la leur
+  (plusieurs variables, une tolérance : rien n'est pris à Unités et formats ; un graphique posé depuis la palette
+  garde 0..100).
 - **Un seuil hors de la plage se voit** [objet-cuve] : sur une cuve, un silo, une trémie, une bouteille, un seuil
   au-delà de Min ou de Max se dessine au bord, son étiquette marquée d'une flèche vers l'extérieur. Avant, il
-  disparaissait en silence alors que son alarme marchait.
+  disparaissait en silence alors que son alarme marchait. Générer dit, pour chaque objet, ce qu'il en dessine :
+  « il se dessine au bord, marqué d'une flèche » (un contenant), « il se dessine au bout de l'échelle » (une jauge,
+  un thermomètre), « il ne se verra pas » (un graphique en barres, un histogramme : comme avant).
 - **La vanne : l'ouverture dans sa plage** [objet-vanne] : « Ouverture : min » et « Ouverture : max » (vides :
   ceux de la variable de l'ouverture dans Unités et formats) - un signal 0..27648 ou 0..1 se montre de 0 à 100 %
   sans formule. Sans plage, comme avant.
@@ -116,6 +124,9 @@ qu'on ne règle pas de plage ; un objet d'un projet existant garde son aspect (v
 - *objet-champ-de-saisie* : « 1.12.10 : Min et Max vides sont ceux de la ligne de la variable dans Unités et
   formats (pas sa mise à l'échelle : vide reste « sans borne » tant que la ligne ne dit rien). »
 - *objet-courbe* : « 1.12.10 : Axe Y min et max vides : l'union des plages des plumes (Unités et formats). »
+- *objet-graphique-en-barres, objet-histogramme* : « 1.12.10 : Min, Max, le seuil bas et le seuil haut (les tolérances
+  de l'histogramme) acceptent une variable tapée sans = (`Seuil_Haut`), lue comme la variable. L'échelle reste celle
+  de l'objet : elle ne vient pas d'Unités et formats. »
 - *objet-vanne* : « 1.12.10 : Ouverture : min et max - la valeur qui vaut 0 % et celle qui vaut 100 % (27648, 1) ;
   vides, la plage de la variable de l'ouverture dans Unités et formats, sinon 0..100. »
 - *objet-instrument-isa* : « 1.12.10 : quatre seuils (vides : ceux de la variable) ; au-delà, la bulle et la
@@ -142,11 +153,13 @@ Tous des avertissements (rien ne bloque) :
   barre de progression : rien ne le disait), un seuil hors de la plage, des seuils dans le désordre (dès qu'une
   valeur vient de la variable ; les valeurs écrites sur l'objet étaient déjà vérifiées par la 1.12.6) ;
 - un nom tapé sans = dans Min, Max, un seuil, l'axe Y, la consigne : une variable inconnue (avant : « n'est pas
-  un nombre », une **erreur** bloquante, sur un curseur, un afficheur, une cuve) ;
+  un nombre », une **erreur** bloquante, sur un curseur, un afficheur, une cuve) ; de même sur un graphique en
+  barres et un histogramme (avant : « voulais-tu =X ? », et le nom ignoré) ;
 - la valeur initiale d'une structure, d'un tableau de structures, d'un membre structure d'un type IHM : un membre
   inconnu, un texte pour un nombre, une valeur d'énumération inconnue, trop d'éléments, un littéral mal formé.
-Le message d'un seuil hors de la plage d'une cuve dit maintenant « il se dessine au bord, marqué d'une flèche »
-(avant : « il ne se verra pas »).
+Le message d'un seuil hors de la plage écrite sur l'objet (1.12.6) dit maintenant ce que l'objet en dessine : « il
+se dessine au bord, marqué d'une flèche » (cuve, silo, trémie, bouteille), « il se dessine au bout de l'échelle »
+(jauge, thermomètre) ; « il ne se verra pas » reste pour les graphiques (avant : « il ne se verra pas » partout).
 
 ## Les essais
 
@@ -175,13 +188,21 @@ Le message d'un seuil hors de la plage d'une cuve dit maintenant « il se dessin
   l'exemple et « montrée par » à leurs nouvelles colonnes (9 et 10).
 - `hmi_reperes_test` : `repereSeuil11210` - `$Cuve_A$.Seuil` dans un seuil et `$Cuve_A$.Maxi` dans un Max :
   Dupliquer les trouve et les remplace (`$Cuve_B$`), en marche chaque copie lit sa variable ; la plage prise à la
-  variable d'une valeur à repère (`=$Cuve_A$.Niveau`).
+  variable d'une valeur à repère (`=$Cuve_A$.Niveau`) ; `$Cuve_A$.Seuil` dans le seuil haut d'un graphique en
+  barres et dans l'alarme haute d'un instrument ISA, `$Cuve_A$.Maxi` dans « Ouverture : max » d'une vanne : trouvés,
+  remplacés, lus en marche (70 puis 30 pour la copie ; la vanne ouverte à 25 % puis 50 %).
 - Dans `lotF11210` aussi : la vanne (une ouverture 0..27648 à 13824 : 50 % ; une variable 0..1 d'Unités et formats :
   25 % sans formule ; une vanne sans plage inchangée), l'instrument ISA qui prend les seuils de sa variable,
   l'alarme « niveau très haut » d'une cuve qui prend l'alarme haute de sa variable ; dans `lotF11210_editeur`, le
   dessin d'une cuve dont l'alarme haute (150) dépasse la plage 0..100 : son étiquette HH se dessine (avant : rien) ;
   une jauge qui prend les quatre seuils de sa variable ; dans `lotF11210_editeur`, une jauge au-delà de son alarme
   haute et un thermomètre au-delà de son seuil haut dessinent leur valeur dans la couleur voulue.
+- Dans `lotF11210` encore : un graphique en barres dont le seuil haut et le Max sont tapés en nom (`Seuil_Haut`,
+  `Echelle_Max`) les lit en marche (7.5, 12), un histogramme sa tolérance haute ; un graphique posé depuis la palette
+  garde 0..100 ; un seuil inconnu dit par Générer, plus de « voulais-tu = » ; le message d'un seuil hors de la plage
+  selon l'objet (une cuve : la flèche ; une jauge : le bout de l'échelle ; un graphique en barres : « il ne se verra
+  pas »). Dans `lotF11210_editeur` : un graphique en barres posé depuis la palette garde 0..100, son seuil haut
+  accepte un nom, vider son Min ou « Revenir à la valeur par défaut » le rend à 0 ou 100 comme avant.
 
 Trois essais existants ont changé, parce que le comportement qu'ils figeaient a changé exprès :
 - `hmi` (lot 9) : une borne `abc` sur un curseur était « n'est pas un nombre » (une erreur) ; `abc` est maintenant un
@@ -197,9 +218,10 @@ Trois essais existants ont changé, parce que le comportement qu'ils figeaient a
   des zones effacées) et des seuils en nombres (un seuil qui est une variable n'y compte pas) ; des zones écrites
   ne changent jamais.
 - **La barre de progression n'a pas de seuils** ; la jauge et le thermomètre n'ont pas de zones (leurs seuils sont
-  des traits et une couleur). Le graphique en barres, l'histogramme, la courbe XY gardent leurs bornes (plusieurs variables, ou une autre
-  sémantique : la tolérance d'un histogramme, le TRS d'un compteur) ; la courbe prend l'union des plages de ses
-  plumes.
+  des traits et une couleur). Le graphique en barres, l'histogramme, la courbe XY ne prennent pas leurs bornes à la
+  variable (plusieurs variables, ou une autre sémantique : la tolérance d'un histogramme, le TRS d'un compteur) ; le
+  graphique en barres et l'histogramme acceptent seulement un nom sans = dans Min, Max et leurs seuils. La courbe
+  prend l'union des plages de ses plumes.
 - **Le dessin hors plage** : seuls les contenants (cuve, silo, trémie, bouteille) dessinent un seuil hors de la plage
   au bord, avec une flèche ; la consigne d'un bargraphe hors plage reste ramenée au bord comme avant ; un
   afficheur numérique n'a pas de plage.
@@ -232,7 +254,9 @@ Trois essais existants ont changé, parce que le comportement qu'ils figeaient a
   - une valeur à repère (`=$Cuve$.Niveau`) trouve maintenant l'unité, le format et la plage de sa variable
     (avant : le repère la laissait sans unité) ;
   - une borne ou un seuil tapé en nom (`abc`, `Seuil`) était une erreur bloquante sur un curseur, un afficheur,
-    une cuve (refusé par l'inspecteur, de toute façon) - c'est maintenant la variable ;
+    une cuve (refusé par l'inspecteur, de toute façon) - c'est maintenant la variable ; sur un graphique en barres
+    ou un histogramme, il était ignoré (Générer : « voulais-tu = ? ») - la ligne du seuil se dessine maintenant à la
+    valeur de la variable ;
   - un tableau de structures ou une structure dont la valeur initiale avait été écrite par un autre outil voit ce
     littéral appliqué au démarrage (avant : ignoré) ; ce qui ne s'applique pas garde la valeur du type et est dit.
 - **Les seuils hors plage d'une cuve** se dessinent maintenant au bord (avant : invisibles) ; Générer le disait
@@ -244,6 +268,7 @@ Trois essais existants ont changé, parce que le comportement qu'ils figeaient a
   la plage par défaut de son dessin (0..100), sans zone ni seuil hérité.
 - **Le moteur compose une vue de plus** : une vue qui a un objet à plage héritée (ou un nom dans une borne) est
   recomposée à chaque cycle (100 ms), comme une vue à joker (lot E) ; le coût n'est pas mesuré sur un gros projet.
-- **Les rôles** : Min, Max, les seuils (et l'axe Y, la consigne, la plage de l'ouverture) d'un objet à échelle sont
-  des formules sans = (comme les bornes du champ de saisie depuis la 1.11.24) : Dupliquer les lit en mode formule,
-  l'avertissement « tapé sans = : voulais-tu =X ? » ne s'y applique plus (le nom est la variable).
+- **Les rôles** : Min, Max, les seuils (et l'axe Y, la consigne, la plage de l'ouverture) d'un objet à échelle, d'un
+  graphique en barres et d'un histogramme sont des formules sans = (comme les bornes du champ de saisie depuis la
+  1.11.24) : Dupliquer les lit en mode formule, l'avertissement « tapé sans = : voulais-tu =X ? » ne s'y applique
+  plus (le nom est la variable).

@@ -1080,7 +1080,7 @@ bool HmiEditor::commitProp(const std::string& key, const std::string& value, boo
                 if (pp) pp->expr.clear();
                 // 1.12.10 (lot F) : une borne, un seuil d'un objet a echelle - vide, comme un objet pose depuis la palette :
                 // il reprend la plage de sa variable.
-                if (hmi::ranges::takesName(o->kind, key)) o->set(key, "");
+                if (hmi::ranges::inheritedKey(o->kind, key)) o->set(key, "");
                 else if (d) o->set(key, d->value);
                 else if (pp && (key == "rot" || key == "access")) pp->value = "0";
                 if (shown.empty()) shown = o->text(key);
@@ -1108,10 +1108,13 @@ bool HmiEditor::commitProp(const std::string& key, const std::string& value, boo
     if (!expr)
         if (const auto* v0 = canvas_->view(); v0)
             if (const auto* o0 = v0->object(sel.front()); o0 && hmi::ranges::takesName(o0->kind, key)) {
-                rangeKey = true;
+                // Vide : une cle heritee reprend celle de sa variable ; une cle qui n'herite de rien (Min d'un graphique
+                // en barres) revient, comme avant, a la valeur d'un objet neuf.
+                const bool inherited = hmi::ranges::inheritedKey(o0->kind, key);
+                rangeKey = inherited || value.find_first_not_of(" \t") != std::string::npos;
                 if (!hmi::ranges::validValue(value)) {
-                    warn("\xC2\xAB " + value + " \xC2\xBB n'est ni un nombre ni un nom de variable (" + key
-                         + ") : rien n'a chang\xC3\xA9. Vide : celui de la variable. Pour un calcul, commencer par =.");
+                    warn("\xC2\xAB " + value + " \xC2\xBB n'est ni un nombre ni un nom de variable (" + key + ") : rien n'a chang\xC3\xA9. "
+                         + (inherited ? "Vide : celui de la variable. " : "") + "Pour un calcul, commencer par =.");
                     return false;
                 }
             }

@@ -129,13 +129,26 @@ std::string thresholdZones(const Project& p, const Object& o, const View* in) {
     return out;
 }
 
+// Les cles qui acceptent un nom sans = mais n'heritent de rien : la consigne d'un bargraphe ; Min, Max et les seuils
+// d'un graphique en barres, d'un histogramme (plusieurs variables, une tolerance : rien a prendre a la variable).
+std::vector<std::string_view> namedKeys(Kind k) {
+    if (k == Kind::Bargraph) return {"setpoint"};
+    if (k == Kind::BarChart || k == Kind::Histogram) return {"min", "max", "low", "high"};
+    return {};
+}
+
+// Le genre a-t-il une cle que apply peut changer (heritee, ou un nom a lire comme la variable) ?
+bool touched(Kind k) { return inherits(k) || !namedKeys(k).empty(); }
+
 // Les changements d'un objet (sans la vanne : son ouverture a part).
 std::vector<Change> changesOf(const Project& p, const Object& o, const View* in) {
     std::vector<Change> out;
     std::vector<std::string_view> keys = inheritedKeys(o.kind);
-    if (o.kind == Kind::Bargraph) keys.push_back("setpoint");
+    const std::size_t inheritedCount = keys.size();
+    for (const auto key : namedKeys(o.kind)) keys.push_back(key);
     const bool follows = followsVariableFormat(o);
-    for (const auto key : keys) {
+    for (std::size_t i = 0; i < keys.size(); ++i) {
+        const auto key = keys[i];
         const auto* prop = o.find(key);
         if (prop && !prop->expr.empty()) continue;            // une formule : la sienne
         const std::string own = ownValue(o, key);
@@ -147,7 +160,7 @@ std::vector<Change> changesOf(const Project& p, const Object& o, const View* in)
             if (isName(own) && !namesAsValue) out.push_back({std::string(key), def, own});
             continue;
         }
-        if (key == "setpoint") continue;
+        if (i >= inheritedCount) continue;                    // vide : rien a heriter (la consigne, un graphique)
         if (follows) {
             const Inherited inh = inheritedFor(p, o, key, in);
             if (!inh.value.empty()) {
@@ -323,6 +336,12 @@ std::vector<std::string_view> inheritedKeys(Kind k) {
 
 bool inherits(Kind k) { return !inheritedKeys(k).empty(); }
 
+bool inheritedKey(Kind k, std::string_view key) {
+    for (const auto kk : inheritedKeys(k))
+        if (kk == key) return true;
+    return false;
+}
+
 bool takesName(Kind k, std::string_view key) { return roles::rangeNameKey(k, key); }
 
 std::string defaultOf(Kind k, std::string_view key) {
@@ -386,7 +405,7 @@ Inherited inheritedFor(const Project& p, const Object& o, std::string_view key, 
 }
 
 bool apply(Object& o, const Project& p, const View* in) {
-    if (!inherits(o.kind)) return false;
+    if (!touched(o.kind)) return false;
     bool changed = false;
     if (o.kind == Kind::Valve) {
         Prop opening;
@@ -416,7 +435,7 @@ bool apply(View& v, const Project& p) {
 
 bool needed(const Project& p, const View& v) {
     for (const auto& o : v.objects) {
-        if (!inherits(o.kind)) continue;
+        if (!touched(o.kind)) continue;
         if (o.kind == Kind::Valve) {
             Prop dummy;
             if (valveOpening(p, o, &v, dummy)) return true;
@@ -428,7 +447,7 @@ bool needed(const Project& p, const View& v) {
 }
 
 bool preview(const Project& p, const View& v, const Object& o, Object& out) {
-    if (!inherits(o.kind)) return false;
+    if (!touched(o.kind)) return false;
     if (o.kind == Kind::Valve) {
         Prop opening;
         if (!valveOpening(p, o, &v, opening) || !opening.expr.empty()) return false;   // une formule : l'editeur ne la calcule pas
@@ -478,7 +497,7 @@ std::string hint(const Project& p, const View& v, const Object& o, std::string_v
 
 void followVariable(Object& o) {
     for (const char* key : {"min", "max", "ymin", "ymax"})
-        if (auto* prop = o.find(key); prop && takesName(o.kind, key)) {
+        if (auto* prop = o.find(key); prop && inheritedKey(o.kind, key)) {   // (un graphique en barres garde son echelle)
             prop->value.clear();
             prop->expr.clear();
         }
@@ -545,12 +564,23 @@ std::vector<Issue> check(const Project& p, const NameExists& plc) {
     // ---- les objets : ce qu'ils liront (le leur, sinon celui de leur variable)
     for (const auto& v : p.views)
         for (const auto& o : v.objects) {
-            if (!inherits(o.kind)) continue;
             const auto issue = [&](const std::string& key, std::string msg) {
                 add(S::Warning, "Objet", v.id, o.id, key, std::move(msg));
             };
+            // Un nom tape sans = dans une cle qui n'herite de rien (la consigne d'un bargraphe ; Min, Max, un seuil d'un
+            // graphique en barres, d'un histogramme) : une variable que le projet connait.
+            for (const auto key : namedKeys(o.kind)) {
+                const auto* prop = o.find(key);
+                if (!prop || !prop->expr.empty()) continue;
+                const std::string own = trim(prop->value);
+                // (Les seuils d'un histogramme sont ses tolerances, LSL et USL.)
+                const std::string what = o.kind != Kind::Histogram || (key != "low" && key != "high") ? label(key)
+                                       : key == "low" ? "Tol\xC3\xA9rance basse" : "Tol\xC3\xA9rance haute";
+                if (isName(own) && !knownName(p, plc, own, &v))
+                    issue(std::string(key), what + " \xC2\xAB " + own + " \xC2\xBB : variable inconnue (un nom tap\xC3\xA9 sans = se lit comme la variable)");
+            }
+            if (!inherits(o.kind)) continue;
             std::vector<std::string_view> keys = inheritedKeys(o.kind);
-            if (o.kind == Kind::Bargraph) keys.push_back("setpoint");
             struct Seen {
                 double value{0};
                 bool   has{false};
@@ -571,7 +601,7 @@ std::vector<Issue> check(const Project& p, const NameExists& plc) {
                         continue;
                     }
                     s.has = number(own, s.value);
-                } else if (key != "setpoint" && followsVariableFormat(o)) {
+                } else if (followsVariableFormat(o)) {
                     const Inherited inh = inheritedFor(p, o, key, &v);
                     if (!inh.value.empty() && number(inh.value, s.value)) {
                         s.has = true;
