@@ -184,8 +184,8 @@ Rien de bloquant (des avertissements et des informations), sauf ce qui l'était 
   `MFCreateMediaType`, `MFCreateSourceReaderFromURL`) se chargent maintenant depuis System32 à la première vidéo
   qui en a besoin ; sans elles, l'objet montre son image d'attente et le conseil (« Media Foundation manque à ce
   Windows… installer le Media Feature Pack ; sinon, convertir en Motion-JPEG AVI »). Les bibliothèques d'import
-  restent liées pour leurs GUID : aucune fonction n'en est importée (la table d'importation de l'exe MinGW est à
-  relire après sa compilation : voir `docs/LIVRAISON-1.12.12.md`).
+  restent liées pour leurs GUID : aucune fonction n'en est importée. Vérifié sur les exe MinGW de la 1.12.12 : ils
+  importent exactement les mêmes DLL que ceux de la 1.12.9.
 - **Le son des vidéos** n'est pas joué (la vidéo est muette ; les propriétés `autoplay` et `muted` restent sans
   effet).
 - **Le WEBM** n'est essayé que par Media Foundation sous Windows (avec les extensions vidéo web) ; ailleurs, l'image
