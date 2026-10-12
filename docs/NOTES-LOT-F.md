@@ -21,8 +21,9 @@ qu'on ne règle pas de plage ; un objet d'un projet existant garde son aspect (v
 - Un objet **posé depuis la palette** naît avec Min et Max vides : il suit sa variable. Un objet d'un projet
   existant a ses valeurs écrites dans son fichier (0, 100…) : il ne change pas. Vider la case dans l'inspecteur
   remet l'objet sur sa variable (avant : vider Min le remettait à 0).
-- Les seuils (vides par défaut) des afficheurs et des contenants suivent la variable dès qu'on lui en donne
-  dans Unités et formats (un geste de l'utilisateur) ; les bornes vides d'un champ de saisie aussi.
+- Les seuils (vides par défaut) des afficheurs, des instruments ISA, des jauges, des thermomètres et des
+  contenants suivent la variable dès qu'on lui en donne dans Unités et formats (un geste de l'utilisateur) ; les
+  bornes vides d'un champ de saisie aussi.
 - **La mise à l'échelle ne remplit que les cases qui avaient une valeur par défaut** (Min, Max d'une jauge,
   d'un bargraphe, d'un curseur, d'une cuve, d'une courbe…). Les bornes vides d'un champ de saisie (« sans
   borne ») et la plage de l'ouverture d'une vanne ne suivent qu'une ligne d'Unités et formats : sinon, un projet
