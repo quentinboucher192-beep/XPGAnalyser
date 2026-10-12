@@ -1,0 +1,1495 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Tableau en deux modes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Maquette : l'objet Tableau de la bibliotheque, regle en un mode a la fois (cases fixes, lignes
+   dynamiques, fichier externe). Les fenetres reprennent l'habillage de XPGAnalyser IHM - le theme
+   Clair de la capture (et Sombre au choix) : l'inspecteur, ses cases, la pastille fx, les carres de
+   legende C / fx / $ / I / !, l'onglet Contenu, la vue. Tout se manipule : rien n'est une image. */
+:root{
+  /* la page autour des fenetres */
+  --page:#eef0f3; --page-2:#e3e7ec; --ink:#1a1f26; --ink-2:#47505b; --ink-3:#69717c; --rule:#d3d8de;
+  /* XPGAnalyser, theme Clair (src/ui/Theme.cpp, Theme::light) */
+  --win:#EEF0F3; --panel:#FFFFFF; --head:#E3E7EC; --rail:#D8DDE4; --input:#FFFFFF; --alt:#F6F8FA;
+  --border:#C4CBD4; --border-2:#98A1AE; --gridl:#E4E8ED; --text:#1B1F26; --muted:#5A6472; --dis:#9AA2AE;
+  --accent:#1D6FE0; --accent-h:#3A86F0; --accent-p:#1557B0; --sel:#CFE2FA; --sel-fg:#0E1218;
+  --ok:#107C41; --warn:#9A6700; --err:#C42B1C; --info:#0B6E99;
+  --ok-bg:#E2F3E9; --warn-bg:#FBF0D9; --err-bg:#FBE5E2; --info-bg:#E1F0F7;
+  --drive-bg:#EAF2FD; --fx-on:#1F4E8C; --leg-i:#0E7C6E; --leg-d:#9A6700; --leg-s:#5A6472; --leg-v:#7C5CD6;
+  --mark:#9A6700; --mark-bg:#FFF1D6; --hole:#0E7C6E; --hole-bg:#DDF2EE; --type:#5B3FB8; --type-bg:#EEE9FB;
+  --shadow:0 1px 0 rgba(20,30,40,.05), 0 14px 34px -22px rgba(20,30,40,.5);
+  /* la vue IHM (un objet Tableau : HmiPainter.cpp, drawTableRows) */
+  --view:#1B2028; --view-dot:#262d37; --t-fill:#262C36; --t-stroke:#3A4556; --t-head:#323A47; --t-grid:#4A5566; --t-text:#DDE3EA; --t-head-text:#FFFFFF;
+  --ui:"Segoe UI","Noto Sans","DejaVu Sans",system-ui,sans-serif;
+  --doc:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+  --mono:"IBM Plex Mono","Cascadia Mono",Consolas,"DejaVu Sans Mono",monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --page:#0f1215; --page-2:#171b20; --ink:#e5e8ec; --ink-2:#afb6c0; --ink-3:#848c97; --rule:#272c33;
+    --win:#14161A; --panel:#1C1F24; --head:#252931; --rail:#2E333C; --input:#101215; --alt:#20242A;
+    --border:#363C47; --border-2:#4A515E; --gridl:#272C34; --text:#E6E9EF; --muted:#9AA2B1; --dis:#5C6472;
+    --accent:#4C8DFF; --accent-h:#6BA1FF; --accent-p:#2E6FD9; --sel:#1E3A63; --sel-fg:#F2F5FA;
+    --ok:#3FBF7F; --warn:#F0B429; --err:#E4574F; --info:#4CB8E8;
+    --ok-bg:#15301f; --warn-bg:#382d12; --err-bg:#3a1c1f; --info-bg:#122c38;
+    --drive-bg:#1a2a42; --fx-on:#2E6FD9; --leg-i:#1f9d8c; --leg-d:#c08a12; --leg-s:#6b7482; --leg-v:#9b80ef;
+    --mark:#F0B429; --mark-bg:#3a2c12; --hole:#4fd1c1; --hole-bg:#12312d; --type:#b8a1ff; --type-bg:#2a2346;
+    --shadow:0 1px 0 rgba(0,0,0,.3), 0 16px 38px -20px rgba(0,0,0,.85);
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --page:#0f1215; --page-2:#171b20; --ink:#e5e8ec; --ink-2:#afb6c0; --ink-3:#848c97; --rule:#272c33;
+  --win:#14161A; --panel:#1C1F24; --head:#252931; --rail:#2E333C; --input:#101215; --alt:#20242A;
+  --border:#363C47; --border-2:#4A515E; --gridl:#272C34; --text:#E6E9EF; --muted:#9AA2B1; --dis:#5C6472;
+  --accent:#4C8DFF; --accent-h:#6BA1FF; --accent-p:#2E6FD9; --sel:#1E3A63; --sel-fg:#F2F5FA;
+  --ok:#3FBF7F; --warn:#F0B429; --err:#E4574F; --info:#4CB8E8;
+  --ok-bg:#15301f; --warn-bg:#382d12; --err-bg:#3a1c1f; --info-bg:#122c38;
+  --drive-bg:#1a2a42; --fx-on:#2E6FD9; --leg-i:#1f9d8c; --leg-d:#c08a12; --leg-s:#6b7482; --leg-v:#9b80ef;
+  --mark:#F0B429; --mark-bg:#3a2c12; --hole:#4fd1c1; --hole-bg:#12312d; --type:#b8a1ff; --type-bg:#2a2346;
+  --shadow:0 1px 0 rgba(0,0,0,.3), 0 16px 38px -20px rgba(0,0,0,.85);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--page);color:var(--ink);font:15px/1.6 var(--doc);padding-inline:16px;padding-block:28px 80px}
+.wrap{max-width:1320px;margin:0 auto;display:grid;grid-template-columns:186px minmax(0,1fr);gap:40px}
+@media (max-width:1020px){.wrap{grid-template-columns:minmax(0,1fr)}.toc{display:none}}
+.toc{position:sticky;top:calc(env(safe-area-inset-top,0px) + 20px);align-self:start;font-size:13px}
+.toc .ver{font:500 11px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);padding:0 10px 10px}
+.toc ol{list-style:none;margin:0;padding:0;display:grid;gap:2px}
+.toc a{display:block;padding:4px 10px;border-radius:6px;color:var(--ink-2);text-decoration:none}
+.toc a:hover{background:var(--page-2);color:var(--ink)}
+.toc .theme{margin:14px 10px 0;display:flex;gap:4px;flex-wrap:wrap}
+main{min-width:0}
+.eyebrow{font:500 12px/1.4 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);margin:0 0 10px}
+h1{font-size:clamp(28px,3.6vw,40px);line-height:1.12;letter-spacing:-.01em;margin:0 0 14px;text-wrap:balance;font-weight:600}
+h2{font-size:clamp(21px,2.4vw,26px);line-height:1.2;margin:2px 0 8px;text-wrap:balance;font-weight:600}
+h3{font-size:16px;margin:24px 0 6px;font-weight:600}
+p{margin:0 0 12px;max-width:78ch}
+.lead{font-size:17px;color:var(--ink-2);max-width:74ch}
+section{padding-block:30px 10px;border-top:1px solid var(--rule)}
+header.hero{padding-block:2px 24px}
+.secno{font:500 12px var(--mono);color:var(--ink-3);letter-spacing:.06em;text-transform:uppercase}
+.sub{color:var(--ink-2)}
+code{font-family:var(--mono);font-size:.88em;background:var(--page-2);padding:1px 5px;border-radius:4px}
+ul.plain{margin:6px 0 12px;padding-left:20px;max-width:80ch}
+ul.plain li{margin:3px 0}
+.quote{font-size:14px;color:var(--ink-2);padding:8px 12px;border-left:3px solid var(--rule);background:var(--page-2);border-radius:0 6px 6px 0;max-width:90ch;margin:14px 0 0}
+.note{font-size:13.5px;color:var(--ink-2);background:var(--page-2);border-radius:8px;padding:10px 14px;margin:12px 0;max-width:92ch}
+.note b{color:var(--ink)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin:14px 0 4px}
+.card{background:var(--page-2);border-radius:8px;padding:14px 16px;min-width:0}
+.card .k{font:500 11px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--accent);margin:0 0 4px}
+.card h4{margin:0 0 6px;font-size:15px}
+.card p{font-size:13.5px;color:var(--ink-2);margin:0}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btnd{appearance:none;border:1px solid var(--rule);background:var(--page);color:var(--ink);font:inherit;font-size:12.5px;padding:4px 10px;border-radius:6px;cursor:pointer}
+.btnd.on{border-color:var(--accent);color:var(--accent);background:var(--panel)}
+
+/* ======================================================== la fenetre de XPGAnalyser IHM */
+.app{background:var(--win);border:1px solid var(--border);border-radius:8px;font:13px/1.4 var(--ui);color:var(--text);box-shadow:var(--shadow);overflow:hidden;margin:14px 0 8px}
+.app-title{display:flex;align-items:center;gap:10px;padding:6px 12px;background:var(--head);border-bottom:1px solid var(--border);font-size:12px;color:var(--muted);flex-wrap:wrap}
+.app-title b{color:var(--text);font-weight:600}
+.app-title .sp{flex:1}
+.logo{width:18px;height:18px;border-radius:4px;background:var(--accent);color:#fff;font:700 11px var(--ui);display:grid;place-items:center}
+.ws{display:grid;grid-template-columns:minmax(0,1fr) 392px;min-height:560px}
+@media (max-width:980px){.ws{grid-template-columns:minmax(0,1fr)}}
+.ws>div{min-width:0}
+
+/* --- la vue (l'editeur de vue, ou la simulation) */
+.stage{display:flex;flex-direction:column;min-width:0;border-right:1px solid var(--border)}
+@media (max-width:980px){.stage{border-right:0;border-bottom:1px solid var(--border)}}
+.stage-tools{display:flex;gap:6px;align-items:center;padding:6px 8px;border-bottom:1px solid var(--border);background:var(--panel);flex-wrap:wrap}
+.chipbtn{appearance:none;border:1px solid var(--border);background:var(--panel);color:var(--text);font:inherit;font-size:12px;padding:3px 9px;border-radius:12px;cursor:pointer;white-space:nowrap}
+.chipbtn:hover{border-color:var(--accent)}
+.chipbtn.on{background:var(--sel);border-color:var(--accent);color:var(--sel-fg)}
+.runbtn{appearance:none;border:1px solid var(--border);background:var(--panel);color:var(--ok);font:600 12px var(--ui);padding:3px 10px;border-radius:4px;cursor:pointer;display:inline-flex;gap:6px;align-items:center}
+.runbtn.on{background:var(--ok);color:#fff;border-color:var(--ok)}
+.stage-tools .lbl{font-size:11.5px;color:var(--muted)}
+.view{position:relative;flex:1;min-height:330px;background-color:var(--view);background-image:radial-gradient(var(--view-dot) 1px,transparent 1px);background-size:20px 20px;overflow:auto;padding:26px 22px}
+.vlabel{position:absolute;left:10px;top:6px;font:11px var(--mono);color:#8a96a8}
+.tobj{position:relative;display:inline-block;max-width:100%;cursor:pointer}
+.tobj.sel{outline:1px solid var(--accent);outline-offset:3px}
+.tobj.sel::before,.tobj.sel::after{content:"";position:absolute;width:7px;height:7px;background:#fff;border:1px solid var(--accent)}
+.tobj.sel::before{left:-7px;top:-7px}.tobj.sel::after{right:-7px;bottom:-7px}
+.htable{border-collapse:collapse;background:var(--t-fill);border:1px solid var(--t-stroke);color:var(--t-text);font:13px var(--ui);table-layout:fixed}
+.htable th{background:var(--t-head);color:var(--t-head-text);font-weight:600;text-align:left;padding:6px 8px;border-right:1px solid var(--t-grid);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.htable td{padding:5px 8px;border-top:1px solid var(--t-grid);border-right:1px solid var(--t-grid);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;height:27px}
+.htable tr.alt td{background:rgba(255,255,255,.04)}
+.htable tr.pick td{background:rgba(76,141,255,.28)}
+.htable td.r{text-align:right}.htable td.c{text-align:center}
+.htable td.warnc{color:#F2C94C}.htable td.alarmc{color:#FF7B72;font-weight:600}
+.htable td.muted{color:#8A96A8;font-style:italic}
+.htable td.mk{color:#F2B24C}
+.htable .empty td{color:#8A96A8;text-align:center;font-style:italic}
+.tcap{font:11px var(--mono);color:#8a96a8;margin-top:6px}
+.scrollhint{position:absolute;right:-12px;top:30px;bottom:0;width:8px;border-radius:4px;background:#1B2028}
+.scrollhint i{position:absolute;left:0;right:0;border-radius:4px;background:#6B7686}
+
+/* --- le panneau du bas : Variables, Generer */
+.bottom{border-top:1px solid var(--border);background:var(--panel);display:flex;flex-direction:column;max-height:230px}
+.btabs{display:flex;gap:2px;padding:0 8px;border-bottom:1px solid var(--border);background:var(--head)}
+.btab{appearance:none;border:0;background:transparent;font:inherit;font-size:12px;color:var(--muted);padding:6px 10px;border-bottom:2px solid transparent;cursor:pointer;display:flex;gap:6px;align-items:center}
+.btab.on{color:var(--text);border-bottom-color:var(--accent);font-weight:600}
+.count{font:600 10.5px var(--mono);padding:0 5px;border-radius:8px;background:var(--rail);color:var(--text)}
+.count.e{background:var(--err);color:#fff}.count.w{background:var(--warn);color:#fff}
+.bbody{overflow:auto;font-size:12px}
+.vtab{width:100%;border-collapse:collapse}
+.vtab th{position:sticky;top:0;background:var(--alt);text-align:left;font-weight:500;color:var(--muted);padding:4px 8px;border-bottom:1px solid var(--border);white-space:nowrap}
+.vtab td{padding:3px 8px;border-bottom:1px solid var(--gridl);white-space:nowrap;vertical-align:top}
+.vtab td.m{font-family:var(--mono);font-size:11.5px}
+.vtab td.v{font-family:var(--mono);font-size:11.5px;color:var(--muted);white-space:normal}
+.vtab tr.use td{background:var(--drive-bg)}
+.genl{list-style:none;margin:0;padding:4px 0}
+.genl li{display:grid;grid-template-columns:18px minmax(0,1fr);gap:6px;padding:4px 10px;border-bottom:1px solid var(--gridl)}
+.genl .ic{font:700 11px var(--ui);width:16px;height:16px;border-radius:50%;display:grid;place-items:center;color:#fff;margin-top:1px}
+.genl .E .ic{background:var(--err)}.genl .W .ic{background:var(--warn)}.genl .I .ic{background:var(--info)}.genl .O .ic{background:var(--ok)}
+.genl .where{font:11px var(--mono);color:var(--muted)}
+
+/* --- l'inspecteur (src/ui/widgets/DataViews : PropertyGrid) */
+.insp{background:var(--panel);display:flex;flex-direction:column;min-width:0}
+.itabs{display:flex;border-bottom:1px solid var(--border);background:var(--panel)}
+.itab{appearance:none;border:0;background:transparent;font:inherit;font-size:13px;color:var(--muted);padding:8px 14px 7px;border-bottom:2px solid transparent;cursor:pointer;display:flex;gap:6px;align-items:center;white-space:nowrap}
+.itab:hover{color:var(--text)}
+.itab.on{color:var(--text);border-bottom-color:var(--accent);font-weight:600}
+.itab svg{width:13px;height:13px}
+.itab .count{font-size:10px}
+.show{display:flex;gap:5px;align-items:center;padding:6px 8px;border-bottom:1px solid var(--border);font-size:11.5px;color:var(--muted);flex-wrap:wrap}
+.spill{border:1px solid var(--border);border-radius:10px;padding:0 7px;font-size:11px;color:var(--text);background:var(--panel);white-space:nowrap}
+.spill.dim{color:var(--dis)}
+.ibody{overflow:auto;flex:1;min-height:0}
+.pg{font-size:12.5px}
+.pg-g{display:flex;align-items:center;gap:6px;padding:4px 8px;background:var(--head);font-weight:600;border-bottom:1px solid var(--border);cursor:pointer;user-select:none}
+.pg-g .chev{width:12px;color:var(--muted);transition:transform .12s}
+.pg-g.closed .chev{transform:rotate(-90deg)}
+.pg-r{display:grid;grid-template-columns:44% 56%;border-bottom:1px solid var(--gridl);min-height:25px;position:relative}
+.pg-r.drive{background:var(--drive-bg)}
+.pg-r.drive::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--accent)}
+.pg-r.selr .pg-n{background:var(--sel)}
+.pg-n{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:0 6px 0 22px;border-right:1px solid var(--gridl);min-width:0}
+.pg-n span:first-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pg-n .ty{font-size:9.5px;color:var(--dis);white-space:nowrap}
+.pg-v{display:flex;align-items:center;gap:5px;padding:1px 4px 1px 4px;min-width:0}
+.pg-v .val{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pg-v .ro{color:var(--muted)}
+.pg-v input[type=text],.pg-v select{flex:1;min-width:0;font:12.5px var(--ui);border:1px solid transparent;background:transparent;color:var(--text);padding:2px 3px;border-radius:2px}
+.pg-v input.code{font:12px var(--mono)}
+.pg-v input[type=text]:hover,.pg-v select:hover{border-color:var(--border)}
+.pg-v input[type=text]:focus,.pg-v select:focus{border-color:var(--accent);background:var(--input);outline:none}
+.pg-v input::placeholder{color:var(--dis);font-style:italic}
+.pg-v input.bad{color:var(--err);text-decoration:underline wavy var(--err) 1px;text-underline-offset:3px}
+.fx{flex:none;width:19px;height:19px;border-radius:50%;border:1px solid var(--border-2);color:var(--muted);font:italic 600 9.5px var(--ui);display:grid;place-items:center;cursor:pointer;background:var(--panel)}
+.fx.on{background:var(--fx-on);border-color:var(--fx-on);color:#fff}
+.fx.off{visibility:hidden}
+.lg{flex:none;margin-left:auto;width:17px;height:17px;border:1px solid var(--border-2);border-radius:3px;font:600 10px var(--ui);display:grid;place-items:center;color:var(--text);background:var(--panel)}
+.lg.fxl{background:var(--accent);border-color:var(--accent);color:#fff;font-size:8.5px;font-style:italic}
+.lg.I{background:var(--leg-i);border-color:var(--leg-i);color:#fff}
+.lg.D{background:var(--leg-d);border-color:var(--leg-d);color:#fff}
+.lg.S{background:var(--leg-s);border-color:var(--leg-s);color:#fff}
+.lg.X{background:var(--err);border-color:var(--err);color:#fff}
+.lg.E{color:transparent}
+.clear{appearance:none;border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:13px;padding:0 3px}
+.clear:hover{color:var(--err)}
+.sw{width:13px;height:13px;border:1px solid var(--border-2);border-radius:2px;flex:none}
+.cb{width:14px;height:14px;border:1px solid var(--border-2);border-radius:2px;flex:none;display:grid;place-items:center;font-size:10px;color:#fff}
+.cb.on{background:var(--accent);border-color:var(--accent)}
+/* le choix du mode, en tete de la section Tableau */
+.modes{display:flex;border:1px solid var(--border);border-radius:5px;overflow:hidden;flex:1;min-width:0}
+.pg-r.modehead{grid-template-columns:max-content minmax(0,1fr);background:var(--alt)}
+.pg-r.modehead .pg-n{padding-left:22px}
+.pg-r.modehead .pg-n .ty{display:none}
+.pg-r.modehead .pg-v{padding:4px 6px}
+.modes button{appearance:none;border:0;border-right:1px solid var(--border);background:var(--panel);font:inherit;font-size:12px;padding:4px 6px;color:var(--muted);cursor:pointer;flex:1;white-space:nowrap}
+.modes button:last-child{border-right:0}
+.modes button.on{background:var(--accent);color:#fff;font-weight:600}
+.typeline{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:4px 6px;align-items:center;padding:3px 8px 5px 22px;font-size:11px;color:var(--muted);border-bottom:1px solid var(--gridl);background:var(--alt)}
+.tchip{font:500 10.5px var(--mono);padding:0 6px;border-radius:9px;background:var(--type-bg);color:var(--type);white-space:nowrap}
+.okchip{font:500 10.5px var(--ui);padding:0 6px;border-radius:9px;background:var(--ok-bg);color:var(--ok);white-space:nowrap}
+.wchip{font:500 10.5px var(--ui);padding:0 6px;border-radius:6px;background:var(--warn-bg);color:var(--warn);white-space:normal}
+.echip{font:500 10.5px var(--ui);padding:0 6px;border-radius:6px;background:var(--err-bg);color:var(--err);white-space:normal}
+.ichip{font:500 10.5px var(--ui);padding:0 6px;border-radius:6px;background:var(--info-bg);color:var(--info);white-space:normal}
+.mkchip{font:500 10.5px var(--mono);padding:0 5px;border-radius:9px;background:var(--mark-bg);color:var(--mark);white-space:nowrap}
+.linkb{appearance:none;border:0;background:transparent;color:var(--accent);font:inherit;font-size:11.5px;cursor:pointer;padding:0;text-decoration:underline;text-underline-offset:2px}
+.help{border-top:1px solid var(--border);background:var(--alt);padding:7px 10px;font-size:11.5px;color:var(--muted);min-height:58px}
+.help b{color:var(--text)}
+
+/* --- l'onglet Contenu */
+.ctools{display:flex;gap:2px;align-items:center;padding:4px 6px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.tbtn{appearance:none;border:1px solid transparent;background:transparent;font:inherit;font-size:12px;color:var(--text);padding:3px 7px;border-radius:3px;cursor:pointer;display:inline-flex;gap:4px;align-items:center;white-space:nowrap}
+.tbtn:hover{background:var(--alt);border-color:var(--border)}
+.tbtn[disabled]{color:var(--dis);cursor:default;background:transparent;border-color:transparent}
+.tsep{width:1px;height:16px;background:var(--border);margin:0 3px}
+.cbanner{padding:6px 9px;border-bottom:1px solid var(--border);font-size:11.5px;color:var(--muted);background:var(--alt);display:flex;flex-wrap:wrap;gap:4px 6px;align-items:center}
+.cbanner b{color:var(--text);font-weight:600}
+.cgrid{overflow:auto}
+table.sheet{border-collapse:collapse;font-size:12px;min-width:100%}
+.sheet th{background:var(--head);color:var(--muted);font-weight:500;padding:3px 6px;border:1px solid var(--border);white-space:nowrap;text-align:left;cursor:pointer}
+.sheet th.sel{background:var(--sel);color:var(--sel-fg)}
+.sheet th.rn{width:26px;text-align:center;cursor:default}
+.sheet td{border:1px solid var(--gridl);padding:0;height:25px;min-width:84px;position:relative}
+.sheet td.rn{background:var(--alt);text-align:center;color:var(--muted);font:11px var(--mono);min-width:26px}
+.sheet td.sel{outline:2px solid var(--accent);outline-offset:-2px;z-index:1}
+.sheet .cell{padding:2px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;cursor:pointer;display:flex;gap:4px;align-items:center;min-height:23px}
+.sheet .cell.f{font-family:var(--mono);color:var(--accent)}
+.sheet .hole{color:var(--hole);background:var(--hole-bg);border-radius:3px;padding:0 2px;font-family:var(--mono)}
+.sheet .mkr{color:var(--mark);background:var(--mark-bg);border-radius:3px;padding:0 2px;font-family:var(--mono)}
+.sheet .fxs{font:italic 600 9px var(--ui);color:#fff;background:var(--fx-on);border-radius:50%;width:15px;height:15px;display:inline-grid;place-items:center;flex:none}
+table.cols{border-collapse:collapse;font-size:12px;width:100%}
+.cols th{position:sticky;top:0;background:var(--head);color:var(--muted);font-weight:500;padding:3px 5px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap;z-index:1}
+.cols td{padding:1px 4px;border-bottom:1px solid var(--gridl);vertical-align:middle;height:27px}
+.cols tr.sel td{background:var(--sel)}
+.cols tr{cursor:pointer}
+.cols .idx{font:11px var(--mono);color:var(--muted);text-align:center;width:22px}
+.cols .ct{font-family:var(--mono);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px}
+.detail{border-top:1px solid var(--border)}
+.detail .dh{padding:5px 9px;background:var(--head);font-weight:600;font-size:12px;display:flex;gap:6px;align-items:center}
+.sugg{display:flex;flex-wrap:wrap;gap:4px;padding:4px 8px 7px 22px;border-bottom:1px solid var(--gridl);background:var(--alt)}
+.sg{appearance:none;border:1px solid var(--border);background:var(--panel);color:var(--text);font:11px var(--mono);padding:1px 6px;border-radius:10px;cursor:pointer;white-space:nowrap}
+.sg:hover{border-color:var(--accent);color:var(--accent)}
+.sg .t{color:var(--type);margin-left:4px}
+.preview{padding:8px 9px 10px;border-top:1px solid var(--border);background:var(--alt)}
+.preview .ph{font-size:11px;color:var(--muted);margin-bottom:5px;display:flex;gap:6px;flex-wrap:wrap}
+.preview .htable{font-size:11.5px}
+.preview .htable th,.preview .htable td{padding:3px 6px;height:auto}
+
+/* --- les reperes de la maquette : bulles numerotees sur la capture « Aujourd'hui » */
+.today{display:grid;grid-template-columns:minmax(0,392px) minmax(0,1fr);gap:22px;align-items:start}
+@media (max-width:900px){.today{grid-template-columns:minmax(0,1fr)}}
+.bub{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:var(--err);color:#fff;font:700 11px var(--ui);flex:none}
+.pg-r .bub{margin:0 2px}
+ol.issues{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+ol.issues li{display:grid;grid-template-columns:22px minmax(0,1fr);gap:8px;font-size:14px;color:var(--ink-2)}
+ol.issues b{color:var(--ink)}
+table.ref{border-collapse:collapse;width:100%;font-size:13px;margin:10px 0}
+.ref th{text-align:left;font-weight:600;padding:7px 8px;border-bottom:2px solid var(--rule);white-space:nowrap}
+.ref td{padding:7px 8px;border-bottom:1px solid var(--rule);vertical-align:top}
+.ref td code{white-space:nowrap}
+.ref .yes{color:var(--ok);font-weight:600}.ref .no{color:var(--err);font-weight:600}
+.tablewrap{overflow-x:auto}
+.legend{display:flex;flex-wrap:wrap;gap:8px 16px;font-size:12.5px;color:var(--ink-2);margin:8px 0}
+.legend span{display:inline-flex;gap:6px;align-items:center}
+.qs{display:grid;gap:10px;margin:12px 0}
+.q{background:var(--page-2);border-radius:8px;padding:12px 14px}
+.q h4{margin:0 0 6px;font-size:14.5px}
+.q p{margin:0;font-size:13.5px;color:var(--ink-2)}
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="toc" aria-label="Sommaire">
+  <div class="ver">Maquette · Tableau</div>
+  <ol>
+    <li><a href="#aujourdhui">1. Aujourd'hui</a></li>
+    <li><a href="#proposition">2. La proposition</a></li>
+    <li><a href="#types">3. Les types acceptés</a></li>
+    <li><a href="#existants">4. Les projets existants</a></li>
+    <li><a href="#decider">5. À décider</a></li>
+  </ol>
+  <div class="theme" role="group" aria-label="Thème">
+    <button class="btnd" data-theme-set="light">Clair</button>
+    <button class="btnd" data-theme-set="dark">Sombre</button>
+  </div>
+</nav>
+<main>
+<header class="hero">
+  <p class="eyebrow">Maquette · objet Tableau · avant de coder</p>
+  <h1>Le Tableau, un mode à la fois</h1>
+  <p class="lead">L'inspecteur du Tableau mêle aujourd'hui trois façons de le remplir : des cases fixes, un fichier externe et « Lignes depuis ». Il les montre toutes en même temps, et une priorité cachée décide laquelle se voit. La proposition : choisir le mode en tête de la section Tableau, ne montrer que ses réglages, et régler les colonnes une par une, en voyant chaque fois le type attendu et le type reçu.</p>
+  <p class="quote">« Soit je décide de fonctionner avec Contenu et dans ce cas-là le nombre de lignes/colonnes est fixe, soit je décide d'avoir des lignes dynamiques avec colonnes fixes […] ne pas voir les options du statique si on fonctionne en dynamique et inversement ; exposer clairement le type de variables possibles et/ou attendu et autoriser les repères, fx, etc. »</p>
+</header>
+
+<!-- =============================================================== 1. Aujourd'hui -->
+<section id="aujourdhui">
+  <div class="secno">1</div>
+  <h2>Aujourd'hui : tout à la fois</h2>
+  <p class="sub">La section Tableau de ta capture, refaite à l'identique, et ce qui ne va pas.</p>
+  <div class="today">
+    <div class="app" style="margin:6px 0">
+      <div class="insp">
+        <div class="itabs">
+          <button class="itab on" tabindex="-1"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="3"/><path d="M8 1v4M8 11v4M1 8h4M11 8h4"/></svg>Propriétés</button>
+          <button class="itab" tabindex="-1"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 3l8 5-8 5z"/></svg>Actions</button>
+          <button class="itab" tabindex="-1"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3" width="12" height="10" rx="1"/><path d="M2 7h12M6 3v10"/></svg>Contenu</button>
+        </div>
+        <div class="show">Montrer : <span class="spill">fx 1</span><span class="spill dim">$ Repères 0</span><span class="spill">Non vides 6</span></div>
+        <div class="pg" id="todayGrid"></div>
+      </div>
+    </div>
+    <ol class="issues">
+      <li><span class="bub">1</span><div><b>Des réglages qui ne servent plus, sans le dire.</b> Colonnes (a;b;c), Lignes et Cases règlent des cases fixes, mais dès que « Lignes depuis » est rempli, elles ne se voient plus. L'inspecteur continue de les proposer.</div></li>
+      <li><span class="bub">2</span><div><b>Deux sources à la fois, une priorité cachée.</b> Fichier externe et Lignes depuis peuvent être remplis ensemble. C'est le code qui décide : Lignes depuis passe d'abord, puis le fichier, puis les cases.</div></li>
+      <li><span class="bub">3</span><div><b>Le type attendu n'est écrit nulle part.</b> <code>=Texts[0]</code> est le premier élément de <code>Texts</code>, un seul texte (STRING), et non une collection. Le tableau affiche « 0 ligne(s) x 0 colonne(s) » sans dire pourquoi. Les types acceptés ne sont que dans l'aide.</div></li>
+      <li><span class="bub">4</span><div><b>Les colonnes de la source se tapent en mini-langue</b> : <code>Nom; Debit = Débit | 0.0</code>. Un titre se met après <code>=</code>, un format après <code>|</code>.</div></li>
+      <li><span class="bub">5</span><div><b>Les largeurs se tapent à part</b> (<code>2;1;1</code>), et s'alignent à la main, par position, sur des colonnes que la case ne montre pas.</div></li>
+    </ol>
+  </div>
+</section>
+
+<!-- ============================================================= 2. La proposition -->
+<section id="proposition">
+  <div class="secno">2</div>
+  <h2>La proposition, à essayer</h2>
+  <div class="cards">
+    <div class="card"><p class="k">Un mode à la fois</p><h4>Cases fixes · Lignes dynamiques · Fichier</h4><p>Le mode se choisit en tête de la section Tableau. L'inspecteur et Contenu ne montrent que ses réglages. Ceux des autres modes sont gardés, pas effacés : revenir à un mode les retrouve.</p></div>
+    <div class="card"><p class="k">Des colonnes fixes, des lignes qui suivent</p><h4>Une colonne = un contenu par ligne</h4><p>En mode dynamique, tu règles chaque colonne : son titre, ce que montre sa case, son format, son unité et sa largeur. <code>[*]</code> désigne l'élément de la ligne : <code>[*].Niveau</code> donne le niveau de chaque cuve. Le nombre de lignes suit la source en marche.</p></div>
+    <div class="card"><p class="k">Le type sous les yeux</p><h4>Attendu, reçu, permis</h4><p>Sous chaque case : ce qu'elle attend (une collection, une valeur), ce qu'elle reçoit (le type de la variable), et si fx et les repères <code>$…$</code> y sont permis. Une erreur dit quoi faire, par exemple « écris Texts ».</p></div>
+  </div>
+  <p class="note"><b>Essaie :</b> les puces au-dessus de la vue chargent un exemple, dont celui de ta capture (<code>=Texts[0]</code>). Change de mode dans la section Tableau, puis ouvre <b>Contenu</b>. Tape dans une case de colonne : les suggestions viennent du type, et l'aperçu suit. <b>▶ Simuler</b> fait bouger les valeurs ; avec les alarmes, la LIST grandit et le tableau gagne des lignes. Le panneau du bas montre les variables utilisées et ce que dit Générer.</p>
+
+  <div class="app" id="appwin">
+    <div class="app-title">
+      <span class="logo">X</span><b>XPGAnalyser IHM</b><span>· Armoire_Gaz</span><span>· Vue_Cuves</span>
+      <span class="sp"></span><span id="titleMode"></span>
+    </div>
+    <div class="ws">
+      <div class="stage">
+        <div class="stage-tools">
+          <button class="runbtn" id="runBtn" aria-pressed="false">▶ Simuler</button>
+          <span class="tsep"></span>
+          <span class="lbl">Exemple :</span>
+          <span id="presets" style="display:flex;gap:5px;flex-wrap:wrap"></span>
+        </div>
+        <div class="view" id="view"></div>
+        <div class="bottom">
+          <div class="btabs">
+            <button class="btab on" data-btab="vars">Variables IHM <span class="count" id="nVars"></span></button>
+            <button class="btab" data-btab="gen">Générer <span class="count" id="nGen"></span></button>
+          </div>
+          <div class="bbody" id="bottomBody"></div>
+        </div>
+      </div>
+      <div class="insp" id="insp">
+        <div class="itabs" role="tablist">
+          <button class="itab" data-itab="props" role="tab"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="3"/><path d="M8 1v4M8 11v4M1 8h4M11 8h4"/></svg>Propriétés</button>
+          <button class="itab" data-itab="actions" role="tab"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 3l8 5-8 5z"/></svg>Actions</button>
+          <button class="itab" data-itab="content" role="tab"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3" width="12" height="10" rx="1"/><path d="M2 7h12M6 3v10"/></svg>Contenu <span class="count" id="nContent"></span></button>
+        </div>
+        <div class="show" id="showBar"></div>
+        <div class="ibody" id="ibody"></div>
+        <div class="help" id="help"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- =========================================================== 3. Les types acceptes -->
+<section id="types">
+  <div class="secno">3</div>
+  <h2>Les types acceptés, case par case</h2>
+  <p class="sub">C'est ce que montre la ligne grise sous chaque case de l'inspecteur et de Contenu. Générer vérifie la même chose.</p>
+  <div class="legend">
+    <span><span class="lg">C</span> constante</span>
+    <span><span class="lg fxl">fx</span> formule (<code>=…</code>)</span>
+    <span><span class="lg D">$</span> repère, remplacé par Dupliquer</span>
+    <span><span class="lg I">I</span> variable IHM</span>
+    <span><span class="lg X">!</span> erreur</span>
+    <span><span class="tchip">REAL</span> le type reçu</span>
+  </div>
+  <div class="tablewrap">
+  <table class="ref">
+    <thead><tr><th>Case</th><th>Attend</th><th>fx</th><th>$ repères</th><th>Exemples</th><th>Refusé, et ce qu'en dit la case</th></tr></thead>
+    <tbody>
+      <tr><td><b>Lignes depuis</b><br><span class="sub">mode dynamique</span></td>
+        <td>Une collection. Un tableau à 1 dimension donne une ligne par élément, à 2 dimensions une ligne par premier indice. LIST et VECTOR : une ligne par élément. MAP : une ligne par clé, avec <code>[*].Clé</code> et <code>[*].Valeur</code>. Énumération : une ligne par valeur. Structure : une ligne par membre.</td>
+        <td class="yes">oui : une formule qui rend une collection</td><td class="yes">oui : <code>$Cuves$</code></td>
+        <td><code>Cuves</code>, <code>Alarmes</code>, <code>Stock</code>, <code>$Ligne$.Mesures</code>. Vide : chaque colonne nomme sa liste (<code>Debits[*]</code>).</td>
+        <td>Une valeur seule : « <code>Texts[0]</code> est un STRING, un élément de Texts. Pour une ligne par élément, écris <code>Texts</code>. »</td></tr>
+      <tr><td><b>Contenu d'une colonne</b><br><span class="sub">mode dynamique</span></td>
+        <td>Une valeur par ligne : BOOL, entier, REAL, STRING, TIME, DATE, TOD, DT ou énumération. Le numéro de ligne s'écrit <code>[#]</code>.</td>
+        <td class="yes">oui : <code>=[*].Niveau * 100 / [*].Capacite</code></td><td class="yes">oui : <code>$Cuves$[*].Niveau</code></td>
+        <td><code>[*].Nom</code>, <code>{[*].Niveau:0.0} m</code>, <code>Debits[*]</code>, <code>[#]</code>, ou un texte fixe</td>
+        <td>Une structure : « <code>[*].Vanne</code> est un T_Vanne : choisis un membre (<code>[*].Vanne.Ouverture</code>…). » Une liste d'une autre taille : un avertissement, et des cases vides.</td></tr>
+      <tr><td><b>Case fixe</b><br><span class="sub">mode cases fixes</span></td>
+        <td>Un texte, un texte à trous ou une formule</td>
+        <td class="yes">oui : <code>=PA * 1.8</code></td><td class="yes">oui : <code>{$Cuve$.Niveau:0.0}</code></td>
+        <td><code>Pression A</code>, <code>{PA:0.00} bar</code>, <code>=PA &gt; 4</code></td>
+        <td>Une formule qui ne se lit pas, ou une variable inconnue (la case le souligne en rouge)</td></tr>
+      <tr><td><b>Titre de colonne</b></td><td>Un texte (à trous possible)</td><td class="no">non</td><td class="yes">oui</td><td><code>Niveau</code>, <code>Débit ({Unite_Debit})</code></td><td>—</td></tr>
+      <tr><td><b>Format</b></td><td>Selon le type de la colonne : <code>0</code>, <code>0.0</code>, <code>0.00</code> pour un nombre, <code>hh:mm:ss</code> pour une durée ou une heure, <code>Oui/Non</code> pour un BOOL</td><td class="no">non</td><td class="no">non</td><td>Vide : celui d'Unités et formats, sinon celui du type</td><td>Un format de nombre sur un STRING : « sans effet sur un texte »</td></tr>
+      <tr><td><b>Couleur</b> d'une colonne</td><td>Aucune, celle des seuils de la variable (lot F), ou une formule par ligne qui rend une couleur</td><td class="yes">oui : <code>=SEL([*].Etat = DEFAUT, '#E5534B', '')</code></td><td class="yes">oui</td><td>« Seuils de la variable » : jaune au-delà d'un seuil, rouge au-delà d'une alarme</td><td>Les seuils d'une colonne qui n'est pas un nombre : « pas de seuils sur un STRING »</td></tr>
+      <tr><td><b>Ligne choisie →</b></td><td>Une variable INT (le numéro de la ligne cliquée) ou STRING (la clé, pour une MAP)</td><td class="no">non</td><td class="yes">oui</td><td><code>Cuve_Choisie</code></td><td>Une variable REAL ou BOOL : « attend un INT ou un STRING »</td></tr>
+      <tr><td><b>Fichier externe</b><br><span class="sub">mode fichier</span></td><td>Un fichier du projet (CSV, Excel, JSON, SQLite), choisi dans la liste</td><td class="no">non</td><td class="no">non</td><td><code>mesures_ligne2.csv</code></td><td>Un document (PDF) : il ne se lit pas en lignes</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- ======================================================= 4. Les projets existants -->
+<section id="existants">
+  <div class="secno">4</div>
+  <h2>Un tableau d'un projet existant</h2>
+  <ul class="plain">
+    <li><b>Son mode vient de ce qu'il a</b>, dans l'ordre que le moteur suivait déjà. Avec « Lignes depuis » : Lignes dynamiques. Sinon, avec un fichier : Fichier externe. Sinon : Cases fixes. Il se dessine donc exactement comme avant.</li>
+    <li><b>Ses colonnes de source deviennent des colonnes.</b> <code>Nom; Debit = Débit | 0.0</code> donne deux colonnes, <code>[*].Nom</code> et <code>[*].Debit</code> (titre « Débit », format 0.0). Les largeurs <code>2;1;1</code> deviennent la largeur de chaque colonne.</li>
+    <li><b>Rien n'est perdu.</b> Les cases fixes d'un tableau qui a « Lignes depuis » restent dans le fichier, cachées. Générer le dit en information : « 4 × 3 cases fixes cachées : le mode Lignes dynamiques les remplace ».</li>
+    <li><b>Le fichier ne change pas tant qu'on ne touche à rien.</b> Les nouvelles clés (le mode, les colonnes réglées) ne s'écrivent qu'une fois réglées. Un tableau qu'on ne modifie pas s'enregistre octet pour octet comme en 1.12.12. Une version d'avant qui ouvre un tableau réglé ainsi retrouve ses clés d'avant, gardées à côté.</li>
+  </ul>
+</section>
+
+<!-- ================================================================ 5. A decider -->
+<section id="decider">
+  <div class="secno">5</div>
+  <h2>À décider avec toi avant de coder</h2>
+  <div class="qs">
+    <div class="q"><h4>1. Deux modes ou trois ?</h4><p>La maquette garde « Fichier externe » comme troisième mode, puisqu'il existe déjà, avec ses colonnes réglées comme celles du mode dynamique. Une autre voie : le ranger dans « Lignes dynamiques », comme une source de plus.</p></div>
+    <div class="q"><h4>2. Des listes de tailles différentes</h4><p>Sans « Lignes depuis », chaque colonne a sa liste. Si elles n'ont pas la même taille, la maquette prend la plus longue, laisse des cases vides et le dit. Préfères-tu la plus courte ?</p></div>
+    <div class="q"><h4>3. Les extras du mode dynamique</h4><p>La ligne choisie (un clic écrit son numéro dans une variable), le tri au clic sur l'en-tête, et la couleur selon les seuils de la variable. Les veux-tu tous dans le premier lot ?</p></div>
+    <div class="q"><h4>4. Écrire depuis le tableau</h4><p>Des cases saisissables en marche, qui écrivent dans la variable de leur ligne (une consigne par cuve) : dans ce lot, ou plus tard ?</p></div>
+  </div>
+</section>
+</main>
+</div>
+<script>
+(function () {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const clone = o => JSON.parse(JSON.stringify(o));
+
+// ------------------------------------------------------------------ le theme
+const themeBtns = document.querySelectorAll('[data-theme-set]');
+function setTheme(t) {
+  document.documentElement.setAttribute('data-theme', t);
+  themeBtns.forEach(b => b.classList.toggle('on', b.dataset.themeSet === t));
+  try { localStorage.setItem('maq-tableau-theme', t); } catch (e) { /* rien */ }
+}
+themeBtns.forEach(b => b.addEventListener('click', () => setTheme(b.dataset.themeSet)));
+(function () {
+  let t = null;
+  try { t = localStorage.getItem('maq-tableau-theme'); } catch (e) { t = null; }
+  setTheme(t || 'light');   // la capture : le theme Clair
+})();
+
+// ============================================================ le projet de la maquette
+const ENUMS = { T_Etat: ['ARRET', 'MARCHE', 'DEFAUT'] };
+const TYPES = {
+  T_Cuve: [{ n: 'Nom', t: 'STRING' }, { n: 'Niveau', t: 'REAL', unit: 'm', fmt: '0.0', th: { high: 8, highAlarm: 9.5 } },
+           { n: 'Capacite', t: 'REAL', unit: 'm', fmt: '0.0' }, { n: 'Etat', t: 'T_Etat' }, { n: 'Vanne', t: 'T_Vanne' }],
+  T_Vanne: [{ n: 'Ouverture', t: 'REAL', unit: '%', fmt: '0' }, { n: 'Defaut', t: 'BOOL' }],
+  T_Alarme: [{ n: 'Heure', t: 'TOD' }, { n: 'Message', t: 'STRING' }, { n: 'Priorite', t: 'INT' }, { n: 'Active', t: 'BOOL' }],
+  T_Recette: [{ n: 'Nom', t: 'STRING' }, { n: 'Temperature', t: 'REAL', unit: '°C', fmt: '0' }, { n: 'Duree', t: 'TIME' }],
+};
+const SIMPLE = new Set(['BOOL', 'INT', 'DINT', 'UINT', 'REAL', 'LREAL', 'STRING', 'TIME', 'DATE', 'TOD', 'DT']);
+const isEnum = t => Object.prototype.hasOwnProperty.call(ENUMS, t);
+const isStruct = t => Object.prototype.hasOwnProperty.call(TYPES, t);
+const isSimple = t => SIMPLE.has(t) || isEnum(t) || t === 'ANY';
+const isNum = t => ['INT', 'DINT', 'UINT', 'REAL', 'LREAL'].includes(t);
+const getVar = n => Object.prototype.hasOwnProperty.call(V, n) ? V[n] : null;
+
+const INIT = {
+  Cuves: { type: 'ARRAY[1..4] OF T_Cuve', kind: 'array', elem: 'T_Cuve', low: 1, items: [
+    { Nom: 'Cuve A', Niveau: 4.2, Capacite: 10, Etat: 'MARCHE', Vanne: { Ouverture: 40, Defaut: false } },
+    { Nom: 'Cuve B', Niveau: 7.5, Capacite: 10, Etat: 'MARCHE', Vanne: { Ouverture: 65, Defaut: false } },
+    { Nom: 'Cuve C', Niveau: 2.8, Capacite: 8, Etat: 'ARRET', Vanne: { Ouverture: 0, Defaut: false } },
+    { Nom: 'Cuve D', Niveau: 9.6, Capacite: 10, Etat: 'DEFAUT', Vanne: { Ouverture: 100, Defaut: true } }] },
+  Alarmes: { type: 'LIST OF T_Alarme', kind: 'list', elem: 'T_Alarme', low: 0, items: [
+    { Heure: '14:02:11', Message: 'Niveau haut cuve D', Priorite: 2, Active: true },
+    { Heure: '14:05:40', Message: 'Vanne V-12 en défaut', Priorite: 1, Active: true },
+    { Heure: '14:11:03', Message: 'Pression basse ligne 2', Priorite: 3, Active: false }] },
+  Stock: { type: 'MAP[STRING] OF INT', kind: 'map', elem: 'INT', items: { vis: 30, ecrou: 50, rondelle: 20 } },
+  Noms_Lignes: { type: 'ARRAY[1..6] OF STRING', kind: 'array', elem: 'STRING', low: 1, items: ['Ligne 1', 'Ligne 2', 'Ligne 3', 'Ligne 4', 'Ligne 5', 'Ligne 6'] },
+  Debits: { type: 'ARRAY[1..6] OF REAL', kind: 'array', elem: 'REAL', unit: 'm³/h', fmt: '0.0', low: 1, items: [12.5, 8.1, 15.0, 9.7, 11.2, 6.4] },
+  Cadences: { type: 'LIST OF INT', kind: 'list', elem: 'INT', unit: 'p/h', low: 0, items: [120, 95, 110, 130] },
+  Texts: { type: 'ARRAY[0..9] OF STRING', kind: 'array', elem: 'STRING', low: 0, items: ['Démarrage', 'Arrêt', 'Défaut', 'Maintenance', 'Remplissage', 'Vidange', 'Lavage', 'Attente', 'Manuel', 'Auto'] },
+  Recette_En_Cours: { type: 'T_Recette', kind: 'struct', elem: 'T_Recette', value: { Nom: 'Recette 12', Temperature: 180, Duree: 'T#25m' } },
+  Etat_Ligne: { type: 'T_Etat', kind: 'scalar', value: 'MARCHE' },
+  PA: { type: 'REAL', kind: 'scalar', unit: 'bar', fmt: '0.00', value: 4.27 },
+  PB: { type: 'REAL', kind: 'scalar', unit: 'bar', fmt: '0.00', value: 3.91 },
+  Debit: { type: 'REAL', kind: 'scalar', unit: 'm³/h', fmt: '0.0', value: 12.4 },
+  Marche: { type: 'BOOL', kind: 'scalar', value: true },
+  Cuve_Choisie: { type: 'INT', kind: 'scalar', value: 0 },
+};
+let V = clone(INIT);
+const FILES = {
+  'mesures_ligne2.csv': { kind: 'CSV', cols: ['Horodatage', 'Poste', 'Debit', 'Pression', 'Operateur'], rows: [
+    ['2026-10-12 06:00', 'Matin', '12.4', '4.21', 'L. Martin'], ['2026-10-12 08:00', 'Matin', '12.9', '4.30', 'L. Martin'],
+    ['2026-10-12 10:00', 'Matin', '11.7', '4.12', 'L. Martin'], ['2026-10-12 14:00', 'Après-midi', '13.1', '4.35', 'S. Dubois'],
+    ['2026-10-12 16:00', 'Après-midi', '12.2', '4.18', 'S. Dubois'], ['2026-10-12 18:00', 'Après-midi', '10.8', '3.97', 'S. Dubois']] },
+  'recettes.xlsx': { kind: 'Excel', cols: ['Recette', 'Temperature', 'Duree', 'Valide'], rows: [
+    ['Recette 10', '170', '20 min', 'oui'], ['Recette 11', '175', '22 min', 'oui'], ['Recette 12', '180', '25 min', 'non']] },
+  'notice_four.pdf': { kind: 'PDF', doc: true, cols: [], rows: [] },
+};
+
+// ===================================================================== l'etat de la maquette
+function freshState() {
+  return {
+    mode: 'dyn',
+    tab: 'props',
+    btab: 'vars',
+    fixed: { headers: ['Mesure', 'Valeur', 'Alarme'], widths: [2, 1, 1], aligns: ['gauche', 'droite', 'centre'],
+             rows: [['Pression A', '{PA:0.00} bar', '=PA > 4'], ['Pression B', '{PB:0.00} bar', '=PB > 4'],
+                    ['Débit', '{Debit:0.0} m³/h', ''], ['Ligne', "=SEL(Marche, 'En marche', 'Arrêt')", '']] },
+    dyn: { from: 'Cuves', cols: [], sort: '', pick: '', empty: '(aucune ligne)' },
+    file: { name: 'mesures_ligne2.csv', cols: [] },
+    sel: { cell: [0, 1], col: -1, dcol: 1, fcol: 0 },
+    closed: { Objet: true, 'Position et taille': true, Apparence: true, 'Sécurité': true },
+    picked: -1,
+  };
+}
+let S = freshState();
+const col = (title, content, extra) => Object.assign({ title, content, fmt: '', unit: '', width: 1, align: '', color: '', colorExpr: '' }, extra || {});
+function fileCols(name) {
+  const f = FILES[name];
+  return f && !f.doc ? f.cols.map((c, i) => ({ src: c, title: '', fmt: '', shown: i !== 4 || name !== 'mesures_ligne2.csv', width: 1 })) : [];
+}
+const PRESETS = [
+  { id: 'cuves', label: 'Cuves · ARRAY OF STRUCT', apply() {
+    S.mode = 'dyn';
+    S.dyn = { from: 'Cuves', sort: '', pick: 'Cuve_Choisie', empty: '(aucune ligne)', cols: [
+      col('Cuve', '[*].Nom', { width: 1.4 }), col('Niveau', '[*].Niveau', { color: 'seuils', align: 'droite' }),
+      col('Remplissage', '=[*].Niveau * 100 / [*].Capacite', { fmt: '0', unit: '%', align: 'droite' }),
+      col('État', '[*].Etat', { color: 'formule', colorExpr: "=SEL([*].Etat = DEFAUT, '#E5534B', '')" }),
+      col('Vanne', '{[*].Vanne.Ouverture:0} %', { align: 'droite' })] };
+    S.sel.dcol = 1; } },
+  { id: 'alarmes', label: 'Alarmes · LIST', apply() {
+    S.mode = 'dyn';
+    S.dyn = { from: 'Alarmes', sort: '', pick: '', empty: 'Aucune alarme en cours', cols: [
+      col('Heure', '[*].Heure', { width: 0.8 }), col('Message', '[*].Message', { width: 2.4 }),
+      col('Priorité', '[*].Priorite', { align: 'centre', width: 0.7, color: 'formule', colorExpr: "=SEL([*].Priorite = 1, '#E5534B', SEL([*].Priorite = 2, '#F2C94C', ''))" })] };
+    S.sel.dcol = 1; } },
+  { id: 'stock', label: 'Stock · MAP', apply() {
+    S.mode = 'dyn';
+    S.dyn = { from: 'Stock', sort: '[*].Clé ↑', pick: '', empty: '(aucune ligne)', cols: [
+      col('Pièce', '[*].Clé'), col('Quantité', '[*].Valeur', { align: 'droite' }),
+      col('À commander', "=SEL([*].Valeur < 25, 'oui', '')", { align: 'centre' })] };
+    S.sel.dcol = 0; } },
+  { id: 'listes', label: 'Une liste par colonne', apply() {
+    S.mode = 'dyn';
+    S.dyn = { from: '', sort: '', pick: '', empty: '(aucune ligne)', cols: [
+      col('N°', '[#]', { width: 0.4, align: 'centre' }), col('Ligne', 'Noms_Lignes[*]'),
+      col('Débit', 'Debits[*]', { align: 'droite' }), col('Cadence', 'Cadences[*]', { align: 'droite' })] };
+    S.sel.dcol = 3; } },
+  { id: 'fixes', label: 'Cases fixes', apply() { S.mode = 'fixed'; S.sel.cell = [0, 1]; S.sel.col = -1; } },
+  { id: 'fichier', label: 'Fichier CSV', apply() { S.mode = 'file'; S.file = { name: 'mesures_ligne2.csv', cols: fileCols('mesures_ligne2.csv') }; S.sel.fcol = 3; } },
+  { id: 'capture', label: 'Ta capture : =Texts[0]', apply() {
+    S.mode = 'dyn';
+    S.dyn = { from: '=Texts[0]', sort: '', pick: '', empty: '(aucune ligne)', cols: [] };
+    S.sel.dcol = -1; S.tab = 'props'; } },
+];
+let preset = 'cuves';
+PRESETS[0].apply();
+S.file.cols = fileCols(S.file.name);
+
+// ============================================================ les chemins : [*].Niveau, Debits[*], [#]
+const ID = '[A-Za-zÀ-ÿ_][\\wÀ-ÿ]*';
+const PATH_RE = new RegExp('^(\\[\\*\\]|\\[#\\]|' + ID + ')((?:\\.' + ID + '|\\[(?:\\*|#|-?\\d+)\\])*)$');
+function parsePath(src) {
+  const raw = String(src).trim();
+  const marks = raw.includes('$');
+  const s = raw.replace(/\$/g, '');
+  const m = s.match(PATH_RE);
+  if (!m) return null;
+  const root = m[1] === '[*]' ? '*' : m[1] === '[#]' ? '#' : m[1];
+  const segs = [];
+  const re = new RegExp('\\.(' + ID + ')|\\[(\\*|#|-?\\d+)\\]', 'g');
+  let x;
+  while ((x = re.exec(m[2]))) {
+    if (x[1] !== undefined) segs.push({ m: x[1] });
+    else segs.push({ i: x[2] === '*' ? '*' : x[2] === '#' ? '#' : parseInt(x[2], 10) });
+  }
+  return { root, segs, marks, text: s };
+}
+// Les membres d'une ligne : ceux de l'element (une structure), ou ceux qu'une source donne d'office.
+function rowMembers(from) {
+  if (!from || from.state !== 'ok') return null;
+  if (from.kind === 'map') return [{ n: 'Clé', t: 'STRING' }, { n: 'Valeur', t: from.elem }];
+  if (from.kind === 'enum') return [{ n: 'Nom', t: 'STRING' }, { n: 'Valeur', t: 'INT' }];
+  if (from.kind === 'struct') return [{ n: 'Membre', t: 'STRING' }, { n: 'Valeur', t: 'ANY' }];
+  return isStruct(from.elem) ? TYPES[from.elem] : null;
+}
+// Le type d'un chemin, sans calculer : { t, kind:'value'|'struct'|'coll'|'error', msg, unit, fmt, th, list:{name,len}, marks }
+function typeOfPath(p, from) {
+  const out = { marks: p.marks };
+  if (p.root === '#') return Object.assign(out, { t: 'INT', kind: 'value', what: 'le numéro de la ligne' });
+  let t, members = null, unit = '', fmt = '', th = null, list = null, collKind = null, elem = null, low = 0, len = 0;
+  if (p.root === '*') {
+    if (!from || from.state !== 'ok') return Object.assign(out, { kind: 'error', msg: '[*] désigne l\'élément de la ligne : il faut « Lignes depuis ». Sinon, nomme la liste de la colonne : Debits[*].' });
+    members = rowMembers(from);
+    t = members ? (from.kind === 'array' || from.kind === 'list' ? from.elem : '(ligne)') : from.elem;
+    if (!members) { unit = from.unit || ''; fmt = from.fmt || ''; }
+  } else {
+    const d = getVar(p.root);
+    if (!d) {
+      if (isEnum(p.root) && !p.segs.length) return Object.assign(out, { t: p.root, kind: 'coll', coll: 'enum', len: ENUMS[p.root].length });
+      return Object.assign(out, { kind: 'error', unknown: true, msg: '« ' + p.root + ' » : ni une variable du projet, ni un membre de la ligne.' });
+    }
+    unit = d.unit || ''; fmt = d.fmt || '';
+    if (d.kind === 'array' || d.kind === 'list' || d.kind === 'map') { collKind = d.kind; elem = d.elem; low = d.low || 0; len = d.kind === 'map' ? Object.keys(d.items).length : d.items.length; t = d.type; }
+    else if (d.kind === 'struct') { t = d.elem; members = TYPES[d.elem]; }
+    else t = d.type;
+  }
+  for (const sg of p.segs) {
+    if (sg.i !== undefined) {
+      if (!collKind) return Object.assign(out, { kind: 'error', msg: (p.root === '*' ? '[*]' : p.root) + ' n\'est pas un tableau ni une LIST : pas d\'indice.' });
+      if (sg.i === '*') list = { name: p.root, len };
+      else if (sg.i === '#') return Object.assign(out, { kind: 'error', msg: '[#] est le numéro de la ligne : il s\'écrit seul.' });
+      else if (collKind !== 'map' && (sg.i < low || sg.i >= low + len)) return Object.assign(out, { kind: 'error', msg: p.root + '[' + sg.i + '] : hors des bornes (' + low + '..' + (low + len - 1) + ').' });
+      t = elem; collKind = null; members = isStruct(elem) ? TYPES[elem] : null;
+      const dv = p.root !== '*' ? getVar(p.root) : null;
+      if (dv) { unit = dv.unit || unit; fmt = dv.fmt || fmt; }
+    } else {
+      if (collKind) return Object.assign(out, { kind: 'error', msg: p.root + ' est une collection : écris ' + p.root + '[*].' + sg.m + ' pour le membre de chaque élément.' });
+      if (!members) return Object.assign(out, { kind: 'error', msg: '.' + sg.m + ' : ' + t + ' n\'a pas de membres.' });
+      const mem = members.find(x => x.n.toLowerCase() === sg.m.toLowerCase());
+      if (!mem) return Object.assign(out, { kind: 'error', msg: t + ' n\'a pas de membre « ' + sg.m + ' » (' + members.map(x => x.n).join(', ') + ').' });
+      t = mem.t; unit = mem.unit || ''; fmt = mem.fmt || ''; th = mem.th || null;
+      members = isStruct(mem.t) ? TYPES[mem.t] : null;
+    }
+  }
+  if (collKind) return Object.assign(out, { t, kind: 'coll', coll: collKind, elem, len, unit, fmt });
+  if (members) return Object.assign(out, { t, kind: 'struct', members });
+  return Object.assign(out, { t, kind: 'value', unit, fmt, th, list });
+}
+
+// Les valeurs d'une collection, pour les lignes.
+function collItems(name) {
+  const d = getVar(name);
+  if (!d) return isEnum(name) ? ENUMS[name].map((n, i) => ({ Nom: n, Valeur: i })) : [];
+  if (d.kind === 'map') return Object.entries(d.items).map(([k, v]) => ({ 'Clé': k, Valeur: v }));
+  if (d.kind === 'struct') return TYPES[d.elem].map(m => ({ Membre: m.n, Valeur: d.value[m.n] }));
+  return d.items;
+}
+// La valeur d'un chemin pour une ligne (row : { item, idx }).
+function valueOfPath(p, row) {
+  if (p.root === '#') return row ? row.idx + 1 : undefined;
+  let cur, d = null;
+  if (p.root === '*') cur = row ? row.item : undefined;
+  else {
+    d = getVar(p.root);
+    if (!d) return undefined;
+    cur = d.kind === 'map' ? d.items : d.kind === 'array' || d.kind === 'list' ? d.items : d.value;
+  }
+  for (const sg of p.segs) {
+    if (cur == null) return undefined;
+    if (sg.i !== undefined) {
+      if (Array.isArray(cur)) cur = sg.i === '*' ? (row ? cur[row.idx] : undefined) : cur[sg.i - (d ? d.low || 0 : 0)];
+      else cur = sg.i === '*' ? (row ? Object.values(cur)[row.idx] : undefined) : cur[sg.i];
+      d = null;
+    } else {
+      const k = Object.keys(cur).find(x => x.toLowerCase() === sg.m.toLowerCase());
+      cur = k === undefined ? undefined : cur[k];
+    }
+  }
+  return cur;
+}
+
+// ============================================================ les formules : =[*].Niveau * 100 / [*].Capacite
+function tokenize(src) {
+  const toks = [];
+  const re = new RegExp('\\s*(?:(\\d+(?:\\.\\d+)?)|\'([^\']*)\'|(<>|<=|>=|[-+*/(),<>=])|(\\$?(?:\\[\\*\\]|\\[#\\]|' + ID + ')\\$?(?:\\.\\$?' + ID + '\\$?|\\[(?:\\*|#|-?\\d+)\\])*))', 'gy');
+  let m, pos = 0;
+  const s = String(src);
+  while (pos < s.length) {
+    re.lastIndex = pos;
+    m = re.exec(s);
+    if (!m || m[0] === '') { if (/^\s*$/.test(s.slice(pos))) break; throw new Error('illisible près de « ' + s.slice(pos, pos + 8) + ' »'); }
+    pos = re.lastIndex;
+    if (m[1] !== undefined) toks.push({ k: 'n', v: parseFloat(m[1]) });
+    else if (m[2] !== undefined) toks.push({ k: 's', v: m[2] });
+    else if (m[3] !== undefined) toks.push({ k: 'o', v: m[3] });
+    else if (m[4] !== undefined) toks.push({ k: 'p', v: m[4] });
+  }
+  return toks;
+}
+const FUNCS = {
+  SEL: a => (a[0] ? a[1] : a[2]), ROUND: a => { const f = Math.pow(10, a[1] || 0); return Math.round(a[0] * f) / f; },
+  MIN: a => Math.min(...a), MAX: a => Math.max(...a), ABS: a => Math.abs(a[0]), CONCAT: a => a.join(''),
+};
+// Calcule une formule (sans son =) pour une ligne ; ctx.paths recoit les chemins lus, ctx.errors les fautes.
+function evalFormula(src, row, ctx) {
+  const toks = tokenize(src);
+  let i = 0;
+  const peek = () => toks[i], next = () => toks[i++];
+  const isOp = v => peek() && peek().k === 'o' && peek().v === v;
+  const isKw = v => peek() && peek().k === 'p' && peek().v.toUpperCase() === v;
+  function primary() {
+    const t = next();
+    if (!t) throw new Error('formule incomplète');
+    if (t.k === 'n' || t.k === 's') return t.v;
+    if (t.k === 'o' && t.v === '(') { const v = or(); if (!isOp(')')) throw new Error('« ) » manque'); next(); return v; }
+    if (t.k === 'o' && t.v === '-') return -unary();
+    if (t.k === 'p') {
+      const up = t.v.toUpperCase();
+      if (up === 'TRUE') return true;
+      if (up === 'FALSE') return false;
+      if (isOp('(')) {
+        if (!FUNCS[up]) throw new Error(t.v + ' : fonction inconnue (SEL, ROUND, MIN, MAX, ABS, CONCAT)');
+        next();
+        const args = [];
+        if (!isOp(')')) { args.push(or()); while (isOp(',')) { next(); args.push(or()); } }
+        if (!isOp(')')) throw new Error('« ) » manque après ' + t.v);
+        next();
+        return FUNCS[up](args);
+      }
+      for (const e in ENUMS) if (ENUMS[e].includes(up)) return up;
+      const p = parsePath(t.v);
+      if (!p) throw new Error('« ' + t.v + ' » illisible');
+      const ty = typeOfPath(p, ctx.from);
+      if (ty.kind === 'error') { ctx.errors.push(ty.msg); return undefined; }
+      if (ty.kind !== 'value') { ctx.errors.push(t.v + ' est ' + (ty.kind === 'struct' ? 'une structure (' + ty.t + ')' : 'une collection') + ' : pas une valeur.'); return undefined; }
+      ctx.paths.push({ p, ty });
+      return valueOfPath(p, row);
+    }
+    throw new Error('« ' + t.v + ' » inattendu');
+  }
+  function unary() { if (isOp('-')) { next(); return -unary(); } if (isKw('NOT')) { next(); return !unary(); } return primary(); }
+  function mul() { let v = unary(); while (isOp('*') || isOp('/')) { const o = next().v, w = unary(); v = o === '*' ? v * w : v / w; } return v; }
+  function add() { let v = mul(); while (isOp('+') || isOp('-')) { const o = next().v, w = mul(); v = o === '+' ? (typeof v === 'string' || typeof w === 'string' ? '' + v + w : v + w) : v - w; } return v; }
+  function cmp() {
+    let v = add();
+    while (peek() && peek().k === 'o' && ['=', '<>', '<', '>', '<=', '>='].includes(peek().v)) {
+      const o = next().v, w = add();
+      v = o === '=' ? v === w : o === '<>' ? v !== w : o === '<' ? v < w : o === '>' ? v > w : o === '<=' ? v <= w : v >= w;
+    }
+    return v;
+  }
+  function and() { let v = cmp(); while (isKw('AND')) { next(); const w = cmp(); v = v && w; } return v; }
+  function or() { let v = and(); while (isKw('OR')) { next(); const w = and(); v = v || w; } return v; }
+  const v = or();
+  if (i < toks.length) throw new Error('« ' + toks[i].v + ' » de trop');
+  return v;
+}
+
+// ============================================================ les formats et l'affichage
+function show(v, t, fmt) {
+  if (v === undefined || v === null) return '';
+  if (typeof v === 'boolean') return fmt === 'Oui/Non' ? (v ? 'Oui' : 'Non') : (v ? 'TRUE' : 'FALSE');
+  if (typeof v === 'number') {
+    if (!isFinite(v)) return '###';
+    if (fmt && /^0(\.0+)?$/.test(fmt)) return v.toFixed((fmt.split('.')[1] || '').length);
+    if (t === 'INT' || t === 'DINT' || t === 'UINT') return String(Math.round(v));
+    return String(Math.round(v * 100) / 100);
+  }
+  return String(v);
+}
+const typeOfValue = v => typeof v === 'boolean' ? 'BOOL' : typeof v === 'number' ? (Number.isInteger(v) ? 'INT' : 'REAL') : typeof v === 'string' ? 'STRING' : 'ANY';
+
+// Une case : un chemin, un texte a trous, une formule, ou un texte fixe. dynamic : un chemin seul est une liaison.
+function kindOf(text, dynamic) {
+  const s = String(text || '').trim();
+  if (!s) return 'vide';
+  if (s[0] === '=') return 'formule';
+  if (s.includes('{')) return 'trous';
+  if (dynamic) {
+    if (s === '[#]') return 'numero';
+    const p = parsePath(s);
+    if (p) return 'chemin';
+  }
+  return 'texte';
+}
+const KIND_LABEL = { vide: 'vide', formule: 'formule', trous: 'texte à trous', chemin: 'variable', numero: 'n° de ligne', texte: 'texte fixe' };
+
+// Analyse et calcule une case pour une ligne : { text, t, unit, fmt, th, state, msg, marks, list, paths }
+function cellOf(text, row, from, dynamic, wantType) {
+  const s = String(text || '').trim();
+  const kind = kindOf(s, dynamic);
+  const res = { kind, text: '', t: '', unit: '', fmt: '', th: null, state: 'ok', msg: '', marks: s.includes('$'), list: null, lists: [] };
+  if (kind === 'vide') return res;
+  if (kind === 'texte') {
+    res.text = s; res.t = 'STRING';
+    if (dynamic) {
+      const p = parsePath(s);
+      if (p) { const ty = typeOfPath(p, from); if (ty.unknown) { res.state = 'warn'; res.msg = '« ' + s + ' » : ni une variable ni un membre - montré tel quel, sur chaque ligne.'; } }
+    }
+    return res;
+  }
+  if (kind === 'chemin' || kind === 'numero') {
+    const p = parsePath(s);
+    const ty = typeOfPath(p, from);
+    if (ty.kind === 'error') { res.state = ty.unknown ? 'warn' : 'error'; res.msg = ty.msg; if (ty.unknown) res.text = s; return res; }
+    if (ty.kind === 'struct') {
+      res.state = 'error';
+      res.msg = s + ' est un ' + ty.t + ' : une structure n\'a pas de case. Choisis un membre (' + ty.members.filter(m => isSimple(m.t)).slice(0, 3).map(m => s + '.' + m.n).join(', ') + '…).';
+      res.t = ty.t; res.members = ty.members;
+      return res;
+    }
+    if (ty.kind === 'coll') {
+      res.state = 'error'; res.t = ty.t;
+      res.msg = s + ' est une collection (' + ty.t + ') : pour une valeur par ligne, écris ' + s + '[*]' + (isStruct(ty.elem) ? '.' + TYPES[ty.elem][0].n : '') + '.';
+      res.fix = s + '[*]' + (isStruct(ty.elem) ? '.' + TYPES[ty.elem][0].n : '');
+      return res;
+    }
+    res.t = ty.t; res.unit = ty.unit || ''; res.fmt = ty.fmt || ''; res.th = ty.th || null; res.list = ty.list || null;
+    if (ty.list) res.lists.push(ty.list);
+    const v = valueOfPath(p, row);
+    if (res.t === 'ANY') res.t = typeOfValue(v);
+    res.value = v;
+    res.text = show(v, res.t, res.fmt);
+    return res;
+  }
+  const ctx = { from, paths: [], errors: [] };
+  if (kind === 'formule') {
+    try {
+      const v = evalFormula(s.slice(1), row, ctx);
+      if (ctx.errors.length) { res.state = 'error'; res.msg = ctx.errors[0]; return res; }
+      res.value = v; res.t = typeOfValue(v);
+      if (typeof v === 'number' && ctx.paths.some(x => x.ty.t === 'REAL' || x.ty.t === 'LREAL')) res.t = 'REAL';
+      if (typeof v === 'number' && /\//.test(s)) res.t = 'REAL';
+      res.text = show(v, res.t, '');
+    } catch (e) { res.state = 'error'; res.msg = 'formule : ' + e.message; }
+    for (const x of ctx.paths) if (x.ty.list) res.lists.push(x.ty.list);
+    return res;
+  }
+  // un texte a trous : {chemin:format} ou {formule}
+  let failed = '';
+  const out = s.replace(/\{([^{}]*)\}/g, (all, inner) => {
+    let expr = inner, f = '';
+    const c = inner.lastIndexOf(':');
+    if (c > 0 && /^[0#.]+$|^hh:mm(:ss)?$/.test(inner.slice(c + 1).trim())) { expr = inner.slice(0, c); f = inner.slice(c + 1).trim(); }
+    const p = parsePath(expr.trim());
+    if (p) {
+      const ty = typeOfPath(p, from);
+      if (ty.kind !== 'value') { failed = failed || (ty.kind === 'error' ? ty.msg : expr.trim() + ' : pas une valeur.'); return '?'; }
+      if (ty.list) res.lists.push(ty.list);
+      return show(valueOfPath(p, row), ty.t, f || ty.fmt);
+    }
+    try { const v = evalFormula(expr, row, ctx); if (ctx.errors.length) { failed = failed || ctx.errors[0]; return '?'; } return show(v, typeOfValue(v), f); }
+    catch (e) { failed = failed || 'trou { } : ' + e.message; return '?'; }
+  });
+  for (const x of ctx.paths) if (x.ty.list) res.lists.push(x.ty.list);
+  res.t = 'STRING'; res.text = out;
+  if (failed) { res.state = 'error'; res.msg = failed; }
+  return res;
+}
+
+// ============================================================ la source des lignes
+function analyzeFrom(srcIn) {
+  const raw = String(srcIn || '').trim();
+  const res = { state: 'empty', marks: raw.includes('$'), formula: raw.startsWith('='), src: raw };
+  if (!raw) return res;
+  const s = res.formula ? raw.slice(1).trim() : raw;
+  const p = parsePath(s);
+  if (!p) { res.state = 'error'; res.msg = 'Illisible : une variable (Cuves), un membre (Ligne.Mesures) ou une formule qui rend une collection.'; return res; }
+  const ty = typeOfPath(p, null);
+  if (ty.kind === 'error') { res.state = 'error'; res.msg = ty.msg; return res; }
+  if (ty.kind === 'coll') {
+    const d = getVar(p.root);
+    if (ty.coll === 'enum') return Object.assign(res, { state: 'ok', kind: 'enum', elem: p.root, typeText: 'énumération ' + p.root, len: ENUMS[p.root].length, name: p.root, rows: 'une ligne par valeur (Nom, Valeur)' });
+    return Object.assign(res, { state: 'ok', kind: ty.coll, elem: ty.elem, typeText: d.type, len: ty.len, name: p.root, unit: d.unit, fmt: d.fmt,
+      rows: ty.coll === 'map' ? 'une ligne par clé ([*].Clé, [*].Valeur)' : 'une ligne par élément' });
+  }
+  if (ty.kind === 'struct' && !p.segs.length && getVar(p.root) && getVar(p.root).kind === 'struct')
+    return Object.assign(res, { state: 'ok', kind: 'struct', elem: ty.t, typeText: ty.t, len: TYPES[ty.t].length, name: p.root, rows: 'une ligne par membre ([*].Membre, [*].Valeur)' });
+  // une valeur seule : pas une collection
+  res.state = 'error';
+  res.typeText = ty.t;
+  const idx = p.segs.length && p.segs[p.segs.length - 1].i !== undefined;
+  if (idx && getVar(p.root)) {
+    res.msg = s + ' est un ' + ty.t + ' : un seul élément de ' + p.root + ', pas une collection. Pour une ligne par élément, écris ' + p.root + '.';
+    res.fix = p.root;
+  } else res.msg = s + ' est un ' + (ty.t || 'une valeur') + ' : une seule valeur, pas une collection (tableau, LIST, VECTOR, MAP, énumération, structure).';
+  return res;
+}
+
+// ============================================================ le tableau : ses en-tetes, ses lignes, ce qu'en dit Generer
+function computeTable() {
+  const out = { headers: [], widths: [], aligns: [], rows: [], issues: [], count: 0, used: new Set(), why: '' };
+  const addUse = s => { const r = String(s || '').replace(/\$/g, '').match(new RegExp('(?:^|[^\\w\\]])(' + ID + ')', 'g')) || []; r.forEach(x => { const n = x.replace(/^[^\wÀ-ÿ]/, ''); if (getVar(n)) out.used.add(n); }); };
+  if (S.mode === 'fixed') {
+    const f = S.fixed;
+    out.headers = f.headers.slice(); out.widths = f.widths.slice(); out.aligns = f.aligns.slice();
+    f.rows.forEach((r, ri) => {
+      out.rows.push(r.map((c, ci) => {
+        addUse(c);
+        const x = cellOf(c, null, null, false);
+        if (String(c).includes('[*]')) { x.state = 'error'; x.msg = '[*] désigne l\'élément d\'une ligne : seulement en mode Lignes dynamiques.'; }
+        if (x.state === 'error') out.issues.push({ lv: 'E', where: 'Case ' + String.fromCharCode(65 + ci) + (ri + 1), msg: x.msg });
+        return { text: x.state === 'error' ? '###' : x.text, cls: x.state === 'error' ? 'alarmc' : '' };
+      }));
+    });
+    out.count = f.rows.length;
+    out.why = f.rows.length + ' lignes × ' + f.headers.length + ' colonnes, réglées dans Contenu';
+    return out;
+  }
+  if (S.mode === 'file') {
+    const f = FILES[S.file.name];
+    if (!S.file.name) { out.issues.push({ lv: 'W', where: 'Fichier externe', msg: 'aucun fichier choisi : le tableau est vide.' }); out.why = 'aucun fichier'; return out; }
+    if (!f || f.doc) { out.issues.push({ lv: 'E', where: 'Fichier externe', msg: S.file.name + ' est un document : il ne se lit pas en lignes.' }); out.why = 'un document'; return out; }
+    const shown = S.file.cols.filter(c => c.shown);
+    out.headers = shown.map(c => c.title || c.src);
+    out.widths = shown.map(c => c.width || 1);
+    out.aligns = shown.map(c => /^[\d.\-]+$/.test((f.rows[0] || [])[f.cols.indexOf(c.src)] || '') ? 'droite' : 'gauche');
+    out.rows = f.rows.map(r => shown.map(c => { const v = r[f.cols.indexOf(c.src)]; const n = parseFloat(v); return { text: c.fmt && !isNaN(n) && /^[\d.\-]+$/.test(v) ? show(n, 'REAL', c.fmt) : v, cls: '' }; }));
+    out.count = f.rows.length;
+    out.why = f.kind + ' · ' + shown.length + ' colonne(s) sur ' + f.cols.length + ' · ' + f.rows.length + ' lignes';
+    return out;
+  }
+  // ---- les lignes dynamiques
+  const d = S.dyn;
+  addUse(d.from);
+  const from = analyzeFrom(d.from);
+  if (from.state === 'error') out.issues.push({ lv: 'E', where: 'Lignes depuis', msg: from.msg });
+  if (d.pick) {
+    const pv = getVar(d.pick.replace(/\$/g, ''));
+    if (!pv) out.issues.push({ lv: 'E', where: 'Ligne choisie →', msg: '« ' + d.pick + ' » : variable inconnue.' });
+    else if (!['INT', 'DINT', 'UINT', 'STRING'].includes(pv.type)) out.issues.push({ lv: 'E', where: 'Ligne choisie →', msg: d.pick + ' est un ' + pv.type + ' : la ligne choisie attend un INT (son numéro) ou un STRING (sa clé, pour une MAP).' });
+    else out.used.add(d.pick.replace(/\$/g, ''));
+  }
+  if (!d.cols.length) {
+    out.issues.push({ lv: from.state === 'ok' ? 'W' : 'I', where: 'Colonnes', msg: from.state === 'ok' ? 'aucune colonne : Contenu › « Une colonne par membre » les crée d\'un coup.' : 'aucune colonne réglée.' });
+  }
+  const items = from.state === 'ok' ? collItems(from.name) : null;
+  // le nombre de lignes : la source ; sinon la plus longue des listes des colonnes
+  const probe = d.cols.map(c => cellOf(c.content, items && items.length ? { item: items[0], idx: 0 } : { item: undefined, idx: 0 }, from, true));
+  let count = 0;
+  if (from.state === 'ok') { count = items.length; out.why = from.len + ' · suivent ' + from.name; }
+  else if (from.state === 'empty') {
+    const lens = [];
+    probe.forEach(x => x.lists.forEach(l => lens.push(l)));
+    if (lens.length) { count = Math.max(...lens.map(l => l.len)); out.why = count + ' · la plus longue liste (' + lens.filter(l => l.len === count).map(l => l.name).join(', ') + ')'; }
+    else if (d.cols.length) { out.issues.push({ lv: 'E', where: 'Lignes', msg: 'ni « Lignes depuis », ni une colonne qui nomme sa liste (Debits[*]) : le tableau ne sait pas combien de lignes montrer.' }); out.why = '0 · d\'où viennent les lignes ?'; }
+  } else out.why = '0 · « Lignes depuis » ne se lit pas';
+  out.count = count;
+  // les listes d'une autre taille
+  probe.forEach((x, k) => x.lists.forEach(l => {
+    if (count && l.len !== count && (from.state === 'ok' || l.len < count))
+      out.issues.push({ lv: 'W', where: 'Colonne « ' + (d.cols[k].title || k + 1) + ' »', msg: l.name + ' a ' + l.len + ' éléments, le tableau ' + count + ' lignes : ' + Math.abs(count - l.len) + ' case(s) ' + (l.len < count ? 'vide(s) en bas.' : 'de ' + l.name + ' jamais montrée(s).') }); }));
+  d.cols.forEach((c, k) => {
+    addUse(c.content); addUse(c.colorExpr);
+    const x = probe[k];
+    if (x.state === 'error') out.issues.push({ lv: 'E', where: 'Colonne « ' + (c.title || k + 1) + ' »', msg: x.msg });
+    else if (x.state === 'warn') out.issues.push({ lv: 'W', where: 'Colonne « ' + (c.title || k + 1) + ' »', msg: x.msg });
+    if (c.color === 'seuils' && x.state === 'ok' && !isNum(x.t)) out.issues.push({ lv: 'W', where: 'Colonne « ' + (c.title || k + 1) + ' »', msg: 'couleur selon les seuils : ' + (x.t || 'ce type') + ' n\'a pas de seuils (un nombre seulement).' });
+    if (c.color === 'seuils' && x.state === 'ok' && isNum(x.t) && !x.th) out.issues.push({ lv: 'I', where: 'Colonne « ' + (c.title || k + 1) + ' »', msg: 'couleur selon les seuils : la variable n\'en a pas dans Unités et formats - la case garde sa couleur.' });
+  });
+  out.headers = d.cols.map(c => c.title || '');
+  out.widths = d.cols.map(c => c.width || 1);
+  out.aligns = d.cols.map((c, k) => c.align || (isNum(probe[k].t) ? 'droite' : 'gauche'));
+  let rowsIdx = [];
+  for (let i = 0; i < count; i++) rowsIdx.push(i);
+  // le tri
+  const sortSpec = d.sort && /^(.*) ([↑↓])$/.exec(d.sort);
+  const cellsFor = i => d.cols.map((c, k) => {
+    const row = { item: items ? items[i] : undefined, idx: i };
+    const x = cellOf(c.content, row, from, true);
+    let cls = '';
+    if (x.state === 'error') return { text: '###', cls: 'alarmc', raw: undefined };
+    if (c.color === 'seuils' && x.th && typeof x.value === 'number') cls = x.value >= x.th.highAlarm ? 'alarmc' : x.value >= x.th.high ? 'warnc' : '';
+    if (c.color === 'formule' && c.colorExpr) {
+      const cx = cellOf(c.colorExpr, row, from, true);
+      if (cx.state === 'ok' && cx.text) cls = /e5534b|ff7b72|rouge/i.test(cx.text) ? 'alarmc' : /f2c94c|jaune/i.test(cx.text) ? 'warnc' : '';
+    }
+    const fmt = c.fmt || x.fmt;
+    const unit = c.unit || (x.kind === 'chemin' ? x.unit : '');
+    const text = x.kind === 'chemin' || x.kind === 'formule' ? show(x.value, x.t, fmt) + (unit && x.text !== '' ? ' ' + unit : '') : x.text;
+    return { text, cls, raw: x.value };
+  });
+  let rows = rowsIdx.map(i => ({ i, cells: cellsFor(i) }));
+  if (sortSpec) {
+    const k = d.cols.findIndex(c => c.content === sortSpec[1] || c.title === sortSpec[1]);
+    if (k >= 0) rows.sort((a, b) => { const x = a.cells[k].raw, y = b.cells[k].raw; const r = x < y ? -1 : x > y ? 1 : 0; return sortSpec[2] === '↑' ? r : -r; });
+  }
+  out.rows = rows.map(r => r.cells);
+  out.rowIdx = rows.map(r => r.i);
+  out.from = from;
+  if (from.state === 'ok' && from.marks) out.issues.push({ lv: 'I', where: 'Lignes depuis', msg: 'un repère : Dupliquer le remplace dans la source et dans les colonnes qui le citent.' });
+  return out;
+}
+
+// ============================================================ l'inspecteur : une ligne de la grille
+let helpText = {};
+function row(opts) {
+  // opts : { label, ty, value (html), drive, fx: 'on'|'off'|'no', leg: 'C'|'I'|'D'|'X'|'fx'|'E'|'', help, cls, line (html) }
+  const id = 'h' + Object.keys(helpText).length;
+  helpText[id] = opts.help || '';
+  const fx = opts.fx === 'no' ? '<span class="fx off">fx</span>' : '<span class="fx' + (opts.fx === 'on' ? ' on' : '') + '" title="fx : une formule (=…)">fx</span>';
+  const legs = { C: '<span class="lg" title="C : une constante">C</span>', I: '<span class="lg I" title="I : une variable IHM">I</span>', D: '<span class="lg D" title="$ : un repère, remplacé par Dupliquer">$</span>',
+                 X: '<span class="lg X" title="! : une erreur">!</span>', S: '<span class="lg S" title="S : une valeur du système (le numéro de la ligne)">S</span>', fx: '<span class="lg fxl" title="fx : une formule">fx</span>', E: '<span class="lg E">·</span>' };
+  return '<div class="pg-r' + (opts.drive ? ' drive' : '') + (opts.cls ? ' ' + opts.cls : '') + '" data-help="' + id + '">' +
+    '<div class="pg-n"><span>' + esc(opts.label) + '</span>' + (opts.ty ? '<span class="ty">' + esc(opts.ty) + '</span>' : '') + '</div>' +
+    '<div class="pg-v">' + fx + opts.value + (opts.leg ? legs[opts.leg] || '' : '') + '</div>' +
+    (opts.line ? '<div class="typeline">' + opts.line + '</div>' : '') + '</div>';
+}
+const group = (name, body) => '<div class="pg-g' + (S.closed[name] ? ' closed' : '') + '" data-act="group" data-g="' + esc(name) + '"><svg class="chev" viewBox="0 0 12 12"><path d="M3 4.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>' + esc(name) + '</div>' + (S.closed[name] ? '' : body);
+const ro = t => '<span class="val ro">' + t + '</span>';
+const inp = (k, v, ph, cls) => '<input type="text" class="' + (cls || '') + '" data-k="' + k + '" data-in="' + k + '" value="' + esc(v) + '" placeholder="' + esc(ph || '') + '" spellcheck="false" autocomplete="off">';
+function legOf(text, err) {
+  const s = String(text || '').trim();
+  if (err) return 'X';
+  if (!s) return 'E';
+  if (s.startsWith('=')) return 'fx';
+  if (s.includes('$')) return 'D';
+  const k = kindOf(s, true);
+  return k === 'numero' ? 'S' : k === 'texte' ? 'C' : 'I';
+}
+function permis(fx, marks) { return '<span class="' + (fx ? 'okchip' : 'echip') + '" title="Une formule =… : ' + (fx ? 'permise' : 'pas ici') + '">fx ' + (fx ? '✓' : '✗') + '</span><span class="' + (marks ? 'okchip' : 'echip') + '" title="Un repère $…$, remplacé par Dupliquer">$ ' + (marks ? '✓' : '✗') + '</span>'; }
+
+function renderProps(T) {
+  helpText = {};
+  let h = '';
+  h += group('Objet', row({ label: 'Nom', ty: 'texte', fx: 'no', value: ro('Tableau_Cuves'), help: 'Le nom de l\'objet.' }) + row({ label: 'Type', fx: 'no', value: ro('Tableau'), help: '' }));
+  h += group('Position et taille', row({ label: 'X', ty: 'nombre', value: ro('40'), leg: 'C' }) + row({ label: 'Y', ty: 'nombre', value: ro('60'), leg: 'C' }) + row({ label: 'Largeur', ty: 'nombre', value: ro('520'), leg: 'C' }) + row({ label: 'Hauteur', ty: 'nombre', value: ro('240'), leg: 'C' }));
+  h += group('Apparence', row({ label: 'Taille du texte', ty: 'nombre', value: ro('14'), leg: 'C' }) + row({ label: 'Remplissage', ty: 'couleur', value: '<span class="sw" style="background:#262C36"></span>' + ro('#262C36'), leg: 'C' }) + row({ label: 'Contour', ty: 'couleur', value: '<span class="sw" style="background:#3A4556"></span>' + ro('#3A4556'), leg: 'C' }));
+  h += group('Sécurité', row({ label: 'Niveau d\'accès', fx: 'no', value: ro('tout le monde (0)') }) + row({ label: 'Autorisation', ty: 'BOOL', value: '<span class="cb"></span>', leg: 'E' }));
+  // ---- la section Tableau
+  let t = row({ label: 'Contenu', ty: 'choix', fx: 'no', cls: 'modehead',
+    value: '<div class="modes" role="group" aria-label="Le mode du tableau">' +
+      [['fixed', 'Cases fixes', 'Cases fixes : un nombre fixe de lignes et de colonnes'], ['dyn', 'Dynamique', 'Lignes dynamiques : des colonnes fixes, une ligne par élément d\'une source'], ['file', 'Fichier', 'Fichier externe : les lignes d\'un fichier du projet']].map(([m, l, tip]) => '<button data-act="mode" data-m="' + m + '" title="' + tip + '" class="' + (S.mode === m ? 'on' : '') + '">' + l + '</button>').join('') + '</div>',
+    help: '<b>Contenu</b> : d\'où viennent les lignes. <b>Cases fixes</b> : un nombre de lignes et de colonnes, chaque case réglée dans Contenu. <b>Dynamique</b> : des colonnes fixes, une ligne par élément d\'une source, autant qu\'elle en a en marche. <b>Fichier</b> : les lignes d\'un fichier externe. Les réglages des autres modes sont gardés.',
+    line: S.mode === 'fixed' ? 'Chaque case : un texte, un texte à trous ou une formule. <button class="linkb" data-act="tab" data-t="content">Régler dans Contenu ›</button>'
+      : S.mode === 'dyn' ? 'Des colonnes fixes ; une ligne par élément, qui suit la source en marche. <button class="linkb" data-act="tab" data-t="content">Les colonnes, dans Contenu ›</button>'
+      : 'Les lignes d\'un fichier du projet (CSV, Excel, JSON, SQLite). <button class="linkb" data-act="tab" data-t="content">Ses colonnes, dans Contenu ›</button>' });
+  if (S.mode === 'fixed') {
+    const f = S.fixed;
+    t += row({ label: 'Lignes', ty: 'nombre', value: '<input type="number" min="1" max="40" data-k="fixedRows" data-in="fixedRows" value="' + f.rows.length + '" style="flex:1;min-width:0;font:12.5px var(--ui);border:1px solid transparent;background:transparent;color:var(--text)">', leg: 'C',
+      help: '<b>Lignes</b> : le nombre de lignes du tableau (sans compter l\'en-tête). Une ligne ajoutée naît vide.' });
+    t += row({ label: 'Colonnes', ty: 'nombre', value: '<input type="number" min="1" max="12" data-k="fixedCols" data-in="fixedCols" value="' + f.headers.length + '" style="flex:1;min-width:0;font:12.5px var(--ui);border:1px solid transparent;background:transparent;color:var(--text)">', leg: 'C',
+      help: '<b>Colonnes</b> : leur nombre. Leurs titres, largeurs et alignements se règlent dans Contenu (un clic sur l\'en-tête).' });
+    let calc = 0, holes = 0;
+    f.rows.forEach(r => r.forEach(c => { if (String(c).startsWith('=')) calc++; else if (String(c).includes('{')) holes++; }));
+    t += row({ label: 'Cases', fx: 'no', value: ro(f.rows.length * f.headers.length + ' cases · ' + calc + ' formule(s) · ' + holes + ' à trous') + '<button class="linkb" data-act="tab" data-t="content">Régler ›</button>',
+      help: '<b>Cases</b> : leur contenu se règle dans l\'onglet Contenu, case par case.' });
+  } else if (S.mode === 'dyn') {
+    const d = S.dyn, from = T.from || analyzeFrom(d.from);
+    const bad = from.state === 'error';
+    let line = '<span>Attend : une collection</span>';
+    if (from.state === 'ok') line += '<span>· Reçu :</span><span class="tchip">' + esc(from.typeText) + '</span><span class="okchip">' + from.len + ' ligne(s) · ' + esc(from.rows) + '</span>';
+    else if (bad) line += '<span>· Reçu :</span>' + (from.typeText ? '<span class="tchip">' + esc(from.typeText) + '</span>' : '') + '<span class="echip">' + esc(from.msg) + '</span>' + (from.fix ? '<button class="linkb" data-act="fixfrom" data-v="' + esc(from.fix) + '">Remplacer par ' + esc(from.fix) + '</button>' : '');
+    else line += '<span class="ichip">vide : chaque colonne nomme sa liste (Debits[*])</span>';
+    line += '<span>·</span>' + permis(true, true);
+    t += row({ label: 'Lignes depuis', ty: 'collection', drive: from.formula, fx: from.formula ? 'on' : 'off',
+      value: inp('from', d.from, 'vide : chaque colonne a sa liste', 'code' + (bad ? ' bad' : '')) + (d.from ? '<button class="clear" data-act="clearfrom" title="Vider">×</button>' : ''),
+      leg: legOf(d.from, bad), cls: bad ? 'err' : '', line,
+      help: '<b>Lignes depuis</b> : une collection, une ligne par élément - un tableau (ARRAY, à 2 dimensions : une ligne par premier indice), une LIST ou un VECTOR, une MAP (une ligne par clé), une énumération (une ligne par valeur), une structure (une ligne par membre). Une formule qui rend une collection, un repère <span class="mkchip">$Cuves$</span> aussi. <b>Vide</b> : chaque colonne nomme sa liste (Noms_Lignes[*], Debits[*]) et le tableau a autant de lignes que la plus longue.' });
+    t += row({ label: 'Lignes', fx: 'no', value: ro(esc(T.why || '0')), help: '<b>Lignes</b> : en lecture. Leur nombre suit la source en marche : une LIST qui grandit ajoute des lignes ; le tableau défile quand elles ne tiennent pas.' });
+    t += row({ label: 'Colonnes', fx: 'no', value: ro(d.cols.length + (d.cols.length ? ' : ' + esc(d.cols.map(c => c.title || '…').join(' · ')) : '')) + '<button class="linkb" data-act="tab" data-t="content">Régler ›</button>',
+      help: '<b>Colonnes</b> : fixes, réglées dans Contenu - pour chacune, son titre et ce que montre sa case pour la ligne ([*].Niveau), son format, son unité, sa largeur, sa couleur.' });
+    const sorts = ['', ...d.cols.flatMap(c => [c.content + ' ↑', c.content + ' ↓'])];
+    t += row({ label: 'Trier par', ty: 'choix', fx: 'no',
+      value: '<select data-k="sort" data-in="sort">' + sorts.map(s => '<option value="' + esc(s) + '"' + (s === d.sort ? ' selected' : '') + '>' + (s ? esc(s) : '(ordre de la source)') + '</option>').join('') + '</select>', leg: 'C',
+      help: '<b>Trier par</b> : une colonne, croissant ou décroissant. Vide : l\'ordre de la source.' });
+    const pv = d.pick ? getVar(d.pick.replace(/\$/g, '')) : null;
+    const pickBad = d.pick && (!pv || !['INT', 'DINT', 'UINT', 'STRING'].includes(pv.type));
+    t += row({ label: 'Ligne choisie →', ty: 'variable', fx: 'no', value: inp('pick', d.pick, 'aucune', 'code' + (pickBad ? ' bad' : '')), leg: d.pick ? (pickBad ? 'X' : 'I') : 'E',
+      line: '<span>Attend : INT (le numéro) ou STRING (la clé d\'une MAP)</span>' + (pv ? '<span>· Reçu :</span><span class="tchip">' + esc(pv.type) + '</span>' + (pickBad ? '<span class="echip">pas un INT ni un STRING</span>' : '<span class="okchip">' + d.pick + ' = ' + esc(show(pv.value, pv.type)) + '</span>') : d.pick ? '<span class="echip">inconnue</span>' : '') + '<span>·</span>' + permis(false, true),
+      help: '<b>Ligne choisie →</b> : en marche, un clic sur une ligne écrit son numéro (1, 2…) dans cette variable, ou sa clé pour une MAP ; la ligne se surligne. Une action peut suivre (ouvrir la popup de la cuve).' });
+    t += row({ label: 'Sans ligne', ty: 'texte', value: inp('empty', d.empty, '(aucune ligne)'), leg: 'C', help: '<b>Sans ligne</b> : le texte montré quand la source est vide.' });
+  } else {
+    const f = FILES[S.file.name];
+    t += row({ label: 'Fichier externe', ty: 'choix', fx: 'no',
+      value: '<select data-k="file" data-in="file"><option value="">(aucun)</option>' + Object.keys(FILES).map(n => '<option value="' + esc(n) + '"' + (n === S.file.name ? ' selected' : '') + (FILES[n].doc ? ' disabled' : '') + '>' + esc(n) + (FILES[n].doc ? ' - un document, pas de lignes' : '') + '</option>').join('') + '</select>', leg: 'C',
+      line: f && !f.doc ? '<span>Reçu :</span><span class="tchip">' + f.kind + '</span><span class="okchip">' + f.cols.length + ' colonnes · ' + f.rows.length + ' lignes</span>' : '<span>Attend : un fichier du projet (CSV, Excel, JSON, SQLite)</span>',
+      help: '<b>Fichier externe</b> : un fichier du gestionnaire de fichiers du projet. L\'action « Lier un tableau » en change en marche.' });
+    t += row({ label: 'Colonnes', fx: 'no', value: ro(S.file.cols.filter(c => c.shown).length + ' sur ' + S.file.cols.length + ' montrées') + '<button class="linkb" data-act="tab" data-t="content">Régler ›</button>', help: '<b>Colonnes</b> : celles du fichier qui se montrent, leur ordre, leur titre et leur format, dans Contenu.' });
+  }
+  h += '<div class="pg-g">' + '<svg class="chev" viewBox="0 0 12 12"><path d="M3 4.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>Tableau</div>' + t;
+  return '<div class="pg">' + h + '</div>';
+}
+
+// ============================================================ l'onglet Contenu
+function cellHtml(text) {
+  const s = String(text || '');
+  if (!s) return '<span style="color:var(--dis)">·</span>';
+  if (s.startsWith('=')) return '<span class="fxs">fx</span><span class="mono" style="font-family:var(--mono);color:var(--accent)">' + esc(s) + '</span>';
+  let h = esc(s).replace(/\{([^{}]*)\}/g, '<span class="hole">{$1}</span>');
+  h = h.replace(/\$([\wÀ-ÿ]+)\$/g, '<span class="mkr">$$$1$$</span>');
+  return h;
+}
+function renderContentFixed(T) {
+  const f = S.fixed;
+  const [sr, sc] = S.sel.cell;
+  let h = '<div class="cbanner"><b>Cases fixes</b> · ' + f.rows.length + ' lignes × ' + f.headers.length + ' colonnes · une case : <span class="mono" style="font-family:var(--mono)">Pression A</span>, <span class="hole" style="font-family:var(--mono)">{PA:0.00} bar</span> ou <span style="font-family:var(--mono);color:var(--accent)">=PA * 1.8</span></div>';
+  h += '<div class="ctools"><button class="tbtn" data-act="addrow">+ Ligne</button><button class="tbtn" data-act="addcol">+ Colonne</button><span class="tsep"></span>' +
+    '<button class="tbtn" data-act="delrow"' + (f.rows.length < 2 ? ' disabled' : '') + '>Retirer la ligne</button><button class="tbtn" data-act="delcol"' + (f.headers.length < 2 ? ' disabled' : '') + '>Retirer la colonne</button><span class="tsep"></span>' +
+    '<button class="tbtn" data-act="rowup" title="Monter la ligne">↑</button><button class="tbtn" data-act="rowdown" title="Descendre la ligne">↓</button></div>';
+  h += '<div class="cgrid"><table class="sheet"><thead><tr><th class="rn"></th>' + f.headers.map((t, c) => '<th data-act="selcol" data-c="' + c + '" class="' + (S.sel.col === c ? 'sel' : '') + '">' + String.fromCharCode(65 + c) + ' · ' + esc(t || '…') + '</th>').join('') + '</tr></thead><tbody>';
+  f.rows.forEach((r, ri) => {
+    h += '<tr><td class="rn">' + (ri + 1) + '</td>' + r.map((c, ci) => {
+      const x = T.rows[ri] && T.rows[ri][ci];
+      const bad = x && x.text === '###';
+      return '<td data-act="selcell" data-r="' + ri + '" data-c="' + ci + '" class="' + (S.sel.col < 0 && ri === sr && ci === sc ? 'sel' : '') + '"><div class="cell"' + (bad ? ' style="color:var(--err)"' : '') + '>' + cellHtml(c) + '</div></td>';
+    }).join('') + '</tr>';
+  });
+  h += '</tbody></table></div>';
+  // le detail : la case choisie, ou la colonne
+  if (S.sel.col >= 0) {
+    const c = S.sel.col;
+    h += '<div class="detail"><div class="dh">Colonne ' + String.fromCharCode(65 + c) + ' · ' + esc(f.headers[c] || '') + '</div><div class="pg">' +
+      row({ label: 'Titre', ty: 'texte', fx: 'no', value: inp('fhead', f.headers[c], 'sans titre'), leg: 'C', help: '<b>Titre</b> : l\'en-tête de la colonne ; un texte à trous et un repère y sont permis.' }) +
+      row({ label: 'Largeur', ty: 'nombre', fx: 'no', value: '<input type="number" min="0.2" step="0.1" data-k="fwidth" data-in="fwidth" value="' + f.widths[c] + '" style="flex:1;min-width:0;font:12.5px var(--ui);border:1px solid transparent;background:transparent;color:var(--text)">', leg: 'C', help: '<b>Largeur</b> : relative aux autres colonnes - 2 est deux fois plus large que 1 (avant : la liste 2;1;1, à aligner à la main).' }) +
+      row({ label: 'Alignement', ty: 'choix', fx: 'no', value: '<select data-k="falign" data-in="falign">' + ['gauche', 'centre', 'droite'].map(a => '<option' + (a === f.aligns[c] ? ' selected' : '') + '>' + a + '</option>').join('') + '</select>', leg: 'C', help: '<b>Alignement</b> du texte des cases de la colonne.' }) +
+      '</div></div>';
+  } else {
+    const txt = (f.rows[sr] || [])[sc] || '';
+    const x = cellOf(txt, null, null, false);
+    if (String(txt).includes('[*]')) { x.state = 'error'; x.msg = '[*] désigne l\'élément d\'une ligne : seulement en mode Lignes dynamiques.'; }
+    let line = '<span>Genre :</span><span class="ichip">' + KIND_LABEL[x.kind] + '</span>';
+    if (x.state === 'error') line += '<span class="echip">' + esc(x.msg) + '</span>';
+    else if (x.kind !== 'vide') line += '<span>· Montre :</span><span class="okchip">' + esc(x.text || '(vide)') + '</span>' + (x.kind === 'formule' ? '<span class="tchip">' + x.t + '</span>' : '');
+    if (x.marks) line += '<span class="mkchip">$ repère</span>';
+    line += '<span>·</span>' + permis(true, true);
+    h += '<div class="detail"><div class="dh">Case ' + String.fromCharCode(65 + sc) + (sr + 1) + ' · ligne ' + (sr + 1) + ', colonne « ' + esc(f.headers[sc] || '') + ' »</div><div class="pg">' +
+      row({ label: 'Contenu', ty: 'texte · fx', fx: txt.startsWith('=') ? 'on' : 'off', drive: txt.startsWith('='), value: inp('cell', txt, 'vide', 'code' + (x.state === 'error' ? ' bad' : '')), leg: x.state === 'error' ? 'X' : txt.startsWith('=') ? 'fx' : x.marks ? 'D' : x.kind === 'trous' ? 'I' : x.kind === 'vide' ? 'E' : 'C', line,
+        help: '<b>Une case</b> : un texte fixe (Pression A), un texte à trous qui montre des variables ({PA:0.00} bar - le format après :), ou une formule (=PA * 1.8, =SEL(Marche, \'En marche\', \'Arrêt\')). Un repère se garde ({$Cuve$.Niveau}) : Dupliquer le remplace. Un nom seul (PA) reste un texte : écris {PA} ou =PA pour sa valeur.' }) +
+      '</div><div class="sugg"><span style="font-size:11px;color:var(--muted);margin-right:2px">Insérer :</span>' +
+      ['{PA:0.00} bar', '{PB:0.00} bar', '{Debit:0.0} m³/h', '=PA > 4', "=SEL(Marche, 'En marche', 'Arrêt')", '{$Cuves$[1].Niveau:0.0} m'].map(s => '<button class="sg" data-act="putcell" data-v="' + esc(s) + '">' + esc(s) + '</button>').join('') + '</div></div>';
+  }
+  return h;
+}
+function suggestionsFor(from) {
+  const out = [];
+  const mem = rowMembers(from);
+  if (from && from.state === 'ok') {
+    if (mem) {
+      const walk = (ms, pre, depth) => ms.forEach(m => {
+        if (isStruct(m.t) && depth < 2) walk(TYPES[m.t], pre + m.n + '.', depth + 1);
+        else out.push({ v: '[*].' + pre + m.n, t: m.t });
+      });
+      walk(mem, '', 0);
+    } else out.push({ v: '[*]', t: from.elem });
+  }
+  out.push({ v: '[#]', t: 'INT · n° de ligne' });
+  for (const n in V) { const d = V[n]; if ((d.kind === 'array' || d.kind === 'list') && !isStruct(d.elem) && n !== (from && from.name)) out.push({ v: n + '[*]', t: d.elem + ' · ' + d.items.length }); }
+  return out;
+}
+function renderContentDyn(T) {
+  const d = S.dyn, from = T.from;
+  let h = '<div class="cbanner">';
+  if (from.state === 'ok') h += '<b>Lignes depuis ' + esc(from.name) + '</b><span class="tchip">' + esc(from.typeText) + '</span><span class="okchip">' + from.len + ' lignes</span><span>· <b>[*]</b> = l\'élément de la ligne</span>';
+  else if (from.state === 'empty') h += '<b>Chaque colonne a sa liste</b><span class="okchip">' + T.count + ' lignes (la plus longue)</span><span>· <b>Liste[*]</b> = son élément de la ligne</span>';
+  else h += '<b>Lignes depuis</b><span class="echip">' + esc(from.msg) + '</span>' + (from.fix ? '<button class="linkb" data-act="fixfrom" data-v="' + esc(from.fix) + '">Remplacer par ' + esc(from.fix) + '</button>' : '');
+  h += '</div>';
+  const mem = rowMembers(from);
+  h += '<div class="ctools"><button class="tbtn" data-act="addcolumn">+ Colonne</button>' +
+    '<button class="tbtn" data-act="autocols"' + (from.state === 'ok' ? '' : ' disabled') + ' title="Une colonne par membre simple de l\'élément">Une colonne par ' + (mem ? 'membre' : 'valeur') + (from.state === 'ok' && from.elem && isStruct(from.elem) && (from.kind === 'array' || from.kind === 'list') ? ' de ' + esc(from.elem) : '') + '</button><span class="tsep"></span>' +
+    '<button class="tbtn" data-act="delcolumn"' + (S.sel.dcol < 0 ? ' disabled' : '') + '>Retirer</button><button class="tbtn" data-act="colup"' + (S.sel.dcol < 1 ? ' disabled' : '') + '>↑</button><button class="tbtn" data-act="coldown"' + (S.sel.dcol < 0 || S.sel.dcol >= d.cols.length - 1 ? ' disabled' : '') + '>↓</button></div>';
+  h += '<div class="cgrid" style="max-height:190px"><table class="cols"><thead><tr><th>#</th><th>Titre</th><th>Contenu de la case</th><th>Type</th><th>Format</th></tr></thead><tbody>';
+  if (!d.cols.length) h += '<tr><td colspan="5" style="color:var(--muted);font-style:italic;padding:8px">Aucune colonne. « + Colonne », ou « Une colonne par membre » pour toutes d\'un coup.</td></tr>';
+  d.cols.forEach((c, k) => {
+    const x = cellOf(c.content, T.count ? { item: from.state === 'ok' ? collItems(from.name)[0] : undefined, idx: 0 } : { idx: 0 }, from, true);
+    const chip = x.state === 'error' ? '<span class="echip">!</span>' : x.state === 'warn' ? '<span class="wchip">?</span>' : '<span class="tchip">' + esc(x.t || '-') + '</span>';
+    h += '<tr data-act="seldcol" data-i="' + k + '" class="' + (k === S.sel.dcol ? 'sel' : '') + '"><td class="idx">' + (k + 1) + '</td><td>' + esc(c.title || '…') + '</td><td><div class="ct">' + cellHtml(c.content) + '</div></td><td>' + chip + '</td><td class="ct">' + esc(c.fmt || x.fmt || '') + (c.unit || x.unit ? ' ' + esc(c.unit || x.unit) : '') + '</td></tr>';
+  });
+  h += '</tbody></table></div>';
+  if (S.sel.dcol >= 0 && d.cols[S.sel.dcol]) {
+    const k = S.sel.dcol, c = d.cols[k];
+    const x = cellOf(c.content, T.count ? { item: from.state === 'ok' ? collItems(from.name)[0] : undefined, idx: 0 } : { idx: 0 }, from, true);
+    let line = '<span>Attend : une valeur par ligne</span><span>· Reçu :</span>';
+    if (x.state === 'error') line += (x.t ? '<span class="tchip">' + esc(x.t) + '</span>' : '') + '<span class="echip">' + esc(x.msg) + '</span>' + (x.fix ? '<button class="linkb" data-act="fixcol" data-v="' + esc(x.fix) + '">Remplacer par ' + esc(x.fix) + '</button>' : '');
+    else {
+      line += '<span class="ichip">' + KIND_LABEL[x.kind] + '</span>' + (x.t ? '<span class="tchip">' + esc(x.t) + '</span>' : '');
+      if (x.lists.length) line += x.lists.map(l => '<span class="' + (T.count && l.len !== T.count ? 'wchip' : 'okchip') + '">' + esc(l.name) + ' : ' + l.len + ' éléments</span>').join('');
+      if (x.state === 'warn') line += '<span class="wchip">' + esc(x.msg) + '</span>';
+    }
+    if (x.marks) line += '<span class="mkchip">$ repère</span>';
+    line += '<span>·</span>' + permis(true, true);
+    const fmtPh = x.fmt ? x.fmt + ' (Unités et formats)' : isNum(x.t) ? 'celui du type' : 'sans effet sur un ' + (x.t || 'texte');
+    const unitPh = x.unit ? x.unit + ' (Unités et formats)' : 'aucune';
+    h += '<div class="detail"><div class="dh">Colonne ' + (k + 1) + ' · ' + esc(c.title || '…') + '</div><div class="pg">' +
+      row({ label: 'Titre', ty: 'texte', fx: 'no', value: inp('ctitle', c.title, 'sans titre'), leg: 'C', help: '<b>Titre</b> : l\'en-tête de la colonne (un texte à trous, un repère : permis).' }) +
+      row({ label: 'Contenu', ty: 'valeur · fx', fx: c.content.startsWith('=') ? 'on' : 'off', drive: c.content.startsWith('='),
+        value: inp('ccontent', c.content, '[*].Membre, Liste[*], {…} ou =…', 'code' + (x.state === 'error' ? ' bad' : '')), leg: x.state === 'error' ? 'X' : legOf(c.content, false), line,
+        help: '<b>Ce que montre la case, pour chaque ligne.</b> <b>[*]</b> est l\'élément de la ligne : [*].Niveau, [*].Vanne.Ouverture. Sans « Lignes depuis », une liste par colonne : Debits[*]. <b>[#]</b> : le numéro de la ligne. Un texte à trous ({[*].Niveau:0.0} m), une formule (=[*].Niveau * 100 / [*].Capacite) ou un texte fixe aussi. Un repère se garde ($Cuves$[*].Niveau). Une structure entière n\'a pas de case : choisis un membre.' }) +
+      '<div class="sugg"><span style="font-size:11px;color:var(--muted);margin-right:2px">Proposés :</span>' + suggestionsFor(from).slice(0, 12).map(s => '<button class="sg" data-act="putcol" data-v="' + esc(s.v) + '">' + esc(s.v) + '<span class="t">' + esc(s.t) + '</span></button>').join('') + '</div>' +
+      row({ label: 'Format', ty: 'texte', fx: 'no', value: inp('cfmt', c.fmt, fmtPh), leg: c.fmt ? 'C' : 'E', help: '<b>Format</b> : 0, 0.0, 0.00 pour un nombre ; Oui/Non pour un BOOL. Vide : celui de la variable dans Unités et formats (lot F), sinon celui du type.' }) +
+      row({ label: 'Unité', ty: 'texte', fx: 'no', value: inp('cunit', c.unit, unitPh), leg: c.unit ? 'C' : 'E', help: '<b>Unité</b> : ajoutée après la valeur. Vide : celle de la variable dans Unités et formats.' }) +
+      row({ label: 'Largeur', ty: 'nombre', fx: 'no', value: '<input type="number" min="0.2" step="0.1" data-k="cwidth" data-in="cwidth" value="' + (c.width || 1) + '" style="flex:1;min-width:0;font:12.5px var(--ui);border:1px solid transparent;background:transparent;color:var(--text)">', leg: 'C', help: '<b>Largeur</b> : relative aux autres colonnes.' }) +
+      row({ label: 'Alignement', ty: 'choix', fx: 'no', value: '<select data-k="calign" data-in="calign"><option value="">' + (isNum(x.t) ? 'auto : à droite (un nombre)' : 'auto : à gauche') + '</option>' + ['gauche', 'centre', 'droite'].map(a => '<option' + (a === c.align ? ' selected' : '') + '>' + a + '</option>').join('') + '</select>', leg: 'C', help: '<b>Alignement</b> : vide, un nombre à droite, un texte à gauche.' }) +
+      row({ label: 'Couleur', ty: 'choix', fx: 'no', value: '<select data-k="ccolor" data-in="ccolor"><option value="">aucune</option><option value="seuils"' + (c.color === 'seuils' ? ' selected' : '') + '>selon les seuils de la variable</option><option value="formule"' + (c.color === 'formule' ? ' selected' : '') + '>une formule par ligne</option></select>', leg: 'C',
+        line: c.color === 'seuils' ? (x.th ? '<span class="okchip">seuils de la variable : ' + x.th.high + ' (seuil haut) · ' + x.th.highAlarm + ' (alarme haute)</span>' : '<span class="wchip">' + (isNum(x.t) ? 'la variable n\'a pas de seuils dans Unités et formats' : 'pas de seuils sur un ' + esc(x.t || 'texte')) + '</span>') : '',
+        help: '<b>Couleur</b> du texte des cases : celle des seuils de la variable (lot F : jaune au-delà d\'un seuil, rouge au-delà d\'une alarme), ou une formule par ligne qui rend une couleur.' }) +
+      (c.color === 'formule' ? row({ label: 'Couleur (formule)', ty: 'fx', fx: 'on', drive: true, value: inp('ccolorexpr', c.colorExpr, "=SEL([*].Etat = DEFAUT, '#E5534B', '')", 'code'), leg: 'fx', help: '<b>Couleur (formule)</b> : pour chaque ligne, une couleur (#E5534B) ou rien.' }) : '') +
+      '</div></div>';
+  }
+  // l'apercu
+  h += '<div class="preview"><div class="ph"><b style="color:var(--text)">Aperçu</b><span>' + (S.sim ? 'en marche' : 'les valeurs initiales') + ' · ' + T.count + ' ligne(s)</span></div>' + tableHtml(T, 5, true) + '</div>';
+  return h;
+}
+function renderContentFile() {
+  const f = FILES[S.file.name];
+  let h = '<div class="cbanner">' + (f && !f.doc ? '<b>Fichier ' + esc(S.file.name) + '</b><span class="tchip">' + f.kind + '</span><span class="okchip">' + f.cols.length + ' colonnes · ' + f.rows.length + ' lignes</span>' : '<b>Aucun fichier lisible</b> : choisis-en un dans Propriétés') + '</div>';
+  h += '<div class="ctools"><button class="tbtn" data-act="fup"' + (S.sel.fcol < 1 ? ' disabled' : '') + '>↑</button><button class="tbtn" data-act="fdown"' + (S.sel.fcol < 0 || S.sel.fcol >= S.file.cols.length - 1 ? ' disabled' : '') + '>↓</button><span class="tsep"></span><button class="tbtn" data-act="fall">Toutes</button></div>';
+  h += '<div class="cgrid"><table class="cols"><thead><tr><th>Montrée</th><th>Colonne du fichier</th><th>Titre</th><th>Format</th></tr></thead><tbody>';
+  S.file.cols.forEach((c, k) => {
+    h += '<tr data-act="selfcol" data-i="' + k + '" class="' + (k === S.sel.fcol ? 'sel' : '') + '"><td><input type="checkbox" data-in="fshown" data-i="' + k + '"' + (c.shown ? ' checked' : '') + '></td><td class="ct">' + esc(c.src) + '</td><td>' + inp('ftitle' + k, c.title, c.src) + '</td><td>' + inp('ffmt' + k, c.fmt, '') + '</td></tr>';
+  });
+  h += '</tbody></table></div>';
+  h += '<div class="note" style="margin:8px">Comme une colonne du mode dynamique, mais son contenu est une colonne du fichier : pas de [*], pas de formule.</div>';
+  return h;
+}
+
+// ============================================================ la vue : l'objet Tableau dessine
+function tableHtml(T, maxRows, small) {
+  const n = Math.max(1, T.headers.length);
+  const sum = T.widths.reduce((a, b) => a + (+b || 1), 0) || n;
+  let h = '<table class="htable" style="width:' + (small ? '100%' : '520px') + '"><colgroup>' + T.headers.map((_, k) => '<col style="width:' + (100 * (+T.widths[k] || 1) / sum).toFixed(1) + '%">').join('') + '</colgroup>';
+  h += '<thead><tr>' + (T.headers.length ? T.headers.map(t => '<th>' + esc(t) + '</th>').join('') : '<th>(aucune colonne)</th>') + '</tr></thead><tbody>';
+  const al = k => T.aligns[k] === 'droite' ? 'r' : T.aligns[k] === 'centre' ? 'c' : '';
+  const rows = T.rows.slice(0, maxRows);
+  rows.forEach((r, i) => {
+    const real = T.rowIdx ? T.rowIdx[i] : i;
+    const picked = S.mode === 'dyn' && S.dyn.pick && S.picked === real;
+    h += '<tr class="' + (i % 2 ? 'alt' : '') + (picked ? ' pick' : '') + '" data-act="pickrow" data-i="' + real + '">' + r.map((c, k) => '<td class="' + al(k) + ' ' + c.cls + '">' + esc(c.text) + '</td>').join('') + '</tr>';
+  });
+  if (!T.rows.length) h += '<tr class="empty"><td colspan="' + n + '">' + esc(S.mode === 'dyn' ? (S.dyn.empty || '(aucune ligne)') : '(aucune ligne)') + '</td></tr>';
+  h += '</tbody></table>';
+  return h;
+}
+function renderView(T) {
+  const max = 7;
+  let h = '<div class="vlabel">' + (S.sim ? 'Simulation · IHM en marche' : 'Éditeur · Vue_Cuves') + '</div>';
+  h += '<div class="tobj sel" title="Tableau_Cuves">' + tableHtml(T, max, false);
+  if (T.rows.length > max) { const r = max / T.rows.length; h += '<div class="scrollhint"><i style="top:0;height:' + Math.max(18, r * 100).toFixed(0) + '%"></i></div>'; }
+  h += '</div>';
+  const modeName = S.mode === 'fixed' ? 'Cases fixes' : S.mode === 'dyn' ? 'Dynamique' : 'Fichier';
+  h += '<div class="tcap">Tableau_Cuves · ' + modeName + ' · ' + T.rows.length + ' ligne(s)' + (T.rows.length > max ? ' · ' + (T.rows.length - max) + ' de plus : il défile' : '') + (S.sim ? '' : ' · valeurs initiales') + (S.mode === 'dyn' && S.dyn.pick && S.sim ? ' · un clic choisit une ligne' : '') + '</div>';
+  return h;
+}
+
+// ============================================================ le panneau du bas
+function renderBottom(T) {
+  const gens = T.issues.slice();
+  const nE = gens.filter(g => g.lv === 'E').length, nW = gens.filter(g => g.lv === 'W').length;
+  $('#nGen').textContent = nE ? nE : nW ? nW : '0';
+  $('#nGen').className = 'count' + (nE ? ' e' : nW ? ' w' : '');
+  $('#nVars').textContent = Object.keys(V).length;
+  document.querySelectorAll('.btab').forEach(b => b.classList.toggle('on', b.dataset.btab === S.btab));
+  if (S.btab === 'vars') {
+    let h = '<table class="vtab"><thead><tr><th>Variable</th><th>Type</th><th>Valeur ' + (S.sim ? '(en marche)' : 'initiale') + '</th></tr></thead><tbody>';
+    for (const n in V) {
+      const d = V[n];
+      let v;
+      if (d.kind === 'array' || d.kind === 'list') v = '[' + d.items.map(x => typeof x === 'object' ? '(' + Object.entries(x).filter(([, y]) => typeof y !== 'object').map(([k, y]) => k + ' := ' + show(y)).join(', ') + ')' : show(x)).join(', ') + ']';
+      else if (d.kind === 'map') v = '[' + Object.entries(d.items).map(([k, x]) => "'" + k + "' => " + x).join(', ') + ']';
+      else if (d.kind === 'struct') v = '(' + Object.entries(d.value).map(([k, x]) => k + ' := ' + show(x)).join(', ') + ')';
+      else v = show(d.value, d.type, d.fmt) + (d.unit ? ' ' + d.unit : '');
+      h += '<tr class="' + (T.used.has(n) ? 'use' : '') + '"><td class="m">' + esc(n) + '</td><td class="m">' + esc(d.type) + '</td><td class="v">' + esc(v.length > 150 ? v.slice(0, 150) + '…' : v) + '</td></tr>';
+    }
+    h += '</tbody></table>';
+    $('#bottomBody').innerHTML = h;
+  } else {
+    if (!gens.length) gens.push({ lv: 'O', where: 'Tableau_Cuves', msg: 'rien à dire.' });
+    $('#bottomBody').innerHTML = '<ul class="genl">' + gens.map(g => '<li class="' + g.lv + '"><span class="ic">' + (g.lv === 'E' ? '!' : g.lv === 'W' ? '!' : g.lv === 'O' ? '✓' : 'i') + '</span><div><span class="where">Vue_Cuves.Tableau_Cuves · ' + esc(g.where) + '</span><br>' + esc(g.msg) + '</div></li>').join('') + '</ul>';
+  }
+}
+
+// ============================================================ tout redessiner, sans perdre la saisie
+function render() {
+  const ae = document.activeElement;
+  const k = ae && ae.dataset ? ae.dataset.k : null;
+  let s0 = null, s1 = null;
+  try { s0 = ae.selectionStart; s1 = ae.selectionEnd; } catch (e) { /* un select */ }
+  const body = $('#ibody');
+  const scroll = body ? body.scrollTop : 0;
+  const cg = document.querySelector('#ibody .cgrid');
+  const cgs = cg ? cg.scrollTop : 0;
+  const T = computeTable();
+  document.querySelectorAll('.itab[data-itab]').forEach(b => b.classList.toggle('on', b.dataset.itab === S.tab));
+  $('#nContent').textContent = S.mode === 'fixed' ? S.fixed.rows.length + '×' + S.fixed.headers.length : S.mode === 'dyn' ? S.dyn.cols.length : S.file.cols.filter(c => c.shown).length;
+  // « Montrer : fx · Repères · Non vides »
+  const all = S.mode === 'dyn' ? [S.dyn.from, S.dyn.pick, ...S.dyn.cols.map(c => c.content)] : S.mode === 'fixed' ? S.fixed.rows.flat() : [S.file.name];
+  const nfx = all.filter(x => String(x || '').trim().startsWith('=')).length, nmk = all.filter(x => String(x || '').includes('$')).length, nne = all.filter(x => String(x || '').trim()).length;
+  $('#showBar').innerHTML = 'Montrer : <span class="spill' + (nfx ? '' : ' dim') + '">fx ' + nfx + '</span><span class="spill' + (nmk ? '' : ' dim') + '">$ Repères ' + nmk + '</span><span class="spill">Non vides ' + nne + '</span>';
+  let html;
+  if (S.tab === 'props') html = renderProps(T);
+  else if (S.tab === 'content') { helpText = {}; html = S.mode === 'fixed' ? renderContentFixed(T) : S.mode === 'dyn' ? renderContentDyn(T) : renderContentFile(); }
+  else { helpText = {}; html = '<div class="pg">' + row({ label: 'Au clic sur une ligne', ty: 'action', fx: 'no', value: '<span class="val ro">' + (S.mode === 'dyn' && S.dyn.pick ? 'écrit le numéro dans ' + esc(S.dyn.pick) + ', puis : (aucune action)' : '(aucune action)') + '</span>', leg: 'E',
+    help: 'Une action au clic sur une ligne : ouvrir une popup pour la cuve choisie, écrire une consigne… Avec « Ligne choisie → », la variable est déjà écrite quand l\'action part.' }) + '</div>'; }
+  body.innerHTML = html;
+  body.scrollTop = scroll;
+  const cg2 = document.querySelector('#ibody .cgrid');
+  if (cg2) cg2.scrollTop = cgs;
+  $('#view').innerHTML = renderView(T);
+  renderBottom(T);
+  $('#titleMode').innerHTML = '<span class="pill" style="font:600 10.5px var(--mono);padding:1px 6px;border-radius:4px;background:var(--sel);color:var(--sel-fg)">' + (S.mode === 'fixed' ? 'Cases fixes' : S.mode === 'dyn' ? 'Lignes dynamiques' : 'Fichier externe') + '</span>';
+  document.querySelectorAll('#presets .chipbtn').forEach(b => b.classList.toggle('on', b.dataset.p === preset));
+  let helped = false;
+  if (k) {
+    const el = document.querySelector('[data-k="' + k + '"]');
+    if (el) {
+      el.focus();
+      try { if (s0 !== null) el.setSelectionRange(s0, s1); } catch (e) { /* number, select */ }
+      const r = el.closest('[data-help]');
+      if (r && helpText[r.dataset.help]) { $('#help').innerHTML = helpText[r.dataset.help]; helped = true; }
+    }
+  }
+  if (!helped && !lastHelp) $('#help').innerHTML = '<b>Tableau</b> : survole une case de l\'inspecteur, son aide s\'affiche ici.';
+}
+let lastHelp = '';
+
+// ============================================================ les gestes
+$('#presets').innerHTML = PRESETS.map(p => '<button class="chipbtn" data-p="' + p.id + '">' + esc(p.label) + '</button>').join('');
+$('#presets').addEventListener('click', e => {
+  const b = e.target.closest('[data-p]');
+  if (!b) return;
+  const p = PRESETS.find(x => x.id === b.dataset.p);
+  preset = p.id;
+  lastHelp = '';
+  V = clone(INIT);
+  S.picked = -1;
+  p.apply();
+  if (p.id === 'capture') S.tab = 'props';
+  render();
+});
+document.querySelectorAll('.btab').forEach(b => b.addEventListener('click', () => { S.btab = b.dataset.btab; render(); }));
+document.querySelectorAll('.itab[data-itab]').forEach(b => b.addEventListener('click', () => { S.tab = b.dataset.itab; lastHelp = ''; render(); }));
+
+document.addEventListener('click', e => {
+  const a = e.target.closest('[data-act]');
+  if (!a || !a.closest('#appwin')) return;
+  const act = a.dataset.act, d = S.dyn, f = S.fixed;
+  const i = a.dataset.i !== undefined ? +a.dataset.i : -1;
+  switch (act) {
+    case 'group': if (a.dataset.g && a.dataset.g !== 'Tableau') S.closed[a.dataset.g] = !S.closed[a.dataset.g]; break;
+    case 'mode': lastHelp = ''; S.mode = a.dataset.m; if (S.mode === 'file' && !S.file.cols.length) S.file.cols = fileCols(S.file.name); break;
+    case 'tab': lastHelp = ''; S.tab = a.dataset.t; break;
+    case 'fixfrom': d.from = a.dataset.v; if (!d.cols.length) autoCols(); break;
+    case 'clearfrom': d.from = ''; break;
+    case 'selcell': S.sel.cell = [+a.dataset.r, +a.dataset.c]; S.sel.col = -1; break;
+    case 'selcol': S.sel.col = +a.dataset.c; break;
+    case 'putcell': { const [r, c] = S.sel.cell; if (f.rows[r]) f.rows[r][c] = a.dataset.v; S.sel.col = -1; break; }
+    case 'addrow': f.rows.push(f.headers.map(() => '')); S.sel.cell = [f.rows.length - 1, 0]; S.sel.col = -1; break;
+    case 'addcol': f.headers.push('Colonne ' + (f.headers.length + 1)); f.widths.push(1); f.aligns.push('gauche'); f.rows.forEach(r => r.push('')); S.sel.col = f.headers.length - 1; break;
+    case 'delrow': if (f.rows.length > 1) { f.rows.splice(S.sel.cell[0], 1); S.sel.cell[0] = Math.min(S.sel.cell[0], f.rows.length - 1); } break;
+    case 'delcol': { const c = S.sel.col >= 0 ? S.sel.col : S.sel.cell[1]; if (f.headers.length > 1) { f.headers.splice(c, 1); f.widths.splice(c, 1); f.aligns.splice(c, 1); f.rows.forEach(r => r.splice(c, 1)); S.sel.col = -1; S.sel.cell[1] = Math.min(c, f.headers.length - 1); } break; }
+    case 'rowup': { const r = S.sel.cell[0]; if (r > 0) { [f.rows[r - 1], f.rows[r]] = [f.rows[r], f.rows[r - 1]]; S.sel.cell[0]--; } break; }
+    case 'rowdown': { const r = S.sel.cell[0]; if (r < f.rows.length - 1) { [f.rows[r + 1], f.rows[r]] = [f.rows[r], f.rows[r + 1]]; S.sel.cell[0]++; } break; }
+    case 'addcolumn': d.cols.push(col('Colonne ' + (d.cols.length + 1), d.from && analyzeFrom(d.from).state === 'ok' ? '' : '')); S.sel.dcol = d.cols.length - 1; break;
+    case 'autocols': autoCols(); break;
+    case 'delcolumn': if (S.sel.dcol >= 0) { d.cols.splice(S.sel.dcol, 1); S.sel.dcol = Math.min(S.sel.dcol, d.cols.length - 1); } break;
+    case 'colup': { const k = S.sel.dcol; if (k > 0) { [d.cols[k - 1], d.cols[k]] = [d.cols[k], d.cols[k - 1]]; S.sel.dcol--; } break; }
+    case 'coldown': { const k = S.sel.dcol; if (k >= 0 && k < d.cols.length - 1) { [d.cols[k + 1], d.cols[k]] = [d.cols[k], d.cols[k + 1]]; S.sel.dcol++; } break; }
+    case 'seldcol': S.sel.dcol = i; break;
+    case 'putcol': if (d.cols[S.sel.dcol]) { const c = d.cols[S.sel.dcol]; c.content = a.dataset.v; if (/^Colonne \d+$/.test(c.title) || !c.title) c.title = titleFor(a.dataset.v); } break;
+    case 'fixcol': if (d.cols[S.sel.dcol]) d.cols[S.sel.dcol].content = a.dataset.v; break;
+    case 'selfcol': if (e.target.tagName === 'INPUT') return; S.sel.fcol = i; break;
+    case 'fup': { const k = S.sel.fcol; if (k > 0) { [S.file.cols[k - 1], S.file.cols[k]] = [S.file.cols[k], S.file.cols[k - 1]]; S.sel.fcol--; } break; }
+    case 'fdown': { const k = S.sel.fcol; if (k >= 0 && k < S.file.cols.length - 1) { [S.file.cols[k + 1], S.file.cols[k]] = [S.file.cols[k], S.file.cols[k + 1]]; S.sel.fcol++; } break; }
+    case 'fall': S.file.cols.forEach(c => { c.shown = true; }); break;
+    case 'pickrow':
+      if (S.mode !== 'dyn' || !d.pick || !S.sim) return;
+      S.picked = i;
+      { const pv = getVar(d.pick.replace(/\$/g, '')); if (pv) { const from = analyzeFrom(d.from); pv.value = pv.type === 'STRING' && from.kind === 'map' ? Object.keys(V[from.name].items)[i] : i + 1; } }
+      break;
+    default: return;
+  }
+  render();
+});
+function titleFor(v) {
+  const m = String(v).replace(/\$/g, '').match(/([A-Za-zÀ-ÿ_][\wÀ-ÿ]*)(?:\[\*\])?$/);
+  if (v === '[#]') return 'N°';
+  if (v === '[*]') return 'Valeur';
+  return m ? m[1].replace(/_/g, ' ') : 'Colonne';
+}
+function autoCols() {
+  const from = analyzeFrom(S.dyn.from);
+  if (from.state !== 'ok') return;
+  const sugg = suggestionsFor(from).filter(s => s.v.startsWith('[*]'));
+  S.dyn.cols = sugg.map(s => col(titleFor(s.v), s.v));
+  S.sel.dcol = 0;
+}
+// ---- la saisie : chaque frappe, l'objet suit (la vue, l'apercu, Generer)
+document.addEventListener('input', e => {
+  const el = e.target;
+  const k = el.dataset ? el.dataset.in : null;
+  if (!k || !el.closest('#appwin')) return;
+  const d = S.dyn, f = S.fixed, c = d.cols[S.sel.dcol];
+  const v = el.type === 'checkbox' ? el.checked : el.value;
+  if (k === 'from') d.from = v;
+  else if (k === 'pick') d.pick = v.trim();
+  else if (k === 'empty') d.empty = v;
+  else if (k === 'sort') d.sort = v;
+  else if (k === 'file') { S.file.name = v; S.file.cols = fileCols(v); S.sel.fcol = 0; }
+  else if (k === 'fixedRows') { const n = Math.max(1, Math.min(40, parseInt(v, 10) || 1)); while (f.rows.length < n) f.rows.push(f.headers.map(() => '')); f.rows.length = n; S.sel.cell[0] = Math.min(S.sel.cell[0], n - 1); }
+  else if (k === 'fixedCols') { const n = Math.max(1, Math.min(12, parseInt(v, 10) || 1)); while (f.headers.length < n) { f.headers.push('Colonne ' + (f.headers.length + 1)); f.widths.push(1); f.aligns.push('gauche'); f.rows.forEach(r => r.push('')); } f.headers.length = n; f.widths.length = n; f.aligns.length = n; f.rows.forEach(r => { r.length = n; }); S.sel.cell[1] = Math.min(S.sel.cell[1], n - 1); }
+  else if (k === 'cell') { const [r, cc] = S.sel.cell; if (f.rows[r]) f.rows[r][cc] = v; }
+  else if (k === 'fhead') f.headers[S.sel.col] = v;
+  else if (k === 'fwidth') f.widths[S.sel.col] = Math.max(0.2, parseFloat(v) || 1);
+  else if (k === 'falign') f.aligns[S.sel.col] = v;
+  else if (c && k === 'ctitle') c.title = v;
+  else if (c && k === 'ccontent') c.content = v;
+  else if (c && k === 'cfmt') c.fmt = v;
+  else if (c && k === 'cunit') c.unit = v;
+  else if (c && k === 'cwidth') c.width = Math.max(0.2, parseFloat(v) || 1);
+  else if (c && k === 'calign') c.align = v;
+  else if (c && k === 'ccolor') { c.color = v; if (v === 'formule' && !c.colorExpr) c.colorExpr = "=SEL([*].Etat = DEFAUT, '#E5534B', '')"; }
+  else if (c && k === 'ccolorexpr') c.colorExpr = v;
+  else if (k === 'fshown') { const fc = S.file.cols[+el.dataset.i]; if (fc) fc.shown = !!v; }
+  else if (k.startsWith('ftitle')) { const fc = S.file.cols[+k.slice(6)]; if (fc) fc.title = v; }
+  else if (k.startsWith('ffmt')) { const fc = S.file.cols[+k.slice(4)]; if (fc) fc.fmt = v; }
+  else return;
+  render();
+});
+document.addEventListener('change', e => { if (e.target.matches('select[data-in], input[type=checkbox][data-in]')) e.target.dispatchEvent(new Event('input', { bubbles: true })); });
+// ---- l'aide de la ligne survolee (la bande d'aide de l'inspecteur)
+$('#ibody').addEventListener('mouseover', e => {
+  const r = e.target.closest('[data-help]');
+  if (!r) return;
+  const t = helpText[r.dataset.help];
+  if (t) { $('#help').innerHTML = t; lastHelp = t; }
+});
+$('#ibody').addEventListener('focusin', e => {
+  const r = e.target.closest('[data-help]');
+  if (r && helpText[r.dataset.help]) $('#help').innerHTML = helpText[r.dataset.help];
+});
+
+// ============================================================ la simulation
+let timer = null, tick = 0;
+const rnd = (a, b) => a + Math.random() * (b - a);
+const MSG = ['Pression haute ligne 1', 'Défaut pompe P-101', 'Niveau bas cuve C', 'Arrêt d\'urgence zone 2', 'Température four hors tolérance', 'Porte armoire ouverte'];
+function step() {
+  tick++;
+  V.Cuves.items.forEach(c => { c.Niveau = Math.max(0, Math.min(c.Capacite, Math.round((c.Niveau + rnd(-0.45, 0.5)) * 10) / 10)); c.Vanne.Ouverture = Math.max(0, Math.min(100, Math.round(c.Vanne.Ouverture + rnd(-6, 6)))); if (Math.random() < 0.06) c.Etat = ['ARRET', 'MARCHE', 'DEFAUT'][Math.floor(Math.random() * 3)]; });
+  V.PA.value = Math.round((V.PA.value + rnd(-0.08, 0.08)) * 100) / 100;
+  V.PB.value = Math.round((V.PB.value + rnd(-0.08, 0.08)) * 100) / 100;
+  V.Debit.value = Math.round((V.Debit.value + rnd(-0.4, 0.4)) * 10) / 10;
+  V.Debits.items = V.Debits.items.map(x => Math.max(0, Math.round((x + rnd(-0.6, 0.6)) * 10) / 10));
+  Object.keys(V.Stock.items).forEach(k => { V.Stock.items[k] = Math.max(0, V.Stock.items[k] + Math.round(rnd(-3, 2))); });
+  if (tick % 4 === 0 && V.Alarmes.items.length < 9) {
+    const now = new Date();
+    V.Alarmes.items.push({ Heure: now.toTimeString().slice(0, 8), Message: MSG[tick % MSG.length], Priorite: 1 + (tick % 3), Active: true });
+  }
+  if (tick % 11 === 0 && V.Alarmes.items.length > 2) V.Alarmes.items.shift();
+  if (tick % 9 === 0 && V.Cadences.items.length < 6) V.Cadences.items.push(Math.round(rnd(90, 135)));
+  const ae = document.activeElement;
+  if (ae && ae.tagName === 'SELECT' && ae.closest('#ibody')) { const T = computeTable(); $('#view').innerHTML = renderView(T); renderBottom(T); return; }
+  render();
+}
+$('#runBtn').addEventListener('click', () => {
+  S.sim = !S.sim;
+  $('#runBtn').classList.toggle('on', S.sim);
+  $('#runBtn').setAttribute('aria-pressed', String(S.sim));
+  $('#runBtn').textContent = S.sim ? '■ Arrêter' : '▶ Simuler';
+  if (S.sim) timer = setInterval(step, 900);
+  else { clearInterval(timer); timer = null; V = clone(INIT); S.picked = -1; tick = 0; }
+  render();
+});
+
+// ============================================================ « Aujourd'hui » : la capture refaite
+(function () {
+  helpText = {};
+  const b = n => '<span class="bub">' + n + '</span>';
+  let h = '';
+  h += row({ label: 'Opacité (%)', ty: 'nombre', value: ro('100'), leg: 'C' });
+  h += row({ label: 'Clignotement', ty: 'BOOL', value: '<span class="cb"></span>', leg: 'C' });
+  h += row({ label: 'Remplissage', ty: 'couleur', value: '<span class="sw" style="background:#262C36"></span>' + ro('#262C36'), leg: 'C' });
+  h += row({ label: 'Contour', ty: 'couleur', value: '<span class="sw" style="background:#3A4556"></span>' + ro('#3A4556'), leg: 'C' });
+  h += row({ label: 'Taille du texte', ty: 'nombre', value: ro('14'), leg: 'C' });
+  h += '<div class="pg-g"><svg class="chev" viewBox="0 0 12 12"><path d="M3 4.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>Sécurité</div>';
+  h += row({ label: 'Niveau d\'accès', fx: 'no', value: ro('tout le monde (0)') });
+  h += row({ label: 'Autorisation', ty: 'BOOL', value: '', leg: 'E' });
+  h += '<div class="pg-g"><svg class="chev" viewBox="0 0 12 12"><path d="M3 4.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>Tableau</div>';
+  h += row({ label: 'Colonnes (a;b;c)', ty: 'texte', value: ro('Nom') + b(1), leg: 'C' });
+  h += row({ label: 'Lignes', ty: 'nombre', value: ro('0') + b(1), leg: 'C' });
+  h += row({ label: 'Fichier externe', ty: 'choix', value: b(2), leg: 'E' });
+  h += row({ label: 'Lignes depuis', drive: true, fx: 'on', value: '<span class="val" style="font-family:var(--mono)">=Texts[0]</span><span class="clear">×</span>' + b(3), leg: 'I' });
+  h += row({ label: 'Colonnes de la source', value: '<span class="val" style="color:var(--dis);font-style:italic">texte</span>' + b(4), leg: 'E' });
+  h += row({ label: 'Cases', fx: 'no', value: ro('0 ligne(s) x 0 colonne(s)') + b(3) });
+  h += row({ label: 'Largeurs des colonnes (…', value: '<span class="val" style="color:var(--dis);font-style:italic">texte</span>' + b(5), leg: 'E' });
+  $('#todayGrid').innerHTML = h;
+  helpText = {};
+})();
+
+render();
+})();
+</script>
+</body>
+</html>
