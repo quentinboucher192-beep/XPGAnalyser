@@ -32,6 +32,7 @@
 #include "HmiTypeRegistry.hpp"   // 1.12.5 : le type du total d'un compteur horaire
 #include "HmiExport.hpp"
 #include "HmiProduction.hpp"
+#include "HmiChoiceLists.hpp"  // 1.12.7 (lot D) : les colonnes choisies d'une source
 #include "HmiDisplay.hpp"      // lot 13
 #include "HmiTypes.hpp"        // lot 16
 #include "HmiTypeForms.hpp"    // 1.12.2 : la valeur initiale d'une variable objet
@@ -581,6 +582,18 @@ std::vector<std::string> splitPens(const std::string& list) {
     return out;
 }
 
+// 1.12.7 (lot E) : les plumes telles que Generer les verifie - une plume a joker (Cuves[*].Niveau), sur son
+// premier element (Cuves[1].Niveau : le moteur en fera une par cuve).
+std::vector<std::string> checkedPens(const Project& p, const View* v, const std::string& list) {
+    std::vector<std::string> pens;
+    for (auto& pen : splitPens(list)) {
+        const auto sample = sources::sampleOf(p, v, pen, nullptr);   // [*], .* et /* : un element type
+        if (!sample) pens.push_back(std::move(pen));
+        else if (!sample->empty()) pens.push_back(*sample);           // un dossier vide : aucune plume
+    }
+    return pens;
+}
+
 } // namespace
 
 // Lot 4 : alarmes, recettes, securite, courbes, historiques - et les actions
@@ -755,10 +768,14 @@ void checkSupervision(const Project& p, const NameExists& plc, std::vector<Issue
                     add(out, S::Error, "S\xC3\xA9" "curit\xC3\xA9", v.id, o.id, "auth", "variable inexistante dans l'autorisation : " + r);
             }
             if (o.kind == Kind::Trend) {
-                const auto pens = splitPens(o.text("variables"));
+                const auto pens = checkedPens(p, &v, o.text("variables"));   // 1.12.7 (lot E) : le joker [*]
                 const bool history = o.text("mode").rfind("historique", 0) == 0;
                 const auto source = o.text("source");
                 if (pens.empty()) add(out, S::Warning, "Courbe", v.id, o.id, "variables", "aucune plume : la courbe restera vide");
+                for (const auto& pen : splitPens(o.text("variables"))) {   // 1.12.7 (lot E) : la source d'un joker
+                    std::string why;
+                    if (sources::sampleOf(p, &v, pen, &why) && !why.empty()) add(out, S::Warning, "Courbe", v.id, o.id, "variables", why);
+                }
                 if (!history || source.empty())
                     for (const auto& pen : pens)
                         for (const auto& r : unknownRoots(pen, &v))
@@ -910,14 +927,29 @@ void checkLot6(const Project& p, const NameExists& plc, std::vector<Issue>& out)
                 // 1.12.5 (lot A) : verifiee aussi avec un repere ($Lignes$ : Lignes) - avant, sautee.
                 const std::string from = trimmedCopy(markers::strip(o.text("rowsFrom"), markers::Mode::Expression));
                 if (!from.empty()) {
+                    // 1.12.7 (lot D) : une colonne choisie que la source n'a pas (elle ne se montrera pas) - sur les
+                    // colonnes que le moteur montrera (choices::rowsFromColumns).
+                    const auto missingColumns = [&](const std::string& source) {
+                        auto columns = choices::rowsFromColumns(p, from);
+                        std::vector<std::string> missing;
+                        choices::applySourceColumns(o.text(choices::kSourceColumnsKey), columns, nullptr, &missing);
+                        for (const auto& m : missing)
+                            add(out, S::Warning, "Objet", v.id, o.id, std::string(choices::kSourceColumnsKey),
+                                "colonne " + m + " : " + source + " n'a pas ce membre, elle ne se montrera pas");
+                    };
                     if (const auto* var = p.variable(from)) {
                         const std::string t = types::normalized(var->type);
                         const auto starts = [&](std::string_view w) { return t.size() >= w.size() && t.compare(0, w.size(), w) == 0; };
+                        // 1.12.7 (lot E, § 2.3) : une structure seule - une ligne par membre.
+                        const bool structure = typeform::decompose(var->type).form == typeform::Form::Simple && !sources::leafMembers(p, var->type).empty();
                         // 1.12.5 (lot A, D17) : un TUPLE aussi (une ligne par element, le moteur le montrait deja).
-                        if (!starts("ARRAY") && !starts("LIST") && !starts("VECTOR") && !starts("MAP") && !starts("TUPLE") && !starts("SET ")
-                            && !starts("RING[") && !starts("RING ["))      // 1.12.7 : un SET, un RING aussi
+                        if (!structure && !starts("ARRAY") && !starts("LIST") && !starts("VECTOR") && !starts("MAP") && !starts("TUPLE")
+                            && !starts("SET ") && !starts("RING[") && !starts("RING ["))      // 1.12.7 : un SET, un RING aussi
                             add(out, S::Error, "Variable", v.id, o.id, "rowsFrom",
-                                "lignes depuis : " + var->name + " (" + var->type + ") n'est ni une LIST, ni un VECTOR, ni une MAP, ni un TUPLE, ni un tableau");
+                                "lignes depuis : " + var->name + " (" + var->type + ") n'est ni une LIST, ni un VECTOR, ni une MAP, ni un TUPLE, ni un tableau, ni une structure");
+                        missingColumns(var->name);
+                    } else if (const auto* e = findEnumeration(p, from)) {
+                        missingColumns(e->name);   // 1.12.7 (lot E) : une enumeration - une ligne par valeur
                     } else {
                         for (const auto& r : scanRoots(from))
                             if (!known(p, plc, r, &v))
@@ -1335,6 +1367,18 @@ void checkLot9(const Project& p, const NameExists& plc, std::vector<Issue>& out)
                             for (const auto& r : scanRoots(from))
                                 if (!known(p, plc, r, &v))
                                     issue(S::Error, "itemsFrom", "\xC3\xA9l\xC3\xA9ments depuis : " + std::string(unknownVariablePrefix()) + r);
+                        // 1.12.7 (lot E) : un tableau ou une liste de structures, sans membre choisi - la liste
+                        // resterait vide (avant : sans un mot) ; le joker choisit le membre montre (Pompes[*].Nom).
+                        if (!sources::hasJoker(from))
+                            if (const auto* var = p.variable(from)) {
+                                const auto shape = typeform::decompose(var->type);
+                                const bool many = shape.form == typeform::Form::Array || shape.form == typeform::Form::List
+                                               || shape.form == typeform::Form::Vector;
+                                const auto* st = many ? p.hmiTypeByName(shape.element) : nullptr;
+                                if (st && st->kind != HmiTypeKind::Enumeration && !st->members.empty())
+                                    issue(S::Warning, "itemsFrom", from + " est un tableau de structures : choisis le membre montr\xC3\xA9 ("
+                                                                       + from + "[*]." + st->members.front().name + ")");
+                            }
                         break;
                     }
                     const char* key = o.kind == Kind::Selector ? "positions" : "items";
@@ -1358,20 +1402,31 @@ void checkLot9(const Project& p, const NameExists& plc, std::vector<Issue>& out)
                     if (bounds && lo >= hi) issue(S::Error, "min", "minimum au-dessus du maximum");
                     if (o.kind == Kind::Thermometer) break;
                     std::string why;
-                    const auto zones = parseZones(o.text("zones"), &why);
+                    const auto zones = parseZones(o.text("zones"), &why, lo, hi);   // 1.12.7 : une borne en % de l'echelle
                     if (!why.empty()) issue(S::Error, "zones", "zones illisibles : " + why);
                     else if (bounds)
                         for (const auto& z : zones)
                             if (z.to < lo || z.from > hi)
                                 issue(S::Warning, "zones", "zone " + formatNumber(z.from) + "-" + formatNumber(z.to) + " hors de l'\xC3\xA9" "chelle "
                                                                + formatNumber(lo) + "-" + formatNumber(hi));
+                    // 1.12.7 (lot D) : deux zones qui se chevauchent - la premiere l'emporte, l'autre ne se voit qu'en partie.
+                    for (std::size_t a = 0; a < zones.size(); ++a)
+                        for (std::size_t b2 = a + 1; b2 < zones.size(); ++b2)
+                            if (zones[b2].from < zones[a].to - 1e-9 && zones[a].from < zones[b2].to - 1e-9) {
+                                issue(S::Warning, "zones", "zones " + formatNumber(zones[a].from) + "-" + formatNumber(zones[a].to) + " et "
+                                                               + formatNumber(zones[b2].from) + "-" + formatNumber(zones[b2].to)
+                                                               + " : elles se chevauchent (la premi\xC3\xA8re l'emporte)");
+                                a = zones.size();
+                                break;
+                            }
                     break;
                 }
                 case Kind::MultiStateIndicator: case Kind::MultiStateText: {
                     std::string why;
                     const auto states = parseStateList(o.text("stateList"), &why);
                     if (!why.empty()) issue(S::Error, "stateList", "\xC3\xA9tats illisibles : " + why);
-                    else if (states.empty()) issue(S::Warning, "stateList", "aucun \xC3\xA9tat : l'objet montrera toujours le m\xC3\xAAme aspect");
+                    else if (states.empty() && !sources::hasStatesFrom(o))   // 1.12.7 (lot E) : Etats depuis une source
+                        issue(S::Warning, "stateList", "aucun \xC3\xA9tat : l'objet montrera toujours le m\xC3\xAAme aspect");
                     break;
                 }
                 case Kind::WeeklySchedule: {
@@ -1380,6 +1435,15 @@ void checkLot9(const Project& p, const NameExists& plc, std::vector<Issue>& out)
                     std::string why;
                     if (!trimmedCopy(o.text("schedule")).empty() && !parseSchedule(o.text("schedule"), res, ws, &why))
                         issue(S::Error, "schedule", "plages illisibles : " + why);
+                    // 1.12.7 (lot D) : l'arrondi a la resolution, dit (avant : en silence).
+                    else
+                        for (const auto& sr : scheduleRoundings(o.text("schedule"), res)) {
+                            const std::string grain = res == 60 ? std::string("1 h") : std::to_string(res) + " min";
+                            if (sr.gone)
+                                issue(S::Warning, "schedule", "plage " + sr.range + " : plus courte qu'une case (" + grain + "), elle dispara\xC3\xAEt");
+                            else
+                                issue(S::Info, "schedule", "plage " + sr.range + " arrondie \xC3\xA0 " + sr.becomes + " (r\xC3\xA9solution " + grain + ")");
+                        }
                     break;
                 }
                 case Kind::SevenSegment: {
@@ -1618,6 +1682,15 @@ void checkSymbols(const Project& p, const NameExists& plc, std::vector<Issue>& o
             }
             if (o.number("w") <= 0 || o.number("h") <= 0)
                 add(out, S::Error, "Symbole", v.id, o.id, "w", "instance de taille nulle : elle ne se voit pas");
+            // 1.12.7 (lot E) : « Repeter depuis » - une source a elements, et des arguments qui citent [*].
+            if (sources::repeats(o)) {
+                std::string first;
+                if (const auto why = sources::sourceProblem(p, &v, roles::nameOf(o.text(sources::kRepeatFromKey)), first); !why.empty())
+                    add(out, S::Warning, "Symbole", v.id, o.id, std::string(sources::kRepeatFromKey), "r\xC3\xA9p\xC3\xA9ter depuis : " + why);
+                if (o.text("params").find("[*]") == std::string::npos)
+                    add(out, S::Warning, "Symbole", v.id, o.id, "params",
+                        "r\xC3\xA9p\xC3\xA9ter depuis : aucun argument ne cite [*] (Cuve := Cuves[*]) - toutes les copies montreront la m\xC3\xAAme chose");
+            }
             const auto given = parseArguments(o.text("params"));
             for (const auto& [argName, value] : given) {
                 if (!sv->param(argName)) {
@@ -1824,11 +1897,27 @@ void checkLot11(const Project& p, const NameExists& plc, std::vector<Issue>& out
             const auto listCheck = [&](const char* key, const char* empty) {
                 const auto items = chartItems(o, key);
                 if (items.empty() && empty) issue(S::Warning, key, empty);
-                for (const auto& it : items) exprCheck(key, it.expression, "\xC3\xA9l\xC3\xA9ment");
+                for (const auto& it : items) {
+                    // 1.12.7 (lot E) : un element a joker (Cuves[*].Niveau) - sa source (un avertissement : une
+                    // source inconnue donne une liste vide en marche), puis son premier element.
+                    std::string why;
+                    if (const auto sample = sources::sampleOf(p, &v, it.expression, &why)) {
+                        if (!why.empty()) issue(S::Warning, key, why);
+                        else exprCheck(key, *sample, "\xC3\xA9l\xC3\xA9ment");
+                        continue;
+                    }
+                    exprCheck(key, it.expression, "\xC3\xA9l\xC3\xA9ment");
+                }
                 return items.size();
             };
             double lo = 0, hi = 0;
             const bool bounds = numberOrEmpty(o, "min", lo) && numberOrEmpty(o, "max", hi);
+            // 1.12.7 (lot E) : « Etats depuis » - sa source (un avertissement : une source inconnue ne donne aucun etat).
+            if (sources::hasStatesFrom(o)) {
+                std::string first;
+                if (const auto why = sources::sourceProblem(p, &v, roles::nameOf(o.text(sources::kStatesFromKey)), first); !why.empty())
+                    issue(S::Warning, std::string(sources::kStatesFromKey).c_str(), "\xC3\xA9tats depuis : " + why);
+            }
             switch (o.kind) {
                 // ---- les graphiques
                 case Kind::BarChart: case Kind::PieChart: {
@@ -1854,12 +1943,28 @@ void checkLot11(const Project& p, const NameExists& plc, std::vector<Issue>& out
                 case Kind::XYChart: {
                     listCheck("variables", "aucune courbe (Y) : le graphique restera vide");
                     const std::string x = trimmedCopy(o.find("xVariable") && !o.find("xVariable")->expr.empty() ? o.find("xVariable")->expr : o.text("xVariable"));
+                    std::string source;
                     if (x.empty()) issue(S::Error, "xVariable", "aucune variable X : aucun point ne sera trac\xC3\xA9");
-                    else exprCheck("xVariable", x, "variable X");
+                    else if (const auto sample = sources::sampleOf(p, &v, x, &source)) {   // 1.12.7 (lot E) : un profil (Profil[*].X)
+                        if (!source.empty()) issue(S::Warning, "xVariable", source);
+                        else exprCheck("xVariable", *sample, "variable X");
+                    } else exprCheck("xVariable", x, "variable X");
                     if (const std::string r = trimmedCopy(o.text("reset")); !r.empty()) exprCheck("reset", r, "remise \xC3\xA0 z\xC3\xA9ro");
                     std::vector<std::pair<double, double>> ref;
                     std::string why;
-                    if (!parseXYPoints(o.text("reference"), ref, &why)) issue(S::Error, "reference", "courbe de r\xC3\xA9" "f\xC3\xA9rence : " + why);
+                    // 1.12.7 (lot E) : une reference depuis une source (Ref[*].X,Ref[*].Y) - sa source, ses deux formules.
+                    if (const auto xy = sources::xyReferenceSource(o.text("reference"))) {
+                        for (const auto& f : {xy->first, xy->second}) {
+                            std::string problem;
+                            if (const auto sample = sources::sampleOf(p, &v, f, &problem)) {
+                                if (!problem.empty()) issue(S::Warning, "reference", "courbe de r\xC3\xA9" "f\xC3\xA9rence : " + problem);
+                                else exprCheck("reference", *sample, "courbe de r\xC3\xA9" "f\xC3\xA9rence");
+                            } else {
+                                exprCheck("reference", f, "courbe de r\xC3\xA9" "f\xC3\xA9rence");
+                            }
+                        }
+                    } else if (!parseXYPoints(o.text("reference"), ref, &why))
+                        issue(S::Error, "reference", "courbe de r\xC3\xA9" "f\xC3\xA9rence : " + why);
                     if (o.text("scale", "fixe") == "fixe") {
                         if (o.number("xmin", 0) >= o.number("xmax", 100)) issue(S::Error, "xmin", "axe X : le minimum doit \xC3\xAAtre sous le maximum");
                         if (o.number("ymin", 0) >= o.number("ymax", 100)) issue(S::Error, "ymin", "axe Y : le minimum doit \xC3\xAAtre sous le maximum");
@@ -1895,13 +2000,23 @@ void checkLot11(const Project& p, const NameExists& plc, std::vector<Issue>& out
                     if (p.alarms.empty() && generatedAlarms().empty())
                         issue(S::Info, "group", "aucune alarme d\xC3\xA9" "finie (Configuration > Alarmes) : l'objet restera vide");
                     const auto* g = o.find("group");
-                    if (g && g->expr.empty() && !trimmedCopy(g->value).empty() && trimmedCopy(g->value) != "*" && !filterTakes(trimmedCopy(g->value)))
-                        issue(S::Warning, "group", "aucune alarme du groupe \xC2\xAB " + trimmedCopy(g->value) + " \xC2\xBB");
+                    // 1.12.7 (lot D) : un groupe choisi ou tape avec un repere ($Zone_A$) se lit sans ses $
+                    // (avant : « aucune alarme du groupe $Zone_A$ », une fausse alerte).
+                    const std::string group = g ? roles::nameOf(g->value) : std::string{};
+                    if (g && g->expr.empty() && !group.empty() && group != "*" && !filterTakes(group))
+                        issue(S::Warning, "group", "aucune alarme du groupe \xC2\xAB " + group + " \xC2\xBB");
                     if (o.kind == Kind::AlarmBanner && o.text("show").find("filement") != std::string::npos && o.number("period", 4000) < 500)
                         issue(S::Warning, "period", "d\xC3\xA9" "filement de moins de 500 ms : illisible");
                     if (o.kind == Kind::AlarmSummary) {
                         for (const auto& z : splitSemicolons(markers::strip(o.text("groups"), markers::Mode::Text))) {   // 1.12.5
                             const std::string zone = trimmedCopy(z);
+                            // 1.12.7 (lot E) : Zones[*].Nom - les zones viennent d'une source.
+                            if (const auto j = sources::jokerOf(zone)) {
+                                std::string first;
+                                if (const auto why = sources::sourceProblem(p, &v, sources::sourceName(*j), first); !why.empty())
+                                    issue(S::Warning, "groups", why);
+                                continue;
+                            }
                             if (!zone.empty() && !filterTakes(zone)) issue(S::Warning, "groups", "zone \xC2\xAB " + zone + " \xC2\xBB : aucune alarme de ce groupe");
                         }
                         if (zonesOf(p, o.text("groups")).empty())
@@ -1944,7 +2059,12 @@ void checkLot11(const Project& p, const NameExists& plc, std::vector<Issue>& out
                         issue(S::Warning, "idealRate", "sans cadence nominale, la performance (et le TRS) vaut 0");
                     std::vector<int> shifts;
                     std::string why;
-                    if (!parseShifts(o.text("shifts"), shifts, &why)) issue(S::Error, "shifts", "d\xC3\xA9" "buts de poste : " + why);
+                    if (!parseShifts(shiftsOf(o.text("shifts"), &p), shifts, &why))
+                        issue(S::Error, "shifts", std::string(usesShiftCalendar(o.text("shifts")) ? "calendrier des postes du projet : " : "d\xC3\xA9" "buts de poste : ") + why);
+                    // 1.12.7 (lot D) : un compteur qui suit le calendrier des postes, alors que le projet n'en a pas.
+                    else if (usesShiftCalendar(o.text("shifts")) && trimmedCopy(p.config.shifts).empty())
+                        issue(S::Warning, "shifts", "le compteur suit le calendrier des postes, mais le projet n'en a pas (Configuration > "
+                                                    "Calendrier des postes) : il compte sans poste");
                     break;
                 }
                 case Kind::VariableTable:
@@ -2114,7 +2234,8 @@ void checkLot12(const Project& p, const NameExists& plc, std::vector<Issue>& out
             const std::string label = std::string(kindLabel(o.kind));
             const auto issue = [&](S sev, const char* key, std::string msg) { add(out, sev, label, v.id, o.id, key, std::move(msg)); };
             // Un enfant d'un conteneur a onglets sur une page qui n'existe pas.
-            if (const auto* parent = o.parent != kNoId ? v.object(o.parent) : nullptr; parent && parent->kind == Kind::TabContainer) {
+            if (const auto* parent = o.parent != kNoId ? v.object(o.parent) : nullptr;
+                parent && parent->kind == Kind::TabContainer && !sources::objectHasJoker(*parent)) {   // 1.12.7 : des onglets dynamiques
                 const auto pages = tabLabels(*parent).size();
                 if (tabPageOf(o) > static_cast<int>(pages))
                     issue(S::Warning, "tabPage", "page " + std::to_string(tabPageOf(o)) + " : le conteneur " + parent->name + " n'en a que "
@@ -2126,13 +2247,28 @@ void checkLot12(const Project& p, const NameExists& plc, std::vector<Issue>& out
             switch (o.kind) {
                 case Kind::NavBar: {
                     std::vector<std::string> names;
-                    for (const auto& n : listItems(o.text("views"))) names.push_back(roles::nameOf(n));   // 1.12.6 (lot C)
+                    for (const auto& n : listItems(o.text("views"))) {
+                        // 1.12.7 (lot E) : Process/* - les vues d'un dossier de vues.
+                        if (const auto folder = sources::folderOf(n)) {
+                            if (sources::viewsInFolder(p, *folder).empty())
+                                issue(S::Warning, "views", "le dossier de vues " + *folder + " n'a aucune vue ordinaire : la barre n'en montrera aucune");
+                            continue;
+                        }
+                        // 1.12.7 (lot E) : Vues[*] - les vues viennent d'une source, verifiee comme telle.
+                        if (const auto j = sources::jokerOf(n)) {
+                            std::string first;
+                            if (const auto why = sources::sourceProblem(p, &v, sources::sourceName(*j), first); !why.empty())
+                                issue(S::Warning, "views", why);
+                            continue;
+                        }
+                        names.push_back(roles::nameOf(n));   // 1.12.6 (lot C)
+                    }
                     for (const auto& n : names) {
                         const View* target = p.viewByName(n);
                         if (!target) issue(S::Error, "views", "vue '" + n + "' introuvable");
                         else if (target->role != "vue") issue(S::Warning, "views", n + " n'est pas une vue ordinaire (" + std::string(viewRoleLabel(target->role)) + ")");
                     }
-                    if (navItems(&p, o).empty()) issue(S::Warning, "views", "aucune vue : la barre restera vide");
+                    if (navItems(&p, o).empty() && !sources::objectHasJoker(o)) issue(S::Warning, "views", "aucune vue : la barre restera vide");
                     const auto labels = splitSemicolons(o.text("labels"));
                     if (!names.empty() && labels.size() > names.size())
                         issue(S::Info, "labels", "plus de libell\xC3\xA9s que de vues : les derniers ne servent pas");
@@ -2146,7 +2282,15 @@ void checkLot12(const Project& p, const NameExists& plc, std::vector<Issue>& out
                     const auto pages = static_cast<int>(tabLabels(o).size());
                     const auto* pg = o.find("page");
                     double n = 1;
-                    if (pg && pg->expr.empty() && (!parseNumber(pg->value, n) || n < 1 || n > pages))
+                    // 1.12.7 (lot E) : des onglets depuis une source (Etats[*], T_MODE[*]) : leur nombre en marche.
+                    const bool dynamicTabs = sources::objectHasJoker(o);
+                    for (const auto& t : splitSemicolons(o.text("tabs")))
+                        if (const auto j = sources::jokerOf(t)) {
+                            std::string first;
+                            if (const auto why = sources::sourceProblem(p, &v, sources::sourceName(*j), first); !why.empty())
+                                issue(S::Warning, "tabs", why);
+                        }
+                    if (!dynamicTabs && pg && pg->expr.empty() && (!parseNumber(pg->value, n) || n < 1 || n > pages))
                         issue(S::Warning, "page", "onglet montr\xC3\xA9 hors de 1 \xC3\xA0 " + std::to_string(pages));
                     const std::string var = trimmedCopy(markers::strip(o.text("variable")));   // 1.11.24 : $Reels[2]$
                     if (!var.empty() && !known(p, plc, rootOf(var), &v)) issue(S::Error, "variable", "variable inexistante : " + var);
@@ -3141,6 +3285,11 @@ struct ExprWalker {
                 if (!anim) { if (!o.actions.empty()) actions(v, &o, o.actions); continue; }
                 for (const auto& prop : o.props) {
                     const Where w{&v, o.id, "Expression", prop.key};
+                    // 1.12.7 (lot E) : la Variable X d'un profil (Profil[*].X) se lit sur son premier element.
+                    if (!prop.expr.empty() && prop.key == "xVariable" && sources::hasJoker(prop.expr)) {
+                        if (const auto sample = sources::sampleOf(p, &v, prop.expr, nullptr)) expr(w, *sample, W::Any);
+                        continue;
+                    }
                     if (!prop.expr.empty()) expr(w, prop.expr, exprcheck::wantOf(o.kind, prop.key), {}, exprcheck::strictType(o.kind, prop.key));   // 1.12.6 (lot B) : le role
                     if (!prop.expr.empty()) enumFamily(w, o.kind, prop.key, prop.expr);
                     // 1.12.5 (lot A, D13) : un Defaut, un Mouvement, une Valeur de synoptique tapes
@@ -3170,8 +3319,10 @@ struct ExprWalker {
                             expr(Where{&v, o.id, "Expression", key}, prop->value, exprcheck::wantOf(o.kind, key), {}, exprcheck::strictType(o.kind, key));   // 1.12.6 : son role
                 // ---- Lot API 8 : corrections des captures ---- le texte-expression du lot 11.
                 for (const char* key : valueExpressionKeys(o.kind))
-                    if (const auto* prop = o.find(key); prop && prop->expr.empty())
-                        expr(Where{&v, o.id, "Expression", key}, prop->value, W::Any);
+                    if (const auto* prop = o.find(key); prop && prop->expr.empty()) {
+                        const auto sample = sources::sampleOf(p, &v, prop->value, nullptr);   // 1.12.7 (lot E) : Profil[*].X
+                        expr(Where{&v, o.id, "Expression", key}, sample && !sample->empty() ? *sample : prop->value, W::Any);
+                    }
                 // Ce que l'objet ecrit (un champ de saisie, une commande) : une variable qu'on peut ecrire.
                 if (kindWritesVariable(o.kind)) target(Where{&v, o.id, "Expression", "variable"}, o.text("variable"), "variable \xC3\xA9" "crite ");
                 if (o.kind == Kind::InputField)
@@ -3219,7 +3370,7 @@ struct ExprWalker {
             for (const auto& o : v.objects) {
                 if (o.kind != Kind::Trend || !animOn(v.id)) continue;
                 if (o.text("mode").rfind("historique", 0) == 0 && !o.text("source").empty()) continue;
-                for (const auto& pen : splitPens(o.text("variables"))) expr(Where{&v, o.id, "Courbe", "variables"}, pen, W::Any, "plume ");
+                for (const auto& pen : checkedPens(p, &v, o.text("variables"))) expr(Where{&v, o.id, "Courbe", "variables"}, pen, W::Any, "plume ");
             }
         finitions();     // ---- Lot API 8 : finitions (les formats d'unites, les symboles hors des vues) ----
     }
@@ -3245,10 +3396,20 @@ struct ExprWalker {
         bool            strict{true};    // 1.12.6 : un type qui ne convient pas est une erreur (sinon un avertissement)
     };
 
-    static std::vector<Site> sitesOf(const Object& o) {
+    std::vector<Site> sitesOf(const Object& o, const View* view) const {
         using W = exprcheck::Want;
         std::vector<Site> s;
+        // 1.12.7 (lot E) : un joker se lit sur le premier element de sa source (Cuve.Mesures[*] : Cuve.Mesures[1]
+        // si le parametre Cuve dit ARRAY[1..3]) ; .* et /* se verifient ailleurs (checkedPens).
+        const auto sampled = [&](const std::string& text) {
+            const auto sample = sources::sampleOf(p, view, text, nullptr);
+            return sample ? *sample : text;
+        };
         for (const auto& prop : o.props) {
+            if (!prop.expr.empty() && prop.key == "xVariable" && sources::hasJoker(prop.expr)) {
+                s.push_back(Site{"Expression", prop.key, sampled(prop.expr), W::Any, false, false, {}});
+                continue;
+            }
             if (!prop.expr.empty()) s.push_back(Site{"Expression", prop.key, prop.expr, exprcheck::wantOf(o.kind, prop.key), false, false, {}, exprcheck::strictType(o.kind, prop.key)});
             if (isTemplateKey(prop.key)) s.push_back(Site{"Texte", prop.key, prop.value, W::Any, true, false, {}});
         }
@@ -3259,10 +3420,12 @@ struct ExprWalker {
         // ---- Lot API 8 : corrections des captures ---- le texte-expression du lot 11.
         for (const char* key : valueExpressionKeys(o.kind))
             if (const auto* prop = o.find(key); prop && prop->expr.empty())
-                s.push_back(Site{"Expression", key, prop->value, W::Any, false, false, {}});
+                s.push_back(Site{"Expression", key, sampled(prop->value), W::Any, false, false, {}});
         if (kindWritesVariable(o.kind)) s.push_back(Site{"Expression", "variable", o.text("variable"), W::Any, false, true, "variable \xC3\xA9" "crite "});
         if (o.kind == Kind::Trend)
-            for (const auto& pen : splitPens(o.text("variables"))) s.push_back(Site{"Courbe", "variables", pen, W::Any, false, false, "plume "});
+            for (const auto& pen : splitPens(o.text("variables")))
+                if (!sources::memberBase(pen) && !sources::folderOf(pen))   // Pompe.*, Ligne/* : verifies avec le projet (checkedPens)
+                    s.push_back(Site{"Courbe", "variables", sampled(pen), W::Any, false, false, "plume "});   // 1.12.7 : le joker
         for (std::size_t i = 0; i < o.actions.size(); ++i) {
             const auto& a = o.actions[i];
             const std::string label = actionLabel(i, a);
@@ -3329,7 +3492,12 @@ struct ExprWalker {
                 if (o.kind != Kind::SymbolInstance || !animOn(v.id)) continue;
                 const View* sv = symbolOf(p, o);
                 if (!sv) continue;                                           // checkSymbols le dit
-                for (const auto& [name, value] : parseArguments(o.text("params"))) {
+                // 1.12.7 (lot E) : « Repeter depuis » - Cuves[*] se lit sur le premier element de la source (le
+                // moteur en pose un par cuve) : la borne basse d'un tableau, 0 d'une LIST.
+                std::string first = "0";
+                if (sources::repeats(o)) (void)sources::sourceProblem(p, &v, roles::nameOf(o.text(sources::kRepeatFromKey)), first);
+                for (const auto& [name, raw] : parseArguments(o.text("params"))) {
+                    const std::string value = sources::repeats(o) ? sources::replaceJokers(raw, first) : raw;
                     const ViewParam* declared = sv->param(name);
                     // 1.12.4 : un parametre objet d'un symbole (LIST, MAP...) - l'instance est developpee en texte,
                     // ses parametres passent par reference : une variable (Recettes, Recette.Etapes), pas un litteral.
@@ -3366,7 +3534,7 @@ struct ExprWalker {
             }
             for (const auto& c : sv.objects) {
                 if (c.kind == Kind::SymbolInstance) continue;               // un symbole dans le symbole : son instance le dit
-                for (const auto& site : sitesOf(c)) {
+                for (const auto& site : sitesOf(c, &sv)) {
                     std::set<std::string> plain, withDefaults;
                     for (const auto& [t, pb] : problemsOf(sv, site, nullptr)) plain.insert(pb.message);
                     if (!defaults.empty())
@@ -3674,6 +3842,21 @@ void roleChecks(const Project& p, std::vector<Issue>& out) {
             if (o.kind == Kind::Selector && countOf("itemsFrom") == 0) aligned("positions", "values", "valeurs \xC3\xA9" "crites", "positions");
             if ((o.kind == Kind::List || o.kind == Kind::ComboBox || o.kind == Kind::RadioGroup) && countOf("itemsFrom") == 0)
                 aligned("items", "values", "valeurs \xC3\xA9" "crites", "\xC3\xA9l\xC3\xA9ments");
+            // 1.12.7 (lot D) : deux choix qui ecrivent la meme valeur - l'objet ne sait plus lequel montrer.
+            if ((o.kind == Kind::Selector || o.kind == Kind::List || o.kind == Kind::ComboBox || o.kind == Kind::RadioGroup)
+                && countOf("itemsFrom") == 0 && countOf("values") > 0) {
+                std::vector<std::string> seen;
+                for (const auto& val : roles::splitList(o.text("values"))) {
+                    const std::string key = trimmedCopy(markers::strip(val));
+                    if (key.empty()) continue;
+                    if (std::find(seen.begin(), seen.end(), key) != seen.end()) {
+                        add(out, S::Warning, "Objet", v.id, o.id, "values",
+                            "valeur \xC3\xA9" "crite " + key + " : deux choix l'\xC3\xA9" "crivent, l'objet ne sait pas lequel montrer");
+                        break;
+                    }
+                    seen.push_back(key);
+                }
+            }
             if (o.kind == Kind::NavBar) aligned("views", "labels", "libell\xC3\xA9s", "vues");
             // ---- 3. les couleurs (fixes), y compris dans les etats et les zones ; 4. le format ;
             //      6. une valeur tapee sans = qui ressemble a une variable
@@ -3703,7 +3886,7 @@ void roleChecks(const Project& p, std::vector<Issue>& out) {
                             break;
                         }
                 if (pr.key == "zones")
-                    for (const auto& z : parseZones(pr.value))
+                    for (const auto& z : parseZones(pr.value, nullptr, o.number("min", 0), o.number("max", 100)))
                         if (!z.color.empty() && !roles::colorOk(z.color)) {
                             add(out, S::Warning, "Objet", v.id, o.id, pr.key,
                                 "zone " + formatNumber(z.from) + "-" + formatNumber(z.to) + " : '" + z.color + "' n'est pas une couleur (#RRGGBB)");

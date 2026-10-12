@@ -92,7 +92,10 @@ struct Zone {
     double      from{0}, to{0};
     std::string color;
 };
-[[nodiscard]] std::vector<Zone> parseZones(std::string_view text, std::string* error = nullptr);
+// 1.12.7 (lot D) : une borne peut se donner en % de l'echelle (« 60 % », « 60% ») : elle vaut
+// lo + (hi - lo) x 60 / 100 quand l'echelle est donnee (lo < hi) - changer min ou max ne casse plus
+// les zones ; sans echelle, 60. Les $ des reperes sont transparents.
+[[nodiscard]] std::vector<Zone> parseZones(std::string_view text, std::string* error = nullptr, double lo = 0, double hi = 0);
 [[nodiscard]] const Zone* zoneOf(const std::vector<Zone>&, double value);
 
 // ---- les valeurs bornees (curseur, potentiometre) ----------------------------------
@@ -208,6 +211,14 @@ inline constexpr std::string_view kDayNames[7] = {"Lu", "Ma", "Me", "Je", "Ve", 
 [[nodiscard]] bool parseSchedule(std::string_view text, int slotMinutes, WeekSchedule& out, std::string* error = nullptr);
 // La forme courte : les jours qui se suivent et se ressemblent groupes (Lu-Ve=...).
 [[nodiscard]] std::string formatSchedule(const WeekSchedule&);
+// 1.12.7 (lot D) : CE QUE LA RESOLUTION FAIT DES PLAGES (avant : arrondies en silence) - une ligne par
+// plage qui ne tombe pas juste : `range` tel qu'ecrit (07:00-07:20), `becomes` ce que le programmateur
+// en garde (07:00-07:30), `gone` : plus courte qu'une case, elle disparait. Les plages illisibles : rien.
+struct ScheduleRounding {
+    std::string range, becomes;
+    bool        gone{false};
+};
+[[nodiscard]] std::vector<ScheduleRounding> scheduleRoundings(std::string_view text, int slotMinutes);
 [[nodiscard]] bool scheduleOn(const WeekSchedule&, int weekday, int minuteOfDay);    // weekday : 0 lundi
 struct ScheduleLayout {
     double labelW{34}, headerH{22};

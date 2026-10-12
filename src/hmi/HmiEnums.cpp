@@ -3,6 +3,7 @@
 
 #include "HmiOperators.hpp"
 #include "HmiScript.hpp"   // 1.11.17 : forEachCode, le parcours commun des textes du projet
+#include "HmiSources.hpp"  // 1.12.7 (lot E) : T_MODE[*], Elements depuis T_MODE suivent le renommage
 
 #include <algorithm>
 #include <cctype>
@@ -431,7 +432,9 @@ std::size_t renameEnumValue(Project& p, std::string_view type, std::string_view 
 }
 std::size_t renameEnumType(Project& p, std::string_view from, std::string_view to) {
     if (from == to) return 0;
-    return rewriteEverywhere(p, [&](std::string_view text) { return renameEnumTypeInText(text, from, to); });
+    // 1.12.7 (lot E) : les sources qui la nomment (T_MODE[*] dans des onglets, Elements depuis T_MODE).
+    const std::size_t followed = sources::renameSourceJokers(p, from, to);
+    return followed + rewriteEverywhere(p, [&](std::string_view text) { return renameEnumTypeInText(text, from, to); });
 }
 void copyEnumerationLiterals(HmiType& copy, std::string_view from) {
     for (auto& o : copy.operators) o.body = renameEnumTypeInText(o.body, from, copy.name);

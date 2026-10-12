@@ -29229,6 +29229,570 @@ void calculees_grille() {
     }
 }
 
+// 1.12.7 (lot D de l'audit des objets, § 2.4) : LES LISTES EN TABLEAU DANS CONTENU - une ligne par
+// element, au lieu de listes a;b;c tapees en parallele. Chaque case garde ses reperes. Chaque controle
+// dit, dans son libelle, ce que faisait la 1.12.6.
+void lotD1127_contenu() {
+    std::printf("1.12.7 (lot D) : Contenu - les choix, les lignes d'un tableau de variables, les etats d'un chronogramme, "
+                "les zones, les plages, les cases a cocher\n");
+    using Mode = app::HmiContentPanel::Mode;
+    // ---- un selecteur : un tableau Libelle / Valeur ecrite
+    {
+        Bench b;
+        auto& content = b.editor->content();
+        const Id sel = b.place(Kind::Selector, 100, 100);
+        b.editor->layout();
+        auto* o = b.v().object(sel);
+        o->set("positions", "Arr\xC3\xAAt;Auto;Manu");
+        o->set("values", "0;1;2");
+        b.editor->layout();
+        check(content.object() == sel && content.mode() == Mode::Choices && content.count() == 3,
+              "lot D : un s\xC3\xA9lecteur a ses choix dans Contenu, un par ligne (avant : pas d'onglet Contenu)");
+        check(content.removeItem(1), "lot D : retirer le choix Auto");
+        same_text(b.v().object(sel)->text("positions"), "Arr\xC3\xAAt;Manu", "lot D : il reste Arr\xC3\xAAt, Manu");
+        same_text(b.v().object(sel)->text("values"), "0;2", "lot D : sa valeur part avec lui (avant : les deux listes \xC3\xA0 aligner \xC3\xA0 la main)");
+        check(content.moveItem(0, 1), "lot D : descendre Arr\xC3\xAAt");
+        same_text(b.v().object(sel)->text("positions"), "Manu;Arr\xC3\xAAt", "lot D : l'ordre des libell\xC3\xA9s");
+        same_text(b.v().object(sel)->text("values"), "2;0", "lot D : ... et celui des valeurs, ensemble");
+        check(content.setField(0, "label", "$Mode$"), "lot D : un libell\xC3\xA9 rep\xC3\xA9r\xC3\xA9 ($Mode$)");
+        same_text(b.v().object(sel)->text("positions"), "$Mode$;Arr\xC3\xAAt", "lot D : la case garde son rep\xC3\xA8re tel quel");
+        check(content.setField(1, "value", "T_MODE#Auto"), "lot D : une valeur \xC3\xA9num\xC3\xA9r\xC3\xA9" "e");
+        check(!content.setField(1, "label", "a;b"), "lot D : un \xC2\xAB ; \xC2\xBB nu dans un libell\xC3\xA9 est refus\xC3\xA9 (il couperait la liste)");
+        check(!content.setField(1, "label", ""), "lot D : un libell\xC3\xA9 vide est refus\xC3\xA9 (le moteur ne le compterait pas, les rangs glisseraient)");
+        check(content.addItem() && content.count() == 3, "lot D : ajouter un choix");
+        same_text(b.v().object(sel)->text("positions"), "$Mode$;Arr\xC3\xAAt;Choix 3", "lot D : le choix ajout\xC3\xA9");
+        same_text(b.v().object(sel)->text("values"), "2;T_MODE#Auto", "lot D : sans valeur, il \xC3\xA9" "crit son rang (rien \xC3\xA0 ajouter)");
+        const auto choices = hmi::choicesOf(*b.v().object(sel));
+        check(choices.size() == 3 && choices[1].value == "T_MODE#Auto" && choices[2].index && choices[2].value == "2",
+              "lot D : le moteur lit les m\xC3\xAAmes choix (Choix 3 \xC3\xA9" "crit son rang, 2)");
+        (void)b.stack.undo();
+        check(content.count() == 2, "lot D : Ctrl+Z reprend le choix ajout\xC3\xA9");
+    }
+    // ---- une liste deroulante : la meme chose sur "items"
+    {
+        Bench b;
+        auto& content = b.editor->content();
+        const Id combo = b.place(Kind::ComboBox, 100, 100);
+        b.editor->layout();
+        b.v().object(combo)->set("items", "Azote;Argon");
+        b.v().object(combo)->set("values", "");
+        b.editor->layout();
+        check(content.mode() == Mode::Choices && content.count() == 2, "lot D : une liste d\xC3\xA9roulante, ses \xC3\xA9l\xC3\xA9ments dans Contenu");
+        check(content.setField(1, "value", "'Ar'"), "lot D : la valeur du 2e \xC3\xA9l\xC3\xA9ment");
+        same_text(b.v().object(combo)->text("values"), ";'Ar'", "lot D : la 1re garde son rang (vide), la 2e sa valeur");
+    }
+    // ---- un tableau de variables : l'unite et le format de chaque ligne
+    {
+        Bench b;
+        auto& content = b.editor->content();
+        const Id tab = b.place(Kind::VariableTable, 100, 100);
+        b.editor->layout();
+        b.v().object(tab)->set("variables", "Temp;Pression;Niveau");
+        b.v().object(tab)->set("units", "");
+        b.v().object(tab)->set("formats", "");
+        b.editor->layout();
+        check(content.setField(1, "unit", "bar") && content.setField(2, "format", "0.0"),
+              "lot D : l'unit\xC3\xA9 et le format d'une ligne se r\xC3\xA8glent dans Contenu (avant : listes de l'inspecteur)");
+        same_text(b.v().object(tab)->text("units"), ";bar", "lot D : l'unit\xC3\xA9 \xC3\xA0 son rang");
+        same_text(b.v().object(tab)->text("formats"), ";;0.0", "lot D : le format \xC3\xA0 son rang");
+        content.selectIndex(1);
+        bool unitShown = false;
+        for (const auto& c : content.grid().categories())
+            for (const auto& pr : c.properties) unitShown = unitShown || (pr.name == "Unit\xC3\xA9" && pr.value == "bar");
+        check(unitShown, "lot D : la ligne choisie montre son unit\xC3\xA9");
+        check(content.moveItem(1, 1), "lot D : descendre Pression");
+        same_text(b.v().object(tab)->text("units"), ";;bar", "lot D : son unit\xC3\xA9 la suit");
+    }
+    // ---- un chronogramme : ses lignes, ou ses etats (le tableau du multi-etats)
+    {
+        Bench b;
+        auto& content = b.editor->content();
+        const Id chrono = b.place(Kind::StateChart, 100, 100);
+        b.editor->layout();
+        b.v().object(chrono)->set("stateList", "0 = Arr\xC3\xAAt | #4A5261; 1 = Marche | #2ECC71");
+        b.editor->layout();
+        check(content.mode() == Mode::Trend, "lot D : un chronogramme montre d'abord ses lignes");
+        check(content.setField(-1, "show", "les \xC3\xA9tats") && content.mode() == Mode::States && content.count() == 2,
+              "lot D : ... puis ses \xC3\xA9tats, un par ligne (avant : la ligne stateList \xC3\xA0 taper)");
+        check(content.addItem() && content.count() == 3, "lot D : ajouter un \xC3\xA9tat au chronogramme");
+        check(content.setField(2, "text", "D\xC3\xA9" "faut $Pompe$") && content.setField(2, "color", "#E5534B"), "lot D : son texte (avec un rep\xC3\xA8re) et sa couleur");
+        const auto states = hmi::parseStateList(b.v().object(chrono)->text("stateList"));
+        check(states.size() == 3 && states[2].match == "2" && states[2].text == "D\xC3\xA9" "faut $Pompe$" && states[2].color == "#E5534B",
+              "lot D : stateList r\xC3\xA9\xC3\xA9" "crite, le rep\xC3\xA8re gard\xC3\xA9 (" + b.v().object(chrono)->text("stateList") + ")");
+        check(!content.setField(-1, "mode", "selon des conditions"), "lot D : un chronogramme n'a pas de Valeur : pas de mode \xC2\xAB conditions \xC2\xBB");
+        check(content.setField(-1, "show", "les lignes") && content.mode() == Mode::Trend, "lot D : retour aux lignes");
+    }
+    // ---- un bargraphe : les zones De / A / Couleur, une borne en % de l'echelle
+    {
+        Bench b;
+        auto& content = b.editor->content();
+        const Id bar = b.place(Kind::Bargraph, 100, 100);
+        b.editor->layout();
+        b.v().object(bar)->set("zones", "0-60 = #2ECC71; 60-80 = #F2C94C; 80-100 = #E5534B");
+        b.v().object(bar)->set("min", "0");
+        b.v().object(bar)->set("max", "100");
+        b.editor->layout();
+        check(content.mode() == Mode::Bands && content.count() == 3, "lot D : les zones d'un bargraphe dans Contenu, une par ligne (avant : un mini-langage)");
+        check(content.setField(0, "to", "60 %") && content.setField(1, "from", "60 %") && content.setField(1, "to", "80 %"),
+              "lot D : une borne en % de l'\xC3\xA9" "chelle");
+        b.v().object(bar)->set("max", "200");
+        const auto zones = hmi::parseZones(b.v().object(bar)->text("zones"), nullptr, 0, 200);
+        check(zones.size() == 3 && zones[0].to == 120 && zones[1].from == 120 && zones[1].to == 160 && zones[2].from == 80,
+              "lot D : max pass\xC3\xA9 \xC3\xA0 200, la borne \xC3\xA0 60 % suit (120) ; une valeur reste une valeur (80) - " + b.v().object(bar)->text("zones"));
+        check(!content.setField(0, "color", "#12;#34"), "lot D : une couleur ne coupe pas la liste");
+        check(content.removeItem(2) && content.count() == 2, "lot D : retirer une zone");
+    }
+    // ---- un programmateur : les plages Jours / De / A, l'arrondi montre
+    {
+        Bench b;
+        auto& content = b.editor->content();
+        const Id prog = b.place(Kind::WeeklySchedule, 100, 100);
+        b.editor->layout();
+        b.v().object(prog)->set("schedule", "Lu-Ve=07:00-12:00,13:30-17:00; Sa=08:00-12:00");
+        b.v().object(prog)->set("resolution", "1 h");
+        b.editor->layout();
+        check(content.mode() == Mode::Schedule && content.count() == 3, "lot D : les plages d'un programmateur, une par ligne (avant : le mini-langage)");
+        content.selectIndex(1);
+        std::string rounding;
+        for (const auto& c : content.grid().categories())
+            for (const auto& pr : c.properties)
+                if (pr.name == "En marche") rounding = pr.value;
+        check(rounding.find("arrondie \xC3\xA0 14:00-17:00") != std::string::npos,
+              "lot D : 13:30-17:00 en r\xC3\xA9solution 1 h : l'arrondi est montr\xC3\xA9 (avant : en silence) - " + rounding);
+        check(!content.setField(0, "days", "Lundi-Xx"), "lot D : des jours illisibles sont refus\xC3\xA9s");
+        check(!content.setField(0, "from", "7h70"), "lot D : une heure illisible est refus\xC3\xA9" "e");
+        check(content.setField(2, "to", "12:30"), "lot D : changer la fin d'une plage");
+        WeekSchedule ws;
+        check(hmi::parseSchedule(b.v().object(prog)->text("schedule"), 30, ws) && hmi::scheduleOn(ws, 5, 12 * 60 + 15)
+                  && hmi::scheduleOn(ws, 0, 13 * 60 + 45) && !hmi::scheduleOn(ws, 0, 12 * 60 + 30),
+              "lot D : le programme r\xC3\xA9\xC3\xA9" "crit se relit (samedi 12:15, lundi 13:45) - " + b.v().object(prog)->text("schedule"));
+    }
+    // ---- un tableau depuis une source : ses colonnes (lesquelles, leur ordre, leur titre, leur format)
+    {
+        Bench b;
+        auto& content = b.editor->content();
+        hmi::HmiType pompe;
+        pompe.id = b.doc->project.allocate();
+        pompe.name = "T_Pompe_CC";
+        pompe.members = {{"Nom", "STRING", "", ""}, {"Debit", "REAL", "", ""}, {"Etat", "INT", "", ""}};
+        b.doc->project.programs.types.push_back(pompe);
+        hmi::Variable pompes;
+        pompes.id = b.doc->project.allocate();
+        pompes.name = "Pompes";
+        pompes.type = "ARRAY[1..4] OF T_Pompe_CC";
+        b.doc->project.programs.variables.push_back(pompes);
+        const Id tab = b.place(Kind::Table, 100, 100);
+        b.editor->layout();
+        b.v().object(tab)->set("rowsFrom", "Pompes");
+        b.editor->refresh();
+        b.editor->layout();
+        check(content.mode() == Mode::SourceColumns && content.count() == 3,
+              "lot D : un tableau depuis une source montre ses colonnes dans Contenu (avant : des cases qui ne servaient pas)");
+        check(content.setField(1, "shown", "FALSE"), "lot D : cacher la colonne Debit");
+        same_text(b.v().object(tab)->text("sourceColumns"), "Nom; Etat", "lot D : les colonnes montr\xC3\xA9" "es, dans l'ordre");
+        check(content.setField(0, "title", "Pompe") && content.setField(1, "format", "0"), "lot D : un titre, un format");
+        same_text(b.v().object(tab)->text("sourceColumns"), "Nom = Pompe; Etat | 0", "lot D : le titre et le format \xC3\xA0 leur colonne");
+        check(content.moveItem(0, 1), "lot D : descendre Nom");
+        same_text(b.v().object(tab)->text("sourceColumns"), "Etat | 0; Nom = Pompe", "lot D : l'ordre des colonnes");
+        check(!content.setField(0, "title", "a;b"), "lot D : un titre ne coupe pas la liste");
+    }
+    // ---- les cases a cocher : langues, boutons, zones
+    {
+        Bench b;
+        auto& content = b.editor->content();
+        b.doc->project.languages.list = {{"fr", "Fran\xC3\xA7" "ais"}, {"en", "English"}, {"de", "Deutsch"}};
+        const Id lang = b.place(Kind::LanguageSelector, 100, 100);
+        b.editor->layout();
+        check(content.mode() == Mode::Checks && content.count() == 3, "lot D : un s\xC3\xA9lecteur de langue coche les langues du projet (avant : des codes \xC3\xA0 taper)");
+        check(content.setField(-1, "check:en", "FALSE"), "lot D : d\xC3\xA9" "cocher English");
+        same_text(b.v().object(lang)->text("languages"), "fr;de", "lot D : vide valait toutes ; d\xC3\xA9" "cocher l'une garde les autres");
+        check(content.setField(-1, "check:en", "TRUE"), "lot D : la recocher");
+        same_text(b.v().object(lang)->text("languages"), "fr;en;de", "lot D : dans l'ordre du projet");
+        b.v().object(lang)->set("languages", "fr;$Langue$");
+        b.editor->layout();
+        check(content.count() == 4, "lot D : un code tap\xC3\xA9 avec un rep\xC3\xA8re ($Langue$) reste une ligne, coch\xC3\xA9" "e");
+        check(content.setField(-1, "check:de", "TRUE"), "lot D : cocher Deutsch");
+        same_text(b.v().object(lang)->text("languages"), "fr;de;$Langue$", "lot D : le rep\xC3\xA8re tap\xC3\xA9 est gard\xC3\xA9");
+        const Id users = b.place(Kind::UserManager, 400, 300);
+        b.editor->layout();
+        check(content.object() == users && content.mode() == Mode::Checks && content.count() == 5, "lot D : la gestion des utilisateurs coche ses 5 boutons");
+        check(content.setField(-1, "check:Supprimer", "FALSE"), "lot D : retirer le bouton Supprimer");
+        same_text(b.v().object(users)->text("buttons"), "Ajouter;Modifier;Activer;Mot de passe", "lot D : les autres, dans leur ordre (avant : \xC3\xA0 taper exactement)");
+        hmi::AlarmDef a1;
+        a1.name = "A1";
+        a1.group = "Zone_A";
+        hmi::AlarmDef a2 = a1;
+        a2.name = "A2";
+        a2.group = "Zone_B";
+        b.doc->project.alarms = {a1, a2};
+        const Id summary = b.place(Kind::AlarmSummary, 100, 400);
+        b.editor->layout();
+        check(content.object() == summary && content.mode() == Mode::Checks && content.count() >= 2, "lot D : le r\xC3\xA9sum\xC3\xA9 par zone coche ses zones");
+        check(content.setField(-1, "check:Zone_A", "FALSE"), "lot D : d\xC3\xA9" "cocher Zone_A");
+        same_text(b.v().object(summary)->text("groups"), "Zone_B", "lot D : il reste Zone_B (avant : les zones \xC3\xA0 taper)");
+        check(!content.setField(-1, "check:Zone_B", "FALSE"), "lot D : la derni\xC3\xA8re zone ne se d\xC3\xA9" "coche pas (vide voudrait dire toutes)");
+    }
+}
+
+// 1.12.7 (lot D, § 2.5) : CHOISIR AU LIEU DE TAPER - les listes a choix de l'inspecteur, qui
+// acceptent aussi un nom tape (un repere $...$, montre en ambre).
+void lotD1127_choix() {
+    std::printf("1.12.7 (lot D) : les listes a choix de l'inspecteur, un repere tape accepte et montre en ambre\n");
+    Bench b;
+    auto& grid = b.editor->properties();
+    const auto findProp = [&](const char* key) -> const ui::PropertyGrid::Property* {
+        for (const auto& c : grid.categories())
+            for (const auto& pr : c.properties)
+                if (pr.key == key) return &pr;
+        return nullptr;
+    };
+    hmi::AlarmDef a1;
+    a1.name = "Haute_A";
+    a1.group = "Zone_A";
+    b.doc->project.alarms = {a1};
+    // ---- le groupe d'un bandeau d'alarme : une liste, et un repere tape par « Taper un nom... »
+    const Id banner = b.place(Kind::AlarmBanner, 100, 100);
+    b.editor->layout();
+    const auto* group = findProp("group");
+    check(group && group->type == ui::PropertyGrid::ValueType::Enum && group->typeIn
+              && std::find(group->enumValues.begin(), group->enumValues.end(), "Zone_A") != group->enumValues.end(),
+          "lot D : le groupe d'un bandeau est une liste (Zone_A) qui accepte un nom tap\xC3\xA9");
+    if (group) {
+        const std::string name = group->name;
+        gfx::Rect cell;
+        check(grid.revealValue(name) && (grid.layout(), grid.valueRect(name, cell)), "lot D : la case du groupe est montr\xC3\xA9" "e");
+        grid.dispatch(ui::MouseDown{{cell.x + 10, cell.y + cell.h / 2}, ui::MouseButton::Left, 1, {}});
+        check(grid.editing(), "lot D : un clic ouvre la liste");
+        b.editor->dispatch(ui::KeyDown{ui::Key::End, {}, false});
+        b.editor->dispatch(ui::KeyDown{ui::Key::Return, {}, false});
+        check(grid.activeField() != nullptr, "lot D : le dernier choix, \xC2\xAB Taper un nom ou un rep\xC3\xA8re \xC2\xBB, ouvre un champ");
+        if (grid.activeField()) {
+            b.editor->dispatch(ui::KeyDown{ui::Key::A, ui::KeyMods{true, false, false, false}, false});
+            b.editor->dispatch(ui::TextInput{"$Zone_A$"});
+            b.editor->dispatch(ui::KeyDown{ui::Key::Return, {}, false});
+        }
+        b.editor->layout();
+        same_text(b.v().object(banner)->text("group"), "$Zone_A$", "lot D : le rep\xC3\xA8re tap\xC3\xA9 est accept\xC3\xA9 tel quel (avant : une liste ferm\xC3\xA9" "e)");
+        const auto* after = findProp("group");
+        check(after && ui::exprfield::hasMarker(*after), "lot D : ... et montr\xC3\xA9 en ambre (la case a son rep\xC3\xA8re)");
+    }
+    // ---- la vue apres connexion : une liste des vues
+    b.doc->project.views.push_back(hmi::makeView(b.doc->project, "Vue_Accueil"));
+    const Id login = b.place(Kind::LoginPanel, 100, 300);
+    b.editor->layout();
+    (void)login;
+    const auto* after = findProp("afterLogin");
+    check(after && after->type == ui::PropertyGrid::ValueType::Enum && after->typeIn
+              && std::find(after->enumValues.begin(), after->enumValues.end(), "Vue_Accueil") != after->enumValues.end(),
+          "lot D : la vue apr\xC3\xA8s connexion se choisit dans les vues (avant : \xC3\xA0 taper)");
+    // ---- les lettres ISA proposent leur unite
+    const Id isa = b.place(Kind::IsaInstrument, 500, 100);
+    b.editor->layout();
+    b.v().object(isa)->set("unit", "");
+    b.editor->refresh();
+    b.editor->layout();
+    const auto commitKey = [&](const char* key, const std::string& value) {
+        const auto* pr = findProp(key);
+        const bool ok = pr && pr->commit && pr->commit(value);
+        b.editor->layout();
+        return ok;
+    };
+    const auto* fn = findProp("function");
+    check(fn && fn->type == ui::PropertyGrid::ValueType::Enum && std::find(fn->enumValues.begin(), fn->enumValues.end(), "TT") != fn->enumValues.end(),
+          "lot D : les lettres ISA se choisissent (PT, TT, FT... ; avant : un texte libre)");
+    check(commitKey("function", "TT"), "lot D : choisir TT");
+    same_text(b.v().object(isa)->text("unit"), "\xC2\xB0" "C", "lot D : TT propose son unit\xC3\xA9 (\xC2\xB0" "C)");
+    check(commitKey("function", "PT"), "lot D : choisir PT");
+    same_text(b.v().object(isa)->text("unit"), "bar", "lot D : PT remplace l'unit\xC3\xA9 que TT avait propos\xC3\xA9" "e (bar)");
+    b.v().object(isa)->set("unit", "kPa");
+    b.editor->refresh();
+    b.editor->layout();
+    check(commitKey("function", "FT"), "lot D : choisir FT");
+    same_text(b.v().object(isa)->text("unit"), "kPa", "lot D : une unit\xC3\xA9 tap\xC3\xA9" "e \xC3\xA0 la main reste");
+    // ---- la position fixe d'une vanne 3 voies
+    const Id v3 = b.place(Kind::ThreeWayValve, 500, 400);
+    b.editor->layout();
+    b.v().object(v3)->set("value", "2");
+    b.editor->refresh();
+    b.editor->layout();
+    const auto* pos = findProp("value");
+    check(pos && pos->type == ui::PropertyGrid::ValueType::Enum && pos->value == "1-3",
+          "lot D : la position 2 se montre \xC2\xAB 1-3 \xC2\xBB dans une liste (avant : un code \xC3\xA0 retenir)");
+    check(commitKey("value", "1-2"), "lot D : choisir 1-2");
+    same_text(b.v().object(v3)->text("value"), "1", "lot D : le code \xC3\xA9" "crit reste celui que le moteur lit (1)");
+    check(commitKey("value", "ferm\xC3\xA9" "e"), "lot D : choisir ferm\xC3\xA9" "e");
+    same_text(b.v().object(v3)->text("value"), "0", "lot D : ferm\xC3\xA9" "e \xC3\xA9" "crit 0");
+    // ---- l'onglet montre, par son nom
+    const Id tabs = b.place(Kind::TabContainer, 100, 450);
+    b.editor->layout();
+    b.v().object(tabs)->set("tabs", "Pompes;Vannes;R\xC3\xA9glages");
+    b.v().object(tabs)->set("page", "1");
+    b.editor->refresh();
+    b.editor->layout();
+    const auto* page = findProp("page");
+    check(page && page->type == ui::PropertyGrid::ValueType::Enum && page->value == "Pompes",
+          "lot D : l'onglet montr\xC3\xA9 se choisit par son nom (avant : un num\xC3\xA9ro)");
+    check(commitKey("page", "Vannes"), "lot D : choisir Vannes");
+    same_text(b.v().object(tabs)->text("page"), "2", "lot D : le num\xC3\xA9ro \xC3\xA9" "crit (2)");
+    // ---- le calendrier des postes : un choix des debuts de poste d'un compteur
+    const Id counter = b.place(Kind::ProductionCounter, 600, 300);
+    b.editor->layout();
+    (void)counter;
+    const auto* shifts = findProp("shifts");
+    check(shifts && shifts->type == ui::PropertyGrid::ValueType::Enum && shifts->typeIn
+              && std::find(shifts->enumValues.begin(), shifts->enumValues.end(), "calendrier") != shifts->enumValues.end(),
+          "lot D : les d\xC3\xA9" "buts de poste d'un compteur peuvent suivre le calendrier du projet");
+}
+
+// 1.12.7 (lot E de l'audit des objets, § 2.3) : « DEPUIS UNE ENUMERATION » dans Contenu (un etat, une
+// image, un onglet par valeur) et « Repeter depuis » dans l'inspecteur d'une instance.
+void lotE1127_editeur() {
+    std::printf("1.12.7 (lot E) : les etats et les onglets depuis une enumeration, Repeter depuis\n");
+    using Mode = app::HmiContentPanel::Mode;
+    Bench b;
+    auto& content = b.editor->content();
+    hmi::HmiType etat;
+    etat.id = b.doc->project.allocate();
+    etat.name = "T_Etat_E";
+    etat.kind = hmi::HmiTypeKind::Enumeration;
+    etat.values = {{"Arret", 0, "Arr\xC3\xAAt", ""}, {"Marche", 1, "En marche", ""}, {"Defaut", 2, "En d\xC3\xA9" "faut", ""}};
+    b.doc->project.programs.types.push_back(etat);
+    hmi::Variable ev;
+    ev.id = b.doc->project.allocate();
+    ev.name = "Etat_Pompe";
+    ev.type = "T_Etat_E";
+    b.doc->project.programs.variables.push_back(ev);
+    // ---- un texte multi-etats : un etat par valeur, la variable choisie devient la Valeur
+    const Id multi = b.place(Kind::MultiStateText, 100, 100);
+    b.editor->layout();
+    check(content.mode() == Mode::States, "lot E : un texte multi-\xC3\xA9tats, ses \xC3\xA9tats dans Contenu");
+    bool offered = false;
+    for (const auto& c : content.grid().categories())
+        for (const auto& pr : c.properties)
+            if (pr.name == "Depuis une \xC3\xA9num\xC3\xA9ration")
+                offered = std::find(pr.enumValues.begin(), pr.enumValues.end(), "T_Etat_E") != pr.enumValues.end()
+                       && std::find(pr.enumValues.begin(), pr.enumValues.end(), "Etat_Pompe") != pr.enumValues.end();
+    check(offered, "lot E : \xC2\xAB Depuis une \xC3\xA9num\xC3\xA9ration \xC2\xBB propose T_Etat_E et la variable Etat_Pompe");
+    check(content.setField(-1, "fromEnum", "Etat_Pompe"), "lot E : les \xC3\xA9tats depuis Etat_Pompe (T_Etat_E)");
+    const auto states = hmi::parseStateList(b.v().object(multi)->text("stateList"));
+    check(states.size() == 3 && states[0].match == "Arret" && states[1].text == "En marche" && states[2].match == "Defaut",
+          "lot E : un \xC3\xA9tat par valeur, reconnue par son nom, son texte (avant : \xC3\xA0 taper, et seulement par num\xC3\xA9ro)");
+    same_text(b.v().object(multi)->expr("value"), "Etat_Pompe", "lot E : la variable choisie devient la Valeur");
+    (void)b.stack.undo();
+    check(hmi::parseStateList(b.v().object(multi)->text("stateList")).size() != 3 || b.v().object(multi)->expr("value").empty(),
+          "lot E : Ctrl+Z rend les \xC3\xA9tats d'avant");
+    // ---- un chronogramme : les etats par numero (il trace des nombres)
+    const Id chrono = b.place(Kind::StateChart, 500, 100);
+    b.editor->layout();
+    check(content.setField(-1, "show", "les \xC3\xA9tats") && content.setField(-1, "fromEnum", "T_Etat_E"), "lot E : les \xC3\xA9tats d'un chronogramme depuis T_Etat_E");
+    const auto cs = hmi::parseStateList(b.v().object(chrono)->text("stateList"));
+    check(cs.size() >= 3 && cs[0].match == "0" && cs[2].match == "2" && cs[2].text == "En d\xC3\xA9" "faut",
+          "lot E : ... par num\xC3\xA9ro (le chronogramme trace des nombres), avec leur texte");
+    // ---- une image animee : une condition par valeur
+    const Id anim = b.place(Kind::AnimatedImage, 100, 400);
+    b.editor->layout();
+    check(!content.setField(-1, "fromEnum", "T_Etat_E"), "lot E : une image anim\xC3\xA9" "e veut une variable (sa condition la compare)");
+    check(content.setField(-1, "fromEnum", "Etat_Pompe"), "lot E : les \xC3\xA9tats d'une image anim\xC3\xA9" "e depuis Etat_Pompe");
+    const auto imgs = hmi::parseImageStates(b.v().object(anim)->text("states"));
+    check(imgs.size() == 3 && imgs[1].condition == "Etat_Pompe = T_Etat_E#Marche",
+          "lot E : une condition par valeur (Etat_Pompe = T_Etat_E#Marche ; avant : une ligne \xC3\xA0 \xC3\xA9" "crire par valeur)");
+    // ---- un conteneur a onglets : un onglet par valeur, la variable de ce type
+    const Id tabs = b.place(Kind::TabContainer, 500, 400);
+    b.editor->layout();
+    check(content.mode() == Mode::Tabs && content.setField(-1, "fromEnum", "Etat_Pompe"), "lot E : les onglets depuis Etat_Pompe");
+    same_text(b.v().object(tabs)->text("tabs"), "Arr\xC3\xAAt;En marche;En d\xC3\xA9" "faut", "lot E : un onglet par valeur (son texte)");
+    same_text(b.v().object(tabs)->text("variable"), "Etat_Pompe", "lot E : ... la variable de l'onglet est celle de ce type (sans d\xC3\xA9" "calage, 1.12.5)");
+    // Un onglet a joker (T_Etat_E[*]) : Contenu dit ce qu'il deviendra.
+    b.v().object(tabs)->set("tabs", "T_Etat_E[*]");
+    b.editor->refresh();
+    b.editor->layout();
+    {
+        bool told = false;
+        if (const auto m = content.table().model())
+            for (std::size_t r = 0; r < m->rowCount(); ++r)
+                for (std::size_t c = 0; c < m->columnCount(); ++c)
+                    told = told || m->cellText(r, c).find("[*] : 3 \xC3\xA9l\xC3\xA9ments de T_Etat_E") != std::string::npos;
+        check(told, "lot E : un onglet T_Etat_E[*] dit ce qu'il deviendra (3 \xC3\xA9l\xC3\xA9ments de T_Etat_E)");
+    }
+    // ---- « Repeter depuis » : l'inspecteur d'une instance seule
+    hmi::Variable cuves;
+    cuves.id = b.doc->project.allocate();
+    cuves.name = "Cuves";
+    cuves.type = "ARRAY[1..8] OF REAL";
+    b.doc->project.programs.variables.push_back(cuves);
+    hmi::View sym = hmi::makeView(b.doc->project, "Sym_E");
+    sym.role = "symbole";
+    b.doc->project.views.push_back(sym);
+    const Id inst = hmi::placeSymbol(b.doc->project, b.v(), "Sym_E", 700, 300);
+    b.editor->canvas().setSelection({inst});
+    b.editor->layout();
+    const ui::PropertyGrid::Property* repeat = nullptr;
+    for (const auto& c : b.editor->properties().categories())
+        for (const auto& pr : c.properties)
+            if (pr.key == "repeatFrom") repeat = &pr;
+    check(repeat && repeat->type == ui::PropertyGrid::ValueType::Enum && repeat->typeIn
+              && std::find(repeat->enumValues.begin(), repeat->enumValues.end(), "Cuves") != repeat->enumValues.end(),
+          "lot E : une instance propose \xC2\xAB R\xC3\xA9p\xC3\xA9ter depuis \xC2\xBB (les tableaux et les LIST du projet, un rep\xC3\xA8re tap\xC3\xA9 accept\xC3\xA9)");
+    if (repeat && repeat->commit) {
+        check(repeat->commit("$Cuves$"), "lot E : un rep\xC3\xA8re $Cuves$ tap\xC3\xA9");
+        same_text(b.v().object(inst)->text("repeatFrom"), "$Cuves$", "lot E : ... gard\xC3\xA9 tel quel (Dupliquer le remplacera)");
+    }
+    bool perRow = false;
+    for (const auto& c : b.editor->properties().categories())
+        for (const auto& pr : c.properties) perRow = perRow || pr.key == "repeatPerRow";
+    check(perRow, "lot E : \xC2\xAB R\xC3\xA9p\xC3\xA9ter : par rang\xC3\xA9" "e \xC2\xBB (8 cuves, 4 par rang\xC3\xA9" "e)");
+    // ---- un tableau de variables : « Ajouter depuis une source », et ce que deviendra la ligne
+    const Id vt = b.place(Kind::VariableTable, 100, 700);
+    b.editor->layout();
+    check(content.object() == vt && content.mode() == Mode::Trend, "lot E : un tableau de variables, ses lignes dans Contenu");
+    const ui::PropertyGrid::Property* fromSource = nullptr;
+    for (const auto& c : content.grid().categories())
+        for (const auto& pr : c.properties)
+            if (pr.name == "Ajouter depuis une source") fromSource = &pr;
+    check(fromSource && fromSource->typeIn && std::find(fromSource->enumValues.begin(), fromSource->enumValues.end(), "Cuves[*]") != fromSource->enumValues.end(),
+          "lot E : Contenu propose \xC2\xAB Ajouter depuis une source \xC2\xBB (Cuves[*]), un chemin tap\xC3\xA9 aussi");
+    const std::size_t rowsBefore = content.count();
+    check(content.setField(-1, "addSource", "Cuves[*]") && content.count() == rowsBefore + 1, "lot E : ajouter Cuves[*] - une ligne");
+    const std::string vars = b.v().object(vt)->text("variables");
+    check(vars.size() >= 8 && vars.compare(vars.size() - 8, 8, "Cuves[*]") == 0, "lot E : ... a la fin de la liste (" + vars + ")");
+    b.editor->layout();
+    bool told = false;
+    if (const auto m = content.table().model())
+        for (std::size_t r = 0; r < m->rowCount(); ++r)
+            for (std::size_t c = 0; c < m->columnCount(); ++c) told = told || m->cellText(r, c).find("[*] : 8 \xC3\xA9l\xC3\xA9ments de Cuves") != std::string::npos;
+    check(told, "lot E : la ligne dit ce qu'elle deviendra : 8 \xC3\xA9l\xC3\xA9ments de Cuves");
+    check(!content.setField(-1, "addSource", "a;b"), "lot E : un \xC2\xAB ; \xC2\xBB nu est refus\xC3\xA9 (il couperait la liste)");
+    // ---- l'apercu de l'editeur : un graphique Cuves[*] dessine une barre par cuve
+    {
+        const Id bars = b.place(Kind::BarChart, 100, 1000);
+        b.v().object(bars)->setBox({100, 1000, 1000, 300});
+        b.v().object(bars)->set("variables", "Cuves[*]");
+        b.v().object(bars)->set("names", "Cuve");
+        Recorder rec;
+        const auto theme = ui::Theme::dark();
+        app::HmiPaintOptions opt;
+        opt.project = &b.doc->project;
+        app::paintHmiObject(rec, b.v(), *b.v().object(bars), {}, app::HmiPropertySource{}, theme, opt);
+        check(rec.wrote("Cuve 1") && rec.wrote("Cuve 8") && !rec.wrote("Cuves[*]"),
+              "lot E : l'aper\xC3\xA7u de l'\xC3\xA9" "diteur : une barre par cuve, Cuve 1 \xC3\xA0 Cuve 8 (avant : une barre Cuves[*])");
+    }
+    // ---- « Etats depuis » : l'inspecteur d'un multi-etats, le bandeau de Contenu
+    {
+        hmi::Variable etats;
+        etats.id = b.doc->project.allocate();
+        etats.name = "Etats_E";
+        etats.type = "MAP[INT] OF STRING";
+        b.doc->project.programs.variables.push_back(etats);
+        b.editor->canvas().setSelection({multi});
+        b.editor->layout();
+        const ui::PropertyGrid::Property* statesFrom = nullptr;
+        for (const auto& c : b.editor->properties().categories())
+            for (const auto& pr : c.properties)
+                if (pr.key == "statesFrom") statesFrom = &pr;
+        check(statesFrom && statesFrom->type == ui::PropertyGrid::ValueType::Enum && statesFrom->typeIn
+                  && std::find(statesFrom->enumValues.begin(), statesFrom->enumValues.end(), "Etats_E") != statesFrom->enumValues.end()
+                  && std::find(statesFrom->enumValues.begin(), statesFrom->enumValues.end(), "T_Etat_E") != statesFrom->enumValues.end(),
+              "lot E : un multi-\xC3\xA9tats propose \xC2\xAB \xC3\x89tats depuis \xC2\xBB (les MAP, les \xC3\xA9num\xC3\xA9rations ; un nom tap\xC3\xA9 aussi)");
+        if (statesFrom && statesFrom->commit) check(statesFrom->commit("Etats_E"), "lot E : \xC3\x89tats depuis Etats_E");
+        same_text(b.v().object(multi)->text("statesFrom"), "Etats_E", "lot E : ... \xC3\xA9" "crit sur l'objet");
+        b.editor->layout();
+        bool banner = false;
+        for (const auto& c : content.grid().categories()) banner = banner || c.name == "\xC3\x89tats depuis";
+        check(content.object() == multi && banner, "lot E : Contenu dit que les \xC3\xA9tats viennent de la source");
+    }
+    // ---- un resume par zone : ses zones depuis une source
+    {
+        hmi::HmiType zone;
+        zone.id = b.doc->project.allocate();
+        zone.name = "T_Zone_E";
+        zone.members = {{"Nom", "STRING", "", ""}};
+        b.doc->project.programs.types.push_back(zone);
+        hmi::Variable zones;
+        zones.id = b.doc->project.allocate();
+        zones.name = "Zones_E";
+        zones.type = "ARRAY[1..4] OF T_Zone_E";
+        b.doc->project.programs.variables.push_back(zones);
+        const Id resume = b.place(Kind::AlarmSummary, 900, 20);
+        b.editor->layout();
+        check(content.object() == resume && content.mode() == Mode::Checks, "lot E : un r\xC3\xA9sum\xC3\xA9 par zone, ses zones dans Contenu ("
+              + std::to_string(resume) + " / " + std::to_string(content.object()) + " / " + std::to_string(static_cast<int>(content.mode())) + ")");
+        const ui::PropertyGrid::Property* zoneSource = nullptr;
+        for (const auto& c : content.grid().categories())
+            for (const auto& pr : c.properties)
+                if (pr.name == "Ajouter depuis une source") zoneSource = &pr;
+        check(zoneSource && std::find(zoneSource->enumValues.begin(), zoneSource->enumValues.end(), "Zones_E[*].Nom") != zoneSource->enumValues.end(),
+              "lot E : Contenu propose Zones_E[*].Nom pour les zones d'un r\xC3\xA9sum\xC3\xA9");
+        check(content.setField(-1, "addSource", "Zones_E[*].Nom"), "lot E : les zones depuis Zones_E[*].Nom");
+        same_text(b.v().object(resume)->text("groups"), "Zones_E[*].Nom", "lot E : toutes les zones (liste vide) : la source seule");
+        b.editor->layout();
+        bool told = false;
+        for (const auto& c : content.grid().categories())
+            for (const auto& pr : c.properties)
+                told = told || (pr.name == "Zones_E[*].Nom" && pr.description.find("4 \xC3\xA9l\xC3\xA9ments de Zones_E") != std::string::npos);
+        check(told, "lot E : sa ligne dit ce qu'elle deviendra (4 \xC3\xA9l\xC3\xA9ments de Zones_E)");
+    }
+    // ---- renommer un dossier de variables : Ligne/Convoyeur/* suit
+    {
+        hmi::Variable vit;
+        vit.id = b.doc->project.allocate();
+        vit.name = "Vitesse_E";
+        vit.type = "REAL";
+        vit.folder = "Ligne/Convoyeur";
+        b.doc->project.programs.variables.push_back(vit);
+        b.v().object(vt)->set("variables", "Ligne/Convoyeur/*");
+        app::HmiVariablesPane vars("varsE1127", b.doc, [&](core::CommandPtr c) { (void)b.stack.push(std::move(c)); });
+        vars.setBounds({0, 0, 1600, 900});
+        vars.layout();
+        std::string why;
+        check(vars.renameFolder("Ligne", "Atelier", &why), "lot E : renommer le dossier de variables Ligne en Atelier (" + why + ")");
+        same_text(b.v().object(vt)->text("variables"), "Atelier/Convoyeur/*",
+                  "lot E : le tableau de variables Ligne/Convoyeur/* suit le dossier renomm\xC3\xA9 (avant : il ne montrait plus rien)");
+        // Glisser le dossier Atelier dans Usine : Usine/Atelier/Convoyeur/*.
+        hmi::Variable debit;
+        debit.id = b.doc->project.allocate();
+        debit.name = "Debit_E";
+        debit.type = "REAL";
+        debit.folder = "Usine";
+        b.doc->project.programs.variables.push_back(debit);
+        vars.refresh();
+        const auto folderRow = [&](const char* key) {
+            for (std::size_t r = 0; r < vars.rows().size(); ++r)
+                if (vars.rows()[r].kind == app::HmiVariablesPane::Row::Kind::Folder && vars.rows()[r].key == key) return static_cast<ui::RowIndex>(r);
+            return ui::TableView::kNoRow;
+        };
+        const auto atelier = folderRow("Atelier"), usine = folderRow("Usine");
+        check(atelier != ui::TableView::kNoRow && usine != ui::TableView::kNoRow, "lot E : les dossiers Atelier et Usine dans l'\xC3\xA9" "cran des variables");
+        vars.dropRows({atelier}, usine, ui::TreeView::DropWhere::Into);
+        same_text(b.v().object(vt)->text("variables"), "Usine/Atelier/Convoyeur/*", "lot E : ... et le dossier gliss\xC3\xA9 dans Usine (Usine/Atelier/Convoyeur/*)");
+    }
+    // ---- une barre de navigation : ses vues depuis une source (une LIST OF STRING, un dossier de vues)
+    {
+        hmi::Variable vues;
+        vues.id = b.doc->project.allocate();
+        vues.name = "Vues_E";
+        vues.type = "LIST OF STRING";
+        b.doc->project.programs.variables.push_back(vues);
+        const Id navId = b.place(Kind::NavBar, 1000, 40);
+        b.editor->layout();
+        check(content.object() == navId && content.mode() == Mode::NavItems, "lot E : une barre de navigation, ses vues dans Contenu");
+        const ui::PropertyGrid::Property* navSource = nullptr;
+        for (const auto& c : content.grid().categories())
+            for (const auto& pr : c.properties)
+                if (pr.name == "Ajouter depuis une source") navSource = &pr;
+        check(navSource && navSource->typeIn && std::find(navSource->enumValues.begin(), navSource->enumValues.end(), "Vues_E[*]") != navSource->enumValues.end(),
+              "lot E : Contenu propose les vues d'une LIST OF STRING (Vues_E[*])");
+        check(!content.setField(-1, "addSource", "Vue_Seule"), "lot E : un nom sans joker n'est pas une source (\xC2\xAB Ajouter \xC2\xBB pose une vue)");
+        check(content.setField(-1, "addSource", "Vues_E[*]"), "lot E : les vues depuis Vues_E[*]");
+        same_text(b.v().object(navId)->text("views"), "Vues_E[*]", "lot E : une barre automatique ne garde que la source");
+        b.editor->layout();
+        bool said = false;
+        if (const auto m = content.table().model())
+            for (std::size_t r = 0; r < m->rowCount(); ++r)
+                for (std::size_t c = 0; c < m->columnCount(); ++c) said = said || m->cellText(r, c).find("les \xC3\xA9l\xC3\xA9ments de Vues_E") != std::string::npos;
+        check(said, "lot E : la ligne dit ce qu'elle deviendra (les \xC3\xA9l\xC3\xA9ments de Vues_E, en marche)");
+    }
+}
+
 int main(int argc, char** argv) {
     // 1.11.1 (API-V) : HMI_TEST_APIV=1 - la vue des variables de l'automate et API dans l'aide a la saisie, seules.
     if (const char* only = std::getenv("HMI_TEST_APIV"); only && *only == '1') {
@@ -29242,6 +29806,14 @@ int main(int argc, char** argv) {
         if (argc > 1) configuration_et_variables(argv[1]);
         if (argc > 1) apiVue1112_dupliquer(argv[1]);   // 1.11.2 (D13)
         if (argc > 1) valuePickerApi1113(argv[1]);     // 1.11.3 : le selecteur et les membres de l'automate
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
+    // 1.12.7 : HMI_TEST_1127=1 - les lots D et E de l'audit des objets, seuls.
+    if (const char* only = std::getenv("HMI_TEST_1127"); only && *only == '1') {
+        lotD1127_contenu();
+        lotD1127_choix();
+        lotE1127_editeur();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -29448,6 +30020,9 @@ int main(int argc, char** argv) {
     lot6_modeles_editeur();
     lot6_contenu();
     lotA1125_contenuTableauVariables();   // 1.12.5 (lot A, D11)
+    lotD1127_contenu();                   // 1.12.7 (lot D) : les listes en tableau dans Contenu
+    lotD1127_choix();                     // 1.12.7 (lot D) : les listes a choix de l'inspecteur
+    lotE1127_editeur();                   // 1.12.7 (lot E) : depuis une enumeration, Repeter depuis
     etats1123();                       // 1.12.3 : les etats des objets multi-etats en table
     communes1123();                    // 1.12.3 : plusieurs objets choisis, leurs proprietes communes
     voixDesSons1123();                 // 1.12.3 : les voix des sons (melange)

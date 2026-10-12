@@ -25,6 +25,18 @@
 //    multi-etats       clignote), le « sinon » ; choisis SELON LA VALEUR (0, 1, 10..20,
 //                      'Auto') ou SELON DES CONDITIONS (Defaut, Marche... : la premiere
 //                      vraie gagne, la Valeur est ecrite pour elles).
+//    Selecteur, liste  (1.12.7, lot D) les CHOIX : une ligne par choix (libelle, valeur
+//    deroulante, boutons ecrite ; vide : le rang), au lieu de positions / items et values
+//    radio, liste      tapes en parallele.
+//    Chronogramme      (1.12.7) ses LIGNES, ou ses ETATS (le tableau du multi-etats, au
+//                      lieu de la ligne stateList) : « Montrer » choisit.
+//    Bargraphe, cadran (1.12.7) les ZONES de couleur : de, a, couleur ; une borne en % de
+//                      l'echelle (60 %) suit min et max.
+//    Programmateur     (1.12.7) les PLAGES : jours, de, a ; l'arrondi a la resolution montre.
+//    Selecteur de      (1.12.7) des CASES A COCHER : les langues du projet, les boutons de la
+//    langue, gestion   gestion des utilisateurs, les zones (groupes d'alarmes, ceux des objets
+//    des utilisateurs, compris) ; ce qui a ete tape et n'est pas propose (un repere $Zone$)
+//    resume par zone   reste, coche.
 //  Un objet qui ne peut rien contenir (une vanne, un bouton) : pas d'onglet.
 //
 //  Tout passe par des commandes de vue : Ctrl+Z reprend une ligne ajoutee, une
@@ -53,7 +65,12 @@ public:
     // d'un panneau (en lecture : on les regle en les choisissant). None : l'objet ne
     // peut pas avoir de contenu, l'editeur cache l'onglet.
     // 1.12.3 : States - les etats d'un voyant multi-etats, d'un texte multi-etats.
-    enum class Mode : std::uint8_t { None, Table, Trend, AnimatedImage, RecipeManager, Zones, Tabs, NavItems, Members, States };
+    // 1.12.7 (lot D) : Choices - les choix d'un selecteur, d'une liste deroulante, de boutons radio,
+    // d'une liste ; Bands - les zones de couleur d'un bargraphe, d'un cadran ; Schedule - les plages
+    // d'un programmateur ; Checks - les cases a cocher (langues, boutons, zones d'un resume).
+    // SourceColumns - un tableau dont les lignes viennent d'une source (Lignes depuis) : ses colonnes.
+    enum class Mode : std::uint8_t { None, Table, Trend, AnimatedImage, RecipeManager, Zones, Tabs, NavItems, Members, States,
+                                     Choices, Bands, Schedule, Checks, SourceColumns };
 
     HmiContentPanel(std::string id, hmi::DocumentPtr doc, hmi::Id view, Apply apply);
 
@@ -76,6 +93,12 @@ public:
     // de 0), "header:1", "width:1", "name", "expression", "color",
     // "condition", "images", "addImage", "period" ; gestionnaire : "recipe",
     // "button:Ajouter" (TRUE/FALSE).
+    // 1.12.7 (lot D) : choix "label", "value" ; tableau de variables "unit", "format" ;
+    // chronogramme "show" (lignes / etats, index -1) ; zones "from", "to", "color" ;
+    // plages "days", "from", "to" ; cases "check:<element>" (TRUE/FALSE) ; colonnes d'une source
+    // "shown" (TRUE/FALSE), "title", "format".
+    // 1.12.7 (lot E) : multi-etats, chronogramme, image animee "fromEnum" (index -1, le nom
+    // d'une enumeration du projet) : un etat par valeur.
     bool setField(int index, const std::string& field, const std::string& value);
 
     [[nodiscard]] HmiToolStrip&     tools() noexcept { return *tools_; }
@@ -104,6 +127,7 @@ private:
     std::shared_ptr<ui::ITableModel> model_;
     int              selected_{-1};
     int              lastColumn_{-1};      // la colonne de la derniere case editee (retirer la colonne)
+    bool             chartStates_{false};  // 1.12.7 : un chronogramme montre ses etats (sinon ses lignes)
     std::size_t      lastCount_{static_cast<std::size_t>(-1)};
     core::ConnectionScope links_;
 };

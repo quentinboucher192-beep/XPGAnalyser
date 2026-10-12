@@ -22,6 +22,7 @@
 #include "../../hmi/HmiMedia.hpp"
 #include "../../hmi/HmiControls.hpp"    // 1.12.2 : le tableau dynamique (tableLayout)
 #include "../../hmi/HmiTypeForms.hpp"   // 1.12.2 : ses colonnes, dans l'editeur
+#include "../../hmi/HmiChoiceLists.hpp" // 1.12.7 (lot D) : les colonnes choisies d'une source
 #include "../../ui/Shapes.hpp"
 
 #include <algorithm>
@@ -1452,6 +1453,27 @@ void paintSymbolInstance(const Ctx& c) {
 
 void paintHmiObject(gfx::IRenderer& r, const hmi::View& view, const Object& o, const HmiViewport& vp,
                     const HmiPropertySource& src, const ui::Theme& theme, const HmiPaintOptions& opt) {
+    // 1.12.7 (lot E, § 2.3) : dans l'editeur, un objet a joker se dessine deplie, comme il demarrera
+    // (Cuves[*].Niveau : une barre par cuve d'un ARRAY ; une LIST : selon sa valeur initiale). En marche, la
+    // vue composee du moteur l'est deja.
+    // « Repeter depuis » : la premiere copie a la place de l'instance, les autres a la suite, estompees (un apercu :
+    // elles ne se choisissent pas).
+    if (opt.editor && opt.project && hmi::sources::repeats(o)) {
+        const auto copies = hmi::sources::previewRepeat(*opt.project, o);
+        if (!copies.empty()) {
+            HmiPaintOptions ghost = opt;
+            ghost.alpha = opt.alpha * 0.55f;
+            for (std::size_t k = 0; k < copies.size(); ++k) paintHmiObject(r, view, copies[k], vp, src, theme, k == 0 ? opt : ghost);
+            return;
+        }
+    }
+    if (opt.editor && opt.project && o.kind != Kind::SymbolInstance && hmi::sources::objectHasJoker(o)) {
+        Object shown = o;
+        if (hmi::sources::previewObject(*opt.project, shown) && !hmi::sources::objectHasJoker(shown)) {
+            paintHmiObject(r, view, shown, vp, src, theme, opt);
+            return;
+        }
+    }
     float alpha = static_cast<float>(std::clamp(src.number(o, "opacity", 100) / 100.0, 0.0, 1.0)) * std::clamp(opt.alpha, 0.f, 1.f);
     if (alpha <= 0.f) return;
     if (opt.editor && view.effectivelyHidden(o)) {
@@ -1664,8 +1686,12 @@ void paintHmiObject(gfx::IRenderer& r, const hmi::View& view, const Object& o, c
                 if (opt.runtime && !opt.editor && opt.runtime->tableRows(o, headers, rows)) {
                     drawTableRows(c, headers, rows, opt.runtime->listFirst(o.id));
                 } else {
-                    const auto* var = opt.project ? opt.project->variable(trimmedPen(from)) : nullptr;
-                    headers = var ? hmi::typeform::columnsOf(*opt.project, var->type) : std::vector<std::string>{"\xE2\x86\x90 " + trimmedPen(from)};
+                    // 1.12.7 (lot E) : les colonnes que donnera la source (une enumeration, une structure aussi).
+                    headers = opt.project ? hmi::choices::rowsFromColumns(*opt.project, from) : std::vector<std::string>{};
+                    const bool known = !headers.empty();
+                    if (!known) headers = {"\xE2\x86\x90 " + trimmedPen(from)};
+                    // 1.12.7 (lot D) : les colonnes choisies (sourceColumns), comme en marche.
+                    if (known) hmi::choices::applySourceColumns(src.text(o, std::string(hmi::choices::kSourceColumnsKey)), headers, nullptr);
                     drawTable(c, headers, static_cast<int>(src.number(o, "rows", 4)));
                 }
                 break;

@@ -21,6 +21,7 @@
 #include "HmiTypePicker.hpp"           // 1.11.19 (lot 6) : le type d'un parametre, au selecteur de types
 #include "HmiAskDialog.hpp"            // 1.11.22 : supprimer un parametre employe (la question)
 #include "../../hmi/HmiPopupParams.hpp"   // 1.11.22 : ses emplois (un retrait a blanc)
+#include "../../hmi/HmiChoiceLists.hpp"   // 1.12.7 (lot D) : l'unite que proposent les lettres ISA
 
 #include <set>
 
@@ -1168,6 +1169,14 @@ bool HmiEditor::commitProp(const std::string& key, const std::string& value, boo
             // et sur tous pour la securite (niveau d'acces, autorisation).
             if (!o->find(key) && sel.size() > 1 && key != "access" && key != "auth") continue;
             if (key == "symbol" && o->kind != hmi::Kind::SymbolInstance) continue;
+            // 1.12.7 (lot D) : les lettres ISA choisies proposent leur unite (PT : bar, TT : degre C) -
+            // posee si l'unite est vide ou si c'etait celle des lettres d'avant (une unite tapee reste).
+            if (key == "function" && o->kind == hmi::Kind::IsaInstrument) {
+                const auto unit = hmi::choices::isaUnitFor(value);
+                const std::string now = o->text("unit");
+                if (!unit.empty() && (now.empty() || now == hmi::choices::isaUnitFor(o->text("function"))) && o->expr("unit").empty())
+                    o->set("unit", std::string(unit));
+            }
             o->set(key, value);
             if (key == "symbol" && symbolW > 0 && symbolH > 0) {
                 o->setNumber("w", symbolW);

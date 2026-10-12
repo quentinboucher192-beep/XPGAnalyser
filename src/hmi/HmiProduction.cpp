@@ -69,6 +69,20 @@ bool parseShifts(std::string_view text, std::vector<int>& minutes, std::string* 
     return true;
 }
 
+bool usesShiftCalendar(std::string_view shifts) noexcept {
+    while (!shifts.empty() && (shifts.front() == ' ' || shifts.front() == '\t')) shifts.remove_prefix(1);
+    while (!shifts.empty() && (shifts.back() == ' ' || shifts.back() == '\t')) shifts.remove_suffix(1);
+    if (shifts.size() != kShiftCalendar.size()) return false;
+    for (std::size_t i = 0; i < shifts.size(); ++i)
+        if (std::tolower(static_cast<unsigned char>(shifts[i])) != kShiftCalendar[i]) return false;
+    return true;
+}
+
+std::string shiftsOf(std::string_view shifts, const Project* project) {
+    if (usesShiftCalendar(shifts)) return project ? project->config.shifts : std::string{};
+    return std::string(shifts);
+}
+
 int currentShift(const std::vector<int>& shifts, int minuteOfDay) {
     if (shifts.empty()) return -1;
     int best = shifts.back();     // avant le premier debut : le dernier poste de la veille

@@ -46,6 +46,11 @@ struct ProductionFigures {
                                                   double idealRatePerHour, double rate, double target);
 // "06:00;14:00;22:00" -> minutes du jour, rangees. Faux et `why` : une heure illisible.
 [[nodiscard]] bool parseShifts(std::string_view text, std::vector<int>& minutes, std::string* why = nullptr);
+// 1.12.7 (lot D) : les debuts de poste d'un compteur - les siens, ou le calendrier des postes du projet
+// (Configuration) quand ils disent « calendrier » (kShiftCalendar, sans casse).
+inline constexpr std::string_view kShiftCalendar = "calendrier";
+[[nodiscard]] bool usesShiftCalendar(std::string_view shifts) noexcept;
+[[nodiscard]] std::string shiftsOf(std::string_view shifts, const Project* project);
 // Le debut du poste en cours a cette minute du jour (0..1439) ; -1 : pas de postes.
 // Avant le premier debut : le dernier de la veille.
 [[nodiscard]] int currentShift(const std::vector<int>& shifts, int minuteOfDay);

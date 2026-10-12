@@ -4,19 +4,27 @@
 #include "HmiAssetPanes.hpp"
 #include "HmiAssist.hpp"
 #include "HmiIcons.hpp"
+#include "HmiObjectAlarmPanes.hpp"    // 1.12.7 (lot D) : les groupes des alarmes des objets
 #include "HmiPainter.hpp"
+#include "../../hmi/HmiChoiceLists.hpp"   // 1.12.7 (lot D) : les colonnes choisies d'une source
+#include "../../hmi/HmiForms.hpp"     // 1.12.7 (lot D) : les boutons de la gestion des utilisateurs
+#include "../../hmi/HmiTypeForms.hpp" // 1.12.7 (lot D) : les colonnes que donne le type d'une source
 #include "../../hmi/HmiMarkers.hpp"   // 1.11 (REP-1) : la recette sans les $ de ses reperes
+#include "../../hmi/HmiRoles.hpp"     // 1.12.7 (lot D) : le decoupeur unique
 #include "../../hmi/HmiExpr.hpp"
 #include "../../hmi/HmiMedia.hpp"
 #include "../../hmi/HmiModel.hpp"
 #include "../../hmi/HmiNavigation.hpp"
 #include "../../hmi/HmiControls.hpp"
+#include "../../hmi/HmiEnums.hpp"     // 1.12.7 (lot E) : les etats, les onglets depuis une enumeration
+#include "../../hmi/HmiSources.hpp"   // 1.12.7 (lot E) : le joker [*], .* et /* dans Contenu
 #include "../../hmi/HmiWidgets.hpp"
 #include "../../ui/Theme.hpp"
 #include "../../ui/widgets/ExprField.hpp"   // 1.10 (chantier K) : les champs a expression, partout pareils
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 
 namespace app {
@@ -263,10 +271,325 @@ NavList readNav(const hmi::Project& p, const hmi::Object& o) {
     return n;
 }
 
+// 1.12.7 (lot E) : ce que deviendra une ligne a joker d'une barre de navigation - Vues[*] (une LIST OF STRING),
+// Process/* (un dossier de vues) ; vide : une vue.
+std::string navSourceSummary(const hmi::Project& p, const hmi::View* view, const std::string& item) {
+    if (const auto folder = hmi::sources::folderOf(item)) {
+        const auto n = hmi::sources::viewsInFolder(p, *folder).size();
+        if (n == 0) return "le dossier de vues " + *folder + " n'a aucune vue ordinaire";
+        return "/* : " + std::to_string(n) + (n == 1 ? " vue" : " vues") + " du dossier " + *folder;
+    }
+    return hmi::sources::jokerSummary(p, view, item);
+}
+
+// Les sources qu'une barre de navigation peut lire : une LIST, un VECTOR, un ARRAY OF STRING (Vues[*]), un
+// dossier de vues ordinaires (Process/*, et ceux qui le contiennent).
+std::vector<std::string> navSources(const hmi::Project& p) {
+    std::vector<std::string> out;
+    for (const auto& v : p.programs.variables) {
+        const auto shape = hmi::typeform::decompose(v.type);
+        const bool many = shape.form == hmi::typeform::Form::List || shape.form == hmi::typeform::Form::Vector
+                       || shape.form == hmi::typeform::Form::Array;
+        if (many && (shape.element == "STRING" || shape.element.rfind("STRING[", 0) == 0)) out.push_back(v.name + "[*]");
+    }
+    std::vector<std::string> folders;
+    for (const auto& v : p.views) {
+        if (v.role != "vue") continue;
+        for (std::string f = v.folder; !f.empty();) {
+            if (std::find(folders.begin(), folders.end(), f) == folders.end()) folders.push_back(f);
+            const auto slash = f.rfind('/');
+            if (slash == std::string::npos) break;
+            f.erase(slash);
+        }
+    }
+    std::sort(folders.begin(), folders.end());
+    for (const auto& f : folders) out.push_back(f + "/*");
+    return out;
+}
+
 void writeNav(hmi::Object& o, const NavList& n) {
     o.set("views", hmi::joinSemicolons(n.views));
     const bool named = std::any_of(n.labels.begin(), n.labels.end(), [](const std::string& l) { return !l.empty(); });
     o.set("labels", named ? hmi::joinSemicolons(n.labels) : std::string{});
+}
+
+// Un texte sans les blancs du bord.
+std::string trimmed(std::string v) {
+    while (!v.empty() && (v.front() == ' ' || v.front() == '\t')) v.erase(v.begin());
+    while (!v.empty() && (v.back() == ' ' || v.back() == '\t')) v.pop_back();
+    return v;
+}
+// Un morceau qui se glisse dans une liste a;b;c sans la couper : le decoupeur unique n'y trouve
+// qu'un element (un ';' dans une chaine 'a;b' ou un repere $A;B$ passe ; un ';' nu, non).
+bool fitsInList(std::string_view text) { return hmi::roles::splitList(text, ';').size() <= 1; }
+
+// ---------------------------------------------- 1.12.7 (lot D) : les choix ---
+// Les choix d'un selecteur ("positions") ou d'une liste ("items") et la valeur ecrite de chacun
+// ("values", au meme rang ; vide : le rang), une ligne par choix - comme le moteur les lit
+// (choicesOf : un libelle vide ne compte pas). Chaque case garde ses reperes tels quels.
+struct ChoiceRows {
+    std::vector<std::string> labels, values;   // values : autant que labels (vide : le rang)
+};
+
+const char* choiceLabelsKey(const hmi::Object& o) { return o.kind == hmi::Kind::Selector ? "positions" : "items"; }
+
+ChoiceRows readChoices(const hmi::Object& o) {
+    ChoiceRows c;
+    c.labels = hmi::listItems(o.text(choiceLabelsKey(o)));
+    if (const std::string raw = o.text("values"); !raw.empty()) c.values = hmi::roles::splitList(raw, ';');
+    c.values.resize(c.labels.size());
+    return c;
+}
+
+void writeChoices(hmi::Object& o, ChoiceRows c) {
+    o.set(choiceLabelsKey(o), hmi::joinSemicolons(c.labels));
+    c.values.resize(c.labels.size());
+    while (!c.values.empty() && c.values.back().empty()) c.values.pop_back();   // les rangs de la fin : rien a ecrire
+    o.set("values", hmi::joinSemicolons(c.values));
+}
+
+// ---------------------------------- 1.12.7 (lot D) : les zones d'une echelle ---
+// "de-a = couleur" (bargraphe, cadran), lu en texte : une borne garde ce qu'on a tape (un
+// nombre, 60 %, un repere $Bas$) ; reecrite "de..a = couleur" (le tiret d'un nombre negatif ne
+// trompe plus personne).
+struct BandRow {
+    std::string from, to, color;
+};
+
+std::vector<BandRow> readBands(const hmi::Object& o) {
+    std::vector<BandRow> out;
+    for (const auto& entry : hmi::listItems(o.text("zones"))) {
+        BandRow b;
+        const auto eq = entry.find('=');
+        const std::string range = trimmed(entry.substr(0, eq == std::string::npos ? entry.size() : eq));
+        b.color = eq == std::string::npos ? std::string{} : trimmed(entry.substr(eq + 1));
+        if (const auto dots = range.find(".."); dots != std::string::npos) {
+            b.from = trimmed(range.substr(0, dots));
+            b.to = trimmed(range.substr(dots + 2));
+        } else {
+            b.from = range;
+            for (std::size_t k = 1; k < range.size(); ++k) {
+                if (range[k] != '-') continue;
+                std::size_t p = k;
+                while (p > 0 && range[p - 1] == ' ') --p;
+                const char before = p > 0 ? range[p - 1] : ' ';
+                if (std::isdigit(static_cast<unsigned char>(before)) || before == '.' || before == '%' || before == '$') {
+                    b.from = trimmed(range.substr(0, k));
+                    b.to = trimmed(range.substr(k + 1));
+                    break;
+                }
+            }
+        }
+        out.push_back(std::move(b));
+    }
+    return out;
+}
+
+void writeBands(hmi::Object& o, const std::vector<BandRow>& bands) {
+    std::vector<std::string> parts;
+    for (const auto& b : bands) parts.push_back(b.from + ".." + b.to + " = " + b.color);
+    o.set("zones", hmi::joinSemicolons(parts));
+}
+
+// ------------------------------------ 1.12.7 (lot D) : les plages d'un programme ---
+// "Lu-Ve=07:00-12:00,13:30-17:00; Sa=08:00-12:00" : une ligne par plage (jours, de, a). Reecrit
+// une entree par ligne ("Lu-Ve=07:00-12:00; Lu-Ve=13:30-17:00") : le programmateur les additionne.
+struct SlotRow {
+    std::string days, from, to;
+};
+
+std::vector<SlotRow> readSlots(const hmi::Object& o) {
+    std::vector<SlotRow> out;
+    for (const auto& entry : hmi::listItems(o.text("schedule"))) {
+        const auto eq = entry.find('=');
+        const std::string days = trimmed(entry.substr(0, eq == std::string::npos ? entry.size() : eq));
+        const std::string ranges = eq == std::string::npos ? std::string{} : entry.substr(eq + 1);
+        bool any = false;
+        for (const auto& r : hmi::roles::splitList(ranges, ',')) {
+            if (r.empty()) continue;
+            SlotRow s;
+            s.days = days;
+            const auto dash = r.find('-');
+            s.from = trimmed(r.substr(0, dash == std::string::npos ? r.size() : dash));
+            s.to = dash == std::string::npos ? std::string{} : trimmed(r.substr(dash + 1));
+            out.push_back(std::move(s));
+            any = true;
+        }
+        if (!any) out.push_back({days, {}, {}});
+    }
+    return out;
+}
+
+void writeSlots(hmi::Object& o, const std::vector<SlotRow>& slots) {
+    std::vector<std::string> parts;
+    for (const auto& s : slots) parts.push_back(s.days + "=" + s.from + "-" + s.to);
+    o.set("schedule", hmi::joinSemicolons(parts));
+}
+
+// "07:00", "7h30", "7" -> minutes ; -1 : illisible (comme le programmateur).
+int slotMinutes(std::string_view text) {
+    std::string t = trimmed(std::string(text));
+    for (auto& c : t) if (c == 'h' || c == 'H') c = ':';
+    int h = 0, m = 0;
+    char colon = 0;
+    const int n = std::sscanf(t.c_str(), "%d%c%d", &h, &colon, &m);
+    if (n == 1) m = 0;
+    else if (n == 2 && colon == ':') m = 0;
+    else if (n != 3 || colon != ':') return -1;
+    if (h < 0 || h > 24 || m < 0 || m > 59 || (h == 24 && m != 0)) return -1;
+    return h * 60 + m;
+}
+
+// Ce que devient une plage a la resolution du programmateur (hmi::scheduleRoundings, la lecture de
+// Generer) : "" si elle tombe juste ; sinon « arrondie a 07:00-07:30 » ou « disparait ».
+std::string slotRounding(const SlotRow& s, int res) {
+    const int a = slotMinutes(s.from), b = slotMinutes(s.to);
+    if (a < 0 || b < 0 || b <= a) return "illisible (07:00-12:00)";
+    const auto r = hmi::scheduleRoundings(s.days + "=" + s.from + "-" + s.to, res);
+    if (r.empty()) return {};
+    const std::string grain = res == 60 ? std::string("1 h") : std::to_string(res) + " min";
+    if (r.front().gone) return "dispara\xC3\xAEt : plus courte qu'une case (" + grain + ")";
+    return "arrondie \xC3\xA0 " + r.front().becomes + " (r\xC3\xA9solution " + grain + ")";
+}
+
+// ------------------------------- 1.12.7 (lot D) : les colonnes d'une source ---
+// Un tableau dont les lignes viennent d'une variable (Lignes depuis) : les colonnes que donne son type,
+// et celles qu'on a choisies (sourceColumns : lesquelles, dans quel ordre, leur titre, leur format).
+struct SourceCols {
+    std::vector<std::string>                 available;   // les colonnes de la source, dans l'ordre
+    std::vector<hmi::choices::SourceColumn>  chosen;      // vide : toutes, sous leur nom
+    [[nodiscard]] const hmi::choices::SourceColumn* find(std::string_view member) const {
+        for (const auto& c : chosen)
+            if (c.member == member) return &c;
+        return nullptr;
+    }
+    // Les lignes : les colonnes choisies dans leur ordre, puis les autres de la source.
+    [[nodiscard]] std::vector<std::string> rows() const {
+        if (chosen.empty()) return available;
+        std::vector<std::string> out;
+        for (const auto& c : chosen) out.push_back(c.member);
+        for (const auto& a : available)
+            if (!find(a)) out.push_back(a);
+        return out;
+    }
+    // Tout est montre, dans l'ordre, sous son nom : la propriete se vide (comme avant).
+    [[nodiscard]] bool plain() const {
+        if (chosen.size() != available.size()) return false;
+        for (std::size_t i = 0; i < chosen.size(); ++i)
+            if (chosen[i].member != available[i] || !chosen[i].title.empty() || !chosen[i].format.empty()) return false;
+        return true;
+    }
+};
+
+std::string rowsSourceOf(const hmi::Object& o) { return trimmed(hmi::markers::strip(o.text("rowsFrom"))); }
+
+SourceCols readSourceCols(const hmi::Project& p, const hmi::Object& o) {
+    SourceCols c;
+    c.available = hmi::choices::rowsFromColumns(p, rowsSourceOf(o));   // 1.12.7 (lot E) : une enumeration, une structure aussi
+    c.chosen = hmi::choices::parseSourceColumns(o.text(hmi::choices::kSourceColumnsKey));
+    return c;
+}
+
+void writeSourceCols(hmi::Object& o, SourceCols c) {
+    o.set(hmi::choices::kSourceColumnsKey, c.plain() ? std::string{} : hmi::choices::formatSourceColumns(c.chosen));
+}
+
+// ------------------------------------------ 1.12.7 (lot D) : les cases a cocher ---
+// Ce qui se propose (les langues du projet, les boutons de la gestion des utilisateurs, les
+// groupes d'alarmes et ceux des objets) et ce que la propriete porte. Ce qui a ete tape et ne
+// se propose pas (un repere $Zone$, un groupe d'une autre version) reste, coche, a la fin.
+struct CheckRows {
+    std::string              key;          // la propriete : "languages", "buttons", "groups"
+    std::vector<std::string> offered;      // dans leur ordre
+    std::vector<std::string> details;      // une ligne d'aide par proposition
+    std::vector<std::string> chosen;       // ce que porte la propriete, dans son ordre
+    bool                     emptyIsAll{false};   // vide : toutes (langues, zones)
+    [[nodiscard]] bool has(std::string_view item) const {
+        return std::find(chosen.begin(), chosen.end(), item) != chosen.end();
+    }
+    // Les lignes montrees : les propositions, puis ce qui a ete tape en plus.
+    [[nodiscard]] std::vector<std::string> rows() const {
+        auto out = offered;
+        for (const auto& c : chosen)
+            if (std::find(out.begin(), out.end(), c) == out.end()) out.push_back(c);
+        return out;
+    }
+};
+
+CheckRows readChecks(const hmi::Project& p, const hmi::Object& o) {
+    CheckRows c;
+    switch (o.kind) {
+        case hmi::Kind::LanguageSelector:
+            c.key = "languages";
+            c.emptyIsAll = true;
+            for (const auto& l : p.languages.list) {
+                c.offered.push_back(l.code);
+                c.details.push_back(l.name.empty() ? l.code : l.name);
+            }
+            break;
+        case hmi::Kind::UserManager:
+            c.key = "buttons";
+            for (const auto b : hmi::kUserButtons) {
+                c.offered.emplace_back(b);
+                c.details.emplace_back("bouton");
+            }
+            break;
+        case hmi::Kind::AlarmSummary:
+            c.key = "groups";
+            c.emptyIsAll = true;
+            for (const auto& a : p.alarms)
+                if (!a.group.empty() && std::find(c.offered.begin(), c.offered.end(), a.group) == c.offered.end()) {
+                    c.offered.push_back(a.group);
+                    c.details.emplace_back("groupe du projet");
+                }
+            for (const auto& gc : objalarms::groupChoices(p))
+                if (!gc.value.empty() && std::find(c.offered.begin(), c.offered.end(), gc.value) == c.offered.end()) {
+                    c.offered.push_back(gc.value);
+                    c.details.push_back(gc.section + (gc.detail.empty() ? std::string{} : "  \xC2\xB7  " + gc.detail));
+                }
+            break;
+        default: return c;
+    }
+    for (auto& item : hmi::listItems(o.text(c.key))) c.chosen.push_back(std::move(item));
+    return c;
+}
+
+// La propriete avec `item` coche ou non : les propositions cochees dans leur ordre, puis ce
+// qui a ete tape en plus. Faux : rien ne change, ou la derniere case d'une liste « vide : toutes ».
+bool toggleCheck(hmi::Object& o, const CheckRows& c, const std::string& item, bool on) {
+    if (c.has(item) == on) return false;
+    std::vector<std::string> next;
+    for (const auto& r : c.rows()) {
+        const bool keep = r == item ? on : c.has(r);
+        if (keep) next.push_back(r);
+    }
+    if (next.empty() && c.emptyIsAll) return false;   // vide voudrait dire « toutes »
+    o.set(c.key, hmi::joinSemicolons(next));
+    return true;
+}
+
+// ------------------------------- 1.12.7 (lot E) : depuis une enumeration ---
+// Ce que propose « Depuis une enumeration » : les enumerations du projet, puis les variables IHM d'un type
+// enumere (choisie, la variable pilote aussi l'objet). `variablesOnly` : une image animee, dont les
+// conditions comparent une variable.
+std::vector<std::string> enumSources(const hmi::Project& p, bool variablesOnly) {
+    std::vector<std::string> out{""};
+    if (!variablesOnly)
+        for (const auto* e : hmi::enumerations(p)) out.push_back(e->name);
+    for (const auto& var : p.programs.variables)
+        if (hmi::findEnumeration(p, var.type)) out.push_back(var.name);
+    return out;
+}
+// L'enumeration d'un choix (son nom, ou le type de la variable choisie ; `variable` : la variable).
+const hmi::HmiType* enumOf(const hmi::Project& p, std::string_view chosen, std::string* variable) {
+    if (variable) variable->clear();
+    if (const auto* e = hmi::findEnumeration(p, chosen)) return e;
+    if (const auto* var = p.variable(chosen))
+        if (const auto* e = hmi::findEnumeration(p, var->type)) {
+            if (variable) *variable = var->name;
+            return e;
+        }
+    return nullptr;
 }
 
 } // namespace
@@ -286,7 +609,7 @@ HmiContentPanel::HmiContentPanel(std::string id, hmi::DocumentPtr doc, Id view, 
     const auto editable = [this] {
         const auto m = mode();
         return m == Mode::Table || m == Mode::Trend || m == Mode::AnimatedImage || m == Mode::Zones || m == Mode::Tabs || m == Mode::NavItems
-            || m == Mode::States;
+            || m == Mode::States || m == Mode::Choices || m == Mode::Bands || m == Mode::Schedule || m == Mode::SourceColumns;   // 1.12.7 (lot D)
     };
     tools_->setEnabledWhen(AAdd, editable);
     tools_->setEnabledWhen(ARemove, [this, editable] { return editable() && selectedIndex() >= 0; });
@@ -349,15 +672,26 @@ HmiContentPanel::Mode HmiContentPanel::mode() const {
     const auto* o = current();
     if (!o) return Mode::None;
     switch (o->kind) {
-        case hmi::Kind::Table:         return Mode::Table;
+        // 1.12.7 (lot D) : un tableau dont les lignes viennent d'une source - ses colonnes.
+        case hmi::Kind::Table:         return rowsSourceOf(*o).empty() ? Mode::Table : Mode::SourceColumns;
         case hmi::Kind::Trend:         return Mode::Trend;
         case hmi::Kind::AnimatedImage: return Mode::AnimatedImage;
         case hmi::Kind::RecipeManager: return Mode::RecipeManager;
         // Lot 11 : les listes d'expressions des graphiques et du tableau de
         // variables se reglent comme les plumes d'une courbe.
         case hmi::Kind::BarChart: case hmi::Kind::PieChart: case hmi::Kind::RadarChart: case hmi::Kind::XYChart:
-        case hmi::Kind::StateChart: case hmi::Kind::VariableTable:
+        case hmi::Kind::VariableTable:
             return Mode::Trend;
+        // 1.12.7 (lot D) : un chronogramme montre ses lignes, ou ses etats (le tableau du multi-etats).
+        case hmi::Kind::StateChart:    return chartStates_ ? Mode::States : Mode::Trend;
+        // 1.12.7 (lot D) : les choix, les zones d'une echelle, les plages, les cases a cocher.
+        case hmi::Kind::Selector: case hmi::Kind::ComboBox: case hmi::Kind::RadioGroup: case hmi::Kind::List:
+            return Mode::Choices;
+        case hmi::Kind::Bargraph: case hmi::Kind::Dial:
+            return Mode::Bands;
+        case hmi::Kind::WeeklySchedule: return Mode::Schedule;
+        case hmi::Kind::LanguageSelector: case hmi::Kind::UserManager: case hmi::Kind::AlarmSummary:
+            return Mode::Checks;
         // Lot 12
         case hmi::Kind::ZoneMap:       return Mode::Zones;
         case hmi::Kind::TabContainer:  return Mode::Tabs;
@@ -386,6 +720,11 @@ std::size_t HmiContentPanel::count() const {
         }
         case Mode::Zones:    return hmi::parseMapZones(o->text("mapZones")).size();
         case Mode::States:   return hmi::parseStateList(o->text("stateList")).size();
+        case Mode::Choices:  return readChoices(*o).labels.size();          // 1.12.7 (lot D)
+        case Mode::Bands:    return readBands(*o).size();
+        case Mode::Schedule: return readSlots(*o).size();
+        case Mode::Checks:   return readChecks(doc_->project, *o).rows().size();
+        case Mode::SourceColumns: return readSourceCols(doc_->project, *o).rows().size();
         case Mode::Tabs:     return hmi::tabLabels(*o).size();
         case Mode::NavItems: return hmi::navItems(&doc_->project, *o).size();
         case Mode::Members: {
@@ -404,6 +743,7 @@ void HmiContentPanel::setObject(Id object) {
     object_ = object;
     selected_ = -1;
     lastColumn_ = -1;
+    chartStates_ = false;   // 1.12.7 : un autre chronogramme montre d'abord ses lignes
     refresh();
     if (count() > 0 && mode() != Mode::RecipeManager) selectIndex(0);
 }
@@ -442,8 +782,19 @@ void HmiContentPanel::refresh() {
                 const auto p = readPens(*o);
                 headers = {"#", penWord(o), "Expression"};
                 icon = ui::Icon::Chart;
-                for (std::size_t i = 0; i < p.exprs.size(); ++i)
-                    rows.push_back({p.names[i].empty() ? p.exprs[i] : p.names[i], p.exprs[i]});
+                const auto* view = doc_->project.view(view_);
+                for (std::size_t i = 0; i < p.exprs.size(); ++i) {
+                    std::string detail = p.exprs[i];
+                    // 1.12.7 (lot E) : une ligne a joker dit ce qu'elle deviendra (8 elements de Cuves).
+                    if (const auto said = hmi::sources::jokerSummary(doc_->project, view, p.exprs[i]); !said.empty())
+                        detail += "  \xC2\xB7  " + said;
+                    // 1.12.7 (lot D) : un tableau de variables montre l'unite et le format de chaque ligne.
+                    if (o->kind == hmi::Kind::VariableTable) {
+                        if (i < p.units.size() && !p.units[i].empty()) detail += "  \xC2\xB7  " + p.units[i];
+                        if (i < p.formats.size() && !p.formats[i].empty()) detail += "  \xC2\xB7  " + p.formats[i];
+                    }
+                    rows.push_back({p.names[i].empty() ? p.exprs[i] : p.names[i], std::move(detail)});
+                }
                 break;
             }
             case Mode::AnimatedImage: {
@@ -483,14 +834,23 @@ void HmiContentPanel::refresh() {
                     if (v)
                         for (const auto& c : v->objects)
                             if (c.parent == o->id && hmi::tabPageOf(c) == static_cast<int>(k) + 1) ++n;
-                    rows.push_back({labels[k], std::to_string(n)});
+                    std::string detail = std::to_string(n);
+                    // 1.12.7 (lot E) : un onglet a joker (T_MODE[*]) dit ce qu'il deviendra en marche.
+                    if (const auto said = hmi::sources::jokerSummary(doc_->project, v, labels[k]); !said.empty())
+                        detail += "  \xC2\xB7  " + said;
+                    rows.push_back({labels[k], std::move(detail)});
                 }
                 break;
             }
             case Mode::NavItems: {
                 headers = {"#", "Vue", "Libell\xC3\xA9"};
                 icon = ui::Icon::Screen;
-                for (const auto& it : hmi::navItems(&doc_->project, *o)) rows.push_back({it.view, it.label});
+                const auto* view = doc_->project.view(view_);
+                for (const auto& it : hmi::navItems(&doc_->project, *o)) {
+                    // 1.12.7 (lot E) : Vues[*], Process/* - ce que la ligne deviendra, a la place du libelle.
+                    const std::string said = navSourceSummary(doc_->project, view, it.view);
+                    rows.push_back({it.view, said.empty() ? it.label : said});
+                }
                 break;
             }
             case Mode::States: {
@@ -502,6 +862,59 @@ void HmiContentPanel::refresh() {
                     const int k = conditionIndexOf(t, r);
                     std::string when = st.match == "*" ? std::string("sinon") : t.conditions && k >= 0 ? t.conds[static_cast<std::size_t>(k)] : st.match;
                     rows.push_back({std::move(when), stateDetail(st)});
+                }
+                break;
+            }
+            // 1.12.7 (lot D) : les choix, les zones, les plages, les cases a cocher.
+            case Mode::Choices: {
+                const auto c = readChoices(*o);
+                headers = {"#", "Libell\xC3\xA9", "Valeur \xC3\xA9" "crite"};
+                icon = ui::Icon::Info;
+                for (std::size_t k = 0; k < c.labels.size(); ++k)
+                    rows.push_back({c.labels[k], c.values[k].empty() ? "(rang " + std::to_string(k) + ")" : c.values[k]});
+                break;
+            }
+            case Mode::Bands: {
+                headers = {"#", "De \xE2\x80\xA6 \xC3\xA0", "Couleur"};
+                icon = ui::Icon::Chart;
+                for (const auto& b : readBands(*o)) rows.push_back({b.from + " \xE2\x80\xA6 " + b.to, b.color});
+                break;
+            }
+            case Mode::Schedule: {
+                headers = {"#", "Jours", "De \xE2\x80\xA6 \xC3\xA0"};
+                icon = ui::Icon::Play;
+                const int res = hmi::resolutionMinutes(o->text("resolution", "30 min"));
+                for (const auto& sl : readSlots(*o)) {
+                    const std::string round = slotRounding(sl, res);
+                    rows.push_back({sl.days, sl.from + " \xE2\x80\xA6 " + sl.to + (round.empty() ? std::string{} : "  (" + round + ")")});
+                }
+                break;
+            }
+            case Mode::SourceColumns: {
+                const auto c = readSourceCols(doc_->project, *o);
+                headers = {"#", "Colonne de " + rowsSourceOf(*o), "Montr\xC3\xA9" "e"};
+                icon = ui::Icon::AnimationTable;
+                for (const auto& r : c.rows()) {
+                    const auto* ch = c.chosen.empty() ? nullptr : c.find(r);
+                    std::string shown = c.chosen.empty() || ch ? std::string("oui") : std::string("cach\xC3\xA9" "e");
+                    if (ch && !ch->title.empty()) shown += "  \xC2\xB7  " + ch->title;
+                    if (ch && !ch->format.empty()) shown += "  \xC2\xB7  " + ch->format;
+                    rows.push_back({r, std::move(shown)});
+                }
+                break;
+            }
+            case Mode::Checks: {
+                const auto c = readChecks(doc_->project, *o);
+                headers = {"#", o->kind == hmi::Kind::UserManager ? "Bouton" : o->kind == hmi::Kind::AlarmSummary ? "Zone" : "Langue", "Montr\xC3\xA9" "e"};
+                icon = ui::Icon::Info;
+                const bool all = c.emptyIsAll && c.chosen.empty();
+                const auto list = c.rows();
+                for (std::size_t k = 0; k < list.size(); ++k) {
+                    const bool typed = k >= c.offered.size();
+                    std::string shown = all || c.has(list[k]) ? std::string("oui") : std::string{};
+                    if (typed) shown += shown.empty() ? "tap\xC3\xA9" "e" : "  \xC2\xB7  tap\xC3\xA9" "e";
+                    else if (k < c.details.size() && !c.details[k].empty()) shown += (shown.empty() ? "" : "  \xC2\xB7  ") + c.details[k];
+                    rows.push_back({list[k], shown});
                 }
                 break;
             }
@@ -621,6 +1034,33 @@ bool HmiContentPanel::addItem() {
                 o.set("tabs", hmi::joinSemicolons(labels));
                 return true;
             });
+        // 1.12.7 (lot D) : un choix, une zone, une plage de plus.
+        case Mode::Choices:
+            return change("Ajouter un choix", [](hmi::Object& o) {
+                auto c = readChoices(o);
+                c.labels.push_back("Choix " + std::to_string(c.labels.size() + 1));
+                c.values.emplace_back();
+                writeChoices(o, std::move(c));
+                return true;
+            });
+        case Mode::Bands:
+            return change("Ajouter une zone", [](hmi::Object& o) {
+                auto bands = readBands(o);
+                BandRow b;
+                b.from = bands.empty() ? hmi::formatNumber(o.number("min", 0)) : bands.back().to;
+                b.to = hmi::formatNumber(o.number("max", 100));
+                b.color = hmiTrendPalette()[bands.size() % hmiTrendPalette().size()];
+                bands.push_back(std::move(b));
+                writeBands(o, bands);
+                return true;
+            });
+        case Mode::Schedule:
+            return change("Ajouter une plage", [](hmi::Object& o) {
+                auto slots = readSlots(o);
+                slots.push_back({"Lu-Ve", "08:00", "12:00"});
+                writeSlots(o, slots);
+                return true;
+            });
         case Mode::NavItems:
             return change("Ajouter une vue \xC3\xA0 la barre", [this](hmi::Object& o) {
                 auto n = readNav(doc_->project, o);
@@ -706,6 +1146,35 @@ bool HmiContentPanel::removeItem(int index) {
                     else if (pg > gone) c.setNumber("tabPage", pg - 1);
                 }
                 o.setNumber("page", std::clamp(static_cast<int>(o.number("page", 1)), 1, static_cast<int>(labels.size())));
+                return true;
+            });
+            break;
+        // 1.12.7 (lot D) : le libelle et sa valeur partent ensemble.
+        case Mode::Choices:
+            ok = change("Retirer un choix", [i](hmi::Object& o) {
+                auto c = readChoices(o);
+                if (i >= c.labels.size()) return false;
+                eraseAt(c.labels, i);
+                eraseAt(c.values, i);
+                writeChoices(o, std::move(c));
+                return true;
+            });
+            break;
+        case Mode::Bands:
+            ok = change("Retirer une zone", [i](hmi::Object& o) {
+                auto bands = readBands(o);
+                if (i >= bands.size()) return false;
+                bands.erase(bands.begin() + static_cast<std::ptrdiff_t>(i));
+                writeBands(o, bands);
+                return true;
+            });
+            break;
+        case Mode::Schedule:
+            ok = change("Retirer une plage", [i](hmi::Object& o) {
+                auto slots = readSlots(o);
+                if (i >= slots.size()) return false;
+                slots.erase(slots.begin() + static_cast<std::ptrdiff_t>(i));
+                writeSlots(o, slots);
                 return true;
             });
             break;
@@ -795,6 +1264,43 @@ bool HmiContentPanel::moveItem(int index, int delta) {
                 else if (shown == pb) o.setNumber("page", pa);
                 return true;
             });
+        // 1.12.7 (lot D) : l'ordre des colonnes montrees d'une source.
+        case Mode::SourceColumns:
+            return change("Ordonner les colonnes", [this, a, b](hmi::Object& o) {
+                auto c = readSourceCols(doc_->project, o);
+                if (c.chosen.empty())
+                    for (const auto& av : c.available) c.chosen.push_back({av, {}, {}});
+                if (std::max(a, b) >= c.chosen.size()) return false;   // une colonne cachee ne se deplace pas
+                std::swap(c.chosen[a], c.chosen[b]);
+                writeSourceCols(o, std::move(c));
+                return true;
+            });
+        // 1.12.7 (lot D)
+        case Mode::Choices:
+            return change("Ordonner les choix", [a, b](hmi::Object& o) {
+                auto c = readChoices(o);
+                if (std::max(a, b) >= c.labels.size()) return false;
+                std::swap(c.labels[a], c.labels[b]);
+                std::swap(c.values[a], c.values[b]);
+                writeChoices(o, std::move(c));
+                return true;
+            });
+        case Mode::Bands:
+            return change("Ordonner les zones", [a, b](hmi::Object& o) {
+                auto bands = readBands(o);
+                if (std::max(a, b) >= bands.size()) return false;
+                std::swap(bands[a], bands[b]);
+                writeBands(o, bands);
+                return true;
+            });
+        case Mode::Schedule:
+            return change("Ordonner les plages", [a, b](hmi::Object& o) {
+                auto slots = readSlots(o);
+                if (std::max(a, b) >= slots.size()) return false;
+                std::swap(slots[a], slots[b]);
+                writeSlots(o, slots);
+                return true;
+            });
         case Mode::NavItems:
             return change("Ordonner les vues de la barre", [this, a, b](hmi::Object& o) {
                 auto n = readNav(doc_->project, o);
@@ -841,9 +1347,122 @@ bool HmiContentPanel::removeColumn(int column) {
 bool HmiContentPanel::setField(int index, const std::string& field, const std::string& value) {
     const auto i = static_cast<std::size_t>(std::max(0, index));
     const auto colOf = [&](std::string_view prefix) { return static_cast<std::size_t>(std::max(0, std::atoi(field.c_str() + prefix.size()))); };
+    // 1.12.7 (lot E, § 2.3) : « Ajouter depuis une source » - une ligne a joker (Cuves[*].Niveau, Pompe.*,
+    // Ligne/Convoyeur/*), ajoutee a la fin ; le moteur en fait un element par element de la source.
+    if (field == "addSource" && mode() == Mode::Checks) {
+        // 1.12.7 (lot E, § 2.3) : les zones d'un resume depuis une source (Zones[*].Nom : le nom de chaque zone).
+        const auto* o = current();
+        const std::string v = trimmed(value);
+        if (!o || o->kind != hmi::Kind::AlarmSummary || v.empty() || !fitsInList(v) || !hmi::sources::hasJoker(v)) return false;
+        return change("Zones depuis une source", [v](hmi::Object& obj) {
+            auto items = hmi::listItems(obj.text("groups"));
+            if (std::find(items.begin(), items.end(), v) != items.end()) return false;
+            items.push_back(v);   // vide (toutes) : la source seule
+            obj.set("groups", hmi::joinSemicolons(items));
+            return true;
+        });
+    }
+    if (field == "addSource" && mode() == Mode::NavItems) {
+        const std::string v = trimmed(value);
+        if (v.empty() || !fitsInList(v) || (!hmi::sources::hasJoker(v) && !hmi::sources::folderOf(v))) return false;
+        return change("Vues depuis une source", [this, v](hmi::Object& o) {
+            auto n = readNav(doc_->project, o);
+            if (n.automatic) n = NavList{};   // automatique : la source seule (sinon chaque vue deux fois)
+            n.views.push_back(v);
+            n.labels.emplace_back();
+            writeNav(o, n);
+            return true;
+        });
+    }
+    if (field == "addSource") {
+        const std::string v = trimmed(value);
+        if (mode() != Mode::Trend || v.empty() || !fitsInList(v)) return false;
+        return change("Ajouter depuis une source", [v](hmi::Object& o) {
+            auto p = readPens(o);
+            p.exprs.push_back(v);
+            p.names.emplace_back();   // les noms : ceux des elements (le membre, la cle, Cuves[*].Nom)
+            writePens(o, std::move(p));
+            return true;
+        });
+    }
+    // 1.12.7 (lot E, § 2.3) : « depuis l'enumeration » - un etat, une image, un onglet par valeur.
+    if (field == "fromEnum") {
+        std::string variable;
+        const auto* e = enumOf(doc_->project, value, &variable);
+        if (!e || e->values.empty()) return false;
+        const auto m = mode();
+        const auto& palette = hmiTrendPalette();
+        if (m == Mode::States) {
+            return change("\xC3\x89tats depuis " + e->name, [e, variable, &palette](hmi::Object& o) {
+                auto t = readStates(o);
+                if (t.conditions) return false;          // selon des conditions : chaque etat a la sienne
+                const bool chart = o.kind == hmi::Kind::StateChart;
+                std::vector<hmi::StateEntry> states;
+                for (std::size_t k = 0; k < e->values.size(); ++k) {
+                    const auto& v = e->values[k];
+                    hmi::StateEntry st;
+                    // un multi-etats reconnait la valeur par son nom (Auto) ; un chronogramme trace des nombres
+                    st.match = chart ? std::to_string(v.value) : v.name;
+                    st.text = v.text.empty() ? v.name : v.text;
+                    std::replace(st.text.begin(), st.text.end(), ';', ',');
+                    std::replace(st.text.begin(), st.text.end(), '|', '/');
+                    st.color = palette[k % palette.size()];
+                    states.push_back(std::move(st));
+                }
+                for (const auto& old : t.states)
+                    if (old.match == "*") states.push_back(old);   // le « sinon » reste le dernier
+                t.states = std::move(states);
+                writeStates(o, std::move(t));
+                if (!variable.empty() && !chart)
+                    if (const auto* val = o.find("value"); !val || (val->expr.empty() && trimmed(val->value).empty()) || (val->expr.empty() && val->value == "0"))
+                        o.setExpr("value", variable);
+                return true;
+            });
+        }
+        if (m == Mode::AnimatedImage) {
+            if (variable.empty()) return false;          // une condition compare une variable
+            return change("\xC3\x89tats depuis " + e->name, [e, variable](hmi::Object& o) {
+                std::vector<hmi::ImageState> states;
+                for (const auto& v : e->values) {
+                    hmi::ImageState st;
+                    st.condition = variable + " = " + e->name + "#" + v.name;
+                    states.push_back(std::move(st));
+                }
+                o.set("states", hmi::formatImageStates(states));
+                return true;
+            });
+        }
+        if (m == Mode::Tabs) {
+            return change("Onglets depuis " + e->name, [e, variable](hmi::Object& o) {
+                std::vector<std::string> labels;
+                for (const auto& v : e->values) {
+                    std::string l = v.text.empty() ? v.name : v.text;
+                    std::replace(l.begin(), l.end(), ';', ',');
+                    labels.push_back(std::move(l));
+                }
+                o.set("tabs", hmi::joinSemicolons(labels));
+                if (!variable.empty()) o.set("variable", variable);   // la page suit la valeur (sans decalage)
+                return true;
+            });
+        }
+        return false;
+    }
+    // 1.12.7 (lot D) : un chronogramme montre ses lignes ou ses etats (rien ne change dans l'objet).
+    if (field == "show") {
+        const auto* o = current();
+        if (!o || o->kind != hmi::Kind::StateChart) return false;
+        const bool states = value.find("tat") != std::string::npos;
+        if (states == chartStates_) return false;
+        chartStates_ = states;
+        selected_ = -1;
+        refresh();
+        if (count() > 0) selectIndex(0);
+        return true;
+    }
     switch (mode()) {
         case Mode::States: {
             if (field == "mode") {
+                if (const auto* o = current(); o && o->kind == hmi::Kind::StateChart) return false;   // 1.12.7 : pas de Valeur
                 const bool wantConditions = value.find("condition") != std::string::npos;
                 return change(wantConditions ? "\xC3\x89tats selon des conditions" : "\xC3\x89tats selon la valeur", [wantConditions](hmi::Object& o) {
                     auto t = readStates(o);
@@ -959,6 +1578,15 @@ bool HmiContentPanel::setField(int index, const std::string& field, const std::s
                 } else if (field == "color") {
                     while (p.colors.size() <= i) p.colors.push_back(hmiTrendPalette()[p.colors.size() % hmiTrendPalette().size()]);
                     p.colors[i] = value;
+                } else if ((field == "unit" || field == "format") && o.kind == hmi::Kind::VariableTable) {
+                    // 1.12.7 (lot D) : l'unite et le format de la ligne, a leur rang (les listes paralleles
+                    // units et formats, que le moteur lit) ; un ';' nu couperait la liste.
+                    if (!fitsInList(value)) return false;
+                    auto& list = field == "unit" ? p.units : p.formats;
+                    if (list.size() < p.exprs.size()) list.resize(p.exprs.size());
+                    if (list[i] == value) return false;
+                    list[i] = value;
+                    while (!list.empty() && list.back().empty()) list.pop_back();
                 } else return false;
                 writePens(o, std::move(p));
                 return true;
@@ -1052,7 +1680,10 @@ bool HmiContentPanel::setField(int index, const std::string& field, const std::s
                 auto n = readNav(doc_->project, o);
                 if (i >= n.views.size() || value.find(';') != std::string::npos) return false;
                 if (field == "view") {
-                    if (value.empty() || !doc_->project.viewByName(value)) return false;
+                    // 1.12.7 (lot D) : une vue du projet, ou un repere ($Vue_Ligne$) dont le nom sera
+                    // remplace par Dupliquer (Generer le verifie sans ses $).
+                    if (value.empty() || (!doc_->project.viewByName(value) && hmi::markers::find(value, hmi::markers::Mode::Text).empty()))
+                        return false;
                     n.views[i] = value;
                 } else if (field == "label") {
                     n.labels[i] = value == hmi::viewCaption(n.views[i]) ? std::string{} : value;
@@ -1060,6 +1691,106 @@ bool HmiContentPanel::setField(int index, const std::string& field, const std::s
                 writeNav(o, n);
                 return true;
             });
+        // 1.12.7 (lot D) : un choix - son libelle (affiche) et sa valeur (ecrite ; vide : le rang).
+        case Mode::Choices:
+            return change("R\xC3\xA9gler un choix", [i, field, value](hmi::Object& o) {
+                auto c = readChoices(o);
+                if (i >= c.labels.size()) return false;
+                const std::string v = trimmed(value);
+                if (!fitsInList(v)) return false;
+                if (field == "label") {
+                    if (v.empty() || c.labels[i] == v) return false;   // un libelle vide ne compte pas (le rang glisserait)
+                    c.labels[i] = v;
+                } else if (field == "value") {
+                    if (c.values[i] == v) return false;
+                    c.values[i] = v;
+                } else return false;
+                writeChoices(o, std::move(c));
+                return true;
+            });
+        case Mode::Bands:
+            return change("R\xC3\xA9gler une zone", [i, field, value](hmi::Object& o) {
+                auto bands = readBands(o);
+                if (i >= bands.size()) return false;
+                const std::string v = trimmed(value);
+                if (!fitsInList(v) || v.find('=') != std::string::npos || v.find("..") != std::string::npos) return false;
+                auto& b = bands[i];
+                std::string* target = field == "from" ? &b.from : field == "to" ? &b.to : field == "color" ? &b.color : nullptr;
+                if (!target || *target == v || (v.empty() && field != "color")) return false;
+                *target = v;
+                writeBands(o, bands);
+                return true;
+            });
+        case Mode::Schedule:
+            return change("R\xC3\xA9gler une plage", [i, field, value](hmi::Object& o) {
+                auto slots = readSlots(o);
+                if (i >= slots.size()) return false;
+                const std::string v = trimmed(value);
+                if (v.empty() || !fitsInList(v) || v.find('=') != std::string::npos) return false;
+                auto& sl = slots[i];
+                if (field == "days") {
+                    if (sl.days == v) return false;
+                    // Les jours se relisent comme le programmateur les lit (Lu-Ve, Sa,Di, tous).
+                    hmi::WeekSchedule probe;
+                    if (!hmi::parseSchedule(v + "=08:00-09:00", 60, probe)) return false;
+                    sl.days = v;
+                } else if (field == "from" || field == "to") {
+                    if (slotMinutes(v) < 0) return false;
+                    std::string& t = field == "from" ? sl.from : sl.to;
+                    if (t == v) return false;
+                    t = v;
+                } else return false;
+                writeSlots(o, slots);
+                return true;
+            });
+        case Mode::SourceColumns:
+            return change("R\xC3\xA9gler une colonne", [this, i, field, value](hmi::Object& o) {
+                auto c = readSourceCols(doc_->project, o);
+                const auto rows = c.rows();
+                if (i >= rows.size()) return false;
+                const std::string member = rows[i];
+                if (c.chosen.empty())
+                    for (const auto& av : c.available) c.chosen.push_back({av, {}, {}});
+                const auto at = std::find_if(c.chosen.begin(), c.chosen.end(), [&](const hmi::choices::SourceColumn& x) { return x.member == member; });
+                const std::string v = trimmed(value);
+                if (field == "shown") {
+                    const bool on = hmi::parseBool(v, true);
+                    if (on == (at != c.chosen.end())) return false;
+                    if (on) c.chosen.push_back({member, {}, {}});
+                    else {
+                        if (c.chosen.size() <= 1) return false;   // vide voudrait dire « toutes »
+                        c.chosen.erase(at);
+                    }
+                } else if (field == "title" || field == "format") {
+                    if (!fitsInList(v) || v.find('|') != std::string::npos || (field == "title" && v.find('=') != std::string::npos)) return false;
+                    auto it = at;
+                    if (it == c.chosen.end()) {   // une colonne cachee qu'on regle se montre
+                        c.chosen.push_back({member, {}, {}});
+                        it = c.chosen.end() - 1;
+                    }
+                    std::string& target = field == "title" ? it->title : it->format;
+                    if (target == v) return false;
+                    target = v;
+                } else return false;
+                writeSourceCols(o, std::move(c));
+                return true;
+            });
+        case Mode::Checks: {
+            if (field.rfind("check:", 0) != 0) return false;
+            const std::string item = field.substr(6);
+            const bool on = hmi::parseBool(value, true);
+            return change("Cocher", [this, item, on](hmi::Object& o) {
+                const auto c = readChecks(doc_->project, o);
+                // Une liste vide qui vaut « toutes » : decocher l'une garde les autres.
+                if (c.emptyIsAll && c.chosen.empty()) {
+                    if (on) return false;
+                    CheckRows all = c;
+                    all.chosen = c.offered;
+                    return toggleCheck(o, all, item, false);
+                }
+                return toggleCheck(o, c, item, on);
+            });
+        }
         case Mode::Members:          // 1.10.4 (K3) : en lecture
         case Mode::None: break;
     }
@@ -1086,6 +1817,27 @@ void HmiContentPanel::rebuildGrid() {
         p.enumValues = std::move(choices);
         p.commit = [this, index, field](std::string_view v) { return setField(index, field, std::string(v)); };
         return p;
+    };
+    // 1.12.7 (lot D) : ce que montre la liste d'un chronogramme - ses lignes ou ses etats.
+    const auto stateChartToggle = [&] {
+        PG::Category show;
+        show.name = "Montrer";
+        show.properties.push_back(editable("Montrer", chartStates_ ? "les \xC3\xA9tats" : "les lignes", PG::ValueType::Enum, -1, "show",
+                                           "Les lignes (une expression chacune) ou les \xC3\xA9tats (valeur, texte, couleur) que "
+                                           "toutes les lignes partagent.",
+                                           {"les lignes", "les \xC3\xA9tats"}));
+        return show;
+    };
+    // 1.12.7 (lot E) : « Depuis une enumeration » - un etat (une image, un onglet) par valeur.
+    const auto fromEnumCell = [&](bool variablesOnly) {
+        auto choices = enumSources(doc_->project, variablesOnly);
+        return editable("Depuis une \xC3\xA9num\xC3\xA9ration", "", PG::ValueType::Enum, -1, "fromEnum",
+                        variablesOnly ? std::string("Une variable d'un type \xC3\xA9num\xC3\xA9r\xC3\xA9 : un \xC3\xA9tat par valeur, sa condition "
+                                                    "\xC3\xA9" "crite (Etat = T_ETAT#Marche) ; les images se choisissent ensuite.")
+                                      : std::string("Une \xC3\xA9num\xC3\xA9ration du projet (ou une variable de ce type, qui devient la "
+                                                    "Valeur) : un \xC3\xA9tat par valeur, son texte, une couleur \xC3\xA0 changer. Remplace "
+                                                    "les \xC3\xA9tats (Ctrl+Z les rend)."),
+                        std::move(choices));
     };
     std::vector<PG::Category> cats;
     const Mode m = mode();
@@ -1146,6 +1898,7 @@ void HmiContentPanel::rebuildGrid() {
         }
         case Mode::Trend: {
             const auto p = readPens(*o);
+            if (o->kind == hmi::Kind::StateChart) cats.push_back(stateChartToggle());   // 1.12.7 (lot D)
             PG::Category pen;
             if (index >= 0) {
                 pen.name = penWord(o) + " " + std::to_string(index + 1);
@@ -1160,15 +1913,40 @@ void HmiContentPanel::rebuildGrid() {
                 pen.properties.push_back(std::move(expr));
                 // 1.12.2 : le chronogramme colore ses lignes par leurs etats (sa liste d'etats) : la
                 // case Couleur d'une de ses lignes ne faisait rien.
-                if (o->kind != hmi::Kind::StateChart)
+                if (o->kind != hmi::Kind::StateChart && o->kind != hmi::Kind::VariableTable)
                     pen.properties.push_back(editable("Couleur", i < p.colors.size() ? p.colors[i] : std::string{}, PG::ValueType::Color, index,
                                                       "color"));
+                // 1.12.7 (lot D) : l'unite et le format de la ligne d'un tableau de variables (avant :
+                // les listes units et formats de l'inspecteur, a aligner a la main).
+                if (o->kind == hmi::Kind::VariableTable) {
+                    pen.properties.push_back(editable("Unit\xC3\xA9", i < p.units.size() ? p.units[i] : std::string{}, PG::ValueType::Text,
+                                                      index, "unit",
+                                                      "Vide : celle de la variable (Configuration > Unit\xC3\xA9s et formats), sinon aucune."));
+                    pen.properties.push_back(editable("Format", i < p.formats.size() ? p.formats[i] : std::string{}, PG::ValueType::Text,
+                                                      index, "format",
+                                                      "0.0, 0.00, 0 ; vide : celui de la variable, sinon le Format de l'objet."));
+                }
             } else {
                 pen.name = penWord(o) + "s";
                 pen.properties.push_back(readOnly(penWord(o) + "s", std::to_string(p.exprs.size()),
                                                   "Plusieurs plumes dans la m\xC3\xAAme courbe : \xC2\xAB Ajouter \xC2\xBB, puis leur expression."));
             }
             cats.push_back(std::move(pen));
+            // 1.12.7 (lot E, § 2.3) : un element par element d'une source - choisi parmi celles du projet, ou tape.
+            {
+                PG::Category from;
+                from.name = "Depuis une source";
+                auto choices = hmi::sources::jokerSuggestions(doc_->project, doc_->project.view(view_));
+                choices.insert(choices.begin(), std::string{});
+                auto cell = editable("Ajouter depuis une source", "", PG::ValueType::Enum, -1, "addSource",
+                                     "Cuves[*].Niveau : un \xC3\xA9l\xC3\xA9ment par cuve (une LIST : leur nombre suit la liste en "
+                                     "marche) ; Pompe.* : un par membre de la structure ; Ligne/Convoyeur/* : un par variable du "
+                                     "dossier. Les noms : Cuves[*].Nom, calcul\xC3\xA9 pour chacun.",
+                                     std::move(choices));
+                cell.typeIn = true;   // un chemin, un repere $Cuves$[*].Niveau se tapent aussi
+                from.properties.push_back(std::move(cell));
+                cats.push_back(std::move(from));
+            }
             break;
         }
         case Mode::AnimatedImage: {
@@ -1203,11 +1981,49 @@ void HmiContentPanel::rebuildGrid() {
             def.properties.push_back(editable("P\xC3\xA9riode de l'objet (ms)", hmi::formatNumber(o->number("period", 500)),
                                               PG::ValueType::Integer, -1, "objectPeriod"));
             def.properties.push_back(readOnly("\xC3\x89tats", std::to_string(states.size())));
+            def.properties.push_back(fromEnumCell(true));   // 1.12.7 (lot E)
             cats.push_back(std::move(def));
             break;
         }
         case Mode::States: {
             const auto t = readStates(*o);
+            // 1.12.7 (lot E) : « Etats depuis » - en marche, les etats viennent d'une source.
+            if (hmi::sources::hasStatesFrom(*o)) {
+                PG::Category from;
+                from.name = "\xC3\x89tats depuis";
+                from.properties.push_back(readOnly("Source", o->text(std::string(hmi::sources::kStatesFromKey)),
+                                                   "En marche, les \xC3\xA9tats viennent de cette source (\xC3\x89tats depuis, dans "
+                                                   "Propri\xC3\xA9t\xC3\xA9s) : ceux ci-dessous donnent leur couleur \xC3\xA0 la m\xC3\xAAme "
+                                                   "valeur, et le \xC2\xAB sinon \xC2\xBB reste le dernier."));
+                cats.push_back(std::move(from));
+            }
+            if (o->kind == hmi::Kind::StateChart) {
+                // 1.12.7 (lot D) : les etats d'un chronogramme (stateList), comme ceux d'un multi-etats ;
+                // chaque ligne du chronogramme les lit selon sa valeur.
+                cats.push_back(stateChartToggle());
+                PG::Category how;
+                how.name = "\xC3\x89tats";
+                const bool otherwise = std::any_of(t.states.begin(), t.states.end(), [](const hmi::StateEntry& e) { return e.match == "*"; });
+                how.properties.push_back(editable("Un \xC3\xA9tat \xC2\xAB sinon \xC2\xBB", otherwise ? "TRUE" : "FALSE", PG::ValueType::Boolean, -1,
+                                                  "otherwise", "Montr\xC3\xA9 quand aucun autre ne vaut (la ligne * ou \xC2\xAB sinon \xC2\xBB)."));
+                how.properties.push_back(fromEnumCell(false));   // 1.12.7 (lot E)
+                cats.push_back(std::move(how));
+                if (index >= 0 && i < t.states.size()) {
+                    const auto& st = t.states[i];
+                    PG::Category state;
+                    state.name = "\xC3\x89tat " + std::to_string(index + 1);
+                    if (st.match == "*") state.properties.push_back(readOnly("Quand", "sinon", "Quand aucun autre \xC3\xA9tat ne vaut."));
+                    else
+                        state.properties.push_back(editable("Quand la valeur vaut", st.match, PG::ValueType::Text, index, "match",
+                                                            "Un nombre (2), un intervalle (10..20), TRUE / FALSE, un texte ('Auto'), "
+                                                            "le nom d'une valeur d'\xC3\xA9num\xC3\xA9ration (Auto), ou * : tout le reste."));
+                    state.properties.push_back(editable("Texte", st.text, PG::ValueType::Text, index, "text",
+                                                        "Ce que la ligne \xC3\xA9" "crit ; sans \xC2\xAB ; \xC2\xBB ni \xC2\xAB | \xC2\xBB."));
+                    state.properties.push_back(editable("Couleur", st.color, PG::ValueType::Color, index, "color"));
+                    cats.push_back(std::move(state));
+                }
+                break;
+            }
             PG::Category how;
             how.name = "Choisir l'\xC3\xA9tat";
             how.properties.push_back(editable("Choisir l'\xC3\xA9tat", t.conditions ? "selon des conditions" : "selon la valeur",
@@ -1227,6 +2043,7 @@ void HmiContentPanel::rebuildGrid() {
             const bool otherwise = std::any_of(t.states.begin(), t.states.end(), [](const hmi::StateEntry& e) { return e.match == "*"; });
             how.properties.push_back(editable("Un \xC3\xA9tat \xC2\xAB sinon \xC2\xBB", otherwise ? "TRUE" : "FALSE", PG::ValueType::Boolean, -1,
                                               "otherwise", "Montr\xC3\xA9 quand aucun autre ne vaut (la ligne * ou \xC2\xAB sinon \xC2\xBB)."));
+            if (!t.conditions) how.properties.push_back(fromEnumCell(false));   // 1.12.7 (lot E)
             cats.push_back(std::move(how));
             if (index >= 0 && i < t.states.size()) {
                 const auto& st = t.states[i];
@@ -1261,8 +2078,10 @@ void HmiContentPanel::rebuildGrid() {
             for (const auto& r : doc_->project.recipes) recipes.push_back(r.name);
             const std::string chosen = o->text("recipe");
             if (std::find(recipes.begin(), recipes.end(), chosen) == recipes.end()) recipes.push_back(chosen);
-            rc.properties.push_back(editable("Recette", chosen, PG::ValueType::Enum, -1, "recipe",
-                                             "Les jeux de cette recette, un par ligne, une colonne par \xC3\xA9l\xC3\xA9ment.", recipes));
+            auto recipeCell = editable("Recette", chosen, PG::ValueType::Enum, -1, "recipe",
+                                       "Les jeux de cette recette, un par ligne, une colonne par \xC3\xA9l\xC3\xA9ment.", recipes);
+            recipeCell.typeIn = true;   // 1.12.7 (lot D) : un repere $Recette$ se tape aussi
+            rc.properties.push_back(std::move(recipeCell));
             const auto* bp = o->find("buttons");
             const auto shown = bp ? hmi::splitSemicolons(bp->value)
                                   : std::vector<std::string>(std::begin(hmi::kRecipeButtons), std::end(hmi::kRecipeButtons));
@@ -1291,6 +2110,9 @@ void HmiContentPanel::rebuildGrid() {
             std::vector<std::string> groups{""}, views{""};
             for (const auto& a : doc_->project.alarms)
                 if (!a.group.empty() && std::find(groups.begin(), groups.end(), a.group) == groups.end()) groups.push_back(a.group);
+            // 1.12.7 (lot D) : les groupes des alarmes des objets (Vue.*, Vue.Objet, symbole:Nom), que le filtre comprend.
+            for (const auto& gc : objalarms::groupChoices(doc_->project))
+                if (!gc.value.empty() && std::find(groups.begin(), groups.end(), gc.value) == groups.end()) groups.push_back(gc.value);
             for (const auto& v : doc_->project.views)
                 if (v.role == "vue" || v.role == "popup") views.push_back(v.name);
             if (index >= 0 && i < zones.size()) {
@@ -1303,12 +2125,16 @@ void HmiContentPanel::rebuildGrid() {
                                                  "Un rectangle : x,y,l,h (10,20,30,40)."));
                 auto g = groups;
                 if (std::find(g.begin(), g.end(), z.group) == g.end()) g.push_back(z.group);
-                zc.properties.push_back(editable("Groupe d'alarmes", z.group, PG::ValueType::Enum, index, "group",
-                                                 "Ses alarmes colorent la zone ; vide : le groupe du m\xC3\xAAme nom que la zone.", g));
+                auto groupCell = editable("Groupe d'alarmes", z.group, PG::ValueType::Enum, index, "group",
+                                          "Ses alarmes colorent la zone ; vide : le groupe du m\xC3\xAAme nom que la zone.", g);
+                groupCell.typeIn = true;   // 1.12.7 (lot D) : un repere $Zone$ se tape aussi
+                zc.properties.push_back(std::move(groupCell));
                 auto vv = views;
                 if (std::find(vv.begin(), vv.end(), z.view) == vv.end()) vv.push_back(z.view);
-                zc.properties.push_back(editable("Vue ouverte d'un clic", z.view, PG::ValueType::Enum, index, "view",
-                                                 "Vide : le clic choisit la zone sans changer de vue.", vv));
+                auto viewCell = editable("Vue ouverte d'un clic", z.view, PG::ValueType::Enum, index, "view",
+                                         "Vide : le clic choisit la zone sans changer de vue.", vv);
+                viewCell.typeIn = true;
+                zc.properties.push_back(std::move(viewCell));
                 zc.properties.push_back(editable("Couleur", z.color, PG::ValueType::Color, index, "color",
                                                  "Sa couleur sans alarme ; vide : Couleur d'une zone calme."));
                 cats.push_back(std::move(zc));
@@ -1332,6 +2158,7 @@ void HmiContentPanel::rebuildGrid() {
             pc.properties.push_back(readOnly("Pages", std::to_string(labels.size()),
                                              "Un objet pos\xC3\xA9 sur le conteneur va dans la page montr\xC3\xA9" "e ; retirer ou "
                                              "d\xC3\xA9placer une page emm\xC3\xA8ne ses objets."));
+            pc.properties.push_back(fromEnumCell(false));   // 1.12.7 (lot E) : un onglet par valeur, la variable de ce type
             cats.push_back(std::move(pc));
             break;
         }
@@ -1345,7 +2172,9 @@ void HmiContentPanel::rebuildGrid() {
                 for (const auto& v : doc_->project.views)
                     if (v.role == "vue") views.push_back(v.name);
                 if (std::find(views.begin(), views.end(), n.views[i]) == views.end()) views.push_back(n.views[i]);
-                nc.properties.push_back(editable("Vue", n.views[i], PG::ValueType::Enum, index, "view", "La vue ouverte d'un clic.", views));
+                auto viewCell = editable("Vue", n.views[i], PG::ValueType::Enum, index, "view", "La vue ouverte d'un clic.", views);
+                viewCell.typeIn = true;   // 1.12.7 (lot D) : un repere $Vue$ se tape aussi (montre en ambre)
+                nc.properties.push_back(std::move(viewCell));
                 nc.properties.push_back(editable("Libell\xC3\xA9", n.labels[i].empty() ? hmi::viewCaption(n.views[i]) : n.labels[i],
                                                  PG::ValueType::Text, index, "label", "Vide : le nom de la vue (sans Vue_, _ en espaces)."));
             }
@@ -1353,6 +2182,171 @@ void HmiContentPanel::rebuildGrid() {
                                              "Automatique : toutes les vues ordinaires du projet, dans leur ordre. \xC2\xAB Ajouter \xC2\xBB "
                                              "fixe la liste."));
             cats.push_back(std::move(nc));
+            // 1.12.7 (lot E, § 2.3) : les vues d'une source - une LIST OF STRING (Vues[*]), un dossier de vues.
+            {
+                PG::Category from;
+                from.name = "Depuis une source";
+                auto choices = navSources(doc_->project);
+                choices.insert(choices.begin(), std::string{});
+                auto cell = editable("Ajouter depuis une source", "", PG::ValueType::Enum, -1, "addSource",
+                                     "Vues[*] : les vues nomm\xC3\xA9" "es dans une LIST OF STRING, dans son ordre (elle peut changer en "
+                                     "marche) ; Process/* : les vues ordinaires du dossier Process. Une barre automatique ne "
+                                     "garde que cette source.",
+                                     std::move(choices));
+                cell.typeIn = true;
+                from.properties.push_back(std::move(cell));
+                cats.push_back(std::move(from));
+            }
+            break;
+        }
+        // 1.12.7 (lot D) : les choix - le libelle et la valeur ecrite, une ligne par choix.
+        case Mode::Choices: {
+            const auto c = readChoices(*o);
+            if (const std::string from = hmi::itemsSourceOf(*o); !from.empty()) {
+                PG::Category src;
+                src.name = "\xC3\x89l\xC3\xA9ments depuis";
+                src.properties.push_back(readOnly("Source", from,
+                                                  "Les choix viennent de cette source (\xC3\x89l\xC3\xA9ments depuis, dans Propri\xC3\xA9t\xC3\xA9s) : "
+                                                  "les lignes ci-dessous ne servent pas tant qu'elle est r\xC3\xA9gl\xC3\xA9" "e."));
+                cats.push_back(std::move(src));
+            }
+            if (index >= 0 && i < c.labels.size()) {
+                PG::Category ch;
+                ch.name = "Choix " + std::to_string(index + 1);
+                ch.properties.push_back(editable("Libell\xC3\xA9", c.labels[i], PG::ValueType::Text, index, "label",
+                                                 "Ce que montre l'objet ; un texte, un rep\xC3\xA8re $Mode$. Pas de \xC2\xAB ; \xC2\xBB seul "
+                                                 "(il couperait la liste)."));
+                auto value = editable("Valeur \xC3\xA9" "crite", c.values[i], PG::ValueType::Text, index, "value",
+                                      "Ce que le choix \xC3\xA9" "crit dans la variable : 2, 'Azote', TRUE, T_MODE#Auto, Auto (le nom "
+                                      "d'une valeur d'\xC3\xA9num\xC3\xA9ration). Vide : le rang (" + std::to_string(i) + "), ou le "
+                                      "libell\xC3\xA9 pour une STRING.");
+                value.placeholder = "(rang " + std::to_string(i) + ")";
+                ch.properties.push_back(std::move(value));
+                cats.push_back(std::move(ch));
+            } else {
+                PG::Category info;
+                info.name = "Choix";
+                info.properties.push_back(readOnly("Choix", std::to_string(c.labels.size()),
+                                                   "Une ligne par choix : son libell\xC3\xA9 et la valeur qu'il \xC3\xA9" "crit. "
+                                                   "\xC2\xAB Ajouter \xC2\xBB en cr\xC3\xA9" "e un ; \xE2\x86\x91\xE2\x86\x93 l'ordre."));
+                cats.push_back(std::move(info));
+            }
+            break;
+        }
+        // 1.12.7 (lot D) : les zones de couleur d'un bargraphe, d'un cadran.
+        case Mode::Bands: {
+            const auto bands = readBands(*o);
+            if (index >= 0 && i < bands.size()) {
+                PG::Category zc;
+                zc.name = "Zone " + std::to_string(index + 1);
+                const std::string bound = "Une valeur (60), ou un % de l'\xC3\xA9" "chelle (60 %) qui suit Min et Max.";
+                zc.properties.push_back(editable("De", bands[i].from, PG::ValueType::Text, index, "from", bound));
+                zc.properties.push_back(editable("\xC3\x80", bands[i].to, PG::ValueType::Text, index, "to", bound));
+                zc.properties.push_back(editable("Couleur", bands[i].color, PG::ValueType::Color, index, "color"));
+                cats.push_back(std::move(zc));
+            }
+            PG::Category info;
+            info.name = "Zones";
+            info.properties.push_back(readOnly("\xC3\x89" "chelle", hmi::formatNumber(o->number("min", 0)) + " \xE2\x80\xA6 "
+                                                                    + hmi::formatNumber(o->number("max", 100)),
+                                               "Min et Max (Propri\xC3\xA9t\xC3\xA9s). Une zone en % les suit quand ils changent."));
+            info.properties.push_back(readOnly("Zones", std::to_string(bands.size())));
+            cats.push_back(std::move(info));
+            break;
+        }
+        // 1.12.7 (lot D) : les plages d'un programmateur, et ce que la resolution en fait.
+        case Mode::Schedule: {
+            const auto slots = readSlots(*o);
+            const int res = hmi::resolutionMinutes(o->text("resolution", "30 min"));
+            if (index >= 0 && i < slots.size()) {
+                PG::Category sc;
+                sc.name = "Plage " + std::to_string(index + 1);
+                sc.properties.push_back(editable("Jours", slots[i].days, PG::ValueType::Text, index, "days",
+                                                 "Lu, Ma, Me, Je, Ve, Sa, Di ; Lu-Ve ; Sa,Di ; tous."));
+                sc.properties.push_back(editable("De", slots[i].from, PG::ValueType::Text, index, "from", "07:00, 7h30."));
+                sc.properties.push_back(editable("\xC3\x80", slots[i].to, PG::ValueType::Text, index, "to", "12:00 ; 24:00 : minuit."));
+                const std::string round = slotRounding(slots[i], res);
+                sc.properties.push_back(readOnly("En marche", round.empty() ? std::string("telle quelle") : round,
+                                                 "Le programmateur compte en cases de la r\xC3\xA9solution : une plage s'arrondit \xC3\xA0 "
+                                                 "la case la plus proche."));
+                cats.push_back(std::move(sc));
+            }
+            PG::Category info;
+            info.name = "Plages";
+            info.properties.push_back(readOnly("R\xC3\xA9solution", res == 60 ? std::string("1 h") : std::to_string(res) + " min",
+                                               "R\xC3\xA9solution (Propri\xC3\xA9t\xC3\xA9s) : la taille d'une case."));
+            info.properties.push_back(readOnly("Plages", std::to_string(slots.size()),
+                                               "Elles servent tant que la variable du programme est vide ; ensuite, la variable garde "
+                                               "ce que l'op\xC3\xA9rateur a coch\xC3\xA9."));
+            cats.push_back(std::move(info));
+            break;
+        }
+        // 1.12.7 (lot D, § 2.4) : les colonnes d'une source - lesquelles, leur titre, leur format.
+        case Mode::SourceColumns: {
+            const auto c = readSourceCols(doc_->project, *o);
+            const auto rows = c.rows();
+            PG::Category src;
+            src.name = "Lignes depuis";
+            src.properties.push_back(readOnly("Source", rowsSourceOf(*o),
+                                              "Une ligne par \xC3\xA9l\xC3\xA9ment de la variable (Lignes depuis, dans Propri\xC3\xA9t\xC3\xA9s) : "
+                                              "les cases du tableau ne servent pas. Ici, ses colonnes : lesquelles se montrent, dans "
+                                              "quel ordre (\xE2\x86\x91\xE2\x86\x93), sous quel titre, \xC3\xA0 quel format."));
+            src.properties.push_back(readOnly("Colonnes", c.chosen.empty() ? std::to_string(rows.size()) + " (toutes)"
+                                                                           : std::to_string(c.chosen.size()) + " sur " + std::to_string(rows.size())));
+            cats.push_back(std::move(src));
+            if (index >= 0 && i < rows.size()) {
+                const auto* ch = c.find(rows[i]);
+                PG::Category cc;
+                cc.name = "Colonne " + rows[i];
+                cc.properties.push_back(editable("Montr\xC3\xA9" "e", c.chosen.empty() || ch ? "TRUE" : "FALSE", PG::ValueType::Boolean, index, "shown",
+                                                 "Cach\xC3\xA9" "e, elle ne se montre pas (la source garde son membre)."));
+                cc.properties.push_back(editable("Titre", ch ? ch->title : std::string{}, PG::ValueType::Text, index, "title",
+                                                 "Vide : le nom du membre (" + rows[i] + ")."));
+                cc.properties.push_back(editable("Format", ch ? ch->format : std::string{}, PG::ValueType::Text, index, "format",
+                                                 "Pour un nombre : 0, 0.0, 0.00 ; vide : tel quel."));
+                cats.push_back(std::move(cc));
+            }
+            break;
+        }
+        // 1.12.7 (lot D) : les cases a cocher (langues, boutons, zones).
+        case Mode::Checks: {
+            const auto c = readChecks(doc_->project, *o);
+            PG::Category cc;
+            const bool all = c.emptyIsAll && c.chosen.empty();
+            cc.name = o->kind == hmi::Kind::UserManager ? "Boutons" : o->kind == hmi::Kind::AlarmSummary ? "Zones" : "Langues";
+            if (c.emptyIsAll)
+                cc.properties.push_back(readOnly(o->kind == hmi::Kind::AlarmSummary ? "Toutes les zones" : "Toutes les langues",
+                                                 all ? "oui (liste vide)" : "non",
+                                                 "Rien de coch\xC3\xA9 : toutes, dans l'ordre du projet. D\xC3\xA9" "cocher une case "
+                                                 "garde les autres."));
+            const auto list = c.rows();
+            for (std::size_t k = 0; k < list.size(); ++k) {
+                const bool typed = k >= c.offered.size();
+                std::string help = typed ? std::string("Tap\xC3\xA9 dans Propri\xC3\xA9t\xC3\xA9s, pas propos\xC3\xA9 par le projet "
+                                                       "(un rep\xC3\xA8re $\xE2\x80\xA6$ est gard\xC3\xA9 tel quel).")
+                                         : k < c.details.size() ? c.details[k] : std::string{};
+                // 1.12.7 (lot E) : une source (Zones[*].Nom) dit ce qu'elle deviendra.
+                if (typed && hmi::sources::hasJoker(list[k]))
+                    help = hmi::sources::jokerSummary(doc_->project, doc_->project.view(view_), list[k]);
+                cc.properties.push_back(editable(list[k], all || c.has(list[k]) ? "TRUE" : "FALSE", PG::ValueType::Boolean, -1,
+                                                 "check:" + list[k], std::move(help)));
+            }
+            cats.push_back(std::move(cc));
+            // 1.12.7 (lot E, § 2.3) : les zones d'un resume lues dans une source (un tableau de structures, une LIST).
+            if (o->kind == hmi::Kind::AlarmSummary) {
+                PG::Category from;
+                from.name = "Depuis une source";
+                std::vector<std::string> choices{std::string{}};
+                for (auto& s : hmi::sources::jokerSuggestions(doc_->project, doc_->project.view(view_)))
+                    if (hmi::sources::hasJoker(s)) choices.push_back(std::move(s));
+                auto cell = editable("Ajouter depuis une source", "", PG::ValueType::Enum, -1, "addSource",
+                                     "Zones[*].Nom : une zone par \xC3\xA9l\xC3\xA9ment (son nom, lu en marche) ; une LIST OF STRING "
+                                     "(Groupes[*]) : ses textes.",
+                                     std::move(choices));
+                cell.typeIn = true;
+                from.properties.push_back(std::move(cell));
+                cats.push_back(std::move(from));
+            }
             break;
         }
         case Mode::Members: {

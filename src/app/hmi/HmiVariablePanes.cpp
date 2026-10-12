@@ -12,6 +12,7 @@
 #include "HmiOperatorPanes.hpp"           // 1.10 (chantier S2)
 #include "HmiEnumPanes.hpp"               // 1.10 (chantier U) : le type enumeration
 #include "../../hmi/HmiTypes.hpp"
+#include "../../hmi/HmiSources.hpp"   // 1.12.7 (lot E) : Ligne/Convoyeur/* suit le dossier renomme
 #include "../../hmi/HmiTypeForms.hpp"     // 1.12.2 : Liste..., Vecteur..., Dictionnaire..., Tuple...
 #include "../../core/AtomicFile.hpp"   // 1.11.16 : exporter les valeurs remanentes
 #include "../../ui/Theme.hpp"
@@ -2136,6 +2137,7 @@ bool HmiVariablesPane::renameFolder(const std::string& path, const std::string& 
             if (const auto m = moved(f)) f = *m;
         for (auto& v : p.programs.variables)
             if (const auto m = moved(v.folder)) v.folder = *m;
+        (void)hmi::sources::renameFolderJokers(p, false, path, target);   // 1.12.7 (lot E) : Ligne/Convoyeur/* suit
     }));
     if (collapsed_.erase(upper(path))) collapsed_.insert(upper(target));
     selectedKey_ = "F:" + upper(target);
@@ -2212,6 +2214,7 @@ void HmiVariablesPane::dropRows(const std::vector<ui::RowIndex>& from, ui::RowIn
                 if (inside(x, f)) x = target + x.substr(f.size());
             for (auto& v : p.programs.variables)
                 if (inside(v.folder, f)) v.folder = target + v.folder.substr(f.size());
+            (void)hmi::sources::renameFolderJokers(p, false, f, target);   // 1.12.7 (lot E) : Ligne/Convoyeur/* suit
             ++moved;
         }
         for (auto& v : p.programs.variables)

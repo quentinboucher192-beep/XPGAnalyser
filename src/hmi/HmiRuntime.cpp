@@ -1237,13 +1237,21 @@ const View* Runtime::viewOf(Id id) const {
     const bool inherited = inherits(*project_, *v);
     const bool symbols = usesSymbols(*project_, *v);
     const bool owned = popupOwner(*project_, *v) != nullptr;    // 1.11.10 : une popup d'un symbole
-    if (!inherited && !symbols && !owned && !overridden(*v)) return v;
+    // 1.12.7 (lot E) : un joker [*] a deplier, une instance a repeter (une fois par tick : la question se
+    // pose a chaque lecture de la vue).
+    auto jk = jokerViews_.find(id);
+    if (jk == jokerViews_.end()) jk = jokerViews_.emplace(id, sources::viewHasJoker(*v)).first;
+    const bool jokers = jk->second;
+    if (!inherited && !symbols && !owned && !overridden(*v) && !jokers) return v;
     // Une entree de std::map ne bouge pas quand on en ajoute d'autres : le
     // pointeur rendu vaut jusqu'au prochain effacement (entree du moteur).
     auto it = composed_.find(id);
     if (it == composed_.end()) {
         View c = inherited ? compose(*project_, *v) : *v;
         applyOverrides(c, *v);
+        // 1.12.7 (lot E) : « Repeter depuis » - une instance par element, avant de developper les symboles.
+        const sources::SourceFn source = [this, id](std::string_view name) { return jokerSource(name, id); };
+        if (jokers) (void)sources::repeatInstances(c, source);
         if (symbols) {
             View e = expandInstances(*project_, c);
             // 1.12.3 : les objets d'une instance n'existent qu'une fois developpes - leurs
@@ -1253,6 +1261,8 @@ const View* Runtime::viewOf(Id id) const {
             c = std::move(e);
         }
         if (owned) c = qualifiedOwnedPopup(*project_, c);        // 1.11.10 : Ouvrir() vise l'instance qui l'ouvre
+        // 1.12.7 (lot E) : le joker [*] des listes (une plume, une barre, une ligne, une vue, un onglet par element).
+        if (jokers || symbols) sources::expandView(c, source, [this, id](std::string_view f) { return jokerText(f, id); });
         it = composed_.emplace(id, std::move(c)).first;
     }
     return &it->second;
@@ -1407,6 +1417,18 @@ bool Runtime::sampleNumber(const std::string& expr, double& out) const {
     if (!v) return false;
     const auto read = roles::adapt(roles::KeyRole{"variables", roles::Role::Number}, *v);
     return read.ok && roles::readNumber(read.text, out);
+}
+
+// 1.12.7 (lot E) : le texte d'une formule (le nom d'un element d'une source : Cuves[2].Nom).
+std::optional<std::string> Runtime::jokerText(std::string_view formula, Id view) const {
+    if (!env_) return std::nullopt;
+    const std::string f(formula);
+    auto it = expressions_.find(f);
+    if (it == expressions_.end()) it = expressions_.emplace(f, Expression::compile(f)).first;
+    if (!it->second.valid()) return std::nullopt;
+    auto v = it->second.evaluate(*env_, viewScope(view));
+    if (!v) return std::nullopt;
+    return v->type() == sim::Type::String ? v->asString() : roles::displayText(*v);
 }
 
 void Runtime::evaluateProps(Id view, Object& o) const {
@@ -3560,6 +3582,7 @@ void Runtime::cycle(double now) {
 void Runtime::tick(double now) {
     if (!running_ || !project_) return;
     composed_.clear(); boundCalls_.clear();                  // le projet a pu changer depuis le dernier appel
+    jokerViews_.clear();                                     // 1.12.7 (lot E) : et ses jokers
     refreshBound();                     // lot 15 : les variables liees a un equipement
     now_ = std::max(now_, now);
     followWatched(now, false);          // 1.9 : les variables des alarmes, suivies en permanence

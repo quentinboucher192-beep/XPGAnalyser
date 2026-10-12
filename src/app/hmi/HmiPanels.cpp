@@ -30,6 +30,8 @@
 #include "HmiValueKind.hpp"              // 1.11.3 : le carre de legende de chaque case
 #include "../../hmi/HmiTypeForms.hpp"   // 1.12.2 : les variables qui ont des elements (Elements depuis)
 #include "../../hmi/HmiEnums.hpp"       // 1.12.2 : les enumerations, sources d'elements
+#include "../../hmi/HmiChoiceLists.hpp" // 1.12.7 (lot D) : les lettres ISA, les positions de la vanne 3 voies
+#include "../../hmi/HmiProduction.hpp"  // 1.12.7 (lot D) : le calendrier des postes
 #include "../../ui/Shapes.hpp"
 #include "../../ui/Theme.hpp"
 #include "../../ui/widgets/Controls.hpp"
@@ -1974,6 +1976,25 @@ const std::vector<KeyInfo>& keyInfos() {
         {"params", "Arguments", PG::ValueType::Text, {},
          "Ce que re\xC3\xA7oit chaque param\xC3\xA8tre du symbole : Armoire := Armoires[1]; Nom := 'B'. "
          "Un param\xC3\xA8tre absent garde sa valeur par d\xC3\xA9" "faut (celle du symbole)."},
+        // 1.12.7 (lot E) : « Repeter depuis » - une instance par element (8 cuves, 8 instances)
+        {"repeatFrom", "R\xC3\xA9p\xC3\xA9ter depuis", PG::ValueType::Text, {},
+         "Une instance par \xC3\xA9l\xC3\xA9ment d'un tableau ou d'une LIST (Cuves) : les arguments qui citent [*] re\xC3\xA7oivent "
+         "l'\xC3\xA9l\xC3\xA9ment (Cuve := Cuves[*]). En marche, les copies se suivent ; une LIST qui grandit en ajoute. "
+         "Vide : une seule instance."},
+        {"repeatAxis", "R\xC3\xA9p\xC3\xA9ter : sens", PG::ValueType::Enum, {"horizontal", "vertical"}, "Les copies c\xC3\xB4te \xC3\xA0 c\xC3\xB4te, ou l'une sous l'autre."},
+        {"repeatGap", "R\xC3\xA9p\xC3\xA9ter : \xC3\xA9" "cart (px)", PG::ValueType::Real, {}, "L'espace entre deux copies."},
+        // 1.12.7 (lot E) : « Etats depuis » - les etats d'un multi-etats, d'un chronogramme lus dans une source
+        {"statesFrom", "\xC3\x89tats depuis", PG::ValueType::Text, {},
+         "Remplace les \xC3\xA9tats \xC3\xA9" "crits, en marche : une MAP (la cl\xC3\xA9 : la valeur de l'\xC3\xA9tat, la valeur : son texte), "
+         "une LIST ou un tableau de textes (l'indice, le texte), une \xC3\xA9num\xC3\xA9ration (sa valeur, son texte). Un \xC3\xA9tat "
+         "\xC3\xA9" "crit pour la m\xC3\xAAme valeur garde sa couleur ; le \xC2\xAB sinon \xC2\xBB reste. Vide : les \xC3\xA9tats \xC3\xA9" "crits."},
+        {"repeatPerRow", "R\xC3\xA9p\xC3\xA9ter : par rang\xC3\xA9" "e", PG::ValueType::Integer, {},
+         "Combien de copies avant de passer \xC3\xA0 la rang\xC3\xA9" "e suivante (8 cuves, 4 par rang\xC3\xA9" "e : deux rang\xC3\xA9" "es). "
+         "0 : toutes sur une rang\xC3\xA9" "e."},
+        // 1.12.7 (lot D) : les colonnes choisies d'une source de tableau
+        {"sourceColumns", "Colonnes de la source", PG::ValueType::Text, {},
+         "Celles qui se montrent, dans l'ordre : Nom; Debit = D\xC3\xA9" "bit | 0.0 (un titre apr\xC3\xA8s =, un format "
+         "apr\xC3\xA8s |). Vide : toutes, sous leur nom. Elles se r\xC3\xA8glent aussi dans Contenu."},
         // ---- lot 11 : les graphiques
         {"xVariable", "Variable X (expression)", PG::ValueType::Text, {}, "L'abscisse : D\xC3\xA9" "bit_m3h. \xC3\x80 chaque cycle, un point (X, Y) par courbe."},
         {"xmin", "Axe X min", PG::ValueType::Real, {}, ""},
@@ -2707,6 +2728,20 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
                          || o->kind == hmi::Kind::PieChart || o->kind == hmi::Kind::RadarChart || o->kind == hmi::Kind::Histogram;
         if (!charts && (o->find("unit") || o->find("format")) && !o->find("varFormat")) allProps.push_back({"varFormat", "TRUE", ""});
         if (o->kind == hmi::Kind::VariableTable && !o->find("formats")) allProps.push_back({"formats", "", ""});
+        // 1.12.7 (lot E) : « Repeter depuis » d'une instance (absent d'un objet neuf : rien ne change dans son fichier).
+        if (o->kind == hmi::Kind::SymbolInstance && !many) {
+            if (!o->find("repeatFrom")) allProps.push_back({"repeatFrom", "", ""});
+            if (!o->find("repeatAxis")) allProps.push_back({"repeatAxis", "horizontal", ""});
+            if (!o->find("repeatGap")) allProps.push_back({"repeatGap", "10", ""});
+            if (!o->find("repeatPerRow")) allProps.push_back({"repeatPerRow", "0", ""});
+        }
+        // 1.12.7 (lot E) : « Etats depuis » d'un multi-etats, d'un chronogramme (absent d'un objet neuf).
+        if ((o->kind == hmi::Kind::MultiStateText || o->kind == hmi::Kind::MultiStateIndicator || o->kind == hmi::Kind::StateChart)
+            && !many && !o->find("statesFrom"))
+            allProps.push_back({"statesFrom", "", ""});
+        // 1.12.7 (lot D) : les colonnes choisies d'un tableau qui a une source.
+        if (o->kind == hmi::Kind::Table && !o->find("sourceColumns") && o->text("rowsFrom").find_first_not_of(" \t") != std::string::npos)
+            allProps.push_back({"sourceColumns", "", ""});
     }
     // Lot 13 : la signature electronique des commandes (absente : aucune).
     if (hmi::kindSignable(o->kind)) {
@@ -2827,6 +2862,27 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
                 p.enumValues.clear();
                 for (const auto& t : hmi::kLoginTabs) p.enumValues.emplace_back(t.label);
                 p.name = "Onglet ouvert";
+            } else if (prop.key == "repeatFrom" && project) {
+                // 1.12.7 (lot E) : les sources d'une repetition - les variables IHM a elements (tableaux, LIST, VECTOR).
+                p.type = PG::ValueType::Enum;
+                p.enumValues = {""};
+                for (const auto& var : project->programs.variables) {
+                    const auto form = hmi::typeform::decompose(var.type).form;
+                    if (form == hmi::typeform::Form::Array || form == hmi::typeform::Form::Array2D || form == hmi::typeform::Form::List
+                        || form == hmi::typeform::Form::Vector)
+                        p.enumValues.push_back(var.name);
+                }
+            } else if (prop.key == "statesFrom" && project) {
+                // 1.12.7 (lot E) : les sources d'etats - les enumerations, les MAP, les LIST et les tableaux.
+                p.type = PG::ValueType::Enum;
+                p.enumValues = {""};
+                for (const auto* e : hmi::enumerations(*project)) p.enumValues.push_back(e->name);
+                for (const auto& var : project->programs.variables) {
+                    const auto form = hmi::typeform::decompose(var.type).form;
+                    if (form == hmi::typeform::Form::Map || form == hmi::typeform::Form::List || form == hmi::typeform::Form::Vector
+                        || form == hmi::typeform::Form::Array)
+                        p.enumValues.push_back(var.name);
+                }
             } else if ((prop.key == "itemsFrom" || prop.key == "rowsFrom") && project) {
                 // 1.12.2 : les sources - les enumerations du projet (des elements), les variables IHM
                 // qui ont des elements (LIST, VECTOR, MAP, tableaux).
@@ -2853,8 +2909,51 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
                 for (const auto& gc : objalarms::groupChoices(*project))
                     if (std::find(p.enumValues.begin(), p.enumValues.end(), gc.value) == p.enumValues.end()) p.enumValues.push_back(gc.value);
             }
-            if (p.type == PG::ValueType::Enum && std::find(p.enumValues.begin(), p.enumValues.end(), prop.value) == p.enumValues.end())
-                p.enumValues.push_back(prop.value);
+            // ---- 1.12.7 (lot D, § 2.5) : choisir au lieu de taper ----
+            if (prop.key == "afterLogin" && project) {
+                // La vue ouverte quand la connexion reussit : une vue ordinaire du projet.
+                p.type = PG::ValueType::Enum;
+                p.enumValues = {""};
+                for (const auto& vw : project->views)
+                    if (vw.role == "vue") p.enumValues.push_back(vw.name);
+            } else if (prop.key == "function" && o->kind == hmi::Kind::IsaInstrument) {
+                // Les lettres ISA (PT, TT, FT...) ; choisies, elles proposent leur unite (HmiEditor).
+                p.type = PG::ValueType::Enum;
+                p.enumValues = {""};
+                for (const auto& f : hmi::choices::kIsaFunctions) p.enumValues.emplace_back(f.letters);
+            } else if (prop.key == "value" && o->kind == hmi::Kind::ThreeWayValve && prop.expr.empty()) {
+                // Une position fixe : fermee, 1-2, 1-3, 2-3 (le code reste ecrit : 0, 1, 2, 3).
+                p.type = PG::ValueType::Enum;
+                p.enumValues.assign(std::begin(hmi::choices::kValve3Labels), std::end(hmi::choices::kValve3Labels));
+                if (const auto label = hmi::choices::valve3Label(prop.value); !label.empty()) p.value = std::string(label);
+            } else if (prop.key == "shifts" && o->kind == hmi::Kind::ProductionCounter && prop.expr.empty()) {
+                // Les debuts de poste : ceux du calendrier du projet (Configuration), ou une liste tapee.
+                p.type = PG::ValueType::Enum;
+                p.enumValues = {"", std::string(hmi::kShiftCalendar)};
+            } else if (prop.key == "page" && o->kind == hmi::Kind::TabContainer && prop.expr.empty()) {
+                // L'onglet montre, par son nom (le numero reste ecrit).
+                const auto labels = hmi::tabLabels(*o);
+                std::vector<std::string> names;
+                for (const auto& l : labels)
+                    if (!l.empty() && std::find(names.begin(), names.end(), l) == names.end()) names.push_back(l);
+                if (names.size() == labels.size() && !names.empty()) {
+                    p.type = PG::ValueType::Enum;
+                    p.enumValues = names;
+                    double n = 0;
+                    if (hmi::parseNumber(prop.value, n) && n >= 1 && n <= static_cast<double>(labels.size()))
+                        p.value = labels[static_cast<std::size_t>(n) - 1];
+                }
+            }
+            if (p.type == PG::ValueType::Enum && std::find(p.enumValues.begin(), p.enumValues.end(), p.value) == p.enumValues.end())
+                p.enumValues.push_back(p.value);
+            // 1.12.7 (lot D) : une liste de noms (vue, groupe, alarme, recette, ressource, style...) accepte
+            // aussi un nom tape - un repere $Zone$ (montre en ambre), un nom d'une autre version.
+            if (p.type == PG::ValueType::Enum && hmi::roles::keyRole(prop.key)) {
+                const auto role = hmi::roles::roleOf(o->kind, prop.key).role;
+                if (role == hmi::roles::Role::Name || prop.key == "function" || prop.key == "page" || prop.key == "shifts"
+                    || (prop.key == "value" && o->kind == hmi::Kind::ThreeWayValve))
+                    p.typeIn = true;
+            }
         }
         if (prop.key == "cells" && prop.expr.empty()) {
             std::size_t nrows = 0, cols = 0, driven = 0;
@@ -2920,6 +3019,17 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
         };
         if (const std::string special = labelForKind(o->kind, prop.key); !special.empty() && prop.key != "variable")
             p.name = special + (prop.expr.empty() ? std::string{} : std::string("  \xC6\x92"));
+        // 1.12.7 (lot D) : une position de vanne 3 voies, un onglet choisis par leur nom ecrivent leur code.
+        if (p.type == PG::ValueType::Enum && o->kind == hmi::Kind::ThreeWayValve && prop.key == "value")
+            p.commit = [inner = p.commit](std::string_view s) { return inner(hmi::choices::valve3Code(s)); };
+        if (p.type == PG::ValueType::Enum && o->kind == hmi::Kind::TabContainer && prop.key == "page") {
+            const auto labels = hmi::tabLabels(*o);
+            p.commit = [inner = p.commit, labels](std::string_view s) {
+                for (std::size_t k = 0; k < labels.size(); ++k)
+                    if (labels[k] == s) return inner(std::to_string(k + 1));
+                return inner(s);
+            };
+        }
         // Lot 16 : le GIF anime - sa lecture, son depart, sa fin ("count", "speed"
         // et "condition" n'y disent pas ce qu'ils disent ailleurs).
         if (o->kind == hmi::Kind::AnimatedGif) {

@@ -224,6 +224,22 @@ void Runtime::sampleCharts(double now) {
                 }
             }
             const std::string xExpr = sourceOf(o, "xVariable");
+            // 1.12.7 (lot E, § 3.4) : la courbe XY en profil - une Variable X a joker (Profil[*].X) : tous les
+            // points (X[i], Y[i]) de la source, refaits a chaque echantillon (pas d'accumulation dans le temps).
+            if (const auto xj = sources::jokerOf(xExpr)) {
+                const auto src = jokerSource(sources::sourceName(*xj), id);
+                for (auto& s : series) {
+                    s.points.clear();
+                    if (!src) continue;
+                    const auto yj = sources::jokerOf(s.expression);
+                    for (const auto& index : src->indices) {
+                        double px = 0, py = 0;
+                        const std::string ye = yj ? sources::itemAt(*yj, index, src->enumeration) : s.expression;
+                        if (eval(sources::itemAt(*xj, index, src->enumeration), px) && eval(ye, py)) s.points.emplace_back(px, py);
+                    }
+                }
+                continue;
+            }
             double x = 0;
             if (xExpr.empty() || !eval(xExpr, x)) continue;
             const auto cap = static_cast<std::size_t>(std::clamp(o.number("maxPoints", 300), 2.0, 20000.0));
@@ -489,7 +505,7 @@ void Runtime::productionCycle(double now) {
             const bool running = runExpr.empty() ? true : evalBool(runExpr, false);
             // Le poste en cours (l'heure du poste).
             std::vector<int> shifts;
-            (void)parseShifts(o.text("shifts"), shifts);
+            (void)parseShifts(shiftsOf(o.text("shifts"), project_), shifts);   // 1.12.7 (lot D) : le calendrier du projet
             const std::string stamp = dateStampOf(now);
             const int minute = stamp.size() >= 16 ? std::atoi(stamp.substr(11, 2).c_str()) * 60 + std::atoi(stamp.substr(14, 2).c_str()) : 0;
             const int shift = currentShift(shifts, minute);

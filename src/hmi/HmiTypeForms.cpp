@@ -5,6 +5,7 @@
 #include "HmiEnums.hpp"
 #include "HmiTypeRegistry.hpp"
 #include "HmiTypes.hpp"
+#include "HmiSources.hpp"   // 1.12.7 (lot E) : les membres simples d'un tableau de structures
 #include "../sim/Interpreter.hpp"
 
 #include <cctype>
@@ -366,7 +367,12 @@ std::vector<std::string> columnsOf(const Project& p, std::string_view type) {
     }
     if (e.form == Form::Simple && !e.reference) {
         std::vector<std::string> out;
-        for (const auto& m : types::membersOf(p, e.element)) out.push_back(m.name);
+        // 1.12.7 (lot E) : un tableau de l'IHM deplie ses membres imbriques (Pompe.Debit, Mesures[0]), comme le
+        // moteur (Runtime::tableRows) ; une LIST, un VECTOR montrent leurs membres directs.
+        if (s.form == Form::Array)
+            for (const auto& m : sources::leafMembers(p, e.element)) out.push_back(m.name);
+        else
+            for (const auto& m : types::membersOf(p, e.element)) out.push_back(m.name);
         if (!out.empty()) return out;
     }
     return {"Valeur"};

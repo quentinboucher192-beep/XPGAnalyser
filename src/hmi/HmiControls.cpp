@@ -300,9 +300,22 @@ int stateIndexOf(const std::vector<StateEntry>& states, std::string_view shown, 
 }
 
 // =================================================================== zones ===
-std::vector<Zone> parseZones(std::string_view text, std::string* error) {
+std::vector<Zone> parseZones(std::string_view text, std::string* error, double lo, double hi) {
     std::vector<Zone> out;
-    for (const auto& entry : listItems(text)) {
+    // 1.12.7 (lot D) : une borne en % de l'echelle.
+    const auto bound = [&](std::string b, double& v) {
+        b = trim(b);
+        bool percent = false;
+        if (!b.empty() && b.back() == '%') {
+            percent = true;
+            b = trim(std::string_view(b).substr(0, b.size() - 1));
+        }
+        if (!parseNumber(b, v)) return false;
+        if (percent && lo < hi) v = lo + (hi - lo) * v / 100.0;
+        return true;
+    };
+    const std::string plain = text.find('$') == std::string_view::npos ? std::string(text) : markers::strip(text, markers::Mode::Text);
+    for (const auto& entry : listItems(plain)) {
         const auto eq = entry.find('=');
         const std::string range = trim(std::string_view(entry).substr(0, eq == std::string::npos ? entry.size() : eq));
         Zone z;
@@ -317,14 +330,14 @@ std::vector<Zone> parseZones(std::string_view text, std::string* error) {
                 if (range[k] != '-') continue;
                 std::size_t p = k;
                 while (p > 0 && range[p - 1] == ' ') --p;
-                if (p > 0 && (std::isdigit(static_cast<unsigned char>(range[p - 1])) || range[p - 1] == '.')) {
+                if (p > 0 && (std::isdigit(static_cast<unsigned char>(range[p - 1])) || range[p - 1] == '.' || range[p - 1] == '%')) {
                     a = range.substr(0, k);
                     b = range.substr(k + 1);
                     break;
                 }
             }
         }
-        if (a.empty() || b.empty() || !parseNumber(a, z.from) || !parseNumber(b, z.to) || z.color.empty()) {
+        if (a.empty() || b.empty() || !bound(a, z.from) || !bound(b, z.to) || z.color.empty()) {
             if (error && error->empty()) *error = "zone illisible : \xC2\xAB " + entry + " \xC2\xBB (de-\xC3\xA0 = couleur, par ex. 0-60 = #2ECC71)";
             continue;
         }
@@ -825,6 +838,31 @@ bool parseSchedule(std::string_view text, int slotMinutes, WeekSchedule& out, st
     }
     out = std::move(s);
     return true;
+}
+
+std::vector<ScheduleRounding> scheduleRoundings(std::string_view text, int slotMinutes) {
+    std::vector<ScheduleRounding> out;
+    const int res = emptySchedule(slotMinutes).slotMinutes;
+    for (const auto& entry : listItems(text)) {
+        const auto eq = entry.find('=');
+        if (eq == std::string::npos) continue;
+        for (const auto& range : listItems(std::string_view(entry).substr(eq + 1)))
+            for (const auto& r : splitKeep(range, ',')) {
+                const auto dash = r.find('-');
+                const int a = dash == std::string::npos ? -1 : minutesOf(r.substr(0, dash));
+                const int b = dash == std::string::npos ? -1 : minutesOf(r.substr(dash + 1));
+                if (a < 0 || b < 0 || b <= a) continue;
+                const int from = static_cast<int>(std::lround(static_cast<double>(a) / res)) * res;
+                const int to = static_cast<int>(std::lround(static_cast<double>(b) / res)) * res;
+                if (from == a && to == b) continue;
+                ScheduleRounding sr;
+                sr.range = hhmm(a) + "-" + hhmm(b);
+                sr.gone = to <= from;
+                if (!sr.gone) sr.becomes = hhmm(from) + "-" + hhmm(to);
+                out.push_back(std::move(sr));
+            }
+    }
+    return out;
 }
 
 std::string formatSchedule(const WeekSchedule& s) {
