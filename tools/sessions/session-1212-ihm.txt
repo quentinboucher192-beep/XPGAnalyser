@@ -9,7 +9,8 @@
 #       QR, la premiere image de la video ;
 #    2. Configuration > Unites et formats : Min, Max et les quatre seuils de
 #       Pression_FGH, Niveau_FGH, Ouverture_FGH ;
-#    3. la jauge : Min et Max vides, montres en gris « 0 (de Pression_FGH) » ;
+#    3. la jauge : Minimum et Maximum vides, montres en gris « 0 (de Pression_FGH) »,
+#       les seuils aussi ; l'editeur la dessine a la valeur initiale (7.6) ;
 #    4. la pompe : la section « Liaison Equipement (T_Pompe_FGH) » de l'inspecteur ;
 #    5. le moteur : Contenu, le mode Etat (une ligne par valeur) ;
 #    6. le polygone : ses poignees de sommets et Contenu, une ligne par sommet ;
@@ -47,10 +48,18 @@ objet "Jauge_FGH"
 attendre 3
 sous-onglet "Propri"
 attendre 3
+# La section Jauge a l'ecran (Minimum, Maximum, les seuils : vides, en gris ce qu'ils prennent a Pression_FGH).
+propriete-clic "Maximum"
+attendre 2
+touche escape
+attendre 2
 capture 1212_ihm_03_jauge_heritee.png
 
 # ---- Lot G : la liaison Equipement, le mode Etat ----
 objet "Pompe_FGH"
+attendre 3
+# La section « Liaison Equipement (T_Pompe_FGH) » a l'ecran (sa premiere ligne, Structure, en lecture seule).
+propriete-clic "Structure"
 attendre 3
 capture 1212_ihm_04_pompe_liaison.png
 
@@ -71,6 +80,9 @@ capture 1212_ihm_06_polygone_sommets.png
 objet "QR_FGH"
 attendre 3
 sous-onglet "Propri"
+attendre 3
+# La ligne Place a l'ecran (en lecture seule : la version choisie, ce qui reste).
+propriete-clic "Place"
 attendre 3
 capture 1212_ihm_07_qr_place.png
 
