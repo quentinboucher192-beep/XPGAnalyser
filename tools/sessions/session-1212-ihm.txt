@@ -1,0 +1,77 @@
+# =============================================================================
+#  Session 1212 IHM : XPGAnalyser IHM (1.12.10 a 1.12.12), XpgAnalyzer-IHM.exe -
+#  les lots F, G et H de l'audit des objets. Armoire_Gaz (migre par la 1.12.1),
+#  avec les vues des sessions 1122 a 1129 et, par demo1212, la vue Vue_LotFGH :
+#    1. la vue dans l'editeur : la pompe liee (son libelle {P_FGH.Nom}), le moteur,
+#       le polygone, le profil trace depuis Profil_FGH, l'horloge, le texte
+#       defilant, le code QR, la premiere image de la video ;
+#    2. la pompe : la section « Liaison Equipement (T_Pompe_FGH) » de l'inspecteur ;
+#    3. le moteur : Contenu, le mode Etat (une ligne par valeur) ;
+#    4. le polygone : ses poignees de sommets et Contenu, une ligne par sommet ;
+#    5. le code QR : la ligne Place (au-dela de la version 10) ;
+#    6. la simulation : la pompe en marche en mode Manuel, le moteur en defaut,
+#       le profil du four, l'horloge a 02:30:05 PM, les messages qui defilent,
+#       la video qui joue ;
+#    7. trois secondes plus tard : la video a avance (Pos_FGH).
+# =============================================================================
+attendre 3
+theme Dark
+attendre 8
+ouvrir "${PROJETS}/ihm/Armoire_Gaz"
+attendre-projet
+attendre 10
+touche ctrl+j
+attendre 2
+
+# ---- La vue dans l'editeur ----
+arbre "IHM/Vues/Vue_LotFGH"
+attendre 8
+capture 1212_ihm_01_vue_editeur.png
+
+# ---- Lot G : la liaison Equipement, le mode Etat ----
+objet "Pompe_FGH"
+attendre 3
+capture 1212_ihm_02_pompe_liaison.png
+
+objet "Moteur_FGH"
+attendre 3
+sous-onglet "Contenu"
+attendre 3
+capture 1212_ihm_03_moteur_etat.png
+
+# ---- Lot H : les sommets ----
+objet "Forme_FGH"
+attendre 3
+sous-onglet "Contenu"
+attendre 3
+capture 1212_ihm_04_polygone_sommets.png
+
+# ---- Lot H : le code QR et sa place ----
+objet "QR_FGH"
+attendre 3
+sous-onglet "Propri"
+attendre 3
+capture 1212_ihm_05_qr_place.png
+
+# ---- La simulation ----
+arbre "Simulation/IHM"
+attendre 2
+ihm-build-attendre 600
+attendre 60
+ihm-sim-etat "en marche"
+attendre 3
+sim-utilisateur "admin" "admin2026"
+attendre 2
+sim-vue "Vue_LotFGH"
+attendre 6
+capture 1212_ihm_06_simulation.png
+attendre 3
+capture 1212_ihm_07_simulation_video.png
+
+touche ctrl+j
+attendre 2
+ihm-sorties console
+attendre 3
+ihm-console-etat
+ihm-diagnostics
+quitter
