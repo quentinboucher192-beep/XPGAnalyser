@@ -6,11 +6,12 @@
 #  par demo1127, le script general Reglages (Base ecrite ; Seuils, une MAP
 #  calculee avec une locale et une boucle FOR ; Total qui la lit ; Echelle qui
 #  lit une variable IHM ; Grille, un tableau ecrit ; Secret, privee ; Compteur,
-#  une variable Conservee a la valeur initiale calculee) et la vue Vue_Calcul :
+#  une variable Conservee a la valeur initiale calculee ; Postes, un SET ; Dernieres, un RING[3]
+#  calcule) et la vue Vue_Calcul :
 #    1. Reglages, onglet Constantes : « ƒx = valeur » dans la case Valeur ;
-#    2. Seuils choisie : son deballage sous la grille ;
+#    2. Seuils choisie : son deballage sous la grille ; Dernieres (un RING[3] calcule) deballee ;
 #    3. ƒx Calcul... : l'onglet Code, et a droite l'apercu, Lit, Lu par, Problemes ;
-#    4. son onglet Locales : la grille (nom, type, valeur initiale, documentation) ;
+#    4. son onglet Locales : la grille (nom, type, valeur initiale, documentation), Noms deballee ;
 #    5. Grille choisie, Elements... : le tableau, une ligne par case ;
 #    6. la simulation : Vue_Calcul lit Reglages.Total, Reglages.Seuils['bas']... ;
 #    7. la Console : chaque valeur calculee au demarrage.
@@ -38,6 +39,12 @@ capture 1127_ihm_01_constantes_calculees.png
 ligne "Seuils" exact
 attendre 3
 capture 1127_ihm_02_deballage_map.png
+# Dernieres, un RING[3] calcule (cinq mesures, il garde les trois dernieres), et Postes, un SET ecrit
+ligne "Dernieres" exact
+attendre 3
+capture 1127_ihm_02b_deballage_ring.png
+ligne "Seuils" exact
+attendre 3
 
 # ---- 3. ƒx Calcul... : l'onglet Code, et a droite l'apercu, Lit, Lu par, Problemes ----
 outil "Calculer la valeur au démarrage"
@@ -45,6 +52,9 @@ attendre 4
 capture 1127_ihm_03_fenetre_calcul.png
 # l'onglet Locales : la grille (nom, type, valeur initiale, documentation)
 bouton "≡ Locales*"
+attendre 3
+# la locale Noms choisie : sa valeur initiale deballee sous la grille
+clic-souris 300 230
 attendre 3
 capture 1127_ihm_04_calcul_locales.png
 touche escape
