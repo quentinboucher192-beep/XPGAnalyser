@@ -114,3 +114,95 @@ Une fonction du projet qui porte le nom d'une nouvelle native (GCD, IOTA…) pas
 4. Dans un script, écrivez `n := NUMERIC_LIMITS<UINT>.MAX();` (l'aide propose les types puis les membres), `g := GCD(12, 18);` et `k := BIT_COUNT(Defauts);`.
 5. Choisissez un tableau dans une grille : **Éléments…** ouvre une ligne par case.
 6. Déclarez `Postes : SET OF STRING := ['P3', 'P1', 'P3'];` et `Dernieres : RING[3] OF REAL;`. Faites `SET_ADD(Postes, 'P2')` puis quatre `RING_ADD(Dernieres, x)` : `Postes` vaut `['P1', 'P2', 'P3']`, et `Dernieres` garde les trois dernières valeurs. Écrivez ensuite `Postes[0] := 'Z';` : Compiler le refuse et dit quoi faire.
+
+## Installer
+
+Fichiers livrés :
+- `XPGAnalyser-Setup-1.12.7.exe` : l'installateur, qui pose les deux applications ;
+- `XPGAnalyser-API-1.12.7-portable.zip` et `XPGAnalyser-IHM-1.12.7-portable.zip` : chaque application, sans installation ;
+- ce document ;
+- les captures `1127_ihm_*`, prises sous Wine avec l'exe livré.
+
+1. Lancez `XPGAnalyser-Setup-1.12.7.exe`. Il met à jour la version installée : même identité d'installation, données reprises sans être déplacées. Il pose les deux applications et leurs deux raccourcis. Vos projets s'ouvrent tels quels.
+2. Windows SmartScreen peut avertir, parce que l'installateur n'est pas signé. Choisissez « Informations complémentaires », puis « Exécuter quand même ».
+
+Empreinte SHA-256 de `XPGAnalyser-Setup-1.12.7.exe` (28,8 Mo, 30 204 130 octets) :
+`369335D054F5F40D0EC89A3CC21AF2C320769A6E20BF6F5D54E8B5059566DA44`
+
+**Les zips portables.** Chacun contient une application et ce qu'il lui faut, dans un dossier `XPGAnalyser-API-1.12.7` ou `XPGAnalyser-IHM-1.12.7`. Décompressez, puis lancez l'exe.
+- `XPGAnalyser-API-1.12.7-portable.zip` (21,5 Mo) :
+  `F13B9F7A1F29DC91A8BCEEB89720B87D9855C6267E68845391067107DE82905C`
+- `XPGAnalyser-IHM-1.12.7-portable.zip` (21,5 Mo) :
+  `BCDC7716DDA2A9DEFACC6E87B4DDEDDB5560AC321337BCBC31E977DB7D6AE23C`
+
+## Vérifications
+
+**Tests Linux** (GCC 13) : la suite CTest complète passe, 72 sur 72. Elle comprend :
+- 6 927 contrôles dans `hmieditor`, 5 045 dans `hmi`, 2 177 dans `hminatives` (chaque fiche, nouvelles natives comprises), 966 dans `hmidecl` ;
+- deux essais nouveaux : `hminatives1127` (269 contrôles) et `hmisetring` (126 contrôles).
+
+Ce que couvrent les essais de la 1.12.7 :
+- **les valeurs calculées** (`calculees` dans `hmidecl`, `calculees_grille` dans `hmieditor`) :
+  - le fichier relu à l'identique ;
+  - le code qui tourne et l'ordre des calculs ;
+  - l'arrêt du démarrage sur une erreur, et une boucle refusée ;
+  - les noms qualifiés : lus, privés refusés, jamais écrits ;
+  - Générer et Compiler, l'édition, le renommage, la duplication, le build incrémental ;
+  - la grille, le déballage, le tableau des Éléments ;
+  - la fenêtre du calcul : ses onglets, son aperçu, Lit, Lu par, Problèmes, « Déplacer dans Locales », « Revenir au calcul d'origine » ;
+  - la ligne de la Console, de Compiler et de Générer qui mène à la fenêtre du calcul, à la ligne ;
+- **les natives** (`hminatives1127`) : chaque native dans le moteur, avec son cas ordinaire, ses bords et sa faute dite comme dans la maquette. Puis Compiler (erreurs pour le nouveau, avertissements pour l'ancien), les templates, `<bit>`, les constantes refusées. Les 153 appels du bac d'essai de la maquette donnent les mêmes résultats dans le moteur ;
+- **SET et RING** (`hmisetring`) : les littéraux, chaque native et ses bords, ce qu'un SET refuse, la capacité d'un RING, les affectations, les variables IHM, Compiler.
+
+**Les deux exe Windows**, compilés sous Linux avec MinGW-w64 et lancés sous Wine :
+- `--version` répond `XPGAnalyser API 1.12.7` et `XPGAnalyser IHM 1.12.7` ;
+- `XpgAnalyzer-API.exe --cli MAST.XPG` analyse le projet d'essai (891 variables, 29 POU), comme avant.
+
+**La session sous Wine** (`tools/sessions/session-1127-ihm.txt`) a tourné avec l'exe livré, sur Armoire_Gaz. Un petit outil y a ajouté le script général `Reglages` et la vue `Vue_Calcul`. `Reglages` contient :
+- `Base`, une constante écrite ;
+- `Seuils`, une MAP calculée avec une locale et une boucle FOR ;
+- `Total`, qui lit `Seuils`, et `Echelle`, qui lit une variable IHM ;
+- `Grille`, un tableau écrit ;
+- `Secret`, une constante privée ;
+- `Postes`, un SET écrit ;
+- `Dernieres`, un RING[3] calculé par cinq `RING_ADD` ;
+- `Compteur`, une variable Conservée à la valeur initiale calculée.
+
+Chaque ligne de la session a réussi :
+- les constantes (capture `1127_ihm_01`) : `ƒx = {'bas': 10, …}`, `ƒx = 40`, `ƒx = 2.5`, `ƒx = [30, 40, 50]` ;
+- le déballage de `Seuils` (`02`) : 'bas' 10, 'haut' 30, 'moyen' 20 ;
+- celui de `Dernieres` (`02b`) : « 3 éléments sur 3 », 30, 40, 50 ;
+- la fenêtre du calcul de `Seuils` :
+  - l'onglet Code (`03`) : l'Aperçu (la MAP), Lit Base, Lu par « calcul de Reglages.Total », Problèmes : aucun ;
+  - l'onglet Locales (`04`) : la grille, et `Noms` déballée dessous ;
+- le tableau des Éléments de `Grille` (`05`) : Indice et Valeur (INT), [1] 4, [2] 8, [3] 15 ;
+- la simulation (`06`) : le build réussit (392 éléments générés, 317 compilés, 0 erreur). `Vue_Calcul` montre `Reglages.Total = 40`, `Reglages.Seuils['bas'] = 10`, `Reglages.Seuils['haut'] = 30`, `Reglages.Echelle = 2.5`, `Reglages.Grille[3] = 15`. Le bouton qui appelle Reglages donne `Total_Lu = 40` ;
+- la Console, filtrée sur « Calcul » (`07`) : les quatre valeurs calculées au démarrage.
+
+**Ce que les sessions ont trouvé, corrigé dans cette livraison.** La première session montrait deux tables sans colonnes :
+- le déballage sous la grille avait des lignes, mais vides ;
+- le tableau des Éléments aussi.
+
+Les essais Linux lisaient leur modèle, pas leurs colonnes. Leurs colonnes sont maintenant posées, et les essais les contrôlent.
+
+**L'installateur**, compilé par Inno Setup 6.4.1 sous Wine, puis installé en silencieux pour tous les comptes, par-dessus la 1.12.6 :
+- « Installation process succeeded ». Il a repris l'installation de la 1.12.6 : même dossier, et son journal de désinstallation complété ;
+- avant comme après : `XpgAnalyzer-API.exe`, `XpgAnalyzer-IHM.exe`, et les raccourcis « XPGAnalyser API » et « XPGAnalyser IHM » ;
+- les deux exe installés sont identiques à ceux qui ont été testés. Installés, ils répondent `XPGAnalyser API 1.12.7` et `XPGAnalyser IHM 1.12.7`.
+
+**Pas encore fait :** ni les exe ni l'installateur n'ont été lancés sur un vrai Windows, et le projet Visual Studio n'a pas été compilé (pas de MSVC ici). La section « Tester vous-même » donne le parcours à refaire chez vous.
+
+## Limites connues
+
+- Le type d'une locale s'écrit dans sa case : le sélecteur de types ne s'y ouvre pas encore. Une faute de type est dite par l'Aperçu et par Compiler.
+- « Lu par » cherche dans les scripts, les fonctions et les calculs, pas dans les expressions des vues.
+- Compiler ne connaît le type d'une liste que si c'est un nom : une locale ou une variable IHM. `LIST_SORT_BY(Recette.Lots, 'Poid')` n'est dit qu'en marche.
+- Un SET range ses textes octet par octet, comme `std::set<std::string>` : `'B'` passe avant `'a'`.
+- `RING_ADD` rend le nombre de valeurs, comme `LIST_ADD` ; la maquette ne disait rien de ce qu'il rend.
+
+## La suite
+
+- **1.12.8, le lot D** : les listes en tableau dans Contenu (une ligne par choix) et les choix au lieu de la saisie.
+- **1.12.9, le lot E** : les tailles dynamiques (« 8 cuves, 8 pompes » : le joker `[*]`).
+
+Ils sont faits en parallèle cette nuit ; leur livraison suit.
