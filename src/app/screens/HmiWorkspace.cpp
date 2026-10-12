@@ -481,6 +481,7 @@ void MainAnalysisScreen::bindHmi() {
         s.locals = spec.locals;
         s.preview = spec.preview;
         s.assist = spec.assist;
+        s.line = spec.line;
         if (!s.preview) s.preview = [info = spec.info](const std::string&, const std::string&) { return info; };
         app_.menus().ShowDialog(std::make_unique<HmiCalcDialog>(std::move(s)), [done = std::move(done)](const menu::DialogResult& r) {
             if (!r.accepted() || !done) return;
@@ -2733,6 +2734,14 @@ void MainAnalysisScreen::openHmiIssue(const hmi::Issue& issue) {
     }
     if (issue.script != hmi::kNoId && doc->project.script(issue.script)) {
         const auto viewOf = doc->project.viewOfScript(issue.script);
+        // 1.12.7 : la faute d'une valeur calculee au demarrage - son onglet, sa ligne, et la fenetre de
+        // son calcul a la ligne de la faute.
+        if (!issue.declaration.empty()) {
+            openHmiScripts(viewOf, issue.script, 0);
+            if (auto* pane = dynamic_cast<HmiScriptsPane*>(hmiTab(viewOf == hmi::kNoId ? std::string("scripts") : "scripts:" + std::to_string(viewOf))))
+                if (pane->editCalculation(issue.declaration, issue.line)) return;
+            return;
+        }
         openHmiScripts(viewOf, issue.script, issue.line);
         // 1.10 (chantier N) : la colonne de la faute, ses caracteres selectionnes.
         if (issue.column > 0)

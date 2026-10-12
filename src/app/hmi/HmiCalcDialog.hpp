@@ -47,6 +47,7 @@ public:
         bool        constant{true};
         std::string calc;           // le code (un modele si la declaration n'en a pas)
         std::string locals;         // les locales, une par ligne (Nom : TYPE := valeur;   // doc)
+        int         line{0};        // > 0 : le code s'ouvre a cette ligne (une faute de la Console, de Compiler)
         // Ce que donnent ce code et ces locales, un fait par ligne : « Valeur au demarrage : ... »,
         // « Erreur : ... », « Faute ligne N : ... », « Attention ligne N : ... », « Lit : a, b »,
         // « Lu par : x, y » ; une autre ligne : une note (« Pas de code : ... »).

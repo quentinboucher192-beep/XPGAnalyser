@@ -90,13 +90,15 @@ public:
     bool editItems(std::size_t row);
     // 1.12.7 : « \xC6\x92x Calcul\xE2\x80\xA6 » - la valeur calculee au demarrage de la ligne `row` (son code, ses
     // locales ; l'hote ouvre la fenetre, calceditor). Faux : pas un script, pas d'hote.
-    bool editCalculation(std::size_t row);
+    // `line` > 0 : la fenetre s'ouvre a cette ligne du code (une faute de la Console, de Compiler).
+    bool editCalculation(std::size_t row, int line = 0);
     // 1.11.19 (lot 6) : "Choisir un type..." dans la case Type - le selecteur de types (par son
     // hote, app::typepicker) ; le type choisi va a la declaration (retrouvee par son identifiant :
     // la grille a pu changer entre-temps). Sans hote : la barre le dit.
     void pickType(std::size_t row);
     bool setTypeOf(hmi::Id declaration, const std::string& type);
     [[nodiscard]] std::vector<std::size_t> selectedRows() const;
+    [[nodiscard]] std::string rowName(std::size_t row) const;   // 1.12.7 : le nom de la declaration de la ligne
     void selectRows(const std::vector<std::size_t>& rows);
     // Choisir la declaration `name` (sans casse) ; faux : pas dans cet onglet.
     bool selectName(const std::string& name);

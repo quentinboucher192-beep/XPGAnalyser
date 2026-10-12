@@ -570,6 +570,8 @@ void HmiDeclGrid::selectRows(const std::vector<std::size_t>& rows) {
     table_->selectModelRows(sel, true);
 }
 
+std::string HmiDeclGrid::rowName(std::size_t row) const { return row < rows_->rows.size() ? rows_->rows[row].d.name : std::string{}; }
+
 bool HmiDeclGrid::selectName(const std::string& name) {
     for (std::size_t i = 0; i < rows_->rows.size(); ++i)
         if (sameText(rows_->rows[i].d.name, name)) {
@@ -867,7 +869,7 @@ void HmiDeclGrid::fillPreviews(const de::Code& code) {
     }
 }
 
-bool HmiDeclGrid::editCalculation(std::size_t row) {
+bool HmiDeclGrid::editCalculation(std::size_t row, int line) {
     if (row >= rows_->rows.size() || !usable() || !calceditor::available()) return false;
     if (role_ != hmi::decl::Role::Script || tab_ == de::Tab::Parameters) {
         say("Seule une constante ou une variable d'un script se calcule au d\xC3\xA9marrage.", true);
@@ -885,6 +887,7 @@ bool HmiDeclGrid::editCalculation(std::size_t row) {
     spec.constant = d.kind == hmi::DeclKind::Constant;
     spec.calc = d.computed || !d.calc.empty() ? d.calc : calceditor::starter(d.name, d.type);
     spec.locals = de::localsText(d.locals);
+    spec.line = line;
     // Ce que le calcul donne et ses fautes (le code enregistre ; Appliquer refait le tout).
     if (d.computed && !r.preview.empty()) spec.info += (r.previewError ? "Erreur : " : "Valeur au d\xC3\xA9marrage : ") + r.preview + "\n";
     const hmi::Declaration* inModel = nullptr;

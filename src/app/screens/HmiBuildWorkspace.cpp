@@ -344,6 +344,7 @@ void MainAnalysisScreen::openConsoleSource(const ConsoleEntry& e) {
         i.script = e.script;
         i.line = e.line;
         i.message = e.message;
+        i.declaration = e.declaration;     // 1.12.7 : une erreur de calcul au demarrage - sa fenetre, a la ligne
         openHmiIssue(i);
         return;
     }

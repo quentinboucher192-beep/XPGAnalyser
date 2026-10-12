@@ -1320,6 +1320,7 @@ void Runtime::logAt(LogLevel level, std::string kind, std::string source, std::s
     e.object = origin_.object;
     e.script = origin_.script;
     e.function = origin_.function;
+    e.declaration = origin_.declaration;
     e.line = line > 0 ? line : line == 0 && !origin_.name.empty() ? static_cast<int>(trace_.line) : 0;
     e.cycle = cycles_;
     e.session = session_;
@@ -2047,7 +2048,17 @@ bool Runtime::computeDeclarations() {
         if (!d) continue;
         sim::ObjRef value;
         std::string why;
-        if (!computeOne(*sc, *d, step.view, value, why)) return stop("calcul " + step.path, why);
+        if (!computeOne(*sc, *d, step.view, value, why)) {
+            // La Console y mene (un double-clic) : le script, la declaration et la ligne de son calcul.
+            const int at = announcedLine(why);
+            startError_ = "calcul " + step.path + " : " + why;
+            const CodeOrigin was = origin_;
+            origin_ = CodeOrigin{"calcul " + step.path, step.view, kNoId, sc->id, kNoId, d->name};
+            logAt(LogLevel::Error, "Erreur", "calcul " + step.path, why, at > 0 ? at : -1);
+            origin_ = was;
+            log("Syst\xC3\xA8me", {}, "d\xC3\xA9marrage arr\xC3\xAAt\xC3\xA9 : " + startError_);
+            return false;
+        }
         initials_[sc->id].set(d->name, value);
         if (step.view == kNoId && d->kind == DeclKind::Constant && d->visibility == Visibility::Public)
             qualified_[upper(sc->name + "." + d->name)] = value;

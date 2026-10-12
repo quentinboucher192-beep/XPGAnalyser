@@ -214,6 +214,9 @@ public:
     bool goToNextUse(const std::string& name);
     // Une declaration du script montre : son onglet, sa ligne choisie. Faux : inconnue.
     bool showDeclaration(const std::string& name);
+    // 1.12.7 : la valeur calculee au demarrage `name` du script montre - son onglet, sa ligne, et la
+    // fenetre de son calcul ouverte a la ligne `line`. Faux : inconnue, ou pas calculee.
+    bool editCalculation(const std::string& name, int line);
 
     [[nodiscard]] HmiToolStrip&      tools() noexcept { return *tools_; }
     [[nodiscard]] const std::string& buildStateText() const noexcept { return buildStateText_; }   // 1.11.13

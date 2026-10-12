@@ -86,8 +86,9 @@ Issue::Severity severityOf(ScriptDiagnostic::Severity s) {
 
 // 1.12.7 : le code des valeurs calculees au demarrage d'un script, lu comme un script (sa syntaxe,
 // ses declarations : la sienne, ses locales, les constantes du script) ; le message dit lequel et sa ligne.
-std::vector<ScriptDiagnostic> checkCalculations(const Script& sc, const TypeKnown& knownType) {
-    std::vector<ScriptDiagnostic> out;
+// Avec chaque faute, la declaration : `line` est celle de son calcul (y aller ouvre la fenetre du calcul).
+std::vector<std::pair<ScriptDiagnostic, std::string>> checkCalculations(const Script& sc, const TypeKnown& knownType) {
+    std::vector<std::pair<ScriptDiagnostic, std::string>> out;
     if (sc.lang != ScriptLang::ST) return out;
     for (const auto& d : sc.decls) {
         if (!d.computed || d.calc.find_first_not_of(" \t\r\n") == std::string::npos) continue;
@@ -96,8 +97,7 @@ std::vector<ScriptDiagnostic> checkCalculations(const Script& sc, const TypeKnow
         cs.decls = calc::declarationsFor(sc, d);
         for (auto x : checkScript(cs, knownType)) {
             x.message = "calcul de " + d.name + (x.line > 0 ? ", ligne " + std::to_string(x.line) : std::string{}) + " : " + x.message;
-            x.line = 0;
-            out.push_back(std::move(x));
+            out.emplace_back(std::move(x), d.name);
         }
     }
     return out;
@@ -429,13 +429,16 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
                 return "calcul de " + d.name + (line > 0 ? ", ligne " + std::to_string(line) : std::string{}) + " : ";
             };
             const auto cdialect = scriptcheck::dialectDeclared(ccode);
+            // La faute porte la declaration et la ligne de son calcul : y aller ouvre la fenetre du calcul.
+            const auto addCalc = [&](Issue::Severity sev, int line, const std::string& message) {
+                add(out, sev, "Script", view, kNoId, sc.name, where(line) + message, sc.id, line);
+                out.back().declaration = d.name;
+            };
             for (const auto& u : scriptNames(ccode))
                 if (!known(p, plc, u.name, owner) && !cdialect.count(upperText(u.name)))
-                    add(out, S::Error, "Script", view, kNoId, sc.name, where(u.line) + "variable inexistante : " + u.name, sc.id);
-            for (const auto& pp : types::pathProblems(p, ccode))
-                add(out, S::Error, "Script", view, kNoId, sc.name, where(pp.line) + pp.message, sc.id);
-            for (const auto& is : calc::analyse(p, sc, d, owner).issues)
-                add(out, is.error ? S::Error : S::Warning, "Script", view, kNoId, sc.name, where(is.line) + is.message, sc.id);
+                    addCalc(S::Error, u.line, "variable inexistante : " + u.name);
+            for (const auto& pp : types::pathProblems(p, ccode)) addCalc(S::Error, pp.line, pp.message);
+            for (const auto& is : calc::analyse(p, sc, d, owner).issues) addCalc(is.error ? S::Error : S::Warning, is.line, is.message);
         }
         for (const auto& called : scriptCalls(sc.body))
             if (!p.generalScript(called))
@@ -4043,8 +4046,10 @@ std::vector<Issue> compileFocused(const Project& p, const CompileFocus* f) {
             ++scripts;
             for (const auto& d : checkScript(sc, knownType))      // 1.11.18 (lot 3) : avec ses declarations du modele
                 add(out, severityOf(d.severity), "Script", v.id, kNoId, sc.name, d.message, sc.id, d.line);
-            for (const auto& d : checkCalculations(sc, knownType))     // 1.12.7
-                add(out, severityOf(d.severity), "Script", v.id, kNoId, sc.name, d.message, sc.id);
+            for (const auto& [d, decl] : checkCalculations(sc, knownType)) {     // 1.12.7
+                add(out, severityOf(d.severity), "Script", v.id, kNoId, sc.name, d.message, sc.id, d.line);
+                out.back().declaration = decl;
+            }
         }
         // Lot 8 : le titre a trous d'une popup, la valeur par defaut des
         // parametres, les bornes d'un champ de saisie.
@@ -4114,8 +4119,10 @@ std::vector<Issue> compileFocused(const Project& p, const CompileFocus* f) {
         ++scripts;
         for (const auto& d : checkScript(sc, knownType))      // 1.11.18 (lot 3) : avec ses declarations du modele
             add(out, severityOf(d.severity), "Script", kNoId, kNoId, sc.name, d.message, sc.id, d.line);
-        for (const auto& d : checkCalculations(sc, knownType))     // 1.12.7
-            add(out, severityOf(d.severity), "Script", kNoId, kNoId, sc.name, d.message, sc.id);
+        for (const auto& [d, decl] : checkCalculations(sc, knownType)) {     // 1.12.7
+            add(out, severityOf(d.severity), "Script", kNoId, kNoId, sc.name, d.message, sc.id, d.line);
+            out.back().declaration = decl;
+        }
         if (sc.event == "Changement" && !sc.watch.empty()) {
             const auto e = Expression::compile(sc.watch);
             if (!e.valid()) add(out, S::Error, "Script", kNoId, kNoId, sc.name, "expression surveill\xC3\xA9" "e " + sc.watch + " : " + e.error(), sc.id);

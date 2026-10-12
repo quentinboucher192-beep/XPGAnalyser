@@ -419,6 +419,7 @@ core::Status HmiCalcDialog::buildUi() {
     refreshButtons();
     focus().clear();
     focus().focus(code_);
+    if (spec_.line > 0) code_->selectRange(static_cast<std::size_t>(spec_.line - 1), 0, 0);
     return core::ok();
 }
 

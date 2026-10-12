@@ -29100,6 +29100,25 @@ void calculees_grille() {
             check(dlg.goToProblem(0) && !dlg.localsShown(), "un clic sur un probl\xC3\xA8me : sa ligne, dans l'onglet Code");
             dlg.revert();
             check(dlg.calcText() == s.calc && dlg.locals().empty(), "Revenir au calcul d'origine : le code et les locales d'avant");
+            app::HmiCalcDialog::Spec at = s;
+            at.calc = "Seuils['bas'] := Base;\nSeuils['haut'] := Base * 3.0;\n";
+            at.line = 2;
+            app::HmiCalcDialog dlg2(at);
+            check(static_cast<bool>(dlg2.Initialize()), "la fen\xC3\xAAtre s'ouvre a une ligne (une faute de la Console)");
+        }
+        // Une faute d'un calcul (la Console, Compiler) y mene : le volet des scripts ouvre la fenetre du calcul
+        // de la declaration, a la ligne de la faute.
+        {
+            app::HmiScriptsPane pane("calc1127", doc, apply);
+            pane.setBounds({0, 0, 1400, 800});
+            pane.layout();
+            pane.selectScript(doc->project.programs.scripts[0].id);
+            asked = false;
+            seen = {};
+            check(pane.editCalculation("seuils", 2) && asked && seen.name == "Seuils" && seen.line == 2,
+                  "editCalculation(Seuils, 2) : la fen\xC3\xAAtre du calcul de Seuils, a la ligne 2");
+            asked = false;
+            check(!pane.editCalculation("Inconnue", 1) && !asked, "une d\xC3\xA9" "claration inconnue : rien ne s'ouvre");
             const auto f = app::HmiCalcDialog::factsOf("Valeur au d\xC3\xA9marrage : 3\nAttention ligne 2 : x\nLit : A, Reglages.B\nLu par : calcul de C\nPas de code");
             check(f.value == "3" && f.problems.size() == 1 && !f.problems[0].error && f.problems[0].line == 2 && f.reads.size() == 2
                       && f.reads[1] == "Reglages.B" && f.readBy == std::vector<std::string>{"calcul de C"} && f.note == "Pas de code",

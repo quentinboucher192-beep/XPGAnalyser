@@ -97,6 +97,7 @@ void HmiConsole::addRuntime(const hmi::JournalEntry& e) {
     c.object = e.object;
     c.script = e.script;
     c.function = e.function;
+    c.declaration = e.declaration;
     add(std::move(c));
 }
 

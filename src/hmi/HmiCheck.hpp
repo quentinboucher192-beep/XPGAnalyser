@@ -42,6 +42,9 @@ struct Issue {
     // ligne ; 0 : la ligne entiere) et sa longueur - le clic y mene.
     int         column{0};
     int         length{0};
+    // 1.12.7 : la valeur calculee au demarrage de `script` en cause (son nom) : `line` est celle de
+    // son calcul - y aller ouvre la fenetre du calcul a cette ligne.
+    std::string declaration{};
 };
 
 struct IssueCounts {

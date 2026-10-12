@@ -41,6 +41,7 @@ struct ConsoleEntry {
     long long     cycle{0};
     int           session{0};
     hmi::Id       view{hmi::kNoId}, object{hmi::kNoId}, script{hmi::kNoId}, function{hmi::kNoId};
+    std::string   declaration;       // 1.12.7 : la valeur calculee au demarrage en cause (son calcul, a la ligne `line`)
     // On peut y aller (un script, une fonction, un objet, une vue).
     [[nodiscard]] bool hasSource() const noexcept {
         return script != hmi::kNoId || function != hmi::kNoId || object != hmi::kNoId || view != hmi::kNoId;

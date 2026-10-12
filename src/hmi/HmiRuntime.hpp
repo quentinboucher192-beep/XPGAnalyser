@@ -99,6 +99,7 @@ struct JournalEntry {
     int           line{0};
     long long     cycle{0};
     int           session{0};
+    std::string   declaration;   // 1.12.7 : la valeur calculee au demarrage en cause ("Seuils" ; sa ligne : `line`)
 };
 
 // ---- alarmes en cours (lot 4) ---------------------------------------------------
@@ -1513,6 +1514,7 @@ private:
     struct CodeOrigin {
         std::string name;                                   // "Horloge", "Vue_A.OnOpen", "fonction Moyenne"
         Id          view{kNoId}, object{kNoId}, script{kNoId}, function{kNoId};
+        std::string declaration{};                          // 1.12.7 : le calcul d'une declaration de `script`
     };
     CodeOrigin               origin_;
     sim::ExecTrace           trace_;

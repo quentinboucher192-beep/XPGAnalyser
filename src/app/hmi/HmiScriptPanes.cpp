@@ -840,6 +840,21 @@ bool HmiScriptsPane::goToNextUse(const std::string& name) {
 
 bool HmiScriptsPane::showDeclaration(const std::string& name) { return codeTabs_->showDeclaration(name); }
 
+bool HmiScriptsPane::editCalculation(const std::string& name, int line) {
+    if (!codeTabs_->showDeclaration(name)) return false;
+    for (const auto tab : {hmi::decledit::Tab::Constants, hmi::decledit::Tab::Variables}) {
+        HmiDeclGrid* g = codeTabs_->grid(tab);
+        if (!g) continue;
+        const auto sel = g->selectedRows();
+        if (sel.size() != 1) continue;
+        std::string a = g->rowName(sel.front()), b = name;
+        for (auto* s : {&a, &b})
+            for (auto& c : *s) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+        if (a == b) return g->editCalculation(sel.front(), line);
+    }
+    return false;
+}
+
 void HmiScriptsPane::rebuildProperties() {
     using PG = ui::PropertyGrid;
     std::vector<PG::Category> cats;

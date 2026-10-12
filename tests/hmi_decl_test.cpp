@@ -1837,6 +1837,13 @@ void calculees() {
         rt.start(0.0);
         check(!rt.running() && rt.startError().find("calcul Reglages.Total") != std::string::npos,
               "une cle absente : le demarrage s'arrete et dit ou - " + rt.startError());
+        // La ligne de la Console y mene (un double-clic) : le script, la declaration, la ligne du calcul.
+        const JournalEntry* err = nullptr;
+        for (const auto& e : rt.journal())
+            if (e.kind == "Erreur") err = &e;
+        check(err && err->script == q.programs.scripts[0].id && err->declaration == "Total" && err->line == 1,
+              "l'erreur du calcul porte son script, sa declaration (Total) et sa ligne (1) - "
+                  + (err ? err->declaration + " ligne " + std::to_string(err->line) : std::string("pas d'erreur au journal")));
         Project c = calcProject();
         c.programs.scripts[0].decls[1].calc = "Seuils['a'] := Total;\n";
         const auto pl = calc::plan(c);
@@ -1938,6 +1945,17 @@ void calculees() {
         for (const auto& i : compile(syn))
             if (i.category == "Script") bad += i.property + " : " + i.message + "\n";
         check(bad.find("Reglages : calcul de Total, ligne 1") != std::string::npos, "Compiler : la syntaxe d'un calcul, sa ligne\n" + bad);
+        // La faute y mene : la declaration et la ligne du calcul (Compiler, Generer).
+        bool led = false;
+        for (const auto& i : compile(syn))
+            if (i.category == "Script" && i.message.find("calcul de Total") != std::string::npos)
+                led = led || (i.declaration == "Total" && i.line == 1 && i.script == syn.programs.scripts[0].id);
+        Project gen = calcProject();
+        gen.programs.scripts[0].decls[3].calc = "Echelle := 1.0;\nEchelle := Inconnue_Y / 100.0;\n";
+        bool genLed = false;
+        for (const auto& i : generate(gen, [](std::string_view) { return false; }))
+            if (i.message.find("Inconnue_Y") != std::string::npos) genLed = genLed || (i.declaration == "Echelle" && i.line == 2);
+        check(led && genLed, "Compiler et Generer : la faute d'un calcul porte sa declaration et sa ligne (la fenetre du calcul s'y ouvre)");
     }
     // L'edition : le calcul et ses locales (une par ligne, sans VAR), le renommage dans les calculs et
     // dans Reglages.X, une valeur ecrite qui remplace le calcul, le defaut d'une MAP (plus de 0.0).

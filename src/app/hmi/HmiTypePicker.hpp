@@ -163,6 +163,7 @@ struct Spec {
     bool        constant{true};
     std::string calc;       // le code actuel (vide : un modele)
     std::string locals;     // les locales, une par ligne
+    int         line{0};    // > 0 : ouvrir le code a cette ligne (une faute de la Console, de Compiler)
     std::string info;       // la valeur calculee, les fautes
     // En direct : ce que donnent ce code et ces locales (la valeur au demarrage, l'erreur, les fautes,
     // « Lit : ... », « Lu par : ... »).
