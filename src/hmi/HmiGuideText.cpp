@@ -1171,6 +1171,7 @@ const std::vector<Topic>& topics() {
                          "verrouille. Le calque actif re\xC3\xA7oit les objets pos\xC3\xA9s.", {}},
              {K::Tip, "L'\xC3\xA9" "diteur suit le th\xC3\xA8me de l'application ; la vue garde sa propre "
                          "couleur de fond.", {}},
+             {K::Paragraph, "1.12.12 : les sommets d'une ligne, d'un polygone, d'une zone de plan et de la r\xC3\xA9" "f\xC3\xA9rence d'une courbe XY ont des poign\xC3\xA9" "es rondes : glisser (Alt : sans magn\xC3\xA9tisme), double-clic sur un segment pour ajouter, clic droit \xE2\x80\xBA Retirer le sommet ou Suppr. Chaque geste s'annule d'un Ctrl+Z.", {}, "1.12.12"},
          },
          {"objets", "proprietes", "actions", "contenu"},
          {},
@@ -1383,6 +1384,7 @@ const std::vector<Topic>& topics() {
                          "projet, r\xC3\xA9" "centes, et le choix personnalis\xC3\xA9 (carr\xC3\xA9, teinte, "
                          "transparence, code, T S V, R G B, opacit\xC3\xA9, pipette) : voir \xC2\xAB Choisir "
                          "une couleur : la palette et la pipette \xC2\xBB.", {}, "1.10"},
+             {K::Paragraph, "1.12.10 : la case \xC2\xAB Unit\xC3\xA9, format et plage de la variable \xC2\xBB - coch\xC3\xA9" "e (par d\xC3\xA9" "faut), l'objet prend l'unit\xC3\xA9, le format, la plage et les seuils de sa variable pour ce qu'il laisse vide.", {}, "1.12.10"},
          },
          {"objets", "variables-ihm", "aide-saisie", "verifier", "champs-expressions", "couleurs", "dupliquer-reperes"},
          {"filtres de l'inspecteur", "Montrer", "fx", "Rep\xC3\xA8res", "Non vides", "cases pilot\xC3\xA9" "es", "cases renseign\xC3\xA9" "es", "pastille ambre", "sections de l'inspecteur", "propri\xC3\xA9t\xC3\xA9s communes", "Position et taille", "section du genre", "Communication", "Animation", "Variable \xC3\xA9" "crite", "Niveau d'acc\xC3\xA8s", "onglet Contenu"},
@@ -2126,6 +2128,7 @@ const std::vector<Topic>& topics() {
                          "**Op\xC3\xA9rateurs (n)**, apr\xC3\xA8s Dessin, Alarmes et Instances) : "
                          "`TO_STRING(Pompe_3)` ailleurs, `a + b` entre deux instances. Voir \xC2\xAB Les "
                          "op\xC3\xA9rateurs des symboles et des types IHM \xC2\xBB.", {}, "1.10"},
+             {K::Paragraph, "1.12.11 : dans un symbole, un libell\xC3\xA9, un titre, un texte d'\xC3\xA9tat \xC3\xA0 trous ({Nom}) re\xC3\xA7oivent l'argument de l'instance, comme le Texte. Cr\xC3\xA9" "er un symbole type ses param\xC3\xA8tres d'apr\xC3\xA8s les chemins choisis (Pompes[1] : T_Pompe).", {}, "1.12.11"},
          },
          {"objet-instance-de-symbole", "tutoriel-symbole", "popups", "objets", "proprietes", "actions", "verifier", "dossiers", "alarmes-symboles", "groupes-objets", "surcharge-alarmes", "parametres-popups", "operateurs", "dupliquer-reperes"},
          {"Symbole", "SymbolInstance", "Instances"},
@@ -2315,6 +2318,8 @@ const std::vector<Topic>& topics() {
              {K::Paragraph, "Choisis la **recette** et les **boutons** pr\xC3\xA9sents (Appliquer, Ajouter, "
                          "Modifier, Supprimer, Lire). En marche, un clic choisit un jeu ; chaque changement "
                          "devient une commande du projet (Ctrl+Z la reprend).", {}},
+             {K::Paragraph, "1.12.11 : une pompe, un moteur, une vanne\xE2\x80\xA6 - Contenu r\xC3\xA8gle leur mode \xC3\x89tat, une ligne par valeur.", {}, "1.12.11"},
+             {K::Paragraph, "1.12.12 : la ligne et le polygone ont leur onglet Contenu (un sommet par ligne) ; la courbe XY y montre ses courbes ou sa courbe de r\xC3\xA9" "f\xC3\xA9rence. Le sommet choisi est le m\xC3\xAAme dans Contenu et sur le dessin.", {}, "1.12.12"},
          },
          {"objets", "proprietes", "recettes", "fichiers"},
          {},
@@ -2504,6 +2509,7 @@ const std::vector<Topic>& topics() {
                          "premi\xC3\xA8res), l'originale propos\xC3\xA9" "e. Une variable chang\xC3\xA9" "e "
                          "est remplac\xC3\xA9" "e partout dans la nouvelle vue (ses objets, ses animations, "
                          "ses actions, ses textes \xC3\xA0 trous), et seulement dans elle.", {}},
+             {K::Paragraph, "1.12.11 : Moteur et son \xC3\xA9tat - un symbole li\xC3\xA9 par sa structure (Moteur : T_Moteur) : pose-le, donne-lui M1.", {}, "1.12.11"},
          },
          {"vues", "concevoir-vite", "paquets-de-vues", "symboles", "modeles"},
          {"mod\xC3\xA8les de vues", "Enregistrer comme mod\xC3\xA8le", "galerie", "choisir un mod\xC3\xA8le", "Nouvelle popup", "Nouveau symbole", "r\xC3\xB4le", "mod\xC3\xA8les du r\xC3\xB4le", "Aucun mod\xC3\xA8le de ce r\xC3\xB4le", "Mes mod\xC3\xA8les", "Mod\xC3\xA8les du projet", "Propos\xC3\xA9s par l'application", "G\xC3\xA9rer mes mod\xC3\xA8les", "Importer un mod\xC3\xA8le", "xpgmodele", "\xC3\xA0 choisir \xC3\xA0 la cr\xC3\xA9" "ation", "ma biblioth\xC3\xA8que"},
@@ -3051,6 +3057,8 @@ const std::vector<Topic>& topics() {
              {K::Paragraph, "Une variable inconnue (ni IHM, ni de l'automate, ni le param\xC3\xA8tre d'une "
                          "vue), un chemin mal \xC3\xA9" "crit, deux lignes pour la m\xC3\xAAme variable, un "
                          "format illisible ; en information, une variable qu'aucun objet ne montre encore.", {}},
+             {K::Paragraph, "1.12.10 : chaque ligne a aussi Min, Max, Seuil bas, Seuil haut, Alarme basse, Alarme haute (un nombre, ou une variable tap\xC3\xA9" "e sans = : Consigne_Max). Les objets qui montrent la variable les prennent pour les cases qu'ils laissent vides ; ce que tu r\xC3\xA8gles sur l'objet l'emporte. Pour une variable li\xC3\xA9" "e \xC3\xA0 un \xC3\xA9quipement, la mise \xC3\xA0 l'\xC3\xA9" "chelle donne Min et Max (en gris) tant que tu ne les tapes pas.", {}, "1.12.10"},
+             {K::Paragraph, "1.12.10 : G\xC3\xA9n\xC3\xA9rer pr\xC3\xA9vient d'un Min \xE2\x89\xA5 Max, d'un seuil hors de la plage, de seuils dans le d\xC3\xA9sordre et d'une variable inconnue, sur la ligne comme sur les objets qui la prennent. Il dit aussi, en information, un objet \xC3\xA9" "crit 0..100 qui montre une variable de 0 \xC3\xA0 10 : vide Min et Max pour qu'il la suive.", {}, "1.12.10"},
          },
          {"proprietes", "langues", "objet-afficheur-numerique", "objet-tableau-de-variables", "verifier", "excel"},
          {"unit\xC3\xA9", "unit\xC3\xA9s", "format", "formats", "{X:u}", "Format de la variable", "Proposer"},
@@ -5256,6 +5264,8 @@ const std::vector<Topic>& topics() {
              {K::Step, "Pose une **Ligne** verticale : Points `0,0 0,100`.", "1"},
              {K::Step, "Pivot X 0,5 et Pivot Y 1 : elle tourne autour de son pied.", "2"},
              {K::Step, "Rotation : `=60.0 * (Pression - 20.0) / 20.0`.", "3"},
+             {K::Paragraph, "1.12.12 : choisi seul, l'objet montre ses sommets. Glissez une poign\xC3\xA9" "e pour d\xC3\xA9placer un sommet, double-cliquez sur un segment pour en ajouter un, Suppr retire le sommet choisi (une ligne en garde 2, un polygone 3). Le cadre suit les points ; l'onglet Contenu les montre en tableau (X, Y), un rep\xC3\xA8re `$Cote_X$` y est gard\xC3\xA9.", {}, "1.12.12"},
+             {K::Paragraph, "1.12.12 : Points depuis trace l'objet d'apr\xC3\xA8s une variable : des nombres x et y altern\xC3\xA9s (`Courbe`), ou les membres X et Y d'un tableau de structures (`Profil[*].X, Profil[*].Y`). Ils se placent dans le cadre selon l'\xC3\xA9" "chelle X et Y (vide : celle des donn\xC3\xA9" "es), Y min en bas. Dans l'\xC3\xA9" "diteur, le dessin montre les valeurs initiales.", {}, "1.12.12"},
          },
          {"objet-communs", "objet-polygone"},
          {},
@@ -5288,6 +5298,8 @@ const std::vector<Topic>& topics() {
                          "contour\t1\tEn pixels.", {}},
              {K::Tip, "Miroir horizontal retourne une fl\xC3\xA8" "che : le sens de circulation inverse, "
                          "sans redessiner.", {}},
+             {K::Paragraph, "1.12.12 : choisi seul, l'objet montre ses sommets. Glissez une poign\xC3\xA9" "e pour d\xC3\xA9placer un sommet, double-cliquez sur un segment pour en ajouter un, Suppr retire le sommet choisi (une ligne en garde 2, un polygone 3). Le cadre suit les points ; l'onglet Contenu les montre en tableau (X, Y), un rep\xC3\xA8re `$Cote_X$` y est gard\xC3\xA9.", {}, "1.12.12"},
+             {K::Paragraph, "1.12.12 : Points depuis trace l'objet d'apr\xC3\xA8s une variable : des nombres x et y altern\xC3\xA9s (`Courbe`), ou les membres X et Y d'un tableau de structures (`Profil[*].X, Profil[*].Y`). Ils se placent dans le cadre selon l'\xC3\xA9" "chelle X et Y (vide : celle des donn\xC3\xA9" "es), Y min en bas. Dans l'\xC3\xA9" "diteur, le dessin montre les valeurs initiales.", {}, "1.12.12"},
          },
          {"objet-communs", "objet-ligne"},
          {},
@@ -5363,6 +5375,7 @@ const std::vector<Topic>& topics() {
                          "verticale (de bas en haut).", {}},
              {K::Tip, "Une valeur hors bornes est ramen\xC3\xA9" "e au minimum ou au maximum : la barre "
                          "ne d\xC3\xA9" "borde pas.", {}},
+             {K::Paragraph, "1.12.10 : Min et Max vides prennent la plage de la variable (Configuration \xE2\x80\xBA Unit\xC3\xA9s et formats, ou sa mise \xC3\xA0 l'\xC3\xA9" "chelle) ; l'inspecteur la montre en gris. Un objet pos\xC3\xA9 depuis la palette na\xC3\xAEt ainsi ; une valeur tap\xC3\xA9" "e l'emporte. Min et Max acceptent aussi une variable tap\xC3\xA9" "e sans = (Consigne_Max).", {}, "1.12.10"},
          },
          {"objet-communs", "objet-jauge"},
          {},
@@ -5396,6 +5409,8 @@ const std::vector<Topic>& topics() {
                          ": bar, \xC2\xB0" "C, %.\nRemplissage\t#2F6FD6\tLa couleur de l'arc "
                          "rempli.\nFond\t#2A313C\tLa couleur de l'arc vide.", {}},
              {K::Paragraph, "1.12.6 : la Valeur se lit comme un nombre, quel que soit le type de sa variable : un BOOL vaut 1 ou 0, un TIME des secondes, une DATE des secondes depuis 1970. Une STRING qui n'est pas un nombre ('abc') ou une structure enti\xC3\xA8re ne donnent plus 0 : la jauge se hachure avec ###, la simulation dit pourquoi, et G\xC3\xA9n\xC3\xA9rer le signale avant.", {}, "1.12.6"},
+             {K::Paragraph, "1.12.10 : Min et Max vides prennent la plage de la variable (Configuration \xE2\x80\xBA Unit\xC3\xA9s et formats, ou sa mise \xC3\xA0 l'\xC3\xA9" "chelle) ; l'inspecteur la montre en gris. Un objet pos\xC3\xA9 depuis la palette na\xC3\xAEt ainsi ; une valeur tap\xC3\xA9" "e l'emporte. Min et Max acceptent aussi une variable tap\xC3\xA9" "e sans = (Consigne_Max).", {}, "1.12.10"},
+             {K::Paragraph, "1.12.10 : quatre seuils (alarme basse, seuil bas, seuil haut, alarme haute ; vides : ceux de la variable), marqu\xC3\xA9s d'un trait ; au-del\xC3\xA0, la valeur (et l'arc de la jauge) prend la couleur des seuils ou des alarmes.", {}, "1.12.10"},
          },
          {"objet-communs", "objet-barre-de-progression", "objet-ligne"},
          {},
@@ -5550,6 +5565,7 @@ const std::vector<Topic>& topics() {
                          "chaque plume.\nRemplissage\t#1B2028\tLe fond du "
                          "trac\xC3\xA9.\nContour\t#3A4556\tLe cadre et la grille.", {}},
              {K::Paragraph, "1.12.9 : le joker [*] - Cuves[*].Niveau donne une plume (une barre, une part, une ligne) par cuve ; Cuves[*].Nom en Noms les nomme. La source : un tableau de l'IHM, une LIST (le nombre suit la liste en marche), une MAP (ses cl\xC3\xA9s) ou une \xC3\xA9num\xC3\xA9ration. Pompe.* : un \xC3\xA9l\xC3\xA9ment par membre de la structure ; Ligne/Convoyeur/* : un par variable du dossier. Contenu \xE2\x80\xBA Ajouter depuis une source les propose, et chaque ligne dit ce qu'elle deviendra. Une source inconnue ne donne rien (G\xC3\xA9n\xC3\xA9rer le dit).", {}, "1.12.9"},
+             {K::Paragraph, "1.12.10 : Axe Y min et max vides : l'union des plages des plumes (Unit\xC3\xA9s et formats).", {}, "1.12.10"},
          },
          {"objet-communs", "historiques", "contenu"},
          {},
@@ -5663,6 +5679,7 @@ const std::vector<Topic>& topics() {
              {K::Tip, "Une proc\xC3\xA9" "dure film\xC3\xA9" "e, une pr\xC3\xA9sentation "
                          "d'\xC3\xA9quipement : ajoute la vid\xC3\xA9o dans les ressources, puis pose "
                          "l'objet.", {}},
+             {K::Paragraph, "1.12.12 : la vid\xC3\xA9o se d\xC3\xA9" "code - un AVI Motion-JPEG partout, et sous Windows les MP4 (H.264), WMV, MOV. Lecture (une variable BOOL) la met en pause, D\xC3\xA9part la fait partir \xC3\xA0 l'affichage ou sur condition, R\xC3\xA9p\xC3\xA9tition la fait boucler ou s'arr\xC3\xAAter sur sa derni\xC3\xA8re image ; sa position peut s'\xC3\xA9" "crire dans une variable. Avant la premi\xC3\xA8re image, ou si le format ne se d\xC3\xA9" "code pas ici, l'image d'attente se montre et le bandeau dit pourquoi : convertir en Motion-JPEG AVI (`ffmpeg -i film.mp4 -an -c:v mjpeg -q:v 3 film.avi`) pour qu'elle se lise partout.", {}, "1.12.12"},
          },
          {"objet-communs", "ressources"},
          {},
@@ -5974,6 +5991,7 @@ const std::vector<Topic>& topics() {
                          ": sans elle, le champ refuse et le dit.", {}},
              {K::Tip, "Le virgule et le point sont accept\xC3\xA9s : 12,5 et 12.5 donnent la m\xC3\xAAme "
                          "valeur.", {}},
+             {K::Paragraph, "1.12.10 : Min et Max vides sont ceux de la ligne de la variable dans Unit\xC3\xA9s et formats (pas sa mise \xC3\xA0 l'\xC3\xA9" "chelle : vide reste \xC2\xAB sans borne \xC2\xBB tant que la ligne ne dit rien).", {}, "1.12.10"},
          },
          {"objet-communs", "securite", "objet-connexion"},
          {},
@@ -6585,6 +6603,7 @@ const std::vector<Topic>& topics() {
                          "rel\xC3\xA2" "chement la valeur est \xC3\xA9" "crite et dite au journal. Sans la "
                          "permission Piloter (sous s\xC3\xA9" "curit\xC3\xA9), la poign\xC3\xA9" "e ne bouge "
                          "pas et le refus est dit.", {}},
+             {K::Paragraph, "1.12.10 : Min et Max vides prennent la plage de la variable (Configuration \xE2\x80\xBA Unit\xC3\xA9s et formats, ou sa mise \xC3\xA0 l'\xC3\xA9" "chelle) ; l'inspecteur la montre en gris. Un objet pos\xC3\xA9 depuis la palette na\xC3\xAEt ainsi ; une valeur tap\xC3\xA9" "e l'emporte. Min et Max acceptent aussi une variable tap\xC3\xA9" "e sans = (Consigne_Max).", {}, "1.12.10"},
          },
          {"objet-potentiometre", "objet-champ-de-saisie", "objet-barre-de-progression"},
          {},
@@ -6653,6 +6672,7 @@ const std::vector<Topic>& topics() {
                          "pixels.\nCouleur du texte\t#E6EAF0\tLa valeur.\nRemplissage\t#2A313C\tLa course "
                          "(fond de l'arc).\nCouleur du bouton\t#2F6FD6\tLa course faite et l'index.\nCouleur "
                          "de la poign\xC3\xA9" "e\t#C8D0DC\tLe bouton.", {}},
+             {K::Paragraph, "1.12.10 : Min et Max vides prennent la plage de la variable (Configuration \xE2\x80\xBA Unit\xC3\xA9s et formats, ou sa mise \xC3\xA0 l'\xC3\xA9" "chelle) ; l'inspecteur la montre en gris. Un objet pos\xC3\xA9 depuis la palette na\xC3\xAEt ainsi ; une valeur tap\xC3\xA9" "e l'emporte. Min et Max acceptent aussi une variable tap\xC3\xA9" "e sans = (Consigne_Max).", {}, "1.12.10"},
          },
          {"objet-curseur", "objet-jauge"},
          {},
@@ -7000,6 +7020,7 @@ const std::vector<Topic>& topics() {
                          "valeur, entre les seuils.\nAlignement\tdroite\tLa valeur dans "
                          "l'afficheur.\nRemplissage\t#141820\tLe fond.\nContour\t#3A4556\tLe bord.\nRayon "
                          "des coins\t4\tDes coins arrondis.", {}},
+             {K::Paragraph, "1.12.10 : les seuils laiss\xC3\xA9s vides sont ceux de la variable (Unit\xC3\xA9s et formats) ; un seuil peut \xC3\xAAtre une variable tap\xC3\xA9" "e sans =.", {}, "1.12.10"},
          },
          {"objet-afficheur-7-segments", "objet-jauge", "proprietes"},
          {},
@@ -7202,6 +7223,8 @@ const std::vector<Topic>& topics() {
                          "pixels.\nCouleur du texte\t#C8D0DC\tLes graduations.\nRemplissage\t#2F6FD6\tLa "
                          "barre.\nFond\t#2A313C\tLe fond de la barre.", {}},
              {K::Paragraph, "1.12.8 : les zones se r\xC3\xA8glent dans Contenu (De, \xC3\x80, Couleur). Une borne en % de l'\xC3\xA9" "chelle (60 %) suit Min et Max quand ils changent ; une borne en valeur reste une valeur. G\xC3\xA9n\xC3\xA9rer signale deux zones qui se chevauchent.", {}, "1.12.8"},
+             {K::Paragraph, "1.12.10 : Min et Max vides prennent la plage de la variable (Configuration \xE2\x80\xBA Unit\xC3\xA9s et formats, ou sa mise \xC3\xA0 l'\xC3\xA9" "chelle) ; l'inspecteur la montre en gris. Un objet pos\xC3\xA9 depuis la palette na\xC3\xAEt ainsi ; une valeur tap\xC3\xA9" "e l'emporte. Min et Max acceptent aussi une variable tap\xC3\xA9" "e sans = (Consigne_Max).", {}, "1.12.10"},
+             {K::Paragraph, "1.12.10 : des zones vides (un objet pos\xC3\xA9 depuis la palette) suivent les seuils de la variable - les alarmes en rouge, les seuils en jaune, le vert entre les seuils ; sans seuil, celles d'un objet neuf, en % de l'\xC3\xA9" "chelle. Des zones \xC3\xA9" "crites dans Contenu restent les leurs.", {}, "1.12.10"},
          },
          {"objet-barre-de-progression", "objet-thermometre", "objet-cadran-a-zones"},
          {},
@@ -7265,6 +7288,8 @@ const std::vector<Topic>& topics() {
                          "graduations.\nTaille du texte\t11\tEn pixels.\nCouleur du texte\t#C8D0DC\tLes "
                          "graduations et la valeur.\nRemplissage\t#E5534B\tLa colonne et le "
                          "bulbe.\nFond\t#2A313C\tLe tube.\nContour\t#8A9BB0\tLe contour du tube.", {}},
+             {K::Paragraph, "1.12.10 : Min et Max vides prennent la plage de la variable (Configuration \xE2\x80\xBA Unit\xC3\xA9s et formats, ou sa mise \xC3\xA0 l'\xC3\xA9" "chelle) ; l'inspecteur la montre en gris. Un objet pos\xC3\xA9 depuis la palette na\xC3\xAEt ainsi ; une valeur tap\xC3\xA9" "e l'emporte. Min et Max acceptent aussi une variable tap\xC3\xA9" "e sans = (Consigne_Max).", {}, "1.12.10"},
+             {K::Paragraph, "1.12.10 : quatre seuils (alarme basse, seuil bas, seuil haut, alarme haute ; vides : ceux de la variable), marqu\xC3\xA9s d'un trait ; au-del\xC3\xA0, la valeur (et l'arc de la jauge) prend la couleur des seuils ou des alarmes.", {}, "1.12.10"},
          },
          {"objet-bargraphe", "objet-afficheur-numerique"},
          {},
@@ -7326,6 +7351,8 @@ const std::vector<Topic>& topics() {
                          "l'aiguille\t#F4F6FA\tL'aiguille.\nRemplissage\t#1F252E\tLe fond du "
                          "cadran.\nContour\t#3A4556\tLe bord.", {}},
              {K::Paragraph, "1.12.8 : les zones se r\xC3\xA8glent dans Contenu (De, \xC3\x80, Couleur). Une borne en % de l'\xC3\xA9" "chelle (60 %) suit Min et Max quand ils changent ; une borne en valeur reste une valeur. G\xC3\xA9n\xC3\xA9rer signale deux zones qui se chevauchent.", {}, "1.12.8"},
+             {K::Paragraph, "1.12.10 : Min et Max vides prennent la plage de la variable (Configuration \xE2\x80\xBA Unit\xC3\xA9s et formats, ou sa mise \xC3\xA0 l'\xC3\xA9" "chelle) ; l'inspecteur la montre en gris. Un objet pos\xC3\xA9 depuis la palette na\xC3\xAEt ainsi ; une valeur tap\xC3\xA9" "e l'emporte. Min et Max acceptent aussi une variable tap\xC3\xA9" "e sans = (Consigne_Max).", {}, "1.12.10"},
+             {K::Paragraph, "1.12.10 : des zones vides (un objet pos\xC3\xA9 depuis la palette) suivent les seuils de la variable - les alarmes en rouge, les seuils en jaune, le vert entre les seuils ; sans seuil, celles d'un objet neuf, en % de l'\xC3\xA9" "chelle. Des zones \xC3\xA9" "crites dans Contenu restent les leurs.", {}, "1.12.10"},
          },
          {"objet-jauge", "objet-bargraphe"},
          {},
@@ -7380,6 +7407,7 @@ const std::vector<Topic>& topics() {
                          "fond.\nContour\t#3A4556\tLe bord.\nCouleur de la trotteuse\t#E5534B\tLa trotteuse.", {}},
              {K::Tip, "Dans un texte \xC3\xA0 trous, `{SYS.Time}` ou `{SYS.DateTime}` donnent la "
                          "m\xC3\xAAme heure (voir les variables syst\xC3\xA8me).", {}},
+             {K::Paragraph, "1.12.12 : Heure affich\xC3\xA9" "e relie l'horloge \xC3\xA0 une variable - une TOD, une DT, une DATE, une STRING ISO 8601 ou un REAL en secondes ; vide, elle montre l'heure de l'IHM. Format de la date (12/10/2026, 2026-10-12, 12 oct. 2026, lundi 12 octobre 2026), Heure sur 24 h ou 12 h, et Fuseau (local, UTC, UTC+2...) valent pour les deux styles. Une heure du mur (DT, TOD, DATE) se montre telle quelle ; l'heure de l'IHM et une heure qui dit son fuseau sont converties dans celui de l'horloge.", {}, "1.12.12"},
          },
          {"objet-date-et-heure", "variables-systeme"},
          {},
@@ -7555,6 +7583,7 @@ const std::vector<Topic>& topics() {
                          "d\xC3\xA9" "filement.\nSens\tgauche\tgauche ou droite.\nPolice\tSans\tLa "
                          "police.\nTaille du texte\t18\tEn pixels.\nCouleur du texte\t#F2C94C\tLe "
                          "texte.\nRemplissage\t#1B2028\tLe fond.\nContour\t#3A4556\tLe bord.", {}},
+             {K::Paragraph, "1.12.12 : Messages depuis fait d\xC3\xA9" "filer les textes d'une LIST ou d'un tableau de textes, d'un joker (Consignes[*].Texte) ou les alarmes en cours (d'un groupe), l'un apr\xC3\xA8s l'autre, s\xC3\xA9par\xC3\xA9s par le S\xC3\xA9parateur. Le nombre de messages suit la liste en marche ; l'\xC3\xA9" "diteur montre ses valeurs initiales. Sans source, ou une source vide : le texte de l'objet.", {}, "1.12.12"},
          },
          {"objet-texte", "variables-systeme"},
          {},
@@ -7746,6 +7775,7 @@ const std::vector<Topic>& topics() {
              {K::Warning, "Un texte trop long pour un code QR est refus\xC3\xA9 : plus de 271 octets en correction L, "
                          "213 en M, 151 en Q, 119 en H (la version 10, la plus grande calcul\xC3\xA9" "e ici). G\xC3\xA9n\xC3\xA9rer le "
                          "signale pour un texte fixe.", {}},
+             {K::Paragraph, "1.12.12 : le code QR va jusqu'\xC3\xA0 la version 40 (177 x 177 modules) : 2 331 octets en M, 5 596 chiffres. Le texte prend le mode le plus compact (des chiffres, des majuscules, sinon les octets en UTF-8) et la plus petite version qui le loge. La ligne Place de l'inspecteur dit ce qui reste ; un texte calcul\xC3\xA9 trop long montre \xC2\xAB trop long \xC2\xBB sur l'objet, et la Console le dit une fois.", {}, "1.12.12"},
          },
          {"objet-texte", "objet-image"},
          {},
@@ -7823,6 +7853,8 @@ const std::vector<Topic>& topics() {
                          "biblioth\xC3\xA8que, une cloche et un nombre sur chaque objet disent combien il en "
                          "porte ; sa fiche les montre dans **Alarmes de l'objet**. Voir \xC2\xAB Les alarmes "
                          "par d\xC3\xA9" "faut des objets du synoptique \xC2\xBB.", {}},
+             {K::Paragraph, "1.12.11 : \xC3\x89quipement - donne au symbole sa structure (P1, Pompes[2], un param\xC3\xA8tre). Ses membres se lient par leur nom : Valeur \xE2\x86\x90 Marche, D\xC3\xA9" "faut \xE2\x86\x90 Defaut, Mode \xE2\x86\x90 Mode, Libell\xC3\xA9 \xE2\x86\x90 Nom (Mesure ou Niveau pour une cuve, Ouverture et En mouvement pour une vanne). La section Liaison \xC3\x89quipement montre chaque r\xC3\xB4le et le membre lu ; un autre choix vaut pour tout le type. Ce que tu r\xC3\xA8gles \xC3\xA0 la main sur l'objet gagne.", {}, "1.12.11"},
+             {K::Paragraph, "1.12.11 : Contenu \xE2\x80\xBA Mode \xC3\x89tat - la Valeur choisit un aspect : arr\xC3\xAAt, marche, d\xC3\xA9" "faut, maintenance (une couleur, anim\xC3\xA9 ou non). Depuis une \xC3\xA9num\xC3\xA9ration : ETAT_MOTEUR, ou une \xC3\xA9num\xC3\xA9ration du projet d'apr\xC3\xA8s ses noms (ARRET, MARCHE, DEFAUT, MAINT\xE2\x80\xA6). Un moteur ETAT_MOTEUR en D\xC3\xA9" "faut (2) se dessine en d\xC3\xA9" "faut.", {}, "1.12.11"},
          },
          {"objets", "objet-communs", "proprietes", "simulation", "variables-instances", "symboles", "alarmes-bibliotheque", "groupes-objets"},
          {"Synoptique"},
@@ -7927,6 +7959,7 @@ const std::vector<Topic>& topics() {
              {K::Bullet, "r\xC3\xA9glante, son ouverture est born\xC3\xA9" "e entre 0 et 100 % ; "
                          "G\xC3\xA9n\xC3\xA9rer signale une ouverture illisible ou fix\xC3\xA9" "e hors de "
                          "ces bornes.", {}},
+             {K::Paragraph, "1.12.10 : Ouverture : min et max - la valeur qui vaut 0 % et celle qui vaut 100 % (27648, 1) ; vides, la plage de la variable de l'ouverture dans Unit\xC3\xA9s et formats, sinon 0..100.", {}, "1.12.10"},
          },
          {"synoptique", "objet-communs", "proprietes", "simulation"},
          {},
@@ -8053,6 +8086,7 @@ const std::vector<Topic>& topics() {
                          "les propri\xC3\xA9t\xC3\xA9s de la vanne : la 1.10.4 le relit comme une vanne 3 "
                          "voies, et le dit. Le mieux reste d'ouvrir le projet avec la 1.10.4.", {}},
              {K::Paragraph, "1.12.8 : une position fixe se choisit (ferm\xC3\xA9" "e, 1-2, 1-3, 2-3) ; le code 0, 1, 2, 3 reste \xC3\xA9" "crit, une variable garde ses codes.", {}, "1.12.8"},
+             {K::Paragraph, "1.12.11 : les cases du mode de position qui ne sert pas sont gris\xC3\xA9" "es ; G\xC3\xA9n\xC3\xA9rer dit une position 1-2 sur un boisseau en L (il ne relie que 1-3 et 2-3).", {}, "1.12.11"},
          },
          {"objet-vanne", "synoptique", "objet-communs", "proprietes", "simulation"},
          {},
@@ -8892,6 +8926,8 @@ const std::vector<Topic>& topics() {
              {K::Bullet, "en d\xC3\xA9" "faut, il prend la couleur de d\xC3\xA9" "faut et clignote ; "
                          "G\xC3\xA9n\xC3\xA9rer signale une variable inconnue dans sa valeur ou son "
                          "d\xC3\xA9" "faut.", {}},
+             {K::Paragraph, "1.12.10 : Min et Max vides prennent la plage de la variable (Configuration \xE2\x80\xBA Unit\xC3\xA9s et formats, ou sa mise \xC3\xA0 l'\xC3\xA9" "chelle) ; l'inspecteur la montre en gris. Un objet pos\xC3\xA9 depuis la palette na\xC3\xAEt ainsi ; une valeur tap\xC3\xA9" "e l'emporte. Min et Max acceptent aussi une variable tap\xC3\xA9" "e sans = (Consigne_Max).", {}, "1.12.10"},
+             {K::Paragraph, "1.12.11 : Course - rentr\xC3\xA9 / sorti : la Valeur se lit vrai / faux (un BOOL Sorti).", {}, "1.12.11"},
          },
          {"synoptique", "objet-communs", "proprietes", "simulation"},
          {},
@@ -8967,6 +9003,7 @@ const std::vector<Topic>& topics() {
                          "G\xC3\xA9n\xC3\xA9rer signale une variable inconnue dans sa valeur ou son "
                          "d\xC3\xA9" "faut.", {}},
              {K::Paragraph, "1.12.8 : Fonction se choisit dans la liste des lettres ISA (PT, TT, FT, LT, PIC, TIC\xE2\x80\xA6) ; choisie, elle propose son unit\xC3\xA9 (PT : bar, TT : \xC2\xB0" "C), sauf si l'unit\xC3\xA9 a \xC3\xA9t\xC3\xA9 tap\xC3\xA9" "e \xC3\xA0 la main.", {}, "1.12.8"},
+             {K::Paragraph, "1.12.10 : quatre seuils (vides : ceux de la variable) ; au-del\xC3\xA0, la bulle et la valeur prennent la couleur des seuils ou des alarmes.", {}, "1.12.10"},
          },
          {"synoptique", "objet-communs", "proprietes", "simulation"},
          {},
@@ -9050,6 +9087,7 @@ const std::vector<Topic>& topics() {
                          "valeur s'\xC3\xA9" "crit dedans (Afficher la valeur) ;", {}},
              {K::Bullet, "ses seuils (vides : aucun) sont trac\xC3\xA9s \xC3\xA0 leur niveau, entre Minimum "
                          "et Maximum ; franchi, un seuil remplit son \xC3\xA9tiquette.", {}},
+             {K::Paragraph, "1.12.10 : Min, Max et les quatre seuils laiss\xC3\xA9s vides viennent de la variable. Un seuil hors de Min..Max se dessine au bord, marqu\xC3\xA9 d'une fl\xC3\xA8" "che.", {}, "1.12.10"},
          },
          {"synoptique", "objet-communs", "proprietes", "simulation"},
          {},
@@ -9148,6 +9186,7 @@ const std::vector<Topic>& topics() {
                          "valeur s'\xC3\xA9" "crit dedans (Afficher la valeur) ;", {}},
              {K::Bullet, "ses seuils (vides : aucun) sont trac\xC3\xA9s \xC3\xA0 leur niveau, entre Minimum "
                          "et Maximum ; franchi, un seuil remplit son \xC3\xA9tiquette.", {}},
+             {K::Paragraph, "1.12.10 : Min, Max et les quatre seuils laiss\xC3\xA9s vides viennent de la variable. Un seuil hors de Min..Max se dessine au bord, marqu\xC3\xA9 d'une fl\xC3\xA8" "che.", {}, "1.12.10"},
          },
          {"synoptique", "objet-communs", "proprietes", "simulation"},
          {},
@@ -9244,6 +9283,7 @@ const std::vector<Topic>& topics() {
                          "valeur s'\xC3\xA9" "crit dedans (Afficher la valeur) ;", {}},
              {K::Bullet, "ses seuils (vides : aucun) sont trac\xC3\xA9s \xC3\xA0 leur niveau, entre Minimum "
                          "et Maximum ; franchi, un seuil remplit son \xC3\xA9tiquette.", {}},
+             {K::Paragraph, "1.12.10 : Min, Max et les quatre seuils laiss\xC3\xA9s vides viennent de la variable. Un seuil hors de Min..Max se dessine au bord, marqu\xC3\xA9 d'une fl\xC3\xA8" "che.", {}, "1.12.10"},
          },
          {"synoptique", "objet-communs", "proprietes", "simulation"},
          {},
@@ -9346,6 +9386,7 @@ const std::vector<Topic>& topics() {
                          "valeur s'\xC3\xA9" "crit dedans (Afficher la valeur) ;", {}},
              {K::Bullet, "ses seuils (vides : aucun) sont trac\xC3\xA9s \xC3\xA0 leur niveau, entre Minimum "
                          "et Maximum ; franchi, un seuil remplit son \xC3\xA9tiquette.", {}},
+             {K::Paragraph, "1.12.10 : Min, Max et les quatre seuils laiss\xC3\xA9s vides viennent de la variable. Un seuil hors de Min..Max se dessine au bord, marqu\xC3\xA9 d'une fl\xC3\xA8" "che.", {}, "1.12.10"},
          },
          {"synoptique", "objet-communs", "proprietes", "simulation"},
          {},
@@ -9739,6 +9780,7 @@ const std::vector<Topic>& topics() {
                          "`.AlarmCount`, `.AlarmActiveCount`, `.AlarmUnackCount`, `.AlarmHighest`, "
                          "`.AlarmGroup` (voir \xC2\xAB Le groupe d'alarmes d'un objet \xC2\xBB).", {}},
              {K::Paragraph, "1.12.9 : R\xC3\xA9p\xC3\xA9ter depuis Cuves - une instance par \xC3\xA9l\xC3\xA9ment ; dans les Arguments, [*] d\xC3\xA9signe l'\xC3\xA9l\xC3\xA9ment (Cuve := Cuves[*]). Les copies se suivent (sens, \xC3\xA9" "cart, combien par rang\xC3\xA9" "e) ; la premi\xC3\xA8re garde le nom de l'instance, les autres Nom_2, Nom_3\xE2\x80\xA6 L'\xC3\xA9" "diteur les montre estomp\xC3\xA9" "es ; les alarmes du symbole sont g\xC3\xA9n\xC3\xA9r\xC3\xA9" "es pour chacune.", {}, "1.12.9"},
+             {K::Paragraph, "1.12.11 : G\xC3\xA9n\xC3\xA9rer compare chaque argument au param\xC3\xA8tre, comme pour une popup : le type, un calcul pour un param\xC3\xA8tre que le symbole \xC3\xA9" "crit, les arguments sans nom en trop, une constante qui ne se convertit pas. Ce sont des avertissements.", {}, "1.12.11"},
          },
          {"symboles", "objet-communs", "actions", "popups", "alarmes-symboles", "groupes-objets", "surcharge-alarmes"},
          {},
@@ -9844,6 +9886,7 @@ const std::vector<Topic>& topics() {
                          "des expressions de la simulation dit pourquoi). G\xC3\xA9n\xC3\xA9rer signale une "
                          "liste vide, une variable inconnue, une \xC3\xA9" "chelle invers\xC3\xA9" "e.", {}},
              {K::Paragraph, "1.12.9 : le joker [*] - Cuves[*].Niveau donne une plume (une barre, une part, une ligne) par cuve ; Cuves[*].Nom en Noms les nomme. La source : un tableau de l'IHM, une LIST (le nombre suit la liste en marche), une MAP (ses cl\xC3\xA9s) ou une \xC3\xA9num\xC3\xA9ration. Pompe.* : un \xC3\xA9l\xC3\xA9ment par membre de la structure ; Ligne/Convoyeur/* : un par variable du dossier. Contenu \xE2\x80\xBA Ajouter depuis une source les propose, et chaque ligne dit ce qu'elle deviendra. Une source inconnue ne donne rien (G\xC3\xA9n\xC3\xA9rer le dit).", {}, "1.12.9"},
+             {K::Paragraph, "1.12.10 : Min, Max, le seuil bas et le seuil haut (les tol\xC3\xA9rances de l'histogramme) acceptent une variable tap\xC3\xA9" "e sans = (Seuil_Haut), lue comme la variable. L'\xC3\xA9" "chelle reste celle de l'objet : elle ne vient pas d'Unit\xC3\xA9s et formats.", {}, "1.12.10"},
          },
          {"graphiques", "objet-communs", "contenu", "proprietes"},
          {},
@@ -9938,6 +9981,7 @@ const std::vector<Topic>& topics() {
              {K::Bullet, "export\xC3\xA9" "e (bouton d'export, source objet:Nom), elle donne une ligne par "
                          "point : courbe, X, Y.", {}},
              {K::Paragraph, "1.12.9 : Variable X Profil[*].X et courbe Y Profil[*].Y : le profil entier, redessin\xC3\xA9 \xC3\xA0 chaque \xC3\xA9" "chantillon (un tableau de points, une LIST qui change). R\xC3\xA9" "f\xC3\xA9rence Ref[*].X, Ref[*].Y : la courbe de r\xC3\xA9" "f\xC3\xA9rence lue dans une source.", {}, "1.12.9"},
+             {K::Paragraph, "1.12.12 : avec une \xC3\xA9" "chelle fixe, les points de la courbe de r\xC3\xA9" "f\xC3\xA9rence se r\xC3\xA8glent sur le dessin (glisser, double-clic, Suppr) ou dans Contenu \xE2\x80\xBA Montrer : la r\xC3\xA9" "f\xC3\xA9rence. Un point gliss\xC3\xA9 ne d\xC3\xA9passe pas ses voisins.", {}, "1.12.12"},
          },
          {"graphiques", "objet-courbe", "objet-communs", "contenu"},
          {},
@@ -10223,6 +10267,7 @@ const std::vector<Topic>& topics() {
              {K::Paragraph, "Le moteur prend une mesure \xC3\xA0 chaque **P\xC3\xA9riode de mesure** et garde "
                          "celles de la **Fen\xC3\xAAtre** ; un trait blanc tiret\xC3\xA9 marque la moyenne. "
                          "Export\xC3\xA9, l'histogramme donne ses classes et ses statistiques.", {}},
+             {K::Paragraph, "1.12.10 : Min, Max, le seuil bas et le seuil haut (les tol\xC3\xA9rances de l'histogramme) acceptent une variable tap\xC3\xA9" "e sans = (Seuil_Haut), lue comme la variable. L'\xC3\xA9" "chelle reste celle de l'objet : elle ne vient pas d'Unit\xC3\xA9s et formats.", {}, "1.12.10"},
          },
          {"graphiques", "objet-communs", "historiques"},
          {},
@@ -11464,6 +11509,8 @@ const std::vector<Topic>& topics() {
                          "choisie\t#FFFFFF\tSon contour apr\xC3\xA8s un clic.\nTaille du texte\t13\tLes noms "
                          "des zones.\nCouleur du texte\t#FFFFFF\tLes noms.\nRemplissage\t#1B2028\tLe fond "
                          "sans image.\nContour\t#3A4556\tLe cadre.", {}},
+             {K::Paragraph, "1.12.12 : la zone choisie dans Contenu se r\xC3\xA8gle sur le plan, comme un polygone. Ajouter (ou clic droit \xE2\x80\xBA Tracer une zone) trace une nouvelle zone : un clic par point, un double-clic ou un clic sur le premier point la ferme, \xC3\x89" "chap l'abandonne.", {}, "1.12.12"},
+             {K::Paragraph, "1.12.12 : la variable de la zone choisie re\xC3\xA7oit le nom de la zone (STRING) ou son num\xC3\xA9ro (entier, 1 pour la premi\xC3\xA8re). \xC3\x89" "crite par le programme, elle choisit la zone (0 : aucune). G\xC3\xA9n\xC3\xA9rer signale une variable d'un autre type.", {}, "1.12.12"},
          },
          {"navigation", "alarmes-objets", "objet-resume-par-zone", "objet-communs", "contenu"},
          {},
@@ -12029,6 +12076,7 @@ const std::vector<Topic>& topics() {
                          "dans un \xC3\xA9" "diteur de code, **Maj+F12** sur son nom fait la m\xC3\xAAme "
                          "recherche, mot entier. Les variables locales et les param\xC3\xA8tres des fonctions "
                          "n'existent que dans leur code.", {}},
+             {K::Paragraph, "1.12.10 : une structure prend une valeur initiale (Marche := TRUE, Consigne := 12.5) ; un tableau de structures, une par \xC3\xA9l\xC3\xA9ment [(Nom := 'Cuve A'), (Nom := 'Cuve B')]. Les membres non nomm\xC3\xA9s et les \xC3\xA9l\xC3\xA9ments en moins gardent les valeurs du type. Ce qui ne peut pas s'appliquer (un membre inconnu, un texte pour un REAL, trop d'\xC3\xA9l\xC3\xA9ments) est refus\xC3\xA9 \xC3\xA0 la saisie, et dit par G\xC3\xA9n\xC3\xA9rer et la Console.", {}, "1.12.10"},
          },
          {"types-ihm", "tableaux-ihm", "variables-liees", "scripts", "variables-locales", "proprietes", "configuration", "excel", "variables-api"},
          {"dossier", "dossiers", "Variables IHM", "ranger", "glisser", "Lier \xC3\xA0 un \xC3\xA9quipement", "Place Modbus", "Qualit\xC3\xA9"},
@@ -12371,6 +12419,7 @@ const std::vector<Topic>& topics() {
              {K::Tip, "Une valeur gard\xC3\xA9" "e (la r\xC3\xA9manence, le stockage Persistante) dont le type a "
                          "chang\xC3\xA9 passe si elle tient dans le nouveau type : 300 passe de DINT \xC3\xA0 INT, "
                          "40000 non (sa valeur initiale reprend, et le journal le dit).", {}, "1.11.19"},
+             {K::Paragraph, "1.12.10 : une structure prend une valeur initiale (Marche := TRUE, Consigne := 12.5) ; un tableau de structures, une par \xC3\xA9l\xC3\xA9ment [(Nom := 'Cuve A'), (Nom := 'Cuve B')]. Les membres non nomm\xC3\xA9s et les \xC3\xA9l\xC3\xA9ments en moins gardent les valeurs du type. Ce qui ne peut pas s'appliquer (un membre inconnu, un texte pour un REAL, trop d'\xC3\xA9l\xC3\xA9ments) est refus\xC3\xA9 \xC3\xA0 la saisie, et dit par G\xC3\xA9n\xC3\xA9rer et la Console.", {}, "1.12.10"},
          },
          {"variables-ihm", "tableaux-ihm", "variables-liees", "dossiers", "parametres-popups", "operateurs", "types-excel", "enum-scripts"},
          {"type IHM", "types IHM", "structure", "T_Four", "membre", "membres", "DDT", "STRUCT", "d\xC3\xA9" "calage",
@@ -15157,6 +15206,7 @@ const std::vector<Topic>& topics() {
                          "suivent ;", {}},
              {K::Bullet, "**Remplacer** : m\xC3\xAAme nom, nouveau contenu (du m\xC3\xAAme genre) ;", {}},
              {K::Bullet, "**Supprimer** : confirmation si elle est cit\xC3\xA9" "e ; Ctrl+Z la rend.", {}},
+             {K::Paragraph, "1.12.12 : les vid\xC3\xA9os AVI, MOV et WMV s'importent ; la fiche montre la premi\xC3\xA8re image quand elle se d\xC3\xA9" "code ici (un AVI Motion-JPEG partout, le reste sous Windows), sa dur\xC3\xA9" "e, sa taille, son codec.", {}, "1.12.12"},
          },
          {"fichiers", "actions-ressources", "objets", "dossiers"},
          {},
@@ -15594,6 +15644,7 @@ const std::vector<Topic>& topics() {
                          "(voir \xC2\xAB Les op\xC3\xA9rateurs des symboles et des types IHM \xC2\xBB). "
                          "**F7** lance Compiler.", {}, "1.10"},
              {K::Paragraph, "1.12.6 : **le type contre le r\xC3\xB4le**. Chaque propri\xC3\xA9t\xC3\xA9 a un r\xC3\xB4le (un nombre, un bool\xC3\xA9" "en, un \xC3\xA9tat, un texte, une dur\xC3\xA9" "e, une date, une couleur, un nom, une liste) ; G\xC3\xA9n\xC3\xA9rer v\xC3\xA9rifie que la variable ou la formule qui la pilote s'y lit : une structure ou un tableau dans une jauge (une erreur, avec ses membres), une STRING lue comme un nombre, une \xC3\xA9num\xC3\xA9ration lue comme un bool\xC3\xA9" "en, un s\xC3\xA9lecteur de date sur un BOOL, un programmateur dont la sortie n'est pas une STRING. Il signale aussi des listes qui ne s'alignent pas (noms, unit\xC3\xA9s, formats, valeurs, libell\xC3\xA9s), une couleur inconnue, un format 0,0 (la virgule n'y est pas une d\xC3\xA9" "cimale : 0.0), une valeur fixe qui ressemble \xC3\xA0 une formule sans =, des seuils dans le d\xC3\xA9sordre ou hors de la plage. Ce sont des avertissements : un projet qui d\xC3\xA9marrait d\xC3\xA9marre toujours, et l'objet montre ### quand la valeur ne se lit pas ; ce que Compiler exigeait d\xC3\xA9j\xC3\xA0 (Visible un bool\xC3\xA9" "en, X un nombre, Remplissage une couleur) reste une erreur.", {}, "1.12.6"},
+             {K::Paragraph, "1.12.12 : G\xC3\xA9n\xC3\xA9rer dit, en information, qu'une vid\xC3\xA9o MP4, WMV, MOV ou WEBM ne se d\xC3\xA9" "code que sous Windows ; en avertissement, une horloge li\xC3\xA9" "e \xC3\xA0 ce qui n'est pas une heure, un fuseau illisible, la source d'un texte d\xC3\xA9" "filant qui n'est pas une liste de textes, un d\xC3\xA9part sur condition sans condition.", {}, "1.12.12"},
          },
          {"simulation", "scripts", "fonctions", "essais", "performances", "parametres-popups", "alarmes-symboles", "erreurs-scripts", "operateurs"},
          {"gravit\xC3\xA9", "erreur", "avertissement", "information", "qualit\xC3\xA9", "contraste", "cible tactile", "vue jamais atteinte"},
