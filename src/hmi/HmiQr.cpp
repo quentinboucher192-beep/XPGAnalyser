@@ -14,19 +14,27 @@ namespace hmi {
 
 namespace {
 
-constexpr int kMaxVersion = 10;
-// [niveau L M Q H][version 0..10] : codes correcteurs par bloc, nombre de blocs.
+constexpr int kMaxVersion = 40;   // 1.12.12 (lot H) : les 40 versions (avant : 10)
+// [niveau L M Q H][version 0..40] : codes correcteurs par bloc, nombre de blocs (ISO/IEC 18004, table 9).
 constexpr int kEccPerBlock[4][kMaxVersion + 1] = {
-    {-1, 7, 10, 15, 20, 26, 18, 20, 24, 30, 18},
-    {-1, 10, 16, 26, 18, 24, 16, 18, 22, 22, 26},
-    {-1, 13, 22, 18, 26, 18, 24, 18, 22, 20, 24},
-    {-1, 17, 28, 22, 16, 22, 28, 26, 26, 24, 28},
+    {-1, 7, 10, 15, 20, 26, 18, 20, 24, 30, 18, 20, 24, 26, 30, 22, 24, 28, 30, 28, 28, 28, 28, 30, 30, 26, 28, 30, 30, 30, 30, 30, 30,
+     30, 30, 30, 30, 30, 30, 30, 30},
+    {-1, 10, 16, 26, 18, 24, 16, 18, 22, 22, 26, 30, 22, 22, 24, 24, 28, 28, 26, 26, 26, 26, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28,
+     28, 28, 28, 28, 28, 28, 28, 28},
+    {-1, 13, 22, 18, 26, 18, 24, 18, 22, 20, 24, 28, 26, 24, 20, 30, 24, 28, 28, 26, 30, 28, 30, 30, 30, 30, 28, 30, 30, 30, 30, 30, 30,
+     30, 30, 30, 30, 30, 30, 30, 30},
+    {-1, 17, 28, 22, 16, 22, 28, 26, 26, 24, 28, 24, 28, 22, 24, 24, 30, 28, 28, 26, 28, 30, 24, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30,
+     30, 30, 30, 30, 30, 30, 30, 30},
 };
 constexpr int kBlocks[4][kMaxVersion + 1] = {
-    {-1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 4},
-    {-1, 1, 1, 1, 2, 2, 4, 4, 4, 5, 5},
-    {-1, 1, 1, 2, 2, 4, 4, 6, 6, 8, 8},
-    {-1, 1, 1, 2, 4, 4, 4, 5, 6, 8, 8},
+    {-1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 4, 4, 4, 4, 4, 6, 6, 6, 6, 7, 8, 8, 9, 9, 10, 12, 12, 12, 13, 14, 15, 16, 17, 18, 19, 19, 20, 21, 22,
+     24, 25},
+    {-1, 1, 1, 1, 2, 2, 4, 4, 4, 5, 5, 5, 8, 9, 9, 10, 10, 11, 13, 14, 16, 17, 17, 18, 20, 21, 23, 25, 26, 28, 29, 31, 33, 35, 37, 38, 40,
+     43, 45, 47, 49},
+    {-1, 1, 1, 2, 2, 4, 4, 6, 6, 8, 8, 8, 10, 12, 16, 12, 17, 16, 18, 21, 20, 23, 23, 25, 27, 29, 34, 34, 35, 38, 40, 43, 45, 48, 51, 53,
+     56, 59, 62, 65, 68},
+    {-1, 1, 1, 2, 4, 4, 4, 5, 6, 8, 8, 11, 11, 16, 16, 18, 16, 19, 21, 25, 25, 25, 34, 30, 32, 35, 37, 40, 42, 45, 48, 51, 54, 57, 60, 63,
+     66, 70, 74, 77, 81},
 };
 constexpr int kPenaltyN1 = 3, kPenaltyN2 = 3, kPenaltyN3 = 40, kPenaltyN4 = 10;
 
@@ -52,6 +60,61 @@ int rawDataModules(int ver) {
     return result;
 }
 int dataCodewords(int ver, int level) { return rawDataModules(ver) / 8 - kEccPerBlock[level][ver] * kBlocks[level][ver]; }
+
+// ---- 1.12.12 (lot H) : les modes ----------------------------------------------------
+//  N : les chiffres par trois sur 10 bits ; A : l'alphanumerique par deux sur 11 bits
+//  (45 x a + b) ; B : les octets. La longueur s'ecrit sur un nombre de bits qui
+//  depend de la version (1-9, 10-26, 27-40).
+int alnumValue(char c) noexcept {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'A' && c <= 'Z') return c - 'A' + 10;
+    switch (c) {
+        case ' ': return 36;
+        case '$': return 37;
+        case '%': return 38;
+        case '*': return 39;
+        case '+': return 40;
+        case '-': return 41;
+        case '.': return 42;
+        case '/': return 43;
+        case ':': return 44;
+        default: return -1;
+    }
+}
+int countBits(char mode, int ver) noexcept {
+    const int range = ver <= 9 ? 0 : ver <= 26 ? 1 : 2;
+    static constexpr int kNumeric[3] = {10, 12, 14}, kAlnum[3] = {9, 11, 13}, kBytes[3] = {8, 16, 16};
+    return mode == 'N' ? kNumeric[range] : mode == 'A' ? kAlnum[range] : kBytes[range];
+}
+int modeIndicator(char mode) noexcept { return mode == 'N' ? 1 : mode == 'A' ? 2 : 4; }
+// Les bits des donnees d'un texte de `len` caracteres (octets en mode B).
+long payloadBits(char mode, long len) noexcept {
+    if (mode == 'N') return 10 * (len / 3) + (len % 3 == 1 ? 4 : len % 3 == 2 ? 7 : 0);
+    if (mode == 'A') return 11 * (len / 2) + 6 * (len % 2);
+    return 8 * len;
+}
+bool fitsIn(char mode, long len, int ver, int level) noexcept {
+    const int cc = countBits(mode, ver);
+    return len < (1L << cc) && 4 + cc + payloadBits(mode, len) <= static_cast<long>(dataCodewords(ver, level)) * 8;
+}
+// Le plus de caracteres (octets) que loge une version dans un mode.
+int maxChars(char mode, int ver, int level) noexcept {
+    const int bits = dataCodewords(ver, level) * 8 - 4 - countBits(mode, ver);
+    if (bits <= 0) return 0;
+    const int n = mode == 'N' ? 3 * (bits / 10) + (bits % 10 >= 7 ? 2 : bits % 10 >= 4 ? 1 : 0)
+                : mode == 'A' ? 2 * (bits / 11) + (bits % 11 >= 6 ? 1 : 0)
+                              : bits / 8;
+    return std::min(n, (1 << countBits(mode, ver)) - 1);
+}
+// "1 234" : les milliers separes par une espace insecable.
+std::string grouped(long n) {
+    std::string digits = std::to_string(n < 0 ? -n : n), out;
+    for (std::size_t i = 0; i < digits.size(); ++i) {
+        if (i > 0 && (digits.size() - i) % 3 == 0) out += "\xC2\xA0";
+        out += digits[i];
+    }
+    return n < 0 ? "-" + out : out;
+}
 
 // ---- Reed-Solomon sur GF(256), polynome 0x11D ----------------------------------
 std::uint8_t gfMul(std::uint8_t x, std::uint8_t y) {
@@ -87,6 +150,17 @@ std::vector<std::uint8_t> rsRemainder(const std::vector<std::uint8_t>& data, con
 }
 
 bool bit(long x, int i) { return ((x >> i) & 1) != 0; }
+
+// Les centres des motifs d'alignement (sur chaque axe), dans l'ordre.
+std::vector<int> alignmentOf(int version) {
+    if (version <= 1 || version > kMaxVersion) return {};
+    const int numAlign = version / 7 + 2;
+    // 1.12.12 : la formule qui vaut pour les 40 versions (la version 32 comprise : un pas de 26).
+    const int step = (version * 8 + numAlign * 3 + 5) / (numAlign * 4 - 4) * 2;
+    std::vector<int> result{6};
+    for (int i = 0, pos = version * 4 + 17 - 7; i < numAlign - 1; ++i, pos -= step) result.insert(result.begin() + 1, pos);
+    return result;
+}
 
 // ---- la grille -------------------------------------------------------------------
 class Symbol {
@@ -234,14 +308,7 @@ private:
         for (int dy = -2; dy <= 2; ++dy)
             for (int dx = -2; dx <= 2; ++dx) setFunction(x + dx, y + dy, std::max(std::abs(dx), std::abs(dy)) != 1);
     }
-    [[nodiscard]] std::vector<int> alignmentPositions() const {
-        if (version_ == 1) return {};
-        const int numAlign = version_ / 7 + 2;
-        const int step = (version_ * 4 + numAlign * 2 + 1) / (numAlign * 2 - 2) * 2;
-        std::vector<int> result{6};
-        for (int i = 0, pos = size_ - 7; i < numAlign - 1; ++i, pos -= step) result.insert(result.begin() + 1, pos);
-        return result;
-    }
+    [[nodiscard]] std::vector<int> alignmentPositions() const { return alignmentOf(version_); }
     void drawVersion() {
         if (version_ < 7) return;
         int rem = version_;
@@ -283,8 +350,60 @@ private:
 int qrCapacity(char level) {
     const int li = levelIndex(level);
     if (li < 0) return 0;
-    return (dataCodewords(kMaxVersion, li) * 8 - 4 - 16) / 8;
+    return maxChars('B', kMaxVersion, li);
 }
+
+char qrModeOf(std::string_view text) noexcept {
+    if (text.empty()) return 'B';      // un texte vide : un segment d'octets vide, comme avant la 1.12.12
+    if (std::all_of(text.begin(), text.end(), [](char c) { return c >= '0' && c <= '9'; })) return 'N';
+    if (std::all_of(text.begin(), text.end(), [](char c) { return alnumValue(c) >= 0; })) return 'A';
+    return 'B';
+}
+
+QrRoom qrRoom(std::string_view text, char level) {
+    QrRoom room;
+    const int li = levelIndex(level);
+    room.mode = qrModeOf(text);
+    room.used = static_cast<int>(std::min<std::size_t>(text.size(), 1u << 30));
+    if (li < 0) return room;
+    room.max = maxChars(room.mode, kMaxVersion, li);
+    for (int v = 1; v <= kMaxVersion; ++v)
+        if (fitsIn(room.mode, room.used, v, li)) {
+            room.version = v;
+            room.fits = true;
+            break;
+        }
+    return room;
+}
+
+std::string qrRoomText(const QrRoom& room, char level) {
+    if (room.max <= 0) return "niveau de correction inconnu (L, M, Q ou H)";
+    const char lv = static_cast<char>(level >= 'a' ? level - 32 : level);
+    const auto unit = [&](long n) {
+        const bool many = n > 1 || n < -1;
+        if (room.mode == 'N') return std::string(many ? "chiffres" : "chiffre");
+        if (room.mode == 'A') return std::string(many ? "caract\xC3\xA8res" : "caract\xC3\xA8re");
+        return std::string(many ? "octets" : "octet");
+    };
+    if (!room.fits)
+        return "trop long : " + grouped(room.used) + " " + unit(room.used) + ", " + grouped(room.max) + " au plus en " + std::string(1, lv);
+    return "reste " + grouped(room.left()) + " " + unit(room.left()) + " en " + std::string(1, lv) + ", version "
+         + std::to_string(room.version);
+}
+
+int qrDataCodewords(int version, char level) {
+    const int li = levelIndex(level);
+    return li < 0 || version < 1 || version > kMaxVersion ? 0 : dataCodewords(version, li);
+}
+int qrEccPerBlock(int version, char level) {
+    const int li = levelIndex(level);
+    return li < 0 || version < 1 || version > kMaxVersion ? 0 : kEccPerBlock[li][version];
+}
+int qrBlocks(int version, char level) {
+    const int li = levelIndex(level);
+    return li < 0 || version < 1 || version > kMaxVersion ? 0 : kBlocks[li][version];
+}
+std::vector<int> qrAlignmentPositions(int version) { return alignmentOf(version); }
 
 QrCode encodeQr(std::string_view text, char level, int forceMask, int minVersion) {
     QrCode out;
@@ -294,24 +413,37 @@ QrCode encodeQr(std::string_view text, char level, int forceMask, int minVersion
         return out;
     }
     out.level = static_cast<char>(level >= 'a' ? level - 32 : level);
-    // La plus petite version qui loge le texte (mode octets).
-    const auto len = static_cast<int>(text.size());
+    // 1.12.12 (lot H) : le mode le plus compact, puis la plus petite version qui loge le texte.
+    const char mode = qrModeOf(text);
+    out.mode = mode;
+    const auto len = static_cast<long>(text.size());
     int version = 0;
-    for (int v = std::clamp(minVersion, 1, kMaxVersion); v <= kMaxVersion; ++v) {
-        const int ccBits = v <= 9 ? 8 : 16;
-        if (4 + ccBits + len * 8 <= dataCodewords(v, li) * 8) { version = v; break; }
-    }
+    for (int v = std::clamp(minVersion, 1, kMaxVersion); v <= kMaxVersion; ++v)
+        if (fitsIn(mode, len, v, li)) { version = v; break; }
     if (version == 0) {
-        out.error = "texte trop long : " + std::to_string(len) + " octets, " + std::to_string(qrCapacity(out.level))
-                  + " au plus au niveau " + std::string(1, out.level);
+        out.error = qrRoomText(qrRoom(text, out.level), out.level);
         return out;
     }
-    // Les bits : mode octets (0100), la longueur, les octets, puis le bourrage.
+    // Les bits : le mode, la longueur, les donnees, puis le bourrage.
     std::vector<bool> bits;
     const auto put = [&](long value, int count) { for (int i = count - 1; i >= 0; --i) bits.push_back(bit(value, i)); };
-    put(4, 4);
-    put(len, version <= 9 ? 8 : 16);
-    for (const char c : text) put(static_cast<unsigned char>(c), 8);
+    put(modeIndicator(mode), 4);
+    put(len, countBits(mode, version));
+    if (mode == 'N') {
+        for (std::size_t i = 0; i < text.size(); i += 3) {
+            const std::size_t n = std::min<std::size_t>(3, text.size() - i);
+            long group = 0;
+            for (std::size_t k = 0; k < n; ++k) group = group * 10 + (text[i + k] - '0');
+            put(group, n == 3 ? 10 : n == 2 ? 7 : 4);
+        }
+    } else if (mode == 'A') {
+        for (std::size_t i = 0; i < text.size(); i += 2) {
+            if (i + 1 < text.size()) put(alnumValue(text[i]) * 45L + alnumValue(text[i + 1]), 11);
+            else put(alnumValue(text[i]), 6);
+        }
+    } else {
+        for (const char c : text) put(static_cast<unsigned char>(c), 8);
+    }
     const std::size_t capacity = static_cast<std::size_t>(dataCodewords(version, li)) * 8;
     put(0, static_cast<int>(std::min<std::size_t>(4, capacity - bits.size())));
     put(0, static_cast<int>((8 - bits.size() % 8) % 8));

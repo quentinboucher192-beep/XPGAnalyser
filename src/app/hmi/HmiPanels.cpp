@@ -37,6 +37,9 @@
 #include "../../hmi/HmiTypes.hpp"        // 1.12.12 (lot H) : les membres X et Y
 #include "../../hmi/HmiEquipmentLink.hpp"   // 1.12.11 (lot G) : la liaison Equipement, le mode Etat
 #include "../../hmi/HmiPopupParams.hpp"     // 1.12.11 (lot G) : les DDT de l'automate (PlcTypes)
+#include "../../hmi/HmiClock.hpp"       // 1.12.12 (lot H) : les fuseaux de l'horloge
+#include "../../hmi/HmiMarquee.hpp"     // 1.12.12 (lot H) : le texte defilant depuis une source
+#include "../../hmi/HmiQr.hpp"          // 1.12.12 (lot H) : la place qui reste dans un code QR
 #include "../../ui/Shapes.hpp"
 #include "../../ui/Theme.hpp"
 #include "../../ui/widgets/Controls.hpp"
@@ -1815,7 +1818,8 @@ const std::vector<KeyInfo>& keyInfos() {
          "d\xC3\xA9" "file \xC3\xA0 la molette, ou par sa barre). Les colonnes : les membres d'une structure, Item1, Item2... d'un tuple, "
          "Cl\xC3\xA9 et Valeur d'une MAP, sinon Valeur. L'export du tableau les prend toutes."},
         {"image", "Image (ressource)", PG::ValueType::Text, {}, "Une image du gestionnaire de ressources. Une expression la choisit en marche (\xC3\xA9tat graphique) : SEL(Ouvert, 'vanne_fermee.png', 'vanne_ouverte.png')."},
-        {"poster", "Image d'attente", PG::ValueType::Text, {}, "L'image montr\xC3\xA9" "e \xC3\xA0 la place de la vid\xC3\xA9o (qui n'est pas d\xC3\xA9" "cod\xC3\xA9" "e)."},
+        {"poster", "Image d'attente", PG::ValueType::Text, {}, "L'image montr\xC3\xA9" "e avant la premi\xC3\xA8re image de la vid\xC3\xA9o, "
+                                                                  "et quand son format ne se d\xC3\xA9" "code pas ici (1.12.12)."},
         {"stretch", "\xC3\x89tirement", PG::ValueType::Enum, {"ajuster", "\xC3\xA9tirer", "aucun"}, ""},
         {"video", "Vid\xC3\xA9o (ressource)", PG::ValueType::Text, {}, ""},
         {"source", "Source", PG::ValueType::Enum, hmiHistorySources(),
@@ -2216,6 +2220,24 @@ const std::vector<KeyInfo>& keyInfos() {
          "sur condition : joue tant que la condition est vraie, revient \xC3\xA0 la premi\xC3\xA8re image quand elle tombe."},
         {"end", "\xC3\x80 la fin", PG::ValueType::Enum, {"derni\xC3\xA8re image", "premi\xC3\xA8re image", "cach\xC3\xA9"},
          "Ce qui reste \xC3\xA0 l'\xC3\xA9" "cran quand la lecture est finie (une fois, N fois)."},
+        // ---- 1.12.12 (lot H) : l'horloge liee, le texte defilant depuis une source, la video et sa lecture, la place du code QR
+        {"dateFormat", "Format de la date", PG::ValueType::Enum, {"jj/mm/aaaa", "jj/mm/aa", "aaaa-mm-jj", "jj mmm aaaa", "jour jj mois aaaa"},
+         "jj/mm/aaaa : 12/10/2026 ; aaaa-mm-jj : 2026-10-12 ; jj mmm aaaa : 12 oct. 2026 ; jour jj mois aaaa : lundi 12 octobre 2026."},
+        {"hourFormat", "Heure sur", PG::ValueType::Enum, {"24 h", "12 h"}, "12 h : 02:30:05 PM (l'horloge analogique dit AM ou PM)."},
+        {"timeZone", "Fuseau", PG::ValueType::Enum, {},
+         "local : l'heure du PC (comme avant) ; UTC ; un d\xC3\xA9" "calage en heures (UTC+2, UTC-5, UTC+5:30). L'heure de l'IHM et une heure "
+         "qui dit son fuseau (un horodatage Unix, 2026-10-12T14:30:00Z) y sont converties ; une DT, une TOD, une DATE se montrent telles quelles."},
+        {"messagesFrom", "Messages depuis", PG::ValueType::Enum, {},
+         "Au lieu du texte, des messages l'un apr\xC3\xA8s l'autre : une LIST ou un tableau de textes (un message par \xC3\xA9l\xC3\xA9ment, le nombre "
+         "suit la liste en marche), un joker (Consignes[*].Texte) ou \xC2\xAB alarmes en cours \xC2\xBB (leurs messages, du groupe choisi). "
+         "Vide, ou rien en ce moment : le texte."},
+        {"playing", "Lecture", PG::ValueType::Text, {},
+         "Vraie (ou vide) : la vid\xC3\xA9o avance ; fausse : pause, sur l'image du moment. Une variable BOOL ou une formule (Marche AND NOT Defaut)."},
+        {"positionVariable", "Variable de la position (s)", PG::ValueType::Text, {},
+         "La position de la lecture, en secondes, \xC3\xA9" "crite au dixi\xC3\xA8me quand elle change (un REAL, un TIME). Vide : rien n'est \xC3\xA9" "crit."},
+        {"qrRoom", "Place", PG::ValueType::ReadOnly, {},
+         "Ce que le texte prend dans le mode le plus compact (chiffres, alphanum\xC3\xA9rique, octets) et ce qui reste au niveau de correction "
+         "choisi : 40 versions, 2 331 octets au plus en M. Un texte calcul\xC3\xA9 se juge en marche (\xC2\xAB trop long \xC2\xBB sur l'objet)."},
     };
     return k;
 }
@@ -2468,6 +2490,119 @@ std::shared_ptr<const std::set<std::string, std::less<>>> hmiPlcUpperNames(const
     return names;
 }
 // ---- fin Lot API 8 ----
+
+// ---- 1.12.12 (lot H) : l'horloge liee, le texte defilant depuis une source, la video, le code QR ----
+namespace {
+// Les proprietes du lot H qu'un objet n'a pas encore (un objet neuf, un projet d'avant) : montrees a leur valeur
+// par defaut, posees a la premiere saisie ; la place d'un code QR, calculee (en lecture seule, jamais enregistree).
+void lotHOffered(const hmi::Object& o, std::vector<hmi::Prop>& props) {
+    const auto offer = [&](const char* key, std::string value) {
+        if (!o.find(key)) props.push_back({key, std::move(value), ""});
+    };
+    switch (o.kind) {
+        case hmi::Kind::Clock:
+            offer("value", "");
+            offer("dateFormat", "jj/mm/aaaa");
+            offer("hourFormat", "24 h");
+            offer("timeZone", "local");
+            break;
+        case hmi::Kind::Marquee:
+            offer("messagesFrom", "");
+            offer("separator", std::string(hmi::marquee::kDefaultSeparator));
+            offer("group", "");
+            break;
+        case hmi::Kind::Video:
+            offer("playing", "");
+            offer("start", "\xC3\xA0 l'affichage");
+            offer("condition", "");
+            offer("play", "en boucle");
+            offer("positionVariable", "");
+            break;
+        case hmi::Kind::QrCode: {
+            const hmi::Prop* tp = o.find("text");
+            const std::string level = o.text("ecLevel", "M");
+            const char lv = level.empty() ? 'M' : level[0];
+            std::string room;
+            if (tp && (!tp->expr.empty() || tp->value.find('{') != std::string::npos))
+                room = "texte calcul\xC3\xA9 : jug\xC3\xA9 en marche (au plus " + std::to_string(hmi::qrCapacity(lv)) + " octets en "
+                     + std::string(1, lv) + ")";
+            else
+                room = hmi::qrRoomText(hmi::qrRoom(hmi::roles::plainText(tp ? tp->value : std::string{}), lv), lv);
+            props.push_back({"qrRoom", room, ""});
+            break;
+        }
+        default:
+            break;
+    }
+}
+
+// Les libelles et les choix des proprietes du lot H.
+void lotHProperty(const hmi::Object& o, const hmi::Prop& prop, PG::Property& p, const hmi::Project* project) {
+    const std::string mark = prop.expr.empty() ? std::string{} : std::string("  \xC6\x92");
+    const auto choose = [&](std::vector<std::string> values, bool typeIn) {
+        p.type = PG::ValueType::Enum;
+        p.enumValues = std::move(values);
+        if (std::find(p.enumValues.begin(), p.enumValues.end(), prop.value) == p.enumValues.end()) p.enumValues.push_back(prop.value);
+        p.typeIn = typeIn;
+    };
+    // L'aide propre a l'objet (une cle partagee, comme separator ou condition, dit autre chose ailleurs) ; la ligne
+    // sur les formules reste.
+    const auto explain = [&](std::string mine) {
+        const auto at = p.description.find("Tape =expression");
+        p.description = std::move(mine) + (at == std::string::npos ? std::string{} : "\n" + p.description.substr(at));
+    };
+    if (o.kind == hmi::Kind::Clock) {
+        if (prop.key == "value") {
+            p.name = "Heure affich\xC3\xA9" "e (vide : celle de l'IHM)" + mark;
+            explain("Une TOD, une DT, une DATE, une STRING ISO 8601 (2026-10-12T14:30:00) ou un REAL en secondes (moins d'un jour : "
+                    "une heure du jour ; au-del\xC3\xA0, un horodatage Unix) : l'horloge montre cette heure au lieu de celle de l'IHM.");
+        } else if (prop.key == "timeZone") {
+            std::vector<std::string> zones;
+            for (const auto z : hmi::clock::kZones) zones.emplace_back(z);
+            choose(std::move(zones), true);
+        }
+    } else if (o.kind == hmi::Kind::Marquee) {
+        if (prop.key == "messagesFrom") {
+            std::vector<std::string> values = {"", std::string(hmi::marquee::kAlarmsSource)};
+            if (project)
+                for (const auto& var : project->programs.variables) {
+                    const auto form = hmi::typeform::decompose(var.type).form;
+                    if (form == hmi::typeform::Form::Array || form == hmi::typeform::Form::List || form == hmi::typeform::Form::Vector
+                        || form == hmi::typeform::Form::Set || form == hmi::typeform::Form::Ring)
+                        values.push_back(var.name);
+                }
+            choose(std::move(values), true);
+            p.name = "Messages depuis" + mark;
+        } else if (prop.key == "separator") {
+            p.name = "S\xC3\xA9parateur des messages" + mark;
+            explain("Entre deux messages de la source (Messages depuis). Par d\xC3\xA9" "faut : un point m\xC3\xA9" "dian entre des espaces.");
+        } else if (prop.key == "group") {
+            p.name = "Groupe (alarmes en cours)" + mark;
+            explain("Avec Messages depuis \xC2\xAB alarmes en cours \xC2\xBB : seulement les alarmes de ce groupe. Vide : toutes.");
+        }
+    } else if (o.kind == hmi::Kind::Video) {
+        if (prop.key == "playing") {
+            p.name = "Lecture (fausse : pause)" + mark;
+        } else if (prop.key == "start") {
+            p.name = "D\xC3\xA9part" + mark;
+            choose({"\xC3\xA0 l'affichage", "sur condition"}, false);
+            explain("\xC3\xA0 l'affichage : d\xC3\xA8s que la vue s'ouvre ; sur condition : joue tant que la condition est vraie, revient \xC3\xA0 "
+                    "l'image d'attente quand elle tombe (et repart du d\xC3\xA9" "but).");
+        } else if (prop.key == "condition") {
+            p.name = "Condition (joue tant qu'elle est vraie)" + mark;
+            p.type = PG::ValueType::Text;
+            explain("Le d\xC3\xA9part sur condition : une variable BOOL (Marche) ou une formule (Marche AND Porte_Fermee).");
+        } else if (prop.key == "play") {
+            p.name = "R\xC3\xA9p\xC3\xA9tition" + mark;
+            choose({"en boucle", "une fois"}, false);
+            explain("en boucle : elle repart du d\xC3\xA9" "but ; une fois : elle reste sur sa derni\xC3\xA8re image.");
+        } else if (prop.key == "poster") {
+            explain("L'image montr\xC3\xA9" "e avant la premi\xC3\xA8re image de la vid\xC3\xA9o, et quand ce format ne se d\xC3\xA9" "code pas ici (un MP4 "
+                    "ailleurs que sous Windows).");
+        }
+    }
+}
+} // namespace
 
 std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& view, const std::vector<Id>& selection,
                                                              const domain::Project* plc, const HmiPropertyCommits& commit,
@@ -2785,6 +2920,9 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
                                        hmi::vertices::kPointsYMaxKey})
                     if (!o->find(key)) allProps.push_back({std::string(key), "", ""});
         }
+        // 1.12.12 (lot H) : l'horloge liee, le texte defilant depuis une source, la lecture d'une video, la place d'un
+        // code QR (absents d'un objet neuf : rien ne change dans son fichier tant qu'on n'y touche pas).
+        if (!many) lotHOffered(*o, allProps);
     }
     // Lot 13 : la signature electronique des commandes (absente : aucune).
     if (hmi::kindSignable(o->kind)) {
@@ -2967,7 +3105,8 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
                 p.type = PG::ValueType::Enum;
                 p.enumValues = {""};
                 for (const auto& st : project->styles) p.enumValues.push_back(st.name);
-            } else if (prop.key == "group" && (o->kind == hmi::Kind::History || hmi::kindIsAlarmView(o->kind)) && project) {
+            } else if (prop.key == "group" && (o->kind == hmi::Kind::History || hmi::kindIsAlarmView(o->kind) || o->kind == hmi::Kind::Marquee)
+                       && project) {   // 1.12.12 (lot H) : le texte defilant des alarmes en cours
                 p.type = PG::ValueType::Enum;
                 p.enumValues = {""};
                 for (const auto& a : project->alarms)
@@ -3180,6 +3319,8 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
                 choose({"derni\xC3\xA8re image", "premi\xC3\xA8re image", "cach\xC3\xA9"});
             }
         }
+        // 1.12.12 (lot H) : l'horloge, le texte defilant, la video, le code QR - leurs libelles et leurs choix.
+        lotHProperty(*o, prop, p, project);
         // 1.10 (chantier K) : toute propriete modifiable de l'inspecteur accepte "=expression".
         // 1.12.11 (lot G) : la Valeur d'un symbole en mode Etat attend un etat (un entier, une enumeration), celle
         // d'un verin rentre / sorti un booleen.

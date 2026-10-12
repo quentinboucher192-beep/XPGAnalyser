@@ -159,6 +159,9 @@ if(WIN32)
     # Lot 15 : les ports du PC et le ping (iphlpapi), changer l'adresse d'un port
     # avec l'autorisation administrateur (shell32).
     target_link_libraries(xpg_hmi PUBLIC iphlpapi shell32)
+    # 1.12.12 (lot H) : la video decodee par Media Foundation (MP4 / H.264, WMV, MOV ;
+    # hmi/HmiVideoMf.cpp). Le Motion-JPEG en AVI, lui, se decode partout sans elle.
+    target_link_libraries(xpg_hmi PUBLIC mfplat mfreadwrite mfuuid mf ole32)
 else()
     # Lot 15 : libpcap, chargee a la demande (dlopen) pour la capture.
     target_link_libraries(xpg_hmi PUBLIC ${CMAKE_DL_LIBS})
@@ -578,6 +581,10 @@ if(XPG_BUILD_TESTS)
     xpg_target_link_libraries(hmi_natives1127_test PRIVATE xpg_hmi)
     xpg_add_test_executable(hmi_setring_test tests/hmi_setring_test.cpp)      # 1.12.7 : SET OF T et RING[N] OF T
     xpg_target_link_libraries(hmi_setring_test PRIVATE xpg_hmi)
+    xpg_add_test_executable(hmi_qr_test tests/hmi_qr_test.cpp)                # 1.12.12 (lot H) : le code QR, versions 1 a 40
+    xpg_target_link_libraries(hmi_qr_test PRIVATE xpg_hmi)
+    xpg_add_test_executable(hmi_video_test tests/hmi_video_test.cpp)          # 1.12.12 (lot H) : le Motion-JPEG en AVI, la lecture
+    xpg_target_link_libraries(hmi_video_test PRIVATE xpg_hmi)
     # 1.12.0 : deux applications, deux rangements (la recopie des projets de la 1.11,
     # ProjectStore et les versions dans chaque application).
     xpg_add_test_executable(edition_test tests/edition_test.cpp src/app/EditionMigration.cpp)
@@ -708,6 +715,8 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME hminatives   COMMAND hmi_natives_test)                 # ---- 1.12.0 : les natives de l'IHM ----
     xpg_add_test(NAME hminatives1127 COMMAND hmi_natives1127_test)           # ---- 1.12.7 : les natives des conteneurs, std::numeric, templates, <bit> ----
     xpg_add_test(NAME hmisetring   COMMAND hmi_setring_test)                 # ---- 1.12.7 : SET OF T et RING[N] OF T ----
+    xpg_add_test(NAME hmiqr        COMMAND hmi_qr_test)                      # ---- 1.12.12 (lot H) : le code QR, versions 1 a 40 ----
+    xpg_add_test(NAME hmivideo     COMMAND hmi_video_test)                   # ---- 1.12.12 (lot H) : le Motion-JPEG en AVI, la lecture ----
     xpg_add_test(NAME edition      COMMAND edition_test ${CMAKE_CURRENT_SOURCE_DIR}/bac/Armoire_Gaz)   # ---- 1.12.0 : deux applications ----
     xpg_add_test(NAME hmioverload  COMMAND hmi_overload_test)                # ---- 1.11.20 : les signatures et les surcharges ----
     xpg_add_test(NAME hmidecl      COMMAND hmi_decl_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/decl/corpus.txt   # ---- 1.11.18 : les declarations (lot 2) ----

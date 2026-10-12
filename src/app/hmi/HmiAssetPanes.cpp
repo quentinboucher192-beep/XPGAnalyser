@@ -222,13 +222,19 @@ void HmiResourcePreview::onPaint(const ui::PaintContext& ctx) {
             break;
         }
         case MediaKind::Video: {
-            // L'affiche, si une image de meme nom existe (presentation.png pour
+            // 1.12.12 (lot H) : sa premiere image quand elle se decode ici (le Motion-JPEG en AVI partout ; MP4, WMV,
+            // MOV sous Windows). Sinon l'affiche, si une image de meme nom existe (presentation.png pour
             // presentation.mp4) ; sinon un ecran et le triangle de lecture.
-            const auto stem = res->name.substr(0, res->name.rfind('.'));
-            const hmi::Resource* poster = nullptr;
-            for (const auto& r : project_->assets.resources)
-                if (r.kind() == MediaKind::Image && r.name.rfind(stem + ".", 0) == 0) poster = &r;
-            const auto img = poster ? cache.resource(ctx.r, *poster) : HmiImageCache::Image{};
+            std::string why;
+            auto img = cache.videoFrame(ctx.r, *res, hmi::kNoId, 0.0, &why);
+            const bool decoded = img.valid();
+            if (!decoded) {
+                const auto stem = res->name.substr(0, res->name.rfind('.'));
+                const hmi::Resource* poster = nullptr;
+                for (const auto& r : project_->assets.resources)
+                    if (r.kind() == MediaKind::Image && r.name.rfind(stem + ".", 0) == 0) poster = &r;
+                img = poster ? cache.resource(ctx.r, *poster) : HmiImageCache::Image{};
+            }
             if (img.valid()) {
                 const float scale = std::min(area.w / static_cast<float>(img.width), area.h / static_cast<float>(img.height));
                 const float w = static_cast<float>(img.width) * scale, h = static_cast<float>(img.height) * scale;
@@ -238,9 +244,12 @@ void HmiResourcePreview::onPaint(const ui::PaintContext& ctx) {
             const gfx::Point m{area.x + area.w / 2, area.y + area.h / 2};
             ui::shapes::fillPolygon(ctx.r, {{m.x - s / 2, m.y - s / 2}, {m.x + s / 2, m.y}, {m.x - s / 2, m.y + s / 2}},
                                     stage.overlay);
-            ctx.r.drawText({area.x + 8, area.y + area.h - 22},
-                           "Non d\xC3\xA9" "cod\xC3\xA9" "e : conteneur lu (dur\xC3\xA9" "e, dimensions, codec)",
-                           ctx.theme.font.smallUi, c.textMuted);
+            if (!decoded) {
+                if (why.empty()) why = hmi::video::decodeAdvice(res->format, res->detail);
+                ctx.r.drawText({area.x + 8, area.y + area.h - 22},
+                               why.empty() ? std::string("Non d\xC3\xA9" "cod\xC3\xA9" "e : conteneur lu (dur\xC3\xA9" "e, dimensions, codec)") : why,
+                               ctx.theme.font.smallUi, c.textMuted);
+            }
             break;
         }
         case MediaKind::Document: {
@@ -290,7 +299,8 @@ HmiResourcesPane::HmiResourcesPane(std::string id, hmi::DocumentPtr doc, Apply a
     : ui::Widget(std::move(id)), doc_(std::move(doc)), apply_(std::move(apply)) {
     const std::string base = this->id();
     auto tools = std::make_unique<HmiToolStrip>(base + ".tools");
-    tools->add(RImport, HmiGlyph::Plus, "Importer une ressource (PNG, JPG, JPEG, BMP, SVG, ICO, WAV, MP3, MP4, WEBM, TTF, OTF ; "
+    // 1.12.12 (lot H) : la liste des extensions acceptees (AVI, MOV, WMV y sont ; avant, recopiee a la main).
+    tools->add(RImport, HmiGlyph::Plus, "Importer une ressource (" + std::string(hmi::acceptedExtensions()) + " ; "
                                         "tout autre fichier - PDF, DOCX, ZIP... - : un document, gard\xC3\xA9 tel quel)", "Importer");
     tools->add(RReplace, HmiGlyph::Paste, "Remplacer le contenu (les objets qui la citent suivent)", "Remplacer");
     tools->add(RRename, HmiGlyph::Text, "Renommer (les objets et les expressions qui la citent suivent)", "Renommer");

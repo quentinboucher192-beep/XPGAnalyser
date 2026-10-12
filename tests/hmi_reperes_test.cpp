@@ -1434,6 +1434,109 @@ void repereEtJoker1127() {
     rt.stop(1.0);
 }
 
+// ====================== 1.12.12 (lot H) : les reperes dans l'horloge, le texte defilant, la video ==
+//  Chaque propriete nouvelle garde ses reperes : l'heure d'une horloge ($Debut$, une formule), la source
+//  des messages d'un texte defilant ($Messages$, un nom), la Lecture et la variable de position d'une
+//  video ($Lecture$, $Pos$, des formules). Dupliquer les trouve dans le mode de leur role et les remplace ;
+//  la marche les lit sans leurs $.
+void reperesLotH11212() {
+    std::printf("-- 1.12.12 (lot H) : les reperes de l'horloge, du texte defilant, de la video\n");
+    Project p;
+    const auto var = [&](const char* name, const char* type, const char* initial) {
+        Variable v;
+        v.id = p.allocate();
+        v.name = name;
+        v.type = type;
+        v.initial = initial;
+        p.programs.variables.push_back(v);
+    };
+    var("Debut", "STRING", "'2026-10-09T14:30:00'");
+    var("Fin", "STRING", "'2026-10-09T18:00:00'");
+    var("Messages", "LIST OF STRING", "['Bienvenue', 'Casque']");
+    var("Annonces", "LIST OF STRING", "['Pause']");
+    var("Pos", "REAL", "0");
+    var("Pos_2", "REAL", "0");
+    var("Lecture", "BOOL", "TRUE");
+    View v = makeView(p, "Vue_H");
+    const Id horloge = edit::add(p, v, Kind::Clock, 10, 10);
+    v.object(horloge)->name = "Horloge_H";
+    v.object(horloge)->setExpr("value", "$Debut$");
+    const Id defilant = edit::add(p, v, Kind::Marquee, 10, 200);
+    v.object(defilant)->name = "Defilant_H";
+    v.object(defilant)->set("messagesFrom", "$Messages$");
+    const Id video = edit::add(p, v, Kind::Video, 10, 300);
+    v.object(video)->name = "Video_H";
+    v.object(video)->set("positionVariable", "$Pos$");
+    v.object(video)->set("playing", "$Lecture$");
+    // Dupliquer : chaque repere, dans le mode de son role (une formule, un nom).
+    const auto sc = dup::scan(v, {horloge, defilant, video}, dup::projectBounds(p));
+    const auto spotOf = [&](const char* marker, const char* key, bool expression) {
+        const auto* m = sc.marker(marker);
+        if (!m) return false;
+        for (const auto& spot : m->spots)
+            if (spot.where == key && spot.expression == expression) return true;
+        return false;
+    };
+    check(spotOf("Debut", "value (expression)", true), "lot H : Dupliquer trouve $Debut$ dans l'heure d'une horloge (sa formule)");
+    check(spotOf("Messages", "messagesFrom", false), "lot H : ... $Messages$ dans Messages depuis (un nom)");
+    check(spotOf("Pos", "positionVariable", true) && spotOf("Lecture", "playing", true),
+          "lot H : ... $Pos$ et $Lecture$ dans la variable de position et la Lecture d'une video (des formules)");
+    auto plan = dup::defaultPlan(v, sc, 1);
+    if (plan.rows.size() == 2) {
+        plan.rows[1].markers[dup::markerKey("Debut")] = "Fin";
+        plan.rows[1].markers[dup::markerKey("Messages")] = "Annonces";
+        plan.rows[1].markers[dup::markerKey("Pos")] = "Pos_2";
+    }
+    const auto r = dup::apply(p, v, plan);
+    check(r.created.size() == 3, "lot H : trois copies");
+    Id copyClock = kNoId, copyMarquee = kNoId, copyVideo = kNoId;
+    for (const Id id : r.created)
+        if (const Object* o = v.object(id)) {
+            if (o->kind == Kind::Clock) copyClock = id;
+            if (o->kind == Kind::Marquee) copyMarquee = id;
+            if (o->kind == Kind::Video) copyVideo = id;
+        }
+    check(v.object(copyClock) && v.object(copyClock)->expr("value") == "$Fin$" && v.object(copyMarquee)
+              && v.object(copyMarquee)->text("messagesFrom") == "$Annonces$" && v.object(copyVideo)
+              && v.object(copyVideo)->text("positionVariable") == "$Pos_2$" && v.object(copyVideo)->text("playing") == "$Lecture$",
+          "lot H : les copies lisent $Fin$, $Annonces$, $Pos_2$ (et gardent $Lecture$)");
+    // La marche : sans leurs $.
+    p.views = {v};
+    p.config.startView = v.id;
+    p.config.cycleMs = 50;
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    rt.tick(0.1);
+    rt.tick(0.2);
+    LiveView live;
+    live.bind(p.views[0]);
+    const View shown = live.evaluate(rt.environment());
+    const auto valueOfClock = [&](Id id) {
+        const Object* o = shown.object(id);
+        return o ? o->text("value") : std::string("?");
+    };
+    check(valueOfClock(horloge) == "2026-10-09T14:30:00" && valueOfClock(copyClock) == "2026-10-09T18:00:00",
+          "lot H : l'horloge et sa copie montrent Debut et Fin (" + valueOfClock(copyClock) + ")");
+    const auto* m1 = rt.marqueeMessages(defilant);
+    const auto* m2 = rt.marqueeMessages(copyMarquee);
+    check(m1 && m1->size() == 2 && m2 && m2->size() == 1 && m2->front() == "Pause",
+          "lot H : le texte defilant lit Messages, sa copie Annonces (sans leurs $)");
+    sim::Value pos, pos2;
+    check(rt.environment().read("Pos", pos) && pos.asReal() > 0.05 && rt.environment().read("Pos_2", pos2) && pos2.asReal() > 0.05,
+          "lot H : la video et sa copie ecrivent leur position dans Pos et Pos_2");
+    // Compiler et Generer : rien de plus qu'avec les memes proprietes sans repere.
+    const auto issues = issuesOf(p);
+    std::size_t lotH = 0;
+    for (const auto& i : issues)
+        if (i.find("Horloge_H") != std::string::npos || i.find("Defilant_H") != std::string::npos || i.find("Video_H") != std::string::npos) {
+            ++lotH;
+            std::printf("  constat : %s\n", i.c_str());
+        }
+    check(lotH == 0, "lot H : Compiler et Generer ne disent rien des reperes de l'horloge, du texte defilant, de la video");
+    rt.stop(1.0);
+}
+
 // 1.12.12 (lot H) : « POINTS DEPUIS » ET LE REPERE - $Profil_A$[*].X, $Profil_A$[*].Y : Dupliquer remplace le repere
 // (la copie lit $Profil_B$), chaque polygone trace sa source en marche ; un repere dans une case des points reste.
 void pointsDepuisRepere11212() {
@@ -1454,6 +1557,7 @@ void pointsDepuisRepere11212() {
     bv.name = "Profil_B";
     bv.type = "ARRAY[1..3] OF T_Pt_R";
     p.programs.variables.push_back(bv);
+    reperesLotH11212();                // 1.12.12 (lot H) : l'horloge, le texte defilant, la video
     // L'echelle X en formule a repere : $Xmax_A$ (10), $Xmax_B$ (20) pour la copie.
     for (const auto& [name, initial] : std::vector<std::pair<std::string, std::string>>{{"Xmax_A", "10"}, {"Xmax_B", "20"}}) {
         Variable xm;

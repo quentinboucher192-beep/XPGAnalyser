@@ -8,12 +8,14 @@
 //  le dit au lieu d'afficher des dimensions inventees.
 //
 //  Bibliotheques d'un seul fichier (third_party/) : stb_image (PNG, JPEG, BMP),
-//  nanosvg (SVG), minimp3 (MP3), stb_truetype (polices). ICO, WAV, MP4 et WEBM
-//  sont lus ici : leurs en-tetes sont courts et documentes.
+//  nanosvg (SVG), minimp3 (MP3), stb_truetype (polices). ICO, WAV, MP4, MOV,
+//  WEBM, AVI et WMV (ASF) sont lus ici : leurs en-tetes sont courts et documentes.
 //
-//  LES VIDEOS NE SONT PAS DECODEES : H.264, VP8, VP9 demandent un vrai
-//  decodeur, qu'aucune bibliotheque d'un seul fichier ne fournit. On en lit le
-//  conteneur (duree, dimensions, codec) ; l'apercu est une image d'attente.
+//  LES VIDEOS : H.264, VP8, VP9 demandent un vrai decodeur, qu'aucune
+//  bibliotheque d'un seul fichier ne fournit ; on en lit le conteneur (duree,
+//  dimensions, codec). 1.12.12 (lot H) : le Motion-JPEG en AVI se decode ici
+//  (HmiVideo.hpp : des images JPEG, stb_image), et sous Windows Media Foundation
+//  decode le reste (HmiVideoMf.cpp) ; ailleurs, l'image d'attente.
 // =============================================================================
 #pragma once
 
@@ -71,6 +73,8 @@ struct Rgba {
 // (rasterise, le plus grand cote ramene a `maxSide`).
 [[nodiscard]] bool decodeImage(const Bytes& data, std::string_view format, Rgba& out, int maxSide = 1024,
                                std::string* error = nullptr);
+// 1.12.12 (lot H) : une image JPEG lue en place (l'image d'une video Motion-JPEG, un morceau du fichier).
+[[nodiscard]] bool decodeJpeg(const std::uint8_t* data, std::size_t size, Rgba& out, std::string* error = nullptr);
 
 // ---- lot 16 : le GIF anime ------------------------------------------------------
 //  Un GIF est une image : il s'importe, se montre dans un objet Image (en boucle)

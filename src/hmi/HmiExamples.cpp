@@ -519,7 +519,7 @@ Example list() {
 Example video() {
     Maker m;
     m.svg("affiche.svg", posterSvg());
-    // Une video n'est pas decodee : sa fiche (taille, duree) et son image d'attente.
+    // Un MP4 (1.12.12 : decode sous Windows seulement ; sans contenu ici) : sa fiche (taille, duree) et son image d'attente.
     Resource r;
     r.id = m.project().allocate();
     r.name = "presentation.mp4";

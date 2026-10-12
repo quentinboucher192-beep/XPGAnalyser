@@ -20,6 +20,7 @@
 #include "../../hmi/HmiExternal.hpp"
 #include "../../hmi/HmiMedia.hpp"
 #include "../../hmi/HmiModel.hpp"
+#include "../../hmi/HmiVideo.hpp"          // 1.12.12 (lot H) : la video decodee
 #include "../../platform/Renderer.hpp"
 
 #include <cstdint>
@@ -28,6 +29,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace app {
 
@@ -75,6 +77,11 @@ public:
         [[nodiscard]] const Image& looping(double seconds) const;
     };
     [[nodiscard]] const Gif* gif(gfx::IRenderer&, const hmi::Resource&);
+    // 1.12.12 (lot H) : UNE VIDEO DECODEE. L'image d'un objet `seconds` apres le debut de sa lecture : une
+    // texture refaite quand l'image change (un decodeur par objet : deux objets d'une meme video vont chacun
+    // a son rythme ; hmi::kNoId : l'apercu, sa premiere image). Invalide : pas encore d'image (le fil la
+    // decode : l'objet montre son image d'attente), ou ce format ne se decode pas ici (`why` le dit).
+    [[nodiscard]] Image videoFrame(gfx::IRenderer&, const hmi::Resource&, hmi::Id object, double seconds, std::string* why = nullptr);
 
 private:
     struct Entry {
@@ -95,6 +102,16 @@ private:
         bool                            failed{false};
     };
     std::map<const void*, GifEntry>          gifs_;             // lot 16
+    struct VideoEntry {                                          // 1.12.12 (lot H)
+        std::weak_ptr<const hmi::Bytes>          blob;
+        std::unique_ptr<hmi::video::FrameSource> source;
+        Image                                    image;
+        std::uint64_t                            serial{0};
+        std::uint64_t                            used{0};
+        bool                                     failed{false};
+        std::string                              why;
+    };
+    std::map<std::pair<hmi::Id, const void*>, VideoEntry> videos_;
     std::size_t                              svgRasterized_{0};
     struct Envelope { std::weak_ptr<const hmi::Bytes> blob; std::vector<float> minMax; };
     std::map<const void*, Envelope>          envelopes_;

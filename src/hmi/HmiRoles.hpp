@@ -227,6 +227,11 @@ inline constexpr KeyRole kKeyRoles[] = {
     {"showBad", Role::Boolean, Role::Text, Unit::None, "BOOL"}, {"showButtons", Role::Boolean, Role::Text, Unit::None, "BOOL"},
     {"labelColor", Role::Color},
     {"play", Role::Choice}, {"start", Role::Choice}, {"end", Role::Choice},
+    // 1.12.12 (lot H) : l'horloge (format de la date, 12 h / 24 h, fuseau), le texte defilant depuis une
+    // source, la video (sa Lecture, la variable de sa position)
+    {"dateFormat", Role::Choice}, {"hourFormat", Role::Choice}, {"timeZone", Role::Choice},
+    {"messagesFrom", Role::Name},
+    {"playing", Role::Formula, Role::Boolean}, {"positionVariable", Role::Formula, Role::Number},
 };
 
 // La ligne d'une cle ; nul : une cle que la table ne connait pas.
@@ -270,6 +275,8 @@ inline constexpr KeyRole kKeyRoles[] = {
         if (r.role == Role::Duration || r.role == Role::Date) r.role = Role::Number;
         r.type = r.role == Role::Boolean ? "BOOL" : r.role == Role::Number ? "REAL" : "";
         if (k == Kind::InputField) { r.role = Role::Text; r.type = {}; }
+        // 1.12.12 (lot H) : l'heure d'une horloge - son texte exact (une DT, une TOD, une DATE, un REAL, une STRING).
+        if (k == Kind::Clock) { r.role = Role::Date; r.type = {}; }
     } else if (key == "variable") {
         // ce que la variable porte : la valeur montree ou ecrite (le texte d'un programme horaire...) ;
         // un objet qui ne montre pas de valeur (un texte, un rectangle) : quelconque.

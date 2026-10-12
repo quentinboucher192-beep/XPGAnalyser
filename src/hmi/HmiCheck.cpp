@@ -25,6 +25,8 @@
 #include "HmiRuntime.hpp"
 #include "HmiPublicVars.hpp"
 #include "HmiQr.hpp"
+#include "HmiClock.hpp"        // 1.12.12 (lot H) : l'horloge liee a une variable
+#include "HmiMarquee.hpp"      // 1.12.12 (lot H) : le texte defilant depuis une source
 #include "HmiAlarmViews.hpp"
 #include "HmiCharts.hpp"
 #include "HmiControls.hpp"
@@ -1228,6 +1230,94 @@ void checkLot8(const Project& p, const NameExists& plc, std::vector<Issue>& out)
 //  bornes a l'envers, des etats, des zones ou des plages illisibles, un code QR
 //  trop long ; et les noms que lisent leurs cases a expression (retour d'etat,
 //  voyant, condition du compteur, consigne, seuils).
+// ---- 1.12.12 (lot H) : l'horloge liee, le texte defilant depuis une source, la video -------------
+//  Tout en avertissements ou en informations (rien de nouveau ne bloque, et un projet de la 1.12.9
+//  n'a aucune de ces proprietes) :
+//   - une horloge : une heure fixe illisible, un fuseau illisible, une valeur qui n'est pas une heure
+//     (un BOOL, une structure, une liste) ;
+//   - un texte defilant : la source de ses messages (inconnue, pas une liste de textes) ;
+//   - une video : le format que toutes les plateformes ne decodent pas (une information : « MP4 : decode
+//     sous Windows seulement ; ailleurs, convertir en Motion-JPEG AVI »), un depart sur condition sans
+//     condition, sa Lecture et sa variable de position (inconnues, ou une position qui ne s'ecrit pas).
+void checkMedias11212(const Project& p, const NameExists& plc, std::vector<Issue>& out) {
+    using S = Issue::Severity;
+    const auto notTime = [&](const std::string& type) {
+        const sim::Type st = typereg::simTypeOf(type);
+        const bool scalar = types::membersOf(p, type).empty() && typeform::decompose(type).form == typeform::Form::Simple;
+        return !scalar || st == sim::Type::Bool || !(sim::isDateType(st) || st == sim::Type::String || st == sim::Type::Time || sim::isNumeric(st));
+    };
+    for (const auto& v : p.views)
+        for (const auto& o : v.objects) {
+            const std::string label = std::string(kindLabel(o.kind));
+            const auto issue = [&](S sev, const char* key, std::string msg) { add(out, sev, label, v.id, o.id, key, std::move(msg)); };
+            switch (o.kind) {
+                case Kind::Clock: {
+                    if (const Prop* tz = o.find("timeZone"); tz && tz->expr.empty()) {
+                        clock::Zone zone;
+                        if (!clock::parseZone(roles::plainText(tz->value), zone))
+                            issue(S::Warning, "timeZone", "fuseau illisible \xC2\xAB " + tz->value + " \xC2\xBB (local, UTC, UTC+2, UTC-5, UTC+5:30) : "
+                                                          "l'heure locale sera montr\xC3\xA9" "e");
+                    }
+                    const Prop* vp = o.find("value");
+                    if (!vp) break;
+                    if (vp->expr.empty()) {
+                        const std::string fixed = trimmedCopy(roles::plainText(vp->value));
+                        if (fixed.empty()) break;
+                        const auto r = clock::read(fixed, clock::Zone{}, DateTime{});
+                        if (!r.ok) issue(S::Warning, "value", "heure affich\xC3\xA9" "e : " + r.why + " - l'horloge montrera ###");
+                        break;
+                    }
+                    const std::string expr = trimmedCopy(markers::strip(vp->expr));
+                    const std::string type = params::expressionType(p, &v, expr);
+                    if (!type.empty() && notTime(type))
+                        issue(S::Warning, "value", "heure affich\xC3\xA9" "e : " + expr + " (" + type + ") n'est pas une heure - une TOD, une DT, "
+                                                   "une DATE, une STRING ISO 8601 (2026-10-12T14:30:00) ou un REAL en secondes ; l'horloge montrera ###");
+                    break;
+                }
+                case Kind::Marquee: {
+                    const Prop* fp = o.find(marquee::kMessagesFromKey);
+                    if (!fp) break;
+                    const std::string from = fp->expr.empty() ? fp->value : fp->expr;
+                    if (trimmedCopy(from).empty()) break;
+                    std::string info;
+                    const std::string problem = marquee::sourceProblem(p, &v, from, &info);
+                    if (!problem.empty()) issue(S::Warning, "messagesFrom", problem);
+                    else if (!info.empty()) issue(S::Info, "messagesFrom", info);
+                    if (marquee::isAlarmSource(roles::nameOf(from)) && p.alarms.empty() && objectAlarms(p).empty())
+                        issue(S::Info, "messagesFrom", "messages depuis les alarmes en cours : le projet n'a pas d'alarme, le texte d\xC3\xA9" "filera");
+                    break;
+                }
+                case Kind::Video: {
+                    if (const auto* res = p.resourceByName(roles::nameOf(o.text("video"))); res && res->kind() == MediaKind::Video) {
+                        const std::string advice = video::decodeAdvice(res->format, res->detail);
+                        if (!advice.empty()) issue(S::Info, "video", advice + " (l'image d'attente se montre \xC3\xA0 la place)");
+                    }
+                    if (const Prop* st = o.find("start"); st && st->expr.empty() && video::settingsOf(st->value, {}).onCondition
+                        && formulaOf(o, "condition").empty())
+                        issue(S::Warning, "condition", "d\xC3\xA9part sur condition, sans condition : la vid\xC3\xA9o ne partira pas");
+                    for (const char* key : {"playing", "positionVariable"}) {
+                        const Prop* pr = o.find(key);
+                        if (!pr || !pr->expr.empty()) continue;   // une formule : Compiler la verifie
+                        const std::string text = trimmedCopy(markers::strip(pr->value));
+                        if (text.empty()) continue;
+                        const bool position = std::string_view(key) == "positionVariable";
+                        if (!position && (roles::trueWord(text) || !roles::readBool(text, true))) continue;   // TRUE, FAUX : une constante
+                        for (const auto& r : scanRoots(text))
+                            if (!known(p, plc, r, &v))
+                                issue(S::Warning, key, std::string(position ? "variable de la position" : "lecture") + " : " + std::string(unknownVariablePrefix()) + r);
+                        if (!position) continue;
+                        const std::string type = params::expressionType(p, &v, text);
+                        if (!type.empty() && (notTime(type) || sim::isDateType(typereg::simTypeOf(type))))
+                            issue(S::Warning, key, text + " (" + type + ") : la position s'\xC3\xA9" "crit en secondes - un REAL, un TIME ou un entier");
+                    }
+                    break;
+                }
+                default:
+                    break;
+            }
+        }
+}
+
 // ---- 1.9 : les parametres des popups ---------------------------------------------
 //  Le type de chaque parametre (connu ?), sa valeur par defaut (du bon type ?),
 //  le mode d'un parametre de symbole (seul Reference vaut) ; les arguments de
@@ -1460,10 +1550,16 @@ void checkLot9(const Project& p, const NameExists& plc, std::vector<Issue>& out)
                     const auto p1 = o.find("text");
                     if (text.empty() && (!p1 || p1->expr.empty())) { issue(S::Warning, "text", "code QR sans texte"); break; }
                     const std::string level = o.text("ecLevel", "M");
-                    const int cap = qrCapacity(level.empty() ? 'M' : level[0]);
-                    if (text.find('{') == std::string::npos && static_cast<int>(text.size()) > cap)
-                        issue(S::Error, "text", std::to_string(text.size()) + " octets : trop long pour un code QR (" + std::to_string(cap)
-                                                    + " au plus en correction " + level + ")");
+                    // 1.12.12 (lot H) : les 40 versions et le mode le plus compact (avant : 213 octets en M) ; le
+                    // texte fixe sans les $ de ses reperes, celui que l'objet encode. Calcule : juge en marche.
+                    if (text.find('{') == std::string::npos && (!p1 || p1->expr.empty())) {
+                        const char lv = level.empty() ? 'M' : level[0];
+                        const auto room = qrRoom(roles::plainText(text), lv);
+                        if (!room.fits && room.max > 0) {
+                            const std::string said = qrRoomText(room, lv);   // « trop long : 3 000 octets, 2 331 au plus en M »
+                            issue(S::Error, "text", "texte trop long pour un code QR" + said.substr(std::min(said.size(), said.find(" :"))));
+                        }
+                    }
                     break;
                 }
                 // Lot 10 : les symboles de synoptique.
@@ -4181,6 +4277,7 @@ std::vector<Issue> generateWith(const Project& p, const NameExists& plcHasName, 
     checkLot8(p, plcHasName, out);
     checkParams19(p, options.plcPaths, out);   // 1.9 : les parametres des popups
     checkLot9(p, plcHasName, out);
+    checkMedias11212(p, plcHasName, out);   // 1.12.12 (lot H) : l'horloge, le texte defilant, la video
     checkPublicVars(p, out);
     checkSymbols(p, plcHasName, out);   // lot 10
     eqlink::check(p, out);              // 1.12.11 (lot G) : la liaison Equipement, le mode Etat
