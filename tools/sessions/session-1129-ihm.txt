@@ -1,0 +1,63 @@
+# =============================================================================
+#  Session 1129 IHM : XPGAnalyser IHM (1.12.8 et 1.12.9), XpgAnalyzer-IHM.exe -
+#  les lots D et E de l'audit des objets. Armoire_Gaz (migre par la 1.12.1),
+#  avec les vues des sessions 1122 a 1127 et, par demo1129, la vue Vue_LotDE :
+#    1. le selecteur, son onglet Contenu : une ligne par choix (libelle, valeur) ;
+#    2. le bargraphe, ses zones dans Contenu (De, A, Couleur) ;
+#    3. le programmateur horaire, ses plages dans Contenu (13:30 arrondie a 14:00) ;
+#    4. la simulation : le joker [*] - une barre et une ligne de tableau par cuve
+#       (Cuves[*].Niveau, nommees par Cuves[*].Nom), une plume par bac (une LIST),
+#       une part par cle du stock (une MAP).
+# =============================================================================
+attendre 3
+theme Dark
+attendre 8
+ouvrir "${PROJETS}/ihm/Armoire_Gaz"
+attendre-projet
+attendre 10
+touche ctrl+j
+attendre 2
+
+# ---- Lot D : Contenu, une ligne par choix ----
+arbre "IHM/Vues/Vue_LotDE"
+attendre 8
+objet "Sel_Mode_DE"
+attendre 3
+sous-onglet "Contenu"
+attendre 3
+capture 1129_ihm_01_contenu_choix.png
+
+objet "Bar_Zones_DE"
+attendre 3
+sous-onglet "Contenu"
+attendre 3
+capture 1129_ihm_02_contenu_zones.png
+
+objet "Prog_DE"
+attendre 3
+sous-onglet "Contenu"
+attendre 3
+capture 1129_ihm_03_contenu_plages.png
+
+# ---- Lot E : le joker [*] en simulation ----
+arbre "Simulation/IHM"
+attendre 2
+ihm-build-attendre 600
+attendre 60
+ihm-sim-etat "en marche"
+attendre 3
+sim-utilisateur "admin" "admin2026"
+attendre 2
+sim-vue "Vue_LotDE"
+attendre 6
+survol 1350 760
+attendre 2
+capture 1129_ihm_04_simulation_joker.png
+
+touche ctrl+j
+attendre 2
+ihm-sorties console
+attendre 3
+ihm-console-etat
+ihm-diagnostics
+quitter
