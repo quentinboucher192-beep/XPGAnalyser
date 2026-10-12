@@ -177,6 +177,15 @@ Rien de bloquant (des avertissements et des informations), sauf ce qui l'était 
   (`HmiVideoQueue.hpp`) est vérifiée ici avec un faux décodeur ; le reste (le lecteur de Windows, son fil, le fichier
   temporaire) est à voir sur un vrai Windows et sous Wine (Wine n'a pas tous les décodeurs H.264 : un AVI
   Motion-JPEG y est le format sûr).
+- **Ajouté à l'intégration (12/10, midi) : Media Foundation se charge à la demande.** Lié à l'édition des liens,
+  l'exe importait `MFPlat.DLL` et `MFReadWrite.dll` : un Windows qui ne les a pas (une édition N sans le Media
+  Feature Pack, un Windows Server sans ses fonctions vidéo) n'aurait plus démarré ni XPGAnalyser IHM ni
+  XPGAnalyser API. Les cinq fonctions qui servent (`MFStartup`, `MFShutdown`, `MFCreateAttributes`,
+  `MFCreateMediaType`, `MFCreateSourceReaderFromURL`) se chargent maintenant depuis System32 à la première vidéo
+  qui en a besoin ; sans elles, l'objet montre son image d'attente et le conseil (« Media Foundation manque à ce
+  Windows… installer le Media Feature Pack ; sinon, convertir en Motion-JPEG AVI »). Les bibliothèques d'import
+  restent liées pour leurs GUID : aucune fonction n'en est importée (la table d'importation de l'exe MinGW est à
+  relire après sa compilation : voir `docs/LIVRAISON-1.12.12.md`).
 - **Le son des vidéos** n'est pas joué (la vidéo est muette ; les propriétés `autoplay` et `muted` restent sans
   effet).
 - **Le WEBM** n'est essayé que par Media Foundation sous Windows (avec les extensions vidéo web) ; ailleurs, l'image
