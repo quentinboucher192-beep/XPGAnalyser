@@ -177,11 +177,118 @@ std::vector<std::string> viewsInFolder(const Project& p, std::string_view folder
     return out;
 }
 
-std::vector<std::string> membersOfPath(const Project& p, std::string_view path) {
-    std::vector<std::string> out;
+namespace {
+bool sameName(std::string_view a, std::string_view b) {
+    if (a.size() != b.size()) return false;
+    for (std::size_t i = 0; i < a.size(); ++i)
+        if (std::tolower(static_cast<unsigned char>(a[i])) != std::tolower(static_cast<unsigned char>(b[i]))) return false;
+    return true;
+}
+
+// Le type d'un chemin qui part d'un type (le parametre d'une popup, d'un symbole : Cuve.Mesures, Cuve etant
+// un T_Cuve) : ses membres et ses indices, comme types::typeOfPath ; vide : inconnu.
+std::string typeAlong(const Project& p, std::string type, std::string_view rest) {
+    std::size_t i = 0;
+    while (i < rest.size()) {
+        const char c = rest[i];
+        if (c == ' ' || c == '\t') {
+            ++i;
+            continue;
+        }
+        if (c == '[') {
+            int depth = 0;
+            std::size_t j = i;
+            for (; j < rest.size(); ++j) {
+                if (rest[j] == '[') ++depth;
+                else if (rest[j] == ']' && --depth == 0) break;
+            }
+            if (j >= rest.size()) return {};
+            types::Spec s;
+            if (!types::parseSpec(type, s) || !s.array()) return {};
+            type = s.element;
+            i = j + 1;
+            continue;
+        }
+        if (c == '.') {
+            std::size_t j = i + 1;
+            while (j < rest.size() && (std::isalnum(static_cast<unsigned char>(rest[j])) || rest[j] == '_')) ++j;
+            const std::string_view member = rest.substr(i + 1, j - i - 1);
+            std::string found;
+            for (const auto& m : types::membersOf(p, type))
+                if (sameName(m.name, member)) found = m.type;
+            if (found.empty()) return {};
+            type = found;
+            i = j;
+            continue;
+        }
+        return {};
+    }
+    return type;
+}
+
+// Le type d'un chemin de la vue : une variable du projet, ou un parametre de la vue (son type declare).
+std::string typeInView(const Project& p, const View* view, std::string_view path) {
     const std::string plain = trimmedOf(markers::strip(path, markers::Mode::Expression));
-    for (const auto& m : leafMembers(p, types::typeOfPath(p, plain))) out.push_back(m.name);
+    if (std::string t = types::typeOfPath(p, plain); !t.empty()) return t;
+    if (!view) return {};
+    const auto cut = plain.find_first_of(".[");
+    const auto* prm = view->param(plain.substr(0, cut));
+    if (!prm || trimmedOf(prm->type).empty()) return {};
+    return typeAlong(p, prm->type, cut == std::string::npos ? std::string_view{} : std::string_view(plain).substr(cut));
+}
+
+// Les membres que `.*` parcourt dans un type : un TUPLE, Item1, Item2... ; une structure, ses membres simples.
+std::vector<std::string> membersOfType(const Project& p, const std::string& type) {
+    std::vector<std::string> out;
+    // Un TUPLE (§ 2.3 : une serie par element) : Item1, Item2...
+    if (const auto shape = typeform::decompose(type); shape.form == typeform::Form::Tuple) {
+        std::size_t n = 1;
+        if (!trimmedOf(shape.parameter).empty()) {
+            ++n;
+            int depth = 0;
+            for (const char c : shape.parameter) {
+                if (c == '(' || c == '[') ++depth;
+                else if (c == ')' || c == ']') --depth;
+                else if (c == ',' && depth == 0) ++n;
+            }
+        }
+        for (std::size_t k = 1; k <= n; ++k) out.push_back("Item" + std::to_string(k));
+        return out;
+    }
+    for (const auto& m : leafMembers(p, type)) out.push_back(m.name);
     return out;
+}
+
+// LA COURBE XY EN PROFIL (§ 3.4) : une Variable X a joker (Profil[*].X) trace, a chaque echantillon, tous les
+// points (X[i], Y[i]) de sa source (le moteur : Runtime::sampleCharts) ; ses courbes Y citent la meme source
+// (Profil[*].Y) et ne se deplient pas en une courbe par element.
+bool xyProfile(const Object& o) {
+    if (o.kind != Kind::XYChart) return false;
+    const Prop* x = o.find("xVariable");
+    return x && hasJoker(x->expr.empty() ? x->value : x->expr);
+}
+} // namespace
+
+std::vector<std::string> membersOfPath(const Project& p, std::string_view path) {
+    const std::string plain = trimmedOf(markers::strip(path, markers::Mode::Expression));
+    std::string type = types::typeOfPath(p, plain);
+    // Un element d'une LIST ou d'un VECTOR (Lignes[0], Moteurs[*].* sur une LIST) : le type de ses elements.
+    if (type.empty() && !plain.empty() && plain.back() == ']') {
+        int depth = 0;
+        std::size_t open = std::string::npos;
+        for (std::size_t i = plain.size(); i-- > 0;) {
+            if (plain[i] == ']') ++depth;
+            else if (plain[i] == '[' && --depth == 0) {
+                open = i;
+                break;
+            }
+        }
+        if (open != std::string::npos && open > 0) {
+            const auto shape = typeform::decompose(types::typeOfPath(p, plain.substr(0, open)));
+            if (shape.form == typeform::Form::List || shape.form == typeform::Form::Vector) type = shape.element;
+        }
+    }
+    return membersOfType(p, type);
 }
 
 std::string itemAt(const Joker& j, std::string_view index, bool enumValue) {
@@ -239,6 +346,7 @@ bool expandObject(Object& o, const SourceFn& source, const TextFn& text) {
     // deplie en membres (Moteurs[1].Marche, Moteurs[1].Debit...).
     const auto formulasPass = [&]() {
         bool any = false;
+        if (xyProfile(o)) return false;   // un profil : Profil[*].Y reste une courbe (tous les points)
         for (const char* key : {"variables", "references"}) {
             if (!expandsFormulas(o.kind, key)) continue;
             Prop* p = o.find(key);
@@ -516,7 +624,13 @@ std::string sourceProblem(const Project& p, const View* view, std::string_view n
     // Un membre (Recette.Etapes), un parametre de la vue (une popup qui recoit la liste) : en marche.
     const auto dot = n.find_first_of(".[");
     const std::string root = n.substr(0, dot);
-    if (view && view->param(root)) return {};
+    if (view && view->param(root)) {
+        // Son type declare dit ses bornes (Cuve.Mesures : ARRAY[1..3] - le premier element est 1, pas 0).
+        types::Spec sp;
+        if (types::parseSpec(typeInView(p, view, n), sp) && sp.array())
+            first = sp.dims == 1 ? std::to_string(sp.low[0]) : std::to_string(sp.low[0]) + "," + std::to_string(sp.low[1]);
+        return {};
+    }
     if (dot != std::string::npos && p.variable(root)) return {};
     return "source inconnue : " + n + " (le joker [*] ne donnera aucun \xC3\xA9l\xC3\xA9ment)";
 }
@@ -530,10 +644,8 @@ std::vector<std::string> membersFor(const Project& p, const View* view, std::str
     auto members = membersOfPath(p, base);
     if (members.empty() && view) {
         const std::string plain = trimmedOf(markers::strip(base, markers::Mode::Expression));
-        const auto dot = plain.find_first_of(".[");
-        if (const auto* prm = view->param(plain.substr(0, dot))) {
-            if (dot == std::string::npos)
-                for (const auto& m : leafMembers(p, prm->type)) members.push_back(m.name);
+        if (view->param(plain.substr(0, plain.find_first_of(".[")))) {
+            members = membersOfType(p, typeInView(p, view, plain));   // Cuve.*, Cuve.Pompe.* : selon son type
             later = members.empty();
         }
     }
@@ -624,6 +736,9 @@ std::vector<std::string> jokerSuggestions(const Project& p, const View* view) {
                 break;
             case typeform::Form::Map:
                 add(v.name + "[*]");
+                break;
+            case typeform::Form::Tuple:
+                add(v.name + ".*");   // Item1, Item2...
                 break;
             case typeform::Form::Simple:
                 if (!leafMembers(p, v.type).empty()) add(v.name + ".*");

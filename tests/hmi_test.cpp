@@ -24229,6 +24229,8 @@ void membresStruct1127() {
     p.programs.variables.push_back(hmiVar(p, "Pompe", "T_Pompe_M"));
     p.programs.variables.push_back(hmiVar(p, "Niveau", "REAL"));
     p.programs.variables.push_back(hmiVar(p, "Moteurs_M", "ARRAY[1..2] OF T_Pompe_M"));
+    p.programs.variables.push_back(hmiVar(p, "Mesure_M", "TUPLE(INT, STRING, REAL)"));
+    p.programs.variables.push_back(hmiVar(p, "Lignes_M", "LIST OF T_Pompe_M"));
     // Un dossier de variables : Ligne/Convoyeur (et dessous) ; un tableau n'y compte pas.
     p.programs.variables.push_back(hmiVar(p, "Vitesse_M", "REAL"));
     p.programs.variables.back().folder = "Ligne/Convoyeur";
@@ -24250,6 +24252,8 @@ void membresStruct1127() {
     v.object(courbe)->set("variables", "Pompe.*");
     const Id dossier = edit::add(p, v, Kind::VariableTable, 400, 300);
     v.object(dossier)->set("variables", "ligne/convoyeur/*");
+    const Id tuple = edit::add(p, v, Kind::BarChart, 800, 600);
+    v.object(tuple)->set("variables", "Mesure_M.*");
     const Id parMoteur = edit::add(p, v, Kind::VariableTable, 800, 10);
     v.object(parMoteur)->set("variables", "Moteurs_M[*].*");
     p.views = {v};
@@ -24279,6 +24283,10 @@ void membresStruct1127() {
     same(composed(parMoteur)->text("variables"), "Moteurs_M[1].Marche;Moteurs_M[1].Debit;Moteurs_M[2].Marche;Moteurs_M[2].Debit",
          "E : Moteurs_M[*].* - chaque membre de chaque moteur (le joker, puis les membres)");
     same(composed(parMoteur)->text("names"), "1 Marche;1 Debit;2 Marche;2 Debit", "E : ... nomm\xC3\xA9s par le num\xC3\xA9ro du moteur et le membre");
+    same(composed(tuple)->text("variables"), "Mesure_M.Item1;Mesure_M.Item2;Mesure_M.Item3",
+         "E : un TUPLE (Mesure_M.*) : une barre par \xC3\xA9l\xC3\xA9ment (avant : rien, \xC2\xA7 2.3 \xC2\xAB une s\xC3\xA9rie par \xC3\xA9l\xC3\xA9ment \xC2\xBB)");
+    check(sources::membersOfPath(p, "Lignes_M[0]") == std::vector<std::string>{"Marche", "Debit"},
+          "E : les membres d'un \xC3\xA9l\xC3\xA9ment d'une LIST de structures (Lignes_M[*].* : chaque membre de chaque ligne)");
     same(composed(dossier)->text("variables"), "Vitesse_M;Marche_M",
          "E : un tableau de variables ligne/convoyeur/* : les variables simples du dossier et de ses sous-dossiers (sans casse, sans le tableau)");
     same(sources::jokerSummary(p, nullptr, "Pompe.*"), ".* : 2 membres de Pompe", "E : Contenu dit ce que deviendra Pompe.*");
@@ -24287,7 +24295,8 @@ void membresStruct1127() {
     {
         const auto offered = sources::jokerSuggestions(p, nullptr);
         const auto has = [&](const char* s) { return std::find(offered.begin(), offered.end(), s) != offered.end(); };
-        check(has("Pompe.*") && has("Ligne/Convoyeur/*") && has("Ligne/*") && has("Ligne/Convoyeur/Moteur/*") && has("Tab_M[*]") && !has("Niveau.*"),
+        check(has("Pompe.*") && has("Ligne/Convoyeur/*") && has("Ligne/*") && has("Ligne/Convoyeur/Moteur/*") && has("Tab_M[*]") && !has("Niveau.*")
+                  && has("Mesure_M.*") && has("Lignes_M[*].Debit"),
               "E : \xC2\xAB Ajouter depuis une source \xC2\xBB propose la structure, les dossiers (et leurs parents), le tableau");
     }
     check(sources::folderOf("Ligne/Convoyeur/*") == std::optional<std::string>("Ligne/Convoyeur") && !sources::folderOf("A / *")
@@ -24503,6 +24512,68 @@ void lignesDepuis1127() {
     rt.stop(1.0);
 }
 
+// 1.12.7 (lot E) : LA COURBE XY EN PROFIL (§ 3.4) et un joker dans un symbole sur un tableau qui part de 1.
+void xyProfil1127() {
+    std::printf("1.12.7 (lot E) : une courbe XY en profil, un joker dans un symbole\n");
+    Project p;
+    HmiType pt;
+    pt.id = p.allocate();
+    pt.name = "T_Point_X";
+    pt.members = {{"X", "REAL", "", ""}, {"Y", "REAL", "", ""}};
+    p.programs.types.push_back(pt);
+    HmiType cuve;
+    cuve.id = p.allocate();
+    cuve.name = "T_Cuve_X";
+    cuve.members = {{"Mesures", "ARRAY[1..3] OF REAL", "", ""}};
+    p.programs.types.push_back(cuve);
+    p.programs.variables.push_back(hmiVar(p, "Profil", "ARRAY[0..2] OF T_Point_X"));
+    p.programs.variables.push_back(hmiVar(p, "Cuves_X", "ARRAY[1..2] OF T_Cuve_X"));
+    View v = makeView(p, "Vue_X");
+    const Id xy = edit::add(p, v, Kind::XYChart, 10, 10);
+    v.object(xy)->setExpr("xVariable", "Profil[*].X");
+    v.object(xy)->set("variables", "Profil[*].Y");
+    View sym = makeView(p, "Sym_X");
+    sym.role = "symbole";
+    ViewParam prm;
+    prm.name = "Cuve";
+    prm.type = "T_Cuve_X";
+    sym.params.push_back(prm);
+    const Id courbe = edit::add(p, sym, Kind::Trend, 10, 10);
+    sym.object(courbe)->set("variables", "Cuve.Mesures[*]");
+    p.views = {v, sym};
+    const Id inst = placeSymbol(p, p.views[0], "Sym_X", 400, 300);
+    p.views[0].object(inst)->set("params", "Cuve := Cuves_X[1]");
+    p.config.startView = p.views[0].id;
+    {
+        bool blocked = false;
+        for (const auto& i : generate(p, [](std::string_view) { return false; }))
+            if (i.severity == Issue::Severity::Error) {
+                blocked = true;
+                std::printf("  erreur : %s\n", i.message.c_str());
+            }
+        check(!blocked, "E : G\xC3\xA9n\xC3\xA9rer accepte le profil (Profil[*].X) et Cuve.Mesures[*] dans un symbole (un tableau 1..3 : pas de Mesures[0] hors des bornes)");
+    }
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    for (int i = 0; i <= 2; ++i) {
+        rt.environment().write("Profil[" + std::to_string(i) + "].X", sim::Value::real(10.0 * i));
+        rt.environment().write("Profil[" + std::to_string(i) + "].Y", sim::Value::real(100.0 - i));
+    }
+    rt.tick(0.1);
+    rt.tick(0.2);
+    same(rt.composedView(p.views[0].id)->object(xy)->text("variables"), "Profil[*].Y", "E : ... ses courbes Y ne se d\xC3\xA9plient pas (une courbe, tous les points)");
+    const auto* series = rt.chartSeries(p.views[0].id, xy);
+    check(series && series->size() == 1 && (*series)[0].points.size() == 3 && (*series)[0].points[2].first == 20 && (*series)[0].points[2].second == 98,
+          "E : le profil - les trois points (X[i], Y[i]) \xC3\xA0 chaque \xC3\xA9" "chantillon, pas un point accumul\xC3\xA9 (avant : impossible)");
+    rt.environment().write("Profil[1].Y", sim::Value::real(50));
+    rt.tick(0.3);
+    series = rt.chartSeries(p.views[0].id, xy);
+    check(series && series->size() == 1 && (*series)[0].points.size() == 3 && (*series)[0].points[1].second == 50,
+          "E : ... qui suit le tableau (Y[1] = 50), sans garder les anciens points");
+    rt.stop(1.0);
+}
+
 int main(int argc, char** argv) {
     // 1.11.10 : HMI_TEST_1110=1 - les fonctions et les popups des symboles, seules.
     if (const char* only = std::getenv("HMI_TEST_1110"); only && *only == '1') {
@@ -24520,6 +24591,7 @@ int main(int argc, char** argv) {
         sourcesObjets1127();
         vuesDossier1127();
         lignesDepuis1127();
+        xyProfil1127();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -24668,6 +24740,7 @@ int main(int argc, char** argv) {
     sourcesObjets1127();              // 1.12.7 (lot E) : un parametre de popup, un membre objet
     vuesDossier1127();                // 1.12.7 (lot E) : une barre de navigation depuis un dossier de vues
     lignesDepuis1127();               // 1.12.7 (lot E) : Lignes depuis une enumeration, une structure
+    xyProfil1127();                   // 1.12.7 (lot E) : la courbe XY en profil
     enumerationsLangage110();         // 1.10 (S1, decision 15) : les enumerations dans les scripts
     operateurs110();                  // 1.10 (chantier S2) : les operateurs des symboles et des types IHM
     operateurs1101();                 // 1.10.1 (chantier U2) : a, b et Resultat (types, legende, exemple, Compiler)

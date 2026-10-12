@@ -147,7 +147,9 @@ par construction.
 - **Toute une structure, tout un dossier** (Graphiques, Production) : `Pompe.*` donne un élément par membre simple
   de la structure (`Pompe.Marche`, `Pompe.Debit`, `Pompe.Moteur.Courant`, `Pompe.Mesures[0]`…), nommé par son
   membre ; `Moteurs[*].*` chaque membre de chaque moteur d'un tableau de structures (« 1 Marche, 1 Debit, 2
-  Marche… ») ; `Ligne/Convoyeur/*` un élément par variable simple rangée dans ce dossier de variables ou dessous,
+  Marche… ») ; `Mesure.*` un élément par élément d'un `TUPLE` (`Mesure.Item1`, `Mesure.Item2`…) ; `Lignes[*].*`
+  sur une `LIST` de structures, les membres de son type ; `Ligne/Convoyeur/*` un élément par variable simple
+  rangée dans ce dossier de variables ou dessous,
   dans l'ordre du projet (sans casse ; les structures et les tableaux n'y sont pas). Pour « toutes les variables de
   la pompe » ou « toutes celles du convoyeur » dans un tableau de variables, une ligne suffit.
 - **Contenu propose les sources** (Graphiques, Production) : la courbe, les graphiques et le tableau de variables ont
@@ -161,6 +163,10 @@ par construction.
   barre par cuve d'un `ARRAY`, une plume par élément de la valeur initiale d'une `LIST`, un bouton par vue d'une
   `LIST OF STRING`, une part par clé initiale d'une `MAP` ; une instance répétée montre ses copies à la suite,
   estompées (seule la première se choisit). Avant : une seule barre au nom de la formule.
+- **La courbe XY en profil** (Graphiques) : une Variable X à joker (`Profil[*].X`) trace, à chaque échantillon,
+  tous les points (`Profil[i].X`, `Profil[i].Y`) de la source - un profil de four, une courbe de pompe relevée,
+  un tableau X / Y ; ses courbes Y citent la même source (`Profil[*].Y`, ou `Debits[*]` pour un second tableau
+  de même taille). Avant : seulement des points accumulés dans le temps. Sans joker en X : comme avant.
 - **Les vues, les zones, les onglets depuis une source** (Navigation) : la barre de navigation lit ses vues dans
   une liste (`Vues[*]` : une `LIST OF STRING` ou un `ARRAY OF STRING`) ou dans un dossier de vues (`Process/*` :
   les vues ordinaires du dossier et de ses sous-dossiers), le résumé par zone ses zones (`Zones[*].Nom`), le
@@ -203,6 +209,8 @@ par construction.
 - *Conteneur à onglets* : « 1.12.7 : Onglets `T_MODE[*]` : un onglet par valeur de l'énumération ; Contenu ›
   Depuis une énumération fait de même et relie la variable de ce type. »
 - *Résumé par zone* : « 1.12.7 : Zones `Zones[*].Nom` : les zones lues dans un tableau de structures. »
+- *Courbe XY* : « 1.12.7 : Variable X `Profil[*].X` et courbe Y `Profil[*].Y` : le profil entier, redessiné à chaque
+  échantillon (un tableau de points, une LIST qui change). »
 - *Tableau* : « 1.12.7 : Lignes depuis une énumération (une ligne par valeur : Nom, Valeur, Texte) ou une
   structure (une ligne par membre : Membre, Valeur) ; un tableau de structures imbriquées : une colonne par
   membre simple (Pompe.Debit). »
@@ -226,6 +234,9 @@ Des avertissements :
   montreraient la même chose) ;
 - « Éléments depuis » un tableau ou une liste de structures sans membre choisi (avec la proposition
   `Pompes[*].Nom`).
+La Variable X d'un profil (`Profil[*].X`) se vérifie sur son premier élément ; un joker sur le paramètre d'un
+symbole ou d'une popup se lit sur la borne basse que donne le type du paramètre (`Cuve.Mesures[*]`, Mesures en
+`ARRAY[1..3]` : `Mesures[1]` ; avant cette correction, la fausse erreur « l'indice 0 est hors des bornes »).
 « Lignes depuis » une structure seule ou une énumération est accepté (avant : une erreur) ; une colonne choisie se
 vérifie sur les colonnes que la marche montrera (`Pompe.Debit` n'est plus dite absente).
 Et un élément à joker se vérifie sur son premier élément (`Cuves[1].Niveau`, `Pompe.Marche` : un membre inconnu
@@ -246,7 +257,9 @@ structure d'une popup (`Cuve.*`) se vérifie sur son type ; un paramètre sans t
   une courbe ; `Moteurs_M[*].*` ; `ligne/convoyeur/*` ; `Niveau.*` et un dossier vide dits), `sourcesObjets1127` (`Cuve.Mesures[*]` et
   `Cuve.*` dans une popup ouverte pour `Cuves[2]`, `Recette.Durees[*]`), `vuesDossier1127` (`Process/*` dans
   une barre de navigation, son clic, son aperçu, un dossier vide dit) et `lignesDepuis1127` (un tableau depuis une
-  énumération et depuis une structure seule, ses colonnes choisies, Générer sans erreur). `HMI_TEST_1127=1` les lance avec ceux du
+  énumération et depuis une structure seule, ses colonnes choisies, Générer sans erreur) et `xyProfil1127` (une
+  courbe XY en profil, ses trois points refaits à chaque échantillon ; un joker dans un symbole sur un tableau
+  qui part de 1, sans fausse erreur de bornes). `HMI_TEST_1127=1` les lance avec ceux du
   lot D.
 - `hmi_editor_test` : `lotE1127_editeur` (les états d'un texte multi-états, d'un chronogramme, d'une image animée
   et les onglets depuis une énumération ; « Répéter depuis » et « par rangée » dans l'inspecteur d'une instance,
@@ -268,7 +281,10 @@ structure d'une popup (`Cuve.*`) se vérifie sur son type ; un paramètre sans t
 - **Un joker et des membres ensemble** (`Moteurs[*].*`) : sur un tableau de l'IHM ; pas sur une `LIST` de
   structures (les membres d'un élément de LIST ne se connaissent qu'en marche : la ligne ne donne rien).
 - **Un tableau à deux dimensions** se déplie case par case (`M[*]` : toutes les cases), pas « une série par
-  ligne » ; un `TUPLE` n'est pas une source de joker.
+  ligne » ; un `TUPLE` se parcourt par `Mesure.*` (pas par `[*]`).
+- **La courbe XY en profil** relit toute la source à chaque échantillon (100 ms) : pour des milliers de points,
+  la période d'échantillonnage du graphique n'existe pas encore (§ 3.4, une autre demande). Le point « du
+  moment » mis en avant est le dernier de la source.
 - **Une MAP comme états d'un multi-états** (« clé = valeur de l'état, valeur = texte ») : non ; « Depuis une
   énumération » seulement.
 - **« Répéter depuis » une LIST** : les copies suivent la liste en marche, mais les alarmes du symbole ne sont

@@ -1864,8 +1864,12 @@ void checkLot11(const Project& p, const NameExists& plc, std::vector<Issue>& out
                 case Kind::XYChart: {
                     listCheck("variables", "aucune courbe (Y) : le graphique restera vide");
                     const std::string x = trimmedCopy(o.find("xVariable") && !o.find("xVariable")->expr.empty() ? o.find("xVariable")->expr : o.text("xVariable"));
+                    std::string source;
                     if (x.empty()) issue(S::Error, "xVariable", "aucune variable X : aucun point ne sera trac\xC3\xA9");
-                    else exprCheck("xVariable", x, "variable X");
+                    else if (const auto sample = sources::sampleOf(p, &v, x, &source)) {   // 1.12.7 (lot E) : un profil (Profil[*].X)
+                        if (!source.empty()) issue(S::Warning, "xVariable", source);
+                        else exprCheck("xVariable", *sample, "variable X");
+                    } else exprCheck("xVariable", x, "variable X");
                     if (const std::string r = trimmedCopy(o.text("reset")); !r.empty()) exprCheck("reset", r, "remise \xC3\xA0 z\xC3\xA9ro");
                     std::vector<std::pair<double, double>> ref;
                     std::string why;
@@ -3190,6 +3194,11 @@ struct ExprWalker {
                 if (!anim) { if (!o.actions.empty()) actions(v, &o, o.actions); continue; }
                 for (const auto& prop : o.props) {
                     const Where w{&v, o.id, "Expression", prop.key};
+                    // 1.12.7 (lot E) : la Variable X d'un profil (Profil[*].X) se lit sur son premier element.
+                    if (!prop.expr.empty() && prop.key == "xVariable" && sources::hasJoker(prop.expr)) {
+                        if (const auto sample = sources::sampleOf(p, &v, prop.expr, nullptr)) expr(w, *sample, W::Any);
+                        continue;
+                    }
                     if (!prop.expr.empty()) expr(w, prop.expr, exprcheck::wantOf(o.kind, prop.key), {}, exprcheck::strictType(o.kind, prop.key));   // 1.12.6 (lot B) : le role
                     if (!prop.expr.empty()) enumFamily(w, o.kind, prop.key, prop.expr);
                     // 1.12.5 (lot A, D13) : un Defaut, un Mouvement, une Valeur de synoptique tapes
@@ -3219,8 +3228,10 @@ struct ExprWalker {
                             expr(Where{&v, o.id, "Expression", key}, prop->value, exprcheck::wantOf(o.kind, key), {}, exprcheck::strictType(o.kind, key));   // 1.12.6 : son role
                 // ---- Lot API 8 : corrections des captures ---- le texte-expression du lot 11.
                 for (const char* key : valueExpressionKeys(o.kind))
-                    if (const auto* prop = o.find(key); prop && prop->expr.empty())
-                        expr(Where{&v, o.id, "Expression", key}, prop->value, W::Any);
+                    if (const auto* prop = o.find(key); prop && prop->expr.empty()) {
+                        const auto sample = sources::sampleOf(p, &v, prop->value, nullptr);   // 1.12.7 (lot E) : Profil[*].X
+                        expr(Where{&v, o.id, "Expression", key}, sample && !sample->empty() ? *sample : prop->value, W::Any);
+                    }
                 // Ce que l'objet ecrit (un champ de saisie, une commande) : une variable qu'on peut ecrire.
                 if (kindWritesVariable(o.kind)) target(Where{&v, o.id, "Expression", "variable"}, o.text("variable"), "variable \xC3\xA9" "crite ");
                 if (o.kind == Kind::InputField)
@@ -3294,10 +3305,20 @@ struct ExprWalker {
         bool            strict{true};    // 1.12.6 : un type qui ne convient pas est une erreur (sinon un avertissement)
     };
 
-    static std::vector<Site> sitesOf(const Object& o) {
+    std::vector<Site> sitesOf(const Object& o, const View* view) const {
         using W = exprcheck::Want;
         std::vector<Site> s;
+        // 1.12.7 (lot E) : un joker se lit sur le premier element de sa source (Cuve.Mesures[*] : Cuve.Mesures[1]
+        // si le parametre Cuve dit ARRAY[1..3]) ; .* et /* se verifient ailleurs (checkedPens).
+        const auto sampled = [&](const std::string& text) {
+            const auto sample = sources::sampleOf(p, view, text, nullptr);
+            return sample ? *sample : text;
+        };
         for (const auto& prop : o.props) {
+            if (!prop.expr.empty() && prop.key == "xVariable" && sources::hasJoker(prop.expr)) {
+                s.push_back(Site{"Expression", prop.key, sampled(prop.expr), W::Any, false, false, {}});
+                continue;
+            }
             if (!prop.expr.empty()) s.push_back(Site{"Expression", prop.key, prop.expr, exprcheck::wantOf(o.kind, prop.key), false, false, {}, exprcheck::strictType(o.kind, prop.key)});
             if (isTemplateKey(prop.key)) s.push_back(Site{"Texte", prop.key, prop.value, W::Any, true, false, {}});
         }
@@ -3308,12 +3329,12 @@ struct ExprWalker {
         // ---- Lot API 8 : corrections des captures ---- le texte-expression du lot 11.
         for (const char* key : valueExpressionKeys(o.kind))
             if (const auto* prop = o.find(key); prop && prop->expr.empty())
-                s.push_back(Site{"Expression", key, prop->value, W::Any, false, false, {}});
+                s.push_back(Site{"Expression", key, sampled(prop->value), W::Any, false, false, {}});
         if (kindWritesVariable(o.kind)) s.push_back(Site{"Expression", "variable", o.text("variable"), W::Any, false, true, "variable \xC3\xA9" "crite "});
         if (o.kind == Kind::Trend)
             for (const auto& pen : splitPens(o.text("variables")))
                 if (!sources::memberBase(pen) && !sources::folderOf(pen))   // Pompe.*, Ligne/* : verifies avec le projet (checkedPens)
-                    s.push_back(Site{"Courbe", "variables", sources::sampleFormula(pen), W::Any, false, false, "plume "});   // 1.12.7 : le joker
+                    s.push_back(Site{"Courbe", "variables", sampled(pen), W::Any, false, false, "plume "});   // 1.12.7 : le joker
         for (std::size_t i = 0; i < o.actions.size(); ++i) {
             const auto& a = o.actions[i];
             const std::string label = actionLabel(i, a);
@@ -3422,7 +3443,7 @@ struct ExprWalker {
             }
             for (const auto& c : sv.objects) {
                 if (c.kind == Kind::SymbolInstance) continue;               // un symbole dans le symbole : son instance le dit
-                for (const auto& site : sitesOf(c)) {
+                for (const auto& site : sitesOf(c, &sv)) {
                     std::set<std::string> plain, withDefaults;
                     for (const auto& [t, pb] : problemsOf(sv, site, nullptr)) plain.insert(pb.message);
                     if (!defaults.empty())
