@@ -1375,6 +1375,9 @@
     <ClCompile Include="src\hmi\HmiSymbolArgCheck.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\hmi\HmiTable.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\hmi\HmiTutorialDeduce.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
@@ -2600,6 +2603,9 @@
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiSymbolArgCheck.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiTable.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiTutorialDeduce.hpp">

@@ -1048,6 +1048,7 @@ void Runtime::bind(const Project* project, sim::Environment* plc) {
 }
 
 sim::Environment& Runtime::environment() { return *env_; }
+sim::Environment& Runtime::envOf() const { return *env_; }
 
 const sim::Value* Runtime::variable(std::string_view name) const {
     const auto it = env_->vars.find(upper(name));

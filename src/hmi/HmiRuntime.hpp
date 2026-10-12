@@ -55,6 +55,7 @@
 #include "HmiSimData.hpp"              // 1.11.15 : la remanence de simulation
 #include "HmiSources.hpp"              // 1.12.7 (lot E) : le joker [*], « Repeter depuis »
 #include "HmiVideo.hpp"                // 1.12.12 (lot H) : la lecture d'une video
+#include "HmiTable.hpp"                // 1.12.13 : le Tableau, un mode a la fois
 
 #include <cstdint>
 #include <deque>
@@ -1031,6 +1032,17 @@ public:
     // `headers` : les colonnes trouvees (les membres, Item1..., Valeur ; Cle et Valeur pour une MAP).
     // Faux : pas de source, ou elle ne se lit pas.
     bool tableRows(const Object& o, std::vector<std::string>& headers, std::vector<std::vector<std::string>>& rows) const;
+    // 1.12.13 : LE TABLEAU EN LIGNES DYNAMIQUES, ce qu'il montre (HmiTable.hpp) - ses colonnes (dynColumns :
+    // chaque contenu calcule pour chaque ligne, dans une portee ou [*] est l'element de la ligne), « ... » la
+    // ou la liste d'une colonne s'arrete, ### une case qui ne se calcule pas, les couleurs (les seuils de la
+    // variable, une formule), le tri, la ligne choisie ; sans dynColumns, le tableau d'avant (tableRows), tel
+    // quel. `view` : la vue qui le montre (ses parametres). Faux : pas en lignes dynamiques.
+    bool tableModel(Id view, const Object& o, table::Model& out) const;
+    // La portee d'une ligne (son rang dans la source) : [*] et ses pseudo-membres, comme pour ses cases -
+    // pour une action du tableau (Element, Index, Cle) et l'ecriture d'une case R/W. `paths` : ses chemins
+    // (l'element, la valeur, la cle ecrite). Faux : la ligne n'existe plus.
+    bool tableRowScope(Id view, const Object& o, long long position, Scope& scope, table::RowPaths* paths = nullptr,
+                       table::Source* source = nullptr) const;
     // Le programmateur horaire : ses plages (celles de sa variable, ou de l'objet).
     [[nodiscard]] const WeekSchedule* schedule(Id object) const;
     // La date et l'heure : celle en cours de reglage, sinon celle de la variable
@@ -1318,6 +1330,12 @@ public:
 private:
     class Env;
     friend class Env;
+    // 1.12.13 : la source d'un tableau en lignes dynamiques, en marche, et ses lignes (HmiRuntimeTable.cpp).
+    struct TableRowSource;
+    struct TableSourceRow;
+    bool tableSource(Id view, const Object& o, TableRowSource& out) const;
+    // L'environnement des expressions, depuis une methode const (Env n'est complet que dans HmiRuntime.cpp).
+    [[nodiscard]] sim::Environment& envOf() const;
     struct TriggerState {
         bool        known{false};
         std::string last;          // la derniere valeur vue (en texte)
