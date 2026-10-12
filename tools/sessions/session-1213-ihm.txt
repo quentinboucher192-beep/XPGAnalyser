@@ -1,0 +1,98 @@
+# =============================================================================
+#  Session 1213 IHM : XPGAnalyser IHM 1.12.13, XpgAnalyzer-IHM.exe - le Tableau v2.
+#  Armoire_Gaz (migre par la 1.12.1), avec les vues des sessions 1122 a 1212 et,
+#  par demo1213, la vue Vue_Tableaux creee comme « Nouvelle vue > Tableaux
+#  dynamiques » (Armoire_Gaz a deja T_Cuve, T_Vanne, T_Recette, Cuves et Recette,
+#  d'autres types : le modele cree T_Cuve_Ex, Cuves_Ex... et s'y lie) :
+#    1. la vue dans l'editeur : les sept tableaux, l'apercu de leurs colonnes ;
+#    2. Tableau_Cuves, l'inspecteur : « Le tableau montre » (lignes dynamiques
+#       coche, les cases fixes et le fichier vides), Lignes depuis, la ligne
+#       choisie, le tri pilote par une formule ;
+#    3. Contenu : les colonnes dynamiques ([#], [*].Nom, les seuils, une formule,
+#       une formule de couleur, Consigne R/W, un texte a trous, Debits[*]) ;
+#    4. Actions : les gestes du tableau et ce que chaque action recoit ;
+#    5. Tableau_Stock, Contenu : plusieurs MAP par la cle (Prix[[*].Cle]) ;
+#    6. la simulation : les sept tableaux en marche - « ... » sur la 4e cuve,
+#       la rondelle sans prix, une liste par colonne ;
+#    7. un clic sur la consigne de la cuve A : le clavier virtuel (de 0 a 10) ;
+#    8. 8 tape puis Entree : la consigne ecrite, Case saisie (Derniere saisie),
+#       le niveau de la cuve A qui monte ;
+#    9. + Article, Reappro., + Alarme, puis un clic sur l'en-tete Nom : la MAP
+#       et la LIST grandissent, le joint 1 sans prix (« ... »), la rondelle
+#       remonte dans le tri, les cuves triees par nom.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 8
+ouvrir "${PROJETS}/ihm/Armoire_Gaz"
+attendre-projet
+attendre 10
+touche ctrl+j
+attendre 2
+
+# ---- La vue dans l'editeur ----
+arbre "IHM/Vues/Vue_Tableaux"
+attendre 8
+capture 1213_ihm_01_vue_editeur.png
+
+# ---- Le tableau des cuves : un mode a la fois, ses colonnes, ses gestes ----
+objet "Tableau_Cuves"
+attendre 3
+sous-onglet "Propri"
+attendre 3
+capture 1213_ihm_02_inspecteur_mode.png
+sous-onglet "Contenu"
+attendre 3
+capture 1213_ihm_03_contenu_colonnes.png
+sous-onglet "Actions"
+attendre 3
+capture 1213_ihm_04_actions_gestes.png
+
+# ---- Plusieurs MAP par la cle ----
+objet "Tableau_Stock"
+attendre 3
+sous-onglet "Contenu"
+attendre 3
+capture 1213_ihm_05_stock_plusieurs_map.png
+
+# ---- La simulation ----
+arbre "Simulation/IHM"
+attendre 2
+ihm-build-attendre 600
+attendre 60
+ihm-sim-etat "en marche"
+attendre 3
+sim-utilisateur "admin" "admin2026"
+attendre 2
+sim-vue "Vue_Tableaux"
+attendre 8
+capture 1213_ihm_06_simulation.png
+
+# ---- Une case R/W : la consigne de la cuve A, au clavier virtuel ----
+sim-partie "Tableau_Cuves" "case:0:5"
+attendre 3
+capture 1213_ihm_07_saisie_consigne.png
+sim-touche "8"
+attendre 1
+sim-touche "↵"
+attendre 6
+capture 1213_ihm_08_consigne_ecrite.png
+
+# ---- Les tableaux grandissent, le tri d'un clic sur l'en-tete ----
+sim-clic "Btn_Ajouter_Article"
+attendre 2
+sim-clic "Btn_Reappro"
+attendre 2
+sim-clic "Btn_Ajouter_Alarme"
+attendre 2
+sim-partie "Tableau_Cuves" "entete:1"
+attendre 4
+capture 1213_ihm_09_gestes.png
+
+touche ctrl+j
+attendre 2
+ihm-sorties console
+attendre 3
+ihm-console-etat
+ihm-diagnostics
+quitter
