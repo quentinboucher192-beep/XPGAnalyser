@@ -24677,6 +24677,57 @@ void etatsDepuis1127() {
     same(q.views[0].object(chrono)->text("statesFrom"), "T_Regime_S", "E : renommer l'\xC3\xA9num\xC3\xA9ration - \xC3\x89tats depuis suit");
 }
 
+// 1.12.7 (lots D et E) : ENREGISTRE ET RELU - les proprietes nouvelles (Etats depuis, Repeter depuis, les
+// colonnes d'une source, les jokers) tiennent ; un objet sans elles s'ecrit comme avant (rien de plus).
+void enregistre1127() {
+    std::printf("1.12.7 (lots D et E) : enregistre et relu\n");
+    Project p;
+    View v = makeView(p, "Vue_W");
+    const Id table = edit::add(p, v, Kind::VariableTable, 10, 10);
+    v.object(table)->set("variables", "$Cuves$[*].Niveau;Pompe.*;Ligne/Convoyeur/*");
+    const Id texte = edit::add(p, v, Kind::MultiStateText, 10, 200);
+    v.object(texte)->set("statesFrom", "Etats");
+    const Id grille = edit::add(p, v, Kind::Table, 10, 400);
+    v.object(grille)->set("rowsFrom", "Lignes");
+    v.object(grille)->set("sourceColumns", "Nom; Debit = D\xC3\xA9" "bit | 0.0");
+    const Id simple = edit::add(p, v, Kind::MultiStateText, 400, 200);
+    p.views = {v};
+    View sym = makeView(p, "Sym_W");
+    sym.role = "symbole";
+    p.views.push_back(sym);
+    const Id inst = placeSymbol(p, p.views[0], "Sym_W", 400, 400);
+    Object* io = p.views[0].object(inst);
+    io->set("repeatFrom", "Cuves");
+    io->set("repeatAxis", "vertical");
+    io->set("repeatGap", "8");
+    io->set("repeatPerRow", "4");
+    p.config.startView = p.views[0].id;
+    const auto files = serializeProject(p);
+    const FileReader reader = [&](const std::string& path, std::string& content) {
+        for (const auto& f : files)
+            if (f.path == path) {
+                content.assign(f.data->begin(), f.data->end());
+                return true;
+            }
+        return false;
+    };
+    const auto back = parseProject(reader);
+    const View* bv = back ? back->view(p.views[0].id) : nullptr;
+    const auto text = [&](Id id, const char* key) {
+        const Object* o = bv ? bv->object(id) : nullptr;
+        return o ? o->text(key) : std::string("?");
+    };
+    check(bv && text(table, "variables") == "$Cuves$[*].Niveau;Pompe.*;Ligne/Convoyeur/*" && text(texte, "statesFrom") == "Etats"
+              && text(grille, "sourceColumns") == "Nom; Debit = D\xC3\xA9" "bit | 0.0",
+          "relu : les jokers, \xC3\x89tats depuis, les colonnes d'une source");
+    check(text(inst, "repeatFrom") == "Cuves" && text(inst, "repeatAxis") == "vertical" && text(inst, "repeatGap") == "8"
+              && text(inst, "repeatPerRow") == "4",
+          "relu : R\xC3\xA9p\xC3\xA9ter depuis, son sens, son \xC3\xA9" "cart, par rang\xC3\xA9" "e");
+    const Object* plain = bv ? bv->object(simple) : nullptr;
+    check(plain && !plain->find("statesFrom") && !plain->find("repeatFrom") && !plain->find("sourceColumns"),
+          "un objet qui ne s'en sert pas ne les porte pas (le fichier ne change pas)");
+}
+
 int main(int argc, char** argv) {
     // 1.11.10 : HMI_TEST_1110=1 - les fonctions et les popups des symboles, seules.
     if (const char* only = std::getenv("HMI_TEST_1110"); only && *only == '1') {
@@ -24696,6 +24747,7 @@ int main(int argc, char** argv) {
         lignesDepuis1127();
         xyProfil1127();
         etatsDepuis1127();
+        enregistre1127();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -24846,6 +24898,7 @@ int main(int argc, char** argv) {
     lignesDepuis1127();               // 1.12.7 (lot E) : Lignes depuis une enumeration, une structure
     xyProfil1127();                   // 1.12.7 (lot E) : la courbe XY en profil
     etatsDepuis1127();                // 1.12.7 (lot E) : Etats depuis une source
+    enregistre1127();                 // 1.12.7 (lots D et E) : enregistre et relu
     enumerationsLangage110();         // 1.10 (S1, decision 15) : les enumerations dans les scripts
     operateurs110();                  // 1.10 (chantier S2) : les operateurs des symboles et des types IHM
     operateurs1101();                 // 1.10.1 (chantier U2) : a, b et Resultat (types, legende, exemple, Compiler)

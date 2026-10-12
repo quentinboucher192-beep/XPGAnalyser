@@ -834,7 +834,11 @@ void HmiContentPanel::refresh() {
                     if (v)
                         for (const auto& c : v->objects)
                             if (c.parent == o->id && hmi::tabPageOf(c) == static_cast<int>(k) + 1) ++n;
-                    rows.push_back({labels[k], std::to_string(n)});
+                    std::string detail = std::to_string(n);
+                    // 1.12.7 (lot E) : un onglet a joker (T_MODE[*]) dit ce qu'il deviendra en marche.
+                    if (const auto said = hmi::sources::jokerSummary(doc_->project, v, labels[k]); !said.empty())
+                        detail += "  \xC2\xB7  " + said;
+                    rows.push_back({labels[k], std::move(detail)});
                 }
                 break;
             }

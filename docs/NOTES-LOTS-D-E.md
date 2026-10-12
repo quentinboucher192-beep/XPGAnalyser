@@ -159,7 +159,8 @@ par construction.
   joker dit ce qu'elle deviendra : « [*] : 8 éléments de Cuves », « .* : 2 membres de Pompe », « [*] : les
   éléments de Bacs (leur nombre suit la source en marche) », ou ce qui ne va pas avec sa source. La barre de
   navigation a le sien : les `LIST OF STRING` du projet (`Vues[*]`) et ses dossiers de vues (`Process/*`) ; le
-  résumé par zone aussi (`Zones[*].Nom`, la case de la source dit ce qu'elle deviendra).
+  résumé par zone aussi (`Zones[*].Nom`, la case de la source dit ce qu'elle deviendra) ; un onglet à joker
+  (`T_MODE[*]`) le dit dans la liste des pages.
 - **L'éditeur montre le dépliage** (Graphiques, Symboles) : un objet à joker se dessine comme il démarrera - une
   barre par cuve d'un `ARRAY`, une plume par élément de la valeur initiale d'une `LIST`, un bouton par vue d'une
   `LIST OF STRING`, une part par clé initiale d'une `MAP` ; une instance répétée montre ses copies à la suite,
@@ -288,13 +289,16 @@ structure d'une popup (`Cuve.*`) se vérifie sur son type ; un paramètre sans t
   - `xyProfil1127` : une courbe XY en profil, ses trois points refaits à chaque échantillon ; sa référence lue
     dans un tableau ; un joker dans un symbole sur un tableau qui part de 1, sans fausse erreur de bornes ;
   - `etatsDepuis1127` : un multi-états depuis une MAP qui grandit en marche, un chronogramme depuis une
-    énumération, l'aperçu, la source inconnue dite, le renommage suivi.
+    énumération, l'aperçu, la source inconnue dite, le renommage suivi ;
+  - `enregistre1127` : les propriétés nouvelles (jokers, États depuis, Répéter depuis et ses réglages, colonnes
+    d'une source) enregistrées et relues ; un objet qui ne s'en sert pas ne les porte pas.
 - `hmi_editor_test` : `lotE1127_editeur` (les états d'un texte multi-états, d'un chronogramme, d'une image animée
   et les onglets depuis une énumération ; « Répéter depuis » et « par rangée » dans l'inspecteur d'une instance,
   un repère tapé ; « Ajouter depuis une source » et le détail d'une ligne à joker dans Contenu ; l'aperçu d'un
   graphique `Cuves[*]` dessiné avec ses 8 barres ; les vues d'une barre de navigation depuis une `LIST OF STRING` ;
   les zones d'un résumé depuis `Zones_E[*].Nom` ; « États depuis » dans l'inspecteur d'un multi-états et le
-  bandeau de Contenu ; un dossier de variables renommé puis glissé par l'écran des variables).
+  bandeau de Contenu ; un dossier de variables renommé puis glissé par l'écran des variables ; un onglet
+  `T_Etat_E[*]` et ce qu'il deviendra).
 - `hmi_reperes_test` : `repereEtJoker1127` (`$Cuves$[*].Niveau` dupliqué en `$Ballons$[*].Niveau`, chacun déplié
   sur sa variable en marche).
 - `renameplan_test` : « 8. les jokers suivent le renommage » (renommer `Cuves` : la plume, le nom calculé, les

@@ -29293,6 +29293,18 @@ void lotE1127_editeur() {
     check(content.mode() == Mode::Tabs && content.setField(-1, "fromEnum", "Etat_Pompe"), "lot E : les onglets depuis Etat_Pompe");
     same_text(b.v().object(tabs)->text("tabs"), "Arr\xC3\xAAt;En marche;En d\xC3\xA9" "faut", "lot E : un onglet par valeur (son texte)");
     same_text(b.v().object(tabs)->text("variable"), "Etat_Pompe", "lot E : ... la variable de l'onglet est celle de ce type (sans d\xC3\xA9" "calage, 1.12.5)");
+    // Un onglet a joker (T_Etat_E[*]) : Contenu dit ce qu'il deviendra.
+    b.v().object(tabs)->set("tabs", "T_Etat_E[*]");
+    b.editor->refresh();
+    b.editor->layout();
+    {
+        bool told = false;
+        if (const auto m = content.table().model())
+            for (std::size_t r = 0; r < m->rowCount(); ++r)
+                for (std::size_t c = 0; c < m->columnCount(); ++c)
+                    told = told || m->cellText(r, c).find("[*] : 3 \xC3\xA9l\xC3\xA9ments de T_Etat_E") != std::string::npos;
+        check(told, "lot E : un onglet T_Etat_E[*] dit ce qu'il deviendra (3 \xC3\xA9l\xC3\xA9ments de T_Etat_E)");
+    }
     // ---- « Repeter depuis » : l'inspecteur d'une instance seule
     hmi::Variable cuves;
     cuves.id = b.doc->project.allocate();
