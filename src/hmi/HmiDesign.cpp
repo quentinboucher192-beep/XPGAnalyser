@@ -603,15 +603,16 @@ std::string demoType(Project& p, HmiType t, const std::string& folder) {
     return name;
 }
 
-// Une variable du modele : reprise si elle existe avec le meme type (sa valeur aussi), creee sinon ; un nom pris par une
-// variable d'un autre type : Nom_Ex... Rend le nom retenu.
+// Une variable du modele : reprise si le modele l'a deja creee (le meme type, dans son dossier), creee sinon ; un nom pris
+// par une variable du projet (meme de ce type : ses gestes ne doivent pas ecrire dans les donnees du projet) : Nom_Ex...
+// Rend le nom retenu.
 std::string demoVariable(Project& p, const std::string& base, const std::string& type, const std::string& initial,
                          const std::string& description, const std::string& folder) {
     std::string name = base;
     for (int n = 1; n < 100; ++n) {
         const Variable* have = p.variable(name);
         if (!have) break;
-        if (upperCopy(have->type) == upperCopy(type)) return have->name;
+        if (upperCopy(have->type) == upperCopy(type) && have->folder == folder) return have->name;
         name = base + "_Ex" + (n > 1 ? std::to_string(n) : std::string{});
     }
     Variable v;
@@ -883,7 +884,7 @@ void fillTablesDemo(Project& p, View& v) {
     ts.set(std::string(tb::kPickKey), article);
     ts.set(std::string(tb::kSortKey), "Qt\xC3\xA9");
     ts.set(std::string(tb::kSortOrderKey), "d\xC3\xA9" "croissant");
-    (void)headButton("Btn_Reappro", "R\xC3\xA9" "appro.", ps, 0, stock + "['rondelle'] := " + stock + "['rondelle'] + 25;");
+    (void)headButton("Btn_Reappro", "R\xC3\xA9" "appro.", ps, 0, stock + "['rondelle'] := MAP_GET(" + stock + ", 'rondelle', 0) + 25;");
     (void)headButton("Btn_Ajouter_Article", "+ Article", ps, 1,
                      ajoutes + " := " + ajoutes + " + 1;\n" + stock + "[CONCAT('joint ', TO_STRING(" + ajoutes + "))] := 5 * " + ajoutes
                          + ";\n" + seuils + "[CONCAT('joint ', TO_STRING(" + ajoutes + "))] := 10;");

@@ -27302,12 +27302,15 @@ void tableauxDynamiques11213() {
     check(p.programs.types.size() == 5 && p.programs.variables.size() == 15, "le mod\xC3\xA8le une seconde fois : ses types et ses variables repris, rien en double");
     Project q;
     q.programs.variables.push_back(hmiVar(q, "Cuves", "INT"));
+    q.programs.variables.push_back(hmiVar(q, "Stock", "MAP[STRING] OF INT"));   // du meme type, mais au projet
     View other = makeView(q, "Tableaux");
     hmi::design::fillFromTemplate(q, other, "tableaux_dynamiques");
     const Object* qc = nullptr;
     for (const auto& o : other.objects)
         if (o.name == "Tableau_Cuves") qc = &o;
     check(q.variable("Cuves_Ex") && qc && qc->text("rowsFrom") == "Cuves_Ex", "une variable Cuves d'un autre type : le mod\xC3\xA8le cr\xC3\xA9" "e Cuves_Ex et s'y lie");
+    check(q.variable("Stock_Ex") && q.variable("Stock_Ex")->folder == "Tableaux dynamiques",
+          "une variable Stock du projet, m\xC3\xAAme du m\xC3\xAAme type : le mod\xC3\xA8le ne la prend pas (ses boutons \xC3\xA9" "criraient dans les donn\xC3\xA9" "es du projet) - Stock_Ex");
 }
 
 int main(int argc, char** argv) {
