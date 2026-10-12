@@ -28552,6 +28552,13 @@ void selecteurTypes1119() {
     check(picker->result() == "ARRAY[1..2] OF T_Four", "les bornes d'un tableau reviennent avec lui : " + picker->result());
     check(picker->setForm("Dictionnaire (MAP)") && picker->result() == "MAP[STRING] OF T_Four", "la cl\xC3\xA9 du dictionnaire aussi : " + picker->result());
     check(!picker->setForm("Matrice") && picker->setForm("Simple") && picker->result() == "T_Four", "une forme inconnue : refus\xC3\xA9" "e ; Simple : T_Four");
+    // 1.12.7 : Tampon (RING) - sa capacite, 100 par defaut ; Ensemble (SET) d'une structure : refuse, dit.
+    check(picker->setForm("Tampon (RING)") && picker->result() == "RING[100] OF T_Four" && picker->resultProblem().empty(),
+          "Tampon (RING) : " + picker->result() + " " + picker->resultProblem());
+    check(picker->setForm("Ensemble (SET)") && picker->result() == "SET OF T_Four"
+              && picker->resultProblem().find("un SET range des valeurs simples") != std::string::npos,
+          "Ensemble (SET) d'une structure : " + picker->resultProblem());
+    check(picker->setForm("Simple") && picker->result() == "T_Four", "et le retour a Simple : " + picker->result());
     // rafraichi : un type cree pendant que le selecteur est ouvert
     HmiType vanne;
     vanne.id = doc->project.allocate();

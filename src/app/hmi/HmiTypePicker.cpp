@@ -575,18 +575,25 @@ private:
             // 1.12.2 : la forme, une puce par forme permise ici.
             r.drawText({x0, y + 4.f}, "Forme :", kSmall, c.textMuted);
             float x = x0 + 96.f;
+            // 1.12.7 : neuf formes (SET et RING en plus) - serrees si elles ne tiennent pas sur la ligne.
+            float pad = 20.f, gap = 6.f, total = 0.f;
+            for (const auto f : forms) total += r.measure(std::string(tf::label(f)), kSmall).width + pad + gap;
+            if (x + total > panel_.right() - 16.f) {
+                pad = 12.f;
+                gap = 3.f;
+            }
             for (const auto f : forms) {
                 const std::string text(tf::label(f));
-                const float w = r.measure(text, kSmall).width + 20.f;
+                const float w = r.measure(text, kSmall).width + pad;
                 if (x + w > panel_.right() - 16.f) break;
                 const gfx::Rect b{x, y, w, 24.f};
                 const bool chosen = form_ == f;
                 r.fillRoundedRect(b, chosen ? c.accent.withAlpha(on ? 70 : 30) : c.headerBg, 6.f);
                 if (chosen) r.strokeRect(b, on ? c.accent : c.border, 1.f);
-                r.drawText({b.x + 10.f, b.y + (b.h - r.lineHeight(kSmall)) * 0.5f}, text, kSmall,
+                r.drawText({b.x + pad * 0.5f, b.y + (b.h - r.lineHeight(kSmall)) * 0.5f}, text, kSmall,
                            on ? (chosen ? c.text : c.textMuted) : c.textDisabled);
                 formChips_.push_back({b, f});
-                x += w + 6.f;
+                x += w + gap;
             }
             y += 34.f;
             const auto label = tf::parameterLabel(form_);
