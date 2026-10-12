@@ -26280,6 +26280,11 @@ void lotF11210() {
         check(std::fabs(c - 50) < 1e-6, "F : une vanne sans plage : son ouverture comme avant (une formule en %)");
         same(shown.object(isa)->text("high") + ";" + shown.object(isa)->text("highAlarm"), "8;9",
              "F : un instrument ISA prend les seuils de sa variable (avant : il n'en avait pas)");
+        // Unites et formats : la ligne d'une ouverture est montree par la vanne qui en prend la plage (avant la
+        // correction de l'integration, Generer disait « aucun objet ne la montre encore »).
+        const auto uses = displayUses(q, q.displays[0]);
+        check(std::find(uses.begin(), uses.end(), "Vue_Vannes." + w.object(unitaire)->name) != uses.end(),
+              "F : Unit\xC3\xA9s et formats : la ligne de l'ouverture est montr\xC3\xA9" "e par la vanne qui en prend la plage");
     }
     // ---- le graphique en barres, l'histogramme : Min, Max, un seuil tapes en nom sans = (decision 5 ; avant : ignores par
     //      le dessin, et Generer disait « voulais-tu =X ? »). Plusieurs variables, une tolerance : rien a heriter.

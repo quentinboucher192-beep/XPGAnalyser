@@ -8,8 +8,16 @@
 //  quelques images d'avance sur celle qu'on montre, et repart du debut quand la
 //  lecture reboucle (ou d'ou on la demande). La ressource passe par un fichier
 //  temporaire (le lecteur reconnait le format a son extension), efface a la
-//  fermeture. Edition des liens : mfplat, mfreadwrite, mfuuid, mf. Les images
-//  d'avance passent par une FrameQueue (HmiVideoQueue.hpp : verifiee partout).
+//  fermeture. Les images d'avance passent par une FrameQueue (HmiVideoQueue.hpp :
+//  verifiee partout).
+//
+//  MEDIA FOUNDATION SE CHARGE A LA DEMANDE (mfplat.dll, mfreadwrite.dll, pris
+//  dans System32 a la premiere video qui en a besoin) : un Windows qui ne l'a pas
+//  - une edition N sans le Media Feature Pack, un Windows Server sans ses
+//  fonctions video - demarre quand meme, et la video y montre son image
+//  d'attente et le conseil. Liees a l'edition des liens, ces deux DLL manquantes
+//  empechaient les deux applications de demarrer. Les bibliotheques d'import
+//  restent liees pour leurs GUID (mfuuid) : aucune fonction n'en est importee.
 //
 //  Ailleurs que sous Windows, rien : openMediaFoundation rend nul (le Motion-JPEG
 //  en AVI, lui, se decode partout : HmiVideo.cpp).
@@ -83,6 +91,55 @@ std::wstring writeTemp(const Bytes& data, std::string_view format) {
     return path;
 }
 
+// Les cinq fonctions de Media Foundation qui servent, chargees une fois pour toutes (les DLL restent chargees).
+struct MfApi {
+    using Startup = HRESULT(WINAPI*)(ULONG, DWORD);
+    using Shutdown = HRESULT(WINAPI*)();
+    using CreateAttributes = HRESULT(WINAPI*)(IMFAttributes**, UINT32);
+    using CreateMediaType = HRESULT(WINAPI*)(IMFMediaType**);
+    using CreateSourceReaderFromURL = HRESULT(WINAPI*)(LPCWSTR, IMFAttributes*, IMFSourceReader**);
+    Startup                   startup{nullptr};
+    Shutdown                  shutdown{nullptr};
+    CreateAttributes          createAttributes{nullptr};
+    CreateMediaType           createMediaType{nullptr};
+    CreateSourceReaderFromURL createSourceReaderFromURL{nullptr};
+    std::string               missing;   // vide : tout est la ; sinon ce qui manque (mfplat.dll...)
+};
+
+// Une DLL du systeme, par son chemin dans System32 (pas une copie posee a cote de l'exe).
+HMODULE systemLibrary(const wchar_t* name) {
+    wchar_t dir[MAX_PATH + 1] = {};
+    const UINT n = GetSystemDirectoryW(dir, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) return nullptr;
+    return LoadLibraryW((std::wstring(dir) + L"\\" + name).c_str());
+}
+
+template <class F>
+bool load(F& f, HMODULE m, const char* name) {
+    f = m ? reinterpret_cast<F>(reinterpret_cast<void*>(GetProcAddress(m, name))) : nullptr;
+    return f != nullptr;
+}
+
+const MfApi& mfApi() {
+    static const MfApi api = [] {
+        MfApi a;
+        HMODULE plat = systemLibrary(L"mfplat.dll");
+        HMODULE reader = plat ? systemLibrary(L"mfreadwrite.dll") : nullptr;
+        if (!plat) {
+            a.missing = "mfplat.dll";
+        } else if (!reader) {
+            a.missing = "mfreadwrite.dll";
+        } else {
+            const bool all = load(a.startup, plat, "MFStartup") && load(a.shutdown, plat, "MFShutdown")
+                          && load(a.createAttributes, plat, "MFCreateAttributes") && load(a.createMediaType, plat, "MFCreateMediaType")
+                          && load(a.createSourceReaderFromURL, reader, "MFCreateSourceReaderFromURL");
+            if (!all) a.missing = "une fonction de mfplat.dll ou de mfreadwrite.dll";
+        }
+        return a;
+    }();
+    return api;
+}
+
 class MfSource final : public FrameSource {
 public:
     MfSource(BlobPtr data, std::wstring path) : data_(std::move(data)), path_(std::move(path)) {
@@ -123,8 +180,9 @@ private:
     }
 
     void run() {
+        const MfApi& mf = mfApi();   // (openMediaFoundation l'a verifie : tout y est)
         const HRESULT co = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-        if (FAILED(MFStartup(MF_VERSION, MFSTARTUP_LITE))) {
+        if (FAILED(mf.startup(MF_VERSION, MFSTARTUP_LITE))) {
             fail("Media Foundation indisponible sur ce Windows");
             if (SUCCEEDED(co)) CoUninitialize();
             return;
@@ -133,12 +191,12 @@ private:
         IMFSourceReader* reader = nullptr;
         IMFMediaType*    type = nullptr;
         const DWORD      videoStream = static_cast<DWORD>(MF_SOURCE_READER_FIRST_VIDEO_STREAM);
-        HRESULT hr = MFCreateAttributes(&attrs, 1);
+        HRESULT hr = mf.createAttributes(&attrs, 1);
         if (SUCCEEDED(hr)) hr = attrs->SetUINT32(MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING, TRUE);
-        if (SUCCEEDED(hr)) hr = MFCreateSourceReaderFromURL(path_.c_str(), attrs, &reader);
+        if (SUCCEEDED(hr)) hr = mf.createSourceReaderFromURL(path_.c_str(), attrs, &reader);
         if (SUCCEEDED(hr)) hr = reader->SetStreamSelection(static_cast<DWORD>(MF_SOURCE_READER_ALL_STREAMS), FALSE);
         if (SUCCEEDED(hr)) hr = reader->SetStreamSelection(videoStream, TRUE);
-        if (SUCCEEDED(hr)) hr = MFCreateMediaType(&type);
+        if (SUCCEEDED(hr)) hr = mf.createMediaType(&type);
         if (SUCCEEDED(hr)) hr = type->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
         if (SUCCEEDED(hr)) hr = type->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_RGB32);
         if (SUCCEEDED(hr)) hr = reader->SetCurrentMediaType(videoStream, nullptr, type);
@@ -240,7 +298,7 @@ private:
         release(type);
         release(reader);
         release(attrs);
-        MFShutdown();
+        mf.shutdown();
         if (SUCCEEDED(co)) CoUninitialize();
     }
 
@@ -258,9 +316,15 @@ private:
 
 } // namespace
 
+bool mediaFoundationAvailable() { return mfApi().missing.empty(); }
+
 std::unique_ptr<FrameSource> openMediaFoundation(const BlobPtr& data, std::string_view format, std::string* why) {
     if (!data || data->empty()) {
         if (why) *why = "fichier vide";
+        return nullptr;
+    }
+    if (!mediaFoundationAvailable()) {
+        if (why) *why = std::string(format) + " : " + mediaFoundationMissing();
         return nullptr;
     }
     std::wstring path = writeTemp(*data, format);
@@ -271,7 +335,17 @@ std::unique_ptr<FrameSource> openMediaFoundation(const BlobPtr& data, std::strin
     return std::make_unique<MfSource>(data, std::move(path));
 }
 
+std::string mediaFoundationMissing() {
+    const MfApi& mf = mfApi();
+    if (mf.missing.empty()) return {};
+    return "Media Foundation manque \xC3\xA0 ce Windows (" + mf.missing + " ; une \xC3\xA9" "dition N : installer le Media Feature Pack) "
+           "; sinon, convertir en Motion-JPEG AVI";
+}
+
 #else
+
+bool mediaFoundationAvailable() { return false; }
+std::string mediaFoundationMissing() { return {}; }
 
 std::unique_ptr<FrameSource> openMediaFoundation(const BlobPtr&, std::string_view, std::string* why) {
     if (why) why->clear();   // le conseil (decodeAdvice) le dit

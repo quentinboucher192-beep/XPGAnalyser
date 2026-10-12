@@ -161,6 +161,8 @@ if(WIN32)
     target_link_libraries(xpg_hmi PUBLIC iphlpapi shell32)
     # 1.12.12 (lot H) : la video decodee par Media Foundation (MP4 / H.264, WMV, MOV ;
     # hmi/HmiVideoMf.cpp). Le Motion-JPEG en AVI, lui, se decode partout sans elle.
+    # Ses fonctions se chargent a la demande (un Windows N sans Media Foundation doit
+    # demarrer) : ces bibliotheques ne donnent que leurs GUID, aucune DLL importee.
     target_link_libraries(xpg_hmi PUBLIC mfplat mfreadwrite mfuuid mf ole32)
 else()
     # Lot 15 : libpcap, chargee a la demande (dlopen) pour la capture.

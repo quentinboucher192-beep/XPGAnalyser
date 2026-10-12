@@ -357,6 +357,8 @@ std::string decodeAdvice(std::string_view format, std::string_view codec) {
     if (f == "AVI" && mjpegCodec(codec)) return {};
     if (f.empty()) return {};
     const std::string what = f == "AVI" && !codec.empty() ? "AVI (" + std::string(codec) + ")" : f;
+    // Sous Windows sans Media Foundation (une edition N) : ce qui manque, et le moyen de s'en passer.
+    if (const std::string missing = mediaFoundationMissing(); !missing.empty()) return what + " : " + missing;
     if (f == "WEBM")
         return what + " : d\xC3\xA9" "cod\xC3\xA9 sous Windows seulement, avec les extensions vid\xC3\xA9o web ; ailleurs, convertir en Motion-JPEG AVI";
     return what + " : d\xC3\xA9" "cod\xC3\xA9 sous Windows seulement ; ailleurs, convertir en Motion-JPEG AVI";
@@ -365,7 +367,7 @@ std::string decodeAdvice(std::string_view format, std::string_view codec) {
 bool decodedHere(std::string_view format, std::string_view codec) {
     if (upper(format) == "AVI" && mjpegCodec(codec)) return true;
 #if defined(_WIN32)
-    return !format.empty();
+    return !format.empty() && mediaFoundationAvailable();
 #else
     return false;
 #endif

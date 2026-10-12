@@ -19,6 +19,7 @@
 // =============================================================================
 #include "HmiDisplay.hpp"
 #include "HmiMarkers.hpp"   // 1.12.5 : un chemin sans ses reperes
+#include "HmiRanges.hpp"    // 1.12.10 (lot F) : la variable dont un objet prend la plage
 
 #include "HmiExpr.hpp"
 #include "HmiLanguages.hpp"
@@ -370,6 +371,8 @@ std::vector<std::string> displayUses(const Project& p, const VariableDisplay& d)
                     if (mine(var)) add(where);
             } else if (!multiVariable(o.kind) && (o.find("unit") || o.find("format")) && mine(displayVariableOf(o))) {
                 add(where);
+            } else if (!multiVariable(o.kind) && ranges::inherits(o.kind) && mine(ranges::variableOf(o))) {
+                add(where);   // 1.12.10 (lot F) : il en prend la plage (la vanne : celle de son ouverture)
             }
             for (const auto& prop : o.props) {
                 if (!prop.expr.empty() || !isTranslatableKey(prop.key) || prop.value.find('{') == std::string::npos) continue;

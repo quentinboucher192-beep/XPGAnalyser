@@ -78,6 +78,10 @@ public:
 [[nodiscard]] std::unique_ptr<FrameSource> openFrameSource(const BlobPtr& data, std::string_view format, std::string* why = nullptr);
 // HmiVideoMf.cpp : Media Foundation (Windows) ; ailleurs, nulle.
 [[nodiscard]] std::unique_ptr<FrameSource> openMediaFoundation(const BlobPtr& data, std::string_view format, std::string* why);
+// Media Foundation est-il la (charge a la demande : un Windows N sans le Media Feature Pack n'en a pas) ?
+// Ailleurs que sous Windows : non. Ce qui manque, dit a l'utilisateur ; vide : rien ne manque (ou pas Windows).
+[[nodiscard]] bool mediaFoundationAvailable();
+[[nodiscard]] std::string mediaFoundationMissing();
 
 // ---- la lecture ----------------------------------------------------------------------------
 struct PlaybackSettings {
