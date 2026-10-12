@@ -1433,6 +1433,66 @@ void repereEtJoker1127() {
     rt.stop(1.0);
 }
 
+
+// 1.12.11 (lot G) : la liaison Equipement est un chemin a reperes comme les autres ($Pompes[1]$) ; le libelle
+// repere ($Rep$) et le mode Etat suivent la copie ; en marche, chacune lit sa pompe.
+void liaisonEquipement11211() {
+    std::printf("-- 1.12.11 (lot G) : la liaison Equipement et ses reperes ($Pompes[1]$)\n");
+    Project p;
+    HmiType t;
+    t.id = p.allocate();
+    t.name = "T_Pompe_R";
+    t.members = {{"Marche", "BOOL", "", ""}, {"Defaut", "BOOL", "", ""}, {"Nom", "STRING", "", ""}};
+    p.programs.types.push_back(t);
+    Variable pompes;
+    pompes.id = p.allocate();
+    pompes.name = "Pompes";
+    pompes.type = "ARRAY[1..3] OF T_Pompe_R";
+    p.programs.variables.push_back(pompes);
+    View v = makeView(p, "Vue_R");
+    const Id pump = edit::add(p, v, Kind::Pump, 10, 10);
+    v.object(pump)->name = "Pompe_1";
+    v.object(pump)->set("equipment", "$Pompes[1]$");
+    v.object(pump)->set("label", "Pompe $Rep$");
+    const auto sc = dup::scan(v, {pump}, dup::projectBounds(p));
+    check(sc.marker("Pompes[1]") != nullptr && sc.marker("Rep") != nullptr,
+          "liaison : Dupliquer trouve le repere de l'equipement ($Pompes[1]$) et celui du libelle ($Rep$)");
+    auto plan = dup::defaultPlan(v, sc, 1);
+    if (plan.rows.size() == 2) {
+        plan.rows[1].markers[dup::markerKey("Pompes[1]")] = "Pompes[2]";
+        plan.rows[1].markers[dup::markerKey("Rep")] = "P102";
+    }
+    const auto r = dup::apply(p, v, plan);
+    const Id copyId = r.created.empty() ? kNoId : r.created.front();
+    const Object* copy = v.object(copyId);
+    check(copy && copy->text("equipment") == "$Pompes[2]$" && copy->text("label") == "Pompe $P102$",
+          "liaison : la copie lit $Pompes[2]$, son libelle $P102$ (" + (copy ? copy->text("equipment") + " / " + copy->text("label") : std::string("?")) + ")");
+    p.views = {v};
+    p.config.startView = v.id;
+    {
+        const auto issues = generate(p, [](std::string_view) { return false; });
+        bool blocked = false;
+        for (const auto& i : issues) blocked = blocked || i.severity == Issue::Severity::Error;
+        check(!blocked, "liaison : Generer ne bloque pas sur un equipement repere");
+    }
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    rt.environment().write("Pompes[1].Marche", sim::Value::boolean(true));
+    rt.environment().write("Pompes[2].Defaut", sim::Value::boolean(true));
+    rt.tick(0.1);
+    const View* shown = rt.composedView(v.id);
+    LiveView live;
+    if (shown) live.bind(*shown);
+    const View values = live.evaluate(rt.environment());
+    const Object* a = values.object(pump);
+    const Object* c = values.object(copyId);
+    check(a && a->text("value") == "TRUE" && a->text("fault") == "FALSE" && a->text("label") == "Pompe Rep",
+          "liaison : l'original lit Pompes[1] (en marche), son libelle sans ses $ (" + (a ? a->text("label") : std::string("?")) + ")");
+    check(c && c->text("value") == "FALSE" && c->text("fault") == "TRUE" && c->text("label") == "Pompe P102",
+          "liaison : la copie lit Pompes[2] (en defaut), son libelle Pompe P102");
+    rt.stop(1.0);
+}
 } // namespace
 
 int main() {
@@ -1454,6 +1514,7 @@ int main() {
     bibliothequeDifferentielle(true);
     chaqueProprieteParSonRole();       // 1.12.6 (lot C)
     repereEtJoker1127();               // 1.12.7 (lot E) : $Cuves$[*].Niveau
+    liaisonEquipement11211();          // 1.12.11 (lot G) : la liaison Equipement, un chemin a reperes
     popupsEtActions();
     dupliquerDansLeSymbole();
     popupAvecSymboleEtRedefinition();

@@ -29,6 +29,8 @@
 #include "HmiCharts.hpp"
 #include "HmiControls.hpp"
 #include "HmiRoles.hpp"         // 1.12.6 (lot B) : le role de chaque propriete
+#include "HmiEquipmentLink.hpp"  // 1.12.11 (lot G) : la liaison Equipement, le mode Etat
+#include "HmiSymbolArgCheck.hpp" // 1.12.11 (lot G) : les arguments des instances, comme ceux des popups
 #include "HmiTypeRegistry.hpp"   // 1.12.5 : le type du total d'un compteur horaire
 #include "HmiExport.hpp"
 #include "HmiProduction.hpp"
@@ -4087,6 +4089,8 @@ std::vector<Issue> generateWith(const Project& p, const NameExists& plcHasName, 
     checkLot9(p, plcHasName, out);
     checkPublicVars(p, out);
     checkSymbols(p, plcHasName, out);   // lot 10
+    eqlink::check(p, out);              // 1.12.11 (lot G) : la liaison Equipement, le mode Etat
+    symargs::check(p, options.plcPaths, out);   // 1.12.11 (lot G) : les arguments des instances de symbole
     checkObjectAlarms(p, plcHasName, out);   // 1.9 : les alarmes des objets
     checkAlarmGroupLinks(p, out);           // 1.10.2 (AL) : les groupes d'alarmes et les liens
     checkLot11(p, plcHasName, out);     // lot 11

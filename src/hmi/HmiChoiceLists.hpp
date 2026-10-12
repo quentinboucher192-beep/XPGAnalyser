@@ -103,6 +103,51 @@ inline constexpr std::string_view kValve3Codes[] = {"0", "1", "2", "3"};
     return std::string(label);
 }
 
+// ---- 1.12.11 (lot G) : la bouteille de gaz - la couleur de son ogive (norme EN 1089-3) -----------
+//  Une couleur par gaz courant, et par propriete pour les autres (inerte, oxydant, toxique) ; le RAL de
+//  la norme et son equivalent #RRGGBB (approche : l'ecran n'est pas un nuancier). L'hydrogene prend le
+//  rouge des gaz inflammables (la norme ne lui en donne pas d'autre) ; l'air, blanc et noir en quartiers,
+//  se dessine d'un blanc grise. Choisi dans l'inspecteur, le gaz ecrit sa couleur (gasColor) : une
+//  couleur tapee reste, et un objet existant garde la sienne.
+struct Gas {
+    std::string_view label, color, ral;
+};
+inline constexpr Gas kGases[] = {
+    {"Oxyg\xC3\xA8ne (blanc)", "#F1ECE1", "RAL 9010"},
+    {"Azote (noir)", "#0A0A0A", "RAL 9005"},
+    {"Argon (vert fonc\xC3\xA9)", "#28713E", "RAL 6001"},
+    {"Dioxyde de carbone (gris)", "#7A7B7A", "RAL 7037"},
+    {"H\xC3\xA9lium (brun)", "#6F4F28", "RAL 8008"},
+    {"Ac\xC3\xA9tyl\xC3\xA8ne (marron)", "#642424", "RAL 3009"},
+    {"Protoxyde d'azote (bleu)", "#13447C", "RAL 5010"},
+    {"Air (blanc et noir)", "#D9D9D6", "RAL 9010 / 9005"},
+    {"Hydrog\xC3\xA8ne (rouge, inflammable)", "#A72920", "RAL 3000"},
+    {"Gaz inerte (vert vif)", "#57A639", "RAL 6018"},
+    {"Gaz oxydant (bleu clair)", "#3B83BD", "RAL 5012"},
+    {"Gaz toxique ou corrosif (jaune)", "#F3E03B", "RAL 1018"},
+};
+// Le gaz d'une couleur (sans casse) ; vide : une autre couleur (tapee, ou d'un projet d'avant).
+[[nodiscard]] inline std::string_view gasOfColor(std::string_view color) noexcept {
+    while (!color.empty() && (color.front() == ' ' || color.front() == '\t')) color.remove_prefix(1);
+    while (!color.empty() && (color.back() == ' ' || color.back() == '\t')) color.remove_suffix(1);
+    for (const auto& g : kGases) {
+        if (g.color.size() != color.size()) continue;
+        bool same = true;
+        for (std::size_t i = 0; i < color.size() && same; ++i) {
+            const char a = g.color[i], b = color[i];
+            same = (a >= 'a' && a <= 'z' ? a - 32 : a) == (b >= 'a' && b <= 'z' ? b - 32 : b);
+        }
+        if (same) return g.label;
+    }
+    return {};
+}
+// La couleur d'un gaz de la liste ; le texte tel quel sinon (une couleur tapee).
+[[nodiscard]] inline std::string gasColorOf(std::string_view label) {
+    for (const auto& g : kGases)
+        if (g.label == label) return std::string(g.color);
+    return std::string(label);
+}
+
 // ---- les colonnes d'une source de tableau (lot D, § 2.4) ----------------------------------
 //  "Nom; Debit = Debit (m3/h) | 0.0; Etat" : les membres montres, dans l'ordre ; apres `=` le titre,
 //  apres `|` le format (0.0, 0.00). Vide : toutes les colonnes de la source, sous leur nom.

@@ -37,7 +37,10 @@
 //    langue, gestion   gestion des utilisateurs, les zones (groupes d'alarmes, ceux des objets
 //    des utilisateurs, compris) ; ce qui a ete tape et n'est pas propose (un repere $Zone$)
 //    resume par zone   reste, coche.
-//  Un objet qui ne peut rien contenir (une vanne, un bouton) : pas d'onglet.
+//    Pompe, moteur,    (1.12.11, lot G) le MODE ETAT : une ligne par valeur (quand la valeur
+//    vanne...          vaut, l'aspect - arret, marche, defaut, maintenance -, sa couleur, anime) ;
+//                      « Depuis une enumeration » le remplit (ETAT_MOTEUR, une du projet).
+//  Un objet qui ne peut rien contenir (un bouton, une cuve) : pas d'onglet.
 //
 //  Tout passe par des commandes de vue : Ctrl+Z reprend une ligne ajoutee, une
 //  case modifiee, une plume retiree.
@@ -69,8 +72,9 @@ public:
     // d'une liste ; Bands - les zones de couleur d'un bargraphe, d'un cadran ; Schedule - les plages
     // d'un programmateur ; Checks - les cases a cocher (langues, boutons, zones d'un resume).
     // SourceColumns - un tableau dont les lignes viennent d'une source (Lignes depuis) : ses colonnes.
+    // 1.12.11 (lot G) : Aspects - le mode Etat d'un symbole du synoptique (valeur -> aspect).
     enum class Mode : std::uint8_t { None, Table, Trend, AnimatedImage, RecipeManager, Zones, Tabs, NavItems, Members, States,
-                                     Choices, Bands, Schedule, Checks, SourceColumns };
+                                     Choices, Bands, Schedule, Checks, SourceColumns, Aspects };
 
     HmiContentPanel(std::string id, hmi::DocumentPtr doc, hmi::Id view, Apply apply);
 
@@ -99,6 +103,9 @@ public:
     // "shown" (TRUE/FALSE), "title", "format".
     // 1.12.7 (lot E) : multi-etats, chronogramme, image animee "fromEnum" (index -1, le nom
     // d'une enumeration du projet) : un etat par valeur.
+    // 1.12.11 (lot G) : mode Etat d'un symbole "match", "look" (Arret, Marche, Defaut, Maintenance),
+    // "color", "animated" ; index -1 : "fromEnum" (ETAT_MOTEUR, une enumeration ou une variable de ce
+    // type), "enabled" (TRUE : ETAT_MOTEUR ; FALSE : la Valeur se relit vrai / faux).
     bool setField(int index, const std::string& field, const std::string& value);
 
     [[nodiscard]] HmiToolStrip&     tools() noexcept { return *tools_; }

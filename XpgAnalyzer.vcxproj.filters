@@ -1108,6 +1108,9 @@
     <ClCompile Include="src\app\hmi\HmiEnumPanes.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiEquipmentLinkPane.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\hmi\HmiExprPage.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
@@ -1264,6 +1267,9 @@
     <ClCompile Include="src\hmi\HmiEnums.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\hmi\HmiEquipmentLink.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\hmi\HmiExprBench.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
@@ -1346,6 +1352,9 @@
       <Filter>hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\hmi\HmiStandalone.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiSymbolArgCheck.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\hmi\HmiTutorialDeduce.cpp">
@@ -2305,6 +2314,9 @@
     <ClInclude Include="src\app\hmi\HmiEnumPanes.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiEquipmentLinkPane.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
     <ClInclude Include="src\app\hmi\HmiExprPage.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
@@ -2476,6 +2488,9 @@
     <ClInclude Include="src\hmi\HmiEnums.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
+    <ClInclude Include="src\hmi\HmiEquipmentLink.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
     <ClInclude Include="src\hmi\HmiExprBench.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
@@ -2543,6 +2558,9 @@
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiStandalone.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiSymbolArgCheck.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiTutorialDeduce.hpp">

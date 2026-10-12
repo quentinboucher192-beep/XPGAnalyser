@@ -18,6 +18,7 @@
 #include "../../hmi/HmiControls.hpp"
 #include "../../hmi/HmiEnums.hpp"     // 1.12.7 (lot E) : les etats, les onglets depuis une enumeration
 #include "../../hmi/HmiSources.hpp"   // 1.12.7 (lot E) : le joker [*], .* et /* dans Contenu
+#include "../../hmi/HmiEquipmentLink.hpp"   // 1.12.11 (lot G) : le mode Etat d'un symbole du synoptique
 #include "../../hmi/HmiWidgets.hpp"
 #include "../../ui/Theme.hpp"
 #include "../../ui/widgets/ExprField.hpp"   // 1.10 (chantier K) : les champs a expression, partout pareils
@@ -592,6 +593,25 @@ const hmi::HmiType* enumOf(const hmi::Project& p, std::string_view chosen, std::
     return nullptr;
 }
 
+// ------------------------------- 1.12.11 (lot G) : le mode Etat d'un symbole ---
+std::vector<hmi::eqlink::Aspect> readAspects(const hmi::Object& o) { return hmi::eqlink::parseAspects(o.text(hmi::eqlink::kAspectsKey)); }
+void writeAspects(hmi::Object& o, const std::vector<hmi::eqlink::Aspect>& a) {
+    if (a.empty()) std::erase_if(o.props, [](const hmi::Prop& p) { return p.key == hmi::eqlink::kAspectsKey; });   // la Valeur se relit vrai / faux
+    else o.set(std::string(hmi::eqlink::kAspectsKey), hmi::eqlink::formatAspects(a));
+}
+std::string aspectDetail(const hmi::eqlink::Aspect& a) {
+    std::string d(hmi::eqlink::lookLabel(a.look));
+    if (!a.color.empty()) d += "  \xC2\xB7  " + a.color;
+    if (a.animated) d += "  \xC2\xB7  anim\xC3\xA9";
+    return d;
+}
+// Ce que propose « Depuis une enumeration » : ETAT_MOTEUR (la native), puis celles du projet et leurs variables.
+std::vector<std::string> aspectSources(const hmi::Project& p) {
+    auto out = enumSources(p, false);
+    out.insert(out.begin() + 1, "ETAT_MOTEUR");
+    return out;
+}
+
 } // namespace
 
 HmiContentPanel::HmiContentPanel(std::string id, hmi::DocumentPtr doc, Id view, Apply apply)
@@ -609,7 +629,8 @@ HmiContentPanel::HmiContentPanel(std::string id, hmi::DocumentPtr doc, Id view, 
     const auto editable = [this] {
         const auto m = mode();
         return m == Mode::Table || m == Mode::Trend || m == Mode::AnimatedImage || m == Mode::Zones || m == Mode::Tabs || m == Mode::NavItems
-            || m == Mode::States || m == Mode::Choices || m == Mode::Bands || m == Mode::Schedule || m == Mode::SourceColumns;   // 1.12.7 (lot D)
+            || m == Mode::States || m == Mode::Choices || m == Mode::Bands || m == Mode::Schedule || m == Mode::SourceColumns   // 1.12.7 (lot D)
+            || m == Mode::Aspects;                                                                                          // 1.12.11 (lot G)
     };
     tools_->setEnabledWhen(AAdd, editable);
     tools_->setEnabledWhen(ARemove, [this, editable] { return editable() && selectedIndex() >= 0; });
@@ -703,7 +724,8 @@ HmiContentPanel::Mode HmiContentPanel::mode() const {
         case hmi::Kind::Group: case hmi::Kind::Container: case hmi::Kind::Frame: case hmi::Kind::ScrollPanel:
         case hmi::Kind::CollapsiblePanel:
             return Mode::Members;
-        default:                       return Mode::None;
+        // 1.12.11 (lot G) : le mode Etat d'une pompe, d'un moteur, d'une vanne... (pas d'un contenant).
+        default:                       return hmi::eqlink::kindHasAspects(o->kind) ? Mode::Aspects : Mode::None;
     }
 }
 
@@ -725,6 +747,7 @@ std::size_t HmiContentPanel::count() const {
         case Mode::Schedule: return readSlots(*o).size();
         case Mode::Checks:   return readChecks(doc_->project, *o).rows().size();
         case Mode::SourceColumns: return readSourceCols(doc_->project, *o).rows().size();
+        case Mode::Aspects:  return readAspects(*o).size();             // 1.12.11 (lot G)
         case Mode::Tabs:     return hmi::tabLabels(*o).size();
         case Mode::NavItems: return hmi::navItems(&doc_->project, *o).size();
         case Mode::Members: {
@@ -918,6 +941,13 @@ void HmiContentPanel::refresh() {
                 }
                 break;
             }
+            // 1.12.11 (lot G) : le mode Etat - une ligne par valeur.
+            case Mode::Aspects: {
+                headers = {"#", "Quand la valeur vaut", "Aspect  \xC2\xB7  couleur"};
+                icon = ui::Icon::Info;
+                for (const auto& a : readAspects(*o)) rows.push_back({a.match == "*" ? std::string("sinon") : a.match, aspectDetail(a)});
+                break;
+            }
             case Mode::Members: {
                 headers = {"#", "Objet", "Type"};
                 icon = ui::Icon::Folder;
@@ -975,6 +1005,18 @@ bool HmiContentPanel::changeInView(const std::string& label, const std::function
 
 bool HmiContentPanel::addItem() {
     switch (mode()) {
+        case Mode::Aspects:   // 1.12.11 (lot G) : une valeur de plus (le plus grand nombre + 1), a l'arret
+            return change("Ajouter un \xC3\xA9tat", [](hmi::Object& o) {
+                auto a = readAspects(o);
+                double top = -1;
+                for (const auto& x : a) {
+                    double n = 0;
+                    if (hmi::parseNumber(x.match, n)) top = std::max(top, n);
+                }
+                a.push_back({hmi::formatNumber(std::floor(top) + 1), hmi::eqlink::Look::Off, "", false});
+                writeAspects(o, a);
+                return true;
+            });
         case Mode::States:
             return change("Ajouter un \xC3\xA9tat", [](hmi::Object& o) {
                 auto t = readStates(o);
@@ -1083,6 +1125,15 @@ bool HmiContentPanel::removeItem(int index) {
     const auto i = static_cast<std::size_t>(index);
     bool ok = false;
     switch (mode()) {
+        case Mode::Aspects:   // 1.12.11 (lot G)
+            ok = change("Retirer un \xC3\xA9tat", [i](hmi::Object& o) {
+                auto a = readAspects(o);
+                if (i >= a.size()) return false;
+                a.erase(a.begin() + static_cast<std::ptrdiff_t>(i));
+                writeAspects(o, a);
+                return true;
+            });
+            break;
         case Mode::States:
             ok = change("Retirer un \xC3\xA9tat", [i](hmi::Object& o) {
                 auto t = readStates(o);
@@ -1203,6 +1254,14 @@ bool HmiContentPanel::moveItem(int index, int delta) {
     if (index < 0 || to < 0 || index >= static_cast<int>(count()) || to >= static_cast<int>(count())) return false;
     const auto a = static_cast<std::size_t>(index), b = static_cast<std::size_t>(to);
     switch (mode()) {
+        case Mode::Aspects:   // 1.12.11 (lot G) : la premiere ligne qui convient gagne
+            return change("Ordonner les \xC3\xA9tats", [a, b](hmi::Object& o) {
+                auto list = readAspects(o);
+                if (std::max(a, b) >= list.size()) return false;
+                std::swap(list[a], list[b]);
+                writeAspects(o, list);
+                return true;
+            });
         case Mode::States:
             return change("Ordonner les \xC3\xA9tats", [a, b](hmi::Object& o) {
                 auto t = readStates(o);
@@ -1386,6 +1445,37 @@ bool HmiContentPanel::setField(int index, const std::string& field, const std::s
         });
     }
     // 1.12.7 (lot E, § 2.3) : « depuis l'enumeration » - un etat, une image, un onglet par valeur.
+    // 1.12.11 (lot G) : le mode Etat d'un symbole - ETAT_MOTEUR, une enumeration du projet (une variable de ce
+    // type devient la Valeur), ou rien (la Valeur se relit vrai / faux).
+    if ((field == "fromEnum" || field == "enabled") && mode() == Mode::Aspects) {
+        std::vector<hmi::eqlink::Aspect> list;
+        std::string variable, label;
+        if (field == "enabled") {
+            if (hmi::parseBool(value, true)) {
+                if (const auto* o = current(); o && !readAspects(*o).empty()) return false;
+                list = hmi::eqlink::motorStateAspects();
+                label = "Mode \xC3\xA9tat (ETAT_MOTEUR)";
+            } else {
+                label = "Sans mode \xC3\xA9tat";
+            }
+        } else if (trimmed(value) == "ETAT_MOTEUR") {
+            list = hmi::eqlink::motorStateAspects();
+            label = "\xC3\x89tats depuis ETAT_MOTEUR";
+        } else {
+            const auto* e = enumOf(doc_->project, value, &variable);
+            if (!e || e->values.empty()) return false;
+            list = hmi::eqlink::aspectsFromEnum(*e);
+            label = "\xC3\x89tats depuis " + e->name;
+        }
+        return change(label, [list, variable](hmi::Object& o) {
+            const bool before = !readAspects(o).empty();
+            if (list.empty() && !before) return false;
+            writeAspects(o, list);
+            // La variable choisie devient la Valeur, si rien n'y est relie a la main.
+            if (!variable.empty() && !hmi::eqlink::setByHand(o, "value")) o.setExpr("value", variable);
+            return true;
+        });
+    }
     if (field == "fromEnum") {
         std::string variable;
         const auto* e = enumOf(doc_->project, value, &variable);
@@ -1789,6 +1879,25 @@ bool HmiContentPanel::setField(int index, const std::string& field, const std::s
                     return toggleCheck(o, all, item, false);
                 }
                 return toggleCheck(o, c, item, on);
+            });
+        }
+        case Mode::Aspects: {        // 1.12.11 (lot G) : une ligne du mode Etat
+            std::string why;
+            if ((field == "match" || field == "color") && !hmi::stateFieldFits(value, &why)) return false;
+            const std::string v = trimmed(value);
+            if (field == "match" && v.empty()) return false;
+            if (field == "look" && !hmi::eqlink::lookFrom(v)) return false;
+            return change("R\xC3\xA9gler un \xC3\xA9tat", [i, field, v](hmi::Object& o) {
+                auto list = readAspects(o);
+                if (i >= list.size()) return false;
+                auto& a = list[i];
+                if (field == "match") a.match = v;
+                else if (field == "look") a.look = *hmi::eqlink::lookFrom(v);
+                else if (field == "color") a.color = v;
+                else if (field == "animated") a.animated = hmi::parseBool(v, false);
+                else return false;
+                writeAspects(o, list);
+                return true;
             });
         }
         case Mode::Members:          // 1.10.4 (K3) : en lecture
@@ -2372,6 +2481,43 @@ void HmiContentPanel::rebuildGrid() {
             PG::Category info;
             info.name = "Contenu";
             info.properties.push_back(readOnly("Objets", std::to_string(members.size()), how));
+            cats.push_back(std::move(info));
+            break;
+        }
+        // 1.12.11 (lot G) : le mode Etat d'un symbole - une ligne par valeur, son aspect.
+        case Mode::Aspects: {
+            const auto list = readAspects(*o);
+            if (index >= 0 && i < list.size()) {
+                const auto& a = list[i];
+                PG::Category row;
+                row.name = "\xC3\x89tat " + std::to_string(index + 1);
+                row.properties.push_back(editable("Quand la valeur vaut", a.match, PG::ValueType::Text, index, "match",
+                                                  "Un nombre (2), une plage (10..20), le nom d'une valeur d'\xC3\xA9num\xC3\xA9ration (Defaut), "
+                                                  "ou * (sinon). La premi\xC3\xA8re ligne qui convient gagne."));
+                std::vector<std::string> looks;
+                for (const auto l : {hmi::eqlink::Look::Off, hmi::eqlink::Look::On, hmi::eqlink::Look::Fault, hmi::eqlink::Look::Maintenance})
+                    looks.emplace_back(hmi::eqlink::lookLabel(l));
+                row.properties.push_back(editable("Aspect", std::string(hmi::eqlink::lookLabel(a.look)), PG::ValueType::Enum, index, "look",
+                                                  "Arr\xC3\xAAt, Marche (il tourne, il coule), D\xC3\xA9" "faut (il clignote), Maintenance.", looks));
+                row.properties.push_back(editable("Couleur", a.color, PG::ValueType::Color, index, "color",
+                                                  "Vide : celle de l'objet (Couleur allum\xC3\xA9, \xC3\xA9teint, de d\xC3\xA9" "faut) ; "
+                                                  "la maintenance : bleue (#4F8FD9)."));
+                row.properties.push_back(editable("Anim\xC3\xA9", a.animated ? "TRUE" : "FALSE", PG::ValueType::Boolean, index, "animated",
+                                                  "Ce qui tourne tourne, ce qui coule coule (si l'objet anime en marche)."));
+                cats.push_back(std::move(row));
+            }
+            PG::Category info;
+            info.name = "Mode \xC3\x89tat";
+            info.properties.push_back(editable("Mode \xC3\x89tat", list.empty() ? "FALSE" : "TRUE", PG::ValueType::Boolean, -1, "enabled",
+                                               "Coch\xC3\xA9 : la Valeur (un entier, une \xC3\xA9num\xC3\xA9ration) choisit un aspect par sa "
+                                               "valeur - un moteur en D\xC3\xA9" "faut (2) se dessine en d\xC3\xA9" "faut. D\xC3\xA9" "coch\xC3\xA9 : vraie, "
+                                               "elle est en marche ; fausse, \xC3\xA0 l'arr\xC3\xAAt."));
+            info.properties.push_back(editable("Depuis une \xC3\xA9num\xC3\xA9ration", "", PG::ValueType::Enum, -1, "fromEnum",
+                                               "ETAT_MOTEUR (0 arr\xC3\xAAt, 1 marche, 2 d\xC3\xA9" "faut, 3 maintenance), une \xC3\xA9num\xC3\xA9ration du "
+                                               "projet (ses valeurs par leur nom : ARRET, STOP ; MARCHE, RUN, AUTO ; DEFAUT, FAULT, ALARME ; "
+                                               "MAINT... ; le reste \xC3\xA0 l'arr\xC3\xAAt), ou une variable de ce type (elle devient la Valeur). "
+                                               "Remplace les lignes (Ctrl+Z les rend).",
+                                               aspectSources(doc_->project)));
             cats.push_back(std::move(info));
             break;
         }

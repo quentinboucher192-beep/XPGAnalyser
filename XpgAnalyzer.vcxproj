@@ -491,6 +491,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\hmi\HmiDeclGrid.cpp" />
     <ClCompile Include="src\app\hmi\HmiDuplicateDialog.cpp" />
     <ClCompile Include="src\app\hmi\HmiEnumPanes.cpp" />
+    <ClCompile Include="src\app\hmi\HmiEquipmentLinkPane.cpp" />
     <ClCompile Include="src\app\hmi\HmiExprPage.cpp" />
     <ClCompile Include="src\app\hmi\HmiExprPageView.cpp" />
     <ClCompile Include="src\app\hmi\HmiNativesCards.cpp" />
@@ -543,6 +544,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\hmi\HmiDeclEdit.cpp" />
     <ClCompile Include="src\hmi\HmiDuplicate.cpp" />
     <ClCompile Include="src\hmi\HmiEnums.cpp" />
+    <ClCompile Include="src\hmi\HmiEquipmentLink.cpp" />
     <ClCompile Include="src\hmi\HmiExprBench.cpp" />
     <ClCompile Include="src\hmi\HmiExprGuide.cpp" />
     <ClCompile Include="src\hmi\HmiLiveGeometry.cpp" />
@@ -571,6 +573,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\hmi\HmiSimData.cpp" />
     <ClCompile Include="src\hmi\HmiSources.cpp" />
     <ClCompile Include="src\hmi\HmiStandalone.cpp" />
+    <ClCompile Include="src\hmi\HmiSymbolArgCheck.cpp" />
     <ClCompile Include="src\hmi\HmiTutorialDeduce.cpp" />
     <ClCompile Include="src\hmi\HmiTypeForms.cpp" />
     <ClCompile Include="src\hmi\HmiTypeRegistry.cpp" />
@@ -896,6 +899,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\hmi\HmiDeclGrid.hpp" />
     <ClInclude Include="src\app\hmi\HmiDuplicateDialog.hpp" />
     <ClInclude Include="src\app\hmi\HmiEnumPanes.hpp" />
+    <ClInclude Include="src\app\hmi\HmiEquipmentLinkPane.hpp" />
     <ClInclude Include="src\app\hmi\HmiExprPage.hpp" />
     <ClInclude Include="src\app\hmi\HmiExprPageView.hpp" />
     <ClInclude Include="src\app\hmi\HmiLive.hpp" />
@@ -953,6 +957,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\hmi\HmiDeclEdit.hpp" />
     <ClInclude Include="src\hmi\HmiDuplicate.hpp" />
     <ClInclude Include="src\hmi\HmiEnums.hpp" />
+    <ClInclude Include="src\hmi\HmiEquipmentLink.hpp" />
     <ClInclude Include="src\hmi\HmiExprBench.hpp" />
     <ClInclude Include="src\hmi\HmiExprGuide.hpp" />
     <ClInclude Include="src\hmi\HmiKeys.hpp" />
@@ -976,6 +981,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\hmi\HmiSimData.hpp" />
     <ClInclude Include="src\hmi\HmiSources.hpp" />
     <ClInclude Include="src\hmi\HmiStandalone.hpp" />
+    <ClInclude Include="src\hmi\HmiSymbolArgCheck.hpp" />
     <ClInclude Include="src\hmi\HmiTutorialDeduce.hpp" />
     <ClInclude Include="src\hmi\HmiTypeForms.hpp" />
     <ClInclude Include="src\hmi\HmiTypeRegistry.hpp" />

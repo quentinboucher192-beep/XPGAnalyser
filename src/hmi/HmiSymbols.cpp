@@ -16,6 +16,8 @@
 #include "HmiSources.hpp"       // 1.12.7 (lot E) : le joker [*], le dossier /*
 #include "HmiTemplates.hpp"
 #include "HmiWidgets.hpp"
+#include "HmiObjectAlarms.hpp"   // 1.12.11 (lot G) : une liaison du synoptique tapee sans =
+#include "HmiPopupParams.hpp"    // 1.12.11 (lot G) : le type d'un chemin (Creer un symbole)
 
 #include <algorithm>
 #include <cctype>
@@ -910,7 +912,17 @@ void rewriteNames(Object& o, const std::function<std::string(std::string_view, b
     };
     for (auto& p : o.props) {
         if (!p.expr.empty()) p.expr = f(p.expr, false);
+        // 1.12.11 (lot G) : la liaison Equipement (un chemin : P1, Pompes[2], le parametre Pompe), et le Defaut ou la
+        // Valeur d'un symbole du synoptique tapes sans = (P1.Defaut) - des formules, comme le moteur les lit.
+        if (p.expr.empty() && (p.key == "equipment" || ((p.key == "fault" || p.key == "value") && synopticLinkedKey(o, p.key)))) {
+            expr(p.value);
+            continue;
+        }
         if (p.key == "text") {
+            tpl(p.value);
+        } else if (p.key != "display" && p.expr.empty() && displayedTextKey(p.key)) {
+            // 1.12.11 (lot G, D6) : chaque texte montre a trous - le libelle d'un symbole ({Nom}), un titre, le texte
+            // d'un etat, l'unite : un parametre du symbole s'y remplace, un renommage le suit (avant : le Texte seul).
             tpl(p.value);
         } else if (p.key == "variable" || p.key == "output" || p.key == "state" || p.key == "lamp" || p.key == "condition"
                    || p.key == "auth"
@@ -1101,6 +1113,10 @@ Expansion expandInstance(const Project& p, const Object& inst, int depth, std::s
         addOwnedPopupArguments(p, *sym, q, c.actions);          // 1.11.10 : ses popups recoivent l'instance
         if (!args.empty() || calls) rewriteNames(c, relink);
         if (auto* tp = c.find("text")) tp->value = resolveLiteralHoles(tp->value);
+        // 1.12.11 (lot G, D6) : chaque texte montre ({Nom} recu en 'P1' : P1), pas seulement le Texte.
+        for (auto& tp : c.props)
+            if (tp.key != "text" && tp.key != "display" && tp.expr.empty() && displayedTextKey(tp.key) && tp.value.find('{') != std::string::npos)
+                tp.value = resolveLiteralHoles(tp.value);
         // Lier un tableau vise un objet par son nom : celui de l'instance.
         for (auto& a : c.actions)
             if (a.operation == Operation::BindTable && siblings.count(a.target)) a.target = inst.name + "." + a.target;
@@ -1243,6 +1259,9 @@ bool createSymbol(Project& p, Id viewId, const std::vector<Id>& selection, const
         ViewParam prm;
         prm.name = n;
         prm.defaultValue = def;
+        // 1.12.11 (lot G) : le type du chemin donne (Armoires[0] : T_Armoire ; Niveaux[2] : REAL) - avant, ANY.
+        // Un chemin de type inconnu (de l'automate, un calcul) : ANY, comme avant.
+        if (isVariablePath(trimmedCopy(markers::strip(def)))) prm.type = params::expressionType(p, host, def);
         declared.push_back(std::move(prm));
     }
     std::set<Id> taken;

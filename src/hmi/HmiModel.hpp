@@ -1787,6 +1787,16 @@ struct ModbusReadSet {
     bool operator==(const ModbusReadSet&) const = default;
 };
 
+// 1.12.11 (lot G) : LA LIAISON EQUIPEMENT D'UN TYPE DE STRUCTURE - le membre que lit un role des
+// symboles du synoptique (T_Pompe : marche <- EnMarche). Seulement ce que l'utilisateur a choisi :
+// les autres roles suivent les noms proposes (HmiEquipmentLink.hpp). `member` vide : aucun membre.
+struct EquipmentLink {
+    std::string type;     // T_Pompe
+    std::string role;     // marche, mesure, position, defaut, ouverture, mouvement, mode, libelle
+    std::string member;   // EnMarche ; vide : aucun
+    bool operator==(const EquipmentLink&) const = default;
+};
+
 struct Project {
     Config            config;
     std::vector<View> views;
@@ -1816,6 +1826,9 @@ struct Project {
     // Lot 21 : les dossiers vides des listes (cle de la liste : "vues", "scripts"...,
     // hmi::fold) - un dossier qui a des elements existe par eux.
     std::map<std::string, std::vector<std::string>> listFolders{};
+    // 1.12.11 (lot G) : la liaison Equipement des symboles du synoptique, par type de structure -
+    // le membre choisi pour un role (HmiEquipmentLink.hpp) ; vide : les noms proposes.
+    std::vector<EquipmentLink> equipmentLinks{};
     Id                nextId{1};
 
     [[nodiscard]] Id           allocate() noexcept { return nextId++; }

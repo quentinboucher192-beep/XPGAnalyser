@@ -890,6 +890,9 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
         for (const auto& o : ty.operators) index += serializeOperator("operateur_type", o);   // 1.10
     }
     for (const auto& f : p.programs.folders) index += "dossier_variables" + field("nom", f) + "\n";
+    // 1.12.11 (lot G) : la liaison Equipement choisie par type de structure (aucune : rien d'ecrit).
+    for (const auto& l : p.equipmentLinks)
+        index += "liaison_equipement" + field("type", l.type) + field("role", l.role) + field("membre", l.member) + "\n";
     // Lot 21 (format 19) : les dossiers vides des autres listes (vues, scripts, styles...).
     for (const auto& [list, folders] : p.listFolders)
         for (const auto& f : folders) index += "dossier_liste" + field("liste", list) + field("nom", f) + "\n";
@@ -1473,6 +1476,9 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
         } else if (r.word == "dossier_variables") {
             const std::string f = toStr(r.get("nom"));
             if (!f.empty()) p.programs.folders.push_back(f);
+        } else if (r.word == "liaison_equipement") {                  // 1.12.11 (lot G)
+            EquipmentLink l{toStr(r.get("type")), toStr(r.get("role")), toStr(r.get("membre"))};
+            if (!l.type.empty() && !l.role.empty()) p.equipmentLinks.push_back(std::move(l));
         } else if (r.word == "dossier_liste") {                     // lot 21
             const std::string list = toStr(r.get("liste")), f = toStr(r.get("nom"));
             if (!list.empty() && !f.empty()) p.listFolders[list].push_back(f);

@@ -18,6 +18,7 @@
 #include "../../ui/Theme.hpp"
 #include "../../hmi/HmiTypeRegistry.hpp"   // 1.11.19 (refonte, lot 6) : les types, un seul catalogue
 #include "HmiTypePicker.hpp"                // 1.11.19 (refonte, lot 6) : "Choisir un type..."
+#include "../../hmi/HmiEquipmentLink.hpp"   // 1.12.11 (lot G) : la liaison Equipement suit le type et ses membres
 
 #include <algorithm>
 #include <iterator>
@@ -3181,7 +3182,11 @@ bool HmiTypesPane::change(Id id, std::string label, const std::function<bool(hmi
         if (!ty::validMemberType(trial, m.type, why, tt->name)) return false;
     bool ok = true;
     apply_(hmi::changeProject(doc_, std::move(label), [&](hmi::Project& p) {
-        if (auto* x = p.hmiType(id)) ok = edit(*x, nullptr);
+        if (auto* x = p.hmiType(id)) {
+            const hmi::HmiType before = *x;
+            ok = edit(*x, nullptr);
+            if (ok) (void)hmi::eqlink::followMembers(p, before, *x);   // 1.12.11 (lot G) : un membre renomme
+        }
     }));
     return ok;
 }
@@ -3257,6 +3262,11 @@ bool HmiTypesPane::renameType(Id id, const std::string& raw, std::string* why) {
         hmi::forEachDeclarations(p, [&](std::vector<hmi::Declaration>& list) { for (auto& d : list) rename(d.type); });
         (void)hmi::renameTypeInOperators(p, before, name);   // 1.10 (chantier S2) : les operateurs suivent
         (void)hmi::renameEnumType(p, before, name);          // 1.10 (chantier E) : T_ANCIEN#x -> T_NOUVEAU#x
+        (void)hmi::eqlink::renameType(p, before, name);      // 1.12.11 (lot G) : sa liaison Equipement
+        // 1.12.11 (lot G) : les parametres des popups et des symboles de ce type (Moteur : T_Moteur) - leur
+        // liaison Equipement en depend (avant : le parametre gardait l'ancien nom, un type inconnu).
+        for (auto& vw : p.views)
+            for (auto& prm : vw.params) rename(prm.type);
     }));
     say("Type renomm\xC3\xA9 : " + before + " \xE2\x86\x92 " + name + " (les variables et les membres qui l'emploient suivent)");
     return true;

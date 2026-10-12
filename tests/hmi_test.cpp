@@ -87,6 +87,7 @@
 #include "../src/hmi/HmiTypes.hpp"    // lot 16
 #include "../src/hmi/HmiTypeRegistry.hpp"   // 1.12.5 (D16) : simTypeOf
 #include "../src/hmi/HmiRoles.hpp"          // 1.12.6 (lots B et C) : le role de chaque propriete
+#include "../src/hmi/HmiEquipmentLink.hpp"  // 1.12.11 (lot G) : la liaison Equipement, le mode Etat
 #include "../src/hmi/HmiPackage.hpp"  // lot 20
 #include "../src/hmi/HmiSymbols.hpp"
 #include "../src/hmi/HmiRetain.hpp"   // 1.12.3 : l'etat des structures du poste
@@ -24728,10 +24729,656 @@ void enregistre1127() {
           "un objet qui ne s'en sert pas ne les porte pas (le fichier ne change pas)");
 }
 
+// ---- 1.12.11 (lot G) : la liaison Equipement, le mode Etat, les libelles a trous des symboles ----
+namespace lotg {
+// Un projet : T_Pompe (Marche, Defaut, Mode, Nom), T_Etat_G (Arret, Marche, Defaut, Maintenance), P1, P2 : T_Pompe,
+// M1 : T_Moteur_G (Etat : T_Etat_G), M2 : T_Moteur_I (Etat : INT) ; une vue Vue_G.
+Project projet() {
+    Project p;
+    View v = makeView(p, "Vue_G");
+    HmiType mode;
+    mode.id = p.allocate();
+    mode.name = "T_Mode_G";
+    mode.kind = HmiTypeKind::Enumeration;
+    mode.values = {{"Auto", 0, "Automatique", ""}, {"Manu", 1, "Manuel", ""}};
+    p.programs.types.push_back(mode);
+    HmiType etat;
+    etat.id = p.allocate();
+    etat.name = "T_Etat_G";
+    etat.kind = HmiTypeKind::Enumeration;
+    etat.values = {{"Arret", 0, "", ""}, {"Marche", 1, "", ""}, {"Defaut", 2, "", ""}, {"Maintenance", 3, "", ""}, {"Manu", 4, "", ""}};
+    p.programs.types.push_back(etat);
+    HmiType pompe;
+    pompe.id = p.allocate();
+    pompe.name = "T_Pompe";
+    pompe.members = {{"Marche", "BOOL", "", ""}, {"Defaut", "BOOL", "", ""}, {"Mode", "T_Mode_G", "", ""}, {"Nom", "STRING", "", ""},
+                     {"EnService", "BOOL", "", ""}};
+    p.programs.types.push_back(pompe);
+    HmiType moteur;
+    moteur.id = p.allocate();
+    moteur.name = "T_Moteur_G";
+    moteur.members = {{"Etat", "T_Etat_G", "", ""}, {"Nom", "STRING", "", ""}};
+    p.programs.types.push_back(moteur);
+    HmiType moteurI;
+    moteurI.id = p.allocate();
+    moteurI.name = "T_Moteur_I";
+    moteurI.members = {{"Etat", "INT", "", ""}};
+    p.programs.types.push_back(moteurI);
+    p.programs.variables.push_back(hmiVar(p, "P1", "T_Pompe"));
+    p.programs.variables.push_back(hmiVar(p, "P2", "T_Pompe"));
+    p.programs.variables.push_back(hmiVar(p, "Pompes", "ARRAY[1..3] OF T_Pompe"));
+    p.programs.variables.push_back(hmiVar(p, "M1", "T_Moteur_G"));
+    p.programs.variables.push_back(hmiVar(p, "M2", "T_Moteur_I"));
+    p.programs.variables.push_back(hmiVar(p, "Niveau_G", "REAL"));
+    p.views.push_back(v);
+    p.config.startView = p.views[0].id;
+    return p;
+}
+Id poser(Project& p, Kind k, const char* name, double x) {
+    const Id id = edit::add(p, p.views[0], k, x, 10);
+    p.views[0].object(id)->name = name;
+    return id;
+}
+} // namespace lotg
+
+void lotG11211_liaison() {
+    std::printf("1.12.11 (lot G) : la liaison Equipement\n");
+    Project p = lotg::projet();
+    const Id pompe = lotg::poser(p, Kind::Pump, "Pompe_1", 10);
+    const Id deux = lotg::poser(p, Kind::Pump, "Pompe_2", 150);
+    const Id main = lotg::poser(p, Kind::Pump, "Pompe_3", 300);
+    p.views[0].object(pompe)->set("equipment", "P1");
+    p.views[0].object(deux)->set("equipment", "$Pompes[2]$");
+    p.views[0].object(main)->set("equipment", "P2");
+    p.views[0].object(main)->setExpr("fault", "Niveau_G > 90");          // reglee a la main : elle gagne
+    p.views[0].object(main)->set("label", "Pompe principale");
+    // ---- sans moteur : ce que la liaison remplit
+    {
+        const auto b = eqlink::bindingOf(p, &p.views[0], *p.views[0].object(pompe));
+        same(b.type, "T_Pompe", "G : Equipement P1 - le type de sa structure (T_Pompe)");
+        std::string rows;
+        for (const auto& r : b.rows) rows += std::string(r.role->key) + "=" + r.source + (r.byHand ? "(main)" : "") + ";";
+        same(rows, "marche=P1.Marche;defaut=P1.Defaut;mode={P1.Mode};libelle={P1.Nom};",
+             "G : une pompe : Valeur <- Marche, D\xC3\xA9" "faut <- Defaut, Mode <- Mode, Libell\xC3\xA9 <- Nom (par leur nom)");
+        const Object o = eqlink::bound(p, &p.views[0], *p.views[0].object(pompe));
+        check(o.expr("value") == "P1.Marche" && o.expr("fault") == "P1.Defaut" && o.text("label") == "{P1.Nom}" && o.text("operatingMode") == "{P1.Mode}",
+              "G : l'objet tel que la liaison le remplit (avant : trois formules sur deux objets)");
+        const Object two = eqlink::bound(p, &p.views[0], *p.views[0].object(deux));
+        same(two.expr("value"), "Pompes[2].Marche", "G : un rep\xC3\xA8re $Pompes[2]$ : le chemin sans ses $ (un rep\xC3\xA8re comme les autres)");
+        const Object hand = eqlink::bound(p, &p.views[0], *p.views[0].object(main));
+        check(hand.expr("fault") == "Niveau_G > 90" && hand.text("label") == "Pompe principale" && hand.expr("value") == "P2.Marche",
+              "G : ce qui est r\xC3\xA9gl\xC3\xA9 \xC3\xA0 la main sur l'objet gagne (le D\xC3\xA9" "faut, le libell\xC3\xA9) ; le reste suit P2");
+        check(p.views[0].object(pompe)->expr("value").empty(), "G : l'objet enregistr\xC3\xA9 ne change pas (le moteur remplit sa copie)");
+    }
+    // ---- le tableau de correspondance, par type : toutes les T_Pompe se lient pareil
+    {
+        Project q = p;
+        check(eqlink::choose(q, "T_Pompe", "marche", std::string("EnService")), "G : choisir EnService pour la Valeur de T_Pompe");
+        check(eqlink::bound(q, &q.views[0], *q.views[0].object(pompe)).expr("value") == "P1.EnService"
+                  && eqlink::bound(q, &q.views[0], *q.views[0].object(main)).expr("value") == "P2.EnService",
+              "G : ... P1 et P2 (deux T_Pompe) le suivent");
+        check(eqlink::choose(q, "T_Pompe", "defaut", std::string{}) && eqlink::bound(q, &q.views[0], *q.views[0].object(pompe)).expr("fault").empty(),
+              "G : \xC2\xAB aucun \xC2\xBB pour le D\xC3\xA9" "faut : il n'est plus li\xC3\xA9");
+        check(eqlink::choose(q, "T_Pompe", "defaut", std::nullopt) && eqlink::bound(q, &q.views[0], *q.views[0].object(pompe)).expr("fault") == "P1.Defaut",
+              "G : revenir aux noms propos\xC3\xA9s");
+        // enregistre et relu ; un projet sans choix n'a rien de plus dans son fichier
+        const auto save = [](const Project& x) {
+            std::string all;
+            for (const auto& f : serializeProject(x)) all.append(f.data->begin(), f.data->end());
+            return all;
+        };
+        check(save(p).find("liaison_equipement") == std::string::npos, "G : un projet sans choix : rien d'\xC3\xA9" "crit (le fichier ne change pas)");
+        const auto files = serializeProject(q);
+        const FileReader reader = [&](const std::string& path, std::string& content) {
+            for (const auto& f : files)
+                if (f.path == path) {
+                    content.assign(f.data->begin(), f.data->end());
+                    return true;
+                }
+            return false;
+        };
+        const auto back = parseProject(reader);
+        check(back && back->equipmentLinks == q.equipmentLinks && back->equipmentLinks.size() == 1
+                  && back->equipmentLinks[0].member == "EnService",
+              "G : le choix par type enregistr\xC3\xA9 et relu");
+        // les renommages : le type, un membre
+        HmiType before = *q.hmiTypeByName("T_Pompe");
+        HmiType after = before;
+        after.members[4].name = "En_Service";
+        check(eqlink::followMembers(q, before, after) == 1 && q.equipmentLinks[0].member == "En_Service",
+              "G : renommer le membre EnService : le choix suit");
+        check(eqlink::renameType(q, "T_Pompe", "T_Pompe_Eau") == 1 && q.equipmentLinks[0].type == "T_Pompe_Eau",
+              "G : renommer le type : le choix suit");
+    }
+    // ---- renommer une variable : l'equipement, un Defaut tape sans =, un libelle a trous suivent
+    {
+        Object o = makeObject(Kind::Pump, 77, "Pompe_R", 0, 0, kNoId);
+        o.set("equipment", "P1");
+        o.set("fault", "P1.Defaut");
+        o.set("label", "{P1.Nom} / {P2.Nom}");
+        rewriteNames(o, [](std::string_view t, bool code) { return replacePath(t, "P1", "P10", code); });
+        check(o.text("equipment") == "P10" && o.text("fault") == "P10.Defaut" && o.text("label") == "{P10.Nom} / {P2.Nom}",
+              "G : renommer P1 en P10 - l'\xC3\xA9quipement, le D\xC3\xA9" "faut tap\xC3\xA9 sans =, le libell\xC3\xA9 \xC3\xA0 trous suivent (avant : seul le Texte)");
+    }
+    // ---- en marche : le dessin, le defaut, le libelle, le mode
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    rt.environment().write("P1.Marche", sim::Value::boolean(true));
+    rt.environment().write("P1.Nom", sim::Value::text("P-101"));
+    rt.environment().write("P1.Mode", sim::Value::integer(sim::Type::DInt, 1));
+    rt.tick(0.1);
+    {
+        LiveView live;
+        live.bind(*rt.composedView(rt.currentView()));
+        const View shown = live.evaluate(rt.environment(), nullptr, nullptr, 0.1);
+        const Object* o = shown.object(pompe);
+        check(o && o->text("value") == "TRUE" && o->text("fault") == "FALSE",
+              "G : en marche, P1.Marche vrai : la pompe en marche, sans d\xC3\xA9" "faut (" + (o ? o->text("value") + "/" + o->text("fault") : std::string("?")) + ")");
+        check(o && o->text("label") == "P-101" && o->text("operatingMode") == "Manuel",
+              "G : ... son libell\xC3\xA9 P1.Nom (P-101), son mode montr\xC3\xA9 par son texte (Manuel)");
+    }
+    rt.environment().write("P1.Defaut", sim::Value::boolean(true));
+    rt.tick(0.2);
+    {
+        LiveView live;
+        live.bind(*rt.composedView(rt.currentView()));
+        const View shown = live.evaluate(rt.environment(), nullptr, nullptr, 0.2);
+        check(shown.object(pompe) && shown.object(pompe)->text("fault") == "TRUE", "G : P1.Defaut vrai : la pompe en d\xC3\xA9" "faut");
+    }
+    rt.stop(0.3);
+    // ---- l'alarme par defaut de l'objet suit la liaison (avant : « le defaut n'est pas relie »)
+    {
+        const auto all = objectAlarms(p);
+        const auto it = std::find_if(all.begin(), all.end(), [](const ObjectAlarm& a) { return a.def.name == "Vue_G.Pompe_1.Defaut"; });
+        check(it != all.end() && it->def.condition == "P1.Defaut" && it->def.message == "{P1.Nom} : d\xC3\xA9" "faut",
+              "G : l'alarme D\xC3\xA9" "faut de la pompe : P1.Defaut, son message nomme la pompe ({P1.Nom})");
+    }
+    // ---- Generer : rien de bloquant ; un chemin qui n'est pas une structure se dit
+    {
+        Project q = p;
+        q.views[0].object(main)->set("equipment", "Niveau_G");
+        const auto issues = generate(q, [](std::string_view) { return false; });
+        bool blocked = false, told = false;
+        for (const auto& i : issues) {
+            if (i.severity == Issue::Severity::Error) {
+                blocked = true;
+                std::printf("  erreur : %s\n", i.message.c_str());
+            }
+            if (i.property == "equipment" && i.message.find("n'est pas une structure") != std::string::npos && i.severity == Issue::Severity::Warning)
+                told = true;
+        }
+        check(!blocked, "G : G\xC3\xA9n\xC3\xA9rer accepte la liaison Equipement (aucune erreur)");
+        check(told, "G : ... un \xC3\xA9quipement Niveau_G (un REAL) se dit : pas une structure (un avertissement)");
+    }
+}
+
+void lotG11211_etat() {
+    std::printf("1.12.11 (lot G) : le mode Etat\n");
+    // ---- le petit tableau valeur -> aspect
+    {
+        const auto a = eqlink::parseAspects("0 = arret; 1 = Marche | anim\xC3\xA9; 2 = d\xC3\xA9" "faut | #FF0000; 3 = maintenance");
+        check(a.size() == 4 && a[1].look == eqlink::Look::On && a[1].animated && a[2].look == eqlink::Look::Fault && a[2].color == "#FF0000",
+              "G : le mode \xC3\x89tat se lit (accents et casse indiff\xC3\xA9rents)");
+        same(eqlink::formatAspects(a), "0 = arret; 1 = marche | anime; 2 = defaut | #FF0000; 3 = maintenance", "G : ... et s'\xC3\xA9" "crit");
+        check(eqlink::aspectOf(a, "2").look == eqlink::Look::Fault && eqlink::aspectOf(a, "1").animated && eqlink::aspectOf(a, "7").look == eqlink::Look::Off,
+              "G : 2 : d\xC3\xA9" "faut ; 1 : marche (anim\xC3\xA9) ; une valeur inconnue : l'arr\xC3\xAAt");
+        same(eqlink::formatAspects(eqlink::motorStateAspects()), "0 = arret; 1 = marche | anime; 2 = defaut; 3 = maintenance",
+             "G : ETAT_MOTEUR rempli d'office : 0 arr\xC3\xAAt, 1 marche, 2 d\xC3\xA9" "faut, 3 maintenance");
+        check(eqlink::lookOfName("ARRET") == eqlink::Look::Off && eqlink::lookOfName("Stop") == eqlink::Look::Off
+                  && eqlink::lookOfName("RUN") == eqlink::Look::On && eqlink::lookOfName("Auto") == eqlink::Look::On
+                  && eqlink::lookOfName("EnMarche") == eqlink::Look::On && eqlink::lookOfName("Fault") == eqlink::Look::Fault
+                  && eqlink::lookOfName("Alarme") == eqlink::Look::Fault && eqlink::lookOfName("Maint_Prev") == eqlink::Look::Maintenance
+                  && eqlink::lookOfName("Manu") == eqlink::Look::Off,
+              "G : une \xC3\xA9num\xC3\xA9ration du projet : les aspects d'apr\xC3\xA8s les noms (ARRET, STOP ; MARCHE, RUN, AUTO ; DEFAUT, FAULT, ALARME ; MAINT... ; le reste : arr\xC3\xAAt)");
+        std::string err;
+        (void)eqlink::parseAspects("0 = rouge", &err);
+        check(!err.empty(), "G : un aspect inconnu se dit (" + err + ")");
+    }
+    Project p = lotg::projet();
+    const Id m1 = lotg::poser(p, Kind::Motor, "Moteur_1", 10);
+    const Id m2 = lotg::poser(p, Kind::Motor, "Moteur_2", 150);
+    const Id m3 = lotg::poser(p, Kind::Motor, "Moteur_3", 300);
+    p.views[0].object(m1)->set("equipment", "M1");
+    p.views[0].object(m2)->set("equipment", "M2");
+    // Moteur_3 : une Valeur liee a la main a l'enumeration, mode Etat ecrit
+    p.views[0].object(m3)->setExpr("value", "M1.Etat");
+    p.views[0].object(m3)->set("stateAspects", "Arret = arret; Marche = marche | anime; Defaut = defaut; Maintenance = maintenance | #4F8FD9");
+    {
+        const Object o1 = eqlink::bound(p, &p.views[0], *p.views[0].object(m1));
+        same(o1.text("stateAspects"), "Arret = arret; Marche = marche | anime; Defaut = defaut; Maintenance = maintenance; Manu = arret",
+             "G : Valeur <- M1.Etat (une \xC3\xA9num\xC3\xA9ration) : le mode \xC3\x89tat d'office, d'apr\xC3\xA8s les noms de ses valeurs");
+        const Object o2 = eqlink::bound(p, &p.views[0], *p.views[0].object(m2));
+        same(o2.text("stateAspects"), "0 = arret; 1 = marche | anime; 2 = defaut; 3 = maintenance",
+             "G : Valeur <- M2.Etat (un INT) : ETAT_MOTEUR d'office");
+    }
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    rt.environment().write("M1.Etat", sim::Value::integer(sim::Type::DInt, 2));
+    rt.environment().write("M2.Etat", sim::Value::integer(sim::Type::Int, 3));
+    rt.tick(0.1);
+    {
+        LiveView live;
+        live.bind(*rt.composedView(rt.currentView()));
+        const View shown = live.evaluate(rt.environment(), nullptr, nullptr, 0.1);
+        const auto look = [&](Id id) {
+            const Object* o = shown.object(id);
+            if (!o) return eqlink::Look::On;
+            return eqlink::aspectOf(eqlink::parseAspects(o->text("stateAspects")), o->text("value"), o->text("valueName")).look;
+        };
+        check(shown.object(m1) && shown.object(m1)->text("value") == "2" && shown.object(m1)->text("valueName") == "Defaut",
+              "G : en mode \xC3\x89tat, la Valeur se lit comme un \xC3\xA9tat : 2, Defaut (avant : TRUE, \xC2\xAB diff\xC3\xA9rent de 0 \xC2\xBB)");
+        check(look(m1) == eqlink::Look::Fault, "G : un moteur en DEFAUT (2) se dessine en d\xC3\xA9" "faut (avant : vert, et il tournait)");
+        check(look(m2) == eqlink::Look::Maintenance, "G : M2.Etat = 3 (un INT, ETAT_MOTEUR) : en maintenance");
+        check(look(m3) == eqlink::Look::Fault, "G : une Valeur reli\xC3\xA9" "e \xC3\xA0 la main et son mode \xC3\x89tat \xC3\xA9" "crit : par le nom de la valeur");
+    }
+    rt.environment().write("M1.Etat", sim::Value::integer(sim::Type::DInt, 1));
+    rt.tick(0.2);
+    {
+        LiveView live;
+        live.bind(*rt.composedView(rt.currentView()));
+        const View shown = live.evaluate(rt.environment(), nullptr, nullptr, 0.2);
+        const Object* o = shown.object(m1);
+        const auto a = o ? eqlink::aspectOf(eqlink::parseAspects(o->text("stateAspects")), o->text("value"), o->text("valueName")) : eqlink::Aspect{};
+        check(a.look == eqlink::Look::On && a.animated, "G : M1.Etat = Marche : en marche, anim\xC3\xA9");
+    }
+    rt.stop(0.3);
+    // ---- Generer : une enumeration lue vrai / faux sur la Valeur, une structure entiere
+    {
+        Project q = p;
+        const Id m4 = lotg::poser(q, Kind::Motor, "Moteur_4", 450);
+        q.views[0].object(m4)->setExpr("value", "M1.Etat");
+        const Id m5 = lotg::poser(q, Kind::Pump, "Pompe_5", 600);
+        q.views[0].object(m5)->setExpr("value", "P1");
+        const auto issues = generate(q, [](std::string_view) { return false; });
+        bool enumTold = false, structTold = false, blocked = false;
+        for (const auto& i : issues) {
+            if (i.object == m4 && i.property == "value" && i.message.find("mode \xC3\x89tat") != std::string::npos) enumTold = i.severity == Issue::Severity::Warning;
+            if (i.object == m5 && i.property == "value" && i.message.find("\xC3\x89quipement") != std::string::npos) structTold = i.severity == Issue::Severity::Warning;
+            if (i.object == m3 && i.property == "value" && i.message.find("mode \xC3\x89tat") != std::string::npos) enumTold = false;   // il l'a
+            if (i.severity == Issue::Severity::Error && (i.object == m4 || i.object == m5 || i.object == m3)) blocked = true;
+        }
+        check(enumTold, "G : G\xC3\xA9n\xC3\xA9rer - une \xC3\xA9num\xC3\xA9ration sur la Valeur lue vrai / faux : le mode \xC3\x89tat propos\xC3\xA9 (un avertissement)");
+        check(structTold, "G : G\xC3\xA9n\xC3\xA9rer - une structure enti\xC3\xA8re sur la Valeur : la liaison \xC3\x89quipement propos\xC3\xA9" "e");
+        check(!blocked, "G : ... rien de bloquant (ce qui d\xC3\xA9marrait d\xC3\xA9marre)");
+    }
+}
+
+void lotG11211_symbole() {
+    std::printf("1.12.11 (lot G) : un symbole lie par sa structure, ses libelles a trous\n");
+    Project p = lotg::projet();
+    View sym = makeView(p, "Sym_Pompe_G");
+    sym.role = std::string(kSymbolRole);
+    sym.width = 200;
+    sym.height = 160;
+    ViewParam prm;
+    prm.name = "Pompe";
+    prm.type = "T_Pompe";
+    sym.params.push_back(prm);
+    ViewParam tag;
+    tag.name = "Repere";
+    tag.type = "STRING";
+    tag.defaultValue = "'P-0'";
+    sym.params.push_back(tag);
+    const Id inner = edit::add(p, sym, Kind::Pump, 10, 10);
+    sym.object(inner)->name = "Pompe";
+    sym.object(inner)->set("equipment", "Pompe");
+    sym.object(inner)->set("label", "{Repere}");
+    const Id title = edit::add(p, sym, Kind::Frame, 0, 0);
+    sym.object(title)->name = "Cadre";
+    sym.object(title)->set("title", "Pompe {Repere} - {Pompe.Nom}");
+    p.views.push_back(sym);
+    const Id inst = edit::add(p, p.views[0], Kind::SymbolInstance, 10, 10);
+    p.views[0].object(inst)->name = "Pompe_A";
+    p.views[0].object(inst)->set("symbol", "Sym_Pompe_G");
+    p.views[0].object(inst)->set("params", "Pompe := P1; Repere := 'P-101'");
+    const auto e = expandInstance(p, *p.views[0].object(inst));
+    const Object* pump = nullptr;
+    const Object* frame = nullptr;
+    for (const auto& o : e.objects) {
+        if (o.name == "Pompe_A.Pompe") pump = &o;
+        if (o.name == "Pompe_A.Cadre") frame = &o;
+    }
+    check(pump && pump->text("equipment") == "P1", "G : dans un symbole, l'\xC3\xA9quipement Pompe re\xC3\xA7oit l'argument P1");
+    check(pump && pump->text("label") == "P-101",
+          "G : le libell\xC3\xA9 {Repere} d'un symbole remplac\xC3\xA9 par l'argument (P-101 ; avant : {Repere} affich\xC3\xA9)");
+    check(frame && frame->text("title") == "Pompe P-101 - {P1.Nom}", "G : un titre \xC3\xA0 trous aussi (" + (frame ? frame->text("title") : std::string("?")) + ")");
+    const Object b = pump ? eqlink::bound(p, &p.views[0], *pump) : Object{};
+    check(b.expr("value") == "P1.Marche" && b.expr("fault") == "P1.Defaut" && b.text("label") == "P-101",
+          "G : ... sa liaison lit P1 (Valeur, D\xC3\xA9" "faut) ; le libell\xC3\xA9 r\xC3\xA9gl\xC3\xA9 dans le symbole gagne");
+    // en marche : le libelle, la valeur
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    rt.environment().write("P1.Marche", sim::Value::boolean(true));
+    rt.environment().write("P1.Nom", sim::Value::text("Eau chaude"));
+    rt.tick(0.1);
+    LiveView live;
+    live.bind(*rt.composedView(rt.currentView()));
+    const View shown = live.evaluate(rt.environment(), nullptr, nullptr, 0.1);
+    const Object* sp = nullptr;
+    const Object* sf = nullptr;
+    for (const auto& o : shown.objects) {
+        if (o.name == "Pompe_A.Pompe") sp = &o;
+        if (o.name == "Pompe_A.Cadre") sf = &o;
+    }
+    check(sp && sp->text("value") == "TRUE" && sp->text("label") == "P-101", "G : en marche, la pompe du symbole suit P1 et montre P-101");
+    check(sf && sf->text("title") == "Pompe P-101 - Eau chaude", "G : ... et le titre du cadre, rempli (" + (sf ? sf->text("title") : std::string("?")) + ")");
+    rt.stop(0.2);
+    // l'alarme Defaut de la pompe du symbole, pour l'instance
+    const auto all = objectAlarms(p);
+    const auto it = std::find_if(all.begin(), all.end(), [](const ObjectAlarm& a) { return a.def.name == "Vue_G.Pompe_A.Pompe.Defaut"; });
+    check(it != all.end() && it->def.condition == "P1.Defaut", "G : l'alarme D\xC3\xA9" "faut de la pompe d'une instance : P1.Defaut");
+}
+
+void lotG11211_popup() {
+    std::printf("1.12.11 (lot G) : la liaison Equipement dans une popup a parametre type\n");
+    Project p = lotg::projet();
+    View pop = makeView(p, "Pop_Pompe_G");
+    pop.role = "popup";
+    pop.width = 300;
+    pop.height = 200;
+    ViewParam prm;
+    prm.name = "Pompe";
+    prm.type = "T_Pompe";
+    prm.defaultValue = "P1";
+    pop.params.push_back(prm);
+    const Id pump = edit::add(p, pop, Kind::Pump, 10, 10);
+    pop.object(pump)->name = "Pompe_Pop";
+    pop.object(pump)->set("equipment", "Pompe");
+    p.views.push_back(pop);
+    const Id popId = p.views.back().id;
+    {
+        const auto b = eqlink::bindingOf(p, &p.views.back(), *p.views.back().object(pump));
+        same(b.type, "T_Pompe", "G : dans une popup, Equipement = son param\xC3\xA8tre Pompe (T_Pompe)");
+    }
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    rt.environment().write("P2.Marche", sim::Value::boolean(true));
+    rt.environment().write("P2.Nom", sim::Value::text("P-2"));
+    check(rt.openPopup(popId, Transition{}, 0.1, "Pompe := P2", {}, kNoId), "G : la popup s'ouvre pour P2");
+    rt.tick(0.2);
+    LiveView live;
+    live.bind(*rt.composedView(popId));
+    const View shown = live.evaluate(rt.environment(), nullptr, rt.viewScope(popId), 0.2);
+    const Object* o = shown.object(pump);
+    check(o && o->text("value") == "TRUE" && o->text("label") == "P-2",
+          "G : ... sa pompe lit Pompe.Marche et Pompe.Nom pour P2 (en marche, P-2)");
+    rt.stop(0.3);
+}
+
+void lotG11211_arguments() {
+    std::printf("1.12.11 (lot G) : les arguments d'une instance de symbole, verifies comme ceux d'une popup\n");
+    Project p = lotg::projet();
+    HmiType vanne;
+    vanne.id = p.allocate();
+    vanne.name = "T_Vanne_G";
+    vanne.members = {{"Ouverture", "REAL", "", ""}};
+    p.programs.types.push_back(vanne);
+    p.programs.variables.push_back(hmiVar(p, "V1", "T_Vanne_G"));
+    View sym = makeView(p, "Sym_Args_G");
+    sym.role = std::string(kSymbolRole);
+    for (const auto& [name, type] : {std::pair<const char*, const char*>{"Pompe", "T_Pompe"}, {"Consigne", "INT"}, {"Nom", "STRING"}, {"Coef", "REAL"}}) {
+        ViewParam prm;
+        prm.name = name;
+        prm.type = type;
+        sym.params.push_back(prm);
+    }
+    // Le symbole ecrit Consigne : un champ de saisie relie a elle.
+    const Id field = edit::add(p, sym, Kind::InputField, 10, 10);
+    sym.object(field)->name = "Saisie";
+    sym.object(field)->set("variable", "Consigne");
+    p.views.push_back(sym);
+    const auto inst = [&](const char* name, const char* params, double x) {
+        const Id id = edit::add(p, p.views[0], Kind::SymbolInstance, x, 10);
+        p.views[0].object(id)->name = name;
+        p.views[0].object(id)->set("symbol", "Sym_Args_G");
+        p.views[0].object(id)->set("params", params);
+        return id;
+    };
+    const Id a = inst("Inst_A", "Pompe := V1; Consigne := 3 + 4; Nom := 12; Coef := 2", 10);
+    const Id b = inst("Inst_B", "P1; Niveau_G; 'x'; abc; 99", 300);
+    const Id c = inst("Inst_C", "Pompe := P1; P2; Consigne := Niveau_G", 600);
+    const Id d = inst("Inst_D", "Pompe := P1; Consigne := M2.Etat; Nom := 'D'; Coef := 2", 900);
+    const auto issues = generate(p, [](std::string_view) { return false; });
+    const auto said = [&](Id obj, const char* part) {
+        for (const auto& i : issues)
+            if (i.object == obj && i.message.find(part) != std::string::npos) return i.severity == Issue::Severity::Warning;
+        return false;
+    };
+    check(said(a, "attend T_POMPE, V1 est T_VANNE_G"), "G : un argument du mauvais type (V1, une T_Vanne_G, pour Pompe : T_Pompe) se dit (avant : rien)");
+    check(said(a, "crit Consigne") && said(a, "3 + 4 n'est pas une variable"),
+          "G : un calcul (3 + 4) pour un param\xC3\xA8tre que le symbole \xC3\xA9" "crit (Consigne, un champ de saisie) se dit");
+    check(said(a, "attend STRING, 12 est INT"), "G : une constante d'un autre type (12 pour un STRING) se dit");
+    check(said(b, "5 arguments sans nom pour 4 param\xC3\xA8tre(s)"), "G : des arguments sans nom en trop (5 pour 4) se disent (avant : ignor\xC3\xA9s en silence)");
+    check(said(b, "abc ne se convertit pas en REAL"),
+          "G : un argument sans nom qui ne se convertit pas (abc pour un REAL) se dit (avant : coll\xC3\xA9 tel quel, sans un mot)");
+    check(said(b, "attend INT, Niveau_G est REAL"), "G : un REAL donn\xC3\xA9 \xC3\xA0 un INT se dit (un \xC3\xA9largissement INT -> REAL passe)");
+    check(said(c, "sans nom P2 (rang 1) est ignor\xC3\xA9 : Pompe est d\xC3\xA9j\xC3\xA0 donn\xC3\xA9"),
+          "G : un argument sans nom au rang d'un param\xC3\xA8tre nomm\xC3\xA9 se dit");
+    {
+        bool clean = true;
+        for (const auto& i : issues)
+            if (i.object == d && i.category == "Symbole" && i.message.find("attend") != std::string::npos) clean = false;
+        check(!said(d, "ne se convertit pas") && !said(d, "n'est pas une variable") && clean,
+              "G : des arguments du bon type : rien (P1, M2.Etat pour un INT ; 2 pour un REAL : un \xC3\xA9largissement accept\xC3\xA9)");
+    }
+    bool blocked = false;
+    for (const auto& i : issues)
+        if (i.severity == Issue::Severity::Error && (i.object == a || i.object == b || i.object == c || i.object == d)
+            && i.message.find("variable inexistante") == std::string::npos) {
+            blocked = true;
+            std::printf("  erreur : %s\n", i.message.c_str());
+        }
+    check(!blocked, "G : ce sont des avertissements : un projet qui d\xC3\xA9marrait d\xC3\xA9marre toujours");
+}
+
+void lotG11211_creer() {
+    std::printf("1.12.11 (lot G) : Creer un symbole type ses parametres ; le modele Moteur et son etat\n");
+    // ---- « Creer un symbole » : le type du chemin donne
+    {
+        Project p = lotg::projet();
+        const Id pump = lotg::poser(p, Kind::Pump, "Pompe_X", 10);
+        p.views[0].object(pump)->setExpr("value", "Pompes[1].Marche");
+        const Id disp = lotg::poser(p, Kind::NumericDisplay, "Mesure_X", 200);
+        p.views[0].object(disp)->setExpr("value", "Niveau_G");
+        const std::string proposed = suggestSymbolParams(p.views[0], {pump, disp});
+        same(proposed, "Pompe := Pompes[1]", "G : Cr\xC3\xA9" "er un symbole propose Pompe := Pompes[1]");
+        Id inst = kNoId;
+        std::string why;
+        check(createSymbol(p, p.views[0].id, {pump, disp}, "Sym_Creer_G", proposed + "; Mesure := Niveau_G; Titre := 'P'", &inst, &why),
+              "G : le symbole cr\xC3\xA9\xC3\xA9 (" + why + ")");
+        const View* sym = p.viewByName("Sym_Creer_G");
+        check(sym && sym->params.size() == 3 && sym->params[0].type == "T_Pompe" && sym->params[1].type == "REAL" && sym->params[2].type.empty(),
+              "G : ses param\xC3\xA8tres typ\xC3\xA9s d'apr\xC3\xA8s les chemins choisis (Pompes[1] : T_Pompe, Niveau_G : REAL ; une constante : ANY ; avant : tous ANY)");
+    }
+    // ---- le modele « Moteur et son etat » : un parametre T_Moteur, la liaison Equipement
+    {
+        Project p;
+        View v = makeView(p, "Moteur_G");
+        v.role = std::string(kSymbolRole);
+        v.width = 240;
+        v.height = 160;
+        design::fillFromTemplate(p, v, "symbole_moteur");
+        const HmiType* t = p.hmiTypeByName("T_Moteur");
+        check(t && t->members.size() == 3 && v.params.size() == 1 && v.params[0].name == "Moteur" && v.params[0].type == "T_Moteur",
+              "G : le mod\xC3\xA8le Moteur et son \xC3\xA9tat d\xC3\xA9" "clare Moteur : T_Moteur (le type cr\xC3\xA9\xC3\xA9 s'il manque ; avant : aucun param\xC3\xA8tre)");
+        const Object* mot = nullptr;
+        for (const auto& o : v.objects)
+            if (o.kind == Kind::Motor) mot = &o;
+        check(mot && mot->text("equipment") == "Moteur", "G : ... son moteur li\xC3\xA9 par \xC3\x89quipement = Moteur");
+        p.views.push_back(v);
+        View vue = makeView(p, "Vue_Moteurs_G");
+        p.programs.variables.push_back(hmiVar(p, "M1", "T_Moteur"));
+        const Id inst = edit::add(p, vue, Kind::SymbolInstance, 10, 10);
+        vue.object(inst)->name = "Moteur_1";
+        vue.object(inst)->set("symbol", "Moteur_G");
+        vue.object(inst)->set("params", "Moteur := M1");
+        p.views.push_back(vue);
+        p.config.startView = p.views.back().id;
+        Runtime rt;
+        rt.bind(&p, nullptr);
+        rt.start(0.0);
+        rt.environment().write("M1.Marche", sim::Value::boolean(true));
+        rt.environment().write("M1.Defaut", sim::Value::boolean(true));
+        rt.environment().write("M1.Nom", sim::Value::text("M-101"));
+        rt.tick(0.1);
+        LiveView live;
+        live.bind(*rt.composedView(rt.currentView()));
+        const View shown = live.evaluate(rt.environment(), nullptr, nullptr, 0.1);
+        std::string value, fault, text, voyant;
+        for (const auto& o : shown.objects) {
+            if (o.kind == Kind::Motor) { value = o.text("value"); fault = o.text("fault"); }
+            if (o.kind == Kind::Text) text = o.text("text");
+            if (o.kind == Kind::Indicator) voyant = o.text("value");
+        }
+        check(value == "TRUE" && fault == "TRUE" && text == "M-101" && voyant == "TRUE",
+              "G : pos\xC3\xA9 et li\xC3\xA9 \xC3\xA0 M1 (une T_Moteur), il suffit : en marche, en d\xC3\xA9" "faut, nomm\xC3\xA9 M-101 (" + value + "/" + fault + "/" + text + ")");
+        rt.stop(0.2);
+        const auto all = objectAlarms(p);
+        const auto it = std::find_if(all.begin(), all.end(), [](const ObjectAlarm& x) { return x.def.condition == "M1.Defaut"; });
+        check(it != all.end() && it->def.message == "{M1.Nom} : d\xC3\xA9" "faut", "G : ... et son alarme D\xC3\xA9" "faut, sur M1.Defaut, nomm\xC3\xA9" "e par M1.Nom");
+        const auto issues = generate(p, [](std::string_view) { return false; });
+        bool blocked = false;
+        for (const auto& i : issues)
+            if (i.severity == Issue::Severity::Error) {
+                blocked = true;
+                std::printf("  erreur : %s\n", i.message.c_str());
+            }
+        check(!blocked, "G : G\xC3\xA9n\xC3\xA9rer accepte le mod\xC3\xA8le et son instance");
+    }
+}
+
+void lotG11211_extras() {
+    std::printf("1.12.11 (lot G) : le verin rentre / sorti, le gaz, la vanne 3 voies, la boucle ISA\n");
+    Project p = lotg::projet();
+    p.programs.variables.push_back(hmiVar(p, "Sorti_G", "BOOL"));
+    const Id ver = lotg::poser(p, Kind::Cylinder, "Verin_1", 10);
+    p.views[0].object(ver)->setExpr("value", "Sorti_G");
+    p.views[0].object(ver)->set("cylinderMode", "rentr\xC3\xA9 / sorti");
+    const Id ver2 = lotg::poser(p, Kind::Cylinder, "Verin_2", 300);
+    p.views[0].object(ver2)->setExpr("value", "Sorti_G");
+    const Id v3 = lotg::poser(p, Kind::ThreeWayValve, "V3_1", 600);
+    p.views[0].object(v3)->set("valve3Bore", "L");
+    p.views[0].object(v3)->set("value", "1");
+    const Id isa = lotg::poser(p, Kind::IsaInstrument, "TT_101", 900);
+    p.views[0].object(isa)->set("loop", "101A");
+    // ---- le verin : vrai / faux en rentre / sorti ; en course, un BOOL se dit
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    rt.environment().write("Sorti_G", sim::Value::boolean(true));
+    rt.tick(0.1);
+    {
+        LiveView live;
+        live.bind(*rt.composedView(rt.currentView()));
+        const View shown = live.evaluate(rt.environment(), nullptr, nullptr, 0.1);
+        same(shown.object(ver)->text("value"), "TRUE", "G : un v\xC3\xA9rin rentr\xC3\xA9 / sorti lit sa Valeur vrai / faux (sorti)");
+        same(shown.object(ver2)->text("value"), "1", "G : ... en course, comme avant : un nombre (1, sur 0..100 : 1 %)");
+    }
+    rt.stop(0.2);
+    const auto issues = generate(p, [](std::string_view) { return false; });
+    const auto said = [&](Id obj, const char* part) {
+        for (const auto& i : issues)
+            if (i.object == obj && i.message.find(part) != std::string::npos) return i.severity == Issue::Severity::Warning;
+        return false;
+    };
+    check(said(ver2, "rentr\xC3\xA9 / sorti") && !said(ver, "rentr\xC3\xA9 / sorti"),
+          "G : G\xC3\xA9n\xC3\xA9rer - un BOOL sur un v\xC3\xA9rin en course : rentr\xC3\xA9 / sorti propos\xC3\xA9 (un avertissement)");
+    check(said(v3, "position 1-2 impossible pour un boisseau en L"), "G : G\xC3\xA9n\xC3\xA9rer - une vanne 3 voies en L fix\xC3\xA9" "e sur 1-2 se dit");
+    // ---- le gaz : la couleur EN 1089-3 par son nom
+    same(std::string(choices::gasOfColor("#0a0a0a")), "Azote (noir)", "G : #0A0A0A est l'azote (noir, RAL 9005)");
+    same(choices::gasColorOf("Oxyg\xC3\xA8ne (blanc)"), "#F1ECE1", "G : l'oxyg\xC3\xA8ne : blanc (RAL 9010)");
+    same(choices::gasColorOf("#123456"), "#123456", "G : une couleur tap\xC3\xA9" "e reste");
+    check(choices::gasOfColor("#1E6B3A").empty(), "G : la couleur d'une bouteille d'avant (#1E6B3A) reste la sienne (pas de gaz)");
+    // ---- la boucle d'un instrument ISA suit la duplication
+    {
+        View& v = p.views[0];
+        const auto sc = dup::scan(v, {isa}, dup::projectBounds(p));
+        const auto plan = dup::defaultPlan(v, sc, 2);
+        const auto r = dup::apply(p, v, plan);
+        std::string loops;
+        for (const Id id : r.created) loops += v.object(id)->text("loop") + ";";
+        same(loops, "102A;103A;", "G : Dupliquer un instrument ISA (boucle 101A) : 102A, 103A (avant : 101A partout)");
+    }
+}
+
+void lotG11211_generer() {
+    std::printf("1.12.11 (lot G) : Generer - les couleurs, une valeur tapee sans =, l'indice suivi\n");
+    Project p = lotg::projet();
+    const Id pump = lotg::poser(p, Kind::Pump, "Pompe_C", 10);
+    p.views[0].object(pump)->set("colorOn", "vert");
+    p.views[0].object(pump)->set("colorFault", "#GG0000");
+    p.views[0].object(pump)->set("stateAspects", "0 = arret; 1 = marche | bleu");
+    const Id typo = lotg::poser(p, Kind::Pump, "Pompe_D", 300);
+    p.views[0].object(typo)->set("fault", "P1.Defot");
+    const auto issues = generate(p, [](std::string_view) { return false; });
+    const auto said = [&](Id obj, const char* key, const char* part) {
+        for (const auto& i : issues)
+            if (i.object == obj && i.property == key && i.message.find(part) != std::string::npos) return true;
+        return false;
+    };
+    check(said(pump, "colorOn", "n'est pas une couleur") && said(pump, "colorFault", "n'est pas une couleur"),
+          "G : les couleurs marche, d\xC3\xA9" "faut d'un symbole se v\xC3\xA9rifient comme des couleurs (\xC2\xA7 4c, depuis la 1.12.6 : v\xC3\xA9rifi\xC3\xA9)");
+    check(said(pump, "stateAspects", "bleu"), "G : ... et celles de son mode \xC3\x89tat (bleu n'en est pas une)");
+    check(said(typo, "fault", "Defot"), "G : un D\xC3\xA9" "faut tap\xC3\xA9 sans = (P1.Defot) est lu en formule et v\xC3\xA9rifi\xC3\xA9 (\xC2\xA7 4d, D13 : v\xC3\xA9rifi\xC3\xA9)");
+    // Le type d'un membre lie contre son role : une STRING pour un niveau, un tableau pour un defaut
+    {
+        Project q = lotg::projet();
+        HmiType cuve;
+        cuve.id = q.allocate();
+        cuve.name = "T_Cuve_G";
+        cuve.members = {{"Niveau", "STRING", "", ""}, {"Defaut", "ARRAY[1..2] OF BOOL", "", ""}};
+        q.programs.types.push_back(cuve);
+        q.programs.variables.push_back(hmiVar(q, "C1", "T_Cuve_G"));
+        const Id tank = lotg::poser(q, Kind::Tank, "Cuve_G", 10);
+        q.views[0].object(tank)->set("equipment", "C1");
+        const auto found = generate(q, [](std::string_view) { return false; });
+        bool number = false, aggregate = false;
+        for (const auto& i : found) {
+            if (i.object != tank || i.property != "equipment") continue;
+            number = number || i.message.find("Niveau (STRING) : un nombre est attendu") != std::string::npos;
+            aggregate = aggregate || i.message.find("Defaut (ARRAY[1..2] OF BOOL) est un agr\xC3\xA9gat") != std::string::npos;
+        }
+        check(number && aggregate, "G : G\xC3\xA9n\xC3\xA9rer - un membre li\xC3\xA9 du mauvais type se dit (une STRING pour le niveau, un tableau pour le d\xC3\xA9" "faut)");
+    }
+    // Dupliquer : l'equipement Pompes[1] (sans repere) suit l'indice, comme une formule
+    {
+        View& v = p.views[0];
+        const Id dupl = lotg::poser(p, Kind::Pump, "Pompe_E", 600);
+        v.object(dupl)->set("equipment", "Pompes[1]");
+        const auto sc = dup::scan(v, {dupl}, dup::projectBounds(p));
+        const auto plan = dup::defaultPlan(v, sc, 2);
+        const auto r = dup::apply(p, v, plan);
+        std::string eq;
+        for (const Id id : r.created) eq += v.object(id)->text("equipment") + ";";
+        same(eq, "Pompes[2];Pompes[3];", "G : Dupliquer une pompe d'\xC3\xA9quipement Pompes[1] : Pompes[2], Pompes[3] (l'indice suivi)");
+    }
+}
+
+void lotG11211() {
+    lotG11211_liaison();
+    lotG11211_etat();
+    lotG11211_symbole();
+    lotG11211_popup();
+    lotG11211_arguments();
+    lotG11211_creer();
+    lotG11211_extras();
+    lotG11211_generer();
+}
+
 int main(int argc, char** argv) {
     // 1.11.10 : HMI_TEST_1110=1 - les fonctions et les popups des symboles, seules.
     if (const char* only = std::getenv("HMI_TEST_1110"); only && *only == '1') {
         fonctionsSymbole11110();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
+    // 1.12.11 : HMI_TEST_11211=1 - le lot G de l'audit des objets (synoptique et symboles), seul.
+    if (const char* only = std::getenv("HMI_TEST_11211"); only && *only == '1') {
+        lotG11211();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -24899,6 +25546,7 @@ int main(int argc, char** argv) {
     xyProfil1127();                   // 1.12.7 (lot E) : la courbe XY en profil
     etatsDepuis1127();                // 1.12.7 (lot E) : Etats depuis une source
     enregistre1127();                 // 1.12.7 (lots D et E) : enregistre et relu
+    lotG11211();                      // 1.12.11 (lot G) : la liaison Equipement, le mode Etat, les symboles
     enumerationsLangage110();         // 1.10 (S1, decision 15) : les enumerations dans les scripts
     operateurs110();                  // 1.10 (chantier S2) : les operateurs des symboles et des types IHM
     operateurs1101();                 // 1.10.1 (chantier U2) : a, b et Resultat (types, legende, exemple, Compiler)

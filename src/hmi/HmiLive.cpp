@@ -8,6 +8,7 @@
 #include "HmiMarkers.hpp"        // 1.12.5 : un texte montre sans ses reperes
 #include "HmiObjectAlarms.hpp"   // 1.12.5 (D13) : une liaison tapee sans =
 #include "HmiNavigation.hpp"      // 1.12.5 : la page d'un conteneur a onglets selon sa variable
+#include "HmiEquipmentLink.hpp"     // 1.12.11 (lot G) : le mode Etat d'un symbole du synoptique
 
 #include <algorithm>
 #include <map>
@@ -79,6 +80,9 @@ void LiveView::bind(const View& view) {
     bound_.clear();
     for (const auto& o : view.objects) {
         for (const auto& p : o.props) {
+            // 1.12.11 (lot G) : la liaison Equipement (un chemin de structure) et le mode Etat ne se calculent
+            // pas : le moteur a deja rempli les roles de l'objet (eqlink::apply, la vue composee).
+            if (p.key == eqlink::kEquipmentKey || p.key == eqlink::kAspectsKey) continue;
             if (!p.expr.empty()) {
                 Bound b;
                 b.object = o.id;
@@ -219,6 +223,11 @@ void LiveView::bind(const View& view) {
             b.role = roles::roleOf(o->kind, b.key);
             b.typed = true;
         }
+        // 1.12.11 (lot G) : un symbole en mode Etat lit sa Valeur comme un etat (son nombre, le nom d'une valeur
+        // d'enumeration) - avant, vrai / faux : un moteur en DEFAUT (2) tournait en vert.
+        if (b.key == "value" && b.typed && eqlink::hasAspects(*o)) b.role.role = roles::Role::State;
+        // ... un verin « rentre / sorti » la lit vrai / faux (un BOOL vrai : sorti ; avant, 1 % de sa course).
+        if (b.key == "value" && b.typed && eqlink::cylinderOnOff(*o)) b.role = roles::KeyRole{b.key, roles::Role::Boolean};
     }
 }
 

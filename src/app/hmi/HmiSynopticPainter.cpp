@@ -22,6 +22,7 @@
 
 #include "../../hmi/HmiExpr.hpp"
 #include "../../hmi/HmiWidgets.hpp"
+#include "../../hmi/HmiEquipmentLink.hpp"   // 1.12.11 (lot G) : le mode Etat, le mode montre
 
 #include <algorithm>
 #include <cmath>
@@ -126,6 +127,8 @@ Sym prepare(const Ctx& c) {
     double lo = c.src.number(c.o, "min", 0), hi = c.src.number(c.o, "max", 100);
     if (hi <= lo) hi = lo + 1;
     s.frac = std::clamp((s.value - lo) / (hi - lo), 0.0, 1.0);
+    // 1.12.11 (lot G) : un verin « rentre / sorti » - vrai : sorti, faux : rentre (sans min ni max).
+    if (c.o.kind == Kind::Cylinder && c.src.text(c.o, "cylinderMode").rfind("rentr", 0) == 0) s.frac = s.on ? 1.0 : 0.0;
     double f = 0;
     s.fault = truthy(c.src.text(c.o, "fault"), f);
     s.t = c.opt.editor ? 0.0 : c.opt.time;
@@ -136,6 +139,24 @@ Sym prepare(const Ctx& c) {
     // Le defaut clignote : sa couleur, puis la meme, assombrie.
     const bool blink = !c.opt.editor && std::fmod(c.opt.time, 1.0) >= 0.5;
     s.col = s.fault ? (blink ? shade(bad, 0.45f) : bad) : s.on ? on : s.off;
+    // 1.12.11 (lot G) : LE MODE ETAT - la valeur (son nombre, ou le nom d'une valeur d'enumeration) choisit un
+    // aspect : arret, marche, defaut, maintenance, avec sa couleur et anime ou non. Avant, un moteur en DEFAUT
+    // (2) se lisait « different de 0 » : vert, et il tournait.
+    if (hmi::eqlink::kindHasAspects(c.o.kind))
+        if (const auto aspects = hmi::eqlink::parseAspects(c.src.text(c.o, "stateAspects")); !aspects.empty()) {
+            using L = hmi::eqlink::Look;
+            const auto a = hmi::eqlink::aspectOf(aspects, value, c.src.text(c.o, "valueName"));
+            gfx::Color own;
+            const bool colored = !a.color.empty() && tryParseColor(a.color, own);
+            s.on = a.look == L::On;
+            s.fault = s.fault || a.look == L::Fault;
+            s.moving = !c.opt.editor && a.animated && !s.fault && c.src.flag(c.o, "animate", true);
+            const gfx::Color mine = colored ? fade(c.seen(own), c.alpha)
+                                  : a.look == L::On ? on : a.look == L::Fault ? bad
+                                  : a.look == L::Maintenance ? c.fixed(0x4F8FD9) : s.off;
+            const gfx::Color faulty = a.look == L::Fault ? mine : bad;   // un Defaut a part garde la couleur de defaut
+            s.col = s.fault ? (blink ? shade(faulty, 0.45f) : faulty) : mine;
+        }
     s.line = c.color("stroke", gfx::Color::rgb(0xC8D0DC));
     if (s.fault) s.line = s.col;
     s.txt = txt;
@@ -914,6 +935,14 @@ bool drawSynoptic(const Ctx& c) {
     }
     // Lot 13 : l'accessibilite - un defaut se lit aussi a son triangle.
     if (s.fault && c.src.flag(c.o, "a11ySymbols", false)) drawFaultBadge(c, s.x + s.w, s.y, std::clamp(s.r() * 0.55, 10.0, 26.0));
+    // 1.12.11 (lot G) : le mode (Auto, Manu...) - une etiquette en haut a gauche, quand il est montre.
+    if (const std::string mode = c.src.text(c.o, "operatingMode"); !mode.empty() && mode.find('{') == std::string::npos) {
+        const double fs = std::clamp(s.r() * 0.32, 8.0, 13.0);
+        const double tw = std::min(s.w * 0.9, fs * 0.62 * static_cast<double>(std::min<std::size_t>(mode.size(), 12)) + fs * 0.8);
+        fill(c, box(s.x, s.y, tw, fs * 1.45, 3), withA(gfx::Color{20, 24, 30, 255}, 0.85f * c.alpha));
+        outline(c, box(s.x, s.y, tw, fs * 1.45, 3), true, s.line, 1.0);
+        text(c, mode, s.x, s.y, tw, fs * 1.45, s.txt, fs, "centre");
+    }
     return true;
 }
 
