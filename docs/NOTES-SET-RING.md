@@ -102,7 +102,7 @@ plus anciennes, au début, partent). Elle est appelée :
 | SET_ADD / SET_REMOVE / SET_HAS sur un nom dont le type est connu et n'est pas un SET (« SET_ADD : un SET est attendu (SET OF T), pas une LIST OF STRING ») ; RING_ADD sur autre chose qu'un RING | erreur |
 | Un littéral du mauvais type écrit dans un SET ou un RING de type connu (« SET_ADD : 'abc' n'est pas un INT », « SET_ADD : 5 n'est pas une STRING : écris '5' ») | erreur |
 | Une native qui écrit à une place sur un SET (LIST_INSERT, LIST_SORT, LIST_SET…, LIST_COPY vers un SET) | erreur |
-| `S[0] := x`, `S.First := x` d'un SET (une locale, une variable IHM) | erreur |
+| `S[0] := x`, `S.First := x` d'un SET (une locale, une variable IHM, `Recette.Postes[0]`) ; la variable d'un `FOR EACH x IN S` écrite (S un nom de type SET) | erreur |
 | La capacité d'un RING déclaré (« RING[0] : la capacité va de 1 à 100000 », « RING : sa capacité est attendue… », « RING[N] : N est une constante entière ('i' …) ») | erreur |
 | `SET OF T_Lot` (une structure), `SET OF TUPLE(…)`, `SET OF LIST OF…` | erreur |
 | Une constante écrite par SET_ADD, SET_REMOVE, RING_ADD (« Cs est une constante : SET_ADD ne peut pas la changer ») | erreur |
@@ -126,9 +126,11 @@ projet nommée SET_ADD passe avant la native.
 - **Les formes** (`src/hmi/HmiTypeForms.cpp`) : deux de plus, **Ensemble (SET)** et **Tampon
   (RING)** (sa capacité en paramètre, 100 par défaut) — dans le sélecteur de types, la case Type,
   « Forme du type » (le texte de ce dialogue cite aussi SET et RING).
-- `hmi::types::isRich`, la Console, les lignes d'un tableau (« lignes depuis » une variable SET ou
-  RING), la valeur nulle d'une constante (`[]`), le modèle de départ d'un calcul
-  (`IF SET_ADD(S, 0) THEN … END_IF`, `RING_ADD(R, 0);`).
+- Ce qui reconnaissait une LIST par son texte reconnaît aussi un SET et un RING : `hmi::types::isRich`,
+  la raison dite quand un objet est lié à une telle variable (c'est « une liste » : S[0] ou S.Count),
+  les lignes d'un tableau (« lignes depuis » une variable SET ou RING), la valeur
+  nulle d'une constante (`[]`), le modèle de départ d'un calcul (`IF SET_ADD(S, 0) THEN … END_IF`,
+  `RING_ADD(R, 0);`).
 
 ### La grille des déclarations et le tableau des éléments
 
@@ -149,8 +151,8 @@ projet nommée SET_ADD passe avant la native.
   LIST_GET, LIST_SUM, LIST_MIN, LIST_MAX, LIST_AVG, JOIN) et sur LIST_ADD. `src/hmi/HmiNativesData.cpp`
   régénéré (227 fonctions).
 - **L'aide à la saisie** : les 7 natives (signature et phrase, de la table du dialecte) ; les
-  modèles `SET OF STRING` et `RING[100] OF REAL` ; après `Dernieres.` (un RING) : Count, Capacity,
-  Full, First, Last ; après `Postes.` (un SET) : Count, First, Last.
+  modèles `SET OF STRING` et `RING[100] OF REAL` ; après `Dernieres.` (un RING, une locale ou une
+  variable IHM) : Count, Capacity, Full, First, Last ; après `Postes.` (un SET) : Count, First, Last.
 - **Le guide** (`src/hmi/HmiGuideText.cpp`, le sujet « MAP et itérateurs : FOR EACH ») : six blocs
   marqués 1.12.7 à la fin du sujet — ce que sont un SET et un RING, un exemple ST, C et C++, ce qu'un
   SET refuse, les affectations, une variable IHM SET ou RING ; et leurs mots-clés (SET, RING, SET_ADD…)
@@ -179,7 +181,7 @@ projet nommée SET_ADD passe avant la native.
 
 ## Les essais
 
-- `tests/hmi_setring_test.cpp` (nouveau, `ctest -R hmisetring`, 117 contrôles) : les déclarations et
+- `tests/hmi_setring_test.cpp` (nouveau, `ctest -R hmisetring`, 120 contrôles) : les déclarations et
   les littéraux (le SET rangé sans doublon, le RING des N dernières, RING[N] d'une constante),
   chaque native avec ses bords (valeur déjà là, absente, SET vide, RING plein) et ses fautes dites en
   français, les membres, l'ordre de FOR EACH, LIST_ADD et VECTOR_PUSH sur un RING et un SET, les
@@ -189,14 +191,16 @@ projet nommée SET_ADD passe avant la native.
   (valeur initiale mise en forme, écrite en place par SET_ADD et RING_ADD, son littéral), des
   variables nommées Set et Ring, une fonction du projet nommée SET_ADD, Compiler (un script sans
   erreur ; le nombre d'arguments ; SET_ADD sur une LIST, RING_ADD sur une LIST, SET_HAS sur un RING ;
-  ce qu'un SET refuse ; un littéral du mauvais type ; une constante ; la capacité d'un RING ; SET OF
-  T_Lot ; un SET passé par valeur à un paramètre LIST OF INT, en marche aussi), un projet entier
-  (`compileWith` : des variables IHM SET et RING et des locales SET et RING, sans erreur), le registre
-  des types (une variable IHM SET, RING ; RING[0], RING sans capacité refusés ; les conversions).
+  ce qu'un SET refuse, la variable d'un FOR EACH sur un SET comprise ; un littéral du mauvais type ;
+  une constante ; la capacité d'un RING ; SET OF T_Lot ; un SET passé par valeur à un paramètre
+  LIST OF INT, en marche aussi ; un membre SET et un membre RING d'un type IHM, par leur chemin, en
+  marche aussi), un projet entier (`compileWith` : des variables IHM SET et RING et des locales SET
+  et RING, sans erreur), le registre des types (une variable IHM SET, RING ; RING[0], RING sans
+  capacité refusés ; les conversions).
 - `tests/hmi_editor_test.cpp` (`setRing1127`, aussi par `HMI_TEST_NATIVES=1`) : l'aide à la saisie
-  (SET_ADD, RING_ADD, SET_INTERSECTION proposées ; les membres d'un RING et d'un SET), le tableau
-  des éléments (un SET rangé, sans doublon, les nombres rangés comme des nombres ; un RING[3] et
-  ses 3 dernières valeurs).
+  (SET_ADD, RING_ADD, SET_INTERSECTION proposées ; les membres d'un RING et d'un SET locaux, d'une
+  variable IHM RING), le tableau des éléments (un SET rangé, sans doublon, les nombres rangés comme
+  des nombres ; un RING[3] et ses 3 dernières valeurs).
 - `tests/hmi_types_test.cpp` : 9 formes (7 + SET et RING), `compose(decompose(…))` de `SET OF STRING`,
   `RING[100] OF REAL`.
 - `tests/hmi_natives_test.cpp` exécute l'essai des 7 nouvelles fiches.
@@ -213,9 +217,10 @@ projet nommée SET_ADD passe avant la native.
   `'B'` avant `'a'`, et sans casse ni accent particuliers.
 - **La capacité maximale d'un RING est 100000** (choisie : un RING garde chaque valeur comme un
   objet du moteur ; les 100 dernières mesures d'une courbe en sont loin).
-- **Compiler ne connaît le type d'une liste que si elle est un nom** (une locale, une variable IHM) :
-  `SET_ADD(Recette.Postes, 5)` ou `LIST_INSERT(Recette.Postes, 0, x)` sur un membre SET n'est dit
-  qu'en marche ; de même la variable d'un FOR EACH sur un SET écrite (en marche : refusée). Un
+- **Compiler connaît le type d'un SET ou d'un RING désigné** : une locale, une variable IHM, le membre
+  d'une variable IHM par son chemin (`SET_ADD(Recette.Postes, 5)`, `Recette.Postes[0] := x` sont
+  dits) ; une valeur calculée, le membre d'une structure locale, et `FOR EACH x IN Recette.Postes DO
+  x := …` (la variable d'un FOR EACH sur un chemin) ne sont dits qu'en marche (refusés). Un
   `POINTER TO` vers un élément de SET n'est pas possible (ADR(S[0]) est refusé), mais un pointeur
   vers le SET entier l'écrit par ses natives, qui gardent sa forme.
 - **Le tableau des éléments** range un SET sur le texte des valeurs (les nombres comme des nombres,

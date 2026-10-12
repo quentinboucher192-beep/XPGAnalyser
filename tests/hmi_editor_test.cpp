@@ -28785,6 +28785,15 @@ void setRing1127() {
           "Dernieres. (un RING) : Count, Capacity, Full, First, Last (" + std::to_string(ring.size()) + ")");
     const auto set = as::suggest(hp, nullptr, "VAR\n    Postes : SET OF STRING;\nEND_VAR\nb := Postes.", "");
     check(find(set, "Count") && find(set, "First") && !find(set, "Capacity") && !find(set, "Full"), "Postes. (un SET) : Count, First, Last ; ni Capacity, ni Full");
+    // Une variable IHM de type RING : les memes membres.
+    hmi::Project withVar;
+    hmi::Variable courbe;
+    courbe.id = withVar.allocate();
+    courbe.name = "Courbe";
+    courbe.type = "RING[100] OF REAL";
+    withVar.programs.variables.push_back(courbe);
+    const auto ihm = as::suggest(withVar, nullptr, "x := Courbe.", "");
+    check(find(ihm, "Capacity") && find(ihm, "Full") && find(ihm, "Count"), "Courbe. (une variable IHM RING) : Count, Capacity, Full (" + std::to_string(ihm.size()) + ")");
     // Le tableau des elements : un SET range, sans doublon, ni Monter ni Descendre ; un RING, ses N dernieres valeurs.
     auto s = app::HmiItemsDialog::modelOf("SET OF STRING", "['P3', 'P1', 'P3']");
     check(s->mode == app::HmiItemsDialog::Model::Mode::List && s->rowCount() == 2 && s->cellText(0, 1) == "'P1'" && s->flavor == "SET",

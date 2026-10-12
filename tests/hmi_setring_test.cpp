@@ -389,6 +389,15 @@ void compiler() {
               "ce qu'un SET refuse : des erreurs" + all(fs));
     }
     {
+        // La variable d'un FOR EACH sur un SET : lue, pas ecrite ; sur un RING ou une LIST, elle s'ecrit.
+        const auto fs = walk("FOR EACH s IN Postes DO\n  s := 'Z';\nEND_FOR\nFOR EACH i, s IN Autre DO\n  i := i + 1;\nEND_FOR\n"
+                             "FOR EACH x IN Dernieres DO\n  x := 0.0;\nEND_FOR\nFOR EACH s IN Liste DO\n  s := 'Z';\nEND_FOR\n"
+                             "FOR EACH s IN Postes DO\n  Liste[0] := s;\nEND_FOR");
+        int refused = 0;
+        for (const auto& f : fs) refused += f.severity == S::Error && f.message.find(kItemRefused) != std::string::npos ? 1 : 0;
+        check(says(fs, kItemRefused, S::Error) && refused == 1, "FOR EACH s IN S (un SET) : s := 'Z' refuse, une fois ; un RING, une LIST : permis" + all(fs));
+    }
+    {
         const auto fs = walk("b := SET_ADD(Nombres, 'abc');\ni := RING_ADD(Petit, 'x');\nb := SET_ADD(Postes, 5);");
         check(says(fs, "SET_ADD : 'abc' n'est pas un INT", S::Error) && says(fs, "RING_ADD : 'x' n'est pas un INT", S::Error)
                   && says(fs, "SET_ADD : 5 n'est pas une STRING", S::Error),
@@ -465,6 +474,50 @@ void compiler() {
                   && typereg::conversion("SET OF INT", "LIST OF REAL").kind == typereg::Conversion::Forbidden
                   && typereg::conversion("LIST OF INT", "VECTOR OF INT").kind == typereg::Conversion::Forbidden,
               "le registre : SET et RING s'echangent avec une LIST de meme element (une LIST et un VECTOR : comme avant)");
+    }
+    {
+        // Un membre objet d'un type IHM : T_Recette.Postes (SET OF STRING), T_Recette.Dern (RING[3] OF INT) - Compiler
+        // connait leur type par le chemin ; en marche, ils s'ecrivent en place.
+        Project p;
+        HmiType rec;
+        rec.id = p.allocate();
+        rec.name = "T_Recette";
+        rec.members = {TypeMember{"Nom", "STRING"}, TypeMember{"Postes", "SET OF STRING"}, TypeMember{"Dern", "RING[3] OF INT"}};
+        p.programs.types.push_back(rec);
+        const auto var = [&](const char* n, const char* t) {
+            Variable v;
+            v.id = p.allocate();
+            v.name = n;
+            v.type = t;
+            p.programs.variables.push_back(v);
+        };
+        var("Recette", "T_Recette");
+        var("R", "STRING");
+        scriptcheck::Scope sc;
+        sc.project = &p;
+        const auto fs = scriptcheck::check(sc, "VAR b : BOOL; i : DINT; END_VAR\nSET_ADD(Recette.Postes, 5);\nLIST_INSERT(Recette.Postes, 0, 'x');\n"
+                                               "Recette.Postes[0] := 'Z';\ni := RING_ADD(Recette.Dern, 'a');\nRecette.Dern[0] := 4;");
+        check(says(fs, "SET_ADD : 5 n'est pas une STRING", S::Error) && says(fs, "LIST_INSERT" + kSetRefused, S::Error) && says(fs, kItemRefused, S::Error)
+                  && says(fs, "RING_ADD : 'a' n'est pas un INT", S::Error) && !says(fs, "Recette.Dern", S::Error),
+              "un membre SET, RING d'une variable IHM : Compiler le connait par son chemin" + all(fs));
+        View v = makeView(p, "Vue");
+        p.views.push_back(v);
+        p.config.startView = p.views.back().id;
+        Script s;
+        s.id = p.allocate();
+        s.name = "Essai";
+        s.event = "Appel";
+        s.body = "VAR i : DINT; END_VAR\nSET_ADD(Recette.Postes, 'b');\nSET_ADD(Recette.Postes, 'a');\nSET_ADD(Recette.Postes, 'b');\nFOR i := 1 TO 5 DO\n  RING_ADD(Recette.Dern, i);\nEND_FOR\n"
+                 "R := JOIN(Recette.Postes, ',') + ' ' + JOIN(Recette.Dern, ',') + ' ' + TO_STRING(Recette.Dern.Full);";
+        p.programs.scripts.push_back(s);
+        Runtime rt;
+        rt.bind(&p, nullptr);
+        rt.start(0.0);
+        rt.tick(0.1);
+        std::string err;
+        (void)rt.callScript("Essai", 0.2, &err);
+        sim::Value out;
+        check(rt.environment().read("R", out) && shown(out) == "a,b 3,4,5 TRUE", "un membre SET et RING en marche : " + shown(out) + " " + err);
     }
     {
         // Le registre des types : une variable IHM SET ou RING (de taille variable : dans la memoire de l'IHM).

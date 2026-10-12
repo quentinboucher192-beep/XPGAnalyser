@@ -323,6 +323,9 @@ std::string hmiVariableDetail(const hmi::Variable& v) {
          + (v.description.empty() ? std::string{} : "  \xC2\xB7  " + v.description);
 }
 
+// 1.12.7 : les membres d'un SET ou d'un RING (plus bas).
+bool setRingMembers(const std::string& type, const std::string& needle, const std::function<void(Item)>& push);
+
 // Lot 16 : apres le point d'une structure ou d'un tableau IHM - les membres, les
 // proprietes publiques (avec leur valeur). Faux : le chemin n'en est pas un.
 bool hmiCompositeMembers(const hmi::Project& hp, const std::string& path, const std::string& needle,
@@ -330,6 +333,7 @@ bool hmiCompositeMembers(const hmi::Project& hp, const std::string& path, const 
     namespace ty = hmi::types;
     const std::string type = ty::typeOfPath(hp, path);
     if (type.empty()) return false;
+    if (setRingMembers(type, needle, push)) return true;      // 1.12.7 : une variable IHM SET ou RING
     ty::Spec spec;
     if (!ty::parseSpec(type, spec) || (!spec.array() && ty::isElementary(spec.element))) return true;   // une case simple : rien
     const auto flat = ty::flatten(hp, "x", type, {}, true);
@@ -1012,6 +1016,34 @@ bool typeMembers(const hmi::Project& hp, const domain::Project* plc, const std::
     return false;
 }
 
+// 1.12.7 : apres le nom d'un SET ou d'un RING (une locale, une variable IHM) - .Count, .First, .Last ; un
+// RING aussi .Capacity (N) et .Full. Faux : le type n'est ni l'un ni l'autre.
+bool setRingMembers(const std::string& type, const std::string& needle, const std::function<void(Item)>& push) {
+    const std::string u = upper(trimmed(type));
+    if (!((u.rfind("SET ", 0) == 0 || u.rfind("RING", 0) == 0) && u.find(" OF ") != std::string::npos)) return false;
+    const bool ring = u[0] == 'R';
+    const std::string element = trimmed(std::string_view(type).substr(u.find(" OF ") + 4));
+    int order = 0;
+    const auto add = [&](const char* name, const std::string& t, const std::string& what) {
+        const int r = matchRank(name, needle);
+        if (r < 0) return;
+        Item it;
+        it.text = name;
+        it.detail = t + kDot + what;
+        it.kind = Kind::Member;
+        it.rank = r * 100 + order++;
+        push(std::move(it));
+    };
+    add("Count", "DINT", ring ? "le nombre de valeurs gard\xC3\xA9" "es (au plus la capacit\xC3\xA9)" : "le nombre de valeurs");
+    if (ring) {
+        add("Capacity", "DINT", "N : le nombre de valeurs que le RING garde");
+        add("Full", "BOOL", "plein : la prochaine valeur fera partir la plus ancienne");
+    }
+    add("First", element, ring ? "la plus ancienne" : "la plus petite");
+    add("Last", element, ring ? "la plus r\xC3\xA9" "cente" : "la plus grande");
+    return true;
+}
+
 // Apres un point, un nom du script : "it." (un iterateur de MAP) -> Key, Value ;
 // "p^." (un pointeur, une reference) -> les membres du type vise ; une locale d'un
 // type IHM -> ses membres ; un tableau -> Length. Faux : le chemin n'est pas au script.
@@ -1057,29 +1089,7 @@ bool dialectMembers(const Scope& sc, const domain::Project* plc, const std::stri
         return true;
     }
     // 1.12.7 : un SET, un RING - .Count, .First, .Last ; un RING aussi .Capacity (N) et .Full.
-    if (const std::string u = upper(trimmed(type)); (u.rfind("SET ", 0) == 0 || u.rfind("RING", 0) == 0) && u.find(" OF ") != std::string::npos) {
-        const bool ring = u[0] == 'R';
-        const std::string element = trimmed(std::string_view(type).substr(u.find(" OF ") + 4));
-        int order = 0;
-        const auto add = [&](const char* name, const std::string& t, const std::string& what) {
-            const int r = matchRank(name, needle);
-            if (r < 0) return;
-            Item it;
-            it.text = name;
-            it.detail = t + kDot + what;
-            it.kind = Kind::Member;
-            it.rank = r * 100 + order++;
-            push(std::move(it));
-        };
-        add("Count", "DINT", ring ? "le nombre de valeurs gard\xC3\xA9" "es (au plus la capacit\xC3\xA9)" : "le nombre de valeurs");
-        if (ring) {
-            add("Capacity", "DINT", "N : le nombre de valeurs que le RING garde");
-            add("Full", "BOOL", "plein : la prochaine valeur fera partir la plus ancienne");
-        }
-        add("First", element, ring ? "la plus ancienne" : "la plus petite");
-        add("Last", element, ring ? "la plus r\xC3\xA9" "cente" : "la plus grande");
-        return true;
-    }
+    if (setRingMembers(type, needle, push)) return true;
     std::string k, v;
     if (mapTypes(type, k, v)) return true;             // une MAP : m[cle], MAP_... ; pas de membres
     (void)typeMembers(*sc.hp, plc, type, needle, push);

@@ -543,6 +543,7 @@ private:
     // texte ; son type, ses membres, ses arguments : S1 (dialectFindings).
     struct DialectName { std::string name, upper; std::size_t from{0}, to{0}; };
     std::vector<DialectName> dialectNames_;
+    std::vector<DialectName> setLoopVars_;      // 1.12.7 : les variables d'un FOR EACH sur un SET (lues, jamais ecrites)
     struct InternalFunction { std::string name; std::size_t from{0}, to{0}; };
     std::vector<InternalFunction> internal_;
     std::set<std::string>    typeWords_;         // les mots des types (en-tetes, declarations), en majuscules
@@ -641,8 +642,13 @@ private:
                 else if (isWord(e, "END_FOR") && --depth == 0) break;
             }
             const std::size_t from = t[f].at, to = atEnd(e) ? body_.size() : t[e].end();
-            for (std::size_t k = f + 2; !atEnd(k) && !isWord(k, "IN") && !isWord(k, "DO") && !isOp(k, ";"); ++k)
-                if (t[k].k == Tok::K::Ident) add(t[k], from, to);
+            std::size_t in = f + 2;
+            for (; !atEnd(in) && !isWord(in, "IN") && !isWord(in, "DO") && !isOp(in, ";"); ++in)
+                if (t[in].k == Tok::K::Ident) add(t[in], from, to);
+            // 1.12.7 : FOR EACH x IN S, S un SET (un nom) - x se lit, ne s'ecrit pas.
+            if (isWord(in, "IN") && in > f + 2 && t[in - 1].k == Tok::K::Ident && isIdent(in + 1) && isWord(in + 2, "DO")
+                && setText(typeOfName(t[in + 1].text)))
+                setLoopVars_.push_back({t[in - 1].text, up(t[in - 1].text), from, to});
         }
         // Les declarations (le texte entier : VAR, VAR_TEMP et VAR_INPUT sont
         // blanchis dans le corps) : un nom que les variables locales n'ont pas.
@@ -856,11 +862,28 @@ private:
         // Une variable locale, un compteur, le nom de la fonction : elementaires.
         std::string type;
         std::string what;
-        // 1.12.7 : S[0] := x, S.First := x - un element d'un SET ne s'ecrit pas en place.
+        // 1.12.7 : S[0] := x, S.First := x, la variable d'un FOR EACH sur un SET - un element d'un SET ne s'ecrit pas en place.
+        if (write && segs.empty())
+            for (const auto& v : setLoopVars_)
+                if (v.upper == R && root.at >= v.from && root.at < v.to) {
+                    reportTok(i, j, S::Error, kSetItemText);
+                    return {};
+                }
         if (write && !segs.empty()) {
-            const auto* l = local(root.text);
-            const Variable* v = !l && p ? p->variable(root.text) : nullptr;
-            if (setText(l ? l->type : v ? v->type : std::string{})) {
+            // Le chemin sans sa derniere case ([i]) ou sans .First / .Last : S, Recette.Postes.
+            const std::string text = textOf(i, j);
+            std::string owner;
+            if (!text.empty() && text.back() == ']') {
+                int depth = 0;
+                for (std::size_t k = text.size(); k-- > 0;) {
+                    if (text[k] == ']') ++depth;
+                    else if (text[k] == '[' && --depth == 0) { owner = text.substr(0, k); break; }
+                }
+            } else if (const auto dot = text.rfind('.'); dot != std::string::npos) {
+                const std::string m = up(text.substr(dot + 1));
+                if (m == "FIRST" || m == "LAST") owner = text.substr(0, dot);
+            }
+            if (!owner.empty() && setText(typeOfName(owner))) {
                 reportTok(i, j, S::Error, kSetItemText);
                 return {};
             }
