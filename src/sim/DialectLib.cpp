@@ -159,7 +159,7 @@ std::string_view cTypeName(std::string_view type) noexcept {
 
 bool elementaryTypeName(std::string_view name) noexcept {
     static constexpr std::string_view kOthers[] = {"STRING", "WSTRING", "CHAR", "WCHAR", "TIME", "LTIME", "DATE", "LDATE", "DT", "LDT",
-                                                   "TOD", "LTOD", "DATE_AND_TIME", "TIME_OF_DAY", "ARRAY", "LIST", "VECTOR", "MAP", "TUPLE", "SET", "RING"};
+                                                   "TOD", "LTOD", "DATE_AND_TIME", "TIME_OF_DAY", "ARRAY", "LIST", "VECTOR", "MAP", "TUPLE"};
     if (typeRow(name)) return true;
     const std::string u = upper(trimmed(name));
     for (const auto o : kOthers)
