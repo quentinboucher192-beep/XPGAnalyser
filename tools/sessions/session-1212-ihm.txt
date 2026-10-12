@@ -58,9 +58,11 @@ capture 1212_ihm_03_jauge_heritee.png
 # ---- Lot G : la liaison Equipement, le mode Etat ----
 objet "Pompe_FGH"
 attendre 3
-# La section « Liaison Equipement (T_Pompe_FGH) » a l'ecran (sa premiere ligne, Structure, en lecture seule).
-propriete-clic "Structure"
-attendre 3
+# La section « Liaison Equipement (T_Pompe_FGH) » a l'ecran, jusqu'a sa ligne Mode (sa liste fermee par Echap).
+propriete-clic "Mode"
+attendre 2
+touche escape
+attendre 2
 capture 1212_ihm_04_pompe_liaison.png
 
 objet "Moteur_FGH"
