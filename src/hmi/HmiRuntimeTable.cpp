@@ -379,7 +379,7 @@ bool Runtime::tableRowScope(Id view, const Object& o, long long position, Scope&
 bool Runtime::tableModel(Id view, const Object& o, table::Model& out) const {
     out = {};
     if (table::modeOf(o) != table::Mode::Rows || !project_ || !env_) return false;
-    out.emptyText = trimmedText(o.text(table::kEmptyKey));
+    out.emptyText = trimmedText(shownText(view, o, table::kEmptyKey));
     // ---- le tableau d'avant (sans dynColumns) : ses lignes, telles quelles ------------------
     if (!table::hasColumns(o)) {
         std::vector<std::vector<std::string>> rows;
@@ -634,9 +634,10 @@ bool Runtime::tableModel(Id view, const Object& o, table::Model& out) const {
         }
         out.rows.push_back(std::move(row));
     }
-    // Le tri : par la colonne choisie, les nombres comme des nombres ; « ... » et ### a la fin.
-    out.sortColumn = table::sortColumnOf(o, cols);
-    out.sortDescending = table::sortDescending(o);
+    // Le tri : par la colonne choisie, les nombres comme des nombres ; « ... » et ### a la fin. Le tri et son ordre
+    // tels que l'ecran les montre : une formule (=Tri_Cuves, qu'un clic sur un en-tete ecrit) evaluee.
+    out.sortColumn = table::sortColumnOf(shownText(view, o, table::kSortKey), cols);
+    out.sortDescending = table::sortDescending(shownText(view, o, table::kSortOrderKey));
     if (out.sortColumn >= 0) {
         const auto k = static_cast<std::size_t>(out.sortColumn);
         const bool desc = out.sortDescending;

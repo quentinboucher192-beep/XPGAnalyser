@@ -1202,12 +1202,14 @@ std::string withoutCaret(std::string_view text) {
     return out;
 }
 
-bool sortDescending(const Object& o) {
-    const std::string s = trimmed(o.text(kSortOrderKey));
+bool sortDescending(const Object& o) { return sortDescending(o.text(kSortOrderKey)); }
+bool sortDescending(std::string_view order) {
+    const std::string s = trimmed(order);
     return !s.empty() && (s.front() == 'd' || s.front() == 'D');
 }
-int sortColumnOf(const Object& o, const std::vector<Column>& cols) {
-    const std::string by = trimmed(o.text(kSortKey));
+int sortColumnOf(const Object& o, const std::vector<Column>& cols) { return sortColumnOf(o.text(kSortKey), cols); }
+int sortColumnOf(std::string_view text, const std::vector<Column>& cols) {
+    const std::string by = trimmed(text);
     if (by.empty()) return -1;
     for (std::size_t k = 0; k < cols.size(); ++k)
         if (same(trimmed(cols[k].title), by)) return static_cast<int>(k);

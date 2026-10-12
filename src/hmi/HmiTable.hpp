@@ -172,6 +172,9 @@ struct RowPaths {
 [[nodiscard]] bool sortDescending(const Object&);
 // La colonne du tri (sortBy : son titre, ou son contenu) ; -1 : l'ordre de la source.
 [[nodiscard]] int sortColumnOf(const Object&, const std::vector<Column>&);
+// Les memes, d'apres le texte montre (en marche : la formule du tri evaluee, =Tri_Cuves).
+[[nodiscard]] bool sortDescending(std::string_view order);
+[[nodiscard]] int sortColumnOf(std::string_view by, const std::vector<Column>&);
 
 // ---- les gestes sur un tableau (Trigger::CellClick...) : ce que recoit l'action -----------------
 //  Ligne (la ligne montree, 1...), Colonne (1...), Valeur (le texte de la case), Valeurs (ceux de la ligne,
