@@ -179,6 +179,13 @@ par construction.
   palette ; choisie par une variable de ce type, elle devient la Valeur), d'un chronogramme (par numéro), d'une
   image animée (une condition `Etat = T_ETAT#Marche` par valeur, les images à choisir ensuite) et les onglets
   d'un conteneur (un onglet par valeur, la variable de ce type : sans décalage). Ctrl+Z rend ce qu'il y avait.
+- **« États depuis »** (Objets, Graphiques) : un voyant ou un texte multi-états, un chronogramme lit ses états dans
+  une source, en marche : une `MAP` (la clé est la valeur de l'état, la valeur son texte - `[0 := 'Arrêt',
+  1 := 'Marche']`), une `LIST` ou un tableau de textes (l'indice, le texte), une énumération (sa valeur - son nom
+  pour un multi-états, son nombre pour un chronogramme - et son texte). Un état écrit pour la même valeur garde sa
+  couleur, les autres prennent la palette, le « sinon » reste le dernier ; une MAP qui grandit ajoute son état au
+  cycle suivant. L'inspecteur propose les MAP, les LIST, les tableaux et les énumérations (un nom tapé aussi) ;
+  Contenu le dit au-dessus des états. Vide : les états écrits, comme avant.
 - **« Répéter depuis »** (Symboles) : une instance de symbole se pose une fois par élément d'un tableau ou d'une
   `LIST` (`Cuves`) ; ses arguments qui citent `[*]` (`Cuve := Cuves[*]`) reçoivent l'élément ; les copies se
   suivent (horizontal ou vertical, à l'écart donné ; « par rangée » : 8 cuves, 4 par rangée, deux rangées). La
@@ -223,7 +230,9 @@ par construction.
   structure (une ligne par membre : Membre, Valeur) ; un tableau de structures imbriquées : une colonne par
   membre simple (Pompe.Debit). »
 - *Voyant et texte multi-états, image animée, chronogramme* : « 1.12.7 : Contenu › Depuis une énumération : un
-  état par valeur (son texte, une couleur), la variable choisie devient la Valeur. »
+  état par valeur (son texte, une couleur), la variable choisie devient la Valeur. États depuis (Propriétés) : les
+  états lus en marche dans une MAP (clé = valeur, valeur = texte), une LIST, un tableau ou une énumération ; un
+  état écrit pour la même valeur donne sa couleur. »
 - *Instance de symbole* : « 1.12.7 : Répéter depuis `Cuves` - une instance par élément ; dans les Arguments,
   `[*]` désigne l'élément (`Cuve := Cuves[*]`). Les copies se suivent (sens, écart, combien par rangée) ; la
   première garde le nom de l'instance, les autres Nom_2, Nom_3… L'éditeur les montre estompées. »
@@ -238,6 +247,8 @@ Des avertissements :
   courbe aussi) ;
 - `X.*` sur ce qui n'est pas une structure, un dossier de variables sans variable simple, un dossier de vues sans
   vue ordinaire : « aucun élément » ;
+- « États depuis » une source inconnue (et « aucun état » n'est plus dit d'un multi-états qui lit ses états
+  dans une source) ;
 - une instance répétée dont la source est inconnue, ou dont aucun argument ne cite `[*]` (toutes les copies
   montreraient la même chose) ;
 - « Éléments depuis » un tableau ou une liste de structures sans membre choisi (avec la proposition
@@ -268,7 +279,8 @@ structure d'une popup (`Cuve.*`) se vérifie sur son type ; un paramètre sans t
   une barre de navigation, son clic, son aperçu, un dossier vide dit) et `lignesDepuis1127` (un tableau depuis une
   énumération et depuis une structure seule, ses colonnes choisies, Générer sans erreur) et `xyProfil1127` (une
   courbe XY en profil, ses trois points refaits à chaque échantillon ; un joker dans un symbole sur un tableau
-  qui part de 1, sans fausse erreur de bornes). `HMI_TEST_1127=1` les lance avec ceux du
+  qui part de 1, sans fausse erreur de bornes) et `etatsDepuis1127` (un multi-états depuis une MAP qui grandit
+  en marche, un chronogramme depuis une énumération, l'aperçu, la source inconnue dite, le renommage suivi). `HMI_TEST_1127=1` les lance avec ceux du
   lot D.
 - `hmi_editor_test` : `lotE1127_editeur` (les états d'un texte multi-états, d'un chronogramme, d'une image animée
   et les onglets depuis une énumération ; « Répéter depuis » et « par rangée » dans l'inspecteur d'une instance,
@@ -292,15 +304,16 @@ structure d'une popup (`Cuve.*`) se vérifie sur son type ; un paramètre sans t
   navigation et le résumé par zone ; le conteneur à onglets prend son joker tapé (ou « Depuis une énumération »).
 - **Lignes depuis un paramètre de popup structure** (`Cuve`) : une structure seule se lit sur une variable du projet
   ou un chemin (`Lignes[2].Pompe`), pas à travers un paramètre.
-- **Un joker et des membres ensemble** (`Moteurs[*].*`) : sur un tableau de l'IHM ; pas sur une `LIST` de
-  structures (les membres d'un élément de LIST ne se connaissent qu'en marche : la ligne ne donne rien).
+- **Un joker et des membres ensemble** (`Moteurs[*].*`) : essayé sur un tableau de l'IHM ; sur une `LIST` de
+  structures (`Lignes[*].*`), les membres viennent du type de la LIST (essayé sans moteur : `Lignes[0]` donne
+  ses membres), pas essayé en marche avec des valeurs.
 - **Un tableau à deux dimensions** se déplie case par case (`M[*]` : toutes les cases), pas « une série par
   ligne » ; un `TUPLE` se parcourt par `Mesure.*` (pas par `[*]`).
 - **La courbe XY en profil** relit toute la source à chaque échantillon (100 ms) : pour des milliers de points,
   la période d'échantillonnage du graphique n'existe pas encore (§ 3.4, une autre demande). Le point « du
   moment » mis en avant est le dernier de la source.
-- **Une MAP comme états d'un multi-états** (« clé = valeur de l'état, valeur = texte ») : non ; « Depuis une
-  énumération » seulement.
+- **« États depuis »** : pas pour l'image animée (ses images ne viennent pas d'une source) ; dans l'éditeur,
+  l'aperçu d'une MAP montre ses clés comme textes (les valeurs se lisent en marche).
 - **« Répéter depuis » une LIST** : les copies suivent la liste en marche, mais les alarmes du symbole ne sont
   générées que pour un tableau de l'IHM (la taille d'une LIST n'est connue qu'en marche). Dans la ligne d'un
   paramètre de l'inspecteur, `Cuves[*]` sur une variable du projet reste une formule ; un repère (`$Cuves$[*]`)
@@ -314,7 +327,7 @@ structure d'une popup (`Cuve.*`) se vérifie sur son type ; un paramètre sans t
 ### Les risques pour les projets existants (lots D et E)
 
 Aucun format ne change : les propriétés nouvelles (`sourceColumns`, `repeatFrom`, `repeatAxis`, `repeatGap`,
-`repeatPerRow`, le champ `postes` de la configuration) sont absentes tant qu'elles ne servent pas, et un fichier
+`repeatPerRow`, `statesFrom`, le champ `postes` de la configuration) sont absentes tant qu'elles ne servent pas, et un fichier
 1.12.6 se relit tel quel. Les seuls changements de comportement visibles :
 - une valeur qui ressemble à un joker est maintenant dépliée : un nom de vue, d'onglet ou de groupe écrit
   `Chemin[*]`, `Chemin.*` ou `Dossier/*` (aucun n'était valable avant : Générer les refusait ou ils ne

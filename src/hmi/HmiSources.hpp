@@ -151,6 +151,15 @@ inline constexpr std::string_view kRepeatFromKey = "repeatFrom";
 inline constexpr std::string_view kRepeatAxisKey = "repeatAxis";
 inline constexpr std::string_view kRepeatGapKey = "repeatGap";
 inline constexpr std::string_view kRepeatPerRowKey = "repeatPerRow";
+
+// ---- « ETATS DEPUIS » (§ 2.3, la colonne Multi-etats) -------------------------------------------------
+//  Un voyant ou un texte multi-etats, un chronogramme lit ses etats dans une source : une MAP (la cle : la
+//  valeur de l'etat ; la valeur : son texte), une LIST, un VECTOR ou un tableau (le rang ou l'indice, le
+//  texte de l'element), une enumeration du projet (sa valeur - son nom, ou son nombre pour un chronogramme
+//  - et son texte). Un etat de la liste ecrite pour la meme valeur garde sa couleur ; les autres prennent la
+//  palette ; le « sinon » (*) reste le dernier. En marche, la liste suit la source (vue composee).
+inline constexpr std::string_view kStatesFromKey = "statesFrom";
+[[nodiscard]] bool hasStatesFrom(const Object& o);
 [[nodiscard]] bool repeats(const Object& o);
 bool repeatInstances(View& v, const SourceFn& source);
 // L'apercu de l'editeur : les copies d'une instance repetee, selon le projet (previewSources : les bornes

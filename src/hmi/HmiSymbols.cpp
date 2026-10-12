@@ -978,8 +978,8 @@ void rewriteNames(Object& o, const std::function<std::string(std::string_view, b
                 first = false;
             }
             if (changed) p.value = rebuilt;
-        } else if (p.key == sources::kRepeatFromKey) {
-            expr(p.value);   // 1.12.7 (lot E) : la source d'une instance repetee (Cuves, Lignes[2].Cuves)
+        } else if (p.key == sources::kRepeatFromKey || p.key == sources::kStatesFromKey) {
+            expr(p.value);   // 1.12.7 (lot E) : la source d'une instance repetee (Cuves), des etats (Etats)
         }
     }
     for (auto& a : o.actions) {

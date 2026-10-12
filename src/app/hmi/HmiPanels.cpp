@@ -1983,6 +1983,11 @@ const std::vector<KeyInfo>& keyInfos() {
          "Vide : une seule instance."},
         {"repeatAxis", "R\xC3\xA9p\xC3\xA9ter : sens", PG::ValueType::Enum, {"horizontal", "vertical"}, "Les copies c\xC3\xB4te \xC3\xA0 c\xC3\xB4te, ou l'une sous l'autre."},
         {"repeatGap", "R\xC3\xA9p\xC3\xA9ter : \xC3\xA9" "cart (px)", PG::ValueType::Real, {}, "L'espace entre deux copies."},
+        // 1.12.7 (lot E) : « Etats depuis » - les etats d'un multi-etats, d'un chronogramme lus dans une source
+        {"statesFrom", "\xC3\x89tats depuis", PG::ValueType::Text, {},
+         "Remplace les \xC3\xA9tats \xC3\xA9" "crits, en marche : une MAP (la cl\xC3\xA9 : la valeur de l'\xC3\xA9tat, la valeur : son texte), "
+         "une LIST ou un tableau de textes (l'indice, le texte), une \xC3\xA9num\xC3\xA9ration (sa valeur, son texte). Un \xC3\xA9tat "
+         "\xC3\xA9" "crit pour la m\xC3\xAAme valeur garde sa couleur ; le \xC2\xAB sinon \xC2\xBB reste. Vide : les \xC3\xA9tats \xC3\xA9" "crits."},
         {"repeatPerRow", "R\xC3\xA9p\xC3\xA9ter : par rang\xC3\xA9" "e", PG::ValueType::Integer, {},
          "Combien de copies avant de passer \xC3\xA0 la rang\xC3\xA9" "e suivante (8 cuves, 4 par rang\xC3\xA9" "e : deux rang\xC3\xA9" "es). "
          "0 : toutes sur une rang\xC3\xA9" "e."},
@@ -2730,6 +2735,10 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
             if (!o->find("repeatGap")) allProps.push_back({"repeatGap", "10", ""});
             if (!o->find("repeatPerRow")) allProps.push_back({"repeatPerRow", "0", ""});
         }
+        // 1.12.7 (lot E) : « Etats depuis » d'un multi-etats, d'un chronogramme (absent d'un objet neuf).
+        if ((o->kind == hmi::Kind::MultiStateText || o->kind == hmi::Kind::MultiStateIndicator || o->kind == hmi::Kind::StateChart)
+            && !many && !o->find("statesFrom"))
+            allProps.push_back({"statesFrom", "", ""});
         // 1.12.7 (lot D) : les colonnes choisies d'un tableau qui a une source.
         if (o->kind == hmi::Kind::Table && !o->find("sourceColumns") && o->text("rowsFrom").find_first_not_of(" \t") != std::string::npos)
             allProps.push_back({"sourceColumns", "", ""});
@@ -2861,6 +2870,17 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
                     const auto form = hmi::typeform::decompose(var.type).form;
                     if (form == hmi::typeform::Form::Array || form == hmi::typeform::Form::Array2D || form == hmi::typeform::Form::List
                         || form == hmi::typeform::Form::Vector)
+                        p.enumValues.push_back(var.name);
+                }
+            } else if (prop.key == "statesFrom" && project) {
+                // 1.12.7 (lot E) : les sources d'etats - les enumerations, les MAP, les LIST et les tableaux.
+                p.type = PG::ValueType::Enum;
+                p.enumValues = {""};
+                for (const auto* e : hmi::enumerations(*project)) p.enumValues.push_back(e->name);
+                for (const auto& var : project->programs.variables) {
+                    const auto form = hmi::typeform::decompose(var.type).form;
+                    if (form == hmi::typeform::Form::Map || form == hmi::typeform::Form::List || form == hmi::typeform::Form::Vector
+                        || form == hmi::typeform::Form::Array)
                         p.enumValues.push_back(var.name);
                 }
             } else if ((prop.key == "itemsFrom" || prop.key == "rowsFrom") && project) {

@@ -29355,6 +29355,30 @@ void lotE1127_editeur() {
         check(rec.wrote("Cuve 1") && rec.wrote("Cuve 8") && !rec.wrote("Cuves[*]"),
               "lot E : l'aper\xC3\xA7u de l'\xC3\xA9" "diteur : une barre par cuve, Cuve 1 \xC3\xA0 Cuve 8 (avant : une barre Cuves[*])");
     }
+    // ---- « Etats depuis » : l'inspecteur d'un multi-etats, le bandeau de Contenu
+    {
+        hmi::Variable etats;
+        etats.id = b.doc->project.allocate();
+        etats.name = "Etats_E";
+        etats.type = "MAP[INT] OF STRING";
+        b.doc->project.programs.variables.push_back(etats);
+        b.editor->canvas().setSelection({multi});
+        b.editor->layout();
+        const ui::PropertyGrid::Property* statesFrom = nullptr;
+        for (const auto& c : b.editor->properties().categories())
+            for (const auto& pr : c.properties)
+                if (pr.key == "statesFrom") statesFrom = &pr;
+        check(statesFrom && statesFrom->type == ui::PropertyGrid::ValueType::Enum && statesFrom->typeIn
+                  && std::find(statesFrom->enumValues.begin(), statesFrom->enumValues.end(), "Etats_E") != statesFrom->enumValues.end()
+                  && std::find(statesFrom->enumValues.begin(), statesFrom->enumValues.end(), "T_Etat_E") != statesFrom->enumValues.end(),
+              "lot E : un multi-\xC3\xA9tats propose \xC2\xAB \xC3\x89tats depuis \xC2\xBB (les MAP, les \xC3\xA9num\xC3\xA9rations ; un nom tap\xC3\xA9 aussi)");
+        if (statesFrom && statesFrom->commit) check(statesFrom->commit("Etats_E"), "lot E : \xC3\x89tats depuis Etats_E");
+        same_text(b.v().object(multi)->text("statesFrom"), "Etats_E", "lot E : ... \xC3\xA9" "crit sur l'objet");
+        b.editor->layout();
+        bool banner = false;
+        for (const auto& c : content.grid().categories()) banner = banner || c.name == "\xC3\x89tats depuis";
+        check(content.object() == multi && banner, "lot E : Contenu dit que les \xC3\xA9tats viennent de la source");
+    }
     // ---- un resume par zone : ses zones depuis une source
     {
         hmi::HmiType zone;

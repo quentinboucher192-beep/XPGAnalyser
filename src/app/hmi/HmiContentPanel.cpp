@@ -1983,6 +1983,16 @@ void HmiContentPanel::rebuildGrid() {
         }
         case Mode::States: {
             const auto t = readStates(*o);
+            // 1.12.7 (lot E) : « Etats depuis » - en marche, les etats viennent d'une source.
+            if (hmi::sources::hasStatesFrom(*o)) {
+                PG::Category from;
+                from.name = "\xC3\x89tats depuis";
+                from.properties.push_back(readOnly("Source", o->text(std::string(hmi::sources::kStatesFromKey)),
+                                                   "En marche, les \xC3\xA9tats viennent de cette source (\xC3\x89tats depuis, dans "
+                                                   "Propri\xC3\xA9t\xC3\xA9s) : ceux ci-dessous donnent leur couleur \xC3\xA0 la m\xC3\xAAme "
+                                                   "valeur, et le \xC2\xAB sinon \xC2\xBB reste le dernier."));
+                cats.push_back(std::move(from));
+            }
             if (o->kind == hmi::Kind::StateChart) {
                 // 1.12.7 (lot D) : les etats d'un chronogramme (stateList), comme ceux d'un multi-etats ;
                 // chaque ligne du chronogramme les lit selon sa valeur.

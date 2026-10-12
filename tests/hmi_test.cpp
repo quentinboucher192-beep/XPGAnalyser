@@ -24604,6 +24604,70 @@ void xyProfil1127() {
     rt.stop(1.0);
 }
 
+// 1.12.7 (lot E) : « ETATS DEPUIS » (§ 2.3) - les etats d'un multi-etats, d'un chronogramme lus dans une source.
+void etatsDepuis1127() {
+    std::printf("1.12.7 (lot E) : Etats depuis une MAP, une enumeration\n");
+    Project p;
+    View v = makeView(p, "Vue_S");
+    HmiType mode;
+    mode.id = p.allocate();
+    mode.name = "T_Mode_S";
+    mode.kind = HmiTypeKind::Enumeration;
+    mode.values = {{"Arret", 0, "Arr\xC3\xAAt", ""}, {"Auto", 1, "Automatique", ""}};
+    p.programs.types.push_back(mode);
+    p.programs.variables.push_back(hmiVar(p, "Etats_S", "MAP[INT] OF STRING"));
+    p.programs.variables.back().initial = "[0 := 'Arr\xC3\xAAt', 1 := 'Marche']";
+    p.programs.variables.push_back(hmiVar(p, "Code_S", "INT"));
+    const Id texte = edit::add(p, v, Kind::MultiStateText, 10, 10);
+    v.object(texte)->setExpr("value", "Code_S");
+    v.object(texte)->set("stateList", "1 = x | #00FF00; * = ? | #4A5261");
+    v.object(texte)->set("statesFrom", "Etats_S");
+    const Id chrono = edit::add(p, v, Kind::StateChart, 10, 300);
+    v.object(chrono)->set("variables", "Code_S");
+    v.object(chrono)->set("statesFrom", "T_Mode_S");
+    p.views = {v};
+    p.config.startView = v.id;
+    {
+        bool blocked = false;
+        for (const auto& i : generate(p, [](std::string_view) { return false; }))
+            if ((i.object == texte || i.object == chrono) && i.severity != Issue::Severity::Info) {
+                blocked = true;
+                std::printf("  %s\n", i.message.c_str());
+            }
+        check(!blocked, "E : G\xC3\xA9n\xC3\xA9rer accepte \xC3\x89tats depuis une MAP et une \xC3\xA9num\xC3\xA9ration");
+    }
+    {
+        Object shown = *p.views[0].object(texte);
+        check(sources::previewObject(p, shown) && parseStateList(shown.text("stateList")).size() == 3,
+              "E : l'aper\xC3\xA7u de l'\xC3\xA9" "diteur : les \xC3\xA9tats de la valeur initiale de la MAP, et le sinon");
+    }
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    rt.tick(0.1);
+    const auto states = [&](Id id) { return parseStateList(rt.composedView(p.views[0].id)->object(id)->text("stateList")); };
+    auto st = states(texte);
+    check(st.size() == 3 && st[0].match == "0" && st[0].text == "Arr\xC3\xAAt" && st[0].color == "#4FA3FF" && st[1].match == "1"
+              && st[1].text == "Marche" && st[1].color == "#00FF00" && st[2].match == "*",
+          "E : un multi-\xC3\xA9tats depuis une MAP - la cl\xC3\xA9 est la valeur, la valeur son texte ; la couleur \xC3\xA9" "crite pour 1 reste, le sinon aussi");
+    check(rt.setRichVariable("Etats_S", "[0 := 'Arr\xC3\xAAt', 1 := 'Marche', 2 := 'D\xC3\xA9" "faut']"), "la MAP grandit en marche");
+    rt.tick(0.2);
+    st = states(texte);
+    check(st.size() == 4 && st[2].match == "2" && st[2].text == "D\xC3\xA9" "faut", "E : ... l'\xC3\xA9tat de plus vient au tick suivant");
+    const auto cs = states(chrono);
+    check(cs.size() == 2 && cs[0].match == "0" && cs[0].text == "Arr\xC3\xAAt" && cs[1].match == "1" && cs[1].text == "Automatique",
+          "E : un chronogramme depuis une \xC3\xA9num\xC3\xA9ration - ses nombres et ses textes");
+    rt.stop(1.0);
+    Project q = p;
+    q.views[0].object(texte)->set("statesFrom", "Inconnu_S");
+    bool warned = false;
+    for (const auto& i : generate(q, [](std::string_view) { return false; }))
+        warned = warned || (i.object == texte && i.severity == Issue::Severity::Warning && i.message.find("\xC3\xA9tats depuis : source inconnue") != std::string::npos);
+    check(warned, "E : \xC3\x89tats depuis une source inconnue : un avertissement");
+    (void)renameEnumType(q, "T_Mode_S", "T_Regime_S");
+    same(q.views[0].object(chrono)->text("statesFrom"), "T_Regime_S", "E : renommer l'\xC3\xA9num\xC3\xA9ration - \xC3\x89tats depuis suit");
+}
+
 int main(int argc, char** argv) {
     // 1.11.10 : HMI_TEST_1110=1 - les fonctions et les popups des symboles, seules.
     if (const char* only = std::getenv("HMI_TEST_1110"); only && *only == '1') {
@@ -24622,6 +24686,7 @@ int main(int argc, char** argv) {
         vuesDossier1127();
         lignesDepuis1127();
         xyProfil1127();
+        etatsDepuis1127();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -24771,6 +24836,7 @@ int main(int argc, char** argv) {
     vuesDossier1127();                // 1.12.7 (lot E) : une barre de navigation depuis un dossier de vues
     lignesDepuis1127();               // 1.12.7 (lot E) : Lignes depuis une enumeration, une structure
     xyProfil1127();                   // 1.12.7 (lot E) : la courbe XY en profil
+    etatsDepuis1127();                // 1.12.7 (lot E) : Etats depuis une source
     enumerationsLangage110();         // 1.10 (S1, decision 15) : les enumerations dans les scripts
     operateurs110();                  // 1.10 (chantier S2) : les operateurs des symboles et des types IHM
     operateurs1101();                 // 1.10.1 (chantier U2) : a, b et Resultat (types, legende, exemple, Compiler)

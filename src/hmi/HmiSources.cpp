@@ -1,4 +1,6 @@
 #include "HmiSources.hpp"
+#include "HmiCharts.hpp"     // la palette des etats
+#include "HmiControls.hpp"   // la liste d'etats (Etats depuis)
 #include "HmiEnums.hpp"
 #include "HmiMarkers.hpp"
 #include "HmiRoles.hpp"
@@ -308,8 +310,14 @@ bool repeats(const Object& o) {
     return o.kind == Kind::SymbolInstance && !roles::nameOf(o.text(kRepeatFromKey)).empty() && o.expr(kRepeatFromKey).empty();
 }
 
+bool hasStatesFrom(const Object& o) {
+    if (o.kind != Kind::MultiStateText && o.kind != Kind::MultiStateIndicator && o.kind != Kind::StateChart) return false;
+    const Prop* p = o.find(kStatesFromKey);
+    return p && p->expr.empty() && !trimmedOf(p->value).empty();
+}
+
 bool objectHasJoker(const Object& o) {
-    if (repeats(o)) return true;
+    if (repeats(o) || hasStatesFrom(o)) return true;
     for (const auto& p : o.props) {
         if (!p.expr.empty() || (p.value.find("[*]") == std::string::npos && p.value.find('*') == std::string::npos)) continue;
         if ((expandsFormulas(o.kind, p.key) || expandsTexts(o.kind, p.key)) && anyJoker(o.kind, p.key, p.value)) return true;
@@ -327,6 +335,7 @@ std::vector<std::string> sourcesOf(const Object& o) {
         if (!name.empty() && std::find(out.begin(), out.end(), name) == out.end()) out.push_back(std::move(name));
     };
     if (repeats(o)) add(roles::nameOf(o.text(kRepeatFromKey)));
+    if (hasStatesFrom(o)) add(roles::nameOf(o.text(kStatesFromKey)));
     for (const auto& p : o.props) {
         if (!p.expr.empty() || p.value.find('*') == std::string::npos) continue;
         if (!expandsFormulas(o.kind, p.key) && !expandsTexts(o.kind, p.key) && p.key != "names" && p.key != "labels") continue;
@@ -484,6 +493,50 @@ bool expandObject(Object& o, const SourceFn& source, const TextFn& text) {
             const bool any = std::any_of(outL.begin(), outL.end(), [](const std::string& s) { return !s.empty(); });
             o.set("labels", any ? joinSemicolons(outL) : std::string{});
         }
+        changed = true;
+    }
+    // ---- 1.12.7 (lot E) : « Etats depuis » - la liste d'etats lue dans une source
+    if (hasStatesFrom(o)) {
+        const std::string name = roles::nameOf(o.text(kStatesFromKey));
+        const auto src = source ? source(name) : std::nullopt;
+        const auto written = parseStateList(o.text("stateList"));
+        const bool chart = o.kind == Kind::StateChart;
+        const auto& palette = chartPalette();
+        const auto clean = [](std::string t) {   // un ';' ou un '|' couperait la liste d'etats
+            std::replace(t.begin(), t.end(), ';', ',');
+            std::replace(t.begin(), t.end(), '|', '/');
+            return t;
+        };
+        std::vector<StateEntry> states;
+        for (std::size_t k = 0; src && k < src->indices.size(); ++k) {
+            const std::string& index = src->indices[k];
+            const std::string label = k < src->labels.size() ? src->labels[k] : index;
+            StateEntry e;
+            if (src->enumeration) {
+                // T_MODE#Auto : un multi-etats la reconnait par son nom, un chronogramme trace son nombre.
+                const auto hash = index.find('#');
+                const auto number = chart && text ? text(index) : std::nullopt;
+                e.match = chart ? (number ? *number : std::to_string(k)) : index.substr(hash == std::string::npos ? 0 : hash + 1);
+                e.text = label;
+            } else {
+                // Une MAP : sa cle (le texte d'une cle 'vis', le nombre d'une cle 3) ; une LIST, un tableau : l'indice.
+                e.match = !index.empty() && index.front() == '\'' ? label : index;
+                const auto t = text ? text(name + "[" + index + "]") : std::nullopt;
+                e.text = t ? *t : label;
+            }
+            e.match = clean(e.match);
+            e.text = clean(e.text);
+            for (const auto& w : written)
+                if (w.match == e.match) {
+                    e.color = w.color;
+                    e.blink = w.blink;
+                }
+            if (e.color.empty() && !palette.empty()) e.color = palette[k % palette.size()];
+            states.push_back(std::move(e));
+        }
+        for (const auto& w : written)
+            if (w.match == "*") states.push_back(w);   // le « sinon » reste le dernier
+        o.set("stateList", formatStateList(states));
         changed = true;
     }
     return changed;
@@ -819,7 +872,7 @@ std::size_t renameSourceJokers(Project& p, std::string_view from, std::string_vi
             bool changed = false;
             for (auto& pr : o.props) {
                 if (!pr.expr.empty()) continue;
-                if (pr.key == "itemsFrom" || pr.key == "rowsFrom" || pr.key == kRepeatFromKey) {
+                if (pr.key == "itemsFrom" || pr.key == "rowsFrom" || pr.key == kRepeatFromKey || pr.key == kStatesFromKey) {
                     // une source nommee telle quelle (Elements depuis T_MODE)
                     if (sameName(trimmedOf(pr.value), f)) {
                         pr.value = t;

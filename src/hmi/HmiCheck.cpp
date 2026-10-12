@@ -1353,7 +1353,8 @@ void checkLot9(const Project& p, const NameExists& plc, std::vector<Issue>& out)
                     std::string why;
                     const auto states = parseStateList(o.text("stateList"), &why);
                     if (!why.empty()) issue(S::Error, "stateList", "\xC3\xA9tats illisibles : " + why);
-                    else if (states.empty()) issue(S::Warning, "stateList", "aucun \xC3\xA9tat : l'objet montrera toujours le m\xC3\xAAme aspect");
+                    else if (states.empty() && !sources::hasStatesFrom(o))   // 1.12.7 (lot E) : Etats depuis une source
+                        issue(S::Warning, "stateList", "aucun \xC3\xA9tat : l'objet montrera toujours le m\xC3\xAAme aspect");
                     break;
                 }
                 case Kind::WeeklySchedule: {
@@ -1839,6 +1840,12 @@ void checkLot11(const Project& p, const NameExists& plc, std::vector<Issue>& out
             };
             double lo = 0, hi = 0;
             const bool bounds = numberOrEmpty(o, "min", lo) && numberOrEmpty(o, "max", hi);
+            // 1.12.7 (lot E) : « Etats depuis » - sa source (un avertissement : une source inconnue ne donne aucun etat).
+            if (sources::hasStatesFrom(o)) {
+                std::string first;
+                if (const auto why = sources::sourceProblem(p, &v, roles::nameOf(o.text(sources::kStatesFromKey)), first); !why.empty())
+                    issue(S::Warning, std::string(sources::kStatesFromKey).c_str(), "\xC3\xA9tats depuis : " + why);
+            }
             switch (o.kind) {
                 // ---- les graphiques
                 case Kind::BarChart: case Kind::PieChart: {
