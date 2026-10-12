@@ -4,10 +4,11 @@
 #  avec les vues des sessions 1122 a 1127 et, par demo1129, la vue Vue_LotDE :
 #    1. le selecteur, son onglet Contenu : une ligne par choix (libelle, valeur) ;
 #    2. le bargraphe, ses zones dans Contenu (De, A, Couleur) ;
-#    3. le programmateur horaire, ses plages dans Contenu (13:30 arrondie a 14:00) ;
+#    3. le programmateur horaire, ses plages dans Contenu : la deuxieme choisie,
+#       13:30-17:00, arrondie a 14:00-17:00 par la resolution d'une heure ;
 #    4. la simulation : le joker [*] - une barre et une ligne de tableau par cuve
-#       (Cuves[*].Niveau, nommees par Cuves[*].Nom), une plume par bac (une LIST),
-#       une part par cle du stock (une MAP).
+#       (Cuves_DE[*].Niveau, nommees par Cuves_DE[*].Nom), une plume par bac (Bacs_DE,
+#       une LIST), une part par cle du stock (Stock_DE, une MAP).
 # =============================================================================
 attendre 3
 theme Dark
@@ -37,6 +38,9 @@ objet "Prog_DE"
 attendre 3
 sous-onglet "Contenu"
 attendre 3
+# la deuxieme plage (13:30-17:00) : son detail dit ce que la resolution en fait
+clic-souris 1420 244
+attendre 2
 capture 1129_ihm_03_contenu_plages.png
 
 # ---- Lot E : le joker [*] en simulation ----

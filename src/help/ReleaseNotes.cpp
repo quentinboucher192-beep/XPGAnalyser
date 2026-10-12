@@ -134,7 +134,7 @@ const std::vector<Note>& table() {
         note("1.12.9", "Objets", Kind::New,
          "DES TABLEAUX ET DES LISTES DEPUIS DES STRUCTURES : \xC2\xAB \xC3\x89l\xC3\xA9ments depuis \xC2\xBB Pompes[*].Nom montre le membre choisi de chaque \xC3\xA9l\xC3\xA9ment et \xC3\xA9" "crit son indice (avant : une liste vide, sans un mot) ; \xC2\xAB Lignes depuis \xC2\xBB un tableau de structures imbriqu\xC3\xA9" "es montre une colonne par membre simple (Pompe.Debit), depuis une \xC3\xA9num\xC3\xA9ration une ligne par valeur, depuis une structure une ligne par membre. G\xC3\xA9n\xC3\xA9rer v\xC3\xA9rifie un joker sur son premier \xC3\xA9l\xC3\xA9ment (avant : Cuves[*].Niveau \xC3\xA9tait une erreur bloquante) et dit une source inconnue ou vide (des avertissements).",
          "objet-tableau", ""),
-        // 1.12.8 (12/10/2026) : voir docs/LIVRAISON-1.12.8.md.
+        // 1.12.8 (12/10/2026) : voir docs/LIVRAISON-1.12.9.md (la 1.12.8 et la 1.12.9).
         note("1.12.8", "Objets", Kind::Changed,
          "CONTENU, UNE LIGNE PAR CHOIX : le s\xC3\xA9lecteur, la liste d\xC3\xA9roulante, les boutons radio et la liste ont leur onglet Contenu, une ligne par choix (son libell\xC3\xA9, la valeur qu'il \xC3\xA9" "crit ; vide : son rang). Ajouter, retirer, monter, descendre emm\xC3\xA8nent le libell\xC3\xA9 et sa valeur ensemble (avant : positions ou items et values \xC3\xA0 aligner \xC3\xA0 la main). Un \xC2\xAB ; \xC2\xBB nu dans un libell\xC3\xA9 est refus\xC3\xA9 tout de suite ; un rep\xC3\xA8re $Mode$ est gard\xC3\xA9 tel quel. Avec \xC2\xAB \xC3\x89l\xC3\xA9ments depuis \xC2\xBB, Contenu le dit : les lignes ne servent pas.",
          "objet-selecteur", ""),
