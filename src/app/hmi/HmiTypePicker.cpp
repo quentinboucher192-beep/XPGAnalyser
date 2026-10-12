@@ -860,7 +860,7 @@ std::string starter(std::string_view name, std::string_view type) {
     const std::string sample = u.find("STRING") != std::string::npos ? "'exemple'" : "0";
     if (u.rfind("SET ", 0) == 0)
         return "(* " + n + " : chaque valeur une fois, rang\xC3\xA9" "e *)\nIF SET_ADD(" + n + ", " + sample + ") THEN\n    (* nouvelle *)\nEND_IF;\n";
-    if (u.rfind("RING", 0) == 0)
+    if (u.rfind("RING[", 0) == 0 || u.rfind("RING [", 0) == 0)
         return "(* " + n + " : les derni\xC3\xA8res valeurs ; plein, la plus ancienne part *)\nRING_ADD(" + n + ", " + sample + ");\n";
     if (u.rfind("ARRAY", 0) == 0) {
         // Les bornes de sa premiere dimension : ARRAY[1..4] OF REAL -> FOR i := 1 TO 4.

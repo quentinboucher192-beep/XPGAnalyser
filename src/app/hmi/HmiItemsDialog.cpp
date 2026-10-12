@@ -43,7 +43,7 @@ std::string zeroOf(const std::string& type) {
     if (u == "TIME") return "T#0s";
     if (u == "REAL" || u == "LREAL") return "0.0";
     if (u.rfind("LIST", 0) == 0 || u.rfind("VECTOR", 0) == 0 || u.rfind("MAP", 0) == 0 || u.rfind("ARRAY", 0) == 0 || u.rfind("SET ", 0) == 0
-        || u.rfind("RING", 0) == 0)      // 1.12.7 : SET, RING
+        || u.rfind("RING[", 0) == 0 || u.rfind("RING [", 0) == 0)      // 1.12.7 : SET, RING
         return "[]";
     return "0";
 }
