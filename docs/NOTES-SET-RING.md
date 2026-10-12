@@ -181,13 +181,15 @@ projet nommée SET_ADD passe avant la native.
 
 ## Les essais
 
-- `tests/hmi_setring_test.cpp` (nouveau, `ctest -R hmisetring`, 120 contrôles) : les déclarations et
+- `tests/hmi_setring_test.cpp` (nouveau, `ctest -R hmisetring`, 126 contrôles) : les déclarations et
   les littéraux (le SET rangé sans doublon, le RING des N dernières, RING[N] d'une constante),
   chaque native avec ses bords (valeur déjà là, absente, SET vide, RING plein) et ses fautes dites en
   français, les membres, l'ordre de FOR EACH, LIST_ADD et VECTOR_PUSH sur un RING et un SET, les
   natives LIST_ qui lisent, PARTIAL_SUM / LIST_SLICE / TO_LIST d'un SET (des LIST), ce qu'un SET
   refuse (S[0] :=, FOR EACH, S.First :=, ADR(S[0]), 13 natives), les affectations entre LIST, SET,
-  RING et ARRAY, les constantes (6 natives qui écrivent ; la lecture), une variable IHM SET et RING
+  RING et ARRAY, les constantes (6 natives qui écrivent ; la lecture), d'autres éléments (un SET OF
+  TIME, OF BOOL, un RING de TUPLE, un SET dans une MAP, un RING de RING, un SET vide, un RING vide pour
+  LIST_AVG), une variable IHM SET et RING
   (valeur initiale mise en forme, écrite en place par SET_ADD et RING_ADD, son littéral), des
   variables nommées Set et Ring, une fonction du projet nommée SET_ADD, Compiler (un script sans
   erreur ; le nombre d'arguments ; SET_ADD sur une LIST, RING_ADD sur une LIST, SET_HAS sur un RING ;

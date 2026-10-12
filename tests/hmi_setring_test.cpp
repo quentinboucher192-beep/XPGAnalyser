@@ -268,6 +268,22 @@ void constantes() {
          "une constante SET, RING : se lit");
 }
 
+// ------------------------------------------------------------------- d'autres bords ---
+void bords() {
+    std::printf("-- d'autres elements : TIME, BOOL, un TUPLE dans un RING, un SET dans une MAP\n");
+    same("STRING", "VAR D : SET OF TIME := [T#5s, T#1s, T#5s]; Bo : SET OF BOOL := [TRUE, FALSE, TRUE]; END_VAR\nR := JOIN(D, ',') + ' ' + JOIN(Bo, ',');",
+         "T#1000ms,T#5000ms FALSE,TRUE", "un SET OF TIME, un SET OF BOOL : ranges, sans doublon");
+    same("STRING", "VAR Ev : RING[2] OF TUPLE(STRING, INT); END_VAR\nRING_ADD(Ev, ('a', 1));\nRING_ADD(Ev, ('b', 2));\nRING_ADD(Ev, ('c', 3));\n"
+                   "R := Ev[0].Item1 + Ev.Last.Item1 + TO_STRING(Ev.Count);", "bc2", "un RING de TUPLE : les deux derniers");
+    same("STRING", "VAR M : MAP[STRING] OF SET OF INT; END_VAR\nM['a'] := [3, 1, 3];\nb := SET_ADD(M['a'], 2);\nR := JOIN(M['a'], ',') + ' ' + TO_STRING(b);",
+         "1,2,3 TRUE", "un SET dans une MAP : M['a'] rangee, SET_ADD(M['a'], 2)");
+    same("STRING", "VAR Rr : RING[2] OF RING[2] OF INT; END_VAR\nRING_ADD(Rr, [1, 2, 3]);\nRING_ADD(Rr[0], 9);\nR := JOIN(Rr[0], ',');", "3,9",
+         "un RING de RING : le litteral garde les 2 dernieres, RING_ADD(Rr[0], 9) aussi");
+    same("STRING", "VAR Vide : SET OF STRING; END_VAR\nR := TO_STRING(SET_REMOVE(Vide, 'x')) + TO_STRING(SET_HAS(Vide, 'x')) + JOIN(SET_UNION(Vide, Vide), ',');",
+         "FALSEFALSE", "un SET vide : SET_REMOVE et SET_HAS rendent FALSE, l'union de deux vides est vide");
+    fails("VAR Vide : RING[3] OF REAL; END_VAR\nx := LIST_AVG(Vide);", "LIST_AVG : la liste est vide", "LIST_AVG d'un RING vide : une erreur (comme une liste)");
+}
+
 // --------------------------------------------------------- les variables de l'IHM ---
 void variablesIhm() {
     std::printf("-- les variables IHM de type SET et RING\n");
@@ -543,6 +559,7 @@ int main() {
     refus();
     affectations();
     constantes();
+    bords();
     variablesIhm();
     avant();
     compiler();
