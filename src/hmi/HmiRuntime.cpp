@@ -3573,6 +3573,7 @@ void Runtime::cycle(double now) {
     sampleCharts(now);       // lot 11 : chronogrammes, courbes XY, histogrammes
     sampleArchive(now);
     controlsCycle(now);      // lot 9 : compteurs horaires, fleches de tendance, programmateurs
+    zoneMapsCycle();         // 1.12.12 (lot H) : la zone choisie par un programme
     productionCycle(now);    // lot 11 : compteurs de production
     editorsCycle();          // lot 11 : les valeurs de l'installation, pour les editeurs de recette
     reportsCycle(now);       // lot 14 : les rapports periodiques a leur heure

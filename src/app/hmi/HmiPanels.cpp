@@ -32,6 +32,9 @@
 #include "../../hmi/HmiEnums.hpp"       // 1.12.2 : les enumerations, sources d'elements
 #include "../../hmi/HmiChoiceLists.hpp" // 1.12.7 (lot D) : les lettres ISA, les positions de la vanne 3 voies
 #include "../../hmi/HmiProduction.hpp"  // 1.12.7 (lot D) : le calendrier des postes
+#include "../../hmi/HmiVertices.hpp"    // 1.12.12 (lot H) : « Points depuis »
+#include "../../hmi/HmiTypeRegistry.hpp" // 1.12.12 (lot H) : les sources de nombres
+#include "../../hmi/HmiTypes.hpp"        // 1.12.12 (lot H) : les membres X et Y
 #include "../../ui/Shapes.hpp"
 #include "../../ui/Theme.hpp"
 #include "../../ui/widgets/Controls.hpp"
@@ -1831,6 +1834,16 @@ const std::vector<KeyInfo>& keyInfos() {
          "lin\xC3\xA9" "aire : les points reli\xC3\xA9s ; escalier : la valeur tenue jusqu'\xC3\xA0 la suivante ; points : seuls."},
         {"legend", "L\xC3\xA9gende", PG::ValueType::Boolean, {}, "Le nom et la derni\xC3\xA8re valeur de chaque plume."},
         {"points", "Points (x,y x,y ...)", PG::ValueType::Text, {}, "Dans le rep\xC3\xA8re de l'objet."},
+        // 1.12.12 (lot H) : « Points depuis » d'une ligne, d'un polygone, et son echelle.
+        {"pointsFrom", "Points depuis", PG::ValueType::Text, {},
+         "Les points lus dans une source, en marche (dans l'\xC3\xA9" "diteur : ses valeurs initiales) : un tableau ou une LIST de "
+         "nombres, x et y altern\xC3\xA9s (Courbe), ou de structures (Profil[*].X, Profil[*].Y). Ils se placent dans le cadre de "
+         "l'objet selon l'\xC3\xA9" "chelle X et Y (vide : celle des donn\xC3\xA9" "es) : X min \xC3\xA0 gauche, Y min en bas. Vide : "
+         "les points \xC3\xA9" "crits."},
+        {"pointsXMin", "Points depuis : X min", PG::ValueType::Text, {}, "Vide : le plus petit X des donn\xC3\xA9" "es."},
+        {"pointsXMax", "Points depuis : X max", PG::ValueType::Text, {}, "Vide : le plus grand X des donn\xC3\xA9" "es."},
+        {"pointsYMin", "Points depuis : Y min", PG::ValueType::Text, {}, "En bas du cadre. Vide : le plus petit Y des donn\xC3\xA9" "es."},
+        {"pointsYMax", "Points depuis : Y max", PG::ValueType::Text, {}, "En haut du cadre. Vide : le plus grand Y des donn\xC3\xA9" "es."},
         {"clip", "Rogner le contenu", PG::ValueType::Boolean, {}, ""},
         {"variable", core::hasApi() ? "Variable API" : "Variable", PG::ValueType::Text, {},          // 1.12.2 : XPGAnalyser IHM
          core::hasApi() ? "La variable de l'automate que l'objet repr\xC3\xA9sente." : "La variable que l'objet repr\xC3\xA9sente."},
@@ -2742,6 +2755,15 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
         // 1.12.7 (lot D) : les colonnes choisies d'un tableau qui a une source.
         if (o->kind == hmi::Kind::Table && !o->find("sourceColumns") && o->text("rowsFrom").find_first_not_of(" \t") != std::string::npos)
             allProps.push_back({"sourceColumns", "", ""});
+        // 1.12.12 (lot H) : « Points depuis » d'une ligne, d'un polygone (absent d'un objet neuf) ; son echelle, une
+        // fois la source choisie.
+        if (hmi::vertices::isShape(*o) && !many) {
+            if (!o->find(hmi::vertices::kPointsFromKey)) allProps.push_back({std::string(hmi::vertices::kPointsFromKey), "", ""});
+            if (hmi::vertices::hasPointsFrom(*o))
+                for (const auto key : {hmi::vertices::kPointsXMinKey, hmi::vertices::kPointsXMaxKey, hmi::vertices::kPointsYMinKey,
+                                       hmi::vertices::kPointsYMaxKey})
+                    if (!o->find(key)) allProps.push_back({std::string(key), "", ""});
+        }
     }
     // Lot 13 : la signature electronique des commandes (absente : aucune).
     if (hmi::kindSignable(o->kind)) {
@@ -2882,6 +2904,29 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
                     if (form == hmi::typeform::Form::Map || form == hmi::typeform::Form::List || form == hmi::typeform::Form::Vector
                         || form == hmi::typeform::Form::Array)
                         p.enumValues.push_back(var.name);
+                }
+            } else if (prop.key == hmi::vertices::kPointsFromKey && project && prop.expr.empty()) {
+                // 1.12.12 (lot H) : les sources de points - un tableau, une LIST, un VECTOR de nombres (x, y alternes) ;
+                // de structures qui ont un X et un Y (Profil[*].X, Profil[*].Y). Un chemin, un repere se tapent aussi.
+                p.type = PG::ValueType::Enum;
+                p.typeIn = true;
+                p.enumValues = {""};
+                for (const auto& var : project->programs.variables) {
+                    const auto shape = hmi::typeform::decompose(var.type);
+                    if (shape.form != hmi::typeform::Form::Array && shape.form != hmi::typeform::Form::List
+                        && shape.form != hmi::typeform::Form::Vector)
+                        continue;
+                    if (hmi::typereg::isNumber(shape.element)) {
+                        p.enumValues.push_back(var.name);
+                        continue;
+                    }
+                    std::string xm, ym;
+                    for (const auto& m : hmi::types::membersOf(*project, shape.element)) {
+                        if (!hmi::typereg::isNumber(m.type)) continue;
+                        if (m.name == "X" || m.name == "x") xm = m.name;
+                        if (m.name == "Y" || m.name == "y") ym = m.name;
+                    }
+                    if (!xm.empty() && !ym.empty()) p.enumValues.push_back(var.name + "[*]." + xm + ", " + var.name + "[*]." + ym);
                 }
             } else if ((prop.key == "itemsFrom" || prop.key == "rowsFrom") && project) {
                 // 1.12.2 : les sources - les enumerations du projet (des elements), les variables IHM

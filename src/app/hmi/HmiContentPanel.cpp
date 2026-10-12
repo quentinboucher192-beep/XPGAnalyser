@@ -18,6 +18,7 @@
 #include "../../hmi/HmiControls.hpp"
 #include "../../hmi/HmiEnums.hpp"     // 1.12.7 (lot E) : les etats, les onglets depuis une enumeration
 #include "../../hmi/HmiSources.hpp"   // 1.12.7 (lot E) : le joker [*], .* et /* dans Contenu
+#include "../../hmi/HmiVertices.hpp"  // 1.12.12 (lot H) : les sommets d'une ligne, d'un polygone
 #include "../../hmi/HmiWidgets.hpp"
 #include "../../ui/Theme.hpp"
 #include "../../ui/widgets/ExprField.hpp"   // 1.10 (chantier K) : les champs a expression, partout pareils
@@ -609,13 +610,14 @@ HmiContentPanel::HmiContentPanel(std::string id, hmi::DocumentPtr doc, Id view, 
     const auto editable = [this] {
         const auto m = mode();
         return m == Mode::Table || m == Mode::Trend || m == Mode::AnimatedImage || m == Mode::Zones || m == Mode::Tabs || m == Mode::NavItems
-            || m == Mode::States || m == Mode::Choices || m == Mode::Bands || m == Mode::Schedule || m == Mode::SourceColumns;   // 1.12.7 (lot D)
+            || m == Mode::States || m == Mode::Choices || m == Mode::Bands || m == Mode::Schedule || m == Mode::SourceColumns   // 1.12.7 (lot D)
+            || m == Mode::Points;                                                                                            // 1.12.12 (lot H)
     };
     tools_->setEnabledWhen(AAdd, editable);
     tools_->setEnabledWhen(ARemove, [this, editable] { return editable() && selectedIndex() >= 0; });
-    tools_->setEnabledWhen(AUp, [this, editable] { return editable() && selectedIndex() > 0; });
+    tools_->setEnabledWhen(AUp, [this, editable] { return editable() && !xyReference_ && selectedIndex() > 0; });
     tools_->setEnabledWhen(ADown, [this, editable] {
-        return editable() && selectedIndex() >= 0 && selectedIndex() + 1 < static_cast<int>(count());
+        return editable() && !xyReference_ && selectedIndex() >= 0 && selectedIndex() + 1 < static_cast<int>(count());
     });
     tools_->setEnabledWhen(AAddColumn, [this] { return mode() == Mode::Table; });
     tools_->setEnabledWhen(ARemoveColumn, [this] {
@@ -647,7 +649,14 @@ HmiContentPanel::HmiContentPanel(std::string id, hmi::DocumentPtr doc, Id view, 
     links_ += tools_->triggered->connect([this](int a) {
         const int sel = selectedIndex();
         switch (a) {
-            case AAdd: if (addItem()) selectIndex(static_cast<int>(count()) - 1); break;
+            case AAdd:
+                // 1.12.12 (lot H) : une zone de plan se trace sur le dessin (l'editeur la passe au canevas).
+                if (mode() == Mode::Zones && zoneTracer_) {
+                    traceRequested->emit();
+                    break;
+                }
+                if (addItem()) selectIndex(static_cast<int>(count()) - 1);
+                break;
             case ARemove: (void)removeItem(sel); break;
             case AUp: if (moveItem(sel, -1)) selectIndex(sel - 1); break;
             case ADown: if (moveItem(sel, +1)) selectIndex(sel + 1); break;
@@ -659,6 +668,7 @@ HmiContentPanel::HmiContentPanel(std::string id, hmi::DocumentPtr doc, Id view, 
     links_ += table_->selectionChanged->connect([this](const std::vector<ui::RowIndex>& rows) {
         selected_ = rows.empty() ? -1 : static_cast<int>(rows.front());
         rebuildGrid();
+        if (!refreshing_) rowChosen->emit(selected_);   // 1.12.12 (lot H) : le dessin montre le meme sommet, la meme zone
     });
     refresh();
 }
@@ -671,6 +681,8 @@ const hmi::Object* HmiContentPanel::current() const {
 HmiContentPanel::Mode HmiContentPanel::mode() const {
     const auto* o = current();
     if (!o) return Mode::None;
+    // 1.12.12 (lot H) : une courbe XY montre ses courbes, ou les points de sa courbe de reference.
+    if (o->kind == hmi::Kind::XYChart && xyReference_) return Mode::Points;
     switch (o->kind) {
         // 1.12.7 (lot D) : un tableau dont les lignes viennent d'une source - ses colonnes.
         case hmi::Kind::Table:         return rowsSourceOf(*o).empty() ? Mode::Table : Mode::SourceColumns;
@@ -694,6 +706,9 @@ HmiContentPanel::Mode HmiContentPanel::mode() const {
             return Mode::Checks;
         // Lot 12
         case hmi::Kind::ZoneMap:       return Mode::Zones;
+        // 1.12.12 (lot H) : les sommets d'une ligne, d'un polygone.
+        case hmi::Kind::Line: case hmi::Kind::Polygon:
+            return Mode::Points;
         case hmi::Kind::TabContainer:  return Mode::Tabs;
         case hmi::Kind::NavBar:        return Mode::NavItems;
         // 1.12.3 : les etats, une ligne chacun.
@@ -727,6 +742,7 @@ std::size_t HmiContentPanel::count() const {
         case Mode::SourceColumns: return readSourceCols(doc_->project, *o).rows().size();
         case Mode::Tabs:     return hmi::tabLabels(*o).size();
         case Mode::NavItems: return hmi::navItems(&doc_->project, *o).size();
+        case Mode::Points:   return hmi::vertices::listOf(*o).entries.size();   // 1.12.12 (lot H)
         case Mode::Members: {
             std::size_t n = 0;
             if (const auto* v = doc_->project.view(view_))
@@ -744,8 +760,10 @@ void HmiContentPanel::setObject(Id object) {
     selected_ = -1;
     lastColumn_ = -1;
     chartStates_ = false;   // 1.12.7 : un autre chronogramme montre d'abord ses lignes
+    xyReference_ = false;   // 1.12.12 (lot H) : une autre courbe XY montre d'abord ses courbes
     refresh();
-    if (count() > 0 && mode() != Mode::RecipeManager) selectIndex(0);
+    // 1.12.12 (lot H) : une ligne, un polygone : aucun sommet choisi d'office (Suppr retire l'objet).
+    if (count() > 0 && mode() != Mode::RecipeManager && mode() != Mode::Points) selectIndex(0);
 }
 
 int HmiContentPanel::selectedIndex() const {
@@ -758,9 +776,17 @@ void HmiContentPanel::selectIndex(int index) {
     hmiSelectModelRow(*table_, static_cast<ui::RowIndex>(index));
     selected_ = index;
     rebuildGrid();
+    if (!refreshing_) rowChosen->emit(selected_);   // 1.12.12 (lot H)
 }
 
 void HmiContentPanel::refresh() {
+    // 1.12.12 (lot H) : la liste refaite (le document a change) ne choisit rien pour le dessin.
+    struct Quiet {
+        bool& flag;
+        bool  was;
+        explicit Quiet(bool& f) : flag(f), was(f) { flag = true; }
+        ~Quiet() { flag = was; }
+    } quiet(refreshing_);
     const auto* o = current();
     std::vector<std::string> headers{"#", "\xC3\x89l\xC3\xA9ment", "D\xC3\xA9tail"};
     std::vector<std::vector<std::string>> rows;
@@ -918,6 +944,15 @@ void HmiContentPanel::refresh() {
                 }
                 break;
             }
+            // 1.12.12 (lot H) : un sommet par ligne, X et Y tels qu'ecrits (un repere garde).
+            case Mode::Points: {
+                headers = {"#", "X", "Y"};
+                icon = ui::Icon::Chart;
+                for (const auto& pt : hmi::vertices::listOf(*o).entries)
+                    rows.push_back({pt.ok && pt.xText.empty() ? hmi::formatNumber(pt.x) : pt.xText,
+                                    pt.ok && pt.yText.empty() ? hmi::formatNumber(pt.y) : pt.yText + (pt.ok ? "" : "  (illisible)")});
+                break;
+            }
             case Mode::Members: {
                 headers = {"#", "Objet", "Type"};
                 icon = ui::Icon::Folder;
@@ -1061,6 +1096,46 @@ bool HmiContentPanel::addItem() {
                 writeSlots(o, slots);
                 return true;
             });
+        // 1.12.12 (lot H) : un sommet de plus, au bout - sur le dernier cote d'un polygone (sa forme ne change pas),
+        // dans le prolongement d'une ligne (d'une demi-longueur de son dernier segment).
+        case Mode::Points:
+            return changeInView("Ajouter un sommet", [](hmi::View& v, hmi::Object& o) {
+                if (!hmi::vertices::listEditable(o)) return false;
+                auto parsed = hmi::vertices::listOf(o);
+                const auto& pts = parsed.points;
+                hmi::vertices::Vertex nv;
+                if (o.kind == hmi::Kind::XYChart) {
+                    // La reference : un point apres le dernier (d'un pas comme le dernier, sinon un dixieme de l'axe X) ;
+                    // le premier au debut de l'axe, a mi-hauteur.
+                    const double x0 = o.number("xmin", 0), x1 = std::max(o.number("xmax", 100), x0 + 1);
+                    const double y0 = o.number("ymin", 0), y1 = std::max(o.number("ymax", 100), y0 + 1);
+                    double step = (x1 - x0) / 10;
+                    if (pts.size() >= 2 && pts.back().x - pts[pts.size() - 2].x > 1e-9) step = pts.back().x - pts[pts.size() - 2].x;
+                    nv.x = pts.empty() ? x0 : pts.back().x + step;
+                    nv.y = pts.empty() ? (y0 + y1) / 2 : pts.back().y;
+                    parsed.entries.push_back(nv);
+                    hmi::vertices::setList(o, std::move(parsed.entries));
+                    return true;
+                }
+                if (pts.size() >= 2 && o.kind == hmi::Kind::Polygon) {
+                    nv.x = (pts.back().x + pts.front().x) / 2;
+                    nv.y = (pts.back().y + pts.front().y) / 2;
+                } else if (pts.size() >= 2) {
+                    const auto& a = pts[pts.size() - 2];
+                    const auto& b = pts.back();
+                    double dx = (b.x - a.x) / 2, dy = (b.y - a.y) / 2;
+                    if (std::fabs(dx) < 1e-9 && std::fabs(dy) < 1e-9) dx = 20;
+                    nv.x = b.x + dx;
+                    nv.y = b.y + dy;
+                } else if (!pts.empty()) {
+                    nv.x = pts.back().x + 20;
+                    nv.y = pts.back().y;
+                }
+                parsed.entries.push_back(nv);
+                hmi::vertices::setVertices(o, std::move(parsed.entries));
+                hmi::edit::refreshGroupBounds(v);
+                return true;
+            });
         case Mode::NavItems:
             return change("Ajouter une vue \xC3\xA0 la barre", [this](hmi::Object& o) {
                 auto n = readNav(doc_->project, o);
@@ -1175,6 +1250,21 @@ bool HmiContentPanel::removeItem(int index) {
                 if (i >= slots.size()) return false;
                 slots.erase(slots.begin() + static_cast<std::ptrdiff_t>(i));
                 writeSlots(o, slots);
+                return true;
+            });
+            break;
+        // 1.12.12 (lot H) : une ligne garde 2 sommets, un polygone 3.
+        case Mode::Points:
+            ok = changeInView("Retirer un sommet", [i](hmi::View& v, hmi::Object& o) {
+                if (!hmi::vertices::listEditable(o)) return false;
+                auto parsed = hmi::vertices::listOf(o);
+                auto& pts = parsed.entries;
+                // Un sommet lu : la ligne en garde 2, le polygone 3 (une reference peut se vider) ; un morceau
+                // illisible part toujours.
+                if (i >= pts.size() || (pts[i].ok && parsed.points.size() <= hmi::vertices::listMinimum(o))) return false;
+                pts.erase(pts.begin() + static_cast<std::ptrdiff_t>(i));
+                hmi::vertices::setList(o, std::move(pts));
+                hmi::edit::refreshGroupBounds(v);
                 return true;
             });
             break;
@@ -1299,6 +1389,17 @@ bool HmiContentPanel::moveItem(int index, int delta) {
                 if (std::max(a, b) >= slots.size()) return false;
                 std::swap(slots[a], slots[b]);
                 writeSlots(o, slots);
+                return true;
+            });
+        // 1.12.12 (lot H) : l'ordre des sommets (la forme change, le cadre suit).
+        case Mode::Points:
+            return changeInView("Ordonner les sommets", [a, b](hmi::View& v, hmi::Object& o) {
+                if (o.kind == hmi::Kind::XYChart || !hmi::vertices::editable(o)) return false;   // la reference : l'ordre de ses x
+                auto pts = hmi::vertices::parse(o.text("points")).entries;
+                if (std::max(a, b) >= pts.size()) return false;
+                std::swap(pts[a], pts[b]);
+                hmi::vertices::setVertices(o, std::move(pts));
+                hmi::edit::refreshGroupBounds(v);
                 return true;
             });
         case Mode::NavItems:
@@ -1450,6 +1551,16 @@ bool HmiContentPanel::setField(int index, const std::string& field, const std::s
     // 1.12.7 (lot D) : un chronogramme montre ses lignes ou ses etats (rien ne change dans l'objet).
     if (field == "show") {
         const auto* o = current();
+        // 1.12.12 (lot H) : une courbe XY montre ses courbes ou sa courbe de reference.
+        if (o && o->kind == hmi::Kind::XYChart) {
+            const bool reference = value.find("f\xC3\xA9rence") != std::string::npos;
+            if (reference == xyReference_) return false;
+            xyReference_ = reference;
+            selected_ = -1;
+            refresh();
+            if (count() > 0 && !reference) selectIndex(0);
+            return true;
+        }
         if (!o || o->kind != hmi::Kind::StateChart) return false;
         const bool states = value.find("tat") != std::string::npos;
         if (states == chartStates_) return false;
@@ -1791,6 +1902,32 @@ bool HmiContentPanel::setField(int index, const std::string& field, const std::s
                 return toggleCheck(o, c, item, on);
             });
         }
+        // 1.12.12 (lot H) : X ou Y d'un sommet - un nombre (le cadre suit), ou un texte a repere ($Cote_X$, garde tel
+        // quel : Dupliquer le remplacera).
+        case Mode::Points: {
+            const auto text = hmi::vertices::cellText(value);
+            if (!text || (field != "x" && field != "y")) return false;
+            // La reference d'une courbe XY : des nombres (un repere la rendrait illisible au dessin).
+            if (double n = 0; current() && current()->kind == hmi::Kind::XYChart && !hmi::parseNumber(*text, n)) return false;
+            return changeInView("R\xC3\xA9gler un sommet", [i, field, t = *text](hmi::View& v, hmi::Object& o) {
+                if (!hmi::vertices::listEditable(o)) return false;
+                auto pts = hmi::vertices::listOf(o).entries;
+                if (i >= pts.size()) return false;
+                auto& pt = pts[i];
+                // Le texte montre de la case : celui ecrit, sinon le nombre lu.
+                const std::string shown = field == "x" ? (pt.ok && pt.xText.empty() ? hmi::formatNumber(pt.x) : pt.xText)
+                                                       : (pt.ok && pt.yText.empty() ? hmi::formatNumber(pt.y) : pt.yText);
+                if (shown == t) return false;
+                if (pt.ok) {   // l'autre case garde son texte (un sommet lu l'a deja)
+                    if (pt.xText.empty()) pt.xText = hmi::formatNumber(pt.x);
+                    if (pt.yText.empty()) pt.yText = hmi::formatNumber(pt.y);
+                }
+                hmi::vertices::setCell(pt, field == "x", t);
+                hmi::vertices::setList(o, std::move(pts));   // le cadre suit les points lus ; un repere reste tel quel
+                hmi::edit::refreshGroupBounds(v);
+                return true;
+            });
+        }
         case Mode::Members:          // 1.10.4 (K3) : en lecture
         case Mode::None: break;
     }
@@ -1826,6 +1963,17 @@ void HmiContentPanel::rebuildGrid() {
                                            "Les lignes (une expression chacune) ou les \xC3\xA9tats (valeur, texte, couleur) que "
                                            "toutes les lignes partagent.",
                                            {"les lignes", "les \xC3\xA9tats"}));
+        return show;
+    };
+    // 1.12.12 (lot H) : ce que montre la liste d'une courbe XY - ses courbes ou sa courbe de reference.
+    const auto xyChartToggle = [&] {
+        PG::Category show;
+        show.name = "Montrer";
+        show.properties.push_back(editable("Montrer", xyReference_ ? "la r\xC3\xA9" "f\xC3\xA9rence" : "les courbes", PG::ValueType::Enum, -1,
+                                           "show",
+                                           "Les courbes (une expression chacune) ou les points de la courbe de r\xC3\xA9" "f\xC3\xA9rence (x, y "
+                                           "dans les unit\xC3\xA9s des axes), qui se r\xC3\xA8glent aussi sur le dessin.",
+                                           {"les courbes", "la r\xC3\xA9" "f\xC3\xA9rence"}));
         return show;
     };
     // 1.12.7 (lot E) : « Depuis une enumeration » - un etat (une image, un onglet) par valeur.
@@ -1899,6 +2047,7 @@ void HmiContentPanel::rebuildGrid() {
         case Mode::Trend: {
             const auto p = readPens(*o);
             if (o->kind == hmi::Kind::StateChart) cats.push_back(stateChartToggle());   // 1.12.7 (lot D)
+            if (o->kind == hmi::Kind::XYChart) cats.push_back(xyChartToggle());         // 1.12.12 (lot H)
             PG::Category pen;
             if (index >= 0) {
                 pen.name = penWord(o) + " " + std::to_string(index + 1);
@@ -2347,6 +2496,69 @@ void HmiContentPanel::rebuildGrid() {
                 from.properties.push_back(std::move(cell));
                 cats.push_back(std::move(from));
             }
+            break;
+        }
+        // 1.12.12 (lot H) : les sommets d'une ligne, d'un polygone, les points d'une courbe de reference - X et Y
+        // du sommet choisi.
+        case Mode::Points: {
+            const auto parsed = hmi::vertices::listOf(*o);
+            const auto& pts = parsed.entries;
+            const bool reference = o->kind == hmi::Kind::XYChart;
+            const bool canEdit = hmi::vertices::listEditable(*o);
+            if (reference) cats.push_back(xyChartToggle());
+            if (hmi::vertices::hasPointsFrom(*o)) {
+                PG::Category from;
+                from.name = "Points depuis";
+                from.properties.push_back(readOnly("Source", o->text(std::string(hmi::vertices::kPointsFromKey)),
+                                                   "En marche, les points viennent de cette source (Points depuis, dans "
+                                                   "Propri\xC3\xA9t\xC3\xA9s) ; les sommets ci-dessous ne servent pas tant qu'elle est "
+                                                   "r\xC3\xA9gl\xC3\xA9" "e."));
+                cats.push_back(std::move(from));
+            }
+            if (index >= 0 && i < pts.size()) {
+                PG::Category vc;
+                vc.name = (reference ? "Point " : "Sommet ") + std::to_string(index + 1);
+                const std::string help = reference ? std::string("Dans les unit\xC3\xA9s des axes ; les points se rangent par x croissant.")
+                                                   : std::string("En pixels, dans le rep\xC3\xA8re de l'objet (son coin haut-gauche, avant rotation). Le "
+                                                                 "cadre suit les points. Un rep\xC3\xA8re ($Cote_X$) se garde tel quel.");
+                const std::string xs = pts[i].ok && pts[i].xText.empty() ? hmi::formatNumber(pts[i].x) : pts[i].xText;
+                const std::string ys = pts[i].ok && pts[i].yText.empty() ? hmi::formatNumber(pts[i].y) : pts[i].yText;
+                if (canEdit) {
+                    vc.properties.push_back(editable("X", xs, PG::ValueType::Text, index, "x", help));
+                    vc.properties.push_back(editable("Y", ys, PG::ValueType::Text, index, "y", help));
+                } else {
+                    // Une formule, une source, un texte que le dessin ne lit pas : il se regle dans Proprietes.
+                    vc.properties.push_back(readOnly("X", xs, help));
+                    vc.properties.push_back(readOnly("Y", ys, help));
+                }
+                if (!pts[i].ok)
+                    vc.properties.push_back(readOnly("Dessin", "ignor\xC3\xA9 (illisible)",
+                                                     "Ce morceau ne donne pas un point : le dessin l'ignore, G\xC3\xA9n\xC3\xA9rer le dit. Deux "
+                                                     "nombres le rendent au dessin ; un rep\xC3\xA8re reste tel quel."));
+                cats.push_back(std::move(vc));
+            }
+            PG::Category info;
+            info.name = reference ? "Courbe de r\xC3\xA9" "f\xC3\xA9rence" : "Sommets";
+            if (reference)
+                info.properties.push_back(readOnly("Points", std::to_string(parsed.points.size()),
+                                                   "Sur le dessin (\xC3\xA9" "chelle fixe) : glisser une poign\xC3\xA9" "e ronde d\xC3\xA9place le "
+                                                   "point, entre ses voisins ; un double-clic sur la courbe en ajoute un ; Suppr retire "
+                                                   "le point choisi (le dessin en garde 2). Ici : Ajouter (apr\xC3\xA8s le dernier), "
+                                                   "Retirer (la liste peut se vider : plus de r\xC3\xA9" "f\xC3\xA9rence)."));
+            else
+                info.properties.push_back(readOnly("Sommets", std::to_string(parsed.points.size()) + (o->kind == hmi::Kind::Line ? " (au moins 2)" : " (au moins 3)"),
+                                                   "Sur le dessin : glisser une poign\xC3\xA9" "e ronde d\xC3\xA9place le sommet ; un double-clic sur "
+                                                   "un segment en ajoute un ; Suppr retire le sommet choisi. Ici : Ajouter (au bout), "
+                                                   "Retirer, \xE2\x86\x91\xE2\x86\x93 l'ordre."));
+            if (!canEdit && !hmi::vertices::hasPointsFrom(*o))
+                info.properties.push_back(readOnly("Modifier", "dans Propri\xC3\xA9t\xC3\xA9s",
+                                                   "Une formule, une source, ou un texte que le dessin ne lit pas en entier : la liste "
+                                                   "se montre ici, elle se corrige dans Propri\xC3\xA9t\xC3\xA9s."));
+            if (!parsed.problems.empty())
+                info.properties.push_back(readOnly("Illisible", hmi::vertices::describe(parsed.problems.front())
+                                                                    + (parsed.problems.size() > 1 ? " (+" + std::to_string(parsed.problems.size() - 1) + ")" : std::string{}),
+                                                   "Un morceau du texte des points qui ne donne pas un point net (G\xC3\xA9n\xC3\xA9rer le dit aussi)."));
+            cats.push_back(std::move(info));
             break;
         }
         case Mode::Members: {

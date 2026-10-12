@@ -136,6 +136,7 @@ void Runtime::resetLot11() {
     shelved_.clear();
     selectedAlarm_.clear();
     selectedZone_.clear();
+    zoneMapSeen_.clear();   // 1.12.12 (lot H)
     silenced_ = false;
     nextAlarmSound_ = -1;
     soundCycle_ = -1;

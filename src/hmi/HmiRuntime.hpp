@@ -1395,6 +1395,8 @@ private:
     bool buttonConfirmHolds(const Object&, double now);
     void controlPart(const View&, const Object&, std::string_view part, double now);
     void controlsCycle(double now);
+    // 1.12.12 (lot H) : la variable d'un plan a zones, relue - un programme qui l'ecrit choisit la zone.
+    void zoneMapsCycle();
     void holdTick(double now);
     [[nodiscard]] const WeekSchedule& scheduleOf(const Object&, ControlState&);
     [[nodiscard]] std::optional<sim::Value> choiceValue(const Object&, const Choice&);
@@ -1668,6 +1670,7 @@ private:
     std::map<std::string, double>                   chartNext_;    // histogramme : la prochaine mesure
     std::vector<ShelvedAlarm>                       shelved_;
     std::string                                     selectedAlarm_, selectedZone_;
+    std::map<Id, std::string>                       zoneMapSeen_;  // 1.12.12 (lot H) : la valeur vue de la variable d'un plan
     bool                                            silenced_{false};
     double                                          nextAlarmSound_{-1};
     long long                                       soundCycle_{-1};   // le cycle du dernier son d'apparition...

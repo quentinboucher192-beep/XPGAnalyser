@@ -25,6 +25,7 @@
 #include "../../hmi/HmiDesign.hpp"
 #include "../../hmi/HmiCommands.hpp"
 #include "../../hmi/HmiEdit.hpp"
+#include "../../hmi/HmiVertices.hpp"   // 1.12.12 (lot H) : les sommets sur le dessin
 #include "../../ui/Widget.hpp"
 
 #include <functional>
@@ -112,6 +113,26 @@ public:
     // la selection oublie ce qui a disparu.
     void documentChanged();
 
+    // ---- 1.12.12 (lot H) : les sommets sur le dessin ------------------------
+    //  Une ligne, un polygone choisis seuls : une poignee ronde par sommet. La
+    //  glisser deplace le sommet (grille, magnetisme ; Alt : sans) ; un double-clic
+    //  sur un segment en insere un ; un clic choisit le sommet, les fleches le
+    //  deplacent, Suppr (ou le menu « Retirer le sommet ») le retire. La zone d'un
+    //  plan choisie dans Contenu et la reference d'une courbe XY (echelle fixe) se
+    //  reglent de meme ; « Tracer une zone » : chaque clic pose un point, un
+    //  double-clic (ou un clic sur le premier point) la ferme, Echap l'abandonne.
+    //  Chaque geste : un pas d'annulation. Le cadre d'une forme suit ses points.
+    [[nodiscard]] hmi::vertices::Target vertexTarget() const;
+    [[nodiscard]] int  selectedVertex() const noexcept { return vertex_; }
+    void selectVertex(int index);                       // -1 : aucun
+    bool removeSelectedVertex();                        // faux : aucun, ou il n'en resterait pas assez
+    void setEditedZone(hmi::Id map, int zone);          // la zone choisie dans Contenu ; -1 : aucune
+    [[nodiscard]] int  editedZone() const noexcept { return zone_; }
+    void startZoneTrace(hmi::Id map);                   // les clics suivants posent une zone du plan
+    [[nodiscard]] bool tracing() const noexcept { return traceMap_ != hmi::kNoId; }
+    const core::SignalPtr<int> vertexChosen = core::Signal<int>::create();   // le sommet choisi (-1 : aucun)
+    const core::SignalPtr<int> zoneTraced   = core::Signal<int>::create();   // une zone tracee : son rang
+
     const core::SignalPtr<>                   selectionChanged = core::Signal<>::create();
     const core::SignalPtr<const std::string&> status          = core::Signal<const std::string&>::create();
     const core::SignalPtr<>                   placed          = core::Signal<>::create();
@@ -148,7 +169,7 @@ protected:
     ui::EventResult    onEvent(const ui::InputEvent&) override;
 
 private:
-    enum class Drag : std::uint8_t { None, Move, Resize, Rotate, Marquee, Pan, Guide };
+    enum class Drag : std::uint8_t { None, Move, Resize, Rotate, Marquee, Pan, Guide, Vertex };
 
     [[nodiscard]] hmi::edit::Pt toView(gfx::Point screen) const;
     [[nodiscard]] int  handleAt(gfx::Point screen) const;          // -1 : aucune ; 8 : rotation
@@ -197,6 +218,18 @@ private:
     bool                   marqueeShown_{false};
     std::vector<double>    snapX_, snapY_;
     std::vector<hmi::edit::SpacingMark> spacing_;     // lot 12 : les ecarts egaux, pendant qu'on deplace
+
+    // 1.12.12 (lot H) : les sommets.
+    void traceClick(gfx::Point screen, int clicks, bool free);
+    void paintVertices(const ui::PaintContext&, const HmiViewport&);
+    int                    vertex_{-1};                 // le sommet choisi de la cible
+    hmi::Id                vertexOwner_{hmi::kNoId};    // son objet (une autre selection l'oublie)
+    hmi::vertices::Target  dragTarget_;                 // la cible du sommet glisse
+    hmi::edit::Pt          grab_{};                     // l'ecart entre la souris et le sommet saisi
+    hmi::Id                zoneMap_{hmi::kNoId};        // le plan dont Contenu montre une zone
+    int                    zone_{-1};                   // ... et cette zone
+    hmi::Id                traceMap_{hmi::kNoId};       // le plan ou se trace une zone
+    std::vector<hmi::edit::Pt> trace_;                  // ses points poses (dans la vue)
 };
 
 } // namespace app

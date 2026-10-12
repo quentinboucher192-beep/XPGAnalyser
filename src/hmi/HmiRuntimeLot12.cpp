@@ -390,7 +390,16 @@ void Runtime::lot12Part(const View& v, const Object& o, std::string_view part, d
             const auto& z = zones[static_cast<std::size_t>(k)];
             selectedZone_ = z.alarmGroup();
             const std::string var = trimmedText(markers::strip(o.text("variable")));
-            if (!var.empty()) (void)writeConverted(var, sim::Value::text(selectedZone_), source, &o);
+            // 1.12.12 (lot H) : la variable recoit le nom de la zone (un STRING) ou son numero (un entier, 1 pour la
+            // premiere) ; avant : le groupe d'alarmes en texte, 0 dans un entier. Ce qui est ecrit est retenu : le
+            // cycle ne le prend pas pour un choix du programme.
+            if (!var.empty()) {
+                sim::Value cur;
+                const bool number = environment().read(var, cur) && cur.type() != sim::Type::String && cur.type() != sim::Type::Unknown;
+                const sim::Value chosen = number ? sim::Value::integer(sim::Type::DInt, k + 1) : sim::Value::text(markers::strip(z.name, markers::Mode::Text));
+                if (writeConverted(var, chosen, source, &o) && environment().read(var, cur))
+                    zoneMapSeen_[o.id] = cur.type() == sim::Type::String ? cur.asString() : std::to_string(cur.asInteger());
+            }
             log("Action", source, "zone choisie : " + selectedZone_);
             if (!z.view.empty()) {
                 Transition t;
@@ -404,6 +413,48 @@ void Runtime::lot12Part(const View& v, const Object& o, std::string_view part, d
         default:
             return;
     }
+}
+
+// 1.12.12 (lot H, § 3.9) : LA VARIABLE D'UN PLAN A ZONES, RELUE. Un programme qui l'ecrit choisit la zone, comme
+// un clic sans la navigation : un STRING, la zone de ce nom (ou de ce groupe d'alarmes) ; un entier, la zone de ce
+// numero (1 pour la premiere ; 0 : aucune). Seul un changement compte (ce que le clic a ecrit est deja vu) : un
+// choix fait ailleurs (le resume par zone) n'est pas defait a chaque cycle.
+void Runtime::zoneMapsCycle() {
+    if (!project_) return;
+    for (const auto& view : project_->views)
+        for (const auto& o : view.objects) {
+            if (o.kind != Kind::ZoneMap) continue;
+            const std::string var = trimmedText(markers::strip(o.text("variable")));
+            sim::Value cur;
+            if (var.empty() || !environment().read(var, cur)) continue;
+            const bool text = cur.type() == sim::Type::String;
+            const std::string seen = text ? cur.asString() : std::to_string(cur.asInteger());
+            auto& last = zoneMapSeen_[o.id];
+            if (seen == last) continue;
+            last = seen;
+            const auto zones = parseMapZones(o.text("mapZones"));
+            const MapZone* chosen = nullptr;
+            if (text) {
+                const std::string wanted = trimmedText(seen);
+                for (const auto& z : zones)
+                    if (!wanted.empty() && (markers::strip(z.name, markers::Mode::Text) == wanted || z.alarmGroup() == wanted)) {
+                        chosen = &z;
+                        break;
+                    }
+            } else if (const long long n = cur.asInteger(); n >= 1 && n <= static_cast<long long>(zones.size())) {
+                chosen = &zones[static_cast<std::size_t>(n - 1)];
+            }
+            if (chosen) {
+                selectedZone_ = chosen->alarmGroup();
+                log("Action", where(view, &o), "zone choisie par le programme : " + selectedZone_);
+            } else if (!selectedZone_.empty()) {
+                for (const auto& z : zones)
+                    if (z.alarmGroup() == selectedZone_) {
+                        selectedZone_.clear();   // aucune zone de ce plan (0, un nom inconnu) : le choix part
+                        break;
+                    }
+            }
+        }
 }
 
 } // namespace hmi

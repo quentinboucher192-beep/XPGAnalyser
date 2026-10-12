@@ -87,6 +87,10 @@ inline constexpr KeyRole kKeyRoles[] = {
     // ---- les formes
     {"fill", Role::Color}, {"stroke", Role::Color}, {"strokeWidth", Role::Number, Role::Text, Unit::None, "REAL"},
     {"radius", Role::Number, Role::Text, Unit::None, "REAL"}, {"points", Role::Mini}, {"shape", Role::Choice},
+    // 1.12.12 (lot H) : « Points depuis » d'une ligne, d'un polygone (sa source) et son echelle (vide : celle des donnees)
+    {"pointsFrom", Role::Mini}, {"pointsXMin", Role::Number, Role::Text, Unit::None, "REAL"},
+    {"pointsXMax", Role::Number, Role::Text, Unit::None, "REAL"}, {"pointsYMin", Role::Number, Role::Text, Unit::None, "REAL"},
+    {"pointsYMax", Role::Number, Role::Text, Unit::None, "REAL"},
     // ---- images, video
     {"image", Role::Name}, {"poster", Role::Name}, {"video", Role::Name}, {"stretch", Role::Choice},
     {"recolor", Role::Color}, {"recolorFrom", Role::Color}, {"recolorMode", Role::Choice},

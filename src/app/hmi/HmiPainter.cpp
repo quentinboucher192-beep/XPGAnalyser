@@ -23,6 +23,7 @@
 #include "../../hmi/HmiControls.hpp"    // 1.12.2 : le tableau dynamique (tableLayout)
 #include "../../hmi/HmiTypeForms.hpp"   // 1.12.2 : ses colonnes, dans l'editeur
 #include "../../hmi/HmiChoiceLists.hpp" // 1.12.7 (lot D) : les colonnes choisies d'une source
+#include "../../hmi/HmiVertices.hpp"    // 1.12.12 (lot H) : les points, « Points depuis »
 #include "../../ui/Shapes.hpp"
 
 #include <algorithm>
@@ -210,15 +211,16 @@ void text(const Ctx& c, std::string_view raw, double bx, double by, double bw, d
 
 std::vector<gfx::Point> parsePoints(const Ctx& c) {
     std::vector<gfx::Point> out;
-    std::istringstream in(c.src.text(c.o, "points"));
-    std::string pair;
-    while (in >> pair) {
-        const auto comma = pair.find(',');
-        if (comma == std::string::npos) continue;
-        double x = 0, y = 0;
-        if (hmi::parseNumber(pair.substr(0, comma), x) && hmi::parseNumber(pair.substr(comma + 1), y))
-            out.push_back({static_cast<float>(x), static_cast<float>(y)});
+    // 1.12.12 (lot H) : « Points depuis » - dans l'editeur, les valeurs initiales de la source (en marche, la
+    // vue composee du moteur porte deja les points lus).
+    if (c.opt.editor && c.opt.project && hmi::vertices::hasPointsFrom(c.o)) {
+        for (const auto& p : hmi::vertices::previewPoints(*c.opt.project, c.o))
+            out.push_back({static_cast<float>(p.x), static_cast<float>(p.y)});
+        return out;
     }
+    // 1.12.12 (lot H) : le lecteur unique des points - "10, 20" se lit aussi.
+    for (const auto& p : hmi::vertices::parse(c.src.text(c.o, "points")).points)
+        out.push_back({static_cast<float>(p.x), static_cast<float>(p.y)});
     return out;
 }
 

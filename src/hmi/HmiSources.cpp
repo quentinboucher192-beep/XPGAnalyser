@@ -7,6 +7,7 @@
 #include "HmiTypeForms.hpp"
 #include "HmiTypes.hpp"
 #include "HmiWidgets.hpp"
+#include "HmiVertices.hpp"   // 1.12.12 (lot H) : « Points depuis » d'une ligne, d'un polygone
 
 #include <algorithm>
 #include <cctype>
@@ -342,6 +343,7 @@ bool hasStatesFrom(const Object& o) {
 
 bool objectHasJoker(const Object& o) {
     if (repeats(o) || hasStatesFrom(o)) return true;
+    if (vertices::hasPointsFrom(o)) return true;   // 1.12.12 (lot H) : ses points viennent d'une source
     if (o.kind == Kind::XYChart)
         if (const Prop* r = o.find("reference"); r && r->expr.empty() && xyReferenceSource(r->value)) return true;
     for (const auto& p : o.props) {
@@ -362,6 +364,10 @@ std::vector<std::string> sourcesOf(const Object& o) {
     };
     if (repeats(o)) add(roles::nameOf(o.text(kRepeatFromKey)));
     if (hasStatesFrom(o)) add(roles::nameOf(o.text(kStatesFromKey)));
+    // 1.12.12 (lot H) : « Points depuis » - la source de ses points.
+    if (vertices::hasPointsFrom(o))
+        if (const auto ps = vertices::pointsSourceOf(o.text(vertices::kPointsFromKey)))
+            if (const auto j = jokerOf(ps->x)) add(sourceName(*j));
     for (const auto& p : o.props) {
         if (!p.expr.empty() || p.value.find('*') == std::string::npos) continue;
         if (!expandsFormulas(o.kind, p.key) && !expandsTexts(o.kind, p.key) && p.key != "names" && p.key != "labels") continue;
@@ -541,6 +547,16 @@ bool expandObject(Object& o, const SourceFn& source, const TextFn& text) {
                 ref->value = points;
                 changed = true;
             }
+    // ---- 1.12.12 (lot H) : « Points depuis » - les points d'une ligne, d'un polygone lus dans une source, en marche
+    // (sans `text`, l'apercu : l'editeur les dessine depuis les valeurs initiales, vertices::previewPoints). Une
+    // source qui ne se lit pas : aucun point (jamais une erreur de marche).
+    if (vertices::hasPointsFrom(o) && text) {
+        std::vector<vertices::Vertex> pts;
+        if (const auto read = vertices::pointsFromSource(o, source, text))
+            for (const auto& p : *read) pts.push_back(vertices::Vertex{p.x, p.y, {}, {}});
+        o.set("points", vertices::format(pts));
+        changed = true;
+    }
     // ---- 1.12.7 (lot E) : « Etats depuis » - la liste d'etats lue dans une source
     if (hasStatesFrom(o)) {
         const std::string name = roles::nameOf(o.text(kStatesFromKey));

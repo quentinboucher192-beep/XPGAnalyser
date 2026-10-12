@@ -30,6 +30,7 @@ namespace {
 constexpr double kPi = 3.14159265358979323846;
 constexpr float kHandle = 7.f;          // cote d'une poignee, en pixels ecran
 constexpr float kRotateReach = 26.f;    // distance de la poignee de rotation
+constexpr float kVertex = 4.5f;         // 1.12.12 (lot H) : le rayon d'une poignee de sommet, en pixels ecran
 
 // Le presse-papiers de l'editeur : les objets, avec leurs expressions et leurs
 // liaisons, et un style a part. Il vit le temps de l'application, d'une vue a
@@ -90,6 +91,11 @@ void HmiCanvas::setSelection(std::vector<Id> ids, bool notify) {
             if (v->object(id) && std::find(clean.begin(), clean.end(), id) == clean.end()) clean.push_back(id);
     if (clean == selection_) return;
     selection_ = std::move(clean);
+    // 1.12.12 (lot H) : le sommet choisi est celui d'un objet ; une autre selection l'oublie.
+    if (selection_.size() != 1 || selection_.front() != vertexOwner_) {
+        vertex_ = -1;
+        vertexOwner_ = kNoId;
+    }
     invalidate();
     if (notify) selectionChanged->emit();
 }
@@ -159,7 +165,167 @@ void HmiCanvas::documentChanged() {
         selectionChanged->emit();
     }
     if (hover_ != kNoId && !v->object(hover_)) hover_ = kNoId;
+    // 1.12.12 (lot H) : un sommet qui n'existe plus (Ctrl+Z, Contenu) ne reste pas choisi ; un plan retire
+    // n'attend plus sa zone.
+    if (vertex_ >= 0) {
+        const auto t = vertexTarget();
+        if (!t.valid() || t.object != vertexOwner_ || static_cast<std::size_t>(vertex_) >= hmi::vertices::points(*v, t).size()) {
+            vertex_ = -1;
+            vertexOwner_ = kNoId;
+        }
+    }
+    if (traceMap_ != kNoId && !v->object(traceMap_)) {
+        traceMap_ = kNoId;
+        trace_.clear();
+    }
     invalidate();
+}
+
+// ------------------------------------------------- 1.12.12 (lot H) : sommets -
+hmi::vertices::Target HmiCanvas::vertexTarget() const {
+    using T = hmi::vertices::Target;
+    const auto* v = view();
+    if (!v || selection_.size() != 1) return {};
+    const auto* o = v->object(selection_.front());
+    if (!o) return {};
+    T t;
+    if (hmi::vertices::isShape(*o)) {
+        t.what = T::What::Shape;
+        t.object = o->id;
+    } else if (o->kind == hmi::Kind::ZoneMap && zoneMap_ == o->id && zone_ >= 0) {
+        t.what = T::What::Zone;
+        t.object = o->id;
+        t.zone = zone_;
+    } else if (o->kind == hmi::Kind::XYChart) {   // la courbe de reference, dans la zone de trace (echelle fixe)
+        t.what = T::What::Reference;
+        t.object = o->id;
+    }
+    if (!t.valid() || !hmi::vertices::editable(*v, t)) return {};
+    return t;
+}
+
+void HmiCanvas::selectVertex(int index) {
+    const auto t = vertexTarget();
+    const Id owner = t.valid() && index >= 0 ? t.object : kNoId;
+    if (owner == kNoId) index = -1;
+    if (index == vertex_ && owner == vertexOwner_) return;
+    vertex_ = index;
+    vertexOwner_ = owner;
+    invalidate();
+    vertexChosen->emit(vertex_);
+}
+
+bool HmiCanvas::removeSelectedVertex() {
+    const auto* v = view();
+    const auto t = vertexTarget();
+    if (!v || !t.valid() || vertex_ < 0) return false;
+    const int k = vertex_;
+    const auto n = hmi::vertices::points(*v, t).size();
+    if (n <= hmi::vertices::minimum(*v, t)) {
+        using W = hmi::vertices::Target::What;
+        status->emit(t.what == W::Reference ? "Sur le dessin, une courbe de r\xC3\xA9" "f\xC3\xA9rence garde au moins 2 points (Contenu peut la "
+                                              "vider) : le point reste."
+                     : t.what == W::Shape && v->object(t.object)->kind == hmi::Kind::Line
+                         ? "Une ligne garde au moins 2 sommets : le sommet reste."
+                         : "Un polygone, une zone gardent au moins 3 sommets : le sommet reste.");
+        return false;
+    }
+    bool done = false;
+    (void)edit("Retirer le sommet", [&](hmi::Project&, hmi::View& vv) { done = hmi::vertices::removeVertex(vv, t, static_cast<std::size_t>(k)); });
+    if (done) selectVertex(std::min(k, static_cast<int>(n) - 2));
+    return done;
+}
+
+void HmiCanvas::setEditedZone(Id map, int zone) {
+    if (map == zoneMap_ && zone == zone_) return;
+    zoneMap_ = map;
+    zone_ = zone;
+    vertex_ = -1;
+    vertexOwner_ = kNoId;
+    invalidate();
+}
+
+void HmiCanvas::startZoneTrace(Id map) {
+    const auto* v = view();
+    const auto* o = v ? v->object(map) : nullptr;
+    if (!o || o->kind != hmi::Kind::ZoneMap) return;
+    // Des zones en formule, un plan verrouille : rien a tracer (addZone le refuserait a la fin).
+    if (const auto* z = o->find("mapZones"); (z && !z->expr.empty()) || v->effectivelyLocked(*o)) {
+        status->emit("Les zones de ce plan ne se tracent pas : elles viennent d'une formule, ou le plan est verrouill\xC3\xA9.");
+        return;
+    }
+    traceMap_ = map;
+    trace_.clear();
+    placeKind_.reset();
+    placeSymbol_.clear();
+    placeVariable_.reset();
+    grabFocus();
+    status->emit("Tracer une zone : un clic par point ; un double-clic, ou un clic sur le premier point, la ferme ; "
+                 "\xC3\x89" "chap l'abandonne.");
+    invalidate();
+}
+
+void HmiCanvas::traceClick(gfx::Point screen, int clicks, bool free) {
+    const auto* v = view();
+    const auto* map = v ? v->object(traceMap_) : nullptr;
+    if (!map || map->kind != hmi::Kind::ZoneMap) {
+        traceMap_ = kNoId;
+        trace_.clear();
+        invalidate();
+        return;
+    }
+    const auto vp = viewport();
+    bool close = clicks >= 2 && trace_.size() >= 3;
+    if (!close && trace_.size() >= 3) {
+        const gfx::Point first = vp.toScreen(trace_.front().x, trace_.front().y);
+        close = std::hypot(first.x - screen.x, first.y - screen.y) <= kVertex + 3.f;
+    }
+    if (close) {
+        const Id mapId = traceMap_;
+        const auto pts = trace_;
+        traceMap_ = kNoId;
+        trace_.clear();
+        int made = -1;
+        (void)edit("Tracer une zone", [&](hmi::Project&, hmi::View& vv) { made = hmi::vertices::addZone(vv, mapId, pts); });
+        invalidate();
+        if (made >= 0) zoneTraced->emit(made);
+        return;
+    }
+    if (clicks >= 2) return;   // le second clic d'un double-clic, avant le troisieme point : rien de plus
+    hmi::edit::Pt p = toView(screen);
+    if (!free) p = hmi::vertices::snapPoint(*v, p, trace_, traceMap_, 6.0 / zoom_).at;
+    trace_.push_back(p);
+    invalidate();
+}
+
+void HmiCanvas::paintVertices(const ui::PaintContext& ctx, const HmiViewport& vp) {
+    const auto* v = view();
+    if (!v) return;
+    const auto accent = ctx.theme.color.accent;
+    const gfx::Color white{255, 255, 255, 255};
+    const auto ring = [&](hmi::edit::Pt p, bool chosen, float r) {
+        const auto pts = shapes::ellipse(vp.toScreen(p.x, p.y), r, r, 16);
+        shapes::fillPolygon(ctx.r, pts, chosen ? accent : white);
+        shapes::strokePolyline(ctx.r, pts, true, chosen ? white : accent, 1.5f);
+    };
+    if (const auto t = vertexTarget(); t.valid()) {
+        const auto pts = hmi::vertices::points(*v, t);
+        // La zone choisie dans Contenu : son contour, par-dessus le plan.
+        if (t.what == hmi::vertices::Target::What::Zone && pts.size() >= 2) {
+            std::vector<gfx::Point> line;
+            for (const auto& p : pts) line.push_back(vp.toScreen(p.x, p.y));
+            shapes::strokePolyline(ctx.r, line, true, accent, 2.f);
+        }
+        for (std::size_t i = 0; i < pts.size(); ++i) ring(pts[i], static_cast<int>(i) == vertex_, kVertex);
+    }
+    // La zone qui se trace : ses points, et le trait jusqu'a la souris ; le premier grossit quand il ferme.
+    if (traceMap_ != kNoId && !trace_.empty()) {
+        std::vector<gfx::Point> line;
+        for (const auto& p : trace_) line.push_back(vp.toScreen(p.x, p.y));
+        if (pointerIn_) line.push_back(pointer_);
+        shapes::strokePolyline(ctx.r, line, false, accent, 1.5f);
+        for (std::size_t i = 0; i < trace_.size(); ++i) ring(trace_[i], i == 0 && trace_.size() >= 3, i == 0 ? kVertex + 1.5f : kVertex - 1.f);
+    }
 }
 
 // -------------------------------------------------------------------- zoom --
@@ -466,6 +632,17 @@ void HmiCanvas::hideSelection(bool on) {
     edit(on ? "Cacher" : "Montrer", [&](hmi::Project&, hmi::View& v) { hmi::edit::setHidden(v, sel, on); });
 }
 void HmiCanvas::nudge(double dx, double dy) {
+    // 1.12.12 (lot H) : un sommet choisi se deplace aux fleches (Maj : le pas de la grille) ; l'objet reste.
+    if (const auto t = vertexTarget(); vertex_ >= 0 && t.valid()) {
+        const auto pts = hmi::vertices::points(*view(), t);
+        if (static_cast<std::size_t>(vertex_) < pts.size()) {
+            const auto k = static_cast<std::size_t>(vertex_);
+            const hmi::edit::Pt to{pts[k].x + dx, pts[k].y + dy};
+            (void)edit("D\xC3\xA9placer le sommet", [&](hmi::Project&, hmi::View& v) { (void)hmi::vertices::moveVertex(v, t, k, to); },
+                       "nudge-vertex");
+            return;
+        }
+    }
     const auto sel = selection_;
     edit("D\xC3\xA9placer", [&](hmi::Project&, hmi::View& v) { hmi::edit::move(v, sel, dx, dy); }, "nudge");
 }
@@ -568,6 +745,21 @@ void HmiCanvas::emitStatus(gfx::Point s) {
     } else if (selection_.size() > 1) {
         text += "   |   " + std::to_string(selection_.size()) + " objets";
     }
+    // 1.12.12 (lot H) : le sommet choisi, ou il est.
+    if (vertex_ >= 0)
+        if (const auto t = vertexTarget(); t.valid()) {
+            const auto pts = hmi::vertices::points(*v, t);
+            // La reference d'une courbe XY : dans les unites de ses axes.
+            const auto data = t.what == hmi::vertices::Target::What::Reference ? hmi::vertices::listOf(*v->object(t.object)).points
+                                                                                : std::vector<hmi::vertices::Vertex>{};
+            if (static_cast<std::size_t>(vertex_) < data.size())
+                text += "   |   point " + std::to_string(vertex_ + 1) + " : x " + hmi::formatNumber(data[static_cast<std::size_t>(vertex_)].x)
+                      + "  y " + hmi::formatNumber(data[static_cast<std::size_t>(vertex_)].y);
+            else if (static_cast<std::size_t>(vertex_) < pts.size())
+                text += "   |   sommet " + std::to_string(vertex_ + 1) + " : x " + fmt(pts[static_cast<std::size_t>(vertex_)].x) + "  y "
+                      + fmt(pts[static_cast<std::size_t>(vertex_)].y);
+        }
+    if (traceMap_ != kNoId) text += "   |   zone : " + std::to_string(trace_.size()) + " point(s), double-clic pour la fermer";
     if (insideGroup_ != kNoId) if (const auto* g = v->object(insideGroup_)) text += "   |   dans " + g->name;
     if (placeKind_)
         text += placeSymbol_.empty() ? "   |   clic : poser un(e) " + std::string(hmi::kindLabel(*placeKind_))
@@ -649,6 +841,7 @@ void HmiCanvas::paintSelection(const ui::PaintContext& ctx, const HmiViewport& v
         shapes::fillPolygon(ctx.r, ring, gfx::Color{255, 255, 255, 255});
         shapes::strokePolyline(ctx.r, ring, true, accent, 1.5f);
     }
+    paintVertices(ctx, vp);   // 1.12.12 (lot H) : par-dessus les poignees du cadre
 }
 
 void HmiCanvas::onPaint(const ui::PaintContext& ctx) {
@@ -989,6 +1182,9 @@ ui::EventResult HmiCanvas::onEvent(const ui::InputEvent& ev) {
             if (const hmi::Id hit = hmi::edit::hitTest(*v, pressView_.x, pressView_.y, insideGroup_, 4.0 / zoom_);
                 hit != hmi::kNoId && std::find(selection_.begin(), selection_.end(), hit) == selection_.end())
                 setSelection({hit});
+            // 1.12.12 (lot H) : sur un sommet, le menu peut le retirer.
+            if (const auto t = vertexTarget(); t.valid())
+                if (const int k = hmi::vertices::vertexAt(*v, t, pressView_, (kVertex + 3.0) / zoom_); k >= 0) selectVertex(k);
             contextRequested->emit(m->pos);
             return ui::EventResult::Consumed;
         }
@@ -997,6 +1193,37 @@ ui::EventResult HmiCanvas::onEvent(const ui::InputEvent& ev) {
         if (placeKind_) {
             placeAt(m->pos, shift);
             return ui::EventResult::Consumed;
+        }
+
+        // 1.12.12 (lot H) : une zone qui se trace - chaque clic pose un point ; un double-clic, ou un clic sur
+        // le premier point, la ferme.
+        if (traceMap_ != kNoId) {
+            traceClick(m->pos, m->clickCount, m->mods.alt);
+            return ui::EventResult::Consumed;
+        }
+        // 1.12.12 (lot H) : un sommet (avant les poignees du cadre, qui peuvent tomber dessus) ; un double-clic
+        // sur un segment en insere un.
+        if (const auto t = vertexTarget(); t.valid()) {
+            if (const int k = hmi::vertices::vertexAt(*v, t, pressView_, (kVertex + 3.0) / zoom_); k >= 0) {
+                selectVertex(k);
+                const auto pts = hmi::vertices::points(*v, t);
+                grab_ = {pts[static_cast<std::size_t>(k)].x - pressView_.x, pts[static_cast<std::size_t>(k)].y - pressView_.y};
+                snapshot_ = *v;
+                ++dragSerial_;
+                dragTarget_ = t;
+                drag_ = Drag::Vertex;
+                return ui::EventResult::Consumed;
+            }
+            hmi::edit::Pt foot{};
+            if (m->clickCount >= 2)
+                if (const int seg = hmi::vertices::segmentAt(*v, t, pressView_, 5.0 / zoom_, &foot); seg >= 0) {
+                    int made = -1;
+                    (void)edit("Ajouter un sommet", [&](hmi::Project&, hmi::View& vv) {
+                        made = hmi::vertices::insertVertex(vv, t, static_cast<std::size_t>(seg), foot);
+                    });
+                    if (made >= 0) selectVertex(made);
+                    return ui::EventResult::Consumed;
+                }
         }
 
         // Une poignee de la selection.
@@ -1060,6 +1287,7 @@ ui::EventResult HmiCanvas::onEvent(const ui::InputEvent& ev) {
             if (hit == kNoId && insideGroup_ != kNoId) { leaveGroup(); return ui::EventResult::Consumed; }
         }
         if (hit != kNoId) {
+            if (vertex_ >= 0) selectVertex(-1);   // 1.12.12 (lot H) : l'objet, pas son sommet
             auto sel = selection_;
             const bool already = std::find(sel.begin(), sel.end(), hit) != sel.end();
             if (shift || ctrl) {
@@ -1107,7 +1335,31 @@ ui::EventResult HmiCanvas::onEvent(const ui::InputEvent& ev) {
             case Drag::None: {
                 const Id h = hmi::edit::hitTest(*v, p.x, p.y, insideGroup_, 4.0 / zoom_);
                 if (h != hover_) { hover_ = h; invalidate(); }
-                if (placeKind_) invalidate();
+                if (placeKind_ || traceMap_ != kNoId) invalidate();   // 1.12.12 (lot H) : la zone qui se trace
+                break;
+            }
+            // 1.12.12 (lot H) : un sommet glisse - recalcule depuis l'etat du depart, un seul pas d'annulation.
+            case Drag::Vertex: {
+                const auto t = dragTarget_;
+                const hmi::View start = snapshot_;
+                const int k = vertex_;
+                hmi::edit::Pt target{p.x + grab_.x, p.y + grab_.y};
+                snapX_.clear();
+                snapY_.clear();
+                // La reference d'une courbe XY : ses valeurs s'arrondissent (un millieme de l'axe), sans magnetisme.
+                if (!m->mods.alt && t.what != hmi::vertices::Target::What::Reference) {
+                    auto siblings = hmi::vertices::points(start, t);
+                    if (k >= 0 && static_cast<std::size_t>(k) < siblings.size()) siblings.erase(siblings.begin() + k);
+                    const auto snap = hmi::vertices::snapPoint(start, target, siblings, t.object, 6.0 / zoom_);
+                    target = snap.at;
+                    snapX_ = snap.xLines;
+                    snapY_ = snap.yLines;
+                }
+                if (k >= 0)
+                    (void)edit("D\xC3\xA9placer le sommet", [&](hmi::Project&, hmi::View& vv) {
+                        vv = start;
+                        (void)hmi::vertices::moveVertex(vv, t, static_cast<std::size_t>(k), target);
+                    }, "vertex:" + std::to_string(dragSerial_));
                 break;
             }
             case Drag::Pan:
@@ -1307,13 +1559,23 @@ ui::EventResult HmiCanvas::onEvent(const ui::InputEvent& ev) {
         switch (k->key) {
             case ui::Key::Space:  spaceDown_ = true; return ui::EventResult::Consumed;
             case ui::Key::Delete:
-            case ui::Key::Backspace: deleteSelection(); return ui::EventResult::Consumed;
+            case ui::Key::Backspace:
+                // 1.12.12 (lot H) : un sommet choisi se retire (l'objet reste, meme s'il n'en a plus assez).
+                if (vertex_ >= 0 && vertexTarget().valid()) {
+                    (void)removeSelectedVertex();
+                    return ui::EventResult::Consumed;
+                }
+                deleteSelection();
+                return ui::EventResult::Consumed;
             case ui::Key::Left:  nudge(-step, 0); return ui::EventResult::Consumed;
             case ui::Key::Right: nudge(step, 0);  return ui::EventResult::Consumed;
             case ui::Key::Up:    nudge(0, -step); return ui::EventResult::Consumed;
             case ui::Key::Down:  nudge(0, step);  return ui::EventResult::Consumed;
             case ui::Key::Escape:
-                if (placeKind_) { placeKind_.reset(); placeSymbol_.clear(); placeVariable_.reset(); invalidate(); }
+                // 1.12.12 (lot H) : la zone qui se trace s'abandonne ; un sommet choisi se laisse.
+                if (traceMap_ != kNoId) { traceMap_ = kNoId; trace_.clear(); invalidate(); }
+                else if (vertex_ >= 0) selectVertex(-1);
+                else if (placeKind_) { placeKind_.reset(); placeSymbol_.clear(); placeVariable_.reset(); invalidate(); }
                 else if (insideGroup_ != kNoId) leaveGroup();
                 else setSelection({});
                 return ui::EventResult::Consumed;
