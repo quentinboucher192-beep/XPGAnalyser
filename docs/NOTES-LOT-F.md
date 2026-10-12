@@ -203,6 +203,8 @@ se dessine au bord, marqué d'une flèche » (cuve, silo, trémie, bouteille), �
   selon l'objet (une cuve : la flèche ; une jauge : le bout de l'échelle ; un graphique en barres : « il ne se verra
   pas »). Dans `lotF11210_editeur` : un graphique en barres posé depuis la palette garde 0..100, son seuil haut
   accepte un nom, vider son Min ou « Revenir à la valeur par défaut » le rend à 0 ou 100 comme avant.
+- Dans `lotF11210` enfin : l'index des lignes suit une ligne renommée sur place, modifiée, ajoutée devant (la
+  première l'emporte, sans casse) et retirée.
 
 Trois essais existants ont changé, parce que le comportement qu'ils figeaient a changé exprès :
 - `hmi` (lot 9) : une borne `abc` sur un curseur était « n'est pas un nombre » (une erreur) ; `abc` est maintenant un
@@ -267,7 +269,13 @@ Trois essais existants ont changé, parce que le comportement qu'ils figeaient a
   exemples, Dupliquer, copier-coller) garde ses valeurs. Ouvert dans une 1.12.9, un tel objet se dessinerait sur
   la plage par défaut de son dessin (0..100), sans zone ni seuil hérité.
 - **Le moteur compose une vue de plus** : une vue qui a un objet à plage héritée (ou un nom dans une borne) est
-  recomposée à chaque cycle (100 ms), comme une vue à joker (lot E) ; le coût n'est pas mesuré sur un gros projet.
+  recomposée à chaque cycle (100 ms), comme une vue à joker (lot E). Mesuré sur la construction de mise au point
+  (sans optimisation), une vue de 300 objets (jauges, cuves, curseurs) dans un projet de 500 lignes d'Unités et
+  formats : sans plage (un projet 1.12.9), 8 à 12 ms par cycle, autant que sans aucune ligne ; avec des plages
+  héritées, 14 à 16 ms ; l'éditeur prépare tous les objets d'une telle vue en 14 à 21 ms par dessin. Un index des
+  lignes (refait quand un chemin change : son empreinte) évite de relire toutes les lignes pour chaque clé de chaque
+  objet - la première version de ce lot coûtait 48 à 86 ms par cycle sur cette vue, même sans plage. Rien n'est
+  mesuré sur la construction livrée (optimisée), plus rapide.
 - **Les rôles** : Min, Max, les seuils (et l'axe Y, la consigne, la plage de l'ouverture) d'un objet à échelle, d'un
   graphique en barres et d'un histogramme sont des formules sans = (comme les bornes du champ de saisie depuis la
   1.11.24) : Dupliquer les lit en mode formule, l'avertissement « tapé sans = : voulais-tu =X ? » ne s'y applique

@@ -15,8 +15,11 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdint>
 #include <map>
 #include <mutex>
+#include <optional>
+#include <unordered_map>
 #include <utility>
 
 namespace hmi::ranges {
@@ -37,6 +40,99 @@ std::string rootOf(std::string_view path) {
     std::size_t end = 0;
     while (end < path.size() && path[end] != '.' && path[end] != '[') ++end;
     return trim(path.substr(0, end));
+}
+
+// ---- les lignes d'Unites et formats, cherchees vite -------------------------------------------
+//  Le moteur pose la question a chaque cycle pour chaque cle de chaque objet de la vue (needed, apply), l'editeur a
+//  chaque dessin (preview) : displayOf relit toutes les lignes a chaque fois (300 objets sur 500 lignes : 1,8 million
+//  de chemins compares par cycle, meme sans aucune plage). Un index des lignes par chemin (exact, sinon generique :
+//  comme displayOf), par fil d'execution, verifie au debut de chaque passage (l'empreinte des chemins : une ligne
+//  ajoutee, renommee ou retiree le refait) ; un parametre de popup passe encore par displayOf.
+std::string lowerAscii(std::string_view s) {
+    std::string out(s);
+    for (auto& c : out) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return out;
+}
+
+// Comme genericPath (HmiDisplay.cpp) : sans blancs, en minuscules, sans les indices (Cuves[1].Niveau : cuves[].niveau).
+std::string genericOf(std::string_view path) {
+    std::string out;
+    bool inside = false;
+    for (const char c : path) {
+        if (c == '[') { inside = true; out += '['; continue; }
+        if (c == ']') { inside = false; out += ']'; continue; }
+        if (inside || std::isspace(static_cast<unsigned char>(c))) continue;
+        out += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+    return out;
+}
+
+struct LineIndex {
+    const Project*         project{nullptr};
+    const VariableDisplay* data{nullptr};
+    std::size_t            size{0};
+    std::uint64_t          print{0};
+    std::unordered_map<std::string, const VariableDisplay*> exact, generic;
+    bool                   anyScaling{false};   // une variable liee mise a l'echelle (sinon, sans ligne : rien a prendre)
+};
+thread_local LineIndex tIndex;
+thread_local int tDepth = 0;
+thread_local bool tReady = false;
+
+std::uint64_t printOf(const std::vector<VariableDisplay>& lines) {
+    std::uint64_t h = 1469598103934665603ULL;
+    for (const auto& d : lines) {
+        for (const char c : d.path) h = (h ^ static_cast<unsigned char>(c)) * 1099511628211ULL;
+        h = (h ^ 0x1FU) * 1099511628211ULL;
+    }
+    return h;
+}
+
+// Un passage (needed, apply, preview, hint, check...) : l'index verifie une fois, au debut ; un passage dans un
+// autre s'en sert tel quel.
+class Pass {
+public:
+    explicit Pass(const Project& p) {
+        if (tDepth++ > 0) return;
+        const std::uint64_t print = printOf(p.displays);
+        if (tIndex.project != &p || tIndex.data != p.displays.data() || tIndex.size != p.displays.size() || tIndex.print != print) {
+            tIndex.exact.clear();
+            tIndex.generic.clear();
+            for (const auto& d : p.displays) {
+                tIndex.exact.emplace(lowerAscii(trim(d.path)), &d);   // la premiere ligne d'un chemin, comme displayOf
+                tIndex.generic.emplace(genericOf(d.path), &d);
+            }
+            tIndex.project = &p;
+            tIndex.data = p.displays.data();
+            tIndex.size = p.displays.size();
+            tIndex.print = print;
+        }
+        tIndex.anyScaling = false;
+        for (const auto& v : p.programs.variables)
+            if (v.bound() && v.scaled() && v.engMin != v.engMax) {
+                tIndex.anyScaling = true;
+                break;
+            }
+        tReady = true;
+    }
+    ~Pass() {
+        if (--tDepth == 0) tReady = false;
+    }
+    Pass(const Pass&) = delete;
+    Pass& operator=(const Pass&) = delete;
+};
+
+// La ligne d'un chemin, comme displayOf (le chemin exact, sinon generique ; un parametre de popup : ce qu'il designe).
+const VariableDisplay* lineOf(const Project& p, std::string_view path, const View* in) {
+    if (!tReady || tIndex.project != &p || tIndex.data != p.displays.data() || tIndex.size != p.displays.size())
+        return displayOf(p, path, in);
+    if (p.displays.empty()) return nullptr;
+    const std::string wanted = trim(markers::strip(path, markers::Mode::Expression));
+    if (wanted.empty()) return nullptr;
+    if (const auto it = tIndex.exact.find(lowerAscii(wanted)); it != tIndex.exact.end()) return it->second;
+    if (const auto it = tIndex.generic.find(genericOf(wanted)); it != tIndex.generic.end()) return it->second;
+    if (in && !in->params.empty()) return displayOf(p, path, in);
+    return nullptr;
 }
 
 bool number(std::string_view text, double& out) { return parseNumber(trim(text), out); }
@@ -147,6 +243,14 @@ std::vector<Change> changesOf(const Project& p, const Object& o, const View* in)
     const std::size_t inheritedCount = keys.size();
     for (const auto key : namedKeys(o.kind)) keys.push_back(key);
     const bool follows = followsVariableFormat(o);
+    // Ce que la variable donne pour une cle (comme inheritedFor ; la variable cherchee une fois pour toutes les cles).
+    std::optional<std::string> var;
+    const auto inheritedAt = [&](std::string_view key, const std::string& def) -> Inherited {
+        if (o.kind == Kind::Trend) return inheritedFor(p, o, key, in);
+        if (!var) var = variableOf(o);
+        if (var->empty()) return {};
+        return inheritedOf(p, *var, key, in, !def.empty());
+    };
     for (std::size_t i = 0; i < keys.size(); ++i) {
         const auto key = keys[i];
         const auto* prop = o.find(key);
@@ -162,7 +266,7 @@ std::vector<Change> changesOf(const Project& p, const Object& o, const View* in)
         }
         if (i >= inheritedCount) continue;                    // vide : rien a heriter (la consigne, un graphique)
         if (follows) {
-            const Inherited inh = inheritedFor(p, o, key, in);
+            const Inherited inh = inheritedAt(key, def);
             if (!inh.value.empty()) {
                 if (isName(inh.value) && !namesAsValue) out.push_back({std::string(key), def, inh.value});
                 else out.push_back({std::string(key), inh.value, {}});
@@ -294,10 +398,12 @@ bool scalingOf(const Project& p, std::string_view path, double& lo, double& hi) 
 
 Inherited inheritedOf(const Project& p, std::string_view path, std::string_view key, const View* in, bool scaling) {
     Inherited out;
+    const Pass pass(p);
+    if (tIndex.project == &p && p.displays.empty() && !tIndex.anyScaling) return out;   // ni ligne ni mise a l'echelle
     const std::string wanted = bare(path);
     if (wanted.empty()) return out;
     const std::string_view k = lineKey(key);
-    if (const auto* d = displayOf(p, wanted, in)) {
+    if (const auto* d = lineOf(p, wanted, in)) {
         const std::string v = trim(field(*d, k));
         if (!v.empty()) {
             out.value = v;
@@ -370,6 +476,7 @@ std::string variableOf(const Object& o) {
 }
 
 Inherited inheritedFor(const Project& p, const Object& o, std::string_view key, const View* in) {
+    const Pass pass(p);
     // La mise a l'echelle : seulement pour une cle qui avait une valeur par defaut (une jauge neuve) -
     // pas pour les bornes vides d'un champ de saisie, ni l'ouverture d'une vanne.
     const bool scaling = !defaultOf(o.kind, key).empty();
@@ -406,6 +513,7 @@ Inherited inheritedFor(const Project& p, const Object& o, std::string_view key, 
 
 bool apply(Object& o, const Project& p, const View* in) {
     if (!touched(o.kind)) return false;
+    const Pass pass(p);
     bool changed = false;
     if (o.kind == Kind::Valve) {
         Prop opening;
@@ -428,12 +536,14 @@ bool apply(Object& o, const Project& p, const View* in) {
 }
 
 bool apply(View& v, const Project& p) {
+    const Pass pass(p);
     bool changed = false;
     for (auto& o : v.objects) changed = apply(o, p, &v) || changed;
     return changed;
 }
 
 bool needed(const Project& p, const View& v) {
+    const Pass pass(p);
     for (const auto& o : v.objects) {
         if (!touched(o.kind)) continue;
         if (o.kind == Kind::Valve) {
@@ -448,6 +558,7 @@ bool needed(const Project& p, const View& v) {
 
 bool preview(const Project& p, const View& v, const Object& o, Object& out) {
     if (!touched(o.kind)) return false;
+    const Pass pass(p);
     if (o.kind == Kind::Valve) {
         Prop opening;
         if (!valveOpening(p, o, &v, opening) || !opening.expr.empty()) return false;   // une formule : l'editeur ne la calcule pas
@@ -470,6 +581,7 @@ bool preview(const Project& p, const View& v, const Object& o, Object& out) {
 }
 
 std::string hint(const Project& p, const View& v, const Object& o, std::string_view key) {
+    const Pass pass(p);
     if (key == "zones" && (o.kind == Kind::Bargraph || o.kind == Kind::Dial)) {
         const auto* zones = o.find("zones");
         if (!zones || !zones->expr.empty() || !trim(zones->value).empty()) return {};
@@ -510,6 +622,7 @@ void followVariable(Object& o) {
 
 // ============================================================ Generer ========
 std::vector<Issue> check(const Project& p, const NameExists& plc) {
+    const Pass pass(p);
     using S = Issue::Severity;
     std::vector<Issue> out;
     const auto add = [&](S sev, std::string category, Id view, Id object, std::string key, std::string message) {

@@ -25100,6 +25100,46 @@ void lotF11210() {
         check(says("Barres_Ecrites", "high 150 est hors de la plage 0..100 : il ne se verra pas"),
               "F : ... d'un graphique en barres : \xC2\xAB il ne se verra pas \xC2\xBB, comme avant (sa ligne n'est pas dessin\xC3\xA9" "e)");
     }
+    // ---- l'index des lignes (le moteur et l'editeur ne relisent plus toutes les lignes pour chaque cle) : une ligne
+    //      renommee sur place, modifiee, ajoutee, retiree - ce que l'objet prend suit, sans rien de perime
+    {
+        Project q;
+        View w = makeView(q, "Vue_Index");
+        q.programs.variables.push_back(hmiVar(q, "Mesure_A", "REAL", "1"));
+        q.programs.variables.push_back(hmiVar(q, "Mesure_B", "REAL", "1"));
+        for (int i = 0; i < 40; ++i) q.displays.push_back({"Autre_" + std::to_string(i), "bar", "0.0"});
+        VariableDisplay a{"Mesure_A", "bar", "0.0"};
+        a.max = "10";
+        q.displays.push_back(a);
+        const Id jauge = edit::add(q, w, Kind::Gauge, 10, 10);
+        w.object(jauge)->setExpr("value", "Mesure_B");
+        w.object(jauge)->set("max", "");
+        q.views = {w};
+        const auto maxOf = [&] {
+            const std::string v = ranges::inheritedFor(q, *q.views[0].object(jauge), "max", &q.views[0]).value;
+            return v.empty() ? std::string("-") : v;
+        };
+        const std::string before = maxOf();
+        q.displays.back().path = "Mesure_B";   // renommee sur place : meme tableau, meme taille
+        const std::string renamed = maxOf();
+        q.displays.back().max = "20";
+        const std::string changed = maxOf();
+        q.displays.insert(q.displays.begin(), [] {
+            VariableDisplay first{"mesure_b", "", ""};
+            first.max = "30";
+            return first;
+        }());
+        const std::string added = maxOf();
+        q.displays.erase(q.displays.begin());
+        q.displays.pop_back();
+        const std::string removed = maxOf();
+        same(before + ";" + renamed + ";" + changed + ";" + added + ";" + removed, "-;10;20;30;-",
+             "F : l'index des lignes suit une ligne renomm\xC3\xA9" "e sur place, modifi\xC3\xA9" "e, ajout\xC3\xA9" "e devant (la premi\xC3\xA8re l'emporte, "
+             "sans casse), retir\xC3\xA9" "e");
+        Object shown;
+        check(!ranges::preview(q, q.views[0], *q.views[0].object(jauge), shown) || shown.text("max") == "100",
+              "F : ... et l'\xC3\xA9" "diteur dessine la jauge sur la plage d'un objet neuf une fois la ligne retir\xC3\xA9" "e");
+    }
 }
 
 // La valeur initiale d'une structure et d'un tableau de structures.
