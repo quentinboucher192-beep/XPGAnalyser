@@ -42,6 +42,17 @@ bool intersects(const Box& a, const Box& b) {
     return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 }
 
+// 1.12.11 (lot G) : le numero de boucle d'un instrument ISA, `k` copies plus loin (101 : 102, 103 ; 101A : 102A ;
+// 099 : 100). Sans chiffre en tete, ou avec un repere ($N$, remplace comme partout) : tel quel.
+std::string nextLoop(const std::string& loop, int k) {
+    std::size_t d = 0;
+    while (d < loop.size() && digit(loop[d])) ++d;
+    if (d == 0 || d > 9 || loop.find('$') != std::string::npos) return loop;
+    std::string n = std::to_string(std::stoll(loop.substr(0, d)) + k);
+    if (n.size() < d) n.insert(0, d - n.size(), '0');
+    return n + loop.substr(d);
+}
+
 } // namespace
 
 // ================================================================ reperes ===
@@ -984,6 +995,9 @@ Result apply(Project& p, View& v, const Plan& plan) {
                 r.markersReplaced += replacedCount;
                 field = std::move(t);
             });
+            // 1.12.11 (lot G) : la boucle d'un instrument ISA suit la copie (TT-101, TT-102...) - avant, toutes TT-101.
+            if (c.kind == Kind::IsaInstrument)
+                if (const Prop* lp = c.find("loop"); lp && lp->expr.empty()) c.set("loop", nextLoop(lp->value, k));
             c.setNumber("x", c.number("x") + off[static_cast<std::size_t>(k - 1)].dx);
             c.setNumber("y", c.number("y") + off[static_cast<std::size_t>(k - 1)].dy);
             const bool root = std::find(unitIds.begin(), unitIds.end(), o.id) != unitIds.end();

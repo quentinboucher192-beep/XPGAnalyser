@@ -42,7 +42,10 @@
 //                      et Contenu choisissent le meme sommet.
 //    Courbe XY         (1.12.12, lot H) ses courbes, ou (Montrer) les points de sa courbe
 //                      de reference, ranges par x croissant.
-//  Un objet qui ne peut rien contenir (une vanne, un bouton) : pas d'onglet.
+//    Pompe, moteur,    (1.12.11, lot G) le MODE ETAT : une ligne par valeur (quand la valeur
+//    vanne...          vaut, l'aspect - arret, marche, defaut, maintenance -, sa couleur, anime) ;
+//                      « Depuis une enumeration » le remplit (ETAT_MOTEUR, une du projet).
+//  Un objet qui ne peut rien contenir (un bouton, une cuve) : pas d'onglet.
 //
 //  Tout passe par des commandes de vue : Ctrl+Z reprend une ligne ajoutee, une
 //  case modifiee, une plume retiree.
@@ -76,8 +79,9 @@ public:
     // SourceColumns - un tableau dont les lignes viennent d'une source (Lignes depuis) : ses colonnes.
     // 1.12.12 (lot H) : Points - les sommets d'une ligne, d'un polygone ; les points de la courbe de
     // reference d'une courbe XY (Montrer : la reference).
+    // 1.12.11 (lot G) : Aspects - le mode Etat d'un symbole du synoptique (valeur -> aspect).
     enum class Mode : std::uint8_t { None, Table, Trend, AnimatedImage, RecipeManager, Zones, Tabs, NavItems, Members, States,
-                                     Choices, Bands, Schedule, Checks, SourceColumns, Points };
+                                     Choices, Bands, Schedule, Checks, SourceColumns, Points, Aspects };
 
     HmiContentPanel(std::string id, hmi::DocumentPtr doc, hmi::Id view, Apply apply);
 
@@ -108,6 +112,9 @@ public:
     // d'une enumeration du projet) : un etat par valeur.
     // 1.12.12 (lot H) : sommets "x", "y" (un nombre, ou un texte a repere $X$ ; la reference d'une
     // courbe XY : un nombre) ; courbe XY "show" (les courbes / la reference, index -1).
+    // 1.12.11 (lot G) : mode Etat d'un symbole "match", "look" (Arret, Marche, Defaut, Maintenance),
+    // "color", "animated" ; index -1 : "fromEnum" (ETAT_MOTEUR, une enumeration ou une variable de ce
+    // type), "enabled" (TRUE : ETAT_MOTEUR ; FALSE : la Valeur se relit vrai / faux).
     bool setField(int index, const std::string& field, const std::string& value);
     // 1.12.12 (lot H) : « Ajouter » d'un plan a zones trace la zone sur le dessin (l'editeur relaie au
     // canevas : traceRequested) ; sans editeur (les essais), une zone rectangulaire comme avant.

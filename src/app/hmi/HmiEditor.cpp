@@ -10,6 +10,7 @@
 #include "../../hmi/HmiApiVars.hpp"     // 1.11.1 (API-V, R1111-6) : l'arbre de la bibliotheque, sur le modele d'API-M
 #include "HmiParamPanes.hpp"             // 1.9 : les parametres des popups
 #include "HmiObjectAlarmPanes.hpp"    // 1.9 : les alarmes de l'objet (inspecteur)
+#include "HmiEquipmentLinkPane.hpp"   // 1.12.11 (lot G) : la Liaison Equipement (inspecteur)
 #include "HmiOperatorPanes.hpp"       // 1.10 (S2) : les operateurs du symbole
 #include "HmiFunctionPanes.hpp"       // 1.11.10 : les fonctions du symbole
 #include "HmiSymbolPopupsPane.hpp"    // 1.11.10 : les popups du symbole
@@ -982,6 +983,26 @@ void HmiEditor::rebuildProperties() {
             cats.front().properties.insert(cats.front().properties.begin(), std::move(p));
         }
     }
+    // 1.12.11 (lot G) : la Liaison Equipement d'un symbole du synoptique, juste apres sa section ; la ligne
+    // de son mode Etat ouvre l'onglet Contenu.
+    if (const auto sel = canvas_->selection(); sel.size() == 1)
+        if (const auto* o = v->object(sel.front()); o && hmi::kindIsSynoptic(o->kind)) {
+            auto extra = eqlinkpane::categories(doc_, apply_, viewId_, o->id);
+            std::size_t at = cats.size();
+            for (std::size_t k = 0; k < cats.size(); ++k)
+                if (cats[k].name == hmi::kindLabel(o->kind)) at = k + 1;
+            cats.insert(cats.begin() + static_cast<long>(at), extra.begin(), extra.end());
+            for (auto& cat : cats)
+                for (auto& p : cat.properties)
+                    if (p.key == "stateAspects") {
+                        p.open = [this, id = o->id] {
+                            content_->setObject(id);
+                            layout();
+                            if (const int i = inspector_->indexOf(content_); i >= 0) inspector_->setCurrentIndex(static_cast<std::size_t>(i));
+                        };
+                        p.openTip = "Le mode \xC3\x89tat en table : Contenu (une ligne par valeur, son aspect)";
+                    }
+        }
     // 1.12.3 : la ligne des etats d'un voyant ou d'un texte multi-etats - son bouton « ... »
     // ouvre la table de l'onglet Contenu (un etat par ligne, selon la valeur ou des conditions).
     if (const auto sel = canvas_->selection(); sel.size() == 1)

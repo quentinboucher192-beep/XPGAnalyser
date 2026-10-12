@@ -22,6 +22,7 @@
 #include "HmiApiVars.hpp"     // 1.11.1 (API-M) : API.<...> est le nom que l'automate connait
 #include "HmiTypeRegistry.hpp" // 1.11.19 (refonte, lot 6) : le type du moteur d'un nom de type
 #include "HmiOverload.hpp"     // 1.11.20 : les surcharges (la regle partagee avec le controle)
+#include "HmiEquipmentLink.hpp" // 1.12.11 (lot G) : la liaison Equipement des symboles du synoptique
 #include "../sim/Interpreter.hpp"
 #include "../sim/Runtime.hpp"
 
@@ -1242,7 +1243,11 @@ const View* Runtime::viewOf(Id id) const {
     auto jk = jokerViews_.find(id);
     if (jk == jokerViews_.end()) jk = jokerViews_.emplace(id, sources::viewHasJoker(*v)).first;
     const bool jokers = jk->second;
-    if (!inherited && !symbols && !owned && !overridden(*v) && !jokers) return v;
+    // 1.12.11 (lot G) : une liaison Equipement a remplir (ses roles, lus dans la structure).
+    auto lk = linkViews_.find(id);
+    if (lk == linkViews_.end()) lk = linkViews_.emplace(id, eqlink::viewHasLinks(*v)).first;
+    const bool links = lk->second;
+    if (!inherited && !symbols && !owned && !overridden(*v) && !jokers && !links) return v;
     // Une entree de std::map ne bouge pas quand on en ajoute d'autres : le
     // pointeur rendu vaut jusqu'au prochain effacement (entree du moteur).
     auto it = composed_.find(id);
@@ -1261,6 +1266,9 @@ const View* Runtime::viewOf(Id id) const {
             c = std::move(e);
         }
         if (owned) c = qualifiedOwnedPopup(*project_, c);        // 1.11.10 : Ouvrir() vise l'instance qui l'ouvre
+        // 1.12.11 (lot G) : la liaison Equipement - les roles libres d'un symbole lus dans sa structure (P1.Marche,
+        // P1.Defaut, {P1.Nom}), apres les instances (leurs objets ont recu leurs arguments).
+        if (links || symbols) (void)eqlink::applyView(*project_, c);
         // 1.12.7 (lot E) : le joker [*] des listes (une plume, une barre, une ligne, une vue, un onglet par element).
         if (jokers || symbols) sources::expandView(c, source, [this, id](std::string_view f) { return jokerText(f, id); });
         it = composed_.emplace(id, std::move(c)).first;
@@ -3584,6 +3592,7 @@ void Runtime::tick(double now) {
     if (!running_ || !project_) return;
     composed_.clear(); boundCalls_.clear();                  // le projet a pu changer depuis le dernier appel
     jokerViews_.clear();                                     // 1.12.7 (lot E) : et ses jokers
+    linkViews_.clear();                                      // 1.12.11 (lot G) : et ses liaisons Equipement
     refreshBound();                     // lot 15 : les variables liees a un equipement
     now_ = std::max(now_, now);
     followWatched(now, false);          // 1.9 : les variables des alarmes, suivies en permanence

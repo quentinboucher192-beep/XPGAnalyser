@@ -537,7 +537,10 @@ const std::vector<ViewTemplate>& viewTemplates() {
          "Une popup \xC3\xA0 param\xC3\xA8tre (Vanne) : la vanne r\xC3\xA9glante, son ouverture, la consigne, Ouvrir et Fermer.", "popup",
          {"popup"}, 480, 280},
         // ... des symboles (240 x 160)...
-        {"symbole_moteur", "Moteur et son \xC3\xA9tat", "Un symbole : le moteur, son voyant de d\xC3\xA9" "faut, son libell\xC3\xA9.", "symbole",
+        // 1.12.11 (lot G) : un modele d'equipement lie par sa structure (le parametre Moteur : T_Moteur).
+        {"symbole_moteur", "Moteur et son \xC3\xA9tat",
+         "Un symbole li\xC3\xA9 \xC3\xA0 sa structure (Moteur : T_Moteur) : le moteur, son voyant de d\xC3\xA9" "faut, son libell\xC3\xA9. "
+         "Pos\xC3\xA9, il suffit de lui donner M1.", "symbole",
          {"symbole"}, 240, 160},
         {"symbole_mesure", "Mesure et unit\xC3\xA9", "Un symbole : l'afficheur, l'unit\xC3\xA9, la fl\xC3\xA8" "che de tendance.", "symbole",
          {"symbole"}, 240, 160},
@@ -821,11 +824,28 @@ void fillFromTemplate(Project& p, View& v, std::string_view key) {
     }
     // -- des symboles (240 x 160)
     if (key == "symbole_moteur") {
-        auto& mot = addAt(p, v, Kind::Motor, "Moteur", 16, 16, W * 0.5 - 16, H - 16 - 64);
+        // 1.12.11 (lot G) : UN MODELE D'EQUIPEMENT LIE PAR SA STRUCTURE. Le parametre Moteur est une T_Moteur
+        // (Marche, Defaut, Nom ; creee si le projet n'en a pas) ; le moteur la prend par sa liaison Equipement
+        // (Valeur <- Marche, Defaut <- Defaut, Libelle <- Nom), le voyant montre son defaut, le texte son nom.
+        // Pose dans une vue, il suffit de donner M1 (une T_Moteur) a l'instance. Avant : ni parametre, ni liaison.
+        if (!p.hmiTypeByName("T_Moteur")) {
+            HmiType t;
+            t.id = p.allocate();
+            t.name = "T_Moteur";
+            t.description = "Un moteur (le mod\xC3\xA8le de symbole Moteur et son \xC3\xA9tat)";
+            t.members = {{"Marche", "BOOL", "", "En marche"}, {"Defaut", "BOOL", "", "En d\xC3\xA9" "faut"}, {"Nom", "STRING", "", "Son rep\xC3\xA8re (M-101)"}};
+            p.programs.types.push_back(std::move(t));
+        }
+        param("Moteur", "T_Moteur", "Le moteur montr\xC3\xA9 (Moteur := M1) : Marche, Defaut, Nom - sa liaison \xC3\x89quipement les lit");
+        auto& mot = addAt(p, v, Kind::Motor, "Dessin_Moteur", 16, 16, W * 0.5 - 16, H - 16 - 64);   // pas « Moteur » : le parametre
         mot.set("variable", "");
-        (void)addAt(p, v, Kind::Indicator, "Defaut", W - 16 - 32, 16, 32, 32);
+        mot.set("equipment", "Moteur");
+        mot.set("labelPosition", "aucun");   // le libelle est le texte du bas (le sien nomme ses alarmes)
+        auto& fault = addAt(p, v, Kind::Indicator, "Defaut", W - 16 - 32, 16, 32, 32);
+        fault.setExpr("value", "Moteur.Defaut");
+        fault.set("colorOn", "#E5534B");
         auto& l = addAt(p, v, Kind::Text, "Libelle", 16, H - 48, W - 32, 32);
-        l.set("text", "Moteur");
+        l.set("text", "{Moteur.Nom}");
         return;
     }
     if (key == "symbole_mesure") {

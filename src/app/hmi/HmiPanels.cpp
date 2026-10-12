@@ -35,6 +35,8 @@
 #include "../../hmi/HmiVertices.hpp"    // 1.12.12 (lot H) : « Points depuis »
 #include "../../hmi/HmiTypeRegistry.hpp" // 1.12.12 (lot H) : les sources de nombres
 #include "../../hmi/HmiTypes.hpp"        // 1.12.12 (lot H) : les membres X et Y
+#include "../../hmi/HmiEquipmentLink.hpp"   // 1.12.11 (lot G) : la liaison Equipement, le mode Etat
+#include "../../hmi/HmiPopupParams.hpp"     // 1.12.11 (lot G) : les DDT de l'automate (PlcTypes)
 #include "../../ui/Shapes.hpp"
 #include "../../ui/Theme.hpp"
 #include "../../ui/widgets/Controls.hpp"
@@ -2079,6 +2081,20 @@ const std::vector<KeyInfo>& keyInfos() {
         {"opening", "Ouverture (%)", PG::ValueType::Text, {},
          "Vanne r\xC3\xA9glante : de 0 \xC3\xA0 100 % (une expression : =Vanne_Position). Vide : tout ou rien."},
         {"moving", "En mouvement (expression)", PG::ValueType::Text, {}, "Vraie : la tige clignote (la vanne bouge)."},
+        // ---- 1.12.11 (lot G) : la liaison Equipement, le mode Etat, le mode montre
+        {"equipment", "\xC3\x89quipement", PG::ValueType::Text, {},
+         "La structure que le symbole repr\xC3\xA9sente : P1, Pompes[2], un param\xC3\xA8tre du symbole ou de la popup, un rep\xC3\xA8re "
+         "$Pompe$. Ses membres se lient par leur nom : Valeur <- Marche, D\xC3\xA9" "faut <- Defaut, Libell\xC3\xA9 <- Nom, Mode <- Mode "
+         "(la section Liaison \xC3\x89quipement les montre et les change pour tout le type). Ce qui est r\xC3\xA9gl\xC3\xA9 \xC3\xA0 la main "
+         "sur l'objet gagne."},
+        {"stateAspects", "Mode \xC3\x89tat", PG::ValueType::Text, {},
+         "La valeur choisit un aspect (arr\xC3\xAAt, marche, d\xC3\xA9" "faut, maintenance) : un moteur ETAT_MOTEUR en D\xC3\xA9" "faut (2) se "
+         "dessine en d\xC3\xA9" "faut. Il se r\xC3\xA8gle dans l'onglet Contenu (Depuis une \xC3\xA9num\xC3\xA9ration)."},
+        {"cylinderMode", "Course", PG::ValueType::Enum, {"position", "rentr\xC3\xA9 / sorti"},
+         "Position : la Valeur entre Minimum et Maximum place la tige. Rentr\xC3\xA9 / sorti : la Valeur se lit vrai / faux "
+         "(un BOOL Sorti) - vrai, la tige sort enti\xC3\xA8rement."},
+        {"operatingMode", "Mode", PG::ValueType::Text, {},
+         "Le mode montr\xC3\xA9 en haut \xC3\xA0 gauche (Auto, Manu) : un texte, ou un texte \xC3\xA0 trous {P1.Mode} ; vide : rien."},
         // ---- 1.10.4 : la vanne 3 voies
         {"valve3Function", "Variante", PG::ValueType::Enum, {"m\xC3\xA9langeuse", "r\xC3\xA9partitrice"},
          "M\xC3\xA9langeuse : les voies 1 et 2 entrent, la voie 3 sort. R\xC3\xA9partitrice : la voie 3 entre, les voies 1 et 2 sortent. "
@@ -2752,6 +2768,11 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
         if ((o->kind == hmi::Kind::MultiStateText || o->kind == hmi::Kind::MultiStateIndicator || o->kind == hmi::Kind::StateChart)
             && !many && !o->find("statesFrom"))
             allProps.push_back({"statesFrom", "", ""});
+        // 1.12.11 (lot G) : la liaison Equipement d'un symbole du synoptique, la course d'un verin (absentes d'un objet
+        // neuf : rien ne change dans son fichier tant qu'on ne les regle pas). Le mode Etat se montre quand il est
+        // regle (Contenu le regle).
+        if (hmi::kindIsSynoptic(o->kind) && !o->find("equipment")) allProps.push_back({"equipment", "", ""});
+        if (o->kind == hmi::Kind::Cylinder && !o->find("cylinderMode")) allProps.push_back({"cylinderMode", "position", ""});
         // 1.12.7 (lot D) : les colonnes choisies d'un tableau qui a une source.
         if (o->kind == hmi::Kind::Table && !o->find("sourceColumns") && o->text("rowsFrom").find_first_not_of(" \t") != std::string::npos)
             allProps.push_back({"sourceColumns", "", ""});
@@ -2782,6 +2803,8 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
     const double variableRank = freshRank("value") >= 0 ? freshRank("value") + 0.5 : -1.0;
 
     std::shared_ptr<const hmi::exprcheck::PlcPaths> exprPaths;   // ---- Lot API 8 : les expressions impossibles (une fois) ----
+    // 1.12.11 (lot G) : ce que la liaison Equipement remplit (une ligne le dit dans son aide).
+    const auto linked = project && !many && hmi::kindIsSynoptic(o->kind) ? hmi::eqlink::bindingOf(*project, &view, *o) : hmi::eqlink::Binding{};
     for (std::size_t propIndex = 0; propIndex < allProps.size(); ++propIndex) {
         const auto& prop = allProps[propIndex];
         if (prop.key == "auth" || prop.key == "access") continue;   // montrees plus bas (Securite)
@@ -2971,6 +2994,26 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
                 p.type = PG::ValueType::Enum;
                 p.enumValues.assign(std::begin(hmi::choices::kValve3Labels), std::end(hmi::choices::kValve3Labels));
                 if (const auto label = hmi::choices::valve3Label(prop.value); !label.empty()) p.value = std::string(label);
+            } else if (prop.key == "equipment" && project && prop.expr.empty()) {
+                // 1.12.11 (lot G) : les structures du projet - ses variables d'un type structure (un tableau : son premier
+                // element), les parametres structure de la vue (popup, symbole) ; un chemin ou un repere se tapent aussi.
+                p.type = PG::ValueType::Enum;
+                p.enumValues = {""};
+                for (const auto& prm : view.params)
+                    if (!hmi::eqlink::membersOf(*project, prm.type).empty()) p.enumValues.push_back(prm.name);
+                for (const auto& var : project->programs.variables) {
+                    hmi::types::Spec spec;
+                    if (!hmi::types::parseSpec(var.type, spec)) continue;
+                    if (hmi::eqlink::membersOf(*project, spec.element).empty()) continue;
+                    p.enumValues.push_back(spec.array() ? var.name + "[" + std::to_string(spec.low[0]) + (spec.dims > 1 ? ", " + std::to_string(spec.low[1]) : std::string{}) + "]"
+                                                        : var.name);
+                }
+            } else if (prop.key == "gasColor" && o->kind == hmi::Kind::GasBottle && prop.expr.empty()) {
+                // 1.12.11 (lot G) : le gaz, choisi par son nom, ecrit sa couleur EN 1089-3 ; une couleur se tape aussi.
+                p.type = PG::ValueType::Enum;
+                p.enumValues.clear();
+                for (const auto& g : hmi::choices::kGases) p.enumValues.emplace_back(g.label);
+                if (const auto gas = hmi::choices::gasOfColor(prop.value); !gas.empty()) p.value = std::string(gas);
             } else if (prop.key == "shifts" && o->kind == hmi::Kind::ProductionCounter && prop.expr.empty()) {
                 // Les debuts de poste : ceux du calendrier du projet (Configuration), ou une liste tapee.
                 p.type = PG::ValueType::Enum;
@@ -2996,7 +3039,8 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
             if (p.type == PG::ValueType::Enum && hmi::roles::keyRole(prop.key)) {
                 const auto role = hmi::roles::roleOf(o->kind, prop.key).role;
                 if (role == hmi::roles::Role::Name || prop.key == "function" || prop.key == "page" || prop.key == "shifts"
-                    || (prop.key == "value" && o->kind == hmi::Kind::ThreeWayValve))
+                    || (prop.key == "value" && o->kind == hmi::Kind::ThreeWayValve) || prop.key == "equipment"   // 1.12.11 (lot G)
+                    || (prop.key == "gasColor" && o->kind == hmi::Kind::GasBottle))
                     p.typeIn = true;
             }
         }
@@ -3017,6 +3061,11 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
         } else if (prop.key == "states" && prop.expr.empty()) {
             const auto states = hmi::parseImageStates(prop.value);
             p.value = states.empty() ? std::string("aucun (onglet Contenu)") : std::to_string(states.size()) + " \xC3\xA9tat(s)";
+            p.type = PG::ValueType::ReadOnly;
+        } else if (prop.key == "stateAspects" && prop.expr.empty()) {
+            // 1.12.11 (lot G) : le mode Etat se regle dans Contenu (une ligne par valeur).
+            const auto aspects = hmi::eqlink::parseAspects(prop.value);
+            p.value = aspects.empty() ? std::string("aucun : vrai / faux (onglet Contenu)") : std::to_string(aspects.size()) + " \xC3\xA9tat(s) (onglet Contenu)";
             p.type = PG::ValueType::ReadOnly;
         }
         // Lot 8 : la bulle d'aide vient du guide (la page de l'objet, sinon les
@@ -3048,6 +3097,11 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
               + std::string("Tape =expression pour la piloter. Pour la retirer : \xE2\x9C\x95 au bout de la ligne, clic droit, "
                             "ou efface le texte.");
         p.description = help;
+        for (const auto& row : linked.rows)   // 1.12.11 (lot G)
+            if (!row.member.empty() && prop.key == row.role->property)
+                p.description = (row.byHand ? "R\xC3\xA9gl\xC3\xA9" "e \xC3\xA0 la main : elle gagne sur la liaison \xC3\x89quipement (" + row.source + ")."
+                                            : "Liaison \xC3\x89quipement : lue dans " + row.source + " (une valeur ou une formule tap\xC3\xA9" "e ici gagne).")
+                              + "\n" + p.description;
         const std::string key = prop.key;
         p.commit = [commit, key](std::string_view s) {
             if (!commit.prop) return false;
@@ -3067,6 +3121,19 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
         // 1.12.7 (lot D) : une position de vanne 3 voies, un onglet choisis par leur nom ecrivent leur code.
         if (p.type == PG::ValueType::Enum && o->kind == hmi::Kind::ThreeWayValve && prop.key == "value")
             p.commit = [inner = p.commit](std::string_view s) { return inner(hmi::choices::valve3Code(s)); };
+        // 1.12.11 (lot G) : un gaz choisi par son nom ecrit sa couleur.
+        if (p.type == PG::ValueType::Enum && o->kind == hmi::Kind::GasBottle && prop.key == "gasColor")
+            p.commit = [inner = p.commit](std::string_view s) { return inner(hmi::choices::gasColorOf(s)); };
+        // 1.12.11 (lot G) : la vanne 3 voies - les cases du mode de position qui ne sert pas, grisees.
+        if (o->kind == hmi::Kind::ThreeWayValve) {
+            const bool twoBools = o->text("positionMode", "entier").rfind("deux", 0) == 0;
+            if ((twoBools && prop.key == "value") || (!twoBools && (prop.key == "positionA" || prop.key == "positionB"))) {
+                p.valueTone = ui::Tone::Muted;
+                p.description = std::string(twoBools ? "Sans effet : la position se lit par les bool\xC3\xA9" "ens A et B (Position par)."
+                                                     : "Sans effet : la position se lit par la Position (un entier ; Position par).")
+                              + "\n" + p.description;
+            }
+        }
         if (p.type == PG::ValueType::Enum && o->kind == hmi::Kind::TabContainer && prop.key == "page") {
             const auto labels = hmi::tabLabels(*o);
             p.commit = [inner = p.commit, labels](std::string_view s) {
@@ -3114,7 +3181,14 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
             }
         }
         // 1.10 (chantier K) : toute propriete modifiable de l'inspecteur accepte "=expression".
-        if (p.commit && p.type != PG::ValueType::ReadOnly) ui::exprfield::mark(p, expectedOf(o->kind, prop.key, p.type), true);
+        // 1.12.11 (lot G) : la Valeur d'un symbole en mode Etat attend un etat (un entier, une enumeration), celle
+        // d'un verin rentre / sorti un booleen.
+        if (p.commit && p.type != PG::ValueType::ReadOnly) {
+            auto expect = expectedOf(o->kind, prop.key, p.type);
+            if (prop.key == "value" && hmi::eqlink::hasAspects(*o)) expect = ui::exprfield::Expect::Value;
+            if (prop.key == "value" && hmi::eqlink::cylinderOnOff(*o)) expect = ui::exprfield::Expect::Bool;
+            ui::exprfield::mark(p, expect, true);
+        }
         if (differs) {
             p.value.clear();
             p.expression.clear();
@@ -3136,6 +3210,7 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
         else if (const int r2 = rankOf(kLookKeys, prop.key); r2 >= 0) { section = SecLook; rank = r2; }
         else if (const int r3 = rankOf(kSecurityKeys, prop.key); r3 >= 0) { section = SecSecurity; rank = r3 * 10.0; }
         else if (prop.key == "variable") rank = variableRank;
+        else if (prop.key == "equipment") rank = -1.0;   // 1.12.11 (lot G) : en tete de la section du symbole
         else if (const double fr = freshRank(prop.key); fr >= 0) rank = fr;
         else rank = 1000.0 + static_cast<double>(propIndex);
         // 1.11.2 (SYM, decision 240 ; la capture du client « Arguments : fx Voiture;50 ») : une instance
@@ -3327,7 +3402,11 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
     return out;
 }
 
-void hmiPublishPlcNames(const domain::Project* plc) { hmi::setPlcNames(hmiPlcUpperNames(plc)); }
+void hmiPublishPlcNames(const domain::Project* plc) {
+    hmi::setPlcNames(hmiPlcUpperNames(plc));
+    // 1.12.11 (lot G) : les DDT de l'automate, pour la liaison Equipement d'un symbole (une structure de l'API).
+    hmi::eqlink::setPlcTypes(plc ? std::make_shared<const hmi::params::PlcTypes>(hmiparams::plcTypesOf(plc)) : nullptr);
+}
 
 // 1.10.4 (K3) : les objets dont la variable fait quelque chose que leur Valeur ne
 // fait pas : une commande l'ecrit, un champ de saisie aussi, un histogramme la

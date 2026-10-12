@@ -151,6 +151,7 @@
 #include "../src/hmi/HmiWidgets.hpp"
 #include "../src/hmi/HmiCharts.hpp"
 #include "../src/hmi/HmiPolicy.hpp"
+#include "../src/hmi/HmiEquipmentLink.hpp"   // 1.12.11 (lot G)
 #include "../src/import/ProjectImporter.hpp"
 #include "../src/sim/Runtime.hpp"            // 1.10 : la simulation de l'API et de l'IHM independantes
 
@@ -25593,9 +25594,10 @@ void inspecteur_range_1104() {
         const auto* vanne = k3Cat(cats, "Vanne");
         std::vector<std::string> own;
         if (vanne) for (const auto& pr : vanne->properties) own.push_back(k3Plain(pr.name));
-        same_text(k3Join(own), "Valeur, D\xC3\xA9" "faut (expression), Couleur allum\xC3\xA9, Couleur \xC3\xA9teint, Couleur de d\xC3\xA9" "faut, "
+        // 1.12.11 (lot G) : \xC3\x89quipement (la liaison par structure) en t\xC3\xAAte de la section d'un symbole du synoptique.
+        same_text(k3Join(own), "\xC3\x89quipement, Valeur, D\xC3\xA9" "faut (expression), Couleur allum\xC3\xA9, Couleur \xC3\xA9teint, Couleur de d\xC3\xA9" "faut, "
                                "Libell\xC3\xA9, Place du libell\xC3\xA9, Commande de la vanne, Ouverture (%), En mouvement (expression)",
-                  "la section Vanne : ses propri\xC3\xA9t\xC3\xA9s propres, dans l'ordre d'une vanne neuve");
+                  "la section Vanne : \xC3\x89quipement, puis ses propri\xC3\xA9t\xC3\xA9s propres, dans l'ordre d'une vanne neuve");
         int values = 0;
         for (const auto& c : cats) for (const auto& pr : c.properties) values += k3Plain(pr.name).rfind("Valeur", 0) == 0 ? 1 : 0;
         check(values == 1, "une seule Valeur (plus de \xC2\xAB Valeur (expression) \xC2\xBB dans Animation)");
@@ -25611,8 +25613,9 @@ void inspecteur_range_1104() {
         p.views[0].object(valve)->setNumber("refresh", 250);
         const auto cats = app::hmiPropertyCategories(p.views[0], {valve}, nullptr, {}, &p.assets, &p);
         const auto* vanne = k3Cat(cats, "Vanne");
-        check(vanne && vanne->properties.size() > 1 && vanne->properties[1].name == "Variable montr\xC3\xA9" "e"
-                  && vanne->properties[1].value == "V_101.Ouv",
+        // (1.12.11 : \xC3\x89quipement en t\xC3\xAAte, puis Valeur, puis la variable.)
+        check(vanne && vanne->properties.size() > 2 && k3Plain(vanne->properties[1].name) == "Valeur"
+                  && vanne->properties[2].name == "Variable montr\xC3\xA9" "e" && vanne->properties[2].value == "V_101.Ouv",
               "une vanne d'avant : sa variable gard\xC3\xA9" "e et relue, juste apr\xC3\xA8s Valeur (Variable montr\xC3\xA9" "e)");
         bool refreshShown = false;
         for (const auto& c : cats) for (const auto& pr : c.properties) refreshShown = refreshShown || pr.name.rfind("Rafra", 0) == 0;
@@ -25675,7 +25678,8 @@ void inspecteur_range_1104() {
     };
     b.editor->canvas().setSelection({bv});
     b.editor->layout();
-    same_text(tabsOf(), "Propri\xC3\xA9t\xC3\xA9s | Actions", "une vanne : pas d'onglet Contenu (elle ne peut rien contenir)");
+    // 1.12.11 (lot G) : une vanne a l'onglet Contenu - son mode \xC3\x89tat (avant : pas d'onglet).
+    same_text(tabsOf(), "Propri\xC3\xA9t\xC3\xA9s | Actions | Contenu", "une vanne : l'onglet Contenu, son mode \xC3\x89tat (1.12.11)");
     {
         const auto names = k3Names(b.editor->properties().categories());
         same_text(k3Join(names), "Objet, Position et taille, Apparence, S\xC3\xA9" "curit\xC3\xA9, Alarmes de l'objet, Variables publiques de l'objet, Vanne",
@@ -29547,6 +29551,184 @@ void lotD1127_choix() {
 
 // 1.12.7 (lot E de l'audit des objets, § 2.3) : « DEPUIS UNE ENUMERATION » dans Contenu (un etat, une
 // image, un onglet par valeur) et « Repeter depuis » dans l'inspecteur d'une instance.
+// 1.12.11 (lot G) : la liaison Equipement dans l'inspecteur, son tableau de correspondance par type, le mode
+// Etat dans Contenu, le mode montre sur le dessin.
+void lotG11211_editeur() {
+    std::printf("1.12.11 (lot G) : la liaison Equipement et le mode Etat dans l'editeur\n");
+    using Mode = app::HmiContentPanel::Mode;
+    Bench b;
+    auto& content = b.editor->content();
+    hmi::HmiType pompe;
+    pompe.id = b.doc->project.allocate();
+    pompe.name = "T_Pompe_E";
+    pompe.members = {{"Marche", "BOOL", "", ""}, {"Defaut", "BOOL", "", ""}, {"Nom", "STRING", "", ""}, {"EnService", "BOOL", "", ""}};
+    b.doc->project.programs.types.push_back(pompe);
+    hmi::HmiType regime;
+    regime.id = b.doc->project.allocate();
+    regime.name = "T_Regime_G";
+    regime.kind = hmi::HmiTypeKind::Enumeration;
+    regime.values = {{"Stop", 0, "", ""}, {"Run", 1, "", ""}, {"Fault", 2, "", ""}, {"Maintenance", 3, "", ""}};
+    b.doc->project.programs.types.push_back(regime);
+    for (const auto& [name, type] : {std::pair<const char*, const char*>{"P1", "T_Pompe_E"}, {"Pompes", "ARRAY[1..2] OF T_Pompe_E"},
+                                     {"Regime_1", "T_Regime_G"}}) {
+        hmi::Variable var;
+        var.id = b.doc->project.allocate();
+        var.name = name;
+        var.type = type;
+        b.doc->project.programs.variables.push_back(var);
+    }
+    const auto findKey = [&](const std::string& key) -> const ui::PropertyGrid::Property* {
+        for (const auto& c : b.editor->properties().categories())
+            for (const auto& pr : c.properties)
+                if (pr.key == key) return &pr;
+        return nullptr;
+    };
+    const auto findName = [&](const std::string& name) -> const ui::PropertyGrid::Property* {
+        for (const auto& c : b.editor->properties().categories())
+            for (const auto& pr : c.properties)
+                if (pr.name == name) return &pr;
+        return nullptr;
+    };
+    const Id pump = b.place(Kind::Pump, 100, 100);
+    b.editor->layout();
+    // ---- la propriete Equipement : en tete de la section Pompe, une liste des structures, un nom tape accepte
+    const auto* eq = findKey("equipment");
+    check(eq && eq->type == ui::PropertyGrid::ValueType::Enum && eq->typeIn
+              && std::find(eq->enumValues.begin(), eq->enumValues.end(), "P1") != eq->enumValues.end()
+              && std::find(eq->enumValues.begin(), eq->enumValues.end(), "Pompes[1]") != eq->enumValues.end(),
+          "lot G : une pompe a la propri\xC3\xA9t\xC3\xA9 \xC3\x89quipement - les structures du projet (P1, Pompes[1]), un nom tap\xC3\xA9 aussi");
+    check(!b.v().object(pump)->find("equipment") && !b.v().object(pump)->find("stateAspects"),
+          "lot G : ... absente d'une pompe neuve (son fichier ne change pas)");
+    {
+        bool first = false;
+        for (const auto& c : b.editor->properties().categories())
+            if (c.name == "Pompe" && !c.properties.empty()) first = c.properties.front().key == "equipment";
+        check(first, "lot G : \xC3\x89quipement est la premi\xC3\xA8re ligne de la section Pompe");
+    }
+    check(eq && eq->commit && eq->commit("P1"), "lot G : \xC3\x89quipement = P1");
+    same_text(b.v().object(pump)->text("equipment"), "P1", "lot G : ... \xC3\xA9" "crit dans l'objet");
+    b.editor->refresh();
+    b.editor->layout();
+    // ---- la Liaison Equipement : une ligne par role, le membre lu
+    {
+        bool section = false;
+        for (const auto& c : b.editor->properties().categories()) section = section || c.name == "Liaison \xC3\x89quipement (T_Pompe_E)";
+        check(section, "lot G : la section Liaison \xC3\x89quipement (T_Pompe_E) suit celle de la pompe");
+    }
+    const auto* run = findName("Valeur (marche)");
+    check(run && run->value == "Marche" && std::find(run->enumValues.begin(), run->enumValues.end(), "EnService") != run->enumValues.end(),
+          "lot G : Valeur (marche) <- Marche (par son nom), les membres propos\xC3\xA9s");
+    const auto inLink = [&](const std::string& name) -> std::string {
+        for (const auto& c : b.editor->properties().categories())
+            if (c.name.rfind("Liaison \xC3\x89quipement", 0) == 0)
+                for (const auto& pr : c.properties)
+                    if (pr.name == name) return pr.value;
+        return "?";
+    };
+    same_text(inLink("D\xC3\xA9" "faut"), "Defaut", "lot G : D\xC3\xA9" "faut <- Defaut");
+    same_text(inLink("Libell\xC3\xA9"), "Nom", "lot G : Libell\xC3\xA9 <- Nom");
+    check(run && run->commit && run->commit("EnService"), "lot G : choisir EnService pour la Valeur");
+    check(b.doc->project.equipmentLinks.size() == 1 && b.doc->project.equipmentLinks[0].type == "T_Pompe_E"
+              && b.doc->project.equipmentLinks[0].role == "marche" && b.doc->project.equipmentLinks[0].member == "EnService",
+          "lot G : ... m\xC3\xA9moris\xC3\xA9 pour le type T_Pompe_E (toutes les T_Pompe_E se lient pareil)");
+    b.editor->refresh();
+    b.editor->layout();
+    same_text(inLink("Valeur (marche)"), "EnService", "lot G : la ligne montre le choix");
+    (void)b.stack.undo();
+    check(b.doc->project.equipmentLinks.empty(), "lot G : Ctrl+Z rend les noms propos\xC3\xA9s");
+    b.editor->refresh();
+    b.editor->layout();
+    // R\xC3\xA9gl\xC3\xA9 a la main : la ligne le dit
+    b.v().object(pump)->setExpr("fault", "Pompes[2].Defaut");
+    b.editor->refresh();
+    b.editor->layout();
+    check(findName("D\xC3\xA9" "faut  (\xC3\xA0 la main)") != nullptr, "lot G : un D\xC3\xA9" "faut r\xC3\xA9gl\xC3\xA9 \xC3\xA0 la main se dit (il gagne)");
+    // ---- le mode Etat : Contenu, depuis une enumeration
+    check(content.object() == pump && content.mode() == Mode::Aspects && content.count() == 0,
+          "lot G : une pompe a l'onglet Contenu : son mode \xC3\x89tat (vide : vrai / faux)");
+    {
+        bool offered = false;
+        for (const auto& c : content.grid().categories())
+            for (const auto& pr : c.properties)
+                if (pr.name == "Depuis une \xC3\xA9num\xC3\xA9ration")
+                    offered = std::find(pr.enumValues.begin(), pr.enumValues.end(), "ETAT_MOTEUR") != pr.enumValues.end()
+                           && std::find(pr.enumValues.begin(), pr.enumValues.end(), "T_Regime_G") != pr.enumValues.end();
+        check(offered, "lot G : Depuis une \xC3\xA9num\xC3\xA9ration propose ETAT_MOTEUR et T_Regime_G");
+    }
+    check(content.setField(-1, "fromEnum", "ETAT_MOTEUR") && content.count() == 4, "lot G : le mode \xC3\x89tat depuis ETAT_MOTEUR : 4 lignes");
+    same_text(b.v().object(pump)->text("stateAspects"), "0 = arret; 1 = marche | anime; 2 = defaut; 3 = maintenance",
+              "lot G : 0 arr\xC3\xAAt, 1 marche (anim\xC3\xA9), 2 d\xC3\xA9" "faut, 3 maintenance");
+    check(content.setField(3, "look", "D\xC3\xA9" "faut") && content.setField(3, "color", "#AA00AA") && content.setField(1, "animated", "FALSE"),
+          "lot G : une ligne se r\xC3\xA8gle (aspect, couleur, anim\xC3\xA9)");
+    same_text(b.v().object(pump)->text("stateAspects"), "0 = arret; 1 = marche; 2 = defaut; 3 = defaut | #AA00AA", "lot G : ... et s'\xC3\xA9" "crit");
+    check(content.setField(-1, "fromEnum", "Regime_1"), "lot G : depuis la variable Regime_1 (T_Regime_G)");
+    same_text(b.v().object(pump)->text("stateAspects"), "Stop = arret; Run = marche | anime; Fault = defaut; Maintenance = maintenance",
+              "lot G : une \xC3\xA9num\xC3\xA9ration du projet : les aspects d'apr\xC3\xA8s ses noms (Stop, Run, Fault, Maintenance)");
+    same_text(b.v().object(pump)->expr("value"), "Regime_1", "lot G : ... la variable choisie devient la Valeur");
+    check(content.setField(-1, "enabled", "FALSE") && !b.v().object(pump)->find("stateAspects") && content.count() == 0,
+          "lot G : d\xC3\xA9" "cocher le mode \xC3\x89tat : la Valeur se relit vrai / faux (la propri\xC3\xA9t\xC3\xA9 dispara\xC3\xAEt)");
+    (void)b.stack.undo();
+    check(b.v().object(pump)->find("stateAspects") != nullptr, "lot G : Ctrl+Z rend le mode \xC3\x89tat");
+    // Une cuve : son niveau n'a pas de mode Etat (pas d'onglet Contenu)
+    const Id tank = b.place(Kind::Tank, 400, 100);
+    b.editor->layout();
+    check(content.object() == tank && content.mode() == Mode::None, "lot G : une cuve n'a pas de mode \xC3\x89tat (sa Valeur est un niveau)");
+    // ---- le dessin : le mode montre (une etiquette)
+    {
+        b.v().object(pump)->set("operatingMode", "Manuel");
+        Recorder rec;
+        const auto theme = ui::Theme::dark();
+        app::HmiPaintOptions opt;
+        opt.project = &b.doc->project;
+        app::paintHmiObject(rec, b.v(), *b.v().object(pump), {}, app::HmiPropertySource{}, theme, opt);
+        check(rec.wrote("Manuel"), "lot G : le mode d'une pompe s'affiche en \xC3\xA9tiquette (Manuel)");
+        // L'apercu de l'editeur : ce que la liaison donne (le libelle a trous), sans l'ecrire dans l'objet.
+        check(rec.wrote("{P1.Nom}"), "lot G : dans l'\xC3\xA9" "diteur, la pompe li\xC3\xA9" "e \xC3\xA0 P1 montre le libell\xC3\xA9 {P1.Nom}");
+        same_text(b.v().object(pump)->text("label"), "", "lot G : ... sans l'\xC3\xA9" "crire dans l'objet (la liaison reste vivante)");
+        // Un libelle tape a la main gagne, dans l'apercu aussi.
+        b.v().object(pump)->set("label", "Pompe d'appoint");
+        rec.clear();
+        app::paintHmiObject(rec, b.v(), *b.v().object(pump), {}, app::HmiPropertySource{}, theme, opt);
+        check(rec.wrote("Pompe d'appoint") && !rec.wrote("{P1.Nom}"), "lot G : un libell\xC3\xA9 r\xC3\xA9gl\xC3\xA9 \xC3\xA0 la main gagne dans l'aper\xC3\xA7u");
+        b.v().object(pump)->set("label", "");
+    }
+    // ---- le mode Etat d'office (la liaison) : Contenu le dit ; cocher Mode Etat part de ces etats
+    {
+        hmi::HmiType moteur;
+        moteur.id = b.doc->project.allocate();
+        moteur.name = "T_Moteur_E";
+        moteur.members = {{"Etat", "T_Regime_G", "", ""}, {"Nom", "STRING", "", ""}};
+        b.doc->project.programs.types.push_back(moteur);
+        hmi::Variable m1;
+        m1.id = b.doc->project.allocate();
+        m1.name = "M1";
+        m1.type = "T_Moteur_E";
+        b.doc->project.programs.variables.push_back(m1);
+        const Id motor = b.place(Kind::Motor, 100, 300);
+        b.v().object(motor)->set("equipment", "M1");
+        b.editor->refresh();
+        b.editor->layout();
+        std::string office;
+        for (const auto& c : content.grid().categories())
+            for (const auto& pr : c.properties)
+                if (pr.name == "Par la liaison \xC3\x89quipement") office = pr.value;
+        check(content.object() == motor && content.count() == 0 && office.rfind("4 \xC3\xA9tat(s) d'office", 0) == 0,
+              "lot G : un moteur li\xC3\xA9 \xC3\xA0 M1 (Etat : une \xC3\xA9num\xC3\xA9ration) - Contenu dit ses 4 \xC3\xA9tats d'office (" + office + ")");
+        check(content.setField(-1, "enabled", "TRUE"), "lot G : cocher Mode \xC3\x89tat");
+        same_text(b.v().object(motor)->text("stateAspects"), "Stop = arret; Run = marche | anime; Fault = defaut; Maintenance = maintenance",
+                  "lot G : ... part des \xC3\xA9tats de la liaison (ceux de T_Regime_G ; sans liaison, ETAT_MOTEUR)");
+        (void)b.stack.undo();
+        check(!b.v().object(motor)->find("stateAspects"), "lot G : Ctrl+Z les retire (d'office de nouveau)");
+    }
+    // ---- un type renomme, un membre renomme : la liaison suit
+    {
+        hmi::Project q = b.doc->project;
+        (void)hmi::eqlink::choose(q, "T_Pompe_E", "marche", std::string("EnService"));
+        check(hmi::eqlink::renameType(q, "T_Pompe_E", "T_Pompe_F") == 1 && q.equipmentLinks[0].type == "T_Pompe_F",
+              "lot G : renommer le type, sa liaison suit");
+    }
+}
+
 void lotE1127_editeur() {
     std::printf("1.12.7 (lot E) : les etats et les onglets depuis une enumeration, Repeter depuis\n");
     using Mode = app::HmiContentPanel::Mode;
@@ -30096,6 +30278,12 @@ int main(int argc, char** argv) {
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
+    // 1.12.11 : HMI_TEST_11211=1 - le lot G de l'audit des objets (synoptique et symboles), seul.
+    if (const char* only = std::getenv("HMI_TEST_11211"); only && *only == '1') {
+        lotG11211_editeur();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
     // 1.12.7 : HMI_TEST_1127=1 - les lots D et E de l'audit des objets, seuls.
     if (const char* only = std::getenv("HMI_TEST_1127"); only && *only == '1') {
         lotD1127_contenu();
@@ -30310,6 +30498,7 @@ int main(int argc, char** argv) {
     lotD1127_contenu();                   // 1.12.7 (lot D) : les listes en tableau dans Contenu
     lotD1127_choix();                     // 1.12.7 (lot D) : les listes a choix de l'inspecteur
     lotE1127_editeur();                   // 1.12.7 (lot E) : depuis une enumeration, Repeter depuis
+    lotG11211_editeur();                  // 1.12.11 (lot G) : la liaison Equipement, le mode Etat
     lotH11212_dessin();                   // 1.12.12 (lot H) : les sommets sur le dessin, le tableau X / Y, les zones
     etats1123();                       // 1.12.3 : les etats des objets multi-etats en table
     communes1123();                    // 1.12.3 : plusieurs objets choisis, leurs proprietes communes

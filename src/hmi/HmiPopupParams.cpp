@@ -9,6 +9,7 @@
 #include "HmiScript.hpp"    // 1.11.22 : forEachCode (renommer partout)
 #include "HmiTypeRegistry.hpp"   // 1.11.19 (refonte, lot 6) : les types et la regle, un seul catalogue
 #include "HmiTypes.hpp"
+#include "HmiObjectAlarms.hpp"   // 1.12.11 (lot G) : une liaison du synoptique tapee sans = (renommer suit)
 
 #include <algorithm>
 #include <cctype>
@@ -378,6 +379,10 @@ std::size_t renameParam(Project& p, std::string_view viewName, std::string_view 
             const Prop before = pr;
             pr.expr = renameRoot(pr.expr, from, to);
             if (pr.key == "variable" || pr.key == "target" || pr.key == "var") pr.value = renameRoot(pr.value, from, to);
+            // 1.12.11 (lot G) : la liaison Equipement d'un symbole (Pompe), un Defaut, un Mouvement ou une Valeur du
+            // synoptique tapes sans = (Pompe.Defaut) - lus comme des formules, ils suivent (avant : un nom perdu).
+            else if (pr.expr.empty() && (pr.key == "equipment" || ((pr.key == "fault" || pr.key == "moving" || pr.key == "value") && synopticLinkedKey(o, pr.key))))
+                pr.value = renameRoot(pr.value, from, to);
             else if (pr.value.find('{') != std::string::npos) pr.value = inTemplate(pr.value);
             changed = changed || !(before == pr);
         }

@@ -8,6 +8,7 @@
 #include "HmiSymbols.hpp"
 #include "HmiMarkers.hpp"   // 1.11 (REP) : markers::strip
 #include "HmiSources.hpp"   // 1.12.7 (lot E) : « Repeter depuis »
+#include "HmiEquipmentLink.hpp"   // 1.12.11 (lot G) : la liaison Equipement remplit le Defaut
 
 #include <algorithm>
 #include <optional>
@@ -353,7 +354,8 @@ struct Generator {
 
     void posedSynoptic(const View& v, const Object& o) {
         const std::string group = objectGroupOf(v, o);
-        for (const auto& la : libraryAlarms(o))
+        // 1.12.11 (lot G) : la liaison Equipement - Defaut <- P1.Defaut, comme le moteur la remplit.
+        for (const auto& la : libraryAlarms(eqlink::bound(p, &v, o)))
             if (la.applicable) emit(v, o, group, {}, {}, {}, ObjectAlarmSource::Library, o.kind, la.def, true);
     }
 
@@ -402,7 +404,7 @@ struct Generator {
                          &args2);
                 }
             } else if (kindIsSynoptic(c.kind)) {
-                for (const auto& la : libraryAlarms(c)) {
+                for (const auto& la : libraryAlarms(eqlink::bound(p, &v, c))) {   // 1.12.11 (lot G)
                     if (!la.applicable) continue;
                     bool active = true;
                     const AlarmDef base = layered(la.def, c, outer, &active, parentArgs);

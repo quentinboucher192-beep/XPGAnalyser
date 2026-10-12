@@ -165,6 +165,9 @@ inline constexpr KeyRole kKeyRoles[] = {
     {"colorMoving", Role::Color}, {"valve3Function", Role::Choice}, {"valve3Bore", Role::Choice},
     {"positionMode", Role::Choice}, {"positionA", Role::Formula, Role::Boolean}, {"positionB", Role::Formula, Role::Boolean},
     {"showPorts", Role::Boolean, Role::Text, Unit::None, "BOOL"},
+    // 1.12.11 (lot G) : la liaison Equipement (le chemin d'une structure), le mode Etat (valeur -> aspect), le mode montre
+    {"equipment", Role::Formula, Role::Text}, {"stateAspects", Role::Mini}, {"operatingMode", Role::Text},
+    {"cylinderMode", Role::Choice},
     {"symbol", Role::Name}, {"params", Role::Mini},
     // 1.12.7 (lot E) : « Repeter depuis » - une instance par element d'une source
     {"repeatFrom", Role::Name}, {"repeatAxis", Role::Choice}, {"repeatGap", Role::Number, Role::Text, Unit::None, "REAL"},

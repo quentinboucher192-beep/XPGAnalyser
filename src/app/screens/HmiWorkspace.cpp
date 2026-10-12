@@ -2209,8 +2209,9 @@ void MainAnalysisScreen::askHmiSymbol(std::uint64_t viewId) {
         "Les " + std::to_string(sel.size()) + " objet(s) choisi(s) deviennent un symbole r\xC3\xA9utilisable (IHM > Symboles, "
         "et la biblioth\xC3\xA8que de l'\xC3\xA9" "diteur) ; une instance les remplace, \xC3\xA0 leur place.\n"
         "Param\xC3\xA8tres : nom := valeur par d\xC3\xA9" "faut. Un chemin (Armoires[0]) donn\xC3\xA9 en valeur est remplac\xC3\xA9 "
-        "par le nom du param\xC3\xA8tre dans les expressions du symbole ; chaque instance relie ensuite le sien "
-        "(Armoire := Armoires[1]). Modifier le symbole modifie toutes ses instances. Ctrl+Z d\xC3\xA9" "fait tout.",
+        "par le nom du param\xC3\xA8tre dans les expressions du symbole, et lui donne son type (Armoires[0] : T_Armoire) ; "
+        "chaque instance relie ensuite le sien (Armoire := Armoires[1]). Modifier le symbole modifie toutes ses instances. "
+        "Ctrl+Z d\xC3\xA9" "fait tout.",
         std::move(fields), "Cr\xC3\xA9" "er");
     dialog->setFieldAssist(1, assist::fieldAssist(assist::sourcesFor(doc)));
     // Lot 21 : un parcours en cours suit le dialogue (l'etape "Nomme-le" met sa bulle de cote).
