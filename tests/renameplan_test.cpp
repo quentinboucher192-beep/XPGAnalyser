@@ -848,6 +848,62 @@ int main(int argc, char** argv) {
     }
     // ---- fin Lot API 8 : les forcages enregistres ----
 
+    // ---- 1.12.7 (lot E) : les jokers suivent le renommage d'une variable IHM ----
+    std::printf("8. 1.12.7 (lot E) : les jokers suivent le renommage\n");
+    {
+        auto doc = std::make_shared<hmi::Document>();
+        auto& hp = doc->project;
+        hmi::HmiType cuve;
+        cuve.id = hp.allocate();
+        cuve.name = "T_Cuve_R";
+        cuve.members = {{"Niveau", "REAL", "", ""}, {"Nom", "STRING", "", ""}};
+        hp.programs.types.push_back(cuve);
+        for (const auto& [n, t] : std::vector<std::pair<const char*, const char*>>{{"Cuves", "ARRAY[1..3] OF T_Cuve_R"}, {"Vues", "LIST OF STRING"}}) {
+            hmi::Variable var;
+            var.id = hp.allocate();
+            var.name = n;
+            var.type = t;
+            hp.programs.variables.push_back(var);
+        }
+        hmi::View v = hmi::makeView(hp, "Vue_R");
+        auto bars = hmi::makeObject(hmi::Kind::BarChart, hp.allocate(), "Barres", 10, 10, v.activeLayer);
+        bars.set("variables", "Cuves[*].Niveau;Cuves_Total");
+        bars.set("names", "Cuves[*].Nom;Cuves");
+        v.objects.push_back(bars);
+        auto nav = hmi::makeObject(hmi::Kind::NavBar, hp.allocate(), "Barre", 10, 300, v.activeLayer);
+        nav.set("views", "Vue_R;Vues[*]");
+        v.objects.push_back(nav);
+        auto resume = hmi::makeObject(hmi::Kind::AlarmSummary, hp.allocate(), "Resume", 10, 360, v.activeLayer);
+        resume.set("groups", "Cuves[*].Nom");
+        v.objects.push_back(resume);
+        auto inst = hmi::makeObject(hmi::Kind::SymbolInstance, hp.allocate(), "Cuve", 10, 400, v.activeLayer);
+        inst.set("repeatFrom", "Cuves");
+        inst.set("params", "Cuve := Cuves[*]");
+        v.objects.push_back(inst);
+        hp.views.push_back(std::move(v));
+        auto side = app::makeHmiRenameSide(doc);
+        core::CommandStack stack;
+        const auto plan = pr::makePlan(nullptr, side.get(), pr::Kind::HmiVariable, "Cuves", "Reservoirs", false);
+        auto cmd = plan.ok() ? pr::makeCommand(nullptr, side.get(), plan) : nullptr;
+        check(cmd && static_cast<bool>(stack.push(std::move(cmd))), "renommer Cuves en Reservoirs (" + plan.problem + ")");
+        const auto text = [&](const char* object, const char* key) {
+            const auto* vw = hp.viewByName("Vue_R");   // relu : la commande remplace le projet
+            const auto* o = vw ? vw->objectByName(object) : nullptr;
+            return o ? o->text(key) : std::string("?");
+        };
+        check(text("Barres", "variables") == "Reservoirs[*].Niveau;Cuves_Total", "lot E : la plume a joker suit (Reservoirs[*].Niveau) : " + text("Barres", "variables"));
+        check(text("Barres", "names") == "Reservoirs[*].Nom;Cuves",
+              "lot E : le nom a joker suit aussi, un nom simple (Cuves) reste un texte : " + text("Barres", "names"));
+        check(text("Resume", "groups") == "Reservoirs[*].Nom", "lot E : les zones d'un resume (Zones[*].Nom) suivent : " + text("Resume", "groups"));
+        check(text("Cuve", "repeatFrom") == "Reservoirs" && text("Cuve", "params") == "Cuve := Reservoirs[*]",
+              "lot E : Repeter depuis et l'argument a joker suivent : " + text("Cuve", "repeatFrom") + " / " + text("Cuve", "params"));
+        const auto plan2 = pr::makePlan(nullptr, side.get(), pr::Kind::HmiVariable, "Vues", "Pages", false);
+        auto cmd2 = plan2.ok() ? pr::makeCommand(nullptr, side.get(), plan2) : nullptr;
+        check(cmd2 && static_cast<bool>(stack.push(std::move(cmd2))), "renommer Vues en Pages (" + plan2.problem + ")");
+        check(text("Barre", "views") == "Vue_R;Pages[*]", "lot E : les vues d'une barre de navigation (Vues[*]) suivent : " + text("Barre", "views"));
+    }
+    // ---- fin 1.12.7 (lot E) ----
+
     std::printf("%s\n", failures ? "ECHEC" : "OK");
     return failures ? 1 : 0;
 }

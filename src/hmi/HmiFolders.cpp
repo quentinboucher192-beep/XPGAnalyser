@@ -1,6 +1,7 @@
 #include "HmiFolders.hpp"
 
 #include "HmiTypes.hpp"
+#include "HmiSources.hpp"   // 1.12.7 (lot E) : Process/* dans une barre de navigation suit le dossier
 
 #include <algorithm>
 #include <cctype>
@@ -233,6 +234,8 @@ bool renameFolder(Project& p, List list, const std::string& from, const std::str
         if (inside(f, from)) f = replacePrefix(f, from, target);
     if (std::none_of(explicitList.begin(), explicitList.end(), [&](const std::string& f) { return sameFolder(f, target); }))
         explicitList.push_back(target);          // le dossier renomme reste, meme vide
+    // 1.12.7 (lot E) : une barre de navigation qui montre ce dossier (Process/*) le suit.
+    if (list == List::Views) (void)sources::renameFolderJokers(p, true, from, target);
     return true;
 }
 

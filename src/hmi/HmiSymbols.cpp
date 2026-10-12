@@ -13,6 +13,7 @@
 #include "HmiExpr.hpp"
 #include "HmiRuntime.hpp"
 #include "HmiScript.hpp"        // 1.11.10 : splitDeclarations (les noms qu'une fonction de symbole cache)
+#include "HmiSources.hpp"       // 1.12.7 (lot E) : le joker [*], le dossier /*
 #include "HmiTemplates.hpp"
 #include "HmiWidgets.hpp"
 
@@ -932,7 +933,8 @@ void rewriteNames(Object& o, const std::function<std::string(std::string_view, b
             bool first = true;
             for (const auto& pen : roles::splitListRaw(p.value)) {
                 std::string next = pen;
-                expr(next);
+                // 1.12.7 (lot E) : Ligne/Convoyeur/* nomme un dossier, pas des variables : il reste.
+                if (!sources::folderOf(next)) expr(next);
                 changed = changed || next != pen;
                 rebuilt += (first ? "" : ";") + next;
                 first = false;
@@ -962,6 +964,22 @@ void rewriteNames(Object& o, const std::function<std::string(std::string_view, b
             if (changed) p.value = formatCells(rows);
         } else if (p.key == "params" && o.kind == Kind::SymbolInstance) {
             args(p.value);
+        } else if (p.key == "names" || p.key == "labels" || p.key == "views" || p.key == "groups" || p.key == "tabs") {
+            // 1.12.7 (lot E) : un element a joker (Cuves[*].Nom, Vues[*], Zones[*].Nom) est une formule : il suit le
+            // renommage et les arguments d'un symbole ; un texte (Cuves, Vue_A, « Toutes [*] ») reste tel quel.
+            std::string rebuilt;
+            bool changed = false;
+            bool first = true;
+            for (const auto& item : roles::splitListRaw(p.value)) {
+                std::string next = item;
+                if (sources::hasJoker(next)) expr(next);
+                changed = changed || next != item;
+                rebuilt += (first ? "" : ";") + next;
+                first = false;
+            }
+            if (changed) p.value = rebuilt;
+        } else if (p.key == sources::kRepeatFromKey) {
+            expr(p.value);   // 1.12.7 (lot E) : la source d'une instance repetee (Cuves, Lignes[2].Cuves)
         }
     }
     for (auto& a : o.actions) {

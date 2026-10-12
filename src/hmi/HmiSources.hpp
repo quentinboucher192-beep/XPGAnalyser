@@ -113,6 +113,14 @@ std::size_t expandView(View& v, const SourceFn& source, const TextFn& text);
 // dans l'ordre du projet (sa source : "vues:Process").
 [[nodiscard]] std::vector<std::string> viewsInFolder(const Project& p, std::string_view folder);
 inline constexpr std::string_view kViewFolderPrefix = "vues:";
+
+// LES RENOMMAGES SUIVENT. Un dossier renomme (Ligne -> Atelier) : Ligne/Convoyeur/* devient Atelier/Convoyeur/*
+// - dans les listes de formules (`views` faux : un dossier de variables) ou dans les vues d'une barre de
+// navigation (`views` vrai : un dossier de vues). Une enumeration renommee (T_MODE -> T_REGIME) : T_MODE[*]
+// et une source « Elements depuis », « Lignes depuis » T_MODE suivent. (Une variable renommee : ses jokers
+// sont des formules, rewriteNames les reecrit.) Rendent le nombre d'objets changes.
+std::size_t renameFolderJokers(Project& p, bool views, std::string_view from, std::string_view to);
+std::size_t renameSourceJokers(Project& p, std::string_view from, std::string_view to);
 // Ce que Generer verifie d'un element a joker ([*], .* ou /*) : nullopt s'il n'en a pas ; sinon la formule
 // d'un element type (Cuves[1].Niveau, Pompe.Marche) et, dans `problem`, ce qui ne va pas avec sa source.
 [[nodiscard]] std::optional<std::string> sampleOf(const Project& p, const View* view, std::string_view item, std::string* problem);

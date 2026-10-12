@@ -758,6 +758,86 @@ std::vector<std::string> jokerSuggestions(const Project& p, const View* view) {
     return out;
 }
 
+namespace {
+// Chaque element d'une liste a;b;c passe par `f` (nullopt : il reste tel qu'ecrit) ; vrai : un a change.
+bool rewriteItems(std::string& value, const std::function<std::optional<std::string>(const std::string&)>& f) {
+    std::string rebuilt;
+    bool changed = false;
+    bool first = true;
+    for (const auto& item : roles::splitListRaw(value)) {
+        std::string next = item;
+        if (auto r = f(item)) {
+            next = std::move(*r);
+            changed = changed || next != item;
+        }
+        rebuilt += (first ? "" : ";") + next;
+        first = false;
+    }
+    if (changed) value = std::move(rebuilt);
+    return changed;
+}
+} // namespace
+
+std::size_t renameFolderJokers(Project& p, bool views, std::string_view from, std::string_view to) {
+    const std::string f = trimmedOf(from), t = trimmedOf(to);
+    if (f.empty() || t.empty()) return 0;
+    const auto moved = [&](const std::string& folder) -> std::optional<std::string> {
+        if (sameName(folder, f)) return t;
+        if (folder.size() > f.size() && folder[f.size()] == '/' && sameName(std::string_view(folder).substr(0, f.size()), f))
+            return t + folder.substr(f.size());
+        return std::nullopt;
+    };
+    std::size_t n = 0;
+    for (auto& v : p.views)
+        for (auto& o : v.objects) {
+            const char* key = views ? (o.kind == Kind::NavBar ? "views" : nullptr) : (expandsFormulas(o.kind, "variables") ? "variables" : nullptr);
+            Prop* pr = key ? o.find(key) : nullptr;
+            if (!pr || !pr->expr.empty() || pr->value.find("/*") == std::string::npos) continue;
+            if (rewriteItems(pr->value, [&](const std::string& item) -> std::optional<std::string> {
+                    const auto folder = folderOf(item);
+                    if (!folder) return std::nullopt;
+                    const auto m = moved(*folder);
+                    return m ? std::optional<std::string>(*m + "/*") : std::nullopt;
+                }))
+                ++n;
+        }
+    return n;
+}
+
+std::size_t renameSourceJokers(Project& p, std::string_view from, std::string_view to) {
+    const std::string f = trimmedOf(from), t = trimmedOf(to);
+    if (f.empty() || t.empty() || f == t) return 0;
+    const auto renamed = [&](const std::string& item) -> std::optional<std::string> {
+        const auto j = jokerOf(item);
+        if (!j || !sameName(trimmedOf(j->before), f)) return std::nullopt;   // un repere $T_MODE$ reste
+        const auto lead = item.find_first_not_of(" \t");
+        return item.substr(0, lead == std::string::npos ? 0 : lead) + t + "[*]" + j->after;
+    };
+    std::size_t n = 0;
+    for (auto& v : p.views)
+        for (auto& o : v.objects) {
+            bool changed = false;
+            for (auto& pr : o.props) {
+                if (!pr.expr.empty()) continue;
+                if (pr.key == "itemsFrom" || pr.key == "rowsFrom" || pr.key == kRepeatFromKey) {
+                    // une source nommee telle quelle (Elements depuis T_MODE)
+                    if (sameName(trimmedOf(pr.value), f)) {
+                        pr.value = t;
+                        changed = true;
+                    } else if (const auto r = renamed(pr.value)) {
+                        pr.value = *r;
+                        changed = true;
+                    }
+                    continue;
+                }
+                const bool lists = expandsFormulas(o.kind, pr.key) || expandsTexts(o.kind, pr.key) || pr.key == "names" || pr.key == "labels";
+                if (lists && pr.value.find("[*]") != std::string::npos && rewriteItems(pr.value, renamed)) changed = true;
+            }
+            if (changed) ++n;
+        }
+    return n;
+}
+
 std::string replaceJokers(std::string_view text, std::string_view index) {
     std::string out;
     std::size_t from = 0;

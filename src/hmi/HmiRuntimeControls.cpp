@@ -655,8 +655,16 @@ std::optional<sources::Source> Runtime::jokerSource(std::string_view name, Id vi
         }
         return s;
     }
-    // Une LIST, un VECTOR (0 a n-1 ; le libelle : le rang, 1 a n), une MAP (ses cles).
-    if (auto o = richOfSource(src, nullptr); o && o->type) {
+    // Une LIST, un VECTOR (0 a n-1 ; le libelle : le rang, 1 a n), une MAP (ses cles) ; 1.12.4 : le parametre
+    // objet de la vue (une popup ouverte avec L := ['x', 'y'], une copie) - par sa portee.
+    sim::ObjRef rich = richOfSource(src, nullptr);
+    if (!rich && view != kNoId)
+        if (const auto scope = scopePtr(view)) {
+            rich = scope->object(src);
+            if (!rich)
+                if (const std::string r = scope->resolve(src); !r.empty() && r[0] == '$') rich = copyObject(r);
+        }
+    if (auto o = rich; o && o->type) {
         if (o->type->kind == sim::TypeDesc::Kind::Map) {
             for (const auto& [k, v] : o->textKeys) {
                 s.indices.push_back(quotedText(k));

@@ -29355,6 +29355,71 @@ void lotE1127_editeur() {
         check(rec.wrote("Cuve 1") && rec.wrote("Cuve 8") && !rec.wrote("Cuves[*]"),
               "lot E : l'aper\xC3\xA7u de l'\xC3\xA9" "diteur : une barre par cuve, Cuve 1 \xC3\xA0 Cuve 8 (avant : une barre Cuves[*])");
     }
+    // ---- un resume par zone : ses zones depuis une source
+    {
+        hmi::HmiType zone;
+        zone.id = b.doc->project.allocate();
+        zone.name = "T_Zone_E";
+        zone.members = {{"Nom", "STRING", "", ""}};
+        b.doc->project.programs.types.push_back(zone);
+        hmi::Variable zones;
+        zones.id = b.doc->project.allocate();
+        zones.name = "Zones_E";
+        zones.type = "ARRAY[1..4] OF T_Zone_E";
+        b.doc->project.programs.variables.push_back(zones);
+        const Id resume = b.place(Kind::AlarmSummary, 900, 20);
+        b.editor->layout();
+        check(content.object() == resume && content.mode() == Mode::Checks, "lot E : un r\xC3\xA9sum\xC3\xA9 par zone, ses zones dans Contenu ("
+              + std::to_string(resume) + " / " + std::to_string(content.object()) + " / " + std::to_string(static_cast<int>(content.mode())) + ")");
+        const ui::PropertyGrid::Property* zoneSource = nullptr;
+        for (const auto& c : content.grid().categories())
+            for (const auto& pr : c.properties)
+                if (pr.name == "Ajouter depuis une source") zoneSource = &pr;
+        check(zoneSource && std::find(zoneSource->enumValues.begin(), zoneSource->enumValues.end(), "Zones_E[*].Nom") != zoneSource->enumValues.end(),
+              "lot E : Contenu propose Zones_E[*].Nom pour les zones d'un r\xC3\xA9sum\xC3\xA9");
+        check(content.setField(-1, "addSource", "Zones_E[*].Nom"), "lot E : les zones depuis Zones_E[*].Nom");
+        same_text(b.v().object(resume)->text("groups"), "Zones_E[*].Nom", "lot E : toutes les zones (liste vide) : la source seule");
+        b.editor->layout();
+        bool told = false;
+        for (const auto& c : content.grid().categories())
+            for (const auto& pr : c.properties)
+                told = told || (pr.name == "Zones_E[*].Nom" && pr.description.find("4 \xC3\xA9l\xC3\xA9ments de Zones_E") != std::string::npos);
+        check(told, "lot E : sa ligne dit ce qu'elle deviendra (4 \xC3\xA9l\xC3\xA9ments de Zones_E)");
+    }
+    // ---- renommer un dossier de variables : Ligne/Convoyeur/* suit
+    {
+        hmi::Variable vit;
+        vit.id = b.doc->project.allocate();
+        vit.name = "Vitesse_E";
+        vit.type = "REAL";
+        vit.folder = "Ligne/Convoyeur";
+        b.doc->project.programs.variables.push_back(vit);
+        b.v().object(vt)->set("variables", "Ligne/Convoyeur/*");
+        app::HmiVariablesPane vars("varsE1127", b.doc, [&](core::CommandPtr c) { (void)b.stack.push(std::move(c)); });
+        vars.setBounds({0, 0, 1600, 900});
+        vars.layout();
+        std::string why;
+        check(vars.renameFolder("Ligne", "Atelier", &why), "lot E : renommer le dossier de variables Ligne en Atelier (" + why + ")");
+        same_text(b.v().object(vt)->text("variables"), "Atelier/Convoyeur/*",
+                  "lot E : le tableau de variables Ligne/Convoyeur/* suit le dossier renomm\xC3\xA9 (avant : il ne montrait plus rien)");
+        // Glisser le dossier Atelier dans Usine : Usine/Atelier/Convoyeur/*.
+        hmi::Variable debit;
+        debit.id = b.doc->project.allocate();
+        debit.name = "Debit_E";
+        debit.type = "REAL";
+        debit.folder = "Usine";
+        b.doc->project.programs.variables.push_back(debit);
+        vars.refresh();
+        const auto folderRow = [&](const char* key) {
+            for (std::size_t r = 0; r < vars.rows().size(); ++r)
+                if (vars.rows()[r].kind == app::HmiVariablesPane::Row::Kind::Folder && vars.rows()[r].key == key) return static_cast<ui::RowIndex>(r);
+            return ui::TableView::kNoRow;
+        };
+        const auto atelier = folderRow("Atelier"), usine = folderRow("Usine");
+        check(atelier != ui::TableView::kNoRow && usine != ui::TableView::kNoRow, "lot E : les dossiers Atelier et Usine dans l'\xC3\xA9" "cran des variables");
+        vars.dropRows({atelier}, usine, ui::TreeView::DropWhere::Into);
+        same_text(b.v().object(vt)->text("variables"), "Usine/Atelier/Convoyeur/*", "lot E : ... et le dossier gliss\xC3\xA9 dans Usine (Usine/Atelier/Convoyeur/*)");
+    }
     // ---- une barre de navigation : ses vues depuis une source (une LIST OF STRING, un dossier de vues)
     {
         hmi::Variable vues;

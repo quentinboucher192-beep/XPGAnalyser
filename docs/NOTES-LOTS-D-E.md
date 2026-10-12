@@ -140,7 +140,8 @@ par construction.
   à deux dimensions, toutes ses cases), une `LIST` ou un `VECTOR` (le nombre suit la liste en marche : une plume
   de plus au cycle suivant), une `MAP` (ses clés : une barre ou une part par clé, nommée par sa clé), une
   énumération du projet (ses valeurs), un membre objet (`Recette.Durees[*]`), le paramètre d'une popup
-  (`Cuve.Mesures[*]` dans une popup ouverte pour `Cuves[2]`). Les listes parallèles suivent : un nom à joker
+  (`Cuve.Mesures[*]` dans une popup ouverte pour `Cuves[2]` ; un paramètre objet reçu en valeur, `L := [5, 6, 7]` :
+  `L[*]`). Les listes parallèles suivent : un nom à joker
   (`Cuves[*].Nom`) se calcule pour chaque élément, un nom simple prend le numéro de l'élément (« Cuve 1 »), la
   couleur tourne dans la palette, l'unité et le format se répètent. Avant : pour 8 cuves, 8 plumes, 8 noms,
   8 couleurs à taper.
@@ -158,7 +159,8 @@ par construction.
   paramètre structure d'une popup) ; un chemin ou un repère `$Cuves$[*].Niveau` se tape aussi. Chaque ligne à
   joker dit ce qu'elle deviendra : « [*] : 8 éléments de Cuves », « .* : 2 membres de Pompe », « [*] : les
   éléments de Bacs (leur nombre suit la source en marche) », ou ce qui ne va pas avec sa source. La barre de
-  navigation a le sien : les `LIST OF STRING` du projet (`Vues[*]`) et ses dossiers de vues (`Process/*`).
+  navigation a le sien : les `LIST OF STRING` du projet (`Vues[*]`) et ses dossiers de vues (`Process/*`) ; le
+  résumé par zone aussi (`Zones[*].Nom`, la case de la source dit ce qu'elle deviendra).
 - **L'éditeur montre le dépliage** (Graphiques, Symboles) : un objet à joker se dessine comme il démarrera - une
   barre par cuve d'un `ARRAY`, une plume par élément de la valeur initiale d'une `LIST`, un bouton par vue d'une
   `LIST OF STRING`, une part par clé initiale d'une `MAP` ; une instance répétée montre ses copies à la suite,
@@ -196,6 +198,12 @@ par construction.
   celles d'une liste.
 - **Repères** : `$Cuves$[*].Niveau` - le repère varie à la duplication (Dupliquer remplace `$Cuves$` par
   `$Ballons$`), le joker parcourt la variable (3 barres pour les cuves, 2 pour les ballons).
+- **Les renommages suivent** (Renommer) : renommer une variable IHM réécrit ses jokers partout où ils se
+  déplient - les plumes et les valeurs (`Cuves[*].Niveau`), les noms calculés (`Cuves[*].Nom`), les vues d'une
+  barre de navigation (`Vues[*]`), les zones d'un résumé, les onglets, « Répéter depuis » et ses arguments ;
+  renommer une énumération réécrit `T_MODE[*]` et « Éléments depuis » / « Lignes depuis » `T_MODE` ; renommer
+  (ou glisser ailleurs) un dossier de variables ou de vues réécrit `Ligne/Convoyeur/*` et `Process/*`. Un nom simple (« Cuves » écrit
+  comme libellé) reste un texte. Dans un symbole, les mêmes listes reçoivent les arguments de l'instance.
 
 ### Pour le guide (paragraphes courts)
 
@@ -255,7 +263,8 @@ structure d'une popup (`Cuve.*`) se vérifie sur son type ; un paramètre sans t
   `colonnesImbriquees1127` (et les mêmes colonnes dans l'aperçu, Contenu et Générer ; un chemin
   `Lignes[2].Mesures` et ses bornes), `membresStruct1127` (`Pompe.*` dans un tableau de variables, un graphique,
   une courbe ; `Moteurs_M[*].*` ; `ligne/convoyeur/*` ; `Niveau.*` et un dossier vide dits), `sourcesObjets1127` (`Cuve.Mesures[*]` et
-  `Cuve.*` dans une popup ouverte pour `Cuves[2]`, `Recette.Durees[*]`), `vuesDossier1127` (`Process/*` dans
+  `Cuve.*` dans une popup ouverte pour `Cuves[2]`, `Recette.Durees[*]`, `L[*]` d'un paramètre objet reçu en
+  valeur), `vuesDossier1127` (`Process/*` dans
   une barre de navigation, son clic, son aperçu, un dossier vide dit) et `lignesDepuis1127` (un tableau depuis une
   énumération et depuis une structure seule, ses colonnes choisies, Générer sans erreur) et `xyProfil1127` (une
   courbe XY en profil, ses trois points refaits à chaque échantillon ; un joker dans un symbole sur un tableau
@@ -264,18 +273,23 @@ structure d'une popup (`Cuve.*`) se vérifie sur son type ; un paramètre sans t
 - `hmi_editor_test` : `lotE1127_editeur` (les états d'un texte multi-états, d'un chronogramme, d'une image animée
   et les onglets depuis une énumération ; « Répéter depuis » et « par rangée » dans l'inspecteur d'une instance,
   un repère tapé ; « Ajouter depuis une source » et le détail d'une ligne à joker dans Contenu ; l'aperçu d'un
-  graphique `Cuves[*]` dessiné avec ses 8 barres ; les vues d'une barre de navigation depuis une `LIST OF STRING`).
+  graphique `Cuves[*]` dessiné avec ses 8 barres ; les vues d'une barre de navigation depuis une `LIST OF STRING` ;
+  les zones d'un résumé depuis `Zones_E[*].Nom`).
 - `hmi_reperes_test` : `repereEtJoker1127` (`$Cuves$[*].Niveau` dupliqué en `$Ballons$[*].Niveau`, chacun déplié
   sur sa variable en marche).
+- `renameplan_test` : « 8. les jokers suivent le renommage » (renommer `Cuves` : la plume, le nom calculé, les
+  zones d'un résumé, « Répéter depuis » et son argument ; renommer `Vues` : la barre de navigation). Et, dans
+  `hmi_test` et `hmi_editor_test` : une énumération renommée (les onglets `T_Mode_E7[*]`), un dossier de vues
+  renommé (`Process/*`), un dossier de variables renommé puis glissé dans un autre par l'écran des variables
+  (`Ligne/Convoyeur/*`, puis `Usine/Atelier/Convoyeur/*`).
 
 ### Ce qui n'est pas fait (lot E)
 
 - **Dans l'éditeur**, l'aperçu suit le projet, pas la marche : une `LIST` montre sa valeur initiale, un nom calculé
   (`Cuves[*].Nom`) le numéro de l'élément ; une copie d'instance répétée ne se choisit pas (la première seule).
   Contenu montre les lignes telles qu'écrites (une ligne `Cuves[*].Niveau`, avec ce qu'elle deviendra).
-- **« Ajouter depuis une source »** existe pour la courbe, les graphiques, le tableau de variables et la barre de
-  navigation ; le résumé par zone et le conteneur à onglets prennent leur joker tapé (ou « Depuis une
-  énumération » pour les onglets).
+- **« Ajouter depuis une source »** existe pour la courbe, les graphiques, le tableau de variables, la barre de
+  navigation et le résumé par zone ; le conteneur à onglets prend son joker tapé (ou « Depuis une énumération »).
 - **Lignes depuis un paramètre de popup structure** (`Cuve`) : une structure seule se lit sur une variable du projet
   ou un chemin (`Lignes[2].Pompe`), pas à travers un paramètre.
 - **Un joker et des membres ensemble** (`Moteurs[*].*`) : sur un tableau de l'IHM ; pas sur une `LIST` de

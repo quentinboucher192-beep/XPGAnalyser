@@ -24045,6 +24045,12 @@ void lotE1127() {
         check(!sources::previewObject(p, plain) && plain.text("variables") == "Cuve.Mesures[*]",
               "E : une source que l'\xC3\xA9" "diteur ne conna\xC3\xAEt pas (le param\xC3\xA8tre d'un symbole) : l'aper\xC3\xA7u la garde telle quelle");
     }
+    // ---- une enumeration renommee : ses onglets T_Mode_E7[*] suivent
+    {
+        Project q = p;
+        (void)renameEnumType(q, "T_Mode_E7", "T_Regime_E7");
+        same(q.views[0].object(tabs)->text("tabs"), "T_Regime_E7[*]", "E : renommer l'\xC3\xA9num\xC3\xA9ration - les onglets T_Mode_E7[*] suivent (avant : une source inconnue)");
+    }
     // ---- une source inconnue : un avertissement, une liste vide en marche (jamais une erreur)
     {
         Project q = p;
@@ -24372,7 +24378,14 @@ void sourcesObjets1127() {
     const Id tout = edit::add(p, pop, Kind::VariableTable, 10, 300);
     pop.object(tout)->set("variables", "Cuve.*");
     const Id popId = pop.id;
-    p.views = {a, pop};
+    // 1.12.4 : un parametre objet (L := [5, 6, 7], une LIST passee en valeur) : L[*] dans la popup.
+    View popL = makeView(p, "Popup_L");
+    popL.role = "popup";
+    popL.params = {{"L", "", "", "LIST OF INT", ParamMode::Reference}};
+    const Id parL = edit::add(p, popL, Kind::BarChart, 10, 10);
+    popL.object(parL)->set("variables", "L[*]");
+    const Id popLId = popL.id;
+    p.views = {a, pop, popL};
     p.config.startView = a.id;
     {
         bool blocked = false;
@@ -24408,6 +24421,18 @@ void sourcesObjets1127() {
         const View shown = live.evaluate(rt.environment(), nullptr, rt.viewScope(popId), 0.3);
         const std::string values = shown.object(mesures)->text("liveValues");
         check(values.find("6.5") != std::string::npos, "E : ... chaque barre lit la cuve re\xC3\xA7ue (Cuves[2].Mesures[1] = 6,5) - " + values);
+    }
+    (void)rt.closeAllPopups(Transition{}, 0.4);
+    check(rt.openPopup(popLId, Transition{}, 0.5, "L := [5, 6, 7]", ""), "ouvrir Popup_L (L := [5, 6, 7])");
+    rt.tick(0.6);
+    same(rt.composedView(popLId)->object(parL)->text("variables"), "L[0];L[1];L[2]",
+         "E : le param\xC3\xA8tre objet d'une popup (L := [5, 6, 7]) : une barre par \xC3\xA9l\xC3\xA9ment (avant : aucune)");
+    {
+        LiveView live;
+        live.bind(*rt.composedView(popLId));
+        const View shown = live.evaluate(rt.environment(), nullptr, rt.viewScope(popLId), 0.6);
+        const std::string values = shown.object(parL)->text("liveValues");
+        check(values == joinLiveValues({"5", "6", "7"}), "E : ... leurs valeurs (5, 6, 7) - " + values);
     }
     rt.stop(1.0);
 }
@@ -24449,6 +24474,11 @@ void vuesDossier1127() {
     rt.stop(1.0);
     Object preview = *p.views[0].object(bar);
     check(sources::previewObject(p, preview) && preview.text("views") == "Accueil_F;Proc_A;Proc_B", "E : ... l'aper\xC3\xA7u de l'\xC3\xA9" "diteur aussi");
+    {
+        std::string why;
+        check(fold::renameFolder(p, fold::List::Views, "Process", "Atelier", &why) && p.views[0].object(bar)->text("views") == "Accueil_F;Atelier/*",
+              "E : renommer le dossier de vues Process en Atelier - la barre suit (" + p.views[0].object(bar)->text("views") + ")");
+    }
     p.views[0].object(bar)->set("views", "Vide/*");
     bool warned = false, blocked = false;
     for (const auto& i : generate(p, [](std::string_view) { return false; })) {

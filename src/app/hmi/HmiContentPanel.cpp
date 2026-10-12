@@ -1345,6 +1345,19 @@ bool HmiContentPanel::setField(int index, const std::string& field, const std::s
     const auto colOf = [&](std::string_view prefix) { return static_cast<std::size_t>(std::max(0, std::atoi(field.c_str() + prefix.size()))); };
     // 1.12.7 (lot E, § 2.3) : « Ajouter depuis une source » - une ligne a joker (Cuves[*].Niveau, Pompe.*,
     // Ligne/Convoyeur/*), ajoutee a la fin ; le moteur en fait un element par element de la source.
+    if (field == "addSource" && mode() == Mode::Checks) {
+        // 1.12.7 (lot E, § 2.3) : les zones d'un resume depuis une source (Zones[*].Nom : le nom de chaque zone).
+        const auto* o = current();
+        const std::string v = trimmed(value);
+        if (!o || o->kind != hmi::Kind::AlarmSummary || v.empty() || !fitsInList(v) || !hmi::sources::hasJoker(v)) return false;
+        return change("Zones depuis une source", [v](hmi::Object& obj) {
+            auto items = hmi::listItems(obj.text("groups"));
+            if (std::find(items.begin(), items.end(), v) != items.end()) return false;
+            items.push_back(v);   // vide (toutes) : la source seule
+            obj.set("groups", hmi::joinSemicolons(items));
+            return true;
+        });
+    }
     if (field == "addSource" && mode() == Mode::NavItems) {
         const std::string v = trimmed(value);
         if (v.empty() || !fitsInList(v) || (!hmi::sources::hasJoker(v) && !hmi::sources::folderOf(v))) return false;
@@ -2298,10 +2311,28 @@ void HmiContentPanel::rebuildGrid() {
                 std::string help = typed ? std::string("Tap\xC3\xA9 dans Propri\xC3\xA9t\xC3\xA9s, pas propos\xC3\xA9 par le projet "
                                                        "(un rep\xC3\xA8re $\xE2\x80\xA6$ est gard\xC3\xA9 tel quel).")
                                          : k < c.details.size() ? c.details[k] : std::string{};
+                // 1.12.7 (lot E) : une source (Zones[*].Nom) dit ce qu'elle deviendra.
+                if (typed && hmi::sources::hasJoker(list[k]))
+                    help = hmi::sources::jokerSummary(doc_->project, doc_->project.view(view_), list[k]);
                 cc.properties.push_back(editable(list[k], all || c.has(list[k]) ? "TRUE" : "FALSE", PG::ValueType::Boolean, -1,
                                                  "check:" + list[k], std::move(help)));
             }
             cats.push_back(std::move(cc));
+            // 1.12.7 (lot E, § 2.3) : les zones d'un resume lues dans une source (un tableau de structures, une LIST).
+            if (o->kind == hmi::Kind::AlarmSummary) {
+                PG::Category from;
+                from.name = "Depuis une source";
+                std::vector<std::string> choices{std::string{}};
+                for (auto& s : hmi::sources::jokerSuggestions(doc_->project, doc_->project.view(view_)))
+                    if (hmi::sources::hasJoker(s)) choices.push_back(std::move(s));
+                auto cell = editable("Ajouter depuis une source", "", PG::ValueType::Enum, -1, "addSource",
+                                     "Zones[*].Nom : une zone par \xC3\xA9l\xC3\xA9ment (son nom, lu en marche) ; une LIST OF STRING "
+                                     "(Groupes[*]) : ses textes.",
+                                     std::move(choices));
+                cell.typeIn = true;
+                from.properties.push_back(std::move(cell));
+                cats.push_back(std::move(from));
+            }
             break;
         }
         case Mode::Members: {
