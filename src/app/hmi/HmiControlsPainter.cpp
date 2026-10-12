@@ -673,7 +673,25 @@ void drawThermometer(const Ctx& c) {
             lineLocal(c, cx + tw / 2 + 2, y, cx + tw / 2 + 7, y, txt);
             text(c, tickLabel(s.mn + (s.mx - s.mn) * t), cx + tw / 2 + 8, y - fs * 0.7, w - cx - tw / 2 - 8, fs * 1.4, txt, fs, "gauche");
         }
-    if (showValue) text(c, known ? formatted(c, v) : std::string("###"), 0, h - valueH, w, valueH, txt, fs * 1.25, "centre");
+    // 1.12.10 (lot F) : ses seuils (les siens, sinon ceux de sa variable) - un trait a leur niveau, a gauche du tube (au
+    // bout s'il sort de la plage) ; au-dela, la valeur prend la couleur des seuils, ou des alarmes.
+    gfx::Color valueCol = txt;
+    {
+        const gfx::Color warn = colorOf(c, "colorWarning", 0xF2C94C), alarm = colorOf(c, "colorAlarm", 0xE5534B);
+        double t = 0;
+        const auto has = [&](const char* key) { return hmi::parseNumber(c.src.text(c.o, key), t); };
+        for (const char* key : {"lowAlarm", "low", "high", "highAlarm"}) {
+            if (!has(key)) continue;
+            const bool strong = std::string_view(key) == "lowAlarm" || std::string_view(key) == "highAlarm";
+            const double y = tubeBottom - (tubeBottom - tubeTop - tw * 0.3) * s.frac(t);
+            lineLocal(c, cx - tw / 2 - 7, y, cx - tw / 2 - 1, y, strong ? alarm : warn, 2.0);
+        }
+        if (known) {
+            if ((has("lowAlarm") && v < t) || (has("highAlarm") && v > t)) valueCol = alarm;
+            else if ((has("low") && v < t) || (has("high") && v > t)) valueCol = warn;
+        }
+    }
+    if (showValue) text(c, known ? formatted(c, v) : std::string("###"), 0, h - valueH, w, valueH, valueCol, fs * 1.25, "centre");
 }
 
 void drawDial(const Ctx& c) {

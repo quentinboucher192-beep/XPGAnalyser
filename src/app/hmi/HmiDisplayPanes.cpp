@@ -8,6 +8,7 @@
 #include "../../hmi/HmiExpr.hpp"
 #include "../../hmi/HmiHistory.hpp"
 #include "../../hmi/HmiLive.hpp"
+#include "../../hmi/HmiRanges.hpp"   // 1.12.10 (lot F) : la plage et les seuils de la variable
 #include "../../ui/Theme.hpp"
 #include "../../ui/widgets/Containers.hpp"
 #include "../../xls/Workbook.hpp"
@@ -629,7 +630,9 @@ HmiUnitsPane::HmiUnitsPane(std::string id, hmi::DocumentPtr doc, Apply apply)
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
     tools_->setEnabledWhen(URemove, [this] { return !selectedDisplay().empty(); });
     auto table = std::make_unique<ui::TableView>(base + ".table");
-    table->setColumns({{"Variable", 280.f}, {"Unit\xC3\xA9", 80.f}, {"Format", 110.f}, {"Exemple", 150.f}, {"Montr\xC3\xA9" "e par", 470.f}});
+    // 1.12.10 (lot F) : la plage et les seuils (vides : non regles ; Min et Max d'une variable liee : sa mise a l'echelle, en gris).
+    table->setColumns({{"Variable", 280.f}, {"Unit\xC3\xA9", 80.f}, {"Format", 110.f}, {"Min", 90.f}, {"Max", 90.f}, {"Seuil bas", 80.f},
+                       {"Seuil haut", 80.f}, {"Alarme basse", 90.f}, {"Alarme haute", 90.f}, {"Exemple", 150.f}, {"Montr\xC3\xA9" "e par", 380.f}});
     table->setSelectionMode(ui::SelectionMode::Single);
     table_ = &static_cast<ui::TableView&>(addChild(std::move(table)));
     grid_ = &static_cast<ui::PropertyGrid&>(addChild(std::make_unique<ui::PropertyGrid>(base + ".grid")));
@@ -669,8 +672,17 @@ HmiUnitsPane::HmiUnitsPane(std::string id, hmi::DocumentPtr doc, Apply apply)
             [this](const std::string& k, const std::string& v, std::string* why) { return setField(k, "unite", v, why); }));
         tg.columns.push_back(paste::column("Format", {"Decimales", "Affichage"}, 2,
             [this](const std::string& k, const std::string& v, std::string* why) { return setField(k, "format", v, why); }));
-        tg.columns.push_back(paste::column("Exemple", {}, 3, nullptr));
-        tg.columns.push_back(paste::column("Montr\xC3\xA9" "e par", {"Montree par"}, 4, nullptr));
+        // 1.12.10 (lot F) : la plage et les seuils se collent aussi (un nombre, ou une variable).
+        const std::pair<const char*, std::vector<std::string>> rangeColumns[] = {
+            {"Min", {"Minimum", "Bas d'\xC3\xA9" "chelle"}}, {"Max", {"Maximum", "Haut d'\xC3\xA9" "chelle"}},
+            {"Seuil bas", {"L", "Low"}}, {"Seuil haut", {"H", "High"}}, {"Alarme basse", {"LL", "LowLow"}}, {"Alarme haute", {"HH", "HighHigh"}}};
+        for (std::size_t k = 0; k < 6; ++k) {
+            const std::string key(hmi::ranges::kKeys[k]);
+            tg.columns.push_back(paste::column(rangeColumns[k].first, rangeColumns[k].second, 3 + k,
+                [this, key](const std::string& path, const std::string& v, std::string* why) { return setField(path, key, v, why); }));
+        }
+        tg.columns.push_back(paste::column("Exemple", {}, 9, nullptr));
+        tg.columns.push_back(paste::column("Montr\xC3\xA9" "e par", {"Montree par"}, 10, nullptr));
         tg.exists = [this](const std::string& k) {
             for (const auto& d : doc_->project.displays)
                 if (same(d.path, k)) return true;
@@ -721,20 +733,40 @@ void HmiUnitsPane::refresh() {
     order_.clear();
     std::vector<std::vector<std::string>> rows;
     std::vector<bool> unused;
+    std::vector<std::vector<bool>> greyed;   // 1.12.10 : Min, Max de la mise a l'echelle (pas tapes)
     for (const auto& d : p.displays) {
         order_.push_back(d.path);
         const auto uses = hmi::displayUses(p, d);
-        rows.push_back({d.path, d.unit, d.format.empty() ? std::string("(de l'objet)") : d.format, hmi::displaySample(d),
-                        uses.empty() ? std::string("(aucun objet)") : std::to_string(uses.size()) + " : " + fewOf(uses, 3)});
+        std::vector<std::string> row{d.path, d.unit, d.format.empty() ? std::string("(de l'objet)") : d.format};
+        std::vector<bool> grey(11, false);
+        for (std::size_t k = 0; k < 6; ++k) {
+            const std::string own = hmi::ranges::field(d, hmi::ranges::kKeys[k]);
+            if (own.empty() && k < 2) {
+                // Une variable liee a un equipement : sa mise a l'echelle, en gris, tant qu'on n'a rien tape.
+                double lo = 0, hi = 0;
+                if (hmi::ranges::scalingOf(p, d.path, lo, hi)) {
+                    row.push_back(hmi::formatNumber(k == 0 ? lo : hi) + " (mise \xC3\xA0 l'\xC3\xA9" "chelle)");
+                    grey[3 + k] = true;
+                    continue;
+                }
+            }
+            row.push_back(own);
+        }
+        row.push_back(hmi::displaySample(d));
+        row.push_back(uses.empty() ? std::string("(aucun objet)") : std::to_string(uses.size()) + " : " + fewOf(uses, 3));
+        rows.push_back(std::move(row));
         unused.push_back(uses.empty());
+        greyed.push_back(std::move(grey));
     }
-    model_ = std::make_shared<Rows>(std::vector<std::string>{"Variable", "Unit\xC3\xA9", "Format", "Exemple", "Montr\xC3\xA9" "e par"}, std::move(rows),
-                                    [unused](ui::RowIndex r, std::size_t c) {
+    model_ = std::make_shared<Rows>(std::vector<std::string>{"Variable", "Unit\xC3\xA9", "Format", "Min", "Max", "Seuil bas", "Seuil haut", "Alarme basse",
+                                                             "Alarme haute", "Exemple", "Montr\xC3\xA9" "e par"}, std::move(rows),
+                                    [unused, greyed](ui::RowIndex r, std::size_t c) {
                                         ui::CellStyle st;
                                         if (r >= unused.size()) return st;
                                         if (c == 0) { st.bold = true; st.icon = ui::Icon::Variable; st.iconTone = unused[r] ? ui::Tone::Muted : ui::Tone::Ok; }
-                                        if (c == 3) st.fgTone = ui::Tone::Accent;
-                                        if (c == 4 && unused[r]) st.fgTone = ui::Tone::Muted;
+                                        if (c < greyed[r].size() && greyed[r][c]) st.fgTone = ui::Tone::Muted;
+                                        if (c == 9) st.fgTone = ui::Tone::Accent;
+                                        if (c == 10 && unused[r]) st.fgTone = ui::Tone::Muted;
                                         return st;
                                     });
     table_->setModel(model_);
@@ -743,7 +775,7 @@ void HmiUnitsPane::refresh() {
     if (selectedDisplay().empty() && !order_.empty()) table_->selectModelRows({0});
     refreshing_ = false;
     rebuildProperties();
-    status_->setMessage(std::to_string(p.displays.size()) + " variable(s) avec une unit\xC3\xA9 ou un format", ui::StatusBar::Severity::Info);
+    status_->setMessage(std::to_string(p.displays.size()) + " variable(s) avec une unit\xC3\xA9, un format ou une plage", ui::StatusBar::Severity::Info);
     invalidate();
 }
 
@@ -759,7 +791,8 @@ void HmiUnitsPane::rebuildProperties() {
         c.properties.push_back(prop("Pour commencer", "Ajouter, ou Proposer (barre d'outils)", PG::ValueType::ReadOnly, {},
                                     "Une variable, son unit\xC3\xA9 (bar, \xC2\xB0" "C, %) et son format (0.0) : repris par chaque "
                                     "objet qui la montre (afficheur, champ de saisie, jauge, bargraphe, tableau de variables...) et par "
-                                    "les trous des textes ({Pression} : son format ; {Pression:u} : son format et son unit\xC3\xA9)."));
+                                    "les trous des textes ({Pression} : son format ; {Pression:u} : son format et son unit\xC3\xA9). "
+                                    "Sa plage (Min, Max) et ses seuils : repris par les objets qui laissent les leurs vides."));
         grid_->setCategories({std::move(c)});
         return;
     }
@@ -770,6 +803,7 @@ void HmiUnitsPane::rebuildProperties() {
             return setField(key, field, std::string(v));
         };
     };
+    std::vector<PG::Category> cats;
     PG::Category c;
     c.name = "Variable";
     c.properties.push_back(prop("Variable", d->path, PG::ValueType::Text, commit("variable"),
@@ -783,9 +817,33 @@ void HmiUnitsPane::rebuildProperties() {
                                 "Vide : chaque objet garde le sien.",
                                 {"", "0", "0.0", "0.00", "0.000", "000", "0.0%"}));
     c.properties.push_back(prop("Exemple", hmi::displaySample(*d), PG::ValueType::ReadOnly));
+    // 1.12.10 (lot F) : la plage et les seuils de la variable, repris par les objets qui laissent les leurs vides.
+    {
+        PG::Category r;
+        r.name = "Plage et seuils";
+        double lo = 0, hi = 0;
+        const bool scaled = hmi::ranges::scalingOf(p, d->path, lo, hi);
+        const char* helps[6] = {
+            "Le bas de l'\xC3\xA9" "chelle des objets qui la montrent (jauge, bargraphe, curseur, cuve, courbe...) : un nombre, ou une variable "
+            "tap\xC3\xA9" "e sans = (Consigne_Min). Vide : celui de la mise \xC3\xA0 l'\xC3\xA9" "chelle d'une variable li\xC3\xA9" "e, sinon celui de l'objet.",
+            "Le haut de l'\xC3\xA9" "chelle : un nombre, ou une variable (Consigne_Max). Vide : celui de la mise \xC3\xA0 l'\xC3\xA9" "chelle, sinon celui de l'objet.",
+            "Le seuil bas (afficheur, cuve, instrument ISA) : la valeur prend la couleur des seuils en dessous.",
+            "Le seuil haut : la valeur prend la couleur des seuils au-dessus.",
+            "L'alarme basse, sous le seuil bas : la couleur des alarmes.",
+            "L'alarme haute, au-dessus du seuil haut : la couleur des alarmes."};
+        for (std::size_t k = 0; k < 6; ++k) {
+            const std::string rangeKey(hmi::ranges::kKeys[k]);
+            auto pr = prop(hmi::ranges::label(rangeKey), hmi::ranges::field(*d, rangeKey), PG::ValueType::Text,
+                           commit(hmi::ranges::kKeys[k].data()), helps[k]);
+            if (scaled && k < 2) pr.placeholder = hmi::formatNumber(k == 0 ? lo : hi) + " (mise \xC3\xA0 l'\xC3\xA9" "chelle)";
+            r.properties.push_back(std::move(pr));
+        }
+        cats.push_back(std::move(r));
+    }
     const auto uses = hmi::displayUses(p, *d);
     c.properties.push_back(prop("Montr\xC3\xA9" "e par", uses.empty() ? std::string("aucun objet") : joinList(uses), PG::ValueType::ReadOnly));
-    grid_->setCategories({std::move(c)});
+    cats.insert(cats.begin(), std::move(c));
+    grid_->setCategories(std::move(cats));
 }
 
 bool HmiUnitsPane::addDisplay(const std::string& rawPath, const std::string& unit, const std::string& format, std::string* why) {
@@ -845,13 +903,20 @@ bool HmiUnitsPane::setField(const std::string& path, const std::string& key, con
             if (&d != cur && same(d.path, value)) return fail(value + " a d\xC3\xA9j\xC3\xA0 sa ligne");
     } else if (key == "format") {
         if (!value.empty() && !hmi::looksLikeFormat(value)) return fail("format \xC2\xAB " + value + " \xC2\xBB illisible (0, 0.0, 0.00, 000, 0.0%)");
+    } else if (hmi::VariableDisplay probe; hmi::ranges::fieldOf(probe, key)) {
+        // 1.12.10 (lot F) : Min, Max, un seuil - un nombre, ou une variable tapee sans = ; vide : non regle.
+        if (!hmi::ranges::validValue(value))
+            return fail(hmi::ranges::label(key) + " \xC2\xAB " + value + " \xC2\xBB : un nombre (10, 2,5) ou un nom de variable (Consigne_Max)");
     } else if (key != "unite") {
         return fail("champ inconnu : " + key);
     }
     const std::string old = cur->path;
     auto cmd = hmi::changeProject(doc_, "Unit\xC3\xA9s et formats : " + old, [&](hmi::Project& pr) {
         for (auto& d : pr.displays)
-            if (same(d.path, old)) (key == "variable" ? d.path : key == "format" ? d.format : d.unit) = value;
+            if (same(d.path, old)) {
+                if (auto* range = hmi::ranges::fieldOf(d, key)) *range = value;
+                else (key == "variable" ? d.path : key == "format" ? d.format : d.unit) = value;
+            }
     });
     if (cmd) apply_(std::move(cmd));
     refresh();

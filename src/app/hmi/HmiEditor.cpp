@@ -23,6 +23,7 @@
 #include "HmiAskDialog.hpp"            // 1.11.22 : supprimer un parametre employe (la question)
 #include "../../hmi/HmiPopupParams.hpp"   // 1.11.22 : ses emplois (un retrait a blanc)
 #include "../../hmi/HmiChoiceLists.hpp"   // 1.12.7 (lot D) : l'unite que proposent les lettres ISA
+#include "../../hmi/HmiRanges.hpp"        // 1.12.10 (lot F) : la plage et les seuils de la variable
 
 #include <set>
 
@@ -1143,7 +1144,10 @@ bool HmiEditor::commitProp(const std::string& key, const std::string& value, boo
                 const auto* d = fresh.find(key);
                 auto* pp = o->find(key);
                 if (pp) pp->expr.clear();
-                if (d) o->set(key, d->value);
+                // 1.12.10 (lot F) : une borne, un seuil d'un objet a echelle - vide, comme un objet pose depuis la palette :
+                // il reprend la plage de sa variable.
+                if (hmi::ranges::inheritedKey(o->kind, key)) o->set(key, "");
+                else if (d) o->set(key, d->value);
                 else if (pp && (key == "rot" || key == "access")) pp->value = "0";
                 if (shown.empty()) shown = o->text(key);
             }
@@ -1164,7 +1168,23 @@ bool HmiEditor::commitProp(const std::string& key, const std::string& value, boo
     static const std::set<std::string, std::less<>> numeric = {
         "x", "y", "w", "h", "rot", "pivotX", "pivotY", "strokeWidth", "radius", "opacity", "fontSize",
         "min", "max", "rows", "duration", "ymin", "ymax", "refresh", "access"};
-    if (!expr && numeric.count(key)) {
+    // 1.12.10 (lot F) : une borne, un seuil d'un objet a echelle - vide, il prend ceux de sa variable (Unites et
+    // formats, la mise a l'echelle) ; un nom tape sans = (Consigne_Max) est la variable.
+    bool rangeKey = false;
+    if (!expr)
+        if (const auto* v0 = canvas_->view(); v0)
+            if (const auto* o0 = v0->object(sel.front()); o0 && hmi::ranges::takesName(o0->kind, key)) {
+                // Vide : une cle heritee reprend celle de sa variable ; une cle qui n'herite de rien (Min d'un graphique
+                // en barres) revient, comme avant, a la valeur d'un objet neuf.
+                const bool inherited = hmi::ranges::inheritedKey(o0->kind, key);
+                rangeKey = inherited || value.find_first_not_of(" \t") != std::string::npos;
+                if (!hmi::ranges::validValue(value)) {
+                    warn("\xC2\xAB " + value + " \xC2\xBB n'est ni un nombre ni un nom de variable (" + key + ") : rien n'a chang\xC3\xA9. "
+                         + (inherited ? "Vide : celui de la variable. " : "") + "Pour un calcul, commencer par =.");
+                    return false;
+                }
+            }
+    if (!expr && numeric.count(key) && !rangeKey) {
         double n = 0;
         // 1.10 (chantier K) : vider un nombre le ramene a sa valeur par defaut
         // (celle d'un objet neuf de ce genre) - on pouvait ne plus le vider.

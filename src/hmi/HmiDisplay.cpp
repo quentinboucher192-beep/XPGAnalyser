@@ -282,7 +282,12 @@ std::string displayRowPath(std::string_view path, const View* in) {
 }
 
 std::string displayVariableOf(const Object& o) {
-    if (const auto* v = o.find("value"); v && !v->expr.empty()) return plainPath(v->expr) ? trim(v->expr) : std::string{};
+    // 1.12.10 (lot F, § 4 de l'audit) : le chemin est lu sans ses reperes avant la recherche de son unite, de son
+    // format et de sa plage (=$Cuve$.Niveau : Cuve.Niveau) - avant, un repere la laissait sans unite.
+    if (const auto* v = o.find("value"); v && !v->expr.empty()) {
+        const std::string path = trim(markers::strip(v->expr, markers::Mode::Expression));
+        return plainPath(path) ? path : std::string{};
+    }
     return trim(autoValueSource(o));
 }
 

@@ -293,10 +293,25 @@ Dossier buildDossier(const Project& p, const std::map<Id, DossierImage>& thumbna
     if (!p.displays.empty()) {
         w.add(K::Heading2, "Les unit\xC3\xA9s et les formats");
         std::vector<std::vector<std::string>> rows;
+        // 1.12.10 (lot F) : la plage et les seuils (min..max ; alarme basse / seuil bas / seuil haut / alarme haute).
+        bool ranged = false;
         for (const auto& vd : p.displays)
+            ranged = ranged || !(vd.min.empty() && vd.max.empty() && vd.low.empty() && vd.high.empty() && vd.lowAlarm.empty() && vd.highAlarm.empty());
+        for (const auto& vd : p.displays) {
             rows.push_back({vd.path, vd.unit, vd.format.empty() ? std::string("-") : vd.format, displaySample(vd),
                             std::to_string(displayUses(p, vd).size())});
-        w.table({"Variable", "Unit\xC3\xA9", "Format", "Exemple", "Objets"}, std::move(rows), {0.4, 0.13, 0.13, 0.22, 0.12});
+            if (!ranged) continue;
+            std::string range = vd.min.empty() && vd.max.empty() ? std::string("-") : (vd.min.empty() ? "?" : vd.min) + ".." + (vd.max.empty() ? "?" : vd.max);
+            if (!(vd.lowAlarm.empty() && vd.low.empty() && vd.high.empty() && vd.highAlarm.empty()))
+                range += " ; " + (vd.lowAlarm.empty() ? "-" : vd.lowAlarm) + " / " + (vd.low.empty() ? "-" : vd.low) + " / "
+                       + (vd.high.empty() ? "-" : vd.high) + " / " + (vd.highAlarm.empty() ? "-" : vd.highAlarm);
+            rows.back().insert(rows.back().begin() + 3, range);
+        }
+        if (ranged)
+            w.table({"Variable", "Unit\xC3\xA9", "Format", "Plage ; seuils (LL / L / H / HH)", "Exemple", "Objets"}, std::move(rows),
+                    {0.3, 0.1, 0.1, 0.22, 0.18, 0.1});
+        else
+            w.table({"Variable", "Unit\xC3\xA9", "Format", "Exemple", "Objets"}, std::move(rows), {0.4, 0.13, 0.13, 0.22, 0.12});
     }
 
     // ---- 4. les alarmes

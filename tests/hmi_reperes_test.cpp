@@ -1433,6 +1433,138 @@ void repereEtJoker1127() {
           "repere et joker : la copie montre les niveaux des ballons (10, 20)");
     rt.stop(1.0);
 }
+// 1.12.10 (lot F) : un seuil, un Max tapes en nom de variable avec un repere ($Cuve$.Seuil), la plage
+// prise a la variable d'une valeur a repere (=$Cuve$.Niveau) - Dupliquer les suit, le moteur les lit sans leurs $.
+void repereSeuil11210() {
+    std::printf("-- 1.12.10 (lot F) : le repere dans un seuil et dans la variable dont l'objet prend sa plage\n");
+    Project p;
+    HmiType t;
+    t.id = p.allocate();
+    t.name = "T_Cuve_F";
+    t.members = {{"Niveau", "REAL", "", ""}, {"Seuil", "REAL", "", ""}, {"Maxi", "REAL", "", ""}};
+    p.programs.types.push_back(t);
+    for (const char* name : {"Cuve_A", "Cuve_B"}) {
+        Variable v;
+        v.id = p.allocate();
+        v.name = name;
+        v.type = "T_Cuve_F";
+        v.initial = std::string(name) == "Cuve_A" ? "(Niveau := 50, Seuil := 70, Maxi := 200)" : "(Niveau := 20, Seuil := 30, Maxi := 40)";
+        p.programs.variables.push_back(v);
+    }
+    // La plage de Cuve_A.Niveau dans Unites et formats : 0..150 (Cuve_B.Niveau n'en a pas).
+    VariableDisplay line{"Cuve_A.Niveau", "m", "0"};
+    line.min = "0";
+    line.max = "150";
+    p.displays.push_back(line);
+    View v = makeView(p, "Vue_F");
+    const Id cuve = edit::add(p, v, Kind::Tank, 10, 10);
+    v.object(cuve)->name = "Cuve_Rep";
+    v.object(cuve)->setExpr("value", "$Cuve$.Niveau");
+    v.object(cuve)->set("min", "");
+    v.object(cuve)->set("max", "");
+    v.object(cuve)->set("high", "$Cuve$.Seuil");
+    const Id curseur = edit::add(p, v, Kind::Slider, 10, 300);
+    v.object(curseur)->name = "Curseur_Rep";
+    v.object(curseur)->set("variable", "$Cuve$.Niveau");
+    v.object(curseur)->set("max", "$Cuve$.Maxi");
+    v.object(curseur)->set("step", "0");
+    const Id barres = edit::add(p, v, Kind::BarChart, 400, 10);
+    v.object(barres)->name = "Barres_Rep";
+    v.object(barres)->set("variables", "$Cuve$.Niveau");
+    v.object(barres)->set("high", "$Cuve$.Seuil");
+    // Les cles nouvelles du lot F : la plage de l'ouverture d'une vanne, l'alarme haute d'un instrument ISA.
+    const Id vanne = edit::add(p, v, Kind::Valve, 700, 10);
+    v.object(vanne)->name = "Vanne_Rep";
+    v.object(vanne)->setExpr("opening", "$Cuve$.Niveau");
+    v.object(vanne)->set("openingMax", "$Cuve$.Maxi");
+    const Id isa = edit::add(p, v, Kind::IsaInstrument, 700, 300);
+    v.object(isa)->name = "Isa_Rep";
+    v.object(isa)->setExpr("value", "$Cuve$.Niveau");
+    v.object(isa)->set("highAlarm", "$Cuve$.Seuil");
+    // Le repere $Cuve$ vaut Cuve_A dans l'original.
+    for (auto* o : {v.object(cuve), v.object(curseur), v.object(barres), v.object(vanne), v.object(isa)})
+        for (auto& pr : o->props) {
+            const auto fix = [](std::string& s) {
+                for (std::size_t at = s.find("$Cuve$"); at != std::string::npos; at = s.find("$Cuve$", at + 1)) s.replace(at, 6, "$Cuve_A$");
+            };
+            fix(pr.value);
+            fix(pr.expr);
+        }
+    const auto sc = dup::scan(v, {cuve, curseur, barres, vanne, isa}, dup::projectBounds(p));
+    check(sc.marker("Cuve_A") != nullptr, "lot F : Dupliquer trouve le rep\xC3\xA8re d'un seuil et d'un Max tap\xC3\xA9s en nom ($Cuve_A$.Seuil)");
+    bool inHigh = false, inMax = false, inBar = false, inValve = false, inIsa = false;
+    if (const auto* m = sc.marker("Cuve_A"))
+        for (const auto& spot : m->spots) {
+            inHigh = inHigh || (spot.objectName == "Cuve_Rep" && spot.where == "high");
+            inMax = inMax || (spot.objectName == "Curseur_Rep" && spot.where == "max");
+            inBar = inBar || (spot.objectName == "Barres_Rep" && spot.where == "high");
+            inValve = inValve || (spot.objectName == "Vanne_Rep" && spot.where == "openingMax");
+            inIsa = inIsa || (spot.objectName == "Isa_Rep" && spot.where == "highAlarm");
+        }
+    check(inHigh && inMax, "lot F : ... dans le seuil haut de la cuve et dans le Max du curseur");
+    check(inBar, "lot F : ... et dans le seuil haut d'un graphique en barres");
+    check(inValve && inIsa, "lot F : ... dans \xC2\xAB Ouverture : max \xC2\xBB d'une vanne et l'alarme haute d'un instrument ISA");
+    auto plan = dup::defaultPlan(v, sc, 1);
+    if (plan.rows.size() == 2) plan.rows[1].markers[dup::markerKey("Cuve_A")] = "Cuve_B";
+    const auto r = dup::apply(p, v, plan);
+    check(r.created.size() == 5, "lot F : une copie de chacun");
+    const Object* copyCuve = nullptr;
+    const Object* copyCurseur = nullptr;
+    const Object* copyBarres = nullptr;
+    const Object* copyVanne = nullptr;
+    const Object* copyIsa = nullptr;
+    for (const Id id : r.created) {
+        const Object* o = v.object(id);
+        if (o && o->kind == Kind::Tank) copyCuve = o;
+        if (o && o->kind == Kind::Slider) copyCurseur = o;
+        if (o && o->kind == Kind::BarChart) copyBarres = o;
+        if (o && o->kind == Kind::Valve) copyVanne = o;
+        if (o && o->kind == Kind::IsaInstrument) copyIsa = o;
+    }
+    check(copyVanne && copyVanne->text("openingMax") == "$Cuve_B$.Maxi" && copyIsa && copyIsa->text("highAlarm") == "$Cuve_B$.Seuil",
+          "lot F : les copies de la vanne et de l'instrument lisent $Cuve_B$.Maxi et $Cuve_B$.Seuil");
+    const Id copyVanneId = copyVanne ? copyVanne->id : kNoId;
+    const Id copyIsaId = copyIsa ? copyIsa->id : kNoId;
+    check(copyBarres && copyBarres->text("high") == "$Cuve_B$.Seuil", "lot F : la copie du graphique en barres lit $Cuve_B$.Seuil");
+    const Id copyBarresId = copyBarres ? copyBarres->id : kNoId;
+    check(copyCuve && copyCuve->text("high") == "$Cuve_B$.Seuil" && copyCurseur && copyCurseur->text("max") == "$Cuve_B$.Maxi",
+          "lot F : la copie lit $Cuve_B$.Seuil et $Cuve_B$.Maxi");
+    p.views = {v};
+    p.config.startView = v.id;
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    rt.tick(0.1);
+    const View* composed = rt.composedView(v.id);
+    LiveView live;
+    live.bind(*composed);
+    const View shown = live.evaluate(rt.environment());
+    const Object* a = shown.object(cuve);
+    const Object* b = copyCuve ? shown.object(copyCuve->id) : nullptr;
+    check(a && a->text("high") == "70" && b && b->text("high") == "30",
+          "lot F : en marche, chaque cuve lit le seuil de sa variable, sans les $ (70, 30)");
+    const Object* ga = shown.object(barres);
+    const Object* gb = copyBarresId != kNoId ? shown.object(copyBarresId) : nullptr;
+    check(ga && ga->text("high") == "70" && gb && gb->text("high") == "30",
+          "lot F : ... chaque graphique en barres aussi (70, 30 ; avant : le texte $Cuve_A$.Seuil, ignor\xC3\xA9)");
+    const Object* ia = shown.object(isa);
+    const Object* ib = copyIsaId != kNoId ? shown.object(copyIsaId) : nullptr;
+    check(ia && ia->text("highAlarm") == "70" && ib && ib->text("highAlarm") == "30", "lot F : ... chaque instrument ISA aussi (70, 30)");
+    double oa = -1, ob = -1;
+    if (const Object* va = shown.object(vanne)) (void)parseNumber(va->text("opening"), oa);
+    if (const Object* vb = copyVanneId != kNoId ? shown.object(copyVanneId) : nullptr) (void)parseNumber(vb->text("opening"), ob);
+    check(std::fabs(oa - 25) < 1e-6 && std::fabs(ob - 50) < 1e-6,
+          "lot F : chaque vanne s'ouvre en % du Maxi de sa cuve (50 sur 200 : 25 % ; 20 sur 40 : 50 %)");
+    check(a && a->text("max") == "150" && b && b->text("max") == "100",
+          "lot F : la plage prise \xC3\xA0 la variable d'une valeur \xC3\xA0 rep\xC3\xA8re (=$Cuve_A$.Niveau : 0..150) ; Cuve_B sans plage : 0..100");
+    rt.dragValue(curseur, 1.0, true, 0.2);
+    if (copyCurseur) rt.dragValue(copyCurseur->id, 1.0, true, 0.3);
+    check(rt.variable("Cuve_A.Niveau") && std::fabs(rt.variable("Cuve_A.Niveau")->asReal() - 200) < 1e-9 && rt.variable("Cuve_B.Niveau")
+              && std::fabs(rt.variable("Cuve_B.Niveau")->asReal() - 40) < 1e-9,
+          "lot F : chaque curseur pouss\xC3\xA9 au bout \xC3\xA9" "crit le Maxi de sa cuve (200, 40)");
+    rt.stop(1.0);
+}
+
 
 // ====================== 1.12.12 (lot H) : les reperes dans l'horloge, le texte defilant, la video ==
 //  Chaque propriete nouvelle garde ses reperes : l'heure d'une horloge ($Debut$, une formule), la source
@@ -1454,6 +1586,7 @@ void reperesLotH11212() {
     var("Fin", "STRING", "'2026-10-09T18:00:00'");
     var("Messages", "LIST OF STRING", "['Bienvenue', 'Casque']");
     var("Annonces", "LIST OF STRING", "['Pause']");
+    repereSeuil11210();                // 1.12.10 (lot F) : $Cuve$.Seuil dans un seuil, la plage d'une valeur a repere
     var("Pos", "REAL", "0");
     var("Pos_2", "REAL", "0");
     var("Lecture", "BOOL", "TRUE");

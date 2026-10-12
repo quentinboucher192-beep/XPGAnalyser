@@ -1657,6 +1657,7 @@ private:
     mutable std::map<Id, View>       composed_;
     mutable std::map<Id, bool>       jokerViews_;   // 1.12.7 (lot E) : la vue a-t-elle un joker ? (refait a chaque tick)
     mutable std::map<Id, bool>       linkViews_;    // 1.12.11 (lot G) : ... une liaison Equipement ? (idem)
+    mutable std::map<Id, bool>       rangeViews_;   // 1.12.10 (lot F) : une plage a prendre a la variable ? (idem)
     // 1.11.10 : les fonctions de symbole appelees ("Vue.Instance.Fonction", en majuscules),
     // pretes a tourner (nul : pas une fonction d'instance) ; refaites avec composed_.
     std::map<std::string, std::shared_ptr<const HmiFunction>> boundCalls_;

@@ -9,6 +9,7 @@
 #include "HmiMarkers.hpp"   // 1.11 (REP) : markers::strip
 #include "HmiSources.hpp"   // 1.12.7 (lot E) : « Repeter depuis »
 #include "HmiEquipmentLink.hpp"   // 1.12.11 (lot G) : la liaison Equipement remplit le Defaut
+#include "HmiRanges.hpp"   // 1.12.10 (lot F) : les seuils pris a la variable
 
 #include <algorithm>
 #include <optional>
@@ -354,8 +355,11 @@ struct Generator {
 
     void posedSynoptic(const View& v, const Object& o) {
         const std::string group = objectGroupOf(v, o);
-        // 1.12.11 (lot G) : la liaison Equipement - Defaut <- P1.Defaut, comme le moteur la remplit.
-        for (const auto& la : libraryAlarms(eqlink::bound(p, &v, o)))
+        // 1.12.11 (lot G) : la liaison Equipement - Defaut <- P1.Defaut, comme le moteur la remplit ;
+        // 1.12.10 (lot F) : les seuils laisses vides sont ceux de la variable (Unites et formats), comme au dessin.
+        Object ranged = eqlink::bound(p, &v, o);
+        (void)ranges::apply(ranged, p, &v);
+        for (const auto& la : libraryAlarms(ranged))
             if (la.applicable) emit(v, o, group, {}, {}, {}, ObjectAlarmSource::Library, o.kind, la.def, true);
     }
 
@@ -404,7 +408,9 @@ struct Generator {
                          &args2);
                 }
             } else if (kindIsSynoptic(c.kind)) {
-                for (const auto& la : libraryAlarms(eqlink::bound(p, &v, c))) {   // 1.12.11 (lot G)
+                Object ranged = eqlink::bound(p, &v, c);             // 1.12.11 (lot G) : la liaison Equipement ;
+                (void)ranges::apply(ranged, p, &v);                  // 1.12.10 (lot F) : les seuils de la variable
+                for (const auto& la : libraryAlarms(ranged)) {
                     if (!la.applicable) continue;
                     bool active = true;
                     const AlarmDef base = layered(la.def, c, outer, &active, parentArgs);

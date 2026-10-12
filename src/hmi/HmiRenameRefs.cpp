@@ -404,11 +404,18 @@ std::size_t renameObjectReferences(Project& p, const std::string& view, const st
             }
         if (changed) note("Styles / " + st.name);
     }
-    for (auto& d : p.displays)
+    for (auto& d : p.displays) {
         if (const std::string v = through("variable", d.path, f); v != d.path) {
             d.path = v;
             note("Unit\xC3\xA9s et formats / " + v);
         }
+        // 1.12.10 (lot F) : Min, Max, un seuil tapes en nom de variable (Consigne_Max).
+        for (std::string* range : {&d.min, &d.max, &d.low, &d.high, &d.lowAlarm, &d.highAlarm})
+            if (const std::string v = through("variable", *range, f); v != *range) {
+                *range = v;
+                note("Unit\xC3\xA9s et formats / " + d.path);
+            }
+    }
     for (auto& sc : p.scenarios) {
         bool changed = false;
         for (auto& st : sc.steps) {

@@ -23,6 +23,7 @@
 #include "HmiTypeRegistry.hpp" // 1.11.19 (refonte, lot 6) : le type du moteur d'un nom de type
 #include "HmiOverload.hpp"     // 1.11.20 : les surcharges (la regle partagee avec le controle)
 #include "HmiEquipmentLink.hpp" // 1.12.11 (lot G) : la liaison Equipement des symboles du synoptique
+#include "HmiRanges.hpp"       // 1.12.10 (lot F) : la plage et les seuils de la variable
 #include "../sim/Interpreter.hpp"
 #include "../sim/Runtime.hpp"
 
@@ -1247,7 +1248,11 @@ const View* Runtime::viewOf(Id id) const {
     auto lk = linkViews_.find(id);
     if (lk == linkViews_.end()) lk = linkViews_.emplace(id, eqlink::viewHasLinks(*v)).first;
     const bool links = lk->second;
-    if (!inherited && !symbols && !owned && !overridden(*v) && !jokers && !links) return v;
+    // 1.12.10 (lot F) : la plage et les seuils pris a la variable, un nom tape sans = (une fois par tick).
+    auto rg = rangeViews_.find(id);
+    if (rg == rangeViews_.end()) rg = rangeViews_.emplace(id, ranges::needed(*project_, *v)).first;
+    const bool ranged = rg->second;
+    if (!inherited && !symbols && !owned && !overridden(*v) && !jokers && !links && !ranged) return v;
     // Une entree de std::map ne bouge pas quand on en ajoute d'autres : le
     // pointeur rendu vaut jusqu'au prochain effacement (entree du moteur).
     auto it = composed_.find(id);
@@ -1271,6 +1276,9 @@ const View* Runtime::viewOf(Id id) const {
         if (links || symbols) (void)eqlink::applyView(*project_, c);
         // 1.12.7 (lot E) : le joker [*] des listes (une plume, une barre, une ligne, une vue, un onglet par element).
         if (jokers || symbols) sources::expandView(c, source, [this, id](std::string_view f) { return jokerText(f, id); });
+        // 1.12.10 (lot F) : une borne, un seuil laisses vides prennent ceux de la variable ; un nom tape sans =
+        // est la variable (apres les jokers et les symboles : leurs objets aussi).
+        (void)ranges::apply(c, *project_);
         it = composed_.emplace(id, std::move(c)).first;
     }
     return &it->second;
@@ -3180,6 +3188,10 @@ void Runtime::initVariables() {
             continue;
         }
         for (const auto& leaf : leaves) slot(leaf.name, leaf.type, leaf.initial, var.name);
+        // 1.12.10 (lot F) : le litteral d'une structure, d'un tableau de structures - ce qui ne s'applique pas
+        // (un membre inconnu, un texte pour un REAL, trop d'elements) garde la valeur du type, et se dit.
+        if (!var.initial.empty())
+            for (const auto& n : types::initialNotes(*project_, var)) logAt(LogLevel::Warning, "Variables", "variable " + var.name, n);
         // 1.12.4 : ses membres objets (Recette.Etapes : LIST OF STRING) - un objet chacun, a sa valeur
         // initiale (le litteral du type IHM) ; illisible : vide, et le journal le dit.
         for (const auto& m : objects) {
@@ -3597,6 +3609,7 @@ void Runtime::tick(double now) {
     composed_.clear(); boundCalls_.clear();                  // le projet a pu changer depuis le dernier appel
     jokerViews_.clear();                                     // 1.12.7 (lot E) : et ses jokers
     linkViews_.clear();                                      // 1.12.11 (lot G) : et ses liaisons Equipement
+    rangeViews_.clear();                                     // 1.12.10 (lot F) : et ses plages
     refreshBound();                     // lot 15 : les variables liees a un equipement
     now_ = std::max(now_, now);
     followWatched(now, false);          // 1.9 : les variables des alarmes, suivies en permanence
