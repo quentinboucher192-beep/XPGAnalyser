@@ -4807,12 +4807,6 @@ private:
             ringOrSetAdd(list, *made);
             return integer(static_cast<std::int64_t>(list.items.size()));
         }
-        if (isRing && u == "VECTOR_RESIZE" && argc >= 2) {
-            auto size = evaluate(*e.arguments[1].second);
-            if (!size) return core::Err<core::Error>(size.error());
-            if (isInteger(size->type()) && size->asInteger() > list.type->capacity)
-                return dialectError(u + " : un " + list.type->text() + " garde au plus " + std::to_string(list.type->capacity) + " valeurs");
-        }
         struct Reshape {
             Obj& o;
             bool on;
@@ -4921,6 +4915,8 @@ private:
             auto size = index(1);
             if (!size) return core::Err<core::Error>(size.error());
             if (*size < 0 || *size > 1000000) return dialectError("VECTOR_RESIZE : taille " + std::to_string(*size) + " hors de 0..1000000");
+            if (isRing && *size > list.type->capacity)          // 1.12.7
+                return dialectError(u + " : un " + list.type->text() + " garde au plus " + std::to_string(list.type->capacity) + " valeurs");
             if (*size < n) list.items.resize(static_cast<std::size_t>(*size));
             while (static_cast<std::int64_t>(list.items.size()) < *size) {
                 ObjRef made;
