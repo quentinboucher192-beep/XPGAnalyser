@@ -26752,6 +26752,18 @@ void tableauModes11213() {
     same(tb::fixedWritePath("=Cuves[2].Consigne"), "Cuves[2].Consigne", "une formule qui n'est qu'un chemin aussi");
     same(tb::fixedWritePath("=PA * 2"), "", "un calcul ne s'ecrit pas");
     same(tb::fixedWritePath("{PA} / {PB}"), "", "deux trous non plus");
+    // La place d'une case et d'un en-tete (les scripts de session cliquent dessus) : un clic en son milieu les retrouve.
+    Object t;
+    t.kind = Kind::Table;
+    t.setNumber("fontSize", 14);
+    const std::vector<double> widths{1.0, 2.0, 1.0};
+    Box b{};
+    const bool cell = tableCellBox(t, 400, 200, "case:1:1", 5, 0, widths, b)
+                   && tableCellHit(t, 400, 200, b.x + b.w / 2, b.y + b.h / 2, 5, 0, widths) == "case:1:1";
+    const bool head = tableCellBox(t, 400, 200, "entete:2", 5, 0, widths, b)
+                   && tableCellHit(t, 400, 200, b.x + b.w / 2, b.y + b.h / 2, 5, 0, widths) == "entete:2";
+    check(cell && head && !tableCellBox(t, 400, 200, "case:9:0", 5, 0, widths, b),
+          "la place d'une case (ligne 2, colonne 2) et d'un en-t\xC3\xAAte : un clic en son milieu les retrouve ; une ligne absente : non");
 }
 
 void tableauAnalyse11213() {

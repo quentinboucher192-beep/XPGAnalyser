@@ -577,6 +577,41 @@ std::string tableCellHit(const Object& o, double w, double h, double x, double y
     return "case:" + std::to_string(l.first + i) + ":" + std::to_string(column);
 }
 
+bool tableCellBox(const Object& o, double w, double h, std::string_view part, std::size_t count, std::size_t first,
+                  const std::vector<double>& widths, Box& out) {
+    const bool header = part.rfind("entete:", 0) == 0;
+    if (!header && part.rfind("case:", 0) != 0) return false;
+    const std::string rest(part.substr(header ? 7 : 5));
+    long long row = -1;
+    int column = 0;
+    if (header) {
+        column = std::atoi(rest.c_str());
+    } else {
+        const auto colon = rest.find(':');
+        if (colon == std::string::npos) return false;
+        row = std::atoll(rest.substr(0, colon).c_str());
+        column = std::atoi(rest.c_str() + colon + 1);
+    }
+    const auto l = tableLayout(o, w, h, count, first);
+    const double width = std::max(1.0, w - l.bar.w);
+    const std::size_t n = std::max<std::size_t>(1, widths.size());
+    if (column < 0 || static_cast<std::size_t>(column) >= n) return false;
+    double total = 0;
+    for (const double c : widths) total += c > 0 ? c : 1.0;
+    double x0 = 0, cw = width;
+    if (total > 0) {
+        for (int k = 0; k < column; ++k) x0 += (widths[static_cast<std::size_t>(k)] > 0 ? widths[static_cast<std::size_t>(k)] : 1.0) / total * width;
+        cw = (widths[static_cast<std::size_t>(column)] > 0 ? widths[static_cast<std::size_t>(column)] : 1.0) / total * width;
+    }
+    if (header) {
+        out = {x0, 0, cw, l.headerH};
+        return true;
+    }
+    if (row < static_cast<long long>(l.first) || row >= static_cast<long long>(l.first + l.fit) || row >= static_cast<long long>(count)) return false;
+    out = {x0, l.headerH + static_cast<double>(row - static_cast<long long>(l.first)) * l.rowH, cw, l.rowH};
+    return true;
+}
+
 std::string comboHit(const Object& o, double w, double h, double x, double y, std::size_t count, bool open, std::size_t first) {
     if (open) {
         const auto l = comboLayout(o, w, h, count, first);

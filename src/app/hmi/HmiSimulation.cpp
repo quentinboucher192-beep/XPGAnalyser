@@ -1460,6 +1460,18 @@ bool HmiLiveCanvas::partRect(std::string_view name, std::string_view part, gfx::
                         found = true;
                         break;
                     }
+                    // 1.12.13 : la case "case:R:C" ou l'en-tete "entete:C" d'un tableau (la mise en page du clic).
+                    case hmi::Kind::Table: {
+                        hmi::table::Model m;
+                        if (!runtime_ || !runtime_->tableShown(layers_[li].view.id, o, m)) break;
+                        const bool rows = hmi::table::modeOf(o) == hmi::table::Mode::Rows;
+                        const std::size_t first = rows ? runtime_->listFirst(o.id) : 0;
+                        std::vector<double> widths = m.widths;
+                        if (!m.columns) widths = hmi::columnFractions(o, std::max<std::size_t>(1, m.headers.size()));
+                        const std::size_t count = rows ? m.rows.size() : std::min(m.rows.size(), hmi::tableLayout(o, box.w, box.h, 0, 0).fit);
+                        found = hmi::tableCellBox(o, box.w, box.h, part, count, first, widths, local);
+                        break;
+                    }
                     // Lot 11 : les parties des objets des alarmes et de la production.
                     case hmi::Kind::AlarmBanner: {
                         const auto l = hmi::bannerLayout(o, box.w, box.h);

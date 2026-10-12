@@ -167,6 +167,10 @@ struct TableLayout {
 // relatives des colonnes (vide : une seule).
 [[nodiscard]] std::string tableCellHit(const Object&, double w, double h, double x, double y, std::size_t count, std::size_t first,
                                        const std::vector<double>& widths);
+// 1.12.13 : la place d'une case ("case:R:C", R une ligne montree) ou d'un en-tete ("entete:C") - les scripts de session
+// et les essais cliquent dessus. Faux : hors du tableau, ou la ligne n'est pas montree (defilee).
+[[nodiscard]] bool tableCellBox(const Object&, double w, double h, std::string_view part, std::size_t count, std::size_t first,
+                                const std::vector<double>& widths, Box& out);
 // "ouvrir" (la boite), "choix:3", "defiler:-1" / "defiler:1", "" (rien).
 [[nodiscard]] std::string comboHit(const Object&, double w, double h, double x, double y, std::size_t count, bool open,
                                    std::size_t first);
