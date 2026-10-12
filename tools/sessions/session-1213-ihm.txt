@@ -40,8 +40,9 @@ objet "Tableau_Cuves"
 attendre 3
 sous-onglet "Propri"
 attendre 3
-# La ligne « Le tableau montre » a l'ecran (sa liste fermee par Echap), et sous elle les reglages du mode.
-propriete-clic "Le tableau montre"
+# La section Tableau a l'ecran jusqu'a « Ligne choisie » (sa liste fermee par Echap) : le mode, Lignes depuis, les
+# colonnes, le tri.
+propriete-clic "Ligne choisie →"
 attendre 2
 touche escape
 attendre 2
