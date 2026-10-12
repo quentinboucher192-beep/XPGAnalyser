@@ -46,6 +46,7 @@ void HmiImageCache::adopt(gfx::IRenderer& r) {
     texts_.clear();
     svgs_.clear();
     gifs_.clear();
+    videos_.clear();   // 1.12.12 (lot H)
 }
 
 void HmiImageCache::purge(gfx::IRenderer& r) {
@@ -85,6 +86,15 @@ void HmiImageCache::purge(gfx::IRenderer& r) {
             for (const auto& f : it->second.gif.frames)
                 if (f.tex.v) r.releaseImage(f.tex);
             it = gifs_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    // 1.12.12 (lot H) : les videos dont le contenu est parti, ou qui ne se dessinent plus (leur decodeur s'arrete).
+    for (auto it = videos_.begin(); it != videos_.end();) {
+        if (it->second.blob.expired() || tick_ - it->second.used > 4096) {
+            if (it->second.image.tex.v) r.releaseImage(it->second.image.tex);
+            it = videos_.erase(it);
         } else {
             ++it;
         }
@@ -157,6 +167,40 @@ const HmiImageCache::Gif* HmiImageCache::gif(gfx::IRenderer& r, const hmi::Resou
         e.gif.frames.push_back(img);
     }
     return &e.gif;
+}
+
+// ---- 1.12.12 (lot H) : la video decodee ----------------------------------------------------
+HmiImageCache::Image HmiImageCache::videoFrame(gfx::IRenderer& r, const hmi::Resource& res, hmi::Id object, double seconds, std::string* why) {
+    if (!res.data || res.kind() != hmi::MediaKind::Video) return {};
+    adopt(r);
+    purge(r);
+    auto& e = videos_[{object, res.data.get()}];
+    e.used = tick_;
+    e.blob = res.data;
+    if (!e.failed && !e.source) {
+        e.source = hmi::video::openFrameSource(res.data, res.format, &e.why);
+        e.failed = !e.source;
+    }
+    if (e.failed) {
+        if (why) *why = e.why;
+        return {};
+    }
+    std::uint64_t serial = 0;
+    const hmi::Rgba* frame = e.source->frameAt(seconds, serial);
+    if (!frame) {
+        // Pas encore d'image (le fil la decode) : la precedente s'il y en a une ; ou la source a echoue.
+        if (e.source->failed(&e.why)) e.failed = true;
+        if (why) *why = e.why;
+        return e.image;
+    }
+    if (serial != e.serial || !e.image.valid()) {
+        if (e.image.tex.v) r.releaseImage(e.image.tex);
+        e.image.tex = r.createImage(frame->pixels.data(), frame->width, frame->height);
+        e.image.width = frame->width;
+        e.image.height = frame->height;
+        e.serial = serial;
+    }
+    return e.image;
 }
 
 HmiImageCache::Image HmiImageCache::svg(gfx::IRenderer& r, const hmi::Resource& res, int width, int height,

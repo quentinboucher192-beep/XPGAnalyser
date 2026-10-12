@@ -29793,6 +29793,112 @@ void lotE1127_editeur() {
     }
 }
 
+// ---- 1.12.12 (lot H) : l'horloge, le texte defilant, la video, le code QR dans l'editeur --------
+//  L'inspecteur propose les reglages nouveaux (absents d'un objet tant qu'on n'y touche pas), avec leurs
+//  choix ; la place d'un code QR se lit ; le dessin de l'editeur montre l'heure fixe d'une horloge dans son
+//  format, les valeurs initiales d'un texte defilant depuis une LIST, et ce qui manque a une video MP4.
+void lotH11212_editeur() {
+    std::printf("1.12.12 (lot H) : l'horloge, le texte defilant, la video, le code QR dans l'editeur\n");
+    Bench b;
+    hmi::Variable annonces;
+    annonces.id = b.doc->project.allocate();
+    annonces.name = "Annonces";
+    annonces.type = "LIST OF STRING";
+    annonces.initial = "['Bienvenue', 'Casque obligatoire']";
+    b.doc->project.programs.variables.push_back(annonces);
+    const auto rows = [&]() {
+        std::map<std::string, ui::PropertyGrid::Property> out;
+        for (const auto& c : b.editor->properties().categories())
+            for (const auto& pr : c.properties) out[pr.name] = pr;
+        return out;
+    };
+    const auto has = [](const ui::PropertyGrid::Property& pr, const char* choice) {
+        return std::find(pr.enumValues.begin(), pr.enumValues.end(), choice) != pr.enumValues.end();
+    };
+    // ---- l'horloge
+    const Id clockId = b.place(Kind::Clock, 100, 100);
+    b.editor->layout();
+    auto r = rows();
+    check(r.count("Heure affich\xC3\xA9" "e (vide : celle de l'IHM)") && r.count("Format de la date") && r.count("Heure sur") && r.count("Fuseau"),
+          "lot H : l'inspecteur d'une horloge propose l'heure affich\xC3\xA9" "e, le format de la date, 12 h / 24 h, le fuseau");
+    check(r.count("Fuseau") && has(r["Fuseau"], "UTC") && has(r["Fuseau"], "UTC+2") && r["Fuseau"].typeIn,
+          "lot H : le fuseau se choisit (local, UTC, UTC+2...) ou se tape (UTC+9:30)");
+    check(r.count("Format de la date") && has(r["Format de la date"], "jour jj mois aaaa") && r.count("Heure sur") && has(r["Heure sur"], "12 h"),
+          "lot H : les formats de la date et 12 h");
+    const hmi::Object* clock = b.v().object(clockId);
+    check(clock && !clock->find("value") && !clock->find("dateFormat") && !clock->find("hourFormat") && !clock->find("timeZone"),
+          "lot H : une horloge neuve ne les porte pas (son fichier ne change pas)");
+    // ---- le texte defilant
+    const Id marqueeId = b.place(Kind::Marquee, 100, 300);
+    b.editor->layout();
+    r = rows();
+    check(r.count("Messages depuis") && has(r["Messages depuis"], "alarmes en cours") && has(r["Messages depuis"], "Annonces")
+              && r["Messages depuis"].typeIn,
+          "lot H : Messages depuis propose \xC2\xAB alarmes en cours \xC2\xBB et les LIST du projet (un nom ou un joker se tape)");
+    check(r.count("S\xC3\xA9parateur des messages") && r.count("Groupe (alarmes en cours)"), "lot H : ... le s\xC3\xA9parateur et le groupe d'alarmes");
+    // ---- la video
+    const Id videoId = b.place(Kind::Video, 500, 100);
+    b.editor->layout();
+    r = rows();
+    check(r.count("Lecture (fausse : pause)") && r.count("Variable de la position (s)") && r.count("Condition (joue tant qu'elle est vraie)"),
+          "lot H : l'inspecteur d'une vid\xC3\xA9o propose la Lecture, la condition, la variable de la position");
+    check(r.count("D\xC3\xA9part") && has(r["D\xC3\xA9part"], "\xC3\xA0 l'affichage") && has(r["D\xC3\xA9part"], "sur condition")
+              && !has(r["D\xC3\xA9part"], "sur action") && r.count("R\xC3\xA9p\xC3\xA9tition") && has(r["R\xC3\xA9p\xC3\xA9tition"], "une fois")
+              && !has(r["R\xC3\xA9p\xC3\xA9tition"], "N fois"),
+          "lot H : D\xC3\xA9part (\xC3\xA0 l'affichage, sur condition) et R\xC3\xA9p\xC3\xA9tition (en boucle, une fois)");
+    // ---- le code QR : la place qui reste
+    const Id qrId = b.place(Kind::QrCode, 500, 400);
+    b.editor->layout();
+    r = rows();
+    check(r.count("Place") && r["Place"].value == "reste 2\xC2\xA0" "302 octets en M, version 3" && r["Place"].type == ui::PropertyGrid::ValueType::ReadOnly,
+          "lot H : la place d'un code QR neuf : \xC2\xAB " + (r.count("Place") ? r["Place"].value : std::string("?")) + " \xC2\xBB (en lecture seule)");
+    b.v().object(qrId)->set("text", std::string(3000, 'q'));
+    b.editor->canvas().setSelection({});
+    b.editor->canvas().setSelection({qrId});
+    b.editor->layout();
+    r = rows();
+    check(r.count("Place") && r["Place"].value.rfind("trop long : 3\xC2\xA0" "000 octets", 0) == 0, "lot H : trop long, dit dans l'inspecteur");
+    check(!b.v().object(qrId)->find("qrRoom"), "lot H : la place ne s'enregistre pas (une ligne calcul\xC3\xA9" "e)");
+    // ---- le dessin de l'editeur
+    hmi::View& v = b.v();
+    v.object(clockId)->set("clockStyle", "num\xC3\xA9rique");
+    v.object(clockId)->set("value", "TOD#14:30:05");
+    v.object(clockId)->set("hourFormat", "12 h");
+    v.object(clockId)->set("dateFormat", "jour jj mois aaaa");
+    v.object(clockId)->set("w", "600");
+    v.object(marqueeId)->set("messagesFrom", "Annonces");
+    v.object(marqueeId)->set("w", "900");
+    hmi::Resource mp4;
+    mp4.id = b.doc->project.allocate();
+    mp4.name = "presentation.mp4";
+    mp4.format = "MP4";
+    mp4.detail = "H.264 (avc1)";
+    mp4.width = 640;
+    mp4.height = 360;
+    mp4.seconds = 4;
+    mp4.data = std::make_shared<hmi::Bytes>(hmi::Bytes{0, 0, 0, 8, 'f', 'r', 'e', 'e'});
+    b.doc->project.assets.resources.push_back(mp4);
+    v.object(videoId)->set("video", "presentation.mp4");
+    v.object(videoId)->set("w", "1400");
+    app::HmiViewport vp;
+    vp.zoom = 1.f;
+    const auto theme = ui::Theme::dark();
+    app::HmiPaintOptions opt;
+    opt.assets = &b.doc->project.assets;
+    opt.project = &b.doc->project;
+    TriRecorder clockRec, marqueeRec, videoRec;
+    app::paintHmiObject(clockRec, v, *v.object(clockId), vp, app::HmiPropertySource{}, theme, opt);
+    app::paintHmiObject(marqueeRec, v, *v.object(marqueeId), vp, app::HmiPropertySource{}, theme, opt);
+    app::paintHmiObject(videoRec, v, *v.object(videoId), vp, app::HmiPropertySource{}, theme, opt);
+    check(clockRec.wrote("02:30:05 PM"), "lot H : l'horloge montre son heure fixe, sur 12 h (02:30:05 PM)");
+    check(clockRec.wrote("lundi 23 septembre 2026") || clockRec.wrote("mercredi 23 septembre 2026"),
+          "lot H : ... et la date d'exemple dans son format (le jour, le mois en toutes lettres)");
+    check(marqueeRec.wrote("Bienvenue   \xC2\xB7   Casque obligatoire"), "lot H : le texte d\xC3\xA9" "filant montre les valeurs initiales de sa LIST, s\xC3\xA9par\xC3\xA9" "es");
+#if !defined(_WIN32)
+    check(videoRec.wrote("MP4 : d\xC3\xA9" "cod\xC3\xA9 sous Windows seulement"), "lot H : une vid\xC3\xA9o MP4 dit ce qui lui manque ici (Windows seulement)");
+#endif
+}
+
 int main(int argc, char** argv) {
     // 1.11.1 (API-V) : HMI_TEST_APIV=1 - la vue des variables de l'automate et API dans l'aide a la saisie, seules.
     if (const char* only = std::getenv("HMI_TEST_APIV"); only && *only == '1') {
@@ -29814,6 +29920,12 @@ int main(int argc, char** argv) {
         lotD1127_contenu();
         lotD1127_choix();
         lotE1127_editeur();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
+    // 1.12.12 : HMI_TEST_11212=1 - le lot H (medias, 2e partie), seul.
+    if (const char* only = std::getenv("HMI_TEST_11212"); only && *only == '1') {
+        lotH11212_editeur();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -30023,6 +30135,7 @@ int main(int argc, char** argv) {
     lotD1127_contenu();                   // 1.12.7 (lot D) : les listes en tableau dans Contenu
     lotD1127_choix();                     // 1.12.7 (lot D) : les listes a choix de l'inspecteur
     lotE1127_editeur();                   // 1.12.7 (lot E) : depuis une enumeration, Repeter depuis
+    lotH11212_editeur();                  // 1.12.12 (lot H) : l'horloge, le texte defilant, la video, le code QR
     etats1123();                       // 1.12.3 : les etats des objets multi-etats en table
     communes1123();                    // 1.12.3 : plusieurs objets choisis, leurs proprietes communes
     voixDesSons1123();                 // 1.12.3 : les voix des sons (melange)

@@ -54,6 +54,7 @@
 #include "HmiLog.hpp"                  // 1.11.14 : les niveaux de IHM_LOG
 #include "HmiSimData.hpp"              // 1.11.15 : la remanence de simulation
 #include "HmiSources.hpp"              // 1.12.7 (lot E) : le joker [*], « Repeter depuis »
+#include "HmiVideo.hpp"                // 1.12.12 (lot H) : la lecture d'une video
 
 #include <cstdint>
 #include <deque>
@@ -747,6 +748,17 @@ public:
     // celui de l'objet). Faux : pas de GIF anime de ce nom dans une vue ouverte.
     bool gifCommand(std::string_view objectName, std::string_view what, int count, double now, const std::string& source,
                     std::string* why = nullptr);
+    // ---- 1.12.12 (lot H) : les medias (HmiRuntimeMedias.cpp) ------------------------------------
+    //  LA VIDEO : chaque objet Video d'une vue ouverte a sa lecture (video::Playback, HmiVideo.hpp) -
+    //  partie a l'affichage ou sur condition, en pause quand sa Lecture est fausse, en boucle ou une
+    //  fois ; sa position (secondes) s'ecrit dans sa variable de position s'il en a une. Le dessin
+    //  montre l'image a cette position (le decodeur est cote ecran, HmiImageCache).
+    //  LE TEXTE DEFILANT : les messages de sa source (Messages depuis : une LIST ou un tableau de
+    //  textes, un joker [*], les alarmes en cours), relus a chaque cycle.
+    //  LE CODE QR : un texte calcule trop long se dit une fois a la Console (l'objet montre « trop long »).
+    [[nodiscard]] const video::Playback* videoPlayback(Id object) const;
+    // Nul : l'objet n'a pas de source (il defile son texte) ; vide : sa source n'a rien en ce moment.
+    [[nodiscard]] const std::vector<std::string>* marqueeMessages(Id object) const;
     [[nodiscard]] comm::Link*      equipmentLink(std::string_view equipment);
     [[nodiscard]] std::vector<EquipmentStatus> equipmentStatuses() const;
     [[nodiscard]] std::optional<EquipmentStatus> equipmentStatus(std::string_view name) const;
@@ -1438,6 +1450,16 @@ private:
     void gifsOpenView(const View&, double now);
     void gifsCycle(double now);
     bool gifMemberValue(const Object&, std::string_view info, sim::Value& out) const;
+    // 1.12.12 (lot H) : les medias - la lecture des videos, les messages des textes defilants, les objets
+    // deja dits a la Console (un code QR trop long, une variable de position refusee : une fois par objet
+    // et par marche).
+    std::map<Id, video::Playback>              videos_;
+    std::map<Id, std::vector<std::string>>     marquees_;
+    std::set<Id>                               qrTold_;
+    void mediasReset();
+    void mediasOpenView(const View&, double now);
+    void mediasCycle(double now);
+    [[nodiscard]] std::vector<std::string> marqueeSource(std::string_view from, Id view) const;
     void reportsCycle(double now);                                      // lot 14 : les rapports a leur heure
     std::map<Id, std::pair<std::string, std::vector<std::string>>> alarmPaths_;   // la condition, ses chemins d'automate
     std::map<std::string, std::vector<std::string>, std::less<>>    exprPaths_;    // une expression, ses chemins d'automate

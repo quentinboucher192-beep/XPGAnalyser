@@ -14,6 +14,7 @@
 #include "HmiRuntime.hpp"
 #include "HmiScript.hpp"        // 1.11.10 : splitDeclarations (les noms qu'une fonction de symbole cache)
 #include "HmiSources.hpp"       // 1.12.7 (lot E) : le joker [*], le dossier /*
+#include "HmiMarquee.hpp"      // 1.12.12 (lot H) : la source des messages d'un texte defilant
 #include "HmiTemplates.hpp"
 #include "HmiWidgets.hpp"
 
@@ -923,7 +924,9 @@ void rewriteNames(Object& o, const std::function<std::string(std::string_view, b
                    || p.key == "min" || p.key == "max"
                    // 1.12.4 : la source d'une liste, d'un tableau (<- L, un parametre objet du symbole ;
                    // une variable renommee la suit).
-                   || p.key == "itemsFrom" || p.key == "rowsFrom") {
+                   || p.key == "itemsFrom" || p.key == "rowsFrom"
+                   // 1.12.12 (lot H) : la Lecture d'une video et sa variable de position.
+                   || p.key == "playing" || p.key == "positionVariable") {
             expr(p.value);
         } else if (p.key == "variables" || p.key == "references"
                    || p.key == "values") {   // les plumes d'une courbe, les elements d'un graphique : a;b;c ; 1.12.5 : les valeurs ecrites d'un selecteur
@@ -982,6 +985,8 @@ void rewriteNames(Object& o, const std::function<std::string(std::string_view, b
             expr(p.value);   // 1.12.7 (lot E) : la reference d'une courbe XY depuis une source (Ref[*].X,Ref[*].Y)
         } else if (p.key == sources::kRepeatFromKey || p.key == sources::kStatesFromKey) {
             expr(p.value);   // 1.12.7 (lot E) : la source d'une instance repetee (Cuves), des etats (Etats)
+        } else if (p.key == marquee::kMessagesFromKey && !marquee::isAlarmSource(p.value)) {
+            expr(p.value);   // 1.12.12 (lot H) : la source des messages d'un texte defilant (Messages, Consignes[*].Texte)
         }
     }
     for (auto& a : o.actions) {

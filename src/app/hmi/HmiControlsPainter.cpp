@@ -14,9 +14,11 @@
 // =============================================================================
 #include "HmiPaintKit.hpp"
 
+#include "../../hmi/HmiClock.hpp"      // 1.12.12 (lot H) : l'horloge liee a une variable
 #include "../../hmi/HmiControls.hpp"
 #include "../../hmi/HmiDisplay.hpp"
 #include "../../hmi/HmiExpr.hpp"
+#include "../../hmi/HmiMarquee.hpp"   // 1.12.12 (lot H) : le texte defilant depuis une source
 #include "../../hmi/HmiQr.hpp"
 #include "../../hmi/HmiRuntime.hpp"
 
@@ -714,21 +716,38 @@ void drawDial(const Ctx& c) {
 
 void drawClock(const Ctx& c) {
     const double w = c.w(), h = c.h();
+    // 1.12.12 (lot H) : l'heure montree - celle de l'IHM dans le fuseau de l'horloge (local : comme avant), ou
+    // celle de « Heure affichee » (une TOD, une DT, une DATE, une STRING ISO, un REAL en secondes) ; le format
+    // de la date, 12 h ou 24 h. Dans l'editeur : l'heure d'exemple, ou la valeur fixe tapee.
+    hmi::clock::Zone zone;
+    (void)hmi::clock::parseZone(c.src.text(c.o, "timeZone", "local"), zone);
+    const bool live = c.opt.runtime && !c.opt.editor;
     hmi::DateTime t{2026, 9, 23, 10, 8, 30};
-    if (c.opt.runtime && !c.opt.editor) t = hmi::dateTimeFromEpoch(c.opt.runtime->epochOf(c.opt.runtime->now()));
+    if (live) t = hmi::clock::civilOf(c.opt.runtime->epochOf(c.opt.runtime->now()), zone);
+    const auto* vp = c.o.find("value");
+    const bool bound = vp && (!vp->expr.empty() || vp->value.find_first_not_of(" \t") != std::string::npos);
+    bool known = true;
+    if (bound && (live || vp->expr.empty())) {
+        const auto r = hmi::clock::read(c.src.text(c.o, "value"), zone, t);
+        known = r.ok && !badQuality(c);
+        if (known) t = r.time;
+    }
     const bool seconds = c.src.flag(c.o, "seconds", true), showDate = c.src.flag(c.o, "showDate", true);
+    const bool twelve = c.src.text(c.o, "hourFormat", "24 h") == "12 h";
     const double fs = fsOf(c, 20);
     const gfx::Color txt = colorOf(c, "textColor", 0xE6EAF0);
-    char date[16];
-    std::snprintf(date, sizeof date, "%02d/%02d/%04d", t.day, t.month, t.year);
+    const std::string dateFormat = c.src.text(c.o, "dateFormat", "jj/mm/aaaa");
+    const bool longDate = dateFormat != "jj/mm/aaaa";   // un format plus long se raccourcit s'il ne tient pas
+    const std::string date = hmi::clock::formatDate(t, dateFormat);
     if (c.src.text(c.o, "clockStyle", "analogique") == "num\xC3\xA9rique") {
         fillAndStroke(c, rectLocal(w, h, 6));
-        char time[16];
-        if (seconds) std::snprintf(time, sizeof time, "%02d:%02d:%02d", t.hour, t.minute, t.second);
-        else std::snprintf(time, sizeof time, "%02d:%02d", t.hour, t.minute);
+        const std::string time = known ? hmi::clock::formatTime(t, twelve, seconds) : std::string("###");
         const double big = std::min(fs * 1.6, h * (showDate ? 0.45 : 0.62));
-        text(c, time, 0, showDate ? h * 0.08 : 0, w, showDate ? h * 0.58 : h, txt, big, "centre");
-        if (showDate) text(c, date, 0, h * 0.62, w, h * 0.3, withAlpha(txt, 0.7f), std::min(fs * 0.7, h * 0.2), "centre");
+        text(c, twelve ? fitted(c, time, w - 6, big) : time, 0, showDate ? h * 0.08 : 0, w, showDate ? h * 0.58 : h,
+             known ? txt : c.fixedText(0x8A94A3), big, "centre");
+        const double small = std::min(fs * 0.7, h * 0.2);
+        if (showDate && known)
+            text(c, longDate ? fitted(c, date, w - 6, small) : date, 0, h * 0.62, w, h * 0.3, withAlpha(txt, 0.7f), small, "centre");
         return;
     }
     const double cx = w / 2, cy = h / 2, R = std::max(10.0, std::min(w, h) / 2 - 3);
@@ -742,7 +761,15 @@ void drawClock(const Ctx& c) {
         lineLocal(c, cx + std::cos(a) * r0, cy + std::sin(a) * r0, cx + std::cos(a) * R * 0.95, cy + std::sin(a) * R * 0.95,
                   major ? txt : withAlpha(txt, 0.5f), major ? 2 : 1);
     }
-    if (showDate) text(c, date, cx - R * 0.6, cy + R * 0.28, R * 1.2, R * 0.2, withAlpha(txt, 0.7f), std::min(fs * 0.6, R * 0.14), "centre");
+    if (!known) {
+        // Une valeur qui ne se lit pas comme une heure : pas d'aiguilles, ###.
+        text(c, "###", cx - R * 0.6, cy - R * 0.2, R * 1.2, R * 0.4, c.fixedText(0x8A94A3), std::min(fs, R * 0.3), "centre");
+        return;
+    }
+    if (showDate) text(c, longDate ? fitted(c, date, R * 1.2, std::min(fs * 0.6, R * 0.14)) : date, cx - R * 0.6, cy + R * 0.28, R * 1.2, R * 0.2,
+                       withAlpha(txt, 0.7f), std::min(fs * 0.6, R * 0.14), "centre");
+    if (twelve) text(c, t.hour < 12 ? "AM" : "PM", cx - R * 0.3, cy - R * 0.45, R * 0.6, R * 0.2, withAlpha(txt, 0.7f), std::min(fs * 0.6, R * 0.14),
+                     "centre");
     // Les aiguilles (angles : 0 en haut, sens horaire).
     const auto hand = [&](double turns, double len, double width, gfx::Color col) {
         const double a = (turns * 360.0 - 90.0) * kPi / 180.0;
@@ -849,11 +876,29 @@ void drawTrendArrow(const Ctx& c) {
     fillLocal(c, arrow, col);
 }
 
+// 1.12.12 (lot H) : ce que defile l'objet - les messages de sa source (Messages depuis : une LIST, un tableau de
+// textes, un joker, les alarmes en cours) l'un apres l'autre, separes ; dans l'editeur, les valeurs initiales.
+// Sans source, ou une source vide : son texte, comme avant.
+std::string marqueeText(const Ctx& c) {
+    const std::string own = c.src.text(c.o, "text");
+    const auto* from = c.o.find(hmi::marquee::kMessagesFromKey);
+    if (!from || (from->expr.empty() && from->value.find_first_not_of(" \t") == std::string::npos)) return own;
+    std::vector<std::string> messages;
+    if (c.opt.runtime && !c.opt.editor) {
+        if (const auto* m = c.opt.runtime->marqueeMessages(c.o.id)) messages = *m;
+    } else if (c.opt.project && from->expr.empty()) {
+        messages = hmi::marquee::preview(*c.opt.project, from->value, c.src.text(c.o, "group"));
+    }
+    const auto* sep = c.o.find("separator");
+    const std::string joined = hmi::marquee::join(messages, sep ? c.src.text(c.o, "separator") : std::string(hmi::marquee::kDefaultSeparator));
+    return joined.empty() ? own : joined;
+}
+
 void drawMarquee(const Ctx& c) {
     const double w = c.w(), h = c.h();
     const auto shape = rectLocal(w, h, 3);
     fillLocal(c, shape, colorOf(c, "fill", 0x1B2028));
-    const std::string msg = c.src.text(c.o, "text");
+    const std::string msg = marqueeText(c);
     const double fs = std::min(fsOf(c, 18), h * 0.75);
     const double tw = measureLocal(c, msg, fs);
     const double gap = std::max(60.0, w * 0.25);
@@ -903,8 +948,13 @@ void drawQrCode(const Ctx& c) {
     const hmi::QrCode qr = qrOf(c.src.text(c.o, "text"), lv.empty() ? 'M' : lv[0]);
     fillLocal(c, rectLocal(w, h), colorOf(c, "fill", 0xFFFFFF));
     if (!qr.ok()) {
-        text(c, "Code QR", 0, 0, w, h * 0.5, c.fixedText(0x8A3A3A), 13, "centre");
-        text(c, fitted(c, qr.error, w - 6, 10), 0, h * 0.5, w, h * 0.4, c.fixedText(0x5A6678), 10, "centre", true);
+        // 1.12.12 (lot H) : un texte trop long le dit sur l'objet (« trop long », et ce que le niveau loge) ; en
+        // marche, un texte calcule trop long est aussi dit une fois a la Console.
+        const std::string tooLong = "trop long : ";
+        const bool longText = qr.error.rfind(tooLong, 0) == 0;
+        text(c, longText ? std::string("trop long") : std::string("Code QR"), 0, 0, w, h * 0.5, c.fixedText(0x8A3A3A), 13, "centre");
+        text(c, fitted(c, longText ? qr.error.substr(tooLong.size()) : qr.error, w - 6, 10), 0, h * 0.5, w, h * 0.4, c.fixedText(0x5A6678), 10,
+             "centre", true);
         return;
     }
     const int margin = static_cast<int>(std::clamp(c.src.number(c.o, "margin", 2), 0.0, 10.0));

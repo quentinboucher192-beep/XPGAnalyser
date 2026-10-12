@@ -95,7 +95,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <AdditionalLibraryDirectories>$(SDL3_DIR)\lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>SDL3.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>SDL3.lib;mfplat.lib;mfreadwrite.lib;mfuuid.lib;mf.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <!-- 1.8.0 : page de code UTF-8, chemins longs, versions de Windows (voir le fichier). -->
     <Manifest>
@@ -248,6 +248,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\hmi\HmiAssets.cpp" />
     <ClCompile Include="src\hmi\HmiCharts.cpp" />
     <ClCompile Include="src\hmi\HmiCheck.cpp" />
+    <ClCompile Include="src\hmi\HmiClock.cpp" />
     <ClCompile Include="src\hmi\HmiComm.cpp" />
     <ClCompile Include="src\hmi\HmiCommands.cpp" />
     <ClCompile Include="src\hmi\HmiControls.cpp" />
@@ -270,6 +271,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\hmi\HmiLanguages.cpp" />
     <ClCompile Include="src\hmi\HmiLive.cpp" />
     <ClCompile Include="src\hmi\HmiLoginMenu.cpp" />
+    <ClCompile Include="src\hmi\HmiMarquee.cpp" />
     <ClCompile Include="src\hmi\HmiMedia.cpp" />
     <ClCompile Include="src\hmi\HmiModbus.cpp" />
     <ClCompile Include="src\hmi\HmiModbusTool.cpp" />
@@ -294,6 +296,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\hmi\HmiRuntimeLot14.cpp" />
     <ClCompile Include="src\hmi\HmiRuntimeLot15.cpp" />
     <ClCompile Include="src\hmi\HmiRuntimeLot16.cpp" />
+    <ClCompile Include="src\hmi\HmiRuntimeMedias.cpp" />
     <ClCompile Include="src\hmi\HmiRuntimePublic.cpp" />
     <ClCompile Include="src\hmi\HmiRuntimeSystem.cpp" />
     <ClCompile Include="src\hmi\HmiScenarios.cpp" />
@@ -307,6 +310,8 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\hmi\HmiTwin.cpp" />
     <ClCompile Include="src\hmi\HmiTypes.cpp" />
     <ClCompile Include="src\hmi\HmiVersions.cpp" />
+    <ClCompile Include="src\hmi\HmiVideo.cpp" />
+    <ClCompile Include="src\hmi\HmiVideoMf.cpp" />
     <ClCompile Include="src\hmi\HmiWeb.cpp" />
     <ClCompile Include="src\hmi\HmiWidgets.cpp" />
     <ClCompile Include="src\hmi\HmiZones.cpp" />
@@ -693,6 +698,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\hmi\HmiAssets.hpp" />
     <ClInclude Include="src\hmi\HmiCharts.hpp" />
     <ClInclude Include="src\hmi\HmiCheck.hpp" />
+    <ClInclude Include="src\hmi\HmiClock.hpp" />
     <ClInclude Include="src\hmi\HmiComm.hpp" />
     <ClInclude Include="src\hmi\HmiCommands.hpp" />
     <ClInclude Include="src\hmi\HmiControls.hpp" />
@@ -714,6 +720,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\hmi\HmiLanguages.hpp" />
     <ClInclude Include="src\hmi\HmiLive.hpp" />
     <ClInclude Include="src\hmi\HmiLoginMenu.hpp" />
+    <ClInclude Include="src\hmi\HmiMarquee.hpp" />
     <ClInclude Include="src\hmi\HmiMedia.hpp" />
     <ClInclude Include="src\hmi\HmiModbus.hpp" />
     <ClInclude Include="src\hmi\HmiModbusTool.hpp" />
@@ -743,6 +750,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\hmi\HmiTwin.hpp" />
     <ClInclude Include="src\hmi\HmiTypes.hpp" />
     <ClInclude Include="src\hmi\HmiVersions.hpp" />
+    <ClInclude Include="src\hmi\HmiVideo.hpp" />
     <ClInclude Include="src\hmi\HmiWeb.hpp" />
     <ClInclude Include="src\hmi\HmiWidgets.hpp" />
     <ClInclude Include="src\hmi\HmiZones.hpp" />

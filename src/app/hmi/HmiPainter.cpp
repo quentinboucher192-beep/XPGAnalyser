@@ -1717,30 +1717,51 @@ void paintHmiObject(gfx::IRenderer& r, const hmi::View& view, const Object& o, c
             drawTrendObject(c, view);
             break;
         case Kind::Video: {
-            // Une video n'est pas decodee (pas de decodeur H.264 / VP9 d'un seul
-            // fichier) : son image d'attente, ce que dit son conteneur, et en
-            // marche une barre de lecture qui avance a son rythme.
+            // 1.12.12 (lot H) : LA VIDEO DECODEE - le Motion-JPEG en AVI partout, MP4 / WMV / MOV sous Windows (Media
+            // Foundation, HmiVideo.hpp). En marche, l'image a la position de sa lecture (le moteur : partie a
+            // l'affichage ou sur condition, en pause, en boucle ou une fois) ; avant la premiere image, ou quand la
+            // plateforme ne decode pas ce format, l'image d'attente, et le bandeau dit ce qui manque. Dans l'editeur :
+            // sa premiere image (sinon l'image d'attente), ce que dit son conteneur.
             shapes::fillPolygon(r, c.map(rectLocal(w, h)), c.color("fill", gfx::Color::rgb(0x101318)));
             const auto* video = resourceNamed(c, src.text(o, "video"));
             const auto* poster = resourceNamed(c, src.text(o, "poster"));
-            const auto posterImg = poster ? HmiImageCache::instance().resource(r, *poster) : HmiImageCache::Image{};
-            if (posterImg.valid()) drawResourceImage(c, posterImg, "ajuster", 0, 0, w, h);
-            const double s = std::min(w, h) * 0.22;
-            shapes::fillPolygon(r, c.map({{static_cast<float>(w / 2 - s / 2), static_cast<float>(h / 2 - s / 2)},
-                                          {static_cast<float>(w / 2 + s / 2), static_cast<float>(h / 2)},
-                                          {static_cast<float>(w / 2 - s / 2), static_cast<float>(h / 2 + s / 2)}}),
-                                fade(gfx::Color{230, 236, 244, 220}, alpha));
-            std::string label = video ? video->name : src.text(o, "video").empty() ? std::string("Vid\xC3\xA9o") : src.text(o, "video") + " (absente)";
-            if (video && video->width > 0)
-                label += "  \xC2\xB7  " + std::to_string(video->width) + " x " + std::to_string(video->height) + "  \xC2\xB7  "
-                       + hmi::formatDuration(video->seconds);
+            const auto* pb = !opt.editor && opt.runtime ? opt.runtime->videoPlayback(o.id) : nullptr;
+            std::string why;
+            HmiImageCache::Image frame;
+            if (video && (opt.editor || (pb && pb->started)))
+                frame = HmiImageCache::instance().videoFrame(r, *video, opt.editor ? hmi::kNoId : o.id, pb ? pb->position : 0.0, &why);
+            if (frame.valid()) {
+                drawResourceImage(c, frame, "ajuster", 0, 0, w, h);
+            } else {
+                const auto posterImg = poster ? HmiImageCache::instance().resource(r, *poster) : HmiImageCache::Image{};
+                if (posterImg.valid()) drawResourceImage(c, posterImg, "ajuster", 0, 0, w, h);
+            }
+            if (video && why.empty() && !hmi::video::decodedHere(video->format, video->detail))
+                why = hmi::video::decodeAdvice(video->format, video->detail);
+            const bool moving = pb && pb->playing && frame.valid();
+            if (!moving) {
+                const double s = std::min(w, h) * 0.22;
+                shapes::fillPolygon(r, c.map({{static_cast<float>(w / 2 - s / 2), static_cast<float>(h / 2 - s / 2)},
+                                              {static_cast<float>(w / 2 + s / 2), static_cast<float>(h / 2)},
+                                              {static_cast<float>(w / 2 - s / 2), static_cast<float>(h / 2 + s / 2)}}),
+                                    fade(gfx::Color{230, 236, 244, frame.valid() ? std::uint8_t(140) : std::uint8_t(220)}, alpha));
+            }
+            // Le bandeau : dans l'editeur, et en marche tant que la video ne se montre pas (ce qui manque y est dit).
             const double band = std::min(28.0, h / 4);
-            shapes::fillPolygon(r, c.map({{0.f, static_cast<float>(h - band)}, {static_cast<float>(w), static_cast<float>(h - band)},
-                                          {static_cast<float>(w), static_cast<float>(h)}, {0.f, static_cast<float>(h)}}),
-                                fade(gfx::Color{0, 0, 0, 150}, alpha));
-            text(c, fitted(c, label, w - 12, 12), 0, h - band, w, band, fade(c.seen(gfx::Color::rgb(0xE6EAF0)), alpha), 12, "gauche");
-            if (!opt.editor && video && video->seconds > 0) {
-                const double f = std::fmod(opt.time, video->seconds) / video->seconds;
+            if (opt.editor || !frame.valid()) {
+                std::string label = video ? video->name : src.text(o, "video").empty() ? std::string("Vid\xC3\xA9o") : src.text(o, "video") + " (absente)";
+                if (video && video->width > 0)
+                    label += "  \xC2\xB7  " + std::to_string(video->width) + " x " + std::to_string(video->height) + "  \xC2\xB7  "
+                           + hmi::formatDuration(video->seconds);
+                if (!why.empty()) label += "  \xC2\xB7  " + why;
+                shapes::fillPolygon(r, c.map({{0.f, static_cast<float>(h - band)}, {static_cast<float>(w), static_cast<float>(h - band)},
+                                              {static_cast<float>(w), static_cast<float>(h)}, {0.f, static_cast<float>(h)}}),
+                                    fade(gfx::Color{0, 0, 0, 150}, alpha));
+                text(c, fitted(c, label, w - 12, 12), 0, h - band, w, band, fade(c.seen(gfx::Color::rgb(0xE6EAF0)), alpha), 12, "gauche");
+            }
+            // La position : une barre fine en bas, a la place de la lecture.
+            if (pb && pb->started && video && video->seconds > 0) {
+                const double f = std::clamp(pb->position / video->seconds, 0.0, 1.0);
                 shapes::fillPolygon(r, c.map({{0.f, static_cast<float>(h - 3)}, {static_cast<float>(w * f), static_cast<float>(h - 3)},
                                               {static_cast<float>(w * f), static_cast<float>(h)}, {0.f, static_cast<float>(h)}}),
                                     fade(c.seen(gfx::Color::rgb(0x2F6FD6)), alpha));

@@ -1,5 +1,7 @@
 #include "HmiMedia.hpp"
 
+#include "HmiVideo.hpp"   // 1.12.12 (lot H) : l'AVI (le Motion-JPEG)
+
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -347,6 +349,41 @@ void webmWalk(const Reader& r, std::size_t from, std::size_t to, WebmInfo& info,
     }
 }
 
+// ---- 1.12.12 (lot H) : WMV / ASF - des objets (un GUID, une taille sur 8 octets) -------------
+struct AsfInfo { double seconds{0}; int width{0}, height{0}; std::string codec; bool ok{false}; };
+AsfInfo readAsf(const Bytes& d) {
+    static const std::uint8_t kHeader[16] = {0x30, 0x26, 0xB2, 0x75, 0x8E, 0x66, 0xCF, 0x11, 0xA6, 0xD9, 0x00, 0xAA, 0x00, 0x62, 0xCE, 0x6C};
+    static const std::uint8_t kFileProps[16] = {0xA1, 0xDC, 0xAB, 0x8C, 0x47, 0xA9, 0xCF, 0x11, 0x8E, 0xE4, 0x00, 0xC0, 0x0C, 0x20, 0x53, 0x65};
+    static const std::uint8_t kStreamProps[16] = {0x91, 0x07, 0xDC, 0xB7, 0xB7, 0xA9, 0xCF, 0x11, 0x8E, 0xE6, 0x00, 0xC0, 0x0C, 0x20, 0x53, 0x65};
+    static const std::uint8_t kVideoMedia[16] = {0xC0, 0xEF, 0x19, 0xBC, 0x4D, 0x5B, 0xCF, 0x11, 0xA8, 0xFD, 0x00, 0x80, 0x5F, 0x5C, 0x44, 0x2B};
+    AsfInfo out;
+    Reader r{d.data(), d.size()};
+    if (!r.has(0, 30) || std::memcmp(d.data(), kHeader, 16) != 0) return out;
+    out.ok = true;
+    const auto le64 = [&](std::size_t at) { return static_cast<std::uint64_t>(r.le32(at)) | (static_cast<std::uint64_t>(r.le32(at + 4)) << 32); };
+    const std::uint64_t headerSize = le64(16);
+    const std::size_t end = static_cast<std::size_t>(std::min<std::uint64_t>(headerSize, d.size()));
+    std::size_t at = 30;
+    for (int guard = 0; at + 24 <= end && guard < 256; ++guard) {
+        const std::uint64_t size = le64(at + 16);
+        if (size < 24 || size > end - at) break;
+        if (std::memcmp(d.data() + at, kFileProps, 16) == 0 && r.has(at, 88)) {
+            const double play = static_cast<double>(le64(at + 64)) / 1e7, preroll = static_cast<double>(le64(at + 80)) / 1000.0;
+            out.seconds = std::max(0.0, play - preroll);
+        } else if (std::memcmp(d.data() + at, kStreamProps, 16) == 0 && r.has(at, 109) && std::memcmp(d.data() + at + 24, kVideoMedia, 16) == 0
+                   && out.width == 0) {
+            out.width = static_cast<int>(r.le32(at + 78));
+            out.height = static_cast<int>(r.le32(at + 82));
+            for (std::size_t k = 0; k < 4; ++k) {
+                const char c = static_cast<char>(d[at + 105 + k]);
+                if (std::isprint(static_cast<unsigned char>(c)) && c != ' ') out.codec += c;
+            }
+        }
+        at += static_cast<std::size_t>(size);
+    }
+    return out;
+}
+
 // ---- polices : la table 'name' ----------------------------------------------------------
 std::string utf16beToUtf8(const std::uint8_t* p, std::size_t n) {
     std::string out;
@@ -433,6 +470,7 @@ std::string formatFromExtension(std::string_view fileName) {
     if (ext == "PNG" || ext == "BMP" || ext == "SVG" || ext == "ICO" || ext == "WAV" || ext == "MP3" || ext == "MP4"
         || ext == "WEBM" || ext == "TTF" || ext == "OTF")
         return ext;
+    if (ext == "AVI" || ext == "MOV" || ext == "WMV") return ext;                     // 1.12.12 (lot H) : la video decodee
     if (ext == "TTC") return "TTF";
     return {};
 }
@@ -440,14 +478,14 @@ std::string formatFromExtension(std::string_view fileName) {
 MediaKind kindOfFormat(std::string_view f) noexcept {
     if (f == "PNG" || f == "JPEG" || f == "BMP" || f == "SVG" || f == "ICO" || f == "GIF") return MediaKind::Image;
     if (f == "WAV" || f == "MP3") return MediaKind::Sound;
-    if (f == "MP4" || f == "WEBM") return MediaKind::Video;
+    if (f == "MP4" || f == "WEBM" || f == "AVI" || f == "MOV" || f == "WMV") return MediaKind::Video;   // 1.12.12 : AVI, MOV, WMV
     if (f == "TTF" || f == "OTF") return MediaKind::Font;
     // Lot API 8 : un autre format (l'extension d'un document) : un document.
     return f.empty() ? MediaKind::Unknown : MediaKind::Document;
 }
 
 std::string_view acceptedExtensions() noexcept {
-    return "PNG, JPG, JPEG, BMP, SVG, ICO, GIF, WAV, MP3, MP4, WEBM, TTF, OTF";
+    return "PNG, JPG, JPEG, BMP, SVG, ICO, GIF, WAV, MP3, MP4, WEBM, AVI, MOV, WMV, TTF, OTF";
 }
 
 // ---- Lot API 8 : glisser de fichiers, 2e partie ----
@@ -515,6 +553,31 @@ MediaInfo inspectMedia(const Bytes& d, std::string_view fileName) {
         else info.error = "ic\xC3\xB4ne sans image lisible";
         return info;
     }
+    // 1.12.12 (lot H) : l'AVI (RIFF AVI) - sa taille, sa cadence, ses images, son codec (le Motion-JPEG se decode partout).
+    if (video::isAvi(d)) {
+        info.kind = MediaKind::Video;
+        info.format = "AVI";
+        video::AviInfo avi;
+        std::string why;
+        const bool read = video::parseAvi(d, avi, &why);
+        info.width = avi.width;
+        info.height = avi.height;
+        info.seconds = avi.seconds();
+        info.images = static_cast<int>(avi.frames.size());
+        info.codec = avi.mjpeg() ? "Motion-JPEG (" + avi.codec + ")" : avi.codec;
+        if (!read) info.error = why;
+        return info;
+    }
+    // 1.12.12 (lot H) : le WMV (un conteneur ASF) - sa duree, sa taille, son codec ; decode par Windows.
+    if (const auto asf = readAsf(d); asf.ok) {
+        info.kind = MediaKind::Video;
+        info.format = "WMV";
+        info.width = asf.width;
+        info.height = asf.height;
+        info.seconds = asf.seconds;
+        info.codec = asf.codec;
+        return info;
+    }
     if (r.tag(0, "RIFF") && r.tag(8, "WAVE")) {
         info.kind = MediaKind::Sound;
         info.format = "WAV";
@@ -529,9 +592,11 @@ MediaInfo inspectMedia(const Bytes& d, std::string_view fileName) {
         info.bitrateKbps = static_cast<int>(bytesPerSecond * 8 / 1000);
         return info;
     }
-    if (r.tag(4, "ftyp")) {
+    // 1.12.12 (lot H) : un MOV (QuickTime : la marque qt, ou un vieux fichier sans ftyp) a les memes boites.
+    const bool oldMov = byName == "MOV" && (r.tag(4, "moov") || r.tag(4, "mdat") || r.tag(4, "wide") || r.tag(4, "free") || r.tag(4, "skip"));
+    if (r.tag(4, "ftyp") || oldMov) {
         info.kind = MediaKind::Video;
-        info.format = "MP4";
+        info.format = oldMov || r.tag(8, "qt  ") ? "MOV" : "MP4";
         Mp4Info m;
         bool video = false;
         mp4Walk(r, 0, d.size(), m, 0, video);
@@ -644,6 +709,25 @@ bool decodeImage(const Bytes& d, std::string_view format, Rgba& out, int maxSide
         return true;
     }
     return fail("ce n'est pas une image");
+}
+
+// 1.12.12 (lot H) : une image d'une video Motion-JPEG (HmiVideo.cpp), lue sans copie.
+bool decodeJpeg(const std::uint8_t* data, std::size_t size, Rgba& out, std::string* error) {
+    if (!data || size < 4 || size > 0x7FFFFFFF || data[0] != 0xFF || data[1] != 0xD8) {
+        if (error) *error = "image JPEG illisible";
+        return false;
+    }
+    int w = 0, h = 0, comp = 0;
+    stbi_uc* px = stbi_load_from_memory(data, static_cast<int>(size), &w, &h, &comp, 4);
+    if (!px) {
+        if (error) *error = stbi_failure_reason() ? stbi_failure_reason() : "image JPEG illisible";
+        return false;
+    }
+    out.width = w;
+    out.height = h;
+    out.pixels.assign(px, px + static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4);
+    stbi_image_free(px);
+    return true;
 }
 
 // ================================================================ lot 10 : SVG ===

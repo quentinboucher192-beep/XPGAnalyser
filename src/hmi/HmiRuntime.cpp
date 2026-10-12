@@ -2602,6 +2602,7 @@ void Runtime::openView(Id id, double now, bool popup) {
     for (const auto& o : snapshot.objects)
         if (!o.actions.empty()) runActions(snapshot, &o, Trigger::ViewOpen, now);
     gifsOpenView(snapshot, now);        // lot 16 : les GIF animes "a l'affichage" partent
+    mediasOpenView(snapshot, now);      // 1.12.12 (lot H) : les videos "a l'affichage" aussi
 }
 
 void Runtime::closeView(Id id, double now) {
@@ -2984,6 +2985,7 @@ void Runtime::start(double now) {
             }
     backgrounds_.clear();
     gifs_.clear();                      // lot 16
+    mediasReset();                      // 1.12.12 (lot H)
     openCounts_.clear();
     previousView_ = kNoId;
     navigations_ = cycles_ = recipeApplies_ = 0;
@@ -3319,6 +3321,7 @@ void Runtime::prime(double now) {
     gestureFormulas_.clear();
     backgrounds_.clear();
     gifs_.clear();                      // lot 16
+    mediasReset();                      // 1.12.12 (lot H)
     initVariables();
     // 1.12.7 : l'essai d'une fonction, le banc des expressions lisent aussi les constantes calculees.
     (void)computeDeclarations();
@@ -3534,6 +3537,7 @@ void Runtime::watchTriggers(const View& v, double now, bool cycleTick) {
 void Runtime::cycle(double now) {
     if (!project_) return;
     gifsCycle(now);                     // lot 16 : les GIF animes (conditions, fin de lecture)
+    mediasCycle(now);                   // 1.12.12 (lot H) : les videos, les textes defilants, les codes QR
     // Les scripts generaux : cycliques a leur periode, "sur changement" quand
     // leur expression change.
     for (const auto& sc : project_->programs.scripts) {

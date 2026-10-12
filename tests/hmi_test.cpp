@@ -28,6 +28,8 @@
 #include "../src/hmi/HmiMedia.hpp"
 #include "../src/hmi/HmiPublicVars.hpp"
 #include "../src/hmi/HmiQr.hpp"
+#include "../src/hmi/HmiClock.hpp"     // 1.12.12 (lot H) : l'horloge liee a une variable
+#include "../src/hmi/HmiMarquee.hpp"   // 1.12.12 (lot H) : le texte defilant depuis une source
 #include "../src/hmi/HmiRecipes.hpp"
 #include "../src/hmi/HmiRuntime.hpp"
 #include "../src/core/CallTrail.hpp"
@@ -4748,17 +4750,20 @@ void controlesLot9() {
     }
     // ---- le code QR : comme qrcodegen (Nayuki), module pour module
     {
-        check(qrCapacity('L') == 271 && qrCapacity('M') == 213 && qrCapacity('Q') == 151 && qrCapacity('H') == 119,
-              "qrCapacity : 271 / 213 / 151 / 119 octets en version 10");
+        // 1.12.12 (lot H) : les 40 versions (avant : la version 10, 271 / 213 / 151 / 119 octets) et le mode le plus
+        // compact - HELLO WORLD en alphanumerique (avant : des octets, masque 4), 80 chiffres en chiffres (avant : version 7).
+        check(qrCapacity('L') == 2953 && qrCapacity('M') == 2331 && qrCapacity('Q') == 1663 && qrCapacity('H') == 1273,
+              "qrCapacity : 2 953 / 2 331 / 1 663 / 1 273 octets en version 40");
         const auto hello = encodeQr("HELLO WORLD", 'M');
         const std::string helloRef =
-            "111111101100101111111\n100000100001001000001\n101110100101001011101\n101110101001001011101\n"
-            "101110101110101011101\n100000101001001000001\n111111101010101111111\n000000001001100000000\n"
-            "100010111111011111001\n000100001011100001111\n001111110011011010010\n111110001100010000000\n"
-            "111110101010101100110\n000000001010111101011\n111111101110101011010\n100000100101110110011\n"
-            "101110101101011000110\n101110100100100011011\n101110100111000111000\n100000100001010000000\n"
-            "111111101111111110101\n";
-        check(hello.ok() && hello.version == 1 && hello.size == 21 && hello.mask == 4, "HELLO WORLD en M : version 1, 21 x 21, masque 4");
+            "111111100010101111111\n100000101110001000001\n101110100010101011101\n101110100010101011101\n"
+            "101110101011101011101\n100000100111001000001\n111111101010101111111\n000000000000000000000\n"
+            "101010100100100010010\n011110001001000010001\n000111111101001011000\n111101011001110101110\n"
+            "010011110101001110101\n000000001010001000101\n111111100000100101100\n100000100110001101000\n"
+            "101110101100101111111\n101110100011010100010\n101110101111011101001\n100000100001110001011\n"
+            "111111101101011100001\n";
+        check(hello.ok() && hello.version == 1 && hello.size == 21 && hello.mask == 0 && hello.mode == 'A',
+              "HELLO WORLD en M : alphanumerique, version 1, 21 x 21, masque 0");
         same(qrRows(hello), helloRef, "... module pour module, la grille de r\xC3\xA9" "f\xC3\xA9rence");
         const auto temp = encodeQr("Temp\xC3\xA9rature : 21,5 \xC2\xB0" "C", 'M');
         const std::string tempRef =
@@ -4781,7 +4786,7 @@ void controlesLot9() {
             {"Vanne V12 : ouverte", 'H', 3, 2, 0x07B3364846E40342ULL},
             {"https://example.com/pompe/P3", 'L', 2, 6, 0x2E09EF4AD29193E9ULL},
             {std::string(100, 'x'), 'M', 6, 3, 0x5F79FBAF41A33CAFULL},
-            {[] { std::string s; for (int i = 0; i < 8; ++i) s += "0123456789"; return s; }(), 'Q', 7, 2, 0xC084DF67CA9E72FBULL},
+            {[] { std::string s; for (int i = 0; i < 8; ++i) s += "0123456789"; return s; }(), 'Q', 4, 0, 0x3F99B8386AE48CC3ULL},
             {std::string(213, 'z'), 'M', 10, 1, 0x08A05B8B23AB3B32ULL},
             {std::string(271, 'w'), 'L', 10, 4, 0xC8BF3C19F7C56F41ULL},
             {"", 'M', 1, 3, 0x27F4A3A3DC113261ULL},
@@ -4794,9 +4799,10 @@ void controlesLot9() {
                       + ", " + std::to_string(q.mask) + ")");
             check(qrHash(q) == r.hash, label + " : la grille de r\xC3\xA9" "f\xC3\xA9rence");
         }
-        const auto tooLong = encodeQr(std::string(214, 'z'), 'M');
-        check(!tooLong.ok() && !tooLong.error.empty(), "214 octets en M : trop long, et dit pourquoi (" + tooLong.error + ")");
-        check(encodeQr(std::string(214, 'z'), 'L').version == 9, "... en L, \xC3\xA7" "a passe (version 9)");
+        const auto tooLong = encodeQr(std::string(2332, 'z'), 'M');
+        check(!tooLong.ok() && !tooLong.error.empty(), "2 332 octets en M : trop long, et dit pourquoi (" + tooLong.error + ")");
+        check(encodeQr(std::string(214, 'z'), 'M').version == 11 && encodeQr(std::string(214, 'z'), 'L').version == 9,
+              "214 octets : version 11 en M (avant : trop long), version 9 en L");
         check(!encodeQr("abc", 'X').ok(), "un niveau inconnu : rien");
         check(encodeQr("A", 'M', -1, 5).version == 5, "une version minimale impos\xC3\xA9" "e");
         check(encodeQr("HELLO WORLD", 'M', 6).mask == 6 && encodeQr("HELLO WORLD", 'M', 6).ok(), "un masque impos\xC3\xA9");
@@ -5124,7 +5130,7 @@ void verificationsLot9() {
     put(Kind::WeeklySchedule, "Prog_Sortie", "").set("output", "Sortie_Absente");
     put(Kind::SevenSegment, "Trop_De_Chiffres").setNumber("digits", 20);
     put(Kind::SevenSegment, "Trop_De_Decimales").setNumber("decimals", 4);
-    put(Kind::QrCode, "QR_Long").set("text", std::string(300, 'q'));
+    put(Kind::QrCode, "QR_Long").set("text", std::string(3000, 'q'));   // 1.12.12 : 2 331 octets au plus en M (avant : 213)
     put(Kind::QrCode, "QR_Vide").set("text", "");
     put(Kind::QrCode, "QR_Trous").set("text", "https://example.com/{Niveau}");
     put(Kind::Marquee, "Immobile").setNumber("speed", 0);
@@ -24728,10 +24734,325 @@ void enregistre1127() {
           "un objet qui ne s'en sert pas ne les porte pas (le fichier ne change pas)");
 }
 
+
+// =============================================================== 1.12.12 (lot H) ===
+//  Les medias, 2e partie : l'horloge liee a une variable (ses formats, ses sources, son fuseau),
+//  le texte defilant depuis une source (une LIST, un tableau, un joker, les alarmes en cours), le code
+//  QR calcule trop long (la Console, une fois), ce que Generer dit de plus ; enregistre et relu. Le code
+//  QR jusqu'a la version 40 et la video decodee ont leurs essais (hmi_qr_test, hmi_video_test).
+//  HMI_TEST_11212=1 les lance seuls.
+namespace {
+std::string clockText(const clock::Reading& r) {
+    char b[48];
+    std::snprintf(b, sizeof b, "%04d-%02d-%02d %02d:%02d:%02d", r.time.year, r.time.month, r.time.day, r.time.hour, r.time.minute, r.time.second);
+    return r.ok ? std::string(b) : "### " + r.why;
+}
+} // namespace
+
+void horloge11212() {
+    std::printf("1.12.12 (lot H) : l'horloge liee a une variable\n");
+    const DateTime today{2026, 10, 12, 9, 0, 0};
+    const clock::Zone local{}, utc{clock::Zone::Kind::Utc, 0}, plus2{clock::Zone::Kind::Offset, 120}, minus5{clock::Zone::Kind::Offset, -300};
+    // ---- les sources : une TOD, une DT, une DATE, une STRING ISO 8601, un REAL en secondes, un TIME
+    same(clockText(clock::read("14:30:05", local, today)), "2026-10-12 14:30:05", "une TOD (son texte, 14:30:05) : la date est celle de l'IHM");
+    check(!clock::read("14:30:05", local, today).hasDate && clock::read("2026-10-09", local, today).hasDate, "... une heure seule n'a pas de date");
+    same(clockText(clock::read("TOD#06:15:00", local, today)), "2026-10-12 06:15:00", "TOD#06:15:00 (une valeur fixe tapee)");
+    same(clockText(clock::read("2026-10-09 14:30:00.250", local, today)), "2026-10-09 14:30:00", "une DT (son texte exact, ses millisecondes lues)");
+    same(clockText(clock::read("DT#2026-10-09-14:30:00", local, today)), "2026-10-09 14:30:00", "DT#2026-10-09-14:30:00");
+    same(clockText(clock::read("2026-10-09", local, today)), "2026-10-09 00:00:00", "une DATE : minuit");
+    same(clockText(clock::read("'2026-10-12T14:30:00'", utc, today)), "2026-10-12 14:30:00", "une STRING ISO sans fuseau : l'heure du mur, telle quelle");
+    same(clockText(clock::read("2026-10-12T14:30:00Z", plus2, today)), "2026-10-12 16:30:00", "une STRING ISO en Z, montree en UTC+2 : 16:30");
+    same(clockText(clock::read("2026-10-12T14:30:00+02:00", utc, today)), "2026-10-12 12:30:00", "... en +02:00, montree en UTC : 12:30");
+    same(clockText(clock::read("2026-10-12T02:00:00Z", minus5, today)), "2026-10-11 21:00:00", "... en UTC-5 : la veille, 21:00");
+    same(clockText(clock::read("12/10/2026 08:05", local, today)), "2026-10-12 08:05:00", "a la francaise : 12/10/2026 08:05");
+    same(clockText(clock::read("3600", local, today)), "2026-10-12 01:00:00", "un REAL de moins d'un jour : une heure du jour (3600 : 01:00:00)");
+    same(clockText(clock::read("1791800000", utc, today)), "2026-10-12 10:13:20", "un REAL au-dela : un horodatage Unix (UTC)");
+    same(clockText(clock::read("1791800000", plus2, today)), "2026-10-12 12:13:20", "... montre en UTC+2");
+    same(clockText(clock::read("T#1h30m", local, today)), "2026-10-12 01:30:00", "un TIME : la duree depuis minuit");
+    check(!clock::read("abc", local, today).ok && !clock::read("2026-13-01", local, today).ok && !clock::read("25:00", local, today).ok
+              && !clock::read("", local, today).ok,
+          "illisible (abc, un mois 13, 25:00, vide) : ### et la raison (" + clock::read("abc", local, today).why + ")");
+    // ---- le fuseau
+    clock::Zone z;
+    check(clock::parseZone("local", z) && z.kind == clock::Zone::Kind::Local && clock::parseZone("", z) && z.kind == clock::Zone::Kind::Local,
+          "le fuseau : local (vide aussi)");
+    check(clock::parseZone("UTC", z) && z.kind == clock::Zone::Kind::Utc && clock::parseZone("UTC+2", z) && z.minutes == 120
+              && clock::parseZone("UTC-5:30", z) && z.minutes == -330 && clock::parseZone("+5,5", z) && z.minutes == 330
+              && clock::parseZone("utc+0", z) && z.kind == clock::Zone::Kind::Utc,
+          "UTC, UTC+2, UTC-5:30, +5,5 (5 h 30), UTC+0");
+    check(!clock::parseZone("Paris", z) && z.kind == clock::Zone::Kind::Local && !clock::parseZone("UTC+15", z), "illisible (Paris, UTC+15) : local");
+    const DateTime u = clock::civilOf(1791800000.0, utc), o5 = clock::civilOf(1791800000.0, minus5);
+    check(u.hour == 10 && u.minute == 13 && o5.hour == 5 && o5.day == 12, "l'heure de l'IHM dans un fuseau : UTC 10:13, UTC-5 05:13");
+    check(clock::civilOf(1791800000.0, local) == dateTimeFromEpoch(1791800000.0), "local : comme avant (l'heure du PC)");
+    // ---- les formats
+    const DateTime d{2026, 10, 12, 14, 30, 5};
+    same(clock::formatDate(d, "jj/mm/aaaa"), "12/10/2026", "jj/mm/aaaa (comme avant)");
+    same(clock::formatDate(d, "jj/mm/aa"), "12/10/26", "jj/mm/aa");
+    same(clock::formatDate(d, "aaaa-mm-jj"), "2026-10-12", "aaaa-mm-jj");
+    same(clock::formatDate(d, "jj mmm aaaa"), "12 oct. 2026", "jj mmm aaaa");
+    same(clock::formatDate(d, "jour jj mois aaaa"), "lundi 12 octobre 2026", "jour jj mois aaaa");
+    same(clock::formatDate(DateTime{2026, 10, 1, 0, 0, 0}, "jour jj mois aaaa"), "jeudi 1er octobre 2026", "... le 1er du mois");
+    same(clock::formatDate(DateTime{2026, 8, 15, 0, 0, 0}, "jj mmm aaaa"), "15 ao\xC3\xBBt 2026", "... ao\xC3\xBBt");
+    same(clock::formatDate(d, "autre"), "12/10/2026", "un format inconnu : jj/mm/aaaa");
+    same(clock::formatTime(d, false, true), "14:30:05", "24 h");
+    same(clock::formatTime(d, true, true), "02:30:05 PM", "12 h");
+    same(clock::formatTime(DateTime{2026, 1, 1, 0, 15, 0}, true, false), "12:15 AM", "12 h, sans les secondes : minuit et quart");
+    same(clock::formatTime(DateTime{2026, 1, 1, 12, 0, 0}, true, true), "12:00:00 PM", "12 h : midi");
+    // ---- en marche : la valeur liee dans la copie que l'ecran dessine (le role Date : son texte exact)
+    // (Une DT, une TOD : celles de l'automate, d'un equipement ou d'un parametre de popup ; ici, leur litteral.)
+    Project p;
+    p.programs.variables.push_back(hmiVar(p, "Horodatage", "REAL", "1791800000.5"));
+    p.programs.variables.push_back(hmiVar(p, "Iso", "STRING", "'2026-10-12T14:30:00Z'"));
+    p.programs.variables.push_back(hmiVar(p, "Marche", "BOOL", "TRUE"));
+    View v = makeView(p, "Vue_Horloge");
+    const auto put = [&](const char* name, const char* expr) {
+        const Id id = edit::add(p, v, Kind::Clock, 10, 10);
+        Object* o = v.object(id);
+        o->name = name;
+        if (*expr) o->setExpr("value", expr);
+        return id;
+    };
+    put("H_Debut", "DT#2026-10-09-14:30:00");
+    put("H_Pause", "TOD#12:15:00");
+    const Id hEpoch = put("H_Epoch", "Horodatage");
+    v.object(hEpoch)->set("timeZone", "UTC+2");
+    put("H_Iso", "Iso");
+    const Id hBool = put("H_Bool", "Marche");
+    const Id hPlain = put("H_Plain", "");
+    p.views = {v};
+    p.config.startView = v.id;
+    check(roles::roleOf(Kind::Clock, "value").role == roles::Role::Date && roles::roleOf(Kind::Gauge, "value").role == roles::Role::Number,
+          "la Valeur d'une horloge a le role Date (son texte exact) ; celle d'une jauge reste un nombre");
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    rt.tick(0.0);
+    LiveView live;
+    live.bind(p.views[0]);
+    const View shown = live.evaluate(rt.environment());
+    const auto shownOf = [&](const char* name) {
+        const Object* o = shown.objectByName(name);
+        clock::Zone zone;
+        if (o) (void)clock::parseZone(o->text("timeZone", "local"), zone);
+        return o ? clock::read(o->text("value"), zone, today) : clock::Reading{false, {}, false, "absent"};
+    };
+    same(clockText(shownOf("H_Debut")), "2026-10-09 14:30:00", "une DT liee : la copie dessinee porte 2026-10-09 14:30:00, lue telle quelle");
+    same(clockText(shownOf("H_Pause")), "2026-10-12 12:15:00", "une TOD liee : 12:15:00, la date de l'IHM");
+    same(clockText(shownOf("H_Epoch")), "2026-10-12 12:13:20", "un REAL (horodatage Unix) lie, en UTC+2 : sans perte (12:13:20)");
+    same(clockText(shownOf("H_Iso")), "2026-10-12 14:30:00", "une STRING ISO en Z liee, en local : convertie (ici, le fuseau du PC)");
+    check(!shownOf("H_Bool").ok, "un BOOL lie : ### (pas une heure)");
+    const Object* plain = shown.objectByName("H_Plain");
+    check(plain && !plain->find("value") && !plain->find("dateFormat") && !plain->find("timeZone"),
+          "une horloge sans Heure affichee : rien de nouveau (elle montre l'heure de l'IHM, comme avant)");
+    // ---- Generer
+    View& gv = p.views[0];
+    const Id hBad = put("H_Mauvaise", "");
+    gv = v;
+    gv.object(hBad)->set("value", "abc");
+    gv.object(hBad)->set("timeZone", "Paris");
+    const auto issues = generate(p, [](std::string_view) { return false; });
+    bool boolWarned = false, badValue = false, badZone = false, plainSilent = true, blocking = false;
+    for (const auto& i : issues) {
+        if (i.object == hBool && i.property == "value" && i.severity == Issue::Severity::Warning && i.message.find("n'est pas une heure") != std::string::npos)
+            boolWarned = true;
+        if (i.object == hBad && i.property == "value" && i.severity == Issue::Severity::Warning) badValue = true;
+        if (i.object == hBad && i.property == "timeZone" && i.severity == Issue::Severity::Warning) badZone = true;
+        if (i.object == hPlain) plainSilent = false;
+        if (gv.object(i.object) && gv.object(i.object)->kind == Kind::Clock && i.severity == Issue::Severity::Error) blocking = true;
+    }
+    check(boolWarned, "Generer : une horloge liee a un BOOL - pas une heure (un avertissement)");
+    check(badValue && badZone, "Generer : une heure fixe illisible, un fuseau illisible (des avertissements)");
+    check(plainSilent && !blocking, "Generer : rien sur une horloge d'avant, rien de bloquant");
+    // ---- enregistre et relu ; un objet qui ne s'en sert pas ne les porte pas
+    gv.object(hEpoch)->set("dateFormat", "jour jj mois aaaa");
+    gv.object(hEpoch)->set("hourFormat", "12 h");
+    const auto files = serializeProject(p);
+    const FileReader reader = [&](const std::string& path, std::string& content) {
+        for (const auto& f : files)
+            if (f.path == path) {
+                content.assign(f.data->begin(), f.data->end());
+                return true;
+            }
+        return false;
+    };
+    const auto back = parseProject(reader);
+    const Object* be = back ? back->views[0].object(hEpoch) : nullptr;
+    const Object* bp = back ? back->views[0].object(hPlain) : nullptr;
+    check(be && be->expr("value") == "Horodatage" && be->text("timeZone") == "UTC+2" && be->text("dateFormat") == "jour jj mois aaaa"
+              && be->text("hourFormat") == "12 h",
+          "relu : la valeur liee, le fuseau, le format de la date, 12 h");
+    check(bp && !bp->find("value") && !bp->find("timeZone") && !bp->find("dateFormat") && !bp->find("hourFormat"),
+          "relu : une horloge qui ne s'en sert pas ne les porte pas (son fichier ne change pas)");
+}
+
+void defilant11212() {
+    std::printf("1.12.12 (lot H) : le texte defilant depuis une source\n");
+    check(marquee::isAlarmSource("alarmes en cours") && marquee::isAlarmSource(" Alarmes ") && !marquee::isAlarmSource("Messages"),
+          "\xC2\xAB alarmes en cours \xC2\xBB (ou alarmes) : les alarmes");
+    same(marquee::join({"A", "", "B", "C"}, " | "), "A | B | C", "les messages a la suite (un vide saute)");
+    Project p;
+    p.programs.variables.push_back(hmiVar(p, "Messages", "LIST OF STRING", "['Bienvenue', 'Casque obligatoire']"));
+    p.programs.variables.push_back(hmiVar(p, "Fixes", "ARRAY[1..3] OF STRING", "['Poste 1', 'Poste 2', 'Poste 3']"));
+    p.programs.variables.push_back(hmiVar(p, "Niveau", "REAL", "12.5"));
+    p.programs.variables.push_back(hmiVar(p, "Seul", "STRING", "'Un seul message'"));
+    HmiType consigne;
+    consigne.id = p.allocate();
+    consigne.name = "T_Consigne_H";
+    consigne.members = {{"Texte", "STRING", "''", ""}, {"Priorite", "INT", "0", ""}};
+    p.programs.types.push_back(consigne);
+    p.programs.variables.push_back(hmiVar(p, "Consignes", "ARRAY[1..2] OF T_Consigne_H"));
+    AlarmDef a1;
+    a1.id = p.allocate();
+    a1.name = "Niveau_Haut";
+    a1.condition = "Niveau > 10";
+    a1.message = "Niveau haut cuve 1";
+    a1.group = "Cuves";
+    AlarmDef a2 = a1;
+    a2.id = p.allocate();
+    a2.name = "Porte_Ouverte";
+    a2.condition = "Niveau > 5";
+    a2.message = "Porte ouverte";
+    a2.group = "Acces";
+    p.alarms = {a1, a2};
+    // ---- l'apercu de l'editeur : les valeurs initiales
+    check(marquee::preview(p, "Messages") == std::vector<std::string>{"Bienvenue", "Casque obligatoire"}, "l'apercu : les valeurs initiales d'une LIST OF STRING");
+    check(marquee::preview(p, "Fixes") == std::vector<std::string>{"Poste 1", "Poste 2", "Poste 3"}, "... d'un ARRAY OF STRING");
+    check(marquee::preview(p, "$Messages$") == std::vector<std::string>{"Bienvenue", "Casque obligatoire"}, "... un repere $Messages$ : sans ses $");
+    check(marquee::preview(p, "alarmes en cours", "Cuves") == std::vector<std::string>{"Niveau haut cuve 1"},
+          "... les alarmes en cours d'un groupe : les messages des alarmes du projet");
+    check(marquee::preview(p, "Inconnue").empty(), "... une source inconnue : rien (le texte defile)");
+    // ---- en marche : une LIST qui grandit, un tableau, un joker, les alarmes, une STRING seule
+    View v = makeView(p, "Vue_Defilant");
+    const auto put = [&](const char* name, const char* from) {
+        const Id id = edit::add(p, v, Kind::Marquee, 10, 10);
+        Object* o = v.object(id);
+        o->name = name;
+        if (*from) o->set("messagesFrom", from);
+        return id;
+    };
+    const Id mList = put("D_Liste", "Messages");
+    const Id mArray = put("D_Tableau", "Fixes");
+    const Id mJoker = put("D_Joker", "Consignes[*].Texte");
+    const Id mAlarms = put("D_Alarmes", "alarmes en cours");
+    const Id mGroup = put("D_Groupe", "alarmes en cours");
+    v.object(mGroup)->set("group", "Acces");
+    const Id mSingle = put("D_Seul", "Seul");
+    const Id mPlain = put("D_Texte", "");
+    auto& btn = addButton(p, v, "Btn_Ajout", 300, 10);
+    btn.actions.push_back(act(Trigger::Click, Operation::RunScript, {}, {}));
+    btn.actions.back().value = "LIST_ADD(Messages, 'Pause a 10 h'); Consignes[1].Texte := 'Fermer la vanne'; Consignes[2].Texte := 'Appeler le chef';";
+    const Id btnId = btn.id;
+    p.views = {v};
+    p.config.startView = v.id;
+    p.config.cycleMs = 50;
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    rt.tick(0.1);
+    const auto messages = [&](Id id) {
+        const auto* m = rt.marqueeMessages(id);
+        return m ? *m : std::vector<std::string>{"(nul)"};
+    };
+    rt.tick(0.15);   // les alarmes s'evaluent au cycle : le texte defilant les voit au suivant
+    check(messages(mList) == std::vector<std::string>{"Bienvenue", "Casque obligatoire"}, "une LIST OF STRING : un message par element");
+    check(messages(mArray) == std::vector<std::string>{"Poste 1", "Poste 2", "Poste 3"}, "un ARRAY OF STRING : ses trois textes");
+    check(messages(mSingle) == std::vector<std::string>{"Un seul message"}, "une STRING seule : un message");
+    check(rt.marqueeMessages(mPlain) == nullptr, "sans source : rien (il defile son texte, comme avant)");
+    check(messages(mAlarms) == std::vector<std::string>{"Niveau haut cuve 1", "Porte ouverte"} || messages(mAlarms) == std::vector<std::string>{"Porte ouverte", "Niveau haut cuve 1"},
+          "les alarmes en cours : le message de chaque alarme active (" + std::to_string(messages(mAlarms).size()) + ")");
+    check(messages(mGroup) == std::vector<std::string>{"Porte ouverte"}, "... d'un groupe (Acces) : la sienne");
+    rt.press(btnId, 0.2);
+    rt.release(btnId, 0.25, true);
+    rt.tick(0.3);
+    check(messages(mList).size() == 3 && messages(mList).back() == "Pause a 10 h", "la LIST grandit en marche : le message de plus suit");
+    check(messages(mJoker) == std::vector<std::string>{"Fermer la vanne", "Appeler le chef"}, "un joker Consignes[*].Texte : le membre de chaque element");
+    rt.environment().write("Niveau", sim::Value::real(1.0));
+    rt.tick(0.4);
+    rt.tick(0.5);
+    check(messages(mAlarms).empty(), "plus d'alarme active : aucun message (le texte defile)");
+    // ---- Generer : le type de la source
+    View& gv = p.views[0];
+    const Id mNumber = edit::add(p, gv, Kind::Marquee, 10, 300);
+    gv.object(mNumber)->set("messagesFrom", "Niveau");
+    const Id mUnknown = edit::add(p, gv, Kind::Marquee, 10, 400);
+    gv.object(mUnknown)->set("messagesFrom", "Inconnue");
+    const auto issues = generate(p, [](std::string_view) { return false; });
+    bool number = false, unknown = false, quiet = true, single = false, blocking = false;
+    for (const auto& i : issues) {
+        if (i.object == mNumber && i.property == "messagesFrom" && i.severity == Issue::Severity::Warning) number = true;
+        if (i.object == mUnknown && i.property == "messagesFrom" && i.severity == Issue::Severity::Warning) unknown = true;
+        if ((i.object == mList || i.object == mArray || i.object == mJoker || i.object == mAlarms || i.object == mPlain) && i.property == "messagesFrom")
+            quiet = false;
+        if (i.object == mSingle && i.severity == Issue::Severity::Info) single = true;
+        if (gv.object(i.object) && gv.object(i.object)->kind == Kind::Marquee && i.severity == Issue::Severity::Error) blocking = true;
+    }
+    check(number && unknown, "Generer : une source qui n'est pas une liste (un REAL), une source inconnue (des avertissements)");
+    check(quiet && single && !blocking, "Generer : rien sur une LIST, un tableau, un joker, les alarmes ; une STRING seule en information ; rien de bloquant");
+    // ---- les renommages suivent (une variable renommee : sa source)
+    std::size_t seen = 0;
+    for (auto& o : p.views[0].objects)
+        rewriteNames(o, [&seen](std::string_view text, bool) {
+            std::string out(text);
+            if (out.find("alarmes") != std::string::npos) ++seen;   // le mot-cle ne doit pas passer par le renommage
+            for (std::size_t at = out.find("Messages"); at != std::string::npos; at = out.find("Messages", at + 8)) out.replace(at, 8, "Annonces");
+            return out;
+        });
+    check(p.views[0].object(mList)->text("messagesFrom") == "Annonces" && p.views[0].object(mAlarms)->text("messagesFrom") == "alarmes en cours"
+              && seen == 0,
+          "renommer Messages en Annonces : la source suit ; \xC2\xAB alarmes en cours \xC2\xBB n'est pas un nom (il ne bouge pas)");
+}
+
+void qrEnMarche11212() {
+    std::printf("1.12.12 (lot H) : le code QR calcule trop long, en marche\n");
+    Project p;
+    p.programs.variables.push_back(hmiVar(p, "Lien", "STRING", "'https://example.com/a'"));
+    View v = makeView(p, "Vue_QR");
+    const Id q = edit::add(p, v, Kind::QrCode, 10, 10);
+    v.object(q)->name = "QR_Calcule";
+    v.object(q)->setExpr("text", "Lien");
+    const Id t = edit::add(p, v, Kind::QrCode, 200, 10);
+    v.object(t)->name = "QR_Trous";
+    v.object(t)->set("text", "https://example.com/{Lien}");
+    p.views = {v};
+    p.config.startView = v.id;
+    p.config.cycleMs = 50;
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    rt.tick(0.1);
+    const auto told = [&](const char* name) {
+        int n = 0;
+        for (const auto& e : rt.journal())
+            if (e.source.find(name) != std::string::npos && e.message.find("trop long") != std::string::npos) ++n;
+        return n;
+    };
+    check(told("QR_Calcule") == 0 && told("QR_Trous") == 0, "un texte calcule court : rien dans la Console");
+    rt.environment().write("Lien", sim::Value::text(std::string(2500, 'x')));
+    rt.tick(0.2);
+    rt.tick(0.3);
+    rt.tick(0.4);
+    check(told("QR_Calcule") == 1 && told("QR_Trous") == 1, "2 500 octets en M : dit une fois chacun dans la Console, pas a chaque cycle");
+    bool warning = false;
+    for (const auto& e : rt.journal())
+        if (e.source.find("QR_Calcule") != std::string::npos && e.message.find("2\xC2\xA0" "500 octets, 2\xC2\xA0" "331 au plus en M") != std::string::npos)
+            warning = e.level == LogLevel::Warning;
+    check(warning, "... un avertissement qui dit la longueur et le plus que tient le niveau");
+    const auto qr = encodeQr(std::string(2500, 'x'), 'M');
+    check(!qr.ok() && qr.error.rfind("trop long : ", 0) == 0, "l'objet montre \xC2\xAB trop long \xC2\xBB (" + qr.error + ")");
+}
+
 int main(int argc, char** argv) {
     // 1.11.10 : HMI_TEST_1110=1 - les fonctions et les popups des symboles, seules.
     if (const char* only = std::getenv("HMI_TEST_1110"); only && *only == '1') {
         fonctionsSymbole11110();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
+    // 1.12.12 : HMI_TEST_11212=1 - le lot H (medias, 2e partie) de l'audit des objets, seul.
+    if (const char* only = std::getenv("HMI_TEST_11212"); only && *only == '1') {
+        horloge11212();
+        defilant11212();
+        qrEnMarche11212();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -24899,6 +25220,9 @@ int main(int argc, char** argv) {
     xyProfil1127();                   // 1.12.7 (lot E) : la courbe XY en profil
     etatsDepuis1127();                // 1.12.7 (lot E) : Etats depuis une source
     enregistre1127();                 // 1.12.7 (lots D et E) : enregistre et relu
+    horloge11212();                   // 1.12.12 (lot H) : l'horloge liee a une variable
+    defilant11212();                  // 1.12.12 (lot H) : le texte defilant depuis une source
+    qrEnMarche11212();                // 1.12.12 (lot H) : le code QR calcule trop long
     enumerationsLangage110();         // 1.10 (S1, decision 15) : les enumerations dans les scripts
     operateurs110();                  // 1.10 (chantier S2) : les operateurs des symboles et des types IHM
     operateurs1101();                 // 1.10.1 (chantier U2) : a, b et Resultat (types, legende, exemple, Compiler)
