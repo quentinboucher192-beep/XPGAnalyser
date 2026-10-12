@@ -177,6 +177,10 @@ inline constexpr KeyRole kKeyRoles[] = {
     {"statesFrom", Role::Name},
     // 1.12.7 (lot D) : les colonnes choisies d'une source de tableau (Nom; Debit = Debit | 0.0)
     {"sourceColumns", Role::Mini},
+    // 1.12.13 : le Tableau, un mode a la fois - le mode, les colonnes dynamiques (leurs contenus gardent leurs reperes,
+    // Dupliquer les suit), le tri, la ligne choisie (une variable), le texte sans ligne, l'acces des cases fixes.
+    {"tableMode", Role::Choice}, {"dynColumns", Role::Mini}, {"sortBy", Role::Choice}, {"sortOrder", Role::Choice},
+    {"pickVariable", Role::Formula, Role::Text}, {"emptyText", Role::Text}, {"colAccess", Role::Mini},
     // ---- les graphiques
     {"xVariable", Role::Formula, Role::Number}, {"xLabel", Role::Text}, {"yLabel", Role::Text},
     {"reference", Role::Mini}, {"referenceColor", Role::Color},

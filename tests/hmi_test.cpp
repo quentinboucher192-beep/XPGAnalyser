@@ -27034,6 +27034,87 @@ void tableauGestes11213() {
     check(rt.journal().size() == before, "un clic sous les lignes : aucune action de case");
 }
 
+void tableauGenererDupliquer11213() {
+    std::printf("1.12.13 : le Tableau - Generer (la reserve, les colonnes, R/W, la ligne choisie, les actions) et Dupliquer (les reperes des colonnes)\n");
+    Project p = projetTableau11213();
+    const Id bad = addTable11213(p, "Fautes", "Cuves", {tcol("Cuve", "[*]"), tcol("Pct", "=[*].Niveau * 2", true), tcol("Inconnue", "=Foo + 1")});
+    View& v = p.views[0];
+    v.object(bad)->set(std::string(tb::kPickKey), "Inconnue_Var");
+    v.object(bad)->set("cells", formatCells({{"a", "b"}}));
+    auto absent = act(Trigger::CellClick, Operation::Log, {}, "x");
+    absent.column = "Absente";
+    v.object(bad)->actions.push_back(absent);
+    Object old;
+    old.id = p.allocate();
+    old.kind = Kind::Table;
+    old.name = "Ancien";
+    old.set("rowsFrom", "Textes[0]");
+    v.objects.push_back(old);
+    Object fx;
+    fx.id = p.allocate();
+    fx.kind = Kind::Table;
+    fx.name = "Fixes";
+    fx.set("columns", "A;B");
+    fx.set("cells", formatCells({{"x", "y"}}));
+    fx.set(std::string(tb::kAccessKey), "R;W");
+    fx.actions.push_back(act(Trigger::CellClick, Operation::Assign, "Element.Consigne", "1"));
+    v.objects.push_back(fx);
+    const auto issues = generate(p, [](std::string_view) { return false; });
+    const auto said = [&](Id obj, Issue::Severity sev, const std::string& part) {
+        for (const auto& i : issues)
+            if (i.object == obj && i.severity == sev && i.message.find(part) != std::string::npos) return true;
+        return false;
+    };
+    using Sev = Issue::Severity;
+    check(said(bad, Sev::Error, "une structure n'a pas de case") && said(bad, Sev::Error, "Correction : [*].Nom"),
+          "G\xC3\xA9n\xC3\xA9rer : [*] seul sur une structure - une erreur, et sa correction");
+    check(said(bad, Sev::Error, "en R/W : une formule se calcule"), "... une formule en R/W : une erreur");
+    check(said(bad, Sev::Error, "Foo"), "... une variable inconnue dans une formule de colonne");
+    check(said(bad, Sev::Error, "ligne choisie : ") && said(bad, Sev::Error, "Inconnue_Var"), "... la ligne choisie : une variable inconnue");
+    check(said(bad, Sev::Info, "\xC2\xAB Cases fixes \xC2\xBB en r\xC3\xA9serve"), "... les cases en r\xC3\xA9serve : une information (le tableau ne les montre pas)");
+    check(said(bad, Sev::Warning, "Absente"), "... une action sur une colonne qui n'existe pas : un avertissement");
+    check(said(old.id, Sev::Warning, "un seul \xC3\xA9l\xC3\xA9ment") && !said(old.id, Sev::Error, "un seul \xC3\xA9l\xC3\xA9ment"),
+          "un tableau d'avant (Lignes depuis = Textes[0]) : un avertissement, pas une erreur (il d\xC3\xA9marrait)");
+    check(said(fx.id, Sev::Warning, "Element n'existe qu'en lignes dynamiques"), "cases fixes : Element dans une action - un avertissement");
+    check(said(fx.id, Sev::Warning, "colonne 2 en R/W"), "cases fixes : une colonne R/W sans case qui s'\xC3\xA9" "crive - un avertissement");
+    // ---- Dupliquer : les reperes de Lignes depuis et des colonnes
+    Object t;
+    t.id = p.allocate();
+    t.kind = Kind::Table;
+    t.name = "Modele";
+    t.set("x", "10");
+    t.set("y", "400");
+    t.set("w", "300");
+    t.set("h", "120");
+    t.set("rowsFrom", "$Src$");
+    t.set(std::string(tb::kModeKey), "lignes dynamiques");
+    t.set(std::string(tb::kColumnsKey), tb::formatColumns({tcol("Nom", "{[*].Nom} - $Zone$"), tcol("Niveau", "[*].Niveau")}));
+    t.set(std::string(tb::kPickKey), "$Choix$");
+    v.objects.push_back(t);
+    const auto sc = dup::scan(v, {t.id}, dup::projectBounds(p));
+    std::set<std::string> names;
+    for (const auto& m : sc.markers) names.insert(m.name);
+    check(names.count("Src") && names.count("Zone") && names.count("Choix"), "Dupliquer voit les rep\xC3\xA8res de Lignes depuis, des colonnes et de la ligne choisie");
+    auto plan = dup::defaultPlan(v, sc, 1);
+    if (plan.rows.size() == 2) {
+        plan.rows[0].markers[dup::markerKey("Src")] = "Cuves";
+        plan.rows[0].markers[dup::markerKey("Zone")] = "A";
+        plan.rows[0].markers[dup::markerKey("Choix")] = "Cuve_Choisie";
+        plan.rows[1].markers[dup::markerKey("Src")] = "Alarmes";
+        plan.rows[1].markers[dup::markerKey("Zone")] = "B";
+        plan.rows[1].markers[dup::markerKey("Choix")] = "Choix_B";
+    }
+    const auto r = dup::apply(p, v, plan);
+    const Object* copy = r.created.empty() ? nullptr : v.object(r.created.front());
+    // Les reperes se gardent, remplis (la copie se reduplique) ; le moteur les lit sans leurs $.
+    check(copy && copy->text("rowsFrom") == "$Alarmes$" && copy->text(std::string(tb::kPickKey)) == "$Choix_B$"
+              && tb::columnsOf(*copy).size() == 2 && tb::columnsOf(*copy)[0].content == "{[*].Nom} - $B$",
+          "la copie : Lignes depuis $Alarmes$, la ligne choisie $Choix_B$, la colonne {[*].Nom} - $B$");
+    check(v.object(t.id)->text("rowsFrom") == "$Cuves$" && tb::columnsOf(*v.object(t.id))[0].content == "{[*].Nom} - $A$", "l'original : $Cuves$, {[*].Nom} - $A$");
+    check(copy && tb::analyzeSource(p, copy->text("rowsFrom")).kind == tb::SourceKind::List && tb::analyzeSource(p, copy->text("rowsFrom")).markers,
+          "... la source de la copie se lit sans ses $ : Alarmes, une LIST");
+}
+
 int main(int argc, char** argv) {
     // 1.12.13 : HMI_TEST_11213=1 - le Tableau, un mode a la fois, seul.
     if (const char* only = std::getenv("HMI_TEST_11213"); only && *only == '1') {
@@ -27041,6 +27122,7 @@ int main(int argc, char** argv) {
         tableauAnalyse11213();
         tableauMoteur11213();
         tableauGestes11213();
+        tableauGenererDupliquer11213();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -27258,6 +27340,7 @@ int main(int argc, char** argv) {
     tableauAnalyse11213();            // 1.12.13 : le Tableau, l'analyse sans moteur
     tableauMoteur11213();             // 1.12.13 : le Tableau en marche (les sources, « ... », seuils, tri)
     tableauGestes11213();             // 1.12.13 : les gestes sur un tableau (parametres, Element, R/W, ligne choisie)
+    tableauGenererDupliquer11213();   // 1.12.13 : Generer et Dupliquer sur le Tableau v2
     enumerationsLangage110();         // 1.10 (S1, decision 15) : les enumerations dans les scripts
     operateurs110();                  // 1.10 (chantier S2) : les operateurs des symboles et des types IHM
     operateurs1101();                 // 1.10.1 (chantier U2) : a, b et Resultat (types, legende, exemple, Compiler)
