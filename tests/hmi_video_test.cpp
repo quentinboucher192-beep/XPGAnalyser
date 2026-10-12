@@ -402,6 +402,9 @@ void moteur() {
     Object& bad = put("Refusee");    // une variable de position inconnue : dite une fois, pas a chaque cycle
     bad.set("positionVariable", "Pos_Inconnue");
     const Id idBad = bad.id;
+    Object& faux = put("Faux");      // une Lecture constante, en francais : en pause (comme Generer la lit)
+    faux.set("playing", "FAUX");
+    const Id idFaux = faux.id;
     p.config.startView = v.id;
     p.views = {v};
     Runtime rt;
@@ -413,6 +416,8 @@ void moteur() {
     check(std::fabs(readReal(rt, "Pos") - 0.1) < 1e-6, "sa position est ecrite dans Pos (0,1 s)");
     const auto* pOld = rt.videoPlayback(idOld);
     check(pOld && pOld->started && pOld->playing, "une video sans les nouveaux reglages : elle joue a l'affichage, en boucle");
+    const auto* pFaux = rt.videoPlayback(idFaux);
+    check(pFaux && pFaux->started && !pFaux->playing && pFaux->position == 0, "Lecture FAUX (une constante) : partie, en pause sur sa premiere image");
     rt.environment().write("Lecture", sim::Value::boolean(false));
     rt.tick(0.2);
     check(pa && std::fabs(pa->position - 0.1) < 1e-6 && !pa->playing, "Lecture fausse : en pause a 0,1 s");

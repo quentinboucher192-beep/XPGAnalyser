@@ -86,8 +86,15 @@ void Runtime::mediasCycle(double now) {
                         video::openView(it->second, settings, now);
                     }
                     auto& pb = it->second;
-                    // La Lecture et la condition : leur formule (=Marche) ou leur texte (Marche) ; vide : elle joue.
-                    const bool play = objectCondition(viewId, so, "playing", true);
+                    // La Lecture et la condition : leur formule (=Marche) ou leur texte (Marche) ; vide : elle joue. Une
+                    // Lecture constante (TRUE, FAUX, NON, 0) se lit comme Generer la lit (FAUX : en pause).
+                    bool play = true;
+                    const Prop* playProp = so.find("playing");
+                    const std::string fixedPlay = playProp && playProp->expr.empty() ? trimmedOf(markers::strip(playProp->value)) : std::string{};
+                    if (!fixedPlay.empty() && roles::readBool(fixedPlay, true) == roles::readBool(fixedPlay, false))
+                        play = roles::readBool(fixedPlay, true);
+                    else
+                        play = objectCondition(viewId, so, "playing", true);
                     const bool condition = settings.onCondition && objectCondition(viewId, so, "condition", false);
                     const auto* res = project_->resourceByName(roles::nameOf(o.text("video")));
                     const bool wasEnded = pb.ended;

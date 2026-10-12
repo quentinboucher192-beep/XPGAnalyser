@@ -43,12 +43,13 @@ n'est une erreur bloquante. Les changements visibles sur des objets existants so
   Media Foundation décode aussi les MP4 / H.264, WMV, MOV et les AVI d'autres codecs, image par image, sur un fil à
   part (sans tout charger). Avant : l'image d'attente et une barre qui bouclait, la vidéo jamais montrée.
 - **La lecture d'une vidéo** (`objet-video`) : « Lecture » (une variable BOOL ou une formule : vraie, elle avance ;
-  fausse, pause ; vide : elle joue), « Départ » (à l'affichage, ou sur condition : elle joue tant que la condition
-  est vraie et revient à l'image d'attente quand elle tombe), « Répétition » (en boucle, ou une fois : elle reste sur
-  sa dernière image, et la Console le dit), « Variable de la position (s) » (la position, écrite au dixième de
-  seconde ; une variable qui la refuse - inconnue, une structure - est dite une fois à la Console, pas à chaque
-  cycle). L'image d'attente se montre jusqu'à la première image, et quand le format ne se décode pas sur cette
-  plateforme ; le bandeau le dit (« MP4 : décodé sous Windows seulement ; ailleurs, convertir en Motion-JPEG AVI »).
+  fausse, pause ; vide : elle joue ; une constante aussi : FAUX, NON, 0 la mettent en pause), « Départ » (à
+  l'affichage, ou sur condition : elle joue tant que la condition est vraie et revient à l'image d'attente quand elle
+  tombe), « Répétition » (en boucle, ou une fois : elle reste sur sa dernière image, et la Console le dit),
+  « Variable de la position (s) » (la position, écrite au dixième de seconde ; une variable qui la refuse - inconnue,
+  une structure - est dite une fois à la Console, pas à chaque cycle). L'image d'attente se montre jusqu'à la
+  première image, et quand le format ne se décode pas sur cette plateforme ; le bandeau le dit (« MP4 : décodé sous
+  Windows seulement ; ailleurs, convertir en Motion-JPEG AVI »).
 - **La première image dans l'éditeur et les ressources** (`objet-video`, `ressources`) : l'éditeur et le gestionnaire
   de ressources montrent la première image d'une vidéo quand elle se décode ici (avant : l'image d'attente, ou un
   écran noir). Les ressources acceptent AVI, MOV et WMV (avant : MP4 et WEBM) ; leur fiche dit la durée, la taille et
@@ -131,21 +132,21 @@ Rien de bloquant (des avertissements et des informations), sauf ce qui l'était 
   les syndromes de Reed-Solomon de chaque bloc (tous nuls), le texte relu à l'identique, la capacité de la table 7 ;
   un caractère de plus passe à la version suivante. La place qui reste et le texte trop long (« reste 2 302 octets en
   M, version 3 », « trop long : 2 332 octets, 2 331 au plus en M »).
-- `hmi_video_test` (nouveau, 72 contrôles) : un AVI Motion-JPEG fait dans l'essai (des images JPEG écrites par stb_image_write) :
-  sa taille, sa cadence (10 images/s, 29,97), ses 3 images et leurs couleurs à la perte JPEG près, une image vide (la
-  précédente), un fichier coupé (les images entières), une image sans tables de Huffman (stb_image seule la refuse ;
-  avec les tables de la norme elle se lit) ; la ressource (AVI, 0,3 s, « Motion-JPEG (MJPG) ») ; la source d'images
-  (l'image à une heure, son numéro qui change avec elle) ; un MP4 sous Linux (pas de source, et pourquoi). LA LECTURE
-  avec une horloge factice : à l'affichage, en boucle (le tour), pause et reprise, une fois (finie sur sa dernière
-  image), sur condition (part, avance, revient à l'image d'attente, repart du début), une durée inconnue. Le moteur :
-  la position écrite dans sa variable, la pause par sa Lecture, le départ sur condition, la fin dite à la Console, une
-  vidéo de la 1.12.9 (sans réglage) qui joue à l'affichage en boucle, une variable de position inconnue dite une
-  seule fois en 7 cycles (avant la correction : 7 erreurs). Générer : le conseil pour un MP4, le départ sans
-  condition, la variable de position inconnue, rien sur l'AVI, rien de bloquant. LA FILE DES IMAGES D'AVANCE de
-  Media Foundation (`HmiVideoQueue.hpp`, sans le fil, avec un faux décodeur) : 3 images d'avance, la première image
-  d'un MP4 à images B (à 0,067 s) montrée à 0 s - l'aperçu de l'éditeur (sans cette règle : rien, 3 contrôles en
-  échec) -, les images en retard qui défilent d'un coup, le saut en arrière de la boucle, une image d'avant le saut
-  jetée.
+- `hmi_video_test` (nouveau, 73 contrôles) : un AVI Motion-JPEG fait dans l'essai (des images JPEG écrites par
+  stb_image_write) : sa taille, sa cadence (10 images/s, 29,97), ses 3 images et leurs couleurs à la perte JPEG près,
+  une image vide (la précédente), un fichier coupé (les images entières), une image sans tables de Huffman (stb_image
+  seule la lit mal ; avec les tables de la norme elle se lit) ; la ressource (AVI, 0,3 s, « Motion-JPEG (MJPG) ») ; la
+  source d'images (l'image à une heure, son numéro qui change avec elle) ; un MP4 sous Linux (pas de source, et
+  pourquoi). LA LECTURE avec une horloge factice : à l'affichage, en boucle (le tour), pause et reprise, une fois
+  (finie sur sa dernière image), sur condition (part, avance, revient à l'image d'attente, repart du début), une durée
+  inconnue. Le moteur : la position écrite dans sa variable, la pause par sa Lecture (une variable, et la constante
+  FAUX), le départ sur condition, la fin dite à la Console, une vidéo de la 1.12.9 (sans réglage) qui joue à
+  l'affichage en boucle, une variable de position inconnue dite une seule fois en 7 cycles (avant la correction : 7
+  erreurs). Générer : le conseil pour un MP4, le départ sans condition, la variable de position inconnue, rien sur
+  l'AVI, rien de bloquant. LA FILE DES IMAGES D'AVANCE de Media Foundation (`HmiVideoQueue.hpp`, sans le fil, avec un
+  faux décodeur) : 3 images d'avance, la première image d'un MP4 à images B (à 0,067 s) montrée à 0 s - l'aperçu de
+  l'éditeur (sans cette règle : rien, 3 contrôles en échec) -, les images en retard qui défilent d'un coup, le saut en
+  arrière de la boucle, une image d'avant le saut jetée.
 - `hmi_test` (`HMI_TEST_11212=1` les lance seuls) : `horloge11212` (chaque source : TOD, DT et ses millisecondes,
   DATE, STRING ISO avec et sans fuseau, à la française, REAL d'un jour et horodatage Unix, TIME ; l'illisible ; les
   fuseaux ; les cinq formats de date, le 1er du mois, 12 h et 24 h ; en marche, la copie que l'écran dessine pour une
