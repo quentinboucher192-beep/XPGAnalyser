@@ -44,6 +44,7 @@
 #include "../../core/FieldCodec.hpp"
 #include "../hmi/HmiCalcDialog.hpp"    // 1.12.7 : la fenetre d'une valeur calculee
 #include "../hmi/HmiAssetPanes.hpp"
+#include "../hmi/HmiResourceFilter.hpp"          // 1.12.12 (lot H) : le filtre des dialogues de ressources
 #include "../hmi/HmiAssist.hpp"
 #include "../hmi/HmiEditor.hpp"
 #include "../hmi/HmiValuePicker.hpp"              // 1.11.3 : le selecteur de valeur
@@ -2402,13 +2403,12 @@ void MainAnalysisScreen::askHmiImportResource() {
     fields.push_back({"Nom dans le projet", "", "vide : le nom du fichier", false, {}});
     app_.menus().ShowDialog(
         FormDialog::withBrowse(std::make_unique<FormDialog>("dialog.hmiImportResource", "Importer une ressource",
-            "Images : PNG, JPG, JPEG, BMP, SVG, ICO. Sons : WAV, MP3. Vid\xC3\xA9os : MP4, WEBM. Polices : TTF, OTF.\n"
+            "Images : PNG, JPG, JPEG, BMP, SVG, ICO. Sons : WAV, MP3. Vid\xC3\xA9os : MP4, WEBM, AVI, MOV, WMV (un AVI Motion-JPEG se lit "
+            "partout, le reste sous Windows). Polices : TTF, OTF.\n"
             "Le contenu est copi\xC3\xA9 dans le projet (ihm/ressources) : le fichier d'origine peut ensuite bouger "
             "ou dispara\xC3\xAEtre. Glisser un fichier sur le volet l'importe aussi. Ctrl+Z retire l'import.",
             std::move(fields), "Importer"), 0,
-            ui::openFile("Ressources IHM|*.png;*.jpg;*.jpeg;*.bmp;*.svg;*.ico;*.gif;*.wav;*.mp3;*.mp4;*.webm;*.ttf;*.otf"
-                                                "|Images|*.png;*.jpg;*.jpeg;*.bmp;*.svg;*.ico;*.gif|Sons|*.wav;*.mp3"
-                                                "|Vid\xC3\xA9os|*.mp4;*.webm|Polices|*.ttf;*.otf", app_.projectFolder(), "Importer une ressource")),
+            ui::openFile(hmiResourceFilter(), app_.projectFolder(), "Importer une ressource")),   // 1.12.12 : fait des extensions acceptees
         [this](const menu::DialogResult& r) {
             auto* pane = dynamic_cast<HmiResourcesPane*>(hmiTab("ressources"));
             if (!r.accepted() || !pane) return;
@@ -2508,9 +2508,7 @@ void MainAnalysisScreen::askHmiReplaceResource(std::uint64_t resourceId) {
                                   + citedBy(uses) + ").")
             + " Une image se remplace par une image, un son par un son. Ctrl+Z rend l'ancien contenu.",
             std::move(fields), "Remplacer"), 0,
-            ui::openFile("Ressources IHM|*.png;*.jpg;*.jpeg;*.bmp;*.svg;*.ico;*.gif;*.wav;*.mp3;*.mp4;*.webm;*.ttf;*.otf"
-                                                "|Images|*.png;*.jpg;*.jpeg;*.bmp;*.svg;*.ico;*.gif|Sons|*.wav;*.mp3"
-                                                "|Vid\xC3\xA9os|*.mp4;*.webm|Polices|*.ttf;*.otf", app_.projectFolder(), "Remplacer " + res->name)),
+            ui::openFile(hmiResourceFilter(), app_.projectFolder(), "Remplacer " + res->name)),   // 1.12.12 : fait des extensions acceptees
         [this, resourceId](const menu::DialogResult& r) {
             auto* pane = dynamic_cast<HmiResourcesPane*>(hmiTab("ressources"));
             if (!r.accepted() || !pane) return;

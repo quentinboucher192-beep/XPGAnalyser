@@ -610,6 +610,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\hmi\HmiActionsPanel.hpp" />
     <ClInclude Include="src\app\hmi\HmiAskDialog.hpp" />
     <ClInclude Include="src\app\hmi\HmiAssetPanes.hpp" />
+    <ClInclude Include="src\app\hmi\HmiResourceFilter.hpp" />
     <ClInclude Include="src\app\hmi\HmiAssist.hpp" />
     <ClInclude Include="src\app\hmi\HmiCanvas.hpp" />
     <ClInclude Include="src\app\hmi\HmiCommHost.hpp" />

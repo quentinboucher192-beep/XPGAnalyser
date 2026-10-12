@@ -31,6 +31,7 @@
 #include "../src/app/hmi/HmiDeclGrid.hpp"
 #include "../src/app/hmi/HmiActionsPanel.hpp"
 #include "../src/app/hmi/HmiMemoryMap.hpp"          // lot 17
+#include "../src/app/hmi/HmiResourceFilter.hpp"     // 1.12.12 (lot H) : le filtre des dialogues de ressources
 #include "../src/app/hmi/HmiNetDiagram.hpp"         // lot 17 (correctif)
 #include "../src/app/hmi/HmiAssetPanes.hpp"
 #include "../src/app/hmi/HmiSound.hpp"
@@ -29897,6 +29898,13 @@ void lotH11212_editeur() {
 #if !defined(_WIN32)
     check(videoRec.wrote("MP4 : d\xC3\xA9" "cod\xC3\xA9 sous Windows seulement"), "lot H : une vid\xC3\xA9o MP4 dit ce qui lui manque ici (Windows seulement)");
 #endif
+    // ---- le filtre des dialogues Importer / Remplacer une ressource : fait des extensions acceptees
+    const std::string filter = app::hmiResourceFilter();
+    check(filter.rfind("Ressources IHM|*.png;*.jpg;*.jpeg;*.bmp;*.svg;*.ico;*.gif;*.wav;*.mp3;*.mp4;*.webm;*.avi;*.mov;*.wmv;*.ttf;*.otf|", 0) == 0
+              && filter.find("|Vid\xC3\xA9os|*.mp4;*.webm;*.avi;*.mov;*.wmv|") != std::string::npos
+              && filter.find("|Images|*.png;*.jpg;*.jpeg;*.bmp;*.svg;*.ico;*.gif|Sons|*.wav;*.mp3|") != std::string::npos
+              && filter.size() > 20 && filter.compare(filter.size() - 20, 20, "|Polices|*.ttf;*.otf") == 0,
+          "lot H : le dialogue Importer une ressource propose les vid\xC3\xA9os AVI, MOV, WMV (" + filter + ")");
 }
 
 int main(int argc, char** argv) {

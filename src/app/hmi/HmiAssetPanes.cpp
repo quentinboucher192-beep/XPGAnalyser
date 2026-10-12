@@ -299,7 +299,8 @@ HmiResourcesPane::HmiResourcesPane(std::string id, hmi::DocumentPtr doc, Apply a
     : ui::Widget(std::move(id)), doc_(std::move(doc)), apply_(std::move(apply)) {
     const std::string base = this->id();
     auto tools = std::make_unique<HmiToolStrip>(base + ".tools");
-    tools->add(RImport, HmiGlyph::Plus, "Importer une ressource (PNG, JPG, JPEG, BMP, SVG, ICO, WAV, MP3, MP4, WEBM, TTF, OTF ; "
+    // 1.12.12 (lot H) : la liste des extensions acceptees (AVI, MOV, WMV y sont ; avant, recopiee a la main).
+    tools->add(RImport, HmiGlyph::Plus, "Importer une ressource (" + std::string(hmi::acceptedExtensions()) + " ; "
                                         "tout autre fichier - PDF, DOCX, ZIP... - : un document, gard\xC3\xA9 tel quel)", "Importer");
     tools->add(RReplace, HmiGlyph::Paste, "Remplacer le contenu (les objets qui la citent suivent)", "Remplacer");
     tools->add(RRename, HmiGlyph::Text, "Renommer (les objets et les expressions qui la citent suivent)", "Renommer");

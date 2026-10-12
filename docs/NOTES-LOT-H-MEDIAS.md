@@ -53,7 +53,8 @@ n'est une erreur bloquante. Les changements visibles sur des objets existants so
 - **La première image dans l'éditeur et les ressources** (`objet-video`, `ressources`) : l'éditeur et le gestionnaire
   de ressources montrent la première image d'une vidéo quand elle se décode ici (avant : l'image d'attente, ou un
   écran noir). Les ressources acceptent AVI, MOV et WMV (avant : MP4 et WEBM) ; leur fiche dit la durée, la taille et
-  le codec (« Motion-JPEG (MJPG) »).
+  le codec (« Motion-JPEG (MJPG) »). Les dialogues Importer et Remplacer une ressource les proposent (leur filtre est
+  fait de la liste des extensions acceptées : il ne peut plus l'oublier).
 - **Les repères** (`dupliquer-reperes`) : l'heure d'une horloge (`=$Debut$`), la source d'un texte défilant
   (`$Messages$`), la Lecture et la variable de position d'une vidéo (`$Lecture$`, `$Pos$`) gardent leurs repères :
   Dupliquer les trouve et les remplace, la marche les lit sans leurs `$`. Renommer une variable fait suivre ces
@@ -217,5 +218,9 @@ qu'à la première saisie (un fichier 1.12.9 se relit tel quel, et s'enregistre 
   sur l'horloge). Générer ajoute une information par vidéo MP4 / WEBM.
 - **Une vidéo qui joue sous Windows** écrit un fichier temporaire (le fichier de la ressource, dans le dossier TEMP,
   effacé à la fermeture de l'objet) et décode sur un fil à part : la mémoire et le processeur d'une vidéo HD.
+- **Un AVI, un MOV ou un WMV importé avant comme document** (lot API 8 : « tout autre fichier ») devient une vidéo :
+  le gestionnaire de ressources montre sa fiche de vidéo (sans durée ni taille, lues à l'import : réimporter le
+  fichier les donne) ; inutilisé, Générer le dit en information. Aucun objet ne pouvait le citer comme vidéo avant
+  (c'était une erreur) : rien ne casse.
 - **Rien d'autre ne change** pour une horloge, un texte défilant ou un code QR qui ne se servent pas des propriétés
   nouvelles ; aucun contrôle nouveau n'est bloquant.

@@ -1807,6 +1807,9 @@
     <ClInclude Include="src\app\hmi\HmiAssetPanes.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiResourceFilter.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
     <ClInclude Include="src\app\hmi\HmiAssist.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
