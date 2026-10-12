@@ -41,6 +41,7 @@
 #include "../../hmi/HmiMarquee.hpp"     // 1.12.12 (lot H) : le texte defilant depuis une source
 #include "../../hmi/HmiQr.hpp"          // 1.12.12 (lot H) : la place qui reste dans un code QR
 #include "../../hmi/HmiRanges.hpp"      // 1.12.10 (lot F) : la plage et les seuils de la variable
+#include "../../hmi/HmiTable.hpp"       // 1.12.13 : le Tableau, un mode a la fois
 #include "../../ui/Shapes.hpp"
 #include "../../ui/Theme.hpp"
 #include "../../ui/widgets/Controls.hpp"
@@ -2011,6 +2012,23 @@ const std::vector<KeyInfo>& keyInfos() {
         {"repeatPerRow", "R\xC3\xA9p\xC3\xA9ter : par rang\xC3\xA9" "e", PG::ValueType::Integer, {},
          "Combien de copies avant de passer \xC3\xA0 la rang\xC3\xA9" "e suivante (8 cuves, 4 par rang\xC3\xA9" "e : deux rang\xC3\xA9" "es). "
          "0 : toutes sur une rang\xC3\xA9" "e."},
+        // 1.12.13 : LE TABLEAU, UN MODE A LA FOIS
+        {"tableMode", "Le tableau montre", PG::ValueType::Enum, {"Cases fixes", "Lignes dynamiques", "Fichier externe"},
+         "Un seul mode \xC3\xA0 la fois : celui choisi ici est utilis\xC3\xA9. Un autre mode d\xC3\xA9j\xC3\xA0 r\xC3\xA9gl\xC3\xA9 reste en r\xC3\xA9serve "
+         "(gard\xC3\xA9, non utilis\xC3\xA9, retrouv\xC3\xA9 tel quel si tu le choisis) : sa ligne le dit, et l'efface d'un clic. "
+         "Cases fixes : un nombre fixe de lignes et de colonnes, chaque case r\xC3\xA9gl\xC3\xA9" "e dans Contenu. Lignes dynamiques : "
+         "des colonnes fixes, une ligne par \xC3\xA9l\xC3\xA9ment d'une source. Fichier externe : les lignes d'un fichier du projet."},
+        {"dynColumns", "Colonnes", PG::ValueType::ReadOnly, {},
+         "Les colonnes des lignes dynamiques : leur titre, leur contenu ([*].Niveau, [#], Debits[*], une formule), R/W. "
+         "\xC3\x80 r\xC3\xA9gler dans l'onglet Contenu."},
+        {"sortBy", "Trier par", PG::ValueType::Enum, {},
+         "Une colonne : les lignes se rangent par sa valeur (les nombres comme des nombres). Vide : l'ordre de la source."},
+        {"sortOrder", "Ordre du tri", PG::ValueType::Enum, {"croissant", "d\xC3\xA9" "croissant"}, ""},
+        {"pickVariable", "Ligne choisie \xE2\x86\x92", PG::ValueType::Enum, {},
+         "En marche, un clic sur une ligne l'\xC3\xA9" "crit dans cette variable - un entier : son num\xC3\xA9ro (1, 2...) ; une STRING : "
+         "sa cl\xC3\xA9 (une MAP), son membre (une structure), son nom (une \xC3\xA9num\xC3\xA9ration). La ligne qu'elle d\xC3\xA9signe "
+         "est surlign\xC3\xA9" "e. Vide : aucune."},
+        {"emptyText", "Sans ligne", PG::ValueType::Text, {}, "Ce que montre le tableau quand la source n'a aucune ligne. Vide : (aucune ligne)."},
         // 1.12.7 (lot D) : les colonnes choisies d'une source de tableau
         {"sourceColumns", "Colonnes de la source", PG::ValueType::Text, {},
          "Celles qui se montrent, dans l'ordre : Nom; Debit = D\xC3\xA9" "bit | 0.0 (un titre apr\xC3\xA8s =, un format "
@@ -2297,6 +2315,21 @@ std::string labelForKind(hmi::Kind kind, std::string_view key) {
         if (key == "colorOff") return "Couleur ferm\xC3\xA9" "e";
     }
     return {};
+}
+
+// 1.12.13 : LE TABLEAU, UN MODE A LA FOIS - une propriete d'un autre mode que celui utilise ne se montre pas (sa
+// ligne « en reserve » la resume) ; les Colonnes de la source d'avant sont reprises en colonnes (Contenu).
+bool tableKeyHidden(const hmi::Object& o, std::string_view key) {
+    using hmi::table::Mode;
+    const Mode m = hmi::table::modeOf(o);
+    if (key == "sourceColumns") return true;
+    if (key == "cells" || key == "columns" || key == hmi::table::kAccessKey) return m != Mode::Fixed;
+    if (key == "rowsFrom" || key == hmi::table::kColumnsKey || key == hmi::table::kSortKey || key == hmi::table::kSortOrderKey
+        || key == hmi::table::kPickKey || key == hmi::table::kEmptyKey)
+        return m != Mode::Rows;
+    if (key == "source") return m != Mode::File;
+    if (key == "widths") return m == Mode::File || (m == Mode::Rows && hmi::table::hasColumns(o));
+    return false;
 }
 
 const KeyInfo* infoOf(std::string_view key) {
@@ -2928,9 +2961,16 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
         // regle (Contenu le regle).
         if (hmi::kindIsSynoptic(o->kind) && !o->find("equipment")) allProps.push_back({"equipment", "", ""});
         if (o->kind == hmi::Kind::Cylinder && !o->find("cylinderMode")) allProps.push_back({"cylinderMode", "position", ""});
-        // 1.12.7 (lot D) : les colonnes choisies d'un tableau qui a une source.
-        if (o->kind == hmi::Kind::Table && !o->find("sourceColumns") && o->text("rowsFrom").find_first_not_of(" \t") != std::string::npos)
-            allProps.push_back({"sourceColumns", "", ""});
+        // 1.12.13 : le Tableau, un mode a la fois - le mode (deduit pour un tableau d'avant : celui qu'il montrait) et,
+        // en lignes dynamiques, les colonnes, le tri, la ligne choisie, le texte sans ligne (absents d'un objet neuf :
+        // rien ne change dans son fichier tant qu'on ne les regle pas).
+        if (o->kind == hmi::Kind::Table && !many) {
+            if (!o->find(hmi::table::kModeKey))
+                allProps.push_back({std::string(hmi::table::kModeKey), std::string(hmi::table::modeLabel(hmi::table::modeOf(*o))), ""});
+            if (hmi::table::modeOf(*o) == hmi::table::Mode::Rows)
+                for (const auto key : {hmi::table::kColumnsKey, hmi::table::kSortKey, hmi::table::kSortOrderKey, hmi::table::kPickKey, hmi::table::kEmptyKey})
+                    if (!o->find(key)) allProps.push_back({std::string(key), key == hmi::table::kSortOrderKey ? std::string("croissant") : std::string{}, ""});
+        }
         // 1.12.12 (lot H) : « Points depuis » d'une ligne, d'un polygone (absent d'un objet neuf) ; son echelle, une
         // fois la source choisie.
         if (hmi::vertices::isShape(*o) && !many) {
@@ -2970,6 +3010,8 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
         // 1.12.2 : le « Profil utilisateur » d'un objet n'etait lu par rien (l'objet restait ouvert a
         // tous) ; « Acces » fait ce travail. Gardee dans le fichier, comme la cadence ci-dessus.
         if (prop.key == "profile") continue;
+        // 1.12.13 : le Tableau - seuls les reglages du mode utilise ; ceux d'un mode en reserve se resument sur sa ligne.
+        if (o->kind == hmi::Kind::Table && !many && tableKeyHidden(*o, prop.key)) continue;
         // 1.10.4 (K3) : la variable d'un objet qui n'en fait rien de plus que sa Valeur
         // (=expression) ne se montre que si elle est deja reglee (un projet d'avant).
         if (prop.key == "variable" && !hmiObjectNeedsVariable(o->kind) && prop.expr.empty()
@@ -3212,6 +3254,62 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
                     p.typeIn = true;
             }
         }
+        // 1.12.13 : le Tableau, un mode a la fois - le mode (son titre), les colonnes dynamiques (un resume), le tri (une
+        // colonne), la ligne choisie (une variable entiere ou texte).
+        if (o->kind == hmi::Kind::Table && !many && prop.expr.empty()) {
+            if (prop.key == hmi::table::kModeKey) {
+                p.type = PG::ValueType::Enum;
+                p.value = std::string(hmi::table::modeTitle(hmi::table::modeOf(*o)));
+                p.enumValues.clear();
+                for (const auto m : hmi::table::kModes) p.enumValues.emplace_back(hmi::table::modeTitle(m));
+            } else if (prop.key == hmi::table::kColumnsKey && project) {
+                const auto cols = hmi::table::hasColumns(*o) ? hmi::table::columnsOf(*o) : hmi::table::legacyColumns(*project, *o);
+                const auto src = hmi::table::analyzeSource(*project, o->text("rowsFrom"));
+                std::size_t bad = 0, rw = 0;
+                for (const auto& c : cols) {
+                    const auto ci = hmi::table::analyzeColumn(*project, src, c);
+                    bad += ci.error.empty() ? 0u : 1u;
+                    rw += c.write ? 1u : 0u;
+                }
+                p.type = PG::ValueType::ReadOnly;
+                p.value = cols.empty() ? std::string("aucune (onglet Contenu)")
+                                       : std::to_string(cols.size()) + " colonne(s)" + (rw ? ", " + std::to_string(rw) + " en R/W" : std::string{})
+                                             + (hmi::table::hasColumns(*o) ? std::string{} : " - reprises du tableau d'avant") + " (onglet Contenu)";
+                if (bad) {
+                    p.value += " \xC2\xB7 " + std::to_string(bad) + " faute(s)";
+                    p.valueTone = ui::Tone::Error;
+                }
+            } else if (prop.key == hmi::table::kSortKey) {
+                p.type = PG::ValueType::Enum;
+                p.enumValues = {""};
+                for (const auto& c : hmi::table::columnsOf(*o))
+                    if (!c.title.empty()) p.enumValues.push_back(c.title);
+            } else if (prop.key == hmi::table::kPickKey && project) {
+                p.type = PG::ValueType::Enum;
+                p.typeIn = true;
+                p.enumValues = {""};
+                for (const auto& var : project->programs.variables) {
+                    std::string u = var.type;
+                    for (auto& ch : u) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+                    if (u == "INT" || u == "DINT" || u == "UINT" || u == "UDINT" || u == "SINT" || u == "LINT" || u == "STRING")
+                        p.enumValues.push_back(var.name);
+                }
+                if (const std::string v = hmi::markers::strip(prop.value); !v.empty() && !project->variable(v)
+                    && std::none_of(view.params.begin(), view.params.end(), [&](const hmi::ViewParam& vp) { return vp.name == v; })) {
+                    p.valueTone = ui::Tone::Error;
+                    p.description = "\xC2\xAB " + v + " \xC2\xBB : variable inconnue.";
+                }
+            } else if (prop.key == hmi::table::kEmptyKey) {
+                p.placeholder = "(aucune ligne)";
+            } else if (prop.key == "rowsFrom" && project) {
+                // Les enumerations (une ligne par valeur) et les structures (une ligne par membre) aussi.
+                for (const auto* e : hmi::enumerations(*project)) p.enumValues.push_back(e->name);
+                for (const auto& var : project->programs.variables)
+                    if (!hmi::types::membersOf(*project, var.type).empty() && hmi::typeform::decompose(var.type).form == hmi::typeform::Form::Simple)
+                        p.enumValues.push_back(var.name);
+                p.typeIn = true;
+            }
+        }
         if (prop.key == "cells" && prop.expr.empty()) {
             std::size_t nrows = 0, cols = 0, driven = 0;
             for (const auto& row : hmi::parseCells(prop.value)) {
@@ -3289,6 +3387,12 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
         // 1.12.7 (lot D) : une position de vanne 3 voies, un onglet choisis par leur nom ecrivent leur code.
         if (p.type == PG::ValueType::Enum && o->kind == hmi::Kind::ThreeWayValve && prop.key == "value")
             p.commit = [inner = p.commit](std::string_view s) { return inner(hmi::choices::valve3Code(s)); };
+        // 1.12.13 : le mode choisi par son titre ecrit son libelle (« cases fixes »...) ; l'editeur dit ce qui passe en reserve.
+        if (o->kind == hmi::Kind::Table && prop.key == hmi::table::kModeKey)
+            p.commit = [commit](std::string_view s) {
+                const auto m = hmi::table::modeFromLabel(s);
+                return m && commit.prop && commit.prop(std::string(hmi::table::kModeKey), std::string(hmi::table::modeLabel(*m)), false);
+            };
         // 1.12.11 (lot G) : un gaz choisi par son nom ecrit sa couleur.
         if (p.type == PG::ValueType::Enum && o->kind == hmi::Kind::GasBottle && prop.key == "gasColor")
             p.commit = [inner = p.commit](std::string_view s) { return inner(hmi::choices::gasColorOf(s)); };
@@ -3381,6 +3485,7 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
         else if (const int r3 = rankOf(kSecurityKeys, prop.key); r3 >= 0) { section = SecSecurity; rank = r3 * 10.0; }
         else if (prop.key == "variable") rank = variableRank;
         else if (prop.key == "equipment") rank = -1.0;   // 1.12.11 (lot G) : en tete de la section du symbole
+        else if (o->kind == hmi::Kind::Table && prop.key == hmi::table::kModeKey) rank = -3.0;   // 1.12.13 : en tete de la section du tableau
         else if (const double fr = freshRank(prop.key); fr >= 0) rank = fr;
         else rank = 1000.0 + static_cast<double>(propIndex);
         // 1.11.2 (SYM, decision 240 ; la capture du client « Arguments : fx Voiture;50 ») : une instance
@@ -3391,6 +3496,61 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
                                         ? hmi::symbolOf(*project, *o) : nullptr;
         if (paramsOf && paramsOf->params.empty()) paramsOf = nullptr;
         if (!paramsOf) rows[section].push_back({rank, std::move(p)});
+        // 1.12.13 : sous le mode utilise, les autres - « en reserve, non utilise » (leur resume, et le bouton qui les efface)
+        // ou « vide ».
+        if (o->kind == hmi::Kind::Table && !many && prop.key == hmi::table::kModeKey) {
+            const auto used = hmi::table::modeOf(*o);
+            double r = -2.9;
+            for (const auto m : hmi::table::kModes) {
+                if (m == used) continue;
+                PG::Property res;
+                res.name = "  " + std::string(hmi::table::modeTitle(m));
+                res.type = PG::ValueType::ReadOnly;
+                res.valueTone = ui::Tone::Muted;
+                if (hmi::table::modeEmpty(*o, m)) {
+                    res.value = "vide";
+                    res.description = "Rien de r\xC3\xA9gl\xC3\xA9 pour ce mode.";
+                } else {
+                    res.value = "en r\xC3\xA9serve, non utilis\xC3\xA9 \xC2\xB7 " + hmi::table::modeSummary(*o, m);
+                    res.description = "Gard\xC3\xA9 dans le fichier, mais le tableau ne le montre pas : choisis-le dans \xC2\xAB Le tableau "
+                                      "montre \xC2\xBB pour le retrouver tel quel. Le bouton au bout de la ligne efface ses r\xC3\xA9glages "
+                                      "(Ctrl+Z les reprend).";
+                    const std::string label(hmi::table::modeLabel(m));
+                    res.revert = [commit, label] { if (commit.prop) (void)commit.prop("__tableClear", label, false); };
+                    res.revertTip = "Effacer les r\xC3\xA9glages \xC2\xAB " + std::string(hmi::table::modeTitle(m)) + " \xC2\xBB (Ctrl+Z les reprend)";
+                }
+                rows[SecType].push_back({r, std::move(res)});
+                r += 0.1;
+            }
+        }
+        // 1.12.13 : sous Lignes depuis, ce qu'elle donne (le type recu, une ligne par quoi) ou sa faute.
+        if (o->kind == hmi::Kind::Table && !many && prop.key == "rowsFrom" && project) {
+            const auto src = hmi::table::analyzeSource(*project, o->text("rowsFrom"));
+            PG::Property got;
+            got.name = "  Re\xC3\xA7u";
+            got.type = PG::ValueType::ReadOnly;
+            got.description = "Attendu : une collection - un tableau, une LIST, un VECTOR, une MAP, une structure, une \xC3\xA9num\xC3\xA9ration. "
+                              "Vide : chaque colonne nomme sa liste (Debits[*]).";
+            switch (src.kind) {
+                case hmi::table::SourceKind::None: got.value = "rien : une liste par colonne"; break;
+                case hmi::table::SourceKind::Error:
+                    got.value = src.error;
+                    got.valueTone = ui::Tone::Error;
+                    if (!src.fix.empty()) {
+                        const std::string fix = src.fix;
+                        got.revert = [commit, fix] { if (commit.prop) (void)commit.prop("rowsFrom", fix, false); };
+                        got.revertTip = "Corriger : " + fix;
+                    }
+                    break;
+                case hmi::table::SourceKind::Unknown: got.value = "connu en marche (un param\xC3\xA8tre de la vue, une formule)"; break;
+                default:
+                    got.value = src.type + (src.count >= 0 ? " \xC2\xB7 " + std::to_string(src.count) + " ligne(s)" : std::string{}) + " \xC2\xB7 "
+                              + hmi::table::rowsWord(src);
+                    got.valueTone = ui::Tone::Ok;
+                    break;
+            }
+            rows[section].push_back({rank + 0.01, std::move(got)});
+        }
         if (paramsOf) {
             // Le symbole, reduit a ses parametres (la ligne le garde apres que l'inspecteur est refait).
             hmi::View shape;

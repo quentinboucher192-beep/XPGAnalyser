@@ -57,6 +57,7 @@
 #include "../src/hmi/HmiProduction.hpp"
 #include "../src/hmi/HmiSources.hpp"
 #include "../src/hmi/HmiVertices.hpp"    // 1.12.12 (lot H) : les sommets, « Points depuis »
+#include "../src/hmi/HmiTable.hpp"          // 1.12.13 : le Tableau, un mode a la fois
 #include "../src/hmi/HmiChoiceLists.hpp"   // 1.12.7 (lot E) : les colonnes de Lignes depuis
 #include "../src/hmi/HmiNavigation.hpp"
 #include "../src/hmi/HmiLoginMenu.hpp"
@@ -26585,7 +26586,355 @@ void structuresF11210() {
     }
 }
 
+// ============================================================ 1.12.13 ======
+//  LE TABLEAU, UN MODE A LA FOIS (HmiTable.hpp) : le mode (coche, ou deduit pour
+//  un tableau d'avant), les colonnes dynamiques ([*], [#], Liste[*], la cle d'une
+//  MAP, une autre MAP par la cle), « ... » ou une liste s'arrete, les chemins R/W,
+//  l'analyse sans moteur (le type attendu et recu, la faute et sa correction).
+//  HMI_TEST_11213=1 les lance seuls.
+namespace {
+
+namespace tb = hmi::table;
+
+// Le projet des exemples : un ARRAY de structures, une LIST de structures (remplie au
+// demarrage par LIST_ADD), deux MAP de meme cle, une structure, une enumeration, des listes.
+Project projetTableau11213() {
+    Project p;
+    HmiType etat;
+    etat.id = p.allocate();
+    etat.name = "T_Etat";
+    etat.kind = HmiTypeKind::Enumeration;
+    etat.values = {{"ARRET", 0, "Arr\xC3\xAAt", ""}, {"MARCHE", 1, "En marche", ""}, {"DEFAUT", 2, "D\xC3\xA9" "faut", ""}};
+    HmiType vanne;
+    vanne.id = p.allocate();
+    vanne.name = "T_Vanne";
+    vanne.members = {{"Ouverture", "REAL", ""}, {"Ouverte", "BOOL", ""}};
+    HmiType cuve;
+    cuve.id = p.allocate();
+    cuve.name = "T_Cuve";
+    cuve.members = {{"Nom", "STRING", ""}, {"Niveau", "REAL", ""}, {"Capacite", "REAL", "10.0"}, {"Consigne", "REAL", ""},
+                    {"Etat", "T_Etat", ""}, {"Vanne", "T_Vanne", ""}};
+    HmiType alarme;
+    alarme.id = p.allocate();
+    alarme.name = "T_Alarme";
+    alarme.members = {{"Message", "STRING", ""}, {"Priorite", "INT", ""}, {"Active", "BOOL", ""}};
+    HmiType recette;
+    recette.id = p.allocate();
+    recette.name = "T_Recette";
+    recette.members = {{"Nom", "STRING", ""}, {"Temperature", "REAL", ""}, {"Duree", "INT", ""}};
+    p.programs.types = {etat, vanne, cuve, alarme, recette};
+    p.programs.variables.push_back(hmiVar(p, "Cuves", "ARRAY[1..4] OF T_Cuve"));
+    p.programs.variables.push_back(hmiVar(p, "Alarmes", "LIST OF T_Alarme"));
+    p.programs.variables.push_back(hmiVar(p, "Stock", "MAP[STRING] OF INT", "['vis' := 30, 'ecrou' := 50, 'rondelle' := 12]"));
+    p.programs.variables.push_back(hmiVar(p, "Prix", "MAP[STRING] OF REAL", "['vis' := 0.12, 'ecrou' := 0.08]"));
+    p.programs.variables.push_back(hmiVar(p, "Debits", "ARRAY[1..3] OF REAL", "[12.5, 8.1, 15.0]"));
+    p.programs.variables.push_back(hmiVar(p, "Cadences", "LIST OF INT", "[120, 95, 101, 88, 130]"));
+    p.programs.variables.push_back(hmiVar(p, "Noms", "LIST OF STRING", "['L1', 'L2', 'L3', 'L4']"));
+    p.programs.variables.push_back(hmiVar(p, "Textes", "LIST OF STRING", "['a', 'b']"));
+    p.programs.variables.push_back(hmiVar(p, "Recette", "T_Recette"));
+    p.programs.variables.push_back(hmiVar(p, "Cuve_Choisie", "INT", "2"));
+    p.programs.variables.push_back(hmiVar(p, "Article", "STRING", "'vis'"));
+    Script s;
+    s.id = p.allocate();
+    s.name = "Init";
+    s.event = "Demarrage";
+    s.body = "VAR a : T_Alarme; END_VAR\n"
+             "Cuves[1].Nom := 'A'; Cuves[1].Niveau := 3.2; Cuves[2].Nom := 'B'; Cuves[2].Niveau := 7.5; Cuves[2].Etat := T_Etat#DEFAUT;\n"
+             "Cuves[3].Nom := 'C'; Cuves[3].Niveau := 9.6; Cuves[4].Nom := 'D'; Cuves[2].Vanne.Ouverture := 40.0;\n"
+             "a.Message := 'Haut niveau C'; a.Priorite := 1; a.Active := TRUE; LIST_ADD(Alarmes, a);\n"
+             "a.Message := 'Pompe 2'; a.Priorite := 3; a.Active := FALSE; LIST_ADD(Alarmes, a);\n"
+             "Recette.Nom := 'Pain'; Recette.Temperature := 220.0; Recette.Duree := 35;";
+    p.programs.scripts.push_back(s);
+    VariableDisplay d;
+    d.path = "Cuves[].Niveau";
+    d.unit = "m";
+    d.format = "0.0";
+    d.high = "8";
+    d.highAlarm = "9";
+    p.displays.push_back(d);
+    View v;
+    v.id = p.allocate();
+    v.name = "Tableaux";
+    p.views = {v};
+    p.config.startView = v.id;
+    return p;
+}
+tb::Column tcol(const char* title, const char* content, bool write = false) {
+    tb::Column c;
+    c.title = title;
+    c.content = content;
+    c.write = write;
+    return c;
+}
+Id addTable11213(Project& p, const char* name, const char* from, const std::vector<tb::Column>& cols) {
+    Object o;
+    o.id = p.allocate();
+    o.kind = Kind::Table;
+    o.name = name;
+    o.set("rowsFrom", from);
+    o.set(std::string(tb::kModeKey), std::string(tb::modeLabel(tb::Mode::Rows)));
+    o.set(std::string(tb::kColumnsKey), tb::formatColumns(cols));
+    p.views[0].objects.push_back(o);
+    return o.id;
+}
+// Les cases d'un modele : "A|3.2 m|..." par ligne.
+std::vector<std::string> rowsText(const tb::Model& m) {
+    std::vector<std::string> out;
+    for (const auto& r : m.rows) {
+        std::string line;
+        for (std::size_t k = 0; k < r.cells.size(); ++k) line += (k ? "|" : "") + r.cells[k].text;
+        out.push_back(line);
+    }
+    return out;
+}
+
+} // namespace
+
+void tableauModes11213() {
+    std::printf("1.12.13 : le Tableau, un mode a la fois\n");
+    Object o;
+    o.kind = Kind::Table;
+    check(tb::modeOf(o) == tb::Mode::Fixed && !tb::modeExplicit(o), "un tableau neuf : cases fixes (deduit)");
+    o.set("cells", formatCells({{"A", "{PA:0.0}"}, {"", "x"}}));
+    o.set("source", "mesures.csv");
+    check(tb::modeOf(o) == tb::Mode::File, "un tableau d'avant relie a un fichier : le fichier l'emportait sur les cases (le meme dessin)");
+    o.set("rowsFrom", "Cuves");
+    check(tb::modeOf(o) == tb::Mode::Rows, "... et Lignes depuis sur les deux");
+    o.set(std::string(tb::kModeKey), "cases fixes");
+    check(tb::modeOf(o) == tb::Mode::Fixed && tb::modeExplicit(o), "le mode coche l'emporte : les autres reglages restent en reserve");
+    check(!tb::modeEmpty(o, tb::Mode::Rows) && !tb::modeEmpty(o, tb::Mode::File), "... ils ne sont pas vides (en reserve)");
+    same(tb::modeSummary(o, tb::Mode::Fixed), "2 \xC3\x97 2 cases, 3 remplies", "le resume des cases fixes");
+    same(tb::modeSummary(o, tb::Mode::Rows), "depuis Cuves, les colonnes de la source", "le resume des lignes dynamiques (sans colonnes)");
+    same(tb::modeSummary(o, tb::Mode::File), "mesures.csv", "le resume du fichier");
+    tb::clearMode(o, tb::Mode::Rows);
+    tb::clearMode(o, tb::Mode::File);
+    check(tb::modeEmpty(o, tb::Mode::Rows) && tb::modeEmpty(o, tb::Mode::File) && !tb::modeEmpty(o, tb::Mode::Fixed),
+          "effacer la reserve : Lignes depuis et le fichier vides, les cases gardees");
+    check(tb::modeFromLabel("Lignes dynamiques") == tb::Mode::Rows && tb::modeFromLabel("FICHIER EXTERNE") == tb::Mode::File
+              && !tb::modeFromLabel("autre"),
+          "le mode se lit par son libelle, sans casse");
+    // Les colonnes : enregistrees et relues a l'identique.
+    std::vector<tb::Column> cols = {tcol("Nom", "[*].Nom"), tcol("Consigne", "[*].Consigne", true)};
+    cols[1].format = "0.0";
+    cols[1].unit = "m";
+    cols[1].width = 1.5;
+    cols[1].align = "droite";
+    cols[1].level = 2;
+    cols[0].color = "formule";
+    cols[0].colorExpr = "=SEL([*].Niveau > 8, '#2EA043', '#E5534B')";
+    check(tb::parseColumns(tb::formatColumns(cols)) == cols, "les colonnes dynamiques : ecrites puis relues a l'identique");
+    // Les cases fixes : R/W par colonne.
+    Object f;
+    f.kind = Kind::Table;
+    f.set(std::string(tb::kAccessKey), "R;W");
+    const auto acc = tb::fixedAccess(f, 3);
+    check(acc.size() == 3 && !acc[0] && acc[1] && !acc[2], "cases fixes : R;W -> la 2e colonne s'ecrit, les autres non");
+    same(tb::formatAccess(acc), "R;W;R", "... et se reecrit");
+    same(tb::fixedWritePath("{PA:0.00} bar"), "PA", "une case fixe a un seul trou ecrit sa variable");
+    same(tb::fixedWritePath("=Cuves[2].Consigne"), "Cuves[2].Consigne", "une formule qui n'est qu'un chemin aussi");
+    same(tb::fixedWritePath("=PA * 2"), "", "un calcul ne s'ecrit pas");
+    same(tb::fixedWritePath("{PA} / {PB}"), "", "deux trous non plus");
+}
+
+void tableauAnalyse11213() {
+    std::printf("1.12.13 : le Tableau, l'analyse sans moteur (types attendus et recus, fautes et corrections)\n");
+    const Project p = projetTableau11213();
+    const auto cuves = tb::analyzeSource(p, "Cuves");
+    check(cuves.kind == tb::SourceKind::Array && cuves.element == "T_Cuve" && cuves.low == 1 && cuves.count == 4,
+          "Cuves : un ARRAY[1..4] OF T_Cuve, 4 lignes de T_Cuve");
+    check(tb::analyzeSource(p, "Alarmes").kind == tb::SourceKind::List, "Alarmes : une LIST (ses lignes, en marche)");
+    const auto stock = tb::analyzeSource(p, "Stock");
+    check(stock.kind == tb::SourceKind::Map && stock.key == "STRING" && stock.element == "INT", "Stock : une MAP[STRING] OF INT");
+    check(tb::analyzeSource(p, "Recette").kind == tb::SourceKind::Struct, "Recette : une structure (une ligne par membre)");
+    check(tb::analyzeSource(p, "T_Etat").kind == tb::SourceKind::Enum && tb::analyzeSource(p, "T_Etat").count == 3,
+          "T_Etat : une enumeration (une ligne par valeur)");
+    check(tb::analyzeSource(p, "$Cuves$").markers && tb::analyzeSource(p, "$Cuves$").kind == tb::SourceKind::Array, "un repere : garde, lu sans ses $");
+    const auto one = tb::analyzeSource(p, "Textes[0]");
+    check(one.kind == tb::SourceKind::Error && one.fix == "Textes", "=Textes[0] : un seul element, pas une collection - corrige en Textes");
+    check(tb::analyzeSource(p, "Cuve_Choisie").kind == tb::SourceKind::Error, "un INT seul n'est pas une source de lignes");
+    // Les colonnes : le type recu, la faute.
+    const auto info = [&](const tb::Source& s, const char* content, bool w = false) { return tb::analyzeColumn(p, s, tcol("x", content, w)); };
+    const auto niveau = info(cuves, "[*].Niveau");
+    check(niveau.type == "REAL" && niveau.unit == "m" && niveau.format == "0.0" && niveau.error.empty(),
+          "[*].Niveau : un REAL, l'unite et le format de Cuves[].Niveau");
+    check(info(cuves, "[*].Vanne.Ouverture").type == "REAL", "[*].Vanne.Ouverture : un membre imbrique");
+    const auto whole = info(cuves, "[*]");
+    check(!whole.error.empty() && whole.fix == "[*].Nom", "[*] seul sur un T_Cuve : une structure n'a pas de case, corrige en [*].Nom");
+    const auto bad = info(cuves, "[*].Hauteur");
+    check(bad.error.find("Hauteur") != std::string::npos && bad.error.find("Niveau") != std::string::npos, "un membre inconnu : la faute cite les membres");
+    const auto consigne = info(cuves, "[*].Consigne", true);
+    check(consigne.writable && consigne.target == "Cuves[i].Consigne", "[*].Consigne en R/W : ecrit Cuves[i].Consigne");
+    check(!info(cuves, "=[*].Niveau * 2", true).writable, "une formule ne s'ecrit pas");
+    check(!info(cuves, "[#]").writable && info(cuves, "[#]").type == "INT", "[#] : le numero de la ligne, un INT, ne s'ecrit pas");
+    check(info(stock, "[*].Cle").type == "STRING" && !info(stock, "[*].Cle", true).writable, "[*].Cle d'une MAP : sa cle, qui ne s'ecrit pas");
+    check(info(stock, "[*].Valeur", true).writable && info(stock, "[*].Valeur").type == "INT", "[*].Valeur d'une MAP : sa valeur, qui s'ecrit");
+    check(info(stock, "Prix[[*].Cle]").type == "REAL" && info(stock, "Prix[[*].Cle]", true).writable, "Prix[[*].Cle] : une autre MAP par la cle de la ligne");
+    const auto mapStar = info(stock, "Prix[*]");
+    check(!mapStar.error.empty() && mapStar.error.find("[[*].Cle]") != std::string::npos, "Prix[*] : une MAP ne se parcourt pas par [*] - la faute propose Prix[[*].Cle]");
+    const tb::Source none;
+    const auto noSource = info(none, "[*].Nom");
+    check(noSource.error.find("Lignes depuis") != std::string::npos, "[*] sans source : la faute dit qu'il faut Lignes depuis, ou Debits[*]");
+    const auto debits = info(none, "Debits[*]");
+    check(debits.error.empty() && debits.type == "REAL" && debits.lists == std::vector<std::string>{"Debits"}, "Debits[*] : la liste de la colonne");
+    check(info(none, "Cuves[*].Niveau").type == "REAL", "Cuves[*].Niveau : le membre de chaque element");
+    const auto arr = info(none, "Debits");
+    check(!arr.error.empty() && arr.fix == "Debits[*]", "Debits seul : une collection, corrige en Debits[*]");
+    check(info(cuves, "{[*].Niveau:0.0} m").kind == tb::Content::Template && info(cuves, "{[*].Niveau:0.0} m", true).writable,
+          "un texte a un seul trou s'ecrit (sa variable)");
+    // Les propositions et les colonnes d'une source.
+    std::set<std::string> sugg;
+    for (const auto& s : tb::suggestions(p, cuves)) sugg.insert(s.text);
+    check(sugg.count("[*].Nom") && sugg.count("[*].Vanne.Ouverture") && sugg.count("[#]") && sugg.count("Debits[*]") && !sugg.count("[*].Vanne"),
+          "les propositions : les membres simples (imbriques compris), [#], les autres listes");
+    std::set<std::string> suggMap;
+    for (const auto& s : tb::suggestions(p, stock)) suggMap.insert(s.text);
+    check(suggMap.count("[*].Cle") && suggMap.count("[*].Valeur") && suggMap.count("Prix[[*].Cle]"), "une MAP : sa cle, sa valeur, les MAP de meme cle");
+    const auto per = tb::columnsForSource(p, cuves);
+    check(per.size() == 7 && per[0].content == "[*].Nom" && per[0].title == "Nom" && per[5].content == "[*].Vanne.Ouverture" && per[6].title == "Ouverte",
+          "Une colonne par membre : 7 colonnes (Vanne depliee en Ouverture, Ouverte)");
+    // La compilation et les chemins d'une ligne.
+    same(tb::compileContent("=[*].Niveau * 100 / [*].Capacite", cuves, &p), "__TABLE_ELT__.Niveau * 100 / __TABLE_ELT__.Capacite",
+         "compiler : [*] devient l'element de la ligne");
+    same(tb::compileContent("Debits[*]", none, &p), "Debits[__TABLE_POS__ + 1]", "compiler : Debits[*] - le rang plus la borne basse de Debits");
+    same(tb::compileContent("Cadences[*]", none, &p), "Cadences[__TABLE_POS__ + 0]", "... une LIST commence a 0");
+    same(tb::compileContent("Prix[[*].Cle]", stock, &p), "Prix[__TABLE_KEY__]", "compiler : la cle de la ligne");
+    same(tb::compileContent("[#]. {[*].Nom}", cuves, &p), "__TABLE_ROW__. {__TABLE_ELT__.Nom}", "compiler : [#] et un texte a trous");
+    tb::RowPaths row;
+    row.element = "Cuves[2]";
+    row.position = 1;
+    same(tb::writePathOf("[*].Consigne", cuves, row, &p), "Cuves[2].Consigne", "la case R/W de la 2e ligne ecrit Cuves[2].Consigne");
+    same(tb::writePathOf("Debits[*]", cuves, row, &p), "Debits[2]", "... Debits[*] : Debits[2]");
+    tb::RowPaths mrow;
+    mrow.element = mrow.value = "Stock['vis']";
+    mrow.key = "'vis'";
+    same(tb::writePathOf("[*].Valeur", stock, mrow, &p), "Stock['vis']", "une MAP : sa valeur, par la cle");
+    same(tb::writePathOf("Prix[[*].Cle]", stock, mrow, &p), "Prix['vis']", "... une autre MAP, par la meme cle");
+    same(tb::writePathOf("[#]", cuves, row, &p), "", "[#] n'ecrit rien");
+    same(tb::keyLiteral("l'ecrou", true), "'l''ecrou'", "une cle texte : les apostrophes doublees");
+    same(tb::titleFor("[*].Vanne.Ouverture"), "Ouverture", "le titre propose : le dernier membre");
+    same(tb::titleFor("Prix[[*].Cle]"), "Prix", "... Prix[[*].Cle] : Prix");
+    // La migration : un tableau d'avant, ses colonnes a l'identique.
+    Object old;
+    old.kind = Kind::Table;
+    old.set("rowsFrom", "Cuves");
+    old.set(std::string(choices::kSourceColumnsKey), "Niveau = Hauteur | 0.0; Nom");
+    const auto mig = tb::legacyColumns(p, old);
+    check(mig.size() == 2 && mig[0].title == "Hauteur" && mig[0].content == "[*].Niveau" && mig[0].format == "0.0" && mig[1].content == "[*].Nom",
+          "migrer un tableau d'avant : ses colonnes choisies (titre, format), dans l'ordre");
+}
+
+void tableauMoteur11213() {
+    std::printf("1.12.13 : le Tableau en marche (les sources, « ... », les seuils, le tri, la ligne choisie)\n");
+    Project p = projetTableau11213();
+    const Id tCuves = addTable11213(p, "Cuves", "Cuves", {tcol("N\xC2\xB0", "[#]"), tcol("Nom", "[*].Nom"), tcol("Niveau", "[*].Niveau"),
+                                                         tcol("%", "=[*].Niveau * 100 / [*].Capacite"), tcol("Etat", "[*].Etat"),
+                                                         tcol("Consigne", "[*].Consigne", true), tcol("Vanne", "{[*].Vanne.Ouverture:0} %"),
+                                                         tcol("Debit", "Debits[*]")});
+    const Id tAl = addTable11213(p, "Alarmes", "Alarmes", {tcol("Message", "[*].Message"), tcol("Prio", "[*].Priorite", true), tcol("Active", "[*].Active")});
+    const Id tStock = addTable11213(p, "Stock", "Stock", {tcol("Article", "[*].Cle"), tcol("Qte", "[*].Valeur", true), tcol("Prix", "Prix[[*].Cle]", true),
+                                                         tcol("Total", "=Stock[[*].Cle] * Prix[[*].Cle]")});
+    const Id tRec = addTable11213(p, "Recette", "Recette", {tcol("Membre", "[*].Membre"), tcol("Valeur", "[*].Valeur", true)});
+    const Id tEnum = addTable11213(p, "Etats", "T_Etat", {tcol("Nom", "[*].Nom"), tcol("Valeur", "[*].Valeur"), tcol("Texte", "[*].Texte")});
+    const Id tListes = addTable11213(p, "Listes", "", {tcol("Ligne", "Noms[*]"), tcol("Cadence", "Cadences[*]", true), tcol("Debit", "Debits[*]")});
+    const Id tCad = addTable11213(p, "Cadences", "Cadences", {tcol("N\xC2\xB0", "[#]"), tcol("Cadence", "[*]", true)});
+    View& v = p.views[0];
+    {
+        Object* o = v.object(tCuves);
+        o->set(std::string(tb::kPickKey), "Cuve_Choisie");
+        auto cols = tb::columnsOf(*o);
+        cols[2].color = "seuils";
+        cols[4].color = "formule";
+        cols[4].colorExpr = "=SEL([*].Etat = T_Etat#DEFAUT, '#2EA043', '#E5534B')";
+        o->set(std::string(tb::kColumnsKey), tb::formatColumns(cols));
+        Object* s = v.object(tStock);
+        s->set(std::string(tb::kSortKey), "Qte");
+        s->set(std::string(tb::kSortOrderKey), "d\xC3\xA9" "croissant");
+    }
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    rt.tick(0.1);
+    const auto model = [&](Id id) {
+        tb::Model m;
+        check(rt.tableModel(v.id, *v.object(id), m), "le modele se fait : " + v.object(id)->name);
+        return m;
+    };
+    // ARRAY de structures : [#], un membre, une formule, une enumeration (son texte), R/W, un texte a trous, une autre liste.
+    const auto mc = model(tCuves);
+    check(mc.columns && mc.kind == tb::SourceKind::Array && mc.rows.size() == 4, "Cuves : 4 lignes (une par element)");
+    const auto rc = rowsText(mc);
+    same(rc.size() > 1 ? rc[1] : std::string{}, "2|B|7.5 m|75|D\xC3\xA9" "faut|0|40 %|8.1", "la 2e ligne : chaque colonne calculee pour Cuves[2]");
+    same(rc.size() > 3 ? rc[3] : std::string{}, "4|D|0.0 m|0|Arr\xC3\xAAt|0|0 %|...", "Debits n'a que 3 elements : « ... » sur la 4e ligne");
+    check(mc.rows.size() == 4 && mc.rows[3].cells[7].missing && !mc.rows[3].cells[6].missing, "... la case manquante est marquee (grise)");
+    check(mc.rows.size() == 4 && mc.rows[1].element == "Cuves[2]" && mc.rows[1].index == "2" && mc.rows[1].position == 1, "la ligne connait son element (Cuves[2]) et son indice");
+    check(mc.rows.size() == 4 && mc.rows[1].picked && !mc.rows[0].picked, "la ligne choisie : Cuve_Choisie = 2");
+    check(mc.rows.size() == 4 && mc.rows[2].cells[2].tone == 2 && mc.rows[1].cells[2].tone == 0, "les seuils de Cuves[].Niveau : 9.6 > alarme haute 9 (rouge), 7.5 rien");
+    check(mc.rows.size() == 4 && mc.rows[1].cells[4].colored && mc.rows[1].cells[4].color == 0xE5534B && mc.rows[0].cells[4].color == 0x2EA043,
+          "la formule de couleur : SEL(G, si faux, si vrai) - DEFAUT en rouge");
+    check(mc.writable.size() == 8 && mc.writable[5] && !mc.writable[3], "R/W : Consigne s'ecrit, la formule non");
+    check(mc.aligns.size() == 8 && mc.aligns[2] == "droite" && mc.aligns[1] == "gauche" && mc.aligns[4] == "gauche", "l'alignement : un nombre a droite, un texte (et une enumeration) a gauche");
+    // LIST de structures (remplie par LIST_ADD au demarrage).
+    const auto ma = model(tAl);
+    check(ma.kind == tb::SourceKind::List && rowsText(ma) == std::vector<std::string>{"Haut niveau C|1|Vrai", "Pompe 2|3|Faux"},
+          "Alarmes (LIST OF T_Alarme) : une ligne par alarme ajoutee, ses membres");
+    check(ma.rows.size() == 2 && ma.rows[1].element == "Alarmes[1]" && ma.rows[1].index == "1", "... la 2e : Alarmes[1] (une LIST commence a 0)");
+    // MAP, et une autre MAP par la cle : rondelle n'a pas de prix (« ... »), tri par quantite decroissante.
+    const auto ms = model(tStock);
+    check(rowsText(ms) == std::vector<std::string>{"ecrou|50|0.08|4", "vis|30|0.12|3.6", "rondelle|12|...|..."},
+          "Stock et Prix : la cle, la valeur, l'autre MAP par la cle ; triees par Qte decroissante ; une cle absente de Prix : « ... »");
+    check(ms.sortColumn == 1 && ms.sortDescending, "... le tri est dit (la colonne, l'ordre)");
+    // Une structure : une ligne par membre.
+    check(rowsText(model(tRec)) == std::vector<std::string>{"Nom|Pain", "Temperature|220", "Duree|35"}, "Recette : une ligne par membre (Membre, Valeur)");
+    check(model(tRec).writable[1], "... [*].Valeur d'une structure s'ecrit (le type de chaque membre)");
+    // Une enumeration : une ligne par valeur.
+    check(rowsText(model(tEnum)) == std::vector<std::string>{"ARRET|0|Arr\xC3\xAAt", "MARCHE|1|En marche", "DEFAUT|2|D\xC3\xA9" "faut"},
+          "T_Etat : Nom, Valeur, Texte");
+    // Sans source : une liste par colonne, la plus longue fait les lignes.
+    const auto ml = model(tListes);
+    check(rowsText(ml) == std::vector<std::string>{"L1|120|12.5", "L2|95|8.1", "L3|101|15", "L4|88|...", "...|130|..."},
+          "une liste par colonne : 5 lignes (Cadences), « ... » ou Noms et Debits s'arretent");
+    check(rowsText(model(tCad)) == std::vector<std::string>{"1|120", "2|95", "3|101", "4|88", "5|130"}, "une LIST de valeurs : [#] et [*]");
+    // En marche : la LIST grandit, le tableau suit ; une ecriture se voit.
+    std::string why;
+    check(rt.callScript("Init", 1.0, &why), "le script se relance" + (why.empty() ? std::string{} : " : " + why));
+    const auto ma2 = model(tAl);
+    check(ma2.rows.size() == 4, "deux alarmes de plus (LIST_ADD) : 4 lignes");
+    // La portee d'une ligne (une action, une case R/W).
+    Scope sc;
+    tb::RowPaths rp;
+    tb::Source src;
+    check(rt.tableRowScope(v.id, *v.object(tStock), 2, sc, &rp, &src) && rp.element == "Stock['vis']" && rp.key == "'vis'",
+          "la portee de la 3e ligne de Stock (dans l'ordre de la MAP) : Stock['vis']");
+    same(tb::writePathOf("Prix[[*].Cle]", src, rp, &p), "Prix['vis']", "... sa case Prix ecrit Prix['vis']");
+    Scope sa;
+    check(rt.tableRowScope(v.id, *v.object(tAl), 1, sa, &rp, nullptr) && sa.object("__TABLE_ELT__") != nullptr, "une ligne de LIST : l'element en place (objet)");
+    Scope sk;
+    check(rt.tableRowScope(v.id, *v.object(tCuves), 1, sk, &rp, nullptr) && sk.alias("__TABLE_ELT__") && *sk.alias("__TABLE_ELT__") == "Cuves[2]",
+          "une ligne d'un tableau IHM : un alias vers Cuves[2]");
+    // Le tableau d'avant (sans colonnes dynamiques) : les memes lignes que tableRows.
+    Object old;
+    old.id = p.allocate();
+    old.kind = Kind::Table;
+    old.name = "Ancien";
+    old.set("rowsFrom", "Stock");
+    v.objects.push_back(old);
+    tb::Model mo;
+    std::vector<std::string> headers;
+    std::vector<std::vector<std::string>> rows;
+    check(rt.tableModel(v.id, *v.object(old.id), mo) && rt.tableRows(*v.object(old.id), headers, rows), "un tableau d'avant : le modele se fait");
+    check(!mo.columns && mo.headers == headers && rowsText(mo).size() == rows.size() && mo.rows.size() == 3 && mo.rows[0].cells[0].text == rows[0][0],
+          "... ses en-tetes et ses cases, tels que tableRows (le meme dessin)");
+}
+
 int main(int argc, char** argv) {
+    // 1.12.13 : HMI_TEST_11213=1 - le Tableau, un mode a la fois, seul.
+    if (const char* only = std::getenv("HMI_TEST_11213"); only && *only == '1') {
+        tableauModes11213();
+        tableauAnalyse11213();
+        tableauMoteur11213();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
     // 1.11.10 : HMI_TEST_1110=1 - les fonctions et les popups des symboles, seules.
     if (const char* only = std::getenv("HMI_TEST_1110"); only && *only == '1') {
         fonctionsSymbole11110();
@@ -26796,6 +27145,9 @@ int main(int argc, char** argv) {
     lotH11212_pointsDepuis();         // 1.12.12 (lot H) : Points depuis une source
     lotH11212_planZones();            // 1.12.12 (lot H) : le plan a zones, sa variable lue et ecrite
     lotH11212_reference();            // 1.12.12 (lot H) : la courbe de reference d'une courbe XY sur le dessin
+    tableauModes11213();              // 1.12.13 : le Tableau, un mode a la fois (reserve, R/W des cases fixes)
+    tableauAnalyse11213();            // 1.12.13 : le Tableau, l'analyse sans moteur
+    tableauMoteur11213();             // 1.12.13 : le Tableau en marche (les sources, « ... », seuils, tri)
     enumerationsLangage110();         // 1.10 (S1, decision 15) : les enumerations dans les scripts
     operateurs110();                  // 1.10 (chantier S2) : les operateurs des symboles et des types IHM
     operateurs1101();                 // 1.10.1 (chantier U2) : a, b et Resultat (types, legende, exemple, Compiler)

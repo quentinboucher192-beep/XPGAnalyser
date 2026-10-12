@@ -906,6 +906,134 @@ void drawTableRows(const Ctx& c, const std::vector<std::string>& headers, const 
     }
 }
 
+// 1.12.13 : LE TABLEAU EN LIGNES DYNAMIQUES (hmi::table::Model, Runtime::tableModel) - ses colonnes a leur
+// largeur et leur alignement, le tri dans l'en-tete (une fleche), la ligne choisie surlignee, une case
+// « ... » en gris (sa liste n'a pas cette ligne), ### en rouge, les seuils de la variable (jaune, rouge), la
+// formule de couleur ; une colonne R/W porte un coin bleu (elle se saisit). Le tableau d'avant (sans
+// colonnes dynamiques) garde son dessin (drawTableRows).
+void drawTableModel(const Ctx& c, const hmi::table::Model& m, std::size_t first) {
+    if (!m.columns) {
+        std::vector<std::vector<std::string>> rows;
+        rows.reserve(m.rows.size());
+        for (const auto& r : m.rows) {
+            std::vector<std::string> cells;
+            for (const auto& cell : r.cells) cells.push_back(cell.text);
+            rows.push_back(std::move(cells));
+        }
+        drawTableRows(c, m.headers, rows, first);
+        if (!m.error.empty() && m.rows.empty()) {
+            const auto l = hmi::tableLayout(c.o, c.w(), c.h(), 0, 0);
+            const double fs = std::clamp(c.src.number(c.o, "fontSize", 14), 8.0, 40.0);
+            text(c, fitted(c, m.error, c.w() - 12, fs), 0, l.headerH + l.rowH, c.w(), l.rowH, c.fixedText(0xE5534B), fs, "centre");
+        }
+        return;
+    }
+    fillAndStroke(c, rectLocal(c.w(), c.h()));
+    const auto l = hmi::tableLayout(c.o, c.w(), c.h(), m.rows.size(), first);
+    const double fs = std::clamp(c.src.number(c.o, "fontSize", 14), 8.0, 40.0);
+    const double width = std::max(1.0, c.w() - l.bar.w);
+    const std::size_t n = std::max<std::size_t>(1, m.headers.size());
+    double total = 0;
+    for (std::size_t k = 0; k < n; ++k) total += k < m.widths.size() && m.widths[k] > 0 ? m.widths[k] : 1.0;
+    std::vector<double> xs(n + 1, 0);
+    for (std::size_t k = 0; k < n; ++k) xs[k + 1] = xs[k] + (k < m.widths.size() && m.widths[k] > 0 ? m.widths[k] : 1.0) / total * width;
+    shapes::fillPolygon(c.r, c.map(rectLocal(c.w(), std::min(l.headerH, c.h()))), c.fixed(0x323A47));
+    const gfx::Color grid = c.fixed(0x4A5566);
+    const gfx::Color txt = c.color("textColor", gfx::Color::rgb(0xDDE3EA));
+    const gfx::Color headTxt = c.fixed(0xFFFFFF);
+    const gfx::Color muted = c.fixedText(0x8A96A8);
+    const gfx::Color alarm = c.fixedText(0xE5534B);
+    const gfx::Color warning = c.fixedText(0xF2C94C);
+    const gfx::Color rw = c.fixed(0x7FB8FF);
+    const auto box = [](double x, double y, double w, double h) {
+        return std::vector<gfx::Point>{{static_cast<float>(x), static_cast<float>(y)}, {static_cast<float>(x + w), static_cast<float>(y)},
+                                       {static_cast<float>(x + w), static_cast<float>(y + h)}, {static_cast<float>(x), static_cast<float>(y + h)}};
+    };
+    for (std::size_t k = 0; k < n; ++k) {
+        const double cw = xs[k + 1] - xs[k];
+        std::string head = k < m.headers.size() ? m.headers[k] : std::string{};
+        if (static_cast<int>(k) == m.sortColumn) head += m.sortDescending ? " \xE2\x96\xBE" : " \xE2\x96\xB4";
+        const std::string align = k < m.aligns.size() ? m.aligns[k] : std::string("gauche");
+        text(c, fitted(c, head, cw - 8, fs), xs[k], 0, cw, l.headerH, headTxt, fs, align == "droite" ? "droite" : align == "centre" ? "centre" : "gauche");
+        if (k > 0) c.r.line(c.map(xs[k], 0), c.map(xs[k], c.h()), grid, 1);
+    }
+    for (std::size_t i = 0; i < l.fit && l.first + i < m.rows.size(); ++i) {
+        const auto& row = m.rows[l.first + i];
+        const double y = l.headerH + l.rowH * static_cast<double>(i);
+        if (row.picked) shapes::fillPolygon(c.r, c.map(box(0, y, width, l.rowH)), fade(gfx::Color{47, 111, 214, 150}, c.alpha));
+        else if ((l.first + i) % 2 == 1) shapes::fillPolygon(c.r, c.map(box(0, y, width, l.rowH)), fade(gfx::Color{255, 255, 255, 10}, c.alpha));
+        c.r.line(c.map(0, y + l.rowH), c.map(width, y + l.rowH), grid, 1);
+        for (std::size_t k = 0; k < row.cells.size() && k < n; ++k) {
+            const auto& cell = row.cells[k];
+            const double cw = xs[k + 1] - xs[k];
+            gfx::Color col = txt;
+            if (cell.missing) col = muted;
+            else if (cell.error || cell.tone == 2) col = alarm;
+            else if (cell.tone == 1) col = warning;
+            else if (cell.colored) col = c.fixedText(cell.color);
+            const std::string align = cell.missing ? std::string("centre") : k < m.aligns.size() ? m.aligns[k] : std::string("gauche");
+            text(c, fitted(c, cell.text, cw - 8, fs), xs[k], y, cw, l.rowH, col, fs, align == "droite" ? "droite" : align == "centre" ? "centre" : "gauche");
+            // Une colonne R/W : un coin bleu en bas a droite de la case (elle se saisit).
+            if (k < m.writable.size() && m.writable[k] && !cell.missing) {
+                const double s = std::min(7.0, l.rowH / 3);
+                shapes::fillPolygon(c.r, c.map({{static_cast<float>(xs[k + 1] - 1), static_cast<float>(y + l.rowH - 1 - s)},
+                                                {static_cast<float>(xs[k + 1] - 1), static_cast<float>(y + l.rowH - 1)},
+                                                {static_cast<float>(xs[k + 1] - 1 - s), static_cast<float>(y + l.rowH - 1)}}),
+                                    rw);
+            }
+        }
+    }
+    if (m.rows.empty()) {
+        const double rowY = l.headerH, rowH = std::min(l.rowH, std::max(0.0, c.h() - l.headerH));
+        if (!m.error.empty()) text(c, fitted(c, m.error, c.w() - 12, fs), 0, rowY, c.w(), rowH, alarm, fs, "centre");
+        else text(c, m.emptyText.empty() ? std::string("(aucune ligne)") : m.emptyText, 0, rowY, c.w(), rowH, muted, fs, "centre");
+    }
+    if (l.bar.w > 0) {
+        shapes::fillPolygon(c.r, c.map(box(l.bar.x, l.bar.y, l.bar.w, l.bar.h)), c.fixed(0x1B2028));
+        shapes::fillPolygon(c.r, c.map(box(l.thumb.x, l.thumb.y, l.thumb.w, l.thumb.h)), c.fixed(0x6B7686));
+    }
+}
+
+// 1.12.13 : dans l'editeur, un tableau a colonnes dynamiques - leurs titres, leur contenu (bleute) sur la
+// premiere ligne, puis les lignes vides ; une colonne R/W porte son coin bleu.
+void drawTableColumnsPreview(const Ctx& c, const std::vector<hmi::table::Column>& cols, int rows) {
+    fillAndStroke(c, rectLocal(c.w(), c.h()));
+    const auto l = hmi::tableLayout(c.o, c.w(), c.h(), static_cast<std::size_t>(std::max(0, rows)), 0);
+    const double fs = std::clamp(c.src.number(c.o, "fontSize", 14), 8.0, 40.0);
+    const std::size_t n = std::max<std::size_t>(1, cols.size());
+    double total = 0;
+    for (std::size_t k = 0; k < cols.size(); ++k) total += cols[k].width > 0 ? cols[k].width : 1.0;
+    if (total <= 0) total = 1;
+    std::vector<double> xs(n + 1, 0);
+    for (std::size_t k = 0; k < n; ++k) xs[k + 1] = xs[k] + (k < cols.size() && cols[k].width > 0 ? cols[k].width : 1.0) / std::max(total, 1.0) * c.w();
+    if (cols.empty()) xs[1] = c.w();
+    shapes::fillPolygon(c.r, c.map(rectLocal(c.w(), std::min(l.headerH, c.h()))), c.fixed(0x323A47));
+    const gfx::Color grid = c.fixed(0x4A5566);
+    const gfx::Color headTxt = c.fixed(0xFFFFFF);
+    const gfx::Color dyn = c.fixedText(0x7FB8FF);
+    for (std::size_t k = 0; k < n; ++k) {
+        const double cw = xs[k + 1] - xs[k];
+        if (k < cols.size()) {
+            text(c, fitted(c, cols[k].title, cw - 8, fs), xs[k], 0, cw, l.headerH, headTxt, fs, "gauche");
+            text(c, fitted(c, cols[k].content, cw - 8, fs), xs[k], l.headerH, cw, l.rowH, dyn, fs, "gauche");
+            if (cols[k].write) {
+                const double s = std::min(7.0, l.rowH / 3);
+                const double y = l.headerH;
+                shapes::fillPolygon(c.r, c.map({{static_cast<float>(xs[k + 1] - 1), static_cast<float>(y + l.rowH - 1 - s)},
+                                                {static_cast<float>(xs[k + 1] - 1), static_cast<float>(y + l.rowH - 1)},
+                                                {static_cast<float>(xs[k + 1] - 1 - s), static_cast<float>(y + l.rowH - 1)}}),
+                                    c.fixed(0x7FB8FF));
+            }
+        }
+        if (k > 0) c.r.line(c.map(xs[k], 0), c.map(xs[k], c.h()), grid, 1);
+    }
+    for (std::size_t i = 0; i < l.fit; ++i) {
+        const double y = l.headerH + l.rowH * static_cast<double>(i + 1);
+        if (y > c.h()) break;
+        c.r.line(c.map(0, y), c.map(c.w(), y), grid, 1);
+    }
+}
+
 // Le gestionnaire de recettes : ses boutons, le nom de la recette, puis ses jeux
 // en tableau (une colonne par element). En marche, le jeu choisi est surligne.
 void drawRecipeManager(const Ctx& c) {
@@ -1722,9 +1850,24 @@ void paintHmiObject(gfx::IRenderer& r, const hmi::View& view, const Object& o, c
             break;
         }
         case Kind::Table: {
+            // 1.12.13 : UN MODE A LA FOIS (hmi::table::modeOf) - le mode coche ; un tableau d'avant, celui que
+            // le moteur prenait (Lignes depuis, puis le fichier, puis les cases). Les reglages des autres
+            // modes, en reserve, ne se dessinent pas.
+            const auto mode = hmi::table::modeOf(o);
+            if (mode == hmi::table::Mode::Rows && opt.runtime && !opt.editor) {
+                hmi::table::Model m;
+                if (opt.runtime->tableModel(view.id, o, m)) {
+                    drawTableModel(c, m, opt.runtime->listFirst(o.id));
+                    break;
+                }
+            }
+            if (mode == hmi::table::Mode::Rows && hmi::table::hasColumns(o)) {
+                drawTableColumnsPreview(c, hmi::table::columnsOf(o), static_cast<int>(src.number(o, "rows", 4)));
+                break;
+            }
             // 1.12.2 : les lignes d'une variable (rowsFrom) - en marche, autant qu'elle en a (il
             // defile) ; dans l'editeur, les colonnes que donnera son type, sur les lignes declarees.
-            if (const std::string from = src.text(o, "rowsFrom"); from.find_first_not_of(" \t") != std::string::npos) {
+            if (const std::string from = src.text(o, "rowsFrom"); mode == hmi::table::Mode::Rows) {
                 std::vector<std::string> headers;
                 std::vector<std::vector<std::string>> rows;
                 if (opt.runtime && !opt.editor && opt.runtime->tableRows(o, headers, rows)) {
@@ -1744,11 +1887,12 @@ void paintHmiObject(gfx::IRenderer& r, const hmi::View& view, const Object& o, c
             // sinon les colonnes declarees.
             // En marche, l'action "Lier un tableau" a pu le relier ailleurs (lot 6).
             const std::string* bound = opt.runtime ? opt.runtime->tableSource(o.id) : nullptr;
-            const auto source = bound ? *bound : src.text(o, "source");
+            // Le fichier : en mode fichier (ou relie en marche par « Lier un tableau ») ; les cases : en mode cases fixes.
+            const auto source = bound ? *bound : mode == hmi::table::Mode::File ? src.text(o, "source") : std::string{};
             const hmi::ExternalFile* file = nullptr;
             if (opt.assets && !source.empty())
                 for (const auto& f : opt.assets->files) if (f.name == source) file = &f;
-            const auto cells = src.text(o, "cells");
+            const auto cells = mode == hmi::table::Mode::Fixed ? src.text(o, "cells") : std::string{};
             if (file) drawTableData(c, *hmiExternalData(*file));
             else if (!cells.empty()) drawTableCells(c, split(src.text(o, "columns"), ';'), hmi::parseCells(cells));
             else drawTable(c, split(src.text(o, "columns"), ';'), static_cast<int>(src.number(o, "rows", 4)));

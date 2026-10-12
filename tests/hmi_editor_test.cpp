@@ -43,6 +43,7 @@
 #include "../src/app/hmi/HmiValueKind.hpp"           // 1.11.3 : le carre de legende
 #include "../src/app/hmi/HmiValuePicker.hpp"
 #include "../src/app/hmi/HmiActionDialogs.hpp"     // 1.11.9 : l'operation en arbre, le script, Maths
+#include "../src/hmi/HmiTable.hpp"   // 1.12.13 : le Tableau, un mode a la fois
 #include "../src/hmi/HmiActionKinds.hpp"
 #include "../src/hmi/HmiViewPaths.hpp"
 #include "../src/hmi/HmiVarMotion.hpp"              // 1.11.6         // 1.11.3 : le selecteur de valeur
@@ -29395,15 +29396,26 @@ void lotD1127_contenu() {
         b.v().object(tab)->set("rowsFrom", "Pompes");
         b.editor->refresh();
         b.editor->layout();
-        check(content.mode() == Mode::SourceColumns && content.count() == 3,
-              "lot D : un tableau depuis une source montre ses colonnes dans Contenu (avant : des cases qui ne servaient pas)");
-        check(content.setField(1, "shown", "FALSE"), "lot D : cacher la colonne Debit");
-        same_text(b.v().object(tab)->text("sourceColumns"), "Nom; Etat", "lot D : les colonnes montr\xC3\xA9" "es, dans l'ordre");
+        // 1.12.13 : les colonnes d'un tableau d'avant se reprennent en colonnes dynamiques ([*].Nom...) - rien ne
+        // s'ecrit tant qu'on n'y touche pas (il se dessine comme avant) ; la premiere retouche les ecrit.
+        check(content.mode() == Mode::DynColumns && content.count() == 3,
+              "lot D (1.12.13) : un tableau depuis une source montre ses colonnes dans Contenu, reprises en colonnes dynamiques");
+        check(!b.v().object(tab)->find(std::string(hmi::table::kColumnsKey)), "lot D (1.12.13) : ... sans rien \xC3\xA9" "crire tant qu'on n'y touche pas");
+        check(content.removeItem(1), "lot D (1.12.13) : retirer la colonne Debit");
+        const auto names = [&] {
+            std::string out;
+            for (const auto& c : hmi::table::columnsOf(*b.v().object(tab)))
+                out += (out.empty() ? "" : "; ") + c.title + "=" + c.content + (c.format.empty() ? std::string{} : "|" + c.format);
+            return out;
+        };
+        same_text(names(), "Nom=[*].Nom; Etat=[*].Etat", "lot D (1.12.13) : les colonnes \xC3\xA9" "crites, dans l'ordre (la premi\xC3\xA8re retouche les reprend)");
+        check(b.v().object(tab)->text(std::string(hmi::table::kModeKey)) == "lignes dynamiques" && !b.v().object(tab)->find("sourceColumns"),
+              "lot D (1.12.13) : le mode devient explicite, les Colonnes de la source d'avant sont reprises");
         check(content.setField(0, "title", "Pompe") && content.setField(1, "format", "0"), "lot D : un titre, un format");
-        same_text(b.v().object(tab)->text("sourceColumns"), "Nom = Pompe; Etat | 0", "lot D : le titre et le format \xC3\xA0 leur colonne");
+        same_text(names(), "Pompe=[*].Nom; Etat=[*].Etat|0", "lot D : le titre et le format \xC3\xA0 leur colonne");
         check(content.moveItem(0, 1), "lot D : descendre Nom");
-        same_text(b.v().object(tab)->text("sourceColumns"), "Etat | 0; Nom = Pompe", "lot D : l'ordre des colonnes");
-        check(!content.setField(0, "title", "a;b"), "lot D : un titre ne coupe pas la liste");
+        same_text(names(), "Etat=[*].Etat|0; Pompe=[*].Nom", "lot D : l'ordre des colonnes");
+        check(!content.setField(0, "title", "a\tb"), "lot D : un titre ne coupe pas la ligne de la colonne (une tabulation)");
     }
     // ---- les cases a cocher : langues, boutons, zones
     {
@@ -30613,7 +30625,129 @@ void lotF11210_editeur() {
     }
 }
 
+// 1.12.13 : LE TABLEAU, UN MODE A LA FOIS, dans l'editeur - l'inspecteur (le mode choisi, les autres en reserve et
+// effaces d'un clic, Lignes depuis et ce qu'elle donne) et Contenu (les colonnes dynamiques, une par membre, la faute
+// corrigee d'un clic, R/W ; en cases fixes, l'acces de chaque colonne). HMI_TEST_11213=1 les lance seuls.
+void tableauEditeur11213() {
+    std::printf("1.12.13 : le Tableau dans l'editeur (le mode, la reserve, les colonnes dynamiques, R/W des cases fixes)\n");
+    using PG = ui::PropertyGrid;
+    using Mode = app::HmiContentPanel::Mode;
+    Bench b;
+    auto& grid = b.editor->properties();
+    auto& content = b.editor->content();
+    hmi::HmiType cuve;
+    cuve.id = b.doc->project.allocate();
+    cuve.name = "T_Cuve_TB";
+    cuve.members = {{"Nom", "STRING", "", ""}, {"Niveau", "REAL", "", ""}, {"Consigne", "REAL", "", ""}};
+    b.doc->project.programs.types.push_back(cuve);
+    const std::pair<const char*, const char*> vars[] = {{"Cuves", "ARRAY[1..3] OF T_Cuve_TB"}, {"PA", "REAL"}, {"Textes", "LIST OF STRING"}};
+    for (const auto& [n, t] : vars) {
+        hmi::Variable v;
+        v.id = b.doc->project.allocate();
+        v.name = n;
+        v.type = t;
+        b.doc->project.programs.variables.push_back(v);
+    }
+    const Id tab = b.place(Kind::Table, 100, 100);
+    b.editor->layout();
+    const auto refresh = [&] {
+        b.editor->refresh();
+        b.editor->layout();
+    };
+    const auto find = [&](const auto& pred) -> const PG::Property* {
+        for (const auto& c : grid.categories())
+            for (const auto& pr : c.properties)
+                if (pred(pr)) return &pr;
+        return nullptr;
+    };
+    const auto prop = [&](std::string_view key) { return find([&](const PG::Property& pr) { return pr.key == key; }); };
+    const auto named = [&](std::string_view name) { return find([&](const PG::Property& pr) { return pr.name == name; }); };
+    const auto commitKey = [&](std::string_view key, std::string_view v) {
+        const auto* p = prop(key);
+        const bool ok = p && p->commit && p->commit(v);
+        refresh();
+        return ok;
+    };
+    const auto obj = [&]() -> const hmi::Object& { return *b.v().object(tab); };
+    // ---- un tableau neuf : cases fixes, les autres modes vides
+    check(prop("tableMode") && prop("tableMode")->value == "Cases fixes", "un tableau neuf montre : Cases fixes (le mode, en t\xC3\xAAte)");
+    check(named("  Lignes dynamiques") && named("  Lignes dynamiques")->value == "vide" && named("  Fichier externe")
+              && named("  Fichier externe")->value == "vide",
+          "... les deux autres modes : vides");
+    check(!prop("rowsFrom") && !prop("source") && prop("columns"), "en cases fixes, Lignes depuis et le fichier ne se montrent pas (avant : les trois m\xC3\xAAl\xC3\xA9s)");
+    check(content.mode() == Mode::Table, "Contenu : les cases");
+    check(content.setField(0, "cell:1", "{PA:0.0} bar"), "une case montre PA");
+    check(content.setField(-1, "access:1", "R/W"), "cases fixes : la colonne 2 en R/W");
+    same_text(obj().text(std::string(hmi::table::kAccessKey)), "R;W;R", "... colAccess : R;W;R");
+    check(!content.setField(-1, "access:1", "X"), "... un acc\xC3\xA8s inconnu est refus\xC3\xA9");
+    // ---- passer en lignes dynamiques : les cases restent, en reserve
+    check(commitKey("tableMode", "Lignes dynamiques"), "choisir Lignes dynamiques");
+    same_text(obj().text(std::string(hmi::table::kModeKey)), "lignes dynamiques", "... le mode est \xC3\xA9" "crit");
+    const auto* res = named("  Cases fixes");
+    check(res && res->value.rfind("en r\xC3\xA9serve", 0) == 0 && res->revert, "les cases fixes passent en r\xC3\xA9serve (gard\xC3\xA9" "es, non utilis\xC3\xA9" "es), avec leur bouton Effacer");
+    check(prop("rowsFrom") && !prop("cells") && prop(hmi::table::kPickKey) && prop(hmi::table::kSortKey),
+          "en lignes dynamiques : Lignes depuis, le tri, la ligne choisie ; plus les cases");
+    check(commitKey("rowsFrom", "Cuves"), "Lignes depuis : Cuves");
+    const auto* got = named("  Re\xC3\xA7u");
+    check(got && got->value.find("ARRAY[1..3] OF T_Cuve_TB") != std::string::npos && got->value.find("3 ligne") != std::string::npos,
+          "sous Lignes depuis, ce qu'elle donne : ARRAY[1..3] OF T_Cuve_TB, 3 lignes - " + std::string(got ? got->value : "(rien)"));
+    check(commitKey("rowsFrom", "Textes[0]") && named("  Re\xC3\xA7u") && named("  Re\xC3\xA7u")->valueTone == ui::Tone::Error && named("  Re\xC3\xA7u")->revert,
+          "Textes[0] : un seul \xC3\xA9l\xC3\xA9ment - la faute, et sa correction d'un clic");
+    named("  Re\xC3\xA7u")->revert();
+    refresh();
+    same_text(obj().text("rowsFrom"), "Textes", "... corrig\xC3\xA9" "e en Textes");
+    check(commitKey("rowsFrom", "Cuves"), "Lignes depuis : Cuves (encore)");
+    // ---- Contenu : les colonnes dynamiques
+    check(content.mode() == Mode::DynColumns && content.count() == 3 && !obj().find(std::string(hmi::table::kColumnsKey)),
+          "Contenu : les colonnes que donne la source, comme le dessin (pas encore \xC3\xA9" "crites)");
+    check(content.setField(-1, "perMember", ""), "Une colonne par membre");
+    const auto contents = [&] {
+        std::string out;
+        for (const auto& c : hmi::table::columnsOf(obj())) out += (out.empty() ? "" : "; ") + c.title + "=" + c.content + (c.write ? " W" : "");
+        return out;
+    };
+    same_text(contents(), "Nom=[*].Nom; Niveau=[*].Niveau; Consigne=[*].Consigne", "... trois colonnes, une par membre");
+    check(content.setField(0, "content", "[*]"), "un contenu fautif : [*] seul (une structure)");
+    content.selectIndex(0);
+    const PG::Property* recu = nullptr;
+    for (const auto& c : content.grid().categories())
+        for (const auto& pr : c.properties)
+            if (pr.name == "Re\xC3\xA7u") recu = &pr;
+    check(recu && recu->valueTone == ui::Tone::Error && recu->open, "Contenu dit la faute (Re\xC3\xA7u, en rouge) et propose sa correction");
+    if (recu && recu->open) recu->open();
+    same_text(contents(), "Nom=[*].Nom; Niveau=[*].Niveau; Consigne=[*].Consigne", "... corrig\xC3\xA9" "e d'un clic en [*].Nom (le titre suit)");
+    check(content.setField(2, "access", "R/W"), "Consigne en R/W");
+    same_text(contents(), "Nom=[*].Nom; Niveau=[*].Niveau; Consigne=[*].Consigne W", "... la colonne s'\xC3\xA9" "crit");
+    check(content.addItem() && content.count() == 4, "Ajouter : une colonne de plus, la premi\xC3\xA8re proposition libre");
+    check(hmi::table::columnsOf(obj())[3].content == "[#]", "... [#] (les membres sont pris)");
+    check(content.moveItem(3, -1) && hmi::table::columnsOf(obj())[2].content == "[#]", "monter la colonne");
+    check(content.removeItem(2) && content.count() == 3, "retirer la colonne");
+    check(prop(hmi::table::kColumnsKey) && prop(hmi::table::kColumnsKey)->value.find("3 colonne") != std::string::npos,
+          "l'inspecteur r\xC3\xA9sume les colonnes (3, onglet Contenu)");
+    // ---- effacer la reserve : un Ctrl+Z la rend
+    res = named("  Cases fixes");
+    check(res && res->revert, "la ligne des cases fixes a son bouton Effacer");
+    if (res && res->revert) res->revert();
+    refresh();
+    check(hmi::table::modeEmpty(obj(), hmi::table::Mode::Fixed) && !obj().find(hmi::table::kAccessKey), "effacer la r\xC3\xA9serve : les cases et leur acc\xC3\xA8s partent");
+    check(named("  Cases fixes") && named("  Cases fixes")->value == "vide", "... la ligne dit : vide");
+    (void)b.stack.undo();
+    refresh();
+    check(!hmi::table::modeEmpty(obj(), hmi::table::Mode::Fixed) && obj().text(std::string(hmi::table::kAccessKey)) == "R;W;R", "Ctrl+Z : les cases reviennent, avec leur acc\xC3\xA8s");
+    // ---- le fichier : rien dans Contenu, les lignes dynamiques en reserve
+    check(commitKey("tableMode", "Fichier externe") && content.mode() == Mode::None && prop("source"), "Fichier externe : le fichier se montre, Contenu n'a rien");
+    check(named("  Lignes dynamiques") && named("  Lignes dynamiques")->value.find("depuis Cuves, 3 colonnes") != std::string::npos,
+          "... les lignes dynamiques en r\xC3\xA9serve : depuis Cuves, 3 colonnes");
+}
+
 int main(int argc, char** argv) {
+    // 1.12.13 : HMI_TEST_11213=1 - le Tableau dans l'editeur, seul (et le Contenu du lot D qu'il remplace).
+    if (const char* only = std::getenv("HMI_TEST_11213"); only && *only == '1') {
+        tableauEditeur11213();
+        lotD1127_contenu();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
     // 1.11.1 (API-V) : HMI_TEST_APIV=1 - la vue des variables de l'automate et API dans l'aide a la saisie, seules.
     if (const char* only = std::getenv("HMI_TEST_APIV"); only && *only == '1') {
         apiVue1112_cadenas();                          // 1.11.2
@@ -30866,6 +31000,7 @@ int main(int argc, char** argv) {
     lot6_contenu();
     lotA1125_contenuTableauVariables();   // 1.12.5 (lot A, D11)
     lotD1127_contenu();                   // 1.12.7 (lot D) : les listes en tableau dans Contenu
+    tableauEditeur11213();                // 1.12.13 : le Tableau, un mode a la fois (inspecteur, Contenu, R/W)
     lotD1127_choix();                     // 1.12.7 (lot D) : les listes a choix de l'inspecteur
     lotE1127_editeur();                   // 1.12.7 (lot E) : depuis une enumeration, Repeter depuis
     lotH11212_editeur();                  // 1.12.12 (lot H) : l'horloge, le texte defilant, la video, le code QR

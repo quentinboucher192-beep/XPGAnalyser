@@ -1,4 +1,5 @@
 #include "HmiEditor.hpp"
+#include "../../hmi/HmiTable.hpp"   // 1.12.13 : le Tableau, un mode a la fois
 #include "../Disposition.hpp"
 #include "../../core/Edition.hpp"   // 1.12.0 : XPGAnalyser IHM - pas de zone API
 #include "../RenameDialog.hpp"            // lot 7 : requestRename (en ligne : rien de plus a lier)
@@ -1128,6 +1129,35 @@ bool HmiEditor::commitProp(const std::string& key, const std::string& value, boo
                                    ? std::to_string(sel.size()) + " objet(s) ne citent plus de style : ils gardent leurs valeurs."
                                    : std::to_string(sel.size()) + " objet(s) citent le style " + style.name
                                          + " : ses valeurs s'appliquent, ses changements suivront (IHM > Styles). Ctrl+Z le reprend.");
+        return true;
+    }
+    // 1.12.13 : LE TABLEAU, UN MODE A LA FOIS - choisir le mode utilise (une commande) dit ce qui passe en reserve
+    // (garde, non utilise) ; effacer les reglages d'un mode en reserve (__tableClear) en est une aussi (Ctrl+Z).
+    if ((key == hmi::table::kModeKey || key == "__tableClear") && !expr) {
+        const auto m = hmi::table::modeFromLabel(value);
+        if (!m) return false;
+        const bool clear = key == "__tableClear";
+        const std::string title(hmi::table::modeTitle(*m));
+        std::string reserve;
+        canvas_->edit(clear ? "Effacer \xC2\xAB " + title + " \xC2\xBB" : "Tableau : " + title, [&](hmi::Project&, hmi::View& vv) {
+            for (Id id : sel) {
+                auto* o = vv.object(id);
+                if (!o || o->kind != hmi::Kind::Table) continue;
+                if (clear) {
+                    hmi::table::clearMode(*o, *m);
+                    continue;
+                }
+                const auto before = hmi::table::modeOf(*o);
+                o->set(std::string(hmi::table::kModeKey), std::string(hmi::table::modeLabel(*m)));
+                if (before != *m && !hmi::table::modeEmpty(*o, before)) reserve = std::string(hmi::table::modeTitle(before));
+            }
+        });
+        statusBar_->setTransientMessage(clear ? "R\xC3\xA9glages \xC2\xAB " + title + " \xC2\xBB effac\xC3\xA9s. Ctrl+Z les reprend."
+                                              : "Le tableau montre : " + title + "."
+                                                    + (reserve.empty() ? std::string{}
+                                                                       : " \xC2\xAB " + reserve + " \xC2\xBB passe en r\xC3\xA9serve : gard\xC3\xA9, non "
+                                                                         "utilis\xC3\xA9 (sa ligne l'efface). Ctrl+Z pour revenir."),
+                                        8.0, ui::StatusBar::Severity::Info);
         return true;
     }
     // 1.10 (chantier K) : "Revenir a la valeur par defaut" (clic droit d'un champ a

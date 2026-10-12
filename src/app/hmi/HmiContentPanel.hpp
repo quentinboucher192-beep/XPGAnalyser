@@ -45,6 +45,12 @@
 //    Pompe, moteur,    (1.12.11, lot G) le MODE ETAT : une ligne par valeur (quand la valeur
 //    vanne...          vaut, l'aspect - arret, marche, defaut, maintenance -, sa couleur, anime) ;
 //                      « Depuis une enumeration » le remplit (ETAT_MOTEUR, une du projet).
+//    Tableau en        (1.12.13) les COLONNES DYNAMIQUES : une ligne par colonne (titre, contenu -
+//    lignes            [*].Niveau, [#], Debits[*], une formule, un texte a trous -, le type recu et
+//    dynamiques        sa faute corrigee d'un clic, format, unite, largeur, alignement, R/W, niveau,
+//                      couleur) ; « Une colonne par membre ». Un tableau d'avant (Lignes depuis,
+//                      Colonnes de la source) s'y montre repris en colonnes, et ne change qu'a la
+//                      premiere retouche. En cases fixes : l'acces R/W de chaque colonne.
 //  Un objet qui ne peut rien contenir (un bouton, une cuve) : pas d'onglet.
 //
 //  Tout passe par des commandes de vue : Ctrl+Z reprend une ligne ajoutee, une
@@ -80,8 +86,10 @@ public:
     // 1.12.12 (lot H) : Points - les sommets d'une ligne, d'un polygone ; les points de la courbe de
     // reference d'une courbe XY (Montrer : la reference).
     // 1.12.11 (lot G) : Aspects - le mode Etat d'un symbole du synoptique (valeur -> aspect).
+    // 1.12.13 : DynColumns - les colonnes dynamiques d'un tableau en lignes dynamiques (SourceColumns ne sert plus au
+    // Tableau : un tableau d'avant s'y montre repris en colonnes).
     enum class Mode : std::uint8_t { None, Table, Trend, AnimatedImage, RecipeManager, Zones, Tabs, NavItems, Members, States,
-                                     Choices, Bands, Schedule, Checks, SourceColumns, Points, Aspects };
+                                     Choices, Bands, Schedule, Checks, SourceColumns, Points, Aspects, DynColumns };
 
     HmiContentPanel(std::string id, hmi::DocumentPtr doc, hmi::Id view, Apply apply);
 
@@ -115,6 +123,9 @@ public:
     // 1.12.11 (lot G) : mode Etat d'un symbole "match", "look" (Arret, Marche, Defaut, Maintenance),
     // "color", "animated" ; index -1 : "fromEnum" (ETAT_MOTEUR, une enumeration ou une variable de ce
     // type), "enabled" (TRUE : ETAT_MOTEUR ; FALSE : la Valeur se relit vrai / faux).
+    // 1.12.13 : colonnes dynamiques "title", "content", "format", "unit", "width", "align", "access" (R, R/W),
+    // "level", "color" ("", seuils, formule), "colorExpr" ; index -1 : "perMember" (une colonne par membre de
+    // la source, a la place des colonnes). Cases fixes : "access:2" (R, R/W) pour la colonne 2 (a partir de 0).
     bool setField(int index, const std::string& field, const std::string& value);
     // 1.12.12 (lot H) : « Ajouter » d'un plan a zones trace la zone sur le dessin (l'editeur relaie au
     // canevas : traceRequested) ; sans editeur (les essais), une zone rectangulaire comme avant.

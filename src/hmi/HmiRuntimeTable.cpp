@@ -381,11 +381,8 @@ bool Runtime::tableModel(Id view, const Object& o, table::Model& out) const {
     // ---- le tableau d'avant (sans dynColumns) : ses lignes, telles quelles ------------------
     if (!table::hasColumns(o)) {
         std::vector<std::vector<std::string>> rows;
-        if (!tableRows(o, out.headers, rows)) {
-            out.error = trimmedText(o.text("rowsFrom")).empty() ? std::string{} : "\xC2\xAB " + trimmedText(markers::strip(o.text("rowsFrom")))
-                                                                                     + " \xC2\xBB ne se lit pas.";
-            return true;
-        }
+        // Illisible : faux, et le dessin d'avant (les colonnes que donnera la source) reste.
+        if (!tableRows(o, out.headers, rows)) return false;
         std::size_t n = out.headers.size();
         for (const auto& r : rows) n = std::max(n, r.size());
         n = std::max<std::size_t>(1, n);

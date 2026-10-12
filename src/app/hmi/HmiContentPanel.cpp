@@ -21,6 +21,7 @@
 #include "../../hmi/HmiVertices.hpp"  // 1.12.12 (lot H) : les sommets d'une ligne, d'un polygone
 #include "../../hmi/HmiEquipmentLink.hpp"   // 1.12.11 (lot G) : le mode Etat d'un symbole du synoptique
 #include "../../hmi/HmiWidgets.hpp"
+#include "../../hmi/HmiTable.hpp"     // 1.12.13 : le Tableau, un mode a la fois
 #include "../../hmi/HmiRanges.hpp"   // 1.12.10 (lot F) : l'echelle des zones, Min et Max herites
 #include "../../ui/Theme.hpp"
 #include "../../ui/widgets/ExprField.hpp"   // 1.10 (chantier K) : les champs a expression, partout pareils
@@ -68,6 +69,7 @@ private:
 struct TableData {
     std::vector<std::string>              headers, widths;
     std::vector<std::vector<std::string>> rows;
+    std::vector<bool>                     access;   // 1.12.13 : R/W par colonne (colAccess)
     [[nodiscard]] std::size_t columns() const { return headers.size(); }
 };
 
@@ -87,6 +89,7 @@ TableData readTable(const hmi::Object& o) {
     while (t.headers.size() < n) t.headers.push_back("Colonne " + std::to_string(t.headers.size() + 1));
     for (auto& r : t.rows) r.resize(n);
     if (!t.widths.empty()) t.widths.resize(n, "1");
+    t.access = hmi::table::fixedAccess(o, n);
     return t;
 }
 
@@ -95,6 +98,9 @@ void writeTable(hmi::Object& o, const TableData& t) {
     o.set("cells", hmi::formatCells(t.rows));
     o.set("widths", hmi::joinSemicolons(t.widths));
     o.setNumber("rows", static_cast<double>(t.rows.size()));
+    // 1.12.13 : l'acces des colonnes - absent tant qu'aucune ne s'ecrit (rien ne change dans le fichier).
+    if (std::find(t.access.begin(), t.access.end(), true) != t.access.end()) o.set(std::string(hmi::table::kAccessKey), hmi::table::formatAccess(t.access));
+    else std::erase_if(o.props, [](const hmi::Prop& p) { return p.key == hmi::table::kAccessKey; });
 }
 
 std::string rowSummary(const std::vector<std::string>& cells) {
@@ -497,6 +503,29 @@ void writeSourceCols(hmi::Object& o, SourceCols c) {
     o.set(hmi::choices::kSourceColumnsKey, c.plain() ? std::string{} : hmi::choices::formatSourceColumns(c.chosen));
 }
 
+// --------------------------------------- 1.12.13 : les colonnes dynamiques ---
+// Celles du tableau (dynColumns) ; un tableau d'avant (Lignes depuis, Colonnes de la source) : les siennes,
+// reprises a l'identique (legacyColumns) - elles s'ecrivent a la premiere retouche.
+std::vector<hmi::table::Column> readDynColumns(const hmi::Project& p, const hmi::Object& o) {
+    if (hmi::table::hasColumns(o)) return hmi::table::columnsOf(o);
+    return hmi::table::legacyColumns(p, o);
+}
+// Ecrites : le mode devient explicite (lignes dynamiques), les Colonnes de la source d'avant partent (reprises).
+void writeDynColumns(hmi::Object& o, const std::vector<hmi::table::Column>& cols) {
+    o.set(std::string(hmi::table::kColumnsKey), hmi::table::formatColumns(cols));
+    if (cols.empty()) o.set(std::string(hmi::table::kColumnsKey), "");
+    o.set(std::string(hmi::table::kModeKey), std::string(hmi::table::modeLabel(hmi::table::Mode::Rows)));
+    std::erase_if(o.props, [](const hmi::Prop& p) { return p.key == hmi::choices::kSourceColumnsKey; });
+}
+// Ce que dit la colonne dans la liste : son contenu, et le type recu (ou sa faute).
+std::string dynColumnDetail(const hmi::table::Column& c, const hmi::table::ColumnInfo& info) {
+    std::string d = c.content.empty() ? std::string("(vide)") : c.content;
+    if (!info.error.empty()) d += "  \xC2\xB7  \xE2\x9C\x95 faute";
+    else if (!info.type.empty()) d += "  \xC2\xB7  " + info.type;
+    if (c.write) d += info.writable ? "  \xC2\xB7  R/W" : "  \xC2\xB7  R/W impossible";
+    return d;
+}
+
 // ------------------------------------------ 1.12.7 (lot D) : les cases a cocher ---
 // Ce qui se propose (les langues du projet, les boutons de la gestion des utilisateurs, les
 // groupes d'alarmes et ceux des objets) et ce que la propriete porte. Ce qui a ete tape et ne
@@ -633,7 +662,8 @@ HmiContentPanel::HmiContentPanel(std::string id, hmi::DocumentPtr doc, Id view, 
         return m == Mode::Table || m == Mode::Trend || m == Mode::AnimatedImage || m == Mode::Zones || m == Mode::Tabs || m == Mode::NavItems
             || m == Mode::States || m == Mode::Choices || m == Mode::Bands || m == Mode::Schedule || m == Mode::SourceColumns   // 1.12.7 (lot D)
             || m == Mode::Points                                                                                             // 1.12.12 (lot H)
-            || m == Mode::Aspects;                                                                                          // 1.12.11 (lot G)
+            || m == Mode::Aspects                                                                                           // 1.12.11 (lot G)
+            || m == Mode::DynColumns;                                                                                       // 1.12.13
     };
     tools_->setEnabledWhen(AAdd, editable);
     tools_->setEnabledWhen(ARemove, [this, editable] { return editable() && selectedIndex() >= 0; });
@@ -707,7 +737,14 @@ HmiContentPanel::Mode HmiContentPanel::mode() const {
     if (o->kind == hmi::Kind::XYChart && xyReference_) return Mode::Points;
     switch (o->kind) {
         // 1.12.7 (lot D) : un tableau dont les lignes viennent d'une source - ses colonnes.
-        case hmi::Kind::Table:         return rowsSourceOf(*o).empty() ? Mode::Table : Mode::SourceColumns;
+        // 1.12.13 : le mode du tableau - ses cases (cases fixes), ses colonnes dynamiques ; un fichier : rien ici.
+        case hmi::Kind::Table:
+            switch (hmi::table::modeOf(*o)) {
+                case hmi::table::Mode::Fixed: return Mode::Table;
+                case hmi::table::Mode::Rows: return Mode::DynColumns;
+                case hmi::table::Mode::File: return Mode::None;
+            }
+            return Mode::Table;
         case hmi::Kind::Trend:         return Mode::Trend;
         case hmi::Kind::AnimatedImage: return Mode::AnimatedImage;
         case hmi::Kind::RecipeManager: return Mode::RecipeManager;
@@ -763,6 +800,7 @@ std::size_t HmiContentPanel::count() const {
         case Mode::Schedule: return readSlots(*o).size();
         case Mode::Checks:   return readChecks(doc_->project, *o).rows().size();
         case Mode::SourceColumns: return readSourceCols(doc_->project, *o).rows().size();
+        case Mode::DynColumns: return readDynColumns(doc_->project, *o).size();   // 1.12.13
         case Mode::Aspects:  return readAspects(*o).size();             // 1.12.11 (lot G)
         case Mode::Tabs:     return hmi::tabLabels(*o).size();
         case Mode::NavItems: return hmi::navItems(&doc_->project, *o).size();
@@ -940,6 +978,15 @@ void HmiContentPanel::refresh() {
                 }
                 break;
             }
+            // 1.12.13 : les colonnes dynamiques - leur titre, leur contenu et le type recu (ou la faute).
+            case Mode::DynColumns: {
+                const auto src = hmi::table::analyzeSource(doc_->project, o->text("rowsFrom"));
+                headers = {"#", "Colonne", "Contenu"};
+                icon = ui::Icon::AnimationTable;
+                for (const auto& c : readDynColumns(doc_->project, *o))
+                    rows.push_back({c.title.empty() ? std::string("(sans titre)") : c.title, dynColumnDetail(c, hmi::table::analyzeColumn(doc_->project, src, c))});
+                break;
+            }
             case Mode::SourceColumns: {
                 const auto c = readSourceCols(doc_->project, *o);
                 headers = {"#", "Colonne de " + rowsSourceOf(*o), "Montr\xC3\xA9" "e"};
@@ -1041,6 +1088,23 @@ bool HmiContentPanel::changeInView(const std::string& label, const std::function
 
 bool HmiContentPanel::addItem() {
     switch (mode()) {
+        case Mode::DynColumns:   // 1.12.13 : une colonne de plus - la premiere proposition pas encore prise
+            return change("Ajouter une colonne", [this](hmi::Object& o) {
+                auto cols = readDynColumns(doc_->project, o);
+                const auto src = hmi::table::analyzeSource(doc_->project, o.text("rowsFrom"));
+                hmi::table::Column c;
+                for (const auto& sg : hmi::table::suggestions(doc_->project, src)) {
+                    const bool taken = std::any_of(cols.begin(), cols.end(), [&](const hmi::table::Column& x) { return trimmed(x.content) == sg.text; });
+                    if (!taken) {
+                        c.content = sg.text;
+                        break;
+                    }
+                }
+                c.title = c.content.empty() ? "Colonne " + std::to_string(cols.size() + 1) : hmi::table::titleFor(c.content);
+                cols.push_back(std::move(c));
+                writeDynColumns(o, cols);
+                return true;
+            });
         case Mode::Aspects:   // 1.12.11 (lot G) : une valeur de plus (le plus grand nombre + 1), a l'arret
             return change("Ajouter un \xC3\xA9tat", [](hmi::Object& o) {
                 auto a = readAspects(o);
@@ -1201,6 +1265,15 @@ bool HmiContentPanel::removeItem(int index) {
     const auto i = static_cast<std::size_t>(index);
     bool ok = false;
     switch (mode()) {
+        case Mode::DynColumns:   // 1.12.13
+            ok = change("Retirer une colonne", [this, i](hmi::Object& o) {
+                auto cols = readDynColumns(doc_->project, o);
+                if (i >= cols.size()) return false;
+                cols.erase(cols.begin() + static_cast<std::ptrdiff_t>(i));
+                writeDynColumns(o, cols);
+                return true;
+            });
+            break;
         case Mode::Aspects:   // 1.12.11 (lot G)
             ok = change("Retirer un \xC3\xA9tat", [i](hmi::Object& o) {
                 auto a = readAspects(o);
@@ -1345,6 +1418,14 @@ bool HmiContentPanel::moveItem(int index, int delta) {
     if (index < 0 || to < 0 || index >= static_cast<int>(count()) || to >= static_cast<int>(count())) return false;
     const auto a = static_cast<std::size_t>(index), b = static_cast<std::size_t>(to);
     switch (mode()) {
+        case Mode::DynColumns:   // 1.12.13 : l'ordre des colonnes
+            return change("Ordonner les colonnes", [this, a, b](hmi::Object& o) {
+                auto cols = readDynColumns(doc_->project, o);
+                if (std::max(a, b) >= cols.size()) return false;
+                std::swap(cols[a], cols[b]);
+                writeDynColumns(o, cols);
+                return true;
+            });
         case Mode::Aspects:   // 1.12.11 (lot G) : la premiere ligne qui convient gagne
             return change("Ordonner les \xC3\xA9tats", [a, b](hmi::Object& o) {
                 auto list = readAspects(o);
@@ -1481,6 +1562,7 @@ bool HmiContentPanel::addColumn() {
         t.headers.push_back("Colonne " + std::to_string(t.headers.size() + 1));
         for (auto& r : t.rows) r.emplace_back();
         if (!t.widths.empty()) t.widths.emplace_back("1");
+        t.access.push_back(false);
         writeTable(o, t);
         return true;
     });
@@ -1498,6 +1580,7 @@ bool HmiContentPanel::removeColumn(int column) {
         t.headers.erase(t.headers.begin() + static_cast<std::ptrdiff_t>(k));
         for (auto& r : t.rows) if (k < r.size()) r.erase(r.begin() + static_cast<std::ptrdiff_t>(k));
         if (k < t.widths.size()) t.widths.erase(t.widths.begin() + static_cast<std::ptrdiff_t>(k));
+        if (k < t.access.size()) t.access.erase(t.access.begin() + static_cast<std::ptrdiff_t>(k));   // 1.12.13
         writeTable(obj, t);
         return true;
     });
@@ -1508,6 +1591,72 @@ bool HmiContentPanel::removeColumn(int column) {
 bool HmiContentPanel::setField(int index, const std::string& field, const std::string& value) {
     const auto i = static_cast<std::size_t>(std::max(0, index));
     const auto colOf = [&](std::string_view prefix) { return static_cast<std::size_t>(std::max(0, std::atoi(field.c_str() + prefix.size()))); };
+    // 1.12.13 : cases fixes - l'acces d'une colonne (R, R/W).
+    if (mode() == Mode::Table && field.rfind("access:", 0) == 0) {
+        const auto k = colOf("access:");
+        const std::string v = trimmed(value);
+        const bool w = v == "R/W" || v == "W" || v == "RW";
+        if (!w && v != "R") return false;
+        return change(w ? "Colonne en R/W" : "Colonne en lecture", [k, w](hmi::Object& o) {
+            auto t = readTable(o);
+            if (k >= t.columns() || t.access[k] == w) return false;
+            t.access[k] = w;
+            writeTable(o, t);
+            return true;
+        });
+    }
+    // 1.12.13 : les colonnes dynamiques.
+    if (mode() == Mode::DynColumns) {
+        if (field == "perMember") {
+            const auto* o = current();
+            if (!o) return false;
+            const auto src = hmi::table::analyzeSource(doc_->project, o->text("rowsFrom"));
+            auto cols = hmi::table::columnsForSource(doc_->project, src);
+            if (cols.empty()) return false;
+            return change("Une colonne par membre", [cols](hmi::Object& obj) {
+                writeDynColumns(obj, cols);
+                return true;
+            });
+        }
+        return change("R\xC3\xA9gler une colonne", [this, i, field, value](hmi::Object& o) {
+            auto cols = readDynColumns(doc_->project, o);
+            if (i >= cols.size()) return false;
+            auto& c = cols[i];
+            const std::string v = trimmed(value);
+            const auto before = c;
+            if (field == "title") c.title = v;
+            else if (field == "content") {
+                // Un titre laisse par defaut (Colonne 3, ou le titre propose de l'ancien contenu) suit le contenu.
+                const bool autoTitle = c.title.empty() || c.title.rfind("Colonne ", 0) == 0 || c.title == hmi::table::titleFor(c.content);
+                c.content = v;
+                if (autoTitle && !v.empty()) c.title = hmi::table::titleFor(v);
+            } else if (field == "format") c.format = v;
+            else if (field == "unit") c.unit = v;
+            else if (field == "width") {
+                double w = 0;
+                if (!hmi::parseNumber(v, w) || w <= 0) return false;
+                c.width = w;
+            } else if (field == "align") c.align = v;
+            else if (field == "access") {
+                if (v != "R" && v != "R/W" && v != "W") return false;
+                c.write = v != "R";
+            } else if (field == "level") {
+                double n = 0;
+                if (!v.empty() && (!hmi::parseNumber(v, n) || n < 0 || n > 9)) return false;
+                c.level = static_cast<int>(n);
+            } else if (field == "color") {
+                if (!v.empty() && v != "seuils" && v != "formule") return false;
+                c.color = v;
+            } else if (field == "colorExpr") c.colorExpr = value;
+            else return false;
+            // Une tabulation ou un retour couperait la ligne de la colonne.
+            for (const auto* t : {&c.title, &c.content, &c.format, &c.unit, &c.colorExpr})
+                if (t->find_first_of("\t\n") != std::string::npos) return false;
+            if (c == before && hmi::table::hasColumns(o)) return false;
+            writeDynColumns(o, cols);
+            return true;
+        });
+    }
     // 1.12.7 (lot E, § 2.3) : « Ajouter depuis une source » - une ligne a joker (Cuves[*].Niveau, Pompe.*,
     // Ligne/Convoyeur/*), ajoutee a la fin ; le moteur en fait un element par element de la source.
     if (field == "addSource" && mode() == Mode::Checks) {
@@ -2041,6 +2190,7 @@ bool HmiContentPanel::setField(int index, const std::string& field, const std::s
                 return true;
             });
         }
+        case Mode::DynColumns:       // 1.12.13 : plus haut
         case Mode::Members:          // 1.10.4 (K3) : en lecture
         case Mode::None: break;
     }
@@ -2153,6 +2303,21 @@ void HmiContentPanel::rebuildGrid() {
                 columns.properties.push_back(editable("Largeur " + std::to_string(k + 1), k < t.widths.size() ? t.widths[k] : std::string("1"),
                                                       PG::ValueType::Real, -1, "width:" + std::to_string(k),
                                                       "Relative : 2 = deux fois plus large qu'une colonne \xC3\xA0 1."));
+                // 1.12.13 : R/W - une case de la colonne qui montre une seule variable ({PA:0.00} bar, =PA) se saisit en marche.
+                std::string writes;
+                for (const auto& r : t.rows)
+                    if (k < r.size())
+                        if (const auto path = hmi::table::fixedWritePath(r[k]); !path.empty())
+                            writes += (writes.empty() ? "" : ", ") + path;
+                auto acc = editable("Acc\xC3\xA8s " + std::to_string(k + 1), k < t.access.size() && t.access[k] ? "R/W" : "R", PG::ValueType::Enum, -1,
+                                    "access:" + std::to_string(k),
+                                    "R/W : en marche, un clic sur une case de la colonne qui montre une seule variable ({PA:0.00} bar, "
+                                    "=PA) la saisit (dans la plage et le type de la variable) ; une case de texte ou de calcul reste en "
+                                    "lecture." + (writes.empty() ? std::string(" Ici, aucune case n'a une seule variable.")
+                                                                 : std::string(" Ici : ") + writes + "."),
+                                    {"R", "R/W"});
+                if (k < t.access.size() && t.access[k] && writes.empty()) acc.valueTone = ui::Tone::Warning;
+                columns.properties.push_back(std::move(acc));
             }
             cats.push_back(std::move(columns));
             break;
@@ -2550,6 +2715,124 @@ void HmiContentPanel::rebuildGrid() {
                                                "Elles servent tant que la variable du programme est vide ; ensuite, la variable garde "
                                                "ce que l'op\xC3\xA9rateur a coch\xC3\xA9."));
             cats.push_back(std::move(info));
+            break;
+        }
+        // 1.12.13 : LES COLONNES DYNAMIQUES - la source et ce qu'elle donne, puis la colonne choisie.
+        case Mode::DynColumns: {
+            const auto src = hmi::table::analyzeSource(doc_->project, o->text("rowsFrom"));
+            const auto cols = readDynColumns(doc_->project, *o);
+            PG::Category lines;
+            lines.name = "Lignes";
+            std::string from = trimmed(o->text("rowsFrom"));
+            std::string got;
+            switch (src.kind) {
+                case hmi::table::SourceKind::None: got = "aucune : chaque colonne nomme sa liste (Debits[*]), la plus longue fait les lignes"; break;
+                case hmi::table::SourceKind::Error: got = src.error; break;
+                case hmi::table::SourceKind::Unknown: got = from + " : connue en marche (un param\xC3\xA8tre, une formule)"; break;
+                default:
+                    got = from + " \xC2\xB7 " + src.type + (src.count >= 0 ? " \xC2\xB7 " + std::to_string(src.count) + " ligne(s)" : std::string{})
+                        + " \xC2\xB7 " + hmi::table::rowsWord(src);
+                    break;
+            }
+            auto source = readOnly("Lignes depuis", got,
+                                   "Une collection, une ligne par \xC3\xA9l\xC3\xA9ment (Propri\xC3\xA9t\xC3\xA9s > Lignes depuis) : un tableau, une "
+                                   "LIST, un VECTOR, une MAP (une ligne par cl\xC3\xA9), une structure (une ligne par membre), une "
+                                   "\xC3\xA9num\xC3\xA9ration (une ligne par valeur). Vide : chaque colonne nomme sa liste.");
+            if (src.kind == hmi::table::SourceKind::Error) {
+                source.valueTone = ui::Tone::Error;
+                if (!src.fix.empty()) source.description += "\nCorrection : " + src.fix + " (Propri\xC3\xA9t\xC3\xA9s > Lignes depuis).";
+            }
+            lines.properties.push_back(std::move(source));
+            if (!hmi::table::hasColumns(*o) && !cols.empty())
+                lines.properties.push_back(readOnly("Colonnes", "reprises du tableau d'avant (" + std::to_string(cols.size()) + ")",
+                                                    "Lignes depuis et Colonnes de la source, telles qu'elles se montraient. La premi\xC3\xA8re "
+                                                    "retouche les \xC3\xA9" "crit en colonnes dynamiques (Ctrl+Z la reprend)."));
+            {
+                const auto per = hmi::table::columnsForSource(doc_->project, src);
+                auto p = readOnly("Une colonne par membre", per.empty() ? std::string("(rien \xC3\xA0 proposer)") : std::to_string(per.size()) + " colonne(s)",
+                                  "Remplace les colonnes par une colonne par membre simple de l'\xC3\xA9l\xC3\xA9ment (les structures "
+                                  "imbriqu\xC3\xA9" "es d\xC3\xA9pli\xC3\xA9" "es), ou Cl\xC3\xA9 et Valeur d'une MAP. Ctrl+Z les rend.");
+                if (!per.empty()) {
+                    p.open = [this] { (void)setField(-1, "perMember", ""); };
+                    p.openTip = "Cr\xC3\xA9" "er les colonnes";
+                    p.openOnClick = true;
+                }
+                lines.properties.push_back(std::move(p));
+            }
+            cats.push_back(std::move(lines));
+            if (index >= 0 && i < cols.size()) {
+                const auto& c = cols[i];
+                const auto info = hmi::table::analyzeColumn(doc_->project, src, c);
+                PG::Category cc;
+                cc.name = "Colonne " + std::to_string(index + 1) + (c.title.empty() ? std::string{} : " \xC2\xB7 " + c.title);
+                cc.properties.push_back(editable("Titre", c.title, PG::ValueType::Text, index, "title", "L'en-t\xC3\xAAte de la colonne."));
+                std::vector<std::string> offered{""};
+                for (const auto& sg : hmi::table::suggestions(doc_->project, src)) offered.push_back(sg.text);
+                if (std::find(offered.begin(), offered.end(), c.content) == offered.end()) offered.push_back(c.content);
+                auto content = editable("Contenu", c.content, PG::ValueType::Enum, index, "content",
+                                        "Ce que montre la case, pour chaque ligne. [*] : l'\xC3\xA9l\xC3\xA9ment de la ligne - [*].Niveau, "
+                                        "[*].Vanne.Ouverture ; une MAP : [*].Cle, [*].Valeur, une autre MAP par la cl\xC3\xA9 : Prix[[*].Cle] ; "
+                                        "une structure : [*].Membre, [*].Valeur ; une \xC3\xA9num\xC3\xA9ration : [*].Nom, [*].Valeur, "
+                                        "[*].Texte. [#] : le num\xC3\xA9ro de la ligne. Sans Lignes depuis : Debits[*] (la plus longue liste "
+                                        "fait les lignes, \xC2\xAB ... \xC2\xBB ailleurs). Un texte \xC3\xA0 trous ({[*].Niveau:0.0} m), une "
+                                        "formule (=[*].Niveau * 100 / [*].Capacite), un texte fixe aussi. Un rep\xC3\xA8re se garde ($Cuves$[*].Niveau).",
+                                        std::move(offered));
+                content.typeIn = true;
+                cc.properties.push_back(std::move(content));
+                // Le type recu, ou la faute (et sa correction d'un clic).
+                std::string kind(hmi::table::contentLabel(info.kind));
+                auto recu = readOnly("Re\xC3\xA7u", info.error.empty() ? kind + (info.type.empty() ? std::string{} : " \xC2\xB7 " + info.type)
+                                                                          + (info.unit.empty() ? std::string{} : " \xC2\xB7 " + info.unit)
+                                                                          + (info.lists.empty() ? std::string{} : " \xC2\xB7 liste " + info.lists.front())
+                                                                    : info.error,
+                                     "Le type que donne le contenu, sans faire tourner l'IHM ; une faute dit ce qui ne va pas.");
+                if (!info.error.empty()) recu.valueTone = ui::Tone::Error;
+                else if (!info.warning.empty()) {
+                    recu.valueTone = ui::Tone::Warning;
+                    recu.description = info.warning + "\n" + recu.description;
+                }
+                if (!info.fix.empty()) {
+                    const std::string fix = info.fix;
+                    recu.open = [this, index, fix] { (void)setField(index, "content", fix); };
+                    recu.openTip = "Corriger : " + fix;
+                    recu.description += "\nCorrection propos\xC3\xA9" "e : " + fix + " (le bouton au bout de la ligne).";
+                }
+                cc.properties.push_back(std::move(recu));
+                auto fmt = editable("Format", c.format, PG::ValueType::Text, index, "format",
+                                    "Un nombre : 0, 0.0, 0.00, 0.0% ; un bool\xC3\xA9" "en : Oui|Non. Vide : celui de la variable (Unit\xC3\xA9s et formats).");
+                fmt.placeholder = info.format;
+                cc.properties.push_back(std::move(fmt));
+                auto unit = editable("Unit\xC3\xA9", c.unit, PG::ValueType::Text, index, "unit", "Apr\xC3\xA8s la valeur. Vide : celle de la variable.");
+                unit.placeholder = info.unit;
+                cc.properties.push_back(std::move(unit));
+                cc.properties.push_back(editable("Largeur", hmi::formatNumber(c.width), PG::ValueType::Real, index, "width",
+                                                 "Relative : 2 = deux fois plus large qu'une colonne \xC3\xA0 1."));
+                cc.properties.push_back(editable("Alignement", c.align, PG::ValueType::Enum, index, "align",
+                                                 "Vide : un nombre \xC3\xA0 droite, un texte \xC3\xA0 gauche.", {"", "gauche", "centre", "droite"}));
+                auto acc = editable("Acc\xC3\xA8s", c.write ? "R/W" : "R", PG::ValueType::Enum, index, "access",
+                                    info.writable ? "R/W : en marche, un clic sur une case la saisit, dans la plage et le type de la variable - "
+                                                    "elle \xC3\xA9" "crit " + info.target + ". Les actions \xC2\xAB Case saisie \xC2\xBB re\xC3\xA7oivent "
+                                                    "Ancienne et Nouvelle."
+                                                  : "Cette colonne ne peut pas s'\xC3\xA9" "crire : " + info.writeWhy + ".",
+                                    {"R", "R/W"});
+                if (c.write && !info.writable) acc.valueTone = ui::Tone::Error;
+                cc.properties.push_back(std::move(acc));
+                if (c.write)
+                    cc.properties.push_back(editable("Niveau pour \xC3\xA9" "crire", c.level > 0 ? std::to_string(c.level) : std::string{},
+                                                     PG::ValueType::Integer, index, "level",
+                                                     "Le niveau d'acc\xC3\xA8s pour saisir une case (1 \xC3\xA0 4). Vide : celui de l'objet."));
+                cc.properties.push_back(editable("Couleur", c.color, PG::ValueType::Enum, index, "color",
+                                                 "seuils : la case en jaune ou en rouge hors des seuils de la variable (Unit\xC3\xA9s et formats) ; "
+                                                 "formule : une couleur calcul\xC3\xA9" "e pour chaque ligne. Vide : la couleur du texte.",
+                                                 {"", "seuils", "formule"}));
+                if (c.color == "formule") {
+                    auto ce = editable("Formule de couleur", c.colorExpr, PG::ValueType::Text, index, "colorExpr",
+                                       "Une couleur pour chaque ligne : =SEL([*].Niveau > [*].Capacite * 0.9, '#2EA043', '#E5534B') "
+                                       "(SEL(G, si faux, si vrai)).");
+                    cc.properties.push_back(std::move(ce));
+                }
+                cats.push_back(std::move(cc));
+            }
             break;
         }
         // 1.12.7 (lot D, § 2.4) : les colonnes d'une source - lesquelles, leur titre, leur format.
