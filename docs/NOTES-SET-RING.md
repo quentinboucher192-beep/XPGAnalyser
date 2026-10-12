@@ -124,8 +124,11 @@ projet nommée SET_ADD passe avant la native.
   `LIST OF INT` reçoit un `SET OF INT` (une LIST vers un SET : « rangée, sans doublon » ; vers un
   RING : « ses dernières valeurs seulement »). Une LIST et un VECTOR restent comme avant.
 - **Les formes** (`src/hmi/HmiTypeForms.cpp`) : deux de plus, **Ensemble (SET)** et **Tampon
-  (RING)** (sa capacité en paramètre, 100 par défaut) — dans le sélecteur de types, la case Type,
-  « Forme du type » (le texte de ce dialogue cite aussi SET et RING).
+  (RING)** (sa capacité en paramètre, 100 par défaut) — dans le sélecteur de types (ses neuf puces se
+  serrent quand elles ne tiennent pas sur la ligne ; avant, celles de trop disparaissaient), la case
+  Type, « Forme du type » et « Créer la variable » (le paramètre : « Bornes, clé, types suivants ou
+  capacité » ; le texte du dialogue cite aussi SET et RING). `SET OF T_Four` (une structure) y est
+  refusé avec sa raison.
 - Ce qui reconnaissait une LIST par son texte reconnaît aussi un SET et un RING : `hmi::types::isRich`,
   la raison dite quand un objet est lié à une telle variable (c'est « une liste » : S[0] ou S.Count),
   les lignes d'un tableau (« lignes depuis » une variable SET ou RING), la valeur
