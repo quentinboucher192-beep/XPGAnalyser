@@ -2,17 +2,26 @@
 #  Session 1212 IHM : XPGAnalyser IHM (1.12.10 a 1.12.12), XpgAnalyzer-IHM.exe -
 #  les lots F, G et H de l'audit des objets. Armoire_Gaz (migre par la 1.12.1),
 #  avec les vues des sessions 1122 a 1129 et, par demo1212, la vue Vue_LotFGH :
-#    1. la vue dans l'editeur : la pompe liee (son libelle {P_FGH.Nom}), le moteur,
-#       le polygone, le profil trace depuis Profil_FGH, l'horloge, le texte
-#       defilant, le code QR, la premiere image de la video ;
-#    2. la pompe : la section « Liaison Equipement (T_Pompe_FGH) » de l'inspecteur ;
-#    3. le moteur : Contenu, le mode Etat (une ligne par valeur) ;
-#    4. le polygone : ses poignees de sommets et Contenu, une ligne par sommet ;
-#    5. le code QR : la ligne Place (au-dela de la version 10) ;
-#    6. la simulation : la pompe en marche en mode Manuel, le moteur en defaut,
-#       le profil du four, l'horloge a 02:30:05 PM, les messages qui defilent,
-#       la video qui joue ;
-#    7. trois secondes plus tard : la video a avance (Pos_FGH).
+#    1. la vue dans l'editeur : la jauge, le bargraphe, la cuve et le curseur
+#       sur la plage de leur variable, la vanne a 50 %, le graphique des cuves ;
+#       la pompe liee (son libelle {P_FGH.Nom}), le moteur, le polygone, le
+#       profil trace depuis Profil_FGH, l'horloge, le texte defilant, le code
+#       QR, la premiere image de la video ;
+#    2. Configuration > Unites et formats : Min, Max et les quatre seuils de
+#       Pression_FGH, Niveau_FGH, Ouverture_FGH ;
+#    3. la jauge : Min et Max vides, montres en gris « 0 (de Pression_FGH) » ;
+#    4. la pompe : la section « Liaison Equipement (T_Pompe_FGH) » de l'inspecteur ;
+#    5. le moteur : Contenu, le mode Etat (une ligne par valeur) ;
+#    6. le polygone : ses poignees de sommets et Contenu, une ligne par sommet ;
+#    7. le code QR : la ligne Place (au-dela de la version 10) ;
+#    8. la simulation : la jauge et l'instrument ISA dans la couleur des seuils,
+#       les cuves A, B, C a 4.2, 7.5, 2.8 des le demarrage ; la pompe en marche
+#       en mode Manuel, le moteur en defaut, le profil du four, l'horloge a
+#       02:30:05 PM, les messages qui defilent, la video qui joue ;
+#    9. trois secondes plus tard : la video a avance (Pos_FGH) ;
+#   10. Vue_MP4_FGH : le meme film en MP4 (H.264), confie a Media Foundation.
+#       Sous Wine (GStreamer sans ses greffons), pas de decodeur : l'objet doit
+#       montrer son image d'attente et le conseil, sans planter.
 # =============================================================================
 attendre 3
 theme Dark
@@ -28,30 +37,42 @@ arbre "IHM/Vues/Vue_LotFGH"
 attendre 8
 capture 1212_ihm_01_vue_editeur.png
 
+# ---- Lot F : la plage et les seuils de la variable ----
+arbre "IHM/Configuration/Unités et formats"
+attendre 4
+capture 1212_ihm_02_unites_formats.png
+arbre "IHM/Vues/Vue_LotFGH"
+attendre 5
+objet "Jauge_FGH"
+attendre 3
+sous-onglet "Propri"
+attendre 3
+capture 1212_ihm_03_jauge_heritee.png
+
 # ---- Lot G : la liaison Equipement, le mode Etat ----
 objet "Pompe_FGH"
 attendre 3
-capture 1212_ihm_02_pompe_liaison.png
+capture 1212_ihm_04_pompe_liaison.png
 
 objet "Moteur_FGH"
 attendre 3
 sous-onglet "Contenu"
 attendre 3
-capture 1212_ihm_03_moteur_etat.png
+capture 1212_ihm_05_moteur_etat.png
 
 # ---- Lot H : les sommets ----
 objet "Forme_FGH"
 attendre 3
 sous-onglet "Contenu"
 attendre 3
-capture 1212_ihm_04_polygone_sommets.png
+capture 1212_ihm_06_polygone_sommets.png
 
 # ---- Lot H : le code QR et sa place ----
 objet "QR_FGH"
 attendre 3
 sous-onglet "Propri"
 attendre 3
-capture 1212_ihm_05_qr_place.png
+capture 1212_ihm_07_qr_place.png
 
 # ---- La simulation ----
 arbre "Simulation/IHM"
@@ -64,9 +85,14 @@ sim-utilisateur "admin" "admin2026"
 attendre 2
 sim-vue "Vue_LotFGH"
 attendre 6
-capture 1212_ihm_06_simulation.png
+capture 1212_ihm_08_simulation.png
 attendre 3
-capture 1212_ihm_07_simulation_video.png
+capture 1212_ihm_09_simulation_video.png
+
+# ---- Lot H : une video MP4, par Media Foundation ----
+sim-vue "Vue_MP4_FGH"
+attendre 8
+capture 1212_ihm_10_mp4_media_foundation.png
 
 touche ctrl+j
 attendre 2
