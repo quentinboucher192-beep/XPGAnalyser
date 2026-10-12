@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.12.13", "12/10/2026", "livr\xC3\xA9" "e le 12/10 au soir"},
     {"1.12.12", "12/10/2026", "livr\xC3\xA9" "e le 12/10 dans l'apr\xC3\xA8s-midi"},
     {"1.12.11", "12/10/2026", "livr\xC3\xA9" "e le 12/10 dans l'apr\xC3\xA8s-midi"},
     {"1.12.10", "12/10/2026", "livr\xC3\xA9" "e le 12/10 dans l'apr\xC3\xA8s-midi"},
@@ -118,6 +119,31 @@ const std::vector<Note>& table() {
     static const std::vector<Note> t = {
         // 1.11.16 (09/10/2026 dans la nuit) : la remanence d'exploitation par variable, la robustesse
         // (lot 4 de la specification du 08/10).
+        // 1.12.13 (12/10/2026) : voir docs/LIVRAISON-1.12.13.md.
+        note("1.12.13", "Tableau", Kind::New,
+         "LE TABLEAU, UN MODE \xC3\x80 LA FOIS : \xC2\xAB Le tableau montre \xC2\xBB coche cases fixes, lignes dynamiques ou fichier externe. Les r\xC3\xA9glages des autres modes restent en r\xC3\xA9serve (\xC2\xAB en r\xC3\xA9serve \xC2\xB7 non utilis\xC3\xA9 \xC2\xBB, \xC2\xAB vide \xC2\xBB) et \xC2\xAB effacer \xC2\xBB les vide ; changer de mode se reprend d'un Ctrl+Z. Un tableau d'avant garde le mode qu'il avait.",
+         "objet-tableau", ""),
+        note("1.12.13", "Tableau", Kind::New,
+         "LES COLONNES DYNAMIQUES : l'onglet Contenu r\xC3\xA8gle une colonne par ligne - titre, contenu li\xC3\xA9 \xC3\xA0 la source ([*].Niveau, [#] le rang, [*].Cle et [*].Valeur d'une MAP, [*].Membre d'une structure, [*].Texte d'une \xC3\xA9num\xC3\xA9ration, Debits[*] une autre liste, Prix[[*].Cle] une autre MAP par la cl\xC3\xA9, =formule, texte \xC3\xA0 trous), format, unit\xC3\xA9, largeur, alignement, couleur (les seuils de la variable, ou une formule SEL). Le type attendu et le type re\xC3\xA7u se voient ; une faute (une structure enti\xC3\xA8re dans une case) se corrige d'un clic. \xC2\xAB Une colonne par membre \xC2\xBB les cr\xC3\xA9" "e.",
+         "objet-tableau", ""),
+        note("1.12.13", "Tableau", Kind::New,
+         "\xC2\xAB ... \xC2\xBB : la plus longue liste fait les lignes ; une case sans valeur (une liste plus courte, une cl\xC3\xA9 absente d'une autre MAP) montre \xC2\xAB ... \xC2\xBB en gris. Sans Lignes depuis, chaque colonne nomme sa liste : une liste par colonne.",
+         "objet-tableau", ""),
+        note("1.12.13", "Tableau", Kind::New,
+         "R/W PAR COLONNE : en marche, un clic sur une case R/W ouvre le clavier virtuel, dans la plage de la variable (Unit\xC3\xA9s et formats) ou celle de son type ; une \xC3\xA9num\xC3\xA9ration se tape par son nom ; une case d'une MAP ou d'une LIST s'\xC3\xA9" "crit aussi. Le niveau de la colonne prot\xC3\xA8ge l'\xC3\xA9" "criture. En cases fixes, R/W se r\xC3\xA8gle par colonne : une case qui n'a qu'une variable s'\xC3\xA9" "crit.",
+         "objet-tableau", ""),
+        note("1.12.13", "Actions", Kind::New,
+         "LES GESTES SUR UN TABLEAU : six d\xC3\xA9" "clencheurs - Clic sur une case, Double clic, Appui long, Case saisie, Ligne choisie, Clic sur un en-t\xC3\xAAte -, pour une colonne ou toutes. L'action re\xC3\xA7oit Ligne, Colonne, Valeur, Valeurs ; Index, Cle ou Membre ; Element, l'\xC3\xA9l\xC3\xA9ment de la ligne par r\xC3\xA9" "f\xC3\xA9rence (Element.Consigne := 5 \xC3\xA9" "crit la cuve) ; Ancienne et Nouvelle ; Titre. L'onglet Actions dit ce que chaque action re\xC3\xA7oit. Un projet qui s'en sert s'enregistre au format 25 (une 1.12.12 le refuse) ; sinon, comme avant.",
+         "actions", ""),
+        note("1.12.13", "Tableau", Kind::New,
+         "LA LIGNE CHOISIE ET LE TRI : \xC2\xAB Ligne choisie \xE2\x86\x92 \xC2\xBB \xC3\xA9" "crit le num\xC3\xA9ro (ou la cl\xC3\xA9) de la ligne cliqu\xC3\xA9" "e, surlign\xC3\xA9" "e ; Trier par et l'ordre rangent les lignes (les nombres comme des nombres, \xC2\xAB ... \xC2\xBB \xC3\xA0 la fin), et une formule les pilote - Tri := Titre sur Clic sur un en-t\xC3\xAAte trie d'un clic. \xC2\xAB Sans ligne \xC2\xBB : le texte d'une source vide.",
+         "objet-tableau", ""),
+        note("1.12.13", "G\xC3\xA9n\xC3\xA9rer", Kind::New,
+         "G\xC3\x89N\xC3\x89RER ET DUPLIQUER SUIVENT LE TABLEAU : le type de chaque colonne, [*] seul sur une structure (et sa correction), une formule en R/W, une variable inconnue, une action sur une colonne absente, les r\xC3\xA9glages en r\xC3\xA9serve (une information). Les param\xC3\xA8tres re\xC3\xA7us (Element, Index, Titre...) sont connus des actions ; une \xC3\xA9num\xC3\xA9ration n'est plus \xC2\xAB sans membre \xC2\xBB. Dupliquer suit les rep\xC3\xA8res de Lignes depuis et des colonnes.",
+         "objet-tableau", ""),
+        note("1.12.13", "Exemples", Kind::New,
+         "DES EXEMPLES DYNAMIQUES : Nouvelle vue \xE2\x80\xBA mod\xC3\xA8le \xC2\xAB Tableaux dynamiques \xC2\xBB - un tableau par genre de source (ARRAY de structures, LIST, MAP et plusieurs MAP, structure, \xC3\xA9num\xC3\xA9ration, une liste par colonne, cases fixes R/W), ses types et ses variables cr\xC3\xA9\xC3\xA9s s'ils manquent, des boutons qui font grandir une LIST et une MAP. L'exemple anim\xC3\xA9 du Tableau (F1) montre une ligne par cuve, la consigne saisie au clavier et le tri.",
+         "objet-tableau", ""),
         // 1.12.12 (12/10/2026) : voir docs/LIVRAISON-1.12.12.md.
         note("1.12.12", "Dessin", Kind::New,
          "LES SOMMETS SUR LE DESSIN : une ligne ou un polygone choisi seul montre une poign\xC3\xA9" "e sur chaque sommet. Glisser d\xC3\xA9place le sommet (au pas de la grille ; Alt : librement), un double-clic sur un segment en ajoute un, Suppr ou le clic droit \xC2\xAB Retirer le sommet \xC2\xBB le retire (une ligne en garde 2, un polygone 3), les fl\xC3\xA8" "ches d\xC3\xA9placent le sommet choisi. Chaque geste s'annule d'un Ctrl+Z, et le cadre suit les points. L'onglet Contenu les montre en tableau (X, Y), un rep\xC3\xA8re gard\xC3\xA9 case par case. \xC2\xAB 10, 20 \xC2\xBB se lit (avant : ignor\xC3\xA9), et G\xC3\xA9n\xC3\xA9rer dit une paire illisible \xC3\xA0 sa place.",

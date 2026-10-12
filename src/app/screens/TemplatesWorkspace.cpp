@@ -139,6 +139,11 @@ std::vector<Entry> appEntries(const hmi::Project& project, const std::string& ro
         v.height = h;
         v.role = e.role;
         if (t.key != "vide") hmi::design::fillFromTemplate(*preview, v, t.key);
+        // 1.12.13 : un modele qui cree ses types et ses variables (Tableaux dynamiques, Moteur et son etat) le dit.
+        if (const auto nt = preview->programs.types.size(), nv = preview->programs.variables.size(); nt + nv > 0)
+            e.contents = "Emporte : " + (nt ? std::to_string(nt) + (nt > 1 ? " types IHM" : " type IHM") : std::string{})
+                       + (nt && nv ? " et " : "") + (nv ? std::to_string(nv) + (nv > 1 ? " variables IHM" : " variable IHM") : std::string{})
+                       + ", cr\xC3\xA9\xC3\xA9s s'ils manquent";
         e.width = v.width;     // un modele peut fixer la sienne (la popup d'equipement)
         e.height = v.height;
         e.previewView = v.id;

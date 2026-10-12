@@ -1378,6 +1378,9 @@
     <ClCompile Include="src\hmi\HmiTable.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\hmi\HmiRuntimeTable.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\hmi\HmiTutorialDeduce.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
