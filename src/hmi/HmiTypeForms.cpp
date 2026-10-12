@@ -127,6 +127,8 @@ std::string_view label(Form f) noexcept {
         case Form::Vector: return "Vecteur";
         case Form::Map: return "Dictionnaire (MAP)";
         case Form::Tuple: return "Tuple";
+        case Form::Set: return "Ensemble (SET)";        // 1.12.7
+        case Form::Ring: return "Tampon (RING)";
     }
     return "Simple";
 }
@@ -140,6 +142,8 @@ std::string_view key(Form f) noexcept {
         case Form::Vector: return "vecteur";
         case Form::Map: return "map";
         case Form::Tuple: return "tuple";
+        case Form::Set: return "ensemble";
+        case Form::Ring: return "tampon";
     }
     return "simple";
 }
@@ -152,6 +156,8 @@ std::optional<Form> fromText(std::string_view text) noexcept {
     if (sameText(t, "LIST")) return Form::List;
     if (sameText(t, "VECTOR")) return Form::Vector;
     if (sameText(t, "ARRAY")) return Form::Array;
+    if (sameText(t, "SET") || sameText(t, "Ensemble")) return Form::Set;      // 1.12.7
+    if (sameText(t, "RING") || sameText(t, "Tampon")) return Form::Ring;
     return std::nullopt;
 }
 
@@ -161,6 +167,7 @@ std::string_view parameterLabel(Form f) noexcept {
         case Form::Array2D: return "Bornes";
         case Form::Map: return "Cl\xC3\xA9";
         case Form::Tuple: return "Puis";
+        case Form::Ring: return "Capacit\xC3\xA9";
         default: return {};
     }
 }
@@ -171,6 +178,7 @@ std::string_view parameterHint(Form f) noexcept {
         case Form::Array2D: return "0..3, 0..9 : 4 lignes de 10 colonnes";
         case Form::Map: return "le type des cl\xC3\xA9s : STRING, un entier (DINT) ou une \xC3\xA9num\xC3\xA9ration";
         case Form::Tuple: return "les types qui suivent le premier : STRING, BOOL";
+        case Form::Ring: return "100 : les 100 derni\xC3\xA8res valeurs (1 \xC3\xA0 100000)";
         default: return {};
     }
 }
@@ -181,6 +189,7 @@ std::string defaultParameter(Form f) {
         case Form::Array2D: return "0..3, 0..9";
         case Form::Map: return "STRING";
         case Form::Tuple: return "STRING";
+        case Form::Ring: return "100";
         default: return {};
     }
 }
@@ -197,6 +206,11 @@ std::string_view summary(Form f) noexcept {
         case Form::Map:
             return "Un dictionnaire cl\xC3\xA9 \xE2\x86\x92 valeur : M['cl\xC3\xA9'], MAP_HAS, MAP_GET, FOR EACH k, v IN M - dans la m\xC3\xA9moire de l'IHM.";
         case Form::Tuple: return "Des valeurs de types fixes : t.Item1, t.Item2... - dans la m\xC3\xA9moire de l'IHM.";
+        case Form::Set:
+            return "Un ensemble : chaque valeur une fois, rang\xC3\xA9" "e : SET_ADD, SET_REMOVE, SET_HAS, S.Count, FOR EACH x IN S - dans la m\xC3\xA9moire de l'IHM.";
+        case Form::Ring:
+            return "Un tampon circulaire : les N derni\xC3\xA8res valeurs, plein la plus ancienne part : RING_ADD, LIST_AVG, R.Count, R.Full"
+                   " - dans la m\xC3\xA9moire de l'IHM.";
     }
     return {};
 }
@@ -210,11 +224,13 @@ std::string_view valueHint(Form f) noexcept {
         case Form::Vector: return "[1, 2, 3] (vide : vide)";
         case Form::Map: return "['a' := 1, 'b' := 2] (vide : vide)";
         case Form::Tuple: return "(1, 'texte')";
+        case Form::Set: return "['P1', 'P3'] (rang\xC3\xA9" "e, sans doublon ; vide : vide)";
+        case Form::Ring: return "[1.0, 2.0] (les N derni\xC3\xA8res ; vide : vide)";
     }
     return {};
 }
 
-bool dynamic(Form f) noexcept { return f == Form::List || f == Form::Vector || f == Form::Map; }
+bool dynamic(Form f) noexcept { return f == Form::List || f == Form::Vector || f == Form::Map || f == Form::Set || f == Form::Ring; }
 bool memoryOnly(Form f) noexcept { return dynamic(f) || f == Form::Tuple; }
 
 bool allowed(Form f, unsigned use) noexcept {
@@ -260,6 +276,8 @@ std::string compose(const Shape& s) {
         case Form::Vector: return "VECTOR OF " + e;
         case Form::Map: return "MAP[" + p + "] OF " + e;
         case Form::Tuple: return "TUPLE(" + e + (p.empty() ? std::string{} : ", " + p) + ")";
+        case Form::Set: return "SET OF " + e;                       // 1.12.7
+        case Form::Ring: return "RING[" + p + "] OF " + e;
     }
     return e;
 }
@@ -292,6 +310,20 @@ Shape decompose(std::string_view type) {
             s.form = vector ? Form::Vector : Form::List;
             s.element = *e;
         }
+    } else if (word("SET")) {                       // 1.12.7 : SET OF T
+        if (auto e = afterOf(3)) {
+            s.form = Form::Set;
+            s.element = *e;
+        }
+    } else if (word("RING")) {                      // 1.12.7 : RING[N] OF T
+        const auto open = t.find('[');
+        const auto close = open == std::string::npos ? open : closing(t, open);
+        if (close != std::string::npos)
+            if (auto e = afterOf(close + 1)) {
+                s.form = Form::Ring;
+                s.parameter = trimmed(std::string_view(t).substr(open + 1, close - open - 1));
+                s.element = *e;
+            }
     } else if (word("MAP")) {
         const auto open = t.find('[');
         const auto close = open == std::string::npos ? open : closing(t, open);

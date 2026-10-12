@@ -2085,7 +2085,7 @@ void MainAnalysisScreen::askHmiCreateVariable(std::uint64_t viewId, const valuek
     // 1.12.2 : la forme (une variable IHM) : Simple, Tableau... Liste, Dictionnaire, Tuple.
     const ShapeFields at{fields.size(), fields.size() + 1, fields.size() + 2, iInitial};
     fields.push_back({"Forme", "Simple", "", false, hmi::typeform::labels(hmi::typereg::UseVariable)});
-    fields.push_back({"Bornes, cl\xC3\xA9 ou types suivants", {}, "", false, {}});
+    fields.push_back({"Bornes, cl\xC3\xA9, types suivants ou capacit\xC3\xA9", {}, "", false, {}});
     fields.push_back({"Type \xC3\xA9" "crit (facultatif)", {}, "il remplace les choix", false, {}});
     auto dialog = std::make_unique<FormDialog>(
         "dialog.hmiCreateVariable", "Cr\xC3\xA9" "er la variable \xC2\xAB " + name + " \xC2\xBB",
@@ -2897,7 +2897,7 @@ void MainAnalysisScreen::askHmiVariable(std::uint64_t variableId) {
     fields.push_back({"Valeur initiale", var ? var->initial : std::string("0"), std::string(tf::valueHint(shape.form)), false, {}});
     fields.push_back({"Description", var ? var->description : std::string{}, "\xC3\xA0 quoi elle sert", false, {}});
     fields.push_back({"Forme", std::string(tf::label(shape.form)), "", false, tf::labels(hmi::typereg::UseVariable)});
-    fields.push_back({"Bornes, cl\xC3\xA9 ou types suivants", shape.form == tf::Form::Simple ? std::string{} : shape.parameter,
+    fields.push_back({"Bornes, cl\xC3\xA9, types suivants ou capacit\xC3\xA9", shape.form == tf::Form::Simple ? std::string{} : shape.parameter,
                       std::string(tf::parameterHint(shape.form)), false, {}});
     fields.push_back({"Type \xC3\xA9" "crit (facultatif)", simpleElement ? std::string{} : (var ? var->type : std::string{}),
                       "LIST OF TUPLE(STRING, REAL) ; il remplace les choix", false, {}});
@@ -2957,15 +2957,17 @@ void MainAnalysisScreen::askHmiShapedType(const std::string& current, const std:
         if (!fixedOnly || !tf::memoryOnly(f)) forms.emplace_back(tf::label(f));
     std::vector<FormDialog::Field> fields;
     fields.push_back({"Forme", std::string(tf::label(shape.form)), "", false, forms});
-    fields.push_back({"Bornes, cl\xC3\xA9 ou types suivants", shape.parameter, std::string(tf::parameterHint(shape.form)), false, {}});
+    fields.push_back({"Bornes, cl\xC3\xA9, types suivants ou capacit\xC3\xA9", shape.parameter, std::string(tf::parameterHint(shape.form)), false, {}});
     fields.push_back({"Type des \xC3\xA9l\xC3\xA9ments", element, "", false, elementChoices(doc->project, hmi::typereg::UseVariable, element)});
     fields.push_back({"Type \xC3\xA9" "crit (facultatif)", simpleElement ? std::string{} : current, "il remplace les choix", false, {}});
     auto dialog = std::make_unique<FormDialog>("dialog.hmiArray", fixedOnly ? "Tableau" : "Forme du type",
         "Tableau : ARRAY[0..9] OF REAL, ARRAY[0..3, 0..9] OF INT, ARRAY[1..4] OF T_Four - ses cases s'\xC3\xA9" "crivent T[i] ou M[i, j], "
         "ses propri\xC3\xA9t\xC3\xA9s T.Length, .Low, .High, .Rows, .Columns se lisent partout."
         + std::string(fixedOnly ? "" : " Liste (LIST OF REAL) et vecteur (VECTOR OF REAL) : une taille variable, L[0], L.Count, LIST_ADD, VECTOR_PUSH ; "
-                                       "dictionnaire (MAP[STRING] OF REAL) : M['cl\xC3\xA9'] ; tuple (TUPLE(INT, STRING)) : t.Item1, t.Item2. "
-                                       "Ces quatre-l\xC3\xA0 vivent dans la m\xC3\xA9moire de l'IHM : sans \xC3\xA9quipement ni adresse."),
+                                       "dictionnaire (MAP[STRING] OF REAL) : M['cl\xC3\xA9'] ; tuple (TUPLE(INT, STRING)) : t.Item1, t.Item2 ; "
+                                       "ensemble (SET OF STRING) : chaque valeur une fois, rang\xC3\xA9" "e, SET_ADD ; tampon (RING[100] OF REAL) : "
+                                       "les 100 derni\xC3\xA8res valeurs, RING_ADD. "
+                                       "Ces objets vivent dans la m\xC3\xA9moire de l'IHM : sans \xC3\xA9quipement ni adresse."),
         std::move(fields), "Appliquer");
     const ShapeFields at{0, 1, 3, std::string::npos};
     dialog->setRules(shapeRules(at));
@@ -3076,7 +3078,7 @@ void MainAnalysisScreen::askHmiNewFunction(std::uint64_t symbolView) {
     // 1.12.2 : le retour a une forme (un tableau, une liste, un vecteur, un dictionnaire, un tuple),
     // ou un type ecrit (LIST OF TUPLE(STRING, REAL), REF_TO T_Four...) qui remplace les choix.
     fields.push_back({"Forme du retour", "Simple", "", false, hmi::typeform::labels(hmi::typereg::UseReturn)});
-    fields.push_back({"Bornes, cl\xC3\xA9 ou types suivants", {}, "", false, {}});
+    fields.push_back({"Bornes, cl\xC3\xA9, types suivants ou capacit\xC3\xA9", {}, "", false, {}});
     fields.push_back({"Type \xC3\xA9" "crit (facultatif)", {}, "MAP[STRING] OF LIST OF REAL ; il remplace les choix", false, {}});
     const ShapeFields at{3, 4, 5, std::string::npos};
     // Le type de retour de la fonction : Aucun reste Aucun (une procedure), sinon sa forme.

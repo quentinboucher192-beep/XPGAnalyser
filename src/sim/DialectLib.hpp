@@ -131,7 +131,7 @@ struct NativeInfo {
     bool             resizes{false};        // elle change sa taille : un ARRAY est refuse
     bool             arrayOk{false};        // elle lit aussi un ARRAY
     bool             member{false};         // son dernier argument facultatif est un membre ('Poids')
-    std::string_view group;                 // "liste", "map", "tuple", "numeric", "bits"
+    std::string_view group;                 // "liste", "map", "tuple", "numeric", "bits" ; 1.12.7 : "set", "ring"
     std::string_view signature;             // "LIST_SET(L, i, x) : BOOL"
     std::string_view summary;
 };

@@ -593,6 +593,14 @@ const std::vector<NativeInfo>& natives() {
         {"MAP_ITEMS", 1, 1, false, false, false, false, "map", "MAP_ITEMS(m) : LIST OF TUPLE(cl\xC3\xA9, valeur)", "Les paires (cl\xC3\xA9, valeur), dans l'ordre des cl\xC3\xA9s : une LIST de TUPLE."},
         {"TUPLE_TO_STRING", 1, 1, false, false, false, false, "tuple", "TUPLE_TO_STRING(t) : STRING", "Le TUPLE \xC3\xA9" "crit comme un litt\xC3\xA9ral : ('four', 850.0)."},
         {"TUPLE_UNPACK", 2, -1, false, false, false, false, "tuple", "TUPLE_UNPACK(t, a, b, \xE2\x80\xA6) : BOOL", "\xC3\x89" "crit chaque champ dans une variable, dans l'ordre : autant de variables que de champs."},
+        // ---- 1.12.7 (SET et RING) : SET OF T (std::set), RING[N] OF T (un tampon circulaire)
+        {"SET_ADD", 2, 2, true, false, false, false, "set", "SET_ADD(S, x) : BOOL", "Ajoute la valeur \xC3\xA0 sa place (le SET reste rang\xC3\xA9) : TRUE si elle est nouvelle ; d\xC3\xA9j\xC3\xA0 l\xC3\xA0, rien ne change (FALSE)."},
+        {"SET_REMOVE", 2, 2, true, false, false, false, "set", "SET_REMOVE(S, x) : BOOL", "Retire la valeur : TRUE si elle y \xC3\xA9tait."},
+        {"SET_HAS", 2, 2, false, false, false, false, "set", "SET_HAS(S, x) : BOOL", "Vrai si la valeur est dans le SET."},
+        {"SET_UNION", 2, 2, false, false, true, false, "set", "SET_UNION(A, B) : SET OF T", "Un SET neuf : les valeurs de A et celles de B, chacune une fois, rang\xC3\xA9" "es (std::set_union)."},
+        {"SET_INTERSECTION", 2, 2, false, false, true, false, "set", "SET_INTERSECTION(A, B) : SET OF T", "Un SET neuf : les valeurs qui sont dans A et dans B (std::set_intersection)."},
+        {"SET_DIFFERENCE", 2, 2, false, false, true, false, "set", "SET_DIFFERENCE(A, B) : SET OF T", "Un SET neuf : les valeurs de A qui ne sont pas dans B (std::set_difference)."},
+        {"RING_ADD", 2, 2, true, false, false, false, "ring", "RING_ADD(R, x) : DINT", "Ajoute la valeur \xC3\xA0 la fin du RING ; plein, la plus ancienne part. Rend le nombre de valeurs (au plus N)."},
         // ---- std::numeric
         {"ACCUMULATE", 2, 3, false, false, true, false, "numeric", "ACCUMULATE(T, init [, op]) : comme init", "Plie les \xC3\xA9l\xC3\xA9ments dans init, du premier au dernier : la somme, ou avec OPERATION le produit, le minimum, le maximum."},
         {"REDUCE", 1, 3, false, false, true, false, "numeric", "REDUCE(T [, init [, op]]) : comme les \xC3\xA9l\xC3\xA9ments", "Comme ACCUMULATE, sans ordre impos\xC3\xA9 ; init vaut 0 s'il manque."},

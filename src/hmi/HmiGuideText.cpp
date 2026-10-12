@@ -13264,9 +13264,40 @@ const std::vector<Topic>& topics() {
                          "it->second = 0.0f; }", "C++"},
              {K::Tip, "Une MAP se garde d'une ex\xC3\xA9" "cution \xC3\xA0 l'autre si elle est "
                          "d\xC3\xA9" "clar\xC3\xA9" "e dans un bloc VAR du script (comme toute VAR).", {}},
+             // 1.12.7 (choix 5 de la maquette v3) : SET et RING - sans intertitre (le tutoriel deduit de ce sujet
+             // garde ses etapes : les lignes du tableau, ses puces).
+             {K::Paragraph, "**`SET OF T`** (std::set) : un ensemble, **chaque valeur une seule fois, rang\xC3\xA9" "e** dans l'ordre. "
+                         "`SET_ADD(S, x)` rend TRUE si la valeur est nouvelle ; d\xC3\xA9j\xC3\xA0 l\xC3\xA0, rien ne change (FALSE). "
+                         "`SET_REMOVE`, `SET_HAS`, et `SET_UNION`, `SET_INTERSECTION`, `SET_DIFFERENCE` qui rendent un SET neuf "
+                         "(std::set_union\xE2\x80\xA6). Un litt\xC3\xA9ral avec des doublons ou en d\xC3\xA9sordre est rang\xC3\xA9 : "
+                         "`['P3', 'P1', 'P3']` devient `['P1', 'P3']`. Plus besoin de LIST_CONTAINS avant chaque LIST_ADD.", {}, "1.12.7"},
+             {K::Paragraph, "**`RING[N] OF T`** : un tampon circulaire, **les N derni\xC3\xA8res valeurs**. `RING_ADD(R, x)` (ou "
+                         "LIST_ADD) ajoute \xC3\xA0 la fin ; plein, la plus ancienne part. `R.Count`, `R.Capacity` (N), `R.Full` ; "
+                         "FOR EACH va de la plus ancienne \xC3\xA0 la plus r\xC3\xA9" "cente ; LIST_AVG, LIST_MIN, LIST_MAX, LIST_SUM, "
+                         "JOIN, LIST_GET\xE2\x80\xA6 le lisent comme une liste (une moyenne glissante). N est une constante "
+                         "enti\xC3\xA8re de 1 \xC3\xA0 100000.", {}, "1.12.7"},
+             {K::Code, "VAR\n    Postes_Actifs : SET OF STRING := ['P1', 'P3'];\n    Dernieres : RING[100] OF REAL;\nEND_VAR\n"
+                         "IF SET_ADD(Postes_Actifs, 'P2') THEN\n    IHM_JOURNAL('P2 choisi ({Postes_Actifs.Count} postes)');\nEND_IF;\n"
+                         "RING_ADD(Dernieres, Mesure);\nMoyenne := LIST_AVG(Dernieres);      (* les 100 dernieres mesures *)", "ST", "1.12.7"},
+             {K::Code, "/* le C n'a ni ensemble ni tampon circulaire : un tableau et un indice qui tourne */\n"
+                         "float dernieres[100]; int debut = 0, nombre = 0;\n"
+                         "dernieres[(debut + nombre) % 100] = mesure;\nif (nombre < 100) ++nombre; else debut = (debut + 1) % 100;", "C", "1.12.7"},
+             {K::Code, "std::set<std::string> postes{\"P1\", \"P3\"};\nif (postes.insert(\"P2\").second)  // nouvelle\n"
+                         "    journal(\"P2 choisi\");\nstd::deque<float> dernieres;          // ou boost::circular_buffer<float>(100)\n"
+                         "dernieres.push_back(mesure);\nif (dernieres.size() > 100) dernieres.pop_front();", "C++", "1.12.7"},
+             {K::Bullet, "**Un SET se range tout seul** : `S[0]` se lit (la plus petite valeur), mais ne s'\xC3\xA9" "crit pas, ni la "
+                         "variable d'un FOR EACH sur lui ; LIST_INSERT, LIST_SET, LIST_SORT, LIST_REVERSE, LIST_SWAP\xE2\x80\xA6 lui sont "
+                         "refus\xC3\xA9" "es (Compiler le dit) ; LIST_ADD le range \xC3\xA0 sa place, une seule fois ; LIST_REMOVE, LIST_CLEAR, "
+                         "LIST_APPEND (l'union) gardent sa forme. Un SET range des valeurs simples (nombres, textes, dur\xC3\xA9" "es, "
+                         "\xC3\xA9num\xC3\xA9rations) : pour des structures, une LIST et LIST_SORT_BY.", {}, "1.12.7"},
+             {K::Bullet, "**Les affectations** : une LIST dans un SET se range et perd ses doublons ; une LIST (ou un ARRAY) dans "
+                         "un RING garde ses N derni\xC3\xA8res valeurs ; un SET ou un RING dans une LIST en fait une LIST ordinaire. Une "
+                         "variable IHM peut \xC3\xAAtre un SET ou un RING (Ensemble (SET), Tampon (RING) dans le s\xC3\xA9lecteur de types) : "
+                         "de taille variable, elle vit dans la m\xC3\xA9moire de l'IHM (ni \xC3\xA9quipement, ni adresse).", {}, "1.12.7"},
          },
          {"fonctions-internes", "tableaux-n", "retours-fonctions"},
-         {"MAP", "MAP_HAS", "MAP_GET", "MAP_REMOVE", "MAP_SIZE", "MAP_CLEAR", "MAP_KEYS", "MAP_BEGIN", "MAP_NEXT", "MAP_END", "MAP_ITERATOR", "FOR EACH", "EACH", "IN", "Key", "Value", "std::map"},
+         {"MAP", "MAP_HAS", "MAP_GET", "MAP_REMOVE", "MAP_SIZE", "MAP_CLEAR", "MAP_KEYS", "MAP_BEGIN", "MAP_NEXT", "MAP_END", "MAP_ITERATOR", "FOR EACH", "EACH", "IN", "Key", "Value", "std::map",
+          "SET", "RING", "SET_ADD", "SET_REMOVE", "SET_HAS", "SET_UNION", "SET_INTERSECTION", "SET_DIFFERENCE", "RING_ADD", "std::set"},
          {"scripts", "fonctions"},
          {},
          "",

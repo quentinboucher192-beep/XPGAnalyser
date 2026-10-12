@@ -235,6 +235,25 @@ private:
             if (i_ < s_.size() && s_[i_] == '(') return tuple(use, depth);
             i_ = save;
         }
+        // 1.12.7 : SET OF T (rangee, chaque valeur une fois), RING[N] OF T (les N dernieres valeurs).
+        if (atWord("SET")) {
+            std::size_t save = i_;
+            (void)word();
+            if (atWord("OF")) {
+                (void)word();
+                return list(use, depth, false, "SET");
+            }
+            i_ = save;                                  // un type IHM nomme SET : un nom
+        }
+        if (atWord("RING")) {
+            std::size_t save = i_;
+            (void)word();
+            skip();
+            if (i_ < s_.size() && s_[i_] == '[') return ring(use, depth);
+            if (atWord("OF"))
+                return fail("RING : sa capacit\xC3\xA9 est attendue, le nombre de valeurs gard\xC3\xA9" "es \xE2\x80\x94 RING[100] OF REAL");
+            i_ = save;
+        }
         if (atWord("MAP")) {
             std::size_t save = i_;
             (void)word();
@@ -386,13 +405,31 @@ private:
         return r;
     }
 
+    // 1.12.7 : RING[N] OF T - N, une capacite entiere de 1 a sim::kRingMax.
+    Resolved ring(unsigned use, int depth) {
+        if (!accept('[')) return fail("RING : [ attendu");
+        long long n = 0;
+        if (!bound(n)) return fail("RING[N] : N est un nombre entier (RING[100] OF REAL)");
+        if (n < 1 || n > kRingCapacityMax)
+            return fail("RING[" + std::to_string(n) + "] : la capacit\xC3\xA9 va de 1 \xC3\xA0 " + std::to_string(kRingCapacityMax));
+        if (!accept(']')) return fail("RING[N] : ] attendu apr\xC3\xA8s la capacit\xC3\xA9");
+        if (!atWord("OF")) return fail("RING[N] : OF attendu apr\xC3\xA8s la capacit\xC3\xA9 (RING[100] OF REAL)");
+        (void)word();
+        return list(use, depth, false, "RING[" + std::to_string(n) + "]");
+    }
+
     // 1.12.2 : LIST OF T, VECTOR OF T - une suite de taille variable (indices a partir de 0).
-    Resolved list(unsigned use, int depth, bool vector) {
+    // 1.12.7 : `flavor` - "SET" (SET OF T), "RING[N]" (RING[N] OF T) ; vide : LIST ou VECTOR.
+    Resolved list(unsigned use, int depth, bool vector, const std::string& flavor = {}) {
         Resolved e = type(UseDeclaration, depth + 1);
         Resolved r;
-        const std::string head = vector ? "VECTOR" : "LIST";
+        const std::string head = !flavor.empty() ? flavor : vector ? "VECTOR" : "LIST";
         r.text = head + " OF " + e.text;
-        r.key = (vector ? "vector:" : "list:") + e.key;
+        r.key = (!flavor.empty() ? lowerOf(flavor) + ":" : vector ? std::string("vector:") : std::string("list:")) + e.key;
+        // Un SET range des valeurs simples (des nombres, des textes, des durees, une enumeration).
+        const bool setRefused = flavor == "SET" && e.ok
+                                && (e.category == Category::Structure || e.category == Category::Collection || e.category == Category::PlcType
+                                    || e.category == Category::Reference || e.category == Category::Generic);
         r.category = Category::Collection;
         r.entry = e.entry;
         r.missing = e.missing;
@@ -400,9 +437,18 @@ private:
         r.dynamic = true;
         r.rich = true;
         r.ok = e.ok && (use & (UseVariable | UseDeclaration | UseParameter | UseReturn)) != 0;    // 1.12.4 : un parametre aussi
-        r.why = e.ok ? (r.ok ? std::string{} : "une " + head + " ne convient pas \xC3\xA0 " + useText(use)) : e.why;
+        r.why = e.ok ? (r.ok ? std::string{} : (flavor.empty() ? "une " + head : "un " + r.text) + " ne convient pas \xC3\xA0 " + useText(use)) : e.why;
+        if (setRefused) {
+            r.ok = false;
+            r.why = r.text + " : un SET range des valeurs simples (des nombres, des textes, des dur\xC3\xA9" "es, une \xC3\xA9num\xC3\xA9ration)";
+        }
         return r;
     }
+    static std::string lowerOf(std::string s) {
+        for (auto& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        return s;
+    }
+    static constexpr long long kRingCapacityMax = 100000;     // sim::kRingMax
 
     // 1.12.2 : TUPLE(T1, T2...) - des valeurs de types fixes, t.Item1, t.Item2...
     Resolved tuple(unsigned use, int depth) {
@@ -695,6 +741,32 @@ Verdict conversion(std::string_view from, std::string_view to) {
         if (f == "DATE_AND_TIME" && (t == "DATE" || t == "TIME_OF_DAY"))
             return done(Conversion::Forbidden, -1, "DATE_AND_TIME vers " + tn + " : \xC3\xA9" "crivez DT_TO_" + (t == "DATE" ? "DATE" : "TOD") + "(\xE2\x80\xA6)");
         return done(Conversion::Forbidden, -1, fn + " n'est pas " + tn + " : une date, une heure du jour, une date et heure et une dur\xC3\xA9" "e ne s'\xC3\xA9" "changent pas");
+    }
+    // 1.12.7 : un SET, un RING et une LIST (un VECTOR) de meme element s'echangent par valeur - le moteur met
+    // la valeur en forme (un SET se range, sans doublon ; un RING garde ses N dernieres).
+    {
+        const auto sequence = [](const std::string& c, std::string& head, std::string& element) {
+            for (const char* h : {"LIST", "VECTOR", "SET", "RING"}) {
+                const std::string hs(h);
+                if (c.rfind(hs, 0) != 0) continue;
+                std::size_t k = hs.size();
+                if (hs == "RING") {
+                    if (k >= c.size() || c[k] != '[' || (k = c.find(']', k)) == std::string::npos) return false;
+                    ++k;
+                }
+                if (c.compare(k, 2, "OF") != 0) return false;
+                head = hs;
+                element = c.substr(k + 2);
+                return true;
+            }
+            return false;
+        };
+        std::string fh, fe, th, te;
+        if (sequence(f, fh, fe) && sequence(t, th, te) && fe == te && (fh == "SET" || fh == "RING" || th == "SET" || th == "RING")) {
+            if (th == "SET" && fh != "SET") return done(Conversion::Lossy, 4, fn + " vers " + tn + " : rang\xC3\xA9" "e, sans doublon");
+            if (th == "RING") return done(Conversion::Lossy, 4, fn + " vers " + tn + " : ses derni\xC3\xA8res valeurs seulement");
+            return done(Conversion::Widening, 1);
+        }
     }
     if (a.family == Family::Real && b.family == Family::Integer)
         return done(Conversion::Forbidden, -1, "un r\xC3\xA9" "el ne devient pas " + tn + " sans conversion : \xC3\xA9" "crivez TO_" + t + "(\xE2\x80\xA6)");

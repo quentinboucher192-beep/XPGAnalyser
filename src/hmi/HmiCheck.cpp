@@ -914,7 +914,8 @@ void checkLot6(const Project& p, const NameExists& plc, std::vector<Issue>& out)
                         const std::string t = types::normalized(var->type);
                         const auto starts = [&](std::string_view w) { return t.size() >= w.size() && t.compare(0, w.size(), w) == 0; };
                         // 1.12.5 (lot A, D17) : un TUPLE aussi (une ligne par element, le moteur le montrait deja).
-                        if (!starts("ARRAY") && !starts("LIST") && !starts("VECTOR") && !starts("MAP") && !starts("TUPLE"))
+                        if (!starts("ARRAY") && !starts("LIST") && !starts("VECTOR") && !starts("MAP") && !starts("TUPLE") && !starts("SET ")
+                            && !starts("RING[") && !starts("RING ["))      // 1.12.7 : un SET, un RING aussi
                             add(out, S::Error, "Variable", v.id, o.id, "rowsFrom",
                                 "lignes depuis : " + var->name + " (" + var->type + ") n'est ni une LIST, ni un VECTOR, ni une MAP, ni un TUPLE, ni un tableau");
                     } else {
@@ -3584,7 +3585,10 @@ void roleChecks(const Project& p, std::vector<Issue>& out) {
                 const auto members = types::membersOf(p, type);
                 types::Spec spec;
                 std::string aggregate, choose;
-                if (up.rfind("LIST", 0) == 0 || up.rfind("VECTOR", 0) == 0) { aggregate = "une liste"; choose = var + "[0] ou " + var + ".Count"; }
+                if (up.rfind("LIST", 0) == 0 || up.rfind("VECTOR", 0) == 0 || up.rfind("SET ", 0) == 0 || up.rfind("RING[", 0) == 0 || up.rfind("RING [", 0) == 0) {   // 1.12.7
+                    aggregate = "une liste";
+                    choose = var + "[0] ou " + var + ".Count";
+                }
                 else if (up.rfind("MAP", 0) == 0) { aggregate = "une MAP"; choose = var + "['cl\xC3\xA9'] ou " + var + ".Count"; }
                 else if (up.rfind("TUPLE", 0) == 0) { aggregate = "un tuple"; choose = var + ".Item1"; }
                 else if (!members.empty()) {

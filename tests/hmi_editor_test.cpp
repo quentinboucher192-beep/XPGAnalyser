@@ -28553,6 +28553,13 @@ void selecteurTypes1119() {
     check(picker->result() == "ARRAY[1..2] OF T_Four", "les bornes d'un tableau reviennent avec lui : " + picker->result());
     check(picker->setForm("Dictionnaire (MAP)") && picker->result() == "MAP[STRING] OF T_Four", "la cl\xC3\xA9 du dictionnaire aussi : " + picker->result());
     check(!picker->setForm("Matrice") && picker->setForm("Simple") && picker->result() == "T_Four", "une forme inconnue : refus\xC3\xA9" "e ; Simple : T_Four");
+    // 1.12.7 : Tampon (RING) - sa capacite, 100 par defaut ; Ensemble (SET) d'une structure : refuse, dit.
+    check(picker->setForm("Tampon (RING)") && picker->result() == "RING[100] OF T_Four" && picker->resultProblem().empty(),
+          "Tampon (RING) : " + picker->result() + " " + picker->resultProblem());
+    check(picker->setForm("Ensemble (SET)") && picker->result() == "SET OF T_Four"
+              && picker->resultProblem().find("un SET range des valeurs simples") != std::string::npos,
+          "Ensemble (SET) d'une structure : " + picker->resultProblem());
+    check(picker->setForm("Simple") && picker->result() == "T_Four", "et le retour a Simple : " + picker->result());
     // rafraichi : un type cree pendant que le selecteur est ouvert
     HmiType vanne;
     vanne.id = doc->project.allocate();
@@ -28764,6 +28771,51 @@ void saisieNatives1127() {
     check(!cppPi.empty() && cppPi.front().text == "pi" && cppPi.front().insert == "pi" && cppPi.front().detail.rfind("= 3.14159265358979", 0) == 0,
           "std::numbers::pi : pi, sa valeur en double");
     check(!find(as::suggest(hp, nullptr, "auto y = Moteur::", "ma"), "max"), "Moteur:: : pas les membres de numeric_limits");
+}
+
+// 1.12.7 (SET et RING) : l'aide a la saisie (les natives, les membres d'un SET et d'un RING), le tableau
+// des elements (un SET range et sans doublon, un RING ses N dernieres valeurs).
+void setRing1127() {
+    std::printf("1.12.7 : SET et RING - l'aide a la saisie, le tableau des elements\n");
+    namespace as = app::assist;
+    hmi::Project hp;
+    const auto find = [](const std::vector<as::Item>& items, std::string_view text) -> const as::Item* {
+        for (const auto& it : items)
+            if (it.text == text) return &it;
+        return nullptr;
+    };
+    check(find(as::suggest(hp, nullptr, "b := ", "SET_A"), "SET_ADD") != nullptr && find(as::suggest(hp, nullptr, "i := ", "RING_"), "RING_ADD") != nullptr
+              && find(as::suggest(hp, nullptr, "S := ", "SET_INT"), "SET_INTERSECTION") != nullptr,
+          "SET_A, RING_, SET_INT : SET_ADD, RING_ADD, SET_INTERSECTION propos\xC3\xA9" "es");
+    const auto ring = as::suggest(hp, nullptr, "VAR\n    Dernieres : RING[5] OF REAL;\nEND_VAR\nx := Dernieres.", "");
+    const auto* cap = find(ring, "Capacity");
+    check(find(ring, "Count") && cap && cap->detail.rfind("DINT", 0) == 0 && find(ring, "Full") && find(ring, "First") && find(ring, "Last"),
+          "Dernieres. (un RING) : Count, Capacity, Full, First, Last (" + std::to_string(ring.size()) + ")");
+    const auto set = as::suggest(hp, nullptr, "VAR\n    Postes : SET OF STRING;\nEND_VAR\nb := Postes.", "");
+    check(find(set, "Count") && find(set, "First") && !find(set, "Capacity") && !find(set, "Full"), "Postes. (un SET) : Count, First, Last ; ni Capacity, ni Full");
+    // Une variable IHM de type RING : les memes membres.
+    hmi::Project withVar;
+    hmi::Variable courbe;
+    courbe.id = withVar.allocate();
+    courbe.name = "Courbe";
+    courbe.type = "RING[100] OF REAL";
+    withVar.programs.variables.push_back(courbe);
+    const auto ihm = as::suggest(withVar, nullptr, "x := Courbe.", "");
+    check(find(ihm, "Capacity") && find(ihm, "Full") && find(ihm, "Count"), "Courbe. (une variable IHM RING) : Count, Capacity, Full (" + std::to_string(ihm.size()) + ")");
+    // Le tableau des elements : un SET range, sans doublon, ni Monter ni Descendre ; un RING, ses N dernieres valeurs.
+    auto s = app::HmiItemsDialog::modelOf("SET OF STRING", "['P3', 'P1', 'P3']");
+    check(s->mode == app::HmiItemsDialog::Model::Mode::List && s->rowCount() == 2 && s->cellText(0, 1) == "'P1'" && s->flavor == "SET",
+          "un SET : rang\xC3\xA9, sans doublon (" + std::to_string(s->rowCount()) + " lignes)");
+    s->values.push_back("'P0'");
+    check(app::HmiItemsDialog::literalOf(*s) == "['P0', 'P1', 'P3']", "un SET rendu : rang\xC3\xA9 - " + app::HmiItemsDialog::literalOf(*s));
+    auto n = app::HmiItemsDialog::modelOf("SET OF INT", "[10, 9, 100, 9]");
+    check(app::HmiItemsDialog::literalOf(*n) == "[9, 10, 100]", "un SET OF INT : les nombres rang\xC3\xA9s comme des nombres - " + app::HmiItemsDialog::literalOf(*n));
+    auto r = app::HmiItemsDialog::modelOf("RING[3] OF INT", "[1, 2, 3, 4]");
+    check(r->rowCount() == 3 && r->cellText(0, 1) == "2" && r->capacity == 3 && r->headerText(1).find("3 au plus") != std::string::npos,
+          "un RING[3] : ses 3 derni\xC3\xA8res valeurs, sa capacit\xC3\xA9 dans l'en-t\xC3\xAA" "te");
+    r->values.push_back("5");
+    check(app::HmiItemsDialog::literalOf(*r) == "[3, 4, 5]", "un RING rendu : les 3 derni\xC3\xA8res - " + app::HmiItemsDialog::literalOf(*r));
+    check(app::itemseditor::editable("SET OF STRING") && app::itemseditor::editable("RING[10] OF REAL"), "SET et RING : des \xC3\xA9l\xC3\xA9ments \xC3\xA0 \xC3\xA9" "diter");
 }
 
 void natives1200() {
@@ -29185,6 +29237,7 @@ int main(int argc, char** argv) {
     if (const char* only = std::getenv("HMI_TEST_NATIVES"); only && *only == '1') {
         natives1200();
         saisieNatives1127();                     // 1.12.7
+        setRing1127();                           // 1.12.7 : SET et RING
         enumsInspecteur1121();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
@@ -29556,6 +29609,7 @@ int main(int argc, char** argv) {
     explorateur1123();                      // 1.11.23 : l'explorateur - puces, titres de domaine
     natives1200();                          // 1.12.0 : les natives - l'arbre, les fiches, le volet
     saisieNatives1127();                    // 1.12.7 : l'aide a la saisie des templates et des nouvelles natives
+    setRing1127();                          // 1.12.7 : SET et RING - l'aide a la saisie, le tableau des elements
     enumsInspecteur1121();                  // 1.12.1 : les enumerations natives des proprietes et l'inspecteur
     if (argc > 1) configuration_et_variables(argv[1]);
     if (argc > 1) aide_saisie_scripts(argv[1]);

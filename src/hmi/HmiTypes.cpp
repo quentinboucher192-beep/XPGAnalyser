@@ -461,7 +461,7 @@ bool isRich(std::string_view type) {
     const std::string u = upperOf(t);
     // Les mots qui ouvrent un type objet (ailleurs que dans les bornes d'un ARRAY).
     if (u.find("LIST") == std::string::npos && u.find("VECTOR") == std::string::npos && u.find("MAP") == std::string::npos
-        && u.find("TUPLE") == std::string::npos)
+        && u.find("TUPLE") == std::string::npos && u.find("SET") == std::string::npos && u.find("RING") == std::string::npos)   // 1.12.7 : SET, RING
         return false;
     return typereg::baseRegistry().resolve(t, typereg::UseAll).rich;
 }

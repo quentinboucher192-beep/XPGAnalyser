@@ -611,9 +611,15 @@ void objets1122() {
     sh.form = tf::Form::Array;
     sh.parameter = "[1..4]";
     check(tf::compose(sh) == "ARRAY[1..4] OF REAL", "des bornes \xC3\xA9" "crites [1..4] : sans leurs crochets");
-    check(tf::forms(tr::UseParameter).size() == 7 && tf::forms(tr::UseVariable).size() == 7 && tf::forms(tr::UseOperand).size() == 1
+    check(tf::forms(tr::UseParameter).size() == 9 && tf::forms(tr::UseVariable).size() == 9 && tf::forms(tr::UseOperand).size() == 1
               && tf::referenceAllowed(tr::UseReturn) && !tf::referenceAllowed(tr::UseVariable),
-          "les formes : 7 pour un param\xC3\xA8tre (1.12.4) et une variable, 1 pour un op\xC3\xA9rande ; REF_TO pour un retour");
+          "les formes : 9 pour un param\xC3\xA8tre (1.12.4) et une variable (1.12.7 : SET et RING), 1 pour un op\xC3\xA9rande ; REF_TO pour un retour");
+    // 1.12.7 : SET OF T, RING[N] OF T - la forme et son parametre (la capacite).
+    for (const char* t : {"SET OF STRING", "RING[100] OF REAL", "LIST OF SET OF INT"})
+        check(tf::compose(tf::decompose(t)) == t, std::string("compose(decompose(") + t + ")) = " + tf::compose(tf::decompose(t)));
+    check(tf::decompose("RING[100] OF REAL").form == tf::Form::Ring && tf::decompose("RING[100] OF REAL").parameter == "100"
+              && tf::decompose("SET OF T_Four").form == tf::Form::Set && tf::dynamic(tf::Form::Set) && tf::dynamic(tf::Form::Ring),
+          "SET OF T, RING[N] OF T : leur forme, la capacite en parametre, de taille variable");
     // 1.12.4 : un parametre de popup ou de symbole peut etre une liste, un vecteur, une MAP, un tuple.
     for (const char* t : {"LIST OF REAL", "VECTOR OF STRING", "MAP[STRING] OF INT", "TUPLE(INT, STRING)", "ARRAY[0..2] OF LIST OF INT"})
         check(typereg::Registry::build(p)->resolve(t, tr::UseParameter).ok, std::string("un param\xC3\xA8tre ") + t + " : accept\xC3\xA9");

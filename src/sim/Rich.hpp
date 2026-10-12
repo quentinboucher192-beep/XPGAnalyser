@@ -18,6 +18,12 @@
 //      taille variable, indicee a partir de 0 (L[0]), L.Count, LIST_ADD, VECTOR_PUSH... ;
 //    - 1.12.2 : un TUPLE (TUPLE(INT, REAL, STRING)) : des valeurs de types fixes,
 //      t.Item1, t.Item2... (taille fixe, comme std::tuple).
+//    - 1.12.7 : un ENSEMBLE (SET OF T, std::set) : une liste rangee, chaque valeur une
+//      seule fois ; un TAMPON CIRCULAIRE (RING[N] OF T) : une liste des N dernieres
+//      valeurs (pleine, la plus ancienne part quand on en ajoute une). Ce sont des
+//      listes (Kind::List, `name` "SET" ou "RING", `capacity` N) : l'affichage, FOR EACH,
+//      .Count, les natives LIST_ qui lisent marchent ; chaque ecriture rend a la liste sa
+//      forme (normalizeList).
 //
 //  LES LITTERAUX (1.12.2) : [1, 2, 3] (une liste, un tableau rempli dans l'ordre :
 //  la derniere dimension varie le plus vite), ['a' := 1, 'b' := 2] (une MAP), (1, 'x')
@@ -54,7 +60,8 @@ struct TypeDesc {
     std::vector<std::pair<std::int64_t, std::int64_t>> bounds;      // Array : [bas, haut] par dimension
     TypeRef     element;                                            // Array, Map (valeur), List, Ref et Pointer (cible)
     Type        key{Type::String};                                  // Map : STRING ou un entier
-    std::string name;                                               // Struct : le nom du type ; Scalar : "LREAL"... ; List : "LIST" ou "VECTOR"
+    std::string name;                                               // Struct : le nom du type ; Scalar : "LREAL"... ; List : "LIST", "VECTOR", "SET" ou "RING"
+    std::int64_t capacity{0};                                       // 1.12.7 : List "RING" : N, le nombre de valeurs gardees
     std::vector<std::pair<std::string, TypeRef>> members;           // Struct (resolue), Tuple (Item1, Item2...)
     bool        literal{false};                                     // 1.12.2 : le type d'un litteral [..], (..) : il se convertit
 
@@ -68,6 +75,13 @@ struct TypeDesc {
 // 1.12.2 : LIST OF T, VECTOR OF T (`vector` : VECTOR) ; TUPLE(T1, T2...) (Item1, Item2...).
 [[nodiscard]] TypeRef listType(TypeRef element, bool vector = false);
 [[nodiscard]] TypeRef tupleType(std::vector<TypeRef> items);
+// 1.12.7 : SET OF T (rangee, chaque valeur une fois) ; RING[N] OF T (les N dernieres valeurs).
+[[nodiscard]] TypeRef setType(TypeRef element);
+[[nodiscard]] TypeRef ringType(TypeRef element, std::int64_t capacity);
+[[nodiscard]] bool    isSetType(const TypeDesc& t) noexcept;
+[[nodiscard]] bool    isRingType(const TypeDesc& t) noexcept;
+// La plus grande capacite d'un RING (RING[100000] OF REAL).
+inline constexpr std::int64_t kRingMax = 100000;
 
 [[nodiscard]] TypeRef scalarType(Type t, std::string_view name = {});
 // Meme forme : memes dimensions et bornes, meme element, meme structure (par son nom).
@@ -99,6 +113,10 @@ struct Obj {
 [[nodiscard]] ObjRef deepCopy(const Obj& o);
 // Copie `from` dans `into`, de meme forme ; faux (et `why`) sinon.
 bool assignObj(Obj& into, const Obj& from, std::string* why);
+// 1.12.7 : rend a un SET sa forme (rangee, sans doublon : la premiere de chaque valeur reste) et a
+// un RING la sienne (ses `capacity` dernieres valeurs : les plus anciennes partent) ; le nombre de
+// valeurs retirees. Une autre liste ne change pas.
+std::size_t normalizeList(Obj& o);
 // L'egalite profonde (tableaux, structures, MAP ; references : meme cible).
 [[nodiscard]] bool deepEquals(const Obj& a, const Obj& b);
 // Pour le journal : "[1.5, 2, 3]", "{Temp: 20.5, Marche: TRUE}", "{'a': 1}", "(1, 'x')".

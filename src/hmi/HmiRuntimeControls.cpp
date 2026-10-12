@@ -145,7 +145,9 @@ roles::Target Runtime::writeTarget(const std::string& var, const Object* writer)
             for (auto& c : up) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
             std::vector<std::pair<std::string, std::string>> members;
             types::Spec spec;
-            if (up.rfind("LIST", 0) == 0 || up.rfind("VECTOR", 0) == 0) t.aggregate = "une liste (" + t.typeName + ")";
+            if (up.rfind("LIST", 0) == 0 || up.rfind("VECTOR", 0) == 0 || up.rfind("SET ", 0) == 0 || up.rfind("RING[", 0) == 0
+                || up.rfind("RING [", 0) == 0)   // 1.12.7 : SET, RING
+                t.aggregate = "une liste (" + t.typeName + ")";
             else if (up.rfind("MAP", 0) == 0) t.aggregate = "une MAP (" + t.typeName + ")";
             else if (up.rfind("TUPLE", 0) == 0) t.aggregate = "un tuple (" + t.typeName + ")";
             else if (env.structMembers(t.typeName, members) && !members.empty()) {

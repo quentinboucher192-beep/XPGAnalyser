@@ -24,6 +24,7 @@ CATS = [
     ("tab", "Tableaux", "Taille et bornes d'un tableau.", "Le dialecte de l'IHM"),
     ("map", "MAP et itérateurs", "Les tables associatives (clé → valeur) et leur parcours.", "Le dialecte de l'IHM"),
     ("liste", "Listes, vecteurs et tuples", "Les collections de taille variable (LIST OF T, VECTOR OF T) : ajouter, retirer, chercher, trier ; les TUPLE. Ce qui ne change pas la taille lit aussi un ARRAY.", "Le dialecte de l'IHM"),
+    ("ensembles", "Ensembles et tampons (SET, RING)", "SET OF T : chaque valeur une fois, rangée (std::set) ; RING[N] OF T : les N dernières valeurs, la plus ancienne part quand il est plein.", "Le dialecte de l'IHM"),   # 1.12.7
     ("ref", "Références et pointeurs", "Désigner une variable sans la copier.", "Le dialecte de l'IHM"),
     # 1.12.7 : la bibliotheque standard du C++, en ST
     ("numeric", "std::numeric", "Plier, cumuler, remplir une suite ; PGCD, PPCM, milieu ; le calcul saturé (C++26).", "Bibliothèques"),
@@ -249,7 +250,7 @@ LDECL = "VAR L : LIST OF INT := [3, 1, 2]; END_VAR"
 VDECL = "VAR V : VECTOR OF STRING := ['a', 'b', 'c']; END_VAR"
 NOC = "/* pas de liste en C : un tableau et un compteur */"
 fn(name="LIST_ADD", cat="liste", params=[("L", "LIST OF T", "la liste", False), ("X", "T", "la valeur ajoutée", False)], ret="DINT",
-   short="Ajoute la valeur à la fin ; rend le nombre d'éléments.", notes=["Un ARRAY a une taille fixe : LIST_ADD le refuse (Compiler l'avertit) — LIST_SET ou LIST_FILL l'écrivent."], st="LIST_ADD(Mesures, Niveau);", c=NOC,
+   short="Ajoute la valeur à la fin ; rend le nombre d'éléments.", notes=["Un ARRAY a une taille fixe : LIST_ADD le refuse (Compiler l'avertit) — LIST_SET ou LIST_FILL l'écrivent.", "1.12.7 : sur un RING, plein, la plus ancienne part (comme RING_ADD) ; sur un SET, la valeur se range à sa place, une seule fois (comme SET_ADD)."], st="LIST_ADD(Mesures, Niveau);", c=NOC,
    cpp="mesures.push_back(niveau);", essai=("DINT", "LIST_ADD(L, 4)", "4", LDECL), plc="—")
 fn(name="LIST_INSERT", cat="liste", params=[("L", "LIST OF T", "la liste", False), ("I", "DINT", "l'indice (0 : en tête)", False), ("X", "T", "la valeur", False)],
    ret="DINT", short="Insère la valeur à l'indice ; rend le nombre d'éléments.", notes=["Un indice hors de 0..L.Count est une erreur."],
@@ -264,20 +265,20 @@ fn(name="LIST_REMOVE", cat="liste", params=[("L", "LIST OF T", "la liste", False
 fn(name="LIST_CLEAR", cat="liste", params=[("L", "LIST OF T", "la liste", False)], ret="BOOL", short="Vide la liste.",
    st="LIST_CLEAR(Mesures);", c=NOC, cpp="mesures.clear();", essai=("BOOL", "LIST_CLEAR(L)", "TRUE", LDECL), plc="—")
 fn(name="LIST_COUNT", cat="liste", params=[("L", "LIST OF T", "la liste", False)], ret="DINT",
-   short="Le nombre d'éléments (comme L.Count).", st="Nb := LIST_COUNT(Mesures);", c=NOC, cpp="nb = mesures.size();",
+   notes=["1.12.7 : un SET (dans son ordre) et un RING (de la plus ancienne à la plus récente) aussi."], short="Le nombre d'éléments (comme L.Count).", st="Nb := LIST_COUNT(Mesures);", c=NOC, cpp="nb = mesures.size();",
    essai=("DINT", "LIST_COUNT(L)", "3", LDECL), plc="—")
 fn(name="LIST_CONTAINS", cat="liste", params=[("L", "LIST, VECTOR, ARRAY", "la liste", False), ("X", "T", "la valeur cherchée", False)], ret="BOOL",
-   short="Vrai si la valeur est dans la liste.", notes=["1.12.7 : il cherche aussi dans un ARRAY."], st="IF LIST_CONTAINS(Actifs, 'Four') THEN ... END_IF", c=NOC,
+   short="Vrai si la valeur est dans la liste.", notes=["1.12.7 : il cherche aussi dans un ARRAY.", "1.12.7 : un SET (dans son ordre) et un RING (de la plus ancienne à la plus récente) aussi."], st="IF LIST_CONTAINS(Actifs, 'Four') THEN ... END_IF", c=NOC,
    cpp="std::find(l.begin(), l.end(), x) != l.end()", essai=("BOOL", "LIST_CONTAINS(L, 2)", "TRUE", LDECL), plc="—")
 fn(name="LIST_INDEX_OF", cat="liste", params=[("L", "LIST, VECTOR, ARRAY", "la liste", False), ("X", "T", "la valeur cherchée", False)], ret="DINT",
-   short="L'indice de la première valeur égale ; -1 si elle n'y est pas.", notes=["1.12.7 : dans un ARRAY, l'indice du tableau (Tab.Low à Tab.High)."], st="i := LIST_INDEX_OF(Recettes, 'Pain');", c=NOC,
+   short="L'indice de la première valeur égale ; -1 si elle n'y est pas.", notes=["1.12.7 : dans un ARRAY, l'indice du tableau (Tab.Low à Tab.High).", "1.12.7 : un SET (dans son ordre) et un RING (de la plus ancienne à la plus récente) aussi."], st="i := LIST_INDEX_OF(Recettes, 'Pain');", c=NOC,
    cpp="auto it = std::find(l.begin(), l.end(), x);\ni = it == l.end() ? -1 : it - l.begin();", essai=("DINT", "LIST_INDEX_OF(L, 2)", "2", LDECL), plc="—")
-fn(name="LIST_FIRST", cat="liste", params=[("L", "LIST OF T", "la liste", False)], ret="T", short="Le premier élément (comme L.First) ; une liste vide : une erreur.",
+fn(name="LIST_FIRST", cat="liste", params=[("L", "LIST OF T", "la liste", False)], ret="T", notes=["1.12.7 : un SET (dans son ordre) et un RING (de la plus ancienne à la plus récente) aussi."], short="Le premier élément (comme L.First) ; une liste vide : une erreur.",
    st="Premier := LIST_FIRST(File);", c=NOC, cpp="premier = file.front();", essai=("INT", "LIST_FIRST(L)", "3", LDECL), plc="—")
-fn(name="LIST_LAST", cat="liste", params=[("L", "LIST OF T", "la liste", False)], ret="T", short="Le dernier élément (comme L.Last) ; une liste vide : une erreur.",
+fn(name="LIST_LAST", cat="liste", params=[("L", "LIST OF T", "la liste", False)], ret="T", notes=["1.12.7 : un SET (dans son ordre) et un RING (de la plus ancienne à la plus récente) aussi."], short="Le dernier élément (comme L.Last) ; une liste vide : une erreur.",
    st="Dernier := LIST_LAST(Mesures);", c=NOC, cpp="dernier = mesures.back();", essai=("INT", "LIST_LAST(L)", "2", LDECL), plc="—")
 fn(name="LIST_GET", cat="liste", params=[("L", "LIST, VECTOR, ARRAY", "la liste", False), ("I", "DINT", "l'indice", False), ("DEFAUT", "T", "la valeur hors de la liste", False)],
-   ret="T", short="L'élément de l'indice, ou DEFAUT hors de la liste (sans erreur).", notes=["1.12.7 : il lit aussi un ARRAY, à ses indices (Tab.Low à Tab.High) ; LIST_SET écrit de même."], st="V := LIST_GET(Mesures, 5, 0.0);", c=NOC,
+   ret="T", short="L'élément de l'indice, ou DEFAUT hors de la liste (sans erreur).", notes=["1.12.7 : il lit aussi un ARRAY, à ses indices (Tab.Low à Tab.High) ; LIST_SET écrit de même.", "1.12.7 : un SET (dans son ordre) et un RING (de la plus ancienne à la plus récente) aussi."], st="V := LIST_GET(Mesures, 5, 0.0);", c=NOC,
    cpp="v = i < mesures.size() ? mesures[i] : 0.0f;", essai=("INT", "LIST_GET(L, 9, -1)", "-1", LDECL), plc="—")
 fn(name="LIST_SORT", cat="liste", params=[("L", "LIST, VECTOR, ARRAY", "des valeurs simples", False), ("DECROISSANT", "BOOL", "TRUE : du plus grand au plus petit", True)],
    ret="BOOL", short="Trie la liste (des nombres, des textes, des durées).", notes=["1.12.7 : un ARRAY aussi, en place (un tableau IHM est écrit).", "Une liste de structures : LIST_SORT_BY(L, 'Poids')."], st="LIST_SORT(Mesures);   (* LIST_SORT(Mesures, TRUE) : décroissant *)",
@@ -285,16 +286,16 @@ fn(name="LIST_SORT", cat="liste", params=[("L", "LIST, VECTOR, ARRAY", "des vale
 fn(name="LIST_REVERSE", cat="liste", params=[("L", "LIST, VECTOR, ARRAY", "la liste", False)], ret="BOOL", short="Renverse l'ordre des éléments.", notes=["1.12.7 : un ARRAY aussi, en place."],
    st="LIST_REVERSE(Historique);", c=NOC, cpp="std::reverse(l.begin(), l.end());", essai=("BOOL", "LIST_REVERSE(L)", "TRUE", LDECL), plc="—")
 fn(name="LIST_SUM", cat="liste", params=[("L", "LIST, VECTOR, ARRAY", "des nombres", False)], ret="comme les éléments",
-   short="La somme des nombres de la liste.", notes=["1.12.7 : un ARRAY aussi.", "ACCUMULATE (std::numeric) fait de même, avec une opération."], st="Total := LIST_SUM(Pesees);", c="for (i = 0; i < n; ++i) total += t[i];",
+   short="La somme des nombres de la liste.", notes=["1.12.7 : un ARRAY aussi.", "ACCUMULATE (std::numeric) fait de même, avec une opération.", "1.12.7 : un SET (dans son ordre) et un RING (de la plus ancienne à la plus récente) aussi."], st="Total := LIST_SUM(Pesees);", c="for (i = 0; i < n; ++i) total += t[i];",
    cpp="total = std::accumulate(l.begin(), l.end(), 0.0);", essai=("DINT", "LIST_SUM(L)", "6", LDECL), plc="—")
 fn(name="LIST_MIN", cat="liste", params=[("L", "LIST, VECTOR, ARRAY", "des valeurs simples", False)], ret="T",
-   short="La plus petite valeur ; une liste vide : une erreur.", notes=["1.12.7 : un ARRAY aussi ; LIST_MIN_INDEX dit où elle est."], st="Mini := LIST_MIN(Mesures);", c=NOC,
+   short="La plus petite valeur ; une liste vide : une erreur.", notes=["1.12.7 : un ARRAY aussi ; LIST_MIN_INDEX dit où elle est.", "1.12.7 : un SET (dans son ordre) et un RING (de la plus ancienne à la plus récente) aussi."], st="Mini := LIST_MIN(Mesures);", c=NOC,
    cpp="mini = *std::min_element(l.begin(), l.end());", essai=("INT", "LIST_MIN(L)", "1", LDECL), plc="—")
 fn(name="LIST_MAX", cat="liste", params=[("L", "LIST, VECTOR, ARRAY", "des valeurs simples", False)], ret="T",
-   short="La plus grande valeur ; une liste vide : une erreur.", notes=["1.12.7 : un ARRAY aussi ; LIST_MAX_INDEX dit où elle est."], st="Maxi := LIST_MAX(Mesures);", c=NOC,
+   short="La plus grande valeur ; une liste vide : une erreur.", notes=["1.12.7 : un ARRAY aussi ; LIST_MAX_INDEX dit où elle est.", "1.12.7 : un SET (dans son ordre) et un RING (de la plus ancienne à la plus récente) aussi."], st="Maxi := LIST_MAX(Mesures);", c=NOC,
    cpp="maxi = *std::max_element(l.begin(), l.end());", essai=("INT", "LIST_MAX(L)", "3", LDECL), plc="—")
 fn(name="LIST_AVG", cat="liste", params=[("L", "LIST, VECTOR, ARRAY", "des nombres", False)], ret="REAL",
-   short="La moyenne des nombres ; une liste vide : une erreur.", notes=["1.12.7 : un ARRAY aussi."], st="Moyenne := LIST_AVG(Mesures);", c=NOC,
+   short="La moyenne des nombres ; une liste vide : une erreur.", notes=["1.12.7 : un ARRAY aussi.", "1.12.7 : un SET (dans son ordre) et un RING (de la plus ancienne à la plus récente) aussi."], st="Moyenne := LIST_AVG(Mesures);", c=NOC,
    cpp="moyenne = std::accumulate(l.begin(), l.end(), 0.0) / l.size();", essai=("REAL", "LIST_AVG(L)", "2", LDECL), plc="—")
 fn(name="VECTOR_PUSH", cat="liste", params=[("V", "VECTOR OF T", "le vecteur", False), ("X", "T", "la valeur ajoutée", False)], ret="DINT",
    short="Ajoute la valeur à la fin (comme LIST_ADD) ; rend la taille.", st="VECTOR_PUSH(Pile, Code);", c=NOC, cpp="pile.push_back(code);",
@@ -320,7 +321,7 @@ fn(name="VECTOR_FRONT", cat="liste", params=[("V", "VECTOR OF T", "le vecteur", 
 fn(name="VECTOR_BACK", cat="liste", params=[("V", "VECTOR OF T", "le vecteur", False)], ret="T", short="Le dernier élément.",
    st="Dernier := VECTOR_BACK(Etapes);", c=NOC, cpp="dernier = etapes.back();", essai=("STRING", "VECTOR_BACK(V)", "c", VDECL), plc="—")
 fn(name="JOIN", cat="liste", params=[("L", "LIST, VECTOR, ARRAY", "des valeurs simples", False), ("SEP", "STRING", "le séparateur (', ' sans lui)", True)],
-   ret="STRING", short="Les éléments en un seul texte, séparés.", notes=["1.12.7 : un ARRAY aussi."], st="Texte := JOIN(Actifs, ', ');", c="/* strcat en boucle */",
+   ret="STRING", short="Les éléments en un seul texte, séparés.", notes=["1.12.7 : un ARRAY aussi.", "1.12.7 : un SET (dans son ordre) et un RING (de la plus ancienne à la plus récente) aussi."], st="Texte := JOIN(Actifs, ', ');", c="/* strcat en boucle */",
    cpp="for (const auto& x : l) texte += (texte.empty() ? \"\" : \", \") + x;", essai=("STRING", "JOIN(V, '-')", "a-b-c", VDECL), plc="—")
 fn(name="SPLIT", cat="liste", params=[("TEXTE", "STRING", "le texte à couper", False), ("SEP", "STRING", "le séparateur", False)],
    ret="LIST OF STRING", short="Le texte coupé à chaque séparateur : une liste de textes.", st="Mots := SPLIT('a;b;c', ';');",
@@ -585,6 +586,58 @@ fn(name="TUPLE_UNPACK", cat="liste", params=[("T", "TUPLE", "le tuple", False), 
    st="TUPLE_UNPACK(Point, Nom, Valeur);   (* Nom := Point.Item1 ; Valeur := Point.Item2 *)", c="strcpy(nom, point.nom);\nvaleur = point.valeur;",
    cpp="std::tie(nom, valeur) = point;\n// C++17 : auto [nom, valeur] = point;",
    essai=("STRING", "Nom", "four", decl(D_POINT, "Nom : STRING", "Valeur : REAL") + "\nTUPLE_UNPACK(Point, Nom, Valeur);"), ou="S F")
+
+# ------------------------------------- 1.12.7 (choix 5 de la maquette v3) : SET et RING --
+#  SET OF T (std::set) : chaque valeur une fois, rangee - SET_ADD rend TRUE si elle est nouvelle ;
+#  RING[N] OF T (un tampon circulaire) : les N dernieres valeurs, la plus ancienne part quand il
+#  est plein. Les natives LIST_ qui lisent (LIST_AVG, LIST_MIN, JOIN, LIST_GET...) les lisent
+#  aussi ; FOR EACH parcourt un SET dans l'ordre, un RING de la plus ancienne a la plus recente.
+D_POSTES = "Postes_Actifs : SET OF STRING := ['P3', 'P1', 'P3']"
+D_AUTRE = "Autre_Choix : SET OF STRING := ['P2', 'P3', 'P4']"
+D_RING = "Dernieres : RING[5] OF REAL := [12.0, 12.4, 13.1, 12.8, 13.5]"
+NOSET = "/* pas d'ensemble en C : un tableau trié, chercher avant d'insérer */"
+SET_NOTE = "Un SET se range tout seul : le littéral ['P3', 'P1', 'P3'] devient ['P1', 'P3'] ; S[0] se lit (la plus petite), ne s'écrit pas."
+SETOP_NOTE = "A et B : des SET, ou une LIST, un RING, un ARRAY (rangés, sans doublon) ; les valeurs de B prennent le type de celles de A."
+fn(name="SET_ADD", cat="ensembles", params=[("S", "SET OF T", "l'ensemble", False), ("X", "T", "la valeur", False)], ret="BOOL",
+   short="Ajoute la valeur à sa place (le SET reste rangé) : TRUE si elle est nouvelle ; déjà là, rien ne change (FALSE).",
+   notes=["Plus besoin de LIST_CONTAINS avant chaque LIST_ADD : le SET garantit qu'une valeur n'y est qu'une fois.",
+          "LIST_ADD sur un SET fait de même (il rend le nombre de valeurs).",
+          "Une valeur d'un autre type est refusée : SET_ADD(Postes, 5) s'arrête sur « 5 n'est pas une STRING ».", SET_NOTE, SCRIPT_NOTE],
+   st="IF SET_ADD(Postes_Actifs, Poste) THEN\n    IHM_JOURNAL(CONCAT('Nouveau poste : ', Poste));\nEND_IF",
+   c=NOSET, cpp="if (postes_actifs.insert(poste).second)   // std::set : second vaut true si elle est nouvelle\n    journal(\"Nouveau poste : \" + poste);",
+   essai=("STRING", "TO_STRING(SET_ADD(Postes_Actifs, 'P2')) + ' ' + JOIN(Postes_Actifs, ',')", "TRUE P1,P2,P3", decl(D_POSTES)), ou="S F")
+fn(name="SET_REMOVE", cat="ensembles", params=[("S", "SET OF T", "l'ensemble", False), ("X", "T", "la valeur", False)], ret="BOOL",
+   short="Retire la valeur : TRUE si elle y était.", notes=[SCRIPT_NOTE],
+   st="SET_REMOVE(Postes_Actifs, Poste);", c=NOSET, cpp="bool retiree = postes_actifs.erase(poste) > 0;",
+   essai=("STRING", "TO_STRING(SET_REMOVE(Postes_Actifs, 'P1')) + ' ' + JOIN(Postes_Actifs, ',')", "TRUE P3", decl(D_POSTES)), ou="S F")
+fn(name="SET_HAS", cat="ensembles", params=[("S", "SET OF T", "l'ensemble", False), ("X", "T", "la valeur", False)], ret="BOOL",
+   short="Vrai si la valeur est dans le SET.", notes=["LIST_CONTAINS lit aussi un SET."],
+   st="IF SET_HAS(Postes_Actifs, 'P2') THEN ... END_IF", c=NOSET, cpp="bool la = postes_actifs.contains(\"P2\");   // C++20",
+   essai=("BOOL", "SET_HAS(Postes_Actifs, 'P3') AND NOT SET_HAS(Postes_Actifs, 'P2')", "TRUE", decl(D_POSTES)), ou="S F")
+fn(name="SET_UNION", cat="ensembles", params=[("A", "SET OF T", "le premier", False), ("B", "SET OF T", "le second", False)], ret="SET OF T",
+   short="Un SET neuf : les valeurs de A et celles de B, chacune une fois, rangées.", notes=[SETOP_NOTE],
+   st="Tous := SET_UNION(Postes_Actifs, Autre_Choix);", c=NOSET,
+   cpp="std::set<std::string> tous;\nstd::set_union(a.begin(), a.end(), b.begin(), b.end(), std::inserter(tous, tous.begin()));",
+   essai=("STRING", "JOIN(SET_UNION(Postes_Actifs, Autre_Choix), ',')", "P1,P2,P3,P4", decl(D_POSTES, D_AUTRE)), ou="S F")
+fn(name="SET_INTERSECTION", cat="ensembles", params=[("A", "SET OF T", "le premier", False), ("B", "SET OF T", "le second", False)], ret="SET OF T",
+   short="Un SET neuf : les valeurs qui sont dans A et dans B (ce que deux choix ont en commun).", notes=[SETOP_NOTE],
+   st="Communs := SET_INTERSECTION(Postes_Actifs, Autre_Choix);", c=NOSET,
+   cpp="std::set<std::string> communs;\nstd::set_intersection(a.begin(), a.end(), b.begin(), b.end(), std::inserter(communs, communs.begin()));",
+   essai=("STRING", "JOIN(SET_INTERSECTION(Postes_Actifs, Autre_Choix), ',')", "P3", decl(D_POSTES, D_AUTRE)), ou="S F")
+fn(name="SET_DIFFERENCE", cat="ensembles", params=[("A", "SET OF T", "le premier", False), ("B", "SET OF T", "ce qu'on retire", False)], ret="SET OF T",
+   short="Un SET neuf : les valeurs de A qui ne sont pas dans B.", notes=[SETOP_NOTE],
+   st="Seulement_A := SET_DIFFERENCE(Postes_Actifs, Autre_Choix);", c=NOSET,
+   cpp="std::set<std::string> seulement_a;\nstd::set_difference(a.begin(), a.end(), b.begin(), b.end(), std::inserter(seulement_a, seulement_a.begin()));",
+   essai=("STRING", "JOIN(SET_DIFFERENCE(Postes_Actifs, Autre_Choix), ',')", "P1", decl(D_POSTES, D_AUTRE)), ou="S F")
+fn(name="RING_ADD", cat="ensembles", params=[("R", "RING[N] OF T", "le tampon circulaire", False), ("X", "T", "la valeur", False)], ret="DINT",
+   short="Ajoute la valeur à la fin ; plein (N valeurs), la plus ancienne part. Rend le nombre de valeurs (au plus N).",
+   notes=["LIST_ADD sur un RING fait de même.", "R.Count, R.Capacity (N), R.Full ; FOR EACH va de la plus ancienne à la plus récente ; "
+          "LIST_AVG, LIST_MIN, LIST_MAX, LIST_SUM, JOIN, LIST_GET le lisent comme une liste (une moyenne glissante).",
+          "N est une constante entière de 1 à 100000 : RING[100] OF REAL.", SCRIPT_NOTE],
+   st="RING_ADD(Dernieres, Mesure);\nMoyenne := LIST_AVG(Dernieres);   (* les 100 dernières mesures *)",
+   c="/* pas de tampon circulaire en C : un tableau et un indice qui tourne */\nt[(debut + n) % N] = x;\nif (n < N) ++n; else debut = (debut + 1) % N;",
+   cpp="dernieres.push_back(mesure);   // std::deque<float> (boost::circular_buffer le borne seul)\nif (dernieres.size() > 100) dernieres.pop_front();",
+   essai=("STRING", "JOIN(Dernieres, ';') + ' ' + TO_STRING(Dernieres.Full)", "12.4;13.1;12.8;13.5;14.2 TRUE", decl(D_RING) + "\nRING_ADD(Dernieres, 14.2);"), ou="S F")
 
 # ------------------------------------------------ 1.12.7 : std::numeric (19 fonctions) --
 #  La bibliotheque <numeric> du C++ jusqu'au C++26 : plier (ACCUMULATE, REDUCE, INNER_PRODUCT,
@@ -1269,6 +1322,14 @@ CONSTRUCTED = [
      "/* pas de liste en C */", "std::list<REAL> l;   // ou std::vector", "VAR Mesures : LIST OF REAL := [1.5, 2.0]; END_VAR"),
     ("VECTOR OF", "VECTOR OF INT", "Un vecteur de taille variable : V[0], V.Count ; VECTOR_PUSH, VECTOR_POP, VECTOR_RESIZE. Comme une liste, dans la mémoire de l'IHM.",
      "/* un tableau alloué : malloc, realloc */", "std::vector<INT> v;", "VAR Pile : VECTOR OF INT; END_VAR"),
+    # 1.12.7 (choix 5 de la maquette v3)
+    ("SET OF", "SET OF STRING", "Un ensemble : chaque valeur une seule fois, rangée (std::set). SET_ADD rend TRUE si elle est nouvelle ; SET_REMOVE, SET_HAS, "
+     "SET_UNION, SET_INTERSECTION, SET_DIFFERENCE ; S.Count, FOR EACH x IN S (dans l'ordre). Un littéral ['P3', 'P1', 'P3'] devient ['P1', 'P3'].",
+     "/* pas d'ensemble en C */", "std::set<std::string> s;", "VAR Postes_Actifs : SET OF STRING := ['P1', 'P3']; END_VAR"),
+    ("RING", "RING[100] OF REAL", "Un tampon circulaire : les N dernières valeurs (N, une constante de 1 à 100000). RING_ADD (ou LIST_ADD) ajoute à la fin ; plein, "
+     "la plus ancienne part. R.Count, R.Capacity, R.Full ; LIST_AVG, LIST_MIN, LIST_MAX le lisent ; FOR EACH de la plus ancienne à la plus récente.",
+     "/* un tableau et un indice qui tourne */", "std::deque<REAL> r;   // bornée à la main, ou boost::circular_buffer<REAL> r(100);",
+     "VAR Dernieres : RING[100] OF REAL; END_VAR"),
     ("TUPLE", "TUPLE(STRING, REAL)", "Des valeurs de types fixes, dans l'ordre : t.Item1, t.Item2... Un littéral : ('four', 850.0). Sans plan mémoire : "
      "une variable IHM de ce type vit dans l'IHM (pour un équipement, une structure IHM).",
      "struct { char nom[33]; float valeur; } t;", "std::tuple<STRING, REAL> t;", "VAR Mesure : TUPLE(STRING, REAL) := ('four', 850.0); END_VAR"),

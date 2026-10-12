@@ -473,6 +473,9 @@ bool richLocalType(std::string_view type, const std::function<bool(std::string_v
     // 1.12.2 : LIST OF T, VECTOR OF T, TUPLE(T1, T2...).
     for (std::string_view p : {"ARRAY", "MAP", "REF_TO", "REFERENCE", "POINTER", "STRING", "LIST", "VECTOR", "TUPLE"})
         if (u.rfind(p, 0) == 0 && (u.size() == p.size() || !identChar(u[p.size()]))) return true;
+    // 1.12.7 : SET OF T, RING[N] OF T (un type IHM nomme SET ou RING reste un nom).
+    for (std::string_view p : {"SET", "RING"})
+        if (u.rfind(p, 0) == 0 && u.size() > p.size() && !identChar(u[p.size()]) && u.find(" OF ") != std::string::npos) return true;
     if (u == "MAP_ITERATOR" || u == "ITERATOR") return true;
     // un type de base permis a une declaration (LINT, ULINT : sans etre proposes)
     if (const auto* e = typereg::baseRegistry().byName(u); e && e->usable(typereg::UseDeclaration) && u == e->name) return true;
