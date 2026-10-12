@@ -14,6 +14,9 @@
 //     pause et reprise, sur condition, une duree inconnue ;
 //   - le moteur : la position ecrite dans sa variable, la pause par sa Lecture,
 //     le depart sur condition, la fin d'une lecture « une fois » ;
+//   - la file des images d'avance de Media Foundation (sans le fil, avec un faux
+//     decodeur) : la premiere image a 0,067 s montree a 0 s, 3 images d'avance,
+//     le saut en arriere de la boucle, une image d'avant le saut jetee ;
 //   - Generer : le conseil pour un MP4, un depart sur condition sans condition.
 //
 //  VIDEO_OBS=1 : chaque observation est ecrite (pas seulement les echecs).
@@ -25,6 +28,7 @@
 #include "../src/hmi/HmiModel.hpp"
 #include "../src/hmi/HmiRuntime.hpp"
 #include "../src/hmi/HmiVideo.hpp"
+#include "../src/hmi/HmiVideoQueue.hpp"
 
 #if defined(__GNUC__)
 #  pragma GCC diagnostic push
@@ -471,6 +475,53 @@ void moteur() {
     check(aviSilent && !blocking, "Generer : rien sur l'AVI Motion-JPEG, et rien de bloquant");
 }
 
+// ---- 5. la file des images d'avance (Media Foundation), avec un faux decodeur -----------------------
+void fileDavance() {
+    std::printf("-- la file des images d'avance de Media Foundation : un faux decodeur, sans fil\n");
+    using video::FrameQueue;
+    const auto image = [](int shade) {
+        Rgba r;
+        r.width = 1;
+        r.height = 1;
+        r.pixels = {static_cast<std::uint8_t>(shade), 0, 0, 255};
+        return r;
+    };
+    const auto shadeOf = [](const Rgba* r) { return r && !r->pixels.empty() ? static_cast<int>(r->pixels[0]) : -1; };
+    FrameQueue q;
+    std::uint64_t serial = 0;
+    check(q.frameAt(0.0, serial) == nullptr && serial == 0 && q.wantsWork(false), "vide : rien a montrer, le fil decode");
+    // Un MP4 a images B : sa premiere image est a 0,067 s (2/30).
+    int made = 0;
+    double t = 2.0 / 30.0;
+    const auto decode = [&] {
+        q.push(t, image(++made));
+        t += 1.0 / 30.0;
+    };
+    while (q.wantsWork(false) && made < 10) decode();
+    check(made == 3 && q.size() == FrameQueue::kAhead && !q.wantsWork(false), "le fil s'arrete a 3 images d'avance");
+    check(shadeOf(q.frameAt(0.0, serial)) == 1 && serial == 1,
+          "la premiere image (a 0,067 s) se montre a 0 s - l'apercu de l'editeur (avant : rien, l'image d'attente)");
+    check(q.wantsWork(false), "... une place libre : le fil reprend");
+    check(shadeOf(q.frameAt(0.05, serial)) == 1 && serial == 1, "a 0,05 s : la meme image (la suivante est a 0,1 s), le meme numero");
+    check(shadeOf(q.frameAt(0.1, serial)) == 2 && serial == 2, "a 0,1 s : la deuxieme image");
+    while (q.wantsWork(false) && made < 10) decode();
+    check(shadeOf(q.frameAt(0.25, serial)) == 5 && serial == 5 && q.size() == 0, "en retard (0,25 s) : les images passees defilent d'un coup, la 5e");
+    check(shadeOf(q.frameAt(0.3, serial)) == 5 && shadeOf(q.frameAt(0.2, serial)) == 5 && q.takeSeek() < 0,
+          "un recul de moins d'un quart de seconde : pas de saut");
+    // La boucle : retour au debut.
+    (void)q.frameAt(0.5, serial);
+    check(shadeOf(q.frameAt(0.0, serial)) == 5 && serial == 5 && q.wantsWork(true),
+          "la boucle (0,5 s puis 0 s) : la derniere image reste, le fil doit repartir (meme fini)");
+    q.push(0.5333, image(99));   // decodee pendant le saut : d'avant lui
+    check(q.size() == 0, "une image decodee d'avant le saut est jetee");
+    check(q.takeSeek() == 0.0 && q.takeSeek() < 0, "le fil repart de 0 s (une seule fois)");
+    t = 2.0 / 30.0;
+    made = 9;
+    decode();
+    check(shadeOf(q.frameAt(0.02, serial)) == 5 && serial == 5, "a 0,02 s : encore la derniere image (la premiere est a 0,067 s)");
+    check(shadeOf(q.frameAt(0.07, serial)) == 10 && serial == 6, "a 0,07 s : la premiere image du nouveau tour");
+}
+
 } // namespace
 
 int main() {
@@ -479,6 +530,7 @@ int main() {
     conteneurs();
     lecture();
     moteur();
+    fileDavance();
     std::printf("%d controles, %d echec(s)\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

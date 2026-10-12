@@ -1783,6 +1783,9 @@
     <ClInclude Include="src\hmi\HmiVideo.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
+    <ClInclude Include="src\hmi\HmiVideoQueue.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
     <ClInclude Include="src\hmi\HmiWeb.hpp">
       <Filter>hmi</Filter>
     </ClInclude>

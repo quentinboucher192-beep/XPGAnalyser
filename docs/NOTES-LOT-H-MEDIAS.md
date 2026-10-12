@@ -131,7 +131,7 @@ Rien de bloquant (des avertissements et des informations), sauf ce qui l'était 
   les syndromes de Reed-Solomon de chaque bloc (tous nuls), le texte relu à l'identique, la capacité de la table 7 ;
   un caractère de plus passe à la version suivante. La place qui reste et le texte trop long (« reste 2 302 octets en
   M, version 3 », « trop long : 2 332 octets, 2 331 au plus en M »).
-- `hmi_video_test` (nouveau, 59 contrôles) : un AVI Motion-JPEG fait dans l'essai (des images JPEG écrites par stb_image_write) :
+- `hmi_video_test` (nouveau, 72 contrôles) : un AVI Motion-JPEG fait dans l'essai (des images JPEG écrites par stb_image_write) :
   sa taille, sa cadence (10 images/s, 29,97), ses 3 images et leurs couleurs à la perte JPEG près, une image vide (la
   précédente), un fichier coupé (les images entières), une image sans tables de Huffman (stb_image seule la refuse ;
   avec les tables de la norme elle se lit) ; la ressource (AVI, 0,3 s, « Motion-JPEG (MJPG) ») ; la source d'images
@@ -141,7 +141,11 @@ Rien de bloquant (des avertissements et des informations), sauf ce qui l'était 
   la position écrite dans sa variable, la pause par sa Lecture, le départ sur condition, la fin dite à la Console, une
   vidéo de la 1.12.9 (sans réglage) qui joue à l'affichage en boucle, une variable de position inconnue dite une
   seule fois en 7 cycles (avant la correction : 7 erreurs). Générer : le conseil pour un MP4, le départ sans
-  condition, la variable de position inconnue, rien sur l'AVI, rien de bloquant.
+  condition, la variable de position inconnue, rien sur l'AVI, rien de bloquant. LA FILE DES IMAGES D'AVANCE de
+  Media Foundation (`HmiVideoQueue.hpp`, sans le fil, avec un faux décodeur) : 3 images d'avance, la première image
+  d'un MP4 à images B (à 0,067 s) montrée à 0 s - l'aperçu de l'éditeur (sans cette règle : rien, 3 contrôles en
+  échec) -, les images en retard qui défilent d'un coup, le saut en arrière de la boucle, une image d'avant le saut
+  jetée.
 - `hmi_test` (`HMI_TEST_11212=1` les lance seuls) : `horloge11212` (chaque source : TOD, DT et ses millisecondes,
   DATE, STRING ISO avec et sans fuseau, à la française, REAL d'un jour et horodatage Unix, TIME ; l'illisible ; les
   fuseaux ; les cinq formats de date, le 1er du mois, 12 h et 24 h ; en marche, la copie que l'écran dessine pour une
@@ -167,8 +171,10 @@ Rien de bloquant (des avertissements et des informations), sauf ce qui l'était 
 
 - **Media Foundation n'a pas été lancé** : il n'y a pas de Windows ici. Le code (`HmiVideoMf.cpp`) se compile avec
   MinGW (`x86_64-w64-mingw32-g++-posix -std=c++20 -fsyntax-only`, sans avertissement), les bibliothèques se lient
-  dans CMake (mfplat, mfreadwrite, mfuuid, mf) et dans le projet Visual Studio ; son comportement reste à voir sur un
-  vrai Windows et sous Wine (Wine n'a pas tous les décodeurs H.264 : un AVI Motion-JPEG y est le format sûr).
+  dans CMake (mfplat, mfreadwrite, mfuuid, mf) et dans le projet Visual Studio ; la file de ses images d'avance
+  (`HmiVideoQueue.hpp`) est vérifiée ici avec un faux décodeur ; le reste (le lecteur de Windows, son fil, le fichier
+  temporaire) est à voir sur un vrai Windows et sous Wine (Wine n'a pas tous les décodeurs H.264 : un AVI
+  Motion-JPEG y est le format sûr).
 - **Le son des vidéos** n'est pas joué (la vidéo est muette ; les propriétés `autoplay` et `muted` restent sans
   effet).
 - **Le WEBM** n'est essayé que par Media Foundation sous Windows (avec les extensions vidéo web) ; ailleurs, l'image

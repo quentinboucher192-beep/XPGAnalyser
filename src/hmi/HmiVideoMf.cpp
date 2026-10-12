@@ -8,12 +8,14 @@
 //  quelques images d'avance sur celle qu'on montre, et repart du debut quand la
 //  lecture reboucle (ou d'ou on la demande). La ressource passe par un fichier
 //  temporaire (le lecteur reconnait le format a son extension), efface a la
-//  fermeture. Edition des liens : mfplat, mfreadwrite, mfuuid, mf.
+//  fermeture. Edition des liens : mfplat, mfreadwrite, mfuuid, mf. Les images
+//  d'avance passent par une FrameQueue (HmiVideoQueue.hpp : verifiee partout).
 //
 //  Ailleurs que sous Windows, rien : openMediaFoundation rend nul (le Motion-JPEG
 //  en AVI, lui, se decode partout : HmiVideo.cpp).
 // =============================================================================
 #include "HmiVideo.hpp"
+#include "HmiVideoQueue.hpp"
 
 #if defined(_WIN32)
 #  ifndef NOMINMAX
@@ -29,7 +31,6 @@
 #  include <algorithm>
 #  include <condition_variable>
 #  include <cstdio>
-#  include <deque>
 #  include <mutex>
 #  include <thread>
 #endif
@@ -98,21 +99,11 @@ public:
     }
     const Rgba* frameAt(double seconds, std::uint64_t& serial) override {
         const std::lock_guard<std::mutex> lock(m_);
-        // Revenue en arriere (la boucle, un nouveau depart) : le fil repart de la.
-        if (seconds + 0.25 < asked_) {
-            seekTo_ = seconds < 0.05 ? 0.0 : seconds;
-            queue_.clear();
-        }
-        asked_ = seconds;
-        while (!queue_.empty() && queue_.front().time <= seconds + 1e-3) {
-            current_ = std::move(queue_.front().image);
-            queue_.pop_front();
-            ++serial_;
-            shown_ = true;
-        }
+        // Revenue en arriere (la boucle, un nouveau depart) : la file le demande au fil. L'image rendue n'est
+        // touchee que par frameAt (le dessin) : elle reste valable hors du verrou.
+        const Rgba* image = queue_.frameAt(seconds, serial);
         cv_.notify_all();
-        serial = serial_;
-        return shown_ ? &current_ : nullptr;
+        return image;
     }
     bool failed(std::string* error) const override {
         const std::lock_guard<std::mutex> lock(m_);
@@ -125,12 +116,6 @@ public:
     }
 
 private:
-    struct Frame {
-        double time{0};
-        Rgba   image;
-    };
-    static constexpr std::size_t kAhead = 3;
-
     void fail(std::string why) {
         const std::lock_guard<std::mutex> lock(m_);
         failed_ = true;
@@ -191,10 +176,9 @@ private:
                 double seek = -1;
                 {
                     std::unique_lock<std::mutex> lock(m_);
-                    cv_.wait(lock, [&] { return stop_ || seekTo_ >= 0 || (!ended && queue_.size() < kAhead); });
+                    cv_.wait(lock, [&] { return stop_ || queue_.wantsWork(ended); });
                     if (stop_) break;
-                    seek = seekTo_;
-                    seekTo_ = -1;
+                    seek = queue_.takeSeek();
                 }
                 if (seek >= 0) {
                     PROPVARIANT pos;
@@ -227,15 +211,14 @@ private:
                         if (SUCCEEDED(buffer->Lock(&bytes, &maxLen, &len))) {
                             const std::size_t rowBytes = static_cast<std::size_t>(stride < 0 ? -stride : stride);
                             if (rowBytes >= static_cast<std::size_t>(width) * 4 && len >= rowBytes * height) {
-                                Frame f;
-                                f.time = static_cast<double>(stamp) / 1e7;
-                                f.image.width = static_cast<int>(width);
-                                f.image.height = static_cast<int>(height);
-                                f.image.pixels.resize(static_cast<std::size_t>(width) * height * 4);
+                                Rgba image;
+                                image.width = static_cast<int>(width);
+                                image.height = static_cast<int>(height);
+                                image.pixels.resize(static_cast<std::size_t>(width) * height * 4);
                                 for (UINT32 y = 0; y < height; ++y) {
                                     // Un pas negatif : les lignes sont rangees de bas en haut.
                                     const BYTE* row = bytes + rowBytes * (stride < 0 ? height - 1 - y : y);
-                                    std::uint8_t* dst = f.image.pixels.data() + static_cast<std::size_t>(y) * width * 4;
+                                    std::uint8_t* dst = image.pixels.data() + static_cast<std::size_t>(y) * width * 4;
                                     for (UINT32 x = 0; x < width; ++x) {   // BGRX -> RGBA
                                         dst[x * 4 + 0] = row[x * 4 + 2];
                                         dst[x * 4 + 1] = row[x * 4 + 1];
@@ -244,7 +227,7 @@ private:
                                     }
                                 }
                                 const std::lock_guard<std::mutex> lock(m_);
-                                if (seekTo_ < 0) queue_.push_back(std::move(f));
+                                queue_.push(static_cast<double>(stamp) / 1e7, std::move(image));   // jetee si un saut est demande
                             }
                             buffer->Unlock();
                         }
@@ -266,12 +249,7 @@ private:
     std::thread             thread_;
     mutable std::mutex      m_;
     std::condition_variable cv_;
-    std::deque<Frame>       queue_;
-    Rgba                    current_;   // lue par le dessin seulement (hors du verrou)
-    std::uint64_t           serial_{0};
-    bool                    shown_{false};
-    double                  asked_{0};
-    double                  seekTo_{-1};
+    FrameQueue              queue_;     // sous le verrou
     double                  duration_{0};
     bool                    stop_{false};
     bool                    failed_{false};
