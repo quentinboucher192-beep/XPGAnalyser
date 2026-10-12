@@ -29681,6 +29681,43 @@ void lotG11211_editeur() {
         opt.project = &b.doc->project;
         app::paintHmiObject(rec, b.v(), *b.v().object(pump), {}, app::HmiPropertySource{}, theme, opt);
         check(rec.wrote("Manuel"), "lot G : le mode d'une pompe s'affiche en \xC3\xA9tiquette (Manuel)");
+        // L'apercu de l'editeur : ce que la liaison donne (le libelle a trous), sans l'ecrire dans l'objet.
+        check(rec.wrote("{P1.Nom}"), "lot G : dans l'\xC3\xA9" "diteur, la pompe li\xC3\xA9" "e \xC3\xA0 P1 montre le libell\xC3\xA9 {P1.Nom}");
+        same_text(b.v().object(pump)->text("label"), "", "lot G : ... sans l'\xC3\xA9" "crire dans l'objet (la liaison reste vivante)");
+        // Un libelle tape a la main gagne, dans l'apercu aussi.
+        b.v().object(pump)->set("label", "Pompe d'appoint");
+        rec.clear();
+        app::paintHmiObject(rec, b.v(), *b.v().object(pump), {}, app::HmiPropertySource{}, theme, opt);
+        check(rec.wrote("Pompe d'appoint") && !rec.wrote("{P1.Nom}"), "lot G : un libell\xC3\xA9 r\xC3\xA9gl\xC3\xA9 \xC3\xA0 la main gagne dans l'aper\xC3\xA7u");
+        b.v().object(pump)->set("label", "");
+    }
+    // ---- le mode Etat d'office (la liaison) : Contenu le dit ; cocher Mode Etat part de ces etats
+    {
+        hmi::HmiType moteur;
+        moteur.id = b.doc->project.allocate();
+        moteur.name = "T_Moteur_E";
+        moteur.members = {{"Etat", "T_Regime_G", "", ""}, {"Nom", "STRING", "", ""}};
+        b.doc->project.programs.types.push_back(moteur);
+        hmi::Variable m1;
+        m1.id = b.doc->project.allocate();
+        m1.name = "M1";
+        m1.type = "T_Moteur_E";
+        b.doc->project.programs.variables.push_back(m1);
+        const Id motor = b.place(Kind::Motor, 100, 300);
+        b.v().object(motor)->set("equipment", "M1");
+        b.editor->refresh();
+        b.editor->layout();
+        std::string office;
+        for (const auto& c : content.grid().categories())
+            for (const auto& pr : c.properties)
+                if (pr.name == "Par la liaison \xC3\x89quipement") office = pr.value;
+        check(content.object() == motor && content.count() == 0 && office.rfind("4 \xC3\xA9tat(s) d'office", 0) == 0,
+              "lot G : un moteur li\xC3\xA9 \xC3\xA0 M1 (Etat : une \xC3\xA9num\xC3\xA9ration) - Contenu dit ses 4 \xC3\xA9tats d'office (" + office + ")");
+        check(content.setField(-1, "enabled", "TRUE"), "lot G : cocher Mode \xC3\x89tat");
+        same_text(b.v().object(motor)->text("stateAspects"), "Stop = arret; Run = marche | anime; Fault = defaut; Maintenance = maintenance",
+                  "lot G : ... part des \xC3\xA9tats de la liaison (ceux de T_Regime_G ; sans liaison, ETAT_MOTEUR)");
+        (void)b.stack.undo();
+        check(!b.v().object(motor)->find("stateAspects"), "lot G : Ctrl+Z les retire (d'office de nouveau)");
     }
     // ---- un type renomme, un membre renomme : la liaison suit
     {

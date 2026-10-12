@@ -1452,9 +1452,12 @@ bool HmiContentPanel::setField(int index, const std::string& field, const std::s
         std::string variable, label;
         if (field == "enabled") {
             if (hmi::parseBool(value, true)) {
-                if (const auto* o = current(); o && !readAspects(*o).empty()) return false;
-                list = hmi::eqlink::motorStateAspects();
-                label = "Mode \xC3\xA9tat (ETAT_MOTEUR)";
+                const auto* o = current();
+                if (o && !readAspects(*o).empty()) return false;
+                // Ceux que la liaison Equipement donne d'office (une enumeration, ETAT_MOTEUR), sinon ETAT_MOTEUR.
+                const auto linked = o ? hmi::eqlink::bindingOf(doc_->project, doc_->project.view(view_), *o).aspects : std::string{};
+                list = linked.empty() ? hmi::eqlink::motorStateAspects() : hmi::eqlink::parseAspects(linked);
+                label = linked.empty() ? "Mode \xC3\xA9tat (ETAT_MOTEUR)" : "Mode \xC3\xA9tat (liaison \xC3\x89quipement)";
             } else {
                 label = "Sans mode \xC3\xA9tat";
             }
@@ -2508,6 +2511,20 @@ void HmiContentPanel::rebuildGrid() {
             }
             PG::Category info;
             info.name = "Mode \xC3\x89tat";
+            // Sans le sien, celui que la liaison Equipement donne d'office (la Valeur liee a un entier, une enumeration).
+            if (list.empty())
+                if (const auto linked = hmi::eqlink::parseAspects(hmi::eqlink::bindingOf(doc_->project, doc_->project.view(view_), *o).aspects);
+                    !linked.empty()) {
+                    PG::Property d;
+                    d.name = "Par la liaison \xC3\x89quipement";
+                    d.type = PG::ValueType::ReadOnly;
+                    std::string shown;
+                    for (const auto& a : linked) shown += (shown.empty() ? "" : ", ") + a.match + " " + std::string(hmi::eqlink::lookLabel(a.look));
+                    d.value = std::to_string(linked.size()) + " \xC3\xA9tat(s) d'office : " + shown;
+                    d.description = "La Valeur li\xC3\xA9" "e lit un entier ou une \xC3\xA9num\xC3\xA9ration : ces \xC3\xA9tats valent sans rien r\xC3\xA9gler. "
+                                    "Coche Mode \xC3\x89tat pour les r\xC3\xA9gler ici (ils deviennent ceux de l'objet).";
+                    info.properties.push_back(std::move(d));
+                }
             info.properties.push_back(editable("Mode \xC3\x89tat", list.empty() ? "FALSE" : "TRUE", PG::ValueType::Boolean, -1, "enabled",
                                                "Coch\xC3\xA9 : la Valeur (un entier, une \xC3\xA9num\xC3\xA9ration) choisit un aspect par sa "
                                                "valeur - un moteur en D\xC3\xA9" "faut (2) se dessine en d\xC3\xA9" "faut. D\xC3\xA9" "coch\xC3\xA9 : vraie, "

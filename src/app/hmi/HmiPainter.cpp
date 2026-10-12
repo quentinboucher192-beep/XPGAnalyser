@@ -23,6 +23,7 @@
 #include "../../hmi/HmiControls.hpp"    // 1.12.2 : le tableau dynamique (tableLayout)
 #include "../../hmi/HmiTypeForms.hpp"   // 1.12.2 : ses colonnes, dans l'editeur
 #include "../../hmi/HmiChoiceLists.hpp" // 1.12.7 (lot D) : les colonnes choisies d'une source
+#include "../../hmi/HmiEquipmentLink.hpp"   // 1.12.11 (lot G) : la liaison Equipement, dans l'editeur
 #include "../../ui/Shapes.hpp"
 
 #include <algorithm>
@@ -1466,6 +1467,16 @@ void paintHmiObject(gfx::IRenderer& r, const hmi::View& view, const Object& o, c
             for (std::size_t k = 0; k < copies.size(); ++k) paintHmiObject(r, view, copies[k], vp, src, theme, k == 0 ? opt : ghost);
             return;
         }
+    }
+    // 1.12.11 (lot G) : dans l'editeur, un symbole du synoptique lie par Equipement se dessine avec ce que la liaison
+    // lui donne : son libelle a trous ({P1.Nom}, s'il n'en a pas a lui), son mode Etat d'office. En marche, la vue
+    // composee du moteur l'est deja.
+    if (opt.editor && opt.project && hmi::kindIsSynoptic(o.kind) && !hmi::eqlink::equipmentPath(o).empty()) {
+        Object shown = hmi::eqlink::bound(*opt.project, &view, o);
+        // Une fois : la propriete retiree (valeur et formule), l'appel suivant ne revient pas ici.
+        std::erase_if(shown.props, [](const hmi::Prop& pr) { return pr.key == hmi::eqlink::kEquipmentKey; });
+        paintHmiObject(r, view, shown, vp, src, theme, opt);
+        return;
     }
     if (opt.editor && opt.project && o.kind != Kind::SymbolInstance && hmi::sources::objectHasJoker(o)) {
         Object shown = o;

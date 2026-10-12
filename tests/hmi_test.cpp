@@ -25070,6 +25070,21 @@ void lotG11211_symbole() {
     const auto all = objectAlarms(p);
     const auto it = std::find_if(all.begin(), all.end(), [](const ObjectAlarm& a) { return a.def.name == "Vue_G.Pompe_A.Pompe.Defaut"; });
     check(it != all.end() && it->def.condition == "P1.Defaut", "G : l'alarme D\xC3\xA9" "faut de la pompe d'une instance : P1.Defaut");
+    // renommer le parametre du symbole : son Equipement suit, un Defaut tape sans = aussi ; l'instance le relie toujours
+    {
+        Project q = p;
+        if (View* s = q.viewByName("Sym_Pompe_G")) s->object(inner)->set("moving", "Pompe.EnService");
+        check(params::renameParam(q, "Sym_Pompe_G", "Pompe", "Pump") > 0, "G : renommer le param\xC3\xA8tre Pompe du symbole en Pump");
+        const View* s = q.viewByName("Sym_Pompe_G");
+        const Object* in = s ? s->object(inner) : nullptr;
+        check(in && in->text("equipment") == "Pump" && in->text("moving") == "Pump.EnService",
+              "G : ... son \xC3\x89quipement suit (Pump ; avant : Pompe, un nom perdu), un Mouvement tap\xC3\xA9 sans = aussi");
+        const auto e2 = expandInstance(q, *q.views[0].object(inst));
+        bool follows = false;
+        for (const auto& o : e2.objects)
+            if (o.name == "Pompe_A.Pompe") follows = o.text("equipment") == "P1";
+        check(follows, "G : ... l'instance (Pump := P1) le relie toujours \xC3\xA0 P1");
+    }
 }
 
 void lotG11211_popup() {
@@ -25193,6 +25208,46 @@ void lotG11211_creer() {
         const View* sym = p.viewByName("Sym_Creer_G");
         check(sym && sym->params.size() == 3 && sym->params[0].type == "T_Pompe" && sym->params[1].type == "REAL" && sym->params[2].type.empty(),
               "G : ses param\xC3\xA8tres typ\xC3\xA9s d'apr\xC3\xA8s les chemins choisis (Pompes[1] : T_Pompe, Niveau_G : REAL ; une constante : ANY ; avant : tous ANY)");
+    }
+    // ---- ... d'une pompe liee par son seul Equipement : le chemin propose, le parametre type, la liaison suit
+    {
+        Project p = lotg::projet();
+        const Id pump = lotg::poser(p, Kind::Pump, "Pompe_Y", 10);
+        p.views[0].object(pump)->set("equipment", "Pompes[2]");
+        const Id other = lotg::poser(p, Kind::Pump, "Pompe_Z", 200);
+        p.views[0].object(other)->set("equipment", "P1");
+        same(suggestSymbolParams(p.views[0], {pump}), "Pompe := Pompes[2]",
+             "G : une pompe li\xC3\xA9" "e \xC3\xA0 Pompes[2] par \xC3\x89quipement : Cr\xC3\xA9" "er un symbole propose Pompe := Pompes[2]");
+        Id inst = kNoId;
+        std::string why;
+        check(createSymbol(p, p.views[0].id, {pump}, "Sym_Equip_G", "Pompe := Pompes[2]", &inst, &why), "G : ... le symbole cr\xC3\xA9\xC3\xA9 (" + why + ")");
+        const View* sym = p.viewByName("Sym_Equip_G");
+        const Object* inside = nullptr;
+        if (sym)
+            for (const auto& o : sym->objects)
+                if (o.kind == Kind::Pump) inside = &o;
+        check(sym && sym->params.size() == 1 && sym->params[0].type == "T_Pompe" && inside && inside->text("equipment") == "Pompe",
+              "G : ... Pompe : T_Pompe, sa pompe li\xC3\xA9" "e au param\xC3\xA8tre (\xC3\x89quipement = Pompe)");
+        // Un chemin sans indice (P1) se donne a la main : son type aussi.
+        Id inst2 = kNoId;
+        check(createSymbol(p, p.views[0].id, {other}, "Sym_Equip_P", "Pompe := P1", &inst2, &why), "G : ... Pompe := P1 donn\xC3\xA9 \xC3\xA0 la main (" + why + ")");
+        const View* sym2 = p.viewByName("Sym_Equip_P");
+        check(sym2 && sym2->params.size() == 1 && sym2->params[0].type == "T_Pompe", "G : ... P1 : le param\xC3\xA8tre est une T_Pompe");
+        // en marche : l'instance lit Pompes[2]
+        Runtime rt;
+        rt.bind(&p, nullptr);
+        rt.start(0.0);
+        rt.environment().write("Pompes[2].Marche", sim::Value::boolean(true));
+        rt.environment().write("Pompes[2].Nom", sim::Value::text("P-202"));
+        rt.tick(0.1);
+        LiveView live;
+        live.bind(*rt.composedView(rt.currentView()));
+        const View shown = live.evaluate(rt.environment(), nullptr, nullptr, 0.1);
+        bool read = false;
+        for (const auto& o : shown.objects)
+            if (o.kind == Kind::Pump && o.text("label") == "P-202") read = o.text("value") == "TRUE";
+        check(read, "G : ... en marche, la pompe de l'instance lit Pompes[2] (marche, P-202)");
+        rt.stop(0.2);
     }
     // ---- le modele « Moteur et son etat » : un parametre T_Moteur, la liaison Equipement
     {

@@ -30,6 +30,9 @@ La règle « ce qui démarrait en 1.12.9 démarre toujours » est tenue :
   formules sur deux objets). Ce qui est réglé à la main sur l'objet gagne. L'alarme Défaut de l'objet suit.
 - **L'aide de chaque case liée** (`synoptique`) : la Valeur, le Défaut, le Libellé… d'un symbole lié disent dans
   leur aide « Liaison Équipement : lue dans P1.Marche » (ou « réglée à la main : elle gagne »).
+- **L'éditeur dessine la liaison** (`synoptique`) : une pompe liée à `P1` montre sous elle `{P1.Nom}` (et prend
+  son mode État d'office) sans que rien ne soit écrit dans l'objet : changer d'Équipement change tout, et un
+  libellé tapé à la main gagne, dans l'éditeur comme en marche.
 - **Le tableau de correspondance, par type** (`synoptique`) : sous la section du symbole, « Liaison Équipement
   (T_Pompe) » montre une ligne par rôle, le membre lu, et « à la main » quand l'objet règle lui-même la propriété.
   Choisir un autre membre (ou « aucun ») vaut pour toutes les structures de ce type ; « (selon le nom) » revient
@@ -40,7 +43,8 @@ La règle « ce qui démarrait en 1.12.9 démarre toujours » est tenue :
   énumération du projet, d'après les noms de ses valeurs (ARRET, STOP : arrêt ; MARCHE, RUN, AUTO : marche ;
   DEFAUT, FAULT, ALARME : défaut ; MAINT… : maintenance ; les autres : arrêt). Avant, un moteur en DÉFAUT (2)
   se lisait « différent de 0 » : vert, et il tournait. Avec la liaison Équipement, une Valeur entière ou énumérée
-  prend ce mode d'office.
+  prend ce mode d'office : Contenu le dit (« Par la liaison Équipement : 4 état(s) d'office ») et cocher « Mode
+  État » part de ces états pour les régler sur l'objet.
 - **Le mode montré** (`synoptique`) : une étiquette en haut à gauche du symbole (Automatique, Manuel), quand le
   membre Mode est lié (ou la propriété « Mode » réglée : un texte, ou `{P1.Mode}`).
 - **Le libellé à trous dans un symbole** (`symboles`) : `{Nom}` dans le libellé d'une pompe, le titre d'un cadre,
@@ -65,8 +69,9 @@ La règle « ce qui démarrait en 1.12.9 démarre toujours » est tenue :
   (A et B en mode entier ; la Position en mode deux booléens) ; Générer dit une position 1-2 fixée sur un
   boisseau en L.
 - **Renommer suit** (`synoptique`) : renommer une variable réécrit l'Équipement, un Défaut ou une Valeur tapés
-  sans `=`, et les libellés et titres à trous (avant : seul le Texte) ; renommer un type IHM met à jour les
-  paramètres de popup et de symbole de ce type.
+  sans `=`, et les libellés et titres à trous (avant : seul le Texte) ; renommer le paramètre d'un symbole ou
+  d'une popup réécrit l'Équipement et un Défaut, un Mouvement ou une Valeur tapés sans `=` (avant : un nom perdu) ;
+  renommer un type IHM met à jour les paramètres de popup et de symbole de ce type.
 
 ## Pour le guide (paragraphes courts)
 
@@ -112,7 +117,7 @@ l'alarme) et Générer en vérifie la variable ; rien à ajouter.
 
 `HMI_TEST_11211=1` les lance seuls, dans `hmi_test` et `hmi_editor_test`.
 
-- `hmi_test` : `lotG11211` (ESSAIS_HMI contrôles) :
+- `hmi_test` : `lotG11211` (87 contrôles) :
   - `lotG11211_liaison` : ce que la liaison remplit (Valeur, Défaut, Mode, Libellé par leur nom), un repère
     `$Pompes[2]$`, ce qui est réglé à la main gagne, l'objet enregistré ne change pas ; le choix d'un membre pour
     le type (deux T_Pompe le suivent, « aucun », retour aux noms), enregistré et relu, un projet sans choix
@@ -123,22 +128,46 @@ l'alarme) et Générer en vérifie la variable ; rien à ajouter.
     énumération, le mode d'office (une énumération, un INT) ; en marche, un moteur en DEFAUT (2) en défaut, un
     INT à 3 en maintenance, le retour en marche animée ; Générer (énumération lue vrai / faux, structure entière) ;
   - `lotG11211_symbole` : dans un symbole, l'équipement reçoit l'argument, `{Repere}` et un titre à trous sont
-    remplacés, en marche, et l'alarme de la pompe de l'instance ;
+    remplacés, en marche, et l'alarme de la pompe de l'instance ; le paramètre renommé (l'Équipement et un
+    Mouvement tapé sans `=` suivent, l'instance relie toujours P1) ;
   - `lotG11211_popup` : une popup à paramètre typé (`Pompe : T_Pompe`) ouverte pour `P2` : sa pompe lit P2 ;
   - `lotG11211_arguments` : le type, un calcul pour un paramètre écrit, les sans-nom en trop et en double, une
     constante qui ne se convertit pas, rien sur une instance juste, rien de bloquant ;
-  - `lotG11211_creer` : Créer un symbole type ses paramètres ; le modèle Moteur et son état (le type créé, le
-    paramètre, la liaison, en marche avec M1, son alarme, Générer) ;
+  - `lotG11211_creer` : Créer un symbole type ses paramètres, aussi d'une pompe liée par son seul Équipement
+    (Pompes[2] proposé, P1 donné à la main, en marche l'instance lit Pompes[2]) ; le modèle Moteur et son état (le
+    type créé, le paramètre, la liaison, en marche avec M1, son alarme, Générer) ;
   - `lotG11211_extras` : le vérin rentré / sorti (en marche, et le BOOL en course dit), la vanne 3 voies en L, les
     gaz, la boucle ISA dupliquée ;
   - `lotG11211_generer` : les couleurs d'un symbole et de son mode État, un Défaut tapé sans `=` vérifié, un membre
     lié du mauvais type, un équipement `Pompes[1]` dupliqué suit l'indice.
-- `hmi_editor_test` : `lotG11211_editeur` (la propriété Équipement, sa liste et sa place, la section Liaison
-  Équipement et un choix pour le type, Ctrl+Z, « à la main » ; Contenu › Mode État : ETAT_MOTEUR, une ligne
-  réglée, une variable énumérée qui devient la Valeur, décocher, Ctrl+Z ; une cuve sans mode État ; l'étiquette du
-  mode dessinée ; le type renommé).
+- `hmi_editor_test` : `lotG11211_editeur` (35 contrôles : la propriété Équipement, sa liste et sa place, la
+  section Liaison Équipement et un choix pour le type, Ctrl+Z, « à la main » ; Contenu › Mode État :
+  ETAT_MOTEUR, une ligne réglée, une variable énumérée qui devient la Valeur, décocher, Ctrl+Z ; une cuve sans
+  mode État ; l'étiquette du mode dessinée ; l'aperçu de l'éditeur - `{P1.Nom}` dessiné sans être écrit, un
+  libellé à la main qui gagne ; le mode État d'office d'un moteur lié dit dans Contenu, cocher Mode État part
+  de ses états ; le type renommé). Trois essais plus anciens de `hmi_editor_test` suivent les
+  changements voulus : la section Vanne commence par « Équipement », la variable d'une vanne est une ligne plus
+  bas, une vanne a l'onglet Contenu (Propriétés | Actions | Contenu).
 - `hmi_reperes_test` : `liaisonEquipement11211` (`$Pompes[1]$` et `Pompe $Rep$` dupliqués en `$Pompes[2]$` et
   `Pompe $P102$`, Générer sans erreur, en marche chacune lit sa pompe).
+
+### Tester vous-même (une dizaine de minutes)
+
+1. Variables : un type `T_Pompe` (Marche BOOL, Defaut BOOL, Mode STRING, Nom STRING) et `P1 : T_Pompe`, `P2 :
+   T_Pompe` (Nom 'P-101', 'P-102').
+2. Poser une pompe, Équipement = `P1` : `{P1.Nom}` s'affiche dessous ; la section « Liaison Équipement
+   (T_Pompe) » dit Valeur ← Marche, Défaut ← Defaut, Mode ← Mode, Libellé ← Nom.
+3. Lancer : P1.Marche à vrai, la pompe tourne ; P1.Defaut à vrai, elle passe en défaut et son alarme Défaut
+   monte ; P1.Mode = 'Manuel', l'étiquette s'affiche. Le libellé montre P-101.
+4. Dans la section, Libellé : « (aucun) » - le libellé disparaît sous toutes les T_Pompe ; Ctrl+Z.
+5. Contenu › Mode État › Depuis une énumération : ETAT_MOTEUR, et la Valeur réglée à la main sur un INT
+   `Etat_P1` : 2, défaut ; 3, maintenance (bleu) ; 1, marche animée.
+6. Sélectionner la pompe, Créer un symbole avec `Pompe := P1` : le paramètre est une `T_Pompe` (une pompe liée
+   à `Pompes[2]` le propose d'elle-même). Poser deux instances, P1 et P2 : chacune lit la sienne. Donner
+   `Niveau_1` (un REAL) : Générer avertit du type.
+7. Modèles › Moteur et son état : le poser, donner `M1` (une T_Moteur).
+8. Un vérin en Course « rentré / sorti » sur un BOOL ; une bouteille de gaz « Azote » (noire) ; une vanne 3
+   voies (les cases du mode inutile grisées) ; un instrument ISA de boucle 101 dupliqué trois fois : 102, 103, 104.
 
 Chaque contrôle dit, dans son libellé, ce que faisait la 1.12.9. Comme pour les lots précédents, l'échec « avant »
 n'est pas rejoué un par un : ces essais appellent des fonctions nouvelles (`eqlink::…`, `symargs::check`) et ne se
@@ -146,9 +175,10 @@ compilent pas contre la 1.12.9.
 
 ## Ce qui n'est pas fait, et pourquoi
 
-- **L'éditeur ne dessine pas la liaison** : une pompe liée montre dans l'éditeur ses valeurs fixes (pas
-  `{P1.Nom}` sous elle) ; la section Liaison Équipement dit ce qui sera lu. Résoudre le type à chaque image de
-  l'éditeur coûterait, pour peu.
+- **Les paquets de symboles** (`.xpgsymboles`, `.xpgvues`) emportent la propriété Équipement des objets et les
+  paramètres typés, pas le tableau de correspondance du projet (`liaison_equipement`) : dans le projet qui les
+  reçoit, les membres se lient par leur nom tant qu'on n'y a rien choisi. Le format des paquets n'a pas été
+  touché (`HmiPackage.hpp` est hors du lot).
 - **Les structures de l'automate (XPGAnalyser API)** : elles se lient en marche et dans Générer par les DDT que
   l'application publie (`eqlink::setPlcTypes`) ; un DDT renommé dans le programme ne déplace pas un choix fait
   pour l'ancien nom (le choix est gardé par nom de type). Non essayé avec un vrai programme (pas d'essai API ici).
@@ -184,10 +214,14 @@ compilent pas contre la 1.12.9.
   - les symboles marche / arrêt (pompe, moteur, vanne…) ont l'onglet Contenu (leur mode État, vide par défaut) ;
     la bouteille de gaz montre le nom du gaz dans l'inspecteur quand sa couleur en est une ; les cases inutiles
     de la vanne 3 voies sont grisées ; une ligne « Équipement » en tête de la section d'un symbole, « Course » pour
-    un vérin, « Mode État » pour les symboles marche / arrêt ;
+    un vérin ; une ligne « Mode État » (son résumé, qui ouvre Contenu) seulement quand l'objet en a un ;
+  - dans l'éditeur, un symbole qui a un Équipement se dessine avec son libellé lié (`{P1.Nom}`) ; un objet sans
+    Équipement se dessine comme avant ;
   - Dupliquer un instrument ISA numérote sa boucle (101, 102…) au lieu de la recopier ;
   - Générer dit plus de choses, toujours en avertissements.
 - **Le renommage** suit maintenant les libellés et les titres à trous (avant : seul le Texte), un Défaut ou une
-  Valeur de synoptique tapés sans `=`, l'Équipement.
+  Valeur de synoptique tapés sans `=`, l'Équipement ; renommer un paramètre de vue suit aussi un Mouvement tapé
+  sans `=` (`src/hmi/HmiPopupParams.cpp`, `renameParam`).
 - **Le coût** : une vue qui a des liaisons Équipement est recomposée à chaque cycle (100 ms) comme une vue à
-  jokers ; la recherche du type et des membres se fait par objet lié, non mesurée sur un gros projet.
+  jokers ; la recherche du type et des membres se fait par objet lié, non mesurée sur un gros projet. L'éditeur
+  la refait à chaque image pour les objets liés de la vue montrée (l'aperçu).
