@@ -99,7 +99,7 @@ Les listes parallèles suivent : `Cuves[*].Nom` nomme chaque élément, la coule
 1. Posez un **sélecteur** et ouvrez Contenu : une ligne par choix, avec son libellé et sa valeur. Montez un choix : sa valeur suit.
 2. Posez un **bargraphe**, réglez ses zones dans Contenu avec une borne à `60 %`, puis passez Max de 100 à 200 : la zone suit (120).
 3. Posez un **programmateur horaire** en résolution 1 h, avec une plage 13:30-17:00 : Contenu dit « arrondie à 14:00-17:00 ».
-4. Créez un type `T_Cuve` (Nom, Niveau) et une variable `Cuves : ARRAY[1..3] OF T_Cuve`. Posez un **graphique en barres** avec Variables `Cuves[*].Niveau` et Noms `Cuves[*].Nom` : trois barres, nommées par leurs cuves.
+4. Créez un type `T_Cuve` (Nom, Niveau) et une variable `Cuves : ARRAY[1..3] OF T_Cuve`. Posez un **graphique en barres** avec Variables `Cuves[*].Niveau` et Noms `Cuves[*].Nom` : trois barres. Un script au démarrage qui nomme et remplit les cuves (`Cuves[1].Nom := 'Cuve A';`…) les montre en marche, nommées par leurs cuves.
 5. Posez une **courbe** sur une `LIST OF REAL` avec `Bacs[*]` : une plume par bac. En marche, ajoutez un bac (`LIST_ADD`) : une plume de plus.
 6. Posez un **camembert** sur une `MAP[STRING] OF INT` avec `Stock[*]` : une part par clé.
 
@@ -180,8 +180,9 @@ Chaque ligne de la session a réussi :
 
 Le détail est dans `docs/NOTES-LOTS-D-E.md`, aux sections « Ce qui n'est pas fait ». L'essentiel :
 
-**Trouvé en préparant la session, plus ancien que les lots D et E, pas corrigé :**
-- La valeur initiale d'une variable IHM `ARRAY OF STRUCT` écrite en littéral (`[(Nom := 'Cuve A', Niveau := 4.2), …]`) est ignorée en simulation : les membres partent de 0 et de ''. Générer ne le dit pas. La session remplit donc ses cuves par un script au démarrage.
+**Vu en préparant la session (ce n'est pas nouveau) :**
+- Un tableau de structures (`Cuves : ARRAY[1..3] OF T_Cuve`) n'a pas de valeur initiale par élément : chaque élément prend celles de son type, dans Types IHM. L'écran des variables refuse un littéral (« une structure prend les valeurs initiales de son type »). La session nomme et remplit donc ses cuves par un script au démarrage.
+- Un littéral écrit dans le fichier par un autre outil (`[(Nom := 'Cuve A', Niveau := 4.2), …]`) est ignoré en simulation, et Générer ne le dit pas.
 
 **Lot D :**
 - Les colonnes d'une source de tableau n'ont pas de largeur propre : elles gardent celles du tableau, par position. Contenu ne propose les colonnes que pour une variable IHM ; pour un paramètre de popup ou un membre, on tape `sourceColumns` dans l'inspecteur.
@@ -209,4 +210,4 @@ Les lots restants du plan de l'audit (§ 4) :
 - **G. Synoptique et symboles** : la liaison « Équipement » par structure, le mode « État », la vérification des arguments de symbole, les types proposés par « Créer un symbole » ;
 - **H. Plus tard** : l'édition des sommets sur le dessin, l'horloge liée à une variable, le texte défilant depuis une liste…
 
-S'y ajoute la valeur initiale d'un `ARRAY OF STRUCT` : la lire, ou que Générer dise qu'elle n'est pas lue.
+À voir aussi : une valeur initiale par élément pour un tableau de structures, et un avertissement de Générer pour un littéral ignoré.
