@@ -40,6 +40,11 @@ objet "Tableau_Cuves"
 attendre 3
 sous-onglet "Propri"
 attendre 3
+# La ligne « Le tableau montre » a l'ecran (sa liste fermee par Echap), et sous elle les reglages du mode.
+propriete-clic "Le tableau montre"
+attendre 2
+touche escape
+attendre 2
 capture 1213_ihm_02_inspecteur_mode.png
 sous-onglet "Contenu"
 attendre 3
