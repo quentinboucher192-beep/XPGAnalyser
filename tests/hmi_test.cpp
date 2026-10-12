@@ -26215,6 +26215,18 @@ void lotF11210() {
               && ranges::hint(p, p.views[0], *p.views[0].object(jaugeAncienne), "max").empty(),
           "F : l'inspecteur montre la valeur h\xC3\xA9rit\xC3\xA9" "e en gris, et d'o\xC3\xB9 elle vient");
     {
+        // 1.12.12 (integration) : l'editeur dessine une jauge qui suit sa variable a la valeur initiale de celle-ci (5), pas
+        // a sa valeur fixe d'objet neuf (40, hors de 0..10 : collee au bout, rouge) ; une jauge aux bornes ecrites garde
+        // son dessin.
+        Object neuve, ancienne;
+        const bool suit = ranges::preview(p, p.views[0], *p.views[0].object(jaugeNeuve), neuve);
+        const Object& avant = *p.views[0].object(jaugeAncienne);   // (ses seuils viennent de la variable, pas sa plage)
+        const bool garde = !ranges::preview(p, p.views[0], avant, ancienne) || ancienne.text("value") == avant.text("value");
+        check(suit && neuve.text("value") == "5" && neuve.text("max") == "10" && garde,
+              "F : l'\xC3\xA9" "diteur dessine la jauge qui suit Pression_Ligne \xC3\xA0 sa valeur initiale (5 sur 0..10, avant : 40, coll\xC3\xA9" "e au bout) ; "
+              "une jauge aux bornes \xC3\xA9" "crites ne change pas");
+    }
+    {
         // En marche : le dessin, le clic et le moteur lisent les memes bornes.
         Runtime rt;
         rt.bind(&p, nullptr);

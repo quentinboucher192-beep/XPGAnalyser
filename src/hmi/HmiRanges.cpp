@@ -11,6 +11,7 @@
 #include "HmiPublicVars.hpp"
 #include "HmiRoles.hpp"
 #include "HmiRuntime.hpp"     // isVariablePath
+#include "HmiVertices.hpp"    // previewText : la valeur initiale d'une variable (l'apercu de l'editeur)
 #include "HmiWidgets.hpp"     // splitSemicolons
 
 #include <algorithm>
@@ -577,6 +578,17 @@ bool preview(const Project& p, const View& v, const Object& o, Object& out) {
     // Dans l'editeur, une variable ne se lit pas : une borne qui en vient garde sa valeur fixe.
     for (const auto& c : changes)
         if (c.expr.empty()) out.set(c.key, c.value);
+    // 1.12.12 (integration) : une Valeur qui est une variable se dessine a la valeur initiale de celle-ci, comme les
+    // jokers et « Points depuis » - sa valeur fixe (celle d'un objet neuf : 40) tombait hors de la plage heritee (0..10) :
+    // la jauge collee au bout, dans la couleur des alarmes. Seulement quand Min ou Max vient de la variable : un objet aux
+    // bornes ecrites (qui ne prend que des seuils) garde son dessin.
+    bool range = false;
+    for (const auto& c : changes) range = range || (c.expr.empty() && (c.key == "min" || c.key == "max"));
+    if (const Prop* val = o.find("value"); range && val && !val->expr.empty() && isName(val->expr)) {
+        double initial = 0;
+        if (const auto text = vertices::previewText(p)(bare(val->expr)); text && parseNumber(trim(*text), initial))
+            out.set("value", formatNumber(initial));
+    }
     return true;
 }
 
