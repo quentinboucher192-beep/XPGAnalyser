@@ -1,5 +1,6 @@
 #include "HmiEdit.hpp"
 #include "HmiNavigation.hpp"
+#include "HmiVertices.hpp"   // 1.12.12 (lot H) : le lecteur des points
 
 #include <algorithm>
 #include <cctype>
@@ -133,15 +134,9 @@ Box rotatedBounds(const Object& o) {
 }
 
 std::vector<Pt> points(const Object& o) {
+    // 1.12.12 (lot H) : le lecteur unique des points (HmiVertices) - "10, 20" se lit aussi.
     std::vector<Pt> out;
-    std::istringstream in(o.text("points"));
-    std::string pair;
-    while (in >> pair) {
-        const auto comma = pair.find(',');
-        if (comma == std::string::npos) continue;
-        double x = 0, y = 0;
-        if (parseNumber(pair.substr(0, comma), x) && parseNumber(pair.substr(comma + 1), y)) out.push_back({x, y});
-    }
+    for (const auto& p : vertices::parse(o.text("points")).points) out.push_back({p.x, p.y});
     return out;
 }
 
@@ -157,6 +152,8 @@ void setPoints(Object& o, const std::vector<Pt>& pts) {
 bool hit(const Object& o, double x, double y, double tolerance) {
     const Box b = o.box();
     const Pt l = toLocal(o, {x, y});
+    // 1.12.12 (lot H) : « Points depuis » - les points viennent d'une source : l'objet se prend dans son cadre.
+    if (vertices::hasPointsFrom(o)) return l.x >= -tolerance && l.y >= -tolerance && l.x <= b.w + tolerance && l.y <= b.h + tolerance;
     switch (o.kind) {
         case Kind::Line: {
             const auto pts = points(o);

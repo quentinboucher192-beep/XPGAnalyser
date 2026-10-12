@@ -52,6 +52,7 @@
 #include "HmiDuplicate.hpp"   // 1.10.2 (chantier D) : les reperes $Nom$
 #include "HmiMarkers.hpp"     // 1.11 (REP) : les reperes $...$, transparents pour le calcul
 #include "HmiApiVars.hpp"     // 1.11.1 (API-M) : les variables de l'automate sous API.
+#include "HmiVertices.hpp"    // 1.12.12 (lot H) : les points d'une ligne, « Points depuis »
 
 #include <algorithm>
 #include <cctype>
@@ -2200,6 +2201,80 @@ void checkLot11(const Project& p, const NameExists& plc, std::vector<Issue>& out
 }
 
 
+// ---- 1.12.12 (lot H) : les sommets sur le dessin -----------------------------------------------
+//  Des avertissements seulement : un projet qui demarrait demarre toujours.
+//   - une ligne, un polygone : un morceau du texte des points qui ne donne pas un point net (10,5,20 ; un
+//     nombre seul ; un mot), dit a sa place (« point 3 ») - avant : compte en silence ;
+//   - « Points depuis » : sa source, verifiee comme celles du lot E (inconnue, sans elements), des nombres,
+//     l'echelle ;
+//   - le plan a zones : le type de la variable de la zone choisie (un STRING, son nom ; un entier, son numero).
+void checkDrawing11212(const Project& p, const NameExists& plc, std::vector<Issue>& out) {
+    using S = Issue::Severity;
+    for (const auto& v : p.views)
+        for (const auto& o : v.objects) {
+            const std::string label(kindLabel(o.kind));
+            const auto issue = [&](S sev, std::string_view key, std::string msg) {
+                add(out, sev, label, v.id, o.id, std::string(key), std::move(msg));
+            };
+            if (vertices::isShape(o) && !vertices::hasPointsFrom(o)) {
+                const Prop* pts = o.find("points");
+                if (!pts || pts->expr.empty())
+                    for (const auto& pb : vertices::parse(o.text("points")).problems) issue(S::Warning, "points", vertices::describe(pb));
+            }
+            if (vertices::hasPointsFrom(o)) {
+                const std::string from = trimmedCopy(o.text(vertices::kPointsFromKey));
+                const auto ps = vertices::pointsSourceOf(from);
+                if (!ps) {
+                    issue(S::Warning, vertices::kPointsFromKey,
+                          "points depuis : \xC2\xAB " + from + " \xC2\xBB ne se lit pas - \xC3\xA9" "cris Courbe (des nombres, x et y "
+                          "altern\xC3\xA9s) ou Profil[*].X, Profil[*].Y");
+                } else {
+                    std::vector<std::string> formulas{ps->x};
+                    if (!ps->alternate) formulas.push_back(ps->y);
+                    bool told = false;
+                    for (const auto& f : formulas) {
+                        std::string problem;
+                        const auto sample = sources::sampleOf(p, &v, f, &problem);
+                        if (!problem.empty()) {
+                            if (!told) issue(S::Warning, vertices::kPointsFromKey, "points depuis : " + problem);
+                            told = true;
+                            continue;
+                        }
+                        const std::string e = sample ? *sample : f;
+                        bool rootsKnown = true;
+                        for (const auto& r : scanRoots(markers::strip(e)))
+                            if (!known(p, plc, r, &v)) {
+                                issue(S::Warning, vertices::kPointsFromKey, "points depuis : " + std::string(unknownVariablePrefix()) + r);
+                                rootsKnown = false;
+                            }
+                        const std::string type = rootsKnown ? params::expressionType(p, &v, markers::strip(e)) : std::string{};
+                        if (!type.empty() && !typereg::isNumber(type))
+                            issue(S::Warning, vertices::kPointsFromKey,
+                                  "points depuis : " + e + " est un " + type + " - des nombres sont attendus (le point ne se tracera pas)");
+                    }
+                }
+                const auto numberIn = [&](std::string_view key, double& x) {
+                    const Prop* pr = o.find(key);
+                    return pr && pr->expr.empty() && roles::readNumber(pr->value, x);
+                };
+                double a = 0, b = 0;
+                if (numberIn(vertices::kPointsXMinKey, a) && numberIn(vertices::kPointsXMaxKey, b) && a >= b)
+                    issue(S::Warning, vertices::kPointsXMinKey, "points depuis : \xC3\xA9" "chelle X - le minimum doit \xC3\xAAtre sous le maximum");
+                if (numberIn(vertices::kPointsYMinKey, a) && numberIn(vertices::kPointsYMaxKey, b) && a >= b)
+                    issue(S::Warning, vertices::kPointsYMinKey, "points depuis : \xC3\xA9" "chelle Y - le minimum doit \xC3\xAAtre sous le maximum");
+            }
+            // Le plan a zones : sa variable se lit et s'ecrit - le nom de la zone (STRING) ou son numero (un entier).
+            if (o.kind == Kind::ZoneMap) {
+                const std::string var = trimmedCopy(markers::strip(o.text("variable")));
+                const std::string type = var.empty() ? std::string{} : params::expressionType(p, &v, var);
+                if (!type.empty() && typereg::simTypeOf(type) != sim::Type::String && !typereg::isInteger(type))
+                    issue(S::Warning, "variable",
+                          "la zone choisie : " + var + " est un " + type + " - un STRING (le nom de la zone) ou un entier (son num\xC3\xA9ro, "
+                          "1 pour la premi\xC3\xA8re, 0 : aucune) ; elle ne se relira pas");
+            }
+        }
+}
+
 // ---- lot 12 : la navigation et la structure ------------------------------------------------
 namespace {
 // "Armoires[0].prete" -> "Armoires" : la racine d'un chemin de variable.
@@ -2213,6 +2288,21 @@ void checkLot12(const Project& p, const NameExists& plc, std::vector<Issue>& out
     using S = Issue::Severity;
     std::set<std::string> groups;
     for (const auto& a : p.alarms) if (!a.group.empty()) groups.insert(a.group);
+    // 1.12.12 (lot H) : le groupe d'une zone prend-il au moins une alarme - du projet, ou d'un objet (Vue.*,
+    // Vue.Objet, symbole:Nom), comme le filtre des vues d'alarmes ? Les alarmes des objets, faites une fois.
+    std::vector<ObjectAlarm> objectList;
+    bool objectListReady = false;
+    const auto zoneGroupTakes = [&](const std::string& filter) {
+        if (groups.count(filter)) return true;
+        for (const auto& a : p.alarms) if (alarmGroupMatches(a.group, {}, {}, filter)) return true;
+        if (!objectListReady) {
+            objectList = objectAlarms(p);
+            objectListReady = true;
+        }
+        for (const auto& oa : objectList)
+            if (oa.active && alarmGroupMatches(oa.def.group, oa.objectGroup, oa.symbols, filter)) return true;
+        return false;
+    };
     // Les vues parentes : introuvables, en boucle.
     for (const auto& v : p.views) {
         if (v.upView == kNoId) continue;
@@ -2320,7 +2410,9 @@ void checkLot12(const Project& p, const NameExists& plc, std::vector<Issue>& out
                                 break;
                             }
                         if (!z.view.empty() && !p.viewByName(z.view)) issue(S::Error, "mapZones", "zone '" + z.name + "' : vue '" + z.view + "' introuvable");
-                        if (!groups.empty() && !groups.count(z.alarmGroup()))
+                        // 1.12.12 (lot H) : un groupe des alarmes des objets, un repere ($Zone_A$) - avant : « aucune
+                        // alarme du groupe », a tort.
+                        if (!groups.empty() && !zoneGroupTakes(roles::nameOf(z.alarmGroup())))
                             issue(S::Info, "mapZones", "zone '" + z.name + "' : aucune alarme du groupe " + z.alarmGroup() + " (elle restera calme)");
                     }
                     const std::string var = trimmedCopy(markers::strip(o.text("variable")));   // 1.11.24 : $Reels[2]$
@@ -3984,7 +4076,9 @@ std::vector<Issue> generateWith(const Project& p, const NameExists& plcHasName, 
             }
             if (o.kind == Kind::Group && v.childrenOf(o.id).empty())
                 add(out, S::Warning, "Objet", v.id, o.id, {}, "groupe vide");
-            if ((o.kind == Kind::Line && edit::points(o).size() < 2) || (o.kind == Kind::Polygon && edit::points(o).size() < 3))
+            // 1.12.12 (lot H) : « Points depuis » - les points viennent d'une source (verifiee par checkDrawing11212).
+            if (!vertices::hasPointsFrom(o)
+                && ((o.kind == Kind::Line && edit::points(o).size() < 2) || (o.kind == Kind::Polygon && edit::points(o).size() < 3)))
                 add(out, S::Error, "Objet", v.id, o.id, "points", "pas assez de points");
             // Les ressources citees : presentes, du bon genre, et avec leur fichier.
             for (const char* resKey : {"image", "video", "poster", "font"}) {
@@ -4091,6 +4185,7 @@ std::vector<Issue> generateWith(const Project& p, const NameExists& plcHasName, 
     checkAlarmGroupLinks(p, out);           // 1.10.2 (AL) : les groupes d'alarmes et les liens
     checkLot11(p, plcHasName, out);     // lot 11
     checkLot12(p, plcHasName, out);     // lot 12
+    checkDrawing11212(p, plcHasName, out);   // 1.12.12 (lot H) : les sommets, Points depuis, le plan a zones
     checkLot13(p, out);                 // lot 13 : la signature, la politique
     checkLanguages(p, out);             // lot 13 : les langues
     checkDisplay(p, plcHasName, out);   // lot 13 : les unites, l'affichage

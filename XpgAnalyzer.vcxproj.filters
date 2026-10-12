@@ -1360,6 +1360,9 @@
     <ClCompile Include="src\hmi\HmiVarMotion.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\hmi\HmiVertices.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\hmi\HmiViewPaths.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
@@ -2555,6 +2558,9 @@
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiVarMotion.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiVertices.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiViewPaths.hpp">

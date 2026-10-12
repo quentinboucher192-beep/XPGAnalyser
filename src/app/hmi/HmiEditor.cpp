@@ -401,16 +401,31 @@ HmiEditor::HmiEditor(std::string widgetId, hmi::DocumentPtr doc, Id view, Apply 
         else if (a == 2) canvas_->duplicateSelection();
         else if (a == 3) run(ActCopy);
         else if (a == 4) run(ActDelete);
+        else if (a == 5) (void)canvas_->removeSelectedVertex();   // 1.12.12 (lot H)
+        else if (a == 6 && canvas_->selection().size() == 1) canvas_->startZoneTrace(canvas_->selection().front());
     });
     links_ += canvas_->contextRequested->connect([this](gfx::Point at) {
         const bool any = !canvas_->selection().empty();
         const std::string none = any ? std::string{} : std::string("choisis d'abord un objet");
         std::vector<ui::PopupMenu::Item> items;
+        // 1.12.12 (lot H) : un sommet choisi (clic droit sur sa poignee) se retire - Suppr est alors pour lui.
+        const bool vertexChosen = canvas_->selectedVertex() >= 0 && canvas_->vertexTarget().valid();
+        if (vertexChosen) {
+            const bool point = canvas_->vertexTarget().what == hmi::vertices::Target::What::Reference;
+            items.push_back({point ? "Retirer le point" : "Retirer le sommet", "Suppr", {}, ui::Icon::None, true, false, 5});
+            items.push_back({{}, {}, {}, ui::Icon::None, true, true, -1});
+        }
+        // 1.12.12 (lot H) : un plan a zones choisi seul - une zone de plus, tracee a la souris.
+        if (const auto* cv = doc_->project.view(viewId_); cv && canvas_->selection().size() == 1)
+            if (const auto* map = cv->object(canvas_->selection().front()); map && map->kind == hmi::Kind::ZoneMap) {
+                items.push_back({"Tracer une zone", {}, {}, ui::Icon::None, true, false, 6});
+                items.push_back({{}, {}, {}, ui::Icon::None, true, true, -1});
+            }
         items.push_back({"Dupliquer\xE2\x80\xA6", "Ctrl+D", none, ui::Icon::None, any, false, 1});
         items.push_back({"Dupliquer tel quel", "Ctrl+Maj+D", none, ui::Icon::None, any, false, 2});
         items.push_back({{}, {}, {}, ui::Icon::None, true, true, -1});
         items.push_back({"Copier", "Ctrl+C", none, ui::Icon::None, any, false, 3});
-        items.push_back({"Supprimer", "Suppr", none, ui::Icon::None, any, false, 4});
+        items.push_back({"Supprimer", vertexChosen ? "" : "Suppr", none, ui::Icon::None, any, false, 4});
         context_->setItems(std::move(items));
         gfx::Size surface = ui::surfaceSize();
         if (surface.w <= 0.f) surface = {bounds().right() + 400.f, bounds().bottom() + 400.f};
@@ -418,6 +433,36 @@ HmiEditor::HmiEditor(std::string widgetId, hmi::DocumentPtr doc, Id view, Apply 
     });
     links_ += tools_->triggered->connect([this](int a) { run(a); });
     links_ += layerTools_->triggered->connect([this](int a) { run(a); });
+    // 1.12.12 (lot H) : les sommets - le dessin et Contenu choisissent le meme ; la zone choisie dans Contenu se
+    // regle sur le dessin, et « Ajouter » d'un plan la trace a la souris.
+    content_->setZoneTracer(true);
+    // Le sommet du dessin est un point lu ; la ligne de Contenu, un morceau du texte (un morceau illisible n'a
+    // pas de poignee).
+    const auto parsedOf = [this] {
+        const auto* v = doc_->project.view(viewId_);
+        const auto* o = v ? v->object(content_->object()) : nullptr;
+        return o ? hmi::vertices::listOf(*o) : hmi::vertices::Parsed{};   // les sommets, ou la reference d'une courbe XY
+    };
+    links_ += canvas_->vertexChosen->connect([this, parsedOf](int k) {
+        if (syncing_ || k < 0 || content_->mode() != HmiContentPanel::Mode::Points) return;
+        const int row = hmi::vertices::entryOfPoint(parsedOf(), k);
+        if (row < 0 || content_->selectedIndex() == row) return;
+        syncing_ = true;
+        content_->selectIndex(row);
+        syncing_ = false;
+    });
+    links_ += content_->rowChosen->connect([this, parsedOf](int row) {
+        if (syncing_) return;
+        syncing_ = true;
+        if (content_->mode() == HmiContentPanel::Mode::Points) canvas_->selectVertex(hmi::vertices::pointOfEntry(parsedOf(), row));
+        else if (content_->mode() == HmiContentPanel::Mode::Zones) canvas_->setEditedZone(content_->object(), row);
+        syncing_ = false;
+    });
+    links_ += content_->traceRequested->connect([this] { canvas_->startZoneTrace(content_->object()); });
+    links_ += canvas_->zoneTraced->connect([this](int k) {
+        content_->refresh();
+        content_->selectIndex(k);
+    });
     // 1.11.3 : le carre de legende - la liste des carres, puis le selecteur (l'hote).
     legendMenu_ = &static_cast<ui::PopupMenu&>(addChild(std::make_unique<ui::PopupMenu>(id() + ".carres")));
     links_ += legendMenu_->itemChosen->connect([this](int a) {

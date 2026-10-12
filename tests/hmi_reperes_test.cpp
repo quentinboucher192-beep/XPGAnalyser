@@ -22,6 +22,7 @@
 #include "../src/hmi/HmiRoles.hpp"
 #include "../src/hmi/HmiRuntime.hpp"
 #include "../src/hmi/HmiSymbols.hpp"
+#include "../src/hmi/HmiVertices.hpp"   // 1.12.12 (lot H) : les points d'une ligne, « Points depuis »
 
 #include <cmath>
 #include <cstdio>
@@ -1433,6 +1434,93 @@ void repereEtJoker1127() {
     rt.stop(1.0);
 }
 
+// 1.12.12 (lot H) : « POINTS DEPUIS » ET LE REPERE - $Profil_A$[*].X, $Profil_A$[*].Y : Dupliquer remplace le repere
+// (la copie lit $Profil_B$), chaque polygone trace sa source en marche ; un repere dans une case des points reste.
+void pointsDepuisRepere11212() {
+    std::printf("-- 1.12.12 (lot H) : Points depuis et le repere ($Profil_A$[*].X, $Profil_A$[*].Y)\n");
+    Project p;
+    HmiType t;
+    t.id = p.allocate();
+    t.name = "T_Pt_R";
+    t.members = {{"X", "REAL", "", ""}, {"Y", "REAL", "", ""}};
+    p.programs.types.push_back(t);
+    Variable a;
+    a.id = p.allocate();
+    a.name = "Profil_A";
+    a.type = "ARRAY[1..2] OF T_Pt_R";
+    p.programs.variables.push_back(a);
+    Variable bv;
+    bv.id = p.allocate();
+    bv.name = "Profil_B";
+    bv.type = "ARRAY[1..3] OF T_Pt_R";
+    p.programs.variables.push_back(bv);
+    // L'echelle X en formule a repere : $Xmax_A$ (10), $Xmax_B$ (20) pour la copie.
+    for (const auto& [name, initial] : std::vector<std::pair<std::string, std::string>>{{"Xmax_A", "10"}, {"Xmax_B", "20"}}) {
+        Variable xm;
+        xm.id = p.allocate();
+        xm.name = name;
+        xm.type = "REAL";
+        xm.initial = initial;
+        p.programs.variables.push_back(xm);
+    }
+    View v = makeView(p, "Vue_PR");
+    const Id poly = edit::add(p, v, Kind::Polygon, 10, 10);   // 120 x 100
+    v.object(poly)->name = "Forme";
+    v.object(poly)->set("pointsFrom", "$Profil_A$[*].X, $Profil_A$[*].Y");
+    for (const char* k : {"pointsXMin", "pointsYMin"}) v.object(poly)->set(k, "0");
+    v.object(poly)->set("pointsXMax", "");
+    v.object(poly)->setExpr("pointsXMax", "$Xmax_A$");
+    v.object(poly)->set("pointsYMax", "10");
+    const auto sc = dup::scan(v, {poly}, dup::projectBounds(p));
+    check(sc.marker("Profil_A") != nullptr && sc.marker("Xmax_A") != nullptr, "Points depuis : Dupliquer trouve les rep\xC3\xA8res $Profil_A$ et $Xmax_A$");
+    auto plan = dup::defaultPlan(v, sc, 1);
+    if (plan.rows.size() == 2) {
+        plan.rows[1].markers[dup::markerKey("Profil_A")] = "Profil_B";
+        plan.rows[1].markers[dup::markerKey("Xmax_A")] = "Xmax_B";
+    }
+    const auto r = dup::apply(p, v, plan);
+    const Id copyId = r.created.empty() ? kNoId : r.created.front();
+    const Object* copy = v.object(copyId);
+    check(copy && copy->text("pointsFrom") == "$Profil_B$[*].X, $Profil_B$[*].Y",
+          "Points depuis : la copie lit $Profil_B$ (" + (copy ? copy->text("pointsFrom") : std::string("?")) + ")");
+    check(copy && copy->expr("pointsXMax") == "$Xmax_B$", "Points depuis : son \xC3\xA9" "chelle X suit ($Xmax_B$)");
+    p.views = {v};
+    p.config.startView = v.id;
+    const auto issues = issuesOf(p);
+    bool sourceSaid = false;
+    for (const auto& i : issues) sourceSaid = sourceSaid || i.find("points depuis") != std::string::npos;
+    check(!sourceSaid, "Points depuis : G\xC3\xA9n\xC3\xA9rer lit la source sans ses $ (rien \xC3\xA0 dire)");
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    const double values[6] = {1, 1, 9, 9, 5, 5};
+    for (int i = 1; i <= 2; ++i) {
+        rt.environment().write("Profil_A[" + std::to_string(i) + "].X", sim::Value::real(values[2 * (i - 1)]));
+        rt.environment().write("Profil_A[" + std::to_string(i) + "].Y", sim::Value::real(values[2 * (i - 1) + 1]));
+    }
+    for (int i = 1; i <= 3; ++i) {
+        rt.environment().write("Profil_B[" + std::to_string(i) + "].X", sim::Value::real(values[2 * (i - 1)]));
+        rt.environment().write("Profil_B[" + std::to_string(i) + "].Y", sim::Value::real(values[2 * (i - 1) + 1]));
+    }
+    rt.tick(0.1);
+    const View* shown = rt.composedView(v.id);
+    const Object* oa = shown ? shown->object(poly) : nullptr;
+    const Object* ob = shown ? shown->object(copyId) : nullptr;
+    check(oa && vertices::parse(oa->text("points")).points.size() == 2 && oa->text("points") == "12,90 108,10",
+          "Points depuis : l'original trace Profil_A (2 points) - " + (oa ? oa->text("points") : std::string("?")));
+    check(ob && ob->text("points") == "6,90 54,10 30,50",
+          "Points depuis : la copie trace Profil_B (3 points), \xC3\xA0 son \xC3\xA9" "chelle X (0..20) - " + (ob ? ob->text("points") : std::string("?")));
+    rt.stop(1.0);
+    // Un repere dans les points d'une ligne : garde, transparent pour le reste (le morceau est ignore et dit).
+    Object line = makeObject(Kind::Line, 1, "L", 0, 0, kNoId);
+    line.set("points", "0,0 $Bout_X$,20 160,0");
+    auto entries = vertices::parse(line.text("points")).entries;
+    check(entries.size() == 3 && !entries[1].ok && entries[1].raw == "$Bout_X$,20", "points : le morceau \xC3\xA0 rep\xC3\xA8re est gard\xC3\xA9 tel quel");
+    vertices::setCell(entries[2], false, "40");
+    vertices::setVertices(line, entries);
+    check(line.text("points") == "0,0 $Bout_X$,20 160,40", "points : une autre case chang\xC3\xA9" "e, le rep\xC3\xA8re reste - " + line.text("points"));
+}
+
 } // namespace
 
 int main() {
@@ -1454,6 +1542,7 @@ int main() {
     bibliothequeDifferentielle(true);
     chaqueProprieteParSonRole();       // 1.12.6 (lot C)
     repereEtJoker1127();               // 1.12.7 (lot E) : $Cuves$[*].Niveau
+    pointsDepuisRepere11212();         // 1.12.12 (lot H) : $Profil_A$[*].X, $Profil_A$[*].Y
     popupsEtActions();
     dupliquerDansLeSymbole();
     popupAvecSymboleEtRedefinition();

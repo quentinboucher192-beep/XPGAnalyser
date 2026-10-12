@@ -54,6 +54,7 @@
 #include "../src/hmi/HmiExport.hpp"
 #include "../src/hmi/HmiProduction.hpp"
 #include "../src/hmi/HmiSources.hpp"
+#include "../src/hmi/HmiVertices.hpp"    // 1.12.12 (lot H) : les sommets, « Points depuis »
 #include "../src/hmi/HmiChoiceLists.hpp"   // 1.12.7 (lot E) : les colonnes de Lignes depuis
 #include "../src/hmi/HmiNavigation.hpp"
 #include "../src/hmi/HmiLoginMenu.hpp"
@@ -24728,10 +24729,337 @@ void enregistre1127() {
           "un objet qui ne s'en sert pas ne les porte pas (le fichier ne change pas)");
 }
 
+// =============================================================================
+//  1.12.12 (lot H de l'audit des objets, « Les sommets sur le dessin ») : les points d'une ligne et d'un
+//  polygone lus pareil partout, Generer qui dit un point illisible a sa place, les gestes sur un sommet (le
+//  cadre suit les points), « Points depuis » en marche et dans l'editeur, la variable d'un plan a zones lue et
+//  ecrite. HMI_TEST_11212H1=1 les lance seuls.
+// =============================================================================
+void lotH11212_points() {
+    std::printf("1.12.12 (lot H) : les points d'une ligne, d'un polygone - le lecteur, Generer, les gestes\n");
+    // ---- le lecteur unique
+    {
+        const auto r = vertices::parse("0,0 10, 20 30 ,40 50 , 60");
+        check(r.points.size() == 4 && r.problems.empty() && r.points[1].x == 10 && r.points[1].y == 20 && r.points[3].y == 60,
+              "H : \xC2\xAB 10, 20 \xC2\xBB (une espace apr\xC3\xA8s la virgule) se lit (avant : le point \xC3\xA9tait ignor\xC3\xA9 sans un mot)");
+        const auto bad = vertices::parse("0,0 10,5,20 7 abc 3,4");
+        check(bad.points.size() == 3 && bad.points[1].x == 10 && std::fabs(bad.points[1].y - 5.2) < 1e-9 && bad.points[2].x == 3,
+              "H : 10,5,20 se lit comme avant (x 10, y 5,2) ; 7 et abc restent ignor\xC3\xA9s, comme avant");
+        check(bad.problems.size() == 3 && bad.problems[0].position == 2 && bad.problems[0].kept && bad.problems[1].position == 3
+                  && bad.problems[2].position == 4 && !bad.problems[2].kept,
+              "H : ... et chacun est dit, \xC3\xA0 sa place (points 2, 3 et 4)");
+        if (bad.problems.size() == 3)
+            same(vertices::describe(bad.problems[1]), "point 3 (7) : un nombre seul (il faut x,y) : ignor\xC3\xA9", "H : le message d'un nombre seul");
+        Object line = makeObject(Kind::Line, 1, "L", 0, 0, kNoId);
+        line.set("points", "0,0 100, 50");
+        check(edit::points(line).size() == 2 && edit::points(line)[1].y == 50, "H : le choix \xC3\xA0 la souris et le redimensionnement lisent pareil (edit::points)");
+        same(vertices::format(vertices::parse("0,0 10.50,2").points), "0,0 10.50,2", "H : un point se r\xC3\xA9\xC3\xA9" "crit tel qu'il \xC3\xA9tait \xC3\xA9" "crit");
+        check(vertices::cellText("12,5") == std::optional<std::string>("12.5") && vertices::cellText("$Cote_X$") == std::optional<std::string>("$Cote_X$")
+                  && !vertices::cellText("1 2") && !vertices::cellText("a,b"),
+              "H : une case de Contenu - 12,5 \xC3\xA9" "crit 12.5, un rep\xC3\xA8re gard\xC3\xA9, un blanc ou une virgule refus\xC3\xA9s");
+    }
+    // ---- Generer : les points illisibles, en avertissements
+    {
+        Project p;
+        View v = makeView(p, "Vue_H");
+        const Id poly = edit::add(p, v, Kind::Polygon, 10, 10);
+        v.object(poly)->set("points", "0,0 100,0 100,5,20 7");
+        const Id line = edit::add(p, v, Kind::Line, 10, 300);
+        v.object(line)->set("points", "10, 20 30, 40");
+        p.views = {v};
+        p.config.startView = v.id;
+        bool blocked = false, three = false, lone = false, lineError = false;
+        for (const auto& i : generate(p, [](std::string_view) { return false; })) {
+            if (i.object == poly && i.severity == Issue::Severity::Error) blocked = true;
+            if (i.object == line && i.severity == Issue::Severity::Error) lineError = true;
+            if (i.object == poly && i.severity == Issue::Severity::Warning && i.message.find("point 3 (100,5,20)") != std::string::npos) three = true;
+            if (i.object == poly && i.severity == Issue::Severity::Warning && i.message.find("point 4 (7)") != std::string::npos) lone = true;
+        }
+        check(three && lone, "H : G\xC3\xA9n\xC3\xA9rer dit les points illisibles, \xC3\xA0 leur place (avant : rien)");
+        check(!blocked, "H : ... en avertissements (le polygone garde ses trois points lus : rien ne bloque)");
+        check(!lineError, "H : une ligne \xC3\xA9" "crite \xC2\xAB 10, 20 30, 40 \xC2\xBB a ses deux points (avant : \xC2\xAB pas assez de points \xC2\xBB, une erreur bloquante)");
+    }
+    // ---- les gestes sur un sommet : le cadre suit les points, rien ne bouge a l'ecran
+    {
+        Project p;
+        View v = makeView(p, "Vue_G");
+        const Id id = edit::add(p, v, Kind::Polygon, 100, 100);   // 120 x 100 : 60,0 120,100 0,100
+        const vertices::Target t{vertices::Target::What::Shape, id, -1};
+        const auto before = vertices::points(v, t);
+        check(before.size() == 3 && before[0].x == 160 && before[0].y == 100, "H : les sommets dans la vue (60,0 d'un polygone pos\xC3\xA9 en 100,100)");
+        check(vertices::moveVertex(v, t, 0, {80, 60}), "H : le sommet 1 d\xC3\xA9plac\xC3\xA9 au-dessus et \xC3\xA0 gauche du cadre");
+        const auto after = vertices::points(v, t);
+        check(after.size() == 3 && after[0].x == 80 && after[0].y == 60 && after[1].x == before[1].x && after[1].y == before[1].y
+                  && after[2].x == before[2].x && after[2].y == before[2].y,
+              "H : il est o\xC3\xB9 on l'a pos\xC3\xA9, les autres n'ont pas boug\xC3\xA9 \xC3\xA0 l'\xC3\xA9" "cran");
+        const Box b = v.object(id)->box();
+        check(b.x == 80 && b.y == 60 && b.w == 140 && b.h == 140, "H : le cadre suit les points (80, 60, 140 x 140)");
+        same(v.object(id)->text("points"), "0,0 140,140 20,140", "H : les points ramen\xC3\xA9s au coin du cadre (ils restent relatifs \xC3\xA0 l'objet)");
+        check(vertices::insertVertex(v, t, 1, {160, 200}) == 2 && vertices::points(v, t).size() == 4, "H : un sommet ins\xC3\xA9r\xC3\xA9 apr\xC3\xA8s le 2e");
+        check(vertices::removeVertex(v, t, 2) && vertices::points(v, t).size() == 3, "H : ... et retir\xC3\xA9");
+        check(!vertices::removeVertex(v, t, 0), "H : un polygone garde 3 sommets (le retrait est refus\xC3\xA9)");
+        // Une ligne tournee de 90 degres : son autre sommet reste a sa place a l'ecran.
+        const Id rl = edit::add(p, v, Kind::Line, 300, 300);   // 160 x 0 : 0,0 160,0
+        v.object(rl)->setNumber("rot", 90);
+        const vertices::Target tl{vertices::Target::What::Shape, rl, -1};
+        const auto r0 = vertices::points(v, tl);
+        check(r0.size() == 2 && vertices::moveVertex(v, tl, 1, {r0[1].x + 30, r0[1].y + 10}),
+              "H : une ligne tourn\xC3\xA9" "e de 90 degr\xC3\xA9s, son 2e sommet d\xC3\xA9plac\xC3\xA9");
+        const auto r1 = vertices::points(v, tl);
+        if (r0.size() == 2 && r1.size() == 2) {
+            near(r1[0].x, r0[0].x, "H : ... le 1er reste en place \xC3\xA0 l'\xC3\xA9" "cran (x)", 0.01);
+            near(r1[0].y, r0[0].y, "H : ... (y)", 0.01);
+            near(r1[1].x, r0[1].x + 30, "H : ... le 2e est o\xC3\xB9 on l'a pos\xC3\xA9 (x)", 0.01);
+            near(r1[1].y, r0[1].y + 10, "H : ... (y)", 0.01);
+        }
+        check(!vertices::removeVertex(v, tl, 0), "H : une ligne garde 2 sommets");
+        // Une formule sur les points : ils ne se changent pas sur le dessin.
+        v.object(id)->setExpr("points", "Forme");
+        check(!vertices::editable(v, t) && !vertices::moveVertex(v, t, 0, {0, 0}), "H : des points en formule ne se changent pas sur le dessin");
+    }
+}
+
+void lotH11212_pointsDepuis() {
+    std::printf("1.12.12 (lot H) : Points depuis une source, en marche et dans l'editeur\n");
+    Project p;
+    HmiType pt;
+    pt.id = p.allocate();
+    pt.name = "T_Point_H";
+    pt.members = {{"X", "REAL", "", ""}, {"Y", "REAL", "", ""}};
+    p.programs.types.push_back(pt);
+    p.programs.variables.push_back(hmiVar(p, "Courbe_H", "ARRAY[0..5] OF REAL", "[0, 0, 50, 100, 100, 0]"));
+    p.programs.variables.push_back(hmiVar(p, "Profil_H", "ARRAY[1..3] OF T_Point_H"));
+    p.programs.variables.push_back(hmiVar(p, "Liste_H", "LIST OF REAL", "[0, 0, 10, 10]"));
+    p.programs.variables.push_back(hmiVar(p, "Niveau_H", "REAL"));
+    View v = makeView(p, "Vue_PH");
+    const Id line = edit::add(p, v, Kind::Line, 0, 0);
+    v.object(line)->setNumber("w", 200);
+    v.object(line)->setNumber("h", 100);
+    v.object(line)->set("pointsFrom", "Courbe_H");
+    const Id poly = edit::add(p, v, Kind::Polygon, 300, 0);   // 120 x 100
+    v.object(poly)->set("pointsFrom", "Profil_H[*].X, Profil_H[*].Y");
+    v.object(poly)->set("pointsXMin", "0");
+    v.object(poly)->set("pointsXMax", "10");
+    v.object(poly)->set("pointsYMin", "0");
+    v.object(poly)->set("pointsYMax", "10");
+    v.object(poly)->set("points", "");   // aucun point ecrit : la source les donne
+    const Id lst = edit::add(p, v, Kind::Line, 0, 300);   // 160 x 0
+    v.object(lst)->setNumber("h", 20);
+    v.object(lst)->set("pointsFrom", "Liste_H");
+    const Id plain = edit::add(p, v, Kind::Line, 0, 500);
+    p.views = {v};
+    p.config.startView = v.id;
+    // ---- l'apercu de l'editeur : les valeurs initiales
+    {
+        const auto pts = vertices::previewPoints(p, *p.views[0].object(line));
+        check(pts.size() == 3 && pts[0].x == 0 && pts[0].y == 100 && pts[1].x == 100 && pts[1].y == 0 && pts[2].x == 200 && pts[2].y == 100,
+              "H : l'aper\xC3\xA7u de l'\xC3\xA9" "diteur - les valeurs initiales de Courbe_H, x et y altern\xC3\xA9s, dans le cadre (Y min en bas)");
+        const auto lp = vertices::previewPoints(p, *p.views[0].object(lst));
+        check(lp.size() == 2 && lp[0].x == 0 && lp[0].y == 20 && lp[1].x == 160 && lp[1].y == 0, "H : ... une LIST : les nombres de son litt\xC3\xA9ral");
+        check(vertices::previewPoints(p, *p.views[0].object(poly)).size() == 3, "H : ... un tableau de structures : un point par \xC3\xA9l\xC3\xA9ment");
+        check(!vertices::editable(*p.views[0].object(poly)), "H : des points depuis une source ne se changent pas sur le dessin");
+    }
+    // ---- Generer : la source, comme celles du lot E ; rien de bloquant
+    {
+        bool blocked = false;
+        for (const auto& i : generate(p, [](std::string_view) { return false; }))
+            if ((i.object == line || i.object == poly || i.object == lst) && i.severity != Issue::Severity::Info) {
+                blocked = true;
+                std::printf("  %s\n", i.message.c_str());
+            }
+        check(!blocked, "H : G\xC3\xA9n\xC3\xA9rer accepte un tableau de nombres, un tableau de structures, une LIST ; un polygone sans point \xC3\xA9" "crit n'est pas \xC2\xAB sans assez de points \xC2\xBB");
+        Project q = p;
+        q.views[0].object(line)->set("pointsFrom", "Inconnue_H");
+        q.views[0].object(poly)->set("pointsFrom", "Niveau_H");
+        q.views[0].object(lst)->set("pointsXMin", "5");
+        q.views[0].object(lst)->set("pointsXMax", "1");
+        bool unknown = false, scalar = false, scale = false, error = false;
+        for (const auto& i : generate(q, [](std::string_view) { return false; })) {
+            if (i.object == line && i.severity == Issue::Severity::Warning && i.message.find("source inconnue") != std::string::npos) unknown = true;
+            if (i.object == poly && i.severity == Issue::Severity::Warning && i.message.find("n'a pas d'\xC3\xA9l\xC3\xA9ments") != std::string::npos) scalar = true;
+            if (i.object == lst && i.severity == Issue::Severity::Warning && i.message.find("chelle X") != std::string::npos) scale = true;
+            if ((i.object == line || i.object == poly || i.object == lst) && i.severity == Issue::Severity::Error) error = true;
+        }
+        check(unknown && scalar && scale && !error, "H : une source inconnue, un REAL seul, une \xC3\xA9" "chelle \xC3\xA0 l'envers : des avertissements, rien de bloquant");
+    }
+    // ---- en marche : les points lus dans la source, a chaque cycle
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    const double courbe[6] = {0, 0, 100, 100, 200, 0};
+    for (int i = 0; i < 6; ++i) rt.environment().write("Courbe_H[" + std::to_string(i) + "]", sim::Value::real(courbe[i]));
+    const double profil[6] = {1, 1, 9, 1, 5, 9};
+    for (int i = 0; i < 3; ++i) {
+        rt.environment().write("Profil_H[" + std::to_string(i + 1) + "].X", sim::Value::real(profil[2 * i]));
+        rt.environment().write("Profil_H[" + std::to_string(i + 1) + "].Y", sim::Value::real(profil[2 * i + 1]));
+    }
+    rt.tick(0.1);
+    const auto pointsOf = [&](Id id) {
+        const View* shown = rt.composedView(p.views[0].id);
+        const Object* o = shown ? shown->object(id) : nullptr;
+        return o ? o->text("points") : std::string("?");
+    };
+    same(pointsOf(line), "0,100 100,0 200,100", "H : en marche, les points lus dans Courbe_H (x, y altern\xC3\xA9s), \xC3\xA0 l'\xC3\xA9" "chelle des donn\xC3\xA9" "es");
+    same(pointsOf(poly), "12,90 108,90 60,10", "H : ... dans Profil_H[*].X, Profil_H[*].Y, \xC3\xA0 l'\xC3\xA9" "chelle 0..10 \xC3\xA9" "crite");
+    rt.environment().write("Profil_H[3].Y", sim::Value::real(5));
+    rt.tick(0.2);
+    same(pointsOf(poly), "12,90 108,90 60,50", "H : ... qui suivent la variable au cycle suivant");
+    check(rt.setRichVariable("Liste_H", "[0, 0, 10, 10, 20, 0]"), "la LIST grandit en marche");
+    rt.tick(0.3);
+    same(pointsOf(lst), "0,20 80,0 160,20", "H : une LIST : un point de plus au cycle suivant");
+    same(pointsOf(plain), "0,0 160,0", "H : une ligne sans source garde ses points \xC3\xA9" "crits");
+    rt.stop(1.0);
+    // ---- enregistre et relu ; un objet qui ne s'en sert pas ne les porte pas
+    const auto files = serializeProject(p);
+    const FileReader reader = [&](const std::string& path, std::string& content) {
+        for (const auto& f : files)
+            if (f.path == path) {
+                content.assign(f.data->begin(), f.data->end());
+                return true;
+            }
+        return false;
+    };
+    const auto back = parseProject(reader);
+    const View* bv = back ? back->view(p.views[0].id) : nullptr;
+    const Object* bp = bv ? bv->object(poly) : nullptr;
+    check(bp && bp->text("pointsFrom") == "Profil_H[*].X, Profil_H[*].Y" && bp->text("pointsYMax") == "10",
+          "H : relu - Points depuis et son \xC3\xA9" "chelle");
+    const Object* bl = bv ? bv->object(plain) : nullptr;
+    check(bl && !bl->find("pointsFrom") && !bl->find("pointsXMin"), "H : une ligne qui ne s'en sert pas ne les porte pas (son fichier ne change pas)");
+}
+
+void lotH11212_planZones() {
+    std::printf("1.12.12 (lot H) : le plan a zones - sa variable lue et ecrite, les groupes des objets\n");
+    Project p;
+    p.programs.variables.push_back(hmiVar(p, "Zone_Nom_H", "STRING"));
+    p.programs.variables.push_back(hmiVar(p, "Zone_Num_H", "INT"));
+    p.programs.variables.push_back(hmiVar(p, "Zone_Reel_H", "REAL"));
+    p.programs.variables.push_back(hmiVar(p, "Defaut_H", "BOOL"));
+    AlarmDef a;
+    a.id = p.allocate();
+    a.name = "Alarme_A";
+    a.condition = "Defaut_H";
+    a.group = "Groupe_A";
+    p.alarms.push_back(a);
+    View v = makeView(p, "Vue_ZH");
+    const std::string zones = "Armoire A | 0,0 50,0 50,100 0,100 | Groupe_A\nArmoire B | 50,0 100,0 100,100 50,100";
+    const Id map = edit::add(p, v, Kind::ZoneMap, 0, 0);
+    v.object(map)->set("mapZones", zones);
+    v.object(map)->set("variable", "Zone_Nom_H");
+    const Id map2 = edit::add(p, v, Kind::ZoneMap, 0, 400);
+    v.object(map2)->set("mapZones", zones);
+    v.object(map2)->set("variable", "Zone_Num_H");
+    // Les groupes des alarmes des objets (Vue_ZH.*), un repere : des zones qui ne sont pas calmes pour rien.
+    const Id pompe = edit::add(p, v, Kind::Pump, 700, 0);
+    v.object(pompe)->setExpr("fault", "Defaut_H");
+    const Id map3 = edit::add(p, v, Kind::ZoneMap, 700, 400);
+    v.object(map3)->set("mapZones", "Pompes | 0,0 50,0 50,100 | Vue_ZH.*\nRep\xC3\xA8re | 50,0 100,0 100,100 | $Groupe_A$");
+    p.views = {v};
+    p.config.startView = v.id;
+    {
+        bool falseInfo = false;
+        for (const auto& i : generate(p, [](std::string_view) { return false; }))
+            if (i.object == map3 && i.message.find("aucune alarme du groupe") != std::string::npos) {
+                falseInfo = true;
+                std::printf("  %s\n", i.message.c_str());
+            }
+        check(!falseInfo, "H : une zone sur le groupe des alarmes des objets (Vue_ZH.*) ou rep\xC3\xA9r\xC3\xA9" "e ($Groupe_A$) n'est plus "
+                          "\xC2\xAB sans alarme \xC2\xBB (avant : une fausse information)");
+        Project q = p;
+        q.views[0].object(map2)->set("variable", "Zone_Reel_H");
+        bool warned = false, blocked = false;
+        for (const auto& i : generate(q, [](std::string_view) { return false; })) {
+            if (i.object == map2 && i.severity == Issue::Severity::Warning && i.message.find("Zone_Reel_H est un REAL") != std::string::npos) warned = true;
+            if ((i.object == map || i.object == map2) && i.severity == Issue::Severity::Error) blocked = true;
+        }
+        check(warned && !blocked, "H : G\xC3\xA9n\xC3\xA9rer - la zone choisie dans un REAL : un avertissement (avant : rien) ; un STRING, un INT : rien");
+    }
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    rt.tick(0.05);
+    rt.objectPart(map, "zone:0", 0.1);
+    check(rt.variable("Zone_Nom_H") && rt.variable("Zone_Nom_H")->asString() == "Armoire A" && rt.selectedZone() == "Groupe_A",
+          "H : un clic \xC3\xA9" "crit le nom de la zone dans un STRING (avant : son groupe) ; son groupe reste la zone choisie des alarmes");
+    rt.objectPart(map2, "zone:1", 0.15);
+    check(rt.variable("Zone_Num_H") && rt.variable("Zone_Num_H")->asInteger() == 2,
+          "H : ... son num\xC3\xA9ro dans un entier (2 : la deuxi\xC3\xA8me ; avant : un texte, refus\xC3\xA9)");
+    rt.tick(0.2);
+    check(rt.selectedZone() == "Armoire B", "H : ce que le clic a \xC3\xA9" "crit n'est pas relu comme un choix du programme");
+    rt.environment().write("Zone_Num_H", sim::Value::integer(sim::Type::Int, 1));
+    rt.tick(0.3);
+    check(rt.selectedZone() == "Groupe_A", "H : un programme \xC3\xA9" "crit 1 : la premi\xC3\xA8re zone est choisie (avant : la variable n'\xC3\xA9tait jamais relue)");
+    rt.environment().write("Zone_Nom_H", sim::Value::text("Armoire B"));
+    rt.tick(0.4);
+    check(rt.selectedZone() == "Armoire B", "H : ... un STRING : la zone de ce nom");
+    rt.environment().write("Zone_Num_H", sim::Value::integer(sim::Type::Int, 0));
+    rt.tick(0.5);
+    check(rt.selectedZone().empty(), "H : ... 0 : plus de zone choisie");
+    rt.stop(1.0);
+}
+
+void lotH11212_reference() {
+    std::printf("1.12.12 (lot H) : la courbe de reference d'une courbe XY - ses points sur le dessin\n");
+    Project p;
+    View v = makeView(p, "Vue_RH");
+    const Id xy = edit::add(p, v, Kind::XYChart, 0, 0);
+    Object* o = v.object(xy);
+    // La zone de trace : 50 a gauche, 12 a droite, 10 en haut (ni titre ni legende), 22 en bas (fontSize 10) - 300 x 200.
+    o->setNumber("x", 0);
+    o->setNumber("y", 0);
+    o->setNumber("w", 362);
+    o->setNumber("h", 232);
+    o->set("text", "");
+    o->setFlag("legend", false);
+    o->set("xLabel", "");
+    o->set("yLabel", "");
+    o->setNumber("fontSize", 10);
+    o->set("reference", "100,100;0,0 50,50");
+    const auto l = vertices::listOf(*o);
+    check(l.entries.size() == 3 && l.entries[0].x == 0 && l.entries[2].x == 100 && l.problems.empty(),
+          "H : la r\xC3\xA9" "f\xC3\xA9rence lue comme le dessin la lit (le point-virgule s\xC3\xA9pare aussi), rang\xC3\xA9" "e par x");
+    vertices::XYPlot pl;
+    check(vertices::xyPlot(*o, pl) && pl.area.x == 50 && pl.area.y == 10 && pl.area.w == 300 && pl.area.h == 200,
+          "H : la zone de trac\xC3\xA9 de la courbe XY, comme l'\xC3\xA9" "diteur la dessine");
+    const vertices::Target t{vertices::Target::What::Reference, xy, -1};
+    check(vertices::editable(v, t), "H : une r\xC3\xA9" "f\xC3\xA9rence \xC3\xA9" "crite, \xC3\xA9" "chelle fixe : elle se r\xC3\xA8gle sur le dessin");
+    const auto pts = vertices::points(v, t);
+    check(pts.size() == 3 && pts[1].x == 200 && pts[1].y == 110, "H : 50,50 au milieu de la zone de trac\xC3\xA9 (200, 110)");
+    check(vertices::moveVertex(v, t, 1, {230, 70}), "H : un point gliss\xC3\xA9");
+    same(v.object(xy)->text("reference"), "0,0 60,70 100,100", "H : ... r\xC3\xA9\xC3\xA9" "crite dans les unit\xC3\xA9s des axes, rang\xC3\xA9" "e");
+    check(vertices::moveVertex(v, t, 1, {400, 70}), "H : gliss\xC3\xA9 au-del\xC3\xA0 de son voisin ...");
+    same(v.object(xy)->text("reference"), "0,0 100,70 100,100", "H : ... il s'arr\xC3\xAAte \xC3\xA0 son x (la courbe reste y(x))");
+    check(vertices::insertVertex(v, t, 0, {80, 160}) == 1, "H : un point ins\xC3\xA9r\xC3\xA9 sur le premier segment");
+    same(v.object(xy)->text("reference"), "0,0 10,25 100,70 100,100", "H : ... \xC3\xA0 sa place (10, 25)");
+    check(vertices::removeVertex(v, t, 1) && vertices::removeVertex(v, t, 0) && !vertices::removeVertex(v, t, 0),
+          "H : retir\xC3\xA9s jusqu'\xC3\xA0 2 : le dessin en garde 2");
+    same(v.object(xy)->text("reference"), "100,70 100,100", "H : ... les deux derniers");
+    v.object(xy)->set("scale", "auto");
+    check(!vertices::editable(v, t), "H : \xC3\xA9" "chelle auto : pas sur le dessin (l'\xC3\xA9" "chelle suivrait le point)");
+    v.object(xy)->set("scale", "fixe");
+    v.object(xy)->set("reference", "Ref[*].X, Ref[*].Y");
+    check(!vertices::editable(v, t) && !vertices::listEditable(*v.object(xy)), "H : une r\xC3\xA9" "f\xC3\xA9rence depuis une source : ni sur le dessin, ni dans Contenu");
+    v.object(xy)->set("reference", "0,0 10, 20");
+    check(!vertices::editable(v, t) && !vertices::listEditable(*v.object(xy)),
+          "H : une r\xC3\xA9" "f\xC3\xA9rence que le dessin ne lit pas : elle se corrige dans Propri\xC3\xA9t\xC3\xA9s (rien n'est r\xC3\xA9\xC3\xA9" "crit)");
+    v.object(xy)->set("reference", "");
+    check(vertices::listEditable(*v.object(xy)) && vertices::listMinimum(*v.object(xy)) == 0,
+          "H : une r\xC3\xA9" "f\xC3\xA9rence vide se commence dans Contenu (elle peut s'y vider)");
+}
+
 int main(int argc, char** argv) {
     // 1.11.10 : HMI_TEST_1110=1 - les fonctions et les popups des symboles, seules.
     if (const char* only = std::getenv("HMI_TEST_1110"); only && *only == '1') {
         fonctionsSymbole11110();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
+    // 1.12.12 : HMI_TEST_11212H1=1 - le lot H (les sommets sur le dessin), seul.
+    if (const char* only = std::getenv("HMI_TEST_11212H1"); only && *only == '1') {
+        lotH11212_points();
+        lotH11212_pointsDepuis();
+        lotH11212_planZones();
+        lotH11212_reference();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -24899,6 +25227,10 @@ int main(int argc, char** argv) {
     xyProfil1127();                   // 1.12.7 (lot E) : la courbe XY en profil
     etatsDepuis1127();                // 1.12.7 (lot E) : Etats depuis une source
     enregistre1127();                 // 1.12.7 (lots D et E) : enregistre et relu
+    lotH11212_points();               // 1.12.12 (lot H) : les points, Generer, les gestes sur un sommet
+    lotH11212_pointsDepuis();         // 1.12.12 (lot H) : Points depuis une source
+    lotH11212_planZones();            // 1.12.12 (lot H) : le plan a zones, sa variable lue et ecrite
+    lotH11212_reference();            // 1.12.12 (lot H) : la courbe de reference d'une courbe XY sur le dessin
     enumerationsLangage110();         // 1.10 (S1, decision 15) : les enumerations dans les scripts
     operateurs110();                  // 1.10 (chantier S2) : les operateurs des symboles et des types IHM
     operateurs1101();                 // 1.10.1 (chantier U2) : a, b et Resultat (types, legende, exemple, Compiler)

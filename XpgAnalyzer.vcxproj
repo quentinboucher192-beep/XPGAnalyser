@@ -575,6 +575,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\hmi\HmiTypeForms.cpp" />
     <ClCompile Include="src\hmi\HmiTypeRegistry.cpp" />
     <ClCompile Include="src\hmi\HmiVarMotion.cpp" />
+    <ClCompile Include="src\hmi\HmiVertices.cpp" />
     <ClCompile Include="src\hmi\HmiViewPaths.cpp" />
     <ClCompile Include="src\project\ActivationConditions.cpp" />
     <ClCompile Include="src\project\GrafcetCheck.cpp" />
@@ -980,6 +981,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\hmi\HmiTypeForms.hpp" />
     <ClInclude Include="src\hmi\HmiTypeRegistry.hpp" />
     <ClInclude Include="src\hmi\HmiVarMotion.hpp" />
+    <ClInclude Include="src\hmi\HmiVertices.hpp" />
     <ClInclude Include="src\hmi\HmiViewPaths.hpp" />
     <ClInclude Include="src\platform\AtlasSymbols.hpp" />
     <ClInclude Include="src\project\ActivationConditions.hpp" />

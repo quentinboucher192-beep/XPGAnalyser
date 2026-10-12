@@ -37,6 +37,11 @@
 //    langue, gestion   gestion des utilisateurs, les zones (groupes d'alarmes, ceux des objets
 //    des utilisateurs, compris) ; ce qui a ete tape et n'est pas propose (un repere $Zone$)
 //    resume par zone   reste, coche.
+//    Ligne, polygone   (1.12.12, lot H) les SOMMETS : X et Y, une ligne par sommet (un
+//                      repere garde case par case) ; le cadre suit les points. Le dessin
+//                      et Contenu choisissent le meme sommet.
+//    Courbe XY         (1.12.12, lot H) ses courbes, ou (Montrer) les points de sa courbe
+//                      de reference, ranges par x croissant.
 //  Un objet qui ne peut rien contenir (une vanne, un bouton) : pas d'onglet.
 //
 //  Tout passe par des commandes de vue : Ctrl+Z reprend une ligne ajoutee, une
@@ -69,8 +74,10 @@ public:
     // d'une liste ; Bands - les zones de couleur d'un bargraphe, d'un cadran ; Schedule - les plages
     // d'un programmateur ; Checks - les cases a cocher (langues, boutons, zones d'un resume).
     // SourceColumns - un tableau dont les lignes viennent d'une source (Lignes depuis) : ses colonnes.
+    // 1.12.12 (lot H) : Points - les sommets d'une ligne, d'un polygone ; les points de la courbe de
+    // reference d'une courbe XY (Montrer : la reference).
     enum class Mode : std::uint8_t { None, Table, Trend, AnimatedImage, RecipeManager, Zones, Tabs, NavItems, Members, States,
-                                     Choices, Bands, Schedule, Checks, SourceColumns };
+                                     Choices, Bands, Schedule, Checks, SourceColumns, Points };
 
     HmiContentPanel(std::string id, hmi::DocumentPtr doc, hmi::Id view, Apply apply);
 
@@ -99,13 +106,21 @@ public:
     // "shown" (TRUE/FALSE), "title", "format".
     // 1.12.7 (lot E) : multi-etats, chronogramme, image animee "fromEnum" (index -1, le nom
     // d'une enumeration du projet) : un etat par valeur.
+    // 1.12.12 (lot H) : sommets "x", "y" (un nombre, ou un texte a repere $X$ ; la reference d'une
+    // courbe XY : un nombre) ; courbe XY "show" (les courbes / la reference, index -1).
     bool setField(int index, const std::string& field, const std::string& value);
+    // 1.12.12 (lot H) : « Ajouter » d'un plan a zones trace la zone sur le dessin (l'editeur relaie au
+    // canevas : traceRequested) ; sans editeur (les essais), une zone rectangulaire comme avant.
+    void setZoneTracer(bool on) noexcept { zoneTracer_ = on; }
 
     [[nodiscard]] HmiToolStrip&     tools() noexcept { return *tools_; }
     [[nodiscard]] ui::TableView&    table() noexcept { return *table_; }
     [[nodiscard]] ui::PropertyGrid& grid() noexcept { return *grid_; }
     // Le nombre d'elements a change (la pastille de l'onglet).
     const core::SignalPtr<std::size_t> countChanged = core::Signal<std::size_t>::create();
+    // 1.12.12 (lot H) : une ligne choisie (le sommet, la zone que le dessin montre) ; « Ajouter » d'un plan.
+    const core::SignalPtr<int>         rowChosen = core::Signal<int>::create();
+    const core::SignalPtr<>            traceRequested = core::Signal<>::create();
 
 protected:
     void onLayout() override;
@@ -128,6 +143,9 @@ private:
     int              selected_{-1};
     int              lastColumn_{-1};      // la colonne de la derniere case editee (retirer la colonne)
     bool             chartStates_{false};  // 1.12.7 : un chronogramme montre ses etats (sinon ses lignes)
+    bool             zoneTracer_{false};   // 1.12.12 (lot H) : « Ajouter » d'un plan trace la zone
+    bool             xyReference_{false};  // 1.12.12 (lot H) : une courbe XY montre sa reference (sinon ses courbes)
+    bool             refreshing_{false};   // 1.12.12 (lot H) : refait par le document - rowChosen se tait
     std::size_t      lastCount_{static_cast<std::size_t>(-1)};
     core::ConnectionScope links_;
 };

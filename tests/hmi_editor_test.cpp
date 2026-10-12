@@ -142,6 +142,7 @@
 #include "../src/hmi/HmiNotify.hpp"
 #include "../src/hmi/HmiReports.hpp"
 #include "../src/hmi/HmiEdit.hpp"
+#include "../src/hmi/HmiVertices.hpp"   // 1.12.12 (lot H) : les sommets sur le dessin
 #include "../src/hmi/HmiHistory.hpp"
 #include "../src/hmi/HmiPublicVars.hpp"
 #include "../src/hmi/HmiRuntime.hpp"
@@ -29793,6 +29794,286 @@ void lotE1127_editeur() {
     }
 }
 
+// 1.12.12 (lot H) : LES SOMMETS SUR LE DESSIN - une ligne, un polygone choisis seuls : glisser une poignee (la
+// grille ; Alt : sans), inserer un sommet d'un double-clic sur un segment, le retirer (Suppr, le menu), un pas
+// d'annulation chacun, le cadre qui suit les points ; le tableau X / Y de Contenu en accord avec le dessin ; une
+// zone d'un plan reglee sur le dessin, une autre tracee a la souris. HMI_TEST_11212H1=1 les lance seuls.
+void lotH11212_dessin() {
+    std::printf("1.12.12 (lot H) : les sommets sur le dessin, le tableau X / Y, les zones d'un plan\n");
+    using Mode = app::HmiContentPanel::Mode;
+    // ---- un polygone : glisser un sommet, en inserer un, le retirer ; un pas d'annulation chacun
+    {
+        Bench b;
+        auto& canvas = b.editor->canvas();
+        const Id poly = b.place(Kind::Polygon, 100, 100);   // 120 x 100 : sommets a l'ecran (160,100) (220,200) (100,200)
+        b.editor->layout();
+        check(canvas.vertexTarget().valid() && canvas.vertexTarget().object == poly,
+              "H : un polygone choisi seul : ses sommets se r\xC3\xA8glent sur le dessin (avant : son cadre seulement)");
+        const auto pointsOf = [&] { return b.v().object(poly) ? b.v().object(poly)->text("points") : std::string("?"); };
+        b.drag(b.screen(160, 100), b.screen(153, 62));
+        same_text(pointsOf(), "50,0 120,140 0,140", "H : glisser le sommet 1 - pos\xC3\xA9 au pas de la grille (150, 60)");
+        const Box moved = b.v().object(poly)->box();
+        check(moved.x == 100 && moved.y == 60 && moved.w == 120 && moved.h == 140, "H : le cadre suit les points (100, 60, 120 x 140)");
+        check(canvas.selectedVertex() == 0, "H : le sommet gliss\xC3\xA9 reste choisi");
+        (void)b.stack.undo();
+        same_text(pointsOf(), "60,0 120,100 0,100", "H : un seul Ctrl+Z reprend le glisser entier");
+        near(b.v().object(poly)->box().y, 100, "H : ... et le cadre");
+        b.drag(b.screen(160, 100), b.screen(153, 62), ui::KeyMods{false, false, true, false});
+        same_text(pointsOf(), "53,0 120,138 0,138", "H : Alt + glisser : sans la grille (153, 62)");
+        check(b.v().objects.size() == 1, "H : ... sans copie (Alt sur un sommet ne duplique pas l'objet)");
+        (void)b.stack.undo();
+        // Un double-clic sur un segment : un sommet de plus, la, en un pas.
+        b.down(b.screen(160, 200));
+        b.up(b.screen(160, 200));
+        b.down(b.screen(160, 200), {}, 2);
+        b.up(b.screen(160, 200));
+        same_text(pointsOf(), "60,0 120,100 60,100 0,100", "H : un double-clic sur le segment du bas ins\xC3\xA8re un sommet, l\xC3\xA0 (avant : rien)");
+        check(canvas.selectedVertex() == 2, "H : le sommet ins\xC3\xA9r\xC3\xA9 est choisi");
+        (void)b.stack.undo();
+        same_text(pointsOf(), "60,0 120,100 0,100", "H : Ctrl+Z le reprend");
+        (void)b.stack.redo();
+        // Le clic droit sur une poignee : « Retirer le sommet ».
+        canvas.dispatch(ui::MouseDown{b.screen(160, 200), ui::MouseButton::Right, 1, {}});
+        canvas.dispatch(ui::MouseUp{b.screen(160, 200), ui::MouseButton::Right, {}});
+        auto* menu = dynamic_cast<ui::PopupMenu*>(b.editor->findById("ed.context"));
+        bool offered = false, deleteKeyFree = false;
+        if (menu)
+            for (const auto& it : menu->items()) {
+                offered = offered || (it.label == "Retirer le sommet" && it.id == 5 && it.shortcut == "Suppr");
+                deleteKeyFree = deleteKeyFree || (it.label == "Supprimer" && it.shortcut.empty());
+            }
+        check(canvas.selectedVertex() == 2 && offered, "H : le clic droit sur un sommet le choisit ; le menu propose \xC2\xAB Retirer le sommet \xC2\xBB");
+        check(deleteKeyFree, "H : ... Suppr est alors pour le sommet (\xC2\xAB Supprimer \xC2\xBB l'objet ne l'affiche plus)");
+        if (menu) {
+            menu->itemChosen->emit(5);
+            menu->close();
+        }
+        same_text(pointsOf(), "60,0 120,100 0,100", "H : ... qui le retire (le polygone reste)");
+        (void)b.stack.undo();
+        // Suppr retire le sommet choisi, l'objet reste.
+        b.down(b.screen(160, 200));
+        b.up(b.screen(160, 200));
+        check(canvas.selectedVertex() == 2, "H : un clic sur une poign\xC3\xA9" "e choisit le sommet");
+        b.key(ui::Key::Delete);
+        check(b.v().object(poly) && pointsOf() == "60,0 120,100 0,100", "H : Suppr retire le sommet choisi, pas le polygone");
+        (void)b.stack.undo();
+        check(pointsOf() == "60,0 120,100 60,100 0,100", "H : Ctrl+Z le rend");
+        (void)b.stack.undo();   // l'insertion : le triangle
+        b.down(b.screen(160, 100));
+        b.up(b.screen(160, 100));
+        b.key(ui::Key::Delete);
+        check(b.v().object(poly) && pointsOf() == "60,0 120,100 0,100", "H : un polygone garde 3 sommets - Suppr ne retire ni le sommet ni le polygone");
+        // Un clic sur le corps de l'objet : l'objet, plus un sommet ; Suppr le retire, comme avant.
+        b.down(b.screen(150, 170));
+        b.up(b.screen(150, 170));
+        check(canvas.selectedVertex() < 0, "H : un clic sur le polygone (pas sur un sommet) : plus de sommet choisi");
+        b.key(ui::Key::Delete);
+        check(!b.v().object(poly), "H : ... Suppr retire le polygone, comme avant");
+    }
+    // ---- une ligne : deux sommets au moins ; plusieurs objets choisis : le cadre commun, comme avant
+    {
+        Bench b;
+        auto& canvas = b.editor->canvas();
+        const Id line = b.place(Kind::Line, 100, 100);   // 160 x 0 : (100,100) (260,100)
+        b.editor->layout();
+        b.drag(b.screen(260, 100), b.screen(260, 160));
+        same_text(b.v().object(line)->text("points"), "0,0 160,60", "H : une ligne : son bout gliss\xC3\xA9 vers le bas");
+        near(b.v().object(line)->box().h, 60, "H : ... son cadre prend de la hauteur");
+        b.key(ui::Key::Delete);
+        check(b.v().object(line) && b.v().object(line)->text("points") == "0,0 160,60", "H : une ligne garde 2 sommets");
+        // Les fleches deplacent le sommet choisi (Maj : le pas de la grille) ; la suite s'annule d'un Ctrl+Z.
+        b.key(ui::Key::Right);
+        b.key(ui::Key::Right);
+        same_text(b.v().object(line)->text("points"), "0,0 162,60", "H : les fl\xC3\xA8" "ches d\xC3\xA9placent le sommet choisi, pas la ligne");
+        b.key(ui::Key::Down, ui::KeyMods{false, true, false, false});
+        same_text(b.v().object(line)->text("points"), "0,0 162,70", "H : Maj + fl\xC3\xA8" "che : le pas de la grille");
+        (void)b.stack.undo();
+        same_text(b.v().object(line)->text("points"), "0,0 160,60", "H : ... un Ctrl+Z pour la suite");
+        const Id rect = b.place(Kind::Rectangle, 500, 100);
+        canvas.setSelection({line, rect});
+        check(!canvas.vertexTarget().valid(), "H : plusieurs objets choisis : pas de sommets, le cadre commun (comme avant)");
+    }
+    // ---- le tableau X / Y de Contenu, en accord avec le dessin
+    {
+        Bench b;
+        auto& content = b.editor->content();
+        auto& canvas = b.editor->canvas();
+        const Id line = b.place(Kind::Line, 100, 100);   // 160 x 0 : 0,0 160,0
+        b.editor->layout();
+        const auto pointsOf = [&] { return b.v().object(line)->text("points"); };
+        check(content.object() == line && content.mode() == Mode::Points && content.count() == 2,
+              "H : une ligne a ses sommets dans Contenu, X et Y, un par ligne (avant : pas d'onglet Contenu)");
+        check(content.selectedIndex() < 0 && canvas.selectedVertex() < 0, "H : aucun sommet choisi d'office (Suppr retire la ligne)");
+        check(content.addItem() && content.count() == 3, "H : Ajouter : un sommet au bout");
+        same_text(pointsOf(), "0,0 160,0 240,0", "H : ... dans le prolongement (une demi-longueur du dernier segment)");
+        near(b.v().object(line)->box().w, 240, "H : le cadre suit (240 de large)");
+        check(content.setField(1, "y", "40"), "H : Y du sommet 2 tap\xC3\xA9 dans Contenu");
+        same_text(pointsOf(), "0,0 160,40 240,0", "H : ... le dessin suit");
+        near(b.v().object(line)->box().h, 40, "H : ... le cadre aussi");
+        check(content.setField(0, "y", "-20"), "H : Y du sommet 1 n\xC3\xA9gatif");
+        same_text(pointsOf(), "0,0 160,60 240,20", "H : ... les points restent relatifs au cadre, qui monte de 20");
+        near(b.v().object(line)->box().y, 80, "H : ... (le cadre en 80)");
+        check(content.moveItem(0, 1), "H : descendre le sommet 1");
+        same_text(pointsOf(), "160,60 0,0 240,20", "H : ... l'ordre des sommets change");
+        check(!content.setField(0, "x", "1 2") && !content.setField(0, "x", "a,b"),
+              "H : un blanc, une virgule hors d'un nombre : refus\xC3\xA9s (ils couperaient la liste)");
+        check(content.setField(0, "x", "12,5"), "H : 12,5 tap\xC3\xA9 \xC3\xA0 la fran\xC3\xA7" "aise");
+        check(pointsOf().rfind("12.5,60 ", 0) == 0, "H : ... \xC3\xA9" "crit 12.5 (une virgule couperait le point)");
+        check(content.setField(2, "x", "$Fin_X$"), "H : un rep\xC3\xA8re dans une case");
+        check(pointsOf().find("$Fin_X$,20") != std::string::npos && content.count() == 3,
+              "H : ... gard\xC3\xA9 tel quel, sa ligne reste (le dessin l'ignore, G\xC3\xA9n\xC3\xA9rer le dit)");
+        check(content.setField(1, "y", "10"), "H : une autre case chang\xC3\xA9" "e ...");
+        check(pointsOf().find("$Fin_X$,20") != std::string::npos, "H : ... le rep\xC3\xA8re reste, case par case");
+        // Le dessin et Contenu choisissent le meme sommet.
+        content.selectIndex(1);
+        check(canvas.selectedVertex() == 1, "H : un sommet choisi dans Contenu : le m\xC3\xAAme sur le dessin");
+        canvas.selectVertex(0);
+        check(content.selectedIndex() == 0, "H : ... et l'inverse");
+        check(content.removeItem(2) && content.count() == 2, "H : retirer la ligne du rep\xC3\xA8re");
+        check(!content.removeItem(0), "H : une ligne garde 2 sommets (Contenu aussi)");
+        (void)b.stack.undo();
+        check(content.count() == 3, "H : Ctrl+Z rend la ligne retir\xC3\xA9" "e");
+    }
+    // ---- une zone d'un plan : reglee sur le dessin, une autre tracee a la souris
+    {
+        Bench b;
+        auto& content = b.editor->content();
+        auto& canvas = b.editor->canvas();
+        const Id map = b.place(Kind::ZoneMap, 100, 100);
+        Object* mo = b.v().object(map);
+        mo->setNumber("w", 400);
+        mo->setNumber("h", 200);
+        mo->set("mapZones", "Armoire A | 0,0 50,0 50,100 0,100");
+        b.editor->layout();
+        check(content.mode() == Mode::Zones && content.selectedIndex() == 0 && canvas.editedZone() == 0 && canvas.vertexTarget().valid(),
+              "H : la zone choisie dans Contenu se r\xC3\xA8gle sur le dessin (avant : ses points en % se tapaient)");
+        b.drag(b.screen(300, 300), b.screen(321, 262));
+        same_text(b.v().object(map)->text("mapZones"), "Armoire A | 0,0 50,0 55,80 0,100", "H : un sommet de la zone gliss\xC3\xA9 (en % du plan)");
+        (void)b.stack.undo();
+        same_text(b.v().object(map)->text("mapZones"), "Armoire A | 0,0 50,0 50,100 0,100", "H : ... un Ctrl+Z");
+        // « Ajouter » : la zone se trace - un clic par point, un clic sur le premier la ferme.
+        content.tools().triggered->emit(1);
+        check(canvas.tracing(), "H : Ajouter une zone : elle se trace sur le plan");
+        for (const auto& pt : std::vector<std::pair<double, double>>{{120, 120}, {220, 120}, {220, 220}, {120, 120}}) {
+            b.down(b.screen(pt.first, pt.second));
+            b.up(b.screen(pt.first, pt.second));
+        }
+        const auto zones = hmi::parseMapZones(b.v().object(map)->text("mapZones"));
+        check(!canvas.tracing() && zones.size() == 2 && zones[1].name == "Zone 2" && zones[1].points.size() == 3 && zones[1].points[0].first == 5
+                  && zones[1].points[0].second == 10 && zones[1].points[2].second == 60,
+              "H : trois clics, puis un sur le premier point : la zone 2 (5,10 30,10 30,60 en % du plan)");
+        check(content.selectedIndex() == 1 && canvas.editedZone() == 1, "H : ... choisie dans Contenu et sur le dessin");
+        (void)b.stack.undo();
+        check(hmi::parseMapZones(b.v().object(map)->text("mapZones")).size() == 1, "H : ... un Ctrl+Z la retire");
+        // Un double-clic ferme aussi ; Echap abandonne.
+        canvas.startZoneTrace(map);
+        for (const auto& pt : std::vector<std::pair<double, double>>{{320, 120}, {420, 120}}) {
+            b.down(b.screen(pt.first, pt.second));
+            b.up(b.screen(pt.first, pt.second));
+        }
+        b.down(b.screen(420, 220));
+        b.up(b.screen(420, 220));
+        b.down(b.screen(420, 220), {}, 2);
+        b.up(b.screen(420, 220));
+        check(hmi::parseMapZones(b.v().object(map)->text("mapZones")).size() == 2, "H : un double-clic ferme la zone");
+        canvas.startZoneTrace(map);
+        b.down(b.screen(150, 150));
+        b.up(b.screen(150, 150));
+        b.key(ui::Key::Escape);
+        check(!canvas.tracing() && hmi::parseMapZones(b.v().object(map)->text("mapZones")).size() == 2, "H : Echap abandonne la zone en cours");
+        // Le clic droit sur le plan : « Tracer une zone ».
+        canvas.dispatch(ui::MouseDown{b.screen(450, 280), ui::MouseButton::Right, 1, {}});
+        canvas.dispatch(ui::MouseUp{b.screen(450, 280), ui::MouseButton::Right, {}});
+        auto* menu = dynamic_cast<ui::PopupMenu*>(b.editor->findById("ed.context"));
+        bool offered = false;
+        if (menu)
+            for (const auto& it : menu->items()) offered = offered || (it.label == "Tracer une zone" && it.id == 6);
+        check(offered, "H : le clic droit sur un plan propose \xC2\xAB Tracer une zone \xC2\xBB");
+        if (menu) {
+            menu->itemChosen->emit(6);
+            menu->close();
+        }
+        check(canvas.tracing(), "H : ... qui commence le trac\xC3\xA9");
+        b.key(ui::Key::Escape);
+    }
+    // ---- la courbe de reference d'une courbe XY : ses points sur le dessin (echelle fixe), et dans Contenu
+    {
+        Bench b;
+        auto& content = b.editor->content();
+        auto& canvas = b.editor->canvas();
+        const Id xy = b.place(Kind::XYChart, 100, 100);
+        Object* xo = b.v().object(xy);
+        // La zone de trace : 50 a gauche, 12 a droite ; 10 en haut (ni titre ni legende), 22 en bas (fontSize 10) :
+        // 300 x 200, de (150,110) a (450,310) - x 0..100 en 150..450, y 0..100 en 310..110.
+        xo->setNumber("w", 362);
+        xo->setNumber("h", 232);
+        xo->set("text", "");
+        xo->setFlag("legend", false);
+        xo->set("xLabel", "");
+        xo->set("yLabel", "");
+        xo->setNumber("fontSize", 10);
+        xo->set("reference", "0,0 50,50 100,100");
+        b.editor->layout();
+        content.refresh();
+        const auto refOf = [&] { return b.v().object(xy)->text("reference"); };
+        check(canvas.vertexTarget().valid() && canvas.vertexTarget().what == hmi::vertices::Target::What::Reference,
+              "H : une courbe XY choisie seule : les points de sa r\xC3\xA9" "f\xC3\xA9rence se r\xC3\xA8glent sur le dessin (avant : en texte)");
+        const auto shown = hmi::vertices::points(b.v(), canvas.vertexTarget());
+        check(shown.size() == 3 && std::fabs(shown[1].x - 300) < 0.01 && std::fabs(shown[1].y - 210) < 0.01,
+              "H : ... ses poign\xC3\xA9" "es dans la zone de trac\xC3\xA9 (50,50 en 300,210)");
+        b.drag(b.screen(300, 210), b.screen(330, 170));
+        same_text(refOf(), "0,0 60,70 100,100", "H : un point de la r\xC3\xA9" "f\xC3\xA9rence gliss\xC3\xA9 (dans les unit\xC3\xA9s des axes)");
+        check(canvas.selectedVertex() == 1, "H : ... il reste choisi");
+        (void)b.stack.undo();
+        same_text(refOf(), "0,0 50,50 100,100", "H : ... un Ctrl+Z");
+        b.drag(b.screen(300, 210), b.screen(480, 210));
+        same_text(refOf(), "0,0 100,50 100,100", "H : un point gliss\xC3\xA9 ne passe pas son voisin (la courbe reste y(x))");
+        (void)b.stack.undo();
+        // Un double-clic sur la courbe : un point de plus.
+        b.down(b.screen(225, 260));
+        b.up(b.screen(225, 260));
+        b.down(b.screen(225, 260), {}, 2);
+        b.up(b.screen(225, 260));
+        same_text(refOf(), "0,0 25,25 50,50 100,100", "H : un double-clic sur la r\xC3\xA9" "f\xC3\xA9rence ins\xC3\xA8re un point, l\xC3\xA0");
+        check(canvas.selectedVertex() == 1, "H : ... choisi");
+        b.key(ui::Key::Delete);
+        same_text(refOf(), "0,0 50,50 100,100", "H : Suppr le retire");
+        check(b.v().object(xy) != nullptr, "H : ... la courbe XY reste");
+        // Contenu : Montrer la reference - X et Y, un point par ligne, ranges par x.
+        check(content.object() == xy && content.mode() == Mode::Trend, "H : Contenu d'une courbe XY : ses courbes d'abord (comme avant)");
+        check(content.setField(-1, "show", "la r\xC3\xA9" "f\xC3\xA9rence") && content.mode() == Mode::Points && content.count() == 3,
+              "H : ... Montrer la r\xC3\xA9" "f\xC3\xA9rence : ses points, X et Y");
+        content.selectIndex(2);
+        check(canvas.selectedVertex() == 2, "H : un point choisi dans Contenu : le m\xC3\xAAme sur le dessin");
+        canvas.selectVertex(0);
+        check(content.selectedIndex() == 0, "H : ... et l'inverse");
+        check(content.setField(0, "x", "75"), "H : X du point 1 tap\xC3\xA9");
+        same_text(refOf(), "50,50 75,0 100,100", "H : ... la r\xC3\xA9" "f\xC3\xA9rence se range par x croissant");
+        check(!content.setField(0, "y", "$Haut$"), "H : un rep\xC3\xA8re dans la r\xC3\xA9" "f\xC3\xA9rence : refus\xC3\xA9 (le dessin ne la lirait plus)");
+        check(!content.moveItem(0, 1), "H : l'ordre de la r\xC3\xA9" "f\xC3\xA9rence est celui de ses x (pas de monter / descendre)");
+        check(content.addItem() && content.count() == 4, "H : Ajouter : un point apr\xC3\xA8s le dernier");
+        same_text(refOf(), "50,50 75,0 100,100 125,100", "H : ... d'un pas comme le dernier");
+        check(content.removeItem(3) && content.removeItem(2) && content.removeItem(1) && content.removeItem(0) && refOf().empty(),
+              "H : Contenu peut vider la r\xC3\xA9" "f\xC3\xA9rence (plus de courbe de r\xC3\xA9" "f\xC3\xA9rence)");
+        check(content.addItem() && refOf() == "0,50", "H : ... puis la recommencer (au d\xC3\xA9" "but de l'axe X, \xC3\xA0 mi-hauteur)");
+        (void)b.stack.undo();
+        (void)b.stack.undo();
+        (void)b.stack.undo();
+        (void)b.stack.undo();
+        (void)b.stack.undo();
+        same_text(refOf(), "50,50 75,0 100,100 125,100", "H : un Ctrl+Z par geste");
+        check(content.setField(-1, "show", "les courbes") && content.mode() == Mode::Trend, "H : Montrer les courbes : la liste d'avant");
+        // Une echelle auto, une source : pas de poignees.
+        b.v().object(xy)->set("scale", "auto");
+        check(!canvas.vertexTarget().valid(), "H : \xC3\xA9" "chelle auto : pas de poign\xC3\xA9" "es (l'\xC3\xA9" "chelle bougerait avec les points)");
+        b.v().object(xy)->set("scale", "fixe");
+        b.v().object(xy)->set("reference", "Ref[*].X, Ref[*].Y");
+        check(!canvas.vertexTarget().valid(), "H : une r\xC3\xA9" "f\xC3\xA9rence depuis une source : pas de poign\xC3\xA9" "es");
+        b.v().object(xy)->set("reference", "0,0 10, 20");
+        check(!canvas.vertexTarget().valid(), "H : une r\xC3\xA9" "f\xC3\xA9rence que le dessin ne lit pas : pas de poign\xC3\xA9" "es (elle se corrige dans Propri\xC3\xA9t\xC3\xA9s)");
+    }
+}
+
 int main(int argc, char** argv) {
     // 1.11.1 (API-V) : HMI_TEST_APIV=1 - la vue des variables de l'automate et API dans l'aide a la saisie, seules.
     if (const char* only = std::getenv("HMI_TEST_APIV"); only && *only == '1') {
@@ -29806,6 +30087,12 @@ int main(int argc, char** argv) {
         if (argc > 1) configuration_et_variables(argv[1]);
         if (argc > 1) apiVue1112_dupliquer(argv[1]);   // 1.11.2 (D13)
         if (argc > 1) valuePickerApi1113(argv[1]);     // 1.11.3 : le selecteur et les membres de l'automate
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
+    // 1.12.12 : HMI_TEST_11212H1=1 - le lot H (les sommets sur le dessin), seul.
+    if (const char* only = std::getenv("HMI_TEST_11212H1"); only && *only == '1') {
+        lotH11212_dessin();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -30023,6 +30310,7 @@ int main(int argc, char** argv) {
     lotD1127_contenu();                   // 1.12.7 (lot D) : les listes en tableau dans Contenu
     lotD1127_choix();                     // 1.12.7 (lot D) : les listes a choix de l'inspecteur
     lotE1127_editeur();                   // 1.12.7 (lot E) : depuis une enumeration, Repeter depuis
+    lotH11212_dessin();                   // 1.12.12 (lot H) : les sommets sur le dessin, le tableau X / Y, les zones
     etats1123();                       // 1.12.3 : les etats des objets multi-etats en table
     communes1123();                    // 1.12.3 : plusieurs objets choisis, leurs proprietes communes
     voixDesSons1123();                 // 1.12.3 : les voix des sons (melange)
