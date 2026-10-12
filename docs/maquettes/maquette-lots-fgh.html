@@ -1,0 +1,2087 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Lots F, G et H</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Maquette des lots F, G et H de l'audit des objets (1.12.10 a 1.12.12). Meme habillage que
+   les maquettes precedentes (docs/maquettes) : une colonne de lecture, un sommaire a gauche,
+   les fenetres de l'appli dessinees avec sa police. Tout est manipulable : les tableaux se
+   modifient, les objets suivent, Generer se recalcule. */
+:root{
+  --page:#eef0f3; --page-2:#e3e7ec; --ink:#1a1f26; --ink-2:#47505b; --ink-3:#69717c; --rule:#d3d8de;
+  --app:#eceeef; --app-2:#fbfbfc; --app-3:#e3e7ea; --app-head:#e6e9ec; --app-line:#cfd5db;
+  --app-fg:#1d232b; --app-fg-2:#4d5662; --app-fg-3:#747c87;
+  --hover:#e0e8f2; --sel:#c8dbf3; --sel-fg:#0c2547; --accent:#1f66d1; --accent-2:#e0eafa; --accent-fg:#ffffff;
+  --ok:#17834a; --ok-bg:#dff2e7; --warn:#a35c00; --warn-bg:#fbeedb; --err:#c42b2b; --err-bg:#fae5e5;
+  --calc:#0a7466; --calc-bg:#dbf1ed; --new:#6a4bd0; --new-bg:#ebe5fc; --mark:#b26b00; --mark-bg:#fff1d6;
+  --view:#ffffff; --view-grid:#eef1f4; --view-ink:#2b333d; --view-line:#9aa4b0;
+  --run:#1e9e5a; --stop:#8a939e; --fault:#d23b3b; --maint:#d98a14; --fluid:#3b82d6;
+  --shadow:0 1px 0 rgba(20,30,40,.05), 0 14px 34px -22px rgba(20,30,40,.5);
+  --ui:"Segoe UI","Noto Sans","DejaVu Sans",system-ui,sans-serif;
+  --doc:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+  --mono:"IBM Plex Mono","Cascadia Mono",Consolas,"DejaVu Sans Mono",monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --page:#0f1215; --page-2:#171b20; --ink:#e5e8ec; --ink-2:#afb6c0; --ink-3:#848c97; --rule:#272c33;
+    --app:#1b1f24; --app-2:#20252b; --app-3:#282e35; --app-head:#232930; --app-line:#333a42;
+    --app-fg:#e2e6eb; --app-fg-2:#aeb5bf; --app-fg-3:#808892;
+    --hover:#262d36; --sel:#1d3556; --sel-fg:#ffffff; --accent:#5b9bff; --accent-2:#1b2c45; --accent-fg:#0b1220;
+    --ok:#4fcb85; --ok-bg:#16301f; --warn:#f2a23c; --warn-bg:#382915; --err:#ff6d6d; --err-bg:#3a1c1f;
+    --calc:#4fd1c1; --calc-bg:#12312d; --new:#b8a1ff; --new-bg:#2a2346; --mark:#f2b24c; --mark-bg:#3a2c12;
+    --view:#14181c; --view-grid:#1c2228; --view-ink:#d6dbe1; --view-line:#5d6672;
+    --run:#3ccb7f; --stop:#7d8691; --fault:#ff5f5f; --maint:#f0a43a; --fluid:#5b9bff;
+    --shadow:0 1px 0 rgba(0,0,0,.3), 0 16px 38px -20px rgba(0,0,0,.85);
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --page:#0f1215; --page-2:#171b20; --ink:#e5e8ec; --ink-2:#afb6c0; --ink-3:#848c97; --rule:#272c33;
+  --app:#1b1f24; --app-2:#20252b; --app-3:#282e35; --app-head:#232930; --app-line:#333a42;
+  --app-fg:#e2e6eb; --app-fg-2:#aeb5bf; --app-fg-3:#808892;
+  --hover:#262d36; --sel:#1d3556; --sel-fg:#ffffff; --accent:#5b9bff; --accent-2:#1b2c45; --accent-fg:#0b1220;
+  --ok:#4fcb85; --ok-bg:#16301f; --warn:#f2a23c; --warn-bg:#382915; --err:#ff6d6d; --err-bg:#3a1c1f;
+  --calc:#4fd1c1; --calc-bg:#12312d; --new:#b8a1ff; --new-bg:#2a2346; --mark:#f2b24c; --mark-bg:#3a2c12;
+  --view:#14181c; --view-grid:#1c2228; --view-ink:#d6dbe1; --view-line:#5d6672;
+  --run:#3ccb7f; --stop:#7d8691; --fault:#ff5f5f; --maint:#f0a43a; --fluid:#5b9bff;
+  --shadow:0 1px 0 rgba(0,0,0,.3), 0 16px 38px -20px rgba(0,0,0,.85);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}*{transition:none!important;animation:none!important}}
+body{margin:0;background:var(--page);color:var(--ink);font:15px/1.6 var(--doc);padding-inline:16px;padding-block:28px 80px}
+.wrap{max-width:1280px;margin:0 auto;display:grid;grid-template-columns:196px minmax(0,1fr);gap:44px}
+@media (max-width:1020px){.wrap{grid-template-columns:minmax(0,1fr)}.toc{display:none}}
+.toc{position:sticky;top:calc(env(safe-area-inset-top,0px) + 20px);align-self:start;font-size:13px}
+.toc .ver{font:500 11px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);padding:0 10px 10px}
+.toc ol{list-style:none;margin:0;padding:0;display:grid;gap:2px}
+.toc ol ol{padding-left:12px;margin:2px 0 6px}
+.toc a{display:block;padding:4px 10px;border-radius:6px;color:var(--ink-2);text-decoration:none}
+.toc ol ol a{font-size:12.5px;padding:3px 10px}
+.toc a:hover,.toc a.on{background:var(--page-2);color:var(--ink)}
+.toc a.on{font-weight:600}
+.toc .theme{margin:14px 10px 0;display:flex;gap:4px;flex-wrap:wrap}
+main{min-width:0}
+.eyebrow{font:500 12px/1.4 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);margin:0 0 10px}
+h1{font-size:clamp(28px,3.6vw,40px);line-height:1.12;letter-spacing:-.01em;margin:0 0 14px;text-wrap:balance;font-weight:600}
+h2{font-size:clamp(21px,2.4vw,26px);line-height:1.2;margin:2px 0 8px;text-wrap:balance;font-weight:600}
+h3{font-size:16px;margin:26px 0 6px;font-weight:600;text-wrap:balance}
+p{margin:0 0 12px;max-width:76ch}
+.lead{font-size:17px;color:var(--ink-2);max-width:72ch}
+.quotes{display:grid;gap:6px;margin:18px 0 0;padding:0;list-style:none;max-width:90ch}
+.quotes li{font-size:14px;color:var(--ink-2);padding:7px 12px;border-left:3px solid var(--rule);background:var(--page-2);border-radius:0 6px 6px 0}
+section{padding-block:30px 10px;border-top:1px solid var(--rule)}
+header.hero{padding-block:2px 26px}
+.secno{font:500 12px var(--mono);color:var(--ink-3);letter-spacing:.06em;text-transform:uppercase}
+.sub{color:var(--ink-2)}
+code,kbd{font-family:var(--mono);font-size:.88em}
+code{background:var(--page-2);padding:1px 5px;border-radius:4px}
+kbd{border:1px solid var(--rule);border-bottom-width:2px;border-radius:4px;padding:0 5px;background:var(--page)}
+ul.plain{margin:6px 0 12px;padding-left:20px;max-width:76ch}
+ul.plain li{margin:3px 0}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin:14px 0 4px}
+.card{background:var(--page-2);border-radius:8px;padding:14px 16px;min-width:0}
+.card .k{font:500 11px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--calc);margin:0 0 4px}
+.card h4{margin:0 0 6px;font-size:15px}
+.card p{font-size:13.5px;color:var(--ink-2);margin:0}
+.card a{color:var(--accent)}
+.note{font-size:13.5px;color:var(--ink-2);background:var(--page-2);border-radius:8px;padding:10px 14px;margin:12px 0;max-width:90ch}
+.note b{color:var(--ink)}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px 22px;margin:8px 0}
+.ba{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;margin:10px 0}
+.ba>div{border-radius:8px;padding:10px 14px;font-size:13.5px;min-width:0}
+.ba .before{background:var(--err-bg);color:var(--ink)}
+.ba .after{background:var(--ok-bg);color:var(--ink)}
+.ba h5{margin:0 0 4px;font:600 11px var(--mono);letter-spacing:.06em;text-transform:uppercase}
+.ba .before h5{color:var(--err)} .ba .after h5{color:var(--ok)}
+.ba ul{margin:0;padding-left:18px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ---------------------------------------------------------------- la fenetre de l'appli */
+.app{background:var(--app);border:1px solid var(--app-line);border-radius:8px;font:13px/1.45 var(--ui);color:var(--app-fg);box-shadow:var(--shadow);overflow:hidden;margin:14px 0 8px}
+.app-bar{display:flex;align-items:center;gap:8px;padding:7px 12px;background:var(--app-head);border-bottom:1px solid var(--app-line);font-size:12px;color:var(--app-fg-2);flex-wrap:wrap}
+.app-bar b{color:var(--app-fg);font-weight:600}
+.app-bar .crumb{color:var(--app-fg-3)}
+.pill{font:600 10.5px var(--mono);padding:1px 6px;border-radius:4px;background:var(--accent-2);color:var(--accent);white-space:nowrap}
+.pill.new{background:var(--new-bg);color:var(--new)}
+.tabs{display:flex;gap:2px;padding:4px 10px 0;border-bottom:1px solid var(--app-line);overflow-x:auto}
+.tab{appearance:none;border:0;background:transparent;font:inherit;color:var(--app-fg-2);padding:7px 14px;border-bottom:2px solid transparent;cursor:pointer;display:flex;gap:6px;align-items:center;white-space:nowrap}
+.tab:hover{color:var(--app-fg)}
+.tab.on{color:var(--app-fg);border-bottom-color:var(--accent);font-weight:600}
+.tools{display:flex;gap:4px;align-items:center;padding:5px 8px;border-bottom:1px solid var(--app-line);flex-wrap:wrap}
+.tbtn{appearance:none;border:1px solid transparent;background:transparent;font:inherit;font-size:12px;color:var(--app-fg);padding:4px 8px;border-radius:4px;cursor:pointer;display:inline-flex;gap:5px;align-items:center;white-space:nowrap}
+.tbtn:hover{background:var(--hover);border-color:var(--app-line)}
+.tbtn.on{background:var(--accent-2);border-color:var(--accent);color:var(--accent)}
+.tbtn[disabled]{color:var(--app-fg-3);cursor:default;background:transparent;border-color:transparent}
+.tsep{width:1px;height:18px;background:var(--app-line);margin:0 4px}
+.hint{margin-left:auto;font-size:11.5px;color:var(--app-fg-3)}
+.gridwrap{overflow:auto;background:var(--app-2)}
+table.grid{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+.grid th{position:sticky;top:0;z-index:2;background:var(--app-head);color:var(--app-fg-2);font-weight:500;text-align:left;padding:5px 8px;border-bottom:1px solid var(--app-line);border-right:1px solid var(--app-line);font-size:12px;white-space:nowrap}
+.grid th.newcol{color:var(--new)}
+.grid td{padding:2px 6px;border-bottom:1px solid var(--app-3);white-space:nowrap;vertical-align:middle;height:28px}
+.grid tbody tr:hover td{background:var(--hover)}
+.grid tr.sel td{background:var(--sel);color:var(--sel-fg)}
+.grid .key{font-family:var(--mono);font-size:12px}
+.grid input{width:100%;min-width:62px;font:12.5px var(--mono);border:1px solid transparent;background:transparent;color:var(--app-fg);padding:2px 4px;border-radius:3px}
+.grid input:hover{border-color:var(--app-line)}
+.grid input:focus{border-color:var(--accent);background:var(--app-2);outline:none}
+.grid input::placeholder{color:var(--app-fg-3);font-style:italic;font-family:var(--ui)}
+#fUnitsTable{min-width:1000px}
+#fUnitsTable input{min-width:104px}
+#fUnitsTable input.narrow{min-width:52px;width:64px}
+.grid input.bad{border-color:var(--err);background:var(--err-bg)}
+.grid input.isvar{color:var(--calc)}
+.grid select{font:12px var(--ui);background:var(--app-2);color:var(--app-fg);border:1px solid var(--app-line);border-radius:3px;padding:1px 3px;max-width:100%}
+.grid .idx{font:12px var(--mono);color:var(--app-fg-3)}
+.grid .acts{text-align:right}
+.inp{font:12.5px var(--mono);padding:4px 7px;border:1px solid var(--app-line);border-radius:4px;background:var(--app-2);color:var(--app-fg);min-width:0}
+.inp.bad{border-color:var(--err);background:var(--err-bg)}
+select.inp{font-family:var(--ui)}
+.btn{appearance:none;border:1px solid var(--app-line);background:var(--app-2);color:var(--app-fg);font:inherit;font-size:12px;padding:4px 10px;border-radius:4px;cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--accent)}
+.btn.on{border-color:var(--accent);background:var(--accent-2);color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.mini{appearance:none;border:0;background:transparent;color:var(--app-fg-2);cursor:pointer;font-size:12px;padding:1px 5px;border-radius:3px}
+.mini:hover{background:var(--app-3);color:var(--app-fg)}
+.mini.x:hover{background:var(--err-bg);color:var(--err)}
+.rowbtns{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.seg{display:inline-flex;border:1px solid var(--app-line);border-radius:6px;overflow:hidden;flex-wrap:wrap}
+.seg button{appearance:none;border:0;background:var(--app-2);font:inherit;font-size:12px;padding:4px 11px;color:var(--app-fg-2);cursor:pointer;border-right:1px solid var(--app-line)}
+.seg button:last-child{border-right:0}
+.seg button.on{background:var(--accent);color:var(--accent-fg)}
+.small{font-size:12px;color:var(--app-fg-2)}
+.mono{font-family:var(--mono)}
+
+/* --------------------------------------------- l'editeur de vue : dessin + inspecteur */
+.ws{display:grid;grid-template-columns:minmax(0,1fr) 320px;min-height:340px}
+@media (max-width:880px){.ws{grid-template-columns:minmax(0,1fr)}}
+.ws>div{min-width:0}
+.canvas{position:relative;background-color:var(--view);background-image:linear-gradient(var(--view-grid) 1px,transparent 1px),linear-gradient(90deg,var(--view-grid) 1px,transparent 1px);background-size:20px 20px;overflow:auto;padding:14px}
+.canvas svg{display:block;max-width:100%;height:auto;touch-action:none;user-select:none;-webkit-user-select:none}
+.objs{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start}
+.obj{appearance:none;border:1px dashed transparent;background:transparent;border-radius:4px;padding:4px;cursor:pointer;color:var(--view-ink);font:11px var(--ui);display:grid;justify-items:center;gap:2px}
+.obj:hover{border-color:var(--view-line)}
+.obj.sel{border:1px solid var(--accent);box-shadow:0 0 0 2px var(--accent-2)}
+.obj .on{font-family:var(--mono);color:var(--app-fg-3)}
+.insp{border-left:1px solid var(--app-line);background:var(--app);display:flex;flex-direction:column;min-width:0}
+@media (max-width:880px){.insp{border-left:0;border-top:1px solid var(--app-line)}}
+.insp-head{padding:8px 10px;border-bottom:1px solid var(--app-line);display:flex;gap:6px;align-items:baseline;flex-wrap:wrap}
+.insp-head b{font-weight:600}
+.insp-head .t{font:11.5px var(--mono);color:var(--app-fg-3)}
+.props{display:grid;grid-template-columns:minmax(96px,auto) minmax(0,1fr);font-size:12.5px}
+.props>.g{grid-column:1/-1;padding:5px 10px;background:var(--app-head);color:var(--app-fg-3);font:600 10.5px var(--ui);letter-spacing:.05em;text-transform:uppercase;border-bottom:1px solid var(--app-line)}
+.props>.l{padding:4px 10px;color:var(--app-fg-2);border-bottom:1px solid var(--app-3);white-space:nowrap}
+.props>.v{padding:2px 8px;border-bottom:1px solid var(--app-3);display:flex;gap:4px;align-items:center;min-width:0}
+.props .v input[type=text]{flex:1;min-width:0;font:12.5px var(--mono);border:1px solid transparent;background:transparent;color:var(--app-fg);padding:2px 4px;border-radius:3px}
+.props .v input[type=text]:hover{border-color:var(--app-line)}
+.props .v input[type=text]:focus{border-color:var(--accent);background:var(--app-2);outline:none}
+.props .v input::placeholder{color:var(--app-fg-3);font-style:italic;font-family:var(--ui)}
+.props .v input.hand{font-weight:600}
+.props .v select{flex:1;min-width:0;font:12px var(--ui);background:var(--app-2);color:var(--app-fg);border:1px solid var(--app-line);border-radius:3px;padding:1px 3px}
+.props .v label{display:flex;gap:6px;align-items:center;cursor:pointer}
+.reset{appearance:none;border:0;background:transparent;color:var(--app-fg-3);cursor:pointer;font-size:12px;padding:0 4px;border-radius:3px}
+.reset:hover{background:var(--app-3);color:var(--accent)}
+.from{font-size:11px;color:var(--app-fg-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vchip{font:11.5px var(--mono);padding:0 6px;border-radius:9px;background:var(--calc-bg);color:var(--calc);white-space:nowrap}
+.mk{color:var(--mark);background:var(--mark-bg);border-radius:3px;padding:0 3px;font-family:var(--mono)}
+
+/* ------------------------------------------------------------------- Generer */
+.gen{border-top:1px solid var(--app-line);background:var(--app-2)}
+.gen-head{display:flex;gap:8px;align-items:center;padding:6px 10px;border-bottom:1px solid var(--app-3);font-size:12px;color:var(--app-fg-2);flex-wrap:wrap}
+.gen-head b{color:var(--app-fg)}
+.gen ul{list-style:none;margin:0;padding:4px 0;max-height:220px;overflow:auto}
+.gen li{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px;padding:3px 10px;font-size:12.5px;align-items:baseline}
+.gen li .where{font:11.5px var(--mono);color:var(--app-fg-3)}
+.gen li.none{color:var(--app-fg-3);font-style:italic;display:block}
+.sev{font:600 10.5px var(--ui);padding:0 6px;border-radius:3px;white-space:nowrap}
+.sev.err{background:var(--err-bg);color:var(--err)} .sev.warn{background:var(--warn-bg);color:var(--warn)} .sev.info{background:var(--accent-2);color:var(--accent)} .sev.ok{background:var(--ok-bg);color:var(--ok)}
+
+/* -------------------------------------------------------------- les blocs de demo */
+.demo{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0}
+@media (max-width:880px){.demo{grid-template-columns:minmax(0,1fr)}}
+.demo>div{min-width:0}
+.pane{padding:10px 12px;display:grid;gap:10px;align-content:start}
+.pane+.pane{border-left:1px solid var(--app-line)}
+@media (max-width:880px){.pane+.pane{border-left:0;border-top:1px solid var(--app-line)}}
+.pane h5{margin:0;font:600 11px var(--ui);letter-spacing:.05em;text-transform:uppercase;color:var(--app-fg-3)}
+.ctrl{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;font-size:12.5px}
+.ctrl label{display:inline-flex;gap:6px;align-items:center;cursor:pointer}
+.ctrl input[type=range]{width:min(220px,100%)}
+.ctrl output{font:12px var(--mono);min-width:5ch}
+.view{background:var(--view);border:1px solid var(--app-line);border-radius:4px;padding:10px;display:flex;justify-content:center;align-items:center;min-height:120px;overflow:hidden}
+.view svg{max-width:100%;height:auto;display:block}
+.vt{fill:var(--view-ink);font:11px var(--ui)}
+.vt.m{font-family:var(--mono)}
+.bar{display:grid;grid-template-columns:auto 1fr;gap:6px 10px;font-size:12.5px;align-items:center}
+.literal{font:12px var(--mono);background:var(--app-2);border:1px solid var(--app-line);border-radius:4px;padding:6px 8px;white-space:pre-wrap;word-break:break-word;color:var(--app-fg)}
+.literal .s{color:#b2361f} .literal .n{color:#2f7d32} .literal .k{color:var(--app-fg-3)}
+:root[data-theme="dark"] .literal .s{color:#f08a6c} :root[data-theme="dark"] .literal .n{color:#8fd18f}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .literal .s{color:#f08a6c} :root:not([data-theme="light"]) .literal .n{color:#8fd18f}}
+
+/* le texte defilant */
+.marquee{position:relative;overflow:hidden;height:34px;background:#0e1a2b;color:#ffd75e;border-radius:3px;font:600 15px var(--ui);display:flex;align-items:center;width:100%}
+.marquee span{position:absolute;white-space:nowrap;will-change:transform}
+/* la video */
+.player{position:relative;background:#000;border-radius:3px;overflow:hidden;width:100%;max-width:420px;aspect-ratio:16/9}
+.player canvas{width:100%;height:100%;display:block}
+.player .poster{position:absolute;inset:0;display:grid;place-items:center;color:#cfd6de;font:13px var(--ui);background:linear-gradient(135deg,#1d2733,#0d1218);text-align:center;padding:10px}
+.player .poster b{display:block;font-size:15px;color:#fff;margin-bottom:4px}
+.player .hud{position:absolute;left:8px;bottom:6px;font:11px var(--mono);color:#fff;background:rgba(0,0,0,.55);padding:1px 6px;border-radius:3px}
+.fmt{width:100%;border-collapse:collapse;font-size:12.5px}
+.fmt th,.fmt td{text-align:left;padding:4px 8px;border-bottom:1px solid var(--app-3)}
+.fmt th{color:var(--app-fg-2);font-weight:500;background:var(--app-head)}
+.fmt tr.cur td{background:var(--sel);color:var(--sel-fg)}
+.qrbox{display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px;align-items:start}
+@media (max-width:620px){.qrbox{grid-template-columns:minmax(0,1fr)}}
+.qrbox canvas{background:#fff;border:1px solid var(--app-line);border-radius:3px;image-rendering:pixelated;width:220px;height:220px;max-width:100%}
+.kv{display:grid;grid-template-columns:auto minmax(0,1fr);gap:3px 12px;font-size:12.5px;margin:0}
+.kv dt{color:var(--app-fg-2)} .kv dd{margin:0;font-family:var(--mono);font-size:12px}
+.meter{height:8px;border-radius:4px;background:var(--app-3);overflow:hidden}
+.meter i{display:block;height:100%;background:var(--accent)}
+.meter.full i{background:var(--err)}
+.blink{animation:blink 1s linear infinite}
+@keyframes blink{0%,49%{opacity:1}50%,100%{opacity:.35}}
+.spin{transform-box:fill-box;transform-origin:center;animation:spin 1.2s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.flow{stroke-dasharray:8 6;animation:flow .8s linear infinite}
+@keyframes flow{to{stroke-dashoffset:-14}}
+.legend{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11.5px;color:var(--app-fg-2)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="toc" aria-label="Sommaire">
+  <div class="ver">Lots F, G, H · 1.12.10 → 1.12.12</div>
+  <ol>
+    <li><a href="#top">En bref</a></li>
+    <li><a href="#f">F · Plages et seuils</a>
+      <ol>
+        <li><a href="#f1">Unités et formats</a></li>
+        <li><a href="#f2">Les objets en héritent</a></li>
+        <li><a href="#f3">La vanne et sa plage</a></li>
+        <li><a href="#f4">Les cuves en un littéral</a></li>
+      </ol>
+    </li>
+    <li><a href="#g">G · Synoptique</a>
+      <ol>
+        <li><a href="#g1">La liaison Équipement</a></li>
+        <li><a href="#g2">Le mode État</a></li>
+        <li><a href="#g3">Les arguments vérifiés</a></li>
+        <li><a href="#g4">Créer un symbole</a></li>
+        <li><a href="#g5">Les petits plus</a></li>
+      </ol>
+    </li>
+    <li><a href="#h">H · Dessin</a>
+      <ol>
+        <li><a href="#h1">Les sommets à la souris</a></li>
+        <li><a href="#h2">Les points depuis une source</a></li>
+        <li><a href="#h3">Le plan à zones</a></li>
+        <li><a href="#h4">La référence XY</a></li>
+      </ol>
+    </li>
+    <li><a href="#m">H · Médias</a>
+      <ol>
+        <li><a href="#m1">L'horloge liée</a></li>
+        <li><a href="#m2">Le texte défilant</a></li>
+        <li><a href="#m3">Le code QR jusqu'à 40</a></li>
+        <li><a href="#m4">La vidéo décodée</a></li>
+      </ol>
+    </li>
+    <li><a href="#fin">Ce qui ne change pas</a></li>
+  </ol>
+  <div class="theme seg" role="group" aria-label="Thème">
+    <button type="button" data-theme-set="light">Clair</button><button type="button" data-theme-set="auto" class="on">Auto</button><button type="button" data-theme-set="dark">Sombre</button>
+  </div>
+</nav>
+
+<main id="top">
+<header class="hero">
+  <p class="eyebrow">Maquette · XPGAnalyser IHM · lots F, G et H de l'audit des objets</p>
+  <h1>Les plages viennent de la variable, une pompe se lie en une case, et le dessin se règle à la souris</h1>
+  <p class="lead">Ce que feraient les trois derniers lots du plan de l'audit (<code>docs/AUDIT-BIBLIOTHEQUE-OBJETS.md</code>, § 4), sur des exemples que vous pouvez manipuler. Tout ce qui est encadré comme une fenêtre de l'appli se modifie : les objets suivent, et Générer se recalcule.</p>
+  <ul class="quotes">
+    <li>« fait la suite fait une maquette interactive pour montrer ce que ca ferait et code FGH d'un coup stp »</li>
+  </ul>
+  <div class="cards">
+    <div class="card"><p class="k">1.12.10 · lot F</p><h4>Plages et seuils de la variable</h4><p>Min, max et quatre seuils dans Unités et formats, la mise à l'échelle par défaut. Les objets en héritent comme de l'unité. Un tableau de structures prend ses valeurs initiales dans un littéral. <a href="#f">Voir</a></p></div>
+    <div class="card"><p class="k">1.12.11 · lot G</p><h4>Synoptique et symboles</h4><p>Une case « Équipement » lie toute une structure. Le mode « État » dessine un DÉFAUT en rouge, plus en vert. Les arguments d'un symbole sont vérifiés comme ceux d'une popup. <a href="#g">Voir</a></p></div>
+    <div class="card"><p class="k">1.12.12 · lot H</p><h4>Dessin et médias</h4><p>Les sommets se déplacent à la souris. Les points viennent d'une source. L'horloge lit une variable, le texte défilant une liste. Le code QR va jusqu'à la version 40, et la vidéo est décodée. <a href="#h">Voir</a></p></div>
+  </div>
+  <p class="note"><b>Une seule installation pour les trois versions.</b> Les projets 1.12.9 s'ouvrent et démarrent tels quels. Les objets gardent leur aspect tant qu'on ne les change pas. Les vérifications nouvelles sont des avertissements, jamais des erreurs bloquantes.</p>
+</header>
+
+<!-- ============================================================== F -->
+<section id="f">
+  <p class="secno">1.12.10 · lot F</p>
+  <h2>Les plages et les seuils se règlent une fois, sur la variable</h2>
+  <p class="sub">Aujourd'hui, la plage 0–10 bar se retape sur la jauge, le bargraphe, la cuve et le curseur. Un seuil hors plage disparaît sans un mot, et un nom de variable tapé dans un seuil est ignoré. Avec le lot F, la variable porte sa plage et ses seuils, comme elle porte déjà son unité et son format.</p>
+
+  <h3 id="f1">Configuration › Unités et formats : six colonnes de plus</h3>
+  <p>Min, Max et les quatre seuils, dans l'ordre des cuves : alarme basse, seuil bas, seuil haut, alarme haute. Une case vide n'est pas réglée. Pour une variable liée avec une mise à l'échelle, celle-ci donne la plage par défaut (en gris). Tapez une valeur, un nom de variable sans <code>=</code>, ou un seuil hors plage : Générer le dit tout de suite.</p>
+  <div class="app" id="fUnits">
+    <div class="app-bar"><b>Configuration</b><span class="crumb">› Unités et formats</span><span class="pill new">1.12.10</span></div>
+    <div class="gridwrap"><table class="grid" id="fUnitsTable"></table></div>
+    <div class="gen" id="fGenUnits"></div>
+  </div>
+
+  <h3 id="f2">Les objets en héritent, sauf ce qu'on règle à la main</h3>
+  <p>Choisissez un objet. La case « Format de la variable » devient <b>« Unité, format et plage de la variable »</b>. Une valeur héritée s'affiche en gris avec son origine. Une valeur tapée sur l'objet passe avant, et <span class="mono">↺</span> la rend à la variable. Le curseur sous le dessin simule la mesure.</p>
+  <div class="app" id="fObjects">
+    <div class="app-bar"><b>Vue_Ligne</b><span class="crumb">› éditeur de vue</span><span class="hint">Un clic choisit l'objet</span></div>
+    <div class="ws">
+      <div>
+        <div class="canvas"><div class="objs" id="fCanvas"></div></div>
+        <div class="tools">
+          <span class="small">Simulation :</span>
+          <label class="small">Pression_Ligne <input type="range" id="fSimP" min="0" max="12" step="0.1" value="6.2"> <output id="fSimPo" class="mono">6.2</output></label>
+          <label class="small">Niveau_Cuve <input type="range" id="fSimN" min="0" max="100" step="1" value="64"> <output id="fSimNo" class="mono">64</output></label>
+        </div>
+      </div>
+      <div class="insp" id="fInsp"></div>
+    </div>
+    <div class="gen" id="fGenObjects"></div>
+  </div>
+  <div class="ba">
+    <div class="before"><h5>Avant</h5><ul><li>0 et 10 retapés sur chaque objet, 4 objets à corriger quand la plage change.</li><li>Un seuil à 12 sur une jauge 0–10 n'est pas dessiné, sans un mot.</li><li><code>Consigne_Max</code> tapé dans un seuil est ignoré.</li></ul></div>
+    <div class="after"><h5>Avec le lot F</h5><ul><li>La plage se règle une fois, dans Unités et formats. Une mise à l'échelle la donne d'office.</li><li>Générer avertit : « Seuil haut 12 hors de la plage 0 … 10 ».</li><li><code>Consigne_Max</code> sans <code>=</code> est lu comme la variable.</li></ul></div>
+  </div>
+  <p class="note"><b>Les projets existants ne bougent pas.</b> Un objet 1.12.9 garde les bornes qu'il porte : elles comptent comme réglées à la main. L'héritage vaut pour les cases laissées vides, et pour les objets nouveaux, qui naissent ainsi.</p>
+
+  <h3 id="f3">La vanne : l'ouverture avec sa plage</h3>
+  <p>« Ouverture (%) » était fixée de 0 à 100. Un signal 0–27648 demandait une formule. Avec sa plage, héritée de la variable ou réglée sur l'objet, la vanne montre le bon pourcentage.</p>
+  <div class="app">
+    <div class="app-bar"><b>Vanne_V12</b><span class="crumb">› Ouverture = Pos_V12 (INT, mise à l'échelle 0 … 27648)</span></div>
+    <div class="demo">
+      <div class="pane">
+        <h5>Le signal</h5>
+        <div class="ctrl"><label>Pos_V12 <input type="range" id="fValve" min="0" max="27648" step="1" value="13824"></label><output id="fValveO">13824</output></div>
+        <div class="ctrl"><label><input type="checkbox" id="fValveRange" checked> Plage de la variable (0 … 27648)</label></div>
+        <p class="small" id="fValveTxt"></p>
+      </div>
+      <div class="pane"><h5>Le dessin</h5><div class="view" id="fValveView"></div></div>
+    </div>
+  </div>
+
+  <h3 id="f4">Un tableau de structures prend ses valeurs initiales dans un littéral</h3>
+  <p>L'écran des variables refusait une valeur initiale pour une structure : « une structure prend les valeurs initiales de son type ». Les huit cuves partaient donc toutes identiques. Il fallait un script au démarrage pour les nommer. Avec le lot F, le littéral est accepté, vérifié et appliqué au démarrage. « Éléments… » l'édite en tableau.</p>
+  <div class="app" id="fInit">
+    <div class="app-bar"><b>Variables IHM</b><span class="crumb">› Cuves</span><span class="pill new">1.12.10</span></div>
+    <div class="gridwrap"><table class="grid"><thead><tr><th>Nom</th><th>Type</th><th>Valeur initiale</th></tr></thead>
+      <tbody><tr class="sel"><td class="key">Cuves</td><td class="key">ARRAY[1..3] OF T_Cuve</td><td class="key" id="fInitLit"></td></tr></tbody></table></div>
+    <div class="demo">
+      <div class="pane">
+        <h5>Éléments… (Nom : STRING, Niveau : REAL)</h5>
+        <div class="gridwrap"><table class="grid" id="fInitTable"></table></div>
+        <div class="rowbtns"><button class="btn" type="button" id="fInitBad">Taper un membre faux</button><button class="btn" type="button" id="fInitReset">Revenir à l'exemple</button></div>
+      </div>
+      <div class="pane">
+        <h5>Au démarrage de la simulation · Cuves[*].Niveau, nommées par Cuves[*].Nom</h5>
+        <div class="view" id="fInitView"></div>
+      </div>
+    </div>
+    <div class="gen" id="fGenInit"></div>
+  </div>
+</section>
+
+<!-- ============================================================== G -->
+<section id="g">
+  <p class="secno">1.12.11 · lot G</p>
+  <h2>Une pompe, une case : la liaison Équipement et le mode État</h2>
+  <p class="sub">Une pompe <code>P1 : T_Pompe</code> demandait trois formules sur deux objets : <code>Valeur =P1.Marche</code>, <code>Défaut =P1.Defaut</code>, et le mode sur un texte à côté. Une énumération d'état était lue « ≠ 0 = marche » : un moteur en DÉFAUT était dessiné vert et tournant.</p>
+
+  <h3 id="g1">La liaison « Équipement » : toute la structure en une case</h3>
+  <p>La case Équipement prend une structure. Ses membres se lient aux rôles du symbole par leur nom : Marche, Defaut, Mode, Debit, Nom… Le tableau de correspondance se modifie, et il est mémorisé pour le type : toutes les <code>T_Pompe</code> se lient de la même façon. Ce qu'on règle à la main sur l'objet passe avant. Changez les membres de P1 et regardez la pompe.</p>
+  <div class="app" id="gEquip">
+    <div class="app-bar"><b>Pompe_1</b><span class="crumb">› Pompe (synoptique)</span><span class="pill new">1.12.11</span></div>
+    <div class="ws">
+      <div>
+        <div class="demo">
+          <div class="pane"><h5>Les membres de l'équipement (simulation)</h5><div id="gMembers" class="bar"></div></div>
+          <div class="pane"><h5>Le dessin</h5><div class="view" id="gPumpView" style="min-height:190px"></div></div>
+        </div>
+      </div>
+      <div class="insp" id="gInsp"></div>
+    </div>
+    <div class="gen" id="gGenEquip"></div>
+  </div>
+  <div class="ba">
+    <div class="before"><h5>Avant</h5><ul><li><code>Valeur =P1.Marche</code></li><li><code>Défaut =P1.Defaut</code></li><li>un texte multi-états à côté pour Auto / Manu, un autre pour le débit</li></ul></div>
+    <div class="after"><h5>Avec le lot G</h5><ul><li><code>Équipement P1</code> : une case. Le libellé, le mode et le débit suivent.</li><li><code>Pompes[2]</code>, <code>$Pompe$</code> ou un paramètre de symbole marchent aussi. Dupliquer suit l'indice.</li></ul></div>
+  </div>
+
+  <h3 id="g2">Le mode « État » : une valeur, un aspect</h3>
+  <p>Quand la Valeur est un entier ou une énumération, un petit tableau donne l'aspect de chaque valeur. Il est rempli d'office pour <code>ETAT_MOTEUR</code>, et pour une énumération du projet d'après ses noms (ARRET, MARCHE, DEFAUT, MAINT…). Il se modifie dans Contenu.</p>
+  <div class="app" id="gState">
+    <div class="app-bar"><b>Moteur_M2</b><span class="crumb">› Valeur = M2_Etat (ETAT_MOTEUR)</span></div>
+    <div class="demo">
+      <div class="pane">
+        <h5>Contenu › États (depuis ETAT_MOTEUR)</h5>
+        <div class="gridwrap"><table class="grid" id="gStateTable"></table></div>
+        <div class="ctrl"><span>M2_Etat :</span><span class="seg" id="gStateSeg"></span></div>
+      </div>
+      <div class="pane">
+        <h5>Le dessin</h5>
+        <div class="two" style="margin:0">
+          <div><p class="small" style="margin:0 0 4px">1.12.9 : « ≠ 0 = marche »</p><div class="view" id="gStateOld"></div></div>
+          <div><p class="small" style="margin:0 0 4px">1.12.11 : le mode État</p><div class="view" id="gStateNew"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3 id="g3">Les arguments d'une instance de symbole, vérifiés comme ceux d'une popup</h3>
+  <p>Générer compare chaque argument au type de son paramètre. Il signale aussi un calcul donné à un paramètre que le symbole écrit, un nom inconnu et une constante qui ne se convertit pas. Modifiez les arguments.</p>
+  <div class="app" id="gArgs">
+    <div class="app-bar"><b>Cuve_Nord</b><span class="crumb">› instance de Sym_Cuve</span></div>
+    <div class="gridwrap"><table class="grid" id="gArgsTable"></table></div>
+    <div class="gen" id="gGenArgs"></div>
+  </div>
+
+  <h3 id="g4">« Créer un symbole » propose des paramètres typés</h3>
+  <p>Les objets choisis lisent <code>P1.Marche</code>, <code>P1.Defaut</code> et <code>P1.Debit</code>. Au lieu de trois paramètres ANY, la fenêtre propose leur type. Comme les trois chemins partent de la même structure, elle propose aussi un seul paramètre <code>Pompe : T_Pompe</code>, lié par Équipement.</p>
+  <div class="app" id="gCreate">
+    <div class="app-bar"><b>Créer un symbole</b><span class="crumb">› 3 objets choisis</span></div>
+    <div class="pane" id="gCreateBody"></div>
+  </div>
+
+  <h3 id="g5">Les petits plus du synoptique</h3>
+  <div class="app">
+    <div class="demo">
+      <div class="pane">
+        <h5>Le vérin en mode booléen</h5>
+        <div class="ctrl"><label><input type="checkbox" id="gJack"> Sorti (BOOL)</label></div>
+        <div class="view" id="gJackView"></div>
+        <p class="small">Un BOOL donnait 1 % de course. En mode booléen : rentré ou sorti.</p>
+      </div>
+      <div class="pane">
+        <h5>La bouteille : le gaz dans une liste</h5>
+        <div class="ctrl"><select class="inp" id="gGas"></select></div>
+        <div class="view" id="gGasView"></div>
+        <p class="small">La couleur de l'ogive vient du gaz choisi (code couleur EN 1089-3).</p>
+      </div>
+    </div>
+    <div class="demo">
+      <div class="pane">
+        <h5>La vanne 3 voies</h5>
+        <div class="ctrl"><span class="seg" id="g3wSeg"></span><label><input type="checkbox" id="g3wL"> Boisseau en L</label></div>
+        <div class="view" id="g3wView"></div>
+        <p class="small" id="g3wTxt"></p>
+      </div>
+      <div class="pane">
+        <h5>L'instrument ISA : la boucle suit la duplication</h5>
+        <div class="rowbtns"><button class="btn" type="button" id="gIsaDup">Dupliquer ×1</button><button class="btn" type="button" id="gIsaReset">Recommencer</button></div>
+        <div class="view" id="gIsaView"></div>
+        <p class="small">Chaque copie prend le numéro suivant (101, 102, 103…), ou suit un repère <code>1$NN$</code>.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================== H dessin -->
+<section id="h">
+  <p class="secno">1.12.12 · lot H · le dessin</p>
+  <h2>Les sommets se règlent à la souris</h2>
+  <p class="sub">Les points d'une ligne, d'un polygone ou d'une zone se tapaient en texte : <code>10,20 50,20 …</code>. <code>10, 20</code> (avec une espace) était ignoré, et <code>10,5,20</code> lu de travers.</p>
+
+  <h3 id="h1">Ligne et polygone : poignées, tableau X / Y, texte</h3>
+  <p>Tirez une poignée pour déplacer un sommet. Double-cliquez sur un côté pour en ajouter un. Cliquez un sommet puis <kbd>Suppr</kbd> pour le retirer. <kbd>Ctrl</kbd>+<kbd>Z</kbd> annule. Le tableau de Contenu et le texte <code>points</code> suivent. Tapez <code>10,5,20</code> dans le texte : Générer montre la paire illisible.</p>
+  <div class="app" id="hPoly">
+    <div class="app-bar"><b>Forme_1</b><span class="crumb" id="hPolyKind">› Polygone</span><span class="pill new">1.12.12</span></div>
+    <div class="tools">
+      <span class="seg" id="hPolySeg"><button type="button" data-k="poly" class="on">Polygone</button><button type="button" data-k="line">Ligne</button></span>
+      <span class="tsep"></span>
+      <button class="tbtn" type="button" id="hUndo">↶ Annuler</button>
+      <button class="tbtn" type="button" id="hDel">✕ Retirer le sommet</button>
+      <span class="hint" id="hPolyHint">Double-clic sur un côté : un sommet de plus</span>
+    </div>
+    <div class="ws">
+      <div class="canvas" style="padding:0"><svg id="hPolySvg" viewBox="0 0 560 320" width="560" height="320" aria-label="Le dessin : la forme et ses poignées"></svg></div>
+      <div class="insp">
+        <div class="insp-head"><b>Contenu</b><span class="t">sommets</span></div>
+        <div class="gridwrap" style="max-height:220px"><table class="grid" id="hPolyTable"></table></div>
+        <div class="props"><div class="g">Points (texte)</div></div>
+        <div style="padding:6px 8px"><input class="inp" style="width:100%" id="hPolyText" spellcheck="false"></div>
+      </div>
+    </div>
+    <div class="gen" id="hGenPoly"></div>
+  </div>
+
+  <h3 id="h2">Les points depuis une source : un profil</h3>
+  <p>« Points depuis » lit un ARRAY ou une LIST de structures (<code>Profil[*].X</code>, <code>Profil[*].Y</code>), ou un ARRAY OF REAL où x et y alternent. Les points sont placés dans la boîte de l'objet selon l'échelle X et Y. Une échelle vide se règle d'après les données. Lancez la simulation : le profil suit la variable.</p>
+  <div class="app">
+    <div class="app-bar"><b>Profil_Four</b><span class="crumb">› Ligne · Points depuis Profil[*].X / Profil[*].Y</span></div>
+    <div class="demo">
+      <div class="pane">
+        <div class="props" style="border:1px solid var(--app-line);border-radius:4px">
+          <div class="g">Points depuis</div>
+          <div class="l">X</div><div class="v"><span class="mono">Profil[*].X</span></div>
+          <div class="l">Y</div><div class="v"><span class="mono">Profil[*].Y</span></div>
+          <div class="l">Échelle X</div><div class="v"><span class="mono">0 … 100</span></div>
+          <div class="l">Échelle Y</div><div class="v"><input type="text" id="hProfScale" placeholder="vide = automatique" value="0 … 1200"></div>
+        </div>
+        <div class="ctrl"><label><input type="checkbox" id="hProfRun"> Simulation : le four chauffe</label></div>
+        <p class="small">Profil : ARRAY[0..10] OF T_Point (X : REAL, Y : REAL) : 11 points.</p>
+      </div>
+      <div class="pane"><div class="view" id="hProfView"></div></div>
+    </div>
+  </div>
+
+  <h3 id="h3">Le plan à zones : les zones se tracent sur l'image</h3>
+  <p>Choisissez une zone : ses sommets se tirent sur le plan. « Ajouter une zone » : cliquez les points, puis double-cliquez pour fermer. La variable de la zone choisie est <b>lue et écrite</b>. Un clic sur une zone l'écrit, et un programme qui l'écrit change la zone montrée. Une STRING donne le nom, un entier le numéro.</p>
+  <div class="app" id="hPlan">
+    <div class="app-bar"><b>Plan_Usine</b><span class="crumb">› Plan à zones · Zone choisie = Zone_Choisie (STRING)</span></div>
+    <div class="tools">
+      <button class="tbtn" type="button" id="hPlanAdd">＋ Ajouter une zone</button>
+      <span class="tsep"></span>
+      <span class="small">Le programme écrit Zone_Choisie :=</span>
+      <select class="inp" id="hPlanProg"></select>
+      <span class="hint" id="hPlanHint"></span>
+    </div>
+    <div class="ws">
+      <div class="canvas" style="padding:0"><svg id="hPlanSvg" viewBox="0 0 560 300" width="560" height="300" aria-label="Le plan et ses zones"></svg></div>
+      <div class="insp">
+        <div class="insp-head"><b>Contenu</b><span class="t">zones</span></div>
+        <div class="gridwrap"><table class="grid" id="hPlanTable"></table></div>
+        <div class="props"><div class="g">En marche</div><div class="l">Zone_Choisie</div><div class="v"><span class="vchip" id="hPlanVar"></span></div></div>
+      </div>
+    </div>
+  </div>
+
+  <h3 id="h4">La courbe XY : la référence à la souris</h3>
+  <p>Les points de la courbe de référence se tirent dans la zone du tracé, ou se tapent dans un tableau X / Y. La mesure, en bleu, est comparée à la référence, avec sa tolérance.</p>
+  <div class="app">
+    <div class="app-bar"><b>Courbe_Pompe</b><span class="crumb">› Courbe XY · Référence (tirez les points)</span></div>
+    <div class="ws">
+      <div class="canvas" style="padding:0"><svg id="hXySvg" viewBox="0 0 560 300" width="560" height="300" aria-label="La courbe XY et sa référence"></svg></div>
+      <div class="insp">
+        <div class="insp-head"><b>Contenu</b><span class="t">référence</span></div>
+        <div class="gridwrap"><table class="grid" id="hXyTable"></table></div>
+        <div class="props"><div class="g">Tolérance</div><div class="l">± Y</div><div class="v"><input type="text" id="hXyTol" value="4"></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================== H medias -->
+<section id="m">
+  <p class="secno">1.12.12 · lot H · les médias</p>
+  <h2>L'horloge lit une variable, le texte défilant une liste, le code QR va jusqu'à 40, la vidéo est décodée</h2>
+
+  <h3 id="m1">L'horloge liée à une variable</h3>
+  <p>Sans Valeur, l'horloge montre l'heure de l'IHM, comme avant. Avec une Valeur, elle montre une TOD, une DATE_AND_TIME, une DATE, un texte ISO 8601 ou des secondes. Elle gagne aussi un format de date, 12 h ou 24 h, et un fuseau.</p>
+  <div class="app">
+    <div class="app-bar"><b>Horloge_1</b><span class="crumb">› Horloge</span></div>
+    <div class="demo">
+      <div class="pane">
+        <div class="props" style="border:1px solid var(--app-line);border-radius:4px">
+          <div class="g">Horloge</div>
+          <div class="l">Valeur</div><div class="v"><select id="mClkSrc"><option value="ihm">(vide) l'heure de l'IHM</option><option value="tod">Heure_Lot : TOD</option><option value="dt">Debut_Cycle : DATE_AND_TIME</option><option value="iso">Horodatage : STRING ISO 8601</option></select></div>
+          <div class="l">Date</div><div class="v"><select id="mClkFmt"><option value="dmy">jj/mm/aaaa</option><option value="iso">aaaa-mm-jj</option><option value="dmon">jj mmm aaaa</option><option value="long">jour jj mois aaaa</option><option value="none">pas de date</option></select></div>
+          <div class="l">Heure</div><div class="v"><span class="seg" id="mClk12"><button type="button" class="on" data-v="24">24 h</button><button type="button" data-v="12">12 h</button></span></div>
+          <div class="l">Fuseau</div><div class="v"><select id="mClkTz"><option value="local">heure locale</option><option value="utc">UTC</option><option value="+9">UTC+9 (Tokyo)</option><option value="-5">UTC−5 (New York)</option></select></div>
+        </div>
+        <div class="ctrl" id="mClkVarCtrl"><label>Heure_Lot <input type="range" id="mClkTod" min="0" max="86399" step="60" value="52200"></label><output id="mClkTodO" class="mono"></output></div>
+      </div>
+      <div class="pane"><div class="view" id="mClkView"></div></div>
+    </div>
+  </div>
+
+  <h3 id="m2">Le texte défilant : les messages depuis une liste, ou les alarmes en cours</h3>
+  <p>« Messages depuis » une LIST ou un ARRAY OF STRING : les messages défilent l'un après l'autre et suivent la liste en marche. « Les alarmes en cours » défile ce qui sonne, éventuellement d'un seul groupe. Sans source, rien ne change.</p>
+  <div class="app">
+    <div class="app-bar"><b>Bandeau_Infos</b><span class="crumb">› Texte défilant</span></div>
+    <div class="demo">
+      <div class="pane">
+        <div class="ctrl"><span class="seg" id="mMqSrc"><button type="button" data-v="txt">Texte</button><button type="button" class="on" data-v="list">Messages_Ligne</button><button type="button" data-v="alarms">Alarmes en cours</button></span></div>
+        <div id="mMqEdit"></div>
+        <div class="ctrl"><label>Séparateur <input class="inp" id="mMqSep" value="   •   " style="width:90px"></label></div>
+      </div>
+      <div class="pane"><div class="marquee" id="mMq"><span></span></div><p class="small" id="mMqTxt"></p></div>
+    </div>
+  </div>
+
+  <h3 id="m3">Le code QR jusqu'à la version 40</h3>
+  <p>Le guide promettait les versions 1 à 40, mais le code s'arrêtait à la version 10 : 213 octets en M. L'encodeur va maintenant jusqu'à 40 (2 331 octets en M) et choisit le mode le plus court : numérique, alphanumérique ou octets UTF-8. L'inspecteur dit ce qui reste. Le code ci-dessous est un vrai code QR : votre téléphone le lit.</p>
+  <div class="app">
+    <div class="app-bar"><b>QR_Lot</b><span class="crumb">› Code QR</span></div>
+    <div class="pane">
+      <div class="ctrl">
+        <label>Correction <select class="inp" id="mQrEcl"><option>L</option><option selected>M</option><option>Q</option><option>H</option></select></label>
+        <span class="rowbtns"><button class="btn" type="button" data-qr="lot">Une étiquette</button><button class="btn" type="button" data-qr="url">Une adresse</button><button class="btn" type="button" data-qr="num">Un numéro de série</button><button class="btn" type="button" data-qr="long">Un long rapport</button><button class="btn" type="button" data-qr="trop">Trop long</button></span>
+      </div>
+      <textarea class="inp" id="mQrText" rows="3" style="width:100%;resize:vertical" spellcheck="false"></textarea>
+      <div class="qrbox">
+        <canvas id="mQrCanvas" width="220" height="220" aria-label="Le code QR"></canvas>
+        <div>
+          <dl class="kv" id="mQrInfo"></dl>
+          <div style="margin-top:8px"><div class="meter" id="mQrMeter"><i></i></div><p class="small" id="mQrLeft" style="margin:4px 0 0"></p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3 id="m4">La vidéo décodée</h3>
+  <p>La vidéo montrait son image d'attente et une barre qui bouclait sur la durée du fichier. Elle est maintenant décodée :
+    <b>Motion-JPEG en AVI</b> sur toutes les machines, par un décodeur intégré ;
+    <b>MP4 (H.264), WMV et MOV</b> sous Windows, par Media Foundation.
+    Lecture, départ sur condition, en boucle ou une fois, et la position écrite dans une variable.</p>
+  <div class="app">
+    <div class="app-bar"><b>Video_Formation</b><span class="crumb">› Vidéo</span></div>
+    <div class="demo">
+      <div class="pane">
+        <div class="props" style="border:1px solid var(--app-line);border-radius:4px">
+          <div class="g">Vidéo</div>
+          <div class="l">Fichier</div><div class="v"><select id="mVidFile"><option value="avi">convoyeur.avi (Motion-JPEG)</option><option value="mp4">ligne.mp4 (H.264)</option><option value="webm">essai.webm (VP9)</option></select></div>
+          <div class="l">Machine</div><div class="v"><span class="seg" id="mVidOs"><button type="button" class="on" data-v="win">Windows</button><button type="button" data-v="lin">Linux</button></span></div>
+          <div class="l">Lecture</div><div class="v"><label><input type="checkbox" id="mVidPlay" checked> Video_Lecture (BOOL)</label></div>
+          <div class="l">Départ</div><div class="v"><select id="mVidStart"><option value="show">à l'affichage</option><option value="cond">sur condition : Porte_Ouverte</option></select></div>
+          <div class="l">Porte_Ouverte</div><div class="v"><label><input type="checkbox" id="mVidCond"> vrai</label></div>
+          <div class="l">Fin</div><div class="v"><select id="mVidLoop"><option value="loop">en boucle</option><option value="once">une fois</option></select></div>
+          <div class="l">Position →</div><div class="v"><span class="vchip" id="mVidPos">Video_Pos = 0,0 s</span></div>
+        </div>
+      </div>
+      <div class="pane">
+        <div class="player" id="mVidPlayer"><canvas id="mVidCanvas" width="420" height="236"></canvas><div class="poster" id="mVidPoster"></div><div class="hud" id="mVidHud"></div></div>
+        <table class="fmt" id="mVidFmt"><thead><tr><th>Format</th><th>Windows</th><th>Ailleurs</th></tr></thead><tbody>
+          <tr data-f="avi"><td>AVI Motion-JPEG</td><td>décodé (intégré)</td><td>décodé (intégré)</td></tr>
+          <tr data-f="mp4"><td>MP4 H.264, WMV, MOV</td><td>décodé (Media Foundation)</td><td>image d'attente</td></tr>
+          <tr data-f="webm"><td>WEBM VP8 / VP9</td><td>si le codec est installé</td><td>image d'attente</td></tr>
+        </tbody></table>
+      </div>
+    </div>
+    <div class="gen" id="mGenVid"></div>
+  </div>
+</section>
+
+<!-- ============================================================== fin -->
+<section id="fin">
+  <p class="secno">Pour finir</p>
+  <h2>Ce qui ne change pas, et comment c'est livré</h2>
+  <div class="two">
+    <div>
+      <h3>Les projets existants</h3>
+      <ul class="plain">
+        <li>Un projet 1.12.9 s'ouvre, se génère et démarre tel quel. Les propriétés nouvelles sont absentes tant qu'elles ne servent pas.</li>
+        <li>Un objet garde son aspect : ses bornes écrites comptent comme réglées à la main. Un symbole sans Équipement garde ses formules. Une horloge sans Valeur montre l'heure de l'IHM.</li>
+        <li>Les vérifications nouvelles de Générer sont des avertissements ou des informations, jamais des erreurs bloquantes.</li>
+        <li>Les repères <code>$…$</code> marchent dans chaque case nouvelle : <code>$Pompe$</code> en Équipement, <code>$Profil$[*].X</code> en points, <code>$Messages$</code> en messages. Dupliquer les suit.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Les versions</h3>
+      <ul class="plain">
+        <li><b>1.12.10</b>, lot F : plages et seuils de la variable, valeurs initiales d'un tableau de structures.</li>
+        <li><b>1.12.11</b>, lot G : liaison Équipement, mode État, arguments vérifiés, symboles typés.</li>
+        <li><b>1.12.12</b>, lot H : sommets, points depuis une source, plan à zones, référence XY, horloge, texte défilant, code QR 40, vidéo.</li>
+        <li>Un seul installateur, la 1.12.12, et le document de livraison avec ce qui est fait, ce qui ne l'est pas, et les essais.</li>
+      </ul>
+    </div>
+  </div>
+  <p class="note"><b>Dans la maquette, ce qui est simulé :</b> les valeurs des variables, Générer (recalculé ici en JavaScript à partir des mêmes règles), et l'image de la vidéo, dessinée au lieu d'être lue dans un fichier. <b>Ce qui est réel :</b> le code QR. Son encodeur suit la norme ; il a été relu par un décodeur indépendant sur les 40 versions et les 4 niveaux.</p>
+</section>
+</main>
+</div>
+<script>
+// Encodeur QR (versions 1 a 40, niveaux L/M/Q/H, modes numerique, alphanumerique, octets UTF-8).
+// Meme algorithme que la norme ISO/IEC 18004 : blocs Reed-Solomon entrelaces, motifs fixes,
+// masque choisi par les penalites. Sert a la maquette des lots F, G, H (code QR jusqu'a 40).
+const QR = (() => {
+  const ECL = {L: 0, M: 1, Q: 2, H: 3};
+  const FORMAT_BITS = [1, 0, 3, 2];
+  const ECC_PER_BLOCK = [
+    [-1, 7, 10, 15, 20, 26, 18, 20, 24, 30, 18, 20, 24, 26, 30, 22, 24, 28, 30, 28, 28, 28, 28, 30, 30, 26, 28, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30],
+    [-1, 10, 16, 26, 18, 24, 16, 18, 22, 22, 26, 30, 22, 22, 24, 24, 28, 28, 26, 26, 26, 26, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28],
+    [-1, 13, 22, 18, 26, 18, 24, 18, 22, 20, 24, 28, 26, 24, 20, 30, 24, 28, 28, 26, 30, 28, 30, 30, 30, 30, 28, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30],
+    [-1, 17, 28, 22, 16, 22, 28, 26, 26, 24, 28, 24, 28, 22, 24, 24, 30, 28, 28, 26, 28, 30, 24, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30],
+  ];
+  const NUM_BLOCKS = [
+    [-1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 4, 4, 4, 4, 4, 6, 6, 6, 6, 7, 8, 8, 9, 9, 10, 12, 12, 12, 13, 14, 15, 16, 17, 18, 19, 19, 20, 21, 22, 24, 25],
+    [-1, 1, 1, 1, 2, 2, 4, 4, 4, 5, 5, 5, 8, 9, 9, 10, 10, 11, 13, 14, 16, 17, 17, 18, 20, 21, 23, 25, 26, 28, 29, 31, 33, 35, 37, 38, 40, 43, 45, 47, 49],
+    [-1, 1, 1, 2, 2, 4, 4, 6, 6, 8, 8, 8, 10, 12, 16, 12, 17, 16, 18, 21, 20, 23, 23, 25, 27, 29, 34, 34, 35, 38, 40, 43, 45, 48, 51, 53, 56, 59, 62, 65, 68],
+    [-1, 1, 1, 2, 4, 4, 4, 5, 6, 8, 8, 11, 11, 16, 16, 18, 16, 19, 21, 25, 25, 25, 34, 30, 32, 35, 37, 40, 42, 45, 48, 51, 54, 57, 60, 63, 66, 70, 74, 77, 81],
+  ];
+  const ALNUM = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:";
+
+  function rawModules(ver) {
+    let r = (16 * ver + 128) * ver + 64;
+    if (ver >= 2) {
+      const n = Math.floor(ver / 7) + 2;
+      r -= (25 * n - 10) * n - 55;
+      if (ver >= 7) r -= 36;
+    }
+    return r;
+  }
+  function dataCodewords(ver, ecl) {
+    return Math.floor(rawModules(ver) / 8) - ECC_PER_BLOCK[ecl][ver] * NUM_BLOCKS[ecl][ver];
+  }
+  function alignPositions(ver) {
+    if (ver === 1) return [];
+    const n = Math.floor(ver / 7) + 2;
+    const step = Math.floor((ver * 8 + n * 3 + 5) / (n * 4 - 4)) * 2;
+    const out = [6];
+    for (let pos = ver * 4 + 10; out.length < n; pos -= step) out.splice(1, 0, pos);
+    return out;
+  }
+  function utf8(text) { return Array.from(new TextEncoder().encode(text)); }
+
+  // Le mode le plus compact pour tout le texte.
+  function modeOf(text) {
+    if (/^[0-9]*$/.test(text)) return "numerique";
+    if ([...text].every(c => ALNUM.includes(c))) return "alphanumerique";
+    return "octets";
+  }
+  function countBits(mode, ver) {
+    const i = ver <= 9 ? 0 : ver <= 26 ? 1 : 2;
+    return {numerique: [10, 12, 14], alphanumerique: [9, 11, 13], octets: [8, 16, 16]}[mode][i];
+  }
+  function payloadBits(text, mode) {
+    const bits = [];
+    const put = (v, n) => { for (let i = n - 1; i >= 0; i--) bits.push((v >>> i) & 1); };
+    let count;
+    if (mode === "numerique") {
+      count = text.length;
+      for (let i = 0; i < text.length; i += 3) {
+        const g = text.substr(i, 3);
+        put(parseInt(g, 10), g.length * 3 + 1);
+      }
+    } else if (mode === "alphanumerique") {
+      count = text.length;
+      for (let i = 0; i + 1 < text.length; i += 2) put(ALNUM.indexOf(text[i]) * 45 + ALNUM.indexOf(text[i + 1]), 11);
+      if (text.length % 2) put(ALNUM.indexOf(text[text.length - 1]), 6);
+    } else {
+      const b = utf8(text);
+      count = b.length;
+      for (const x of b) put(x, 8);
+    }
+    return {bits, count};
+  }
+  // La version, la place prise et ce qui reste ; null si trop long meme en version 40.
+  function plan(text, eclName) {
+    const ecl = ECL[eclName];
+    const mode = modeOf(text);
+    const {bits, count} = payloadBits(text, mode);
+    for (let ver = 1; ver <= 40; ver++) {
+      const used = 4 + countBits(mode, ver) + bits.length;
+      const cap = dataCodewords(ver, ecl) * 8;
+      if (used <= cap && count < (1 << countBits(mode, ver))) return {ver, mode, used, cap, ecl};
+    }
+    return null;
+  }
+  // Ce qui tient encore dans la version 40, dans le mode du texte.
+  function left(text, eclName) {
+    const ecl = ECL[eclName];
+    const mode = modeOf(text);
+    const {bits} = payloadBits(text, mode);
+    const free = dataCodewords(40, ecl) * 8 - (4 + countBits(mode, 40) + bits.length);
+    const per = mode === "numerique" ? 10 / 3 : mode === "alphanumerique" ? 5.5 : 8;
+    return Math.floor(Math.max(0, free) / per);
+  }
+
+  // Reed-Solomon sur GF(256), polynome 0x11D.
+  function mul(x, y) {
+    let z = 0;
+    for (let i = 7; i >= 0; i--) {
+      z = (z << 1) ^ ((z >>> 7) * 0x11D);
+      z ^= ((y >>> i) & 1) * x;
+    }
+    return z & 0xFF;
+  }
+  function divisor(degree) {
+    const r = new Array(degree).fill(0);
+    r[degree - 1] = 1;
+    let root = 1;
+    for (let i = 0; i < degree; i++) {
+      for (let j = 0; j < r.length; j++) {
+        r[j] = mul(r[j], root);
+        if (j + 1 < r.length) r[j] ^= r[j + 1];
+      }
+      root = mul(root, 0x02);
+    }
+    return r;
+  }
+  function remainder(data, div) {
+    const r = div.map(() => 0);
+    for (const b of data) {
+      const f = b ^ r.shift();
+      r.push(0);
+      div.forEach((c, i) => { r[i] ^= mul(c, f); });
+    }
+    return r;
+  }
+
+  function encode(text, eclName, forceMask) {
+    const p = plan(text, eclName);
+    if (!p) return null;
+    const {ver, mode, ecl} = p;
+    // Les bits de donnees.
+    const bits = [];
+    const put = (v, n) => { for (let i = n - 1; i >= 0; i--) bits.push((v >>> i) & 1); };
+    put({numerique: 1, alphanumerique: 2, octets: 4}[mode], 4);
+    const pl = payloadBits(text, mode);
+    put(pl.count, countBits(mode, ver));
+    bits.push(...pl.bits);
+    const cap = dataCodewords(ver, ecl) * 8;
+    put(0, Math.min(4, cap - bits.length));
+    put(0, (8 - bits.length % 8) % 8);
+    for (let pad = 0xEC; bits.length < cap; pad ^= 0xEC ^ 0x11) put(pad, 8);
+    const data = [];
+    for (let i = 0; i < bits.length; i += 8) {
+      let b = 0;
+      for (let j = 0; j < 8; j++) b = (b << 1) | bits[i + j];
+      data.push(b);
+    }
+    // Les blocs, leurs codes de correction, l'entrelacement.
+    const nBlocks = NUM_BLOCKS[ecl][ver], eccLen = ECC_PER_BLOCK[ecl][ver];
+    const raw = Math.floor(rawModules(ver) / 8);
+    const nShort = nBlocks - raw % nBlocks, shortLen = Math.floor(raw / nBlocks);
+    const div = divisor(eccLen);
+    const blocks = [];
+    for (let i = 0, k = 0; i < nBlocks; i++) {
+      const dat = data.slice(k, k + shortLen - eccLen + (i < nShort ? 0 : 1));
+      k += dat.length;
+      const ecc = remainder(dat, div);
+      if (i < nShort) dat.push(0);
+      blocks.push(dat.concat(ecc));
+    }
+    const all = [];
+    for (let i = 0; i < blocks[0].length; i++)
+      blocks.forEach((b, j) => { if (i !== shortLen - eccLen || j >= nShort) all.push(b[i]); });
+
+    // La matrice.
+    const size = ver * 4 + 17;
+    const m = Array.from({length: size}, () => new Array(size).fill(false));
+    const fn = Array.from({length: size}, () => new Array(size).fill(false));
+    const set = (x, y, v) => { m[y][x] = v; fn[y][x] = true; };
+    for (let i = 0; i < size; i++) { set(6, i, i % 2 === 0); set(i, 6, i % 2 === 0); }
+    const finder = (cx, cy) => {
+      for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++) {
+        const d = Math.max(Math.abs(dx), Math.abs(dy)), x = cx + dx, y = cy + dy;
+        if (x >= 0 && x < size && y >= 0 && y < size) set(x, y, d !== 2 && d !== 4);
+      }
+    };
+    finder(3, 3); finder(size - 4, 3); finder(3, size - 4);
+    const al = alignPositions(ver), na = al.length;
+    for (let i = 0; i < na; i++) for (let j = 0; j < na; j++) {
+      if ((i === 0 && j === 0) || (i === 0 && j === na - 1) || (i === na - 1 && j === 0)) continue;
+      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++)
+        set(al[i] + dx, al[j] + dy, Math.max(Math.abs(dx), Math.abs(dy)) !== 1);
+    }
+    const formatBits = mask => {
+      const d = (FORMAT_BITS[ecl] << 3) | mask;
+      let r = d;
+      for (let i = 0; i < 10; i++) r = (r << 1) ^ ((r >>> 9) * 0x537);
+      const b = ((d << 10) | r) ^ 0x5412;
+      const bit = i => ((b >>> i) & 1) !== 0;
+      for (let i = 0; i <= 5; i++) set(8, i, bit(i));
+      set(8, 7, bit(6)); set(8, 8, bit(7)); set(7, 8, bit(8));
+      for (let i = 9; i < 15; i++) set(14 - i, 8, bit(i));
+      for (let i = 0; i < 8; i++) set(size - 1 - i, 8, bit(i));
+      for (let i = 8; i < 15; i++) set(8, size - 15 + i, bit(i));
+      set(8, size - 8, true);
+    };
+    formatBits(0);
+    if (ver >= 7) {
+      let r = ver;
+      for (let i = 0; i < 12; i++) r = (r << 1) ^ ((r >>> 11) * 0x1F25);
+      const b = (ver << 12) | r;
+      for (let i = 0; i < 18; i++) {
+        const v = ((b >>> i) & 1) !== 0, a = size - 11 + i % 3, c = Math.floor(i / 3);
+        set(a, c, v); set(c, a, v);
+      }
+    }
+    let i = 0;
+    for (let right = size - 1; right >= 1; right -= 2) {
+      if (right === 6) right = 5;
+      for (let vert = 0; vert < size; vert++) for (let j = 0; j < 2; j++) {
+        const x = right - j, up = ((right + 1) & 2) === 0, y = up ? size - 1 - vert : vert;
+        if (!fn[y][x] && i < all.length * 8) { m[y][x] = ((all[i >>> 3] >>> (7 - (i & 7))) & 1) !== 0; i++; }
+      }
+    }
+    const maskFn = [
+      (x, y) => (x + y) % 2 === 0, (x, y) => y % 2 === 0, (x, y) => x % 3 === 0, (x, y) => (x + y) % 3 === 0,
+      (x, y) => (Math.floor(x / 3) + Math.floor(y / 2)) % 2 === 0, (x, y) => x * y % 2 + x * y % 3 === 0,
+      (x, y) => (x * y % 2 + x * y % 3) % 2 === 0, (x, y) => ((x + y) % 2 + x * y % 3) % 2 === 0,
+    ];
+    const applyMask = k => {
+      for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) if (!fn[y][x] && maskFn[k](x, y)) m[y][x] = !m[y][x];
+    };
+    const penalty = () => {
+      let s = 0, dark = 0;
+      const line = get => {
+        let run = 1;
+        for (let k = 1; k < size; k++) {
+          if (get(k) === get(k - 1)) { run++; if (run === 5) s += 3; else if (run > 5) s += 1; }
+          else run = 1;
+        }
+        const pat = [1, 0, 1, 1, 1, 0, 1, 0, 0, 0, 0];
+        for (let k = 0; k + 11 <= size; k++) {
+          let a = true, b = true;
+          for (let t = 0; t < 11; t++) {
+            const v = get(k + t) ? 1 : 0;
+            if (v !== pat[t]) a = false;
+            if (v !== pat[10 - t]) b = false;
+          }
+          if (a) s += 40;
+          if (b) s += 40;
+        }
+      };
+      for (let y = 0; y < size; y++) line(k => m[y][k]);
+      for (let x = 0; x < size; x++) line(k => m[k][x]);
+      for (let y = 0; y + 1 < size; y++) for (let x = 0; x + 1 < size; x++) {
+        const c = m[y][x];
+        if (c === m[y][x + 1] && c === m[y + 1][x] && c === m[y + 1][x + 1]) s += 3;
+      }
+      for (const row of m) for (const v of row) if (v) dark++;
+      const total = size * size;
+      s += Math.floor(Math.abs(dark * 20 - total * 10) / total) * 10;
+      return s;
+    };
+    let best = 0, bestScore = Infinity;
+    for (let k = 0; k < 8; k++) {
+      if (forceMask !== undefined && k !== forceMask) continue;
+      applyMask(k); formatBits(k);
+      const sc = penalty();
+      if (sc < bestScore) { bestScore = sc; best = k; }
+      applyMask(k);
+    }
+    applyMask(best); formatBits(best);
+    return {size, modules: m, version: ver, mode, mask: best, used: p.used, cap: p.cap};
+  }
+  return {encode, plan, left, dataCodewords, ECL};
+})();
+if (typeof module !== "undefined") module.exports = QR;
+
+// ============================================================== outils communs
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+const fr = (x, d = 1) => (Math.round(x * 10 ** d) / 10 ** d).toFixed(d).replace(".", ",").replace("-", "−");
+const frn = x => Number.isInteger(x) ? String(x).replace("-", "−") : fr(x, Math.abs(x) < 10 ? 2 : 1).replace(/,?0+$/, "");
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+const cssv = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const svgNS = "http://www.w3.org/2000/svg";
+const sev = (k, t) => `<span class="sev ${k}">${{err: "Erreur", warn: "Avertissement", info: "Information", ok: "Bon"}[k]}</span>${t}`;
+function genBox(el, title, items) {
+  const n = items.filter(i => i.k === "warn" || i.k === "err").length;
+  el.innerHTML = `<div class="gen-head"><b>Générer</b><span>${esc(title)}</span><span class="hint">${n ? n + " avertissement" + (n > 1 ? "s" : "") : "rien de bloquant"}</span></div>` +
+    `<ul>${items.length ? items.map(i => `<li>${sev(i.k, "")}<span>${i.w ? `<span class="where">${esc(i.w)}</span> · ` : ""}${i.t}</span></li>`).join("") : `<li class="none">Rien à signaler.</li>`}</ul>`;
+}
+// Le theme : clair, auto, sombre (garde par le navigateur si possible).
+(function theme() {
+  const apply = v => {
+    if (v === "auto") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = v;
+    $$("[data-theme-set]").forEach(b => b.classList.toggle("on", b.dataset.themeSet === v));
+    try { localStorage.setItem("maq-fgh-theme", v); } catch (e) {}
+    window.dispatchEvent(new Event("themechange"));
+  };
+  let saved = "auto";
+  try { saved = localStorage.getItem("maq-fgh-theme") || "auto"; } catch (e) {}
+  apply(saved);
+  $$("[data-theme-set]").forEach(b => b.addEventListener("click", () => apply(b.dataset.themeSet)));
+})();
+// Le sommaire suit la lecture.
+(function toc() {
+  const links = $$(".toc a");
+  const map = new Map(links.map(a => [a.getAttribute("href").slice(1), a]));
+  const targets = [...map.keys()].map(id => document.getElementById(id)).filter(Boolean);
+  const io = new IntersectionObserver(es => {
+    es.forEach(e => {
+      if (!e.isIntersecting) return;
+      links.forEach(a => a.classList.remove("on"));
+      const a = map.get(e.target.id);
+      if (a) a.classList.add("on");
+    });
+  }, {rootMargin: "-10% 0px -80% 0px"});
+  targets.forEach(t => io.observe(t));
+})();
+
+// ============================================================== F : plages et seuils
+const KEYS = ["min", "max", "ll", "l", "h", "hh"];
+const LBL = {min: "Min", max: "Max", ll: "Alarme basse", l: "Seuil bas", h: "Seuil haut", hh: "Alarme haute"};
+const F = {
+  vars: {
+    Pression_Ligne: {type: "REAL", unit: "bar", fmt: "0.00", scale: [0, 10], scaleTxt: "0 … 27648 → 0 … 10", cells: {min: "", max: "", ll: "1", l: "2", h: "Consigne_Max", hh: "9.5"}, value: 6.2},
+    Niveau_Cuve: {type: "REAL", unit: "%", fmt: "0.0", scale: null, cells: {min: "0", max: "100", ll: "10", l: "20", h: "80", hh: "90"}, value: 64},
+    Temp_Four: {type: "INT", unit: "°C", fmt: "0", scale: [0, 1200], scaleTxt: "0 … 32767 → 0 … 1200", cells: {min: "", max: "", ll: "", l: "", h: "950", hh: "1100"}, value: 870},
+    Consigne_Max: {type: "REAL", unit: "bar", fmt: "0.0", scale: null, cells: {min: "0", max: "10", ll: "", l: "", h: "", hh: ""}, value: 8.5},
+  },
+  objects: [
+    {id: "Jauge_P", kind: "Jauge", v: "Pression_Ligne", fromVar: true, hand: {}},
+    {id: "Bar_P", kind: "Bargraphe", v: "Pression_Ligne", fromVar: true, hand: {}},
+    {id: "Curseur_P", kind: "Curseur", v: "Pression_Ligne", fromVar: true, hand: {}},
+    {id: "Cuve_1", kind: "Cuve", v: "Niveau_Cuve", fromVar: true, hand: {}},
+    {id: "Jauge_1129", kind: "Jauge", v: "Pression_Ligne", fromVar: true, hand: {min: "0", max: "10", h: "12"}, legacy: true},
+  ],
+  sel: "Jauge_P",
+};
+// Une case : vide, un nombre, une variable (avec ou sans =), un nom inconnu, ou illisible.
+function cell(txt) {
+  const t = String(txt ?? "").trim();
+  if (!t) return {k: "empty"};
+  const num = t.replace(",", ".");
+  if (/^[-+]?\d+(\.\d+)?$/.test(num)) return {k: "num", v: parseFloat(num)};
+  const name = t.replace(/^=/, "").trim();
+  if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+    const v = F.vars[name];
+    return v ? {k: "var", name, v: v.value} : {k: "unknown", name};
+  }
+  return {k: "bad", t};
+}
+const valOf = c => (c.k === "num" || c.k === "var") ? c.v : undefined;
+// La valeur d'une case de la variable, avec la mise a l'echelle par defaut.
+function varProp(name, p) {
+  const V = F.vars[name];
+  const c = cell(V.cells[p]);
+  if (c.k !== "empty") return {c, v: valOf(c), from: c.k === "var" ? c.name : `de ${name}`};
+  if ((p === "min" || p === "max") && V.scale) return {c: {k: "num", v: V.scale[p === "min" ? 0 : 1]}, v: V.scale[p === "min" ? 0 : 1], from: `échelle de ${name}`};
+  return {c, v: undefined, from: ""};
+}
+function objProp(o, p) {
+  const c = cell(o.hand[p]);
+  if (c.k !== "empty") return {c, v: valOf(c), hand: true, from: "réglé sur l'objet"};
+  if (o.fromVar) return {...varProp(o.v, p), hand: false};
+  const def = {min: 0, max: 100}[p];
+  return {c: {k: def === undefined ? "empty" : "num", v: def}, v: def, hand: false, from: def === undefined ? "" : "valeur par défaut"};
+}
+function rangeIssues(where, get, items) {
+  const mn = get("min").v, mx = get("max").v;
+  if (mn !== undefined && mx !== undefined && mn >= mx) items.push({k: "warn", w: where, t: `Min (${frn(mn)}) n'est pas sous Max (${frn(mx)}).`});
+  for (const p of KEYS) {
+    const r = get(p);
+    if (r.c.k === "unknown") items.push({k: "warn", w: where, t: `${LBL[p]} : « ${esc(r.c.name)} » n'est ni un nombre ni une variable connue.`});
+    else if (r.c.k === "bad") items.push({k: "warn", w: where, t: `${LBL[p]} : « ${esc(r.c.t)} » est illisible.`});
+  }
+  for (const p of ["ll", "l", "h", "hh"]) {
+    const v = get(p).v;
+    if (v === undefined || mn === undefined || mx === undefined || mn >= mx) continue;
+    if (v < mn || v > mx) items.push({k: "warn", w: where, t: `${LBL[p]} ${frn(v)} hors de la plage ${frn(mn)} … ${frn(mx)} : il est dessiné au bord, avec une marque.`});
+  }
+  const seq = ["ll", "l", "h", "hh"].map(p => [p, get(p).v]).filter(x => x[1] !== undefined);
+  for (let i = 1; i < seq.length; i++) if (seq[i][1] < seq[i - 1][1]) {
+    items.push({k: "info", w: where, t: `${LBL[seq[i - 1][0]]} (${frn(seq[i - 1][1])}) passe après ${LBL[seq[i][0]].toLowerCase()} (${frn(seq[i][1])}) : l'ordre attendu est alarme basse < seuil bas < seuil haut < alarme haute.`});
+    break;
+  }
+}
+function renderUnits() {
+  const t = $("#fUnitsTable");
+  const head = `<thead><tr><th>Variable</th><th>Type</th><th>Unité</th><th>Format</th>${KEYS.map(k => `<th class="newcol">${LBL[k]}</th>`).join("")}</tr></thead>`;
+  const rows = Object.entries(F.vars).map(([name, V]) => {
+    const cells = KEYS.map(p => {
+      const c = cell(V.cells[p]);
+      const ph = (p === "min" || p === "max") && V.scale ? `${frn(V.scale[p === "min" ? 0 : 1])} (échelle)` : "";
+      const cls = c.k === "var" ? "isvar" : (c.k === "unknown" || c.k === "bad") ? "bad" : "";
+      const tip = c.k === "var" ? `lu comme la variable ${c.name} = ${frn(c.v)}` : (V.scale && (p === "min" || p === "max") ? `mise à l'échelle : ${V.scaleTxt}` : "");
+      return `<td><input data-var="${name}" data-p="${p}" value="${esc(V.cells[p])}" placeholder="${esc(ph)}" class="${cls}" title="${esc(tip)}" aria-label="${LBL[p]} de ${name}"></td>`;
+    }).join("");
+    return `<tr><td class="key">${name}</td><td class="key">${V.type}</td><td><input class="narrow" value="${esc(V.unit)}" data-var="${name}" data-u="unit" aria-label="Unité de ${name}"></td><td><input class="narrow" value="${esc(V.fmt)}" data-var="${name}" data-u="fmt" aria-label="Format de ${name}"></td>${cells}</tr>`;
+  }).join("");
+  t.innerHTML = head + `<tbody>${rows}</tbody>`;
+}
+function genUnits() {
+  const items = [];
+  for (const name of Object.keys(F.vars)) {
+    rangeIssues(name, p => varProp(name, p), items);
+    for (const p of KEYS) {
+      const c = cell(F.vars[name].cells[p]);
+      if (c.k === "var") items.push({k: "info", w: name, t: `${LBL[p]} « ${c.name} » est lu comme la variable (${frn(c.v)} ${esc(F.vars[c.name].unit)}).`});
+    }
+    if (F.vars[name].scale && !F.vars[name].cells.min && !F.vars[name].cells.max)
+      items.push({k: "info", w: name, t: `la plage vient de la mise à l'échelle (${esc(F.vars[name].scaleTxt)}).`});
+  }
+  genBox($("#fGenUnits"), "Unités et formats", items);
+}
+// --- les dessins des objets a echelle
+function bands(get) {
+  const mn = get("min").v ?? 0, mx = get("max").v ?? 100;
+  const ll = get("ll").v, l = get("l").v, h = get("h").v, hh = get("hh").v;
+  return {mn, mx, ll, l, h, hh};
+}
+function stateColor(b, v) {
+  if ((b.hh !== undefined && v >= b.hh) || (b.ll !== undefined && v <= b.ll)) return cssv("--fault");
+  if ((b.h !== undefined && v >= b.h) || (b.l !== undefined && v <= b.l)) return cssv("--maint");
+  return cssv("--run");
+}
+function drawObj(o) {
+  const V = F.vars[o.v], get = p => objProp(o, p), b = bands(get), v = V.value;
+  const unit = (o.hand.unit ?? "") || V.unit;
+  const span = b.mx - b.mn || 1, f = x => clamp((x - b.mn) / span, 0, 1), out = x => x !== undefined && (x < b.mn || x > b.mx);
+  const marks = ["ll", "l", "h", "hh"].filter(p => b[p] !== undefined);
+  const col = {ll: cssv("--fault"), l: cssv("--maint"), h: cssv("--maint"), hh: cssv("--fault")};
+  let s = "";
+  if (o.kind === "Jauge") {
+    const cx = 70, cy = 72, r = 54, ang = x => Math.PI * (1 - f(x));
+    const pt = (x, rr) => [cx + rr * Math.cos(ang(x)), cy - rr * Math.sin(ang(x))];
+    const arc = (a, c, color, w) => {
+      const [x1, y1] = pt(a, r), [x2, y2] = pt(c, r);
+      return `<path d="M${x1.toFixed(1)},${y1.toFixed(1)} A${r},${r} 0 0 1 ${x2.toFixed(1)},${y2.toFixed(1)}" stroke="${color}" stroke-width="${w}" fill="none"/>`;
+    };
+    s += arc(b.mn, b.mx, cssv("--view-line"), 10);
+    const cuts = [[b.ll, b.l, cssv("--maint")], [b.mn, b.ll, cssv("--fault")], [b.h, b.hh ?? b.mx, cssv("--maint")], [b.hh, b.mx, cssv("--fault")], [b.l ?? b.mn, b.h ?? b.mx, cssv("--run")]];
+    for (const [a, c, color] of cuts) if (a !== undefined && c !== undefined && c > a) s += arc(clamp(a, b.mn, b.mx), clamp(c, b.mn, b.mx), color, 10);
+    for (const p of marks) if (out(b[p])) { const [x, y] = pt(b[p] > b.mx ? b.mx : b.mn, r + 12); s += `<text x="${x}" y="${y}" class="vt" text-anchor="middle" fill="${cssv("--warn")}" font-weight="700">!</text>`; }
+    const [nx, ny] = pt(clamp(v, b.mn, b.mx), r - 12);
+    s += `<line x1="${cx}" y1="${cy}" x2="${nx.toFixed(1)}" y2="${ny.toFixed(1)}" stroke="${cssv("--view-ink")}" stroke-width="2.5" stroke-linecap="round"/><circle cx="${cx}" cy="${cy}" r="4" fill="${cssv("--view-ink")}"/>`;
+    s += `<text x="${cx - r}" y="${cy + 14}" class="vt" text-anchor="middle">${frn(b.mn)}</text><text x="${cx + r}" y="${cy + 14}" class="vt" text-anchor="middle">${frn(b.mx)}</text>`;
+    s += `<text x="${cx}" y="${cy + 26}" class="vt m" text-anchor="middle" fill="${stateColor(b, v)}" font-weight="600">${fr(v, 1)} ${esc(unit)}</text>`;
+    return `<svg viewBox="0 0 140 104" width="140" height="104">${s}</svg>`;
+  }
+  if (o.kind === "Bargraphe") {
+    const x = 40, y = 8, w = 28, hgt = 120, yy = q => y + hgt * (1 - f(q));
+    s += `<rect x="${x}" y="${y}" width="${w}" height="${hgt}" fill="none" stroke="${cssv("--view-line")}"/>`;
+    s += `<rect x="${x + 1}" y="${yy(v).toFixed(1)}" width="${w - 2}" height="${(y + hgt - yy(v)).toFixed(1)}" fill="${stateColor(b, v)}" opacity=".85"/>`;
+    for (const p of marks) {
+      const q = clamp(b[p], b.mn, b.mx), yv = yy(q);
+      s += `<line x1="${x - 6}" x2="${x + w + 6}" y1="${yv}" y2="${yv}" stroke="${col[p]}" stroke-width="2" ${out(b[p]) ? 'stroke-dasharray="3 2"' : ""}/>`;
+      if (out(b[p])) s += `<text x="${x + w + 10}" y="${yv + 4}" class="vt" fill="${cssv("--warn")}" font-weight="700">!</text>`;
+    }
+    s += `<text x="${x - 8}" y="${y + 4}" class="vt" text-anchor="end">${frn(b.mx)}</text><text x="${x - 8}" y="${y + hgt}" class="vt" text-anchor="end">${frn(b.mn)}</text>`;
+    s += `<text x="${x + w / 2}" y="${y + hgt + 16}" class="vt m" text-anchor="middle" fill="${stateColor(b, v)}" font-weight="600">${fr(v, 1)} ${esc(unit)}</text>`;
+    return `<svg viewBox="0 0 110 150" width="110" height="150">${s}</svg>`;
+  }
+  if (o.kind === "Curseur") {
+    const x0 = 14, x1 = 186, y = 34, xx = q => x0 + (x1 - x0) * f(q);
+    s += `<line x1="${x0}" x2="${x1}" y1="${y}" y2="${y}" stroke="${cssv("--view-line")}" stroke-width="6" stroke-linecap="round"/>`;
+    s += `<line x1="${x0}" x2="${xx(v)}" y1="${y}" y2="${y}" stroke="${cssv("--fluid")}" stroke-width="6" stroke-linecap="round"/>`;
+    for (const p of marks) s += `<line x1="${xx(clamp(b[p], b.mn, b.mx))}" x2="${xx(clamp(b[p], b.mn, b.mx))}" y1="${y - 12}" y2="${y - 5}" stroke="${col[p]}" stroke-width="2"/>`;
+    s += `<circle cx="${xx(v)}" cy="${y}" r="9" fill="${cssv("--view")}" stroke="${cssv("--fluid")}" stroke-width="3"/>`;
+    s += `<text x="${x0}" y="${y + 24}" class="vt" text-anchor="middle">${frn(b.mn)}</text><text x="${x1}" y="${y + 24}" class="vt" text-anchor="middle">${frn(b.mx)}</text>`;
+    s += `<text x="${(x0 + x1) / 2}" y="${y + 24}" class="vt m" text-anchor="middle">${fr(v, 1)} ${esc(unit)}</text>`;
+    return `<svg viewBox="0 0 200 66" width="200" height="66">${s}</svg>`;
+  }
+  // la cuve
+  const x = 24, y = 10, w = 70, hgt = 110, yy = q => y + hgt * (1 - f(q));
+  s += `<path d="M${x},${y + 8} Q${x + w / 2},${y - 6} ${x + w},${y + 8} L${x + w},${y + hgt} L${x},${y + hgt} Z" fill="none" stroke="${cssv("--view-line")}" stroke-width="2"/>`;
+  s += `<rect x="${x + 2}" y="${yy(v).toFixed(1)}" width="${w - 4}" height="${(y + hgt - yy(v) - 1).toFixed(1)}" fill="${cssv("--fluid")}" opacity=".7"/>`;
+  for (const p of marks) { const yv = yy(clamp(b[p], b.mn, b.mx)); s += `<line x1="${x - 8}" x2="${x + w + 8}" y1="${yv}" y2="${yv}" stroke="${col[p]}" stroke-width="1.6" stroke-dasharray="4 3"/><text x="${x + w + 10}" y="${yv + 4}" class="vt">${{ll: "LL", l: "L", h: "H", hh: "HH"}[p]}</text>`; }
+  s += `<text x="${x + w / 2}" y="${y + hgt + 16}" class="vt m" text-anchor="middle" fill="${stateColor(b, v)}" font-weight="600">${fr(v, 0)} ${esc(unit)}</text>`;
+  return `<svg viewBox="0 0 130 140" width="130" height="140">${s}</svg>`;
+}
+function renderCanvas() {
+  $("#fCanvas").innerHTML = F.objects.map(o => `<button type="button" class="obj ${o.id === F.sel ? "sel" : ""}" data-o="${o.id}" aria-pressed="${o.id === F.sel}">${drawObj(o)}<span class="on">${o.id}${o.legacy ? " (1.12.9)" : ""}</span></button>`).join("");
+}
+function renderInsp() {
+  const o = F.objects.find(x => x.id === F.sel);
+  const V = F.vars[o.v];
+  const row = p => {
+    const r = objProp(o, p);
+    const inh = o.fromVar ? varProp(o.v, p) : {v: {min: 0, max: 100}[p], from: "défaut"};
+    const ph = inh.v !== undefined ? `${frn(inh.v)} (${inh.from})` : (o.fromVar ? `(${o.v} n'en a pas)` : "");
+    return `<div class="l">${LBL[p]}</div><div class="v"><input type="text" data-hand="${p}" class="${r.hand ? "hand" : "inh"} ${r.c.k === "var" ? "isvar" : ""}" value="${esc(o.hand[p] ?? "")}" placeholder="${esc(ph)}" aria-label="${LBL[p]}"><button type="button" class="reset" data-reset="${p}" title="Rendre à la variable" ${r.hand ? "" : "hidden"}>↺</button></div>`;
+  };
+  $("#fInsp").innerHTML = `<div class="insp-head"><b>${o.id}</b><span class="t">${o.kind}</span></div><div class="props">
+    <div class="g">Valeur</div>
+    <div class="l">Variable</div><div class="v"><select id="fInspVar">${Object.keys(F.vars).map(n => `<option ${n === o.v ? "selected" : ""}>${n}</option>`).join("")}</select></div>
+    <div class="l"></div><div class="v"><label><input type="checkbox" id="fInspFrom" ${o.fromVar ? "checked" : ""}> Unité, format et plage de la variable</label></div>
+    <div class="g">Plage et seuils</div>${KEYS.map(row).join("")}
+    <div class="g">Unité et format</div>
+    <div class="l">Unité</div><div class="v"><input type="text" data-uo="unit" class="${o.hand.unit ? "hand" : "inh"}" placeholder="${esc(o.fromVar ? `${V.unit} (de ${o.v})` : "")}" value="${esc(o.hand.unit ?? "")}" aria-label="Unité"></div>
+    <div class="l">Format</div><div class="v"><input type="text" data-uo="fmt" class="${o.hand.fmt ? "hand" : "inh"}" placeholder="${esc(o.fromVar ? `${V.fmt} (de ${o.v})` : "")}" value="${esc(o.hand.fmt ?? "")}" aria-label="Format"></div>
+  </div>${o.legacy ? `<p class="small" style="padding:6px 10px;margin:0">Un objet de la 1.12.9 : ses bornes écrites sont gardées, comme réglées à la main.</p>` : ""}`;
+}
+function genObjects() {
+  const items = [];
+  for (const o of F.objects) {
+    const handKeys = KEYS.filter(p => cell(o.hand[p]).k !== "empty");
+    if (!handKeys.length && o.fromVar) continue;          // tout vient de la variable : dit dans Unites et formats
+    rangeIssues(o.id, p => objProp(o, p), items);
+    for (const p of handKeys) { const c = cell(o.hand[p]); if (c.k === "var") items.push({k: "info", w: o.id, t: `${LBL[p]} « ${c.name} » est lu comme la variable.`}); }
+  }
+  if (!items.length) items.push({k: "ok", w: "Vue_Ligne", t: "les objets prennent leur plage et leurs seuils de leur variable."});
+  genBox($("#fGenObjects"), "Vue_Ligne", items);
+}
+function refreshF() { renderCanvas(); genObjects(); }
+function initF() {
+  renderUnits(); genUnits(); renderCanvas(); renderInsp(); genObjects();
+  $("#fUnitsTable").addEventListener("input", e => {
+    const i = e.target, V = F.vars[i.dataset.var];
+    if (!V) return;
+    if (i.dataset.u) V[i.dataset.u] = i.value; else V.cells[i.dataset.p] = i.value;
+    if (i.dataset.p) {
+      const c = cell(i.value);
+      i.className = c.k === "var" ? "isvar" : (c.k === "unknown" || c.k === "bad") ? "bad" : "";
+    }
+    genUnits(); refreshF(); renderInspPlaceholders();
+  });
+  $("#fCanvas").addEventListener("click", e => {
+    const b = e.target.closest("[data-o]");
+    if (!b) return;
+    F.sel = b.dataset.o; renderCanvas(); renderInsp();
+  });
+  $("#fInsp").addEventListener("input", e => {
+    const o = F.objects.find(x => x.id === F.sel), i = e.target;
+    if (i.dataset.uo) { if (i.value.trim()) o.hand[i.dataset.uo] = i.value; else delete o.hand[i.dataset.uo]; i.className = i.value.trim() ? "hand" : "inh"; refreshF(); return; }
+    if (i.dataset.hand) {
+      if (i.value.trim()) o.hand[i.dataset.hand] = i.value; else delete o.hand[i.dataset.hand];
+      const r = objProp(o, i.dataset.hand);
+      i.className = (r.hand ? "hand" : "inh") + (r.c.k === "var" ? " isvar" : "");
+      i.nextElementSibling.hidden = !r.hand;
+      refreshF();
+    }
+  });
+  $("#fInsp").addEventListener("change", e => {
+    const o = F.objects.find(x => x.id === F.sel);
+    if (e.target.id === "fInspVar") { o.v = e.target.value; refreshF(); renderInsp(); }
+    if (e.target.id === "fInspFrom") { o.fromVar = e.target.checked; refreshF(); renderInsp(); }
+  });
+  $("#fInsp").addEventListener("click", e => {
+    const b = e.target.closest("[data-reset]");
+    if (!b) return;
+    delete F.objects.find(x => x.id === F.sel).hand[b.dataset.reset];
+    refreshF(); renderInsp();
+  });
+  const sim = (id, name) => $(id).addEventListener("input", e => { F.vars[name].value = parseFloat(e.target.value); $(id + "o").textContent = fr(F.vars[name].value, name === "Niveau_Cuve" ? 0 : 1); refreshF(); });
+  sim("#fSimP", "Pression_Ligne"); sim("#fSimN", "Niveau_Cuve");
+  initValve(); initInit();
+}
+// Les indications grises de l'inspecteur suivent Unites et formats sans perdre la saisie.
+function renderInspPlaceholders() {
+  const o = F.objects.find(x => x.id === F.sel);
+  $$("#fInsp [data-hand]").forEach(i => {
+    const p = i.dataset.hand, inh = o.fromVar ? varProp(o.v, p) : {v: {min: 0, max: 100}[p], from: "défaut"};
+    i.placeholder = inh.v !== undefined ? `${frn(inh.v)} (${inh.from})` : (o.fromVar ? `(${o.v} n'en a pas)` : "");
+  });
+}
+// --- la vanne et sa plage
+function initValve() {
+  const draw = () => {
+    const raw = parseInt($("#fValve").value, 10), ranged = $("#fValveRange").checked;
+    const pct = ranged ? raw / 27648 * 100 : Math.min(raw, 100);
+    $("#fValveO").textContent = raw.toLocaleString("fr-FR");
+    $("#fValveTxt").innerHTML = ranged
+      ? `Ouverture : <b>${fr(pct, 0)} %</b> (${raw.toLocaleString("fr-FR")} sur 0 … 27 648).`
+      : `Sans plage : ${raw.toLocaleString("fr-FR")} est lu comme des %, borné à <b>${fr(pct, 0)} %</b>. C'était le cas avant le lot F.`;
+    const c = pct > 1 ? cssv("--run") : cssv("--stop");
+    $("#fValveView").innerHTML = `<svg viewBox="0 0 220 120" width="220" height="120">
+      <line x1="10" y1="80" x2="70" y2="80" stroke="${cssv("--view-line")}" stroke-width="8"/><line x1="150" y1="80" x2="210" y2="80" stroke="${cssv("--view-line")}" stroke-width="8"/>
+      <path d="M70,58 L110,80 L70,102 Z M150,58 L110,80 L150,102 Z" fill="${c}" stroke="${cssv("--view-ink")}" stroke-width="1.5"/>
+      <line x1="110" y1="80" x2="110" y2="36" stroke="${cssv("--view-ink")}" stroke-width="2"/>
+      <rect x="92" y="16" width="36" height="20" rx="3" fill="none" stroke="${cssv("--view-ink")}"/>
+      <rect x="94" y="18" width="${(32 * pct / 100).toFixed(1)}" height="16" fill="${cssv("--fluid")}" opacity=".7"/>
+      <text x="110" y="12" class="vt m" text-anchor="middle">${fr(pct, 0)} %</text></svg>`;
+  };
+  $("#fValve").addEventListener("input", draw); $("#fValveRange").addEventListener("change", draw); draw();
+}
+// --- les cuves en un litteral
+const INIT_DEF = "[(Nom := 'Cuve A', Niveau := 4.2), (Nom := 'Cuve B', Niveau := 7.5), (Nom := 'Cuve C', Niveau := 2.8)]";
+const INIT = {text: INIT_DEF};
+function splitTop(s, sep) {
+  const out = []; let depth = 0, q = false, cur = "";
+  for (const ch of s) {
+    if (ch === "'") q = !q;
+    if (!q && "([".includes(ch)) depth++;
+    if (!q && ")]".includes(ch)) depth--;
+    if (!q && depth === 0 && ch === sep) { out.push(cur); cur = ""; continue; }
+    cur += ch;
+  }
+  if (cur.trim()) out.push(cur);
+  return out;
+}
+function parseInit(txt) {
+  const rows = [], issues = [];
+  const t = txt.trim();
+  if (!t) return {rows, issues};
+  if (!t.startsWith("[") || !t.endsWith("]")) { issues.push({k: "warn", w: "Cuves", t: "valeur initiale illisible : un tableau s'écrit entre crochets, [(…), (…)]."}); return {rows, issues}; }
+  const els = splitTop(t.slice(1, -1), ",");
+  els.forEach((e, i) => {
+    const s = e.trim();
+    const row = {};
+    if (!s.startsWith("(") || !s.endsWith(")")) { issues.push({k: "warn", w: `Cuves[${i + 1}]`, t: `« ${esc(s)} » n'est pas une structure (Nom := …, Niveau := …).`}); rows.push(row); return; }
+    for (const part of splitTop(s.slice(1, -1), ",")) {
+      const m = part.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:=\s*(.+?)\s*$/);
+      if (!m) { issues.push({k: "warn", w: `Cuves[${i + 1}]`, t: `« ${esc(part.trim())} » : il faut membre := valeur.`}); continue; }
+      const mem = m[1].toLowerCase() === "nom" ? "Nom" : m[1].toLowerCase() === "niveau" ? "Niveau" : null;
+      if (!mem) { issues.push({k: "warn", w: `Cuves[${i + 1}]`, t: `membre inconnu « ${esc(m[1])} » : T_Cuve a Nom et Niveau.`}); continue; }
+      if (mem === "Nom") {
+        if (/^'.*'$/.test(m[2])) row.Nom = m[2].slice(1, -1);
+        else issues.push({k: "warn", w: `Cuves[${i + 1}].Nom`, t: `${esc(m[2])} n'est pas une STRING : écrire '${esc(m[2])}'.`});
+      } else {
+        const v = m[2].replace(",", ".");
+        if (/^[-+]?\d+(\.\d+)?$/.test(v)) row.Niveau = parseFloat(v);
+        else issues.push({k: "warn", w: `Cuves[${i + 1}].Niveau`, t: `${esc(m[2])} ne se convertit pas en REAL.`});
+      }
+    }
+    rows.push(row);
+  });
+  if (rows.length > 3) issues.push({k: "warn", w: "Cuves", t: `${rows.length} éléments pour ARRAY[1..3] : les éléments en trop sont ignorés.`});
+  return {rows: rows.slice(0, 3), issues};
+}
+const litHtml = t => esc(t).replace(/(&#39;[^&]*?&#39;)/g, '<span class="s">$1</span>').replace(/(:=\s*)(-?\d+(?:[.,]\d+)?)/g, '$1<span class="n">$2</span>');
+function renderInit(fromTable) {
+  const {rows, issues} = parseInit(INIT.text);
+  $("#fInitLit").innerHTML = `<input value="${esc(INIT.text)}" id="fInitInput" spellcheck="false" style="min-width:min(560px,70vw)" aria-label="Valeur initiale de Cuves">`;
+  if (!fromTable) {
+    $("#fInitTable").innerHTML = `<thead><tr><th>Élément</th><th>Nom</th><th>Niveau</th></tr></thead><tbody>${[0, 1, 2].map(i => `<tr><td class="idx">Cuves[${i + 1}]</td><td><input data-i="${i}" data-m="Nom" value="${esc(rows[i]?.Nom ?? "")}" placeholder="'' (du type)"></td><td><input data-i="${i}" data-m="Niveau" value="${rows[i]?.Niveau !== undefined ? String(rows[i].Niveau).replace(".", ",") : ""}" placeholder="0 (du type)"></td></tr>`).join("")}</tbody>`;
+  }
+  const W = 330, H = 150, bw = 60;
+  let s = `<line x1="30" y1="120" x2="${W - 10}" y2="120" stroke="${cssv("--view-line")}"/>`;
+  [0, 1, 2].forEach(i => {
+    const r = rows[i] || {}, v = r.Niveau ?? 0, x = 50 + i * 95, hgt = clamp(v / 10, 0, 1) * 100;
+    s += `<rect x="${x}" y="${120 - hgt}" width="${bw}" height="${hgt}" fill="${["#3b82d6", "#e0892b", "#2fa36b"][i]}" opacity=".85"/>`;
+    s += `<text x="${x + bw / 2}" y="${114 - hgt}" class="vt m" text-anchor="middle">${fr(v, 1)}</text><text x="${x + bw / 2}" y="136" class="vt" text-anchor="middle">${esc(r.Nom ?? "")}${r.Nom === undefined ? "''" : ""}</text>`;
+  });
+  $("#fInitView").innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${s}</svg>`;
+  const ok = issues.length ? issues : [{k: "ok", w: "Cuves", t: "la valeur initiale est appliquée au démarrage, élément par élément (les adresses ne bougent pas)."}];
+  genBox($("#fGenInit"), "Variables IHM", ok);
+}
+function initInit() {
+  renderInit(false);
+  $("#fInit").addEventListener("input", e => {
+    if (e.target.id === "fInitInput") { INIT.text = e.target.value; const pos = e.target.selectionStart; renderInit(false); const i = $("#fInitInput"); i.focus(); i.setSelectionRange(pos, pos); return; }
+    if (e.target.dataset.i === undefined) return;
+    // le tableau reecrit le litteral
+    const vals = [0, 1, 2].map(i => ({Nom: $(`#fInitTable [data-i="${i}"][data-m="Nom"]`).value, Niveau: $(`#fInitTable [data-i="${i}"][data-m="Niveau"]`).value}));
+    INIT.text = "[" + vals.map(v => "(" + [v.Nom !== "" ? `Nom := '${v.Nom.replace(/'/g, "")}'` : "", v.Niveau !== "" ? `Niveau := ${v.Niveau.replace(",", ".")}` : ""].filter(Boolean).join(", ") + ")").join(", ") + "]";
+    renderInit(true);
+  });
+  $("#fInitBad").addEventListener("click", () => { INIT.text = INIT_DEF.replace("Niveau := 7.5", "Nvieau := 7.5").replace("'Cuve C'", "Cuve C"); renderInit(false); });
+  $("#fInitReset").addEventListener("click", () => { INIT.text = INIT_DEF; renderInit(false); });
+}
+
+// ============================================================== G : synoptique et symboles
+const T_POMPE = [["Nom", "STRING"], ["Marche", "BOOL"], ["Defaut", "BOOL"], ["Mode", "MODE_MARCHE"], ["Debit", "REAL"], ["Heures", "REAL"]];
+const MODES = ["Auto", "Manuel", "Local", "Distant"];
+const ROLES = [
+  {r: "Valeur (marche)", t: ["BOOL"], def: "Marche"},
+  {r: "Défaut", t: ["BOOL"], def: "Defaut"},
+  {r: "Mode", t: ["MODE_MARCHE"], def: "Mode"},
+  {r: "Mesure", t: ["REAL", "INT"], def: "Debit"},
+  {r: "Libellé", t: ["STRING"], def: "Nom"},
+  {r: "Ouverture", t: ["REAL", "INT"], def: ""},
+  {r: "En mouvement", t: ["BOOL"], def: ""},
+];
+const G = {
+  equip: "P1",
+  map: Object.fromEntries(ROLES.map(x => [x.r, x.def])),
+  data: {
+    P1: {Nom: "P1 - alimentation", Marche: true, Defaut: false, Mode: 0, Debit: 32.5, Heures: 1250},
+    P2: {Nom: "P2 - secours", Marche: false, Defaut: false, Mode: 1, Debit: 0, Heures: 310},
+    "Pompes[2]": {Nom: "Pompe 2", Marche: true, Defaut: true, Mode: 0, Debit: 12, Heures: 8800},
+    "$Pompe$": {Nom: "P1 - alimentation", Marche: true, Defaut: false, Mode: 0, Debit: 32.5, Heures: 1250},
+  },
+  label: "",
+};
+function pumpSvg(st) {
+  // st : {run, fault, mode, label, measure, anim}
+  const col = st.fault ? cssv("--fault") : st.run ? cssv("--run") : cssv("--stop");
+  const flow = st.run && !st.fault;
+  return `<svg viewBox="0 0 240 170" width="240" height="170">
+    <line x1="8" y1="92" x2="70" y2="92" stroke="${cssv("--view-line")}" stroke-width="10"/>
+    <line x1="120" y1="40" x2="232" y2="40" stroke="${cssv("--view-line")}" stroke-width="10"/>
+    ${flow ? `<line x1="8" y1="92" x2="70" y2="92" stroke="${cssv("--fluid")}" stroke-width="4" class="flow"/><line x1="120" y1="40" x2="232" y2="40" stroke="${cssv("--fluid")}" stroke-width="4" class="flow"/>` : ""}
+    <circle cx="105" cy="92" r="40" fill="${col}" stroke="${cssv("--view-ink")}" stroke-width="2" class="${st.fault ? "blink" : ""}"/>
+    <path d="M105,52 L145,52 L145,40" fill="none" stroke="${cssv("--view-ink")}" stroke-width="2"/>
+    <g class="${flow ? "spin" : ""}"><path d="M105,92 L125,78 M105,92 L101,116 M105,92 L84,80" stroke="${cssv("--view")}" stroke-width="5" stroke-linecap="round"/></g>
+    <circle cx="105" cy="92" r="5" fill="${cssv("--view")}"/>
+    ${st.mode !== undefined ? `<rect x="146" y="70" width="26" height="20" rx="4" fill="${cssv("--accent-2")}" stroke="${cssv("--accent")}"/><text x="159" y="84" class="vt" text-anchor="middle" fill="${cssv("--accent")}" font-weight="700">${MODES[st.mode][0]}</text>` : ""}
+    ${st.measure !== undefined ? `<text x="160" y="112" class="vt m">${fr(st.measure, 1)} m³/h</text>` : ""}
+    <text x="105" y="152" class="vt" text-anchor="middle" font-weight="600">${esc(st.label)}</text>
+  </svg>`;
+}
+function memberValue(name) { return G.data[G.equip][name]; }
+function renderEquip() {
+  const d = G.data[G.equip];
+  $("#gMembers").innerHTML = `
+    <span>Nom</span><input class="inp" data-m="Nom" value="${esc(d.Nom)}">
+    <span>Marche</span><label><input type="checkbox" data-m="Marche" ${d.Marche ? "checked" : ""}> ${d.Marche ? "TRUE" : "FALSE"}</label>
+    <span>Defaut</span><label><input type="checkbox" data-m="Defaut" ${d.Defaut ? "checked" : ""}> ${d.Defaut ? "TRUE" : "FALSE"}</label>
+    <span>Mode</span><select class="inp" data-m="Mode">${MODES.map((m, i) => `<option value="${i}" ${i === d.Mode ? "selected" : ""}>MODE_MARCHE#${m}</option>`).join("")}</select>
+    <span>Debit</span><span><input type="range" min="0" max="60" step="0.5" data-m="Debit" value="${d.Debit}"> <output class="mono">${fr(d.Debit, 1)}</output></span>
+    <span>Heures</span><span class="mono">${d.Heures} h</span>`;
+  drawPump();
+  renderEquipInsp();
+}
+function drawPump() {
+  const role = r => G.map[r] ? memberValue(G.map[r]) : undefined;
+  $("#gPumpView").innerHTML = pumpSvg({
+    run: !!role("Valeur (marche)"), fault: !!role("Défaut"), mode: role("Mode"),
+    measure: role("Mesure"), label: G.label || (role("Libellé") ?? "Pompe_1"),
+  });
+  const items = [];
+  const linked = ROLES.filter(x => G.map[x.r]).map(x => G.map[x.r]);
+  items.push({k: "ok", w: "Pompe_1", t: `Équipement ${esc(G.equip)} (T_Pompe) : ${linked.length} rôles liés (${linked.join(", ")}).`});
+  if (G.equip === "$Pompe$") items.push({k: "info", w: "Pompe_1", t: "un repère : Dupliquer le fait varier ($Pompe$ → P2, P3…), et il est retiré au dessin comme au moteur."});
+  if (G.map["Valeur (marche)"] === "") items.push({k: "warn", w: "Pompe_1", t: "aucun membre pour la Valeur : la pompe est dessinée arrêtée."});
+  items.push({k: "warn", w: "Pompe_2", t: "Valeur reçoit toute la structure P2 : utiliser la liaison Équipement."});
+  items.push({k: "warn", w: "Moteur_M3", t: "Valeur = M3_Etat (ETAT_MOTEUR) est lue comme un booléen (≠ 0 = marche) : passer en mode État."});
+  items.push({k: "warn", w: "Vanne_V4", t: "Couleur défaut « rouje » n'est pas une couleur."});
+  genBox($("#gGenEquip"), "Vue_Synoptique", items);
+}
+function renderEquipInsp() {
+  const opts = r => `<option value="">(aucun)</option>` + T_POMPE.filter(([, t]) => r.t.includes(t)).map(([m, t]) => `<option value="${m}" ${G.map[r.r] === m ? "selected" : ""}>${m} : ${t}</option>`).join("");
+  $("#gInsp").innerHTML = `<div class="insp-head"><b>Pompe_1</b><span class="t">Pompe</span></div><div class="props">
+    <div class="g">Liaison</div>
+    <div class="l">Équipement</div><div class="v"><select id="gEquipSel">${Object.keys(G.data).map(n => `<option ${n === G.equip ? "selected" : ""}>${n}</option>`).join("")}</select></div>
+    <div class="l"></div><div class="v"><span class="small">${G.equip === "$Pompe$" ? `<span class="mk">$Pompe$</span> : un repère` : "T_Pompe"}</span></div>
+    <div class="g">Correspondance (pour tous les T_Pompe)</div>
+    ${ROLES.map(r => `<div class="l">${r.r}</div><div class="v"><select data-role="${r.r}">${opts(r)}</select></div>`).join("")}
+    <div class="g">Réglé sur l'objet</div>
+    <div class="l">Libellé</div><div class="v"><input type="text" id="gLabel" class="${G.label ? "hand" : "inh"}" value="${esc(G.label)}" placeholder="{${esc(G.equip)}.Nom} (Équipement)" aria-label="Libellé"></div>
+  </div><p class="small" style="padding:6px 10px;margin:0">La correspondance est gardée par type : changer Mesure ici change toutes les pompes T_Pompe du projet.</p>`;
+}
+function initEquip() {
+  renderEquip();
+  $("#gMembers").addEventListener("input", e => {
+    const m = e.target.dataset.m;
+    if (!m) return;
+    const d = G.data[G.equip];
+    if (e.target.type === "checkbox") { d[m] = e.target.checked; e.target.nextSibling.textContent = d[m] ? " TRUE" : " FALSE"; }
+    else if (m === "Mode") d[m] = parseInt(e.target.value, 10);
+    else if (m === "Debit") { d[m] = parseFloat(e.target.value); e.target.nextElementSibling.textContent = fr(d[m], 1); }
+    else d[m] = e.target.value;
+    drawPump();
+  });
+  $("#gInsp").addEventListener("change", e => {
+    if (e.target.id === "gEquipSel") { G.equip = e.target.value; renderEquip(); return; }
+    if (e.target.dataset.role !== undefined) { G.map[e.target.dataset.role] = e.target.value; drawPump(); }
+  });
+  $("#gInsp").addEventListener("input", e => {
+    if (e.target.id === "gLabel") { G.label = e.target.value; e.target.className = G.label ? "hand" : "inh"; drawPump(); }
+  });
+}
+// --- le mode Etat
+const ASPECTS = {Arrêt: "--stop", Marche: "--run", Défaut: "--fault", Maintenance: "--maint"};
+const STATE = {value: 2, rows: [
+  {name: "Arret", n: 0, aspect: "Arrêt", anim: false},
+  {name: "Marche", n: 1, aspect: "Marche", anim: true},
+  {name: "Defaut", n: 2, aspect: "Défaut", anim: false},
+  {name: "Maintenance", n: 3, aspect: "Maintenance", anim: false},
+]};
+function motorSvg(color, spin, blink, txt) {
+  return `<svg viewBox="0 0 150 120" width="150" height="120">
+    <rect x="30" y="28" width="78" height="56" rx="8" fill="${color}" stroke="${cssv("--view-ink")}" stroke-width="2" class="${blink ? "blink" : ""}"/>
+    ${[40, 52, 64, 76, 88, 100].map(x => `<line x1="${x}" y1="32" x2="${x}" y2="80" stroke="${cssv("--view")}" stroke-opacity=".35"/>`).join("")}
+    <rect x="108" y="48" width="18" height="16" fill="${cssv("--view-line")}"/>
+    <g class="${spin ? "spin" : ""}"><circle cx="69" cy="56" r="14" fill="none" stroke="${cssv("--view")}" stroke-width="3" stroke-dasharray="20 8"/></g>
+    <text x="69" y="61" class="vt" text-anchor="middle" fill="${cssv("--view")}" font-weight="700">M</text>
+    <text x="69" y="106" class="vt" text-anchor="middle">${esc(txt)}</text></svg>`;
+}
+function renderState() {
+  const asp = Object.keys(ASPECTS);
+  $("#gStateTable").innerHTML = `<thead><tr><th>Valeur</th><th>Aspect</th><th>Animé</th></tr></thead><tbody>${STATE.rows.map((r, i) => `<tr class="${r.n === STATE.value ? "sel" : ""}"><td class="key">ETAT_MOTEUR#${r.name} (${r.n})</td><td><select data-i="${i}" data-f="aspect">${asp.map(a => `<option ${a === r.aspect ? "selected" : ""}>${a}</option>`).join("")}</select></td><td><input type="checkbox" data-i="${i}" data-f="anim" ${r.anim ? "checked" : ""} style="width:auto;min-width:0" aria-label="Animé"></td></tr>`).join("")}</tbody>`;
+  $("#gStateSeg").innerHTML = STATE.rows.map(r => `<button type="button" data-n="${r.n}" class="${r.n === STATE.value ? "on" : ""}">${r.name}</button>`).join("");
+  const r = STATE.rows.find(x => x.n === STATE.value);
+  $("#gStateOld").innerHTML = motorSvg(STATE.value !== 0 ? cssv("--run") : cssv("--stop"), STATE.value !== 0, false, STATE.value !== 0 ? "« en marche »" : "à l'arrêt");
+  $("#gStateNew").innerHTML = motorSvg(cssv(ASPECTS[r.aspect]), r.anim, r.aspect === "Défaut", r.aspect);
+}
+function initState() {
+  renderState();
+  $("#gStateSeg").addEventListener("click", e => { const b = e.target.closest("[data-n]"); if (b) { STATE.value = parseInt(b.dataset.n, 10); renderState(); } });
+  $("#gStateTable").addEventListener("change", e => {
+    const i = e.target.dataset.i; if (i === undefined) return;
+    const r = STATE.rows[+i];
+    if (e.target.dataset.f === "aspect") r.aspect = e.target.value; else r.anim = e.target.checked;
+    renderState();
+  });
+}
+// --- les arguments d'une instance de symbole
+const KNOWN = {"Cuves": "ARRAY[1..3] OF T_Cuve", "Cuves[1]": "T_Cuve", "Cuves[2]": "T_Cuve", "Cuves[3]": "T_Cuve", "P1": "T_Pompe", "Base": "REAL", "Seuil_Haut": "REAL", "Nom_Cuve": "STRING", "Commande_V1": "BOOL", "Marche": "BOOL"};
+const PARAMS = [
+  {p: "Cuve", t: "T_Cuve", dir: "lu", a: "Cuves[2]"},
+  {p: "Nom", t: "STRING", dir: "lu", a: "12"},
+  {p: "Seuil", t: "REAL", dir: "lu", a: "'haut'"},
+  {p: "Commande", t: "BOOL", dir: "écrit par le symbole", a: "Marche AND Base > 2"},
+  {p: "Couleur", t: "", dir: "", a: "3", unknown: true},
+];
+function checkArg(x) {
+  const a = x.a.trim();
+  if (x.unknown) return {k: "warn", t: `Sym_Cuve n'a pas de paramètre « ${esc(x.p)} ».`};
+  if (!a) return {k: "info", t: "vide : la valeur par défaut du paramètre."};
+  const isStr = /^'.*'$/.test(a), isNum = /^[-+]?\d+([.,]\d+)?$/.test(a), isBool = /^(TRUE|FALSE)$/i.test(a);
+  const varT = KNOWN[a];
+  const isCalc = !varT && !isStr && !isNum && !isBool;
+  if (x.dir.startsWith("écrit")) {
+    if (varT === x.t) return {k: "ok", t: `${esc(a)} : ${varT}, écrite par le symbole.`};
+    if (varT) return {k: "warn", t: `${esc(a)} est un ${varT}, le paramètre attend un ${x.t}.`};
+    return {k: "warn", t: `le symbole écrit ${x.p} : il lui faut une variable, pas ${isCalc ? "un calcul" : "une constante"}.`};
+  }
+  if (varT) {
+    if (varT === x.t) return {k: "ok", t: `${esc(a)} : ${varT}.`};
+    if (varT.startsWith("ARRAY") && varT.endsWith(x.t)) return {k: "warn", t: `${esc(a)} est un tableau de ${x.t}, pas un ${x.t} : écrire ${esc(a)}[1].`};
+    if ((x.t === "REAL" && varT === "INT") || (x.t === "STRING")) return {k: "ok", t: `${esc(a)} : ${varT}, converti en ${x.t}.`};
+    return {k: "warn", t: `${esc(a)} est un ${varT}, le paramètre attend un ${x.t}.`};
+  }
+  if (x.t === "STRING") return isStr ? {k: "ok", t: "un texte."} : {k: "warn", t: `${esc(a)} n'est pas une STRING : écrire '${esc(a.replace(/'/g, ""))}'.`};
+  if (x.t === "REAL") return isNum ? {k: "ok", t: "un nombre."} : isStr ? {k: "warn", t: `${esc(a)} ne se convertit pas en REAL.`} : {k: "info", t: "un calcul : vérifié en marche."};
+  if (x.t === "BOOL") return isBool ? {k: "ok", t: "une constante."} : {k: "info", t: "un calcul : vérifié en marche."};
+  if (/^[A-Za-z_]/.test(a)) return {k: "warn", t: `« ${esc(a)} » : variable inconnue.`};
+  return {k: "warn", t: `${esc(a)} n'est pas un ${x.t}.`};
+}
+function renderArgs(keepFocus) {
+  const res = PARAMS.map(checkArg);
+  const body = PARAMS.map((x, i) => `<tr><td class="key">${esc(x.p)}</td><td class="key">${esc(x.t || "—")}</td><td class="small">${esc(x.dir || "—")}</td><td><input data-i="${i}" value="${esc(x.a)}" aria-label="Argument ${esc(x.p)}"></td><td>${sev(res[i].k, "")} <span class="small">${res[i].t}</span></td></tr>`).join("");
+  if (!keepFocus) $("#gArgsTable").innerHTML = `<thead><tr><th>Paramètre</th><th>Type</th><th>Sens</th><th>Argument</th><th>Vérification</th></tr></thead><tbody>${body}</tbody>`;
+  else $$("#gArgsTable tbody tr").forEach((tr, i) => { tr.lastElementChild.innerHTML = `${sev(res[i].k, "")} <span class="small">${res[i].t}</span>`; });
+  genBox($("#gGenArgs"), "Vue_Cuves", PARAMS.map((x, i) => ({...res[i], w: `Cuve_Nord · ${x.p}`})).filter(r => r.k !== "ok"));
+}
+function initArgs() {
+  renderArgs(false);
+  $("#gArgsTable").addEventListener("input", e => { const i = e.target.dataset.i; if (i === undefined) return; PARAMS[+i].a = e.target.value; renderArgs(true); });
+}
+// --- creer un symbole
+function initCreate() {
+  const paths = [["P1.Marche", "BOOL", "Valeur"], ["P1.Defaut", "BOOL", "Défaut"], ["P1.Debit", "REAL", "Texte de l'afficheur"]];
+  const render = mode => {
+    $("#gCreateBody").innerHTML = `
+      <div class="gridwrap"><table class="grid"><thead><tr><th>Chemin choisi</th><th>Type</th><th>Lu par</th></tr></thead><tbody>${paths.map(p => `<tr><td class="key">${p[0]}</td><td class="key">${p[1]}</td><td class="small">${p[2]}</td></tr>`).join("")}</tbody></table></div>
+      <div class="ctrl"><span class="seg" id="gCreateSeg"><button type="button" data-m="one" class="${mode === "one" ? "on" : ""}">Un paramètre Pompe : T_Pompe (conseillé)</button><button type="button" data-m="each" class="${mode === "each" ? "on" : ""}">Un paramètre par chemin</button></span></div>
+      <div class="two" style="margin:0">
+        <div><p class="small" style="margin:0 0 4px">Les paramètres proposés</p><div class="gridwrap"><table class="grid"><thead><tr><th>Nom</th><th>Type</th></tr></thead><tbody>${mode === "one" ? `<tr><td class="key">Pompe</td><td class="key">T_Pompe</td></tr>` : `<tr><td class="key">Marche</td><td class="key">BOOL</td></tr><tr><td class="key">Defaut</td><td class="key">BOOL</td></tr><tr><td class="key">Debit</td><td class="key">REAL</td></tr>`}</tbody></table></div></div>
+        <div><p class="small" style="margin:0 0 4px">Dans le symbole</p><div class="literal">${mode === "one" ? "Pompe_1 · Équipement = Pompe\nAfficheur · Texte = {Pompe.Debit} m³/h" : "Pompe_1 · Valeur = Marche\nPompe_1 · Défaut = Defaut\nAfficheur · Texte = {Debit} m³/h"}</div></div>
+      </div>
+      <p class="small" style="margin:0">Avant : trois paramètres <code>ANY</code>, à typer à la main.</p>`;
+  };
+  render("one");
+  $("#gCreateBody").addEventListener("click", e => { const b = e.target.closest("[data-m]"); if (b) render(b.dataset.m); });
+}
+// --- les petits plus
+const GAS = [["Oxygène", "#f2f2f2"], ["Azote", "#1f1f1f"], ["Argon", "#2c5a3b"], ["Dioxyde de carbone", "#8d939a"], ["Hélium", "#6e4a2a"], ["Hydrogène", "#c0392b"], ["Acétylène", "#7b2f22"], ["Protoxyde d'azote", "#25509b"]];
+function initSmall() {
+  const jack = () => {
+    const out = $("#gJack").checked, len = out ? 92 : 12;
+    $("#gJackView").innerHTML = `<svg viewBox="0 0 240 70" width="240" height="70"><rect x="14" y="20" width="96" height="30" rx="4" fill="${cssv("--stop")}" stroke="${cssv("--view-ink")}"/><rect x="${110}" y="31" width="${len}" height="8" fill="${cssv("--view-ink")}"/><rect x="${110 + len}" y="22" width="8" height="26" fill="${cssv("--view-ink")}"/><text x="62" y="40" class="vt" text-anchor="middle" fill="${cssv("--view")}">${out ? "sorti" : "rentré"}</text></svg>`;
+  };
+  $("#gJack").addEventListener("change", jack); jack();
+  $("#gGas").innerHTML = GAS.map(g => `<option>${g[0]}</option>`).join("");
+  const gas = () => {
+    const g = GAS.find(x => x[0] === $("#gGas").value);
+    $("#gGasView").innerHTML = `<svg viewBox="0 0 120 150" width="120" height="150"><rect x="38" y="36" width="44" height="100" rx="10" fill="${cssv("--view-grid")}" stroke="${cssv("--view-ink")}"/><path d="M38,58 Q38,30 60,26 Q82,30 82,58 Z" fill="${g[1]}" stroke="${cssv("--view-ink")}"/><rect x="54" y="14" width="12" height="14" fill="${cssv("--view-line")}"/><text x="60" y="146" class="vt" text-anchor="middle">${esc(g[0])}</text></svg>`;
+  };
+  $("#gGas").addEventListener("change", gas); gas();
+  let pos = "1-2";
+  const w3 = () => {
+    const L = $("#g3wL").checked, bad = L && pos === "1-2";
+    $("#g3wSeg").innerHTML = ["fermée", "1-2", "1-3", "2-3"].map(p => `<button type="button" data-p="${p}" class="${p === pos ? "on" : ""}">${p}</button>`).join("");
+    const act = (a, b) => pos === `${a}-${b}`;
+    const line = (x1, y1, x2, y2, on) => `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${on && !bad ? cssv("--fluid") : cssv("--view-line")}" stroke-width="${on && !bad ? 6 : 4}" stroke-opacity="${on ? 1 : .45}"/>`;
+    $("#g3wView").innerHTML = `<svg viewBox="0 0 220 130" width="220" height="130">
+      ${line(10, 50, 110, 50, act(1, 2) || act(1, 3))}${line(110, 50, 210, 50, act(1, 2) || act(2, 3))}${line(110, 50, 110, 125, act(1, 3) || act(2, 3))}
+      <circle cx="110" cy="50" r="16" fill="${cssv("--view")}" stroke="${cssv("--view-ink")}" stroke-width="2"/>
+      <text x="16" y="40" class="vt">1</text><text x="198" y="40" class="vt">2</text><text x="118" y="122" class="vt">3</text>
+      ${bad ? `<path d="M98,38 L122,62 M122,38 L98,62" stroke="${cssv("--fault")}" stroke-width="3"/>` : ""}</svg>`;
+    $("#g3wTxt").innerHTML = bad ? `${sev("warn", "")} Générer : la position 1-2 est impossible pour un boisseau en L.` : "Les lignes du mode inactif sont grisées.";
+  };
+  $("#g3wSeg").addEventListener("click", e => { const b = e.target.closest("[data-p]"); if (b) { pos = b.dataset.p; w3(); } });
+  $("#g3wL").addEventListener("change", w3); w3();
+  let isa = [101];
+  const drawIsa = () => {
+    $("#gIsaView").innerHTML = `<svg viewBox="0 0 ${Math.max(150, isa.length * 74 + 10)} 90" width="${Math.max(150, isa.length * 74 + 10)}" height="90">${isa.map((n, i) => `<g transform="translate(${10 + i * 74},8)"><circle cx="32" cy="34" r="30" fill="${cssv("--view")}" stroke="${cssv("--view-ink")}" stroke-width="2"/><line x1="2" y1="34" x2="62" y2="34" stroke="${cssv("--view-ink")}"/><text x="32" y="28" class="vt" text-anchor="middle" font-weight="700">TT</text><text x="32" y="50" class="vt m" text-anchor="middle" ${i ? `fill="${cssv("--new")}"` : ""}>${n}</text></g>`).join("")}</svg>`;
+  };
+  window.drawIsa = drawIsa;
+  $("#gIsaDup").addEventListener("click", () => { if (isa.length < 5) isa.push(isa[isa.length - 1] + 1); drawIsa(); });
+  $("#gIsaReset").addEventListener("click", () => { isa = [101]; drawIsa(); });
+  drawIsa();
+}
+function initG() { initEquip(); initState(); initArgs(); initCreate(); initSmall(); }
+
+// ============================================================== H : le dessin
+// Un point de l'ecran dans le repere du SVG.
+function svgPoint(svg, ev) {
+  const p = svg.createSVGPoint();
+  p.x = ev.clientX; p.y = ev.clientY;
+  const m = svg.getScreenCTM();
+  return m ? p.matrixTransform(m.inverse()) : {x: 0, y: 0};
+}
+const snap = (v, alt) => alt ? Math.round(v) : Math.round(v / 10) * 10;
+// Le point du segment [a, b] le plus proche de p, et sa distance.
+function nearSeg(p, a, b) {
+  const dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy || 1;
+  const t = clamp(((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2, 0, 1);
+  const q = [a[0] + t * dx, a[1] + t * dy];
+  return {q, d: Math.hypot(p[0] - q[0], p[1] - q[1])};
+}
+function inPoly(p, pts) {
+  let inside = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const [xi, yi] = pts[i], [xj, yj] = pts[j];
+    if ((yi > p[1]) !== (yj > p[1]) && p[0] < (xj - xi) * (p[1] - yi) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+// --- ligne et polygone
+const PL = {kind: "poly", pts: [[80, 70], [300, 40], [470, 120], [420, 260], [150, 250]], sel: -1, hist: [], text: null};
+const plText = () => PL.pts.map(p => `${p[0]},${p[1]}`).join(" ");
+function plSave() { PL.hist.push(JSON.stringify(PL.pts)); if (PL.hist.length > 60) PL.hist.shift(); }
+function plParse(t) {
+  const norm = t.replace(/,\s+/g, ",").trim();
+  const toks = norm ? norm.split(/\s+/) : [];
+  const pts = [], bad = [];
+  toks.forEach((tok, i) => {
+    const m = tok.match(/^(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)$/);
+    if (m) pts.push([parseFloat(m[1]), parseFloat(m[2])]);
+    else bad.push({i: i + 1, tok, why: /^-?\d+(\.\d+)?$/.test(tok) ? "un nombre seul" : (tok.split(",").length === 3 ? "trois nombres : une virgule décimale ? écrire 10.5,20" : "ni x,y ni un nombre")});
+  });
+  return {pts, bad};
+}
+function plDraw() {
+  const svg = $("#hPolySvg"), pts = PL.pts;
+  const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+  const bx = Math.min(...xs), by = Math.min(...ys), bw = Math.max(...xs) - bx, bh = Math.max(...ys) - by;
+  const d = pts.map((p, i) => `${i ? "L" : "M"}${p[0]},${p[1]}`).join(" ") + (PL.kind === "poly" ? " Z" : "");
+  let s = `<rect x="${bx - 6}" y="${by - 6}" width="${bw + 12}" height="${bh + 12}" fill="none" stroke="${cssv("--accent")}" stroke-dasharray="4 3" opacity=".6"/>`;
+  s += `<text x="${bx - 6}" y="${by - 10}" class="vt m" fill="${cssv("--accent")}">Forme_1 · ${Math.round(bw)} × ${Math.round(bh)}</text>`;
+  s += `<path d="${d}" fill="${PL.kind === "poly" ? cssv("--fluid") : "none"}" fill-opacity=".18" stroke="${cssv("--view-ink")}" stroke-width="2.5" stroke-linejoin="round"/>`;
+  s += `<path d="${d}" fill="none" stroke="transparent" stroke-width="14" data-seg="1" style="cursor:copy"/>`;
+  pts.forEach((p, i) => { s += `<rect x="${p[0] - 6}" y="${p[1] - 6}" width="12" height="12" rx="2" data-v="${i}" fill="${i === PL.sel ? cssv("--accent") : cssv("--view")}" stroke="${cssv("--accent")}" stroke-width="2" style="cursor:move"/>`; });
+  svg.innerHTML = s;
+  $("#hPolyKind").textContent = "› " + (PL.kind === "poly" ? "Polygone" : "Ligne");
+  $("#hDel").disabled = PL.sel < 0 || pts.length <= (PL.kind === "poly" ? 3 : 2);
+  $("#hUndo").disabled = !PL.hist.length;
+}
+function plTable() {
+  $("#hPolyTable").innerHTML = `<thead><tr><th>#</th><th>X</th><th>Y</th><th></th></tr></thead><tbody>${PL.pts.map((p, i) => `<tr class="${i === PL.sel ? "sel" : ""}"><td class="idx">${i + 1}</td><td><input data-i="${i}" data-c="0" value="${p[0]}"></td><td><input data-i="${i}" data-c="1" value="${p[1]}"></td><td class="acts"><button class="mini" type="button" data-up="${i}" title="Monter">↑</button><button class="mini x" type="button" data-rm="${i}" title="Retirer">✕</button></td></tr>`).join("")}</tbody>`;
+}
+function plGen() {
+  const t = PL.text ?? plText(), {bad} = plParse(t);
+  const items = bad.map(b => ({k: "warn", w: "Forme_1 · points", t: `paire ${b.i}, « ${esc(b.tok)} » : ${b.why}.`}));
+  if (!bad.length && /,\s+/.test(t)) items.push({k: "info", w: "Forme_1 · points", t: "« 10, 20 » (une espace après la virgule) est lu comme 10,20."});
+  genBox($("#hGenPoly"), "Vue_Formes", items);
+}
+function plAll(fromText) {
+  plDraw(); plTable();
+  if (!fromText) { PL.text = null; $("#hPolyText").value = plText(); }
+  plGen();
+}
+function initPoly() {
+  const svg = $("#hPolySvg");
+  svg.setAttribute("tabindex", "0");
+  let drag = -1, lastDown = {t: 0, x: 0, y: 0};
+  // Le double-clic est reconnu ici : redessiner au premier appui remplace l'element vise,
+  // et le navigateur ne donnerait alors ni click ni dblclick.
+  const insertAt = q => {
+    let best = {d: Infinity, i: -1, q: null};
+    const n = PL.pts.length, segs = PL.kind === "poly" ? n : n - 1;
+    for (let i = 0; i < segs; i++) { const r = nearSeg(q, PL.pts[i], PL.pts[(i + 1) % n]); if (r.d < best.d) best = {...r, i}; }
+    if (best.d > 14) return;
+    plSave(); PL.pts.splice(best.i + 1, 0, [snap(best.q[0]), snap(best.q[1])]); PL.sel = best.i + 1; plAll();
+  };
+  svg.addEventListener("pointerdown", e => {
+    e.preventDefault(); svg.focus({preventScroll: true});   // Suppr et Ctrl+Z visent ce dessin
+    const p = svgPoint(svg, e), now = performance.now();
+    const dbl = now - lastDown.t < 400 && Math.hypot(p.x - lastDown.x, p.y - lastDown.y) < 8;
+    lastDown = {t: dbl ? 0 : now, x: p.x, y: p.y};
+    if (dbl && e.target.dataset.v === undefined) { insertAt([p.x, p.y]); return; }
+    const v = e.target.dataset.v;
+    if (v === undefined) { if (PL.sel !== -1) { PL.sel = -1; plDraw(); plTable(); } return; }
+    plSave(); drag = +v; PL.sel = drag; svg.setPointerCapture(e.pointerId); plDraw(); plTable();
+  });
+  svg.addEventListener("pointermove", e => {
+    if (drag < 0) return;
+    const p = svgPoint(svg, e);
+    PL.pts[drag] = [clamp(snap(p.x, e.altKey), 0, 560), clamp(snap(p.y, e.altKey), 0, 320)];
+    plDraw();
+  });
+  svg.addEventListener("pointerup", () => { if (drag >= 0) { drag = -1; plAll(); } });
+  const del = () => {
+    if (PL.sel < 0 || PL.pts.length <= (PL.kind === "poly" ? 3 : 2)) return;
+    plSave(); PL.pts.splice(PL.sel, 1); PL.sel = -1; plAll();
+  };
+  const undo = () => { if (!PL.hist.length) return; PL.pts = JSON.parse(PL.hist.pop()); PL.sel = -1; plAll(); };
+  $("#hPoly").addEventListener("keydown", e => {
+    if (e.target.tagName === "INPUT") return;
+    if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); del(); }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); undo(); }
+  });
+  $("#hDel").addEventListener("click", del);
+  $("#hUndo").addEventListener("click", undo);
+  $("#hPolySeg").addEventListener("click", e => {
+    const b = e.target.closest("[data-k]"); if (!b) return;
+    PL.kind = b.dataset.k; $$("#hPolySeg button").forEach(x => x.classList.toggle("on", x === b)); plAll();
+  });
+  $("#hPolyTable").addEventListener("input", e => {
+    const i = e.target.dataset.i; if (i === undefined) return;
+    const v = parseFloat(e.target.value.replace(",", "."));
+    if (Number.isFinite(v)) { PL.pts[+i][+e.target.dataset.c] = v; plDraw(); PL.text = null; $("#hPolyText").value = plText(); plGen(); }
+  });
+  $("#hPolyTable").addEventListener("focusin", () => plSave());
+  $("#hPolyTable").addEventListener("click", e => {
+    const up = e.target.dataset.up, rm = e.target.dataset.rm;
+    if (up !== undefined && +up > 0) { plSave(); const i = +up; [PL.pts[i - 1], PL.pts[i]] = [PL.pts[i], PL.pts[i - 1]]; plAll(); }
+    if (rm !== undefined) { PL.sel = +rm; del(); }
+  });
+  $("#hPolyText").addEventListener("input", e => {
+    PL.text = e.target.value;
+    const {pts} = plParse(PL.text);
+    if (pts.length >= 2) PL.pts = pts;
+    plDraw(); plTable(); plGen();
+  });
+  plAll();
+}
+// --- les points depuis une source : un profil de four
+function initProfile() {
+  let t = 12, run = false, raf = 0;
+  const prof = () => Array.from({length: 11}, (_, i) => {
+    const x = i * 10, k = 0.25 + 0.75 * Math.min(1, t / 8);
+    return [x, Math.round(20 + k * 1080 * (1 - Math.exp(-x / 22)) * (x > 75 ? 1 - (x - 75) / 120 : 1))];
+  });
+  const draw = () => {
+    const pts = prof();
+    const sc = $("#hProfScale").value.replace(/\s/g, "").replace("…", "...");
+    const m = sc.match(/^(-?\d+(?:[.,]\d+)?)\.\.\.(-?\d+(?:[.,]\d+)?)$/);
+    const ys = pts.map(p => p[1]);
+    const [y0, y1] = m ? [parseFloat(m[1].replace(",", ".")), parseFloat(m[2].replace(",", "."))] : [Math.min(...ys), Math.max(...ys)];
+    const W = 380, H = 190, L = 44, B = 160, T = 14, R = W - 14;
+    const X = x => L + (R - L) * x / 100, Y = y => B - (B - T) * clamp((y - y0) / ((y1 - y0) || 1), 0, 1);
+    let s = `<rect x="${L}" y="${T}" width="${R - L}" height="${B - T}" fill="none" stroke="${cssv("--accent")}" stroke-dasharray="4 3" opacity=".5"/>`;
+    s += `<text x="${L - 6}" y="${T + 4}" class="vt" text-anchor="end">${frn(y1)}</text><text x="${L - 6}" y="${B}" class="vt" text-anchor="end">${frn(y0)}</text>`;
+    s += `<text x="${L}" y="${B + 16}" class="vt" text-anchor="middle">0</text><text x="${R}" y="${B + 16}" class="vt" text-anchor="middle">100</text>`;
+    s += `<polyline points="${pts.map(p => `${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join(" ")}" fill="none" stroke="${cssv("--fault")}" stroke-width="2.5"/>`;
+    pts.forEach(p => { s += `<circle cx="${X(p[0]).toFixed(1)}" cy="${Y(p[1]).toFixed(1)}" r="3" fill="${cssv("--fault")}"/>`; });
+    s += `<text x="${(L + R) / 2}" y="${B + 30}" class="vt" text-anchor="middle">${m ? "échelle Y réglée" : "échelle Y automatique : " + frn(y0) + " … " + frn(y1)}</text>`;
+    $("#hProfView").innerHTML = `<svg viewBox="0 0 ${W} ${H + 12}" width="${W}" height="${H + 12}">${s}</svg>`;
+  };
+  const loop = () => { t += 0.05; draw(); if (run && t < 12) raf = requestAnimationFrame(loop); };
+  $("#hProfRun").addEventListener("change", e => { run = e.target.checked; t = run ? 0 : t; cancelAnimationFrame(raf); if (run) loop(); else draw(); });
+  $("#hProfScale").addEventListener("input", draw);
+  draw();
+}
+// --- le plan a zones
+const PZ = {zones: [
+  {name: "Atelier", group: "Atelier", color: "#3b82d6", pts: [[30, 30], [270, 30], [270, 170], [30, 170]]},
+  {name: "Stock", group: "Stock", color: "#2fa36b", pts: [[290, 30], [530, 30], [530, 140], [400, 140], [400, 170], [290, 170]]},
+  {name: "Quai", group: "Pompe_1 (objet)", color: "#e0892b", pts: [[30, 190], [530, 190], [530, 270], [30, 270]]},
+], sel: 0, chosen: "Atelier", adding: null};
+const GROUPS = ["Atelier", "Stock", "Quai", "Utilités", "Pompe_1 (objet)", "Cuve_1 (objet)"];
+function pzDraw() {
+  const svg = $("#hPlanSvg");
+  let s = `<rect x="20" y="20" width="520" height="260" fill="${cssv("--view-grid")}" stroke="${cssv("--view-ink")}" stroke-width="3"/>`;
+  s += `<line x1="280" y1="20" x2="280" y2="180" stroke="${cssv("--view-ink")}" stroke-width="2"/><line x1="20" y1="180" x2="540" y2="180" stroke="${cssv("--view-ink")}" stroke-width="2"/><line x1="120" y1="180" x2="160" y2="180" stroke="${cssv("--view-grid")}" stroke-width="4"/>`;
+  PZ.zones.forEach((z, i) => {
+    const chosen = z.name === PZ.chosen;
+    s += `<polygon points="${z.pts.map(p => p.join(",")).join(" ")}" fill="${z.color}" fill-opacity="${chosen ? .45 : .18}" stroke="${z.color}" stroke-width="${i === PZ.sel ? 3 : 1.5}" data-z="${i}" style="cursor:pointer"/>`;
+    const cx = z.pts.reduce((a, p) => a + p[0], 0) / z.pts.length, cy = z.pts.reduce((a, p) => a + p[1], 0) / z.pts.length;
+    s += `<text x="${cx}" y="${cy}" class="vt" text-anchor="middle" font-weight="${chosen ? 700 : 400}" pointer-events="none">${esc(z.name)}${chosen ? " ●" : ""}</text>`;
+  });
+  const z = PZ.zones[PZ.sel];
+  if (z && !PZ.adding) z.pts.forEach((p, k) => { s += `<rect x="${p[0] - 6}" y="${p[1] - 6}" width="12" height="12" rx="2" data-v="${k}" fill="${cssv("--view")}" stroke="${cssv("--accent")}" stroke-width="2" style="cursor:move"/>`; });
+  if (PZ.adding && PZ.adding.length) {
+    s += `<polyline points="${PZ.adding.map(p => p.join(",")).join(" ")}" fill="none" stroke="${cssv("--accent")}" stroke-width="2" stroke-dasharray="5 3"/>`;
+    PZ.adding.forEach(p => { s += `<circle cx="${p[0]}" cy="${p[1]}" r="4" fill="${cssv("--accent")}"/>`; });
+  }
+  svg.innerHTML = s;
+  $("#hPlanVar").textContent = `'${PZ.chosen}'`;
+  $("#hPlanHint").textContent = PZ.adding ? "Cliquez les points, double-cliquez pour fermer" : "Un clic sur une zone écrit Zone_Choisie";
+  $("#hPlanAdd").classList.toggle("on", !!PZ.adding);
+}
+function pzTable() {
+  $("#hPlanTable").innerHTML = `<thead><tr><th>Zone</th><th>Groupe d'alarmes</th><th>Points</th></tr></thead><tbody>${PZ.zones.map((z, i) => `<tr class="${i === PZ.sel ? "sel" : ""}" data-row="${i}"><td><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${z.color};margin-right:6px"></span>${esc(z.name)}</td><td><select data-g="${i}">${GROUPS.map(g => `<option ${g === z.group ? "selected" : ""}>${esc(g)}</option>`).join("")}</select></td><td class="idx">${z.pts.length}</td></tr>`).join("")}</tbody>`;
+  $("#hPlanProg").innerHTML = PZ.zones.map(z => `<option ${z.name === PZ.chosen ? "selected" : ""}>'${esc(z.name)}'</option>`).join("");
+}
+function initPlan() {
+  const svg = $("#hPlanSvg");
+  let drag = -1, lastDown = {t: 0, x: 0, y: 0};
+  const close = () => {
+    const pts = PZ.adding.filter((p, i, a) => !i || p[0] !== a[i - 1][0] || p[1] !== a[i - 1][1]);
+    if (pts.length >= 3) { PZ.zones.push({name: `Zone_${PZ.zones.length + 1}`, group: "Utilités", color: "#a052c8", pts}); PZ.sel = PZ.zones.length - 1; }
+    PZ.adding = null; pzDraw(); pzTable();
+  };
+  svg.addEventListener("pointerdown", e => {
+    const p = svgPoint(svg, e), now = performance.now();
+    const dbl = now - lastDown.t < 400 && Math.hypot(p.x - lastDown.x, p.y - lastDown.y) < 8;
+    lastDown = {t: dbl ? 0 : now, x: p.x, y: p.y};
+    if (PZ.adding) { if (dbl) close(); else { PZ.adding.push([snap(p.x), snap(p.y)]); pzDraw(); } return; }
+    if (e.target.dataset.v !== undefined) { drag = +e.target.dataset.v; svg.setPointerCapture(e.pointerId); return; }
+    const i = PZ.zones.findIndex(z => inPoly([p.x, p.y], z.pts));
+    if (i >= 0) { PZ.sel = i; PZ.chosen = PZ.zones[i].name; pzDraw(); pzTable(); }
+  });
+  svg.addEventListener("pointermove", e => {
+    if (drag < 0) return;
+    const p = svgPoint(svg, e);
+    PZ.zones[PZ.sel].pts[drag] = [clamp(snap(p.x), 20, 540), clamp(snap(p.y), 20, 280)];
+    pzDraw();
+  });
+  svg.addEventListener("pointerup", () => { drag = -1; });
+  $("#hPlanAdd").addEventListener("click", () => { PZ.adding = PZ.adding ? null : []; pzDraw(); });
+  $("#hPlanTable").addEventListener("click", e => { const tr = e.target.closest("[data-row]"); if (tr && e.target.tagName !== "SELECT") { PZ.sel = +tr.dataset.row; pzDraw(); pzTable(); } });
+  $("#hPlanTable").addEventListener("change", e => { const g = e.target.dataset.g; if (g !== undefined) PZ.zones[+g].group = e.target.value; });
+  $("#hPlanProg").addEventListener("change", e => { PZ.chosen = e.target.value.replace(/'/g, ""); PZ.sel = PZ.zones.findIndex(z => z.name === PZ.chosen); pzDraw(); pzTable(); });
+  pzDraw(); pzTable();
+}
+// --- la courbe XY et sa reference
+const XY = {ref: [[0, 52], [20, 50], [40, 45], [60, 37], [80, 26], [100, 12]], meas: [[8, 50.5], [25, 49.8], [42, 42], [55, 41], [68, 33], [86, 20]], tol: 4};
+function xyInterp(x) {
+  const r = [...XY.ref].sort((a, b) => a[0] - b[0]);
+  if (x <= r[0][0]) return r[0][1];
+  for (let i = 1; i < r.length; i++) if (x <= r[i][0]) { const [x0, y0] = r[i - 1], [x1, y1] = r[i]; return y0 + (y1 - y0) * (x - x0) / ((x1 - x0) || 1); }
+  return r[r.length - 1][1];
+}
+function xyDraw() {
+  const L = 50, R = 540, T = 16, B = 260, X = x => L + (R - L) * x / 100, Y = y => B - (B - T) * y / 60;
+  let s = `<rect x="${L}" y="${T}" width="${R - L}" height="${B - T}" fill="none" stroke="${cssv("--view-line")}"/>`;
+  for (let y = 0; y <= 60; y += 20) s += `<line x1="${L}" x2="${R}" y1="${Y(y)}" y2="${Y(y)}" stroke="${cssv("--view-grid")}"/><text x="${L - 6}" y="${Y(y) + 4}" class="vt" text-anchor="end">${y}</text>`;
+  for (let x = 0; x <= 100; x += 20) s += `<text x="${X(x)}" y="${B + 16}" class="vt" text-anchor="middle">${x}</text>`;
+  s += `<text x="${(L + R) / 2}" y="${B + 32}" class="vt" text-anchor="middle">Débit (m³/h) · HMT (m)</text>`;
+  const r = [...XY.ref].sort((a, b) => a[0] - b[0]);
+  const up = r.map(p => `${X(p[0]).toFixed(1)},${Y(p[1] + XY.tol).toFixed(1)}`), dn = r.map(p => `${X(p[0]).toFixed(1)},${Y(p[1] - XY.tol).toFixed(1)}`).reverse();
+  s += `<polygon points="${up.concat(dn).join(" ")}" fill="${cssv("--ok")}" fill-opacity=".12" stroke="none"/>`;
+  s += `<polyline points="${r.map(p => `${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join(" ")}" fill="none" stroke="${cssv("--ok")}" stroke-width="2.5"/>`;
+  s += `<polyline points="${XY.meas.map(p => `${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join(" ")}" fill="none" stroke="${cssv("--fluid")}" stroke-width="1.5" stroke-dasharray="4 3"/>`;
+  XY.meas.forEach(p => { const bad = Math.abs(p[1] - xyInterp(p[0])) > XY.tol; s += `<circle cx="${X(p[0]).toFixed(1)}" cy="${Y(p[1]).toFixed(1)}" r="4" fill="${bad ? cssv("--fault") : cssv("--fluid")}"/>`; });
+  XY.ref.forEach((p, i) => { s += `<rect x="${X(p[0]) - 6}" y="${Y(p[1]) - 6}" width="12" height="12" rx="2" data-v="${i}" fill="${cssv("--view")}" stroke="${cssv("--ok")}" stroke-width="2" style="cursor:move"/>`; });
+  $("#hXySvg").innerHTML = s;
+  const out = XY.meas.filter(p => Math.abs(p[1] - xyInterp(p[0])) > XY.tol).length;
+  $("#hXySvg").setAttribute("aria-label", `La courbe XY : ${out} point${out > 1 ? "s" : ""} de mesure hors tolérance`);
+}
+function xyTable() {
+  $("#hXyTable").innerHTML = `<thead><tr><th>#</th><th>X</th><th>Y</th></tr></thead><tbody>${XY.ref.map((p, i) => `<tr><td class="idx">${i + 1}</td><td><input data-i="${i}" data-c="0" value="${fr(p[0], 0)}"></td><td><input data-i="${i}" data-c="1" value="${fr(p[1], 1)}"></td></tr>`).join("")}</tbody>`;
+}
+function initXy() {
+  const svg = $("#hXySvg"), L = 50, R = 540, T = 16, B = 260;
+  let drag = -1;
+  svg.addEventListener("pointerdown", e => { if (e.target.dataset.v !== undefined) { drag = +e.target.dataset.v; svg.setPointerCapture(e.pointerId); } });
+  svg.addEventListener("pointermove", e => {
+    if (drag < 0) return;
+    const p = svgPoint(svg, e);
+    XY.ref[drag] = [clamp(Math.round((p.x - L) / (R - L) * 100), 0, 100), clamp(Math.round((B - p.y) / (B - T) * 60 * 2) / 2, 0, 60)];
+    xyDraw();
+  });
+  svg.addEventListener("pointerup", () => { if (drag >= 0) { drag = -1; xyTable(); } });
+  $("#hXyTable").addEventListener("input", e => {
+    const i = e.target.dataset.i; if (i === undefined) return;
+    const v = parseFloat(e.target.value.replace(",", "."));
+    if (Number.isFinite(v)) { XY.ref[+i][+e.target.dataset.c] = v; xyDraw(); }
+  });
+  $("#hXyTol").addEventListener("input", e => { const v = parseFloat(e.target.value.replace(",", ".")); if (Number.isFinite(v)) { XY.tol = v; xyDraw(); } });
+  xyDraw(); xyTable();
+}
+function initH() { initPoly(); initProfile(); initPlan(); initXy(); }
+
+// ============================================================== H : les medias
+// --- l'horloge liee
+const MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
+const MOIS3 = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];
+const JOURS = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
+const CLK = {h12: false};
+function clockNow() {
+  const src = $("#mClkSrc").value, tz = $("#mClkTz").value;
+  const pad = n => String(n).padStart(2, "0");
+  let parts, note = "", hasDate = true;
+  const fromUtc = (ms, off) => { const d = new Date(ms + off * 3600e3); return {Y: d.getUTCFullYear(), M: d.getUTCMonth(), D: d.getUTCDate(), w: d.getUTCDay(), h: d.getUTCHours(), m: d.getUTCMinutes(), s: d.getUTCSeconds()}; };
+  if (src === "ihm") {
+    const n = new Date();
+    if (tz === "local") parts = {Y: n.getFullYear(), M: n.getMonth(), D: n.getDate(), w: n.getDay(), h: n.getHours(), m: n.getMinutes(), s: n.getSeconds()};
+    else parts = fromUtc(n.getTime(), tz === "utc" ? 0 : parseInt(tz, 10));
+    note = "l'heure de l'IHM";
+  } else if (src === "tod") {
+    const t = parseInt($("#mClkTod").value, 10);
+    parts = {h: Math.floor(t / 3600), m: Math.floor(t / 60) % 60, s: t % 60};
+    hasDate = false;
+    note = `Heure_Lot = TOD#${pad(parts.h)}:${pad(parts.m)}:${pad(parts.s)} (une TOD n'a ni date ni fuseau)`;
+  } else if (src === "dt") {
+    const t = parseInt($("#mClkTod").value, 10);
+    const base = Date.UTC(2026, 9, 12) + t * 1000 - 2 * 3600e3;   // ecrite en heure de Paris (UTC+2 en octobre)
+    parts = tz === "local" ? fromUtc(base, 2) : fromUtc(base, tz === "utc" ? 0 : parseInt(tz, 10));
+    note = `Debut_Cycle = DT#2026-10-12-${pad(Math.floor(t / 3600))}:${pad(Math.floor(t / 60) % 60)}:00 (heure locale de l'IHM)`;
+  } else {
+    const ms = Date.UTC(2026, 9, 12, 14, 30, 0);
+    parts = tz === "local" ? fromUtc(ms, 2) : fromUtc(ms, tz === "utc" ? 0 : parseInt(tz, 10));
+    note = "Horodatage = '2026-10-12T14:30:00Z' (UTC)";
+  }
+  return {parts, note, hasDate};
+}
+function drawClock() {
+  const {parts: p, note, hasDate} = clockNow(), pad = n => String(n).padStart(2, "0");
+  const fmt = $("#mClkFmt").value;
+  let date = "";
+  if (hasDate && fmt !== "none") {
+    if (fmt === "dmy") date = `${pad(p.D)}/${pad(p.M + 1)}/${p.Y}`;
+    else if (fmt === "iso") date = `${p.Y}-${pad(p.M + 1)}-${pad(p.D)}`;
+    else if (fmt === "dmon") date = `${p.D} ${MOIS3[p.M]} ${p.Y}`;
+    else date = `${JOURS[p.w]} ${p.D} ${MOIS[p.M]} ${p.Y}`;
+  }
+  const h12 = CLK.h12 ? ((p.h + 11) % 12 + 1) : p.h;
+  const time = `${CLK.h12 ? h12 : pad(p.h)}:${pad(p.m)}:${pad(p.s)}${CLK.h12 ? (p.h < 12 ? " AM" : " PM") : ""}`;
+  const cx = 70, cy = 70, R = 58, a = (v, max) => (v / max) * 2 * Math.PI - Math.PI / 2;
+  const hand = (ang, len, w, col) => `<line x1="${cx}" y1="${cy}" x2="${(cx + len * Math.cos(ang)).toFixed(1)}" y2="${(cy + len * Math.sin(ang)).toFixed(1)}" stroke="${col}" stroke-width="${w}" stroke-linecap="round"/>`;
+  let s = `<circle cx="${cx}" cy="${cy}" r="${R}" fill="${cssv("--view")}" stroke="${cssv("--view-ink")}" stroke-width="2"/>`;
+  for (let i = 0; i < 12; i++) { const an = a(i, 12); s += `<line x1="${(cx + (R - 8) * Math.cos(an)).toFixed(1)}" y1="${(cy + (R - 8) * Math.sin(an)).toFixed(1)}" x2="${(cx + (R - 2) * Math.cos(an)).toFixed(1)}" y2="${(cy + (R - 2) * Math.sin(an)).toFixed(1)}" stroke="${cssv("--view-ink")}" stroke-width="2"/>`; }
+  s += hand(a((p.h % 12) + p.m / 60, 12), 32, 4, cssv("--view-ink")) + hand(a(p.m + p.s / 60, 60), 46, 3, cssv("--view-ink")) + hand(a(p.s, 60), 50, 1.5, cssv("--fault"));
+  s += `<circle cx="${cx}" cy="${cy}" r="3.5" fill="${cssv("--view-ink")}"/>`;
+  $("#mClkView").innerHTML = `<div style="display:grid;justify-items:center;gap:6px"><svg viewBox="0 0 140 140" width="140" height="140">${s}</svg><div class="mono" style="font-size:20px">${time}</div><div class="small">${esc(date || "")}</div><div class="small" style="font-style:italic">${esc(note)}</div></div>`;
+  $("#mClkTodO").textContent = (() => { const t = parseInt($("#mClkTod").value, 10); return `${pad(Math.floor(t / 3600))}:${pad(Math.floor(t / 60) % 60)}`; })();
+  $("#mClkVarCtrl").style.display = ($("#mClkSrc").value === "tod" || $("#mClkSrc").value === "dt") ? "" : "none";
+}
+function initClock() {
+  ["#mClkSrc", "#mClkFmt", "#mClkTz"].forEach(id => $(id).addEventListener("change", drawClock));
+  $("#mClkTod").addEventListener("input", drawClock);
+  $("#mClk12").addEventListener("click", e => { const b = e.target.closest("[data-v]"); if (!b) return; CLK.h12 = b.dataset.v === "12"; $$("#mClk12 button").forEach(x => x.classList.toggle("on", x === b)); drawClock(); });
+  drawClock(); setInterval(() => { if ($("#mClkSrc").value === "ihm") drawClock(); }, 1000);
+}
+// --- le texte defilant
+const MQ = {src: "list", text: "Bienvenue sur la ligne 2", list: ["Ligne 2 : changement de format à 14 h", "Port des lunettes obligatoire", "Objectif du jour : 4 200 pièces"],
+  alarms: [{t: "Cuve_1 : niveau haut", g: "Ligne 2", on: true}, {t: "Pompe_1 : défaut thermique", g: "Ligne 2", on: true}, {t: "Compresseur : pression basse", g: "Utilités", on: false}, {t: "Four : température haute", g: "Ligne 2", on: false}], group: "Toutes"};
+function mqMessages() {
+  if (MQ.src === "txt") return [MQ.text];
+  if (MQ.src === "list") return MQ.list.filter(s => s.trim());
+  return MQ.alarms.filter(a => a.on && (MQ.group === "Toutes" || a.g === MQ.group)).map(a => a.t);
+}
+function mqEdit() {
+  const el = $("#mMqEdit");
+  if (MQ.src === "txt") el.innerHTML = `<div class="ctrl"><label>Texte <input class="inp" data-t="1" value="${esc(MQ.text)}" style="width:min(320px,100%)"></label></div>`;
+  else if (MQ.src === "list") el.innerHTML = `<p class="small" style="margin:0 0 4px">Messages_Ligne : LIST OF STRING (en marche)</p>` + MQ.list.map((m, i) => `<div class="ctrl" style="margin-bottom:4px"><input class="inp" data-l="${i}" value="${esc(m)}" style="flex:1;min-width:0"><button class="mini x" type="button" data-rm="${i}" title="LIST_REMOVE">✕</button></div>`).join("") + `<button class="btn" type="button" data-add="1">LIST_ADD : un message de plus</button>`;
+  else el.innerHTML = `<div class="ctrl" style="margin-bottom:4px"><label>Groupe <select class="inp" data-g="1">${["Toutes", "Ligne 2", "Utilités"].map(g => `<option ${g === MQ.group ? "selected" : ""}>${g}</option>`).join("")}</select></label></div>` + MQ.alarms.map((a, i) => `<div class="ctrl"><label><input type="checkbox" data-a="${i}" ${a.on ? "checked" : ""}> ${esc(a.t)} <span class="small">(${a.g})</span></label></div>`).join("");
+}
+function initMarquee() {
+  let x = null, txt = "", raf = 0, last = 0;
+  const box = $("#mMq"), span = $("#mMq span");
+  const compose = () => { const ms = mqMessages(); return ms.length ? ms.join($("#mMqSep").value) : ""; };
+  const info = () => { const n = mqMessages().length; $("#mMqTxt").textContent = MQ.src === "txt" ? "Un seul texte, comme avant." : MQ.src === "list" ? `${n} message${n > 1 ? "s" : ""} : la liste est relue à chaque tour.` : (n ? `${n} alarme${n > 1 ? "s" : ""} en cours${MQ.group !== "Toutes" ? ` (groupe ${MQ.group})` : ""}.` : "Aucune alarme en cours : le bandeau est vide."); };
+  const tick = t => {
+    const dt = last ? (t - last) / 1000 : 0; last = t;
+    if (x === null || x < -span.offsetWidth) { txt = compose(); span.textContent = txt; x = box.clientWidth; }
+    x -= 70 * dt; span.style.transform = `translateX(${x.toFixed(1)}px)`;
+    raf = requestAnimationFrame(tick);
+  };
+  $("#mMqSrc").addEventListener("click", e => { const b = e.target.closest("[data-v]"); if (!b) return; MQ.src = b.dataset.v; $$("#mMqSrc button").forEach(z => z.classList.toggle("on", z === b)); mqEdit(); info(); x = null; });
+  $("#mMqEdit").addEventListener("input", e => {
+    const d = e.target.dataset;
+    if (d.t) MQ.text = e.target.value;
+    if (d.l !== undefined) MQ.list[+d.l] = e.target.value;
+    if (d.a !== undefined) MQ.alarms[+d.a].on = e.target.checked;
+    if (d.g) MQ.group = e.target.value;
+    info();
+  });
+  $("#mMqEdit").addEventListener("change", e => { if (e.target.dataset.a !== undefined || e.target.dataset.g) info(); });
+  $("#mMqEdit").addEventListener("click", e => {
+    const d = e.target.dataset;
+    if (d.rm !== undefined) { MQ.list.splice(+d.rm, 1); mqEdit(); info(); }
+    if (d.add) { MQ.list.push(`Message ${MQ.list.length + 1}`); mqEdit(); info(); }
+  });
+  mqEdit(); info();
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) { span.textContent = compose(); span.style.transform = "translateX(8px)"; }
+  else raf = requestAnimationFrame(tick);
+}
+// --- le code QR
+const QR_PRESETS = {
+  lot: "LOT-2026-10-12-0042",
+  url: "https://intranet.usine.example/ihm/ligne-2?vue=Supervision&poste=3",
+  num: "004212345678901234567890",
+  long: Array.from({length: 26}, (_, i) => `Lot 42 · cuve ${String.fromCharCode(65 + i % 8)} · niveau ${(3 + (i * 7) % 60 / 10).toFixed(1)} m · contrôle ${i % 3 ? "conforme" : "à revoir"} · opérateur ${["Martin", "Durand", "Bernard"][i % 3]}`).join("\n"),
+  trop: "Rapport de production de la ligne 2, lot 42. ".repeat(60),
+};
+function drawQr() {
+  const text = $("#mQrText").value, ecl = $("#mQrEcl").value;
+  const cv = $("#mQrCanvas"), g = cv.getContext("2d");
+  const q = text ? QR.encode(text, ecl) : null;
+  g.fillStyle = "#fff"; g.fillRect(0, 0, cv.width, cv.height);
+  const bytes = new TextEncoder().encode(text).length;
+  const cap40 = QR.dataCodewords(40, QR.ECL[ecl]) - 3;
+  const meter = $("#mQrMeter");
+  if (!text) { $("#mQrInfo").innerHTML = "<dt>Texte</dt><dd>vide</dd>"; $("#mQrLeft").textContent = ""; meter.firstElementChild.style.width = "0"; return; }
+  if (!q) {
+    g.fillStyle = "#c42b2b"; g.font = "600 16px system-ui"; g.textAlign = "center"; g.fillText("trop long", cv.width / 2, cv.height / 2);
+    $("#mQrInfo").innerHTML = `<dt>Texte</dt><dd>${bytes.toLocaleString("fr-FR")} octets</dd><dt>Version 40 en ${ecl}</dt><dd>${cap40.toLocaleString("fr-FR")} octets au plus</dd>`;
+    meter.classList.add("full"); meter.firstElementChild.style.width = "100%";
+    $("#mQrLeft").innerHTML = `${sev("warn", "")} Générer : le texte est trop long pour un code QR en ${ecl}. En marche, l'objet montre « trop long » et la Console le dit une fois.`;
+    return;
+  }
+  const quiet = 4, n = q.size + 2 * quiet, px = Math.max(1, Math.floor(cv.width / n));
+  const off = Math.floor((cv.width - px * n) / 2);
+  g.fillStyle = "#000";
+  for (let y = 0; y < q.size; y++) for (let x = 0; x < q.size; x++) if (q.modules[y][x]) g.fillRect(off + (x + quiet) * px, off + (y + quiet) * px, px, px);
+  const modeTxt = {numerique: "numérique", alphanumerique: "alphanumérique", octets: "octets (UTF-8)"}[q.mode];
+  $("#mQrInfo").innerHTML = `<dt>Mode</dt><dd>${modeTxt}</dd><dt>Version</dt><dd>${q.version} (${q.size} × ${q.size} modules)${q.version > 10 ? ' <span class="pill new">au-delà de 10</span>' : ""}</dd><dt>Données</dt><dd>${Math.ceil(q.used / 8).toLocaleString("fr-FR")} octets sur ${(q.cap / 8).toLocaleString("fr-FR")}</dd><dt>Masque</dt><dd>${q.mask}</dd>`;
+  meter.classList.remove("full");
+  const left = QR.left(text, ecl);
+  const pct = clamp(100 - left / (left + text.length) * 100, 1, 100);
+  meter.firstElementChild.style.width = pct.toFixed(1) + "%";
+  const unitTxt = {numerique: "chiffres", alphanumerique: "caractères", octets: "octets"}[q.mode];
+  $("#mQrLeft").textContent = `Reste ${left.toLocaleString("fr-FR")} ${unitTxt} jusqu'à la version 40 en ${ecl}.`;
+}
+function initQr() {
+  $("#mQrText").value = QR_PRESETS.url;
+  $("#mQrText").addEventListener("input", drawQr);
+  $("#mQrEcl").addEventListener("change", drawQr);
+  $$("[data-qr]").forEach(b => b.addEventListener("click", () => { $("#mQrText").value = QR_PRESETS[b.dataset.qr]; drawQr(); }));
+  drawQr();
+}
+// --- la video
+const VID = {t: 0, state: "attente", os: "win", last: 0, condPrev: false, dur: 12};
+function vidDecodable() {
+  const f = $("#mVidFile").value;
+  return f === "avi" || (f === "mp4" && VID.os === "win");
+}
+function vidFrame(g, t) {
+  const W = 420, H = 236;
+  g.fillStyle = "#1b2430"; g.fillRect(0, 0, W, H);
+  g.fillStyle = "#2c3a4a"; g.fillRect(0, 150, W, 40);
+  for (let i = 0; i < 14; i++) { const x = ((i * 34 - t * 60) % (W + 34) + W + 34) % (W + 34) - 17; g.fillStyle = "#56677a"; g.beginPath(); g.arc(x, 190, 7, 0, Math.PI * 2); g.fill(); }
+  for (let i = 0; i < 4; i++) { const x = ((i * 120 + t * 60) % (W + 80)) - 60; g.fillStyle = ["#e0892b", "#3b82d6", "#2fa36b", "#c94f7c"][i]; g.fillRect(x, 112, 54, 38); g.fillStyle = "rgba(0,0,0,.25)"; g.fillRect(x, 140, 54, 10); }
+  g.fillStyle = "#8a96a3"; g.fillRect(300, 30, 12, 70); g.fillRect(270, 30, 72, 10);
+  g.fillStyle = "#fff"; g.font = "12px monospace"; g.fillText("convoyeur.avi", 10, 20);
+}
+function vidRender() {
+  const g = $("#mVidCanvas").getContext("2d"), poster = $("#mVidPoster"), f = $("#mVidFile").value;
+  const names = {avi: "convoyeur.avi (Motion-JPEG)", mp4: "ligne.mp4 (H.264)", webm: "essai.webm (VP9)"};
+  if (!vidDecodable()) {
+    poster.hidden = false;
+    poster.innerHTML = `<div><b>Image d'attente</b>${esc(names[f])} : ${f === "mp4" ? "décodé sous Windows seulement" : "pas décodé ici"}.<br>Convertir en Motion-JPEG AVI pour le voir partout.</div>`;
+    $("#mVidHud").textContent = "pas de lecture";
+  } else if (VID.state === "attente") {
+    poster.hidden = false;
+    poster.innerHTML = `<div><b>Image d'attente</b>${$("#mVidStart").value === "cond" ? "La vidéo part quand Porte_Ouverte devient vrai." : "La lecture part à l'affichage, si Video_Lecture est vrai."}</div>`;
+    $("#mVidHud").textContent = "attente";
+  } else {
+    poster.hidden = true;
+    vidFrame(g, VID.t);
+    $("#mVidHud").textContent = `${VID.state} · image ${Math.floor(VID.t * 25) + 1} / ${VID.dur * 25} · ${fr(VID.t, 1)} s`;
+  }
+  $("#mVidPos").textContent = `Video_Pos = ${fr(VID.t, 1)} s`;
+  $$("#mVidFmt tbody tr").forEach(tr => tr.classList.toggle("cur", tr.dataset.f === f));
+  const items = [];
+  if (f === "avi") items.push({k: "ok", w: "Video_Formation", t: "convoyeur.avi : Motion-JPEG, 640 × 360, 25 images/s, 12 s : décodé sur toutes les machines."});
+  if (f === "mp4") items.push({k: "info", w: "Video_Formation", t: "ligne.mp4 (H.264) est décodé sous Windows (Media Foundation). Ailleurs, l'image d'attente."});
+  if (f === "webm") items.push({k: "warn", w: "Video_Formation", t: "essai.webm (VP9) n'est décodé que si Windows a le codec VP9. Préférer MP4 (H.264) ou Motion-JPEG AVI."});
+  if ($("#mVidStart").value === "cond") items.push({k: "info", w: "Video_Formation", t: "départ sur la condition Porte_Ouverte (un front montant relance la lecture)."});
+  genBox($("#mGenVid"), "Vue_Formation", items);
+}
+function vidStep(ts) {
+  const dt = VID.last ? (ts - VID.last) / 1000 : 0; VID.last = ts;
+  const play = $("#mVidPlay").checked, cond = $("#mVidCond").checked, start = $("#mVidStart").value, loop = $("#mVidLoop").value === "loop";
+  if (vidDecodable()) {
+    if (VID.state === "attente" && play && (start === "show" || (cond && !VID.condPrev))) VID.state = "lecture";
+    if (start === "cond" && cond && !VID.condPrev && VID.state === "fin") { VID.t = 0; VID.state = "lecture"; }
+    if (VID.state === "lecture" && !play) VID.state = "pause";
+    if (VID.state === "pause" && play) VID.state = "lecture";
+    if (VID.state === "lecture") {
+      VID.t += dt;
+      if (VID.t >= VID.dur) { if (loop) VID.t -= VID.dur; else { VID.t = VID.dur - 0.04; VID.state = "fin"; } }
+    }
+  }
+  VID.condPrev = cond;
+  vidRender();
+  requestAnimationFrame(vidStep);
+}
+function initVideo() {
+  $("#mVidOs").addEventListener("click", e => { const b = e.target.closest("[data-v]"); if (!b) return; VID.os = b.dataset.v; $$("#mVidOs button").forEach(x => x.classList.toggle("on", x === b)); VID.state = "attente"; VID.t = 0; });
+  ["#mVidFile", "#mVidStart"].forEach(id => $(id).addEventListener("change", () => { VID.state = "attente"; VID.t = 0; }));
+  vidRender();
+  requestAnimationFrame(vidStep);
+}
+function initM() { initClock(); initMarquee(); initQr(); initVideo(); }
+
+// ============================================================== demarrage
+function initAll() { initF(); initG(); initH(); initM(); }
+initAll();
+// Les couleurs du dessin viennent du theme : tout se redessine quand il change.
+let themeTimer = 0;
+const redraw = () => { clearTimeout(themeTimer); themeTimer = setTimeout(() => {
+  renderCanvas(); drawValveAgain(); renderInit(false); drawPump(); renderState(); plDraw(); pzDraw(); xyDraw(); drawClock();
+  ["#gJack", "#gGas", "#g3wL"].forEach(id => $(id).dispatchEvent(new Event("change"))); window.drawIsa && window.drawIsa();
+  $("#hProfScale").dispatchEvent(new Event("input"));
+}, 30); };
+function drawValveAgain() { $("#fValve").dispatchEvent(new Event("input")); }
+window.addEventListener("themechange", redraw);
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", redraw);
+
+</script>
+</body>
+</html>
