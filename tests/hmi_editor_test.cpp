@@ -29129,6 +29129,7 @@ void calculees_grille() {
             s.calc = "VAR\n    k : REAL := 3.0;   // le facteur du haut\nEND_VAR\nSeuils['bas'] := Base;\nSeuils['haut'] := Base * k;\n";
             s.preview = seen.preview;
             s.assist = seen.assist;
+            s.valueOf = seen.valueOf;
             app::HmiCalcDialog dlg(s);
             const bool built = static_cast<bool>(dlg.Initialize());
             check(built && !dlg.localsShown() && dlg.locals().empty(), "la fen\xC3\xAAtre du calcul : l'onglet Code d'abord, aucune locale");
@@ -29150,6 +29151,17 @@ void calculees_grille() {
             check(!dlg.facts().problems.empty() && dlg.facts().problems[0].error && dlg.facts().problems[0].line == 1,
                   "Probl\xC3\xA8mes : une constante du script \xC3\xA9" "crite, ligne 1 - " + dlg.previewText());
             check(dlg.goToProblem(0) && !dlg.localsShown(), "un clic sur un probl\xC3\xA8me : sa ligne, dans l'onglet Code");
+            // Les locales se deballent comme la grille : une locale a taille choisie, ses elements dessous.
+            dlg.setTexts("Seuils['bas'] := Base;\n", "t : ARRAY[1..3] OF INT := [4, 8, 15];\nr : REAL := 2.0;");
+            dlg.showLocals(true);
+            dlg.selectLocal(0);
+            const auto* lu = dlg.localsUnfold();
+            check(static_cast<bool>(seen.valueOf) && lu && lu->model() && lu->model()->rowCount() == 4 && lu->model()->cellText(1, 0) == "[1]"
+                      && lu->model()->cellText(3, 2) == "15" && lu->columns().size() == 3,
+                  "les locales d\xC3\xA9" "ball\xC3\xA9" "es : t, ses cases [1]..[3] (15) - "
+                      + (lu && lu->model() ? std::to_string(lu->model()->rowCount()) + " lignes" : std::string("pas de d\xC3\xA9" "ballage")));
+            dlg.selectLocal(1);
+            check(dlg.localsUnfold() == nullptr, "une locale simple (REAL) : pas de d\xC3\xA9" "ballage");
             dlg.revert();
             check(dlg.calcText() == s.calc && dlg.locals().empty(), "Revenir au calcul d'origine : le code et les locales d'avant");
             app::HmiCalcDialog::Spec at = s;

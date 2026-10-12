@@ -35,6 +35,7 @@
 #pragma once
 
 #include "HmiPanels.hpp"
+#include "HmiUnfold.hpp"      // 1.12.7 : le deballage de la valeur choisie
 #include "../TablePaste.hpp"
 #include "../../core/Command.hpp"
 #include "../../hmi/HmiCommands.hpp"
@@ -143,8 +144,7 @@ private:
     std::string                        previewError_;
     // 1.12.7 : LE DEBALLAGE - sous la table, la valeur a taille de la ligne choisie (LIST, VECTOR, MAP,
     // ARRAY, TUPLE, structure), un element par ligne, en arbre, en lecture.
-    class Unfold;
-    std::shared_ptr<Unfold> unfoldModel_;
+    std::shared_ptr<HmiUnfoldModel> unfoldModel_;
     ui::TableView*          unfold_{nullptr};
     bool                    unfoldShown_{false};
     void refreshUnfold();

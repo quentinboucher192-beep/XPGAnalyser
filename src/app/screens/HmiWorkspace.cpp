@@ -482,6 +482,7 @@ void MainAnalysisScreen::bindHmi() {
         s.preview = spec.preview;
         s.assist = spec.assist;
         s.line = spec.line;
+        s.valueOf = spec.valueOf;
         if (!s.preview) s.preview = [info = spec.info](const std::string&, const std::string&) { return info; };
         app_.menus().ShowDialog(std::make_unique<HmiCalcDialog>(std::move(s)), [done = std::move(done)](const menu::DialogResult& r) {
             if (!r.accepted() || !done) return;

@@ -26,7 +26,9 @@
 // =============================================================================
 #pragma once
 
+#include "HmiUnfold.hpp"
 #include "../../menu/IMenu.hpp"
+#include "../../sim/Rich.hpp"
 #include "../../ui/widgets/Controls.hpp"
 #include "../../ui/widgets/DataViews.hpp"
 
@@ -54,6 +56,9 @@ public:
         std::function<std::string(const std::string& calc, const std::string& locals)> preview;
         // L'aide a la saisie du code (Ctrl+Espace) ; `locals` rend les locales du moment.
         std::function<void(ui::MultiLineText& code, std::function<std::string()> locals)> assist;
+        // Le deballage d'une locale (sous la grille) : sa valeur initiale, lue dans son type (vide : celle
+        // de son type) ; nulle : `why` dit pourquoi. Sans lui : pas de deballage.
+        std::function<sim::ObjRef(const std::string& type, const std::string& value, std::string* why)> valueOf;
     };
     // Une locale de la grille.
     struct Local {
@@ -90,6 +95,8 @@ public:
     [[nodiscard]] bool localsShown() const noexcept { return localsShown_; }
     [[nodiscard]] const std::vector<Local>& locals() const;
     [[nodiscard]] const ui::TableView* localsTable() const noexcept { return table_; }
+    [[nodiscard]] const ui::TableView* localsUnfold() const noexcept { return unfoldShown_ ? unfold_ : nullptr; }   // nul : cache
+    void selectLocal(std::size_t row);
     bool addLocal();
     bool removeLocal(std::size_t row);
     bool moveLocal(std::size_t row, int delta);
@@ -111,12 +118,16 @@ private:
     void finish(bool ok);
     void changed();
     void refreshButtons();
+    void refreshUnfold();
     [[nodiscard]] std::size_t selectedLocal() const;
 
     Spec                         spec_;
     std::shared_ptr<LocalsModel> model_;
     ui::MultiLineText*           code_{nullptr};
     ui::TableView*               table_{nullptr};
+    ui::TableView*               unfold_{nullptr};
+    std::shared_ptr<HmiUnfoldModel> unfoldModel_;
+    bool                         unfoldShown_{false};
     ui::Widget*                  body_{nullptr};
     ui::Button*                  tabCode_{nullptr};
     ui::Button*                  tabLocals_{nullptr};

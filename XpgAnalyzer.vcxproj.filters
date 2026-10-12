@@ -1831,6 +1831,9 @@
     <ClInclude Include="src\app\hmi\HmiItemsDialog.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiUnfold.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
     <ClInclude Include="src\app\hmi\HmiLoginPainter.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>

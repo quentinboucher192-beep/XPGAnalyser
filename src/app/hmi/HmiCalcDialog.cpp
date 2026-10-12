@@ -183,6 +183,8 @@ public:
     CalcBody(std::string title, std::string help) : title_(std::move(title)), help_(std::move(help)) {}
     ui::Widget*                    code{nullptr};
     ui::Widget*                    table{nullptr};
+    ui::Widget*                    unfold{nullptr};       // le deballage de la locale choisie (sous sa grille)
+    const bool*                    unfoldShown{nullptr};
     ui::Button*                    tabCode{nullptr};
     ui::Button*                    tabLocals{nullptr};
     std::vector<ui::Button*>       codeBar, localsBar;
@@ -220,9 +222,15 @@ protected:
             code->setVisibility(loc ? ui::Visibility::Collapsed : ui::Visibility::Visible);
             code->setBounds({x, contentY, leftW_, contentH});
         }
+        const bool unfolded = loc && unfoldShown && *unfoldShown;
+        const float unfoldH = unfolded ? std::clamp(contentH * 0.42f, 110.f, 200.f) : 0.f;
         if (table) {
             table->setVisibility(loc ? ui::Visibility::Visible : ui::Visibility::Collapsed);
-            table->setBounds({x, contentY, leftW_, contentH});
+            table->setBounds({x, contentY, leftW_, std::max(60.f, contentH - unfoldH - (unfolded ? 8.f : 0.f))});
+        }
+        if (unfold) {
+            unfold->setVisibility(unfolded ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+            unfold->setBounds({x, contentY + contentH - unfoldH, leftW_, unfoldH});
         }
         const auto bar = [&](std::vector<ui::Button*>& buttons, bool shown) {
             float bx = x;
@@ -393,8 +401,21 @@ core::Status HmiCalcDialog::buildUi() {
     table_ = &static_cast<ui::TableView&>(body->addChild(std::move(table)));
     links_ += table_->cellEdited->connect([this](ui::RowIndex, std::size_t, const std::string&, bool accepted) {
         if (accepted) changed();
+        refreshUnfold();
     });
+    links_ += table_->selectionChanged->connect([this](const std::vector<ui::RowIndex>&) { refreshUnfold(); });
     body->table = table_;
+    // Le deballage de la locale choisie (une valeur a taille : LIST, MAP, ARRAY, TUPLE, structure...).
+    unfoldModel_ = std::make_shared<HmiUnfoldModel>();
+    auto unfold = std::make_unique<ui::TableView>(base + ".locales.deballage");
+    unfold->setModel(unfoldModel_);
+    unfold->setColumns(HmiUnfoldModel::columns());
+    unfold->setVisibility(ui::Visibility::Collapsed);
+    unfold_ = &static_cast<ui::TableView&>(body->addChild(std::move(unfold)));
+    links_ += unfold_->expanderClicked->connect([this](ui::RowIndex r) { unfoldModel_->toggle(r); });
+    body->unfold = unfold_;
+    body->unfoldShown = &unfoldShown_;
+    links_ += model_->modelReset->connect([this] { refreshUnfold(); });   // une locale changee, ajoutee, retiree
     auto* add = button("+ Ajouter", "locale.ajouter");
     links_ += add->clicked->connect([this] { (void)addLocal(); });
     auto* remove = button("Supprimer", "locale.supprimer");
@@ -483,6 +504,33 @@ std::size_t HmiCalcDialog::selectedLocal() const {
     if (!table_) return static_cast<std::size_t>(-1);
     const auto rows = table_->selectedModelRows();
     return rows.empty() ? static_cast<std::size_t>(-1) : static_cast<std::size_t>(rows.front());
+}
+
+void HmiCalcDialog::selectLocal(std::size_t row) {
+    if (table_ && row < model_->rows.size()) table_->selectModelRows({static_cast<ui::RowIndex>(row)});
+    refreshUnfold();
+}
+
+void HmiCalcDialog::refreshUnfold() {
+    if (!unfold_ || !unfoldModel_) return;
+    const std::size_t row = selectedLocal();
+    sim::ObjRef root;
+    std::string why, name;
+    if (row < model_->rows.size() && spec_.valueOf) {
+        const auto& l = model_->rows[row];
+        name = l.name;
+        if (!l.type.empty()) root = spec_.valueOf(l.type, l.value, &why);
+        if (root && !HmiUnfoldModel::sized(root)) {   // une valeur simple : rien a deballer
+            root.reset();
+            why.clear();
+        }
+    }
+    const bool show = root != nullptr || !why.empty();
+    unfoldModel_->show(root, name, why);
+    if (show != unfoldShown_) {
+        unfoldShown_ = show;
+        if (body_) body_->invalidateLayout();
+    }
 }
 
 bool HmiCalcDialog::addLocal() {

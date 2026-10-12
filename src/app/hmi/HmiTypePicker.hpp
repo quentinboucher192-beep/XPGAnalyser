@@ -39,6 +39,7 @@
 #include "../../hmi/HmiPopupParams.hpp"
 #include "../../hmi/HmiTypeForms.hpp"
 #include "../../hmi/HmiTypeRegistry.hpp"
+#include "../../sim/Rich.hpp"   // 1.12.7 : sim::ObjRef (le deballage des locales d'un calcul)
 #include "../../menu/IMenu.hpp"
 
 #include <functional>
@@ -170,6 +171,8 @@ struct Spec {
     std::function<std::string(const std::string& calc, const std::string& locals)> preview{};
     // L'aide a la saisie du code (Ctrl+Espace) : branche l'editeur ; `locals` rend les locales du moment.
     std::function<void(ui::MultiLineText& code, std::function<std::string()> locals)> assist{};
+    // Le deballage d'une locale : sa valeur initiale (vide : celle de son type) ; nulle : `why` dit pourquoi.
+    std::function<sim::ObjRef(const std::string& type, const std::string& value, std::string* why)> valueOf{};
 };
 using Done = std::function<void(const std::string& calc, const std::string& locals)>;
 using Host = std::function<void(Spec, Done)>;

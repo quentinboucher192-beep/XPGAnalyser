@@ -32,7 +32,8 @@
   valeur.
 - **La fenêtre du calcul**, comme la maquette : deux onglets, **Code** (l'éditeur ST, avec l'aide à
   la saisie Ctrl+Espace : les noms du projet, du script et des locales) et **Locales** (une grille :
-  nom, type, valeur initiale, documentation ; Ajouter, Supprimer, Monter, Descendre) ; à droite, en
+  nom, type, valeur initiale, documentation ; Ajouter, Supprimer, Monter, Descendre), déballée comme la
+  grille : la valeur initiale à taille de la locale choisie se lit dessous, élément par élément ; à droite, en
   direct (une demi-seconde après la dernière frappe, F5 tout de suite) : l'**Aperçu** (la valeur au
   démarrage, ou l'erreur qui arrêterait le démarrage), ce qu'il **Lit**, qui le lit (**Lu par** :
   les autres calculs, le code de son script, les scripts et fonctions qui lisent `Reglages.X`) et

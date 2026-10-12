@@ -216,104 +216,6 @@ public:
 //  La valeur a taille de la ligne choisie : la racine (son nom), puis ses elements - un indice
 //  ([0], [1, 2] pour un tableau a deux dimensions), une cle ('bas', 3), un membre (Temp, Item1) -
 //  chacun avec son type et sa valeur ; un element a taille se deplie a son tour (la fleche).
-class HmiDeclGrid::Unfold final : public ui::ITableModel {
-public:
-    struct Line {
-        std::string label, type, value, path;
-        int         depth{0};
-        bool        children{false};
-    };
-    std::vector<Line>     lines;
-    std::set<std::string> open{""};          // les chemins deplies (la racine : d'emblee)
-    sim::ObjRef           root;
-    std::string           rootName;
-    std::string           why;                // la valeur illisible : pourquoi
-
-    static bool sized(const sim::ObjRef& o) { return o && o->type && o->type->kind != sim::TypeDesc::Kind::Scalar; }
-    static std::string typeOf(const sim::ObjRef& o) {
-        if (!o || !o->type) return {};
-        return o->type->kind == sim::TypeDesc::Kind::Struct ? o->type->name : o->type->text();
-    }
-    static std::string valueOf(const sim::ObjRef& o) {
-        if (!o) return {};
-        if (!sized(o)) return o->value.display();
-        const std::size_t n = o->type->kind == sim::TypeDesc::Kind::Map ? o->textKeys.size() + o->intKeys.size() : o->items.size();
-        std::string text = sim::display(*o);
-        if (text.size() > 80) text = text.substr(0, 77) + "...";
-        // 1.12.7 : un RING dit sa capacite (« 3 elements sur 5 »).
-        const std::string of = sim::isRingType(*o->type) ? " sur " + std::to_string(o->type->capacity) : std::string{};
-        return std::to_string(n) + (n > 1 ? " \xC3\xA9l\xC3\xA9ments" : " \xC3\xA9l\xC3\xA9ment") + of + "  " + text;
-    }
-    void add(const sim::ObjRef& o, const std::string& label, const std::string& path, int depth) {
-        if (lines.size() > 2000) return;                         // une tres grande valeur : le debut
-        lines.push_back({label, typeOf(o), valueOf(o), path, depth, sized(o)});
-        if (!sized(o) || !open.count(path)) return;
-        const auto& t = *o->type;
-        switch (t.kind) {
-            case sim::TypeDesc::Kind::Map:
-                for (const auto& [k, v] : o->textKeys) add(v, "'" + k + "'", path + "/'" + k + "'", depth + 1);
-                for (const auto& [k, v] : o->intKeys) add(v, std::to_string(k), path + "/" + std::to_string(k), depth + 1);
-                break;
-            case sim::TypeDesc::Kind::Struct:
-            case sim::TypeDesc::Kind::Tuple:
-                for (std::size_t k = 0; k < o->items.size(); ++k) {
-                    const std::string m = k < t.members.size() ? t.members[k].first : "Item" + std::to_string(k + 1);
-                    add(o->items[k], m, path + "/" + m, depth + 1);
-                }
-                break;
-            case sim::TypeDesc::Kind::Array: {
-                // L'indice ecrit : les bornes de chaque dimension (la derniere varie le plus vite).
-                for (std::size_t flat = 0; flat < o->items.size(); ++flat) {
-                    std::vector<std::int64_t> idx(t.bounds.size(), 0);
-                    std::size_t rest = flat;
-                    for (std::size_t d = t.bounds.size(); d-- > 0;) {
-                        const auto span = static_cast<std::size_t>(t.bounds[d].second - t.bounds[d].first + 1);
-                        idx[d] = t.bounds[d].first + static_cast<std::int64_t>(span ? rest % span : 0);
-                        rest = span ? rest / span : 0;
-                    }
-                    std::string label = "[";
-                    for (std::size_t d = 0; d < idx.size(); ++d) label += (d ? ", " : "") + std::to_string(idx[d]);
-                    label += "]";
-                    add(o->items[flat], label, path + "/" + label, depth + 1);
-                }
-                break;
-            }
-            default:
-                for (std::size_t k = 0; k < o->items.size(); ++k)
-                    add(o->items[k], "[" + std::to_string(k) + "]", path + "/[" + std::to_string(k) + "]", depth + 1);
-                break;
-        }
-    }
-    void rebuild() {
-        lines.clear();
-        if (root) add(root, rootName, "", 0);
-        else if (!why.empty()) lines.push_back({rootName, {}, "illisible : " + why, "", 0, false});
-    }
-
-    [[nodiscard]] std::size_t rowCount() const override { return lines.size(); }
-    [[nodiscard]] std::size_t columnCount() const override { return 3; }
-    [[nodiscard]] std::string headerText(std::size_t c) const override {
-        return c == 0 ? std::string("\xC3\x89l\xC3\xA9ment") : c == 1 ? std::string("Type") : std::string("Valeur");
-    }
-    [[nodiscard]] std::string cellText(ui::RowIndex r, std::size_t c) const override {
-        if (r >= lines.size()) return {};
-        const auto& l = lines[r];
-        return c == 0 ? l.label : c == 1 ? l.type : l.value;
-    }
-    [[nodiscard]] ui::CellStyle cellStyle(ui::RowIndex r, std::size_t c) const override {
-        ui::CellStyle s;
-        if (r >= lines.size()) return s;
-        const auto& l = lines[r];
-        s.monospace = true;
-        if (c == 0) {
-            s.indent = 16.f * static_cast<float>(l.depth);
-            s.expander = l.children ? (open.count(l.path) ? 1 : 0) : -1;
-        }
-        if (c == 1) s.fgTone = ui::Tone::Muted;
-        return s;
-    }
-    [[nodiscard]] bool less(ui::RowIndex a, ui::RowIndex b, std::size_t) const override { return a < b; }
-};
 
 // ------------------------------------------------------------------- la grille ----
 HmiDeclGrid::HmiDeclGrid(std::string id, hmi::DocumentPtr doc, Apply apply, de::Tab tab)
@@ -360,13 +262,10 @@ HmiDeclGrid::HmiDeclGrid(std::string id, hmi::DocumentPtr doc, Apply apply, de::
     table_ = &static_cast<ui::TableView&>(addChild(std::move(table)));
     hint_ = &static_cast<ui::StatusBar&>(addChild(std::make_unique<ui::StatusBar>(base + ".hint")));
     // 1.12.7 : le deballage de la valeur choisie (cache tant qu'aucune valeur a taille n'est choisie).
-    unfoldModel_ = std::make_shared<Unfold>();
+    unfoldModel_ = std::make_shared<HmiUnfoldModel>();
     unfold_ = &static_cast<ui::TableView&>(addChild(std::make_unique<ui::TableView>(base + ".unfold")));
     unfold_->setModel(unfoldModel_);
-    // Ses colonnes (une table sans colonnes ne montre rien) ; l'ordre est celui de la valeur : pas de tri.
-    unfold_->setColumns({{"\xC3\x89l\xC3\xA9ment", 240.f, 60.f, true, false, true, ui::Align::Start, 0, false},
-                         {"Type", 190.f, 50.f, true, false, true, ui::Align::Start, 0, false},
-                         {"Valeur", 560.f, 60.f, true, false, true, ui::Align::Start, 0, false}});
+    unfold_->setColumns(HmiUnfoldModel::columns());   // une table sans colonnes ne montre rien
     unfold_->setVisibility(ui::Visibility::Collapsed);
 
     rows_ = std::make_shared<Rows>();
@@ -404,13 +303,7 @@ HmiDeclGrid::HmiDeclGrid(std::string id, hmi::DocumentPtr doc, Apply apply, de::
     links_ += search_->changed->connect([this] { applySearch(); });
     // 1.12.7 : le deballage suit la ligne choisie ; la fleche deplie un element.
     links_ += table_->selectionChanged->connect([this](const std::vector<ui::RowIndex>&) { refreshUnfold(); });
-    links_ += unfold_->expanderClicked->connect([this](ui::RowIndex r) {
-        if (r >= unfoldModel_->lines.size()) return;
-        const std::string path = unfoldModel_->lines[r].path;
-        if (!unfoldModel_->open.erase(path)) unfoldModel_->open.insert(path);
-        unfoldModel_->rebuild();
-        unfoldModel_->modelReset->emit();
-    });
+    links_ += unfold_->expanderClicked->connect([this](ui::RowIndex r) { unfoldModel_->toggle(r); });
 
     // EXCEL : le collage (Ctrl+V, Ctrl+Maj+V) - le nom dit quelle ligne.
     paste_.table = table_;
@@ -805,7 +698,7 @@ void HmiDeclGrid::refreshUnfold() {
             // Une valeur ecrite : lue dans son type (vide : la valeur de son type).
             root = hmi::Runtime::valueObject(doc_->project, row.d.type, row.d.value, &why);
         }
-        if (root && !Unfold::sized(root)) root.reset();
+        if (root && !HmiUnfoldModel::sized(root)) root.reset();
     }
     const bool show = root != nullptr || !why.empty();
     if (name != unfoldModel_->rootName) unfoldModel_->open = {""};   // une autre declaration : repliee sous la racine
@@ -890,6 +783,10 @@ bool HmiDeclGrid::editCalculation(std::size_t row, int line) {
     spec.calc = d.computed || !d.calc.empty() ? d.calc : calceditor::starter(d.name, d.type);
     spec.locals = de::localsText(d.locals);
     spec.line = line;
+    // Le deballage d'une locale : sa valeur initiale lue dans son type (vide : la valeur de son type).
+    spec.valueOf = [doc = doc_](const std::string& type, const std::string& value, std::string* why) -> sim::ObjRef {
+        return doc ? hmi::Runtime::valueObject(doc->project, type, value, why) : nullptr;
+    };
     // Ce que le calcul donne et ses fautes (le code enregistre ; Appliquer refait le tout).
     if (d.computed && !r.preview.empty()) spec.info += (r.previewError ? "Erreur : " : "Valeur au d\xC3\xA9marrage : ") + r.preview + "\n";
     const hmi::Declaration* inModel = nullptr;
