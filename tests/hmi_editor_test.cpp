@@ -29800,6 +29800,34 @@ void lotE1127_editeur() {
 //  1.12.10 (lot F) : la plage et les seuils de la variable - Unites et formats, l'inspecteur,
 //  la valeur initiale d'une structure dans l'ecran des variables
 // =============================================================================
+// 1.12.10 (lot F) : les textes dessines et leur couleur (la valeur d'un instrument ISA au-dela d'un seuil).
+struct TextColorRecorder final : gfx::IRenderer {
+    std::vector<std::pair<std::string, gfx::Color>> texts;
+    void beginFrame(gfx::Color) override {}
+    void endFrame() override {}
+    void pushClip(const gfx::Rect&) override {}
+    void popClip() override {}
+    void fillRect(const gfx::Rect&, gfx::Color) override {}
+    void strokeRect(const gfx::Rect&, gfx::Color, float) override {}
+    void fillRoundedRect(const gfx::Rect&, gfx::Color, float) override {}
+    void line(gfx::Point, gfx::Point, gfx::Color, float) override {}
+    void drawText(gfx::Point, std::string_view t, gfx::FontId, gfx::Color c) override { texts.emplace_back(std::string(t), c); }
+    void drawTexture(const gfx::Rect&, gfx::TextureId, gfx::Color) override {}
+    gfx::TextMetrics measure(std::string_view t, gfx::FontId) const override { return {8.f * static_cast<float>(t.size()), 16.f, 12.f, 4.f}; }
+    float lineHeight(gfx::FontId) const override { return 16.f; }
+    gfx::Size surfaceSize() const override { return {2000.f, 1000.f}; }
+    float dpiScale() const override { return 1.f; }
+    std::size_t fitCharacters(std::string_view t, gfx::FontId, float maxWidth) const override {
+        return std::min(t.size(), static_cast<std::size_t>(std::max(0.f, maxWidth) / 8.f));
+    }
+    // La couleur du premier texte qui contient `part` ; faux : aucun.
+    bool colorOf(std::string_view part, gfx::Color& out) const {
+        for (const auto& [t, c] : texts)
+            if (t.find(part) != std::string::npos) { out = c; return true; }
+        return false;
+    }
+};
+
 void lotF11210_editeur() {
     std::printf("1.12.10 (lot F) : Unites et formats (plage, seuils), l'inspecteur (la valeur heritee en gris), les structures\n");
     {
@@ -29838,6 +29866,16 @@ void lotF11210_editeur() {
         check(pane.setField("Debit_Lie", "max", "8") && pane.table().model()->cellText(1, 4) == "8", "F : ... une valeur tap\xC3\xA9" "e l'emporte");
         (void)stack.undo();
         check(p.displays[1].max.empty(), "F : Ctrl+Z la reprend");
+        // Coller depuis Excel : la plage et les seuils se collent comme l'unite et le format.
+        installerPressePapiers();
+        essaiPressePapiers() = "Variable\tUnit\xC3\xA9\tMin\tMax\tAlarme haute\r\nPression_Entree\tbar\t0\t16\t15\r\nPression_Ligne\t\t\t12\t\r\n";
+        check(pane.table().pasteFromClipboard(false), "F : Ctrl+V");
+        const hmi::VariableDisplay* entree = nullptr;
+        for (const auto& dd : p.displays)
+            if (dd.path == "Pression_Entree") entree = &dd;
+        check(entree && entree->unit == "bar" && entree->min == "0" && entree->max == "16" && entree->highAlarm == "15"
+                  && p.displays.front().max == "12",
+              "F : coll\xC3\xA9s : une ligne neuve avec sa plage et son alarme haute, le Max d'une ligne qui existait");
     }
     {
         Bench b;
@@ -29882,6 +29920,8 @@ void lotF11210_editeur() {
               "F : vider Max le rend \xC3\xA0 la variable (avant : la valeur d'un objet neuf, 100)");
         check(!commitKey("max", "deux cents") && b.v().object(jauge)->text("max").empty(), "F : un texte qui n'est ni un nombre ni un nom est refus\xC3\xA9");
         check(commitKey("max", "50") && b.v().object(jauge)->text("max") == "50", "F : un nombre tap\xC3\xA9 sur l'objet l'emporte");
+        check(commitKey("max", std::string(ui::exprfield::kToDefault)) && b.v().object(jauge)->text("max").empty(),
+              "F : \xC2\xAB Revenir \xC3\xA0 la valeur par d\xC3\xA9" "faut \xC2\xBB rend Max \xC3\xA0 la variable (vide), comme un objet neuf (avant : 100)");
     }
     {
         // Le dessin : un seuil hors de la plage d'une cuve se dessine au bord, son etiquette marquee (avant : il disparaissait).
@@ -29908,6 +29948,22 @@ void lotF11210_editeur() {
         opt.project = &dp;   // l'apercu de l'editeur lit le projet
         app::paintHmiObject(vr, dv, *dv.object(vanne), {}, app::HmiPropertySource{}, theme, opt);
         check(vr.wrote("50 %") && !vr.wrote("100 %"), "F : une vanne 0..27648 ouverte \xC3\xA0 13824 se dessine \xC3\xA0 50 % (avant : 100 %)");
+        // Un instrument ISA en marche au-dela de son alarme haute : sa valeur prend la couleur des alarmes.
+        const Id isa = hmi::edit::add(dp, dv, Kind::IsaInstrument, 600, 10);
+        dv.object(isa)->set("value", "9.5");
+        dv.object(isa)->set("high", "8");
+        dv.object(isa)->set("highAlarm", "9");
+        app::HmiPaintOptions live = opt;
+        live.editor = false;
+        TextColorRecorder ir;
+        app::paintHmiObject(ir, dv, *dv.object(isa), {}, app::HmiPropertySource{}, theme, live);
+        gfx::Color vc{};
+        check(ir.colorOf("9.5", vc) && vc.r == 0xE5 && vc.g == 0x53 && vc.b == 0x4B,
+              "F : un instrument ISA \xC3\xA0 9,5 (alarme haute 9) : sa valeur en rouge, la couleur des alarmes (avant : pas de seuils)");
+        dv.object(isa)->set("value", "8.5");
+        TextColorRecorder ir2;
+        app::paintHmiObject(ir2, dv, *dv.object(isa), {}, app::HmiPropertySource{}, theme, live);
+        check(ir2.colorOf("8.5", vc) && vc.r == 0xF2 && vc.g == 0xC9 && vc.b == 0x4C, "F : ... \xC3\xA0 8,5 (seuil haut 8) : la couleur des seuils");
     }
     {
         // L'ecran des variables : la valeur initiale d'une structure, d'un tableau de structures.

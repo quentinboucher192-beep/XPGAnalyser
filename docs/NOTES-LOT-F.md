@@ -52,7 +52,10 @@ qu'on ne règle pas de plage ; un objet d'un projet existant garde son aspect (v
 - **L'inspecteur le montre** [proprietes] : une case vide montre en gris ce que l'objet en fera, « 10 (de
   Pression_Ligne) », « 0 (mise à l'échelle de Debit) », « 100 (par défaut) ». La case « Format de la variable »
   devient « Unité, format et plage de la variable », et apparaît aussi sur la barre de progression et la courbe.
-  Vider Min ou Max rend la case à la variable (avant : 0 et 100).
+  Vider Min ou Max, ou « Revenir à la valeur par défaut », rend la case à la variable (avant : 0 et 100).
+- **Un objet d'avant qui ne suit pas sa variable** [unites-formats] : Générer dit, en information, qu'une jauge
+  écrite 0..100 montre une variable qui va de 0 à 10 (sa ligne, ou sa mise à l'échelle) et propose de vider Min et
+  Max pour qu'elle la suive. Rien ne change sans ce geste.
 - **Un nom de variable sans =** [objet-cuve, objet-curseur…] : Min, Max, les quatre seuils, l'axe Y d'une courbe,
   la consigne d'un bargraphe et la plage de l'ouverture d'une vanne acceptent `Consigne_Max` tapé sans =, lu
   comme la variable, comme l'axe X de la courbe XY. Avant : refusé par l'inspecteur, et une erreur bloquante de
@@ -126,6 +129,8 @@ Tous des avertissements (rien ne bloque) :
 - dans Unités et formats : Min ≥ Max (la mise à l'échelle comptée), un seuil hors de Min..Max, des seuils dans le
   désordre (alarme basse ≤ seuil bas ≤ seuil haut ≤ alarme haute), une valeur qui n'est ni un nombre ni une
   variable, une variable inconnue ;
+- en information : un objet dont Min et Max écrits diffèrent de la plage de sa variable (« videz Min et Max pour
+  qu'il la suive ») ;
 - sur un objet, avec ce qu'il prendra à sa variable : Min ≥ Max (et, même écrits sur l'objet, sur une jauge et une
   barre de progression : rien ne le disait), un seuil hors de la plage, des seuils dans le désordre (dès qu'une
   valeur vient de la variable ; les valeurs écrites sur l'objet étaient déjà vérifiées par la 1.12.6) ;
@@ -153,10 +158,13 @@ Le message d'un seuil hors de la plage d'une cuve dit maintenant « il se dessin
   qui montre 4.2, 7.5, 2.8 et Cuve A, B, C dès le démarrage, sans script ; un texte pour un REAL, un membre
   inconnu, trop d'éléments dits par la Console et par Générer, sans rien bloquer ; le littéral relu.
 - `hmi_editor_test` : `lotF11210_editeur` - Unités et formats (les six colonnes, une valeur refusée, la mise à
-  l'échelle en gris, une valeur tapée qui l'emporte, Ctrl+Z) ; l'inspecteur (une jauge posée depuis la palette
-  avec Min et Max vides, l'aide grise « 10 (de Pression_Ligne) », le nouveau libellé, un nom accepté, vider rend à
-  la variable, un texte refusé) ; l'écran des variables (un littéral par élément accepté, une structure, un membre
-  inconnu, un texte pour un REAL et trop d'éléments refusés avec leur raison). L'essai du lot 13 sur le volet lit
+  l'échelle en gris, une valeur tapée qui l'emporte, Ctrl+Z, le collage depuis Excel d'une plage et d'une alarme) ;
+  l'inspecteur (une jauge posée depuis la palette avec Min et Max vides, l'aide grise « 10 (de Pression_Ligne) »,
+  le nouveau libellé, un nom accepté, vider rend à la variable, « Revenir à la valeur par défaut » aussi, un texte
+  refusé) ; le dessin (l'étiquette HH d'une alarme hors plage, une vanne 0..27648 à 50 %, un instrument ISA en
+  couleur d'alarme puis de seuil) ; l'écran des variables (un littéral par élément accepté, une structure, un
+  membre inconnu, un texte pour un REAL et trop d'éléments refusés avec leur raison) ; le tableau « Éléments »
+  d'un tableau de structures (une ligne par élément, son littéral, rendu tel quel). L'essai du lot 13 sur le volet lit
   l'exemple et « montrée par » à leurs nouvelles colonnes (9 et 10).
 - `hmi_reperes_test` : `repereSeuil11210` - `$Cuve_A$.Seuil` dans un seuil et `$Cuve_A$.Maxi` dans un Max :
   Dupliquer les trouve et les remplace (`$Cuve_B$`), en marche chaque copie lit sa variable ; la plage prise à la
@@ -189,8 +197,6 @@ Trois essais existants ont changé, parce que le comportement qu'ils figeaient a
 - **Une borne héritée qui est un nom** (`Max = Consigne_Max` dans Unités et formats) se lit en marche ; l'éditeur
   dessine alors l'objet avec la valeur d'un objet neuf (il ne calcule pas les variables), et Générer ne compare
   pas un seuil à une borne qui est une variable.
-- **L'ancrage des valeurs de l'inspecteur** : « Revenir à la valeur par défaut » (clic droit) remet Min et Max à
-  ceux d'un objet neuf de la bibliothèque (0, 100), pas à vide.
 - **Le volet Unités et formats ne propose pas** les variables liées avec une mise à l'échelle (Proposer ne relit
   que les unités et les formats des objets) ; la plage d'une telle variable sert aux objets même sans ligne.
 - **Les éléments d'un tableau de structures** : le tableau « Éléments… » montre une ligne par élément et son

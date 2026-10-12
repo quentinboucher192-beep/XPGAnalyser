@@ -592,6 +592,18 @@ std::vector<Issue> check(const Project& p, const NameExists& plc) {
             const std::string hiKey = o.kind == Kind::Trend ? "ymax" : o.kind == Kind::Valve ? std::string(kOpeningMax) : "max";
             const auto& lo = seen[loKey];
             const auto& hi = seen[hiKey];
+            // Une plage ecrite sur l'objet qui n'est pas celle de sa variable (un objet d'avant, 0..100 sur une variable
+            // mise a l'echelle 0..10) : une information - vider Min et Max lui fait suivre la variable.
+            if (lo.has && hi.has && !lo.inherited && !hi.inherited && followsVariableFormat(o) && o.kind != Kind::InputField
+                && o.kind != Kind::Trend && o.kind != Kind::Valve) {
+                const Inherited vlo = inheritedFor(p, o, loKey, &v), vhi = inheritedFor(p, o, hiKey, &v);
+                double a = 0, b = 0;
+                if (number(vlo.value, a) && number(vhi.value, b) && a < b && (a != lo.value || b != hi.value))
+                    add(S::Info, "Objet", v.id, o.id, loKey,
+                        "Min, Max " + formatNumber(lo.value) + ".." + formatNumber(hi.value) + " : sa variable va de " + formatNumber(a) + " \xC3\xA0 "
+                            + formatNumber(b) + " (" + (vhi.scaling ? vhi.origin : "de " + vhi.origin)
+                            + ") - videz Min et Max pour qu'il la suive");
+            }
             // Min >= Max : deja une erreur pour une valeur ecrite sur un curseur, un bargraphe, une cuve... ;
             // ici, une borne heritee, ou une jauge et une barre de progression (rien ne le disait).
             const bool plainCheck = o.kind == Kind::Gauge || o.kind == Kind::ProgressBar || o.kind == Kind::Trend || o.kind == Kind::Valve

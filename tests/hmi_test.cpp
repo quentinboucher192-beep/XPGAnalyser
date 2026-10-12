@@ -25009,6 +25009,9 @@ void lotF11210() {
         check(!says("Cuve_Nom", "n'est pas un nombre", Issue::Severity::Error), "F : une alarme haute tap\xC3\xA9" "e Consigne_Max : accept\xC3\xA9" "e (la variable)");
         check(says("Curseur_Inconnu", "Max \xC2\xAB Consigne_Mx \xC2\xBB : variable inconnue"), "F : un Max tap\xC3\xA9 Consigne_Mx : variable inconnue, dite");
         check(says("Jauge_Vide", "la plage est vide"), "F : une jauge 10..5 : la plage est vide (avant : rien)");
+        check(says("Jauge_Ancienne", "Min, Max 0..100 : sa variable va de 0 \xC3\xA0 10 (de Pression_Ligne)", Issue::Severity::Info),
+              "F : une jauge d'avant (0..100) sur une variable 0..10 : une information propose de vider Min et Max pour la suivre");
+        check(!says("Jauge_Neuve", "sa variable va de", Issue::Severity::Info), "F : ... rien pour une jauge qui la suit d\xC3\xA9j\xC3\xA0");
         check(!says("", "Autre : ni unit\xC3\xA9 ni format", Issue::Severity::Info),
               "F : une ligne qui ne donne qu'une plage n'est plus \xC2\xAB une ligne qui ne change rien \xC2\xBB");
         check(says("Cuve_Hors", "Alarme haute 15 hors de la plage 0..10"), "F : un seuil hors de la plage h\xC3\xA9rit\xC3\xA9" "e (0..10 de Pression_Ligne) : dit");

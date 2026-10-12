@@ -1078,7 +1078,10 @@ bool HmiEditor::commitProp(const std::string& key, const std::string& value, boo
                 const auto* d = fresh.find(key);
                 auto* pp = o->find(key);
                 if (pp) pp->expr.clear();
-                if (d) o->set(key, d->value);
+                // 1.12.10 (lot F) : une borne, un seuil d'un objet a echelle - vide, comme un objet pose depuis la palette :
+                // il reprend la plage de sa variable.
+                if (hmi::ranges::takesName(o->kind, key)) o->set(key, "");
+                else if (d) o->set(key, d->value);
                 else if (pp && (key == "rot" || key == "access")) pp->value = "0";
                 if (shown.empty()) shown = o->text(key);
             }
