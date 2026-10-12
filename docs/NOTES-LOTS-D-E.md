@@ -314,8 +314,11 @@ structure d'une popup (`Cuve.*`) se vérifie sur son type ; un paramètre sans t
   Contenu montre les lignes telles qu'écrites (une ligne `Cuves[*].Niveau`, avec ce qu'elle deviendra).
 - **« Ajouter depuis une source »** existe pour la courbe, les graphiques, le tableau de variables, la barre de
   navigation et le résumé par zone ; le conteneur à onglets prend son joker tapé (ou « Depuis une énumération »).
-- **Lignes depuis un paramètre de popup structure** (`Cuve`) : une structure seule se lit sur une variable du projet
-  ou un chemin (`Lignes[2].Pompe`), pas à travers un paramètre.
+- **« Lignes depuis » et « Éléments depuis » à travers un paramètre de popup** (`Cuve`, `Cuve.Mesures` dans une
+  popup ouverte pour `Cuves[2]`) : aucune ligne, aucun élément en marche - la source n'est pas résolue par la
+  portée de la vue pour un tableau ou une structure de l'IHM (vu en fin de nuit par un essai, non corrigé ; une
+  LIST passée en paramètre objet marche, et le joker `Cuve.Mesures[*]` des graphiques aussi). Une variable du
+  projet ou un chemin (`Lignes[2].Pompe`) se lisent.
 - **Un joker et des membres ensemble** (`Moteurs[*].*`) : essayé sur un tableau de l'IHM ; sur une `LIST` de
   structures (`Lignes[*].*`), les membres viennent du type de la LIST (essayé sans moteur : `Lignes[0]` donne
   ses membres), pas essayé en marche avec des valeurs.
